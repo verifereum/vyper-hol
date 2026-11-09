@@ -105,23 +105,3 @@ Proof
   rpt IF_CASES_TAC >> gvs[] >> decide_tac
 QED
 
-(* assignable_type is needed even on the equal-type path: supported_value_type
-   alone admits an empty struct.  Transfer positivity backwards from annotation. *)
-Theorem immutable_assign_physical_positive:
-  expr_body_pre ce cx env e es /\ assignable_type env.type_defs (expr_type e) /\
-  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME stv ==>
-  0 < type_memory_size stv
-Proof
-  strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
-       env_context_consistent_def] >>
-  `type_widens_to (get_tenv cx) (lowered_value_type ce e) (expr_type e)` by
-    (irule immutable_rhs_physical_widens >> qexistsl_tac [`env`,`es`] >> simp[]) >>
-  `?atv. evaluate_type (get_tenv cx) (expr_type e) = SOME atv` by
-    (drule assignable_type_well_formed >>
-     simp[well_formed_type_def, optionTheory.IS_SOME_EXISTS]) >>
-  `0 < type_slot_size atv` by metis_tac[assignable_type_slot_size_pos] >>
-  drule_all type_widens_to_zero_memory_size >>
-  simp[type_memory_size_slots]
-QED

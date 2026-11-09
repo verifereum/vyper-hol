@@ -10,6 +10,9 @@ Ancestors
   immutableDeployAssignAdmissible venomMemProps exprSimProps context stmtLowering
   emitHelper venomInst valueEncodingProps immutableDeployStoreLength
   immutableDeployOperandTransfer immutableAssignNormalizeFrame stmtSimDeclCompose
+  immutableDeployPhysicalSource vyperTypeArgFits typedMemoryCopy
+  exprSimIfExpCompat valueCopyBytes immutableAssignRepresentation exprSimHyps
+  immutableDeployAssignRanges exprSimTypedAlloc annassignRelayoutSource
   exprOperandVar placeStoreAllocPath exprSimBufferStore loweringHalt stmtLoweringMono fragExec fragGasMode
 Libs monadsyntax
 
@@ -312,4 +315,148 @@ Proof
   >- (rpt strip_tac >> irule compiler_ci_mono_not_fresh >>
       qexists_tac `su` >> simp[]) >>
   fs[ci_mono_def]
+QED
+
+(* Store dispatch after the RHS has been materialised. *)
+Theorem immutable_assign_value_stmt_post:
+  body_inv tops ctx ce cx /\ cx.in_deploy /\
+  supported_immutable_type tops (ce.ce_module,id) = SOME ity /\
+  expr_body_pre ce cx env e es /\
+  assignable_type env.type_defs (expr_type e) /\
+  type_widens_to env.type_defs (expr_type e) ity /\
+  (do pv <- eval_expr cx e; read_result cx pv od) es = (INL v,ee) /\
+  expr_sim_inv ce cx env ee /\
+  expr_post ctx func ce cx e ers si su s0 ee v op s /\
+  compile_assign_value ce (Lit (n2w off)) LocCode op (is_word_type ity) loc
+    ity (lowered_value_type ce e) da (type_memory_bytes ce ity) su = ((),sb) /\
+  fn_has_code su sb func /\ fn_inst_ids_distinct func /\ ~block_is_terminated sb /\
+  local_ptrs_reserved ce su /\ (!x. op = Var x ==> not_fresh_at su x) /\
+  ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
+  s.vs_inst_idx = LENGTH su.cs_current_insts /\
+  ce.ce_imm_alloca = SOME region /\
+  (!x. region = Var x ==> not_fresh_at su x) /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME ity /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\
+  off + type_memory_size itv < dimword (:256) /\
+  write_place cx (ImmutablePlace ce.ce_module id []) v ee = (INL (),fin) ==>
+  ?q. gas_marked_path F ctx func s 0 (OK q) /\
+    stmt_post ctx func cx lctx ce ce su sb ee s (INL ()) fin q
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
+  drule_all immutable_assign_bare_global >> strip_tac >>
+  drule_all immutable_rhs_physical_typed >> strip_tac >>
+  drule_all immutable_rhs_physical_widens >> strip_tac >>
+  drule_all type_widens_to_value_has_type >> strip_tac >>
+  `value_has_type itv v` by gvs[] >>
+  `stmt_state_rel ctx func ce cx ee s` by fs[expr_post_def] >>
+  Cases_on `is_word_type ity`
+  >- (`lowered_value_type ce e = ity` by metis_tac[compileEnvTheory.type_widens_to_word] >>
+      `expr_type e = ity` by metis_tac[compileEnvTheory.type_widens_to_word] >>
+      `eval_operand op s = SOME (typed_val_to_w256 itv v)` by
+        fs[expr_post_def, expr_val_rel_def] >>
+      irule immutable_assign_word_stmt_post >>
+      simp[] >>
+      qexistsl_tac [`type_memory_bytes ce ity`,`da`,`env`,`id`,`itv`,`ity`,`loc`,`off`,
+        `op`,`lowered_value_type ce e`,`v`] >>
+      simp[] >> gvs[]) >>
+  `~is_word_type (lowered_value_type ce e)` by
+    metis_tac[return_source_word_widens_eq] >>
+  `?ptv w. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv /\
+     value_has_type ptv v /\ eval_operand op s = SOME w /\
+     val_in_memory stv v (w2n w) s.vs_memory /\
+     val_footprint stv v = val_footprint ptv v` by
+    (`type_widens_to (get_tenv cx) (lowered_value_type ce e) (post_value_type ce e)` by
+       metis_tac[immutable_rhs_physical_post_widens] >>
+     drule_all type_widens_to_value_has_type >> strip_tac >>
+     drule immutable_rhs_post_physical_classify >> strip_tac
+     >- (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+     `~is_word_type (post_value_type ce e)` by metis_tac[is_bytestring_word_type] >>
+     `?w. eval_operand op s = SOME w /\ val_in_memory tu' v (w2n w) s.vs_memory` by
+       (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+     qexistsl_tac [`tu'`,`w`] >> simp[] >> conj_tac
+     >- metis_tac[bytestring_val_in_memory_transfer] >>
+     metis_tac[bytestring_val_footprint_eq]) >>
+  `0 < type_memory_size stv` by
+    (drule_all immutable_assign_rhs_memory_positive >> simp[]) >>
+  `type_memory_bytes ce ity = type_memory_size itv` by
+    metis_tac[expr_sim_inv_memory_size] >>
+  Cases_on `ity = lowered_value_type ce e \/
+    (is_bytestring_type ity /\ is_bytestring_type (lowered_value_type ce e))`
+  >- (`~is_word_type (post_value_type ce e)` by
+        metis_tac[immutable_rhs_post_physical_classify, is_bytestring_word_type] >>
+      `expr_val_at ce cx (post_value_type ce e) si su ee v op s` by fs[expr_post_def] >>
+      `0 < val_footprint stv v` by
+        (qpat_x_assum `val_footprint stv v = _` kall_tac >>
+         Cases_on `v` >> simp[val_footprint_def] >>
+         Cases_on `stv` >> simp[] >> rename1 `BaseTV bt` >>
+         Cases_on `bt` >> simp[] >> rename1 `BytesT bd` >>
+         Cases_on `bd` >> simp[]) >>
+      drule_all immutable_assign_source_range >>
+      disch_then (map_every assume_tac o CONJUNCTS) >>
+      qabbrev_tac `copy_size = if is_bytestring_type ity then type_memory_size stv else type_memory_size itv` >>
+      qabbrev_tac `n = if copy_size <= 32 then 1 else (copy_size+31) DIV 32` >>
+      `val_footprint stv v <= 32*n /\ 32*n <= type_memory_size itv` by
+        (irule immutable_assign_direct_window >> goal_assum (drule_at Any) >>
+         metis_tac[]) >>
+      `regions_disjoint off (32*n) (w2n w) (val_footprint stv v)` by
+        (gvs[regions_disjoint_def] >> decide_tac) >>
+      qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[] >> disch_tac >>
+      qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+        (mp_then Any mp_tac immutable_assign_direct_stmt_post) >>
+      disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
+      disch_then (drule_at (Pat `write_place _ _ _ _ = _`)) >>
+      disch_then (drule_at (Pat `FLOOKUP env.bare_globals _ = _`)) >>
+      disch_then (drule_at (Pat `evaluate_type _ ity = _`)) >>
+      disch_then (drule_at (Pat `ce.ce_imm_alloca = _`)) >>
+      disch_then (qspecl_then [`n`,`lctx`,`val_footprint stv v`,`copy_size`] mp_tac) >>
+      (impl_tac >-
+        (`tu = itv` by metis_tac[optionTheory.SOME_11] >>
+         `copy_size = (if is_bytestring_type ity then type_memory_bytes ce (lowered_value_type ce e) else type_memory_size itv)` by
+           simp[Abbr `copy_size`] >>
+         `n = (if copy_size <= 32 then 1 else (copy_size+31) DIV 32)` by
+           simp[Abbr `n`] >>
+         qpat_x_assum `Abbrev (n = _)` kall_tac >>
+         qpat_x_assum `Abbrev (copy_size = _)` kall_tac >>
+         gvs[regions_disjoint_def] >> decide_tac)) >>
+      simp[]) >>
+  `ity <> lowered_value_type ce e /\ ~is_bytestring_type ity /\
+   ~is_bytestring_type (lowered_value_type ce e)` by
+    metis_tac[typed_copy_bytestring_source, type_widens_from_bytestring] >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[] >> disch_tac >>
+  `~(is_bytestring_type ity /\ is_bytestring_type (lowered_value_type ce e))` by simp[] >>
+  drule_all immutable_assign_normalized_compile >> strip_tac >>
+  `cs_extends su mid` by metis_tac[compile_alloc_buffer_extends] >>
+  `cs_extends mid sm` by
+    metis_tac[cj 1 ci_mono_typed_memory_family, ci_mono_def, pairTheory.SND] >>
+  `compile_assign_value ce (Lit (n2w off)) LocCode buf.buf_operand F loc ity ity da
+     (type_memory_size itv) sm = ((),sb)` by
+    (simp[compile_assign_value_def, comp_bind_def, comp_return_def] >>
+     qpat_x_assum `(if _ then _ else _) sm = _` mp_tac >> simp[]) >>
+  `cs_extends sm sb` by
+    metis_tac[cj 1 ci_mono_stmt_helpers, ci_mono_def, pairTheory.SND] >>
+  `fn_has_code su mid func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `supported_value_type tops ity` by fs[supportedDeclsTheory.supported_immutable_type_def, AllCaseEqs()] >>
+  `lowered_value_type ce e <> ity` by metis_tac[] >>
+  drule_all immutable_assign_normalization_ready >> strip_tac >>
+  `tu = itv /\ stv' = stv /\ sw = w` by metis_tac[optionTheory.SOME_11] >>
+  `?n. type_memory_size itv = 32*n` by metis_tac[type_memory_size_slots] >>
+  `val_wf itv v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  qpat_assum `compile_assign_value _ _ _ op _ _ _ _ _ _ _ = _`
+    (mp_then Any mp_tac immutable_assign_normalized_stmt_post) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
+  disch_then (drule_at (Pat `write_place _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP env.bare_globals _ = _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ ity = _`)) >>
+  disch_then (drule_at (Pat `ce.ce_imm_alloca = _`)) >>
+  disch_then (qspecl_then [`n`,`lctx`,`itv`] mp_tac) >>
+  (impl_tac >-
+    (`acyclic_struct_metadata ce.ce_struct_fields` by fs[bodySimTheory.body_inv_def] >>
+     simp[] >> fs[expr_sim_inv_def] >> metis_tac[])) >> simp[]
 QED
