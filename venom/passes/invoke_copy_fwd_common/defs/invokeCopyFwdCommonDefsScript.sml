@@ -37,7 +37,7 @@
 Theory invokeCopyFwdCommonDefs
 Ancestors
   readonlyMemoryArgsDefs dfgDefs basePtrDefs memAliasDefs dominatorDefs
-  passSharedDefs venomEffects cfgDefs passResidualFrame stateEquiv
+  passSharedDefs venomEffects cfgDefs passResidualFrame stateEquiv pred_set While pair indexedLists list
 
 (* ===== Analysis Context ===== *)
 
@@ -440,3 +440,166 @@ Definition ricf_no_derived_mutable_sibling_def:
         v <> dst ==>
         ~MEM (Var v) use_inst.inst_operands
 End
+
+Theorem icf_aliases_step_mem:
+  !dfg als out.
+    out IN SND (icf_aliases_step dfg als) <=>
+    out IN als \/ ?v inst. v IN als /\
+      MEM inst (dfg_get_uses dfg v) /\ inst.inst_opcode = ASSIGN /\
+      inst.inst_outputs = [out]
+Proof
+  simp[icf_aliases_step_def, IN_BIGUNION, IN_IMAGE, PULL_EXISTS] >>
+  rpt gen_tac >> eq_tac
+  >- (rpt strip_tac >> gvs[] >>
+      Cases_on `inst.inst_opcode = ASSIGN` >> gvs[] >>
+      Cases_on `inst.inst_outputs` >> gvs[] >>
+      rename1 `inst.inst_outputs = h::tail` >>
+      Cases_on `tail` >> gvs[] >> metis_tac[]) >>
+  rpt strip_tac >> gvs[] >> disj2_tac >>
+  qexists_tac `v` >> simp[] >> qexists_tac `inst` >> simp[]
+QED
+
+Theorem icf_aliases_step_changed:
+  !dfg als. FST (icf_aliases_step dfg als) <=>
+    SND (icf_aliases_step dfg als) <> als
+Proof
+  simp[icf_aliases_step_def] >> SET_TAC[]
+QED
+
+Theorem icf_aliases_step_inflationary:
+  !dfg als. als SUBSET SND (icf_aliases_step dfg als)
+Proof
+  simp[SUBSET_DEF, icf_aliases_step_mem]
+QED
+
+Theorem icf_aliases_owhile_fixpoint:
+  !n carrier dfg als.
+    CARD (carrier DIFF als) = n /\ FINITE carrier /\ als SUBSET carrier /\
+    (!a. a SUBSET carrier ==> SND (icf_aliases_step dfg a) SUBSET carrier) ==>
+    ?res. OWHILE (\(changed, _). changed)
+             (\(_, a). icf_aliases_step dfg a) (T, als) = SOME (F,res) /\
+          als SUBSET res /\ res SUBSET carrier /\
+          icf_aliases_step dfg res = (F,res)
+Proof
+  completeInduct_on `n` >> rpt strip_tac >>
+  Cases_on `icf_aliases_step dfg als` >> rename1 `icf_aliases_step dfg als = (changed,next)` >>
+  `als SUBSET next` by metis_tac[icf_aliases_step_inflationary, SND] >>
+  `next SUBSET carrier` by metis_tac[SND] >>
+  reverse (Cases_on `changed`)
+  >- (`next = als` by metis_tac[icf_aliases_step_changed, FST, SND] >> gvs[] >>
+      qexists_tac `als` >> simp[Once OWHILE_THM] >>
+      simp[Once OWHILE_THM]) >>
+  `next <> als` by metis_tac[icf_aliases_step_changed, FST, SND] >>
+  `CARD (carrier DIFF next) < CARD (carrier DIFF als)` by
+    (irule CARD_PSUBSET >> simp[] >>
+     simp[PSUBSET_DEF, SUBSET_DEF, EXTENSION] >>
+     gvs[SUBSET_DEF, EXTENSION] >> metis_tac[]) >>
+  first_x_assum (qspec_then `CARD (carrier DIFF next)` mp_tac) >>
+  simp[] >> disch_then (qspecl_then [`carrier`, `dfg`, `next`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `res` >>
+  simp[Once OWHILE_THM] >> metis_tac[SUBSET_TRANS]
+QED
+
+Theorem icf_use_positions_mem:
+  !dfg v inst pos.
+    MEM (inst,pos) (icf_use_positions dfg v) <=>
+    MEM inst (dfg_get_uses dfg v) /\
+    pos < LENGTH inst.inst_operands /\ EL pos inst.inst_operands = Var v
+Proof
+  simp[icf_use_positions_def, MEM_FLAT, MEM_MAP, MEM_MAPi, PULL_EXISTS] >>
+  rpt gen_tac >> eq_tac
+  >- (rpt strip_tac >> gvs[] >>
+      qpat_x_assum `MEM (inst,pos) _` mp_tac >>
+      CASE_TAC >> simp[] >> IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]) >>
+  rpt strip_tac >> qexistsl_tac [`inst`, `pos`] >> simp[]
+QED
+
+Theorem icf_alias_use_positions_mem:
+  !dfg als v inst pos. FINITE als ==>
+    (MEM (v,inst,pos) (icf_alias_use_positions dfg als) <=>
+     v IN als /\ MEM (inst,pos) (icf_use_positions dfg v))
+Proof
+  simp[icf_alias_use_positions_def, MEM_FLAT, MEM_MAP, PULL_EXISTS,
+       MEM_SET_TO_LIST] >> rpt strip_tac >>
+  simp[EXISTS_PROD] >> metis_tac[]
+QED
+
+Theorem INDEX_FIND_EL_le:
+  !l n P k.
+    k < LENGTH l /\ P (EL k l) ==>
+    ?j x. INDEX_FIND n P l = SOME (j, x) /\ j <= n + k
+Proof
+  Induct >> simp[INDEX_FIND_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `P h` >> simp[] >>
+  Cases_on `k` >> gvs[] >>
+  first_x_assum (qspecl_then [`SUC n`, `P`, `n'`] mp_tac) >>
+  simp[] >> strip_tac >> simp[]
+QED
+
+Theorem findi_EL_le:
+  !l P k.
+    k < LENGTH l /\ P (EL k l) ==>
+    ?j. findi P l = SOME j /\ j <= k
+Proof
+  rpt strip_tac >>
+  drule_all (Q.SPECL [`l`, `0`, `P`, `k`] INDEX_FIND_EL_le) >>
+  strip_tac >> simp[findi_def]
+QED
+
+Theorem INDEX_FIND_MAP_FST:
+  !l n P f.
+    OPTION_MAP FST (INDEX_FIND n P (MAP f l)) =
+    OPTION_MAP FST (INDEX_FIND n (P o f) l)
+Proof
+  Induct >> simp[INDEX_FIND_def] >> rpt gen_tac >>
+  Cases_on `P (f h)` >> simp[]
+QED
+
+Theorem findi_MAP:
+  !l P f. findi P (MAP f l) = findi (P o f) l
+Proof
+  simp[findi_def, INDEX_FIND_MAP_FST]
+QED
+
+Theorem findi_inst_ids:
+  !xs ys id.
+    MAP (\inst. inst.inst_id) xs = MAP (\inst. inst.inst_id) ys ==>
+    findi (\inst. inst.inst_id = id) xs =
+    findi (\inst. inst.inst_id = id) ys
+Proof
+  rpt strip_tac >>
+  `findi (\x. x = id) (MAP (\inst. inst.inst_id) xs) =
+   findi (\x. x = id) (MAP (\inst. inst.inst_id) ys)` by simp[] >>
+  gvs[findi_MAP, combinTheory.o_DEF]
+QED
+
+Theorem INDEX_FIND_some_index:
+  !l n P j x. INDEX_FIND n P l = SOME (j,x) ==>
+    n <= j /\ j < n + LENGTH l /\ EL (j - n) l = x /\ P x
+Proof
+  Induct >> simp[INDEX_FIND_def] >> rpt gen_tac >>
+  Cases_on `P h` >> simp[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  `j - n = SUC (j - SUC n)` by decide_tac >> simp[]
+QED
+
+Theorem findi_some_index:
+  !l P j. findi P l = SOME j ==> j < LENGTH l /\ P (EL j l)
+Proof
+  simp[findi_def, optionTheory.OPTION_MAP_EQ_SOME, pairTheory.EXISTS_PROD] >>
+  rpt strip_tac >> drule INDEX_FIND_some_index >> simp[] >> metis_tac[]
+QED
+
+Theorem findi_inst_id_recover:
+  !xs inst j.
+    ALL_DISTINCT (MAP (\i. i.inst_id) xs) /\ MEM inst xs /\
+    findi (\i. i.inst_id = inst.inst_id) xs = SOME j ==>
+    j < LENGTH xs /\ EL j xs = inst
+Proof
+  rpt strip_tac >> drule findi_some_index >> strip_tac >> simp[] >>
+  qpat_x_assum `MEM inst xs` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  `j = n` by
+    (qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+     simp[EL_ALL_DISTINCT_EL_EQ] >>
+     disch_then (qspecl_then [`j`, `n`] mp_tac) >> simp[EL_MAP] >> gvs[]) >> gvs[]
+QED

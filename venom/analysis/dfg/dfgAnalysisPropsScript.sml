@@ -254,3 +254,11 @@ Proof
   ACCEPT_TAC normalize_operand_eval_restricted_proof
 QED
 
+
+Theorem dfg_operand_vars_eq:
+  !ops. dfgDefs$operand_vars ops = venomInst$operand_vars ops
+Proof
+  Induct >> simp[dfgDefsTheory.operand_vars_def, venomInstTheory.operand_vars_def] >>
+  Cases_on `h` >>
+  simp[dfgDefsTheory.operand_var_def, venomInstTheory.operand_var_def]
+QED

@@ -30,7 +30,7 @@
 
 Theory internalReturnCopyFwdDefs
 Ancestors
-  invokeCopyFwdCommonDefs
+  invokeCopyFwdCommonDefs list
 
 (* ===== Return Buffer Source Validation ===== *)
 
@@ -270,3 +270,139 @@ Definition ircf_transform_ctx_def:
       MAP (ircf_transform_function fn_meta ctx.ctx_functions rma)
           ctx.ctx_functions
 End
+
+Theorem ircf_try_forward_prefix_and_copy:
+  !ctx bb copy_idx new_insts.
+    ircf_try_forward ctx bb copy_idx = SOME new_insts ==>
+    copy_idx < LENGTH bb.bb_instructions /\
+    LENGTH new_insts = LENGTH bb.bb_instructions /\
+    (EL copy_idx bb.bb_instructions).inst_opcode = MCOPY /\
+    EL copy_idx new_insts = mk_nop_inst (EL copy_idx bb.bb_instructions) /\
+    (!i. i < copy_idx ==> EL i new_insts = EL i bb.bb_instructions)
+Proof
+  simp[ircf_try_forward_def] >> rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  rpt strip_tac >> simp[indexedListsTheory.EL_MAPi] >>
+  Cases_on `MEM (EL i bb.bb_instructions).inst_id
+              (MAP (\ri. ri.inst_id)
+                (MAP (\(v,inst,pos). inst)
+                  (FILTER (\(v,inst,pos).
+                    ~icf_is_assign_output_use inst pos /\
+                    (inst.inst_opcode = MCOPY ==> pos <> 0 \/
+                     inst.inst_id <> (EL copy_idx bb.bb_instructions).inst_id))
+                    (icf_alias_use_positions ctx.icf_dfg
+                      (icf_collect_aliases ctx.icf_dfg
+                        (icf_assign_root ctx.icf_dfg {} dst))))))` >>
+  simp[] >>
+  pop_assum mp_tac >> simp[MEM_MAP, PULL_EXISTS, pairTheory.EXISTS_PROD] >>
+  rpt strip_tac >>
+  `i < LENGTH bb.bb_instructions` by decide_tac >>
+  drule_then (qspec_then `\el. el.inst_id = ri.inst_id` mp_tac) findi_EL_le >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `EVERY ($~ o (\idx. idx <= copy_idx)) _`
+    (mp_tac o REWRITE_RULE [EVERY_MAP, EVERY_MEM]) >>
+  disch_then (qspec_then `(p_1, ri, p_2)` mp_tac) >>
+  simp[] >> decide_tac
+QED
+
+Theorem ircf_try_forward_inst_fields:
+  !ctx bb k new_insts.
+    ircf_try_forward ctx bb k = SOME new_insts ==>
+    (!i. i < LENGTH bb.bb_instructions ==>
+      (EL i new_insts).inst_id = (EL i bb.bb_instructions).inst_id /\
+      (i <> k ==>
+       (EL i new_insts).inst_opcode = (EL i bb.bb_instructions).inst_opcode /\
+       (EL i new_insts).inst_outputs = (EL i bb.bb_instructions).inst_outputs))
+Proof
+  simp[ircf_try_forward_def] >> rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs()] >> rpt strip_tac >>
+  simp[indexedListsTheory.EL_MAPi, passSharedDefsTheory.mk_nop_inst_def] >>
+  rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem ircf_try_forward_checks:
+  !ctx bb k new_insts.
+    ircf_try_forward ctx bb k = SOME new_insts ==>
+    ?dst src sz di si.
+      (EL k bb.bb_instructions).inst_operands = [Var dst; Var src; Lit sz] /\
+      icf_assign_root ctx.icf_dfg {} dst <> icf_assign_root ctx.icf_dfg {} src /\
+      dfg_get_def ctx.icf_dfg (icf_assign_root ctx.icf_dfg {} dst) = SOME di /\
+      dfg_get_def ctx.icf_dfg (icf_assign_root ctx.icf_dfg {} src) = SOME si /\
+      icf_is_alloca di /\ icf_is_alloca si /\
+      icf_matches_alloca_size di sz /\ icf_matches_alloca_size si sz /\
+      ircf_is_ret_buf_source ctx bb.bb_instructions
+        (icf_assign_root ctx.icf_dfg {} src)
+        (EL k bb.bb_instructions).inst_id k /\
+      (!v inst pos.
+        MEM (v,inst,pos) (icf_alias_use_positions ctx.icf_dfg
+          (icf_collect_aliases ctx.icf_dfg (icf_assign_root ctx.icf_dfg {} dst))) /\
+        ~icf_is_assign_output_use inst pos /\
+        ~(inst.inst_opcode = MCOPY /\ pos = 0 /\
+          inst.inst_id = (EL k bb.bb_instructions).inst_id) ==>
+        inst.inst_opcode <> PHI /\ is_mem_addr_position inst.inst_opcode pos /\
+        ?j. findi (\el. el.inst_id = inst.inst_id) bb.bb_instructions = SOME j /\ k < j)
+Proof
+  simp[ircf_try_forward_def] >> rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  rpt gen_tac >> strip_tac >>
+  fs[FILTER_EQ_NIL, EVERY_MAP, EVERY_MEM, MEM_FILTER, pairTheory.FORALL_PROD] >>
+  rpt (first_x_assum (qspecl_then [`v`, `inst`, `pos`] mp_tac)) >>
+  simp[] >>
+  Cases_on `findi (\el. el.inst_id = inst.inst_id) bb.bb_instructions` >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem ircf_try_forward_update:
+  !ctx bb k new_insts.
+    ircf_try_forward ctx bb k = SOME new_insts ==>
+    ?dst src sz uses.
+      (EL k bb.bb_instructions).inst_operands = [Var dst; Var src; Lit sz] /\
+      uses = FILTER (\(v,inst,pos).
+        ~icf_is_assign_output_use inst pos /\
+        ~(inst.inst_opcode = MCOPY /\ pos = 0 /\
+          inst.inst_id = (EL k bb.bb_instructions).inst_id))
+        (icf_alias_use_positions ctx.icf_dfg
+          (icf_collect_aliases ctx.icf_dfg (icf_assign_root ctx.icf_dfg {} dst))) /\
+      new_insts = MAPi (\i inst.
+        if i = k then mk_nop_inst inst
+        else if MEM inst.inst_id (MAP (\(v,ri,pos). ri.inst_id) uses)
+        then inst with inst_operands := MAP (\op. case op of
+          Var v => if v IN icf_collect_aliases ctx.icf_dfg
+                             (icf_assign_root ctx.icf_dfg {} dst)
+                   then Var (icf_assign_root ctx.icf_dfg {} src) else op
+        | _ => op) inst.inst_operands
+        else inst) bb.bb_instructions
+Proof
+  simp[ircf_try_forward_def] >> rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs(), MAP_COMPOSE, combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
+QED
+
+Theorem ircf_is_ret_buf_source_uses:
+  !ctx insts s cid k.
+    ircf_is_ret_buf_source ctx insts s cid k ==>
+    ?iv j.
+      iv.inst_opcode = INVOKE /\
+      findi (\el. el.inst_id = iv.inst_id) insts = SOME j /\ j < k /\
+      (!v inst pos.
+        MEM (v,inst,pos) (icf_alias_use_positions ctx.icf_dfg
+                          (icf_collect_aliases ctx.icf_dfg s)) ==>
+        icf_is_assign_output_use inst pos \/
+        (inst.inst_opcode = MCOPY /\ pos = 1 /\ inst.inst_id = cid) \/
+        (inst = iv /\ pos = 1))
+Proof
+  simp[ircf_is_ret_buf_source_def] >> rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs(), LENGTH_EQ_1] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >>
+  `inv_inst.inst_opcode = INVOKE` by
+    (qpat_x_assum `FILTER _ _ = [_]`
+       (strip_assume_tac o REWRITE_RULE [FILTER_EQ_CONS]) >> gvs[]) >>
+  Cases_on `findi (\el. el.inst_id = inv_inst.inst_id) insts` >> gvs[] >>
+  qexists_tac `inv_inst` >> simp[] >>
+  rpt strip_tac >>
+  fs[FILTER_EQ_NIL, EVERY_MEM, pairTheory.FORALL_PROD] >>
+  first_x_assum (qspecl_then [`v`, `inst`, `pos`] mp_tac) >> simp[] >>
+  strip_tac >> simp[] >>
+  `MEM (v,inst,pos) [(_0,inv_inst,_1)]` by
+    (qpat_x_assum `FILTER _ _ = [_]` (fn th => rewrite_tac[GSYM th]) >>
+     simp[MEM_FILTER, icf_is_assign_output_use_def]) >> gvs[]
+QED
