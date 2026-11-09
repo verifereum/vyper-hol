@@ -1796,7 +1796,7 @@ Proof
   simp[ci_mono_emit_void]
 QED
 
-Theorem ci_mono_compile_with_byte_offset[local]:
+Theorem ci_mono_compile_with_byte_offset:
   ∀ base offset sa. ci_mono sa (SND (compile_with_byte_offset base offset sa))
 Proof
   rw[contextTheory.compile_with_byte_offset_def] >>
