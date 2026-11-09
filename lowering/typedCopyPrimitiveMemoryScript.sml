@@ -17,7 +17,7 @@ Proof
   strip_tac >> irule frag_exec_mem_refl >> simp[]
 QED
 
-Theorem typed_copy_word_mem_ok[local]:
+Theorem typed_copy_word_mem_ok:
   compile_store_memory_typed cenv dst dty src sty sa = ((),sb) /\
   is_word_type dty /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
