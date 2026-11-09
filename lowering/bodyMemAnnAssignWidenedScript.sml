@@ -6,7 +6,7 @@
 Theory bodyMemAnnAssignWidened
 Ancestors
   bodyMemoryPreds widenedLocalContinuationMem widenedLocalOutcomeMem
-  widenedAssignValueParts
+  widenedAssignValueParts widenedLocalRuntimeMem
 Libs
   monadsyntax
 
