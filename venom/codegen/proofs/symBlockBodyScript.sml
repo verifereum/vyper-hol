@@ -727,6 +727,55 @@ Proof
   qexists_tac `ps_after` >> simp[]
 QED
 
+Theorem body_jump_entry:
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  is_terminator inst.inst_opcode /\
+  step_inst fuel ctx inst vs = OK vs1 /\ vs1 = jump_to t vs /\
+  MEM t (get_successors inst) /\
+  fn_frame_inv ctx cpl lo fn ra rest mem0 ps_after vs1 as1 /\
+  (!at. MEM at ps_after.ps_stack \/ at IN FDOM ps_after.ps_spilled ==>
+    operand_val (frame_view fn ra vs1) lo at =
+    operand_val (frame_view fn ra vs1) lo (normalize_operand dfg [] at)) /\
+  FLOOKUP lo t = SOME off /\ FLOOKUP o2pc off = SOME as1.as_pc ==>
+  ?tbb ps_tdfs tops tafter pe.
+    pe = ps_tdfs with <| ps_stack := ps_after.ps_stack;
+                         ps_spilled := ps_after.ps_spilled |> /\
+    ~vs1.vs_halted /\ vs1.vs_labels = vs.vs_labels /\
+    vs1.vs_call_ctx = vs.vs_call_ctx /\ vs1.vs_current_bb = t /\
+    vs1.vs_prev_bb = SOME bb.bb_label /\ tbb.bb_label = t /\
+    lookup_block vs1.vs_current_bb fn.fn_blocks = SOME tbb /\
+    tbb <> HD fn.fn_blocks /\ fn_reachable fn tbb.bb_label /\
+    lineage_entry liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      bb.bb_label tbb.bb_label pe /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      vs1.vs_current_bb ps_tdfs /\
+    generate_block_plan liveness dfg cfg fn tbb ps_tdfs = SOME (tops,tafter) /\
+    asm_block_at prog as1.as_pc (execute_plan cpl.cp_initial_fmp tops) /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 pe vs1 as1 /\
+    fn_entry_inv Inv ctx fn vs1 /\
+    (!at. MEM at pe.ps_stack \/ at IN FDOM pe.ps_spilled ==>
+      operand_val (frame_view fn ra vs1) lo at =
+      operand_val (frame_view fn ra vs1) lo (normalize_operand dfg [] at))
+Proof
+  strip_tac >> drule_all fnBlockBodyClassesTheory.body_succ_placed >> strip_tac >>
+  `toff = off /\ tpc = as1.as_pc` by metis_tac[optionTheory.SOME_11] >>
+  `~vs1.vs_halted` by gvs[frameRelTheory.fn_frame_inv_def] >>
+  drule_all body_step_entry_inv >> strip_tac >>
+  drule_all body_jump_entry_lineage >> strip_tac >>
+  drule_all body_jump_entry_frame >> strip_tac >>
+  drule body_inv_facts >> strip_tac >>
+  qexistsl_tac [`tbb`, `ps_tdfs`, `tops`, `tafter`,
+    `ps_tdfs with <| ps_stack := ps_after.ps_stack;
+                     ps_spilled := ps_after.ps_spilled |>`] >>
+  simp[] >> gvs[jump_to_def] >> gvs[]
+QED
+
 (* body_inv bundles block_body_frame_sim's premises. *)
 Theorem sym_block_body_frame_sim:
   !fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
