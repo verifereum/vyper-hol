@@ -839,6 +839,16 @@ Proof
   metis_tac[analyzed_computed_operand_demand]
 QED
 
+Theorem native_inst_ops_prefix_complete:
+  !lv dfg cfg fn lbl halt np bl xs p0 ops q.
+    native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 (LENGTH xs) ops q <=>
+    generate_block_insts_plan lv dfg cfg fn lbl halt np bl 0 xs p0 = SOME (ops,q)
+Proof
+  rpt gen_tac >>
+  qspecl_then [`LENGTH xs`,`xs`] mp_tac native_inst_ops_prefix_split >>
+  simp[generate_block_insts_plan_def] >> metis_tac[]
+QED
+
 Theorem generate_block_insts_plan_index_sum:
   !rest lv dfg cfg fn label halt n len i n' i' ps.
     n + i = n' + i' ==>
