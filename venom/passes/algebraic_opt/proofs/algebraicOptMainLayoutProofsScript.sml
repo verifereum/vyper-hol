@@ -162,3 +162,51 @@ Proof
      LENGTH (ao_transform_inst dfg ra lbl (idx + LENGTH xs) targets fr inst)) = 0`
     by decide_tac >> simp[]
 QED
+
+Theorem ao_transform_insts_supply_phi_prefix_length:
+  !insts s idx outs s'.
+    ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs,s') ==>
+    phi_prefix_length outs = phi_prefix_length insts
+Proof
+  Induct >- simp[ao_transform_insts_supply_def, venomExecSemanticsTheory.phi_prefix_length_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_alloc_fresh s` >> rename1 `ao_alloc_fresh s = (fr,next)` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets next (SUC idx) insts` >>
+  rename1 `ao_transform_insts_supply dfg ra lbl targets next (SUC idx) insts = (post,last)` >>
+  gvs[Once ao_transform_insts_supply_def] >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (`ao_transform_inst dfg ra lbl idx targets fr h =
+         [ao_resolve_iszero_inst targets h]` by
+        (irule ao_transform_inst_control_owner >> simp[]) >>
+      gvs[venomExecSemanticsTheory.phi_prefix_length_def, ao_resolve_iszero_inst_fields] >>
+      metis_tac[]) >>
+  `FILTER (\i. i.inst_opcode = PHI)
+      (ao_transform_inst dfg ra lbl idx targets fr h) = []` by
+    simp[ao_transform_inst_phis] >>
+  `ao_transform_inst dfg ra lbl idx targets fr h <> []` by
+    simp[ao_transform_inst_nonempty] >>
+  Cases_on `ao_transform_inst dfg ra lbl idx targets fr h` >>
+  gvs[FILTER, venomExecSemanticsTheory.phi_prefix_length_def, AllCaseEqs()]
+QED
+
+Theorem ao_transform_insts_supply_take_phi_length:
+  !insts s idx pre mid.
+    ao_transform_insts_supply dfg ra lbl targets s idx
+      (TAKE (phi_prefix_length insts) insts) = (pre,mid) ==>
+    LENGTH pre = phi_prefix_length insts
+Proof
+  Induct >- simp[venomExecSemanticsTheory.phi_prefix_length_def,
+                 ao_transform_insts_supply_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI`
+  >- (simp[venomExecSemanticsTheory.phi_prefix_length_def] >> strip_tac >>
+      Cases_on `ao_alloc_fresh s` >> rename1 `ao_alloc_fresh s = (fr,next)` >>
+      Cases_on `ao_transform_insts_supply dfg ra lbl targets next (SUC idx)
+        (TAKE (phi_prefix_length insts) insts)` >>
+      rename1 `ao_transform_insts_supply dfg ra lbl targets next (SUC idx)
+        (TAKE (phi_prefix_length insts) insts) = (tail,last)` >>
+      `ao_transform_inst dfg ra lbl idx targets fr h =
+         [ao_resolve_iszero_inst targets h]` by
+        (irule ao_transform_inst_control_owner >> simp[]) >>
+      gvs[Once ao_transform_insts_supply_def] >> metis_tac[]) >>
+  simp[venomExecSemanticsTheory.phi_prefix_length_def, ao_transform_insts_supply_def]
+QED
