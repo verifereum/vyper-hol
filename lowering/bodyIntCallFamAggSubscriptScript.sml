@@ -4,21 +4,10 @@
    use it for that case. *)
 Theory bodyIntCallFamAggSubscript
 Ancestors
-  bodyIntCallJointContract bodyIntCallFamAggSubscriptHeld
-  bodyIntCallFamAggSubscriptResources bodyIntCallJointWidened
-  bodyIntCallFamAggSubscriptMapSuffix bodyIntCallFamAggSubscriptTuple
-  bodyIntCallFamAggSubscriptReadOnly bodyIntCallFamAggSubscriptStore
-  bodyIntCallFamAggSubscriptScratch bodyIntCallFamAggSubscriptScratchStages
-  bodyIntCallFamAggSubscriptScratchTail bodyIntCallFamAggSubscriptMapping
-  bodyIntCallFamAggSubscriptAllocRun bodyIntCallFamAggSubscriptStoreRun
-  bodyIntCallFamAggSubscriptRunCuts bodyIntCallFamAggSubscriptReadRun
-  bodyIntCallFamAggSubscriptWordRun bodyIntCallFamAggSubscriptTailRun
-  bodyIntCallFamAggSubscriptMappingRun bodyIntCallFamAggSubscriptMappingSlot
-  bodyIntCallFamAggSubscriptKey bodyIntCallFamAggSubscriptOptionalKey
-  bodyIntCallFamAggSubscriptHashTail bodyIntCallFamAggSubscriptKeyLanding
-  bodyIntCallFamAggSubscriptKeyOutcome
-  bodyIntCallFamAggSubscriptForcedOutcome bodyIntCallFamAggSubscriptCompile
-  bodyIntCallFamAggSubscriptKeyProducer bodyIntCallFamAggSubscriptBaseOutcome
+  bodyIntCallJointContract bodyIntCallJointWidened
+  bodyIntCallFamAggSubscriptHeld bodyIntCallFamAggSubscriptTuple
+  bodyIntCallFamAggSubscriptCompile bodyIntCallFamAggSubscriptRunCuts
+  bodyIntCallFamAggSubscriptCuts
 
 Theorem intcall_subscript_step:
   (!e'. expr_size e' < expr_size e ==>
