@@ -2,6 +2,7 @@
 Theory bodyMemSliceData
 Ancestors
   exprSimSliceMemory exprSimSliceData exprSimSliceTerminal builtinBytesMemory allocationPtr
+  sliceDataOperandMemory
   abiBuiltinAllocation allocaFootprint exprSimMemUnwrap bodyUnopFragMemory fragGasMode
   fragGasSeqMem exprSimHash loweringHalt emitHelperProps exprLoweringProps
   venomMemDefs venomInst list rich_list finite_map words context compileEnv

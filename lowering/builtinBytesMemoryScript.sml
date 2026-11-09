@@ -138,7 +138,7 @@ QED
 
 (* The successful bounds check limits the load to the source interval.
    Failing checks terminate before the load. *)
-Theorem word_add_upper[local]:
+Theorem word_add_upper:
   !a b : bytes32. w2n (a + b) <= w2n a + w2n b
 Proof
   simp[word_add_def, w2n_n2w, MOD_LESS_EQ]
@@ -195,7 +195,7 @@ Proof
   qspecl_then [`data`, `off`] mp_tac word_add_upper >> decide_tac
 QED
 
-Theorem mcopy_operand_frame[local]:
+Theorem mcopy_operand_frame:
   eval_operand x (mcopy dst src n s) = eval_operand x s /\
   (mcopy dst src n s).vs_alloca_next = s.vs_alloca_next
 Proof
@@ -240,7 +240,7 @@ Proof
        exec_pure2_def, eval_operand_def, lookup_var_update_var]
 QED
 
-Theorem allocate_frontier_mono[local]:
+Theorem allocate_frontier_mono:
   s.vs_alloca_next <= (abi_builtin_allocate_state id n s).vs_alloca_next
 Proof
   Cases_on `FLOOKUP s.vs_allocas id = NONE` >>
@@ -291,7 +291,7 @@ Proof
   qspecl_then [`data`, `off`] mp_tac word_add_upper >> decide_tac
 QED
 
-Theorem alloc_buffer_extends[local]:
+Theorem alloc_buffer_extends:
   compile_alloc_buffer n st = (buf, st1) ==>
   st1.cs_current_insts = st.cs_current_insts ++ emitted_insts st st1
 Proof
@@ -302,7 +302,7 @@ Proof
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1]
 QED
 
-Theorem emitted_insts_chain_suffix[local]:
+Theorem emitted_insts_chain_suffix:
   !sa sc st sb xs ys zs.
     sc.cs_current_insts = sa.cs_current_insts ++ xs /\
     st.cs_current_insts = sc.cs_current_insts ++ ys /\
@@ -314,7 +314,7 @@ Proof
        rich_listTheory.DROP_APPEND2]
 QED
 
-Theorem vars_only_alloca_frame[local]:
+Theorem vars_only_alloca_frame:
   !s t id n. t = s with vs_vars := t.vs_vars ==>
     (alloca_next_valid t <=> alloca_next_valid s) /\
     t.vs_alloca_next = s.vs_alloca_next /\
