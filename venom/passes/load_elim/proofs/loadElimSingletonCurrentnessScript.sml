@@ -69,7 +69,7 @@ QED
 Theorem le_configured_retained_step_read:
   le_configured_context ctx /\
   (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
-  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  wf_alias_sets ctx.lctx_aliases /\
   dfg_assigns_sound ctx.lctx_dfg s /\ inst_wf inst /\
   le_absolute_key ctx.lctx_addr_space key /\
   FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME ops /\
@@ -111,7 +111,7 @@ QED
 Theorem le_configured_multivalue_step_read:
   le_configured_context ctx /\
   (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
-  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  wf_alias_sets ctx.lctx_aliases /\
   dfg_assigns_sound ctx.lctx_dfg s /\ inst_wf inst /\
   le_absolute_key ctx.lctx_addr_space key /\
   FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME ops /\
@@ -200,7 +200,7 @@ Theorem le_retained_occ_read:
     (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
     (load_analyze ctx fn) /\
   le_configured_context ctx /\ (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
-  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  wf_alias_sets ctx.lctx_aliases /\
   le_occ_valid C fn e /\ le_singleton_retained_occ ctx fn key op e /\
   (!bb n fuel u t. e = StepOcc bb n fuel u t ==>
     MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
@@ -334,7 +334,7 @@ QED
 Theorem le_prefix_retained_suffix_read:
   wf_function fn /\ fn_inst_wf fn /\
   le_configured_context ctx /\ (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
-  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  wf_alias_sets ctx.lctx_aliases /\
   fn_entry_label fn = SOME s0.vs_current_bb /\
   is_fixpoint (df_process_block Forward NONE load_join load_transfer
     load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
@@ -406,7 +406,7 @@ Theorem le_occ_prefix_singleton_current:
   wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
   le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
   (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
-  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  wf_alias_sets ctx.lctx_aliases /\
   fn_entry_label fn = SOME s0.vs_current_bb /\
   is_fixpoint (df_process_block Forward NONE load_join load_transfer
     load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
@@ -469,7 +469,7 @@ Theorem le_frame_singleton_current:
   wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
   le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
   (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
-  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  wf_alias_sets ctx.lctx_aliases /\
   fn_entry_label fn = SOME s0.vs_current_bb /\
   is_fixpoint (df_process_block Forward NONE load_join load_transfer
     load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))

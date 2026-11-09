@@ -6,7 +6,7 @@ Ancestors
   loadElimActionSelection loadElimLatestJoin loadElimOccurrence loadElimDefs
   loadElimSentinelHelpers loadElimKeyShapeInvariant cfgAnalysisProps
   instIdxIndep analysisSimProofsBase venomInstProps contextCodegenRel opcodeClass
-  cfgDefs finite_map dfAnalyzeProps
+  cfgDefs finite_map dfAnalyzeProps memAliasDefs memAliasProps
   venomState venomInst venomExecSemantics venomExecProps venomExecProofs stateFrame stateEquiv list
 
 (* Entry/edge coupling is le_padded_control.  Inside a block only the
@@ -72,7 +72,7 @@ Definition le_round_ready_def:
     wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
     le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
     (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
-    ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+    wf_alias_sets ctx.lctx_aliases /\
     fn_entry_label fn = SOME s0.vs_current_bb /\
     is_fixpoint (df_process_block Forward NONE load_join load_transfer
       load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
@@ -91,6 +91,17 @@ Definition le_round_ready_def:
     EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts fn) /\
     EVERY (\f. EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts f)) C.ctx_functions
 End
+
+(* The wrapper's three original alias maps meet every round's query contract,
+   independently of that round's source function and configured address space. *)
+Theorem le_function_alias_maps_wf:
+  wf_alias_sets (memory_alias_analyze bp fn) /\
+  wf_alias_sets (storage_alias_analyze bp fn) /\
+  wf_alias_sets (transient_alias_analyze bp fn)
+Proof
+  simp[memory_alias_analyze_def, storage_alias_analyze_def,
+       transient_alias_analyze_def, memAliasPropsTheory.ma_analyze_wf]
+QED
 
 Theorem le_body_coupling_fetch:
   le_configured_context ctx /\

@@ -123,7 +123,8 @@ Theorem le_retained_store_read_step:
   (!v. bp_get_ptrs bp v = []) /\ le_absolute_key space key /\
   inst.inst_operands = [addr;value] /\
   eval_operand addr s = SOME w /\ eval_operand (norm addr) s = SOME w /\
-  key IN FDOM (load_invalidate (ma_analyze bp fn space) bp space ll
+  wf_alias_sets aliases /\
+  key IN FDOM (load_invalidate aliases bp space ll
     (load_get_write_key bp space norm inst)) /\
   le_key_address space key s = SOME a /\ a < dimword (:256) /\
   step_inst fuel ctx inst s = OK t ==>
@@ -135,7 +136,6 @@ Proof
   `le_key_address space (load_get_write_key bp space norm inst) s =
     SOME (w2n w)` by
     (irule le_empty_write_key_address >> simp[] >> metis_tac[]) >>
-  `wf_alias_sets (ma_analyze bp fn space)` by simp[ma_analyze_wf] >>
   drule_all le_retained_store_regions >> strip_tac >>
   irule le_store_read_disjoint_step >> metis_tac[]
 QED
@@ -146,7 +146,8 @@ Theorem le_retained_store_key_read_step:
   (!v. bp_get_ptrs bp v = []) /\ le_absolute_key space key /\
   inst.inst_operands = [addr;value] /\
   eval_operand addr s = SOME w /\ eval_operand (norm addr) s = SOME w /\
-  key IN FDOM (load_invalidate (ma_analyze bp fn space) bp space ll
+  wf_alias_sets aliases /\
+  key IN FDOM (load_invalidate aliases bp space ll
     (load_get_write_key bp space norm inst)) /\
   le_key_address space key s = SOME a /\ a < dimword (:256) /\
   step_inst fuel ctx inst s = OK t ==>

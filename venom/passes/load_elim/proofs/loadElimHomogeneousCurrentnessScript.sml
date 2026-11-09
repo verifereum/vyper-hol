@@ -214,7 +214,7 @@ QED
 Theorem le_homogeneous_occ_read:
   wf_function fn /\ fn_inst_wf fn /\
   le_configured_context ctx /\ (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
-  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  wf_alias_sets ctx.lctx_aliases /\
   fn_entry_label fn = SOME s0.vs_current_bb /\
   is_fixpoint (df_process_block Forward NONE load_join load_transfer
     load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
@@ -253,7 +253,7 @@ Theorem le_occ_prefix_homogeneous_current:
   wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
   le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
   (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
-  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  wf_alias_sets ctx.lctx_aliases /\
   fn_entry_label fn = SOME s0.vs_current_bb /\
   is_fixpoint (df_process_block Forward NONE load_join load_transfer
     load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
@@ -337,7 +337,7 @@ Theorem le_occ_prefix_store_test_current:
   wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
   le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
   (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
-  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  wf_alias_sets ctx.lctx_aliases /\
   fn_entry_label fn = SOME s0.vs_current_bb /\
   is_fixpoint (df_process_block Forward NONE load_join load_transfer
     load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))

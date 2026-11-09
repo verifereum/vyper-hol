@@ -60,7 +60,7 @@ The later column applies separately to f1, f2, f3 and f4 unless stated otherwise
 | le_configured_context (73) | B: mk_load_context_def + memory config equations + le_configured_context_def | B: same finite membership for each of four configs; independent of source function |
 | ctx.lctx_dfg = dfg_build_function source (73) | B: record projection | B: record projection; does NOT imply DFG soundness |
 | all bp_get_ptrs empty (74) | A/B: le_step_preserves_analyze_empty, instantiate bp/dfg to frozen analyses and s to initial s | A/B: identical b is reused; original empty-BP fact suffices, no recomputation |
-| aliases = ma_analyze b source addr_space (75) | B: memory_alias_analyze_def, mk_load_context_def | C: A_T vs ma_analyze b f1 Transient; A_S vs ma_analyze b f2 Storage; A_M vs ma_analyze b f3 Data and vs ma_analyze b f4 Calldata. Last two also change address space, not just function! |
+| wf_alias_sets aliases (75), generalized in .45 | A/B: le_function_alias_maps_wf, mk_load_context_def | A/B: the same theorem covers A_T, A_S and A_M for every later source and configured address space; no reanalysis equality is required |
 | entry label = SOME s.current_bb (76) | B: frozen premise | C: entry preservation (structural, no execution theorem needed) |
 | load analysis fixpoint (77-80) | A/B: le_load_analyze_fixpoint + le_solver_process_def, using wf_function f0 | A/B conditional on wf_function fi; fixpoint theorem itself works for any ctx, no alias equality needed |
 | dfg_assigns_sound rebuilt DFG s (81) | B: frozen premise | C: new ASSIGN chains and PHI definitions change DFG; original DFG soundness is not this fact |
@@ -189,3 +189,33 @@ CFG/wf_ssa/inst_wf preservation from reached rebuilt-DFG validity; do not hide
 either in generic preservation assumptions in a final wrapper. A successful
 initial-memory readiness specialization alone will not settle these gaps.
 No final-theorem proof or speculative helper stub has been added in this audit.
+
+## Checked alias-query integration (.45)
+
+The exact-reanalysis conjunct described above is now historical. The current
+`le_round_ready` requires only `wf_alias_sets ctx.lctx_aliases`; all other
+conjuncts are unchanged. `le_coupled_run_initial` and the full dependency cone
+build under this generalized contract (2026-11-09,
+TO_load-elim-correct2-20261109T010004Z_m5407_t001).
+
+Inventory: the only implementation-level use of a specific analyzed map was
+`le_retained_store_read_step` in RetainedStore. It obtained well-formedness by
+`ma_analyze_wf` before applying `le_retained_store_regions`, which already uses
+`ma_may_alias_iff`. Both store read/key-read boundaries now accept an arbitrary
+well-formed alias map. No representation-dependent use was found. Propagation
+changes only hypotheses in SingletonCurrentness, ExitCurrentness, LatestRead,
+HomogeneousCurrentness, LatestRetention, ReachedAvailability, ReachedCapture,
+ReachedSourceAgreement (including domain/disjoint/prefix corollaries),
+ReachedBatchSuccess, ReachedStore, ReachedLoad, DynamicCapture, ActualPhiFrame,
+CaptureEntry and CoupledExecution. Existing proofs replay without tactical
+changes. The 16-theory integration build passed in
+TO_load-elim-correct2-20261109T010004Z_m5404_t001.
+
+`le_function_alias_maps_wf` specializes the existing generic `ma_analyze_wf`
+through the three alias-analysis wrappers, so the original A_M/A_T/A_S maps
+satisfy readiness's alias clause regardless of later source or address space.
+It does not assert equality to reanalysis. The final coupled theory build also
+checks this specialization. This discharges the alias row only: generated-name
+disjointness/source-domain coupling, CFG and structural preservation, rebuilt
+DFG validity and later-source step/PHI invariants remain unresolved. No frozen
+statement, relation, or final proof has been changed.
