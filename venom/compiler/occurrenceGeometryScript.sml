@@ -2,7 +2,7 @@
    No machine-word representability is required by this geometry. *)
 Theory occurrenceGeometry
 Ancestors
-  o1LowerDloadOccurrence finite_map list pred_set arithmetic
+  o1LowerDloadOccurrence venomExecSemantics finite_map list pred_set arithmetic
 
 Definition occurrence_natural_geometry_def:
   occurrence_natural_geometry lo a U B stk s <=>
@@ -146,4 +146,77 @@ Theorem occurrence_natural_geometry_zero_wrap_probe[local]:
 Proof
   simp[occurrence_natural_geometry_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >> gvs[]
+QED
+
+Theorem occurrence_geometry_entry:
+  enters_block fn
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) s ==>
+  occurrence_natural_geometry lo 0 [] FEMPTY [] s
+Proof
+  simp[occurrence_natural_geometry_empty]
+QED
+
+Theorem occurrence_geometry_block:
+  occurrence_natural_geometry lo a U B stk s /\
+  is_terminator inst.inst_opcode /\ step_inst fuel C inst s = OK s' /\
+  enters_block fn s' s1 ==>
+  occurrence_natural_geometry lo a U B stk s1
+Proof
+  strip_tac >> irule occurrence_natural_geometry_same_frontier >>
+  qexists_tac `s` >> simp[] >>
+  drule o1LowerDloadStackFrontierTheory.ld_enters_block_frontier >>
+  strip_tac >> simp[] >>
+  irule mem2varBlockSimHelpersTheory.step_inst_result_preserves_alloca_next >>
+  metis_tac[venomInstTheory.is_terminator_def]
+QED
+
+Theorem occurrence_geometry_alloca:
+  occurrence_natural_geometry lo a U B stk s /\
+  occurrence_allocas_ok B a s /\ ~MEM a (MAP (\u. u.of_owner) U) /\
+  lo <= s.vs_alloca_next /\ inst.inst_opcode = ALLOCA /\
+  exec_alloca inst s amount = OK s' ==>
+  occurrence_natural_geometry lo a U (occurrence_sites_step a B inst s') stk s'
+Proof
+  strip_tac >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
+  >- (gvs[exec_alloca_def, AllCaseEqs(), venomStateTheory.update_var_def] >>
+      simp[occurrence_sites_step_def, FLOOKUP_UPDATE] >>
+      irule occurrence_natural_geometry_extend >> simp[] >>
+      fs[occurrence_allocas_ok_def] >>
+      qpat_x_assum `!aid. _` (qspec_then `inst.inst_id` mp_tac) >>
+      simp[FLOOKUP_DEF] >> metis_tac[]) >>
+  PairCases_on `x` >>
+  gvs[exec_alloca_def, AllCaseEqs(), venomStateTheory.update_var_def] >>
+  `FLOOKUP B (a,inst.inst_id) = SOME (x0,x1)` by fs[occurrence_allocas_ok_def] >>
+  simp[occurrence_sites_step_def] >>
+  `B |+ ((a,inst.inst_id),(x0,x1)) = B` by
+    (simp[fmap_eq_flookup, FLOOKUP_UPDATE] >>
+     gen_tac >> IF_CASES_TAC >> gvs[]) >>
+  simp[] >> irule occurrence_natural_geometry_same_frontier >>
+  qexists_tac `s` >> simp[]
+QED
+
+Theorem occurrence_geometry_next:
+  occurrence_natural_geometry lo a U B stk s /\
+  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  lo <= s.vs_alloca_next /\ inst.inst_opcode <> INVOKE /\
+  step_inst fuel C inst s = OK s' ==>
+  occurrence_natural_geometry lo a U (occurrence_sites_step a B inst s') stk
+    (s' with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  strip_tac >> irule occurrence_natural_geometry_same_frontier >>
+  qexists_tac `s'` >> simp[] >>
+  Cases_on `inst.inst_opcode = ALLOCA`
+  >- (irule (INST_TYPE [alpha |-> ``:256``] occurrence_geometry_alloca) >>
+      fs[occurrence_annotation_ok_def] >>
+      qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+      simp[venomExecSemanticsTheory.step_inst_non_invoke,
+           venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+           AllCaseEqs()] >> strip_tac >>
+      qexistsl_tac [`alloc_size`, `s`] >> simp[]) >>
+  simp[occurrence_sites_step_def] >>
+  irule occurrence_natural_geometry_same_frontier >>
+  qexists_tac `s` >> simp[] >>
+  irule mem2varBlockSimHelpersTheory.step_inst_result_preserves_alloca_next >>
+  metis_tac[]
 QED
