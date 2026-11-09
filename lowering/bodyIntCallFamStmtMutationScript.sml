@@ -12,7 +12,7 @@ Theorem intcall_joint_res_requires_declared_binding:
   FLOOKUP ce.ce_vars id = SOME loc ==>
   id IN FDOM env.var_types
 Proof
-  simp[intcall_joint_res_def, bodySimTheory.ce_locals_declared_def] >>
+  simp[intcall_joint_res_def, intcall_expr_res_def, bodySimTheory.ce_locals_declared_def] >>
   metis_tac[]
 QED
 

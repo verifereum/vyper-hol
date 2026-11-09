@@ -28,7 +28,7 @@ Theorem intcall_joint_res_mutation:
       regions_disjoint io (type_memory_size tv) (w2n bw) cap) ==>
   intcall_joint_res fp ce env' ee sb u
 Proof
-  pure_rewrite_tac [intcall_joint_res_def] >> strip_tac >>
+  pure_rewrite_tac [intcall_joint_res_def, intcall_expr_res_def] >> strip_tac >>
   rpt conj_tac >> simp[]
   >- metis_tac[arithmeticTheory.ADD_COMM]
   >- (fs[intcall_frame_ok_def] >> metis_tac[])
@@ -45,7 +45,7 @@ Theorem intcall_local_region_protected:
 Proof
   strip_tac >>
   irule (INST_TYPE [alpha |-> ``:string``] provenance_protected_regions) >>
-  fs[intcall_frame_ok_def, intcall_joint_res_def] >>
+  fs[intcall_frame_ok_def, intcall_joint_res_def, intcall_expr_res_def] >>
   qexists_tac `fp.jc_prot` >>
   qexistsl_tac [`local_region ce es.scopes s`, `fp.jc_lo`, `n`, `fp.jc_staged`] >>
   simp[] >> metis_tac[arithmeticTheory.ADD_COMM]

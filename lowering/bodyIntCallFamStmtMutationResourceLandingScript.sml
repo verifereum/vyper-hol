@@ -18,7 +18,7 @@ Theorem intcall_joint_res_storage_landing:
   u.vs_alloca_next = s.vs_alloca_next ==>
   intcall_joint_res fp ce env' ee sb u
 Proof
-  pure_rewrite_tac[intcall_joint_res_def] >> strip_tac >>
+  pure_rewrite_tac[intcall_joint_res_def, intcall_expr_res_def] >> strip_tac >>
   `!op. fp.jc_reserved op ==> eval_operand op u = eval_operand op s` by
     (rpt strip_tac >>
      fs[intcall_frame_ok_def] >>
