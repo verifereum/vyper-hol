@@ -471,3 +471,143 @@ Theorem scratch_save_cons_finish[local]:
 Proof
   rpt strip_tac >> qexists_tac `last` >> metis_tac[scratch_save_cons_runs]
 QED
+
+
+Theorem execute_plan_restore_cons[local]:
+  execute_plan f (SORestore off::ops) =
+  execute_plan f [SORestore off] ++ execute_plan f ops
+Proof
+  simp[planExecTheory.execute_plan_def]
+QED
+
+Theorem execute_plan_restore_length[local]:
+  LENGTH (execute_plan f [SORestore off]) = 2
+Proof
+  simp[planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def]
+QED
+
+Theorem execute_plan_restore_cons_length[local]:
+  LENGTH (execute_plan f (SORestore off::ops)) =
+  2 + LENGTH (execute_plan f ops)
+Proof
+  pure_rewrite_tac[Once execute_plan_restore_cons, LENGTH_APPEND,
+                   execute_plan_restore_length] >> simp[]
+QED
+
+Theorem sym_steps_restore_cons_compose[local]:
+  sym_steps p env 2 ss = SymOK mid /\
+  sym_steps p env (LENGTH (execute_plan f ops)) mid = SymOK last ==>
+  sym_steps p env (LENGTH (execute_plan f (SORestore off::ops))) ss = SymOK last
+Proof
+  strip_tac >> pure_rewrite_tac[execute_plan_restore_cons_length] >>
+  metis_tac[sym_steps_compose_ok]
+QED
+
+Theorem scratch_restore_cons_post[local]:
+  last.sym_stack = top ++ (v::stk) /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (MAP (\k. EL k items) indices)) top /\
+  op_kind_ok fn ret (EL k items) v ==>
+  last.sym_stack = (top ++ [v]) ++ stk /\
+  LIST_REL (op_kind_ok fn ret)
+    (REVERSE (MAP (\k. EL k items) (k::indices))) (top ++ [v])
+Proof
+  simp[LIST_REL_APPEND, APPEND_ASSOC]
+QED
+
+
+Theorem scratch_restore_cons_runs[local]:
+  sym_steps p env 2 ss = SymOK mid /\
+  op_kind_ok fn ret (EL k items) v /\
+  mid.sym_mem_labels = ss.sym_mem_labels /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+  sym_steps p env
+    (LENGTH (execute_plan f (MAP (\j. SORestore (EL j offsets)) indices))) mid = SymOK last /\
+  last.sym_stack = top ++ (v::stk) /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (MAP (\j. EL j items) indices)) top /\
+  last.sym_mem_labels = mid.sym_mem_labels /\
+  last.sym_base.as_pc = mid.sym_base.as_pc +
+    LENGTH (execute_plan f (MAP (\j. SORestore (EL j offsets)) indices)) ==>
+  ?out vals. sym_steps p env
+    (LENGTH (execute_plan f (MAP (\j. SORestore (EL j offsets)) (k::indices)))) ss = SymOK out /\
+    out.sym_stack = vals ++ stk /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE (MAP (\j. EL j items) (k::indices))) vals /\
+    out.sym_mem_labels = ss.sym_mem_labels /\
+    out.sym_base.as_pc = ss.sym_base.as_pc +
+      LENGTH (execute_plan f (MAP (\j. SORestore (EL j offsets)) (k::indices)))
+Proof
+  strip_tac >>
+  drule_all_then strip_assume_tac scratch_restore_cons_post >>
+  drule_all_then assume_tac sym_steps_restore_cons_compose >>
+  qexistsl_tac [`last`, `top ++ [v]`] >>
+  conj_tac >- (pure_rewrite_tac[listTheory.MAP] >> simp[]) >>
+  conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+  conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+  conj_tac >- metis_tac[] >>
+  pure_rewrite_tac[listTheory.MAP] >> BETA_TAC >>
+  asm_rewrite_tac[execute_plan_restore_cons_length, arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem asm_block_at_restore_cons[local]:
+  asm_block_at p pc (execute_plan f (SORestore off::ops)) ==>
+  asm_block_at p pc (execute_plan f [SORestore off]) /\
+  asm_block_at p (pc+2) (execute_plan f ops)
+Proof
+  pure_rewrite_tac[Once execute_plan_restore_cons,
+    stackOpSimTheory.asm_block_at_append, execute_plan_restore_length] >> simp[]
+QED
+
+Theorem scratch_restore_cons_step[local]:
+  (!ss stk. scratch_kinds_ok fn ret items offsets ss.sym_mem_labels /\
+    ss.sym_stack = stk /\
+    asm_block_at p ss.sym_base.as_pc
+      (execute_plan f (MAP (\j. SORestore (EL j offsets)) indices)) ==>
+    ?last top. sym_steps p env
+      (LENGTH (execute_plan f (MAP (\j. SORestore (EL j offsets)) indices))) ss = SymOK last /\
+      last.sym_stack = top ++ stk /\
+      LIST_REL (op_kind_ok fn ret) (REVERSE (MAP (\j. EL j items) indices)) top /\
+      last.sym_mem_labels = ss.sym_mem_labels /\
+      last.sym_base.as_pc = ss.sym_base.as_pc +
+        LENGTH (execute_plan f (MAP (\j. SORestore (EL j offsets)) indices))) /\
+  scratch_kinds_ok fn ret items offsets ss.sym_mem_labels /\
+  k < LENGTH items /\ EL k offsets < dimword(:256) /\ ss.sym_stack = stk /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan f (MAP (\j. SORestore (EL j offsets)) (k::indices))) ==>
+  ?last top. sym_steps p env
+    (LENGTH (execute_plan f (MAP (\j. SORestore (EL j offsets)) (k::indices)))) ss = SymOK last /\
+    last.sym_stack = top ++ stk /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE (MAP (\j. EL j items) (k::indices))) top /\
+    last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc +
+      LENGTH (execute_plan f (MAP (\j. SORestore (EL j offsets)) (k::indices)))
+Proof
+  strip_tac >>
+  qpat_x_assum `asm_block_at _ _ _` (mp_tac o SIMP_RULE (srw_ss()) []) >>
+  disch_then (strip_assume_tac o MATCH_MP asm_block_at_restore_cons) >>
+  drule_all_then (qspec_then `env` strip_assume_tac) sym_restore_scratch_index >>
+  rename1 `sym_steps p env 2 ss = SymOK mid` >>
+  qpat_x_assum `!ss stk. _` (qspecl_then [`mid`, `mid.sym_stack`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  strip_tac >> simp[scratch_restore_cons_runs]
+QED
+
+Theorem sym_restore_scratch_list:
+  !indices ss stk.
+  scratch_kinds_ok fn ret items offsets ss.sym_mem_labels /\
+  EVERY (\k. k < LENGTH items /\ EL k offsets < dimword(:256)) indices /\
+  ss.sym_stack = stk /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan initial_fmp (MAP (\k. SORestore (EL k offsets)) indices)) ==>
+  ?last top. sym_steps p env
+    (LENGTH (execute_plan initial_fmp (MAP (\k. SORestore (EL k offsets)) indices))) ss = SymOK last /\
+    last.sym_stack = top ++ stk /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE (MAP (\k. EL k items) indices)) top /\
+    last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc +
+      LENGTH (execute_plan initial_fmp (MAP (\k. SORestore (EL k offsets)) indices))
+Proof
+  Induct
+  >- (rpt strip_tac >> qexistsl_tac [`ss`, `[]`] >>
+      simp[planExecTheory.execute_plan_def, sym_steps_def]) >>
+  rpt strip_tac >> irule scratch_restore_cons_step >>
+  gvs[listTheory.EVERY_DEF]
+QED
