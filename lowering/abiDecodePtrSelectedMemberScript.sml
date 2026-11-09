@@ -78,60 +78,25 @@ QED
 Finalise abi_decode_member_run_phases
 
 
-Theorem abi_decode_selected_member_success:
+Theorem abi_decode_member_selection_success:
+  compile_getelemptr_abi pos (dec_info_needs_offset ei) off MLOAD
+    (Var src) hi sa = (v,sm) /\
   abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sa G tn s /\
-  abi_decode_member_layout ei off q k z h cap /\
-  abi_decode_member_code dst pos src hi ei off q sa sb /\
-  fn_has_code sa sb func /\ run_inst_seq (emitted_insts sa sb) s = OK u ==>
-  ?H tf t. t = u with vs_inst_idx := LENGTH sb.cs_current_insts /\
-    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
-    abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sb H tf t /\
-    abi_decode_member_frame sa G tn s H tf t (w2n d+q) k /\
-    ?sm sn v out m.
-      compile_getelemptr_abi pos (dec_info_needs_offset ei) off MLOAD
-        (Var src) hi sa = (v,sm) /\
-      emit_op ADD [Var dst;Lit (n2w q)] sm = (Var out,sn) /\
-      compile_abi_decode_to_buf (Var out) v MLOAD (Var src) hi ei sn = ((),sb) /\
-      32 <= m /\ m <= k /\
-      abi_decode_ptr_window H tf t out (d+n2w q) m
-Proof
-  strip_tac >>
-  drule abi_decode_member_live_compiler >> strip_tac >>
-  drule_all abi_decode_member_run_phases >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts sa sm) s = OK (t with vs_inst_idx := _)` >>
-  rename1 `run_inst_seq (emitted_insts sm sn) t = OK (r with vs_inst_idx := _)` >>
-  `cs_extends sa sm /\ cs_extends sm sn /\ cs_extends sn sb` by
-    suspend "code_frames" >>
-  `fn_has_code sa sm func /\ fn_has_code sm sn func /\ fn_has_code sn sb func` by
-    metis_tac[fn_has_code_split, cs_extends_trans] >>
-  suspend "selection"
-QED
-
-Resume abi_decode_selected_member_success[code_frames]:
-  conj_tac
-  >- (qspec_then `pos` (qspec_then `dec_info_needs_offset ei`
-        (qspec_then `off` (qspec_then `MLOAD` mp_tac))) compile_getelemptr_abi_labels >>
-      disch_then (qspecl_then [`Var src`, `hi`, `sa`, `\i. T`] mp_tac) >> simp[]) >>
-  conj_tac
-  >- metis_tac[exprSimAccountsTheory.emit_op_extends_next_var] >>
-  metis_tac[cs_extends_abi_decode]
-QED
-
-Resume abi_decode_selected_member_success[selection]:
-  drule abi_decode_member_live_resources >> strip_tac >>
-  drule abi_decode_member_live_separation >> strip_tac >>
-  `?J tj w.
+  abi_decode_member_layout ei off q k z h cap /\ fn_has_code sa sm func /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sm) s = OK (t with vs_inst_idx := s.vs_inst_idx) ==>
+  ?J tj w.
     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sm) s J tj /\
     abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sm J tj t /\
     abi_decode_member_frame sa G tn s J tj t (w2n d+q) k /\
     eval_operand v t = SOME w /\ op_prov J v = NONE /\ op_taint tj v = {} /\
     (!x. v = Var x ==> not_fresh_at sm x) /\
-    (~dec_info_needs_offset ei ==> w = z+n2w off)` by suspend "selection_replay" >>
-  suspend "destination"
-QED
-
-Resume abi_decode_selected_member_success[selection_replay]:
-  markerLib.RESUME_TAC >>
+    (~dec_info_needs_offset ei ==> w = z+n2w off)
+Proof
+  strip_tac >>
+  drule abi_decode_member_live_resources >> strip_tac >>
+  drule abi_decode_member_live_compiler >> strip_tac >>
+  drule abi_decode_member_live_separation >> strip_tac >>
   (fs[abi_decode_member_layout_def] >> gvs[dec_info_needs_offset_def]
   >- (drule_all abi_decode_static_selection_framed >>
       disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -150,7 +115,7 @@ Resume abi_decode_selected_member_success[selection_replay]:
   (impl_tac >- simp[]) >> strip_tac >> suspend "dynamic_frame")
 QED
 
-Resume abi_decode_selected_member_success[static_frame]:
+Resume abi_decode_member_selection_success[static_frame]:
   markerLib.RESUME_TAC >>
   (fs[assignTuplePtrCopyEndpointTheory.ghost_inv_inst_idx, stmt_state_rel_inst_idx,
       lookup_var_def, fresh_vars_wrt_def] >>
@@ -178,7 +143,7 @@ Resume abi_decode_selected_member_success[static_frame]:
    qexistsl_tac [`H`, `tf`] >> simp[eval_operand_def, lookup_var_def] >> gvs[])
 QED
 
-Resume abi_decode_selected_member_success[dynamic_frame]:
+Resume abi_decode_member_selection_success[dynamic_frame]:
   markerLib.RESUME_TAC >>
   (fs[assignTuplePtrCopyEndpointTheory.ghost_inv_inst_idx, stmt_state_rel_inst_idx,
       lookup_var_def, fresh_vars_wrt_def] >>
@@ -194,43 +159,110 @@ Resume abi_decode_selected_member_success[dynamic_frame]:
    qexistsl_tac [`H`, `tf`] >> simp[eval_operand_def, lookup_var_def] >> gvs[])
 QED
 
-Resume abi_decode_selected_member_success[destination]:
-  markerLib.RESUME_TAC >>
+Finalise abi_decode_member_selection_success
+
+Theorem abi_decode_member_destination_success:
+  emit_op ADD [Var dst;Lit (n2w q)] sm = (Var out,sn) /\
+  abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sm J tj t /\
+  q+k <= cap /\ fn_has_code sm sn func ==>
+  ?r H tm.
+    run_inst_seq (emitted_insts sm sn) t = OK (r with vs_inst_idx := t.vs_inst_idx) /\
+    inst_seq_ptr D 0 ctx func PG J tj (emitted_insts sm sn) t H tm /\
+    r.vs_inst_idx = LENGTH sn.cs_current_insts /\
+    abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sn H tm r /\
+    abi_decode_member_frame sm J tj t H tm r (w2n d+q) k /\
+    ptr_covers H tm out r k /\ lookup_var out r = SOME (d+n2w q) /\
+    not_fresh_at sn out
+Proof
+  strip_tac >>
   drule abi_decode_member_live_resources >> strip_tac >>
   drule abi_decode_member_live_compiler >> strip_tac >>
-  `q+k <= cap` by fs[abi_decode_member_layout_def] >>
-  mp_tac (Q.INST [`sa` |-> `sm`, `sb` |-> `sn`, `G` |-> `J`, `tn` |-> `tj`,
-     `s` |-> `t`, `b` |-> `d`] abi_decode_member_destination_ptr) >>
-  (impl_tac >- (simp[] >> fs[abi_decode_member_live_def])) >> strip_tac >>
-  suspend "destination_frame" 
+  drule abi_decode_member_live_separation >> strip_tac >>
+  drule_all abi_decode_member_destination_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts sm sn) t = OK (r with vs_inst_idx := _)` >>
+  `abi_decode_member_frame sm J tj t H tm r (w2n d+q) k` by
+    (fs[stateFrameTheory.state_frame_def, venom_state_component_equality] >>
+     irule abi_decode_member_frame_readonly >> simp[]) >>
+  `sm.cs_next_var <= sn.cs_next_var` by
+    metis_tac[exprSimAccountsTheory.emit_op_extends_next_var] >>
+  `sm.cs_current_bb = sn.cs_current_bb` by
+    (qpat_x_assum `emit_op ADD [Var dst; Lit (n2w q)] sm = _` mp_tac >>
+     simp[emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def,
+          emit_def, comp_bind_def, comp_return_def, comp_ignore_bind_def, LET_THM] >>
+     strip_tac >> gvs[]) >>
+  `abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sn H tm r` by
+    (`r.vs_current_bb = t.vs_current_bb` by
+       fs[stateFrameTheory.state_frame_def, venom_state_component_equality] >>
+     irule abi_decode_member_live_transport >> simp[] >>
+     qexistsl_tac [`J`, `w2n d+q`, `k`, `t`, `sm`, `tj`] >> simp[]) >>
+  qexistsl_tac [`r`, `H`, `tm`] >> simp[]
 QED
 
-Resume abi_decode_selected_member_success[destination_frame]:
+Theorem abi_decode_selected_member_success:
+  abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sa G tn s /\
+  abi_decode_member_layout ei off q k z h cap /\
+  abi_decode_member_code dst pos src hi ei off q sa sb /\
+  fn_has_code sa sb func /\ run_inst_seq (emitted_insts sa sb) s = OK u ==>
+  ?H tf t. t = u with vs_inst_idx := LENGTH sb.cs_current_insts /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
+    abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sb H tf t /\
+    abi_decode_member_frame sa G tn s H tf t (w2n d+q) k /\
+    ?sm sn v out m.
+      compile_getelemptr_abi pos (dec_info_needs_offset ei) off MLOAD
+        (Var src) hi sa = (v,sm) /\
+      emit_op ADD [Var dst;Lit (n2w q)] sm = (Var out,sn) /\
+      compile_abi_decode_to_buf (Var out) v MLOAD (Var src) hi ei sn = ((),sb) /\
+      32 <= m /\ m <= k /\
+      abi_decode_ptr_window H tf t out (d+n2w q) m
+Proof
+  strip_tac >>
+  drule abi_decode_member_live_compiler >> strip_tac >>
+  drule_all abi_decode_member_run_phases >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK (t with vs_inst_idx := _)` >>
+  rename1 `run_inst_seq (emitted_insts sm sn) t = OK (r with vs_inst_idx := _)` >>
+  `cs_extends sa sm /\ cs_extends sm sn /\ cs_extends sn sb` by
+    suspend "code_frames" >>
+  `fn_has_code sa sm func /\ fn_has_code sm sn func /\ fn_has_code sn sb func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  drule_all abi_decode_member_selection_success >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  rename1 `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sm) s J tj` >>
+  suspend "destination"
+QED
+
+Resume abi_decode_selected_member_success[code_frames]:
+  conj_tac
+  >- (qspec_then `pos` (qspec_then `dec_info_needs_offset ei`
+        (qspec_then `off` (qspec_then `MLOAD` mp_tac))) compile_getelemptr_abi_labels >>
+      disch_then (qspecl_then [`Var src`, `hi`, `sa`, `\i. T`] mp_tac) >> simp[]) >>
+  conj_tac
+  >- metis_tac[exprSimAccountsTheory.emit_op_extends_next_var] >>
+  metis_tac[cs_extends_abi_decode]
+QED
+
+Resume abi_decode_selected_member_success[destination]:
   markerLib.RESUME_TAC >>
-  (`t' = r` by
-     (qpat_x_assum `run_inst_seq (emitted_insts sm sn) t = OK (t' with vs_inst_idx := _)` mp_tac >>
-      simp[] >> simp[venom_state_component_equality]) >> gvs[] >>
-   `abi_decode_member_frame sm J tj t H tm r (w2n d+q) k` by
-     (irule abi_decode_member_frame_readonly >> simp[]) >>
-   `sm.cs_next_var <= sn.cs_next_var` by
-     metis_tac[exprSimAccountsTheory.emit_op_extends_next_var] >>
-   `sm.cs_current_bb = sn.cs_current_bb` by
-     (qpat_x_assum `emit_op ADD [Var dst; Lit (n2w q)] sm = _` mp_tac >>
-      simp[emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def,
-           emit_def, comp_bind_def, comp_return_def, comp_ignore_bind_def, LET_THM] >>
-      strip_tac >> gvs[]) >>
-   `abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sn H tm r` by
-     (irule abi_decode_member_live_transport >> simp[] >>
-      qexistsl_tac [`J`, `w2n d+q`, `k`, `t`, `sm`, `tj`] >> simp[]) >>
-   suspend "decode")
+  `q+k <= cap` by fs[abi_decode_member_layout_def] >>
+  drule_all abi_decode_member_destination_success >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts sm sn) t = OK (r' with vs_inst_idx := _)` >>
+  `r' = r` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sm sn) t = OK (r' with vs_inst_idx := _)` mp_tac >>
+     simp[] >> simp[venom_state_component_equality]) >> gvs[] >>
+  suspend "decode"
 QED
 
 Resume abi_decode_selected_member_success[decode]:
   markerLib.RESUME_TAC >>
   (`eval_operand v r = SOME w /\ op_prov H v = NONE /\ op_taint tm v = {}` by
-     (Cases_on `v` >> fs[eval_operand_def, lookup_var_def,
-       ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
-   `!x. v = Var x ==> not_fresh_at sn x` by metis_tac[not_fresh_at_mono] >>
+     (Cases_on `v` >> fs[abi_decode_member_frame_def, eval_operand_def, lookup_var_def,
+       ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def,
+       venom_state_component_equality] >> metis_tac[]) >>
+   `sm.cs_next_var <= sn.cs_next_var` by
+     metis_tac[exprSimAccountsTheory.emit_op_extends_next_var] >>
+   `!x. v = Var x ==> not_fresh_at sn x` by
+     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sm` >> simp[]) >>
    drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
      abi_decode_member_decode_success >>
    disch_then (drule_at (Pat `abi_decode_member_live _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
