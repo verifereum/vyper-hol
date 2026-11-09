@@ -143,7 +143,7 @@ Theorem avail_transfer_inst_adds:
     inst.inst_opcode ≠ ASSIGN ∧
     ¬is_terminator inst.inst_opcode ∧
     LENGTH inst.inst_outputs ≤ 1 ∧
-    ¬is_nonidempotent inst.inst_opcode ∧
+    ¬avail_nonidempotent inst.inst_opcode ∧
     ¬has_conflicting_effects inst.inst_opcode ∧
     mk_expr dfg inst ∉ FDOM (avail_remove_effect ae
                                (write_effects inst.inst_opcode)) ⇒

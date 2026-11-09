@@ -5,7 +5,7 @@ Ancestors
   cfgNormBase simplifyCfgBypassPhi simplifyCfgPhiSemantics
   venomExecSemantics alist option
   simplifyCfgRepairDataflow simplifyCfgCollapseShape simplifyCfgPhiShape
-  simplifyCfgChainDataflow simplifyCfgBypassShape mmWfProofs simplifyCfgWfssa
+  simplifyCfgChainDataflow simplifyCfgBypassShape venomInstIdsProps simplifyCfgWfssa
   simplifyCfgBypassDataflow simplifyCfgBypassClosure
   simplifyCfgFixupShape simplifyCfgFixupClosure
 
