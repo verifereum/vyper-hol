@@ -227,3 +227,65 @@ Proof
   >- (fs[type_memory_size_def] >> decide_tac) >>
   gvs[typed_copy_state_frame_def]
 QED
+
+Theorem typed_copy_runtime_header_frag_mem[local]:
+  emit_op LT [Var counter; length] a = (lt,b) /\
+  emit_op ISZERO [lt] b = (done,c) /\
+  not_fresh_at a counter /\ lookup_var counter s = SOME (n2w k) /\
+  eval_operand length s = SOME (n2w N) /\ k <= N /\ N < dimword (:256) ==>
+  frag_exec_mem ctx a c (\u. u = s)
+    (\t. eval_operand done t = SOME (if k < N then 0w else 1w) /\
+      t.vs_memory = s.vs_memory /\ typed_copy_state_frame a off len s t) (\r. F)
+Proof
+  strip_tac >> `k < dimword (:256)` by decide_tac >>
+  `frag_exec_mem ctx a b (\u. u = s)
+     (\t. eval_operand lt t = SOME (bool_to_word (k < N)) /\
+          t.vs_memory = s.vs_memory /\ typed_copy_state_frame a off len s t) (\r. F)` by
+    (irule typed_copy_emit_op_frag_mem >> simp[venomInstTheory.is_terminator_def] >>
+     goal_assum (drule_at Any) >>
+     simp[below_frontier_no_ranges, venomInstTheory.is_terminator_def,
+          step_inst_base_opcode_eqs, mk_inst_def,
+          exec_pure2_def, eval_operand_def, w2n_n2w, LESS_MOD]) >>
+  drule frag_exec_mem_then >> disch_then irule >> conj_tac
+  >- (simp[] >> rpt strip_tac >>
+      `frag_exec_mem ctx b c (\u. u = t)
+         (\u. eval_operand done u = SOME (bool_to_word (bool_to_word (k < N) = 0w)) /\
+              u.vs_memory = t.vs_memory /\ typed_copy_state_frame b off len t u) (\r. F)` by
+        (irule typed_copy_emit_op_frag_mem >> simp[venomInstTheory.is_terminator_def] >>
+         goal_assum (drule_at Any) >>
+         simp[below_frontier_no_ranges, venomInstTheory.is_terminator_def,
+              step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def]) >>
+      pop_assum (mp_then Any irule frag_exec_mem_conseq) >> simp[] >> rpt strip_tac >>
+      fs[bool_to_word_def] >> Cases_on `k < N` >> gvs[] >>
+      irule typed_copy_state_frame_trans >> qexists_tac `t` >> simp[] >>
+      irule typed_copy_state_frame_mono >> goal_assum (drule_at Any) >>
+      metis_tac[typed_copy_emit_op_mono]) >>
+  metis_tac[typed_copy_emit_op_mono, ci_mono_def]
+QED
+
+Theorem typed_copy_runtime_index_header_frag_mem[local]:
+  emit_op LT [Var counter; length] a = (lt,b) /\
+  emit_op ISZERO [lt] b = (done,c) /\ ci_mono sa a /\
+  not_fresh_at a counter /\
+  (!x. src = Var x ==> not_fresh_at a x) /\
+  (!x. dst = Var x ==> not_fresh_at a x) /\
+  (!x. length = Var x ==> not_fresh_at sa x) /\ N < dimword (:256) ==>
+  frag_exec_mem ctx a c
+    (\t. typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k t /\
+         eval_operand length t = SOME (n2w N))
+    (\t. (typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k t /\
+          eval_operand length t = SOME (n2w N)) /\
+         eval_operand done t = SOME (if k < N then 0w else 1w)) (\r. F)
+Proof
+  strip_tac >> irule frag_exec_mem_pointwise >> qx_gen_tac `s` >> strip_tac >> fs[] >>
+  `k <= N /\ lookup_var counter s = SOME (n2w k)` by
+    gvs[typed_copy_index_inv_def] >>
+  `!x. length = Var x ==> not_fresh_at a x` by
+    metis_tac[typed_copy_operand_fresh_mono] >>
+  drule_all typed_copy_runtime_header_frag_mem >>
+  disch_then (qspecl_then [`w2n dw`, `N * type_memory_size dtv`, `ctx`] mp_tac) >>
+  disch_then (mp_then Any irule frag_exec_mem_conseq) >> simp[] >> rpt strip_tac
+  >- (irule typed_copy_index_inv_preserve >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
+  metis_tac[typed_copy_state_frame_operand]
+QED
