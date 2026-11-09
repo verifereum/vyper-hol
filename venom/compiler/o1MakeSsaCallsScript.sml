@@ -5,7 +5,7 @@ Ancestors
   o1MakeSsaCallPaths o1MakeSsaTraversalFrames fmpStepList
   unitShapeDefs o1PassContract o1ContractSueStep o1MakeSsaEventFrames
   o1MakeSsaEventOwnership o1MakeSsaCallOwnership venomExecProps
-  makeSsaCurrentDefs makeSsaCurrentProps o1MakeSsaFormats o1MakeSsaFrontier
+  makeSsaDefs makeSsaCurrentProps o1MakeSsaFormats o1MakeSsaFrontier
   o1MakeSsaActualMaps o1MakeSsaOwnership makeSsaCurrentAnalysis
   venomWf venomInst venomFnScheduleRunner irSupply list pred_set simplifyCfgCallChecks
 

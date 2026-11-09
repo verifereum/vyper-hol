@@ -30,7 +30,6 @@ Ancestors
   tailMerge
   simplifyCfg
   cfgNorm
-  makeSsa
   (* memory passes *)
   loadElim
   deadStoreElim

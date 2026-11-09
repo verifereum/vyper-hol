@@ -408,7 +408,8 @@ Theorem abi_scratch_array_entry_caller:
     actual.vs_current_bb = loop_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH loop_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
-  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  (* Unfold the one let directly: simp_tac bool_ss took 1.6 s on this goal. *)
+  PURE_ONCE_REWRITE_TAC [LET_THM] >> BETA_TAC >> strip_tac >>
   drule_all abi_caller_allocation_budget_zero >> strip_tac >>
   `FINITE (abi_decoder_ids first last)` by simp[] >>
   drule_all (Q.INST [`ids` |-> `abi_decoder_ids first last`]

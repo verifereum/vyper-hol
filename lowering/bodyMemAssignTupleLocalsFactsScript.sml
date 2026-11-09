@@ -1,7 +1,7 @@
 (* Memory boundary facts for tuple assignment to existing locals. *)
 Theory bodyMemAssignTupleLocalsFacts
 Ancestors
-  bodyDeclMemoryCore bodyDeclMemoryCounted stmtSimDefs compileEnv
+  bodyDeclMemoryCore bodyDeclMemoryCounted stmtSimDefs compileEnv loweringStateRelDefs
   venomState valueEncoding finite_map list fragExec fragExecMem
   exprLoweringProps loweringSlice words
 

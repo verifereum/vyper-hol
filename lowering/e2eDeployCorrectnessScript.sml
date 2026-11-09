@@ -104,7 +104,7 @@ Proof
   `deploy_source_ok tops am tx` by simp[deploy_source_ok_def] >>
   drule_all deploy_unit_shape_ok >> strip_tac >>
   drule_all deploy_unit_defs_reach_uses >> strip_tac >>
-  drule_all deploy_initcode_bounded >> strip_tac >>
+  drule_all deploy_initcode_half_bounded >> strip_tac >>
   `o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\
    codegen_assembly rpolicy dout.po_unit = SOME prog /\
    generate_context_plan dout.po_unit.cu_context = SOME cplan` by

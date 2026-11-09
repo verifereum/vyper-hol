@@ -3,7 +3,7 @@
    Helpers: homogeneous tuple view and enumerated sparse entries. *)
 Theory abiDecoderFixedMemory
 Ancestors
-  valueEncoding valueEncodingProps vyperValue list arithmetic
+  valueEncoding valueEncodingDefs valueEncodingProps vyperValue list arithmetic
 
 Theorem tuple_in_memory_replicate:
   !vs off. tuple_in_memory vs (REPLICATE (LENGTH vs) tv) off mem <=>

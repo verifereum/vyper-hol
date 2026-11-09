@@ -12,6 +12,7 @@ Ancestors
   phiBlock passSimulationProps passSimulationDefs execEquivParamProps
   venomExecSemantics venomInst venomWf stateEquiv stateEquivProps
   phiWellFormed phiTransform phiDefs list
+  passTransform
 
 (* Helper: transform_function matches function_map_transform shape *)
 Theorem transform_function_is_function_map_transform:

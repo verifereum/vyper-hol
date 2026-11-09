@@ -52,7 +52,7 @@ effects and registered-allocation effects.
 
 The `abi-codegen` corpus contains twelve pinned-Python source, AST and bytecode
 fixtures. Its provenance is reproduced by
-`lowering/defs/bytecode/python-o1-bytecode-fixtures --check --vyper-repo PATH`.
+`bytecode/python-o1-bytecode-fixtures --check --vyper-repo PATH`.
 The ABI parity theories compare compiler output with those bytecode fixtures;
 this is finite differential evidence, not a universal compiler equivalence
 theorem. See [compiler-definition-parity.md](compiler-definition-parity.md) for

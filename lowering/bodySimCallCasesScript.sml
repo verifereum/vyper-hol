@@ -141,7 +141,7 @@ Theorem body_selfdestruct_case:
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call v24 SelfDestructTarget es v25)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >>
+  rpt strip_tac >> irule body_expr_ok_intro >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >>
   rw[exprSimHypsDefsTheory.expr_body_pre_def,
      supportedExprTraverseTheory.expr_has_evm_run_thm,
      supportedExprTraverseTheory.expr_evm_run_root_def]
@@ -174,7 +174,7 @@ Theorem body_create_case:
     (kind = RawCreate ==> body_exprs_ok cx (TAKE 2 es)) ==>
     body_expr_ok cx (Call ty (CreateTarget kind has_salt rof kw_order) es v26)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >>
+  rpt strip_tac >> irule body_expr_ok_intro >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >>
   rw[exprSimHypsDefsTheory.expr_body_pre_def,
      supportedExprTraverseTheory.expr_has_evm_run_thm,
      supportedExprTraverseTheory.expr_evm_run_root_def]
