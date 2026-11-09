@@ -69,11 +69,11 @@ Proof
   `eval_operand fp.jc_rpc fp.jc_oorig = SOME fp.jc_pc` by
     fs[intcall_frame_ok_def] >>
   Cases_on `fp.jc_rb`
-  >- (fs[intcall_joint_res_def, stmt_state_rel_inst_idx,
+  >- (fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_inst_idx,
          allocas_above_def, local_region_def, ret_pc_ok_def,
          return_buf_frame_def, lookup_var_def, ADD_COMM] >> metis_tac[]) >>
   rename1 `fp.jc_rb = SOME rb` >> PairCases_on `rb` >>
-  fs[intcall_joint_res_def, stmt_state_rel_inst_idx,
+  fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_inst_idx,
      allocas_above_def, local_region_def, ret_pc_ok_def,
      return_buf_frame_def, lookup_var_def, ADD_COMM] >>
   metis_tac[]
