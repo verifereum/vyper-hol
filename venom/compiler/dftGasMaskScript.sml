@@ -631,8 +631,31 @@ Proof
         (impl_tac >- metis_tac[]) >> strip_tac >>
         qpat_x_assum `residual_result _ _ _` mp_tac >>
         simp[residual_result_def, stateEquivTheory.lift_result_def] >> strip_tac >>
-        cheat) >>
+        Cases_on `bind_outputs x.inst_outputs ret.iret_values
+          (adopt_return_fmp ret (merge_callee_state
+            (s with vs_gas_readings := gs)
+            (t with vs_gas_readings := w::tail)))` >>
+        simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+             EL_APPEND_EQN, gas_events_step_def,
+             venomInstTheory.is_terminator_def] >>
+        `extra = []` by metis_tac[APPEND_11, APPEND_NIL] >>
+        Cases_on `step_inst fuel C y (x' with vs_inst_idx := SUC s.vs_inst_idx)` >>
+        simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]) >>
     qexists_tac `extra ++ [(s.vs_current_bb,y.inst_id)]` >> simp[]) >>
+  strip_tac >>
+  `?n. terminates (run_blocks n C f (cs with vs_gas_readings := gs))` by
+    (qexists_tac `fuel_src` >>
+     qpat_x_assum `terminates (dft_exec_cons _ _ _ _ _)` mp_tac >>
+     simp[dftIndexedExecTheory.dft_exec_cons_def, Once step_inst_def] >>
+     Cases_on `run_blocks fuel_src C f (cs with vs_gas_readings := gs)` >>
+     simp[passSimulationDefsTheory.terminates_def]) >>
+  qpat_x_assum `(?fuel_src. _) ==> _` mp_tac >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  qpat_x_assum `residual_result _ _ _`
+    (assume_tac o REWRITE_RULE [residual_result_def]) >>
+  Cases_on `run_blocks fuel C f (cs with vs_gas_readings := gs)` >>
+  qpat_x_assum `lift_result _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [stateEquivTheory.lift_result_def]) >>
   cheat
 QED
 
