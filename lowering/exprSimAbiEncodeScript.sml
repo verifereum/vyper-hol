@@ -15,6 +15,7 @@ Ancestors
 
 Theorem compile_abi_encode_case:
   !nocalls ctx func cenv cx ann ensure mid t args.
+    EVERY (\bb. phi_prefix_length bb.bb_instructions = 0) func.fn_blocks /\
     exprs_case nocalls ctx func cenv cx args ==>
     expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann (AbiEncode ensure mid) t args)
 Proof
