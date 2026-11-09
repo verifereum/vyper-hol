@@ -1628,6 +1628,66 @@ Proof
   gvs[sym_frame_inv_def, sym_kinds_ok_def]
 QED
 
+Theorem sym_invoke_cleanup_frame_rebuild:
+  sym_frame_inv p env ctx cplan fn ret srest labs0 old cs ss /\
+  asm_sym_rel p env fin sfin /\ sym_kinds_ok cplan fn ret srest final sfin /\
+  (!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
+    FLOOKUP sfin.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
+  sym_frame_inv p env ctx cplan fn ret srest labs0 final fin sfin
+Proof
+  rw[sym_frame_inv_def] >> metis_tac[]
+QED
+
+Theorem sym_invoke_return_suffix_frame:
+  (if outs = [] then ([],called)
+   else if ~halting \/ LENGTH outs > 1 then
+     popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) outs)) called
+   else ([],called)) = (pops,popped) /\
+  (if outs = [] \/ FILTER (\out. MEM out nl) outs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst nl term popped) = (opts,swapped) /\
+  final = release_dead_spills nl swapped /\
+  spill_alloc_layout_wf called.ps_alloc called.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword (:256)
+    | SORestore off => off < dimword (:256) | _ => T) (pops ++ opts) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  asm_static_wf p /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 called asr ssr /\
+  asm_block_at p asr.as_pc
+    (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts))) ==>
+  ?fin sfin.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (1 + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))) asr = AsmOK fin /\
+    sym_steps p env
+      (1 + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))) ssr = SymOK sfin /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 final fin sfin
+Proof
+  strip_tac >>
+  `asm_block_at p asr.as_pc [AsmLabel ret_lbl] /\
+   asm_block_at p (asr.as_pc + 1) (execute_plan cplan.cp_initial_fmp (pops ++ opts))` by
+    (qpat_x_assum `asm_block_at p _ (execute_plan _ (SOLabel _ :: _))` mp_tac >>
+     simp[execute_plan_def, Once exec_stack_op_def,
+       stackOpSimTheory.asm_block_at_cons, arithmeticTheory.ADD_COMM]) >>
+  drule_all sym_invoke_return_label_pair >> strip_tac >>
+  `!off b. MEM (SOSpill off) (pops ++ opts) /\ in_mem_range off 32 b ==>
+    closure_spill_byte ctx cplan fn.fn_name b /\ context_spill_byte cplan b` by
+    (rpt gen_tac >> disch_tac >> metis_tac[sym_invoke_cleanup_footprint]) >>
+  `sym_kinds_ok cplan fn ret srest called ss /\
+   asm_block_at p ss.sym_base.as_pc (execute_plan cplan.cp_initial_fmp (pops ++ opts))` by
+    gvs[sym_frame_inv_def, asm_sym_rel_def] >>
+  drule_all sym_invoke_cleanup_kinds_numeric >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  rename1 `sym_steps p env _ ss = SymOK sfin` >>
+  `sym_steps p env (1 + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))) ssr = SymOK sfin` by
+    simp[Once sym_steps_add] >>
+  `asm_sym_rel p env asr ssr` by gvs[sym_frame_inv_def] >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  rename1 `asm_sym_rel p env fin sfin` >>
+  qexistsl [`fin`, `sfin`] >> simp[] >>
+  irule sym_invoke_cleanup_frame_rebuild >> metis_tac[]
+QED
+
 Theorem sym_invoke_frame_sim_deep:
   !fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
    next_liveness is_halting next_is_term bb_label base ps vs as ops ps' r ra
