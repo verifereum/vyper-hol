@@ -178,7 +178,7 @@ Proof
   disch_then (qspec_then `a` (SUBST1_TAC o SYM)) >> simp[]
 QED
 
-Theorem ld_shared_selfdestruct_step[local]:
+Theorem ld_shared_selfdestruct_step:
   ld_shared_agree D s.vs_call_ctx.cc_address tn s t /\
   s.vs_call_ctx = t.vs_call_ctx /\ inst.inst_opcode = SELFDESTRUCT /\
   (!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t) /\
