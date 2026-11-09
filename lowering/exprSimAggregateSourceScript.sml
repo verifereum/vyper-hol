@@ -98,18 +98,6 @@ Proof
   metis_tac[expr_body_pre_vv_res_ok]
 QED
 
-Theorem typed_value_wf:
-  (!ty v. value_has_type ty v ==> val_wf ty v) /\
-  (!tvs vs. values_have_types tvs vs ==> tuple_val_wf vs tvs) /\
-  (!tv n kvs. sparse_has_type tv n kvs ==> kvs_val_wf kvs tv n) /\
-  (!tv vs. all_have_type tv vs ==> elems_val_wf vs tv) /\
-  (!ftvs fields. struct_has_type ftvs fields ==> fields_val_wf fields ftvs)
-Proof
-  ho_match_mp_tac value_has_type_ind >>
-  simp[value_has_type_def, val_wf_def, type_memory_size_def] >>
-  rpt strip_tac >>
-  qspec_then `max` assume_tac le_word_size_mul >> decide_tac
-QED
 
 Theorem aggregate_materialised_child_wf:
   expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL tv,es') /\
@@ -165,10 +153,23 @@ Proof
   strip_tac >> drule_all aggregate_named_child_body_syntax >> strip_tac >>
   `~expr_has_evm_run e` by
     (gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >> res_tac >> gvs[]) >>
-  simp[] >> rpt conj_tac
-  >- (irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
-      metis_tac[])
-  >- (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  simp[] >> rpt conj_tac >>
+  TRY (irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
+       metis_tac[] >> NO_TAC) >>
+  TRY (fs[listTheory.EVERY_MEM] >> metis_tac[] >> NO_TAC) >>
+  TRY (strip_tac >>
+       qpat_x_assum `~supported_expr_exists _ (StructLit _ _ _)` mp_tac >>
+       simp[supportedExprTraverseTheory.supported_expr_exists_def,
+            supportedExprTraverseTheory.supported_fields_exists_every,
+            listTheory.EXISTS_MEM] >>
+       fs[listTheory.MEM_MAP] >> metis_tac[] >> NO_TAC) >>
+  TRY (rpt strip_tac >>
+       qpat_x_assum `!target. supported_expr_exists _ (StructLit _ _ _) ==> _`
+         (qspec_then `target` irule) >>
+       simp[supportedExprTraverseTheory.supported_expr_exists_def,
+            supportedExprTraverseTheory.supported_fields_exists_every,
+            listTheory.EXISTS_MEM] >>
+       disj2_tac >> fs[listTheory.MEM_MAP] >> metis_tac[] >> NO_TAC) >>
   strip_tac >> gvs[] >> Cases_on `int_calls_expr e` >> gvs[] >>
   metis_tac[MEM]
 QED

@@ -47,13 +47,6 @@ Proof
   simp[update_phi_bypass_def]
 QED
 
-Theorem canon_jnz_inst_use_source:
-  MEM (Var v) (canon_jnz_inst inst).inst_operands ==>
-  MEM (Var v) inst.inst_operands
-Proof
-  simp[canon_jnz_inst_def] >> rpt CASE_TAC >> gvs[] >> metis_tac[]
-QED
-
 Theorem subst_label_inst_use_source:
   MEM (Var v) (subst_label_inst old new inst).inst_operands ==>
   MEM (Var v) inst.inst_operands
@@ -71,13 +64,6 @@ Proof
         metis_tac[update_phi_bypass_phi_operands, update_phi_bypass_shape] >>
       gvs[inst_wf_def, update_phi_bypass_shape]) >>
   simp[update_phi_bypass_non_phi]
-QED
-
-Theorem inst_wf_canon_jnz_inst:
-  inst_wf inst ==> inst_wf (canon_jnz_inst inst)
-Proof
-  simp[canon_jnz_inst_def] >> rpt CASE_TAC >> gvs[inst_wf_def] >>
-  metis_tac[]
 QED
 
 Theorem do_merge_jump_block_map:
@@ -133,7 +119,7 @@ Proof
   rpt strip_tac >>
   gvs[update_phi_bypass_shape, canon_jnz_inst_shape, subst_label_inst_shape,
     is_terminator_def, update_phi_bypass_non_phi] >>
-  metis_tac[canon_jnz_inst_use_source, subst_label_inst_use_source]
+  metis_tac[canon_jnz_inst_var_subset, subst_label_inst_use_source]
 QED
 
 Theorem do_merge_jump_phi_pair_source:

@@ -145,6 +145,10 @@ val scalar_modular_allocs_ok_eval = save_thm
    EQT_ELIM (EVAL ``EVERY (fn_allocs_ok ^scalar_modular_tops)
       (^scalar_modular_external_sources ++ ^scalar_modular_internal_sources ++
        (case ^scalar_modular_fallback_source of NONE => [] | SOME f => [f]))``))
+(* lower_vyper_runtime_unit's immutable-section bound. *)
+val scalar_modular_immutables_ok_eval =
+  EQT_ELIM (EVAL ``compute_immutables_len
+      (get_struct_fields (make_struct_fields_map scalar_modular_program)) scalar_modular_program < 0x6000``)
 val scalar_modular_internal_fns_eval = save_thm
   ("scalar_modular_internal_fns_eval",
    evalCompilerBytecodeLib.weak_eval ``MAP (set_internal_package_target
@@ -526,6 +530,7 @@ val scalar_modular_lower_runtime_eval = save_thm
       scalar_modular_fallback_fn_eval, scalar_modular_entry_info_eval,
       scalar_modular_run_lowering_eval,
       scalar_modular_return_buffers_ok_eval, scalar_modular_allocs_ok_eval,
+      scalar_modular_immutables_ok_eval,
       boolTheory.AND_CLAUSES, boolTheory.COND_CLAUSES,
       LET_THM, pairTheory.FST, pairTheory.SND,
       pairTheory.UNCURRY_DEF, pairTheory.pair_case_def] @

@@ -203,7 +203,7 @@ Proof
   simp[compile_external_call_kwargs_def, LET_THM, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `retsz = 0` >- simp[comp_return_def] >>
+  Cases_on `rt = NoneT` >- simp[comp_return_def] >>
   simp[] >> Cases_on `hasdef` >>
   simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
@@ -248,7 +248,7 @@ Proof
   >~ [`ce.ce_func_info name = info`] >- suspend "internal"
   >~ [`compile_call f ce rt ty (ExtCall b b0 p l') args default_ret sa = _`]
     >- suspend "external" >>
-  suspend "send"
+  BasicProvers.every_case_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >> gvs[vv_operand_def]
 QED
 
 Resume abi_image_call_not_label[create]:
@@ -289,13 +289,6 @@ Resume abi_image_call_not_label[external]:
   rpt (pairarg_tac >> gvs[]) >>
   gvs[AllCaseEqs(), vv_operand_def, mk_ptr_def] >>
   metis_tac[abi_image_external_call_not_label]
-QED
-
-Resume abi_image_call_not_label[send]:
-  Cases_on `args` >> gvs[vv_operand_def] >>
-  rename1 `list_CASE tail _ _` >> Cases_on `tail` >> gvs[vv_operand_def] >>
-  gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[vv_operand_def]) >>
-  simp[vv_operand_def]
 QED
 
 Finalise abi_image_call_not_label

@@ -483,7 +483,7 @@ Proof
   drule fmpLowerDefsTheory.fmp_checked_seal_some >> strip_tac >>
   gvs[fmpLowerDefsTheory.fmp_seal_def, fn_insts_def] >>
   Cases_on `root_layout` >> gvs[] >>
-  drule_all fmpStepSupplyTheory.fresh_ir_var_inst_ok >> strip_tac >>
+  drule_all irSupplyTheory.fresh_ir_var_inst_ok >> strip_tac >>
   drule fresh_ir_var_contract >> strip_tac >>
   drule_all fmp_make_root_layout_inst_ok >> strip_tac >>
   drule fmp_make_root_layout_used_vars >> strip_tac >>

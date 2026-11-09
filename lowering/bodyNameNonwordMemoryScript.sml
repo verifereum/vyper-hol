@@ -1,7 +1,7 @@
 (* Memory-safe compilation of local names. *)
 Theory bodyNameNonwordMemory
 Ancestors
-  bodyNameMemoryFacts
+  bodyNameMemoryFacts exprSimMemDefs
   exprSimSource exprSimHypsDefs exprSimDefs exprSimProps bodyMemoryDefs
   exprSimMemoryValues exprSimMemoryStack fragGasSeqMem fragGasPathMem
   gasNormalPrefix gasSummary gasContext gasCount fragGasMode loweringPosts
@@ -31,6 +31,10 @@ Proof
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>
   qexistsl_tac [`[]`, `entry.value`, `es`, `s0`] >>
+  reverse conj_tac
+  >- (simp[expr_store_bound_def, vyperASTTheory.expr_type_def,
+           eval_operand_def] >>
+      rpt strip_tac >> gvs[] >> drule val_store_size_le >> decide_tac) >>
   simp[gas_value_prefix_def, gas_marked_exec_def, gas_explicit_def,
        gas_marked_path_def, gas_path_mem_rules,
        lower_value_def, comp_bind_def, comp_return_def,
@@ -44,7 +48,7 @@ Proof
   rpt strip_tac >> gvs[] >>
   disj2_tac >> disj1_tac >> qexistsl [`id`, `w2n w`, `sz`] >>
   drule val_footprint_le >> strip_tac >>
-  conj_tac >- decide_tac >>
+  `val_footprint entry.type entry.value <= sz` by decide_tac >> simp[] >>
   irule local_path_at_val_at >> irule local_path_at_root >> simp[]
 QED
 

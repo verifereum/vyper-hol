@@ -17,7 +17,7 @@ Ancestors
   exprSimSource
   exprSimHypsDefs
   list finite_map vyperInterpreter vyperState
-  vyperPlaceResultTyping vyperScopePreservation vyperLookup
+  vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperScopePreservation vyperLookup
   vyperTypeInvariants vyperPlaceInvariants vyperTypeEvalSoundness
   vyperTypeExprSoundness vyperTypeSystem vyperTypeCallGraph vyperTypeValues
   vyperTypeCallStackSoundness vyperTypeEnvPreservation vyperTypeStatePreservation
@@ -59,6 +59,8 @@ Theorem popped_keys_indexed_update:
     popped_history_typed entry.type entry.popped /\
     EVERY (\k. ?p i etv n. k = p ++ [ValueSubscript i] /\
       subscripts_type entry.type p = SOME (ArrayTV etv (Dynamic n)))
+      (MAP FST entry.popped) /\
+    EVERY (\k. ?err. evaluate_subscripts entry.type entry.value k = INR err)
       (MAP FST entry.popped) ==>
     popped_keys_indexed (pre ++ (sc |+ (id,entry))::rest)
 Proof

@@ -1,7 +1,7 @@
 (* Pure observations and total selectors for source shadows. *)
 Theory gasShadowCompilePure
 Ancestors
-  gasShadowCompileBase gasShadow exprLowering vyperAST list pair
+  gasShadowCompileBase gasShadow exprLowering exprCallBounds vyperAST list pair
 
 Theorem gas_shadow_place_type[simp]:
   !e cenv. place_type cenv (gas_shadow_expr e) = place_type cenv e
@@ -53,26 +53,33 @@ QED
 Theorem gas_shadow_lowered_value_type[simp]:
   lowered_value_type cenv (gas_shadow_expr e) = lowered_value_type cenv e
 Proof
+  completeInduct_on `expr_size e` >> rpt strip_tac >> gvs[] >>
   Cases_on `e` >>
   simp[gas_shadow_expr_def, lowered_value_type_def, expr_type_def]
   >~ [`lowered_value_type _ (Call _ ct _ _) = _`]
-  >- (Cases_on `ct` >> simp[lowered_value_type_def, expr_type_def]) >>
+  >- (Cases_on `ct` >> simp[lowered_value_type_def, expr_type_def])
+  >~ [`lowered_value_type _ (Builtin _ _ _) = _`]
+  >- (rename1 `gas_shadow_builtin bi` >>
+      Cases_on `bi` >>
+      simp[gas_shadow_builtin_def, lowered_value_type_def, expr_type_def,
+           MAP_MAP_o, combinTheory.o_DEF] >>
+      IF_CASES_TAC >> simp[lowered_value_type_def, expr_type_def]) >>
   rename1 `MAP gas_shadow_expr args` >>
   rename1 `TypeBuiltin ann tb ret_ty _` >>
-  Cases_on `tb` >> simp[lowered_value_type_def, expr_type_def, MAP_MAP_o, combinTheory.o_DEF] >>
+  Cases_on `tb` >> simp[lowered_value_type_def, expr_type_def, MAP_MAP_o, combinTheory.o_DEF]
+  >~ [`AbiEncode ensure method_id`]
+  >- (`!a. MEM a args ==>
+         lowered_value_type cenv (gas_shadow_expr a) = lowered_value_type cenv a`
+        by (rpt strip_tac >>
+            first_x_assum (qspec_then `expr_size a` mp_tac) >>
+            impl_tac >- (drule expr_list_member_bound >> simp[expr_size_def, ETA_AX]) >>
+            simp[]) >>
+      `MAP (\a. lowered_value_type cenv (gas_shadow_expr a)) args =
+       MAP (lowered_value_type cenv) args` by (irule MAP_CONG >> simp[]) >>
+      Cases_on `args` >> gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
   Cases_on `args` >> simp[gas_shadow_HD, MAP_MAP_o, combinTheory.o_DEF] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
-QED
-
-Theorem gas_shadow_ext_call_arg_types[simp]:
-  !decl_tys args.
-    ext_call_arg_types cenv decl_tys (MAP gas_shadow_expr args) =
-    ext_call_arg_types cenv decl_tys args
-Proof
-  Induct >> Cases_on `args` >> simp[ext_call_arg_types_def] >>
-  simp[gas_shadow_lowered_value_type] >>
-  rename1 `gas_shadow_expr head` >>
-  Cases_on `head` >> simp[gas_shadow_expr_def]
 QED
 
 Theorem gas_shadow_is_msg_data[simp]:

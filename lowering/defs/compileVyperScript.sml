@@ -1102,11 +1102,15 @@ End
    internal call in new_temporary_value's, those of its defaults and its
    body (alloc_limits_stmts), and its return type's, which a caller stages
    for an internal call's result in new_temporary_value.  The compile env
-   only supplies struct sizes, which every function's has the same. *)
+   only supplies struct sizes, which every function's has the same.
+   The parameters' ABI encoding is also bounded below 2 ** 128 bytes, so a
+   constructor's appended arguments keep the deployment code within half a
+   word. *)
 Definition fn_allocs_ok_def:
   fn_allocs_ok tops (mut, nr, rr, fname, fargs, dflts, ret, body) ⇔
     let cenv = build_compile_env tops Internal mut fname fargs ret body F in
     EVERY (λ(_,ty). type_memory_bytes cenv ty < 2 ** 64) fargs ∧
+    abi_size_bound cenv.ce_struct_fields (TupleT (MAP SND fargs)) < 2 ** 128 ∧
     alloc_limits_exprs cenv dflts ∧ alloc_limits_stmts cenv body ∧
     type_memory_bytes cenv ret < 2 ** 64
 End
@@ -1430,7 +1434,9 @@ Definition lower_vyper_runtime_unit_def:
           set_fallback_package_target rpolicy.rpol_target
             (package_fallback_fn tops use_trans nkey_map fb_fn) in
     let entry_info = build_dense_entry_info selectors external_fns in
-    if EVERY external_return_buffer_ok external_fns ∧
+    if compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
+         tops < 0x6000 ∧
+       EVERY external_return_buffer_ok external_fns ∧
        EVERY (fn_allocs_ok tops)
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
     then
@@ -1438,6 +1444,17 @@ Definition lower_vyper_runtime_unit_def:
         rpolicy 0 0 ([] : dense_bucket list) entry_info "__entry"
     else NONE
 End
+
+(* A unit that lowers has its immutable section below the CODE allocator's
+   0x6000 limit (Vyper rejects larger sections). *)
+Theorem lower_vyper_runtime_unit_immutables_bound:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit ⇒
+  compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
+    tops < 0x6000
+Proof
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  rw[lower_vyper_runtime_unit_def, AllCaseEqs()]
+QED
 
 (* A unit that lowers has every external return buffer below the limit. *)
 Theorem lower_vyper_runtime_unit_return_buffer_ok:
@@ -1465,6 +1482,15 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
+(* Only __init__ may be a Deploy function, as the constructor.
+   Mirrors Python: vyper/semantics/types/function.py
+   (ContractFunctionT.from_FunctionDef: "Only constructors can be marked as
+   `@deploy`!"). *)
+Definition ctor_named_init_def:
+  (ctor_named_init NONE ⇔ T) ∧
+  (ctor_named_init (SOME (_, _, _, fname, _, _, _, _)) ⇔ fname = "__init__")
+End
+
 (* Deploy lowering receives the actual runtime bytes.  Their size and data
    section are both owned by run_deploy_lowering. *)
 Definition lower_vyper_deploy_unit_def:
@@ -1484,8 +1510,10 @@ Definition lower_vyper_deploy_unit_def:
                  package_internal_fn tops use_trans nkey_map T immutables_len)
                 int_fns
           else [] in
-    if ¬EVERY (fn_allocs_ok tops)
-          (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [f]))
+    if ¬(immutables_len < 0x6000) ∨
+       ¬EVERY (fn_allocs_ok tops)
+          (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [f])) ∨
+       ¬ctor_named_init ctor_fn
     then NONE else
     let (ctor_cenv, ctor_args, ctor_payable, ctor_nr, ctor_nkey,
          ctor_trans, ctor_body, ctor_ret) =
@@ -1498,6 +1526,27 @@ Definition lower_vyper_deploy_unit_def:
       immutables_len ctor_args 0 deploy_int_fns ctor_cenv ctor_body
       ctor_payable ctor_nr ctor_nkey ctor_trans "__deploy"
 End
+
+Theorem lower_vyper_deploy_unit_immutables_bound:
+  lower_vyper_deploy_unit tops rpolicy bytes = SOME unit ==>
+  compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
+    tops < 0x6000
+Proof
+  Cases_on `classify_functions tops` >>
+  PairCases_on `r` >>
+  rw[lower_vyper_deploy_unit_def, AllCaseEqs()]
+QED
+
+(* A deploy unit that lowers has its constructor named __init__. *)
+Theorem lower_vyper_deploy_unit_ctor_named_init:
+  ∀tops rpolicy bytes unit exts ints fb ctor.
+    lower_vyper_deploy_unit tops rpolicy bytes = SOME unit ∧
+    classify_functions tops = (exts, ints, fb, ctor) ⇒
+    ctor_named_init ctor
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lower_vyper_deploy_unit_def, AllCaseEqs()]
+QED
 
 (* A deploy unit that lowers has the constructor's and every internal
    function's static buffers below the limit. *)

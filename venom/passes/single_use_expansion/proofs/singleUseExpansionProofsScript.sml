@@ -35,19 +35,6 @@ QED
 
 (* ===== Helper: lookup/eval after update_var ===== *)
 
-Theorem lookup_var_update_diff[local]:
-  x <> y ==> lookup_var x (update_var y v s) = lookup_var x s
-Proof
-  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
-QED
-
-Theorem eval_operand_update_diff[local]:
-  (!x. op = Var x ==> x <> v) ==>
-  eval_operand op (update_var v w s) = eval_operand op s
-Proof
-  Cases_on `op` >> simp[eval_operand_def, lookup_var_update_diff, update_var_def]
-QED
-
 (* ===== Helper: run_insts append ===== *)
 
 Theorem run_insts_append[local]:
@@ -101,31 +88,6 @@ Proof
   res_tac
 QED
 
-(* The modified instruction preserves opcode, outputs, id *)
-Theorem sue_expand_inst_preserves_opcode[local]:
-  !dfg inst.
-    ~sue_should_skip inst.inst_opcode ==>
-    ?assigns new_ops.
-      sue_expand_inst dfg inst = assigns ++ [inst with inst_operands := new_ops] /\
-      EVERY (\a. a.inst_opcode = ASSIGN) assigns /\
-      LENGTH new_ops = LENGTH inst.inst_operands
-Proof
-  rw[sue_expand_inst_def] >>
-  pairarg_tac >> gvs[] >>
-  imp_res_tac sue_expand_ops_assigns_are_assign >>
-  imp_res_tac sue_expand_ops_length >> gvs[] >>
-  metis_tac[]
-QED
-
-(* Skipped instructions are unchanged *)
-Theorem sue_expand_inst_skip[local]:
-  !dfg inst.
-    sue_should_skip inst.inst_opcode ==>
-    sue_expand_inst dfg inst = [inst]
-Proof
-  rw[sue_expand_inst_def]
-QED
-
 (* ===== Effect-free simulation helpers ===== *)
 
 (* Running effect-free instructions whose outputs are all in fresh
@@ -150,13 +112,6 @@ Proof
     last_x_assum (qspecl_then [`fuel`, `ctx`, `v`, `st'`, `fresh`] mp_tac) >>
     gvs[]) >>
   metis_tac[stateEquivPropsTheory.state_equiv_trans]
-QED
-
-(* ASSIGN is effect-free *)
-Theorem assign_is_effect_free[local]:
-  is_effect_free_op ASSIGN
-Proof
-  EVAL_TAC
 QED
 
 (* ASSIGN assigns produce effect-free instructions *)
@@ -708,17 +663,6 @@ QED
 
 (* Helper: if an assign in the expansion prefix errors, the original
    instruction also errors. *)
-(* Helper: ASSIGN errors iff eval_operand is NONE *)
-Theorem assign_error_eval_none[local]:
-  !fuel ctx op out id st.
-    (?e. step_inst fuel ctx
-           <| inst_opcode := ASSIGN; inst_operands := [op];
-              inst_outputs := [out]; inst_id := id |> st = Error e) <=>
-    eval_operand op st = NONE
-Proof
-  rw[step_inst_non_invoke, step_inst_base_def, is_alloca_op_def] >>
-  Cases_on `eval_operand op st` >> simp[]
-QED
 
 (* Helper: if eval_operands returns NONE, some position has eval NONE *)
 Theorem eval_operands_none_exists[local]:
@@ -760,32 +704,8 @@ Proof
   qexists_tac `j` >> simp[]
 QED
 
-(* Helper: running a single ASSIGN [op] [out] preserves eval of
-   operands whose var names differ from out. *)
-Theorem single_assign_preserves_eval[local]:
-  !fuel ctx op out id st st'.
-    step_inst fuel ctx
-      <| inst_opcode := ASSIGN; inst_operands := [op];
-         inst_outputs := [out]; inst_id := id |> st = OK st' ==>
-    !op'. (!x. op' = Var x ==> x <> out) ==>
-          eval_operand op' st' = eval_operand op' st
-Proof
-  rw[step_inst_non_invoke, step_inst_base_def, is_alloca_op_def] >>
-  Cases_on `eval_operand op st` >> gvs[] >>
-  Cases_on `op'` >> gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
-QED
-
 (* Helper: run_insts of assigns from sue_expand_ops errors
    only if some original operand evals to NONE. *)
-(* Helper: sue_needs_assign is F for Label operands *)
-Theorem sue_needs_assign_label[local]:
-  !dfg inst idx l. ~sue_needs_assign dfg inst idx \/
-    idx < LENGTH inst.inst_operands /\
-    (!l. EL idx inst.inst_operands <> Label l) ==>
-    (!l. EL idx inst.inst_operands <> Label l) \/ ~sue_needs_assign dfg inst idx
-Proof
-  metis_tac[]
-QED
 
 (* Helper: run_insts of assigns from sue_expand_ops errors only if some
    original operand evals to NONE. Also: that operand is not a Label.
@@ -1335,89 +1255,6 @@ Proof
   Cases_on `i` >> fs[]
 QED
 
-(* Helper: SUC jm offset computation — extracted to avoid context pollution (L304) *)
-Triviality sue_suc_offset[local]:
-  !f (xs : 'a list) i j jm assigns mod_inst.
-    i < LENGTH xs /\
-    j = SUM (MAP (LENGTH o f) (TAKE i xs)) /\
-    jm = j + LENGTH assigns /\
-    f (EL i xs) = assigns ++ [mod_inst]
-  ==>
-    SUC jm = SUM (MAP (LENGTH o f) (TAKE (SUC i) xs))
-Proof
-  rpt strip_tac >>
-  `SUM (MAP (LENGTH o f) (TAKE (SUC i) xs)) =
-   SUM (MAP (LENGTH o f) (TAKE i xs)) + LENGTH (f (EL i xs))`
-    by (irule FLAT_MAP_offset_SUC >> simp[]) >>
-  simp[]
-QED
-
-Theorem lift_result_exec_result_map[local]:
-  !R_ok R_term g r1 r2.
-    lift_result R_ok R_term R_term r1 r2 /\
-    (!s1 s2. R_ok s1 s2 ==> R_ok (g s1) (g s2)) /\
-    (!s1 s2. R_term s1 s2 ==> R_term (g s1) (g s2))
-  ==> lift_result R_ok R_term R_term (exec_result_map g r1) (exec_result_map g r2)
-Proof
-  Cases_on `r1` >> Cases_on `r2` >>
-  simp[lift_result_def, exec_result_map_def]
-QED
-
-(* lift_result_halt_wrap: local re-proof of analysisSimProofsBase triviality *)
-Triviality lift_result_halt_wrap[local]:
-  !R_ok R_term r1 r2.
-    valid_state_rel R_ok R_term ==>
-    lift_result R_ok R_term R_term r1 r2 ==>
-    lift_result R_ok R_term R_term
-      (case r1 of
-         OK s'' => if s''.vs_halted then Halt s'' else OK s''
-       | Halt s' => Halt s'
-       | Abort a s' => Abort a s'
-       | IntRet rv ss => IntRet rv ss
-       | Error e => Error e)
-      (case r2 of
-         OK s'' => if s''.vs_halted then Halt s'' else OK s''
-       | Halt s' => Halt s'
-       | Abort a s' => Abort a s'
-       | IntRet rv ss => IntRet rv ss
-       | Error e => Error e)
-Proof
-  rpt strip_tac >>
-  Cases_on `r1` >> Cases_on `r2` >> gvs[lift_result_def] >>
-  imp_res_tac execEquivParamBaseTheory.vsr_R_ok_fields >> gvs[] >>
-  Cases_on `v.vs_halted` >> gvs[lift_result_def] >>
-  metis_tac[execEquivParamBaseTheory.vsr_R_ok_R_term]
-QED
-
-(* invoke_lift_result_idx_bridge: local re-proof *)
-Triviality invoke_lift_result_idx_bridge[local]:
-  !R_ok R_term fuel ctx inst1 inst2 s n.
-    valid_state_rel R_ok R_term /\
-    inst1.inst_opcode = INVOKE /\ inst2.inst_opcode = INVOKE /\
-    lift_result R_ok R_term R_term
-      (step_inst fuel ctx inst1 s)
-      (step_inst fuel ctx inst2 s)
-  ==>
-    lift_result R_ok R_term R_term
-      (step_inst fuel ctx inst1 (s with vs_inst_idx := n))
-      (step_inst fuel ctx inst2 (s with vs_inst_idx := n))
-Proof
-  rpt strip_tac >>
-  `step_inst fuel ctx inst1 (s with vs_inst_idx := n) =
-    case step_inst fuel ctx inst1 s of
-      OK s'' => OK (s'' with vs_inst_idx := n)
-    | x => x` by simp[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
-  `step_inst fuel ctx inst2 (s with vs_inst_idx := n) =
-    case step_inst fuel ctx inst2 s of
-      OK s'' => OK (s'' with vs_inst_idx := n)
-    | x => x` by simp[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
-  ntac 2 (pop_assum SUBST1_TAC) >>
-  Cases_on `step_inst fuel ctx inst1 s` >>
-  Cases_on `step_inst fuel ctx inst2 s` >>
-  gvs[lift_result_def] >>
-  metis_tac[analysisSimProofsBaseTheory.R_ok_idx_change]
-QED
-
 (* Per-instruction simulation at arbitrary state *)
 Triviality sue_inst_sim_at[local]:
   !dfg inst fuel ctx st fresh fn bb.
@@ -1554,32 +1391,6 @@ Proof
   >- metis_tac[stateEquivProofsTheory.state_equiv_trans,
               stateEquivProofsTheory.execution_equiv_trans]
   >- (qexists_tac `Error e` >> simp[])
-QED
-
-(* lift_result through case with OK continuation and optional non-OK state transform *)
-Triviality lift_result_case_map[local]:
-  !R_ok R_term r1 r2 f g h1 h2.
-    valid_state_rel R_ok R_term /\
-    lift_result R_ok R_term R_term r1 r2 /\
-    (!s1 s2. R_ok s1 s2 ==> lift_result R_ok R_term R_term (f s1) (g s2)) /\
-    (!s1 s2. R_term s1 s2 ==> R_term (h1 s1) (h2 s2))
-  ==>
-    lift_result R_ok R_term R_term
-      (case r1 of
-         OK s => f s
-       | Halt s => Halt (h1 s)
-       | Abort a s => Abort a (h1 s)
-       | IntRet rv ss => IntRet rv (h1 ss)
-       | Error e => Error e)
-      (case r2 of
-         OK s => g s
-       | Halt s => Halt (h2 s)
-       | Abort a s => Abort a (h2 s)
-       | IntRet rv ss => IntRet rv (h2 ss)
-       | Error e => Error e)
-Proof
-  Cases_on `r1` >> Cases_on `r2` >>
-  gvs[lift_result_def]
 QED
 
 (* Bridge step_inst through idx changes + case dispatch in one shot.
@@ -2022,61 +1833,13 @@ Proof
     metis_tac[])
 QED
 
-Theorem sue_block_sim[local]:
-  !fuel ctx bb st dfg fresh fn.
-    MEM bb fn.fn_blocks /\
-    fn_inst_wf fn /\
-    (!inst. MEM inst bb.bb_instructions ==>
-            ~is_alloca_op inst.inst_opcode /\
-            sue_operands_wf inst) /\
-    (!inst x. MEM inst bb.bb_instructions /\
-              MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
-    fresh = sue_fresh_vars_fn fn /\
-    st.vs_inst_idx = 0 ==>
-    lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
-      (exec_block fuel ctx bb st)
-      (exec_block fuel ctx (sue_expand_block dfg bb) st)
-Proof
-  rpt strip_tac >>
-  simp[sue_expand_block_def] >>
-  qspecl_then [`bb`, `dfg`, `fresh`, `fn`] mp_tac sue_block_sim_induct >>
-  (impl_tac >- (rpt conj_tac >> metis_tac[])) >>
-  disch_then (qspecl_then [`LENGTH bb.bb_instructions`, `fuel`, `ctx`, `st`] mp_tac) >>
-  `st with vs_inst_idx := 0 = st` by simp[venom_state_component_equality] >>
-  simp[]
-QED
-
 (* ===== run_block bridge: SUE preserves the PHI prefix exactly ===== *)
-
-Triviality sue_expand_inst_nonphi_prefix_append[local]:
-  !dfg inst rest.
-    inst.inst_opcode <> PHI ==>
-    phi_prefix_length (sue_expand_inst dfg inst ++ rest) = 0
-Proof
-  rpt strip_tac >>
-  simp[sue_expand_inst_def] >>
-  Cases_on `sue_should_skip inst.inst_opcode` >>
-  gvs[phi_prefix_length_def, sue_should_skip_def, is_param_opcode_def] >>
-  pairarg_tac >> gvs[] >>
-  Cases_on `assigns` >> gvs[phi_prefix_length_def]
-  >- (drule sue_expand_ops_assigns_are_assign >> simp[phi_prefix_length_def]) >>
-  Cases_on `inst.inst_opcode` >> gvs[sue_should_skip_def, is_param_opcode_def, phi_prefix_length_def]
-QED
 
 Triviality sue_expand_inst_phi[local]:
   !dfg inst.
     inst.inst_opcode = PHI ==> sue_expand_inst dfg inst = [inst]
 Proof
   rw[sue_expand_inst_def, sue_should_skip_def, is_param_opcode_def]
-QED
-
-Triviality sue_expand_inst_phi_prefix_append[local]:
-  !dfg inst rest.
-    inst.inst_opcode = PHI ==>
-    phi_prefix_length (sue_expand_inst dfg inst ++ rest) =
-    SUC (phi_prefix_length rest)
-Proof
-  rw[sue_expand_inst_phi, phi_prefix_length_def]
 QED
 
 Triviality sue_expand_inst_prefix_length_append[local]:
@@ -2373,34 +2136,6 @@ QED
    mod_inst has the original opcode. *)
 (* Already have sue_expand_inst_preserves_opcode — just re-export the key fact *)
 
-(* Count contribution from one expanded instruction to var_use_count *)
-Triviality sue_expand_inst_count[local]:
-  !dfg inst v.
-    sue_should_skip inst.inst_opcode ==>
-    LENGTH (FILTER (\i. ~sue_count_exempt i.inst_opcode /\ MEM (Var v) i.inst_operands)
-                   (sue_expand_inst dfg inst)) = 0
-Proof
-  rw[sue_expand_inst_def, skip_iff_exempt]
-QED
-
-Triviality sue_expand_inst_nonskip_count[local]:
-  !dfg inst v.
-    ~sue_should_skip inst.inst_opcode ==>
-    LENGTH (FILTER (\i. ~sue_count_exempt i.inst_opcode /\ MEM (Var v) i.inst_operands)
-                   (sue_expand_inst dfg inst)) =
-    if MEM (Var v) (SND (sue_expand_ops dfg inst inst.inst_operands 0))
-    then 1 else 0
-Proof
-  rw[sue_expand_inst_def] >>
-  pairarg_tac >> fs[] >>
-  `EVERY (\a. a.inst_opcode = ASSIGN) assigns` by
-    metis_tac[sue_expand_ops_assigns_are_assign] >>
-  `~sue_count_exempt inst.inst_opcode` by metis_tac[skip_iff_exempt] >>
-  simp[FILTER_APPEND_DISTRIB, FILTER_EQ_NIL, EVERY_MEM] >>
-  rpt strip_tac >> gvs[sue_count_exempt_def, is_param_opcode_def] >>
-  fs[EVERY_MEM] >> res_tac >> gvs[sue_count_exempt_def, is_param_opcode_def]
-QED
-
 (* fn_insts_blocks = FLAT of MAP *)
 Triviality fn_insts_blocks_flat[local]:
   !bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)
@@ -2465,18 +2200,6 @@ Proof
   rw[sue_fresh_vars_fn_def, fn_insts_mem] >>
   simp[MEM_FLAT, MEM_MAP, MEM_MAPi, PULL_EXISTS] >>
   metis_tac[]
-QED
-
-(* Original operand vars are not in the fresh var set *)
-Triviality sue_original_not_fresh[local]:
-  !fn inst v.
-    (!bb i x. MEM bb fn.fn_blocks /\ MEM i bb.bb_instructions /\
-       MEM (Var x) i.inst_operands ==> x NOTIN sue_fresh_vars_fn fn) /\
-    MEM inst (fn_insts fn) /\
-    MEM (Var v) inst.inst_operands ==>
-    v NOTIN sue_fresh_vars_fn fn
-Proof
-  rw[fn_insts_mem] >> metis_tac[]
 QED
 
 (* Combined: an original operand variable != any sue_fresh_var for any

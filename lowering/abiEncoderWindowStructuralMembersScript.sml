@@ -1101,16 +1101,6 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem window_structural_member_envelope_frame[local]:
-  EVERY (\(b,n). d <= b /\ b+n <= d+len) outs ==>
-  !a. EVERY (\(b,n). a < b \/ b+n <= a) [(d,len)] ==>
-      EVERY (\(b,n). a < b \/ b+n <= a) outs
-Proof
-  simp_tac (srw_ss()) [EVERY_MEM] >> strip_tac >>
-  rpt gen_tac >> strip_tac >> qx_gen_tac `r` >> strip_tac >>
-  Cases_on `r` >> first_x_assum drule >> simp[] >> decide_tac
-QED
-
 Theorem window_structural_members_cons_run_sizes_core[local]:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ DROP k infos = (h0,h1,h2,h3)::rest /\
@@ -1252,7 +1242,7 @@ Resume window_structural_members_cons_run_sizes_core[compose]:
   simp_tac (srw_ss()) [NoAsms, EMPTY_SUBSET, EVERY_DEF] >>
   asm_rewrite_tac[] >>
   (conj_tac >-
-    (drule window_structural_member_envelope_frame >>
+    (drule window_member_envelope_frame >>
      simp_tac (srw_ss()) [NoAsms, EVERY_DEF])) >>
   qpat_x_assum `ids SUBSET _` mp_tac >>
   qpat_x_assum `window_alloca_sites func (frag_ids ready en) SUBSET _` mp_tac >>

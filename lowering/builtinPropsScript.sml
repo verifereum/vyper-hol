@@ -1021,7 +1021,7 @@ Proof
 QED
 
 (* compile_select extends cs_current_insts (follows from 3x emit_op_extends) *)
-Triviality compile_select_extends:
+Theorem compile_select_extends:
   ∀ a b c st op st'.
     compile_select a b c st = (op, st') ⇒
     st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧

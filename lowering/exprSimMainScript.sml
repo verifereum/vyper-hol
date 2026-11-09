@@ -47,7 +47,7 @@ Theorem compile_builtin_case:
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_case nocalls ctx func cenv cx (Builtin ann bi args)`
-    suffices_by metis_tac[expr_sim_case_of_vv] >>
+    suffices_by simp[expr_sim_case_of_vv] >>
   Cases_on `bi`
   >~ [`Builtin _ (Bop _) _`] >- metis_tac[]
   >~ [`Builtin _ (MakeArray _ _) _`] >- metis_tac[]
@@ -87,13 +87,16 @@ QED
 
 Theorem compile_type_builtin_case:
   !nocalls ctx func cenv cx ann tb t args.
-    exprs_case nocalls ctx func cenv cx args ==>
+    exprs_case nocalls ctx func cenv cx args /\
+    (tb = Convert ==> ~nocalls ==>
+     !e1 a f cargs d. args = [e1] /\ e1 = Call a (IntCall f) cargs d ==>
+       lowered_value_type cenv e1 = expr_type e1) ==>
     expr_sim_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args) /\
     expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args)
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args)`
-    suffices_by metis_tac[expr_sim_case_of_vv] >>
+    suffices_by simp[expr_sim_case_of_vv] >>
   Cases_on `tb`
   >~ [`TypeBuiltin _ MaxValue _ _`] >- simp[compile_bound_builtin_case]
   >~ [`TypeBuiltin _ MinValue _ _`] >- simp[compile_bound_builtin_case]
@@ -161,7 +164,7 @@ Proof
   >~ [`Call _ _ _ _`] >- (irule compile_call_case_sim >> gvs[])
   >~ [`Name _ _`] >- simp[compile_name_case_sim]
   >~ [`Literal _ _`] >- simp[compile_literal_case_sim]
-  >~ [`FlagMember _ _ _`] >- simp[compile_flag_member_case_sim] >>
+  >~ [`FlagMember _ _ _`] >- simp[exprSimFlagWordTheory.compile_flag_member_case_sim] >>
   FIRST (map (fn th => irule expr_ok_of_vv >> irule th >> gvs[])
     [compile_toplevel_name_sim, compile_ifexp_sim,
      compile_struct_lit_sim, compile_subscript_sim, compile_attribute_sim,
