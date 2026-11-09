@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimArrayCase
 Ancestors
+  bodyPtrPopTargetSimRegisters freshWrites
   bodyPtrPopTargetSimArrayRun bodyPtrPopTargetSimArrayGuard exprSimArrayIndex
   bodyPtrPopMemoryHeader stmtReasonLitFragMemory bodyPtrPopTargetSimArrayEndpoint
   bodyPtrBopScalarCompile bodyPtrBopScalarSeq bodyPtrBopInLiteralSuffix
@@ -29,11 +30,30 @@ Proof
        mk_inst_def, is_terminator_def]
 QED
 
+Theorem target_array_elem_layout:
+  array_elem_ptr bop idx dyn ws esz sa = (dst,sb) ==>
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var
+Proof
+  simp[array_elem_ptr_def, comp_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  Cases_on `dyn` >> gvs[comp_return_def] >>
+  imp_res_tac emit_op_extends >>
+  imp_res_tac emitted_insts_emit_op >>
+  rpt (qpat_x_assum `_.cs_current_insts = _.cs_current_insts ++ emitted_insts _ _`
+    kall_tac) >>
+  gvs[same_blocks_def] >>
+  simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, APPEND_ASSOC]
+QED
+
 Theorem target_array_guarded_path_ptr:
   array_bounds_check idx len sgn sa = ((),sm) /\
   array_elem_ptr bop idx dyn ws esz sm = (dst,sb) /\
   eval_operand bop s = SOME b /\ eval_operand idx s = SOME i /\
-  eval_operand len s = SOME n /\ fresh_vars_wrt sa s /\ idx_in_range sgn i n /\
+  eval_operand len s = SOME n /\
+  (!x. bop = Var x ==> not_fresh_at sa x) /\
+  (!x. idx = Var x ==> not_fresh_at sa x) /\
+  (!x. len = Var x ==> not_fresh_at sa x) /\ idx_in_range sgn i n /\
   op_prov G idx = NONE /\ op_taint tn idx = {} /\
   op_prov G len = NONE /\ op_taint tn len = {} /\ op_taint tn bop = {} /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -47,36 +67,48 @@ Theorem target_array_guarded_path_ptr:
     un.t_trans = tn.t_trans /\ un.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
                               op_taint un (Var x) = op_taint tn (Var x)) /\
-    fresh_vars_wrt sb t /\ copy_old_operand sb dst /\
+    copy_old_operand sb dst /\
     t = s with <|vs_vars := t.vs_vars;
                  vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)|> /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
-  strip_tac >> drule_all target_array_suffix_runtime >>
+  strip_tac >> drule_all target_array_suffix_run_old_inputs_ptr >>
   disch_then (qx_choose_then `raw` strip_assume_tac) >>
   drule hash_code_prefix_split >> strip_tac >>
-  drule_all target_bounds_check_path_ptr >>
+  drule_all target_bounds_path_old_inputs_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  drule_all array_bounds_check_ok >> strip_tac >> gvs[] >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK t` >>
   drule target_array_guard_layout >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts sa sm)` by gvs[EVERY_CONJ] >>
   drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
   qabbrev_tac `u = t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sm)` >>
+  suspend "guard_frame"
+QED
+
+Resume target_array_guarded_path_ptr[guard_frame]:
+  drule target_array_elem_layout >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule emitted_insts_append >> fs[copy_runtime_frame_def]) >>
+  drule_all target_array_suffix_writes_fresh >> strip_tac >>
+  `writes_fresh sa (emitted_insts sa sm)` by gvs[writes_fresh_append] >>
+  drule_all run_inst_seq_writes_fresh >> strip_tac >>
+  `t.vs_labels = s.vs_labels` by
+    (qpat_x_assum `t = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   `eval_operand bop u = SOME b /\ eval_operand idx u = SOME i /\
    copy_old_operand sm bop /\ copy_old_operand sm idx` by
     (simp[Abbr `u`, copy_old_operand_def] >>
-     metis_tac[fresh_vars_wrt_not_fresh_at]) >>
+     Cases_on `bop` >> Cases_on `idx` >>
+     gvs[eval_operand_def, lookup_var_def, not_fresh_at_def] >> metis_tac[]) >>
   `op_prov H bop = op_prov G bop /\ op_taint un bop = {} /\
    op_prov H idx = NONE /\ op_taint un idx = {}` by
     (`copy_old_operand sa bop /\ copy_old_operand sa idx` by
-       (simp[copy_old_operand_def] >> metis_tac[fresh_vars_wrt_not_fresh_at]) >>
+       simp[copy_old_operand_def] >>
      Cases_on `bop` >> Cases_on `idx` >>
      gvs[copy_old_operand_def, op_prov_def, op_taint_def]) >>
   `~u.vs_halted /\ lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
    isPREFIX (emitted_insts sm sb) (DROP u.vs_inst_idx bb.bb_instructions)` by
-    simp[Abbr `u`] >>
+    (simp[Abbr `u`] >> gvs[]) >>
   drule_all target_array_elem_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   suspend "finish"
@@ -109,10 +141,6 @@ Resume target_array_guarded_path_ptr[finish]:
        (fn th => once_rewrite_tac[th]) >> simp[NoAsms]) >>
   qpat_x_assum `raw = s with vs_vars := _` kall_tac >>
   gvs[op_taint_def] >> conj_tac
-  >- (qpat_x_assum `!k. raw with vs_inst_idx := k = _`
-        (qspec_then `LENGTH (emitted_insts sm sb) + u.vs_inst_idx`
-          (fn th => rewrite_tac[GSYM th])) >> fs[fresh_vars_wrt_def]) >>
-  conj_tac
   >- (`LENGTH (emitted_insts sm sb) + u.vs_inst_idx =
         LENGTH (emitted_insts sa sm) + (LENGTH (emitted_insts sm sb) + s.vs_inst_idx)` by
         (simp[NoAsms, Abbr `u`] >> decide_tac) >>
@@ -122,26 +150,11 @@ QED
 
 Finalise target_array_guarded_path_ptr
 
-Theorem target_array_elem_layout:
-  array_elem_ptr bop idx dyn ws esz sa = (dst,sb) ==>
-  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-  same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var
-Proof
-  simp[array_elem_ptr_def, comp_bind_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  Cases_on `dyn` >> gvs[comp_return_def] >>
-  imp_res_tac emit_op_extends >>
-  imp_res_tac emitted_insts_emit_op >>
-  rpt (qpat_x_assum `_.cs_current_insts = _.cs_current_insts ++ emitted_insts _ _`
-    kall_tac) >>
-  gvs[same_blocks_def] >>
-  simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND, APPEND_ASSOC]
-QED
-
 Theorem target_fixed_array_path_ptr:
   compile_array_subscript bop idx F cnt ws esz sgn loader sa = (dst,sb) /\
   eval_operand bop s = SOME b /\ eval_operand idx s = SOME i /\
-  fresh_vars_wrt sa s /\ idx_in_range sgn i (n2w cnt) /\
+  (!x. bop = Var x ==> not_fresh_at sa x) /\
+  (!x. idx = Var x ==> not_fresh_at sa x) /\ idx_in_range sgn i (n2w cnt) /\
   op_prov G idx = NONE /\ op_taint tn idx = {} /\ op_taint tn bop = {} /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -153,7 +166,7 @@ Theorem target_fixed_array_path_ptr:
     un.t_trans = tn.t_trans /\ un.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
                               op_taint un (Var x) = op_taint tn (Var x)) /\
-    fresh_vars_wrt sb t /\ copy_old_operand sb dst /\
+    copy_old_operand sb dst /\
     t = s with <|vs_vars := t.vs_vars;
                  vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)|> /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
@@ -172,6 +185,7 @@ Proof
     simp[eval_operand_def, op_prov_def, op_taint_def] >>
   `isPREFIX (emitted_insts sa sm ++ emitted_insts sm sb)
      (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
+  `!x. Lit (n2w cnt) = Var x ==> not_fresh_at sa x` by simp[] >>
   drule_all target_array_guarded_path_ptr >> simp[]
 QED
 
@@ -284,7 +298,7 @@ Theorem target_dynamic_memory_array_path_ptr:
     un.t_trans = tn.t_trans /\ un.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
                               op_taint un (Var x) = op_taint tn (Var x)) /\
-    fresh_vars_wrt sb t /\ copy_old_operand sb dst /\
+    copy_old_operand sb dst /\
     t = s with <|vs_vars := t.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|> /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
@@ -308,6 +322,10 @@ Proof
   `lookup_block r.vs_current_bb fn.fn_blocks = SOME bb /\
    isPREFIX (emitted_insts sl sm ++ emitted_insts sm sb)
      (DROP r.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
+  `(!x. Var src = Var x ==> not_fresh_at sl x) /\
+   (!x. idx = Var x ==> not_fresh_at sl x) /\
+   (!x. Var out = Var x ==> not_fresh_at sl x)` by
+    metis_tac[fresh_vars_wrt_not_fresh_at] >>
   drule_all target_array_guarded_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   suspend "finish"
