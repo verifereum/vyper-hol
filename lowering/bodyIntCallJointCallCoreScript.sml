@@ -123,7 +123,7 @@ Theorem intcall_effect_map_producer:
   intcall_map_producer fp e
 Proof
   strip_tac >> gvs[intcall_map_producer_def,
-    supported_pure_expr_def]
+    supported_pure_expr_def, supported_effect_expr_def]
 QED
 
 Theorem intcall_supported_call_forms:

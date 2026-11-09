@@ -294,13 +294,16 @@ Definition intcall_forced_producer_def:
 End
 
 (* Mapping-place producer: an expression naming a mapping
-   (expr_map_pre, not well_typed_expr), with expr_map_sim's certificate. *)
+   (expr_map_pre, not well_typed_expr), with expr_map_sim's certificate.
+   It covers effectful mapping places too (nested[f()] in nested[f()][k]),
+   since supported_effect_expr's Subscript clause admits them as bases. *)
 Definition intcall_map_producer_def:
   intcall_map_producer fp e <=>
     !ce env es sa sb s ty vv.
       intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
       expr_map_pre ce fp.jc_cx env e es /\
-      supported_place_expr fp.jc_tops e /\
+      (supported_place_expr fp.jc_tops e \/
+       supported_effect_place_expr fp.jc_tops e) /\
       calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e) /\
       compile_expr ce ty e sa = (vv,sb) /\
       fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
