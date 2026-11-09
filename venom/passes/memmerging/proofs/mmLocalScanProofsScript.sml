@@ -4044,6 +4044,34 @@ Proof
      qexists_tac `fn0` >> gvs[wf_function_def]) >> gvs[]
 QED
 
+Theorem mm_local_prefix_write_group_owner[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM w bb.bb_instructions /\
+  w.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  MEM a (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  MEM b (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  MEM w.inst_id a.cg_inst_ids /\ MEM w.inst_id b.cg_inst_ids ==> a = b
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    (irule mm_local_prefix_id_distinct >>
+     qexistsl [`fn0`,`index`,`k`,`sk`,`supply`] >> simp[] >>
+     conj_tac
+     >- metis_tac[wf_function_def, mmWfProofsTheory.fn_inst_ids_distinct_block, EL_MEM] >>
+     gvs[ir_supply_covers_fn_def, irSupplyTheory.fn_ir_inst_ids_def,
+       irSupplyTheory.block_ir_inst_ids_def, EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+     gen_tac >> strip_tac >> qpat_x_assum `!id. _ ==> id < _` irule >>
+     qexists_tac `MAP (\i. i.inst_id) (EL index fn0.fn_blocks).bb_instructions` >>
+     (conj_tac >- (qexists_tac `EL index fn0.fn_blocks` >> simp[EL_MEM])) >>
+     simp[MEM_MAP] >> qexists_tac `i` >> simp[]) >>
+  irule mm_local_scan_group_owner >>
+  qexistsl [`bb`,`dfg_build_function fn0`,`w.inst_id`,`mode`,
+            `\id. id = w.inst_id`] >> simp[] >>
+  metis_tac[mm_local_prefix_write_not_def]
+QED
+
 Theorem mm_local_cut_pending_ancestor[local]:
   bb.bb_instructions = pre ++ post /\
   ss = FOLDL (scan_inst dfg mode) empty_scan_state pre /\
@@ -4071,6 +4099,30 @@ Proof
      metis_tac[MEM_APPEND]) >>
   drule mm_local_rep_member >> strip_tac >>
   gvs[MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem mm_local_prefix_write_pending_ancestor[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM w bb.bb_instructions /\
+  w.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  bb.bb_instructions = pre ++ post /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) mode) empty_scan_state pre /\
+  MEM h (ss.ss_copies ++ ss.ss_flushed) /\ MEM w.inst_id h.cg_inst_ids /\
+  MEM g (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  MEM w.inst_id g.cg_inst_ids /\ rep_of_group bb.bb_instructions g = SOME (r,g) /\
+  ~MEM r (MAP (\i. i.inst_id) pre) ==>
+  MEM h ss.ss_copies /\ mm_local_copy_ancestor h g
+Proof
+  strip_tac >> irule mm_local_cut_pending_ancestor >>
+  conj_tac >- simp[] >>
+  qexistsl [`bb`,`dfg_build_function fn0`,`w.inst_id`,`mode`,`post`,`pre`,`r`] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> irule mm_local_prefix_write_group_owner >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  rpt strip_tac >> irule mm_local_prefix_fragment_ids_before_cut >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[MEM_APPEND]
 QED
 
 Theorem mm_local_memzero_merge_effect[local]:
