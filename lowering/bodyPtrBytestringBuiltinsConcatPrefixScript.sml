@@ -4,7 +4,7 @@ Ancestors
   bodyPtrBytestringBuiltinsBuffer bodyPtrBytestringBuiltinsAllocation
   bodyPtrPopMemoryStore loweringHalt bodyPtrIfExpAllocCompiler
   annAssignPtrAllocGhost annAssignPtrStore bodyPtrHashBuiltinsAllocFrame
-  bodyPtrEnvBuiltinsScalar exprSimAlloc ghostPcTransportPtr
+  bodyPtrEnvBuiltinsScalar bodyPtrIfExpAllocSource exprSimAlloc ghostPcTransportPtr
   bodyPtrAttributeAdd typedCopyPtr fragExec exprLoweringProps exprSimLiteralBuffer
   fragGasPathPtr fragGasSeqPtr loweringPosts bodyPtrDefs context emitHelper
   emitHelperProps compileEnv venomState venomInst venomExecSemantics
@@ -233,13 +233,32 @@ Theorem concat_slice_out_buf_counted_frame:
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==>
       lookup_var x t = lookup_var x s /\ FLOOKUP G2 x = FLOOKUP G x /\
-      op_taint tn2 (Var x) = op_taint tn (Var x))
+      op_taint tn2 (Var x) = op_taint tn (Var x)) /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n a,n) /\
+    w2n a+n < dimword (:256) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!aid b k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,k) ==>
+      regions_disjoint (w2n a) n b k) /\
+    (!name b k. local_region ce es.scopes t name b k ==>
+      regions_disjoint (w2n a) n b k) /\
+    (!name b k. local_region ce es.scopes s name b k <=>
+      local_region ce es.scopes t name b k)
 Proof
   strip_tac >> drule_all compile_slice_out_buf_counted >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
   `ghost_inv d ce cx es G2 tn2 t /\ ghost_kept ce es sa G tn s G2 tn2`
     by suspend "frame" >>
-  qexistsl_tac [`r`,`p`,`a`,`G2`,`tn2`,`t`] >> simp[]
+  `!name b k. local_region ce es.scopes s name b k <=>
+    local_region ce es.scopes t name b k` by
+    (simp[local_region_def] >> rpt gen_tac >>
+     `!q sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var q) sz) ==>
+        lookup_var q t = lookup_var q s` by
+       (rpt strip_tac >> `not_fresh_at sa q` by
+          (fs[local_ptrs_reserved_def] >> metis_tac[]) >> simp[]) >>
+     metis_tac[]) >>
+  qexistsl_tac [`r`,`p`,`a`,`G2`,`tn2`,`t`] >> simp[] >>
+  suspend "sites"
 QED
 
 Resume concat_slice_out_buf_counted_frame[frame]:
@@ -285,6 +304,24 @@ Resume concat_slice_out_buf_counted_frame[inv]:
   qexistsl_tac [`G1`,`tn1`] >>
   simp[copy_len_binop_ghost_frame] >>
   simp[step_taint_def, mk_inst_def, store_taint_def, adopt_reset_def, imm_taint_def]
+QED
+
+Resume concat_slice_out_buf_counted_frame[sites]:
+  `fn_has_code sa sm fn` by
+    (drule compile_slice_out_buf_compiler_parts >> strip_tac >> gvs[] >>
+     drule_all fn_has_code_split >> simp[]) >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [r]) (fn_insts fn)` by
+    (drule_all compile_alloc_buffer_raw_step >> strip_tac >> gvs[]) >>
+  drule_all compile_alloc_buffer_raw_resources >> strip_tac >>
+  drule_all concat_alloc_raw_frame >> strip_tac >>
+  `!name b k. local_region ce es.scopes t name b k ==>
+    local_region ce es.scopes u name b k` by
+    (simp[local_region_def] >> rpt strip_tac >>
+     `not_fresh_at sa p'` by
+       (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     `lookup_var p' u = lookup_var p' s /\ lookup_var p' t = lookup_var p' s`
+       by simp[] >> metis_tac[]) >>
+  gvs[update_var_def] >> metis_tac[]
 QED
 
 Finalise concat_slice_out_buf_counted_frame
