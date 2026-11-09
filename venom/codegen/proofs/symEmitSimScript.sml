@@ -163,16 +163,6 @@ Proof
        sym_state_component_equality, asm_state_component_equality]
 QED
 
-Theorem sym_step_push_word:
-  sym_step p env (AsmPush bytes) ss = SymOK
-    (ss with <| sym_base := asm_next (ss.sym_base with as_stack := []);
-                sym_stack := Val (word_of_bytes F (0w:bytes32) (REVERSE bytes)) ::
-                             ss.sym_stack |>)
-Proof
-  simp[sym_step_def, sym_lift_def, asm_step_def, asm_next_def,
-       sym_state_component_equality, asm_state_component_equality]
-QED
-
 Theorem sym_emit_kinds_replace:
   sym_kinds_ok cplan fn ret srest ps ss /\
   ss'.sym_mem_labels = ss.sym_mem_labels /\

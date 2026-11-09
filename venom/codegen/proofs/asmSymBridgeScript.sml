@@ -1993,7 +1993,7 @@ Proof
   irule asm_sym_rel_next >> simp[]
 QED
 
-Theorem LIST_REL_swap[local]:
+Theorem LIST_REL_swap:
   LIST_REL R l1 l2 ∧ n < LENGTH l1 ∧ 0 < n ⇒
   LIST_REL R (LUPDATE (HD l1) n (LUPDATE (EL n l1) 0 l1))
              (LUPDATE (HD l2) n (LUPDATE (EL n l2) 0 l2))

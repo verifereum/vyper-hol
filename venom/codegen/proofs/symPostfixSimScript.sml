@@ -636,3 +636,290 @@ Proof
   >- (irule scratch_store_labels_retains >> simp[scratch_store_labels_at]) >>
   simp[scratch_store_labels_at]
 QED
+
+(* Exported here so scratch replay and emitted instructions share the rule. *)
+Theorem sym_step_push_word:
+  sym_step p env (AsmPush bytes) ss = SymOK
+    (ss with <| sym_base := asm_next (ss.sym_base with as_stack := []);
+                sym_stack := Val (word_of_bytes F (0w:bytes32) (REVERSE bytes)) ::
+                             ss.sym_stack |>)
+Proof
+  simp[sym_step_def, sym_lift_def, asm_step_def, asm_next_def,
+       sym_state_component_equality, asm_state_component_equality]
+QED
+
+(* A scratch instruction consists of a numeric address push and one operation. *)
+Theorem sym_scratch_push_then_run:
+  asm_block_at p ss.sym_base.as_pc [AsmPush (encode_num_bytes off); inst] /\
+  sym_step p env inst
+    (ss with <| sym_base := asm_next (ss.sym_base with as_stack := []);
+                sym_stack := Val (n2w off) :: ss.sym_stack |>) = SymOK ss' ==>
+  sym_steps p env 2 ss = SymOK ss'
+Proof
+  simp[stackOpSimTheory.asm_block_at_cons] >> strip_tac >>
+  gvs[asm_next_def] >>
+  simp[codegenSymRelTheory.sym_steps_compute, sym_step_push_word,
+       strongPrefixSimTheory.push_encode_num_roundtrip, asm_next_def]
+QED
+
+Theorem sym_scratch_store_run:
+  off < dimword (:256) /\ ss.sym_stack = sv :: tail /\
+  asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp (SOSpill off)) ==>
+  ?ss'. sym_steps p env 2 ss = SymOK ss' /\
+    ss'.sym_stack = tail /\
+    ss'.sym_mem_labels = scratch_store_labels ss.sym_mem_labels off sv /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 2
+Proof
+  strip_tac >>
+  qabbrev_tac `pushed = ss with
+    <| sym_base := asm_next (ss.sym_base with as_stack := []);
+       sym_stack := Val (n2w off) :: ss.sym_stack |>` >>
+  `pushed.sym_stack = Val (n2w off) :: sv :: tail` by simp[Abbr `pushed`] >>
+  drule sym_mstore_scratch_step >> simp[] >> strip_tac >>
+  qexists `ss'` >> gvs[Abbr `pushed`, asm_next_def] >>
+  irule sym_scratch_push_then_run >> qexistsl [`AsmOp "MSTORE"`, `off`] >>
+  gvs[exec_stack_op_def, sym_step_def, sym_step_op_def, asm_next_def]
+QED
+
+Theorem sym_scratch_restore_run:
+  off < dimword (:256) /\ scratch_mem_ok fn ret slots ss.sym_mem_labels /\
+  FLOOKUP slots off = SOME op /\
+  asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp (SORestore off)) ==>
+  ?ss' value. sym_steps p env 2 ss = SymOK ss' /\
+    ss'.sym_stack = value :: ss.sym_stack /\ op_kind_ok fn ret op value /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 2
+Proof
+  strip_tac >>
+  qabbrev_tac `pushed = ss with
+    <| sym_base := asm_next (ss.sym_base with as_stack := []);
+       sym_stack := Val (n2w off) :: ss.sym_stack |>` >>
+  `pushed.sym_stack = Val (n2w off) :: ss.sym_stack /\
+   scratch_mem_ok fn ret slots pushed.sym_mem_labels /\
+   FLOOKUP slots (w2n (n2w off : bytes32)) = SOME op` by simp[Abbr `pushed`] >>
+  drule_all scratch_restore_step_inventory >> strip_tac >>
+  qexistsl [`ss'`, `value`] >> gvs[Abbr `pushed`, asm_next_def] >>
+  irule sym_scratch_push_then_run >> qexistsl [`AsmOp "MLOAD"`, `off`] >>
+  gvs[exec_stack_op_def, sym_step_def, sym_step_op_def, asm_next_def]
+QED
+
+Theorem scratch_store_labels_support:
+  (!b. b IN FDOM labs ==> context_spill_byte cplan b) /\
+  (!b. in_mem_range off 32 b ==> context_spill_byte cplan b) ==>
+  (!b. b IN FDOM (scratch_store_labels labs off sv) ==> context_spill_byte cplan b)
+Proof
+  rpt strip_tac >> Cases_on `in_mem_range off 32 b` >- metis_tac[] >>
+  `FLOOKUP (scratch_store_labels labs off sv) b = FLOOKUP labs b` by
+    (irule scratch_store_labels_outside >> simp[]) >>
+  metis_tac[flookup_thm, optionTheory.IS_SOME_EXISTS]
+QED
+
+Definition scratch_state_ok_def:
+  scratch_state_ok cplan fn ret srest ghost slots ss <=>
+    (?top. ss.sym_stack = top ++ srest /\
+           LIST_REL (op_kind_ok fn ret) ghost top) /\
+    scratch_mem_ok fn ret slots ss.sym_mem_labels /\
+    (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cplan b)
+End
+
+(* Top-first occurrence replay.  The inventory key is the physical address. *)
+Inductive scratch_replay_step:
+  (!cplan R g slots n.
+     0 < n /\ n <= 16 /\ n <= LENGTH g ==>
+     scratch_replay_step cplan R (SODup n) g slots (EL (n-1) g :: g) slots) /\
+  (!cplan R g slots n.
+     0 < n /\ n <= 16 /\ n < LENGTH g ==>
+     scratch_replay_step cplan R (SOSwap n) g slots
+       (LUPDATE (HD g) n (LUPDATE (EL n g) 0 g)) slots) /\
+  (!cplan R g slots n.
+     n <= LENGTH g ==>
+     scratch_replay_step cplan R (SOPop n) g slots (DROP n g) slots) /\
+  (!cplan R op g slots off.
+     off < dimword (:256) /\
+     (!old at. FLOOKUP slots old = SOME at /\ old <> off ==>
+       off + 32 <= old \/ old + 32 <= off) /\
+     (!b. in_mem_range off 32 b ==> R b /\ context_spill_byte cplan b) ==>
+     scratch_replay_step cplan R (SOSpill off) (op :: g) slots g (slots |+ (off,op))) /\
+  (!cplan R g slots off op.
+     off < dimword (:256) /\ FLOOKUP slots off = SOME op ==>
+     scratch_replay_step cplan R (SORestore off) g slots (op :: g) slots)
+End
+
+Inductive scratch_replay:
+  (!cplan R g slots. scratch_replay cplan R [] g slots g slots) /\
+  (!cplan R op ops g slots middle cells final inventory.
+     scratch_replay_step cplan R op g slots middle cells /\
+     scratch_replay cplan R ops middle cells final inventory ==>
+     scratch_replay cplan R (op :: ops) g slots final inventory)
+End
+
+Theorem scratch_state_store_run:
+  scratch_state_ok cplan fn ret srest (op :: g) slots ss /\
+  off < dimword (:256) /\
+  (!old at. FLOOKUP slots old = SOME at /\ old <> off ==>
+    off + 32 <= old \/ old + 32 <= off) /\
+  (!b. in_mem_range off 32 b ==> R b /\ context_spill_byte cplan b) /\
+  asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp (SOSpill off)) ==>
+  ?ss'. sym_steps p env 2 ss = SymOK ss' /\
+    scratch_state_ok cplan fn ret srest g (slots |+ (off,op)) ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  simp[scratch_state_ok_def] >> rpt strip_tac >>
+  Cases_on `top` >> gvs[] >>
+  drule_all sym_scratch_store_run >> disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists `ss'` >> simp[] >> conj_tac
+  >- (conj_tac >- metis_tac[scratch_mem_ok_store] >>
+      metis_tac[scratch_store_labels_support]) >>
+  metis_tac[scratch_store_labels_outside]
+QED
+
+Theorem scratch_state_restore_run:
+  scratch_state_ok cplan fn ret srest g slots ss /\
+  off < dimword (:256) /\ FLOOKUP slots off = SOME op /\
+  asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp (SORestore off)) ==>
+  ?ss'. sym_steps p env 2 ss = SymOK ss' /\
+    scratch_state_ok cplan fn ret srest (op :: g) slots ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+    ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[scratch_state_ok_def] >> rpt strip_tac >>
+  drule_all sym_scratch_restore_run >> disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists `ss'` >> simp[] >> metis_tac[APPEND, listTheory.LIST_REL_def]
+QED
+
+
+Theorem sym_step_dup_name:
+  0 < n /\ n <= 16 ==>
+  sym_step p env (AsmOp (dup_name n)) ss = sym_dup (n-1) ss
+Proof
+  strip_tac >>
+  `n < SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC 0))))))))))))))))` by decide_tac >>
+  pop_assum mp_tac >>
+  pure_rewrite_tac[prim_recTheory.LESS_THM, prim_recTheory.NOT_LESS_0] >>
+  strip_tac >> gvs[] >> simp[dup_name_def] >>
+  simp[sym_step_def, sym_step_op_def, dup_table_def]
+QED
+
+Theorem sym_step_swap_name:
+  0 < n /\ n <= 16 ==>
+  sym_step p env (AsmOp (swap_name n)) ss = sym_swap n ss
+Proof
+  strip_tac >>
+  `n < SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC 0))))))))))))))))` by decide_tac >>
+  pop_assum mp_tac >>
+  pure_rewrite_tac[prim_recTheory.LESS_THM, prim_recTheory.NOT_LESS_0] >>
+  strip_tac >> gvs[] >> simp[swap_name_def] >>
+  simp[sym_step_def, sym_step_op_def, dup_table_def, swap_table_def]
+QED
+
+Theorem scratch_state_dup_run:
+  scratch_state_ok cplan fn ret srest g slots ss /\
+  0 < n /\ n <= 16 /\ n <= LENGTH g /\
+  asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp (SODup n)) ==>
+  ?ss'. sym_steps p env 1 ss = SymOK ss' /\
+    scratch_state_ok cplan fn ret srest (EL (n-1) g :: g) slots ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+    ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[scratch_state_ok_def, exec_stack_op_def, stackOpSimTheory.asm_block_at_cons] >>
+  rpt strip_tac >>
+  `n-1 < LENGTH top` by (gvs[LIST_REL_EL_EQN] >> decide_tac) >>
+  simp[codegenSymRelTheory.sym_steps_compute, sym_step_dup_name,
+       sym_dup_def, sym_set_stack_def, asm_next_def, EL_APPEND1] >>
+  gvs[LIST_REL_EL_EQN]
+QED
+
+Theorem scratch_state_swap_run:
+  scratch_state_ok cplan fn ret srest g slots ss /\
+  0 < n /\ n <= 16 /\ n < LENGTH g /\
+  asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp (SOSwap n)) ==>
+  ?ss'. sym_steps p env 1 ss = SymOK ss' /\
+    scratch_state_ok cplan fn ret srest
+      (LUPDATE (HD g) n (LUPDATE (EL n g) 0 g)) slots ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+    ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[scratch_state_ok_def, exec_stack_op_def, stackOpSimTheory.asm_block_at_cons] >>
+  rpt strip_tac >>
+  `n < LENGTH top /\ 0 < LENGTH top` by (gvs[LIST_REL_EL_EQN] >> decide_tac) >>
+  simp[codegenSymRelTheory.sym_steps_compute, sym_step_swap_name,
+       sym_swap_def, sym_set_stack_def, asm_next_def, EL_APPEND1,
+       LUPDATE_APPEND1, HD_APPEND] >>
+  `HD (top ++ srest) = HD top` by (Cases_on `top` >> gvs[]) >>
+  simp[] >> irule asmSymBridgeTheory.LIST_REL_swap >> simp[]
+QED
+
+Theorem sym_scratch_pop_run:
+  !n ss. n <= LENGTH ss.sym_stack /\
+  asm_block_at p ss.sym_base.as_pc (REPLICATE n (AsmOp "POP")) ==>
+  sym_steps p env n ss = SymOK
+    (ss with <| sym_base := ss.sym_base with as_pc := ss.sym_base.as_pc + n;
+                sym_stack := DROP n ss.sym_stack |>)
+Proof
+  Induct >- simp[sym_steps_def, sym_state_component_equality, asm_state_component_equality] >>
+  rpt strip_tac >> Cases_on `ss.sym_stack` >> gvs[] >>
+  gvs[REPLICATE, stackOpSimTheory.asm_block_at_cons] >>
+  simp[Once sym_steps_def, sym_step_def, sym_step_op_def, sym_set_stack_def,
+       asm_next_def] >>
+  metis_tac[arithmeticTheory.ADD_CLAUSES, numeralTheory.numeral_distrib]
+QED
+
+Theorem scratch_state_pop_run:
+  scratch_state_ok cplan fn ret srest g slots ss /\ n <= LENGTH g /\
+  asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp (SOPop n)) ==>
+  ?ss'. sym_steps p env n ss = SymOK ss' /\
+    scratch_state_ok cplan fn ret srest (DROP n g) slots ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + n /\
+    ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[scratch_state_ok_def, exec_stack_op_def] >> rpt strip_tac >>
+  `n <= LENGTH ss.sym_stack` by (gvs[LIST_REL_EL_EQN] >> decide_tac) >>
+  drule_all sym_scratch_pop_run >> disch_then (qspec_then `env` assume_tac) >>
+  qexists `ss with <| sym_base := ss.sym_base with as_pc := ss.sym_base.as_pc + n;
+                     sym_stack := DROP n ss.sym_stack |>` >>
+  simp[] >> qexists `DROP n top` >>
+  gvs[DROP_APPEND1, LIST_REL_EL_EQN, rich_listTheory.LIST_REL_DROP]
+QED
+
+Theorem scratch_replay_step_sim:
+  scratch_replay_step cplan R op g slots final inventory /\
+  scratch_state_ok cplan fn ret srest g slots ss /\
+  asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp op) ==>
+  ?ss'. sym_steps p env (LENGTH (exec_stack_op initial_fmp op)) ss = SymOK ss' /\
+    scratch_state_ok cplan fn ret srest final inventory ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (exec_stack_op initial_fmp op) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  qpat_x_assum `scratch_replay_step _ _ _ _ _ _ _` mp_tac >>
+  simp[Once scratch_replay_step_cases] >> strip_tac >> gvs[]
+  >- (drule_all scratch_state_dup_run >> simp[exec_stack_op_def] >> metis_tac[])
+  >- (drule_all scratch_state_swap_run >> simp[exec_stack_op_def] >> metis_tac[])
+  >- (drule_all scratch_state_pop_run >> simp[exec_stack_op_def] >> metis_tac[])
+  >- (drule_all scratch_state_store_run >> simp[exec_stack_op_def] >> metis_tac[]) >>
+  drule_all scratch_state_restore_run >> simp[exec_stack_op_def] >> metis_tac[]
+QED
+
+Theorem scratch_replay_sim:
+  !cplan R ops g slots final inventory.
+  scratch_replay cplan R ops g slots final inventory ==>
+  !fn ret srest ss p env initial_fmp.
+  scratch_state_ok cplan fn ret srest g slots ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    scratch_state_ok cplan fn ret srest final inventory ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  ho_match_mp_tac scratch_replay_ind >> conj_tac
+  >- simp[execute_plan_def, sym_steps_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[execute_plan_def, stackOpSimTheory.asm_block_at_append] >> strip_tac >>
+  drule_all scratch_replay_step_sim >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  first_x_assum drule >> disch_then (qspecl_then [`p`, `env`, `initial_fmp`] mp_tac) >>
+  simp[execute_plan_def] >> strip_tac >>
+  qexists `ss''` >> simp[execute_plan_def] >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >> simp[sym_steps_add]
+QED
