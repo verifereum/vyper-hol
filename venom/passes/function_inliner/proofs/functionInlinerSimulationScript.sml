@@ -416,3 +416,27 @@ Proof
   irule inline_final_return_cut >> simp[] >>
   metis_tac[]
 QED
+
+(* Interface probe: the exit packet deliberately forgets call-local params.
+   A caller-data bridge requiring their equality needs a preservation fact
+   from actual clone execution, not merely this packet. *)
+Theorem inline_exit_packet_params_probe[local]:
+  !d ret. d.vs_params = [] ==>
+    bind_outputs [] []
+      (adopt_return_fmp <|iret_values := []; iret_adopt_fmp := NONE|>
+        (merge_callee_state d d)) = SOME d /\
+    inline_clone_exit "" {} {} UNIV [] d ret
+      <|iret_values := []; iret_adopt_fmp := NONE|> d
+      (OK (jump_to ret (d with vs_params := [0w]))) /\
+    (jump_to ret (d with vs_params := [0w])).vs_params <> d.vs_params
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- simp[bind_outputs_def, adopt_return_fmp_def, merge_callee_state_def,
+          venom_state_component_equality] >>
+  simp[inline_clone_exit_def, bind_outputs_def, adopt_return_fmp_def,
+       merge_callee_state_def, jump_to_def] >>
+  qexists `d with vs_params := [0w]` >>
+  simp[inline_opaque_frame_rel_def, inline_frame_rel_def,
+       inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+       merge_callee_state_def, jump_to_def, venomStateTheory.lookup_var_def]
+QED
