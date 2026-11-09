@@ -4,14 +4,14 @@ Ancestors externalReturnSelectedSuffix externalReturnConsumerFit compileEnv
   externalReturnSelectedResources externalReturnSiteSemantics externalReturnSimpleSuffix
   externalReturnConsumerProbe externalReturnSuffixResult stmtSimDefs bodySim
   loweringPosts exprLowering vyperInterpreter typedMemoryCopy words
-  valueCopyBytes exprLoweringProps vyperTypeSystem
+  valueCopyBytes exprLoweringProps vyperTypeSystem typedCopyAgreement
 
 Theorem return_consumer_suffix_bytestring:
   is_bytestring_type ret /\ is_bytestring_type phy /\ is_bytestring_type ann ==>
   return_consumer_suffix ce ret phy op sa =
   return_consumer_suffix ce ret ann op sa
 Proof
-  simp[return_consumer_suffix_def]
+  simp[return_consumer_suffix_def, compile_store_memory_typed_bytes]
 QED
 
 Theorem return_selected_compatible_suffix:
@@ -56,20 +56,18 @@ Proof
     (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)` assume_tac
     >- simp[]) >>
   Cases_on `ce.ce_raw_return`
-  >- (drule_all return_site_value_semantics >> strip_tac >>
-      drule_all return_site_nocopy_memory >> strip_tac >>
-      `compile_external_return (SOME op) F T ce.ce_ret_enc_info
-         ce.ce_max_return_size F nkey ut (mut = View) sa = (u,sf)` by
-        (qpat_x_assum `return_consumer_suffix _ _ _ _ _ = _` mp_tac >>
-         gvs[return_consumer_suffix_def, comp_bind_def, comp_return_def]) >>
-      `state_rel func ce cx ee s` by fs[stmt_state_rel_def] >>
-      `lookup_raw_return_or_F (NONE:num option) tx.function_name External tops`
-        by fs[] >>
-      gvs[] >> rename1 `val_in_memory rtv v (w2n w) s.vs_memory` >>
-      `w2n w + val_footprint rtv v <= dimword (:256)` by simp[] >>
-      drule_all return_raw_suffix_path >> strip_tac >>
-      first_x_assum (qspecl_then [`am.exports`, `ctx`] strip_assume_tac) >>
-      qexistsl_tac [`n`, `r`] >> simp[] >> metis_tac[]) >>
+  >- (`is_bytestring_type (expr_type e)` by
+        (drule_all return_site_value_semantics >> strip_tac >>
+         metis_tac[typed_copy_bytestring_source]) >>
+      `return_consumer_suffix ce ret (expr_type e) op sa = (u,sf)` by
+        metis_tac[return_consumer_suffix_bytestring] >>
+      qpat_x_assum `return_consumer_suffix _ _ (lowered_value_type _ _) _ _ = _`
+        kall_tac >>
+      drule_all return_consumer_raw_split >> strip_tac >>
+      `compile_external_return (SOME buf.buf_operand) F T ce.ce_ret_enc_info
+         ce.ce_max_return_size F nkey ut (mut = View) sn = (u,sf)` by
+        gvs[is_bytestring_word_type] >>
+      drule_all return_selected_raw_copy_path >> simp[]) >>
   `ret <> NoneT` by metis_tac[return_site_valued_not_none] >>
   drule_all return_selected_nocopy_window >> strip_tac >>
   `ce.ce_max_return_size < dimword (:256)` by
