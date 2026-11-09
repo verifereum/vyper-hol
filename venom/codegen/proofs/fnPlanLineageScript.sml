@@ -5132,3 +5132,178 @@ Resume lineage_dfs_join_preterminal_core_actual[dfs_worker]:
 QED
 
 Finalise lineage_dfs_join_preterminal_core_actual
+
+Theorem lineage_dfs_join_block_replay_actual:
+  !fn entry succ sb dfg ch growth spill_base lbl_ctr fn_ops ps_end psL psD bops afterD.
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ succ <> entry /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_analyze fn).cfg_dfs_pre /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psL /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psD /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn sb psD =
+    SOME (bops,afterD) ==>
+  ?afterL.
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn sb psL =
+      SOME (bops,afterL) /\
+    afterL.ps_alloc = afterD.ps_alloc /\ afterL.ps_spilled = afterD.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?prefixL prefixD phi_ops xs qL qD ops out.
+    xs = DROP (LENGTH (collect_phis sb.bb_instructions)) sb.bb_instructions /\
+    (!p r. (p = psL /\ r = qL) \/ (p = psD /\ r = qD) ==>
+      phi_schedule_run
+        (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i),
+          bb_is_halting sb)) (collect_phis sb.bb_instructions)) p = (phi_ops,r)) /\
+    native_inst_ops_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ
+      (bb_is_halting sb) (LENGTH (collect_phis sb.bb_instructions))
+      (LENGTH sb.bb_instructions) xs qL (LENGTH xs) ops
+      (out with ps_stack := prefixL ++ out.ps_stack) /\
+    native_inst_ops_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ
+      (bb_is_halting sb) (LENGTH (collect_phis sb.bb_instructions))
+      (LENGTH sb.bb_instructions) xs qD (LENGTH xs) ops
+      (out with ps_stack := prefixD ++ out.ps_stack)` by
+    (Cases_on `(LAST sb.bb_instructions).inst_opcode = JMP`
+     >- suspend "jmp_complete" >> suspend "ordinary_complete") >>
+  `fn_entry_label fn <> SOME succ /\ collect_phis sb.bb_instructions <> []` by
+    (Cases_on `collect_phis sb.bb_instructions` >> gvs[]) >>
+  `!p r. (p = psL /\ r = qL) \/ (p = psD /\ r = qD) ==>
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn sb p =
+      case generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+        succ (bb_is_halting sb) 0 (LENGTH sb.bb_instructions)
+        (LENGTH (collect_phis sb.bb_instructions)) xs r of
+      NONE => NONE
+    | SOME (tail_ops,q) => if revert_block_spills sb (phi_ops ++ tail_ops)
+        then NONE else SOME ([SOLabel succ] ++ phi_ops ++ tail_ops,q)` by
+    suspend "block_equations" >>
+  `!p q. native_inst_ops_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ
+      (bb_is_halting sb) (LENGTH (collect_phis sb.bb_instructions))
+      (LENGTH sb.bb_instructions) xs p (LENGTH xs) ops q ==>
+    generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      succ (bb_is_halting sb) 0 (LENGTH sb.bb_instructions)
+      (LENGTH (collect_phis sb.bb_instructions)) xs p = SOME (ops,q)` by
+    suspend "workers" >>
+  suspend "finish"
+QED
+
+Resume lineage_dfs_join_block_replay_actual[block_equations]:
+  rpt gen_tac >> strip_tac >>
+  `phi_schedule_run
+    (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i),
+      bb_is_halting sb)) (collect_phis sb.bb_instructions)) p = (phi_ops,r)` by
+    metis_tac[] >>
+  drule_all fnPlanLineagePhiScheduleTheory.generate_join_block_plan_phi_schedule >>
+  disch_then (qspec_then `dfg` strip_assume_tac) >>
+  qpat_x_assum `sb.bb_instructions = _ ++ _`
+    (mp_tac o Q.AP_TERM `DROP (LENGTH (collect_phis sb.bb_instructions))`) >>
+  simp_tac (srw_ss()) [listTheory.DROP_APPEND] >> simp[]
+QED
+
+Resume lineage_dfs_join_block_replay_actual[workers]:
+  rpt gen_tac >> strip_tac >>
+  gvs[fnPlanLineageEntryProductionTheory.native_inst_ops_prefix_complete] >>
+  qpat_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = SOME (ops,q)`
+    (fn th => rewrite_tac[GSYM th]) >>
+  irule fnPlanLineageEntryProductionTheory.generate_block_insts_plan_index_sum >> simp[]
+QED
+
+Resume lineage_dfs_join_block_replay_actual[jmp_complete]:
+  drule_all lineage_dfs_join_preterminal_core_actual >> strip_tac >>
+  qpat_x_assum `!bops after. _` (qspecl_then [`bops`,`afterD`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  suspend "jmp_extend"
+QED
+
+Resume lineage_dfs_join_block_replay_actual[ordinary_complete]:
+  drule_all lineage_dfs_join_physical_start_actual >> strip_tac >>
+  suspend "ordinary_layout"
+QED
+
+Resume lineage_dfs_join_block_replay_actual[finish]:
+  qpat_x_assum `!p q. native_inst_ops_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ ==> _`
+    (fn th =>
+      (qpat_assum `native_inst_ops_prefix _ _ _ _ _ _ _ _ _ qL _ _ _` (mp_tac o MATCH_MP th) >>
+       qpat_assum `native_inst_ops_prefix _ _ _ _ _ _ _ _ _ qD _ _ _` (mp_tac o MATCH_MP th))) >>
+  ntac 2 strip_tac >>
+  qpat_assum `!p r. _ ==> generate_block_plan _ _ _ _ _ _ = _`
+    (qspecl_then [`psD`,`qD`] mp_tac) >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  qpat_x_assum `!p r. _ ==> generate_block_plan _ _ _ _ _ _ = _`
+    (qspecl_then [`psL`,`qL`] mp_tac) >>
+  (impl_tac >- simp[]) >> simp[] >>
+  Cases_on `revert_block_spills sb (phi_ops ++ ops)` >> gvs[]
+QED
+
+Resume lineage_dfs_join_block_replay_actual[jmp_extend]:
+  `LAST xs = LAST sb.bb_instructions` by
+    (qpat_assum `xs = _` (fn th => pure_rewrite_tac[th]) >>
+     irule listTheory.last_drop >>
+     qpat_x_assum `xs <> []` mp_tac >> simp[listTheory.DROP_EQ_NIL]) >>
+  `DROP (PRE (LENGTH xs)) xs = [LAST sb.bb_instructions]` by
+    (qspecl_then [`xs`,`LENGTH xs`] mp_tac rich_listTheory.DROP_PREn_LAST_CONS >>
+     simp[arithmeticTheory.PRE_SUB1] >> gvs[]) >>
+  `SUC (PRE (LENGTH xs)) = LENGTH xs` by (Cases_on `xs` >> gvs[]) >>
+  qexistsl_tac [`prefixL`,`prefixD`,`phi_ops`,`xs`,`qL`,`qD`,`ops ++ tops`,`out`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `p0 = _` kall_tac >>
+  qpat_x_assum `qL = _` kall_tac >> qpat_x_assum `qD = _` kall_tac >>
+  conj_tac >>
+  qpat_assum `SUC (PRE (LENGTH xs)) = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
+  rewrite_tac[fnPlanLineageEntryProductionTheory.native_inst_ops_prefix_suc] >>
+  qmatch_goalsub_rename_tac `out with ps_stack := pref ++ out.ps_stack` >>
+  qexistsl_tac [`ops`,`q with ps_stack := pref ++ q.ps_stack`,
+    `LAST sb.bb_instructions`,`[]`,`tops`] >> simp[]
+QED
+
+Resume lineage_dfs_join_block_replay_actual[ordinary_layout]:
+  `collect_phis sb.bb_instructions <> []` by
+    (Cases_on `collect_phis sb.bb_instructions` >> gvs[]) >>
+  `non_param_insts sb = sb.bb_instructions` by
+    (drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >> simp[]) >>
+  `MEM sb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `!i. LENGTH (collect_phis sb.bb_instructions) <= i /\
+    i < LENGTH sb.bb_instructions ==>
+    (EL i sb.bb_instructions).inst_opcode <> PHI /\
+    ((EL i sb.bb_instructions).inst_opcode = JMP ==>
+      SUC i = LENGTH sb.bb_instructions)` by
+    (qspecl_then [`fn`,`sb`,`LENGTH (collect_phis sb.bb_instructions)`] mp_tac
+       fnPlanLineageEntryProductionTheory.ready_block_ordinary_suffix_layout >>
+     (impl_tac >- simp[]) >> simp[]) >>
+  `!j. j < LENGTH xs ==>
+    (EL j xs).inst_opcode <> JMP /\ (EL j xs).inst_opcode <> PHI` by
+    suspend "nonjmp_layout" >>
+  qpat_x_assum `!k. _ ==> ?ops q. _` (qspec_then `LENGTH xs` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexistsl_tac [`prefixL`,`prefixD`,`phi_ops`,`xs`,`qL`,`qD`,`ops`,`q`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume lineage_dfs_join_block_replay_actual[nonjmp_layout]:
+  gen_tac >> strip_tac >>
+  `LENGTH (collect_phis sb.bb_instructions) + j < LENGTH sb.bb_instructions` by
+    (qpat_assum `xs = _` (fn th => fs[th]) >> decide_tac) >>
+  `EL j xs = EL (LENGTH (collect_phis sb.bb_instructions) + j) sb.bb_instructions` by
+    simp[listTheory.EL_DROP, arithmeticTheory.ADD_COMM] >>
+  qpat_x_assum `!i. _ <= i /\ _ ==> _`
+    (qspec_then `LENGTH (collect_phis sb.bb_instructions) + j` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  reverse conj_tac >- gvs[] >>
+  strip_tac >>
+  `SUC (LENGTH (collect_phis sb.bb_instructions) + j) = LENGTH sb.bb_instructions` by
+    metis_tac[] >>
+  `EL (LENGTH (collect_phis sb.bb_instructions) + j) sb.bb_instructions =
+    LAST sb.bb_instructions` by
+    (`sb.bb_instructions <> []` by (Cases_on `sb.bb_instructions` >> gvs[]) >>
+     simp[listTheory.LAST_EL] >> AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
+  metis_tac[]
+QED
+
+Finalise lineage_dfs_join_block_replay_actual
