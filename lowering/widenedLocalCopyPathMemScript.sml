@@ -56,9 +56,14 @@ Theorem staged_local_typed_copy_path_mem:
     (!a k. a+k <= w2n dw \/ w2n dw + type_memory_size dtv <= a ==>
       mem_bytes_at a k t.vs_memory = mem_bytes_at a k u.vs_memory)
 Proof
-  strip_tac >> irule staged_region_typed_copy_path_mem >>
-  first_assum (irule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
-  first_assum (irule_at (Pat `compile_copy_memory _ _ _ _ = _`)) >>
-  first_assum (irule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
-  metis_tac[]
+  strip_tac >>
+  Q.SUBGOAL_THEN
+    `(?aid. FLOOKUP s.vs_allocas aid = SOME (w2n dw,sz) /\
+       aid < sa.cs_next_id) \/
+     (?name. local_region ce es.scopes s name (w2n dw) sz)` assume_tac >-
+    (disj1_tac >> qexists `aid` >> simp[]) >>
+  drule_all staged_region_typed_copy_path_mem >>
+  disch_then (qx_choose_then `r` (qx_choose_then `u` (qx_choose_then `t`
+    (qx_choose_then `tw` (qx_choose_then `g` strip_assume_tac))))) >>
+  qexistsl [`r`, `u`, `t`, `tw`, `g`] >> gvs[ADD_COMM] >> asm_rewrite_tac[]
 QED
