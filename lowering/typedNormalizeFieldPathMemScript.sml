@@ -234,22 +234,52 @@ Proof
   rpt strip_tac >> irule normalize_prefix_mono >> simp[]
 QED
 
+Theorem normalize_field_pair_geometry[local]:
+  LENGTH DT = N /\ LENGTH ST = N /\ i <= N /\
+  dt::dts = DROP i DT /\ st::sts = DROP i ST /\
+  (!j. d j = b + d0 + SUM (MAP f (TAKE j DT))) /\
+  (!j. h j = a + s0 + SUM (MAP f (TAKE j ST))) /\
+  doff = d0 + SUM (MAP f (TAKE i DT)) /\
+  soff = s0 + SUM (MAP f (TAKE i ST)) /\
+  d N <= frontier /\ h N <= frontier ==>
+  i < N /\ dt = EL i DT /\ st = EL i ST /\
+  d (SUC i) = d i + f dt /\ h (SUC i) = h i + f st /\
+  (!j k. j <= k /\ k <= N ==> d j <= d k /\ h j <= h k) /\
+  d (SUC i) <= frontier /\ h (SUC i) <= frontier /\
+  d i = b + doff /\ h i = a + soff
+Proof
+  strip_tac >>
+  qpat_assum `LENGTH DT = N` (mp_then Any mp_tac normalize_field_prefix_geometry) >>
+  disch_then drule_all >> strip_tac >>
+  qpat_assum `LENGTH ST = N` (mp_then Any mp_tac normalize_field_prefix_geometry) >>
+  disch_then drule_all >> strip_tac >>
+  `d (SUC i) <= d N /\ h (SUC i) <= h N` by
+    (conj_tac >> first_assum irule >> decide_tac) >>
+  `d (SUC i) <= frontier /\ h (SUC i) <= frontier` by decide_tac >>
+  `!j k. j <= k /\ k <= N ==> d j <= d k /\ h j <= h k` by
+    metis_tac[] >>
+  simp[]
+QED
+
 (* Code containment and the terminal PHI certificate for one real child. *)
 Theorem normalize_field_suffix_boundary[local]:
   compile_with_byte_offset dst doff sa = (dp,sc) /\
   compile_with_byte_offset src soff sc = (sp,sd) /\
   compile_store_memory_typed ce dp dt sp st sd = ((),se) /\
-  compile_typed_copy_fields ce dst src dts sts
-    (doff + type_memory_bytes ce dt) (soff + type_memory_bytes ce st) se = ((),sb) /\
+  compile_typed_copy_fields ce dst src (dt::dts) (st::sts) doff soff sa = ((),sb) /\
   phi_prefix_length sa.cs_current_insts = 0 /\ fn_has_code sa sb fn /\
-  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) ==>
+  lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
+  phi_prefix_length bb.bb_instructions = 0 ==>
   fn_has_code sa se fn /\ fn_has_code se sb fn /\
   phi_prefix_length se.cs_current_insts = 0 /\
   (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
     phi_prefix_length bb.bb_instructions = 0)
 Proof
-  strip_tac >> drule_all normalize_fields_suffix_code >> strip_tac >>
+  strip_tac >>
+  `compile_typed_copy_fields ce dst src dts sts
+    (doff + type_memory_bytes ce dt) (soff + type_memory_bytes ce st) se = ((),sb)` by
+    (drule normalize_fields_cons_states >> strip_tac >> gvs[]) >>
+  drule_all normalize_fields_suffix_code >> strip_tac >>
   `phi_prefix_length se.cs_current_insts = 0` by
     metis_tac[typedNormalizeContinuationTheory.normalize_typed_prefix_zero,
       typedNormalizeContinuationTheory.normalize_offset_prefix_zero] >>
@@ -501,22 +531,11 @@ Proof
   rpt gen_tac >> strip_tac >> suspend "step"
 QED
 Resume normalize_tuple_fields_certificate[step]:
-  qpat_assum `LENGTH DT = N` (mp_then Any mp_tac normalize_field_prefix_geometry) >>
+  qpat_assum `!i. d i = _` (mp_then Any mp_tac normalize_field_pair_geometry) >>
+  disch_then (fn th => qpat_assum `!i. h i = _` (mp_then Any mp_tac th)) >>
   disch_then drule_all >> strip_tac >>
-  qpat_assum `LENGTH ST = N` (mp_then Any mp_tac normalize_field_prefix_geometry) >>
-  disch_then drule_all >> strip_tac >>
-  drule_all normalize_fields_tail_equation >> strip_tac >>
-  `fn_has_code sc se fn /\ fn_has_code se sb fn /\
-   phi_prefix_length se.cs_current_insts = 0 /\
-   (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-     phi_prefix_length bb.bb_instructions = 0)` by
-    (irule normalize_field_suffix_boundary >> asm_rewrite_tac[] >>
-     conj_tac >- metis_tac[] >>
-     goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
-     asm_rewrite_tac[] >> metis_tac[]) >>
+  drule_all normalize_field_suffix_boundary >> strip_tac >>
   `u.vs_alloca_next = s.vs_alloca_next` by gvs[venom_state_component_equality] >>
-  `d (SUC i) <= d N /\ h (SUC i) <= h N` by
-    (conj_tac >> first_assum irule >> decide_tac) >>
   `d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next` by decide_tac >>
   qpat_assum `!i sd se dp sp u. _` (qspec_then `i` mp_tac) >>
   disch_then (qspecl_then [`sd`,`se`,`dp`,`sp`] mp_tac) >>
@@ -525,7 +544,6 @@ Resume normalize_tuple_fields_certificate[step]:
       qpat_assum `compile_store_memory_typed ce dp dt sp st sd = _` (fn cth =>
         qpat_assum `i < N` (fn ith =>
           pure_rewrite_tac [GSYM dth, GSYM sth, cth, ith, REFL_CLAUSE, AND_CLAUSES])))) >> disch_tac >>
-  `d i = b + doff /\ h i = a + soff` by simp[] >>
   `Src i u.vs_memory` by simp[] >>
   qpat_assum `!u. eval_operand dp u = _ /\ _ ==> _`
     (mp_then Any mp_tac normalize_field_bounded_child_path_mem) >>
@@ -533,7 +551,6 @@ Resume normalize_tuple_fields_certificate[step]:
   disch_then (qspecl_then [`u`,`b`,`a`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >> strip_tac >>
   drule_all normalize_field_runtime_step >> strip_tac >>
-  `(!j k. j <= k /\ k <= N ==> d j <= d k /\ h j <= h k)` by metis_tac[] >>
   `abi_decode_footprint_frame [(d i,d (SUC i) - d i)] u v` by
     (qpat_assum `d (SUC i) = _` (fn th => rewrite_tac[th]) >>
      simp_tac arith_ss [] >> first_assum ACCEPT_TAC) >>
