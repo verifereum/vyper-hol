@@ -2,7 +2,8 @@
 Theory placeTypedCopyArrayMem
 Ancestors
   placeTypedCopyPrimitiveMem placeMemoryArrayForward placeMemoryDynarrayForward
-  immutableMemoryFrame placeTypedFieldsMem freshWrites
+  immutableMemoryFrame placeTypedFieldsMem freshWrites placeMemoryTypedBase
+  placeMemoryCodeLayout
   bodyDeclMemoryCounted fragGasPathMem fragExecMem instMemFrontier
   venomState venomExecSemantics venomInst context compileEnv emitHelper
   emitHelperProps exprLoweringProps valueEncodingProps list rich_list
@@ -484,3 +485,230 @@ Proof
     (irule typed_copy_effect_then >> qexistsl_tac [`sa`,`head`,`a`] >> simp[]) >>
   metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]
 QED
+
+Theorem typed_memory_sarray_fast_forward_mem:
+  ~is_abi_dynamic cenv.ce_struct_fields det /\
+  type_widens_to tenv (ArrayT src_et (Fixed m)) (ArrayT det (Fixed n)) /\
+  compile_copy_sarray_typed cenv dst det src src_et n sa = ((),sb) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  evaluate_type tenv (ArrayT src_et (Fixed m)) = SOME stv /\
+  evaluate_type tenv (ArrayT det (Fixed n)) = SOME dtv /\
+  val_wf dtv v /\ val_in_memory stv v (w2n sw) s.vs_memory /\
+  type_memory_bytes cenv (ArrayT det (Fixed n)) = type_memory_size dtv /\
+  w2n dw + type_memory_size dtv + 64 < dimword (:256) /\
+  w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+  w2n dw + type_memory_size dtv <= s.vs_alloca_next /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      val_in_memory dtv v (w2n dw) t.vs_memory /\
+      typed_copy_effect ctx func sa sb s t (w2n dw) (type_memory_size dtv)
+Proof
+  strip_tac >>
+  `ArrayT src_et (Fixed m) = ArrayT det (Fixed n)` by
+    (irule (INST_TYPE [``:'a`` |-> ``:string``, ``:'b`` |-> ``:num``]
+              typed_memory_static_widening) >> conj_tac
+     >- (qexists_tac `cenv.ce_struct_fields` >> simp[is_abi_dynamic_def]) >>
+     qexists_tac `tenv` >> simp[]) >>
+  gvs[] >>
+  `compile_copy_memory dst src (type_memory_size dtv) sa = ((),sb)` by
+    (qpat_x_assum `compile_copy_sarray_typed _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[Once compile_store_memory_typed_def] >>
+     gvs[type_memory_bytes_def]) >>
+  `type_memory_size dtv < dimword (:256)` by decide_tac >>
+  `w2n sw + type_memory_size dtv <= s.vs_alloca_next /\
+   w2n dw + type_memory_size dtv <= s.vs_alloca_next` by decide_tac >>
+  drule_all compile_copy_memory_effect_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `t` >> simp[] >>
+  irule val_in_memory_relocate >> simp[] >>
+  qexistsl_tac [`w2n sw`, `type_memory_size dtv`, `s.vs_memory`] >>
+  simp[exprSimPropsTheory.val_footprint_le]
+QED
+
+Theorem typed_memory_sarray_slow_forward_mem:
+  compile_copy_sarray_typed cenv dst dt src st N sa = ((),sb) /\
+  ~(type_memory_bytes cenv dt = type_memory_bytes cenv st /\
+    ~is_abi_dynamic cenv.ce_struct_fields dt) /\
+  type_widens_to tenv st dt /\
+  evaluate_type tenv dt = SOME dtv /\ evaluate_type tenv st = SOME stv /\
+  type_memory_bytes cenv dt = type_memory_size dtv /\
+  type_memory_bytes cenv st = type_memory_size stv /\
+  value_has_type (ArrayTV dtv (Fixed N)) (ArrayV (SArrayV kvs)) /\
+  val_wf (ArrayTV dtv (Fixed N)) (ArrayV (SArrayV kvs)) /\
+  value_has_type (ArrayTV stv (Fixed N)) (ArrayV (SArrayV kvs)) /\
+  val_wf (ArrayTV stv (Fixed N)) (ArrayV (SArrayV kvs)) /\
+  val_in_memory (ArrayTV stv (Fixed N)) (ArrayV (SArrayV kvs))
+    (w2n sw) s.vs_memory /\
+  (w2n sw + N * type_memory_size stv <= w2n dw \/
+   w2n dw + N * type_memory_size dtv <= w2n sw) /\
+  w2n sw + N * type_memory_size stv < dimword (:256) /\
+  w2n dw + N * type_memory_size dtv + 64 < dimword (:256) /\
+  w2n sw + N * type_memory_size stv <= s.vs_alloca_next /\
+  w2n dw + N * type_memory_size dtv <= s.vs_alloca_next /\
+  N < dimword (:256) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!dp sp a b u dw sw v.
+    value_has_type stv v /\ val_wf stv v /\
+    value_has_type dtv v /\ val_wf dtv v /\
+    val_in_memory stv v (w2n sw) u.vs_memory /\
+    (w2n sw + type_memory_size stv <= w2n dw \/
+     w2n dw + type_memory_size dtv <= w2n sw) /\
+    w2n sw + type_memory_size stv < dimword (:256) /\
+    w2n dw + type_memory_size dtv + 64 < dimword (:256) /\
+    w2n sw + type_memory_size stv <= u.vs_alloca_next /\
+    w2n dw + type_memory_size dtv <= u.vs_alloca_next /\
+    compile_store_memory_typed cenv dp dt sp st a = ((),b) /\
+    (!x. dp = Var x ==> not_fresh_at a x) /\
+    (!x. sp = Var x ==> not_fresh_at a x) /\
+    eval_operand dp u = SOME dw /\ eval_operand sp u = SOME sw /\
+    fn_has_code a b func /\ ~u.vs_halted /\
+    u.vs_current_bb = a.cs_current_bb /\
+    u.vs_inst_idx = LENGTH a.cs_current_insts ==>
+    ?t. gas_path_mem ctx func u 0 (OK t) /\
+        val_in_memory dtv v (w2n dw) t.vs_memory /\
+        typed_copy_effect ctx func a b u t (w2n dw) (type_memory_size dtv)) ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      val_in_memory (ArrayTV dtv (Fixed N)) (ArrayV (SArrayV kvs))
+        (w2n dw) t.vs_memory /\
+      typed_copy_effect ctx func sa sb s t (w2n dw) (N * type_memory_size dtv)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all typed_memory_sarray_slow_compile >> strip_tac >>
+  drule_all typed_copy_slow_array_control_layout >> strip_tac >>
+  `(do so <- emit_op MUL [Var counter; Lit (n2w (type_memory_bytes cenv st))];
+       doff <- emit_op MUL [Var counter; Lit (n2w (type_memory_bytes cenv dt))];
+       sp <- emit_op ADD [src; so]; dp <- emit_op ADD [dst; doff];
+       return (sp,dp) od) stb = ((sp,dp),b4)` by
+    simp[comp_bind_def, comp_return_def] >>
+  rpt (qpat_x_assum `fresh_label _ _ = _` kall_tac) >>
+  qpat_x_assum `fresh_var _ = _` kall_tac >>
+  rpt (qpat_x_assum `emit_inst _ _ _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `emit_op _ _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `new_block _ _ = _` kall_tac) >>
+  qpat_x_assum `compile_copy_sarray_typed _ _ _ _ _ _ _ = _` kall_tac >>
+  `?u. gas_path_mem ctx func s 0 (OK u) /\
+       typed_copy_effect ctx func sa sth s u (w2n dw) (N * type_memory_size dtv) /\
+       lookup_var counter u = SOME 0w /\ u.vs_memory = s.vs_memory` by
+    suspend "initial" >>
+  `default_value stv = default_value dtv` by metis_tac[typed_memory_widening_defaults] >>
+  qabbrev_tac `elem = \i. case ALOOKUP kvs i of NONE => default_value stv | SOME v => v` >>
+  `!i. value_has_type stv (elem i) /\ val_wf stv (elem i) /\
+       value_has_type dtv (elem i) /\ val_wf dtv (elem i)` by suspend "elements" >>
+  `?z. gas_path_mem ctx func s 0 (OK z) /\
+       val_in_memory (ArrayTV stv (Fixed N)) (ArrayV (SArrayV kvs))
+         (w2n sw) z.vs_memory /\
+       (!j. j < N ==> val_in_memory dtv (elem j)
+          (w2n dw + j * type_memory_size dtv) z.vs_memory) /\
+       typed_copy_effect ctx func sa sth s z (w2n dw) (N * type_memory_size dtv) /\
+       lookup_var counter z = SOME (n2w N)` by
+    (irule typed_memory_array_iteration_forward_mem >>
+     qpat_assum `typed_copy_effect _ _ sa sth s u _ _` (irule_at Any) >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >> suspend "round") >>
+  suspend "exit"
+QED
+
+Resume typed_memory_sarray_slow_forward_mem[initial]:
+  markerLib.RESUME_TAC >>
+  irule typed_memory_array_init_effect_mem >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]
+QED
+
+Resume typed_memory_sarray_slow_forward_mem[elements]:
+  markerLib.RESUME_TAC >>
+  map_every (fn q => qpat_assum q mp_tac)
+    [`value_has_type (ArrayTV dtv _) _`, `value_has_type (ArrayTV stv _) _`,
+     `val_wf (ArrayTV dtv _) _`, `val_wf (ArrayTV stv _) _`,
+     `evaluate_type tenv dt = _`, `evaluate_type tenv st = _`,
+     `default_value stv = _`] >>
+  simp[Abbr `elem`, NoAsms] >> rpt (first_x_assum kall_tac) >>
+  simp[valueEncodingTheory.val_wf_def] >> rpt strip_tac >>
+  metis_tac[typed_memory_sparse_lookup_type, typed_memory_sparse_lookup_wf]
+QED
+
+Resume typed_memory_sarray_slow_forward_mem[round]:
+  markerLib.RESUME_TAC >>
+  simp[valueEncodingTheory.type_memory_size_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~a.vs_halted /\ a.vs_current_bb = hdr /\ a.vs_inst_idx = 0` by
+    gvs[typed_copy_effect_def] >>
+  irule typed_memory_array_round_effect_mem >>
+  qpat_assum `hbb.bb_instructions = _` (irule_at Any) >>
+  simp[] >>
+  qpat_assum `DROP _ ebb.bb_instructions = _` (irule_at Any) >>
+  rpt (goal_assum (drule_at Any)) >> simp[eval_operand_def] >>
+  suspend "element"
+QED
+
+Resume typed_memory_sarray_slow_forward_mem[element]:
+  markerLib.RESUME_TAC >> gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `eval_operand src a' = SOME sw /\ eval_operand dst a' = SOME dw` by
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`eval_operand src s = SOME sw`, `eval_operand dst s = SOME dw`,
+        `!x. src = Var x ==> _`, `!x. dst = Var x ==> _`,
+        `typed_copy_effect ctx func sa sth s a _ _`,
+        `typed_copy_effect ctx func sa stb a a' _ _`] >>
+     rpt (first_x_assum kall_tac) >> rpt strip_tac >>
+     Cases_on `src` >> Cases_on `dst` >>
+     gvs[eval_operand_def, typed_copy_effect_def,
+         venom_state_component_equality] >> metis_tac[]) >>
+  `i * type_memory_size stv + type_memory_size stv <= N * type_memory_size stv /\
+   i * type_memory_size dtv + type_memory_size dtv <= N * type_memory_size dtv` by
+    (`SUC i <= N` by decide_tac >>
+     `SUC i * type_memory_size stv <= N * type_memory_size stv /\
+      SUC i * type_memory_size dtv <= N * type_memory_size dtv` by simp[] >>
+     qpat_x_assum `SUC i * type_memory_size stv <= _` mp_tac >>
+     qpat_x_assum `SUC i * type_memory_size dtv <= _` mp_tac >>
+     pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  `val_in_memory stv (elem i) (w2n sw + i * type_memory_size stv) a'.vs_memory` by
+    (simp[Abbr `elem`, NoAsms] >> irule typed_memory_sarray_element >>
+     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  `a'.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_x_assum `typed_copy_effect ctx func sa sth s a _ _` mp_tac >>
+     qpat_x_assum `typed_copy_effect ctx func sa stb a a' _ _` mp_tac >>
+     simp[typed_copy_effect_def, venom_state_component_equality] >> metis_tac[]) >>
+  irule typed_memory_array_element_forward_mem >>
+  qpat_assum `compile_store_memory_typed _ _ _ _ _ _ = _` (irule_at Any) >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  suspend "child_bounds"
+QED
+
+Resume typed_memory_sarray_slow_forward_mem[child_bounds]:
+  markerLib.RESUME_TAC >>
+  `~a'.vs_halted /\ a'.vs_current_bb = blabel /\ a'.vs_inst_idx = 0` by
+    (drule typed_copy_effect_endpoint >> simp[]) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  qpat_x_assum `!j. value_has_type stv (elem j) /\ _` (qspec_then `i` mp_tac) >>
+  qpat_x_assum `!dp sp a b u dw sw v. _` mp_tac >>
+  rpt (first_x_assum kall_tac) >>
+  simp_tac pure_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  metis_tac[]
+QED
+
+Resume typed_memory_sarray_slow_forward_mem[exit]:
+  markerLib.RESUME_TAC >>
+  `~z.vs_halted /\ z.vs_current_bb = hdr /\ z.vs_inst_idx = 0` by
+    gvs[typed_copy_effect_def] >>
+  `?t. gas_path_mem ctx func z 0 (OK t) /\
+       typed_copy_effect ctx func sa sb z t (w2n dw) (N * type_memory_size dtv) /\
+       lookup_var counter t = SOME (n2w N) /\ t.vs_memory = z.vs_memory` by
+    (irule typed_memory_array_condition_effect_mem >>
+     qpat_assum `hbb.bb_instructions = _` (irule_at Any) >>
+     rpt (goal_assum (drule_at Any)) >> simp[eval_operand_def] >> metis_tac[]) >>
+  qexists_tac `t` >> conj_tac
+  >- metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES] >>
+  conj_tac
+  >- (irule typed_memory_sarray_intro >> simp[] >>
+      qpat_x_assum `!j. j < N ==> val_in_memory _ _ _ _` mp_tac >>
+      simp[Abbr `elem`]) >>
+  irule typed_copy_effect_then >> qexistsl_tac [`sa`,`sth`,`z`] >> simp[]
+QED
+
+Finalise typed_memory_sarray_slow_forward_mem
