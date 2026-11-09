@@ -5,7 +5,7 @@ Ancestors
   venomExecSemantics venomState o1LowerDloadPairedAllocation
   venomMemProps basePtrProofs o1FrameLockstep ssaAvailablePred venomExecProofs venomWf rangeAnalysisProofs contextCodegenRel
   tailMergeStep venomInstProofs1 ptrDisciplineControl venomInstProps relation
-  singleUseExpansionSupplySim occurrenceOrigin unitShapeDefs
+  singleUseExpansionSupplySim occurrenceOrigin unitShapeDefs o1LowerDloadOccurrence
 
 Definition ircf_alias_value_def:
   ircf_alias_value fn s G v <=>
@@ -1087,3 +1087,74 @@ Proof
   irule ircf_redirect_revert_operand_available >>
   metis_tac[EVERY_MEM]
 QED
+
+Theorem ircf_saved_forward_suffix_absent:
+  !vs C stk PG G tn fn inst s n a U B HP H.
+    occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H ==>
+    vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C ==>
+    !j bb k d sr sz ai root.
+      j < LENGTH stk /\
+      lookup_block (EL j stk).cf_state.vs_current_bb
+        (EL j stk).cf_fn.fn_blocks = SOME bb /\
+      wf_function (EL j stk).cf_fn /\ fn_inst_wf (EL j stk).cf_fn /\
+      fn_inst_ids_distinct (EL j stk).cf_fn /\
+      ircf_no_dst_write_alias (EL j stk).cf_fn /\
+      ircf_fwd_ok (EL j stk).cf_fn bb k d sr sz /\
+      ircf_copy_roots (EL j stk).cf_fn (EL k bb.bb_instructions) =
+        SOME (d,sr,sz) /\
+      k < (EL j stk).cf_state.vs_inst_idx /\
+      MEM ai (fn_insts (EL j stk).cf_fn) /\
+      ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [root] /\
+      (root = d \/ root = sr) ==>
+      occurrence_suffix_absent ((EL j U).of_owner,ai.inst_id) j H HP U
+Proof
+  ho_match_mp_tac occ_frame_reachable_strongind >> rpt conj_tac
+  >- simp[]
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume ircf_saved_forward_suffix_absent[next]:
+  rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  irule occurrence_suffix_absent_next >>
+  drule occ_frame_reachable_owner_fresh >> strip_tac >>
+  drule occ_frame_reachable_stack_length >> strip_tac >>
+  fs[ALL_DISTINCT, MEM_MAP] >>
+  metis_tac[MEM_EL]
+QED
+
+Resume ircf_saved_forward_suffix_absent[block]:
+  rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  irule occurrence_suffix_absent_block >> first_x_assum irule >>
+  simp[] >> metis_tac[]
+QED
+
+Resume ircf_saved_forward_suffix_absent[call]:
+  rpt gen_tac >> strip_tac >> strip_tac >> gen_tac >>
+  Cases_on `j`
+  >- (simp[] >> rpt gen_tac >> strip_tac >>
+      irule occurrence_suffix_absent_start >>
+      drule occ_frame_reachable_origin_certificate >> simp[] >>
+      strip_tac >> drule occurrence_origin_certificate_current >> strip_tac >>
+      `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+      fs[active_inst_def] >>
+      `bb' = bb` by
+        metis_tac[lookup_block_label, same_label_same_block] >> gvs[]
+      >- (irule ircf_fwd_dst_call_args_absent >>
+          simp[] >> metis_tac[]) >>
+      irule ircf_fwd_src_call_args_absent >> simp[] >> metis_tac[]) >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  irule occurrence_suffix_absent_push >> first_x_assum irule >>
+  simp[] >> metis_tac[]
+QED
+
+Resume ircf_saved_forward_suffix_absent[ret]:
+  rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `_ ==> !j. _` mp_tac >> simp[] >>
+  disch_then (qspec_then `SUC j` mp_tac) >> simp[] >>
+  metis_tac[occurrence_suffix_absent_pop]
+QED
+
+Finalise ircf_saved_forward_suffix_absent
