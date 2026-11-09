@@ -1091,3 +1091,265 @@ Resume source_owned_nonbulk_array_ptr[constructor_frames]:
      qexistsl [`p`,`32`] >> simp[]) >>
   suspend "constructor_allocation_frames"
 QED
+
+Resume source_owned_nonbulk_array_ptr[constructor_allocation_frames]:
+  markerLib.RESUME_TAC >>
+  `!id b k. FLOOKUP s.vs_allocas id = SOME (b,k) ==>
+      FLOOKUP t'.vs_allocas id = SOME (b,k)` by
+    (qpat_assum `!id b k. FLOOKUP s.vs_allocas id = SOME (b,k) ==> _` mp_tac >>
+     qpat_assum `!id b k. FLOOKUP h.vs_allocas id = SOME (b,k) ==> _` mp_tac >>
+     qpat_assum `h.vs_allocas = t.vs_allocas` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  suspend "constructor_changed_ids"
+QED
+
+Resume source_owned_nonbulk_array_ptr[constructor_changed_ids]:
+  markerLib.RESUME_TAC >>
+  `!id. id < st.cs_next_id \/ last.cs_next_id <= id ==>
+      FLOOKUP t'.vs_allocas id = FLOOKUP s.vs_allocas id` by
+    (qpat_assum `!id. id < middle.cs_next_id \/ st1.cs_next_id <= id ==> _` mp_tac >>
+     qpat_assum `!id. id <> header_st.cs_next_id ==> _` mp_tac >>
+     qpat_assum `h.vs_allocas = t.vs_allocas` mp_tac >>
+     `st.cs_next_id <= header_st.cs_next_id /\
+      st.cs_next_id <= middle.cs_next_id /\ st1.cs_next_id <= last.cs_next_id` by
+       (qpat_assum `st.cs_next_id <= header_st.cs_next_id` mp_tac >>
+        qpat_assum `header_st.cs_next_id < middle.cs_next_id` mp_tac >>
+        qpat_assum `st1.cs_next_id <= last.cs_next_id` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+     qpat_assum `st.cs_next_id <= header_st.cs_next_id` mp_tac >>
+     qpat_assum `st.cs_next_id <= middle.cs_next_id` mp_tac >>
+     qpat_assum `st1.cs_next_id <= last.cs_next_id` mp_tac >>
+     qpat_assum `header_st.cs_next_id < last.cs_next_id` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     `id <> header_st.cs_next_id` by decide_tac >>
+     `id < middle.cs_next_id \/ st1.cs_next_id <= id` by decide_tac >>
+     metis_tac[]) >>
+  suspend "constructor_scratch_frame"
+QED
+
+Resume source_owned_nonbulk_array_ptr[constructor_scratch_frame]:
+  markerLib.RESUME_TAC >>
+  `!b k. MEM (b,k) ((p,32)::fp) ==> ?id.
+      st.cs_next_id <= id /\ id < last.cs_next_id /\
+      FLOOKUP t'.vs_allocas id = SOME (b,k)` by
+    (qpat_assum `!b k. MEM (b,k) fp ==> _` mp_tac >>
+     qpat_assum `FLOOKUP t'.vs_allocas header_st.cs_next_id = SOME (p,32)` mp_tac >>
+     qpat_assum `st.cs_next_id <= header_st.cs_next_id` mp_tac >>
+     qpat_assum `header_st.cs_next_id < last.cs_next_id` mp_tac >>
+     qpat_assum `header_st.cs_next_id < middle.cs_next_id` mp_tac >>
+     qpat_assum `st1.cs_next_id <= last.cs_next_id` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     fs[MEM] >- (qexists `header_st.cs_next_id` >> simp[]) >>
+     first_x_assum drule >> strip_tac >> qexists `id` >>
+     simp[] >> decide_tac) >>
+  suspend "constructor_scratch_sites"
+QED
+
+Resume source_owned_nonbulk_array_ptr[constructor_scratch_sites]:
+  markerLib.RESUME_TAC >>
+  `s.vs_alloca_next <= t'.vs_alloca_next /\ p+32 <= t'.vs_alloca_next` by
+    (qpat_assum `s.vs_alloca_next <= t.vs_alloca_next` mp_tac >>
+     qpat_assum `h.vs_alloca_next <= t'.vs_alloca_next` mp_tac >>
+     qpat_assum `h.vs_alloca_next = t.vs_alloca_next` mp_tac >>
+     qpat_assum `alloca_inv t'` mp_tac >>
+     qpat_assum `FLOOKUP t'.vs_allocas header_st.cs_next_id = SOME (p,32)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  suspend "constructor_sites_finish"
+QED
+
+Resume source_owned_nonbulk_array_ptr[constructor_sites_finish]:
+  markerLib.RESUME_TAC >>
+  `!id b k. st.cs_next_id <= id /\ id < last.cs_next_id /\
+      FLOOKUP t'.vs_allocas id = SOME (b,k) ==>
+      k = 32 /\ b < dimword (:256) /\ b+32 <= t'.vs_alloca_next /\
+      ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+        ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]` by
+    (qpat_assum `!id b k. middle.cs_next_id <= id /\ id < st1.cs_next_id /\ FLOOKUP t'.vs_allocas id = SOME (b,k) ==> _` mp_tac >>
+     qpat_assum `!id b k. st.cs_next_id <= id /\ id < last.cs_next_id /\ FLOOKUP s.vs_allocas id = SOME (b,k) ==> _` mp_tac >>
+     qpat_assum `!id. id < middle.cs_next_id \/ st1.cs_next_id <= id ==> _` mp_tac >>
+     qpat_assum `!id. id <> header_st.cs_next_id ==> _` mp_tac >>
+     qpat_assum `h.vs_allocas = t.vs_allocas` mp_tac >>
+     qpat_assum `FLOOKUP t'.vs_allocas header_st.cs_next_id = SOME (p,32)` mp_tac >>
+     qpat_assum `p+32 < dimword (:256)` mp_tac >>
+     qpat_assum `p+32 <= t'.vs_alloca_next` mp_tac >>
+     qpat_assum `s.vs_alloca_next <= t'.vs_alloca_next` mp_tac >>
+     qpat_assum `MEM inst (fn_insts fn)` mp_tac >>
+     qpat_assum `inst.inst_id = header_st.cs_next_id` mp_tac >>
+     qpat_assum `inst.inst_opcode = ALLOCA` mp_tac >>
+     qpat_assum `inst.inst_operands = [Lit 32w]` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt gen_tac >> rpt disch_tac >>
+     rpt gen_tac >> strip_tac >>
+     Cases_on `id = header_st.cs_next_id`
+     >- (qpat_assum `id = header_st.cs_next_id` mp_tac >>
+         qpat_assum `FLOOKUP t'.vs_allocas id = SOME (b,k)` mp_tac >>
+         qpat_assum `FLOOKUP t'.vs_allocas header_st.cs_next_id = SOME (p,32)` mp_tac >>
+         qpat_assum `p+32 < dimword (:256)` mp_tac >>
+         qpat_assum `p+32 <= t'.vs_alloca_next` mp_tac >>
+         qpat_assum `MEM inst (fn_insts fn)` mp_tac >>
+         qpat_assum `inst.inst_id = header_st.cs_next_id` mp_tac >>
+         qpat_assum `inst.inst_opcode = ALLOCA` mp_tac >>
+         qpat_assum `inst.inst_operands = [Lit 32w]` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[] >>
+         qexists `inst` >> simp[]) >>
+     Cases_on `middle.cs_next_id <= id /\ id < st1.cs_next_id`
+     >- metis_tac[] >>
+     `id < middle.cs_next_id \/ st1.cs_next_id <= id` by decide_tac >>
+     `FLOOKUP s.vs_allocas id = SOME (b,k)` by metis_tac[] >>
+     qpat_assum `!id b k. st.cs_next_id <= id /\ id < last.cs_next_id /\ FLOOKUP s.vs_allocas id = SOME (b,k) ==> _`
+       (qspecl_then [`id`,`b`,`k`] mp_tac) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+     (conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- decide_tac >> metis_tac[])) >>
+  suspend "constructor_ghost_frames"
+QED
+
+Resume source_owned_nonbulk_array_ptr[constructor_ghost_frames]:
+  markerLib.RESUME_TAC >>
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t' = eval_operand op s` by
+    (qpat_assum `!op. abi_decoder_operand_live loop_st.cs_next_var op ==> eval_operand op t' = _` mp_tac >>
+     qpat_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op t = _` mp_tac >>
+     `!op. eval_operand op h = eval_operand op t` by
+       (qpat_assum `h.vs_labels = t.vs_labels` mp_tac >>
+        qpat_assum `!x. lookup_var x h = lookup_var x t` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+        Cases_on `op` >> simp[eval_operand_def]) >>
+     pop_assum mp_tac >>
+     qpat_assum `st.cs_next_var <= loop_st.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     metis_tac[abi_decoder_operand_live_mono]) >>
+  suspend "constructor_live_ghost"
+QED
+
+Resume source_owned_nonbulk_array_ptr[constructor_live_ghost]:
+  markerLib.RESUME_TAC >>
+  `!x. not_fresh_at st x ==> FLOOKUP H' x = FLOOKUP G x /\
+      op_taint u' (Var x) = op_taint tn (Var x)` by
+    (qpat_assum `!x. not_fresh_at st0 x /\ _ ==> _` mp_tac >>
+     qpat_assum `!x. not_fresh_at st x ==> _` mp_tac >>
+     qpat_assum `st.cs_next_var <= loop_st.cs_next_var` mp_tac >>
+     qpat_assum `st0.cs_next_var = loop_st.cs_next_var+4` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     `not_fresh_at st0 x` by
+       (irule freshWritesTheory.not_fresh_at_mono >> goal_assum (drule_at Any) >> decide_tac) >>
+     `~MEM x [STRING #"%" (toString loop_st.cs_next_var);
+        STRING #"%" (toString (loop_st.cs_next_var+1));
+        STRING #"%" (toString (loop_st.cs_next_var+2));
+        STRING #"%" (toString (loop_st.cs_next_var+3))]` by
+       (qpat_assum `not_fresh_at st x` mp_tac >>
+        qpat_assum `st.cs_next_var <= loop_st.cs_next_var` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> simp[not_fresh_at_def] >>
+        rpt strip_tac >> metis_tac[DECIDE ``a <= b ==> a <= b+1 /\ a <= b+2 /\ a <= b+3``]) >>
+     metis_tac[]) >>
+  suspend "constructor_safety"
+QED
+
+Resume source_owned_nonbulk_array_ptr[constructor_safety]:
+  markerLib.RESUME_TAC >>
+  `!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H u h) ==>
+       !fuel. ptr_safe_run D lower fuel ctx fn PG H u init` by
+    (qpat_assum `Abbrev (h = _)` mp_tac >>
+     qpat_assum `lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME bb` mp_tac >>
+     qpat_assum `bb.bb_instructions = loop_st.cs_current_insts ++ _` mp_tac >>
+     qpat_assum `lookup_block (FST labels) fn.fn_blocks = SOME hb` mp_tac >>
+     qpat_assum `phi_prefix_length hb.bb_instructions = 0` mp_tac >>
+     qpat_assum `init.vs_current_bb = loop_st.cs_current_bb` mp_tac >>
+     qpat_assum `init.vs_inst_idx = LENGTH loop_st.cs_current_insts` mp_tac >>
+     qpat_assum `~init.vs_halted` mp_tac >>
+     `allocas_from lower init` by
+       (qpat_assum `allocas_from lower h` mp_tac >>
+        qpat_assum `Abbrev (h = _)` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[markerTheory.Abbrev_def, allocas_from_def, jump_to_def]) >>
+     qpat_assum `allocas_from lower init` mp_tac >>
+     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac bool_ss [markerTheory.Abbrev_def] >> rpt strip_tac >>
+     `get_instruction bb init.vs_inst_idx = SOME
+        (mk_inst loop_st.cs_next_id JMP [Label (FST labels)] [])` by
+       simp[get_instruction_def, EL_APPEND_EQN] >>
+     `!fuel. ptr_safe_step D lower fuel ctx fn PG H u
+        (mk_inst loop_st.cs_next_id JMP [Label (FST labels)] []) init` by
+       simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+         mk_inst_def, step_inst_non_invoke, step_inst_base_def, jump_to_def,
+         codegenRelTheory.source_memory_write_ranges_def,
+         contextCodegenRelTheory.source_memory_read_ranges_def, op_taint_def] >>
+     Cases_on `fuel`
+     >- (simp[Once ptr_safe_run_def, Once ptr_safe_block_def,
+              get_instruction_def, EL_APPEND_EQN] >>
+         simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
+              is_terminator_def, Once ptr_safe_blocks_def]) >>
+     `lookup_block init.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
+     `is_terminator (mk_inst loop_st.cs_next_id JMP [Label (FST labels)] []).inst_opcode /\
+      (mk_inst loop_st.cs_next_id JMP [Label (FST labels)] []).inst_opcode <> INVOKE /\
+      step_inst_base (mk_inst loop_st.cs_next_id JMP [Label (FST labels)] []) init =
+        OK (jump_to (FST labels) init)` by
+       simp[mk_inst_def, is_terminator_def, step_inst_base_def] >>
+     drule_all typedCopyArrayPtrTheory.ptr_safe_run_jump_no_phi >>
+     disch_then (qspecl_then [`n`,`D`,`lower`,`ctx`,`PG`,`H`,`u`] mp_tac) >> simp[]) >>
+  suspend "constructor_final_safety"
+QED
+
+Resume source_owned_nonbulk_array_ptr[constructor_final_safety]:
+  markerLib.RESUME_TAC >>
+  `!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H' u' t') ==>
+       !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s` by
+    (qpat_assum `!D. _ ==> !fuel. ptr_safe_run D lower fuel ctx fn PG H u h` mp_tac >>
+     qpat_assum `!D. _ ==> !fuel. ptr_safe_run D lower fuel ctx fn PG H u init` mp_tac >>
+     qpat_assum `!D lower ctx' func. _ ==> !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s` mp_tac >>
+     qpat_assum `fn_has_code st loop_st fn` mp_tac >>
+     qpat_assum `allocas_from lower s` mp_tac >>
+     qpat_assum `lower <= s.vs_alloca_next` mp_tac >>
+     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+     qpat_assum `s.vs_current_bb = st.cs_current_bb` mp_tac >>
+     qpat_assum `s.vs_inst_idx = LENGTH st.cs_current_insts` mp_tac >>
+     qpat_assum `init = t with vs_inst_idx := LENGTH loop_st.cs_current_insts` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  suspend "constructor_packaging"
+QED
+
+Resume source_owned_nonbulk_array_ptr[constructor_packaging]:
+  markerLib.RESUME_TAC >>
+  `abi_footprint_disjoint base_addr owner_cap ((p,32)::fp)` by
+    (qpat_assum `abi_footprint_disjoint base_addr owner_cap fp` mp_tac >>
+     `base_addr+owner_cap <= p \/ p+32 <= base_addr` by
+       (qpat_assum `alloca_inv t'` mp_tac >>
+        qpat_assum `FLOOKUP t'.vs_allocas oid = SOME (base_addr,owner_cap)` mp_tac >>
+        qpat_assum `FLOOKUP t'.vs_allocas header_st.cs_next_id = SOME (p,32)` mp_tac >>
+        `oid <> header_st.cs_next_id` by
+          (qpat_assum `oid < st.cs_next_id \/ last.cs_next_id <= oid` mp_tac >>
+           qpat_assum `st.cs_next_id <= header_st.cs_next_id` mp_tac >>
+           qpat_assum `header_st.cs_next_id < last.cs_next_id` mp_tac >>
+           POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+        qpat_assum `oid <> header_st.cs_next_id` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[alloca_inv_def, allocas_non_overlapping_def] >> metis_tac[]) >>
+     (FIRST [qpat_assum `base_addr+owner_cap <= p` mp_tac,
+             qpat_assum `p+32 <= base_addr` mp_tac] >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      simp[abi_footprint_disjoint_def] >> metis_tac[])) >>
+  `u'.t_mem SUBSET tn.t_mem /\ u'.t_stor = tn.t_stor /\
+    u'.t_trans = tn.t_trans /\ u'.t_imm = tn.t_imm` by
+    (qpat_assum `u'.t_mem SUBSET u.t_mem` mp_tac >>
+     qpat_assum `u.t_mem SUBSET tn.t_mem` mp_tac >>
+     qpat_assum `u'.t_stor = u.t_stor` mp_tac >>
+     qpat_assum `u.t_stor = tn.t_stor` mp_tac >>
+     qpat_assum `u'.t_trans = u.t_trans` mp_tac >>
+     qpat_assum `u.t_trans = tn.t_trans` mp_tac >>
+     qpat_assum `u'.t_imm = u.t_imm` mp_tac >>
+     qpat_assum `u.t_imm = tn.t_imm` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[pred_setTheory.SUBSET_TRANS]) >>
+  `t'.vs_current_bb = last.cs_current_bb /\
+    t'.vs_inst_idx = LENGTH last.cs_current_insts` by
+    (qpat_assum `t'.vs_current_bb = SND (SND labels)` mp_tac >>
+     qpat_assum `last.cs_current_bb = SND (SND labels)` mp_tac >>
+     qpat_assum `last.cs_current_insts = []` mp_tac >>
+     qpat_assum `t'.vs_inst_idx = 0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  (qexistsl [`t'`,`H'`,`u'`,`(p,32)::fp`] >>
+   rpt conj_tac >> first_assum ACCEPT_TAC)
+QED
+
+Finalise source_owned_nonbulk_array_ptr
