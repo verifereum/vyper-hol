@@ -539,5 +539,7 @@ Theorem intcall_if_stmt_step:
   (?e s1 s2. st = If e s1 s2) ==>
   intcall_stmts_producer fp [st]
 Proof
-  cheat
+  strip_tac >> gvs[] >>
+  irule intcall_if_producer >> simp[] >>
+  conj_tac >> first_x_assum irule >> simp[vyperASTTheory.stmt_size_def]
 QED
