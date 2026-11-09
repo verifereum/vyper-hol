@@ -719,6 +719,78 @@ Proof
   simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]
 QED
 
+Theorem prefix_events_splice[local]:
+  !pre s bb xs u.
+    DROP s.vs_inst_idx bb.bb_instructions = pre ++ xs /\
+    EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+    FOLDR (dft_exec_cons fuel C) OK pre s = OK u ==>
+    gas_events_block fuel C owner bb s =
+    gas_events_block fuel C owner
+      <|bb_label := owner; bb_instructions :=
+        REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre|> s ++
+    gas_events_block fuel C owner bb u
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (gvs[] >> simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]) >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `DROP _ _ = _`
+       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[LENGTH_DROP]) >>
+  `EL s.vs_inst_idx bb.bb_instructions = h /\
+   DROP (SUC s.vs_inst_idx) bb.bb_instructions = pre ++ xs` by
+    gvs[rich_listTheory.DROP_CONS_EL] >>
+  fs[EVERY_DEF] >>
+  qpat_x_assum `dft_exec_cons _ _ _ _ _ = _` mp_tac >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def] >>
+  Cases_on `step_inst fuel C h s` >> simp[] >> strip_tac >>
+  first_x_assum (qspecl_then
+    [`v with vs_inst_idx := SUC s.vs_inst_idx`, `bb`, `xs`, `u`] mp_tac) >>
+  simp[] >> strip_tac >>
+  once_rewrite_tac[gas_events_block_def] >>
+  simp[venomInstTheory.get_instruction_def, EL_APPEND_EQN, APPEND_ASSOC] >>
+  pure_rewrite_tac[GSYM venomInstTheory.get_instruction_def] >>
+  pure_once_rewrite_tac[GSYM gas_events_block_def] >>
+  AP_THM_TAC >> AP_TERM_TAC >>
+  irule gas_events_block_suffix_cong >> qexists_tac `pre` >>
+  simp[DROP_APPEND, DROP_DROP_T, arithmeticTheory.ADD1]
+QED
+
+Theorem prefix_events_stopped[local]:
+  !pre s bb xs.
+    DROP s.vs_inst_idx bb.bb_instructions = pre ++ xs /\
+    EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+    (~?u. FOLDR (dft_exec_cons fuel C) OK pre s = OK u) ==>
+    gas_events_block fuel C owner bb s =
+    gas_events_block fuel C owner
+      <|bb_label := owner; bb_instructions :=
+        REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre|> s
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[] >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `DROP _ _ = _`
+       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[LENGTH_DROP]) >>
+  `EL s.vs_inst_idx bb.bb_instructions = h /\
+   DROP (SUC s.vs_inst_idx) bb.bb_instructions = pre ++ xs` by
+    gvs[rich_listTheory.DROP_CONS_EL] >>
+  fs[EVERY_DEF] >>
+  once_rewrite_tac[gas_events_block_def] >>
+  simp[venomInstTheory.get_instruction_def, EL_APPEND_EQN, APPEND_ASSOC] >>
+  Cases_on `step_inst fuel C h s` >> simp[] >>
+  `gas_events_block fuel C owner bb (v with vs_inst_idx := SUC s.vs_inst_idx) =
+   gas_events_block fuel C owner
+     <|bb_label := owner; bb_instructions :=
+       REPLICATE (SUC s.vs_inst_idx) (mk_inst 0 STOP [] []) ++ pre|>
+     (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (first_x_assum (qspecl_then
+       [`v with vs_inst_idx := SUC s.vs_inst_idx`, `bb`, `xs`] mp_tac) >>
+     simp[] >> disch_then irule >>
+     qpat_x_assum `!u. dft_exec_cons _ _ _ _ _ <> _` mp_tac >>
+     simp[dftIndexedExecTheory.dft_exec_cons_def]) >>
+  pop_assum SUBST1_TAC >>
+  irule gas_events_block_suffix_cong >> qexists_tac `pre` >>
+  simp[DROP_APPEND, DROP_DROP_T, arithmeticTheory.ADD1]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
