@@ -24,7 +24,8 @@ Ancestors
   internalReturnCopyFwdPlan internalReturnCopyFwdDefs internalReturnCopyFwdAlias reachableFnSim
   taintAgree o1LowerDloadShared o1PassContract ptrDiscipline passSharedDefs
   venomExecSemantics venomInst venomWf venomState finite_map pred_set list
-  rangeAnalysisProofs stepWriteFootprintBase
+  rangeAnalysisProofs stepWriteFootprintBase o1LowerDloadOccurrence occurrenceGeometry
+  venomExecProps
 
 (* The transformed block, before NOPs are cleared *)
 Definition ircf_tbb_def:
@@ -297,6 +298,57 @@ Proof
   irule ircf_gam_saved_write_disjoint >> fs[EVERY_MEM] >> metis_tac[]
 QED
 
+Theorem ircf_gam_frontier:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ lo <= vs.vs_alloca_next /\
+  EVERY wf_function C.ctx_functions /\ EVERY fn_inst_wf C.ctx_functions /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY ircf_no_dst_write_alias C.ctx_functions /\
+  (db,sb,sz) IN ircf_gam_cur fn_meta rma C fn s UNION ircf_gam_stk fn_meta rma C stk /\
+  q < sz ==> db+q < s.vs_alloca_next /\ sb+q < s.vs_alloca_next
+Proof
+  strip_tac >>
+  `ircf_alias_frames C stk fn inst s G` by
+    (drule o1LowerDloadOccurrenceTheory.occ_frame_reachable_projection >> strip_tac >>
+     drule_all ircf_alias_frames_reachable >> simp[]) >>
+  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+    metis_tac[occ_frame_reachable_annotation] >>
+  `occurrence_natural_geometry lo a U B stk s` by
+    metis_tac[occ_frame_reachable_geometry] >>
+  qpat_x_assum `_ IN _ UNION _` (strip_assume_tac o REWRITE_RULE [IN_UNION])
+  >- (qpat_x_assum `_ IN ircf_gam_cur _ _ _ _ _`
+        (strip_assume_tac o SIMP_RULE (srw_ss()) [ircf_gam_cur_def]) >>
+      `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+      `MEM fn C.ctx_functions /\ ircf_size_coherent fn s` by
+        fs[ircf_alias_frames_def, ircf_alias_boundary_def] >>
+      `wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\ ircf_no_dst_write_alias fn` by
+        metis_tac[EVERY_MEM] >>
+      drule_all ircf_gam_allocations >> strip_tac >>
+      fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>
+      `db+sz <= s.vs_alloca_next /\ sb+sz <= s.vs_alloca_next` by
+        metis_tac[occurrence_geometry_site_bounds] >> decide_tac) >>
+  `?j. j < LENGTH stk /\
+       (db,sb,sz) IN ircf_gam_cur fn_meta rma C (EL j stk).cf_fn (EL j stk).cf_state` by
+    (fs[ircf_gam_stk_def, IN_BIGUNION, MEM_MAP, MEM_EL] >> metis_tac[]) >>
+  `ircf_alias_saved C (EL j stk)` by
+    (fs[ircf_alias_frames_def] >> metis_tac[EVERY_EL]) >>
+  `MEM (EL j stk).cf_fn C.ctx_functions /\
+   ircf_size_coherent (EL j stk).cf_fn (EL j stk).cf_state` by
+    fs[ircf_alias_saved_def, ircf_alias_boundary_def] >>
+  qpat_x_assum `_ IN ircf_gam_cur _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [ircf_gam_cur_def]) >>
+  `MEM bb (EL j stk).cf_fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `wf_function (EL j stk).cf_fn /\ fn_inst_wf (EL j stk).cf_fn /\
+   wf_ssa (EL j stk).cf_fn /\ ircf_no_dst_write_alias (EL j stk).cf_fn` by
+    metis_tac[EVERY_MEM] >>
+  drule_all ircf_gam_allocations >> strip_tac >>
+  fs[occurrence_annotation_ok_def] >>
+  `FLOOKUP B ((EL j U).of_owner,dai.inst_id) = SOME (db,sz) /\
+   FLOOKUP B ((EL j U).of_owner,sai.inst_id) = SOME (sb,sz)` by
+    metis_tac[occurrence_saved_ok_allocas] >>
+  `db+sz <= s.vs_alloca_next /\ sb+sz <= s.vs_alloca_next` by
+    metis_tac[occurrence_geometry_site_bounds] >> decide_tac
+QED
+
 Theorem ircf_cross_base_frame:
   ircf_cross tn gam s t /\
   step_inst_base inst s = OK s' /\
@@ -363,6 +415,42 @@ Proof
     ~(off <= sb+k /\ sb+k < off+len)` by
     (rpt strip_tac >> metis_tac[ircf_gam_write_disjoint]) >>
   gvs[range_bytes_def] >> metis_tac[]
+QED
+
+Theorem ircf_cross_disciplined_base:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ lo <= vs.vs_alloca_next /\
+  EVERY wf_function C.ctx_functions /\ EVERY fn_inst_wf C.ctx_functions /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY fn_inst_ids_distinct C.ctx_functions /\
+  EVERY ircf_no_dst_write_alias C.ctx_functions /\ ptr_discipline lo C vs /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  gam = ircf_gam_cur fn_meta rma C fn s UNION ircf_gam_stk fn_meta rma C stk /\
+  ircf_cross tn gam s t /\
+  step_inst_base inst s = OK s' /\ step_inst_base ti t = OK t' /\
+  (!db sb sz k. (db,sb,sz) IN gam /\ k < sz ==>
+    sb+k NOTIN range_bytes (source_memory_write_ranges ti t)) ==>
+  ircf_cross (step_taint inst s s' tn) gam s' t'
+Proof
+  strip_tac >>
+  `MEM fn C.ctx_functions` by
+    (drule occ_frame_reachable_annotation >> simp[]) >>
+  `active_inst fn inst s` by
+    (qpat_assum `occ_frame_reachable _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     once_rewrite_tac[occ_frame_reachable_cases] >> metis_tac[]) >>
+  `MEM inst (fn_insts fn)` by
+    metis_tac[allocaFrontierBoundTheory.active_inst_mem_fn_insts] >>
+  `inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> SETFMP /\
+   inst.inst_opcode <> DRET` by
+    (drule_all o1LowerDloadPtrDisciplineTheory.ptr_discipline_inst_opcode_exclusions >>
+     simp[]) >>
+  `!db sb sz k. (db,sb,sz) IN gam /\ k < sz ==>
+     db+k NOTIN new_site_bytes s s' /\ sb+k NOTIN new_site_bytes s s' /\
+     sb+k NOTIN range_bytes (source_memory_write_ranges ti t)` by
+    (rpt gen_tac >> strip_tac >>
+     `db+k < s.vs_alloca_next /\ sb+k < s.vs_alloca_next` by
+       metis_tac[ircf_gam_frontier] >>
+     metis_tac[step_inst_base_new_site_bytes_frontier]) >>
+  drule_all ircf_cross_protected_base >> simp[]
 QED
 
 Theorem ircf_gam_phi_prefix:

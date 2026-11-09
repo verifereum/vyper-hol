@@ -145,6 +145,41 @@ Proof
   metis_tac[frame_reachable_var_taint_bounded, var_taint_bounded_operand]
 QED
 
+Theorem step_inst_base_OK_fmp_frame:
+  step_inst_base inst s = OK s' /\
+  inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> SETFMP /\
+  inst.inst_opcode <> DRET ==> s'.vs_fmp = s.vs_fmp
+Proof
+  strip_tac >> Cases_on `is_terminator inst.inst_opcode`
+  >- (Cases_on `inst.inst_opcode` >> gvs[venomInstTheory.is_terminator_def] >>
+      gvs[step_inst_base_opcode_eqs, AllCaseEqs(), jump_to_def] >>
+      pairarg_tac >> gvs[]) >>
+  Cases_on `is_alloca_op inst.inst_opcode`
+  >- (Cases_on `inst.inst_opcode` >> gvs[venomInstTheory.is_alloca_op_def] >>
+      gvs[step_inst_base_opcode_eqs, exec_alloca_def, AllCaseEqs(), update_var_def]) >>
+  drule_all venomInstProofs1Theory.step_inst_base_preserves_all >> simp[]
+QED
+
+Theorem step_inst_base_new_site_bytes_frontier:
+  step_inst_base inst s = OK s' /\
+  inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> SETFMP /\
+  inst.inst_opcode <> DRET /\ i < s.vs_alloca_next ==>
+  i NOTIN new_site_bytes s s'
+Proof
+  strip_tac >>
+  `s'.vs_fmp = s.vs_fmp` by metis_tac[step_inst_base_OK_fmp_frame] >>
+  Cases_on `inst.inst_opcode = ALLOCA`
+  >- (gvs[step_inst_base_opcode_eqs, exec_alloca_def, AllCaseEqs()] >>
+      simp[new_site_bytes_def, update_var_def, FLOOKUP_UPDATE] >>
+      rpt gen_tac >> Cases_on `inst.inst_id = aid` >>
+      simp[FLOOKUP_DEF] >> rpt strip_tac >> gvs[]) >>
+  `inst.inst_opcode <> INVOKE` by
+    (strip_tac >> gvs[step_inst_base_opcode_eqs]) >>
+  `s'.vs_allocas = s.vs_allocas` by
+    metis_tac[venomMemProofsTheory.step_inst_base_preserves_allocas] >>
+  simp[new_site_bytes_def, FLOOKUP_DEF] >> metis_tac[]
+QED
+
 Theorem mem_taint_frame_exact:
   q NOTIN new_site_bytes s s' /\
   q NOTIN range_bytes (step_writes inst s s') /\
