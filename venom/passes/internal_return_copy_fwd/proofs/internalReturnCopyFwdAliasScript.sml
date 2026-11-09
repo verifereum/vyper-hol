@@ -3,7 +3,7 @@ Theory internalReturnCopyFwdAlias
 Ancestors
   internalReturnCopyFwdPlan ptrDiscipline venomWfProps venomInst list finite_map words
   venomExecSemantics venomState o1LowerDloadPairedAllocation
-  venomMemProps basePtrProofs o1FrameLockstep
+  venomMemProps basePtrProofs o1FrameLockstep ssaAvailablePred venomExecProofs venomWf rangeAnalysisProofs
 
 Definition ircf_alias_value_def:
   ircf_alias_value fn s G v <=>
@@ -299,4 +299,132 @@ Proof
   `FLOOKUP t.vs_allocas ai.inst_id = FLOOKUP s.vs_allocas ai.inst_id` by
     (irule basePtrProofsTheory.step_inst_alloca_flookup >> metis_tac[]) >>
   metis_tac[ircf_size_coherent_def]
+QED
+
+Theorem ircf_alias_site_boundary_step:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  MEM bb fn.fn_blocks /\ n < LENGTH bb.bb_instructions /\
+  inst = EL n bb.bb_instructions /\ inst.inst_opcode <> PHI /\
+  boundary_pred fn bb n (ircf_alias_site_value fn s G) /\
+  ircf_size_coherent fn s /\ step_inst fuel C inst s = OK t ==>
+  boundary_pred fn bb (SUC n) (ircf_alias_site_value fn t (step_prov PG G inst t))
+Proof
+  strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (gvs[fn_insts_def] >> metis_tac[o1PassContractTheory.fn_insts_blocks_MEM, EL_MEM]) >>
+  `venomWf$inst_wf inst` by metis_tac[fn_inst_wf_every_bb, EVERY_MEM, EL_MEM] >>
+  `ssa_form fn` by gvs[wf_ssa_def] >>
+  `!u. MEM (Var u) inst.inst_operands ==> ircf_alias_site_value fn s G u` by
+    metis_tac[boundary_pred_operand] >>
+  `!v. MEM v inst.inst_outputs ==>
+    ircf_alias_site_value fn t (step_prov PG G inst t) v` by
+    metis_tac[ircf_alias_site_output] >>
+  `!v. ircf_alias_site_value fn s G v ==>
+    ircf_alias_site_value fn t (step_prov PG G inst t) v` by
+    (rpt strip_tac >> Cases_on `MEM v inst.inst_outputs` >>
+     metis_tac[ircf_alias_site_preserves]) >>
+  simp[boundary_pred_def] >> conj_tac
+  >- metis_tac[boundary_pred_def, dom_pred_mono] >>
+  irule prefix_pred_suc >> metis_tac[boundary_pred_def, prefix_pred_mono]
+QED
+
+Theorem ircf_alias_other_output:
+  ssa_form fn /\ MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\
+  ai.inst_outputs = [root] /\ ai.inst_operands = [Lit sz] /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode <> ALLOCA /\
+  inst.inst_opcode <> ASSIGN /\ MEM v inst.inst_outputs ==>
+  ~ircf_alias fn root v
+Proof
+  metis_tac[ircf_alias_output_inv]
+QED
+
+Theorem ircf_alias_site_state_eq:
+  s.vs_vars = t.vs_vars /\ s.vs_allocas = t.vs_allocas ==>
+  (ircf_alias_site_value fn s G v <=> ircf_alias_site_value fn t G v)
+Proof
+  simp[ircf_alias_site_value_def, lookup_var_def]
+QED
+
+Theorem ircf_alias_site_phis_prov:
+  !insts. ssa_form fn /\ EVERY (\i. MEM i (fn_insts fn)) insts /\
+  ircf_alias_site_value fn s G v ==>
+  ircf_alias_site_value fn s (phis_prov prev G insts) v
+Proof
+  Induct >> simp[phis_prov_def] >> rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  `ircf_alias_site_value fn s (phis_prov prev G insts) v` by metis_tac[EVERY_DEF] >>
+  simp[ircf_alias_site_value_def] >> rpt strip_tac >>
+  `~MEM v h.inst_outputs` by
+    (strip_tac >> drule_all ircf_alias_output_inv >> strip_tac >> gvs[]) >>
+  simp[FLOOKUP_set_prov] >> metis_tac[ircf_alias_site_value_def]
+QED
+
+Theorem ircf_alias_site_eval_phis:
+  ssa_form fn /\ EVERY (\i. MEM i (fn_insts fn)) insts /\
+  ircf_alias_site_value fn s G v /\ eval_phis s insts = OK t ==>
+  ircf_alias_site_value fn t (phis_prov s.vs_prev_bb G insts) v
+Proof
+  strip_tac >>
+  `ircf_alias_site_value fn s (phis_prov s.vs_prev_bb G insts) v` by
+    metis_tac[ircf_alias_site_phis_prov] >>
+  `t.vs_allocas = s.vs_allocas` by
+    (drule eval_phis_only_updates_vs_vars >>
+     disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  simp[ircf_alias_site_value_def] >> rpt strip_tac >>
+  `!pinst x. MEM pinst insts /\ pinst.inst_opcode = PHI /\
+     (x = v \/ x = root) ==> ~MEM x pinst.inst_outputs` by
+    (rpt strip_tac >> gvs[] >>
+     `MEM pinst (fn_insts fn)` by gvs[EVERY_MEM] >>
+     `ircf_alias fn root root` by simp[ircf_alias_refl] >>
+     drule_all ircf_alias_output_inv >> strip_tac >> gvs[]) >>
+  `lookup_var v t = lookup_var v s` by
+    (drule eval_phis_lookup_cases >> disch_then (qspec_then `v` mp_tac) >>
+     metis_tac[MEM]) >>
+  `lookup_var root t = lookup_var root s` by
+    (drule eval_phis_lookup_cases >> disch_then (qspec_then `root` mp_tac) >>
+     metis_tac[MEM]) >>
+  metis_tac[ircf_alias_site_value_def]
+QED
+
+Theorem ircf_alias_site_other_output:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode <> ALLOCA /\ inst.inst_opcode <> ASSIGN /\
+  MEM v inst.inst_outputs ==> ircf_alias_site_value fn s G v
+Proof
+  simp[ircf_alias_site_value_def] >> metis_tac[ircf_alias_other_output]
+QED
+
+Theorem ircf_alias_site_phi_prefix:
+  ssa_form fn /\ MEM bb fn.fn_blocks ==>
+  prefix_pred bb (phi_prefix_length bb.bb_instructions) (ircf_alias_site_value fn s G)
+Proof
+  rw[prefix_pred_def] >>
+  `(EL j bb.bb_instructions).inst_opcode = PHI` by
+    metis_tac[rangeAnalysisProofsTheory.phi_prefix_length_el_phi] >>
+  irule ircf_alias_site_other_output >> simp[] >>
+  qexists_tac `EL j bb.bb_instructions` >> simp[] >>
+  gvs[fn_insts_def] >> metis_tac[o1PassContractTheory.fn_insts_blocks_MEM, EL_MEM]
+QED
+
+Theorem ircf_alias_site_block_entry:
+  ssa_form fn /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  eval_phis s bb.bb_instructions = OK t /\
+  dom_pred fn bb.bb_label (ircf_alias_site_value fn s G) ==>
+  boundary_pred fn bb (phi_prefix_length bb.bb_instructions)
+    (ircf_alias_site_value fn (t with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+      (entry_prov fn s G))
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `EVERY (\i. MEM i (fn_insts fn)) bb.bb_instructions` by
+    (simp[EVERY_MEM, fn_insts_def] >>
+     metis_tac[o1PassContractTheory.fn_insts_blocks_MEM]) >>
+  simp[boundary_pred_def] >> reverse conj_tac
+  >- metis_tac[ircf_alias_site_phi_prefix] >>
+  irule dom_pred_mono >> qexists_tac `ircf_alias_site_value fn s G` >> simp[] >>
+  rpt strip_tac >>
+  `ircf_alias_site_value fn t (phis_prov s.vs_prev_bb G bb.bb_instructions) v` by
+    metis_tac[ircf_alias_site_eval_phis] >>
+  gvs[entry_prov_def] >>
+  gvs[ircf_alias_site_value_def, lookup_var_def]
 QED
