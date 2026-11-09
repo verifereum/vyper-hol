@@ -5652,6 +5652,32 @@ Proof
   irule mm_local_bytes_write_merge >> simp[]
 QED
 
+Theorem mm_local_write_log_partition[local]:
+  !js s.
+  (!j k. MEM j js /\ P j /\ MEM k js /\ ~P k ==>
+    FST (wr j) + LENGTH (SND (wr j)) <= FST (wr k) \/
+    FST (wr k) + LENGTH (SND (wr k)) <= FST (wr j)) ==>
+  FOLDL (\st j. write_memory_with_expansion (FST (wr j)) (SND (wr j)) st) s js =
+  FOLDL (\st j. write_memory_with_expansion (FST (wr j)) (SND (wr j)) st)
+    (FOLDL (\st j. write_memory_with_expansion (FST (wr j)) (SND (wr j)) st)
+      s (FILTER P js)) (FILTER (\j. ~P j) js)
+Proof
+  Induct_on `js` >- simp[] >> rpt gen_tac >> strip_tac >>
+  `!j k. MEM j js /\ P j /\ MEM k js /\ ~P k ==>
+    FST (wr j) + LENGTH (SND (wr j)) <= FST (wr k) \/
+    FST (wr k) + LENGTH (SND (wr k)) <= FST (wr j)` by metis_tac[MEM] >>
+  first_x_assum (qspec_then `write_memory_with_expansion (FST (wr h)) (SND (wr h)) s` mp_tac) >>
+  simp[] >> strip_tac >> Cases_on `P h`
+  >- simp[] >>
+  `EVERY (\(d,bs). d + LENGTH bs <= FST (wr h) \/
+    FST (wr h) + LENGTH (SND (wr h)) <= d) (MAP wr (FILTER P js))` by
+    (simp[EVERY_MEM, MEM_MAP, MEM_FILTER, pairTheory.FORALL_PROD] >>
+     rpt strip_tac >> gvs[] >> metis_tac[MEM, pairTheory.FST, pairTheory.SND]) >>
+  drule mm_local_write_log_commute >> disch_then (qspec_then `s` mp_tac) >>
+  simp[FOLDL_MAP, pairTheory.UNCURRY, combinTheory.o_DEF] >>
+  strip_tac >> simp[]
+QED
+
 (* Essential counterexample evidence: a variable-free unreachable block. *)
 Theorem mm_local_dead_input:
   fn0 = mk_raw_function "f"
