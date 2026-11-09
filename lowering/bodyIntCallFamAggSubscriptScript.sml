@@ -6,6 +6,7 @@ Theory bodyIntCallFamAggSubscript
 Ancestors
   bodyIntCallJointContract bodyIntCallFamAggSubscriptHeld
   bodyIntCallFamAggSubscriptResources bodyIntCallJointWidened
+  bodyIntCallFamAggSubscriptMapSuffix
 
 Theorem intcall_subscript_step:
   (!e'. expr_size e' < expr_size e ==>
