@@ -566,6 +566,42 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
+(* The calldata member frame step with the effect's lower bound at the
+   entry state's next id (trunk's lemma uses abi_decoder_entry_floor). *)
+Theorem calldata_member_after_head[local]:
+  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) hi_op src dst 0 sb (LENGTH bs)
+    d (SUM (MAP (type_memory_bytes ce) (pretys ++ ty::tys))) first last b cap initial /\
+  mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
+  abi_scratch_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
+    (d + SUM (MAP (type_memory_bytes ce) pretys)) (type_memory_bytes ce ty) b cap initial after_head /\
+  first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
+  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var hi_op /\ st.cs_next_var <= end_st.cs_next_var ==>
+  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) hi_op src dst 0 sb (LENGTH bs)
+    d (SUM (MAP (type_memory_bytes ce) (pretys ++ ty::tys))) first last b cap after_head /\
+  mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD after_head) = bs /\
+  fresh_vars_wrt limit_st after_head /\ abi_decoder_budget first last b cap after_head /\
+  abi_decoder_operand_live end_st.cs_next_var src /\ abi_decoder_operand_live end_st.cs_next_var dst /\
+  abi_decoder_operand_live end_st.cs_next_var hi_op
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `abi_scratch_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
+    d (SUM (MAP (type_memory_bytes ce) (pretys ++ ty::tys))) b cap initial after_head` by
+    (irule abi_scratch_effect_widen >>
+     qexistsl_tac [`d + SUM (MAP (type_memory_bytes ce) pretys)`, `end_st.cs_next_id`,
+       `st.cs_next_id`, `st.cs_next_var`, `type_memory_bytes ce ty`] >>
+     asm_simp_tac arith_ss [MAP_APPEND, MAP, SUM_APPEND, SUM]) >>
+  drule_all (calldata_pos abiScratchDecoderTransportTheory.abi_scratch_decoder_ranges_effect) >>
+  strip_tac >>
+  drule_all (calldata_pos abiScratchDecoderTransportTheory.abi_scratch_decoder_source_effect) >>
+  strip_tac >>
+  `abi_decoder_operand_live end_st.cs_next_var src /\ abi_decoder_operand_live end_st.cs_next_var dst /\
+   abi_decoder_operand_live end_st.cs_next_var hi_op` by
+    (rpt conj_tac >> irule abi_decoder_operand_live_mono >>
+     qexists_tac `st.cs_next_var` >> asm_simp_tac bool_ss []) >>
+  fs[abi_scratch_effect_def]
+QED
+
 Theorem calldata_scratch_members_guarded_ptr:
   !tys tvs pretys st final func ctx src root bs vs sb d first last b cap limit_st
     initial G tn lower P D PG.
@@ -705,7 +741,7 @@ Proof
   `(bounded ==> lower <= after_head.vs_alloca_next)` by
     (drule_all abi_scratch_effect_alloca_next_mono >>
      strip_tac >> strip_tac >> fs[]) >>
-  drule_all (calldata_pos abi_scratch_decoder_member_after_head) >> strip_tac >>
+  drule_all calldata_member_after_head >> strip_tac >>
   `not_fresh_at st root /\
    (!q. src = Var q ==> not_fresh_at st q)` by
     (qpat_assum `abi_decoder_operand_live st.cs_next_var src` mp_tac >>
