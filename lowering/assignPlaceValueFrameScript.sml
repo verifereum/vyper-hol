@@ -6,6 +6,8 @@ Ancestors
   supportedExprs vyperInterpreter vyperState vyperContext vyperMisc vyperAST
   pair sum list vyperStatePreservation vyperPlaceFrames vyperCallFrame
   vyperImmutablesPreservation vyperStorageBackend vyperScopePreservation
+  loweringPosts targetPlaceSimMem exprSimProps valueEncodingProofs
+  valueEncoding compileEnv venomState words arithmetic finite_map
 
 Theorem assign_target_pure_indices[local]:
   !tops bt. supported_target_pure tops bt ==>
@@ -178,4 +180,42 @@ Proof
   >- (gvs[read_result_def, read_place_def, read_storage_slot_eq] >>
       CASE_TAC >> simp[]) >>
   irule read_result_nonstorage_frame >> simp[] >> metis_tac[]
+QED
+
+Theorem assign_target_region_window[local]:
+  ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ aid < sm.cs_next_id /\
+      b <= off /\ off + len <= b + sz /\
+      (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+          b + sz <= lb \/ lb + lsz <= b)) \/
+   (?name b sz. local_region cenv es.scopes s name b sz /\
+      b <= off /\ off + len <= b + sz) \/ len = 0) /\
+  target_post ctx func cenv cx es sm sc s ee pv vt op t /\
+  target_pure_frame cenv cx es s t ==>
+  mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory
+Proof
+  strip_tac
+  >- (`mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (gvs[target_post_def] >> first_x_assum irule >> metis_tac[]) >>
+      drule mem_bytes_at_agree_window >> simp[])
+  >- (`mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (gvs[target_pure_frame_def] >> first_x_assum irule >>
+         qexists_tac `name` >> simp[]) >>
+      drule mem_bytes_at_agree_window >> simp[]) >>
+  simp[mem_bytes_at_def]
+QED
+
+Theorem assign_located_value_bytes[local]:
+  vv_at cenv cx ty sa sm es r (LocatedValue lty p) s /\
+  p.ptr_location = LocMemory /\
+  read_result cx r es = (INL v,es) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  eval_operand p.ptr_operand s = SOME w /\
+  target_post ctx func cenv cx es sm sc s ee pv vt op t /\
+  target_pure_frame cenv cx es s t ==>
+  mem_bytes_at (w2n w) (val_footprint tv v) t.vs_memory =
+    mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
+Proof
+  strip_tac >> irule assign_target_region_window >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  gvs[vv_at_def] >> metis_tac[]
 QED
