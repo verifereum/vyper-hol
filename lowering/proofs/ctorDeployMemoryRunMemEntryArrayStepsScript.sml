@@ -901,7 +901,7 @@ Proof
 QED
 
 Theorem ctor_checked_dyn_elem_ptr_mem_ok:
-  compile_abi_decode_dyn_elem_ptr DLOAD elem_src src_data hi asz st = (ptr_op,st') /\
+  compile_abi_decode_dyn_elem_ptr DLOAD (Lit 0w) elem_src src_data hi asz st = (ptr_op,st') /\
   eval_operand elem_src s = SOME (n2w head) /\ head < dimword (:256) /\
   head+32 <= LENGTH s.vs_data_section ==>
   run_inst_seq_mem_ok (emitted_insts st st') s
@@ -937,7 +937,7 @@ Proof
 QED
 
 Theorem ctor_checked_dyn_elem_ptr_extends:
-  compile_abi_decode_dyn_elem_ptr DLOAD elem_src src_data hi asz st = (ptr_op,st') ==>
+  compile_abi_decode_dyn_elem_ptr DLOAD (Lit 0w) elem_src src_data hi asz st = (ptr_op,st') ==>
   inst_extends st st'
 Proof
   Cases_on `hi = Lit 0w` >>

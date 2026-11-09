@@ -168,7 +168,7 @@ QED
 
 Theorem deploy_ctor_decode_buffer_old_prefix[local]:
  !k dst src hi ce env ty tv av v st st' ctx func site initial sb d.
- compile_abi_decode_to_buf dst src DLOAD hi
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi
    (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),st') /\
  abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
  abi_decoder_metadata ce env ty tv
@@ -218,7 +218,7 @@ Proof
     rpt strip_tac >> res_tac >> gvs[]) >>
  drule (BETA_RULE deploy_ctor_coherent_run) >>
  disch_then (drule_at Any) >>
- disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+ disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
  disch_then (drule_at (Pat `eval_operand dst initial = _`)) >>
  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
  simp_tac bool_ss [LESS_EQ_REFL, SUBSET_REFL] >>

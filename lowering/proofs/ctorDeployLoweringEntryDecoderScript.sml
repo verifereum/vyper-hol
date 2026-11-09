@@ -15,7 +15,7 @@ Ancestors
 
 val Ck = ``\ty tv.
  !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -58,7 +58,7 @@ Proof
    (Cases_on `src` >> Cases_on `dst` >>
     simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
     metis_tac[not_fresh_at_def]) >>
- `compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+ `compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
   mem_bytes_at sb 32 initial.vs_data_section = enc (vyper_to_abi_type env ty) av` by metis_tac[] >>
  qpat_assum `type_memory_bytes ce ty = 32` (fn th =>
    irule (PURE_REWRITE_RULE [th] deploy_ctor_noalloc_shifted_run)) >>
@@ -84,7 +84,7 @@ Proof
    (Cases_on `src` >> Cases_on `dst` >> Cases_on `hi` >>
     simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
     metis_tac[not_fresh_at_def]) >>
- `compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st')` by metis_tac[] >>
+ `compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st')` by metis_tac[] >>
  irule deploy_ctor_noalloc_shifted_run >> asm_rewrite_tac[] >>
  drule_all deploy_ctor_bytestring_frame_fragment >>
  simp[frag_exec_def] >> rpt strip_tac >>
@@ -119,7 +119,7 @@ Proof
    (abi_decoder_prune_vars st.cs_next_var initial)` by
    (irule ctor_actual_bulk_empty_window_pre >>
     asm_simp_tac bool_ss [vyper_to_abi_type_def] >> goal_assum (drule_at Any)) >>
- qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+ qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
    (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>
  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
    (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>

@@ -14,7 +14,7 @@ Ancestors
  compileEnv valueEncoding words list arithmetic finite_map venomMemDefs
 
 Theorem deploy_ctor_bytestring_frame_fragment:
- compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  type_to_abi_dec_info sf ce ty = DecBytestring n /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -56,7 +56,7 @@ Proof
 QED
 
 Theorem deploy_ctor_bulk_frame_fragment:
- compile_abi_decode_to_buf dst src DLOAD hi (DecDynArray ei abi_sz mem_sz F maxn)
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecDynArray ei abi_sz mem_sz F maxn)
    st = ((),st') /\ ~dec_info_needs_clamp ei /\
  abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
    (DecDynArray ei abi_sz mem_sz F maxn) (ListV avs) (ArrayV (DynArrayV vs))

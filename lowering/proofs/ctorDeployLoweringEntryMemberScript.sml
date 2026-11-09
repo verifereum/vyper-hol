@@ -165,7 +165,7 @@ Proof
 QED
 
 Theorem deploy_ctor_empty_complex_frame_reach:
-  compile_abi_decode_to_buf dst src opc hi (DecComplex dynamic []) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) hi (DecComplex dynamic []) st = ((),st') /\
   fn_has_code st st' func /\ eval_operand src initial = SOME (n2w sb) /\
   (hi = Lit 0w \/ ?hb. eval_operand hi initial = SOME (n2w hb) /\
     sb <= hb /\ hb < dimword (:256)) /\
@@ -193,7 +193,7 @@ QED
 (* Contracts are ML quotations only: k remains fixed across recursive calls. *)
 val Ck = ``\ty tv.
  !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -221,7 +221,7 @@ val Ck = ``\ty tv.
 val Mk = ``\tys tvs.
  !dst src hi st final ctx func site initial limit_st sb d D N ids
    pretys pretvs preavs prevs avs vs.
- compile_abi_decode_complex_elems dst src DLOAD hi (abi_decoder_member_infos sf ce tys)
+ compile_abi_decode_complex_elems dst src DLOAD (Lit 0w) hi (abi_decoder_member_infos sf ce tys)
    (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
    (SUM (MAP (type_memory_bytes ce) pretys)) st = ((),final) /\
  abi_decoder_members ce env sf pretys pretvs preavs prevs /\
@@ -297,7 +297,7 @@ Theorem deploy_ctor_member_child_run:
   abi_decoder_operand_live middle.cs_next_var childsrc /\
   abi_decoder_operand_live middle.cs_next_var childdst /\
   D <= d /\ d + SUM (MAP (type_memory_bytes ce) (pretys ++ ty::tys)) <= D+N /\
-  compile_abi_decode_to_buf childdst childsrc DLOAD hi (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
+  compile_abi_decode_to_buf childdst childsrc DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st prepared /\
   fn_has_code middle end_st func /\ fn_inst_ids_distinct func /\
   (middle.cs_blocks = end_st.cs_blocks \/ !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==> phi_prefix_length bb.bb_instructions = 0) /\
@@ -331,7 +331,7 @@ Theorem deploy_ctor_member_child_run_elim:
   !st initial prepared.
   abi_decoder_address_frame st.cs_next_var initial prepared ==>
   !childdst childsrc hi middle end_st.
-  compile_abi_decode_to_buf childdst childsrc DLOAD hi (type_to_abi_dec_info sf ce ty) middle = ((),end_st) ==>
+  compile_abi_decode_to_buf childdst childsrc DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) middle = ((),end_st) ==>
   !sb d D N ctx func site limit_st ids.
   mem_bytes_at sb (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys)))
     (ListV (preavs ++ av::avs)))) initial.vs_data_section =
@@ -375,7 +375,7 @@ Theorem deploy_ctor_member_child_run_application:
   abi_decoder_members ce env sf pretys pretvs preavs prevs /\
   abi_decoder_members ce env sf (ty::tys) (tv::tvs) (av::avs') (v::vs') /\
   abi_decoder_address_frame st.cs_next_var initial prepared /\
-  compile_abi_decode_to_buf childdst childsrc DLOAD hi (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
+  compile_abi_decode_to_buf childdst childsrc DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   mem_bytes_at sb (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys)))
     (ListV (preavs ++ av::avs')))) initial.vs_data_section =
     enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys))) (ListV (preavs ++ av::avs')) /\
@@ -412,7 +412,7 @@ Proof
     (fn premise => disch_then (fn rule => mp_then Any mp_tac rule premise)) >>
   qpat_assum `abi_decoder_address_frame st.cs_next_var initial prepared`
     (fn premise => disch_then (fn rule => mp_then Any mp_tac rule premise)) >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then drule_all >> simp[]
 QED
 
@@ -420,7 +420,7 @@ Theorem deploy_ctor_member_empty_run:
   abi_decoder_coherent ce env sf ty tv /\
   abi_decoder_metadata ce env ty tv root_di av v /\
   type_to_abi_dec_info sf ce ty = DecComplex T [] /\
-  compile_abi_decode_to_buf dst src DLOAD hi (DecComplex T []) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecComplex T []) st = ((),st') /\
   fn_has_code st st' func /\ eval_operand src initial = SOME (n2w sb) /\
   (hi = Lit 0w \/ ?h. eval_operand hi initial = SOME (n2w h) /\
     sb <= h /\ h < dimword (:256)) /\
@@ -514,7 +514,7 @@ Theorem deploy_ctor_member_tail_run:
     middle end_st prepared after_head /\
   st.cs_next_var <= middle.cs_next_var /\ middle.cs_next_var <= end_st.cs_next_var ==>
   !dst src hi final.
-  compile_abi_decode_complex_elems dst src DLOAD hi (abi_decoder_member_infos sf ce tys)
+  compile_abi_decode_complex_elems dst src DLOAD (Lit 0w) hi (abi_decoder_member_infos sf ce tys)
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) (pretys ++ [ty]))))
     (SUM (MAP (type_memory_bytes ce) (pretys ++ [ty]))) end_st = ((),final) /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -654,7 +654,7 @@ Proof
            (fn premise => disch_then (fn rule => mp_then Any mp_tac rule premise)) >>
          qpat_assum `abi_decoder_address_frame st.cs_next_var initial prepared`
            (fn premise => disch_then (fn rule => mp_then Any mp_tac rule premise)) >>
-         disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+         disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
          BETA_TAC >> disch_then irule >>
          asm_x "child" kall_tac >> asm_x "tail" kall_tac >>
          asm_simp_tac bool_ss [] >> qexists `sb` >>
@@ -669,7 +669,7 @@ Proof
      `abi_decoder_operand_live middle.cs_next_var hi` by
        (irule abi_decoder_operand_live_mono >> goal_assum (drule_at Any) >> simp[]) >>
      qpat_assum `type_to_abi_dec_info sf ce ty = DecComplex T []` (fn flag =>
-       qpat_x_assum `compile_abi_decode_to_buf (SND ops) _ _ _ _ _ = _`
+       qpat_x_assum `compile_abi_decode_to_buf (SND ops) _ _ _ _ _ _ = _`
          (assume_tac o PURE_REWRITE_RULE [flag]) >>
        qpat_x_assum `eval_operand (FST ops) prepared = _`
          (assume_tac o PURE_REWRITE_RULE [flag, COND_CLAUSES])) >>
@@ -678,7 +678,7 @@ Proof
        (qpat_assum `abi_decoder_members _ _ _ (_::_) _ _ _`
           (mp_tac o PURE_REWRITE_RULE [abi_decoder_members_def]) >>
         simp_tac bool_ss [] >> metis_tac[]) >>
-     drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`) deploy_ctor_member_empty_run >>
+     drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) deploy_ctor_member_empty_run >>
      disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
      BETA_TAC >> disch_then irule >>
      asm_x "child" kall_tac >> asm_x "tail" kall_tac >>
@@ -687,7 +687,7 @@ Proof
      qexists `sb + SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys))` >>
      asm_simp_tac bool_ss []) >>
   rename1 `(^Hk) ctx func site ids D N limit_st tv v _ _ middle end_st prepared after_head` >>
-  `compile_abi_decode_complex_elems dst src DLOAD hi (abi_decoder_member_infos sf ce tys)
+  `compile_abi_decode_complex_elems dst src DLOAD (Lit 0w) hi (abi_decoder_member_infos sf ce tys)
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) (pretys ++ [ty]))))
     (SUM (MAP (type_memory_bytes ce) (pretys ++ [ty]))) end_st = ((),final)` by
     (asm_x "child" kall_tac >> asm_x "tail" kall_tac >>
@@ -695,7 +695,7 @@ Proof
        (mp_tac o PURE_REWRITE_RULE [abi_decoder_members_def]) >> strip_tac >>
      drule abiDecoderCoherenceTheory.abi_decoder_coherent_header >>
      simp_tac bool_ss [abiDecoderCoherenceTheory.abi_decoder_header_def] >> strip_tac >>
-     qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ end_st = _` mp_tac >>
+     qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ end_st = _` mp_tac >>
      qpat_x_assum `abi_embedded_static_size _ ty = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp_tac bool_ss [MAP_APPEND, MAP, SUM_APPEND, SUM, ADD_0]) >>
@@ -715,7 +715,7 @@ Proof
     (fn premise => disch_then (fn rule => mp_then Any mp_tac rule premise)) >>
   disch_then (drule_at (Pat `abi_decoder_address_frame _ initial prepared`)) >>
   disch_then (drule_at (Pat `(^Hk) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `compile_abi_decode_complex_elems _ _ _ _ _ _ _ end_st = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ end_st = _`)) >>
   disch_then (drule_at (Pat `eval_operand src initial = SOME (n2w sb)`)) >>
   (impl_tac >- (asm_x "child" kall_tac >> asm_x "tail" kall_tac >>
     asm_simp_tac bool_ss [] >> metis_tac[])) >>
@@ -812,7 +812,7 @@ QED
 
 Theorem deploy_ctor_complex_execute:
   LIST_REL (^Ck) tys tvs /\
-  compile_abi_decode_to_buf dst src DLOAD hi (DecComplex dyn (abi_decoder_member_infos sf ce tys)) st = ((),final) /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecComplex dyn (abi_decoder_member_infos sf ce tys)) st = ((),final) /\
   abi_decoder_members ce env sf tys tvs avs vs /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
   sb + LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)) < dimword (:256) /\
@@ -928,7 +928,7 @@ Proof
   drule_all abi_decoder_tuple_members >> strip_tac >>
   `type_memory_bytes ce (TupleT tys) = SUM (MAP (type_memory_bytes ce) tys)` by
     (simp[Once type_memory_bytes_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_tuple_infos]) >>
   `vyper_to_abi_type env (TupleT tys) = Tuple (MAP (vyper_to_abi_type env) tys)` by
     simp[Once vyper_to_abi_type_def, vyper_to_abi_types_MAP] >>
@@ -996,7 +996,7 @@ Proof
  `LIST_REL (^Ck) (REPLICATE (LENGTH vs) ty) (REPLICATE (LENGTH vs) tv)` by
    (simp_tac bool_ss [LIST_REL_REPLICATE_same] >> BETA_TAC >>
     strip_tac >> first_assum ACCEPT_TAC) >>
- qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+ qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
    (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
  drule_all (SIMP_RULE bool_ss [map_replicate, SUM_REPLICATE]
    (Q.INST [`tys` |-> `REPLICATE (LENGTH vs) ty`,

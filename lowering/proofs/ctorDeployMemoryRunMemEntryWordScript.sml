@@ -37,7 +37,7 @@ Proof
 QED
 
 Theorem ctor_word_fresh_mem_ok:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   sb < dimword (:256) /\ d < dimword (:256) /\
   sb + 32 <= LENGTH s.vs_data_section /\ d + 32 <= s.vs_alloca_next /\
@@ -89,7 +89,7 @@ Proof
 QED
 
 Theorem ctor_word_reentry_mem_ok:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\
   abi_decoder_operand_live st.cs_next_var dst /\
@@ -117,7 +117,7 @@ Proof
 QED
 
 Theorem ctor_word_sequence_path:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
   fn_has_code st st' func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   run_inst_seq_mem_ok (emitted_insts st st') s /\
@@ -152,7 +152,7 @@ Proof
 QED
 
 Theorem ctor_word_sequence_zero_path:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
   fn_has_code st st' func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   run_inst_seq_mem_ok (emitted_insts st st') s /\
@@ -195,7 +195,7 @@ Proof
 QED
 
 Theorem ctor_word_sequence_history:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
   fn_has_code st st' func /\ alloca_history func s /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   t.vs_allocas = s.vs_allocas /\ t.vs_current_bb = s.vs_current_bb ==>
@@ -226,7 +226,7 @@ Proof
 QED
 
 Theorem ctor_checked_word_sequence:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_metadata ce env ty tv root_di av v /\
@@ -282,7 +282,7 @@ Proof
 QED
 
 Theorem ctor_checked_word_run:
-  compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_coherent ce env sf ty tv /\ abi_decoder_metadata ce env ty tv root_di av v /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -329,7 +329,7 @@ Proof
     (Cases_on `src` >> Cases_on `dst` >>
      simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      metis_tac[not_fresh_at_def]) >>
-  `compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  `compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
    mem_bytes_at sb 32 initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
    sb + 32 <= LENGTH initial.vs_data_section` by metis_tac[] >>
   drule_all ctor_checked_word_sequence >> disch_then (qspec_then `ctx` strip_assume_tac) >>

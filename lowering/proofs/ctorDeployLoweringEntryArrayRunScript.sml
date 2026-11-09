@@ -316,10 +316,10 @@ Proof
   gvs[] >> strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac emit_op_next_id >>
   `!src data hi sz a v z.
-    compile_abi_decode_dyn_elem_ptr DLOAD src data hi sz a = (v,z) ==>
+    compile_abi_decode_dyn_elem_ptr DLOAD (Lit 0w) src data hi sz a = (v,z) ==>
     a.cs_next_id <= z.cs_next_id` by
     (rpt strip_tac >>
-     qpat_x_assum `compile_abi_decode_dyn_elem_ptr DLOAD _ _ _ _ a = (v,z)` mp_tac >>
+     qpat_x_assum `compile_abi_decode_dyn_elem_ptr DLOAD (Lit 0w) _ _ _ _ a = (v,z)` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
      mp_tac (GEN_ALL (Q.INST [`opc` |-> `DLOAD`] abi_decoder_code_dyn_elem_ptr)) >>
      simp[abi_decoder_code_def] >> metis_tac[pairTheory.SND]) >>
@@ -328,7 +328,7 @@ QED
 
 val Ck = ``\ty tv.
  !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -357,7 +357,7 @@ Theorem deploy_ctor_array_body_at_index:
   (^Ck) ty tv /\
   abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   fn_has_code st end_st func /\ fn_inst_ids_distinct func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -454,7 +454,7 @@ Proof
   pure_asm_rewrite_tac [] >> disch_tac >>
   qpat_x_assum `eval_operand (SND (SND ops)) prepared = _` mp_tac >>
   pure_asm_rewrite_tac [] >> disch_tac >>
-  asm "child" (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`) o BETA_RULE) >>
+  asm "child" (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) o BETA_RULE) >>
   disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand (FST (SND ops)) _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand (SND (SND ops)) _ = _`)) >>
@@ -518,7 +518,7 @@ Theorem deploy_ctor_array_iteration:
   (^Ck) ty tv /\
   abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   fn_has_code st end_st func /\ fn_inst_ids_distinct func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -887,11 +887,11 @@ Proof
  `abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic maxn)))
     (ListV avs) (ArrayV (DynArrayV vs))` by fs[abi_decoder_metadata_def] >>
- `compile_abi_decode_to_buf dst src DLOAD hi
+ `compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi
     (DecDynArray (type_to_abi_dec_info sf ce ty)
       (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
       (is_abi_dynamic ce.ce_struct_fields ty) maxn) st = ((),st')` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      simp_tac bool_ss [Once type_to_abi_dec_info_def]) >>
  drule_all ctor_actual_array_loop_layout >> strip_tac >>
  drule_all ctor_actual_array_prefix_inputs >>

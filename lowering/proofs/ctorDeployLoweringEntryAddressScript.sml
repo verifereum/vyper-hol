@@ -137,7 +137,7 @@ QED
 Theorem deploy_ctor_prefix_decoder_code_phase[local]:
  cs_extends st middle /\ middle.cs_blocks = st.cs_blocks /\
  abi_decode_source_opcode opc /\ st.cs_next_id <= middle.cs_next_id /\
- compile_abi_decode_to_buf dst src opc hi di middle = ((),end_st) /\
+ compile_abi_decode_to_buf dst src opc (Lit 0w) hi di middle = ((),end_st) /\
  fn_has_code st end_st func /\
  (st.cs_blocks = end_st.cs_blocks \/
    !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -238,7 +238,7 @@ Theorem deploy_ctor_singleton_address_prefix:
  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
  ?src middle prepared.
-   compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+   compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
      (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
    eval_operand src prepared = SOME
      (if ~is_word_type ty /\ is_abi_dynamic ce.ce_struct_fields ty

@@ -33,7 +33,7 @@ val Hk = ``\r ctx func site initial st st' limit_st ids D N tv v d k.
 
 val Ck = ``\ty tv.
  !r dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -55,7 +55,7 @@ val Ck = ``\ty tv.
 val Mk = ``\tys tvs.
  !r dst src hi st final ctx func site initial limit_st sb d D N ids
    pretys pretvs preavs prevs avs vs.
- compile_abi_decode_complex_elems dst src DLOAD hi (abi_decoder_member_infos sf ce tys)
+ compile_abi_decode_complex_elems dst src DLOAD (Lit 0w) hi (abi_decoder_member_infos sf ce tys)
    (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
    (SUM (MAP (type_memory_bytes ce) pretys)) st = ((),final) /\
  abi_decoder_members ce env sf pretys pretvs preavs prevs /\
@@ -102,7 +102,7 @@ QED
 
 Theorem ctor_checked_complex_execute_from:
   LIST_REL (^Ck) tys tvs /\
-  compile_abi_decode_to_buf dst src DLOAD hi (DecComplex dyn (abi_decoder_member_infos sf ce tys)) st = ((),final) /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecComplex dyn (abi_decoder_member_infos sf ce tys)) st = ((),final) /\
   abi_decoder_members ce env sf tys tvs avs vs /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
   sb + LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)) < dimword (:256) /\

@@ -138,7 +138,7 @@ Theorem deploy_ctor_array_prepared_child_inputs:
   abi_decoder_operand_live middle.cs_next_var child_src /\
   abi_decoder_operand_live middle.cs_next_var child_dst /\
   abi_decoder_operand_live middle.cs_next_var hi /\
-  compile_abi_decode_to_buf child_dst child_src DLOAD hi
+  compile_abi_decode_to_buf child_dst child_src DLOAD (Lit 0w) hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   end_st.cs_next_var <= limit_st.cs_next_var /\
   fn_has_code middle end_st func /\ fn_inst_ids_distinct func /\
@@ -152,7 +152,7 @@ Theorem deploy_ctor_array_prepared_child_inputs:
   all_have_type tv vs /\ type_memory_size tv = type_memory_bytes ce ty /\
   d+32+j*type_memory_bytes ce ty+type_memory_bytes ce ty <=
     d+type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\
-  compile_abi_decode_to_buf child_dst child_src DLOAD hi
+  compile_abi_decode_to_buf child_dst child_src DLOAD (Lit 0w) hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   abi_decoder_coherent ce env sf ty tv /\
   abi_decoder_metadata ce env ty tv (type_to_abi_dec_info ce.ce_struct_fields ce ty)
@@ -275,10 +275,10 @@ Proof
   gvs[] >> strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac emit_op_next_id >>
   `!src data hi sz a v z.
-    compile_abi_decode_dyn_elem_ptr DLOAD src data hi sz a = (v,z) ==>
+    compile_abi_decode_dyn_elem_ptr DLOAD (Lit 0w) src data hi sz a = (v,z) ==>
     a.cs_next_id <= z.cs_next_id` by
     (rpt strip_tac >>
-     qpat_x_assum `compile_abi_decode_dyn_elem_ptr DLOAD _ _ _ _ a = (v,z)` mp_tac >>
+     qpat_x_assum `compile_abi_decode_dyn_elem_ptr DLOAD (Lit 0w) _ _ _ _ a = (v,z)` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
      mp_tac (GEN_ALL (Q.INST [`opc` |-> `DLOAD`] abi_decoder_code_dyn_elem_ptr)) >>
      simp[abi_decoder_code_def] >> metis_tac[pairTheory.SND]) >>
@@ -287,7 +287,7 @@ QED
 
 val Ccomplete = ``\ty tv.
  !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -318,7 +318,7 @@ Theorem deploy_ctor_array_body_complete_at_index:
   (^Ccomplete) ty tv /\
   abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   fn_has_code st end_st func /\ fn_inst_ids_distinct func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -414,7 +414,7 @@ Theorem deploy_ctor_array_iteration_complete:
   (^Ccomplete) ty tv /\
   abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   fn_has_code st end_st func /\ fn_inst_ids_distinct func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>

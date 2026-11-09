@@ -87,7 +87,7 @@ Proof
 QED
 
 Theorem deploy_ctor_empty_complex_complete_frame_reach:
-  compile_abi_decode_to_buf dst src opc hi (DecComplex dynamic []) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) hi (DecComplex dynamic []) st = ((),st') /\
   fn_has_code st st' func /\ eval_operand src initial = SOME (n2w sb) /\
   (hi = Lit 0w \/ ?hb. eval_operand hi initial = SOME (n2w hb) /\
     sb <= hb /\ hb < dimword (:256)) /\

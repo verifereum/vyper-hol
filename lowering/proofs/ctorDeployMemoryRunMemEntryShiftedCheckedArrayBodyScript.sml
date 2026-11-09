@@ -12,7 +12,7 @@ Ancestors
 
 val Ck = ``\ty tv.
  !r dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -57,7 +57,7 @@ val O = ``\k ctx func site ids D N d outsz next limit_st
 
 Theorem ctor_checked_array_child_at_index_from:
   (^Ck) ty tv /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   fn_has_code middle end_st func /\ fn_inst_ids_distinct func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -118,7 +118,7 @@ Proof
      fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def, IN_DEF]) >>
   `D <= d+32+j*type_memory_bytes ce ty /\
    d+32+j*type_memory_bytes ce ty+type_memory_bytes ce ty <= D+N` by decide_tac >>
-  asm "child" (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`) o BETA_RULE) >>
+  asm "child" (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) o BETA_RULE) >>
   disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand (FST (SND ops)) _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand (SND (SND ops)) _ = _`)) >>
@@ -166,7 +166,7 @@ Theorem ctor_checked_array_body_at_index_from:
   (^Ck) ty tv /\
   abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   fn_has_code st end_st func /\ fn_inst_ids_distinct func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -262,7 +262,7 @@ Proof
   `frag_ids middle end_st SUBSET ids` by
     (irule SUBSET_TRANS >> qexists `frag_ids st end_st` >>
      simp[] >> simp[frag_ids_def, SUBSET_DEF] >> decide_tac) >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`) ctor_checked_array_child_at_index_from >>
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) ctor_checked_array_child_at_index_from >>
   disch_then (drule_at (Pat `(^O) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
@@ -296,7 +296,7 @@ Theorem ctor_checked_array_iteration_from:
   (^Ck) ty tv /\
   abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   fn_has_code st end_st func /\ fn_inst_ids_distinct func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>

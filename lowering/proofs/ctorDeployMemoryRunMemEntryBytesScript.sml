@@ -113,7 +113,7 @@ Proof
 QED
 
 Theorem ctor_bytes_fresh_mem_ok:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st') /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decode_load DLOAD (n2w sb : bytes32) s = n2w cnt /\
   cnt <= n /\ n < dimword (:256) /\ sb < dimword (:256) /\ d < dimword (:256) /\
@@ -126,7 +126,7 @@ Theorem ctor_bytes_fresh_mem_ok:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_bytes_phases, comp_bind_def,
     comp_ignore_bind_def, LET_THM] >>
   simp_tac (srw_ss()) [abi_decode_copy_opcode_def, LET_THM] >>
@@ -172,7 +172,7 @@ Proof
 QED
 
 Theorem ctor_bytes_reentry_mem_ok:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st') /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
   abi_decode_load DLOAD (n2w sb : bytes32) initial = n2w cnt /\
   cnt <= n /\ n < dimword (:256) /\ sb < dimword (:256) /\ d < dimword (:256) /\
@@ -211,7 +211,7 @@ Proof
 QED
 
 Theorem ctor_bytes_sequence_path:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st') /\
   fn_has_code st st' func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   run_inst_seq_mem_ok (emitted_insts st st') s /\
@@ -244,7 +244,7 @@ Proof
 QED
 
 Theorem ctor_bytes_sequence_zero_path:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st') /\
   fn_has_code st st' func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   run_inst_seq_mem_ok (emitted_insts st st') s /\
@@ -266,7 +266,7 @@ Proof
 QED
 
 Theorem ctor_bytes_sequence_history:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st') /\
   fn_has_code st st' func /\ alloca_history func s /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   t.vs_allocas = s.vs_allocas /\ t.vs_current_bb = s.vs_current_bb ==>
@@ -297,7 +297,7 @@ Proof
 QED
 
 Theorem ctor_checked_bytes_sequence:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st') /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecBytestring n /\
   abi_decoder_metadata ce env ty tv root_di av v /\
@@ -369,7 +369,7 @@ Proof
 QED
 
 Theorem ctor_checked_bytes_run:
-  compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
   type_to_abi_dec_info sf ce ty = DecBytestring n /\
   abi_decoder_coherent ce env sf ty tv /\ abi_decoder_metadata ce env ty tv root_di av v /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -417,7 +417,7 @@ Proof
     (Cases_on `src` >> Cases_on `dst` >> Cases_on `hi` >>
      simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      metis_tac[not_fresh_at_def]) >>
-  `compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st')` by metis_tac[] >>
+  `compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st')` by metis_tac[] >>
   drule_all ctor_checked_bytes_sequence >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   drule_all ctor_word_path_sim >> strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>

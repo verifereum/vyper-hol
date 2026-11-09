@@ -161,7 +161,7 @@ Proof
 QED
 
 Theorem ctor_bulk_sequence_mem_ok:
- compile_abi_decode_to_buf dst src DLOAD hi
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi
    (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
  ~dec_info_needs_clamp ei /\
  eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
@@ -178,7 +178,7 @@ Theorem ctor_bulk_sequence_mem_ok:
 Proof
  disch_then (map_every assume_tac o CONJUNCTS) >>
  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
- qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+ qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
  asm_simp_tac bool_ss [abi_decode_bulk_phases, comp_ignore_bind_def,
                       comp_bind_def, LET_THM] >>
  pairarg_tac >> strip_tac >>
@@ -214,7 +214,7 @@ Proof
 QED
 
 Theorem ctor_typed_bulk_mem_ok:
- compile_abi_decode_to_buf dst src DLOAD hi
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi
    (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
  ~dec_info_needs_clamp ei /\
  abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn))
@@ -243,7 +243,7 @@ Proof
 QED
 
 Theorem ctor_bulk_reentry_mem_ok:
- compile_abi_decode_to_buf dst src DLOAD hi
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi
    (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
  ~dec_info_needs_clamp ei /\
  abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn))
@@ -274,7 +274,7 @@ Proof
 QED
 
 Theorem ctor_bulk_sequence_zero_path:
- compile_abi_decode_to_buf dst src DLOAD hi (DecDynArray ei abi_sz mem_sz F maxn)
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecDynArray ei abi_sz mem_sz F maxn)
    st = ((),st') /\ ~dec_info_needs_clamp ei /\
  fn_has_code st st' func /\ ~s.vs_halted /\
  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -313,7 +313,7 @@ Proof
 QED
 
 Theorem ctor_bulk_sequence_history:
- compile_abi_decode_to_buf dst src DLOAD hi (DecDynArray ei abi_sz mem_sz F maxn)
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecDynArray ei abi_sz mem_sz F maxn)
    st = ((),st') /\ ~dec_info_needs_clamp ei /\
  fn_has_code st st' func /\ alloca_history func s /\
  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -344,7 +344,7 @@ Proof
 QED
 
 Theorem ctor_checked_bulk_sequence:
- compile_abi_decode_to_buf dst src DLOAD hi (DecDynArray ei abi_sz mem_sz F maxn)
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecDynArray ei abi_sz mem_sz F maxn)
    st = ((),st') /\ ~dec_info_needs_clamp ei /\
  abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn))
    (ArrayTV tv (Dynamic maxn)) (DecDynArray ei abi_sz mem_sz F maxn)

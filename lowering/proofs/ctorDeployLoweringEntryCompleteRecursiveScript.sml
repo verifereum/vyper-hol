@@ -12,7 +12,7 @@ Ancestors
 
 val Ccomplete = ``\ty tv.
  !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -51,7 +51,7 @@ Proof
   drule_all abi_decoder_tuple_members >> strip_tac >>
   `type_memory_bytes ce (TupleT tys) = SUM (MAP (type_memory_bytes ce) tys)` by
     (simp[Once type_memory_bytes_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_tuple_infos]) >>
   `vyper_to_abi_type env (TupleT tys) = Tuple (MAP (vyper_to_abi_type env) tys)` by
     simp[Once vyper_to_abi_type_def, vyper_to_abi_types_MAP] >>
@@ -119,7 +119,7 @@ Proof
  `LIST_REL (^Ccomplete) (REPLICATE (LENGTH vs) ty) (REPLICATE (LENGTH vs) tv)` by
    (simp_tac bool_ss [LIST_REL_REPLICATE_same] >> BETA_TAC >>
     strip_tac >> first_assum ACCEPT_TAC) >>
- qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+ qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
    (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
  drule_all (SIMP_RULE bool_ss [map_replicate, SUM_REPLICATE]
    (Q.INST [`tys` |-> `REPLICATE (LENGTH vs) ty`,

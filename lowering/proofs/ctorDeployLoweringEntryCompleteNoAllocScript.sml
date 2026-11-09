@@ -15,7 +15,7 @@ Ancestors
  vyperABI vyperTypeABI exprLowering abiDecoderCorrectPrimitiveArray
 
 Theorem deploy_ctor_bytestring_complete_fragment:
- compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  type_to_abi_dec_info sf ce ty = DecBytestring n /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -60,7 +60,7 @@ Proof
 QED
 
 Theorem deploy_ctor_bulk_complete_fragment:
- compile_abi_decode_to_buf dst src DLOAD hi (DecDynArray ei abi_sz mem_sz F maxn)
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecDynArray ei abi_sz mem_sz F maxn)
    st = ((),st') /\ ~dec_info_needs_clamp ei /\
  abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
    (DecDynArray ei abi_sz mem_sz F maxn) (ListV avs) (ArrayV (DynArrayV vs))
@@ -102,7 +102,7 @@ QED
 (* Ambient-only contract: resource strengthening is a separate obligation. *)
 val Ccomplete = ``\ty tv.
  !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -142,7 +142,7 @@ Proof
    (Cases_on `src` >> Cases_on `dst` >> Cases_on `hi` >>
     simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
     metis_tac[not_fresh_at_def]) >>
- `compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st')` by metis_tac[] >>
+ `compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st')` by metis_tac[] >>
  irule deploy_ctor_noalloc_complete_run >> asm_rewrite_tac[] >>
  drule_all deploy_ctor_bytestring_complete_fragment >>
  simp[frag_exec_def] >> rpt strip_tac >>
@@ -177,7 +177,7 @@ Proof
    (abi_decoder_prune_vars st.cs_next_var initial)` by
    (irule ctor_actual_bulk_empty_window_pre >>
     asm_simp_tac bool_ss [vyper_to_abi_type_def] >> goal_assum (drule_at Any)) >>
- qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+ qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
    (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>
  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
    (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>

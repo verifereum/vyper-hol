@@ -30,7 +30,7 @@ Ancestors
 
 val Ckw = ``\ty tv.
  !k dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -419,11 +419,11 @@ Proof
  `abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic maxn)))
     (ListV avs) (ArrayV (DynArrayV vs))` by fs[abi_decoder_metadata_def] >>
- `compile_abi_decode_to_buf dst src DLOAD hi
+ `compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi
     (DecDynArray (type_to_abi_dec_info sf ce ty)
       (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
       (is_abi_dynamic ce.ce_struct_fields ty) maxn) st = ((),st')` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      simp_tac bool_ss [Once type_to_abi_dec_info_def]) >>
  drule_all ctor_actual_array_loop_layout >> strip_tac >>
  drule_all ctor_actual_array_prefix_inputs >>
@@ -525,7 +525,7 @@ Proof
    (abi_decoder_prune_vars st.cs_next_var initial)` by
    (irule ctor_actual_bulk_empty_window_pre >>
     asm_simp_tac bool_ss [vyper_to_abi_type_def] >> goal_assum (drule_at Any)) >>
- qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+ qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
    (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>
  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
    (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>
