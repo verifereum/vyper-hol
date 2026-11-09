@@ -141,8 +141,6 @@ Theorem normalize_field_child_path_mem:
   eval_operand dst s = SOME d /\ eval_operand src s = SOME p /\
   (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) /\
   phi_prefix_length sa.cs_current_insts = 0 /\
-  (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa se fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ Src s.vs_memory /\
@@ -150,8 +148,7 @@ Theorem normalize_field_child_path_mem:
     eval_operand sp u = SOME (p + n2w soff) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
     phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
-    (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     u.vs_alloca_next = s.vs_alloca_next /\ Src u.vs_memory ==>
@@ -267,13 +264,9 @@ Theorem normalize_field_suffix_boundary[local]:
   compile_with_byte_offset src soff sc = (sp,sd) /\
   compile_store_memory_typed ce dp dt sp st sd = ((),se) /\
   compile_typed_copy_fields ce dst src (dt::dts) (st::sts) doff soff sa = ((),sb) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\ fn_has_code sa sb fn /\
-  lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-  phi_prefix_length bb.bb_instructions = 0 ==>
+  phi_prefix_length sa.cs_current_insts = 0 /\ fn_has_code sa sb fn ==>
   fn_has_code sa se fn /\ fn_has_code se sb fn /\
-  phi_prefix_length se.cs_current_insts = 0 /\
-  (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0)
+  phi_prefix_length se.cs_current_insts = 0
 Proof
   strip_tac >>
   `compile_typed_copy_fields ce dst src dts sts
@@ -283,9 +276,6 @@ Proof
   `phi_prefix_length se.cs_current_insts = 0` by
     metis_tac[typedNormalizeContinuationTheory.normalize_typed_prefix_zero,
       typedNormalizeContinuationTheory.normalize_offset_prefix_zero] >>
-  simp[] >> irule typedNormalizeContinuationTheory.normalize_fields_suffix_entry >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  goal_assum (drule_at (Pat `compile_typed_copy_fields _ _ _ _ _ _ _ _ = _`)) >>
   simp[]
 QED
 Theorem normalize_fields_tail_equation[local]:
@@ -389,8 +379,6 @@ Theorem normalize_field_bounded_child_path_mem[local]:
   eval_operand dst s = SOME (n2w b) /\ eval_operand src s = SOME (n2w a) /\
   (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) /\
   phi_prefix_length sa.cs_current_insts = 0 /\
-  (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa se fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ Src s.vs_memory /\
@@ -400,8 +388,7 @@ Theorem normalize_field_bounded_child_path_mem[local]:
     eval_operand sp u = SOME (n2w hi) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
     phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
-    (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     dend <= u.vs_alloca_next /\ hend <= u.vs_alloca_next /\ Src u.vs_memory ==>
@@ -425,7 +412,7 @@ Theorem normalize_field_bounded_child_path_mem[local]:
       vs_prev_bb := s.vs_prev_bb|>) = s
 Proof
   strip_tac >> irule normalize_field_child_path_mem >>
-  asm_rewrite_tac[] >> conj_tac >- metis_tac[] >>
+  asm_rewrite_tac[] >>
   goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `compile_with_byte_offset _ _ sa = _`)) >>
   goal_assum (drule_at (Pat `compile_with_byte_offset _ _ sc = _`)) >>
@@ -458,8 +445,7 @@ Theorem normalize_tuple_fields_certificate[local]:
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
     phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
-    (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next /\
@@ -475,8 +461,6 @@ Theorem normalize_tuple_fields_certificate[local]:
         vs_prev_bb := u.vs_prev_bb|>) = u) /\
   compile_typed_copy_fields ce dst src DT ST d0 s0 sa = ((),sb) /\
   phi_prefix_length sa.cs_current_insts = 0 /\
-  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -580,8 +564,7 @@ Theorem normalize_tuple_fields_path_mem:
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
     phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
-    (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next /\
@@ -597,8 +580,6 @@ Theorem normalize_tuple_fields_path_mem:
         vs_prev_bb := u.vs_prev_bb|>) = u) /\
   compile_typed_copy_fields ce dst src DT ST d0 s0 sa = ((),sb) /\
   phi_prefix_length sa.cs_current_insts = 0 /\
-  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -647,8 +628,7 @@ Theorem normalize_tuple_fields_memory_path_mem:
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
     phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
-    (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next /\
@@ -665,8 +645,6 @@ Theorem normalize_tuple_fields_memory_path_mem:
         vs_prev_bb := u.vs_prev_bb|>) = u) /\
   compile_typed_copy_fields ce dst src DT ST d0 s0 sa = ((),sb) /\
   phi_prefix_length sa.cs_current_insts = 0 /\
-  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -726,8 +704,7 @@ Theorem normalize_nominal_struct_fields_memory_path_mem:
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
     phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
-    (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next /\
@@ -744,8 +721,6 @@ Theorem normalize_nominal_struct_fields_memory_path_mem:
         vs_prev_bb := u.vs_prev_bb|>) = u) /\
   compile_struct_typed_copy ce dst src fields src_fields d0 s0 sa = ((),sb) /\
   phi_prefix_length sa.cs_current_insts = 0 /\
-  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\

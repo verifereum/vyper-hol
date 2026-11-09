@@ -119,8 +119,7 @@ Theorem normalize_tuple_semantic_path_mem:
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
     phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
-    (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next /\
@@ -137,8 +136,6 @@ Theorem normalize_tuple_semantic_path_mem:
         vs_prev_bb := u.vs_prev_bb|>) = u) /\
   compile_typed_copy_fields ce dst src DT ST 0 0 sa = ((),sb) /\
   phi_prefix_length sa.cs_current_insts = 0 /\
-  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME (n2w b) /\ eval_operand src s = SOME (n2w a) /\
@@ -229,8 +226,6 @@ Theorem typed_ordered_fields_child_rank_path_mem:
     (w2n sw + type_memory_size stv <= w2n dw \/
       w2n dw + type_memory_size dtv <= w2n sw) /\
     phi_prefix_length sa.cs_current_insts = 0 /\
-    (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\
     fn_has_code sa sb fn /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
@@ -251,8 +246,7 @@ Theorem typed_ordered_fields_child_rank_path_mem:
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
     phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
-    (?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next /\
@@ -325,8 +319,6 @@ Theorem typed_store_tuple_entry_path_mem:
   (w2n sw + type_memory_size stv <= w2n dw \/
     w2n dw + type_memory_size dtv <= w2n sw) /\
   phi_prefix_length sa.cs_current_insts = 0 /\
-  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
@@ -345,8 +337,6 @@ Theorem typed_store_tuple_entry_path_mem:
     (w2n sw + type_memory_size stv <= w2n dw \/
       w2n dw + type_memory_size dtv <= w2n sw) /\
     phi_prefix_length sa.cs_current_insts = 0 /\
-    (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\
     fn_has_code sa sb fn /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
