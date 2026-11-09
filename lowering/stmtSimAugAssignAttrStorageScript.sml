@@ -418,7 +418,7 @@ Proof
      irule emit_op_zero_path >> simp[] >>
      qexistsl_tac [`[dst]`, `cur`, `if tr then TLOAD else SLOAD`, `sn`] >>
      Cases_on `tr` >> gvs[is_terminator_def] >> gen_tac >>
-     simp[step_inst_base_def, exec_read1_def, mk_inst_def]) >>
+     FIRST [simp[step_inst_base_def, exec_read1_def, mk_inst_def]]) >>
   `stmt_state_rel ctx func cenv cx es t` by
     (simp[Abbr `t`, stmt_state_rel_inst_idx] >>
      irule stmt_state_rel_update_var >> simp[] >>

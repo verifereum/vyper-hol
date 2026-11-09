@@ -279,9 +279,13 @@ Theorem compile_abi_decode_static_correct:
     inst_extends st st'
 Proof
   strip_tac >>
-  `compile_abi_decode_to_buf dst src opc (Lit 0w) (DecPrimWord clamp) st = ((),st')`
-    by simp[compile_abi_decode_to_buf_def] >>
-  drule_all abi_decoder_clamped_word_sequence >> simp[]
+  `compile_abi_decode_to_buf dst src opc (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st')`
+    by simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def,
+            comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  mp_tac (Q.INST [`B` |-> `0`, `pos` |-> `w2n (p:bytes32)`,
+                  `base_op` |-> `Lit 0w`, `hi` |-> `Lit 0w`]
+          abi_decoder_clamped_word_sequence) >>
+  simp[eval_operand_def]
 QED
 
 (* ===== ABI Encoding / Memory Correspondence ===== *)

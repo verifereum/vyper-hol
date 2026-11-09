@@ -65,7 +65,8 @@ Proof
   `?codepos. FLOOKUP s.vs_labels "runtime_begin" = SOME codepos` by
     fs[immutable_base_zero_alt, optionTheory.IS_SOME_EXISTS] >>
   qexistsl_tac [`t`, `b`, `codepos`] >>
-  simp[Abbr `inst`, mk_inst_def, step_inst_base_def, eval_operand_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[Abbr `inst`, mk_inst_def, eval_operand_def] >>
   qpat_x_assum `exec_alloca _ _ _ = OK t` mp_tac >>
   simp[exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas st.cs_next_id` >>
@@ -94,7 +95,8 @@ Proof
   conj_tac >- (simp[below_frontier_CODECOPY, eval_operand_def,
                     wordsTheory.w2n_n2w] >> decide_tac) >>
   conj_tac >- simp[inst_dload_in_section_other, mk_inst_def] >>
-  simp[mk_inst_def, step_inst_base_def, eval_operand_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[mk_inst_def, eval_operand_def] >>
   Cases_on `FLOOKUP s.vs_labels "runtime_begin"` >> simp[] >>
   simp[run_inst_seq_mem_ok_last, below_frontier_RETURN,
        inst_dload_in_section_other, mk_inst_def,
@@ -121,8 +123,9 @@ Proof
    pos + rt < dimword(:256)` by decide_tac >>
   qabbrev_tac `s1 = update_var tmp (n2w (pos + rt)) s` >>
   `step_inst_base (mk_inst id ADD [Var buf; Lit (n2w rt)] [tmp]) s = OK s1` by
-    simp[Abbr `s1`, mk_inst_def, step_inst_base_def, exec_pure2_def,
-         eval_operand_def, wordsTheory.word_add_n2w] >>
+    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     simp[Abbr `s1`, mk_inst_def, exec_pure2_def,
+          eval_operand_def, wordsTheory.word_add_n2w]) >>
   `eval_operand (Var buf) s1 = SOME (n2w pos) /\
    eval_operand (Var tmp) s1 = SOME (n2w (pos + rt)) /\
    s1.vs_alloca_next = s.vs_alloca_next` by
@@ -138,8 +141,9 @@ Proof
   conj_tac >- simp[inst_dload_in_section_other, mk_inst_def] >>
   qabbrev_tac `s2 = mcopy (pos + rt) 0 cap s1` >>
   `step_inst_base (mk_inst copy_id MCOPY [Var tmp; imm; Lit (n2w cap)] []) s1 = OK s2` by
-    simp[Abbr `s2`, mk_inst_def, step_inst_base_def, eval_operand_def,
-         wordsTheory.w2n_n2w] >>
+    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     simp[Abbr `s2`, mk_inst_def, eval_operand_def,
+          wordsTheory.w2n_n2w]) >>
   simp[] >> irule (SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss) []
     constructor_epilogue_copy_return_mem_ok) >>
   qexists_tac `pos` >>
@@ -197,7 +201,8 @@ Theorem epilogue_return_not_OK[local]:
     step_inst_base (mk_inst id RETURN [dst;szop] []) s <> OK u
 Proof
   rpt gen_tac >>
-  simp[mk_inst_def, Once step_inst_base_def, AllCaseEqs()]
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[mk_inst_def, AllCaseEqs()]
 QED
 
 Theorem epilogue_mem_ok_index[local]:
@@ -422,7 +427,8 @@ Proof
     mp_tac run_from_jump_end_mem >>
   impl_tac
   >- (gvs[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
-      simp[mk_inst_def, is_terminator_def, Once step_inst_base_def,
+      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      simp[mk_inst_def, is_terminator_def,
            inst_mem_below_frontier_def, source_memory_read_ranges_def,
            source_memory_write_ranges_def]) >>
   disch_then (qspecl_then [`fuel`, `Halt final`] mp_tac) >>

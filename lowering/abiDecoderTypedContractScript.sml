@@ -37,28 +37,51 @@ Definition abi_decoder_reservation_def:
        b <= off /\ off + sz <= b + cap)
 End
 
+(* The dispatcher entry itself never allocates scratch. Allocation/child
+   phases recover their ordinary frontier using emitted-instruction bounds. *)
+Definition abi_decoder_entry_floor_def:
+  abi_decoder_entry_floor st = st.cs_next_id + 1
+End
+
+Theorem abi_decoder_reservation_restrict:
+  abi_decoder_reservation a last b cap s /\ a <= c ==>
+  abi_decoder_reservation c last b cap s
+Proof
+  rw[abi_decoder_reservation_def] >>
+  `a <= id` by decide_tac >> first_x_assum drule_all >> simp[]
+QED
+
+Theorem abi_decoder_reservation_entry_phase:
+  abi_decoder_reservation (abi_decoder_entry_floor st) last b cap s /\
+  abi_decoder_entry_floor st <= phase.cs_next_id ==>
+  abi_decoder_reservation phase.cs_next_id last b cap s
+Proof
+  metis_tac[abi_decoder_reservation_restrict]
+QED
+
 Definition abi_decoder_ranges_def:
-  abi_decoder_ranges opc hi src dst sb len d outsz b cap s <=>
+  abi_decoder_ranges opc src_base_op hi src dst src_base sb len d outsz b cap s <=>
     abi_decode_source_opcode opc /\
+    eval_operand src_base_op s = SOME (n2w src_base) /\
     eval_operand src s = SOME (n2w sb) /\
     eval_operand dst s = SOME (n2w d) /\
-    sb + len < dimword (:256) /\ d + outsz < dimword (:256) /\
+    src_base + sb + len < dimword (:256) /\ d + outsz < dimword (:256) /\
     (hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
                            sb + len <= h /\ h < dimword (:256)) /\
     (d + outsz <= b \/ b + cap <= d) /\
     (opc = MLOAD ==>
-       abi_footprint_disjoint sb len [(d,outsz);(b,cap)])
+       abi_footprint_disjoint (src_base + sb) len [(d,outsz);(b,cap)])
 End
 
 Definition abi_decoder_pre_def:
-  abi_decoder_pre ce env ty tv di av v st last src dst opc hi sb d b cap s <=>
+  abi_decoder_pre ce env ty tv di av v st last src dst opc src_base_op hi src_base sb d b cap s <=>
     abi_decoder_metadata ce env ty tv di av v /\
     fresh_vars_wrt st s /\
-    abi_decoder_reservation st.cs_next_id last b cap s /\
-    abi_decoder_ranges opc hi src dst sb
+    abi_decoder_reservation (abi_decoder_entry_floor st) last b cap s /\
+    abi_decoder_ranges opc src_base_op hi src dst src_base sb
       (LENGTH (enc (vyper_to_abi_type env ty) av)) d
       (type_memory_bytes ce ty) b cap s /\
-    mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env ty) av))
+    mem_bytes_at (src_base + sb) (LENGTH (enc (vyper_to_abi_type env ty) av))
       (abi_decode_source opc s) = enc (vyper_to_abi_type env ty) av
 End
 
@@ -81,8 +104,8 @@ QED
    it identifies the canonical word without assuming a source-value roundtrip. *)
 Theorem abi_decoder_uint256_canonical_load:
   abi_decoder_pre ce env (BaseT (UintT 256)) (BaseTV (UintT 256))
-    (DecPrimWord NoClamp) av (IntV (&w2n w)) st last src dst opc hi sb d b cap s ==>
-  abi_decode_load opc (n2w sb : bytes32) s = w
+    (DecPrimWord NoClamp) av (IntV (&w2n w)) st last src dst opc src_base_op hi src_base sb d b cap s ==>
+  abi_decode_load opc (n2w (src_base + sb) : bytes32) s = w
 Proof
   pure_rewrite_tac[abi_decoder_pre_def, abi_decoder_metadata_def,
                    abi_decoder_ranges_def] >> rpt strip_tac >>
@@ -90,42 +113,42 @@ Proof
     (drule_all (cj 1 abi_to_vyper_vyper_to_abi) >>
      simp[vyper_to_abi_def, vyper_to_abi_base_def]) >>
   gvs[vyper_to_abi_type_def, enc_def, enc_number_def] >>
-  `sb < dimword (:256)` by decide_tac >>
-  asm_simp_tac bool_ss [abi_decode_load_bytes] >>
+  `src_base + sb < dimword (:256)` by decide_tac >>
+  simp[abi_decode_load_bytes] >>
   asm_rewrite_tac[] >> irule word_of_bytes_word_to_bytes >>
   simp[dividesTheory.divides_def]
 QED
 
 Theorem abi_decoder_typed_word_sequence:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord NoClamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc src_base_op hi (DecPrimWord NoClamp) st = ((),st') /\
   abi_decoder_pre ce env (BaseT (UintT 256)) (BaseTV (UintT 256))
-    (DecPrimWord NoClamp) av (IntV (&w2n (w:bytes32))) st last src dst opc hi sb d b cap s ==>
+    (DecPrimWord NoClamp) av (IntV (&w2n (w:bytes32))) st last src dst opc src_base_op hi src_base sb d b cap s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
       abi_decoder_post (BaseTV (UintT 256)) (IntV (&w2n w)) st'
         d 32 b cap s t
 Proof
   strip_tac >>
-  `abi_decode_load opc (n2w sb : bytes32) s = w` by
+  `abi_decode_load opc (n2w (src_base + sb) : bytes32) s = w` by
     (drule_all abi_decoder_uint256_canonical_load >> simp[]) >>
   qhdtm_x_assum `abi_decoder_pre` mp_tac >>
   pure_rewrite_tac[abi_decoder_pre_def, abi_decoder_ranges_def] >> rpt strip_tac >>
   `d < dimword (:256)` by decide_tac >>
   drule_all abi_decode_word_sequence >> strip_tac >>
   qexists_tac `s'` >>
-  gvs[abi_decoder_post_def] >>
+  gvs[abi_decoder_post_def, GSYM wordsTheory.word_add_n2w, arithmeticTheory.ADD_COMM] >>
   irule abi_decoder_frame_from_output >> simp[]
 QED
 
 Theorem abi_decoder_word_shape:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord NoClamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc src_base_op hi (DecPrimWord NoClamp) st = ((),st') /\
   abi_decode_source_opcode opc ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st st')
 Proof
-  strip_tac >> gvs[] >>
-  gvs[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  strip_tac >> gvs[] >> Cases_on `src_base_op = Lit 0w` >>
+  gvs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_static_def,
       compile_abi_clamp_basetype_def, comp_bind_def, comp_ignore_bind_def,
       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
       fresh_id_def, emit_def, emitted_insts_def,
@@ -137,13 +160,13 @@ Proof
 QED
 
 Theorem abi_decoder_typed_word_fragment:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord NoClamp) st = ((),st') ==>
+  compile_abi_decode_to_buf dst src opc src_base_op hi (DecPrimWord NoClamp) st = ((),st') ==>
   frag_exec ctx st st'
     (\s. abi_decoder_pre ce env (BaseT (UintT 256)) (BaseTV (UintT 256))
-       (DecPrimWord NoClamp) av (IntV (&w2n (w:bytes32))) st last src dst opc hi sb d b cap s)
+       (DecPrimWord NoClamp) av (IntV (&w2n (w:bytes32))) st last src dst opc src_base_op hi src_base sb d b cap s)
     (\t. ?s. abi_decoder_pre ce env (BaseT (UintT 256)) (BaseTV (UintT 256))
-       (DecPrimWord NoClamp) av (IntV (&w2n w)) st last src dst opc hi sb d b cap s /\
-       abi_decode_load opc (n2w sb : bytes32) s = w /\
+       (DecPrimWord NoClamp) av (IntV (&w2n w)) st last src dst opc src_base_op hi src_base sb d b cap s /\
+       abi_decode_load opc (n2w (src_base + sb) : bytes32) s = w /\
        abi_decoder_post (BaseTV (UintT 256)) (IntV (&w2n w)) st' d 32 b cap s t)
     (K F)
 Proof
@@ -152,7 +175,7 @@ Proof
   strip_tac >> drule_all abi_decoder_word_shape >> strip_tac >>
   irule frag_exec_run_inst_seq >> simp[] >> rpt strip_tac >>
   drule_all abi_decoder_typed_word_sequence >> strip_tac >>
-  `abi_decode_load opc (n2w sb : bytes32) s = w` by
+  `abi_decode_load opc (n2w (src_base + sb) : bytes32) s = w` by
     (drule_all abi_decoder_uint256_canonical_load >> simp[]) >>
   qexists_tac `t` >> simp[] >> qexists_tac `s` >>
   gvs[abi_decoder_post_def, fresh_vars_wrt_def,
@@ -167,12 +190,12 @@ Proof
 QED
 
 Theorem abi_decoder_typed_empty_fragment:
-  compile_abi_decode_to_buf dst src opc (Lit 0w) (DecComplex F []) st = ((),st') ==>
+  compile_abi_decode_to_buf dst src opc src_base_op (Lit 0w) (DecComplex F []) st = ((),st') ==>
   frag_exec ctx st st'
     (abi_decoder_pre ce env (TupleT []) (TupleTV []) (DecComplex F [])
-       (ListV []) (ArrayV (TupleV [])) st last src dst opc (Lit 0w) sb d b cap)
+       (ListV []) (ArrayV (TupleV [])) st last src dst opc src_base_op (Lit 0w) src_base sb d b cap)
     (\t. ?s. abi_decoder_pre ce env (TupleT []) (TupleTV []) (DecComplex F [])
-       (ListV []) (ArrayV (TupleV [])) st last src dst opc (Lit 0w) sb d b cap s /\
+       (ListV []) (ArrayV (TupleV [])) st last src dst opc src_base_op (Lit 0w) src_base sb d b cap s /\
        abi_decoder_post (TupleTV []) (ArrayV (TupleV [])) st' d 0 b cap s t)
     (K F)
 Proof
@@ -206,17 +229,14 @@ Proof
 QED
 
 Theorem abi_decoder_child_ranges:
-  abi_decoder_ranges opc hi src dst sb len d outsz b cap s /\
+  abi_decoder_ranges opc src_base_op hi src dst src_base sb len d outsz b cap s /\
   delta + childlen <= len /\
   eval_operand childsrc s = SOME (n2w (sb + delta)) ==>
-  abi_decoder_ranges opc hi childsrc dst (sb + delta) childlen d outsz b cap s
+  abi_decoder_ranges opc src_base_op hi childsrc dst src_base (sb + delta) childlen d outsz b cap s
 Proof
   rw[abi_decoder_ranges_def] >>
   gvs[abi_footprint_disjoint_def, DISJ_IMP_THM, FORALL_AND_THM] >>
-  TRY (first_assum ACCEPT_TAC) >>
-  TRY (disj2_tac >> qexists_tac `h` >> simp[] >> decide_tac) >>
-  TRY (rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >> decide_tac) >>
-  decide_tac
+  disj2_tac >> qexists_tac `h` >> simp[] >> decide_tac
 QED
 
 (* The source restriction uses canonical runtime bytes only. It imposes no
@@ -298,13 +318,13 @@ Theorem abi_decoder_wrapped_bytes_pre_child:
   abi_decoder_pre ce env (TupleT [BaseT (BytesT (Dynamic n))])
     (TupleTV [BaseTV (BytesT (Dynamic n))]) di
     (ListV [contractABI$BytesV bs]) (ArrayV (TupleV [BytesV bs]))
-    st last src dst MLOAD hi sb d b cap s /\
+    st last src dst MLOAD src_base_op hi src_base sb d b cap s /\
   eval_operand childsrc s = SOME (n2w (sb + 32)) ==>
   abi_decoder_pre ce env (BaseT (BytesT (Dynamic n)))
     (BaseTV (BytesT (Dynamic n)))
     (type_to_abi_dec_info ce.ce_struct_fields ce (BaseT (BytesT (Dynamic n))))
     (contractABI$BytesV bs) (BytesV bs)
-    st last childsrc dst MLOAD hi (sb + 32) d b cap s
+    st last childsrc dst MLOAD src_base_op hi src_base (sb + 32) d b cap s
 Proof
   pure_rewrite_tac[abi_decoder_pre_def] >> strip_tac >>
   drule abi_decoder_singleton_metadata_child >> strip_tac >>
@@ -319,8 +339,26 @@ Proof
           vyperABITheory.vyper_base_to_abi_type_def,
           type_memory_bytes_def, abi_decoder_singleton_bytes_encoding,
           byteTheory.LENGTH_word_to_bytes]) >>
+  rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
   irule abi_decoder_singleton_bytes_source >>
-  qpat_x_assum `mem_bytes_at sb _ _ = _` mp_tac >>
+  qpat_x_assum `mem_bytes_at (src_base + sb) _ _ = _` mp_tac >>
   rewrite_tac[vyperABITheory.vyper_base_to_abi_type_def,
       vyperABITheory.vyper_to_abi_type_def]
+QED
+
+(* Compatibility: callers with the former stronger entry reservation retain
+   the same typed contract, without a new resource condition. *)
+Theorem abi_decoder_pre_from_full_reservation:
+  abi_decoder_metadata ce env ty tv di av v /\ fresh_vars_wrt st s /\
+  abi_decoder_reservation st.cs_next_id last b cap s /\
+  abi_decoder_ranges opc base_op hi src dst src_base sb
+    (LENGTH (enc (vyper_to_abi_type env ty) av)) d
+    (type_memory_bytes ce ty) b cap s /\
+  mem_bytes_at (src_base + sb) (LENGTH (enc (vyper_to_abi_type env ty) av))
+    (abi_decode_source opc s) = enc (vyper_to_abi_type env ty) av ==>
+  abi_decoder_pre ce env ty tv di av v st last src dst opc base_op hi src_base sb d b cap s
+Proof
+  strip_tac >> simp[abi_decoder_pre_def] >>
+  irule abi_decoder_reservation_restrict >> goal_assum (drule_at Any) >>
+  simp[abi_decoder_entry_floor_def]
 QED

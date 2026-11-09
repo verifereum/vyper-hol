@@ -53,7 +53,7 @@ Proof
   `step_inst_base (mk_inst st.cs_next_id (if tr then TSTORE else SSTORE)
      [Lit slot; op] []) s = OK u` by
     (Cases_on `tr` >>
-     gvs[Abbr `u`, step_inst_base_def, exec_write2_def, mk_inst_def,
+     gvs[Abbr `u`, step_inst_base_opcode_eqs, exec_write2_def, mk_inst_def,
          eval_operand_def]) >>
   `run_inst_seq (emitted_insts st st') s = OK u` by
     simp[run_inst_seq_def] >>

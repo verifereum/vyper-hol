@@ -386,6 +386,8 @@ Proof
   `cenv.ce_target CapMcopy /\
    acyclic_struct_metadata cenv.ce_struct_fields` by
     metis_tac[body_inv_mcopy, body_inv_def] >>
+  `assign_alloc_ok cenv t e` by
+    fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def] >>
   Cases_on `supported_target_pure tops t`
   >- metis_tac[compile_assign_place_case] >>
   metis_tac[assign_place_effectful_index_case]
