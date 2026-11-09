@@ -8,7 +8,7 @@ Ancestors
   exprSimDefs
   loweringPosts exprSimTypedAlloc
   gasContext gasExemptCert
-  fragGasOriginPtr bodyPtrDefs gasSummary
+  fragGasOriginPtr bodyPtrDefs gasSummary bodySimFull gasOutcomeFull
   list rich_list finite_map fragExec freshWrites
   vyperTypeABI
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
@@ -529,3 +529,37 @@ Proof
   irule state_rel_scopes_nil >> gvs[stmt_state_rel_def]
 QED
 
+Theorem compile_return_none_int_frag_full:
+  !D lo d ctx shadow_ctx PG func shadow_func
+   cx lctx cenv ty ret_tv es rpc slot_size.
+    cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) ==>
+    stmt_frag_full
+      (D, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx
+      (\v ee gt r. intret_q func cenv cx ret_tv v ee r)
+      cenv
+      (stmt_env cenv lctx ty (Return NONE))
+      (stmt_env cenv lctx ty (Return NONE))
+      (eval_stmt cx (Return NONE)) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  `compile_stmt cenv lctx ty (Return NONE) sa = ((), sb)` by
+    (qpat_x_assum `stmt_env cenv lctx ty (Return NONE) sa = (cenv', sb)` mp_tac >>
+     simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def] >>
+     pairarg_tac >> simp[] >> strip_tac >> gvs[]) >>
+  drule_all (Q.INST [`s` |-> `s0`, `G` |-> `G0`, `tn` |-> `tn0`,
+                    `explicit` |-> `gas_explicit_sites ctx shadow_ctx`]
+               compile_return_none_int_origin_ptr) >>
+  disch_then (qspecl_then [`shadow_ctx`, `ret_tv`, `PG`] strip_assume_tac) >>
+  pure_rewrite_tac[gas_outcome_full_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  qexistsl_tac [`INR (ReturnException NoneV)`, `es`, `r`, `G0`, `tn0`] >>
+  simp[gas_explicit_def, exit_result_def, stmt_exit_ptr_def, intret_q_gas_obs] >>
+  gen_tac >> disj2_tac >> gvs[] >>
+  qpat_x_assum `intret_q _ _ _ _ _ _ _` mp_tac >>
+  simp[intret_q_def, result_rel_def, state_rel_def, storage_rel_def,
+       transient_rel_def, accounts_rel_def, immutables_rel_def, logs_rel_def] >>
+  metis_tac[]
+QED
