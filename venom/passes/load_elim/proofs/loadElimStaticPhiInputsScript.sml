@@ -29,7 +29,7 @@ Proof
   irule le_static_singleton_endpoint_available >> metis_tac[]
 QED
 
-Theorem le_phi_pairs_generated[local]:
+Theorem le_phi_pairs_generated:
   !pairs. phi_pairs (mk_phi_ops_from_pairs pairs) = pairs
 Proof
   Induct >> simp[mk_phi_ops_from_pairs_def, phi_pairs_def] >>
