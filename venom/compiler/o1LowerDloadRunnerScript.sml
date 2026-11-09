@@ -4,7 +4,7 @@ Ancestors
   o1LowerDloadEndpointConsumer o1LowerDloadRootEntry o1PassContract
   o1PassLift venomExecProofs venomExecSemantics venomWf venomInst
   o1LowerDloadJointRelation o1LowerDloadEntryFetch
-  contextCodegenRel venomState list arithmetic
+  contextCodegenRel venomState list arithmetic gasEvents gasEventsFuel
   o1LowerDloadOccurrence o1LowerDloadOccurrenceHeadroom ptrDiscipline
   o1LowerDloadRunnerBoundary passSimulationDefs
 
@@ -45,6 +45,8 @@ val ldPexec = ``\k ctx bb s.
       lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
       lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
       exec_block m C' bb' t = r' /\
+      gas_events_block m C' fn'.fn_name bb' t =
+        gas_events_block k C fn.fn_name bb s /\
       ^ldR stk PG fn a U HP ts s.vs_call_ctx.cc_address r r'``;
 val ldPrun = ``\k ctx fn s0.
   !stk PG G tn i s1 t0 t1 n a U B HP H sites X ts r.
@@ -56,6 +58,7 @@ val ldPrun = ``\k ctx fn s0.
     run_blocks k C fn s0 = r /\ terminates r ==>
     ?m fn' r'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
       run_blocks m C' fn' t0 = r' /\
+      gas_events_blocks m C' fn' t0 = gas_events_blocks k C fn s0 /\
       ^ldR stk PG fn a U HP ts s0.vs_call_ctx.cc_address r r'``;
 val ldPstep = ``\k ctx callinst s.
   !stk PG G tn fn t n a U B HP H sites X ts r.
@@ -64,6 +67,8 @@ val ldPstep = ``\k ctx callinst s.
     active_inst fn callinst s /\ callinst.inst_opcode = INVOKE /\
     step_inst k C callinst s = r /\ terminates r ==>
     ?m r'. step_inst m C' callinst t = r' /\
+    gas_events_step m C' fn.fn_name callinst t =
+      gas_events_step k C fn.fn_name callinst s /\
     (case r of
       OK s1 => ?next t1 nr Gr tnr Br Hr sitesr Xr.
         r' = OK t1 /\
@@ -156,7 +161,9 @@ Resume ld_runner_run_clause[halt]:
     fs[Abbr `bt`] >>
   qexists_tac `SUC m` >>
   simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
-  qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
+  qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[] >>
+  simp[Once gas_events_blocks_def, Abbr `sin`] >>
+  simp[Once gas_events_blocks_def]
 QED
 Resume ld_runner_run_clause[abort]:
   `?te. bt = Abort a' te` by fs[Abbr `RR`] >>
@@ -167,7 +174,9 @@ Resume ld_runner_run_clause[abort]:
     fs[Abbr `bt`] >>
   qexists_tac `SUC m` >>
   simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
-  qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
+  qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[] >>
+  simp[Once gas_events_blocks_def, Abbr `sin`] >>
+  simp[Once gas_events_blocks_def]
 QED
 Resume ld_runner_run_clause[return]:
   `?jr tr. bt = IntRet jr tr` by
@@ -179,7 +188,9 @@ Resume ld_runner_run_clause[return]:
     fs[Abbr `bt`] >>
   qexists_tac `SUC m` >>
   simp[Once run_blocks_def] >> simp[Once run_blocks_def] >>
-  qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
+  qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[] >>
+  simp[Once gas_events_blocks_def, Abbr `sin`] >>
+  simp[Once gas_events_blocks_def]
 QED
 Resume ld_runner_run_clause[branch]:
   qpat_x_assum `Abbrev (OK v = _)`
@@ -230,7 +241,16 @@ Resume ld_runner_run_clause[branch]:
      simp[Once run_blocks_def]) >>
   `run_blocks (SUC (MAX m m')) C' fn' t0 = run_blocks m' C' fn' te` by
     simp[Once run_blocks_def] >>
-  qexists_tac `SUC (MAX m m')` >> simp[]
+  `gas_events_block (MAX m m') C' fn'.fn_name bb'
+     (s_phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) =
+   gas_events_block m C' fn'.fn_name bb'
+     (s_phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions)` by
+    (irule (cj 2 (cj 2 (cj 2 gas_events_fuel_extension))) >> simp[]) >>
+  `gas_events_blocks (MAX m m') C' fn' te = gas_events_blocks m' C' fn' te` by
+    (irule (cj 2 (cj 2 (cj 3 gas_events_fuel_extension))) >>
+     simp[] >> Cases_on `run_blocks m' C' fn' te` >> fs[terminates_def]) >>
+  qexists_tac `SUC (MAX m m')` >> simp[] >>
+  once_rewrite_tac[gas_events_blocks_def] >> simp[Abbr `sin`]
 QED
 Finalise ld_runner_run_clause
 
