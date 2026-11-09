@@ -1,6 +1,7 @@
 Theory bodyPtrPopTargetSimRegisters
 Ancestors
   bodyPtrPopTargetSimArrayCase bodyPtrPopTargetSimArrayGuard
+  bodyPtrPopTargetSimArrayEndpoint fragGasFresh appendStorageStageTransportPtr
   bodyPtrBopScalarRun bodyPtrBopScalarSeq bodyPtrBopScalarOutcome varsExt freshWrites fragExec
   exprSimArrayIndex exprLoweringProps compileEnv list pred_set venomInst ptrDiscipline
 
@@ -63,4 +64,40 @@ Proof
   drule_all bop_scalar_seq_path >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`t`, `G'`, `tn'`] >> simp[]
+QED
+
+Theorem target_fixed_array_run_old_inputs_ptr:
+  compile_array_subscript bop idx F cnt ws esz sgn loader sa = (dst,sb) /\
+  (!x. bop = Var x ==> not_fresh_at sa x) /\
+  (!x. idx = Var x ==> not_fresh_at sa x) /\
+  eval_operand bop s = SOME b /\ eval_operand idx s = SOME i /\
+  idx_in_range sgn i (n2w cnt) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand dst t = SOME (b+i*n2w esz) /\
+    t = s with vs_vars := t.vs_vars /\
+    (!x. not_fresh_at sa x ==> FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)
+Proof
+  strip_tac >>
+  `eval_operand bop (drop_fresh sa s) = SOME b /\
+   eval_operand idx (drop_fresh sa s) = SOME i` by
+    gvs[eval_operand_drop_fresh] >>
+  `fresh_vars_wrt sa (drop_fresh sa s)` by simp[fresh_vars_wrt_drop_fresh] >>
+  `array_len_ok F cnt loader bop (drop_fresh sa s) (n2w cnt)` by
+    simp[array_len_ok_def] >>
+  drule_all compile_array_subscript_ok >> strip_tac >>
+  `writes_fresh sa (emitted_insts sa sb)` by
+    (qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[compile_array_subscript_split, comp_bind_def, comp_return_def,
+          comp_ignore_bind_def] >> pairarg_tac >> simp[] >> strip_tac >>
+     rename1 `array_bounds_check _ _ _ sa = (unit,sm)` >> Cases_on `unit` >>
+     drule_all target_array_suffix_writes_fresh >> simp[]) >>
+  drule writes_fresh_path_opcodes >> strip_tac >>
+  `vars_ext_result (run_inst_seq (emitted_insts sa sb) (drop_fresh sa s))
+     (run_inst_seq (emitted_insts sa sb) s)` by
+    (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh] >>
+     gvs[EVERY_CONJ]) >>
+  gvs[vars_ext_result_def] >>
+  drule_all run_inst_seq_writes_fresh >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[vars_ext_eval_operand]
 QED
