@@ -2411,6 +2411,56 @@ Proof
     gvs[] >> decide_tac)) >> gvs[]
 QED
 
+Theorem native_defined_ordinary_suffix_production:
+  !fn bb dfg p incoming k qs v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    ~bb_is_halting bb /\
+    ~MEM (Var v) incoming.ps_stack /\ Var v NOTIN FDOM incoming.ps_spilled /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)
+      (LENGTH (get_params bb.bb_instructions)+p) (LENGTH bb.bb_instructions)
+      (DROP p (non_param_insts bb)) incoming k qs /\
+    (!j. j < k ==> (EL j (DROP p (non_param_insts bb))).inst_opcode <> PHI /\
+      (EL j (DROP p (non_param_insts bb))).inst_opcode <> JMP /\
+      ~is_param_opcode (EL j (DROP p (non_param_insts bb))).inst_opcode) /\
+    (!j before w. j < k /\
+      fnPlanLineageEntryProduction$native_inst_prefix
+        (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)
+        (LENGTH (get_params bb.bb_instructions)+p) (LENGTH bb.bb_instructions)
+        (DROP p (non_param_insts bb)) incoming j before /\
+      MEM (Var w) (compute_operands (EL j (DROP p (non_param_insts bb)))) ==>
+      MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1 /\
+    ((MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==>
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (get_params bb.bb_instructions)+p+k)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by
+    (irule fnPlanLineageCallersTheory.ssa_form_block_outputs_distinct >>
+     qexists_tac `fn` >> gvs[codegen_ready_fn_def]) >>
+  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (non_param_insts bb)))` by
+    (drule_all fnPlanLineageCallersTheory.ready_block_parameter_suffix >>
+     disch_then (fn th => qpat_x_assum `ALL_DISTINCT _` (mp_tac o ONCE_REWRITE_RULE [th])) >>
+     simp[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND]) >>
+  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (DROP p (non_param_insts bb))))` by
+    (qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+     qspec_then `p` (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV o RAND_CONV o RAND_CONV)
+       empty_rewrites [GSYM th]) TAKE_DROP >>
+     simp[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND]) >>
+  drule native_ordinary_suffix_production >>
+  disch_then (qspecl_then [`bb`,`p`,`v`] mp_tac) >> simp[] >>
+  (impl_tac
+   >- (rpt strip_tac >>
+       qpat_x_assum `!j before w. _` (qspecl_then [`j`,`before`,`w`] mp_tac) >>
+       simp[])) >> strip_tac >>
+  conj_tac
+  >- (qpat_x_assum `_ <= if _ then _ else _` mp_tac >>
+      IF_CASES_TAC >> simp[] >> decide_tac) >>
+  gvs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
 Theorem native_defined_ordinary_suffix_demand_support:
   !fn bb dfg p incoming k qs v.
     codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
@@ -2434,25 +2484,7 @@ Theorem native_defined_ordinary_suffix_demand_support:
     MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
       (LENGTH (get_params bb.bb_instructions)+p+k))
 Proof
-  rpt gen_tac >> strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by
-    (irule fnPlanLineageCallersTheory.ssa_form_block_outputs_distinct >>
-     qexists_tac `fn` >> gvs[codegen_ready_fn_def]) >>
-  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (non_param_insts bb)))` by
-    (drule_all fnPlanLineageCallersTheory.ready_block_parameter_suffix >>
-     disch_then (fn th => qpat_x_assum `ALL_DISTINCT _` (mp_tac o ONCE_REWRITE_RULE [th])) >>
-     simp[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND]) >>
-  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (DROP p (non_param_insts bb))))` by
-    (qpat_x_assum `ALL_DISTINCT _` mp_tac >>
-     qspec_then `p` (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV o RAND_CONV o RAND_CONV)
-       empty_rewrites [GSYM th]) TAKE_DROP >>
-     simp[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND]) >>
-  drule native_ordinary_suffix_production >>
-  disch_then (qspecl_then [`bb`,`p`,`v`] mp_tac) >> simp[] >>
-  (impl_tac
-   >- (rpt strip_tac >>
-       qpat_x_assum `!j before w. _` (qspecl_then [`j`,`before`,`w`] mp_tac) >>
-       simp[])) >> metis_tac[]
+  metis_tac[native_defined_ordinary_suffix_production]
 QED
 
 Theorem native_supported_ordinary_suffix_joint[local]:
