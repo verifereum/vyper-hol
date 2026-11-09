@@ -40,8 +40,9 @@ Proof
            Cases_on `tr` >>
            simp[stmt_state_rel_def, compileEnvTheory.state_rel_def,
                 tstore_def, sstore_def, LET_THM]) >>
-        Cases_on `tr` >>
-        gvs[step_inst_base_def, exec_write2_def, mk_inst_def]) >>
+        Cases_on `tr` >> gvs[step_SSTORE] >>
+        PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+        simp[mk_inst_def, exec_write2_def, eval_operands_def]) >>
      Cases_on `tr` >> gvs[] >>
      simp[run_inst_seq_def, stmt_state_rel_inst_idx] >>
      gvs[lookup_var_def, sstore_def, tstore_def, LET_THM]) >>
