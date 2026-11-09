@@ -686,6 +686,7 @@ Theorem deploy_frame_register_static_fields:
     cenv'.ce_func_return_type = cenv.ce_func_return_type /\
     cenv'.ce_method_id = cenv.ce_method_id /\
     cenv'.ce_module = cenv.ce_module /\
+    cenv'.ce_modules = cenv.ce_modules /\
     cenv'.ce_event_info = cenv.ce_event_info /\
     cenv'.ce_is_external = cenv.ce_is_external
 Proof
@@ -1108,9 +1109,7 @@ Theorem deploy_ctor_allocation_bounds:
     lookup_function NONE "__init__" Deploy tops =
       SOME (mut,nr,args,[],NoneT,stmts) ==>
     EVERY (\a. type_memory_bytes cenv (SND a) < 2 ** 64) args /\
-    alloc_limits_stmts cenv stmts /\
-    ~supported_stmts_expr_exists
-      (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) stmts
+    alloc_limits_stmts cenv stmts
 Proof
   rpt gen_tac >> strip_tac >>
   drule deploy_ctor_static_tables >> strip_tac >>
@@ -1262,22 +1261,17 @@ Theorem deploy_frame_typed_allocated_stmts_exprs_ok:
   (!id vt. FLOOKUP env.toplevel_vtypes id = SOME vt ==>
      well_formed_vtype env.type_defs vt) /\
   type_stmts env ret ss = SOME env' /\
-  ~supported_stmts_expr_exists (\e. ~alloc_limits_expr cenv e) ss /\
   alloc_limits_stmts cenv ss /\ ~cenv.ce_is_external ==>
-  EVERY (stmt_exprs_ok cenv) ss
+  stmts_exprs_ok cenv ss
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all deploy_frame_typed_stmts_no_bad_widths >> strip_tac >>
-  `~supported_stmts_expr_exists
-     (\e. ~byte_widths_expr e \/ ~alloc_limits_expr cenv e) ss` by
-    fs[deploy_frame_stmt_exists_disj] >>
-  `(\e. ~byte_widths_expr e \/ ~alloc_limits_expr cenv e) =
-   (\e. (~is_extcode e /\ (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)) \/
-        (is_extcode e /\ (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)))` by
+  drule_all deploy_frame_typed_stmts_no_bad_widths >>
+  simp[bodyExprPreFactsTheory.stmts_exprs_ok_thm] >>
+  `(\e. ~byte_widths_expr e) =
+   (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
+        (is_extcode e /\ ~byte_widths_expr e))` by
     (simp[FUN_EQ_THM] >> metis_tac[]) >>
-  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
-  fs[deploy_frame_stmt_exists_disj] >>
-  fs[stmts_exprs_ok_EVERY, DE_MORGAN_THM]
+  pop_assum SUBST1_TAC >> simp[deploy_frame_stmt_exists_disj]
 QED
 
 Theorem deploy_ctor_typed_allocation_frame:
@@ -1296,13 +1290,11 @@ Theorem deploy_ctor_typed_allocation_frame:
   (!n ty. FLOOKUP env.var_types n = SOME ty ==>
      ?id. MEM (id,ty) args /\ n = id) /\
   type_stmts env NoneT stmts = SOME env' ==>
-  EVERY (stmt_exprs_ok cenv) stmts /\ locals_alloc_ok cenv env
+  stmts_exprs_ok cenv stmts /\ locals_alloc_ok cenv env
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all deploy_ctor_allocation_bounds >> strip_tac >>
   drule deploy_ctor_static_tables >> strip_tac >>
-  drule deploy_frame_supported_stmts_no_extcode >> strip_tac >>
-  drule_all deploy_frame_remove_extcode_guard >> strip_tac >>
   conj_tac >- (irule deploy_frame_typed_allocated_stmts_exprs_ok >>
     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   irule deploy_frame_formal_locals_alloc_ok >> goal_assum (drule_at Any) >> simp[]
