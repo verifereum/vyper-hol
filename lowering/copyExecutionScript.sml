@@ -126,7 +126,7 @@ Theorem compile_slot_to_memory_shape:
      slot_copy_final cs src dst n (if loc = LocStorage then SLOAD else TLOAD))
 Proof
   strip_tac >> gvs[] >>
-  simp[compile_slot_to_memory_def, compile_word_copy_loop_def,
+  simp[compile_slot_to_memory_def, compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_loop_base_def,
        word_scale_def, compile_ptr_load_def, compile_ptr_store_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_label_def, fresh_var_def, fresh_id_def,

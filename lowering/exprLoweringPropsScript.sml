@@ -1693,12 +1693,27 @@ val ci_mono_emit_rws =
    ci_mono_compile_ptr_load, ci_mono_compile_ptr_store];
 
 (* ci_mono for compile_word_copy_loop *)
+Theorem ci_mono_word_copy:
+  ∀ src dst wc ll sl ic imm sa.
+    ci_mono sa (SND (compile_word_copy_loop_base src dst wc ll sl ic imm sa))
+Proof
+  rw[contextTheory.compile_word_copy_loop_base_def, LET_THM] >>
+  ci_mono_chain_tac ci_mono_emit_rws
+QED
+
 Theorem ci_mono_compile_word_copy_loop:
   ∀ src dst wc ll sl ic sa.
     ci_mono sa (SND (compile_word_copy_loop src dst wc ll sl ic sa))
 Proof
-  rw[contextTheory.compile_word_copy_loop_def, LET_THM] >>
-  ci_mono_chain_tac ci_mono_emit_rws
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, ci_mono_word_copy]
+QED
+
+Theorem ci_mono_store_immutable_bytestring:
+  !imm src dst sa.
+    ci_mono sa (SND (compile_store_immutable_bytestring imm src dst sa))
+Proof
+  rw[compile_store_immutable_bytestring_def, compile_bytestring_word_count_def] >>
+  ci_mono_chain_tac (ci_mono_word_copy :: ci_mono_emit_rws)
 QED
 
 (* ci_mono for compile_alloc_buffer *)
