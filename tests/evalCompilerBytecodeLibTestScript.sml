@@ -8,7 +8,7 @@ val fixture_test_root = OS.FileSys.tmpName ();
 val () = OS.FileSys.remove fixture_test_root;
 val () = OS.FileSys.mkDir fixture_test_root;
 val fixture_test_dirs =
-  ["tests", "lowering", "lowering/defs", "bytecode",
+  ["tests", "bytecode",
    "bytecode/eval",
    "bytecode/external-entries",
    "bytecode/external-entries/oracle"];
@@ -38,7 +38,7 @@ in
 end;
 
 val fixture_test_contexts =
-  ["bytecode/eval", "lowering/defs", ".", "tests"];
+  ["bytecode/eval", ".", "tests"];
 fun cleanup_fixture_test () = (
   OS.FileSys.remove fixture_test_file;
   List.app
