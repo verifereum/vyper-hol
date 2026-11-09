@@ -4466,6 +4466,25 @@ Proof
   metis_tac[fnPlanLineageObserverTransportTheory.ready_incoming_block_nonentry]
 QED
 
+Theorem lineage_dfs_entry_block_outgoing_core:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME lbl /\
+  lineage_state lv dfg (cfg_analyze fn) fn ps0 lbl psL /\
+  dfs_block_state lv dfg (cfg_analyze fn) fn ps0 lbl psD /\
+  generate_block_plan lv dfg (cfg_analyze fn) fn bb psD = SOME (ops,afterD)
+  ==> ?afterL prefixL prefixD out.
+    generate_block_plan lv dfg (cfg_analyze fn) fn bb psL = SOME (ops,afterL) /\
+    prefixL = [] /\ prefixD = [] /\
+    afterL = out with ps_stack := prefixL ++ out.ps_stack /\
+    afterD = out with ps_stack := prefixD ++ out.ps_stack /\
+    (!v. MEM v (live_vars_at lv lbl (LENGTH bb.bb_instructions)) ==>
+      ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)
+Proof
+  strip_tac >>
+  drule dfs_block_state_lineage_state >> strip_tac >>
+  `psL = ps0 /\ psD = ps0` by metis_tac[lineage_state_entry_initial] >>
+  gvs[] >> qexistsl_tac [`afterD`,`[]`,`[]`,`afterD`] >> simp[]
+QED
+
 Theorem lineage_dfs_entry_block_replay:
   codegen_ready_fn fn /\ fn_entry_label fn = SOME lbl /\
   lineage_state lv dfg (cfg_analyze fn) fn ps0 lbl psL /\
@@ -4475,10 +4494,8 @@ Theorem lineage_dfs_entry_block_replay:
     generate_block_plan lv dfg (cfg_analyze fn) fn bb psL = SOME (ops,afterL) /\
     afterL.ps_alloc = afterD.ps_alloc /\ afterL.ps_spilled = afterD.ps_spilled
 Proof
-  strip_tac >>
-  drule dfs_block_state_lineage_state >> strip_tac >>
-  `psL = ps0 /\ psD = ps0` by metis_tac[lineage_state_entry_initial] >>
-  gvs[] >> qexists_tac `afterD` >> simp[]
+  strip_tac >> drule_all lineage_dfs_entry_block_outgoing_core >> strip_tac >>
+  qexists_tac `afterL` >> simp[]
 QED
 
 Theorem lineage_state_block_unit_preservation:
@@ -5229,7 +5246,7 @@ QED
 
 Finalise lineage_dfs_join_preterminal_core_actual
 
-Theorem lineage_dfs_join_block_replay_actual:
+Theorem lineage_dfs_join_block_outgoing_core_actual:
   !fn entry succ sb dfg ch growth spill_base lbl_ctr fn_ops ps_end psL psD bops afterD.
   codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ succ <> entry /\
   lookup_block succ fn.fn_blocks = SOME sb /\
@@ -5243,10 +5260,13 @@ Theorem lineage_dfs_join_block_replay_actual:
     (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psD /\
   generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn sb psD =
     SOME (bops,afterD) ==>
-  ?afterL.
+  ?afterL prefixL prefixD out.
     generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn sb psL =
       SOME (bops,afterL) /\
-    afterL.ps_alloc = afterD.ps_alloc /\ afterL.ps_spilled = afterD.ps_spilled
+    afterL = out with ps_stack := prefixL ++ out.ps_stack /\
+    afterD = out with ps_stack := prefixD ++ out.ps_stack /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ (LENGTH sb.bb_instructions)) ==>
+      ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)
 Proof
   rpt gen_tac >> strip_tac >>
   `?prefixL prefixD phi_ops xs qL qD ops out.
@@ -5262,7 +5282,9 @@ Proof
     native_inst_ops_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ
       (bb_is_halting sb) (LENGTH (collect_phis sb.bb_instructions))
       (LENGTH sb.bb_instructions) xs qD (LENGTH xs) ops
-      (out with ps_stack := prefixD ++ out.ps_stack)` by
+      (out with ps_stack := prefixD ++ out.ps_stack) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ (LENGTH sb.bb_instructions)) ==>
+      ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` by
     (Cases_on `(LAST sb.bb_instructions).inst_opcode = JMP`
      >- suspend "jmp_complete" >> suspend "ordinary_complete") >>
   `fn_entry_label fn <> SOME succ` by simp[] >>
@@ -5285,7 +5307,7 @@ Proof
   suspend "finish"
 QED
 
-Resume lineage_dfs_join_block_replay_actual[block_equations]:
+Resume lineage_dfs_join_block_outgoing_core_actual[block_equations]:
   rpt gen_tac >> strip_tac >>
   `phi_schedule_run
     (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i),
@@ -5298,7 +5320,7 @@ Resume lineage_dfs_join_block_replay_actual[block_equations]:
   simp_tac (srw_ss()) [listTheory.DROP_APPEND] >> simp[]
 QED
 
-Resume lineage_dfs_join_block_replay_actual[workers]:
+Resume lineage_dfs_join_block_outgoing_core_actual[workers]:
   rpt gen_tac >> strip_tac >>
   gvs[fnPlanLineageEntryProductionTheory.native_inst_ops_prefix_complete] >>
   qpat_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = SOME (ops,q)`
@@ -5306,19 +5328,19 @@ Resume lineage_dfs_join_block_replay_actual[workers]:
   irule fnPlanLineageEntryProductionTheory.generate_block_insts_plan_index_sum >> simp[]
 QED
 
-Resume lineage_dfs_join_block_replay_actual[jmp_complete]:
+Resume lineage_dfs_join_block_outgoing_core_actual[jmp_complete]:
   drule_all lineage_dfs_join_preterminal_core_actual >> strip_tac >>
   qpat_x_assum `!bops after. _` (qspecl_then [`bops`,`afterD`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   suspend "jmp_extend"
 QED
 
-Resume lineage_dfs_join_block_replay_actual[ordinary_complete]:
+Resume lineage_dfs_join_block_outgoing_core_actual[ordinary_complete]:
   drule_all lineage_dfs_join_physical_start_actual >> strip_tac >>
   suspend "ordinary_layout"
 QED
 
-Resume lineage_dfs_join_block_replay_actual[finish]:
+Resume lineage_dfs_join_block_outgoing_core_actual[finish]:
   qpat_x_assum `!p q. native_inst_ops_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ ==> _`
     (fn th =>
       (qpat_assum `native_inst_ops_prefix _ _ _ _ _ _ _ _ _ qL _ _ _` (mp_tac o MATCH_MP th) >>
@@ -5330,10 +5352,11 @@ Resume lineage_dfs_join_block_replay_actual[finish]:
   qpat_x_assum `!p r. _ ==> generate_block_plan _ _ _ _ _ _ = _`
     (qspecl_then [`psL`,`qL`] mp_tac) >>
   (impl_tac >- simp[]) >> simp[] >>
-  Cases_on `revert_block_spills sb (phi_ops ++ ops)` >> gvs[]
+  Cases_on `revert_block_spills sb (phi_ops ++ ops)` >> gvs[] >>
+  strip_tac >> qexistsl_tac [`prefixL`,`prefixD`,`out`] >> simp[]
 QED
 
-Resume lineage_dfs_join_block_replay_actual[jmp_extend]:
+Resume lineage_dfs_join_block_outgoing_core_actual[jmp_extend]:
   `LAST xs = LAST sb.bb_instructions` by
     (qpat_assum `xs = _` (fn th => pure_rewrite_tac[th]) >>
      irule listTheory.last_drop >>
@@ -5347,6 +5370,8 @@ Resume lineage_dfs_join_block_replay_actual[jmp_extend]:
   conj_tac >- first_assum ACCEPT_TAC >>
   qpat_x_assum `p0 = _` kall_tac >>
   qpat_x_assum `qL = _` kall_tac >> qpat_x_assum `qD = _` kall_tac >>
+  pure_rewrite_tac[CONJ_ASSOC] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >>
   qpat_assum `SUC (PRE (LENGTH xs)) = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
   rewrite_tac[fnPlanLineageEntryProductionTheory.native_inst_ops_prefix_suc] >>
@@ -5355,7 +5380,7 @@ Resume lineage_dfs_join_block_replay_actual[jmp_extend]:
     `LAST sb.bb_instructions`,`[]`,`tops`] >> simp[]
 QED
 
-Resume lineage_dfs_join_block_replay_actual[ordinary_layout]:
+Resume lineage_dfs_join_block_outgoing_core_actual[ordinary_layout]:
   `fn_entry_label fn <> SOME succ` by simp[] >>
   `non_param_insts sb = sb.bb_instructions` by
     (drule_all fnPlanLineagePhiScheduleTheory.ready_nonentry_block_suffix >> simp[]) >>
@@ -5376,10 +5401,12 @@ Resume lineage_dfs_join_block_replay_actual[ordinary_layout]:
   qexistsl_tac [`prefixL`,`prefixD`,`phi_ops`,`xs`,`qL`,`qD`,`ops`,`q`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+  pure_rewrite_tac[CONJ_ASSOC] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Resume lineage_dfs_join_block_replay_actual[nonjmp_layout]:
+Resume lineage_dfs_join_block_outgoing_core_actual[nonjmp_layout]:
   gen_tac >> strip_tac >>
   `LENGTH (collect_phis sb.bb_instructions) + j < LENGTH sb.bb_instructions` by
     (qpat_assum `xs = _` (fn th => fs[th]) >> decide_tac) >>
@@ -5399,6 +5426,30 @@ Resume lineage_dfs_join_block_replay_actual[nonjmp_layout]:
   metis_tac[]
 QED
 
-Finalise lineage_dfs_join_block_replay_actual
+Finalise lineage_dfs_join_block_outgoing_core_actual
 
 
+
+Theorem lineage_dfs_join_block_replay_actual:
+  !fn entry succ sb dfg ch growth spill_base lbl_ctr fn_ops ps_end psL psD bops afterD.
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ succ <> entry /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_analyze fn).cfg_dfs_pre /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psL /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psD /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn sb psD =
+    SOME (bops,afterD) ==>
+  ?afterL.
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn sb psL =
+      SOME (bops,afterL) /\
+    afterL.ps_alloc = afterD.ps_alloc /\ afterL.ps_spilled = afterD.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_dfs_join_block_outgoing_core_actual >> strip_tac >>
+  qexists_tac `afterL` >> simp[]
+QED
