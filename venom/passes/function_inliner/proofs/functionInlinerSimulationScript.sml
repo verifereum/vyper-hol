@@ -1,7 +1,9 @@
 (* Continuation-style transport in the actual execution semantics. *)
 Theory functionInlinerSimulation
 Ancestors
-  functionInlinerOperational functionInlinerCallBoundary venomExecSemantics
+  functionInlinerOperational functionInlinerCallBoundary
+  functionInlinerReturnTransport functionInlinerFuel functionInlinerSiteLayout
+  venomExecSemantics
   functionInlinerFrame functionInlinerDefs venomState venomInst venomWf list pred_set
 
 (* The countdown is the number of ordinary instructions still to traverse.
@@ -98,4 +100,97 @@ Proof
     (irule inline_ordinary_clone_step_result >> simp[] >> metis_tac[]) >>
   Cases_on `step_inst fuel ctx (instrs m) ss` >>
   gvs[inline_ordinary_step_result_def] >> metis_tac[]
+QED
+
+(* Error is deliberately excluded: consumers require source termination.
+   J retains the clone-local return packet; it is not a terminal observation. *)
+Definition inline_cps_result_def:
+  inline_cps_result kont obs retk r q <=>
+    case r of
+      OK s => (?t. q = OK t /\ kont s t)
+    | IntRet ir s => retk ir s q
+    | Halt s => (?t. q = Halt t /\ obs s t)
+    | Abort a s => (?t. q = Abort a t /\ obs s t)
+    | Error e => F
+End
+
+(* Consume the producer at the actual rewritten suffix, not at block entry.
+   C executes the suspended target continuation, with the full exit packet
+   available (including the saved caller and local callee state). *)
+Theorem inline_return_exit_cps:
+  step_inst source_fuel ctx inst s = IntRet ir s' ==>
+  (inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) /\
+  inst.inst_operands = ops ++ [pc] /\
+  raw_return_user_arity inst = SOME (LENGTH outs) /\
+  EVERY (\op. (!v. op = Var v ==> v IN V /\ v NOTIN opaque) /\
+    ~is_label_op op) ops /\
+  (!x v. MEM x outs /\ v IN V ==> STRCAT p v <> x) /\
+  inline_opaque_frame_rel (STRCAT p) V opaque caller.vs_vars P s t /\
+  bb.bb_instructions = pre ++
+    FST (rewrite_inline_inst args outs ret (clone_instruction p [] inst) param_idx) /\
+  ~t.vs_halted /\
+  (!q. inline_clone_exit p V opaque P outs caller ret ir s' q ==> C q) ==>
+  inline_cps_result kont obs (inline_clone_exit p V opaque P outs caller ret)
+    (IntRet ir s') (exec_block fuel ctx bb (t with vs_inst_idx := LENGTH pre)) /\
+  C (exec_block fuel ctx bb (t with vs_inst_idx := LENGTH pre))
+Proof
+  strip_tac >> strip_tac >>
+  drule inline_return_exit_packet >>
+  disch_then (drule_at (Pat `inline_opaque_frame_rel _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `_ .bb_instructions = _`)) >>
+  simp[] >> disch_then (qspec_then `fuel` mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  simp[inline_cps_result_def]
+QED
+
+(* Actual raw-site continuation dispatch. The return block is entered once:
+   run_block performs its parallel PHIs before the exec_block suffix.
+   This boundary makes no claim about fix_inline_phis/renumber_fn_inst_ids. *)
+Theorem inline_clone_exit_raw_continuation:
+  inline_clone_exit p V opaque P outs caller ret ir s' (OK v) /\
+  lookup_block lbl caller_fn.fn_blocks = SOME source_bb /\
+  ~MEM ret (fn_labels caller_fn) /\
+  rb = <|bb_label := ret;
+         bb_instructions := DROP (i+1) source_bb.bb_instructions|> /\
+  eval_phis v rb.bb_instructions = OK vphi /\
+  exec_block f ctx rb
+    (vphi with vs_inst_idx := phi_prefix_length rb.bb_instructions) = OK w /\
+  ~w.vs_halted /\
+  run_blocks g ctx (inline_call_site p ret caller_fn callee lbl i) w = res /\
+  terminates res ==>
+  ?h. run_blocks h ctx (inline_call_site p ret caller_fn callee lbl i) v = res
+Proof
+  strip_tac >>
+  `v.vs_current_bb = ret` by
+    (drule inline_clone_exit_control >> simp[]) >>
+  irule inline_run_blocks_join >> conj_tac >- simp[] >>
+  qexistsl [`rb`, `f`, `g`, `w`] >> simp[run_block_def] >>
+  gvs[inline_call_site_lookup_return]
+QED
+
+(* Instantiation of the return lift by the actual raw-site dispatcher above.
+   A producer such as inline_return_exit_cps supplies the first premise. *)
+Theorem inline_clone_result_raw_continuation:
+  inline_cps_result kont obs (inline_clone_exit p V opaque P outs caller ret)
+    (IntRet ir s') q /\
+  lookup_block lbl caller_fn.fn_blocks = SOME source_bb /\
+  ~MEM ret (fn_labels caller_fn) /\
+  rb = <|bb_label := ret;
+         bb_instructions := DROP (i+1) source_bb.bb_instructions|> /\
+  (!v. inline_clone_exit p V opaque P outs caller ret ir s' (OK v) ==>
+    ?vphi f w g.
+      eval_phis v rb.bb_instructions = OK vphi /\
+      exec_block f ctx rb
+        (vphi with vs_inst_idx := phi_prefix_length rb.bb_instructions) = OK w /\
+      ~w.vs_halted /\
+      run_blocks g ctx (inline_call_site p ret caller_fn callee lbl i) w = res /\
+      terminates res) ==>
+  ?v h. q = OK v /\
+    run_blocks h ctx (inline_call_site p ret caller_fn callee lbl i) v = res
+Proof
+  simp[inline_cps_result_def] >> strip_tac >>
+  drule inline_clone_exit_control >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  irule inline_clone_exit_raw_continuation >> simp[] >>
+  metis_tac[]
 QED
