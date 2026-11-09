@@ -283,3 +283,73 @@ Proof
      gen_tac] >>
     simp[emit_op_labels, emit_void_labels, compile_ptr_store_labels])
 QED
+
+Theorem abi_args_entry_extends_result:
+  (!a x b. m a = (x,b) ==> cs_extends a b) ==>
+  !a. cs_extends a (SND (m a))
+Proof
+  strip_tac >> gen_tac >> Cases_on `m a` >> metis_tac[pairTheory.SND]
+QED
+
+Theorem abi_args_entry_safe_emitted_prefix:
+  (!a x b. m a = (x,b) ==> cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)) /\
+  (!x b. cs_extends b (SND (k x b))) ==>
+  !a y c. compileEnv$comp_bind m k a = (y,c) ==>
+    cs_extends a c /\ abi_args_entry_safe a c
+Proof
+  strip_tac >> drule abi_args_entry_emitted_prefix >>
+  metis_tac[abi_args_entry_safe_def]
+QED
+
+Theorem abi_args_entry_struct_lit:
+  (!ce ty e a vv b. cfn ce ty e a = (vv,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b) ==>
+  !fields ce ty buf off a x b.
+    compile_struct_lit cfn ce ty fields buf off a = (x,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b
+Proof
+  strip_tac >> Induct >> rpt gen_tac
+  >- simp[compile_struct_lit_def, comp_return_def, cs_extends_refl] >>
+  PairCases_on `h` >> simp[compile_struct_lit_def] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac abi_args_entry_safe_bind >> conj_tac
+  >- metis_tac[] >>
+  gen_tac >>
+  `(!a x b. emit_op ADD [buf; Lit (n2w off)] a = (x,b) ==>
+      cs_extends a b /\
+      (a.cs_current_insts = [] ==> abi_args_entry_emitted a b))` by
+    (rpt gen_tac >> strip_tac >> irule abi_args_entry_emit_op >>
+     simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+  ho_match_mp_tac abi_args_entry_safe_emitted_prefix >> conj_tac
+  >- simp[] >>
+  rpt (FIRST
+    [irule abi_args_entry_extends_bind >> conj_tac,
+     irule abi_args_entry_extends_ignore_bind >> conj_tac,
+     gen_tac] >> simp[compile_store_memory_labels]) >>
+  irule abi_args_entry_extends_result >> metis_tac[abi_args_entry_unwrap_value]
+QED
+
+Theorem abi_args_entry_struct_lit_emitted:
+  (!ce ty e a vv b. cfn ce ty e a = (vv,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b) ==>
+  !ce ty fld fields buf off a x b.
+    compile_struct_lit cfn ce ty (fld::fields) buf off a = (x,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)
+Proof
+  strip_tac >> rpt gen_tac >> PairCases_on `fld` >>
+  simp[compile_struct_lit_def] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac abi_args_entry_emitted_suffix_bind >> conj_tac
+  >- metis_tac[] >>
+  gen_tac >> ho_match_mp_tac abi_args_entry_emitted_prefix >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule abi_args_entry_emit_op >>
+      simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+  rpt (FIRST
+    [irule abi_args_entry_extends_bind >> conj_tac,
+     irule abi_args_entry_extends_ignore_bind >> conj_tac,
+     gen_tac] >> simp[compile_store_memory_labels]) >>
+  irule abi_args_entry_extends_result >>
+  metis_tac[abi_args_entry_unwrap_value, abi_args_entry_struct_lit]
+QED
