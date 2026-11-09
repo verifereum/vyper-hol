@@ -587,16 +587,6 @@ QED
 (* ===== Path / dominance infrastructure ===== *)
 
 (* Converting RTC to is_fn_path *)
-Theorem rtc_to_is_fn_path[local]:
-  !fn a b. RTC (fn_cfg_edge fn) a b ==>
-    ?path. is_fn_path fn path /\ path <> [] /\ HD path = a /\ LAST path = b
-Proof
-  gen_tac >> ho_match_mp_tac relationTheory.RTC_INDUCT >>
-  rpt strip_tac
-  >- (qexists_tac `[a]` >> simp[is_fn_path_def])
-  >> qexists_tac `a::path` >>
-  Cases_on `path` >> fs[is_fn_path_def]
-QED
 
 (* ===== cfg_exec_path infrastructure for operand condition ===== *)
 
@@ -758,7 +748,7 @@ Theorem dominates_path_no_revisit[local]:
 Proof
   rpt strip_tac >>
   fs[fn_dominates_def, fn_reachable_def] >>
-  drule_then strip_assume_tac rtc_to_is_fn_path >>
+  drule_then strip_assume_tac rtc_to_fn_path >>
   `MEM d path` by (
     first_x_assum (qspec_then `path` mp_tac) >> simp[]) >>
   drule_then strip_assume_tac last_occurrence_split >>

@@ -39,6 +39,10 @@ removed when a new pin includes them. The current series contains:
 - vyperlang/vyper#5239: a storage, transient or immutable variable is read at
   its own declared type, not at a wider expected type (such as an external
   call's parameter type), whose layout differs for nested bounded types.
+- vyperlang/vyper#5354: PHI origin traversal uses an active recursion path and
+  guarded memoization, so shared multi-origin PHIs cannot disappear from a
+  sibling operand. The pass is used by O2/O3/Os; the O1 fixture schedule does
+  not run it.
 
 Only fixtures with external calls that take arguments change. The
 provenance's `vyper_commit` names the unpatched base revision.

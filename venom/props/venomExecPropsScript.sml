@@ -613,6 +613,58 @@ Proof
   >> fs[]
 QED
 
+Theorem phi_prefix_mem:
+  !insts i. MEM i (TAKE (phi_prefix_length insts) insts) ==>
+    MEM i insts /\ i.inst_opcode = PHI
+Proof
+  Induct >> simp[venomExecSemanticsTheory.phi_prefix_length_def] >>
+  gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >> metis_tac[]
+QED
+
+(* The PHI batch reads from one snapshot and writes only its prefix outputs. *)
+Theorem eval_phis_lookup_frame:
+  !insts s t x.
+    eval_phis s insts = OK t /\
+    (!i. MEM i (TAKE (phi_prefix_length insts) insts) ==>
+         ~MEM x i.inst_outputs) ==>
+    lookup_var x t = lookup_var x s
+Proof
+  Induct >> simp[venomExecSemanticsTheory.eval_phis_def,
+                 venomExecSemanticsTheory.phi_prefix_length_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  gvs[AllCaseEqs(), venomExecSemanticsTheory.eval_one_phi_def] >>
+  strip_tac >> gvs[] >>
+  `x <> out` by metis_tac[listTheory.MEM] >>
+  first_x_assum drule >>
+  disch_then (qspec_then `x` mp_tac) >>
+  simp[venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem eval_phis_lookup_output:
+  !insts s t i x.
+    ALL_DISTINCT (FLAT (MAP (\j. j.inst_outputs) insts)) /\
+    eval_phis s insts = OK t /\
+    MEM i (TAKE (phi_prefix_length insts) insts) /\ MEM x i.inst_outputs ==>
+    ?v. eval_one_phi s i = SOME (x,v) /\ lookup_var x t = SOME v
+Proof
+  Induct >> simp[venomExecSemanticsTheory.eval_phis_def,
+                 venomExecSemanticsTheory.phi_prefix_length_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  gvs[AllCaseEqs(), venomExecSemanticsTheory.eval_one_phi_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  first_x_assum drule >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `MEM i insts` by metis_tac[rich_listTheory.MEM_TAKE] >>
+  `x <> out` by
+    (strip_tac >> gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+     metis_tac[]) >>
+  first_x_assum (qspec_then `x` mp_tac) >>
+  simp[venomStateTheory.lookup_var_def] >> metis_tac[]
+QED
+
 (* run_block preserves vs_labels *)
 Theorem run_block_preserves_labels:
   !fuel ctx bb s s'. run_block fuel ctx bb s = OK s' ==> s'.vs_labels = s.vs_labels
