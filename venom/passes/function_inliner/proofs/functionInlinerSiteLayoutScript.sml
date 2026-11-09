@@ -296,3 +296,127 @@ Proof
   simp[get_instruction_def] >> IF_CASES_TAC >> simp[] >>
   gvs[LIST_EQ_REWRITE, EL_MAP]
 QED
+
+(* Fetched semantic fields retain a concrete block and instruction witness. *)
+Definition inline_fetched_fields_def:
+  inline_fetched_fields fn b j fields <=>
+    ?bb inst. lookup_block b fn.fn_blocks = SOME bb /\
+      get_instruction bb j = SOME inst /\ inline_inst_fields inst = fields
+End
+
+Theorem inline_fetched_fields_elim:
+  inline_fetched_fields fn b j fields ==>
+  ?bb inst. lookup_block b fn.fn_blocks = SOME bb /\
+    get_instruction bb j = SOME inst /\ inline_inst_fields inst = fields
+Proof
+  simp[inline_fetched_fields_def]
+QED
+
+Theorem inline_fetched_invoke_embedding:
+  lookup_block lbl caller.fn_blocks = SOME callbb /\
+  lookup_block b callee.fn_blocks = SOME cb /\
+  cb.bb_instructions = pre ++ call::post /\ call.inst_opcode = INVOKE /\
+  ~MEM (STRCAT p b) (fn_labels caller) /\ STRCAT p b <> ret ==>
+  let args = rotate_invoke_ops (EL i callbb.bb_instructions).inst_operands;
+      outs = (EL i callbb.bb_instructions).inst_outputs;
+      k = LENGTH (FST (rewrite_inline_insts args outs ret
+            (MAP (clone_instruction p (fn_labels callee)) pre) 0));
+      final = renumber_fn_inst_ids (inline_call_site p ret caller callee lbl i)
+  in inline_fetched_fields final (STRCAT p b) k
+       (inline_inst_fields (clone_instruction p (fn_labels callee) call))
+Proof
+  strip_tac >> simp[LET_THM] >>
+  qmatch_goalsub_abbrev_tac `inline_fetched_fields final _ k fields` >>
+  drule_all inline_call_site_lookup_clone_focus >>
+  disch_then (qspec_then `i` mp_tac) >>
+  simp[rewrite_inline_inst_def, clone_instruction_def, is_param_opcode_def] >>
+  qmatch_goalsub_abbrev_tac `SOME raw` >> strip_tac >>
+  `get_instruction raw k = SOME (clone_instruction p (fn_labels callee) call)` by
+    simp[Abbr `raw`, Abbr `k`, get_instruction_def, clone_instruction_def,
+         EL_APPEND2, EL_APPEND1] >>
+  drule inline_renumber_lookup_some >> strip_tac >>
+  drule inline_fields_get_instruction >> disch_then (qspec_then `k` mp_tac) >>
+  simp[] >> Cases_on `get_instruction bb' k` >> simp[] >> strip_tac >>
+  simp[inline_fetched_fields_def, Abbr `final`, Abbr `fields`] >>
+  metis_tac[]
+QED
+
+Theorem inline_clone_fields_cong:
+  inline_inst_fields a = inline_inst_fields b ==>
+  inline_inst_fields (clone_instruction p labs a) =
+  inline_inst_fields (clone_instruction p labs b)
+Proof
+  simp[inline_inst_fields_def, clone_instruction_def]
+QED
+
+(* Indexed consumer, so a renumbered first embedding can be the callee of
+   the second. Its actual intermediate instruction need not have the old ID. *)
+Theorem inline_fetched_invoke_embedding_indexed:
+  inline_fetched_fields callee b j (inline_inst_fields call) /\
+  call.inst_opcode = INVOKE /\
+  lookup_block lbl caller.fn_blocks = SOME callbb /\
+  ~MEM (STRCAT p b) (fn_labels caller) /\ STRCAT p b <> ret ==>
+  ?cb. lookup_block b callee.fn_blocks = SOME cb /\
+    inline_fetched_fields
+      (renumber_fn_inst_ids (inline_call_site p ret caller callee lbl i))
+      (STRCAT p b)
+      (LENGTH (FST (rewrite_inline_insts
+        (rotate_invoke_ops (EL i callbb.bb_instructions).inst_operands)
+        (EL i callbb.bb_instructions).inst_outputs ret
+        (MAP (clone_instruction p (fn_labels callee))
+          (TAKE j cb.bb_instructions)) 0)))
+      (inline_inst_fields (clone_instruction p (fn_labels callee) call))
+Proof
+  strip_tac >> drule inline_fetched_fields_elim >> strip_tac >>
+  fs[get_instruction_def] >>
+  `bb.bb_instructions = TAKE j bb.bb_instructions ++
+      EL j bb.bb_instructions :: DROP (SUC j) bb.bb_instructions` by
+    metis_tac[TAKE_DROP, DROP_CONS_EL] >>
+  `(EL j bb.bb_instructions).inst_opcode = INVOKE` by
+    gvs[inline_inst_fields_def] >>
+  drule_all inline_fetched_invoke_embedding >>
+  disch_then (qspec_then `i` mp_tac) >> simp[] >> strip_tac >>
+  drule inline_clone_fields_cong >>
+  disch_then (qspecl_then [`p`, `fn_labels callee`] assume_tac) >>
+  gvs[]
+QED
+
+Theorem inline_fetched_invoke_two_embeddings:
+  inline_fetched_fields callee b j (inline_inst_fields call) /\
+  call.inst_opcode = INVOKE /\
+  lookup_block lbl1 caller1.fn_blocks = SOME callbb1 /\
+  ~MEM (STRCAT p1 b) (fn_labels caller1) /\ STRCAT p1 b <> ret1 /\
+  lookup_block lbl2 caller2.fn_blocks = SOME callbb2 /\
+  ~MEM (STRCAT p2 (STRCAT p1 b)) (fn_labels caller2) /\
+  STRCAT p2 (STRCAT p1 b) <> ret2 ==>
+  let mid = renumber_fn_inst_ids (inline_call_site p1 ret1 caller1 callee lbl1 i1);
+      final = renumber_fn_inst_ids (inline_call_site p2 ret2 caller2 mid lbl2 i2)
+  in ?cb1 k1 cb2 k2.
+    lookup_block b callee.fn_blocks = SOME cb1 /\
+    k1 = LENGTH (FST (rewrite_inline_insts
+      (rotate_invoke_ops (EL i1 callbb1.bb_instructions).inst_operands)
+      (EL i1 callbb1.bb_instructions).inst_outputs ret1
+      (MAP (clone_instruction p1 (fn_labels callee))
+        (TAKE j cb1.bb_instructions)) 0)) /\
+    lookup_block (STRCAT p1 b) mid.fn_blocks = SOME cb2 /\
+    k2 = LENGTH (FST (rewrite_inline_insts
+      (rotate_invoke_ops (EL i2 callbb2.bb_instructions).inst_operands)
+      (EL i2 callbb2.bb_instructions).inst_outputs ret2
+      (MAP (clone_instruction p2 (fn_labels mid))
+        (TAKE k1 cb2.bb_instructions)) 0)) /\
+    inline_fetched_fields mid (STRCAT p1 b) k1
+      (inline_inst_fields (clone_instruction p1 (fn_labels callee) call)) /\
+    inline_fetched_fields final (STRCAT p2 (STRCAT p1 b)) k2
+      (inline_inst_fields (clone_instruction p2 (fn_labels mid)
+        (clone_instruction p1 (fn_labels callee) call)))
+Proof
+  strip_tac >> simp[LET_THM] >>
+  drule_all inline_fetched_invoke_embedding_indexed >>
+  disch_then (qspec_then `i1` strip_assume_tac) >>
+  qpat_x_assum `inline_fetched_fields callee b j _` kall_tac >>
+  `(clone_instruction p1 (fn_labels callee) call).inst_opcode = INVOKE` by
+    simp[clone_instruction_def] >>
+  drule_all inline_fetched_invoke_embedding_indexed >>
+  disch_then (qspec_then `i2` strip_assume_tac) >>
+  gvs[]
+QED

@@ -462,3 +462,35 @@ Proof
        inline_choice_location_def] >>
   rpt strip_tac >> gvs[]
 QED
+
+(* Syntax provenance can be transported without re-inverting a target run.
+   The indexed layout theorem retains the exact offsets; this projection
+   keeps the original child equation alongside a concrete twice-fetched call. *)
+Theorem inline_original_child_two_embeddings:
+  inline_original_child C fuel parent q call caller r child cr /\
+  inline_fetched_fields callee b j (inline_inst_fields call) /\
+  lookup_block lbl1 caller1.fn_blocks = SOME callbb1 /\
+  ~MEM (STRCAT p1 b) (fn_labels caller1) /\ STRCAT p1 b <> ret1 /\
+  lookup_block lbl2 caller2.fn_blocks = SOME callbb2 /\
+  ~MEM (STRCAT p2 (STRCAT p1 b)) (fn_labels caller2) /\
+  STRCAT p2 (STRCAT p1 b) <> ret2 ==>
+  let mid = renumber_fn_inst_ids (inline_call_site p1 ret1 caller1 callee lbl1 i1);
+      final = renumber_fn_inst_ids (inline_call_site p2 ret2 caller2 mid lbl2 i2)
+  in ?bb k inst.
+    lookup_block (STRCAT p2 (STRCAT p1 b)) final.fn_blocks = SOME bb /\
+    get_instruction bb k = SOME inst /\
+    inline_inst_fields inst = inline_inst_fields
+      (clone_instruction p2 (fn_labels mid)
+        (clone_instruction p1 (fn_labels callee) call)) /\
+    inline_original_child C fuel parent q call caller r child cr
+Proof
+  strip_tac >>
+  `call.inst_opcode = INVOKE` by fs[inline_original_child_def] >>
+  drule_all inline_fetched_invoke_two_embeddings >>
+  disch_then (qspecl_then [`i2`, `i1`] mp_tac) >>
+  simp[LET_THM] >> strip_tac >>
+  qpat_x_assum `inline_fetched_fields callee _ _ _` kall_tac >>
+  qpat_x_assum `inline_fetched_fields _ (STRCAT p1 b) _ _` kall_tac >>
+  drule inline_fetched_fields_elim >> strip_tac >>
+  metis_tac[]
+QED
