@@ -6,7 +6,7 @@ Ancestors
   fragGasMode gasOutcome gasSummary exprSimWordArgs vyperState vyperContext
   exprLoweringProps loweringPosts context list words
 
-Theorem slice_terminal_outcome_mem[local]:
+Theorem slice_terminal_outcome_mem:
   (!tail. source (es with gas_obs := tail) = (res, es with gas_obs := tail)) /\
   gas_path_mem ctx func s 0 r /\
   ((?t. r = OK t /\ Q res (es with gas_obs := []) t) \/
