@@ -485,6 +485,116 @@ QED
 
 Finalise sym_reduce_depth_plan_frame_sim
 
+Theorem mem_label_at_from_bytes:
+  (!i. i < 32 ==> FLOOKUP labs (off+i) = SOME (l,d,i)) ==>
+  mem_label_at labs off = SOME (l,d)
+Proof
+  strip_tac >> first_assum (qspec_then `0` assume_tac) >>
+  gvs[mem_label_at_def, listTheory.EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
+QED
+
+Theorem scratch_label_store_cell:
+  mem_sval_at (labs |++ GENLIST (\i. (off+i,(l,d,i))) 32) off (Lab l d)
+Proof
+  pure_rewrite_tac[mem_sval_at_def] >> irule mem_label_at_from_bytes >>
+  simp[asmSymBridgeTheory.mstore_labels_lookup, Excl "GENLIST"]
+QED
+
+Theorem scratch_label_store_outside:
+  ~in_mem_range off 32 b ==>
+  FLOOKUP (labs |++ GENLIST (\i. (off+i,(l,d,i))) 32) b = FLOOKUP labs b
+Proof
+  simp[asmSymBridgeTheory.mstore_labels_lookup, in_mem_range_def]
+QED
+
+Theorem mem_sval_at_local_cong:
+  (!b. in_mem_range off 32 b ==> FLOOKUP labs' b = FLOOKUP labs b) ==>
+  (mem_sval_at labs' off sv <=> mem_sval_at labs off sv)
+Proof
+  strip_tac >>
+  `!b. in_mem_range off 32 b ==> (b IN FDOM labs' <=> b IN FDOM labs)` by
+    metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
+  `FLOOKUP labs' off = FLOOKUP labs off` by
+    (first_x_assum irule >> simp[in_mem_range_def]) >>
+  Cases_on `sv` >>
+  simp[mem_sval_at_def, mem_label_at_def, listTheory.EVERY_MEM,
+       rich_listTheory.MEM_COUNT_LIST] >>
+  gvs[in_mem_range_def]
+QED
+
+Theorem sym_mstore_word_cell:
+  ss.sym_stack = Val off :: Val w :: tail ==>
+  ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = tail /\
+    mem_sval_at ss'.sym_mem_labels (w2n off) (Val w) /\
+    (!b. ~in_mem_range (w2n off) 32 b ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
+       sval_val_def, asm_op_mem_reads_def, asm_op_mem_writes_def,
+       mem_labels_hit_def, sym_lift_def, asmOpSimTheory.asm_step_op_mstore,
+       asm_op_arity_table_def, log_table_def,
+       asm_mstore_def, mem_sval_at_def, mem_labels_clear_def,
+       finite_mapTheory.FLOOKUP_DRESTRICT, asm_next_def,
+       finite_mapTheory.FDOM_DRESTRICT]
+QED
+
+Theorem sym_mstore_label_cell:
+  ss.sym_stack = Val off :: Lab l d :: tail ==>
+  ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = tail /\
+    mem_sval_at ss'.sym_mem_labels (w2n off) (Lab l d) /\
+    (!b. ~in_mem_range (w2n off) 32 b ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  qspecl_then [`ss.sym_mem_labels`, `w2n off`, `l`, `d`] assume_tac
+    (Q.GENL [`labs`, `off`, `l`, `d`] (SPEC_ALL scratch_label_store_cell)) >>
+  qspecl_then [`w2n off`, `ss.sym_mem_labels`, `l`, `d`] mp_tac
+    (Q.GENL [`off`, `labs`, `l`, `d`, `b`] (SPEC_ALL scratch_label_store_outside)) >>
+  strip_tac >> gvs[sym_mstore_def, sym_lift_def, asm_mstore_def, asm_next_def]
+QED
+
+Theorem sym_mload_label_cell:
+  ss.sym_stack = Val off :: tail /\
+  mem_sval_at ss.sym_mem_labels (w2n off) (Lab l d) ==>
+  ?ss'. sym_mload ss = SymOK ss' /\ ss'.sym_stack = Lab l d :: tail /\
+        ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[mem_sval_at_def] >> strip_tac >> simp[sym_mload_def]
+QED
+
+Theorem scratch_store_preserves_disjoint_cell:
+  mem_sval_at labs cell sv /\
+  (!b. in_mem_range cell 32 b ==> ~in_mem_range off 32 b) /\
+  (!b. ~in_mem_range off 32 b ==> FLOOKUP labs' b = FLOOKUP labs b) ==>
+  mem_sval_at labs' cell sv
+Proof
+  metis_tac[mem_sval_at_local_cong]
+QED
+
+Theorem sym_mload_word_cell:
+  ss.sym_stack = Val off :: tail /\
+  mem_sval_at ss.sym_mem_labels (w2n off) (Val w) /\
+  asm_mload (ss.sym_base with as_stack := [off]) = AsmOK loaded /\
+  loaded.as_stack = [w] ==>
+  ?ss'. sym_mload ss = SymOK ss' /\ ss'.sym_stack = Val w :: tail /\
+        ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  strip_tac >>
+  `FLOOKUP ss.sym_mem_labels (w2n off) = NONE` by
+    (gvs[mem_sval_at_def] >> simp[finite_mapTheory.FLOOKUP_DEF] >>
+     first_x_assum irule >> simp[in_mem_range_def]) >>
+  simp[sym_mload_def, mem_label_at_def, sym_step_concrete_def,
+       asm_op_arity_def, asm_op_arity_table_def, sval_val_def,
+       asm_op_mem_reads_def, mem_labels_hit_def,
+       asmOpSimTheory.asm_step_op_mload, sym_lift_def] >>
+  `~?i. i IN FDOM ss.sym_mem_labels /\ in_mem_range (w2n off) 32 i` by
+    metis_tac[mem_sval_at_def] >>
+  simp[asm_op_mem_writes_def, mem_labels_clear_def,
+       GSYM pred_setTheory.IN_UNIV, finite_mapTheory.DRESTRICT_UNIV] >>
+  simp[finite_mapTheory.fmap_eq_flookup, finite_mapTheory.FLOOKUP_DRESTRICT]
+QED
+
 (* A branch condition cannot carry either class of symbolic label. *)
 Theorem sym_jnz_condition_kind:
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
