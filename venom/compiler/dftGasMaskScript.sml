@@ -791,6 +791,39 @@ Proof
   simp[DROP_APPEND, DROP_DROP_T, arithmeticTheory.ADD1]
 QED
 
+Theorem prefix_independent_update_ok[local]:
+  !pre s out w u.
+    EVERY (\i. ~is_terminator i.inst_opcode /\
+      (!v. MEM (Var v) i.inst_operands ==> out <> v) /\
+      ~MEM out i.inst_outputs) pre ==>
+    (FOLDR (dft_exec_cons fuel C) OK pre (update_var out w s) = OK u <=>
+     ?v. FOLDR (dft_exec_cons fuel C) OK pre s = OK v /\
+         u = update_var out w v)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (simp[] >> metis_tac[]) >>
+  fs[EVERY_DEF] >>
+  Cases_on `h.inst_opcode = INVOKE`
+  >- (mp_tac (Q.SPECL [`fuel`, `C`, `h`, `s`]
+        dftCommutationTheory.step_inst_invoke_frame) >>
+      disch_then (qspecl_then [`out`, `w`] mp_tac) >> simp[] >> strip_tac >>
+      simp[dftIndexedExecTheory.dft_exec_cons_def] >>
+      Cases_on `step_inst fuel C h s` >>
+      simp[dftCommutationTheory.map_result_state_def] >>
+      first_x_assum (qspecl_then
+        [`v with vs_inst_idx := SUC s.vs_inst_idx`, `out`, `w`, `u`] mp_tac) >>
+      simp[update_var_def]) >>
+  mp_tac (Q.SPECL [`fuel`, `C`, `h`, `s`]
+    dftCommutationTheory.step_inst_frame) >>
+  disch_then (qspecl_then [`out`, `w`] mp_tac) >> simp[] >> strip_tac >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def] >>
+      Cases_on `step_inst fuel C h s` >>
+      simp[dftCommutationTheory.map_result_state_def] >>
+      first_x_assum (qspecl_then
+        [`v with vs_inst_idx := SUC s.vs_inst_idx`, `out`, `w`, `u`] mp_tac) >>
+      simp[update_var_def]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
