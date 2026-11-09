@@ -1011,3 +1011,17 @@ Proof
   `MEM inst bb.bb_instructions` by simp[EL_MEM] >>
   drule_all ircf_copy_roots_no_write_use >> simp[]
 QED
+
+Theorem ircf_block_plan_fetch_noncopy:
+  ircf_block_plan fn bb bb2 /\ get_instruction bb i = SOME ii /\
+  ii.inst_opcode <> MCOPY ==>
+  get_instruction bb2 i = SOME
+    (if ii.inst_opcode = ASSIGN then ii else
+     ii with inst_operands := MAP (ircf_redirect_op fn bb bb2) ii.inst_operands)
+Proof
+  simp[ircf_block_plan_def, get_instruction_def] >> strip_tac >>
+  `i NOTIN ircf_fwds bb bb2` by
+    (strip_tac >> qpat_x_assum `!k. k IN _ ==> _` drule >>
+     gvs[ircf_fwd_ok_def]) >>
+  simp[]
+QED
