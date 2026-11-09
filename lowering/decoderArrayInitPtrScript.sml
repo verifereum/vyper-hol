@@ -870,8 +870,8 @@ Proof
   drule_all (calldata_pos abi_decode_loop_array_trace) >> strip_tac >>
   rename1 `abi_decode_array_loop_init _ _ _ _ _ _ _ sa = (setup,sb)` >>
   `sb.cs_next_id <= sc.cs_next_id` by
-    (mp_tac (cj 3 (calldata_pos ci_mono_compile_abi_decode)) >>
-     disch_then (qspecl_then [`Var root`,`src`,`CALLDATALOAD`,`Lit 0w`,
+    (mp_tac (cj 3 ci_mono_compile_abi_decode) >>
+     disch_then (qspecl_then [`Var root`,`src`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,
        `ei`,`abi_sz`,`mem_sz`,`FST setup`,`SND setup`,`sb`] mp_tac) >>
      simp[ci_mono_def, cs_extends_def]) >>
   `sb.cs_next_id <= last` by decide_tac >>
