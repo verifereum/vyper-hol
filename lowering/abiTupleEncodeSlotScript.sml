@@ -1,5 +1,6 @@
 Theory abiTupleEncodeSlot
 Ancestors
+  abiDecoderRange
   abiTupleEncodeInput abiBuiltinEncodeCorrect abiBuiltinEncodeWord abiEncoderInput
   abiEncoderInputFrame abiEncoderWrites abiEncoderBytes abiDecoderReentry abiDecoderContract
   abiDecoderGuards abiDecoderFrameCompose compileEnv context emitHelper emitHelperProps

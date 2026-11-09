@@ -169,10 +169,11 @@ Proof
        run_inst_seq_mem_ok [mk_inst st_exit.cs_next_id TSTORE
           [Lit (n2w nkey); Lit 0w] []] s` by
         (simp[run_inst_seq_def, run_inst_seq_mem_ok_def, mk_inst_def,
-          step_inst_base_def, eval_operand_def, Abbr `u`,
-          inst_mem_below_frontier_def, inst_dload_in_section_def,
-          exec_write2_def, contextCodegenRelTheory.source_memory_read_ranges_def,
-          codegenRelTheory.source_memory_write_ranges_def] ) >>
+              inst_mem_below_frontier_def, inst_dload_in_section_def,
+              contextCodegenRelTheory.source_memory_read_ranges_def,
+              codegenRelTheory.source_memory_write_ranges_def] >>
+         PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+         simp[mk_inst_def, eval_operand_def, Abbr `u`, exec_write2_def]) >>
       `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
         [mk_inst st_exit.cs_next_id TSTORE [Lit (n2w nkey); Lit 0w] []]` by
         simp[mk_inst_def, is_terminator_def] >>

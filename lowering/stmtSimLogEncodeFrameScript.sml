@@ -56,16 +56,16 @@ Theorem log_encode_step_memory_mono[local]:
   LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   simp_tac bool_ss [log_encode_safe_opcode_def] >> strip_tac
-  >- gvs[step_inst_base_def, exec_alloca_def, AllCaseEqs(), update_var_def]
-  >- gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs(), update_var_def]
-  >- gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs(), update_var_def]
-  >- gvs[step_inst_base_def, exec_read1_def, AllCaseEqs(), update_var_def]
-  >- (gvs[step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+  >- gvs[step_inst_base_opcode_eqs, exec_alloca_def, AllCaseEqs(), update_var_def]
+  >- gvs[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs(), update_var_def]
+  >- gvs[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs(), update_var_def]
+  >- gvs[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs(), update_var_def]
+  >- (gvs[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs()] >>
       simp[mstore_memory_nondecreasing])
-  >- (gvs[step_inst_base_def, AllCaseEqs(), mcopy_def] >>
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), mcopy_def] >>
       simp[write_memory_with_expansion_nondecreasing])
-  >- gvs[step_inst_base_def, exec_read0_def, AllCaseEqs(), update_var_def] >>
-  gvs[step_inst_base_def, AllCaseEqs()] >>
+  >- gvs[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs(), update_var_def] >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
   simp[write_memory_with_expansion_nondecreasing]
 QED
 

@@ -276,20 +276,32 @@ Theorem compile_get_target_ptr_store_place:
 Proof
   ntac 2 gen_tac >> measureInduct_on `base_assignment_target_size bt` >>
   Cases_on `bt` >> rpt gen_tac >>
-  simp[Once exprLoweringTheory.compile_get_target_ptr_def, target_store_place_def]
-  >- (BasicProvers.every_case_tac >> simp[comp_return_def] >> rpt strip_tac >> gvs[])
-  >- (BasicProvers.every_case_tac >> simp[comp_return_def] >> rpt strip_tac >> gvs[]) >>
+  simp[Once exprLoweringTheory.compile_get_target_ptr_def]
+  >- (simp[target_store_place_def] >> BasicProvers.every_case_tac >> simp[comp_return_def] >> rpt strip_tac >> gvs[])
+  >- (simp[target_store_place_def] >> BasicProvers.every_case_tac >> simp[comp_return_def] >> rpt strip_tac >> gvs[]) >>
   simp[comp_bind_def] >>
   Cases_on `compile_get_target_ptr cfn cenv b sa` >>
   rename1 `_ = (rb, sm)` >> PairCases_on `rb` >>
   `(rb1 = SOME LocStorage \/ rb1 = SOME LocTransient) ==>
    target_store_place cenv b = SOME rb2` by
     (first_x_assum (qspec_then `b` mp_tac) >> simp[] >>
-     disch_then drule >> simp[]) >>
-  simp[LET_THM] >> strip_tac >>
-  BasicProvers.every_case_tac >>
-  gvs[comp_bind_def, comp_return_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[])
+     disch_then drule >> simp[])
+  >- (simp[LET_THM] >>
+      Cases_on `rb2`
+      >- (simp[comp_bind_def, comp_return_def, LET_THM] >>
+          rpt (pairarg_tac >> gvs[comp_bind_def, comp_return_def, LET_THM]) >>
+          rpt strip_tac >> gvs[target_store_place_def]) >>
+      Cases_on `x`
+      >- (simp[comp_bind_def, comp_return_def, LET_THM] >>
+          rpt (pairarg_tac >> gvs[comp_bind_def, comp_return_def, LET_THM]) >>
+          rpt strip_tac >> gvs[target_store_place_def]) >>
+      simp[comp_bind_def, comp_return_def, LET_THM] >>
+      rpt (pairarg_tac >> gvs[comp_bind_def, comp_return_def, LET_THM]) >>
+      rpt strip_tac >> gvs[target_store_place_def] >>
+      Cases_on `t` >> simp[]) >>
+  simp[comp_bind_def, comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[target_store_place_def]
 QED
 
 (* A function the runtime unit lowers (lower_vyper_runtime_unit_allocs_ok)

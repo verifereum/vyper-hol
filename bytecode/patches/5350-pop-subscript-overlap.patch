@@ -1,0 +1,130 @@
+Upstream PR: https://github.com/vyperlang/vyper/pull/5350
+Status: open (draft)
+
+Reject a subscript of a pop() result whose index can write a variable the
+base reads, or makes a risky call (CompilerPanic "risky overlap"). The pin
+has no subscript overlap check, so this also brings the read/write overlap
+helpers (_subscript_read_write_overlap and the risky-call walk).
+
+diff --git a/vyper/codegen_venom/expr.py b/vyper/codegen_venom/expr.py
+--- a/vyper/codegen_venom/expr.py
++++ b/vyper/codegen_venom/expr.py
+@@ -27,6 +27,8 @@ from vyper.exceptions import (
+     UnimplementedException,
+     tag_exceptions,
+ )
++from vyper.semantics.analysis.base import Modifiability
++from vyper.semantics.analysis.utils import get_expr_writes
+ from vyper.semantics.data_locations import DataLocation
+ from vyper.semantics.types import (
+     AddressT,
+@@ -56,6 +58,96 @@ from .context import VenomCodegenContext
+ from .value import VyperValue
+ 
+ 
++# Builtins whose lowering emits call-family opcodes. This mirrors
++# IRnode.contains_risky_call at the source level.
++_RISKY_BUILTINS = {
++    "raw_call",
++    "send",
++    "raw_create",
++    "create_minimal_proxy_to",
++    "create_copy_of",
++    "create_from_blueprint",
++    "ecrecover",
++    "ecadd",
++    "ecmul",
++    "sha256",
++    "print",
++}
++
++
++def get_referenced_variables(node: vy_ast.VyperNode) -> set:
++    """Return variables read while evaluating an expression."""
++    if isinstance(node, vy_ast.ExprNode):
++        # Ignore reads which were folded away at compile time.
++        node = node.reduced()
++    ret: set = set()
++    if isinstance(node, vy_ast.ExprNode) and node._expr_info is not None:
++        ret.update(access.variable for access in node._expr_info._reads)
++    for child in node._children:
++        ret |= get_referenced_variables(child)
++    return ret
++
++
++def _contains_risky_call(node: vy_ast.VyperNode) -> bool:
++    if isinstance(node, vy_ast.ExprNode):
++        # Ignore calls which were folded away at compile time.
++        node = node.reduced()
++
++    if isinstance(node, (vy_ast.ExtCall, vy_ast.StaticCall)):
++        return True
++
++    if isinstance(node, vy_ast.Call):
++        func_t = node.func._metadata.get("type")
++        if isinstance(func_t, BuiltinFunctionT) and func_t._id in _RISKY_BUILTINS:
++            return True
++        if isinstance(func_t, ContractFunctionT) and func_t.is_internal:
++            if _function_contains_risky_call(func_t.get_concrete_override()):
++                return True
++
++    return any(_contains_risky_call(child) for child in node._children)
++
++
++def _function_contains_risky_call(func_t: ContractFunctionT) -> bool:
++    decl_node = func_t.decl_node
++    assert decl_node is not None
++    if "contains_risky_call" not in decl_node._metadata:
++        # Recursion is forbidden, so the call graph traversal terminates.
++        decl_node._metadata["contains_risky_call"] = any(
++            _contains_risky_call(child) for child in decl_node._children
++        )
++    return decl_node._metadata["contains_risky_call"]
++
++
++def _subscript_read_write_overlap(
++    base_node: vy_ast.VyperNode, index_node: vy_ast.VyperNode
++) -> bool:
++    # The base is evaluated before the index. Detect an index expression
++    # which can mutate variables used to derive that base.
++    base_reads = {
++        var
++        for var in get_referenced_variables(base_node)
++        if var.decl_node is not None and var.modifiability != Modifiability.CONSTANT
++    }
++    if not base_reads:
++        return False
++
++    index_writes = {access.variable for access in get_expr_writes(index_node)}
++    if base_reads & index_writes:
++        return True
++
++    return _contains_risky_call(index_node)
++
++
++def _is_derived_from_pop(node: vy_ast.VyperNode) -> bool:
++    """Return True if `node` is a `pop()` result, or a member or element of one."""
++    while isinstance(node, (vy_ast.Subscript, vy_ast.Attribute)):
++        node = node.value
++    if not isinstance(node, vy_ast.Call):
++        return False
++    func_t = node.func._metadata.get("type")
++    return isinstance(func_t, MemberFunctionT) and func_t.name == "pop"
++
++
+ @dataclass
+ class _CallKwargs:
+     """Keyword arguments for external calls."""
+@@ -840,6 +932,12 @@ class Expr:
+         """
+         node = self.node
+         assert isinstance(node, vy_ast.Subscript)
++        if _is_derived_from_pop(node.value) and _subscript_read_write_overlap(
++            node.value, node.slice
++        ):
++            # The popped element is past the array's new length, so the
++            # index can overwrite it before the base is read.
++            raise CompilerPanic("risky overlap")
+         base_vv = Expr(node.value, self.ctx).lower()
+         base = base_vv.operand  # Extract pointer for address math
+         index = Expr(node.slice, self.ctx).lower_value()  # Need the value
