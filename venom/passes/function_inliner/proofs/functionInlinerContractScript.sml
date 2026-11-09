@@ -19,6 +19,9 @@ Definition inliner_input_ok_def:
       EVERY (\inst.
         ~MEM inst.inst_opcode [ALLOCA; DALLOCA; DRET; SETFMP] /\
         label_positions_ok inst /\
+        (inst.inst_opcode = PHI ==>
+          EVERY (\op. !l. op = Label l ==> MEM l (fn_labels fn))
+            inst.inst_operands) /\
         EVERY (\v. ~isPREFIX "inl" v) inst.inst_outputs /\
         EVERY (\op. case op of Var v => ~isPREFIX "inl" v | _ => T)
           inst.inst_operands /\
