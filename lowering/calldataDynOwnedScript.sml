@@ -2560,6 +2560,10 @@ Resume calldata_owned_header_step[next_invariant]:
   `Own st.cs_next_id end_st.cs_next_id v` by suspend "ownership_frame" >>
   suspend "invariant_assembly"
 QED
+(* Built once here rather than inside the proof below. *)
+val owned_interval_replace_unlet =
+  GEN_ALL (SIMP_RULE bool_ss [LET_THM] calldata_owned_interval_replace);
+
 Resume calldata_owned_header_step[ownership_frame]:
   `Own st.cs_next_id end_st.cs_next_id u` by
     (qpat_assum `H j u` mp_tac >> asm "Hdef" mp_tac >>
@@ -2588,7 +2592,7 @@ Resume calldata_owned_header_step[ownership_frame]:
   qpat_assum `Abbrev (Own = _)` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
   pure_rewrite_tac[markerTheory.Abbrev_def] >> disch_then SUBST1_TAC >> BETA_TAC >>
   ntac 8 disch_tac >>
-  ho_match_mp_tac (GEN_ALL (SIMP_RULE bool_ss [LET_THM] calldata_owned_interval_replace)) >>
+  MATCH_MP_TAC owned_interval_replace_unlet >>
   qexistsl_tac [`u`,`st1.cs_next_id`,`middle.cs_next_id`] >>
   asm_rewrite_tac[] >> decide_tac
 QED
