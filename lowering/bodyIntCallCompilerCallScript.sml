@@ -119,3 +119,114 @@ Proof
        intcall_interval_emit_void, intcall_interval_raw_call_finish]
 
 QED
+
+Theorem intcall_interval_call_send:
+  (!ce ty e a. k <= a.cs_next_var ==>
+    intcall_compiler_interval k a (SND (cfn ce ty e a))) /\
+  k <= a.cs_next_var ==>
+  intcall_compiler_interval k a
+    (SND (compile_call cfn ce rt ty (Send hg) es dflt a))
+Proof
+  strip_tac >> namedCases_on `es` ["", "addr rest"] >>
+  simp[compile_call_def] >>
+  rpt (ho_match_mp_tac intcall_interval_pair_bind_floor >>
+       simp[intcall_interval_emit_inst, intcall_compiler_interval_refl] >>
+       rpt strip_tac) >>
+  Cases_on `rest` >> simp[] >> rpt IF_CASES_TAC >> simp[] >>
+  rpt (ho_match_mp_tac intcall_interval_pair_bind_floor >>
+       simp[intcall_interval_emit_inst, intcall_interval_lower_value,
+            intcall_interval_emit_op, intcall_interval_emit_void,
+            intcall_compiler_interval_refl] >> rpt strip_tac >> simp[]) >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[] >>
+       rpt (ho_match_mp_tac intcall_interval_pair_bind_floor >>
+            simp[intcall_interval_lower_value, intcall_interval_emit_op,
+                 intcall_interval_emit_void, intcall_compiler_interval_refl] >>
+            rpt strip_tac >> simp[])) >>
+  simp[intcall_compiler_interval_refl, intcall_interval_lower_value]
+QED
+
+Theorem intcall_interval_call_log:
+  (!ce ty e a. k <= a.cs_next_var ==>
+    intcall_compiler_interval k a (SND (cfn ce ty e a))) /\
+  k <= a.cs_next_var ==>
+  intcall_compiler_interval k a
+    (SND (compile_call cfn ce rt ty RawLog es dflt a))
+Proof
+  strip_tac >> namedCases_on `es` ["", "topics rest"] >>
+  simp[compile_call_def] >>
+  rpt (ho_match_mp_tac intcall_interval_pair_bind_floor >>
+       simp[intcall_interval_emit_inst, intcall_compiler_interval_refl] >>
+       rpt strip_tac) >>
+  namedCases_on `rest` ["", "data tail"]
+  >- (simp[] >> ho_match_mp_tac intcall_interval_pair_bind_floor >>
+      simp[intcall_interval_emit_inst, intcall_compiler_interval_refl]) >>
+  simp[] >> Cases_on `tail` >> simp[] >>
+  rpt (ho_match_mp_tac intcall_interval_pair_bind_floor >>
+       simp[intcall_interval_emit_inst, intcall_interval_multi_exprs_floor,
+            intcall_compiler_interval_refl] >> rpt strip_tac) >>
+  IF_CASES_TAC >> simp[] >>
+  rpt (ho_match_mp_tac intcall_interval_pair_bind_floor >>
+       simp[intcall_interval_alloc_buffer, intcall_interval_lower_value,
+            intcall_interval_emit_void, intcall_interval_emit_op,
+            intcall_interval_emit_inst, intcall_compiler_interval_refl] >>
+       rpt strip_tac >> simp[]) >>
+  simp[intcall_interval_lower_value, intcall_compiler_interval_refl]
+QED
+
+Theorem intcall_interval_call_revert:
+  (!ce ty e a. k <= a.cs_next_var ==>
+    intcall_compiler_interval k a (SND (cfn ce ty e a))) /\
+  k <= a.cs_next_var ==>
+  intcall_compiler_interval k a
+    (SND (compile_call cfn ce rt ty RawRevert es dflt a))
+Proof
+  strip_tac >> namedCases_on `es` ["", "data rest"] >>
+  simp[compile_call_def] >>
+  rpt (ho_match_mp_tac intcall_interval_pair_bind_floor >>
+       simp[intcall_interval_emit_inst, intcall_compiler_interval_refl] >>
+       rpt strip_tac) >>
+  Cases_on `rest` >> simp[] >>
+  rpt (ho_match_mp_tac intcall_interval_pair_bind_floor >>
+       simp[intcall_interval_lower_value, intcall_interval_raw_revert,
+            intcall_interval_emit_inst, intcall_compiler_interval_refl] >>
+       rpt strip_tac >> simp[]) >>
+  simp[intcall_interval_lower_value, intcall_compiler_interval_refl]
+QED
+
+Theorem intcall_interval_call_selfdestruct:
+  k <= a.cs_next_var ==>
+  intcall_compiler_interval k a
+    (SND (compile_call cfn ce rt ty SelfDestructTarget es dflt a))
+Proof
+  strip_tac >> simp[compile_call_def] >>
+  ho_match_mp_tac intcall_interval_pair_bind_floor >>
+  simp[intcall_interval_emit_inst, intcall_compiler_interval_refl]
+QED
+
+Theorem intcall_interval_call_create:
+  (!ce ty e a. k <= a.cs_next_var ==>
+    intcall_compiler_interval k a (SND (cfn ce ty e a))) /\
+  k <= a.cs_next_var ==>
+  intcall_compiler_interval k a
+    (SND (compile_call cfn ce rt ty (CreateTarget ck hs rof extra) es dflt a))
+Proof
+  strip_tac >> simp[compile_call_def] >>
+  Cases_on `compile_create_call cfn ce ck hs rof es a` >>
+  simp[as_stack_val_def] >>
+  metis_tac[intcall_interval_create_call, pairTheory.SND]
+QED
+
+Theorem intcall_interval_call:
+  (!ce ty e a. k <= a.cs_next_var ==>
+    intcall_compiler_interval k a (SND (cfn ce ty e a))) ==>
+  !ce rt ty target es dflt a. k <= a.cs_next_var ==>
+    intcall_compiler_interval k a
+      (SND (compile_call cfn ce rt ty target es dflt a))
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `target` >>
+  simp[intcall_interval_call_internal, intcall_interval_call_external,
+       intcall_interval_call_raw, intcall_interval_call_calldata,
+       intcall_interval_call_send, intcall_interval_call_log,
+       intcall_interval_call_revert, intcall_interval_call_selfdestruct,
+       intcall_interval_call_create]
+QED
