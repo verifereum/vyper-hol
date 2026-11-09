@@ -150,7 +150,7 @@ Proof
   simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   first_x_assum irule >> goal_assum (drule_at Any) >>
-  gvs[body_inv_def] >> metis_tac[]
+  gvs[body_inv_def, cenv_module_pins_def] >> metis_tac[]
 QED
 
 Theorem deploy_ctor_target_reserved_entry:
@@ -1164,7 +1164,7 @@ Proof
   PairCases_on `cf` >>
   simp[set_constructor_package_target_def, package_constructor_def,
        update_cenv_nonreentrant_def] >> strip_tac >> gvs[] >>
-  simp[body_inv_def, deploy_evaluation_context_def,
+  simp[body_inv_def, cenv_module_pins_def, deploy_evaluation_context_def,
        initial_evaluation_context_def, get_module_code_def, get_tenv_def,
        type_env_all_modules_def, GSYM type_env_def,
        build_compile_env_def] >>
@@ -1193,9 +1193,9 @@ Proof
      (cenv0 with ce_imm_alloca :=
         (if imm_len tops > 0 then SOME imm else NONE))
      (deploy_evaluation_context tops am tx)` by
-    (fs[body_inv_def] >> metis_tac[]) >>
+    (fs[body_inv_def, cenv_module_pins_def] >> metis_tac[]) >>
   drule_all compile_register_constructor_args_body_inv >> strip_tac >>
-  fs[body_inv_def] >> metis_tac[]
+  fs[body_inv_def, cenv_module_pins_def] >> metis_tac[]
 QED
 
 Theorem deploy_frame_storage_var_types:
