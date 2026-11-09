@@ -97,8 +97,6 @@ Theorem slice_data_string_success_post_mem:
    (t with vs_inst_idx := k))
 Proof
  strip_tac >>
- `mem_bytes_at src_base (LENGTH (MAP (n2w o ORD) text : word8 list))
-    s.vs_memory = MAP (n2w o ORD) text` by simp[] >>
  mp_tac (slice_data_success_run |> Q.INST
    [`bs` |-> `MAP (n2w o ORD) text : word8 list`,
     `src_len` |-> `sl`, `src_data` |-> `data`]) >>
