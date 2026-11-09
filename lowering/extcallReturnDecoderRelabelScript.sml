@@ -177,3 +177,20 @@ Resume return_transport_decoder_mutual[loop]:
   gvs[] >> transport_close
 QED
 Finalise return_transport_decoder_mutual
+
+Theorem return_decoder_start_oblivious:
+  frag_start_oblivious
+    (compile_abi_decode_to_buf dst src opc base_op hi info)
+Proof
+  irule return_compile_transport_oblivious >>
+  simp[return_transport_decoder_mutual]
+QED
+
+Theorem return_decoder_start_relabel:
+  compile_abi_decode_to_buf dst src opc base_op hi info st = (v,en) /\
+  LENGTH ids = LENGTH st.cs_current_insts ==>
+  compile_abi_decode_to_buf dst src opc base_op hi info
+    (start_relabel L ids st) = (v,start_swap st L ids en)
+Proof
+  metis_tac[return_decoder_start_oblivious, frag_start_oblivious_def]
+QED
