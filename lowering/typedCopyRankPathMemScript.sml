@@ -11,7 +11,7 @@ Ancestors
   venomExecSemantics storageDecodeMemory valueEncodingProps
   typedNormalizeDynarray typedNormalizeFastRepresentation fragGasPathMem
   typedCopyAgreement emitHelper stmtSimReturn valueCopyBytes
-  exprSimBufferStore exprSimAggregateChildren
+  exprSimBufferStore exprSimAggregateChildren venomInst bodyDeclMemoryCounted
 
 Theorem typed_store_rank_path_mem:
   !n ce tenv dty sty dtv stv v dst src sa sb ctx fn s dw sw.
@@ -345,7 +345,74 @@ Resume typed_store_rank_path_mem[dynamic_slow_premises]:
   (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
 QED
 Resume typed_store_rank_path_mem[dynamic_equal]:
-  cheat
+  qpat_x_assum `!m. m < n ==> _` kall_tac >>
+  `elem = se` by metis_tac[] >> gnvs[] >>
+  qpat_x_assum `value_has_type (ArrayTV tv (Dynamic _)) v` mp_tac >>
+  Cases_on `v` >> simp[value_has_type_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> simp[value_has_type_def] >> strip_tac >>
+  `LENGTH l <= cap /\ LENGTH l <= n''` by
+    fs[value_has_type_def, typed_copy_dynarray_wf] >>
+  `LENGTH l * type_memory_size tv <= n'' * type_memory_size tv /\
+   LENGTH l * type_memory_size tv <= cap * type_memory_size tv` by
+    simp[LE_MULT_RCANCEL] >>
+  `mload (w2n sw) s = n2w (LENGTH l)` by
+    fs[val_in_memory_def, GSYM valueEncodingPropsTheory.mem_word_at_eq_mload] >>
+  `w2n (sw+32w) = w2n sw+32 /\ w2n (dw+32w) = w2n dw+32 /\
+   LENGTH l * type_memory_bytes ce elem < dimword(:256) /\
+   w2n sw + 32 <= s.vs_alloca_next /\ w2n dw + 32 <= s.vs_alloca_next /\
+   w2n (sw+32w) + LENGTH l * type_memory_bytes ce elem <= s.vs_alloca_next /\
+   w2n (dw+32w) + LENGTH l * type_memory_bytes ce elem <= s.vs_alloca_next` by
+    suspend "equal_numeric" >>
+  `!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x` by metis_tac[] >>
+  drule_all typed_dynarray_equal_compiler_run >> strip_tac >>
+  suspend "equal_finish"
+QED
+Resume typed_store_rank_path_mem[equal_numeric]:
+  gns[type_memory_size_def, Excl "LE_MULT_RCANCEL"] >>
+  simp[w2n_add_2] >> decide_tac
+QED
+Resume typed_store_rank_path_mem[equal_finish]:
+  `gas_path_mem ctx fn s 0 (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (irule bodyDeclMemoryCountedTheory.body_decl_zero_gas_path >>
+     simp[] >> qexists_tac `sa` >> simp[] >>
+     drule typed_dynarray_equal_shape >>
+     simp[same_blocks_def, mk_inst_def, is_terminator_def]) >>
+  `val_in_memory (ArrayTV tv (Dynamic (LENGTH l))) (ArrayV (DynArrayV l))
+     (w2n sw) s.vs_memory` by
+    metis_tac[dynarray_in_memory_capacity_irrelevant] >>
+  `val_wf (ArrayTV tv (Dynamic (LENGTH l))) (ArrayV (DynArrayV l))` by
+    fs[typed_copy_dynarray_wf] >>
+  `mem_bytes_at (w2n dw) (32+LENGTH l*type_memory_size tv) u.vs_memory =
+   mem_bytes_at (w2n sw) (32+LENGTH l*type_memory_size tv) s.vs_memory` by
+    (simp[] >>
+     pure_rewrite_tac [Q.SPECL [`LENGTH l*type_memory_size tv`, `32`] ADD_COMM] >>
+     irule typed_dynarray_equal_window >> simp[] >>
+     qexists_tac `type_memory_size (ArrayTV tv (Dynamic n''))` >>
+     simp[] >> gns[type_memory_size_def, Excl "LE_MULT_RCANCEL"] >> decide_tac) >>
+  `val_in_memory (ArrayTV tv (Dynamic (LENGTH l))) (ArrayV (DynArrayV l))
+     (w2n dw) u.vs_memory` by
+    (irule valueCopyTheory.val_in_memory_relocate >> conj_tac >- simp[] >>
+     qexistsl_tac [`w2n sw`, `32+LENGTH l*type_memory_size tv`, `s.vs_memory`] >>
+     simp[val_footprint_def, type_memory_size_def] >> metis_tac[ADD_COMM]) >>
+  suspend "equal_endpoint"
+QED
+Resume typed_store_rank_path_mem[equal_endpoint]:
+  `u.vs_halted = s.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `sb.cs_current_bb = sa.cs_current_bb` by metis_tac[typed_dynarray_equal_shape] >>
+  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >> simp[] >>
+  conj_tac >- metis_tac[dynarray_in_memory_capacity_irrelevant] >>
+  conj_tac
+  >- (rpt strip_tac >> simp[] >> irule typed_dynarray_equal_exterior >>
+      gns[type_memory_size_def, Excl "LE_MULT_RCANCEL"] >> decide_tac) >>
+  conj_tac
+  >- (qpat_x_assum `u with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+      qpat_x_assum `s.vs_current_bb = sa.cs_current_bb` mp_tac >>
+      qpat_x_assum `s.vs_inst_idx = LENGTH sa.cs_current_insts` mp_tac >>
+      rpt (pop_assum kall_tac) >>
+      simp[venom_state_component_equality] >> metis_tac[]) >>
+  fs[lookup_var_def]
 QED
 Resume typed_store_rank_path_mem[tuple]:
   `?stys. sty = TupleT stys` by metis_tac[typed_copy_tuple_widening] >>
@@ -611,3 +678,44 @@ Resume typed_store_rank_path_mem[struct_rank_call]:
   simp[] >> metis_tac[]
 QED
 Finalise typed_store_rank_path_mem
+
+
+Theorem compile_store_memory_typed_path_mem:
+  acyclic_struct_metadata ce.ce_struct_fields /\
+  sfields_tenv_consistent ce.ce_struct_fields tenv /\
+  (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv. evaluate_type tenv fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  type_widens_to tenv sty dty /\
+  evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+  value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+  compile_store_memory_typed ce dst dty src sty sa = ((),sb) /\
+  val_in_memory stv v (w2n sw) s.vs_memory /\
+  w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+  w2n dw + type_memory_size dtv <= s.vs_alloca_next /\
+  w2n sw + type_memory_size stv < dimword(:256) /\
+  w2n dw + type_memory_size dtv < dimword(:256) /\
+  (w2n sw + type_memory_size stv <= w2n dw \/
+    w2n dw + type_memory_size dtv <= w2n sw) /\
+  (emitted_blocks sa sb <> [] ==>
+    ?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
+      phi_prefix_length bb.bb_instructions = 0) /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
+  (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) ==>
+  ?t. gas_path_mem ctx fn s 0 (OK t) /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    val_in_memory dtv v (w2n dw) t.vs_memory /\
+    (!p k. p+k <= w2n dw \/ w2n dw+type_memory_size dtv <= p ==>
+      mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
+      vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> irule typed_store_rank_path_mem >> simp[] >>
+  goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  simp[] >> qexistsl_tac [`stv`, `tenv`] >> simp[ADD_COMM] >> metis_tac[]
+QED
