@@ -1,10 +1,10 @@
 Theory abiBuiltinEncodeAllocate
 Ancestors
   abiBuiltinEncodeCode abiBuiltinAllocation abiDecoderReentry abiDecoderContract context
-  compileEnv emitHelper emitHelperProps exprLoweringProps venomInst words list rich_list
+  compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps venomInst words list rich_list
   arithmetic abiBuiltinSetupFrames abiBuiltinPrefix abiEncoderBytesPrefix abiEncoderSequence
   abiDecoderDynamicLoopSetup abiDecoderGuards abiDecoderLoop fragExec instIdxIndep venomState
-  venomExecSemantics finite_map
+  venomExecSemantics finite_map abiDecoderRange
 
 (* ===== Code ===== *)
 

@@ -3,7 +3,7 @@ Ancestors
   placeMemoryDeadSuffix placeMemoryFieldRebuild placeMemoryIndexRebuild
   vyperTypeDefaults exprSimProps
   vyperPlaceStatePreservation vyperAssignPreservesType vyperValueOperation
-  exprSimAggregateEncoding exprSimPop valueEncoding valueEncodingProps valueEncodingTyping
+  exprSimAggregateEncoding exprSimPop valueEncoding valueEncodingDefs valueEncodingProps valueEncodingTyping
   placeMemoryTypedBase vyperState vyperTyping loweringPosts arithmetic list rich_list alist
 
 Theorem typed_memory_step_read:

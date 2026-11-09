@@ -27,7 +27,7 @@
 
 Theory algebraicOptDefs
 Ancestors
-  passSimulationDefs passSharedDefs dfgDefs dfgAnalysisProps rangeAnalysisDefs
+  passTransform passSharedDefs dfgDefs rangeAnalysisDefs
   venomExecSemantics venomInst
 Libs
   pred_setTheory integerTheory

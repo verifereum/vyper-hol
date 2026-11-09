@@ -10,13 +10,14 @@ Ancestors
   vyperABI contractABI venomState venomExecSemantics words list pair arithmetic
 
 Theorem abi_valid_singleton_prefix_decode_offset:
-  compile_abi_decode_to_buf dst src opc hi
+  compile_abi_decode_to_buf dst src opc base_op hi
     (DecComplex T [(type_to_abi_dec_info sf ce ty,32,type_memory_bytes ce ty)])
-    start = ((),end_st) /\ fn_has_code start end_st func /\
+    start = ((),end_st) /\ (base_op = Lit 0w \/ opc = MLOAD) /\
+  fn_has_code start end_st func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
-  abi_valid_singleton_prefix_pre ce env sf ty tv bs av v start src dst opc hi sb d b cap initial /\
+  abi_valid_singleton_prefix_pre ce env sf ty tv bs av v start src dst opc base_op hi B sb d b cap initial /\
   dec_info_needs_offset (type_to_abi_dec_info sf ce ty) /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
@@ -40,7 +41,7 @@ Proof
   drule_all abi_valid_dynamic_singleton_trace >> strip_tac >>
   drule_all abi_valid_singleton_child_code >> strip_tac >>
   Cases_on `ops` >> RULE_ASSUM_TAC (SIMP_RULE bool_ss [FST, SND]) >>
-  rename1 `abi_decode_singleton_setup dst src opc hi start = ((childsrc,childdst),middle)` >>
+  rename1 `abi_decode_singleton_setup dst src opc base_op hi start = ((childsrc,childdst),middle)` >>
   `middle.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   drule_all abi_valid_singleton_prefix_entry >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func initial prepared` >>
@@ -50,8 +51,8 @@ Proof
   >- asm_simp_tac bool_ss [] >>
   mp_tac (Q.INST [`start` |-> `middle`, `end_st` |-> `end_st`,
     `initial` |-> `prepared:venom_state`, `dst` |-> `childdst`, `src` |-> `childsrc`,
-    `sb` |-> `sb + abi_head_word bs`] abi_decoder_decode) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
+    `src_base` |-> `B`, `sb` |-> `sb + abi_head_word bs`] abi_decoder_decode) >>
+  impl_tac >- (asm_simp_tac (srw_ss()) [abi_decoder_entry_floor_def] >> decide_tac) >> strip_tac >>
   rename1 `val_in_memory tv v d actual.vs_memory` >>
   `abi_decoder_effect first last start.cs_next_id end_st.cs_next_id start.cs_next_var
       limit_st d (type_memory_bytes ce ty) b cap initial actual` by
@@ -66,9 +67,9 @@ Proof
 QED
 
 Theorem abi_valid_singleton_parent_pre:
-  abi_valid_singleton_prefix_pre ce env sf ty tv bs av v st src dst opc hi sb d b cap initial ==>
+  abi_valid_singleton_prefix_pre ce env sf ty tv bs av v st src dst opc base_op hi B sb d b cap initial ==>
   abi_decoder_valid_pre ce env sf (TupleT [ty]) (TupleTV [tv]) bs
-    (ArrayV (TupleV [v])) st src dst opc hi sb d b cap initial
+    (ArrayV (TupleV [v])) st src dst opc base_op hi B sb d b cap initial
 Proof
   simp_tac bool_ss [abi_valid_singleton_prefix_pre_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -89,14 +90,15 @@ Proof
 QED
 
 Theorem abi_valid_singleton_prefix_decode:
-  compile_abi_decode_to_buf dst src opc hi
+  compile_abi_decode_to_buf dst src opc base_op hi
     (DecComplex T [(type_to_abi_dec_info sf ce ty,32,type_memory_bytes ce ty)])
-    start = ((),end_st) /\ fn_has_code start end_st func /\
+    start = ((),end_st) /\ (base_op = Lit 0w \/ opc = MLOAD) /\
+  fn_has_code start end_st func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
-  abi_valid_singleton_prefix_pre ce env sf ty tv bs av v start src dst opc hi sb d b cap initial /\
-  abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
+  abi_valid_singleton_prefix_pre ce env sf ty tv bs av v start src dst opc base_op hi B sb d b cap initial /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor start /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = start.cs_current_bb /\

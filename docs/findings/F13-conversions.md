@@ -34,12 +34,12 @@ all are the original fixture's compiled calldata.
 
 | Fix | Durable exact current regressions | Affected unchanged source fixture |
 |---|---|---|
-| TASK010 | [decimal](../../tests/vyperDecimalConvertTestScript.sml): `decimal_convert_signed_scaled_boundary`, `decimal_convert_boundaries_eval`, `decimal_convert_boundaries_cv` | [scalar_convert_decimal](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/scalar_convert_decimal.vy) |
-| TASK011 | [address](../../tests/vyperBytesAddressConvertTestScript.sml): `bytes_address_boundaries_eval`, `bytes_address_all_fixed_lengths_cv`, `bytes_address_fixture_runtime_checked` / `deployment_checked` | [scalar_convert_bytes32_to_address](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/scalar_convert_bytes32_to_address.vy) |
-| TASK012 | [decimal bytes](../../tests/vyperBytesDecimalConvertTestScript.sml): `bytes_decimal_boundaries_eval`, `bytes_decimal_all_fixed_lengths_cv`, `bytes_decimal_fixture_runtime_checked` / `deployment_checked` | [scalar_convert_bytes32_to_decimal](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/scalar_convert_bytes32_to_decimal.vy) |
-| TASK013 | [fixed bytes](../../tests/vyperFixedBytesConvertTestScript.sml): `fixed_bytes_narrow_success_iff`, `fixed_bytes_all_length_pairs_cv`, `fixed_bytes_fixture_runtime_checked` / `deployment_checked` | [scalar_convert_bytes32_to_bytes4](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/scalar_convert_bytes32_to_bytes4.vy) |
+| TASK010 | [decimal](../../tests/vyperDecimalConvertTestScript.sml): `decimal_convert_signed_scaled_boundary`, `decimal_convert_boundaries_eval`, `decimal_convert_boundaries_cv` | [scalar_convert_decimal](../../bytecode/python-o1-no-asm-opt-sources/scalar_convert_decimal.vy) |
+| TASK011 | [address](../../tests/vyperBytesAddressConvertTestScript.sml): `bytes_address_boundaries_eval`, `bytes_address_all_fixed_lengths_cv`, `bytes_address_fixture_runtime_checked` / `deployment_checked` | [scalar_convert_bytes32_to_address](../../bytecode/python-o1-no-asm-opt-sources/scalar_convert_bytes32_to_address.vy) |
+| TASK012 | [decimal bytes](../../tests/vyperBytesDecimalConvertTestScript.sml): `bytes_decimal_boundaries_eval`, `bytes_decimal_all_fixed_lengths_cv`, `bytes_decimal_fixture_runtime_checked` / `deployment_checked` | [scalar_convert_bytes32_to_decimal](../../bytecode/python-o1-no-asm-opt-sources/scalar_convert_bytes32_to_decimal.vy) |
+| TASK013 | [fixed bytes](../../tests/vyperFixedBytesConvertTestScript.sml): `fixed_bytes_narrow_success_iff`, `fixed_bytes_all_length_pairs_cv`, `fixed_bytes_fixture_runtime_checked` / `deployment_checked` | [scalar_convert_bytes32_to_bytes4](../../bytecode/python-o1-no-asm-opt-sources/scalar_convert_bytes32_to_bytes4.vy) |
 
-Fixture HOL definitions are in [scalar fixtures](../../lowering/defs/bytecode/eval/evalCompilerSubsetScalarsScript.sml).
+Fixture HOL definitions are in [scalar fixtures](../../bytecode/eval/evalCompilerSubsetScalarsScript.sml).
 F16's first two checker failures are the same TASK011/012 defects, not two
 additional unfixed conversions. The unrelated signed int≥135→decimal lower
 rounding issue belongs to [F22](F22-outside-supported-lowering.md).

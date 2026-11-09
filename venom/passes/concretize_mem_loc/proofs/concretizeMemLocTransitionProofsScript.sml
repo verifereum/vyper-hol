@@ -5,6 +5,7 @@ Ancestors
   staticLayoutCompletionProofs staticLayoutAllocatorProofs
   staticLayoutFoldProofs staticLayoutWf concretizeMemLocDefs staticLayoutDefs
   passSimulationDefs passSharedDefs passSharedProps venomInst list fcgDefs
+  passTransform
 
 Theorem concretize_inst_with_positions_not_alloca[local]:
   static_alloca_items fn = SOME items /\

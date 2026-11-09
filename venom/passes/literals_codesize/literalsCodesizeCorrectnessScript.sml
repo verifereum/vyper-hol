@@ -136,12 +136,12 @@ Proof
            (fn_insts_blocks bbs))` by (
     Induct >>
     simp[venomInstTheory.fn_insts_blocks_def,
-         passSimulationDefsTheory.block_map_transform_def,
+         passTransformTheory.block_map_transform_def,
          listTheory.MAP_MAP_o, combinTheory.o_DEF,
          lit_codesize_inst_outputs]) >>
   gvs[venomWfTheory.ssa_form_def,
       literalsCodesizeDefsTheory.lit_codesize_function_def,
-      passSimulationDefsTheory.function_map_transform_def,
+      passTransformTheory.function_map_transform_def,
       venomInstTheory.fn_insts_def]
 QED
 

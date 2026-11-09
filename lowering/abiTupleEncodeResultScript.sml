@@ -1,6 +1,7 @@
 (* Composable execution results for the complete tuple producer. *)
 Theory abiTupleEncodeResult
 Ancestors
+  abiDecoderRange
   abiTupleEncodeSlot abiTupleEncodeInput abiTupleEncodeMemory abiTupleProps
   abiEncoderInputFrame abiDecoderReentry abiDecoderContract abiDecoderGuards
   abiDecoderFrameCompose compileEnv emitHelperProps exprLoweringProps

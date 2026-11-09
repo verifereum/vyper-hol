@@ -13,7 +13,7 @@ Ancestors
   gasOutcome gasSummary gasSummaryCompose gasExemptCert fragGasMode fragGasPath
   gasContext
   exprSimHypsDefs exprLoweringProps emitHelperProps emitHelper exprLowering
-  compileEnv fragExecMem supportedStmtTraverse supportedStmts supportedExprs
+  compileEnv loweringStateRelDefs fragExecMem supportedStmtTraverse supportedStmts supportedExprs
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants
   vyperTypeSystem vyperLookup vyperInterpreter vyperState
   venomInst venomState list rich_list finite_map

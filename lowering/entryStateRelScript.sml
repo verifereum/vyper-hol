@@ -20,7 +20,7 @@ Theory entryStateRel
 Ancestors
   list rich_list finite_map alist
   e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec
-  compileEnv compileVyper moduleLowering supportedProgram supportedNames
+  compileEnv loweringStateRelDefs compileVyper moduleLowering supportedProgram supportedNames
   supportedDecls immutableLocationProps immutableSectionRel immutableRelation
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractContext
   vyperInterpreter vyperState vyperContext vyperAST vyperValue vyperTypeDefaults

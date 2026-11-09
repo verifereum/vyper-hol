@@ -26,7 +26,7 @@ Proof
   strip_tac >> gvs[AllCaseEqs()] >>
   gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
       combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
-      raise_def, assert_def, adopt_call_outcome_INR_storage] >>
+      raise_def, assert_def, vyperTypeExtCallSoundnessTheory.adopt_call_outcome_INR] >>
   metis_tac[take_call_outcome_storage_suffix,
             take_adopt_call_outcome_storage_suffix]
 QED
@@ -44,7 +44,7 @@ Proof
   strip_tac >> gvs[AllCaseEqs()] >>
   gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
       combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
-      raise_def, adopt_call_outcome_INR_storage] >>
+      raise_def, vyperTypeExtCallSoundnessTheory.adopt_call_outcome_INR] >>
   metis_tac[take_call_outcome_storage_suffix,
             take_adopt_call_outcome_storage_suffix]
 QED
@@ -155,7 +155,7 @@ Proof
   strip_tac >> gvs[AllCaseEqs()] >>
   gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
       combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
-      raise_def, assert_def, adopt_call_outcome_INR_storage] >>
+      raise_def, assert_def, vyperTypeExtCallSoundnessTheory.adopt_call_outcome_INR] >>
   metis_tac[take_call_outcome_storage_suffix,
             take_adopt_call_outcome_storage_suffix]
 QED
