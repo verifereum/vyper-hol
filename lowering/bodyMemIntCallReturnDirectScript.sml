@@ -7,7 +7,7 @@
 Theory bodyMemIntCallReturnDirect
 Ancestors
   bodyMemoryDefs intCallReturnMem stmtSimReturn compileEnv valueEncoding
-  compileVyper internalReturnImmutableTypes internalReturnPathMem internalReturnStoreMem internalReturnSuffixMem internalReturnTupleMem
+  compileVyper internalReturnImmutableTypes internalReturnPathMem internalReturnStoreMem internalReturnSuffixMem internalReturnTupleMem internalReturnBytestringMem
 
 (* ADMITTED (leaf): the internal twin of loweringMemFrameRet's
    external_frame_ret_ok_mem's direct returns.  The compile env returns

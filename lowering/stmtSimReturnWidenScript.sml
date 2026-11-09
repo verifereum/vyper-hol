@@ -102,7 +102,7 @@ Proof
             typed_copy_tuple_widening, cj 2 stack_word_fits_eq]
 QED
 
-Theorem return_bytestring_expr_rel[local]:
+Theorem return_bytestring_expr_rel:
   type_widens_to (get_tenv cx) sty ty /\ is_bytestring_type ty /\
   evaluate_type (get_tenv cx) sty = SOME stv /\
   evaluate_type (get_tenv cx) ty = SOME dtv /\ value_has_type dtv v /\
