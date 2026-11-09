@@ -792,6 +792,102 @@ Proof
   gvs[listTheory.LIST_REL_EL_EQN] >> metis_tac[]
 QED
 
+Theorem MAP_ZIP_indices:
+  !xs ys indices.
+    LENGTH xs = LENGTH ys /\ EVERY (\i. i < LENGTH xs) indices ==>
+    MAP FST (MAP (\i. EL i (ZIP (xs,ys))) indices) = MAP (\i. EL i xs) indices /\
+    MAP SND (MAP (\i. EL i (ZIP (xs,ys))) indices) = MAP (\i. EL i ys) indices
+Proof
+  rpt strip_tac >> simp[listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  irule listTheory.MAP_CONG >> gvs[listTheory.EVERY_MEM, listTheory.EL_ZIP]
+QED
+
+Theorem sym_spill_restore_indices_steps:
+  !offsets saved indices p env ss stk initial_fmp.
+    LENGTH offsets = LENGTH saved /\
+    EVERY (\i. i < LENGTH offsets) indices /\
+    ALL_DISTINCT offsets /\ EVERY (\off. off < dimword(:256)) offsets /\
+    (!a b. MEM a offsets /\ MEM b offsets /\ a <> b ==>
+      a + 32 <= b \/ b + 32 <= a) /\
+    ss.sym_stack = saved ++ stk /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp
+      (MAP SOSpill offsets ++ MAP SORestore (MAP (\i. EL i offsets) indices))) ==>
+    ?out vals.
+      sym_steps p env (LENGTH (execute_plan initial_fmp
+        (MAP SOSpill offsets ++ MAP SORestore (MAP (\i. EL i offsets) indices))))
+        ss = SymOK out /\
+      out.sym_stack = REVERSE vals ++ stk /\
+      LIST_REL (\sv sv'. !fn ret op.
+        op_kind_ok fn ret op sv ==> op_kind_ok fn ret op sv')
+        (MAP (\i. EL i saved) indices) vals /\
+      out.sym_mem_labels = scratch_labels_store ss.sym_mem_labels (ZIP (offsets,saved)) /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp
+        (MAP SOSpill offsets ++ MAP SORestore (MAP (\i. EL i offsets) indices)))
+Proof
+  rpt strip_tac >>
+  `?out vals.
+    sym_steps p env (2 * LENGTH (ZIP (offsets,saved)) +
+      2 * LENGTH (MAP (\i. EL i (ZIP (offsets,saved))) indices)) ss = SymOK out /\
+    out.sym_stack = REVERSE vals ++ stk /\
+    LIST_REL (\sv sv'. !fn ret op.
+      op_kind_ok fn ret op sv ==> op_kind_ok fn ret op sv')
+      (MAP SND (MAP (\i. EL i (ZIP (offsets,saved))) indices)) vals /\
+    out.sym_mem_labels = scratch_labels_store ss.sym_mem_labels (ZIP (offsets,saved)) /\
+    out.sym_base.as_pc = ss.sym_base.as_pc +
+      (2 * LENGTH (ZIP (offsets,saved)) +
+      2 * LENGTH (MAP (\i. EL i (ZIP (offsets,saved))) indices))` by
+    (irule sym_spill_restore_schedule_steps >>
+     simp[listTheory.MAP_ZIP, listTheory.EVERY_MAP, combinTheory.o_DEF] >>
+     conj_tac
+     >- (rpt strip_tac >>
+         imp_res_tac listTheory.MEM_ZIP_MEM_MAP >> gvs[]) >>
+     conj_tac
+     >- (rw[listTheory.EVERY_MEM] >>
+         imp_res_tac listTheory.MEM_ZIP_MEM_MAP >> gvs[listTheory.EVERY_MEM]) >>
+     conj_tac
+     >- (gvs[listTheory.EVERY_MEM, listTheory.LENGTH_ZIP] >>
+         metis_tac[listTheory.EL_ZIP, listTheory.MEM_ZIP]) >>
+     qexists_tac `initial_fmp` >> simp[MAP_ZIP_indices]) >>
+  qexistsl_tac [`out`, `vals`] >>
+  gvs[MAP_ZIP_indices, doSwapSimTheory.execute_plan_spill_restore_length,
+      listTheory.LENGTH_ZIP]
+QED
+
+Theorem sym_kinds_zip_scratch_store:
+  !cp fn ret srest ps ps' ss out offsets saved top.
+    LENGTH offsets = LENGTH saved /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    (!op old off. FLOOKUP ps.ps_spilled op = SOME old /\ MEM off offsets ==>
+      old + 32 <= off \/ off + 32 <= old) /\
+    (!off b. MEM off offsets /\ in_mem_range off 32 b ==> context_spill_byte cp b) /\
+    ps'.ps_spilled = ps.ps_spilled /\
+    out.sym_mem_labels = scratch_labels_store ss.sym_mem_labels (ZIP (offsets,saved)) /\
+    out.sym_stack = top ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE ps'.ps_stack) top ==>
+    sym_kinds_ok cp fn ret srest ps' out
+Proof
+  rpt strip_tac >> rename1 `sym_kinds_ok cp0 fn ret srest ps' out` >>
+  `sym_kinds_ok cp0 fn ret srest (ps with ps_stack := ps'.ps_stack) out` by
+    (irule sym_kinds_scratch_store >> conj_tac
+     >- metis_tac[] >>
+     qexistsl_tac [`ss`, `ZIP (offsets,saved)`] >> simp[] >>
+     rpt strip_tac >> imp_res_tac listTheory.MEM_ZIP_MEM_MAP >>
+     gvs[] >> metis_tac[]) >>
+  gvs[sym_kinds_ok_def]
+QED
+
+Theorem scratch_labels_zip_store_outside:
+  !offsets saved labs R b.
+    LENGTH offsets = LENGTH saved /\
+    (!off b. MEM off offsets /\ in_mem_range off 32 b ==> R b) /\ ~R b ==>
+    FLOOKUP (scratch_labels_store labs (ZIP (offsets,saved))) b = FLOOKUP labs b
+Proof
+  rpt strip_tac >> irule scratch_labels_store_outside >>
+  irule scratch_ranges_outside >> qexists_tac `R` >> simp[] >>
+  rpt strip_tac >> imp_res_tac listTheory.MEM_ZIP_MEM_MAP >>
+  gvs[] >> metis_tac[]
+QED
+
 Theorem sym_scratch_indices_numeric:
   !items tail offsets indices ps ps' p env cp fn ret srest initial_fmp R ss.
     REVERSE ps.ps_stack = items ++ tail /\
@@ -829,62 +925,31 @@ Proof
   `LENGTH offsets = LENGTH saved` by
     metis_tac[listTheory.LIST_REL_LENGTH] >>
   `?out vals.
-    sym_steps p env (2 * LENGTH (ZIP (offsets,saved)) +
-      2 * LENGTH (MAP (\i. EL i (ZIP (offsets,saved))) indices)) ss = SymOK out /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp
+      (MAP SOSpill offsets ++ MAP SORestore (MAP (\i. EL i offsets) indices))))
+      ss = SymOK out /\
     out.sym_stack = REVERSE vals ++ (tailvals ++ srest) /\
     LIST_REL (\sv sv'. !fn ret op.
       op_kind_ok fn ret op sv ==> op_kind_ok fn ret op sv')
-      (MAP SND (MAP (\i. EL i (ZIP (offsets,saved))) indices)) vals /\
+      (MAP (\i. EL i saved) indices) vals /\
     out.sym_mem_labels = scratch_labels_store ss.sym_mem_labels (ZIP (offsets,saved)) /\
-    out.sym_base.as_pc = ss.sym_base.as_pc +
-      (2 * LENGTH (ZIP (offsets,saved)) +
-      2 * LENGTH (MAP (\i. EL i (ZIP (offsets,saved))) indices))` by
-    (irule sym_spill_restore_schedule_steps >>
-     simp[listTheory.MAP_ZIP, listTheory.EVERY_MAP, combinTheory.o_DEF] >>
-     conj_tac
-     >- (rpt strip_tac >>
-         imp_res_tac listTheory.MEM_ZIP_MEM_MAP >> gvs[]) >>
-     conj_tac
-     >- (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-         imp_res_tac listTheory.MEM_ZIP_MEM_MAP >> gvs[]) >>
-     conj_tac
-     >- (gvs[listTheory.EVERY_MEM, listTheory.LENGTH_ZIP] >>
-         metis_tac[listTheory.EL_ZIP, listTheory.MEM_ZIP]) >>
-     qexists_tac `initial_fmp` >>
-     `MAP FST (MAP (\i. EL i (ZIP (offsets,saved))) indices) =
-        MAP (\i. EL i offsets) indices` by
-       (simp[listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
-        irule listTheory.MAP_CONG >>
-        gvs[listTheory.EVERY_MEM] >> simp[listTheory.EL_ZIP]) >>
-     simp[]) >>
-  `MAP SND (MAP (\i. EL i (ZIP (offsets,saved))) indices) =
-     MAP (\i. EL i saved) indices` by
-    (simp[listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
-     irule listTheory.MAP_CONG >>
-     gvs[listTheory.EVERY_MEM] >> simp[listTheory.EL_ZIP]) >>
+    out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp
+      (MAP SOSpill offsets ++ MAP SORestore (MAP (\i. EL i offsets) indices)))` by
+    (irule sym_spill_restore_indices_steps >> gvs[]) >>
   `LIST_REL (op_kind_ok fn ret) (MAP (\i. EL i items) indices) vals` by
     (irule sym_selected_kinds_transport >> metis_tac[]) >>
-  qexists_tac `out` >>
-  gvs[doSwapSimTheory.execute_plan_spill_restore_length, listTheory.LENGTH_ZIP] >>
-  conj_tac
-  >- (rename1 `sym_kinds_ok cp0 fn ret srest ps' out` >>
-      `sym_kinds_ok cp0 fn ret srest (ps with ps_stack := ps'.ps_stack) out` by
-        (irule sym_kinds_scratch_store >>
-         conj_tac
-         >- (qexists_tac `REVERSE vals ++ tailvals` >>
-             simp[] >> irule listTheory.LIST_REL_APPEND_suff >>
-             simp[rich_listTheory.LIST_REL_REVERSE_EQ]) >>
-         qexistsl_tac [`ss`, `ZIP (offsets,saved)`] >> simp[] >>
-         rpt strip_tac >>
-         imp_res_tac listTheory.MEM_ZIP_MEM_MAP >> gvs[] >> metis_tac[]) >>
-      gvs[sym_kinds_ok_def]) >>
-  rpt strip_tac >>
-  qpat_x_assum `out.sym_mem_labels = _` SUBST1_TAC >>
-  irule scratch_labels_store_outside >>
-  irule scratch_ranges_outside >>
-  qexists_tac `R` >>
-  simp[] >> rpt strip_tac >>
-  imp_res_tac listTheory.MEM_ZIP_MEM_MAP >> gvs[] >> metis_tac[]
+  `LIST_REL (op_kind_ok fn ret) (REVERSE ps'.ps_stack)
+     (REVERSE vals ++ tailvals)` by
+    (simp[] >> irule listTheory.LIST_REL_APPEND_suff >>
+     simp[rich_listTheory.LIST_REL_REVERSE_EQ]) >>
+  `out.sym_stack = (REVERSE vals ++ tailvals) ++ srest` by simp[] >>
+  rename1 `sym_kinds_ok cp0 fn ret srest ps ss` >>
+  `!off b. MEM off offsets /\ in_mem_range off 32 b ==>
+    context_spill_byte cp0 b` by metis_tac[] >>
+  qexists_tac `out` >> simp[] >> conj_tac
+  >- (drule_all sym_kinds_zip_scratch_store >> simp[]) >>
+  rpt strip_tac >> simp[] >>
+  irule scratch_labels_zip_store_outside >> metis_tac[]
 QED
 
 Theorem sym_phi_prefix_frame_sim:
