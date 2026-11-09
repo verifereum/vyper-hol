@@ -26,7 +26,8 @@ Theorem typed_memory_array_element_forward_mem:
     (w2n sw + type_memory_size stv <= w2n dw \/
      w2n dw + type_memory_size dtv <= w2n sw) /\
     w2n sw + type_memory_size stv < dimword (:256) /\
-    w2n dw + type_memory_size dtv + 64 < dimword (:256) /\
+    w2n dw + type_memory_size dtv < dimword (:256) /\
+    type_memory_size dtv + 64 < dimword (:256) /\
     w2n sw + type_memory_size stv <= u.vs_alloca_next /\
     w2n dw + type_memory_size dtv <= u.vs_alloca_next /\
     compile_store_memory_typed cenv dp dt sp st a = ((),b) /\
@@ -51,7 +52,8 @@ Theorem typed_memory_array_element_forward_mem:
    w2n dw + i * type_memory_size dtv + type_memory_size dtv <=
      w2n sw + i * type_memory_size stv) /\
   w2n sw + i * type_memory_size stv + type_memory_size stv < dimword (:256) /\
-  w2n dw + i * type_memory_size dtv + type_memory_size dtv + 64 < dimword (:256) /\
+  w2n dw + i * type_memory_size dtv + type_memory_size dtv < dimword (:256) /\
+  type_memory_size dtv + 64 < dimword (:256) /\
   w2n sw + i * type_memory_size stv + type_memory_size stv <= s.vs_alloca_next /\
   w2n dw + i * type_memory_size dtv + type_memory_size dtv <= s.vs_alloca_next /\
   not_fresh_at sa counter /\
@@ -227,7 +229,8 @@ Theorem typed_memory_sarray_slow_forward_mem:
     (w2n sw + type_memory_size stv <= w2n dw \/
      w2n dw + type_memory_size dtv <= w2n sw) /\
     w2n sw + type_memory_size stv < dimword (:256) /\
-    w2n dw + type_memory_size dtv + 64 < dimword (:256) /\
+    w2n dw + type_memory_size dtv < dimword (:256) /\
+    type_memory_size dtv + 64 < dimword (:256) /\
     w2n sw + type_memory_size stv <= u.vs_alloca_next /\
     w2n dw + type_memory_size dtv <= u.vs_alloca_next /\
     compile_store_memory_typed cenv dp dt sp st a = ((),b) /\
@@ -253,7 +256,8 @@ Theorem typed_memory_sarray_slow_forward_mem:
   (w2n sw + N * type_memory_size stv <= w2n dw \/
    w2n dw + N * type_memory_size dtv <= w2n sw) /\
   w2n sw + N * type_memory_size stv < dimword (:256) /\
-  w2n dw + N * type_memory_size dtv + 64 < dimword (:256) /\
+  w2n dw + N * type_memory_size dtv < dimword (:256) /\
+  N * type_memory_size dtv + 64 < dimword (:256) /\
   w2n sw + N * type_memory_size stv <= s.vs_alloca_next /\
   w2n dw + N * type_memory_size dtv <= s.vs_alloca_next /\
   N < dimword (:256) /\
@@ -401,7 +405,8 @@ Theorem typed_memory_sarray_fast_forward_mem:
   evaluate_type tenv (ArrayT det (Fixed n)) = SOME dtv /\
   val_wf dtv v /\ val_in_memory stv v (w2n sw) s.vs_memory /\
   type_memory_bytes cenv (ArrayT det (Fixed n)) = type_memory_size dtv /\
-  w2n dw + type_memory_size dtv + 64 < dimword (:256) /\
+  w2n dw + type_memory_size dtv < dimword (:256) /\
+    type_memory_size dtv + 64 < dimword (:256) /\
   w2n sw + type_memory_size stv <= s.vs_alloca_next /\
   w2n dw + type_memory_size dtv <= s.vs_alloca_next /\
   fn_has_code sa sb func /\ ~s.vs_halted /\

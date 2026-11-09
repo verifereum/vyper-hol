@@ -74,7 +74,8 @@ Theorem typed_memory_fields_forward_mem:
   (w2n sw + soff + type_memory_size_list stvs <= w2n dw + doff \/
    w2n dw + doff + type_memory_size_list dtvs <= w2n sw + soff) /\
   w2n sw + soff + type_memory_size_list stvs < dimword (:256) /\
-  w2n dw + doff + type_memory_size_list dtvs + 64 < dimword (:256) /\
+  w2n dw + doff + type_memory_size_list dtvs < dimword (:256) /\
+  type_memory_size_list dtvs + 64 < dimword (:256) /\
   w2n sw + soff + type_memory_size_list stvs <= s.vs_alloca_next /\
   w2n dw + doff + type_memory_size_list dtvs <= s.vs_alloca_next /\
   compile_typed_copy_fields cenv dst src dts sts doff soff sa = ((),sb) /\
@@ -95,7 +96,8 @@ Theorem typed_memory_fields_forward_mem:
     (w2n sw + type_memory_size stv <= w2n dw \/
      w2n dw + type_memory_size dtv <= w2n sw) /\
     w2n sw + type_memory_size stv < dimword (:256) /\
-    w2n dw + type_memory_size dtv + 64 < dimword (:256) /\
+    w2n dw + type_memory_size dtv < dimword (:256) /\
+    type_memory_size dtv + 64 < dimword (:256) /\
     w2n sw + type_memory_size stv <= u.vs_alloca_next /\
     w2n dw + type_memory_size dtv <= u.vs_alloca_next /\
     compile_store_memory_typed cenv dp dt sp st a = ((),b) /\
@@ -280,7 +282,8 @@ Theorem typed_memory_struct_forward_mem:
   (w2n sw + soff + type_memory_size_list tvs <= w2n dw + doff \/
    w2n dw + doff + type_memory_size_list tvs <= w2n sw + soff) /\
   w2n sw + soff + type_memory_size_list tvs < dimword (:256) /\
-  w2n dw + doff + type_memory_size_list tvs + 64 < dimword (:256) /\
+  w2n dw + doff + type_memory_size_list tvs < dimword (:256) /\
+  type_memory_size_list tvs + 64 < dimword (:256) /\
   w2n sw + soff + type_memory_size_list tvs <= s.vs_alloca_next /\
   w2n dw + doff + type_memory_size_list tvs <= s.vs_alloca_next /\
   compile_struct_typed_copy cenv dst src fields fields doff soff sa = ((),sb) /\
@@ -301,7 +304,8 @@ Theorem typed_memory_struct_forward_mem:
     (w2n sw + type_memory_size stv <= w2n dw \/
      w2n dw + type_memory_size dtv <= w2n sw) /\
     w2n sw + type_memory_size stv < dimword (:256) /\
-    w2n dw + type_memory_size dtv + 64 < dimword (:256) /\
+    w2n dw + type_memory_size dtv < dimword (:256) /\
+    type_memory_size dtv + 64 < dimword (:256) /\
     w2n sw + type_memory_size stv <= u.vs_alloca_next /\
     w2n dw + type_memory_size dtv <= u.vs_alloca_next /\
     compile_store_memory_typed cenv dp dt sp st a = ((),b) /\

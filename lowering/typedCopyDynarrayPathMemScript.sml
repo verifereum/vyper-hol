@@ -319,7 +319,8 @@ Theorem typed_memory_dynarray_slow_forward_mem:
     (w2n sw + type_memory_size stv <= w2n dw \/
      w2n dw + type_memory_size dtv <= w2n sw) /\
     w2n sw + type_memory_size stv < dimword (:256) /\
-    w2n dw + type_memory_size dtv + 64 < dimword (:256) /\
+    w2n dw + type_memory_size dtv < dimword (:256) /\
+    type_memory_size dtv + 64 < dimword (:256) /\
     w2n sw + type_memory_size stv <= u.vs_alloca_next /\
     w2n dw + type_memory_size dtv <= u.vs_alloca_next /\
     compile_store_memory_typed cenv dp dt sp st a = ((),b) /\
@@ -345,7 +346,8 @@ Theorem typed_memory_dynarray_slow_forward_mem:
   (w2n sw + type_memory_size (ArrayTV stv (Dynamic scap)) <= w2n dw \/
    w2n dw + type_memory_size (ArrayTV dtv (Dynamic cap)) <= w2n sw) /\
   w2n sw + type_memory_size (ArrayTV stv (Dynamic scap)) < dimword (:256) /\
-  w2n dw + type_memory_size (ArrayTV dtv (Dynamic cap)) + 64 < dimword (:256) /\
+  w2n dw + type_memory_size (ArrayTV dtv (Dynamic cap)) < dimword (:256) /\
+  type_memory_size (ArrayTV dtv (Dynamic cap)) + 64 < dimword (:256) /\
   w2n sw + type_memory_size (ArrayTV stv (Dynamic scap)) <= s.vs_alloca_next /\
   w2n dw + type_memory_size (ArrayTV dtv (Dynamic cap)) <= s.vs_alloca_next /\
   cap < dimword (:256) /\
