@@ -1,8 +1,8 @@
 Theory loadElimDynamicCapture
 Ancestors
-  loadElimReachedBatchSuccess loadElimInitialEntryActions
+  loadElimStructuralBatchSuccess loadElimInitialEntryActions
   loadElimOccurrenceInversion loadElimActionFreshness loadElimHistoryHelpers
-  loadElimReachedSourceAgreement loadElimOriginHelpers list finite_map
+  loadElimStructuralCapture loadElimOriginHelpers list finite_map
 
 (* The successful source batch remains explicit, just as in the noninitial
    interface. No agreement on generated variables is required. *)
@@ -17,8 +17,6 @@ Theorem le_occ_prefix_all_entries_phis_success:
     load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
     (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
     (load_analyze ctx fn) /\
-  (!bb' n fuel u' t'. MEM (StepOcc bb' n fuel u' t')
-    (pre ++ PhiOcc bb u p :: suffix) ==> dfg_assigns_sound ctx.lctx_dfg u') /\
   r.vs_prev_bb = u.vs_prev_bb /\
   DISJOINT G (set (fn_all_vars fn)) /\
   (!v. v NOTIN G ==> lookup_var v u = lookup_var v r) /\
@@ -36,7 +34,7 @@ Proof
       `fn_entry_label fn = SOME bb.bb_label` by
         metis_tac[venomExecPropsTheory.lookup_block_label] >>
       drule_all le_entry_phis_empty >> simp[] >> metis_tac[]) >>
-  irule le_occ_prefix_collected_phis_success_disjoint >> metis_tac[]
+  irule le_occ_prefix_collected_phis_success_disjoint_structural >> metis_tac[]
 QED
 
 Theorem le_occ_prefix_collected_action_capture:
@@ -52,8 +50,6 @@ Theorem le_occ_prefix_collected_action_capture:
     load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
     (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
     (load_analyze ctx fn) /\
-  (!bb' n fuel u' t'. MEM (StepOcc bb' n fuel u' t')
-    (pre ++ PhiOcc bb u p :: suffix) ==> dfg_assigns_sound ctx.lctx_dfg u') /\
   r.vs_prev_bb = u.vs_prev_bb /\
   DISJOINT G (set (fn_all_vars fn)) /\
   (!v. v NOTIN G ==> lookup_var v u = lookup_var v r) /\
@@ -77,7 +73,7 @@ Proof
      (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn))` by
     metis_tac[le_collected_action_outputs_distinct] >>
   drule collect_phi_actions_member >> strip_tac >>
-  drule_all le_occ_prefix_phi_selected_source_capture_disjoint >> strip_tac >>
+  drule_all le_occ_prefix_phi_selected_source_capture_disjoint_structural >> strip_tac >>
   metis_tac[]
 QED
 
@@ -96,8 +92,6 @@ Theorem le_occ_prefix_collected_action_history:
     load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
     (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
     (load_analyze ctx fn) /\
-  (!bb' n fuel u' t'. MEM (StepOcc bb' n fuel u' t')
-    (pre ++ PhiOcc bb u p :: suffix) ==> dfg_assigns_sound ctx.lctx_dfg u') /\
   r.vs_prev_bb = u.vs_prev_bb /\
   DISJOINT G (set (fn_all_vars fn)) /\
   (!v. v NOTIN G ==> lookup_var v u = lookup_var v r) /\
@@ -128,8 +122,6 @@ Theorem le_occ_prefix_collected_action_success_capture:
     load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
     (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
     (load_analyze ctx fn) /\
-  (!bb' n fuel u' t'. MEM (StepOcc bb' n fuel u' t')
-    (pre ++ PhiOcc bb u p :: suffix) ==> dfg_assigns_sound ctx.lctx_dfg u') /\
   r.vs_prev_bb = u.vs_prev_bb /\
   DISJOINT G (set (fn_all_vars fn)) /\
   (!v. v NOTIN G ==> lookup_var v u = lookup_var v r) /\
