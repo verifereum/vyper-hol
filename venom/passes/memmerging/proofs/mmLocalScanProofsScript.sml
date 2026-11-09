@@ -4578,6 +4578,70 @@ Proof
   metis_tac[]
 QED
 
+(* Capture only the memory projection: bookkeeping is not part of the event. *)
+Theorem mm_local_capture_store[local]:
+  inst.inst_opcode = MSTORE /\ inst.inst_operands = [Lit dst; Var v] /\
+  lookup_var v s = SOME (mload src s) /\
+  step_inst fuel ctx inst s = OK t ==>
+  t.vs_memory =
+    (write_memory_with_expansion (w2n dst) (read_memory src 32 s) s).vs_memory
+Proof
+  strip_tac >>
+  `step_inst_base inst s = OK t` by
+    (qpat_x_assum `step_inst fuel ctx inst s = OK t` mp_tac >>
+     simp[venomExecSemanticsTheory.step_inst_non_invoke]) >>
+  gvs[venomExecSemanticsTheory.step_inst_base_def,
+      venomExecSemanticsTheory.exec_write2_def,
+      venomStateTheory.eval_operand_def] >>
+  simp[mload_mstore_eq_mcopy_state, venomExecSemanticsTheory.mcopy_def,
+       venomStateTheory.read_memory_def]
+QED
+
+Theorem mm_local_capture_copy[local]:
+  inst.inst_opcode = MCOPY /\
+  inst.inst_operands = [Lit dst; Lit src; Lit len] /\
+  step_inst fuel ctx inst s = OK t ==>
+  t.vs_memory =
+    (write_memory_with_expansion (w2n dst)
+      (read_memory (w2n src) (w2n len) s) s).vs_memory
+Proof
+  strip_tac >>
+  `step_inst_base inst s = OK t` by
+    (qpat_x_assum `step_inst fuel ctx inst s = OK t` mp_tac >>
+     simp[venomExecSemanticsTheory.step_inst_non_invoke]) >>
+  gvs[venomExecSemanticsTheory.step_inst_base_def,
+      venomStateTheory.eval_operand_def] >>
+  simp[venomExecSemanticsTheory.mcopy_def, venomStateTheory.read_memory_def]
+QED
+
+Theorem mm_local_capture_store_post_phis[local]:
+  wf_ssa fn0 /\ wf_function fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  h = phi_prefix_length bb.bb_instructions /\ h <= j /\ j < LENGTH bb.bb_instructions /\
+  LENGTH states = SUC (j-h) /\
+  eval_phis s bb.bb_instructions = OK s_phi /\
+  EL 0 states = s_phi with vs_inst_idx := h /\
+  (!r. r < j-h ==>
+    ~is_terminator (EL (h+r) bb.bb_instructions).inst_opcode /\
+    ?t. step_inst fuel ctx (EL (h+r) bb.bb_instructions) (EL r states) = OK t /\
+        EL (SUC r) states = t with vs_inst_idx := SUC (EL r states).vs_inst_idx) /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state
+      (TAKE j bb.bb_instructions) /\
+  inst = EL j bb.bb_instructions /\ inst.inst_opcode = MSTORE /\
+  inst.inst_operands = [Lit dst; Var v] /\ FLOOKUP ss.ss_loads v = SOME src /\
+  step_inst fuel ctx inst (EL (j-h) states) = OK t ==>
+  t.vs_memory = (write_memory_with_expansion (w2n dst)
+    (read_memory src 32 (EL (j-h) states)) (EL (j-h) states)).vs_memory
+Proof
+  strip_tac >>
+  `!u a. FLOOKUP ss.ss_loads u = SOME a ==>
+     lookup_var u (EL (j-h) states) = SOME (mload a (EL (j-h) states))` by
+    (match_mp_tac mm_local_live_load_post_phis >> simp[]) >>
+  irule mm_local_capture_store >> metis_tac[]
+QED
+
 Theorem mm_local_known_value_frame[local]:
   lookup_var x s = SOME value /\ step_inst_base inst s = OK t /\
   ~MEM (Var x) inst.inst_operands /\ ~MEM x inst.inst_outputs ==>
