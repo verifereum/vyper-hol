@@ -592,6 +592,21 @@ Proof
   simp[venom_state_fupdcanon]
 QED
 
+Theorem taint_agree_call_abort:
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\
+  MEM inst.inst_opcode [CALL; STATICCALL] /\
+  step_inst_base inst s = Abort a s' ==>
+  ?t'. step_inst_base inst t = Abort a t'
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule taint_agree_external_operands >>
+     qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `taint_ok _ _ _ _` (irule_at Any) >> simp[] >> fs[MEM]) >>
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
+  fs[MEM] >> gvs[step_inst_base_opcode_eqs, AllCaseEqs(), exec_ext_call_def]
+QED
+
 Theorem taint_agree_mcopy:
   taint_agree D X tn s t /\
   (!k. k < len /\ src+k NOTIN tn.t_mem ==>
