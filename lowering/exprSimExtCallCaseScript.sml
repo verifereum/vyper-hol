@@ -197,6 +197,7 @@ Definition extcall_returned_def:
     ~t.vs_halted /\ t.vs_current_bb = sr.cs_current_bb /\
     t.vs_inst_idx = LENGTH sr.cs_current_insts /\ ee.gas_obs = [] /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+    accounts_runtime_well_typed ee.accounts /\
     sa.cs_next_var <= sr.cs_next_var /\ sa.cs_next_id <= sr.cs_next_id /\
     local_ptrs_reserved cenv sr /\
     EVERY (safe_operand sr) [addr_op; buf_op; default_op] /\
@@ -512,6 +513,12 @@ Resume extcall_call_step[call_success]:
     (drule vyperCallOutcomeTheory.take_call_outcome_frame >> disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
   `(SND (adopt_call_outcome rq oc consumed)).scopes = consumed.scopes` by
     (Cases_on `rq.cr_static` >> simp[vyperCallOutcomeTheory.adopt_call_outcome_equation]) >>
+  `accounts_runtime_well_typed (SND (adopt_call_outcome rq oc consumed)).accounts` by
+    (drule_at (Pat `take_call_outcome _ _ _ _ = _`)
+       vyperCallOutcomePropsTheory.take_adopt_call_outcome_typed >>
+     disch_then irule >>
+     simp[vyperCallOutcomeTheory.adopt_call_outcome_equation] >>
+     first_assum ACCEPT_TAC) >>
   `extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
       has_default default_op default_ty default_opt oc.co_returnData
       (SND (adopt_call_outcome rq oc consumed)) (jump_to sr.cs_current_bb u')` by
