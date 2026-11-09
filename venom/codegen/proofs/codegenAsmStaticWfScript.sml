@@ -7,12 +7,11 @@
 Theory codegenAsmStaticWf
 Ancestors
   codegenSymRel codegenAsmProgOk codegenEncodingWf codegen asmSymSem asmWf
-  asmOptimizer unitShapeDefs stackPlanGen venomWf
+  asmOptimizer unitShapeDefs stackPlanGen venomWf fnPlanCover
 
 Theorem codegen_asm_static_wf:
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
-  sym_unit_static_ok unit /\ codegen_ready unit.cu_context /\
-  ctx_wf unit.cu_context ==>
+  sym_unit_static_ok unit /\ codegen_ready unit.cu_context ==>
   asm_static_wf prog
 Proof
   cheat
