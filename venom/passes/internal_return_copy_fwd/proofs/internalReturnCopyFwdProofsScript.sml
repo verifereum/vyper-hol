@@ -273,15 +273,6 @@ QED
    3. Context-Level Transformation and Correctness (ircf_pass_correct)
    ========================================================================== *)
 
-Definition ircf_transform_ctx_def:
-  ircf_transform_ctx (fn_meta : (string, invoke_fn_meta) fmap)
-                     (rma : (string, bool list) fmap)
-                     (ctx : venom_context) : venom_context =
-    ctx with ctx_functions :=
-      MAP (ircf_transform_function fn_meta ctx.ctx_functions rma)
-          ctx.ctx_functions
-End
-
 Theorem ircf_transform_ctx_entry[simp]:
   !ctx fn_meta rma.
     (ircf_transform_ctx fn_meta rma ctx).ctx_entry = ctx.ctx_entry

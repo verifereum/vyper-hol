@@ -25,6 +25,7 @@
  *   ircf_try_forward          — try to forward a single mcopy
  *   ircf_transform_block      — transform all mcopy in a block
  *   ircf_transform_function   — function-level transform
+ *   ircf_transform_ctx        — context-level transform
  *)
 
 Theory internalReturnCopyFwdDefs
@@ -258,4 +259,14 @@ Definition ircf_transform_function_def:
       (F, []) fn.fn_blocks in
     let fn' = fn with fn_blocks := new_blocks in
     if changed then clear_nops_function fn' else fn'
+End
+
+(* Context-level transform: every function, against the original list. *)
+Definition ircf_transform_ctx_def:
+  ircf_transform_ctx (fn_meta : (string, invoke_fn_meta) fmap)
+                     (rma : (string, bool list) fmap)
+                     (ctx : venom_context) : venom_context =
+    ctx with ctx_functions :=
+      MAP (ircf_transform_function fn_meta ctx.ctx_functions rma)
+          ctx.ctx_functions
 End

@@ -76,7 +76,9 @@ Definition fn_run_rel_def:
       (Halt s, Halt s') => dead_result_rel D r r'
     | (Abort a s, Abort a' s') => dead_result_rel D r r'
     | (IntRet v s, IntRet v' s') =>
-        v' = v /\ ?G tn. R_ret stk PG G tn fn v s s'
+        v' = v /\
+        ?(G:(string, num # num) fmap) (tn:taint).
+          R_ret stk PG G tn fn v s s'
     | _ => F
 End
 
