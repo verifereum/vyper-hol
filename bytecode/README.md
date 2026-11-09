@@ -39,9 +39,10 @@ removed when a new pin includes them. The current series contains:
 - vyperlang/vyper#5239: a storage, transient or immutable variable is read at
   its own declared type, not at a wider expected type (such as an external
   call's parameter type), whose layout differs for nested bounded types.
+- vyperlang/vyper#5254: the inliner binds the unused return-PC parameter
+  to zero instead of the removed callee's label.
 
-Only fixtures with external calls that take arguments change. The
-provenance's `vyper_commit` names the unpatched base revision.
+The provenance's `vyper_commit` names the unpatched base revision.
 
 Name a new patch `<upstream-pr>-<slug>.patch`, and start it with the upstream
 PR URL and its merge status (including the merge commit when merged). Keep
