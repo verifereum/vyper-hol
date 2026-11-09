@@ -1672,3 +1672,69 @@ Proof
   qpat_x_assum `u = _ with vs_vars := _` SUBST1_TAC >>
   qpat_x_assum `v = _ with vs_vars := _` SUBST1_TAC >> simp[] >> metis_tac[]
 QED
+
+Theorem inline_opaque_available_fdom:
+  inline_opaque_available opaque s t <=>
+    opaque INTER FDOM s.vs_vars SUBSET FDOM t.vs_vars
+Proof
+  simp[inline_opaque_available_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_DEF, SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem inline_opaque_available_bind:
+  inline_opaque_available opaque s t /\
+  bind_outputs outs vals s = SOME u /\
+  bind_outputs outs vals' t = SOME v ==>
+  inline_opaque_available opaque u v
+Proof
+  strip_tac >>
+  qpat_assum `bind_outputs outs vals s = SOME u`
+    (mp_then Any assume_tac bind_outputs_fdom) >>
+  qpat_assum `bind_outputs outs vals' t = SOME v`
+    (mp_then Any assume_tac bind_outputs_fdom) >>
+  gvs[inline_opaque_available_fdom] >> ASM_SET_TAC[]
+QED
+
+Theorem inline_opaque_available_merge_adopt[simp]:
+  inline_opaque_available opaque
+    (adopt_return_fmp ir (merge_callee_state s u))
+    (adopt_return_fmp jr (merge_callee_state t v)) =
+  inline_opaque_available opaque s t
+Proof
+  Cases_on `ir.iret_adopt_fmp` >> Cases_on `jr.iret_adopt_fmp` >>
+  simp[inline_opaque_available_def, lookup_var_def, adopt_return_fmp_def,
+       merge_callee_state_def]
+QED
+
+Theorem inline_opaque_available_step:
+  inline_opaque_available opaque s t /\ inst_wf inst /\
+  step_inst f ctx inst s = OK u /\ step_inst g ctx' inst t = OK v ==>
+  inline_opaque_available opaque u v
+Proof
+  strip_tac >> Cases_on `is_terminator inst.inst_opcode`
+  >- (imp_res_tac step_terminator_preserves_vars >>
+      gvs[inline_opaque_available_def] >> metis_tac[]) >>
+  `inst.inst_opcode <> PHI` by metis_tac[step_inst_ok_imp_not_phi] >>
+  `FDOM u.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs` by
+    metis_tac[step_inst_fdom] >>
+  `FDOM v.vs_vars = FDOM t.vs_vars UNION set inst.inst_outputs` by
+    metis_tac[step_inst_fdom] >>
+  gvs[inline_opaque_available_fdom] >> ASM_SET_TAC[]
+QED
+
+Theorem inline_merge_adopt_lookup[simp]:
+  lookup_var x (adopt_return_fmp ir (merge_callee_state s u)) = lookup_var x s
+Proof
+  Cases_on `ir.iret_adopt_fmp` >>
+  simp[lookup_var_def, adopt_return_fmp_def, merge_callee_state_def]
+QED
+
+Theorem inline_opaque_available_call_bind:
+  inline_opaque_available opaque s t /\
+  bind_outputs outs ir.iret_values (adopt_return_fmp ir (merge_callee_state s u)) = SOME s' /\
+  bind_outputs outs jr.iret_values (adopt_return_fmp jr (merge_callee_state t v)) = SOME t' ==>
+  inline_opaque_available opaque s' t'
+Proof
+  strip_tac >> irule inline_opaque_available_bind >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
+QED
