@@ -1293,6 +1293,39 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Theorem sym_popmany_contiguous_numeric:
+  items <> [] /\
+  EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) items) /\
+  is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) items)) /\
+  popmany_plan items ps = (ops, ps') /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword (:256)
+    | SORestore off => off < dimword (:256) | _ => T) ops /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest ps' ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp ops) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled
+Proof
+  strip_tac >>
+  `LENGTH items < LENGTH ps.ps_stack` by
+    metis_tac[cleanOpsSimTheory.contiguous_top_stack_bound] >>
+  Cases_on `do_swap (LENGTH items) ps` >>
+  rename1 `do_swap (LENGTH items) ps = (swaps, swapped)` >>
+  `spill_alloc_layout_wf swapped.ps_alloc swapped.ps_spilled` by
+    metis_tac[doSwapSimTheory.do_swap_layout_wf, pairTheory.SND] >>
+  Cases_on `items` >- gvs[] >>
+  gvs[stackPlanOpsTheory.popmany_plan_def] >>
+  `SUC (LENGTH t) <= LENGTH ps.ps_stack` by simp[] >>
+  drule_all sym_swap_pop_numeric >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists_tac `ss'` >> gvs[]
+QED
+
 Theorem sym_popmany_numeric:
   popmany_plan items ps = (ops, ps') /\
   spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
@@ -1314,18 +1347,7 @@ Proof
   Cases_on `EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) items) /\
     is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) items))`
   >- (qpat_x_assum `_ /\ _` strip_assume_tac >>
-      `LENGTH items < LENGTH ps.ps_stack` by
-        metis_tac[cleanOpsSimTheory.contiguous_top_stack_bound] >>
-      Cases_on `do_swap (LENGTH items) ps` >>
-      rename1 `do_swap (LENGTH items) ps = (swaps, swapped)` >>
-      `spill_alloc_layout_wf swapped.ps_alloc swapped.ps_spilled` by
-        metis_tac[doSwapSimTheory.do_swap_layout_wf, pairTheory.SND] >>
-      Cases_on `items` >- gvs[] >>
-      gvs[stackPlanOpsTheory.popmany_plan_def] >>
-      `SUC (LENGTH t) <= LENGTH ps.ps_stack` by simp[] >>
-      drule_all sym_swap_pop_numeric >>
-      disch_then (qspec_then `env` strip_assume_tac) >>
-      qexists_tac `ss'` >> gvs[]) >>
+      drule_all sym_popmany_contiguous_numeric >> simp[]) >>
   `popmany_individual items ps = (ops,ps')` by
     metis_tac[cleanOpsSimTheory.popmany_plan_noncontig_new] >>
   qpat_x_assum `popmany_individual _ _ = _` mp_tac >>
@@ -1362,6 +1384,51 @@ Proof
   metis_tac[fnFrameStepsRevertForwardTheory.rf_release_spill_lookup]
 QED
 
+Theorem sym_invoke_cleanup_pops_numeric:
+  (if outs = [] then ([],called)
+   else if ~halting \/ LENGTH outs > 1 then
+     popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) outs)) called
+   else ([],called)) = (pops,popped) /\
+  spill_alloc_layout_wf called.ps_alloc called.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword (:256)
+    | SORestore off => off < dimword (:256) | _ => T) pops /\
+  (!off b. MEM (SOSpill off) pops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest called ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp pops) ==>
+  ?mid. sym_steps p env (LENGTH (execute_plan fmp pops)) ss = SymOK mid /\
+    sym_kinds_ok cplan fn ret srest popped mid /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp pops) /\
+    (!b. ~R b ==> FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    spill_alloc_layout_wf popped.ps_alloc popped.ps_spilled
+Proof
+  strip_tac >> Cases_on `outs = []`
+  >- (gvs[] >> qexists_tac `ss` >> simp[execute_plan_def, sym_steps_def]) >>
+  Cases_on `~halting \/ LENGTH outs > 1`
+  >- (gvs[] >> drule_all sym_popmany_numeric >> simp[]) >>
+  gvs[] >> qexists_tac `ss` >> simp[execute_plan_def, sym_steps_def]
+QED
+
+Theorem sym_invoke_cleanup_opts_numeric:
+  (if outs = [] \/ FILTER (\out. MEM out nl) outs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst nl term popped) = (opts,swapped) /\
+  spill_alloc_layout_wf popped.ps_alloc popped.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword (:256)
+    | SORestore off => off < dimword (:256) | _ => T) opts /\
+  (!off b. MEM (SOSpill off) opts /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest popped mid /\
+  asm_block_at p mid.sym_base.as_pc (execute_plan fmp opts) ==>
+  ?fin. sym_steps p env (LENGTH (execute_plan fmp opts)) mid = SymOK fin /\
+    sym_kinds_ok cplan fn ret srest swapped fin /\
+    fin.sym_base.as_pc = mid.sym_base.as_pc + LENGTH (execute_plan fmp opts) /\
+    (!b. ~R b ==> FLOOKUP fin.sym_mem_labels b = FLOOKUP mid.sym_mem_labels b)
+Proof
+  strip_tac >> Cases_on `outs = [] \/ FILTER (\out. MEM out nl) outs = []`
+  >- (gvs[] >> qexists_tac `mid` >> simp[execute_plan_def, sym_steps_def]) >>
+  gvs[] >> drule_all sym_optimistic_swap_numeric >> simp[]
+QED
+
 Theorem sym_invoke_cleanup_kinds_numeric:
   (if outs = [] then ([],called)
    else if ~halting \/ LENGTH outs > 1 then
@@ -1393,23 +1460,15 @@ Proof
     mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp pops) /\
     (!b. ~R b ==> FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
     spill_alloc_layout_wf popped.ps_alloc popped.ps_spilled` by
-    (Cases_on `outs = []`
-     >- (gvs[] >> qexists_tac `ss` >> simp[execute_plan_def, sym_steps_def]) >>
-     Cases_on `~halting \/ LENGTH outs > 1`
-     >- (gvs[] >> drule_all sym_popmany_numeric >> simp[]) >>
-     gvs[] >> qexists_tac `ss` >> simp[execute_plan_def, sym_steps_def]) >>
+    (drule_all sym_invoke_cleanup_pops_numeric >>
+     disch_then (qspec_then `env` strip_assume_tac) >> simp[]) >>
   `asm_block_at p mid.sym_base.as_pc (execute_plan fmp opts)` by
     metis_tac[arithmeticTheory.ADD_COMM] >>
   `?fin. sym_steps p env (LENGTH (execute_plan fmp opts)) mid = SymOK fin /\
     sym_kinds_ok cplan fn ret srest swapped fin /\
     fin.sym_base.as_pc = mid.sym_base.as_pc + LENGTH (execute_plan fmp opts) /\
     (!b. ~R b ==> FLOOKUP fin.sym_mem_labels b = FLOOKUP mid.sym_mem_labels b)` by
-    (Cases_on `outs = [] \/ FILTER (\out. MEM out nl) outs = []`
-     >- (gvs[] >> qexists_tac `mid` >> simp[execute_plan_def, sym_steps_def]) >>
-     gvs[] >>
-     `asm_block_at p mid.sym_base.as_pc (execute_plan fmp opts)` by
-       metis_tac[arithmeticTheory.ADD_COMM] >>
-     drule_all sym_optimistic_swap_numeric >>
+    (drule_all sym_invoke_cleanup_opts_numeric >>
      disch_then (qspec_then `env` strip_assume_tac) >> simp[]) >>
   qexists_tac `fin` >> conj_tac
   >- (once_rewrite_tac[arithmeticTheory.ADD_COMM] >> simp[Once sym_steps_add]) >>
@@ -1445,6 +1504,36 @@ Proof
      gvs[] >> metis_tac[sym_optimistic_spill_bounds]) >>
   simp[planSpillBoundsTheory.ops_spill_bounded_append] >>
   metis_tac[planSpillBoundsTheory.ops_spill_bounded_weaken]
+QED
+
+Theorem sym_invoke_cleanup_footprint:
+  (if outs = [] then ([],called)
+   else if ~halting \/ LENGTH outs > 1 then
+     popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) outs)) called
+   else ([],called)) = (pops,popped) /\
+  (if outs = [] \/ FILTER (\out. MEM out nl) outs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst nl term popped) = (opts,swapped) /\
+  final = release_dead_spills nl swapped /\
+  spill_alloc_layout_wf called.ps_alloc called.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  !off b. MEM (SOSpill off) (pops ++ opts) /\ in_mem_range off 32 b ==>
+    closure_spill_byte ctx cplan name b /\ context_spill_byte cplan b
+Proof
+  strip_tac >> drule_all sym_invoke_cleanup_spill_bounds >>
+  drule_all fnFrameBoundaryInvokeTheory.invoke_cleanup_alloc >>
+  disch_then strip_assume_tac >> disch_then assume_tac >>
+  rpt gen_tac >> strip_tac >>
+  `called.ps_alloc.sa_spill_base <= off /\
+   off + 32 <= final.ps_alloc.sa_next_offset` by
+    metis_tac[planSpillBoundsTheory.ops_spill_bounded_def] >>
+  `r.sr_spill_base <= b /\ b < r.sr_spill_end` by
+    (fs[in_mem_range_def] >> decide_tac) >>
+  conj_tac
+  >- (simp[closure_spill_byte_def] >> qexists_tac `r` >>
+      simp[fcgDefsTheory.fcg_path_def]) >>
+  simp[context_spill_byte_def] >> metis_tac[]
 QED
 
 Theorem sym_invoke_cleanup_numeric:
