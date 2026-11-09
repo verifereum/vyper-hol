@@ -944,6 +944,87 @@ Proof
   metis_tac[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM]
 QED
 
+Theorem sym_do_swap_big_numeric:
+  !dist ps ops ps' cplan fn ret srest ss p initial_fmp env R.
+  do_swap dist ps = (ops, ps') /\ dist > 16 /\
+  dist < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword (:256)
+    | SORestore off => off < dimword (:256) | _ => T) ops /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest ps' ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt strip_tac >>
+  drule_all doSwapSimTheory.do_swap_big_decompose >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  qmatch_goalsub_abbrev_tac `MAP SOSpill offs` >>
+  qmatch_goalsub_abbrev_tac `REVERSE desired` >>
+  strip_tac >> gvs[] >>
+  drule sym_kinds_ok_stack_chunk >>
+  disch_then (qspec_then `dist + 1` mp_tac) >> simp[] >> strip_tac >>
+  `LENGTH (top_n (dist + 1) ps.ps_stack) = dist + 1` by
+    metis_tac[LIST_REL_LENGTH, LENGTH_REVERSE] >>
+  `LENGTH offs = LENGTH (top_n (dist + 1) ps.ps_stack) /\ ALL_DISTINCT offs /\
+    (!a b i. MEM a offs /\ MEM b offs /\ a <> b /\ in_mem_range a 32 i ==>
+      ~in_mem_range b 32 i) /\
+    (!op old off b. FLOOKUP ps.ps_spilled op = SOME old /\ MEM off offs /\
+      in_mem_range old 32 b ==> ~in_mem_range off 32 b)` by
+    (irule sym_scratch_numeric_layout >> qexists_tac `ps.ps_alloc` >>
+     simp[Abbr `offs`]) >>
+  `EVERY (\off. off < dimword (:256)) offs` by gvs[EVERY_MAP] >>
+  `EVERY (\i. i < LENGTH (REVERSE (top_n (dist + 1) ps.ps_stack)))
+     (REVERSE desired)` by
+    (simp[Abbr `desired`, EVERY_APPEND, EVERY_GENLIST] >> decide_tac) >>
+  `LENGTH vals = LENGTH offs` by simp[] >>
+  `ss.sym_stack = vals ++ (tail ++ srest)` by metis_tac[APPEND_ASSOC] >>
+  drule_all sym_scratch_schedule_kinds >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  `REVERSE (MAP (\i. EL i (REVERSE (top_n (dist + 1) ps.ps_stack)))
+      (REVERSE desired)) =
+   REVERSE (MAP (\i. EL i (top_n (dist + 1) ps.ps_stack)) desired)` by
+    (pure_rewrite_tac[MAP_REVERSE, REVERSE_REVERSE] >>
+     qunabbrev_tac `desired` >>
+     irule (GSYM (PURE_REWRITE_RULE [APPEND] doSwapSimTheory.reverse_desired_values)) >>
+     simp[] >> decide_tac) >>
+  qexists_tac `ss'` >> simp[] >> reverse conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> rpt strip_tac >>
+      metis_tac[MEM_MAP]) >>
+  irule sym_kinds_ok_scratch_finish >>
+  conj_tac
+  >- (qexists_tac `top ++ tail` >>
+      simp[REVERSE_APPEND, LIST_REL_APPEND_suff, APPEND_ASSOC] >>
+      metis_tac[LIST_REL_APPEND_suff]) >>
+  qexistsl_tac [`offs`, `ps`, `ss`] >> simp[] >> metis_tac[MEM_MAP]
+QED
+
+Theorem sym_do_swap_numeric:
+  !dist ps ops ps' cplan fn ret srest ss p initial_fmp env R.
+  do_swap dist ps = (ops, ps') /\ dist < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword (:256)
+    | SORestore off => off < dimword (:256) | _ => T) ops /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest ps' ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt strip_tac >> Cases_on `dist <= 16`
+  >- (drule_all sym_do_swap_small >> disch_then (qspec_then `env` strip_assume_tac) >>
+      metis_tac[]) >>
+  irule sym_do_swap_big_numeric >> simp[] >>
+  metis_tac[arithmeticTheory.GREATER_DEF, arithmeticTheory.NOT_LESS]
+QED
+
 Theorem sym_invoke_frame_sim_deep:
   !fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
    next_liveness is_halting next_is_term bb_label base ps vs as ops ps' r ra
