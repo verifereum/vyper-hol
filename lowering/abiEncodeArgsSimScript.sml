@@ -266,7 +266,8 @@ Theorem abi_args_nil_sim:
     (\s. abi_args_post ctx func ce cx es sa sa s0 es [] [] [] s)
     (wb_args_exit (INL []))
 Proof
-  cheat
+  irule fragExecTheory.frag_exec_refl >> simp[abi_args_post_def, wb_frame_def] >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem abi_args_ready_head:
@@ -790,28 +791,34 @@ QED
 Theorem abi_args_vv_error_prefix:
   expr_vv_sim ctx func ce cx (expr_type e) e es /\
   compile_expr ce (expr_type e) e sa = (vv,mid) /\
-  eval_expr cx e es = (INR exc,es') /\
-  expr_res_ok (INR exc : value + exception) /\
   fn_has_code sa mid func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved ce sa /\ cs_extends sa mid /\ cs_extends mid sb ==>
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s)
-    Q (wb_args_exit (INR exc))
+  local_ptrs_reserved ce sa /\
+  gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
+  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
+    (\rr ee t. ?tv v. rr = INL tv /\
+       vv_post ctx func ce cx e es sa mid s0 ee tv vv t /\
+       read_result cx tv ee = (INL v,ee) /\
+       t.vs_current_bb = mid.cs_current_bb /\
+       t.vs_inst_idx = LENGTH mid.cs_current_insts)
+    (\rr ee r. expr_exit rr r)
 Proof
-  cheat
+  strip_tac >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_vv_sim_def] >>
+  disch_then (qspecl_then [`sa`, `mid`, `vv`, `s0`] mp_tac) >>
+  simp[] >>
+  simp[gasOutcomeTheory.gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >>
+  metis_tac[abi_args_vv_post_read]
 QED
 
 Theorem abi_args_vv_read_error_prefix:
-  expr_vv_sim ctx func ce cx (expr_type e) e es /\
-  compile_expr ce (expr_type e) e sa = (vv,mid) /\
-  eval_expr cx e es = (INL tvv,es') /\
-  read_result cx tvv es' = (INR exc,es') /\
-  expr_res_ok (INR exc : value + exception) /\
-  fn_has_code sa mid func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved ce sa /\ cs_extends sa mid /\ cs_extends mid sb ==>
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s)
-    Q (wb_args_exit (INR exc))
+  vv_post ctx func ce cx e es sa mid s0 ee tv vv t /\
+  read_result cx tv ee = (INR exc,ee') ==> F
 Proof
-  cheat
+  strip_tac >> drule abi_args_vv_post_read >> simp[]
 QED
 
 Theorem compile_abi_encode_args_sim_live:
