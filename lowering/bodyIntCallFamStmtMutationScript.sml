@@ -2,6 +2,7 @@
 Theory bodyIntCallFamStmtMutation
 Ancestors
   bodyIntCallJointContract bodyIntCallFamStmtMutationResource
+  bodyIntCallFamStmtMutationEffectful
   bodyIntCallFamStmtMutationLocalStore bodyIntCallFamStmtMutationResourceLanding
   bodyIntCallFamStmtMutationAppendSuffix bodyIntCallFamStmtMutationAppendExec
   bodyIntCallFamStmtMutationDeclEntry
