@@ -233,3 +233,61 @@ Proof
   simp[Abbr `mid`, asm_next_def,
        sym_state_component_equality, asm_state_component_equality]
 QED
+
+Theorem sym_mstore_word_step:
+  ss.sym_stack = Val off :: Val value :: tail /\
+  (!b. b IN FDOM ss.sym_mem_labels ==>
+       ~in_mem_range (w2n off) 32 b) ==>
+  sym_step p env (AsmOp "MSTORE") ss = SymOK
+    (ss with <| sym_base := ss.sym_base with <| as_stack := [];
+                  as_memory := mem_write32 (w2n off) value ss.sym_base.as_memory;
+                  as_pc := ss.sym_base.as_pc + 1 |>;
+                sym_stack := tail |> )
+Proof
+  strip_tac >>
+  `mem_labels_clear ss.sym_mem_labels (in_mem_range (w2n off) 32) =
+   ss.sym_mem_labels` by (irule mem_labels_clear_disjoint >> simp[]) >>
+  simp[sym_step_def, sym_step_op_def, sym_mstore_def,
+       sym_step_concrete_def, sym_lift_def, sval_val_def,
+       asm_op_arity_def, asm_op_arity_table_def,
+       asm_op_mem_reads_def, asm_op_mem_writes_def, log_table_def,
+       mem_labels_hit_def, asm_step_op_def, asm_step_arith_def,
+       asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+       asm_mstore_def, spillSimTheory.mem_write32_def, asm_next_def, sym_state_component_equality,
+       asm_state_component_equality]
+QED
+
+Theorem sym_istore_success_run:
+  ss.sym_stack = Val value :: Val off :: tail /\
+  (!b. b IN FDOM ss.sym_mem_labels ==>
+       ~in_mem_range (w2n off) 32 b) /\
+  asm_block_at p ss.sym_base.as_pc [AsmOp "SWAP1"; AsmOp "MSTORE"] ==>
+  codegenSymRel$sym_steps p env 2 ss = SymOK
+    (ss with <| sym_base := ss.sym_base with <| as_stack := [];
+                  as_memory := mem_write32 (w2n off) value ss.sym_base.as_memory;
+                  as_pc := ss.sym_base.as_pc + 2 |>;
+                sym_stack := tail |> )
+Proof
+  simp[asm_block_at_def] >> strip_tac >>
+  qpat_x_assum `!j. _` (fn th =>
+    map_every (fn n => qspec_then n mp_tac th) [`0`, `1`]) >>
+  simp[] >> rpt strip_tac >>
+  simp[codegenSymRelTheory.sym_steps_compute, Once sym_step_def,
+       Once sym_step_op_def, dup_table_def, swap_table_def, sym_swap_def,
+       sym_set_stack_def, asm_next_def, LUPDATE_compute] >>
+  qmatch_goalsub_abbrev_tac `sym_step p env (AsmOp "MSTORE") mid` >>
+  `mid.sym_stack = Val off :: Val value :: tail` by simp[Abbr `mid`] >>
+  drule sym_mstore_word_step >>
+  simp[Abbr `mid`, asm_next_def,
+       sym_state_component_equality, asm_state_component_equality]
+QED
+
+(* Contract diagnostic: the ordinary-instruction hypotheses must exclude
+   CODESIZE, which the symbolic semantics deliberately rejects. *)
+Theorem sym_codesize_contract_diagnostic:
+  ~is_pre_codegen_opcode CODESIZE /\
+  venom_to_evm_name CODESIZE = SOME "CODESIZE" /\
+  sym_step p env (AsmOp "CODESIZE") ss = SymBad "CODESIZE"
+Proof
+  EVAL_TAC
+QED
