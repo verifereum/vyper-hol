@@ -4,7 +4,11 @@ Theory bodySimCallIntcall
 Ancestors
   bodyIntCallSeams bodyIntCallSource bodySimExprCases exprSimHypsDefs exprSimDefs
   list bodySim exprSimHyps vyperAST vyperInterpreter vyperState
-  vyperContext vyperTypeCallGraph
+  vyperContext vyperTypeCallGraph exprSimSend exprLowering context
+  exprSimUnwrap exprSimMemoryRead
+  exprSimMemorySource exprSimProps exprLoweringProps gasOutcome gasSummary
+  gasSummaryCompose gasExemptCert gasContext fragGasPath fragGasMode fragExec
+  venomState compileEnv exprSimUnwrapProps
 
 (* The IHs at a supported callee (body_intcall_source_selection): not
    nonreentrant, no defaults, as many arguments as parameters. *)
@@ -84,6 +88,94 @@ Proof
        Once evaluate_def] >>
   qexistsl_tac [`penv`,`results`,`s1`,`s2`,`s2`,`t1`,`t2`,`s2`,`vs`] >>
   simp[return_def]
+QED
+
+Theorem compile_expr_intcall_location[local]:
+  !cenv ty ann src name args dflt sa vv sb.
+    compile_expr cenv ty (Call ann (IntCall (src,name)) args dflt) sa =
+      (vv,sb) ==>
+    ((?t op. vv = StackValue t op) \/
+     (?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory))
+Proof
+  rpt gen_tac >> simp[compile_expr_call, compile_call_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  gvs[AllCaseEqs(), base_ptr_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED
+
+Theorem expr_sim_of_vv_sim_stack_memory[local]:
+  !ctx func cenv cx ty e es.
+    expr_vv_sim ctx func cenv cx ty e es /\
+    (!sa vv sm. compile_expr cenv ty e sa = (vv,sm) ==>
+      ((?t op. vv = StackValue t op) \/
+       (?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory))) ==>
+    expr_sim ctx func cenv cx ty e es
+Proof
+  rw[expr_sim_def] >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[lower_value_def, comp_bind_def] >>
+  Cases_on `compile_expr cenv ty e sa` >> rename1 `_ = (vv,sm)` >>
+  simp[] >> strip_tac >>
+  drule compile_expr_extends >> strip_tac >>
+  drule unwrap_value_extends >> strip_tac >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
+    metis_tac[forced_expr_admissible_raw] >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_vv_sim_def] >>
+  disch_then (qspecl_then [`sa`, `sm`, `vv`, `s0`] mp_tac) >> simp[] >>
+  rewrite_tac[gas_outcome_def] >> strip_tac >>
+  qexists_tac `marks`
+  >- (disj1_tac >> gvs[gas_summary_at_def]
+      >- (`~t.vs_halted` by
+            metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+          qpat_x_assum `!sa vv sm. compile_expr _ _ _ _ = _ ==> _` drule >>
+          strip_tac >> gvs[]
+          >- (gvs[unwrap_value_def, comp_return_def] >>
+              `?v. read_result cx tv (es_end with gas_obs := []) =
+                   (INL v,es_end with gas_obs := [])` by
+                gvs[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def] >>
+              `vv_post ctx func cenv cx e es sa sb s0
+                (es_end with gas_obs := []) (Value v) (StackValue t' op) t` by
+                metis_tac[vv_post_read_result] >>
+              qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK t`] >>
+              simp[] >> conj_tac
+              >- (drule read_result_gas_obs >> strip_tac >>
+                  gvs[gas_marked_exec_def, vyperStateTheory.bind_def]) >>
+              metis_tac[expr_post_of_vv_post_stack]) >>
+          drule_all unwrap_memory_marked_read >> simp[] >> strip_tac >>
+          qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u`] >>
+          simp[] >>
+          `marks = marks ++ []` by simp[] >>
+          pop_assum SUBST1_TAC >> irule gas_marked_exec_bind_normal >>
+          goal_assum drule >> simp[]) >>
+      Cases_on `res`
+      >- (Cases_on `r` >> gvs[expr_exit_def]) >>
+      rename1 `expr_exit (INR exc) r` >>
+      `expr_res_ok (INR exc : value + exception)` by
+        (Cases_on `exc` >> Cases_on `r` >>
+         gvs[expr_exit_def, expr_res_ok_def, AllCaseEqs()] >>
+         Cases_on `e'` >> gvs[expr_exit_def, expr_res_ok_def]) >>
+      qexistsl_tac [`INR exc`, `es_end`, `r`] >>
+      simp[GSYM expr_exit_exception_transport] >>
+      irule gas_marked_exec_bind_exception >> goal_assum drule) >>
+  disj2_tac >> metis_tac[force_exempt_cert]
+QED
+
+(* A widened internal call is laid out at the callee's return type.
+   Its stack/memory result needs no post-value/annotation equality to force. *)
+Theorem intcall_sim_case_widened:
+  !ctx func cenv cx ann src name es dflt.
+    post_value_type cenv (Call ann (IntCall (src,name)) es dflt) <>
+      expr_type (Call ann (IntCall (src,name)) es dflt) /\
+    expr_vv_case F ctx func cenv cx (Call ann (IntCall (src,name)) es dflt) ==>
+    expr_sim_case F ctx func cenv cx (Call ann (IntCall (src,name)) es dflt)
+Proof
+  pure_rewrite_tac[expr_sim_case_def, expr_vv_case_def] >>
+  rpt strip_tac >> irule expr_sim_of_vv_sim_stack_memory >>
+  conj_tac >- metis_tac[compile_expr_intcall_location] >>
+  metis_tac[]
 QED
 
 (* GAP (#638 the call step): the INVOKE of an internal call.  The IHs
@@ -190,7 +282,13 @@ Theorem intcall_body_expr_ok:
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func cenv cx (Call v16 (IntCall (src_id_opt,fn)) es v17)`
-    suffices_by metis_tac[expr_sim_case_of_vv] >>
+    suffices_by
+      (strip_tac >> conj_tac >- (
+         Cases_on `post_value_type cenv (Call v16 (IntCall (src_id_opt,fn)) es v17) =
+                   expr_type (Call v16 (IntCall (src_id_opt,fn)) es v17)`
+         >- (irule expr_sim_case_of_vv >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         irule intcall_sim_case_widened >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+       first_assum ACCEPT_TAC) >>
   simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
   rename1 `expr_body_pre cenv cx tenv _ es0` >>
   drule_all body_intcall_source_selection >> strip_tac >>
