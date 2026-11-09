@@ -7,7 +7,7 @@ Ancestors
   stmtReasonMemory fragExec context compileEnv venomState venomInst
 
 Theorem intcall_mapping_scratch_run_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   compile_mapping_subscript base_op key sa = (op,sb) /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   (!x. base_op = Var x ==> not_fresh_at sa x) /\

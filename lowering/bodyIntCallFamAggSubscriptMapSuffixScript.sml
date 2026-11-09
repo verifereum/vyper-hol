@@ -8,21 +8,21 @@ Ancestors
 (* A store contained in an allocated scratch region preserves the resources.
    The allocation invariant authorizes it above the protected frontier. *)
 Theorem intcall_allocated_mstore_res:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   sa.cs_next_var <= sb.cs_next_var /\
   MEM inst (fn_insts fp.jc_func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
   b <= dst /\ dst + 32 <= b + sz /\
   (!name lb len. local_region ce es.scopes s name lb len ==>
      regions_disjoint b sz lb len) ==>
-  intcall_joint_res fp ce env es sb (mstore dst w s)
+  intcall_expr_res fp ce env es sb (mstore dst w s)
 Proof
   rpt strip_tac >>
   `fp.jc_lo <= b` by
-    (fs[intcall_joint_res_def, allocas_above_def] >> metis_tac[]) >>
+    (fs[intcall_expr_res_def, allocas_above_def] >> metis_tac[]) >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es (mstore dst w s)` by
     (irule literal_mstore_state_rel >>
-     reverse conj_tac >- fs[intcall_joint_res_def] >>
+     reverse conj_tac >- fs[intcall_expr_res_def] >>
      qexistsl_tac [`b`, `inst`, `sz`] >>
      fs[regions_disjoint_def] >> metis_tac[]) >>
   irule intcall_joint_res_mstore >>
@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem intcall_allocated_mstore_run:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   emit_void MSTORE [ptr_op; value_op] sa = ((),sb) /\
   eval_operand ptr_op s = SOME addr /\ eval_operand value_op s = SOME w /\
   MEM inst (fn_insts fp.jc_func) /\ inst.inst_opcode = ALLOCA /\
@@ -44,7 +44,7 @@ Theorem intcall_allocated_mstore_run:
   (!name lb len. local_region ce es.scopes s name lb len ==>
      regions_disjoint b sz lb len) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      intcall_joint_res fp ce env es sb t /\
+      intcall_expr_res fp ce env es sb t /\
       (t with vs_memory := s.vs_memory) = s
 Proof
   rpt strip_tac >>
@@ -61,7 +61,7 @@ QED
 
 (* Allocate the hash scratch region and initialize its first word. *)
 Theorem intcall_alloc_header_run:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   compile_alloc_buffer cap sa = (buf,sm) /\
   emit_void MSTORE [buf.buf_operand; value_op] sm = ((),sh) /\
   fn_has_code sa sm fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
@@ -69,7 +69,7 @@ Theorem intcall_alloc_header_run:
   (!x. value_op = Var x ==> not_fresh_at sa x) /\
   eval_operand value_op s = SOME w ==>
   ?t addr. run_inst_seq (emitted_insts sa sh) s = OK t /\
-    intcall_joint_res fp ce env es sh t /\
+    intcall_expr_res fp ce env es sh t /\
     eval_operand buf.buf_operand t = SOME addr /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n addr,cap) /\
     w2n addr + cap < dimword (:256) /\
@@ -78,7 +78,7 @@ Theorem intcall_alloc_header_run:
 Proof
   rpt strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
-   local_ptrs_reserved ce sa` by fs[intcall_joint_res_def] >>
+   local_ptrs_reserved ce sa` by fs[intcall_expr_res_def] >>
   drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   drule_all exprSimMapKeyTheory.hash_alloc_capacity_mstore_frame >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sh) s = OK header` >>
@@ -92,7 +92,7 @@ Proof
   `eval_operand value_op allocated = SOME w` by
     (Cases_on `value_op` >> gvs[eval_operand_def] >> metis_tac[]) >>
   `?u. run_inst_seq (emitted_insts sm sh) allocated = OK u /\
-       intcall_joint_res fp ce env es sh u /\
+       intcall_expr_res fp ce env es sh u /\
        (u with vs_memory := allocated.vs_memory) = allocated` by
     (irule intcall_allocated_mstore_run >> simp[] >>
      qexistsl_tac [`allocated_addr`, `w2n allocated_addr`,

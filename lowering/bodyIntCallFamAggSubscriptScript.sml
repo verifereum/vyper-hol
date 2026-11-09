@@ -7,7 +7,10 @@ Ancestors
   bodyIntCallJointContract bodyIntCallJointWidened
   bodyIntCallFamAggSubscriptHeld bodyIntCallFamAggSubscriptTuple
   bodyIntCallFamAggSubscriptCompile bodyIntCallFamAggSubscriptRunCuts
-  bodyIntCallFamAggSubscriptCuts
+  bodyIntCallFamAggSubscriptCuts bodyIntCallFamAggSubscriptResources
+  bodyIntCallFamAggSubscriptScratch bodyIntCallFamAggSubscriptTailRun
+  bodyIntCallFamAggSubscriptHashTail bodyIntCallFamAggSubscriptAllocRun
+  bodyIntCallFamAggSubscriptWordRun
 
 Theorem intcall_subscript_step:
   (!e'. expr_size e' < expr_size e ==>

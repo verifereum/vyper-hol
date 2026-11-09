@@ -6,7 +6,7 @@ Ancestors
   compileEnv context venomState
 
 Theorem intcall_mapping_slot_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   compile_mapping_subscript base_op key sa = (op,sb) /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   (!x. base_op = Var x ==> not_fresh_at sa x) /\
@@ -21,7 +21,7 @@ Theorem intcall_mapping_slot_cont:
 Proof
   rpt gen_tac >> strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
-   local_ptrs_reserved ce sa` by fs[intcall_joint_res_def] >>
+   local_ptrs_reserved ce sa` by fs[intcall_expr_res_def] >>
   drule_all compile_mapping_subscript_frame >> strip_tac >>
   drule_all intcall_mapping_scratch_run_cont >> strip_tac >>
   `same_blocks sa sb /\

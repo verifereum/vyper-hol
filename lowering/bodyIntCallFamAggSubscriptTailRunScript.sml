@@ -6,7 +6,7 @@ Ancestors
   context compileEnv venomState venomInst
 
 Theorem intcall_scratch_tail_run_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s0 /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s0 /\
   intcall_expr_cont fp ce env es sa s0 es sn s /\
   emit_op ADD [buf; Lit 32w] sn = (dst,sp) /\
   emit_void MSTORE [dst; key] sp = ((),sq) /\

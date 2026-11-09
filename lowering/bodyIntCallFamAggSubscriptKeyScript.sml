@@ -25,7 +25,7 @@ Theorem intcall_dynamic_key_cont:
 Proof
   rpt gen_tac >> strip_tac >>
   `local_ptrs_reserved ce sn` by
-    fs[intcall_expr_cont_def, intcall_joint_res_def] >>
+    fs[intcall_expr_cont_def, intcall_expr_res_def] >>
   drule_all compile_hashmap_dynamic_key_frame >> strip_tac >>
   drule (cj 1 (REWRITE_RULE [DISJ_IMP_THM] mapping_suffix_shape)) >> strip_tac >>
   `sn.cs_next_var <= sp.cs_next_var /\ sp.cs_current_bb = sn.cs_current_bb /\

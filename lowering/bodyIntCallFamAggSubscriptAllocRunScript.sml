@@ -6,7 +6,7 @@ Ancestors
   intCallFrame loweringPosts
 
 Theorem intcall_alloc_run_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   compile_alloc_buffer sz sa = (buf,sb) /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   sz < dimword (:256) /\ ~s.vs_halted /\
@@ -25,7 +25,7 @@ Theorem intcall_alloc_run_cont:
 Proof
   rpt gen_tac >> strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
-   local_ptrs_reserved ce sa` by fs[intcall_joint_res_def] >>
+   local_ptrs_reserved ce sa` by fs[intcall_expr_res_def] >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all intcall_joint_res_alloc >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >> gvs[] >>

@@ -5,7 +5,7 @@ Ancestors
   exprSimLiteralBuffer context compileEnv venomState venomInst
 
 Theorem intcall_scratch_store_run_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s0 /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s0 /\
   intcall_expr_cont fp ce env es sa s0 es si s /\
   emit_void MSTORE [ptr_op; value] si = ((),sb) /\
   eval_operand ptr_op s = SOME addr /\ eval_operand value s = SOME w /\

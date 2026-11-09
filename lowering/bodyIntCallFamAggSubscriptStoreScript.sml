@@ -64,11 +64,11 @@ Proof
   conj_tac >- fs[typed_copy_effect_def] >>
   `si.cs_next_var <= sb.cs_next_var` by
     (drule emitted_insts_emit_void >> simp[]) >>
-  `intcall_joint_res fp ce env es si s` by fs[intcall_expr_cont_def] >>
+  `intcall_expr_res fp ce env es si s` by fs[intcall_expr_cont_def] >>
   drule_all intcall_allocated_mstore_run >> strip_tac >>
   drule_all literal_emit_mstore_run >> strip_tac >> gvs[] >>
   irule intcall_owned_store_cont >> simp[] >>
   conj_tac
-  >- fs[intcall_joint_res_def, stmt_state_rel_inst_idx] >>
+  >- fs[intcall_expr_res_def, stmt_state_rel_inst_idx] >>
   metis_tac[]
 QED

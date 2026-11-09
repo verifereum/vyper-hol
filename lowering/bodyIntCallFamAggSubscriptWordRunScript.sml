@@ -8,7 +8,7 @@ Ancestors
   intCallFrame
 
 Theorem intcall_alloc_word_run_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   compile_alloc_buffer cap sa = (buf,sm) /\
   emit_void MSTORE [buf.buf_operand; value_op] sm = ((),sh) /\
   fn_has_code sa sm fp.jc_func /\ fn_has_code sm sh fp.jc_func /\
@@ -46,7 +46,7 @@ Proof
     (rpt strip_tac >> first_x_assum irule >> qexists_tac `n` >>
      irule local_region_frame_fwd >>
      qexistsl_tac [`s`, `sa`, `es.scopes`] >>
-     fs[intcall_expr_cont_def, intcall_joint_res_def,
+     fs[intcall_expr_cont_def, intcall_expr_res_def,
         local_region_def, lookup_var_def] >> metis_tac[]) >>
   drule_all bodyIntCallJointAggCoreTheory.intcall_alloc_run_frame >> strip_tac >>
   `eval_operand value_op (mid with vs_inst_idx := LENGTH sm.cs_current_insts) = SOME w` by

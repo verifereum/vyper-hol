@@ -7,7 +7,7 @@ Ancestors
   venomState venomInst
 
 Theorem intcall_scratch_store_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s0 /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s0 /\
   intcall_expr_cont fp ce env es sa s0 es si s /\
   emit_void MSTORE [ptr_op; value] si = ((),sb) /\
   eval_operand ptr_op s = SOME addr /\ eval_operand value s = SOME w /\
@@ -31,17 +31,17 @@ Proof
      irule local_region_frame >>
      conj_tac
      >- (qexists_tac `fp.jc_func` >>
-         fs[intcall_joint_res_def, stmt_state_rel_def,
+         fs[intcall_expr_res_def, stmt_state_rel_def,
             state_rel_def]) >>
      qexistsl_tac [`sa`, `es.scopes`, `s`] >>
-     fs[intcall_expr_cont_def, intcall_joint_res_def]) >>
+     fs[intcall_expr_cont_def, intcall_expr_res_def]) >>
   irule intcall_allocated_mstore_landing >> simp[] >>
-  conj_tac >- fs[intcall_expr_cont_def, intcall_joint_res_def, stmt_state_rel_def] >>
+  conj_tac >- fs[intcall_expr_cont_def, intcall_expr_res_def, stmt_state_rel_def] >>
   conj_tac
   >- (qexistsl_tac [`b`, `inst`, `sz`] >> simp[] >>
       conj_tac >- (gvs[regions_disjoint_def] >> gvs[]) >>
       conj_tac >- (gvs[regions_disjoint_def] >> metis_tac[]) >>
-      fs[intcall_expr_cont_def, intcall_joint_res_def, allocas_above_def] >>
+      fs[intcall_expr_cont_def, intcall_expr_res_def, allocas_above_def] >>
       qpat_x_assum `!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==> _`
         drule >> simp[]) >>
   qexistsl_tac [`ptr_op`, `si`, `value`] >> simp[]
@@ -50,7 +50,7 @@ QED
 (* Finish the scratch region after its first word is initialized.  The hash
    contents are intentionally opaque here: this boundary retains resources. *)
 Theorem intcall_scratch_tail_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s0 /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s0 /\
   intcall_expr_cont fp ce env es sa s0 es sn s /\
   gas_marked_path F fp.jc_ctx fp.jc_func s0 0 (OK s) /\
   emit_op ADD [buf; Lit 32w] sn = (dst,sp) /\

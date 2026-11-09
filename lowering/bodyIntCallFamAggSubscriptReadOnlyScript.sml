@@ -28,7 +28,7 @@ Proof
    s.vs_inst_idx = LENGTH si.cs_current_insts /\
    stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
    local_ptrs_reserved ce si` by
-    fs[intcall_expr_cont_def, intcall_joint_res_def] >>
+    fs[intcall_expr_cont_def, intcall_expr_res_def] >>
   conj_tac
   >- (drule_all straight_line_zero_gas_path >> simp[]) >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es t` by

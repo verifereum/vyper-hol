@@ -7,7 +7,7 @@ Ancestors
   compileEnv context venomState
 
 Theorem intcall_hashmap_tail_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sn s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sn s /\
   ~s.vs_halted /\ s.vs_current_bb = sn.cs_current_bb /\
   s.vs_inst_idx = LENGTH sn.cs_current_insts /\
   expr_post fp.jc_ctx fp.jc_func ce fp.jc_cx e ek sk sn ks es kv key s /\
@@ -38,7 +38,7 @@ Proof
   `!x. base_op = Var x ==> not_fresh_at sp x` by
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `sn` >> simp[]) >>
-  `intcall_joint_res fp ce env es sp u /\ ~u.vs_halted /\
+  `intcall_expr_res fp ce env es sp u /\ ~u.vs_halted /\
    u.vs_current_bb = sp.cs_current_bb /\
    u.vs_inst_idx = LENGTH sp.cs_current_insts` by
     fs[intcall_expr_cont_def] >>

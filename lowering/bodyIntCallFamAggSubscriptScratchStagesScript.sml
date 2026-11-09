@@ -8,7 +8,7 @@ Ancestors
   emitHelper stmtSimAugAssignPlaceMemory
 
 Theorem intcall_alloc_word_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   compile_alloc_buffer cap sa = (buf,sm) /\
   emit_void MSTORE [buf.buf_operand; value_op] sm = ((),sh) /\
   fn_has_code sa sm fp.jc_func /\ fn_has_code sm sh fp.jc_func /\
@@ -40,7 +40,7 @@ Proof
      qpat_x_assum `!name b len. local_region _ _ allocated _ _ _ ==> _` irule >>
      qexists_tac `n` >> irule local_region_frame_fwd >>
      qexistsl_tac [`s`, `sa`, `es.scopes`] >>
-     fs[intcall_expr_cont_def, intcall_joint_res_def] >> metis_tac[]) >>
+     fs[intcall_expr_cont_def, intcall_expr_res_def] >> metis_tac[]) >>
   `eval_operand value_op allocated = SOME w` by
     (`allocated.vs_labels = s.vs_labels` by
        (drule aug_place_marked_path_labels >> simp[]) >>
@@ -53,7 +53,7 @@ Proof
       (mstore (w2n addr) w allocated with
         vs_inst_idx := LENGTH sh.cs_current_insts)` by
     (irule intcall_allocated_mstore_landing >> simp[] >>
-     conj_tac >- fs[intcall_expr_cont_def, intcall_joint_res_def,
+     conj_tac >- fs[intcall_expr_cont_def, intcall_expr_res_def,
                     stmt_state_rel_def] >>
      reverse conj_tac
      >- (qexistsl_tac [`buf.buf_operand`, `sm`, `value_op`] >> simp[]) >>
@@ -63,7 +63,7 @@ Proof
      simp[mk_inst_def] >> conj_tac
      >- (fs[regions_disjoint_def] >> metis_tac[]) >>
      conj_tac >- (fs[regions_disjoint_def] >> metis_tac[]) >>
-     fs[intcall_expr_cont_def, intcall_joint_res_def, allocas_above_def] >>
+     fs[intcall_expr_cont_def, intcall_expr_res_def, allocas_above_def] >>
      qpat_x_assum `!aid b sz. FLOOKUP allocated.vs_allocas aid = SOME (b,sz) ==> _`
        drule >> simp[]) >>
   `gas_marked_path F fp.jc_ctx fp.jc_func s 0
