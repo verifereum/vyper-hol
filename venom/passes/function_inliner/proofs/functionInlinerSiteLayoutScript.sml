@@ -146,3 +146,61 @@ Proof
   disch_then (qspecl_then [`p`, `i`, `callee`] mp_tac) >>
   strip_tac >> gvs[] >> simp[EL_DROP]
 QED
+
+Theorem rewrite_inline_insts_append:
+  !pre args outs r rest k.
+  rewrite_inline_insts args outs r (pre ++ rest) k =
+    (FST (rewrite_inline_insts args outs r pre k) ++
+     FST (rewrite_inline_insts args outs r rest
+       (SND (rewrite_inline_insts args outs r pre k))),
+     SND (rewrite_inline_insts args outs r rest
+       (SND (rewrite_inline_insts args outs r pre k))))
+Proof
+  Induct >> simp[rewrite_inline_insts_def, pairTheory.UNCURRY] >>
+  rpt gen_tac >> simp[APPEND_ASSOC]
+QED
+
+Theorem rewrite_inline_insts_focus:
+  rewrite_inline_insts args outs r (pre ++ inst::post) k =
+    (FST (rewrite_inline_insts args outs r pre k) ++
+     FST (rewrite_inline_inst args outs r inst
+       (SND (rewrite_inline_insts args outs r pre k))) ++
+     FST (rewrite_inline_insts args outs r post
+       (SND (rewrite_inline_inst args outs r inst
+         (SND (rewrite_inline_insts args outs r pre k))))),
+     SND (rewrite_inline_insts args outs r post
+       (SND (rewrite_inline_inst args outs r inst
+         (SND (rewrite_inline_insts args outs r pre k))))))
+Proof
+  simp[rewrite_inline_insts_append, rewrite_inline_insts_def, pairTheory.UNCURRY]
+QED
+
+Theorem inline_call_site_lookup_clone_focus:
+  lookup_block lbl caller.fn_blocks = SOME bb /\
+  lookup_block cl callee.fn_blocks = SOME cb /\
+  ~MEM (STRCAT p cl) (fn_labels caller) /\ STRCAT p cl <> r /\
+  cb.bb_instructions = pre ++ inst::post ==>
+  let args = rotate_invoke_ops (EL i bb.bb_instructions).inst_operands;
+      outs = (EL i bb.bb_instructions).inst_outputs;
+      labs = fn_labels callee;
+      a = rewrite_inline_insts args outs r (MAP (clone_instruction p labs) pre) 0;
+      b = rewrite_inline_inst args outs r (clone_instruction p labs inst) (SND a);
+      c = rewrite_inline_insts args outs r (MAP (clone_instruction p labs) post) (SND b)
+  in lookup_block (STRCAT p cl)
+       (inline_call_site p r caller callee lbl i).fn_blocks =
+     SOME (clone_basic_block p labs cb with
+       bb_instructions := FST a ++ FST b ++ FST c)
+Proof
+  strip_tac >> drule_all inline_call_site_lookup_clone >>
+  disch_then (qspec_then `i` assume_tac) >> simp[] >>
+  simp[rewrite_inline_block_def, clone_basic_block_def, pairTheory.UNCURRY,
+       MAP_APPEND, rewrite_inline_insts_focus]
+QED
+
+Theorem inline_rewrite_focus_getter:
+  instrs = FST a ++ FST b ++ FST c /\ j < LENGTH (FST b) ==>
+  LENGTH (FST a) + j < LENGTH instrs /\
+  EL (LENGTH (FST a) + j) instrs = EL j (FST b)
+Proof
+  strip_tac >> gvs[] >> simp[EL_APPEND2, EL_APPEND1]
+QED
