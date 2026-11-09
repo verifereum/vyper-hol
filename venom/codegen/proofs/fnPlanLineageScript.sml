@@ -493,6 +493,54 @@ Proof
   simp[pred_setTheory.SUBSET_DEF, listTheory.MAP_APPEND] >> metis_tac[]
 QED
 
+Theorem dfs_block_state_defining_outputs_absent:
+  codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps ==>
+  EVERY (\inst. EVERY (\v. ~MEM (Var v) ps.ps_stack /\
+    Var v NOTIN FDOM ps.ps_spilled) inst.inst_outputs) bb.bb_instructions
+Proof
+  strip_tac >> Cases_on `fn_entry_label fn = SOME lbl`
+  >- (drule_all dfs_block_state_initialized_trace >> strip_tac >>
+      `MEM (lbl,init_cleanup_plan_state ch growth spill_base lbl_ctr) events` by
+        (drule plan_aux_trace_fresh_event >> gvs[]) >>
+      `ps = init_cleanup_plan_state ch growth spill_base lbl_ctr` by
+        metis_tac[plan_aux_trace_event_unique, listTheory.MEM_APPEND, listTheory.MEM] >>
+      gvs[init_cleanup_plan_state_def, init_plan_state_def]) >>
+  drule_all dfs_block_state_native_incoming >> strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl /\ ssa_form fn` by
+    metis_tac[livenessTransferProofsTheory.lookup_block_mem,
+      venomExecPropsTheory.lookup_block_label, codegen_ready_fn_def] >>
+  gvs[chronological_support_def, listTheory.EVERY_MEM] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  spose_not_then assume_tac >>
+  `MEM (Var v) after.ps_stack \/ Var v IN FDOM after.ps_spilled` by metis_tac[] >>
+  `?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+    MEM v di.inst_outputs /\ MEM db.bb_label visited` by metis_tac[] >>
+  drule_all fnPlanLineagePathTheory.visited_definition_fresh_block_outputs >>
+  disch_then assume_tac >> gvs[listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem lineage_state_defining_outputs_spill_absent:
+  codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps ==>
+  EVERY (\inst. EVERY (\v. Var v NOTIN FDOM ps.ps_spilled)
+    inst.inst_outputs) bb.bb_instructions
+Proof
+  strip_tac >> drule lineage_state_dfs_fields >> strip_tac >>
+  drule_all dfs_block_state_defining_outputs_absent >>
+  `ps.ps_spilled = ps_dfs.ps_spilled` by
+    metis_tac[stackPlanTypesTheory.plan_state_accfupds] >>
+  gvs[listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
 Theorem dfs_block_state_native_join_residual:
   codegen_ready_fn fn /\ fn_entry_label fn <> SOME lbl /\
   generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
