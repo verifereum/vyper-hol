@@ -24,7 +24,7 @@
  *)
 Theory exprSimAggregateChildren
 Ancestors
-  exprSimVVFrame
+  exprSimVVFrame valueEncodingDefs
   exprSimProps
   loweringPosts vyperTypeSystem vyperValue valueEncoding valueEncodingProofs vyperTyping
   exprSimAlloc typedMemoryCopy

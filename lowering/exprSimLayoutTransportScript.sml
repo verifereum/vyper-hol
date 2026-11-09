@@ -1,6 +1,6 @@
 Theory exprSimLayoutTransport
 Ancestors
-  loweringPosts
+  loweringPosts valueEncodingDefs
   exprSimProps vyperTypeSystem vyperValue valueEncoding vyperTypeArgFits
   vyperTypeValues context compileEnv valueTypingMemoryProps
 

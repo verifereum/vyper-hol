@@ -180,7 +180,7 @@ Proof
      mem_bytes_at b' sz' u.vs_memory = mem_bytes_at b' sz' s0.vs_memory` by
     (rpt strip_tac >> simp[] >> irule mstore_mem_bytes_at_disjoint >>
      `regions_disjoint b sz b' sz'` by (gvs[local_ptrs_rel_def] >> metis_tac[]) >>
-     gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `!p. MEM p entry.popped /\ snapshot_in entry.type b sz p s0.vs_memory ==>
        snapshot_in entry.type b sz p u.vs_memory` by
     (Cases >> rw[snapshot_in_def] >>
@@ -198,7 +198,7 @@ Proof
       >- (`b' = b` by gvs[local_region_def] >> gvs[] >>
           qpat_x_assum `!k. dynarray_len_at _ _ k ==> _` drule >> simp[]) >>
       `regions_disjoint b sz b' sz'` by (gvs[local_ptrs_rel_def] >> metis_tac[]) >>
-      gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac)
+      gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
   >- (rw[scopes_progress_def] >> Cases_on `n = id` >> gvs[])
   >- (rpt strip_tac >> rename1 `local_region _ _ _ nm b' sz'` >>
       Cases_on `nm = id`
