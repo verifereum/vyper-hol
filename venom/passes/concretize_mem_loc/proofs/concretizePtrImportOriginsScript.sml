@@ -255,7 +255,7 @@ Proof
     (venomFnInstsProofsTheory.all_distinct_flat_map_unique |> SPEC_ALL |>
       Q.GENL [`f`, `l`, `a`, `b`, `v`])) >>
   qexistsl [`\fn. MAP (\i. i.inst_id) (fn_insts fn)`,
-            `i.inst_id`,`C.ctx_functions`] >>
+            `C.ctx_functions`, `i.inst_id`] >>
   simp[MEM_MAP] >> conj_tac
   >- (gvs[ctx_inst_ids_distinct_def, fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat, MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]) >>
   conj_tac >- metis_tac[] >> metis_tac[]
