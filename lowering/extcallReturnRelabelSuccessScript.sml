@@ -6,7 +6,7 @@ Ancestors
   extcallReturnObserverResources extcallReturnObserverIds extcallReturnObserver
   extcallReturnDecodeSummary extcallReturnDecoderCode
   abiValidAllocatedContract abiMalformedRecursiveInterface
-  exprSimAbiGasBridge abiEncoderObserver bodyMemAssignTopCopySem
+  exprSimAbiGasBridge abiEncoderObserver exprLoweringProps
   compileEnv venomState venomInst venomExecSemantics venomExecProofs fragExec
   list pred_set finite_map
 
@@ -14,12 +14,17 @@ Theorem return_relabel_stmt_control[local]:
   stmt_state_rel ctx func ce cx es (s with vs_current_bb := b) =
   stmt_state_rel ctx func ce cx es s
 Proof
-  irule EQ_TRANS >>
-  qexists_tac `stmt_state_rel ctx func ce cx es
-    (s with <|vs_vars := s.vs_vars; vs_current_bb := b;
-              vs_inst_idx := s.vs_inst_idx; vs_prev_bb := s.vs_prev_bb|>)` >>
-  conj_tac >- (AP_TERM_TAC >> simp[venom_state_component_equality]) >>
-  rewrite_tac[topcopy_control_frame] >> simp[]
+  `fmp_room ctx func (s with vs_current_bb := b) =
+   fmp_room ctx func s` by
+    (irule fmp_room_fields_cong >> simp[]) >>
+  simp[stmt_state_rel_def, state_rel_def, accounts_rel_def, local_ptrs_rel_def,
+       local_region_def, local_backed_def, immutable_base_zero_alt,
+       lookup_var_def, storage_rel_def,
+       transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
+       contract_storage_def, contract_transient_def, venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def, alloca_room_def,
+       pending_alloca_size_def, immutable_alloca_sep_def]
 QED
 
 Theorem return_relabel_operand[local]:
