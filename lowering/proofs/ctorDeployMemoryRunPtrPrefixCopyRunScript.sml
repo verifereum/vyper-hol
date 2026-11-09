@@ -105,7 +105,7 @@ Theorem prefix_bytestring_sentinel_code:
      st'.cs_current_insts = st.cs_current_insts ++ xs /\
      st'.cs_current_bb = st.cs_current_bb
 Proof
-  simp[abi_decode_bytes_sentinel, abi_decode_source_opcode_def,
+  simp[abi_decode_bytes_sentinel, compile_abi_dec_addr_def, abi_decode_source_opcode_def,
        abi_decode_count_guard_def, abi_decode_copy_opcode_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
@@ -490,7 +490,9 @@ Theorem prefix_bulk_sentinel_code:
 Proof
   strip_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac (srw_ss()) [abi_decode_bulk_phases, abi_decode_source_opcode_def,
+  asm_simp_tac (srw_ss()) [abi_decode_bulk_phases, compile_abi_dec_addr_def, abi_decode_source_opcode_def,
+    abi_decode_dynarray_position_prefix_zero_base,
+    abiDecoderBytesBoundTheory.abi_decode_bytes_head_def, abi_decode_dynarray_payload_guard_def,
     abi_decode_dynarray_checked_prefix_def, abi_decode_count_guard_def,
     abi_decode_dynarray_end_guard_def, abi_decode_bulk_body_def,
     abi_decode_array_header_def, abi_decode_bulk_payload_def,
