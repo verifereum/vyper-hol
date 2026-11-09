@@ -23,7 +23,7 @@ Theorem slice_data_bytes_outcome_mem:
   compile_slice_data sl data sop lop sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
-  alloca_history func s /\ fresh_vars_wrt sa s /\ ~s.vs_halted /\
+  alloca_history func s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand sl s = SOME (n2w (LENGTH bs)) /\
   eval_operand data s = SOME (n2w src_base) /\
@@ -102,7 +102,7 @@ Theorem slice_data_string_outcome_mem:
   compile_slice_data sl data sop lop sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
-  alloca_history func s /\ fresh_vars_wrt sa s /\ ~s.vs_halted /\
+  alloca_history func s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand sl s = SOME (n2w (LENGTH text)) /\
   eval_operand data s = SOME (n2w src_base) /\

@@ -49,7 +49,7 @@ QED
 Theorem slice_data_body_mem_ok:
   compile_slice_data sl data start len sz sa = (out,sb) /\
   fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s /\
-  fresh_vars_wrt sa s /\
+  (!op z. MEM op [sl;data;start;len] /\ op = Var z ==> not_fresh_at sa z) /\
   eval_operand sl s = SOME l /\ eval_operand data s = SOME d /\
   eval_operand start s = SOME a /\ eval_operand len s = SOME n /\
   w2n d + w2n l <= s.vs_alloca_next /\
@@ -58,7 +58,7 @@ Theorem slice_data_body_mem_ok:
 Proof
   strip_tac >> drule_all slice_data_allocation_bound >> strip_tac >>
   `alloca_next_valid s` by fs[stmt_state_rel_def, alloca_inv_def] >>
-  irule compile_slice_data_mem_ok >> goal_assum (drule_at Any) >>
+  irule compile_slice_data_live_mem_ok >> goal_assum (drule_at Any) >>
   metis_tac[]
 QED
 
@@ -66,7 +66,7 @@ Theorem slice_data_success_path_mem:
   compile_slice_data sl data start len sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
-  fresh_vars_wrt sa s /\ ~s.vs_halted /\
+  (!op z. MEM op [sl;data;start;len] /\ op = Var z ==> not_fresh_at sa z) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand sl s = SOME l /\ eval_operand data s = SOME d /\
