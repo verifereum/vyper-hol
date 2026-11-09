@@ -92,9 +92,20 @@ def main():
                                section_hex=section.hex(), canonical=section == canonical,
                                padding_word=int.from_bytes(section[64:], "big"),
                                get="a"))
-    assert [row["padding_word"] for row in report] == [0, 1, 0, 1]
-    assert [row["canonical"] for row in report] == [True, False, True, False]
-    assert report[2]["section_hex"] != report[3]["section_hex"]
+    assert [row["padding_word"] for row in report] == [0, 0, 0, 0]
+    assert [row["canonical"] for row in report] == [True, True, True, True]
+    assert report[2]["section_hex"] == report[3]["section_hex"]
+    source = Path(__file__).with_name("immutables") / "sources/i09_immut_widen_bytes.vy"
+    deploy, runtime = compile_source(args.vyper_python, source.read_text())
+    for value in (b"", b"a", b"0123456789"):
+        encoded = len(value).to_bytes(32, "big") + value.ljust(
+            32 * ((len(value) + 31) // 32), b"\x00")
+        installed = execute(deploy + (32).to_bytes(32, "big") + encoded)
+        assert installed == runtime + encoded.ljust(160, b"\x00")
+        assert execute(installed, keccak(text="get()")[:4]) == (
+            (32).to_bytes(32, "big") + encoded)
+        report.append(dict(case="i09_immut_widen_bytes", value=value.decode(),
+                           section_bytes=160, get=value.decode()))
     source = Path(__file__).with_name("immutables") / "sources/p23_imm_uint256.vy"
     deploy, runtime = compile_source(args.vyper_python, source.read_text())
     installed = execute(deploy)
