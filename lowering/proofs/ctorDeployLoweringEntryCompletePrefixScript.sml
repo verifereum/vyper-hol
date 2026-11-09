@@ -6,7 +6,7 @@ Ancestors
  ctorDeployLoweringEntryRegistration ctorAbiActualFrame ctorAbiActualSites
  abiDecoderDynamicLoopSetup abiDecoderArrayHeader abiDecoderIndexInit abiDecoderArrayLoopInit
  abiDecoderReentry abiDecoderContract abiDecoderLoop abiDecoderVarSequence
- abiEncoderRegisteredEffect fragExec instIdxIndep emitHelperProps
+ abiEncoderRegisteredEffect fragExec instIdxIndep emitHelperProps fragGasStraight fragGasPath
  venomExecSemantics venomState venomMemDefs compileEnv valueEncoding
  finite_map list words arithmetic rich_list emitHelper context exprLoweringProps venomInst valueEncodingProps
 
@@ -316,4 +316,153 @@ Proof
      goal_assum (drule_at Any) >> qexists `st.cs_next_var` >> simp[]) >>
   qexistsl [`actual`, `slot`] >> simp[] >>
   irule abi_decode_sim_trans >> qexists `guard` >> simp[]
+QED
+
+Theorem deploy_ctor_array_prefix_complete_gas_path:
+  abi_decode_dynarray_prefix src DLOAD hi maxn asz st = ((),st') /\
+  eval_operand src initial = SOME (n2w sb) /\
+  abi_decode_load DLOAD (n2w sb : bytes32) initial = n2w n /\
+  n <= maxn /\ maxn < dimword (:256) /\
+  (hi = Lit 0w \/ ?h. eval_operand hi initial = SOME (n2w h) /\
+    sb+32+n*asz <= h /\ h < dimword (:256)) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var hi /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  fn_has_code st st' func /\ ~initial.vs_halted /\
+  initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?actual. gas_path ctx func initial 0 (OK actual) /\
+    fresh_vars_wrt limit_st actual /\
+    abi_decoder_address_frame st.cs_next_var initial actual /\
+    actual.vs_labels = initial.vs_labels /\
+    abi_encoder_registered_effect {} [] initial actual /\
+    ~actual.vs_halted /\ actual.vs_current_bb = st'.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
+    abi_decode_sim ctx func initial actual /\
+    actual.vs_gas_readings = initial.vs_gas_readings /\ actual.vs_code = initial.vs_code /\
+    actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
+    actual.vs_block_ctx = initial.vs_block_ctx
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ctor_actual_array_prefix_reentry >> strip_tac >>
+  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all ctor_actual_array_prefix_code >> strip_tac >>
+  `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st st')` by
+    fs[EVERY_CONJ] >>
+  drule_all deploy_ctor_decoder_sequence_ambient >> strip_tac >>
+  drule_all deploy_ctor_decoder_sequence_observations >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st')` by fs[EVERY_CONJ] >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st') = []` by
+    (simp[FILTER_EQ_NIL, EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `EVERY (\i. abi_decoder_reentry_opcode _) _` mp_tac >>
+     pure_rewrite_tac[EVERY_MEM] >> disch_then (qspec_then `i` mp_tac) >>
+     simp[abi_decoder_reentry_opcode_def]) >>
+  `st'.cs_current_bb = st.cs_current_bb /\
+   st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'` by
+    gvs[inst_extends_def, emitted_insts_def, IS_PREFIX_APPEND, DROP_APPEND] >>
+  drule_all concat_straight_gas_path >> strip_tac >>
+  `abi_decode_sim ctx func initial
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    metis_tac[gas_path_normal, abi_decode_sim_def] >>
+  qexists `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+  gvs[fresh_vars_wrt_def, abi_decoder_address_frame_def,
+       eval_op_inst_idx, abi_encoder_registered_effect_def]
+QED
+
+Theorem deploy_ctor_array_count_header_complete_gas_path:
+  abi_decode_array_header dst src DLOAD st = (cnt,st') /\
+  eval_operand src initial = SOME p /\
+  eval_operand dst initial = SOME (n2w d) /\ d < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var dst /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  fn_has_code st st' func /\ ~initial.vs_halted /\
+  initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?actual. gas_path ctx func initial 0 (OK actual) /\
+    eval_operand cnt actual = SOME (abi_decode_load DLOAD p initial) /\
+    mem_word_at d actual.vs_memory = abi_decode_load DLOAD p initial /\
+    fresh_vars_wrt limit_st actual /\ abi_decode_frame d 32 initial actual /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\
+      eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
+    actual.vs_labels = initial.vs_labels /\
+    abi_encoder_registered_effect {} [(d,32)] initial actual /\
+    actual.vs_allocas = initial.vs_allocas /\
+    actual.vs_alloca_next = initial.vs_alloca_next /\
+    ~actual.vs_halted /\ actual.vs_current_bb = st'.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
+    abi_decode_sim ctx func initial actual /\
+    actual.vs_gas_readings = initial.vs_gas_readings /\ actual.vs_code = initial.vs_code /\
+    actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
+    actual.vs_block_ctx = initial.vs_block_ctx
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ctor_actual_array_count_header_reentry >> strip_tac >>
+  drule ctor_actual_array_count_header_code >> strip_tac >>
+  drule_all deploy_ctor_decoder_sequence_observations >> strip_tac >>
+  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_array_header_shape >> strip_tac >>
+  `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st st')` by
+    fs[EVERY_CONJ] >>
+  drule_all deploy_ctor_decoder_sequence_ambient >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st')` by fs[EVERY_CONJ] >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st') = []` by
+    (simp[FILTER_EQ_NIL, EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `EVERY (\i. abi_decoder_reentry_opcode _) _` mp_tac >>
+     pure_rewrite_tac[EVERY_MEM] >> disch_then (qspec_then `i` mp_tac) >>
+     simp[abi_decoder_reentry_opcode_def]) >>
+  `st'.cs_current_bb = st.cs_current_bb /\
+   st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'` by
+    gvs[inst_extends_def, emitted_insts_def, IS_PREFIX_APPEND, DROP_APPEND] >>
+  drule_all concat_straight_gas_path >> strip_tac >>
+  `abi_decode_sim ctx func initial
+    (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    metis_tac[gas_path_normal, abi_decode_sim_def] >>
+  qexists `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+  gvs[fresh_vars_wrt_def, abi_decode_frame_def,
+       eval_op_inst_idx, abi_encoder_registered_effect_def] >> metis_tac[]
+QED
+
+Theorem deploy_ctor_array_index_complete_gas_path:
+  abi_decode_index_init st = (ip,st') /\
+  (!i. MEM i (emitted_insts st st') ==> MEM i (fn_insts func)) /\
+  st.cs_next_id IN ctor_actual_sites func ids /\
+  ctor_actual_scratch func ids D N s /\ D+N <= s.vs_alloca_next /\
+  alloca_inv s /\ alloca_frontier_inv_from k ctx func site s /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts func)) /\
+  k + unit_alloca_budget ctx < dimword (:256) /\
+  D <= d /\ d+32 <= D+N /\ mload d s = n2w (LENGTH vs) /\
+  st.cs_next_var < limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  fn_has_code st st' func /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t p. gas_path ctx func s 0 (OK t) /\ eval_operand ip t = SOME (n2w p) /\
+    (^Ok) k ctx func site ids D N d outsz
+      st.cs_next_var limit_st tv vs st.cs_next_id p s 0 0 t /\
+    ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
+    t.vs_inst_idx = LENGTH st'.cs_current_insts /\ abi_decode_sim ctx func s t /\
+    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all deploy_ctor_array_index_observation >>
+  disch_then (qspecl_then [`tv`, `outsz`] strip_assume_tac) >>
+  drule abi_decode_index_init_shape >> strip_tac >>
+  drule deploy_ctor_index_init_ambient_code >> strip_tac >>
+  drule_all deploy_ctor_decoder_sequence_ambient >> strip_tac >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st') = []` by
+    (simp[FILTER_EQ_NIL, EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `EVERY (\i. abi_decoder_reentry_opcode _) _` mp_tac >>
+     pure_rewrite_tac[EVERY_MEM] >> disch_then (qspec_then `i` mp_tac) >>
+     simp[abi_decoder_reentry_opcode_def]) >>
+  `st'.cs_current_bb = st.cs_current_bb /\
+   st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'` by
+    gvs[inst_extends_def, emitted_insts_def, IS_PREFIX_APPEND, DROP_APPEND] >>
+  drule_all concat_straight_gas_path >> strip_tac >>
+  `abi_decode_sim ctx func s
+    (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    metis_tac[gas_path_normal, abi_decode_sim_def] >>
+  qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`, `p`] >>
+  fs[eval_op_inst_idx, deploy_ctor_array_observation_inst_idx]
 QED
