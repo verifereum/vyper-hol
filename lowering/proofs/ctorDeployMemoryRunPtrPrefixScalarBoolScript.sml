@@ -54,7 +54,7 @@ Theorem prefix_scalar_bool_shape:
   isPREFIX st.cs_current_insts st'.cs_current_insts /\
   LENGTH st'.cs_current_insts = LENGTH st.cs_current_insts+5
 Proof
-  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def, SRULE [LET_THM] prefix_boolword_compile] >>
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, comp_bind_def, compile_abi_decode_range_check_def, SRULE [LET_THM] prefix_boolword_compile] >>
   strip_tac >> gvs[IS_PREFIX_APPEND]
 QED
 
