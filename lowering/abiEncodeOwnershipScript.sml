@@ -54,8 +54,8 @@ QED
 Theorem abi_encode_argument_footprint_frontier:
   abi_args_post ctx func ce cx es sa st s0 es' args ops vs s /\
   i < LENGTH args /\
-  evaluate_type (get_tenv cx) (expr_type (EL i args)) = SOME tv /\
-  ~is_word_type (expr_type (EL i args)) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce (EL i args)) = SOME tv /\
+  ~is_word_type (lowered_value_type ce (EL i args)) /\
   eval_operand (EL i ops) s = SOME w ==>
   val_footprint tv (EL i vs) = 0 \/
   w2n w + val_footprint tv (EL i vs) <= s.vs_alloca_next
