@@ -142,9 +142,11 @@ Proof
   (* Only substitution with the assumptions is needed here; fs[] over this
      context took 3.5 s. *)
   full_simp_tac bool_ss [] >>
+  qabbrev_tac `nm = STRING #"%" (toString ca.cs_next_var)` >>
   simp[eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, run_inst_seq_mem_ok_last,
        mk_inst_def, below_frontier_no_ranges] >>
+  simp[Abbr`nm`] >>
   `w2n (n2w (buffer_allocation_base s ca.cs_next_id):bytes32) <=
     buffer_allocation_base s ca.cs_next_id` by
     simp[w2n_n2w, arithmeticTheory.MOD_LESS_EQ] >>
