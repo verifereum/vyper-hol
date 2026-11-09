@@ -279,7 +279,7 @@ Proof
   pure_rewrite_tac[GSYM mk_inst_def] >>
   simp[Once run_inst_seq_mem_ok_cons, below_frontier_no_ranges,
        Excl "consume_call_outcome_eq"] >>
-  simp[NoAsms, step_inst_base_def, mk_inst_def, eval_operand_def,
+  simp[NoAsms, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
        lookup_var_update_var, Excl "consume_call_outcome_eq",
        inst_dload_in_section_def] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
