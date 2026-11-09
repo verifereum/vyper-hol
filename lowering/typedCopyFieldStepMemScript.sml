@@ -57,9 +57,6 @@ Theorem normalize_field_child_path_mem:
   compile_store_memory_typed ce dp dt sp st sd = ((),se) /\
   eval_operand dst s = SOME d /\ eval_operand src s = SOME p /\
   (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) /\
-  (emitted_blocks sa se <> [] ==>
-    ?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa se fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -68,9 +65,7 @@ Theorem normalize_field_child_path_mem:
     eval_operand sp u = SOME (p + n2w soff) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
     fn_has_code sd se fn /\
-    (emitted_blocks sd se <> [] ==>
-      ?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-        phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     u.vs_alloca_next = s.vs_alloca_next /\ Src u.vs_memory ==>

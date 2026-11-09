@@ -33,9 +33,6 @@ Theorem typed_store_rank_path_mem:
   w2n dw + type_memory_size dtv < dimword(:256) /\
   (w2n sw + type_memory_size stv <= w2n dw \/
     w2n dw + type_memory_size dtv <= w2n sw) /\
-  (emitted_blocks sa sb <> [] ==>
-    ?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
@@ -170,7 +167,6 @@ Resume typed_store_rank_path_mem[fixed_slow]:
      reverse conj_tac >- (goal_assum drule >> simp[]) >>
      goal_assum (drule_at (Pat `compile_copy_sarray_typed _ _ _ _ _ _ _ = _`)) >>
      gvs[] >> metis_tac[]) >>
-  qpat_x_assum `emitted_blocks sa sb <> [] ==> _` (drule_then strip_assume_tac) >>
   `!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x` by metis_tac[] >>
   `eval_operand src s = SOME (n2w (w2n sw)) /\
    eval_operand dst s = SOME (n2w (w2n dw))` by simp[] >>
@@ -180,8 +176,7 @@ Resume typed_store_rank_path_mem[fixed_slow]:
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand dst _ = _`)) >>
-  disch_then (drule_at (Pat `lookup_block _ _ = _`)) >>
-  disch_then (qspec_then `ctx` mp_tac) >>
+  disch_then (qspecl_then [`fn`, `ctx`] mp_tac) >>
   (impl_tac >- suspend "fixed_slow_premises") >>
   strip_tac >> qexists_tac `t` >>
   qpat_x_assum `!m. m < n ==> _` kall_tac >>
@@ -301,7 +296,6 @@ Resume typed_store_rank_path_mem[dynamic_slow]:
      reverse conj_tac >- (goal_assum drule >> simp[]) >>
      goal_assum (drule_at (Pat `compile_copy_dynarray_typed _ _ _ _ _ _ _ = _`)) >>
      gvs[] >> metis_tac[]) >>
-  qpat_x_assum `emitted_blocks sa sb <> [] ==> _` (drule_then strip_assume_tac) >>
   `!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x` by metis_tac[] >>
   `eval_operand src s = SOME (n2w (w2n sw)) /\
    eval_operand dst s = SOME (n2w (w2n dw))` by simp[] >>
@@ -309,8 +303,7 @@ Resume typed_store_rank_path_mem[dynamic_slow]:
     normalize_dynarray_semantic_path_mem >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand dst _ = _`)) >>
-  disch_then (drule_at (Pat `lookup_block _ _ = _`)) >>
-  disch_then (qspecl_then [`tv'`, `ctx`] mp_tac) >>
+  disch_then (qspecl_then [`fn`, `tv'`, `ctx`] mp_tac) >>
   (impl_tac >- suspend "dynamic_slow_premises") >>
   strip_tac >> qexists_tac `t` >>
   qpat_x_assum `!m. m < n ==> _` kall_tac >>
@@ -698,9 +691,6 @@ Theorem compile_store_memory_typed_path_mem:
   w2n dw + type_memory_size dtv < dimword(:256) /\
   (w2n sw + type_memory_size stv <= w2n dw \/
     w2n dw + type_memory_size dtv <= w2n sw) /\
-  (emitted_blocks sa sb <> [] ==>
-    ?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
