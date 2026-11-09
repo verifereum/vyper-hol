@@ -614,6 +614,8 @@ Proof
            vyperStateTheory.raise_def, AllCaseEqs()] >>
       rpt strip_tac >> gvs[] >>
       imp_res_tac entry_lock_action_logs >>
+      imp_res_tac (SRULE [vyperStateTheory.ignore_bind_def]
+                     entry_lock_action_logs) >>
       imp_res_tac eval_stmts_log_extends >>
       gvs[log_extends_def] >>
       metis_tac[rich_listTheory.IS_PREFIX_TRANS]) >>

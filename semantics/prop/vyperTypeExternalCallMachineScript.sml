@@ -215,7 +215,8 @@ Proof
       ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
-  irule checked_public_getter_body_preserves_machine_components >>
+  irule (INST_TYPE [alpha |-> ``:expr``]
+           checked_public_getter_body_preserves_machine_components) >>
   goal_assum (drule_at (Pat `eval_stmts`)) >>
   goal_assum (drule_at (Pat `external_getter_tuple`)) >>
   gvs[initial_state_def, machine_well_typed_def, state_well_typed_def] >>
@@ -523,6 +524,17 @@ Proof
       state_well_typed_def]
 QED
 
+(* A view call's lock only checks, so a halted lock-then-action run is a
+   halted run of the action alone. *)
+Theorem view_lock_prefix_halt[local]:
+  (nr ==> cx.nonreentrant_slot <> NONE) /\
+  (do lock_if_nr cx nr T; action od) st = (INR HaltException,st') ==>
+  action st = (INR HaltException,st')
+Proof
+  strip_tac >> drule view_lock_prefix_execution >>
+  disch_then (qspecl_then [`st`,`action`] strip_assume_tac) >> gvs[]
+QED
+
 Theorem call_external_function_selected_getter_halt_machine_well_typed[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\ machine_well_typed am /\
@@ -536,34 +548,44 @@ Theorem call_external_function_selected_getter_halt_machine_well_typed[local]:
   machine_well_typed am'
 Proof
   rpt strip_tac >>
-  `nr = F /\ mut = View /\ dflts = [] /\ ?exp. body = [Return (SOME exp)]` by
+  `mut = View /\ dflts = [] /\ ?exp. body = [Return (SOME exp)]` by
     (Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
      >- (rename1 `is_public_getter_decl _
            (VariableDecl vis storage id ty init)` >>
          Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
          Cases_on `storage` >> gvs[] >>
          Cases_on `is_ArrayT ty` >> gvs[] >>
-         TRY (drule_all array_public_getter_tuple_shape >> strip_tac >> gvs[] >> NO_TAC) >>
-         gvs[external_getter_tuple_def]) >>
+         FIRST
+           [drule_all array_public_getter_tuple_shape >> metis_tac[],
+            gvs[external_getter_tuple_def]]) >>
      rename1 `is_public_getter_decl _
        (HashMapDecl vis transient id kt vt init)` >>
      Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
      drule_all hashmap_public_getter_tuple_shape >> metis_tac[]) >>
   gvs[] >>
-  drule call_external_function_halt_cases >>
-  simp[initial_evaluation_context_def] >> strip_tac >> gvs[] >>
-  drule external_entry_halt_phases >>
-  simp[ignore_bind_def, bind_def, return_def] >> strip_tac >>
+  `nr ==> (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot <> NONE` by
+    (strip_tac >> drule_all checked_selected_getter_lock_slot >>
+     simp[initial_evaluation_context_def]) >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx src` >>
+  `~cx.in_deploy` by simp[Abbr `cx`, initial_evaluation_context_def] >>
+  drule call_external_function_halt_cases >> strip_tac >>
+  drule external_entry_halt_phases >> strip_tac >>
+  gvs[eval_external_defaults_nil, return_def] >>
+  `(do lock_if_nr cx nr T; eval_stmts cx [Return (SOME exp)] od)
+       (s1 with scopes := [env]) =
+     (INR HaltException,st_body)` by gvs[lock_if_nr_def] >>
+  drule_all view_lock_prefix_halt >> strip_tac >>
   `s1 = initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>` by
     (qpat_x_assum `send_call_value _ _ _ = _` mp_tac >>
      Cases_on `tx.value = 0` >>
-     simp[send_call_value_def, bind_def, ignore_bind_def, return_def,
-          check_def, assert_def, raise_def]) >>
-  gvs[] >>
+     simp[Abbr `cx`, initial_evaluation_context_def, send_call_value_def,
+          bind_def, ignore_bind_def, return_def, check_def, assert_def,
+          raise_def]) >>
+  gvs[] >> qunabbrev_tac `cx` >>
   `state_well_typed st_body /\ accounts_well_typed st_body.accounts` by
     (qpat_x_assum `eval_stmts _ _ _ = (INR HaltException,_)`
        (assume_tac o SRULE [initial_state_def]) >>
-     drule_all (SRULE [initial_evaluation_context_def, initial_state_def]
+     drule_all (SRULE [initial_state_def]
        checked_getter_initial_body_components) >> simp[]) >>
   gvs[machine_well_typed_def, abstract_machine_from_state_def,
       state_well_typed_def]
