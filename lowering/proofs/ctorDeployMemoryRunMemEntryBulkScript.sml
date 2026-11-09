@@ -50,7 +50,7 @@ Proof
 QED
 
 Theorem ctor_bulk_payload_mem_ok:
- abi_decode_bulk_payload dst src cnt mem_sz DLOAD st = ((),st') /\
+ abi_decode_bulk_payload dst src cnt mem_sz DLOAD (Lit 0w) st = ((),st') /\
  eval_operand src s = SOME (n2w sb) /\
  eval_operand dst s = SOME (n2w d) /\
  eval_operand cnt s = SOME (n2w n) /\
@@ -60,7 +60,8 @@ Theorem ctor_bulk_payload_mem_ok:
  d+32+n*mem_sz <= s.vs_alloca_next /\ fresh_vars_wrt st s ==>
  run_inst_seq_mem_ok (emitted_insts st st') s
 Proof
- simp[abi_decode_bulk_payload_def, comp_bind_def] >>
+ simp[abi_decode_bulk_payload_def, comp_bind_def,
+      compile_abi_dec_addr_def, comp_return_def] >>
  pairarg_tac >> strip_tac >> gvs[] >>
  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
  rename1 `emit_op MUL [cnt; Lit (n2w mem_sz)] st = (sz_op,c1)` >>
@@ -125,7 +126,7 @@ Proof
 QED
 
 Theorem ctor_bulk_body_mem_ok:
- abi_decode_bulk_body dst src DLOAD mem_sz st = ((),st') /\
+ abi_decode_bulk_body dst src src DLOAD (Lit 0w) mem_sz st = ((),st') /\
  eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
  abi_decode_load DLOAD (n2w sb : bytes32) s = n2w n /\
  sb+32 < dimword (:256) /\ d+32 < dimword (:256) /\
@@ -155,8 +156,8 @@ Proof
    (irule ctor_bulk_payload_mem_ok >> simp[] >>
     qexistsl [`cnt`, `d`, `dst`, `mem_sz`, `n`, `sb`, `src`] >> simp[]) >>
  drule abi_decode_bulk_payload_sequence >>
- disch_then (qspecl_then [`sb`, `s1`, `n`, `d`] mp_tac) >>
- (impl_tac >- simp[]) >> strip_tac >>
+ disch_then (qspecl_then [`0`, `sb`, `s1`, `n`, `d`] mp_tac) >>
+ (impl_tac >- simp[eval_operand_def]) >> strip_tac >>
  irule ctor_checked_emitted_mem_chain >> qexistsl [`c1`, `s1`] >> simp[]
 QED
 
@@ -182,15 +183,18 @@ Proof
  asm_simp_tac bool_ss [abi_decode_bulk_phases, comp_ignore_bind_def,
                       comp_bind_def, LET_THM] >>
  pairarg_tac >> strip_tac >>
- rename1 `abi_decode_dynarray_checked_prefix src DLOAD hi maxn abi_sz st = (u,c1)` >>
- Cases_on `u` >>
+ qpat_assum `abi_decode_dynarray_position_prefix _ _ _ _ _ _ _ = _`
+   (strip_assume_tac o REWRITE_RULE [abi_decode_dynarray_position_prefix_zero_base_eq]) >>
+ rename1 `abi_decode_dynarray_checked_prefix src DLOAD hi maxn abi_sz st = ((),c1)` >>
+ qpat_x_assum `_ = ((),st')` mp_tac >>
+ asm_rewrite_tac[] >> disch_tac >>
  drule_all abi_decode_dynarray_checked_prefix_sequence >> strip_tac >>
  rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
  `eval_operand src s1 = SOME (n2w sb) /\
   eval_operand dst s1 = SOME (n2w d)` by metis_tac[] >>
  `abi_decode_load DLOAD (n2w sb : bytes32) s1 = n2w n` by
    gvs[abi_decode_load_def, abi_decode_source_def] >>
- `abi_decode_bulk_body dst src DLOAD mem_sz c1 = ((),st')` by
+ `abi_decode_bulk_body dst src src DLOAD (Lit 0w) mem_sz c1 = ((),st')` by
    (qpat_x_assum `_ = ((),st')` mp_tac >>
     asm_simp_tac bool_ss [pairTheory.UNCURRY_DEF]) >>
  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
@@ -207,9 +211,10 @@ Proof
  `run_inst_seq_mem_ok (emitted_insts c1 st') s1` by
    (irule ctor_bulk_body_mem_ok >> simp[] >>
     qexistsl [`d`, `dst`, `mem_sz`, `n`, `sb`, `src`] >> simp[]) >>
- mp_tac (Q.INST [`st` |-> `c1`, `s` |-> `s1`, `opc` |-> `DLOAD`]
+ mp_tac (Q.INST [`st` |-> `c1`, `s` |-> `s1`, `opc` |-> `DLOAD`,
+   `base_op` |-> `Lit 0w`, `src_base` |-> `0`]
    abi_decode_bulk_body_sequence) >>
- (impl_tac >- simp[]) >> strip_tac >>
+ (impl_tac >- simp[eval_operand_def]) >> strip_tac >>
  irule ctor_checked_emitted_mem_chain >> qexistsl [`c1`, `s1`] >> simp[]
 QED
 
