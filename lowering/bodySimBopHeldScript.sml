@@ -13,7 +13,10 @@ Theorem body_bop_in_literal_nonword_case:
       (Builtin ty (Bop bop) [e1; Builtin a (MakeArray t n) elems])
 Proof
   rpt gen_tac >> strip_tac >> strip_tac >>
-  simp[Once body_expr_ok_def, expr_body_pre_def] >>
+  simp[Once body_expr_ok_def] >>
+  (reverse conj_tac
+   >- (rpt strip_tac >> drule expr_map_pre_shape >> simp[])) >>
+  simp[expr_body_pre_def] >>
   rpt strip_tac >>
   qpat_x_assum `well_typed_expr _ (Builtin _ _ _)` mp_tac >>
   simp[Once well_typed_expr_def, well_typed_builtin_app_def] >>
