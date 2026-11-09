@@ -220,7 +220,7 @@ Proof
   qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   fs[stmt_state_rel_inst_idx, lookup_var_def,
      arithmeticTheory.ADD_COMM] >>
-  conj_tac >> first_assum ACCEPT_TAC)
+  first_assum ACCEPT_TAC)
 QED
 
 (* Compatibility interface: callers not needing the block may forget it. *)
