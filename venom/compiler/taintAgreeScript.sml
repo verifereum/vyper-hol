@@ -18,11 +18,13 @@
 
 Theory taintAgree
 Ancestors
+  o1LowerDloadConcreteExternal o1LowerDloadExternalEffects o1LowerDloadExternalOracle
+  o1LowerDloadPrecompileEffects extCallOracle
   o1LowerDloadHaltResult o1LowerDloadJointStorageWrite o1LowerDloadStackFrontier
   o1LowerDloadRangeTransport o1LowerDloadJointMemoryRead o1LowerDloadJointRead1
   o1LowerDloadMemoryConsumer o1LowerDloadJointInternalEffects
   o1LowerDloadRelocationKernel o1LowerDloadShared o1PassContract ptrDiscipline codegenRel contextCodegenRel
-  venomExecSemantics venomState finite_map pred_set list
+  venomExecSemantics venomCallOracleDefs venomState finite_map pred_set list
 
 (* s and t agree except at the taint tn, the dead bytes X, and memory at
    or above the bump allocator; call requests agree outside D (their
@@ -127,6 +129,64 @@ Proof
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
+Theorem taint_agree_request_snapshots:
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  inst.inst_opcode <> INVOKE /\ taint_within D C vs /\
+  taint_agree D X tn s t /\ step_inst_base inst s = OK s' /\
+  LENGTH s.vs_requests < LENGTH s'.vs_requests ==>
+  accounts_agree_except D s.vs_accounts t.vs_accounts /\
+  transient_agree_except D s.vs_transient t.vs_transient
+Proof
+  strip_tac >>
+  `step_inst 0 C inst s = OK s'` by simp[step_inst_non_invoke] >>
+  `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+      (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+      (s.vs_transient s.vs_call_ctx.cc_address)` by
+    (fs[taint_within_def] >> metis_tac[]) >>
+  drule taint_agree_shared >>
+  metis_tac[ld_shared_accounts_observe, ld_shared_transient_observe]
+QED
+
+Theorem taint_agree_external_clean_shared:
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  ptr_discipline lo C vs /\
+  MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2] /\
+  taint_agree D X tn s t ==>
+  tn.t_stor = {} /\ tn.t_trans = {} /\
+  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient
+Proof
+  strip_tac >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `tn.t_stor = {} /\ tn.t_trans = {}` by
+    (fs[taint_ok_def, MEM] >> metis_tac[]) >>
+  drule taint_agree_shared >>
+  metis_tac[ld_shared_clean_accounts, ld_shared_clean_transient]
+QED
+
+Theorem taint_agree_external_update:
+  taint_agree D X tn s t /\ tn'.t_var = tn.t_var /\
+  r1 = s with <|vs_memory := m1; vs_accounts := a1; vs_transient := tr1;
+    vs_logs := l1; vs_outcomes := o1; vs_requests := q1;
+    vs_pending_deletions := p1; vs_returndata := rd|> /\
+  r2 = t with <|vs_memory := m2; vs_accounts := a2; vs_transient := tr2;
+    vs_logs := l2; vs_outcomes := o2; vs_requests := q2;
+    vs_pending_deletions := p2; vs_returndata := rd|> /\
+  ld_shared_agree D s.vs_call_ctx.cc_address tn' r1 r2 /\
+  (!i. i NOTIN X /\ i NOTIN tn'.t_mem /\ i < s.vs_alloca_next ==>
+     read_byte i m1 = read_byte i m2) ==>
+  taint_agree D X tn' r1 r2
+Proof
+  strip_tac >>
+  `l1 = l2 /\ o1 = o2 /\ p1 = p2` by gvs[ld_shared_agree_def] >>
+  gvs[taint_agree_def, op_taint_def] >>
+  qpat_x_assum `_ = s` (mp_tac o Q.AP_TERM
+    `\u. u with <|vs_memory := m1; vs_accounts := a1; vs_transient := tr1;
+      vs_logs := l1; vs_outcomes := o1; vs_requests := q1;
+      vs_pending_deletions := p1; vs_returndata := rd|>`) >>
+  simp[venom_state_fupdcanon]
+QED
+
 Theorem taint_agree_operand_defined:
   taint_agree D X tn s t ==>
   (IS_SOME (eval_operand op s) <=> IS_SOME (eval_operand op t))
@@ -188,6 +248,48 @@ Theorem taint_agree_bind_output:
 Proof
   simp[bind_outputs_def] >> rpt strip_tac >> gvs[] >>
   irule taint_agree_update_var >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem taint_agree_external_operands:
+  taint_ok fn tn inst s /\ taint_agree D X tn s t /\
+  MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] ==>
+  !op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t
+Proof
+  rpt strip_tac >> irule taint_agree_operand_clean >>
+  gvs[taint_ok_def, MEM] >> metis_tac[]
+QED
+
+Theorem taint_agree_external_read:
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  o1_ctx_shape C /\ MEM fn C.ctx_functions /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  taint_agree D X tn s t /\
+  (!off len i. MEM (off,len) (source_memory_read_ranges inst s) /\
+               off <= i /\ i < off + len ==> i NOTIN X) /\
+  MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
+  MEM (off,len) (source_memory_read_ranges inst s) ==>
+  read_memory off len s = read_memory off len t
+Proof
+  strip_tac >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `wf_function fn /\ fn_inst_wf fn` by
+    (gvs[o1PassContractTheory.o1_ctx_shape_def, listTheory.EVERY_MEM] >>
+     metis_tac[o1PassContractTheory.o1_fn_shape_def]) >>
+  `~in_revert_forward fn s` by
+    (spose_not_then assume_tac >>
+     gvs[in_revert_forward_def, active_inst_def] >>
+     `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+       (irule venomExecPropsTheory.MEM_lookup_block >>
+        gvs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def]) >>
+     gvs[] >>
+     `get_instruction bb s.vs_inst_idx = SOME (EL s.vs_inst_idx bb.bb_instructions)` by
+       simp[venomInstTheory.get_instruction_def] >>
+     drule_all memSafeRunTheory.revert_forward_at_opcode >> fs[MEM]) >>
+  irule taint_agree_reachable_clean_read >>
+  qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `ptr_discipline _ _ _` (irule_at Any) >> simp[] >>
+  gvs[taint_ok_def, about_to_revert_def, MEM] >> metis_tac[]
 QED
 
 Theorem taint_agree_exec_pure1:
@@ -362,6 +464,132 @@ Proof
   irule taint_agree_memory >>
   qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
   gvs[pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem taint_agree_consume_call_memory:
+  taint_agree D X tn s t /\ tn'.t_var = tn.t_var /\
+  consume_call_outcome rq1 ro rs s = (w1,r1) /\
+  consume_call_outcome rq2 ro rs t = (w2,r2) /\
+  r1.vs_returndata = r2.vs_returndata /\
+  ld_shared_agree D s.vs_call_ctx.cc_address tn' r1 r2 /\
+  (tn.t_mem DIFF {i | ro <= i /\
+       i < ro + LENGTH (TAKE rs r1.vs_returndata)}) SUBSET tn'.t_mem ==>
+  taint_agree D X tn' r1 r2
+Proof
+  strip_tac >>
+  `r1 = s with <|vs_memory :=
+      (write_memory_with_expansion ro (TAKE rs r1.vs_returndata) s).vs_memory;
+    vs_accounts := r1.vs_accounts; vs_transient := r1.vs_transient;
+    vs_logs := r1.vs_logs; vs_outcomes := r1.vs_outcomes;
+    vs_requests := r1.vs_requests; vs_pending_deletions := r1.vs_pending_deletions;
+    vs_returndata := r1.vs_returndata|>` by
+    (qpat_x_assum `consume_call_outcome _ _ _ s = _` mp_tac >>
+     pure_rewrite_tac[consume_call_outcome_eq, pairTheory.PAIR_EQ] >>
+     strip_tac >> gvs[]) >>
+  `r2 = t with <|vs_memory :=
+      (write_memory_with_expansion ro (TAKE rs r1.vs_returndata) t).vs_memory;
+    vs_accounts := r2.vs_accounts; vs_transient := r2.vs_transient;
+    vs_logs := r2.vs_logs; vs_outcomes := r2.vs_outcomes;
+    vs_requests := r2.vs_requests; vs_pending_deletions := r2.vs_pending_deletions;
+    vs_returndata := r1.vs_returndata|>` by
+    (qpat_x_assum `consume_call_outcome _ _ _ t = _` mp_tac >>
+     pure_rewrite_tac[consume_call_outcome_eq, pairTheory.PAIR_EQ] >>
+     strip_tac >> gvs[]) >>
+  `taint_agree D X (tn with t_mem := tn'.t_mem)
+     (write_memory_with_expansion ro (TAKE rs r1.vs_returndata) s)
+     (write_memory_with_expansion ro (TAKE rs r1.vs_returndata) t)` by
+    (irule taint_agree_write_memory >> simp[] >> metis_tac[]) >>
+  irule taint_agree_external_update >>
+  qpat_assum `taint_agree D X tn s t` (irule_at Any) >>
+  qpat_assum `r1 = _` (irule_at Any) >>
+  qpat_assum `r2 = _` (irule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  drule taint_agree_memory >> simp[] >> disch_then irule >> simp[]
+QED
+
+Theorem taint_agree_consume_call:
+  taint_agree D X tn s t /\
+  ((computed_precompile rq1 /\ computed_precompile rq2 /\
+    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
+   request_agree_except D rq1 rq2) /\
+  rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
+  rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
+  consume_call_outcome rq1 ro rs s = (w1,r1) /\
+  consume_call_outcome rq2 ro rs t = (w2,r2) ==>
+  w1 = w2 /\
+  taint_agree D X
+    (tn with <|t_mem := tn.t_mem DIFF
+        {i | ro <= i /\ i < ro + LENGTH (TAKE rs r1.vs_returndata)};
+      t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+        r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+        then {} else tn.t_stor;
+      t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+        r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+        then {} else tn.t_trans|>) r1 r2
+Proof
+  strip_tac
+  >- (`ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
+        metis_tac[taint_agree_shared] >>
+      `r1.vs_requests = s.vs_requests` by
+        (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
+         simp[consume_call_outcome_eq, record_request_def] >>
+         strip_tac >> gvs[]) >>
+      drule_all ld_consume_precompile_shared >> strip_tac >>
+      simp[Excl "consume_call_outcome_eq"] >>
+      irule taint_agree_consume_call_memory >>
+      qpat_assum `taint_agree D X tn s t` (irule_at Any) >>
+      qpat_assum `consume_call_outcome rq1 _ _ _ = _` (irule_at Any) >>
+      qpat_assum `consume_call_outcome rq2 _ _ _ = _` (irule_at Any) >>
+      simp[Excl "consume_call_outcome_eq"] >>
+      fs[ld_shared_agree_def, Excl "consume_call_outcome_eq"]) >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
+    metis_tac[taint_agree_shared] >>
+  `s.vs_outcomes = t.vs_outcomes /\
+   LIST_REL (request_agree_except D) s.vs_requests t.vs_requests` by
+    fs[ld_shared_agree_def] >>
+  drule_all ld_consume_call_outcome_masked_observation >> strip_tac >>
+  simp[Excl "consume_call_outcome_eq"] >>
+  drule_all ld_consume_call_outcome_shared_effects >> strip_tac >>
+  irule taint_agree_consume_call_memory >>
+  qpat_assum `taint_agree D X tn s t` (irule_at Any) >>
+  qpat_assum `consume_call_outcome rq1 _ _ _ = _` (irule_at Any) >>
+  qpat_assum `consume_call_outcome rq2 _ _ _ = _` (irule_at Any) >>
+  simp[Excl "consume_call_outcome_eq"] >>
+  fs[ld_shared_agree_def, Excl "consume_call_outcome_eq"] >> metis_tac[]
+QED
+
+Theorem taint_agree_consume_create:
+  taint_agree D X tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  consume_create_outcome rq s = (w,r) ==>
+  ?u. consume_create_outcome rq t = (w,u) /\ taint_agree D X tn r u
+Proof
+  strip_tac >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
+    metis_tac[taint_agree_shared] >>
+  `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
+    metis_tac[ld_shared_clean_accounts, ld_shared_clean_transient] >>
+  `s.vs_outcomes = t.vs_outcomes /\ s.vs_logs = t.vs_logs /\
+   s.vs_pending_deletions = t.vs_pending_deletions` by fs[ld_shared_agree_def] >>
+  drule_all ld_consume_create_outcome_transport >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `consume_create_outcome rq t = (w,u)` >>
+  qexists_tac `u` >> simp[Excl "consume_create_outcome_eq"] >>
+  qpat_assum `r = _` (fn th => once_rewrite_tac[th]) >>
+  simp[Abbr `u`, taint_agree_def, ld_shared_agree_def, word_agree_except_def,
+       Excl "consume_create_outcome_eq"] >>
+  gvs[taint_agree_def, ld_shared_agree_def, word_agree_except_def,
+      Excl "consume_create_outcome_eq"] >>
+  conj_tac
+  >- (Cases_on `computed_precompile rq` >>
+      simp[record_request_def, LIST_REL_APPEND, request_agree_except_def,
+        accounts_agree_except_def, transient_agree_except_def,
+        storage_agree_except_def, word_agree_except_def]) >>
+  qpat_x_assum `_ = s` (mp_tac o Q.AP_TERM
+    `\v. v with <|vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
+      vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
+      vs_pending_deletions := r.vs_pending_deletions;
+      vs_returndata := r.vs_returndata;
+      vs_requests := record_request rq s.vs_requests|>`) >>
+  simp[venom_state_fupdcanon]
 QED
 
 Theorem taint_agree_mcopy:
