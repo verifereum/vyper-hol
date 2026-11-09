@@ -180,6 +180,206 @@ Proof
   metis_tac[]
 QED
 
+Theorem sym_invoke_prefix_pair:
+  !lo o2pc p env ctx cp fn ret srest labs0 ps cs ss r n cs' ss' ps'.
+  lo = SND (compute_label_offsets p) /\ o2pc = build_offset_to_pc p /\
+  asm_static_wf p /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  asm_steps lo o2pc p n cs = AsmOK cs' /\
+  sym_steps p env n ss = SymOK ss' /\
+  sym_kinds_ok cp fn ret srest ps' ss' /\
+  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps' cs' ss'
+Proof
+  rpt strip_tac >>
+  `asm_sym_rel p env cs' ss'` by
+    (gvs[sym_frame_inv_def] >> drule_all asm_sym_steps_lockstep >> simp[]) >>
+  drule_all sym_invoke_prefix_frame_transport >> simp[]
+QED
+
+Theorem sym_invoke_selected_frame_prefix:
+  !p env ctx cp fn ret srest labs0 ps cs ss mid operands nl iops prepared
+   dfg rops arranged base r lo o2pc.
+  lo = SND (compute_label_offsets p) /\ o2pc = build_offset_to_pc p /\
+  asm_static_wf p /\
+  EVERY (\op. ~is_label_operand op) operands /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan INVOKE operands nl ps = (iops,prepared) /\
+  reorder_plan dfg operands prepared = (rops,arranged) /\
+  LENGTH operands <= 16 /\ LENGTH operands <= LENGTH prepared.ps_stack /\
+  generated_plan_state_wf_marked base ps /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) operands /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_block_at p cs.as_pc (execute_plan cp.cp_initial_fmp (iops ++ rops)) /\
+  asm_steps lo o2pc p (LENGTH (execute_plan cp.cp_initial_fmp (iops ++ rops))) cs =
+    AsmOK mid ==>
+  ?sms. sym_steps p env (LENGTH (execute_plan cp.cp_initial_fmp (iops ++ rops))) ss =
+          SymOK sms /\
+        sym_frame_inv p env ctx cp fn ret srest labs0 arranged mid sms
+Proof
+  rpt strip_tac >>
+  rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss` >>
+  rename1 `generated_plan_state_wf_marked spillbase ps` >>
+  `sym_kinds_ok cplan fn ret srest ps ss /\
+   asm_block_at p ss.sym_base.as_pc
+     (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
+    gvs[sym_frame_inv_def, asm_sym_rel_def] >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+   plan_slots_bounded spillbase ps /\ residual_budget_wf_marked spillbase [] ps` by
+    metis_tac[fnPlanPrefixTheory.generated_plan_state_wf_marked_def,
+              deepResidualSimTheory.generated_plan_state_wf_marked_residual_nil] >>
+  drule_all sym_invoke_selected_prefix_sim_marked >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  goal_assum (drule_at Any) >>
+  drule_all sym_invoke_prefix_pair >> simp[]
+QED
+
+Theorem sval_conc_words:
+  !svs ws lo.
+  EVERY (\sv. ?w. sv = Val w) svs /\
+  LIST_REL (\sv w. sval_conc lo sv = SOME w) svs ws ==>
+  svs = MAP Val ws
+Proof
+  Induct >> Cases_on `ws` >> simp[] >>
+  rpt strip_tac >> gvs[sval_conc_def] >> metis_tac[]
+QED
+
+Theorem sym_invoke_argument_list_words:
+  fn_shape_ok fn /\ label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: args /\
+  EVERY (\op. op <> dead_stack_marker) args /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE args) svs ==>
+  EVERY (\sv. ?w. sv = Val w) svs
+Proof
+  rw[EVERY_MEM] >>
+  drule_all LIST_REL_MEM_IMP_R >> strip_tac >>
+  gvs[MEM_REVERSE] >>
+  `x <> dead_stack_marker` by metis_tac[] >>
+  drule_all sym_invoke_argument_word_kind >> simp[]
+QED
+
+Theorem sym_invoke_arranged_stack:
+  !p env ctx cp fn ret srest ps cs ss inst nm args saved_ops values saved rest.
+  fn_shape_ok fn /\ label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: args /\
+  EVERY (\op. op <> dead_stack_marker) args /\
+  sym_kinds_ok cp fn ret srest ps ss /\ asm_sym_rel p env cs ss /\
+  ps.ps_stack = saved_ops ++ args /\
+  cs.as_stack = values ++ saved ++ rest /\ LENGTH values = LENGTH args ==>
+  ?saved_sym.
+    ss.sym_stack = MAP Val values ++ saved_sym ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE saved_ops) saved_sym
+Proof
+  rpt strip_tac >>
+  gvs[sym_kinds_ok_def, REVERSE_APPEND, LIST_REL_SPLIT1] >>
+  rename1 `LIST_REL (op_kind_ok fn ret) (REVERSE args) arg_syms` >>
+  `EVERY (\sv. ?w. sv = Val w) arg_syms` by
+    (drule_all sym_invoke_argument_list_words >> simp[]) >>
+  `LENGTH arg_syms = LENGTH values` by
+    metis_tac[LIST_REL_LENGTH, LENGTH_REVERSE] >>
+  `LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
+     arg_syms values` by
+    metis_tac[asm_sym_rel_def, GSYM APPEND_ASSOC, LIST_REL_APPEND_EQ] >>
+  drule_all sval_conc_words >> strip_tac >> gvs[]
+QED
+
+Theorem sym_invoke_callee_code_label:
+  !ctx cp i fn r p pc.
+  generate_context_plan ctx = SOME cp /\ i < LENGTH ctx.ctx_functions /\
+  EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
+  fn_shape_ok fn /\
+  asm_block_at p pc (execute_plan cp.cp_initial_fmp r.sr_plan) ==>
+  MEM (AsmLabel fn.fn_name) p
+Proof
+  rpt strip_tac >>
+  drule_all fnPlanPlaceFnRegionTheory.context_region_leading_label >> strip_tac >>
+  `fn.fn_name = (HD fn.fn_blocks).bb_label` by
+    gvs[fn_shape_ok_def, fn_entry_label_def, entry_block_def, AllCaseEqs()] >>
+  irule spillWordBoundsTheory.asm_block_at_member >>
+  goal_assum (drule_at Any) >> simp[execute_plan_def, exec_stack_op_def]
+QED
+
+Theorem sym_invoke_call_entry_pair:
+  !p env lo o2pc mid sms cas ret_lbl nm.
+  lo = SND (compute_label_offsets p) /\ o2pc = build_offset_to_pc p /\
+  asm_static_wf p /\ asm_sym_rel p env mid sms /\
+  asm_block_at p mid.as_pc
+    [AsmPushLabel ret_lbl; AsmPushLabel nm; AsmOp "JUMP"] /\
+  MEM (AsmLabel nm) p /\ asm_steps lo o2pc p 3 mid = AsmOK cas ==>
+  ?scas. sym_steps p env 3 sms = SymOK scas /\
+    asm_sym_rel p env cas scas /\
+    scas.sym_stack = Lab ret_lbl 0 :: sms.sym_stack /\
+    scas.sym_mem_labels = sms.sym_mem_labels
+Proof
+  rpt strip_tac >>
+  `?pc. INDEX_OF (AsmLabel nm) p = SOME pc` by
+    (Cases_on `INDEX_OF (AsmLabel nm) p` >> gvs[INDEX_OF_eq_NONE]) >>
+  `asm_block_at p sms.sym_base.as_pc
+     [AsmPushLabel ret_lbl; AsmPushLabel nm; AsmOp "JUMP"]` by
+    (gvs[asm_sym_rel_def] >> simp[]) >>
+  drule_all sym_invoke_call_packet >>
+  disch_then (qspec_then `env` assume_tac) >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  gvs[]
+QED
+
+Theorem sym_invoke_return_code_label:
+  !p pc fmp ret nm post.
+  asm_block_at p pc (execute_plan fmp
+    ([SOPushLabel ret; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret] ++ post)) ==>
+  MEM (AsmLabel ret) p
+Proof
+  rpt strip_tac >> irule spillWordBoundsTheory.asm_block_at_member >>
+  goal_assum (drule_at Any) >> simp[execute_plan_def, exec_stack_op_def]
+QED
+
+Theorem sym_invoke_entry_symbolic_boundary:
+  !p env lo o2pc ctx cp fn ret srest labs0 arranged mid sms cas inst nm args
+   saved_ops values saved rest ret_lbl fmp post n ss.
+  lo = SND (compute_label_offsets p) /\ o2pc = build_offset_to_pc p /\
+  asm_static_wf p /\ fn_shape_ok fn /\ label_flow_ok ctx /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: args /\
+  EVERY (\op. op <> dead_stack_marker) args /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 arranged mid sms /\
+  arranged.ps_stack = saved_ops ++ args /\
+  mid.as_stack = values ++ saved ++ rest /\ LENGTH values = LENGTH args /\
+  asm_block_at p mid.as_pc (execute_plan fmp
+    ([SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ post)) /\
+  MEM (AsmLabel nm) p /\ asm_steps lo o2pc p 3 mid = AsmOK cas /\
+  sym_steps p env n ss = SymOK sms ==>
+  ?scas saved_sym.
+    sym_steps p env (n + 3) ss = SymOK scas /\
+    sym_steps p env 3 sms = SymOK scas /\ asm_sym_rel p env cas scas /\
+    scas.sym_stack = [Lab ret_lbl 0] ++ MAP Val values ++ saved_sym ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE saved_ops) saved_sym /\
+    scas.sym_mem_labels = sms.sym_mem_labels /\
+    (!b. b IN FDOM scas.sym_mem_labels ==> context_spill_byte cp b) /\
+    MEM (AsmLabel ret_lbl) p
+Proof
+  rpt strip_tac >>
+  rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 arranged mid sms` >>
+  `asm_sym_rel p env mid sms /\ sym_kinds_ok cplan fn ret srest arranged sms` by
+    gvs[sym_frame_inv_def] >>
+  drule_all sym_invoke_arranged_stack >> strip_tac >>
+  drule_all fnFrameBoundaryInvokeTheory.invoke_packet_block >> strip_tac >>
+  drule_all sym_invoke_call_entry_pair >> strip_tac >>
+  drule_all sym_invoke_return_code_label >> strip_tac >>
+  gvs[sym_kinds_ok_def, sym_steps_add]
+QED
+
 Theorem sym_invoke_frame_sim_deep:
   !fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
    next_liveness is_halting next_is_term bb_label base ps vs as ops ps' r ra
