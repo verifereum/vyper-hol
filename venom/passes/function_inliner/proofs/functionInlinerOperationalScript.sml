@@ -2115,3 +2115,279 @@ Proof
   gvs[step_inst_non_invoke, inline_create_eval_list, AllCaseEqs()] >>
   irule inline_create_clone_frame >> simp[] >> metis_tac[]
 QED
+
+Theorem inline_ordinary_step_result_from_strong:
+  inline_ordinary_result
+    (inline_opaque_frame_rel ren (V UNION set inst.inst_outputs) opaque saved P) r q ==>
+  inline_ordinary_step_result ren V opaque saved P inst r q
+Proof
+  Cases_on `r` >> simp[] >>
+  metis_tac[inline_opaque_frame_restrict, pred_setTheory.SUBSET_UNION]
+QED
+
+Theorem inline_ordinary_step_result_from_ok:
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P) r q /\
+  (!s'. r = OK s' ==> ?t'. q = OK t' /\
+    inline_opaque_frame_rel ren (V UNION set inst.inst_outputs) opaque saved P s' t') ==>
+  inline_ordinary_step_result ren V opaque saved P inst r q
+Proof
+  Cases_on `r` >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_call_clone_step_result:
+  inst.inst_opcode = CALL /\ LENGTH inst.inst_operands = 7 /\
+  inst.inst_outputs = [x] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x ==>
+  inline_ordinary_step_result ren V opaque saved P inst
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >> irule inline_ordinary_step_result_from_ok >>
+  conj_tac >- (
+    `V UNION set inst.inst_outputs = x INSERT V` by (simp[] >> SET_TAC[]) >>
+    pop_assum (fn th => pure_rewrite_tac[th]) >> rpt strip_tac >>
+    irule inline_call_clone_ok >> simp[] >> metis_tac[]) >>
+  irule inline_call_clone_result >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_create_opcode_clone_step_result:
+  MEM inst.inst_opcode [CREATE; CREATE2] /\
+  LENGTH inst.inst_operands = (if inst.inst_opcode = CREATE then 3 else 4) /\
+  inst.inst_outputs = [x] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x ==>
+  inline_ordinary_step_result ren V opaque saved P inst
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >> irule inline_ordinary_step_result_from_ok >>
+  conj_tac >- (
+    `V UNION set inst.inst_outputs = x INSERT V` by (simp[] >> SET_TAC[]) >>
+    pop_assum (fn th => pure_rewrite_tac[th]) >> rpt strip_tac >>
+    irule inline_create_opcode_clone_ok >> simp[] >> metis_tac[]) >>
+  irule inline_create_opcode_clone_result >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_inst_wf_value_output[local]:
+  inst_wf inst /\
+  (inline_pure1_opcode inst.inst_opcode \/ inline_pure2_opcode inst.inst_opcode \/
+   inline_pure3_opcode inst.inst_opcode \/ inline_read0_opcode inst.inst_opcode \/
+   inline_read1_opcode inst.inst_opcode) ==>
+  LENGTH inst.inst_outputs = 1
+Proof
+  Cases_on `inst.inst_opcode` >>
+  simp[inst_wf_def, inline_pure1_opcode_def, inline_pure2_opcode_def,
+    inline_pure3_opcode_def, inline_read0_opcode_def, inline_read1_opcode_def] >>
+  metis_tac[]
+QED
+
+Theorem inline_ordinary_step_result_singleton:
+  inst.inst_outputs = [x] /\
+  inline_ordinary_result (inline_opaque_frame_rel ren (x INSERT V) opaque saved P) r q ==>
+  inline_ordinary_step_result ren V opaque saved P inst r q
+Proof
+  strip_tac >> irule inline_ordinary_step_result_from_strong >>
+  `V UNION set inst.inst_outputs = x INSERT V` by (simp[] >> SET_TAC[]) >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >> simp[]
+QED
+
+Theorem inline_ordinary_step_result_empty:
+  inst.inst_outputs = [] /\
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P) r q ==>
+  inline_ordinary_step_result ren V opaque saved P inst r q
+Proof
+  strip_tac >> irule inline_ordinary_step_result_from_strong >> simp[]
+QED
+
+Theorem inline_ordinary_result_singleton_support[local]:
+  inline_ordinary_result (inline_opaque_frame_rel ren (x INSERT V) opaque saved P) r q ==>
+  inline_ordinary_result
+    (inline_opaque_frame_rel ren (V UNION {x}) opaque saved P) r q
+Proof
+  `V UNION {x} = x INSERT V` by SET_TAC[] >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >> simp[]
+QED
+
+Theorem inline_ordinary_clone_step_result:
+  inst_wf inst /\ inline_ordinary_opcode inst.inst_opcode /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!op. MEM op inst.inst_operands ==>
+    eval_operand (clone_operand p labels op) t = eval_operand op s) /\
+  (!u v. u IN V UNION set inst.inst_outputs /\ v IN V UNION set inst.inst_outputs ==>
+    (ren u = ren v <=> u = v)) /\
+  (!x. MEM x inst.inst_outputs ==> ren x NOTIN P /\ ren x = STRCAT p x) ==>
+  inline_ordinary_step_result ren V opaque saved P inst
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  `eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s` by
+    (irule inline_clone_eval_operands_members >> simp[]) >>
+  `eval_operands (MAP (clone_operand p labels) (REVERSE (TL inst.inst_operands))) t =
+    eval_operands (REVERSE (TL inst.inst_operands)) s` by
+    (irule inline_clone_eval_operands_reverse_tail >> simp[]) >>
+  Cases_on `inline_pure2_opcode inst.inst_opcode`
+  >- (`LENGTH inst.inst_outputs = 1` by
+        (irule inline_inst_wf_value_output >> simp[] >> metis_tac[]) >>
+      `?x. inst.inst_outputs = [x]` by gvs[listTheory.LENGTH_EQ_NUM_compute] >>
+      pop_assum strip_assume_tac >>
+      irule inline_ordinary_step_result_from_strong >>
+      `V UNION set inst.inst_outputs = HD inst.inst_outputs INSERT V` by
+        (simp[] >> SET_TAC[]) >>
+      pop_assum (fn th => pure_rewrite_tac[th]) >>
+      irule inline_pure2_opcode_clone_result >> simp[] >> metis_tac[]) >>
+  Cases_on `inline_pure1_opcode inst.inst_opcode \/ inline_pure3_opcode inst.inst_opcode`
+  >- (`LENGTH inst.inst_outputs = 1` by
+        (irule inline_inst_wf_value_output >> simp[] >> metis_tac[]) >>
+      `?x. inst.inst_outputs = [x]` by gvs[listTheory.LENGTH_EQ_NUM_compute] >>
+      pop_assum strip_assume_tac >>
+      irule inline_ordinary_step_result_from_strong >>
+      `V UNION set inst.inst_outputs = HD inst.inst_outputs INSERT V` by
+        (simp[] >> SET_TAC[]) >>
+      pop_assum (fn th => pure_rewrite_tac[th]) >>
+      irule inline_pure13_opcode_clone_result >> simp[] >> metis_tac[]) >>
+  Cases_on `inline_read0_opcode inst.inst_opcode \/ inline_read1_opcode inst.inst_opcode`
+  >- (`LENGTH inst.inst_outputs = 1` by
+        (irule inline_inst_wf_value_output >> simp[] >> metis_tac[]) >>
+      `?x. inst.inst_outputs = [x]` by gvs[listTheory.LENGTH_EQ_NUM_compute] >>
+      pop_assum strip_assume_tac >>
+      irule inline_ordinary_step_result_from_strong >>
+      `V UNION set inst.inst_outputs = HD inst.inst_outputs INSERT V` by
+        (simp[] >> SET_TAC[]) >>
+      pop_assum (fn th => pure_rewrite_tac[th]) >>
+      irule inline_read_opcode_clone_result >> simp[] >> metis_tac[]) >>
+  `inline_effect_opcode inst.inst_opcode \/ inline_special_opcode inst.inst_opcode` by
+    metis_tac[inline_ordinary_opcode_coverage] >>
+  qpat_x_assum `inline_ordinary_opcode _` kall_tac >>
+  qpat_x_assum `~inline_pure2_opcode _` kall_tac >>
+  qpat_x_assum `~(_ \/ _)` kall_tac >>
+  qpat_x_assum `~(_ \/ _)` kall_tac >>
+  gvs[inline_effect_opcode_def, inline_special_opcode_def]
+  >~ [`inst.inst_opcode = CALL`]
+  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+      irule inline_call_clone_step_result >> simp[] >> metis_tac[])
+  >~ [`inst.inst_opcode = CREATE`]
+  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+      irule inline_create_opcode_clone_step_result >> simp[] >> metis_tac[])
+  >~ [`inst.inst_opcode = CREATE2`]
+  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+      irule inline_create_opcode_clone_step_result >> simp[] >> metis_tac[]) >>
+  irule inline_ordinary_step_result_from_strong
+  >~ [`inst.inst_opcode = INVALID`]
+  >- (gvs[inst_wf_def] >> irule inline_simple_opcode_clone_result >> simp[])
+  >~ [`inst.inst_opcode = NOP`]
+  >- (gvs[inst_wf_def] >> irule inline_simple_opcode_clone_result >> simp[])
+  >~ [`inst.inst_opcode = STOP`]
+  >- (gvs[inst_wf_def] >> irule inline_simple_opcode_clone_result >> simp[])
+  >~ [`inst.inst_opcode = SINK`]
+  >- (gvs[inst_wf_def] >> irule inline_simple_opcode_clone_result >> simp[])
+  >~ [`inst.inst_opcode = MSTORE`]
+  >- (gvs[inst_wf_def] >> irule inline_write2_opcode_clone_result >> simp[] >> metis_tac[])
+  >~ [`inst.inst_opcode = MSTORE8`]
+  >- (gvs[inst_wf_def] >> irule inline_write2_opcode_clone_result >> simp[] >> metis_tac[])
+  >~ [`inst.inst_opcode = SSTORE`]
+  >- (gvs[inst_wf_def] >> irule inline_storage_opcode_clone_result >> simp[])
+  >~ [`inst.inst_opcode = TSTORE`]
+  >- (gvs[inst_wf_def] >> irule inline_storage_opcode_clone_result >> simp[])
+  >~ [`inst.inst_opcode = MCOPY`]
+  >- (gvs[inst_wf_def] >> irule inline_mcopy_atomic_clone_result >> simp[])
+  >~ [`inst.inst_opcode = ISTORE`]
+  >- (gvs[inst_wf_def] >> irule inline_istore_atomic_clone_result >> simp[])
+  >~ [`inst.inst_opcode = CALLDATACOPY`]
+  >- (gvs[inst_wf_def] >> irule inline_copy_data_atomic_clone_result >> simp[])
+  >~ [`inst.inst_opcode = DLOADBYTES`]
+  >- (gvs[inst_wf_def] >> irule inline_copy_data_atomic_clone_result >> simp[])
+  >~ [`inst.inst_opcode = CODECOPY`]
+  >- (gvs[inst_wf_def] >> irule inline_copy_data_atomic_clone_result >> simp[])
+  >~ [`inst.inst_opcode = RETURNDATACOPY`]
+  >- (gvs[inst_wf_def] >> irule inline_returndatacopy_atomic_clone_result >> simp[])
+  >~ [`inst.inst_opcode = EXTCODECOPY`]
+  >- (gvs[inst_wf_def] >> irule inline_extcodecopy_atomic_clone_result >> simp[])
+  >~ [`inst.inst_opcode = ASSERT`]
+  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+      irule inline_assert_clone_result >> simp[] >> metis_tac[])
+  >~ [`inst.inst_opcode = ASSERT_UNREACHABLE`]
+  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+      irule inline_assert_clone_result >> simp[] >> metis_tac[])
+  >~ [`inst.inst_opcode = RETURN`]
+  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+      irule inline_return_revert_clone_result >> simp[] >> metis_tac[])
+  >~ [`inst.inst_opcode = REVERT`]
+  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+      irule inline_return_revert_clone_result >> simp[] >> metis_tac[])
+  >~ [`inst.inst_opcode = SELFDESTRUCT`]
+  >- (gvs[inst_wf_def] >> irule inline_selfdestruct_clone_result >> simp[])
+  >~ [`inst.inst_opcode = LOG`]
+  >- (gvs[inst_wf_def] >> irule inline_log_clone_result >> simp[] >> metis_tac[]) >>
+  all_tac
+  >~ [`inst.inst_opcode = GETFMP`]
+  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+      irule inline_ordinary_result_singleton_support >>
+      irule inline_fmp_read_clone_result >> simp[] >> metis_tac[])
+  >~ [`inst.inst_opcode = INITIAL_FMP`]
+  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+      irule inline_ordinary_result_singleton_support >>
+      irule inline_fmp_read_clone_result >> simp[] >> metis_tac[])
+  >~ [`inst.inst_opcode = GAS`]
+  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+      irule inline_ordinary_result_singleton_support >>
+      irule inline_gas_clone_result >> simp[] >> metis_tac[])
+  >~ [`inst.inst_opcode = SHA3`]
+  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+      irule inline_ordinary_result_singleton_support >>
+      irule inline_sha3_clone_result >> simp[] >> metis_tac[])
+  >~ [`inst.inst_opcode = STATICCALL`]
+  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+      irule inline_ordinary_result_singleton_support >>
+      irule inline_call6_clone_result >> simp[] >> metis_tac[])
+  >~ [`inst.inst_opcode = DELEGATECALL`]
+  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+      irule inline_ordinary_result_singleton_support >>
+      irule inline_call6_clone_result >> simp[] >> metis_tac[]) >>
+  gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+  irule inline_bump_clone_result >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_ordinary_step_result_ok:
+  inline_ordinary_step_result ren V opaque saved P inst r q /\ r = OK s ==>
+  ?t. q = OK t /\
+    inline_opaque_frame_rel ren (V UNION set inst.inst_outputs) opaque saved P s t
+Proof
+  strip_tac >> gvs[]
+QED
+
+Theorem inline_ordinary_step_result_halt:
+  inline_ordinary_step_result ren V opaque saved P inst r q /\ r = Halt s ==>
+  ?t. q = Halt t /\ inline_opaque_frame_rel ren V opaque saved P s t
+Proof
+  strip_tac >> gvs[]
+QED
+
+Theorem inline_ordinary_step_result_abort:
+  inline_ordinary_step_result ren V opaque saved P inst r q /\ r = Abort a s ==>
+  ?t. q = Abort a t /\ inline_opaque_frame_rel ren V opaque saved P s t
+Proof
+  strip_tac >> gvs[]
+QED
+
+Theorem inline_ordinary_step_result_error:
+  inline_ordinary_step_result ren V opaque saved P inst r q /\ r = Error e ==>
+  ?e'. q = Error e'
+Proof
+  strip_tac >> gvs[]
+QED
+
+Theorem inline_ordinary_step_result_not_intret:
+  inline_ordinary_step_result ren V opaque saved P inst r q ==>
+  !ret s. r <> IntRet ret s
+Proof
+  simp[inline_ordinary_step_result_def]
+QED
