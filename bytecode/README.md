@@ -31,16 +31,27 @@ Before installing, the generator applies `patches/*.patch` to the pinned
 revision in C-locale filename order, using `git apply` for each file. A failed
 patch stops generation; an empty series leaves the pin unchanged. Each file
 backports one upstream PR so independent fixes can be added separately and
-removed when a new pin includes them. The current series contains:
+removed when a new pin includes them. The pin already contains
+vyperlang/vyper#5127 (external calls send `4 + encoded length` bytes) and
+vyperlang/vyper#5322 (empty `Bytes`/`String` to signed conversions mask the
+data word). The current series contains:
 
-- vyperlang/vyper#5127: an external call sends the selector and the encoded
-  arguments, `4 + encoded length` bytes, rather than `4 + ` the argument
-  tuple's ABI size bound.
-- vyperlang/vyper#5239: a storage, transient or immutable variable is read at
-  its own declared type, not at a wider expected type (such as an external
-  call's parameter type), whose layout differs for nested bounded types.
-- vyperlang/vyper#5254: the inliner binds the unused return-PC parameter
-  to zero instead of the removed callee's label.
+- `5239-declared-variable-type.patch`, vyperlang/vyper#5239: a storage,
+  transient or immutable variable is read at its own declared type, not at a
+  wider expected type (such as an external call's parameter type), whose
+  layout differs for nested bounded types.
+- `5254-inliner-retpc.patch`, vyperlang/vyper#5254: the inliner binds the
+  unused return-PC parameter to zero instead of the removed callee's label.
+- `5336-dft-abort-order.patch`, vyperlang/vyper#5336: DFT keeps aborting
+  instructions (an `assert`, an internal call) in their order, scheduling each
+  after the previous run of aborting instructions.
+- `5349-dft-effectless-roots.patch`, vyperlang/vyper#5349: an instruction with
+  no outputs and no effects (an `assert`) stays a scheduling root even when a
+  later abort depends on it, so nothing is hoisted above it.
+- `local-dft-create-abort.patch`, not upstream: makes Python's DFT schedule as
+  the HOL pass does where it deliberately departs from upstream:
+  `create`/`create2` count as aborts. Its name sorts after the PR files it
+  builds on.
 
 The provenance's `vyper_commit` names the unpatched base revision.
 
