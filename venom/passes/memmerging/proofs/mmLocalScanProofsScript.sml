@@ -5748,6 +5748,38 @@ Proof
   drule_all mm_local_pending_discharge_prefix >> simp[]
 QED
 
+Theorem mm_local_pending_copy_birth[local]:
+  mm_local_pending cap js s t /\
+  LIST_REL (\j w. cap j = SOME w) js ws /\
+  EVERY (\(d,bs). src+len <= d \/ d+LENGTH bs <= src) ws /\
+  payload = read_memory src len s /\ cap n = SOME (dst,payload) /\
+  s'.vs_memory = (write_memory_with_expansion dst payload s).vs_memory ==>
+  payload = read_memory src len t /\ LENGTH payload = len /\
+  mm_local_pending cap (js ++ [n]) s' t
+Proof
+  strip_tac >>
+  `payload = read_memory src len t` by
+    (drule_all mm_local_pending_log >> strip_tac >>
+     drule_all mm_local_read_write_log_memory >> simp[]) >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[mm_local_read_memory_bytes] >>
+  irule mm_local_pending_create >> metis_tac[]
+QED
+
+Theorem mm_local_pending_mcopy_birth[local]:
+  mm_local_pending cap js s t /\
+  LIST_REL (\j w. cap j = SOME w) js ws /\
+  EVERY (\(d,bs). src+len <= d \/ d+LENGTH bs <= src) ws /\
+  payload = read_memory src len s /\ cap n = SOME (dst,payload) ==>
+  payload = read_memory src len t /\ LENGTH payload = len /\
+  mm_local_pending cap (js ++ [n]) (mcopy dst src len s) t
+Proof
+  strip_tac >> irule mm_local_pending_copy_birth >>
+  conj_tac >- (qexists `ws` >> simp[]) >>
+  qexistsl [`dst`, `s`] >>
+  simp[venomExecSemanticsTheory.mcopy_def, venomStateTheory.read_memory_def]
+QED
+
 Definition mm_local_group_captures_def:
   mm_local_group_captures is cap B g <=>
     !j d bs. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
@@ -5903,6 +5935,126 @@ Proof
   pure_rewrite_tac[mm_local_group_captures_def] >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   Cases_on `j' = j` >> gvs[] >> metis_tac[]
+QED
+
+Theorem mm_local_hazards_partition[local]:
+  MEM h ss.ss_copies ==>
+  MEM h (flush_hazards Mem2Mem ss c).ss_copies \/
+  MEM h (flush_hazards Mem2Mem ss c).ss_flushed
+Proof
+  simp[flush_hazards_def, mode_allows_overlap_def] >>
+  rpt IF_CASES_TAC >>
+  gvs[flush_copies_def, MEM_APPEND, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem mm_local_hazards_source_exclusion[local]:
+  MEM h (flush_hazards Mem2Mem ss c).ss_copies ==>
+  ~copy_overwrites h (copy_src_interval c)
+Proof
+  simp[flush_hazards_def, mode_allows_overlap_def] >>
+  rpt IF_CASES_TAC >>
+  gvs[flush_copies_def, raw_hazards_def, copies_that_overwrite_def, MEM_FILTER] >>
+  rpt strip_tac >> gvs[FILTER_EQ_NIL, EVERY_MEM, MEM_FILTER]
+QED
+
+Theorem mm_local_prefix_future_hazard[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  bb.bb_instructions = pre ++ i::post /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state pre /\
+  hs = flush_hazards Mem2Mem (invalidate_loads ss iv) c /\
+  (scan_inst (dfg_build_function fn0) Mem2Mem ss i).ss_flushed = hs.ss_flushed /\
+  MEM w pre /\ w.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  MEM h ss.ss_copies /\ MEM w.inst_id h.cg_inst_ids /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM w.inst_id g.cg_inst_ids /\ rep_of_group bb.bb_instructions g = SOME (r,g) /\
+  ~MEM r (MAP (\i. i.inst_id) pre) ==>
+  MEM h hs.ss_copies /\ ~copy_overwrites h (copy_src_interval c)
+Proof
+  strip_tac >>
+  `MEM h hs.ss_copies \/ MEM h hs.ss_flushed` by
+    (gvs[] >> irule mm_local_hazards_partition >> simp[invalidate_loads_def]) >>
+  `MEM h hs.ss_copies` by
+    (spose_not_then assume_tac >> fs[] >>
+     `MEM h (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by
+       (qspecl_then [`post`, `scan_inst (dfg_build_function fn0) Mem2Mem ss i`]
+          strip_assume_tac (Q.INST [`dfg` |-> `dfg_build_function fn0`,
+            `mode` |-> `Mem2Mem`] mm_local_fold_flushed_extension) >>
+        gvs[scan_block_def, FOLDL_APPEND, hard_barrier_def, MEM_APPEND]) >>
+     `h = g` by
+       (irule mm_local_prefix_write_group_owner >>
+        goal_assum (drule_at Any) >> simp[] >> metis_tac[MEM_APPEND]) >>
+     `MEM r h.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+     `MEM r (MAP (\i. i.inst_id) pre)` by
+       (irule mm_local_prefix_fragment_ids_before_cut >>
+        goal_assum (drule_at Any) >> simp[] >> metis_tac[APPEND_ASSOC]) >>
+     metis_tac[]) >>
+  simp[] >> gvs[] >> metis_tac[mm_local_hazards_source_exclusion]
+QED
+
+Theorem mm_local_prefix_bulk_future_hazard[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  bb.bb_instructions = pre ++ i::post /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state pre /\
+  i.inst_opcode = MCOPY /\ i.inst_operands = [Lit dst; Lit src; Lit len] /\
+  c = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+         cg_inst_ids := [i.inst_id] |> /\
+  hs = flush_hazards Mem2Mem (invalidate_loads ss (mk_interval (w2n dst) (w2n len))) c /\
+  MEM w pre /\ w.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  MEM h ss.ss_copies /\ MEM w.inst_id h.cg_inst_ids /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM w.inst_id g.cg_inst_ids /\ rep_of_group bb.bb_instructions g = SOME (r,g) /\
+  ~MEM r (MAP (\i. i.inst_id) pre) ==>
+  MEM h hs.ss_copies /\ ~copy_overwrites h (copy_src_interval c)
+Proof
+  strip_tac >>
+  `(scan_inst (dfg_build_function fn0) Mem2Mem ss i).ss_flushed = hs.ss_flushed` by
+    simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def,
+      scan_bulk_copy_def, operand_lit_val_def, mode_allows_overlap_def] >>
+  drule_all mm_local_prefix_future_hazard >> simp[]
+QED
+
+Theorem mm_local_prefix_store_future_hazard[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  bb.bb_instructions = pre ++ i::post /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state pre /\
+  i.inst_opcode = MSTORE /\ i.inst_operands = [Lit dst; Var v] /\
+  FLOOKUP ss.ss_loads v = SOME src /\
+  c = <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
+         cg_inst_ids := [i.inst_id] ++
+           (case dfg_get_def (dfg_build_function fn0) v of
+              SOME li => [li.inst_id] | NONE => []) |> /\
+  hs = flush_hazards Mem2Mem (invalidate_loads ss (mk_interval (w2n dst) 32)) c /\
+  MEM w pre /\ w.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  MEM h ss.ss_copies /\ MEM w.inst_id h.cg_inst_ids /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM w.inst_id g.cg_inst_ids /\ rep_of_group bb.bb_instructions g = SOME (r,g) /\
+  ~MEM r (MAP (\i. i.inst_id) pre) ==>
+  MEM h hs.ss_copies /\ ~copy_overwrites h (copy_src_interval c)
+Proof
+  strip_tac >>
+  `(scan_inst (dfg_build_function fn0) Mem2Mem ss i).ss_flushed = hs.ss_flushed` by
+    (simp[scan_inst_def, mode_load_opcode_def, scan_store_def,
+      operand_lit_val_def, operand_var_name_def, mode_allows_overlap_def] >> gvs[]) >>
+  drule_all mm_local_prefix_future_hazard >> simp[]
+QED
+
+Theorem mm_local_capture_source_exclusion[local]:
+  ~copy_overwrites h (copy_src_interval c) /\
+  h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length ==>
+  LENGTH bs = 0 \/ c.cg_length = 0 \/
+  c.cg_src + c.cg_length <= d \/ d + LENGTH bs <= c.cg_src
+Proof
+  Cases_on `bs` >- simp[] >>
+  simp[copy_overwrites_def, copy_dst_interval_def, copy_src_interval_def,
+    mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
+    mmIntervalTheory.interval_end_def, arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
+  rpt strip_tac >> gvs[] >> decide_tac
 QED
 
 Theorem mm_local_hazards_removed[local]:
