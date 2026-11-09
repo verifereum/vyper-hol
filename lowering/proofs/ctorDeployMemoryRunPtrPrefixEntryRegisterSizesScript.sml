@@ -167,7 +167,9 @@ Proof
          alloca_frontier_inv_from_def, remaining_alloca_budget_def]) >>
  `!aid. middle.cs_next_id <= aid ==> FLOOKUP prepared.vs_allocas aid = NONE` by
    (rpt strip_tac >> simp[] >> first_x_assum irule >> decide_tac) >>
- `FLOOKUP AG ptr' = SOME (b,sz) /\ op_taint atn (Var ptr') = {}` by metis_tac[] >>
+ `FLOOKUP AG ptr' = SOME (b,sz) /\ op_taint atn (Var ptr') = {}` by
+   (qpat_x_assum `!x. not_fresh_at st x ==> FLOOKUP AG x = _ /\ _`
+      (qspec_then `ptr'` mp_tac) >> simp[]) >>
  `d + type_memory_bytes ce ty <= prepared.vs_alloca_next /\
   lo <= prepared.vs_alloca_next` by simp[] >>
  `!inst b sz n. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
