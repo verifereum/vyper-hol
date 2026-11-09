@@ -392,3 +392,55 @@ Proof
   mp_tac (Q.INST [`s` |-> `u`] storage_traversal_multi_round) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
 QED
+
+Theorem storage_traversal_exit:
+  lookup_block hdr fn.fn_blocks = SOME hb /\
+  hb.bb_instructions =
+    [mk_inst hid LT [Var ctr; Var len] [cmp];
+     mk_inst (hid+1) ISZERO [Var cmp] [done];
+     mk_inst (hid+2) JNZ [Var done; Label exit; Label body_lbl] []] /\
+  lookup_block exit fn.fn_blocks = SOME eb /\
+  isPREFIX [mk_inst eid (if tr then TSTORE else SSTORE) [dst; Var len] []]
+    eb.bb_instructions /\
+  len <> cmp /\ len <> done /\
+  (!x. dst = Var x ==> x <> cmp /\ x <> done) /\
+  (!x. not_fresh_at sa x ==> x <> cmp /\ x <> done) /\
+  store_copy_normalize sbase s = h /\
+  (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase) /\
+  eval_operand dst s = SOME d /\ ~s.vs_call_ctx.cc_static /\
+  lookup_var ctr s = SOME (n2w n) /\ lookup_var len s = SOME (n2w n) /\
+  n < dimword(:256) /\
+  ~s.vs_halted /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 ==>
+  ?t. gas_path_mem ctx fn s 0 (OK t) /\
+      store_copy_normalize sbase t = (if tr then tstore d (n2w n) h else sstore d (n2w n) h) /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x sbase) /\
+      ~t.vs_halted /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 1
+Proof
+  strip_tac >>
+  `?q. gas_path_mem ctx fn s 0 (OK q) /\
+       store_copy_normalize sbase q = store_copy_normalize sbase s /\
+       (!x. x <> cmp /\ x <> done ==> lookup_var x q = lookup_var x s) /\
+       ~q.vs_halted /\ q.vs_current_bb = exit /\ q.vs_inst_idx = 0` by
+    (mp_tac (Q.INST [`i` |-> `n`, `bb` |-> `hb`, `id` |-> `hid`]
+       storage_traversal_header) >> simp[]) >>
+  `q.vs_call_ctx = s.vs_call_ctx /\ q.vs_labels = s.vs_labels` by
+    (qpat_x_assum `store_copy_normalize sbase q = store_copy_normalize sbase s`
+       (mp_tac o Q.AP_TERM `(\u. (u.vs_call_ctx,u.vs_labels))`) >>
+     simp[NoAsms, store_copy_normalize_def]) >>
+  `eval_operand dst q = SOME d /\ eval_operand (Var len) q = SOME (n2w n)` by
+    (simp[eval_operand_def] >> Cases_on `dst` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `gas_path_mem ctx fn q 0
+      (OK ((if tr then tstore d (n2w n) q else sstore d (n2w n) q)
+        with vs_inst_idx := q.vs_inst_idx + 1))` by
+    (irule dyn_storage_length_store_path >> simp[] >>
+     qexistsl_tac [`dst`, `eid`, `Var len`] >> fs[IS_PREFIX_APPEND]) >>
+  qexists_tac `(if tr then tstore d (n2w n) q else sstore d (n2w n) q)
+     with vs_inst_idx := 1` >>
+  conj_tac >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_mem_then)) >>
+               qexists_tac `q` >> gvs[]) >>
+  conj_tac
+  >- (Cases_on `tr` >> simp[store_copy_normalize_idx,
+        SRULE [] (Q.INST [`loc` |-> `LocStorage`] store_copy_normalize_store),
+        SRULE [] (Q.INST [`loc` |-> `LocTransient`] store_copy_normalize_store)]) >>
+  Cases_on `tr` >> fs[tstore_def, sstore_def, lookup_var_def] >> metis_tac[]
+QED

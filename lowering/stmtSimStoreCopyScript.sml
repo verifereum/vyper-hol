@@ -322,7 +322,7 @@ Proof
   simp[store_copy_normalize_def, jump_to_def]
 QED
 
-Theorem store_copy_normalize_idx[local,simp]:
+Theorem store_copy_normalize_idx[simp]:
   store_copy_normalize sbase (s with vs_inst_idx := idx) =
     store_copy_normalize sbase s
 Proof
@@ -335,7 +335,7 @@ Proof
   simp[store_copy_normalize_def, update_var_def]
 QED
 
-Theorem store_copy_normalize_store[local]:
+Theorem store_copy_normalize_store:
   store_copy_normalize sbase
     ((if loc = LocStorage then sstore else tstore) key value s) =
   (if loc = LocStorage then sstore else tstore) key value
