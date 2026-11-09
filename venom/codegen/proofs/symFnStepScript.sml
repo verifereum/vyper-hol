@@ -896,8 +896,52 @@ Theorem sym_fn_block_frame_step:
          sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel ==>
          sym_fn_frame_sim_at (SUC fuel)
 Proof
-  cheat
+  gen_tac >> strip_tac >> rewrite_tac[sym_fn_frame_sim_at_def] >>
+  rpt gen_tac >> strip_tac >> suspend "frame_phis"
 QED
+
+Resume sym_fn_block_frame_step[frame_phis]:
+  qspecl_then [`vs`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs
+  >- suspend "frame_prefix"
+  >> simp[run_blocks_unfold, run_block_def]
+QED
+
+Resume sym_fn_block_frame_step[frame_prefix]:
+  `MEM fn ctx.ctx_functions /\ fn_shape_ok fn` by
+    metis_tac[listTheory.MEM_EL, unitShapeDefsTheory.unit_shape_ok_def,
+              listTheory.EVERY_MEM] >>
+  drule_all sym_block_step_prefix >> suspend "frame_prefix_result"
+QED
+
+Resume sym_fn_block_frame_step[frame_prefix_result]:
+  strip_tac >> drule venomExecPropsTheory.lookup_block_label >>
+  strip_tac >> suspend "frame_body"
+QED
+
+Resume sym_fn_block_frame_step[frame_body]:
+  `dfs_block_state liveness dfg cfg fn
+     (init_cleanup_plan_state ch growth spill_base lbl_ctr) bb.bb_label ps_dfs` by
+    metis_tac[] >>
+  drule_all sym_nonentry_body_inv >> suspend "frame_body_match"
+QED
+
+Resume sym_fn_block_frame_step[frame_body_match]:
+  strip_tac >> drule_all sym_block_body_frame_sim >>
+  suspend "frame_result"
+QED
+
+Resume sym_fn_block_frame_step[frame_result]:
+  strip_tac >> drule_all sym_body_result_prefix >>
+  suspend "frame_finish"
+QED
+
+Resume sym_fn_block_frame_step[frame_finish]:
+  strip_tac >> drule_all sym_nonentry_run_rest >>
+  disch_then (fn th => rewrite_tac[th]) >> fs[sym_body_result_def]
+QED
+
+Finalise sym_fn_block_frame_step
 
 Theorem sym_fn_sims_all:
   !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
