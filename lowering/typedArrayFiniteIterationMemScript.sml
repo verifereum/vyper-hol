@@ -4,7 +4,7 @@ Ancestors
   typedArrayIterationPathMem fragGasPathMem context compileEnv exprLoweringProps
   venomState venomExecSemantics words arithmetic list
 
-Theorem finite_array_path_iteration[local]:
+Theorem finite_array_path_iteration:
   !remaining i s.
     i + remaining = n /\ Inv i s /\ (!j u. Inv j u ==> ~u.vs_halted) /\
     (!j u. Inv j u /\ j < n ==>
@@ -23,7 +23,7 @@ Proof
   irule gas_path_mem_then >> qexists_tac `v` >> simp[]
 QED
 
-Theorem array_iteration_frame_trans[local]:
+Theorem array_iteration_frame_trans:
   (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
     vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
     vs_prev_bb := u.vs_prev_bb|>) = u /\
@@ -37,7 +37,7 @@ Proof
   simp[venom_state_component_equality] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem array_iteration_observations_trans[local]:
+Theorem array_iteration_observations_trans:
   mem_bytes_at a len v.vs_memory = mem_bytes_at a len u.vs_memory /\
   mem_bytes_at a len u.vs_memory = mem_bytes_at a len s.vs_memory /\
   (!p k. p+k <= b \/ hi <= p ==>
