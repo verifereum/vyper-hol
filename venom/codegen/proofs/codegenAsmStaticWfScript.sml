@@ -7,7 +7,7 @@
 Theory codegenAsmStaticWf
 Ancestors
   codegenSymRel codegenAsmProgOk codegenEncodingWf codegen asmSymSem asmWf
-  asmOptimizer unitShapeDefs stackPlanGen venomWf fnPlanCover fnBlockBodyHelpers
+  asmOptimizer unitShapeDefs stackPlanGen venomWf fnPlanCover fnBlockBodyHelpers asmSplice
   list rich_list planExec stackPlanTypes stackPlanOps finite_map
 
 Definition plan_ref_def:
@@ -1080,10 +1080,109 @@ Proof
   drule data_segment_header_mem >> simp[MEM_APPEND]
 QED
 
+Theorem asm_defined_symbols_mem:
+  MEM l (FLAT (MAP asm_defined_symbols prog)) <=>
+  MEM (AsmLabel l) prog \/ MEM (AsmDataHeader l) prog
+Proof
+  Induct_on `prog` >- simp[] >>
+  Cases_on `h` >> simp[asm_defined_symbols_def] >> metis_tac[]
+QED
+
+Theorem distinct_symbols_labels_unique:
+  ALL_DISTINCT (FLAT (MAP asm_defined_symbols prog)) ==> asm_labels_unique prog
+Proof
+  Induct_on `prog` >- simp[asm_labels_unique_def] >>
+  Cases_on `h` >>
+  gvs[asm_defined_symbols_def, asm_labels_unique_def, asm_defined_symbols_mem,
+       MEM_FILTER, MEM_MAP, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem distinct_symbols_code_data_disjoint:
+  ALL_DISTINCT (FLAT (MAP asm_defined_symbols prog)) ==>
+  !l. MEM (AsmLabel l) prog ==> ~MEM (AsmDataHeader l) prog
+Proof
+  Induct_on `prog` >- simp[] >>
+  Cases_on `h` >> simp[asm_defined_symbols_def, asm_defined_symbols_mem] >> metis_tac[]
+QED
+
+Theorem data_suffix_discipline:
+  asm_data_at_end (data_segment_asm segs ++ [AsmDataHeader "code_end"]) /\
+  (!i. i < LENGTH (data_segment_asm segs ++ [AsmDataHeader "code_end"]) /\
+       is_data_inst (EL i (data_segment_asm segs ++ [AsmDataHeader "code_end"])) ==>
+       ?j l. j <= i /\
+         EL j (data_segment_asm segs ++ [AsmDataHeader "code_end"]) = AsmDataHeader l)
+Proof
+  mp_tac data_suffix_all_data >>
+  Cases_on `segs` >>
+  rewrite_tac[asmIRTheory.data_segment_asm_def, asmIRTheory.data_section_asm_def,
+              MAP, FLAT, APPEND, data_discipline_cons] >> simp[]
+QED
+
+Theorem plan_data_discipline:
+  asm_data_at_end (execute_plan fmp ops ++ data_segment_asm segs ++
+                  [AsmDataHeader "code_end"]) /\
+  (!i. i < LENGTH (execute_plan fmp ops ++ data_segment_asm segs ++
+                  [AsmDataHeader "code_end"]) /\
+       is_data_inst (EL i (execute_plan fmp ops ++ data_segment_asm segs ++
+                         [AsmDataHeader "code_end"])) ==>
+       ?j l. j <= i /\ EL j (execute_plan fmp ops ++ data_segment_asm segs ++
+                             [AsmDataHeader "code_end"]) = AsmDataHeader l)
+Proof
+  mp_tac execute_plan_no_data >>
+  disch_then (mp_tac o MATCH_MP data_discipline_append) >>
+  disch_then (qspec_then `data_segment_asm segs ++ [AsmDataHeader "code_end"]` mp_tac) >>
+  simp[data_suffix_discipline]
+QED
+
+Theorem asm_no_refs_no_data_label:
+  asm_label_refs prog = [] ==> !l. ~MEM (AsmDataLabel l) prog
+Proof
+  simp[asm_label_refs_def, FLAT_EQ_NIL, EVERY_MAP, EVERY_MEM] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem execute_plan_no_data_label:
+  ~MEM (AsmDataLabel l) (execute_plan fmp ops)
+Proof
+  mp_tac execute_plan_no_data >>
+  simp[EVERY_MEM] >> metis_tac[is_data_inst_def]
+QED
+
+Theorem codegen_assembly_symbols:
+  codegen_assembly rpolicy unit = SOME prog ==>
+  asm_labels_unique prog /\ (!l. MEM (AsmLabel l) prog ==> ~MEM (AsmDataHeader l) prog)
+Proof
+  simp[codegen_assembly_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule asm_symbols_ok_distinct >>
+  metis_tac[distinct_symbols_labels_unique, distinct_symbols_code_data_disjoint, MEM_APPEND, MEM]
+QED
+
+Theorem codegen_assembly_data_discipline:
+  codegen_assembly rpolicy unit = SOME prog ==>
+  asm_data_at_end prog /\
+  (!i. i < LENGTH prog /\ is_data_inst (EL i prog) ==>
+       ?j l. j <= i /\ EL j prog = AsmDataHeader l)
+Proof
+  simp[codegen_assembly_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  simp[plan_data_discipline]
+QED
+
+Theorem codegen_assembly_no_data_label:
+  codegen_assembly rpolicy unit = SOME prog /\ sym_unit_static_ok unit ==>
+  !l. ~MEM (AsmDataLabel l) prog
+Proof
+  simp[codegen_assembly_def, AllCaseEqs()] >> strip_tac >>
+  gvs[sym_unit_static_ok_def, MEM_APPEND, execute_plan_no_data_label] >>
+  metis_tac[data_segment_bytes_no_refs, asm_no_refs_no_data_label]
+QED
+
 Theorem codegen_asm_static_wf:
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
   sym_unit_static_ok unit /\ codegen_ready unit.cu_context ==>
   asm_static_wf prog
 Proof
-  cheat
+  strip_tac >> rewrite_tac[asm_static_wf_def] >>
+  metis_tac[codegen_assembly_symbols, codegen_assembly_label_refs_closed,
+    codegen_assembly_no_data_label, codegen_assembly_data_discipline,
+    codegen_assembly_asm_encoding_wf]
 QED
