@@ -32,6 +32,7 @@ Theorem for_body_entry_mem:
     bc.ce_module_vars = cenv.ce_module_vars /\
     bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
     bc.ce_imm_alloca = cenv.ce_imm_alloca /\
+    bc.ce_module_var_type = cenv.ce_module_var_type /\
     not_local_ptr cenv esk.scopes dv /\
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
     MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\

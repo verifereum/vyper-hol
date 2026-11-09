@@ -47,7 +47,7 @@ Proof
      rpt strip_tac >>
      qpat_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
      rewrite_tac[immutable_alloca_sep_def] >>
-     disch_then drule_all >> strip_tac >>
+     disch_then (drule_all o CONJUNCT2) >> strip_tac >>
      `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
      irule mcopy_mem_bytes_at_disjoint >> gvs[regions_disjoint_def]) >>
   rewrite_tac[stmt_state_rel_def] >>
