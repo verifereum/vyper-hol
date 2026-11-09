@@ -10,6 +10,7 @@ Ancestors
   bodyIntCallFamCallIntFlags bodyIntCallFamCallIntStageAdapters
   bodyIntCallFamCallIntForcingFrames bodyIntCallFamCallIntForcingLocal
   bodyIntCallFamCallIntFootprintFrame bodyIntCallFamCallIntImmutableFrame
+  bodyIntCallFamCallIntForcingTransport
 
 (* The packaging theorem quantifies over every frame at the selected owner;
    the graph induction premise supplies all of them at once. *)
