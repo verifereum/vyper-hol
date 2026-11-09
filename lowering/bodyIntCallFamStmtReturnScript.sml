@@ -2,7 +2,7 @@
 Theory bodyIntCallFamStmtReturn
 Ancestors
   bodyIntCallJointContract bodyIntCallSharpReturn bodyIntCallFamStmtReturnStackExit
-  bodyIntCallFamStmtReturnMemorySuffix
+  bodyIntCallFamStmtReturnProducer bodyIntCallFamStmtReturnMemoryEndpoint
   bodySim stmtSimReturn stmtSimDefs loweringPosts compileEnv ctorReturnFrame
   stmtLowering vyperTyping vyperInterpreter gasOutcome gasSummary
   gasSummaryCompose venomExecSemantics venomState
@@ -57,5 +57,7 @@ Theorem intcall_return_stmt_step:
   (?eo. st = Return eo) ==>
   intcall_stmts_producer fp [st]
 Proof
-  cheat
+  strip_tac >> gvs[] >> Cases_on `eo`
+  >- simp[intcall_bare_return_producer] >>
+  irule intcall_valued_return_producer >> simp[]
 QED
