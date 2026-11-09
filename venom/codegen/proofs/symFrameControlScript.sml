@@ -24,7 +24,74 @@ Ancestors
   fnFrameDeepAbort fnFrameDeepGas fnFrameStepsRevertForwardDeep asmSymBridge
   asmSymSem frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  dfgDefs
+  dfgDefs symPlannerSim
+
+(* Reassemble the frame boundary after a region-local symbolic segment. *)
+Theorem sym_frame_inv_region_transfer:
+  !p env ctx cp fn ret srest labs0 ps cs ss r cs' ss' ps'.
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  asm_sym_rel p env cs' ss' /\
+  sym_kinds_ok cp fn ret srest ps' ss' /\
+  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps' cs' ss'
+Proof
+  rw[sym_frame_inv_def] >>
+  `~(r.sr_spill_base <= b /\ b < r.sr_spill_end)` by
+    (strip_tac >> fs[closure_spill_byte_def] >>
+     metis_tac[fcgDefsTheory.fcg_path_def, relationTheory.RTC_REFL]) >>
+  metis_tac[]
+QED
+
+(* The symbolic prefix and the concrete endpoint share an explicit count. *)
+Theorem sym_selected_prefix_frame_sim_marked:
+  !opc operands nl ps iops prepared dfg selected rops arranged spillbase
+    fn r cp p env ret srest labs0 ctx cs ss initial_fmp.
+  opc <> INVOKE /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan opc operands nl ps = (iops,prepared) /\
+  reorder_plan dfg selected prepared = (rops,arranged) /\
+  PERM operands selected /\ LENGTH operands <= 16 /\
+  LENGTH operands <= LENGTH prepared.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  plan_slots_bounded spillbase ps /\ residual_budget_wf_marked spillbase [] ps /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) operands /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp (iops ++ rops)) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp (iops ++ rops))) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp (iops ++ rops))) ss =
+      SymOK ss' /\
+    sym_frame_inv p env ctx cp fn ret srest labs0 arranged cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (iops ++ rops))
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `MEM r cplan.cp_regions` >>
+  `asm_sym_rel p env cs ss /\ sym_kinds_ok cplan fn ret srest ps ss` by
+    fs[sym_frame_inv_def] >>
+  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
+  `asm_block_at p ss.sym_base.as_pc
+     (execute_plan initial_fmp (iops ++ rops))` by simp[] >>
+  drule_all sym_selected_prefix_sim_marked >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  qexistsl_tac [`cs'`, `ss'`] >> simp[] >>
+  conj_tac
+  >- (irule sym_frame_inv_region_transfer >> goal_assum (drule_at Any) >>
+      metis_tac[]) >>
+  drule_all asm_sym_rel_pc >> simp[]
+QED
 
 Theorem sym_jmp_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness

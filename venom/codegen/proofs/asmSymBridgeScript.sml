@@ -1396,7 +1396,7 @@ QED
 
 (* ===== One step: the opcodes with label cases ===== *)
 
-Theorem asm_sym_rel_pc[local]:
+Theorem asm_sym_rel_pc:
   asm_sym_rel p env cs ss ⇒
   ss.sym_base.as_pc = cs.as_pc ∧ LENGTH ss.sym_stack = LENGTH cs.as_stack
 Proof
