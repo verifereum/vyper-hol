@@ -10,6 +10,7 @@ Ancestors bodyPtrPopTargetSimMapKeyRun exprSimMapKey exprLowering
   venomState venomExecSemantics ptrDiscipline bodyPtrDefs words finite_map pred_set
   instIdxIndep exprSimHash localPtrsProps bodyPtrEnvBuiltinsMemoryHash
   bodyPtrEnvBuiltinsAllocation instSeqComposePtr loweringHalt
+  assignTuplePtrCopyEndpoint fragExec
 
 Theorem map_scratch_emission:
   !base key sa op sb.
@@ -395,3 +396,60 @@ Resume map_scratch_prefix_certificate[checks]:
 QED
 
 Finalise map_scratch_prefix_certificate
+
+Theorem map_scratch_ptr_frame:
+  compile_mapping_subscript base_op key sa = (op,sb) /\
+  (!x. base_op = Var x ==> not_fresh_at sa x) /\
+  (!x. key = Var x ==> not_fresh_at sa x) /\
+  eval_operand base_op s = SOME w0 /\ eval_operand key s = SOME w1 /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
+  op_taint tn base_op = {} /\ op_taint tn key = {} /\
+  ghost_inv d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
+  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?t G' tn'. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (hashmap_slot w0 w1) /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 G' tn'
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
+    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv d cenv cx es G' tn'
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
+    ghost_kept cenv es sa G tn s G' tn' /\
+    op_taint tn' op = {} /\ op_prov G' op = NONE /\
+    (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule_all compile_mapping_subscript_frame >> strip_tac >>
+  drule map_scratch_shape >> strip_tac >>
+  `MEM (mk_inst ia ALLOCA [Lit 64w] [p]) (fn_insts func)` by
+    suspend "site" >>
+  `~not_fresh_at sa p /\ ~not_fresh_at sa q /\ ~not_fresh_at sa h /\
+   (!x. base_op = Var x ==> x <> p) /\
+   (!x. key = Var x ==> x <> p /\ x <> q)` by metis_tac[] >>
+  `?G' tn'. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
+    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn' /\
+    op_taint tn' (Var h) = {} /\ op_prov G' (Var h) = NONE /\
+    (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x))` by
+    (drule_all map_scratch_prefix_certificate >>
+     disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >> metis_tac[]) >>
+  qexistsl_tac [`t`, `G'`, `tn'`] >> simp[ghost_inv_inst_idx] >>
+  `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0 /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb)` by simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_inst_seq_gas_path_ptr >> simp[]
+QED
+
+Resume map_scratch_ptr_frame[site]:
+  drule lookup_block_fn_insts >>
+  disch_then irule >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >>
+  simp[IS_PREFIX_APPEND] >> strip_tac >>
+  irule MEM_DROP_IMP >> qexists_tac `s.vs_inst_idx` >> simp[]
+QED
+
+Finalise map_scratch_ptr_frame
