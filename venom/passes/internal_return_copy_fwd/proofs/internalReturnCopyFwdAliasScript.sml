@@ -676,3 +676,61 @@ Proof
   simp[ircf_alias_site_value_def, lookup_var_def] >>
   irule ircf_alias_site_boundary_step >> metis_tac[lookup_block_MEM]
 QED
+
+Theorem ircf_alias_saved_return:
+  ssa_form f.cf_fn /\ wf_function f.cf_fn /\ ircf_alias_saved C f /\
+  bind_outputs f.cf_inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state f.cf_state e)) = SOME t ==>
+  ircf_alias_boundary f.cf_fn (t with vs_inst_idx := SUC f.cf_state.vs_inst_idx)
+    (DRESTRICT f.cf_prov (COMPL (set f.cf_inst.inst_outputs)))
+Proof
+  rw[ircf_alias_saved_def, ircf_alias_boundary_def, active_inst_def] >>
+  `bb' = bb` by metis_tac[lookup_block_MEM, lookup_block_label, same_label_same_block] >>
+  gvs[] >>
+  `t.vs_current_bb = f.cf_state.vs_current_bb` by
+    metis_tac[bind_return_current_bb] >>
+  simp[]
+  >- metis_tac[ircf_size_coherent_return] >>
+  irule ircf_alias_site_boundary_return >> simp[] >>
+  goal_assum drule >> simp[]
+QED
+
+Theorem ircf_alias_boundary_block:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\ active_inst fn inst s /\
+  is_terminator inst.inst_opcode /\ step_inst fuel C inst s = OK t /\
+  ~t.vs_halted /\ enters_block fn t u ==>
+  ircf_alias_boundary fn u (entry_prov fn t G)
+Proof
+  strip_tac >>
+  `?bb. MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb /\
+    s.vs_inst_idx < LENGTH bb.bb_instructions /\
+    inst = EL s.vs_inst_idx bb.bb_instructions /\
+    boundary_pred fn bb s.vs_inst_idx (ircf_alias_site_value fn s G)` by
+    (gvs[ircf_alias_boundary_def, active_inst_def] >>
+     metis_tac[lookup_block_MEM, lookup_block_label, same_label_same_block]) >>
+  `bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions` by
+    (gvs[wf_function_def, fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
+  `fn_cfg_edge fn s.vs_current_bb t.vs_current_bb` by
+    metis_tac[sue_terminator_cfg_edge] >>
+  `fn_reachable fn t.vs_current_bb` by
+    metis_tac[ircf_alias_boundary_def, fn_reachable_step] >>
+  `inst_wf inst` by metis_tac[EVERY_EL] >>
+  `step_prov PG G inst t = G` by metis_tac[step_prov_terminator] >>
+  `ircf_size_coherent fn s /\ fn_reachable fn bb.bb_label /\
+    fn_cfg_edge fn bb.bb_label t.vs_current_bb` by
+    gvs[ircf_alias_boundary_def] >>
+  `dom_pred fn t.vs_current_bb (ircf_alias_site_value fn t G)` by
+    (drule_all ircf_alias_site_boundary_exit >> metis_tac[]) >>
+  `ircf_size_coherent fn t` by
+    (irule ircf_size_coherent_step >> conj_tac
+     >- gvs[wf_function_def] >>
+     qexistsl_tac [`C`, `fuel`, `inst`, `s`] >>
+     gvs[ircf_alias_boundary_def, fn_insts_def] >>
+     metis_tac[o1PassContractTheory.fn_insts_blocks_MEM, EL_MEM]) >>
+  `u.vs_current_bb = t.vs_current_bb` by metis_tac[enters_block_current_bb] >>
+  simp[ircf_alias_boundary_def] >> conj_tac
+  >- metis_tac[ircf_size_coherent_enters_block] >>
+  gvs[enters_block_def] >>
+  metis_tac[ircf_alias_site_block_entry, wf_ssa_def, lookup_block_label]
+QED
