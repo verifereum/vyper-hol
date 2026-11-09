@@ -1,11 +1,14 @@
 (* Seam 2 joint induction, a family leaf of the agg step: attributes. *)
 Theory bodyIntCallFamAggAttribute
 Ancestors
+  bodyIntCallFamAggAttributeTypedSupport
   bodyIntCallJointContract bodyIntCallJointAggCore bodyAttributeMemory
   exprSimFieldLayout exprSimAttributeProps bodyFieldMemoryProps
   loweringPosts exprSimVVFrame exprLoweringProps emitHelperProps
   compileEnv moduleLoweringProps venomState fragGasMode typedMemoryCopy instIdxIndep
   emitHelper exprSimAttribute exprSimDefs exprSimHypsDefs context
+  exprSimUnwrap fragExec supportedExprs vyperTypeCallGraph stmtSimForced
+  exprSimHyps vyperInterpreter vyperAST
 
 Theorem attribute_add_landing:
   intcall_frame_ok fp /\
@@ -134,5 +137,53 @@ Theorem intcall_attribute_step:
   (?a base fld. e = Attribute a base fld) ==>
   intcall_expr_producer fp e /\ intcall_map_producer fp e
 Proof
-  cheat
+  strip_tac >> gvs[] >> rename1 `Attribute ann obj fld` >>
+  reverse conj_tac
+  >- (irule intcall_map_producer_other >> simp[]) >>
+  rewrite_tac[intcall_expr_producer_def] >> rpt gen_tac >> strip_tac >>
+  drule attr_pre_base >> strip_tac >>
+  drule compile_expr_attribute >> strip_tac >> gvs[] >>
+  rename1 `compile_expr ce ty obj sa = (bvv,sm)` >>
+  drule compile_expr_extends >> strip_tac >>
+  drule attr_extends >> strip_tac >>
+  `fn_has_code sa sm fp.jc_func /\ fn_has_code sm sb fp.jc_func` by
+    metis_tac[fn_has_code_split] >>
+  `local_ptrs_reserved ce sa` by fs[intcall_joint_res_def] >>
+  `gas_admissible (eval_expr fp.jc_cx obj) expr_vv_res_ok es` by
+    metis_tac[expr_body_pre_vv_gas_admissible] >>
+  `intcall_expr_producer fp obj` by
+    (first_x_assum (qspec_then `obj` mp_tac) >> simp[]) >>
+  qpat_x_assum `intcall_expr_producer fp obj` mp_tac >>
+  pure_rewrite_tac[intcall_expr_producer_def] >>
+  disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`env`, `es`, `s`] mp_tac) >>
+  (impl_tac >- (fs[int_calls_expr_def] >>
+    metis_tac[supported_attribute_child])) >>
+  strip_tac >>
+  once_rewrite_tac[evaluate_def] >>
+  irule forced_vv_then_outcome >>
+  conj_tac >- simp[] >>
+  gvs[] >> qmatch_assum_abbrev_tac `gas_outcome _ _ _ _ _ Q _` >>
+  qexists_tac `\tv ee t. Q (INL tv) ee t` >>
+  reverse conj_tac >- fs[Abbr `Q`] >>
+  rpt gen_tac >> simp[Abbr `Q`] >> strip_tac >>
+  `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sm s ee tv bvv t` by
+    (gvs[vv_post_def, intcall_expr_cont_def, intcall_joint_res_def] >>
+     first_assum ACCEPT_TAC) >>
+  `post_value_type ce obj = expr_type obj` by
+    (irule attr_post_value_type >> metis_tac[]) >>
+  drule_at (Pat `compile_expr _ _ _ _ = _`) attribute_selection_landing >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `expr_body_pre _ _ _ (Attribute _ _ _) _`)) >>
+  disch_then (qspecl_then [`sb`, `gs`, `p`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt strip_tac >>
+    Cases_on `bvv` >>
+    gvs[vv_loc_def, vv_location_def, is_word_type_def, is_bytestring_type_def] >>
+    qexistsl_tac [`a`, `k`] >> simp[] >>
+    disj2_tac >> qexistsl_tac [`b`, `z`] >> simp[])) >>
+  strip_tac >>
+  `ee with gas_obs := [] = ee` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  qexistsl_tac [`INL tv'`, `ee`, `OK u`] >>
+  gvs[vv_post_def, vv_operand_def, mk_ptr_def, expr_type_def]
 QED
