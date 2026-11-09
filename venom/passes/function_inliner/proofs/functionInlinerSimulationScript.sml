@@ -295,3 +295,52 @@ Proof
   simp[] >> rpt strip_tac >>
   simp[Once run_blocks_def]
 QED
+
+Definition inline_source_resume_def:
+  inline_source_resume n ctx bb caller outs ir u =
+    case bind_outputs outs ir.iret_values
+           (adopt_return_fmp ir (merge_callee_state caller u)) of
+      NONE => Error "invoke: return arity mismatch"
+    | SOME w => exec_block n ctx bb
+        (w with vs_inst_idx := SUC caller.vs_inst_idx)
+End
+
+(* Join the suffix-IH witnesses under the final-function dispatcher. *)
+Theorem inline_return_dispatch_cut:
+  (!v k. v.vs_current_bb = ret ==>
+    run_blocks (SUC k) ctx' final v =
+      case exec_block k ctx' rb (v with vs_inst_idx := 0) of
+        OK z => if z.vs_halted then Halt z else run_blocks k ctx' final z
+      | IntRet ir z => IntRet ir z
+      | other => other) /\
+  (!r q. Q r q ==> terminates q) /\
+  (!w v r. A w v /\
+    exec_block n ctx bb (w with vs_inst_idx := SUC caller.vs_inst_idx) = r /\
+    terminates r ==>
+    ?k. case exec_block k ctx' rb (v with vs_inst_idx := 0) of
+      OK z => if z.vs_halted then Q r (Halt z)
+              else ?g. Q r (run_blocks g ctx' final z)
+    | IntRet ir z => Q r (IntRet ir z)
+    | Halt z => Q r (Halt z)
+    | Abort a z => Q r (Abort a z)
+    | Error e => F) /\
+  A w v /\ v.vs_current_bb = ret /\
+  exec_block n ctx bb (w with vs_inst_idx := SUC caller.vs_inst_idx) = r /\
+  terminates r ==>
+  ?h. Q r (run_blocks h ctx' final v)
+Proof
+  strip_tac >>
+  qpat_x_assum `!w v r. _` drule_all >> strip_tac >>
+  Cases_on `exec_block k ctx' rb (v with vs_inst_idx := 0)` >> gvs[]
+  >- (Cases_on `v'.vs_halted` >> gvs[]
+      >- (qexists `SUC k` >> simp[]) >>
+      `terminates (run_blocks g ctx' final v')` by metis_tac[] >>
+      `exec_block (g+k) ctx' rb (v with vs_inst_idx := 0) = OK v'` by
+        (irule (cj 2 venomExecPropsTheory.fuel_mono) >>
+         simp[] >> qexists `k` >> simp[]) >>
+      `run_blocks (g+k) ctx' final v' = run_blocks g ctx' final v'` by
+        (drule crossBlockSimPropsTheory.run_blocks_fuel_mono >>
+         disch_then (qspec_then `k` mp_tac) >> simp[]) >>
+      qexists `SUC (g+k)` >> simp[])
+  >> qexists `SUC k` >> simp[]
+QED
