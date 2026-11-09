@@ -774,3 +774,24 @@ Proof
   >- (drule_all_then MATCH_ACCEPT_TAC sym_do_swap_small) >>
   `16 < dist` by decide_tac >> drule_all_then MATCH_ACCEPT_TAC sym_do_swap_big
 QED
+
+Theorem sym_swap_one_stack[local]:
+  ss.sym_stack = w::v::stk ==>
+  ?last. sym_swap 1 ss = SymOK last /\
+    last.sym_stack = v::w::stk /\ last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + 1
+Proof
+  simp[sym_swap_def, sym_set_stack_def, asm_next_def, LUPDATE_compute]
+QED
+
+Theorem sym_exec_swap_one_stack:
+  ss.sym_stack = w::v::stk /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOSwap 1]) ==>
+  ?last. sym_steps p env 1 ss = SymOK last /\
+    last.sym_stack = v::w::stk /\ last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + 1
+Proof
+  simp[execute_plan_def, exec_stack_op_def] >> strip_tac >>
+  drule sym_steps_singleton >>
+  simp[sym_step_swap_name, sym_swap_one_stack]
+QED
