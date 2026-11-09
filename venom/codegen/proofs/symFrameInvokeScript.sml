@@ -13,7 +13,7 @@ Ancestors
   symFnSimSpec codegenSymRel fnFrameDeepInvoke asmSymBridge asmSymSem
   frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  dfgDefs list
+  dfgDefs list symPlannerSim
 
 (* INVOKE cannot consume the opaque code-end pointer. *)
 Theorem sym_invoke_argument_not_code_end:
@@ -112,6 +112,72 @@ Proof
     gvs[in_mem_range_def] >>
   metis_tac[contextCodegenRelPropsTheory.context_spill_byte_of_region,
             fnFrameBoundaryInvokeTheory.invoke_caller_region_outside_callee]
+QED
+
+(* Label-free INVOKE preparation is precisely ADD preparation.  This is
+   the same reduction used by invoke_selected_prefix_sim_marked. *)
+Theorem sym_invoke_selected_prefix_sim_marked:
+  EVERY (\op. ~is_label_operand op) operands /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan INVOKE operands nl ps = (iops,prepared) /\
+  reorder_plan dfg operands prepared = (rops,arranged) /\
+  LENGTH operands <= 16 /\ LENGTH operands <= LENGTH prepared.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  plan_slots_bounded spillbase ps /\ residual_budget_wf_marked spillbase [] ps /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) operands /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (iops ++ rops)) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp (iops ++ rops))) ss =
+          SymOK ss' /\
+        sym_kinds_ok cplan fn ret srest arranged ss' /\
+        ss'.sym_base.as_pc =
+          ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (iops ++ rops)) /\
+        (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+             FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  `emit_input_plan ADD operands nl ps = (iops,prepared)` by
+    metis_tac[fnFrameBoundaryInvokeTheory.invoke_label_free_input] >>
+  `ADD <> INVOKE /\ PERM operands operands` by simp[] >>
+  drule_all sym_selected_prefix_sim_marked >> simp[]
+QED
+
+Theorem sym_invoke_call_packet:
+  !p env ss ret_lbl nm pc.
+  asm_block_at p ss.sym_base.as_pc
+    [AsmPushLabel ret_lbl; AsmPushLabel nm; AsmOp "JUMP"] /\
+  INDEX_OF (AsmLabel nm) p = SOME pc ==>
+  sym_steps p env 3 ss =
+    SymOK (ss with <| sym_base := ss.sym_base with as_pc := pc;
+                     sym_stack := Lab ret_lbl 0 :: ss.sym_stack |> )
+Proof
+  rpt strip_tac >>
+  gvs[stackOpSimTheory.asm_block_at_cons] >>
+  simp[sym_steps_compute, sym_step_def, sym_set_stack_def,
+       sym_step_op_def, sym_jump_def, sym_jump_dest_def, asm_next_def]
+QED
+
+Theorem sym_invoke_prefix_frame_transport:
+  !p env ctx cp fn ret srest labs0 ps cs ss ps' cs' ss' r.
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  asm_sym_rel p env cs' ss' /\ sym_kinds_ok cp fn ret srest ps' ss' /\
+  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps' cs' ss'
+Proof
+  rw[sym_frame_inv_def] >>
+  `~(r.sr_spill_base <= b /\ b < r.sr_spill_end)` by
+    (strip_tac >> gvs[closure_spill_byte_def, fcgDefsTheory.fcg_path_def] >>
+     metis_tac[relationTheory.RTC_REFL]) >>
+  metis_tac[]
 QED
 
 Theorem sym_invoke_frame_sim_deep:
