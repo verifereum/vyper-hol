@@ -21,15 +21,18 @@
  *                            INVOKE names a function of the context
  *   op_kind_ok             - the kind of symbolic value an operand's slot
  *                            holds in a frame
+ *   sym_kinds_ok           - the kinds part of the frame invariant
  *   sym_frame_inv          - fn_frame_inv's symbolic twin
  *   sym_steps              - n symbolic steps, as asm_steps
  *   sym_run_terminal_never_bad - a symbolic run that ends never misuses a
  *                            label, at any fuel
+ *   asm_sym_steps_lockstep - an OK symbolic run is shadowed by a related
+ *                            OK concrete run
  *)
 
 Theory codegenSymRel
 Ancestors
-  asmDataEnv asmSymBridge asmSymSem frameRel contextCodegenRel codegenRel
+  asmDataEnv asmSymBridge asmSymSem asmSem frameRel contextCodegenRel codegenRel
   unitShapeDefs stackPlanTypes venomWf venomExecSemantics venomState
   venomInst list finite_map arithmetic
 
@@ -129,23 +132,29 @@ End
 
 (* ===== The frame invariant ===== *)
 
-(* The symbolic state ss of program p against the concrete state cs, in
-   fn's frame with planner state ps:
-     ret:   the return label the caller's INVOKE pushed;
-     srest: the caller's symbolic stack below the frame, never touched;
-     labs0: the memory labels when the frame was entered.
-   ss is related to cs (asm_sym_rel); its frame stack holds values of its
-   operands' kinds; each live spill slot holds a value of its operand's
-   kind; label bytes lie in spill regions only, and outside the frame's
-   closure are the entry ones. *)
-Definition sym_frame_inv_def:
-  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss <=>
-    asm_sym_rel p env cs ss /\
+(* The kinds part of the frame invariant, which stack shuffles, spills and
+   restores keep without looking at the concrete state: in fn's frame with
+   planner state ps, ret the return label the caller pushed and srest the
+   caller's symbolic stack below the frame, the frame stack holds values of
+   its operands' kinds, each live spill slot holds a value of its operand's
+   kind, and label bytes lie in spill regions only. *)
+Definition sym_kinds_ok_def:
+  sym_kinds_ok cp fn ret srest ps ss <=>
     (?top. ss.sym_stack = top ++ srest /\
            LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top) /\
     (!op off. FLOOKUP ps.ps_spilled op = SOME off ==>
        ?sv. op_kind_ok fn ret op sv /\ mem_sval_at ss.sym_mem_labels off sv) /\
-    (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\
+    (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b)
+End
+
+(* The symbolic state ss of program p against the concrete state cs: related
+   (asm_sym_rel), of the right kinds, with the memory labels outside the
+   frame's closure those at the frame's entry, labs0, and the return label
+   a code label. *)
+Definition sym_frame_inv_def:
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss <=>
+    asm_sym_rel p env cs ss /\
+    sym_kinds_ok cp fn ret srest ps ss /\
     (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
          FLOOKUP ss.sym_mem_labels b = FLOOKUP labs0 b) /\
     (fn_has_retpc fn ==> MEM (AsmLabel ret) p)
@@ -235,4 +244,24 @@ Proof
   Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >>
   simp[sym_terminal_def] >>
   ONCE_REWRITE_TAC [ADD_COMM] >> simp[]
+QED
+
+(* A symbolic run that stays OK is shadowed by the concrete run, step for
+   step (asm_sym_step): the concrete run is OK too, and the two end related. *)
+Theorem asm_sym_steps_lockstep:
+  !n cs ss ss'.
+    asm_static_wf p /\ asm_sym_rel p env cs ss /\
+    sym_steps p env n ss = SymOK ss' ==>
+    ?cs'. asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p)
+            p n cs = AsmOK cs' /\
+          asm_sym_rel p env cs' ss'
+Proof
+  Induct >> simp[sym_steps_def, asm_steps_def] >> rpt gen_tac >> strip_tac >>
+  `ss.sym_base.as_pc = cs.as_pc` by gvs[asm_sym_rel_def] >>
+  Cases_on `ss.sym_base.as_pc >= LENGTH p` >> gvs[] >>
+  `cs.as_pc < LENGTH p` by simp[] >>
+  drule_all asm_sym_step >>
+  Cases_on `sym_step p env (EL cs.as_pc p) ss` >>
+  gvs[asm_sym_step_rel_def] >> strip_tac >> gvs[] >>
+  first_x_assum drule_all >> simp[]
 QED
