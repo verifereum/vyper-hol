@@ -791,7 +791,7 @@ Theorem sym_exec_swap_one_stack:
     last.sym_stack = v::w::stk /\ last.sym_mem_labels = ss.sym_mem_labels /\
     last.sym_base.as_pc = ss.sym_base.as_pc + 1
 Proof
-  simp[execute_plan_def, exec_stack_op_def] >> strip_tac >>
+  rw[execute_plan_def, exec_stack_op_def] >>
   drule sym_steps_singleton >>
   simp[sym_step_swap_name, sym_swap_one_stack]
 QED
@@ -1055,4 +1055,100 @@ Proof
   rw_tac bool_ss [EVERY_DEF, asm_block_at_restore_swap_cons] >>
   drule_all_then (qspec_then `env` strip_assume_tac) sym_restore_swap_one >>
   simp[sym_restore_carried_continue]
+QED
+
+Theorem reverse_top_n_partition:
+  k <= LENGTH xs ==>
+  REVERSE xs = REVERSE (top_n k xs) ++ REVERSE (TAKE (LENGTH xs-k) xs)
+Proof
+  strip_tac >> drule top_n_suffix >> metis_tac[REVERSE_APPEND]
+QED
+
+Theorem deep_dup_residual_lengths[local]:
+  15 < dist /\ dist < LENGTH xs /\ k = dist-15 ==>
+  LENGTH (REVERSE (top_n k xs)) = k /\
+  15 < LENGTH (REVERSE (TAKE (LENGTH xs-k) xs))
+Proof
+  simp[top_n_def, LENGTH_TAKE] >> decide_tac
+QED
+
+Theorem deep_dup_residual_index[local]:
+  REVERSE xs = a ++ b /\ LENGTH a = dist-15 /\ 15 < dist ==>
+  EL 15 b = EL dist (REVERSE xs)
+Proof
+  strip_tac >> simp[EL_APPEND_EQN]
+QED
+
+Theorem deep_dup_residual_shape:
+  15 < dist /\ dist < LENGTH xs /\ k = dist-15 /\
+  a = REVERSE (top_n k xs) /\ b = REVERSE (TAKE (LENGTH xs-k) xs) ==>
+  REVERSE xs = a ++ b /\ LENGTH a = k /\ 15 < LENGTH b /\
+  EL 15 b = EL dist (REVERSE xs)
+Proof
+  strip_tac >>
+  `k <= LENGTH xs` by decide_tac >>
+  metis_tac[reverse_top_n_partition, deep_dup_residual_lengths, deep_dup_residual_index]
+QED
+
+Theorem sym_dup_sixteen_stack[local]:
+  15 < LENGTH rest /\ ss.sym_stack = rest ++ srest ==>
+  ?mid. sym_dup 15 ss = SymOK mid /\
+    mid.sym_stack = EL 15 rest :: (rest ++ srest) /\
+    mid.sym_mem_labels = ss.sym_mem_labels /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + 1
+Proof
+  simp[sym_dup_def, sym_set_stack_def, asm_next_def, EL_APPEND_EQN]
+QED
+
+Theorem sym_exec_dup_sixteen_stack:
+  15 < LENGTH rest /\ ss.sym_stack = rest ++ srest /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan f [SODup 16]) ==>
+  ?mid. sym_steps p env 1 ss = SymOK mid /\
+    mid.sym_stack = EL 15 rest :: (rest ++ srest) /\
+    mid.sym_mem_labels = ss.sym_mem_labels /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + 1
+Proof
+  rw[execute_plan_def, exec_stack_op_def] >>
+  drule sym_steps_singleton >>
+  simp[SRULE [] (Q.INST [`d` |-> `15`] sym_step_dup_name), sym_dup_sixteen_stack]
+QED
+
+Theorem asm_block_at_dup_sixteen[local]:
+  asm_block_at p pc (execute_plan f ([SODup 16] ++ tail)) ==>
+  asm_block_at p pc (execute_plan f [SODup 16]) /\
+  asm_block_at p (pc+1) (execute_plan f tail)
+Proof
+  simp[execute_plan_def, exec_stack_op_def, stackOpSimTheory.asm_block_at_cons]
+QED
+
+Theorem sym_dup_sixteen_residual_finish[local]:
+  LIST_REL (op_kind_ok fn ret) b rest /\ 15 < LENGTH b /\
+  sym_steps p env 1 ss = SymOK mid /\
+  mid.sym_stack = EL 15 rest :: (rest ++ srest) /\
+  mid.sym_mem_labels = ss.sym_mem_labels /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+  asm_block_at p (ss.sym_base.as_pc+1) (execute_plan f tail) ==>
+  ?mid. sym_steps p env 1 ss = SymOK mid /\
+    mid.sym_stack = EL 15 rest :: (rest ++ srest) /\
+    op_kind_ok fn ret (EL 15 b) (EL 15 rest) /\
+    mid.sym_mem_labels = ss.sym_mem_labels /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+    asm_block_at p mid.sym_base.as_pc (execute_plan f tail)
+Proof
+  rw[LIST_REL_EL_EQN] >> metis_tac[]
+QED
+
+Theorem sym_dup_sixteen_residual:
+  LIST_REL (op_kind_ok fn ret) b rest /\ 15 < LENGTH b /\
+  ss.sym_stack = rest ++ srest /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan f ([SODup 16] ++ tail)) ==>
+  ?mid. sym_steps p env 1 ss = SymOK mid /\
+    mid.sym_stack = EL 15 rest :: (rest ++ srest) /\
+    op_kind_ok fn ret (EL 15 b) (EL 15 rest) /\
+    mid.sym_mem_labels = ss.sym_mem_labels /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+    asm_block_at p mid.sym_base.as_pc (execute_plan f tail)
+Proof
+  strip_tac >> drule_then strip_assume_tac asm_block_at_dup_sixteen >>
+  metis_tac[LIST_REL_LENGTH, sym_exec_dup_sixteen_stack, sym_dup_sixteen_residual_finish]
 QED
