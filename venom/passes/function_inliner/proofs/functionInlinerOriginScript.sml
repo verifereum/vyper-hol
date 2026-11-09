@@ -821,3 +821,140 @@ Proof
       venomWfPropsTheory.fn_insts_blocks_flat, MEM_FILTER] >>
   metis_tac[]
 QED
+
+(* Only PHI operands are subject to this namespace closure. INVOKE targets
+   intentionally remain external to the current function. *)
+Definition inliner_phi_labels_closed_def:
+  inliner_phi_labels_closed fn <=>
+    !inst l. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
+      MEM (Label l) inst.inst_operands ==> MEM l (fn_labels fn)
+End
+
+Theorem inliner_input_phi_labels_closed:
+  inliner_input_ok ctx /\ MEM fn ctx.ctx_functions ==>
+  inliner_phi_labels_closed fn
+Proof
+  simp[inliner_phi_labels_closed_def] >>
+  strip_tac >> gvs[inliner_input_ok_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem inliner_phi_labels_fresh:
+  inliner_phi_labels_closed fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = PHI /\ ~MEM fresh (fn_labels fn) ==>
+  ~MEM (Label fresh) inst.inst_operands
+Proof
+  metis_tac[inliner_phi_labels_closed_def]
+QED
+
+Theorem clone_function_phi_labels_closed:
+  inliner_phi_labels_closed fn ==>
+  inliner_phi_labels_closed (clone_function p fn)
+Proof
+  simp[inliner_phi_labels_closed_def, clone_function_def,
+       fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff,
+       MEM_MAP, clone_basic_block_def, clone_instruction_def] >>
+  rpt strip_tac >> gvs[MEM_MAP, clone_instruction_def] >>
+  rename1 `MEM op orig.inst_operands` >>
+  Cases_on `op` >> gvs[clone_operand_def] >>
+  `MEM s (fn_labels fn)` by metis_tac[] >> gvs[] >>
+  gvs[fn_labels_def, MEM_MAP] >>
+  qexists_tac `clone_basic_block p (fn_labels fn) bb` >>
+  simp[clone_basic_block_def] >> qexists_tac `bb` >> simp[fn_labels_def]
+QED
+
+Theorem fix_inline_phis_labels_closed:
+  inliner_phi_labels_closed fn /\ MEM fresh (fn_labels fn) ==>
+  inliner_phi_labels_closed (fix_inline_phis old fresh ret fn)
+Proof
+  simp[inliner_phi_labels_closed_def, fix_inline_phis_structure,
+    fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `MEM bb _` mp_tac >>
+  simp[fix_inline_phis_def, MEM_MAP] >> strip_tac >>
+  Cases_on `MEM bb'.bb_label (bb_succs ret)` >> gvs[]
+  >- (gvs[MEM_MAP] >>
+      rename1 `MEM orig bb'.bb_instructions` >>
+      Cases_on `orig.inst_opcode = PHI` >> gvs[subst_label_inst_def] >>
+      qpat_x_assum `MEM (Label l) _` mp_tac >> simp[MEM_MAP] >>
+      strip_tac >> rename1 `MEM op orig.inst_operands` >>
+      Cases_on `op` >> gvs[subst_label_op_def] >>
+      Cases_on `s = old` >> gvs[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem inline_call_site_phi_labels_closed:
+  !caller callee p ret lbl idx.
+    inliner_phi_labels_closed caller /\ inliner_phi_labels_closed callee ==>
+    inliner_phi_labels_closed (inline_call_site p ret caller callee lbl idx)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `lookup_block lbl caller.fn_blocks` >- simp[inline_call_site_def] >>
+  drule inline_call_site_labels >>
+  disch_then (qspecl_then [`callee`, `p`, `ret`, `idx`] assume_tac) >>
+  `inliner_phi_labels_closed (clone_function p callee)` by
+    metis_tac[clone_function_phi_labels_closed] >>
+  simp[inliner_phi_labels_closed_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `MEM inst _` mp_tac >>
+  simp[inline_call_site_def] >> pairarg_tac >> simp[] >>
+  simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff,
+    replace_block_def, MEM_MAP] >>
+  strip_tac >> gvs[SF boolSimps.COND_elim_ss,
+    instruction_component_equality]
+  >- (gvs[inliner_phi_labels_closed_def] >>
+      metis_tac[unitShapeDefsTheory.MEM_fn_insts_blocks_iff, fn_insts_def,
+        venomExecProofsTheory.lookup_block_MEM, rich_listTheory.MEM_TAKE])
+  >- (gvs[inliner_phi_labels_closed_def] >>
+      metis_tac[unitShapeDefsTheory.MEM_fn_insts_blocks_iff, fn_insts_def])
+  >- (gvs[inliner_phi_labels_closed_def] >>
+      metis_tac[unitShapeDefsTheory.MEM_fn_insts_blocks_iff, fn_insts_def,
+        venomExecProofsTheory.lookup_block_MEM, rich_listTheory.MEM_DROP_IMP]) >>
+  drule rewrite_inline_blocks_survivor >>
+  disch_then (qspecl_then [`bb`, `inst`] mp_tac) >> simp[] >> strip_tac >>
+  `MEM l (fn_labels (clone_function p callee))` by
+    (gvs[inliner_phi_labels_closed_def] >>
+     metis_tac[unitShapeDefsTheory.MEM_fn_insts_blocks_iff, fn_insts_def]) >>
+  gvs[clone_function_def, fn_labels_def, MEM_MAP, clone_basic_block_def] >>
+  metis_tac[]
+QED
+
+Theorem renumber_fn_phi_labels_closed:
+  inliner_phi_labels_closed fn ==>
+  inliner_phi_labels_closed (renumber_fn_inst_ids fn)
+Proof
+  rpt strip_tac >> simp[inliner_phi_labels_closed_def, renumber_fn_labels] >>
+  rpt strip_tac >>
+  drule_at (Pos last) (Q.ISPEC `\i. (i.inst_opcode, i.inst_operands)`
+    renumber_fn_inst_projection_origin) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  gvs[inliner_phi_labels_closed_def] >> metis_tac[]
+QED
+
+Theorem inline_one_site_phi_labels_closed:
+  !caller callee ist caller' ist'.
+  inliner_phi_labels_closed caller /\ inliner_phi_labels_closed callee /\
+  inline_one_site caller callee ist = SOME (caller',ist') ==>
+  inliner_phi_labels_closed caller'
+Proof
+  rpt gen_tac >> simp[inline_one_site_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  irule renumber_fn_phi_labels_closed >> CASE_TAC
+  >- metis_tac[inline_call_site_phi_labels_closed] >>
+  irule fix_inline_phis_labels_closed >> conj_tac
+  >- metis_tac[inline_call_site_phi_labels_closed] >>
+  drule venomExecProofsTheory.lookup_block_MEM >> strip_tac >>
+  drule venomExecProofsTheory.lookup_block_label >> strip_tac >>
+  simp[fn_labels_def, MEM_MAP] >> qexists_tac `x` >> simp[]
+QED
+
+Theorem inliner_fn_origin_phi_labels_closed:
+  !ctx n fn. inliner_fn_origin ctx n fn ==> inliner_phi_labels_closed fn
+Proof
+  ho_match_mp_tac inliner_fn_origin_ind >> rpt conj_tac >>
+  metis_tac[inliner_input_phi_labels_closed, inline_one_site_phi_labels_closed]
+QED
+
+Theorem qualified_origin_phi_labels_closed:
+  qualified_origin ctx n fn ==> inliner_phi_labels_closed fn
+Proof
+  metis_tac[qualified_origin_erasure, inliner_fn_origin_phi_labels_closed]
+QED

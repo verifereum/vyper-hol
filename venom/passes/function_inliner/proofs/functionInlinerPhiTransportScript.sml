@@ -1,7 +1,7 @@
 (* Parallel PHI evaluation across the caller continuation predecessor repair. *)
 Theory functionInlinerPhiTransport
 Ancestors
-  functionInlinerDefs functionInlinerSiteLayout simplifyCfgBypassPhi venomExecSemantics venomWf
+  functionInlinerDefs functionInlinerOrigin functionInlinerSiteLayout simplifyCfgBypassPhi venomExecSemantics venomWf
   cfgTransform venomState passSimulationProps list
 
 Theorem inline_resolve_phi_repair:
@@ -98,4 +98,26 @@ Theorem inline_fix_phis_nonphi:
   (if inst.inst_opcode <> PHI then inst else subst_label_inst old fresh inst) = inst
 Proof
   simp[]
+QED
+
+(* Static closure discharges the operand freshness side condition. The
+   runtime predecessor inequality remains explicit, even for closed PHIs. *)
+Theorem inline_eval_phis_closed_repair:
+  inliner_phi_labels_closed fn /\ fn_inst_wf fn /\
+  MEM bb fn.fn_blocks /\ ~MEM fresh (fn_labels fn) /\ prev <> fresh ==>
+  eval_phis (s with vs_prev_bb := SOME (if prev = old then fresh else prev))
+    (MAP (\inst. if inst.inst_opcode <> PHI then inst
+                else subst_label_inst old fresh inst) bb.bb_instructions) =
+  case eval_phis (s with vs_prev_bb := SOME prev) bb.bb_instructions of
+    OK u => OK (u with vs_prev_bb := SOME (if prev = old then fresh else prev))
+  | err => err
+Proof
+  strip_tac >> irule inline_eval_phis_repair >> simp[EVERY_MEM] >>
+  rpt strip_tac
+  >- (gvs[fn_inst_wf_def, EVERY_MEM] >>
+      `inst_wf inst` by metis_tac[] >> gvs[inst_wf_def]) >>
+  `MEM inst (fn_insts fn)` by
+    (simp[venomInstTheory.fn_insts_def,
+       unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
+  metis_tac[inliner_phi_labels_fresh]
 QED
