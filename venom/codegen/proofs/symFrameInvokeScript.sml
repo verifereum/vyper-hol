@@ -13,7 +13,106 @@ Ancestors
   symFnSimSpec codegenSymRel fnFrameDeepInvoke asmSymBridge asmSymSem
   frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  dfgDefs
+  dfgDefs list
+
+(* INVOKE cannot consume the opaque code-end pointer. *)
+Theorem sym_invoke_argument_not_code_end:
+  label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  MEM (Var x) inst.inst_operands ==> ~code_end_var fn x
+Proof
+  rw[label_flow_ok_def] >>
+  first_x_assum drule_all >> simp[] >> metis_tac[]
+QED
+
+Theorem sym_invoke_argument_shape:
+  fn_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: args ==>
+  opaque_use_ok fn /\ EVERY (\op. ~is_label_operand op) args
+Proof
+  strip_tac >>
+  `opaque_use_ok fn /\ label_positions_ok inst` by
+    (gvs[fn_shape_ok_def, EVERY_MEM, inst_shape_ok_def] >> metis_tac[]) >>
+  gvs[label_positions_ok_def]
+QED
+
+Theorem sym_invoke_argument_word_kind:
+  fn_shape_ok fn /\ label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: args /\ MEM op args /\
+  op <> dead_stack_marker /\ op_kind_ok fn ret op sv ==>
+  ?w. sv = Val w
+Proof
+  strip_tac >>
+  drule_all sym_invoke_argument_shape >> strip_tac >>
+  `~is_label_operand op` by gvs[EVERY_MEM] >>
+  Cases_on `op` >> gvs[is_label_operand_def, op_kind_ok_def] >>
+  metis_tac[fnFrameBoundaryInvokeTheory.invoke_arguments_not_retpc,
+            sym_invoke_argument_not_code_end, MEM]
+QED
+
+Theorem sym_invoke_output_not_code_end:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = INVOKE /\ MEM x inst.inst_outputs ==>
+  ~code_end_var fn x
+Proof
+  strip_tac >> strip_tac >> drule_all code_end_var_def_inst >> simp[]
+QED
+
+Theorem sym_invoke_output_word_kind:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = INVOKE /\ MEM x inst.inst_outputs ==>
+  op_kind_ok fn ret (Var x) (Val w)
+Proof
+  strip_tac >>
+  `~code_end_var fn x /\ ~retpc_var fn x` by
+    (conj_tac >- metis_tac[sym_invoke_output_not_code_end] >>
+     drule_at (Pat `MEM inst (fn_insts fn)`)
+       frameViewFactsTheory.noncopy_output_not_retpc >> simp[]) >>
+  simp[op_kind_ok_def]
+QED
+
+Theorem mem_sval_at_range_cong:
+  (!b. in_mem_range off 32 b ==> FLOOKUP m b = FLOOKUP m' b) ==>
+  (mem_sval_at m off sv <=> mem_sval_at m' off sv)
+Proof
+  strip_tac >>
+  `FLOOKUP m off = FLOOKUP m' off /\
+   !i. MEM i (COUNT_LIST 32) ==>
+       FLOOKUP m (off + i) = FLOOKUP m' (off + i)` by
+    gvs[in_mem_range_def, rich_listTheory.MEM_COUNT_LIST] >>
+  Cases_on `sv` >>
+  simp[mem_sval_at_def, mem_label_at_def, EVERY_MEM,
+       GSYM (cj 1 finite_mapTheory.flookup_thm)] >> metis_tac[]
+QED
+
+Theorem sym_invoke_external_labels_preserved:
+  !ctx cp caller callee m1 m0.
+  fn_directly_calls ctx caller callee /\
+  (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp callee b ==>
+       FLOOKUP m1 b = FLOOKUP m0 b) ==>
+  !b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp caller b ==>
+      FLOOKUP m1 b = FLOOKUP m0 b
+Proof
+  metis_tac[fnFrameBoundaryInvokeTheory.invoke_closure_subset]
+QED
+
+Theorem sym_invoke_caller_spill_labels_preserved:
+  !ctx cp caller callee r off m1 m0.
+  ordered_spill_regions cp.cp_regions /\ MEM r cp.cp_regions /\
+  r.sr_fn_name = caller /\ r.sr_spill_base <= off /\
+  off + 32 <= r.sr_spill_end /\ fn_directly_calls ctx caller callee /\
+  ~TC (fn_directly_calls ctx) caller caller /\
+  (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp callee b ==>
+       FLOOKUP m1 b = FLOOKUP m0 b) ==>
+  !b. in_mem_range off 32 b ==> FLOOKUP m1 b = FLOOKUP m0 b
+Proof
+  rpt strip_tac >>
+  `r.sr_spill_base <= b /\ b < r.sr_spill_end` by
+    gvs[in_mem_range_def] >>
+  metis_tac[contextCodegenRelPropsTheory.context_spill_byte_of_region,
+            fnFrameBoundaryInvokeTheory.invoke_caller_region_outside_callee]
+QED
 
 Theorem sym_invoke_frame_sim_deep:
   !fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
