@@ -795,3 +795,252 @@ Resume source_owned_nonbulk_array_ptr[loop_input_transport]:
      simp[lookup_var_def, FLOOKUP_DEF]) >>
   suspend "loop_call_inputs"
 QED
+
+Resume source_owned_nonbulk_array_ptr[loop_call_inputs]:
+  markerLib.RESUME_TAC >>
+  `h.vs_labels = t.vs_labels` by
+    (qpat_assum `Abbrev (h = _)` mp_tac >>
+     qpat_assum `init = t with vs_inst_idx := _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[markerTheory.Abbrev_def, jump_to_def]) >>
+  `eval_operand src h = SOME (n2w cdsbase) /\
+   lookup_var root h = SOME (n2w d)` by
+    (qpat_assum `h.vs_labels = t.vs_labels` mp_tac >>
+     qpat_assum `!x. lookup_var x h = _` mp_tac >>
+     qpat_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> _` mp_tac >>
+     qpat_assum `abi_decoder_operand_live st.cs_next_var src` mp_tac >>
+     qpat_assum `abi_decoder_operand_live st.cs_next_var (Var root)` mp_tac >>
+     qpat_assum `eval_operand src s = _` mp_tac >>
+     qpat_assum `lookup_var root s = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+     conj_tac >-
+       (qpat_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> _`
+          (qspec_then `src` assume_tac) >>
+        Cases_on `src` >> fs[eval_operand_def, abi_decoder_operand_live_def]) >>
+     qpat_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> _`
+       (qspec_then `Var root` mp_tac) >>
+     simp[eval_operand_def]) >>
+  suspend "loop_call_resources"
+QED
+
+Resume source_owned_nonbulk_array_ptr[loop_call_resources]:
+  markerLib.RESUME_TAC >>
+  `h.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `h.vs_call_ctx = t.vs_call_ctx` mp_tac >>
+     qpat_assum `abi_decode_footprint_frame _ s t` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[abi_decode_footprint_frame_def]) >>
+  `mem_bytes_at cdsbase
+      (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+      h.vs_call_ctx.cc_calldata =
+      enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
+    (qpat_assum `h.vs_call_ctx = s.vs_call_ctx` (fn th => rewrite_tac [th]) >>
+     first_assum ACCEPT_TAC) >>
+  `abi_decode_load CALLDATALOAD (n2w cdsbase : bytes32) h = n2w (LENGTH xs)` by
+    (qpat_assum `h.vs_call_ctx = s.vs_call_ctx` mp_tac >>
+     qpat_assum `abi_decode_load CALLDATALOAD (n2w cdsbase) s = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[abi_decode_load_def, abi_decode_source_def]) >>
+  suspend "loop_scratch_resources"
+QED
+
+Resume source_owned_nonbulk_array_ptr[loop_scratch_resources]:
+  markerLib.RESUME_TAC >>
+  `allocas_from lower h /\ lower <= h.vs_alloca_next` by
+    (qpat_assum `h.vs_allocas = t.vs_allocas` mp_tac >>
+     qpat_assum `h.vs_alloca_next = t.vs_alloca_next` mp_tac >>
+     qpat_assum `!id. id <> header_st.cs_next_id ==> _` mp_tac >>
+     qpat_assum `FLOOKUP t.vs_allocas header_st.cs_next_id = _` mp_tac >>
+     qpat_assum `case FLOOKUP s.vs_allocas (loop_st.cs_next_id-2) of NONE => p = s.vs_alloca_next | SOME (slot,sz) => p = slot` mp_tac >>
+     qpat_assum `s.vs_alloca_next <= t.vs_alloca_next` mp_tac >>
+     qpat_assum `allocas_from lower s` mp_tac >>
+     qpat_assum `lower <= s.vs_alloca_next` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+     `lower <= p` by
+       (qpat_x_assum `case FLOOKUP s.vs_allocas (loop_st.cs_next_id-2) of NONE => _ | SOME _ => _` mp_tac >>
+        Cases_on `FLOOKUP s.vs_allocas (loop_st.cs_next_id-2)`
+        >- simp[] >>
+        rename1 `FLOOKUP s.vs_allocas _ = SOME z` >>
+        PairCases_on `z` >> fs[allocas_from_def] >> metis_tac[]) >>
+     conj_tac >-
+       (simp[allocas_from_def] >> rpt strip_tac >>
+        Cases_on `aid = header_st.cs_next_id` >> fs[] >>
+        fs[allocas_from_def] >> metis_tac[]) >> decide_tac) >>
+  suspend "invoke_loop"
+QED
+
+Resume source_owned_nonbulk_array_ptr[invoke_loop]:
+  markerLib.RESUME_TAC >>
+  `!bb. lookup_block st1.cs_current_bb fn.fn_blocks = SOME bb ==>
+     phi_prefix_length bb.bb_instructions = 0` by
+    (gen_tac >> disch_tac >> pop_assum mp_tac >>
+     qpat_assum `lookup_block st1.cs_current_bb fn.fn_blocks = SOME <| bb_label := _; bb_instructions := _ |>`
+       (fn th => rewrite_tac [th, optionTheory.SOME_11]) >>
+     disch_then (SUBST_ALL_TAC o SYM) >>
+     qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ st0 = _` mp_tac >>
+     qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ middle = ((),st1)` mp_tac >>
+     qpat_assum `abi_decode_source_opcode CALLDATALOAD` mp_tac >>
+     qpat_assum `st0.cs_current_insts = []` mp_tac >>
+     qpat_assum `FST ops = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     drule abiDecoderArraySetupCodeTheory.abi_decoder_array_child_end_phi >>
+     simp[] >>
+     disch_then (qspecl_then [`STRING #"%" (toString st1.cs_next_var)`,
+       `STRING #"%" (toString st0.cs_next_var)`, `FST labels`,
+       `<| bb_label := st1.cs_current_bb; bb_instructions := st1.cs_current_insts ++ abi_decode_backedge_insts st1.cs_next_id (STRING #"%" (toString st0.cs_next_var)) (STRING #"%" (toString st1.cs_next_var)) ip (FST labels) |>`] mp_tac) >> simp[]) >>
+  `abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w)
+     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
+     (type_memory_size tv) st0 = (ops,middle)` by
+    (qpat_assum `ip = Var q` (fn th => rewrite_tac [GSYM th]) >>
+     first_assum ACCEPT_TAC) >>
+  mp_tac (Q.INST [`body_st` |-> `st0`, `end_st` |-> `st1`,
+    `hdr` |-> `FST (labels : string # string # string)`,
+    `body_lbl` |-> `FST (SND (labels : string # string # string))`,
+    `exit_lbl` |-> `SND (SND (labels : string # string # string))`,
+    `hid` |-> `loop_st.cs_next_id+1`,
+    `first_var` |-> `loop_st.cs_next_var`,
+    `iv` |-> `STRING #"%" (toString loop_st.cs_next_var)`,
+    `cv` |-> `STRING #"%" (toString (loop_st.cs_next_var+1))`,
+    `cmp` |-> `STRING #"%" (toString (loop_st.cs_next_var+2))`,
+    `done` |-> `STRING #"%" (toString (loop_st.cs_next_var+3))`,
+    `nv` |-> `STRING #"%" (toString st1.cs_next_var)`,
+    `index_id` |-> `header_st.cs_next_id`, `slot` |-> `p`,
+    `elem_idx` |-> `STRING #"%" (toString st0.cs_next_var)`,
+    `back_bb` |-> `<| bb_label := st1.cs_current_bb; bb_instructions := st1.cs_current_insts ++ abi_decode_backedge_insts st1.cs_next_id (STRING #"%" (toString st0.cs_next_var)) (STRING #"%" (toString st1.cs_next_var)) ip (FST (labels : string # string # string)) |>`,
+    `hdr_bb` |-> `<| bb_label := FST (labels : string # string # string); bb_instructions := abi_decode_header_insts (loop_st.cs_next_id+1) ip src CALLDATALOAD (STRING #"%" (toString loop_st.cs_next_var)) (STRING #"%" (toString (loop_st.cs_next_var+1))) (STRING #"%" (toString (loop_st.cs_next_var+2))) (STRING #"%" (toString (loop_st.cs_next_var+3))) (FST (SND (labels : string # string # string))) (SND (SND (labels : string # string # string))) |>`]
+    source_owned_array_loop_ptr) >>
+  (impl_tac >-
+    (qpat_assum `!middle end_st i r G tn child childsrc e srcpos. _`
+       (qspecl_then [`middle`,`st1`] mp_tac) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[])) >>
+  disch_then (qspecl_then [`LENGTH xs`,`0`,`h`,`H`,`u`] mp_tac) >>
+  (impl_tac >- suspend "loop_inputs") >>
+  disch_then strip_assume_tac >>
+  suspend "constructor_composition"
+QED
+
+Resume source_owned_nonbulk_array_ptr[loop_inputs]:
+  markerLib.RESUME_TAC >> (
+  conj_tac >- simp_tac std_ss [] >>
+  conj_tac >- simp_tac std_ss [] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  suspend "loop_inputs_tail")
+QED
+
+Resume source_owned_nonbulk_array_ptr[loop_inputs_tail]:
+  markerLib.RESUME_TAC >> (
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (qpat_assum `ip = Var q` (fn th => rewrite_tac [th]) >> simp_tac (srw_ss()) []) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- simp_tac (srw_ss()) [abiDecoderExecutionTheory.abi_decode_header_insts_def, phi_prefix_length_def, mk_inst_def] >>
+  conj_tac >- REFL_TAC >>
+  conj_tac >- REFL_TAC >>
+  conj_tac >- REFL_TAC >>
+  conj_tac >- REFL_TAC >>
+  conj_tac >- REFL_TAC >>
+  conj_tac >-
+    (qpat_assum `st0.cs_next_var = loop_st.cs_next_var+4` (fn th => rewrite_tac [th]) >>
+     simp_tac std_ss []) >>
+  conj_tac >-
+    (qpat_assum `last.cs_next_var = st1.cs_next_var+1` mp_tac >>
+     qpat_assum `last.cs_next_var <= limit.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  suspend "loop_runtime_inputs")
+QED
+
+Resume source_owned_nonbulk_array_ptr[loop_runtime_inputs]:
+  markerLib.RESUME_TAC >> (
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (qpat_assum `h.vs_memory = t.vs_memory` (fn th => rewrite_tac [th]) >>
+     first_assum ACCEPT_TAC) >>
+  conj_tac >- simp_tac std_ss [] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (qpat_assum `h.vs_allocas = t.vs_allocas` (fn th => rewrite_tac [th]) >>
+     first_assum ACCEPT_TAC) >>
+  suspend "loop_owner_inputs")
+QED
+
+Resume source_owned_nonbulk_array_ptr[loop_owner_inputs]:
+  markerLib.RESUME_TAC >> (
+  conj_tac >-
+    (qpat_assum `oid < st.cs_next_id \/ last.cs_next_id <= oid` mp_tac >>
+     qpat_assum `st.cs_next_id <= header_st.cs_next_id` mp_tac >>
+     qpat_assum `header_st.cs_next_id < middle.cs_next_id` mp_tac >>
+     qpat_assum `st1.cs_next_id <= last.cs_next_id` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (qpat_assum `h.vs_allocas = t.vs_allocas` (fn th => rewrite_tac [th]) >>
+     first_assum ACCEPT_TAC) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (asm_simp_tac bool_ss []) >>
+  suspend "loop_scratch_interval")
+QED
+
+Resume source_owned_nonbulk_array_ptr[loop_scratch_interval]:
+  markerLib.RESUME_TAC >> (
+  conj_tac >-
+    (qpat_assum `!id p k. st.cs_next_id <= id /\ _ ==> _` mp_tac >>
+     qpat_assum `!id. id <> header_st.cs_next_id ==> _` mp_tac >>
+     qpat_assum `h.vs_allocas = t.vs_allocas` mp_tac >>
+     qpat_assum `h.vs_alloca_next = t.vs_alloca_next` mp_tac >>
+     qpat_assum `s.vs_alloca_next <= t.vs_alloca_next` mp_tac >>
+     qpat_assum `st.cs_next_id <= header_st.cs_next_id` mp_tac >>
+     qpat_assum `header_st.cs_next_id < middle.cs_next_id` mp_tac >>
+     qpat_assum `st1.cs_next_id <= last.cs_next_id` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >> rpt gen_tac >> strip_tac >>
+     `id <> header_st.cs_next_id /\ st.cs_next_id <= id /\ id < last.cs_next_id` by decide_tac >>
+     `FLOOKUP s.vs_allocas id = SOME (p,k)` by metis_tac[] >>
+     qpat_x_assum `!id p k. st.cs_next_id <= id /\ _ ==> _`
+       (qspecl_then [`id`,`p`,`k`] mp_tac) >>
+     simp[] >> strip_tac >> asm_simp_tac bool_ss [] >> decide_tac) >>
+  suspend "loop_ghost_tail")
+QED
+
+Resume source_owned_nonbulk_array_ptr[loop_ghost_tail]:
+  markerLib.RESUME_TAC >> (
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  first_assum ACCEPT_TAC)
+QED
