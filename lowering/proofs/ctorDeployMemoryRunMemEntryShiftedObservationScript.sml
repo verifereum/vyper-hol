@@ -57,7 +57,7 @@ Theorem ctor_actual_array_observation_operand_from:
   eval_operand op s = SOME w
 Proof
   strip_tac >> Cases_on `op` >>
-  gvs[abi_decoder_operand_live_def, eval_operand_def] >>
+  full_simp_tac bool_ss [abi_decoder_operand_live_def, eval_operand_def] >>
   first_x_assum irule >> fs[IN_DEF]
 QED
 
