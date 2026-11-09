@@ -1,40 +1,9 @@
 (* Finite typed-array traversal, including the final exit test. *)
 Theory typedCopyArrayLoopMemory
 Ancestors typedCopyArrayStepMemory typedCopyLoopPathMemory typedMemoryCopy
+  typedCopyRuntimeLoopMemory
   finiteIterationMemory fragGasPathMem venomExecSemantics venomState
   words list finite_map arithmetic
-
-Theorem typed_copy_array_exit_path_mem[local]:
-  typed_copy_index_inv sa ctr src dst sw dw f stv dtv N s0 N s /\
-  ci_mono sa a /\ not_fresh_at a ctr /\
-  (!x. src = Var x \/ dst = Var x ==> not_fresh_at a x) /\
-  ~not_fresh_at a lt /\ ~not_fresh_at a done /\
-  N < dimword (:256) /\ ~s.vs_halted /\ s.vs_inst_idx = 0 /\
-  lookup_block s.vs_current_bb func.fn_blocks = SOME test /\
-  test.bb_instructions =
-    [mk_inst hid LT [Var ctr; Lit (n2w N)] [lt];
-     mk_inst (hid+1) ISZERO [Var lt] [done];
-     mk_inst (hid+2) JNZ [Var done; Label exit; Label body_lbl] []] ==>
-  ?t. gas_path_mem ctx func s 0 (OK t) /\
-    typed_copy_index_inv sa ctr src dst sw dw f stv dtv N s0 N t /\
-    t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
-    t.vs_alloca_next = s.vs_alloca_next
-Proof
-  strip_tac >>
-  `lookup_var ctr s = SOME (n2w N)` by gvs[typed_copy_index_inv_def] >>
-  `N <= N` by simp[] >>
-  drule_all typed_copy_loop_header_path_mem >> simp[] >> strip_tac >>
-  qabbrev_tac `t = jump_to exit (update_var done 1w (update_var lt 0w s))` >>
-  `typed_copy_state_frame a 0 0 s t` by
-    (unabbrev_all_tac >> irule typed_copy_control_pair_frame >> simp[]) >>
-  `t.vs_memory = s.vs_memory` by
-    simp[Abbr `t`, jump_to_def, update_var_def] >>
-  `typed_copy_index_inv sa ctr src dst sw dw f stv dtv N s0 N t` by
-    (irule typed_copy_index_inv_preserve >> goal_assum (drule_at Any) >>
-     qexistsl_tac [`a`, `0`, `0`] >> simp[] >> metis_tac[]) >>
-  qexists_tac `t` >> simp[Abbr `t`, jump_to_def, update_var_def] >>
-  metis_tac[]
-QED
 
 Theorem typed_copy_array_loop_path_mem:
   typed_copy_index_inv sa ctr src dst sw dw f stv dtv N s0 k s /\
@@ -81,25 +50,6 @@ Theorem typed_copy_array_loop_path_mem:
     t.vs_alloca_next = s.vs_alloca_next
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  qabbrev_tac `Inv = \j u.
-    typed_copy_index_inv sa ctr src dst sw dw f stv dtv N s0 j u /\
-    u.vs_current_bb = header /\ u.vs_inst_idx = 0 /\ ~u.vs_halted /\
-    u.vs_alloca_next = s.vs_alloca_next` >>
-  ho_match_mp_tac gas_path_mem_finite_iteration_exit >>
-  conj_tac
-  >- (simp[Abbr `Inv`] >> rpt strip_tac >>
-      qpat_x_assum `!j u. _` (qspec_then `i` mp_tac) >>
-      simp[] >> disch_tac >>
-      drule_all typed_copy_array_step_path_mem >>
-      strip_tac >> goal_assum (drule_at Any) >> simp[]) >>
-  conj_tac >- simp[Abbr `Inv`] >>
-  conj_tac
-  >- (simp[Abbr `Inv`] >> rpt strip_tac >>
-      `~not_fresh_at a lt /\ ~not_fresh_at a done` by
-        (conj_tac >> first_x_assum irule >> simp[]) >>
-      `lookup_block u.vs_current_bb func.fn_blocks = SOME test` by simp[] >>
-      drule_all typed_copy_array_exit_path_mem >>
-      disch_then (qspec_then `ctx` strip_assume_tac) >>
-      goal_assum (drule_at Any) >> simp[]) >>
-  simp[Abbr `Inv`]
+  mp_tac (Q.INST [`bound` |-> `Lit (n2w N)`] typed_copy_runtime_array_loop_path_mem) >>
+  (impl_tac >- (simp[eval_operand_def] >> metis_tac[])) >> metis_tac[]
 QED
