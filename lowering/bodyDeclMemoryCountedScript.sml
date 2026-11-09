@@ -11,7 +11,7 @@ Ancestors
   exprSimBufferStore words venomExecSemantics stmtLowering context
   fragExec fragExecMem allocaHistoryFragment list rich_list emitHelper
   emitHelperProps venomInst exprSimLiteralBuffer exprSimAlloc exprSimBuffer
-  finite_map bodySimDeclCases allocLimits bodySim exprSimHyps
+  finite_map allocLimits exprSimHyps
   vyperTypeSystem vyperTypeInvariants memoryLocalRhsProps
   supportedStmtTraverse supportedExprTraverse vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperInterpreter vyperState
