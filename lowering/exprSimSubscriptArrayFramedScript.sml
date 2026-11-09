@@ -4,7 +4,7 @@ Ancestors
   exprSimSubscriptArrayFrame exprSimSubscriptArrayOrigin exprSimArrayIndex exprSimLen exprSimCopy
   exprSimSubscriptArraySource vyperState vyperMisc
   exprSimAggregateEncoding exprSimProps loweringPosts vyperTypeSystem arithmetic
-  emitHelperProps exprLoweringProps venomExecSemantics exprLowering compileEnv
+  emitHelperProps exprLoweringProps venomExecSemantics exprLowering compileEnv loweringStateRelDefs
   exprSimHypsDefs supportedExprTraverse vyperTypeCallStackSoundness
   freshWrites fragGasFresh moduleLoweringProps venomState exprSimUnopProps
   fragExec fragGasSeq fragGasMode venomInst list rich_list finite_map
@@ -49,7 +49,7 @@ Proof
      qexistsl_tac [`cx`, `env`, `es`, `r`, `ArrayT et (Dynamic bound)`] >>
      simp[]) >>
   drule array_len_ok_DLOAD >>
-  gvs[valueEncodingTheory.mem_word_at_def]
+  gvs[valueEncodingDefsTheory.mem_word_at_def]
 QED
 
 Theorem sub_layout_array_element:
@@ -61,7 +61,7 @@ Theorem sub_layout_array_element:
      Num i * type_memory_size et) et v
 Proof
   strip_tac >> Cases_on `av` >> Cases_on `bd` >>
-  gvs[valueEncodingTheory.val_wf_def, vyperValueOperationTheory.array_index_def,
+  gvs[valueEncodingDefsTheory.val_wf_def, vyperValueOperationTheory.array_index_def,
       AllCaseEqs(), listTheory.oEL_THM] >>
   gvs[sub_layout_def, valueEncodingTheory.type_memory_size_def]
   >~ [`ArrayV (DynArrayV vs)`]
@@ -82,15 +82,6 @@ Proof
   qpat_x_assum `!b mem. _` (qspecl_then [`b`, `mem`] mp_tac) >>
   simp[valueEncodingPropsTheory.val_in_memory_sarray] >> strip_tac >>
   metis_tac[valueEncodingProofsTheory.kvs_in_memory_lookup, ADD_ASSOC])
-QED
-
-Theorem local_path_at_step:
-  local_path_at cenv cx n k tv /\ mem_step_offset tv sb = SOME (j,et) ==>
-  local_path_at cenv cx n (k + j) et
-Proof
-  rw[local_path_at_def] >>
-  qexistsl_tac [`t0`, `tv0`, `path ++ [sb]`] >> simp[] >>
-  drule_all mem_path_offset_snoc >> simp[]
 QED
 
 Theorem local_val_at_array_element:
@@ -607,23 +598,6 @@ Proof
   irule not_fresh_at_mono >> goal_assum (drule_at Any) >> simp[]
 QED
 
-(* A dynamic memory parent needs provenance beyond the fixed-history rule:
-   both the parent and child keys can be dynamic-array pop keys. *)
-Theorem dynamic_memory_selection_snapshot_probe[local]:
-  let tv = ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 2)) (Dynamic 2);
-      path = [ValueSubscript (IntV 0)];
-      hist = [(path ++ [ValueSubscript (IntV 0)], IntV 9);
-              (path, ArrayV (DynArrayV [IntV 5; IntV 1]))]
-  in subscripts_type tv [] = SOME tv /\
-     subscripts_type tv path = SOME (ArrayTV (BaseTV (UintT 256)) (Dynamic 2)) /\
-     read_popped tv path hist = SOME (ArrayV (DynArrayV [IntV 5; IntV 1])) /\
-     read_popped tv (path ++ [ValueSubscript (IntV 0)]) hist = SOME (IntV 9) /\
-     evaluate_subscripts (ArrayTV (BaseTV (UintT 256)) (Dynamic 2))
-       (ArrayV (DynArrayV [IntV 5; IntV 1])) [ValueSubscript (IntV 0)] = INL (IntV 5)
-Proof
-  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
-QED
-
 (* Successful source selection after an index which preserves the captured
    non-storage base's source memory and immutable maps. *)
 Theorem framed_array_select_read:
@@ -708,7 +682,7 @@ Proof
             SOME (Num i * type_memory_size etv,etv)` by
            (Cases_on `av` >>
             gvs[mem_step_offset_def, vyperValueOperationTheory.array_index_def,
-                valueEncodingTheory.val_wf_def, listTheory.oEL_THM,
+                valueEncodingDefsTheory.val_wf_def, listTheory.oEL_THM,
                 AllCaseEqs()]) >>
          drule_all vv_at_fixed_array_element >> simp[]) >>
      `vv_at cenv cx (ArrayT et bd) sa sb es' r (LocatedValue ann p) s`

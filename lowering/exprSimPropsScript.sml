@@ -5,9 +5,9 @@ Ancestors
   loweringPosts
   words list rich_list finite_map pred_set pair
   fragExec varsExt loweringSlice localPtrsProps venomMemDefs
-  exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
+  exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
-  valueEncoding valueEncodingProofs vyperTypeSystem
+  valueEncoding valueEncodingDefs valueEncodingProofs vyperTypeSystem
   venomExecSemantics venomInst venomState
   vyperLookupStorage vyperStorageBackend vyperEvalPreservesScopes
 Libs
@@ -522,10 +522,10 @@ Proof
    (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
    val_footprint tv v = type_memory_size tv` by
     metis_tac[val_size_cases]
-  >- (gvs[val_footprint_def, valueEncodingTheory.val_wf_def,
+  >- (gvs[val_footprint_def, valueEncodingDefsTheory.val_wf_def,
           valueEncodingTheory.type_memory_size_def] >>
       qspec_then `n` mp_tac le_word_size_mul >> decide_tac)
-  >- (gvs[val_footprint_def, valueEncodingTheory.val_wf_def,
+  >- (gvs[val_footprint_def, valueEncodingDefsTheory.val_wf_def,
           valueEncodingTheory.type_memory_size_def] >>
       qspec_then `n` mp_tac le_word_size_mul >> decide_tac) >>
   simp[]
@@ -597,10 +597,10 @@ Proof
    (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
    val_store_size tv v = type_memory_size tv` by
     metis_tac[val_size_cases]
-  >- (gvs[val_store_size_def, valueEncodingTheory.val_wf_def,
+  >- (gvs[val_store_size_def, valueEncodingDefsTheory.val_wf_def,
           valueEncodingTheory.type_memory_size_def] >>
       irule word_size_le_of_le_mul >> simp[])
-  >- (gvs[val_store_size_def, valueEncodingTheory.val_wf_def,
+  >- (gvs[val_store_size_def, valueEncodingDefsTheory.val_wf_def,
           valueEncodingTheory.type_memory_size_def] >>
       irule word_size_le_of_le_mul >> simp[]) >>
   simp[]

@@ -1,35 +1,36 @@
 (* Actual recursive singleton Bytes decoding, including the outer memory guard. *)
 Theory abiDecoderWrappedBytesFragment
 Ancestors
-  abiDecoderWrapped abiDecoderSingletonSetup abiDecoderTypedCompose abiDecoderBytesTyped
+  abiDecoderRange abiDecoderWrapped abiDecoderSingletonSetup abiDecoderTypedCompose abiDecoderBytesTyped
   abiDecoderTypedContract abiDecoderGuards abiDecoderContract abiDecoderBytes abiEncoder
   emitHelperProps exprLoweringProps compileEnv emitHelper valueEncoding fragExec
   venomExecSemantics venomState venomInst words rich_list list
 
 Theorem abi_decoder_typed_wrapped_bytes_sequence:
-  compile_abi_decode_to_buf dst src MLOAD hi
+  compile_abi_decode_to_buf dst src MLOAD base_op hi
     (DecComplex T [(DecBytestring n,32,mem_sz)]) st = ((),st') /\
   abi_decoder_pre ce env (TupleT [BaseT (BytesT (Dynamic n))])
     (TupleTV [BaseTV (BytesT (Dynamic n))]) (DecComplex T [(DecBytestring n,32,mem_sz)])
     (ListV [contractABI$BytesV bs]) (ArrayV (TupleV [vyperValue$BytesV bs]))
-    st last src dst MLOAD hi sb d b cap s ==>
+    st last src dst MLOAD base_op hi src_base sb d b cap s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decoder_post (TupleTV [BaseTV (BytesT (Dynamic n))])
       (ArrayV (TupleV [vyperValue$BytesV bs]))
       st' d (abi_decode_bytes_copy_size n) b cap s t
 Proof
-  strip_tac >> qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  strip_tac >> qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_wrapped_bytes_phases, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >>
-  rename1 `abi_decode_singleton_setup dst src MLOAD hi st = (child_ops,c1)` >>
+  rename1 `abi_decode_singleton_setup dst src MLOAD base_op hi st = (child_ops,c1)` >>
   PairCases_on `child_ops` >> gvs[] >>
-  rename1 `abi_decode_singleton_setup dst src MLOAD hi st = ((child_src,child_dst),c1)` >>
-  `compile_abi_decode_to_buf child_dst child_src MLOAD hi (DecBytestring n) c1 =
+  rename1 `abi_decode_singleton_setup dst src MLOAD base_op hi st = ((child_src,child_dst),c1)` >>
+  `compile_abi_decode_to_buf child_dst child_src MLOAD base_op hi (DecBytestring n) c1 =
     ((),st')` by
     (qpat_x_assum `_ = ((),st')` mp_tac >> asm_simp_tac bool_ss [pairTheory.UNCURRY_DEF]) >>
   drule_all abi_decoder_wrapped_bytes_setup >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK mid` >>
-  drule_all abi_decoder_typed_bytes_sequence >> strip_tac >>
+  drule abi_decoder_typed_bytes_sequence >> simp[] >>
+  disch_then drule >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts c1 st') mid = OK t` >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_bytes_shape >> strip_tac >>
@@ -45,7 +46,7 @@ Proof
 QED
 
 Theorem abi_decoder_wrapped_bytes_shape:
-  compile_abi_decode_to_buf dst src MLOAD hi
+  compile_abi_decode_to_buf dst src MLOAD base_op hi
     (DecComplex T [(DecBytestring n,32,mem_sz)]) st = ((),st') ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\
@@ -54,10 +55,10 @@ Theorem abi_decoder_wrapped_bytes_shape:
 Proof
   simp_tac bool_ss [abi_decode_wrapped_bytes_phases, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >>
-  rename1 `abi_decode_singleton_setup dst src MLOAD hi st = (child_ops,c1)` >>
+  rename1 `abi_decode_singleton_setup dst src MLOAD base_op hi st = (child_ops,c1)` >>
   PairCases_on `child_ops` >> gvs[] >>
-  rename1 `abi_decode_singleton_setup dst src MLOAD hi st = ((child_src,child_dst),c1)` >>
-  `compile_abi_decode_to_buf child_dst child_src MLOAD hi (DecBytestring n) c1 =
+  rename1 `abi_decode_singleton_setup dst src MLOAD base_op hi st = ((child_src,child_dst),c1)` >>
+  `compile_abi_decode_to_buf child_dst child_src MLOAD base_op hi (DecBytestring n) c1 =
     ((),st')` by
     (qpat_x_assum `_ = ((),st')` mp_tac >> asm_simp_tac bool_ss [pairTheory.UNCURRY_DEF]) >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
@@ -71,17 +72,17 @@ Proof
 QED
 
 Theorem abi_decoder_typed_wrapped_bytes_fragment:
-  compile_abi_decode_to_buf dst src MLOAD hi
+  compile_abi_decode_to_buf dst src MLOAD base_op hi
     (DecComplex T [(DecBytestring n,32,mem_sz)]) st = ((),st') ==>
   frag_exec ctx st st'
     (abi_decoder_pre ce env (TupleT [BaseT (BytesT (Dynamic n))])
        (TupleTV [BaseTV (BytesT (Dynamic n))]) (DecComplex T [(DecBytestring n,32,mem_sz)])
        (ListV [contractABI$BytesV bs]) (ArrayV (TupleV [vyperValue$BytesV bs]))
-       st last src dst MLOAD hi sb d b cap)
+       st last src dst MLOAD base_op hi src_base sb d b cap)
     (\t. ?s. abi_decoder_pre ce env (TupleT [BaseT (BytesT (Dynamic n))])
        (TupleTV [BaseTV (BytesT (Dynamic n))]) (DecComplex T [(DecBytestring n,32,mem_sz)])
        (ListV [contractABI$BytesV bs]) (ArrayV (TupleV [vyperValue$BytesV bs]))
-       st last src dst MLOAD hi sb d b cap s /\
+       st last src dst MLOAD base_op hi src_base sb d b cap s /\
        abi_decoder_post (TupleTV [BaseTV (BytesT (Dynamic n))])
          (ArrayV (TupleV [vyperValue$BytesV bs]))
          st' d (abi_decode_bytes_copy_size n) b cap s t)

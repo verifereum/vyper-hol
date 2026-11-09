@@ -4,7 +4,7 @@ Ancestors
   stmtSimZero stmtSimPass stmtSimSeqMem
   exprSimMemDefs stmtSimDefs loweringPosts gasOutcome gasSummary gasContext
   allocaHistory exprSimProps stmtSimExpr stmtSimProps
-  bodyMemoryDefs fragExecMem fragExec compileEnv stmtLowering exprSimDefs
+  bodyMemoryDefs fragExecMem fragExec compileEnv loweringStateRelDefs stmtLowering exprSimDefs
   vyperEvalPreservesScopes
   exprLoweringProps venomState venomExecSemantics
   vyperInterpreter vyperTypeSystem vyperState vyperExprNoControl list finite_map

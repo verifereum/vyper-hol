@@ -68,7 +68,7 @@ Theorem rest_word_layout_caller_path:
 Proof
   simp[rest_word_loop_layout_def] >> rpt strip_tac >>
   irule rest_word_jump_marked >> goal_assum drule >> simp[] >>
-  simp[mk_inst_def, step_inst_base_def]
+  simp[mk_inst_def, step_inst_base_opcode_eqs]
 QED
 
 Theorem rest_word_init_sequence:
@@ -76,7 +76,7 @@ Theorem rest_word_init_sequence:
                 mk_inst b ASSIGN [Lit 0w] [result]] s =
     OK (update_var result 0w (update_var idx 0w s))
 Proof
-  simp[exprLoweringPropsTheory.run_inst_seq_def, step_inst_base_def, mk_inst_def,
+  simp[exprLoweringPropsTheory.run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        eval_operand_def]
 QED
 
@@ -98,7 +98,7 @@ Proof
   simp[rest_word_init_sequence, mk_inst_def, is_terminator_def,
        fragExecMemTheory.run_inst_seq_mem_ok_def] >>
   impl_tac >- (rpt strip_tac >>
-    simp[step_inst_base_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, eval_operand_def] >>
     rpt conj_tac >> irule below_frontier_no_ranges >> simp[]) >> simp[]
 QED
 
@@ -145,21 +145,10 @@ Proof
   conj_tac
   >- (irule rest_word_block_path >> simp[Once CONJ_ASSOC] >>
       qexistsl [`h.rw_cond`, `u`] >>
-      `run_inst_seq [mk_inst a ASSIGN [Lit 0w] [h.rw_idx];
-                     mk_inst b ASSIGN [Lit 0w] [h.rw_result]] s = OK u` by
-        simp[rest_word_init_sequence, Abbr `u`] >>
-      `~u.vs_halted /\ u.vs_current_bb = h.rw_entry` by
-        simp[Abbr `u`, update_var_def] >>
-      `step_inst_base (mk_inst c JMP [Label h.rw_cond] [])
-         (u with vs_inst_idx := 2) =
-       OK (jump_to h.rw_cond (u with vs_inst_idx := 2))` by
-        simp[mk_inst_def, step_inst_base_opcode_eqs] >>
-      `jump_to h.rw_cond u = jump_to h.rw_cond (u with vs_inst_idx := 2)` by
-        simp[jump_to_def] >>
-      simp[mk_inst_def, is_terminator_def,
+      simp[rest_word_init_sequence, Abbr `u`, update_var_def,
+           mk_inst_def, step_inst_base_opcode_eqs, jump_to_def, is_terminator_def,
            fragExecMemTheory.run_inst_seq_mem_ok_def] >>
-      rpt strip_tac >>
-      simp[step_inst_base_opcode_eqs, eval_operand_def] >>
+      rpt strip_tac >> simp[eval_operand_def] >>
       rpt conj_tac >> irule below_frontier_no_ranges >> simp[]) >>
   `R (jump_to h.rw_cond u)` by metis_tac[] >>
   `rest_word_membership_inv h.rw_idx h.rw_result len needleval elem R 0 u` by

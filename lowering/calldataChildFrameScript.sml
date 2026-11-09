@@ -2,7 +2,7 @@
    The execution theorem must supply the footprint and outside-site map frame. *)
 Theory calldataChildFrame
 Ancestors
-  actualAllocExec abiDecoderFrame valueEncodingProps valueEncoding
+  valueEncodingDefs actualAllocExec abiDecoderFrame valueEncodingProps valueEncoding
   venomMemDefs venomState finite_map arithmetic list words
 
 Theorem calldata_child_preserves_allocated_region:

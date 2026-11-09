@@ -52,11 +52,11 @@ Ancestors
   exprSimDefs
   loweringPosts
   list finite_map
-   exprLowering compileEnv immutableEncoding vyperAST vyperInterpreter
+   exprLowering compileEnv loweringStateRelDefs immutableEncoding vyperAST vyperInterpreter
   vyperState
   loweringSlice fragExec freshWrites venomInst venomExecSemantics venomState
   exprSimCopy exprOperandVar vyperEvalExprPreservesScopesDom
-  valueEncoding valueEncodingProofs vyperTypeValues vyperStorage vyperValue
+  valueEncoding valueEncodingDefs valueEncodingProofs vyperTypeValues vyperStorage vyperValue
   vyperLookupStorage
   exprSimMemorySource exprSimMemoryRead gasOutcome gasSummary
   gasSummaryCompose gasExemptCert fragGasMode fragGasPath emitHelperProps
@@ -338,7 +338,7 @@ Proof
   `off + k < dimword (:256)` by DECIDE_TAC >>
   `mem_word_at (off + k) s.vs_data_section = typed_val_to_w256 tvt v` by
     (irule val_in_memory_word_type >> metis_tac[]) >>
-  gvs[valueEncodingTheory.mem_word_at_def]
+  gvs[valueEncodingDefsTheory.mem_word_at_def]
 QED
 
 (* A word immutable at runtime: a DLOAD. *)
@@ -525,7 +525,7 @@ Proof
   `off + k < dimword (:256)` by (fs[sub_layout_def] >> DECIDE_TAC) >>
   `mem_word_at (off + k) s.vs_memory = typed_val_to_w256 tvt v` by
     (irule val_in_memory_word_type >> metis_tac[]) >>
-  gvs[valueEncodingTheory.mem_word_at_def, mload_def]
+  gvs[valueEncodingDefsTheory.mem_word_at_def, mload_def]
 QED
 
 (* The ILOAD of a constructor immutable word reads memory. *)
@@ -913,7 +913,7 @@ Proof
 QED
 
 (* compile_imm_load_word_ctor_frag's counted form. *)
-Theorem compile_imm_load_word_ctor_path[local]:
+Theorem compile_imm_load_word_ctor_path:
   !ctx func cenv cx es pop sm op sb s0 w.
     compile_imm_load_word T cenv.ce_imm_alloca pop sm = (op, sb) /\
     local_ptrs_reserved cenv sm /\ fn_has_code sm sb func /\

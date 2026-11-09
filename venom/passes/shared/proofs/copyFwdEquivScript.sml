@@ -24,10 +24,6 @@
  *   copy_fwd_cross_equiv       — mcopy vs nop → cross equiv holds
  *   copy_fwd_rel               — simulation invariant for copy forwarding
  *   mload_cross_equiv          — MLOAD same result at cross-equiv regions
- *   copy_fwd_read_equiv        — read instruction: rewritten inst preserves rel
- *   copy_fwd_write_equiv       — write instruction: rewritten inst preserves rel
- *   copy_fwd_terminator_equiv  — terminator: rewritten inst preserves rel
- *   copy_fwd_rel_preserved_identical_inst — non-clobbering inst preserves invariant
  *)
 
 Theory copyFwdEquiv
@@ -299,132 +295,7 @@ Proof
 QED
 
 (* =========================================================================
-   5. Per-Instruction Equivalence Under Operand Rewrite
-
-   The core theorem: if instruction i_orig uses variable dst_var at a
-   memory-address position (iao_ofst), and i_xfrm is the same instruction
-   with dst_var replaced by src_root at that position, then stepping
-   i_orig in s1 and i_xfrm in s2 (under copy_fwd_rel) produces
-   equivalent results.
-
-   This is the theorem that the IRCF proof uses for each rewritten use.
-   ========================================================================= *)
-
-(* For a read instruction (MLOAD, SHA3): the output value is the same. *)
-Theorem copy_fwd_read_equiv:
-  ∀i_orig i_xfrm s1 s2
-   dst_addr src_addr alloca_sz dst_var src_var out.
-    copy_fwd_rel dst_addr src_addr alloca_sz s1 s2 ∧
-    (* i_orig reads from dst_var, i_xfrm reads from src_var *)
-    i_orig.inst_opcode = i_xfrm.inst_opcode ∧
-    i_orig.inst_outputs = i_xfrm.inst_outputs ∧
-    (* The only operand difference: dst_var → src_var at iao_ofst *)
-    (∃ops. mem_read_ops i_orig = SOME ops ∧ ops.iao_ofst = Var dst_var) ∧
-    (∃ops. mem_read_ops i_xfrm = SOME ops ∧ ops.iao_ofst = Var src_var) ∧
-    (* Non-offset operands are identical *)
-    (∀pos. pos < LENGTH i_orig.inst_operands ∧
-           EL pos i_orig.inst_operands ≠ Var dst_var ⇒
-           EL pos i_orig.inst_operands = EL pos i_xfrm.inst_operands) ∧
-    (* dst_var and src_var point to the right addresses *)
-    lookup_var dst_var s1 = SOME (n2w dst_addr) ∧
-    lookup_var src_var s2 = SOME (n2w src_addr) ∧
-    (* Read size within alloca bounds *)
-    (∀sz_op max_sz. mem_read_ops i_orig = SOME <| iao_ofst := Var dst_var;
-               iao_size := SOME sz_op; iao_max_size := max_sz |> ⇒
-             ∀sz_val. eval_operand sz_op s1 = SOME sz_val ⇒
-                      w2n sz_val ≤ alloca_sz) ∧
-    alloca_sz ≥ 32 ⇒
-    ∀s1' s2'.
-      step_inst_base i_orig s1 = OK s1' ∧
-      step_inst_base i_xfrm s2 = OK s2' ⇒
-      (∀out. MEM out i_orig.inst_outputs ⇒
-             lookup_var out s1' = lookup_var out s2')
-Proof
-  cheat
-QED
-
-(* For a write instruction (MSTORE, MCOPY dst): observable state is
-   preserved. Memory differs but only at the respective alloca regions. *)
-Theorem copy_fwd_write_equiv:
-  ∀i_orig i_xfrm s1 s2
-   dst_addr src_addr alloca_sz dst_var src_var.
-    copy_fwd_rel dst_addr src_addr alloca_sz s1 s2 ∧
-    i_orig.inst_opcode = i_xfrm.inst_opcode ∧
-    (∃ops. mem_write_ops i_orig = SOME ops ∧ ops.iao_ofst = Var dst_var) ∧
-    (∃ops. mem_write_ops i_xfrm = SOME ops ∧ ops.iao_ofst = Var src_var) ∧
-    (∀pos. pos < LENGTH i_orig.inst_operands ∧
-           EL pos i_orig.inst_operands ≠ Var dst_var ⇒
-           EL pos i_orig.inst_operands = EL pos i_xfrm.inst_operands) ∧
-    lookup_var dst_var s1 = SOME (n2w dst_addr) ∧
-    lookup_var src_var s2 = SOME (n2w src_addr) ⇒
-    ∀s1' s2'.
-      step_inst_base i_orig s1 = OK s1' ∧
-      step_inst_base i_xfrm s2 = OK s2' ⇒
-      observable_equiv s1' s2' ∧
-      (∀v. lookup_var v s1' = lookup_var v s2') ∧
-      (* Invariant preserved: cross-equiv still holds for src region,
-         and dst/src cross-equiv updated for the new memory contents *)
-      cross_mem_region_equiv
-        s1'.vs_memory src_addr s2'.vs_memory src_addr alloca_sz
-Proof
-  cheat
-QED
-
-(* For terminators (RETURN, REVERT): produces same observable result. *)
-Theorem copy_fwd_terminator_equiv:
-  ∀i_orig i_xfrm s1 s2
-   dst_addr src_addr alloca_sz dst_var src_var.
-    copy_fwd_rel dst_addr src_addr alloca_sz s1 s2 ∧
-    i_orig.inst_opcode = i_xfrm.inst_opcode ∧
-    i_orig.inst_opcode ∈ {RETURN; REVERT} ∧
-    (∃ops. mem_read_ops i_orig = SOME ops ∧ ops.iao_ofst = Var dst_var) ∧
-    (∃ops. mem_read_ops i_xfrm = SOME ops ∧ ops.iao_ofst = Var src_var) ∧
-    (∀pos. pos < LENGTH i_orig.inst_operands ∧
-           EL pos i_orig.inst_operands ≠ Var dst_var ⇒
-           EL pos i_orig.inst_operands = EL pos i_xfrm.inst_operands) ∧
-    lookup_var dst_var s1 = SOME (n2w dst_addr) ∧
-    lookup_var src_var s2 = SOME (n2w src_addr) ∧
-    (∀sz_val. eval_operand (EL 1 i_orig.inst_operands) s1 = SOME sz_val ⇒
-              w2n sz_val ≤ alloca_sz) ⇒
-    lift_result observable_equiv observable_equiv observable_equiv
-      (step_inst_base i_orig s1)
-      (step_inst_base i_xfrm s2)
-Proof
-  cheat
-QED
-
-(* =========================================================================
-   6. Invariant Preservation
-
-   Instructions between the NOP'd copy and the rewritten uses that do
-   NOT touch the dst or src variables maintain the copy_fwd_rel.
-   The clobber analysis in the pass ensures no such instruction writes
-   to the src region.
-   ========================================================================= *)
-
-(* An instruction that is IDENTICAL in both executions and doesn't
-   clobber the src or dst regions preserves copy_fwd_rel. *)
-Theorem copy_fwd_rel_preserved_identical_inst:
-  ∀inst s1 s2 s1' s2' dst_addr src_addr alloca_sz.
-    copy_fwd_rel dst_addr src_addr alloca_sz s1 s2 ∧
-    step_inst_base inst s1 = OK s1' ∧
-    step_inst_base inst s2 = OK s2' ∧
-    (* Instruction doesn't write to src or dst regions *)
-    (∀ofst write_sz max_sz.
-      mem_write_ops inst = SOME <| iao_ofst := ofst;
-        iao_size := SOME write_sz; iao_max_size := max_sz |> ⇒
-      ∀a wsz.
-        eval_operand ofst s1 = SOME a ∧
-        eval_operand write_sz s1 = SOME wsz ⇒
-        (w2n a + w2n wsz ≤ dst_addr ∨ dst_addr + alloca_sz ≤ w2n a) ∧
-        (w2n a + w2n wsz ≤ src_addr ∨ src_addr + alloca_sz ≤ w2n a)) ⇒
-    copy_fwd_rel dst_addr src_addr alloca_sz s1' s2'
-Proof
-  cheat
-QED
-
-(* =========================================================================
-   7. ASSIGN Transparency
+   5. ASSIGN Transparency
 
    ASSIGN forwards values unchanged. pointer_confined + ASSIGN means
    the output is pointer-derived (if input was), so it stays in the

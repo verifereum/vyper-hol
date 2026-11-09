@@ -1,10 +1,10 @@
 (* Source selection and counted suffix summaries for framed arrays. *)
 Theory exprSimSubscriptArraySuffix
 Ancestors
-  exprSimSubscriptArrayEndpoint exprSimSubscriptArrayFramed
+  loweringStateRelDefs exprSimSubscriptArrayEndpoint exprSimSubscriptArrayFramed
   exprSimSubscriptArraySource gasSummary exprSimDefs vyperState
   vyperPlaceTyping vyperValueOperation vyperArray integer_word words integer
-  exprSimSource exprSimCopy exprSimLen valueEncodingProps valueEncoding
+  exprSimSource exprSimCopy exprSimLen valueEncodingProps valueEncoding valueEncodingDefs
 
 Theorem framed_array_select_error:
   expr_body_pre cenv cx env obj es /\
@@ -65,6 +65,10 @@ Proof
   simp[select_result_def, extend_place_def, place_type_value_def,
        read_place_def, get_immutables_def, get_address_immutables_def,
        lift_option_type_def, lift_sum_def, bind_def, ignore_bind_def, return_def, raise_def] >>
+  Cases_on `ALOOKUP s.immutables cx.txn.target` >> simp[return_def, raise_def] >>
+  Cases_on `FLOOKUP (get_source_immutables o' x) s'` >>
+  simp[return_def, raise_def] >>
+  Cases_on `subscripts_type (FST x') l` >> simp[return_def, raise_def] >>
   rpt (CASE_TAC >> simp[bind_def, ignore_bind_def, return_def, raise_def])
 QED
 
@@ -266,7 +270,7 @@ Theorem fixed_array_index_footprint:
     val_footprint (ArrayTV etv (Fixed n)) (ArrayV av)
 Proof
   strip_tac >> Cases_on `av` >>
-  gvs[valueEncodingTheory.val_wf_def, vyperValueOperationTheory.array_index_def,
+  gvs[valueEncodingDefsTheory.val_wf_def, vyperValueOperationTheory.array_index_def,
       loweringPostsTheory.val_footprint_def, type_memory_size_def,
       AllCaseEqs(), listTheory.oEL_THM] >>
   irule arithmeticTheory.LESS_MONO_MULT >> decide_tac
@@ -531,7 +535,11 @@ Proof
   qpat_x_assum `evaluate_type _ (expr_type idx) = _` kall_tac >>
   `cs_extends sc sd /\ sc.cs_next_var <= sd.cs_next_var /\
    sc.cs_next_id <= sd.cs_next_id` by
-    (irule array_subscript_grows >> goal_assum (drule_at Any) >>
+    (qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ sc = _`
+       (mp_tac o Q.AP_TERM `SND`) >>
+     simp[] >> disch_then (SUBST1_TAC o SYM) >>
+     rewrite_tac[GSYM exprLoweringPropsTheory.ci_mono_def] >>
+     irule exprLoweringPropsTheory.ci_mono_compile_array_subscript >>
      simp[exprLoweringPropsTheory.ci_mono_compile_ptr_load]) >>
   `!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
        (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
@@ -557,5 +565,5 @@ Proof
   qexistsl_tac [`iop`,`iw`,`sc`] >> simp[] >>
   rpt strip_tac >>
   qpat_x_assum `!x. p.ptr_operand = Var x ==> _` drule >>
-  simp[compileEnvTheory.not_fresh_at_def]
+  simp[loweringStateRelDefsTheory.not_fresh_at_def]
 QED
