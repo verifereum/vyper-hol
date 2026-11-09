@@ -325,3 +325,124 @@ Resume concat_slice_out_buf_counted_frame[sites]:
 QED
 
 Finalise concat_slice_out_buf_counted_frame
+
+Theorem concat_prefix_counted:
+  compile_alloc_buffer bsz sa = (buf,s1) /\
+  emit_op ADD [buf.buf_operand; Lit 32w] s1 = (data,s2) /\
+  compile_alloc_buffer 64 s2 = (ob,s3) /\
+  emit_void MSTORE [ob.buf_operand; Lit 0w] s3 = ((),s4) /\
+  fn_has_code sa s4 fn /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved ce sa /\ 32 <= bsz /\ bsz < dimword (:256) /\
+  stmt_state_rel ctx fn ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  (!x k. ce.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!x k. ce.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?r p off a ow Gf tnf t.
+    buf.buf_operand = Var r /\ data = Var p /\ ob.buf_operand = Var off /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK t) /\
+    stmt_state_rel ctx fn ce cx es t /\ ghost_inv d ce cx es Gf tnf t /\
+    ghost_kept ce es sa G tn s Gf tnf /\
+    ptr_covers Gf tnf r t bsz /\ ptr_covers Gf tnf p t (bsz-32) /\
+    ptr_covers Gf tnf off t 64 /\
+    lookup_var r t = SOME a /\ lookup_var p t = SOME (a+32w) /\
+    lookup_var off t = SOME ow /\ mload (w2n ow) t = 0w /\
+    (!i. w2n ow <= i /\ i < w2n ow+32 ==> i NOTIN tnf.t_mem) /\
+    ~t.vs_halted /\ t.vs_current_bb = s4.cs_current_bb /\
+    t.vs_inst_idx = LENGTH s4.cs_current_insts /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n a,bsz) /\
+    FLOOKUP t.vs_allocas s2.cs_next_id = SOME (w2n ow,64) /\
+    w2n a+bsz < dimword (:256) /\ w2n ow+64 < dimword (:256) /\
+    regions_disjoint (w2n ow) 64 (w2n a) bsz /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!aid b k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,k) ==>
+      regions_disjoint (w2n a) bsz b k /\ regions_disjoint (w2n ow) 64 b k) /\
+    (!name b k. local_region ce es.scopes t name b k ==>
+      regions_disjoint (w2n a) bsz b k /\ regions_disjoint (w2n ow) 64 b k) /\
+    (!name b k. local_region ce es.scopes s name b k <=>
+      local_region ce es.scopes t name b k) /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tnf (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `compile_slice_out_buf bsz sa = ((buf.buf_operand,data),s2)` by
+    simp[builtinBytesTheory.compile_slice_out_buf_def, comp_bind_def, comp_return_def] >>
+  drule compile_slice_out_buf_compiler_parts >> strip_tac >>
+  `cs_extends sa s2` by metis_tac[cs_extends_trans] >>
+  `cs_extends s2 s3` by metis_tac[compile_alloc_buffer_extends] >>
+  `cs_extends s3 s4` by
+    (irule cs_extends_emit_inst >>
+     qexistsl_tac [`MSTORE`,`[ob.buf_operand; Lit 0w]`,`[]`,`()`] >>
+     simp[emit_inst_def, GSYM emit_void_def]) >>
+  `cs_extends s2 s4` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa s2 fn /\ fn_has_code s2 s4 fn` by metis_tac[fn_has_code_split] >>
+  `fn_has_code s2 s3 fn /\ fn_has_code s3 s4 fn` by metis_tac[fn_has_code_split] >>
+  drule_all concat_slice_out_buf_counted_frame >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_id <= s2.cs_next_id` by
+    (mp_tac (ci_mono_compile_slice_out_buf |> Q.SPECL [`bsz`,`sa`]) >>
+     simp[ci_mono_def]) >>
+  `local_ptrs_reserved ce s2` by metis_tac[local_ptrs_reserved_next_var] >>
+  `!x. not_fresh_at sa x ==> not_fresh_at s2 x` by
+    (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `(!x k. ce.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at s2 x) /\
+   (!x k. ce.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at s2 x)` by metis_tac[] >>
+  `32 <= 64 /\ 64 < dimword (:256)` by
+    (conj_tac >- decide_tac >> irule vyperArithTheory.lt_dimword_256 >>
+     qexists_tac `7` >> simp[]) >>
+  qpat_x_assum `compile_alloc_buffer 64 s2 = _` assume_tac >>
+  drule_all concat_alloc_zero_counted >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  suspend "assemble"
+QED
+
+Resume concat_prefix_counted[assemble]:
+  `r' = r /\ p' = p` by metis_tac[operand_11] >>
+  gvs[] >>
+  `not_fresh_at s2 r /\ not_fresh_at s2 p /\ sa.cs_next_id < s2.cs_next_id` by
+    (qpat_x_assum `compile_alloc_buffer bsz sa = _` assume_tac >>
+     drule compile_alloc_buffer_parts >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >>
+     gvs[not_fresh_at_def] >> rpt strip_tac >>
+     gvs[]) >>
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK t')` by
+    (drule_all gas_path_ptr_then >> simp[]) >>
+  `ptr_covers G1 tn1 r t' bsz /\ ptr_covers G1 tn1 p t' (bsz-32)` by
+    (conj_tac >> first_x_assum irule >> simp[]) >>
+  `lookup_var r t' = SOME a /\ lookup_var p t' = SOME (a+32w)` by simp[] >>
+  qexistsl_tac [`a`,`a'`,`G1`,`tn1`,`t'`] >>
+  simp[] >> conj_tac >- suspend "kept" >>
+  suspend "frames"
+QED
+
+Resume concat_prefix_counted[frames]:
+  conj_tac >-
+    (qpat_x_assum `!aid b k. aid < s2.cs_next_id /\ _ ==> _`
+       irule >> qexists_tac `sa.cs_next_id` >> simp[]) >>
+  conj_tac >-
+    (rpt gen_tac >> strip_tac >> conj_tac >- metis_tac[] >>
+     qpat_x_assum `!aid b k. aid < s2.cs_next_id /\ _ ==> _` irule >>
+     qexists_tac `aid` >> simp[] >> decide_tac) >>
+  metis_tac[]
+QED
+
+Resume concat_prefix_counted[kept]:
+  gvs[ghost_kept_def] >>
+  conj_tac >-
+    (rpt gen_tac >> strip_tac >>
+     `aid < s2.cs_next_id` by decide_tac >>
+     `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by simp[] >>
+     `i IN tn2.t_mem` by
+       (qpat_x_assum `!aid off sz i. FLOOKUP t.vs_allocas aid = _ /\ _ ==> _`
+          irule >> simp[] >> qexistsl_tac [`aid`,`off`,`sz`] >> metis_tac[]) >>
+     qpat_x_assum `!aid off sz i. FLOOKUP s.vs_allocas aid = _ /\ _ ==> _`
+       irule >> simp[] >> qexistsl_tac [`aid`,`off`,`sz`] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `i IN tn2.t_mem` by metis_tac[] >>
+  metis_tac[]
+QED
+
+Finalise concat_prefix_counted
