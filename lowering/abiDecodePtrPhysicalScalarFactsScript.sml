@@ -44,3 +44,35 @@ Resume abi_decode_physical_word_input[shape]:
 QED
 
 Finalise abi_decode_physical_word_input
+
+Theorem abi_decode_physical_bytes_input:
+  (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
+  abi_decoder_metadata ce env ty tv di (dec (vyper_to_abi_type env ty) bs) v /\
+  vyper_decode_valid_enc (vyper_to_abi_type env ty) bs /\
+  mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc s) = bs /\
+  n < dimword(:256) /\ B + sb + LENGTH bs < dimword(:256) /\
+  eval_operand base_op s = SOME (n2w B) /\
+  (base_op <> Lit 0w ==>
+    B + sb + LENGTH bs <= d \/ d + abi_decode_bytes_copy_size n <= B + sb) /\
+  d + abi_decode_bytes_copy_size n < dimword(:256) /\
+  eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+  abi_decode_source_opcode opc /\ fresh_vars_wrt st s /\
+  (hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
+    sb + LENGTH bs <= h /\ h < dimword(:256)) ==>
+  ?at payload. abi_decoder_valid_bytes_pre n at bs payload st src dst opc base_op hi B sb d s /\
+    (!mem. val_in_memory (BaseTV (BytesT (Dynamic n))) (vyperValue$BytesV payload) d mem /\
+      val_in_memory (BaseTV (StringT n)) (StringV (MAP (CHR o w2n) payload)) d mem ==>
+      val_in_memory tv v d mem)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_decoder_valid_bytes_metadata >>
+  disch_then (qx_choose_then `at` (qx_choose_then `payload`
+    (MAP_EVERY assume_tac o CONJUNCTS))) >>
+  `vyper_decode_valid_enc at bs` by metis_tac[] >>
+  drule_all abi_valid_bytes_decode >> strip_tac >>
+  qexistsl_tac [`at`, `payload`] >>
+  conj_tac
+  >- (asm_simp_tac bool_ss [abi_decoder_valid_bytes_pre_def] >> strip_tac >>
+      qpat_x_assum `base_op <> Lit 0w ==> _` drule >> decide_tac) >>
+  rpt strip_tac >> first_x_assum irule >> asm_simp_tac bool_ss []
+QED
