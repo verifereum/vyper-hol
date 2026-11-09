@@ -1126,10 +1126,8 @@ Proof
   `vs.vs_inst_idx = k` by gvs[body_inv_def] >>
   `get_instruction bb vs.vs_inst_idx = SOME inst` by metis_tac[] >>
   drule_all fnBlockBodyHelpersTheory.step_ok_terminator_jump >> strip_tac
-  >- (drule_all sym_body_jmp_step >> strip_tac >>
-      drule_all block_rest_jump >> simp[])
-  >- (drule_all sym_body_jnz_step >> strip_tac >>
-      drule_all block_rest_jump >> simp[]) >>
+  >- (drule_all sym_body_jmp_step >> strip_tac >> metis_tac[block_rest_jump])
+  >- (drule_all sym_body_jnz_step >> strip_tac >> metis_tac[block_rest_jump]) >>
   gvs[inst_shape_ok_def]
 QED
 
@@ -1181,6 +1179,65 @@ Proof
   drule_all body_log_topics >> simp[]
 QED
 
+Theorem sym_body_revert_result:
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\ revert_forward_pair bb k j /\
+  label_flow_ok ctx /\ asm_static_wf prog /\
+  sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
+  sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
+    as ss (block_rest fuel ctx fn bb vs)
+Proof
+  strip_tac >> drule_all sym_body_revert_step >> strip_tac >>
+  irule sym_body_result_exec >> simp[]
+QED
+
+Theorem sym_body_nonterm_result:
+  (!m. m < d ==>
+    !k prefix_ops rest_ops ps vs as ss.
+      m = LENGTH bb.bb_instructions - k /\
+      gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
+      sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+      body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+        growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+        block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+        ra pc_ret rest mem0 /\
+      label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
+      sym_unit_static_ok unit /\ asm_static_wf prog /\
+      (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+      sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
+      sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
+        as ss (block_rest fuel ctx fn bb vs)) /\
+  d = LENGTH bb.bb_instructions - k /\
+  gen_fn_sim_at fuel /\ sym_fn_sim_at fuel /\
+  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  ~is_terminator inst.inst_opcode /\ (!j. ~revert_forward_pair bb k j) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (inst.inst_opcode = LOG ==>
+    ?tc args. inst.inst_operands = Lit tc :: args /\ w2n tc <= 4) /\
+  step_inst fuel ctx inst vs = OK vs1 /\
+  label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
+  sym_unit_static_ok unit /\ asm_static_wf prog /\
+  (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
+  sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
+    as ss (block_rest fuel ctx fn bb vs)
+Proof
+  strip_tac >> drule_all sym_body_nonterm_prefix >> strip_tac >>
+  `LENGTH bb.bb_instructions - SUC k < d` by decide_tac >>
+  qpat_x_assum `!m. m < d ==> _` drule >> strip_tac >>
+  `sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
+     as1 ss1 (block_rest fuel ctx fn bb vs')` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  drule_all sym_body_result_prefix >> simp[]
+QED
+
 Theorem sym_body_run:
   !d k prefix_ops rest_ops ps vs as ss.
     d = LENGTH bb.bb_instructions - k /\
@@ -1204,20 +1261,13 @@ Proof
   `EL k bb.bb_instructions = EL k bb.bb_instructions` by simp[] >>
   drule_all sym_body_inst_bounds >> strip_tac >>
   Cases_on `?j. revert_forward_pair bb k j`
-  >- (pop_assum strip_assume_tac >> drule_all sym_body_revert_step >>
-      strip_tac >> irule sym_body_result_exec >> simp[]) >>
+  >- (pop_assum strip_assume_tac >> drule_all sym_body_revert_result >> simp[]) >>
   pop_assum (assume_tac o REWRITE_RULE [NOT_EXISTS_THM]) >>
   Cases_on `?vs1. step_inst fuel ctx (EL k bb.bb_instructions) vs = OK vs1`
   >- (pop_assum strip_assume_tac >>
       Cases_on `is_terminator (EL k bb.bb_instructions).inst_opcode`
       >- (drule_all sym_body_terminator >> simp[]) >>
-      drule_all sym_body_nonterm_prefix >> strip_tac >>
-      `LENGTH bb.bb_instructions - SUC k < d` by decide_tac >>
-      qpat_x_assum `!m. m < d ==> _` drule >> strip_tac >>
-      `sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
-         as1 ss1 (block_rest fuel ctx fn bb vs')` by
-        (first_x_assum irule >> simp[] >> metis_tac[]) >>
-      drule_all sym_body_result_prefix >> simp[]) >>
+      drule_all sym_body_nonterm_result >> simp[]) >>
   `!s. step_inst fuel ctx (EL k bb.bb_instructions) vs <> OK s` by metis_tac[] >>
   metis_tac[sym_body_nonok]
 QED
