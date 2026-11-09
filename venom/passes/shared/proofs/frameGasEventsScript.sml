@@ -90,23 +90,6 @@ Proof
 QED
 
 (* One-step unfoldings at a known instruction or block. *)
-Theorem exec_block_at:
-  get_instruction bb s.vs_inst_idx = SOME i ==>
-  exec_block k C bb s =
-    case step_inst k C i s of
-      OK p =>
-        if is_terminator i.inst_opcode then
-          if p.vs_halted then Halt p else OK p
-        else exec_block k C bb (p with vs_inst_idx := SUC s.vs_inst_idx)
-    | IntRet v p => IntRet v p
-    | Halt p => Halt p
-    | Abort a p => Abort a p
-    | Error e => Error e
-Proof
-  strip_tac >> CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
-  simp[]
-QED
-
 Theorem gas_events_block_at:
   get_instruction bb s.vs_inst_idx = SOME i ==>
   gas_events_block k C owner bb s =
@@ -160,7 +143,10 @@ Theorem exec_block_step_nonerror:
   (!e. exec_block k C bb s <> Error e) ==>
   !e. step_inst k C i s <> Error e
 Proof
-  rpt strip_tac >> imp_res_tac exec_block_at >> gvs[]
+  rpt strip_tac >>
+  qpat_x_assum `!e. exec_block _ _ _ _ <> _`
+    (mp_tac o ONCE_REWRITE_RULE [exec_block_def]) >>
+  simp[]
 QED
 
 Theorem run_blocks_block_nonerror:
@@ -265,8 +251,11 @@ Proof
     (mp_tac o REWRITE_RULE [block_events_agree_def]) >>
   disch_then (qspecl_then [`owner`, `k`, `k'`] mp_tac) >>
   impl_tac
-  >- (rpt (qpat_x_assum `exec_block _ _ _ _ = _` mp_tac) >>
-      imp_res_tac exec_block_at >> simp[]) >>
+  >- (qpat_x_assum `exec_block k C bb s = _`
+        (mp_tac o ONCE_REWRITE_RULE [exec_block_def]) >>
+      qpat_x_assum `exec_block k' C' bb' t = _`
+        (mp_tac o ONCE_REWRITE_RULE [exec_block_def]) >>
+      simp[]) >>
   strip_tac >> imp_res_tac gas_events_block_at >> simp[]
 QED
 
@@ -286,8 +275,9 @@ Proof
     (mp_tac o REWRITE_RULE [block_events_agree_def]) >>
   disch_then (qspecl_then [`owner`, `k`, `k'`] mp_tac) >>
   impl_tac
-  >- (qpat_x_assum `exec_block k C bb s = _` mp_tac >>
-      imp_res_tac exec_block_at >> simp[]) >>
+  >- (qpat_x_assum `exec_block k C bb s = _`
+        (mp_tac o ONCE_REWRITE_RULE [exec_block_def]) >>
+      simp[]) >>
   strip_tac >> imp_res_tac gas_events_block_at >>
   simp[gas_events_step_plain]
 QED
@@ -354,40 +344,6 @@ Proof
     (mp_tac o REWRITE_RULE [run_events_agree_def]) >>
   disch_then (qspecl_then [`n`, `n'`] mp_tac) >>
   impl_tac >- metis_tac[] >> strip_tac >>
-  qpat_x_assum `block_events_agree _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [block_events_agree_def]) >>
-  disch_then (qspecl_then [`fn.fn_name`, `n`, `n'`] mp_tac) >> simp[] >>
-  strip_tac >> imp_res_tac gas_events_blocks_at >> simp[]
-QED
-
-Theorem run_events_agree_halt:
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  eval_phis s bb.bb_instructions = OK phi /\
-  finite_block C bb
-    (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
-    (OK post) /\ post.vs_halted /\
-  lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
-  eval_phis t bb'.bb_instructions = OK phi' /\
-  finite_block C' bb'
-    (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions)
-    (OK post') /\ post'.vs_halted /\
-  fn'.fn_name = fn.fn_name /\
-  block_events_agree C C' bb
-    (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) bb'
-    (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions)
-    (OK post) (OK post') ==>
-  run_events_agree C C' fn s fn' t r r'
-Proof
-  rpt strip_tac >> simp[run_events_agree_def] >> rpt strip_tac >>
-  `?n. k = SUC n` by metis_tac[run_blocks_nonerror_suc] >>
-  `?n'. k' = SUC n'` by metis_tac[run_blocks_nonerror_suc] >>
-  rpt (qpat_x_assum `_ = SUC _` SUBST_ALL_TAC) >>
-  `exec_block n C bb
-     (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) =
-   OK post` by metis_tac[exec_block_finite_eq, run_blocks_block_nonerror] >>
-  `exec_block n' C' bb'
-     (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions) =
-   OK post'` by metis_tac[exec_block_finite_eq, run_blocks_block_nonerror] >>
   qpat_x_assum `block_events_agree _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [block_events_agree_def]) >>
   disch_then (qspecl_then [`fn.fn_name`, `n`, `n'`] mp_tac) >> simp[] >>
