@@ -1076,3 +1076,50 @@ Proof
   qpat_x_assum `!j v. _ ==> j.inst_opcode = ASSIGN \/ _`
     (qspecl_then [`inst`, `v`] mp_tac) >> simp[]
 QED
+
+Theorem ircf_writer_redirect_op:
+  ircf_block_plan fn bb bb2 /\ MEM bb fn.fn_blocks /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  i < LENGTH bb.bb_instructions /\ i NOTIN ircf_fwds bb bb2 /\
+  mem_write_ops (EL i bb.bb_instructions) <> NONE /\
+  MEM op (EL i bb.bb_instructions).inst_operands ==>
+  ircf_redirect_op fn bb bb2 op = op
+Proof
+  strip_tac >> Cases_on `op` >> simp[ircf_redirect_op_def] >>
+  rename1 `ircf_redirect fn bb bb2 v = v` >>
+  irule ircf_redirect_unaffected >> rpt gen_tac >> strip_tac >> strip_tac >>
+  `ircf_fwd_ok fn bb k d s sz` by
+    (drule_all ircf_block_plan_fwd_ok >> simp[]) >>
+  `k < LENGTH bb.bb_instructions /\
+   (EL k bb.bb_instructions).inst_opcode = MCOPY` by fs[ircf_fwd_ok_def] >>
+  `(EL i bb.bb_instructions).inst_id <> (EL k bb.bb_instructions).inst_id` by
+    (strip_tac >>
+     `MEM (EL i bb.bb_instructions) (fn_insts fn) /\
+      MEM (EL k bb.bb_instructions) (fn_insts fn)` by
+       (simp[venomInstTheory.fn_insts_def] >>
+        metis_tac[unitShapeDefsTheory.MEM_fn_insts_blocks, EL_MEM]) >>
+     `EL i bb.bb_instructions = EL k bb.bb_instructions` by
+       metis_tac[venomWfPropsTheory.fn_inst_ids_distinct_inj] >>
+     `i = k` by
+       (irule venomExecProofsTheory.inst_ids_el_eq >>
+        qexistsl_tac [`bb`, `fn`] >> simp[]) >> metis_tac[]) >>
+  `MEM (EL i bb.bb_instructions) bb.bb_instructions /\
+   MEM (EL k bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+  drule_all ircf_copy_roots_no_write_use >> simp[]
+QED
+
+Theorem ircf_block_plan_writer:
+  ircf_block_plan fn bb bb2 /\ MEM bb fn.fn_blocks /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  i < LENGTH bb.bb_instructions /\ i NOTIN ircf_fwds bb bb2 /\
+  mem_write_ops (EL i bb.bb_instructions) <> NONE ==>
+  EL i bb2.bb_instructions = EL i bb.bb_instructions
+Proof
+  strip_tac >>
+  `MAP (ircf_redirect_op fn bb bb2) (EL i bb.bb_instructions).inst_operands =
+   (EL i bb.bb_instructions).inst_operands` by
+    (irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
+     irule ircf_writer_redirect_op >> simp[] >>
+     qexists_tac `i` >> simp[EL_MEM]) >>
+  fs[ircf_block_plan_def] >> simp[]
+QED
