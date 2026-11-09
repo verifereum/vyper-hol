@@ -319,3 +319,60 @@ Theorem occurrence_origin_certificate_length:
 Proof
   simp[occurrence_origin_certificate_def]
 QED
+
+(* j selects the owning suspended frame. Only its strictly younger frames
+   must exclude id; the selected owner's environment is intentionally free. *)
+Definition occurrence_suffix_absent_def:
+  occurrence_suffix_absent id j H HP U <=>
+    j < LENGTH U /\
+    (!v. FLOOKUP H v <> SOME id) /\ ~MEM (SOME id) HP /\
+    (!i. i < j ==>
+      (!v. FLOOKUP (EL i U).of_prov v <> SOME id) /\
+      ~MEM (SOME id) (EL i U).of_params)
+End
+
+Theorem occurrence_suffix_absent_start:
+  ~MEM (SOME id) params ==>
+  occurrence_suffix_absent id 0 FEMPTY params (u::U)
+Proof
+  simp[occurrence_suffix_absent_def]
+QED
+
+Theorem occurrence_suffix_absent_next:
+  occurrence_suffix_absent id j H HP U /\
+  (inst.inst_opcode = ALLOCA ==> id <> (a,inst.inst_id)) ==>
+  occurrence_suffix_absent id j (occurrence_step a HP H inst s) HP U
+Proof
+  simp[occurrence_suffix_absent_def] >>
+  metis_tac[occurrence_step_identity_absent]
+QED
+
+Theorem occurrence_suffix_absent_block:
+  occurrence_suffix_absent id j H HP U ==>
+  occurrence_suffix_absent id j (entry_prov fn s H) HP U
+Proof
+  simp[occurrence_suffix_absent_def] >>
+  metis_tac[entry_prov_identity_absent]
+QED
+
+Theorem occurrence_suffix_absent_push:
+  occurrence_suffix_absent id j H HP U ==>
+  occurrence_suffix_absent id (SUC j) FEMPTY (MAP (op_prov H) ops)
+    (<|of_owner := a; of_prov := H; of_params := HP|> :: U)
+Proof
+  simp[occurrence_suffix_absent_def] >> strip_tac >>
+  conj_tac >- (irule occurrence_call_identity_absent >> simp[]) >>
+  Cases >> simp[]
+QED
+
+Theorem occurrence_suffix_absent_pop:
+  occurrence_suffix_absent id (SUC j) H HP (u::U) ==>
+  occurrence_suffix_absent id j
+    (DRESTRICT u.of_prov (COMPL (set outs))) u.of_params U
+Proof
+  simp[occurrence_suffix_absent_def] >> strip_tac >>
+  first_assum (qspec_then `0` assume_tac) >> fs[] >>
+  conj_tac >- (irule occurrence_return_identity_absent >> simp[]) >>
+  gen_tac >> strip_tac >>
+  first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]
+QED
