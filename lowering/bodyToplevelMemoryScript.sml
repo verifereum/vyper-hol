@@ -8,7 +8,7 @@ Ancestors
   exprSimMemDefs gasOutcome gasSummary fragGasMode fragGasPathMem context
   loweringPosts
   bodyMemoryDefs exprSimLeaves exprSimHyps exprSimDefs exprLowering
-  compileEnv fragExecMem venomState loweringSlice valueEncoding
+  compileEnv loweringStateRelDefs fragExecMem venomState loweringSlice valueEncoding
   exprLoweringProps accountsRelProps
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTyping
   vyperValueOperation vyperStorageLayoutSafety vyperLookupStorage

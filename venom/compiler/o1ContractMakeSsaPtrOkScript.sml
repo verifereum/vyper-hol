@@ -5,7 +5,7 @@
 Theory o1ContractMakeSsaPtrOk
 Ancestors
   ptrDiscipline pointerConfinedDefs pointerConfinedProps unitShapeDefs
-  venomInst venomWf cfgWf o1PassContract makeSsaCurrentDefs makeSsaCurrentProps
+  venomInst venomWf cfgWf o1PassContract makeSsaDefs makeSsaCurrentProps
   makeSsaCurrentCfg makeSsaCurrentOrigin makeSsaCurrentWfSsa
   makeSsaCurrentInputOk makeSsaCurrentNonDegenerate
   allocaRemapSSA mem2varBlockSimHelpers

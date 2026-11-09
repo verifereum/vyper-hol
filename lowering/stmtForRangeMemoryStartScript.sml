@@ -47,7 +47,7 @@ Proof
      rpt strip_tac >> gvs[]) >>
   `step_inst_base aa s0 = OK s1` by
     (qpat_assum `exec_alloca _ _ _ = _` mp_tac >>
-     gvs[step_inst_base_def, mk_inst_def, eval_operand_def]) >>
+     gvs[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   `gas_path_mem ctx func s0 0 (OK (jump_to entry_lbl s1))` by
     (irule for_start_zero_path_mem >> simp[] >> qexists_tac `j` >> gvs[mk_inst_def]) >>
   suspend "frames"

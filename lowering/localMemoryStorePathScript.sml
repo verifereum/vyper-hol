@@ -7,7 +7,7 @@ Ancestors
   stmtSimDeclStore stmtSimDecl stmtSimDeclMem stmtSimAssignStore stmtSimAssign
   valueCopy valueCopySource valueCopyBytes exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding vyperInterpreter vyperState vyperValue vyperLookup
+  compileEnv loweringStateRelDefs valueEncoding vyperInterpreter vyperState vyperValue vyperLookup
   vyperExprNoControl venomExecSemantics venomExecProofs venomInst venomState
   fragGasSeq fragGasMode context exprSimBufferStore stmtSimDeclPath
 Libs
@@ -203,7 +203,7 @@ Proof
      (OK (mcopy (w2n w) (w2n sw) sz s1 with vs_inst_idx := SUC s1.vs_inst_idx))` by
     (irule emit_inst_zero_marked_path >> simp[] >>
      qexistsl_tac [`[Var p; src; Lit (n2w sz)]`, `MCOPY`, `[]`, `sm`, `sb`] >>
-     gvs[emit_void_def, emit_inst_def, step_inst_base_def, mk_inst_def, eval_operand_def,
+     gvs[emit_void_def, emit_inst_def, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
          is_terminator_def, wordsTheory.w2n_n2w]) >>
   `sb.cs_current_bb = sm.cs_current_bb /\
    LENGTH sb.cs_current_insts = SUC (LENGTH sm.cs_current_insts)` by

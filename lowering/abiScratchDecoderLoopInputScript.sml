@@ -8,14 +8,14 @@ Ancestors
 
 Theorem abi_scratch_decoder_loop_input:
   abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) st src dst opc hi sb d first last b cap initial /\
+    bs (ArrayV (DynArrayV vs)) st src dst opc base_op hi B sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= site /\ site < last /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
   eval_operand ip initial = SOME (n2w slot) /\ abi_decoder_operand_live st.cs_next_var ip /\
   (is_dynamic (vyper_to_abi_type env ty) ==>
     !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) ==>
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc hi ip src dst
-    sb d slot first last b cap st.cs_next_var initial
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc base_op hi ip src dst
+    B sb d slot first last b cap st.cs_next_var initial
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `site IN abi_decoder_ids first last` by simp[abi_decoder_ids_def] >>

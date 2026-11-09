@@ -45,6 +45,7 @@ Theorem compile_assign_place_case:
                            read_result cx pv sread = (INL v,s2)) ==>
      target_case F ctx func cenv cx bt) /\
     ~immutable_root cx bt /\
+    assign_alloc_ok cenv bt e /\
     target_indices_pre cenv cx env bt /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
     expr_body_pre cenv cx env e es /\ cenv.ce_target CapMcopy /\
@@ -71,6 +72,7 @@ Theorem assign_place_effectful_index_case:
                            read_result cx pv sread = (INL v,s2)) ==>
      target_case F ctx func cenv cx bt) /\
     ~immutable_root cx bt /\
+    assign_alloc_ok cenv bt e /\
     target_indices_pre cenv cx env bt /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
     expr_body_pre cenv cx env e es /\ cenv.ce_target CapMcopy /\

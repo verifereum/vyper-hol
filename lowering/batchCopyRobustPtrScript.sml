@@ -35,12 +35,12 @@ Proof
       conj_tac
       >- (simp[bodyPtrDefsTheory.frag_exec_ptr_def] >> rpt strip_tac >>
           disj1_tac >> metis_tac[]) >>
-      simp[valueEncodingTheory.mem_bytes_at_def] >>
+      simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
       rpt strip_tac >> irule robust_val_in_memory_copy_transport >>
       conj_tac >- simp[] >>
       qexistsl_tac [`s.vs_memory`, `s.vs_memory`, `0`, `w2n a`,
                     `tn.t_mem`, `tn.t_mem`] >>
-      simp[valueEncodingTheory.mem_bytes_at_def]) >>
+      simp[valueEncodingDefsTheory.mem_bytes_at_def]) >>
   suspend "positive"
 QED
 

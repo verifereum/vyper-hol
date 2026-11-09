@@ -6,7 +6,7 @@ Ancestors
   fragExec venomState venomMemDefs finite_map pred_set list arithmetic words
   abiDecoderWordTyped abiDecoderLayout abiDecoderTypedContract abiDecoderReentryPointer
   abiDecoderClampedWord abiDecoderCoherence allocaFrontierBound allocaBudgetProps
-  valueEncoding compileEnv exprLoweringProps venomExecSemantics
+  valueEncoding compileEnv loweringStateRelDefs exprLoweringProps venomExecSemantics
 
 (* The independent memory frame, not the broad effect, provides separation. *)
 Theorem ctor_actual_frame_empty_effect:
@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem ctor_actual_word_narrow_fragment:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_metadata ce env ty tv root_di av v /\
@@ -62,7 +62,7 @@ Proof
 QED
 
 Theorem ctor_actual_member_setup_narrow_fragment:
-  abi_decode_member_setup dst src DLOAD hi dyn ao vo st = (ops,st') /\
+  abi_decode_member_setup dst src DLOAD (Lit 0w) hi dyn ao vo st = (ops,st') /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
   (dyn ==> abi_decode_load DLOAD (n2w (sb + ao) : bytes32) initial = n2w payload_off /\
     sb + payload_off < dimword (:256)) /\
@@ -86,7 +86,7 @@ Proof
 QED
 
 Theorem ctor_actual_word_narrow_run:
-  compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_coherent ce env sf ty tv /\ abi_decoder_metadata ce env ty tv root_di av v /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -131,7 +131,7 @@ Proof
     (Cases_on `src` >> Cases_on `dst` >>
      simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      metis_tac[not_fresh_at_def]) >>
-  `compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  `compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
    mem_bytes_at sb 32 initial.vs_data_section = enc (vyper_to_abi_type env ty) av` by
     metis_tac[] >>
   drule_all ctor_actual_word_narrow_fragment >>

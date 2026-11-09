@@ -2,14 +2,15 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringNoCtor
 Ancestors
-  ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
+  structFieldsProps ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
   compileVyper vyperInterpreter e2eDeployDefs moduleLowering
   immutableDeployExecution ctorDeployDefs e2eEntry venomState vyperCompiler
   immutableEncoding immutableEncodingProofs immutableSectionRel immutableValue
-  valueEncoding vyperValue vyperTypeInitialState vyperTypeContractStaticMaps
+  valueEncoding valueEncodingDefs vyperValue vyperTypeInitialState vyperTypeContractStaticMaps
   vyperTypeConstantCells abiCallerBuiltinInput entryStateRel
   venomPipelineData venomPipelineDriver venomPipelineRunner venomFnScheduleRunner
   unitLabelMap fcgPruning
+  fcgDefs
 
 Theorem no_ctor_lookup:
   !tops exts ints fb.
@@ -70,9 +71,9 @@ Proof
   qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
   simp[deploy_state_rel_def] >> strip_tac >>
   drule_all no_ctor_args >> strip_tac >>
-  qpat_x_assum `gas_variant _ _` mp_tac >>
-  simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
-       venom_state_component_equality]
+  qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
+  disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_code, s.vs_labels)`) >>
+  simp[deploy_entry_state_def, entry_venom_state_def]
 QED
 
 Theorem no_ctor_simple_data:
@@ -389,7 +390,7 @@ Proof
 QED
 
 Theorem no_ctor_make_ssa:
-  makeSsaCurrentDefs$make_ssa_current_fn s
+  makeSsaDefs$make_ssa_current_fn s
     (mk_raw_function "__deploy"
       [<| bb_label := "__deploy"; bb_instructions :=
         [mk_inst 0 ALLOCA [Lit n] ["%0"];
@@ -669,7 +670,7 @@ Theorem no_ctor_late_make_ssa:
     <| fn_eom := SOME e; fn_mems_used := mems;
        fn_fmp_signature := SOME
          <| fms_has_fmp_param := F; fms_publishes := F |> |> ==>
-  makeSsaCurrentDefs$make_ssa_current_fn s fn = (fn,s)
+  makeSsaDefs$make_ssa_current_fn s fn = (fn,s)
 Proof
   strip_tac >> gvs[] >> EVAL_TAC
 QED
@@ -1669,7 +1670,7 @@ Proof
 QED
 
 Theorem no_ctor_late_fold:
-  makeSsaCurrentDefs$make_ssa_current_fn s fn = (fn,s) /\
+  makeSsaDefs$make_ssa_current_fn s fn = (fn,s) /\
   simplifyCfgDefs$simplify_cfg_fn_with_labels fn = (fn,[]) /\
   singleUseExpansionDefs$sue_expand_function_supply s fn = (expanded,t) /\
   dftDefs$dft_fn expanded = ordered /\
@@ -1977,9 +1978,10 @@ Proof
     (s with <| vs_allocas := s.vs_allocas |+ (id, (s.vs_alloca_next, LENGTH bytes));
                vs_alloca_next := s.vs_alloca_next + LENGTH bytes |>)` >>
   `step_inst_base (mk_inst id ALLOCA [Lit (n2w (LENGTH bytes))] [buf]) s = OK t` by
-    simp[Abbr `t`, venomInstTheory.mk_inst_def,
-         venomExecSemanticsTheory.step_inst_base_def, venomExecSemanticsTheory.exec_alloca_def,
-         eval_operand_def, wordsTheory.w2n_n2w] >>
+    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[Abbr `t`, venomInstTheory.mk_inst_def,
+          venomExecSemanticsTheory.exec_alloca_def,
+          eval_operand_def, wordsTheory.w2n_n2w]) >>
   `eval_operand (Var buf) t = SOME (n2w s.vs_alloca_next) /\
    FLOOKUP t.vs_labels "runtime_begin" = SOME (n2w codepos) /\
    TAKE (LENGTH bytes)
@@ -2014,9 +2016,9 @@ Proof
   `imm_len tops < dimword(:256) /\
    LENGTH runtime_bc + imm_len tops < dimword(:256)` by decide_tac >>
   `vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = imm_len tops` by
-    (qpat_x_assum `gas_variant _ _` mp_tac >>
-     simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
-          venom_state_component_equality, init_venom_state_def]) >>
+    (qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
+     disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_allocas, s.vs_alloca_next)`) >>
+     simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def]) >>
   irule (no_ctor_fresh_sequence |>
     Q.INST [`bytes` |-> `runtime_bc ++ REPLICATE (imm_len tops) 0w`, `id` |-> `0`] |>
     SRULE [listTheory.LENGTH_APPEND, rich_listTheory.LENGTH_REPLICATE]) >>
@@ -2067,10 +2069,10 @@ Proof
            Lit (n2w (LENGTH bytes))] []]`] |> SRULE []) >>
   disch_then (qspecl_then [`0`, `ctx`, `bb`] mp_tac) >>
   (impl_tac >-
-    (simp[Abbr `bb`, Abbr `t`, venomInstTheory.mk_inst_def] >>
-     simp[venomInstTheory.is_terminator_def,
-          venomExecSemanticsTheory.step_inst_base_def,
-          venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs()])) >>
+    (simp[Abbr `bb`, Abbr `t`, venomInstTheory.mk_inst_def,
+          venomInstTheory.is_terminator_def] >>
+     PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs()])) >>
   strip_tac >> qexists_tac `final'` >>
   `run_context 1 ctx s = Halt final'` by
     (qpat_assum `run_block_non_phis 0 ctx bb t = _` mp_tac >>
@@ -2107,9 +2109,9 @@ Proof
   `imm_len tops < dimword(:256) /\
    LENGTH runtime_bc + imm_len tops < dimword(:256)` by decide_tac >>
   `vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = imm_len tops` by
-    (qpat_x_assum `gas_variant _ _` mp_tac >>
-     simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
-          venom_state_component_equality, init_venom_state_def]) >>
+    (qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
+     disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_allocas, s.vs_alloca_next)`) >>
+     simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def]) >>
   qexists_tac `1` >> asm_rewrite_tac[] >>
   mp_tac (no_ctor_simple_context_execution |>
     Q.INST [`bytes` |-> `runtime_bc ++ REPLICATE (imm_len tops) 0w`,
@@ -2121,67 +2123,6 @@ Proof
           rich_listTheory.REPLICATE_GENLIST, listTheory.TAKE_GENLIST,
           arithmeticTheory.MIN_DEF])) >>
   metis_tac[]
-QED
-
-Theorem no_ctor_zero_word_bytes:
-  word_to_bytes (0w:bytes32) T = REPLICATE 32 (0w:word8)
-Proof
-  simp[byteTheory.word_to_bytes_def,
-       fcpLib.INDEX_CONV ``dimindex(:256)``] >> EVAL_TAC >>
-  simp[wordsTheory.ZERO_SHIFT, wordsTheory.w2w_0]
-QED
-
-Theorem no_ctor_zero_address_bytes:
-  word_to_bytes (0w:160 word) T = REPLICATE 20 (0w:word8)
-Proof
-  simp[byteTheory.word_to_bytes_def,
-       fcpLib.INDEX_CONV ``dimindex(:160)``] >> EVAL_TAC >>
-  simp[wordsTheory.ZERO_SHIFT, wordsTheory.w2w_0]
-QED
-
-Theorem no_ctor_fit_zero:
-  immutable_fit n (REPLICATE m (0w:word8)) = REPLICATE n 0w
-Proof
-  simp[immutable_fit_def, rich_listTheory.REPLICATE_APPEND,
-       rich_listTheory.REPLICATE_GENLIST, listTheory.TAKE_GENLIST,
-       arithmeticTheory.MIN_DEF]
-QED
-
-Theorem no_ctor_flat_zero_slots:
-  !n sz. FLAT (GENLIST (\i. REPLICATE sz (0w:word8)) n) =
-    REPLICATE (n * sz) 0w
-Proof
-  Induct >> simp[listTheory.GENLIST_CONS, combinTheory.o_DEF,
-    rich_listTheory.REPLICATE_APPEND, arithmeticTheory.MULT]
-QED
-
-Theorem no_ctor_padded_zero_word:
-  (word_of_bytes_be (PAD_RIGHT 0w 32 (REPLICATE n 0w)):bytes32) = 0w /\
-  (word_of_bytes_be (PAD_LEFT 0w 32 (REPLICATE n 0w)):bytes32) = 0w
-Proof
-  simp[listTheory.PAD_RIGHT, listTheory.PAD_LEFT,
-       GSYM rich_listTheory.REPLICATE_GENLIST,
-       rich_listTheory.REPLICATE_APPEND, byteTheory.word_of_bytes_be_def,
-       immutable_word_of_zero_bytes]
-QED
-
-Theorem no_ctor_default_encoding:
-  (!tv. encode_immutable_value tv (default_value tv) =
-    REPLICATE (type_memory_size tv) 0w) /\
-  (!tvs. encode_immutable_tuple tvs (MAP default_value tvs) =
-    REPLICATE (type_memory_size_list tvs) 0w) /\
-  (!fts. encode_immutable_fields fts
-    (MAP (\(id,t). (id, default_value t)) fts) =
-    REPLICATE (type_memory_size_fields fts) 0w)
-Proof
-  ho_match_mp_tac type_memory_size_ind >>
-  rw[default_value_def, default_value_tuple_MAP, default_value_struct_MAP,
-     encode_immutable_value_def, type_memory_size_def,
-     immutable_word_bytes_def, typed_val_to_w256_def, val_to_w256_def,
-     integer_wordTheory.i2w_0, no_ctor_padded_zero_word,
-     no_ctor_zero_word_bytes, no_ctor_zero_address_bytes,
-     no_ctor_flat_zero_slots, no_ctor_fit_zero,
-     rich_listTheory.REPLICATE_APPEND]
 QED
 
 Theorem no_ctor_zero_section:
@@ -2623,9 +2564,9 @@ Proof
   strip_tac >>
   qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
   simp[deploy_state_rel_def] >> strip_tac >>
-  qpat_x_assum `gas_variant _ _` mp_tac >>
-  simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
-       venom_state_component_equality, init_venom_state_def] >>
+  qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
+  disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_accounts, s.vs_transient, s.vs_logs)`) >>
+  simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def] >>
   metis_tac[]
 QED
 
@@ -2651,7 +2592,7 @@ Proof
   disch_then (qspecl_then [`tx`, `[]`, `am`] mp_tac) >> simp[] >> strip_tac >>
   qexists `[]` >>
   simp[no_ctor_gas_marks, deploy_venom_result_rel_def] >>
-  gvs[compileEnvTheory.storage_agree_def, compileEnvTheory.transient_agree_def,
+  gvs[loweringStateRelDefsTheory.storage_agree_def, loweringStateRelDefsTheory.transient_agree_def,
       e2eDefsTheory.logs_correspond_def,
       vfmStateTheory.account_state_component_equality]
 QED

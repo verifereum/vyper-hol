@@ -33,7 +33,7 @@ Ancestors
   list rich_list finite_map pred_set valueEncodingProps
   fragExec localPtrsProps  loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps
-  context compileEnv moduleLoweringProps
+  context compileEnv loweringStateRelDefs moduleLoweringProps
   venomExecSemantics venomInst venomState
 Libs
   monadsyntax
@@ -614,7 +614,7 @@ Theorem storage_copy_assign_step[local]:
         t.vs_halted = s.vs_halted /\ t.vs_labels = s.vs_labels
 Proof
   rpt strip_tac >>
-  simp[step_inst_base_def, mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   simp[eval_operand_update_var, lookup_var_update_var, update_var_def]
 QED
 
@@ -630,7 +630,7 @@ Proof
   fs[same_blocks_def] >> simp[mk_inst_def, is_terminator_def] >>
   rpt strip_tac >> gvs[] >> disj1_tac >>
   qexists_tac `update_var cv 0w sbase` >>
-  simp[run_inst_seq_def, step_inst_base_def, eval_operand_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, eval_operand_def,
        eval_operand_update_var, storage_copy_frame_def,
        lookup_var_update_var, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   metis_tac[]
@@ -798,7 +798,7 @@ Proof
      OK (update_var nv (k+1w) s)` by
     (irule step_ADD >> simp[eval_operand_lit]) >>
   simp[run_inst_seq_def] >>
-  simp[step_inst_base_def, mk_inst_def, eval_operand_update_var]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_update_var]
 QED
 
 Theorem storage_copy_increment_run[local]:
@@ -1111,7 +1111,7 @@ Proof
   fs[same_blocks_def] >> simp[mk_inst_def, is_terminator_def] >>
   rpt strip_tac >> gvs[] >> disj1_tac >>
   qexists_tac `update_var cv 0w sbase` >>
-  simp[run_inst_seq_def, step_inst_base_def, eval_operand_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, eval_operand_def,
        eval_operand_update_var, copy_prefix_zero, storage_copy_frame_def,
        lookup_var_update_var, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   metis_tac[]
