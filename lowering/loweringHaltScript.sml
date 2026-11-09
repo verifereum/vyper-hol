@@ -79,9 +79,9 @@ Theory loweringHalt
 Ancestors
   list rich_list finite_map
   fragExec loweringSlice accountsRelProps
-  stmtLowering moduleLowering context emitHelper emitHelperProps compileEnv
+  stmtLowering moduleLowering context emitHelper emitHelperProps compileEnv loweringStateRelDefs
   abiEncoder abiEncoderProps abiEncoderFragment
-  valueEncoding valueEncodingProps
+  valueEncoding valueEncodingDefs valueEncodingProps
   e2eDefs vyperABI contractABI vyperInterpreter vyperState vyperValue
   vyperValueOperation vfmExecution
   venomExecSemantics venomInst venomInstProofs venomState venomMemProps
@@ -147,7 +147,9 @@ Theorem return_bytes_prim_value:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `ret` >> gvs[is_word_type_def, evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `v0` >> gvs[safe_cast_def, AllCaseEqs()] >>
+  qpat_x_assum `safe_cast _ _ = _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [safe_cast_def, AllCaseEqs()]) >>
+  gvs[] >>
   simp[return_bytes_def, enc_def, REV_DEF, typed_val_to_w256_def,
        val_to_w256_def]
   >~ [`PAD_LEFT`]
@@ -1270,7 +1272,7 @@ Proof
       exprLoweringPropsTheory.run_inst_seq_def, DROP_LENGTH_APPEND] >>
   simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac [instruction_accessors, opcode_case_def] >>
+  pure_rewrite_tac [instruction_accessors, combinTheory.K_THM, opcode_case_def] >>
   res_tac >> gvs[exec_write2_def, eval_operand_def, eval_operands_def]
 QED
 

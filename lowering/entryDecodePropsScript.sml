@@ -33,8 +33,8 @@ Ancestors
   arithmetic list rich_list words integer integer_word
   valueEncodingProofs valueEncodingProps loweringHalt exprSimConvert
   moduleLoweringProps abiEncoderProps entryDispatchProps
-  moduleLowering abiEncoder compileEnv compileVyper exprLowering
-  valueEncoding selectorDispatch fragExec emitHelper emitHelperProps
+  moduleLowering abiEncoder compileEnv loweringStateRelDefs compileVyper exprLowering
+  valueEncoding valueEncodingDefs selectorDispatch fragExec emitHelper emitHelperProps
   venomExecSemantics venomState venomInst venomMemProps
   vyperABI vyperABIRoundtrip vyperTyping vyperValue vyperValueOperation
   vyperInterpreter exprSimArith contractABI byte vfmTypes vyperCall

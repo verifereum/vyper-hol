@@ -4,7 +4,7 @@ Theory annAssignPtrLength
 Ancestors
  annAssignPtrSetup typedCopyPtr fragGasSeqPtr fragGasPathPtr
  bodyPtrDefs ptrDiscipline venomInst venomInstProofs venomExecSemantics
- venomState finite_map emitHelper emitHelperProps context compileEnv
+ venomState finite_map emitHelper emitHelperProps context compileEnv loweringStateRelDefs
  exprLoweringProps fragExec
 
 Theorem annassign_mload_path_ptr:

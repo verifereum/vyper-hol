@@ -30,7 +30,7 @@
 Theory emitHelperProps
 Ancestors
   fragGasPath gasCount fragExec
-  exprLoweringProps localPtrsProps emitHelper compileEnv
+  exprLoweringProps localPtrsProps emitHelper compileEnv loweringStateRelDefs
   venomExecSemantics venomExecProofs venomState venomInst
   instIdxIndep vfmState freshLabelStringProps ASCIInumbers
   list pred_set arithmetic
@@ -2173,7 +2173,8 @@ Proof
   conj_tac >- (
     gvs[fresh_vars_wrt_def, write_memory_with_expansion_def, LET_THM,
         emit_void_def, comp_bind_def, fresh_id_def, emit_def]) >>
-  simp[write_memory_with_expansion_def, LET_THM]
+  simp[write_memory_with_expansion_def, LET_THM,
+       venomMemPropsTheory.eval_operand_with_memory]
 QED
 
 (* ===== ALLOCA ===== *)

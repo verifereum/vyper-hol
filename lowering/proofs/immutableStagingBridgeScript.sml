@@ -5,8 +5,8 @@
 Theory immutableStagingBridge
 Ancestors
   immutableConstructorRelation immutableDeployRelation immutableSectionRel
-  immutableRelation immutableValue immutableSection compileEnv compileVyper
-  valueMemoryTransport valueEncoding list arithmetic
+  immutableRelation immutableValue immutableSection compileEnv loweringStateRelDefs compileVyper
+  valueMemoryTransport valueEncoding valueEncodingDefs list arithmetic
 
 Theorem immutable_memory_prefix_bytes:
   cap <= LENGTH mem /\ off + n <= cap ==>

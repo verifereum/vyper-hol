@@ -1,7 +1,7 @@
 Theory immutableCopyExecution
 Ancestors
   immutableWordExecution immutableMemoryFrame emitHelperProps
-  context compileEnv emitHelper exprLoweringProps venomState venomExecSemantics venomInst
+  context compileEnv loweringStateRelDefs emitHelper exprLoweringProps venomState venomExecSemantics venomInst
   mmCopyEquiv venomMemProps mmInterval
 
 (* The offset helper either folds a literal or emits a single ADD.  Its

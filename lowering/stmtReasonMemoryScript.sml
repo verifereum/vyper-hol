@@ -4,7 +4,7 @@
 Theory stmtReasonMemory
 Ancestors
   fragExecMem instMemFrontier stmtLowering emitHelper emitHelperProps
-  exprLoweringProps context compileEnv valueEncoding valueEncodingProps
+  exprLoweringProps context compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps
   valueEncodingProofs venomMemDefs venomMemProps venomExecSemantics venomState venomInst
   fragExec fragGasSeqAbort fragGasMode fragGasPathMem gasCount instIdxIndep
   venomInstProofs

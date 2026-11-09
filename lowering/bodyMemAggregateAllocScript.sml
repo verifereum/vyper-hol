@@ -6,7 +6,7 @@ Ancestors
   exprSimHyps exprSimHypsDefs exprSimSource exprSimProps exprSimDefs
   loweringPosts gasOutcome gasSummary gasSummaryCompose gasContext
   fragGasMode fragGasPath fragGasSeq fragExec
-  exprLowering exprLoweringProps compileEnv valueEncoding
+  exprLowering exprLoweringProps compileEnv loweringStateRelDefs valueEncoding
   vyperInterpreter vyperState abiBuiltinAllocation allocaHistoryFragment
   emitHelperProps emitHelper context rich_list list venomInst
 

@@ -3,7 +3,7 @@
 Theory bodyMemAssignAttrStorage
 Ancestors
   bodyMemoryPreds bodyMemAugAssignAttrStorage vyperInterpreter vyperState
-  vyperStorageBackend loweringPosts exprSimProps compileEnv venomExecSemantics venomState
+  vyperStorageBackend loweringPosts exprSimProps compileEnv loweringStateRelDefs venomExecSemantics venomState
   exprSimMemUnwrap exprSimVVFrame bodyMemEmitOpFrame context emitHelperProps
   exprLoweringProps exprSimMemDefs exprBopSimProps freshWrites
   gasOutcome gasSummary gasSummaryCompose fragGasMode fragGasPath

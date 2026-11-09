@@ -5,7 +5,7 @@ Ancestors bodyPtrHashBuiltinsKeccakCase bodyPtrHashBuiltinsSummary
   bodyPtrHashBuiltinsCursor exprSimVVFrame
   bodyPtrHashBuiltinsUnary exprSimHash exprSimHypsDefs vyperTypeSystem
   exprLoweringProps exprSimDefs exprLowering emitHelperProps
-  bodyPtrDefs gasSummaryComposePtr vyperInterpreter vyperContext compileEnv list
+  bodyPtrDefs gasSummaryComposePtr vyperInterpreter vyperContext compileEnv loweringStateRelDefs list
   exprSimWordArgs fragExec exprSimSource exprSimHyps rich_list arithmetic vyperTyping
 
 (* Private proof-code consumer of the shared semantic endpoint interface. *)

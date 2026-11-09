@@ -17,7 +17,7 @@ Ancestors
   gasContext gasSummary gasOutcome gasSummaryCompose gasExemptCert
   fragGasMode fragGasPath fragGasSeq gasCount fragExec
   exprLowering exprLoweringProps exprOperandVar emitHelper emitHelperProps
-  builtinSystem compileEnv
+  builtinSystem compileEnv loweringStateRelDefs
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   allocLimits venomExecSemantics venomExecProps venomInst venomState
   venomInstProofs list rich_list arithmetic finite_map

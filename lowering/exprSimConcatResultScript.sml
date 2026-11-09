@@ -16,7 +16,7 @@ Ancestors
   exprCallBounds stmtSimDeclCompose gasOutcome gasSummary gasSummaryCompose
   gasExemptCert fragGasSeq fragGasMode fragGasPath freshWrites fragExec
   abiDecoderReentryPointer loweringPosts exprLowering exprLoweringProps
-  emitHelperProps emitHelper context compileEnv allocLimits valueEncoding
+  emitHelperProps emitHelper context compileEnv loweringStateRelDefs allocLimits valueEncoding valueEncodingDefs
   valueEncodingProps venomState venomExecSemantics vyperValue
   vyperValueOperation vyperTyping vyperTypeConversions vyperTypeSystem
   vyperContext vyperEvalExprPreservesScopesDom vyperInterpreter vyperState
