@@ -723,6 +723,106 @@ Proof
   gvs[spill_op_wf_def] >> metis_tac[]
 QED
 
+Theorem sym_kinds_ok_spill:
+  !cp fn ret srest ps ss ss' sv stk initial_fmp lo off.
+    sym_kinds_ok cp fn ret srest ps ss /\ 1 <= LENGTH ps.ps_stack /\
+    spill_op_wf ps (SOSpill off) /\ ss.sym_stack = sv :: stk /\
+    ss'.sym_stack = stk /\ mem_sval_at ss'.sym_mem_labels off sv /\
+    (!b. ~in_mem_range off 32 b ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    (!b. in_mem_range off 32 b ==> context_spill_byte cp b) ==>
+    sym_kinds_ok cp fn ret srest
+      (apply_prefix_op initial_fmp lo (SOSpill off) ps) ss'
+Proof
+  rpt strip_tac >> rename1 `sym_kinds_ok ctx fn ret srest ps ss` >>
+  `op_kind_ok fn ret (stack_peek 0 ps.ps_stack) sv` by
+    (drule sym_kinds_ok_peek >> disch_then (qspec_then `1` mp_tac) >>
+     simp[stackModelTheory.stack_peek_def, EL]) >>
+  `sym_kinds_ok ctx fn ret srest
+    (ps with ps_stack := TAKE (LENGTH ps.ps_stack - 1) ps.ps_stack)
+    (ss with <|sym_base := ss'.sym_base; sym_stack := DROP 1 ss.sym_stack|>)` by
+    (irule sym_kinds_ok_pop >> simp[]) >>
+  `!op' off'. FLOOKUP (ps.ps_spilled |+ (stack_peek 0 ps.ps_stack, off)) op' = SOME off' ==>
+    ?sv'. op_kind_ok fn ret op' sv' /\ mem_sval_at ss'.sym_mem_labels off' sv'` by
+    metis_tac[sym_spilled_store_kinds] >>
+  `!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte ctx b` by
+    (ho_match_mp_tac (Q.ISPECL
+       [`in_mem_range off 32`, `ss.sym_mem_labels`]
+       (Q.GENL [`P`, `labs`] mem_labels_frame_domain)) >>
+     gvs[sym_kinds_ok_def]) >>
+  `DROP 1 ss.sym_stack = stk` by simp[] >>
+  gvs[sym_kinds_ok_def, apply_prefix_op_def, stackModelTheory.stack_pop_def] >>
+  metis_tac[]
+QED
+
+Theorem sym_prefix_spill:
+  !cp fn ret srest ps ss initial_fmp lo p env off R.
+    1 <= LENGTH ps.ps_stack /\ spill_op_wf ps (SOSpill off) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    (!b. in_mem_range off 32 b ==> R b /\ context_spill_byte cp b) /\
+    asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp (SOSpill off)) ==>
+    ?ss'. sym_steps p env 2 ss = SymOK ss' /\
+      sym_kinds_ok cp fn ret srest
+        (apply_prefix_op initial_fmp lo (SOSpill off) ps) ss' /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+      (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt strip_tac >>
+  `ss.sym_stack <> []` by
+    (gvs[sym_kinds_ok_def] >> drule LIST_REL_LENGTH >>
+     Cases_on `top` >> gvs[]) >>
+  Cases_on `ss.sym_stack` >- gvs[] >> rename1 `ss.sym_stack = sv :: stk` >>
+  `off < dimword(:256)` by gvs[spill_op_wf_def] >>
+  `asm_block_at p ss.sym_base.as_pc
+    [AsmPush (encode_num_bytes off); AsmOp "MSTORE"]` by gvs[exec_stack_op_def] >>
+  drule_all sym_steps_spill >> disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists_tac `ss'` >> simp[] >>
+  conj_tac >- (irule sym_kinds_ok_spill >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem sym_prefix_op_sim:
+  !op initial_fmp lo p env cp fn ret srest R ps ss.
+    is_prefix_op op /\ (!l d. op <> SOPushOfst l d) /\
+    FST (stack_op_wf lo op (LENGTH ps.ps_stack)) /\ spill_op_wf ps op /\
+    (!off b. op = SOSpill off /\ in_mem_range off 32 b ==>
+       R b /\ context_spill_byte cp b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp op) ==>
+    ?ss'. sym_steps p env (LENGTH (exec_stack_op initial_fmp op)) ss = SymOK ss' /\
+      sym_kinds_ok cp fn ret srest (apply_prefix_op initial_fmp lo op ps) ss' /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (exec_stack_op initial_fmp op) /\
+      (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  Cases_on `op` >> simp[is_prefix_op_def, stack_op_wf_def] >> rpt strip_tac
+  >~ [`exec_stack_op initial_fmp (SOPush arg)`] >-
+      (Cases_on `arg` >>
+       gvs[exec_stack_op_def, apply_prefix_op_def, apply_simple_op_def] >>
+       metis_tac[SRULE [exec_stack_op_def, apply_prefix_op_def, apply_simple_op_def]
+         sym_prefix_push_lit, sym_prefix_push_label,
+         SRULE [exec_stack_op_def, apply_prefix_op_def, apply_simple_op_def]
+         sym_prefix_push_var, arithmeticTheory.ADD_COMM])
+  >~ [`exec_stack_op initial_fmp (SOPushLabel l)`] >-
+      (gvs[exec_stack_op_def, apply_prefix_op_def, apply_simple_op_def] >>
+       metis_tac[sym_prefix_push_label, arithmeticTheory.ADD_COMM])
+  >~ [`exec_stack_op initial_fmp (SOPop k)`] >-
+      (drule_all sym_prefix_pop >> simp[exec_stack_op_def] >> metis_tac[])
+  >~ [`exec_stack_op initial_fmp (SOSwap k)`] >-
+      (drule_all sym_prefix_swap >> simp[exec_stack_op_def] >> metis_tac[])
+  >~ [`exec_stack_op initial_fmp (SODup k)`] >-
+      (drule_all sym_prefix_dup >> simp[exec_stack_op_def] >> metis_tac[])
+  >~ [`exec_stack_op initial_fmp (SOPoke k arg)`] >-
+      (drule sym_prefix_poke >> metis_tac[arithmeticTheory.ADD_COMM])
+  >~ [`exec_stack_op initial_fmp (SOSpill off)`] >-
+      (drule_all sym_prefix_spill >> simp[exec_stack_op_def] >> metis_tac[])
+  >~ [`exec_stack_op initial_fmp (SORestore off)`] >-
+      (drule_all sym_prefix_restore >> simp[exec_stack_op_def] >> metis_tac[])
+  >~ [`exec_stack_op initial_fmp SOInitialFmp`] >-
+      (drule_all sym_prefix_initial_fmp >> simp[exec_stack_op_def] >> metis_tac[])
+  >~ [`exec_stack_op initial_fmp (SOLabel l)`] >-
+      (drule_all sym_prefix_label >> simp[exec_stack_op_def] >> metis_tac[])
+QED
+
 (* A prefix of planner ops with no SOPushOfst (codegen emits one only for
    OFFSET, which unit_shape_ok excludes), whose spills write inside the
    byte set R and the context's spill regions, steps symbolically to the
