@@ -341,6 +341,41 @@ QED
 
 (* Actual footprint, including dynamic bytelikes and empty aggregates: no
    declared-capacity or literal ABI typing premise is used. *)
+Theorem abi_encode_post_lowered_footprint:
+  expr_body_pre ce cx env e es /\
+  expr_post ctx func ce cx e es0 origin sa s0 es' v op s /\
+  ~is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+  value_has_type tv v ==>
+  ?ptv. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv /\
+    ~is_word_type (post_value_type ce e) /\
+    val_footprint ptv v = val_footprint tv v
+Proof
+  strip_tac >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[exprSimHypsTheory.expr_body_pre_lowered_fits] >>
+  drule_all abiEncodeMaterializeTheory.materialize_post_lowered_classify >> strip_tac
+  >- (qexists `tv` >> simp[] >>
+      metis_tac[exprSimLayoutTransportTheory.compatible_word_type]) >>
+  `~is_word_type (post_value_type ce e)` by
+    metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
+  `?ptv. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv /\
+      value_has_type ptv v` by
+    (`post_value_type ce e = expr_type e \/
+      post_value_type ce e = lowered_value_type ce e` by
+       (Cases_on `e` >> simp[post_value_type_def] >>
+        rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
+        simp[post_value_type_def, vyperASTTheory.expr_type_def] >>
+        IF_CASES_TAC >> simp[]) >>
+     gvs[] >>
+     drule exprSimHypsTheory.expr_body_pre_type_evaluates >>
+     simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+     goal_assum (drule_at Any) >>
+     metis_tac[CONJUNCT1 vyperTypeArgFitsTheory.arg_type_fits_value_has_type]) >>
+  qexists `ptv` >> simp[] >>
+  irule valueCopyBytesTheory.bytestring_val_footprint_eq >> metis_tac[]
+QED
+
 Theorem abi_encode_nonword_expr_window:
   expr_post ctx func ce cx e es origin sa s0 es' v op s /\
   ~is_word_type (post_value_type ce e) /\
