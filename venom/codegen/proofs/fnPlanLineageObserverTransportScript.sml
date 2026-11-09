@@ -2862,3 +2862,46 @@ Proof
     (simp[FILTER_EQ_NIL, EVERY_MEM, MEM_MAP] >> metis_tac[optionTheory.NOT_IS_SOME_EQ_NONE]) >>
   simp[]
 QED
+
+(* Shared terminal boundary: stack support is enough even when spills carry debt. *)
+Theorem native_ready_terminal_stack_support:
+  !fn bb dfg before chunk after v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    bb.bb_instructions <> [] /\ is_terminator (LAST bb.bb_instructions).inst_opcode /\
+    LIST_ELEM_COUNT (Var v) before.ps_stack +
+      (if Var v IN FDOM before.ps_spilled then 1 else 0) <= 1 /\
+    (!w. MEM (Var w) (compute_operands (LAST bb.bb_instructions)) ==>
+      MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) /\
+    (MEM (Var v) before.ps_stack ==> MEM v
+      (live_vars_at (liveness_analyze fn) bb.bb_label (PRE (LENGTH bb.bb_instructions)))) /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (LAST bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))
+      (bb_is_halting bb) F bb.bb_label before = SOME (chunk,after) ==>
+    ((MEM (Var v) after.ps_stack \/ Var v IN FDOM after.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst_wf (LAST bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def] >>
+     metis_tac[rich_listTheory.LAST_MEM]) >>
+  Cases_on `(LAST bb.bb_instructions).inst_opcode = JMP`
+  >- metis_tac[native_terminal_jmp_demand_support] >>
+  `~MEM v (LAST bb.bb_instructions).inst_outputs` by
+    simp[venomExecProofsTheory.terminator_no_outputs] >>
+  `PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions /\
+   SUC (PRE (LENGTH bb.bb_instructions)) = LENGTH bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  `(LAST bb.bb_instructions).inst_opcode <> PHI /\
+   (LAST bb.bb_instructions).inst_opcode <> OFFSET /\
+   ~is_param_opcode (LAST bb.bb_instructions).inst_opcode /\
+   (LAST bb.bb_instructions).inst_opcode <> NOP` by
+    (qpat_x_assum `is_terminator _` mp_tac >>
+     Cases_on `(LAST bb.bb_instructions).inst_opcode` >>
+     simp[venomInstTheory.is_terminator_def, venomInstTheory.is_param_opcode_def]) >>
+  qspecl_then [`fn`,`bb`,`PRE (LENGTH bb.bb_instructions)`] mp_tac
+    native_indexed_regular_stack_support >>
+  simp[rich_listTheory.EL_PRE_LENGTH] >>
+  disch_then (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (qspec_then `v` mp_tac) >> simp[]
+QED

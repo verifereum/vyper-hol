@@ -3138,15 +3138,11 @@ Proof
   `MEM (Var v) before.ps_stack ==> MEM v
     (live_vars_at (liveness_analyze fn) bb.bb_label (PRE (LENGTH bb.bb_instructions)))` by
     suspend "prefix_support" >>
-  Cases_on `(LAST bb.bb_instructions).inst_opcode = JMP`
-  >- metis_tac[fnPlanLineageObserverTransportTheory.native_terminal_jmp_demand_support] >>
   `LIST_ELEM_COUNT (Var v) before.ps_stack +
     (if Var v IN FDOM before.ps_spilled then 1 else 0) <= 1` by suspend "prefix_bound" >>
   `!w. MEM (Var w) (compute_operands (LAST bb.bb_instructions)) ==>
     MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled` by suspend "available" >>
-  `~MEM (Var v) after.ps_stack /\ Var v NOTIN FDOM after.ps_spilled \/
-    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))` by
-    suspend "regular" >> metis_tac[]
+  metis_tac[fnPlanLineageObserverTransportTheory.native_ready_terminal_stack_support]
 QED
 
 Resume lineage_state_incoming_block_exit_support[terminal]:
@@ -3198,28 +3194,6 @@ Resume lineage_state_incoming_block_exit_support[available]:
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `setup_ops` >> gvs[rich_listTheory.EL_PRE_LENGTH]
-QED
-
-Resume lineage_state_incoming_block_exit_support[regular]:
-  `PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions /\
-   SUC (PRE (LENGTH bb.bb_instructions)) = LENGTH bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> gvs[]) >>
-  `~MEM v (LAST bb.bb_instructions).inst_outputs` by
-    (qpat_x_assum `EVERY _ bb.bb_instructions` mp_tac >>
-     simp[listTheory.EVERY_MEM] >>
-     disch_then irule >> simp[rich_listTheory.LAST_MEM]) >>
-  `(LAST bb.bb_instructions).inst_opcode <> PHI /\
-   (LAST bb.bb_instructions).inst_opcode <> OFFSET /\
-   ~is_param_opcode (LAST bb.bb_instructions).inst_opcode /\
-   (LAST bb.bb_instructions).inst_opcode <> NOP` by
-    (qpat_x_assum `is_terminator _` mp_tac >>
-     Cases_on `(LAST bb.bb_instructions).inst_opcode` >>
-     simp[venomInstTheory.is_terminator_def, venomInstTheory.is_param_opcode_def]) >>
-  qspecl_then [`fn`,`bb`,`PRE (LENGTH bb.bb_instructions)`] mp_tac
-    fnPlanLineageObserverTransportTheory.native_indexed_regular_stack_support >>
-  simp[rich_listTheory.EL_PRE_LENGTH] >>
-  disch_then (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  disch_then (qspec_then `v` mp_tac) >> simp[] >> metis_tac[]
 QED
 
 Resume lineage_state_incoming_block_exit_support[bound_computed]:
