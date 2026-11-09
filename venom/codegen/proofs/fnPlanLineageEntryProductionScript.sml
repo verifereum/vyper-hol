@@ -2,7 +2,7 @@ Theory fnPlanLineageEntryProduction
 Ancestors
   fnPlanLineagePhiInputExclusion fnPlanLineagePhiLiveBudget
   fnPlanLineageLiveness fnPlanLineageJoinEntry fnPlanLineageNativeResources fnPlanLineageNativeOrigins
-  fnPlanLineageCallers fnPlanLineageSetup fnPlanLineagePath fnPlanLineageSuffix
+  fnPlanLineageCallers fnPlanLineageSetup fnPlanLineagePath fnPlanLineageSuffix fnPlanLineagePrefix
   callLayoutDefs stackPlanGen venomWf venomInst passSharedDefs removeUnusedProofs removeUnusedSsaProofs list rich_list finite_map bag
 
 (* Chronological origins include dead definitions retained by native emission.
@@ -183,6 +183,63 @@ Inductive native_inst_prefix:
       label ps = SOME (ops,qs) ==>
     native_inst_prefix lv dfg cfg fn label halting n len xs ps0 (SUC k) qs)
 End
+
+(* Conservative operation-carrying refinement, retaining original-tail flags. *)
+Inductive native_inst_ops_prefix:
+  (!lv dfg cfg fn lbl halt np bl xs p0.
+    native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 0 [] p0) /\
+  (!lv dfg cfg fn lbl halt np bl xs p0 j ops p inst rest step_ops q.
+    native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 j ops p /\
+    DROP j xs = inst::rest /\
+    generate_inst_plan lv dfg cfg fn inst
+      (if rest = [] then live_vars_at lv lbl bl
+       else live_vars_at lv lbl (j+np+1)) halt
+      (case rest of [] => F | h::t => is_terminator h.inst_opcode)
+      lbl p = SOME (step_ops,q) ==>
+    native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 (SUC j) (ops ++ step_ops) q)
+End
+
+Theorem native_inst_ops_prefix_zero:
+  native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 0 ops q <=>
+    ops = [] /\ q = p0
+Proof
+  simp[Once native_inst_ops_prefix_cases] >> metis_tac[]
+QED
+
+Theorem native_inst_ops_prefix_suc:
+  native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 (SUC j) ops q <=>
+  ?pre p inst rest step_ops.
+    native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 j pre p /\
+    DROP j xs = inst::rest /\
+    generate_inst_plan lv dfg cfg fn inst
+      (if rest = [] then live_vars_at lv lbl bl
+       else live_vars_at lv lbl (j+np+1)) halt
+      (case rest of [] => F | h::t => is_terminator h.inst_opcode)
+      lbl p = SOME (step_ops,q) /\ ops = pre ++ step_ops
+Proof
+  simp[Once native_inst_ops_prefix_cases] >> metis_tac[]
+QED
+
+Theorem native_inst_ops_prefix_erase:
+  !lv dfg cfg fn lbl halt np bl xs p0 k ops q.
+    native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 k ops q ==>
+    native_inst_prefix lv dfg cfg fn lbl halt np bl xs p0 k q
+Proof
+  ho_match_mp_tac native_inst_ops_prefix_ind >>
+  metis_tac[native_inst_prefix_rules]
+QED
+
+Theorem native_inst_prefix_ops:
+  !lv dfg cfg fn lbl halt np bl xs p0 k q.
+    native_inst_prefix lv dfg cfg fn lbl halt np bl xs p0 k q <=>
+    ?ops. native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 k ops q
+Proof
+  reverse (rpt gen_tac >> eq_tac)
+  >- metis_tac[native_inst_ops_prefix_erase] >>
+  map_every qid_spec_tac [`q`,`k`,`p0`,`xs`,`bl`,`np`,`halt`,`lbl`,`fn`,`cfg`,`dfg`,`lv`] >>
+  ho_match_mp_tac native_inst_prefix_ind >>
+  metis_tac[native_inst_ops_prefix_rules]
+QED
 
 Theorem native_inst_prefix_zero:
   native_inst_prefix lv dfg cfg fn label halting n len xs ps 0 qs <=> qs = ps
@@ -2273,4 +2330,39 @@ Proof
      Cases_on `t` >> gvs[]) >>
   `start = incoming` by gvs[] >> gvs[] >>
   metis_tac[incoming_join_block_available, arithmeticTheory.ADD_COMM]
+QED
+
+(* Exact dispatcher frame for the ordinary interval, including OFFSET. *)
+Theorem native_ordinary_shared_core_replay:
+  !lv dfg cfg fn inst nl halt term lbl ps prefixP prefixQ.
+    codegen_ready_inst inst /\ inst_wf inst /\
+    inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
+    (!x. MEM x (compute_operands inst) /\ is_var_operand x ==>
+      MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) /\
+    EVERY (\v. ~MEM (Var v) prefixP) (nl ++ inst.inst_outputs) /\
+    EVERY (\v. ~MEM (Var v) prefixQ) (nl ++ inst.inst_outputs) ==>
+    ?ops qs.
+      generate_inst_plan lv dfg cfg fn inst nl halt term lbl ps = SOME (ops,qs) /\
+      generate_inst_plan lv dfg cfg fn inst nl halt term lbl
+        (ps with ps_stack := prefixP ++ ps.ps_stack) =
+        SOME (ops,qs with ps_stack := prefixP ++ qs.ps_stack) /\
+      generate_inst_plan lv dfg cfg fn inst nl halt term lbl
+        (ps with ps_stack := prefixQ ++ ps.ps_stack) =
+        SOME (ops,qs with ps_stack := prefixQ ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >> fs[codegen_ready_inst_def] >>
+  Cases_on `inst.inst_opcode = OFFSET`
+  >- (drule_all inst_wf_offset_shape >> strip_tac >>
+      drule_all fnPlanLineageStagesTheory.generate_offset_plan_frame >>
+      disch_tac >>
+      qexistsl_tac [`[SOPushOfst lbl' (w2n v)]`,
+        `ps with ps_stack := ps.ps_stack ++ [Var out]`] >>
+      simp[generate_inst_plan_def,APPEND_ASSOC]) >>
+  Cases_on `is_param_opcode inst.inst_opcode \/ inst.inst_opcode = NOP`
+  >- (qexistsl_tac [`[]`,`ps`] >> gvs[generate_inst_plan_def,codegen_ready_inst_def]) >>
+  gvs[generate_inst_plan_def] >>
+  namedCases_on `generate_regular_inst_plan lv dfg cfg fn inst nl halt term lbl ps`
+    ["ops qs"] >>
+  qexistsl_tac [`ops`,`qs`] >> simp[] >> conj_tac >>
+  irule native_regular_bottom_frame >> simp[]
 QED
