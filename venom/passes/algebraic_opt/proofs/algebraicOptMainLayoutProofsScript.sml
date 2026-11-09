@@ -128,3 +128,37 @@ Proof
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   metis_tac[ao_alloc_fresh_scalar_support]
 QED
+
+Theorem ao_transform_insts_supply_cursor:
+  ao_transform_insts_supply dfg ra lbl targets supply idx xs = (pre,mid) /\
+  ao_transform_insts_supply dfg ra lbl targets supply idx (xs ++ ys) = (outs,last) ==>
+  ao_transform_insts_supply dfg ra lbl targets mid (idx + LENGTH xs) ys =
+    (DROP (LENGTH pre) outs,last) /\ TAKE (LENGTH pre) outs = pre
+Proof
+  strip_tac >>
+  qpat_x_assum `ao_transform_insts_supply _ _ _ _ _ _ (_ ++ _) = _` mp_tac >>
+  simp[ao_transform_insts_supply_append] >> strip_tac >>
+  gvs[DROP_APPEND, rich_listTheory.TAKE_LENGTH_APPEND]
+QED
+
+Theorem ao_transform_insts_supply_cursor_step:
+  ir_supply_inst_ok supply /\ V SUBSET set supply.irs_used_vars /\
+  ao_transform_insts_supply dfg ra lbl targets supply idx (xs ++ inst::ys) = (outs,last) ==>
+  ?pre mid fr next post.
+    ao_transform_insts_supply dfg ra lbl targets supply idx xs = (pre,mid) /\
+    ao_alloc_fresh mid = (fr,next) /\
+    ao_transform_insts_supply dfg ra lbl targets next (SUC (idx + LENGTH xs)) ys = (post,last) /\
+    DROP (LENGTH pre) outs = ao_transform_inst dfg ra lbl (idx + LENGTH xs) targets fr inst ++ post /\
+    DROP (LENGTH pre + LENGTH (ao_transform_inst dfg ra lbl (idx + LENGTH xs) targets fr inst)) outs = post /\
+    ir_supply_inst_ok mid /\ V SUBSET set mid.irs_used_vars /\
+    set supply.irs_used_vars SUBSET set mid.irs_used_vars /\
+    set next.irs_used_vars SUBSET set last.irs_used_vars
+Proof
+  strip_tac >> drule_all ao_transform_insts_supply_occurrence >>
+  strip_tac >> goal_assum (drule_at Any) >>
+  simp[DROP_APPEND, arithmeticTheory.ADD_SUB, DROP_LENGTH_TOO_LONG,
+       arithmeticTheory.SUB_EQ_0] >>
+  `LENGTH pre - (LENGTH pre +
+     LENGTH (ao_transform_inst dfg ra lbl (idx + LENGTH xs) targets fr inst)) = 0`
+    by decide_tac >> simp[]
+QED
