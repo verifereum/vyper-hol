@@ -341,6 +341,8 @@ Theorem prefix_loop_count_guard_code:
      mk_inst (st.cs_next_id+3) ASSERT [Var z] []]
 Proof
   simp[abi_decode_dynarray_checked_prefix_def,abi_decode_count_guard_def,
+    abiDecoderBytesBoundTheory.abi_decode_bytes_head_def,
+    abiDecoderDynarrayBoundTheory.abi_decode_dynarray_payload_guard_def,
     abi_decode_dynarray_end_guard_def,comp_bind_def,comp_ignore_bind_def,
     comp_return_def,emit_op_def,emit_void_def,fresh_var_def,fresh_id_def,emit_def] >>
   strip_tac >> gvs[emitted_insts_def] >>
@@ -549,6 +551,8 @@ Theorem prefix_loop_guard_outputs[local]:
   !v. abi_decoder_older_vars st.cs_next_var v ==> v <> x /\ v <> y /\ v <> z
 Proof
   simp[abi_decode_dynarray_checked_prefix_def,abi_decode_count_guard_def,
+    abiDecoderBytesBoundTheory.abi_decode_bytes_head_def,
+    abiDecoderDynarrayBoundTheory.abi_decode_dynarray_payload_guard_def,
     abi_decode_dynarray_end_guard_def,comp_bind_def,comp_ignore_bind_def,
     comp_return_def,emit_op_def,emit_void_def,fresh_var_def,fresh_id_def,emit_def] >>
   strip_tac >> gvs[emitted_insts_def] >>
