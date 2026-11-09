@@ -4,6 +4,7 @@ Ancestors
   augAssignPlaceRhsMemory stmtSimAugAssignPlaceStorage
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlace stmtSimAugAssign
   tupleTargetStoreProps gasContext vyperState bodyMemoryPreds
+  augAssignPlaceSuffixAdmissibility
   exprSimSource exprSimHyps exprSimHypsDefs
 
 Theorem aug_place_memory_suffix_source[local]:
@@ -120,10 +121,11 @@ Theorem aug_place_memory_rhs_callback:
   lookup_scopes id ee.scopes = SOME entry /\
   evaluate_subscripts entry.type entry.value path = INL old /\
   gas_admissible
-    (bind (lift_sum (evaluate_binop
-      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-      ptv bop cur rhs)) (write_place cx (MemoryPlace id path)))
-    (stmt_res_ok lctx) ee ==>
+    (bind (bind (eval_expr cx e) (read_result cx))
+      (\rhs. bind (lift_sum (evaluate_binop
+        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+        ptv bop cur rhs)) (write_place cx (MemoryPlace id path))))
+    (stmt_res_ok lctx) st ==>
   word_value rhs /\ expr_sim_inv cenv cx env ee /\
   binop_frag_val_mem ctx func cenv cx bop ty ty NONE
     (if bop = Exp then expr_int_literal e else NONE)
@@ -137,6 +139,8 @@ Theorem aug_place_memory_rhs_callback:
 Proof
   strip_tac >> drule_all aug_place_rhs_typed_memory_source >> strip_tac >>
   drule aug_place_typing >> strip_tac >>
+  drule_at (Pat `gas_admissible`) aug_place_memory_pointwise_tail >>
+  disch_then (drule_at (Pat `bind _ _ _ = _`)) >> strip_tac >>
   drule_all aug_place_memory_suffix_source >> strip_tac >>
   simp[] >> metis_tac[]
 QED
