@@ -3855,6 +3855,48 @@ Proof
   simp[MEM_MAP] >> qexists_tac `q` >> gvs[MEM_APPEND]
 QED
 
+Theorem mm_local_prefix_rep_write[local]:
+  wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM i bb.bb_instructions /\
+  ALOOKUP (rep_map_of_groups bb.bb_instructions
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed) i.inst_id = SOME cg ==>
+  i.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}
+Proof
+  strip_tac >> drule alistTheory.ALOOKUP_MEM >>
+  simp[rep_map_of_groups_def, MEM_MAP, MEM_FILTER] >> strip_tac >>
+  rename1 `IS_SOME opt` >> Cases_on `opt` >> gvs[] >>
+  qpat_x_assum `SOME _ = rep_of_group _ _` (assume_tac o SYM) >>
+  drule mm_local_rep_member >> strip_tac >> gvs[] >>
+  drule_all mm_local_prefix_group_roles_elim >> strip_tac
+  >- (`st = i` by metis_tac[mmWfProofsTheory.all_distinct_map_inv] >> gvs[])
+  >- (rename1 `MEM copy_inst bb.bb_instructions` >>
+      `copy_inst = i` by metis_tac[mmWfProofsTheory.all_distinct_map_inv] >>
+      Cases_on `mode` >> gvs[mode_copy_opcode_def]) >>
+  `MEM q bb.bb_instructions` by simp[MEM_APPEND] >>
+  `q = i` by metis_tac[mmWfProofsTheory.all_distinct_map_inv] >>
+  metis_tac[mm_local_prefix_load_not_rep]
+QED
+
+Theorem mm_local_memzero_rep_write[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM i bb.bb_instructions /\
+  ALOOKUP (rep_map_of_groups bb.bb_instructions
+    (scan_block_memzero dfg bb).mz_flushed) i.inst_id = SOME cg ==>
+  i.inst_opcode IN {MSTORE; CALLDATACOPY}
+Proof
+  strip_tac >> drule alistTheory.ALOOKUP_MEM >>
+  simp[rep_map_of_groups_def, MEM_MAP, MEM_FILTER] >> strip_tac >>
+  rename1 `IS_SOME opt` >> Cases_on `opt` >> gvs[] >>
+  qpat_x_assum `SOME _ = rep_of_group _ _` (assume_tac o SYM) >>
+  drule mm_local_rep_member >> strip_tac >> gvs[] >>
+  drule_all mm_local_memzero_group_roles >> strip_tac >>
+  `i' = i` by metis_tac[mmWfProofsTheory.all_distinct_map_inv] >>
+  gvs[is_zero_store_def, is_calldatasize_copy_def]
+QED
+
 Theorem mm_local_cut_pending_ancestor[local]:
   bb.bb_instructions = pre ++ post /\
   ss = FOLDL (scan_inst dfg mode) empty_scan_state pre /\
