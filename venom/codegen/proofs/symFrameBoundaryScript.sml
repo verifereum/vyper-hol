@@ -952,6 +952,122 @@ Proof
   irule scratch_labels_zip_store_outside >> metis_tac[]
 QED
 
+Theorem sym_temporary_offsets_resources:
+  !al sp items offsets al2 cp R.
+    spill_alloc_layout_wf al sp /\
+    offsets = FST (spill_alloc_n [] al items) /\
+    al2 = FOLDL (\a off. free_spill_slot off a)
+      (SND (spill_alloc_n [] al items)) offsets /\
+    (!b. al2.sa_spill_base <= b /\ b < al2.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) ==>
+    LENGTH offsets = LENGTH items /\ ALL_DISTINCT offsets /\
+    (!a b. MEM a offsets /\ MEM b offsets /\ a <> b ==>
+      a + 32 <= b \/ b + 32 <= a) /\
+    (!op old off. FLOOKUP sp op = SOME old /\ MEM off offsets ==>
+      old + 32 <= off \/ off + 32 <= old) /\
+    (!off b. MEM off offsets /\ in_mem_range off 32 b ==>
+      context_spill_byte cp b /\ R b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all doSwapSimTheory.spill_alloc_n_temporary_layout >> strip_tac >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  conj_tac
+  >- (gvs[listTheory.MEM_EL] >> metis_tac[]) >>
+  conj_tac
+  >- (gvs[listTheory.MEM_EL] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `al2.sa_spill_base <= b /\ b < al2.sa_next_offset` by
+    (gvs[listTheory.EVERY_MEM, in_mem_range_def] >> res_tac >> decide_tac) >>
+  metis_tac[]
+QED
+
+Theorem sym_do_swap_deep_numeric:
+  !d ps p env cp fn ret srest initial_fmp R ss.
+    d > 16 /\ d < LENGTH ps.ps_stack /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) (FST (do_swap d ps)) \/
+      MEM (SORestore off) (FST (do_swap d ps)) ==> off < dimword(:256)) /\
+    (!b. (SND (do_swap d ps)).ps_alloc.sa_spill_base <= b /\
+      b < (SND (do_swap d ps)).ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc
+      (execute_plan initial_fmp (FST (do_swap d ps))) ==>
+    ?out. sym_steps p env
+        (LENGTH (execute_plan initial_fmp (FST (do_swap d ps)))) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest (SND (do_swap d ps)) out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc +
+        LENGTH (execute_plan initial_fmp (FST (do_swap d ps))) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `items = top_n (d + 1) ps.ps_stack` >>
+  qabbrev_tac `offsets = FST (spill_alloc_n [] ps.ps_alloc items)` >>
+  qabbrev_tac `alloc2 = FOLDL (\a off. free_spill_slot off a)
+    (SND (spill_alloc_n [] ps.ps_alloc items)) offsets` >>
+  qabbrev_tac `desired = [d] ++ GENLIST (\i. i + 1) (d - 1) ++ [0]` >>
+  qabbrev_tac `tail = TAKE (LENGTH ps.ps_stack - (d + 1)) ps.ps_stack` >>
+  `do_swap d ps =
+    (MAP SOSpill offsets ++ MAP SORestore (MAP (\i. EL i offsets) (REVERSE desired)),
+     ps with <|ps_stack := tail ++ MAP (\i. EL i items) desired;
+               ps_alloc := alloc2|>)` by
+    (drule_all doSwapSimTheory.do_swap_big_decompose >>
+     pure_rewrite_tac[LET_THM] >>
+     simp[Abbr `items`, Abbr `offsets`, Abbr `alloc2`, Abbr `desired`, Abbr `tail`]) >>
+  pop_assum SUBST_ALL_TAC >>
+  fs[Excl "MAP", Excl "REVERSE_DEF"] >>
+  `LENGTH items = d + 1` by
+    (simp[Abbr `items`, stackPlanOpsTheory.top_n_def] >> decide_tac) >>
+  `REVERSE ps.ps_stack = REVERSE items ++ REVERSE tail` by
+    (simp[GSYM listTheory.REVERSE_APPEND] >>
+     simp[Abbr `items`, Abbr `tail`, doSwapSimTheory.top_n_suffix]) >>
+  `REVERSE (MAP (\i. EL i items) desired) =
+    MAP (\i. EL i (REVERSE items)) desired` by
+    (qspecl_then [`items`, `d`] mp_tac doSwapSimTheory.reverse_desired_values >>
+     simp[Abbr `desired`]) >>
+  `LENGTH offsets = LENGTH items /\ ALL_DISTINCT offsets /\
+    (!a b. MEM a offsets /\ MEM b offsets /\ a <> b ==>
+      a + 32 <= b \/ b + 32 <= a) /\
+    (!op old off. FLOOKUP ps.ps_spilled op = SOME old /\ MEM off offsets ==>
+      old + 32 <= off \/ off + 32 <= old) /\
+    (!off b. MEM off offsets /\ in_mem_range off 32 b ==>
+      context_spill_byte cp' b /\ R b)` by
+    (irule sym_temporary_offsets_resources >>
+     metis_tac[]) >>
+  `EVERY (\off. off < dimword(:256)) offsets` by
+    (gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >> metis_tac[]) >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule sym_scratch_indices_numeric >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`REVERSE items`, `ps`, `REVERSE tail`] >>
+  simp[listTheory.MAP_REVERSE] >>
+  simp[Abbr `desired`, listTheory.EVERY_GENLIST] >> gvs[]
+QED
+
+Theorem sym_do_swap_numeric:
+  !d ps p env cp fn ret srest initial_fmp R ss.
+    d < LENGTH ps.ps_stack /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) (FST (do_swap d ps)) \/
+      MEM (SORestore off) (FST (do_swap d ps)) ==> off < dimword(:256)) /\
+    (!b. (SND (do_swap d ps)).ps_alloc.sa_spill_base <= b /\
+      b < (SND (do_swap d ps)).ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc
+      (execute_plan initial_fmp (FST (do_swap d ps))) ==>
+    ?out. sym_steps p env
+        (LENGTH (execute_plan initial_fmp (FST (do_swap d ps)))) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest (SND (do_swap d ps)) out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc +
+        LENGTH (execute_plan initial_fmp (FST (do_swap d ps))) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt strip_tac >> Cases_on `d <= 16`
+  >- (irule sym_do_swap_shallow >> simp[] >> metis_tac[]) >>
+  irule sym_do_swap_deep_numeric >> gvs[] >> metis_tac[]
+QED
+
 Theorem sym_phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0

@@ -2219,7 +2219,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem top_n_suffix[local]:
+Theorem top_n_suffix:
   !n stk. n <= LENGTH stk ==>
     TAKE (LENGTH stk - n) stk ++ top_n n stk = stk
 Proof
@@ -4425,7 +4425,7 @@ Proof
   rpt IF_CASES_TAC >> gvs[] >> simp[PRE_SUB1]
 QED
 
-Theorem reverse_desired_values[local]:
+Theorem reverse_desired_values:
   !(items:'a list) dist.
     LENGTH items = dist + 1 /\ dist > 0 ==>
     REVERSE (MAP (\i. EL i items)
