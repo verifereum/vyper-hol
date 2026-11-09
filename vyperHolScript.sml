@@ -40,7 +40,7 @@ Ancestors
   (* lowering: gas-origin and raw gas shadows, calldata registration, constructor
      arguments, widened returns, body memory closures, place typing *)
   msgGasOriginPost generatedGasOrigin gasShadowRawRuntime gasShadowRawDeploy
-  calldataRegistrationLocals ctorRegisterArgs stmtSimReturnWiden
+  ctorRegisterArgs stmtSimReturnWiden
   bodyMemory bodyDeclMemory bodyStmtClosureMemory
   placeTypingE2EProps
   (* passes: memory merging block/supply proofs, remaining-oracle and pass-oracle
