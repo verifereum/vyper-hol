@@ -37,6 +37,59 @@ Proof
   strip_tac >> gvs[] >> simp[APPEND_ASSOC]
 QED
 
+Theorem noninvoke_block_events_prefix[local]:
+  !fuel C owner bb s.
+    EVERY (\i. i.inst_opcode <> INVOKE)
+      (DROP s.vs_inst_idx bb.bb_instructions) ==>
+    ?extra.
+      MAP (\i. (owner,i.inst_id))
+        (FILTER (\i. i.inst_opcode = GAS)
+          (DROP s.vs_inst_idx bb.bb_instructions)) =
+      gas_events_block fuel C owner bb s ++ extra
+Proof
+  rpt gen_tac >>
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  Cases_on `s.vs_inst_idx < LENGTH bb.bb_instructions`
+  >- (drule rich_listTheory.DROP_CONS_EL >>
+      disch_then (fn th => fs[th]) >>
+      simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+           gas_events_step_def] >>
+      Cases_on `step_inst fuel C (EL s.vs_inst_idx bb.bb_instructions) s` >>
+      simp[] >>
+      Cases_on `(EL s.vs_inst_idx bb.bb_instructions).inst_opcode = GAS` >>
+      simp[] >>
+      Cases_on `is_terminator (EL s.vs_inst_idx bb.bb_instructions).inst_opcode` >>
+      simp[] >>
+      first_x_assum (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+      simp[] >>
+      disch_then (qspec_then `v' with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+      simp[] >> gvs[]) >>
+  simp[Once gas_events_block_def, venomInstTheory.get_instruction_def, DROP_EQ_NIL]
+QED
+
+Theorem noninvoke_block_padding_mask[local]:
+  EVERY (\i. i.inst_opcode <> INVOKE)
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  sites = MAP (\i. (owner,i.inst_id))
+    (FILTER (\i. i.inst_opcode = GAS)
+      (DROP s.vs_inst_idx bb.bb_instructions)) ==>
+  ?raw_slots.
+    LENGTH raw_slots = LENGTH sites /\
+    MAP THE (FILTER IS_SOME raw_slots) = [] /\
+    !gobs tail.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs ==>
+      ?extra. sites = gas_events_block fuel C owner bb
+        (s with vs_gas_readings := gobs ++ tail) ++ extra
+Proof
+  strip_tac >> qexists_tac `REPLICATE (LENGTH sites) NONE` >>
+  simp[LENGTH_REPLICATE, FILTER_EQ_NIL, MEM_REPLICATE] >>
+  rpt strip_tac >> gvs[] >>
+  qspec_then `s with vs_gas_readings := gobs ++ tail` mp_tac
+    (Q.SPECL [`fuel`, `C`, `owner`, `bb`] noninvoke_block_events_prefix) >>
+  simp[]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
