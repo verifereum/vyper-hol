@@ -324,7 +324,7 @@ Proof
   simp[] >> irule mstore_mem_bytes_at_disjoint >> decide_tac
 QED
 
-Theorem typed_dynarray_equal_window[local]:
+Theorem typed_dynarray_equal_window:
   !s d p l stride src_size.
     mload p s = n2w l /\ 32+l*stride <= src_size /\
     (p+src_size <= d \/ d+32+l*stride <= p) ==>
