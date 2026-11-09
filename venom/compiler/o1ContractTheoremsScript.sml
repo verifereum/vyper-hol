@@ -24,7 +24,7 @@ Ancestors
   o1PassContract o1DretDesugarContract o1ContractFmpLowering unitMemInv
   o1ContractCfgNorm o1ContractCfgNormGas
   venomPassSchedule venomCompilerTypes o1ContractLowerDloadStage
-  o1ContractSimplifyCfg o1ContractSue
+  o1ContractSimplifyCfg o1SimplifyCfgGasEvents o1ContractSue
   o1ContractMakeSsa o1ContractConcretize o1ContractDft
 
 (* ===== The pre-walk runs ===== *)
