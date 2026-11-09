@@ -23,7 +23,7 @@ Proof
 QED
 
 Theorem source_array_navigation[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,mid) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
@@ -70,7 +70,7 @@ Theorem entry_source_array_owned_entry:
   off = abi_array_child_offset NONE (vyper_to_abi_type env ty) avs j /\
   cell = d+32+j*type_memory_bytes ce ty /\
   total = type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,mid) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
@@ -116,7 +116,7 @@ Proof
   `d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) < dimword (:256)` by metis_tac[] >>
   drule_all (PURE_REWRITE_RULE [vyper_to_abi_type_def, LET_THM]
     entry_source_dynamic_array_child_window) >> simp_tac bool_ss [] >> strip_tac >>
-  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `entry_source_metadata _ _ _ (ArrayT _ _) _ _ _ _` kall_tac >>
   qpat_x_assum `mem_bytes_at sb _ _ = _` kall_tac >>
   qpat_x_assum `sb + LENGTH _ < _` kall_tac >>

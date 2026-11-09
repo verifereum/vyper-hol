@@ -37,7 +37,7 @@ Proof
 QED
 
 Theorem entry_address_setup_opcodes[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di abi_sz mem_sz st =
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di abi_sz mem_sz st =
     (ops,st') ==>
   EVERY (\i. MEM i.inst_opcode [MLOAD; ADD; MUL; CALLDATALOAD]) (emitted_insts st st')
 Proof
@@ -51,7 +51,7 @@ Proof
 QED
 
 Theorem entry_address_setup_fields[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di abi_sz mem_sz st =
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di abi_sz mem_sz st =
     (ops,st') /\ run_inst_seq (emitted_insts st st') s = OK t ==>
   entry_loop_fields s t
 Proof
@@ -60,14 +60,14 @@ Proof
 QED
 
 Theorem entry_canonical_dynamic_child_address:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) st = (ops,st') /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
   j < LENGTH xs /\ is_dynamic (vyper_to_abi_type env ty) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -137,7 +137,7 @@ QED
 
 (* Interface check: the child is itself a dynamic array, not a word leaf. *)
 Theorem entry_canonical_nested_array_address[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic inner)))
     (abi_embedded_static_size ce.ce_struct_fields (ArrayT ty (Dynamic inner)))
     (type_memory_bytes ce (ArrayT ty (Dynamic inner))) st = (ops,st') /\
@@ -147,7 +147,7 @@ Theorem entry_canonical_nested_array_address[local]:
     (ArrayTV (ArrayTV tv (Dynamic inner)) (Dynamic outer))
     parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
   j < LENGTH xs /\ is_dynamic (vyper_to_abi_type env (ArrayT ty (Dynamic inner))) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env (ArrayT ty (Dynamic inner)))) (ListV avs)))
     d (type_memory_bytes ce (ArrayT (ArrayT ty (Dynamic inner)) (Dynamic outer))) b cap s /\
   mem_bytes_at sb

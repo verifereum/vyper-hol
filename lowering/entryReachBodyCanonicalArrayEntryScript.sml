@@ -10,7 +10,7 @@ Ancestors
   venomState venomInst words list rich_list arithmetic
 
 Theorem array_entry_observation_code[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di az mz st = (ops,mid) /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di az mz st = (ops,mid) /\
   mid.cs_next_var <= limit_st.cs_next_var ==>
   mid.cs_current_bb = st.cs_current_bb /\
   EVERY (\i. MEM i.inst_opcode
@@ -31,7 +31,7 @@ Proof
 QED
 
 Theorem array_entry_sequence_path[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di az mz st = (ops,mid) /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di az mz st = (ops,mid) /\
   mid.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   run_inst_seq (emitted_insts st mid) s = OK t /\ inst_extends st mid /\
   fn_has_code st mid fn /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
@@ -50,7 +50,7 @@ Proof
 QED
 
 Theorem array_entry_static_endpoint:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di az mz st = (ops,mid) /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di az mz st = (ops,mid) /\
   ~dec_info_needs_offset di /\ eval_operand ip s = SOME p /\ mload (w2n p) s = n2w j /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
@@ -76,7 +76,7 @@ Proof
 QED
 
 Theorem array_entry_dynamic_endpoint:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di az mz st = (ops,mid) /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di az mz st = (ops,mid) /\
   dec_info_needs_offset di /\ eval_operand ip s = SOME p /\ mload (w2n p) s = n2w j /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decode_load CALLDATALOAD (n2w (sb+(j*az+32)) : bytes32) s = n2w child_off /\
@@ -124,7 +124,7 @@ Definition array_entry_navigation_def:
 End
 
 Theorem array_entry_canonical_split[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,mid) /\
   abi_decoder_coherent ce env ce.ce_struct_fields (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
@@ -172,7 +172,7 @@ Proof
 QED
 
 Theorem array_entry_owned_split[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,mid) /\
   abi_decoder_coherent ce env ce.ce_struct_fields (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
@@ -227,7 +227,7 @@ Theorem entry_canonical_array_owned_entry:
   off = abi_array_child_offset NONE (vyper_to_abi_type env ty) avs j /\
   cell = d+32+j*type_memory_bytes ce ty /\
   total = type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,mid) /\
   abi_decoder_coherent ce env ce.ce_struct_fields (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\

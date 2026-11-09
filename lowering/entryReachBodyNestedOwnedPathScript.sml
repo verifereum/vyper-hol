@@ -46,7 +46,7 @@ Proof
   drule_all entry_index_counter_readiness >> strip_tac >>
   qexists_tac `p'` >>
   simp_tac bool_ss [entry_array_init_resources_def] >>
-  `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
      ((ip,cnt),loop_st)` by
     simp[abi_decode_array_loop_init_def, comp_bind_def,
          comp_ignore_bind_def, comp_return_def] >>
@@ -76,14 +76,14 @@ QED
 
 Theorem entry_nested_owned_initializer_boundary:
   ity = ArrayT ty (Dynamic inner) /\ itv = ArrayTV tv (Dynamic inner) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ity) (abi_embedded_static_size ce.ce_struct_fields ity)
     (type_memory_bytes ce ity) st = (ops,middle) /\
   abi_decoder_coherent ce env sf (ArrayT ity (Dynamic outer)) (ArrayTV itv (Dynamic outer)) /\
   abi_decoder_metadata ce env (ArrayT ity (Dynamic outer)) (ArrayTV itv (Dynamic outer))
     parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
   j < LENGTH xs /\ is_dynamic (vyper_to_abi_type env ity) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ity)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ity (Dynamic outer))) b cap s /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ity)) (ListV avs)))
@@ -125,7 +125,7 @@ Theorem entry_nested_owned_initializer_boundary:
     mem_bytes_at (sb+abi_array_child_offset NONE (vyper_to_abi_type env ity) avs j)
       (LENGTH (enc (vyper_to_abi_type env ity) (EL j avs)))
       (abi_decode_source CALLDATALOAD u) = enc (vyper_to_abi_type env ity) (EL j avs) /\
-    abi_decoder_ranges CALLDATALOAD (Lit 0w) (FST (SND ops)) (SND (SND ops))
+    abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) (FST (SND ops)) (SND (SND ops)) 0
       (sb+abi_array_child_offset NONE (vyper_to_abi_type env ity) avs j)
       (LENGTH (enc (vyper_to_abi_type env ity) (EL j avs)))
       (d+32+j*type_memory_bytes ce ity) (type_memory_bytes ce ity) b cap u /\
@@ -138,12 +138,12 @@ Proof
   drule_all entry_canonical_dynamic_child_address >>
   disch_then (qx_choose_then `raw` strip_assume_tac) >>
   `32 <= type_memory_bytes ce ity` by simp[Once type_memory_bytes_def] >>
-  `abi_decoder_ranges CALLDATALOAD (Lit 0w) (FST (SND ops)) (SND (SND ops))
+  `abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) (FST (SND ops)) (SND (SND ops)) 0
      (sb+abi_array_child_offset NONE (vyper_to_abi_type env ity) avs j)
      (LENGTH (enc (vyper_to_abi_type env ity) (EL j avs)))
      (d+32+j*type_memory_bytes ce ity) (type_memory_bytes ce ity) b cap raw` by
     (qpat_x_assum `ity = _` kall_tac >>
-     qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ s` mp_tac >>
+     qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ s` mp_tac >>
      simp_tac bool_ss [abiDecoderTypedContractTheory.abi_decoder_ranges_def] >>
      strip_tac >> simp[Excl "enc_def"] >> rpt conj_tac >> decide_tac) >>
   suspend "endpoint"
@@ -207,7 +207,7 @@ Resume entry_nested_owned_initializer_boundary[record_frame]:
       simp_tac (srw_ss()) [entry_owned_loop_resources_def, abi_alloca_history_def])
   >- (qpat_assum `mem_bytes_at _ _ (abi_decode_source _ raw) = _` mp_tac >>
       simp_tac (srw_ss()) [abiDecoderContractTheory.abi_decode_source_def])
-  >- (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ raw` mp_tac >>
+  >- (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ raw` mp_tac >>
       simp_tac (srw_ss()) [abiDecoderTypedContractTheory.abi_decoder_ranges_def,
         eval_operand_def, AC ADD_ASSOC ADD_COMM, Excl "enc_def"])
   >> qpat_assum `entry_array_init_resources _ _ _ _ _ (_,_,_,_,_,_,_,_,raw)` mp_tac >>

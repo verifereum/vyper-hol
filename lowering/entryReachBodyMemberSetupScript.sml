@@ -10,7 +10,7 @@ Ancestors
   venomState venomInst words list rich_list arithmetic
 
 Theorem member_setup_observation_code[local]:
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) dyn ao vo st = (ops,mid) /\
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,mid) /\
   mid.cs_next_var <= limit_st.cs_next_var ==>
   mid.cs_current_bb = st.cs_current_bb /\
   EVERY (\i. MEM i.inst_opcode
@@ -30,7 +30,7 @@ Proof
 QED
 
 Theorem entry_member_setup_endpoint:
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) dyn ao vo st = (ops,mid) /\
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,mid) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   (dyn ==> abi_decode_load CALLDATALOAD (n2w (sb+ao) : bytes32) s = n2w payload_off /\
     sb + payload_off < dimword (:256)) /\

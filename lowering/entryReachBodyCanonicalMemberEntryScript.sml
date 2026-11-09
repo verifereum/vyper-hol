@@ -14,7 +14,7 @@ Theorem canonical_member_live_navigation[local]:
   mem_bytes_at sb (LENGTH (enc (Tuple (pre ++ aty::post)) (ListV (pvs ++ av::avs))))
     (abi_decode_source CALLDATALOAD s) = enc (Tuple (pre ++ aty::post)) (ListV (pvs ++ av::avs)) /\
   sb + LENGTH (enc (Tuple (pre ++ aty::post)) (ListV (pvs ++ av::avs))) < dimword (:256) /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (is_dynamic aty)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w) (is_dynamic aty)
     (SUM (MAP abi_member_head_size pre)) vo st = (ops,mid) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
@@ -55,7 +55,7 @@ Theorem entry_canonical_member_owned_entry:
   d + outsz < dimword (:256) /\ entry_owned_region oid root extent d outsz s /\
   entry_scratch_ready sites b cap s /\ alloca_inv s /\
   abi_alloca_history (fn_insts fn) s /\ alloca_frontier_inv ctx fn site s /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (dec_info_needs_offset ei) ao vo st = (ops,mid) /\
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w) (dec_info_needs_offset ei) ao vo st = (ops,mid) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   mid.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\

@@ -471,7 +471,7 @@ QED
 (* Integrated initialization.  The trace states name the actual counter site;
    they are compiler equations, not assumptions about an executed prefix. *)
 Theorem calldata_array_loop_init_safe:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -717,7 +717,7 @@ QED
 
 Theorem calldata_loop_prefix_entry_code:
   !ip src start hdr body exit_lbl end_st fn.
-  abi_decode_loop_prefix ip src CALLDATALOAD start = ((hdr,body,exit_lbl),end_st) /\
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) start = ((hdr,body,exit_lbl),end_st) /\
   fn_has_code start end_st fn ==>
   ?bb hb.
     lookup_block start.cs_current_bb fn.fn_blocks = SOME bb /\
@@ -737,7 +737,7 @@ QED
 
 Theorem calldata_loop_prefix_entry_safe:
   !ip src start hdr body exit_lbl end_st fn s ctx.
-  abi_decode_loop_prefix ip src CALLDATALOAD start = ((hdr,body,exit_lbl),end_st) /\
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) start = ((hdr,body,exit_lbl),end_st) /\
   fn_has_code start end_st fn /\
   s.vs_current_bb = start.cs_current_bb /\
   s.vs_inst_idx = LENGTH start.cs_current_insts /\ ~s.vs_halted ==>
@@ -756,7 +756,7 @@ QED
 Theorem calldata_init_to_header_safe:
   !ctx st loop_st P Q R ip src hdr body exit_lbl end_st fn s.
   frag_exec_mem ctx st loop_st P Q R /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st =
     ((hdr,body,exit_lbl),end_st) /\
   fn_has_code st loop_st fn /\ fn_has_code loop_st end_st fn /\
   P s /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\

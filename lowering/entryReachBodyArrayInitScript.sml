@@ -50,7 +50,7 @@ Proof
 QED
 
 Theorem entry_array_init_opcodes[local]:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     (setup,loop_st) ==>
   EVERY (\i. MEM i.inst_opcode [CALLDATALOAD; GT; ISZERO; ASSERT; MSTORE; ALLOCA])
     (emitted_insts st loop_st)
@@ -67,7 +67,7 @@ Proof
 QED
 
 Theorem entry_array_init_sequence_fields:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     (setup,loop_st) /\
   run_inst_seq (emitted_insts st loop_st) s = OK t ==>
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
@@ -185,7 +185,7 @@ Proof
 QED
 
 Theorem entry_array_init_accepted_live:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st = ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
