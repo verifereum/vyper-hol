@@ -3086,3 +3086,75 @@ Theorem initialized_entry_parameter_prefix_resource_bound:
 Proof
   metis_tac[initialized_entry_parameter_prefix_joint]
 QED
+
+Theorem initialized_entry_parameter_exit_demand_support:
+  !fn dfg ch growth spill_base lbl_ctr param v ops after succ.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    MEM param (get_params (HD fn.fn_blocks).bb_instructions) /\ MEM v param.inst_outputs /\
+    MEM succ (cfg_succs_of (cfg_analyze fn) (HD fn.fn_blocks).bb_label) /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (HD fn.fn_blocks) (init_cleanup_plan_state ch growth spill_base lbl_ctr) =
+        SOME (ops,after) ==>
+    ((MEM (Var v) after.ps_stack \/ Var v IN FDOM after.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+        (LENGTH (HD fn.fn_blocks).bb_instructions)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  drule_all fnPlanLineageEntryProductionTheory.ready_entry_static_boundary >> strip_tac >>
+  `~bb_is_halting (HD fn.fn_blocks)` by metis_tac[ready_edge_source_nonhalting] >>
+  `(HD fn.fn_blocks).bb_instructions <> [] /\
+    is_terminator (LAST (HD fn.fn_blocks).bb_instructions).inst_opcode` by
+    gvs[venomWfTheory.bb_well_formed_def] >>
+  `(HD fn.fn_blocks = HD fn.fn_blocks ==>
+    LENGTH (cfg_preds_of (cfg_analyze fn) (HD fn.fn_blocks).bb_label) <> 1)` by simp[] >>
+  drule_all ready_block_terminal_factor >> strip_tac >> gvs[] >>
+  `LIST_ELEM_COUNT (Var v) before.ps_stack +
+    (if Var v IN FDOM before.ps_spilled then 1 else 0) <= 1 /\
+    ((MEM (Var v) before.ps_stack \/ Var v IN FDOM before.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+        (PRE (LENGTH (HD fn.fn_blocks).bb_instructions))))` by suspend "prefix" >>
+  `!w. MEM (Var w) (compute_operands (LAST (HD fn.fn_blocks).bb_instructions)) ==>
+    MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled` by suspend "available" >>
+  qspecl_then [`fn`,`HD fn.fn_blocks`] mp_tac native_ready_terminal_stack_support >>
+  simp[] >>
+  disch_then (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (qspec_then `v` mp_tac) >> simp[]
+QED
+
+Resume initialized_entry_parameter_exit_demand_support[prefix]:
+  `start = SND (prepare_params_plan (liveness_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr))` by
+    (qpat_x_assum `prepare_params_plan _ _ _ = _` (mp_tac o AP_TERM ``SND : stack_op list # plan_state -> plan_state``) >> simp[]) >>
+  gvs[] >>
+  qspec_then `fn` mp_tac initialized_entry_parameter_prefix_joint >> simp[] >>
+  disch_then (drule_at (Pat `fnPlanLineageEntryProduction$native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ before`)) >>
+  simp[] >> disch_then (qspecl_then [`param`,`v`] mp_tac) >> simp[] >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Resume initialized_entry_parameter_exit_demand_support[available]:
+  `start = SND (prepare_params_plan (liveness_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr))` by
+    (qpat_x_assum `prepare_params_plan _ _ _ = _` (mp_tac o AP_TERM ``SND : stack_op list # plan_state -> plan_state``) >> simp[]) >>
+  `fnPlanLineageEntryProduction$entry_boundary_resources fn (HD fn.fn_blocks)
+    (PRE (LENGTH (HD fn.fn_blocks).bb_instructions)) before` by
+    (gvs[] >>
+     qspec_then `fn` mp_tac fnPlanLineageEntryProductionTheory.initialized_entry_prefix_structural >>
+     simp[] >>
+     disch_then (drule_at (Pat `fnPlanLineageEntryProduction$native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ before`)) >>
+     simp[] >> impl_tac
+     >- (rpt gen_tac >> strip_tac >>
+         drule_all ready_entry_ordinary_prefix_layout >> simp[]) >>
+     simp[]) >>
+  `PRE (LENGTH (HD fn.fn_blocks).bb_instructions) <
+    LENGTH (HD fn.fn_blocks).bb_instructions` by
+    (Cases_on `(HD fn.fn_blocks).bb_instructions` >> gvs[]) >>
+  qspecl_then [`fn`,`HD fn.fn_blocks`,`PRE (LENGTH (HD fn.fn_blocks).bb_instructions)`,`before`]
+    mp_tac fnPlanLineageNativeResourcesTheory.native_live_boundary_operands >>
+  gvs[rich_listTheory.EL_PRE_LENGTH,
+    fnPlanLineageEntryProductionTheory.entry_boundary_resources_def,
+    fnPlanLineageNativeResourcesTheory.native_live_boundary_def]
+QED
+
+Finalise initialized_entry_parameter_exit_demand_support
