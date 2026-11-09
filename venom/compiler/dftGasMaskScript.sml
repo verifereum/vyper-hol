@@ -261,6 +261,98 @@ Proof
   simp[]
 QED
 
+Theorem invoke_partner_concrete_updates[local]:
+  dft_gas_swap_pair x y /\ y.inst_opcode = INVOKE /\ inst_wf x /\
+  step_inst fuel C x s = OK t ==>
+  ?us. EVERY (\q. MEM (FST q) x.inst_outputs /\
+                   !v. MEM (Var v) y.inst_operands ==> FST q <> v) us /\
+    t = FOLDL (\st q. update_var (FST q) (SND q) st)
+      (s with vs_gas_readings :=
+        DROP (if x.inst_opcode = GAS then 1 else 0) s.vs_gas_readings) us
+Proof
+  strip_tac >>
+  `dft_gas_swap_pair y x` by metis_tac[dft_gas_swap_pair_sym] >>
+  drule_all dftGasInvCallPartnerTheory.inv_call_partner_class >> strip_tac >>
+  Cases_on `x.inst_opcode = GAS`
+  >- (drule_all dftBlockSimTheory.step_inst_ok_gas >> strip_tac >>
+      qexists_tac `[(x',case s.vs_gas_readings of [] => 0w | h::tl => h)]` >>
+      simp[] >> metis_tac[dft_independent_gas_output]) >>
+  `step_inst_base x s = OK t` by gvs[step_inst_non_invoke] >>
+  drule_all dftBlockSimTheory.pure_step_structure >> strip_tac >>
+  qexists_tac `pairs` >>
+  conj_tac
+  >- (qpat_assum `dft_gas_swap_pair x y`
+        (mp_tac o MATCH_MP dft_swap_output_frame) >>
+      strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >>
+      `MEM (FST q) x.inst_outputs` by
+        (qpat_x_assum `MAP FST pairs = _` (SUBST1_TAC o SYM) >>
+         simp[MEM_MAP] >> metis_tac[]) >>
+      metis_tac[]) >>
+  simp[pairTheory.LAMBDA_PROD]
+QED
+
+Theorem updates_readings_cursor[local]:
+  !us s gs idx.
+    (FOLDL (\st q. update_var (FST q) (SND q) st) s us)
+      with <|vs_inst_idx := idx; vs_gas_readings := gs|> =
+    FOLDL (\st q. update_var (FST q) (SND q) st)
+      (s with <|vs_inst_idx := idx; vs_gas_readings := gs|>) us
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  gvs[update_var_def]
+QED
+
+Theorem invoke_partner_prefix_concrete[local]:
+  !pre s pg rest u.
+    y.inst_opcode = INVOKE /\
+    EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x) pre /\
+    LENGTH pg = LENGTH (FILTER (\x. x.inst_opcode = GAS) pre) /\
+    FOLDR (dft_exec_cons fuel C) OK pre
+      (s with vs_gas_readings := pg ++ rest) = OK u ==>
+    ?us.
+      EVERY (\q. MEM (FST q) (FLAT (MAP (\x. x.inst_outputs) pre)) /\
+        !v. MEM (Var v) y.inst_operands ==> FST q <> v) us /\
+      u = FOLDL (\st q. update_var (FST q) (SND q) st)
+        (s with <|vs_gas_readings := rest;
+                   vs_inst_idx := s.vs_inst_idx + LENGTH pre|>) us
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[venom_state_component_equality] >>
+  fs[EVERY_DEF] >>
+  `~is_terminator h.inst_opcode` by gvs[dft_gas_swap_pair_def] >>
+  fs[dftIndexedExecTheory.dft_exec_cons_def] >>
+  Cases_on `step_inst fuel C h (s with vs_gas_readings := pg ++ rest)` >>
+  gvs[] >>
+  `?pg'. LENGTH pg' = LENGTH (FILTER (\x. x.inst_opcode = GAS) pre) /\
+    v.vs_gas_readings = pg' ++ rest` by
+    (Cases_on `h.inst_opcode = GAS`
+     >- (drule_all dftBlockSimTheory.step_inst_ok_gas >> strip_tac >>
+         Cases_on `pg` >> gvs[update_var_def]) >>
+     `h.inst_opcode <> INVOKE` by
+       (strip_tac >> gvs[dft_gas_swap_pair_def,
+          venomEffectsTheory.effects_independent_def,
+          venomEffectsTheory.write_effects_def,
+          venomEffectsTheory.all_effects_def,
+          venomEffectsTheory.empty_effects_def]) >>
+     drule_all dft_nonconsuming_ok_readings >> strip_tac >>
+     qexists_tac `pg` >> gvs[]) >>
+  drule_all invoke_partner_concrete_updates >>
+  disch_then (qx_choose_then `hs` strip_assume_tac) >>
+  first_x_assum (qspecl_then
+    [`v with vs_inst_idx := SUC s.vs_inst_idx`, `pg'`, `rest`, `u`] mp_tac) >>
+  simp[NoAsms] >>
+  (impl_tac >-
+    (qpat_x_assum `v = _` kall_tac >>
+     `v with vs_gas_readings := pg' ++ rest = v` by
+       (simp[venom_state_component_equality]) >>
+     gvs[])) >>
+  disch_then (qx_choose_then `ts` strip_assume_tac) >>
+  qexists_tac `hs ++ ts` >>
+  conj_tac
+  >- (gvs[EVERY_APPEND, EVERY_MEM] >> metis_tac[]) >>
+  gvs[updates_readings_cursor, FOLDL_APPEND, arithmeticTheory.ADD_CLAUSES]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
