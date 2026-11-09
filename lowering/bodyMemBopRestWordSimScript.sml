@@ -232,8 +232,6 @@ Resume compile_rest_word_membership_sim_mem[safe_tail]:
         vyperValueOperationTheory.binop_negate_def]) >>
   qexistsl [`[]`, `fin`, `q`, `BoolV answer`] >>
   simp[gasSummaryTheory.gas_marked_exec_def] >>
-  conj_tac
-  >- simp[] >>
   simp[loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
        compileEnvTheory.is_word_type_def, vyperValueTheory.evaluate_type_def,
        valueEncodingTheory.typed_val_to_w256_def, valueEncodingTheory.val_to_w256_def,
