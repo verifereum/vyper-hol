@@ -5,8 +5,8 @@
    shape admits what the lowering emits for raw_call, create and calldata
    raw_call (DELEGATECALL, CREATE/CREATE2, DALLOCA; vyper-hol #963): until
    that widening it is false for those programs and stays admitted.
-   lower_vyper_runtime_unit_defs_reach_uses_full is the S2b branch's
-   theorem; it becomes a one-liner once that branch merges. *)
+   lower_vyper_runtime_unit_defs_reach_uses_full is
+   lower_vyper_runtime_unit_defs_reach_uses, which needs no whitelist. *)
 Theory whitelistS2
 Ancestors
   vyperLoweringCorrect whitelistS2Shape whitelistS2RawBaseShape whitelistS2CreateShape
@@ -34,5 +34,5 @@ Theorem lower_vyper_runtime_unit_defs_reach_uses_full:
     lower_vyper_runtime_unit tops rpolicy = SOME unit
     ==> unit_defs_reach_uses unit
 Proof
-  cheat
+  ACCEPT_TAC lower_vyper_runtime_unit_defs_reach_uses
 QED
