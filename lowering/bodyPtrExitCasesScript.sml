@@ -22,6 +22,9 @@ Ancestors
   supportedStmtTraverse supportedExprTraverse vyperTypeSystem
   stmtSimDefs stmtSimProps stmtLowering compileEnv emitHelper emitHelperProps
   stmtAbortPtr stmtAssertPtr exprLoweringProps gasContext
+  bodyAssertReasonPtr assertReasonTypedPtr exprSimSource vyperTypeCallStackSoundness
+  reasonRaisePtr reasonLiteralPtr reasonMemorySuccessPtr reasonStorageEncoderPtr
+  exprReasonOperand
 
 val _ = Parse.hide "body";
 
@@ -71,7 +74,36 @@ QED
 Theorem body_raise_reason_case_ptr:
   !cx e. body_expr_ptr_ok cx e ==> body_stmt_ptr_ok cx (Raise (RaiseReason e))
 Proof
-  cheat
+  rw[body_stmt_ptr_ok_def] >>
+  `supported_string_reason tops e` by
+    gvs[supported_stmt_def, supported_raise_reason_def] >>
+  drule_then strip_assume_tac supported_string_reason_body_calls >>
+  drule_then strip_assume_tac reason_supported_expression >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supported_raise_exists_def, int_calls_stmt_def, int_calls_raise_reason_def,
+         body_inv_def] >>
+     qexists_tac `[]` >> simp[]) >>
+  Cases_on `?ml str. e = Literal (BaseT (StringT ml)) (StringL str)`
+  >- (gvs[] >> irule compile_raise_reason_lit_frag_ptr >> simp[] >> metis_tac[]) >>
+  `expr_vv_sim_ptr d ctx PG func cenv cx (expr_type e) e es` by
+    metis_tac[body_expr_ptr_ok_def] >>
+  Cases_on `reason_covered cenv e`
+  >- (gvs[reason_covered_def]
+      >- (irule compile_raise_reason_frag_ptr >> simp[] >> metis_tac[])
+      >- (irule compile_raise_storage_reason_frag_ptr >>
+          fs[stmtSimReasonStorageTheory.reason_storage_vv_def] >>
+          metis_tac[COND_CLAUSES])) >>
+  irule compile_raise_code_reason_shared_frag_ptr >> simp[] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule supported_reason_code >>
+      gvs[supported_stmt_def, supported_raise_reason_def, type_stmt_def] >>
+      metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem body_assert_case_ptr:
@@ -120,5 +152,33 @@ Theorem body_assert_reason_case_ptr:
     body_expr_ptr_ok cx e ==>
     body_stmt_ptr_ok cx (Assert e (AssertReason se))
 Proof
-  cheat
+  rw[body_stmt_ptr_ok_def] >>
+  `supported_expr tops e /\ supported_string_reason tops se` by
+    gvs[supported_stmt_def, supported_assert_reason_def,
+        supportedExprsTheory.supported_expr_def] >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then strip_assume_tac supported_string_reason_body_calls >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supported_assert_exists_def, int_calls_stmt_def,
+         int_calls_assert_reason_def, body_inv_def] >>
+     qexists `int_calls_expr se` >> simp[]) >>
+  `expr_body_pre cenv cx env se es` by
+    (irule stmt_expr_body_pre >>
+     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supported_assert_exists_def, int_calls_stmt_def,
+         int_calls_assert_reason_def, body_inv_def] >>
+     qexists `[]` >> simp[] >> metis_tac[call_evaluation_safe_append_right]) >>
+  irule compile_assert_typed_reason_frag_ptr >>
+  reverse conj_tac
+  >- (conj_tac >- gvs[type_stmt_def] >>
+      fs[body_expr_ptr_ok_def] >> metis_tac[]) >>
+  qexists `env` >> rpt gen_tac >> strip_tac >>
+  irule assert_reason_body_endpoint_ptr >> conj_tac
+  >- (qexists `tops` >> simp[]) >>
+  qexistsl [`e`,`es`,`gs`] >> simp[] >> metis_tac[]
 QED

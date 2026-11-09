@@ -32,11 +32,12 @@ Ancestors
   vyperContext vyperTypeSystem vyperTypeBuiltins vyperValue vyperTyping vyperStorage
   builtinProps vyperTypeInvariants context freshWrites loweringSlice emitHelperProps
   exprSimUnwrap exprSimCopy vyperTypeExprResult vyperTypeExprSoundness vyperExprNoControl
+  vyperTypeInitialState
 
 open gasContextTheory gasOutcomeTheory gasSummaryTheory gasSummaryComposeTheory
      gasExemptCertTheory fragGasModeTheory fragGasPathTheory;
 
-Theorem len_pre_args[local]:
+Theorem len_pre_args:
   !cenv cx env ann args es.
     expr_body_pre cenv cx env (Builtin ann Len args) es ==>
     ?e. args = [e] /\ ann = BaseT (UintT 256) /\
@@ -50,7 +51,7 @@ Proof
   Cases_on `rest` >> gvs[]
 QED
 
-Theorem names_builtin_len[local]:
+Theorem names_builtin_len:
   !args. ~names_builtin Len args
 Proof
   `!bt args. names_builtin bt args ==> bt <> Len` suffices_by
@@ -58,7 +59,7 @@ Proof
   ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]
 QED
 
-Theorem compile_expr_len[local]:
+Theorem compile_expr_len:
   !cenv ty ann e st.
     compile_expr cenv ty (Builtin ann Len [e]) st =
     (let (vv, st1) = compile_expr cenv ty e st in
@@ -72,7 +73,7 @@ Proof
        compile_builtin_dispatch_body_def]
 QED
 
-Theorem eval_expr_len[local]:
+Theorem eval_expr_len:
   !cx ann e es.
     eval_expr cx (Builtin ann Len [e]) es =
     (do tv <- eval_expr cx e;
@@ -89,7 +90,7 @@ Proof
   rename1 `(res, es2)` >> Cases_on `res` >> simp[bind_def, return_def]
 QED
 
-Theorem sized_type_cases[local]:
+Theorem sized_type_cases:
   !t. is_sized_type t ==>
     (?et k. t = ArrayT et (Dynamic k)) \/
     (?k. t = BaseT (StringT k)) \/
@@ -118,6 +119,31 @@ Proof
   rename1 `ArrayV av` >> Cases_on `av` >>
   gvs[value_has_type_def, val_in_memory_def, result_array_length_def, read_result_def, bind_def,
       return_def]
+QED
+
+Theorem sized_memory_header_widens[local]:
+  !tenv pt t pvt tvt v a mem cx es.
+    type_widens_to tenv pt t /\ is_sized_type t /\
+    evaluate_type tenv pt = SOME pvt /\
+    evaluate_type tenv t = SOME tvt /\ value_has_type tvt v /\
+    val_in_memory pvt v a mem ==>
+    ?n. result_array_length cx (Value v) es = (INL n,es) /\
+        mem_word_at a mem = n2w n
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[type_widens_to_def]
+  >- metis_tac[sized_memory_header] >>
+  drule sized_type_cases >> strip_tac >>
+  Cases_on `pt` >>
+  gvs[arg_type_fits_def, evaluate_type_def, AllCaseEqs()] >>
+  TRY (rename1 `arg_type_fits (ArrayT _ bd) _` >>
+       Cases_on `bd` >> gvs[arg_type_fits_def]) >>
+  Cases_on `v` >>
+  gvs[value_has_type_def, val_in_memory_def, result_array_length_def,
+      read_result_def, bind_def, return_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  gvs[value_has_type_def, val_in_memory_def, result_array_length_def,
+      read_result_def, bind_def, return_def]
 QED
 
 Theorem read_storage_array_length:
@@ -219,6 +245,25 @@ Proof
   disch_then (qspecl_then [`cx`, `es`] strip_assume_tac) >> gvs[]
 QED
 
+Theorem read_result_memory_header_widens[local]:
+  !env cx pt t pvt tvt r es v w mem n.
+    type_widens_to (get_tenv cx) pt t /\
+    evaluate_type (get_tenv cx) pt = SOME pvt /\
+    evaluate_type (get_tenv cx) t = SOME tvt /\ is_sized_type t /\
+    env.type_defs = get_tenv cx /\
+    eval_result_typed (env,cx,es) r (Type t) /\
+    read_result cx r es = (INL v,es) /\ value_has_type tvt v /\
+    val_in_memory pvt v w mem /\
+    result_array_length cx r es = (INL n,es) ==>
+    mem_word_at w mem = n2w n
+Proof
+  rpt gen_tac >> strip_tac >>
+  `evaluate_type env.type_defs t = SOME tvt` by simp[] >>
+  drule_all sized_read_result_length >> strip_tac >>
+  drule_all sized_memory_header_widens >>
+  disch_then (qspecl_then [`cx`, `es`] strip_assume_tac) >> gvs[]
+QED
+
 Theorem sized_read_result_length_success:
   !env cx t tvt r es v.
     evaluate_type env.type_defs t = SOME tvt /\ is_sized_type t /\
@@ -266,6 +311,56 @@ Theorem storage_holds_header:
 Proof
   rpt gen_tac >> simp[storage_holds_def] >> strip_tac >> gvs[] >>
   `0 < type_slot_size tvt` by
+    (drule sized_type_cases >> strip_tac >>
+     gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+         vyperValueTheory.type_slot_size_def]) >>
+  `value_has_type tvt v` by metis_tac[] >>
+  `evaluate_type env.type_defs t = SOME tvt` by simp[] >>
+  drule_all sized_read_result_length >> strip_tac >>
+  Cases_on `tr` >>
+  gvs[read_storage_slot_def, get_storage_backend_def,
+      get_transient_storage_def, get_accounts_def, bind_def, return_def] >>
+  qmatch_asmsub_abbrev_tac `lift_option dv` >> Cases_on `dv` >>
+  gvs[lift_option_def, raise_def, return_def] >>
+  drule_all sized_decode_header >>
+  disch_then (qspecl_then [`cx`, `es`] strip_assume_tac) >>
+  gvs[read_slot_def]
+QED
+
+Theorem sized_type_widens_source[local]:
+  type_widens_to tenv pt t /\ is_sized_type t ==> is_sized_type pt
+Proof
+  strip_tac >> gvs[type_widens_to_def] >>
+  drule sized_type_cases >> strip_tac >> Cases_on `pt` >>
+  gvs[arg_type_fits_def, is_sized_type_def]
+  >~ [`arg_type_fits (ArrayT _ bd) _`]
+  >- (Cases_on `bd` >> gvs[arg_type_fits_def, is_sized_type_def]) >>
+  rename1 `arg_type_fits (BaseT bt) _` >>
+  Cases_on `bt` >> gvs[arg_type_fits_def, is_sized_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  gvs[arg_type_fits_def, is_sized_type_def]
+QED
+
+Theorem storage_holds_header_widens[local]:
+  !env cx tr pt t pvt tvt tv w es s n.
+    storage_holds cx tr pt tv w es s /\
+    type_widens_to (get_tenv cx) pt t /\
+    evaluate_type (get_tenv cx) pt = SOME pvt /\
+    evaluate_type (get_tenv cx) t = SOME tvt /\ is_sized_type t /\
+    env.type_defs = get_tenv cx /\
+    eval_result_typed (env,cx,es) tv (Type t) /\
+    (!v. read_result cx tv es = (INL v,es) ==> value_has_type tvt v) /\
+    result_array_length cx tv es = (INL n, es) ==>
+    lookup_storage w
+      (if tr then lookup_transient_storage cx.txn.target es.tStorage
+       else (lookup_account cx.txn.target es.accounts).storage) = n2w n /\
+    storage_range_agree (get_storage cx es tr)
+      (if tr then contract_transient s else contract_storage s) w pvt /\
+    0 < type_slot_size pvt
+Proof
+  rpt gen_tac >> simp[storage_holds_def] >> strip_tac >> gvs[] >>
+  `is_sized_type pt` by metis_tac[sized_type_widens_source] >>
+  `0 < type_slot_size pvt` by
     (drule sized_type_cases >> strip_tac >>
      gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
          vyperValueTheory.type_slot_size_def]) >>
@@ -341,8 +436,61 @@ Proof
       `evaluate_type env.type_defs t = SOME tvt` by simp[] >>
       `value_has_type tvt v` by metis_tac[] >>
       drule_all read_result_memory_header >>
-      simp[ptr_load_val_def, mem_word_at_def]) >>
+      simp[ptr_load_val_def, mem_word_at_def])
+  >>~- ([`val_in_memory _ _ _ _`],
+        `evaluate_type env.type_defs t = SOME tvt` by simp[] >>
+        drule_all read_result_memory_header >>
+        simp[ptr_load_val_def, mload_def, mem_word_at_def]) >>
   drule_all storage_holds_header >> strip_tac >>
+  drule_all storage_range_agree_head >>
+  gvs[ptr_load_val_def, sload_def, tload_def,
+      vyperStorageBackendTheory.get_storage_def,
+      vfmExecutionTheory.lookup_transient_storage_def,
+      vfmStateTheory.lookup_account_def]
+QED
+
+Theorem vv_holds_len_header_widens[local]:
+  !env func cenv cx es s pt t pvt tvt tv vv n ctx.
+    stmt_state_rel ctx func cenv cx es s /\ vv_holds cenv cx pt tv vv es s /\
+    type_widens_to env.type_defs pt t /\
+    is_sized_type t /\ evaluate_type (get_tenv cx) t = SOME tvt /\
+    evaluate_type (get_tenv cx) pt = SOME pvt /\
+    env.type_defs = get_tenv cx /\
+    eval_result_typed (env,cx,es) tv (Type t) /\
+    (!v. read_result cx tv es = (INL v,es) ==> value_has_type tvt v) /\
+    result_array_length cx tv es = (INL n, es) ==>
+    ?w. eval_operand (vv_operand vv) s = SOME w /\
+        ptr_load_val cenv.ce_is_ctor
+          (case vv_location vv of SOME l => l | NONE => LocMemory) w s = n2w n
+Proof
+  rpt gen_tac >> strip_tac >>
+  `is_sized_type pt` by metis_tac[sized_type_widens_source] >>
+  `evaluate_type env.type_defs pt = SOME pvt /\
+   evaluate_type env.type_defs t = SOME tvt` by simp[] >>
+  Cases_on `vv` >> gvs[vv_holds_def, vv_operand_def, vv_location_def]
+  >~ [`expr_val_rel cx pt v op s`]
+  >- (gvs[expr_val_rel_def] >>
+      `~is_word_type pt` by
+        (drule sized_type_cases >> strip_tac >> gvs[is_word_type_def]) >>
+      gvs[] >>
+      drule_all read_result_memory_header_widens >> strip_tac >>
+      gvs[ptr_load_val_def, mload_def, mem_word_at_def]) >>
+  rename1 `p.ptr_location` >> Cases_on `p.ptr_location` >> gvs[]
+  >~ [`val_in_memory _ _ _ _`]
+  >- (drule_all read_result_memory_header_widens >>
+      simp[ptr_load_val_def, mload_def, mem_word_at_def])
+  >~ [`immutable_holds`]
+  >- (Cases_on `cenv.ce_is_ctor`
+      >- (drule_all immutable_holds_memory >> strip_tac >> gvs[] >>
+          drule_all read_result_memory_header_widens >>
+          simp[ptr_load_val_def, mload_def, mem_word_at_def]) >>
+      drule_all immutable_holds_data >> strip_tac >> gvs[] >>
+      drule_all read_result_memory_header_widens >>
+      simp[ptr_load_val_def, mem_word_at_def])
+  >>~- ([`val_in_memory _ _ _ _`],
+        drule_all read_result_memory_header_widens >>
+        simp[ptr_load_val_def, mload_def, mem_word_at_def]) >>
+  drule_all storage_holds_header_widens >> strip_tac >>
   drule_all storage_range_agree_head >>
   gvs[ptr_load_val_def, sload_def, tload_def,
       vyperStorageBackendTheory.get_storage_def,
@@ -369,7 +517,26 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem len_vv_post_load[local]:
+Theorem vv_holds_sized_length_success_widens[local]:
+  !env cenv cx pt t r vv es s tvt.
+    vv_holds cenv cx pt r vv es s /\ is_sized_type t /\
+    evaluate_type (get_tenv cx) t = SOME tvt /\
+    env.type_defs = get_tenv cx /\
+    eval_result_typed (env,cx,es) r (Type t) /\
+    (!v. read_result cx r es = (INL v,es) ==> value_has_type tvt v) ==>
+    ?n. result_array_length cx r es = (INL n,es)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?v. read_result cx r es = (INL v,es)` by
+    (Cases_on `vv` >> gvs[vv_holds_def] >>
+     Cases_on `p.ptr_location` >>
+     gvs[storage_holds_def, immutable_holds_def] >> metis_tac[]) >>
+  `value_has_type tvt v` by metis_tac[] >>
+  irule sized_read_result_length_success >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem len_vv_post_load:
   !func cenv cx e es sa sm sb s0 es' tv vv s1 op s n ctx.
     vv_post ctx func cenv cx e es sa sm s0 es' tv vv s1 /\
     sa.cs_next_var <= sm.cs_next_var /\
@@ -433,7 +600,9 @@ Proof
 QED
 
 Theorem compile_len_vv_frag[local]:
-  !env ctx func cenv cx e es sa sm sb s0 es' tv vv op tvt R.
+  !env ctx func cenv cx e es sa sm sb s0 es' tv vv op tvt pvt R.
+    type_widens_to (get_tenv cx) (post_value_type cenv e) (expr_type e) /\
+    evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME pvt /\
     compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand vv)
       (case vv_location vv of SOME l => l | NONE => LocMemory) sm = (op,sb) /\
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -451,9 +620,10 @@ Proof
   rpt gen_tac >> strip_tac >> irule frag_exec_pointwise >>
   qx_gen_tac `s1` >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es' s1 /\
-   vv_holds cenv cx (expr_type e) tv vv es' s1` by fs[vv_post_def] >>
-  drule_all vv_holds_sized_length_success >> strip_tac >>
-  drule_all vv_holds_len_header >> strip_tac >>
+   vv_holds cenv cx (post_value_type cenv e) tv vv es' s1` by fs[vv_post_def] >>
+  drule_all vv_holds_sized_length_success_widens >> strip_tac >>
+  `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by simp[] >>
+  drule_all vv_holds_len_header_widens >> strip_tac >>
   ` (case vv_location vv of SOME l => l | NONE => LocMemory) <> LocCalldata` by
     (Cases_on `vv` >> gvs[vv_location_def, vv_holds_def] >>
      Cases_on `p.ptr_location` >> gvs[]) >>
@@ -465,7 +635,7 @@ Proof
   simp[] >> qexistsl [`s1`, `sm`, `tv`, `vv`] >> simp[]
 QED
 
-Theorem len_load_extends[local]:
+Theorem len_load_extends:
   !ctor imm pop loc sa op sb.
     compile_builtin_len ctor imm pop loc sa = (op,sb) ==> cs_extends sa sb
 Proof
@@ -692,7 +862,7 @@ Proof
   Cases_on `decode_value x (w2n sl) tv` >> simp[raise_def, return_def]
 QED
 
-Theorem len_rp_obs[local]:
+Theorem len_rp_obs:
   !cx p st g.
     read_place cx p (st with gas_obs := g) =
     (FST (read_place cx p st), SND (read_place cx p st) with gas_obs := g)
@@ -712,7 +882,7 @@ Proof
       Cases_on `evaluate_subscripts (FST x') (SND x') l` >> simp[return_def, raise_def])
 QED
 
-Theorem len_bind_obs[local]:
+Theorem len_bind_obs:
   !m f.
     (!st g. m (st with gas_obs := g) = (FST (m st), SND (m st) with gas_obs := g)) /\
     (!v st g. f v (st with gas_obs := g) = (FST (f v st), SND (f v st) with gas_obs := g)) ==>
@@ -723,7 +893,7 @@ Proof
   Cases_on `m st` >> Cases_on `q` >> simp[]
 QED
 
-Theorem len_rr_obs[local]:
+Theorem len_rr_obs:
   !cx res st g.
     read_result cx res (st with gas_obs := g) =
     (FST (read_result cx res st), SND (read_result cx res st) with gas_obs := g)
@@ -731,7 +901,7 @@ Proof
   Cases_on `res` >> simp[read_result_def, len_rp_obs, return_def, raise_def]
 QED
 
-Theorem len_tail_obs[local]:
+Theorem len_tail_obs:
   !v st g.
     (case v of
        ArrayV (DynArrayV vs) => return (LENGTH vs)
@@ -759,7 +929,7 @@ Proof
   simp[return_def, raise_def]
 QED
 
-Theorem len_ral_gas_obs0[local]:
+Theorem len_ral_gas_obs0:
   !cx tv st g.
     result_array_length cx tv (st with gas_obs := g) =
     (FST (result_array_length cx tv st),
@@ -775,7 +945,7 @@ Proof
   Cases_on `get_storage_backend cx tr st` >> Cases_on `q` >> simp[return_def]
 QED
 
-Theorem len_ral_gas_obs[local]:
+Theorem len_ral_gas_obs:
   !cx tv st g r.
     result_array_length cx tv st = (r, st) ==>
     result_array_length cx tv (st with gas_obs := g) = (r, st with gas_obs := g)
@@ -784,7 +954,9 @@ Proof
 QED
 
 Theorem len_vv_path[local]:
-  !env ctx func cenv cx e es sa sm sb s0 es' tv vv op tvt t.
+  !env ctx func cenv cx e es sa sm sb s0 es' tv vv op tvt t pvt.
+    type_widens_to (get_tenv cx) (post_value_type cenv e) (expr_type e) /\
+    evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME pvt /\
     compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand vv)
       (case vv_location vv of SOME l => l | NONE => LocMemory) sm = (op,sb) /\
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -807,9 +979,10 @@ Theorem len_vv_path[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es' t /\
-   vv_holds cenv cx (expr_type e) tv vv es' t` by fs[vv_post_def] >>
-  drule_all vv_holds_sized_length_success >> strip_tac >>
-  drule_all vv_holds_len_header >> strip_tac >>
+   vv_holds cenv cx (post_value_type cenv e) tv vv es' t` by fs[vv_post_def] >>
+  drule_all vv_holds_sized_length_success_widens >> strip_tac >>
+  `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by simp[] >>
+  drule_all vv_holds_len_header_widens >> strip_tac >>
   ` (case vv_location vv of SOME l => l | NONE => LocMemory) <> LocCalldata` by
     (Cases_on `vv` >> gvs[vv_location_def, vv_holds_def] >>
      Cases_on `p.ptr_location` >> gvs[]) >>
@@ -819,7 +992,7 @@ Proof
   simp[] >> qexistsl [`t`, `sm`, `tv`, `vv`] >> simp[]
 QED
 
-Theorem len_source[local]:
+Theorem len_source:
   !cx ann e.
     eval_expr cx (Builtin ann Len [e]) =
     bind (eval_expr cx e)
@@ -828,7 +1001,7 @@ Proof
   rpt gen_tac >> simp[FUN_EQ_THM, eval_expr_len]
 QED
 
-Theorem len_operand_admissible[local]:
+Theorem len_operand_admissible:
   !cenv cx env e es.
     expr_body_pre cenv cx env e es ==>
     gas_admissible (eval_expr cx e) expr_vv_res_ok es
@@ -838,7 +1011,7 @@ Proof
   metis_tac[expr_body_pre_vv_res_ok]
 QED
 
-Theorem len_exempt_cert[local]:
+Theorem len_exempt_cert:
   !memory tops p cx ann e start marks out endpoint.
     gas_exempt_cert memory tops p (ignore_bind (eval_expr cx e) (return ()))
       start marks out endpoint ==>
@@ -874,6 +1047,10 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule expr_body_pre_builtin_arg >>
      disch_then (qspecl_then [`e`, `es`] mp_tac) >> fs[expr_body_pre_def]) >>
+  drule post_type_evaluates >> disch_then (qx_choose_then `ptv` assume_tac) >>
+  `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by
+    (irule post_value_type_widens >>
+     fs[expr_body_pre_def] >> metis_tac[]) >>
   simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
   gvs[compile_expr_len] >> pairarg_tac >> gvs[] >>
   rename1 `compile_expr cenv ty e sa = (evv, sm)` >>
@@ -914,7 +1091,7 @@ Proof
                     `tv`,`fe with gas_obs := []`] expr_body_pre_runtime_typed) >>
           simp[] >> strip_tac >>
           mp_tac (Q.SPECL [`env`,`ctx`,`func`,`cenv`,`cx`,`e`,`es`,`sa`,`sm`,`lsb`,`s0`,
-                    `fe with gas_obs := []`,`tv`,`evv`,`lop`,`tvt`,`t`] len_vv_path) >>
+                    `fe with gas_obs := []`,`tv`,`evv`,`lop`,`tvt`,`t`,`ptv`] len_vv_path) >>
           (impl_tac >- simp[]) >> strip_tac >>
           `!tail. result_array_length cx tv (fe with gas_obs := tail) =
                   (INL n, fe with gas_obs := tail)` by

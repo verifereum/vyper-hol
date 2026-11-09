@@ -16,7 +16,7 @@
 
 Theory removeUnusedStructProofs
 Ancestors
-  removeUnusedSsaProofs
+  removeUnusedSsaProofs venomWfProps
   removeUnusedProofs removeUnusedDefs
   passSimulationDefs
   venomWf
@@ -24,6 +24,7 @@ Ancestors
   venomInst
   indexedLists pointerConfinedDefs pointerConfinedProps
   list rich_list combin
+  passTransform
 
 (* ===== Structural preservation: remove_unused_single_pass ===== *)
 
@@ -50,18 +51,6 @@ Proof
   simp[clear_nops_block_def, remove_unused_block_label]
 QED
 
-(* Helper: remove_unused_inst preserves non-ALLOCA *)
-Theorem rui_preserves_opcode[local]:
-  !live inst P.
-    P inst.inst_opcode /\ P NOP ==>
-    P (remove_unused_inst live inst).inst_opcode
-Proof
-  rpt strip_tac >>
-  qspecl_then [`live`, `inst`] strip_assume_tac
-    remove_unused_inst_cases >>
-  gvs[mk_nop_inst_def]
-QED
-
 Theorem rusp_preserves_inst_property[local]:
   !P fn.
     (!inst. P inst ==> P (mk_nop_inst inst)) /\
@@ -76,20 +65,6 @@ Proof
       MEM_MAP, clear_nops_block_def, remove_unused_block_def,
       MEM_FILTER, MEM_MAPi] >>
   metis_tac[remove_unused_inst_cases, EL_MEM]
-QED
-
-Theorem rusp_preserves_every_inst[local]:
-  !P fn.
-    (!inst. P inst ==> P (mk_nop_inst inst)) /\
-    EVERY (\bb. EVERY P bb.bb_instructions) fn.fn_blocks ==>
-    EVERY (\bb. EVERY P bb.bb_instructions)
-          (remove_unused_single_pass fn).fn_blocks
-Proof
-  rw[EVERY_MEM] >> rpt strip_tac >> rw[EVERY_MEM] >> rpt strip_tac >>
-  mp_tac rusp_preserves_inst_property >>
-  disch_then (qspecl_then [`P`, `fn`] mp_tac) >>
-  impl_tac >- (rpt strip_tac >> metis_tac[]) >>
-  metis_tac[]
 QED
 
 Theorem rusp_preserves_fn_inst_wf:
@@ -116,18 +91,6 @@ Theorem rui_identity_on_terminator[local]:
     remove_unused_inst live inst = inst
 Proof
   rw[remove_unused_inst_def, is_removable_def]
-QED
-
-Theorem rui_not_new_terminator[local]:
-  !live inst.
-    ~is_terminator inst.inst_opcode ==>
-    ~is_terminator (remove_unused_inst live inst).inst_opcode \/
-    remove_unused_inst live inst = inst
-Proof
-  rpt strip_tac >>
-  qspecl_then [`live`, `inst`] strip_assume_tac
-    remove_unused_inst_cases >>
-  gvs[mk_nop_inst_def] >> EVAL_TAC
 QED
 
 (* Exported: FILTER index correspondence *)
@@ -201,29 +164,6 @@ Proof
   `is_terminator (EL j1 mapped).inst_opcode` by metis_tac[] >>
   `j1 < LENGTH mapped` by gvs[] >>
   `j1 = PRE (LENGTH mapped)` by metis_tac[] >>
-  gvs[]
-QED
-
-Theorem filter_nop_preserves_phi_prefix[local]:
-  !mapped.
-    (!i j. i < j /\ j < LENGTH mapped /\
-           (EL j mapped).inst_opcode = PHI ==>
-           (EL i mapped).inst_opcode = PHI) ==>
-    !i j. i < j /\
-          j < LENGTH (FILTER (\inst. inst.inst_opcode <> NOP) mapped) /\
-          (EL j (FILTER (\inst. inst.inst_opcode <> NOP) mapped)).inst_opcode
-            = PHI ==>
-          (EL i (FILTER (\inst. inst.inst_opcode <> NOP) mapped)).inst_opcode
-            = PHI
-Proof
-  rpt strip_tac >>
-  `i < j /\ j < LENGTH (FILTER (\inst. inst.inst_opcode <> NOP) mapped)` by
-    gvs[] >>
-  drule_all filter_el_mono >> strip_tac >>
-  `(EL j2 mapped).inst_opcode = PHI` by metis_tac[] >>
-  `j2 < LENGTH mapped` by gvs[] >>
-  `j1 < LENGTH mapped` by gvs[] >>
-  `(EL j1 mapped).inst_opcode = PHI` by metis_tac[] >>
   gvs[]
 QED
 
@@ -835,18 +775,6 @@ Proof
   qexists_tac `k` >> simp[EL_MAPi]
 QED
 
-(* Core identity: if rui result has opcode <> NOP, it returned the original *)
-Theorem rui_not_nop_identity_ssa[local]:
-  !live inst.
-    (remove_unused_inst live inst).inst_opcode <> NOP ==>
-    remove_unused_inst live inst = inst
-Proof
-  rpt strip_tac >>
-  qspecl_then [`live`, `inst`] strip_assume_tac
-    remove_unused_inst_cases >>
-  gvs[mk_nop_inst_def]
-QED
-
 (* If ALL_DISTINCT (MAP f l) then f is injective on MEM elements *)
 Theorem all_distinct_map_inj_mem[local]:
   !f l x y. ALL_DISTINCT (MAP f l) /\ MEM x l /\ MEM y l /\ (f x = f y)
@@ -1008,51 +936,6 @@ Proof
     mp_tac filter_preserves_el_order >>
   (impl_tac >- simp[]) >> strip_tac >>
   qexistsl_tac [`i'`, `j'`] >> fs[]
-QED
-
-(* Helper: map a single index in a rusp block back to the original block *)
-Theorem rusp_block_el_original[local]:
-  !func bk idx.
-    MEM bk (remove_unused_single_pass func).fn_blocks /\
-    idx < LENGTH bk.bb_instructions ==>
-    ?ob m. MEM ob func.fn_blocks /\
-           bk.bb_label = ob.bb_label /\
-           m < LENGTH ob.bb_instructions /\
-           EL idx bk.bb_instructions = EL m ob.bb_instructions
-Proof
-  rpt strip_tac >>
-  gvs[remove_unused_single_pass_def, LET_THM,
-      clear_nops_function_def, function_map_transform_def, MEM_MAP,
-      clear_nops_block_def, remove_unused_block_def] >>
-  rename1 `MEM ob func.fn_blocks` >>
-  drule filter_el_original >> strip_tac >>
-  qexistsl_tac [`ob`, `j`] >> simp[] >>
-  `j < LENGTH ob.bb_instructions` by gvs[LENGTH_MAPi] >>
-  simp[] >> gvs[EL_MAPi] >> irule rui_not_nop_identity_ssa >> simp[]
-QED
-
-(* Helper: two indices i1 < i2 in a rusp block map to m1 < m2 in original *)
-Theorem rusp_block_el_mono[local]:
-  !func bk i1 i2.
-    MEM bk (remove_unused_single_pass func).fn_blocks /\
-    i1 < i2 /\ i2 < LENGTH bk.bb_instructions ==>
-    ?ob m1 m2. MEM ob func.fn_blocks /\
-               bk.bb_label = ob.bb_label /\
-               m1 < m2 /\ m2 < LENGTH ob.bb_instructions /\
-               EL i1 bk.bb_instructions = EL m1 ob.bb_instructions /\
-               EL i2 bk.bb_instructions = EL m2 ob.bb_instructions
-Proof
-  rpt strip_tac >>
-  gvs[remove_unused_single_pass_def, LET_THM,
-      clear_nops_function_def, function_map_transform_def, MEM_MAP,
-      clear_nops_block_def, remove_unused_block_def] >>
-  rename1 `MEM ob func.fn_blocks` >>
-  drule_all filter_el_mono >> strip_tac >>
-  qexistsl_tac [`ob`, `j1`, `j2`] >> simp[] >>
-  `j2 < LENGTH ob.bb_instructions /\ j1 < LENGTH ob.bb_instructions`
-    by gvs[LENGTH_MAPi] >>
-  simp[] >> gvs[EL_MAPi] >>
-  conj_tac >> irule rui_not_nop_identity_ssa >> simp[]
 QED
 
 (* wf_ssa survives: both ssa_form and def_dominates_uses are preserved *)

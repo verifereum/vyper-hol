@@ -24,7 +24,7 @@ Proof
   >- fs[abi_decoder_valid_pre_def, Excl "vyper_decode_valid_enc_def", Excl "dec_def", Excl "enc_def"] >>
   qpat_x_assum `!bs. _` (qspec_then `bs` mp_tac) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  `abi_decoder_reservation start.cs_next_id last b cap initial` by
+  `abi_decoder_reservation (abi_decoder_entry_floor start) last b cap initial` by
     (drule_all abi_decoder_budget_child_reservation >> simp[]) >>
   drule_all abi_decoder_valid_pre_prefix >> strip_tac >>
   mp_tac (Q.INST [`av` |-> `dec (vyper_to_abi_type env ty) bs`] abi_decoder_decode) >>

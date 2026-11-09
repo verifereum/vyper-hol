@@ -207,7 +207,7 @@ Theorem fmp_install_checked_root_ordinary_location:
   split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
   analyze_fmp_reclaims infos ctx fn = SOME plan /\
   fmp_make_root_layout ctx fn info runner s0 = SOME (FmpRootLayout n root newpc s1) /\
-  fmp_lower_blocks infos ctx runner s1 (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult blocks leftover s2) /\
   fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) /\
   ~MEM inst.inst_opcode [PARAM; RETPC_PARAM; INITIAL_FMP; FMP_PARAM] ==>
@@ -352,7 +352,7 @@ Theorem fmp_install_checked_root_seed_location:
   split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
   analyze_fmp_reclaims infos ctx fn = SOME plan /\
   fmp_make_root_layout ctx fn info runner s0 = SOME (FmpRootLayout n root newpc s1) /\
-  fmp_lower_blocks infos ctx runner s1 (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult blocks leftover s2) /\
   fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) ==>
   ((?bb i. MEM bb out /\ bb.bb_label = lbl /\ MEM i bb.bb_instructions /\
@@ -572,7 +572,7 @@ Theorem fmp_install_checked_root_retpc_writer_origin:
   split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
   analyze_fmp_reclaims infos ctx fn = SOME plan /\
   fmp_make_root_layout ctx fn info runner s0 = SOME (FmpRootLayout n root newpc s1) /\
-  fmp_lower_blocks infos ctx runner s1 (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult blocks leftover s2) /\
   fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) /\
   MEM bb' out /\ MEM j bb'.bb_instructions /\ MEM x j.inst_outputs /\ x <> runner ==>
@@ -609,7 +609,7 @@ Proof
   gvs[fmpLowerDefsTheory.fmp_seal_def]
   >- (first_x_assum drule >> simp[] >> metis_tac[]) >>
   Cases_on `root_layout` >> gvs[] >>
-  drule_all fmpStepSupplyTheory.fresh_ir_var_inst_ok >> strip_tac >>
+  drule_all irSupplyTheory.fresh_ir_var_inst_ok >> strip_tac >>
   drule (cj 1 fresh_ir_var_contract) >> strip_tac >>
   drule (cj 2 fresh_ir_var_contract) >> strip_tac >>
   drule_all fmp_make_root_layout_inst_ok >> strip_tac >>

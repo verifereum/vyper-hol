@@ -38,7 +38,9 @@ Ancestors
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperTyping vyperEvalPreservesScopes
   vyperExprNoControl vyperValueOperation
-  gasOutcome gasContext stmtSimForRounds vyperArith
+  gasOutcome gasContext gasExemptCert gasSummary gasSummaryCompose stmtSimForRounds vyperArith
+  stmtSimDeclGas stmtSimDeclCompose
+  fragGasSeq fragGasSeqAbort fragGasPath fragGasMode gasCount instIdxIndep
   venomExecSemantics venomExecProofs venomInst venomState integer_word
 Libs
   monadsyntax intLib
@@ -85,6 +87,110 @@ Proof
   Cases_on `read_result cx tv2 es3` >> rename1 `_ = (r2, es4)` >>
   Cases_on `r2` >> simp[]
 QED
+
+Theorem eval_stmt_for_range_forced[local]:
+  !cx fty tyv id e1 e2 bound body.
+  evaluate_type (get_tenv cx) fty = SOME tyv ==>
+  eval_stmt cx (For id fty (Range e1 e2) bound body) =
+  do v1 <- (do raw <- eval_expr cx e1; read_result cx raw od);
+     v2 <- (do raw <- eval_expr cx e2; read_result cx raw od);
+     rl <- lift_sum (get_range_limits v1 v2);
+     check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
+     eval_for cx tyv id body
+       (GENLIST (\j. IntV (FST rl + &j)) (SND rl))
+  od
+Proof
+  rpt gen_tac >> strip_tac >> pure_once_rewrite_tac[Once evaluate_def] >>
+  simp[LET_THM, lift_option_type_def, eval_iterator_range_forced,
+       bind_assoc, bind_return, LENGTH_GENLIST]
+QED
+
+(* The result predicate of a whole statement rules out a forced end's
+   type error; other expression exceptions cannot be loop control. *)
+Theorem forced_endpoint_admissible[local]:
+  !cx e next lctx es.
+  gas_admissible (bind (bind (eval_expr cx e) (read_result cx)) next)
+    (stmt_res_ok lctx) es ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+Proof
+  rpt gen_tac >> strip_tac >> rw[gas_admissible_def] >>
+  Cases_on `res` >- simp[expr_res_ok_def] >>
+  rename1 `INR ex` >> irule expr_res_ok_of_exn >>
+  conj_tac >- (qexistsl_tac [`cx`, `e`, `es with gas_obs := gs`, `ee`] >>
+               simp[SF ETA_ss]) >>
+  qexists_tac `lctx` >>
+  qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+  simp[gas_admissible_def] >>
+  disch_then (qspec_then `gs` mp_tac) >> simp[bind_def]
+QED
+
+Theorem forced_endpoint_error_cert[local]:
+  !memory tops ctx func cx e next es s0 marks err ee leaf finish.
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+    (es,s0) marks (err,ee) (leaf,finish) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (bind (bind (eval_expr cx e) (read_result cx)) next)
+      (return ())) (es,s0) marks (err,ee) (leaf,finish)
+Proof
+  rpt strip_tac >> pure_once_rewrite_tac[ignore_bind_def] >>
+  pure_once_rewrite_tac[bind_assoc] >>
+  irule gas_exempt_cert_error_value >> simp[]
+QED
+(* A marked prefix supplies the frozen endpoint hypotheses at exactly the
+   canonical state used by bind composition, even for gas-sensitive H. *)
+Theorem marked_endpoint_normalized[local]:
+  !memory ctx func source es s0 marks v mid t H.
+  gas_marked_exec memory (ctx,func) source (es,s0) marks (INL v) mid (OK t) /\
+  (!gs v ee. source (es with gas_obs := gs) = (INL v,ee) ==> H v ee) ==>
+  H v (mid with gas_obs := [])
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!gs v ee. _` irule >>
+  qexists_tac `gas_explicit marks s0.vs_gas_readings` >>
+  fs[gas_marked_exec_def] >>
+  first_x_assum (qspec_then `[]` mp_tac) >> simp[]
+QED
+
+Theorem forced_endpoint_tail_cert[local]:
+  !memory tops ctx func cx e next es s0 left v mid t right err ee leaf finish.
+  gas_marked_exec memory (ctx,func)
+    (bind (eval_expr cx e) (read_result cx))
+    (es,s0) left (INL v) mid (OK t) /\
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (next v) (return ()))
+    (mid with gas_obs := [],t) right (err,ee) (leaf,finish) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (bind (bind (eval_expr cx e) (read_result cx)) next)
+      (return ())) (es,s0) (left ++ right) (err,ee) (leaf,finish)
+Proof
+  rpt strip_tac >> pure_once_rewrite_tac[ignore_bind_def] >>
+  pure_once_rewrite_tac[bind_assoc] >>
+  drule gas_exempt_cert_bind_value >> disch_then irule >>
+  simp[GSYM ignore_bind_def]
+QED
+
+Theorem checked_range_tail[local]:
+  !cx tyv id body bound n1 n2.
+  (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
+      check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
+      eval_for cx tyv id body
+        (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od) =
+  if n1 <= n2 then
+    if Num (n2 - n1) <= bound then
+      eval_for cx tyv id body
+        (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))
+    else raise (Error (RuntimeError "For too long"))
+  else raise (Error (RuntimeError "no range"))
+Proof
+  rpt gen_tac >>
+  simp[get_range_limits_def, lift_sum_def, check_def, assert_def,
+       compatible_bound_def] >>
+  Cases_on `n1 <= n2` >>
+  simp[FUN_EQ_THM, bind_def, ignore_bind_def, return_def, raise_def, assert_def] >>
+  Cases_on `Num (n2 - n1) <= bound` >> simp[return_def, raise_def]
+QED
+
 
 (* What a range loop over [n1, n2) does after its ends, from es2: the
    range's runtime errors (start above end, more rounds than the bound), or
@@ -295,7 +401,7 @@ QED
    rounds than the bound reverts at its ASSERT; otherwise the run goes to the
    condition block with the counter cv at a and the end ev at a + (b - a),
    having written only the block's own outputs. *)
-Theorem for_entry_checked_block:
+Theorem for_entry_checked_path:
   !ctx func ee lbl cond_lbl op1 op2 a b cmp cv rv g1 z1 g2 z2 ev bound i.
     lookup_block lbl func.fn_blocks =
       SOME <| bb_label := lbl;
@@ -317,17 +423,15 @@ Theorem for_entry_checked_block:
     (!x. op1 = Var x \/ op2 = Var x ==> ~MEM x [cv; rv; g1; z1; g2; z2; ev]) ==>
     (((if cmp = SGT then word_gt a b else w2n a > w2n b) \/
       w2n (b - a) > w2n (n2w bound : bytes32)) ==>
-     ?fuel t. run_from fuel ctx func ee = Abort Revert_abort t) /\
+     ?t. gas_marked_path F ctx func ee 0 (Abort Revert_abort t)) /\
     (~(if cmp = SGT then word_gt a b else w2n a > w2n b) /\
      ~(w2n (b - a) > w2n (n2w bound : bytes32)) ==>
      ?vs. lookup_var cv (ee with vs_vars := vs) = SOME a /\
           lookup_var ev (ee with vs_vars := vs) = SOME (a + (b - a)) /\
           (!x. ~MEM x [cv; rv; g1; z1; g2; z2; ev] ==>
                lookup_var x (ee with vs_vars := vs) = lookup_var x ee) /\
-          !fuel rr.
-            run_from fuel ctx func (jump_to cond_lbl (ee with vs_vars := vs)) =
-              rr /\ (!e. rr <> Error e) ==>
-            ?fuel'. run_from fuel' ctx func ee = rr)
+          gas_marked_path F ctx func ee 0
+            (OK (jump_to cond_lbl (ee with vs_vars := vs))))
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `bad1 = if cmp = SGT then word_gt a b else w2n a > w2n b` >>
@@ -368,6 +472,10 @@ Proof
    eval_operand (Var z2) s6 = SOME (bool_to_word (bool_to_word bad2 = 0w))` by
     (gvs[markerTheory.Abbrev_def, ALL_DISTINCT, eval_operand_def,
          lookup_var_update_var]) >>
+  suspend "steps"
+QED
+
+Resume for_entry_checked_path[steps]:
   `step_inst_base (mk_inst (i + 2) cmp [op1; op2] [g1]) s2 = OK s3` by
     (simp[Abbr `s3`, Abbr `bad1`] >> Cases_on `cmp = SGT`
      >- (gvs[] >> irule step_SGT >> metis_tac[]) >>
@@ -383,7 +491,7 @@ Proof
   suspend "runs"
 QED
 
-Resume for_entry_checked_block[runs]:
+Resume for_entry_checked_path[runs]:
   `lookup_block ee.vs_current_bb func.fn_blocks = SOME bb` by
     simp[Abbr `bb`] >>
   `!k. k <= 9 ==>
@@ -402,7 +510,12 @@ Resume for_entry_checked_block[runs]:
         `k = 9` by decide_tac >> simp[]) >>
      pop_assum SUBST1_TAC >> irule EVERY_TAKE >> simp[]) >>
   Cases_on `bad1` >> simp[]
-  >- (`step_inst_base (mk_inst (i + 4) ASSERT [Var z1] []) s4 =
+  >- suspend "first_abort" >>
+  suspend "first_ok"
+QED
+
+Resume for_entry_checked_path[first_abort]:
+  (`step_inst_base (mk_inst (i + 4) ASSERT [Var z1] []) s4 =
          Abort Revert_abort (revert_state (set_returndata [] s4))` by
         (irule step_ASSERT_revert >> gvs[bool_to_word_def]) >>
       `run_inst_seq (TAKE 5 bb.bb_instructions) ee =
@@ -414,9 +527,15 @@ Resume for_entry_checked_block[runs]:
          qpat_assum `run_inst_seq (TAKE 4 _) _ = _`
            (mp_tac o MATCH_MP run_inst_seq_append) >>
          simp[run_inst_seq_def]) >>
-      drule_at (Pos last) run_from_prefix_abort >>
+      drule_at (Pat `run_inst_seq _ _ = Abort _ _`) run_inst_seq_abort_zero_path >>
       disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >> simp[] >>
-      metis_tac[]) >>
+      impl_tac
+      >- (simp[Abbr `bb`, mk_inst_def, is_terminator_def] >>
+          gvs[is_terminator_def]) >>
+      metis_tac[])
+QED
+
+Resume for_entry_checked_path[first_ok]:
   `step_inst_base (mk_inst (i + 4) ASSERT [Var z1] []) s4 = OK s4` by
     (irule step_ASSERT_ok >> gvs[bool_to_word_def]) >>
   `step_inst_base (mk_inst (i + 5) GT [Var rv; Lit (n2w bound)] [g2]) s4 =
@@ -437,7 +556,12 @@ Resume for_entry_checked_block[runs]:
        (mp_tac o MATCH_MP run_inst_seq_append) >>
      simp[run_inst_seq_def]) >>
   Cases_on `bad2` >> simp[]
-  >- (`step_inst_base (mk_inst (i + 7) ASSERT [Var z2] []) s6 =
+  >- suspend "second_abort" >>
+  suspend "second_ok"
+QED
+
+Resume for_entry_checked_path[second_abort]:
+  (`step_inst_base (mk_inst (i + 7) ASSERT [Var z2] []) s6 =
          Abort Revert_abort (revert_state (set_returndata [] s6))` by
         (irule step_ASSERT_revert >> gvs[bool_to_word_def]) >>
       `run_inst_seq (TAKE 8 bb.bb_instructions) ee =
@@ -449,9 +573,15 @@ Resume for_entry_checked_block[runs]:
          qpat_assum `run_inst_seq (TAKE 7 _) _ = _`
            (mp_tac o MATCH_MP run_inst_seq_append) >>
          simp[run_inst_seq_def]) >>
-      drule_at (Pos last) run_from_prefix_abort >>
+      drule_at (Pat `run_inst_seq _ _ = Abort _ _`) run_inst_seq_abort_zero_path >>
       disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >> simp[] >>
-      metis_tac[]) >>
+      impl_tac
+      >- (simp[Abbr `bb`, mk_inst_def, is_terminator_def] >>
+          gvs[is_terminator_def]) >>
+      metis_tac[])
+QED
+
+Resume for_entry_checked_path[second_ok]:
   `step_inst_base (mk_inst (i + 7) ASSERT [Var z2] []) s6 = OK s6` by
     (irule step_ASSERT_ok >> gvs[bool_to_word_def]) >>
   `step_inst_base (mk_inst (i + 8) ADD [op1; Var rv] [ev]) s6 = OK s7` by
@@ -466,34 +596,93 @@ Resume for_entry_checked_block[runs]:
        (mp_tac o MATCH_MP run_inst_seq_append) >>
      simp[run_inst_seq_def]) >>
   `LENGTH bb.bb_instructions = 10` by simp[Abbr `bb`] >>
-  drule_at (Pos last) run_from_prefix_ok >>
-  disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >> simp[] >>
-  strip_tac >>
+  `gas_path ctx func ee 0 (OK (s7 with vs_inst_idx := 9))` by
+    (drule_at (Pos last) tuple_run_inst_seq_gas_path >>
+     disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+     impl_tac
+     >- (simp[] >> first_x_assum (qspec_then `9` mp_tac) >> simp[]) >>
+     simp[Abbr `bb`, mk_inst_def] >> gvs[]) >>
   `ee with vs_vars := s7.vs_vars = s7` by
     simp[Abbr `s7`, Abbr `s6`, Abbr `s5`, Abbr `s4`, Abbr `s3`, Abbr `s2`,
          Abbr `s1`, update_var_def, venom_state_component_equality] >>
   `~s7.vs_halted` by
     gvs[markerTheory.Abbrev_def, update_var_def] >>
+  suspend "normal_finish"
+QED
+
+Resume for_entry_checked_path[normal_finish]:
   qexists_tac `s7.vs_vars` >> asm_rewrite_tac[] >>
   rpt conj_tac
   >- gvs[markerTheory.Abbrev_def, lookup_var_update_var, ALL_DISTINCT]
   >- gvs[markerTheory.Abbrev_def, lookup_var_update_var]
   >- (rpt strip_tac >>
       gvs[markerTheory.Abbrev_def, lookup_var_update_var]) >>
-  rpt strip_tac >> qexists_tac `SUC fuel` >>
-  qpat_x_assum `!fuel. run_from fuel ctx func ee = _`
-    (fn th => rewrite_tac [th]) >>
-  simp[] >>
-  irule run_from_jump_result >>
-  `jump_to cond_lbl (s7 with vs_inst_idx := 9) = jump_to cond_lbl s7` by
-    simp[jump_to_def] >>
-  `get_instruction bb 9 = SOME (mk_inst (i + 9) JMP [Label cond_lbl] [])` by
-    simp[Abbr `bb`, get_instruction_def] >>
-  simp[] >> qexists_tac `cond_lbl` >>
-  fs[venomInstTheory.mk_inst_def, is_terminator_def, step_jmp_behavior]
+  rewrite_tac[gas_marked_path_def] >>
+  `s7.vs_current_bb = lbl` by
+    simp[Abbr `s7`, Abbr `s6`, Abbr `s5`, Abbr `s4`, Abbr `s3`,
+         Abbr `s2`, Abbr `s1`, update_var_def] >>
+  `gas_path_edge ctx func (s7 with vs_inst_idx := 9) 0
+     (OK (jump_to cond_lbl s7))` by
+    (rewrite_tac[gas_path_edge_def] >> simp[] >> qexists_tac `0` >>
+     qexists_tac `mk_inst (i + 9) JMP [Label cond_lbl] []` >>
+     simp[Abbr `bb`, get_instruction_def, mk_inst_def,
+          step_inst_non_invoke, step_jmp_behavior, jump_to_def,
+          gas_count_step_def, is_terminator_def] >>
+     disj2_tac >> disj1_tac >> qexists_tac `cond_lbl` >> simp[]) >>
+  `gas_path ctx func (s7 with vs_inst_idx := 9) 0
+     (OK (jump_to cond_lbl s7))` by
+    (drule (cj 2 gas_path_rules) >> disch_then (qspec_then `0` mp_tac) >>
+     simp[] >> disch_then irule >> irule (cj 1 gas_path_rules) >>
+     simp[jump_to_def]) >>
+  drule_all gas_path_then >> simp[]
 QED
 
-Finalise for_entry_checked_block
+Finalise for_entry_checked_path
+Theorem for_entry_checked_block:
+  !ctx func ee lbl cond_lbl op1 op2 a b cmp cv rv g1 z1 g2 z2 ev bound i.
+    lookup_block lbl func.fn_blocks =
+      SOME <| bb_label := lbl;
+              bb_instructions :=
+                [mk_inst i ASSIGN [op1] [cv];
+                 mk_inst (i + 1) SUB [op2; op1] [rv];
+                 mk_inst (i + 2) cmp [op1; op2] [g1];
+                 mk_inst (i + 3) ISZERO [Var g1] [z1];
+                 mk_inst (i + 4) ASSERT [Var z1] [];
+                 mk_inst (i + 5) GT [Var rv; Lit (n2w bound)] [g2];
+                 mk_inst (i + 6) ISZERO [Var g2] [z2];
+                 mk_inst (i + 7) ASSERT [Var z2] [];
+                 mk_inst (i + 8) ADD [op1; Var rv] [ev];
+                 mk_inst (i + 9) JMP [Label cond_lbl] []] |> /\
+    MEM cmp [SGT; GT] /\
+    ee.vs_current_bb = lbl /\ ee.vs_inst_idx = 0 /\ ~ee.vs_halted /\
+    eval_operand op1 ee = SOME a /\ eval_operand op2 ee = SOME b /\
+    ALL_DISTINCT [cv; rv; g1; z1; g2; z2; ev] /\
+    (!x. op1 = Var x \/ op2 = Var x ==> ~MEM x [cv; rv; g1; z1; g2; z2; ev]) ==>
+    (((if cmp = SGT then word_gt a b else w2n a > w2n b) \/
+      w2n (b - a) > w2n (n2w bound : bytes32)) ==>
+     ?fuel t. run_from fuel ctx func ee = Abort Revert_abort t) /\
+    (~(if cmp = SGT then word_gt a b else w2n a > w2n b) /\
+     ~(w2n (b - a) > w2n (n2w bound : bytes32)) ==>
+     ?vs. lookup_var cv (ee with vs_vars := vs) = SOME a /\
+          lookup_var ev (ee with vs_vars := vs) = SOME (a + (b - a)) /\
+          (!x. ~MEM x [cv; rv; g1; z1; g2; z2; ev] ==>
+               lookup_var x (ee with vs_vars := vs) = lookup_var x ee) /\
+          !fuel rr.
+            run_from fuel ctx func (jump_to cond_lbl (ee with vs_vars := vs)) =
+              rr /\ (!e. rr <> Error e) ==>
+            ?fuel'. run_from fuel' ctx func ee = rr)
+Proof
+  rpt gen_tac >> strip_tac >> drule_all for_entry_checked_path >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  simp[gas_marked_path_def] >> strip_tac >> conj_tac
+  >- (disch_tac >> first_x_assum drule >> strip_tac >>
+      drule gas_path_exit >> simp[exit_result_def] >> metis_tac[]) >>
+  strip_tac >>
+  qpat_x_assum `~_ /\ ~_ ==> _` mp_tac >> simp[] >> strip_tac >>
+  qexists_tac `vs` >> simp[] >>
+  drule gas_path_normal >> simp[]
+QED
+
 
 
 (* ===== The code ===== *)
@@ -851,8 +1040,420 @@ Theorem range_expr_post_int_operand[local]:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
   eval_operand op s = SOME (i2w n)
 Proof
-  rw[expr_post_def] >> drule_all range_expr_val_rel_int_operand >> simp[]
+  rw[expr_post_def] >> gvs[] >> drule_all range_expr_val_rel_int_operand >> simp[]
 QED
+
+Theorem forced_endpoint_bind_outcome[local]:
+  expr_sim ctx func cenv cx fty e es /\
+  lower_value compile_expr cenv fty e sa = (op,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  gas_admissible (bind (bind (eval_expr cx e) (read_result cx)) next)
+    (stmt_res_ok lctx) es /\
+  (!marks v mid t.
+    gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+      (es,s0) marks (INL v) mid (OK t) /\
+    expr_post ctx func cenv cx e es sa sb s0 mid v op t /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    gas_admissible (next v) (stmt_res_ok lctx) (mid with gas_obs := []) ==>
+    gas_outcome F (cx_tops cx) (ctx,func) (next v)
+      (mid with gas_obs := [],t) Post
+      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)) ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (bind (bind (eval_expr cx e) (read_result cx)) next) (es,s0) Post
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+Proof
+  strip_tac >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    (irule forced_endpoint_admissible >> goal_assum (drule_at Any)) >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_def] >>
+  disch_then (qspecl_then [`sa`, `sb`, `op`, `s0`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  >- suspend "normal"
+  >- suspend "exception" >>
+  qexists_tac `marks` >> disj2_tac >>
+  irule_at Any forced_endpoint_error_cert >> goal_assum (drule_at Any)
+QED
+
+Resume forced_endpoint_bind_outcome[normal]:
+  gvs[] >>
+  `gas_admissible (next v) (stmt_res_ok lctx) (es_end with gas_obs := [])` by
+    (irule gas_admissible_bind_tail >> goal_assum (drule_at Any) >>
+     qexists_tac `gas_explicit marks s0.vs_gas_readings` >>
+     fs[gas_marked_exec_def]) >>
+  `gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+     (es,s0) marks (INL v) (es_end with gas_obs := []) (OK t)` by
+    fs[gas_marked_exec_def] >>
+  qpat_x_assum `!marks v mid t. _` drule_all >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  >- suspend "bind_finish"
+  >- suspend "bind_finish" >>
+  qexists_tac `marks ++ marks'` >> disj2_tac >>
+  irule_at Any forced_endpoint_tail_cert >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Resume forced_endpoint_bind_outcome[exception]:
+  gvs[] >> Cases_on `res` >- fs[] >>
+  rename1 `INR ex` >> qexists_tac `marks` >> disj1_tac >>
+  qexistsl_tac [`INR ex`, `es_end`, `r`] >>
+  conj_tac
+  >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+  disj2_tac >> simp[] >> gen_tac >>
+  irule expr_exit_stmt_exit >> qexists_tac `INR ex` >> simp[]
+QED
+
+Resume forced_endpoint_bind_outcome[bind_finish]:
+  markerLib.RESUME_TAC >>
+  (qexists_tac `marks ++ marks'` >> disj1_tac >>
+   qexistsl_tac [`res`, `es_end'`, `r`] >>
+   conj_tac
+   >- (irule gas_marked_exec_bind_normal >> goal_assum (drule_at Any) >> simp[]) >>
+   gvs[])
+QED
+
+Finalise forced_endpoint_bind_outcome
+
+Theorem for_range_checked_tail_outcome[local]:
+  for_range_checked_code cenv lctx ty id fty bound stmts op1 op2 st =
+    ((), sf) /\
+  fn_has_code st sf func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv st /\ ret_pc_ok cenv st t0 /\
+  t0.vs_current_bb = st.cs_current_bb /\
+  t0.vs_inst_idx = LENGTH st.cs_current_insts /\ ~t0.vs_halted /\
+  stmt_state_rel ctx func cenv cx es t0 /\
+  is_int_type fty /\ evaluate_type (get_tenv cx) fty = SOME tyv /\
+  32 <= type_memory_bytes cenv fty /\
+  type_memory_bytes cenv fty < dimword (:256) /\
+  bound < dimword (:256) /\ cenv.ce_alloca_locals /\
+  lookup_scopes id es.scopes = NONE /\
+  (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
+  (!c lc sa sb. compile_stmts c lc ty stmts sa = ((), sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
+  eval_operand op1 t0 = SOME (i2w n1) /\
+  eval_operand op2 t0 = SOME (i2w n2) /\
+  (!l. op1 <> Label l /\ op2 <> Label l) /\
+  (!x. op1 = Var x \/ op2 = Var x ==> not_fresh_at st x) /\
+  value_has_type tyv (IntV n1) /\ value_has_type tyv (IntV n2) /\
+  P (es with gas_obs := []) /\
+  (!c st1 ex inc ei j.
+     declare_local cenv id fty st = (c, st1) /\
+     n1 <= n2 /\ Num (n2 - n1) <= bound /\
+     P ei /\ lookup_scopes id ei.scopes = NONE /\
+     j < Num (n2 - n1) ==>
+     stmt_frag ctx func cx (InLoop ex inc) RetQ c
+       (stmts_env c (InLoop ex inc) ty stmts) (eval_stmts cx stmts)
+       (ei with scopes :=
+         (FEMPTY |+ (id, <| assignable := F; type := tyv;
+            value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes)) /\
+  (!ei j gs r2 es2 sc rest.
+     n1 <= n2 /\ Num (n2 - n1) <= bound /\
+     P ei /\ lookup_scopes id ei.scopes = NONE /\
+     j < Num (n2 - n1) /\
+     eval_stmts cx stmts
+       (ei with <| scopes :=
+         (FEMPTY |+ (id, <| assignable := F; type := tyv;
+            value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes;
+         gas_obs := gs |>) = (r2, es2) /\
+     (r2 = INL () \/ r2 = INR ContinueException) /\
+     es2.scopes = sc :: rest ==> P (es2 with scopes := rest)) /\
+  gas_admissible
+    (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
+        check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
+        eval_for cx tyv id stmts
+          (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od)
+    (stmt_res_ok lctx) es ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
+        check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
+        eval_for cx tyv id stmts
+          (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od)
+    (es,t0)
+    (stmt_post ctx func cx lctx cenv cenv st sf t0)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+Proof
+  strip_tac >>
+  `cs_extends st st` by simp[cs_extends_refl] >>
+  drule_at (Pat `for_range_checked_code _ _ _ _ _ _ _ _ _ _ = _`)
+    for_range_checked_parts >>
+  disch_then (qspecl_then [`st`, `func`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  disch_then (qx_choosel_then
+    [`p`, `cv`, `rv`, `g1`, `z1`, `g2`, `z2`, `ev`, `dv`, `entry_lbl`,
+     `cond_lbl`, `body_lbl`, `incr_lbl`, `exit_lbl`, `bc`, `sb0`, `sb1`,
+     `sj`, `nv`] strip_assume_tac) >>
+  suspend "allocation"
+QED
+
+Resume for_range_checked_tail_outcome[allocation]:
+  qabbrev_tac `sz = type_memory_bytes cenv fty` >>
+  qabbrev_tac `A = mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
+  `MEM A (fn_insts func)` by
+    (qpat_assum `lookup_block st.cs_current_bb _ = _`
+       (mp_tac o MATCH_MP
+          (REWRITE_RULE [GSYM AND_IMP_INTRO] lookup_block_fn_insts)) >>
+     disch_then irule >> simp[Abbr `A`]) >>
+  `not_local_ptr cenv es.scopes p` by
+    (qpat_assum `p = _` SUBST1_TAC >> irule reserved_fresh_not_local >>
+     qexists_tac `st` >> simp[]) >>
+  `A.inst_opcode = ALLOCA /\ A.inst_operands = [Lit (n2w sz)] /\
+   A.inst_outputs = [p] /\ A.inst_id = st.cs_next_id` by
+    simp[Abbr `A`, mk_inst_def] >>
+  `?sA. exec_alloca A t0 (n2w sz : bytes32) = OK sA` by
+    (Cases_on `FLOOKUP t0.vs_allocas A.inst_id`
+     >- simp[exec_alloca_def] >>
+     rename1 `_ = SOME entry` >> PairCases_on `entry` >> simp[exec_alloca_def]) >>
+  `step_inst_base A t0 = exec_alloca A t0 (n2w sz : bytes32)` by
+    simp[step_inst_base_def, eval_operand_def] >>
+  `step_inst_base A t0 = OK sA` by simp[] >>
+  drule_all stmt_state_rel_exec_alloca >> strip_tac >>
+  drule_all exec_alloca_frame >> strip_tac >>
+  `w2n (n2w sz : bytes32) = sz` by simp[Abbr `sz`] >>
+  `gas_marked_path F ctx func t0 0 (OK (jump_to entry_lbl sA))` by
+    (irule for_start_zero_path >> simp[] >>
+     qexists_tac `st.cs_next_id + 1` >> simp[]) >>
+  suspend "checked_entry"
+QED
+
+Resume for_range_checked_tail_outcome[checked_entry]:
+  `!k. ~not_fresh_at st (STRING #"%" (toString (st.cs_next_var + k)))` by
+    (rw[not_fresh_at_def] >> qexists_tac `st.cs_next_var + k` >> simp[]) >>
+  `!x. op1 = Var x \/ op2 = Var x ==>
+       x <> p /\ ~MEM x [cv; rv; g1; z1; g2; z2; ev]` by
+    (rpt gen_tac >> strip_tac >>
+     `not_fresh_at st x` by metis_tac[] >>
+     fs[not_fresh_at_def] >> rw[] >> first_x_assum irule >> simp[]) >>
+  `eval_operand op1 (jump_to entry_lbl sA) = SOME (i2w n1) /\
+   eval_operand op2 (jump_to entry_lbl sA) = SOME (i2w n2)` by
+    (conj_tac >> irule eval_operand_jump_to_frame >>
+     simp[] >> metis_tac[]) >>
+  drule_at (Pat `lookup_block _ _ = _`)
+    (for_entry_checked_path |> SPEC_ALL |>
+     Q.INST [`i` |-> `st.cs_next_id + 2`] |> SRULE [GSYM arithmeticTheory.ADD_ASSOC]) >>
+  disch_then (qspecl_then [`jump_to entry_lbl sA`, `ctx`, `i2w n2`, `i2w n1`] mp_tac) >>
+  (impl_tac >-
+    (simp[jump_to_def, ASCIInumbersTheory.toString_inj] >>
+     Cases_on `is_signed_type fty` >> simp[] >>
+     gen_tac >> disch_tac >>
+     qpat_x_assum `!x. op1 = Var x \/ op2 = Var x ==> x <> p /\ _`
+       (qspec_then `x` mp_tac) >>
+     qpat_x_assum `op1 = Var x \/ op2 = Var x` (fn th => REWRITE_TAC [th]) >>
+     rpt (qpat_x_assum `_ = STRING #"%" (toString _)` SUBST1_TAC) >>
+     simp[])) >>
+  strip_tac >>
+  suspend "checked_tests"
+QED
+
+Resume for_range_checked_tail_outcome[checked_tests]:
+  qspecl_then [`get_tenv cx`, `fty`, `tyv`, `n1`, `n2`] mp_tac range_end_words >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `((if (if is_signed_type fty then SGT else GT) = SGT
+       then word_gt (i2w n1 : bytes32) (i2w n2)
+       else w2n (i2w n1 : bytes32) > w2n (i2w n2 : bytes32)) <=> n2 < n1)` by
+    (qpat_x_assum `(if is_signed_type fty then _ else _) <=> _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `is_signed_type fty` >> simp[]) >>
+  fs[] >>
+  Cases_on `n1 <= n2`
+  >- suspend "valid_order" >>
+  suspend "bad_order"
+QED
+
+Resume for_range_checked_tail_outcome[valid_order]:
+  fs[checked_range_tail] >>
+  Cases_on `Num (n2 - n1) <= bound`
+  >- suspend "loop_setup" >>
+  suspend "bad_bound"
+QED
+
+Resume for_range_checked_tail_outcome[loop_setup]:
+  fs[] >>
+  qpat_x_assum `~(_ < _) /\ ~(_ > _) ==> _` mp_tac >>
+  simp[integerTheory.INT_NOT_LT] >>
+  disch_then (qx_choose_then `vs` strip_assume_tac) >>
+  suspend "loop_state"
+QED
+
+Resume for_range_checked_tail_outcome[loop_state]:
+  qabbrev_tac `cc = jump_to cond_lbl (jump_to entry_lbl sA with vs_vars := vs)` >>
+  `!q. not_fresh_at st q ==> ~MEM q [cv; rv; g1; z1; g2; z2; ev] /\ q <> p` by
+    (rpt strip_tac >> fs[not_fresh_at_def] >> rw[] >>
+     first_x_assum irule >> simp[]) >>
+  `!x. ~MEM x [cv; rv; g1; z1; g2; z2; ev] ==>
+       lookup_var x cc = lookup_var x sA` by
+    (gen_tac >> strip_tac >> simp[Abbr `cc`] >>
+     qpat_x_assum `!x. _ ==> lookup_var x (_ with vs_vars := vs) = _`
+       (qspec_then `x` mp_tac) >>
+     gvs[lookup_var_def, jump_to_def]) >>
+  `!q. not_fresh_at st q ==> FLOOKUP vs q = FLOOKUP sA.vs_vars q` by
+    (rpt strip_tac >>
+     `~MEM q [cv; rv; g1; z1; g2; z2; ev]` by metis_tac[] >>
+     qpat_assum `!x. ~MEM x _ ==> lookup_var x cc = _`
+       (qspec_then `q` mp_tac) >>
+     (impl_tac >- simp[]) >> disch_tac >>
+     gvs[Abbr `cc`, lookup_var_def, jump_to_def]) >>
+  `stmt_state_rel ctx func cenv cx es (sA with vs_vars := vs)` by
+    (irule stmt_state_rel_vars_frame >> simp[] >> conj_tac
+     >- (rpt strip_tac >> simp[lookup_var_def] >>
+         first_x_assum irule >>
+         qpat_assum `local_ptrs_reserved cenv st`
+           (mp_tac o CONJUNCT1 o CONJUNCT2 o PURE_REWRITE_RULE [local_ptrs_reserved_def]) >>
+         disch_then (qspecl_then [`name`, `name`, `p'`, `sz'`, `sz'`] mp_tac) >>
+         simp[]) >>
+     rpt strip_tac >> simp[lookup_var_def] >>
+     first_x_assum irule >> metis_tac[local_ptrs_reserved_imm_base]) >>
+  `cc = jump_to cond_lbl (jump_to entry_lbl (sA with vs_vars := vs))` by
+    simp[Abbr `cc`, jump_to_def] >>
+  `stmt_state_rel ctx func cenv cx es cc` by
+    metis_tac[stmt_state_rel_jump_to] >>
+  suspend "loop_parameters"
+QED
+
+Resume for_range_checked_tail_outcome[loop_parameters]:
+  `!x v. not_fresh_at st x /\ lookup_var x t0 = SOME v ==>
+         lookup_var x cc = SOME v` by
+    (rpt strip_tac >> `x <> p /\ ~MEM x [cv; rv; g1; z1; g2; z2; ev]` by
+       metis_tac[] >> metis_tac[]) >>
+  `ret_pc_ok cenv st cc` by
+    (irule ret_pc_ok_frame >> qexistsl_tac [`cenv`, `t0`, `st`] >> simp[]) >>
+  `cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
+   FLOOKUP cc.vs_allocas A.inst_id = SOME (w2n w, sz)` by
+    (simp[Abbr `cc`, jump_to_def] >> fs[Abbr `A`, mk_inst_def]) >>
+  `lookup_var p cc = SOME w` by
+    (`~MEM p [cv; rv; g1; z1; g2; z2; ev]` by
+       simp[ASCIInumbersTheory.toString_inj] >> metis_tac[]) >>
+  `lookup_var cv cc = SOME (i2w (n1 + &0)) /\
+   lookup_var ev cc = SOME (i2w n2)` by
+    (gvs[Abbr `cc`, lookup_var_def, jump_to_def, wordsTheory.WORD_SUB_ADD2]) >>
+  suspend "loop_code"
+QED
+
+Resume for_range_checked_tail_outcome[loop_code]:
+  `sb0.cs_next_var <= sb1.cs_next_var` by metis_tac[] >>
+  `local_ptrs_reserved bc sb0` by
+    (irule local_ptrs_reserved_next_var >>
+     qexists_tac `st with cs_next_var := st.cs_next_var + 1` >> simp[] >>
+     irule declare_local_reserved >> metis_tac[]) >>
+  `type_memory_size tyv = 32` by
+    (drule_all is_int_type_memory_size >> simp[]) >>
+  `(!scs. not_local_ptr cenv scs cv) /\ (!scs. not_local_ptr cenv scs dv) /\
+   (!scs. not_local_ptr cenv scs nv)` by
+    (rpt conj_tac >> gen_tac >>
+     qpat_assum `cv = _` SUBST1_TAC >> qpat_assum `dv = _` SUBST1_TAC >>
+     qpat_assum `nv = _` SUBST1_TAC >>
+     irule reserved_fresh_not_local >> qexists_tac `st` >> fs[]) >>
+  `for_code func cenv bc ty stmts id tyv p sz A cv ev dv nv
+      cond_lbl exit_lbl body_lbl incr_lbl
+      (st.cs_next_id+12) (st.cs_next_id+13) (st.cs_next_id+14) bbb
+      sj.cs_next_id (sj.cs_next_id+1) (sj.cs_next_id+2) sb0 sb1 sj` by
+    (drule_all declare_local_ptr >> strip_tac >>
+     simp[for_code_def, block_is_terminated_def,
+          mk_inst_def, not_fresh_at_def, is_terminator_def]) >>
+  suspend "loop_apply"
+QED
+
+Resume for_range_checked_tail_outcome[loop_apply]:
+  `!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv` by
+    (rpt strip_tac >> fs[not_fresh_at_def] >> rw[] >>
+     first_x_assum irule >> fs[]) >>
+  `!scs. lookup_scopes id scs = NONE ==> not_local_ptr bc (FEMPTY::scs) p` by
+    (rpt strip_tac >>
+     `not_local_ptr cenv (FEMPTY::scs) p` by
+       (qpat_assum `p = _` SUBST1_TAC >> irule reserved_fresh_not_local >>
+        qexists_tac `st` >> simp[]) >>
+     irule not_local_ptr_name_update >> qexistsl_tac [`cenv`, `id`] >> simp[] >>
+     drule_all declare_local_ptr >> strip_tac >>
+     qpat_assum `_ = cenv` (fn th => ONCE_REWRITE_TAC [SYM th]) >> simp[]) >>
+  drule (for_loop_alloca |> SPEC_ALL |> Q.INST [`k` |-> `0`] |> SRULE [] |> GEN_ALL) >>
+  disch_then (drule_at (Pat `ret_pc_ok _ _ _`)) >>
+  disch_then (drule_at (Pat `lookup_var ev _ = _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `gas_admissible _ _ _`)) >>
+  disch_then (qspecl_then [`w`, `RetQ`, `P`] mp_tac) >>
+  (impl_tac >- (simp[] >>
+    qpat_assum `!ei j gs r2 es2 sc rest. _` MATCH_ACCEPT_TAC)) >>
+  strip_tac >> suspend "loop_compose"
+QED
+
+Resume for_range_checked_tail_outcome[loop_compose]:
+  `gas_marked_path F ctx func t0 0 (OK cc)` by
+    (irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexists_tac `jump_to entry_lbl sA` >> simp[Abbr `cc`] >> gvs[]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ (es,cc) _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >>
+  strip_tac >> qexists_tac `marks`
+  >- suspend "loop_normal" >>
+  disj2_tac >>
+  irule_at Any gas_exempt_cert_zero_prefix >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Resume for_range_checked_tail_outcome[loop_normal]:
+  disj1_tac >>
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_summary_at_def] >> strip_tac >>
+  `gas_marked_exec F (ctx,func)
+     (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1))))
+     (es,t0) marks res es_end r` by
+    (irule gas_marked_exec_zero_prefix >> goal_assum (drule_at Any) >> simp[]) >>
+  qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
+  suspend "loop_post"
+QED
+
+Resume for_range_checked_tail_outcome[loop_post]:
+  disj1_tac >>
+  qpat_x_assum `(\res ee s. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
+  simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
+  suspend "loop_frames"
+QED
+
+Resume for_range_checked_tail_outcome[loop_frames]:
+  conj_tac >- simp[block_is_terminated_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `!a b. FLOOKUP t0.vs_allocas a = SOME b ==> _`
+    (drule_then assume_tac) >>
+  qpat_x_assum `!a b. FLOOKUP _ a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b`
+    irule >>
+  simp[jump_to_def]
+QED
+
+Resume for_range_checked_tail_outcome[bad_bound]:
+  `?t. gas_marked_path F ctx func (jump_to entry_lbl sA) 0
+        (Abort Revert_abort t)` by
+    (first_x_assum irule >> simp[]) >>
+  `gas_marked_path F ctx func t0 0 (Abort Revert_abort t)` by
+    (irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexists_tac `jump_to entry_lbl sA` >> simp[]) >>
+  simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gas_summary_at_def] >>
+  qexistsl_tac [`INR (Error (RuntimeError "For too long"))`, `es`,
+                 `Abort Revert_abort t`] >>
+  simp[gas_marked_exec_def, raise_def, exit_result_def,
+       stmt_exit_def, expr_exit_def]
+QED
+
+Resume for_range_checked_tail_outcome[bad_order]:
+  `?t. gas_marked_path F ctx func (jump_to entry_lbl sA) 0
+        (Abort Revert_abort t)` by
+    (qpat_x_assum `_ \/ _ ==> ?t. _` irule >>
+     disj1_tac >> intLib.ARITH_TAC) >>
+  `gas_marked_path F ctx func t0 0 (Abort Revert_abort t)` by
+    (irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexists_tac `jump_to entry_lbl sA` >> simp[]) >>
+  simp[checked_range_tail, gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gas_summary_at_def] >>
+  qexistsl_tac [`INR (Error (RuntimeError "no range"))`, `es`,
+                 `Abort Revert_abort t`] >>
+  simp[gas_marked_exec_def, raise_def, exit_result_def,
+       stmt_exit_def, expr_exit_def]
+QED
+
+Finalise for_range_checked_tail_outcome
 
 (* Checked source endpoints may still lower to literal operands. The body
    judgment is needed only after successful bound checks and for a nonempty
@@ -883,9 +1484,13 @@ Theorem compile_for_range_checked_frag_active:
               (do raw <- eval_expr cx e2; read_result cx raw od)
                 (es1 with gas_obs := gs2) = (INL tv2, es2) ==>
               ?n2. tv2 = IntV n2 /\ value_has_type tyv (IntV n2) /\
-                   P es2 /\
-                   ((n1 <= n2 /\ Num (n2 - n1) <= bound /\
-                     0 < Num (n2 - n1)) ==> Q)) /\
+                   P es2) /\
+    (!gs n1 es1 n2 es2.
+       (do raw <- eval_expr cx e1; read_result cx raw od)
+         (es with gas_obs := gs) = (INL (IntV n1), es1) /\
+       (do raw <- eval_expr cx e2; read_result cx raw od) es1 =
+         (INL (IntV n2), es2) /\
+       n1 <= n2 /\ Num (n2 - n1) <= bound /\ 0 < Num (n2 - n1) ==> Q) /\
     well_typed_expr env e1 /\ well_typed_expr env e2 /\
     (!x t. FLOOKUP env.var_types x = SOME t ==>
            well_formed_type env.type_defs t) /\
@@ -915,356 +1520,202 @@ Theorem compile_for_range_checked_frag_active:
       (stmt_env cenv lctx ty (For id fty (Range e1 e2) bound stmts))
       (eval_stmt cx (For id fty (Range e1 e2) bound stmts)) es
 Proof
-  (* admitted at base cut: range-operand premises no longer match the counted eval_stmt shape (qpat_x_assum on the uncounted operand evaluation fails) *)
-  cheat
-QED
-
-Resume compile_for_range_checked_frag_active[ends]:
-  qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
-    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `s1`, `op1`, `r1`, `es1`, `s0`] mp_tac) >>
-  impl_tac >- fs[] >>
-  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
-  impl_tac >- fs[] >>
-  qpat_x_assum `(?ex. r1 = INR ex /\ _) \/ _`
-    (DISJ_CASES_THEN2 strip_assume_tac
-       (qx_choosel_then [`n1`, `r2`, `es2`]
-          (fn th => MAP_EVERY assume_tac (CONJUNCTS th))))
-  >- (gvs[] >> strip_tac >> disj2_tac >> qexists_tac `fuel` >> simp[] >>
-      irule expr_exit_stmt_exit >> qexists `INR ex` >> simp[]) >>
-  qpat_x_assum `r1 = _` SUBST_ALL_TAC >> simp[] >> strip_tac >>
-  rename1 `expr_post ctx func cenv cx e1 es sa s1 s0 es1 (IntV n1) op1 t1` >>
-  qpat_x_assum `!tv es1. (do raw <- eval_expr cx e1; read_result cx raw od) es = _ ==> _` drule >> strip_tac >>
-  qpat_x_assum `IntV n1 = _`
-    (SUBST_ALL_TAC o SYM o SIMP_RULE (srw_ss()) []) >>
-  `eval_operand op1 t1 = SOME (i2w n1)` by
-    (drule_all range_expr_post_int_operand >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es1 t1` by fs[expr_post_def] >>
-  qpat_x_assum `expr_sim _ _ _ _ _ e2 _`
-    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`s1`, `s2`, `op2`, `r2`, `es2`, `t1`] mp_tac) >>
-  impl_tac >- fs[] >>
-  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
-  impl_tac >- fs[] >>
-  qpat_x_assum `(?ex. r2 = INR ex /\ _) \/ _`
-    (DISJ_CASES_THEN2 strip_assume_tac
-       (qx_choosel_then [`n2`]
-          (fn th => MAP_EVERY assume_tac (CONJUNCTS th))))
-  >- (rpt BasicProvers.VAR_EQ_TAC >> simp[] >> strip_tac >> disj2_tac >>
-      qpat_x_assum `!fuel. (!e. run_from fuel ctx func t1 <> Error e) ==> _`
-        (qspec_then `fuel` mp_tac) >>
-      impl_tac >- metis_tac[exit_result_not_error] >>
-      disch_then (qx_choose_then `f0` strip_assume_tac) >>
-      qexists_tac `f0` >> simp[] >>
-      irule expr_exit_stmt_exit >> qexists `INR ex` >> simp[]) >>
-  qpat_x_assum `r2 = _` SUBST_ALL_TAC >> simp[] >> strip_tac >>
-  rename1 `expr_post ctx func cenv cx e2 es1 s1 s2 t1 es2 (IntV n2) op2 t2` >>
-  suspend "alloca"
-QED
-
-Resume compile_for_range_checked_frag_active[alloca]:
-  `value_has_type tyv (IntV n2) /\ P es2 /\
-   ((n1 <= n2 /\ Num (n2 - n1) <= bound /\
-     0 < Num (n2 - n1)) ==> Q)` by
-    (qpat_x_assum `!tv2 es2. (do raw <- eval_expr cx e2; read_result cx raw od) es1 = _ ==> _` drule >>
+  map_every qx_gen_tac [`P`, `Q`] >>
+  (* Expose the paired abstraction to ordinary forall rewriting. *)
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
+  simp_tac (srw_ss()) [pairTheory.FORALL_PROD] >>
+  map_every qx_gen_tac [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `env`, `ty`] >>
+  rpt gen_tac >>
+  disch_then (fn th => MAP_EVERY assume_tac (CONJUNCTS th)) >>
+  `is_word_type fty` by
+    (fs[is_int_type_cases] >> gvs[is_word_type_def]) >>
+  REWRITE_TAC [stmt_frag_def, stmt_framed_frag_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  Cases_on `compile_stmt cenv lctx ty (For id fty (Range e1 e2) bound stmts)
+              sa` >>
+  simp[] >> strip_tac >> gvs[] >>
+  rename1 `compile_stmt _ _ _ _ sa = (uu, sb)` >>
+  `uu = ()` by simp[oneTheory.one] >> gvs[] >>
+  Cases_on `lower_value compile_expr cenv fty e1 sa` >>
+  rename1 `_ = (op1, s1)` >>
+  Cases_on `lower_value compile_expr cenv fty e2 s1` >>
+  rename1 `_ = (op2, s2)` >>
+  qspecl_then [`cenv`, `env`, `fty`, `e1`, `sa`, `op1`, `s1`] mp_tac
+    lower_value_word_shape >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  qspecl_then [`cenv`, `env`, `fty`, `e2`, `s1`, `op2`, `s2`] mp_tac
+    lower_value_word_shape >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  `cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
+   cs_extends s1 s2 /\ s1.cs_next_var <= s2.cs_next_var` by
+    metis_tac[cj 2 compile_expr_grows] >>
+  `for_range_checked_code cenv lctx ty id fty bound stmts op1 op2 s2 =
+     ((), sb)` by metis_tac[compile_stmt_for_range_checked] >>
+  `cs_extends s2 sb` by
+    (drule_at (Pat `for_range_checked_code _ _ _ _ _ _ _ _ _ _ = _`)
+       for_range_checked_parts >>
+     disch_then (qspecl_then [`sa`, `func`] mp_tac) >>
+     simp[] >> metis_tac[cs_extends_trans]) >>
+  `cs_extends sa s2` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa s2 func /\ fn_has_code s2 sb func` by
+    (qspecl_then [`sa`, `s2`, `sb`, `func`] mp_tac fn_has_code_split >>
      simp[]) >>
-  `stmt_state_rel ctx func cenv cx es2 t2` by fs[expr_post_def] >>
-  `eval_operand op2 t2 = SOME (i2w n2)` by
+  `fn_has_code sa s1 func /\ fn_has_code s1 s2 func` by
+    (qspecl_then [`sa`, `s1`, `s2`, `func`] mp_tac fn_has_code_split >>
+     simp[]) >>
+  `local_ptrs_reserved cenv s1` by
+    (irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
+  `local_ptrs_reserved cenv s2` by
+    (irule local_ptrs_reserved_next_var >> qexists `s1` >> simp[]) >>
+  suspend "endpoints"
+QED
+
+Resume compile_for_range_checked_frag_active[endpoints]:
+  `eval_stmt cx (For id fty (Range e1 e2) bound stmts) =
+   do v1 <- (do raw <- eval_expr cx e1; read_result cx raw od);
+      v2 <- (do raw <- eval_expr cx e2; read_result cx raw od);
+      rl <- lift_sum (get_range_limits v1 v2);
+      check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
+      eval_for cx tyv id stmts
+        (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od` by
+    (irule eval_stmt_for_range_forced >> simp[]) >>
+  qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
+  simp[SF ETA_ss] >>
+  irule forced_endpoint_bind_outcome >>
+  simp[] >> qexistsl_tac [`cenv`, `fty`, `lctx`, `op1`, `sa`, `s1`] >>
+  fs[SF ETA_ss] >> rpt gen_tac >> strip_tac >>
+  suspend "first_end"
+QED
+
+Resume compile_for_range_checked_frag_active[first_end]:
+  markerLib.RESUME_TAC >>
+  qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+  first_x_assum (qspec_then `[]` mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!gs tv es1. bind (eval_expr cx e1) _ _ = _ ==> _`
+    (drule_then strip_assume_tac) >>
+  gvs[] >>
+  `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[expr_post_def] >> strip_tac >>
+     qpat_x_assum `stmt_state_rel _ _ _ _ mid t`
+       (mp_tac o Q.INST [`gs` |-> `[]`, `readings` |-> `t.vs_gas_readings`,
+                         `k` |-> `t.vs_inst_idx`] o MATCH_MP msg_gas_state_frame) >>
+     qpat_x_assum `t.vs_inst_idx = _` kall_tac >> simp[]) >>
+  `~t.vs_halted` by
+    (fs[gas_marked_path_def] >> metis_tac[gas_path_normal]) >>
+  irule forced_endpoint_bind_outcome >> simp[] >>
+  qexistsl_tac [`cenv`, `fty`, `lctx`, `op2`, `s1`, `s2`] >>
+  simp[] >> rpt gen_tac >> strip_tac >> suspend "second_end"
+QED
+
+Resume compile_for_range_checked_frag_active[second_end]:
+  qpat_assum `gas_marked_exec _ _ _ _ _ _ _ (OK t')` mp_tac >>
+  rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+  first_x_assum (qspec_then `[]` mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!gs2 tv2 es2. bind (eval_expr cx e2) _ _ = _ ==> _`
+    (drule_then strip_assume_tac) >> gvs[] >>
+  `stmt_state_rel ctx func cenv cx (mid' with gas_obs := []) t'` by
+    (qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[expr_post_def] >> strip_tac >>
+     qpat_x_assum `stmt_state_rel _ _ _ _ mid' t'`
+       (mp_tac o Q.INST [`gs` |-> `[]`, `readings` |-> `t'.vs_gas_readings`,
+                         `k` |-> `t'.vs_inst_idx`] o MATCH_MP msg_gas_state_frame) >>
+     qpat_x_assum `t'.vs_inst_idx = _` kall_tac >> simp[]) >>
+  `~t'.vs_halted` by
+    (fs[gas_marked_path_def] >> metis_tac[gas_path_normal]) >>
+  `eval_operand op1 t = SOME (i2w n1)` by
+    (qpat_x_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _` kall_tac >>
+     drule_all range_expr_post_int_operand >> simp[]) >>
+  `eval_operand op2 t' = SOME (i2w n2)` by
     (drule_all range_expr_post_int_operand >> simp[]) >>
-  `!x w. not_fresh_at s1 x /\ lookup_var x t1 = SOME w ==>
-         lookup_var x t2 = SOME w` by fs[expr_post_def] >>
-  `eval_operand op1 t2 = SOME (i2w n1)` by
-    (Cases_on `op1` >> gvs[eval_operand_def]) >>
-  `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-         lookup_var x t2 = SOME w` by
-    (rpt strip_tac >> `not_fresh_at s1 x` by metis_tac[not_fresh_at_mono] >>
+  `eval_operand op1 t' = SOME (i2w n1)` by
+    (qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[expr_post_def] >> strip_tac >>
+     Cases_on `op1` >> gvs[eval_operand_def]) >>
+  `n1 <= n2 /\ Num (n2 - n1) <= bound /\ 0 < Num (n2 - n1) ==> Q` by
+    (strip_tac >>
+     qpat_x_assum `!gs n1 es1 n2 es2. _ ==> Q` irule >>
+     simp[SF ETA_ss] >>
+     qpat_assum `gas_marked_exec _ _ (bind (eval_expr cx e1) _) _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     metis_tac[]) >>
+  suspend "tail_entry"
+QED
+
+Resume compile_for_range_checked_frag_active[tail_entry]:
+  `ret_pc_ok cenv s1 t` by
+    (irule ret_pc_ok_frame >> qexistsl_tac [`cenv`, `s0`, `sa`] >>
      fs[expr_post_def]) >>
-  `!a b. FLOOKUP s0.vs_allocas a = SOME b ==>
-         FLOOKUP t2.vs_allocas a = SOME b` by fs[expr_post_def] >>
-  `lookup_scopes id es2.scopes = NONE` by
-    (irule lookup_scopes_none_map_fdom >> qexists `es.scopes` >>
-     `!e si r sf.
-        (do raw <- eval_expr cx e; read_result cx raw od) si = (r, sf) ==>
-        MAP FDOM si.scopes = MAP FDOM sf.scopes` by
-       (rpt gen_tac >> simp[bind_def, AllCaseEqs()] >> strip_tac >>
-        imp_res_tac read_result_state >> gvs[] >>
-        metis_tac[eval_expr_preserves_scopes_dom]) >>
-     metis_tac[]) >>
-  (* the loop variable's ALLOCA *)
-  drule_all declare_local_ptr >> strip_tac >>
-  qabbrev_tac `sz = type_memory_bytes cenv fty` >>
-  qabbrev_tac `A = mk_inst s2.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
-  `MEM A (fn_insts func)` by
-    (qpat_assum `lookup_block s2.cs_current_bb _ = _`
-       (mp_tac o MATCH_MP
-          (REWRITE_RULE [GSYM AND_IMP_INTRO] lookup_block_fn_insts)) >>
-     disch_then irule >> simp[Abbr `A`]) >>
-  `not_local_ptr cenv es2.scopes p` by
-    (qpat_assum `p = _` SUBST1_TAC >> irule reserved_fresh_not_local >>
-     qexists_tac `s2` >> simp[]) >>
-  `A.inst_opcode = ALLOCA /\ A.inst_operands = [Lit (n2w sz)] /\
-   A.inst_outputs = [p] /\ A.inst_id = s2.cs_next_id` by
-    simp[Abbr `A`, venomInstTheory.mk_inst_def] >>
-  `step_inst_base A t2 = exec_alloca A t2 (n2w sz : bytes32)` by
-    simp[Abbr `A`, step_inst_base_def, venomInstTheory.mk_inst_def] >>
-  `?sA. exec_alloca A t2 (n2w sz : bytes32) = OK sA` by
-    (simp[exec_alloca_def] >> BasicProvers.every_case_tac >> simp[]) >>
-  `step_inst_base A t2 = OK sA` by fs[] >>
-  qspecl_then [`func`, `cenv`, `cx`, `es2`, `t2`, `A`, `p`,
-               `n2w sz : bytes32`, `sA`, `ctx`] mp_tac stmt_state_rel_exec_alloca >>
-  impl_tac >- fs[] >>
-  disch_then (CONJUNCTS_THEN2 assume_tac
-    (qx_choose_then `wp` strip_assume_tac)) >>
-  `sA.vs_current_bb = t2.vs_current_bb /\ sA.vs_inst_idx = t2.vs_inst_idx /\
-   ~sA.vs_halted /\ (!x. x <> p ==> lookup_var x sA = lookup_var x t2) /\
-   (!a b. FLOOKUP t2.vs_allocas a = SOME b ==>
-          FLOOKUP sA.vs_allocas a = SOME b)` by
-    (qspecl_then [`A`, `t2`, `n2w sz : bytes32`, `sA`, `p`]
-       mp_tac exec_alloca_frame >>
-     impl_tac >- simp[] >> simp[]) >>
-  `w2n (n2w sz : bytes32) = sz` by fs[] >>
-  `FLOOKUP sA.vs_allocas s2.cs_next_id = SOME (w2n wp, sz)` by
-    (qpat_x_assum `FLOOKUP sA.vs_allocas A.inst_id = _` mp_tac >>
-     qpat_assum `A.inst_id = _` (fn th => REWRITE_TAC [th]) >>
-     qpat_assum `w2n (n2w sz) = sz` (fn th => REWRITE_TAC [th])) >>
-  qspecl_then [`ctx`, `func`, `t2`, `sA`, `A`, `s2.cs_current_insts`,
-               `s2.cs_current_bb`, `entry_lbl`, `s2.cs_next_id + 1`]
-    mp_tac for_start_block >>
-  impl_tac >- fs[] >> strip_tac >>
-  suspend "entry"
+  `ret_pc_ok cenv s2 t'` by
+    (irule ret_pc_ok_frame >> qexistsl_tac [`cenv`, `t`, `s1`] >>
+     fs[expr_post_def]) >>
+  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
+    (qpat_x_assum `bind (eval_expr cx e1) _ _ = _` mp_tac >>
+     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+     imp_res_tac read_result_state >> gvs[] >>
+     drule eval_expr_preserves_scopes_dom >> simp[]) >>
+  `MAP FDOM mid.scopes = MAP FDOM mid'.scopes` by
+    (qpat_x_assum `bind (eval_expr cx e2) _ _ = _` mp_tac >>
+     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+     imp_res_tac read_result_state >> gvs[] >>
+     drule eval_expr_preserves_scopes_dom >> simp[]) >>
+  `lookup_scopes id (mid' with gas_obs := []).scopes = NONE` by
+    (simp[] >> irule lookup_scopes_none_map_fdom >>
+     qexists_tac `es.scopes` >> simp[]) >>
+  suspend "tail_apply"
 QED
 
-Resume compile_for_range_checked_frag_active[entry]:
-  `!k. not_fresh_at s2 (STRING #"%" (toString (s2.cs_next_var + k))) ==> F`
-    by (rw[not_fresh_at_def] >> qexists `s2.cs_next_var + k` >> simp[]) >>
-  `!x. op1 = Var x \/ op2 = Var x ==>
-       x <> p /\ ~MEM x [cv; rv; g1; z1; g2; z2; ev]` by
-    (rpt gen_tac >> strip_tac >>
-     `not_fresh_at s2 x` by
-       (gvs[] >> irule not_fresh_at_mono >> qexists `s1` >> simp[]) >>
-     fs[not_fresh_at_def] >> rw[] >> first_x_assum irule >> simp[]) >>
-  `eval_operand op1 (jump_to entry_lbl sA) = SOME (i2w n1) /\
-   eval_operand op2 (jump_to entry_lbl sA) = SOME (i2w n2)` by
-    (conj_tac
-     >- (qspecl_then [`op1`, `t2`, `sA`, `entry_lbl`, `i2w n1`] mp_tac
-           eval_operand_jump_to_frame >>
-         impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
-     qspecl_then [`op2`, `t2`, `sA`, `entry_lbl`, `i2w n2`] mp_tac
-       eval_operand_jump_to_frame >>
-     impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
-  qspecl_then [`ctx`, `func`, `jump_to entry_lbl sA`, `entry_lbl`, `cond_lbl`,
-               `op1`, `op2`, `i2w n1`, `i2w n2`,
-               `if is_signed_type fty then SGT else GT`,
-               `cv`, `rv`, `g1`, `z1`, `g2`, `z2`, `ev`, `bound`,
-               `s2.cs_next_id + 2`]
-    mp_tac for_entry_checked_block >>
-  impl_tac
-  >- (simp[jump_to_def] >> rw[] >>
-      simp[ALL_DISTINCT, ASCIInumbersTheory.toString_inj] >> metis_tac[]) >>
-  strip_tac >>
-  qspecl_then [`get_tenv cx`, `fty`, `tyv`, `n1`, `n2`] mp_tac
-    range_end_words >>
-  impl_tac >- fs[] >>
-  strip_tac >>
-  `w2n (n2w bound : bytes32) = bound` by simp[] >>
-  `(if (if is_signed_type fty then SGT else GT) = SGT
-    then word_gt (i2w n1 : bytes32) (i2w n2)
-    else w2n (i2w n1 : bytes32) > w2n (i2w n2 : bytes32)) <=> n2 < n1` by
-    (qpat_x_assum `(if is_signed_type fty then _ else _) <=> _`
-       (SUBST1_TAC o SYM) >>
-     Cases_on `is_signed_type fty` >> simp[]) >>
-  qpat_x_assum `range_outcome _ _ _ _ _ _ _ _ _ _`
-    (DISJ_CASES_THEN2 assume_tac strip_assume_tac o
-     REWRITE_RULE [range_outcome_def, DISJ_ASSOC])
-  >- suspend "range_error" >>
-  suspend "loop"
+Resume compile_for_range_checked_frag_active[tail_apply]:
+  qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ source _ _ _` >>
+  `gas_outcome F (cx_tops cx) (ctx,func) source
+    (mid' with gas_obs := [],t')
+    (stmt_post ctx func cx lctx cenv cenv s2 sb t')
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
+    (simp[Abbr `source`] >> irule for_range_checked_tail_outcome >>
+     simp[] >> qexistsl_tac [`P`, `fty`, `op1`, `op2`, `ty`] >>
+     simp[] >> suspend "tail_hyps") >>
+  suspend "tail_transport"
 QED
 
-(* The range's runtime errors: the entry block's ASSERT reverts, after the
-   ends' code. *)
-Resume compile_for_range_checked_frag_active[range_error]:
-  qpat_x_assum `(n2 < n1 /\ _) \/ _` strip_assume_tac >>
-  qpat_x_assum `_ ==> ?fuel t. run_from fuel ctx func _ = Abort _ _`
-    mp_tac >> simp[integerTheory.INT_NOT_LT] >> strip_tac >>
-  disj2_tac >>
-  qpat_x_assum `!fuel rr. run_from fuel ctx func (jump_to entry_lbl sA) = rr /\ _ ==> _`
-    (qspecl_then [`fuel`, `Abort Revert_abort t`] mp_tac) >>
-  simp[] >> strip_tac >> rename1 `run_from f2 ctx func t2 = _` >>
-  qpat_x_assum `!fuel. (!e. run_from fuel ctx func t2 <> Error e) ==> _`
-    (qspec_then `f2` mp_tac) >> simp[] >> strip_tac >>
-  rename1 `run_from f1 ctx func t1 = _` >>
-  qpat_x_assum `!fuel. (!e. run_from fuel ctx func t1 <> Error e) ==> _`
-    (qspec_then `f1` mp_tac) >> simp[] >> strip_tac >>
-  rename1 `run_from f0 ctx func s0 = _` >> qexists_tac `f0` >>
-  simp[exit_result_def, stmt_exit_def, expr_exit_def]
+Resume compile_for_range_checked_frag_active[tail_hyps]:
+  conj_tac
+  >- (rpt strip_tac >> fs[not_fresh_at_def] >> rpt strip_tac >>
+      first_x_assum irule >> decide_tac) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `Q` by (first_x_assum irule >> simp[] >> decide_tac) >>
+      `value_has_type tyv (IntV (n1 + &j))` by
+        (drule_all range_value_has_type >> simp[]) >>
+      first_x_assum irule >> simp[] >> qexists_tac `s2` >> simp[]) >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  `Q` by (first_x_assum irule >> simp[] >> decide_tac) >>
+  `value_has_type tyv (IntV (n1 + &j))` by
+    (drule_all range_value_has_type >> simp[]) >>
+  first_x_assum irule >> metis_tac[]
 QED
 
-Resume compile_for_range_checked_frag_active[loop]:
-  `~(n2 < n1) /\ ~(Num (n2 - n1) > bound)` by
-    simp[integerTheory.INT_NOT_LT, arithmeticTheory.NOT_GREATER] >>
-  qpat_x_assum `_ /\ _ ==> ?vs. _` mp_tac >> impl_tac >- simp[] >>
-  disch_then (qx_choose_then `vs` strip_assume_tac) >>
-  qabbrev_tac `cc = jump_to cond_lbl (jump_to entry_lbl sA with vs_vars := vs)` >>
-  (* the variables *)
-  `sb0.cs_next_var <= sb1.cs_next_var` by metis_tac[] >>
-  `dv <> p /\ dv <> cv /\ dv <> ev /\ nv <> cv /\ nv <> ev /\ nv <> p /\
-   cv <> ev /\ cv <> p /\ ev <> p` by (fs[] >> rw[] >> fs[]) >>
-  `!x. ~MEM x [cv; rv; g1; z1; g2; z2; ev] ==>
-       lookup_var x cc = lookup_var x sA` by
-    (gen_tac >> strip_tac >> simp[Abbr `cc`] >>
-     qpat_x_assum `!x. ~MEM x _ ==> _` drule >>
-     simp[lookup_var_def, jump_to_def]) >>
-  `(!scs. not_local_ptr cenv scs cv) /\ (!scs. not_local_ptr cenv scs ev) /\
-   (!scs. not_local_ptr cenv scs dv) /\ (!scs. not_local_ptr cenv scs nv)` by
-    (rpt conj_tac >> gen_tac >>
-     qpat_assum `cv = _` SUBST1_TAC >> qpat_assum `ev = _` SUBST1_TAC >>
-     qpat_assum `dv = _` SUBST1_TAC >> qpat_assum `nv = _` SUBST1_TAC >>
-     irule reserved_fresh_not_local >> qexists_tac `s2` >> fs[]) >>
-  `local_ptrs_reserved bc sb0` by
-    (irule local_ptrs_reserved_next_var >>
-     qexists_tac `s2 with cs_next_var := s2.cs_next_var + 1` >> simp[] >>
-     irule declare_local_reserved >> metis_tac[]) >>
-  `!scs. lookup_scopes id scs = NONE ==> not_local_ptr bc (FEMPTY::scs) p` by
-    (rpt strip_tac >>
-     `not_local_ptr cenv (FEMPTY::scs) p` by
-       (qpat_assum `p = _` SUBST1_TAC >> irule reserved_fresh_not_local >>
-        qexists_tac `s2` >> simp[]) >>
-     irule not_local_ptr_name_update >> qexistsl_tac [`cenv`, `id`] >> simp[] >>
-     qpat_assum `_ = cenv` (fn th => ONCE_REWRITE_TAC [SYM th]) >> simp[]) >>
-  suspend "state"
-QED
-
-Resume compile_for_range_checked_frag_active[state]:
-  `!q. not_fresh_at s2 q ==> ~MEM q [cv; rv; g1; z1; g2; z2; ev] /\ q <> p` by
-    (rpt strip_tac >> fs[not_fresh_at_def] >> rw[] >>
-     first_x_assum irule >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es2 cc` by
-    (simp[Abbr `cc`, stmt_state_rel_jump_to] >>
-     irule stmt_state_rel_vars_frame >> simp[stmt_state_rel_jump_to] >>
-     reverse conj_tac
-     >- (qx_gen_tac `q` >> strip_tac >>
-         `not_fresh_at s2 q` by metis_tac[local_ptrs_reserved_imm_base] >>
-         qpat_assum `!q. not_fresh_at s2 q ==> _`
-           (drule_then strip_assume_tac) >>
-         qpat_x_assum `!x. ~MEM x _ ==> _` drule >>
-         fs[lookup_var_def, jump_to_def]) >>
-     qx_genl_tac [`nm`, `en`, `q`, `qsz`] >> strip_tac >>
-     `not_fresh_at s2 q` by
-       (qpat_x_assum `local_ptrs_reserved cenv s2`
-          (mp_tac o CONJUNCT1 o CONJUNCT2 o PURE_REWRITE_RULE [local_ptrs_reserved_def]) >>
-        disch_then (qspecl_then [`nm`, `nm`, `q`, `qsz`, `qsz`] mp_tac) >>
-        simp[]) >>
-     qpat_assum `!q. not_fresh_at s2 q ==> _` (drule_then strip_assume_tac) >>
-     qpat_x_assum `!x. ~MEM x _ ==> _` drule >>
-     fs[lookup_var_def, jump_to_def]) >>
-  `lookup_var p cc = SOME wp` by
-    (`~MEM p [cv; rv; g1; z1; g2; z2; ev]` by (fs[] >> rw[] >> fs[]) >>
-     qpat_x_assum `!x. ~MEM x _ ==> lookup_var x cc = _` drule >> simp[]) >>
-  `FLOOKUP cc.vs_allocas A.inst_id = SOME (w2n wp, sz)` by
-    fs[Abbr `cc`, jump_to_def] >>
-  `!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==>
-         lookup_var x cc = SOME v` by
-    (rpt strip_tac >>
-     `not_fresh_at s2 x` by metis_tac[not_fresh_at_mono,
-                                     arithmeticTheory.LESS_EQ_TRANS] >>
-     `~MEM x [cv; rv; g1; z1; g2; z2; ev] /\ x <> p` by metis_tac[] >>
-     metis_tac[]) >>
-  `ret_pc_ok cenv sa cc` by
-    (qspecl_then [`cenv`, `cenv`, `sa`, `sa`, `s0`, `cc`] mp_tac
-       ret_pc_ok_frame >>
-     impl_tac >- fs[] >> simp[]) >>
-  `!fuel rr. run_from fuel ctx func cc = rr /\ (!e. rr <> Error e) ==>
-             ?fuel'. run_from fuel' ctx func s0 = rr` by
-    (rpt strip_tac >>
-     qpat_x_assum `!fuel rr. run_from fuel ctx func cc = rr /\ _ ==> _`
-       drule_all >> disch_then (qx_choose_then `f1` assume_tac) >>
-     qpat_x_assum
-       `!fuel rr. run_from fuel ctx func (jump_to entry_lbl sA) = rr /\ _ ==> _`
-       drule_all >> disch_then (qx_choose_then `f2` assume_tac) >>
-     qpat_x_assum `!fuel. (!e. run_from fuel ctx func t2 <> Error e) ==> _`
-       (qspec_then `f2` mp_tac) >> simp[] >>
-     disch_then (qx_choose_then `f3` assume_tac) >>
-     qpat_x_assum `!fuel. (!e. run_from fuel ctx func t1 <> Error e) ==> _`
-       (qspec_then `f3` mp_tac) >> simp[] >>
-     disch_then (qx_choose_then `f4` assume_tac) >>
-     qexists_tac `f4` >> simp[]) >>
-  `!a b. FLOOKUP s0.vs_allocas a = SOME b ==> FLOOKUP cc.vs_allocas a = SOME b`
-    by simp[Abbr `cc`, jump_to_def] >>
-  `cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted`
-    by (simp[Abbr `cc`, jump_to_def] >> fs[jump_to_def]) >>
-  `lookup_var cv cc = SOME (i2w (n1 + &0))` by
-    (simp[Abbr `cc`] >> qpat_x_assum `lookup_var cv _ = _` mp_tac >>
-     simp[lookup_var_def, jump_to_def]) >>
-  `lookup_var ev cc = SOME (i2w n2)` by
-    (simp[Abbr `cc`] >> qpat_x_assum `lookup_var ev _ = _` mp_tac >>
-     simp[lookup_var_def, jump_to_def, wordsTheory.WORD_SUB_ADD2]) >>
-  suspend "run_loop"
-QED
-
-Resume compile_for_range_checked_frag_active[run_loop]:
-  `type_memory_size tyv = 32` by
-    (qspecl_then [`get_tenv cx`, `fty`, `tyv`] mp_tac
-       is_int_type_memory_size >> simp[]) >>
-  `!j. j < Num (n2 - n1) ==> value_has_type tyv (IntV (n1 + &j))` by
-    (qspecl_then [`tyv`, `n1`, `n2`] mp_tac range_value_has_type >> simp[]) >>
-  (* the body's judgment and P's preservation as for_loop takes them *)
-  `!ei j r9 es9.
-     P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
-     eval_stmts cx stmts
-       (ei with scopes :=
-          (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                             value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) =
-       (r9, es9) ==>
-     stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
-       (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts)
-       (ei with scopes :=
-          (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                             value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes)
-       r9 es9` by
-    (rpt strip_tac >>
-     `Q` by (first_x_assum irule >> simp[] >> decide_tac) >>
-     qpat_x_assum `!st0 c st1 ex inc ei n1 j r2 es2. _`
-       (qspecl_then [`s2`, `bc`, `s2 with cs_next_var := s2.cs_next_var + 1`,
-                     `exit_lbl`, `incr_lbl`, `ei`, `n1`, `j`, `r9`, `es9`]
-          mp_tac) >>
-     simp[]) >>
-  `!ei j r9 es9 sc9 rest9.
-     P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
-     eval_stmts cx stmts
-       (ei with scopes :=
-          (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                             value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) =
-       (r9, es9) /\
-     (r9 = INL () \/ r9 = INR ContinueException) /\
-     es9.scopes = sc9 :: rest9 ==>
-     P (es9 with scopes := rest9)` by
-    (rpt strip_tac >>
-     `Q` by (first_x_assum irule >> simp[] >> decide_tac) >>
-     qpat_x_assum `!ei n1 j r2 es2 sc rest. _`
-       (qspecl_then [`ei`, `n1`, `j`, `r9`, `es9`, `sc9`, `rest9`] mp_tac) >>
-     simp[]) >>
-  qspecl_then [`Num (n2 - n1)`, `P`, `ctx`, `func`, `cenv`, `bc`, `cx`, `lctx`,
-               `RetQ`, `ty`, `stmts`, `id`, `tyv`, `p`, `sz`, `A`, `cv`, `ev`,
-               `dv`, `nv`, `n1`, `n2`, `cond_lbl`, `exit_lbl`, `body_lbl`,
-               `incr_lbl`, `s2.cs_next_id + 12`, `s2.cs_next_id + 13`,
-               `s2.cs_next_id + 14`, `bbb`, `sj.cs_next_id`, `sj.cs_next_id + 1`,
-               `sj.cs_next_id + 2`, `sb0`, `sb1`, `sj`, `sa`, `0`, `es2`, `cc`,
-               `wp`] mp_tac for_loop_alloca >>
-  impl_tac
-  >- (simp[for_code_def] >> conj_tac
-      >- simp[block_is_terminated_def, venomInstTheory.mk_inst_def,
-              is_terminator_def, not_fresh_at_def] >>
-      conj_tac
-      >- (rw[not_fresh_at_def] >>
-          first_x_assum (qspec_then `sb1.cs_next_var` mp_tac) >> simp[]) >>
-      first_assum ACCEPT_TAC) >>
-  strip_tac
-  >- (rename1 `s9.vs_current_bb = exit_lbl` >> disj1_tac >>
-      qexists_tac `s9` >> qexists_tac `cenv` >>
-      simp[stmt_lands_def, block_is_terminated_def, cenv_top_ext_refl] >>
-      rpt strip_tac >> metis_tac[]) >>
-  disj2_tac >> rename1 `exit_result r9` >>
-  drule exit_result_not_error >> strip_tac >> metis_tac[]
+Resume compile_for_range_checked_frag_active[tail_transport]:
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks''` >> disj1_tac >>
+  fs[gas_summary_at_def]
+  >- (qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
+      disj1_tac >>
+      irule stmt_post_entry_frame >> qexistsl_tac [`t'`, `s2`] >>
+      fs[expr_post_def] >> rpt strip_tac >>
+      `not_fresh_at s1 x` by
+        (fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+      `not_fresh_at s2 x` by
+        (fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+      metis_tac[]) >>
+  qexistsl_tac [`res`, `es_end`, `r`] >> simp[]) >>
+  qexists_tac `marks''` >> disj2_tac >> metis_tac[]
 QED
 
 Finalise compile_for_range_checked_frag_active
@@ -1324,8 +1775,14 @@ Theorem compile_for_range_checked_frag:
       (stmt_env cenv lctx ty (For id fty (Range e1 e2) bound stmts))
       (eval_stmt cx (For id fty (Range e1 e2) bound stmts)) es
 Proof
-  (* admitted at base cut: body premise after restatement no longer matches compile_for_range_checked_frag_active's (first_assum ACCEPT_TAC fails) *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`P`, `T`] compile_for_range_checked_frag_active) >>
+  CONV_TAC (LAND_CONV (RAND_CONV (REWR_CONV (GSYM ETA_AX)))) >>
+  simp_tac (srw_ss()) [pairTheory.FORALL_PROD] >>
+  disch_then irule >> gvs[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- metis_tac[] >>
+  qexists `env` >> simp[] >> metis_tac[]
 QED
 
 (* Integrity gate for the forced iterator boundary and checked-range consumer. *)
@@ -1334,7 +1791,6 @@ val () = List.app (fn th =>
   in if null axs andalso null (Thm.hyp th) andalso
         List.all (fn s => s = "DISK_THM") ors
      then print "RANGE_FORCE_AUDIT OK\n"
-     (* admitted at base cut: reports instead of failing while compile_for_range_checked_frag(_active) are admitted *)
-     else print "RANGE_FORCE_AUDIT ADMITTED: forced range inherits a base-cut admission\n"
+     else raise Fail "forced range inherited admission"
   end) [eval_iterator_range_forced, eval_stmt_for_range_cases,
         compile_for_range_checked_frag_active, compile_for_range_checked_frag];

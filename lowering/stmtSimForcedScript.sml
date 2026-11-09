@@ -12,7 +12,7 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem ignore_bind_bind_value[local]:
+Theorem ignore_bind_bind_value:
   !(a : evaluation_state -> value evaluation_result) k.
     ignore_bind (bind a k) (return ()) =
     bind a (\v. ignore_bind (k v) (return ()))
@@ -64,8 +64,8 @@ Theorem forced_then_summary:
       (\res ee r. expr_exit res r) /\
     (!v ee t.
        P v ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
-       (?gs ee1. a (es with gas_obs := gs) =
-                 (INL v, ee1)) ==>
+       (?gs. a (es with gas_obs := gs) =
+                 (INL v, ee)) ==>
        ?res ee' r.
          (!tail. k v (ee with gas_obs := tail) =
                  (res, ee' with gas_obs := tail)) /\
@@ -81,9 +81,10 @@ Proof
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
   simp[gas_summary_at_def] >> strip_tac
   >- (gvs[] >>
-      `?gs ee1. a
-                  (es with gas_obs := gs) = (INL v, ee1)` by
-        (fs[gas_marked_exec_def] >> metis_tac[]) >>
+      `?gs. a (es with gas_obs := gs) = (INL v, es_end with gas_obs := [])` by
+        (fs[gas_marked_exec_def] >>
+         qexists_tac `gas_explicit marks s0.vs_gas_readings` >>
+         qpat_x_assum `!tail. a _ = _` (qspec_then `[]` mp_tac) >> simp[]) >>
       `~t.vs_halted` by
         (fs[gas_marked_exec_def] >> drule gas_marked_path_exec >>
          strip_tac >> drule gas_path_ok_not_halted >> simp[]) >>
@@ -113,8 +114,8 @@ Theorem forced_then_outcome:
       (\res ee r. expr_exit res r) /\
     (!v ee t.
        P v ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
-       (?gs ee1. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
-                 (INL v, ee1)) ==>
+       (?gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+                 (INL v, ee)) ==>
        ?res ee' r.
          (!tail. k v (ee with gas_obs := tail) =
                  (res, ee' with gas_obs := tail)) /\
@@ -171,8 +172,8 @@ Theorem forced_then_stmt_outcome:
       (\res ee r. expr_exit res r) /\
     (!v ee t.
        P v ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
-       (?gs ee1. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
-                 (INL v, ee1)) ==>
+       (?gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+                 (INL v, ee)) ==>
        ?res ee' r.
          (!tail. k v (ee with gas_obs := tail) =
                  (res, ee' with gas_obs := tail)) /\
@@ -205,7 +206,8 @@ Theorem forced_vv_then_outcome:
       (\res ee r. expr_exit res r) /\
     (!tv ee t.
        P tv ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
-       (?gs ee1. eval_expr cx e (es with gas_obs := gs) = (INL tv, ee1)) ==>
+       (?gs. eval_expr cx e (es with gas_obs := gs) =
+                 (INL tv, ee)) ==>
        ?res ee' r.
          (!tail. k tv (ee with gas_obs := tail) =
                  (res, ee' with gas_obs := tail)) /\
@@ -236,7 +238,8 @@ Theorem forced_vv_then_stmt_outcome:
       (\res ee r. expr_exit res r) /\
     (!tv ee t.
        P tv ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
-       (?gs ee1. eval_expr cx e (es with gas_obs := gs) = (INL tv, ee1)) ==>
+       (?gs. eval_expr cx e (es with gas_obs := gs) =
+                 (INL tv, ee)) ==>
        ?res ee' r.
          (!tail. k tv (ee with gas_obs := tail) =
                  (res, ee' with gas_obs := tail)) /\

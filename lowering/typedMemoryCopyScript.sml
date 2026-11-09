@@ -4,7 +4,7 @@
    Metadata premises are the field-layout clauses of expr_sim_inv. *)
 Theory typedMemoryCopy
 Ancestors
-  exprSimProps loweringPosts
+  exprSimProps loweringPosts exprSimStorageCopy
   context typedCopyDomain compileEnv emitHelper emitHelperProps structFieldsProps valueEncoding valueEncodingProps
   valueEncodingProofs valueCopy fragExec exprLoweringProps exprSimHyps
   vyperTypeSystem vyperTypeArgFits vyperValue vyperTyping
@@ -765,7 +765,7 @@ Proof
   strip_tac >> drule_all typed_copy_word_raw_frag >>
   disch_then (qspec_then `ctx` (mp_then Any irule frag_exec_conseq)) >> simp[] >>
   conj_tac
-  >- (drule_all entryDecodePropsTheory.val_in_memory_word >> strip_tac >>
+  >- (drule_all exprSimPropsTheory.val_in_memory_word >> strip_tac >>
       simp[mstore_mem_word_at_same, GSYM mem_word_at_eq_mload]) >>
   simp[typed_copy_word_state_frame]
 QED
@@ -3240,7 +3240,7 @@ Proof
   metis_tac[typed_copy_memory_size]
 QED
 
-Theorem typed_copy_tuple_children_widen[local]:
+Theorem typed_copy_tuple_children_widen:
   !stys dtys dtvs.
     (stys = dtys \/ arg_types_fit stys dtys) /\
     OPT_MMAP (evaluate_type tenv) dtys = SOME dtvs ==>
@@ -3304,7 +3304,7 @@ Proof
                  decide_tac)) >> simp[]
 QED
 
-Theorem typed_copy_struct_values[local]:
+Theorem typed_copy_struct_values:
   !names tvs fields.
     LENGTH names = LENGTH tvs /\
     struct_has_type (ZIP (names,tvs)) fields /\
@@ -3319,7 +3319,7 @@ Proof
   qexists_tac `h'1::vs` >> simp[value_has_type_def, val_wf_def]
 QED
 
-Theorem typed_copy_struct_field_bytes[local]:
+Theorem typed_copy_struct_field_bytes:
   !fields tvs.
     OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs /\
     EVERY (\(fname,fty,sz). !tv. evaluate_type tenv fty = SOME tv ==>
@@ -3447,7 +3447,7 @@ Proof
          gvs[is_word_type_def, evaluate_type_def, type_memory_size_def,
              AllCaseEqs()]) >>
       `mem_word_at (w2n sw) s.vs_memory = typed_val_to_w256 dtv v` by
-        metis_tac[entryDecodePropsTheory.val_in_memory_word] >>
+        metis_tac[exprSimPropsTheory.val_in_memory_word] >>
       drule_all typed_copy_word_frag >> simp[]) >>
   Cases_on `is_bytestring_type dty`
   >- (drule_all typed_copy_bytestring_source >> strip_tac >>
@@ -3580,6 +3580,100 @@ Proof
   qexists_tac `t` >> gvs[typed_copy_state_frame_def, typed_copy_frame_def] >>
   metis_tac[]
 QED
+
+(* Source classification shared by return and aggregate-element stores. *)
+Theorem return_source_word_fits_eq[local]:
+  (!sty ty. arg_type_fits sty ty /\ is_word_type sty ==> sty = ty) /\
+  (!stys tys. arg_types_fit stys tys /\ EVERY is_word_type stys ==>
+    stys = tys)
+Proof
+  ho_match_mp_tac arg_type_fits_ind >>
+  rw[arg_type_fits_def, is_word_type_def] >> gvs[]
+QED
+
+Theorem return_source_word_widens_eq:
+  is_word_type sty /\ type_widens_to tenv sty ty ==> sty = ty
+Proof
+  simp[type_widens_to_def] >> metis_tac[cj 1 return_source_word_fits_eq]
+QED
+
+Theorem type_widens_from_bytestring:
+  type_widens_to tenv sty ty /\ is_bytestring_type sty ==>
+  is_bytestring_type ty
+Proof
+  simp[type_widens_to_def] >> strip_tac >>
+  Cases_on `sty` >> gvs[is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_bytestring_type_def]
+  >- (Cases_on `ty` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+      rename1 `BaseT tb` >> Cases_on `tb` >>
+      gvs[arg_type_fits_def, is_bytestring_type_def]) >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  gvs[is_bytestring_type_def] >> Cases_on `ty` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `BaseT tb` >> Cases_on `tb` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `BytesT db` >> Cases_on `db` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def]
+QED
+
+Theorem typed_return_copy_static[local]:
+  (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+            vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
+            vs_inst_idx := s.vs_inst_idx|>) = s ==>
+  copy_static t = copy_static s
+Proof
+  simp[copy_static_def, venom_state_component_equality]
+QED
+
+(* Shared typed-store execution boundary, also used by expression adapters. *)
+Theorem typed_return_store_frag:
+  compile_store_memory_typed cenv dst dty src sty sa = ((),sb) /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname, fty, sz). !tv. evaluate_type tenv fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  type_widens_to tenv sty dty /\
+  evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+  value_has_type stv v /\ value_has_type dtv v /\
+  val_wf stv v /\ val_wf dtv v /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  val_in_memory stv v (w2n sw) s.vs_memory /\
+  w2n sw + type_memory_size stv < dimword (:256) /\
+  w2n dw + type_memory_size dtv < dimword (:256) /\
+  (w2n sw + type_memory_size stv <= w2n dw \/
+   w2n dw + type_memory_size dtv <= w2n sw) /\
+  (!t. copy_static t = copy_static s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!a len. a + len <= w2n dw \/ w2n dw + type_memory_size dtv <= a ==>
+      mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory ==> P t) ==>
+  frag_exec ctx sa sb (\z. z = s)
+    (\t. P t /\ val_in_memory dtv v (w2n dw) t.vs_memory /\
+      copy_static t = copy_static s /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)) R
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  rewrite_tac[frag_exec_def] >> rpt strip_tac >>
+  rule_assum_tac BETA_RULE >> qpat_x_assum `_ = s` SUBST_ALL_TAC >>
+  drule_all compile_store_memory_typed_run >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  disj1_tac >> qexists_tac `t` >> simp[] >>
+  `copy_static t = copy_static s` by
+    (irule typed_return_copy_static >> simp[]) >>
+  simp[] >> conj_tac
+  >- (first_x_assum irule >> fs[arithmeticTheory.ADD_COMM] >>
+      first_assum ACCEPT_TAC) >>
+  metis_tac[]
+QED
+
+(* Keep typed-copy correctness usable by expression-case proofs. *)
+val _ = if List.exists (fn name => name = "exprSimIfExp") (ancestry "-")
+        then raise Fail "Typed-copy infrastructure depends on IfExp"
+        else ();
 
 (* Every exported copy boundary must be closed, including the recursive
    execution theorem: an old public admission must never be a dependency. *)

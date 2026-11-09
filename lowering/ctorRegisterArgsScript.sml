@@ -9,7 +9,7 @@ Ancestors
   venomExecSemantics venomState venomInst venomMemDefs
   words list finite_map pred_set arithmetic
   ctorAbiActualArrayRun loweringHalt abiDecoderLoop exprLoweringProps
-  abiDecoderReentryAddress abiDecoderMemberSlice abiDecoderMemberBody rich_list
+  abiDecoderReentryAddress abiDecoderMemberSlice abiDecoderMemberBody rich_list abiDecoderMembers
 
 Theorem ctor_type_memory_bytes_vars[simp]:
   !ce ty vars. type_memory_bytes (ce with ce_vars := vars) ty =
@@ -140,7 +140,7 @@ Theorem ctor_register_cons:
    od) st
 Proof
   strip_tac >>
-  simp[build_positional_args_def, build_positional_arg_def,
+  simp_tac (srw_ss()) [LET_THM, build_positional_args_def, build_positional_arg_def,
        Once compile_register_constructor_args_def,
        var_location_memory_size_def, comp_bind_def, comp_return_def,
        comp_ignore_bind_def] >>
@@ -149,7 +149,8 @@ Proof
     (ce with ce_vars := ce.ce_vars |+
       (name, PtrVar buf.buf_operand (type_memory_bytes ce ty)))`
     by simp[compile_env_component_equality] >>
-  asm_rewrite_tac []
+  asm_simp_tac (srw_ss()) [LET_THM, var_location_memory_size_def,
+    comp_bind_def, comp_return_def, comp_ignore_bind_def]
 QED
 
 Theorem ctor_registration_appends:
@@ -472,7 +473,7 @@ QED
 
 Theorem ctor_decode_buffer_old_prefix:
   !dst src hi ce env ty tv av v st st' ctx func site initial sb d.
-  compile_abi_decode_to_buf dst src DLOAD hi
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),st') /\
   abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
   abi_decoder_metadata ce env ty tv
@@ -521,7 +522,7 @@ Proof
      rpt strip_tac >> res_tac >> gvs[]) >>
   drule (BETA_RULE ctor_actual_coherent_run) >>
   disch_then (drule_at Any) >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand dst initial = _`)) >>
   disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
   simp_tac bool_ss [LESS_EQ_REFL, SUBSET_REFL] >>
@@ -643,7 +644,10 @@ Proof
      qexistsl [`mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
        [STRING #"%" (toString st.cs_next_var)]`, `initial`, `site`] >>
      drule_all entry_alloc_buffer_inst >>
-     fs[mk_inst_def, step_inst_base_def]) >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+                      combinTheory.K_THM, opcode_case_def] >>
+     fs[mk_inst_def]) >>
   `frag_exec ctx st sa (\u. u = initial)
      (\u. u = raw with vs_inst_idx := LENGTH sa.cs_current_insts) (\r. F)` by
     (irule compile_alloc_buffer_fresh_frag >> qexistsl [`buf`, `n`] >>
@@ -765,17 +769,6 @@ Proof
   rpt strip_tac >> first_x_assum irule >> conj_tac >> metis_tac[]
 QED
 
-Theorem ctor_word_dec_descriptor[local]:
-  is_word_type ty ==>
-  ?clamp. type_to_abi_dec_info sf ce ty = DecPrimWord clamp
-Proof
-  Cases_on `ty` >> simp[is_word_type_def, type_to_abi_dec_info_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[is_word_type_def, type_to_abi_dec_info_def] >>
-  rename1 `BytesT b` >> Cases_on `b` >>
-  simp[is_word_type_def, type_to_abi_dec_info_def]
-QED
-
 Theorem ctor_singleton_decode_code:
   !ptr. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var ptr) (type_memory_bytes ce ty)) ==>
   compile_decode_args ce [build_positional_arg ce (name,ty)] off
@@ -785,16 +778,18 @@ Theorem ctor_singleton_decode_code:
        do offset_val <- emit_op DLOAD [static_src];
           emit_op ADD [Lit 0w; offset_val]
        od else comp_return static_src);
-     compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+     compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
        (type_to_abi_dec_info ce.ce_struct_fields ce ty)
   od
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `is_word_type ty`
   >- (`?clamp. type_to_abi_dec_info ce.ce_struct_fields ce ty = DecPrimWord clamp` by
-        metis_tac[ctor_word_dec_descriptor] >>
+        metis_tac[ctor_arg_word_descriptor] >>
       simp[build_positional_arg_def, compile_decode_args_def,
         var_location_decode_operand_def, compile_abi_decode_to_buf_def,
-        compile_abi_decode_static_def, FUN_EQ_THM,
+        compile_abi_decode_static_def,
+        abiDecoderRangeTheory.compile_abi_dec_addr_zero,
+        compile_abi_decode_range_check_def, FUN_EQ_THM,
         comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
       rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
       pairarg_tac >> simp[] >> pairarg_tac >> simp[]) >>
@@ -817,7 +812,7 @@ Theorem ctor_singleton_decode_phases:
      (?offset_val second. ~is_word_type ty /\ is_abi_dynamic ce.ce_struct_fields ty /\
        emit_op DLOAD [static_src] first = (offset_val,second) /\
        emit_op ADD [Lit 0w; offset_val] second = (src,middle))) /\
-    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
       (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last)
 Proof
   rpt gen_tac >> strip_tac >> drule ctor_singleton_decode_code >>
@@ -955,7 +950,7 @@ QED
 Theorem ctor_prefix_decoder_code_phase[local]:
   cs_extends st middle /\ middle.cs_blocks = st.cs_blocks /\
   abi_decode_source_opcode opc /\ st.cs_next_id <= middle.cs_next_id /\
-  compile_abi_decode_to_buf dst src opc hi di middle = ((),end_st) /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) hi di middle = ((),end_st) /\
   fn_has_code st end_st func /\
   (st.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -1133,7 +1128,7 @@ Theorem ctor_singleton_address_prefix[local]:
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?src middle prepared.
-    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
       (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
     eval_operand src prepared = SOME
       (if ~is_word_type ty /\ is_abi_dynamic ce.ce_struct_fields ty
@@ -1215,7 +1210,7 @@ Theorem ctor_canonical_singleton_prefix[local]:
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?src middle prepared sb.
-    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
       (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
     eval_operand src prepared = SOME (n2w sb) /\
     eval_operand (Var ptr) prepared = SOME (n2w d) /\
@@ -1272,12 +1267,6 @@ Proof
   qpat_assum `EL i atys = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
   asm_rewrite_tac[] >>
   metis_tac[LESS_EQ_LESS_TRANS, LESS_EQ_TRANS]
-QED
-
-Theorem ctor_register_abi_types_map[local]:
-  !tys. vyper_to_abi_types env tys = MAP (vyper_to_abi_type env) tys
-Proof
-  Induct >> simp[vyper_to_abi_type_def]
 QED
 
 Theorem ctor_effect_scratch_extend[local]:
@@ -1352,7 +1341,7 @@ Theorem ctor_decode_constructor_arg_old_prefix:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `LENGTH atys = LENGTH fargs /\ EL i atys = vyper_to_abi_type env ty` by
-    simp[ctor_register_abi_types_map, MAP_COMPOSE, EL_MAP] >>
+    simp[vyper_to_abi_types_MAP, MAP_COMPOSE, EL_MAP] >>
   `i < LENGTH atys /\ LENGTH avs = LENGTH atys` by metis_tac[] >>
   drule_all ctor_canonical_singleton_prefix >>
   disch_then (qspec_then `ctx`
@@ -1723,7 +1712,7 @@ QED
 
 Resume ctor_register_suffix_actual[recurse]:
   `LENGTH atys = LENGTH fargs /\ EL i atys = vyper_to_abi_type env h1` by
-    simp[ctor_register_abi_types_map, MAP_COMPOSE, EL_MAP] >>
+    simp[vyper_to_abi_types_MAP, MAP_COMPOSE, EL_MAP] >>
   `abi_embedded_static_size ce0.ce_struct_fields h1 = abi_member_head_size (EL i atys)` by
     (drule ctor_coherent_head_size >> simp[]) >>
   `SUM (MAP abi_member_head_size (TAKE (SUC i) atys)) =

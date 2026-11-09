@@ -13,6 +13,7 @@ Ancestors
   venomState venomInst venomExecSemantics venomExecProps venomWf
   stateEquiv stateEquivProps
   crossBlockSimDefs crossBlockSimProps execEquivParamProps pointerConfinedDefs
+  passTransform
 
 (* ===== Monotonicity: larger excluded set is weaker ===== *)
 
@@ -29,17 +30,6 @@ Theorem state_equiv_mono:
 Proof
   rw[state_equiv_def, execution_equiv_def, pred_setTheory.SUBSET_DEF] >>
   metis_tac[]
-QED
-
-Theorem lift_result_mono:
-  !V1 V2 r1 r2.
-    V1 SUBSET V2 /\
-    lift_result (state_equiv V1) (execution_equiv V1) (execution_equiv V1) r1 r2 ==>
-    lift_result (state_equiv V2) (execution_equiv V2) (execution_equiv V2) r1 r2
-Proof
-  rpt strip_tac >>
-  Cases_on `r1` >> Cases_on `r2` >> gvs[lift_result_def] >>
-  metis_tac[state_equiv_mono, execution_equiv_mono]
 QED
 
 Theorem result_equiv_mono:
@@ -154,12 +144,6 @@ Proof
   gvs[rusp_fn_name]
 QED
 
-Theorem rusp_entry_label:
-  !fn. fn_entry_label (remove_unused_single_pass fn) = fn_entry_label fn
-Proof
-  simp[removeUnusedStructProofsTheory.rusp_preserves_entry_label]
-QED
-
 Theorem ru_function_entry_label:
   !fn. fn_entry_label (remove_unused_function fn) = fn_entry_label fn
 Proof
@@ -170,7 +154,7 @@ Proof
   pop_assum mp_tac >>
   MAP_EVERY qid_spec_tac [`r`, `fn`] >>
   ho_match_mp_tac WhileTheory.OWHILE_IND >> rpt strip_tac >>
-  gvs[rusp_entry_label]
+  gvs[rusp_preserves_entry_label]
 QED
 
 Theorem lookup_function_ru_context:
@@ -333,7 +317,7 @@ Resume remove_unused_actual_member_reconstruction[compose_results]:
   disj2_tac >>
   `remove_unused_eliminated_vars fn SUBSET remove_unused_all_eliminated ctx` by
     metis_tac[elim_subset_all_elim] >>
-  drule_all lift_result_mono >> strip_tac >>
+  drule_all lift_result_weaken_vars >> strip_tac >>
   Cases_on `run_blocks N ctx fn (s with vs_gas_readings := gs)` >>
   Cases_on `run_blocks N ctx (remove_unused_function fn) (s with vs_gas_readings := hs)` >>
   Cases_on `run_blocks N (remove_unused_context ctx) (remove_unused_function fn) s` >>

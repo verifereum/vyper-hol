@@ -2,7 +2,7 @@
 Theory selectedBodyCode
 Ancestors actualRegistrationCode moduleLowering compileEnv
   loweringShapeDefs loweringShapeRules loweringShapeProps fragExec list
-  sourceEntryCode compileVyper vyperInterpreter supportedProgramProps
+  sourceEntryCode runtimeExternalPackageCode compileVyper vyperInterpreter supportedProgramProps
   entryDispatchProps rawEntryCode entryCheckIntervals sourceEntrySelection
   supportedProgram supportedDecls loweringShapeSource compileEnv supportedNames
   vyperCompiler actualDecoderPackaging
@@ -90,76 +90,14 @@ Proof
     (rpt strip_tac >> drule_all supported_program_declaration >>
      simp[supported_declaration_header_def]) >>
   drule_all external_lookup_raw_package_member >> strip_tac >>
-  `runtime_bodies_shape_ok tops` by
-    metis_tac[supported_program_runtime_bodies_shape_ok] >>
-  `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
-    (FST (SND (classify_functions tops))))` by
-    (irule supported_names_internal_names_distinct >>
-     fs[supported_program_def, supported_declaration_names_def]) >>
-  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
-  simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  rename1 `classify_functions tops = (exts,ints,fb,ctor)` >>
-  simp[] >> strip_tac >>
-  qspecl_then [`tops`, `F`] mp_tac internal_descriptors_ok >>
-  impl_tac >- fs[] >>
-  rewrite_tac[pairTheory.FST, pairTheory.SND] >> strip_tac >>
-  `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)
-    (build_selectors (type_env tops) exts)` by
-    rewrite_tac[build_selectors_fn_labels] >>
-  `EVERY external_fn_shape_ok
-    (MAP (set_external_package_target rpolicy.rpol_target o
-      package_external_fn tops F (assign_nkeys tops 0)) exts)` by
-    (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
-     irule package_external_fn_shape_ok >> gs[]) >>
-  `EVERY internal_fn_shape_ok
-    (MAP (set_internal_package_target rpolicy.rpol_target o
-      package_internal_fn tops F (assign_nkeys tops 0) F 0) ints)` by
-    (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
-     irule package_internal_fn_shape_ok >> gs[]) >>
-  `fallback_shape_ok (set_fallback_package_target rpolicy.rpol_target
-    (package_fallback_fn tops F (assign_nkeys tops 0) fb))` by
-    (qspecl_then [`tops`, `F`, `assign_nkeys tops 0`,
-       `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok >> gs[]) >>
-  gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
-    internal_fn_descriptors_MAP_package_internal_fn] >>
-  qmatch_asmsub_abbrev_tac `run_lowering sels extpkgs intpkgs fbpkg` >>
-  `lowering_policy_ok rpolicy` by
-    (qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-     rw[run_lowering_def]) >>
-  `rpolicy.rpol_frontend_dispatch = Linear` by fs[lowering_policy_ok_def] >>
-  Cases_on `compile_generate_runtime sels extpkgs intpkgs fbpkg Linear 0 0 []
-    (build_dense_entry_info sels extpkgs) (initial_compile_state "__entry")` >>
-  rename1 `_ = (u,final)` >> Cases_on `u` >>
-  drule runtime_external_boundary >>
-  impl_tac >- simp[shape_state_initial_compile_state] >> strip_tac >>
-  `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors intpkgs) /\
-   ALL_DISTINCT (MAP FST (internal_fn_descriptors intpkgs))` by
-    simp[Abbr `intpkgs`, internal_fn_descriptors_set_internal_package_target,
-      internal_fn_descriptors_MAP_package_internal_fn] >>
-  `MEM (mk_raw_function "__entry" (all_blocks entry_end))
-    unit.cu_context.ctx_functions` by
-    (drule run_lowering_packaged_entry_member >>
-     disch_then (qspecl_then [`r`, `final`, `entry_end`] mp_tac) >> simp[]) >>
-  `shape_state (initial_compile_state "__entry")` by
-    simp[shape_state_initial_compile_state] >>
-  `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) sels` by
-    simp[Abbr `sels`, build_selectors_fn_labels] >>
-  drule_all runtime_dispatch_shape_boundary >> strip_tac >>
-  drule_all external_bodies_run_shape >> strip_tac >>
-  drule_all external_fallback_suffix_extends >> strip_tac >>
-  drule_all run_lowering_entry_interval >> strip_tac >>
+  drule_all source_runtime_external_packages >> strip_tac >>
   `MEM (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt)
     extpkgs` by
     (qpat_x_assum `set_external_package_target _ _ = _` (SUBST1_TAC o SYM) >>
-     simp_tac pure_ss [Abbr `extpkgs`, MEM_MAP] >>
-     qexists_tac `package_external_fn tops F (assign_nkeys tops 0)
-       (mut,F,lookup_raw_return_or_F (NONE:num option) name External tops,
-        name,args,([] : expr list),ret,fbody)` >>
-     conj_tac >- REFL_TAC >>
+     qpat_x_assum `extpkgs = _` (fn th => rewrite_tac[th]) >>
+     simp[MEM_MAP] >>
      qexists_tac `(mut,F,lookup_raw_return_or_F (NONE:num option) name External tops,
-        name,args,([] : expr list),ret,fbody)` >>
-     conj_tac >- REFL_TAC >> first_assum ACCEPT_TAC) >>
+        name,args,([] : expr list),ret,fbody)` >> simp[]) >>
   qpat_x_assum `MEM (lbl,_,_,_,_,_,_,_,_,_,_) extpkgs` mp_tac >>
   rewrite_tac[MEM_SPLIT] >> strip_tac >>
   qpat_x_assum `extpkgs = _` SUBST_ALL_TAC >>

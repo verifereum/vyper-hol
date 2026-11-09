@@ -16,7 +16,7 @@
  *)
 Theory bodyPtrCtrlCases
 Ancestors
-  bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
+  fragGasSeqPtr bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list
   bodySimStmtCases bodyExprPreFacts supportedStmts supportedExprs
   stmtLoweringMono vyperTypeSystem vyperTypeCallStackSoundness
@@ -24,7 +24,8 @@ Ancestors
   stmtSimDefs stmtSimProps loweringPosts stmtLowering compileEnv emitHelper
   emitHelperProps exprLoweringProps fragExec ptrSafeRun ptrDiscipline
   codegenRel contextCodegenRel venomInst venomState venomExecSemantics
-  venomExecProofs
+  venomExecProofs stmtIfPtr exprSimSource supportedExprTraverse
+  supportedStmtTraverse bodyForRangePtr bodyForArrayPtr
 
 val _ = Parse.hide "body";
 
@@ -49,25 +50,8 @@ Theorem emit_jump_zero_path_ptr:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted ==>
   gas_path_ptr D 0 ctx func PG G tn s 0 G tn (OK (jump_to lbl s))
 Proof
-  strip_tac >> drule_all fn_has_code_same_block >> strip_tac >>
-  `get_instruction bb (LENGTH sa.cs_current_insts) =
-    SOME (mk_inst sa.cs_next_id JMP [Label lbl] [])` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `ptr_safe_step D 0 0 ctx func PG G tn
-     (mk_inst sa.cs_next_id JMP [Label lbl] []) s` by
-    (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-          allocas_from_def, mk_inst_def, source_memory_write_ranges_def,
-          source_memory_read_ranges_def, op_taint_def] >>
-     simp[GSYM mk_inst_def, step_inst_non_invoke] >>
-     simp[mk_inst_def, step_jmp_behavior, jump_to_def]) >>
-  `gas_path_ptr_edge D 0 ctx func PG G tn s 0 G tn (OK (jump_to lbl s))` by
-    (rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
-     qexists_tac `0:num` >>
-     simp[step_inst_non_invoke, mk_inst_def, gas_count_step_def,
-          step_jmp_behavior, is_terminator_def] >>
-     fs[mk_inst_def] >> metis_tac[]) >>
-  `~(jump_to lbl s).vs_halted` by simp[jump_to_def] >>
-  metis_tac[gas_path_ptr_rules, arithmeticTheory.ADD_CLAUSES]
+  strip_tac >> irule emit_jump_path_ptr >> simp[allocas_from_def] >>
+  qexistsl_tac [`sa`, `sb`] >> simp[]
 QED
 
 Theorem stmt_state_rel_clear_obs[local]:
@@ -208,7 +192,47 @@ Theorem body_if_case_ptr:
        body_stmts_ptr_ok cx ss2) /\ body_expr_ptr_ok cx e ==>
     body_stmt_ptr_ok cx (If e ss1 ss2)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> simp[Once body_stmt_ptr_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
+      stmt_exprs_ok_def, supported_stmt_expr_exists_def, optionTheory.IS_SOME_EXISTS] >>
+  `supported_expr tops e` by fs[supportedExprsTheory.supported_expr_def] >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
+  `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+      is_dynamic (vyper_to_abi_type (type_env tops) target)` by
+    gvs[body_inv_def] >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >> simp[] >>
+     qexists_tac `int_calls_stmts ss1 ++ int_calls_stmts ss2` >> simp[]) >>
+  `!ty. expr_sim_ptr d ctx PG func cenv cx ty e es /\
+        expr_vv_sim_ptr d ctx PG func cenv cx ty e es` by
+    (gen_tac >>
+     qpat_x_assum `body_expr_ptr_ok _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_ptr_ok_def]) >>
+     disch_then irule >> metis_tac[]) >>
+  irule compile_if_stmt_frag_ptr >> simp[stmts_env_cs_mono] >>
+  conj_tac >- metis_tac[compile_expr_grows] >>
+  rpt strip_tac >>
+  rename1 `_ = (INL (BoolV b), es1)` >>
+  `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+  `?tv s1. eval_expr cx e (es with gas_obs := gs) = (INL tv, s1)` by
+    (qpat_x_assum `_ = (INL (BoolV b), es1)` mp_tac >>
+     simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
+  `body_stmts_ptr_ok cx ss1 /\ body_stmts_ptr_ok cx ss2` by
+    (`push_scope es1 = (INL (), es1 with scopes updated_by CONS FEMPTY)` by
+       simp[push_scope_def, return_def] >> metis_tac[]) >>
+  `expr_sim_inv cenv cx env es1` by
+    (metis_tac[exprSimSourceTheory.expr_body_pre_eval]) >>
+  drule expr_sim_inv_push_scope >> strip_tac >>
+  rpt (qpat_x_assum `body_stmts_ptr_ok _ _`
+         (strip_assume_tac o REWRITE_RULE [body_stmts_ptr_ok_def])) >>
+  Cases_on `b` >> fs[] >> first_x_assum irule >>
+  gvs[stmts_exprs_ok_EVERY, stmt_exprs_ok_def,
+      allocLimitsTheory.alloc_limits_stmt_def, compileVyperTheory.stmt_valued_return_def] >>
+  metis_tac[call_evaluation_safe_append_left, call_evaluation_safe_append_right]
 QED
 
 (* ADMITTED: a piece of the body induction. *)
@@ -228,7 +252,9 @@ Theorem body_for_case_ptr:
        body_iterator_ptr_ok cx it) ==>
     body_stmt_ptr_ok cx (For id typ it n body)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> Cases_on `it`
+  >- (irule body_for_array_ptr >> simp[] >> metis_tac[])
+  >> irule body_for_range_ptr >> simp[] >> metis_tac[]
 QED
 
 Theorem body_expr_stmt_case_ptr:
@@ -247,7 +273,7 @@ Proof
      qexists_tac `[]` >> simp[]) >>
   `expr_vv_sim_ptr d ctx PG func cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_expr_ptr_ok _ _`
-       (mp_tac o REWRITE_RULE [body_expr_ptr_ok_def]) >>
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_ptr_ok_def]) >>
      disch_then (qspecl_then [`d`, `PG`, `tops`, `ctx`, `func`, `cenv`,
                               `env`, `expr_type e`, `es`] mp_tac) >>
      simp[]) >>

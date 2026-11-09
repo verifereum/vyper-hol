@@ -11,22 +11,16 @@ Ancestors
   exprLowering compileEnv abiEncoder context emitHelper fragExec
   abiDecoderAppend abiDecoderCounters abiDecoderCode exprLoweringProps
   ctorAbiActualSites abiDecoderReentryAddress abiDecoderReentry
-  abiDecoderLoop instIdxIndep ctorAbiActualMemory
+  abiDecoderLoop instIdxIndep ctorAbiActualMemory abiDecoderMembers
 Libs
   monadsyntax
-
-Theorem ctor_arg_abi_types_map[local]:
-  !tys. vyper_to_abi_types env tys = MAP (vyper_to_abi_type env) tys
-Proof
-  Induct >> simp[vyper_to_abi_type_def]
-QED
 
 Theorem ctor_arg_selected_type[local]:
   i < LENGTH fargs /\ EL i fargs = (name,ty) /\
   atys = vyper_to_abi_types env (MAP SND fargs) ==>
   LENGTH atys = LENGTH fargs /\ EL i atys = vyper_to_abi_type env ty
 Proof
-  simp[ctor_arg_abi_types_map, MAP_COMPOSE, EL_MAP]
+  simp[vyper_to_abi_types_MAP, MAP_COMPOSE, EL_MAP]
 QED
 
 Theorem ctor_arg_tuple_member[local]:
@@ -111,7 +105,7 @@ Proof
   gvs[abi_decode_source_def, Excl "enc_def"]
 QED
 
-Theorem ctor_arg_word_descriptor[local]:
+Theorem ctor_arg_word_descriptor:
   is_word_type ty ==>
   ?clamp. type_to_abi_dec_info sf ce ty = DecPrimWord clamp
 Proof
@@ -128,7 +122,7 @@ Theorem ctor_arg_static_code[local]:
   compile_decode_args ce [build_positional_arg ce (name,ty)] off
       DLOAD (Lit (n2w data_size)) 0 =
   do src <- emit_op ADD [Lit 0w; Lit (n2w off)];
-     compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+     compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
        (type_to_abi_dec_info ce.ce_struct_fields ce ty)
   od
 Proof
@@ -147,7 +141,7 @@ Theorem ctor_arg_dynamic_code[local]:
   do static_src <- emit_op ADD [Lit 0w; Lit (n2w off)];
      offset_val <- emit_op DLOAD [static_src];
      src <- emit_op ADD [Lit 0w; offset_val];
-     compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+     compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
        (type_to_abi_dec_info ce.ce_struct_fields ce ty)
   od
 Proof
@@ -165,7 +159,7 @@ Theorem ctor_arg_primitive_code[local]:
   compile_decode_args ce [build_positional_arg ce (name,ty)] off
       DLOAD (Lit (n2w data_size)) 0 =
   do src <- emit_op ADD [Lit 0w; Lit (n2w off)];
-     compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+     compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
        (type_to_abi_dec_info ce.ce_struct_fields ce ty)
   od
 Proof
@@ -174,7 +168,7 @@ Proof
     metis_tac[ctor_arg_word_descriptor] >>
   simp[build_positional_arg_def, compile_decode_args_def,
        var_location_decode_operand_def, compile_abi_decode_to_buf_def,
-       compile_abi_decode_static_def, FUN_EQ_THM,
+       compile_abi_decode_static_def, compile_abi_dec_addr_def, FUN_EQ_THM,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[]
@@ -198,7 +192,7 @@ QED
 Theorem ctor_arg_decoder_code_phase[local]:
   cs_extends st middle /\ middle.cs_blocks = st.cs_blocks /\
   abi_decode_source_opcode opc /\ st.cs_next_id <= middle.cs_next_id /\
-  compile_abi_decode_to_buf dst src opc hi di middle = ((),end_st) /\
+  compile_abi_decode_to_buf dst src opc base_op hi di middle = ((),end_st) /\
   fn_has_code st end_st func /\
   (st.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -222,7 +216,7 @@ QED
 
 Theorem ctor_arg_decoder_actual[local]:
   !dst src hi ce env ty tv av v st st' ctx func site initial sb d.
-    compile_abi_decode_to_buf dst src DLOAD hi
+    compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi
       (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),st') /\
     abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
     abi_decoder_metadata ce env ty tv
@@ -273,7 +267,7 @@ Proof
      rpt strip_tac >> res_tac >> gvs[]) >>
   drule (BETA_RULE ctor_actual_coherent_run) >>
   disch_then (drule_at Any) >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand dst initial = _`)) >>
   disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
   simp_tac bool_ss [LESS_EQ_REFL, SUBSET_REFL] >>
@@ -401,7 +395,7 @@ Theorem ctor_arg_setup_decode_actual[local]:
     lookup_var x prepared = SOME w) /\
   ~prepared.vs_halted /\ prepared.vs_current_bb = middle.cs_current_bb /\
   prepared.vs_inst_idx = LENGTH middle.cs_current_insts /\
-  compile_abi_decode_to_buf (Var pvar) src DLOAD (Lit (n2w data_size))
+  compile_abi_decode_to_buf (Var pvar) src DLOAD (Lit 0w) (Lit (n2w data_size))
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),st') /\
   abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
   abi_decoder_metadata ce env ty tv
@@ -500,7 +494,7 @@ QED
 Theorem ctor_arg_add_decode_actual[local]:
   !ptr sb st src middle ce ty data_size st' env tv av v initial d func ctx site.
   emit_op ADD [Lit 0w; Lit (n2w sb)] st = (src,middle) /\
-  compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+  compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),st') /\
   abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
   abi_decoder_metadata ce env ty tv
@@ -566,7 +560,7 @@ Proof
   `sb < dimword (:256)` by decide_tac >>
   qpat_x_assum `st.cs_blocks = middle.cs_blocks` kall_tac >>
   irule ctor_arg_setup_decode_actual >> asm_rewrite_tac[] >>
-  goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `abi_decode_sim _ _ _ _`)) >>
   asm_rewrite_tac[] >>
   simp[Abbr `prepared`, ctor_arg_register_observations,
@@ -581,7 +575,7 @@ Theorem ctor_arg_dynamic_decode_actual[local]:
   emit_op DLOAD [head] m1 = (rel,m2) /\
   emit_op ADD [Lit 0w; rel] m2 = (src,middle) /\
   abi_decode_load DLOAD (n2w off : bytes32) initial = n2w sb /\
-  compile_abi_decode_to_buf (Var pvar) src DLOAD (Lit (n2w data_size))
+  compile_abi_decode_to_buf (Var pvar) src DLOAD (Lit 0w) (Lit (n2w data_size))
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),st') /\
   abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
   abi_decoder_metadata ce env ty tv
@@ -678,7 +672,7 @@ Proof
     (qpat_assum `eval_operand src prepared = _` mp_tac >>
      simp_tac (srw_ss()) [WORD_ADD_0]) >>
   irule ctor_arg_setup_decode_actual >> asm_rewrite_tac[] >>
-  goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `abi_decode_sim _ _ initial prepared`)) >>
   asm_rewrite_tac[] >>
   qpat_x_assum `prepared = _` (fn th => rewrite_tac[th]) >>
@@ -759,7 +753,7 @@ Proof
       pairarg_tac >> asm_simp_tac (srw_ss()) [] >> strip_tac >>
       irule ctor_arg_add_decode_actual >> asm_rewrite_tac[] >>
       goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
-      goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
       asm_rewrite_tac[] >> qexistsl [`EL i avs`, `env`] >> gvs[Excl "enc_def"]) >>
   Cases_on `is_abi_dynamic ce.ce_struct_fields ty`
   >- (drule_all ctor_arg_dynamic_code >> strip_tac >>
@@ -769,7 +763,7 @@ Proof
       pairarg_tac >> asm_simp_tac (srw_ss()) [] >>
       pairarg_tac >> asm_simp_tac (srw_ss()) [] >> strip_tac >>
       irule ctor_arg_dynamic_decode_actual >> asm_rewrite_tac[] >>
-      goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
       goal_assum (drule_at (Pat `emit_op ADD [Lit 0w; _] _ = _`)) >>
       goal_assum (drule_at (Pat `emit_op DLOAD _ _ = _`)) >>
       goal_assum (drule_at (Pat `emit_op ADD _ _ = _`)) >>
@@ -781,6 +775,6 @@ Proof
   pairarg_tac >> asm_simp_tac (srw_ss()) [] >> strip_tac >>
   irule ctor_arg_add_decode_actual >> asm_rewrite_tac[] >>
   goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   asm_rewrite_tac[] >> qexistsl [`EL i avs`, `env`] >> gvs[Excl "enc_def"]
 QED

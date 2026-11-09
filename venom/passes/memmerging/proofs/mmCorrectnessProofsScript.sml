@@ -3,7 +3,6 @@
  *
  * Definitions (invariants, fresh sets, block wf predicates) and
  * proof infrastructure for the memmerging correctness argument.
- * Re-exported by mmCorrectnessScript.sml.
  *)
 
 Theory mmCorrectnessProofs
@@ -16,6 +15,7 @@ Ancestors
   venomInst venomState venomEffects pred_set finite_map
   list rich_list arithmetic words alist
   mmCopy mmScan passSharedField execEquivProps memzeroFrame
+  passTransform
 Libs
   memzeroFrameLib stepInstBaseLib
 
@@ -640,7 +640,7 @@ Theorem step_mem_write_only_memory[local]:
     s' with vs_memory := s.vs_memory = s
 Proof
   rpt strip_tac >> gvs[] >> gvs[inst_wf_def] >>
-  gvs[step_inst_non_invoke, step_inst_base_def, is_terminator_def,
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, is_terminator_def,
       exec_write2_def, mstore_def, mcopy_def, LET_THM] >>
   BasicProvers.every_case_tac >> gvs[wmexp_only_changes_memory] >>
   simp[venom_state_component_equality]
@@ -1352,11 +1352,9 @@ Proof
   (impl_tac >- fs[]) >> simp[]
 QED
 
-(* mode_run_insts_lift_result and mm_block_simulates_mode are after
-   flat_map_same_start_block_bridge and bb_wf_decompose below. *)
-
-(* mm_block_simulates_mode: proved in mmBlockSimScript as
-   mm_block_simulates_mode_proof. No forward declaration needed. *)
+(* mode_run_insts_lift_result is after flat_map_same_start_block_bridge
+   and bb_wf_decompose below; mm_block_simulates_mode_proof is in
+   mmBlockSimProofs. *)
 
 (* Generalized run_insts simulation for memzero transform.
    Starts from memzero_inv-related states (needed for within-group induction).

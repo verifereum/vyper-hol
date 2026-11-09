@@ -20,6 +20,7 @@
  *)
 Theory exprSimBufferStore
 Ancestors
+  exprSimProps
   exprSimVVFrame
   exprSimProps
   loweringPosts
@@ -67,7 +68,7 @@ Proof
   rpt strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
   `step_inst_base (mk_inst sa.cs_next_id MCOPY [dst; src; sz] []) s =
      OK (mcopy (w2n d) (w2n w) (w2n n) s)` by
-    simp[step_inst_base_def] >>
+    simp[step_inst_base_opcode_eqs] >>
   simp[run_inst_seq_def]
 QED
 

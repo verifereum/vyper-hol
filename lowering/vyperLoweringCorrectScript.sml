@@ -32,8 +32,8 @@
  *     has no PARAM, no function has its FMP convention set
  *   lower_vyper_runtime_unit_fn_ptr_ok -- the lowered functions and their
  *     reachable parts are pointer-confined (fn_ptr_ok)
- *   lower_vyper_runtime_unit_defs_reach_uses -- S2b (planned admission):
- *     every use is written on every path to it
+ *   lower_vyper_runtime_unit_defs_reach_uses -- S2b: every use is written
+ *     on every path to it
  *   (S3, lower_vyper_runtime_unit_memory_ok, is in loweringMemCorrect)
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
@@ -936,18 +936,6 @@ Proof
   ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_checked
 QED
 
-(* S2b, planned admission: every variable a use in the lowering's code
-   reads is written on every path to the use.  SimplifyCFG's pre-walk
-   needs it. *)
-Theorem lower_vyper_runtime_unit_defs_reach_uses:
-  !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
-    immutable_free_program tops
-    ==> unit_defs_reach_uses unit
-Proof
-  cheat
-QED
-
 (* The runtime unit reserves no global memory. *)
 Theorem lower_vyper_runtime_unit_global_reserved:
   !tops rpolicy unit.
@@ -989,6 +977,21 @@ Proof
   rpt gen_tac >> simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
   strip_tac >> metis_tac[]
+QED
+
+(* S2b: every variable a use in the lowering's code reads is written on
+   every path to the use.  SimplifyCFG's pre-walk needs it.  run_lowering
+   decides it on the unit (lowering_context_ok). *)
+Theorem lower_vyper_runtime_unit_defs_reach_uses:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit
+    ==> unit_defs_reach_uses unit
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
+  drule run_lowering_context_ok >> strip_tac >>
+  drule lowering_context_ok_defs_reach_uses >>
+  simp[unit_defs_reach_uses_def]
 QED
 
 (* run_lowering builds every function with mk_raw_function, which leaves
@@ -1067,17 +1070,19 @@ End
 (* The lowered unit's functions and their reachable parts are
    pointer-confined (fn_ptr_ok), with P each function's pointer parameters:
    the return buffer, if any, and the arguments passed in memory:
-   lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound. *)
+   lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound for a
+   unit without DALLOCA. *)
 Theorem lower_vyper_runtime_unit_fn_ptr_ok:
   !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    ~ctx_has_dalloca unit.cu_context ==>
     ?P. EVERY (fn_ptr_ok P) unit.cu_context.ctx_functions /\
         EVERY (\f. fn_ptr_ok P (reachable_fn f)) unit.cu_context.ctx_functions
 Proof
   rpt strip_tac >>
   drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
   drule run_lowering_context_ok >> simp[lowering_context_ok_def] >>
-  strip_tac >> drule ptr_ok_check_sound >> strip_tac >>
+  strip_tac >> drule_all ptr_ok_check_sound >> strip_tac >>
   qexists_tac `\nm. set (ctx_ptr_param_list unit.cu_context nm)` >>
   fs[listTheory.EVERY_MEM]
 QED

@@ -1,49 +1,19 @@
 (* Guard boundary for actual-site tuple and struct decoding. *)
 Theory ctorAbiActualComplex
 Ancestors
-  ctorAbiActualMemberRun ctorAbiActualObservations ctorAbiActualWorld
-  ctorAbiActualNarrow ctorAbiActualChildFrame ctorAbiActualLabelEmpty
-  abiDecoderComplexExecute abiDecoderComplexGuard abiDecoderComplexHead
-  abiDecoderReentry abiDecoderDynamicLoopSetup abiDecoderVarSequence
-  abiDecoderContract abiDecoderLoop fragExec instIdxIndep compileEnv
+  ctorAbiActualMemberRun ctorAbiActualChildFrame ctorAbiActualLabelEmpty
+  abiDecoderComplexExecute abiDecoderComplexHead
+  abiDecoderReentry abiDecoderDynamicLoopSetup
+  abiDecoderContract abiDecoderLoop fragExec compileEnv
   abiEncoderRegisteredEffect venomState venomExecSemantics venomInst words list arithmetic
   abiDecoderMembers abiDecoderMemberInfos abiDecodeRanges contractABI vyperABI
   allocaFrontierBound allocaBudgetProps venomMemDefs pred_set exprLowering ctorAbiActualFrame abiEncoderProps
   abiDecoderTupleInputs abiDecoderTypedContract abiDecoderCoherence valueEncodingProps
   abiDecoderStruct abiStaticDynarrayLayout vyperTyping finite_map valueEncoding valueEncodingTyping
 
-Theorem ctor_actual_complex_guard_labels:
-  abi_decode_complex_head_guard src hi head_sz st = ((),st') /\
-  eval_operand src initial = SOME (n2w sb) /\
-  (hi = Lit 0w \/ ?hb. eval_operand hi initial = SOME (n2w hb) /\
-    sb + head_sz <= hb /\ hb < dimword (:256)) /\
-  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var hi /\
-  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
-  frag_exec ctx st st' (\s. s = initial)
-    (\t. fresh_vars_wrt limit_st t /\ abi_decoder_address_frame st.cs_next_var initial t /\
-      abi_encoder_registered_effect {} [] initial t /\ t.vs_labels = initial.vs_labels) (K F)
-Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule abi_decoder_complex_guard_code >> strip_tac >>
-  drule abi_decode_complex_head_guard_shape >> strip_tac >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts st st')` by fs[EVERY_CONJ] >>
-  `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode)
-    (emitted_insts st st')` by fs[EVERY_CONJ] >>
-  irule frag_exec_run_inst_seq >> simp[] >>
-  drule_all abi_decoder_complex_guard_reentry >> strip_tac >>
-  drule_all ctor_actual_sequence_labels >> strip_tac >>
-  drule_all ctor_actual_sequence_world >> strip_tac >>
-  `abi_encoder_registered_effect {} [] initial actual` by
-    (irule ctor_actual_empty_effect >> gvs[abi_decoder_address_frame_def]) >>
-  qexists `actual` >>
-  gvs[abi_decoder_address_frame_def, fresh_vars_wrt_def, eval_op_inst_idx,
-      abi_encoder_registered_effect_def]
-QED
-
 val C = ``\ty tv.
  !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -93,7 +63,7 @@ QED
 
 Theorem ctor_actual_complex_execute:
   LIST_REL (^C) tys tvs /\
-  compile_abi_decode_to_buf dst src DLOAD hi (DecComplex dyn (abi_decoder_member_infos sf ce tys)) st = ((),final) /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecComplex dyn (abi_decoder_member_infos sf ce tys)) st = ((),final) /\
   abi_decoder_members ce env sf tys tvs avs vs /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
   sb + LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)) < dimword (:256) /\
@@ -134,7 +104,7 @@ Proof
   drule ctor_actual_complex_head_bound >> strip_tac >>
   mp_tac (Q.INST [`st'` |-> `middle`, `head_sz` |->
     `FOLDR (\(_,asz,_) acc. asz + acc) 0 (abi_decoder_member_infos sf ce tys)`]
-    ctor_actual_complex_guard_labels) >>
+    ctor_actual_complex_guard_labels_fragment) >>
   (impl_tac >- (qpat_x_assum `LIST_REL _ _ _` kall_tac >>
     asm_simp_tac bool_ss [] >>
     Cases_on `hi = Lit 0w` >- simp[] >>
@@ -212,7 +182,7 @@ Proof
   drule_all abi_decoder_tuple_members >> strip_tac >>
   `type_memory_bytes ce (TupleT tys) = SUM (MAP (type_memory_bytes ce) tys)` by
     (simp[Once type_memory_bytes_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_tuple_infos]) >>
   `vyper_to_abi_type env (TupleT tys) = Tuple (MAP (vyper_to_abi_type env) tys)` by
     simp[Once vyper_to_abi_type_def, vyper_to_abi_types_MAP] >>

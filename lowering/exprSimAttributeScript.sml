@@ -109,6 +109,8 @@ Proof
       alloc_limits_expr_def] >>
   Cases_on `expr_type obj` >> gvs[attribute_type_def] >>
   rpt strip_tac >>
+  TRY (qpat_x_assum `~supported_expr_exists _ (Attribute _ _ _)` mp_tac >>
+       simp[supportedExprTraverseTheory.supported_expr_exists_def] >> NO_TAC) >>
   qpat_x_assum `!target. supported_expr_exists _ (Attribute _ _ _) ==> _`
     (qspec_then `target` irule) >>
   simp[supportedExprTraverseTheory.supported_expr_exists_def]
@@ -361,10 +363,29 @@ Proof
   simp[]
 QED
 
+Theorem type_widens_to_struct[local]:
+  type_widens_to tenv t (StructT sid) ==> t = StructT sid
+Proof
+  Cases_on `t` >> simp[type_widens_to_def, arg_type_fits_def] >>
+  metis_tac[]
+QED
+
+Theorem attr_post_value_type:
+  expr_body_pre cenv cx env obj es /\ expr_type obj = StructT sid ==>
+  post_value_type cenv obj = expr_type obj
+Proof
+  strip_tac >>
+  `expr_sim_inv cenv cx env es /\ well_typed_expr env obj` by
+    fs[expr_body_pre_def] >>
+  drule_all post_value_type_widens >>
+  simp[] >> metis_tac[type_widens_to_struct]
+QED
+
 (* The field's value_vv after the ADD, from the base's. *)
 Theorem attr_vv_post:
   !func cenv cx obj es sa sn s0 es1 tv bvv q w dst ann fld sid fs ftv tv' ctx.
     vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+    post_value_type cenv obj = expr_type obj /\
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
       SOME (w + n2w (attr_offset cenv (StructT sid) (vv_loc bvv) fld)) /\
@@ -392,7 +413,7 @@ Proof
   `value_has_type ftv fv` by
     (drule_all vyperAssignPreservesTypeTheory.struct_field_has_type >>
      strip_tac >> gvs[]) >>
-  rewrite_tac[vv_post_def] >> rpt conj_tac
+  rewrite_tac[vv_post_def] >> simp[] >> rpt conj_tac
   >~ [`vv_holds _ _ _ _ (LocatedValue _ _) _ _`]
   >- (simp[vv_holds_def, mk_ptr_def, expr_type_def] >>
       gvs[attr_offset_def] >>
@@ -431,6 +452,25 @@ Proof
       gvs[storage_holds_def])
   >~ [`vv_at _ _ _ _ _ _ _ (LocatedValue _ _) _`]
   >- (simp[expr_type_def] >> irule attr_vv_at_field >> simp[] >>
+      metis_tac[])
+  >~ [`storage_read_live`]
+  >- (strip_tac >>
+      qpat_x_assum `~expr_has_effect obj ==> _` mp_tac >>
+      asm_rewrite_tac[] >> strip_tac >>
+      drule vyperPlaceResultTypingTheory.struct_field_slot_exists >> strip_tac >>
+      drule_all exprSimFieldLayoutTheory.struct_field_offset_slots_eq >>
+      strip_tac >>
+      Cases_on `bvv` >>
+      simp[mk_ptr_def, vv_loc_def, contextTheory.vv_location_def] >>
+      rename1 `LocatedValue t p` >>
+      `t = StructT sid` by
+        (qpat_x_assum `vv_holds _ _ _ _ (LocatedValue _ _) _ _` mp_tac >>
+         simp[vv_holds_def, is_bytestring_type_def] >> rpt strip_tac >>
+         simp[]) >>
+      gvs[vv_loc_def, contextTheory.vv_location_def,
+          contextTheory.vv_operand_def, attr_offset_def] >>
+      rpt strip_tac >> gvs[] >>
+      irule accountsRelPropsTheory.storage_read_live_field >>
       metis_tac[]) >>
   first_assum ACCEPT_TAC
 QED
@@ -512,12 +552,19 @@ Proof
            bind_def, lift_option_type_def, return_def, raise_def,
            pairTheory.UNCURRY] >>
       rpt (BasicProvers.FULL_CASE_TAC >>
-           gvs[return_def, raise_def, pairTheory.UNCURRY])) >>
+           gvs[return_def, raise_def, pairTheory.UNCURRY]))
+  >~ [`MemoryPlace id path`]
+  >- (simp[select_result_def, extend_place_def, place_type_value_def,
+           read_place_def, get_scopes_def, bind_def, ignore_bind_def,
+           lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+      rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def]) >>
+      rpt strip_tac >> gvs[]) >>
   simp[select_result_def, extend_place_def, place_type_value_def,
-       read_place_def, get_scopes_def, get_immutables_def,
-       get_address_immutables_def, bind_def, ignore_bind_def,
-       lift_option_type_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])
+       read_place_def, get_immutables_def, get_address_immutables_def,
+       bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def]) >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem attr_operand_admissible[local]:
@@ -612,6 +659,8 @@ Theorem attr_summary_ok[local]:
          t.vs_inst_idx = LENGTH sb.cs_current_insts) R
 Proof
   rpt strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    metis_tac[attr_post_value_type] >>
   `eval_expr cx obj (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL btv, fe with gas_obs := [])` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
@@ -694,6 +743,8 @@ Proof
   rpt gen_tac >> strip_tac >> simp[Once expr_vv_case_def] >>
   rpt gen_tac >> strip_tac >>
   drule attr_pre_base >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (drule_all attr_post_value_type >> simp[]) >>
   `expr_vv_sim ctx func cenv cx ty obj es` by
     (irule (iffLR expr_vv_case_def) >>
      gvs[vyperTypeCallGraphTheory.int_calls_expr_def] >> metis_tac[]) >>
@@ -706,7 +757,10 @@ Theorem compile_attribute_case:
     expr_sim_case nocalls ctx func cenv cx (Attribute ann obj fld) /\
     expr_vv_case nocalls ctx func cenv cx (Attribute ann obj fld)
 Proof
-  metis_tac[compile_attribute_vv_case, expr_sim_case_of_vv]
+  rpt strip_tac >>
+  `expr_vv_case nocalls ctx func cenv cx (Attribute ann obj fld)` by
+    metis_tac[compile_attribute_vv_case] >>
+  simp[] >> irule expr_sim_case_of_vv >> simp[]
 QED
 
 Theorem compile_attribute_vv_sim:

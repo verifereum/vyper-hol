@@ -17,7 +17,6 @@ Ancestors
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource vfmExecution
-  venomPipelineCorrect
   passSimulationDefs
   codegenCorrectness immutableCodeLayout
   stateEquiv stateEquivProps
@@ -626,32 +625,6 @@ Proof
   >> Cases_on `y` >> gvs[external_call_result_rel_legacy_def]
 QED
 
-(* Bridge from vyper_evm_correspondence to run_call + call_result_matches.
-
-   vyper_evm_correspondence is defined in terms of VFM's `run` which
-   executes all frames to completion. call_result_matches uses `run_call`
-   which stops when the current call frame completes.
-
-   For outermost calls (LENGTH es.contexts = 1): run_call = run because
-   step never empties the context stack (step_preserves_nonempty_contexts).
-   For inner calls (LENGTH es.contexts > 1): run_call stops when
-   handle_exception pops the callee frame; the postcondition includes
-   the frame-popping effects (stack push, account rollback on revert).
-
-   This encapsulates the EVM execution semantics reasoning about
-   context stack management, handle_exception, and the OWHILE loop. *)
-Theorem evm_correspondence_to_call_result[local]:
-  !tenv event_info am tx ret es.
-    vyper_evm_correspondence_legacy tenv event_info ret am tx es /\
-    ~NULL es.contexts
-    ==>
-    ?r es_final.
-      run_call_legacy es = SOME (r, es_final) /\
-      call_result_matches_legacy tenv event_info am tx ret r es es_final
-Proof
-  cheat
-QED
-
 (* ===== Main Correctness Theorem ===== *)
 
 (* LEGACY compiler correctness for a single external call.
@@ -839,7 +812,8 @@ Proof
    call_outcomes_ok am tx vs.vs_outcomes` by simp[] >>
   `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
   `o1_run_state_ok vs` by
-    (fs[o1_run_state_ok_def] >> simp[Abbr`vs`, entry_venom_state_def]) >>
+    (fs[o1_run_state_ok_def] >>
+     gvs[Abbr`vs`, entry_venom_state_def, call_state_rel_def]) >>
   `EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
    fixed_region_reserved 0 unit.cu_context` by
     (drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
@@ -897,7 +871,10 @@ Proof
    taint_within
      (external_call_dead tx (call_external (SOME vs.vs_outcomes) [] am tx))
      unit.cu_context vs_in` by
-    (drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >> simp[] >>
+    (drule lower_vyper_runtime_unit_memory_ok >>
+     disch_then (qspecl_then [`am`, `tx`, `ret`, `vs_in`] mp_tac) >>
+     impl_tac >- fs[] >>
+     strip_tac >> simp[] >>
      metis_tac[external_call_dead_observations]) >>
   `mem_inv dload_offset_ok unit.cu_context vs_in` by
     (irule lower_vyper_runtime_unit_dload_offset_ok >> simp[] >>

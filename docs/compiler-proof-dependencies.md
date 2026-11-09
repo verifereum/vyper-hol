@@ -61,7 +61,7 @@ is `e2eCorrectness.vyper_call_correct`.
 | Hypothesis | Class | Current producer / absence |
 |---|---|---|
 | compiler returns `(deploy_bc,runtime_bc)` | boundary | Caller supplies success; L1 extracts raw phases and exact assembled runtime bytes. No universal success producer. |
-| `supported_program tops` | computational boundary | 101 named `supportedFixtures*.*_supported_program` exports/plain EVAL at TASK022; exact manifest whitelist on `tops` alone. No universal membership, typing or semantic correctness producer. |
+| `supported_program tops` | computational boundary | Plain EVAL on concrete `tops`; exact whitelist on `tops` alone. No universal membership, typing or semantic correctness producer. |
 | `source_typing_ok tops am tx` | boundary + environmental | Checker artifact; partial `load_contract_establishes_checked_contract_runtime_ready`, `load_contract_establishes_machine_well_typed`, `checked_call_external_preserves_machine_well_typed`. No complete arbitrary-environment producer. |
 | `source_storage_ok tops am tx` | environmental/layout/hash guard | Conditional `eval_stmt_preserves_contract_storage_well_formed` family and `take_adopt_call_outcome_storage_suffix`. No complete deployment/transaction producer; Milestone 7. |
 | `call_state_rel tops runtime_bc am tx es` | environmental | No general producer or satisfiability theorem. L6/L8 **consume**, not produce, it; transaction corollary deferred to Milestone 7. |

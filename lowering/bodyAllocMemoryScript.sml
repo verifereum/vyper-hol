@@ -1,7 +1,7 @@
 (* Actual body allocation sites: membership and reused-site size. *)
 Theory bodyAllocMemory
 Ancestors
-  exprSimSource
+  exprSimSource exprSimProps
   builtinBytesMemory allocaFootprint abiBuiltinAllocation exprLoweringProps exprLowering
   exprSimAggregateChildren exprSimLiteralBuffer exprSimAlloc exprSimOps instMemFrontier
   fragExec fragExecMem allocaHistoryFragment rich_list
@@ -190,7 +190,7 @@ Proof
   rpt gen_tac >> strip_tac >> first_x_assum drule >> simp[]
 QED
 
-Theorem compile_alloc_buffer_body_history[local]:
+Theorem compile_alloc_buffer_body_history:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
   ~block_is_terminated sa /\ fn_inst_ids_distinct func /\
   alloca_history func s /\ alloca_inv s /\

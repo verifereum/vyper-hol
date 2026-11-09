@@ -6,14 +6,15 @@
  * other expression to its own case piece.
  *
  * TOP-LEVEL:
- *   leaf_expr_sim_ptr
+ *   leaf_expr_sim_ptr -- by constructor: exprSimPtrName,
+ *     exprSimPtrTopLevel, exprSimPtrFlagMember, exprSimPtrLiteral
  *)
 Theory exprSimPtr
 Ancestors
+  exprSimPtrName exprSimPtrTopLevel exprSimPtrFlagMember exprSimPtrLiteral
   bodyPtrDefs exprSimHyps exprSimHypsDefs vyperAST vyperInterpreter list
 
-(* ADMITTED: a piece of the body induction; bodySimPtrMain's
-   body_expr_ptr_ok_leaf uses it. *)
+(* bodySimPtrMain's body_expr_ptr_ok_leaf uses it. *)
 Theorem leaf_expr_sim_ptr:
   !d PG ctx func cenv cx env ty e es.
     ((?a id. e = Name a id) \/ (?a nsid. e = TopLevelName a nsid) \/
@@ -22,5 +23,7 @@ Theorem leaf_expr_sim_ptr:
     expr_sim_ptr d ctx PG func cenv cx ty e es /\
     expr_vv_sim_ptr d ctx PG func cenv cx ty e es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  metis_tac[name_expr_sim_ptr, toplevel_expr_sim_ptr,
+            flag_member_expr_sim_ptr, literal_expr_sim_ptr]
 QED

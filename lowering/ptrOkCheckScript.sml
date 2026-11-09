@@ -1,6 +1,6 @@
-(* Soundness of vyperCompiler's ptr_ok_check: a unit that passes it has
- * every function pointer-confined (ptrDiscipline's fn_ptr_ok), with the
- * pointer parameters it computes.
+(* Soundness of vyperCompiler's ptr_ok_check: a unit without DALLOCA that
+ * passes it has every function pointer-confined (ptrDiscipline's fn_ptr_ok),
+ * with the pointer parameters it computes.
  *
  * TOP-LEVEL:
  *   pv_closure_set -- a closed list closure is pointer_derived_vars
@@ -180,16 +180,44 @@ Proof
   simp[addr_operand_is_alt] >> rpt strip_tac >> gvs[ptr_cmp_exempt_alt]
 QED
 
+Theorem lit_case[local]:
+  !ops P. (case ops of [Lit idx] => P idx | _ => F) <=>
+          ?idx. ops = [Lit idx] /\ P idx
+Proof
+  rpt gen_tac >> Cases_on `ops` >- simp[] >>
+  rename1 `op1::rest` >> Cases_on `op1` >> simp[] >>
+  Cases_on `rest` >> simp[]
+QED
+
+Theorem pv_def_check_sound[local]:
+  !pl ar pv inst v.
+    pv_def_check pl ar pv inst /\ MEM v inst.inst_outputs /\ MEM v pv ==>
+    inst.inst_opcode = ALLOCA \/
+    ((inst.inst_opcode = DALLOCA \/
+      (inst.inst_opcode = PARAM /\
+       ?idx. inst.inst_operands = [Lit idx] /\ MEM (w2n idx) pl)) /\
+     ~MEM v ar) \/
+    (is_pointer_preserving_op inst.inst_opcode /\
+     ?u. MEM (Var u) inst.inst_operands /\ MEM u pv)
+Proof
+  rpt strip_tac >> fs[pv_def_check_def, EVERY_MEM] >>
+  first_x_assum drule_all >> simp[lit_case, EXISTS_MEM] >>
+  strip_tac >> gvs[] >>
+  Cases_on `op` >> gvs[] >> metis_tac[]
+QED
+
 Theorem fn_ptr_ok_check_sound_aux[local]:
-  !PL fn pv pva pvo.
+  !PL fn pv pva pvo ar.
     pointer_derived_vars fn (ptr_roots (\nm. set (PL nm)) fn) = set pv /\
     pointer_derived_vars fn (alloca_roots fn) = set pva /\
     pointer_derived_vars fn
       (ptr_roots (\nm. set (PL nm)) fn DIFF alloca_roots fn) = set pvo /\
+    set ar = alloca_roots fn /\
     fn.fn_forced_alloc_positions = FEMPTY /\
     (!inst. MEM inst (fn_insts fn) ==>
             inst_ptr_ok_check PL pv inst /\ affine_check pv inst /\
-            phi_check pv inst /\ write_excl_check pva pvo inst) ==>
+            phi_check pv inst /\ write_excl_check pva pvo inst /\
+            pv_def_check (PL fn.fn_name) ar pv inst) ==>
     fn_ptr_ok (\nm. set (PL nm)) fn
 Proof
   rpt gen_tac >> strip_tac >>
@@ -219,10 +247,14 @@ Proof
       gvs[phi_check_def, EXISTS_MEM, EVERY_MEM, PULL_EXISTS] >>
       first_x_assum drule >> simp[] >> strip_tac >> rpt strip_tac
       >- (first_x_assum drule >> simp[]) >>
-      first_x_assum drule >> Cases_on `op` >> simp[]) >>
+      first_x_assum drule >> Cases_on `op` >> simp[])
+  >- (rpt gen_tac >> strip_tac >>
+      `write_excl_check pva pvo inst` by metis_tac[] >>
+      gvs[write_excl_check_def]) >>
   rpt gen_tac >> strip_tac >>
-  `write_excl_check pva pvo inst` by metis_tac[] >>
-  gvs[write_excl_check_def]
+  `pv_def_check (PL fn.fn_name) ar pv inst` by metis_tac[] >>
+  drule_all pv_def_check_sound >> qpat_x_assum `set ar = _` (SUBST1_TAC o SYM) >>
+  simp[]
 QED
 
 Theorem fn_ptr_ok_check_sound:
@@ -246,7 +278,7 @@ Proof
   rename1 `pv_closure fn (opcode_root_list ALLOCA fn ++ _) = SOME pv_all` >>
   rename1 `pv_closure fn (opcode_root_list ALLOCA fn) = SOME pv_a` >>
   rename1 `pv_closure fn (FILTER _ _) = SOME pv_o` >>
-  qexistsl_tac [`pv_all`, `pv_a`, `pv_o`] >>
+  qexistsl_tac [`opcode_root_list ALLOCA fn`, `pv_all`, `pv_a`, `pv_o`] >>
   imp_res_tac pv_closure_set >>
   conj_tac >- fs[EVERY_MEM] >>
   rpt conj_tac >> metis_tac[]
@@ -280,13 +312,22 @@ Proof
 QED
 
 Theorem ptr_ok_check_sound:
-  !ctx. ptr_ok_check ctx ==>
+  !ctx. ptr_ok_check ctx /\ ~ctx_has_dalloca ctx ==>
         EVERY (\fn. fn_ptr_ok (\nm. set (ctx_ptr_param_list ctx nm)) fn /\
                     fn_ptr_ok (\nm. set (ctx_ptr_param_list ctx nm))
                       (reachable_fn fn))
           ctx.ctx_functions
 Proof
-  rw[ptr_ok_check_def, EVERY_MEM] >> first_x_assum drule >> strip_tac >>
+  rpt strip_tac >>
+  `EVERY (\fn. fn_ptr_ok_check (ctx_ptr_param_list ctx) fn /\
+               wf_function fn /\
+               EVERY (\i. i.inst_opcode <> PHI) (fn_insts fn) /\
+               fn_ptr_ok_check (ctx_ptr_param_list ctx)
+                 (fn_reachable_blocks fn)) ctx.ctx_functions`
+    by gvs[ptr_ok_check_def, ctx_has_dalloca_def] >>
+  qpat_x_assum `ptr_ok_check _` kall_tac >>
+  qpat_x_assum `~ctx_has_dalloca _` kall_tac >>
+  rw[EVERY_MEM] >> fs[EVERY_MEM] >> first_x_assum drule >> strip_tac >>
   `fn_reachable_blocks fn = reachable_fn fn` by
     simp[fn_reachable_blocks_reachable_fn, EVERY_MEM] >>
   gvs[] >> imp_res_tac fn_ptr_ok_check_sound >> simp[]

@@ -53,7 +53,7 @@ QED
    element's own only for bytestrings, whose store ignores the source type,
    and for an internal call returning a wider layout, which the caller rules
    out. *)
-Theorem aggregate_elem_lowered_type[local]:
+Theorem aggregate_elem_lowered_type:
   !ce e env.
     well_typed_expr env e /\
     (int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
@@ -64,7 +64,10 @@ Proof
        vyperTypeSystemTheory.well_typed_expr_def,
        vyperTypeSystemTheory.type_builtin_result_ok_def,
        vyperTypeCallGraphTheory.int_calls_expr_def] >>
-  rpt strip_tac >> gvs[is_bytestring_type_def]
+  rpt strip_tac >> gvs[is_bytestring_type_def] >>
+  (* concat: its typing makes the annotation a bytestring *)
+  gvs[vyperTypeSystemTheory.well_typed_builtin_app_def] >>
+  rpt (pop_assum mp_tac) >> rw[] >> gvs[is_bytestring_type_def]
 QED
 
 Theorem aggregate_store_lowered_elem[local]:
@@ -260,6 +263,7 @@ Proof
 QED
 
 Theorem aggregate_tuple_store_marked[local]:
+  post_value_type ce e = expr_type e /\
   compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su = ((),sb) /\
   expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
@@ -394,7 +398,7 @@ Proof
   simp[GSYM ignore_bind_def] >> metis_tac[]
 QED
 
-Theorem aggregate_tuple_ignore_values[local]:
+Theorem aggregate_tuple_ignore_values:
   ignore_bind (bind (eval_exprs cx args) (\vs. return (v::vs))) (return ()) =
   ignore_bind (eval_exprs cx args) (return ())
 Proof
@@ -428,7 +432,7 @@ Proof
   disj2_tac >> metis_tac[]
 QED
 
-Theorem aggregate_tuple_eval_cons[local]:
+Theorem aggregate_tuple_eval_cons:
   eval_exprs cx (e::args) =
   bind (eval_expr cx e) (\tv. bind (read_result cx tv)
     (\v. bind (eval_exprs cx args) (\vs. return (v::vs))))
@@ -516,6 +520,10 @@ Proof
   `expr_body_pre ce cx env h es /\ (nocalls ==> int_calls_expr h = [])` by
     metis_tac[listTheory.MEM] >>
   `well_typed_expr env h` by metis_tac[expr_body_pre_def] >>
+  `post_value_type ce h = expr_type h` by
+    (`lowered_value_type ce h = expr_type h \/ is_bytestring_type (expr_type h)` by
+       (irule aggregate_elem_lowered_type >> metis_tac[listTheory.MEM]) >>
+     metis_tac[post_value_type_lowered, post_value_type_bytestring]) >>
   drule aggregate_tuple_cons_compile >>
   (impl_tac >- (irule aggregate_elem_lowered_type >> metis_tac[listTheory.MEM])) >>
   strip_tac >>
@@ -870,7 +878,7 @@ Finalise aggregate_make_tuple_sim
 
 
 (* Post transport keeps the counted execution and exemption witnesses intact. *)
-Theorem struct_gas_outcome_post[local]:
+Theorem struct_gas_outcome_post:
   gas_outcome memory tops (ctx,func) source (es,s0) Q R /\
   (!res es' r. Q res es' r ==> Q' res es' r) ==>
   gas_outcome memory tops (ctx,func) source (es,s0) Q' R
@@ -878,7 +886,7 @@ Proof
   rewrite_tac[gas_outcome_def, gas_summary_at_def] >> metis_tac[]
 QED
 
-Theorem struct_tuple_memory_post[local]:
+Theorem struct_tuple_memory_post:
   !names tvs vs ptr mem.
   LENGTH names = LENGTH tvs /\ tuple_in_memory vs tvs ptr mem ==>
   fields_in_memory (ZIP (names,vs)) (ZIP (names,tvs)) ptr mem
@@ -981,7 +989,7 @@ Proof
 QED
 
 
-Theorem array_header_store_state_rel[local]:
+Theorem array_header_store_state_rel:
   stmt_state_rel ctx func ce cx es s /\
   (!name lo sz. local_region ce es.scopes s name lo sz ==>
      lo + sz <= b \/ b + 32 <= lo) /\
@@ -1020,7 +1028,7 @@ Proof
   qexistsl_tac [`es`, `s`] >> simp[mstore_def]
 QED
 
-Theorem array_header_store_boundary[local]:
+Theorem array_header_store_boundary:
   stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_outputs = [x] /\
   not_local_ptr ce es.scopes x /\
