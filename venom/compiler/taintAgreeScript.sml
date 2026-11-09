@@ -592,6 +592,38 @@ Proof
   simp[venom_state_fupdcanon]
 QED
 
+Theorem taint_agree_call_mask:
+  MEM inst.inst_opcode [CALL; STATICCALL] /\
+  inst.inst_outputs = [out] /\ out_taint tn inst s = {} /\
+  source_memory_write_ranges inst s = [(ro,rs)] /\
+  rq.cr_static = (inst.inst_opcode = STATICCALL \/ s.vs_call_ctx.cc_static) /\
+  consume_call_outcome rq ro rs s = (w,r) ==>
+  step_taint inst s (update_var out w r) tn =
+    (tn with <|t_mem := tn.t_mem DIFF
+       {i | ro <= i /\ i < ro + LENGTH (TAKE rs r.vs_returndata)};
+      t_stor := if ~rq.cr_static /\ r.vs_requests <> s.vs_requests /\
+        r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+        then {} else tn.t_stor;
+      t_trans := if ~rq.cr_static /\ r.vs_requests <> s.vs_requests /\
+        r.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+        then {} else tn.t_trans|>) with
+      t_var := set_var_taint tn.t_var [out] {}
+Proof
+  strip_tac >>
+  `r.vs_allocas = s.vs_allocas /\ r.vs_fmp = s.vs_fmp` by
+    (qpat_x_assum `consume_call_outcome _ _ _ _ = _` mp_tac >>
+     simp[consume_call_outcome_eq] >> strip_tac >> gvs[]) >>
+  `written_taint tn inst s = {}` by
+    (fs[MEM] >> simp[written_taint_def] >> rpt CASE_TAC >> simp[]) >>
+  fs[MEM] >>
+  simp[step_taint_def, mem_taint_def, new_site_bytes_def, step_writes_def,
+    store_taint_def, imm_taint_def, adopt_reset_def,
+    range_bytes_def, update_var_def, taint_component_equality,
+    LENGTH_TAKE_EQ, arithmeticTheory.MIN_DEF, FLOOKUP_DEF, SF CONJ_ss,
+    Excl "consume_call_outcome_eq"] >>
+  rpt IF_CASES_TAC >> gvs[arithmeticTheory.LESS_OR_EQ]
+QED
+
 Theorem taint_agree_call_abort:
   taint_agree D X tn s t /\ taint_ok fn tn inst s /\
   MEM inst.inst_opcode [CALL; STATICCALL] /\
