@@ -4,7 +4,7 @@ Ancestors
   abiEncoderRegisteredEffect abiDecoderReentry abiDecoderDynamicLoopSetup
   abiEncoderWrites abiEncoderWindowLookup emitHelperProps exprLoweringProps
   abiDecoderContract abiDecoderFrameCompose instIdxIndep
-  abiDecoderArrayHeader venomMemProps abiDecoderGuards
+  abiDecoderArrayHeader venomMemProps abiDecoderGuards abiDecoderRange
   emitHelper compileEnv venomState venomExecSemantics venomInst words list finite_map
 
 Theorem abi_encode_store_run_open[local]:

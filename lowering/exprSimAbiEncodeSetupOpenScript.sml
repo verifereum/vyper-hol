@@ -4,7 +4,7 @@ Ancestors
   exprSimAbiEncodeOpenSetup abiBuiltinPrefix abiBuiltinSetupFrames
   abiBuiltinAllocation abiBuiltinEncodeAllocate abiBuiltinEncodeMethod
   abiBuiltinEncodeSetup abiBuiltinEncodeCode abiEncodeWindowBuiltin
-  abiEncoderSequence abiDecoderContract compileEnv abiDecoderGuards
+  abiEncoderSequence abiDecoderContract compileEnv abiDecoderGuards abiDecoderRange
   abiBuiltinEncodeCorrect abiDecoderFrameCompose abiEncoderWrites venomMemProps abiDecoderArrayHeader
   abiDecoderReentry abiDecoderReentryAddress abiDecoderDynamicLoopSetup
   emitHelperProps exprLoweringProps venomExecSemantics venomExecProofs

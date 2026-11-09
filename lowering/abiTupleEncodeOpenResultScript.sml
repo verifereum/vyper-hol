@@ -3,7 +3,7 @@ Theory abiTupleEncodeOpenResult
 Ancestors
   abiTupleEncodeResult abiTupleEncodeOpenInput abiTupleEncodeOpenMemory abiTupleProps
   abiEncoderOpenInputFrame abiEncoderInputFrame abiDecoderReentry abiDecoderContract
-  abiDecoderGuards abiDecoderFrameCompose compileEnv emitHelperProps exprLoweringProps
+  abiDecoderGuards abiDecoderRange abiDecoderFrameCompose compileEnv emitHelperProps exprLoweringProps
   venomState venomExecSemantics words list arithmetic
 
 Definition abi_tuple_encode_open_result_def:

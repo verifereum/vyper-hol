@@ -6,7 +6,7 @@ Ancestors
   valueEncoding valueEncodingProps compileEnv venomState venomInst venomMemDefs
   contractABI words list abiEncoderOpenInputFrame abiDecoderFrameCompose
   abiTupleEncodeInput abiTupleEncodeMemory abiTupleProps arithmetic
-  abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderGuards abiTupleEncodePrepare
+  abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderGuards abiDecoderRange abiTupleEncodePrepare
 
 (* Only the meaningful prefix is owned. MCOPY may snapshot unused source
    padding that overlaps the destination, without affecting this result. *)

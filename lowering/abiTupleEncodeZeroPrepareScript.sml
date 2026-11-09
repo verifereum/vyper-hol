@@ -4,7 +4,7 @@ Ancestors
   abiTupleEncodeZeroInput abiTupleEncodeOpenMemory abiTupleProps
   exprLowering context compileEnv emitHelperProps exprLoweringProps venomInst words list rich_list arithmetic
   abiDecoderReentry abiDecoderContract abiDecoderFrameCompose venomState venomExecSemantics
-  abiBuiltinAllocation emitHelper abiDecoderGuards finite_map abiEncoderSequence abiDecoderLoop
+  abiBuiltinAllocation emitHelper abiDecoderGuards abiDecoderRange finite_map abiEncoderSequence abiDecoderLoop
   fragExec instIdxIndep abiBuiltinEncodeResources abiBuiltinEncodeInput
 
 Theorem abi_tuple_encode_zero_tail_inputs:

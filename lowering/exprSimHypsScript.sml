@@ -1527,8 +1527,10 @@ Proof
       `env.type_defs = get_tenv cx /\
        sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
        well_typed_type_builtin_args (AbiEncode ensure method_id) v4 (MAP expr_type args)` by
-        gvs[expr_body_pre_def, expr_sim_inv_def, well_typed_expr_def,
-            env_consistent_def, env_context_consistent_def] >>
+        (qpat_x_assum `expr_body_pre _ _ _ (TypeBuiltin _ _ _ _) _` mp_tac >>
+         rpt (pop_assum kall_tac) >> strip_tac >>
+         gvs[expr_body_pre_def, expr_sim_inv_def, well_typed_expr_def,
+             env_consistent_def, env_context_consistent_def]) >>
       drule expr_body_pre_lowered_evaluates >> strip_tac >>
       qpat_x_assum `bind _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,

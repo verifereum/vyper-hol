@@ -184,7 +184,10 @@ Proof
      (conj_tac >- metis_tac[window_pre_sites]) >>
      `window_alloca_growth s u /\ abi_encoder_registered_effect {st.cs_next_id} [] s u` by
        metis_tac[window_phase_effect, window_phase_resources] >>
-     asm_rewrite_tac[] >> fs[abi_encoder_window_pre_def]) >>
+     asm_rewrite_tac[] >>
+     qpat_x_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [abi_encoder_window_pre_def] >> strip_tac >>
+     asm_rewrite_tac[]) >>
   `eval_operand src u = SOME (n2w sb) /\ eval_operand dst u = SOME (n2w d)` by
     (qpat_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp_tac bool_ss [abi_encoder_window_pre_def] >> strip_tac >>
