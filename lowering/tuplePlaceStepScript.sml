@@ -201,3 +201,132 @@ Proof
   drule_all tuplePlacePointerReadyTheory.tuple_place_writable_borrow_destination_apart >>
   simp[valueEncodingTheory.type_memory_size_def]
 QED
+
+Theorem tuple_place_pointer_window_transport:
+  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  supported_target_pure tops bt /\ eval_base_place cx bt es = (res,ee) /\
+  target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  mem_bytes_at (w2n w) (type_memory_size_list ltvs) t.vs_memory =
+    mem_bytes_at (w2n w) (type_memory_size_list ltvs) s.vs_memory /\
+  i <= j /\ j < LENGTH ltys /\ ~is_word_type (EL j ltys) ==>
+  val_in_memory (EL j ltvs) (EL j vs)
+    (w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) t.vs_memory
+Proof
+  strip_tac >>
+  `val_in_memory (EL j ltvs) (EL j vs)
+    (w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) s.vs_memory` by
+    (irule tuplePlacePointerReadyTheory.tuple_place_pointer_pending_memory >>
+     metis_tac[]) >>
+  `val_wf (EL j ltvs) (EL j vs)` by
+    (fs[tuplePlaceHeadTheory.tuple_place_head_def,
+        vyperTypeDefaultsTheory.values_have_types_LIST_REL,
+        listTheory.LIST_REL_EL_EQN] >>
+     metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf]) >>
+  `SUM (MAP type_memory_size (TAKE j ltvs)) + type_memory_size (EL j ltvs)
+    <= type_memory_size_list ltvs` by
+    (simp[valueEncodingProofsTheory.type_memory_size_list_sum] >>
+     irule tupleMemoryLayoutTheory.tuple_element_interval >>
+     fs[tuplePlaceHeadTheory.tuple_place_head_def]) >>
+  irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
+  conj_tac >- simp[] >>
+  qexistsl [`type_memory_size (EL j ltvs)`, `s.vs_memory`] >> simp[] >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule valueEncodingPropsTheory.mem_bytes_at_translated_window >>
+  qexists `type_memory_size_list ltvs` >> simp[]
+QED
+
+Theorem tuple_place_word_head_step:
+  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  eval_base_place cx bt es = (INL (PlaceR p),ee) /\
+  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
+  assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit ltys tys /\
+  evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+  evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs) /\
+  i < LENGTH tys /\ is_word_type (EL i tys) /\
+  emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE
+    | _ => MSTORE) [dst; EL i elems] sa = ((),sb) /\
+  eval_operand dst s = SOME dw /\
+  place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx ee s /\
+  write_place cx p (EL i vs) ee = (INL (),ff) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (loc = LocMemory ==> w2n w + type_memory_size_list ltvs <= w2n dw \/
+    w2n dw + type_memory_size (EL i tvs) <= w2n w) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP t.vs_allocas aid = SOME entry)
+Proof
+  strip_tac >>
+  drule_all tuplePlaceBranchReadyTheory.tuple_place_pointer_word_store >> strip_tac >>
+  qexists `t` >> simp[] >>
+  `ci_mono sa sb` by
+    (metis_tac[exprLoweringPropsTheory.ci_mono_emit_void, pairTheory.SND]) >>
+  `LENGTH ltys = LENGTH tys` by metis_tac[vyperTypeArgFitsTheory.arg_types_fit_LENGTH] >>
+  irule tuple_place_pointer_head_advance >>
+  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >> simp[] >>
+  qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >> rpt strip_tac >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule tuple_place_pointer_window_transport >>
+  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_SUC_REFL]
+QED
+
+Theorem tuple_place_pointer_slice_transport:
+  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  supported_target_pure tops bt /\ eval_base_place cx bt es = (res,ee) /\
+  target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
+  (w2n w + type_memory_size_list ltvs <= d \/ d+len <= w2n w) /\
+  (!name b sz a n. local_region cenv ee.scopes s name b sz /\ b <= a /\
+    a+n <= b+sz /\ (a+n <= d \/ d+len <= a) ==>
+    mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory) /\
+  (!aid b sz a n. aid < sa.cs_next_id /\
+    FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ b <= a /\ a+n <= b+sz /\
+    (a+n <= d \/ d+len <= a) ==>
+    mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory) /\
+  i <= j /\ j < LENGTH ltys /\ ~is_word_type (EL j ltys) /\
+  0 < type_memory_size (EL j ltvs) ==>
+  val_in_memory (EL j ltvs) (EL j vs)
+    (w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) t.vs_memory
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `tuple_place_snapshot cenv cx ee lo sa.cs_next_id tys ltys ltvs w s` by
+    (irule tuplePlacePointerReadyTheory.tuple_place_pointer_snapshot >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx ee s /\ LENGTH ltvs = LENGTH ltys` by
+    fs[loweringPostsTheory.target_post_def, tuplePlaceHeadTheory.tuple_place_head_def] >>
+  `SUM (MAP type_memory_size (TAKE j ltvs)) + type_memory_size (EL j ltvs)
+    <= type_memory_size_list ltvs` by
+    (simp[valueEncodingProofsTheory.type_memory_size_list_sum] >>
+     irule tupleMemoryLayoutTheory.tuple_element_interval >> simp[]) >>
+  `w2n w + SUM (MAP type_memory_size (TAKE j ltvs)) + type_memory_size (EL j ltvs)
+     <= d \/ d+len <= w2n w + SUM (MAP type_memory_size (TAKE j ltvs))` by decide_tac >>
+  `mem_bytes_at (w2n w + SUM (MAP type_memory_size (TAKE j ltvs)))
+     (type_memory_size (EL j ltvs)) t.vs_memory =
+   mem_bytes_at (w2n w + SUM (MAP type_memory_size (TAKE j ltvs)))
+     (type_memory_size (EL j ltvs)) s.vs_memory` by
+    (drule_all tuplePlacePointerReadyTheory.tuple_place_snapshot_element_bounds >>
+     strip_tac >> metis_tac[]) >>
+  `val_in_memory (EL j ltvs) (EL j vs)
+    (w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) s.vs_memory` by
+    (irule tuplePlacePointerReadyTheory.tuple_place_pointer_pending_memory >> metis_tac[]) >>
+  `val_wf (EL j ltvs) (EL j vs)` by
+    (fs[tuplePlaceHeadTheory.tuple_place_head_def,
+        vyperTypeDefaultsTheory.values_have_types_LIST_REL,
+        listTheory.LIST_REL_EL_EQN] >>
+     metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf]) >>
+  irule valueEncodingPropsTheory.val_in_memory_mem_agree >> simp[] >>
+  qexistsl [`type_memory_size (EL j ltvs)`, `s.vs_memory`] >>
+  gvs[]
+QED
+
