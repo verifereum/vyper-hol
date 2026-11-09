@@ -42,7 +42,7 @@ Theorem entry_address_setup_opcodes[local]:
   EVERY (\i. MEM i.inst_opcode [MLOAD; ADD; MUL; CALLDATALOAD]) (emitted_insts st st')
 Proof
   Cases_on `dec_info_needs_offset di` >>
-  simp[abi_decode_array_element_setup_def, compile_abi_decode_dyn_elem_ptr_def,
+  simp[abi_decode_array_element_setup_def, abiEncoderTheory.compile_abi_dec_addr_def, compile_abi_decode_dyn_elem_ptr_def,
     abi_decode_indexed_address_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[emitted_insts_def] >>
@@ -120,7 +120,8 @@ Proof
     simp[abi_decoder_operand_live_def] >>
   rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
   `LENGTH pre = LENGTH vpre` by decide_tac >>
-  drule_all abi_decoder_dynarray_dynamic_setup >> strip_tac >>
+  drule_all (PURE_REWRITE_RULE [arithmeticTheory.ADD]
+    (Q.INST [`B` |-> `0`] abi_decoder_dynarray_dynamic_setup)) >> strip_tac >>
   drule_all entry_address_setup_fields >> strip_tac >>
   `sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
       (ListV (pre ++ av::post))) < dimword (:256) /\

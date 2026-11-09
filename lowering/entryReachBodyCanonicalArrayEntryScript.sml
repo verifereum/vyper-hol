@@ -21,7 +21,7 @@ Theorem array_entry_observation_code[local]:
     (emitted_insts st mid)
 Proof
   Cases_on `dec_info_needs_offset di` >>
-  simp[abi_decode_array_element_setup_def, abi_decode_indexed_address_def,
+  simp[abi_decode_array_element_setup_def, abiEncoderTheory.compile_abi_dec_addr_def, abi_decode_indexed_address_def,
        compile_abi_decode_dyn_elem_ptr_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
