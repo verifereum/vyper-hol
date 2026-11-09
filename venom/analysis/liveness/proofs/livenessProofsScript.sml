@@ -182,6 +182,19 @@ Proof
   ACCEPT_TAC livenessTransferProofsTheory.collect_phis_mem
 QED
 
+Theorem current_collect_phis_length:
+  !insts. LENGTH (collect_phis insts) <= LENGTH insts
+Proof
+  ACCEPT_TAC livenessTransferProofsTheory.current_collect_phis_length
+QED
+
+Theorem current_wf_nonphi_after_collect:
+  !xs i. i < LENGTH xs /\ (EL i xs).inst_opcode <> PHI ==>
+    LENGTH (collect_phis xs) <= i
+Proof
+  ACCEPT_TAC livenessTransferProofsTheory.current_wf_nonphi_after_collect
+QED
+
 val _ = List.app (fn (_,th) =>
   if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
   then () else raise Fail "oracle in public liveness API")

@@ -808,7 +808,7 @@ Proof
   simp[stack_poke_def, MEM_LUPDATE] >> metis_tac[EL_MEM]
 QED
 
-Theorem reorder_reduce_inventory_subset_nb[local]:
+Theorem reorder_reduce_inventory_subset_nb:
   !(dist:num) tops op f ps ops ps'.
     (if dist > 16 then
        reduce_depth_plan (LENGTH ps.ps_stack) tops op f (LENGTH tops) ps

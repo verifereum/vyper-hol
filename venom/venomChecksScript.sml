@@ -15,5 +15,6 @@ Ancestors
   unitShapeChecks unitTransformChecks
   (* passes: call-frame allocation, effect and abort order in DFT, FMP aliasing *)
   concretizeCallFrameRegression dftEffectOrderTest dftAbortOrderTest fmpAliasProbe
+  functionInlinerReturnPcWitness
   (* execution of INVOKE with no arguments and of STOP after a call *)
   invokeEmptyArgs stopReturndata

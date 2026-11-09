@@ -44,10 +44,6 @@
  *   Copy forwarding equivalence:
  *     copy_fwd_cross_equiv                — mcopy vs nop establishes cross-region equiv
  *     copy_fwd_rel_observable_equiv       — simulation invariant implies observable equiv
- *     copy_fwd_read_equiv                 — rewritten read (dst→src) gives same output
- *     copy_fwd_write_equiv                — rewritten write preserves observable + vars + src equiv
- *     copy_fwd_terminator_equiv           — RETURN/REVERT with rewritten operand
- *     copy_fwd_rel_preserved_identical_inst — identical non-clobbering inst preserves invariant
  *     assign_transparent                  — ASSIGN forwards value unchanged
  *     phi_transparent                     — PHI forwards value unchanged
  *)
@@ -1043,18 +1039,6 @@ Theorem copy_fwd_cross_equiv =
 
 Theorem copy_fwd_rel_observable_equiv =
   copyFwdEquivTheory.copy_fwd_rel_observable_equiv
-
-Theorem copy_fwd_read_equiv =
-  copyFwdEquivTheory.copy_fwd_read_equiv
-
-Theorem copy_fwd_write_equiv =
-  copyFwdEquivTheory.copy_fwd_write_equiv
-
-Theorem copy_fwd_terminator_equiv =
-  copyFwdEquivTheory.copy_fwd_terminator_equiv
-
-Theorem copy_fwd_rel_preserved_identical_inst =
-  copyFwdEquivTheory.copy_fwd_rel_preserved_identical_inst
 
 Theorem assign_transparent =
   copyFwdEquivTheory.assign_transparent

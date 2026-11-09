@@ -21,7 +21,7 @@
 
 Theory concretizeMemLocProofs
 Ancestors
-  venomFnInstsProofs instIdxIndep concretizeMemLocDefs allocaRemapDefs pointerConfinedDefs passResidualFrame
+  venomFnInstsProofs instIdxIndep concretizeMemLocDefs allocaRemapDefs pointerConfinedDefs passResidualFrame concretizeAnalysisSizeLookup
   passSimulationProps passSimulationDefs passSharedProps passSharedDefs
   venomWf venomExecSemantics venomExecProofs opcodeClass
   venomMemDefs venomMemProofs stateEquiv
@@ -6323,21 +6323,7 @@ Proof
   rpt strip_tac >> drule_all alloca_size_le_remaining >> simp[]
 QED
 
-(* FIND with predicate Q /\ id = FIND with id /\ Q (needed because
-   find_by_inst_id puts inst_id first, but get_alloca_size_def puts Q first) *)
-Triviality find_by_inst_id_alt:
-  !Q l inst.
-    ALL_DISTINCT (MAP (\i. i.inst_id) l) /\
-    MEM inst l /\ Q inst ==>
-    FIND (\i. Q i /\ i.inst_id = inst.inst_id) l = SOME inst
-Proof
-  gen_tac >>
-  Induct >> simp[FIND_thm] >>
-  rpt strip_tac >> gvs[] >>
-  IF_CASES_TAC >> gvs[ALL_DISTINCT_APPEND, MEM_MAP]
-QED
-
-(* get_alloca_size for a known ALLOCA instruction in the function *)
+(* Literal-size extraction is shared with the stage analysis boundary. *)
 Triviality get_alloca_size_from_inst:
   !fn bb inst sz.
     fn_inst_ids_distinct fn /\
@@ -6346,18 +6332,8 @@ Triviality get_alloca_size_from_inst:
     get_alloca_size fn (Allocation inst.inst_id) = w2n sz
 Proof
   rpt strip_tac >>
-  simp[get_alloca_size_def] >>
-  `MEM inst (FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks))` by
-    (`MEM inst (fn_insts fn)` by metis_tac[MEM_fn_insts] >>
-     gvs[fn_insts_def, fn_insts_blocks_flat]) >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id)
-     (FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks)))` by
-    gvs[fn_inst_ids_distinct_alt, fn_insts_def, fn_insts_blocks_flat] >>
-  `FIND (\i. is_alloca_op i.inst_opcode /\ i.inst_id = inst.inst_id)
-        (FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks)) = SOME inst` by
-    (match_mp_tac (find_by_inst_id_alt |> Q.SPEC `is_alloca_op o inst_opcode`
-       |> SIMP_RULE (srw_ss()) []) >> simp[is_alloca_op_def]) >>
-  gvs[]
+  irule concretizeAnalysisSizeLookupTheory.get_alloca_size_from_inst >>
+  metis_tac[MEM_fn_insts]
 QED
 
 (* alloca_sizes_match preserved by step_inst for non-INVOKE instructions *)

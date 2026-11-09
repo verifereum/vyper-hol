@@ -24,7 +24,7 @@ Ancestors
   fnFrameStepsRevertForward dominatorProofs dfgAnalysisProps cfgCorrectnessProof dfHelperProofs
   venomWfProps
 
-Theorem lineage_state_entry_cases[local]:
+Theorem lineage_state_entry_cases:
   lineage_state liveness dfg cfg fn ps0 lbl ps ==>
   (fn_entry_label fn = SOME lbl /\ ps = ps0) \/
   (?pred. lineage_entry liveness dfg cfg fn ps0 pred lbl ps)
@@ -46,7 +46,7 @@ Proof
   metis_tac[fn_cfg_edge_cfg_analyze]
 QED
 
-Theorem lineage_entry_edge[local]:
+Theorem lineage_entry_edge:
   lineage_entry liveness dfg (cfg_analyze fn) fn ps0 pred succ ps /\
   codegen_ready_fn fn ==>
   (?bb. lookup_block pred fn.fn_blocks = SOME bb) /\
@@ -62,19 +62,7 @@ Proof
   metis_tac[fn_cfg_edge_cfg_analyze]
 QED
 
-Theorem ready_small_preds_no_phis[local]:
-  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
-  LENGTH (cfg_preds_of (cfg_analyze fn) lbl) <= 1 ==>
-  collect_phis bb.bb_instructions = []
-Proof
-  strip_tac >>
-  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
-    metis_tac[lookup_block_MEM, lookup_block_label] >>
-  gvs[codegen_ready_fn_def, phis_at_joins_def, EVERY_MEM] >>
-  metis_tac[NULL_EQ]
-QED
-
-Theorem ready_entry_no_phis[local]:
+Theorem ready_entry_no_phis:
   codegen_ready_fn fn /\ fn_entry_label fn = SOME lbl /\
   lookup_block lbl fn.fn_blocks = SOME bb ==>
   collect_phis bb.bb_instructions = []
@@ -92,14 +80,14 @@ Proof
   gvs[codegen_ready_fn_def, block_entries_ready_def, NULL_EQ]
 QED
 
-Theorem initial_cleanup_empty[local]:
+Theorem initial_cleanup_empty:
   (init_cleanup_plan_state ch growth spill_base lbl_ctr).ps_stack = [] /\
   (init_cleanup_plan_state ch growth spill_base lbl_ctr).ps_spilled = FEMPTY
 Proof
   simp[init_cleanup_plan_state_def, init_plan_state_def]
 QED
 
-Theorem dominates_entry_label[local]:
+Theorem dominates_entry_label:
   fn_entry_label fn = SOME entry /\ fn_dominates fn dom entry ==>
   dom = entry
 Proof
@@ -108,51 +96,7 @@ Proof
   simp[is_fn_path_def]
 QED
 
-Theorem ready_entry_no_preds[local]:
-  codegen_ready_fn fn /\ entry_block fn = SOME eb ==>
-  cfg_preds_of (cfg_analyze fn) eb.bb_label = []
-Proof
-  strip_tac >> gvs[codegen_ready_fn_def, block_entries_ready_def, NULL_EQ]
-QED
-
-Theorem small_preds_not_dominates_pred[local]:
-  codegen_ready_fn fn /\ fn_reachable fn pred /\
-  fn_cfg_edge fn pred succ /\
-  LENGTH (cfg_preds_of (cfg_analyze fn) succ) <= 1 ==>
-  ~fn_dominates fn succ pred
-Proof
-  strip_tac >>
-  `wf_function fn` by gvs[codegen_ready_fn_def] >>
-  `?eb. entry_block fn = SOME eb` by
-    (gvs[wf_function_def, fn_has_entry_def, entry_block_def] >>
-     Cases_on `fn.fn_blocks` >> gvs[]) >>
-  `MEM pred (cfg_preds_of (cfg_analyze fn) succ)` by
-    metis_tac[fn_cfg_edge_cfg_analyze, cfg_edge_symmetry_uncond] >>
-  `succ <> eb.bb_label` by metis_tac[ready_entry_no_preds, MEM] >>
-  `cfg_reachable_of (cfg_analyze fn) succ` by
-    metis_tac[fn_reachable_step, fn_reachable_cfg_analyze] >>
-  drule_all exists_pred_not_dominated >>
-  disch_then (qx_choose_then `other` strip_assume_tac) >>
-  `other = pred` by
-    (Cases_on `cfg_preds_of (cfg_analyze fn) succ` >> gvs[] >>
-     rename1 `SUC (LENGTH rest) <= 1` >> Cases_on `rest` >> gvs[]) >>
-  metis_tac[fn_dominates_cfg_analyze]
-QED
-
-Theorem dominating_def_excludes_outputs[local]:
-  codegen_ready_fn fn /\
-  MEM def_bb fn.fn_blocks /\ MEM inst def_bb.bb_instructions /\
-  MEM v inst.inst_outputs /\ fn_dominates fn def_bb.bb_label pred /\
-  MEM target fn.fn_blocks /\ ~fn_dominates fn target.bb_label pred ==>
-  ~MEM v (FLAT (MAP (\i. i.inst_outputs) target.bb_instructions))
-Proof
-  strip_tac >> strip_tac >>
-  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
-  gvs[MEM_FLAT, MEM_MAP] >>
-  metis_tac[ssa_unique_output_block]
-QED
-
-Theorem strict_dominating_def_excludes_outputs[local]:
+Theorem strict_dominating_def_excludes_outputs:
   codegen_ready_fn fn /\
   MEM def_bb fn.fn_blocks /\ MEM inst def_bb.bb_instructions /\
   MEM v inst.inst_outputs /\ fn_dominates fn def_bb.bb_label target.bb_label /\
@@ -165,7 +109,7 @@ Proof
   metis_tac[ssa_unique_output_block]
 QED
 
-Theorem ready_dominates_trans[local]:
+Theorem ready_dominates_trans:
   codegen_ready_fn fn /\ fn_dominates fn a b /\ fn_dominates fn b c ==>
   fn_dominates fn a c
 Proof
@@ -173,7 +117,7 @@ Proof
   gvs[fn_dominates_cfg_analyze] >> metis_tac[dominates_trans]
 QED
 
-Theorem ready_dominates_antisym[local]:
+Theorem ready_dominates_antisym:
   codegen_ready_fn fn /\ fn_dominates fn a b /\ fn_dominates fn b a ==>
   a = b
 Proof
@@ -181,13 +125,13 @@ Proof
   gvs[fn_dominates_cfg_analyze] >> metis_tac[dominates_antisym]
 QED
 
-Theorem normalize_marker_not_var[local]:
+Theorem normalize_marker_not_var:
   normalize_operand dfg visited dead_stack_marker <> Var v
 Proof
   simp[dead_stack_marker_def, normalize_operand_def]
 QED
 
-Theorem normalize_var_invariant[local]:
+Theorem normalize_var_invariant:
   !P dfg visited op.
   (!u inst w. FLOOKUP dfg.dfg_defs u = SOME inst /\
      inst.inst_opcode = ASSIGN /\ inst.inst_operands = [Var w] /\ P u ==> P w) ==>
@@ -235,7 +179,7 @@ Proof
   simp[NoAsms]
 QED
 
-Theorem ready_assign_source_def[local]:
+Theorem ready_assign_source_def:
   codegen_ready_fn fn /\ MEM db fn.fn_blocks /\ MEM def db.bb_instructions /\
   MEM u def.inst_outputs /\
   FLOOKUP (dfg_build_function fn).dfg_defs u = SOME inst /\
@@ -258,7 +202,7 @@ Proof
   gvs[def_available_at_def] >> metis_tac[]
 QED
 
-Theorem normalize_dominating_def[local]:
+Theorem normalize_dominating_def:
   codegen_ready_fn fn /\
   MEM db fn.fn_blocks /\ MEM inst db.bb_instructions /\ MEM u inst.inst_outputs /\
   fn_dominates fn db.bb_label target /\
@@ -277,7 +221,7 @@ Proof
   disch_then (qspec_then `v` mp_tac) >> simp[] >> metis_tac[]
 QED
 
-Theorem normalize_strict_dominating_def[local]:
+Theorem normalize_strict_dominating_def:
   codegen_ready_fn fn /\
   MEM db fn.fn_blocks /\ MEM inst db.bb_instructions /\ MEM u inst.inst_outputs /\
   fn_dominates fn db.bb_label target /\ db.bb_label <> target /\
@@ -299,7 +243,7 @@ Proof
   disch_then (qspec_then `v` mp_tac) >> simp[] >> metis_tac[]
 QED
 
-Theorem collect_phis_idempotent[local]:
+Theorem collect_phis_idempotent:
   !instrs. collect_phis (collect_phis instrs) = collect_phis instrs
 Proof
   Induct >> simp[collect_phis_def] >> gen_tac >>
@@ -315,7 +259,7 @@ Proof
   simp[FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
-Theorem phi_owner_cons_witness[local]:
+Theorem phi_owner_cons_witness:
   !i p xs v owner.
     (MEM v (MAP SND (phi_pairs p.inst_operands)) ==> i = owner) ==>
     ((?q. MEM (owner,q) ((i,p)::xs) /\
@@ -327,7 +271,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem indexed_phi_owner_lookup[local]:
+Theorem indexed_phi_owner_lookup:
   !indexed om mt pred v owner.
     (!idx phi. MEM (idx,phi) indexed /\
       MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> idx = owner) ==>
@@ -367,7 +311,7 @@ Proof
     MEM v (MAP SND (phi_pairs phi.inst_operands))` >> simp[]
 QED
 
-Theorem build_phi_owner_at[local]:
+Theorem build_phi_owner_at:
   (!j phi. MEM (j,phi) (MAPi (\k p. (k,p)) phis) /\
     MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> j = owner) ==>
   FLOOKUP (FST (build_phi_maps pred phis)) v =
@@ -381,7 +325,7 @@ Proof
   simp[build_phi_maps_def, indexedListsTheory.MEM_MAPi]
 QED
 
-Theorem build_phi_owner_lookup[local]:
+Theorem build_phi_owner_lookup:
   (!i j v. i < LENGTH phis /\ j < LENGTH phis /\
     MEM v (MAP SND (phi_pairs (EL i phis).inst_operands)) /\
     MEM v (MAP SND (phi_pairs (EL j phis).inst_operands)) ==> i = j) ==>
@@ -405,7 +349,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem indexed_phi_selected_absent[local]:
+Theorem indexed_phi_selected_absent:
   !indexed om mt pred i.
     ~MEM i (MAP FST indexed) ==>
     FLOOKUP (SND (FOLDL (\(om,mt) (idx,phi).
@@ -426,7 +370,7 @@ Proof
   simp[FLOOKUP_UPDATE]
 QED
 
-Theorem indexed_phi_selected_member[local]:
+Theorem indexed_phi_selected_member:
   !indexed om mt pred i phi.
     ALL_DISTINCT (MAP FST indexed) /\ MEM (i,phi) indexed ==>
     FLOOKUP (SND (FOLDL (\(om,mt) (idx,p).
@@ -459,7 +403,7 @@ Proof
   disch_then (fn th => rewrite_tac[th]) >> simp[FLOOKUP_UPDATE]
 QED
 
-Theorem build_phi_selected_lookup[local]:
+Theorem build_phi_selected_lookup:
   i < LENGTH phis ==>
   FLOOKUP (SND (build_phi_maps pred phis)) i =
     OPTION_MAP SND
@@ -492,7 +436,7 @@ Definition phi_place_run_def:
       | NONE => (acc ++ [w],placed)) (acc,placed) xs
 End
 
-Theorem phi_place_run_mem[local]:
+Theorem phi_place_run_mem:
   !xs om mt acc placed v.
     MEM v (FST (phi_place_run om mt acc placed xs)) <=>
     MEM v acc \/ (MEM v xs /\ FLOOKUP om v = NONE) \/
@@ -526,7 +470,7 @@ Proof
   Cases_on `v = h` >> gvs[] >> metis_tac[optionTheory.SOME_11]
 QED
 
-Theorem input_vars_placement_mem[local]:
+Theorem input_vars_placement_mem:
   ~NULL (collect_phis instrs) ==>
   (MEM v (input_vars_from pred instrs live) <=>
    (MEM v live /\ FLOOKUP (FST (build_phi_maps pred (collect_phis instrs))) v = NONE) \/
@@ -544,7 +488,7 @@ Proof
   disch_then (qspecl_then [`om`, `mt`, `[]`, `[]`, `v`] mp_tac) >> simp[]
 QED
 
-Theorem phi_selected_exists[local]:
+Theorem phi_selected_exists:
   !pairs pred. (?v. MEM (pred,v) pairs) ==>
     ?v. FIND (\pair. FST pair = pred) pairs = SOME (pred,v) /\
         MEM (pred,v) pairs
@@ -553,7 +497,7 @@ Proof
   simp[FIND_thm] >> strip_tac >> IF_CASES_TAC >> gvs[] >> metis_tac[]
 QED
 
-Theorem input_vars_phi_exactly_one[local]:
+Theorem input_vars_phi_exactly_one:
   (!i j v. i < LENGTH (collect_phis instrs) /\ j < LENGTH (collect_phis instrs) /\
     MEM v (MAP SND (phi_pairs (EL i (collect_phis instrs)).inst_operands)) /\
     MEM v (MAP SND (phi_pairs (EL j (collect_phis instrs)).inst_operands)) ==> i = j) /\
@@ -579,7 +523,8 @@ Proof
   `!v j. FLOOKUP (FST (build_phi_maps pred (collect_phis instrs))) v = SOME j <=>
      j < LENGTH (collect_phis instrs) /\
      MEM v (MAP SND (phi_pairs (EL j (collect_phis instrs)).inst_operands))`
-    by (rpt gen_tac >> drule build_phi_owner_lookup >> simp[]) >>
+    by (rpt gen_tac >> match_mp_tac build_phi_owner_lookup >>
+        first_assum ACCEPT_TAC) >>
   `?seed. MEM seed live /\ MEM seed (MAP SND (phi_pairs phi.inst_operands))`
     by metis_tac[] >>
   `~NULL (collect_phis instrs)` by (Cases_on `collect_phis instrs` >> gvs[]) >>
@@ -606,7 +551,7 @@ Proof
   `j = i` by metis_tac[] >> gvs[]
 QED
 
-Theorem ready_phi_edge_wf[local]:
+Theorem ready_phi_edge_wf:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   MEM phi (collect_phis bb.bb_instructions) ==>
   phi_edge_uses_wf fn bb phi
@@ -617,7 +562,7 @@ Proof
   gvs[codegen_ready_fn_def, def_dominates_uses_def] >> metis_tac[]
 QED
 
-Theorem ready_phi_var_pairs[local]:
+Theorem ready_phi_var_pairs:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   MEM phi (collect_phis bb.bb_instructions) ==>
   (MEM (Var v) phi.inst_operands <=>
@@ -632,7 +577,7 @@ Proof
   gvs[] >> metis_tac[phi_pairs_mem_var]
 QED
 
-Theorem ready_phi_external_pred[local]:
+Theorem ready_phi_external_pred:
   codegen_ready_fn fn /\ fn_reachable fn lbl /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
   MEM phi (collect_phis bb.bb_instructions) ==>
@@ -653,7 +598,7 @@ Proof
     fn_dominates_cfg_analyze]
 QED
 
-Theorem ready_phi_external_value[local]:
+Theorem ready_phi_external_value:
   codegen_ready_fn fn /\ fn_reachable fn lbl /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
   MEM phi (collect_phis bb.bb_instructions) ==>
@@ -680,7 +625,7 @@ Proof
   irule dominating_def_excludes_outputs >> metis_tac[]
 QED
 
-Theorem ready_phi_live_seed[local]:
+Theorem ready_phi_live_seed:
   codegen_ready_fn fn /\ fn_reachable fn lbl /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
   MEM phi (collect_phis bb.bb_instructions) ==>
@@ -709,17 +654,8 @@ Proof
   simp[MEM_FLAT, MEM_MAP] >> metis_tac[inst_defs_def]
 QED
 
-Theorem phi_disjoint_use_indices[local]:
-  !phis i j v.
-    phi_uses_disjoint phis /\ i < LENGTH phis /\ j < LENGTH phis /\
-    MEM v (inst_uses (EL i phis)) /\ MEM v (inst_uses (EL j phis)) ==> i = j
-Proof
-  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
-  Cases_on `i` >> Cases_on `j` >>
-  gvs[phi_uses_disjoint_def, EVERY_MEM] >> metis_tac[EL_MEM]
-QED
 
-Theorem ready_phi_disjoint[local]:
+Theorem ready_phi_disjoint:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
   phi_uses_disjoint (collect_phis bb.bb_instructions)
 Proof
@@ -731,7 +667,7 @@ Proof
   gvs[EVERY_MEM, phi_block_ready_def]
 QED
 
-Theorem ready_phi_pair_indices[local]:
+Theorem ready_phi_pair_indices:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
   !i j v. i < LENGTH (collect_phis bb.bb_instructions) /\
     j < LENGTH (collect_phis bb.bb_instructions) /\
@@ -746,7 +682,7 @@ Proof
   gvs[MEM_MAP] >> metis_tac[phi_pairs_mem_var, pairTheory.PAIR]
 QED
 
-Theorem ready_phi_pred_pair[local]:
+Theorem ready_phi_pred_pair:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   MEM pred (cfg_preds_of (cfg_analyze fn) lbl) /\
   MEM phi (collect_phis bb.bb_instructions) ==>
@@ -764,7 +700,7 @@ Proof
   PairCases_on `edge_pair` >> gvs[] >> metis_tac[]
 QED
 
-Theorem ready_phi_input_hypotheses[local]:
+Theorem ready_phi_input_hypotheses:
   codegen_ready_fn fn /\ fn_reachable fn lbl /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
   MEM pred (cfg_preds_of (cfg_analyze fn) lbl) ==>
@@ -788,7 +724,7 @@ Proof
   metis_tac[ready_phi_var_pairs]
 QED
 
-Theorem ready_phi_input_exactly_one[local]:
+Theorem ready_phi_input_exactly_one:
   codegen_ready_fn fn /\ fn_reachable fn lbl /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
   MEM pred (cfg_preds_of (cfg_analyze fn) lbl) ==>
@@ -801,14 +737,14 @@ Proof
   irule input_vars_phi_exactly_one >> metis_tac[]
 QED
 
-Theorem input_vars_from_collect[local]:
+Theorem input_vars_from_collect:
   input_vars_from pred (collect_phis instrs) live =
   input_vars_from pred instrs live
 Proof
   simp[input_vars_from_def, collect_phis_idempotent]
 QED
 
-Theorem input_vars_non_phi_iff[local]:
+Theorem input_vars_non_phi_iff:
   ~MEM (Var v) (FLAT (MAP (\phi. phi.inst_operands)
                           (collect_phis instrs))) ==>
   (MEM v (input_vars_from pred instrs live) <=> MEM v live)
@@ -830,7 +766,7 @@ Proof
   gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]
 QED
 
-Theorem phi_index_in_collect[local]:
+Theorem phi_index_in_collect:
   !instrs j.
     (!i k. i < k /\ k < LENGTH instrs /\
            (EL k instrs).inst_opcode = PHI ==>
@@ -849,7 +785,7 @@ Proof
   first_x_assum (qspecl_then [`SUC i`, `SUC k`] mp_tac) >> simp[]
 QED
 
-Theorem ready_phi_index_in_collect[local]:
+Theorem ready_phi_index_in_collect:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   j < LENGTH bb.bb_instructions /\
   (EL j bb.bb_instructions).inst_opcode = PHI ==>
@@ -861,21 +797,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem live_end_dominating_def[local]:
-  codegen_ready_fn fn /\ fn_reachable fn lbl /\
-  lookup_block lbl fn.fn_blocks = SOME bb /\
-  MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions)) ==>
-  ?def_bb inst. MEM def_bb fn.fn_blocks /\ MEM inst def_bb.bb_instructions /\
-    MEM v inst.inst_outputs /\ fn_dominates fn def_bb.bb_label lbl
-Proof
-  strip_tac >>
-  mp_tac (live_def_dominates |> Q.SPEC `fn` |> Q.SPEC `lbl` |>
-    Q.SPEC `bb` |> Q.SPEC `LENGTH bb.bb_instructions` |> Q.SPEC `v`) >>
-  (impl_tac >- (simp[] >> rpt strip_tac >> decide_tac)) >>
-  metis_tac[]
-QED
-
-Theorem live_start_strict_dominating_def[local]:
+Theorem live_start_strict_dominating_def:
   codegen_ready_fn fn /\ fn_reachable fn lbl /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
   MEM v (live_vars_at (liveness_analyze fn) lbl 0) /\
@@ -896,7 +818,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem ready_entry_live_empty[local]:
+Theorem ready_entry_live_empty:
   codegen_ready_fn fn /\ fn_entry_label fn = SOME lbl /\
   lookup_block lbl fn.fn_blocks = SOME bb ==>
   live_vars_at (liveness_analyze fn) lbl 0 = []
@@ -914,18 +836,7 @@ Proof
   metis_tac[dominates_entry_label]
 QED
 
-Theorem initial_cleanup_wf_marked[local]:
-  generated_plan_state_wf_marked spill_base
-    (init_cleanup_plan_state ch growth spill_base lbl_ctr)
-Proof
-  simp[generated_plan_state_wf_marked_def,
-       planSpillBoundsTheory.plan_slots_bounded_def,
-       planSpillBoundsTheory.alloc_slots_bounded_def,
-       doSwapSimTheory.spill_alloc_layout_wf_def,
-       init_cleanup_plan_state_def, init_plan_state_def, init_spill_alloc_def]
-QED
-
-Theorem ready_join_pred_jmp[local]:
+Theorem ready_join_pred_jmp:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   lookup_block pred fn.fn_blocks = SOME pb /\ fn_cfg_edge fn pred lbl /\
   1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) ==>
@@ -944,7 +855,7 @@ Proof
   qpat_x_assum `!p. MEM p _ ==> _` (qspec_then `pred` mp_tac) >> simp[NULL_EQ]
 QED
 
-Theorem ready_join_pred_succs[local]:
+Theorem ready_join_pred_succs:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   lookup_block pred fn.fn_blocks = SOME pb /\ fn_cfg_edge fn pred lbl /\
   1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) ==>
@@ -970,7 +881,7 @@ Proof
     metis_tac[fn_cfg_edge_cfg_analyze] >> gvs[]
 QED
 
-Theorem ready_join_live_out[local]:
+Theorem ready_join_live_out:
   codegen_ready_fn fn /\ fn_reachable fn pred /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
   lookup_block pred fn.fn_blocks = SOME pb /\ fn_cfg_edge fn pred lbl /\
@@ -990,7 +901,7 @@ Proof
        live_vars_at_def, list_union_mem]
 QED
 
-Theorem lineage_entry_small_fresh[local]:
+Theorem lineage_entry_small_fresh:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
     (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps /\
@@ -1019,7 +930,7 @@ Proof
   drule_all dominating_def_excludes_outputs >> simp[]
 QED
 
-Theorem lineage_entry_non_phi_fresh[local]:
+Theorem lineage_entry_non_phi_fresh:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
     (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps /\
@@ -1057,7 +968,7 @@ Proof
   drule_all strict_dominating_def_excludes_outputs >> simp[]
 QED
 
-Theorem lineage_entry_marked[local]:
+Theorem lineage_entry_marked:
   codegen_ready_fn fn /\
   lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
     (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps ==>
@@ -1069,7 +980,7 @@ Proof
   disch_then (qspec_then `pb` mp_tac) >> simp[]
 QED
 
-Theorem lineage_entry_coverage[local]:
+Theorem lineage_entry_coverage:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
     (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps /\
@@ -1100,7 +1011,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem lineage_entry_phi_sources[local]:
+Theorem lineage_entry_phi_sources:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
     (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps ==>

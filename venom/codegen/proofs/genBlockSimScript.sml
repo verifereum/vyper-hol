@@ -4341,7 +4341,7 @@ Proof
   disch_then (qspec_then `o2pc` mp_tac) >> simp[]
 QED
 
-Theorem phi_poke_fresh_distinct[local]:
+Theorem phi_poke_fresh_distinct:
   !stk d op. ALL_DISTINCT stk /\ ~MEM op stk ==>
     ALL_DISTINCT (stack_poke d op stk)
 Proof
@@ -4351,7 +4351,7 @@ Proof
   metis_tac[ALL_DISTINCT_EL_IMP, MEM_EL]
 QED
 
-Theorem phi_poke_fresh_disjoint[local]:
+Theorem phi_poke_fresh_disjoint:
   !stk d op s. DISJOINT (set stk) s /\ ~(op IN s) ==>
     DISJOINT (set (stack_poke d op stk)) s
 Proof
@@ -6603,7 +6603,7 @@ Proof
   gvs[finite_mapTheory.DOMSUB_FLOOKUP_THM]
 QED
 
-Theorem bump_emit_one_input_spilled_shape[local]:
+Theorem bump_emit_one_input_spilled_shape:
   !opc nl op ps ops ps'.
     emit_one_input opc nl op ps = (ops,ps') ==>
     ps'.ps_spilled = ps.ps_spilled \/
