@@ -1665,7 +1665,7 @@ Proof
   simp[store_copy_normalize_def, mload_def]
 QED
 
-Theorem store_slots_fold_compose[local]:
+Theorem store_slots_fold_compose:
   u.vs_memory = s.vs_memory /\
   store_copy_normalize s u =
     FOLDL (\q j. (if tr then tstore else sstore) (dw + n2w j)
