@@ -142,6 +142,7 @@ Theorem storage_typed_unwrap_path:
     LENGTH u.vs_memory <= LENGTH z.vs_memory /\
     (!x. not_fresh_at sm x ==> lookup_var x z = lookup_var x u) /\
     copy_static z = copy_static u /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
     u.vs_allocas = s.vs_allocas |+ (sa.cs_next_id,(b,type_memory_bytes ce sty)) /\
     u.vs_alloca_next = b + type_memory_bytes ce sty /\
     (u with <|vs_vars := s.vs_vars; vs_allocas := s.vs_allocas;
