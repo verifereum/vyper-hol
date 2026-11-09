@@ -4784,6 +4784,8 @@ Theorem lineage_dfs_join_ordinary_paired_interval_actual:
       (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
         (collect_phis sb.bb_instructions)) psD =
       (phi_ops, psD with <|ps_stack := prefixD ++ suffix; ps_alloc := al|>) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ
+       (LENGTH (collect_phis sb.bb_instructions))) ==> MEM (Var v) p0.ps_stack) /\
     (!k. k <= LENGTH xs /\
       (!j. j < k ==> (EL j xs).inst_opcode <> JMP /\ (EL j xs).inst_opcode <> PHI) ==>
       ?ops q.
@@ -4812,7 +4814,8 @@ Proof
     `psD with <|ps_stack := suffix; ps_alloc := al|>`,
     `DROP (LENGTH (collect_phis sb.bb_instructions)) sb.bb_instructions`] >>
   conj_tac >- simp[] >> conj_tac >- simp[] >>
-  conj_tac >- simp[] >> conj_tac >- simp[] >> rpt strip_tac >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  conj_tac >- simp[] >> rpt strip_tac >>
   qpat_x_assum `sb.bb_label = succ` (SUBST_ALL_TAC o SYM) >>
   irule fnPlanLineageEntryProductionTheory.analyzed_ordinary_paired_interval_replay >>
   simp[] >> gen_tac >> strip_tac >>
@@ -4842,6 +4845,8 @@ Theorem lineage_dfs_join_physical_start_actual:
     get_params sb.bb_instructions = [] /\ xs <> [] /\
     qL = p0 with ps_stack := prefixL ++ p0.ps_stack /\
     qD = p0 with ps_stack := prefixD ++ p0.ps_stack /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ
+       (LENGTH (collect_phis sb.bb_instructions))) ==> MEM (Var v) p0.ps_stack) /\
     (!p q. (p = psL /\ q = qL) \/ (p = psD /\ q = qD) ==>
       phi_schedule_run
         (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i),
@@ -4891,6 +4896,7 @@ Proof
      simp_tac (srw_ss()) [listTheory.DROP_APPEND] >> metis_tac[]) >>
   conj_tac >- (first_assum ACCEPT_TAC) >> conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac >- REFL_TAC >> conj_tac >- REFL_TAC >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac >- suspend "block_equations" >> first_assum ACCEPT_TAC
 QED
 
