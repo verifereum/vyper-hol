@@ -368,3 +368,43 @@ Proof
   asm_simp_tac bool_ss [] >>
   simp[jump_to_def, abi_decode_header_state_def, update_var_def]
 QED
+
+Theorem deploy_ctor_array_header_complete_gas_reach:
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst DLOAD hi
+    hdr exit_lbl hid header_var first last lo hi_id next limit_st slot_id /\
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD hi ip src dst
+    sb d slot b cap next initial /\
+  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
+  (^Ok) k ctx func site ids D N d outsz next limit_st
+    tv vs slot_id slot initial j j s /\
+  ~s.vs_halted /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 ==>
+  ?h. (^Ok) k ctx func site ids D N d outsz next limit_st
+      tv vs slot_id slot initial j j h /\
+    ~h.vs_halted /\ h.vs_current_bb = (if j < LENGTH vs then st.cs_current_bb else exit_lbl) /\
+    h.vs_inst_idx = 0 /\ abi_decode_sim ctx func s h /\
+    h.vs_outcomes = s.vs_outcomes /\ h.vs_tx_ctx = s.vs_tx_ctx /\
+    h.vs_block_ctx = s.vs_block_ctx /\ gas_path ctx func s 0 (OK h)
+Proof
+  strip_tac >>
+  drule abi_decoder_recursive_data_facts >> strip_tac >>
+  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
+  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
+  `eval_operand ip s = SOME (n2w slot) /\ eval_operand src s = SOME (n2w sb)` by
+    (`!op w. abi_decoder_operand_live next op /\ eval_operand op initial = SOME w ==>
+        eval_operand op s = SOME w` by
+       (rpt strip_tac >> drule_all deploy_ctor_array_observation_operand >> simp[]) >>
+     fs[abi_decoder_ranges_def, Excl "enc_def"] >> conj_tac >>
+     first_x_assum irule >> simp[]) >>
+  `mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    (abi_decode_source DLOAD s) = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
+    fs[abi_decode_source_def, Excl "enc_def"] >>
+  `sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword (:256)` by
+    fs[abi_decoder_ranges_def, Excl "enc_def"] >>
+  drule_all canonical_dynamic_array_count_load >> strip_tac >>
+  `abi_decode_load DLOAD (n2w sb : bytes32) s = n2w (LENGTH vs)` by
+    (qpat_x_assum `abi_decode_load _ _ _ = _` mp_tac >> asm_rewrite_tac[]) >>
+  drule_all deploy_ctor_array_header_complete_gas_run >> simp[]
+QED

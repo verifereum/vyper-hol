@@ -5,7 +5,7 @@ Ancestors
  abiDecoderReentry abiDecoderTypedContract abiEncoderRegisteredEffect
  compileEnv venomState venomExecSemantics valueEncoding words list rich_list arithmetic
  ctorDeployMemoryFrontier ctorAbiActualSites abiDecoderArrayBackedge
- abiDecoderLoopRegisters abiDecoderLoopSetup abiDecoderExecution
+ abiDecoderLoopRegisters abiDecoderLoopSetup abiDecoderExecution abiDecoderHeaderGasPath fragGasPath
  venomMemDefs venomMemProofs ASCIInumbers finite_map pred_set
  ctorAbiActualArrayInvariant abiDecoderLoop ctorAbiActualFrame
  ctorAbiActualChildFrame abiEncoderProps ctorAbiActualObservations
@@ -471,4 +471,43 @@ Proof
   disch_then (qx_choose_then `t` (MAP_EVERY assume_tac o CONJUNCTS)) >>
   qexists `t` >> asm_simp_tac bool_ss [] >>
   metis_tac[abi_decode_sim_trans]
+QED
+
+Theorem deploy_ctor_array_backedge_complete_gas_run:
+  (^Ok) k ctx func site ids D N d outsz next limit_st
+    tv vs slot_id slot initial (SUC j) j s /\
+  slot_id IN ctor_actual_sites func ids /\ all_have_type tv vs /\
+  32 + LENGTH vs * type_memory_size tv <= outsz /\
+  venomMemDefs$regions_disjoint (slot,32) (d,outsz) /\
+  next <= nv /\ nv < limit_st.cs_next_var /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  bb.bb_instructions = prefix ++ abi_decode_backedge_insts id iv
+    (STRING #"%" (toString nv)) ip hdr /\
+  lookup_block hdr func.fn_blocks = SOME hdr_bb /\
+  phi_prefix_length hdr_bb.bb_instructions = 0 /\
+  s.vs_inst_idx = LENGTH prefix /\ ~s.vs_halted /\
+  eval_operand (Var iv) s = SOME (n2w j) /\
+  eval_operand ip s = SOME (n2w slot) /\ abi_decoder_operand_live next ip /\
+  slot < dimword (:256) /\ j < LENGTH vs /\ LENGTH vs < dimword (:256) ==>
+  ?t. (^Ok) k ctx func site ids D N d outsz next limit_st
+      tv vs slot_id slot initial (SUC j) (SUC j) t /\
+    ~t.vs_halted /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+    abi_decode_sim ctx func s t /\
+    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ gas_path ctx func s 0 (OK t)
+Proof
+  strip_tac >>
+  `ip <> Var (STRING #"%" (toString nv))` by
+    metis_tac[abi_decoder_live_excludes_output] >>
+  drule_all abi_decode_backedge_sim >> disch_then (qspec_then `ctx` mp_tac) >>
+  simp[w2n_n2w] >> disch_tac >>
+  drule_all abi_decode_backedge_gas_path >> disch_then (qspec_then `ctx` mp_tac) >>
+  simp[w2n_n2w] >> disch_tac >>
+  drule_all deploy_ctor_array_observation_backedge >>
+  disch_then (qspec_then `hdr` assume_tac) >>
+  qexists `jump_to hdr (mstore slot (n2w (SUC j))
+    (update_var (STRING #"%" (toString nv)) (n2w (SUC j)) s))` >>
+  conj_tac >- (fs[] >> NO_TAC) >>
+  asm_simp_tac bool_ss [] >>
+  simp[jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def]
 QED
