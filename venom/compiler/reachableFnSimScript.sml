@@ -414,3 +414,49 @@ Proof
   Cases_on `run_blocks fuel C fn s0` >> gvs[fn_run_rel_def] >>
   Cases_on `run_blocks m C' fn' s0` >> gvs[]
 QED
+
+Theorem frame_reachable_assign_prefix:
+  !d seq s G tn ri.
+  frame_reachable vs C stk PG G tn fn
+    (EL s.vs_inst_idx bb.bb_instructions) s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  seq 0 = s /\
+  (!j. j <= d ==> (seq j).vs_inst_idx = s.vs_inst_idx + j) /\
+  (!j. j < d ==> ?ii u.
+    get_instruction bb (s.vs_inst_idx + j) = SOME ii /\
+    ii.inst_opcode = ASSIGN /\ step_inst_base ii (seq j) = OK u /\
+    seq (SUC j) = (u with vs_inst_idx := SUC (seq j).vs_inst_idx)) /\
+  get_instruction bb (s.vs_inst_idx + d) = SOME ri ==>
+  lookup_block (seq d).vs_current_bb fn.fn_blocks = SOME bb /\
+  ?Gd tnd. frame_reachable vs C stk PG Gd tnd fn ri (seq d)
+Proof
+  Induct_on `d`
+  >- (rpt gen_tac >> strip_tac >> gvs[get_instruction_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `?ii u. get_instruction bb (s.vs_inst_idx + d) = SOME ii /\
+    ii.inst_opcode = ASSIGN /\ step_inst_base ii (seq d) = OK u /\
+    seq (SUC d) = (u with vs_inst_idx := SUC (seq d).vs_inst_idx)` by
+    (first_x_assum (qspec_then `d` mp_tac) >> simp[]) >>
+  `lookup_block (seq d).vs_current_bb fn.fn_blocks = SOME bb /\
+   ?Gd tnd. frame_reachable vs C stk PG Gd tnd fn ii (seq d)` by
+    (first_x_assum irule >> qexistsl_tac [`G`, `s`, `tn`] >> simp[] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_SUC_REFL,
+               arithmeticTheory.LESS_TRANS]) >>
+  `step_inst 0 C ii (seq d) = OK u` by
+    simp[step_inst_non_invoke] >>
+  `~is_terminator ii.inst_opcode /\ ii.inst_opcode <> INVOKE` by
+    simp[is_terminator_def] >>
+  drule_all venomInstPropsTheory.step_preserves_control_flow >> strip_tac >>
+  qpat_x_assum `!seq s G tn ri. _` kall_tac >>
+  conj_tac >- simp[] >>
+  ` (seq d).vs_inst_idx = s.vs_inst_idx + d` by simp[] >>
+  qpat_x_assum `!j. j <= SUC d ==> _` kall_tac >>
+  qpat_x_assum `!j. j < SUC d ==> _` kall_tac >>
+  qpat_x_assum `seq 0 = s` kall_tac >>
+  `active_inst fn ii (seq d) /\
+   active_inst fn ri (u with vs_inst_idx := SUC (seq d).vs_inst_idx)` by
+    (conj_tac >> simp[active_inst_def] >> qexists_tac `bb` >>
+     gvs[get_instruction_def, arithmeticTheory.ADD_CLAUSES] >>
+     metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  metis_tac[frame_reachable_next]
+QED
