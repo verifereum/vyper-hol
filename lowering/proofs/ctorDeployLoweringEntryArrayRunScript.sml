@@ -611,6 +611,16 @@ Proof
   drule_all canonical_dynamic_array_count_load >> strip_tac >>
   `abi_decode_load DLOAD (n2w sb : bytes32) s = n2w (LENGTH vs)` by
     (qpat_x_assum `abi_decode_load _ _ _ = _` mp_tac >> asm_rewrite_tac[]) >>
+  `abi_decode_loop_cfg func hdr st.cs_current_bb exit_lbl hid ip src DLOAD
+    (STRING #"%" (toString header_var))
+    (STRING #"%" (toString (header_var+1)))
+    (STRING #"%" (toString (header_var+2)))
+    (STRING #"%" (toString (header_var+3)))` by
+    fs[abi_decode_position_loop_cfg_def, abi_decode_position_header_insts_def,
+       abi_decode_position_header_delta_def, abi_decode_loop_cfg_def,
+       abi_decode_header_insts_def] >>
+  `header_var + 4 <= limit_st.cs_next_var` by
+    fs[abi_decode_position_header_delta_def] >>
   drule_all deploy_ctor_array_header_run >> simp[]
 QED
 
@@ -849,7 +859,8 @@ Proof
    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) loop_st.cs_next_var limit_st
    tv vs slot_id slot prepared 0 0 prepared` by
    (irule deploy_ctor_array_observation_self >> goal_assum (drule_at Any)) >>
- fs[abi_decoder_recursive_loop_data_def, Excl "enc_def"]
+ fs[abi_decoder_recursive_loop_data_def, abi_decoder_operand_live_def,
+    eval_operand_def, Excl "enc_def"]
 QED
 
 Theorem deploy_ctor_array_scratch_enlarge[local]:
