@@ -8,7 +8,7 @@ Ancestors
   bodyIntCallFamAggSubscriptResources bodyIntCallJointWidened
   bodyIntCallFamAggSubscriptMapSuffix bodyIntCallFamAggSubscriptTuple
   bodyIntCallFamAggSubscriptReadOnly bodyIntCallFamAggSubscriptStore
-  bodyIntCallFamAggSubscriptScratch
+  bodyIntCallFamAggSubscriptScratch bodyIntCallFamAggSubscriptScratchStages
 
 Theorem intcall_subscript_step:
   (!e'. expr_size e' < expr_size e ==>
