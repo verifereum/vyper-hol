@@ -9,7 +9,7 @@
 Theory exprSimAbiEncode
 Ancestors
   exprSimHypsDefs vyperAST exprSimAbiEncodeNonwordCase
-  exprSimAbiEncodeWordSuccess exprSimAbiEncodeTupleCompletion
+  exprSimAbiEncodeWordCase exprSimAbiEncodeTupleCase
   exprSimAbiEncodeArgs exprSimHash exprLowering vyperTypeCallGraph
   exprSimAbiEncodeRuntimeInputs exprSimProps
 
@@ -18,16 +18,18 @@ Theorem compile_abi_encode_case:
     exprs_case nocalls ctx func cenv cx args ==>
     expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann (AbiEncode ensure mid) t args)
 Proof
-  rpt gen_tac >> strip_tac >> rewrite_tac[expr_vv_case_def] >> rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
   Cases_on `LENGTH args = 1 /\ ~ensure`
-  >- (Cases_on `args` >> gvs[] >>
+  >- (rewrite_tac[expr_vv_case_def] >> rpt strip_tac >>
+      Cases_on `args` >> gvs[] >>
       rename1 `exprs_case _ _ _ _ _ [e]` >>
-      Cases_on `is_word_type (expr_type e)`
-      >- suspend "word" >>
-      irule compile_abi_encode_nonword_vv_sim >>
-      simp[] >> conj_tac >- (qexists `env` >> simp[]) >>
       `expr_body_pre cenv cx env e es` by
         (irule abi_encode_body_arg_pre >> goal_assum (drule_at Any) >> simp[]) >>
-      fs[exprs_case_def, expr_sim_case_def, int_calls_expr_def] >> metis_tac[]) >>
-  suspend "tuple"
+      `expr_sim ctx func cenv cx (expr_type e) e es` by
+        (fs[exprs_case_def, expr_sim_case_def, int_calls_expr_def] >> metis_tac[]) >>
+      Cases_on `is_word_type (expr_type e)`
+      >- (irule compile_abi_encode_word_vv_sim >> simp[] >> qexists `env` >> simp[]) >>
+      irule compile_abi_encode_nonword_vv_sim >>
+      simp[] >> qexists `env` >> simp[]) >>
+  irule compile_abi_encode_tuple_vv_case >> simp[] >> metis_tac[]
 QED
