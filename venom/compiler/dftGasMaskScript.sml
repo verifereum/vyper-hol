@@ -445,6 +445,32 @@ Proof
   EVAL_TAC >> simp[]
 QED
 
+Theorem invoke_updates_concrete_frame[local]:
+  !updates s.
+  EVERY (\uw. ~MEM (Var (FST uw)) i.inst_operands /\
+               ~MEM (FST uw) i.inst_outputs) updates /\
+  i.inst_opcode = INVOKE ==>
+  step_inst fuel C i
+    (FOLDL (\st uw. update_var (FST uw) (SND uw) st) s updates) =
+  (case step_inst fuel C i s of
+     OK t => OK (FOLDL (\st uw. update_var (FST uw) (SND uw) st) t updates)
+   | Halt t => Halt t | Abort a t => Abort a t
+   | IntRet vals t => IntRet vals t | Error e => Error e)
+Proof
+  Induct >- (simp[] >> rpt strip_tac >>
+    Cases_on `step_inst fuel C i s` >> simp[]) >>
+  simp[] >> rpt strip_tac >>
+  first_x_assum (qspec_then `update_var (FST h) (SND h) s` mp_tac) >>
+  simp[] >>
+  `step_inst fuel C i (update_var (FST h) (SND h) s) =
+   (case step_inst fuel C i s of
+      OK t => OK (update_var (FST h) (SND h) t)
+    | Halt t => Halt t | Abort a t => Abort a t
+    | IntRet vals t => IntRet vals t | Error e => Error e)`
+    by (irule dftCommutationTheory.step_inst_invoke_frame >> metis_tac[]) >>
+  simp[] >> Cases_on `step_inst fuel C i s` >> simp[]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
