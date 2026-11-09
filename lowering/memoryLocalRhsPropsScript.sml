@@ -303,10 +303,6 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       qpat_x_assum `supported_expr _ _` mp_tac >>
       simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
-           supported_builtin_form_def])
-  >- (rpt gen_tac >> strip_tac >>
-      qpat_x_assum `supported_expr _ _` mp_tac >>
-      simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
            supported_type_builtin_form_def] >> strip_tac >>
       Cases_on `args` >> gvs[] >>
       rename1 `supported_pure_exprs tops (a :: tail)` >> Cases_on `tail` >> gvs[] >>
