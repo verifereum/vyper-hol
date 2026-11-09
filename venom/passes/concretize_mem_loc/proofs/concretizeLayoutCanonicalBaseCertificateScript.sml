@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalBaseCertificate
-Ancestors concretizeLayoutCanonicalBaseMemory concretizeLayoutCanonicalBaseExternal
+Ancestors frameGasEvents concretizeMemLocDefs passSharedDefs concretizeLayoutCanonicalBaseMemory concretizeLayoutCanonicalBaseExternal
   concretizeLayoutCanonicalBaseCorridor concretizeLayoutCanonicalBaseJump
   concretizeLayoutCanonicalBaseTerminalExit concretizeLayoutCanonicalBaseAbortExit
   concretizeLayoutCanonicalBase concretizeLayoutCanonicalDeferred
@@ -19,6 +19,30 @@ Proof
   Cases_on `a` >>
   simp[layout_canonical_step_witness_def, layout_canonical_block_witness_def] >>
   strip_tac >> gvs[concretize_positions_not_invoke] >>
+  gvs[layout_corridor_entry_def, ranked_terminal_entry_def,
+      ranked_terminal_corridor_def, layout_phase_normalize_def] >>
+  Cases_on `y.ltp_remaining` >> gvs[] >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem concretize_positions_gas:
+  ((concretize_inst_with_positions p i).inst_opcode = GAS <=>
+   i.inst_opcode = GAS) /\
+  (i.inst_opcode = GAS ==> concretize_inst_with_positions p i = i)
+Proof
+  rw[concretize_inst_with_positions_def] >> rpt CASE_TAC >>
+  gvs[mk_assign_inst_def, mk_nop_inst_def]
+QED
+
+(* The witnessed target instruction emits the same GAS events. *)
+Theorem layout_canonical_step_witness_gas:
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend q n i s j t a ==>
+  (j.inst_opcode = GAS <=> i.inst_opcode = GAS) /\
+  (i.inst_opcode = GAS ==> j = i)
+Proof
+  Cases_on `a` >>
+  simp[layout_canonical_step_witness_def, layout_canonical_block_witness_def] >>
+  strip_tac >> gvs[concretize_positions_gas] >>
   gvs[layout_corridor_entry_def, ranked_terminal_entry_def,
       ranked_terminal_corridor_def, layout_phase_normalize_def] >>
   Cases_on `y.ltp_remaining` >> gvs[] >>
@@ -196,7 +220,7 @@ Theorem layout_canonical_base_certificate:
   fixed_region_reserved lo C /\ activation_depth q0 = 0 ==>
   selected_base_certificate C C' q0 path
     (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend))
 Proof
   strip_tac >>
   qpat_x_assum `es = _` SUBST_ALL_TAC >> qpat_x_assum `qs = _` SUBST_ALL_TAC >>
@@ -205,7 +229,10 @@ Proof
   qpat_x_assum `layout_canonical_ES _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [layout_canonical_ES_def]) >>
   `j.inst_opcode <> INVOKE` by metis_tac[layout_canonical_step_witness_not_invoke] >>
-  simp[layout_deferred_noninvoke] >>
+  `!r r'. step_events_agree C C' i s j t r r'` by
+    (rpt gen_tac >> irule step_events_agree_plain >>
+     metis_tac[layout_canonical_step_witness_gas]) >>
+  simp[events_OS_def, layout_deferred_noninvoke] >>
   Cases_on `?p. r = OK p`
   >- (qpat_x_assum `?p. _` strip_assume_tac >>
       qpat_x_assum `r = _` SUBST_ALL_TAC >> rename1 `OK post` >>

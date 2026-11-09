@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalCallReturn
-Ancestors concretizeLayoutCanonicalCallEntry concretizeLayoutCanonicalDeferred
+Ancestors frameGasEvents concretizeLayoutCanonicalCallEntry concretizeLayoutCanonicalDeferred
   concretizeLayoutCanonicalResume concretizeLayoutCanonicalDriver
   concretizeLayoutCallResult concretizeLayoutPhaseOrigin concretizeLayoutAlignedControl
   concretizeLayoutPairedEntry frameRelocationLocal frameDecoratedEndpoints
@@ -57,20 +57,26 @@ Theorem layout_canonical_call_return_certificate:
   selected_call_return_certificate C C' q0 path
     (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend))
 Proof
   strip_tac >> rewrite_tac[selected_call_return_certificate_def] >>
   rpt gen_tac >> strip_tac >>
   `joint_segment C qc wc qe` by metis_tac[cj 3 decorated_execution_segment] >>
   drule_all layout_canonical_call_entry >> strip_tac >> gvs[] >>
   qexistsl [`out`, `ct`] >> conj_tac >- simp[] >>
-  rpt strip_tac >> Cases_on `rc'` >>
+  rpt strip_tac >>
+  qpat_x_assum `events_OutR _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [events_OutR_def]) >>
+  Cases_on `rc'` >>
   gvs[layout_canonical_OutR_def, layout_canonical_result_def, layout_canonical_ret_def] >>
   drule_all layout_canonical_caller_bind >> strip_tac >>
   simp[selected_step_match_def] >> qexists `OK post'` >>
   conj_tac
   >- (irule finite_step_invoke_return >> simp[] >> metis_tac[]) >>
+  rewrite_tac[events_OS_def] >> reverse conj_tac
+  >- (irule step_events_agree_invoke >> simp[] >>
+      metis_tac[cj 3 decorated_execution_erases]) >>
   simp[layout_deferred_OS_def] >> rpt strip_tac >>
   drule_all layout_invoke_paired_witness >> strip_tac >> gvs[] >>
   `?stk PG G tn callee inst oms om hs h.

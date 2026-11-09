@@ -1,17 +1,17 @@
 Theory concretizeLayoutCanonicalDeferredExit
-Ancestors concretizeLayoutCanonicalCallExit concretizeLayoutCanonicalDeferred
+Ancestors frameGasEvents concretizeLayoutCanonicalCallExit concretizeLayoutCanonicalDeferred
   frameSelectedSimulation
 
 Theorem deferred_exit_step_match[local]:
   ((?post. r = Halt post) \/ (?a post. r = Abort a post)) ==>
   (selected_step_match C'
-     (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
+     (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend))
      q n w qe i s j t r <=>
    selected_step_match C'
-     (layout_canonical_OS D lo vs0 C C' q0 es qs ass qend)
+     (events_OS C C' (layout_canonical_OS D lo vs0 C C' q0 es qs ass qend))
      q n w qe i s j t r)
 Proof
-  strip_tac >> gvs[selected_step_match_def] >>
+  strip_tac >> gvs[selected_step_match_def, events_OS_def] >>
   simp[layout_deferred_nonOK]
 QED
 
@@ -32,8 +32,8 @@ Theorem layout_deferred_call_exit_certificate:
   selected_call_exit_certificate C C' q0 path
     (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend))
 Proof
   strip_tac >>
   drule_all layout_canonical_call_exit_certificate >>

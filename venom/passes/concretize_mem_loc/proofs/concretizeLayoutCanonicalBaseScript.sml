@@ -448,6 +448,28 @@ Proof
 QED
 
 (* Growing dispatch: validate the shared phase join before expanding families. *)
+(* The remaining ordinary opcodes write exactly one variable. *)
+Theorem layout_ordinary_single_output[local]:
+  inst_wf i /\
+  (MEM i.inst_opcode [NOP; ALLOCA; ASSIGN; ADD; SUB; SHL; SHR; SAR; OFFSET;
+      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE; TSTORE; EQ; LT; GT; RETURNDATASIZE; ASSERT; ASSERT_UNREACHABLE; MSTORE; MSTORE8; BUMP; PARAM; RETPC_PARAM; CODESIZE; DLOAD; INITIAL_FMP; BALANCE; SELFBALANCE; EXTCODESIZE; EXTCODEHASH] \/ context_read0_opcode i.inst_opcode \/
+    clean_value_shape i) /\
+  i.inst_opcode <> ALLOCA /\ i.inst_opcode <> NOP /\
+  ~MEM i.inst_opcode [SSTORE; TSTORE] /\
+  ~MEM i.inst_opcode [ASSERT; ASSERT_UNREACHABLE] /\
+  ~MEM i.inst_opcode [MSTORE; MSTORE8] /\
+  i.inst_opcode <> BUMP ==>
+  ?v. i.inst_outputs = [v]
+Proof
+  strip_tac >>
+  `LENGTH i.inst_outputs = 1` suffices_by simp[LENGTH_EQ_NUM_compute] >>
+  rpt (pop_assum mp_tac) >>
+  PURE_ONCE_REWRITE_TAC[inst_wf_def] >>
+  PURE_REWRITE_TAC[context_read0_opcode_def, clean_value_shape_def,
+    scalar_binary_opcode_def] >>
+  Cases_on `i.inst_opcode` >> simp[PULL_EXISTS]
+QED
+
 Theorem layout_canonical_ordinary_nonterm_success:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
@@ -569,9 +591,11 @@ Proof
             simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
          drule_all layout_bump_trace_step >> metis_tac[]) >>
      `?v. i.inst_outputs = [v]` by
-       (qpat_x_assum `inst_wf i` mp_tac >>
-        fs[MEM, context_read0_opcode_def, clean_value_shape_def, scalar_binary_opcode_def] >>
-        gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+       (irule layout_ordinary_single_output >> rpt conj_tac >>
+        FIRST [first_assum ACCEPT_TAC,
+               disj1_tac >> first_assum ACCEPT_TAC,
+               disj2_tac >> disj1_tac >> first_assum ACCEPT_TAC,
+               disj2_tac >> disj2_tac >> first_assum ACCEPT_TAC]) >>
      Cases_on `i.inst_opcode = ASSIGN`
      >- (gvs[] >>
          `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>

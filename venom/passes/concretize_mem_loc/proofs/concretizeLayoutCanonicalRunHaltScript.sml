@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalRunHalt
-Ancestors concretizeLayoutCanonicalBlock concretizeLayoutCanonicalDriver
+Ancestors frameGasEvents concretizeLayoutCanonicalBlock concretizeLayoutCanonicalDriver
   concretizeLayoutCanonicalDeferred frameSelectedSimulation
   concretizeLayoutPhaseOrigin concretizeLayoutCanonicalIndex
   concretizeLayoutAlignedControl frameControlAgreement
@@ -71,8 +71,8 @@ Theorem layout_canonical_run_halt_certificate:
   selected_run_halt_certificate C C' q0 path
     (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
-    (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
-    (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend))
 Proof
   strip_tac >> simp[selected_run_halt_certificate_def] >> rpt strip_tac >>
   drule layout_canonical_run_phi >>
@@ -109,7 +109,7 @@ Proof
   qexistsl [`actual`, `phi'' with vs_inst_idx := phi_prefix_length actual.bb_instructions`] >>
   conj_tac >- (simp[layout_canonical_EB_def] >> metis_tac[]) >>
   rpt strip_tac >> Cases_on `rb'` >>
-  gvs[layout_canonical_OB_def, layout_canonical_result_def] >>
+  gvs[events_OB_def, layout_canonical_OB_def, layout_canonical_result_def] >>
   first_x_assum drule >> strip_tac >>
   fs[layout_completed_jump_def]
 QED
