@@ -13,7 +13,7 @@ Ancestors
   augAssignPlaceMemoryTarget augAssignPlaceMemoryContinuation
   augAssignPlaceSuffixMemory augAssignPlaceRhsContinuation augAssignPlaceTopMemory
   augAssignPlaceCompileMemory augAssignPlaceLoadContinuation
-  augAssignPlaceSourceMemory
+  augAssignPlaceSourceMemory augAssignPlaceCompositeMemory
 
 Theorem body_augassign_place_mem_case:
   !cx ty t bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
