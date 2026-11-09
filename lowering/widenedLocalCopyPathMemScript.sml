@@ -1,7 +1,7 @@
 (* Counted normalization of a staged aggregate into a reserved local. *)
 Theory widenedLocalCopyPathMem
 Ancestors
-  widenedMemoryStaging typedNormalizeRankPathMem freshWrites
+  widenedStagingState fragGasPathResources typedNormalizeRankPathMem freshWrites
   abiDecoderFrame compileEnv context stmtLowering venomState words
   abiBuiltinAllocation emitHelperProps exprLoweringProps loweringHalt
   abiTupleProps fragGasPathMem list rich_list arithmetic
@@ -48,10 +48,17 @@ Theorem staged_local_typed_copy_path_mem:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!a k. (a+k <= w2n dw \/ w2n dw + type_memory_size dtv <= a) /\
       (a+k <= w2n tw \/ w2n tw+n <= a) ==>
-      mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory)
+      mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory) /\
+    stmt_state_rel ctx fn ce cx es u /\ alloca_history fn u /\
+    alloca_history fn t /\ LENGTH u.vs_memory <= LENGTH t.vs_memory /\
+    (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
+      vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
+      vs_prev_bb := u.vs_prev_bb|>) = u /\
+    (!a k. a+k <= w2n dw \/ w2n dw + type_memory_size dtv <= a ==>
+      mem_bytes_at a k t.vs_memory = mem_bytes_at a k u.vs_memory)
 Proof
   strip_tac >> `!x. src = Var x ==> not_fresh_at sa x` by metis_tac[] >>
-  drule_all compile_staging_prefix_forward_mem >>
+  drule_all compile_staging_prefix_state_mem >>
   disch_then (qx_choose_then `r` (qx_choose_then `t` (qx_choose_then `tw`
     (map_every assume_tac o CONJUNCTS)))) >>
   qpat_x_assum `n = type_memory_size stv` SUBST_ALL_TAC >>
@@ -83,11 +90,17 @@ Proof
     (u with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory;
       vs_current_bb := sn.cs_current_bb; vs_inst_idx := LENGTH sn.cs_current_insts;
       vs_prev_bb := t.vs_prev_bb|>) = t /\
-    (!x. not_fresh_at sn x ==> lookup_var x u = lookup_var x t)` by
+    (!x. not_fresh_at sn x ==> lookup_var x u = lookup_var x t) /\
+    LENGTH t.vs_memory <= LENGTH u.vs_memory` by
     (irule typed_store_rank_path_mem >>
      first_assum (irule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
      first_assum (irule_at (Pat `type_widens_to _ _ _`)) >> first_assum (irule_at (Pat `val_in_memory _ _ _ _`)) >>
      gvs[] >> conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  suspend "finish"
+QED
+
+Resume staged_local_typed_copy_path_mem[finish]:
+  markerLib.RESUME_TAC >>
   `gas_path_mem ctx fn s g (OK u)` by (drule_all gas_path_mem_then >> simp[]) >>
   `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by
     (rpt strip_tac >> `not_fresh_at sn x` by
@@ -96,7 +109,12 @@ Proof
       vs_current_bb := r.vs_current_bb; vs_inst_idx := r.vs_inst_idx;
       vs_prev_bb := r.vs_prev_bb|>) = r` by
     suspend "restore" >>
-  qexistsl_tac [`r`, `t`, `u`, `tw`, `g`] >> asm_rewrite_tac[] >> rpt strip_tac >>
+  `alloca_history fn u` by
+    (irule (cj 1 gas_path_mem_history) >>
+     first_assum (irule_at (Pat `gas_path_mem _ _ t _ _`)) >>
+     simp[] >> fs[stmt_state_rel_def]) >>
+  qexistsl_tac [`r`, `t`, `u`, `tw`, `g`] >> asm_rewrite_tac[] >>
+  rpt strip_tac >>
   qpat_x_assum `!a k. _ ==> mem_bytes_at a k u.vs_memory = _` (qspecl_then [`a`, `k`] mp_tac) >>
   qpat_x_assum `!a k. _ ==> mem_bytes_at a k t.vs_memory = _` (qspecl_then [`a`, `k`] mp_tac) >> simp[]
 QED
