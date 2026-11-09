@@ -2,6 +2,7 @@
 Theory symPlannerScratch
 Ancestors
   symPlannerBase doSwapSim contextCodegenRelProps list rich_list
+  asmSymSem asmSem asmToBytecodeProofs codegenSymRel stackOpSim
 
 Definition scratch_kinds_ok_def:
   scratch_kinds_ok fn ret items offsets labs <=>
@@ -83,3 +84,88 @@ Proof
   rpt strip_tac >> drule_all sym_mstore_kind >>
   metis_tac[scratch_kinds_ok_save]
 QED
+
+Theorem sym_step_push_bytes:
+  sym_step p env (AsmPush bytes) ss =
+  SymOK (ss with <| sym_base := (asm_next ss.sym_base) with as_stack := [];
+    sym_stack := Val (word_of_bytes F (0w:bytes32) (REVERSE bytes)) :: ss.sym_stack |> )
+Proof
+  simp[sym_step_def, asmSemTheory.asm_step_def, sym_lift_def,
+       asmSemTheory.asm_next_def, sym_state_component_equality]
+QED
+
+Theorem sym_push_offset_step:
+  off < dimword(:256) ==>
+  ?mid. sym_step p env (AsmPush (encode_num_bytes off)) ss = SymOK mid /\
+    mid.sym_stack = Val (n2w off) :: ss.sym_stack /\
+    mid.sym_mem_labels = ss.sym_mem_labels /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + 1
+Proof
+  simp[sym_step_push_bytes, raw_spill_push_encode_num_roundtrip, asm_next_def]
+QED
+
+Theorem sym_steps_push_memory:
+  asm_block_at p ss.sym_base.as_pc [AsmPush bytes; AsmOp name] /\
+  sym_step p env (AsmPush bytes) ss = SymOK mid /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+  sym_step_op p env name mid = SymOK last ==>
+  sym_steps p env 2 ss = SymOK last
+Proof
+  strip_tac >> fs[asm_block_at_cons, sym_step_def] >>
+  simp[codegenSymRelTheory.sym_steps_compute, sym_step_def]
+QED
+
+
+Definition scratch_push_state_def:
+  scratch_push_state off ss = ss with
+    <| sym_base := (asm_next ss.sym_base) with as_stack := [];
+       sym_stack := Val (n2w off) :: ss.sym_stack |>
+End
+
+Theorem scratch_push_state_projections[simp]:
+  (scratch_push_state off ss).sym_stack = Val (n2w off) :: ss.sym_stack /\
+  (scratch_push_state off ss).sym_mem_labels = ss.sym_mem_labels /\
+  (scratch_push_state off ss).sym_base.as_pc = ss.sym_base.as_pc + 1
+Proof
+  simp[scratch_push_state_def, asm_next_def]
+QED
+
+Theorem sym_step_scratch_push:
+  off < dimword(:256) ==>
+  sym_step p env (AsmPush (encode_num_bytes off)) ss =
+    SymOK (scratch_push_state off ss)
+Proof
+  simp[sym_step_push_bytes, scratch_push_state_def, raw_spill_push_encode_num_roundtrip]
+QED
+
+Theorem sym_steps_scratch_store:
+  off < dimword(:256) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOSpill off]) /\
+  sym_mstore (scratch_push_state off ss) = SymOK last ==>
+  sym_steps p env 2 ss = SymOK last
+Proof
+  rw[planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def] >>
+  drule sym_steps_push_memory >>
+  simp[sym_step_scratch_push, sym_step_op_def, scratch_push_state_projections]
+QED
+
+Theorem sym_steps_scratch_load:
+  off < dimword(:256) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SORestore off]) /\
+  sym_mload (scratch_push_state off ss) = SymOK last ==>
+  sym_steps p env 2 ss = SymOK last
+Proof
+  rw[planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def] >>
+  drule sym_steps_push_memory >>
+  simp[sym_step_scratch_push, sym_step_op_def, scratch_push_state_projections]
+QED
+
+Theorem sym_scratch_store_post:
+  off < dimword(:256) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOSpill off]) ==>
+  ((?last. sym_mstore (scratch_push_state off ss) = SymOK last /\ P last) ==>
+   ?last. sym_steps p env 2 ss = SymOK last /\ P last)
+Proof
+  rpt strip_tac >> qexists_tac `last` >> metis_tac[sym_steps_scratch_store]
+QED
+

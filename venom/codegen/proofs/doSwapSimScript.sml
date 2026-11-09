@@ -2632,7 +2632,7 @@ Proof
   CONV_TAC (LHS_CONV fcpLib.INDEX_CONV) >> REFL_TAC
 QED
 
-Theorem raw_spill_push_encode_num_roundtrip[local]:
+Theorem raw_spill_push_encode_num_roundtrip:
   n < dimword(:256) ==>
   word_of_bytes F (0w:bytes32)
     (REVERSE (encode_num_bytes n)) = n2w n
