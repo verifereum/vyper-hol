@@ -18,7 +18,7 @@ Ancestors
   codegenSymRel fnFrameSteps fnFrameSinglePred fnEntryParams fnFrameBoundary asmSymBridge asmSymSem
   frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  dfgDefs
+  dfgDefs symShuffleSim
 
 (* Symbolic kinds at the boundary depend on the defining instruction,
    not on the concrete word used to represent a label. *)
@@ -440,6 +440,14 @@ Proof
   metis_tac[sym_steps_two]
 QED
 
+Theorem sym_steps_ok_append:
+  sym_steps p env m ss = SymOK mid /\
+  sym_steps p env n mid = SymOK out ==>
+  sym_steps p env (m + n) ss = SymOK out
+Proof
+  simp[sym_steps_add]
+QED
+
 Theorem sym_spill_offsets_steps:
   !xs p env ss stk initial_fmp.
     EVERY (\p. FST p < dimword(:256)) xs /\
@@ -466,9 +474,178 @@ Proof
   first_x_assum drule_all >>
   disch_then (qspec_then `env` strip_assume_tac) >>
   `sym_steps p env (2 + 2 * LENGTH xs) ss = SymOK out` by
-    (qspec_then `2` (qspec_then `2 * LENGTH xs` mp_tac) sym_steps_add >>
-     disch_then (qspec_then `ss` mp_tac) >> simp[]) >>
+    (irule sym_steps_ok_append >> goal_assum drule >> simp[]) >>
   qexists_tac `out` >> gvs[scratch_labels_store_def, arithmeticTheory.MULT_CLAUSES]
+QED
+
+Theorem sym_restore_offsets_steps:
+  !xs p env ss initial_fmp.
+    EVERY (\p. FST p < dimword(:256) /\
+      mem_sval_at ss.sym_mem_labels (FST p) (SND p)) xs /\
+    asm_block_at p ss.sym_base.as_pc
+      (execute_plan initial_fmp (MAP SORestore (MAP FST xs))) ==>
+    ?out vals. sym_steps p env (2 * LENGTH xs) ss = SymOK out /\
+      out.sym_stack = REVERSE vals ++ ss.sym_stack /\
+      LIST_REL (\sv sv'. !fn ret op.
+        op_kind_ok fn ret op sv ==> op_kind_ok fn ret op sv')
+        (MAP SND xs) vals /\
+      out.sym_mem_labels = ss.sym_mem_labels /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH xs
+Proof
+  Induct >- simp[sym_steps_def] >>
+  gen_tac >> PairCases_on `h` >>
+  pure_rewrite_tac[listTheory.EVERY_DEF, listTheory.MAP,
+       pairTheory.FST, pairTheory.SND, listTheory.LENGTH,
+       execute_plan_def, listTheory.FLAT, exec_stack_op_def,
+       stackOpSimTheory.asm_block_at_append] >>
+  pure_rewrite_tac[GSYM execute_plan_def] >> simp[] >> rpt strip_tac >>
+  drule_all sym_restore_offset_steps >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  rename1 `sym_steps p env 2 ss = SymOK mid` >>
+  `asm_block_at p mid.sym_base.as_pc
+    (execute_plan initial_fmp (MAP SORestore (MAP FST xs)))` by simp[] >>
+  `EVERY (\p. FST p < dimword(:256) /\
+     mem_sval_at mid.sym_mem_labels (FST p) (SND p)) xs` by simp[] >>
+  first_x_assum drule_all >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  `sym_steps p env (2 + 2 * LENGTH xs) ss = SymOK out` by
+    (irule sym_steps_ok_append >> goal_assum drule >> simp[]) >>
+  qexistsl_tac [`out`, `sv' :: vals`] >>
+  gvs[arithmeticTheory.MULT_CLAUSES]
+QED
+
+Theorem scratch_labels_store_restore_ready:
+  EVERY (\p. FST p < dimword(:256)) xs /\
+  ALL_DISTINCT (MAP FST xs) /\
+  (!p q. MEM p xs /\ MEM q xs /\ FST p <> FST q ==>
+     FST p + 32 <= FST q \/ FST q + 32 <= FST p) /\
+  EVERY (\p. MEM p xs) ys ==>
+  EVERY (\p. FST p < dimword(:256) /\
+    mem_sval_at (scratch_labels_store labs xs) (FST p) (SND p)) ys
+Proof
+  simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  metis_tac[scratch_labels_store_saved, pairTheory.PAIR]
+QED
+
+Theorem sym_spill_restore_schedule_steps:
+  !xs ys p env ss stk initial_fmp.
+    EVERY (\p. FST p < dimword(:256)) xs /\
+    ALL_DISTINCT (MAP FST xs) /\
+    (!p q. MEM p xs /\ MEM q xs /\ FST p <> FST q ==>
+       FST p + 32 <= FST q \/ FST q + 32 <= FST p) /\
+    EVERY (\p. MEM p xs) ys /\
+    ss.sym_stack = MAP SND xs ++ stk /\
+    asm_block_at p ss.sym_base.as_pc
+      (execute_plan initial_fmp
+        (MAP SOSpill (MAP FST xs) ++ MAP SORestore (MAP FST ys))) ==>
+    ?out vals. sym_steps p env (2 * LENGTH xs + 2 * LENGTH ys) ss = SymOK out /\
+      out.sym_stack = REVERSE vals ++ stk /\
+      LIST_REL (\sv sv'. !fn ret op.
+        op_kind_ok fn ret op sv ==> op_kind_ok fn ret op sv')
+        (MAP SND ys) vals /\
+      out.sym_mem_labels = scratch_labels_store ss.sym_mem_labels xs /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + (2 * LENGTH xs + 2 * LENGTH ys)
+Proof
+  rpt gen_tac >>
+  rewrite_tac[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  strip_tac >> drule_all sym_spill_offsets_steps >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  rename1 `sym_steps p env (2 * LENGTH xs) ss = SymOK mid` >>
+  `EVERY (\p. FST p < dimword(:256) /\
+    mem_sval_at mid.sym_mem_labels (FST p) (SND p)) ys` by
+    (gvs[] >> irule scratch_labels_store_restore_ready >> metis_tac[]) >>
+  `asm_block_at p mid.sym_base.as_pc
+    (execute_plan initial_fmp (MAP SORestore (MAP FST ys)))` by
+    gvs[doSwapSimTheory.execute_plan_map_spill_length] >>
+  drule_all sym_restore_offsets_steps >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexistsl_tac [`out`, `vals`] >>
+  drule_all sym_steps_ok_append >> simp[]
+QED
+
+Theorem scratch_labels_store_context:
+  !labs cp xs.
+  (!b. b IN FDOM labs ==> context_spill_byte cp b) /\
+  (!off sv b. MEM (off,sv) xs /\ in_mem_range off 32 b ==>
+     context_spill_byte cp b) ==>
+  !b. b IN FDOM (scratch_labels_store labs xs) ==> context_spill_byte cp b
+Proof
+  rpt strip_tac >> spose_not_then assume_tac >>
+  `EVERY (\p. ~in_mem_range (FST p) 32 b) xs` by
+    (simp[listTheory.EVERY_MEM] >> metis_tac[pairTheory.PAIR]) >>
+  drule scratch_labels_store_outside >>
+  disch_then (qspec_then `labs` mp_tac) >>
+  gvs[finite_mapTheory.FLOOKUP_DEF, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem sym_kinds_scratch_store:
+  !cp fn ret srest ps ss xs out top stack.
+  sym_kinds_ok cp fn ret srest ps ss /\
+  (!op old off sv. FLOOKUP ps.ps_spilled op = SOME old /\ MEM (off,sv) xs ==>
+    old + 32 <= off \/ off + 32 <= old) /\
+  (!off sv b. MEM (off,sv) xs /\ in_mem_range off 32 b ==>
+     context_spill_byte cp b) /\
+  out.sym_mem_labels = scratch_labels_store ss.sym_mem_labels xs /\
+  out.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE stack) top ==>
+  sym_kinds_ok cp fn ret srest (ps with ps_stack := stack) out
+Proof
+  simp[sym_kinds_ok_def] >> rpt strip_tac
+  >- (rename1 `FLOOKUP ps.ps_spilled op = SOME old` >>
+      `EVERY (\p. old + 32 <= FST p \/ FST p + 32 <= old) xs` by
+        (simp[listTheory.EVERY_MEM] >> metis_tac[pairTheory.PAIR]) >>
+      metis_tac[scratch_labels_store_preserves_saved]) >>
+  metis_tac[scratch_labels_store_context]
+QED
+
+Theorem sym_do_swap_shallow:
+  !d ps p env cp fn ret srest initial_fmp lo R ss.
+    d <= 16 /\ d < LENGTH ps.ps_stack /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc
+      (execute_plan initial_fmp (FST (do_swap d ps))) ==>
+    ?out. sym_steps p env
+        (LENGTH (execute_plan initial_fmp (FST (do_swap d ps)))) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest (SND (do_swap d ps)) out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc +
+        LENGTH (execute_plan initial_fmp (FST (do_swap d ps))) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt strip_tac >>
+  `SND (do_swap d ps) =
+     apply_prefix_ops initial_fmp lo (FST (do_swap d ps)) ps` by
+    (Cases_on `d = 0` >>
+     simp[stackPlanOpsTheory.do_swap_def, mixedPrefixSimTheory.apply_prefix_ops_def,
+       mixedPrefixSimTheory.apply_prefix_op_def, strongPrefixSimTheory.apply_simple_op_def]) >>
+  pop_assum SUBST1_TAC >> irule sym_prefix_ops_sim >>
+  Cases_on `d = 0` >>
+  simp[stackPlanOpsTheory.do_swap_def, prefixExecTheory.prefix_wf_def,
+    prefixExecTheory.stack_op_wf_def, mixedPrefixSimTheory.prefix_spill_wf_def,
+    mixedPrefixSimTheory.spill_op_wf_def, prefixSimTheory.is_prefix_op_def]
+QED
+
+Theorem sym_pop_numeric:
+  !n ps p env cp fn ret srest initial_fmp lo R ss.
+    n <= LENGTH ps.ps_stack /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOPop n]) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp [SOPop n])) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest
+        (ps with ps_stack := stack_pop n ps.ps_stack) out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc +
+        LENGTH (execute_plan initial_fmp [SOPop n]) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt strip_tac >>
+  `ps with ps_stack := stack_pop n ps.ps_stack =
+     apply_prefix_ops initial_fmp lo [SOPop n] ps` by
+    simp[mixedPrefixSimTheory.apply_prefix_ops_def,
+      mixedPrefixSimTheory.apply_prefix_op_def, strongPrefixSimTheory.apply_simple_op_def,
+      stackModelTheory.stack_pop_def] >>
+  pop_assum SUBST1_TAC >> irule sym_prefix_ops_sim >>
+  simp[prefixExecTheory.prefix_wf_def, prefixExecTheory.stack_op_wf_def,
+    mixedPrefixSimTheory.prefix_spill_wf_def, mixedPrefixSimTheory.spill_op_wf_def,
+    prefixSimTheory.is_prefix_op_def]
 QED
 
 Theorem sym_phi_prefix_frame_sim:
