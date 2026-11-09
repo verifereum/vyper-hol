@@ -131,6 +131,8 @@ Theorem target_index_dynamic_header_ptr:
      ISL (evaluate_subscripts entry.type entry.value path)) ==>
   ?src a vs. FST rb = Var src /\ ptr_covers H un src u 32 /\
     lookup_var src u = SOME a /\
+    (?entry. lookup_scopes id ef.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL (ArrayV (DynArrayV vs))) /\
     (!mem. mem_agree_outside un.t_mem u.vs_memory mem ==>
       val_in_memory (ArrayTV etv (Dynamic cap)) (ArrayV (DynArrayV vs))
         (w2n a) mem)
