@@ -1,6 +1,6 @@
 Theory fnPlanLineageEntryProduction
 Ancestors
-  fnPlanLineagePhiInputExclusion fnPlanLineagePhiLiveBudget
+  fnPlanLineageWide fnPlanLineagePhiInputExclusion fnPlanLineagePhiLiveBudget
   fnPlanLineageLiveness fnPlanLineageJoinEntry fnPlanLineageNativeResources fnPlanLineageNativeOrigins
   fnPlanLineageCallers fnPlanLineageSetup fnPlanLineagePath fnPlanLineageSuffix fnPlanLineagePrefix
   callLayoutDefs stackPlanGen venomWf venomInst passSharedDefs removeUnusedProofs removeUnusedSsaProofs list rich_list finite_map bag
@@ -2668,4 +2668,51 @@ Proof
     (p0 with ps_stack := prefixQ ++ _) _ _ _`
     (mp_tac o MATCH_MP native_inst_ops_prefix_cleanup_update) >>
   disch_then (qspecl_then [`hQ`,`gQ`,`bQ`] mp_tac) >> simp[]
+QED
+
+Theorem terminal_jmp_paired_cleanup_replay:
+  !lv dfg cfg fn inst nl halt term lbl ps prefixP prefixQ
+    hP gP bP hQ gQ bQ ops extended_out dest.
+    inst.inst_opcode = JMP /\ inst.inst_operands = [Label dest] /\
+    inst.inst_outputs = [] /\
+    (!targets. join_target_ops lv fn lbl inst = SOME targets ==>
+      ALL_DISTINCT targets /\
+      (!x. MEM x targets ==> MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled)) /\
+    generate_inst_plan lv dfg cfg fn inst nl halt term lbl
+      (ps with <|ps_stack := prefixQ ++ ps.ps_stack;
+        ps_cleanup_height := hQ; ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>) =
+      SOME (ops,extended_out) ==>
+    ?out.
+      generate_inst_plan lv dfg cfg fn inst nl halt term lbl ps = SOME (ops,out) /\
+      generate_inst_plan lv dfg cfg fn inst nl halt term lbl
+        (ps with <|ps_stack := prefixP ++ ps.ps_stack;
+          ps_cleanup_height := hP; ps_cleanup_growth := gP; ps_cleanup_promised := bP|>) =
+        SOME (ops,out with <|ps_stack := prefixP ++ out.ps_stack;
+          ps_cleanup_height := hP; ps_cleanup_growth := gP; ps_cleanup_promised := bP|>) /\
+      extended_out = out with <|ps_stack := prefixQ ++ out.ps_stack;
+        ps_cleanup_height := hQ; ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?base.
+    generate_inst_plan lv dfg cfg fn inst nl halt term lbl
+      (ps with ps_stack := prefixQ ++ ps.ps_stack) = SOME (ops,base) /\
+    extended_out = base with <|ps_cleanup_height := hQ;
+      ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>` by
+    (`generate_inst_plan lv dfg cfg fn inst nl halt term lbl
+       ((ps with ps_stack := prefixQ ++ ps.ps_stack) with
+         <|ps_cleanup_height := hQ; ps_cleanup_growth := gQ;
+           ps_cleanup_promised := bQ|>) = SOME (ops,extended_out)` by simp[] >>
+     gvs[fnPlanLineageReplayTheory.generate_inst_plan_cleanup_update,AllCaseEqs()] >>
+     qexists_tac `SND r` >> simp[]) >>
+  drule_all terminal_jmp_inst_bottom_reflection >> strip_tac >>
+  qexists_tac `out` >> simp[] >>
+  `generate_inst_plan lv dfg cfg fn inst nl halt term lbl
+    ((ps with ps_stack := prefixP ++ ps.ps_stack) with
+      <|ps_cleanup_height := hP; ps_cleanup_growth := gP;
+        ps_cleanup_promised := bP|>) =
+    SOME (ops,(out with ps_stack := prefixP ++ out.ps_stack) with
+      <|ps_cleanup_height := hP; ps_cleanup_growth := gP;
+        ps_cleanup_promised := bP|>)` suffices_by simp[] >>
+  simp[fnPlanLineageReplayTheory.generate_inst_plan_cleanup_update] >>
+  drule_all terminal_jmp_inst_bottom_frame >> simp[]
 QED
