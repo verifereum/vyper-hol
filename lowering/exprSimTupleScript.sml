@@ -109,7 +109,7 @@ Definition tuple_offset_def:
     SUM (TAKE k (MAP (elem_size_in_location cenv loc) tys))
 End
 
-Theorem compile_expr_tuple_subscript[local]:
+Theorem compile_expr_tuple_subscript:
   !cenv ty ann obj idx tys st vv st'.
     compile_expr cenv ty (Subscript ann obj idx) st = (vv, st') /\
     place_type cenv obj = ValPT (TupleT tys) ==>
@@ -497,7 +497,7 @@ Proof
   simp[supportedExprTraverseTheory.supported_expr_exists_def]
 QED
 
-Theorem eval_expr_tuple_subscript[local]:
+Theorem eval_expr_tuple_subscript:
   !cx ann obj ity k es.
     eval_expr cx (Subscript ann obj (Literal ity (IntL (&k)))) es =
     (do r <- eval_expr cx obj;
@@ -567,7 +567,7 @@ QED
 
 (* The element's pointer in memory: the element lies inside the base's
    bytes, so its address does not wrap, and the base sits where vv_at says. *)
-Theorem tuple_elem_ptr[local]:
+Theorem tuple_elem_ptr:
   !func cenv cx env es sa sn es1 tv bvv q w tys tvs vs k ctx.
     stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
@@ -1130,7 +1130,7 @@ Proof
 QED
 
 (* A completed base execution: the ADD's path and the element's post. *)
-Theorem tuple_summary_ok[local]:
+Theorem tuple_summary_ok:
   !ctx func cenv cx env ty obj ity k es tys sa sm p sb bvv s0 marks btv fe
    t R.
     expr_body_pre cenv cx env
