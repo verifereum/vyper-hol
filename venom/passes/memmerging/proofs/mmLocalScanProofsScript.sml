@@ -5654,7 +5654,7 @@ QED
 
 Theorem mm_local_write_log_partition[local]:
   !js s.
-  (!j k. MEM j js /\ P j /\ MEM k js /\ ~P k ==>
+  (!pre j mid k post. js = pre ++ [j] ++ mid ++ [k] ++ post /\ ~P j /\ P k ==>
     FST (wr j) + LENGTH (SND (wr j)) <= FST (wr k) \/
     FST (wr k) + LENGTH (SND (wr k)) <= FST (wr j)) ==>
   FOLDL (\st j. write_memory_with_expansion (FST (wr j)) (SND (wr j)) st) s js =
@@ -5663,16 +5663,24 @@ Theorem mm_local_write_log_partition[local]:
       s (FILTER P js)) (FILTER (\j. ~P j) js)
 Proof
   Induct_on `js` >- simp[] >> rpt gen_tac >> strip_tac >>
-  `!j k. MEM j js /\ P j /\ MEM k js /\ ~P k ==>
+  `!pre j mid k post. js = pre ++ [j] ++ mid ++ [k] ++ post /\ ~P j /\ P k ==>
     FST (wr j) + LENGTH (SND (wr j)) <= FST (wr k) \/
-    FST (wr k) + LENGTH (SND (wr k)) <= FST (wr j)` by metis_tac[MEM] >>
+    FST (wr k) + LENGTH (SND (wr k)) <= FST (wr j)` by
+      (rpt strip_tac >>
+       first_x_assum (qspecl_then [`h::pre`, `j`, `mid`, `k`, `post`] mp_tac) >> simp[]) >>
   first_x_assum (qspec_then `write_memory_with_expansion (FST (wr h)) (SND (wr h)) s` mp_tac) >>
-  simp[] >> strip_tac >> Cases_on `P h`
+  (impl_tac >- metis_tac[]) >> strip_tac >> Cases_on `P h`
   >- simp[] >>
   `EVERY (\(d,bs). d + LENGTH bs <= FST (wr h) \/
     FST (wr h) + LENGTH (SND (wr h)) <= d) (MAP wr (FILTER P js))` by
     (simp[EVERY_MEM, MEM_MAP, MEM_FILTER, pairTheory.FORALL_PROD] >>
-     rpt strip_tac >> gvs[] >> metis_tac[MEM, pairTheory.FST, pairTheory.SND]) >>
+     rpt strip_tac >> gvs[] >>
+     rename1 `MEM k js` >>
+     qpat_x_assum `MEM k js`
+       (qx_choose_then `pre` (qx_choose_then `post` assume_tac) o REWRITE_RULE [MEM_SPLIT]) >>
+     qpat_x_assum `!pre j mid k post. h::js = _ /\ _ ==> _`
+       (qspecl_then [`[]`, `h`, `pre`, `k`, `post`] mp_tac) >>
+     gvs[quantHeuristicsTheory.PAIR_EQ_EXPAND]) >>
   drule mm_local_write_log_commute >> disch_then (qspec_then `s` mp_tac) >>
   simp[FOLDL_MAP, pairTheory.UNCURRY, combinTheory.o_DEF] >>
   strip_tac >> simp[]
@@ -5688,7 +5696,8 @@ QED
 
 Theorem mm_local_pending_partition[local]:
   mm_local_pending cap js s t /\
-  (!j k d bs a cs. MEM j js /\ P j /\ MEM k js /\ ~P k /\
+  (!pre j mid k post d bs a cs.
+    js = pre ++ [j] ++ mid ++ [k] ++ post /\ ~P j /\ P k /\
     cap j = SOME (d,bs) /\ cap k = SOME (a,cs) ==>
     d + LENGTH bs <= a \/ a + LENGTH cs <= d) ==>
   mm_local_pending cap (FILTER P js ++ FILTER (\j. ~P j) js) s t
@@ -5711,7 +5720,7 @@ Proof
     (irule (SRULE [combinTheory.o_DEF]
       (Q.INST [`wr` |-> `THE o cap`] mm_local_write_log_partition)) >>
       rpt strip_tac >>
-      `IS_SOME (cap j) /\ IS_SOME (cap k)` by gvs[EVERY_MEM] >>
+      `IS_SOME (cap j) /\ IS_SOME (cap k)` by gvs[EVERY_MEM, MEM_APPEND] >>
       Cases_on `cap j` >> Cases_on `cap k` >> gvs[] >>
       PairCases_on `x` >> PairCases_on `x'` >> gvs[] >> metis_tac[]) >>
   gvs[FOLDL_MAP, FOLDL_APPEND, pairTheory.UNCURRY, combinTheory.o_DEF]
@@ -5719,7 +5728,8 @@ QED
 
 Theorem mm_local_pending_discharge_filter[local]:
   mm_local_pending cap js s t /\
-  (!j k d bs a cs. MEM j js /\ P j /\ MEM k js /\ ~P k /\
+  (!pre j mid k post d bs a cs.
+    js = pre ++ [j] ++ mid ++ [k] ++ post /\ ~P j /\ P k /\
     cap j = SOME (d,bs) /\ cap k = SOME (a,cs) ==>
     d + LENGTH bs <= a \/ a + LENGTH cs <= d) /\
   LIST_REL (\j w. cap j = SOME w) (FILTER P js) old /\
