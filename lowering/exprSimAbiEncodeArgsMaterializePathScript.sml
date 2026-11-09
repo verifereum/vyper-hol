@@ -107,6 +107,39 @@ Proof
       exprLoweringTheory.unwrap_value_def, comp_bind_def]
 QED
 
+Theorem materialize_zero_store:
+  ~is_word_type ty /\ type_memory_bytes ce ty = 0 ==>
+  compile_store_memory ce src dst ty ty = comp_return ()
+Proof
+  strip_tac >>
+  `~is_bytestring_type ty` by
+    (spose_not_then assume_tac >>
+     drule valueCopyBytesTheory.bytestring_memory_bytes_positive >>
+     disch_then (qspec_then `ce` mp_tac) >> simp[]) >>
+  simp[contextTheory.compile_store_memory_def,
+       contextTheory.compile_copy_memory_def]
+QED
+
+Theorem materialize_zero_code_shape:
+  ~is_word_type ty /\ type_memory_bytes ce ty = 0 /\
+  ~is_word_type vty /\ type_memory_bytes ce vty = 0 /\
+  p.ptr_location = LocCode ==>
+  compile_materialize_vv ce ty (LocatedValue vty p) =
+    comp_bind (compile_alloc_buffer 0)
+      (\tmp. comp_bind (compile_alloc_buffer 0)
+        (\src. comp_return tmp.buf_operand))
+Proof
+  strip_tac >>
+  simp[exprLoweringTheory.compile_materialize_vv_def,
+       exprLoweringTheory.unwrap_value_def,
+       contextTheory.compile_ensure_in_memory_def,
+       contextTheory.compile_imm_copy_to_memory_def,
+       materialize_zero_store, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, FUN_EQ_THM] >>
+  gen_tac >> pairarg_tac >> simp[] >>
+  Cases_on `compile_alloc_buffer 0 cs'` >> simp[]
+QED
+
 (* A zero-sized destination can leave the unwrap loop's exit empty. *)
 Theorem materialize_zero_destination_alias_probe:
   let sa = initial_compile_state "@wcopy_exit_2";
