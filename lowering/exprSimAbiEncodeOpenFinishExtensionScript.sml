@@ -1,6 +1,6 @@
 Theory exprSimAbiEncodeOpenFinishExtension
 Ancestors
-  exprSimAbiEncodeFramedSuffix exprSimAbiEncodeFinish abiEncoderExtendSim
+  exprSimAbiEncodeFinish abiEncoderExtendSim
   abiBuiltinEncodeCode abiBuiltinEncodeCorrect abiEncoderSequence abiDecoderReentry
   exprSimAbiEncodeExecFrame abiEncoderRegisteredEffect abiDecoderContract
   abiDecoderLoop instIdxIndep entrySinkExtraction venomState compileEnv emitHelper
