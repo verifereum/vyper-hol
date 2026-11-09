@@ -4493,6 +4493,91 @@ QED
 
 Finalise mm_local_live_load_step
 
+Theorem mm_local_scan_phi_prefix[local]:
+  !xs ss. FOLDL (scan_inst dfg Mem2Mem) ss
+    (TAKE (phi_prefix_length xs) xs) = ss
+Proof
+  Induct_on `xs` >> simp[venomExecSemanticsTheory.phi_prefix_length_def] >>
+  rpt gen_tac >> IF_CASES_TAC >>
+  simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def,
+       is_volatile_memory_def, venomEffectsTheory.read_effects_def,
+       venomEffectsTheory.write_effects_def, venomEffectsTheory.all_effects_def,
+       venomEffectsTheory.empty_effects_def]
+QED
+
+Theorem mm_local_live_load_cut[local]:
+  !n h states fn0 supply index k bb sk fuel ctx.
+  wf_ssa fn0 /\ wf_function fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  h+n <= LENGTH bb.bb_instructions /\ n < LENGTH states /\
+  (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state
+    (TAKE h bb.bb_instructions)).ss_loads = FEMPTY /\
+  (!r. r < n ==>
+    ~is_terminator (EL (h+r) bb.bb_instructions).inst_opcode /\
+    ?t. step_inst fuel ctx (EL (h+r) bb.bb_instructions) (EL r states) = OK t /\
+        EL (SUC r) states = t with vs_inst_idx := SUC (EL r states).vs_inst_idx) ==>
+  !v src. FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE (h+n) bb.bb_instructions)).ss_loads v = SOME src ==>
+    lookup_var v (EL n states) = SOME (mload src (EL n states))
+Proof
+  Induct_on `n`
+  >- (rpt strip_tac >> gvs[]) >>
+  rpt strip_tac >>
+  `!v src. FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE (h+n) bb.bb_instructions)).ss_loads v = SOME src ==>
+    lookup_var v (EL n states) = SOME (mload src (EL n states))` by
+    (first_x_assum match_mp_tac >>
+     qexistsl [`supply`,`index`,`k`,`sk`,`fuel`,`ctx`] >>
+     simp[] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `h+n < LENGTH bb.bb_instructions` by decide_tac >>
+  `~is_terminator (EL (h+n) bb.bb_instructions).inst_opcode /\
+    ?t. step_inst fuel ctx (EL (h+n) bb.bb_instructions) (EL n states) = OK t /\
+        EL (SUC n) states = t with vs_inst_idx := SUC (EL n states).vs_inst_idx` by
+    (first_x_assum irule >> simp[]) >>
+  gvs[arithmeticTheory.ADD_CLAUSES, rich_listTheory.TAKE_SUC_BY_TAKE,
+      rich_listTheory.FOLDL_SNOC] >>
+  `!u a. FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE (h+n) bb.bb_instructions)).ss_loads u = SOME a ==>
+    ~MEM u (EL (h+n) bb.bb_instructions).inst_outputs` by
+    (metis_tac[mm_local_live_cut_fresh]) >>
+  `~is_terminator (EL (h+n) bb.bb_instructions).inst_opcode` by
+    (qpat_x_assum `!r. r < SUC n ==> _` (qspec_then `n` mp_tac) >> simp[]) >>
+  drule_all mm_local_live_load_step >>
+  simp[venomStateTheory.lookup_var_def, venomStateTheory.mload_def,
+       venomStateTheory.read_memory_def]
+QED
+
+Theorem mm_local_live_load_post_phis[local]:
+  wf_ssa fn0 /\ wf_function fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  h = phi_prefix_length bb.bb_instructions /\ h <= j /\ j <= LENGTH bb.bb_instructions /\
+  LENGTH states = SUC (j-h) /\
+  eval_phis s bb.bb_instructions = OK s_phi /\
+  EL 0 states = s_phi with vs_inst_idx := h /\
+  (!r. r < j-h ==>
+    ~is_terminator (EL (h+r) bb.bb_instructions).inst_opcode /\
+    ?t. step_inst fuel ctx (EL (h+r) bb.bb_instructions) (EL r states) = OK t /\
+        EL (SUC r) states = t with vs_inst_idx := SUC (EL r states).vs_inst_idx) /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state
+      (TAKE j bb.bb_instructions) ==>
+  !v src. FLOOKUP ss.ss_loads v = SOME src ==>
+    lookup_var v (EL (j-h) states) = SOME (mload src (EL (j-h) states))
+Proof
+  strip_tac >>
+  `j = h + (j-h)` by decide_tac >>
+  qpat_x_assum `ss = _` (fn th => rewrite_tac[th]) >>
+  qpat_assum `j = h + (j-h)` (fn th => once_rewrite_tac[th]) >>
+  simp[NoAsms] >>
+  match_mp_tac mm_local_live_load_cut >>
+  qexistsl [`supply`,`index`,`k`,`sk`,`fuel`,`ctx`] >>
+  simp[mm_local_scan_phi_prefix, empty_scan_state_def] >>
+  metis_tac[]
+QED
+
 Theorem mm_local_known_value_frame[local]:
   lookup_var x s = SOME value /\ step_inst_base inst s = OK t /\
   ~MEM (Var x) inst.inst_operands /\ ~MEM x inst.inst_outputs ==>
