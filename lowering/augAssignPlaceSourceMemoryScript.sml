@@ -4,7 +4,7 @@ Ancestors
   augAssignPlaceRhsMemory stmtSimAugAssignPlaceStorage
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlace stmtSimAugAssign
   tupleTargetStoreProps gasContext vyperState bodyMemoryPreds
-  augAssignPlaceSuffixAdmissibility
+  augAssignPlaceSuffixAdmissibility augAssignPlaceSourcePrefix
   exprSimSource exprSimHyps exprSimHypsDefs
 
 Theorem aug_place_memory_suffix_source[local]:
