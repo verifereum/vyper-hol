@@ -52,7 +52,7 @@ End
 (* ===== Offsets in a local's memory ===== *)
 
 (* mem_field_offset, mem_step_offset and mem_path_offset are in
-   compileEnv, where local_ptrs_rel uses them. *)
+   loweringStateRelDefs, where local_ptrs_rel uses them. *)
 
 (* The cenv twin of mem_step_offset and mem_path_offset, over declared
    types and read off the compile environment alone: a field sits at

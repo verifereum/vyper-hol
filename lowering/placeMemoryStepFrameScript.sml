@@ -1,6 +1,6 @@
 Theory placeMemoryStepFrame
 Ancestors
-  compileEnv placeMemoryDeadSuffix placeMemoryFieldRebuild placeMemoryIndexRebuild
+  compileEnv loweringStateRelDefs placeMemoryDeadSuffix placeMemoryFieldRebuild placeMemoryIndexRebuild
   vyperTypeDefaults exprSimProps
   vyperPlaceStatePreservation vyperAssignPreservesType vyperValueOperation
   exprSimAggregateEncoding exprSimPop valueEncoding valueEncodingDefs valueEncodingProps valueEncodingTyping
