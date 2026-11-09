@@ -244,5 +244,5 @@ Proof
       mp_tac (Q.INST [`ann` |-> `a`] intcall_pop_toplevel_producer) >>
       simp[intcall_expr_producer_def] >>
       disch_then irule >> metis_tac[]) >>
-  simp[intcall_map_producer_def, supported_pure_expr_def]
+  simp[intcall_map_producer_def, supported_pure_expr_def, supported_effect_expr_def]
 QED

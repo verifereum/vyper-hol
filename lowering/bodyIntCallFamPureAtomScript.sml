@@ -107,7 +107,7 @@ QED
 Theorem intcall_toplevel_map_producer:
   intcall_map_producer fp (TopLevelName ann (src,id))
 Proof
-  rw[intcall_map_producer_def] >>
+  rw[intcall_map_producer_def, supported_effect_expr_def] >>
   `env_consistent env fp.jc_cx es /\
    ?kt vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt)` by
     gvs[expr_map_pre_def, expr_sim_inv_def, well_typed_expr_def, AllCaseEqs()] >>
