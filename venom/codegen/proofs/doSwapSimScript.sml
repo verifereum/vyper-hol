@@ -1753,7 +1753,7 @@ Proof
 QED
 
 (* The two DUP restoration schedules visit every temporary slot once. *)
-Theorem dup_restore_indices_reverse[local]:
+Theorem dup_restore_indices_reverse:
   !k. 0 < k ==>
     GENLIST (\i. k - 2 - i) (k - 1) ++ [k - 1] =
     REVERSE (GENLIST I (k - 1)) ++ [k - 1] /\
@@ -1787,7 +1787,7 @@ Proof
        LUPDATE_APPEND1, APPEND_ASSOC, LUPDATE_def]
 QED
 
-Theorem map_el_reverse_indices[local]:
+Theorem map_el_reverse_indices:
   !xs:'a list.
     MAP (\i. EL i xs) (REVERSE (GENLIST I (LENGTH xs))) = REVERSE xs
 Proof
