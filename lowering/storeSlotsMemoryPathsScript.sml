@@ -7,7 +7,7 @@ Ancestors
   venomExecSemantics venomState venomInst list rich_list finite_map words
   arithmetic valueEncoding valueEncodingProps
 
-Theorem store_slots_emitted_seq_path_mem[local]:
+Theorem store_slots_emitted_seq_path_mem:
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   same_blocks sa sb /\ fn_has_code sa sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
