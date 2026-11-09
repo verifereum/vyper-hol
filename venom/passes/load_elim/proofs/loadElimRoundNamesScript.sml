@@ -2,7 +2,8 @@ Theory loadElimRoundNames
 Ancestors
   loadElimDefs loadElimOriginHelpers loadElimPhiCapture
   loadElimAllBlockPopulation loadElimConvergence loadElimSolverHelpers
-  loadElimSupportHelpers loadElimGeneratedSupport
+  loadElimSupportHelpers loadElimGeneratedSupport loadElimActionFreshness
+  localPtrsProps
   dfgAnalysisProps cfgTransform removeUnusedSsaProofs livenessTransferProofs
   venomInst venomWf venomExecProps cfgDefs cfgAnalysisProps list rich_list finite_map pred_set
 
@@ -216,4 +217,162 @@ Proof
   simp[] >>
   gvs[cfgTransformTheory.fn_all_vars_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
   metis_tac[]
+QED
+
+(* Names are indexed by original load opcode, not by generated PHI IDs. *)
+Definition le_opcode_names_def:
+  le_opcode_names fn ops =
+    {v | ?i. MEM i (fn_insts fn) /\ MEM i.inst_opcode ops /\
+             v = fresh_phi_var i.inst_id}
+End
+
+Theorem le_round_fresh_origin:
+  v IN load_elim_one_fresh ctx g fn ==>
+  ?i. MEM i (fn_insts fn) /\ i.inst_opcode = ctx.lctx_config.lc_load /\
+      v = fresh_phi_var i.inst_id
+Proof
+  simp[load_elim_one_fresh_def, load_elim_fresh_vars_def, MEM_MAP] >>
+  strip_tac >> drule collect_phi_actions_member >> strip_tac >>
+  drule compute_phi_action_origin >> strip_tac >>
+  qexists `inst` >> simp[fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+  metis_tac[MEM_EL]
+QED
+
+Theorem le_opcode_names_disjoint:
+  fn_inst_ids_distinct fn /\ DISJOINT (set ops1) (set ops2) ==>
+  DISJOINT (le_opcode_names fn ops1) (le_opcode_names fn ops2)
+Proof
+  simp[DISJOINT_DEF, EXTENSION, le_opcode_names_def] >>
+  rpt strip_tac >> spose_not_then strip_assume_tac >> gvs[] >>
+  drule_all fn_inst_ids_distinct_inj >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem le_opcode_names_prefix:
+  v IN le_opcode_names fn ops ==> isPREFIX "$le_phi_" v
+Proof
+  simp[le_opcode_names_def] >> strip_tac >> gvs[fresh_phi_var_def]
+QED
+
+Theorem le_opcode_names_source_disjoint:
+  EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) ==>
+  DISJOINT (le_opcode_names fn ops) (set (fn_all_vars fn))
+Proof
+  pure_rewrite_tac[EVERY_MEM] >> strip_tac >>
+  simp[DISJOINT_DEF, EXTENSION] >> gen_tac >>
+  spose_not_then strip_assume_tac >>
+  drule le_opcode_names_prefix >>
+  first_x_assum drule >> simp[]
+QED
+
+Definition le_round_name_bound_def:
+  le_round_name_bound original fn ops <=>
+    set (fn_all_vars fn) SUBSET
+      set (fn_all_vars original) UNION le_opcode_names original ops /\
+    (!i. MEM i (fn_insts fn) /\ i.inst_opcode <> PHI /\
+         i.inst_opcode <> ASSIGN /\ i.inst_opcode <> NOP ==>
+         MEM i (fn_insts original))
+End
+
+Theorem le_round_name_bound_initial:
+  le_round_name_bound fn fn []
+Proof
+  simp[le_round_name_bound_def, le_opcode_names_def, SUBSET_DEF]
+QED
+
+Theorem le_round_name_bound_fresh:
+  le_round_name_bound original fn ops /\
+  ctx.lctx_config.lc_load <> PHI /\ ctx.lctx_config.lc_load <> ASSIGN /\
+  ctx.lctx_config.lc_load <> NOP ==>
+  load_elim_one_fresh ctx g fn SUBSET
+    le_opcode_names original [ctx.lctx_config.lc_load]
+Proof
+  simp[le_round_name_bound_def, SUBSET_DEF] >> rpt strip_tac >>
+  drule le_round_fresh_origin >> strip_tac >>
+  simp[le_opcode_names_def] >> metis_tac[]
+QED
+
+Theorem le_round_name_bound_step:
+  le_round_name_bound original fn ops /\ wf_function fn /\
+  ctx.lctx_config.lc_load <> PHI /\ ctx.lctx_config.lc_load <> ASSIGN /\
+  ctx.lctx_config.lc_load <> NOP ==>
+  le_round_name_bound original (load_elim_one ctx g fn)
+    (ctx.lctx_config.lc_load::ops)
+Proof
+  strip_tac >>
+  drule_all le_round_name_bound_fresh >> disch_then (qspec_then `g` assume_tac) >>
+  gvs[le_round_name_bound_def, SUBSET_DEF] >> conj_tac
+  >- (rpt strip_tac >> drule_all le_round_vars_bound >> strip_tac
+      >- (first_x_assum drule >> simp[le_opcode_names_def] >> metis_tac[]) >>
+      first_x_assum drule >> simp[le_opcode_names_def] >> metis_tac[]) >>
+  rpt strip_tac >> metis_tac[le_round_other_opcode_origin]
+QED
+
+Theorem le_round_name_bound_disjoint:
+  le_round_name_bound original fn ops /\ fn_inst_ids_distinct original /\
+  EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars original) /\
+  ~MEM ctx.lctx_config.lc_load ops /\
+  ctx.lctx_config.lc_load <> PHI /\ ctx.lctx_config.lc_load <> ASSIGN /\
+  ctx.lctx_config.lc_load <> NOP ==>
+  DISJOINT (load_elim_one_fresh ctx g fn) (set (fn_all_vars fn))
+Proof
+  strip_tac >>
+  drule_all le_round_name_bound_fresh >> disch_then (qspec_then `g` assume_tac) >>
+  `DISJOINT (le_opcode_names original [ctx.lctx_config.lc_load])
+            (le_opcode_names original ops)` by
+    (irule le_opcode_names_disjoint >> simp[DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
+  drule le_opcode_names_source_disjoint >>
+  disch_then (qspec_then `[ctx.lctx_config.lc_load]` assume_tac) >>
+  gvs[le_round_name_bound_def, SUBSET_DEF, DISJOINT_DEF, EXTENSION] >>
+  metis_tac[]
+QED
+
+(* Intermediate well-formedness is the independent RoundWf obligation.
+   CFG, BP and alias fields of the contexts need not be rebuilt here. *)
+Theorem le_five_round_name_separation:
+  wf_function fn /\ wf_function fn1 /\ wf_function fn2 /\ wf_function fn3 /\
+  EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
+  c1.lctx_config.lc_load = MLOAD /\ c2.lctx_config.lc_load = TLOAD /\
+  c3.lctx_config.lc_load = SLOAD /\ c4.lctx_config.lc_load = DLOAD /\
+  c5.lctx_config.lc_load = CALLDATALOAD /\
+  fn1 = load_elim_one c1 g fn /\ fn2 = load_elim_one c2 g fn1 /\
+  fn3 = load_elim_one c3 g fn2 /\ fn4 = load_elim_one c4 g fn3 ==>
+  DISJOINT (load_elim_one_fresh c1 g fn) (set (fn_all_vars fn)) /\
+  DISJOINT (load_elim_one_fresh c2 g fn1) (set (fn_all_vars fn1)) /\
+  DISJOINT (load_elim_one_fresh c3 g fn2) (set (fn_all_vars fn2)) /\
+  DISJOINT (load_elim_one_fresh c4 g fn3) (set (fn_all_vars fn3)) /\
+  DISJOINT (load_elim_one_fresh c5 g fn4) (set (fn_all_vars fn4))
+Proof
+  strip_tac >>
+  `le_round_name_bound fn fn []` by simp[le_round_name_bound_initial] >>
+  `le_round_name_bound fn fn1 [MLOAD]` by
+    (qpat_x_assum `fn1 = _` SUBST1_TAC >>
+     ` [MLOAD] = c1.lctx_config.lc_load::[]` by simp[] >>
+     pop_assum SUBST1_TAC >> irule le_round_name_bound_step >> simp[]) >>
+  `le_round_name_bound fn fn2 [TLOAD; MLOAD]` by
+    (qpat_x_assum `fn2 = _` SUBST1_TAC >>
+     `[TLOAD; MLOAD] = c2.lctx_config.lc_load::[MLOAD]` by simp[] >>
+     pop_assum SUBST1_TAC >> irule le_round_name_bound_step >> simp[]) >>
+  `le_round_name_bound fn fn3 [SLOAD; TLOAD; MLOAD]` by
+    (qpat_x_assum `fn3 = _` SUBST1_TAC >>
+     `[SLOAD; TLOAD; MLOAD] = c3.lctx_config.lc_load::[TLOAD; MLOAD]` by simp[] >>
+     pop_assum SUBST1_TAC >> irule le_round_name_bound_step >> simp[]) >>
+  `le_round_name_bound fn fn4 [DLOAD; SLOAD; TLOAD; MLOAD]` by
+    (qpat_x_assum `fn4 = _` SUBST1_TAC >>
+     `[DLOAD; SLOAD; TLOAD; MLOAD] = c4.lctx_config.lc_load::[SLOAD; TLOAD; MLOAD]` by simp[] >>
+     pop_assum SUBST1_TAC >> irule le_round_name_bound_step >> simp[]) >>
+  `fn_inst_ids_distinct fn` by gvs[wf_function_def] >>
+  conj_tac
+  >- (irule le_round_name_bound_disjoint >> simp[] >>
+      qexistsl [`[]`, `fn`] >> gvs[]) >>
+  conj_tac
+  >- (irule le_round_name_bound_disjoint >> simp[] >>
+      qexistsl [`[MLOAD]`, `fn`] >> gvs[]) >>
+  conj_tac
+  >- (irule le_round_name_bound_disjoint >> simp[] >>
+      qexistsl [`[TLOAD; MLOAD]`, `fn`] >> gvs[]) >>
+  conj_tac
+  >- (irule le_round_name_bound_disjoint >> simp[] >>
+      qexistsl [`[SLOAD; TLOAD; MLOAD]`, `fn`] >> gvs[]) >>
+  irule le_round_name_bound_disjoint >> simp[] >>
+  qexistsl [`[DLOAD; SLOAD; TLOAD; MLOAD]`, `fn`] >> gvs[]
 QED
