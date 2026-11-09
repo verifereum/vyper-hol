@@ -65,15 +65,6 @@ Proof
        type_memory_size_def]
 QED
 
-(* The current invariant cannot constrain the physical IntCall return table. *)
-Theorem return_site_inv_return_table:
-  expr_sim_inv (ce with ce_func_return_type := f) cx env es <=>
-  expr_sim_inv ce cx env es
-Proof
-  simp[expr_sim_inv_def,
-       placeTypingPropsTheory.place_map_tables_agree_on_defined_def]
-QED
-
 Theorem return_site_intcall_physical_type:
   lowered_value_type (ce with ce_func_return_type := f)
     (Call ann (IntCall fid) args drv) = f (nsid_to_string fid)
