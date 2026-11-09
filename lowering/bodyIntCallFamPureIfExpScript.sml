@@ -6,7 +6,8 @@ Ancestors
   exprSimAggregateChildren exprBopSimProps arithmetic exprSimProps
   exprSimWordArgs exprSimSubscriptArrayCompose exprSimAggregateSource
   stmtSimAugAssignPlaceMemory gasSummary gasContext vyperState exprSimSubscriptMap
-  exprSimDefs gasOutcome
+  exprSimDefs gasOutcome exprSimOperators exprLoweringProps bodyIntCallJointStmtJump
+  stmtSimForLoop
 
 (* Assemble the ordinary forced post at the chosen forcing endpoint. *)
 Theorem vv_post_forcing_frames:
@@ -410,6 +411,191 @@ Proof
   qpat_x_assum `_ ==> !tv. _` mp_tac >> simp[]
 QED
 
+Theorem ifexp_joint_expr_producer:
+  intcall_forced_producer fp c /\ intcall_expr_producer fp a /\
+  intcall_expr_producer fp b ==>
+  intcall_expr_producer fp (IfExp t c a b)
+Proof
+  strip_tac >> simp[Once intcall_expr_producer_def] >> rpt gen_tac >> strip_tac >>
+  drule expr_body_pre_ifexp >> strip_tac >>
+  `local_ptrs_reserved ce sa` by fs[intcall_joint_res_def] >>
+  `?cop sc. lower_value compile_expr ce (BaseT BoolT) c sa = (cop,sc) /\
+    fn_has_code sa sc fp.jc_func` by
+    (drule_at (Pat `compile_expr _ _ _ _ = _`) ifexp_root_code_layout >>
+     disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+     (impl_tac >- (simp[] >> metis_tac[compile_expr_grows])) >>
+     disch_then (qspec_then `T` strip_assume_tac) >> metis_tac[]) >>
+  `supportedExprs$supported_expr fp.jc_tops c /\
+   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr c)` by
+    fs[supportedExprsTheory.supported_expr_def,
+       supportedExprsTheory.supported_pure_expr_def,
+       supportedExprsTheory.supported_effect_expr_def,
+       vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  qpat_x_assum `intcall_forced_producer _ _` mp_tac >>
+  simp[Once intcall_forced_producer_def] >>
+  disch_then (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `intcall_joint_res _ _ _ _ _ _`)) >>
+  (impl_tac >- (simp[] >> metis_tac[ifexp_root_condition_admissible])) >>
+  disch_then (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+      rewrite_tac[gas_summary_at_def] >> strip_tac
+      >- suspend "normal" >>
+      irule ifexp_root_condition_exit >> goal_assum (drule_at Any) >> fs[]) >>
+  rewrite_tac[gas_outcome_def] >> qexists `marks` >> disj2_tac >>
+  drule ifexp_root_condition_cert >> metis_tac[]
+QED
+
+Resume ifexp_joint_expr_producer[normal]:
+  qpat_x_assum `(\res ee u. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
+  gvs[] >>
+  `?sel. v = BoolV sel` by
+    (irule ifexp_root_condition_bool >> goal_assum (drule_at Any) >>
+     fs[gas_marked_exec_def] >> metis_tac[]) >>
+  gvs[] >>
+  `expr_post fp.jc_ctx fp.jc_func ce fp.jc_cx c es sa sc s
+     (es_end with gas_obs := []) (BoolV sel) cop t'` by
+    (fs[expr_post_def, intcall_expr_cont_def, intcall_joint_res_def] >>
+     first_assum MATCH_ACCEPT_TAC) >>
+  drule_at (Pat `compile_expr _ _ (IfExp _ _ _ _) _ = _`) ifexp_root_code_layout >>
+  disch_then (drule_at (Pat `fn_has_code sa sb _`)) >>
+  (impl_tac >- (simp[] >> metis_tac[compile_expr_grows])) >>
+  disch_then (qspec_then `sel` strip_assume_tac) >> gvs[] >>
+  `~t'.vs_halted /\ t'.vs_current_bb = sc.cs_current_bb /\
+   t'.vs_inst_idx = LENGTH sc.cs_current_insts` by fs[intcall_expr_cont_def] >>
+  drule_all ifexp_root_jnz_path >> strip_tac >>
+  `intcall_joint_res fp ce env (es_end with gas_obs := []) se
+     (jump_to (if sel then tl else el) t')` by
+    (simp[intcall_joint_res_jump_to] >> irule bodyIntCallJointStmtBoundaryTheory.intcall_joint_res_next_var >>
+     qexists `sc` >> fs[intcall_expr_cont_def]) >>
+  `expr_body_pre ce fp.jc_cx env (if sel then a else b)
+     (es_end with gas_obs := [])` by
+    (Cases_on `sel` >> fs[intcall_joint_res_def]) >>
+  `supportedExprs$supported_pure_expr fp.jc_tops (if sel then a else b)` by
+    (Cases_on `sel` >>
+     fs[supportedExprsTheory.supported_expr_def,
+        supportedExprsTheory.supported_pure_expr_def,
+        supportedExprsTheory.supported_effect_expr_def]) >>
+  `post_value_type ce (if sel then a else b) = expr_type (if sel then a else b)` by
+    (irule post_value_type_not_int_call >> rpt strip_tac >>
+     gvs[supportedExprsTheory.supported_pure_expr_def]) >>
+  `int_calls_expr (if sel then a else b) = []` by
+    metis_tac[bodyExprPreFactsTheory.supported_pure_int_calls] >>
+  `gas_admissible (bind (eval_expr fp.jc_cx (if sel then a else b))
+     (conditional_result fp.jc_cx)) expr_vv_res_ok (es_end with gas_obs := [])` by
+    (irule ifexp_root_branch_admissible >> goal_assum (drule_at Any) >>
+     fs[gas_marked_exec_def] >> metis_tac[]) >>
+  `intcall_expr_producer fp (if sel then a else b)` by (Cases_on `sel` >> simp[]) >>
+  `expr_type (if sel then a else b) = expr_type a` by (Cases_on `sel` >> simp[]) >>
+  drule_at (Pat `compile_expr _ _ _ _ = _`) ifexp_joint_arm_outcome >>
+  disch_then (drule_at (Pat `intcall_joint_res _ _ _ _ _ _`)) >>
+  disch_then (fn th => qpat_assum `expr_type (if _ then _ else _) = _`
+    (fn eq => drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`) (REWRITE_RULE [eq] th))) >>
+  impl_tac >- suspend "arm_hyps" >> strip_tac >>
+  suspend "arm_finish"
+QED
+
+Resume ifexp_joint_expr_producer[arm_hyps]:
+  `cs_extends se sea /\ se.cs_next_var <= sea.cs_next_var /\
+   se.cs_next_id <= sea.cs_next_id` by metis_tac[compile_expr_grows] >>
+  `cs_extends sea sx` by
+    (mp_tac ci_mono_compile_ifexp_arm >>
+     simp[ci_mono_def] >> metis_tac[pairTheory.SND]) >>
+  `fn_has_code se sea fp.jc_func /\ fn_has_code sea sx fp.jc_func` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  `gas_admissible (eval_expr fp.jc_cx (if sel then a else b)) expr_vv_res_ok
+     (es_end with gas_obs := [])` by metis_tac[ifexp_arm_raw_admissible] >>
+  simp[jump_to_def, supportedExprsTheory.supported_expr_def] >>
+  rpt conj_tac
+  >- (qpat_assum `expr_body_pre _ _ _ (if _ then _ else _) _`
+        (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+          ifexp_body_pre_lowered_type_compatible)) >> simp[] >> metis_tac[]) 
+  >- (rpt strip_tac >>
+      qpat_assum `expr_body_pre _ _ _ (if _ then _ else _) _`
+        (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+          exprSimHypsTheory.expr_body_pre_copy_ok)) >> simp[])
+  >- (rpt strip_tac >>
+      `expr_body_pre ce fp.jc_cx env (if sel then a else b)
+         (es_end with gas_obs := gs)` by
+        fs[exprSimSourceTheory.expr_body_pre_gas_obs] >>
+      metis_tac[ifexp_body_pre_read_typed]) >>
+  qpat_assum `expr_body_pre _ _ _ (if _ then _ else _) _`
+    (mp_tac o MATCH_MP exprSimHypsTheory.expr_body_pre_type_evaluates) >>
+  simp[optionTheory.IS_SOME_EXISTS]
+QED
+
+Resume ifexp_joint_expr_producer[arm_finish]:
+  drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)
+    (ifexp_arm_finish_slot |> Q.INST
+      [`slot_ok` |-> `\w:bytes32.
+        (post_value_type ce (if sel then a else b) <> NoneT /\
+         ~is_word_type (post_value_type ce (if sel then a else b)) /\
+         ~is_bytestring_type (post_value_type ce (if sel then a else b)) ==>
+         !tv. evaluate_type (get_tenv fp.jc_cx)
+           (post_value_type ce (if sel then a else b)) = SOME tv ==>
+         ?a k. a <= w2n w /\ w2n w + type_memory_size tv <= a+k /\
+           a+k < dimword (:256) /\
+           (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a+k <= b+z))`]
+      |> SIMP_RULE (srw_ss()) []) >>
+  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `emit_inst ASSIGN _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >>
+  disch_then (qspecl_then [`expr_type a`, `sb`] mp_tac) >>
+  impl_tac >- (simp[] >> conj_tac
+    >- fs[intcall_joint_res_def] >>
+    drule (REWRITE_RULE [ETA_THM] bop_marked_scopes_dom) >> simp[]) >>
+  strip_tac >>
+  drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)
+    ifexp_root_selected_outcome_prefix >>
+  disch_then (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `gas_path _ _ _ _ _`)) >>
+  disch_then (qspec_then `expr_type a` mp_tac) >>
+  disch_then (irule o MATCH_MP
+    (REWRITE_RULE [GSYM AND_IMP_INTRO]
+      stmtSimForLoopTheory.gas_outcome_exec_conseq)) >>
+  reverse conj_tac >- simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `(\res ee u. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
+  gvs[] >> suspend "lift_root"
+QED
+
+Resume ifexp_joint_expr_producer[lift_root]:
+  `~expr_has_effect (IfExp (expr_type a) c a b)` by
+    (irule supportedExprTraverseTheory.supported_pure_expr_effect_free >>
+     qexists `fp.jc_tops` >>
+     qpat_x_assum `supportedExprs$supported_expr _ (IfExp _ _ _ _)` mp_tac >>
+     simp[supportedExprsTheory.supported_expr_def,
+          supportedExprsTheory.supported_effect_expr_def]) >>
+  qpat_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def,
+       fragGasModeTheory.gas_marked_path_def]) >>
+  `intcall_expr_cont fp ce env
+     (es with gas_obs := gas_explicit marks' s.vs_gas_readings)
+     sa s (mid with gas_obs := []) sb t` by
+    (irule bodyIntCallJointPureContTheory.pure_vv_post_cont >>
+     simp[] >>
+     conj_tac >- metis_tac[exprSimUnwrapTheory.compile_expr_extends] >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >- (fs[intcall_joint_res_def] >> metis_tac[]) >>
+     qexistsl [`IfExp (expr_type a) c a b`, `INL tv`, `tv`,
+       `if is_word_type (expr_type a) then StackValue (expr_type a) (Var rv)
+        else LocatedValue (expr_type a) (mk_ptr (Var rv) LocMemory)`] >>
+     simp[] >>
+     conj_tac >- (first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[vv_post_def, locals_kept_def] >> strip_tac >> metis_tac[]) >>
+  `intcall_expr_cont fp ce env es sa s (mid with gas_obs := []) sb t` by
+    (qpat_x_assum `intcall_expr_cont _ _ _ (_ with gas_obs := _) _ _ _ _ _` mp_tac >>
+     simp[intcall_expr_cont_def, locals_kept_def] >> strip_tac >> metis_tac[]) >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[vv_post_def] >> strip_tac >>
+  simp[] >> conj_tac
+  >- metis_tac[CONJUNCT1 exprOperandVarTheory.compiler_compile_var] >>
+  simp[expr_type_def, contextTheory.vv_operand_def,
+       contextTheory.mk_ptr_def] >> metis_tac[]
+QED
+
+Finalise ifexp_joint_expr_producer
+
 Theorem intcall_ifexp_step:
   (!e'. expr_size e' < expr_size e ==>
         intcall_expr_producer fp e' /\ intcall_forced_producer fp e' /\
@@ -417,5 +603,9 @@ Theorem intcall_ifexp_step:
   (?ty c e1 e2. e = IfExp ty c e1 e2) ==>
   intcall_expr_producer fp e /\ intcall_map_producer fp e
 Proof
-  cheat
+  strip_tac >> gvs[] >> conj_tac
+  >- (irule ifexp_joint_expr_producer >>
+      simp[]) >>
+  simp[intcall_map_producer_def, exprSimMapDefsTheory.expr_map_pre_def,
+       Once vyperTypeSystemTheory.well_typed_expr_def]
 QED
