@@ -3,7 +3,7 @@
    stores only its live slots (compile_store_slots). *)
 Theory bodyMemAssignTopSparse
 Ancestors
-  storeSlotsCountedBase storeSlotsMemoryTransfer bodyMemAssignTopCopyOutcome stmtSimAssignStorageSparse placeStoreSlots
+  storeSlotsCountedEntries storeSlotsCountedBase storeSlotsMemoryTransfer bodyMemAssignTopCopyOutcome stmtSimAssignStorageSparse placeStoreSlots
   bodyMemoryDefs bodyMemoryPreds exprSimMemDefs exprSimDefs
   stmtSimDefs stmtLowering exprLowering compileEnv context
   vyperStorageLayoutSafety vyperStorage vyperValue vyperTyping

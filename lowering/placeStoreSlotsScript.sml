@@ -1796,7 +1796,7 @@ Proof
   metis_tac[ADD_COMM]
 QED
 
-Theorem store_slots_tuple_support[local]:
+Theorem store_slots_tuple_support:
   !tvs vs off writes.
     LENGTH vs = LENGTH tvs /\ encode_tuple off tvs vs = SOME writes ==>
     !k. MEM k (MAP FST writes) <=>
@@ -1945,7 +1945,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem store_slots_struct_support[local]:
+Theorem store_slots_struct_support:
   !fts vals off writes.
     encode_struct off fts vals = SOME writes ==>
     !k. MEM k (MAP FST writes) <=>
