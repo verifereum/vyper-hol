@@ -32,8 +32,8 @@ Proof
   `step_inst_base (mk_inst sa.cs_next_id
      (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE)
      [dst; op] []) s = OK u` by
-    (gvs[] >> rewrite_tac[step_inst_base_def, mk_inst_def] >>
-     simp[exec_write2_def]) >>
+    (gvs[] >> simp[step_inst_base_opcode_eqs, mk_inst_def,
+                    exec_write2_def]) >>
   `run_inst_seq (emitted_insts sa sb) s = OK u` by
     (gvs[] >> simp[run_inst_seq_def]) >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
