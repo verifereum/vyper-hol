@@ -2,7 +2,7 @@
 Theory appendStorageGhostPtr
 Ancestors
   bodyPtrDefs appendStorageRel accountsRelProps ptrDiscipline
-  compileEnv venomState vyperStorage words pred_set stmtFragPtr loweringPosts
+  compileEnv loweringStateRelDefs venomState vyperStorage words pred_set stmtFragPtr loweringPosts
 
 Theorem storage_dead_key_taint_empty:
   X SUBSET {(k,b) | storage_dead cx tr st (w2n k) b} /\

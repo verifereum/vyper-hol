@@ -2,7 +2,7 @@
 Theory bodyMemAssignTopCopyCompiler
 Ancestors
   list rich_list finite_map pred_set fragExec loweringSlice
-  emitHelper emitHelperProps exprLoweringProps context compileEnv
+  emitHelper emitHelperProps exprLoweringProps context compileEnv loweringStateRelDefs
   venomExecSemantics venomInst venomState
 Libs
   monadsyntax
@@ -326,7 +326,6 @@ Proof
     `sa.cs_next_id`, `sth.cs_next_id`, `stb.cs_next_id`, `ebb`, `hbb`, `bbb`] >>
   gvs[same_blocks_def, emitted_insts_def, IS_PREFIX_APPEND, DROP_LENGTH_APPEND] >>
   rpt conj_tac >> rpt strip_tac >>
-  FIRST_PROVE [
-    `j=0 \/ j=1 \/ j=2 \/ j=3 \/ j=4 \/ j=5 \/ j=6 \/ j=7` by decide_tac >>
-    gvs[]]
+  `j=0 \/ j=1 \/ j=2 \/ j=3 \/ j=4 \/ j=5 \/ j=6 \/ j=7` by decide_tac >>
+  fs[]
 QED

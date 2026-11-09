@@ -23,7 +23,7 @@ Ancestors
   fragExec  exprSimAlloc exprSimCopy exprSimStorageCopy
   intCallReturnMem intCallResult typedMemoryCopy valueCopy valueCopyBytes
   loweringSlice localPtrsProps stmtSimReturn
-  stmtLowering exprLowering emitHelper exprLoweringProps context compileEnv
+  stmtLowering exprLowering emitHelper exprLoweringProps context compileEnv loweringStateRelDefs
   typedCopyDomain valueEncoding vyperTypeSystem vyperState vyperTyping
   venomExecSemantics venomInst venomState
 
@@ -172,7 +172,7 @@ Proof
   rw[arg_type_fits_def, is_word_type_def] >> gvs[]
 QED
 
-Theorem return_source_word_widens_eq[local]:
+Theorem return_source_word_widens_eq:
   is_word_type sty /\ type_widens_to tenv sty ty ==> sty = ty
 Proof
   simp[type_widens_to_def] >> metis_tac[cj 1 return_source_word_fits_eq]

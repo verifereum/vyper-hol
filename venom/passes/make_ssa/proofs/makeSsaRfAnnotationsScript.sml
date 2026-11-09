@@ -1,6 +1,7 @@
 Theory makeSsaRfAnnotations
 Ancestors makeSsaCurrentRenameTrace makeSsaCurrentTokens makeSsaCurrentTreeTrace
-  makeSsaRfRenameTrace makeSsaHelper venomInst irSupply list alist pair arithmetic
+  makeSsaRfRenameTrace venomInst irSupply list alist pair arithmetic
+  venomExecProofs
 
 Definition rf_output_annotations_def:
   (rf_output_annotations l i j [] = []) /\

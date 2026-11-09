@@ -3,7 +3,7 @@ Theory stmtSimLogEncodeFrame
 Ancestors
   stmtSimLogScalarEncode stmtSimLogAllocResource stmtSimLogEncodeFields
   stmtSimLogExecFields localPtrsProps loweringSlice abiDecoderFrame
-  valueEncodingProps compileEnv exprLoweringProps venomState venomMemProps
+  valueEncodingProps compileEnv loweringStateRelDefs exprLoweringProps venomState venomMemProps
   venomExecSemantics venomInst venomMemDefs abiBuiltinAllocation finite_map words list arithmetic
 
 Theorem log_encode_local_frame[local]:
@@ -56,16 +56,16 @@ Theorem log_encode_step_memory_mono[local]:
   LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   simp_tac bool_ss [log_encode_safe_opcode_def] >> strip_tac
-  >- gvs[step_inst_base_def, exec_alloca_def, AllCaseEqs(), update_var_def]
-  >- gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs(), update_var_def]
-  >- gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs(), update_var_def]
-  >- gvs[step_inst_base_def, exec_read1_def, AllCaseEqs(), update_var_def]
-  >- (gvs[step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+  >- gvs[step_inst_base_opcode_eqs, exec_alloca_def, AllCaseEqs(), update_var_def]
+  >- gvs[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs(), update_var_def]
+  >- gvs[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs(), update_var_def]
+  >- gvs[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs(), update_var_def]
+  >- (gvs[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs()] >>
       simp[mstore_memory_nondecreasing])
-  >- (gvs[step_inst_base_def, AllCaseEqs(), mcopy_def] >>
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), mcopy_def] >>
       simp[write_memory_with_expansion_nondecreasing])
-  >- gvs[step_inst_base_def, exec_read0_def, AllCaseEqs(), update_var_def] >>
-  gvs[step_inst_base_def, AllCaseEqs()] >>
+  >- gvs[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs(), update_var_def] >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
   simp[write_memory_with_expansion_nondecreasing]
 QED
 
@@ -142,7 +142,7 @@ Proof
   qpat_x_assum `ce.ce_is_ctor ==> _` drule_all >> strip_tac >>
   conj_tac >- decide_tac >> conj_tac
   >- (rpt strip_tac >> Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
-      >- (first_x_assum drule_all >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      >- (first_x_assum drule_all >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
       rename1 `FLOOKUP s.vs_allocas inst.inst_id = SOME r` >>
       `FLOOKUP t.vs_allocas inst.inst_id = SOME r` by metis_tac[] >>
       gvs[] >> first_x_assum drule_all >> simp[]) >>

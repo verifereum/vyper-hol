@@ -11,7 +11,7 @@
 Theory exprSimConcatStep
 Ancestors
   concatMemory allocaFootprint exprLoweringProps emitHelperProps emitHelper
-  compileEnv venomInst venomState venomExecSemantics words arithmetic
+  compileEnv loweringStateRelDefs venomInst venomState venomExecSemantics words arithmetic
   finite_map list
 Libs
   monadsyntax

@@ -2,7 +2,7 @@
 Theory abiDecoderCopy
 Ancestors
   abiDecoderComposition abiDecoderContract emitHelperProps exprLoweringProps
-  venomExecSemantics venomInst venomState compileEnv valueEncoding emitHelper
+  venomExecSemantics venomInst venomState compileEnv loweringStateRelDefs valueEncoding emitHelper
 
 Theorem run_mcopy_vars[local]:
   run_inst_seq [mk_inst id MCOPY [dst;src;sz] []] s = OK t ==>

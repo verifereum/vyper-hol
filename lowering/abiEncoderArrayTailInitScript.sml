@@ -1,5 +1,6 @@
 Theory abiEncoderArrayTailInit
 Ancestors
+  abiDecoderRange
   abiEncoderArrayCode abiDecoderIndexInit compileEnv context emitHelperProps exprLoweringProps
   emitHelper venomInst words list rich_list arithmetic abiEncoderComplexPrefix
   abiDecoderReentryAddress abiDecoderReentryAddress abiDecoderArrayInitExec

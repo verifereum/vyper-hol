@@ -1963,8 +1963,8 @@ Proof
   Cases_on `inst.inst_operands` >> simp[subst_label_map_op_def] >>
   Cases_on `t` >> simp[subst_label_map_op_def] >>
   Cases_on `h'` >> simp[subst_label_map_op_def] >>
-  Cases_on `t'` >> simp[subst_label_map_op_def] >>
-  TRY (BasicProvers.every_case_tac >> simp[] >> NO_TAC) >>
+  Cases_on `t'` >> simp[subst_label_map_op_def]
+  >- (BasicProvers.every_case_tac >> simp[]) >>
   Cases_on `h'` >> simp[subst_label_map_op_def] >>
   Cases_on `t` >> simp[subst_label_map_op_def] >>
   TRY (BasicProvers.every_case_tac >> simp[] >> NO_TAC) >>

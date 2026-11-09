@@ -7,7 +7,7 @@ Ancestors
   fragExecMem instMemFrontier allocaHistoryFragment emitHelperProps
   exprLoweringProps emitHelper venomInst venomState words list rich_list
   vyperInterpreter vyperValueOperation vyperContext
-  compileEnv fragExec valueEncoding valueEncodingProofs vyperValue vyperAST venomExecSemantics
+  compileEnv loweringStateRelDefs fragExec valueEncoding valueEncodingProofs vyperValue vyperAST venomExecSemantics
   loweringSlice exprLowering vyperState vyperTyping vyperTypeSystem
 
 Theorem body_env_read_frag_mem:

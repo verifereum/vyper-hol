@@ -1912,43 +1912,6 @@ Proof
   disch_then drule_all >> simp[]
 QED
 
-Theorem body_update_place_tail_storage:
-  contract_storage_well_formed cx st /\ storage_layout_safe cx /\
-  storage_place_region cx p /\ runtime_place_typed cx st p ptv /\
-  evaluate_type env.type_defs ty = SOME ptv /\ value_has_type ptv cur /\
-  well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
-  state_well_typed st /\ live_memory_result st rhs /\
-  eval_result_typed (env,cx,st) rhs (Type (expr_type e)) /\
-  (do v <- read_result cx rhs;
-      result <- lift_sum (evaluate_binop
-        (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0) ptv bop cur v);
-      write_place cx p result od) st = (res,st') ==>
-  contract_storage_well_formed cx st'
-Proof
-  strip_tac >> qpat_x_assum `do _ od _ = _` mp_tac >>
-  simp_tac (srw_ss()) [bind_def] >> Cases_on `read_result cx rhs st` >>
-  rename1 `read_result cx rhs st = (answer,middle)` >>
-  imp_res_tac read_result_state >> gvs[] >>
-  reverse (Cases_on `answer`) >- (simp[] >> strip_tac >> gvs[]) >>
-  rename1 `read_result cx rhs st = (INL right,st)` >>
-  `value_runtime_typed env (expr_type e) right` by
-    (drule_all vyperTypeEvalSoundnessTheory.read_live_result_success_type >> simp[]) >>
-  simp[] >> strip_tac >> gvs[] >>
-  fs[value_runtime_typed_def] >>
-  qpat_x_assum `_ = (res,st')` mp_tac >>
-  simp_tac (srw_ss()) [bind_def, lift_sum_def] >>
-  Cases_on `evaluate_binop
-    (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0) ptv bop cur right` >>
-  simp[return_def, raise_def] >> strip_tac >> gvs[] >>
-  rename1 `evaluate_binop _ ptv bop cur right = INL result` >>
-  `value_has_type ptv result` by
-    (drule_at (Pat `evaluate_binop _ _ _ _ _ = _`)
-       vyperTypeBuiltinsTheory.well_typed_binop_success_type >>
-     disch_then (qspec_then `ty` mp_tac) >>
-     simp[] >> disch_then drule_all >> simp[]) >>
-  drule_all write_place_preserves_contract_storage >> simp[]
-QED
-
 Theorem body_augassign_rhs_storage:
   well_typed_expr env e /\ runtime_storage_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
@@ -1977,7 +1940,7 @@ Proof
     (drule_all vyperTypeEvalSoundnessTheory.runtime_place_typed_transport >> simp[]) >>
   `storage_layout_safe cx` by metis_tac[runtime_storage_consistent_layout] >>
   `state_well_typed st1` by gvs[runtime_consistent_def] >>
-  drule_all body_update_place_tail_storage >> simp[]
+  drule_all update_place_tail_preserves_storage >> simp[]
 QED
 
 Theorem body_eval_augassign_storage:

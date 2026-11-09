@@ -18,7 +18,7 @@ Ancestors
   ptrDiscipline typedCopyPtr representationCleanPtr
   exprSimNameValue exprSimMemoryPath exprSimUnwrapProps exprSimProps
   exprSimHypsDefs exprSimDefs loweringPosts loweringSlice emitHelperProps
-  exprLowering exprLoweringProps fragExec compileEnv context
+  exprLowering exprLoweringProps fragExec compileEnv loweringStateRelDefs context
   exprSimHyps exprSimSource
   vyperAST vyperInterpreter vyperState vyperTypeEnv vyperTypeSystem
   vyperTypeInvariants vyperTyping valueEncoding

@@ -9,7 +9,7 @@ Ancestors
   stmtSimLogArgs stmtSimLogArgsGrowth stmtSimLogSource stmtSimLogCompose
   stmtSimLogSuffixActual stmtSimLogSuffixCode stmtSimLogTrace exprSimWordArgs
   bodyMemoryDefs allocaHistory allocaHistoryFragment fragExecMem fragGasSeqMem
-  freshWrites compileEnv stmtLowering fragExec loweringSlice exprLoweringProps
+  freshWrites compileEnv loweringStateRelDefs stmtLowering fragExec loweringSlice exprLoweringProps
   emitHelperProps emitHelper context venomInst venomState
   vyperInterpreter vyperState vyperTyping list rich_list
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext

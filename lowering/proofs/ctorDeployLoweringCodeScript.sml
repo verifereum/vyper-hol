@@ -19,11 +19,13 @@ Proof
   drule (iffLR MEM_classify_internal) >> strip_tac >>
   `~supported_stmts_expr_exists expr_shape_root src7` by
     (gs[runtime_bodies_shape_ok_def] >> first_x_assum drule >> simp[]) >>
-  simp[package_internal_fn_def, set_internal_package_target_def,
-    update_cenv_nonreentrant_def, internal_fn_shape_ok_def, cenv_static_ok_def] >>
   imp_res_tac supported_program_runtime_bodies_shape_ok >>
   imp_res_tac runtime_bodies_shape_ok_func_defaults >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
+  drule_then (qspecl_then [`Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
+    (strip_assume_tac o SRULE [cenv_static_ok_def])) build_compile_env_static >>
+  simp[package_internal_fn_def, set_internal_package_target_def,
+    update_cenv_nonreentrant_def, internal_fn_shape_ok_def, cenv_static_ok_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem deploy_build_env_no_return_pc:
@@ -65,12 +67,14 @@ Proof
   `supported_program tops` by fs[deploy_source_ok_def] >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
+  drule_then (qspecl_then [`Deploy`, `cf0`, `cf3`, `cf4`, `cf6`, `cf7`, `F`]
+    (strip_assume_tac o SRULE [cenv_static_ok_def])) build_compile_env_static >>
   gvs[package_constructor_def, set_constructor_package_target_def,
     update_cenv_nonreentrant_def] >>
   simp[deploy_build_env_no_return_pc, cenv_static_ok_def] >>
-  imp_res_tac supported_program_runtime_bodies_shape_ok >>
-  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem deploy_internal_package_certificates:

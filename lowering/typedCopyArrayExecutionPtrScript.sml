@@ -73,13 +73,13 @@ Proof
     (qpat_assum `si = _` (fn th => rewrite_tac[th]) >>
      qpat_assum `sb' = _` (fn th => rewrite_tac[th]) >>
      qpat_assum `sc = _` (fn th => rewrite_tac[th]) >>
-     simp[compileEnvTheory.not_fresh_at_def] >>
-     gvs[compileEnvTheory.not_fresh_at_def] >> rpt strip_tac >>
+     simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
+     gvs[loweringStateRelDefsTheory.not_fresh_at_def] >> rpt strip_tac >>
      first_x_assum irule >> decide_tac) >>
   `!p. not_fresh_at sa p ==>
      ~MEM p [ctr;lt;done;so;doff;sp;dp]` by
     (qx_gen_tac `p` >>
-     simp[compileEnvTheory.not_fresh_at_def] >> strip_tac >>
+     simp[loweringStateRelDefsTheory.not_fresh_at_def] >> strip_tac >>
      simp[] >> rpt conj_tac >> strip_tac >> gvs[] >>
      first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   `ALL_DISTINCT [ctr;lt;done;so;doff;sp;dp]` by
@@ -382,7 +382,7 @@ Resume compile_copy_sarray_strings_two_frag_ptr[address1_resources]:
      asm_rewrite_tac[] >>
      simp_tac (srw_ss()) [exprLoweringPropsTheory.ci_mono_def]) >>
   `!p. not_fresh_at si p ==> p <> tmp` by
-    (simp_tac (srw_ss()) [Abbr `tmp`, compileEnvTheory.not_fresh_at_def] >>
+    (simp_tac (srw_ss()) [Abbr `tmp`, loweringStateRelDefsTheory.not_fresh_at_def] >>
      rpt strip_tac >>
      first_x_assum (qspec_then `se.cs_next_var - si.cs_next_var` mp_tac) >>
      `si.cs_next_var + (se.cs_next_var - si.cs_next_var) = se.cs_next_var` by decide_tac >>
@@ -479,7 +479,7 @@ Resume compile_copy_sarray_strings_two_frag_ptr[copy1_resources]:
      simp_tac (srw_ss()) [Abbr `sh`, Abbr `th`, Abbr `sinit`, Abbr `tinit`,
        venomStateTheory.jump_to_def, venomStateTheory.update_var_def]) >>
   `val_wf (BaseTV (StringT 1)) (StringV y)` by
-    simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def,
+    simp[valueEncodingDefsTheory.val_wf_def, valueEncodingTheory.type_memory_size_def,
          vfmConstantsTheory.word_size_def] >>
   Q.SUBGOAL_THEN
    `w2n a + 64 + type_memory_size (BaseTV (StringT 1)) <= w2n b \/
@@ -539,7 +539,7 @@ Resume compile_copy_sarray_strings_two_frag_ptr[final_representation]:
        val_in_memory (BaseTV (StringT 33)) (StringV x) (w2n b) m` by
     (qpat_assum `!ft fv p. _ ==> !m. mem_agree_outside tc1.t_mem _ m ==> _`
        (qspecl_then [`BaseTV (StringT 33)`, `StringV x`, `w2n b`] match_mp_tac) >>
-     conj_tac >- simp[valueEncodingTheory.val_wf_def,
+     conj_tac >- simp[valueEncodingDefsTheory.val_wf_def,
        valueEncodingTheory.type_memory_size_def, vfmConstantsTheory.word_size_def] >>
      conj_tac >-
        (qpat_assum `w2n (n2w (w2n b + 1*96):256 word) = w2n b + 96`
@@ -563,7 +563,7 @@ Resume compile_copy_sarray_strings_two_frag_ptr[final_representation]:
   rpt strip_tac >>
   Cases_on `x = ""` >> Cases_on `y = ""` >>
   gvs[vyperValueTheory.enumerate_static_array_def,
-      vyperValueTheory.default_value_def, valueEncodingTheory.val_in_memory_def,
+      vyperValueTheory.default_value_def, valueEncodingDefsTheory.val_in_memory_def,
       valueEncodingTheory.type_memory_size_def, vfmConstantsTheory.word_size_def] >>
   rpt strip_tac >> gvs[] >>
   `i = 0 \/ i = 1` by decide_tac >> gvs[]
@@ -638,7 +638,7 @@ Resume compile_copy_sarray_strings_two_frag_ptr[final_old_names]:
        exprLoweringPropsTheory.ci_mono_compile_store_bytestring >>
      asm_rewrite_tac[] >> simp_tac (srw_ss()) [exprLoweringPropsTheory.ci_mono_def]) >>
   `!q. not_fresh_at si q ==> q <> tmp` by
-    (simp_tac (srw_ss()) [Abbr `tmp`, compileEnvTheory.not_fresh_at_def] >>
+    (simp_tac (srw_ss()) [Abbr `tmp`, loweringStateRelDefsTheory.not_fresh_at_def] >>
      rpt strip_tac >>
      first_x_assum (qspec_then `se.cs_next_var - si.cs_next_var` mp_tac) >>
      `si.cs_next_var + (se.cs_next_var - si.cs_next_var) = se.cs_next_var` by decide_tac >>
@@ -1000,7 +1000,7 @@ Resume compile_copy_sarray_strings_two_frag_ptr[later_control]:
      asm_rewrite_tac[] >>
      simp_tac (srw_ss()) [exprLoweringPropsTheory.ci_mono_def]) >>
   `!p. not_fresh_at si p ==> p <> tmp` by
-    (simp_tac (srw_ss()) [Abbr `tmp`, compileEnvTheory.not_fresh_at_def] >>
+    (simp_tac (srw_ss()) [Abbr `tmp`, loweringStateRelDefsTheory.not_fresh_at_def] >>
      rpt strip_tac >>
      first_x_assum (qspec_then `se.cs_next_var - si.cs_next_var` mp_tac) >>
      `si.cs_next_var + (se.cs_next_var - si.cs_next_var) = se.cs_next_var` by decide_tac >>

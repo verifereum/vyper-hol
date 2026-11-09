@@ -8,8 +8,8 @@ Ancestors
   stmtSimAssignAttrStorage stmtLowering exprLowering exprLoweringProps
   storageStoreFrame stmtSimDeclPath stmtSimDecl stmtSimDeclMem venomExecSemantics venomState vyperState
   exprSimBuffer fragExec venomInst ASCIInumbers string rich_list
-  emitHelper emitHelperProps compileEnv list finite_map
-  tupleMemoryFrame tupleMemoryLayout valueEncoding valueEncodingProps vyperTyping stmtLoweringMono
+  emitHelper emitHelperProps compileEnv loweringStateRelDefs list finite_map
+  tupleMemoryFrame tupleMemoryLayout valueEncoding valueEncodingDefs valueEncodingProps vyperTyping stmtLoweringMono
   vyperInterpreter freshWrites
 
 Theorem tuple_store_word_step:

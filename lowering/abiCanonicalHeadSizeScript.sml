@@ -1,7 +1,7 @@
 Theory abiCanonicalHeadSize
 Ancestors
   venomMemProps abiCanonicalWindows abiDecodeRanges contractABI list rich_list arithmetic byte
-  abiDecoderContract valueEncodingProps valueEncodingProofs valueEncoding words venomState
+  abiDecoderContract valueEncodingProps valueEncodingProofs valueEncoding valueEncodingDefs words venomState
 
 (* Canonical array data and member windows, for fixed and dynamic arrays. *)
 Theorem canonical_array_tuple:

@@ -2,7 +2,7 @@
 Theory ctorDeployDeadSectionRel
 Ancestors
   ctorDeployDeadSection ctorDeployDefs immutableSectionRel immutableValue
-  immutableEncoding valueEncoding compileVyper structFieldsProps entryStateRel
+  immutableEncoding valueEncoding valueEncodingDefs compileVyper structFieldsProps entryStateRel
   list rich_list vyperValue words arithmetic vyperTyping alist valueEncodingProofs
   valueTypingMemoryProps exprSimAggregateEncoding immutableEncodingProofs valueEncodingProps
 

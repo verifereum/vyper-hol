@@ -18,7 +18,7 @@
 
 Theory mmTransform
 Ancestors
-  mmScan passSimulationDefs
+  mmScan passTransform
 
 (* ===== Instruction builders ===== *)
 

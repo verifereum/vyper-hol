@@ -2,8 +2,8 @@
 Theory exprSimSubscriptArrayFrame
 Ancestors
   exprSimSubscriptArraySource exprSimProps exprSimAttributeFields
-  loweringPosts valueEncodingProofs valueEncoding exprBopSimProps
-  list rich_list finite_map pair vyperState compileEnv exprLoweringProps vyperValue
+  loweringPosts valueEncodingProofs valueEncoding valueEncodingDefs exprBopSimProps
+  list rich_list finite_map pair vyperState compileEnv loweringStateRelDefs exprLoweringProps vyperValue
 
 Theorem immutable_holds_runtime_frame:
   ~cenv.ce_is_ctor /\ immutable_holds cenv cx ty r w es s /\
