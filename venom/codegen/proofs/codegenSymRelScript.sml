@@ -34,7 +34,7 @@ Theory codegenSymRel
 Ancestors
   asmDataEnv asmSymBridge asmSymSem asmSem frameRel contextCodegenRel codegenRel
   unitShapeDefs stackPlanTypes venomWf venomExecSemantics venomState
-  venomInst list finite_map arithmetic
+  venomInst allocaRemapSSA dfgAnalysisProps dfgDefs list finite_map arithmetic
 
 (* ===== Label-flow facts of the Venom unit ===== *)
 
@@ -102,6 +102,39 @@ Definition sym_unit_static_ok_def:
     wf_invoke_targets unit.cu_context
 End
 
+(* In SSA form, a code_end variable's one definition is its seed ADD or a
+   copy of another code_end variable. *)
+Theorem code_end_var_def_inst:
+  !fn x inst.
+    ssa_form fn /\ code_end_var fn x /\ MEM inst (fn_insts fn) /\
+    MEM x inst.inst_outputs ==>
+    (inst.inst_opcode = ADD /\ ?op. inst.inst_operands = [op; Label "code_end"]) \/
+    (inst.inst_opcode = ASSIGN /\
+     ?y. inst.inst_operands = [Var y] /\ code_end_var fn y)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `code_end_var _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [code_end_var_cases]) >>
+  rename1 `MEM def (fn_insts fn)` >>
+  `def = inst` by metis_tac[allocaRemapSSATheory.ssa_unique_output] >>
+  gvs[]
+QED
+
+(* retpc_shape_ok's clause on what defines a return-PC variable. *)
+val retpc_def_tac =
+  qpat_assum `!inst x. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
+                       retpc_var fn x ==> _` (fn th => drule_all th);
+
+(* No variable is both a return-PC variable and a code_end variable. *)
+Theorem code_end_var_not_retpc_var:
+  !fn x. code_end_var fn x ==> retpc_shape_ok fn ==> ~retpc_var fn x
+Proof
+  Induct_on `code_end_var` >> rpt strip_tac >>
+  qpat_assum `retpc_shape_ok _`
+    (strip_assume_tac o REWRITE_RULE [retpc_shape_ok_def]) >>
+  retpc_def_tac >> gvs[]
+QED
+
 (* ===== Symbolic kinds of operands ===== *)
 
 (* The symbolic value sv may sit in the slot of operand op in fn's frame,
@@ -121,6 +154,54 @@ Definition op_kind_ok_def:
         else if code_end_var fn x then (?d. sv = Lab "code_end" d)
         else (?w. sv = Val w)
 End
+
+(* The ASSIGN-chain root of an operand has the operand's kind. *)
+Theorem op_kind_ok_normalize_operand:
+  !dfg visited op.
+    dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn ==>
+    (op_kind_ok fn ret (normalize_operand dfg visited op) sv <=>
+     op_kind_ok fn ret op sv)
+Proof
+  recInduct normalize_operand_ind >> rpt strip_tac >>
+  simp[Once normalize_operand_def] >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `FLOOKUP (dfg_build_function fn).dfg_defs v` >> simp[] >>
+  rename1 `FLOOKUP _ v = SOME inst` >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  rename1 `inst.inst_operands = op1 :: ops` >>
+  Cases_on `ops` >> simp[] >>
+  `MEM v inst.inst_outputs /\ MEM inst (fn_insts fn)` by
+    (irule dfg_build_function_correct >> simp[dfg_get_def_def]) >>
+  first_x_assum (qspecl_then [`inst`, `op1`] mp_tac) >> simp[] >>
+  disch_then kall_tac >>
+  `retpc_shape_ok fn /\ label_positions_ok inst` by
+    gvs[fn_shape_ok_def, EVERY_MEM, inst_shape_ok_def] >>
+  `~(code_end_var fn v /\ retpc_var fn v)` by
+    metis_tac[code_end_var_not_retpc_var] >>
+  qpat_x_assum `retpc_shape_ok _`
+    (strip_assume_tac o REWRITE_RULE [retpc_shape_ok_def]) >>
+  Cases_on `op1`
+  >~ [`Label l`]
+  >- gvs[label_positions_ok_def, is_label_operand_def]
+  >~ [`Lit w`]
+  >- (`~retpc_var fn v` by (strip_tac >> retpc_def_tac >> simp[]) >>
+      `~code_end_var fn v` by
+        (strip_tac >> drule_all code_end_var_def_inst >> simp[]) >>
+      simp[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def])
+  >~ [`Var y`]
+  >- (`retpc_var fn v <=> retpc_var fn y` by
+        (eq_tac >> strip_tac
+         >- (retpc_def_tac >> simp[])
+         >> simp[retpc_var_def] >>
+         irule (cj 2 copy_phi_var_rules) >> gvs[retpc_var_def] >>
+         metis_tac[]) >>
+      `code_end_var fn v <=> code_end_var fn y` by
+        (eq_tac >> strip_tac
+         >- (drule_all code_end_var_def_inst >> simp[])
+         >> irule (cj 2 code_end_var_rules) >> metis_tac[]) >>
+      simp[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def])
+QED
 
 (* The 32 memory bytes from off hold the symbolic value sv: a label's
    intact bytes, or no label bytes at all. *)
