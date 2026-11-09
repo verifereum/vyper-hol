@@ -9,7 +9,7 @@ Ancestors bodyPtrPopTargetSimMapKeyRun exprSimMapKey exprLowering
   exprSimPtrTopLevelImmutableCopy typedCopyPtr fragExecPtr fragGasSeqPtr
   venomState venomExecSemantics ptrDiscipline bodyPtrDefs words finite_map pred_set
   instIdxIndep exprSimHash localPtrsProps bodyPtrEnvBuiltinsMemoryHash
-  bodyPtrEnvBuiltinsAllocation instSeqComposePtr
+  bodyPtrEnvBuiltinsAllocation instSeqComposePtr loweringHalt
 
 Theorem map_scratch_emission:
   !base key sa op sb.
@@ -327,3 +327,71 @@ QED
 
 Finalise map_scratch_tail_certificate
 
+
+Theorem map_scratch_prefix_certificate:
+  code = [mk_inst ia ALLOCA [Lit 64w] [p];
+          mk_inst is MSTORE [Var p;slot] [];
+          mk_inst ip ADD [Var p;Lit 32w] [q];
+          mk_inst ik MSTORE [Var q;key] [];
+          mk_inst ih SHA3 [Var p;Lit 64w] [h]] /\
+  ALL_DISTINCT [p;q;h] /\ (!x. slot = Var x ==> x <> p) /\
+  (!x. key = Var x ==> x <> p /\ x <> q) /\
+  eval_operand slot s = SOME w0 /\ eval_operand key s = SOME w1 /\
+  op_taint tn slot = {} /\ op_taint tn key = {} /\
+  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  fn_inst_ids_distinct fn /\ MEM (mk_inst ia ALLOCA [Lit 64w] [p]) (fn_insts fn) /\
+  ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
+  ~not_fresh_at sa p /\ ~not_fresh_at sa q /\ ~not_fresh_at sa h /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  run_inst_seq code s = OK t ==>
+  ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code s G' tn' /\
+    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn' /\
+    op_taint tn' (Var h) = {} /\ op_prov G' (Var h) = NONE /\
+    (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> gvs[] >>
+  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+  simp[Once run_inst_seq_def] >>
+  Cases_on `step_inst_base (mk_inst ia ALLOCA [Lit 64w] [p]) s` >>
+  simp[] >> strip_tac >> rename1 `step_inst_base _ s = OK s1` >>
+  `64 < dimword (:256)` by simp[dimword_def] >>
+  drule_all builtin_allocation_certificate >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `local_ptrs_rel fn cenv es.scopes s1` by fs[stmt_state_rel_def, state_rel_def] >>
+  `eval_operand slot s1 = SOME w0 /\ eval_operand key s1 = SOME w1 /\
+   op_taint tn1 slot = {} /\ op_taint tn1 key = {} /\
+   (!x. not_fresh_at sa x ==> FLOOKUP G1 x = FLOOKUP G x /\
+      op_taint tn1 (Var x) = op_taint tn (Var x))` by suspend "allocation_frame" >>
+  `?root cap. FLOOKUP G1 p = SOME (root,cap) /\ root <= b /\
+    b+64 <= root+cap /\ lookup_var p s1 = SOME (n2w b) /\
+    op_taint tn1 (Var p) = {}` by
+    (gvs[ptr_covers_def, eval_operand_def] >> metis_tac[]) >>
+  `ALL_DISTINCT [p;q;h] /\ (!x. key = Var x ==> x <> q)` by
+    (simp[] >> metis_tac[]) >>
+  drule_all map_scratch_tail_certificate >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`G'`, `tn'`] >> simp[] >>
+  conj_tac >- suspend "checks" >>
+  irule ghost_kept_clean_suffix >> qexistsl_tac [`G1`, `tn1`] >> simp[]
+QED
+
+Resume map_scratch_prefix_certificate[allocation_frame]:
+  drule_all alloca_step_frame_effects >>
+  disch_then (qspecl_then [`PG`, `G`, `tn`] strip_assume_tac) >>
+  qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ [_] _ _ _` mp_tac >>
+  simp[inst_seq_ptr_def] >> strip_tac >>
+  qspecl_then [`ia`, `64w`, `p`, `s`] strip_assume_tac step_alloca_frame >>
+  gvs[] >> Cases_on `slot` >> Cases_on `key` >>
+  gvs[eval_operand_def, op_taint_def] >> rpt strip_tac >>
+  `x <> p` by metis_tac[] >> metis_tac[op_taint_def]
+QED
+
+Resume map_scratch_prefix_certificate[checks]:
+  qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ [_] _ _ _`
+    (strip_assume_tac o SRULE [inst_seq_ptr_def]) >>
+  PURE_ONCE_REWRITE_TAC[inst_seq_ptr_def] >> gvs[]
+QED
+
+Finalise map_scratch_prefix_certificate
