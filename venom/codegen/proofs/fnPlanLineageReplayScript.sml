@@ -1,6 +1,6 @@
 Theory fnPlanLineageReplay
 Ancestors
-  stackPlanGen stackModel list rich_list
+  stackPlanGen stackPlanOps stackPlanTypes stackModel list rich_list
 
 Theorem stack_find_append_excluded:
   !xs ys p. EVERY (\x. ~p x) ys ==>
@@ -78,3 +78,90 @@ Proof
      simp[finite_mapTheory.FLOOKUP_DEF] >> IF_CASES_TAC >> simp[]) >>
   first_x_assum drule >> strip_tac >> gvs[]
 QED
+
+(* Instruction planning cannot inspect cleanup bookkeeping.  These operation
+   boundaries keep that fact separate from stack-layout replay. *)
+Theorem do_spill_tos_cleanup_update:
+  !ps h g b.
+    do_spill_tos (ps with <|ps_cleanup_height := h; ps_cleanup_growth := g;
+                            ps_cleanup_promised := b|>) =
+    (FST (do_spill_tos ps), SND (do_spill_tos ps) with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>)
+Proof
+  simp[do_spill_tos_def] >> rpt gen_tac >> pairarg_tac >>
+  simp[plan_state_component_equality]
+QED
+
+Theorem do_restore_cleanup_update:
+  !op ps h g b.
+    do_restore op (ps with <|ps_cleanup_height := h; ps_cleanup_growth := g;
+                            ps_cleanup_promised := b|>) =
+    (FST (do_restore op ps), SND (do_restore op ps) with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>)
+Proof
+  rpt gen_tac >> simp[do_restore_def] >>
+  Cases_on `FLOOKUP ps.ps_spilled op` >> simp[plan_state_component_equality]
+QED
+
+Theorem do_spill_at_cleanup_update:
+  !d ps h g b.
+    do_spill_at d (ps with <|ps_cleanup_height := h; ps_cleanup_growth := g;
+                            ps_cleanup_promised := b|>) =
+    (FST (do_spill_at d ps), SND (do_spill_at d ps) with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>)
+Proof
+  rpt gen_tac >> Cases_on `alloc_spill_slot ps.ps_alloc` >>
+  Cases_on `d = 0` >>
+  simp[do_spill_at_def, do_spill_tos_def, plan_state_component_equality]
+QED
+
+Theorem do_swap_cleanup_update:
+  !d ps h g b.
+    do_swap d (ps with <|ps_cleanup_height := h; ps_cleanup_growth := g;
+                        ps_cleanup_promised := b|>) =
+    (FST (do_swap d ps), SND (do_swap d ps) with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>)
+Proof
+  rpt gen_tac >> simp[do_swap_def] >>
+  Cases_on `d = 0` >- simp[plan_state_component_equality] >>
+  Cases_on `d <= 16` >- simp[plan_state_component_equality] >>
+  simp[] >> pairarg_tac >> simp[plan_state_component_equality]
+QED
+
+Theorem do_dup_cleanup_update:
+  !d ps h g b.
+    do_dup d (ps with <|ps_cleanup_height := h; ps_cleanup_growth := g;
+                       ps_cleanup_promised := b|>) =
+    (FST (do_dup d ps), SND (do_dup d ps) with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>)
+Proof
+  rpt gen_tac >> simp[do_dup_def] >>
+  Cases_on `d <= 15` >- simp[plan_state_component_equality] >>
+  simp[] >> pairarg_tac >> simp[plan_state_component_equality]
+QED
+
+Theorem restore_spilled_plan_cleanup_update:
+  !xs ps h g b.
+    restore_spilled_plan xs (ps with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>) =
+    (FST (restore_spilled_plan xs ps), SND (restore_spilled_plan xs ps) with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>)
+Proof
+  Induct_on `xs` >- simp[restore_spilled_plan_def] >>
+  rpt gen_tac >> simp[restore_spilled_plan_def, do_restore_cleanup_update] >>
+  Cases_on `do_restore h ps` >> simp[pairTheory.UNCURRY_VAR]
+QED
+
+Theorem reduce_depth_plan_cleanup_update:
+  !fuel targets op f n ps h g b.
+    reduce_depth_plan fuel targets op f n (ps with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>) =
+    (FST (reduce_depth_plan fuel targets op f n ps),
+     SND (reduce_depth_plan fuel targets op f n ps) with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>)
+Proof
+  Induct_on `fuel` >> rpt gen_tac >>
+  simp[reduce_depth_plan_def, do_spill_at_cleanup_update, pairTheory.UNCURRY_VAR] >>
+  rpt CASE_TAC >> simp[do_spill_at_cleanup_update, pairTheory.UNCURRY_VAR]
+QED
+
