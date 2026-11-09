@@ -60,6 +60,13 @@ Proof
   simp[taint_agree_def]
 QED
 
+Theorem taint_agree_call_ctx:
+  taint_agree D X tn s t ==> s.vs_call_ctx = t.vs_call_ctx
+Proof
+  strip_tac >> drule taint_agree_frame >>
+  disch_then (mp_tac o Q.AP_TERM `\u. u.vs_call_ctx`) >> simp[]
+QED
+
 Theorem taint_agree_labels:
   taint_agree D X tn s t ==> s.vs_labels = t.vs_labels
 Proof
@@ -683,6 +690,185 @@ Proof
   gvs[step_inst_base_opcode_eqs, AllCaseEqs()]
 QED
 
+Theorem taint_agree_hash_step:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\ ~in_revert_forward fn s /\
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\
+  (!off len i. MEM (off,len) (source_memory_read_ranges inst s) /\
+               off <= i /\ i < off + len ==> i NOTIN X) /\
+  inst.inst_opcode = SHA3 /\ step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base inst t = OK t' /\
+       taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule taint_agree_operand_clean >>
+     gvs[taint_ok_def] >> metis_tac[]) >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  rename1 `inst.inst_operands = [op_off; op_len]` >>
+  rename1 `eval_operand op_off t = SOME a` >>
+  rename1 `eval_operand op_len t = SOME n` >>
+  `read_memory (w2n a) (w2n n) s = read_memory (w2n a) (w2n n) t` by
+    (irule taint_agree_reachable_clean_read >>
+     qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `ptr_discipline _ _ _` (irule_at Any) >>
+     simp[source_memory_read_ranges_def, memory_range_of_operands_def] >>
+     gvs[taint_ok_def, about_to_revert_def,
+         source_memory_read_ranges_def, memory_range_of_operands_def] >> metis_tac[]) >>
+  simp[GSYM read_memory_def] >>
+  simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+       imm_taint_def, adopt_reset_def, new_site_bytes_def,
+       set_var_taint_def, step_writes_def, source_memory_write_ranges_def,
+       written_taint_def, range_bytes_def, FLOOKUP_DEF, SF CONJ_ss,
+       update_var_def] >>
+  qmatch_goalsub_abbrev_tac `taint_agree D X mask` >>
+  `mask = tn with t_var := mask.t_var` by
+    simp[Abbr `mask`, taint_component_equality] >>
+  pop_assum SUBST1_TAC >> simp[Abbr `mask`] >>
+  rewrite_tac[GSYM update_var_def] >>
+  irule (SRULE [set_var_taint_def] taint_agree_update_var) >>
+  simp[word_agree_except_def]
+QED
+
+Theorem taint_agree_logs_append:
+  taint_agree D X tn s t ==>
+  taint_agree D X tn
+    (s with vs_logs := s.vs_logs ++ [ev]) (t with vs_logs := t.vs_logs ++ [ev])
+Proof
+  strip_tac >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn
+    (s with vs_logs := s.vs_logs ++ [ev]) (t with vs_logs := t.vs_logs ++ [ev])` by
+    metis_tac[taint_agree_shared, ld_shared_logs_append] >>
+  fs[taint_agree_def] >> simp[taint_agree_def] >>
+  qpat_x_assum `_ = s` (mp_tac o Q.AP_TERM `\u. u with vs_logs := u.vs_logs ++ [ev]`) >>
+  simp[]
+QED
+
+Theorem taint_agree_log_step:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\ ~in_revert_forward fn s /\
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\
+  (!off len i. MEM (off,len) (source_memory_read_ranges inst s) /\
+               off <= i /\ i < off + len ==> i NOTIN X) /\
+  inst.inst_opcode = LOG /\ inst.inst_outputs = [] /\ step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base inst t = OK t' /\
+       taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule taint_agree_operand_clean >>
+     gvs[taint_ok_def] >> metis_tac[]) >>
+  `!ops. (!op. MEM op ops ==> MEM op inst.inst_operands) ==>
+         eval_operands ops s = eval_operands ops t` by
+    (Induct >> simp[eval_operands_def] >> rpt strip_tac >>
+     `eval_operand h s = eval_operand h t` by metis_tac[MEM] >>
+     `eval_operands ops s = eval_operands ops t` by
+       (first_x_assum irule >> metis_tac[MEM]) >> simp[]) >>
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  Cases_on `REVERSE rest` >> gvs[] >> rename1 `REVERSE rest = p::rr` >>
+  Cases_on `rr` >> gvs[] >> rename1 `REVERSE rest = p::szop::tops` >>
+  `rest = REVERSE (p::szop::tops)` by metis_tac[REVERSE_REVERSE] >>
+  `eval_operand p s = eval_operand p t /\ eval_operand szop s = eval_operand szop t /\
+   eval_operands tops s = eval_operands tops t` by
+    (rpt conj_tac >> first_x_assum irule >> simp[MEM_REVERSE] >> metis_tac[MEM]) >>
+  `EVERY (\op. IS_SOME (eval_operand op s)) tops` by
+    (qpat_assum `eval_operands tops s = SOME topics` mp_tac >>
+     simp[GSYM ld_eval_operands_defined]) >>
+  `IS_SOME (eval_operands inst.inst_operands s)` by
+    (simp[ld_eval_operands_defined, eval_operand_def] >> metis_tac[optionTheory.IS_SOME_DEF]) >>
+  gvs[] >>
+  `read_memory (w2n off) (w2n sz) s = read_memory (w2n off) (w2n sz) t` by
+    (irule taint_agree_reachable_clean_read >>
+     qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `ptr_discipline _ _ _` (irule_at Any) >>
+     simp[source_memory_read_ranges_def, memory_range_of_operands_def, REVERSE_APPEND] >>
+     gvs[taint_ok_def, about_to_revert_def,
+         source_memory_read_ranges_def, memory_range_of_operands_def, REVERSE_APPEND] >> metis_tac[]) >>
+  simp[GSYM read_memory_def] >>
+  gvs[] >>
+  `!ev. step_taint inst s (s with vs_logs := s.vs_logs ++ [ev]) tn = tn` by
+    (simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+          imm_taint_def, adopt_reset_def, new_site_bytes_def,
+          set_var_taint_def, step_writes_def, source_memory_write_ranges_def,
+          range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, DRESTRICT_UNIV,
+          taint_component_equality] >>
+     Cases_on `REVERSE tops` >> simp[written_taint_def] >>
+     rename1 `REVERSE tops = h::tl` >>
+     Cases_on `tl` >> simp[written_taint_def] >>
+     rename1 `REVERSE tops = h::h2::tail` >>
+     Cases_on `tail` >> simp[]) >>
+  simp[] >> irule taint_agree_logs_append >> simp[]
+QED
+
+Theorem taint_agree_observation_abort:
+  taint_agree D X tn s t /\ MEM inst.inst_opcode [SHA3; LOG] /\
+  step_inst_base inst s = Abort a s' ==>
+  ?t'. step_inst_base inst t = Abort a t'
+Proof
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
+  `IS_SOME (eval_operands inst.inst_operands s) =
+   IS_SOME (eval_operands inst.inst_operands t)` by
+    (irule o1LowerDloadOpaqueTheory.eval_operands_defined_iff >>
+     metis_tac[taint_agree_operand_defined]) >>
+  fs[MEM] >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >> simp[]
+QED
+
+Theorem taint_agree_memory_observation_step:
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  o1_ctx_shape C /\ MEM fn C.ctx_functions /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  taint_agree D X tn s t /\
+  (!off len i. MEM (off,len) (source_memory_read_ranges inst s) /\
+               off <= i /\ i < off + len ==> i NOTIN X) /\
+  MEM inst.inst_opcode [SHA3; LOG] ==>
+  (!s'. step_inst_base inst s = OK s' ==>
+    ?t'. step_inst_base inst t = OK t' /\
+         taint_agree D X (step_taint inst s s' tn) s' t') /\
+  (!v s'. step_inst_base inst s = IntRet v s' ==>
+    ?t'. step_inst_base inst t = IntRet v t' /\ taint_agree D X tn s' t') /\
+  (!s'. step_inst_base inst s = Halt s' ==>
+    ?t'. step_inst_base inst t = Halt t' /\ dead_result_rel D (Halt s') (Halt t')) /\
+  (!a s'. step_inst_base inst s = Abort a s' ==>
+    ?t'. step_inst_base inst t = Abort a t')
+Proof
+  strip_tac >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `wf_function fn /\ fn_inst_wf fn` by
+    (gvs[o1PassContractTheory.o1_ctx_shape_def, listTheory.EVERY_MEM] >>
+     metis_tac[o1PassContractTheory.o1_fn_shape_def]) >>
+  `inst_wf inst` by
+    (gvs[active_inst_def, venomWfTheory.fn_inst_wf_def] >>
+     metis_tac[listTheory.MEM_EL]) >>
+  `~in_revert_forward fn s` by
+    (spose_not_then assume_tac >>
+     gvs[in_revert_forward_def, active_inst_def] >>
+     `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+       (irule venomExecPropsTheory.MEM_lookup_block >>
+        gvs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def]) >>
+     gvs[] >>
+     `get_instruction bb s.vs_inst_idx = SOME (EL s.vs_inst_idx bb.bb_instructions)` by
+       simp[venomInstTheory.get_instruction_def] >>
+     drule_all memSafeRunTheory.revert_forward_at_opcode >> fs[MEM]) >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `inst.inst_opcode = SHA3`
+      >- (irule taint_agree_hash_step >> metis_tac[]) >>
+      irule taint_agree_log_step >> fs[MEM] >>
+      gvs[venomWfTheory.inst_wf_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> fs[MEM] >>
+      gvs[step_inst_base_opcode_eqs, AllCaseEqs()]) >>
+  reverse conj_tac
+  >- (rpt strip_tac >> irule taint_agree_observation_abort >> metis_tac[]) >>
+  rpt strip_tac >> fs[MEM] >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()]
+QED
+
 Theorem taint_agree_load_store_step:
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
   o1_ctx_shape C /\ MEM fn C.ctx_functions /\
@@ -876,13 +1062,6 @@ Proof
   pop_assum SUBST1_TAC >>
   rewrite_tac[GSYM update_var_def] >>
   simp[Abbr `mask`] >> irule taint_agree_update_var >> simp[]
-QED
-
-Theorem taint_agree_call_ctx:
-  taint_agree D X tn s t ==> s.vs_call_ctx = t.vs_call_ctx
-Proof
-  strip_tac >> drule taint_agree_frame >>
-  disch_then (mp_tac o Q.AP_TERM `\u. u.vs_call_ctx`) >> simp[]
 QED
 
 Theorem taint_agree_sload:
