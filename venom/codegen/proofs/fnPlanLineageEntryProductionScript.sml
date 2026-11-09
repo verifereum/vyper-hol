@@ -255,6 +255,31 @@ Proof
        fnPlanLineagePrefixTheory.generate_block_insts_prefix_suc]
 QED
 
+Theorem native_inst_ops_prefix_cleanup_update:
+  !lv dfg cfg fn lbl halt np bl xs p0 k ops q h g b.
+    native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 k ops q ==>
+    native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs
+      (p0 with <|ps_cleanup_height := h; ps_cleanup_growth := g;
+        ps_cleanup_promised := b|>) k ops
+      (q with <|ps_cleanup_height := h; ps_cleanup_growth := g;
+        ps_cleanup_promised := b|>)
+Proof
+  simp[native_inst_ops_prefix_exec,
+    fnPlanLineagePrefixTheory.generate_block_insts_prefix_cleanup_update]
+QED
+
+Theorem native_inst_prefix_cleanup_update:
+  !lv dfg cfg fn lbl halt np bl xs p0 k q h g b.
+    native_inst_prefix lv dfg cfg fn lbl halt np bl xs p0 k q ==>
+    native_inst_prefix lv dfg cfg fn lbl halt np bl xs
+      (p0 with <|ps_cleanup_height := h; ps_cleanup_growth := g;
+        ps_cleanup_promised := b|>) k
+      (q with <|ps_cleanup_height := h; ps_cleanup_growth := g;
+        ps_cleanup_promised := b|>)
+Proof
+  simp[native_inst_prefix_ops] >> metis_tac[native_inst_ops_prefix_cleanup_update]
+QED
+
 Theorem native_inst_ops_prefix_split:
   !k xs lv dfg cfg fn lbl halt np bl p0 ops q.
     k <= LENGTH xs ==>
@@ -2597,4 +2622,50 @@ Proof
        (SUC (LENGTH (get_params bb.bb_instructions) + (a+j))))` by
     (irule ready_block_suffix_next_live >> metis_tac[]) >>
   gvs[]
+QED
+
+(* Physical cores agree independently of each path's cleanup bookkeeping. *)
+Theorem native_ordinary_paired_interval_cleanup_replay:
+  !k lv dfg cfg fn lbl halt np bl xs p0 prefixP prefixQ hP gP bP hQ gQ bQ.
+    k <= LENGTH xs /\
+    (!j p inst rest.
+      j < k /\ native_inst_prefix lv dfg cfg fn lbl halt np bl xs p0 j p /\
+      DROP j xs = inst::rest ==>
+      codegen_ready_inst inst /\ inst_wf inst /\
+      inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
+      (!x. MEM x (compute_operands inst) /\ is_var_operand x ==>
+        MEM x p.ps_stack \/ x IN FDOM p.ps_spilled) /\
+      EVERY (\v. ~MEM (Var v) prefixP)
+        ((if rest = [] then live_vars_at lv lbl bl
+          else live_vars_at lv lbl (j+np+1)) ++ inst.inst_outputs) /\
+      EVERY (\v. ~MEM (Var v) prefixQ)
+        ((if rest = [] then live_vars_at lv lbl bl
+          else live_vars_at lv lbl (j+np+1)) ++ inst.inst_outputs)) ==>
+    ?ops q.
+      native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 k ops q /\
+      native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs
+        (p0 with <|ps_stack := prefixP ++ p0.ps_stack;
+          ps_cleanup_height := hP; ps_cleanup_growth := gP; ps_cleanup_promised := bP|>)
+        k ops
+        (q with <|ps_stack := prefixP ++ q.ps_stack;
+          ps_cleanup_height := hP; ps_cleanup_growth := gP; ps_cleanup_promised := bP|>) /\
+      native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs
+        (p0 with <|ps_stack := prefixQ ++ p0.ps_stack;
+          ps_cleanup_height := hQ; ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>)
+        k ops
+        (q with <|ps_stack := prefixQ ++ q.ps_stack;
+          ps_cleanup_height := hQ; ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all native_ordinary_paired_interval_replay >> strip_tac >>
+  qexistsl_tac [`ops`,`q`] >> conj_tac >- simp[] >>
+  conj_tac
+  >- (qpat_x_assum `native_inst_ops_prefix _ _ _ _ _ _ _ _ _
+        (p0 with ps_stack := prefixP ++ _) _ _ _`
+        (mp_tac o MATCH_MP native_inst_ops_prefix_cleanup_update) >>
+      disch_then (qspecl_then [`hP`,`gP`,`bP`] mp_tac) >> simp[]) >>
+  qpat_x_assum `native_inst_ops_prefix _ _ _ _ _ _ _ _ _
+    (p0 with ps_stack := prefixQ ++ _) _ _ _`
+    (mp_tac o MATCH_MP native_inst_ops_prefix_cleanup_update) >>
+  disch_then (qspecl_then [`hQ`,`gQ`,`bQ`] mp_tac) >> simp[]
 QED
