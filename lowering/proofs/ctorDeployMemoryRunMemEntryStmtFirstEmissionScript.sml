@@ -942,17 +942,20 @@ Proof
           metis_tac[ctor_copy_memory_first_emission, ctor_store_memory_first_emission]) >>
       metis_tac[ctor_store_memory_first_emission])
   >- (ho_match_mp_tac first_emission_bind >> conj_tac
-      >- metis_tac[ctor_assign_normalize_first_emission] >>
+      >- (rpt gen_tac >> disch_tac >> irule ctor_assign_normalize_first_emission >>
+          metis_tac[]) >>
       gen_tac >> simp_tac bool_ss [compile_memory_to_storage_def] >>
       mp_tac (ctor_assign_storage_suffix_first_emission |> Q.SPEC `SSTORE`) >>
       simp[] >> metis_tac[])
   >- (ho_match_mp_tac first_emission_bind >> conj_tac
-      >- metis_tac[ctor_assign_normalize_first_emission] >>
+      >- (rpt gen_tac >> disch_tac >> irule ctor_assign_normalize_first_emission >>
+          metis_tac[]) >>
       gen_tac >> simp_tac bool_ss [compile_memory_to_transient_def] >>
       mp_tac (ctor_assign_storage_suffix_first_emission |> Q.SPEC `TSTORE`) >>
       simp[] >> metis_tac[])
   >- (ho_match_mp_tac first_emission_bind >> conj_tac
-      >- metis_tac[ctor_assign_normalize_first_emission] >>
+      >- (rpt gen_tac >> disch_tac >> irule ctor_assign_normalize_first_emission >>
+          metis_tac[]) >>
       rpt gen_tac >> strip_tac >>
       drule ctor_assign_code_suffix_first_emission >> simp[]) >>
   ho_match_mp_tac first_emission_ignore_bind >> conj_tac
