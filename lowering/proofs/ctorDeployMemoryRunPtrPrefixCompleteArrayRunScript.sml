@@ -174,6 +174,16 @@ Proof
   drule_all canonical_dynamic_array_count_load >> strip_tac >>
   `abi_decode_load DLOAD (n2w sb:bytes32) s = n2w (LENGTH vs)` by
     (qpat_x_assum `abi_decode_load _ _ _ = _` mp_tac >> asm_rewrite_tac[]) >>
+  `abi_decode_loop_cfg func hdr st.cs_current_bb exit_lbl hid (Var slot_var) src DLOAD
+    (STRING #"%" (toString header_var))
+    (STRING #"%" (toString (header_var+1)))
+    (STRING #"%" (toString (header_var+2)))
+    (STRING #"%" (toString (header_var+3)))` by
+    fs[abi_decode_position_loop_cfg_def, abi_decode_position_header_insts_def,
+       abi_decode_position_header_delta_def, abi_decode_loop_cfg_def,
+       abi_decode_header_insts_def] >>
+  `header_var + 4 <= limit_st.cs_next_var` by
+    fs[abi_decode_position_header_delta_def] >>
   drule_all prefix_complete_array_header_pair >>
   disch_then (qspecl_then [`PG`,`Ddead`] mp_tac) >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
@@ -520,8 +530,9 @@ Proof
     (drule prefix_complete_array_header_support >> simp[]) >>
   `?hdr_bb. lookup_block hdr func.fn_blocks = SOME hdr_bb /\
     phi_prefix_length hdr_bb.bb_instructions = 0` by
-    (fs[abi_decode_loop_cfg_def,abi_decode_header_insts_def,
-      phi_prefix_length_def,mk_inst_def]) >>
+    (fs[abi_decode_position_loop_cfg_def,abi_decode_position_header_insts_def,
+      abi_decode_position_header_delta_def,abi_decode_loop_cfg_def,
+      abi_decode_header_insts_def,phi_prefix_length_def,mk_inst_def]) >>
   `?t H' qt' A.
     (^Ok) k ctx func site ids D N d
       (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
