@@ -169,3 +169,94 @@ Proof
   rpt strip_tac >> qexists_tac `last` >> metis_tac[sym_steps_scratch_store]
 QED
 
+
+Theorem sym_result_case_identity[local]:
+  (case result of SymOK s => SymOK s | SymHalt s => SymHalt s
+   | SymRevert s => SymRevert s | SymFault s => SymFault s
+   | SymError e => SymError e | SymBad e => SymBad e) = result
+Proof
+  Cases_on `result` >> simp[]
+QED
+
+Theorem sym_steps_scratch_store_eq:
+  off < dimword(:256) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOSpill off]) ==>
+  sym_steps p env 2 ss = sym_mstore (scratch_push_state off ss)
+Proof
+  rw[planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def,
+     asm_block_at_cons] >>
+  simp[codegenSymRelTheory.sym_steps_compute, sym_step_scratch_push] >>
+  simp[sym_step_def, sym_step_op_def, sym_result_case_identity]
+QED
+
+Theorem sym_steps_scratch_load_eq:
+  off < dimword(:256) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SORestore off]) ==>
+  sym_steps p env 2 ss = sym_mload (scratch_push_state off ss)
+Proof
+  rw[planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def,
+     asm_block_at_cons] >>
+  simp[codegenSymRelTheory.sym_steps_compute, sym_step_scratch_push] >>
+  simp[sym_step_def, sym_step_op_def, sym_result_case_identity]
+QED
+
+Theorem sym_mstore_scratch_push_cons[local]:
+  scratch_kinds_ok fn ret items offsets ss.sym_mem_labels /\
+  EVERY (\at. off+32 <= at \/ at+32 <= off) offsets /\
+  op_kind_ok fn ret op v /\ ss.sym_stack = v :: stk /\
+  off < dimword(:256) ==>
+  ?last. sym_mstore (scratch_push_state off ss) = SymOK last /\
+    last.sym_stack = stk /\
+    scratch_kinds_ok fn ret (op::items) (off::offsets) last.sym_mem_labels /\
+    (!i. ~in_mem_range off 32 i ==>
+       FLOOKUP last.sym_mem_labels i = FLOOKUP ss.sym_mem_labels i) /\
+    (!at sv. (off+32 <= at \/ at+32 <= off) ==>
+       (mem_sval_at last.sym_mem_labels at sv <=> mem_sval_at ss.sym_mem_labels at sv)) /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + 2
+Proof
+  mp_tac (Q.INST [`ss` |-> `scratch_push_state off ss`] sym_mstore_scratch_cons) >>
+  simp[arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem sym_spill_scratch_cons:
+  scratch_kinds_ok fn ret items offsets ss.sym_mem_labels /\
+  EVERY (\at. off+32 <= at \/ at+32 <= off) offsets /\
+  op_kind_ok fn ret op v /\ ss.sym_stack = v :: stk /\
+  off < dimword(:256) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOSpill off]) ==>
+  ?last. sym_steps p env 2 ss = SymOK last /\ last.sym_stack = stk /\
+    scratch_kinds_ok fn ret (op::items) (off::offsets) last.sym_mem_labels /\
+    (!i. ~in_mem_range off 32 i ==>
+       FLOOKUP last.sym_mem_labels i = FLOOKUP ss.sym_mem_labels i) /\
+    (!at sv. (off+32 <= at \/ at+32 <= off) ==>
+       (mem_sval_at last.sym_mem_labels at sv <=> mem_sval_at ss.sym_mem_labels at sv)) /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + 2
+Proof
+  rpt strip_tac >> drule_all sym_steps_scratch_store_eq >>
+  simp[sym_mstore_scratch_push_cons]
+QED
+Theorem sym_mload_scratch_push_index[local]:
+  scratch_kinds_ok fn ret items offsets ss.sym_mem_labels /\
+  k < LENGTH items /\ EL k offsets < dimword(:256) /\ ss.sym_stack = stk ==>
+  ?last v. sym_mload (scratch_push_state (EL k offsets) ss) = SymOK last /\
+    last.sym_stack = v :: stk /\ op_kind_ok fn ret (EL k items) v /\
+    last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + 2
+Proof
+  mp_tac (Q.INST [`ss` |-> `scratch_push_state (EL k offsets) ss`]
+    scratch_kinds_ok_load) >> simp[arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem sym_restore_scratch_index:
+  scratch_kinds_ok fn ret items offsets ss.sym_mem_labels /\
+  k < LENGTH items /\ EL k offsets < dimword(:256) /\ ss.sym_stack = stk /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan initial_fmp [SORestore (EL k offsets)]) ==>
+  ?last v. sym_steps p env 2 ss = SymOK last /\
+    last.sym_stack = v :: stk /\ op_kind_ok fn ret (EL k items) v /\
+    last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + 2
+Proof
+  rpt strip_tac >> drule_all sym_steps_scratch_load_eq >>
+  simp[sym_mload_scratch_push_index]
+QED
