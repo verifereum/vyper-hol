@@ -2405,8 +2405,10 @@ Proof
   rename1 `stack_get_phi_depth _ ps.ps_stack = SOME d` >>
   `d < LENGTH ps.ps_stack` by
     (gvs[stack_get_phi_depth_def] >> drule stack_find_bound >> simp[]) >>
-  `~MEM dead_stack_marker (SND (do_dup d ps)).ps_stack` by
-    (drule do_dup_stack_exact >> simp[] >> strip_tac >>
+  `!dup_ops ps1. do_dup d ps = (dup_ops,ps1) ==>
+     ~MEM dead_stack_marker ps1.ps_stack` by
+    (rpt strip_tac >> drule (cj 2 do_dup_stack_exact) >>
+     disch_then drule >> strip_tac >> gvs[] >>
      metis_tac[stack_peek_mem]) >>
   `!i stk out. ~MEM dead_stack_marker stk ==>
       ~MEM dead_stack_marker (stack_poke i (Var out) stk)` by
