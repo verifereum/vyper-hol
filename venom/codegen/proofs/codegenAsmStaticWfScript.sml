@@ -514,6 +514,148 @@ Proof
   simp[is_label_operand_def]
 QED
 
+Theorem reorder_plan_fst_no_ref:
+  ~plan_ref l (FST (reorder_plan dfg operands ps))
+Proof
+  Cases_on `reorder_plan dfg operands ps` >>
+  metis_tac[reorder_plan_no_ref, pairTheory.FST]
+QED
+
+Theorem regular_join_fst_no_ref:
+  ~plan_ref l (FST (if opc = JMP then
+    case join_target_ops liveness fn bb inst of
+      NONE => ([], ps)
+    | SOME targets => (\(restore_ops, restored).
+        (\(swap_ops, arranged). (restore_ops ++ swap_ops, arranged))
+          (reorder_plan dfg targets restored))
+        (restore_spilled_plan targets ps)
+    else ([], ps)))
+Proof
+  simp[pairTheory.ELIM_UNCURRY, plan_ref_fst_cond, plan_ref_fst_option,
+    plan_ref_append, plan_ref_nil, restore_spilled_plan_fst_no_ref,
+    reorder_plan_fst_no_ref] >>
+  simp[optionTheory.option_case_compute]
+QED
+
+Theorem generate_regular_inst_plan_refs:
+  generate_regular_inst_plan liveness dfg cfg fn inst live halting term bb ps =
+    (ops, ps') /\
+  (inst.inst_opcode = INVOKE ==> invoke_operands_wf inst) /\
+  plan_ref l ops ==>
+  MEM (SOLabel l) ops \/ l = "revert" \/
+  MEM (Label l) (compute_operands inst) \/
+  (MEM inst.inst_opcode [JMP; JNZ; INVOKE] /\ MEM (Label l) inst.inst_operands)
+Proof
+  pure_rewrite_tac[generate_regular_inst_plan_def, LET_THM] >>
+  rpt (pairarg_tac >> fs[]) >>
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `generate_emit_ops inst topics emit_ps = _` >>
+  `~plan_ref l join_ops` by
+    (qpat_x_assum `_ = (join_ops, ps2)`
+       (mp_tac o AP_TERM ``FST : stack_op list # plan_state -> stack_op list``) >>
+     simp_tac std_ss [] >>
+     metis_tac[regular_join_fst_no_ref]) >>
+  qpat_x_assum `Abbrev (topics = _)` kall_tac >>
+  qpat_x_assum `Abbrev (emit_ps = _)` kall_tac >>
+  qpat_x_assum `_ = (join_ops, ps2)` kall_tac >>
+  imp_res_tac reorder_plan_no_ref >>
+  `~plan_ref l reorder_ops` by
+    (qpat_x_assum `_ = (reorder_ops, ps4)`
+       (mp_tac o AP_TERM ``\p : stack_op list # plan_state. plan_ref l (FST p)``) >>
+     simp[plan_ref_fst_cond]) >>
+  `~plan_ref l pop_ops` by
+    (qpat_x_assum `_ = (pop_ops, ps8)`
+       (mp_tac o AP_TERM ``\p : stack_op list # plan_state. plan_ref l (FST p)``) >>
+     simp[plan_ref_fst_cond, plan_ref_nil, popmany_plan_fst_no_ref]) >>
+  `~plan_ref l opt_ops` by
+    (qpat_x_assum `_ = (opt_ops, ps9)`
+       (mp_tac o AP_TERM ``\p : stack_op list # plan_state. plan_ref l (FST p)``) >>
+     simp[plan_ref_fst_cond, plan_ref_nil, optimistic_swap_plan_fst_no_ref]) >>
+  qpat_x_assum `_ = (ops, ps')` mp_tac >>
+  simp[CaseEq "bool"] >> strip_tac >>
+  gvs[plan_ref_append, MEM_APPEND] >>
+  metis_tac[emit_input_plan_refs, generate_emit_ops_refs, MEM]
+QED
+
+Theorem shaped_compute_operands_refs:
+  inst_shape_ok inst /\ inst.inst_opcode <> PHI /\
+  MEM (Label l) (compute_operands inst) ==>
+  l = "code_end" \/
+  (l = "runtime_begin" /\ MEM (Label "runtime_begin") inst.inst_operands)
+Proof
+  strip_tac >> drule compute_operands_labels >> strip_tac >>
+  gvs[inst_shape_ok_def] >>
+  drule_all label_positions_ok_refs >> simp[] >> metis_tac[]
+QED
+
+Theorem generate_inst_plan_refs:
+  generate_inst_plan liveness dfg cfg fn inst live halting term bb ps =
+    SOME (ops, ps') /\ inst_shape_ok inst /\ plan_ref l ops ==>
+  MEM (SOLabel l) ops \/ l = "revert" \/
+  (MEM inst.inst_opcode [JMP; JNZ; INVOKE] /\ MEM (Label l) inst.inst_operands) \/
+  l = "code_end" \/
+  (l = "runtime_begin" /\ MEM (Label "runtime_begin") inst.inst_operands)
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> OFFSET` by gvs[inst_shape_ok_def] >>
+  gvs[generate_inst_plan_def, CaseEq "bool", plan_ref_nil] >>
+  imp_res_tac generate_phi_plan_no_ref >> gvs[] >>
+  drule_all generate_regular_inst_plan_refs >> simp[] >>
+  metis_tac[shaped_compute_operands_refs]
+QED
+
+Theorem generate_block_insts_plan_refs:
+  !insts i ps ops ps'.
+  generate_block_insts_plan liveness dfg cfg fn bb_label halting
+    n_params block_len i insts ps = SOME (ops, ps') /\
+  EVERY inst_shape_ok insts /\ plan_ref l ops ==>
+  MEM (SOLabel l) ops \/ l = "revert" \/
+  (?inst. MEM inst insts /\ MEM inst.inst_opcode [JMP; JNZ; INVOKE] /\
+          MEM (Label l) inst.inst_operands) \/
+  l = "code_end" \/
+  (l = "runtime_begin" /\
+   ?inst. MEM inst insts /\ MEM (Label "runtime_begin") inst.inst_operands)
+Proof
+  Induct >- simp[generate_block_insts_plan_def, plan_ref_nil] >>
+  rw[generate_block_insts_plan_def, AllCaseEqs()] >>
+  gvs[plan_ref_append, MEM_APPEND] >>
+  FIRST [drule_all generate_inst_plan_refs,
+    first_x_assum (drule_at Any)] >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem generate_block_plan_refs:
+  generate_block_plan liveness dfg cfg fn bb ps = SOME (ops, ps') /\
+  EVERY inst_shape_ok bb.bb_instructions /\ plan_ref l ops ==>
+  MEM (SOLabel l) ops \/ l = "revert" \/
+  (?inst. MEM inst bb.bb_instructions /\
+          MEM inst.inst_opcode [JMP; JNZ; INVOKE] /\
+          MEM (Label l) inst.inst_operands) \/
+  l = "code_end" \/
+  (l = "runtime_begin" /\
+   ?inst. MEM inst bb.bb_instructions /\
+          MEM (Label "runtime_begin") inst.inst_operands)
+Proof
+  pure_rewrite_tac[generate_block_plan_def, LET_THM] >>
+  rpt (pairarg_tac >> fs[]) >>
+  strip_tac >>
+  `~plan_ref l param_ops` by
+    (qpat_x_assum `_ = (param_ops, ps1)`
+       (mp_tac o AP_TERM ``\p : stack_op list # plan_state. plan_ref l (FST p)``) >>
+     simp[plan_ref_fst_cond, plan_ref_nil, prepare_params_plan_fst_no_ref]) >>
+  `~plan_ref l clean_ops` by
+    (qpat_x_assum `_ = (clean_ops, ps2)`
+       (mp_tac o AP_TERM ``\p : stack_op list # plan_state. plan_ref l (FST p)``) >>
+     simp[plan_ref_fst_cond, plan_ref_nil, clean_stack_plan_fst_no_ref]) >>
+  `EVERY inst_shape_ok (non_param_insts bb)` by
+    (gvs[non_param_insts_def, EVERY_MEM, MEM_FILTER] >> metis_tac[]) >>
+  qpat_x_assum `_ = (param_ops, ps1)` kall_tac >>
+  qpat_x_assum `_ = (clean_ops, ps2)` kall_tac >>
+  gvs[AllCaseEqs(), plan_ref_cons, plan_ref_append, MEM_APPEND] >>
+  drule_all generate_block_insts_plan_refs >>
+  simp[non_param_insts_def, MEM_FILTER] >> metis_tac[]
+QED
+
 Theorem codegen_asm_static_wf:
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
   sym_unit_static_ok unit /\ codegen_ready unit.cu_context ==>
