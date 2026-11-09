@@ -142,6 +142,104 @@ Proof
   irule taint_agree_update_var >> goal_assum (drule_at Any) >> simp[]
 QED
 
+Theorem taint_agree_exec_pure1:
+  taint_agree D X tn s t /\
+  (!op x y. MEM op inst.inst_operands /\
+     word_agree_except (op_taint tn op) x y ==>
+     word_agree_except m (f x) (f y)) /\
+  exec_pure1 f inst s = OK s' ==>
+  ?t'. exec_pure1 f inst t = OK t' /\
+       taint_agree D X
+         (tn with t_var := set_var_taint tn.t_var inst.inst_outputs m) s' t'
+Proof
+  simp[exec_pure1_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule_all taint_agree_operand_value >> strip_tac >>
+  qexists_tac `update_var out (f y) t` >> simp[] >>
+  irule taint_agree_update_var >> simp[] >>
+  first_x_assum irule >> simp[] >> goal_assum (drule_at Any)
+QED
+
+Theorem taint_agree_exec_pure2_clean:
+  taint_agree D X tn s t /\
+  (!op. MEM op inst.inst_operands ==> op_taint tn op = {}) /\
+  exec_pure2 f inst s = OK s' ==>
+  ?t'. exec_pure2 f inst t = OK t' /\
+       taint_agree D X
+         (tn with t_var := set_var_taint tn.t_var inst.inst_outputs {}) s' t'
+Proof
+  simp[exec_pure2_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  `eval_operand op1 s = eval_operand op1 t` by
+    (irule taint_agree_operand_clean >> goal_assum (drule_at Any) >> simp[]) >>
+  `eval_operand op2 s = eval_operand op2 t` by
+    (irule taint_agree_operand_clean >> goal_assum (drule_at Any) >> simp[]) >>
+  gvs[] >> irule taint_agree_update_var >>
+  simp[word_agree_except_def]
+QED
+
+Theorem taint_agree_exec_pure3_clean:
+  taint_agree D X tn s t /\
+  (!op. MEM op inst.inst_operands ==> op_taint tn op = {}) /\
+  exec_pure3 f inst s = OK s' ==>
+  ?t'. exec_pure3 f inst t = OK t' /\
+       taint_agree D X
+         (tn with t_var := set_var_taint tn.t_var inst.inst_outputs {}) s' t'
+Proof
+  simp[exec_pure3_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  `eval_operand op1 s = eval_operand op1 t` by
+    (irule taint_agree_operand_clean >> goal_assum (drule_at Any) >> simp[]) >>
+  `eval_operand op2 s = eval_operand op2 t` by
+    (irule taint_agree_operand_clean >> goal_assum (drule_at Any) >> simp[]) >>
+  `eval_operand op3 s = eval_operand op3 t` by
+    (irule taint_agree_operand_clean >> goal_assum (drule_at Any) >> simp[]) >>
+  gvs[] >> irule taint_agree_update_var >>
+  simp[word_agree_except_def]
+QED
+
+Theorem taint_agree_assign:
+  taint_agree D X tn s t /\ inst.inst_opcode = ASSIGN /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base inst t = OK t' /\
+       taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  drule_all taint_agree_operand_value >> strip_tac >>
+  qexists_tac `update_var out y t` >> simp[] >>
+  `step_taint inst s (update_var out v s) tn =
+     tn with t_var := set_var_taint tn.t_var [out] (op_taint tn op1)` by
+    (Cases_on `tn` >>
+     simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+          imm_taint_def, adopt_reset_def, new_site_bytes_def, update_var_def,
+          step_writes_def, source_memory_write_ranges_def, written_taint_def,
+          range_bytes_def, FLOOKUP_DEF, SF CONJ_ss,
+          taint_component_equality]) >>
+  simp[] >> irule taint_agree_update_var >> simp[]
+QED
+
+Theorem taint_agree_pure2:
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\
+  MEM inst.inst_opcode
+    [ADD; SUB; MUL; Div; Mod; SDIV; SMOD; Exp; EQ; LT; GT; SLT; SGT;
+     AND; OR; XOR; SIGNEXTEND; BYTE; OFFSET] /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base inst t = OK t' /\
+       taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==> op_taint tn op = {}` by
+    (gvs[taint_ok_def] >> metis_tac[]) >>
+  fs[MEM] >> gvs[step_inst_base_opcode_eqs] >>
+  drule_all taint_agree_exec_pure2_clean >> strip_tac >>
+  qexists_tac `t'` >> simp[] >>
+  qpat_x_assum `exec_pure2 _ inst s = _` mp_tac >>
+  simp[exec_pure2_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  qpat_x_assum `taint_agree _ _ _ _ _` mp_tac >>
+  simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+       imm_taint_def, adopt_reset_def, new_site_bytes_def, update_var_def,
+       step_writes_def, source_memory_write_ranges_def, written_taint_def,
+       range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, taint_component_equality] >>
+  simp[taint_agree_def, ld_shared_agree_def, op_taint_def] >> metis_tac[]
+QED
+
 (* Why it holds: taint_ok gives each operand of a non-propagating opcode
    no taint, so taint_agree evaluates it equally in t; access_ok puts
    each read ending above lo inside a site, below the bump pointer since
