@@ -1,7 +1,7 @@
 Theory algebraicOptMainResidualProofs
 Ancestors
   algebraicOptMainCallProofs algebraicOptMainControlProofs
-  algebraicOptRelationProofs algebraicOptDefs algebraicOptShapeProofs
+  algebraicOptRelationProofs algebraicOptDefs algebraicOptShapeProofs dretShapeDefs
   venomCallOracleDefs venomExecSemantics venomState venomInst venomWf stateEquiv stateEquivProps stateFrame list
 
 Theorem ao_main_equal_write:
@@ -821,3 +821,15 @@ Proof
   simp[] >> strip_tac >> simp[] >>
   gvs[execution_equiv_def, execution_frame_def, venom_state_component_equality]
 QED
+
+Theorem ao_resolve_dret_shape:
+  parse_dret_shape inst = SOME shape ==>
+  parse_dret_shape (ao_resolve_iszero_inst targets inst) = SOME shape
+Proof
+  Cases_on `inst.inst_operands` >>
+  simp[parse_dret_shape_def] >>
+  Cases_on `h` >> simp[parse_dret_shape_def] >>
+  simp[ao_resolve_iszero_inst_def, ao_resolve_iszero_op_def,
+       parse_dret_shape_def]
+QED
+
