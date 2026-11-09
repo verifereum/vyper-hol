@@ -4,6 +4,7 @@
 Theory bodyIntCallFamStmtLog
 Ancestors
   bodyIntCallJointContract bodyIntCallFamStmtLogSuffix
+  bodyIntCallFamStmtLogArgsFrame bodyIntCallFamStmtLogGas
 
 Theorem intcall_log_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
