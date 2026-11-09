@@ -824,6 +824,69 @@ Proof
       simp[update_var_def]
 QED
 
+(* An actual OK cut itself witnesses termination at the current fuel.
+   Its exact-successor premise can therefore be obtained from the conditional
+   residual clause using terminates_def and residual_result_cases, even when
+   a later segment errors.  Both segment certificates are fixed before fills. *)
+Theorem mask_exact_cut_prefix[local]:
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  (!pg rest.
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m1 pg ==>
+    (?extra. e1 = gas_events_block fuel C owner
+      <|bb_label := owner; bb_instructions :=
+        REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre|>
+      (s with vs_gas_readings := pg ++ rest) ++ extra) /\
+    (!v. FOLDR (dft_exec_cons fuel C) OK pre
+        (s with vs_gas_readings := pg ++ rest) = OK v ==>
+      gas_events_block fuel C owner
+        <|bb_label := owner; bb_instructions :=
+          REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre|>
+        (s with vs_gas_readings := pg ++ rest) = e1 /\
+      v = u with vs_gas_readings := rest)) /\
+  (!qg tail.
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m2 qg ==>
+    ?extra. e2 = gas_events_block fuel C owner
+      <|bb_label := owner; bb_instructions :=
+        REPLICATE u.vs_inst_idx (mk_inst 0 STOP [] []) ++ post|>
+      (u with vs_gas_readings := qg ++ tail) ++ extra) ==>
+  !gobs tail.
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (m1 ++ m2) gobs ==>
+    ?extra. e1 ++ e2 = gas_events_block fuel C owner
+      <|bb_label := owner; bb_instructions :=
+        REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ (pre ++ post)|>
+      (s with vs_gas_readings := gobs ++ tail) ++ extra
+Proof
+  strip_tac >> simp[LIST_REL_SPLIT1] >> rpt strip_tac >> gvs[] >>
+  qpat_x_assum `!pg rest. LIST_REL _ m1 pg ==> _`
+    (qspecl_then [`ys1`, `ys2 ++ tail`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `gas_events_block fuel C owner bb st` >>
+  Cases_on `?v. FOLDR (dft_exec_cons fuel C) OK pre st = OK v`
+  >- (pop_assum strip_assume_tac >>
+      `DROP st.vs_inst_idx bb.bb_instructions = pre ++ post` by
+        (simp[Abbr `st`, Abbr `bb`] >>
+         metis_tac[LENGTH_REPLICATE, DROP_LENGTH_APPEND, APPEND_ASSOC]) >>
+      drule_all prefix_events_splice >> disch_then (qspec_then `owner` SUBST1_TAC) >>
+      qpat_x_assum `!v. _` drule >>
+      simp[Abbr `st`] >> strip_tac >> gvs[] >>
+      drule_all prefix_ok_cursor >> simp[] >> strip_tac >>
+      qpat_x_assum `!qg tail. _`
+        (qspecl_then [`ys2`, `tail`] mp_tac) >> simp[] >>
+      `gas_events_block fuel C owner bb (u with vs_gas_readings := ys2 ++ tail) =
+       gas_events_block fuel C owner
+         <|bb_label := owner; bb_instructions :=
+           REPLICATE u.vs_inst_idx (mk_inst 0 STOP [] []) ++ post|>
+         (u with vs_gas_readings := ys2 ++ tail)` by
+        (irule gas_events_block_suffix_cong >> qexists_tac `post` >>
+         simp[Abbr `bb`, DROP_APPEND, DROP_DROP_T]) >>
+      simp[]) >>
+  `DROP st.vs_inst_idx bb.bb_instructions = pre ++ post` by
+    (simp[Abbr `st`, Abbr `bb`] >>
+         metis_tac[LENGTH_REPLICATE, DROP_LENGTH_APPEND, APPEND_ASSOC]) >>
+  drule_all prefix_events_stopped >> disch_then (qspec_then `owner` SUBST1_TAC) >>
+  simp[Abbr `st`] >> irule mask_prefix_extend >> simp[]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
