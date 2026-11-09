@@ -6837,6 +6837,120 @@ Proof
   strip_tac >> simp[mm_local_pending_def] >> metis_tac[]
 QED
 
+Theorem mm_local_write_rep_unique[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  j < LENGTH is /\
+  (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  MEM a gs /\ MEM b gs /\ MEM (EL j is).inst_id a.cg_inst_ids /\
+  MEM (EL j is).inst_id b.cg_inst_ids /\ r < LENGTH is /\ q < LENGTH is /\
+  rep_of_group is a = SOME ((EL r is).inst_id,a) /\
+  rep_of_group is b = SOME ((EL q is).inst_id,b) ==> r = q
+Proof
+  strip_tac >>
+  `a = b` by
+    (irule mm_local_prefix_write_group_owner >>
+     qexistsl [`bb`, `fn0`, `index`, `k`, `Mem2Mem`, `sk`, `supply`, `EL j is`] >>
+     gvs[] >> metis_tac[EL_MEM]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `((EL r is).inst_id = (EL q is).inst_id)` by gvs[] >>
+  metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx]
+QED
+
+Definition mm_local_rep_index_def:
+  mm_local_rep_index is gs j = @r. r < LENGTH is /\
+    ?g. MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+      rep_of_group is g = SOME ((EL r is).inst_id,g)
+End
+
+Theorem mm_local_rep_index_eq[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  j < LENGTH is /\
+  (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\ r < LENGTH is /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  mm_local_rep_index is gs j = r
+Proof
+  strip_tac >> simp[mm_local_rep_index_def] >> SELECT_ELIM_TAC >>
+  conj_tac >- metis_tac[] >> rpt strip_tac >>
+  qpat_x_assum `is = _` SUBST_ALL_TAC >>
+  qpat_x_assum `gs = _` SUBST_ALL_TAC >>
+  metis_tac[mm_local_write_rep_unique]
+QED
+
+Theorem mm_local_canonical_pending_owned[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  n <= LENGTH is /\ n <= N /\ mm_local_history is H N ==>
+  mm_local_owned (mm_local_write_capture is H N) (mm_local_rep_index is gs) n
+    (mm_local_pending_indices is gs n)
+Proof
+  strip_tac >> simp[mm_local_owned_def, mm_local_pending_indices_order, EVERY_MEM] >>
+  qx_gen_tac `j` >> strip_tac >>
+  `MEM j (mm_local_pending_indices is gs n)` by metis_tac[] >>
+  drule_all mm_local_canonical_pending_owner >> strip_tac >>
+  qpat_x_assum `MEM j (mm_local_pending_indices is gs n)`
+    (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+  `j < LENGTH is` by decide_tac >>
+  drule_all mm_local_rep_index_eq >> strip_tac >> simp[] >> metis_tac[]
+QED
+
+Theorem mm_local_canonical_pending_keep[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  n <= LENGTH is ==>
+  FILTER (\j. SUC n <= mm_local_rep_index is gs j) (mm_local_pending_indices is gs n) =
+  FILTER (\j. j < n) (mm_local_pending_indices is gs (SUC n))
+Proof
+  strip_tac >>
+  simp[NoAsms, mm_local_pending_indices_def, rich_listTheory.COUNT_LIST_SNOC,
+    rich_listTheory.SNOC_APPEND, FILTER_APPEND, FILTER_FILTER, COND_RAND] >>
+  rewrite_tac[rich_listTheory.FILTER_EQ] >>
+  qx_gen_tac `j` >> simp[MEM_COUNT_LIST] >> strip_tac >>
+  eq_tac >> strip_tac >>
+  `j < LENGTH is` by decide_tac >>
+  `mm_local_rep_index is gs j = r` by
+    (qpat_x_assum `is = _` SUBST_ALL_TAC >>
+     qpat_x_assum `gs = _` SUBST_ALL_TAC >>
+     metis_tac[mm_local_rep_index_eq, pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
+  gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_SUC_REFL, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem mm_local_canonical_pending_partition[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  n <= LENGTH is /\ n <= N /\ mm_local_history is H N ==>
+  FILTER (\j. mm_local_rep_index is gs j <> n) (mm_local_pending_indices is gs n) =
+  FILTER (\j. j < n) (mm_local_pending_indices is gs (SUC n))
+Proof
+  strip_tac >>
+  drule_all mm_local_canonical_pending_owned >>
+  rewrite_tac[mm_local_owned_def, EVERY_MEM] >> strip_tac >>
+  drule_all mm_local_canonical_pending_keep >>
+  disch_then (fn th => rewrite_tac[GSYM th]) >>
+  rewrite_tac[rich_listTheory.FILTER_EQ] >> rpt strip_tac >>
+  `n <= mm_local_rep_index is gs x` by metis_tac[] >> BETA_TAC >> decide_tac
+QED
+
 Theorem mm_local_two_copy_read[local]:
   mm_local_history is H (n+2) /\
   (EL n is).inst_opcode = MCOPY /\
