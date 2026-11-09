@@ -1,7 +1,7 @@
 Theory loadElimCoupledExecution
 Ancestors
   loadElimCaptureEntry loadElimCaptureSteps loadElimCaptureInvariant loadElimPrependIndex
-  loadElimOccurrenceInvariants loadElimReachedLoad loadElimReachedStore
+  loadElimReachedLoad loadElimReachedStore
   loadElimPaddedCalls loadElimPaddedNoncall loadElimMemoryRel
   loadElimActionSelection loadElimLatestJoin loadElimOccurrence loadElimDefs
   loadElimSentinelHelpers loadElimKeyShapeInvariant cfgAnalysisProps
@@ -78,15 +78,6 @@ Definition le_round_ready_names_def:
       load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
       (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
       (load_analyze ctx fn) /\
-    dfg_assigns_sound (dfg_build_function fn) s0 /\
-    bp_ptr_sound ctx.lctx_bp s0 /\ alloca_inv s0 /\ allocas_in_word s0 /\
-    bp_ptrs_bounded ctx.lctx_bp fn s0 /\
-    le_step_preserves ctx.lctx_bp (dfg_build_function fn) fn /\
-    (!bb u t. MEM bb fn.fn_blocks /\
-      MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
-      eval_phis u bb.bb_instructions = OK t /\
-      dfg_assigns_sound (dfg_build_function fn) u ==>
-      dfg_assigns_sound (dfg_build_function fn) t) /\
     DISJOINT G (set (fn_all_vars fn)) /\
     EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts fn) /\
     EVERY (\f. EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts f)) C.ctx_functions
@@ -753,13 +744,6 @@ Theorem le_coupled_phi_entry:
           (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) bb.bb_label))
 Proof
   strip_tac >>
-  `!bb' n fuel u' t'. MEM (StepOcc bb' n fuel u' t')
-     (h ++ [PhiOcc bb u p]) ==> dfg_assigns_sound ctx.lctx_dfg u'` by
-    (rpt strip_tac >>
-     irule (cj 1 le_occ_invariants_step_dfg) >>
-     fs[le_round_ready_disjoint_def, le_round_ready_names_def, Excl "isPREFIX"] >>
-     drule_all le_occ_prefix_frozen_invariants >> strip_tac >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `r.vs_prev_bb = u.vs_prev_bb /\ r.vs_labels = u.vs_labels` by
     fs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def] >>
   rule_assum_tac (PURE_REWRITE_RULE [le_round_ready_disjoint_def, le_round_ready_names_def, le_padded_control_def]) >>
