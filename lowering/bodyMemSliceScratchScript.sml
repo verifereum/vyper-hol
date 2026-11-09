@@ -4,36 +4,32 @@ Ancestors
   exprSimSliceFixedAdapter builtinBytesMemory allocationPtr abiBuiltinAllocation
   bodyMemAggregateBounds exprSimMemUnwrap fragGasSeqMem exprLoweringProps
   emitHelper emitHelperProps compileEnv context venomInst venomState
-  allocaFootprint venomMemDefs list finite_map words
+  allocaFootprint venomMemDefs list finite_map words bodyMemBiSha256Suffix
+  fragExecMem instMemFrontier
 
 Theorem slice_fixed_scratch_mem_ok[local]:
   compile_alloc_buffer 32 sa = (buf,sm) /\
   emit_void MSTORE [buf.buf_operand; val_op] sm = ((),sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
+  stmt_state_rel ctx func cenv cx es s /\
   fn_has_code sa sb func /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   run_inst_seq_mem_ok (emitted_insts sa sm ++ emitted_insts sm sb) s
 Proof
   strip_tac >> drule_all slice_fixed_scratch_embedding >> strip_tac >>
+  `alloca_next_valid s` by fs[stmt_state_rel_def, alloca_inv_def] >>
   `32 < dimword (:256)` by simp[dimword_def] >>
-  `alloca_next_valid s` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, alloca_inv_def] >>
-  `?p. FLOOKUP (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_allocas
-      sa.cs_next_id = SOME (p,32)` by
-    (Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
-     >- simp[abi_builtin_allocate_state_def, FLOOKUP_UPDATE] >>
-     PairCases_on `x` >>
-     drule_all stmt_state_rel_alloca_site_bound >> strip_tac >>
-     simp[abi_builtin_allocate_state_def]) >>
-  irule compile_alloc_buffer_header_store_mem_ok >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`buf`, `32`, `p`, `val_op`] >> simp[]
+  `!base cap. FLOOKUP s.vs_allocas sa.cs_next_id = SOME (base,cap) ==> cap = 32` by
+    (rpt strip_tac >> drule_all stmt_state_rel_alloca_site_bound >> simp[]) >>
+  drule_all sha256_alloc32_mem >> strip_tac >>
+  irule run_inst_seq_mem_ok_append >> simp[] >> rpt strip_tac >> gvs[] >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  simp[run_inst_seq_mem_ok_last, below_frontier_MSTORE] >> metis_tac[]
 QED
 
 Theorem slice_fixed_scratch_path_mem[local]:
   compile_alloc_buffer 32 sa = (buf,sm) /\
   emit_void MSTORE [buf.buf_operand; val_op] sm = ((),sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
+  stmt_state_rel ctx func cenv cx es s /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   alloca_history func s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -69,7 +65,7 @@ Theorem slice_fixed_scratch_entry_mem[local]:
   LENGTH bs <= 32 /\ TAKE (LENGTH bs) (word_to_bytes_be w) = bs /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\ ~s.vs_halted /\
-  fresh_vars_wrt sa s /\ alloca_history func s /\
+  alloca_history func s /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u p. run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK u /\
@@ -114,7 +110,7 @@ Theorem slice_source_fixed_capture_entry_mem:
   emit_void MSTORE [buf.buf_operand; src_op] sb = ((),sc) /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   fn_inst_ids_distinct func /\ fn_has_code sm sc func /\ ~t.vs_halted /\
-  fresh_vars_wrt sm t /\ alloca_history func t /\
+  alloca_history func t /\
   t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?bs u p. v = BytesV bs /\ LENGTH bs = m /\
