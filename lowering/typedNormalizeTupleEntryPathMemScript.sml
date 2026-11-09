@@ -200,7 +200,7 @@ Proof
   rpt strip_tac >> first_x_assum irule >> simp[ADD_COMM, GSYM type_memory_size_list_sum]
 QED
 
-Theorem typed_tuple_child_rank_path_mem[local]:
+Theorem typed_ordered_fields_child_rank_path_mem:
   LIST_REL (type_widens_to tenv) ST DT /\
   LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) ST stvs /\
   LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) DT dtvs /\
@@ -208,7 +208,8 @@ Theorem typed_tuple_child_rank_path_mem[local]:
   LIST_REL (\ty tv. type_memory_bytes ce ty = type_memory_size tv) ST stvs /\
   values_have_types stvs vs /\ values_have_types dtvs vs /\
   EVERY2 val_wf stvs vs /\ EVERY2 val_wf dtvs vs /\
-  LENGTH DT = LENGTH ST /\ type_rank ce.ce_struct_fields (TupleT DT) = rank /\
+  LENGTH DT = LENGTH ST /\
+  (!ty. MEM ty DT ==> type_rank ce.ce_struct_fields ty < rank) /\
   (!j. d j = b + SUM (MAP (type_memory_bytes ce) (TAKE j DT))) /\
   (!j. h j = a + SUM (MAP (type_memory_bytes ce) (TAKE j ST))) /\
   (a + type_memory_size_list stvs <= b \/ b + type_memory_size_list dtvs <= a) /\
@@ -277,8 +278,7 @@ Proof
     (irule typed_tuple_child_windows >> qexistsl [`DT`, `ST`, `a`, `b`, `ce`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `type_rank ce.ce_struct_fields (EL i DT) < rank` by
-    (qpat_x_assum `type_rank _ (TupleT _) = rank` (SUBST1_TAC o SYM) >>
-     irule member_rank_lt_tuple >> simp[EL_MEM]) >>
+    (qpat_x_assum `!ty. MEM ty DT ==> _` irule >> simp[EL_MEM]) >>
   `evaluate_type tenv (EL i ST) = SOME (EL i stvs) /\
    evaluate_type tenv (EL i DT) = SOME (EL i dtvs) /\
    type_widens_to tenv (EL i ST) (EL i DT) /\
@@ -381,12 +381,15 @@ Proof
   `compile_typed_copy_fields ce dst src tys ST 0 0 sa = ((),sb)` by
     (qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
      simp[Once compile_store_memory_typed_def, is_word_type_def, is_bytestring_type_def]) >>
+  `!ty. MEM ty tys ==> type_rank ce.ce_struct_fields ty < rank` by
+    (gen_tac >> strip_tac >> qpat_x_assum `type_rank _ (TupleT _) = rank`
+      (SUBST1_TAC o SYM) >> irule member_rank_lt_tuple >> simp[]) >>
   qabbrev_tac `d = \i. w2n dw + SUM (MAP (type_memory_bytes ce) (TAKE i tys))` >>
   qabbrev_tac `h = \i. w2n sw + SUM (MAP (type_memory_bytes ce) (TAKE i ST))` >>
   qpat_assum `!dty sty dtv stv v dst src sa sb s dw sw. _`
     (mp_then Any mp_tac (Q.INST [`d` |-> `d`, `h` |-> `h`,
       `a` |-> `w2n (sw:256 word)`, `b` |-> `w2n (dw:256 word)`]
-      typed_tuple_child_rank_path_mem)) >>
+      typed_ordered_fields_child_rank_path_mem)) >>
   disch_then (drule_at (Pat `LIST_REL (type_widens_to tenv) _ _`)) >>
   disch_then (drule_at (Pat `LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) ST stvs`)) >>
   disch_then (drule_at (Pat `LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) tys dtvs`)) >>

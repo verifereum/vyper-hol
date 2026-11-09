@@ -5,7 +5,7 @@
    admitted as that one is. *)
 Theory bodyMemAnnAssignWidened
 Ancestors
-  bodyMemoryPreds widenedMemoryStaging typedNormalizeTupleEntryPathMem
+  bodyMemoryPreds widenedMemoryStaging typedNormalizeStructEntryPathMem
 Libs
   monadsyntax
 
