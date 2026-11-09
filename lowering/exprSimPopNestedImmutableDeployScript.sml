@@ -407,6 +407,7 @@ Proof
 QED
 
 Theorem immutable_ctor_pointer_post[local]:
+  post_value_type cenv e = expr_type e /\
   stmt_state_rel ctx func cenv cx es' u /\
   wb_frame cenv initial es' sa s0 u /\ cenv.ce_is_ctor /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
@@ -424,7 +425,7 @@ Proof
   strip_tac >>
   simp[vv_post_def, vv_holds_def, vv_at_def, contextTheory.mk_ptr_def] >>
   conj_tac
-  >- (rewrite_tac[immutable_holds_def] >>
+  >- (rewrite_tac[immutable_holds_def] >> asm_rewrite_tac[] >>
       qexistsl [`id`, `off`, `tv`, `updated`, `j`, `etv`, `v`] >> simp[]) >>
   gvs[wb_frame_def] >> first_assum ACCEPT_TAC
 QED
