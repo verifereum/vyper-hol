@@ -1514,3 +1514,110 @@ Proof
     (simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
   irule inline_phi_selected_static >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
+
+Definition inline_opaque_available_def:
+  inline_opaque_available opaque s t <=>
+    !x a. x IN opaque /\ lookup_var x s = SOME a ==>
+      ?b. lookup_var x t = SOME b
+End
+
+Theorem inline_opaque_available_refl[simp]:
+  inline_opaque_available opaque s s
+Proof
+  simp[inline_opaque_available_def]
+QED
+
+Theorem inline_opaque_available_control[simp]:
+  inline_opaque_available opaque (s with vs_prev_bb := a) (t with vs_prev_bb := b) =
+    inline_opaque_available opaque s t /\
+  inline_opaque_available opaque (s with vs_inst_idx := i) (t with vs_inst_idx := j) =
+    inline_opaque_available opaque s t /\
+  inline_opaque_available opaque (jump_to l s) (jump_to k t) =
+    inline_opaque_available opaque s t
+Proof
+  simp[inline_opaque_available_def, lookup_var_def, jump_to_def]
+QED
+
+Theorem inline_opaque_available_write:
+  inline_opaque_available opaque s t ==>
+  inline_opaque_available opaque (update_var x a s) (update_var x b t)
+Proof
+  simp[inline_opaque_available_def, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> Cases_on `x' = x` >> gvs[] >> metis_tac[]
+QED
+
+Theorem inline_caller_available_snapshot:
+  !insts s t u.
+  inline_caller_data N opaque s t /\ inline_opaque_available opaque s t /\
+  (!inst x a. MEM inst insts /\ inst.inst_opcode = PHI /\
+    eval_one_phi s inst = SOME (x,a) ==>
+    ?b. eval_one_phi t inst = SOME (x,b) /\ (x NOTIN opaque ==> b = a)) /\
+  eval_phis s insts = OK u ==>
+  ?v. eval_phis t insts = OK v /\ inline_caller_data N opaque u v /\
+    inline_opaque_available opaque u v
+Proof
+  Induct_on `insts` >- simp[eval_phis_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `h.inst_opcode = PHI`
+  >- (gvs[eval_phis_def, AllCaseEqs()] >>
+      rename1 `eval_phis s insts = OK tail` >>
+      `?b. eval_one_phi t h = SOME (out,b) /\ (out NOTIN opaque ==> b = v)` by
+        metis_tac[MEM] >>
+      `?z. eval_phis t insts = OK z /\ inline_caller_data N opaque tail z /\
+           inline_opaque_available opaque tail z` by
+        (first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      qexists `update_var out b z` >> simp[eval_phis_def] >>
+      conj_tac >- (irule inline_caller_data_phi_write >> simp[] >> metis_tac[]) >>
+      irule inline_opaque_available_write >> simp[]) >>
+  gvs[eval_phis_def] >> metis_tac[]
+QED
+
+Theorem inline_caller_available_phis:
+  inline_caller_data N opaque s t /\ inline_opaque_available opaque s t /\
+  t.vs_prev_bb = s.vs_prev_bb /\ inline_opacity_ok fn opaque /\
+  MEM bb fn.fn_blocks /\
+  (!ins y. MEM ins (fn_insts fn) /\ MEM (Var y) ins.inst_operands ==> y IN N) /\
+  eval_phis s bb.bb_instructions = OK u ==>
+  ?v. eval_phis t bb.bb_instructions = OK v /\ inline_caller_data N opaque u v /\
+    inline_opaque_available opaque u v
+Proof
+  strip_tac >> irule inline_caller_available_snapshot >>
+  goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
+  irule inline_caller_eval_one_phi >> goal_assum (drule_at Any) >> simp[] >>
+  qexists `N` >> simp[] >> rpt strip_tac >>
+  `y IN N /\ (y IN opaque ==> x IN opaque)` by
+    (drule_all inline_phi_block_static >> metis_tac[]) >> simp[] >>
+  `lookup_var y s = SOME a` by metis_tac[inline_phi_selected_read] >>
+  gvs[inline_opaque_available_def] >> metis_tac[]
+QED
+
+Theorem inline_caller_available_repaired_phis:
+  inline_caller_data N opaque s t /\ inline_opaque_available opaque s t /\
+  t.vs_prev_bb = OPTION_MAP (\l. if l = old then fresh else l) s.vs_prev_bb /\
+  inline_opacity_ok fn opaque /\ inliner_phi_labels_closed fn /\ fn_inst_wf fn /\
+  MEM bb fn.fn_blocks /\ ~MEM fresh (fn_labels fn) /\
+  (!l. s.vs_prev_bb = SOME l ==> MEM l (fn_labels fn)) /\
+  (!ins y. MEM ins (fn_insts fn) /\ MEM (Var y) ins.inst_operands ==> y IN N) /\
+  eval_phis s bb.bb_instructions = OK u ==>
+  ?v. eval_phis t
+      (MAP (\inst. if inst.inst_opcode <> PHI then inst
+                   else subst_label_inst old fresh inst) bb.bb_instructions) = OK v /\
+    inline_caller_data N opaque u v /\ inline_opaque_available opaque u v
+Proof
+  strip_tac >> qabbrev_tac `t0 = t with vs_prev_bb := s.vs_prev_bb` >>
+  `?v0. eval_phis t0 bb.bb_instructions = OK v0 /\
+        inline_caller_data N opaque u v0 /\ inline_opaque_available opaque u v0` by
+    (irule inline_caller_available_phis >> conj_tac
+     >- (qexists `fn` >> simp[] >> gvs[]) >>
+     qexists `s` >>
+     gvs[Abbr `t0`, inline_caller_data_def, inline_caller_bookkeeping_def,
+         inline_shared_frame_def, stateFrameTheory.execution_frame_def, lookup_var_def,
+         inline_opaque_available_def]) >>
+  drule_all inline_eval_phis_optional_repair >>
+  disch_then (qspecl_then [`t0`, `old`] mp_tac) >> simp[] >> strip_tac >>
+  qexists `v0 with vs_prev_bb := t.vs_prev_bb` >>
+  `t with vs_prev_bb := OPTION_MAP (\l. if l = old then fresh else l) s.vs_prev_bb = t` by
+    metis_tac[venom_state_fupdselfid] >>
+  gvs[Abbr `t0`, inline_caller_data_def, inline_caller_bookkeeping_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def, lookup_var_def,
+      inline_opaque_available_def]
+QED
