@@ -140,6 +140,23 @@ Proof
   Cases_on `compile_alloc_buffer 0 cs'` >> simp[]
 QED
 
+Theorem materialize_zero_code_gas_free:
+  compile_materialize_vv ce ty (LocatedValue vty p) sa = (dst,sb) /\
+  ~is_word_type ty /\ type_memory_bytes ce ty = 0 /\
+  ~is_word_type vty /\ type_memory_bytes ce vty = 0 /\
+  p.ptr_location = LocCode ==> frag_gas_free sa sb
+Proof
+  strip_tac >>
+  gvs[materialize_zero_code_shape, contextTheory.compile_alloc_buffer_def,
+      emitHelperTheory.emit_op_def, compileEnvTheory.fresh_var_def,
+      compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  simp[frag_gas_free_def, frag_code_def, fragExecTheory.emitted_blocks_def,
+       exprLoweringPropsTheory.emitted_insts_def, rich_listTheory.DROP_APPEND,
+       arithmeticTheory.SUB_PLUS, arithmeticTheory.SUB_EQ_0,
+       venomInstTheory.mk_inst_def]
+QED
+
 (* A zero-sized destination can leave the unwrap loop's exit empty. *)
 Theorem materialize_zero_destination_alias_probe:
   let sa = initial_compile_state "@wcopy_exit_2";
