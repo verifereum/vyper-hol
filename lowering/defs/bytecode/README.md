@@ -30,18 +30,12 @@ only committed objects, and installs them in an isolated environment using
 `python-o1-oracle-constraints.txt`.
 
 Before installing, the generator applies `vyper-pin.patch` to the pinned
-revision. It backports five upstream fixes that the HOL lowering follows:
+revision. It backports three upstream fixes that the HOL lowering follows
+(the pin already contains vyperlang/vyper#5127 and #5322):
 
-- vyperlang/vyper#5127: an external call sends the selector and the encoded
-  arguments, `4 + encoded length` bytes, rather than `4 + ` the argument
-  tuple's ABI size bound.
 - vyperlang/vyper#5239: a storage, transient or immutable variable is read at
   its own declared type, not at a wider expected type (such as an external
   call's parameter type), whose layout differs for nested bounded types.
-- vyperlang/vyper#5322: converting a `Bytes`/`String` value to a signed
-  integer or decimal masks the data word to zero when the length is zero, so
-  stale data in an emptied bytestring cannot make the arithmetic shift
-  return -1.
 - vyperlang/vyper#5336: DFT keeps aborting instructions (an `assert`, an
   internal call) in their order, scheduling each after the previous run of
   aborting instructions.

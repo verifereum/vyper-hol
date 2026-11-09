@@ -1,5 +1,9 @@
+Upstream PR: https://github.com/vyperlang/vyper/pull/5239
+Status: merged 2026-09-08 (a6b31a3a1d4cf6c47b30a53179c1ce120f73d49e)
+
+Read state variables using their declared layout.
+
 diff --git a/vyper/codegen_venom/expr.py b/vyper/codegen_venom/expr.py
-index c834b2d0..e4690826 100644
 --- a/vyper/codegen_venom/expr.py
 +++ b/vyper/codegen_venom/expr.py
 @@ -604,11 +604,13 @@ class Expr:
@@ -42,50 +46,11 @@ index c834b2d0..e4690826 100644
  
          # Case 6: Interface address (x.address where x is an interface)
          if isinstance(sub_typ, InterfaceT) and attr == "address":
-@@ -1778,11 +1784,13 @@ class Expr:
- 
-             # ABI-encode from args_buf to buf+32
-             encode_dst = b.add(buf._ptr, IRLiteral(32))
--            abi_encode_to_buf(self.ctx, encode_dst, args_val.operand, args_tuple_t)
-+            args_abi_len = abi_encode_to_buf(self.ctx, encode_dst, args_val.operand, args_tuple_t)
-+            args_len = b.add(args_abi_len, IRLiteral(4))
-+        else:
-+            args_len = IRLiteral(4)
- 
--        # Call starts at buf+28, length = 4 + args_abi_size
-+        # Call starts at buf+28, length = 4-byte selector + ABI args payload.
-         args_ofst = b.add(buf._ptr, IRLiteral(28))
--        args_len = IRLiteral(4 + args_abi_size)
- 
-         # === Contract Existence Check ===
-         # If function returns nothing and skip_contract_check is False,
-diff --git a/vyper/codegen_venom/builtins/convert.py b/vyper/codegen_venom/builtins/convert.py
-index b9eebef..6e27f1a 100644
---- a/vyper/codegen_venom/builtins/convert.py
-+++ b/vyper/codegen_venom/builtins/convert.py
-@@ -182,6 +182,12 @@ def _to_int(
-         length = b.mload(val)
-         data_ptr = b.add(val, IRLiteral(32))
-         data = b.mload(data_ptr)
-+        if out_t.is_signed:
-+            # the data word of an empty bytestring may hold garbage (an
-+            # emptied storage bytestring keeps its old data); mask it so sar
-+            # of an empty value yields 0 (sar with shift >= 256 propagates
-+            # the sign bit)
-+            data = b.mul(data, b.iszero(b.iszero(length)))
-         # Right-shift to convert left-aligned bytes to right-aligned int
-         # num_zero_bits = (32 - len) * 8
-         num_zero_bits = b.mul(b.sub(IRLiteral(32), length), IRLiteral(8))
-@@ -264,6 +270,9 @@ def _to_decimal(
-         length = b.mload(val)
-         data_ptr = b.add(val, IRLiteral(32))
-         data = b.mload(data_ptr)
-+        # the data word of an empty bytestring may hold garbage (see
-+        # `_to_int`); mask it so sar of an empty value yields 0
-+        data = b.mul(data, b.iszero(b.iszero(length)))
-         num_zero_bits = b.mul(b.sub(IRLiteral(32), length), IRLiteral(8))
-         val = b.sar(num_zero_bits, data)
-         # Clamp to decimal bounds if needed
+Upstream PR: https://github.com/vyperlang/vyper/pull/5336
+Status: merged 2026-11-04 (56e7bc32c934dddced672abd68494cd8561fd85a)
+
+Order aborting instructions against each other in DFT.
+
 diff --git a/vyper/venom/passes/dft.py b/vyper/venom/passes/dft.py
 index 54af5494..9d623b53 100644
 --- a/vyper/venom/passes/dft.py
@@ -203,21 +168,16 @@ index 54af5494..9d623b53 100644
              if inst.is_bb_terminator:
                  for var in self.order:
                      dep = self.dfg.get_producing_instruction(var)
+Upstream PR: https://github.com/vyperlang/vyper/pull/5349
+Status: merged 2026-11-08 (1a1d7c0481352eefd6989c35e7c9f424c8079517)
+
+Keep an effectless, outputless instruction (assert) as a DFT entry.
+Applies after 5336-dft-abort-order.patch.
+
 diff --git a/vyper/venom/passes/dft.py b/vyper/venom/passes/dft.py
 --- a/vyper/venom/passes/dft.py
 +++ b/vyper/venom/passes/dft.py
-@@ -22,6 +22,10 @@
-     "assert_unreachable": "halt",
-     "returndatacopy": "halt",
-     "invoke": "any",
-+    # not upstream: vyper-hol's DFT (dft_abort_kind) also treats a create as
-+    # an abort, since it can fault
-+    "create": "halt",
-+    "create2": "halt",
- }
- 
- 
-@@ -80,7 +84,18 @@
+@@ -80,7 +80,18 @@
          entry_instructions: OrderedSet[IRInstruction] = OrderedSet(non_phi_instructions)
          for inst in non_phi_instructions:
              to_remove = self.dda.get(inst, OrderedSet()) | self.eda.get(inst, OrderedSet())
@@ -236,4 +196,21 @@ diff --git a/vyper/venom/passes/dft.py b/vyper/venom/passes/dft.py
 +            )
  
          entry_instructions_list = list(entry_instructions)
+ 
+Not upstream: vyper-hol DFT departure. Also treat create/create2 as aborts,
+as the HOL pass (dft_abort_kind) does. Applies after 5336-dft-abort-order.patch.
+
+diff --git a/vyper/venom/passes/dft.py b/vyper/venom/passes/dft.py
+--- a/vyper/venom/passes/dft.py
++++ b/vyper/venom/passes/dft.py
+@@ -22,6 +22,10 @@
+     "assert_unreachable": "halt",
+     "returndatacopy": "halt",
+     "invoke": "any",
++    # not upstream: vyper-hol's DFT (dft_abort_kind) also treats a create as
++    # an abort, since it can fault
++    "create": "halt",
++    "create2": "halt",
+ }
+ 
  
