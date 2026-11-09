@@ -79,3 +79,71 @@ Proof
   rpt strip_tac >> Cases_on `id = (a,aid)` >> gvs[FLOOKUP_UPDATE] >>
   metis_tac[]
 QED
+
+Theorem occurrence_natural_geometry_push:
+  occurrence_natural_geometry lo a U B stk s /\
+  (!id. id IN FDOM B ==> MEM (FST id) (a::MAP (\u. u.of_owner) U)) /\
+  ~MEM c (a::MAP (\u. u.of_owner) U) /\
+  u.of_owner = a /\ f.cf_state.vs_alloca_next = s.vs_alloca_next /\
+  t.vs_alloca_next = s.vs_alloca_next ==>
+  occurrence_natural_geometry lo c (u::U) B (f::stk) t
+Proof
+  strip_tac >>
+  `!id b z. FLOOKUP B id = SOME (b,z) ==> FST id <> c` by
+    (rpt strip_tac >> `id IN FDOM B` by fs[FLOOKUP_DEF] >> metis_tac[]) >>
+  fs[occurrence_natural_geometry_def] >>
+  simp[occurrence_natural_geometry_def] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >> conj_tac
+  >- (Cases >> simp[]
+      >- (rpt strip_tac >> metis_tac[FLOOKUP_DEF]) >>
+      rpt strip_tac >>
+      qpat_x_assum `!j. j < LENGTH stk ==> _` drule >>
+      strip_tac >> simp[] >> rpt strip_tac >>
+      metis_tac[FLOOKUP_DEF]) >>
+  Cases >> Cases >> simp[] >> rpt strip_tac >> metis_tac[]
+QED
+
+Theorem occurrence_natural_geometry_pop:
+  occurrence_natural_geometry lo a (u::U) B (f::stk) s /\
+  (!id. id IN FDOM B ==> MEM (FST id) (a::MAP (\u. u.of_owner) (u::U))) /\
+  t.vs_alloca_next = f.cf_state.vs_alloca_next ==>
+  occurrence_natural_geometry lo u.of_owner U
+    (DRESTRICT B {id | FST id <> a}) stk t
+Proof
+  strip_tac >> fs[occurrence_natural_geometry_def] >>
+  `!id b z. FLOOKUP (DRESTRICT B {id | FST id <> a}) id = SOME (b,z) ==>
+     FLOOKUP B id = SOME (b,z) /\
+     MEM (FST id) (MAP (\u. u.of_owner) (u::U))` by
+    (simp[FLOOKUP_DRESTRICT] >> rpt strip_tac >>
+     `id IN FDOM B` by fs[FLOOKUP_DEF] >> metis_tac[]) >>
+  qpat_assum `!j. j < SUC (LENGTH stk) ==> _`
+    (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+  simp[occurrence_natural_geometry_def] >>
+  conj_tac
+  >- (rpt gen_tac >> disch_tac >>
+      qpat_x_assum `!id b z. FLOOKUP (DRESTRICT _ _) id = _ ==> _` drule >>
+      simp[] >> strip_tac >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> fs[FLOOKUP_DRESTRICT] >> metis_tac[]) >> conj_tac
+  >- (gen_tac >> strip_tac >>
+      qpat_x_assum `!j. j < SUC (LENGTH stk) ==> _`
+        (qspec_then `SUC j` mp_tac) >> simp[] >> strip_tac >>
+      conj_tac >- (qpat_x_assum `!i j. _` (qspecl_then [`0`,`SUC j`] mp_tac) >> simp[]) >>
+      conj_tac >- (rpt strip_tac >> fs[FLOOKUP_DRESTRICT] >> metis_tac[]) >>
+      rpt strip_tac >> fs[FLOOKUP_DRESTRICT] >> metis_tac[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!i j. _` (qspecl_then [`SUC i`,`SUC j`] mp_tac) >> simp[]
+QED
+
+(* Definition probes: zero-size sites and natural bases beyond word256. *)
+Theorem occurrence_natural_geometry_zero_wrap_probe[local]:
+  occurrence_natural_geometry 0 0 []
+    (FEMPTY |+ ((0,0),(2 ** 256,0))) []
+    (s with vs_alloca_next := 2 ** 256) /\
+  occurrence_natural_geometry 0 0 []
+    (FEMPTY |+ ((0,0),(2 ** 256,1))) []
+    (s with vs_alloca_next := 2 ** 256 + 1)
+Proof
+  simp[occurrence_natural_geometry_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[]
+QED
