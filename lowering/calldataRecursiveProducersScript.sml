@@ -1,7 +1,7 @@
 (* Static recursive-call boundaries, independent of calldata and runtime freshness. *)
 Theory calldataRecursiveProducers
 Ancestors
-  valueEncodingDefs calldataMembers calldataDynOwned abiDecoderLoopCode abiDecoderLoopEmit
+  valueEncodingDefs calldataMembers calldataDynOwned abiDecoderLoopCode abiDecoderLoopEmit abiDecoderExecution
   abiDecoderCoherence exprLoweringProps abiDecoderContract abiCallerAllocation list
   abiDecoderRecursiveLoopLayout abiDecoderArraySetupCode abiDecoderArraySetupInputs abiDecoderPhi fragExec
   abiEncoder emitHelper emitHelperProps compileEnv abiDecoderAppend abiDecoderReentry
@@ -36,7 +36,8 @@ Proof
        `CALLDATALOAD`,`Lit 0w`,`di`,`middle`] mp_tac) >> simp[]) >>
   `st0.cs_current_insts = []` by
     (qpat_x_assum `abi_decode_loop_prefix _ _ _ _ _ = _` mp_tac >>
-     simp[abi_decode_loop_prefix_shape, abi_decode_loop_prefix_state_def] >>
+     simp[abi_decode_loop_prefix_shape, abi_decode_loop_prefix_state_def, abi_decode_position_header_zero,
+       abi_decode_position_header_delta_def] >>
      strip_tac >> gvs[]) >>
   drule_all abi_decoder_array_body_entry_phi >> strip_tac >>
   fs[ci_mono_def] >> metis_tac[]

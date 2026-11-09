@@ -730,7 +730,8 @@ Proof
   gvs[] >>
   qpat_x_assum `fn_has_code _ _ _` mp_tac >>
   simp[fn_has_code_def, emitted_blocks_def,
-       abi_decode_loop_prefix_state_def, DISJ_IMP_THM, FORALL_AND_THM] >>
+       abi_decode_loop_prefix_state_def, abi_decode_position_header_zero,
+       abi_decode_position_header_delta_def, DISJ_IMP_THM, FORALL_AND_THM] >>
   rpt strip_tac >>
   simp[abi_decode_header_insts_def, phi_prefix_length_def, mk_inst_def]
 QED

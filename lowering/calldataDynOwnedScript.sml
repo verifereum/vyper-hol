@@ -731,7 +731,8 @@ Proof
   strip_tac >>
   `st0.cs_next_var = loop_st.cs_next_var + 4` by
     (qpat_x_assum `abi_decode_loop_prefix _ _ _ _ _ = _` mp_tac >>
-     simp[abi_decode_loop_prefix_shape, abi_decode_loop_prefix_state_def] >>
+     simp[abi_decode_loop_prefix_shape, abi_decode_loop_prefix_state_def, abi_decode_position_header_zero,
+       abi_decode_position_header_delta_def] >>
      strip_tac >> gvs[]) >>
   rpt gen_tac >> disch_tac >>
   `abi_decoder_operand_live loop_st.cs_next_var op` by
