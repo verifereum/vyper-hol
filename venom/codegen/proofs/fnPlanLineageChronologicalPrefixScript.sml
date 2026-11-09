@@ -403,8 +403,8 @@ Proof
   metis_tac[]
 QED
 
-(* Exact copy of fnBlockStepHelpersTheory.nonentry_block_no_params;
-   planner leaves must not import frame-step helper theories. *)
+(* Nonentry parameter shape is shared by fnPlanLineageJoinEntry; planner
+   leaves must not import frame-step helper theories. *)
 Theorem ready_unique_nonentry_worker_shape:
   !fn lbl bb.
     codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
@@ -422,7 +422,7 @@ Proof
   `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
   `canonical_param_prefix fn /\ bb_well_formed bb` by
     (gvs[codegen_ready_fn_def, wf_function_def] >> metis_tac[]) >>
-  drule_all nonentry_block_no_params >> strip_tac >> simp[] >>
+  drule_all fnPlanLineageJoinEntryTheory.nonentry_block_no_params >> strip_tac >> simp[] >>
   `collect_phis bb.bb_instructions = []` by
     (gvs[codegen_ready_fn_def, phis_at_joins_def, EVERY_MEM] >>
      first_x_assum (qspec_then `bb` mp_tac) >>
@@ -749,7 +749,7 @@ Proof
     (Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def] >>
      strip_tac >> gvs[]) >>
   `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
-    (qspecl_then [`fn`, `lbl`, `bb`] mp_tac nonentry_block_no_params >>
+    (qspecl_then [`fn`, `lbl`, `bb`] mp_tac fnPlanLineageJoinEntryTheory.nonentry_block_no_params >>
      simp[] >> (impl_tac >- gvs[codegen_ready_fn_def]) >> simp[]) >>
   `k < LENGTH (non_param_insts bb)` by
     (qpat_x_assum `non_param_insts bb = _ ++ _`
@@ -932,7 +932,7 @@ Proof
     (Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def] >> metis_tac[]) >>
   `canonical_param_prefix fn /\ bb_well_formed bb` by
     (gvs[codegen_ready_fn_def, wf_function_def] >> metis_tac[]) >>
-  drule_all nonentry_block_no_params >> strip_tac >>
+  drule_all fnPlanLineageJoinEntryTheory.nonentry_block_no_params >> strip_tac >>
   drule well_formed_phi_worker_shape >> strip_tac >>
   `no_param_insts bb.bb_instructions` by
     (Cases_on `fn.fn_blocks` >> gvs[canonical_param_prefix_def, EVERY_MEM]) >>
@@ -1008,7 +1008,7 @@ Proof
     (Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def] >> metis_tac[]) >>
   `canonical_param_prefix fn /\ bb_well_formed bb` by
     (gvs[codegen_ready_fn_def, wf_function_def] >> metis_tac[]) >>
-  drule_all nonentry_block_no_params >> strip_tac >>
+  drule_all fnPlanLineageJoinEntryTheory.nonentry_block_no_params >> strip_tac >>
   drule well_formed_phi_worker_shape >> strip_tac >>
   `bb.bb_instructions <> []` by gvs[bb_well_formed_def] >>
   `no_param_insts bb.bb_instructions` by

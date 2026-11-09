@@ -738,11 +738,33 @@ Proof
   gvs[bb_well_formed_def, is_terminator_def]
 QED
 
+Theorem ready_nonentry_block_suffix:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  fn_entry_label fn <> SOME lbl ==>
+  get_params bb.bb_instructions = [] /\
+  non_param_insts bb = bb.bb_instructions /\
+  ?rest. rest <> [] /\ bb.bb_instructions = collect_phis bb.bb_instructions ++ rest
+Proof
+  strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  Cases_on `collect_phis bb.bb_instructions = []`
+  >- (`bb <> HD fn.fn_blocks` by
+        (Cases_on `fn.fn_blocks` >>
+         gvs[fn_entry_label_def, entry_block_def, venomInstTheory.lookup_block_def,
+           listTheory.FIND_thm] >> metis_tac[]) >>
+      `canonical_param_prefix fn` by gvs[codegen_ready_fn_def] >>
+      drule_all nonentry_block_no_params >> strip_tac >> simp[] >>
+      `bb_well_formed bb` by
+        (gvs[codegen_ready_fn_def, wf_function_def, EVERY_MEM] >>
+         metis_tac[venomExecPropsTheory.lookup_block_MEM]) >>
+      gvs[bb_well_formed_def]) >>
+  metis_tac[ready_phi_block_suffix]
+QED
+
 Theorem generate_join_block_plan_phi_schedule:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   fn_entry_label fn <> SOME lbl /\
   1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
-  collect_phis bb.bb_instructions <> [] /\
   phi_schedule_run
     (MAPi (\j inst. (inst, live_vars_at (liveness_analyze fn) lbl (SUC j),
       bb_is_halting bb)) (collect_phis bb.bb_instructions)) ps = (phi_ops, ps_phi) ==>
@@ -759,7 +781,7 @@ Theorem generate_join_block_plan_phi_schedule:
         else SOME ([SOLabel lbl] ++ phi_ops ++ tail_ops, out)
 Proof
   rpt strip_tac >>
-  drule_all ready_phi_block_suffix >> strip_tac >> simp[] >>
+  drule_all ready_nonentry_block_suffix >> strip_tac >> simp[] >>
   qexists_tac `rest` >> simp[] >>
   `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
   `bb <> HD fn.fn_blocks` by

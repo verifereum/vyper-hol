@@ -1691,7 +1691,7 @@ Theorem native_incoming_prefix_dead_stack:
 Proof
   rpt gen_tac >> strip_tac >>
   `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
-    (irule fnPlanLineageEntryProductionTheory.nonentry_block_no_params >>
+    (irule fnPlanLineageJoinEntryTheory.nonentry_block_no_params >>
      gvs[codegen_ready_fn_def] >> metis_tac[]) >>
   irule native_setup_prefix_dead_stack >> simp[] >>
   reverse conj_tac

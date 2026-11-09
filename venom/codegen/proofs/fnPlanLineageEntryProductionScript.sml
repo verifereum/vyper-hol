@@ -1602,23 +1602,6 @@ Proof
   strip_tac >> simp[listTheory.MEM_MAP_f]
 QED
 
-(* Exact copy from fnBlockStepHelpers.nonentry_block_no_params, previously
-   housed in fnPlanLineageChronologicalPrefix; moved here for positive transfer. *)
-Theorem nonentry_block_no_params:
-  !fn lbl bb.
-    canonical_param_prefix fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
-    bb <> HD fn.fn_blocks ==>
-    get_params bb.bb_instructions = [] /\
-    non_param_insts bb = bb.bb_instructions
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule venomExecPropsTheory.lookup_block_MEM >> strip_tac >>
-  `no_param_insts bb.bb_instructions` by
-    (Cases_on `fn.fn_blocks` >> gvs[canonical_param_prefix_def, EVERY_MEM]) >>
-  gvs[no_param_insts_def] >>
-  conj_tac >- (Cases_on `bb.bb_instructions` >> gvs[get_params_def]) >>
-  simp[non_param_insts_def, FILTER_EQ_ID, EVERY_MEM]
-QED
 
 Theorem incoming_join_native_phi_positive_prefix:
   !k fn entry lbl bb pred pb dfg ps0 ops after incoming qs.

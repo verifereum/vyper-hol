@@ -2732,7 +2732,7 @@ Proof
     (irule fnPlanLineageObserverTransportTheory.ready_incoming_block_nonentry >>
      simp[] >> qexists_tac `pred` >> simp[]) >>
   `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
-    (irule fnPlanLineageEntryProductionTheory.nonentry_block_no_params >>
+    (irule fnPlanLineageJoinEntryTheory.nonentry_block_no_params >>
      gvs[codegen_ready_fn_def] >> metis_tac[]) >>
   gvs[] >>
   qpat_x_assum `!j before w. _` kall_tac >>
@@ -3125,7 +3125,7 @@ Proof
     (irule fnPlanLineageObserverTransportTheory.ready_incoming_block_nonentry >>
      simp[] >> qexists_tac `pred` >> simp[]) >>
   `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
-    (irule fnPlanLineageEntryProductionTheory.nonentry_block_no_params >>
+    (irule fnPlanLineageJoinEntryTheory.nonentry_block_no_params >>
      metis_tac[codegen_ready_fn_def]) >>
   qabbrev_tac `p = LENGTH (collect_phis bb.bb_instructions)` >>
   `k = p+(k-p)` by (gvs[Abbr `p`] >> decide_tac) >>
@@ -4051,7 +4051,7 @@ Resume lineage_history_ordinary_output_body_absent[previous_body]:
     (strip_tac >> gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def, AllCaseEqs()] >>
      metis_tac[venomExecPropsTheory.lookup_block_label]) >>
   `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
-    (irule fnPlanLineageEntryProductionTheory.nonentry_block_no_params >>
+    (irule fnPlanLineageJoinEntryTheory.nonentry_block_no_params >>
      metis_tac[codegen_ready_fn_def]) >>
   drule_all lineage_state_block_native_run >> strip_tac >> gvs[] >>
   `?seed. native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
@@ -4175,7 +4175,7 @@ Proof
      gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def] >>
      metis_tac[venomExecPropsTheory.lookup_block_label]) >>
   `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
-    (irule fnPlanLineageEntryProductionTheory.nonentry_block_no_params >> metis_tac[codegen_ready_fn_def]) >>
+    (irule fnPlanLineageJoinEntryTheory.nonentry_block_no_params >> metis_tac[codegen_ready_fn_def]) >>
   `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
   Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1`
   >- suspend "singleton" >>
@@ -4263,7 +4263,7 @@ Resume lineage_state_ordinary_instruction_outputs_absent[layout]:
     (strip_tac >> gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def, AllCaseEqs()] >>
      metis_tac[venomExecPropsTheory.lookup_block_label]) >>
   `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
-    (irule fnPlanLineageEntryProductionTheory.nonentry_block_no_params >> metis_tac[codegen_ready_fn_def]) >>
+    (irule fnPlanLineageJoinEntryTheory.nonentry_block_no_params >> metis_tac[codegen_ready_fn_def]) >>
   rpt gen_tac >> strip_tac >>
   `p+j < r /\ p+j < LENGTH bb.bb_instructions /\ p <= p+j` by decide_tac >>
   `EL j (DROP p bb.bb_instructions) = EL (p+j) bb.bb_instructions` by
@@ -4297,7 +4297,7 @@ Resume lineage_state_ordinary_instruction_outputs_absent[available]:
      gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def] >>
      metis_tac[venomExecPropsTheory.lookup_block_label]) >>
   `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
-    (irule fnPlanLineageEntryProductionTheory.nonentry_block_no_params >> metis_tac[codegen_ready_fn_def]) >>
+    (irule fnPlanLineageJoinEntryTheory.nonentry_block_no_params >> metis_tac[codegen_ready_fn_def]) >>
   `!w. MEM w (live_vars_at (liveness_analyze fn) bb.bb_label p) ==>
     MEM (Var w) seed.ps_stack \/ Var w IN FDOM seed.ps_spilled` by
     (metis_tac[lineage_state_native_post_phi_available]) >>
@@ -4347,7 +4347,7 @@ Proof
      gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def] >>
      metis_tac[venomExecPropsTheory.lookup_block_label]) >>
   `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
-    (irule fnPlanLineageEntryProductionTheory.nonentry_block_no_params >>
+    (irule fnPlanLineageJoinEntryTheory.nonentry_block_no_params >>
      metis_tac[codegen_ready_fn_def]) >>
   `!i. i < LENGTH (collect_phis bb.bb_instructions) ==>
     EL i bb.bb_instructions = EL i (collect_phis bb.bb_instructions) /\
@@ -4420,7 +4420,7 @@ Proof
      gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def] >>
      metis_tac[venomExecPropsTheory.lookup_block_label]) >>
   `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
-    (irule fnPlanLineageEntryProductionTheory.nonentry_block_no_params >>
+    (irule fnPlanLineageJoinEntryTheory.nonentry_block_no_params >>
      metis_tac[codegen_ready_fn_def, livenessTransferProofsTheory.lookup_block_mem]) >>
   drule_all lineage_state_block_native_run >> strip_tac >> gvs[] >>
   `LIST_ELEM_COUNT (Var v) start.ps_stack +
@@ -4507,7 +4507,7 @@ Proof
      gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def] >>
      metis_tac[venomExecPropsTheory.lookup_block_label]) >>
   `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
-    (irule fnPlanLineageEntryProductionTheory.nonentry_block_no_params >> metis_tac[codegen_ready_fn_def]) >>
+    (irule fnPlanLineageJoinEntryTheory.nonentry_block_no_params >> metis_tac[codegen_ready_fn_def]) >>
   gvs[] >> irule lineage_state_nonentry_prefix_unit_bound >>
   goal_assum (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[]
@@ -4586,7 +4586,7 @@ Proof
      gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def] >>
      metis_tac[venomExecPropsTheory.lookup_block_label]) >>
   `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
-    (irule fnPlanLineageEntryProductionTheory.nonentry_block_no_params >>
+    (irule fnPlanLineageJoinEntryTheory.nonentry_block_no_params >>
      metis_tac[codegen_ready_fn_def, livenessTransferProofsTheory.lookup_block_mem]) >>
   gvs[] >> irule lineage_state_nonentry_prefix_unit_bound >>
   goal_assum (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)) >>

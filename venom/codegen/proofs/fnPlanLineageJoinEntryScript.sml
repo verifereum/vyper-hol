@@ -2,7 +2,7 @@ Theory fnPlanLineageJoinEntry
 Ancestors
   fnPlanLineagePhiRealization fnPlanLineagePhiActivation fnPlanLineageEdge
   fnPlanLineagePhiMaps codegenReadyCompute stackPlanGen venomWf venomExecProps
-  livenessTransferProofs list finite_map
+  livenessTransferProofs list finite_map callLayoutDefs
 
 Theorem analyzed_edge_phi_matching_total:
   codegen_ready_fn fn /\ lookup_block succ fn.fn_blocks = SOME sb /\
@@ -241,4 +241,22 @@ Proof
     (irule successful_join_edge_phi_candidate >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   metis_tac[]
+QED
+
+(* Exact copy from fnBlockStepHelpers.nonentry_block_no_params.  Shared here
+   by entry production and PHI-independent join decomposition. *)
+Theorem nonentry_block_no_params:
+  !fn lbl bb.
+    canonical_param_prefix fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+    bb <> HD fn.fn_blocks ==>
+    get_params bb.bb_instructions = [] /\
+    non_param_insts bb = bb.bb_instructions
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule venomExecPropsTheory.lookup_block_MEM >> strip_tac >>
+  `no_param_insts bb.bb_instructions` by
+    (Cases_on `fn.fn_blocks` >> gvs[canonical_param_prefix_def, EVERY_MEM]) >>
+  gvs[no_param_insts_def] >>
+  conj_tac >- (Cases_on `bb.bb_instructions` >> gvs[get_params_def]) >>
+  simp[non_param_insts_def, FILTER_EQ_ID, EVERY_MEM]
 QED
