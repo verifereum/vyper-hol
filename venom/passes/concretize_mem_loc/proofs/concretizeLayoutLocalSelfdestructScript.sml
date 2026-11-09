@@ -61,6 +61,27 @@ Proof
   Cases_on `x = ben` >> gvs[] >> metis_tac[]
 QED
 
+(* EIP-6780 form: transfer the balance, and zero the account when it was
+   created in this transaction. *)
+Theorem accounts_agree_except_selfdestruct_eip6780:
+  accounts_agree_except D a b ==>
+  accounts_agree_except D
+    (if c then update_account self (lookup_account self a with balance := 0)
+                 (transfer_value self ben (lookup_account self a).balance a)
+     else transfer_value self ben (lookup_account self a).balance a)
+    (if c then update_account self (lookup_account self b with balance := 0)
+                 (transfer_value self ben (lookup_account self b).balance b)
+     else transfer_value self ben (lookup_account self b).balance b)
+Proof
+  strip_tac >>
+  `!x. (lookup_account x a).balance = (lookup_account x b).balance` by
+    metis_tac[accounts_agree_except_balance] >>
+  fs[accounts_agree_except_def, lookup_account_def] >>
+  rw[update_account_def, vfmExecutionTheory.transfer_value_def,
+     combinTheory.APPLY_UPDATE_THM] >>
+  fs[account_state_component_equality] >> rw[] >> fs[lookup_account_def]
+QED
+
 Theorem selfdestruct_abort_execution[local]:
   inst.inst_opcode = SELFDESTRUCT /\ relocation_env s t /\ variable_domains s t /\
   (!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t) /\
@@ -103,7 +124,7 @@ Proof
   qpat_x_assum `eval_operand addr_op t = SOME addr` SUBST1_TAC >>
   simp[NoAsms] >>
   fs[dead_result_rel_def, halt_state_def, set_returndata_def] >>
-  irule accounts_agree_except_selfdestruct >> simp[]
+  irule accounts_agree_except_selfdestruct_eip6780 >> simp[]
 QED
 
 Theorem concretize_selfdestruct_abort_complete:
