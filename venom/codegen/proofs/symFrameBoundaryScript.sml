@@ -362,6 +362,28 @@ Proof
   simp[sym_steps_compute]
 QED
 
+Theorem sym_push_offset_post:
+  !p env ss off inst P.
+    off < dimword(:256) /\
+    asm_block_at p ss.sym_base.as_pc [AsmPush (encode_num_bytes off); inst] /\
+    (!pushed. pushed = ss with <|
+       sym_base := asm_next (ss.sym_base with as_stack := []);
+       sym_stack := Val (n2w off) :: ss.sym_stack |> ==>
+       ?out. sym_step p env inst pushed = SymOK out /\ P out) ==>
+    ?out. sym_steps p env 2 ss = SymOK out /\ P out
+Proof
+  rpt strip_tac >>
+  first_x_assum (qspec_then `ss with <|
+    sym_base := asm_next (ss.sym_base with as_stack := []);
+    sym_stack := Val (n2w off) :: ss.sym_stack |>` mp_tac) >>
+  simp[] >> strip_tac >>
+  qexists_tac `out` >> simp[] >> irule sym_steps_two >>
+  qexistsl_tac [`AsmPush (encode_num_bytes off)`, `inst`,
+    `ss with <|sym_base := asm_next (ss.sym_base with as_stack := []);
+      sym_stack := Val (n2w off) :: ss.sym_stack |>`] >>
+  simp[sym_step_push_offset, asmSemTheory.asm_next_def]
+QED
+
 Theorem sym_spill_offset_steps:
   !p env ss off sv stk.
     off < dimword(:256) /\ ss.sym_stack = sv :: stk /\
@@ -372,24 +394,14 @@ Theorem sym_spill_offset_steps:
       ss'.sym_mem_labels = scratch_labels_write ss.sym_mem_labels off sv /\
       ss'.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
-  rpt strip_tac >>
-  qmatch_goalsub_abbrev_tac `scratch_labels_write labs off sv` >>
-  qabbrev_tac `pushed = ss with <|
+  rpt strip_tac >> ho_match_mp_tac sym_push_offset_post >>
+  qexistsl_tac [`off`, `AsmOp "MSTORE"`] >> simp[] >>
+  rpt strip_tac >> gvs[sym_step_def, sym_step_op_def] >>
+  mp_tac sym_mstore_scratch_write >>
+  disch_then (qspec_then `ss with <|
     sym_base := asm_next (ss.sym_base with as_stack := []);
-    sym_stack := Val (n2w off) :: ss.sym_stack |>` >>
-  `?out. sym_mstore pushed = SymOK out /\ out.sym_stack = stk /\
-    out.sym_mem_labels = scratch_labels_write labs off sv /\
-    out.sym_base.as_pc = ss.sym_base.as_pc + 2` by
-    (mp_tac sym_mstore_scratch_write >>
-     disch_then (qspec_then `pushed` mp_tac) >>
-     simp[Abbr `pushed`, Abbr `labs`, asmSemTheory.asm_next_def]) >>
-  `sym_step p env (AsmPush (encode_num_bytes off)) ss = SymOK pushed` by
-    simp[Abbr `pushed`, sym_step_push_offset] >>
-  `sym_step p env (AsmOp "MSTORE") pushed = SymOK out` by
-    simp[sym_step_def, sym_step_op_def] >>
-  `pushed.sym_base.as_pc = ss.sym_base.as_pc + 1` by
-    simp[Abbr `pushed`, asmSemTheory.asm_next_def] >>
-  metis_tac[sym_steps_two]
+    sym_stack := Val (n2w off) :: ss.sym_stack |>` mp_tac) >>
+  simp[asmSemTheory.asm_next_def]
 QED
 
 Theorem sym_mload_saved_kinds:
