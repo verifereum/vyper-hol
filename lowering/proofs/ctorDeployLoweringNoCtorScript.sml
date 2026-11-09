@@ -2572,22 +2572,23 @@ Theorem no_ctor_source_success:
 Proof
   strip_tac >> drule no_ctor_constants_frame >> strip_tac >> gvs[] >>
   qmatch_asmsub_abbrev_tac `evaluate_all_constants cx installed` >>
-  `cx.in_deploy /\ cx.txn = tx` by
+  `cx.in_deploy /\ cx.txn = tx with created_in_tx := T` by
     simp[Abbr `cx`, deploy_evaluation_context_def,
          initial_evaluation_context_def] >>
   `evaluate_all_constants cx installed cx.txn.target [(NONE,tops)] = SOME am_c` by
     gvs[Abbr `cx`, Abbr `installed`] >>
   qabbrev_tac `st0 = initial_state am_c [FEMPTY] with
     <| outcomes := NONE; requests := []; gas_obs := gobs |>` >>
-  `value_transfer_ok cx.txn st0.accounts` by simp[Abbr `st0`, initial_state_def] >>
+  `value_transfer_ok cx.txn st0.accounts` by
+    simp[Abbr `st0`, initial_state_def, value_transfer_created_in_tx] >>
   drule no_ctor_send_value >> strip_tac >>
   `call_external_function NONE gobs installed cx F Payable tops [(NONE,tops)]
     [] [] [] [] NoneT =
     (INL NoneV, am_c with accounts := accounts_after_transfer tx am.accounts, [])` by
-    (gvs[Abbr `st0`] >> drule_all no_ctor_empty_external >>
+    (qunabbrev_tac `st0` >> drule_all no_ctor_empty_external >>
      disch_then (qspec_then `tops` mp_tac) >>
-     simp[initial_state_def, abstract_machine_from_state_def,
-          abstract_machine_component_equality]) >>
+     gvs[initial_state_def, abstract_machine_from_state_def,
+         abstract_machine_component_equality, value_transfer_created_in_tx]) >>
   gvs[Abbr `installed`, Abbr `cx`] >>
   drule no_ctor_load_reduce >> simp[abstract_machine_component_equality]
 QED

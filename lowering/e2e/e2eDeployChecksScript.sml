@@ -98,7 +98,7 @@ Theorem deploy_context_source_install:
   (deploy_evaluation_context tops am tx).sources =
     (tx.target, [(NONE,tops)]) :: am.sources /\
   (deploy_evaluation_context tops am tx).in_deploy /\
-  (deploy_evaluation_context tops am tx).txn = tx
+  (deploy_evaluation_context tops am tx).txn = tx with created_in_tx := T
 Proof
   simp[deploy_evaluation_context_def, initial_evaluation_context_def]
 QED
@@ -131,10 +131,10 @@ Theorem deploy_storage_setup:
   deploy_storage_ok tops am tx <=>
   contract_storage_well_formed
     (initial_evaluation_context ((tx.target,[(NONE,tops)])::am.sources)
-       am.layouts tx NONE with in_deploy := T) (initial_state am []) /\
+       am.layouts (tx with created_in_tx := T) NONE with in_deploy := T) (initial_state am []) /\
   storage_layout_safe
     (initial_evaluation_context ((tx.target,[(NONE,tops)])::am.sources)
-       am.layouts tx NONE with in_deploy := T)
+       am.layouts (tx with created_in_tx := T) NONE with in_deploy := T)
 Proof
   simp[deploy_storage_ok_def, deploy_evaluation_context_def]
 QED

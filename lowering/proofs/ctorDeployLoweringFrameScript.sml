@@ -399,7 +399,8 @@ Theorem deploy_frame_checked_body_setup:
     ALOOKUP sources tx.target = SOME mods /\ ALOOKUP mods NONE = SOME ts /\
     lookup_function NONE tx.function_name Deploy ts =
       SOME (mut,nr,args,dflts,ret,body) /\
-    cx = (initial_evaluation_context sources layouts tx NONE with in_deploy := T) /\
+    cx = (initial_evaluation_context sources layouts (tx with created_in_tx := T) NONE
+            with in_deploy := T) /\
     bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
     ALL_DISTINCT (MAP FST args) /\ st.scopes = [scope] /\ state_well_typed st /\
     env_immutables_consistent (artifact_env deploy_art mods NONE) cx st /\
@@ -449,8 +450,8 @@ Theorem deploy_frame_bound_start_typing:
     check_contract T am.layouts tx.target mods = SOME deploy_art /\
     check_contract F am.layouts tx.target mods = SOME runtime_art /\
     machine_well_typed am /\
-    cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
-            NONE with in_deploy := T) /\ context_well_typed cx /\
+    cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts
+            (tx with created_in_tx := T) NONE with in_deploy := T) /\ context_well_typed cx /\
     initial_immutables (type_env_all_modules mods) mods = SOME imms /\
     evaluate_all_constants cx
       (am with <|immutables updated_by CONS (tx.target,imms);
@@ -537,12 +538,14 @@ Proof
      SOME [(NONE,tops)] /\
    deploy_evaluation_context tops am tx =
      (initial_evaluation_context ((tx.target,[(NONE,tops)])::am.sources)
-       am.layouts tx NONE with in_deploy := T)` by
+       am.layouts (tx with created_in_tx := T) NONE with in_deploy := T)` by
     simp[deploy_evaluation_context_def] >>
   `ALL_DISTINCT (MAP FST args)` by
     (drule_all checked_constructor_args_distinct >> simp[]) >>
   drule_all deploy_frame_checked_body_setup >> strip_tac >>
-  drule_all checked_constructor_call_evaluation_safe >> strip_tac >>
+  drule_all (SRULE [] (Q.INST [`tx` |-> `tx with created_in_tx := T`]
+                         checked_constructor_call_evaluation_safe)) >>
+  strip_tac >>
   qexistsl [`env_body`, `env_after`] >> simp[] >> metis_tac[]
 QED
 
