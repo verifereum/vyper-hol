@@ -7,7 +7,7 @@ Ancestors
   abiDecoderReentryPointer loweringShapeRules instIdxIndep
   compileEnv context bodyPtrDefs fragGasSeqPtr instSeqComposePtr
   assignTuplePtrLocalBytesCopy fragExec venomState venomExecSemantics
-  words arithmetic list
+  words arithmetic list abiDecodePtrFootprint abiDecodePtrMemberFrame
 
 Theorem abi_decode_flat_success:
   !infos off q sa sb s G tn u.
@@ -20,7 +20,9 @@ Theorem abi_decode_flat_success:
       (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     abi_decode_member_frame sa G tn s H tf
       (u with vs_inst_idx := LENGTH sb.cs_current_insts)
-      (w2n d+q) (SUM (MAP (SND o SND) infos))
+      (w2n d+q) (SUM (MAP (SND o SND) infos)) /\
+    abi_decode_clean_flat infos (w2n d+q) tf
+      (u with vs_inst_idx := LENGTH sb.cs_current_insts)
 Proof
   Induct >- suspend "nil" >>
   qx_gen_tac `entry` >> PairCases_on `entry` >> rpt gen_tac >> strip_tac >>
@@ -43,7 +45,7 @@ Resume abi_decode_flat_success[nil]:
   gvs[emitted_insts_def, run_inst_seq_def, inst_seq_ptr_def] >>
   `s with vs_inst_idx := LENGTH sa.cs_current_insts = s` by
     (drule abi_decode_member_live_compiler >> simp[venom_state_component_equality]) >>
-  simp[abi_decode_member_frame_def]
+  simp[abi_decode_member_frame_def, abi_decode_clean_flat_def]
 QED
 
 Resume abi_decode_flat_success[split]:
@@ -67,6 +69,7 @@ Resume abi_decode_flat_success[tail]:
   `sa.cs_next_var <= sm.cs_next_var` by suspend "age" >>
   qexistsl_tac [`J`, `tj`] >> simp[] >>
   conj_tac >- suspend "path" >>
+  reverse conj_tac >- suspend "clean" >>
   irule abi_decode_member_frame_compose >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
@@ -87,6 +90,20 @@ Resume abi_decode_flat_success[path]:
     fs[inst_extends_def] >>
   irule inst_seq_ptr_append_run >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Resume abi_decode_flat_success[clean]:
+  simp[abi_decode_clean_flat_def] >>
+  `w2n (d+n2w q) = q+w2n d` by
+    (drule abi_decode_member_live_separation >> strip_tac >>
+     `q+msz <= cap` by fs[abi_decode_member_layout_def] >>
+     `q < dimword(:256) /\ w2n d+q < dimword(:256)` by decide_tac >>
+     simp[word_add_def, w2n_n2w]) >>
+  pure_rewrite_tac[ADD_ASSOC] >>
+  irule (abi_decode_runtime_clean_member_frame |> INST_TYPE [alpha |-> ``:num # num``]) >>
+  qexistsl_tac [`H`, `J`, `msz+(q+w2n d)`, `SUM (MAP (SND o SND) infos)`,
+    `t`, `sm`, `tf`] >>
+  simp[] >> fs[abi_decode_ptr_window_def]
 QED
 
 Finalise abi_decode_flat_success
