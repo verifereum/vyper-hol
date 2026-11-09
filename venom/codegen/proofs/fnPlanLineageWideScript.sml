@@ -1,6 +1,7 @@
 Theory fnPlanLineageWide
-Ancestors fnPlanLineageInventory
+Ancestors fnPlanLineageInventory fnPlanLineageSetup
 Libs stackPlanOpsTheory stackModelTheory fnPlanLineageReorderTheory listTheory
+     stackPlanGenTheory venomInstTheory asmIRTheory venomEffectsTheory
 
 (* Materialisation shields arbitrary residual prefixes even for wide joins.
    The preservation lemmas here do not assume a short target window. *)
@@ -324,4 +325,81 @@ Proof
   conj_tac
   >- (irule fnPlanLineageInventoryTheory.restore_spilled_plan_bottom_frame >> simp[]) >>
   irule reorder_plan_wide_materialised_bottom_frame >> simp[]
+QED
+
+Theorem terminal_jmp_regular_bottom_frame:
+  !liveness dfg cfg fn inst next_live halt next_term lbl ps prefix ops out dest.
+    inst.inst_opcode = JMP /\ inst.inst_operands = [Label dest] /\
+    inst.inst_outputs = [] /\
+    (!targets. join_target_ops liveness fn lbl inst = SOME targets ==>
+      ALL_DISTINCT targets /\
+      (!x. MEM x targets ==> MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled)) /\
+    generate_regular_inst_plan liveness dfg cfg fn inst next_live halt next_term lbl ps =
+      (ops,out) ==>
+    generate_regular_inst_plan liveness dfg cfg fn inst next_live halt next_term lbl
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,out with ps_stack := prefix ++ out.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!dfg ps. reorder_plan dfg [] ps = ([],ps)` by simp[reorder_plan_def] >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, compute_operands_def,
+       get_non_label_operands_def, stackPlanTypesTheory.is_label_operand_def,
+       emit_input_plan_def, is_commutative_def,
+       stack_pop_def, generate_emit_ops_def, venom_to_evm_name_def] >>
+  Cases_on `join_target_ops liveness fn lbl inst` >> simp[]
+  >- (strip_tac >> gvs[fnPlanLineageSetupTheory.release_dead_spills_stack_update,
+                       release_dead_spills_stack]) >>
+  rename1 `join_target_ops liveness fn lbl inst = SOME targets` >>
+  namedCases_on `restore_spilled_plan targets ps` ["rops mid"] >>
+  namedCases_on `reorder_plan dfg targets mid` ["sops tail"] >>
+  `ALL_DISTINCT targets /\
+   (!x. MEM x targets ==> MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled)` by metis_tac[] >>
+  drule_all restore_reorder_wide_bottom_frame >>
+  disch_then (qspec_then `prefix` strip_assume_tac) >>
+  simp[] >> strip_tac >>
+  gvs[fnPlanLineageSetupTheory.release_dead_spills_stack_update, release_dead_spills_stack]
+QED
+
+Theorem join_reached_bottom_extension:
+  !liveness fn lbl inst out prefix.
+    (!targets. join_target_ops liveness fn lbl inst = SOME targets ==>
+      LENGTH targets <= LENGTH out.ps_stack) ==>
+    (join_reached liveness fn lbl inst
+       (out with ps_stack := prefix ++ out.ps_stack) <=>
+     join_reached liveness fn lbl inst out)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `join_target_ops liveness fn lbl inst` >>
+  simp[join_reached_def] >>
+  `LENGTH x <= LENGTH out.ps_stack` by metis_tac[] >>
+  simp[stack_pop_bottom_extension, APPEND_ASSOC]
+QED
+
+Theorem terminal_jmp_inst_bottom_frame:
+  !liveness dfg cfg fn inst next_live halt next_term lbl ps prefix ops out dest.
+    inst.inst_opcode = JMP /\ inst.inst_operands = [Label dest] /\
+    inst.inst_outputs = [] /\
+    (!targets. join_target_ops liveness fn lbl inst = SOME targets ==>
+      ALL_DISTINCT targets /\
+      (!x. MEM x targets ==> MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) /\
+      LENGTH targets <= LENGTH out.ps_stack) /\
+    generate_inst_plan liveness dfg cfg fn inst next_live halt next_term lbl ps =
+      SOME (ops,out) ==>
+    generate_inst_plan liveness dfg cfg fn inst next_live halt next_term lbl
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      SOME (ops,out with ps_stack := prefix ++ out.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[generate_inst_plan_def, is_pre_codegen_opcode_def,
+     is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
+     is_raw_fmp_opcode_def, is_param_opcode_def, AllCaseEqs()] >>
+  `generate_regular_inst_plan liveness dfg cfg fn inst next_live halt next_term lbl
+     (ps with ps_stack := prefix ++ ps.ps_stack) =
+     (ops,out with ps_stack := prefix ++ out.ps_stack)` by
+    (irule terminal_jmp_regular_bottom_frame >> simp[] >> metis_tac[]) >>
+  `join_reached liveness fn lbl inst (out with ps_stack := prefix ++ out.ps_stack) <=>
+     join_reached liveness fn lbl inst out` by
+    (irule join_reached_bottom_extension >> metis_tac[]) >>
+  simp[]
 QED
