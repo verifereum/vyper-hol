@@ -996,6 +996,209 @@ Proof
   simp[arithmeticTheory.ADD_COMM]
 QED
 
+(* Lift an exact returning callee cut through the real caller frame. *)
+Theorem invoke_return_residual[local]:
+  i.inst_opcode = INVOKE /\
+  decode_invoke i = SOME (name,ops) /\
+  lookup_function name C.ctx_functions = SOME f /\
+  eval_operands ops s = SOME args /\
+  setup_callee f args s = SOME cs /\
+  residual_result tail (IntRet ir u)
+    (run_blocks fuel C f (cs with vs_gas_readings := gs)) /\
+  bind_outputs i.inst_outputs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state s u)) = SOME t ==>
+  step_inst fuel C i (s with vs_gas_readings := gs) =
+    OK (t with vs_gas_readings := tail)
+Proof
+  strip_tac >>
+  `setup_callee f args (s with vs_gas_readings := gs) =
+     SOME (cs with vs_gas_readings := gs)` by
+    (qpat_x_assum `setup_callee _ _ _ = SOME _` mp_tac >>
+     simp[gasOracleReplayTheory.gas_setup_callee, optionTheory.OPTION_MAP_EQ_SOME] >>
+     strip_tac >> gvs[] >>
+     qpat_x_assum `cs = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  Cases_on `run_blocks fuel C f (cs with vs_gas_readings := gs)` >>
+  gvs[residual_result_def, stateEquivTheory.lift_result_def] >>
+  simp[Once step_inst_def, gasOracleReplayTheory.gas_eval_operands,
+       gasOracleReplayTheory.gas_merge_callee,
+       gasOracleReplayTheory.gas_adopt_return,
+       gasOracleReplayTheory.gas_bind_outputs]
+QED
+
+Theorem invoke_segment_mask[local]:
+  !fuel C C' i s.
+    (!fn fn' t.
+      LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+      LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+      o1_ctx_shape C /\ o1_ctx_shape C' /\
+      MEM fn C.ctx_functions /\ fn' = dft_fn fn /\
+      dft_fn_rel fn fn' /\ strict_dom_vars_defined fn t /\
+      fn_reachable fn t.vs_current_bb /\
+      ctx_labels_bound C t.vs_labels /\ ctx_labels_bound C' t.vs_labels /\
+      ~t.vs_call_ctx.cc_static /\ terminates (run_blocks fuel C' fn' t) /\
+      gas_count_blocks fuel C' fn' t <= LENGTH t.vs_gas_readings ==>
+      ?m es unused.
+        LENGTH m = LENGTH es /\
+        PERM (MAP THE (FILTER IS_SOME m) ++ unused) t.vs_gas_readings /\
+        (!u. (?ir. run_blocks fuel C' fn' t = IntRet ir u) ==>
+          EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+        !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+          (?extra. es = gas_events_blocks fuel C fn
+             (t with vs_gas_readings := gs ++ tail) ++ extra) /\
+          ((?j. terminates (run_blocks j C fn
+             (t with vs_gas_readings := gs ++ tail))) ==>
+           terminates (run_blocks fuel C fn (t with vs_gas_readings := gs ++ tail)) /\
+           dft_res_rel
+             (restore_result [] (run_blocks fuel C fn (t with vs_gas_readings := gs ++ tail)))
+             (restore_result [] (run_blocks fuel C' fn' t)) /\
+           (!u. (?ir. run_blocks fuel C' fn' t = IntRet ir u) ==>
+             gas_events_blocks fuel C fn (t with vs_gas_readings := gs ++ tail) = es /\
+             residual_result tail (run_blocks fuel C' fn' t)
+               (run_blocks fuel C fn (t with vs_gas_readings := gs ++ tail))))) /\
+    LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+    LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+    o1_ctx_shape C /\ o1_ctx_shape C' /\
+    ctx_labels_bound C s.vs_labels /\ ctx_labels_bound C' s.vs_labels /\
+    ~s.vs_call_ctx.cc_static /\ i.inst_opcode = INVOKE /\
+    terminates (step_inst fuel C' i s) /\
+    LENGTH (gas_events_step fuel C' s.vs_current_bb i s) <= LENGTH s.vs_gas_readings ==>
+    ?m es unused.
+      LENGTH m = LENGTH es /\
+      PERM (MAP THE (FILTER IS_SOME m) ++ unused) s.vs_gas_readings /\
+      (!u. (step_inst fuel C' i s = OK u \/
+            (?ir. step_inst fuel C' i s = IntRet ir u)) ==>
+        EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+      !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+        (?extra. es = gas_events_step fuel C s.vs_current_bb i
+           (s with vs_gas_readings := gs ++ tail) ++ extra) /\
+        ((?j. terminates (step_inst j C i (s with vs_gas_readings := gs ++ tail))) ==>
+          terminates (step_inst fuel C i (s with vs_gas_readings := gs ++ tail)) /\
+          dft_res_rel
+            (restore_result [] (step_inst fuel C i (s with vs_gas_readings := gs ++ tail)))
+            (restore_result [] (step_inst fuel C' i s)) /\
+          (((?u. step_inst fuel C' i s = OK u) \/
+            (?ir u. step_inst fuel C' i s = IntRet ir u)) ==>
+            gas_events_step fuel C s.vs_current_bb i
+              (s with vs_gas_readings := gs ++ tail) = es /\
+            residual_result tail (step_inst fuel C' i s)
+              (step_inst fuel C i (s with vs_gas_readings := gs ++ tail))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `terminates (step_inst _ _ _ _)` mp_tac >>
+  simp[Once step_inst_def] >>
+  Cases_on `decode_invoke i` >- simp[passSimulationDefsTheory.terminates_def] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `lookup_function x0 C'.ctx_functions`
+  >- simp[passSimulationDefsTheory.terminates_def] >>
+  simp[] >>
+  Cases_on `eval_operands x1 s` >- simp[passSimulationDefsTheory.terminates_def] >>
+  simp[] >>
+  rename1 `lookup_function x0 C'.ctx_functions = SOME callee'` >>
+  rename1 `eval_operands x1 s = SOME args` >>
+  Cases_on `setup_callee callee' args s`
+  >- simp[passSimulationDefsTheory.terminates_def] >>
+  simp[] >> strip_tac >>
+  rename1 `setup_callee callee' args s = SOME cs` >>
+  `OPTREL (\f g. g = dft_fn f)
+     (lookup_function x0 C.ctx_functions)
+     (lookup_function x0 C'.ctx_functions)` by
+    (irule o1PassLiftTheory.list_rel_lookup_function >> simp[] >>
+     rpt strip_tac >> gvs[] >> simp[dft_fn_def] >> pairarg_tac >> simp[]) >>
+  Cases_on `lookup_function x0 C.ctx_functions` >>
+  gvs[optionTheory.OPTREL_def] >>
+  rename1 `lookup_function x0 C.ctx_functions = SOME callee` >>
+  `dft_fn_rel callee (dft_fn callee)` by
+    (drule dft_fn_rel_lookup_function >>
+     disch_then (qspec_then `x0` mp_tac) >> simp[optionTheory.OPTREL_def]) >>
+  `setup_callee callee args s = SOME cs` by
+    metis_tac[dft_fn_rel_setup_callee] >>
+  `fn_entry_label callee = SOME cs.vs_current_bb /\
+   strict_dom_vars_defined callee cs /\
+   ctx_labels_bound C cs.vs_labels /\ ctx_labels_bound C' cs.vs_labels /\
+   ~cs.vs_call_ctx.cc_static` by
+    metis_tac[dft_setup_callee_entry,
+      dftGasSimInvariantTheory.ev_setup_callee_dominators,
+      dftGasSimInvariantTheory.ev_setup_callee_labels_bound,
+      dftGasSimInvariantTheory.ev_setup_callee_nonstatic] >>
+  `fn_reachable callee cs.vs_current_bb` by
+    simp[venomWfTheory.fn_reachable_def] >>
+  `MEM callee C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  `cs.vs_gas_readings = s.vs_gas_readings` by
+    metis_tac[gasOracleReplayTheory.gas_setup_callee_readings] >>
+  `gas_count_blocks fuel C' (dft_fn callee) cs <= LENGTH cs.vs_gas_readings` by
+    (qpat_x_assum `LENGTH (gas_events_step _ _ _ _ _) <= _` mp_tac >>
+     simp[gas_events_length, Once gas_count_step_def]) >>
+  `terminates (run_blocks fuel C' (dft_fn callee) cs)` by
+    (Cases_on `run_blocks fuel C' (dft_fn callee) cs` >>
+     gvs[passSimulationDefsTheory.terminates_def]) >>
+  qpat_x_assum `!fn t. _` (drule_all_then strip_assume_tac) >>
+  `!rs. setup_callee callee args (s with vs_gas_readings := rs) =
+       SOME (cs with vs_gas_readings := rs)` by
+    (gen_tac >> qpat_x_assum `setup_callee callee args s = SOME cs` mp_tac >>
+     simp[gasOracleReplayTheory.gas_setup_callee, optionTheory.OPTION_MAP_EQ_SOME] >>
+     strip_tac >> gvs[] >>
+     qpat_x_assum `cs = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  qexistsl [`m`, `es`, `unused`] >> simp[] >>
+  Cases_on `run_blocks fuel C' (dft_fn callee) cs` >>
+  gvs[passSimulationDefsTheory.terminates_def] >>
+  simp[step_inst_def, gasOracleReplayTheory.gas_eval_operands,
+       gas_events_step_def]
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!gs tail. _` (qspecl_then [`gs`, `tail`] mp_tac) >>
+      simp[] >> strip_tac >> simp[] >>
+      disch_then (qx_choose_then `j` assume_tac) >>
+      `?j. terminates (run_blocks j C callee (cs with vs_gas_readings := gs ++ tail))` by
+        (qexists_tac `j` >>
+         Cases_on `run_blocks j C callee (cs with vs_gas_readings := gs ++ tail)` >>
+         gvs[passSimulationDefsTheory.terminates_def]) >>
+      gvs[GSYM passSimulationDefsTheory.terminates_def] >>
+      qpat_x_assum `(?j. _) ==> _` (mp_tac) >>
+      impl_tac >- metis_tac[] >> strip_tac >>
+      Cases_on `run_blocks fuel C callee (cs with vs_gas_readings := gs ++ tail)` >>
+      gvs[restore_result_def, dftRunRelTheory.dft_res_rel_def,
+          stateEquivTheory.lift_result_def])
+  >- (rpt gen_tac >> strip_tac >>
+   qpat_x_assum `!gs tail. _` (qspecl_then [`gs`, `tail`] mp_tac) >>
+   simp[] >> strip_tac >> simp[] >>
+   disch_then (qx_choose_then `j` assume_tac) >>
+   `?j. terminates (run_blocks j C callee (cs with vs_gas_readings := gs ++ tail))` by
+     (qexists_tac `j` >>
+      Cases_on `run_blocks j C callee (cs with vs_gas_readings := gs ++ tail)` >>
+      gvs[passSimulationDefsTheory.terminates_def]) >>
+   gvs[GSYM passSimulationDefsTheory.terminates_def] >>
+   qpat_x_assum `(?j. _) ==> _` mp_tac >>
+   impl_tac >- metis_tac[] >> strip_tac >>
+   Cases_on `run_blocks fuel C callee (cs with vs_gas_readings := gs ++ tail)` >>
+   gvs[restore_result_def, dftRunRelTheory.dft_res_rel_def,
+       stateEquivTheory.lift_result_def]) >>
+  rename1 `run_blocks fuel C' (dft_fn callee) cs = IntRet ir u` >>
+  Cases_on `bind_outputs i.inst_outputs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state s u))` >> gvs[] >>
+  rename1 `bind_outputs _ _ _ = SOME t` >>
+  `t.vs_gas_readings = u.vs_gas_readings` by
+    (drule gasOracleReplayTheory.gas_bind_outputs_readings >>
+     simp[merge_callee_state_def, adopt_return_fmp_def]) >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!gs tail. _` (qspecl_then [`gs`, `tail`] mp_tac) >>
+  simp[] >> strip_tac >>
+  disch_then (qx_choose_then `j` assume_tac) >>
+  `?j. terminates (run_blocks j C callee (cs with vs_gas_readings := gs ++ tail))` by
+    (qexists_tac `j` >>
+     Cases_on `run_blocks j C callee (cs with vs_gas_readings := gs ++ tail)` >>
+     gvs[passSimulationDefsTheory.terminates_def]) >>
+  gvs[GSYM passSimulationDefsTheory.terminates_def] >>
+  qpat_x_assum `(?j. _) ==> _` mp_tac >>
+  impl_tac >- metis_tac[] >> strip_tac >>
+  Cases_on `run_blocks fuel C callee (cs with vs_gas_readings := gs ++ tail)` >>
+  gvs[residual_result_def, stateEquivTheory.lift_result_def] >>
+  simp[gasOracleReplayTheory.gas_merge_callee,
+       gasOracleReplayTheory.gas_adopt_return,
+       gasOracleReplayTheory.gas_bind_outputs,
+       passSimulationDefsTheory.terminates_def, restore_result_def,
+       dftRunRelTheory.dft_res_rel_def, residual_result_def,
+       stateEquivTheory.lift_result_def]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
