@@ -10,6 +10,7 @@
 Theory bodyIntCallFamStmtLogSuffix
 Ancestors
   bodyIntCallJointContract stmtSimLogSuffixFrame stmtSimLogSuffixActual bodyIntCallFamStmtLogSuffixEncodeFrame
+  bodyIntCallFamStmtLogSuffixResources bodyIntCallFamStmtLogSuffixFootprint
 
 Theorem intcall_log_suffix_run:
   !ce id h tys flags args sa xs sm ops st lctx ty sb ctx func cx es s vs
