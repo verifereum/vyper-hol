@@ -247,3 +247,240 @@ Proof
   irule typed_copy_effect_then >> qexistsl_tac [`b4`,`b4`,`u`] >>
   gvs[] >> metis_tac[not_fresh_at_mono]
 QED
+
+Theorem typed_memory_array_condition_effect_mem:
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  bb.bb_instructions =
+    [mk_inst id1 LT [Var counter; length] [lt];
+     mk_inst id2 ISZERO [Var lt] [done];
+     mk_inst id3 JNZ [Var done; Label exit; Label blabel] []] /\
+  lookup_var counter s = SOME (n2w i) /\
+  eval_operand length s = SOME (n2w N) /\ i <= N /\ N < dimword (:256) /\
+  counter <> lt /\ counter <> done /\
+  (!x. not_fresh_at old x ==> x <> lt /\ x <> done) /\
+  next.cs_current_bb = (if i < N then blabel else exit) /\
+  next.cs_current_insts = [] ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      typed_copy_effect ctx func old next s t d n /\
+      lookup_var counter t = SOME (n2w i) /\ t.vs_memory = s.vs_memory
+Proof
+  strip_tac >>
+  `gas_path_mem ctx func s 0
+    (OK (jump_to (if i < N then blabel else exit)
+      ((update_var done (bool_to_word (~(i < N)))
+         (update_var lt (bool_to_word (i < N)) s)) with vs_inst_idx := 2)))` by
+    (irule typed_memory_array_condition_path_mem >> simp[eval_operand_def] >>
+     qexistsl_tac [`counter`, `id1`, `id2`, `id3`, `length`] >> simp[]) >>
+  drule fragGasModeTheory.gas_marked_path_from_mem >> strip_tac >>
+  qexists_tac `jump_to (if i < N then blabel else exit)
+      ((update_var done (bool_to_word (~(i < N)))
+         (update_var lt (bool_to_word (i < N)) s)) with vs_inst_idx := 2)` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  gvs[typed_copy_effect_def, jump_to_def, update_var_def,
+      venom_state_component_equality, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem typed_memory_array_backedge_effect_mem:
+  gas_path_mem ctx func s 0 (OK v) /\
+  typed_copy_effect ctx func bst b5 s v d n /\
+  lookup_var counter s = SOME (n2w i) /\ not_fresh_at bst counter /\
+  (!x. not_fresh_at old x ==>
+       not_fresh_at bst x /\ x <> inc /\ x <> counter) /\
+  lookup_block b5.cs_current_bb func.fn_blocks = SOME bb /\
+  DROP (LENGTH b5.cs_current_insts) bb.bb_instructions =
+    [mk_inst id1 ADD [Var counter; Lit 1w] [inc];
+     mk_inst id2 ASSIGN [Var inc] [counter]; mk_inst id3 JMP [Label hdr] []] /\
+  SUC i < dimword (:256) /\
+  head.cs_current_bb = hdr /\ head.cs_current_insts = [] ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      typed_copy_effect ctx func old head s t d n /\
+      lookup_var counter t = SOME (n2w (SUC i)) /\ t.vs_memory = v.vs_memory
+Proof
+  strip_tac >>
+  `lookup_var counter v = SOME (n2w i)` by
+    metis_tac[typed_copy_effect_lookup] >>
+  drule typed_copy_effect_endpoint >> strip_tac >>
+  `gas_path_mem ctx func v 0
+    (OK (jump_to hdr
+      ((update_var counter (n2w (SUC i)) (update_var inc (n2w (SUC i)) v)) with
+        vs_inst_idx := v.vs_inst_idx + 2)))` by
+    (irule typed_memory_array_backedge_path_mem >> simp[] >>
+     qexistsl_tac [`id1`, `id2`, `id3`] >> simp[]) >>
+  `gas_path_mem ctx func s 0
+    (OK (jump_to hdr
+      ((update_var counter (n2w (SUC i)) (update_var inc (n2w (SUC i)) v)) with
+        vs_inst_idx := v.vs_inst_idx + 2)))` by
+    metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES] >>
+  drule fragGasModeTheory.gas_marked_path_from_mem >> strip_tac >>
+  qexists_tac `jump_to hdr
+      ((update_var counter (n2w (SUC i)) (update_var inc (n2w (SUC i)) v)) with
+        vs_inst_idx := v.vs_inst_idx + 2)` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  simp[jump_to_def, lookup_var_update_var] >>
+  qpat_x_assum `typed_copy_effect _ _ _ _ _ _ _ _` mp_tac >> strip_tac >>
+  gvs[typed_copy_effect_def, jump_to_def, update_var_def,
+      venom_state_component_equality, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem typed_memory_array_init_effect_mem:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  DROP s.vs_inst_idx bb.bb_instructions =
+    [mk_inst id1 ASSIGN [Lit 0w] [counter]; mk_inst id2 JMP [Label hdr] []] /\
+  (!x. not_fresh_at old x ==> x <> counter) /\
+  head.cs_current_bb = hdr /\ head.cs_current_insts = [] ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      typed_copy_effect ctx func old head s t d n /\
+      lookup_var counter t = SOME 0w /\ t.vs_memory = s.vs_memory
+Proof
+  strip_tac >>
+  `gas_path_mem ctx func s 0
+    (OK (jump_to hdr ((update_var counter 0w s) with
+                       vs_inst_idx := s.vs_inst_idx + 1)))` by
+    (irule typed_memory_array_init_path_mem >> simp[] >>
+     qexistsl_tac [`id1`, `id2`] >> simp[]) >>
+  drule fragGasModeTheory.gas_marked_path_from_mem >> strip_tac >>
+  qexists_tac `jump_to hdr ((update_var counter 0w s) with
+                       vs_inst_idx := s.vs_inst_idx + 1)` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  gvs[typed_copy_effect_def, jump_to_def, update_var_def,
+      venom_state_component_equality, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem typed_memory_array_round_effect_mem:
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME hbb /\
+  hbb.bb_instructions =
+    [mk_inst h1 LT [Var counter; length] [lt];
+     mk_inst h2 ISZERO [Var lt] [done];
+     mk_inst h3 JNZ [Var done; Label exit; Label blabel] []] /\
+  lookup_var counter s = SOME (n2w i) /\
+  eval_operand length s = SOME (n2w N) /\ i < N /\ N < dimword (:256) /\
+  counter <> lt /\ counter <> done /\ not_fresh_at bst counter /\
+  (!x. not_fresh_at old x ==> x <> lt /\ x <> done /\
+       not_fresh_at bst x /\ x <> inc /\ x <> counter) /\
+  bst.cs_current_bb = blabel /\ bst.cs_current_insts = [] /\
+  head.cs_current_bb = s.vs_current_bb /\ head.cs_current_insts = [] /\
+  lookup_block b5.cs_current_bb func.fn_blocks = SOME ebb /\
+  DROP (LENGTH b5.cs_current_insts) ebb.bb_instructions =
+    [mk_inst e1 ADD [Var counter; Lit 1w] [inc];
+     mk_inst e2 ASSIGN [Var inc] [counter];
+     mk_inst e3 JMP [Label head.cs_current_bb] []] /\
+  (!a. gas_path_mem ctx func s 0 (OK a) /\
+       typed_copy_effect ctx func old bst s a d n /\
+       lookup_var counter a = SOME (n2w i) /\ a.vs_memory = s.vs_memory ==>
+       ?v. gas_path_mem ctx func a 0 (OK v) /\
+           val_in_memory dtv value d v.vs_memory /\
+           typed_copy_effect ctx func bst b5 a v d n) ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      val_in_memory dtv value d t.vs_memory /\
+      typed_copy_effect ctx func old head s t d n /\
+      lookup_var counter t = SOME (n2w (SUC i))
+Proof
+  strip_tac >>
+  `?a. gas_path_mem ctx func s 0 (OK a) /\
+       typed_copy_effect ctx func old bst s a d n /\
+       lookup_var counter a = SOME (n2w i) /\ a.vs_memory = s.vs_memory` by
+    (irule typed_memory_array_condition_effect_mem >>
+     qpat_assum `hbb.bb_instructions = _` (irule_at Any) >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >>
+     metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]) >>
+  qpat_x_assum `!a. _ ==> ?v. _` drule_all >> strip_tac >>
+  `?t. gas_path_mem ctx func a 0 (OK t) /\
+       typed_copy_effect ctx func old head a t d n /\
+       lookup_var counter t = SOME (n2w (SUC i)) /\ t.vs_memory = v.vs_memory` by
+    (irule typed_memory_array_backedge_effect_mem >>
+     qpat_assum `typed_copy_effect ctx func bst b5 a v d n` (irule_at Any) >>
+     qpat_assum `DROP _ ebb.bb_instructions = _` (irule_at Any) >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >>
+     rpt strip_tac >> first_x_assum drule >> simp[] >> decide_tac) >>
+  qexists_tac `t` >>
+  conj_tac >- metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES] >>
+  simp[] >> irule typed_copy_effect_then >>
+  qexistsl_tac [`old`,`bst`,`a`] >> simp[]
+QED
+
+Theorem finite_state_iteration[local]:
+  P 0 u /\ (!i a. i < N /\ P i a ==> ?b. P (SUC i) b) ==>
+  ?t. P N t
+Proof
+  strip_tac >>
+  `!i. i <= N ==> ?a. P i a` suffices_by metis_tac[arithmeticTheory.LESS_EQ_REFL] >>
+  Induct >> strip_tac
+  >- metis_tac[] >>
+  `i <= N /\ i < N` by decide_tac >>
+  first_x_assum drule >> strip_tac >>
+  qpat_x_assum `!i a. _` drule_all >> simp[]
+QED
+
+Theorem typed_memory_array_iteration_forward_mem:
+  val_wf stv v /\
+  (!j. j < N ==> val_wf dtv (elem j)) /\
+  (src + type_memory_size stv <= dst \/
+   dst + N * type_memory_size dtv <= src) /\
+  val_in_memory stv v src u.vs_memory /\
+  typed_copy_effect ctx func sa head s u dst (N * type_memory_size dtv) /\
+  gas_path_mem ctx func s 0 (OK u) /\
+  lookup_var counter u = SOME (n2w 0) /\
+  (!i a. i < N /\
+     val_in_memory stv v src a.vs_memory /\
+     (!j. j < i ==> val_in_memory dtv (elem j)
+       (dst + j * type_memory_size dtv) a.vs_memory) /\
+     typed_copy_effect ctx func sa head s a dst (N * type_memory_size dtv) /\
+     gas_path_mem ctx func s 0 (OK a) /\
+     lookup_var counter a = SOME (n2w i) ==>
+     ?b. gas_path_mem ctx func a 0 (OK b) /\
+         val_in_memory dtv (elem i)
+           (dst + i * type_memory_size dtv) b.vs_memory /\
+         typed_copy_effect ctx func sa head a b
+           (dst + i * type_memory_size dtv) (type_memory_size dtv) /\
+         lookup_var counter b = SOME (n2w (SUC i))) ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      val_in_memory stv v src t.vs_memory /\
+      (!j. j < N ==> val_in_memory dtv (elem j)
+        (dst + j * type_memory_size dtv) t.vs_memory) /\
+      typed_copy_effect ctx func sa head s t dst (N * type_memory_size dtv) /\
+      lookup_var counter t = SOME (n2w N)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `?t. val_in_memory stv v src t.vs_memory /\
+       (!j. j < N ==> val_in_memory dtv (elem j)
+         (dst + j * type_memory_size dtv) t.vs_memory) /\
+       typed_copy_effect ctx func sa head s t dst (N * type_memory_size dtv) /\
+       gas_path_mem ctx func s 0 (OK t) /\
+       lookup_var counter t = SOME (n2w N)` suffices_by metis_tac[] >>
+  qabbrev_tac `P = \i t.
+    val_in_memory stv v src t.vs_memory /\
+    (!j. j < i ==> val_in_memory dtv (elem j)
+      (dst + j * type_memory_size dtv) t.vs_memory) /\
+    typed_copy_effect ctx func sa head s t dst (N * type_memory_size dtv) /\
+    gas_path_mem ctx func s 0 (OK t) /\
+    lookup_var counter t = SOME (n2w i)` >>
+  `?t. P N t` suffices_by simp[Abbr `P`] >>
+  irule finite_state_iteration >>
+  reverse conj_tac >- (qexists_tac `u` >> simp[Abbr `P`]) >>
+  simp_tac std_ss [Abbr `P`] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!i a. _` drule_all >> strip_tac >>
+  `val_in_memory stv v src b.vs_memory /\
+   (!j. j < SUC i ==> val_in_memory dtv (elem j)
+     (dst + j * type_memory_size dtv) b.vs_memory)` by
+    (irule typed_memory_array_prefix_step >>
+     conj_tac >- (qexists_tac `N` >> simp[]) >>
+     simp[] >> goal_assum (drule_at Any) >> simp[] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `i * type_memory_size dtv + type_memory_size dtv <= N * type_memory_size dtv` by
+    (`SUC i * type_memory_size dtv <= N * type_memory_size dtv` by simp[] >>
+     qpat_x_assum `SUC i * _ <= _` mp_tac >>
+     pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  `typed_copy_effect ctx func sa head a b dst (N * type_memory_size dtv)` by
+    (irule typed_copy_effect_enlarge >> goal_assum (drule_at Any) >> decide_tac) >>
+  qexists_tac `b` >> simp[] >>
+  conj_tac >-
+    (irule typed_copy_effect_then >> qexistsl_tac [`sa`,`head`,`a`] >> simp[]) >>
+  metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]
+QED
