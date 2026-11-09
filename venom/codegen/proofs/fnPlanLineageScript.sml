@@ -3236,3 +3236,73 @@ Resume lineage_state_incoming_block_exit_support[bound_computed]:
 QED
 
 Finalise lineage_state_incoming_block_exit_support
+
+(* LRC records executed sources, not its endpoint.  Transport a single actual
+   incoming execution witness; no support invariant is assumed at every vertex. *)
+Theorem lineage_history_incoming_stack_support:
+  !fn dfg ch growth spill_base lbl_ctr entry.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry ==>
+    !vertices a b v.
+      lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr) (FST a) (SND a) /\
+      LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr)) vertices a b /\
+      EVERY (\vertex. !bb. lookup_block (FST vertex) fn.fn_blocks = SOME bb ==>
+        EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions) vertices /\
+      (?pred pb input ops after.
+        cfg_reachable_of (cfg_analyze fn) pred /\
+        lookup_block pred fn.fn_blocks = SOME pb /\
+        generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb input =
+          SOME (ops,after) /\
+        (MEM (Var v) after.ps_stack ==> MEM v
+          (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))) /\
+        LIST_ELEM_COUNT (Var v) after.ps_stack +
+          (if Var v IN FDOM after.ps_spilled then 1 else 0) <= 1 /\
+        (SND a).ps_stack = after.ps_stack /\ (SND a).ps_spilled = after.ps_spilled /\
+        MEM (FST a) (cfg_succs_of (cfg_analyze fn) pred)) ==>
+      ?pred pb input ops after.
+        cfg_reachable_of (cfg_analyze fn) pred /\
+        lookup_block pred fn.fn_blocks = SOME pb /\
+        generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb input =
+          SOME (ops,after) /\
+        (MEM (Var v) after.ps_stack ==> MEM v
+          (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))) /\
+        LIST_ELEM_COUNT (Var v) after.ps_stack +
+          (if Var v IN FDOM after.ps_spilled then 1 else 0) <= 1 /\
+        (SND b).ps_stack = after.ps_stack /\ (SND b).ps_spilled = after.ps_spilled /\
+        MEM (FST b) (cfg_succs_of (cfg_analyze fn) pred)
+Proof
+  rpt gen_tac >> strip_tac >> Induct >> simp[listTheory.LRC_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  PairCases_on `h` >> PairCases_on `z` >> gvs[] >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) z0 z1` by
+    metis_tac[lineage_edge_step] >>
+  drule lineage_edge_physical >> strip_tac >>
+  suspend "step"
+QED
+
+Resume lineage_history_incoming_stack_support[step]:
+  `EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions` by metis_tac[] >>
+  `(MEM (Var v) after'.ps_stack ==> MEM v
+      (live_vars_at (liveness_analyze fn) h0 (LENGTH bb.bb_instructions))) /\
+    LIST_ELEM_COUNT (Var v) after'.ps_stack +
+      (if Var v IN FDOM after'.ps_spilled then 1 else 0) <= 1` by
+    (irule lineage_state_incoming_block_exit_support >> simp[] >>
+     conj_tac >- (qexists_tac `z0` >> simp[]) >>
+     goal_assum (drule_at (Pat `lineage_state _ _ _ _ _ h0 h1`)) >> simp[] >>
+     goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ bb _ = _`)) >> simp[] >>
+     suspend "incoming") >>
+  first_x_assum irule >> simp[] >>
+  qexists_tac `(z0,z1)` >> simp[] >>
+  qexistsl_tac [`h0`,`bb`,
+    `h1 with <|ps_cleanup_height := ch'; ps_cleanup_promised := promised|>`,
+    `ops'`,`after'`] >> simp[] >>
+  metis_tac[lineage_state_reachable, fn_reachable_cfg_analyze, codegen_ready_fn_def]
+QED
+
+Resume lineage_history_incoming_stack_support[incoming]:
+  qexistsl_tac [`pb`,`pred`,`after`,`input`,`ops`] >> simp[]
+QED
+
+Finalise lineage_history_incoming_stack_support
