@@ -5,6 +5,7 @@ Ancestors
   venomFnScheduleRunner allocaRemapSSA o1MakeSsaCfg makeSsaCurrentWfSsa
   cfgWf venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
   simplifyCfgPhiSemantics basePtrProofs mmTraceProofs frameViewMemory dftCommutation
+  regularMemorySim
 Libs
   wordsLib finite_mapLib
 
@@ -5519,6 +5520,136 @@ Proof
      metis_tac[mm_local_snapshot_store_base]) >>
   simp[] >> first_x_assum irule >> simp[] >> rpt strip_tac >>
   first_x_assum irule >> simp[]
+QED
+
+Definition mm_local_bytes_def:
+  mm_local_bytes (B:num -> word8) a n = GENLIST (\i. B (a+i)) n
+End
+
+Theorem mm_local_bytes_length[local, simp]:
+  LENGTH (mm_local_bytes B a n) = n
+Proof
+  simp[mm_local_bytes_def]
+QED
+
+Theorem mm_local_bytes_restrict[local]:
+  off+n <= len ==>
+  mm_local_bytes B (a+off) n = TAKE n (DROP off (mm_local_bytes B a len))
+Proof
+  strip_tac >>
+  pure_rewrite_tac[mm_local_bytes_def, DROP_GENLIST, TAKE_GENLIST,
+                   combinTheory.o_DEF] >>
+  `MIN n (len-off) = n` by (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  asm_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> irule GENLIST_EQ >> simp[]
+QED
+
+Theorem mm_local_bytes_merge_compat[local]:
+  c1.cg_dst <= c2.cg_dst /\ copy_can_merge c1 c2 ==>
+  c2.cg_dst <= c1.cg_dst + c1.cg_length /\
+  c1.cg_dst + (copy_merge c1 c2).cg_length =
+    MAX (c1.cg_dst + c1.cg_length) (c2.cg_dst + c2.cg_length) /\
+  mm_local_bytes B c1.cg_src c1.cg_length =
+    TAKE c1.cg_length (mm_local_bytes B (copy_merge c1 c2).cg_src
+      (copy_merge c1 c2).cg_length) /\
+  mm_local_bytes B c2.cg_src c2.cg_length =
+    TAKE c2.cg_length (DROP (c2.cg_dst-c1.cg_dst)
+      (mm_local_bytes B (copy_merge c1 c2).cg_src (copy_merge c1 c2).cg_length))
+Proof
+  simp[copy_can_merge_def, copy_merge_def] >> strip_tac >>
+  `c2.cg_src = c1.cg_src + (c2.cg_dst-c1.cg_dst)` by decide_tac >>
+  `c1.cg_length <= MAX (c1.cg_dst+c1.cg_length)
+      (c2.cg_dst+c2.cg_length) - c1.cg_dst /\
+   c2.cg_dst-c1.cg_dst+c2.cg_length <= MAX (c1.cg_dst+c1.cg_length)
+      (c2.cg_dst+c2.cg_length) - c1.cg_dst` by
+    (simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  conj_tac >- (simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  conj_tac
+  >- (irule (SRULE [] (Q.INST [`off` |-> `0`] mm_local_bytes_restrict)) >> simp[]) >>
+  metis_tac[mm_local_bytes_restrict]
+QED
+
+Theorem mm_local_bytes_write_merge[local]:
+  c1.cg_dst <= c2.cg_dst /\ copy_can_merge c1 c2 ==>
+  write_memory_with_expansion c2.cg_dst (mm_local_bytes B c2.cg_src c2.cg_length)
+    (write_memory_with_expansion c1.cg_dst (mm_local_bytes B c1.cg_src c1.cg_length) s) =
+  write_memory_with_expansion (copy_merge c1 c2).cg_dst
+    (mm_local_bytes B (copy_merge c1 c2).cg_src (copy_merge c1 c2).cg_length) s
+Proof
+  strip_tac >> drule_all mm_local_bytes_merge_compat >>
+  disch_then (qspec_then `B` strip_assume_tac) >>
+  simpLib.SIMP_TAC (srw_ss()) [copy_merge_def] >>
+  irule mm_local_payload_write_merge >>
+  pure_rewrite_tac[mm_local_bytes_length] >> gvs[copy_merge_def]
+QED
+
+Theorem mm_local_bytes_write_merge_reverse[local]:
+  c1.cg_dst <= c2.cg_dst /\ copy_can_merge c1 c2 ==>
+  write_memory_with_expansion c1.cg_dst (mm_local_bytes B c1.cg_src c1.cg_length)
+    (write_memory_with_expansion c2.cg_dst (mm_local_bytes B c2.cg_src c2.cg_length) s) =
+  write_memory_with_expansion (copy_merge c1 c2).cg_dst
+    (mm_local_bytes B (copy_merge c1 c2).cg_src (copy_merge c1 c2).cg_length) s
+Proof
+  strip_tac >> drule_all mm_local_bytes_merge_compat >>
+  disch_then (qspec_then `B` strip_assume_tac) >>
+  simpLib.SIMP_TAC (srw_ss()) [copy_merge_def] >>
+  irule mm_local_payload_write_merge_reverse >>
+  pure_rewrite_tac[mm_local_bytes_length] >> gvs[copy_merge_def]
+QED
+
+Theorem mm_local_bytes_merge_agreement[local]:
+  c1.cg_dst <= c2.cg_dst /\ copy_can_merge c1 c2 /\
+  mm_local_bytes B c1.cg_src c1.cg_length = mm_local_bytes C c1.cg_src c1.cg_length /\
+  mm_local_bytes B c2.cg_src c2.cg_length = mm_local_bytes C c2.cg_src c2.cg_length ==>
+  mm_local_bytes B (copy_merge c1 c2).cg_src (copy_merge c1 c2).cg_length =
+  mm_local_bytes C (copy_merge c1 c2).cg_src (copy_merge c1 c2).cg_length
+Proof
+  simp[mm_local_bytes_def, GENLIST_FUN_EQ, copy_can_merge_def, copy_merge_def] >>
+  strip_tac >> qx_gen_tac `i` >> strip_tac >>
+  Cases_on `i < c1.cg_length`
+  >- (first_x_assum irule >> simp[]) >>
+  `c2.cg_src = c1.cg_src + (c2.cg_dst-c1.cg_dst)` by decide_tac >>
+  `c2.cg_dst-c1.cg_dst <= i /\ i-(c2.cg_dst-c1.cg_dst) < c2.cg_length` by
+    (qpat_x_assum `i < MAX _ _ - _` mp_tac >>
+     pure_rewrite_tac[arithmeticTheory.MAX_DEF] >> IF_CASES_TAC >> decide_tac) >>
+  `c1.cg_src+i = c2.cg_src + (i-(c2.cg_dst-c1.cg_dst))` by decide_tac >>
+  metis_tac[arithmeticTheory.ADD_SYM]
+QED
+
+Theorem mm_local_read_memory_bytes[local]:
+  read_memory a n s =
+  mm_local_bytes (\i. if i < LENGTH s.vs_memory then EL i s.vs_memory else 0w) a n
+Proof
+  simp[venomStateTheory.read_memory_def, mm_local_bytes_def,
+       regularMemorySimTheory.venom_returndata_read_byte, codegenRelTheory.read_byte_def]
+QED
+
+Theorem mm_local_capture_rebase[local]:
+  payload = read_memory a n (H j) /\
+  read_memory a n (H k) = read_memory a n (H j) ==>
+  payload = mm_local_bytes
+    (\i. if i < LENGTH (H k).vs_memory then EL i (H k).vs_memory else 0w) a n
+Proof
+  metis_tac[mm_local_read_memory_bytes]
+QED
+
+Theorem mm_local_capture_write_merge[local]:
+  c1.cg_dst <= c2.cg_dst /\ copy_can_merge c1 c2 /\
+  p1 = read_memory c1.cg_src c1.cg_length (H j1) /\
+  p2 = read_memory c2.cg_src c2.cg_length (H j2) /\
+  read_memory c1.cg_src c1.cg_length (H k) = read_memory c1.cg_src c1.cg_length (H j1) /\
+  read_memory c2.cg_src c2.cg_length (H k) = read_memory c2.cg_src c2.cg_length (H j2) ==>
+  write_memory_with_expansion c2.cg_dst p2
+    (write_memory_with_expansion c1.cg_dst p1 s) =
+  write_memory_with_expansion (copy_merge c1 c2).cg_dst
+    (read_memory (copy_merge c1 c2).cg_src (copy_merge c1 c2).cg_length (H k)) s
+Proof
+  strip_tac >>
+  `p1 = read_memory c1.cg_src c1.cg_length (H k) /\
+   p2 = read_memory c2.cg_src c2.cg_length (H k)` by metis_tac[] >>
+  qpat_x_assum `p1 = read_memory _ _ (H k)` (fn th => once_rewrite_tac[th]) >>
+  qpat_x_assum `p2 = read_memory _ _ (H k)` (fn th => once_rewrite_tac[th]) >>
+  simpLib.SIMP_TAC (srw_ss()) [mm_local_read_memory_bytes] >>
+  irule mm_local_bytes_write_merge >> simp[]
 QED
 
 (* Essential counterexample evidence: a variable-free unreachable block. *)
