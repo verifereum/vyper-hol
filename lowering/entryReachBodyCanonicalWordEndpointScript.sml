@@ -108,7 +108,7 @@ Theorem entry_canonical_word_owned_endpoint:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD /\ abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
-    simp[abi_decode_source_opcode_def, abi_decoder_operand_live_def] >>
+    simp[abi_decode_source_opcode_def, abiDecoderReentryTheory.abi_decoder_operand_live_def] >>
   drule_all (SIMP_RULE (srw_ss()) [eval_operand_def]
     (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0`]
       abi_decoder_primitive_memory_reentry)) >> strip_tac >>

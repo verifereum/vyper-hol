@@ -50,7 +50,7 @@ Theorem entry_member_setup_endpoint:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD /\ abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
-    simp[abi_decode_source_opcode_def, abi_decoder_operand_live_def] >>
+    simp[abi_decode_source_opcode_def, abiDecoderReentryTheory.abi_decoder_operand_live_def] >>
   drule_all (SIMP_RULE bool_ss [eval_operand_def, arithmeticTheory.ADD]
     (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0`] abi_decode_member_setup_reentry)) >> strip_tac >>
   drule_all member_setup_observation_code >> strip_tac >>
