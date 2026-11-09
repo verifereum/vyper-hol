@@ -656,6 +656,126 @@ Proof
   simp[non_param_insts_def, MEM_FILTER] >> metis_tac[]
 QED
 
+Definition generated_block_ref_slice_def:
+  generated_block_ref_slice lv dfg cfg fn l visited ops <=>
+    ?lbl bb start chunk stop pre post.
+      lookup_block lbl fn.fn_blocks = SOME bb /\ MEM lbl visited /\
+      generate_block_plan lv dfg cfg fn bb start = SOME (chunk, stop) /\
+      plan_ref l chunk /\ ops = pre ++ chunk ++ post
+End
+
+Theorem generated_block_ref_slice_self:
+  lookup_block lbl fn.fn_blocks = SOME bb /\ MEM lbl visited /\
+  generate_block_plan lv dfg cfg fn bb ps = SOME (ops, ps') /\ plan_ref l ops ==>
+  generated_block_ref_slice lv dfg cfg fn l visited ops
+Proof
+  strip_tac >> simp[generated_block_ref_slice_def] >>
+  qexistsl [`lbl`, `bb`, `ps`, `ops`, `ps'`, `[]`, `[]`] >> simp[]
+QED
+
+Theorem generated_block_ref_slice_transport:
+  generated_block_ref_slice lv dfg cfg fn l visited ops /\
+  set visited SUBSET set final ==>
+  generated_block_ref_slice lv dfg cfg fn l final (before ++ ops ++ after)
+Proof
+  rw[generated_block_ref_slice_def, pred_setTheory.SUBSET_DEF] >>
+  qexistsl [`lbl`, `bb`, `start`, `chunk`, `stop`, `before ++ pre`, `post ++ after`] >>
+  simp[APPEND_ASSOC]
+QED
+
+Theorem generated_block_ref_slice_append:
+  (!l. plan_ref l xs ==> generated_block_ref_slice lv dfg cfg fn l seen_x xs) /\
+  (!l. plan_ref l ys ==> generated_block_ref_slice lv dfg cfg fn l seen_y ys) /\
+  set seen_x SUBSET set final /\ set seen_y SUBSET set final ==>
+  !l. plan_ref l (xs ++ ys) ==> generated_block_ref_slice lv dfg cfg fn l final (xs ++ ys)
+Proof
+  rw[plan_ref_append]
+  >- (`generated_block_ref_slice lv dfg cfg fn l final ([] ++ xs ++ ys)`
+        suffices_by simp[] >>
+      irule generated_block_ref_slice_transport >> metis_tac[]) >>
+  `generated_block_ref_slice lv dfg cfg fn l final (xs ++ ys ++ [])`
+    suffices_by simp[] >>
+  irule generated_block_ref_slice_transport >> metis_tac[]
+QED
+
+Theorem generated_block_ref_succ_append:
+  generate_succs_plan lv dfg cfg fn ss sp succs seen ps = SOME (ys, final, ps') /\
+  (!l. plan_ref l xs ==> generated_block_ref_slice lv dfg cfg fn l seen xs) /\
+  (!l. plan_ref l ys ==> generated_block_ref_slice lv dfg cfg fn l final ys) ==>
+  !l. plan_ref l (xs ++ ys) ==> generated_block_ref_slice lv dfg cfg fn l final (xs ++ ys)
+Proof
+  strip_tac >> drule generate_succs_plan_visited_mono >> strip_tac >>
+  rpt strip_tac >> irule generated_block_ref_slice_append >>
+  metis_tac[pred_setTheory.SUBSET_REFL]
+QED
+
+Theorem generated_block_ref_aux_append:
+  generate_fn_plan_aux lv dfg cfg fn wl seen ps = SOME (ys, final, ps') /\
+  (!l. plan_ref l xs ==> generated_block_ref_slice lv dfg cfg fn l seen xs) /\
+  (!l. plan_ref l ys ==> generated_block_ref_slice lv dfg cfg fn l final ys) ==>
+  !l. plan_ref l (xs ++ ys) ==> generated_block_ref_slice lv dfg cfg fn l final (xs ++ ys)
+Proof
+  strip_tac >> drule generate_fn_plan_aux_visited_mono >> strip_tac >>
+  rpt strip_tac >> irule generated_block_ref_slice_append >>
+  metis_tac[pred_setTheory.SUBSET_REFL]
+QED
+
+Theorem generated_block_ref_block_successors:
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  generate_block_plan lv dfg cfg fn bb ps = SOME (bops, pout) /\
+  generate_succs_plan lv dfg cfg fn ss sp succs (lbl::visited) pout = SOME (sops, seen, pmid) /\
+  (!l. plan_ref l sops ==> generated_block_ref_slice lv dfg cfg fn l seen sops) ==>
+  !l. plan_ref l (bops ++ sops) ==>
+    generated_block_ref_slice lv dfg cfg fn l seen (bops ++ sops)
+Proof
+  rpt strip_tac >> irule generated_block_ref_succ_append >>
+  metis_tac[generated_block_ref_slice_self, MEM]
+QED
+
+Theorem generated_block_ref_block_continuation:
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  generate_block_plan lv dfg cfg fn bb ps = SOME (bops, pout) /\
+  generate_succs_plan lv dfg cfg fn ss sp succs (lbl::visited) pout = SOME (sops, seen, pmid) /\
+  generate_fn_plan_aux lv dfg cfg fn wl seen pmid = SOME (rops, final, pend) /\
+  (!l. plan_ref l sops ==> generated_block_ref_slice lv dfg cfg fn l seen sops) /\
+  (!l. plan_ref l rops ==> generated_block_ref_slice lv dfg cfg fn l final rops) ==>
+  !l. plan_ref l (bops ++ sops ++ rops) ==>
+    generated_block_ref_slice lv dfg cfg fn l final (bops ++ sops ++ rops)
+Proof
+  strip_tac >>
+  `!l. plan_ref l (bops ++ sops) ==>
+       generated_block_ref_slice lv dfg cfg fn l seen (bops ++ sops)` by
+    metis_tac[generated_block_ref_block_successors] >>
+  rpt strip_tac >> gvs[APPEND_ASSOC] >>
+  irule generated_block_ref_aux_append >> metis_tac[]
+QED
+
+Theorem traversal_generated_block_ref_slice:
+  (!lv dfg cfg fn wl visited ps ops final ps'.
+    generate_fn_plan_aux lv dfg cfg fn wl visited ps = SOME (ops, final, ps') ==>
+    !l. plan_ref l ops ==> generated_block_ref_slice lv dfg cfg fn l final ops) /\
+  (!lv dfg cfg fn ss sp succs visited ps ops final ps'.
+    generate_succs_plan lv dfg cfg fn ss sp succs visited ps = SOME (ops, final, ps') ==>
+    !l. plan_ref l ops ==> generated_block_ref_slice lv dfg cfg fn l final ops)
+Proof
+  ho_match_mp_tac generate_fn_plan_aux_ind >> rpt conj_tac
+  >- simp[Once generate_fn_plan_aux_def, plan_ref_nil]
+  >- suspend "aux"
+  >- simp[Once generate_fn_plan_aux_def, plan_ref_nil]
+  >> suspend "succ"
+QED
+
+Resume traversal_generated_block_ref_slice[aux]:
+  rw[Once generate_fn_plan_aux_def, AllCaseEqs()] >> gvs[] >>
+  metis_tac[generated_block_ref_block_continuation]
+QED
+
+Resume traversal_generated_block_ref_slice[succ]:
+  rw[Once (cj 4 generate_fn_plan_aux_def), AllCaseEqs()] >> gvs[] >>
+  metis_tac[generated_block_ref_succ_append]
+QED
+Finalise traversal_generated_block_ref_slice
+
 Theorem traversal_reference_block:
   (!lv dfg cfg fn wl visited ps ops final ps'.
     generate_fn_plan_aux lv dfg cfg fn wl visited ps = SOME (ops, final, ps') ==>
@@ -672,43 +792,156 @@ Theorem traversal_reference_block:
       generate_block_plan lv dfg cfg fn bb start = SOME (chunk, stop) /\
       plan_ref l chunk /\ ops = pre ++ chunk ++ post)
 Proof
-  ho_match_mp_tac generate_fn_plan_aux_ind >> rpt conj_tac
-  >- simp[Once generate_fn_plan_aux_def, plan_ref_nil]
-  >- suspend "aux"
-  >- simp[Once generate_fn_plan_aux_def, plan_ref_nil]
-  >> suspend "succ"
+  mp_tac traversal_generated_block_ref_slice >> simp[generated_block_ref_slice_def]
 QED
 
-Resume traversal_reference_block[aux]:
-  rpt gen_tac >> strip_tac >>
-  simp[Once generate_fn_plan_aux_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  drule generate_succs_plan_visited_mono >>
-  drule generate_fn_plan_aux_visited_mono >>
-  simp[pred_setTheory.SUBSET_DEF] >> rpt strip_tac >>
-  gvs[plan_ref_append]
-  >- (qexistsl [`lbl`, `bb`, `ps`, `block_ops`, `ps''`, `[]`, `succ_ops ++ rest_ops`] >>
-      simp[] >> metis_tac[]) >>
-  first_x_assum drule >> strip_tac
-  >- (qexistsl [`lbl'`, `bb'`, `start`, `chunk`, `stop`, `block_ops ++ pre`, `post ++ rest_ops`] >>
-      simp[APPEND_ASSOC]) >>
-  qexistsl [`lbl'`, `bb'`, `start`, `chunk`, `stop`, `block_ops ++ succ_ops ++ pre`, `post`] >>
-  simp[APPEND_ASSOC]
+Theorem entry_traversal_label_mem:
+  generate_fn_plan_aux lv dfg cfg fn [entry] [] ps = SOME (ops, final, ps') /\
+  fn_entry_label fn = SOME entry /\ MEM lbl final /\
+  lookup_block lbl fn.fn_blocks = SOME bb ==>
+  MEM (SOLabel lbl) ops
+Proof
+  strip_tac >> drule (cj 1 traversal_dfs_witness) >>
+  disch_then (qspec_then `ps` mp_tac) >>
+  simp[fnPlanLineageTheory.dfs_aux_call_rules] >>
+  disch_then drule_all >> strip_tac >>
+  drule_all fnPlanPlaceDfsBlockTheory.lookup_block_plan_leading_label >>
+  strip_tac >> gvs[MEM_APPEND]
 QED
 
-Resume traversal_reference_block[succ]:
-  rpt gen_tac >> strip_tac >>
-  simp[Once (cj 4 generate_fn_plan_aux_def), AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  drule generate_succs_plan_visited_mono >>
-  simp[pred_setTheory.SUBSET_DEF] >> strip_tac >>
-  gvs[plan_ref_append] >> first_x_assum drule >> strip_tac
-  >- (qexistsl [`lbl`, `bb`, `start`, `chunk`, `stop`, `pre`, `post ++ rest_ops`] >>
-      simp[APPEND_ASSOC]) >>
-  qexistsl [`lbl`, `bb`, `start`, `chunk`, `stop`, `s_ops ++ pre`, `post`] >>
-  simp[APPEND_ASSOC]
+Theorem block_jump_ref_successor:
+  bb_well_formed bb /\ MEM inst bb.bb_instructions /\
+  MEM inst.inst_opcode [JMP; JNZ] /\ MEM (Label l) inst.inst_operands ==>
+  MEM l (bb_succs bb)
+Proof
+  strip_tac >>
+  `is_terminator inst.inst_opcode` by gvs[venomInstTheory.is_terminator_def] >>
+  drule_all simplifyCfgStructTheory.bb_well_formed_terminator_last >>
+  strip_tac >>
+  gvs[venomInstTheory.bb_succs_def, bb_well_formed_def,
+      simplifyCfgStructTheory.get_successors_mem_label, MEM_nub] >>
+  Cases_on `bb.bb_instructions` >>
+  gvs[MEM_nub, simplifyCfgStructTheory.get_successors_mem_label]
 QED
-Finalise traversal_reference_block
+
+Theorem ready_fn_jump_edge:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM inst bb.bb_instructions /\ MEM inst.inst_opcode [JMP; JNZ] /\
+  MEM (Label l) inst.inst_operands ==> fn_cfg_edge fn lbl l
+Proof
+  strip_tac >>
+  drule simplifyCfgDefsTheory.lookup_block_member_label >> strip_tac >>
+  `bb_well_formed bb` by metis_tac[genBlockSimTheory.bb_well_formed_from_ready] >>
+  drule_all block_jump_ref_successor >> simp[fn_cfg_edge_def] >> metis_tac[]
+QED
+
+Theorem ready_fn_edge_target_lookup:
+  codegen_ready_fn fn /\ fn_cfg_edge fn lbl l ==>
+  ?target. lookup_block l fn.fn_blocks = SOME target
+Proof
+  rw[codegen_ready_fn_def, wf_function_def, fn_cfg_edge_def] >>
+  `MEM l (fn_labels fn)` by metis_tac[fn_succs_closed_def] >>
+  gvs[venomInstTheory.fn_labels_def] >>
+  drule dfAnalyzeProofsTheory.lookup_block_exists >> metis_tac[]
+QED
+
+Theorem entry_traversal_edge_target:
+  generate_fn_plan_aux lv dfg (cfg_analyze fn) fn [entry] [] ps = SOME (ops, final, ps') /\
+  codegen_ready_fn fn /\ MEM lbl final /\ fn_cfg_edge fn lbl l ==>
+  MEM l final /\ ?target. lookup_block l fn.fn_blocks = SOME target
+Proof
+  strip_tac >> drule_all ready_fn_cfg_edge >> strip_tac >>
+  drule (cj 1 traversal_visited_closed) >> simp[] >> strip_tac >>
+  conj_tac >- metis_tac[] >>
+  metis_tac[ready_fn_edge_target_lookup]
+QED
+
+Theorem entry_traversal_jump_target:
+  generate_fn_plan_aux lv dfg (cfg_analyze fn) fn [entry] [] ps = SOME (ops, final, ps') /\
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\ MEM lbl final /\
+  MEM inst bb.bb_instructions /\ MEM inst.inst_opcode [JMP; JNZ] /\
+  MEM (Label l) inst.inst_operands ==>
+  MEM l final /\ ?target. lookup_block l fn.fn_blocks = SOME target
+Proof
+  strip_tac >>
+  drule simplifyCfgDefsTheory.lookup_block_member_label >> strip_tac >>
+  `bb_well_formed bb /\ fn_succs_closed fn` by
+    (gvs[codegen_ready_fn_def, wf_function_def] >> metis_tac[]) >>
+  drule_all block_jump_ref_successor >> strip_tac >>
+  `fn_cfg_edge fn lbl l` by (simp[fn_cfg_edge_def] >> metis_tac[]) >>
+  drule_all ready_fn_cfg_edge >> strip_tac >>
+  drule (cj 1 traversal_visited_closed) >> simp[] >> strip_tac >>
+  conj_tac >- metis_tac[] >>
+  `MEM l (fn_labels fn)` by metis_tac[fn_succs_closed_def] >>
+  gvs[venomInstTheory.fn_labels_def] >>
+  drule dfAnalyzeProofsTheory.lookup_block_exists >> metis_tac[]
+QED
+
+Theorem entry_traversal_jump_label_mem:
+  generate_fn_plan_aux lv dfg (cfg_analyze fn) fn [entry] [] ps = SOME (ops, final, ps') /\
+  fn_entry_label fn = SOME entry /\ codegen_ready_fn fn /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ MEM lbl final /\
+  MEM inst bb.bb_instructions /\ MEM inst.inst_opcode [JMP; JNZ] /\
+  MEM (Label l) inst.inst_operands ==>
+  MEM (SOLabel l) ops
+Proof
+  strip_tac >> drule_all entry_traversal_jump_target >> strip_tac >>
+  irule entry_traversal_label_mem >> metis_tac[]
+QED
+
+Theorem entry_traversal_refs:
+  generate_fn_plan_aux lv dfg (cfg_analyze fn) fn [entry] [] ps = SOME (ops, final, ps') /\
+  fn_entry_label fn = SOME entry /\ fn_shape_ok fn /\ codegen_ready_fn fn /\
+  plan_ref l ops ==>
+  MEM (SOLabel l) ops \/ l = "revert" \/ l = "code_end" \/
+  (l = "runtime_begin" /\
+   ?inst. MEM inst (fn_insts fn) /\ MEM (Label "runtime_begin") inst.inst_operands) \/
+  (?inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+          MEM (Label l) inst.inst_operands)
+Proof
+  strip_tac >> drule (cj 1 traversal_reference_block) >>
+  disch_then drule >> strip_tac >>
+  drule simplifyCfgDefsTheory.lookup_block_member_label >> strip_tac >>
+  `EVERY inst_shape_ok bb.bb_instructions` by
+    (gvs[fn_shape_ok_def, EVERY_MEM, venomInstTheory.fn_insts_def,
+         MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
+  drule_all generate_block_plan_refs >> strip_tac >>
+  gvs[MEM_APPEND]
+  >- (disj1_tac >> rewrite_tac[GSYM MEM_APPEND] >>
+      irule entry_traversal_jump_label_mem >> simp[] >> metis_tac[])
+  >- (disj1_tac >> rewrite_tac[GSYM MEM_APPEND] >>
+      irule entry_traversal_jump_label_mem >> simp[] >> metis_tac[]) >>
+  simp[venomInstTheory.fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]
+QED
+
+Theorem generate_fn_plan_with_cleanup_refs:
+  generate_fn_plan_with_cleanup ch growth fn sb lc = SOME (ops, ps') /\
+  fn_shape_ok fn /\ codegen_ready_fn fn /\ plan_ref l ops ==>
+  MEM (SOLabel l) ops \/ l = "revert" \/ l = "code_end" \/
+  (l = "runtime_begin" /\
+   ?inst. MEM inst (fn_insts fn) /\ MEM (Label "runtime_begin") inst.inst_operands) \/
+  (?inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+          MEM (Label l) inst.inst_operands)
+Proof
+  strip_tac >>
+  `fn_entry_label fn = SOME fn.fn_name` by gvs[fn_shape_ok_def] >>
+  gvs[generate_fn_plan_with_cleanup_def] >>
+  drule_all cleanup_plan_entry_call >> strip_tac >>
+  drule_all entry_traversal_refs >> simp[]
+QED
+
+Theorem generate_fn_plan_with_cleanup_entry_label:
+  generate_fn_plan_with_cleanup ch growth fn sb lc = SOME (ops, ps') /\
+  fn_shape_ok fn ==>
+  MEM (SOLabel fn.fn_name) ops
+Proof
+  strip_tac >>
+  `fn_entry_label fn = SOME fn.fn_name` by gvs[fn_shape_ok_def] >>
+  gvs[generate_fn_plan_with_cleanup_def] >>
+  drule fnPlanPlaceFnRegionTheory.generate_fn_plan_with_cleanup_analyzed_leading_label >>
+  strip_tac >> gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def,
+                  AllCaseEqs()]
+QED
 
 Theorem codegen_asm_static_wf:
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
