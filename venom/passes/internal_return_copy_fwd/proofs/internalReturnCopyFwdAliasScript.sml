@@ -1338,3 +1338,19 @@ Proof
     (irule ircf_current_forward_sites_exclusion >> simp[] >> metis_tac[]) >>
   decide_tac
 QED
+
+Theorem ircf_alloca_of_coherent_size:
+  ssa_form fn /\ ircf_size_coherent fn s /\ ircf_alloca_of fn root amount /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\
+  ai.inst_outputs = [root] /\
+  FLOOKUP s.vs_allocas ai.inst_id = SOME (b,z) ==>
+  z = w2n amount
+Proof
+  strip_tac >>
+  `ai.inst_operands = [Lit amount]` by
+    (fs[ircf_alloca_of_def] >>
+     `ai = ai'` by
+       (irule ssa_outputs_same_inst >> gvs[fn_insts_def] >> metis_tac[MEM]) >>
+     gvs[]) >>
+  metis_tac[ircf_size_coherent_def]
+QED

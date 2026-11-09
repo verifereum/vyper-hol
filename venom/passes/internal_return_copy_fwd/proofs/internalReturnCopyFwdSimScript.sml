@@ -21,7 +21,7 @@
 
 Theory internalReturnCopyFwdSim
 Ancestors
-  internalReturnCopyFwdPlan internalReturnCopyFwdDefs reachableFnSim
+  internalReturnCopyFwdPlan internalReturnCopyFwdDefs internalReturnCopyFwdAlias reachableFnSim
   taintAgree o1LowerDloadShared o1PassContract ptrDiscipline passSharedDefs
   venomExecSemantics venomInst venomWf venomState finite_map pred_set list
 
@@ -194,6 +194,106 @@ Proof
   qspec_tac (`C.ctx_functions`, `fns`) >>
   Induct >> rw[lookup_function_def, FIND_thm] >> gvs[MEM_MAP] >>
   gvs[lookup_function_def] >> metis_tac[]
+QED
+
+Theorem ircf_gam_allocations:
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  ircf_no_dst_write_alias fn /\ MEM bb fn.fn_blocks /\
+  ircf_size_coherent fn s /\
+  (db,sb,sz) IN ircf_gam fn_meta rma C fn bb s.vs_allocas n ==>
+  ?k d sr amount dai sai.
+    k < n /\ ircf_fwd_ok fn bb k d sr amount /\
+    ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,amount) /\
+    MEM dai (fn_insts fn) /\ dai.inst_opcode = ALLOCA /\ dai.inst_outputs = [d] /\
+    MEM sai (fn_insts fn) /\ sai.inst_opcode = ALLOCA /\ sai.inst_outputs = [sr] /\
+    FLOOKUP s.vs_allocas dai.inst_id = SOME (db,sz) /\
+    FLOOKUP s.vs_allocas sai.inst_id = SOME (sb,sz)
+Proof
+  strip_tac >>
+  `ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+    simp[ircf_tbb_def, ircf_transform_block_plan] >>
+  gvs[ircf_gam_def] >>
+  rename1 `ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,szw)` >>
+  `ircf_fwd_ok fn bb k d sr szw` by
+    (drule_all ircf_block_plan_fwd_ok >> simp[]) >>
+  `sz1 = w2n szw /\ sz2 = w2n szw` by
+    (conj_tac >> irule ircf_alloca_of_coherent_size >>
+     gvs[wf_ssa_def] >> metis_tac[ircf_fwd_ok_def]) >>
+  metis_tac[]
+QED
+
+Theorem ircf_gam_cur_write_disjoint:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ lo <= vs.vs_alloca_next /\
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  ircf_size_coherent fn s /\ access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  (db,sb,sz) IN ircf_gam_cur fn_meta rma C fn s /\ q < sz /\
+  MEM (off,len) (source_memory_write_ranges inst s) ==>
+  ~(off <= db+q /\ db+q < off+len) /\
+  ~(off <= sb+q /\ sb+q < off+len)
+Proof
+  strip_tac >>
+  qpat_x_assum `_ IN ircf_gam_cur _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [ircf_gam_cur_def]) >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  drule_all ircf_gam_allocations >> strip_tac >>
+  `db <= db+q /\ db+q < db+sz /\ sb <= sb+q /\ sb+q < sb+sz` by decide_tac >>
+  conj_tac >> irule ircf_current_forward_write_disjoint >> metis_tac[]
+QED
+
+Theorem ircf_gam_saved_write_disjoint:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ lo <= vs.vs_alloca_next /\
+  j < LENGTH stk /\ wf_function (EL j stk).cf_fn /\
+  fn_inst_wf (EL j stk).cf_fn /\ wf_ssa (EL j stk).cf_fn /\
+  fn_inst_ids_distinct (EL j stk).cf_fn /\ ircf_no_dst_write_alias (EL j stk).cf_fn /\
+  ircf_size_coherent (EL j stk).cf_fn (EL j stk).cf_state /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  (db,sb,sz) IN ircf_gam_cur fn_meta rma C (EL j stk).cf_fn (EL j stk).cf_state /\
+  q < sz /\ MEM (off,len) (source_memory_write_ranges inst s) ==>
+  ~(off <= db+q /\ db+q < off+len) /\
+  ~(off <= sb+q /\ sb+q < off+len)
+Proof
+  strip_tac >>
+  qpat_x_assum `_ IN ircf_gam_cur _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [ircf_gam_cur_def]) >>
+  `MEM bb (EL j stk).cf_fn.fn_blocks` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  drule_all ircf_gam_allocations >> strip_tac >>
+  `db <= db+q /\ db+q < db+sz /\ sb <= sb+q /\ sb+q < sb+sz` by decide_tac >>
+  conj_tac >> irule ircf_saved_forward_write_disjoint >> metis_tac[]
+QED
+
+Theorem ircf_gam_write_disjoint:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ lo <= vs.vs_alloca_next /\
+  EVERY wf_function C.ctx_functions /\ EVERY fn_inst_wf C.ctx_functions /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY fn_inst_ids_distinct C.ctx_functions /\
+  EVERY ircf_no_dst_write_alias C.ctx_functions /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  (db,sb,sz) IN ircf_gam_cur fn_meta rma C fn s UNION ircf_gam_stk fn_meta rma C stk /\
+  q < sz /\ MEM (off,len) (source_memory_write_ranges inst s) ==>
+  ~(off <= db+q /\ db+q < off+len) /\
+  ~(off <= sb+q /\ sb+q < off+len)
+Proof
+  strip_tac >>
+  `ircf_alias_frames C stk fn inst s G` by
+    (drule o1LowerDloadOccurrenceTheory.occ_frame_reachable_projection >> strip_tac >>
+     drule_all ircf_alias_frames_reachable >> simp[]) >>
+  `MEM fn C.ctx_functions /\ ircf_size_coherent fn s /\
+   EVERY (ircf_alias_saved C) stk` by
+    fs[ircf_alias_frames_def, ircf_alias_boundary_def] >>
+  qpat_x_assum `_ IN _ UNION _` (strip_assume_tac o REWRITE_RULE [IN_UNION])
+  >- (irule ircf_gam_cur_write_disjoint >> fs[EVERY_MEM] >> metis_tac[]) >>
+  `?j. j < LENGTH stk /\
+       (db,sb,sz) IN ircf_gam_cur fn_meta rma C (EL j stk).cf_fn (EL j stk).cf_state` by
+    (fs[ircf_gam_stk_def, IN_BIGUNION, MEM_MAP, MEM_EL] >> metis_tac[]) >>
+  `ircf_alias_saved C (EL j stk)` by metis_tac[EVERY_EL] >>
+  `MEM (EL j stk).cf_fn C.ctx_functions /\
+   ircf_size_coherent (EL j stk).cf_fn (EL j stk).cf_state` by
+    fs[ircf_alias_saved_def, ircf_alias_boundary_def] >>
+  irule ircf_gam_saved_write_disjoint >> fs[EVERY_MEM] >> metis_tac[]
 QED
 
 (* ===== One block, and the pass ===== *)
