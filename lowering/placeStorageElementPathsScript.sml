@@ -181,3 +181,88 @@ Proof
   qexists_tac `t` >> simp[] >>
   fs[store_copy_frame_def] >> metis_tac[]
 QED
+
+Theorem storage_element_multi_path:
+  code =
+    [mk_inst id MUL [Var ctr; Lit (n2w em)] [mv];
+     mk_inst (id+1) ADD [Lit 32w; Var mv] [so];
+     mk_inst (id+2) ADD [src; Var so] [sp];
+     mk_inst (id+3) MUL [Var ctr; Lit (n2w ew)] [dm];
+     mk_inst (id+4) ADD [Lit 1w; Var dm] [off];
+     mk_inst (id+5) ADD [dst; Var off] [dp]] /\
+  ALL_DISTINCT [ctr; mv; so; sp; dm; off; dp] /\
+  (!x. src = Var x \/ dst = Var x ==> ~MEM x [mv; so; sp; dm; off; dp]) /\
+  (!x. not_fresh_at sa x ==> ~MEM x [mv; so; sp; dm; off; dp]) /\
+  ~MEM len [mv; so; sp; dm; off; dp] /\
+  (loc = LocStorage \/ loc = LocTransient) /\
+  compile_word_copy_loop (Var sp) (Var dp) ew LocMemory loc F sc = (u,sd) /\
+  fn_has_code sc sd fn /\ ew < dimword (:256) /\
+  not_fresh_at sc sp /\ not_fresh_at sc dp /\
+  not_fresh_at sc ctr /\ not_fresh_at sc len /\
+  (!x. not_fresh_at sa x ==> not_fresh_at sc x) /\
+  s.vs_current_bb = sc.cs_current_bb /\
+  s.vs_inst_idx + 6 = LENGTH sc.cs_current_insts /\
+  H = (\i. FOLDL (\a j. store_copy_prefix loc
+         (p + n2w (32 + j*em)) (d + n2w (1 + j*ew)) a ew)
+       sbase (COUNT_LIST i)) /\
+  store_copy_normalize sbase s = H j /\
+  (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase) /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  lookup_var ctr s = SOME (n2w j) /\ lookup_var len s = SOME (n2w n) /\
+  ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
+  w2n (p + n2w (32 + j*em)) + 32*ew <= s.vs_alloca_next /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?t. gas_marked_path T ctx fn s 0 (OK t) /\
+      store_copy_normalize sbase t = H (SUC j) /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x sbase) /\
+      lookup_var ctr t = SOME (n2w j) /\ lookup_var len t = SOME (n2w n) /\
+      ~t.vs_halted /\ t.vs_current_bb = sd.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sd.cs_current_insts
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all dyn_storage_multi_addresses_path >>
+  disch_then (qspec_then `ctx` (qx_choose_then `r` strip_assume_tac)) >>
+  `store_copy_normalize sbase r = H j` by
+    (qpat_x_assum `(r with <|vs_vars := _; vs_inst_idx := _|>) = _`
+       (mp_tac o Q.AP_TERM `store_copy_normalize sbase`) >>
+     simp[storage_element_normalize_vars_idx]) >>
+  `r.vs_alloca_next = s.vs_alloca_next /\
+   r.vs_call_ctx = s.vs_call_ctx /\ r.vs_halted = s.vs_halted /\
+   r.vs_current_bb = s.vs_current_bb` by
+    (qpat_x_assum `(r with <|vs_vars := _; vs_inst_idx := _|>) = _` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `eval_operand (Var sp) r = SOME (p + n2w (32 + j*em)) /\
+   eval_operand (Var dp) r = SOME (d + n2w (1 + j*ew))` by
+    simp[eval_operand_def, word_add_n2w, word_mul_n2w] >>
+  `(!x. not_fresh_at sa x ==> lookup_var x r = lookup_var x sbase) /\
+   lookup_var ctr r = SOME (n2w j) /\ lookup_var len r = SOME (n2w n)` by
+    (fs[ALL_DISTINCT, MEM] >> metis_tac[]) >>
+  `?t. gas_marked_path T ctx fn r 0 (OK t) /\
+      store_copy_normalize sbase t = H (SUC j) /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x sbase) /\
+      lookup_var ctr t = SOME (n2w j) /\ lookup_var len t = SOME (n2w n) /\
+      ~t.vs_halted /\ t.vs_current_bb = sd.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sd.cs_current_insts` by
+    (irule storage_element_multi_copy >>
+     qpat_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _` (irule_at Any) >>
+     qpat_assum `eval_operand (Var dp) r = _` (irule_at Any) >>
+     qpat_assum `eval_operand (Var sp) r = _` (irule_at Any) >>
+     qexistsl_tac [`p`, `em`, `d`] >> simp[] >>
+     conj_tac >- gvs[] >> metis_tac[]) >>
+  qexists_tac `t` >> simp[gas_marked_path_def] >>
+  fs[gas_marked_path_def] >> drule_all gas_path_mem_then >> simp[]
+QED
+
+Theorem storage_element_multi_fresh:
+  sc.cs_next_var = sa.cs_next_var + 10 ==>
+  not_fresh_at sc ("%" ++ toString (sa.cs_next_var + 6)) /\
+  not_fresh_at sc ("%" ++ toString (sa.cs_next_var + 9)) /\
+  not_fresh_at sc ("%" ++ toString (sa.cs_next_var + 1)) /\
+  not_fresh_at sc ("%" ++ toString sa.cs_next_var) /\
+  (!x. not_fresh_at sa x ==> not_fresh_at sc x)
+Proof
+  simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  strip_tac >> rpt conj_tac >> rpt strip_tac >>
+  first_x_assum irule >> decide_tac
+QED
