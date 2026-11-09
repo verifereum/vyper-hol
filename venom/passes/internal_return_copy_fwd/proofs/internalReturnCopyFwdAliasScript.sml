@@ -1304,3 +1304,37 @@ Proof
      metis_tac[FLOOKUP_DEF]) >>
   metis_tac[occurrence_geometry_sites_disjoint]
 QED
+
+Theorem ircf_current_forward_write_disjoint:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  wf_function fn /\ fn_inst_wf fn /\ fn_inst_ids_distinct fn /\
+  ircf_no_dst_write_alias fn /\ ircf_fwd_ok fn bb k d sr sz /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  k < s.vs_inst_idx /\ MEM ai (fn_insts fn) /\
+  ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [root] /\
+  (root = d \/ root = sr) /\
+  FLOOKUP s.vs_allocas ai.inst_id = SOME (b,z) /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  MEM (off,len) (source_memory_write_ranges inst s) /\ b <= i /\ i < b+z ==>
+  ~(off <= i /\ i < off+len)
+Proof
+  strip_tac >> strip_tac >>
+  `0 < z /\ len <> 0` by decide_tac >>
+  drule_then strip_assume_tac occ_frame_reachable_annotation >> fs[] >>
+  drule_then assume_tac occ_frame_reachable_geometry >> fs[] >>
+  qpat_x_assum `!lo. _` (qspec_then `lo` assume_tac) >> fs[] >>
+  `FLOOKUP B (a,ai.inst_id) = SOME (b,z)` by
+    fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>
+  `lo <= b` by metis_tac[occurrence_geometry_site_bounds] >>
+  `lo < off+len` by decide_tac >>
+  `?ops v c w. mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+     FLOOKUP G v = SOME (c,w) /\ c <= off /\ off+len <= c+w` by
+    (fs[access_ok_def] >> metis_tac[]) >>
+  `0 < w` by decide_tac >>
+  `b+z <= c \/ c+w <= b` by
+    (irule ircf_current_forward_sites_exclusion >> simp[] >> metis_tac[]) >>
+  decide_tac
+QED
