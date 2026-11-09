@@ -31,9 +31,11 @@ Proof
   gvs[read_result_def, return_def]
   >~ [`expr_val_own`]
   >- (gvs[vv_own_def, expr_val_own_def, is_bytestring_word_type] >>
-      rpt strip_tac >> first_x_assum irule >> simp[SF SFY_ss]) >>
+      rpt strip_tac >> first_x_assum irule >>
+      simp[SF SFY_ss, read_result_def, return_def]) >>
+  qpat_x_assum `_ ==> vv_own _ _ _ _ _ _ _ _ _` kall_tac >>
   gvs[vv_holds_def, read_result_def, return_def, expr_val_rel_def,
-      expr_val_at_def] >>
+      expr_val_at_def, is_bytestring_word_type] >>
   metis_tac[]
 QED
 

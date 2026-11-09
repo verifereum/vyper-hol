@@ -2181,6 +2181,7 @@ QED
 (* A non-word arm unwrapped in place keeps its result's vv_at; any other
    arm's result is no memory place. *)
 Theorem ifexp_arm_unwrap_vv_at[local]:
+  post_value_type ce e = expr_type e /\
   unwrap_value ce vv sm = (op,sb) /\ ~is_word_type (expr_type e) /\
   read_result cx raw ee = (INL v,ee) /\
   vv_post ctx func ce cx e es sa sm s0 ee raw vv s /\
@@ -2207,11 +2208,13 @@ Proof
     metis_tac[vv_post_read_result] >>
   Cases_on `?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory`
   >- (gvs[] >>
-      `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
+      `~is_word_type t` by
+        (gvs[vv_post_def, vv_holds_def] >>
+         metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
       gvs[unwrap_value_def, comp_return_def] >>
       qexists_tac `s` >> simp[cj 1 gas_path_rules] >>
       conj_tac >- (irule expr_post_of_vv_post_memory >> simp[] >>
-                   qexists_tac `expr_type e` >> simp[]) >>
+                   qexists_tac `t` >> simp[]) >>
       rpt strip_tac >> irule ifexp_vv_at_conditional >>
       qexistsl_tac [`raw`, `v`] >> simp[] >>
       qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ raw _ _` mp_tac >>
@@ -2226,7 +2229,7 @@ Proof
   impl_tac >- simp[] >> strip_tac >>
   qexists_tac `u` >> simp[] >> rpt strip_tac >>
   irule ifexp_vv_at_of_val_at >> gvs[read_result_def, return_def] >>
-  fs[expr_post_def]
+  gvs[expr_post_def]
 QED
 
 Theorem ifexp_arm_suffix_path[local]:
