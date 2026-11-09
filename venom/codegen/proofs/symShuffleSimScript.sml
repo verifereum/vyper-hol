@@ -176,6 +176,192 @@ Proof
       rich_listTheory.REPLICATE, stackOpSimTheory.asm_block_at_cons]
 QED
 
+(* Label-word observation depends only on its own bytes. *)
+Theorem mem_label_at_locality:
+  (!b. in_mem_range off 32 b ==> FLOOKUP labs' b = FLOOKUP labs b) ==>
+  mem_label_at labs' off = mem_label_at labs off
+Proof
+  strip_tac >>
+  `!i. i < 32 ==> FLOOKUP labs' (off + i) = FLOOKUP labs (off + i)` by
+    simp[in_mem_range_def] >>
+  `FLOOKUP labs' off = FLOOKUP labs off` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  simp[mem_label_at_def, EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
+QED
+
+Theorem mem_sval_at_locality:
+  (!b. in_mem_range off 32 b ==> FLOOKUP labs' b = FLOOKUP labs b) ==>
+  (mem_sval_at labs' off sv <=> mem_sval_at labs off sv)
+Proof
+  strip_tac >> Cases_on `sv`
+  >- (simp[mem_sval_at_def] >> metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]) >>
+  drule mem_label_at_locality >> simp[mem_sval_at_def]
+QED
+
+Theorem mem_sval_at_install:
+  mem_sval_at (labs |++ GENLIST (\i. (off+i, (l,d,i))) 32) off (Lab l d)
+Proof
+  simp[mem_sval_at_def, mem_label_at_def, asmSymBridgeTheory.mstore_labels_lookup,
+       EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
+QED
+
+Theorem mem_labels_clear_flookup:
+  FLOOKUP (mem_labels_clear labs P) b =
+    if P b then NONE else FLOOKUP labs b
+Proof
+  simp[mem_labels_clear_def, finite_mapTheory.FLOOKUP_DRESTRICT,
+       pred_setTheory.IN_APP] >> IF_CASES_TAC >> gvs[]
+QED
+
+Theorem mem_sval_at_clear:
+  mem_sval_at (mem_labels_clear labs (in_mem_range off 32)) off (Val w)
+Proof
+  simp[mem_sval_at_def, mem_labels_clear_def,
+       finite_mapTheory.FDOM_DRESTRICT, pred_setTheory.IN_APP]
+QED
+
+Theorem mem_labels_frame_domain:
+  (!b. ~P b ==> FLOOKUP labs' b = FLOOKUP labs b) /\
+  (!b. b IN FDOM labs ==> C b) /\
+  (!b. P b ==> C b) ==>
+  !b. b IN FDOM labs' ==> C b
+Proof
+  rpt strip_tac >> Cases_on `P b`
+  >- metis_tac[] >>
+  metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]
+QED
+
+Theorem sym_mstore_label_effect:
+  ss.sym_stack = Val addr :: Lab l d :: stk ==>
+  ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = stk /\
+        ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+        ss'.sym_mem_labels =
+          ss.sym_mem_labels |++ GENLIST (\i. (w2n addr+i, (l,d,i))) 32
+Proof
+  strip_tac >> simp[sym_mstore_def, asm_mstore_def, sym_lift_def,
+                    asm_next_def, Excl "GENLIST"]
+QED
+
+Theorem sym_mstore_val_effect:
+  ss.sym_stack = Val addr :: Val w :: stk ==>
+  ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = stk /\
+        ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+        ss'.sym_mem_labels =
+          mem_labels_clear ss.sym_mem_labels (in_mem_range (w2n addr) 32)
+Proof
+  strip_tac >>
+  simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
+       asm_op_arity_table_def, sval_val_def, asm_op_mem_reads_def,
+       log_table_def, mem_labels_hit_def, asm_op_mem_writes_def,
+       asmOpSimTheory.asm_step_op_mstore, asm_mstore_def, sym_lift_def,
+       asm_next_def]
+QED
+
+Theorem mem_sval_val_no_label:
+  mem_sval_at labs off (Val w) ==>
+  mem_label_at labs off = NONE /\ ~mem_labels_hit labs (in_mem_range off 32)
+Proof
+  simp[mem_sval_at_def, mem_labels_hit_def] >> strip_tac >>
+  `FLOOKUP labs off = NONE` by
+    (simp[finite_mapTheory.FLOOKUP_DEF] >>
+     first_x_assum irule >> simp[in_mem_range_def]) >>
+  simp[mem_label_at_def] >> metis_tac[]
+QED
+
+Theorem sym_mload_label_effect:
+  ss.sym_stack = Val addr :: stk /\
+  mem_sval_at ss.sym_mem_labels (w2n addr) (Lab l d) ==>
+  ?ss'. sym_mload ss = SymOK ss' /\
+        ss'.sym_stack = Lab l d :: stk /\
+        ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+        ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[mem_sval_at_def] >> strip_tac >>
+  simp[sym_mload_def, asm_next_def]
+QED
+
+Theorem sym_mload_val_effect:
+  ss.sym_stack = Val addr :: stk /\
+  mem_sval_at ss.sym_mem_labels (w2n addr) (Val w) ==>
+  ?ss' w'. sym_mload ss = SymOK ss' /\
+           ss'.sym_stack = Val w' :: stk /\
+           ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+           ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  strip_tac >> drule mem_sval_val_no_label >> strip_tac >>
+  simp[sym_mload_def, sym_step_concrete_def, asm_op_arity_def,
+       asm_op_arity_table_def, sval_val_def, asm_op_mem_reads_def,
+       asm_op_mem_writes_def, log_table_def,
+       asmOpSimTheory.asm_step_op_mload, asm_mload_def, sym_lift_def,
+       asm_next_def, mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
+       finite_mapTheory.DRESTRICT_UNIV]
+QED
+
+Theorem sym_mstore_label:
+  ss.sym_stack = Val addr :: Lab l d :: stk ==>
+  ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = stk /\
+        ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+        mem_sval_at ss'.sym_mem_labels (w2n addr) (Lab l d) /\
+        (!b. ~in_mem_range (w2n addr) 32 b ==>
+             FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule sym_mstore_label_effect >> strip_tac >>
+  qexists_tac `ss'` >>
+  pure_asm_rewrite_tac[mem_sval_at_install,
+                       asmSymBridgeTheory.mstore_labels_lookup] >>
+  simp[in_mem_range_def]
+QED
+
+Theorem sym_mstore_val:
+  ss.sym_stack = Val addr :: Val w :: stk ==>
+  ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = stk /\
+        ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+        mem_sval_at ss'.sym_mem_labels (w2n addr) (Val w) /\
+        (!b. ~in_mem_range (w2n addr) 32 b ==>
+             FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule sym_mstore_val_effect >> strip_tac >>
+  qexists_tac `ss'` >> simp[mem_sval_at_clear, mem_labels_clear_flookup]
+QED
+
+Theorem sym_steps_mstore:
+  asm_block_at p ss.sym_base.as_pc [AsmOp "MSTORE"] /\
+  ss.sym_stack = Val addr :: sv :: stk ==>
+  ?ss'. sym_steps p env 1 ss = SymOK ss' /\ ss'.sym_stack = stk /\
+        ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+        mem_sval_at ss'.sym_mem_labels (w2n addr) sv /\
+        (!b. ~in_mem_range (w2n addr) 32 b ==>
+             FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule sym_steps_single >>
+  simp[sym_step_def, sym_step_op_def] >> strip_tac >>
+  Cases_on `sv` >> metis_tac[sym_mstore_label, sym_mstore_val]
+QED
+
+Theorem op_kind_ok_val_retype:
+  op_kind_ok fn ret op (Val w) ==> op_kind_ok fn ret op (Val w')
+Proof
+  Cases_on `op` >> simp[op_kind_ok_def] >>
+  rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem sym_steps_mload_kind:
+  asm_block_at p ss.sym_base.as_pc [AsmOp "MLOAD"] /\
+  ss.sym_stack = Val addr :: stk /\
+  mem_sval_at ss.sym_mem_labels (w2n addr) sv /\
+  op_kind_ok fn ret op sv ==>
+  ?ss' sv'. sym_steps p env 1 ss = SymOK ss' /\
+            ss'.sym_stack = sv' :: stk /\ op_kind_ok fn ret op sv' /\
+            ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+            ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  strip_tac >> drule sym_steps_single >>
+  simp[sym_step_def, sym_step_op_def] >> strip_tac >>
+  Cases_on `sv`
+  >- metis_tac[sym_mload_val_effect, op_kind_ok_val_retype] >>
+  metis_tac[sym_mload_label_effect]
+QED
+
 (* A prefix of planner ops with no SOPushOfst (codegen emits one only for
    OFFSET, which unit_shape_ok excludes), whose spills write inside the
    byte set R and the context's spill regions, steps symbolically to the
