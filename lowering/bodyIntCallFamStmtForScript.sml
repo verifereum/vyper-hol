@@ -1,7 +1,11 @@
 (* Seam 2 joint induction, a family leaf of the stmt step: For. *)
 Theory bodyIntCallFamStmtFor
 Ancestors
-  bodyIntCallJointContract bodySim loweringPosts compileEnv bodyIntCallFamStmtForEntry bodyIntCallFamStmtForScope bodyIntCallFamStmtForResources bodyIntCallFamStmtForFrontier bodyIntCallFamStmtForTransport bodyIntCallFamStmtForPop bodyIntCallFamStmtForArrayFrame bodyIntCallFamStmtForRound bodyIntCallFamStmtForStart bodyIntCallFamStmtForSetup stmtForRangeMemoryLoop stmtSimForLoop stmtSimProps stmtSimDeclStore fragGasMode intCallFrame venomState finite_map
+  bodyIntCallJointContract bodySim loweringPosts compileEnv bodyIntCallFamStmtForEntry bodyIntCallFamStmtForScope bodyIntCallFamStmtForResources bodyIntCallFamStmtForFrontier bodyIntCallFamStmtForTransport bodyIntCallFamStmtForPop bodyIntCallFamStmtForArrayFrame bodyIntCallFamStmtForRound bodyIntCallFamStmtForStart bodyIntCallFamStmtForSetup bodyIntCallFamStmtForSetupGeneral stmtForRangeMemoryLoop stmtSimForLoop stmtSimProps stmtSimDeclStore fragGasMode intCallFrame venomState finite_map
+  bodyIntCallJointStmtSeq stmtSimDefs stmtLowering compileVyper stmtSimForParts
+  vyperTypeSystem vyperTyping supportedStmts supportedStmtTraverse supportedExprs
+  exprSimHypsDefs vyperTypeInvariants exprSimSource
+  vyperInterpreter vyperState list vyperTypeCallGraph
 
 (* Re-entry uses the original compile state, not the body's allocation
    frontier.  Only the static operand reservations need to be re-established. *)
@@ -735,6 +739,193 @@ Proof
   goal_assum (drule_at Any) >>
   qhdtm_assum `declare_local` (irule_at Any) >> simp[] >> metis_tac[]
 QED
+
+Theorem intcall_stmts_producer_for_range_lit:
+  intcall_stmts_producer fp stmts ==>
+  intcall_stmts_producer fp
+    [For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) bound stmts]
+Proof
+  strip_tac >> simp[intcall_stmts_producer_def, eval_stmts_singleton] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[supported_stmt_def, type_stmt_def, int_calls_stmt_def,
+      supported_stmt_expr_exists_def] >>
+  gvs[supported_iterator_def, well_typed_iterator_def, well_typed_expr_def,
+      vyperASTTheory.expr_type_def, AllCaseEqs()] >>
+  rename1 `is_int_type fty` >>
+  `FLOOKUP ce.ce_vars id = NONE` by
+    (fs[intcall_joint_res_def, ce_locals_declared_def] >>
+     Cases_on `FLOOKUP ce.ce_vars id` >> metis_tac[]) >>
+  `env.type_defs = get_tenv fp.jc_cx` by
+    fs[intcall_joint_res_def, expr_sim_inv_def, env_consistent_def,
+       env_context_consistent_def] >>
+  `?tyv. evaluate_type (get_tenv fp.jc_cx) fty = SOME tyv` by
+    fs[well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
+  `ce.ce_alloca_locals` by fs[body_inv_def] >>
+  qpat_x_assum `stmts_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmts_env_singleton, stmt_env_def, declare_stmt_local_def,
+       comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `!c lc sa sb. compile_stmts c lc
+      (if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty) stmts sa = ((),sb) ==>
+      cs_extends sa sb` by
+    metis_tac[stmtLoweringMonoTheory.compile_stmt_cs_mono, fragExecTheory.cs_mono_def] >>
+  drule_all compile_for_range_lit_parts >> strip_tac >>
+  drule_all declare_local_ptr >> strip_tac >>
+  suspend "layout"
+QED
+
+Resume intcall_stmts_producer_for_range_lit[layout]:
+  qabbrev_tac `sz = type_memory_bytes ce fty` >>
+  qabbrev_tac `A = mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
+  `local_ptrs_reserved ce sa` by fs[intcall_joint_res_def] >>
+  `sb0.cs_next_var <= sb1.cs_next_var` by
+    metis_tac[stmtLoweringMonoTheory.compile_stmt_cs_mono, fragExecTheory.cs_mono_def] >>
+  `dv <> p /\ dv <> cv /\ dv <> ev /\ nv <> cv /\ nv <> ev /\ nv <> p /\
+   cv <> ev /\ cv <> p /\ ev <> p` by (fs[] >> rw[] >> fs[]) >>
+  `(!scs. not_local_ptr ce scs cv) /\ (!scs. not_local_ptr ce scs ev) /\
+   (!scs. not_local_ptr ce scs dv) /\ (!scs. not_local_ptr ce scs nv) /\
+   (!scs. not_local_ptr ce scs p)` by
+    (rpt conj_tac >> gen_tac >>
+     qpat_assum `cv = _` SUBST1_TAC >> qpat_assum `ev = _` SUBST1_TAC >>
+     qpat_assum `dv = _` SUBST1_TAC >> qpat_assum `nv = _` SUBST1_TAC >>
+     qpat_assum `p = _` SUBST1_TAC >>
+     irule exprLoweringPropsTheory.local_ptrs_reserved_fresh >>
+     qexists_tac `sa` >> fs[]) >>
+  `local_ptrs_reserved bc sb0` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists_tac `sa with cs_next_var := sa.cs_next_var + 1` >> simp[] >>
+     irule declare_local_reserved >> metis_tac[]) >>
+  `MEM A (fn_insts fp.jc_func)` by
+    (qpat_assum `lookup_block sa.cs_current_bb _ = _`
+       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+         fragExecTheory.lookup_block_fn_insts)) >> simp[Abbr `A`]) >>
+  `is_word_type fty` by
+    (Cases_on `fty` >> gvs[vyperTypeSystemTheory.is_int_type_def] >>
+     rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
+     gvs[vyperTypeSystemTheory.is_int_type_def, is_word_type_def]) >>
+  `sz = 32 /\ type_memory_size tyv = 32` by
+    (drule_all stmtSimReturnTheory.word_type_sizes >>
+     disch_then (qspec_then `ce` mp_tac) >> simp[Abbr `sz`]) >>
+  `for_code fp.jc_func ce bc
+     (if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty)
+     stmts id tyv p sz A cv ev dv nv cond_lbl exit_lbl body_lbl incr_lbl
+     (sa.cs_next_id + 5) (sa.cs_next_id + 6) (sa.cs_next_id + 7) bbb
+     sj.cs_next_id (sj.cs_next_id + 1) (sj.cs_next_id + 2) sb0 sb1 sj` by
+    (simp[for_code_def, Abbr `A`] >>
+     conj_tac >- simp[block_is_terminated_def, venomInstTheory.mk_inst_def,
+                      venomInstTheory.is_terminator_def] >>
+     simp[not_fresh_at_def] >> metis_tac[]) >>
+  suspend "start"
+QED
+
+Resume intcall_stmts_producer_for_range_lit[start]:
+  `!x. not_fresh_at sa x ==> x <> p /\ x <> cv /\ x <> ev` by
+    (simp[not_fresh_at_def] >> metis_tac[]) >>
+  `sz < dimword (:256)` by (simp[wordsTheory.dimword_def]) >>
+  `ALL_DISTINCT [p;cv;ev]` by simp[] >>
+  `?cc w. gas_marked_path F fp.jc_ctx fp.jc_func s 0 (OK cc) /\
+    cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
+    intcall_joint_res fp ce env es sa cc /\
+    lookup_var cv cc = SOME (i2w n1) /\ lookup_var ev cc = SOME (i2w n2) /\
+    lookup_var p cc = SOME w /\ FLOOKUP cc.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
+    (!x. not_fresh_at sa x ==> lookup_var x cc = lookup_var x s) /\
+    (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==> FLOOKUP cc.vs_allocas aid = SOME ent) /\
+    s.vs_alloca_next <= cc.vs_alloca_next /\ cc.vs_memory = s.vs_memory /\
+    cc.vs_labels = s.vs_labels` by
+    (irule intcall_for_literal_start_no_history >>
+     simp[] >> metis_tac[]) >>
+  suspend "iterate"
+QED
+
+Resume intcall_stmts_producer_for_range_lit[iterate]:
+  `value_has_type tyv (IntV n1) /\ value_has_type tyv (IntV n2)` by
+    (metis_tac[vyperTypeValuesTheory.well_typed_literal_sound,
+       vyperValueOperationTheory.evaluate_literal_def]) >>
+  `Num (n2 - n1) < dimword (:256)` by
+    metis_tac[stmtSimForRangeTheory.range_end_words] >>
+  `eval_stmt fp.jc_cx
+     (For id fty (Range (Literal fty (IntL n1)) (Literal fty (IntL n2)))
+       (Num (n2 - n1)) stmts) =
+   eval_for fp.jc_cx tyv id stmts (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))` by
+    (simp[FUN_EQ_THM] >> gen_tac >>
+     qmatch_goalsub_abbrev_tac `lhs = _` >> Cases_on `lhs` >>
+     fs[] >> drule stmtSimForPartsTheory.eval_stmt_for_range_lit >> simp[]) >>
+  pop_assum SUBST_ALL_TAC >>
+  `?env_b. type_stmts (extend_local env id fty F) fp.jc_ret_ty stmts = SOME env_b` by
+    fs[optionTheory.IS_SOME_EXISTS] >>
+  `?ce_b. stmts_env bc (InLoop exit_lbl incr_lbl)
+      (if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty) stmts sb0 = (ce_b,sb1)` by
+    (qmatch_goalsub_abbrev_tac `stmts_env bc lc rt stmts sb0` >>
+     Cases_on `stmts_env bc lc rt stmts sb0` >>
+     metis_tac[stmtSimPropsTheory.compile_stmts_env, pairTheory.SND]) >>
+  `same_frame ce bc` by
+    (irule bodySimDeclCasesTheory.declare_local_same_frame >>
+     qhdtm_assum `declare_local` (irule_at Any) >> simp[]) >>
+  `body_inv fp.jc_tops fp.jc_ctx bc fp.jc_cx` by
+    metis_tac[bodyExprPreFactsTheory.body_inv_same_frame] >>
+  `!k. k < Num (n2 - n1) ==> value_has_type tyv (IntV (n1 + &k))` by
+    metis_tac[stmtSimForRangeTheory.range_value_has_type] >>
+  `local_ptrs_reserved ce sb1` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists_tac `sa` >> fs[cs_extends_def]) >>
+  `supported_program fp.jc_tops /\ get_module_code fp.jc_cx NONE = SOME fp.jc_tops` by
+    fs[body_inv_def] >>
+  `call_evaluation_safe fp.jc_cx (int_calls_stmts stmts)` by
+    (fs[intcall_frame_ok_def, vyperTypeCallStackSoundnessTheory.call_evaluation_safe_def] >>
+     metis_tac[]) >>
+  `!op x. fp.jc_reserved op /\ op = Var x ==> not_fresh_at sa x` by
+    fs[intcall_joint_res_def] >>
+  `!op. fp.jc_reserved op ==> op <> Var cv /\ op <> Var nv /\ op <> Var dv` by
+    (gen_tac >> strip_tac >>
+     `?x z. op = Var x /\ lookup_var x fp.jc_oorig = SOME z` by
+       (qpat_x_assum `intcall_frame_ok fp` mp_tac >> simp[intcall_frame_ok_def]) >>
+     `not_fresh_at sa x` by metis_tac[] >>
+     gvs[not_fresh_at_def]) >>
+  suspend "iteration_apply"
+QED
+
+Resume intcall_stmts_producer_for_range_lit[iteration_apply]:
+  irule stmtSimDeclComposeTheory.gas_outcome_zero_prefix >>
+  qexists_tac `cc` >> simp[] >>
+  `gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (eval_for fp.jc_cx tyv id stmts
+      (DROP 0 (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))))) (es,cc)
+    (\res ee t. res = INL () /\ t.vs_current_bb = exit_lbl /\
+      t.vs_inst_idx = 0 /\ ~t.vs_halted /\ intcall_joint_res fp ce env ee sa t /\
+      (!x z. not_fresh_at sa x /\ lookup_var x cc = SOME z ==> lookup_var x t = SOME z) /\
+      (!aid b. FLOOKUP cc.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      cc.vs_alloca_next <= t.vs_alloca_next)
+    (\res ee r. ?ex. res = INR ex /\ intcall_stmt_exit fp (INR ex) ee r)` by
+    (irule (SRULE [LET_THM] intcall_for_range_producer_iterations) >>
+     qhdtm_assum `for_code` (irule_at Any) >> simp[] >>
+     qhdtm_assum `declare_local` (irule_at Any) >> simp[] >>
+     qexistsl_tac [`lctx`, `bindings`] >> simp[Abbr `A`, Abbr `sz`] >>
+     conj_tac >- (simp[not_fresh_at_def] >> fs[not_fresh_at_def]) >>
+     conj_tac >-
+       (gen_tac >> strip_tac >>
+        irule exprLoweringPropsTheory.local_ptrs_reserved_not_live >>
+        conj_tac >- (qexistsl_tac [`id`, `32`] >> simp[vyperStateTheory.lookup_scopes_def]) >>
+        metis_tac[]) >>
+     simp[venomInstTheory.mk_inst_def] >>
+     conj_tac >-
+       (qpat_x_assum `IS_SOME (case _ of _ => _ | _ => _)` mp_tac >>
+        simp[extend_local_def] >> IF_CASES_TAC >> simp[]) >>
+     drule bodyExprPreFactsTheory.stmt_exprs_ok_same_frame >>
+     disch_then SUBST1_TAC >>
+     drule bodySimDeclCasesTheory.body_for_exprs_ok >> simp[]) >>
+  fs[listTheory.DROP_0] >>
+  irule exprSimSubscriptMapTheory.gas_outcome_conseq >>
+  qhdtm_assum `gas_outcome` (irule_at Any) >> simp[] >>
+  reverse conj_tac
+  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+      simp[stmt_lands_def, cenv_top_ext_refl, block_is_terminated_def] >>
+      irule bodyIntCallJointStmtBoundaryTheory.intcall_joint_res_next_var >>
+      qexists_tac `sa` >> simp[] >>
+      metis_tac[stmtLoweringMonoTheory.compile_stmt_cs_mono, fragExecTheory.cs_mono_def]) >>
+  rpt strip_tac >> gvs[]
+QED
+
+Finalise intcall_stmts_producer_for_range_lit
 
 Theorem intcall_for_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
