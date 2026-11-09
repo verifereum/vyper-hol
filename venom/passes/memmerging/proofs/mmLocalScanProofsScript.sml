@@ -5433,6 +5433,94 @@ Proof
   metis_tac[mm_local_write_log_memory_cong]
 QED
 
+Theorem mm_local_snapshot_copy[local]:
+  inst.inst_opcode = MCOPY /\ inst.inst_operands = [Lit dst; Lit src; Lit len] /\
+  step_inst fuel ctx inst s = OK t /\
+  c = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+          cg_inst_ids := [inst.inst_id] |> /\
+  MEM g (flush_hazards Mem2Mem ss c).ss_copies ==>
+  read_memory g.cg_src g.cg_length t = read_memory g.cg_src g.cg_length s
+Proof
+  strip_tac >> drule_all mm_local_capture_copy >> strip_tac >>
+  drule mm_local_flush_hazards_read >>
+  disch_then (qspecl_then [`s`, `read_memory (w2n src) (w2n len) s`] mp_tac) >>
+  gvs[venomStateTheory.read_memory_def, LENGTH_TAKE, LENGTH_DROP]
+QED
+
+Theorem mm_local_snapshot_store[local]:
+  inst.inst_opcode = MSTORE /\ inst.inst_operands = [Lit dst; Var v] /\
+  lookup_var v s = SOME (mload src s) /\ step_inst fuel ctx inst s = OK t /\
+  c.cg_dst = w2n dst /\ c.cg_src = src /\ c.cg_length = 32 /\
+  MEM g (flush_hazards Mem2Mem
+    (invalidate_loads ss (mk_interval (w2n dst) 32)) c).ss_copies ==>
+  read_memory g.cg_src g.cg_length t = read_memory g.cg_src g.cg_length s
+Proof
+  strip_tac >> drule_all mm_local_capture_store >> strip_tac >>
+  drule mm_local_flush_hazards_read >>
+  disch_then (qspecl_then [`s`, `read_memory src 32 s`] mp_tac) >>
+  gvs[venomStateTheory.read_memory_def, LENGTH_TAKE, LENGTH_DROP]
+QED
+
+Theorem mm_local_snapshot_copy_base[local]:
+  inst.inst_opcode = MCOPY /\ inst.inst_operands = [Lit dst; Lit src; Lit len] /\
+  step_inst_base inst s = OK t /\
+  c = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+          cg_inst_ids := [inst.inst_id] |> /\
+  MEM g (flush_hazards Mem2Mem ss c).ss_copies ==>
+  read_memory g.cg_src g.cg_length t = read_memory g.cg_src g.cg_length s
+Proof
+  strip_tac >>
+  `step_inst 0 ARB inst s = OK t` by
+    simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  drule_all mm_local_snapshot_copy >> simp[]
+QED
+
+Theorem mm_local_snapshot_store_base[local]:
+  inst.inst_opcode = MSTORE /\ inst.inst_operands = [Lit dst; Var v] /\
+  lookup_var v s = SOME (mload src s) /\ step_inst_base inst s = OK t /\
+  c.cg_dst = w2n dst /\ c.cg_src = src /\ c.cg_length = 32 /\
+  MEM g (flush_hazards Mem2Mem
+    (invalidate_loads ss (mk_interval (w2n dst) 32)) c).ss_copies ==>
+  read_memory g.cg_src g.cg_length t = read_memory g.cg_src g.cg_length s
+Proof
+  strip_tac >>
+  `step_inst 0 ARB inst s = OK t` by
+    simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  drule_all mm_local_snapshot_store >> simp[]
+QED
+
+Theorem mm_local_snapshot_segment[local]:
+  !b a. a <= b /\ mm_local_history is H b /\
+  (!j. a <= j /\ j < b ==>
+    (H (SUC j)).vs_memory = (H j).vs_memory \/
+    (?dst src len. (EL j is).inst_opcode = MCOPY /\
+      (EL j is).inst_operands = [Lit dst; Lit src; Lit len] /\
+      c j = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+                cg_inst_ids := [(EL j is).inst_id] |> /\
+      MEM g (flush_hazards Mem2Mem (ss j) (c j)).ss_copies) \/
+    (?dst v src. (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dst; Var v] /\
+      lookup_var v (H j) = SOME (mload src (H j)) /\
+      (c j).cg_dst = w2n dst /\ (c j).cg_src = src /\ (c j).cg_length = 32 /\
+      MEM g (flush_hazards Mem2Mem
+        (invalidate_loads (ss j) (mk_interval (w2n dst) 32)) (c j)).ss_copies)) ==>
+  read_memory g.cg_src g.cg_length (H b) = read_memory g.cg_src g.cg_length (H a)
+Proof
+  Induct_on `b` >- simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `a = SUC b` >- simp[] >>
+  `a <= b` by decide_tac >>
+  drule mm_local_history_last >> strip_tac >>
+  `read_memory g.cg_src g.cg_length (H (SUC b)) =
+   read_memory g.cg_src g.cg_length (H b)` by
+    (qpat_x_assum `!j. _` (qspec_then `b` mp_tac) >> simp[] >>
+     strip_tac
+     >- simp[venomStateTheory.read_memory_def]
+     >- (drule_all mm_local_snapshot_copy_base >> simp[]) >>
+     metis_tac[mm_local_snapshot_store_base]) >>
+  simp[] >> first_x_assum irule >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> simp[]
+QED
+
 (* Essential counterexample evidence: a variable-free unreachable block. *)
 Theorem mm_local_dead_input:
   fn0 = mk_raw_function "f"
