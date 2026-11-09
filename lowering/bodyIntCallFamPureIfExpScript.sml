@@ -339,6 +339,77 @@ Proof
 QED
 
 
+Theorem ifexp_joint_arm_outcome:
+  intcall_expr_producer fp e /\ post_value_type ce e = expr_type e /\
+  intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+  expr_body_pre ce fp.jc_cx env e es /\ supportedExprs$supported_expr fp.jc_tops e /\
+  calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e) /\
+  compile_expr ce ty e sa = (vv,sm) /\
+  compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sm = (op,sb) /\
+  fn_has_code sa sm fp.jc_func /\ fn_has_code sm sb fp.jc_func /\
+  fn_inst_ids_distinct fp.jc_func /\
+  gas_admissible (eval_expr fp.jc_cx e) expr_vv_res_ok es /\
+  gas_admissible (bind (eval_expr fp.jc_cx e) (conditional_result fp.jc_cx))
+    expr_vv_res_ok es /\
+  intcall_joint_res fp ce env es sa s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  (~is_word_type (expr_type e) ==>
+    lowered_value_type ce e = expr_type e \/
+    is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
+      arg_type_fits (lowered_value_type ce e) (expr_type e) \/
+    same_memory_layout ce (lowered_value_type ce e) (expr_type e)) /\
+  (!tv. evaluate_type (get_tenv fp.jc_cx) (expr_type e) = SOME tv /\
+      ~is_word_type (expr_type e) ==>
+      type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+      type_memory_size tv < 2 ** 64) /\
+  (!gs v es2. ~is_word_type (expr_type e) /\
+    bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)
+      (es with gas_obs := gs) = (INL v,es2) ==>
+    ?tv. evaluate_type (get_tenv fp.jc_cx) (expr_type e) = SOME tv /\ value_has_type tv v) /\
+  (?tv. evaluate_type (get_tenv fp.jc_cx) (expr_type e) = SOME tv) ==>
+  gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (bind (eval_expr fp.jc_cx e) (conditional_result fp.jc_cx)) (es,s0)
+    (\res ee q. ?tr v w. res = INL tr /\ read_result fp.jc_cx tr ee = (INL v,ee) /\
+      expr_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s0 ee v op q /\
+      eval_operand op q = SOME w /\
+      (post_value_type ce e <> NoneT /\ ~is_word_type (post_value_type ce e) /\
+       ~is_bytestring_type (post_value_type ce e) ==>
+       !tv. evaluate_type (get_tenv fp.jc_cx) (post_value_type ce e) = SOME tv ==>
+         ?a k. a <= w2n w /\ w2n w + type_memory_size tv <= a+k /\
+           a+k < dimword (:256) /\
+           (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a+k <= b+z)) /\
+      q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. expr_exit res r)
+Proof
+  strip_tac >>
+  qpat_x_assum `intcall_expr_producer _ _` mp_tac >>
+  simp[Once intcall_expr_producer_def] >>
+  disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `intcall_joint_res _ _ _ _ _ _`)) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  irule gas_outcome_bind_result_exec >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- (rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]) >>
+  reverse conj_tac >- (rpt strip_tac >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sm s0
+     (mid with gas_obs := []) v vv t` by
+    (fs[vv_post_def, intcall_expr_cont_def, intcall_joint_res_def] >>
+     first_assum MATCH_ACCEPT_TAC) >>
+  drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`) ifexp_joint_arm_marked_suffix >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `intcall_joint_res _ _ _ _ _ _`)) >>
+  (impl_tac >- (simp[] >> metis_tac[optionTheory.SOME_11])) >>
+  strip_tac >> rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl [`INL tr`, `mid with gas_obs := []`, `OK q`] >>
+  simp[] >>
+  qpat_x_assum `_ ==> !tv. _` mp_tac >> simp[]
+QED
+
 Theorem intcall_ifexp_step:
   (!e'. expr_size e' < expr_size e ==>
         intcall_expr_producer fp e' /\ intcall_forced_producer fp e' /\
