@@ -239,10 +239,10 @@ Proof
 QED
 
 Theorem inline_return_exit:
+  step_inst source_fuel ctx inst s = IntRet ir s' ==>
   (inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) /\
   inst.inst_operands = ops ++ [pc] /\
   raw_return_user_arity inst = SOME (LENGTH outs) /\
-  step_inst source_fuel ctx inst s = IntRet ir s' /\
   EVERY (\op. (!v. op = Var v ==> v IN V /\ v NOTIN opaque) /\
     ~is_label_op op) ops /\
   (!x v. MEM x outs /\ v IN V ==> STRCAT p v <> x) /\
@@ -267,7 +267,7 @@ Theorem inline_return_exit:
     (jump_to ret u).vs_inst_idx = 0 /\
     (jump_to ret u).vs_prev_bb = SOME t.vs_current_bb
 Proof
-  strip_tac >> (
+  strip_tac >> strip_tac >> (
   `MEM inst.inst_opcode [RET; RETFMP]` by simp[] >>
   drule_all inline_return_source >> strip_tac >>
   qpat_x_assum `s' = s` SUBST_ALL_TAC >>

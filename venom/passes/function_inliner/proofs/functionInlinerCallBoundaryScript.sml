@@ -50,3 +50,43 @@ Proof
   simp[rotate_invoke_ops_def, EL_APPEND_EQN, venomStateTheory.eval_operand_def]
 QED
 
+
+Theorem inline_call_return_exit:
+  call_inst.inst_opcode = INVOKE /\ decode_invoke call_inst = SOME (name,arg_ops) /\
+  lookup_function name ctx.ctx_functions = SOME callee /\
+  eval_operands arg_ops caller = SOME vals /\
+  setup_callee callee vals caller = SOME cs /\
+  run_blocks call_fuel ctx callee cs = IntRet ir s' /\
+  (inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) /\
+  inst.inst_operands = ops ++ [pc] /\
+  raw_return_user_arity inst = SOME (LENGTH call_inst.inst_outputs) /\
+  step_inst source_fuel ctx inst s = IntRet ir s' /\
+  EVERY (\op. (!v. op = Var v ==> v IN V /\ v NOTIN opaque) /\
+    ~is_label_op op) ops /\
+  (!x v. MEM x call_inst.inst_outputs /\ v IN V ==> STRCAT p v <> x) /\
+  inline_opaque_frame_rel (STRCAT p) V opaque caller.vs_vars P s t /\
+  bb.bb_instructions = pre ++
+    FST (rewrite_inline_inst args call_inst.inst_outputs ret
+      (clone_instruction p [] inst) param_idx) /\ ~t.vs_halted ==>
+  ?u caller'.
+    step_inst call_fuel ctx call_inst caller =
+      OK (adopt_return_fmp ir (merge_callee_state caller' s')) /\
+    exec_block fuel ctx bb (t with vs_inst_idx := LENGTH pre) = OK (jump_to ret u) /\
+    inline_opaque_frame_rel (STRCAT p) V opaque caller'.vs_vars P s' u /\
+    (!x. x IN P ==> lookup_var x (jump_to ret u) =
+      lookup_var x (adopt_return_fmp ir (merge_callee_state caller' s'))) /\
+    merge_callee_state caller u = merge_callee_state caller s' /\
+    u.vs_fmp = s'.vs_fmp /\
+    (adopt_return_fmp ir (merge_callee_state caller' s')).vs_fmp =
+      (if inst.inst_opcode = RETFMP then s'.vs_fmp else caller.vs_fmp) /\
+    (jump_to ret u).vs_current_bb = ret /\
+    (jump_to ret u).vs_inst_idx = 0 /\
+    (jump_to ret u).vs_prev_bb = SOME t.vs_current_bb
+Proof
+  strip_tac >> drule inline_return_exit >>
+  disch_then (drule_at (Pat `inline_opaque_frame_rel _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `_ .bb_instructions = _`)) >>
+  simp[] >> disch_then (qspec_then `fuel` mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  qexistsl [`u`, `caller'`] >> simp[Once run_defs]
+QED
