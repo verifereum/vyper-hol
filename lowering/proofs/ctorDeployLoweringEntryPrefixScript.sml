@@ -585,6 +585,92 @@ Proof
  fs[abi_decode_sim_def] >> metis_tac[]
 QED
 
+Theorem deploy_ctor_entry_before_register_gas_path:
+ !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
+  body cenv nr nkey ut imm exit_lbl sa sb sj se sp sf func mut nr' body' am_c es0
+  exts ints fb cf cenv0 pos_args is_payable ret cap st_pay st1 cenv1 st2 st3.
+ deploy_phases policy tops (deploy_bc,runtime_bc) (rpolicy,dunit,dout,prog,cplan) /\
+ deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
+ gas_variant vs (deploy_entry_state prog cplan tops es) /\
+ deploy_ctor_code tops rpolicy runtime_bc dunit
+   (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,se,sp,sf,func) /\
+ deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
+ classify_functions tops = (exts,ints,fb,SOME cf) /\
+ set_constructor_package_target rpolicy.rpol_target
+   (package_constructor tops F (assign_nkeys tops 0) cf) =
+     (cenv0,pos_args,is_payable,nr,nkey,ut,body,ret) /\
+ cap = imm_len tops /\
+ (if is_payable then comp_return ()
+  else comp_bind (emit_op CALLVALUE [])
+    (\cv. comp_bind (emit_op ISZERO [cv]) (\nv. emit_void ASSERT [nv])))
+     (initial_compile_state "__deploy") = ((),st_pay) /\
+ (if cap > 0 then
+    comp_bind (compile_fixed_region_with_id cap) (\r. comp_return (SND r).buf_operand)
+  else comp_return (Lit 0w)) st_pay = (imm,st1) /\
+ compile_register_constructor_args
+   (cenv0 with ce_imm_alloca := (if cap > 0 then SOME imm else NONE))
+   pos_args 0 0 st1 = (cenv1,st2) /\
+ (if nr then compile_nonreentrant_lock nkey ut F else comp_return ()) st2 = ((),st3) /\
+ fresh_label "ctor_exit" st3 = (exit_lbl,sa) ==>
+ ?t. fresh_vars_wrt st1 t /\ ~t.vs_halted /\
+     t.vs_current_bb = st1.cs_current_bb /\
+     t.vs_inst_idx = LENGTH st1.cs_current_insts /\ eval_operand imm t = SOME 0w /\
+     vars_pc_only vs t /\ t.vs_allocas = FEMPTY /\ t.vs_alloca_next = imm_len tops /\
+     alloca_inv t /\
+     (!site. alloca_frontier_inv_from (imm_len tops) dunit.cu_context func site t) /\
+     (!aid. st1.cs_next_id <= aid ==> FLOOKUP t.vs_allocas aid = NONE) /\
+     (!scope. local_ptrs_rel func
+        (cenv0 with ce_imm_alloca := (if cap > 0 then SOME imm else NONE)) [scope] t) /\
+     t.vs_memory = vs.vs_memory /\ t.vs_data_section = vs.vs_data_section /\
+     t.vs_call_ctx = vs.vs_call_ctx /\ t.vs_gas_readings = vs.vs_gas_readings /\
+     t.vs_code = vs.vs_code /\ t.vs_labels = vs.vs_labels /\
+     t.vs_accounts = vs.vs_accounts /\ t.vs_transient = vs.vs_transient /\
+     t.vs_logs = vs.vs_logs /\ t.vs_requests = vs.vs_requests /\
+     t.vs_pending_deletions = vs.vs_pending_deletions /\
+     (!fuel r. run_from fuel dunit.cu_context func t = r /\ (!err. r <> Error err) ==>
+        ?fuel'. run_context fuel' dunit.cu_context vs = r) /\
+     gas_path dunit.cu_context func
+       (vs with <|vs_prev_bb := NONE; vs_current_bb := "__deploy"; vs_inst_idx := 0|>)
+       0 (OK t)
+Proof
+ rpt gen_tac >> strip_tac >>
+ drule_all deploy_ctor_prefix_entry >>
+ disch_then (map_every assume_tac o CONJUNCTS) >>
+ qpat_x_assum `?e. _` (qx_choose_then `e` (map_every assume_tac o CONJUNCTS)) >>
+ `supported_program tops` by fs[deploy_source_ok_def] >>
+ drule_all deploy_ctor_original_entry_shape >> strip_tac >>
+ drule deploy_ctor_entry_initial_fields >> strip_tac >>
+ qabbrev_tac `start = vs with <|vs_prev_bb := NONE; vs_current_bb := "__deploy"; vs_inst_idx := 0|>` >>
+ `fresh_vars_wrt (initial_compile_state "__deploy") start /\
+  ~start.vs_halted /\ start.vs_current_bb = (initial_compile_state "__deploy").cs_current_bb /\
+  start.vs_inst_idx = LENGTH (initial_compile_state "__deploy").cs_current_insts /\
+  (is_payable \/ start.vs_call_ctx.cc_callvalue = 0w) /\ vars_pc_only vs start` by
+   (drule deploy_ctor_vars_pc_frame >> strip_tac >>
+    fs[Abbr `start`, fresh_vars_wrt_def, initial_compile_state_def, vars_pc_only_def]) >>
+ `fn_has_code (initial_compile_state "__deploy") sa func` by fs[deploy_ctor_code_def] >>
+ drule_all deploy_ctor_registration_code >> strip_tac >>
+ qpat_x_assum `fresh_vars_wrt (initial_compile_state "__deploy") e` kall_tac >>
+ drule deploy_ctor_pre_register_gas_path >> disch_then drule >>
+ disch_then (qspecl_then [`dunit.cu_context`, `func`, `start`] mp_tac) >>
+ simp[] >> strip_tac >>
+ `vars_pc_only vs t` by
+   (irule vars_pc_only_trans >> goal_assum $ drule_at Any >> simp[]) >>
+ `t.vs_allocas = FEMPTY /\ t.vs_alloca_next = imm_len tops` by
+   (qpat_assum `vars_pc_only vs t` (strip_assume_tac o MATCH_MP deploy_ctor_vars_pc_frame) >> simp[]) >>
+ `dunit.cu_context.ctx_entry = SOME func.fn_name` by
+   (fs[deploy_ctor_code_def] >> drule lower_vyper_deploy_unit_entry >> simp[]) >>
+ drule_all deploy_ctor_empty_alloca_frontier >> strip_tac >>
+ `!scope. local_ptrs_rel func
+   (cenv0 with ce_imm_alloca := (if cap > 0 then SOME imm else NONE)) [scope] t` by
+   (gen_tac >> drule deploy_ctor_initial_local_ptrs >> disch_then irule) >>
+ qpat_assum `vars_pc_only vs t` (strip_assume_tac o MATCH_MP deploy_ctor_vars_pc_frame) >>
+ gvs[Abbr `start`] >> qexists `t` >> simp[] >>
+ fs[abi_decode_sim_def] >> rpt strip_tac >>
+ qpat_x_assum `!fuel. _ ==> ?fuel'. run_from fuel' _ _ _ = _` drule >>
+ strip_tac >> qexists `SUC fuel'` >>
+ simp[run_context_def, run_function_def, run_blocks_run_from_no_phi]
+QED
+
 Theorem deploy_ctor_pre_register_unterminated:
  (if pay then comp_return ()
   else comp_bind (emit_op CALLVALUE [])
