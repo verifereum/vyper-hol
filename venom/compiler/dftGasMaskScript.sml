@@ -471,6 +471,40 @@ Proof
   simp[] >> Cases_on `step_inst fuel C i s` >> simp[]
 QED
 
+Theorem invoke_return_gas_frame[local]:
+  !out outs ir w s j rs t v gs tail.
+    ~MEM out outs /\
+    bind_outputs outs ir.iret_values
+      (adopt_return_fmp ir (merge_callee_state
+        (update_var out w s with <|vs_inst_idx := j; vs_gas_readings := rs|>) t)) = SOME v ==>
+    ?b. bind_outputs outs ir.iret_values
+      (adopt_return_fmp ir (merge_callee_state
+        (s with vs_gas_readings := gs) (t with vs_gas_readings := w::tail))) = SOME b /\
+      b.vs_inst_idx = s.vs_inst_idx /\ b.vs_gas_readings = w::tail /\
+      (update_var out w b with <|vs_inst_idx := j; vs_gas_readings := tail|>) =
+      (v with vs_gas_readings := tail)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `retbase = adopt_return_fmp ir (merge_callee_state s t)` >>
+  `adopt_return_fmp ir (merge_callee_state
+      (update_var out w s with <|vs_inst_idx := j; vs_gas_readings := rs|>) t) =
+      update_var out w retbase with vs_inst_idx := j` by
+    (Cases_on `ir.iret_adopt_fmp` >>
+     simp[Abbr `retbase`, adopt_return_fmp_def, merge_callee_state_def, update_var_def]) >>
+  `adopt_return_fmp ir (merge_callee_state
+      (s with vs_gas_readings := gs) (t with vs_gas_readings := w::tail)) =
+      retbase with vs_gas_readings := w::tail` by
+    (Cases_on `ir.iret_adopt_fmp` >>
+     simp[Abbr `retbase`, adopt_return_fmp_def, merge_callee_state_def]) >>
+  qpat_x_assum `bind_outputs _ _ _ = SOME v` mp_tac >>
+  simp[bind_outputs_idx, dftCommutationTheory.bind_outputs_update_var] >>
+  Cases_on `bind_outputs outs ir.iret_values retbase` >> simp[] >> strip_tac >>
+  drule bind_outputs_inst_idx >>
+  simp[Abbr `retbase`, merge_callee_state_inst_idx] >> strip_tac >>
+  qexists_tac `x with vs_gas_readings := w::tail` >>
+  simp[gasOracleReplayTheory.gas_bind_outputs, update_var_def]
+QED
+
 (* Bounded operational probe: a returning call is one variable-length
    segment, followed by the delayed GAS.  The only mask premise below is
    the blocks induction hypothesis at the actual callee entry. *)
@@ -656,7 +690,33 @@ Proof
   Cases_on `run_blocks fuel C f (cs with vs_gas_readings := gs)` >>
   qpat_x_assum `lift_result _ _ _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [stateEquivTheory.lift_result_def]) >>
-  cheat
+  qpat_x_assum `ir = _` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `_ = t with vs_gas_readings := _` SUBST_ALL_TAC >>
+  drule_all invoke_return_gas_frame >>
+  disch_then (qspecl_then [`gs`, `tail`] strip_assume_tac) >>
+  `step_inst fuel C x (s with vs_gas_readings := gs) = OK b` by
+    (simp[Once step_inst_def]) >>
+  `step_inst fuel C y (b with vs_inst_idx := SUC s.vs_inst_idx) =
+    OK (update_var out w b with <|vs_inst_idx := SUC s.vs_inst_idx;
+                                  vs_gas_readings := tail|>)` by
+    (simp[Once step_inst_def, step_inst_base_def, exec_gas_def, update_var_def] >>
+     first_assum (ACCEPT_TAC o SIMP_RULE (srw_ss()) [update_var_def])) >>
+  `dft_exec_cons fuel C x (dft_exec_cons fuel C y OK)
+      (s with vs_gas_readings := gs) =
+    OK (v with <|vs_inst_idx := SUC (SUC s.vs_inst_idx);
+                 vs_gas_readings := tail|>)` by
+    simp[dftIndexedExecTheory.dft_exec_cons_def, venomInstTheory.is_terminator_def] >>
+  qpat_x_assum `dft_exec_cons fuel C x _ _ = _`
+    (fn th => rewrite_tac[th]) >>
+  conj_tac >- simp[passSimulationDefsTheory.terminates_def] >>
+  conj_tac >- simp[restore_result_def, dft_res_rel_def] >>
+  qpat_x_assum `sites = _ ++ extra` kall_tac >>
+  simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+       EL_APPEND_EQN, gas_events_step_def, venomInstTheory.is_terminator_def,
+       Excl "APPEND_ASSOC"] >>
+  simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+       EL_APPEND_EQN, gas_events_step_def, venomInstTheory.is_terminator_def] >>
+  simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]
 QED
 
 Theorem dft_blocks_gas_mask:
