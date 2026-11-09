@@ -9,7 +9,7 @@
    allocations stay above lo, and the frontier does not move down. *)
 Theory bodyIntCallFamStmtLogSuffix
 Ancestors
-  bodyIntCallJointContract stmtSimLogSuffixFrame
+  bodyIntCallJointContract stmtSimLogSuffixFrame stmtSimLogSuffixActual
 
 Theorem intcall_log_suffix_run:
   !ce id h tys flags args sa xs sm ops st lctx ty sb ctx func cx es s vs
