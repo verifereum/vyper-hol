@@ -7,7 +7,7 @@ Ancestors
   fragGasMode fragExec venomState venomInst valueEncodingProps
   vyperTyping vyperValue finite_map list arithmetic words
 
-Theorem bytes_count_mono_fresh[local]:
+Theorem bytes_count_mono_fresh:
   compile_bytestring_word_count src sa = (cnt,sm) ==>
   ci_mono sa sm /\ (!x. cnt = Var x ==> not_fresh_at sm x)
 Proof
