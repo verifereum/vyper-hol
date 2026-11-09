@@ -120,7 +120,7 @@ Theorem owned_bytes_invariant_inputs[local]:
   mem_bytes_at sb len (abi_decode_source CALLDATALOAD t) = bytes
 Proof
   simp_tac bool_ss [entry_bytes_array_inv_def] >> strip_tac >>
-  fs[abiDecoderTypedContractTheory.abi_decoder_ranges_def,
+  fs[abiDecoderTypedContractTheory.abi_decoder_ranges_def, eval_operand_def,
      abiDecoderContractTheory.abi_decode_source_def, entry_loop_fields_def] >>
   metis_tac[]
 QED
@@ -210,7 +210,7 @@ Proof
   `abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
      (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
      d outsz (d+outsz) region_sz u` by
-    (fs[abiDecoderTypedContractTheory.abi_decoder_ranges_def]) >>
+    (fs[abiDecoderTypedContractTheory.abi_decoder_ranges_def, eval_operand_def]) >>
   qpat_x_assum `outsz = _` SUBST_ALL_TAC >>
   `fresh_vars_wrt limit_st u` by fs[entry_bytes_array_inv_def] >>
   `abi_decoder_operand_live st.cs_next_var src /\
@@ -380,7 +380,7 @@ Proof
   qpat_x_assum `entry_array_init_resources _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [entry_array_init_resources_def]) >>
   qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abiDecoderTypedContractTheory.abi_decoder_ranges_def]) >>
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abiDecoderTypedContractTheory.abi_decoder_ranges_def, arithmeticTheory.ADD]) >>
   `d < dimword (:256)` by decide_tac >>
   `abi_decode_load CALLDATALOAD (n2w sb:bytes32) initial = n2w (LENGTH avs)` by
     (irule abiCanonicalHeadSizeTheory.canonical_dynamic_array_count_load >>
@@ -388,7 +388,7 @@ Proof
   drule_all owned_array_initializer >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
-  pure_rewrite_tac[abiDecoderTypedContractTheory.abi_decoder_ranges_def] >>
+  pure_rewrite_tac[abiDecoderTypedContractTheory.abi_decoder_ranges_def, eval_operand_def, arithmeticTheory.ADD] >>
   asm_rewrite_tac[] >>
   fs[entry_loop_fields_def, abi_decode_source_def, Excl "enc_def"] >>
   metis_tac[]
@@ -525,12 +525,12 @@ Resume entry_owned_canonical_bytes_array_execution[configured]:
       (Q.INST [`base_op` |-> `Lit 0w`] abiDecoderRecursiveLoopLayoutTheory.abi_decoder_loop_phase_lookups)) >> strip_tac >>
   `eval_operand src prepared = SOME (n2w sb)` by
     (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ prepared` mp_tac >>
-     pure_rewrite_tac[abiDecoderTypedContractTheory.abi_decoder_ranges_def] >> metis_tac[]) >>
+     pure_rewrite_tac[abiDecoderTypedContractTheory.abi_decoder_ranges_def, eval_operand_def, arithmeticTheory.ADD] >> metis_tac[]) >>
   `abi_decode_load CALLDATALOAD (n2w sb:bytes32) prepared = n2w (LENGTH avs)` by
     (irule abiCanonicalHeadSizeTheory.canonical_dynamic_array_count_load >>
      qexists_tac `vyper_to_abi_type env ty` >> asm_rewrite_tac[] >>
      qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ prepared` mp_tac >>
-     pure_rewrite_tac[abiDecoderTypedContractTheory.abi_decoder_ranges_def] >> metis_tac[]) >>
+     pure_rewrite_tac[abiDecoderTypedContractTheory.abi_decoder_ranges_def, eval_operand_def, arithmeticTheory.ADD] >> metis_tac[]) >>
   qpat_assum `LENGTH xs = LENGTH avs` (SUBST_ALL_TAC o SYM) >>
   `entry_decode_path ctx fn prepared (jump_to (FST labels) prepared) /\
    entry_owned_loop_inv ctx fn site (FST labels) ip src (n2w p) (n2w sb) tv xs d
