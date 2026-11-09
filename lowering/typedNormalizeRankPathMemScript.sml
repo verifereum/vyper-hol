@@ -366,7 +366,56 @@ Resume typed_store_rank_path_mem[dynamic_equal_finish]:
   simp[lookup_var_def] >> metis_tac[lookup_var_def]
 QED
 Resume typed_store_rank_path_mem[dynamic_slow]:
-  cheat
+  qpat_x_assum `value_has_type (ArrayTV tv (Dynamic _)) v` mp_tac >>
+  Cases_on `v` >> simp[value_has_type_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> simp[value_has_type_def] >> strip_tac >>
+  `emitted_blocks sa sb <> []` by
+    (irule typedNormalizeDynarrayLoopTheory.typed_dynarray_emits_blocks >>
+     reverse conj_tac >- (goal_assum drule >> simp[]) >>
+     goal_assum (drule_at (Pat `compile_copy_dynarray_typed _ _ _ _ _ _ _ = _`)) >>
+     gvs[] >> metis_tac[]) >>
+  qpat_x_assum `emitted_blocks sa sb <> [] ==> _` (drule_then strip_assume_tac) >>
+  `!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x` by metis_tac[] >>
+  `eval_operand src s = SOME (n2w (w2n sw)) /\
+   eval_operand dst s = SOME (n2w (w2n dw))` by simp[] >>
+  drule_at (Pat `compile_copy_dynarray_typed _ _ _ _ _ _ _ = _`)
+    normalize_dynarray_semantic_path_mem >>
+  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
+  disch_then (drule_at (Pat `eval_operand dst _ = _`)) >>
+  disch_then (drule_at (Pat `lookup_block _ _ = _`)) >>
+  disch_then (qspecl_then [`tv'`, `ctx`] mp_tac) >>
+  (impl_tac >- suspend "dynamic_slow_premises") >>
+  strip_tac >> goal_assum (drule_at (Pat `gas_path_mem _ _ _ _ _`)) >>
+  qpat_x_assum `!m. m < n ==> _` kall_tac >>
+  fs[] >> metis_tac[]
+QED
+Resume typed_store_rank_path_mem[dynamic_slow_premises]:
+  simp[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- simp[value_has_type_def] >>
+  conj_tac >- metis_tac[] >>
+  qpat_x_assum `!m. m < n ==> _` mp_tac >>
+  qpat_x_assum `type_rank _ (ArrayT _ _) = n` mp_tac >>
+  qpat_x_assum `acyclic_struct_metadata _` mp_tac >>
+  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+  qpat_x_assum `!name fields. FLOOKUP _ name = SOME fields ==> _` mp_tac >>
+  qpat_x_assum `evaluate_type tenv se = SOME tv` mp_tac >>
+  qpat_x_assum `evaluate_type tenv elem = SOME tv'` mp_tac >>
+  qpat_x_assum `type_widens_to tenv se elem` mp_tac >>
+  rpt (pop_assum kall_tac) >> ntac 8 disch_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `type_rank ce.ce_struct_fields elem < n` by
+    (qpat_x_assum `type_rank _ (ArrayT _ _) = n` mp_tac >>
+     simp[Once typedCopyDomainTheory.type_rank_def]) >>
+  qpat_x_assum `!m. m < n ==> _`
+    (drule_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`))) >>
+  disch_then (drule_at (Pat `evaluate_type _ se = _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ elem = _`)) >>
+  disch_then (drule_at (Pat `value_has_type tv _`)) >>
+  disch_then (drule_at (Pat `eval_operand sp _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand dp _ = _`)) >>
+  disch_then (qspecl_then [`ctx`, `fn`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
 QED
 Resume typed_store_rank_path_mem[tuple]:
   cheat
