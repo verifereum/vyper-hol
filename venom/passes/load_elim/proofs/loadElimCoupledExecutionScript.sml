@@ -937,3 +937,29 @@ Resume le_coupled_run[intret]:
   Cases_on `br` >> gvs[lift_result_def, Excl "isPREFIX"]
 QED
 Finalise le_coupled_run
+
+Theorem le_coupled_run_initial:
+  le_round_ready C fn ctx s0 /\
+  le_padded_control {v | isPREFIX "$le_phi_" v} s0 t ==>
+  (?e. run_blocks fuel C fn s0 = Error e) \/
+  lift_result (le_padded_control {v | isPREFIX "$le_phi_" v})
+    (padded_exec_equiv {v | isPREFIX "$le_phi_" v})
+    (padded_exec_equiv {v | isPREFIX "$le_phi_" v})
+    (run_blocks fuel C fn s0)
+    (run_blocks fuel C
+      (analysis_function_transform_prepend NONE (load_analyze ctx fn)
+        (load_phi_prepend (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn))
+        (\ll inst. [load_elim_inst ctx
+          (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ll inst]) fn) t)
+Proof
+  strip_tac >> irule le_coupled_run >> simp[Excl "isPREFIX"] >>
+  qexistsl_tac [`[]`, `s0`] >>
+  simp[Excl "isPREFIX"] >> rpt strip_tac >>
+  irule (cj 1 le_occ_prefix_rules) >> simp[active_inst_def] >>
+  qpat_x_assum `eval_phis s0 _ = OK p` mp_tac >>
+  rewrite_tac[loadElimOperationalHistoryTheory.le_eval_phis_snapshot] >>
+  strip_tac >> drule loadElimActualPhiFrameTheory.le_snapshot_batch_controls >>
+  simp[Excl "isPREFIX"] >> strip_tac >>
+  fs[get_instruction_def, Excl "isPREFIX"] >>
+  qexists_tac `bb` >> metis_tac[lookup_block_MEM, lookup_block_label]
+QED
