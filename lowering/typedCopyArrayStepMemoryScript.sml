@@ -136,7 +136,7 @@ Proof
 QED
 
 (* The header and increment change only compiler-fresh control variables. *)
-Theorem typed_copy_control_pair_frame[local]:
+Theorem typed_copy_control_pair_frame:
   ~not_fresh_at sa x /\ ~not_fresh_at sa y ==>
   typed_copy_state_frame sa off len s
     (jump_to lbl (update_var y yw (update_var x xw s)))
