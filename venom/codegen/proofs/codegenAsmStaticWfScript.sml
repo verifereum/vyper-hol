@@ -104,6 +104,24 @@ Proof
   metis_tac[do_restore_no_ref]
 QED
 
+(* A fold only needs a one-step accumulator invariant. *)
+Theorem plan_ref_free_foldl:
+  !xs initial ops rest.
+  FOLDL advance initial xs = (ops, rest) /\
+  (!acc x. ~plan_ref l (FST acc) ==> ~plan_ref l (FST (advance acc x))) /\
+  ~plan_ref l (FST initial) ==> ~plan_ref l ops
+Proof
+  Induct >> simp[] >> metis_tac[]
+QED
+
+Theorem spill_accumulate_no_ref:
+  ~plan_ref l acc_ops ==>
+  ~plan_ref l (FST ((\(off, al').
+    (acc_ops ++ [SOSpill off], SNOC off offsets, al')) (alloc_spill_slot al)))
+Proof
+  pairarg_tac >> simp[plan_ref_append, plan_ref_def]
+QED
+
 Theorem spill_fold_no_ref:
   !items acc_ops offsets al ops offsets' al'.
   FOLDL (\(ops, offs, al) item.
@@ -112,11 +130,8 @@ Theorem spill_fold_no_ref:
     (acc_ops, offsets, al) items = (ops, offsets', al') /\
   ~plan_ref l acc_ops ==> ~plan_ref l ops
 Proof
-  Induct >> simp[] >> rpt gen_tac >>
-  Cases_on `alloc_spill_slot al` >>
-  rename1 `alloc_spill_slot al = (off, alloc_next)` >> simp[] >> strip_tac >>
-  first_x_assum (qspec_then `acc_ops ++ [SOSpill off]` mp_tac) >>
-  simp[plan_ref_append, plan_ref_def] >> disch_then drule >> simp[]
+  rpt strip_tac >> drule_at Any plan_ref_free_foldl >>
+  simp[pairTheory.FORALL_PROD, spill_accumulate_no_ref, SF SFY_ss]
 QED
 
 Theorem do_swap_no_ref:
@@ -139,19 +154,51 @@ Proof
   rpt IF_CASES_TAC >> simp[]
 QED
 
+(* Sequential generators concatenate their output chunks. *)
+Theorem plan_pair_bind_no_ref:
+  (!st chunk next_st. produce st = (chunk, next_st) ==> ~plan_ref l chunk) /\
+  (!st chunk next_st. continue st = (chunk, next_st) ==> ~plan_ref l chunk) /\
+  (\(first_ops, middle_st).
+     (\(last_ops, final_st). (first_ops ++ last_ops, final_st))
+       (continue middle_st)) (produce ps) = (ops, ps') ==>
+  ~plan_ref l ops
+Proof
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[plan_ref_append] >> metis_tac[plan_ref_append]
+QED
+
 Theorem reduce_depth_plan_no_ref:
   !fuel target_ops target_op f n ps ops ps'.
   reduce_depth_plan fuel target_ops target_op f n ps = (ops, ps') ==>
   !l. ~plan_ref l ops
 Proof
-  Induct >> simp[reduce_depth_plan_def, plan_ref_def] >> rpt gen_tac >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `stack_get_unfixed_depth target_op f n ps.ps_stack` >> simp[] >>
-  rename1 `stack_get_unfixed_depth target_op f n ps.ps_stack = SOME depth` >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `select_spill_candidate ps.ps_stack target_ops depth n` >> simp[] >>
-  pairarg_tac >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >> metis_tac[do_spill_at_no_ref, plan_ref_def]
+  Induct >- simp[reduce_depth_plan_def, plan_ref_def] >>
+  rw[Once reduce_depth_plan_def, AllCaseEqs()] >>
+  gvs[plan_ref_def] >>
+  metis_tac[plan_pair_bind_no_ref, do_spill_at_no_ref, plan_ref_def]
+QED
+
+(* Selecting a restoration does not introduce a pushed label. *)
+Theorem reorder_restore_selection_no_ref:
+  (case stack_get_unfixed_depth operand f n ps.ps_stack of
+     SOME _ => ([], ps)
+   | NONE => (case FLOOKUP ps.ps_spilled operand of
+                SOME _ => do_restore operand ps
+              | NONE => ([], ps))) = (ops, ps') ==>
+  !l. ~plan_ref l ops
+Proof
+  simp[AllCaseEqs()] >> rpt strip_tac >>
+  gvs[plan_ref_def, do_restore_def, AllCaseEqs()]
+QED
+
+(* Depth reduction is optional; both choices are reference-free. *)
+Theorem reorder_reduce_selection_no_ref:
+  (if (dist:num) > 16 then
+     reduce_depth_plan fuel target_ops operand f n ps
+   else ([], ps)) = (ops, ps') ==> !l. ~plan_ref l ops
+Proof
+  IF_CASES_TAC >> gvs[plan_ref_def] >>
+  metis_tac[reduce_depth_plan_no_ref, plan_ref_def]
 QED
 
 Theorem reorder_one_no_ref:
@@ -160,14 +207,14 @@ Theorem reorder_one_no_ref:
 Proof
   simp[reorder_one_def] >> pairarg_tac >>
   `!l. ~plan_ref l restore_ops` by
-    (gvs[AllCaseEqs(), plan_ref_def] >> metis_tac[do_restore_no_ref, plan_ref_def]) >>
+    (metis_tac[reorder_restore_selection_no_ref]) >>
   gvs[] >> qpat_x_assum `_ = (restore_ops, ps1)` kall_tac >>
   Cases_on `stack_get_unfixed_depth operand (LENGTH target_ops - (idx + 1))
               (LENGTH target_ops) ps1.ps_stack` >> simp[]
   >- (rw[] >> gvs[]) >>
   pairarg_tac >>
   `!l. ~plan_ref l reduce_ops` by
-    (gvs[AllCaseEqs(), plan_ref_def] >> metis_tac[reduce_depth_plan_no_ref, plan_ref_def]) >>
+    (drule reorder_reduce_selection_no_ref >> simp[]) >>
   gvs[] >> qpat_x_assum `_ = (reduce_ops, ps2)` kall_tac >>
   Cases_on `stack_get_unfixed_depth operand (LENGTH target_ops - (idx + 1))
               (LENGTH target_ops) ps2.ps_stack` >> simp[]
@@ -177,6 +224,14 @@ Proof
   metis_tac[do_swap_no_ref, plan_ref_def]
 QED
 
+Theorem reorder_accumulate_no_ref:
+  ~plan_ref l acc_ops ==>
+  ~plan_ref l (FST ((\(step_ops, next_ps). (acc_ops ++ step_ops, next_ps))
+    (reorder_one dfg target_ops idx operand ps)))
+Proof
+  pairarg_tac >> simp[plan_ref_append] >> metis_tac[reorder_one_no_ref]
+QED
+
 Theorem reorder_fold_no_ref:
   !xs acc_ops ps ops ps'.
   FOLDL (\(ops, ps) (idx, operand).
@@ -184,14 +239,8 @@ Theorem reorder_fold_no_ref:
       (reorder_one dfg target_ops idx operand ps)) (acc_ops, ps) xs =
     (ops, ps') /\ ~plan_ref l acc_ops ==> ~plan_ref l ops
 Proof
-  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >> simp[] >>
-  rename1 `reorder_one dfg target_ops idx operand ps` >>
-  Cases_on `reorder_one dfg target_ops idx operand ps` >>
-  rename1 `reorder_one dfg target_ops idx operand ps = (step_ops, next_ps)` >>
-  simp[] >> strip_tac >>
-  first_x_assum (qspec_then `acc_ops ++ step_ops` mp_tac) >>
-  simp[plan_ref_append] >> disch_then drule >>
-  drule reorder_one_no_ref >> simp[]
+  rpt strip_tac >> drule_at Any plan_ref_free_foldl >>
+  simp[pairTheory.FORALL_PROD, reorder_accumulate_no_ref, SF SFY_ss]
 QED
 
 Theorem reorder_plan_no_ref:
@@ -199,6 +248,31 @@ Theorem reorder_plan_no_ref:
 Proof
   simp[reorder_plan_def] >> strip_tac >> gen_tac >>
   drule reorder_fold_no_ref >> simp[plan_ref_def]
+QED
+
+Theorem popmany_swap_accumulate_no_ref:
+  ~plan_ref l acc_ops ==>
+  ~plan_ref l (FST ((\(swap_ops, next_ps).
+    (acc_ops ++ swap_ops ++ [SOPop 1],
+     next_ps with ps_stack := stack_pop 1 next_ps.ps_stack))
+    (if dist = 0 then ([], ps) else do_swap dist ps)))
+Proof
+  IF_CASES_TAC >- simp[plan_ref_append, plan_ref_def] >>
+  pairarg_tac >> simp[plan_ref_append, plan_ref_def] >>
+  metis_tac[do_swap_no_ref, plan_ref_def]
+QED
+
+Theorem popmany_accumulate_no_ref:
+  ~plan_ref l acc_ops ==>
+  ~plan_ref l (FST (case stack_get_depth v ps.ps_stack of
+    NONE => (acc_ops, ps)
+  | SOME dist => (\(swap_ops, next_ps).
+      (acc_ops ++ swap_ops ++ [SOPop 1],
+       next_ps with ps_stack := stack_pop 1 next_ps.ps_stack))
+      (if dist = 0 then ([], ps) else do_swap dist ps)))
+Proof
+  Cases_on `stack_get_depth v ps.ps_stack` >>
+  simp[popmany_swap_accumulate_no_ref]
 QED
 
 Theorem popmany_fold_no_ref:
@@ -214,19 +288,8 @@ Theorem popmany_fold_no_ref:
     (acc_ops, ps) xs = (ops, ps') /\
   ~plan_ref l acc_ops ==> ~plan_ref l ops
 Proof
-  Induct >> simp[] >> rpt gen_tac >>
-  Cases_on `stack_get_depth h ps.ps_stack` >> simp[]
-  >- metis_tac[] >>
-  rename1 `stack_get_depth h ps.ps_stack = SOME depth` >>
-  Cases_on `depth = 0` >> simp[]
-  >- (strip_tac >>
-      first_x_assum (qspec_then `acc_ops ++ [SOPop 1]` mp_tac) >>
-      simp[plan_ref_append, plan_ref_def] >> disch_then drule >> simp[]) >>
-  Cases_on `do_swap depth ps` >>
-  rename1 `do_swap depth ps = (swap_ops, next_ps)` >> simp[] >> strip_tac >>
-  first_x_assum (qspec_then `acc_ops ++ swap_ops ++ [SOPop 1]` mp_tac) >>
-  simp[plan_ref_append, plan_ref_def] >> disch_then drule >>
-  drule do_swap_no_ref >> simp[plan_ref_def]
+  rpt strip_tac >> drule_at Any plan_ref_free_foldl >>
+  simp[pairTheory.FORALL_PROD, popmany_accumulate_no_ref, SF SFY_ss]
 QED
 
 Theorem popmany_individual_no_ref:
