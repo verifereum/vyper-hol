@@ -388,3 +388,12 @@ Proof
   drule_all venomWfPropsTheory.fn_inst_ids_distinct_inj >>
   strip_tac >> gvs[]
 QED
+
+Theorem decode_invoke_prov_mem:
+  decode_invoke inst = SOME (nm,ops) /\
+  MEM (SOME id) (MAP (op_prov H) ops) ==>
+  ?v. MEM (Var v) inst.inst_operands /\ FLOOKUP H v = SOME id
+Proof
+  simp[venomExecSemanticsTheory.decode_invoke_def, AllCaseEqs(), MEM_MAP] >>
+  rpt strip_tac >> Cases_on `y` >> gvs[op_prov_def] >> metis_tac[]
+QED

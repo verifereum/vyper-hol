@@ -5,7 +5,7 @@ Ancestors
   venomExecSemantics venomState o1LowerDloadPairedAllocation
   venomMemProps basePtrProofs o1FrameLockstep ssaAvailablePred venomExecProofs venomWf rangeAnalysisProofs contextCodegenRel
   tailMergeStep venomInstProofs1 ptrDisciplineControl venomInstProps relation
-  singleUseExpansionSupplySim
+  singleUseExpansionSupplySim occurrenceOrigin
 
 Definition ircf_alias_value_def:
   ircf_alias_value fn s G v <=>
@@ -963,4 +963,44 @@ Proof
   `(EL k bb.bb_instructions).inst_opcode = MCOPY` by metis_tac[ircf_fwd_ok_def] >>
   simp[source_memory_read_ranges_def, codegenRelTheory.source_memory_write_ranges_def,
        codegenRelTheory.sized_source_write_range_def, eval_operand_def]
+QED
+
+Theorem ircf_fwd_src_call_args_absent:
+  fn_inst_wf fn /\ fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d sr sz /\ occurrence_syntax_origin fn a H /\
+  k < i /\ i < LENGTH bb.bb_instructions /\
+  call_inst = EL i bb.bb_instructions /\ call_inst.inst_opcode = INVOKE /\
+  decode_invoke call_inst = SOME (nm,ops) /\
+  MEM sai (fn_insts fn) /\ sai.inst_opcode = ALLOCA /\
+  sai.inst_outputs = [sr] ==>
+  ~MEM (SOME (a,sai.inst_id)) (MAP (op_prov H) ops)
+Proof
+  strip_tac >> strip_tac >>
+  drule_all decode_invoke_prov_mem >> strip_tac >>
+  `v IN pointer_derived_vars fn {sr}` by
+    (drule_all occurrence_syntax_origin_planned_root >> simp[]) >>
+  `ircf_alias fn sr v` by
+    (drule_all ircf_fwd_src_pointer_closure >> simp[pred_setTheory.SUBSET_DEF]) >>
+  drule_all ircf_fwd_later_invoke_not_src_alias >> simp[]
+QED
+
+Theorem ircf_fwd_dst_call_args_absent:
+  fn_inst_wf fn /\ fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d sr sz /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  ircf_no_dst_write_alias fn /\ occurrence_syntax_origin fn a H /\
+  k < i /\ i < LENGTH bb.bb_instructions /\
+  call_inst = EL i bb.bb_instructions /\ call_inst.inst_opcode = INVOKE /\
+  decode_invoke call_inst = SOME (nm,ops) /\
+  MEM dai (fn_insts fn) /\ dai.inst_opcode = ALLOCA /\
+  dai.inst_outputs = [d] ==>
+  ~MEM (SOME (a,dai.inst_id)) (MAP (op_prov H) ops)
+Proof
+  strip_tac >> strip_tac >>
+  drule_all decode_invoke_prov_mem >> strip_tac >>
+  `v IN pointer_derived_vars fn {d}` by
+    (drule_all occurrence_syntax_origin_planned_root >> simp[]) >>
+  `ircf_alias fn d v` by
+    (drule_all ircf_fwd_dst_pointer_closure >> simp[pred_setTheory.SUBSET_DEF]) >>
+  drule_all ircf_fwd_later_invoke_not_dst_alias >> simp[]
 QED

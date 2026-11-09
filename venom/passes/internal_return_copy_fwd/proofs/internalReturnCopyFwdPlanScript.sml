@@ -965,3 +965,49 @@ Proof
   `inst.inst_opcode = ASSIGN` by metis_tac[ircf_fwd_dst_pointer_use] >>
   metis_tac[ircf_assign_pointer_alias]
 QED
+
+Theorem ircf_fwd_later_invoke_not_src_alias:
+  fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d s sz /\ k < i /\ i < LENGTH bb.bb_instructions /\
+  inst = EL i bb.bb_instructions /\ inst.inst_opcode = INVOKE /\
+  MEM (Var v) inst.inst_operands ==> ~ircf_alias fn s v
+Proof
+  strip_tac >> strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (rewrite_tac[fn_insts_def] >>
+     irule unitShapeDefsTheory.MEM_fn_insts_blocks >>
+     qexists_tac `bb` >> simp[EL_MEM]) >>
+  `inst.inst_id <> (EL k bb.bb_instructions).inst_id` by
+    (strip_tac >> drule_all ircf_fwd_copy_id >> strip_tac >>
+     gvs[ircf_fwd_ok_def]) >>
+  fs[ircf_fwd_ok_def] >>
+  qpat_x_assum `!j v. _ ==> j.inst_opcode = ASSIGN \/ _`
+    (qspecl_then [`inst`, `v`] assume_tac) >> rfs[] >>
+  rename1 `EL earlier bb.bb_instructions = EL i bb.bb_instructions` >>
+  `earlier < LENGTH bb.bb_instructions` by decide_tac >>
+  `earlier = i` by
+    (irule venomExecProofsTheory.inst_ids_el_eq >>
+     qexistsl_tac [`bb`, `fn`] >> simp[]) >> decide_tac
+QED
+
+Theorem ircf_fwd_later_invoke_not_dst_alias:
+  fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d s sz /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,s,sz) /\
+  ircf_no_dst_write_alias fn /\ k < i /\ i < LENGTH bb.bb_instructions /\
+  inst = EL i bb.bb_instructions /\ inst.inst_opcode = INVOKE /\
+  MEM (Var v) inst.inst_operands ==> ~ircf_alias fn d v
+Proof
+  strip_tac >> strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (rewrite_tac[fn_insts_def] >>
+     irule unitShapeDefsTheory.MEM_fn_insts_blocks >>
+     qexists_tac `bb` >> simp[EL_MEM]) >>
+  `inst.inst_id <> (EL k bb.bb_instructions).inst_id` by
+    (strip_tac >> drule_all ircf_fwd_copy_id >> strip_tac >>
+     gvs[ircf_fwd_ok_def]) >>
+  fs[ircf_fwd_ok_def] >>
+  `MEM (EL k bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+  `MEM inst bb.bb_instructions` by simp[EL_MEM] >>
+  drule_all ircf_copy_roots_no_write_use >> simp[]
+QED
