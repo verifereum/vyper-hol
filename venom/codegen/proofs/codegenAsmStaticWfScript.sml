@@ -70,20 +70,57 @@ Proof
   simp[plan_ref_append, MEM_APPEND] >> metis_tac[]
 QED
 
+Theorem plan_ref_cons:
+  plan_ref l (op::ops) <=> op = SOPushLabel l \/ op = SOPush (Label l) \/
+    (?n. op = SOPushOfst l n) \/ plan_ref l ops
+Proof
+  simp[plan_ref_def] >> metis_tac[]
+QED
+
+Theorem plan_ref_nil:
+  ~plan_ref l []
+Proof
+  simp[plan_ref_def]
+QED
+
+Theorem plan_ref_fst_cond:
+  plan_ref l (FST (if guard then yes else no)) =
+  (if guard then plan_ref l (FST yes) else plan_ref l (FST no))
+Proof
+  Cases_on `guard` >> simp[]
+QED
+
+Theorem plan_ref_fst_option:
+  plan_ref l (FST (case opt of NONE => absent | SOME x => present x)) =
+  (case opt of NONE => plan_ref l (FST absent)
+   | SOME x => plan_ref l (FST (present x)))
+Proof
+  Cases_on `opt` >> simp[]
+QED
+
+Theorem do_spill_tos_fst_no_ref:
+  ~plan_ref l (FST (do_spill_tos ps))
+Proof
+  simp[do_spill_tos_def, pairTheory.ELIM_UNCURRY, plan_ref_def]
+QED
+
 Theorem do_spill_tos_no_ref:
   do_spill_tos ps = (ops, ps') ==> !l. ~plan_ref l ops
 Proof
-  simp[do_spill_tos_def] >> pairarg_tac >>
-  simp[] >> rpt strip_tac >> gvs[plan_ref_def]
+  metis_tac[do_spill_tos_fst_no_ref, pairTheory.FST]
+QED
+
+Theorem do_spill_at_fst_no_ref:
+  ~plan_ref l (FST (do_spill_at dist ps))
+Proof
+  simp[do_spill_at_def, pairTheory.ELIM_UNCURRY, plan_ref_fst_cond,
+    plan_ref_append, plan_ref_cons, do_spill_tos_fst_no_ref]
 QED
 
 Theorem do_spill_at_no_ref:
   do_spill_at dist ps = (ops, ps') ==> !l. ~plan_ref l ops
 Proof
-  simp[do_spill_at_def] >> IF_CASES_TAC
-  >- metis_tac[do_spill_tos_no_ref]
-  >> pairarg_tac >> simp[] >> strip_tac >> gvs[]
-  >> drule do_spill_tos_no_ref >> simp[plan_ref_append, plan_ref_def]
+  metis_tac[do_spill_at_fst_no_ref, pairTheory.FST]
 QED
 
 Theorem do_restore_no_ref:
@@ -178,50 +215,40 @@ Proof
   metis_tac[plan_pair_bind_no_ref, do_spill_at_no_ref, plan_ref_def]
 QED
 
-(* Selecting a restoration does not introduce a pushed label. *)
-Theorem reorder_restore_selection_no_ref:
-  (case stack_get_unfixed_depth operand f n ps.ps_stack of
-     SOME _ => ([], ps)
-   | NONE => (case FLOOKUP ps.ps_spilled operand of
-                SOME _ => do_restore operand ps
-              | NONE => ([], ps))) = (ops, ps') ==>
-  !l. ~plan_ref l ops
+Theorem do_restore_fst_no_ref:
+  ~plan_ref l (FST (do_restore operand ps))
 Proof
-  simp[AllCaseEqs()] >> rpt strip_tac >>
-  gvs[plan_ref_def, do_restore_def, AllCaseEqs()]
+  Cases_on `do_restore operand ps` >> metis_tac[do_restore_no_ref, pairTheory.FST]
 QED
 
-(* Depth reduction is optional; both choices are reference-free. *)
-Theorem reorder_reduce_selection_no_ref:
-  (if (dist:num) > 16 then
-     reduce_depth_plan fuel target_ops operand f n ps
-   else ([], ps)) = (ops, ps') ==> !l. ~plan_ref l ops
+Theorem do_swap_fst_no_ref:
+  ~plan_ref l (FST (do_swap dist ps))
 Proof
-  IF_CASES_TAC >> gvs[plan_ref_def] >>
-  metis_tac[reduce_depth_plan_no_ref, plan_ref_def]
+  Cases_on `do_swap dist ps` >> metis_tac[do_swap_no_ref, pairTheory.FST]
+QED
+
+Theorem reduce_depth_plan_fst_no_ref:
+  ~plan_ref l (FST (reduce_depth_plan fuel target_ops operand f n ps))
+Proof
+  Cases_on `reduce_depth_plan fuel target_ops operand f n ps` >>
+  metis_tac[reduce_depth_plan_no_ref, pairTheory.FST]
+QED
+
+Theorem reorder_one_fst_no_ref:
+  ~plan_ref l (FST (reorder_one dfg target_ops idx operand ps))
+Proof
+  simp[reorder_one_def, pairTheory.ELIM_UNCURRY,
+    plan_ref_fst_cond, plan_ref_fst_option, plan_ref_nil,
+    plan_ref_append, do_restore_fst_no_ref,
+    do_swap_fst_no_ref, reduce_depth_plan_fst_no_ref] >>
+  simp[optionTheory.option_case_compute]
 QED
 
 Theorem reorder_one_no_ref:
   reorder_one dfg target_ops idx operand ps = (ops, ps') ==>
   !l. ~plan_ref l ops
 Proof
-  simp[reorder_one_def] >> pairarg_tac >>
-  `!l. ~plan_ref l restore_ops` by
-    (metis_tac[reorder_restore_selection_no_ref]) >>
-  gvs[] >> qpat_x_assum `_ = (restore_ops, ps1)` kall_tac >>
-  Cases_on `stack_get_unfixed_depth operand (LENGTH target_ops - (idx + 1))
-              (LENGTH target_ops) ps1.ps_stack` >> simp[]
-  >- (rw[] >> gvs[]) >>
-  pairarg_tac >>
-  `!l. ~plan_ref l reduce_ops` by
-    (drule reorder_reduce_selection_no_ref >> simp[]) >>
-  gvs[] >> qpat_x_assum `_ = (reduce_ops, ps2)` kall_tac >>
-  Cases_on `stack_get_unfixed_depth operand (LENGTH target_ops - (idx + 1))
-              (LENGTH target_ops) ps2.ps_stack` >> simp[]
-  >- (rw[] >> gvs[plan_ref_append]) >>
-  rpt IF_CASES_TAC >> simp[] >> gvs[] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[plan_ref_append] >>
-  metis_tac[do_swap_no_ref, plan_ref_def]
+  metis_tac[reorder_one_fst_no_ref, pairTheory.FST]
 QED
 
 Theorem reorder_accumulate_no_ref:
