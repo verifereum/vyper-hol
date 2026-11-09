@@ -18,9 +18,22 @@ Theorem abi_decode_member_phase_shape:
   inst_extends sa sm /\ inst_extends sm sn /\ inst_extends sn sb /\
   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sm) /\
   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sn) /\
-  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sn sb)
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sn sb) /\
+  same_blocks sa sb
 Proof
   strip_tac >>
+  `same_blocks sa sb` by
+    (drule emit_op_same_blocks >> strip_tac >>
+     fs[abi_decode_member_layout_def] >> gvs[dec_info_needs_offset_def]
+     >- (Cases_on `emit_op ADD [pos;Lit (n2w off)] sa` >>
+         fs[compile_getelemptr_abi_def, comp_bind_def, comp_return_def] >>
+         drule abi_decoder_clamped_word_shape >>
+         simp[abi_decode_source_opcode_def] >> strip_tac >>
+         metis_tac[emit_op_same_blocks, same_blocks_def]) >>
+     drule abi_decode_bytes_position_shape >>
+     simp[abi_decode_source_opcode_def] >> strip_tac >>
+     drule abi_decode_selection_shape >> strip_tac >>
+     metis_tac[same_blocks_def]) >>
   `inst_extends sm sn` by metis_tac[inst_extends_emit_op] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sm)` by
     (drule abi_decode_member_pointer_allocation_shape >>

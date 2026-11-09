@@ -43,7 +43,8 @@ Theorem abi_decode_flat_member_shape:
   abi_decode_member_code dst pos src hi ei off q sa sb /\
   abi_decode_member_layout ei off q k z h cap ==>
   inst_extends sa sb /\
-  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+  same_blocks sa sb
 Proof
   strip_tac >> fs[abi_decode_member_code_def] >>
   drule_all abi_decode_member_phase_shape >> strip_tac >>
@@ -61,21 +62,24 @@ Theorem abi_decode_flat_compile_shape:
     compile_abi_decode_complex_elems (Var dst) pos MLOAD (Var src) hi
       elems off q sa = ((),sb) ==>
     inst_extends sa sb /\
-    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
+    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+    same_blocks sa sb
 Proof
   Induct
   >- simp[Once compile_abi_decode_to_buf_def, comp_return_def,
-       inst_extends_def, emitted_insts_def] >>
+       inst_extends_def, emitted_insts_def, same_blocks_def] >>
   qx_gen_tac `entry` >> PairCases_on `entry` >> rpt gen_tac >> strip_tac >>
   fs[abi_decode_flat_layout_def] >>
   drule abi_decode_flat_compile_cons >> strip_tac >>
   drule_all abi_decode_flat_member_shape >> strip_tac >>
   `inst_extends sm sb /\
-   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb) /\
+   same_blocks sm sb` by
     (first_x_assum irule >> goal_assum (drule_at Any) >> simp[ADD_COMM]) >>
   conj_tac >- metis_tac[inst_extends_trans] >>
   `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
-    metis_tac[emitted_insts_append, inst_extends_def] >> simp[]
+    metis_tac[emitted_insts_append, inst_extends_def] >>
+  simp[] >> metis_tac[same_blocks_trans]
 QED
 
 Theorem abi_decode_flat_compile_cons_code:
@@ -97,8 +101,7 @@ Proof
   drule_all abi_decode_flat_member_shape >> strip_tac >>
   `inst_extends sm sb /\
    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
-    (irule abi_decode_flat_compile_shape >> goal_assum (drule_at Any) >>
-     goal_assum (drule_at Any)) >>
+    metis_tac[abi_decode_flat_compile_shape] >>
   `cs_extends sa sm /\ cs_extends sm sb` by
     (conj_tac
      >- (fs[abi_decode_member_code_def] >>
