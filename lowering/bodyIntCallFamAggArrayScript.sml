@@ -2,13 +2,14 @@
 Theory bodyIntCallFamAggArray
 Ancestors
   bodyIntCallJointContract bodyIntCallJointAggCore exprSimAggregateLayout
-  exprSimSource exprSimHyps exprSimHypsDefs exprSimAggregateChildren
+  exprSimSource exprSimHyps exprSimHypsDefs exprSimAggregateChildren exprSimAggregateSource
   vyperTypeInvariants stmtSimDeclPath placeMemoryCopyEffect
   compileEnv emitHelper emitHelperProps venomState venomExecSemantics venomMemProps
   valueEncodingProps intCallFrame exprSimProps exprSimAlloc venomInst
   fragGasMode context exprSimAggregateLoops exprSimAggregateEncoding
   exprSimWordArgs gasOutcome gasSummary gasSummaryCompose
   exprLoweringProps fragExec valueEncodingProofs stmtReasonVvMemory
+  exprOperandVar bodyIntCallRestoreResults abiStaticAggregateProps
 
 (* Public child typing bridge: no equality between the produced layout and
    the annotation is assumed, including for widened internal-call results. *)
@@ -409,6 +410,222 @@ Resume intcall_array_elems_outcome[cons_memory]:
 QED
 
 Finalise intcall_array_elems_outcome
+
+Theorem intcall_array_value_producer:
+  (!e. MEM e args ==> intcall_expr_producer fp e) ==>
+  intcall_expr_producer fp (Builtin ann (MakeArray (SOME et) bnd) args)
+Proof
+  strip_tac >> rewrite_tac[intcall_expr_producer_def] >> rpt gen_tac >> strip_tac >>
+  drule make_array_evaluated_layout >> strip_tac >>
+  drule compile_array_literal_inv >> strip_tac >>
+  suspend "entry"
+QED
+
+Resume intcall_array_value_producer[entry]:
+  `type_memory_bytes ce ann < 2 ** 64` by
+    fs[expr_body_pre_def, allocLimitsTheory.alloc_limits_expr_def] >>
+  `type_memory_bytes ce ann < dimword (:256)` by
+    (gvs[wordsTheory.dimword_def] >> decide_tac) >>
+  `ci_mono sa sm /\ ci_mono sm sb` by
+    metis_tac[ci_mono_compile_alloc_buffer, ci_mono_compile_make_array_cfn,
+              compile_expr_ci_mono, pairTheory.SND] >>
+  `fn_has_code sa sm fp.jc_func /\ fn_has_code sm sb fp.jc_func` by
+    metis_tac[fn_has_code_split, ci_mono_def] >>
+  qpat_x_assum `compile_make_array _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[exprLoweringTheory.compile_make_array_def, comp_ignore_bind_def,
+       comp_bind_def, comp_return_def] >>
+  pairarg_tac >> strip_tac >>
+  pop_assum mp_tac >>
+  pure_asm_rewrite_tac [] >> simp[] >> strip_tac >>
+  rename1 `compile_make_array_elems _ _ _ _ _ _ _ _ sh = _` >>
+  `ci_mono sm sh` by
+    (Cases_on `bnd` >> gvs[comp_return_def] >>
+     metis_tac[ci_mono_emit_void, pairTheory.SND, ci_mono_refl]) >>
+  `ci_mono sh sb` by
+    (`compile_make_tuple compile_expr ce args ba.buf_operand
+        (if (case bnd of vyperAST$Fixed cap => F | Dynamic cap => T) then 32 else 0) sh = (u,sb)` by
+       (qpat_x_assum `compile_make_array_elems _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+        qpat_x_assum `type_memory_bytes ce et = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+        simp[compile_make_array_elems_as_tuple]) >>
+     metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND]) >>
+  `fn_has_code sm sh fp.jc_func /\ fn_has_code sh sb fp.jc_func` by
+    metis_tac[fn_has_code_split, ci_mono_def] >>
+  drule_at (Pat `intcall_joint_res _ _ _ _ _ _`) intcall_array_entry >>
+  disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+  disch_then (qspecl_then [`sh`, `n2w (LENGTH args)`,
+    `(case bnd of vyperAST$Fixed cap => F | Dynamic cap => T)`] mp_tac) >>
+  (impl_tac >- (simp[] >> conj_tac
+    >- (Cases_on `bnd` >> gvs[comp_return_def]) >>
+    Cases_on `bnd` >> gvs[])) >> strip_tac >>
+  suspend "loop"
+QED
+
+Resume intcall_array_value_producer[loop]:
+  drule_at (Pat `compile_make_array_elems _ _ _ _ _ _ _ _ _ = _`)
+    intcall_array_elems_outcome >>
+  disch_then (drule_at (Pat `intcall_expr_cont _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
+  disch_then (qspec_then `w` mp_tac) >>
+  (impl_tac >- (simp[] >> conj_tac
+    >- (rpt gen_tac >> strip_tac >> conj_tac
+        >- (fs[supportedExprsTheory.supported_expr_def,
+               supportedExprsTheory.supported_pure_expr_def,
+               supportedExprsTheory.supported_effect_expr_def,
+               supportedExprsTheory.supported_pure_exprs_every, listTheory.EVERY_MEM]) >>
+        conj_tac
+        >- (fs[vyperTypeCallGraphTheory.int_calls_expr_def,
+               vyperTypeCallStackSoundnessTheory.calls_follow_call_graph_def] >>
+            metis_tac[int_calls_exprs_every_mem]) >>
+        fs[listTheory.EVERY_MEM]) >>
+    conj_tac
+    >- (rpt gen_tac >> strip_tac >> conj_tac
+        >- (drule expr_body_pre_builtin_arg >> disch_then irule >> simp[]) >>
+        drule_all intcall_array_child_layout >> simp[]) >>
+    suspend "loop_bounds")) >>
+  disch_tac >> suspend "source"
+QED
+
+Resume intcall_array_value_producer[loop_bounds]:
+  gvs[] >> conj_tac >- suspend "stride_bound" >>
+  fs[arithmeticTheory.ADD_COMM] >> metis_tac[]
+QED
+
+Resume intcall_array_value_producer[stride_bound]:
+  `expr_sim_inv ce fp.jc_cx env es` by fs[intcall_joint_res_def] >>
+  `type_memory_bytes ce (ArrayT et bnd) = type_memory_size (ArrayTV tv bnd)` by
+    metis_tac[expr_sim_inv_memory_size] >>
+  `0 < bound_length bnd` by
+    (qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
+     simp[Once vyperValueTheory.evaluate_type_def] >>
+     gvs[AllCaseEqs()]) >>
+  Cases_on `bnd` >>
+  gvs[vyperASTTheory.bound_length_def, valueEncodingTheory.type_memory_size_def,
+      wordsTheory.dimword_def] >>
+  `type_memory_size tv <= n * type_memory_size tv` by
+    (once_rewrite_tac[GSYM arithmeticTheory.MULT_LEFT_1] >>
+     rewrite_tac[arithmeticTheory.LE_MULT_RCANCEL] >> simp[]) >> decide_tac
+QED
+
+Resume intcall_array_value_producer[source]:
+  irule gas_outcome_zero_prefix_any >>
+  goal_assum (drule_at Any) >>
+  `compatible_bound bnd (LENGTH args)` by
+    fs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def,
+       vyperTypeSystemTheory.well_typed_builtin_app_def] >>
+  `!st. eval_expr fp.jc_cx
+      (Builtin (ArrayT et bnd) (MakeArray (SOME et) bnd) args) st =
+      (case eval_exprs fp.jc_cx args st of (rr,ee) =>
+        ((case rr of INL vs => INL (Value (ArrayV (make_array_value tv bnd vs)))
+                   | INR exc => INR exc),ee))` by
+    (gen_tac >> Cases_on `eval_exprs fp.jc_cx args st` >>
+     simp[] >> irule aggregate_eval_make_array >> simp[]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- suspend "counted_source"
+  >> suspend "exempt_source"
+QED
+
+Resume intcall_array_value_producer[counted_source]:
+  qexists_tac `marks` >> disj1_tac >>
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_summary_at_def] >> strip_tac
+  >- suspend "normal_source"
+  >> suspend "exit_source"
+QED
+
+Resume intcall_array_value_producer[exempt_source]:
+  `ignore_bind (eval_expr fp.jc_cx
+      (Builtin (ArrayT et bnd) (MakeArray (SOME et) bnd) args)) (return ()) =
+   ignore_bind (eval_exprs fp.jc_cx args) (return ())` by
+    (simp[FUN_EQ_THM, vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def] >>
+     gen_tac >> Cases_on `eval_exprs fp.jc_cx args x` >>
+     rename1 `eval_exprs _ _ _ = (rr,ee')` >> Cases_on `rr` >>
+     simp[vyperStateTheory.return_def]) >>
+  qexists_tac `marks` >> disj2_tac >> asm_rewrite_tac[] >> metis_tac[]
+QED
+
+Resume intcall_array_value_producer[normal_source]:
+  gvs[] >>
+  qexistsl [`INL (Value (ArrayV (make_array_value tv bnd vs)))`, `es_end`, `OK t`] >>
+  conj_tac
+  >- (fs[gas_marked_exec_def] >> simp[]) >>
+  `u = Var p` by metis_tac[compiler_make_array_elems_result] >>
+  gvs[vyperASTTheory.expr_type_def, contextTheory.mk_ptr_def,
+      contextTheory.vv_operand_def] >>
+  `val_in_memory (ArrayTV tv bnd)
+    (ArrayV (make_array_value tv bnd vs)) (w2n w) t.vs_memory` by
+    suspend "array_memory" >>
+  suspend "array_endpoint"
+QED
+
+Resume intcall_array_value_producer[exit_source]:
+  `?exc. res = INR exc` by
+    (Cases_on `res` >> gvs[exprSimDefsTheory.expr_exit_def]) >>
+  gvs[] >> qexistsl [`INR exc`, `es_end`, `r`] >>
+  conj_tac >- (fs[gas_marked_exec_def] >> simp[]) >>
+  disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  Cases_on `exc` >> Cases_on `r` >>
+  gvs[exprSimDefsTheory.expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >>
+  gvs[exprSimDefsTheory.expr_exit_def]
+QED
+
+Resume intcall_array_value_producer[array_memory]:
+  Cases_on `bnd`
+  >- (irule fixed_array_from_dense >>
+      gvs[vyperValueTheory.compatible_bound_def]) >>
+  gvs[vyperValueTheory.make_array_value_def, val_in_memory_dynarray] >>
+  rewrite_tac[mem_word_at_bytes] >>
+  `mem_bytes_at (w2n w) 32 t.vs_memory =
+   mem_bytes_at (w2n w) 32 u'.vs_memory` by
+    (first_x_assum irule >> simp[] >> decide_tac) >>
+  qpat_x_assum `mem_word_at _ _ = _` mp_tac >>
+  pure_rewrite_tac[mem_word_at_bytes] >>
+  pure_asm_rewrite_tac[] >> simp[]
+QED
+
+Resume intcall_array_value_producer[array_endpoint]:
+  `type_memory_bytes ce (ArrayT et bnd) = type_memory_size (ArrayTV tv bnd)` by
+    (irule expr_sim_inv_memory_size >>
+     fs[intcall_joint_res_def] >> metis_tac[]) >>
+  conj_tac
+  >- (simp[loweringPostsTheory.vv_holds_def,
+           vyperStateTheory.read_result_def, vyperStateTheory.return_def, is_word_type_def] >>
+      qexists_tac `w` >> asm_rewrite_tac[]) >>
+  reverse conj_tac
+  >- (conj_tac >- metis_tac[compiler_ci_mono_not_fresh] >>
+      strip_tac >> qexistsl [`w2n w`, `type_memory_size (ArrayTV tv bnd)`] >>
+      gvs[]) >>
+  `expr_body_pre ce fp.jc_cx env
+    (Builtin (ArrayT et bnd) (MakeArray (SOME et) bnd) args)
+    (es with gas_obs := gas_explicit marks u'.vs_gas_readings)` by simp[] >>
+  `eval_expr fp.jc_cx
+    (Builtin (ArrayT et bnd) (MakeArray (SOME et) bnd) args)
+    (es with gas_obs := gas_explicit marks u'.vs_gas_readings) =
+    (INL (Value (ArrayV (make_array_value tv bnd vs))),
+     es_end with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+     qpat_x_assum `!tail. eval_exprs _ _ _ = _` (qspec_then `[]` mp_tac) >> simp[]) >>
+  drule_all exprSimSourceTheory.expr_body_pre_eval_result >> strip_tac >>
+  `env.type_defs = get_tenv fp.jc_cx` by
+    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+       env_context_consistent_def] >>
+  `value_has_type (ArrayTV tv bnd) (ArrayV (make_array_value tv bnd vs))` by
+    (qpat_x_assum `!tv'. INL _ = _ ==> _`
+       (qspec_then `Value (ArrayV (make_array_value tv bnd vs))` mp_tac) >>
+     simp[vyperTypeInvariantsTheory.eval_result_typed_def, vyperASTTheory.expr_type_def]) >>
+  irule allocated_value_vv_at >>
+  qexistsl [`sa.cs_next_id`, `w2n w`, `type_memory_size (ArrayTV tv bnd)`,
+            `ArrayTV tv bnd`, `w`] >>
+  simp[loweringPostsTheory.val_footprint_def] >>
+  conj_tac >- fs[ci_mono_def] >>
+  fs[regions_disjoint_def] >> conj_tac
+  >- first_assum ACCEPT_TAC >>
+  irule valueTypingMemoryPropsTheory.value_has_type_memory_wf >> simp[]
+QED
+
+Finalise intcall_array_value_producer
 
 Theorem intcall_array_literal_step:
   (!e'. expr_size e' < expr_size e ==>
