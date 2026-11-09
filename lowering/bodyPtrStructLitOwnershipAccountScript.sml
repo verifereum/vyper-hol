@@ -2,7 +2,7 @@ Theory bodyPtrStructLitOwnershipAccount
 Ancestors bodyPtrStructLitOwnershipSliceCases bodyPtrStructLitOwnershipInterfaces
   bodyPtrStructLitOwnershipFreshness bodyPtrStructLitOwnershipSteps
   loweringShapeProps loweringShapeDefs loweringShapeRules exprLowering compileEnv
-  context list gasShadowCompileBase
+  context list
 
 Theorem alloc_run_compile_acc:
   shape_step F compiler_label (\s. cenv_shape_ok s ce)

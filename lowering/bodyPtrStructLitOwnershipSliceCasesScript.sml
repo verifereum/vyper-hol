@@ -5,7 +5,7 @@ Ancestors bodyPtrStructLitOwnershipCalldataSlice
   bodyPtrStructLitOwnershipIfexpFrame
   bodyPtrStructLitOwnershipInterfaces bodyPtrStructLitOwnershipFreshness
   bodyPtrStructLitOwnershipSteps loweringShapeDefs loweringShapeRules
-  loweringShapeProps exprLowering compileEnv context list pair gasShadowCompileBase
+  loweringShapeProps exprLowering compileEnv context list pair
 
 Theorem alloc_run_lower_value_then:
   shape_step internal compiler_label (\s. cenv_shape_ok s ce) (cfn ce ty e)

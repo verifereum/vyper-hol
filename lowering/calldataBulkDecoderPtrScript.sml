@@ -1,6 +1,6 @@
 (* Pointer endpoint of the static-element calldata array bulk decoder. *)
 Theory calldataBulkDecoderPtr
-Ancestors decoderHeaderRawPtr calldataBulkPayloadPtr decoderArrayInitPtr calldataBulkLive
+Ancestors decoderHeaderRawPtr calldataBulkPayloadPtr decoderArrayInitPtr
   abiDecoderBulk abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderArrayHeader
   abiDecoderContract abiDecoderGuards abiDecoderReentry calldataDynOwned abiEncoder compileEnv emitHelper
   emitHelperProps exprLoweringProps decoderGhostFramePtr decoderArraySetupPtr

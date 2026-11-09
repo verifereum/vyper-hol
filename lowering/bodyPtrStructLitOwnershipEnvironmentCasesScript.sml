@@ -2,7 +2,7 @@ Theory bodyPtrStructLitOwnershipEnvironmentCases
 Ancestors bodyPtrStructLitOwnershipMemory bodyPtrStructLitOwnershipStructFrame
   bodyPtrStructLitOwnershipInterfaces bodyPtrStructLitOwnershipFreshness
   bodyPtrStructLitOwnershipSteps exprLowering builtinSimple loweringShapeDefs
-  loweringShapeRules loweringShapeProps compileEnv context list pair gasShadowCompileBase
+  loweringShapeRules loweringShapeProps compileEnv context list pair
 
 Theorem alloc_run_compile_env_var:
   alloc_run fresh_outputs (compile_env_var item) (\v s. fresh_outputs s)

@@ -144,3 +144,18 @@ Proof
     alloc_run_emit_inst) >>
   simp[alloc_run_def, invalid_expr_call_def, emit_inst_eq]
 QED
+
+(* Monadic bind in its uncurried and pair-let forms; formerly in theories
+   trunk removed (gasShadowCompileBase,). *)
+Theorem comp_bind_uncurry:
+  (\s. UNCURRY h (f s)) = comp_bind f h
+Proof
+  simp[FUN_EQ_THM, comp_bind_def] >> gen_tac >>
+  Cases_on `f s` >> simp[]
+QED
+
+Theorem state_pair_let_bind:
+  pair$UNCURRY k (m a) = comp_bind m k a
+Proof
+  Cases_on `m a` >> simp[comp_bind_def]
+QED

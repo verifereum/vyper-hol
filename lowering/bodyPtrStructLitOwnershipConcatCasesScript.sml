@@ -1,7 +1,7 @@
 Theory bodyPtrStructLitOwnershipConcatCases
 Ancestors bodyPtrStructLitOwnershipConcatFrame bodyPtrStructLitOwnershipIfexpFrame
   bodyPtrStructLitOwnershipSteps loweringShapeProps loweringShapeDefs loweringShapeRules
-  exprLowering compileEnv context list gasShadowCompileBase stackPlanTypes unitShapeDefs
+  exprLowering compileEnv context list stackPlanTypes unitShapeDefs
 
 Theorem concat_alloc_bind[local]:
   shape_stable R /\

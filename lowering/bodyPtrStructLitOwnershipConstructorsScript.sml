@@ -2,7 +2,7 @@ Theory bodyPtrStructLitOwnershipConstructors
 Ancestors bodyPtrStructLitOwnershipAggregateLoops bodyPtrStructLitOwnershipIfexpFrame
   bodyPtrStructLitOwnershipStructFrame bodyPtrStructLitOwnershipSteps
   loweringShapeProps loweringShapeDefs loweringShapeRules exprLowering compileEnv
-  context list gasShadowCompileBase
+  context list
 
 Theorem alloc_run_builtin_make_array:
   (!e. MEM e args ==>

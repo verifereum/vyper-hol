@@ -1,6 +1,6 @@
 Theory bodyPtrStructLitOwnershipLiterals
 Ancestors bodyPtrStructLitOwnershipPrimitives bodyPtrStructLitOwnershipFreshness
-  bodyPtrStructLitOwnershipSteps exprLowering context list pair gasShadowCompileBase compileEnv
+  bodyPtrStructLitOwnershipSteps exprLowering context list pair compileEnv
 
 Theorem alloc_run_compile_store_byte_chunks:
   !data_ptr bs offset.

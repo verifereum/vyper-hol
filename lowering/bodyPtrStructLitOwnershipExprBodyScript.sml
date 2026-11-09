@@ -5,7 +5,7 @@ Ancestors bodyPtrStructLitOwnershipBaseCases bodyPtrStructLitOwnershipNameArithm
   bodyPtrStructLitOwnershipPop bodyPtrStructLitOwnershipSteps
   bodyPtrStructLitOwnershipFreshness
   loweringShapeDefs loweringShapeProps exprLowering supportedExprTraverse
-  context compileEnv gasShadowCompileBase vyperAST list
+  context compileEnv vyperAST list
 
 Theorem alloc_run_compile_expr_body_cases:
   ~supported_expr_exists expr_shape_root e /\

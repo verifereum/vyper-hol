@@ -2,7 +2,7 @@ Theory bodyPtrStructLitOwnershipNameArithmetic
 Ancestors bodyPtrStructLitOwnershipBaseCases bodyPtrStructLitOwnershipNumeric
   bodyPtrStructLitOwnershipConsumers bodyPtrStructLitOwnershipFreshness
   bodyPtrStructLitOwnershipSteps loweringShapeDefs loweringShapeProps
-  exprLowering compileEnv context gasShadowCompileBase
+  exprLowering compileEnv context
 
 Theorem alloc_run_compile_addmod_names:
   alloc_run fresh_outputs (compile_addmod_names ce rt aty a bty b mty m)

@@ -2,7 +2,7 @@ Theory bodyPtrStructLitOwnershipWei
 Ancestors bodyPtrStructLitOwnershipFreshness bodyPtrStructLitOwnershipSteps
   bodyPtrStructLitOwnershipSliceCases bodyPtrStructLitOwnershipInterfaces
   loweringShapeDefs loweringShapeRules loweringShapeProps exprLowering
-  builtinMisc compileEnv context list pair gasShadowCompileBase
+  builtinMisc compileEnv context list pair
 
 Theorem alloc_run_compile_as_wei_value_int:
   alloc_run fresh_outputs (compile_as_wei_value_int v scale signed) (\v s. T)

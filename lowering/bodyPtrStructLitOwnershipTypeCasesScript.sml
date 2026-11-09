@@ -3,7 +3,7 @@ Ancestors bodyPtrStructLitOwnershipConvert bodyPtrStructLitOwnershipBytesPrefix
   bodyPtrStructLitOwnershipScalar bodyPtrStructLitOwnershipInterfaces
   bodyPtrStructLitOwnershipFreshness bodyPtrStructLitOwnershipSteps
   loweringShapeDefs loweringShapeRules loweringShapeProps exprLowering context compileEnv
-  builtinSimple exprCallBounds compilerFirstEmission list pair
+  builtinSimple exprCallBounds list pair
 
 Theorem compile_builtin_empty_complex_alloc_run:
   !nbytes bs st v st'.

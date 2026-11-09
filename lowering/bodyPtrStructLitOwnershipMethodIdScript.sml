@@ -4,7 +4,7 @@ Ancestors bodyPtrStructLitOwnershipHashing bodyPtrStructLitOwnershipPrimitives
   bodyPtrStructLitOwnershipLiterals bodyPtrStructLitOwnershipInterfaces
   bodyPtrStructLitOwnershipSliceCases loweringShapeDefs loweringShapeRules
   loweringShapeProps builtinHashing exprLowering compileEnv context list pair
-  gasShadowCompileBase
+ 
 
 Theorem alloc_run_compile_method_id_hash:
   alloc_run fresh_outputs (compile_method_id_hash arg_ty val_op)

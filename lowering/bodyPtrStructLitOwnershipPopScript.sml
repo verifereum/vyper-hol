@@ -5,7 +5,7 @@ Ancestors bodyPtrStructLitOwnershipSubscriptTails bodyPtrStructLitOwnershipInter
   exprLowering compileEnv context supportedExprTraverse
   bodyPtrStructLitTargetScalar bodyPtrStructLitTargetArray
   bodyPtrStructLitOwnershipFrame bodyPtrStructLitOwnershipShape
-  loweringShapeRules stackPlanTypes gasShadowCompileBase
+  loweringShapeRules stackPlanTypes
 
 Theorem alloc_run_compile_dynarray_pop:
   alloc_run fresh_outputs (compile_dynarray_pop base_op ws sz ctor imm loc)
