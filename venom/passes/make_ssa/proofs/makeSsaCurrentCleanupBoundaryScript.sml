@@ -1,6 +1,6 @@
 Theory makeSsaCurrentCleanupBoundary
 Ancestors
-  makeSsaCurrentDefs makeSsaCurrentEdgeTrace makeSsaCurrentTraceCertificate
+  makeSsaDefs makeSsaCurrentEdgeTrace makeSsaCurrentTraceCertificate
   venomInst irSupply list pair
 
 Theorem current_phi_slots_remove_self:

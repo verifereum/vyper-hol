@@ -5,7 +5,7 @@ Ancestors
   exprBopSimProps exprSimProps exprSimAlloc context ASCIInumbers
   bodySim exprSimSend exprSimHyps vyperTypeSystem vyperAST list
   exprSimAggregateSource vyperInterpreter vyperValue vyperState vyperContext
-  exprSimWordArgs exprLowering compileEnv emitHelper venomExecSemantics
+  exprSimWordArgs exprLowering compileEnv loweringStateRelDefs emitHelper venomExecSemantics
   exprLoweringProps venomState venomMemDefs exprSimDefs exprSimStack loweringPosts
   exprSimHypsDefs exprSimSource vyperEvent fragExec venomInst
 Libs
@@ -229,7 +229,7 @@ Proof
       `allocas_non_overlapping s` by
         fs[expr_post_def, stmt_state_rel_def, alloca_inv_def] >>
       `aid <> old` by decide_tac >>
-      fs[allocas_non_overlapping_def, compileEnvTheory.regions_disjoint_def] >>
+      fs[allocas_non_overlapping_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
       metis_tac[]) >>
   rpt strip_tac >>
   qpat_x_assum `!n b sz. local_region _ es.scopes t _ _ _ ==> _` irule >>

@@ -47,7 +47,7 @@ Proof
   `name <> s` by (strip_tac >> gvs[]) >> rw[]
 QED
 
-Theorem supported_internal_function_lookup[local]:
+Theorem supported_internal_function_lookup:
   !tops id mut nr rr args dflts ret body.
     supported_function_decl tops id Internal =
       SOME (mut, nr, rr, args, dflts, ret, body) ==>
@@ -329,6 +329,9 @@ Theorem memory_rhs_read_lowered_typed:
     value_runtime_typed env (lowered_value_type cenv e) v
 Proof
   ho_match_mp_tac lowered_value_type_ind >> rpt conj_tac
+  >~ [`Builtin _ (Concat _) _`]
+  >- (rpt strip_tac >> simp[lowered_value_type_def] >>
+      drule_all exprSimHypsTheory.concat_read_buffer_typed >> simp[])
   >- (rpt gen_tac >> simp[lowered_value_type_def] >> strip_tac >>
       gvs[Once evaluate_def, bind_def, return_def, read_result_def,
           evaluate_literal_def] >>
@@ -366,14 +369,15 @@ Proof
         metis_tac[abi_encode_lowered_well_typed] >>
       metis_tac[type_builtin_read_annotation_typed])
   >- (rpt gen_tac >> strip_tac >>
+      rename1 `expr_body_pre _ _ _ (Call ann (IntCall func_id) args drv) _` >>
       simp[lowered_value_type_def] >>
       `expr_sim_inv cenv cx env es /\
-       well_typed_expr env (Call v4 (IntCall func_id) v5 v6)` by
+       well_typed_expr env (Call ann (IntCall func_id) args drv)` by
         gvs[expr_body_pre_def] >>
       qpat_x_assum `supported_expr _ _` mp_tac >>
       simp[supported_expr_def, supported_pure_expr_def,
            supported_effect_expr_def] >> strip_tac >>
-      Cases_on `v6` >> gvs[supported_effect_expr_def,
+      Cases_on `drv` >> gvs[supported_effect_expr_def,
                                  optionTheory.IS_SOME_EXISTS] >>
       PairCases_on `x` >>
       `?sig. FLOOKUP env.fn_sigs func_id = SOME sig` by

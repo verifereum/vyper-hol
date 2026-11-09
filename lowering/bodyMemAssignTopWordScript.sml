@@ -14,7 +14,7 @@ Ancestors
   stmtSimProps stmtSimDefs exprSimDefs loweringPosts
   gasOutcome gasSummary fragGasMode fragGasPath gasContext
   exprSimHypsDefs exprLoweringProps emitHelperProps emitHelper exprLowering
-  compileEnv fragExecMem supportedStmtTraverse supportedStmts supportedExprs
+  compileEnv loweringStateRelDefs fragExecMem supportedStmtTraverse supportedStmts supportedExprs
   supportedTypes vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants
   vyperTypeSystem vyperLookup vyperInterpreter vyperState
   venomExecSemantics venomInst venomState list rich_list finite_map
@@ -45,7 +45,7 @@ Proof
   `~s.vs_call_ctx.cc_static` by
     (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
      Cases_on `tr` >>
-     simp[stmt_state_rel_def, compileEnvTheory.state_rel_def,
+     simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
           tstore_def, sstore_def, LET_THM]) >>
   drule emitted_insts_emit_void >> strip_tac >>
   drule emit_void_same_blocks >> strip_tac >>
@@ -53,7 +53,7 @@ Proof
   `step_inst_base (mk_inst st.cs_next_id (if tr then TSTORE else SSTORE)
      [Lit slot; op] []) s = OK u` by
     (Cases_on `tr` >>
-     gvs[Abbr `u`, step_inst_base_def, exec_write2_def, mk_inst_def,
+     gvs[Abbr `u`, step_inst_base_opcode_eqs, exec_write2_def, mk_inst_def,
          eval_operand_def]) >>
   `run_inst_seq (emitted_insts st st') s = OK u` by
     simp[run_inst_seq_def] >>

@@ -14,13 +14,6 @@
  *   - is_revert_label           : Check if label points to simple revert block
  *   - transform_jnz             : Transform JNZ to assert pattern if applicable
  *
- * This theory imports state equivalence definitions from stateEquivTheory:
- *   - state_equiv        : State equivalence ignoring a set of variables
- *   - execution_equiv    : State equivalence ignoring control flow
- *   - observable_equiv          : External effect equivalence
- *   - result_equiv       : Result equivalence for exec_result
- *   - terminates                : Predicate for successful termination (not Error)
- *
  * ============================================================================
  * TRANSFORMATION PATTERNS
  * ============================================================================
@@ -56,7 +49,7 @@
 
 Theory rtaDefs
 Ancestors
-  passSimulationDefs stateEquiv venomExecSemantics venomInst venomState irSupply
+  passTransform venomExecSemantics venomInst venomState irSupply
   finite_map pred_set
 Libs
   finite_mapTheory venomStateTheory

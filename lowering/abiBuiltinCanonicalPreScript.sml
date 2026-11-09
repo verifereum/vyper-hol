@@ -42,10 +42,10 @@ Theorem abi_builtin_canonical_pre_ready:
   eval_operand (FST ops) prepared = SOME (n2w d) /\
   eval_operand (FST (SND ops)) prepared = SOME (n2w (p + 32)) /\
   eval_operand (SND (SND ops)) prepared =
-    SOME (n2w (p + 32 + LENGTH (enc (vyper_to_abi_type env ty) av))) ==>
-  first <= ready.cs_next_id /\ abi_decoder_budget first last b cap prepared /\
+    SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) ==>
+  first <= abi_decoder_entry_floor ready /\ abi_decoder_budget first last b cap prepared /\
   abi_decoder_recursive_pre ce env sf ty tv (type_to_abi_dec_info sf ce ty) av v ready last
-    (FST (SND ops)) (FST ops) MLOAD (SND (SND ops)) (p + 32) d b cap
+    (Lit 0w) (FST ops) MLOAD (FST (SND ops)) (SND (SND ops)) (p + 32) 0 d b cap
     (abi_decoder_prune_vars ready.cs_next_var prepared)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -53,7 +53,7 @@ Proof
   drule abi_builtin_decode_setup_shape >> strip_tac >>
   qpat_assum `abi_builtin_canonical_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_builtin_canonical_pre_def]) >>
-  `first <= ready.cs_next_id` by fs[] >>
+  `first <= abi_decoder_entry_floor ready` by fs[abi_decoder_entry_floor_def] >>
   `abi_decoder_budget first last b cap prepared` by
     (mp_tac (Q.INST [`next` |-> `st.cs_next_var`,
       `site` |-> `abi_builtin_decode_output_site st min_size max_size`,
@@ -61,22 +61,21 @@ Proof
       `t` |-> `prepared:venom_state`] abi_builtin_allocation_frame_budget) >>
      asm_simp_tac bool_ss []) >>
   drule abi_decoder_budget_reservation >> strip_tac >>
-  `abi_decoder_reservation ready.cs_next_id last b cap prepared` by
-    (mp_tac (Q.INST [`next` |-> `ready.cs_next_id`, `s` |-> `prepared:venom_state`,
-      `t` |-> `prepared:venom_state`] abi_decoder_reservation_advance) >> asm_simp_tac bool_ss []) >>
-  `abi_decoder_ranges MLOAD (SND (SND ops)) (FST (SND ops)) (FST ops) (p + 32)
+  `abi_decoder_reservation (abi_decoder_entry_floor ready) last b cap prepared` by
+    (irule abi_decoder_reservation_restrict >> goal_assum drule >> simp[]) >>
+  `abi_decoder_ranges MLOAD (FST (SND ops)) (SND (SND ops)) (Lit 0w) (FST ops) (p + 32) 0
     (LENGTH (enc (vyper_to_abi_type env ty) av)) d (type_memory_bytes ce ty) b cap prepared` by
-    (asm_simp_tac bool_ss [abi_decoder_ranges_def, abi_decode_source_opcode_def] >>
-     disj2_tac >> qexists_tac `p + 32 + LENGTH (enc (vyper_to_abi_type env ty) av)` >>
-     asm_simp_tac (srw_ss()) []) >>
+    (asm_simp_tac (srw_ss()) [abi_decoder_ranges_def, abi_decode_source_opcode_def, eval_operand_def] >>
+     disj2_tac >> qexists_tac `LENGTH (enc (vyper_to_abi_type env ty) av)` >>
+     asm_simp_tac (srw_ss()) [] >> decide_tac) >>
   qpat_assum `abi_builtin_allocation_frame _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_builtin_allocation_frame_def]) >>
   asm_simp_tac bool_ss [abi_decoder_recursive_pre_def] >>
   mp_tac (Q.INST [`st` |-> `ready`, `s` |-> `prepared:venom_state`,
     `di` |-> `type_to_abi_dec_info ce.ce_struct_fields ce ty`,
-    `src` |-> `FST (SND (ops:operand # operand # operand))`,
+    `src` |-> `Lit 0w`, `base_op` |-> `FST (SND (ops:operand # operand # operand))`,
     `dst` |-> `FST (ops:operand # operand # operand)`, `opc` |-> `MLOAD`,
-    `hi` |-> `SND (SND (ops:operand # operand # operand))`, `sb` |-> `p + 32`]
+    `hi` |-> `SND (SND (ops:operand # operand # operand))`, `src_base` |-> `p + 32`, `sb` |-> `0`]
     abi_decoder_pre_prune) >>
-  impl_tac >- asm_simp_tac (srw_ss()) [abi_decode_source_def] >> asm_simp_tac bool_ss []
+  impl_tac >- asm_simp_tac (srw_ss()) [abi_decode_source_def, abi_decoder_operand_live_def] >> asm_simp_tac bool_ss []
 QED

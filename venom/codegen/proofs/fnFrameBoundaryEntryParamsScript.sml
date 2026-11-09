@@ -2,8 +2,9 @@ Theory fnFrameBoundaryEntryParams
 Ancestors
   asmFrame allocMono frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel stackPlanOps doSwapSim cleanOpsSim strongPrefixSim planAlign stackOpSim planWf prefixExec blockSimHelpers foldlSim
   callLayoutDefs venomExecSemantics venomState venomInst list rich_list pred_set
-  arithmetic words unitShapeDefs venomWf phiBlock cfgHelpers
+  arithmetic words unitShapeDefs venomWf cfgHelpers
   livenessAnalysisProps cfgAnalysisProps asmSem planExec fnFrameTerminalPrep codegenRel contextCodegenRel mixedPrefixSim prefixSim
+  venomWfProps
 
 (* Installing the symbolic parameter names emits no code. *)
 Theorem parameter_stack_fold:
@@ -265,8 +266,8 @@ Theorem entry_param_step:
     OK (entry_bind_pairs (entry_param_pairs s [inst]) s)
 Proof
   rw[entry_param_shape_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def,
-       entry_param_pairs_def, update_var_def]
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  simp[entry_param_pairs_def, update_var_def]
 QED
 
 Theorem entry_param_run_insts:
@@ -296,7 +297,7 @@ Theorem entry_param_skip_prefix:
       vs_inst_idx := LENGTH insts)
 Proof
   strip_tac >>
-  qspec_then `insts` mp_tac phiBlockTheory.exec_block_skip_prefix_non_invoke >>
+  qspec_then `insts` mp_tac venomWfPropsTheory.exec_block_skip_prefix_non_invoke >>
   disch_then (qspecl_then [`fuel`, `ctx`, `bb`, `s`, `0`] mp_tac) >>
   simp[ADD_CLAUSES] >> disch_then irule >>
   simp[entry_param_run_insts, EL_APPEND_EQN] >>
@@ -1018,7 +1019,8 @@ Proof
   impl_tac >- decide_tac >>
   disch_then SUBST1_TAC >> pop_assum SUBST1_TAC >>
   simp[livenessDefsTheory.liveness_transfer_def,
-       livenessDefsTheory.live_update_def, entry_ret_family_el_assign,
+       livenessDefsTheory.live_update_def,
+       livenessDefsTheory.MEM_FOLDL_append_unseen, entry_ret_family_el_assign,
        mk_inst_def, inst_defs_def, livenessDefsTheory.ordered_inst_uses_def,
        python_stack_operands_def, venomInstTheory.operand_vars_def,
        venomInstTheory.operand_var_def, MEM_FILTER]

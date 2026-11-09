@@ -27,7 +27,7 @@
 Theory intCallReturn
 Ancestors
   list rich_list finite_map
-  intCallStep intCallFrame stmtSimReturn exprLoweringProps localPtrsProps compileEnv
+  intCallStep intCallFrame stmtSimReturn exprLoweringProps localPtrsProps compileEnv loweringStateRelDefs
   accountsRelProps
   vyperCall vyperTyping vyperInterpreter vyperState
   venomExecSemantics venomExecProofs venomInstProofs opcodeClass venomInst

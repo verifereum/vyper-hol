@@ -49,7 +49,7 @@ Ancestors
   stmtSimAssign
   stmtSimAssignMem stmtSimAugAssign
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  exprOperandVar compileEnv valueEncoding valueEncodingProps
+  exprOperandVar compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperLookup vyperExprNoControl
   vyperTyping vyperTypeEnv vyperTypeInvariants vyperTypeExprSoundness
   vyperTypeExprResult

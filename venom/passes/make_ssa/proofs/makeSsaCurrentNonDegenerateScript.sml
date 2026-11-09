@@ -10,7 +10,7 @@
  *)
 Theory makeSsaCurrentNonDegenerate
 Ancestors
-  makeSsaCurrentDefs venomWf cfgWf venomInst irSupply unitShapeDefs
+  makeSsaDefs venomWf cfgWf venomInst irSupply unitShapeDefs
   o1PassContract makeSsaCurrentNonDegTransport makeSsaCurrentNonDegPhiInput
 
 (* Why it holds (intuition only; the proof's structure is free).
