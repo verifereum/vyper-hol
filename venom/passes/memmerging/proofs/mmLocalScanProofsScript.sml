@@ -3472,6 +3472,86 @@ Proof
   simp[arithmeticTheory.MAX_DEF] >> decide_tac
 QED
 
+Theorem mm_local_read_write_disjoint[local]:
+  a+n <= d \/ d+LENGTH bs <= a ==>
+  read_memory a n (write_memory_with_expansion d bs s) = read_memory a n s
+Proof
+  strip_tac >>
+  simp[venomStateTheory.read_memory_def, write_as_replace] >>
+  irule read_nonoverlap_expand >> simp[]
+QED
+
+Theorem mm_local_read_write_log[local]:
+  !ws s. EVERY (\(d,bs). a+n <= d \/ d+LENGTH bs <= a) ws ==>
+  read_memory a n
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s ws) =
+  read_memory a n s
+Proof
+  Induct_on `ws` >- simp[] >>
+  Cases_on `h` >> simp[] >> rpt strip_tac >>
+  first_x_assum (drule_then (fn th => rewrite_tac[th])) >>
+  simp[mm_local_read_write_disjoint]
+QED
+
+Theorem mm_local_read_write_log_memory[local]:
+  u.vs_memory =
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v ws).vs_memory /\
+  EVERY (\(d,bs). a+n <= d \/ d+LENGTH bs <= a) ws ==>
+  read_memory a n u = read_memory a n v
+Proof
+  strip_tac >>
+  `read_memory a n u = read_memory a n
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v ws)` by
+    simp[venomStateTheory.read_memory_def] >>
+  metis_tac[mm_local_read_write_log]
+QED
+
+Theorem mm_local_mload_write_log_memory[local]:
+  u.vs_memory =
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v ws).vs_memory /\
+  EVERY (\(d,bs). a+32 <= d \/ d+LENGTH bs <= a) ws ==>
+  mload a u = mload a v
+Proof
+  strip_tac >> drule_all mm_local_read_write_log_memory >>
+  simp[venomStateTheory.read_memory_def, venomStateTheory.mload_def]
+QED
+
+Theorem mm_local_mcopy_write_log[local]:
+  EVERY (\(d,bs). (src+n <= d \/ d+LENGTH bs <= src) /\
+                     (dst+n <= d \/ d+LENGTH bs <= dst)) ws ==>
+  mcopy dst src n
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s ws) =
+  FOLDL (\st (d,bs). write_memory_with_expansion d bs st)
+    (mcopy dst src n s) ws
+Proof
+  strip_tac >>
+  `EVERY (\(d,bs). src+n <= d \/ d+LENGTH bs <= src) ws` by
+    (gvs[EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
+  `read_memory src n
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s ws) =
+    read_memory src n s` by simp[mm_local_read_write_log] >>
+  simp[venomExecSemanticsTheory.mcopy_def,
+       GSYM venomStateTheory.read_memory_def] >>
+  irule mm_local_write_log_commute >>
+  gvs[EVERY_MEM, pairTheory.FORALL_PROD, venomStateTheory.read_memory_def,
+      LENGTH_TAKE, LENGTH_DROP] >> metis_tac[]
+QED
+
+Theorem mm_local_mcopy_write_log_memory[local]:
+  u.vs_memory =
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v ws).vs_memory /\
+  EVERY (\(d,bs). (src+n <= d \/ d+LENGTH bs <= src) /\
+                     (dst+n <= d \/ d+LENGTH bs <= dst)) ws ==>
+  (mcopy dst src n u).vs_memory =
+  (FOLDL (\st (d,bs). write_memory_with_expansion d bs st)
+    (mcopy dst src n v) ws).vs_memory
+Proof
+  strip_tac >>
+  drule mm_local_mcopy_write_log >>
+  disch_then (qspec_then `v` (fn th => once_rewrite_tac[GSYM th])) >>
+  simp[venomExecSemanticsTheory.mcopy_def, write_as_replace]
+QED
+
 (* Essential counterexample evidence: a variable-free unreachable block. *)
 Theorem mm_local_dead_input:
   fn0 = mk_raw_function "f"
