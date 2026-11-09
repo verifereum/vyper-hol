@@ -65,20 +65,16 @@ Proof
   qmatch_asmsub_abbrev_tac `write_place _ _ _ _ = (INL (),ee)` >>
   qexists_tac `ee` >> simp[] >> gen_tac >>
   `expr_body_pre ce cx env e (es with gas_obs := tail)` by simp[] >>
-  `!r ee1. eval_expr cx e (es with gas_obs := tail) = (INL r,ee1) ==>
-    eval_target_place cx (TopLevelNameTarget (src,id)) ee1 =
-    (INL (ImmutablePlace src id []),ee1)` by
-    (rpt strip_tac >> irule immutable_assign_rhs_target >>
-     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `eval_target_place cx (TopLevelNameTarget (src,id)) (es with gas_obs := tail) =
+    (INL (ImmutablePlace src id []),es with gas_obs := tail)` by
+    (irule immutable_target_place_state >> fs[expr_body_pre_def] >>
+     metis_tac[]) >>
   drule_all immutable_assign_empty_read >>
   disch_then (qspec_then `tail` mp_tac) >>
   simp[Once evaluate_def] >>
   Cases_on `eval_expr cx e (es with gas_obs := tail)` >>
   rename1 `_ = (rr,ee1)` >> Cases_on `rr` >>
-  simp[bind_def] >>
-  `eval_target_place cx (TopLevelNameTarget (src,id)) ee1 =
-    (INL (ImmutablePlace src id []),ee1)` by metis_tac[] >>
-  gvs[] >> strip_tac >> simp[] >>
+  simp[bind_def] >> strip_tac >> gvs[] >>
   drule immutable_write_place_gas_obs >> simp[]
 QED
 
