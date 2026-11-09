@@ -696,3 +696,29 @@ Resume source_owned_complex_suffix_ptr[compose_resources]:
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   suspend "interval"
 QED
+
+Resume source_owned_complex_suffix_ptr[interval]:
+  markerLib.RESUME_TAC >>
+  `!id p sz. sa.cs_next_id <= id /\ id < en.cs_next_id /\
+    FLOOKUP t.vs_allocas id = SOME (p,sz) ==>
+    sz = 32 /\ p < dimword (:256) /\ p+32 <= t.vs_alloca_next /\
+    ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+      ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]` by
+    (rpt gen_tac >> strip_tac >> Cases_on `mid.cs_next_id <= id`
+     >- (qpat_assum `!id p sz. mid.cs_next_id <= id /\ _ ==> _` irule >>
+         asm_rewrite_tac[]) >>
+     `id < mid.cs_next_id /\ id < sb.cs_next_id` by decide_tac >>
+     `FLOOKUP s.vs_allocas id = SOME (p,sz)` by
+       (qpat_assum `!id. id < mid.cs_next_id \/ en.cs_next_id <= id ==> _`
+          (qspec_then `id` mp_tac) >>
+        (impl_tac >- decide_tac) >>
+        qpat_assum `r.vs_allocas = s.vs_allocas` mp_tac >>
+        qpat_assum `FLOOKUP t.vs_allocas id = _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+     qpat_assum `!id p sz. sa.cs_next_id <= id /\ _ ==> _`
+       (qspecl_then [`id`,`p`,`sz`] mp_tac) >>
+     (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+     asm_rewrite_tac[] >> conj_tac >- decide_tac >>
+     qexists_tac `ins` >> asm_rewrite_tac[]) >>
+  suspend "chain"
+QED
