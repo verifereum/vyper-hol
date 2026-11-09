@@ -13,7 +13,7 @@ Ancestors
   symFnSimSpec codegenSymRel fnFrameDeepInvoke asmSymBridge asmSymSem
   frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  dfgDefs list symPlannerSim prefixExec mixedPrefixSim symShuffleSim
+  dfgDefs list symPlannerSim prefixExec mixedPrefixSim symShuffleSim gasFrameSim
 
 (* INVOKE cannot consume the opaque code-end pointer. *)
 Theorem sym_invoke_argument_not_code_end:
@@ -1079,6 +1079,77 @@ Proof
       metis_tac[]) >>
   irule sym_do_swap_big_numeric >> simp[] >>
   metis_tac[arithmeticTheory.GREATER_DEF, arithmeticTheory.NOT_LESS]
+QED
+
+Theorem sym_pop_numeric:
+  n <= LENGTH ps.ps_stack /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp [SOPop n]) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan fmp [SOPop n])) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest
+      (ps with ps_stack := stack_pop n ps.ps_stack) ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp [SOPop n]) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  `?ss'. sym_steps p env (LENGTH (execute_plan fmp [SOPop n])) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest (apply_prefix_ops fmp FEMPTY [SOPop n] ps) ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp [SOPop n]) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)` by
+    (irule sym_prefix_ops_sim >>
+     simp[prefix_wf_def, stack_op_wf_def, prefix_spill_wf_def, spill_op_wf_def,
+       prefixSimTheory.is_prefix_op_def]) >>
+  gvs[apply_prefix_ops_def, apply_prefix_op_def,
+    strongPrefixSimTheory.apply_simple_op_def, stackModelTheory.stack_pop_def]
+QED
+
+Theorem sym_swap_pop_numeric:
+  do_swap dist ps = (swaps, swapped) /\ dist < LENGTH ps.ps_stack /\
+  n <= LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword (:256)
+    | SORestore off => off < dimword (:256) | _ => T) swaps /\
+  (!off b. MEM (SOSpill off) swaps /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp (swaps ++ [SOPop n])) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan fmp (swaps ++ [SOPop n]))) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest
+      (swapped with ps_stack := stack_pop n swapped.ps_stack) ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp (swaps ++ [SOPop n])) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  drule_all sym_do_swap_numeric >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  `n <= LENGTH swapped.ps_stack` by metis_tac[planWfTheory.do_swap_length, pairTheory.SND] >>
+  `asm_block_at p ss'.sym_base.as_pc (execute_plan fmp [SOPop n])` by
+    metis_tac[arithmeticTheory.ADD_COMM] >>
+  drule_all sym_pop_numeric >>
+  disch_then (qspecl_then [`env`, `R`] strip_assume_tac) >>
+  qexists_tac `ss''` >> conj_tac
+  >- simp[Once sym_steps_add] >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem sym_optimistic_swap_numeric:
+  optimistic_swap_plan dfg inst live term ps = (ops, ps') /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword (:256)
+    | SORestore off => off < dimword (:256) | _ => T) ops /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest ps' ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp ops) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule gasFrameSimTheory.gas_optimistic_cases >> strip_tac
+  >- (gvs[] >> qexists_tac `ss` >> simp[execute_plan_def, sym_steps_def]) >>
+  irule sym_do_swap_numeric >> simp[] >> metis_tac[planAlignTheory.stack_get_depth_bound]
 QED
 
 Theorem sym_invoke_frame_sim_deep:
