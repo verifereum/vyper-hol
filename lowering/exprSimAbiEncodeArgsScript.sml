@@ -21,6 +21,7 @@ Theorem compile_abi_encode_args_case_gas_sim:
      int_calls_expr (TypeBuiltin ann (AbiEncode ensure mid) ty args) = []) /\
     compile_abi_encode_args compile_expr ce args sa = (ops,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    EVERY (\bb. phi_prefix_length bb.bb_instructions = 0) func.fn_blocks /\
     local_ptrs_reserved ce sa /\
     stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\

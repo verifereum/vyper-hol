@@ -3,7 +3,7 @@
 ## Meta
 Status: planned
 Priority: P1
-Created: 2026-11-07
+Created: 2026-11-07 (v6: 2026-11-09)
 Location: lowering/exprSimAbiEncodeArgsScript.sml
 
 ## Theorem Statement (FROZEN)
@@ -17,6 +17,7 @@ Theorem compile_abi_encode_args_case_gas_sim:
      int_calls_expr (TypeBuiltin ann (AbiEncode ensure mid) ty args) = []) /\
     compile_abi_encode_args compile_expr ce args sa = (ops,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    EVERY (\bb. phi_prefix_length bb.bb_instructions = 0) func.fn_blocks /\
     local_ptrs_reserved ce sa /\
     stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
@@ -58,6 +59,12 @@ Owner note 6 (authorized restatements, branch manager ruling with argon's audit)
 - Done by the owner: in `compile_abi_encode_memory_trace`, `compile_abi_encode_word_trace` and `compile_abi_encode_tuple_trace` (`lowering/abiBuiltinEncodeWordScript.sml`), every encoder-layout type (`type_to_abi_enc_info`, `abi_size_bound`, the tuple's `type_memory_bytes`/`compile_alloc_buffer`, `compile_store_abi_tuple`'s ZIP types) is now `lowered_value_type ce e` / `MAP (lowered_value_type ce) args`. The compile hypotheses (`cfn ce (expr_type e) e origin`, `lower_value cfn ce (expr_type e) e origin`, `is_word_type (expr_type e)`) keep `expr_type`, as the lowering does. Repair their proofs.
 - Yours: the source/producer theorems built on them (`compile_abi_encode_memory_source`, `compile_abi_encode_word_source` in `abiBuiltinEncodeWord`; `compile_abi_encode_tuple_source`, `compile_abi_encode_tuple_producer` in `abiBuiltinEncodeReusedInput`, and any other theorem in those two files whose statement mentions the encoder layout) may be restated the same way: encoder-layout types (`maxlen`, the `abi_builtin_encode_pre`/resources encoder info, `abi_tuple_encode_inst_count`, staging sizes, the output buffer's `BytesT` bound) move to the lowered type; the compile hypotheses and the source-semantics side (`evaluate_type_builtin ... (TupleT [expr_type e])` / `(TupleT (MAP expr_type args))`, its result bytes) keep `expr_type`. If the link between the two needs a premise (e.g. that the lowered and annotated types have the same ABI type and the value converts the same at both), add the weakest one that works, and list every changed statement, word for word old and new, in the commit message. Keep the probe theory out of the target's ancestry; the owner deletes it at the end.
 - No other statement changes. Anything else false: stop and report with a checked counterexample, as in note 5.
+
+Owner note 7 (course change, branch manager ruling with argon, supersedes the entry-safety plan): the frozen statement above now carries the whole-function no-PHI premise `EVERY (\bb. phi_prefix_length bb.bb_instructions = 0) func.fn_blocks`, the same premise the `abiBuiltin*` encode/decode theorems use (there in its `lookup_block ... ==> phi_prefix_length bb.bb_instructions = 0` form, which follows from it via `lookup_block` membership). It will be threaded through `body_inv`/`expr_sim_inv` later; it is not yours to discharge.
+- Use it wherever a block's PHI prefix must be zero: the `(sm.cs_blocks = sb.cs_blocks \/ ... \/ !bb. lookup_block ... ==> phi_prefix_length bb.bb_instructions = 0)` disjunctions of `compile_materialize_vv_owned_path` and the `abiBuiltinEncode*` traces, and any run-from-block step.
+- You may add exactly this premise (same text, same `func`) to theorems in `abiEncodeMaterialize`, `abiEncodeArgsSim`, `abiEncodeArgsCase`, `abiEncodeArgsWindows`, `abiArgsLabelBoundary` and new `exprSimAbiEncodeArgs<Part>` theories where they need it. List each such statement, old and new, in the commit message. No other statement changes beyond owner notes 1-6.
+- The previous run's whole-compiler entry-safety detour (`abi_args_entry_emitted`, `abi_args_entry_safe`, the `exprSimAbiEncodeArgsEntry*` theories proving that every compiler fragment starts with a non-PHI instruction) has been deleted. Do not rebuild it, and do not prove structural facts about the whole expression compiler; the premise above replaces it. `exprSimAbiEncodeArgsBridgeAudit` was deleted too.
+- What the earlier runs proved and committed on this branch stays: the restated encode traces/sources, `exprSimHyps`, the lowered-layout readiness (`abiEncodeArgsCase`), and the `abiEncodeArgsSim` boundaries. The remaining admissions are in `abiEncodeArgsSim` (6), `abiEncodeArgsCase` (1) and the target.
 
 ## Completion Criteria
 
