@@ -92,7 +92,8 @@ Proof
      (LocatedValue ty p) t` by metis_tac[vv_post_read_result] >>
   `ty = BaseT (StringT n)` by
     (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value _) _ _` mp_tac >>
-     simp[vv_post_def, vv_holds_def]) >>
+     simp[vv_post_def, vv_holds_def, post_value_type_bytestring,
+          is_bytestring_type_def]) >>
   qpat_x_assum `ty = _` SUBST_ALL_TAC >>
   `?a. eval_operand p.ptr_operand t = SOME a /\
        immutable_holds cenv cx (BaseT (StringT n)) (Value (StringV str))

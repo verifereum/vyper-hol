@@ -530,6 +530,7 @@ Theorem add_unwrap_post[local]:
   !func cenv cx e es sa sm sn su s0 es1 tv vv r v op dst bw off s.
     emit_op ADD [bop; Lit (n2w off)] sm = (dst, sn) /\
     ci_mono sa sm /\
+    post_value_type cenv e = expr_type e /\
     vv_post ctx func cenv cx e es sa sn s0 es1 tv vv r /\
     eval_operand dst r = SOME (bw + n2w off) /\
     expr_post ctx func cenv cx e es1 (sa with cs_next_var := sn.cs_next_var)
@@ -610,6 +611,7 @@ Proof
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- simp[] >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by simp[post_value_type_word] >>
   drule_all add_unwrap_post >> strip_tac >>
   qexistsl_tac [`v`, `u`] >> simp[] >>
   qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
