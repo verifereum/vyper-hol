@@ -2,7 +2,7 @@ Theory algebraicOptMainResidualProofs
 Ancestors
   algebraicOptMainCallProofs algebraicOptMainControlProofs
   algebraicOptRelationProofs algebraicOptDefs algebraicOptShapeProofs
-  venomExecSemantics venomState venomInst venomWf stateEquiv stateEquivProps stateFrame list
+  venomCallOracleDefs venomExecSemantics venomState venomInst venomWf stateEquiv stateEquivProps stateFrame list
 
 Theorem ao_main_equal_write:
   ao_main_observations fn V s r /\
@@ -506,4 +506,318 @@ Proof
   simp[step_inst_base_opcode_eqs, lift_result_def] >>
   gvs[execution_equiv_def, execution_frame_def, halt_state_def,
       set_returndata_def, venom_state_component_equality]
+QED
+
+Theorem ao_main_returndatacopy_base:
+  inst_wf inst /\ inst.inst_opcode = RETURNDATACOPY /\
+  other.inst_opcode = RETURNDATACOPY /\
+  other.inst_operands = MAP resolve inst.inst_operands /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (resolve a) r = SOME w) /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r ==>
+  (?e. step_inst_base inst s = Error e) \/
+  lift_result
+    (\t u. ao_main_observations fn V t u /\
+      (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+      t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx)
+    (execution_equiv UNIV) (execution_equiv UNIV)
+    (step_inst_base inst s) (step_inst_base other r)
+Proof
+  strip_tac >> gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  rename1 `inst.inst_operands = [a;b;c]` >>
+  Cases_on `eval_operand a s`
+  >- simp[step_inst_base_opcode_eqs] >>
+  Cases_on `eval_operand b s`
+  >- simp[step_inst_base_opcode_eqs] >>
+  Cases_on `eval_operand c s`
+  >- simp[step_inst_base_opcode_eqs] >>
+  `eval_operand (resolve a) r = SOME x /\
+   eval_operand (resolve b) r = SOME x' /\
+   eval_operand (resolve c) r = SOME x''` by metis_tac[] >>
+  `s.vs_returndata = r.vs_returndata` by
+    gvs[venom_state_component_equality] >>
+  simp[step_inst_base_opcode_eqs] >> IF_CASES_TAC >> simp[lift_result_def]
+  >- gvs[execution_equiv_def, execution_frame_def, halt_state_def,
+         set_returndata_def, venom_state_component_equality] >>
+  conj_tac
+  >- (irule ao_main_observations_vars >> qexistsl_tac [`r`, `s`] >>
+      simp[write_memory_with_expansion_def]) >>
+  gvs[write_memory_with_expansion_def, venom_state_component_equality]
+QED
+
+Theorem ao_main_jmp_base:
+  inst.inst_opcode = JMP /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+  step_inst_base inst s = OK t ==>
+  ?u. step_inst_base (ao_resolve_iszero_inst targets inst) r = OK u /\
+    ao_main_observations fn V t u /\
+    (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+    t.vs_inst_idx = 0 /\ u.vs_inst_idx = 0
+Proof
+  strip_tac >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  simp[ao_resolve_iszero_inst_def, ao_resolve_iszero_op_def,
+       step_inst_base_opcode_eqs] >> conj_tac
+  >- simp[ao_main_control_observations] >>
+  gvs[jump_to_def, venom_state_component_equality]
+QED
+
+Theorem ao_extract_labels_resolved:
+  !ops labels. extract_labels ops = SOME labels ==>
+    extract_labels (MAP (ao_resolve_iszero_op targets opc) ops) = SOME labels
+Proof
+  Induct >> simp[extract_labels_def] >> Cases >>
+  simp[extract_labels_def, AllCaseEqs(), ao_resolve_iszero_op_def] >>
+  metis_tac[]
+QED
+
+Theorem ao_main_djmp_base:
+  inst.inst_opcode = DJMP /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (ao_resolve_iszero_op targets DJMP a) r = SOME w) /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+  step_inst_base inst s = OK t ==>
+  ?u. step_inst_base (ao_resolve_iszero_inst targets inst) r = OK u /\
+    ao_main_observations fn V t u /\
+    (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+    t.vs_inst_idx = 0 /\ u.vs_inst_idx = 0
+Proof
+  strip_tac >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  `eval_operand (ao_resolve_iszero_op targets DJMP selector_op) r = SOME idx`
+    by metis_tac[] >>
+  drule ao_extract_labels_resolved >>
+  disch_then (qspecl_then [`targets`, `DJMP`] assume_tac) >>
+  simp[ao_resolve_iszero_inst_def, step_inst_base_opcode_eqs] >>
+  conj_tac
+  >- simp[ao_main_control_observations] >>
+  gvs[jump_to_def, venom_state_component_equality]
+QED
+
+Theorem ao_main_log_base:
+  inst.inst_opcode = LOG /\ other.inst_opcode = LOG /\
+  inst.inst_operands = Lit tc :: ops /\
+  other.inst_operands = Lit tc :: MAP resolve ops /\
+  (!a w. MEM a ops /\ eval_operand a s = SOME w ==>
+    eval_operand (resolve a) r = SOME w) /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+  step_inst_base inst s = OK t ==>
+  ?u. step_inst_base other r = OK u /\
+    ao_main_observations fn V t u /\
+    (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+    t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx
+Proof
+  strip_tac >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  `0 < LENGTH (REVERSE ops) /\ 1 < LENGTH (REVERSE ops)` by simp[] >>
+  `MEM (EL 0 (REVERSE ops)) ops /\ MEM (EL 1 (REVERSE ops)) ops` by
+    metis_tac[MEM_EL, MEM_REVERSE] >>
+  `MEM (HD (REVERSE ops)) ops` by
+    (qpat_x_assum `MEM (EL 0 _) _` mp_tac >> simp[EL]) >>
+  `eval_operand (resolve (HD (REVERSE ops))) r = SOME off /\
+   eval_operand (resolve (EL 1 (REVERSE ops))) r = SOME sz` by simp[] >>
+  `eval_operands (MAP resolve (DROP 2 (REVERSE ops))) r = SOME topics` by
+    (irule ao_main_eval_operands_map >> qexists_tac `s` >> simp[] >>
+     rpt strip_tac >> first_x_assum irule >> simp[] >>
+     drule rich_listTheory.MEM_DROP_IMP >> simp[]) >>
+  `REVERSE ops <> []` by (Cases_on `ops` >> gvs[]) >>
+  pure_rewrite_tac[GSYM MAP_REVERSE, GSYM MAP_DROP] >>
+  simp[EL_MAP, rich_listTheory.MAP_HD] >> conj_tac
+  >- (irule ao_main_observations_vars >> qexistsl_tac [`r`, `s`] >> simp[]) >>
+  gvs[venom_state_component_equality]
+QED
+
+Theorem ao_main_exec_ext_call:
+  other.inst_outputs = inst.inst_outputs /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+  exec_ext_call inst s gas addr value ao az ro rz static = OK t ==>
+  ?u. exec_ext_call other r gas addr value ao az ro rz static = OK u /\
+    ao_main_observations fn V t u /\
+    (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+    t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx
+Proof
+  strip_tac >>
+  `venom_call_request s addr value ao az static =
+   venom_call_request r addr value ao az static` by
+    gvs[venom_call_request_def, read_memory_def, venom_state_component_equality] >>
+  `s.vs_outcomes = r.vs_outcomes` by gvs[venom_state_component_equality] >>
+  gvs[exec_ext_call_def, AllCaseEqs()] >> simp[] >> conj_tac
+  >- (irule ao_main_observations_update >> simp[] >>
+      irule ao_main_observations_vars >> qexistsl_tac [`r`, `s`] >> simp[]) >>
+  gvs[update_var_def, write_memory_with_expansion_def, venom_state_component_equality]
+QED
+
+Theorem ao_main_call_base:
+  MEM inst.inst_opcode [CALL; STATICCALL] /\
+  other.inst_opcode = inst.inst_opcode /\
+  other.inst_outputs = inst.inst_outputs /\
+  other.inst_operands = MAP resolve inst.inst_operands /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (resolve a) r = SOME w) /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+  step_inst_base inst s = OK t ==>
+  ?u. step_inst_base other r = OK u /\
+    ao_main_observations fn V t u /\
+    (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+    t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx
+Proof
+  strip_tac >> `s.vs_call_ctx = r.vs_call_ctx` by
+    gvs[venom_state_component_equality] >>
+  gvs[MEM] >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  fs[RIGHT_AND_OVER_OR, DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[] >> irule ao_main_exec_ext_call >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem ao_main_exec_create:
+  inst.inst_outputs = [out] /\ other.inst_outputs = [out] /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r ==>
+  lift_result
+    (\t u. ao_main_observations fn V t u /\
+      (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+      t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx)
+    (execution_equiv UNIV) (execution_equiv UNIV)
+    (exec_create inst s value offset sz salt)
+    (exec_create other r value offset sz salt)
+Proof
+  strip_tac >>
+  `venom_create_request s value offset sz salt =
+   venom_create_request r value offset sz salt /\ s.vs_outcomes = r.vs_outcomes` by
+    gvs[venom_create_request_def, read_memory_def, venom_state_component_equality] >>
+  simp[exec_create_def] >> IF_CASES_TAC >> simp[lift_result_def]
+  >- gvs[execution_equiv_def, execution_frame_def, halt_state_def,
+         set_returndata_def, venom_state_component_equality] >>
+  conj_tac
+  >- (irule ao_main_observations_update >> simp[] >>
+      irule ao_main_observations_vars >> qexistsl_tac [`r`, `s`] >> simp[]) >>
+  gvs[update_var_def, venom_state_component_equality]
+QED
+
+Theorem ao_main_create_base:
+  inst_wf inst /\ MEM inst.inst_opcode [CREATE; CREATE2] /\
+  other.inst_opcode = inst.inst_opcode /\
+  other.inst_outputs = inst.inst_outputs /\
+  other.inst_operands = MAP resolve inst.inst_operands /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (resolve a) r = SOME w) /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r ==>
+  (?e. step_inst_base inst s = Error e) \/
+  lift_result
+    (\t u. ao_main_observations fn V t u /\
+      (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+      t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx)
+    (execution_equiv UNIV) (execution_equiv UNIV)
+    (step_inst_base inst s) (step_inst_base other r)
+Proof
+  strip_tac >> gvs[MEM] >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute]
+  >- (rename1 `inst.inst_operands = [a;b;c]` >>
+      Cases_on `eval_operand a s` >- simp[step_inst_base_opcode_eqs] >>
+      Cases_on `eval_operand b s` >- simp[step_inst_base_opcode_eqs] >>
+      Cases_on `eval_operand c s` >- simp[step_inst_base_opcode_eqs] >>
+      fs[RIGHT_AND_OVER_OR, DISJ_IMP_THM, FORALL_AND_THM] >>
+      simp[step_inst_base_opcode_eqs] >> disj2_tac >>
+      irule ao_main_exec_create >> simp[]) >>
+  rename1 `inst.inst_operands = [a;b;c;d]` >>
+  Cases_on `eval_operand a s` >- simp[step_inst_base_opcode_eqs] >>
+  Cases_on `eval_operand b s` >- simp[step_inst_base_opcode_eqs] >>
+  Cases_on `eval_operand c s` >- simp[step_inst_base_opcode_eqs] >>
+  Cases_on `eval_operand d s` >- simp[step_inst_base_opcode_eqs] >>
+  fs[RIGHT_AND_OVER_OR, DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[step_inst_base_opcode_eqs] >> disj2_tac >>
+  irule ao_main_exec_create >> simp[]
+QED
+
+Theorem ao_main_exec_delegatecall:
+  other.inst_outputs = inst.inst_outputs /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+  exec_delegatecall inst s gas addr ao az ro rz = OK t ==>
+  ?u. exec_delegatecall other r gas addr ao az ro rz = OK u /\
+    ao_main_observations fn V t u /\
+    (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+    t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx
+Proof
+  strip_tac >>
+  `read_memory (w2n ao) (w2n az) s = read_memory (w2n ao) (w2n az) r /\
+   s.vs_accounts = r.vs_accounts /\ s.vs_call_ctx = r.vs_call_ctx` by
+    gvs[read_memory_def, venom_state_component_equality] >>
+  `!target data code.
+    make_venom_delegatecall_state s target (w2n gas) data code r.vs_call_ctx.cc_static =
+    make_venom_delegatecall_state r target (w2n gas) data code r.vs_call_ctx.cc_static` by
+    gvs[make_venom_delegatecall_state_def, venom_to_tx_params_def,
+        venom_state_component_equality] >>
+  gvs[exec_delegatecall_def, extract_venom_result_def, AllCaseEqs()] >>
+  pairarg_tac >> gvs[] >> conj_tac
+  >- (irule ao_main_observations_update >> simp[] >>
+      irule ao_main_observations_vars >> qexistsl_tac [`r`, `s`] >> simp[]) >>
+  gvs[update_var_def, write_memory_with_expansion_def, venom_state_component_equality]
+QED
+
+Theorem ao_main_delegatecall_base:
+  inst.inst_opcode = DELEGATECALL /\ other.inst_opcode = DELEGATECALL /\
+  other.inst_outputs = inst.inst_outputs /\
+  other.inst_operands = MAP resolve inst.inst_operands /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (resolve a) r = SOME w) /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+  step_inst_base inst s = OK t ==>
+  ?u. step_inst_base other r = OK u /\
+    ao_main_observations fn V t u /\
+    (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+    t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx
+Proof
+  strip_tac >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  fs[RIGHT_AND_OVER_OR, DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[] >> irule ao_main_exec_delegatecall >> simp[] >> metis_tac[]
+QED
+
+Theorem ao_pack_dret_dynamic_vars_index:
+  !pairs cursor s ptrs fc t vars idx.
+    pack_dret_dynamic cursor pairs s = (ptrs,fc,t) ==>
+    pack_dret_dynamic cursor pairs
+      (s with <|vs_vars := vars; vs_inst_idx := idx|>) =
+    (ptrs,fc,t with <|vs_vars := vars; vs_inst_idx := idx|>)
+Proof
+  Induct >> simp[pack_dret_dynamic_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[Once pack_dret_dynamic_def] >> pairarg_tac >> gvs[] >>
+  strip_tac >> gvs[] >>
+  `mcopy (w2n cursor) (w2n h0) (w2n h1)
+     (s with <|vs_vars := vars; vs_inst_idx := idx|>) =
+   mcopy (w2n cursor) (w2n h0) (w2n h1) s with
+     <|vs_vars := vars; vs_inst_idx := idx|>` by
+    simp[mcopy_def, write_memory_with_expansion_def,
+         venom_state_component_equality] >>
+  first_x_assum drule >> disch_then assume_tac >>
+  simp[Once pack_dret_dynamic_def]
+QED
+
+Theorem ao_main_dret_base:
+  inst.inst_opcode = DRET /\ other.inst_opcode = DRET /\
+  other.inst_outputs = inst.inst_outputs /\
+  parse_dret_shape other = parse_dret_shape inst /\
+  other.inst_operands = MAP resolve inst.inst_operands /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (resolve a) r = SOME w) /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+  step_inst_base inst s = IntRet vals t ==>
+  ?u. step_inst_base other r = IntRet vals u /\ execution_equiv UNIV t u
+Proof
+  strip_tac >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  `eval_operands other.inst_operands r = SOME vals'` by
+    (gvs[] >> irule ao_main_eval_operands_map >> qexists_tac `s` >> simp[]) >>
+  `s.vs_call_entry_fmp = r.vs_call_entry_fmp` by
+    gvs[venom_state_component_equality] >>
+  pairarg_tac >> gvs[] >>
+  drule ao_pack_dret_dynamic_vars_index >>
+  disch_then (qspecl_then [`r.vs_vars`, `r.vs_inst_idx`] mp_tac) >>
+  simp[] >> strip_tac >> simp[] >>
+  gvs[execution_equiv_def, execution_frame_def, venom_state_component_equality]
 QED
