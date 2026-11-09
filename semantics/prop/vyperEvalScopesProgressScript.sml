@@ -206,16 +206,50 @@ QED
 Resume eval_mutual_scopes_progress[Builtin]:
   rpt gen_tac >> strip_tac >>
   Cases_on `builtin_args_length_ok bt (LENGTH es)`
-  >- (Cases_on `bt = Len` >> rpt gen_tac >> strip_tac >>
-      Cases_on `bt = Env MsgGas` >>
-      gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-          assert_def, return_def, raise_def, AllCaseEqs()] >>
-      imp_res_tac result_array_length_state >>
-      imp_res_tac next_gas_reading_state >>
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `bt = Len \/ bt = Env MsgGas`
+      >- (Cases_on `bt = Len`
+          >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+                  assert_def, return_def, raise_def, AllCaseEqs()] >>
+              imp_res_tac result_array_length_state >>
+              imp_res_tac precompile_call_success_state >>
+              imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
+              gvs[] >>
+              first_x_assum drule >> simp[type_check_def, assert_def, return_def] >>
+              metis_tac[]) >>
+          gvs[] >>
+          qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+          simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+               assert_def, return_def, raise_def, AllCaseEqs()] >>
+          rpt strip_tac >>
+          imp_res_tac next_gas_reading_state >>
+          imp_res_tac precompile_call_success_state >>
+          imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
+          gvs[]) >>
+      Cases_on `code_slice_source bt es`
+      >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+              assert_def, return_def, raise_def, AllCaseEqs()] >>
+          imp_res_tac precompile_call_success_state >>
+          imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >> gvs[] >>
+          first_x_assum drule >> simp[]) >>
+      PairCases_on `x` >>
+      `bt <> Len /\ bt <> Env MsgGas` by fs[] >>
+      `!s0. type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s0 =
+            (INL (),s0)` by simp[type_check_def, assert_def] >>
+      `!s1 r s2. eval_exprs cx (TL es) s1 = (r,s2) ==>
+                 scopes_progress s1.scopes s2.scopes` by metis_tac[] >>
+      `!s1 tv s2 s3 r s4. eval_exprs cx (TL es) s1 = (INL tv,s2) /\
+                          eval_exprs cx [x1] s3 = (r,s4) ==>
+                          scopes_progress s3.scopes s4.scopes` by metis_tac[] >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      qpat_x_assum `code_slice_source _ _ = _` (fn th =>
+        simp[Once evaluate_def, th, bind_def, ignore_bind_def, type_check_def,
+             assert_def, return_def, raise_def, AllCaseEqs()]) >>
+      rpt strip_tac >> gvs[] >>
       imp_res_tac precompile_call_success_state >>
       imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >> gvs[] >>
-      first_x_assum drule >> simp[type_check_def, assert_def, return_def] >>
-      metis_tac[])
+      imp_res_tac eval_exprs_preserves_scopes_dom >>
+      metis_tac[scopes_progress_trans, scopes_progress_refl])
   >> simp[Once evaluate_def, type_check_def, assert_def, bind_def,
           ignore_bind_def, raise_def]
 QED
