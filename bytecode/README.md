@@ -28,8 +28,7 @@ only committed objects, and installs them in an isolated environment using
 `python-o1-oracle-constraints.txt`.
 
 Before installing, the generator applies `vyper-pin.patch` to the pinned
-revision. It backports four upstream fixes, which the HOL lowering follows
-except where noted:
+revision. It backports four upstream fixes, which the HOL lowering follows:
 
 - vyperlang/vyper#5127: an external call sends the selector and the encoded
   arguments, `4 + encoded length` bytes, rather than `4 + ` the argument
@@ -46,7 +45,6 @@ except where noted:
   index that can write a variable that base reads, or makes a risky call.
   Upstream gets this by lowering such targets through the subscript overlap
   check; the pin has no such check, so the patch walks the target instead.
-  The HOL lowering does not reject these targets yet.
 
 The pin has no subscript overlap check at all, so the patch brings
 `_subscript_read_write_overlap`, `_subscript_base_length_can_stale` and their
