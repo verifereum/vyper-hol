@@ -654,7 +654,7 @@ Definition store_slots_loop_code_def:
     lv <> cv /\ dv <> cv
 End
 
-Theorem store_slots_loop_code[local]:
+Theorem store_slots_loop_code:
   compile_copy_elements_to_slots cenv src slot elem cnt tr sa = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func ==>
   ?layout. store_slots_loop_code cenv src slot elem cnt tr sa sb func layout
@@ -737,7 +737,10 @@ Proof
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   `cv = STRCAT "%" (toString sa.cs_next_var)` by
     (qpat_x_assum `fresh_var c = _` mp_tac >>
-     simp_tac (srw_ss()) [fresh_var_def] >> strip_tac >> gvs[]) >>
+     simp_tac (srw_ss()) [fresh_var_def, LET_THM, pairTheory.PAIR_EQ] >>
+     strip_tac >>
+     qpat_x_assum `STRING _ _ = cv` (fn th => rewrite_tac[GSYM th]) >>
+     simp[]) >>
   fs[ci_mono_def, not_fresh_at_def,
      emitHelperPropsTheory.fresh_var_distinct] >>
   rpt strip_tac >> gvs[] >>
@@ -758,7 +761,7 @@ Definition store_slots_prefix_def:
     ~u.vs_halted
 End
 
-Theorem store_slots_prefix_empty[local]:
+Theorem store_slots_prefix_empty:
   ~s.vs_halted ==> store_slots_prefix sa etv el tr sw dw s 0 [] s
 Proof
   simp[store_slots_prefix_def, store_copy_normalize_def]
@@ -776,7 +779,7 @@ Proof
   simp[store_slots_prefix_def] >> metis_tac[]
 QED
 
-Theorem store_slots_prefix_control[local]:
+Theorem store_slots_prefix_control:
   store_slots_prefix sa etv el tr sw dw s i ks u /\
   (!x. not_fresh_at sa x ==> x <> a /\ x <> b) ==>
   store_slots_prefix sa etv el tr sw dw s i ks
@@ -790,7 +793,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem store_slots_prefix_init_control[local]:
+Theorem store_slots_prefix_init_control:
   store_slots_prefix sa etv el tr sw dw s i ks u /\
   (!x. not_fresh_at sa x ==> x <> a) ==>
   store_slots_prefix sa etv el tr sw dw s i ks
