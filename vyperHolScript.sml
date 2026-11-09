@@ -41,7 +41,7 @@ Ancestors
      arguments, widened returns, body memory closures, place typing *)
   msgGasOriginPost generatedGasOrigin gasShadowRawRuntime gasShadowRawDeploy
   calldataRegistrationLocals ctorRegisterArgs stmtSimReturnWiden
-  bodyMemory bodyDeclMemory bodyStmtClosureMemory bodyExprClosureMemory
+  bodyMemory bodyDeclMemory bodyStmtClosureMemory
   placeTypingE2EProps
   (* passes: memory merging block/supply proofs, remaining-oracle and pass-oracle
      simulations, jump independence *)
