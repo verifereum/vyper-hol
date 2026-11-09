@@ -62,12 +62,15 @@ Proof
 QED
 
 (* The dead bytes and the bound a frame's run is checked under: D holds
-   cx's dead storage bytes, and lo is the constructor's immutables fixed
+   cx's dead bytes and has exactly cx's dead storage and transient bytes
+   (a storage load's taint must stay inside what cx's storage is dead in;
+   a deploy frame differs only in its immutables and return bytes), and lo is the constructor's immutables fixed
    region, which its code addresses by literal offsets, or 0 in a runtime
    frame, where every access is checked. *)
 Definition dead_lo_ok_def:
   dead_lo_ok D lo cenv cx <=>
     dead_sub (cx_dead cx) D /\
+    D.d_stor = (cx_dead cx).d_stor /\ D.d_trans = (cx_dead cx).d_trans /\
     (cenv.ce_is_ctor ==> !im. D.d_imm im = UNIV) /\
     lo = (if cenv.ce_is_ctor then imm_len (cx_tops cx) else 0)
 End
