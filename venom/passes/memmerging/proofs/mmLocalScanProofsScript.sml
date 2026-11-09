@@ -6009,6 +6009,136 @@ Proof
   gvs[copy_memzero_def, mm_local_bytes_def, REPLICATE_GENLIST, combinTheory.K_DEF]
 QED
 
+Definition mm_local_group_coverage_def:
+  mm_local_group_coverage is n cap g <=>
+    !a. (g.cg_dst <= a /\ a < g.cg_dst + g.cg_length) <=>
+      ?j d bs. j < n /\ j < LENGTH is /\
+        MEM (EL j is).inst_id g.cg_inst_ids /\ cap j = SOME (d,bs) /\
+        d <= a /\ a < d + LENGTH bs
+End
+
+Theorem mm_local_group_coverage_birth[local]:
+  j < n /\ j < LENGTH is /\ ALL_DISTINCT (MAP (\i. i.inst_id) is) /\
+  g.cg_inst_ids = [(EL j is).inst_id] /\
+  cap j = SOME (g.cg_dst, bs) /\ LENGTH bs = g.cg_length ==>
+  mm_local_group_coverage is n cap g
+Proof
+  simp[mm_local_group_coverage_def] >> strip_tac >> gen_tac >> eq_tac
+  >- (strip_tac >> qexistsl [`j`, `g.cg_dst`, `bs`] >> simp[]) >>
+  strip_tac >>
+  `j' = j` by metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx] >>
+  gvs[]
+QED
+
+Theorem mm_local_copy_merge_interval[local]:
+  c1.cg_dst <= c2.cg_dst /\ copy_can_merge c1 c2 ==>
+  (!a. ((copy_merge c1 c2).cg_dst <= a /\
+        a < (copy_merge c1 c2).cg_dst + (copy_merge c1 c2).cg_length) <=>
+    (c1.cg_dst <= a /\ a < c1.cg_dst + c1.cg_length) \/
+    (c2.cg_dst <= a /\ a < c2.cg_dst + c2.cg_length))
+Proof
+  simp[copy_merge_def, copy_can_merge_def, arithmeticTheory.MAX_DEF] >>
+  rpt strip_tac >> IF_CASES_TAC >> decide_tac
+QED
+
+Theorem mm_local_group_coverage_merge[local]:
+  c1.cg_dst <= c2.cg_dst /\ copy_can_merge c1 c2 /\
+  mm_local_group_coverage is n cap c1 /\ mm_local_group_coverage is n cap c2 ==>
+  mm_local_group_coverage is n cap (copy_merge c1 c2)
+Proof
+  strip_tac >> drule_all mm_local_copy_merge_interval >> strip_tac >>
+  fs[mm_local_group_coverage_def] >> gen_tac >>
+  first_x_assum (qspec_then `a` SUBST1_TAC) >>
+  simp[copy_merge_def, MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem mm_local_merge_adjacent_coverage[local]:
+  !cs. SORTED (\a b. a.cg_dst <= b.cg_dst) cs /\
+    EVERY (mm_local_group_coverage is n cap) cs ==>
+    EVERY (mm_local_group_coverage is n cap) (merge_adjacent cs)
+Proof
+  recInduct merge_adjacent_ind >> simp[merge_adjacent_def] >>
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  Cases_on `copy_can_merge c1 c2`
+  >- (gvs[] >> first_x_assum irule >> conj_tac
+      >- (gvs[sortingTheory.SORTED_EQ, relationTheory.transitive_def,
+              copy_merge_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+      simp[] >> irule mm_local_group_coverage_merge >>
+      gvs[sortingTheory.SORTED_DEF]) >>
+  gvs[] >> first_x_assum irule >> gvs[sortingTheory.SORTED_DEF]
+QED
+
+Theorem mm_local_add_copy_coverage[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) cs /\
+  EVERY (mm_local_group_coverage is n cap) cs /\
+  mm_local_group_coverage is n cap c ==>
+  EVERY (mm_local_group_coverage is n cap) (add_copy cs c)
+Proof
+  strip_tac >> simp[add_copy_def] >> irule mm_local_merge_adjacent_coverage >>
+  metis_tac[mm_local_insert_sorted_order, mm_local_insert_every]
+QED
+
+Definition mm_local_zero_capture_def:
+  mm_local_zero_capture dfg is n j =
+    if j < n /\ j < LENGTH is then
+      if is_zero_store (EL j is) then
+        (case (EL j is).inst_operands of
+          [Lit dst; Lit value] => SOME (w2n dst, REPLICATE 32 (0w:word8))
+        | _ => NONE)
+      else if is_calldatasize_copy dfg (EL j is) then
+        (case (EL j is).inst_operands of
+          [Lit dst; Var v; Lit len] => SOME (w2n dst, REPLICATE (w2n len) (0w:word8))
+        | _ => NONE)
+      else NONE
+    else NONE
+End
+
+Theorem mm_local_zero_capture_store[local]:
+  j < n /\ j < LENGTH is /\ (EL j is).inst_opcode = MSTORE /\
+  (EL j is).inst_operands = [Lit dst; Lit 0w] ==>
+  mm_local_zero_capture dfg is n j = SOME (w2n dst, REPLICATE 32 0w)
+Proof
+  simp[mm_local_zero_capture_def, is_zero_store_def, operand_lit_val_def]
+QED
+
+Theorem mm_local_zero_capture_calldata[local]:
+  j < n /\ j < LENGTH is /\ is_calldatasize_copy dfg (EL j is) /\
+  (EL j is).inst_operands = [Lit dst; Var v; Lit len] ==>
+  mm_local_zero_capture dfg is n j = SOME (w2n dst, REPLICATE (w2n len) 0w)
+Proof
+  strip_tac >>
+  `(EL j is).inst_opcode = CALLDATACOPY` by fs[is_calldatasize_copy_def] >>
+  simp[mm_local_zero_capture_def, is_zero_store_def]
+QED
+
+Theorem mm_local_zero_capture_future[local]:
+  n <= j ==> mm_local_zero_capture dfg is n j = NONE
+Proof
+  simp[mm_local_zero_capture_def]
+QED
+
+Theorem mm_local_zero_capture_past[local]:
+  j < n /\ n <= m ==>
+  mm_local_zero_capture dfg is m j = mm_local_zero_capture dfg is n j
+Proof
+  simp[mm_local_zero_capture_def]
+QED
+
+Theorem mm_local_zero_capture_cases[local]:
+  mm_local_zero_capture dfg is n j = SOME (d,bs) ==>
+  j < n /\ j < LENGTH is /\
+  ((?dst. (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dst; Lit 0w] /\
+      d = w2n dst /\ bs = REPLICATE 32 0w) \/
+   (?dst v len. is_calldatasize_copy dfg (EL j is) /\
+      (EL j is).inst_operands = [Lit dst; Var v; Lit len] /\
+      d = w2n dst /\ bs = REPLICATE (w2n len) 0w))
+Proof
+  simp[mm_local_zero_capture_def] >>
+  rpt IF_CASES_TAC >> gvs[AllCaseEqs(), is_zero_store_def, operand_lit_val_def] >>
+  rpt strip_tac >> gvs[operand_lit_val_def]
+QED
+
 (* Essential counterexample evidence: a variable-free unreachable block. *)
 Theorem mm_local_dead_input:
   fn0 = mk_raw_function "f"
