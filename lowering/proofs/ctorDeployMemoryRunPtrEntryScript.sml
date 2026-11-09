@@ -275,8 +275,13 @@ Proof
   drule_all deploy_ptr_entry_package_accepts_value >> disch_tac >>
   Q.SUBGOAL_THEN `is_payable \/ initial.vs_call_ctx.cc_callvalue = 0w` assume_tac
   >- (Cases_on `is_payable` >> simp[] >>
-      gvs[Abbr `initial`, gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
-          deploy_state_rel_def, venom_state_component_equality, call_context_component_equality]) >>
+      `vs.vs_call_ctx = (deploy_entry_state prog cplan tops es).vs_call_ctx` by
+        (qpat_x_assum `gas_variant _ _` mp_tac >>
+         simp_tac std_ss [gas_variant_def, venom_state_component_equality] >>
+         rpt strip_tac >> simp[]) >>
+      qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
+      simp_tac std_ss [deploy_state_rel_def] >> strip_tac >>
+      simp[Abbr `initial`, deploy_entry_state_def, entry_venom_state_def] >> gvs[]) >>
   drule_all prefix_entry_prepare_actual >>
   disch_then (qspecl_then [`entry_taint`, `[]`, `FEMPTY`,
     `deploy_dead tops runtime_bc am tx`] strip_assume_tac) >>
@@ -451,8 +456,13 @@ Proof
   drule_all deploy_ptr_entry_package_accepts_value >> disch_tac >>
   Q.SUBGOAL_THEN `is_payable \/ initial.vs_call_ctx.cc_callvalue = 0w` assume_tac
   >- (Cases_on `is_payable` >> simp[] >>
-      gvs[Abbr `initial`, gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
-          deploy_state_rel_def, venom_state_component_equality, call_context_component_equality]) >>
+      `vs.vs_call_ctx = (deploy_entry_state prog cplan tops es).vs_call_ctx` by
+        (qpat_x_assum `gas_variant _ _` mp_tac >>
+         simp_tac std_ss [gas_variant_def, venom_state_component_equality] >>
+         rpt strip_tac >> simp[]) >>
+      qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
+      simp_tac std_ss [deploy_state_rel_def] >> strip_tac >>
+      simp[Abbr `initial`, deploy_entry_state_def, entry_venom_state_def] >> gvs[]) >>
   drule_all prefix_entry_prepare_actual >>
   disch_then (qspecl_then [`entry_taint`, `[]`, `FEMPTY`,
     `deploy_dead tops runtime_bc am tx`] strip_assume_tac) >>
