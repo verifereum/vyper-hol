@@ -21,6 +21,7 @@
 Theory dftContractGas
 Ancestors
   dftGasOracleFromList dftGasOracleToList dftGasOracleSim dftGasOracleInv
+  dftGasMask
   dftGasFromListUnion dftGasToListAgreement dftGasFromListTraceNames
   dftGasToListTrace dftGasFromListReadings rich_list pair
   dftGasOracleDefs venomRetProps contextRawReachable ptrDiscipline passSimulationDefs
