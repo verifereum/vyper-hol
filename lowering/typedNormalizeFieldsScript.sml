@@ -292,7 +292,7 @@ QED
 
 (* The memory part of the indexed completed-prefix invariant.  d and h are
    the absolute destination/source prefix-sum endpoints at the call site. *)
-Theorem normalize_fields_prefix_frame[local]:
+Theorem normalize_fields_prefix_frame:
   i < N /\
   (!j k. j <= k /\ k <= N ==> d j <= d k /\ h j <= h k) /\
   abi_footprint_disjoint (h 0) (h N - h 0) [(d 0,d N - d 0)] /\
@@ -365,7 +365,7 @@ Proof
     rich_listTheory.SNOC_APPEND, listTheory.MAP_APPEND, listTheory.SUM_APPEND]
 QED
 
-Theorem normalize_prefix_mono[local]:
+Theorem normalize_prefix_mono:
   !xs j k. j <= k ==> SUM (MAP f (TAKE j xs)) <= SUM (MAP f (TAKE k xs))
 Proof
   Induct_on `xs` >- simp[] >> rpt gen_tac >>
@@ -733,7 +733,7 @@ Proof
   asm_simp_tac (srw_ss()) [LET_THM]
 QED
 
-Theorem normalize_struct_prefix_sizes[local]:
+Theorem normalize_struct_prefix_sizes:
   !fields i.
     (!name ty sz. MEM (name,ty,sz) fields ==> sz = type_memory_bytes ce ty) ==>
     SUM (MAP (SND o SND) (TAKE i fields)) =
