@@ -134,6 +134,65 @@ Proof
     listTheory.EL_REVERSE] >> metis_tac[]
 QED
 
+(* Scratch memory is indexed by byte offset, not by operand identity. *)
+Theorem mem_sval_at_store_label:
+  !labs off l d.
+  mem_sval_at (labs |++ GENLIST (\i. (off+i,(l,d,i))) 32) off (Lab l d)
+Proof
+  simp[mem_sval_at_def, mem_label_at_def, mstore_labels_lookup,
+       listTheory.EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
+QED
+
+Theorem sym_mload_mem_sval_label:
+  !ss off l d stk.
+  ss.sym_stack = Val off :: stk /\
+  mem_sval_at ss.sym_mem_labels (w2n off) (Lab l d) ==>
+  sym_mload ss = SymOK
+    (ss with <| sym_base := asm_next (ss.sym_base with
+                  as_memory := asm_expand_memory (w2n off + 32)
+                    ss.sym_base.as_memory);
+                sym_stack := Lab l d :: stk |>)
+Proof
+  simp[mem_sval_at_def, sym_mload_def]
+QED
+
+Theorem mem_sval_at_cong:
+  !labs labs' off sv.
+  (!i. in_mem_range off 32 i ==> FLOOKUP labs' i = FLOOKUP labs i) ==>
+  (mem_sval_at labs' off sv <=> mem_sval_at labs off sv)
+Proof
+  rpt gen_tac >> simp[in_mem_range_def] >> strip_tac >> Cases_on `sv`
+  >- (simp[mem_sval_at_def, in_mem_range_def] >>
+      metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_NONE_SOME]) >>
+  simp[mem_sval_at_def, mem_label_at_def,
+       listTheory.EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
+QED
+
+Theorem mem_sval_at_clear_value:
+  !labs off w.
+  mem_sval_at (mem_labels_clear labs (in_mem_range off 32)) off (Val w)
+Proof
+  simp[mem_sval_at_def, mem_labels_clear_def,
+       finite_mapTheory.FDOM_DRESTRICT, pred_setTheory.IN_INTER]
+QED
+
+Theorem sym_mstore_label_scratch:
+  !ss off l d stk.
+  ss.sym_stack = Val off :: Lab l d :: stk ==>
+  ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = stk /\
+    mem_sval_at ss'.sym_mem_labels (w2n off) (Lab l d) /\
+    (!i. ~in_mem_range (w2n off) 32 i ==>
+      FLOOKUP ss'.sym_mem_labels i = FLOOKUP ss.sym_mem_labels i)
+Proof
+  rpt strip_tac >>
+  simp[sym_mstore_def, sym_lift_def, asmSemTheory.asm_mstore_def,
+       asmSemTheory.asm_next_def, mem_sval_at_store_label,
+       mstore_labels_lookup, in_mem_range_def, Excl "GENLIST_NUMERALS"] >>
+  pure_once_rewrite_tac [arithmeticTheory.ADD_COMM] >>
+  rewrite_tac[mem_sval_at_store_label, mstore_labels_lookup] >>
+  simp[]
+QED
+
 Theorem sym_phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0
