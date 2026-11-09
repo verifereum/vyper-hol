@@ -50,7 +50,8 @@ Theorem storage_element_fold_fields:
   !j. (H j).vs_memory = sbase.vs_memory /\
       (H j).vs_allocas = sbase.vs_allocas /\
       (H j).vs_alloca_next = sbase.vs_alloca_next /\
-      (H j).vs_call_ctx = sbase.vs_call_ctx
+      (H j).vs_call_ctx = sbase.vs_call_ctx /\
+      (H j).vs_labels = sbase.vs_labels
 Proof
   strip_tac >> Induct
   >- simp[COUNT_LIST_def] >>
