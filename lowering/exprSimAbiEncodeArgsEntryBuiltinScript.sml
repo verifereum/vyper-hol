@@ -840,3 +840,34 @@ Proof
   gen_tac >> ho_match_mp_tac abi_args_entry_ptr_val >>
   metis_tac[abi_args_entry_uint2str]
 QED
+
+Theorem abi_args_entry_slice_bounds:
+  !start len size a x b.
+    compile_assert_slice_bounds start len size a = (x,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)
+Proof
+  ntac 3 gen_tac >> rewrite_tac[compile_assert_slice_bounds_def] >>
+  ho_match_mp_tac abi_args_entry_emitted_prefix >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule abi_args_entry_emit_op >>
+      simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+  rpt gen_tac >>
+  rpt (FIRST [irule abi_args_entry_extends_bind,
+              irule abi_args_entry_extends_ignore_bind] >> conj_tac >>
+       rpt gen_tac >> BETA_TAC) >>
+  simp[emit_op_labels, emit_void_labels]
+QED
+
+Theorem abi_args_entry_slice_out:
+  !sz a x b. compile_slice_out_buf sz a = (x,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)
+Proof
+  gen_tac >> rewrite_tac[compile_slice_out_buf_def] >>
+  ho_match_mp_tac abi_args_entry_emitted_prefix >> conj_tac
+  >- metis_tac[abi_args_entry_alloc_buffer] >>
+  rpt gen_tac >>
+  rpt (irule abi_args_entry_extends_bind >> conj_tac >>
+       rpt gen_tac >> BETA_TAC) >>
+  simp[emit_op_labels, comp_return_def, cs_extends_refl]
+QED
