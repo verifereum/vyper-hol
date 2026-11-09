@@ -520,7 +520,9 @@ QED
 Resume entry_owned_canonical_bytes_array_execution[configured]:
   markerLib.RESUME_TAC >> rpt strip_tac >>
   drule_all abiDecoderRecursiveLoopEntryTheory.abi_decoder_loop_phase_entry >> strip_tac >>
-  drule_all abiDecoderRecursiveLoopLayoutTheory.abi_decoder_loop_phase_lookups >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [abiDecoderExecutionTheory.abi_decode_position_header_zero,
+      abiDecoderExecutionTheory.abi_decode_position_header_delta_def, arithmeticTheory.ADD_0]
+      (Q.INST [`base_op` |-> `Lit 0w`] abiDecoderRecursiveLoopLayoutTheory.abi_decoder_loop_phase_lookups)) >> strip_tac >>
   `eval_operand src prepared = SOME (n2w sb)` by
     (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ prepared` mp_tac >>
      pure_rewrite_tac[abiDecoderTypedContractTheory.abi_decoder_ranges_def] >> metis_tac[]) >>

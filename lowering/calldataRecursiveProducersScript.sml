@@ -128,8 +128,12 @@ Theorem calldata_loop_cfg_producer:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decoder_loop_phase_lookups >> strip_tac >>
-  drule abi_decoder_loop_prefix_facts >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [abiDecoderExecutionTheory.abi_decode_position_header_zero,
+      abiDecoderExecutionTheory.abi_decode_position_header_delta_def, arithmeticTheory.ADD_0]
+      (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_loop_phase_lookups)) >> strip_tac >>
+  drule (SIMP_RULE bool_ss [abiDecoderExecutionTheory.abi_decode_position_header_zero,
+      abiDecoderExecutionTheory.abi_decode_position_header_delta_def, arithmeticTheory.ADD_0]
+      (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_loop_prefix_facts)) >> strip_tac >>
   drule abi_decoder_array_setup_head >> strip_tac >>
   drule_all calldata_loop_child_static >> strip_tac >>
   qpat_x_assum `abi_decode_loop_suffix _ _ _ _ _ = _` mp_tac >>
@@ -426,6 +430,16 @@ Proof
   qpat_x_assum `compile_abi_decode_to_buf dst src _ (Lit 0w) _ _ st = _` kall_tac >>
   qpat_x_assum `dyn \/ _` kall_tac >>
   drule abi_decode_array_loop_init_trace >> strip_tac >> gvs[] >>
+  `addr = src /\
+   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn asz st = ((),guard_st)` by
+    (qpat_x_assum `abi_decode_dynarray_position_prefix _ _ _ _ _ _ _ = _` mp_tac >>
+     Cases_on `abi_decode_count_guard CALLDATALOAD src maxn st` >>
+     simp[abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_position_prefix_unbounded,
+          abiEncoderTheory.compile_abi_dec_addr_def, abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_prefix_def,
+          abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     strip_tac >> gvs[]) >>
+  gvs[] >>
   drule abi_decode_dyn_loop_trace >> strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_array_loop_init_shape >> strip_tac >>
@@ -452,7 +466,9 @@ Proof
     (mp_tac (cj 1 ci_mono_compile_abi_decode) >>
      disch_then (qspecl_then [`SND (SND ops)`,`FST (SND ops)`,
        `CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`di`,`middle`] mp_tac) >> simp[]) >>
-  drule abi_decoder_loop_prefix_facts >> strip_tac >>
+  drule (SIMP_RULE bool_ss [abiDecoderExecutionTheory.abi_decode_position_header_zero,
+      abiDecoderExecutionTheory.abi_decode_position_header_delta_def, arithmeticTheory.ADD_0]
+      (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_loop_prefix_facts)) >> strip_tac >>
   drule abi_decoder_loop_suffix_facts >> strip_tac >>
   `?bb. lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME bb /\
      isPREFIX loop_st.cs_current_insts bb.bb_instructions` by

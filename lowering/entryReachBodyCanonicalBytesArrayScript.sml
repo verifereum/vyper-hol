@@ -1235,9 +1235,13 @@ Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_loop_phase_cfg >> strip_tac >>
-  drule_all abi_decoder_loop_phase_lookups >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [abiDecoderExecutionTheory.abi_decode_position_header_zero,
+      abiDecoderExecutionTheory.abi_decode_position_header_delta_def, arithmeticTheory.ADD_0]
+      (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_loop_phase_lookups)) >> strip_tac >>
   drule_all abi_decoder_loop_phase_containment >> strip_tac >>
-  drule abi_decoder_loop_prefix_facts >> strip_tac >>
+  drule (SIMP_RULE bool_ss [abiDecoderExecutionTheory.abi_decode_position_header_zero,
+      abiDecoderExecutionTheory.abi_decode_position_header_delta_def, arithmeticTheory.ADD_0]
+      (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_loop_prefix_facts)) >> strip_tac >>
   drule abi_decoder_array_setup_head >> strip_tac >>
   `abi_decode_loop_suffix ip (Var (STRING #"%" (toString body_st.cs_next_var)))
      (FST labels) (SND (SND labels)) last = ((),final)` by metis_tac[] >>
@@ -1361,7 +1365,9 @@ Proof
   drule_all entry_bytes_array_phase_layout >> strip_tac >>
   `loop_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   drule_all abi_decoder_loop_phase_entry >> strip_tac >>
-  drule_all abi_decoder_loop_phase_lookups >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [abiDecoderExecutionTheory.abi_decode_position_header_zero,
+      abiDecoderExecutionTheory.abi_decode_position_header_delta_def, arithmeticTheory.ADD_0]
+      (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_loop_phase_lookups)) >> strip_tac >>
   qexistsl_tac [`guard_st`,`header_st`,`loop_st`,`ip`,`cnt`,`labels`,`body_st`,`ops`,`middle`,`last`] >>
   asm_rewrite_tac[] >> conj_tac
   >- (irule entry_bytes_array_concrete_config >> simp[SF SFY_ss]) >>

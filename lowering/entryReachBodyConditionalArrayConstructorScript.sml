@@ -376,7 +376,9 @@ Proof
   rename1 `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = (ops,middle)` >>
   rename1 `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ middle = ((),last)` >>
   drule_all entry_bytes_array_initial_live >> strip_tac >>
-  drule abi_decoder_loop_prefix_facts >> strip_tac >>
+  drule (SIMP_RULE bool_ss [abiDecoderExecutionTheory.abi_decode_position_header_zero,
+      abiDecoderExecutionTheory.abi_decode_position_header_delta_def, arithmeticTheory.ADD_0]
+      (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_loop_prefix_facts)) >> strip_tac >>
   qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = _`
     (mp_then Any strip_assume_tac abi_decode_array_element_setup_operands) >>
   qpat_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ middle = _`
