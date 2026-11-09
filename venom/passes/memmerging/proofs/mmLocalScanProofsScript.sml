@@ -5049,16 +5049,22 @@ Proof
 QED
 
 Theorem mm_local_read_write_disjoint[local]:
-  a+n <= d \/ d+LENGTH bs <= a ==>
+  n = 0 \/ bs = [] \/ a+n <= d \/ d+LENGTH bs <= a ==>
   read_memory a n (write_memory_with_expansion d bs s) = read_memory a n s
 Proof
+  Cases_on `n = 0` >- simp[venomStateTheory.read_memory_def] >>
+  Cases_on `bs = []`
+  >- (gvs[venomStateTheory.read_memory_def, write_as_replace,
+          replace_bytes_def, expand_mem_def] >>
+      rw[LIST_EQ_REWRITE, EL_APPEND_EQN, EL_TAKE, EL_DROP, EL_REPLICATE] >>
+      rw[] >> gvs[]) >>
   strip_tac >>
   simp[venomStateTheory.read_memory_def, write_as_replace] >>
   irule read_nonoverlap_expand >> simp[]
 QED
 
 Theorem mm_local_read_write_log[local]:
-  !ws s. EVERY (\(d,bs). a+n <= d \/ d+LENGTH bs <= a) ws ==>
+  !ws s. EVERY (\(d,bs). n = 0 \/ bs = [] \/ a+n <= d \/ d+LENGTH bs <= a) ws ==>
   read_memory a n
     (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s ws) =
   read_memory a n s
@@ -5072,7 +5078,7 @@ QED
 Theorem mm_local_read_write_log_memory[local]:
   u.vs_memory =
     (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v ws).vs_memory /\
-  EVERY (\(d,bs). a+n <= d \/ d+LENGTH bs <= a) ws ==>
+  EVERY (\(d,bs). n = 0 \/ bs = [] \/ a+n <= d \/ d+LENGTH bs <= a) ws ==>
   read_memory a n u = read_memory a n v
 Proof
   strip_tac >>
@@ -5088,8 +5094,11 @@ Theorem mm_local_mload_write_log_memory[local]:
   EVERY (\(d,bs). a+32 <= d \/ d+LENGTH bs <= a) ws ==>
   mload a u = mload a v
 Proof
-  strip_tac >> drule_all mm_local_read_write_log_memory >>
-  simp[venomStateTheory.read_memory_def, venomStateTheory.mload_def]
+  strip_tac >>
+  `read_memory a 32 u = read_memory a 32 v` by
+    (irule mm_local_read_write_log_memory >> qexists_tac `ws` >>
+     simp[] >> gvs[EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
+  gvs[venomStateTheory.read_memory_def, venomStateTheory.mload_def]
 QED
 
 Theorem mm_local_mcopy_write_log[local]:
@@ -5101,7 +5110,7 @@ Theorem mm_local_mcopy_write_log[local]:
     (mcopy dst src n s) ws
 Proof
   strip_tac >>
-  `EVERY (\(d,bs). src+n <= d \/ d+LENGTH bs <= src) ws` by
+  `EVERY (\(d,bs). n = 0 \/ bs = [] \/ src+n <= d \/ d+LENGTH bs <= src) ws` by
     (gvs[EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
   `read_memory src n
     (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s ws) =
@@ -5832,7 +5841,7 @@ QED
 Theorem mm_local_pending_copy_birth[local]:
   mm_local_pending cap js s t /\
   LIST_REL (\j w. cap j = SOME w) js ws /\
-  EVERY (\(d,bs). src+len <= d \/ d+LENGTH bs <= src) ws /\
+  EVERY (\(d,bs). len = 0 \/ bs = [] \/ src+len <= d \/ d+LENGTH bs <= src) ws /\
   payload = read_memory src len s /\ cap n = SOME (dst,payload) /\
   s'.vs_memory = (write_memory_with_expansion dst payload s).vs_memory ==>
   payload = read_memory src len t /\ LENGTH payload = len /\
@@ -5856,7 +5865,8 @@ Theorem mm_local_pending_mcopy_birth[local]:
   mm_local_pending cap (js ++ [n]) (mcopy dst src len s) t
 Proof
   strip_tac >> irule mm_local_pending_copy_birth >>
-  conj_tac >- (qexists `ws` >> simp[]) >>
+  conj_tac >- (qexists `ws` >> simp[] >>
+    gvs[EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
   qexistsl [`dst`, `s`] >>
   simp[venomExecSemanticsTheory.mcopy_def, venomStateTheory.read_memory_def]
 QED
@@ -6207,16 +6217,10 @@ Proof
      (write_memory_with_expansion (w2n dst) (read_memory (w2n src) (w2n len) (H n)) (H n))` by
     simp[venomStateTheory.read_memory_def] >>
   pop_assum SUBST1_TAC >>
-  Cases_on `c2.cg_length = 0` >- simp[venomStateTheory.read_memory_def] >>
-  Cases_on `w2n len = 0`
-  >- (gvs[venomStateTheory.read_memory_def, write_as_replace,
-          replace_bytes_def, expand_mem_def] >>
-      rw[LIST_EQ_REWRITE, EL_APPEND_EQN, EL_TAKE, EL_DROP, EL_REPLICATE] >>
-      rw[] >> gvs[]) >>
   irule mm_local_read_write_disjoint >>
   drule (INST_TYPE [alpha |-> ``:word8``] mm_local_capture_source_exclusion) >>
   disch_then (qspecl_then [`w2n dst`, `read_memory (w2n src) (w2n len) (H n)`] mp_tac) >>
-  gvs[] >> simp[venomStateTheory.read_memory_def]
+  gvs[] >> simp[venomStateTheory.read_memory_def] >> metis_tac[]
 QED
 
 Theorem mm_local_two_copy_captures[local]:
