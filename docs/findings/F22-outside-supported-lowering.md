@@ -84,22 +84,20 @@ regressions. No named original fixture exercises these excluded mismatches.
 [storage codec](../../semantics/vyperStorageScript.sml),
 [event encoding](../../semantics/vyperEventScript.sml).
 Current producer boundaries are
-[supportedExprForms](../../lowering/supported/supportedExprFormsScript.sml),
-[supportedExprs](../../lowering/supported/supportedExprsScript.sml),
-[supportedStmts](../../lowering/supported/supportedStmtsScript.sml),
-[supportedTypes](../../lowering/supported/supportedTypesScript.sml),
-[supportedDecls](../../lowering/supported/supportedDeclsScript.sml).
+[supportedExprForms](../../lowering/proofs/supported/supportedExprFormsScript.sml),
+[supportedExprs](../../lowering/proofs/supported/supportedExprsScript.sml),
+[supportedStmts](../../lowering/proofs/supported/supportedStmtsScript.sml),
+[supportedTypes](../../lowering/proofs/supported/supportedTypesScript.sml),
+[supportedDecls](../../lowering/proofs/supported/supportedDeclsScript.sml).
 
 The whitelist theorems prove **exclusion/support**, not these programs'
-semantic correctness: [expression form properties](../../lowering/supported/supportedExprFormPropsScript.sml)
+semantic correctness: [expression form properties](../../lowering/proofs/supported/supportedExprFormPropsScript.sml)
 `supported_power_shift_counterexamples`, `conversion_width_boundary_rejection`,
-`supported_abi_forms_coverage`; [expression properties](../../lowering/supported/supportedExprPropsScript.sml)
-`supported_storage_base_exclusions`, `supported_effect_nesting_counterexamples`;
-[statement properties](../../lowering/supported/supportedStmtPropsScript.sml)
-`supported_storage_effects_rejected`, `supported_target_exclusions`, `supported_log_statement_row`.
+`supported_abi_forms_coverage`; [expression properties](../../lowering/proofs/supported/supportedExprPropsScript.sml)
+`supported_storage_base_exclusions`, `supported_effect_nesting_counterexamples`.
 
 Executable ordering witnesses are in
-[evalAssignmentOrder](../../lowering/defs/bytecode/eval/evalAssignmentOrderScript.sml)
+[evalAssignmentOrder](../../bytecode/eval/evalAssignmentOrderScript.sml)
 (source evaluation and selected exact-bytecode fixtures) and
 [vyperLoadTimingTest](../../tests/vyperLoadTimingTestScript.sml)
 (storage/memory call arguments and eager builtins). These concrete checks do

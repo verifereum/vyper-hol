@@ -1,7 +1,7 @@
 Theory placeMemoryStaging
 Ancestors
   exprSimAlloc placeMemoryTypedPrimitive placeMemoryPrimitiveForward
-  placeMemoryCopyEffect context exprLoweringProps compileEnv venomExecSemantics
+  placeMemoryCopyEffect context exprLoweringProps compileEnv loweringStateRelDefs venomExecSemantics
   venomState venomInst emitHelper fragExec rich_list instIdxIndep finite_map
   loweringHalt abiTupleProps placeMemoryCopyFrames fragGasMode
 

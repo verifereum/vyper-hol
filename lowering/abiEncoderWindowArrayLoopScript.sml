@@ -364,3 +364,104 @@ Proof
     (abi_encode_array_header_state iv cmp done (LENGTH avs) (LENGTH avs) u)` >>
   drule_all window_array_header_step >> simp[]
 QED
+
+Theorem window_array_header_high_vars:
+  not_fresh_at bound iv /\ not_fresh_at bound cmp /\ not_fresh_at bound done ==>
+  !x. ~not_fresh_at bound x ==>
+    lookup_var x (jump_to label (abi_encode_array_header_state iv cmp done i n s)) =
+    lookup_var x s
+Proof
+  rpt strip_tac >>
+  `x <> iv /\ x <> cmp /\ x <> done` by metis_tac[] >>
+  simp[jump_to_def, abi_encode_array_header_state_def, lookup_var_def,
+    update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem window_array_backedge_high_vars:
+  not_fresh_at bound nv ==>
+  !x. ~not_fresh_at bound x ==>
+    lookup_var x (jump_to hdr (mstore islot w (update_var nv w s))) = lookup_var x s
+Proof
+  rpt strip_tac >> `x <> nv` by metis_tac[] >>
+  simp[jump_to_def, lookup_var_def, window_store_vars,
+    update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem window_array_loop_run_observed:
+  j <= N /\ P j s /\
+  (!k u. k < N /\ P k u ==>
+    ?v. window_array_transition ctx func owner ids outs u v /\ P (SUC k) v /\
+      (!x. ~not_fresh_at bound x ==> lookup_var x v = lookup_var x u)) /\
+  (!u. P N u ==>
+    ?v. window_array_transition ctx func owner ids outs u v /\ Q v /\
+      (!x. ~not_fresh_at bound x ==> lookup_var x v = lookup_var x u)) ==>
+  ?t. window_array_transition ctx func owner ids outs s t /\ Q t /\
+    (!x. ~not_fresh_at bound x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  ho_match_mp_tac (Q.INST [`P` |->
+    `\k u. P k u /\ (!x. ~not_fresh_at bound x ==> lookup_var x u = lookup_var x s)`]
+    window_array_loop_run) >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> first_x_assum drule_all >> strip_tac >>
+      qexists_tac `v` >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum drule_all >> strip_tac >>
+  qexists_tac `v` >> simp[] >> metis_tac[]
+QED
+
+Theorem window_array_control_loop_observed:
+  lookup_block hdr func.fn_blocks = SOME <|bb_label := hdr; bb_instructions :=
+    abi_encode_array_header_insts id ip count_op iv cmp done body_lbl exit_lbl|> /\
+  lookup_block body_lbl func.fn_blocks = SOME body_bb /\
+  lookup_block exit_lbl func.fn_blocks = SOME exit_bb /\
+  phi_prefix_length body_bb.bb_instructions = 0 /\
+  phi_prefix_length exit_bb.bb_instructions = 0 /\
+  (!x. not_fresh_at owner x ==> x <> iv /\ x <> cmp /\ x <> done) /\
+  not_fresh_at bound iv /\ not_fresh_at bound cmp /\ not_fresh_at bound done /\
+  window_array_inv ctx func owner ids ei asz msz active ty avs src dst
+    ip isite islot dp dsite dslot count_op hdr sb cap d j s /\
+  j <= LENGTH avs /\
+  (!k u. k < LENGTH avs /\
+    window_array_inv ctx func owner ids ei asz msz active ty avs src dst
+      ip isite islot dp dsite dslot count_op body_lbl sb cap d k u ==>
+    ?v. window_array_transition ctx func owner ids outs u v /\
+      window_array_inv ctx func owner ids ei asz msz active ty avs src dst
+        ip isite islot dp dsite dslot count_op hdr sb cap d (SUC k) v /\
+      (!x. ~not_fresh_at bound x ==> lookup_var x v = lookup_var x u)) ==>
+  ?t. window_array_transition ctx func owner ids outs s t /\
+    window_array_inv ctx func owner ids ei asz msz active ty avs src dst
+      ip isite islot dp dsite dslot count_op exit_lbl sb cap d (LENGTH avs) t /\
+    (!x. ~not_fresh_at bound x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  ho_match_mp_tac (Q.INST [`N` |-> `LENGTH (avs:abi_value list)`, `P` |->
+    `\k u. window_array_inv ctx func owner ids ei asz msz active ty avs src dst
+      ip isite islot dp dsite dslot count_op hdr sb cap d k u`]
+    window_array_loop_run_observed) >>
+  simp_tac bool_ss [] >> asm_rewrite_tac[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `window_array_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ j s` kall_tac >>
+      `k <= LENGTH avs` by decide_tac >>
+      `window_array_transition ctx func owner ids outs u
+         (jump_to body_lbl (abi_encode_array_header_state iv cmp done k (LENGTH avs) u)) /\
+       window_array_inv ctx func owner ids ei asz msz active ty avs src dst
+         ip isite islot dp dsite dslot count_op body_lbl sb cap d k
+         (jump_to body_lbl (abi_encode_array_header_state iv cmp done k (LENGTH avs) u))` by
+        (drule_all window_array_header_step >> simp[] >> decide_tac) >>
+      first_x_assum drule_all >> strip_tac >> qexists_tac `v` >>
+      asm_rewrite_tac[] >> conj_tac
+      >- metis_tac[window_array_transition_trans] >>
+      rpt strip_tac >> first_x_assum drule >> disch_then SUBST1_TAC >>
+      irule window_array_header_high_vars >> qexists_tac `bound` >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `window_array_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ j s` kall_tac >>
+  `LENGTH avs <= LENGTH avs` by decide_tac >>
+  qexists_tac `jump_to exit_lbl
+    (abi_encode_array_header_state iv cmp done (LENGTH avs) (LENGTH avs) u)` >>
+  conj_tac
+  >- (drule_all window_array_header_step >> simp[]) >>
+  conj_tac
+  >- (drule_all window_array_header_step >> simp[]) >>
+  rpt strip_tac >> irule window_array_header_high_vars >>
+  qexists_tac `bound` >> simp[]
+QED

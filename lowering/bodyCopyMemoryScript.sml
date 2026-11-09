@@ -7,7 +7,7 @@ Ancestors
   bodyAllocMemory exprSimDefs exprSimBufferStore exprSimLiteralBuffer exprSimAlloc fragExec fragExecMem instMemFrontier
   stmtLowering
   allocaHistoryFragment exprLoweringProps exprLowering emitHelperProps emitHelper
-  compileEnv context venomInst venomState venomExecSemantics venomMemDefs
+  compileEnv loweringStateRelDefs context venomInst venomState venomExecSemantics venomMemDefs
   valueEncoding valueEncodingProofs list rich_list finite_map words arithmetic
 
 Theorem compile_copy_memory_body_mem_ok:

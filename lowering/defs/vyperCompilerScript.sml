@@ -277,12 +277,13 @@ End
 
 (* ===== Checked pointer confinement ===== *)
 
-(* ptr_ok_check decides ptrDiscipline's fn_ptr_ok for every function and
-   its reachable part, with the pointer parameters it computes (ctx_ptr_param_list); ptrOkCheck
-   proves it sound.  It is executable as the rest of the lowering is: no
-   quantifiers and no SET_TO_LIST (the native parity runner cannot run
-   them), so the closures are lists from a fuel-bounded iteration of
-   pointer_use_step_step, each checked closed. *)
+(* For a unit without DALLOCA, ptr_ok_check decides ptrDiscipline's
+   fn_ptr_ok for every function and its reachable part, with the pointer
+   parameters it computes (ctx_ptr_param_list); ptrOkCheck proves it sound.
+   It is executable as the rest of the lowering is: no quantifiers and no
+   SET_TO_LIST (the native parity runner cannot run them), so the closures
+   are lists from a fuel-bounded iteration of pointer_use_step_step, each
+   checked closed. *)
 
 Definition pointer_use_vars_fuel_def:
   pointer_use_vars_fuel 0 fn vars = vars /\
@@ -484,8 +485,15 @@ Definition fn_reachable_blocks_def:
       FILTER (\bb. cfg_reachable_of (cfg_analyze fn) bb.bb_label) fn.fn_blocks
 End
 
+(* S3's pointer discipline covers units without DALLOCA, the O1 source
+   shape (o1_source_unit_ok), so a unit with DALLOCA passes unchecked: the
+   lowering restores the free memory pointer with SETFMP after a
+   dynamically sized buffer (create_copy_of, create_from_blueprint, raw_call
+   with msg.data), which the pointer discipline does not admit. *)
 Definition ptr_ok_check_def:
   ptr_ok_check ctx <=>
+    EXISTS (\fn. EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts fn))
+      ctx.ctx_functions \/
     EVERY (\fn. fn_ptr_ok_check (ctx_ptr_param_list ctx) fn /\
                 wf_function fn /\
                 EVERY (\i. i.inst_opcode <> PHI) (fn_insts fn) /\
@@ -497,10 +505,10 @@ End
    (mem_safe_raw_unit_memory_ok, alloca_frontier_inv_entry) asks of the
    unit: every function's labels distinct and an entry block, and the
    reachable call graph acyclic.  ptr_ok_check is what S3's pointer
-   discipline asks of it (fn_ptr_ok).  The last conjunct is definite
-   assignment (every use is written on every path to it), which
-   SimplifyCFG's input contract asks for.  Like the inst-id and budget
-   checks, they are decided on the unit rather than proved of the
+   discipline asks of a unit without DALLOCA (fn_ptr_ok).  The last
+   conjunct is definite assignment (every use is written on every path to
+   it), which SimplifyCFG's input contract asks for.  Like the inst-id and
+   budget checks, they are decided on the unit rather than proved of the
    lowering.  The budget check leaves room for 32 bytes per DLOAD:
    LowerDload gives each DLOAD a 32-byte scratch ALLOCA, so its output's
    frontier runs that far past the input's. *)

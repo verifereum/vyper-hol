@@ -116,7 +116,7 @@ QED
 Theorem abi_decoder_struct_inputs:
   FLOOKUP env nsid = SOME (StructArgs args) /\ LENGTH tvs = LENGTH args /\
   abi_decoder_recursive_pre ce env sf (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
-    di av v st last src dst opc hi sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) ==>
+    di av v st last src dst opc base_op hi B sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) ==>
   ?cfields avs fields.
     FLOOKUP sf (nsid_to_string nsid) = SOME cfields /\
     MAP (FST o SND) cfields = MAP SND args /\
@@ -125,14 +125,15 @@ Theorem abi_decoder_struct_inputs:
     abi_decoder_members ce (env \\ nsid) (sf \\ nsid_to_string nsid)
       (MAP SND args) tvs avs (MAP SND fields) /\
     type_memory_bytes ce (StructT nsid) = SUM (MAP (type_memory_bytes ce) (MAP SND args)) /\
-    abi_decoder_ranges opc hi src dst sb
+    abi_decoder_ranges opc base_op hi src dst B sb
       (LENGTH (enc (Tuple (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args))) (ListV avs)))
       d (SUM (MAP (type_memory_bytes ce) (MAP SND args))) b cap initial /\
-    mem_bytes_at sb
+    mem_bytes_at (B + sb)
       (LENGTH (enc (Tuple (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args))) (ListV avs)))
       (abi_decode_source opc initial) =
         enc (Tuple (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args))) (ListV avs) /\
     abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+    abi_decoder_operand_live st.cs_next_var base_op /\
     abi_decoder_operand_live st.cs_next_var hi
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>

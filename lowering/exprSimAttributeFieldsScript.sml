@@ -52,7 +52,7 @@ Ancestors
   exprSimHypsDefs
   storageDecodeMemory
   list rich_list finite_map pair
-  exprSimProps exprSimHyps compileEnv valueEncoding
+  exprSimProps exprSimHyps compileEnv loweringStateRelDefs valueEncoding
   vyperAST vyperInterpreter vyperState vyperStorage vyperValue
   vyperTyping vyperTypeSystem vyperTypeExprSoundness
 Libs

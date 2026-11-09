@@ -41,7 +41,8 @@ decode with `jsonConstASTLib.annotated_ast` and evaluate
    reads `folded_value` or inferred `type` fields.
 2. Process declarations in order. Elaborate each constant's integer expression
    using its declared type and previously evaluated constants. Check literal
-   ranges and evaluate the closed expression with `eval_pure_expr`. Before
+   ranges and evaluate the closed expression with `eval_expr` in the empty
+   context and state. Before
    accepting a closed shift, check that its count lies in 0–256 and that a
    left shift's unwrapped result fits the result type. This prevents runtime
    wrapping from changing a source constant's value.
@@ -54,8 +55,8 @@ decode with `jsonConstASTLib.annotated_ast` and evaluate
 
 `eval_integer_constant_sound` proves that every successful evaluation agrees
 with `eval_expr` in **any** runtime context and state, leaving that state
-unchanged. Its proof establishes context independence for the supported closed
-integer expressions, then uses `eval_pure_expr_to_eval_expr_some`.
+unchanged. Its proof shows that a supported closed integer expression has one
+result in every context and state, and that a successful result is a value.
 
 `evaluate_constant_sound` applies this result to source-expression elaboration.
 `evaluate_constant_literal_equivalent` proves equivalence of the elaborated

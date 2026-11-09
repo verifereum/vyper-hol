@@ -64,7 +64,7 @@ and `"abi_decode conversion"` are not exempt. An exempt run lacks result/effect 
 top still supplies an actual EVM run. See
 [source strict decoder](../../semantics/vyperABIScript.sml),
 [lowered decoder](../../lowering/defs/abiEncoderScript.sml),
-[dynamic fixture](../../lowering/defs/bytecode/eval/evalCompilerSubsetAbiBuiltinsScript.sml)
+[dynamic fixture](../../bytecode/eval/evalCompilerSubsetAbiBuiltinsScript.sml)
 and [current audit](../compiler-proof-status-2026-10-09.md).
 Pinned reference `vyper/codegen_venom/abi/abi_decoder.py`, `clamp_bytestring`,
 checks length/end,
