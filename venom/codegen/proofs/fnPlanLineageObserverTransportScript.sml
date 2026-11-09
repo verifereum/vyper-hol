@@ -521,46 +521,6 @@ QED
 
 (* Terminal JMPs neither consume nor define variables.  Reuse the native
    absence boundary rather than duplicating the target restoration proof. *)
-Theorem native_terminal_jmp_demand_support:
-  !fn bb dfg ps ops qs v.
-    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
-    bb.bb_instructions <> [] /\ (LAST bb.bb_instructions).inst_opcode = JMP /\
-    (!w. MEM w (live_vars_at (liveness_analyze fn) bb.bb_label
-      (PRE (LENGTH bb.bb_instructions))) ==>
-      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
-    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
-      (LAST bb.bb_instructions)
-      (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))
-      (bb_is_halting bb) F bb.bb_label ps = SOME (ops,qs) /\
-    ((MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
-      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
-        (PRE (LENGTH bb.bb_instructions)))) ==>
-    ((MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==>
-      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
-        (LENGTH bb.bb_instructions)))
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
-    (LENGTH bb.bb_instructions))` >- simp[] >>
-  `inst_wf (LAST bb.bb_instructions)` by
-    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, EVERY_MEM] >>
-     metis_tac[LAST_MEM]) >>
-  `?succ. (LAST bb.bb_instructions).inst_operands = [Label succ]` by
-    gvs[venomWfTheory.inst_wf_def] >>
-  `SUC (PRE (LENGTH bb.bb_instructions)) = LENGTH bb.bb_instructions /\
-    PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> gvs[]) >>
-  `EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions = LAST bb.bb_instructions` by
-    metis_tac[LAST_EL] >>
-  `~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
-    (PRE (LENGTH bb.bb_instructions)))` by
-    (strip_tac >> drule_at (Pat `MEM _ (live_vars_at _ _ _)`)
-       analyzed_live_loss_compute_operand >>
-     simp[compute_operands_def, asmIRTheory.get_non_label_operands_def,
-       stackPlanTypesTheory.is_label_operand_def]) >>
-  `~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled` by metis_tac[] >>
-  drule_all native_terminal_jmp_nondefining_absent >> simp[]
-QED
 
 Theorem native_indexed_ordinary_step_demand_support:
   !fn bb dfg k before inst rest ops after v.
@@ -2792,4 +2752,49 @@ Proof
   drule native_ordinary_interval_dead_stack >>
   disch_then (qspecl_then [`bb`,`p`,`v`] mp_tac) >> simp[] >>
   (impl_tac >- (rpt strip_tac >> metis_tac[])) >> simp[]
+QED
+
+(* A terminal JMP cannot resurrect dead spill debt: targets are live-out and
+   the regular release removes all unsupported spill entries. *)
+Theorem native_terminal_jmp_demand_support:
+  !fn bb dfg ps ops qs v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    bb.bb_instructions <> [] /\ (LAST bb.bb_instructions).inst_opcode = JMP /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (LAST bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))
+      (bb_is_halting bb) F bb.bb_label ps = SOME (ops,qs) /\
+    (MEM (Var v) ps.ps_stack ==>
+      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (PRE (LENGTH bb.bb_instructions)))) ==>
+    ((MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (LENGTH bb.bb_instructions)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (LENGTH bb.bb_instructions))` >- simp[] >>
+  `inst_wf (LAST bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, EVERY_MEM] >>
+     metis_tac[LAST_MEM]) >>
+  `?succ. (LAST bb.bb_instructions).inst_operands = [Label succ]` by
+    gvs[venomWfTheory.inst_wf_def] >>
+  `SUC (PRE (LENGTH bb.bb_instructions)) = LENGTH bb.bb_instructions /\
+    PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  `EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions = LAST bb.bb_instructions` by
+    metis_tac[LAST_EL] >>
+  `~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (PRE (LENGTH bb.bb_instructions)))` by
+    (strip_tac >> drule_at (Pat `MEM _ (live_vars_at _ _ _)`)
+       analyzed_live_loss_compute_operand >>
+     simp[compute_operands_def, asmIRTheory.get_non_label_operands_def,
+       stackPlanTypesTheory.is_label_operand_def]) >>
+  `~MEM (Var v) ps.ps_stack` by metis_tac[] >>
+  `~MEM v (LAST bb.bb_instructions).inst_outputs` by
+    gvs[venomWfTheory.inst_wf_def] >>
+  qspecl_then [`fn`,`bb`,`PRE (LENGTH bb.bb_instructions)`] mp_tac
+    native_ordinary_dead_stack_release >>
+  simp[venomInstTheory.is_param_opcode_def] >>
+  disch_then drule >> simp[] >> metis_tac[]
 QED
