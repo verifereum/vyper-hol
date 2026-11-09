@@ -1738,3 +1738,17 @@ Proof
   strip_tac >> irule inline_opaque_available_bind >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem inline_opaque_available_return:
+  inline_opaque_available opaque c d /\
+  (!x. x IN opaque ==> lookup_var x v = lookup_var x d) /\
+  (!x. MEM x outs ==> x NOTIN opaque) /\
+  bind_outputs outs ir.iret_values (adopt_return_fmp ir (merge_callee_state c u)) = SOME w ==>
+  inline_opaque_available opaque w v
+Proof
+  strip_tac >> drule bind_outputs_fdom >>
+  Cases_on `ir.iret_adopt_fmp` >>
+  simp[adopt_return_fmp_def, merge_callee_state_def] >> strip_tac >>
+  gvs[inline_opaque_available_fdom, SUBSET_DEF] >>
+  rpt strip_tac >> irule lookup_var_fdom >> qexists `d` >> simp[] >> metis_tac[]
+QED
