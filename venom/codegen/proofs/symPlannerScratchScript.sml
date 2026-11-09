@@ -260,3 +260,120 @@ Proof
   rpt strip_tac >> drule_all sym_steps_scratch_load_eq >>
   simp[sym_mload_scratch_push_index]
 QED
+
+Theorem scratch_write_region_frame:
+  r.sr_spill_base <= off /\ off + 32 <= r.sr_spill_end /\
+  (!i. ~in_mem_range off 32 i ==> FLOOKUP labs' i = FLOOKUP labs i) ==>
+  !i. ~(r.sr_spill_base <= i /\ i < r.sr_spill_end) ==>
+    FLOOKUP labs' i = FLOOKUP labs i
+Proof
+  rw[in_mem_range_def] >> first_x_assum irule >> decide_tac
+QED
+
+Theorem scratch_write_durable_kinds:
+  (!op at. FLOOKUP spilled op = SOME at ==>
+    ?v. op_kind_ok fn ret op v /\ mem_sval_at labs at v) /\
+  (!op at. FLOOKUP spilled op = SOME at ==> off+32 <= at \/ at+32 <= off) /\
+  (!at v. (off+32 <= at \/ at+32 <= off) ==>
+    (mem_sval_at labs' at v <=> mem_sval_at labs at v)) ==>
+  !op at. FLOOKUP spilled op = SOME at ==>
+    ?v. op_kind_ok fn ret op v /\ mem_sval_at labs' at v
+Proof
+  metis_tac[]
+QED
+
+Theorem scratch_region_context_transport:
+  MEM r cplan.cp_regions /\
+  (!i. ~(r.sr_spill_base <= i /\ i < r.sr_spill_end) ==>
+    FLOOKUP labs' i = FLOOKUP labs i) /\
+  (!i. i IN FDOM labs ==> context_spill_byte cplan i) ==>
+  !i. i IN FDOM labs' ==> context_spill_byte cplan i
+Proof
+  rpt strip_tac >> Cases_on `r.sr_spill_base <= i /\ i < r.sr_spill_end` >>
+  metis_tac[context_spill_byte_of_region, finite_mapTheory.FLOOKUP_DEF,
+            optionTheory.NOT_SOME_NONE]
+QED
+
+Definition scratch_frame_def:
+  scratch_frame offsets labs labs' <=>
+  (!i. EVERY (\off. ~in_mem_range off 32 i) offsets ==>
+    FLOOKUP labs' i = FLOOKUP labs i) /\
+  (!at sv. EVERY (\off. off+32 <= at \/ at+32 <= off) offsets ==>
+    (mem_sval_at labs' at sv <=> mem_sval_at labs at sv))
+End
+
+Theorem scratch_frame_refl:
+  scratch_frame offsets labs labs
+Proof
+  simp[scratch_frame_def]
+QED
+
+Theorem scratch_frame_singleton:
+  scratch_frame [off] labs labs' <=>
+  (!i. ~in_mem_range off 32 i ==> FLOOKUP labs' i = FLOOKUP labs i) /\
+  (!at sv. (off+32 <= at \/ at+32 <= off) ==>
+    (mem_sval_at labs' at sv <=> mem_sval_at labs at sv))
+Proof
+  simp[scratch_frame_def]
+QED
+
+Theorem scratch_frame_append:
+  scratch_frame xs a b /\ scratch_frame ys b c ==>
+  scratch_frame (xs ++ ys) a c
+Proof
+  rw[scratch_frame_def, EVERY_APPEND] >> metis_tac[]
+QED
+
+Theorem scratch_frame_cons:
+  scratch_frame [off] a b /\ scratch_frame offsets b c ==>
+  scratch_frame (off::offsets) a c
+Proof
+  metis_tac[scratch_frame_append, listTheory.APPEND]
+QED
+
+Theorem scratch_frame_cell:
+  scratch_frame offsets labs labs' /\
+  EVERY (\off. off+32 <= at \/ at+32 <= off) offsets ==>
+  (mem_sval_at labs' at sv <=> mem_sval_at labs at sv)
+Proof
+  simp[scratch_frame_def]
+QED
+
+Theorem scratch_frame_kinds:
+  scratch_frame written labs labs' /\ scratch_kinds_ok fn ret items offsets labs /\
+  EVERY (\at. EVERY (\off. off+32 <= at \/ at+32 <= off) written) offsets ==>
+  scratch_kinds_ok fn ret items offsets labs'
+Proof
+  rw[scratch_frame_def, EVERY_MEM] >>
+  metis_tac[scratch_kinds_ok_transport]
+QED
+
+Theorem scratch_slot_inside_region:
+  r.sr_spill_base <= off /\ off+32 <= r.sr_spill_end /\
+  in_mem_range off 32 i ==>
+  r.sr_spill_base <= i /\ i < r.sr_spill_end
+Proof
+  simp[in_mem_range_def] >> decide_tac
+QED
+
+Theorem scratch_frame_region:
+  scratch_frame offsets labs labs' /\
+  EVERY (\off. r.sr_spill_base <= off /\ off+32 <= r.sr_spill_end) offsets ==>
+  !i. ~(r.sr_spill_base <= i /\ i < r.sr_spill_end) ==>
+    FLOOKUP labs' i = FLOOKUP labs i
+Proof
+  rw[scratch_frame_def, EVERY_MEM] >>
+  first_x_assum irule >> metis_tac[scratch_slot_inside_region]
+QED
+
+Theorem sym_spill_scratch_head:
+  op_kind_ok fn ret op v /\ ss.sym_stack = v::stk /\ off < dimword(:256) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOSpill off]) ==>
+  ?last. sym_steps p env 2 ss = SymOK last /\ last.sym_stack = stk /\
+    scratch_kinds_ok fn ret [op] [off] last.sym_mem_labels /\
+    scratch_frame [off] ss.sym_mem_labels last.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + 2
+Proof
+  mp_tac (Q.INST [`items` |-> `[]`, `offsets` |-> `[]`] sym_spill_scratch_cons) >>
+  simp[scratch_kinds_ok_nil, scratch_frame_singleton] >> metis_tac[]
+QED
