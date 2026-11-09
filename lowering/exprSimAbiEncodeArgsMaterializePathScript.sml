@@ -156,3 +156,109 @@ Proof
   CONV_TAC (RAND_CONV (REWR_CONV (GSYM boolTheory.ETA_THM))) >>
   qexists_tac `b` >> simp[]
 QED
+
+Theorem materialize_equal_zero_lookup_probe:
+  let sa = initial_compile_state "@wcopy_exit_2";
+      vv = LocatedValue (TupleT []) (mk_ptr (Lit 0w) LocStorage);
+      sb = SND (compile_materialize_vv ce (TupleT []) vv sa);
+      fn = venomInst$mk_raw_function "materialize-probe" sb.cs_blocks
+  in
+    sb.cs_current_bb = sa.cs_current_bb /\ sb.cs_current_insts = [] /\
+    (MAP (\i. i.inst_opcode)
+      (THE (lookup_block sb.cs_current_bb fn.fn_blocks)).bb_instructions =
+      [ALLOCA; ALLOCA; ASSIGN; JMP]) /\
+    (MAP (\i. i.inst_opcode)
+      (THE (lookup_block "@wcopy_cond_0" fn.fn_blocks)).bb_instructions =
+      [EQ; JNZ])
+Proof
+  EVAL_TAC
+QED
+
+Definition materialize_zero_probe_fn_def:
+  materialize_zero_probe_fn ce =
+    let sa = initial_compile_state "@wcopy_exit_2";
+        vv = LocatedValue (TupleT []) (mk_ptr (Lit 0w) LocStorage);
+        sb = SND (compile_materialize_vv ce (TupleT []) vv sa)
+    in venomInst$mk_raw_function "materialize-probe" sb.cs_blocks
+End
+
+Definition materialize_zero_probe_next_def:
+  materialize_zero_probe_next fn s =
+    let bb = THE (lookup_block s.vs_current_bb fn.fn_blocks);
+        inst = THE (get_instruction bb s.vs_inst_idx)
+    in case venomExecSemantics$step_inst_base inst s of
+         OK t => if is_terminator inst.inst_opcode then t
+                 else t with vs_inst_idx := SUC s.vs_inst_idx
+       | _ => s
+End
+
+Definition materialize_zero_probe_trace_def:
+  materialize_zero_probe_trace ce 0 = init_venom_state "@wcopy_exit_2" /\
+  materialize_zero_probe_trace ce (SUC n) =
+    materialize_zero_probe_next (materialize_zero_probe_fn ce)
+      (materialize_zero_probe_trace ce n)
+End
+
+Theorem materialize_zero_probe_edges:
+  !n. n < 6 ==>
+    fragGasPath$gas_path_edge ctx (materialize_zero_probe_fn ce)
+      (materialize_zero_probe_trace ce n) 0
+      (OK (materialize_zero_probe_trace ce (SUC n)))
+Proof
+  rpt strip_tac >>
+  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4 \/ n = 5` by decide_tac >>
+  gvs[] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``fragGasPath$gas_path_edge``]) >>
+  simp[fragGasPathTheory.gas_path_edge_def] >>
+  qexists_tac `0` >>
+  simp[venomInstTheory.lookup_block_def, listTheory.FIND_thm,
+       venomInstTheory.get_instruction_def] >> EVAL_TAC >> simp[] >>
+  disj2_tac >>
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM boolTheory.ETA_THM))) >>
+  qexists_tac `"@wcopy_cond_0"` >> simp[]
+QED
+
+Theorem materialize_zero_probe_path:
+  !n. n <= 6 ==>
+    fragGasPath$gas_path ctx (materialize_zero_probe_fn ce)
+      (materialize_zero_probe_trace ce 0) 0
+      (OK (materialize_zero_probe_trace ce n))
+Proof
+  Induct >> rpt strip_tac
+  >- (irule (cj 1 fragGasPathTheory.gas_path_rules) >> EVAL_TAC) >>
+  `fragGasPath$gas_path ctx (materialize_zero_probe_fn ce)
+      (materialize_zero_probe_trace ce 0) 0
+      (OK (materialize_zero_probe_trace ce n))` by
+    (first_x_assum irule >> decide_tac) >>
+  `fragGasPath$gas_path_edge ctx (materialize_zero_probe_fn ce)
+      (materialize_zero_probe_trace ce n) 0
+      (OK (materialize_zero_probe_trace ce (SUC n)))` by
+    (irule materialize_zero_probe_edges >> decide_tac) >>
+  metis_tac[fragGasPathTheory.gas_path_rules,
+            fragGasPathTheory.gas_path_edge_normal,
+            fragGasPathTheory.gas_path_then, arithmeticTheory.ADD]
+QED
+
+Theorem materialize_zero_probe_endpoint:
+  let t = materialize_zero_probe_trace ce 6 in
+    ~t.vs_halted /\ t.vs_current_bb = "@wcopy_exit_2" /\
+    t.vs_inst_idx = 0 /\
+    FLOOKUP t.vs_allocas 0 = SOME (0,0) /\
+    FLOOKUP t.vs_allocas 1 = SOME (0,0) /\
+    lookup_var "%3" t = SOME 1w
+Proof
+  EVAL_TAC >> simp[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem materialize_equal_zero_counted_probe:
+  let t = materialize_zero_probe_trace ce 6 in
+    gas_marked_path F ctx (materialize_zero_probe_fn ce)
+      (init_venom_state "@wcopy_exit_2") 0 (OK t) /\
+    ~t.vs_halted /\ t.vs_current_bb = "@wcopy_exit_2" /\
+    t.vs_inst_idx = 0 /\ FLOOKUP t.vs_allocas 0 = SOME (0,0)
+Proof
+  simp[fragGasModeTheory.gas_marked_path_def] >>
+  mp_tac (Q.SPEC `6` materialize_zero_probe_path) >>
+  mp_tac materialize_zero_probe_endpoint >>
+  simp[materialize_zero_probe_trace_def]
+QED
