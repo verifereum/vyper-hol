@@ -3177,3 +3177,43 @@ Resume initialized_entry_parameter_exit_demand_support[available]:
 QED
 
 Finalise initialized_entry_parameter_exit_demand_support
+
+(* Exact statement copied from fnFrameStepsPhiTheory; frame imports are
+   excluded from planner leaves. Reuse the existing generic popmany boundary. *)
+Theorem phi_plan_spilled_unchanged:
+  !inst live halt ps ops ps'.
+    generate_phi_plan inst live halt ps = (ops, ps') ==>
+    ps'.ps_spilled = ps.ps_spilled
+Proof
+  rpt gen_tac >> simp[generate_phi_plan_def, LET_THM] >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- simp[] >>
+  simp[] >> rpt (IF_CASES_TAC >> gvs[]) >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) live` >> gvs[] >>
+  imp_res_tac deepResidualBudgetTheory.do_dup_spilled_eq >> gvs[] >>
+  metis_tac[fnPlanLineageInventoryTheory.popmany_plan_spilled_unchanged, pairTheory.SND,
+    stackPlanTypesTheory.plan_state_accfupds]
+QED
+
+Theorem native_phi_interval_spilled_unchanged:
+  !lv dfg cfg fn lbl halt n len xs incoming k qs.
+    fnPlanLineageEntryProduction$native_inst_prefix
+      lv dfg cfg fn lbl halt n len xs incoming k qs ==>
+    (!i. i < k ==> (EL i xs).inst_opcode = PHI) ==>
+    qs.ps_spilled = incoming.ps_spilled
+Proof
+  ho_match_mp_tac fnPlanLineageEntryProductionTheory.native_inst_prefix_ind >>
+  conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  `k < LENGTH xs` by
+    (qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[] >> decide_tac) >>
+  `inst = EL k xs` by metis_tac[HD_DROP, HD] >>
+  `inst.inst_opcode = PHI` by (first_x_assum (qspec_then `k` mp_tac) >> simp[]) >>
+  `qs.ps_spilled = incoming.ps_spilled` by
+    (first_x_assum irule >> rpt strip_tac >>
+     `i < SUC k` by decide_tac >> metis_tac[]) >>
+  gvs[generate_inst_plan_def, is_pre_codegen_opcode_def] >>
+  metis_tac[phi_plan_spilled_unchanged]
+QED
