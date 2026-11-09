@@ -916,7 +916,7 @@ Proof
   `w2n (if stat then 0w else vw) =
      (case value_opt of NONE => 0 | SOME n => n)` by
     (Cases_on `value_opt` >> gvs[]) >>
-  `cap < dimword (:256)` by decide_tac >>
+  `cap < dimword (:256)` by simp[] >>
   `?gw. eval_operand gas_op pre = SOME gw` by (Cases_on `eval_operand gas_op t` >> gvs[]) >>
   drule_at (Pat `emit_op _ _ _ = _`) oracle_call_path >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ pre`)) >>
@@ -962,7 +962,9 @@ Resume extcall_call_step[precheck_pass]:
   disch_then (drule_at (Pat `eval_operand ok _ = _`)) >>
   simp[] >>
   disch_then (qspec_then `ctx` mp_tac) >>
-  simp[frag_path_def] >> disch_then (qspec_then `func` mp_tac) >> simp[] >>
+  fs[wordsTheory.dimword_def] >>
+  simp[frag_path_def] >>
+  disch_then (qspec_then `func` mp_tac) >> simp[] >>
   qpat_x_assum `_ = OK u'` SUBST_ALL_TAC >>
   drule gas_path_normal >> strip_tac >> simp[] >>
   strip_tac
