@@ -55,9 +55,9 @@ QED
 
 Theorem immutable_assign_word_store:
   compile_assign_value cenv dst LocCode src T src_loc dty sty da mem_size sa = ((),sb) /\
-  cenv.ce_imm_alloca = SOME region /\
+  (!region. cenv.ce_imm_alloca = SOME region ==> eval_operand region s = SOME 0w) /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
-  eval_operand region s = SOME 0w /\ eval_operand dst s = SOME (n2w off) /\
+  eval_operand dst s = SOME (n2w off) /\
   eval_operand src s = SOME (typed_val_to_w256 tv v) /\
   off < dimword (:256) /\
   evaluate_type tenv dty = SOME tv /\ is_word_type dty /\ value_has_type tv v /\
@@ -76,7 +76,7 @@ Theorem immutable_assign_word_store:
     u.vs_immutables = s.vs_immutables |+ (off,typed_val_to_w256 tv v)
 Proof
   strip_tac >>
-  `compile_imm_store_word (SOME region) dst src sa = ((),sb)` by
+  `compile_imm_store_word cenv.ce_imm_alloca dst src sa = ((),sb)` by
     gvs[stmtLoweringTheory.compile_assign_value_def, comp_bind_def, comp_return_def] >>
   drule immutable_store_word_old_execution >>
   disch_then (qspecl_then [`typed_val_to_w256 tv v`,`s`,`n2w off`] mp_tac) >>
@@ -89,13 +89,14 @@ Proof
   qexists_tac `t` >> simp[] >>
   irule placeTypedCopyPathTheory.place_copy_seq_path >> simp[] >>
   qexists_tac `sa` >>
-  drule contextTheory.compile_imm_store_word_result >> strip_tac >>
-  simp[emitted_insts_def, listTheory.DROP_APPEND, mk_inst_def, is_terminator_def] >>
+  Cases_on `cenv.ce_imm_alloca` >>
   qpat_x_assum `compile_imm_store_word _ _ _ _ = _` mp_tac >>
   simp[compile_imm_store_word_def, emitHelperTheory.emit_op_def,
        emitHelperTheory.emit_void_def, fresh_id_def, fresh_var_def,
        emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  strip_tac >> gvs[ same_blocks_def]
+  strip_tac >> gvs[same_blocks_def, emitted_insts_def,
+    listTheory.DROP_APPEND, mk_inst_def, is_terminator_def,
+    arithmeticTheory.SUB_PLUS]
 QED
 
 Theorem immutable_assign_normalized_compile:
