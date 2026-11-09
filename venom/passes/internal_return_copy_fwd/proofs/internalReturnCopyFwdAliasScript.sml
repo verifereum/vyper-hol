@@ -905,3 +905,62 @@ Proof
   simp[source_memory_read_ranges_def, codegenRelTheory.source_memory_write_ranges_def,
        codegenRelTheory.sized_source_write_range_def]
 QED
+
+(* A nonempty read through an alias is at the natural allocation base. *)
+Theorem ircf_alias_read_site:
+  ircf_alias_site_value fn s G v /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\
+  ai.inst_outputs = [root] /\ ai.inst_operands = [Lit sz] /\
+  ircf_alias fn root v /\ lookup_var v s = SOME w /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  MEM (w2n w,len) (source_memory_read_ranges inst s) /\ len <> 0 ==>
+  lookup_var root s = SOME w /\
+  FLOOKUP s.vs_allocas ai.inst_id = SOME (w2n w,w2n sz) /\
+  FLOOKUP G v = SOME (w2n w,w2n sz) /\ len <= w2n sz
+Proof
+  strip_tac >> drule_all ircf_alias_site_value_elim >> strip_tac >> gvs[] >>
+  drule_all access_ok_read_site_bounds >> strip_tac >>
+  `w2n (n2w b : bytes32) = b` by
+    simp[wordsTheory.word_n2w_le2, arithmeticTheory.LESS_EQUAL_ANTISYM] >>
+  gvs[]
+QED
+
+Theorem ircf_fwd_source_root_later:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  k <= s.vs_inst_idx /\ ircf_fwd_ok fn bb k d r sz ==>
+  ?rai rb. MEM rai (fn_insts fn) /\ rai.inst_opcode = ALLOCA /\
+    rai.inst_outputs = [r] /\ rai.inst_operands = [Lit sz] /\
+    lookup_var r s = SOME (n2w rb) /\
+    FLOOKUP s.vs_allocas rai.inst_id = SOME (rb,w2n sz)
+Proof
+  strip_tac >>
+  `?dv rv. (EL k bb.bb_instructions).inst_operands = [Var dv; Var rv; Lit sz] /\
+    ircf_alias fn r rv` by metis_tac[ircf_fwd_ok_def] >>
+  `ircf_alias_site_value fn s G rv` by
+    (irule ircf_alias_boundary_earlier_operand >> simp[] >>
+     qexists_tac `k` >> gvs[ircf_fwd_ok_def]) >>
+  `ircf_alloca_of fn r sz` by metis_tac[ircf_fwd_ok_def] >>
+  gvs[ircf_alloca_of_def] >>
+  drule_all ircf_alias_site_value_elim >> strip_tac >>
+  qexistsl_tac [`ai`, `b`] >> simp[]
+QED
+
+(* Zero-size forwards need no representability or revert qualification. *)
+Theorem ircf_fwd_zero_ranges:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx = k /\ ircf_fwd_ok fn bb k d r sz /\ w2n sz = 0 ==>
+  (!off len. MEM (off,len) (source_memory_read_ranges (EL k bb.bb_instructions) s) ==>
+    len = 0) /\
+  (!off len. MEM (off,len) (source_memory_write_ranges (EL k bb.bb_instructions) s) ==>
+    len = 0)
+Proof
+  strip_tac >> drule_all ircf_fwd_operand_sites >> strip_tac >>
+  `(EL k bb.bb_instructions).inst_opcode = MCOPY` by metis_tac[ircf_fwd_ok_def] >>
+  simp[source_memory_read_ranges_def, codegenRelTheory.source_memory_write_ranges_def,
+       codegenRelTheory.sized_source_write_range_def, eval_operand_def]
+QED
