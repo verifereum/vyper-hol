@@ -35,7 +35,7 @@ Theorem calldata_bulk_payload_sequence:
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
     inst_extends st st'
 Proof
-  simp[abi_decode_bulk_payload_def, comp_bind_def] >>
+  simp[abi_decode_bulk_payload_def, compile_abi_dec_addr_def, comp_return_def, comp_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op MUL [cnt; Lit (n2w mem_sz)] st = (sz_op,c1)` >>
@@ -117,6 +117,7 @@ Proof
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   asm_simp_tac bool_ss [abi_decode_bulk_phases] >>
   simp[abi_decode_dynarray_prefix_def, abi_decode_dynarray_end_guard_def,
+       abi_decode_dynarray_position_prefix_unbounded, compile_abi_dec_addr_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, FUN_EQ_THM] >>
   rpt gen_tac >>
   Cases_on `abi_decode_count_guard CALLDATALOAD src maxn x` >> simp[]
@@ -195,7 +196,7 @@ Proof
   `inst_extends cs' st'` by
     (qpat_x_assum `abi_decode_bulk_body _ _ _ _ _ _ _ = _` mp_tac >>
      simp[abi_decode_bulk_body_def, abi_decode_array_header_def,
-          abi_decode_bulk_payload_def, comp_bind_def, comp_ignore_bind_def,
+          abi_decode_bulk_payload_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
           comp_return_def] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >>
      imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
      metis_tac[inst_extends_trans]) >>
@@ -298,7 +299,7 @@ Theorem calldata_bulk_payload_prefix_safe:
   !pre i post u. emitted_insts st st' = pre ++ i::post /\
     run_inst_seq pre s = OK u ==> inst_mem_below_frontier i u
 Proof
-  simp[abi_decode_bulk_payload_def, comp_bind_def] >>
+  simp[abi_decode_bulk_payload_def, compile_abi_dec_addr_def, comp_return_def, comp_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op MUL [cnt; Lit (n2w mem_sz)] st = (sz_op,c1)` >>
@@ -406,7 +407,7 @@ Theorem calldata_bulk_body_extends:
   inst_extends st st'
 Proof
   simp[abi_decode_bulk_body_def, abi_decode_array_header_def,
-       abi_decode_bulk_payload_def, comp_bind_def, comp_ignore_bind_def,
+       abi_decode_bulk_payload_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
   metis_tac[inst_extends_trans]
