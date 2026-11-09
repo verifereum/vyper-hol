@@ -2,6 +2,7 @@
 Theory bodyMemAggregateBodyContinuation
 Ancestors
   bodyMemAggregatePhysicalRead bodyMemAggregateTypedStore wideningZeroLayout
+  aggregateBytestringStorePathMem
   exprSimAggregateChildren exprSimHyps exprSimHypsDefs typedMemoryCopy
   exprLoweringProps loweringPosts compileEnv context venomState externalNormalizePremises
   vyperInterpreter vyperState fragGasPathMem
