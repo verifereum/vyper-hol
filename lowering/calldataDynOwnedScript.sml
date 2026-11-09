@@ -4713,6 +4713,7 @@ Proof
      (maxn MOD dimword (:256)) abi_sz st = ((ip,cnt),loop_st)` by
     (qpat_assum `abi_decode_array_loop_init _ _ _ _ _ maxn _ _ = _` mp_tac >>
      simp_tac bool_ss [abi_decode_array_loop_init_def, abi_decode_dynarray_prefix_def,
+        abi_decode_dynarray_position_prefix_def, compile_abi_dec_addr_def,
         comp_bind_def, comp_ignore_bind_def, calldata_count_guard_mod_limit]) >>
   `maxn MOD dimword (:256) < dimword (:256)` by simp[] >>
   drule_all calldata_array_loop_init_repeat_safe >>
@@ -5159,6 +5160,7 @@ Proof
      (maxn MOD dimword (:256)) abi_sz st = ((ip,cnt),loop_st)` by
     (qpat_assum `abi_decode_array_loop_init _ _ _ _ _ maxn _ _ = _` mp_tac >>
      simp_tac bool_ss [abi_decode_array_loop_init_def, abi_decode_dynarray_prefix_def,
+        abi_decode_dynarray_position_prefix_def, compile_abi_dec_addr_def,
         comp_bind_def, comp_ignore_bind_def, calldata_count_guard_mod_limit]) >>
   `maxn MOD dimword (:256) < dimword (:256)` by simp[] >>
   mp_tac (Q.INST [`maxn` |-> `maxn MOD dimword (:256)`]

@@ -56,6 +56,8 @@ Theorem entry_array_init_opcodes[local]:
     (emitted_insts st loop_st)
 Proof
   simp[abi_decode_array_loop_init_def, abi_decode_dynarray_prefix_def,
+       abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_position_prefix_unbounded,
+       compile_abi_dec_addr_def,
        abi_decode_count_guard_def, abi_decode_dynarray_end_guard_def,
        abi_decode_array_header_def, abi_decode_index_init_def,
        compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
