@@ -28,7 +28,7 @@ Ancestors
   immutableDeployAssignRestore immutableAssignCode immutableAssignEmpty
   immutableAssignCompose immutableAssignOpen stmtSimForced
   bodySim supportedTargets supportedDecls
-  placeStore targetPlaceSimCases targetPlaceSim targetPlaceSimDefs
+  placeStore targetPureVvFrame targetPlaceSimCases targetPlaceSim targetPlaceSimDefs
   stmtSimDefs exprSimHypsDefs exprSimDefs typedCopyDomain loweringPosts
   stmtLowering exprLowering compileEnv
   vyperInterpreter vyperState vyperTypeSystem
