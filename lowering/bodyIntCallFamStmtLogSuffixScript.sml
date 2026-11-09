@@ -9,7 +9,10 @@
    allocations stay above lo, and the frontier does not move down. *)
 Theory bodyIntCallFamStmtLogSuffix
 Ancestors
-  bodyIntCallJointContract stmtSimLogSuffixFrame
+  bodyIntCallJointContract stmtSimLogSuffixFrame stmtSimLogSuffixActual bodyIntCallFamStmtLogSuffixEncodeFrame
+  bodyIntCallFamStmtLogSuffixResources bodyIntCallFamStmtLogSuffixFootprint
+  bodyIntCallFamStmtLogSuffixStore bodyIntCallFamStmtLogSuffixMemory
+  bodyIntCallFamStmtLogSuffixPipeline bodyIntCallFamStmtLogSuffixCompose
 
 Theorem intcall_log_suffix_run:
   !ce id h tys flags args sa xs sm ops st lctx ty sb ctx func cx es s vs
@@ -45,5 +48,12 @@ Theorem intcall_log_suffix_run:
              mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory) /\
       allocas_above lo t /\ s.vs_alloca_next <= t.vs_alloca_next
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all log_success_suffix_actual_run >> strip_tac >>
+  `EVERY (supported_scalar_type o SND) xs` by
+    (gvs[listTheory.LIST_REL_EL_EQN, listTheory.EVERY_EL] >> rpt strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  drule_all intcall_log_suffix_resources >> strip_tac >>
+  qexists_tac `t` >> simp[] >> rpt strip_tac >>
+  drule_all intcall_log_suffix_memory >> simp[]
 QED

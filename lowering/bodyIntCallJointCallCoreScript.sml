@@ -113,7 +113,7 @@ Proof
      qexistsl [`fp.jc_ctx`, `fp.jc_cx`, `fp.jc_func`] >>
      fs[intcall_joint_res_def]) >>
   fs[intcall_expr_cont_def, loweringPostsTheory.wb_frame_def] >>
-  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  first_assum ACCEPT_TAC
 QED
 
 (* Calls and pops are values, never mapping places. *)
