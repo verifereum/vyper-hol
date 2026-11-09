@@ -756,3 +756,42 @@ Resume source_owned_nonbulk_array_ptr[loop_initial_fields]:
      first_assum ACCEPT_TAC) >>
   suspend "remaining_loop_inputs"
 QED
+
+Resume source_owned_nonbulk_array_ptr[remaining_loop_inputs]:
+  markerLib.RESUME_TAC >>
+  `DISJOINT {a | p <= a /\ a < p+32} u.t_mem` by
+    (qpat_assum `u.t_mem = _` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `u.t_mem SUBSET tn.t_mem` by
+    (qpat_assum `u.t_mem = _` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[pred_setTheory.SUBSET_DEF]) >>
+  `op_taint u src = {} /\ op_prov H src = NONE` by
+    (qpat_assum `!x. src = Var x ==> _` mp_tac >>
+     qpat_assum `!x. not_fresh_at st x ==> _` mp_tac >>
+     qpat_assum `op_taint tn src = {}` mp_tac >>
+     qpat_assum `op_prov G src = NONE` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `src` >>
+     simp[op_taint_def, op_prov_def] >> metis_tac[]) >>
+  suspend "loop_input_transport"
+QED
+
+Resume source_owned_nonbulk_array_ptr[loop_input_transport]:
+  markerLib.RESUME_TAC >>
+  `alloca_inv h /\ alloca_frontier_inv ctx fn site h` by
+    (qpat_assum `h.vs_allocas = t.vs_allocas` mp_tac >>
+     qpat_assum `h.vs_alloca_next = t.vs_alloca_next` mp_tac >>
+     qpat_assum `alloca_inv t` mp_tac >>
+     qpat_assum `alloca_frontier_inv ctx fn site t` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     metis_tac[calldata_alloca_invariants_fields]) >>
+  `fresh_vars_wrt limit h` by
+    (qpat_assum `!x. lookup_var x h = _` mp_tac >>
+     qpat_assum `fresh_vars_wrt limit t` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt strip_tac >> fs[fresh_vars_wrt_def] >> rpt strip_tac >>
+     qpat_x_assum `!x. lookup_var x h = _`
+       (qspec_then `STRING #"%" (toString n)` mp_tac) >>
+     `STRING #"%" (toString n) NOTIN FDOM t.vs_vars` by metis_tac[] >>
+     simp[lookup_var_def, FLOOKUP_DEF]) >>
+  suspend "loop_call_inputs"
+QED
