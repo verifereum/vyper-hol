@@ -356,7 +356,20 @@ Proof
        fresh_id_def, emit_def] >> rpt (pairarg_tac >> gvs[]) >> metis_tac[]) >> gvs[] >>
   `cs_extends sa ready /\ cs_extends ready copied /\ cs_extends copied sb /\
    (!p. not_fresh_at sa p ==> not_fresh_at ready p /\ not_fresh_at copied p) /\
-   not_fresh_at ready len /\ not_fresh_at copied len` by suspend "compiler" >>
+   not_fresh_at ready len /\ not_fresh_at copied len` by
+    (qpat_x_assum `compile_abi_encode_to_buf _ _ _ _ = _` kall_tac >>
+     qpat_x_assum `fn_has_code _ _ _` kall_tac >>
+     qpat_x_assum `abi_encode_bytes_prefix _ _ _ = _` mp_tac >>
+     qpat_x_assum `abi_encode_bytes_copy _ _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `abi_encode_bytes_suffix _ _ = _` mp_tac >>
+     simp[abi_encode_bytes_prefix_def, abi_encode_bytes_copy_def,
+          abi_encode_bytes_suffix_def, abi_encode_round_def, emit_op_def, emit_void_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+          fresh_id_def, emit_def] >>
+     rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+     simp[cs_extends_def, not_fresh_at_def] >>
+     rpt conj_tac >> rpt strip_tac >> gvs[not_fresh_at_def] >>
+     simp[GSYM listTheory.APPEND_ASSOC, rich_listTheory.IS_PREFIX_APPEND]) >>
   `fn_has_code sa ready fn /\ fn_has_code ready copied fn /\ fn_has_code copied sb fn` by
     metis_tac[fn_has_code_split, cs_extends_trans] >>
   `ptr_covers G tn dst s (32+ceil32 (LENGTH bs)) /\
@@ -377,35 +390,15 @@ Proof
   drule_all abi_encode_bytes_suffix_allocation_counted_ptr >>
   disch_then (qspecl_then [`PG`, `Gf'`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf''`, `tnf''`, `sf''`] >>
-  conj_tac >- suspend "path" >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]) >>
   gvs[eval_operand_def, w2n_n2w, LESS_MOD] >>
   irule abi_encoder_copy_memory >> irule immutable_mstore_memory_cong >> simp[]
 QED
 
-Resume compile_abi_encode_bytes_allocation_path_ptr[compiler]:
-  qpat_x_assum `compile_abi_encode_to_buf _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `fn_has_code _ _ _` kall_tac >>
-  qpat_x_assum `abi_encode_bytes_prefix _ _ _ = _` mp_tac >>
-  qpat_x_assum `abi_encode_bytes_copy _ _ _ _ _ = _` mp_tac >>
-  qpat_x_assum `abi_encode_bytes_suffix _ _ = _` mp_tac >>
-  simp[abi_encode_bytes_prefix_def, abi_encode_bytes_copy_def,
-       abi_encode_bytes_suffix_def, abi_encode_round_def, emit_op_def, emit_void_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
-       fresh_id_def, emit_def] >>
-  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
-  simp[cs_extends_def, not_fresh_at_def] >>
-  rpt conj_tac >> rpt strip_tac >> gvs[not_fresh_at_def] >>
-  simp[GSYM listTheory.APPEND_ASSOC, rich_listTheory.IS_PREFIX_APPEND]
-QED
-
-Resume compile_abi_encode_bytes_allocation_path_ptr[path]:
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]
-QED
-
-Finalise compile_abi_encode_bytes_allocation_path_ptr
 
 (* Local algebra used by the stronger witness; the old proof's local facts
    are not exported. *)
@@ -496,7 +489,18 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qspec_then `LENGTH (bs:word8 list)` strip_assume_tac abi_bytes_ceil32_gap >>
   `!i. w2n a <= i /\ i < w2n a+32+LENGTH bs ==> i NOTIN tn.t_mem` by
-    suspend "clean" >>
+    (`(!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
+      (!i. w2n a+32 <= i /\ i < w2n a+32+LENGTH bs ==> i NOTIN tn.t_mem)` by
+       (conj_tac
+        >- (`!mem'. mem_agree_outside tn.t_mem s.vs_memory mem' ==>
+                mem_word_at (w2n a) mem' = (n2w (LENGTH bs):bytes32)` by
+              gvs[abi_encoder_input_bytes_iff] >>
+            drule robust_mem_word_at_clean >> simp[]) >>
+        `!mem'. mem_agree_outside tn.t_mem s.vs_memory mem' ==>
+                mem_bytes_at (w2n a+32) (LENGTH bs) mem' = bs` by
+          gvs[abi_encoder_input_bytes_iff] >>
+        drule robust_mem_bytes_at_clean >> simp[ADD_ASSOC]) >>
+     rpt strip_tac >> Cases_on `i < w2n a+32` >> metis_tac[arithmeticTheory.NOT_LESS]) >>
   `tnf.t_mem = tn.t_mem DIFF
     {i | w2n b <= i /\ i < w2n b+32+ceil32 (LENGTH bs)}` by
     (asm_rewrite_tac[] >> irule bytes_allocation_taint_clean >> simp[]) >>
@@ -509,7 +513,11 @@ Proof
   conj_tac >- simp[] >>
   conj_tac >- (gvs[ptr_covers_def] >> metis_tac[]) >>
   `mem_bytes_at (w2n a) cap sf.vs_memory = mem_bytes_at (w2n a) cap s.vs_memory` by
-    suspend "source_memory" >>
+    (irule listTheory.LIST_EQ >> simp[] >> rpt strip_tac >> rename1 `j < cap` >>
+     `~(w2n b <= w2n a+j /\ w2n a+j < w2n b+32+ceil32 (LENGTH bs))` by decide_tac >>
+     `mem_bytes_at (w2n a+j) 1 sf.vs_memory = mem_bytes_at (w2n a+j) 1 s.vs_memory` by
+       (gvs[mem_agree_outside_def] >> metis_tac[]) >>
+     pop_assum mp_tac >> simp[listTheory.LIST_EQ_REWRITE, EL_mem_bytes_at]) >>
   `!i. i < cap ==> (w2n a+i IN tnf.t_mem <=> w2n a+i IN tn.t_mem)` by
     (rpt strip_tac >> simp[] >> decide_tac) >>
   drule bytes_allocation_robust_window >>
@@ -520,27 +528,3 @@ Proof
   metis_tac[]
 QED
 
-Resume compile_abi_encode_bytes_allocation_counted_ptr[clean]:
-  `(!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
-   (!i. w2n a+32 <= i /\ i < w2n a+32+LENGTH bs ==> i NOTIN tn.t_mem)` by
-    (conj_tac
-     >- (`!mem'. mem_agree_outside tn.t_mem s.vs_memory mem' ==>
-             mem_word_at (w2n a) mem' = (n2w (LENGTH bs):bytes32)` by
-           gvs[abi_encoder_input_bytes_iff] >>
-         drule robust_mem_word_at_clean >> simp[]) >>
-     `!mem'. mem_agree_outside tn.t_mem s.vs_memory mem' ==>
-             mem_bytes_at (w2n a+32) (LENGTH bs) mem' = bs` by
-       gvs[abi_encoder_input_bytes_iff] >>
-     drule robust_mem_bytes_at_clean >> simp[ADD_ASSOC]) >>
-  rpt strip_tac >> Cases_on `i < w2n a+32` >> metis_tac[arithmeticTheory.NOT_LESS]
-QED
-
-Resume compile_abi_encode_bytes_allocation_counted_ptr[source_memory]:
-  irule listTheory.LIST_EQ >> simp[] >> rpt strip_tac >> rename1 `j < cap` >>
-  `~(w2n b <= w2n a+j /\ w2n a+j < w2n b+32+ceil32 (LENGTH bs))` by decide_tac >>
-  `mem_bytes_at (w2n a+j) 1 sf.vs_memory = mem_bytes_at (w2n a+j) 1 s.vs_memory` by
-    (gvs[mem_agree_outside_def] >> metis_tac[]) >>
-  pop_assum mp_tac >> simp[listTheory.LIST_EQ_REWRITE, EL_mem_bytes_at]
-QED
-
-Finalise compile_abi_encode_bytes_allocation_counted_ptr

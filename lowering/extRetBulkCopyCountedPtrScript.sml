@@ -523,18 +523,14 @@ Proof
   drule_all emit_assert_success_counted_ptr >>
   disch_then (qspecl_then [`PG`, `Gf'`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf'`, `tnf'`, `sf' with vs_inst_idx := SUC sf'.vs_inst_idx`] >>
-  conj_tac >- suspend "path" >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> gvs[]) >>
   gvs[lookup_var_def] >> metis_tac[]
 QED
 
-Resume emit_bulk_capacity_check_counted_ptr[path]:
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> gvs[]
-QED
-
-Finalise emit_bulk_capacity_check_counted_ptr
 
 (* Pointer arithmetic exports the new provenance, not just cleanliness. *)
 Theorem emit_bulk_offset_ambient_counted_ptr:
@@ -590,7 +586,14 @@ Proof
   conj_tac >-
     simp[Abbr `t`, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
          GSYM word_add_n2w] >>
-  conj_tac >- suspend "coverage" >>
+  conj_tac >-
+    (`op_taint tf (Var out) = {}` by
+       simp[Abbr `tf`, Abbr `t`, copy_len_binop_ghost_frame] >>
+     gvs[ptr_covers_def] >>
+     `off < dimword(:256)` by decide_tac >>
+     simp[Abbr `gf`, Abbr `t`, step_prov_def, set_prov_def, out_prov_def,
+          first_prov_def, op_prov_def, mk_inst_def, FLOOKUP_UPDATE,
+          lookup_var_def, update_var_def, w2n_add_2, w2n_n2w, LESS_MOD] >> decide_tac) >>
   simp[Abbr `tf`, Abbr `gf`, Abbr `t`, copy_len_binop_ghost_frame,
        step_taint_def, imm_taint_def, mk_inst_def,
        update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
@@ -598,17 +601,6 @@ Proof
   simp[copy_len_binop_ghost_frame, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
-Resume emit_bulk_offset_ambient_counted_ptr[coverage]:
-  `op_taint tf (Var out) = {}` by
-    simp[Abbr `tf`, Abbr `t`, copy_len_binop_ghost_frame] >>
-  gvs[ptr_covers_def] >>
-  `off < dimword(:256)` by decide_tac >>
-  simp[Abbr `gf`, Abbr `t`, step_prov_def, set_prov_def, out_prov_def,
-       first_prov_def, op_prov_def, mk_inst_def, FLOOKUP_UPDATE,
-       lookup_var_def, update_var_def, w2n_add_2, w2n_n2w, LESS_MOD] >> decide_tac
-QED
-
-Finalise emit_bulk_offset_ambient_counted_ptr
 
 Theorem emit_bulk_offset_counted_ptr:
   emit_op ADD [Var root; Lit (n2w off)] sa = (Var out,sb) /\
@@ -704,27 +696,19 @@ Proof
   drule_all compile_copy_memory_dynamic_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf''`, `tnf'''`, `sf'''`] >>
-  conj_tac >- suspend "path" >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf''`, `sf''`, `tnf''`] >> simp[]) >>
   conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
-  conj_tac >- suspend "memory" >>
+  conj_tac >- gvs[w2n_n2w, LESS_MOD, mcopy_def, read_memory_def,
+                  write_memory_with_expansion_def, expand_memory_def] >>
   gvs[w2n_n2w, LESS_MOD] >> metis_tac[]
 QED
 
-Resume emit_bulk_data_counted_ptr[path]:
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf''`, `sf''`, `tnf''`] >> simp[]
-QED
-
-Resume emit_bulk_data_counted_ptr[memory]:
-  gvs[w2n_n2w, LESS_MOD, mcopy_def, read_memory_def,
-      write_memory_with_expansion_def, expand_memory_def]
-QED
-
-Finalise emit_bulk_data_counted_ptr
 
 Theorem emit_bulk_header_counted_ptr:
   emit_op MLOAD [Var src] sa = (Var length,sb) /\
@@ -772,26 +756,18 @@ Proof
   drule_all emit_mstore_clean_ambient_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf'`, `tnf''`, `sf''`] >>
-  conj_tac >- suspend "path" >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]) >>
   conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
   conj_tac >- metis_tac[eval_operand_def] >>
   conj_tac >- metis_tac[] >>
-  conj_tac >- suspend "memory" >>
+  conj_tac >- gvs[mstore_def, write_memory_with_expansion_def, expand_memory_def] >>
   gvs[] >> metis_tac[]
 QED
 
-Resume emit_bulk_header_counted_ptr[path]:
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]
-QED
-
-Resume emit_bulk_header_counted_ptr[memory]:
-  gvs[mstore_def, write_memory_with_expansion_def, expand_memory_def]
-QED
-
-Finalise emit_bulk_header_counted_ptr
 
 Theorem compile_bulk_dynarray_code:
   compile_copy_dynarray_typed cenv (Var dst) ty capacity (Var src) ty sa = ((),sz) ==>
@@ -847,13 +823,23 @@ Proof
   `fn_has_code sa sb fn /\ fn_has_code sb sc fn /\
    fn_has_code sc sd fn /\ fn_has_code sd se fn /\ fn_has_code se sg fn /\
    fn_has_code sg sh fn /\ fn_has_code sh si fn /\
-   fn_has_code si sj fn /\ fn_has_code sj sz fn` by suspend "code" >>
+   fn_has_code si sj fn /\ fn_has_code sj sz fn` by
+    (gvs[emit_op_def, emit_void_def, compile_copy_memory_dynamic_def,
+         comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
+         emit_def, comp_return_def, fragExecTheory.fn_has_code_def,
+         fragExecTheory.emitted_blocks_def] >>
+     rpt conj_tac >> irule listTheory.isPREFIX_TRANS >>
+     goal_assum (drule_at Any) >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >> simp[NoAsms]) >>
   `ptr_covers G tn src s 32 /\ ptr_covers G tn dst s 32` by
     (gvs[ptr_covers_def] >> metis_tac[LESS_EQ_ADD]) >>
   drule_all emit_bulk_header_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `not_fresh_at sg src /\ not_fresh_at sg dst /\ not_fresh_at sg length /\
-   (!p. not_fresh_at sa p ==> not_fresh_at sg p)` by suspend "fresh" >>
+   (!p. not_fresh_at sa p ==> not_fresh_at sg p)` by
+    (gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+         fresh_var_def, fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
+     metis_tac[LESS_EQ_REFL, LESS_EQ_TRANS]) >>
   `lookup_var src sf = SOME a /\ lookup_var dst sf = SOME b /\
    ptr_covers Gf tnf src sf (32+len*type_memory_bytes cenv ty) /\
    ptr_covers Gf tnf dst sf (32+len*type_memory_bytes cenv ty) /\
@@ -866,28 +852,8 @@ Proof
     (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
      qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[]) >>
   conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
-  conj_tac >- suspend "memory" >>
+  conj_tac >-
+    gvs[mcopy_def, read_memory_def, write_memory_with_expansion_def, expand_memory_def] >>
   gvs[] >> metis_tac[]
 QED
 
-Resume compile_copy_dynarray_bulk_counted_ptr[code]:
-  gvs[emit_op_def, emit_void_def, compile_copy_memory_dynamic_def,
-      comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
-      emit_def, comp_return_def, fragExecTheory.fn_has_code_def,
-      fragExecTheory.emitted_blocks_def] >>
-  rpt conj_tac >> irule listTheory.isPREFIX_TRANS >>
-  goal_assum (drule_at Any) >>
-  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >> simp[NoAsms]
-QED
-
-Resume compile_copy_dynarray_bulk_counted_ptr[fresh]:
-  gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
-      fresh_var_def, fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
-  metis_tac[LESS_EQ_REFL, LESS_EQ_TRANS]
-QED
-
-Resume compile_copy_dynarray_bulk_counted_ptr[memory]:
-  gvs[mcopy_def, read_memory_def, write_memory_with_expansion_def, expand_memory_def]
-QED
-
-Finalise compile_copy_dynarray_bulk_counted_ptr

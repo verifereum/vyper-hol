@@ -58,7 +58,43 @@ Proof
   qabbrev_tac `tn2 = step_taint (mk_inst (id+1) MSTORE [Var dst; Var tmp] [])
     v1 s2 tn1` >>
   qexistsl_tac [`G2`, `tn2`, `s2 with vs_inst_idx := SUC v1.vs_inst_idx`] >>
-  conj_tac >- suspend "path" >>
+  conj_tac
+  >- (`get_instruction bb s.vs_inst_idx = SOME (mk_inst id MLOAD [Var src] [tmp])` by
+        (qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >> simp[]) >>
+      `get_instruction bb v1.vs_inst_idx =
+        SOME (mk_inst (id+1) MSTORE [Var dst; Var tmp] [])` by
+        (qpat_x_assum `!i. _` (qspec_then `1` mp_tac) >>
+         simp[Abbr `v1`, ADD1]) >>
+      `step_inst_base (mk_inst id MLOAD [Var src] [tmp]) s = OK s1` by
+        (pure_once_rewrite_tac[step_inst_base_def] >>
+         simp[mk_inst_def, exec_read1_def, eval_operand_def, Abbr `s1`]) >>
+      `step_inst_base (mk_inst (id+1) MSTORE [Var dst; Var tmp] []) v1 = OK s2` by
+        (pure_once_rewrite_tac[step_inst_base_def] >>
+         simp[mk_inst_def, exec_write2_def, eval_operand_def, Abbr `s2`]) >>
+      irule (gas_path_ptr_step |> Q.INST
+        [`i` |-> `mk_inst id MLOAD [Var src] [tmp]`, `n` |-> `0`] |>
+        SRULE [mk_inst_def]) >>
+      simp[is_terminator_def] >>
+      qexistsl_tac [`id`, `src`, `tmp`, `s1`] >>
+      simp[GSYM mk_inst_def] >>
+      conj_tac >- metis_tac[] >>
+      conj_tac >- (irule ptr_inst_ok_mload >> simp[]) >>
+      `s1 with vs_inst_idx := SUC (LENGTH sa.cs_current_insts) = v1` by
+        simp[Abbr `v1`] >> asm_rewrite_tac[] >>
+      irule (gas_path_ptr_step |> Q.INST
+        [`i` |-> `mk_inst j MSTORE [Var dst; Var tmp] []`, `n` |-> `0`] |>
+        SRULE [mk_inst_def, is_terminator_def]) >>
+      `~v1.vs_halted /\ v1.vs_current_bb = sa.cs_current_bb` by
+        simp[Abbr `v1`, Abbr `s1`, update_var_def] >>
+      simp[] >> qexistsl_tac [`dst`, `id+1`, `tmp`, `s2`] >>
+      simp[GSYM mk_inst_def] >> conj_tac
+      >- (irule ptr_inst_ok_mstore >> simp[] >>
+          qpat_x_assum `s1 with vs_inst_idx := _ = v1` kall_tac >>
+          qpat_x_assum `ptr_covers G1 tn1 dst s1 32` mp_tac >>
+          fs[Abbr `v1`, ptr_covers_def, lookup_var_def]) >>
+      simp[Abbr `G2`, Abbr `tn2`] >>
+      irule (cj 1 gas_path_ptr_rules) >>
+      simp[Abbr `s2`, Abbr `v1`, Abbr `s1`, mstore_def, update_var_def]) >>
   `s2.vs_memory = (mstore (w2n b) (mload (w2n a) s) s).vs_memory` by
     simp[Abbr `s2`, Abbr `v1`, Abbr `s1`, mstore_def, update_var_def] >>
   conj_tac >- simp[Abbr `s2`, Abbr `v1`, Abbr `s1`, mstore_def, update_var_def] >>
@@ -72,47 +108,6 @@ Proof
        lookup_var_def, mstore_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
 QED
 
-Resume compile_store_word_counted_ptr[path]:
-  `get_instruction bb s.vs_inst_idx = SOME (mk_inst id MLOAD [Var src] [tmp])` by
-    (qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >> simp[]) >>
-  `get_instruction bb v1.vs_inst_idx =
-    SOME (mk_inst (id+1) MSTORE [Var dst; Var tmp] [])` by
-    (qpat_x_assum `!i. _` (qspec_then `1` mp_tac) >>
-     simp[Abbr `v1`, ADD1]) >>
-  `step_inst_base (mk_inst id MLOAD [Var src] [tmp]) s = OK s1` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_read1_def, eval_operand_def, Abbr `s1`]) >>
-  `step_inst_base (mk_inst (id+1) MSTORE [Var dst; Var tmp] []) v1 = OK s2` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def, Abbr `s2`]) >>
-  irule (gas_path_ptr_step |> Q.INST
-    [`i` |-> `mk_inst id MLOAD [Var src] [tmp]`, `n` |-> `0`] |>
-    SRULE [mk_inst_def]) >>
-  simp[is_terminator_def] >>
-  qexistsl_tac [`id`, `src`, `tmp`, `s1`] >>
-  simp[GSYM mk_inst_def] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- (irule ptr_inst_ok_mload >> simp[]) >>
-  `s1 with vs_inst_idx := SUC (LENGTH sa.cs_current_insts) = v1` by
-    simp[Abbr `v1`] >> asm_rewrite_tac[] >>
-  irule (gas_path_ptr_step |> Q.INST
-    [`i` |-> `mk_inst j MSTORE [Var dst; Var tmp] []`, `n` |-> `0`] |>
-    SRULE [mk_inst_def, is_terminator_def]) >>
-  `~v1.vs_halted /\ v1.vs_current_bb = sa.cs_current_bb` by
-    simp[Abbr `v1`, Abbr `s1`, update_var_def] >>
-  simp[] >> qexistsl_tac [`dst`, `id+1`, `tmp`, `s2`] >>
-  simp[GSYM mk_inst_def] >> conj_tac
-  >- (irule ptr_inst_ok_mstore >> simp[] >>
-      qpat_x_assum `s1 with vs_inst_idx := _ = v1` kall_tac >>
-      qpat_x_assum `ptr_covers G1 tn1 dst s1 32` mp_tac >>
-      fs[Abbr `v1`, ptr_covers_def, lookup_var_def]) >>
-  simp[Abbr `G2`, Abbr `tn2`] >>
-  irule (cj 1 gas_path_ptr_rules) >>
-  simp[Abbr `s2`, Abbr `v1`, Abbr `s1`, mstore_def, update_var_def]
-
-QED
-
-Finalise compile_store_word_counted_ptr
 
 (* Singleton-entry form for the zero-count sequential composition interface. *)
 Theorem compile_store_word_copy_path_ptr:

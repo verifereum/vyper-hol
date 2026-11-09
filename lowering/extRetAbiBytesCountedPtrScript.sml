@@ -216,7 +216,14 @@ Proof
   conj_tac >-
     simp[Abbr `t`, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
          GSYM word_add_n2w] >>
-  conj_tac >- suspend "coverage" >>
+  conj_tac >-
+    (`op_taint tf (Var out) = {}` by
+       simp[Abbr `tf`, Abbr `t`, copy_len_binop_ghost_frame] >>
+     gvs[ptr_covers_def] >>
+     `off < dimword(:256)` by decide_tac >>
+     simp[Abbr `gf`, Abbr `t`, step_prov_def, set_prov_def, out_prov_def,
+          first_prov_def, op_prov_def, mk_inst_def, FLOOKUP_UPDATE,
+          lookup_var_def, update_var_def, w2n_add_2, w2n_n2w, LESS_MOD] >> decide_tac) >>
   `tf.t_imm = tn.t_imm` by
     simp[Abbr `tf`, step_taint_def, imm_taint_def, mk_inst_def] >>
   simp[Abbr `tf`, Abbr `gf`, Abbr `t`, copy_len_binop_ghost_frame,
@@ -225,17 +232,6 @@ Proof
   simp[copy_len_binop_ghost_frame, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
-Resume abi_bytes_lastptr_ambient_counted_ptr[coverage]:
-  `op_taint tf (Var out) = {}` by
-    simp[Abbr `tf`, Abbr `t`, copy_len_binop_ghost_frame] >>
-  gvs[ptr_covers_def] >>
-  `off < dimword(:256)` by decide_tac >>
-  simp[Abbr `gf`, Abbr `t`, step_prov_def, set_prov_def, out_prov_def,
-       first_prov_def, op_prov_def, mk_inst_def, FLOOKUP_UPDATE,
-       lookup_var_def, update_var_def, w2n_add_2, w2n_n2w, LESS_MOD] >> decide_tac
-QED
-
-Finalise abi_bytes_lastptr_ambient_counted_ptr
 
 Theorem abi_bytes_lastptr_counted_ptr:
   emit_op ADD [Var root; Var offset] sa = (Var out,sb) /\
@@ -322,18 +318,14 @@ Proof
   drule_all (abi_bytes_lastptr_ambient_counted_ptr |> Q.INST [`n` |-> `32`]) >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf''`, `tnf''`, `sf''`] >>
-  conj_tac >- suspend "path" >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]) >>
   gvs[] >> metis_tac[]
 QED
 
-Resume abi_encode_bytes_prefix_ambient_counted_ptr[path]:
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]
-QED
-
-Finalise abi_encode_bytes_prefix_ambient_counted_ptr
 
 Theorem abi_encode_bytes_copy_ambient_counted_ptr:
   abi_encode_bytes_copy (Var dst) (Var src) (Var len) (Var last) sa = ((),sb) /\
@@ -402,19 +394,15 @@ Proof
   drule_all emit_mcopy_ambient_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf`, `tnf''`, `sf''`] >>
-  conj_tac >- suspend "path" >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`G`, `sf`, `tnf`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf'`, `tnf'`] >> simp[]) >>
   gvs[w2n_n2w, LESS_MOD] >>
   simp[mcopy_def, write_memory_with_expansion_def]
 QED
 
-Resume abi_encode_bytes_copy_ambient_counted_ptr[path]:
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`G`, `sf`, `tnf`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf`, `sf'`, `tnf'`] >> simp[]
-QED
-
-Finalise abi_encode_bytes_copy_ambient_counted_ptr
 
 (* Exact execution first; the semantic exterior/cleanliness consequence is
    separated from this instruction composition. *)
@@ -462,7 +450,20 @@ Proof
        fresh_id_def, emit_def] >> rpt (pairarg_tac >> gvs[]) >> metis_tac[]) >> gvs[] >>
   `cs_extends sa ready /\ cs_extends ready copied /\ cs_extends copied sb /\
    (!p. not_fresh_at sa p ==> not_fresh_at ready p /\ not_fresh_at copied p) /\
-   not_fresh_at ready len /\ not_fresh_at copied len` by suspend "compiler" >>
+   not_fresh_at ready len /\ not_fresh_at copied len` by
+    (qpat_x_assum `compile_abi_encode_to_buf _ _ _ _ = _` kall_tac >>
+     qpat_x_assum `fn_has_code _ _ _` kall_tac >>
+     qpat_x_assum `abi_encode_bytes_prefix _ _ _ = _` mp_tac >>
+     qpat_x_assum `abi_encode_bytes_copy _ _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `abi_encode_bytes_suffix _ _ = _` mp_tac >>
+     simp[abi_encode_bytes_prefix_def, abi_encode_bytes_copy_def,
+          abi_encode_bytes_suffix_def, abi_encode_round_def, emit_op_def, emit_void_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+          fresh_id_def, emit_def] >>
+     rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+     simp[cs_extends_def, not_fresh_at_def] >>
+     rpt conj_tac >> rpt strip_tac >> gvs[not_fresh_at_def] >>
+     simp[GSYM listTheory.APPEND_ASSOC, rich_listTheory.IS_PREFIX_APPEND]) >>
   `fn_has_code sa ready fn /\ fn_has_code ready copied fn /\ fn_has_code copied sb fn` by
     metis_tac[fn_has_code_split, cs_extends_trans] >>
   `ptr_covers G tn dst s (32+ceil32 (LENGTH bs)) /\
@@ -483,35 +484,15 @@ Proof
   drule_all abi_encode_bytes_suffix_ambient_counted_ptr >>
   disch_then (qspecl_then [`PG`, `Gf'`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf''`, `tnf''`, `sf''`] >>
-  conj_tac >- suspend "path" >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]) >>
   gvs[eval_operand_def, w2n_n2w, LESS_MOD] >>
   irule abi_encoder_copy_memory >> irule immutable_mstore_memory_cong >> simp[]
 QED
 
-Resume compile_abi_encode_bytes_ambient_path_ptr[compiler]:
-  qpat_x_assum `compile_abi_encode_to_buf _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `fn_has_code _ _ _` kall_tac >>
-  qpat_x_assum `abi_encode_bytes_prefix _ _ _ = _` mp_tac >>
-  qpat_x_assum `abi_encode_bytes_copy _ _ _ _ _ = _` mp_tac >>
-  qpat_x_assum `abi_encode_bytes_suffix _ _ = _` mp_tac >>
-  simp[abi_encode_bytes_prefix_def, abi_encode_bytes_copy_def,
-       abi_encode_bytes_suffix_def, abi_encode_round_def, emit_op_def, emit_void_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
-       fresh_id_def, emit_def] >>
-  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
-  simp[cs_extends_def, not_fresh_at_def] >>
-  rpt conj_tac >> rpt strip_tac >> gvs[not_fresh_at_def] >>
-  simp[GSYM listTheory.APPEND_ASSOC, rich_listTheory.IS_PREFIX_APPEND]
-QED
-
-Resume compile_abi_encode_bytes_ambient_path_ptr[path]:
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]
-QED
-
-Finalise compile_abi_encode_bytes_ambient_path_ptr
 
 Theorem abi_encode_bytes_live_clean[local]:
   (!mem'. mem_agree_outside m mem mem' ==>
@@ -644,7 +625,11 @@ Proof
   conj_tac >- simp[] >>
   conj_tac >- (gvs[ptr_covers_def] >> metis_tac[]) >>
   `mem_bytes_at (w2n a) cap sf.vs_memory = mem_bytes_at (w2n a) cap s.vs_memory` by
-    suspend "source_memory" >>
+    (irule listTheory.LIST_EQ >> simp[] >> rpt strip_tac >> rename1 `j < cap` >>
+     `~(w2n b <= w2n a+j /\ w2n a+j < w2n b+32+ceil32 (LENGTH bs))` by decide_tac >>
+     `mem_bytes_at (w2n a+j) 1 sf.vs_memory = mem_bytes_at (w2n a+j) 1 s.vs_memory` by
+       (gvs[mem_agree_outside_def] >> metis_tac[]) >>
+     pop_assum mp_tac >> simp[listTheory.LIST_EQ_REWRITE, EL_mem_bytes_at]) >>
   `!i. i < cap ==> (w2n a+i IN tnf.t_mem <=> w2n a+i IN tn.t_mem)` by
     (rpt strip_tac >> simp[] >> decide_tac) >>
   drule abi_bytes_robust_window_transport >>
@@ -655,15 +640,6 @@ Proof
   metis_tac[]
 QED
 
-Resume compile_abi_encode_bytes_ambient_counted_ptr[source_memory]:
-  irule listTheory.LIST_EQ >> simp[] >> rpt strip_tac >> rename1 `j < cap` >>
-  `~(w2n b <= w2n a+j /\ w2n a+j < w2n b+32+ceil32 (LENGTH bs))` by decide_tac >>
-  `mem_bytes_at (w2n a+j) 1 sf.vs_memory = mem_bytes_at (w2n a+j) 1 s.vs_memory` by
-    (gvs[mem_agree_outside_def] >> metis_tac[]) >>
-  pop_assum mp_tac >> simp[listTheory.LIST_EQ_REWRITE, EL_mem_bytes_at]
-QED
-
-Finalise compile_abi_encode_bytes_ambient_counted_ptr
 
 (* Compatibility interfaces: executions are proved once, above. *)
 Theorem abi_encode_bytes_prefix_counted_ptr:
