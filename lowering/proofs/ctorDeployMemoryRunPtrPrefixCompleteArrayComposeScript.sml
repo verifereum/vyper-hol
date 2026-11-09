@@ -238,7 +238,7 @@ Proof
   qexistsl [`prepared`,`slot`,`H`,`qt`,`actual`,`Hout`,`qout`,`A`] >>
   rule_assum_tac (SIMP_RULE std_ss []) >>
   rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
-  simp_tac std_ss [] >> asm_rewrite_tac[] >>
+  simp_tac std_ss [] >> asm_simp_tac bool_ss [] >>
   conj_tac >-
     (rpt strip_tac >>
      `st.cs_next_var <= loop_st.cs_next_var` by
@@ -250,12 +250,10 @@ Proof
      `abi_decoder_older_vars loop_st.cs_next_var x` by
        (fs[abi_decoder_older_vars_def] >> metis_tac[LESS_EQ_TRANS]) >>
      metis_tac[]) >>
-  conj_tac >- (qexists `hdr_bb'` >> simp[]) >>
-  conj_tac >- (irule abi_decode_sim_trans >> qexists `prepared` >> asm_rewrite_tac[]) >>
-  strip_tac >>
-  qpat_x_assum `(!fuel. ptr_safe_run _ _ fuel _ _ _ H qt prepared) ==> _` irule >>
-  qpat_x_assum `(!fuel. ptr_safe_run _ _ fuel _ _ _ Hout qout actual) ==> _` irule >>
-  asm_rewrite_tac[]
+  conj_tac >-
+    (conj_tac >- first_assum ACCEPT_TAC >>
+     qexists `hdr_bb'` >> simp[]) >>
+  irule abi_decode_sim_trans >> qexists `prepared` >> asm_rewrite_tac[]
 QED
 
 Theorem prefix_complete_array_setup_exit_pair:
@@ -277,7 +275,8 @@ Proof
   rule_assum_tac (SIMP_RULE std_ss []) >>
   rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
   qexistsl [`prepared`,`slot`,`H`,`qt`,`actual`,`Hout`,`qout`,`A`] >>
-  simp_tac std_ss [] >> asm_rewrite_tac[] >> qexists `hdr_bb` >> simp[]
+  simp_tac std_ss [] >> asm_simp_tac bool_ss [] >>
+  conj_tac >- first_assum ACCEPT_TAC >> qexists `hdr_bb` >> simp[]
 QED
 
 
