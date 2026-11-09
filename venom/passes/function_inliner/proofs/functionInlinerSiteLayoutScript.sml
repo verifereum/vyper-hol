@@ -1,7 +1,8 @@
-(* Exact raw one-site layout, before PHI repair and renumbering. *)
+(* Located one-site layout, with raw assembly and final semantic projections. *)
 Theory functionInlinerSiteLayout
 Ancestors
-  functionInlinerDefs functionInlinerWf cfgTransformProps cfgTransform
+  functionInlinerDefs functionInlinerWf functionInlinerOrigin
+  cfgTransformProps cfgTransform
   venomInst list rich_list pred_set
 
 Theorem rewrite_inline_blocks_map:
@@ -203,4 +204,95 @@ Theorem inline_rewrite_focus_getter:
   EL (LENGTH (FST a) + j) instrs = EL j (FST b)
 Proof
   strip_tac >> gvs[] >> simp[EL_APPEND2, EL_APPEND1]
+QED
+
+(* Unlike fn_insts projections, this retains each block's location. *)
+Theorem inline_renumber_blocks_located[local]:
+  !bbs n acc n' res f.
+    (!i k. f (i with inst_id := k) = f i) /\
+    FOLDL (\(n,acc) bb.
+      let (n',bb') = renumber_block_inst_ids n bb in (n',acc ++ [bb']))
+      (n,acc) bbs = (n',res) ==>
+    MAP (\bb. (bb.bb_label, MAP f bb.bb_instructions)) res =
+    MAP (\bb. (bb.bb_label, MAP f bb.bb_instructions)) (acc ++ bbs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `FOLDL _ _ _ = _` mp_tac >> simp[Once FOLDL] >>
+  Cases_on `renumber_block_inst_ids n h` >> simp[] >> strip_tac >>
+  gvs[LET_THM] >> first_x_assum drule_all >>
+  simp[MAP_APPEND, APPEND_ASSOC] >>
+  qspecl_then [`n`, `h`] mp_tac renumber_block_structure >>
+  drule renumber_block_projection >>
+  disch_then (qspecl_then [`n`, `h`] mp_tac) >> simp[]
+QED
+
+Theorem inline_renumber_fn_located:
+  (!i k. f (i with inst_id := k) = f i) ==>
+  MAP (\bb. (bb.bb_label, MAP f bb.bb_instructions))
+    (renumber_fn_inst_ids fn).fn_blocks =
+  MAP (\bb. (bb.bb_label, MAP f bb.bb_instructions)) fn.fn_blocks
+Proof
+  strip_tac >> simp[renumber_fn_inst_ids_def] >> pairarg_tac >> simp[] >>
+  drule_all (SRULE [LET_THM] inline_renumber_blocks_located) >> simp[]
+QED
+
+Theorem inline_lookup_located_projection[local]:
+  !bbs bbs' f l.
+  MAP (\bb. (bb.bb_label, MAP f bb.bb_instructions)) bbs =
+  MAP (\bb. (bb.bb_label, MAP f bb.bb_instructions)) bbs' ==>
+  OPTION_MAP (\bb. (bb.bb_label, MAP f bb.bb_instructions)) (lookup_block l bbs) =
+  OPTION_MAP (\bb. (bb.bb_label, MAP f bb.bb_instructions)) (lookup_block l bbs')
+Proof
+  Induct >> Cases_on `bbs'` >> simp[lookup_block_def] >>
+  rpt strip_tac >> gvs[] >> simp[FIND_thm] >>
+  IF_CASES_TAC >> gvs[GSYM lookup_block_def]
+QED
+
+Theorem inline_renumber_lookup_projection:
+  (!i k. f (i with inst_id := k) = f i) ==>
+  OPTION_MAP (\bb. (bb.bb_label, MAP f bb.bb_instructions))
+    (lookup_block l (renumber_fn_inst_ids fn).fn_blocks) =
+  OPTION_MAP (\bb. (bb.bb_label, MAP f bb.bb_instructions))
+    (lookup_block l fn.fn_blocks)
+Proof
+  strip_tac >> irule inline_lookup_located_projection >>
+  irule inline_renumber_fn_located >> simp[]
+QED
+
+Definition inline_inst_fields_def:
+  inline_inst_fields inst = (inst.inst_opcode, inst.inst_operands, inst.inst_outputs)
+End
+
+Theorem inline_renumber_lookup_none[simp]:
+  lookup_block l (renumber_fn_inst_ids fn).fn_blocks = NONE <=>
+  lookup_block l fn.fn_blocks = NONE
+Proof
+  mp_tac (Q.ISPEC `inline_inst_fields` (Q.GEN `f` inline_renumber_lookup_projection)) >>
+  simp[inline_inst_fields_def] >>
+  Cases_on `lookup_block l (renumber_fn_inst_ids fn).fn_blocks` >>
+  Cases_on `lookup_block l fn.fn_blocks` >> simp[]
+QED
+
+Theorem inline_renumber_lookup_some:
+  lookup_block l fn.fn_blocks = SOME bb ==>
+  ?bb'. lookup_block l (renumber_fn_inst_ids fn).fn_blocks = SOME bb' /\
+    bb'.bb_label = bb.bb_label /\
+    MAP inline_inst_fields bb'.bb_instructions = MAP inline_inst_fields bb.bb_instructions
+Proof
+  strip_tac >>
+  mp_tac (Q.ISPEC `inline_inst_fields` (Q.GEN `f` inline_renumber_lookup_projection)) >>
+  simp[inline_inst_fields_def] >>
+  Cases_on `lookup_block l (renumber_fn_inst_ids fn).fn_blocks` >> simp[]
+QED
+
+Theorem inline_fields_get_instruction:
+  MAP inline_inst_fields bb'.bb_instructions = MAP inline_inst_fields bb.bb_instructions ==>
+  OPTION_MAP inline_inst_fields (get_instruction bb' k) =
+  OPTION_MAP inline_inst_fields (get_instruction bb k)
+Proof
+  strip_tac >>
+  `LENGTH bb'.bb_instructions = LENGTH bb.bb_instructions` by
+    metis_tac[LENGTH_MAP] >>
+  simp[get_instruction_def] >> IF_CASES_TAC >> simp[] >>
+  gvs[LIST_EQ_REWRITE, EL_MAP]
 QED

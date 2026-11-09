@@ -152,3 +152,51 @@ Proof
       Cases_on `h.inst_outputs` >> simp[] >> Cases_on `t` >> simp[]) >>
   simp[] >> irule inline_eval_phis_closed_repair >> simp[] >> metis_tac[]
 QED
+
+(* Final layout: PHI repair followed by instruction-ID renumbering. *)
+Theorem inline_final_lookup_fields:
+  lookup_block l fn.fn_blocks = SOME bb ==>
+  ?tb. lookup_block l (renumber_fn_inst_ids (fix_inline_phis old fresh rb fn)).fn_blocks =
+      SOME tb /\
+    tb.bb_label = bb.bb_label /\
+    MAP inline_inst_fields tb.bb_instructions =
+      MAP inline_inst_fields
+        (if MEM bb.bb_label (bb_succs rb) then
+           MAP (\inst. if inst.inst_opcode <> PHI then inst
+                      else subst_label_inst old fresh inst) bb.bb_instructions
+         else bb.bb_instructions)
+Proof
+  strip_tac >> drule inline_fix_phis_lookup_some >>
+  disch_then (qspecl_then [`rb`, `old`, `fresh`] assume_tac) >>
+  drule inline_renumber_lookup_some >>
+  disch_then strip_assume_tac >> qexists `bb'` >>
+  Cases_on `MEM bb.bb_label (bb_succs rb)` >> gvs[]
+QED
+
+(* Raw lookup premise is supplied by the existing call/clone/return/other
+   lookup cases. This theorem discharges the executable inline_one_site
+   wrapper and both final transformations in one place. *)
+Theorem inline_one_site_lookup_fields:
+  find_invoke_site callee.fn_name caller.fn_blocks = SOME (lbl,i) /\
+  p = inline_prefix ist.is_inline_count /\
+  ret = return_block_label p ist.is_label_counter /\
+  lookup_block lbl caller.fn_blocks = SOME source_bb /\
+  ~MEM ret (fn_labels caller) /\
+  lookup_block l (inline_call_site p ret caller callee lbl i).fn_blocks = SOME bb /\
+  inline_one_site caller callee ist = SOME (fn',ist') ==>
+  ?tb. lookup_block l fn'.fn_blocks = SOME tb /\ tb.bb_label = bb.bb_label /\
+    MAP inline_inst_fields tb.bb_instructions =
+      MAP inline_inst_fields
+        (if MEM bb.bb_label
+              (bb_succs <|bb_label := ret;
+                bb_instructions := DROP (i+1) source_bb.bb_instructions|>) then
+           MAP (\inst. if inst.inst_opcode <> PHI then inst
+                      else subst_label_inst lbl ret inst) bb.bb_instructions
+         else bb.bb_instructions)
+Proof
+  strip_tac >>
+  drule_all inline_call_site_lookup_return >>
+  disch_then (qspecl_then [`p`, `i`, `callee`] assume_tac) >>
+  gvs[inline_one_site_def] >>
+  irule inline_final_lookup_fields >> simp[]
+QED
