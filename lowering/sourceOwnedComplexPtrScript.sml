@@ -3,13 +3,35 @@ Theory sourceOwnedComplexPtr
 Ancestors sourceRecursiveComplexPtr sourceOwnedArrayConstructorPtr
   canonicalMemberTraversalPtr
   venomExecSemantics venomState abiDecoderMemberSetup abiDecoderContract
-  decoderMemberPrefixPtr abiDecoderDynamicLoopSetup fragExec abiDecoderFrame
+  decoderMemberPrefixPtr abiDecoderDynamicLoopSetup fragExec abiDecoderFrame emitHelper venomInst
   exprLoweringProps bodyPtrDefs list abiDecoderMemberCode abiDecoderLoop compileEnv arithmetic finite_map abiDecoderMemberCons
   abiDecoderCode abiEncoder emitHelperProps rich_list abiDecoderOffset
   abiDecoderOffsetHead abiDecoderCoherence vyperValue sourceEncodingLayout
   sourceEncodingWindows abiDecoderOffsetHead abiEncoderInput abiDecoderReentry
   venomMemDefs allocaFrontierBound actualAllocCredit calldataDynOwned
   abiEncoderSourceTransport abiDecoderMemberSlice decoderGhostFramePtr ptrDiscipline
+
+Theorem member_navigation_opcode_frame[local]:
+  MEM ins.inst_opcode [ADD; CALLDATALOAD] /\ step_inst_base ins s = OK t ==>
+  t = s with vs_vars := t.vs_vars
+Proof
+  simp[] >> strip_tac
+  >- metis_tac[step_pure_opcode_frame, MEM]
+  >> gvs[step_inst_base_def, exec_read1_def, AllCaseEqs(), update_var_def] >>
+     simp[venom_state_component_equality]
+QED
+
+Theorem member_navigation_opcodes[local]:
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) dyn ao vo st = (ops,st') ==>
+  EVERY (\i. MEM i.inst_opcode [ADD; CALLDATALOAD]) (emitted_insts st st')
+Proof
+  Cases_on `dyn` >>
+  simp[abi_decode_member_setup_def, compile_getelemptr_abi_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
+    emit_void_def, fresh_var_def, fresh_id_def, emit_def, emitted_insts_def] >>
+  strip_tac >> gvs[] >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  gvs[DROP_LENGTH_APPEND, mk_inst_def]
+QED
 
 Theorem owned_member_navigation_ptr:
   abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w)
@@ -31,6 +53,7 @@ Theorem owned_member_navigation_ptr:
     abi_decode_sim ctx fn s r /\
     r.vs_current_bb = mid.cs_current_bb /\ r.vs_inst_idx = LENGTH mid.cs_current_insts /\
     abi_decoder_address_frame sa.cs_next_var s r /\ fresh_vars_wrt limit r /\
+    (!op. abi_decoder_operand_live sa.cs_next_var op ==> eval_operand op r = eval_operand op s) /\
     abi_decoder_operand_live mid.cs_next_var (FST ops) /\
     abi_decoder_operand_live mid.cs_next_var (SND ops) /\
     SND ops = Var q /\ eval_operand (SND ops) r = SOME (n2w (d + vo)) /\
@@ -46,6 +69,14 @@ Proof
   `eval_operand (Var root) s = SOME (n2w d)` by simp[eval_operand_def] >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_member_setup_reentry >> strip_tac >>
+  `t = s with vs_vars := t.vs_vars` by
+    (`EVERY (\i. MEM i.inst_opcode [ADD; CALLDATALOAD]) (emitted_insts sa mid)` by
+       metis_tac[member_navigation_opcodes] >>
+     qspecl_then [`emitted_insts sa mid`, `K F`, `s`, `t`] mp_tac
+       run_inst_seq_protected_frame >>
+     (impl_tac >- (simp[] >> rpt strip_tac >>
+       irule member_navigation_opcode_frame >>
+       gvs[EVERY_MEM] >> metis_tac[])) >> simp[]) >>
   `w2n (n2w d : bytes32) + vo < dimword (:256)` by simp[] >>
   drule_all calldata_member_setup_endpoint_ptr_uniform >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
@@ -55,12 +86,18 @@ Proof
     (irule frag_exec_run_inst_seq >> simp[] >>
      fs[EVERY_CONJ] >> metis_tac[]) >>
   drule abi_decode_sim_from_fragment >> disch_then drule >> strip_tac >>
+  `!op. abi_decoder_operand_live sa.cs_next_var op ==> eval_operand op t = eval_operand op s` by
+    (qpat_assum `t = s with vs_vars := _` mp_tac >>
+     qpat_assum `!x. not_fresh_at sa x ==> lookup_var x t = _ /\ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> Cases_on `op` >>
+     gvs[eval_operand_def, calldata_operand_live_not_fresh, venom_state_component_equality] >>
+     metis_tac[]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH mid.cs_current_insts`, `H`, `u`, `q`] >>
   gvs[abi_decoder_address_frame_def, fresh_vars_wrt_def, lookup_var_def,
     ptr_covers_def, eval_operand_def] >>
   `s with vs_inst_idx := LENGTH sa.cs_current_insts = s` by
     simp[venom_state_component_equality] >>
-  qpat_x_assum `!D. _` mp_tac >>
+  qpat_x_assum `!D. (!fuel. ptr_safe_run D _ _ _ _ _ _ _ _) ==> _` mp_tac >>
   qpat_x_assum `s with vs_inst_idx := _ = s` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[ADD1, ADD_ASSOC, ADD_COMM]
 QED
@@ -385,7 +422,9 @@ Resume source_owned_complex_suffix_ptr[source_window]:
      POP_ASSUM_LIST (K ALL_TAC) >>
      Cases_on `is_dynamic (EL k ats)` >> simp[abi_tuple_child_offset_def]) >>
   `mem_bytes_at cdsbase (LENGTH (enc (Tuple ats) (ListV avs))) r.vs_call_ctx.cc_calldata =
-    enc (Tuple ats) (ListV avs)` by metis_tac[] >>
+    enc (Tuple ats) (ListV avs)` by
+    (qpat_assum `r.vs_call_ctx = s.vs_call_ctx` (fn th => rewrite_tac[th]) >>
+     first_assum ACCEPT_TAC) >>
   `LIST_REL (\ty av. ~is_dynamic ty ==> LENGTH (enc ty av) = abi_member_head_size ty) ats avs` by
     metis_tac[] >>
   drule_all structural_tuple_indexed_source >> strip_tac >>
@@ -511,4 +550,149 @@ Resume source_owned_complex_suffix_ptr[prefix]:
      rpt strip_tac >> Cases_on `i < k` >- metis_tac[] >>
      `i = k` by decide_tac >> metis_tac[]) >>
   suspend "tail"
+QED
+
+
+Resume source_owned_complex_suffix_ptr[tail]:
+  markerLib.RESUME_TAC >>
+  `!op. abi_decoder_operand_live sa.cs_next_var op ==>
+    eval_operand op t = eval_operand op s` by
+    (asm_x "child" kall_tac >> asm_x "ih" kall_tac >> rpt strip_tac >>
+     qpat_assum `!op. abi_decoder_operand_live mid.cs_next_var op ==> _`
+       (qspec_then `op` mp_tac) >>
+     (impl_tac >- metis_tac[abi_decoder_operand_live_mono]) >>
+     qpat_assum `!op. abi_decoder_operand_live sa.cs_next_var op ==> _`
+       (qspec_then `op` mp_tac) >>
+     qpat_assum `abi_decoder_operand_live sa.cs_next_var op` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  `!x. not_fresh_at sa x ==> FLOOKUP J x = FLOOKUP G x /\
+    op_taint v (Var x) = op_taint tn (Var x)` by
+    (asm_x "child" kall_tac >> asm_x "ih" kall_tac >> rpt strip_tac >>
+     `not_fresh_at mid x` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+     qpat_assum `!x. not_fresh_at mid x ==> _` (qspec_then `x` mp_tac) >>
+     qpat_assum `!x. not_fresh_at sa x ==> lookup_var x r = _ /\ _`
+       (qspec_then `x` mp_tac) >> simp[]) >>
+  `lookup_var root t = SOME (n2w d) /\ eval_operand src t = SOME (n2w cdsbase)` by
+    (asm_x "child" kall_tac >> asm_x "ih" kall_tac >>
+     qpat_assum `!op. abi_decoder_operand_live sa.cs_next_var op ==> eval_operand op t = _`
+       (fn th => mp_tac (Q.SPEC `Var root` th) >> mp_tac (Q.SPEC `src` th)) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`abi_decoder_operand_live sa.cs_next_var src`,
+        `abi_decoder_operand_live sa.cs_next_var (Var root)`,
+        `lookup_var root s = _`, `eval_operand src s = _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[eval_operand_def]) >>
+  suspend "tail_resources"
+QED
+
+Resume source_owned_complex_suffix_ptr[tail_resources]:
+  markerLib.RESUME_TAC >>
+  `sa.cs_next_var <= en.cs_next_var` by decide_tac >>
+  `not_fresh_at en root /\ (!q. src = Var q ==> not_fresh_at en q)` by
+    (asm_x "child" kall_tac >> asm_x "ih" kall_tac >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `abi_decoder_operand_live en.cs_next_var src /\
+   abi_decoder_operand_live en.cs_next_var (Var root)` by
+    (asm_x "child" kall_tac >> asm_x "ih" kall_tac >>
+     metis_tac[abi_decoder_operand_live_mono]) >>
+  `op_taint v src = {} /\ op_prov J src = NONE` by
+    (qpat_assum `!x. not_fresh_at sa x ==> FLOOKUP J x = _ /\ _` mp_tac >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`!q. src = Var q ==> not_fresh_at sa q`, `op_taint tn src = _`, `op_prov G src = _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `src` >>
+     simp[op_taint_def, op_prov_def] >> metis_tac[]) >>
+  `mem_bytes_at cdsbase (LENGTH (enc (Tuple ats) (ListV avs))) t.vs_call_ctx.cc_calldata =
+    enc (Tuple ats) (ListV avs)` by
+    (qpat_assum `abi_decode_footprint_frame _ s t` mp_tac >>
+     qpat_assum `mem_bytes_at cdsbase _ s.vs_call_ctx.cc_calldata = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[abi_decode_footprint_frame_def]) >>
+  `en.cs_blocks = sb.cs_blocks \/
+    !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0` by
+    (asm_x "child" kall_tac >> asm_x "ih" kall_tac >>
+     irule abi_decoder_members_tail_phi >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+  `oid < en.cs_next_id \/ sb.cs_next_id <= oid` by decide_tac >>
+  `lo <= t.vs_alloca_next` by decide_tac >>
+  suspend "tail_slots"
+QED
+
+Resume source_owned_complex_suffix_ptr[tail_slots]:
+  markerLib.RESUME_TAC >>
+  `!id p sz. en.cs_next_id <= id /\ id < sb.cs_next_id /\
+    FLOOKUP t.vs_allocas id = SOME (p,sz) ==>
+    sz = 32 /\ p < dimword (:256) /\ p+32 <= t.vs_alloca_next /\
+    ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+      ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]` by
+    (asm_x "child" kall_tac >> asm_x "ih" kall_tac >>
+     rpt gen_tac >> strip_tac >>
+     `sa.cs_next_id <= id /\ en.cs_next_id <= id` by decide_tac >>
+     `FLOOKUP s.vs_allocas id = SOME (p,sz)` by
+       (qpat_assum `!id. id < mid.cs_next_id \/ en.cs_next_id <= id ==> _`
+          (qspec_then `id` mp_tac) >>
+        qpat_assum `r.vs_allocas = s.vs_allocas` mp_tac >>
+        qpat_assum `FLOOKUP t.vs_allocas id = _` mp_tac >>
+        qpat_assum `en.cs_next_id <= id` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+     qpat_assum `!id p sz. sa.cs_next_id <= id /\ _ ==> _`
+       (qspecl_then [`id`,`p`,`sz`] mp_tac) >>
+     (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+     asm_rewrite_tac[] >> conj_tac >- decide_tac >>
+     qexists_tac `ins` >> asm_rewrite_tac[]) >>
+  `SUM (MAP abi_member_head_size (TAKE (SUC k) ats)) =
+     SUM (MAP abi_member_head_size (TAKE k ats)) + abi_member_head_size (EL k ats) /\
+   SUM (MAP type_memory_size (TAKE (SUC k) tvs)) =
+     SUM (MAP type_memory_size (TAKE k tvs)) + type_memory_size (EL k tvs)` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`k < LENGTH tys`, `LENGTH ats = LENGTH tys`, `LENGTH tvs = LENGTH tys`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+     simp[TAKE_SUC_BY_TAKE, MAP_SNOC, SUM_SNOC]) >>
+  asm "ih" (qspec_then `SUC k` mp_tac) >>
+  disch_then (qspecl_then [`en`, `t`, `J`, `v`] mp_tac) >>
+  (impl_tac >- (asm_rewrite_tac[] >> simp[Abbr `ats`])) >> strip_tac >>
+  suspend "compose"
+QED
+
+Resume source_owned_complex_suffix_ptr[compose]:
+  markerLib.RESUME_TAC >>
+  asm_x "child" kall_tac >> asm_x "ih" kall_tac >>
+  `abi_decode_footprint_frame ((d,cap)::(fp ++ fp')) s t` by
+    (irule abi_decode_footprint_frame_weaken >>
+     qexists_tac `((d + SUM (MAP type_memory_size (TAKE k tvs)),
+       type_memory_size (EL k tvs))::fp)` >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
+     simp[NoAsms] >>
+     rpt gen_tac >> strip_tac
+     >- (qexistsl_tac [`d`, `cap`] >> simp[NoAsms] >> decide_tac) >>
+     qexistsl_tac [`d'`, `sz`] >> simp[NoAsms, MEM_APPEND] >>
+     metis_tac[]) >>
+  `abi_decode_footprint_frame ((d,cap)::(fp ++ fp')) t t'` by
+    (irule abi_decode_footprint_frame_weaken >>
+     qexists_tac `((d,cap)::fp')` >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
+     simp[NoAsms] >>
+     rpt gen_tac >> strip_tac
+     >- (qexistsl_tac [`d`, `cap`] >> simp[NoAsms] >> decide_tac) >>
+     qexistsl_tac [`d'`, `sz`] >> simp[NoAsms, MEM_APPEND] >>
+     metis_tac[]) >>
+  suspend "compose_resources"
+QED
+
+Resume source_owned_complex_suffix_ptr[compose_resources]:
+  markerLib.RESUME_TAC >>
+  `!id p sz. FLOOKUP s.vs_allocas id = SOME (p,sz) ==>
+    FLOOKUP t.vs_allocas id = SOME (p,sz)` by
+    (rpt strip_tac >>
+     qpat_assum `!id p sz. FLOOKUP r.vs_allocas id = _ ==> _` irule >>
+     qpat_assum `r.vs_allocas = s.vs_allocas` (fn th => rewrite_tac[th]) >>
+     first_assum ACCEPT_TAC) >>
+  `!id. id < sa.cs_next_id \/ en.cs_next_id <= id ==>
+    FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id` by
+    (rpt strip_tac >>
+     `id < mid.cs_next_id \/ en.cs_next_id <= id` by decide_tac >>
+     qpat_assum `!id. id < mid.cs_next_id \/ en.cs_next_id <= id ==> _`
+       (qspec_then `id` mp_tac) >>
+     (impl_tac >- decide_tac) >>
+     qpat_assum `r.vs_allocas = s.vs_allocas` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  suspend "interval"
 QED
