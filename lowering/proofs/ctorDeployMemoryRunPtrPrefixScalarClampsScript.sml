@@ -17,8 +17,9 @@ Theorem prefix_scalar_shift_step:
   step_inst_base (mk_inst iid SIGNEXTEND [Lit k; a] [x]) s =
     OK (update_var x (sign_extend k w) s)
 Proof
-  pure_rewrite_tac[step_inst_base_def, mk_inst_def] >> simp[] >>
-  simp[exec_pure2_def, eval_operand_def]
+  strip_tac >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+       eval_operand_def]
 QED
 
 Theorem prefix_scalar_eq_step:
@@ -1009,7 +1010,7 @@ Theorem prefix_scalar_checked_layout:
      LENGTH st'.cs_current_insts = LENGTH st.cs_current_insts+5
 Proof
   strip_tac >>
-  gvs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def, SRULE [LET_THM] prefix_scalar_int_compile,
+  gvs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, comp_bind_def, compile_abi_decode_range_check_def, SRULE [LET_THM] prefix_scalar_int_compile,
       SRULE [LET_THM] prefix_scalar_bytes_compile, emitted_insts_def,
       rich_listTheory.IS_PREFIX_APPEND] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND, APPEND] >> simp[]
