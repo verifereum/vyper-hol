@@ -20,6 +20,120 @@ Ancestors
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
   dfgDefs
 
+(* Symbolic kinds at the boundary depend on the defining instruction,
+   not on the concrete word used to represent a label. *)
+Theorem phi_input_not_code_end:
+  MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
+  MEM (Var x) inst.inst_operands ==>
+  ~code_end_var fn x
+Proof
+  rw[label_flow_ok_def] >>
+  first_x_assum drule_all >> simp[] >> metis_tac[]
+QED
+
+Theorem phi_output_not_code_end:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = PHI /\ MEM x inst.inst_outputs ==>
+  ~code_end_var fn x
+Proof
+  rpt strip_tac >> drule_all code_end_var_def_inst >> simp[]
+QED
+
+Theorem phi_retpc_kind:
+  retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = PHI /\ MEM x inst.inst_outputs /\
+  MEM (Var y) inst.inst_operands ==>
+  (retpc_var fn x <=> retpc_var fn y)
+Proof
+  strip_tac >> eq_tac
+  >- (strip_tac >>
+      drule (cj 3 (iffLR retpc_shape_ok_def)) >>
+      disch_then drule_all >> simp[] >> metis_tac[]) >>
+  simp[retpc_var_def] >> strip_tac >>
+  irule (cj 3 copy_phi_var_rules) >> metis_tac[]
+QED
+
+Theorem phi_operand_kind_transport:
+  MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
+  ssa_form fn /\ retpc_shape_ok fn /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
+  MEM x inst.inst_outputs /\ MEM (Var y) inst.inst_operands /\
+  op_kind_ok fn ret (Var y) sv ==>
+  op_kind_ok fn ret (Var x) sv
+Proof
+  strip_tac >>
+  drule_all phi_input_not_code_end >> strip_tac >>
+  drule_all phi_output_not_code_end >> strip_tac >>
+  drule_all phi_retpc_kind >> strip_tac >>
+  gvs[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def]
+QED
+
+Theorem param_output_not_code_end:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
+  MEM inst.inst_opcode [PARAM; FMP_PARAM; RETPC_PARAM] ==>
+  ~code_end_var fn x
+Proof
+  rpt strip_tac >> drule_all code_end_var_def_inst >> gvs[]
+QED
+
+Theorem param_output_retpc_kind:
+  retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
+  MEM inst.inst_opcode [PARAM; FMP_PARAM; RETPC_PARAM] ==>
+  (retpc_var fn x <=> inst.inst_opcode = RETPC_PARAM)
+Proof
+  strip_tac >> eq_tac
+  >- (strip_tac >> drule (cj 3 (iffLR retpc_shape_ok_def)) >>
+      disch_then drule_all >> gvs[]) >>
+  strip_tac >> simp[retpc_var_def] >>
+  irule (cj 1 copy_phi_var_rules) >> metis_tac[]
+QED
+
+Theorem param_output_kind:
+  ssa_form fn /\ retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  MEM x inst.inst_outputs /\
+  MEM inst.inst_opcode [PARAM; FMP_PARAM; RETPC_PARAM] ==>
+  (op_kind_ok fn ret (Var x) sv <=>
+   if inst.inst_opcode = RETPC_PARAM then sv = Lab ret 0
+   else ?w. sv = Val w)
+Proof
+  strip_tac >> drule_all param_output_not_code_end >> strip_tac >>
+  drule_all param_output_retpc_kind >> strip_tac >>
+  simp[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def]
+QED
+
+Theorem sym_frame_inv_same_count:
+  !lo o2pc prog env ctx cp fn ret srest labs0 ps cs ss n cs' ss' ps'.
+  lo = SND (compute_label_offsets prog) /\
+  o2pc = build_offset_to_pc prog /\ asm_static_wf prog /\
+  sym_frame_inv prog env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_steps lo o2pc prog n cs = AsmOK cs' /\
+  sym_steps prog env n ss = SymOK ss' /\
+  sym_kinds_ok cp fn ret srest ps' ss' /\
+  (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+     FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
+  sym_frame_inv prog env ctx cp fn ret srest labs0 ps' cs' ss'
+Proof
+  rw[sym_frame_inv_def] >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >> gvs[]
+QED
+
+Theorem sym_kinds_stack_poke:
+  !cp fn ret srest ps ss d op.
+  sym_kinds_ok cp fn ret srest ps ss /\ d < LENGTH ps.ps_stack /\
+  (!sv. op_kind_ok fn ret (stack_peek d ps.ps_stack) sv ==>
+        op_kind_ok fn ret op sv) ==>
+  sym_kinds_ok cp fn ret srest
+    (ps with ps_stack := stack_poke d op ps.ps_stack) ss
+Proof
+  rw[sym_kinds_ok_def] >> qexists `top` >>
+  gvs[listTheory.LIST_REL_EL_EQN, stackModelTheory.stack_poke_def] >>
+  rpt strip_tac >>
+  simp[listTheory.EL_REVERSE, listTheory.EL_LUPDATE] >>
+  IF_CASES_TAC >> gvs[stackModelTheory.stack_peek_def,
+    listTheory.EL_REVERSE] >> metis_tac[]
+QED
+
 Theorem sym_phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0
