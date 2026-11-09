@@ -9,7 +9,7 @@ Ancestors
   gasExemptCert gasSummaryComposePtr targetPlaceSimCasesBase
   exprLowering emitHelperProps stmtLoweringMono compileEnv loweringPosts
   bodyPtrPopTargetDefs targetPlaceSimDefs targetPlaceSim exprSimSource exprSimDefs
-  vyperInterpreter vyperState
+  vyperInterpreter vyperState bodyPtrPopTargetSimArraySuffix
 
 Theorem target_array_sim_ptr:
   body_inv tops ctx cenv cx /\
@@ -170,7 +170,16 @@ Resume target_array_sim_ptr[source_ready]:
 QED
 
 Resume target_array_sim_ptr[source_typed]:
-  cheat
+  `vt = Type et /\ is_int_type (expr_type e)` by
+    fs[subscript_vtype_def, AllCaseEqs()] >> gvs[] >>
+  `~t'.vs_halted` by
+    (qpat_x_assum `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ (OK t')` mp_tac >>
+     simp[gas_marked_exec_ptr_def] >> metis_tac[gas_path_ptr_ok_not_halted]) >>
+  irule target_array_normal_suffix_ptr >> simp[] >>
+  conj_tac >- simp[Abbr `ef`] >>
+  qexistsl_tac [`G`, `bd`, `rb0`, `bt`, `e`, `em`, `env`,
+    `gas_explicit marks s0.vs_gas_readings ++ em.gas_obs`, `idx`, `sm`, `sn`, `t`, `tn`] >>
+  simp[Abbr `ef`, Abbr `em`] >> metis_tac[]
 QED
 
 Resume target_array_sim_ptr[base_exempt]:
