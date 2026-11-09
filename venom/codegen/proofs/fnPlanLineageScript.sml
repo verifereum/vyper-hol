@@ -4466,6 +4466,21 @@ Proof
   metis_tac[fnPlanLineageObserverTransportTheory.ready_incoming_block_nonentry]
 QED
 
+Theorem lineage_dfs_entry_block_replay:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME lbl /\
+  lineage_state lv dfg (cfg_analyze fn) fn ps0 lbl psL /\
+  dfs_block_state lv dfg (cfg_analyze fn) fn ps0 lbl psD /\
+  generate_block_plan lv dfg (cfg_analyze fn) fn bb psD = SOME (ops,afterD)
+  ==> ?afterL.
+    generate_block_plan lv dfg (cfg_analyze fn) fn bb psL = SOME (ops,afterL) /\
+    afterL.ps_alloc = afterD.ps_alloc /\ afterL.ps_spilled = afterD.ps_spilled
+Proof
+  strip_tac >>
+  drule dfs_block_state_lineage_state >> strip_tac >>
+  `psL = ps0 /\ psD = ps0` by metis_tac[lineage_state_entry_initial] >>
+  gvs[] >> qexists_tac `afterD` >> simp[]
+QED
+
 Theorem lineage_state_block_unit_preservation:
   codegen_ready_fn fn /\
   lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
