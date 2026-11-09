@@ -371,3 +371,26 @@ Proof
     PURE_REWRITE_RULE [MAP_REVERSE, REVERSE_REVERSE]) sym_restore_scratch_list >>
   metis_tac[LIST_REL_scratch_swap_order, MAP_REVERSE]
 QED
+
+Theorem sym_restore_scratch_swap:
+  scratch_kinds_ok fn ret (REVERSE items) offsets ss.sym_mem_labels /\
+  LENGTH items = dist+1 /\ 0 < dist /\ LENGTH offsets = LENGTH items /\
+  EVERY (\off. off < dimword(:256)) offsets /\
+  ss.sym_stack = stk /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan initial_fmp (MAP (\k. SORestore (EL k offsets))
+      (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0])))) ==>
+  ?last top. sym_steps p env
+    (LENGTH (execute_plan initial_fmp (MAP (\k. SORestore (EL k offsets))
+      (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))))) ss = SymOK last /\
+    last.sym_stack = top ++ stk /\
+    LIST_REL (op_kind_ok fn ret)
+      (REVERSE (MAP (\k. EL k items) ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))) top /\
+    last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc +
+      LENGTH (execute_plan initial_fmp (MAP (\k. SORestore (EL k offsets))
+        (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))))
+Proof
+  strip_tac >> drule_all scratch_swap_restore_indices >>
+  metis_tac[sym_restore_scratch_swap_bounded]
+QED
