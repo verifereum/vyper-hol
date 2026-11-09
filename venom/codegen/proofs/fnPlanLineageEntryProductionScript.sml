@@ -2716,3 +2716,77 @@ Proof
   simp[fnPlanLineageReplayTheory.generate_inst_plan_cleanup_update] >>
   drule_all terminal_jmp_inst_bottom_frame >> simp[]
 QED
+
+Theorem analyzed_ordinary_worker_cleanup_replay:
+  !fn bb dfg cfg halt p0 prefixP prefixQ hP gP bP hQ gQ bQ ops after.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    get_params bb.bb_instructions = [] /\ collect_phis bb.bb_instructions = [] /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label 0) ==>
+      MEM (Var v) p0.ps_stack \/ Var v IN FDOM p0.ps_spilled) /\
+    (!j. j < LENGTH bb.bb_instructions ==>
+      (EL j bb.bb_instructions).inst_opcode <> JMP) /\
+    (!j. j < LENGTH bb.bb_instructions ==>
+      EVERY (\v. ~MEM (Var v) prefixP)
+        (live_vars_at (liveness_analyze fn) bb.bb_label (SUC j) ++
+         (EL j bb.bb_instructions).inst_outputs) /\
+      EVERY (\v. ~MEM (Var v) prefixQ)
+        (live_vars_at (liveness_analyze fn) bb.bb_label (SUC j) ++
+         (EL j bb.bb_instructions).inst_outputs)) /\
+    generate_block_insts_plan (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+      (LENGTH bb.bb_instructions) 0 bb.bb_instructions
+      (p0 with <|ps_stack := prefixQ ++ p0.ps_stack;
+        ps_cleanup_height := hQ; ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>) =
+      SOME (ops,after) ==>
+    ?q.
+      generate_block_insts_plan (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+        (LENGTH bb.bb_instructions) 0 bb.bb_instructions p0 = SOME (ops,q) /\
+      generate_block_insts_plan (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+        (LENGTH bb.bb_instructions) 0 bb.bb_instructions
+        (p0 with <|ps_stack := prefixP ++ p0.ps_stack;
+          ps_cleanup_height := hP; ps_cleanup_growth := gP; ps_cleanup_promised := bP|>) =
+        SOME (ops,q with <|ps_stack := prefixP ++ q.ps_stack;
+          ps_cleanup_height := hP; ps_cleanup_growth := gP; ps_cleanup_promised := bP|>) /\
+      after = q with <|ps_stack := prefixQ ++ q.ps_stack;
+        ps_cleanup_height := hQ; ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>
+Proof
+  rpt gen_tac >> strip_tac >>
+  `non_param_insts bb = bb.bb_instructions` by
+    (drule_all ready_block_parameter_suffix >> simp[]) >>
+  `!j. j < LENGTH bb.bb_instructions ==>
+     (EL j bb.bb_instructions).inst_opcode <> PHI` by
+    (drule ready_block_ordinary_suffix_layout >>
+     disch_then (qspecl_then [`bb`,`0`] mp_tac) >> simp[]) >>
+  `?pre q.
+     native_inst_ops_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+       (LENGTH bb.bb_instructions) bb.bb_instructions p0
+       (LENGTH bb.bb_instructions) pre q /\
+     native_inst_ops_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+       (LENGTH bb.bb_instructions) bb.bb_instructions
+       (p0 with ps_stack := prefixP ++ p0.ps_stack)
+       (LENGTH bb.bb_instructions) pre (q with ps_stack := prefixP ++ q.ps_stack) /\
+     native_inst_ops_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+       (LENGTH bb.bb_instructions) bb.bb_instructions
+       (p0 with ps_stack := prefixQ ++ p0.ps_stack)
+       (LENGTH bb.bb_instructions) pre (q with ps_stack := prefixQ ++ q.ps_stack)` by
+    (irule analyzed_ordinary_paired_interval_replay >> gvs[]) >>
+  `native_inst_ops_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+     (LENGTH bb.bb_instructions) bb.bb_instructions
+     (p0 with <|ps_stack := prefixQ ++ p0.ps_stack; ps_cleanup_height := hQ;
+       ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>)
+     (LENGTH bb.bb_instructions) pre
+     (q with <|ps_stack := prefixQ ++ q.ps_stack; ps_cleanup_height := hQ;
+       ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>)` by
+    (qpat_x_assum `native_inst_ops_prefix _ _ _ _ _ _ _ _ _
+       (p0 with ps_stack := prefixQ ++ _) _ _ _`
+       (mp_tac o MATCH_MP native_inst_ops_prefix_cleanup_update) >>
+     disch_then (qspecl_then [`hQ`,`gQ`,`bQ`] mp_tac) >> simp[]) >>
+  gvs[native_inst_ops_prefix_complete] >>
+  `native_inst_ops_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+     (LENGTH bb.bb_instructions) bb.bb_instructions
+     (p0 with ps_stack := prefixP ++ p0.ps_stack)
+     (LENGTH bb.bb_instructions) ops (q with ps_stack := prefixP ++ q.ps_stack)` by
+    simp[native_inst_ops_prefix_complete] >>
+  drule native_inst_ops_prefix_cleanup_update >>
+  disch_then (qspecl_then [`hP`,`gP`,`bP`] mp_tac) >>
+  simp[native_inst_ops_prefix_complete]
+QED
