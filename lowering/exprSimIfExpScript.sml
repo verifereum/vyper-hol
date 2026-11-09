@@ -480,7 +480,7 @@ Proof
 QED
 
 (* Restore the expression frame after a fresh typed normalization. *)
-Theorem ifexp_typed_copy_post[local]:
+Theorem ifexp_typed_copy_post:
   expr_post ctx func ce cx e es origin sa s0 es' v src r /\
   local_ptrs_reserved ce origin /\ local_ptrs_reserved ce sa /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
@@ -550,7 +550,7 @@ Resume ifexp_typed_copy_post[locals]:
     qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ u.vs_memory = _` irule >> decide_tac) >>
   simp[]
 QED
-Finalise ifexp_typed_copy_post[local]
+Finalise ifexp_typed_copy_post
 
 Theorem ifexp_typed_normalize_post[local]:
   compile_alloc_buffer (type_memory_bytes ce dty) sa = (buf,sm) /\

@@ -143,3 +143,57 @@ Resume ifexp_typed_allocate_path_mem[finish]:
     (qspecl_then [`aid`, `b`, `len`] mp_tac) >> simp[] >> metis_tac[]
 QED
 Finalise ifexp_typed_allocate_path_mem[local]
+
+(* Destination post reconstruction is shared with S1; the path itself is the
+   memory-counted allocation/store result above. *)
+Theorem ifexp_typed_normalize_post_path_mem:
+  compile_alloc_buffer (type_memory_size dtv) sa = (buf,sm) /\
+  compile_store_memory_typed ce buf.buf_operand dty src sty sm = ((),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce origin /\ local_ptrs_reserved ce sa /\
+  origin.cs_next_var <= sa.cs_next_var /\ origin.cs_next_id <= sa.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  sty = post_value_type ce e /\
+  type_widens_to (get_tenv cx) sty dty /\
+  ~is_word_type sty /\ ~is_bytestring_type sty /\
+  ~is_word_type dty /\ ~is_bytestring_type dty /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  0 < type_memory_size stv /\ type_memory_size dtv < dimword (:256) /\
+  value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
+  sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  (emitted_blocks sm sb <> [] ==>
+    ?bb. lookup_block sb.cs_current_bb func.fn_blocks = SOME bb /\
+      phi_prefix_length bb.bb_instructions = 0) /\
+  expr_post ctx func ce cx e es origin sa s0 es' v src s /\
+  eval_operand src s = SOME sw /\
+  w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+  alloca_history func s /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?n t w. gas_path_mem ctx func s n (OK t) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    expr_post ctx func ce cx (IfExp dty c a b) es origin sb s0 es' v buf.buf_operand t /\
+    eval_operand buf.buf_operand t = SOME w /\
+    w2n w + type_memory_size dtv <= t.vs_alloca_next
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func ce cx es' s /\
+   expr_val_at ce cx sty origin sa es' v src s /\
+   val_in_memory stv v (w2n sw) s.vs_memory` by
+    gvs[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def] >>
+  drule_all ifexp_typed_allocate_path_mem >> strip_tac >>
+  qexistsl_tac [`ngas`, `t`, `w`] >> simp[] >>
+  irule ifexp_typed_copy_post >>
+  simp[] >> qexistsl_tac [`e`, `s`, `sa`, `src`] >> simp[] >>
+  conj_tac >- (qpat_x_assum `!name b len. _` ACCEPT_TAC) >>
+  conj_tac >- (qpat_x_assum `!aid b len. _` ACCEPT_TAC) >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
