@@ -3,7 +3,7 @@ Theory stmtSimZero
 Ancestors
   stmtSimDefs loweringPosts gasOutcome gasSummary gasContext fragGasMode
   fragGasPath fragGasPathMem stmtLowering compileEnv loweringSlice exprLoweringProps
-  vyperInterpreter vyperState
+  vyperInterpreter vyperState bodySimFull gasOutcomeFull fragGasOriginPtr bodyPtrDefs
 
 Theorem stmt_framed_frag_zero:
   stmt_framed_frag (alloca_prefix 0) ctx func cx lctx RetQ cenv m source es
@@ -59,5 +59,26 @@ Proof
   `stmt_post ctx func cx lctx cenv cenv sa sa s0 (INL ())
      (es with gas_obs := []) s0` by (irule stmt_post_nil >> simp[]) >>
   gvs[stmt_post_def] >> qexists_tac `cenv` >> simp[]
+QED
+
+Theorem stmt_frag_nil_full:
+  !D lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty es.
+    stmt_frag_full (D, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmts_env cenv lctx ty []) (stmts_env cenv lctx ty [])
+      (eval_stmts cx []) es
+Proof
+  rw[stmt_frag_full_def, stmts_env_def, comp_return_def] >>
+  PURE_REWRITE_TAC[gas_outcome_full_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  qexistsl_tac [`INL ()`, `es`, `OK s0`, `G0`, `tn0`] >>
+  conj_tac
+  >- simp[gas_explicit_def, Once evaluate_def, return_def] >>
+  conj_tac >- simp[gas_origin_ptr_path_rules] >>
+  disj1_tac >> qexists_tac `s0` >> simp[] >>
+  `stmt_post ctx func cx lctx cenv cenv sa sa s0 (INL ())
+     (es with gas_obs := []) s0` by (irule stmt_post_nil >> simp[]) >>
+  gvs[stmt_post_def] >>
+  fs[ghost_inv_at_def] >> first_assum ACCEPT_TAC
 QED
 
