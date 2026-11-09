@@ -3474,7 +3474,7 @@ Proof
   simp[local_ptrs_rel_def, local_backed_def, local_region_def,
      lookup_var_def, immutables_rel_def, logs_rel_def,
      venomMemDefsTheory.alloca_inv_def, alloca_room_def, pending_alloca_size_def,
-     fmp_room_def, immutable_alloca_sep_def, immutable_base_zero_def,
+     fmp_room_def, immutable_alloca_sep_def, immutable_decl_sep_def, immutable_base_zero_def,
      venomMemDefsTheory.allocas_non_overlapping_def,
      venomMemDefsTheory.alloca_next_valid_def] >>
   qpat_x_assum `local_ptrs_rel _ _ _ _`
@@ -3497,7 +3497,7 @@ Proof
       [fmp_room_def, pending_alloca_size_def]) >>
   qpat_x_assum `immutable_alloca_sep _ _ _ _ _`
     (assume_tac o SIMP_RULE (boss_ss())
-      [immutable_alloca_sep_def, local_region_def, lookup_var_def]) >>
+      [immutable_alloca_sep_def, immutable_decl_sep_def, local_region_def, lookup_var_def]) >>
   `es.accounts cx.txn.target with storage := mt =
    s.vs_accounts cx.txn.target with storage := mt` by
     (qpat_assum `es.accounts _ with storage := _ = _`
@@ -4269,7 +4269,7 @@ Proof
        venomMemDefsTheory.alloca_inv_def,
        venomMemDefsTheory.allocas_non_overlapping_def,
        venomMemDefsTheory.alloca_next_valid_def, alloca_room_def,
-       pending_alloca_size_def, immutable_alloca_sep_def,
+       pending_alloca_size_def, immutable_alloca_sep_def, immutable_decl_sep_def,
        exprLoweringPropsTheory.immutable_base_zero_alt,
        accounts_rel_def, accounts_agree_def]
 QED

@@ -286,7 +286,8 @@ Theorem for_iteration_mem:
 Proof
   rpt gen_tac >> strip_tac >>
   `bc.ce_module_vars = cenv.ce_module_vars /\ bc.ce_module = cenv.ce_module /\
-   bc.ce_is_ctor = cenv.ce_is_ctor /\ bc.ce_imm_alloca = cenv.ce_imm_alloca` by
+   bc.ce_is_ctor = cenv.ce_is_ctor /\ bc.ce_imm_alloca = cenv.ce_imm_alloca /\
+   bc.ce_module_var_type = cenv.ce_module_var_type` by
     (fs[for_code_def] >>
      qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
   `?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\ ~s2.vs_halted /\
