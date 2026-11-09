@@ -8,6 +8,7 @@
  *)
 Theory bodyPtrTypeBuiltinsSeamConvert
 Ancestors
+  bodyPtrTypeBuiltinsBytesDispatch bodyPtrTypeBuiltinsScalarOperandContinuation exprSimConvert
   bodyPtrTypeBuiltinsCastExecution bodyPtrTypeBuiltinsCastSemantic
   bodyPtrTypeBuiltinsIntegerBytesRun bodyPtrTypeBuiltinsIntegerSemantic
   bodyPtrTypeBuiltinsLoweredRepresentation bodyPtrTypeBuiltinsMarkedBind
@@ -45,5 +46,13 @@ Theorem convert_unwidened_ptr:
       expr_sim_ptr d ctx PG func cenv cx ty (TypeBuiltin v11 Convert typ [e1]) st /\
       expr_vv_sim_ptr d ctx PG func cenv cx ty (TypeBuiltin v11 Convert typ [e1]) st
 Proof
-  cheat
+  rpt gen_tac >> disch_tac >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_sim_ptr d ctx PG func cenv cx ty (TypeBuiltin v11 Convert typ [e1]) st` by
+    (Cases_on `is_bytestring_type (expr_type e1)`
+     >- (irule bytestring_convert_expr_sim_ptr >> metis_tac[]) >>
+     irule scalar_convert_expr_sim_ptr >> metis_tac[]) >>
+  conj_tac >- simp[] >>
+  irule exprPtrUnwrapTheory.expr_vv_sim_ptr_stack >>
+  metis_tac[compile_convert_stack, eval_expr_type_builtin_value]
 QED
