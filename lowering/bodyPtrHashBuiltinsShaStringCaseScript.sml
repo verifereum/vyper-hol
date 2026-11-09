@@ -2,7 +2,7 @@
 Theory bodyPtrHashBuiltinsShaStringCase
 Ancestors bodyPtrHashBuiltinsShaCase bodyPtrHashBuiltinsShaStringInput
   bodyPtrHashBuiltinsShaBytes
-  bodyPtrHashBuiltinsKeccakCase exprSimHash exprOperandVar exprSimVVFrame
+  bodyPtrHashBuiltinsKeccakCase exprSimHash exprSimHashBoundary exprOperandVar exprSimVVFrame
   bodyPtrDefs compileEnv venomState list words exprSimWordArgs
   bodyPtrHashBuiltinsCases arithmetic
 
