@@ -26,6 +26,21 @@ Ancestors
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
   dfgDefs symPlannerSim symShuffleSim
 
+(* Projection and exact-stack extraction use sym_kinds_ok_def directly:
+ * theorem search checks that simp[sym_kinds_ok_def] closes both interfaces.
+ * Releasing spills additionally needs lookup inclusion and stack preservation.
+ *)
+Theorem sym_frame_inv_release_dead_spills:
+  !p env ctx cp fn ret srest labs0 ps cs ss nl.
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss ==>
+  sym_frame_inv p env ctx cp fn ret srest labs0
+    (release_dead_spills nl ps) cs ss
+Proof
+  rw[sym_frame_inv_def, sym_kinds_ok_def,
+     fnPlanPrefixTheory.release_dead_spills_stack] >>
+  metis_tac[fnFrameStepsRevertForwardTheory.rf_release_spill_lookup]
+QED
+
 (* Reassemble the frame boundary after a region-local symbolic segment. *)
 Theorem sym_frame_inv_region_transfer:
   !p env ctx cp fn ret srest labs0 ps cs ss r cs' ss' ps'.
@@ -225,6 +240,173 @@ Proof
               arithmeticTheory.TWO, arithmeticTheory.ONE, sym_steps_def] >>
   gvs[stackOpSimTheory.asm_block_at_cons, sym_step_def, sym_step_op_def,
       sym_set_stack_def, asm_next_def, sym_jumpi_def, sym_jump_def]
+QED
+
+Theorem sym_kinds_ok_push:
+  !cp fn ret srest ps ss op sv base'.
+  sym_kinds_ok cp fn ret srest ps ss /\ op_kind_ok fn ret op sv ==>
+  sym_kinds_ok cp fn ret srest
+    (ps with ps_stack := SNOC op ps.ps_stack)
+    (ss with <|sym_base := base'; sym_stack := sv :: ss.sym_stack|>)
+Proof
+  rw[sym_kinds_ok_def] >>
+  qexists_tac `sv :: top` >> simp[]
+QED
+
+Theorem sym_kinds_ok_pop:
+  !cp fn ret srest ps ss op sv stk base'.
+  sym_kinds_ok cp fn ret srest
+    (ps with ps_stack := SNOC op ps.ps_stack) ss /\
+  ss.sym_stack = sv :: stk ==>
+  sym_kinds_ok cp fn ret srest ps
+    (ss with <|sym_base := base'; sym_stack := stk|>)
+Proof
+  rw[sym_kinds_ok_def] >>
+  gvs[listTheory.REVERSE_SNOC, listTheory.LIST_REL_CONS1] >> metis_tac[]
+QED
+
+Theorem noncopy_output_not_code_end:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\ MEM out inst.inst_outputs /\
+  inst.inst_opcode <> ADD /\ inst.inst_opcode <> ASSIGN ==>
+  ~code_end_var fn out
+Proof
+  rpt strip_tac >> drule_all code_end_var_def_inst >> simp[]
+QED
+
+Theorem sym_gas_output_not_code_end:
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = GAS /\ MEM out inst.inst_outputs ==>
+  ~code_end_var fn out
+Proof
+  strip_tac >> irule noncopy_output_not_code_end >>
+  conj_tac >- fs[codegen_ready_fn_def] >>
+  qexists_tac `inst` >> simp[]
+QED
+
+Theorem sym_gas_output_kind:
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = GAS /\ MEM out inst.inst_outputs ==>
+  op_kind_ok fn ret (Var out) (Val w)
+Proof
+  strip_tac >>
+  `~retpc_var fn out /\ ~code_end_var fn out` by
+    metis_tac[gasFrameSimTheory.gas_output_non_retpc,
+              sym_gas_output_not_code_end] >>
+  simp[op_kind_ok_def]
+QED
+
+(* GAS reads no symbolic operands or memory and produces a word. *)
+Theorem sym_step_gas:
+  sym_step p env (AsmOp "GAS") ss =
+    SymOK (ss with <|
+      sym_base := ss.sym_base with <|as_pc := ss.sym_base.as_pc + 1;
+        as_stack := []; as_gas_readings := TL ss.sym_base.as_gas_readings|>;
+      sym_stack := Val (HD (ss.sym_base.as_gas_readings ++ [0w])) ::
+                   ss.sym_stack|>)
+Proof
+  `asm_op_arity "GAS" = 0 /\
+   ALOOKUP dup_table "GAS" = NONE /\
+   ALOOKUP swap_table "GAS" = NONE /\
+   ALOOKUP log_table "GAS" = NONE` by EVAL_TAC >>
+  Cases_on `ss.sym_base.as_gas_readings` >>
+  simp[sym_step_def, sym_step_op_def, sym_step_concrete_def,
+       mem_labels_hit_def, asm_op_mem_reads_def, mem_labels_clear_def,
+       asm_op_mem_writes_def, GSYM pred_setTheory.UNIV_DEF,
+       finite_mapTheory.DRESTRICT_UNIV, asm_step_op_def, asm_step_arith_def,
+       asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+       asm_step_control_def, asm_step_extcall_def, asm_step_copy_def,
+       asm_step_context_def, asm_gas_def, asm_push_val_def, asm_next_def,
+       sym_lift_def, sym_state_component_equality, asm_state_component_equality]
+QED
+
+Theorem sym_gas_steps:
+  asm_block_at p ss.sym_base.as_pc [AsmOp "GAS"] ==>
+  sym_steps p env 1 ss =
+    SymOK (ss with <|
+      sym_base := ss.sym_base with <|as_pc := ss.sym_base.as_pc + 1;
+        as_stack := []; as_gas_readings := TL ss.sym_base.as_gas_readings|>;
+      sym_stack := Val (HD (ss.sym_base.as_gas_readings ++ [0w])) ::
+                   ss.sym_stack|>)
+Proof
+  strip_tac >>
+  rewrite_tac[arithmeticTheory.ONE, sym_steps_def] >>
+  gvs[asm_block_at_def, sym_step_gas]
+QED
+
+Theorem sym_gas_kinds_steps:
+  !cp fn ret srest ps ss p env out.
+  sym_kinds_ok cp fn ret srest ps ss /\
+  op_kind_ok fn ret (Var out)
+    (Val (HD (ss.sym_base.as_gas_readings ++ [0w]))) /\
+  asm_block_at p ss.sym_base.as_pc [AsmOp "GAS"] ==>
+  ?ss'. sym_steps p env 1 ss = SymOK ss' /\
+    sym_kinds_ok cp fn ret srest
+      (ps with ps_stack := SNOC (Var out) ps.ps_stack) ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule sym_gas_steps >> disch_then (qspec_then `env` assume_tac) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  irule sym_kinds_ok_push >> simp[]
+QED
+
+Theorem sym_gas_emit_frame_sim:
+  !p env ctx cp fn ret srest labs0 ps cs ss inst out.
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = GAS /\ MEM out inst.inst_outputs /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\ asm_block_at p cs.as_pc [AsmOp "GAS"] ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      1 cs = AsmOK cs' /\
+    sym_steps p env 1 ss = SymOK ss' /\
+    sym_frame_inv p env ctx cp fn ret srest labs0
+      (ps with ps_stack := SNOC (Var out) ps.ps_stack) cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss` >>
+  `asm_sym_rel p env cs ss /\ sym_kinds_ok cplan fn ret srest ps ss` by
+    fs[sym_frame_inv_def] >>
+  `op_kind_ok fn ret (Var out)
+     (Val (HD (ss.sym_base.as_gas_readings ++ [0w])))` by
+    metis_tac[sym_gas_output_kind] >>
+  `asm_block_at p ss.sym_base.as_pc [AsmOp "GAS"]` by
+    metis_tac[asm_sym_rel_pc] >>
+  drule_all sym_gas_kinds_steps >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  qexistsl_tac [`cs'`, `ss'`] >> simp[sym_frame_inv_def] >>
+  fs[sym_frame_inv_def]
+QED
+
+(* The return suffix removes the opaque PC and preserves all label memory. *)
+Theorem sym_ret_suffix_steps:
+  !p env ctx cp fn ret srest labs0 ps cs ss values pc.
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\ asm_block_at p cs.as_pc [AsmOp "JUMP"] /\
+  ss.sym_stack = Lab ret 0 :: (MAP Val (REVERSE values) ++ srest) /\
+  sym_jump_dest p (Lab ret 0) = SOME pc ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      1 cs = AsmOK cs' /\
+    sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss' /\
+    cs'.as_pc = pc /\
+    ss'.sym_stack = MAP Val (REVERSE values) ++ srest /\
+    (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+         FLOOKUP ss'.sym_mem_labels b = FLOOKUP labs0 b) /\
+    (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `asm_sym_rel p env cs ss` by fs[sym_frame_inv_def] >>
+  `asm_block_at p ss.sym_base.as_pc [AsmOp "JUMP"]` by
+    metis_tac[asm_sym_rel_pc] >>
+  drule_all sym_jump_steps >> disch_then (qspec_then `env` assume_tac) >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  qexistsl_tac [`cs'`, `ss with <|sym_base := ss.sym_base with as_pc := pc;
+    sym_stack := MAP Val (REVERSE values) ++ srest|>`] >> simp[] >>
+  conj_tac >- (drule_all asm_sym_rel_pc >> simp[]) >>
+  fs[sym_frame_inv_def, sym_kinds_ok_def]
 QED
 
 Theorem sym_jmp_frame_sim_deep:
