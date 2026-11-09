@@ -68,7 +68,8 @@ Theorem owned_target_relayout_store_outcome:
        (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
        ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
-       t.vs_inst_idx = LENGTH sf.cs_current_insts) \/
+       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+       alloca_frame cenv ee sb s cenv ff t) \/
      (exit_result r /\ stmt_exit RetQ ff res r))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>

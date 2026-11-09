@@ -11,14 +11,33 @@ Theorem relayout_store_stmt_post:
   vv_post ctx func cenv cx e es sa sv s0 mid (Value v) vv s1 /\
   target_post ctx func cenv cx mid sv st s1 ee (PlaceR p) (Type dty) tr s2 /\
   sa.cs_next_var <= sv.cs_next_var /\ sv.cs_next_var <= st.cs_next_var /\
+  sa.cs_next_id <= sv.cs_next_id /\ sv.cs_next_id <= st.cs_next_id /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sv /\
   stmt_state_rel ctx func cenv cx ff u /\
+  alloca_frame cenv ee st s2 cenv ff u /\
   (!x. not_fresh_at st x ==> lookup_var x u = lookup_var x s2) /\
   (!aid b. FLOOKUP s2.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
   ~u.vs_halted /\ u.vs_current_bb = sf.cs_current_bb /\
   u.vs_inst_idx = LENGTH sf.cs_current_insts /\ ~block_is_terminated sf ==>
-  stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff u
+  stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
 Proof
   strip_tac >>
+  `MAP FDOM mid.scopes = MAP FDOM es.scopes /\
+   MAP FDOM ee.scopes = MAP FDOM mid.scopes` by
+    fs[vv_post_def, target_post_def, locals_kept_def] >>
+  `alloca_frame cenv es sa s0 cenv mid s1` by
+    (irule vv_post_alloca_frame >> metis_tac[]) >>
+  `alloca_frame cenv mid sv s1 cenv ee s2` by
+    (irule target_post_alloca_frame >> fs[vv_post_def] >> metis_tac[]) >>
+  `alloca_frame cenv es sa s0 cenv ee s2` by
+    (irule alloca_frame_trans >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ ee s2`)) >>
+     fs[vv_post_def]) >>
+  `alloca_frame cenv es sa s0 cenv ff u` by
+    (irule alloca_frame_trans >>
+     goal_assum (drule_at (Pat `alloca_frame _ ee st s2 _ _ _`)) >>
+     fs[vv_post_def, target_post_def] >> qexists_tac `st` >> simp[]) >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
   fs[vv_post_def, target_post_def] >> rpt strip_tac >>
   `not_fresh_at sv x /\ not_fresh_at st x` by
@@ -45,17 +64,21 @@ Theorem relayout_store_gas_outcome:
   vv_post ctx func cenv cx e es sa sv s0 mid (Value v) vv s1 /\
   target_post ctx func cenv cx mid sv st s1 ee (PlaceR p) (Type dty) tr s2 /\
   sa.cs_next_var <= sv.cs_next_var /\ sv.cs_next_var <= st.cs_next_var /\
+  sa.cs_next_id <= sv.cs_next_id /\ sv.cs_next_id <= st.cs_next_id /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sv /\
   ~block_is_terminated sf /\ write_place cx p v ee = (res,ff) /\
   gas_marked_path F ctx func s2 0 r /\
   ((?u. r = OK u /\ res = INL () /\
      stmt_state_rel ctx func cenv cx ff u /\
+  alloca_frame cenv ee st s2 cenv ff u /\
      (!x. not_fresh_at st x ==> lookup_var x u = lookup_var x s2) /\
      (!aid b. FLOOKUP s2.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
      ~u.vs_halted /\ u.vs_current_bb = sf.cs_current_bb /\
      u.vs_inst_idx = LENGTH sf.cs_current_insts) \/
    (exit_result r /\ stmt_exit RetQ ff res r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) (write_place cx p v) (ee,s2)
-    (stmt_post ctx func cx lctx cenv cenv sa sf s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sf es s0)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -93,6 +116,7 @@ Theorem widened_target_store_gas_outcome:
        SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
      | _ => NONE) (type_memory_bytes cenv dty) st = ((),sf) /\
   ci_mono sa sv /\ ci_mono sv st /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv sv /\ local_ptrs_reserved cenv st /\
   ~is_word_type dty /\ ~is_bytestring_type dty /\ dty <> sty /\
   type_widens_to (get_tenv cx) sty dty /\ assignable_type (get_tenv cx) sty /\
@@ -112,7 +136,7 @@ Theorem widened_target_store_gas_outcome:
   ~s2.vs_halted /\ s2.vs_current_bb = st.cs_current_bb /\
   s2.vs_inst_idx = LENGTH st.cs_current_insts ==>
   gas_outcome F (cx_tops cx) (ctx,func) (write_place cx p v) (ee,s2)
-    (stmt_post ctx func cx lctx cenv cenv sa sf s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sf es s0)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -127,7 +151,7 @@ Proof
   `MAP FDOM mid.scopes = MAP FDOM ee.scopes` by
     fs[target_post_def, locals_kept_def] >>
   `0 < type_memory_size stv` by metis_tac[strict_widening_source_positive] >>
-  `sv.cs_next_id <= st.cs_next_id /\ sa.cs_next_var <= sv.cs_next_var /\
+  `sa.cs_next_id <= sv.cs_next_id /\ sv.cs_next_id <= st.cs_next_id /\ sa.cs_next_var <= sv.cs_next_var /\
    sv.cs_next_var <= st.cs_next_var` by fs[ci_mono_def, cs_extends_def] >>
   `expr_val_own cenv cx sty sa sv mid v (vv_operand vv) s1` by metis_tac[] >>
   `sv.cs_next_id <= sv.cs_next_id` by simp[] >>
@@ -139,15 +163,12 @@ Proof
        (!aid b. FLOOKUP s2.vs_allocas aid = SOME b ==>
           FLOOKUP u.vs_allocas aid = SOME b) /\
        ~u.vs_halted /\ u.vs_current_bb = sf.cs_current_bb /\
-       u.vs_inst_idx = LENGTH sf.cs_current_insts) \/
+       u.vs_inst_idx = LENGTH sf.cs_current_insts /\
+       alloca_frame cenv ee st s2 cenv ff u) \/
       (exit_result r /\ stmt_exit RetQ ff res r))` by
     (irule owned_target_relayout_store_outcome >> simp[] >>
      (conj_tac >- metis_tac[]) >>
-     goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `assign_alloc_ok _ _ _`)) >> simp[] >>
-     goal_assum (drule_at (Pat `expr_val_own _ _ _ _ _ _ _ _ _`)) >>
-     simp[] >> qexistsl_tac [`compile_expr`, `env`, `vv_location vv`] >>
-     fs[]) >>
+     metis_tac[]) >>
   irule relayout_store_gas_outcome >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_path _ _ _ _ _ _`)) >> simp[] >>
   goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[] >>

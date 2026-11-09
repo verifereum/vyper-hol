@@ -30,7 +30,9 @@ Proof
   Cases_on `loc = LocStorage` >>
   gvs[stmtLoweringTheory.compile_assign_value_def,
     compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def] >>
-  strip_tac >> irule place_static_dyn_storage_exit >> metis_tac[]
+  strip_tac >> irule place_static_dyn_storage_exit >> simp[] >>
+  goal_assum (drule_at (Pat `compile_dynarray_to_storage _ _ _ _ _ _ = _`)) >>
+  metis_tac[]
 QED
 
 Resume same_layout_storage_static_exit[fixed]:

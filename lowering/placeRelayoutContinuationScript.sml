@@ -120,7 +120,8 @@ Theorem owned_target_relayout_store_run:
       (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sf.cs_current_insts
+      t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+      alloca_frame cenv ee sb s cenv ff t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!x. op = Var x ==> not_fresh_at sa x` by simp[] >>
@@ -140,9 +141,9 @@ Proof
      Cases_on `b'` >> gvs[slot_loc_def]) >>
   qpat_x_assum `lowered_value_type cenv e = sty` (SUBST_ALL_TAC o SYM) >>
   irule place_relayout_storage_run >> simp[] >>
+  (conj_tac >- metis_tac[]) >>
   goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `compile_get_target_ptr _ _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
   goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
   simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
@@ -159,8 +160,8 @@ Resume owned_target_relayout_store_run[memory]:
   qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[] >> strip_tac >>
   irule place_relayout_memory_run >> simp[] >>
+  (conj_tac >- metis_tac[]) >>
   goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
   goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
   simp[] >> metis_tac[]
 QED
