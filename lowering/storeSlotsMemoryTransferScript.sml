@@ -4,6 +4,7 @@ Ancestors
   storeSlotsObserverMemory storeSlotsMemoryFootprint storeSlotsMemoryPaths exprSimAbiGasBridge abiEncoderPrefixSafety
   fragGasPath fragGasPathMem gasCount abiEncoderObserver fragExec venomState list
   simplifyCfgMergeRuns memSafeRun exprSimHash placeStoreSlots placeStoreStorage
+  stopReturndata
 
 Theorem gas_path_stop_view_agreement:
   gas_path ctx fn s n (OK t) /\ gas_path ctx fn s m (OK u) /\
@@ -214,4 +215,84 @@ Proof
      simp[frag_observer_cut_lookup, frag_observer_cut_instruction] >>
      qexistsl_tac [`id`, `id`] >> simp[]) >>
   irule store_slots_stop_view_post >> metis_tac[]
+QED
+
+Theorem mem_path_initial_lookup[local]:
+  gas_path_mem ctx fn s n (OK t) ==>
+  s = t \/ ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb
+Proof
+  once_rewrite_tac[gas_path_mem_cases] >>
+  simp[exit_result_def] >> strip_tac >>
+  fs[gas_path_mem_edge_def] >> metis_tac[]
+QED
+
+Theorem observer_cut_no_mem_edge[local]:
+  (s.vs_current_bb,s.vs_inst_idx) = frag_observer_cut sb ==>
+  ~gas_path_mem_edge ctx (frag_observer sa sb fn id) s n (OK t)
+Proof
+  simp[frag_observer_cut_def, pairTheory.PAIR_EQ] >> strip_tac >>
+  simp[gas_path_mem_edge_def, frag_observer_cut_lookup,
+       frag_observer_cut_instruction] >>
+  simp[step_stop_clears_returndata, venomInstTheory.mk_inst_def, exit_result_def]
+QED
+
+Theorem observer_mem_path_transfer:
+  !ctx observed s n r. gas_path_mem ctx observed s n r ==>
+  !sa sb fn id t.
+    observed = frag_observer sa sb fn id /\ r = OK t /\
+    cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
+    (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb /\
+    (t.vs_current_bb,t.vs_inst_idx) = frag_observer_cut sb ==>
+    gas_path_mem ctx fn s n (OK t)
+Proof
+  ho_match_mp_tac gas_path_mem_strongind >> rpt strip_tac
+  >- (gvs[] >> irule (cj 1 gas_path_mem_rules) >> simp[])
+  >- (gvs[] >>
+    rename1 `gas_path_mem_edge ctx (frag_observer sa sb fn id) s n (OK middle)` >>
+    `(s.vs_current_bb,s.vs_inst_idx) <> frag_observer_cut sb` by
+      metis_tac[observer_cut_no_mem_edge] >>
+    `(middle.vs_current_bb,middle.vs_inst_idx) = frag_observer_cut sb \/
+     ?bb. lookup_block middle.vs_current_bb
+       (frag_observer sa sb fn id).fn_blocks = SOME bb` by
+      metis_tac[mem_path_initial_lookup] >>
+    `(middle.vs_current_bb,middle.vs_inst_idx) IN frag_observer_region sa sb` by
+      metis_tac[observer_memory_edge_region] >>
+    `gas_path_mem_edge ctx fn s n (OK middle)` by
+      metis_tac[observer_memory_edge_transfer] >>
+    irule (cj 2 gas_path_mem_rules) >> qexists_tac `middle` >>
+    simp[] >> first_x_assum irule >> metis_tac[]) >>
+  gvs[exit_result_def]
+QED
+
+Theorem store_slots_bytes_observer_mem:
+  is_bytestring_type dty /\ evaluate_type tenv dty = SOME tv /\
+  value_has_type tv v /\ encode_value tv v = SOME writes /\
+  val_in_memory tv v (w2n sw) s.vs_memory /\
+  w2n sw + type_memory_size tv < dimword (:256) /\
+  w2n sw + type_memory_size tv <= s.vs_alloca_next /\
+  compile_store_slots cenv src dst dty tr sa = ((),sb) /\
+  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_path_mem ctx fn s 0 (OK t) /\
+    t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_call_ctx = s.vs_call_ctx /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `fn_has_code sa sb (frag_observer sa sb fn 0)` by
+    metis_tac[frag_observer_has_code] >>
+  drule_all store_slots_bytes_call_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `t` >> simp[] >>
+  fs[fragGasModeTheory.gas_marked_path_def] >>
+  irule observer_mem_path_transfer >>
+  goal_assum (drule_at (Pat `gas_path_mem _ _ _ _ _`)) >>
+  qexistsl_tac [`0`, `sa`, `sb`] >>
+  simp[frag_observer_start_region, frag_observer_cut_def]
 QED
