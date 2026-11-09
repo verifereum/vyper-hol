@@ -24,7 +24,7 @@ Proof
   `cx_tops cx = tops` by
     (irule cx_tops_module >> fs[body_inv_def]) >>
   irule stmt_expr_body_pre >>
-  gvs[body_inv_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[body_inv_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[]
 QED
