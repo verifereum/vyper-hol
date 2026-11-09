@@ -313,62 +313,6 @@ Proof
        local_region_def, locals_kept_def, popped_kept_def]
 QED
 
-Theorem materialize_store_owned_post_sim:
-  compile_store_memory ce src (Var p) (expr_type e) (expr_type e) su = ((),sb) /\
-  expr_post ctx func ce cx e es sa su s0 es' v src z /\
-  ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-  value_has_type tv v /\ val_wf tv v /\
-  type_memory_bytes ce (expr_type e) = type_memory_size tv /\
-  type_memory_size tv + 64 < dimword (:256) /\
-  (!x. src = Var x ==> not_fresh_at su x) /\ not_fresh_at su p /\
-  local_ptrs_reserved ce su /\ sa.cs_next_var <= su.cs_next_var /\
-  lookup_var p z = SOME w /\
-  FLOOKUP z.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
-  sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
-  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = aid /\
-  (!name b len. local_region ce es'.scopes z name b len ==>
-     w2n w + type_memory_size tv <= b \/ b + len <= w2n w) /\
-  (!name b len. local_region ce es.scopes s0 name b len ==>
-     w2n w + type_memory_size tv <= b \/ b + len <= w2n w) ==>
-  frag_exec ctx su sb (\s. s = z)
-    (\s. expr_post ctx func ce cx e es sa sb s0 es' v (Var p) s /\
-      FLOOKUP s.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
-      eval_operand (Var p) s = SOME w /\
-      val_in_memory tv v (w2n w) s.vs_memory /\
-      (!name b len. local_region ce es'.scopes s name b len ==>
-         w2n w + type_memory_size tv <= b \/ b + len <= w2n w)) R
-Proof
-  cheat
-QED
-
-Theorem materialize_store_post_sim:
-  compile_store_memory ce src (Var p) (expr_type e) (expr_type e) su = ((),sb) /\
-  expr_post ctx func ce cx e es sa su s0 es' v src z /\
-  ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-  value_has_type tv v /\ val_wf tv v /\
-  type_memory_bytes ce (expr_type e) = type_memory_size tv /\
-  type_memory_size tv + 64 < dimword (:256) /\
-  (!x. src = Var x ==> not_fresh_at su x) /\ not_fresh_at su p /\
-  local_ptrs_reserved ce su /\ sa.cs_next_var <= su.cs_next_var /\
-  lookup_var p z = SOME w /\
-  FLOOKUP z.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
-  sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
-  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = aid /\
-  (!name b len. local_region ce es'.scopes z name b len ==>
-     w2n w + type_memory_size tv <= b \/ b + len <= w2n w) /\
-  (!name b len. local_region ce es.scopes s0 name b len ==>
-     w2n w + type_memory_size tv <= b \/ b + len <= w2n w) ==>
-  frag_exec ctx su sb (\s. s = z)
-    (\s. expr_post ctx func ce cx e es sa sb s0 es' v (Var p) s /\
-      FLOOKUP s.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
-      eval_operand (Var p) s = SOME w /\
-      val_in_memory tv v (w2n w) s.vs_memory) R
-Proof
-  cheat
-QED
-
 Theorem materialize_rebase_post:
   vv_post ctx func ce cx e es sa mid s0 es' tvv vv u /\
   expr_post ctx func ce cx e es' (sa with cs_next_var := mid.cs_next_var)
@@ -378,7 +322,190 @@ Theorem materialize_rebase_post:
   local_ptrs_reserved ce sa /\ sa.cs_next_var <= mid.cs_next_var ==>
   expr_post ctx func ce cx e es sa su s0 es' v src z
 Proof
-  cheat
+  strip_tac >>
+  `local_ptrs_rel func ce es.scopes s0` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
+  `!n b sz. local_region ce es'.scopes u n b sz ==>
+             local_region ce es.scopes s0 n b sz` by
+    (rpt strip_tac >> irule local_region_frame >> conj_tac
+     >- (qexists_tac `func` >> simp[]) >>
+     qexistsl [`sa`, `es'.scopes`, `u`] >> simp[] >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[vv_post_def]) >>
+  `locals_kept ce es es' s0 z` by
+    (irule exprBopSimPropsTheory.locals_kept_trans >>
+     goal_assum (drule_at Any) >> qexistsl [`es'`, `u`] >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[vv_post_def, expr_post_def] >> metis_tac[]) >>
+  gvs[vv_post_def, expr_post_def] >> rpt conj_tac
+  >- (strip_tac >> irule expr_val_own_start_mono >>
+      qexists_tac `sa with cs_next_var := mid.cs_next_var` >> simp[])
+  >- (rpt strip_tac >>
+      `not_fresh_at (sa with cs_next_var := mid.cs_next_var) x` by
+        (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+      first_x_assum irule >> simp[] >> metis_tac[])
+  >- metis_tac[] >>
+  rpt strip_tac >>
+  `FLOOKUP u.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
+  `mem_bytes_at off sz z.vs_memory = mem_bytes_at off sz u.vs_memory` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem materialize_wb_frame_inst_idx[local]:
+  !ce es es' sa s0 s k.
+    wb_frame ce es es' sa s0 (s with vs_inst_idx := k) <=>
+    wb_frame ce es es' sa s0 s
+Proof
+  simp[wb_frame_def, venomStateTheory.lookup_var_def]
+QED
+
+Theorem materialize_expr_val_rel_inst_idx[local]:
+  !cx ty v op s k.
+    expr_val_rel cx ty v op (s with vs_inst_idx := k) <=>
+    expr_val_rel cx ty v op s
+Proof
+  Cases_on `op` >> simp[expr_val_rel_def, venomStateTheory.eval_operand_def,
+                        venomStateTheory.lookup_var_def]
+QED
+
+Theorem materialize_local_region_inst_idx[local]:
+  !ce scopes s k name b len.
+    local_region ce scopes (s with vs_inst_idx := k) name b len <=>
+    local_region ce scopes s name b len
+Proof
+  simp[local_region_def, venomStateTheory.lookup_var_def]
+QED
+
+Theorem materialize_expr_val_at_inst_idx[local]:
+  !ce cx ty sa sb es v op s k.
+    expr_val_at ce cx ty sa sb es v op (s with vs_inst_idx := k) <=>
+    expr_val_at ce cx ty sa sb es v op s
+Proof
+  Cases_on `op` >> simp[expr_val_at_def, venomStateTheory.eval_operand_def,
+    venomStateTheory.lookup_var_def, materialize_local_region_inst_idx]
+QED
+
+Theorem materialize_store_owned_post_sim:
+  compile_store_memory ce src (Var p) (lowered_value_type ce e)
+    (lowered_value_type ce e) su = ((),sb) /\
+  expr_post ctx func ce cx e es sa su s0 es' v src z /\
+  expr_body_pre ce cx env e es_pre /\
+  ~is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
+  type_memory_size tv + 64 < dimword (:256) /\
+  (!x. src = Var x ==> not_fresh_at su x) /\ not_fresh_at su p /\
+  local_ptrs_reserved ce su /\ sa.cs_next_var <= su.cs_next_var /\
+  lookup_var p z = SOME w /\
+  FLOOKUP z.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+  sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = aid /\
+  (!name b len. local_region ce es'.scopes z name b len ==>
+     w2n w + type_memory_size tv <= b \/ b + len <= w2n w) /\
+  (!name b len. local_region ce es.scopes s0 name b len ==>
+     w2n w + type_memory_size tv <= b \/ b + len <= w2n w) ==>
+  frag_exec ctx su sb (\s. s = z)
+    (\s. stmt_state_rel ctx func ce cx es' s /\
+      wb_frame ce es es' sa s0 s /\
+      expr_val_rel cx (lowered_value_type ce e) v (Var p) s /\
+      expr_val_at ce cx (lowered_value_type ce e) sa sb es' v (Var p) s /\
+      FLOOKUP s.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+      eval_operand (Var p) s = SOME w /\
+      val_in_memory tv v (w2n w) s.vs_memory /\
+      (!name b len. local_region ce es'.scopes s name b len ==>
+         w2n w + type_memory_size tv <= b \/ b + len <= w2n w)) R
+Proof
+  strip_tac >>
+  drule_all materialize_expr_post_lowered_source >> strip_tac >>
+  `~is_word_type (lowered_value_type ce e)` by
+    metis_tac[expr_body_pre_lowered_fits, compatible_word_type] >>
+  `stmt_state_rel ctx func ce cx es' z /\ wb_frame ce es es' sa s0 z` by
+    (gvs[expr_post_def, wb_frame_def] >> metis_tac[]) >>
+  drule (cj 1 materialize_store_state_run) >>
+  disch_then (drule_at Any) >>
+  disch_then (drule_at Any) >>
+  disch_then (qspecl_then [`v`, `tv`, `inst`, `w`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[arithmeticTheory.ADD_COMM])) >>
+  strip_tac >>
+  `allocas_non_overlapping z` by
+    gvs[exprLoweringPropsTheory.stmt_state_rel_def, alloca_inv_def] >>
+  `wb_frame ce es es' sa s0 t` by
+    (irule materialize_fresh_store_frame >>
+     qexistsl [`aid`, `w2n w`, `z`, `type_memory_size tv`] >>
+     simp[] >> conj_tac
+     >- metis_tac[arithmeticTheory.ADD_COMM] >>
+     conj_tac
+     >- (rpt strip_tac >> first_x_assum irule >>
+         gvs[not_fresh_at_def] >> decide_tac) >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
+  drule valueCopyTheory.compile_store_memory_run_size_bound_with_capacity >>
+  disch_then (drule_at Any) >>
+  disch_then (drule_at Any) >>
+  disch_then (qspecl_then [`get_tenv cx`, `tv`, `v`, `w`] mp_tac) >>
+  (impl_tac >- simp[venomStateTheory.eval_operand_def]) >>
+  strip_tac >> gvs[] >>
+  `!name b len. local_region ce es'.scopes t name b len ==>
+      w2n w + type_memory_size tv <= b \/ b + len <= w2n w` by
+    (drule_all copy_buffer_local_region_frame >>
+     disch_then (qspecl_then [`es'.scopes`] mp_tac) >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `lookup_var p t = SOME w` by metis_tac[] >>
+  `expr_val_rel cx (lowered_value_type ce e) v (Var p) t` by
+    (simp[expr_val_rel_def, venomStateTheory.eval_operand_def] >>
+     qexists_tac `w` >> simp[]) >>
+  `expr_val_at ce cx (lowered_value_type ce e) sa sb es' v (Var p) t` by
+    (simp[expr_val_at_def, venomStateTheory.eval_operand_def] >>
+     disj1_tac >>
+     qexistsl [`inst.inst_id`, `w2n w`, `type_memory_size tv`] >>
+     simp[] >> drule val_footprint_le >>
+     simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  irule frag_exec_run_inst_seq >>
+  gvs[exprLoweringPropsTheory.same_blocks_def] >>
+  conj_tac >- simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx] >>
+  conj_tac >- simp[materialize_wb_frame_inst_idx] >>
+  conj_tac >- simp[materialize_expr_val_rel_inst_idx] >>
+  conj_tac >- simp[materialize_expr_val_at_inst_idx] >>
+  conj_tac >- (simp[venomStateTheory.eval_operand_def,
+                  venomStateTheory.lookup_var_def] >> metis_tac[]) >>
+  simp[materialize_local_region_inst_idx] >> gvs[]
+QED
+
+Theorem materialize_store_post_sim:
+  compile_store_memory ce src (Var p) (lowered_value_type ce e)
+    (lowered_value_type ce e) su = ((),sb) /\
+  expr_post ctx func ce cx e es sa su s0 es' v src z /\
+  expr_body_pre ce cx env e es_pre /\
+  ~is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
+  type_memory_size tv + 64 < dimword (:256) /\
+  (!x. src = Var x ==> not_fresh_at su x) /\ not_fresh_at su p /\
+  local_ptrs_reserved ce su /\ sa.cs_next_var <= su.cs_next_var /\
+  lookup_var p z = SOME w /\
+  FLOOKUP z.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+  sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = aid /\
+  (!name b len. local_region ce es'.scopes z name b len ==>
+     w2n w + type_memory_size tv <= b \/ b + len <= w2n w) /\
+  (!name b len. local_region ce es.scopes s0 name b len ==>
+     w2n w + type_memory_size tv <= b \/ b + len <= w2n w) ==>
+  frag_exec ctx su sb (\s. s = z)
+    (\s. stmt_state_rel ctx func ce cx es' s /\
+      wb_frame ce es es' sa s0 s /\
+      expr_val_rel cx (lowered_value_type ce e) v (Var p) s /\
+      expr_val_at ce cx (lowered_value_type ce e) sa sb es' v (Var p) s /\
+      FLOOKUP s.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+      eval_operand (Var p) s = SOME w /\
+      val_in_memory tv v (w2n w) s.vs_memory) R
+Proof
+  strip_tac >> drule_all materialize_store_owned_post_sim >>
+  disch_then (qspec_then `R` assume_tac) >>
+  irule frag_exec_conseq >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem compile_materialize_vv_owned_sim:
