@@ -6,7 +6,7 @@
 
 Theory phiElimCorrectness
 Ancestors
-  phiTransform phiWellFormed venomWf sorting list
+  passTransform phiTransform phiWellFormed venomWf sorting list
   phiBlock passSimulationProps passSimulationDefs execEquivParamProps venomExecSemantics venomInst stateEquiv stateEquivProps phiDefs passSimulationProofs
 
 Theorem transform_function_is_function_map_transform[local]:
