@@ -266,6 +266,38 @@ Proof
   metis_tac[]
 QED
 
+(* A physical restore exposes kinds at the actual planner result. *)
+Theorem sym_do_restore_frame_sim:
+  !cp op ps ops ps' initial_fmp p env fn ret srest ss ctx labs0 cs r.
+  do_restore op ps = (ops,ps') /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SORestore off) ops ==> off < dimword(:256)) /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp ops) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp ops)) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cp fn ret srest labs0 ps' cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all do_restore_symbolic_prefix_facts >>
+  disch_then (qspecl_then [`initial_fmp`, `SND (compute_label_offsets p)`]
+    strip_assume_tac) >>
+  drule doSwapSimTheory.spill_alloc_layout_wf_spilled_separated >> strip_tac >>
+  drule_all planAlignTheory.do_restore_ss_align >> strip_tac >>
+  rename1 `MEM r cplan.cp_regions` >>
+  `!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    (r.sr_spill_base <= b /\ b < r.sr_spill_end) /\
+    context_spill_byte cplan b` by simp[] >>
+  drule_all sym_prefix_ops_frame_sim >> strip_tac >>
+  qexistsl_tac [`cs'`, `ss'`] >>
+  gvs[sym_frame_inv_def, sym_kinds_ok_def]
+QED
+
 (* A branch condition cannot carry either class of symbolic label. *)
 Theorem sym_jnz_condition_kind:
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
