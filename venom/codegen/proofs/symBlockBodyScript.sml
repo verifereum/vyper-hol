@@ -213,6 +213,112 @@ Proof
        planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def]
 QED
 
+(* Application-only view: preserve each quantified/conditional premise intact.
+   This generic transformation does not depend on concrete block terms. *)
+fun anchored_leaf names th = let
+  val th = SPEC_ALL th
+  val (ant, _) = dest_imp (concl th)
+  val premises = strip_conj ant
+  val body = SPEC_ALL (MP th (LIST_CONJ (map ASSUME premises)))
+  val (step, _) = dest_imp (concl body)
+  val body = UNDISCH body
+  val premises = premises @ [step]
+  fun named n t = let
+    val t = if is_eq t then lhs t else t
+  in fst (dest_const (fst (strip_comb t))) = n end
+    handle HOL_ERR _ => false
+  val anchors = map (fn n =>
+    case List.find (named n) premises of SOME t => t
+    | NONE => raise Fail ("missing anchor: " ^ n ^ " in " ^
+        String.concatWith "," (map (fn t =>
+          (fst (dest_const (fst (strip_comb (if is_eq t then lhs t else t))))
+          handle HOL_ERR _ => "variable-head"))
+          (filter (fn t => not (is_forall t)) premises)))) names
+  val others = filter (fn t => not (exists (aconv t) anchors)) premises
+in
+  foldr (fn (p, th) => DISCH p th) body (anchors @ others)
+end;
+
+fun leaf_matches 0 ttac th = ttac th
+  | leaf_matches n ttac th = first_assum (fn a =>
+      leaf_matches (n - 1) ttac
+        (MATCH_MP (PART_MATCH (fst o dest_imp) th (concl a)) a));
+
+Theorem sym_body_ordinary_ok:
+  !fuel rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch growth
+   spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs block_ops
+   ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv ra pc_ret
+   rest mem0 inst vs1 env ret srest labs0 ss.
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> GAS /\
+  ~is_terminator inst.inst_opcode /\ (!j. ~revert_forward_pair bb k j) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (inst.inst_opcode = LOG ==>
+     ?tc args. inst.inst_operands = Lit tc :: args /\ w2n tc <= 4) /\
+  step_inst fuel ctx inst vs = OK vs1 /\
+  label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\ sym_unit_static_ok unit /\
+  asm_static_wf prog /\ (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
+  ?ops ps' rest' n as1 ss1.
+    generate_inst_plan liveness dfg cfg fn inst
+      (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+      (k + 1 < LENGTH bb.bb_instructions /\
+       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+      bb.bb_label ps = SOME (ops, ps') /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions)
+      (SUC k - LENGTH (get_params bb.bb_instructions))
+      (DROP (SUC k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
+      ps' = SOME (rest', ps_after) /\
+    rest_ops = ops ++ rest' /\
+    asm_steps lo o2pc prog n as = AsmOK as1 /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps' vs1 as1 /\
+    as1.as_pc = as.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp ops) /\
+    sym_steps prog env n ss = SymOK ss1 /\
+    sym_frame_inv prog env ctx cpl fn ret srest labs0 ps' as1 ss1
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule body_inv_facts >> strip_tac >>
+  drule_all body_inv_inst >> strip_tac >>
+  drule_all body_inv_step >> strip_tac >>
+  drule_all body_inv_static >> strip_tac >>
+  drule body_inv_equiv >> disch_then drule >> disch_then drule >> strip_tac >>
+  drule body_inv_not_in_rf >> disch_then drule >> strip_tac >>
+  drule_all body_inv_memory >> strip_tac >>
+  `!e. step_inst fuel ctx inst vs <> Error e` by simp[] >>
+  drule body_inv_label_resolve >> disch_then drule >> disch_then drule >>
+  disch_then drule >> disch_then drule >> strip_tac >>
+  qhdtm_assum `body_inv` (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
+  `fn_shape_ok fn` by
+    (gvs[unit_shape_ok_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `sym_data_label prog env "code_end"` by
+    metis_tac[codegen_sym_code_end_label] >>
+  `(MEM (Label "runtime_begin") inst.inst_operands ==>
+    sym_data_label prog env "runtime_begin")` by
+    metis_tac[codegen_sym_runtime_begin_label] >>
+  `!op w. inst.inst_opcode = ADD /\
+    inst.inst_operands = [op; Label "code_end"] /\ eval_operand op vs = SOME w ==>
+    w2n w < dimword (:256) DIV 2` by
+    metis_tac[code_end_offset_ok_def] >>
+  `!dist prev val_op. inst.inst_opcode = PHI /\
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME dist /\
+    vs.vs_prev_bb = SOME prev /\ resolve_phi prev inst.inst_operands = SOME val_op ==>
+    operand_val (frame_view fn ra vs) lo (stack_peek dist ps.ps_stack) =
+    eval_operand val_op (frame_view fn ra vs)` by simp[] >>
+  `inst.inst_opcode = ASSERT ==> IS_SOME (FLOOKUP lo "revert")` by simp[] >>
+  leaf_matches 6 mp_tac (anchored_leaf
+    ["fn_frame_inv", "generate_inst_plan", "sym_frame_inv",
+     "generated_plan_state_wf_marked", "IN", "step_inst"]
+    sym_inst_frame_sim_deep) >>
+  simp[] >> strip_tac >>
+  metis_tac[]
+QED
+
 (* body_inv bundles block_body_frame_sim's premises. *)
 Theorem sym_block_body_frame_sim:
   !fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
