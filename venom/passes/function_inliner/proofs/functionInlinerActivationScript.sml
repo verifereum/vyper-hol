@@ -3,8 +3,8 @@
 Theory functionInlinerActivation
 Ancestors
   functionInlinerSimulation functionInlinerSiteSimulation
-  functionInlinerSiteLayout functionInlinerDefs venomExecSemantics
-  venomState venomInst list rich_list pred_set
+  functionInlinerSiteLayout functionInlinerDefs functionInlinerFrame venomExecSemantics
+  venomState venomInst passSimulationProofs passSimulationDefs list rich_list pred_set
 
 Datatype:
   inline_parent_edge = <|
@@ -265,6 +265,9 @@ Definition inline_snapshot_data_def:
     (!x. x IN snap.ils_defined DIFF snap.ils_opaque ==>
       lookup_var x snap.ils_state =
       lookup_var (route.ir_rename x) frame.ipf_state) /\
+    (!x. x IN snap.ils_defined INTER snap.ils_opaque /\
+         IS_SOME (lookup_var x snap.ils_state) ==>
+      IS_SOME (lookup_var (route.ir_rename x) frame.ipf_state)) /\
     (!x. x IN snap.ils_protected ==>
       lookup_var x snap.ils_saved =
       lookup_var (snap.ils_parent_rename x) frame.ipf_state)
@@ -316,4 +319,97 @@ Theorem inline_snapshot_original_entry:
   snap.ils_state.vs_return_pc_token = a.ia_entry.vs_return_pc_token
 Proof
   simp[inline_snapshot_data_def]
+QED
+
+Theorem inline_snapshot_clone_point:
+  inline_clone_point caller callee final lbl i p ret N opaque_caller opaque
+    c d V b j counter s t /\
+  s.vs_params = a.ia_entry.vs_params /\
+  s.vs_return_pc_token = a.ia_entry.vs_return_pc_token ==>
+  inline_snapshot_data a
+    <|ir_owner := owner; ir_rename := STRCAT p; ir_path := path|>
+    <|ils_state := s; ils_saved := c; ils_entry := a.ia_entry;
+      ils_defined := V; ils_opaque := opaque;
+      ils_protected := N DIFF opaque_caller; ils_parent_rename := I|>
+    <|ipf_state := t; ipf_anchor := d|> /\
+  inline_shared_frame s = inline_shared_frame t
+Proof
+  simp[inline_clone_point_def, inline_snapshot_data_def,
+       inline_target_anchor_def, inline_opaque_frame_rel_def,
+       inline_frame_rel_def, venomStateTheory.lookup_var_def] >>
+  metis_tac[]
+QED
+
+Theorem inline_snapshot_identity_storage:
+  inline_activation_storage a.ia_id
+    (\id. if id = a.ia_id then SOME a else NONE)
+    (\id. if id = a.ia_id then SOME (inline_route_identity a.ia_id) else NONE)
+    (\id. if id = a.ia_id then
+      SOME <|ils_state := a.ia_entry; ils_saved := a.ia_entry;
+             ils_entry := a.ia_entry; ils_defined := V; ils_opaque := opaque;
+             ils_protected := {}; ils_parent_rename := I|> else NONE)
+    (\id. if id = a.ia_id then
+      SOME <|ipf_state := a.ia_entry; ipf_anchor := a.ia_entry|> else NONE)
+Proof
+  simp[inline_activation_storage_def, inline_route_identity_def,
+       inline_snapshot_data_def]
+QED
+
+Definition inline_original_call_result_def:
+  inline_original_call_result call caller cr r <=>
+    (?ir se u. cr = IntRet ir se /\
+      bind_outputs call.inst_outputs ir.iret_values
+        (adopt_return_fmp ir (merge_callee_state caller se)) = SOME u /\ r = OK u) \/
+    (?se. cr = Halt se /\ r = Halt se) \/
+    (?ab se. cr = Abort ab se /\ r = Abort ab se)
+End
+
+(* The exact original child run, not an intermediate target-success premise. *)
+Definition inline_original_child_def:
+  inline_original_child C fuel parent q call caller r child cr <=>
+    call.inst_opcode = INVOKE /\
+    step_inst fuel C call caller = r /\ terminates r /\
+    child.ia_id = parent ++ [q] /\
+    (?edge nm ops.
+      child.ia_parent = SOME edge /\
+      edge.ipe_parent = parent /\ edge.ipe_call = call /\
+      edge.ipe_saved = caller /\ edge.ipe_child = child.ia_entry /\
+      decode_invoke call = SOME (nm,ops) /\
+      lookup_function nm C.ctx_functions = SOME child.ia_function /\
+      eval_operands ops caller = SOME edge.ipe_args /\
+      setup_callee child.ia_function edge.ipe_args caller = SOME child.ia_entry) /\
+    run_blocks fuel C child.ia_function child.ia_entry = cr /\
+    terminates cr /\ inline_original_call_result call caller cr r
+End
+
+Theorem inline_original_child_exists:
+  call.inst_opcode = INVOKE /\ step_inst fuel C call caller = r /\ terminates r ==>
+  ?child cr. inline_original_child C fuel parent q call caller r child cr
+Proof
+  strip_tac >> drule_all terminating_invoke_inversion >> strip_tac >>
+  qexistsl [
+    `<|ia_id := parent ++ [q]; ia_function := fn; ia_entry := cs;
+       ia_parent := SOME (<|ipe_parent := parent; ipe_call := call;
+         ipe_saved := caller; ipe_args := args; ipe_child := cs|>)|>`, `cr`] >>
+  simp[inline_original_child_def, inline_original_call_result_def] >>
+  metis_tac[]
+QED
+
+Theorem inline_original_child_argument:
+  inline_original_child C call_fuel parent q call caller r child cr /\
+  inline_snapshot_data child route snap frame /\
+  MEM inst.inst_opcode [PARAM; FMP_PARAM] /\
+  inst.inst_operands = [Lit idx] /\ inst.inst_outputs = [x] /\
+  step_inst fuel C inst snap.ils_state = pr /\ (!e. pr <> Error e) ==>
+  ?ops.
+    (?nm. decode_invoke call = SOME (nm,ops)) /\
+    w2n idx < LENGTH ops /\
+    eval_operand (EL (w2n idx) ops) caller =
+      SOME (EL (w2n idx) snap.ils_state.vs_params) /\
+    pr = OK (update_var x (EL (w2n idx) snap.ils_state.vs_params) snap.ils_state)
+Proof
+  strip_tac >> fs[inline_original_child_def] >>
+  drule inline_snapshot_original_entry >> strip_tac >>
+  `MEM inst.inst_opcode [PARAM; FMP_PARAM]` by simp[] >>
+  drule_all inline_original_reached_argument >> simp[]
 QED
