@@ -112,3 +112,38 @@ Proof
   qexists_tac `ri` >>
   gvs[arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD_COMM]
 QED
+
+Theorem ld_available_revert_terminal:
+  get_instruction bb t.vs_inst_idx = SOME ri /\
+  ri.inst_opcode = REVERT /\ ri.inst_operands = [off; len] /\
+  eval_operand off t = SOME x /\ eval_operand len t = SOME y ==>
+  ?t1. exec_block fuel C bb t = Abort Revert_abort t1
+Proof
+  strip_tac >> simp[Once exec_block_def] >>
+  simp[step_inst_non_invoke] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >> simp[]
+QED
+
+Theorem ld_available_assign_step:
+  s.vs_labels = t.vs_labels /\
+  (!v. v IN V ==> (IS_SOME (FLOOKUP s.vs_vars v) <=>
+                   IS_SOME (FLOOKUP t.vs_vars v))) /\
+  ii.inst_opcode = ASSIGN /\
+  (!v. MEM (Var v) ii.inst_operands ==> v IN V) /\
+  step_inst_base ii s = OK u ==>
+  ?u'. step_inst_base ii t = OK u' /\
+    u.vs_labels = u'.vs_labels /\
+    (!v. v IN V ==> (IS_SOME (FLOOKUP u.vs_vars v) <=>
+                     IS_SOME (FLOOKUP u'.vs_vars v)))
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst_base ii s = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  `IS_SOME (eval_operand op1 s) <=> IS_SOME (eval_operand op1 t)` by
+    (irule ld_available_operand >> metis_tac[MEM]) >>
+  Cases_on `eval_operand op1 t` >> gvs[] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  simp[update_var_def] >> rpt strip_tac >>
+  Cases_on `out = v'` >> simp[FLOOKUP_UPDATE]
+QED
