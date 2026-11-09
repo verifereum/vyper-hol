@@ -8,6 +8,7 @@ Ancestors
   vyperImmutablesPreservation vyperStorageBackend vyperScopePreservation
   loweringPosts targetPlaceSimMem exprSimProps valueEncodingProofs
   valueEncoding compileEnv venomState words arithmetic finite_map
+  exprSimIfExp bodyMemAssignAttrStorage
 
 Theorem assign_target_pure_indices[local]:
   !tops bt. supported_target_pure tops bt ==>
@@ -411,4 +412,34 @@ Proof
       first_assum ACCEPT_TAC)
   >- (disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]) >>
   simp[]
+QED
+
+Theorem assign_pure_target_vv_own:
+  supported_target_pure tops bt /\ eval_target_place cx bt es = (res,ee) /\
+  vv_own cenv cx ty sa sm es r vv s /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  local_ptrs_reserved cenv sm /\ local_ptrs_rel func cenv es.scopes s /\
+  sm.cs_next_id <= sc.cs_next_id /\
+  target_post ctx func cenv cx es sm sc s ee pv vt op t ==>
+  vv_own cenv cx ty sa sc ee r vv t
+Proof
+  strip_tac >>
+  `ee.scopes = es.scopes` by metis_tac[assign_pure_target_views] >>
+  `!v. read_result cx r ee = (INL v,ee) ==>
+       read_result cx r es = (INL v,es)` by
+    (rpt strip_tac >>
+     `FST (read_result cx r es) = INL v` by
+       metis_tac[assign_pure_target_read_frame, FST] >>
+     Cases_on `read_result cx r es` >> gvs[] >>
+     drule read_result_state >> simp[]) >>
+  `vv_own cenv cx ty sa sm ee r vv s` by
+    (Cases_on `vv` >> gvs[vv_own_def, expr_val_own_def] >> metis_tac[]) >>
+  irule ifexp_vv_own_alloc_frame >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- (gvs[target_post_def] >>
+    rpt gen_tac >> eq_tac >> strip_tac
+    >- (irule local_region_frame >> conj_tac >- metis_tac[] >>
+        metis_tac[]) >>
+    irule local_region_frame_fwd >> metis_tac[]) >>
+  gvs[target_post_def]
 QED

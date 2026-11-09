@@ -287,7 +287,7 @@ Proof
         disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[])
 QED
 
-Theorem ifexp_vv_own_alloc_frame[local]:
+Theorem ifexp_vv_own_alloc_frame:
   vv_own cenv cx ty sa sb es raw vv s /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
                FLOOKUP q.vs_allocas aid = SOME entry) /\
