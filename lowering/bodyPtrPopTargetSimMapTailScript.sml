@@ -137,7 +137,7 @@ Proof
   drule_all run_inst_seq_gas_path_ptr >> simp[]
 QED
 
-Theorem map_scalar_key_word[local]:
+Theorem map_scalar_key_word:
   hashmap_key_type kt /\ ~is_bytestring_type kt /\
   evaluate_type tenv kt = SOME tv ==> is_word_type kt
 Proof
