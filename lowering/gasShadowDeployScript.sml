@@ -21,7 +21,7 @@ Proof
           gas_shadow_compiles_return] >>
   rpt (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
     >- (rpt IF_CASES_TAC >>
-        simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
+        simp[pairTheory.UNCURRY, gas_shadow_compiles_bind, gas_shadow_compiles_return,
              gas_shadow_compiles_emit_op, gas_shadow_compiles_emit_void,
              gas_shadow_compiles_fixed_region_with_id,
              gas_shadow_compiles_register_constructor_args,
@@ -29,7 +29,7 @@ Proof
              gas_shadow_compiles_fresh_label, gas_shadow_compile_stmt]) >> gen_tac) >>
   ho_match_mp_tac gas_shadow_compiles_get_terminated >> gen_tac >>
   Cases_on `b` >> Cases_on `nr` >>
-  simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
+  simp[pairTheory.UNCURRY, gas_shadow_compiles_bind, gas_shadow_compiles_return,
        gas_shadow_compiles_emit_inst, gas_shadow_compiles_new_block,
        gas_shadow_compiles_nonreentrant_unlock,
        gas_shadow_compiles_constructor_epilogue,
