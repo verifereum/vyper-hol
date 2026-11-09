@@ -4289,6 +4289,51 @@ Proof
       arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >> decide_tac
 QED
 
+Theorem mm_local_live_cut_fresh[local]:
+  wf_ssa fn0 /\ wf_function fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  j < LENGTH bb.bb_instructions /\
+  FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+    empty_scan_state (TAKE j bb.bb_instructions)).ss_loads v = SOME src ==>
+  ~MEM v (EL j bb.bb_instructions).inst_outputs
+Proof
+  strip_tac >> drule mm_local_scan_lookup_origin >> strip_tac >>
+  `MEM q bb.bb_instructions` by metis_tac[MEM_TAKE] >>
+  `MEM q (EL index fn0.fn_blocks).bb_instructions` by
+    (irule mm_local_pending_load_origin >> metis_tac[]) >>
+  `MEM q (fn_insts fn0)` by
+    (irule mmWfProofsTheory.fn_insts_mem_block >>
+     qexists_tac `EL index fn0.fn_blocks` >> simp[EL_MEM]) >>
+  `?li. dfg_get_def (dfg_build_function fn0) v = SOME li` by
+    (irule dfgCorrectnessProofTheory.dfg_build_function_defs_complete_proof >>
+     qexists_tac `q` >> simp[]) >>
+  `MEM v q.inst_outputs` by simp[] >>
+  `q = li` by (irule mm_local_prefix_producer_identify >> metis_tac[]) >>
+  strip_tac >>
+  `EL j bb.bb_instructions = li` by
+    (irule mm_local_prefix_producer_identify >> metis_tac[EL_MEM]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    (irule mm_local_prefix_id_distinct >>
+     qexistsl [`fn0`,`index`,`k`,`sk`,`supply`] >> simp[] >>
+     conj_tac
+     >- metis_tac[wf_function_def, mmWfProofsTheory.fn_inst_ids_distinct_block, EL_MEM] >>
+     gvs[ir_supply_covers_fn_def, irSupplyTheory.fn_ir_inst_ids_def,
+       irSupplyTheory.block_ir_inst_ids_def, EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+     gen_tac >> strip_tac >> qpat_x_assum `!id. _ ==> id < _` irule >>
+     qexists_tac `MAP (\i. i.inst_id) (EL index fn0.fn_blocks).bb_instructions` >>
+     (conj_tac >- (qexists_tac `EL index fn0.fn_blocks` >> simp[EL_MEM])) >>
+     simp[MEM_MAP] >> qexists_tac `i` >> simp[]) >>
+  qpat_x_assum `MEM q (TAKE j _)` mp_tac >>
+  simp[MEM_EL, EL_TAKE] >> rpt strip_tac >>
+  `n < LENGTH bb.bb_instructions` by decide_tac >>
+  `n = j` by
+    (irule mmCorrectnessProofsTheory.all_distinct_inst_id_idx >>
+     qexists_tac `bb.bb_instructions` >> simp[EL_TAKE]) >>
+  decide_tac
+QED
+
 Theorem mm_local_live_load_empty[local]:
   !v src. FLOOKUP empty_scan_state.ss_loads v = SOME src ==>
     lookup_var v s = SOME (mload src s)
@@ -4343,6 +4388,110 @@ Proof
   `mload src t = mload src s` by simp[venomStateTheory.mload_def] >>
   metis_tac[]
 QED
+
+Theorem mm_local_live_load_step[local]:
+  step_inst fuel ctx inst s = OK t /\ ~is_terminator inst.inst_opcode /\
+  (!v src. FLOOKUP ss.ss_loads v = SOME src ==>
+     lookup_var v s = SOME (mload src s)) /\
+  (!v src. FLOOKUP ss.ss_loads v = SOME src ==> ~MEM v inst.inst_outputs) ==>
+  !v src. FLOOKUP (scan_inst dfg Mem2Mem ss inst).ss_loads v = SOME src ==>
+    lookup_var v t = SOME (mload src t)
+Proof
+  strip_tac >>
+  `!v src. FLOOKUP ss.ss_loads v = SOME src ==>
+      lookup_var v t = lookup_var v s` by
+    (rpt strip_tac >> irule basePtrProofsTheory.step_inst_preserves_lookup >>
+     metis_tac[]) >>
+  Cases_on `inst.inst_opcode = MLOAD`
+  >- (gvs[scan_inst_def, mode_load_opcode_def] >>
+      `step_inst_base inst s = OK t` by
+        (qpat_x_assum `step_inst fuel ctx inst s = OK t` mp_tac >>
+         simp[venomExecSemanticsTheory.step_inst_non_invoke]) >>
+      gvs[venomExecSemanticsTheory.step_inst_base_def,
+          venomExecSemanticsTheory.exec_read1_def, AllCaseEqs()] >>
+      rename1 `inst.inst_operands = [op]` >>
+      Cases_on `op` >>
+      gvs[scan_load_def, operand_lit_val_def, hard_barrier_def,
+          venomStateTheory.eval_operand_def, mode_allows_overlap_def] >>
+      IF_CASES_TAC >>
+      simp[flush_copies_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+      rpt strip_tac >> Cases_on `out = v` >>
+      gvs[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+          venomStateTheory.mload_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  Cases_on `inst.inst_opcode = MSTORE`
+  >- suspend "store"
+  >> Cases_on `inst.inst_opcode = MCOPY`
+  >- suspend "copy"
+  >> Cases_on `is_volatile_memory inst`
+  >- simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def, hard_barrier_def] >>
+  `t.vs_memory = s.vs_memory` by
+    (`inst.inst_opcode <> INVOKE` by
+       (strip_tac >> gvs[is_volatile_memory_def, venomEffectsTheory.read_effects_def,
+                        venomEffectsTheory.all_effects_def]) >>
+     Cases_on `is_alloca_op inst.inst_opcode`
+     >- (irule venomMemPropsTheory.step_inst_alloca_preserves_memory >> metis_tac[]) >>
+     irule venomInstProofsTheory.write_effects_sound_memory >>
+     gvs[is_volatile_memory_def] >> metis_tac[]) >>
+  simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  rpt strip_tac >> `mload src t = mload src s` by simp[venomStateTheory.mload_def] >>
+  metis_tac[]
+QED
+
+Resume mm_local_live_load_step[store]:
+  gvs[scan_inst_def, mode_load_opcode_def] >>
+      simp[scan_store_def] >>
+      rpt (BasicProvers.TOP_CASE_TAC >>
+           gvs[hard_barrier_def, operand_var_name_def, operand_lit_val_def,
+               mode_allows_overlap_def]) >>
+      rename1 `inst.inst_operands = [dst_op; val_op]` >>
+      Cases_on `dst_op` >> Cases_on `val_op` >>
+      gvs[operand_lit_val_def, operand_var_name_def] >>
+      qmatch_goalsub_abbrev_tac `flush_hazards Mem2Mem ss0 cg` >>
+      `!u g. (flush_hazards Mem2Mem u g).ss_loads = u.ss_loads` by
+        (rpt gen_tac >> simp[flush_hazards_def, mode_allows_overlap_def] >>
+         rpt IF_CASES_TAC >> simp[flush_copies_def]) >>
+      simp[] >> simp[Abbr `ss0`] >>
+      `step_inst_base inst s = OK t` by
+        (qpat_x_assum `step_inst fuel ctx inst s = OK t` mp_tac >>
+         simp[venomExecSemanticsTheory.step_inst_non_invoke]) >>
+      gvs[venomExecSemanticsTheory.step_inst_base_def,
+          venomExecSemanticsTheory.exec_write2_def,
+          venomStateTheory.eval_operand_def, AllCaseEqs()] >>
+      `LENGTH (word_to_bytes val T) = 32` by
+        simp[byteTheory.LENGTH_word_to_bytes] >>
+      qpat_assum `LENGTH (word_to_bytes val T) = 32`
+        (fn th => once_rewrite_tac[GSYM th]) >>
+      match_mp_tac mm_local_live_load_write >>
+      simp[venomMemPropsTheory.mstore_eq_write_mem] >> rpt strip_tac >>
+      drule mm_local_invalidate_binding >> metis_tac[]
+QED
+
+Resume mm_local_live_load_step[copy]:
+  gvs[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+      simp[scan_bulk_copy_def] >>
+      rpt (BasicProvers.TOP_CASE_TAC >>
+           gvs[hard_barrier_def, operand_lit_val_def, mode_allows_overlap_def]) >>
+      rename1 `inst.inst_operands = [dst_op; src_op; size_op]` >>
+      Cases_on `dst_op` >> Cases_on `src_op` >> Cases_on `size_op` >>
+      gvs[operand_lit_val_def] >>
+      `!u g. (flush_hazards Mem2Mem u g).ss_loads = u.ss_loads` by
+        (rpt gen_tac >> simp[flush_hazards_def, mode_allows_overlap_def] >>
+         rpt IF_CASES_TAC >> simp[flush_copies_def]) >>
+      simp[] >>
+      `step_inst_base inst s = OK t` by
+        (qpat_x_assum `step_inst fuel ctx inst s = OK t` mp_tac >>
+         simp[venomExecSemanticsTheory.step_inst_non_invoke]) >>
+      gvs[venomExecSemanticsTheory.step_inst_base_def,
+          venomStateTheory.eval_operand_def, AllCaseEqs()] >>
+      `LENGTH (TAKE (w2n c'') (DROP (w2n c') s.vs_memory ++
+          REPLICATE (w2n c'') 0w)) = w2n c''` by simp[] >>
+      pop_assum (fn th => once_rewrite_tac[GSYM th]) >>
+      match_mp_tac mm_local_live_load_write >>
+      simp[venomExecSemanticsTheory.mcopy_def] >> rpt strip_tac >>
+      drule mm_local_invalidate_binding >> metis_tac[]
+QED
+
+Finalise mm_local_live_load_step
 
 Theorem mm_local_known_value_frame[local]:
   lookup_var x s = SOME value /\ step_inst_base inst s = OK t /\
