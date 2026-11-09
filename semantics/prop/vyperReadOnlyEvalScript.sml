@@ -497,7 +497,20 @@ Resume evaluate_read_only[builtin_other]:
   >- rpt (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
           simp[machine_frame_def, machine_frame_reads, machine_frame_primitives,
                machine_frame_precompile_call_success]) >>
-  gvs[SF ETA_ss] >> metis_tac[]
+  gvs[SF ETA_ss] >> Cases_on `code_slice_source bt es` >> simp[]
+  >- metis_tac[] >>
+  rename1 `_ = SOME p` >> PairCases_on `p` >> simp[] >>
+  `EVERY (expr_mutability_ok mods View) (TL es) /\ expr_mutability_ok mods View p1` by
+    (qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
+     qpat_x_assum `EVERY _ es` mp_tac >> rpt (pop_assum kall_tac) >>
+     rw[code_slice_source_SOME] >> gvs[expr_mutability_ok_def]) >>
+  irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
+       simp[machine_frame_def, machine_frame_reads, machine_frame_primitives,
+            machine_frame_precompile_call_success])
 QED
 
 Resume evaluate_read_only[expr_intcall]:

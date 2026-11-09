@@ -1,11 +1,15 @@
-(* Exact staged Python-oracle bytecode check for dynamic ABI encode/decode.
-   TOP-LEVEL: abi_dynamic_matches_python_oracle (plain EVAL_TAC).
-   Checked checkpoints: abi_dynamic_available_00 through _12 cover all 495
+(* Staged bytecode check for dynamic ABI encode/decode.
+   Bounded ABI decoding deliberately differs from VYPER_PIN
+   (vyperlang/vyper#5333), so the program is checked to be supported, to
+   compile, and to differ from the pinned bytes:
+   TOP-LEVEL: abi_dynamic_supported_status, abi_dynamic_compiles,
+   abi_dynamic_differs_from_pinned_decoder.
+   Checked checkpoints: abi_dynamic_available_00 through _14 cover all 579
    concrete SSA use-site availability obligations, in slices of at most 40.
    No compiler stage depends on the independent Python bytecode oracle. *)
 
 Theory evalCompilerBytecodeAbiDynamic
-Ancestors evalCompilerSubsetAbiBuiltins compileVyper concretizeMemLocDefs codegenReadyCompute stackPlanGenCompute alist byte integer_word option cv_std
+Ancestors evalCompilerSubsetAbiBuiltins compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute stackPlanGenCompute alist byte integer_word option cv_std
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib intReduce
 
 fun holbuild_extra_deps (_ : string list) = ()
@@ -154,8 +158,9 @@ val abi_dynamic_ready_available_terms = find_terms
   (can (match_term ``def_available_at_exec cfg dom fn bb use_opt v``))
   (rhs (concl abi_dynamic_ready_dom_exec_step2))
 val () =
-  if length abi_dynamic_ready_available_terms = 495 then ()
-  else raise Fail "expected 495 ABI-dynamic availability calls"
+  if length abi_dynamic_ready_available_terms = 579 then ()
+  else raise Fail ("expected 579 ABI-dynamic availability calls, found " ^
+    Int.toString (length abi_dynamic_ready_available_terms))
 (* The same-block order check of def_available_at_exec_compute indexes the
    block with EL over GENLIST, which is cubic in the block length; this
    single pass decides the same thing. *)
@@ -445,7 +450,45 @@ Proof
   conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
   conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
   conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
+QED
+Theorem abi_dynamic_available_13:
+  ^(abi_dynamic_available_slice 13)
+Proof
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
+QED
+Theorem abi_dynamic_available_14:
+  ^(abi_dynamic_available_slice 14)
+Proof
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  EVAL_TAC
 QED
 
 val abi_dynamic_ready_available_evals = map EQT_INTRO
@@ -456,7 +499,8 @@ val abi_dynamic_ready_available_evals = map EQT_INTRO
      abi_dynamic_available_06, abi_dynamic_available_07,
      abi_dynamic_available_08, abi_dynamic_available_09,
      abi_dynamic_available_10, abi_dynamic_available_11,
-     abi_dynamic_available_12]))
+     abi_dynamic_available_12, abi_dynamic_available_13,
+     abi_dynamic_available_14]))
 val abi_dynamic_ready_dom_exec_step3 = PURE_REWRITE_CONV
   abi_dynamic_ready_available_evals
   (rhs (concl abi_dynamic_ready_dom_exec_step2))
@@ -799,15 +843,29 @@ val () = computeLib.upd_compset (computeLib.add_thms
      abi_dynamic_lower_deploy_eval, abi_dynamic_deploy_pipeline_eval,
      abi_dynamic_finalize_deploy_eval]))
 
-Theorem abi_dynamic_matches_python_oracle:
+(* Bounded ABI decoding deliberately differs from VYPER_PIN: it checks
+   relative positions before forming pointers and copies bytestrings by their
+   runtime length (vyperlang/vyper#5333). Keep the independent pinned oracle. *)
+val abi_dynamic_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities)
+      task090_abi_dynamic_program``
+val _ = save_thm ("abi_dynamic_supported_status",
+  EVAL ``supported_program task090_abi_dynamic_program``)
+Theorem abi_dynamic_compiles:
+  IS_SOME (compile_vyper (K SOME) (o1_policy all_capabilities)
+    task090_abi_dynamic_program)
+Proof
+  CONV_TAC (RAND_CONV (K abi_dynamic_compile_eval)) >> EVAL_TAC
+QED
+Theorem abi_dynamic_differs_from_pinned_decoder:
   compile_vyper (K SOME) (o1_policy all_capabilities)
-    task090_abi_dynamic_program =
+    task090_abi_dynamic_program <>
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "abi_dynamic.hex")
 Proof
-  EVAL_TAC
+  CONV_TAC (RAND_CONV (LAND_CONV (K abi_dynamic_compile_eval))) >> EVAL_TAC
 QED
 
-(* Retain the checked availability slices and final parity theorem.  Remove
+(* Retain the checked availability slices and the divergence check.  Remove
    the older, larger transient stage equations from the theory export; they
    remain certified computations in the script and in holbuild checkpoints.
    The local compset registrations above do not export a compile result. *)

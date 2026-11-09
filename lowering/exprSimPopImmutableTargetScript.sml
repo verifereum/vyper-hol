@@ -1406,7 +1406,7 @@ Proof
   Cases_on `av` >> gvs[vyperValueOperationTheory.array_index_def,
                        vyperValueOperationTheory.array_length_def] >>
   simp[listTheory.oEL_THM] >>
-  rpt CASE_TAC >> gvs[]
+  rw[] >> rpt CASE_TAC >> simp[]
 QED
 
 Theorem imm_typed_array_length[local]:

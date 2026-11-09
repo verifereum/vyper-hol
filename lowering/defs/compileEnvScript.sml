@@ -887,6 +887,18 @@ Definition local_region_def:
       lookup_var p ss = SOME w ∧ base = w2n w
 End
 
+(* Live local regions depend only on the locals' pointer variables. *)
+Theorem local_region_lookup_cong:
+  (∀name entry p sz.
+     lookup_scopes name scopes = SOME entry ∧
+     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ⇒
+     lookup_var p t = lookup_var p s) ⇒
+  (local_region cenv scopes t name lo sz ⇔
+   local_region cenv scopes s name lo sz)
+Proof
+  rw[local_region_def] >> metis_tac[]
+QED
+
 (* x is not the pointer variable of a live local, so assigning it leaves the
    locals in place. *)
 Definition not_scope_ptr_def:
@@ -1179,7 +1191,8 @@ Definition transient_rel_def:
       (vs.tStorage addr) (contract_transient ss)
 End
 
-(* The accounts and the transient storage of every address agree.
+(* The accounts and the transient storage of every address agree, and
+   Venom's active frame code (ss.vs_code) equals cx.txn.code.
    Other addresses' accounts and
    transient storage change during a body only through the call oracle,
    whose outcome both sides adopt the same way (adopt_outcome), which makes
@@ -1188,7 +1201,8 @@ End
 Definition accounts_rel_def:
   accounts_rel cx (vs:evaluation_state) ss ⇔
     accounts_agree cx vs.accounts ss.vs_accounts ∧
-    transient_agree cx vs.tStorage ss.vs_transient
+    transient_agree cx vs.tStorage ss.vs_transient ∧
+    ss.vs_code = cx.txn.code
 End
 
 (* ===== Immutables Relation ===== *)

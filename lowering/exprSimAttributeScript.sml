@@ -557,7 +557,7 @@ Proof
        read_place_def, get_scopes_def, get_immutables_def,
        get_address_immutables_def, bind_def, ignore_bind_def,
        lift_option_type_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])
+  rpt (CASE_TAC >> gvs[bind_def, return_def, raise_def])
 QED
 
 Theorem attr_operand_admissible[local]:

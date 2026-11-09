@@ -535,7 +535,7 @@ val raw_deployment : term decoder =
 
 val deployment : term decoder =
   check_trace_type "deployment" $
-  JSONDecode.map (fn ((((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl),bp),rg) =>
+  JSONDecode.map (fn (((((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl),bp),rg),ic) =>
              (* translate_annotated_ast returns (sources, exports, import_map) *)
              let val (srcs, exps_import_map) = pairSyntax.dest_pair srcs_exps_imap
                  val (exps, import_map) = pairSyntax.dest_pair exps_import_map in
@@ -555,13 +555,14 @@ val deployment : term decoder =
                ("blobBaseFee", bf),
                ("gasPrice", g),
                ("chainId", numSyntax.term_of_int 1),
+               ("initcode", ic),
                ("callData", d),
                ("runtimeBytecode", bc),
                ("storageLayout", sl),
                ("isBlueprint", bp),
                ("readsGas", rg)
              ]) end)
-          (tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
+          (tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
                            tuple3 (
                              field "contract_abi" (array abiEntry),
                              field "env" $ field "block" $
@@ -584,7 +585,11 @@ val deployment : term decoder =
                 JSONDecode.map (fn s => mk_bool (s = "blueprint"))
                   (field "deployment_type" string)),
                JSONDecode.map (fn kvs => mk_bool (reads_gas_source_json (JSON.OBJECT kvs)))
-                 rawObject))
+                 rawObject),
+              orElse (field "initcode"
+                        (JSONDecode.map (flat_bytes_from_hex o theoptstring)
+                          (nullable string)),
+                      succeed (mk_list ([], wordsSyntax.mk_int_word_type 8)))))
 
 val trace : term decoder =
   andThen (field "trace_type" string) (fn kind =>

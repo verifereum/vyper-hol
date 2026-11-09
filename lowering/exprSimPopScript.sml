@@ -569,6 +569,7 @@ Proof
    u.vs_outcomes = s0.vs_outcomes /\ u.vs_requests = s0.vs_requests /\
    u.vs_immutables = s0.vs_immutables /\
    u.vs_data_section = s0.vs_data_section /\
+   u.vs_code = s0.vs_code /\
    u.vs_allocas = s0.vs_allocas /\ u.vs_alloca_next = s0.vs_alloca_next` by
     (qpat_x_assum `u = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
   `state_rel func cenv cx es s0` by fs[stmt_state_rel_def] >>

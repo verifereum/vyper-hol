@@ -75,7 +75,7 @@ Theorem aug_place_memory_read_typed:
 Proof
   strip_tac >> drule_all aug_place_target_memory_live >> strip_tac >>
   `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
-    metis_tac[aug_place_target_entry_typed] >>
+    (drule_all aug_place_target_entry_typed >> simp[]) >>
   `st.scopes = es.scopes` by metis_tac[aug_place_target_scopes] >>
   gvs[place_ptr_rel_def] >>
   `tv0 = entry.type` by metis_tac[aug_place_entry_type_agrees, optionTheory.SOME_11] >>

@@ -2431,15 +2431,61 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Builtin]:
       irule contract_storage_well_formed_accounts_transient_frame >>
       qexists_tac `st` >> gvs[runtime_storage_consistent_def]) >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
+  qpat_assum `bt <> Env MsgGas` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
     type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
-  Cases_on `eval_exprs cx es st` >>
-  rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  qpat_x_assum `∀s'' x t. _ ∧ bt ≠ Len ∧ bt ≠ Env MsgGas ⇒ _`
-    (qspecl_then [`st`, `()`, `st`] mp_tac) >>
-  (impl_tac >- (simp[type_check_def, assert_def] >> metis_tac[])) >>
-  strip_tac >> first_x_assum drule_all >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `option_CASE (code_slice_source bt es) _ SF st` >>
+  Cases_on `option_CASE (code_slice_source bt es) (eval_exprs cx es) SF st` >>
+  rename1 `option_CASE _ _ _ st = (args_res,args_st)` >>
+  `contract_storage_well_formed cx args_st` by (
+    qpat_x_assum `option_CASE _ _ _ st = _` mp_tac >> qunabbrev_tac `SF` >>
+    Cases_on `code_slice_source bt es`
+    >- (simp_tac(srw_ss())[] >> strip_tac >>
+        qpat_x_assum `∀s'' x t. _ ∧ _ ∧ _ ∧ NONE = NONE ⇒ _`
+          (qspecl_then [`st`, `()`, `st`] mp_tac) >>
+        (impl_tac >- simp[type_check_def, assert_def]) >>
+        strip_tac >> first_x_assum drule_all >> simp[]) >>
+    rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
+    rename1 `code_slice_source bt es = SOME (code_ty,addr)` >>
+    drule_all code_slice_operand_typing >> strip_tac >>
+    drule_all code_slice_operand_call_safe >> strip_tac >>
+    simp_tac(srw_ss())[bind_def, return_def, raise_def, get_accounts_def,
+      lift_sum_def] >>
+    Cases_on `eval_exprs cx (TL es) st` >>
+    rename1 `eval_exprs cx (TL es) st = (tail_res,tail_st)` >>
+    qpat_x_assum `∀s'' x t v c a. _ ∧ _ ∧ _ ∧ _ ∧ v = (c,a) ⇒ _`
+      (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`] mp_tac) >>
+    (impl_tac >- simp[type_check_def, assert_def]) >>
+    strip_tac >> first_x_assum drule_all >> strip_tac >>
+    reverse (Cases_on `tail_res`)
+    >- (simp_tac(srw_ss())[] >> strip_tac >>
+        rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]) >>
+    rename1 `eval_exprs cx (TL es) st = (INL tail_vs,tail_st)` >>
+    simp_tac(srw_ss())[] >>
+    `runtime_consistent env cx st` by
+      metis_tac[runtime_storage_consistent_runtime] >>
+    `runtime_consistent env cx tail_st` by
+      metis_tac[eval_exprs_preserves_runtime_consistent] >>
+    `runtime_storage_consistent env cx tail_st` by
+      metis_tac[runtime_storage_consistent_intro,
+                runtime_storage_consistent_layout] >>
+    Cases_on `eval_exprs cx [addr] tail_st` >>
+    rename1 `eval_exprs cx [addr] tail_st = (addr_res,addr_st)` >>
+    ORACLE_STORAGE_TAC >>
+    qpat_x_assum `∀s'' x t v c a s3 tv t'. _ ⇒ _`
+      (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`,`st`,
+                    `tail_vs`,`tail_st`] mp_tac) >>
+    (impl_tac >- simp[type_check_def, assert_def]) >>
+    strip_tac >> first_x_assum drule_all >> strip_tac >>
+    rpt (qpat_x_assum `!x. _` kall_tac) >>
+    reverse (Cases_on `addr_res`) >> simp_tac(srw_ss())[]
+    >- (strip_tac >> gvs[]) >>
+    rename1 `eval_exprs cx [addr] tail_st = (INL avs,addr_st)` >>
+    Cases_on `evaluate_code_source cx addr_st.accounts (is_self_addr addr)
+                code_ty (expr_type addr) avs` >>
+    simp_tac(srw_ss())[return_def, raise_def] >> strip_tac >> gvs[]) >>
+  rpt (qpat_x_assum `!x. _` kall_tac) >>
   Cases_on `args_res` >> gvs[bind_def, return_def, raise_def,
     get_accounts_def, lift_sum_def]
   >- (Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) x` >>

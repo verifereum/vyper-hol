@@ -125,13 +125,14 @@ End
 (* ===== PLAN 5.7 oracle-mode boundary ===== *)
 
 (* No gas-reading/oracle equality is invented here: cc_gas, outcomes,
-   code/labels and frame-pointer fields are deliberately free at entry. *)
+   labels and frame-pointer fields are deliberately free at entry. *)
 Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     compileEnv$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
     ~vs.vs_call_ctx.cc_static /\
     ~tx.is_static /\
-    vs.vs_prev_hashes = tx.block_hashes
+    vs.vs_prev_hashes = tx.block_hashes /\
+    vs.vs_code = tx.code
 End
 
 (* tx_env_ok is also a conjunct of venom_env_rel, through call_ctx_rel; it
@@ -1070,17 +1071,19 @@ End
 (* The lowered unit's functions and their reachable parts are
    pointer-confined (fn_ptr_ok), with P each function's pointer parameters:
    the return buffer, if any, and the arguments passed in memory:
-   lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound. *)
+   lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound for a
+   unit without DALLOCA. *)
 Theorem lower_vyper_runtime_unit_fn_ptr_ok:
   !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    ~ctx_has_dalloca unit.cu_context ==>
     ?P. EVERY (fn_ptr_ok P) unit.cu_context.ctx_functions /\
         EVERY (\f. fn_ptr_ok P (reachable_fn f)) unit.cu_context.ctx_functions
 Proof
   rpt strip_tac >>
   drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
   drule run_lowering_context_ok >> simp[lowering_context_ok_def] >>
-  strip_tac >> drule ptr_ok_check_sound >> strip_tac >>
+  strip_tac >> drule_all ptr_ok_check_sound >> strip_tac >>
   qexists_tac `\nm. set (ctx_ptr_param_list unit.cu_context nm)` >>
   fs[listTheory.EVERY_MEM]
 QED

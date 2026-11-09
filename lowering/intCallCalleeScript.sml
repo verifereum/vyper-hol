@@ -1825,7 +1825,8 @@ Proof
    s.vs_block_ctx = caller.vs_block_ctx /\ s.vs_logs = caller.vs_logs /\
    s.vs_outcomes = caller.vs_outcomes /\ s.vs_requests = caller.vs_requests /\
    s.vs_pending_deletions = caller.vs_pending_deletions /\
-   s.vs_immutables = caller.vs_immutables /\ s.vs_data_section = caller.vs_data_section` by
+   s.vs_immutables = caller.vs_immutables /\ s.vs_data_section = caller.vs_data_section /\
+   s.vs_code = caller.vs_code` by
     (fs[mat_frame_def, setup_callee_def, AllCaseEqs()] >>
      qpat_x_assum `s = _` SUBST1_TAC >> gvs[]) >>
   `local_ptrs_rel func (cenv2 with ce_alloca_locals := T) [env] s` by

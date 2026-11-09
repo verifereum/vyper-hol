@@ -613,7 +613,8 @@ Proof
    s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
    s'.vs_pending_deletions = s.vs_pending_deletions /\
    s'.vs_immutables = s.vs_immutables /\
-   s'.vs_data_section = s.vs_data_section /\ s'.vs_labels = s.vs_labels` by
+   s'.vs_data_section = s.vs_data_section /\ s'.vs_labels = s.vs_labels /\
+   s'.vs_code = s.vs_code` by
     simp[Abbr `s'`, mstore_def, LET_THM] >>
   `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by
     fs[stmt_state_rel_def, state_rel_def] >>

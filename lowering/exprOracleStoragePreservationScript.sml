@@ -332,7 +332,9 @@ Resume eval_expr_oracle_storage_mutual[Expr_Builtin]:
   rpt gen_tac >> strip_tac >>
   gvs[int_calls_expr_def, supported_expr_exists_def, expr_evm_run_root_def] >>
   reverse conj_tac
-  >- (rpt strip_tac >> gvs[Once well_typed_expr_def]) >>
+  >- (rpt strip_tac >>
+      qpat_x_assum `type_place_expr _ (Builtin _ _ _) = SOME _` mp_tac >>
+      simp[Once well_typed_expr_def]) >>
   strip_tac >>
   qpat_x_assum `well_typed_expr env (Builtin ty bt es)` mp_tac >>
   simp_tac(srw_ss())[Once well_typed_expr_def] >> strip_tac >>
@@ -383,12 +385,69 @@ Resume eval_expr_oracle_storage_mutual[Expr_Builtin]:
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
     type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
-  Cases_on `eval_exprs cx es st` >>
-  rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  qpat_x_assum `!s'' t. _ /\ bt <> Len /\ bt <> Env MsgGas ==> _`
-    (qspecl_then [`st`, `st`] mp_tac) >>
-  (impl_tac >- (simp[type_check_def, assert_def] >> metis_tac[])) >>
-  strip_tac >> first_x_assum drule_all >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `option_CASE (code_slice_source bt es) _ SF st` >>
+  Cases_on `option_CASE (code_slice_source bt es) (eval_exprs cx es) SF st` >>
+  rename1 `option_CASE _ _ _ st = (args_res,args_st)` >>
+  `contract_storage_well_formed cx args_st` by (
+    qpat_x_assum `option_CASE _ _ _ st = _` mp_tac >> qunabbrev_tac `SF` >>
+    Cases_on `code_slice_source bt es`
+    >- (simp_tac(srw_ss())[] >> strip_tac >>
+        qpat_x_assum `!s'' t. _ /\ _ /\ _ /\ NONE = NONE ==> _`
+          (qspecl_then [`st`, `st`] mp_tac) >>
+        (impl_tac >- simp[type_check_def, assert_def]) >>
+        strip_tac >> first_x_assum drule_all >> simp[]) >>
+    rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
+    rename1 `code_slice_source bt es = SOME (code_ty,addr)` >>
+    drule_all code_slice_operand_typing >> strip_tac >>
+    `int_calls_exprs (TL es) = [] /\
+     ~supported_exprs_exists expr_evm_run_root (TL es) /\
+     int_calls_expr addr = [] /\
+     ~supported_expr_exists expr_evm_run_root addr` by (
+      qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
+      qpat_x_assum `int_calls_exprs es = []` mp_tac >>
+      qpat_x_assum `~supported_exprs_exists _ es` mp_tac >>
+      rpt (pop_assum kall_tac) >>
+      rw[code_slice_source_SOME] >>
+      gvs[int_calls_expr_def, supported_expr_exists_def]) >>
+    `call_evaluation_safe cx (int_calls_exprs (TL es)) /\
+     call_evaluation_safe cx (int_calls_expr addr)` by asm_rewrite_tac[] >>
+    simp_tac(srw_ss())[bind_def, return_def, raise_def, get_accounts_def,
+      lift_sum_def] >>
+    Cases_on `eval_exprs cx (TL es) st` >>
+    rename1 `eval_exprs cx (TL es) st = (tail_res,tail_st)` >>
+    qpat_x_assum `!s'' t c a. _ /\ _ /\ _ /\ SOME _ = SOME _ ==> _`
+      (qspecl_then [`st`,`st`,`code_ty`,`addr`] mp_tac) >>
+    (impl_tac >- simp[type_check_def, assert_def]) >>
+    strip_tac >> first_x_assum drule_all >> strip_tac >>
+    reverse (Cases_on `tail_res`)
+    >- (simp_tac(srw_ss())[] >> strip_tac >>
+        rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]) >>
+    rename1 `eval_exprs cx (TL es) st = (INL tail_vs,tail_st)` >>
+    simp_tac(srw_ss())[] >>
+    `runtime_consistent env cx tail_st` by
+      metis_tac[eval_exprs_preserves_runtime_consistent,
+                runtime_storage_consistent_runtime] >>
+    `runtime_storage_consistent env cx tail_st` by
+      metis_tac[runtime_storage_consistent_intro,
+                runtime_storage_consistent_layout] >>
+    `IS_SOME tail_st.outcomes /\ oracle_storage_ok cx tail_st` by
+      (irule oracle_storage_entry_suffix >> qexists_tac `st` >> simp[] >>
+       drule (cj 6 eval_outcome_suffix_mutual) >> simp[]) >>
+    Cases_on `eval_exprs cx [addr] tail_st` >>
+    rename1 `eval_exprs cx [addr] tail_st = (addr_res,addr_st)` >>
+    qpat_x_assum `!s'' t c a s3 tv t'. _ ==> _`
+      (qspecl_then [`st`,`st`,`code_ty`,`addr`,`st`,`tail_vs`,`tail_st`]
+         mp_tac) >>
+    (impl_tac >- simp[type_check_def, assert_def]) >>
+    strip_tac >> first_x_assum drule_all >> strip_tac >>
+    rpt (qpat_x_assum `!x. _` kall_tac) >>
+    reverse (Cases_on `addr_res`) >> simp_tac(srw_ss())[]
+    >- (strip_tac >> gvs[]) >>
+    rename1 `eval_exprs cx [addr] tail_st = (INL avs,addr_st)` >>
+    Cases_on `evaluate_code_source cx addr_st.accounts (is_self_addr addr)
+                code_ty (expr_type addr) avs` >>
+    simp_tac(srw_ss())[return_def, raise_def] >> strip_tac >> gvs[]) >>
+  rpt (qpat_x_assum `!x. _` kall_tac) >>
   Cases_on `args_res` >> gvs[bind_def, return_def, raise_def,
     get_accounts_def, lift_sum_def]
   >- (Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) x` >>

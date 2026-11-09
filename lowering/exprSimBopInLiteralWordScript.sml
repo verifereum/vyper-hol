@@ -216,7 +216,7 @@ Theorem literal_make_array_action:
 Proof
   strip_tac >>
   `MakeArray (SOME et) n <> Len /\ MakeArray (SOME et) n <> Env MsgGas /\
-   ~precompile_builtin (MakeArray (SOME et) n) /\
+   ~precompile_builtin (MakeArray (SOME et) n) /\ code_slice_source (MakeArray (SOME et) n) elems = NONE /\
    builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH elems)` by
     simp[precompile_builtin_def, builtin_args_length_ok_def] >>
   drule_all eval_expr_builtin_action >>
@@ -264,7 +264,7 @@ Theorem literal_membership_action_prefix:
 Proof
   strip_tac >>
   `Bop bop <> Len /\ Bop bop <> Env MsgGas /\
-   ~precompile_builtin (Bop bop) /\
+   ~precompile_builtin (Bop bop) /\ (!as. code_slice_source (Bop bop) as = NONE) /\
    builtin_args_length_ok (Bop bop) 2` by
     simp[precompile_builtin_def, builtin_args_length_ok_def] >>
   `eval_exprs cx [] = vyperState$return []` by

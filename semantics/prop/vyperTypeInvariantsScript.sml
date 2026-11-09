@@ -408,6 +408,7 @@ End
 Definition context_well_typed_def:
   context_well_typed cx <=>
     LENGTH cx.txn.calldata < 2 ** 256 /\
+    LENGTH cx.txn.code < 2 ** 256 /\
     cx.txn.value < 2 ** 256 /\
     cx.txn.time_stamp < 2 ** 256 /\
     cx.txn.block_number < 2 ** 256 /\

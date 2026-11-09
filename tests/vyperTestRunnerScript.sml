@@ -41,6 +41,7 @@ Datatype:
   ; blobBaseFee: num
   ; gasPrice: num
   ; chainId: num
+  ; initcode: byte list
   ; callData: byte list
   ; runtimeBytecode: byte list
   ; storageLayout: json_storage_layout
@@ -196,6 +197,7 @@ Definition run_deployment_def:
           ; function_name := name
           ; args := args
           ; calldata := []
+          ; code := dt.initcode ++ dt.callData
           ; value := dt.value
           ; time_stamp := dt.timeStamp
           ; block_number := dt.blockNumber
@@ -227,6 +229,7 @@ Definition call_trace_txn_def:
      ; function_name := ""
      ; args := []
      ; calldata := ct.callData
+     ; code := []
      ; value := ct.value
      ; time_stamp := ct.timeStamp
      ; block_number := ct.blockNumber
@@ -374,6 +377,7 @@ Definition run_call_def:
           ; function_name := name
           ; args := args
           ; calldata := ct.callData
+          ; code := (lookup_account ct.target am.accounts).code
           ; value := ct.value
           ; time_stamp := ct.timeStamp
           ; block_number := ct.blockNumber

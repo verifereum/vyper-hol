@@ -994,6 +994,62 @@ val () = app (fn (params, expression) => check_rejects empty_layouts
         [Name (BaseT (BytesT (Dynamic 33))) "b";
          Literal (BaseT (IntT 256)) (IntL (-1))]``)]
 
+(* This annotation previously passed despite disagreeing with Vyper's
+   inferred slice capacity. *)
+val () = check_rejects empty_layouts
+  (builtin_modules ``Pure`` ``[("b", BaseT (BytesT (Dynamic 2)))]``
+    ``BaseT (BytesT (Dynamic 1))``
+    ``Builtin (BaseT (BytesT (Dynamic 1))) (Slice 1)
+        [Name (BaseT (BytesT (Dynamic 2))) "b";
+         Literal (BaseT (UintT 256)) (IntL 0);
+         Literal (BaseT (UintT 256)) (IntL 2)]``)
+
+(* Result capacities may exceed both literal lengths and source capacities. *)
+val slice_params =
+  ``[("b", BaseT (BytesT (Dynamic 2))); ("n", BaseT (UintT 256))]``
+fun slice_expression bound start len =
+  ``Builtin (BaseT (BytesT (Dynamic ^bound))) (Slice ^bound)
+      [Name (BaseT (BytesT (Dynamic 2))) "b"; ^start; ^len]``
+val slice_zero = ``Literal (BaseT (UintT 256)) (IntL 0)``
+val slice_one = ``Literal (BaseT (UintT 256)) (IntL 1)``
+val slice_two = ``Literal (BaseT (UintT 256)) (IntL 2)``
+val slice_length = ``Name (BaseT (UintT 256)) "n"``
+val () = app (fn (bound, start, len) => check_rejects empty_layouts
+  (builtin_modules ``Pure`` slice_params
+    ``BaseT (BytesT (Dynamic ^bound))`` (slice_expression bound start len)))
+  [(``1 : num``, slice_zero, slice_length),
+   (``1 : num``, slice_zero, slice_zero)]
+val () = app (fn (bound, start, len) => check_accepts "slice inferred capacity"
+  false empty_layouts (builtin_modules ``Pure`` slice_params
+    ``BaseT (BytesT (Dynamic ^bound))`` (slice_expression bound start len)))
+  [(``2 : num``, slice_zero, slice_length),
+   (``1 : num``, slice_one, slice_one),
+   (``2 : num``, slice_one, slice_two),
+   (``2 : num``, ``Literal (BaseT (UintT 256)) (IntL 3)``, slice_length)]
+val () = app (fn len => check_accepts "slice widened annotation" false empty_layouts
+  (builtin_modules ``Pure``
+    ``[("b", BaseT (BytesT (Dynamic 50))); ("n", BaseT (UintT 256))]``
+    ``BaseT (BytesT (Dynamic 100))``
+    ``Builtin (BaseT (BytesT (Dynamic 100))) (Slice 100)
+        [Name (BaseT (BytesT (Dynamic 50))) "b"; ^slice_zero; ^len]``))
+  [slice_two, slice_length]
+
+val code_source = ``Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code)
+  [Name (BaseT AddressT) "a"]``
+val code_params = ``[("a", BaseT AddressT); ("n", BaseT (UintT 256))]``
+fun code_slice bound len =
+  ``Builtin (BaseT (BytesT (Dynamic ^bound))) (Slice ^bound)
+      [^code_source; ^slice_zero; ^len]``
+val () = check_accepts "code slice has unbounded source capacity" false empty_layouts
+  (builtin_modules ``View`` code_params ``BaseT (BytesT (Dynamic 30000))``
+    (code_slice ``30000 : num`` ``Literal (BaseT (UintT 256)) (IntL 30000)``))
+val () = check_accepts "code slice widened annotation" false empty_layouts
+  (builtin_modules ``View`` code_params ``BaseT (BytesT (Dynamic 100))``
+    (code_slice ``100 : num`` slice_two))
+val () = check_rejects empty_layouts
+  (builtin_modules ``View`` code_params ``BaseT (BytesT (Dynamic 24576))``
+    (code_slice ``24576 : num`` slice_length))
+
 val s10 = ``BaseT (StringT 10)``
 val s20 = ``BaseT (StringT 20)``
 val () = check_rejects empty_layouts

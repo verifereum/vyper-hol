@@ -712,6 +712,10 @@ Proof
        simp[artifact_env_def, MAP_MAP_o] >> impl_tac
        >- (gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP, artifact_env_def] >> metis_tac[]) >>
        simp[]) >>
+    `code_slice_source bt es = NONE` by
+      (Cases_on `code_slice_source bt es` >> simp[] >>
+       rename1 `_ = SOME p` >> PairCases_on `p` >>
+       gvs[code_slice_source_SOME, constant_builtin_def]) >>
     qexists `Value v` >>
     simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
          lift_sum_def, get_accounts_def, return_def, expr_type_def, eval_result_typed_def,
@@ -1024,6 +1028,10 @@ Resume constant_eval_expr_fold_agreement[builtin]:
          constant_value mods (constant_machine_immutables am cx.txn.target) e = SOME v` by
       (fs[EVERY_MEM] >> metis_tac[constant_exprs_MEM_typed]) >>
     `bt <> Env MsgGas` by (strip_tac >> gvs[constant_builtin_def]) >>
+    `code_slice_source bt es = NONE` by
+      (Cases_on `code_slice_source bt es` >> simp[] >>
+       rename1 `_ = SOME p` >> PairCases_on `p` >>
+       gvs[code_slice_source_SOME, constant_builtin_def]) >>
     qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
     simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
          lift_sum_def, get_accounts_def, return_def] >> strip_tac >>

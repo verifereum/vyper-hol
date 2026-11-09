@@ -442,7 +442,17 @@ QED
 Theorem eval_builtin_scope_effect[local]:
   (!st x middle.
     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL x,middle) /\
-    bt <> Len /\ bt <> Env MsgGas ==> scope_pop_effect (eval_exprs cx es)) /\
+    bt <> Len /\ bt <> Env MsgGas /\ code_slice_source bt es = NONE ==>
+    scope_pop_effect (eval_exprs cx es)) /\
+  (!st x middle code_ty addr.
+    type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL x,middle) /\
+    bt <> Len /\ bt <> Env MsgGas /\ code_slice_source bt es = SOME (code_ty,addr) ==>
+    scope_pop_effect (eval_exprs cx (TL es))) /\
+  (!st x middle code_ty addr st1 tail_vs st2.
+    type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL x,middle) /\
+    bt <> Len /\ bt <> Env MsgGas /\ code_slice_source bt es = SOME (code_ty,addr) /\
+    eval_exprs cx (TL es) st1 = (INL tail_vs,st2) ==>
+    scope_pop_effect (eval_exprs cx [addr])) /\
   (!st x middle.
     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL x,middle) /\
     bt = Len ==> scope_pop_effect (eval_expr cx (HD es))) ==>
@@ -458,7 +468,16 @@ Proof
           gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
       Cases_on `bt = Env MsgGas` >> simp[] >>
       ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-      >- (first_x_assum irule >> metis_tac[]) >>
+      >- (Cases_on `code_slice_source bt es` >> simp[]
+          >- (first_x_assum irule >> metis_tac[]) >>
+          rename1 `SOME p` >> PairCases_on `p` >> simp[] >>
+          ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac
+          >- (first_x_assum irule >> metis_tac[]) >>
+          rpt gen_tac >> strip_tac >>
+          ho_match_mp_tac scope_pop_effect_bind >> conj_tac
+          >- (first_x_assum irule >> metis_tac[]) >>
+          gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
+          gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
       gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
       gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
       gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >> simp[]
@@ -695,7 +714,10 @@ Proof
   [`scope_pop_effect (eval_expr _ (Call _ (CreateTarget kind has_salt rof kw_order) _ _))`] >-
     suspend "Create" >~
   [`scope_pop_effect (eval_expr _ (Call _ (IntCall _) _ _))`] >-
-    suspend "IntCall" >>
+    suspend "IntCall" >~
+  [`scope_pop_effect (eval_expr _ (Builtin _ _ _))`] >-
+    (irule eval_builtin_scope_effect >> rpt conj_tac >> rpt strip_tac >>
+     first_x_assum irule >> metis_tac[]) >>
   FIRST ((simp[] >> NO_TAC) :: map (fn th => FIRST
     [MATCH_ACCEPT_TAC (GEN_ALL th),
      match_mp_tac (GEN_ALL th) >> rpt conj_tac >> first_assum ACCEPT_TAC] >> NO_TAC)
@@ -707,7 +729,7 @@ Proof
      eval_name_place_scope_effect, eval_toplevel_place_scope_effect,
      eval_attribute_base_place_scope_effect, eval_target_place_scope_effect,
      eval_subscript_base_place_scope_effect, eval_subscript_scope_effect,
-     eval_builtin_scope_effect, eval_typebuiltin_scope_effect,
+     eval_typebuiltin_scope_effect,
      eval_raw_call_scope_effect, eval_raw_calldata_scope_effect,
       eval_raw_revert_scope_effect,
      eval_selfdestruct_scope_effect, eval_raw_log_scope_effect, eval_send_scope_effect])

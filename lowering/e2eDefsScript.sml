@@ -146,6 +146,7 @@ Definition call_state_rel_def:
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
       buffer_to_list ctxt.msgParams.data = tx.calldata /\
+      ctxt.msgParams.code = tx.code /\
       tx_block_fields_rel tx es.txParams /\
       source_deployment_rel tops am tx
 End

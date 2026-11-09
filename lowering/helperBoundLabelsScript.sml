@@ -656,13 +656,33 @@ Proof
     conj_tac, IF_CASES_TAC])
 QED
 
+Theorem bound_labels_abi_dec_addr:
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label)
+    (all_blocks (SND (compile_abi_dec_addr bp pos s))))
+Proof
+  rw[compile_abi_dec_addr_def, comp_return_def, bound_labels_emit_op]
+QED
+
+Theorem bound_labels_abi_decode_range_check:
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label)
+    (all_blocks (SND (compile_abi_decode_range_check lo hi_end hi s))))
+Proof
+  strip_tac >> simp[compile_abi_decode_range_check_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void]),
+    gen_tac, strip_tac, irule bound_labels_bind, irule bound_labels_ignore_bind,
+    conj_tac])
+QED
+
 Theorem bound_labels_getelemptr_abi:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label)
-    (all_blocks (SND (compile_getelemptr_abi src dyn off opc hi s))))
+    (all_blocks (SND (compile_getelemptr_abi src dyn off opc bp hi s))))
 Proof
   strip_tac >> simp[compile_getelemptr_abi_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
+    bound_labels_abi_dec_addr, bound_labels_abi_decode_range_check,
     comp_return_def]), gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
 QED
@@ -670,57 +690,50 @@ QED
 Theorem bound_labels_abi_decode_dyn_elem_ptr:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label)
-    (all_blocks (SND (compile_abi_decode_dyn_elem_ptr opc es sd hi asz s))))
+    (all_blocks (SND (compile_abi_decode_dyn_elem_ptr opc bp es sd hi asz s))))
 Proof
   strip_tac >> simp[compile_abi_decode_dyn_elem_ptr_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
+    bound_labels_abi_dec_addr, bound_labels_abi_decode_range_check,
     comp_return_def]), gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
 QED
 
-val abi_decode_tac =
-  FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
+val bound_labels_decode_tac =
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
     bound_labels_emit_inst, bound_labels_abi_decode_static,
     bound_labels_abi_clamp_basetype, bound_labels_getelemptr_abi,
     bound_labels_abi_decode_dyn_elem_ptr, bound_labels_alloc_buffer,
-    bound_labels_new_block, comp_return_def]),
+    bound_labels_new_block, bound_labels_abi_dec_addr,
+    bound_labels_abi_decode_range_check, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_fresh_label_bind,
     irule bound_labels_bind, irule bound_labels_ignore_bind,
-    conj_tac, IF_CASES_TAC];
-
-val abi_decode_step = FIRST [abi_decode_tac, ALL_TAC];
+    conj_tac, IF_CASES_TAC]) >> gvs[] >>
+  Cases_on `opc` >> simp[bound_labels_emit_void];
 
 Theorem bound_labels_abi_decode:
-  (!dst src opc hi info s.
+  (!dst src opc bp hi info s.
     (!l. compiler_label l ==> P l) /\
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
     EVERY P (MAP (\bb. bb.bb_label)
-      (all_blocks (SND (compile_abi_decode_to_buf dst src opc hi info s))))) /\
-  (!dst src opc hi elems ao vo s.
+      (all_blocks (SND (compile_abi_decode_to_buf dst src opc bp hi info s))))) /\
+  (!dst src opc bp hi elems ao vo s.
     (!l. compiler_label l ==> P l) /\
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
     EVERY P (MAP (\bb. bb.bb_label)
-      (all_blocks (SND (compile_abi_decode_complex_elems dst src opc hi elems ao vo s))))) /\
-  (!dst src opc hi ei asz msz ip cnt s.
+      (all_blocks (SND (compile_abi_decode_complex_elems dst src opc bp hi elems ao vo s))))) /\
+  (!dst src opc bp hi ei asz msz ip cnt s.
     (!l. compiler_label l ==> P l) /\
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
     EVERY P (MAP (\bb. bb.bb_label)
-      (all_blocks (SND (compile_abi_decode_dyn_loop dst src opc hi ei asz msz ip cnt s)))))
+      (all_blocks (SND (compile_abi_decode_dyn_loop dst src opc bp hi ei asz msz ip cnt s)))))
 Proof
   ho_match_mp_tac compile_abi_decode_to_buf_ind >> rpt strip_tac >>
-  simp[Once compile_abi_decode_to_buf_def] >>
-  (* the loop below, one layer per script step: as a single rpt it runs
-     past the step timeout *)
-  abi_decode_step >> abi_decode_step >>
-  abi_decode_step >> abi_decode_step >>
-  abi_decode_step >> abi_decode_step >>
-  abi_decode_step >> abi_decode_step >>
-  abi_decode_step >> abi_decode_step >>
-  abi_decode_step >> abi_decode_step >>
-  abi_decode_step >> abi_decode_step >>
-  abi_decode_step >> abi_decode_step >>
-  rpt abi_decode_tac >> gvs[] >>
-  Cases_on `opc` >> simp[bound_labels_emit_void]
+  simp[Once compile_abi_decode_to_buf_def]
+  >- bound_labels_decode_tac >- bound_labels_decode_tac
+  >- bound_labels_decode_tac >- bound_labels_decode_tac
+  >- bound_labels_decode_tac >- bound_labels_decode_tac
+  >> bound_labels_decode_tac
 QED
 
 Theorem bound_labels_lower_abi_encode:

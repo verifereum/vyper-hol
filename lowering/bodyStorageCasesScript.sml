@@ -584,7 +584,13 @@ Theorem body_eval_builtin_storage:
   (!r s. builtin_args_length_ok bt (LENGTH es) /\ bt = Len /\
     eval_expr cx (HD es) st = (r,s) ==> contract_storage_well_formed cx s) /\
   (!r s. builtin_args_length_ok bt (LENGTH es) /\ bt <> Len /\
+    code_slice_source bt es = NONE /\
     eval_exprs cx es st = (r,s) ==> contract_storage_well_formed cx s) /\
+  (!ct ca r s. code_slice_source bt es = SOME (ct,ca) /\
+    eval_exprs cx (TL es) st = (r,s) ==> contract_storage_well_formed cx s) /\
+  (!ct ca tvs s1 r s. code_slice_source bt es = SOME (ct,ca) /\
+    eval_exprs cx (TL es) st = (INL tvs,s1) /\
+    eval_exprs cx [ca] s1 = (r,s) ==> contract_storage_well_formed cx s) /\
   eval_expr cx (Builtin ty bt es) st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
@@ -612,12 +618,39 @@ Proof
       rpt strip_tac >> gvs[] >>
       irule contract_storage_well_formed_backends_frame >>
       qexists_tac `st` >> simp[]) >>
-  gvs[] >> Cases_on `eval_exprs cx es st` >>
-  rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  `contract_storage_well_formed cx args_st` by metis_tac[] >>
+  gvs[] >>
+  `?args_res args_st.
+     (case code_slice_source bt es of
+        NONE => eval_exprs cx es
+      | SOME (code_ty,addr) =>
+          do tail_vs <- eval_exprs cx (TL es);
+             addr_vs <- eval_exprs cx [addr];
+             code_acc <- get_accounts;
+             code_v <- lift_sum (evaluate_code_source cx code_acc
+                                   (is_self_addr addr) code_ty
+                                   (expr_type addr) addr_vs);
+             return (code_v::tail_vs)
+          od) st = (args_res,args_st) /\
+     contract_storage_well_formed cx args_st` by (
+    Cases_on `code_slice_source bt es` >> simp[]
+    >- (Cases_on `eval_exprs cx es st` >> metis_tac[]) >>
+    rename1 `_ = SOME p` >> PairCases_on `p` >>
+    simp[bind_def, return_def, raise_def, get_accounts_def, lift_sum_def] >>
+    Cases_on `eval_exprs cx (TL es) st` >>
+    rename1 `eval_exprs cx (TL es) st = (tail_res,tail_st)` >>
+    Cases_on `tail_res` >> gvs[] >>
+    rename1 `eval_exprs cx (TL es) st = (INL tvs,tail_st)` >>
+    Cases_on `eval_exprs cx [p1] tail_st` >>
+    rename1 `eval_exprs cx [p1] tail_st = (addr_res,addr_st)` >>
+    `contract_storage_well_formed cx addr_st` by metis_tac[] >>
+    Cases_on `addr_res` >> gvs[return_def, raise_def] >>
+    CASE_TAC >> gvs[return_def, raise_def]) >>
+  qpat_x_assum `option_CASE _ _ _ st = _` (fn th =>
+    simp_tac (srw_ss()) [bind_def, return_def, raise_def, get_accounts_def,
+                         lift_sum_def, th]) >>
   Cases_on `args_res` >>
   gvs[bind_def, return_def, raise_def, get_accounts_def, lift_sum_def]
-  >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
+  >- (rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
       Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
       gvs[return_def, raise_def] >>
       Cases_on `precompile_call_success bt args_st` >>
