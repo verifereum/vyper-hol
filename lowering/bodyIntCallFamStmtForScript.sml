@@ -1,7 +1,7 @@
 (* Seam 2 joint induction, a family leaf of the stmt step: For. *)
 Theory bodyIntCallFamStmtFor
 Ancestors
-  bodyIntCallJointContract bodySim loweringPosts compileEnv bodyIntCallFamStmtForEntry bodyIntCallFamStmtForScope
+  bodyIntCallJointContract bodySim loweringPosts compileEnv bodyIntCallFamStmtForEntry bodyIntCallFamStmtForScope bodyIntCallFamStmtForResources bodyIntCallFamStmtForFrontier
 
 (* Re-entry uses the original compile state, not the body's allocation
    frontier.  Only the static operand reservations need to be re-established. *)
