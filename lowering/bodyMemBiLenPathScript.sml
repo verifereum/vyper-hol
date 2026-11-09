@@ -57,7 +57,9 @@ Proof
 QED
 
 Theorem len_vv_path_mem:
-  !env ctx func cenv cx e es sa sm sb s0 es' tv vv op tvt t.
+  !env ctx func cenv cx e es sa sm sb s0 es' tv vv op tvt t pvt.
+    type_widens_to (get_tenv cx) (post_value_type cenv e) (expr_type e) /\
+    evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME pvt /\
     compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand vv)
       (case vv_location vv of SOME l => l | NONE => LocMemory) sm = (op,sb) /\
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -83,9 +85,10 @@ Theorem len_vv_path_mem:
 Proof
   rpt gen_tac >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es' t /\
-   vv_holds cenv cx (expr_type e) tv vv es' t` by fs[vv_post_def] >>
-  drule_all vv_holds_sized_length_success >> strip_tac >>
-  drule_all vv_holds_len_header >> strip_tac >>
+   vv_holds cenv cx (post_value_type cenv e) tv vv es' t` by fs[vv_post_def] >>
+  drule_all len_mem_vv_holds_sized_length_success_widens >> strip_tac >>
+  `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by simp[] >>
+  drule_all len_mem_vv_holds_len_header_widens >> strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts sm sb) t` by
     (irule len_load_mem_ok >> metis_tac[]) >>
   drule len_vv_not_calldata >> strip_tac >>
