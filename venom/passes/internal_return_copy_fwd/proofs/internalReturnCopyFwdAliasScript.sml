@@ -5,7 +5,7 @@ Ancestors
   venomExecSemantics venomState o1LowerDloadPairedAllocation
   venomMemProps basePtrProofs o1FrameLockstep ssaAvailablePred venomExecProofs venomWf rangeAnalysisProofs contextCodegenRel
   tailMergeStep venomInstProofs1 ptrDisciplineControl venomInstProps relation
-  singleUseExpansionSupplySim occurrenceOrigin
+  singleUseExpansionSupplySim occurrenceOrigin unitShapeDefs
 
 Definition ircf_alias_value_def:
   ircf_alias_value fn s G v <=>
@@ -1003,4 +1003,31 @@ Proof
   `ircf_alias fn d v` by
     (drule_all ircf_fwd_dst_pointer_closure >> simp[pred_setTheory.SUBSET_DEF]) >>
   drule_all ircf_fwd_later_invoke_not_dst_alias >> simp[]
+QED
+
+Theorem ircf_fwd_revert_use_later:
+  fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d r sz /\
+  i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = REVERT /\
+  MEM (Var v) (EL i bb.bb_instructions).inst_operands /\
+  ircf_alias fn d v ==> k < i
+Proof
+  strip_tac >>
+  `MEM (EL i bb.bb_instructions) (fn_insts fn) /\
+   MEM (EL k bb.bb_instructions) (fn_insts fn)` by
+    (conj_tac >> simp[fn_insts_def, MEM_fn_insts_blocks_iff] >>
+     qexists_tac `bb` >> simp[] >> metis_tac[EL_MEM, ircf_fwd_ok_def]) >>
+  `(EL i bb.bb_instructions).inst_id <> (EL k bb.bb_instructions).inst_id` by
+    (strip_tac >>
+     `EL i bb.bb_instructions = EL k bb.bb_instructions` by
+       metis_tac[fn_inst_ids_distinct_inj] >>
+     gvs[ircf_fwd_ok_def]) >>
+  qpat_x_assum `ircf_fwd_ok _ _ _ _ _ _` mp_tac >>
+  simp[ircf_fwd_ok_def] >> strip_tac >>
+  `?j. k < j /\ j < LENGTH bb.bb_instructions /\
+       EL j bb.bb_instructions = EL i bb.bb_instructions` by
+    (qpat_x_assum `!inst v. _ /\ _ /\ _ /\ _ /\ _ ==> _`
+       (qspecl_then [`EL i bb.bb_instructions`, `v`] mp_tac) >> simp[]) >>
+  `j = i` by metis_tac[inst_ids_el_eq] >> gvs[]
 QED

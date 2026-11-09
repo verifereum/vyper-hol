@@ -274,3 +274,26 @@ Proof
   qpat_x_assum `!j. j < d ==> _` drule >>
   simp[arithmeticTheory.ADD_CLAUSES]
 QED
+
+Theorem ld_available_assign_prefix_revert_pointwise:
+  !S t V d bb' ri' off' len' fuel C'.
+  (S 0).vs_labels = t.vs_labels /\
+  (!v. v IN V ==> (IS_SOME (FLOOKUP (S 0).vs_vars v) <=>
+                   IS_SOME (FLOOKUP t.vs_vars v))) /\
+  (!j. j < d ==> ?ii u.
+    get_instruction bb' (t.vs_inst_idx + j) = SOME ii /\
+    ii.inst_opcode = ASSIGN /\
+    (!v. MEM (Var v) ii.inst_operands ==> v IN V) /\
+    step_inst_base ii (S j) = OK u /\
+    S (SUC j) = (u with vs_inst_idx := SUC (S j).vs_inst_idx)) /\
+  get_instruction bb' (t.vs_inst_idx + d) = SOME ri' /\
+  ri'.inst_opcode = REVERT /\ ri'.inst_operands = [off';len'] /\
+  (!v. MEM (Var v) [off';len'] ==> v IN V) /\
+  IS_SOME (eval_operand off' (S d)) /\ IS_SOME (eval_operand len' (S d)) ==>
+  ?u. exec_block fuel C' bb' t = Abort Revert_abort u
+Proof
+  qx_gen_tac `seq` >> rpt gen_tac >> strip_tac >>
+  irule ld_available_assign_prefix_revert >>
+  qexistsl_tac [`seq`, `V`, `d`, `len'`, `len'`, `off'`, `off'`, `ri'`] >>
+  simp[]
+QED
