@@ -5,8 +5,8 @@ Ancestors
   exprSimAlloc exprSimBufferStore abiBuiltinAllocation tupleStageProps
   fragGasPathMem fragGasMode fragGasSeqMem allocaHistoryFragment
   exprLoweringProps loweringSlice emitHelper emitHelperProps exprLowering
-  compileEnv context venomState venomExecSemantics venomInst freshWrites
-  valueEncoding valueEncodingProps valueTypingMemoryProps finite_map list rich_list
+  compileEnv loweringStateRelDefs context venomState venomExecSemantics venomInst freshWrites
+  valueEncoding valueEncodingDefs valueEncodingProps valueTypingMemoryProps finite_map list rich_list
   localPtrsProps stmtSimDefs stmtSimProps fragExec fragExecMem bodyMemoryDefs
   loweringPosts vyperTyping instMemFrontier stmtSimReturn tupleLoadProps stmtLowering tupleTypedLoad
 Libs
@@ -32,8 +32,9 @@ Proof
     (drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >> strip_tac >>
      drule emitted_insts_emit_op >> strip_tac >>
      qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK a` mp_tac >>
-     asm_simp_tac (srw_ss()) [run_inst_seq_def, step_inst_base_def, mk_inst_def,
-       eval_operand_def, exec_alloca_def] >>
+     asm_simp_tac (srw_ss()) [run_inst_seq_def, mk_inst_def] >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     asm_simp_tac (srw_ss()) [eval_operand_def, exec_alloca_def] >>
      Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
      >- (simp[LET_THM, update_var_def] >> rpt strip_tac >> gvs[]) >>
      PairCases_on `x` >> simp[LET_THM, update_var_def] >> rpt strip_tac >> gvs[]) >>
@@ -248,7 +249,8 @@ Proof
   simp[emitted_insts_def, DROP_APPEND1, venomInstTheory.mk_inst_def,
        run_inst_seq_mem_ok_cons, run_inst_seq_mem_ok_last,
        below_frontier_no_ranges, below_frontier_MLOAD] >>
-  simp[Once step_inst_base_def, exec_pure2_def, eval_operand_def,
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[exec_pure2_def, eval_operand_def,
        bind_outputs_def, lookup_var_update_var] >>
   gvs[eval_operand_def] >>
   simp[GSYM venomInstTheory.mk_inst_def, below_frontier_MLOAD,

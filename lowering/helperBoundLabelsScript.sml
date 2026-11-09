@@ -719,6 +719,30 @@ Proof
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
 QED
 
+Theorem bound_labels_abi_bytes_copy[local]:
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label)
+    (all_blocks (SND
+      ((case opc of
+          CALLDATALOAD => emit_void CALLDATACOPY [dst; src; sz_op]
+        | DLOAD => emit_void DLOADBYTES [dst; src; sz_op]
+        | _ => emit_void MCOPY [dst; src; sz_op]) s))))
+Proof
+  Cases_on `opc` >> simp[bound_labels_emit_void]
+QED
+
+val bound_labels_decode_case_tac =
+  simp[Once compile_abi_decode_to_buf_def] >>
+  rpt (FIRST [gen_tac, strip_tac, irule bound_labels_fresh_label_bind,
+    irule bound_labels_bind, irule bound_labels_ignore_bind,
+    conj_tac, IF_CASES_TAC,
+    CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
+      bound_labels_emit_inst, bound_labels_abi_decode_static,
+      bound_labels_abi_clamp_basetype, bound_labels_getelemptr_abi,
+      bound_labels_abi_decode_dyn_elem_ptr, bound_labels_abi_dec_addr,
+      bound_labels_abi_decode_range_check, bound_labels_alloc_buffer,
+      bound_labels_new_block, bound_labels_abi_bytes_copy, comp_return_def])]) >> gvs[];
+
 Theorem bound_labels_abi_decode:
   (!dst src opc bop hi info s.
     (!l. compiler_label l ==> P l) /\
@@ -736,19 +760,20 @@ Theorem bound_labels_abi_decode:
     EVERY P (MAP (\bb. bb.bb_label)
       (all_blocks (SND (compile_abi_decode_dyn_loop dst src opc bop hi ei asz msz ip cnt s)))))
 Proof
-  ho_match_mp_tac compile_abi_decode_to_buf_ind >> rpt strip_tac >>
-  (* One timed step per decoder case. *)
-  TRY (simp[Once compile_abi_decode_to_buf_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
-    bound_labels_emit_inst, bound_labels_abi_decode_static,
-    bound_labels_abi_clamp_basetype, bound_labels_getelemptr_abi,
-    bound_labels_abi_decode_dyn_elem_ptr, bound_labels_abi_dec_addr,
-    bound_labels_abi_decode_range_check, bound_labels_alloc_buffer,
-    bound_labels_new_block, comp_return_def]),
-    gen_tac, strip_tac, irule bound_labels_fresh_label_bind,
-    irule bound_labels_bind, irule bound_labels_ignore_bind,
-    conj_tac, IF_CASES_TAC]) >> gvs[] >>
-  Cases_on `opc` >> simp[bound_labels_emit_void])
+  ho_match_mp_tac compile_abi_decode_to_buf_ind >> rpt strip_tac
+  >~ [`compile_abi_decode_to_buf _ _ _ _ _ (DecPrimWord _) _`]
+  >- bound_labels_decode_case_tac
+  >~ [`compile_abi_decode_to_buf _ _ _ _ _ (DecBytestring _) _`]
+  >- bound_labels_decode_case_tac
+  >~ [`compile_abi_decode_to_buf _ _ _ _ _ (DecDynArray _ _ _ _ _) _`]
+  >- bound_labels_decode_case_tac
+  >~ [`compile_abi_decode_to_buf _ _ _ _ _ (DecComplex _ _) _`]
+  >- bound_labels_decode_case_tac
+  >~ [`compile_abi_decode_complex_elems _ _ _ _ _ [] _ _ _`]
+  >- bound_labels_decode_case_tac
+  >~ [`compile_abi_decode_complex_elems _ _ _ _ _ (_::_) _ _ _`]
+  >- bound_labels_decode_case_tac >>
+  bound_labels_decode_case_tac
 QED
 
 Theorem bound_labels_lower_abi_encode:

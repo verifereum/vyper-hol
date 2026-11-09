@@ -1,7 +1,7 @@
 (* Compiler-facing base equations for return normalization. *)
 Theory externalReturnCopyBase
 Ancestors
-  externalReturnCopyBoundary context compileEnv fragExec valueEncoding
+  externalReturnCopyBoundary context compileEnv fragExec valueEncoding valueEncodingDefs
 
 Theorem return_typed_copy_bytes_dispatch:
   ~is_word_type dty /\ is_bytestring_type dty /\ is_bytestring_type sty ==>

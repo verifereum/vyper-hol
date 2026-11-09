@@ -4,7 +4,7 @@ Theory bodyMemBiSha256Compose
 Ancestors
   bodyMemBiSha256Suffix bodyExprForceMemory exprSimHash exprSimMemDefs allocaHistoryFragment
   fragGasSeqMem exprSimProps exprLoweringProps exprOperandVar exprSimWordArgs
-  venomMemDefs compileEnv vyperTypeSystem fragGasSeqAbort fragGasMode
+  venomMemDefs compileEnv loweringStateRelDefs vyperTypeSystem fragGasSeqAbort fragGasMode
   exprSimPrecompiles fragExec vyperState exprSimDefs exprSimVVFrame venomInstProps venomExecSemantics venomMemProps venomMemProofs
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext fragGasPath
   exprSimSource exprSimHypsDefs exprSimHyps vyperTyping builtinSimple exprLowering

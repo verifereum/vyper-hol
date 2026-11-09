@@ -1,7 +1,7 @@
 Theory stmtForArrayMemoryRounds
 Ancestors
   stmtForArrayControlMemory stmtForArrayMemoryRoundSupport
-  stmtSimForArrayLoop stmtSimProps exprLoweringProps bodyMemoryDefs loweringPosts compileEnv
+  stmtSimForArrayLoop stmtSimProps exprLoweringProps bodyMemoryDefs loweringPosts compileEnv loweringStateRelDefs
   venomState allocaHistory fragGasMode fragGasPathMem finite_map list arithmetic
   stmtForArrayMemoryCopy stmtForArrayMemoryBodyEntry rich_list emitHelper venomInst
   bodyDeclMemoryCounted stmtLowering venomMemDefs stmtSimDefs gasContext vyperState
@@ -68,8 +68,9 @@ Theorem array_round_last:
 Proof
   rw[array_round_inv_def] >>
   `alloca_history func s` by fs[array_round_frame_def] >>
-  drule array_condition_boundary_mem >> simp[] >>
-  disch_then drule >> simp[] >> strip_tac >>
+  drule array_condition_boundary_mem >>
+  simp[Excl "typed_copy_lookup_var_jump"] >>
+  disch_then drule >> simp[Excl "typed_copy_lookup_var_jump"] >> strip_tac >>
   rename1 `gas_path_mem ctx func s 0 (OK t)` >>
   qexists_tac `t` >> conj_tac
   >- simp[gas_marked_path_def] >>
@@ -100,8 +101,9 @@ Theorem array_round_increment:
 Proof
   rw[array_round_inv_def] >>
   `alloca_history func s` by fs[array_round_frame_def] >>
-  drule array_increment_boundary_mem >> simp[] >>
-  disch_then drule >> simp[] >> strip_tac >>
+  drule array_increment_boundary_mem >>
+  simp[Excl "typed_copy_lookup_var_jump"] >>
+  disch_then drule >> simp[Excl "typed_copy_lookup_var_jump"] >> strip_tac >>
   rename1 `gas_path_mem ctx func s 0 (OK t)` >>
   qexists_tac `t` >> simp[gas_marked_path_def, ADD1] >>
   irule array_round_frame_transport >> simp[] >> qexists_tac `s` >> simp[] >>
@@ -170,8 +172,9 @@ Theorem array_round_live:
 Proof
   rw[array_round_inv_def] >>
   `alloca_history func s` by fs[array_round_frame_def] >>
-  drule array_condition_boundary_mem >> simp[] >>
-  disch_then drule >> simp[] >> strip_tac >>
+  drule array_condition_boundary_mem >>
+  simp[Excl "typed_copy_lookup_var_jump"] >>
+  disch_then drule >> simp[Excl "typed_copy_lookup_var_jump"] >> strip_tac >>
   rename1 `gas_path_mem ctx func s 0 (OK t)` >>
   qexists_tac `t` >> simp[gas_marked_path_def] >>
   irule array_round_frame_transport >> simp[] >> qexists_tac `s` >> simp[] >>

@@ -13,324 +13,47 @@
 
 Theory fnAliasStep
 Ancestors
-  fnAliasInv reorderSim frameRel codegenRel unitShapeDefs stackPlanGen
+  reorderSim frameRel codegenRel unitShapeDefs stackPlanGen
   stackPlanOps stackPlanTypes venomExecSemantics venomState livenessDefs
   dfgDefs cfgDefs deepResidualBudget fnFrameStepsRevertForward frameViewFacts
   venomExecProps venomInstProps planWf stackModel foldlSim
-  list rich_list finite_map pred_set
-
+  list rich_list finite_map pred_set fnPlanLineageInventory fnPlanLineageReorder
 (* ===== Slot provenance: the planner manufactures no operand ===== *)
 
-Theorem restore_spilled_plan_inventory_subset:
-  !targets ps ops ps'.
-    restore_spilled_plan targets ps = (ops,ps') ==>
-    !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
-         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
-Proof
-  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  metis_tac[do_restore_inventory_subset]
-QED
+Theorem restore_spilled_plan_inventory_subset = fnPlanLineageInventoryTheory.restore_spilled_plan_inventory_subset
 
 (* A restore moves its operand from the spill map to the stack. *)
-Theorem do_restore_inventory_count[local]:
-  !op ps ops ps'.
-    do_restore op ps = (ops,ps') ==>
-    (!x. LIST_ELEM_COUNT x ps'.ps_stack +
-           (if x IN FDOM ps'.ps_spilled then 1 else 0) =
-         LIST_ELEM_COUNT x ps.ps_stack +
-           (if x IN FDOM ps.ps_spilled then 1 else 0)) /\
-    op NOTIN FDOM ps'.ps_spilled /\
-    FDOM ps'.ps_spilled SUBSET FDOM ps.ps_spilled
-Proof
-  rpt gen_tac >> simp[do_restore_def] >>
-  Cases_on `FLOOKUP ps.ps_spilled op` >> simp[]
-  >- (strip_tac >> gvs[FLOOKUP_DEF]) >>
-  strip_tac >> gvs[stack_push_def, SNOC_APPEND, LIST_ELEM_COUNT_DEF,
-                   FILTER_APPEND, FLOOKUP_DEF, SUBSET_DEF] >>
-  rw[] >> gvs[]
-QED
+Theorem do_restore_inventory_count[local] = fnPlanLineageInventoryTheory.do_restore_inventory_count
 
-Theorem restore_spilled_plan_inventory_count[local]:
-  !targets ps ops ps'.
-    restore_spilled_plan targets ps = (ops,ps') ==>
-    (!x. LIST_ELEM_COUNT x ps'.ps_stack +
-           (if x IN FDOM ps'.ps_spilled then 1 else 0) =
-         LIST_ELEM_COUNT x ps.ps_stack +
-           (if x IN FDOM ps.ps_spilled then 1 else 0)) /\
-    (!x. MEM x targets ==> x NOTIN FDOM ps'.ps_spilled) /\
-    FDOM ps'.ps_spilled SUBSET FDOM ps.ps_spilled
-Proof
-  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  drule do_restore_inventory_count >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  rpt conj_tac
-  >- metis_tac[]
-  >- (rpt strip_tac >> gvs[SUBSET_DEF] >> metis_tac[])
-  >> metis_tac[SUBSET_TRANS]
-QED
+Theorem restore_spilled_plan_inventory_count[local] = fnPlanLineageInventoryTheory.restore_spilled_plan_inventory_count
 
 (* The join reorder's target stack fits on the stack once its spilled
    operands are restored. *)
-Theorem restore_spilled_plan_length_floor:
-  !targets ps ops ps'.
-    restore_spilled_plan targets ps = (ops,ps') /\
-    pending_inventory_wf targets ps ==>
-    LENGTH targets <= LENGTH ps'.ps_stack
-Proof
-  rpt strip_tac >> drule restore_spilled_plan_inventory_count >> strip_tac >>
-  irule list_elem_count_dom_length >> gen_tac >>
-  Cases_on `MEM x targets`
-  >- (`LIST_ELEM_COUNT x targets <=
-       LIST_ELEM_COUNT x ps.ps_stack +
-         (if x IN FDOM ps.ps_spilled then 1 else 0)` by
-        fs[pending_inventory_wf_def] >>
-      `x NOTIN FDOM ps'.ps_spilled` by metis_tac[] >>
-      qpat_x_assum `!x. LIST_ELEM_COUNT x ps'.ps_stack + _ = _`
-        (qspec_then `x` mp_tac) >> simp[]) >>
-  `LIST_ELEM_COUNT x targets = 0` by
-    (CCONTR_TAC >>
-     `LIST_ELEM_COUNT x targets > 0` by decide_tac >>
-     metis_tac[LIST_ELEM_COUNT_MEM]) >>
-  simp[]
-QED
+Theorem restore_spilled_plan_length_floor = fnPlanLineageInventoryTheory.restore_spilled_plan_length_floor
 
-Theorem reorder_restore_length_mono[local]:
-  !op f n ps ops ps'.
-    (case stack_get_unfixed_depth op f n ps.ps_stack of
-       SOME _ => ([],ps)
-     | NONE => case FLOOKUP ps.ps_spilled op of
-                 SOME _ => do_restore op ps | NONE => ([],ps)) = (ops,ps') ==>
-    LENGTH ps.ps_stack <= LENGTH ps'.ps_stack
-Proof
-  rpt gen_tac >>
-  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[] >>
-  Cases_on `FLOOKUP ps.ps_spilled op` >> simp[] >>
-  strip_tac >> gvs[] >>
-  qpat_x_assum `do_restore _ _ = _` mp_tac >>
-  simp[do_restore_def] >> strip_tac >> gvs[stack_push_def]
-QED
+Theorem reorder_restore_length_mono[local] = fnPlanLineageInventoryTheory.reorder_restore_length_mono
 
 (* reorder_one keeps the target window on the stack, with no bound on the
    number of targets. *)
-Theorem reorder_one_length_floor:
-  !dfg tops idx op ps ops ps'.
-    idx < LENGTH tops /\
-    LENGTH tops <= LENGTH ps.ps_stack /\
-    reorder_one dfg tops idx op ps = (ops,ps') ==>
-    LENGTH tops <= LENGTH ps'.ps_stack
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
-  rewrite_tac[reorder_one_def, LET_THM] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> gvs[] >>
-  `LENGTH tops <= LENGTH ps1.ps_stack` by
-    (drule reorder_restore_length_mono >> decide_tac) >>
-  Cases_on `stack_get_unfixed_depth op
-    (LENGTH tops - (idx + 1)) (LENGTH tops) ps1.ps_stack` >> simp[]
-  >- (strip_tac >> gvs[]) >>
-  rename1 `stack_get_unfixed_depth op _ _ ps1.ps_stack = SOME dist` >>
-  pairarg_tac >> simp[] >>
-  `LENGTH tops <= LENGTH ps2.ps_stack` by
-    (Cases_on `dist > 16` >> gvs[] >>
-     drule reduce_depth_plan_target_len_floor >> simp[]) >>
-  Cases_on `stack_get_unfixed_depth op
-    (LENGTH tops - (idx + 1)) (LENGTH tops) ps2.ps_stack` >> simp[]
-  >- (strip_tac >> gvs[]) >>
-  rename1 `stack_get_unfixed_depth op _ _ ps2.ps_stack = SOME dist'` >>
-  `dist' < LENGTH ps2.ps_stack` by metis_tac[stack_get_unfixed_depth_props] >>
-  `LENGTH tops - (idx + 1) < LENGTH ps2.ps_stack` by decide_tac >>
-  Cases_on `dist' = LENGTH tops - (idx + 1)` >> simp[]
-  >- (strip_tac >> gvs[]) >>
-  Cases_on `operand_equiv dfg op
-    (stack_peek (LENGTH tops - (idx + 1)) ps2.ps_stack)` >> simp[]
-  >- (strip_tac >> gvs[stack_poke_def]) >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  rename1 `do_swap dist' ps2 = (swap1_ops,ps3)` >>
-  `LENGTH ps3.ps_stack = LENGTH ps2.ps_stack` by
-    (qspecl_then [`dist'`, `ps2`] mp_tac do_swap_length >>
-     asm_simp_tac (srw_ss()) []) >>
-  strip_tac >> gvs[] >>
-  `LENGTH tops - (idx + 1) < LENGTH ps3.ps_stack` by decide_tac >>
-  qspecl_then [`LENGTH tops - (idx + 1)`, `ps3`] mp_tac do_swap_length >>
-  asm_simp_tac (srw_ss()) []
-QED
+Theorem reorder_one_length_floor = fnPlanLineageInventoryTheory.reorder_one_length_floor
 
-Theorem plan_steps_reorder_inventory_subset_nb[local]:
-  !items dfg tops ps ops ps'.
-    EVERY (\(idx,op). idx < LENGTH tops) items /\
-    LENGTH tops <= LENGTH ps.ps_stack /\
-    plan_steps (\(idx,op) ps. reorder_one dfg tops idx op ps) items ps =
-      (ops,ps') ==>
-    !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
-         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
-Proof
-  Induct >> simp[plan_steps_def] >> rpt gen_tac >>
-  Cases_on `h` >> rename1 `(idx,op)` >> simp[] >> strip_tac >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  rename1 `reorder_one dfg tops idx op ps = (step_ops,ps1)` >>
-  `LENGTH tops <= LENGTH ps1.ps_stack` by
-    metis_tac[reorder_one_length_floor] >>
-  `!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
-        MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
-    metis_tac[reorder_one_inventory_subset_nb] >>
-  rpt strip_tac >>
-  `MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled` by
-    (first_x_assum (qspecl_then [`dfg`, `tops`, `ps1`] mp_tac) >>
-     simp[] >> metis_tac[]) >>
-  metis_tac[]
-QED
+Theorem plan_steps_reorder_inventory_subset_nb[local] = fnPlanLineageInventoryTheory.plan_steps_reorder_inventory_subset_nb
 
 (* reorder_plan manufactures no operand, with no bound on the number of
    targets. *)
-Theorem reorder_plan_inventory_subset_nb:
-  !dfg tops ps ops ps'.
-    LENGTH tops <= LENGTH ps.ps_stack /\
-    reorder_plan dfg tops ps = (ops,ps') ==>
-    !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
-         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
-Proof
-  rpt gen_tac >> strip_tac >>
-  `EVERY (\(idx,op). idx < LENGTH tops) (MAPi (\i op. (i,op)) tops)` by
-    (simp[EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
-     rpt strip_tac >> gvs[]) >>
-  qpat_x_assum `reorder_plan _ _ _ = _`
-    (assume_tac o REWRITE_RULE [reorder_plan_eq_plan_steps]) >>
-  metis_tac[plan_steps_reorder_inventory_subset_nb]
-QED
+Theorem reorder_plan_inventory_subset_nb = fnPlanLineageInventoryTheory.reorder_plan_inventory_subset_nb
 
-Theorem foldl_plan_inventory_subset[local]:
-  !(f : 'a # plan_state -> 'b -> 'a # plan_state) items acc.
-    (!acc x at.
-       MEM at (SND (f acc x)).ps_stack \/ at IN FDOM (SND (f acc x)).ps_spilled ==>
-       MEM at (SND acc).ps_stack \/ at IN FDOM (SND acc).ps_spilled) ==>
-    !at. MEM at (SND (FOLDL f acc items)).ps_stack \/
-         at IN FDOM (SND (FOLDL f acc items)).ps_spilled ==>
-         MEM at (SND acc).ps_stack \/ at IN FDOM (SND acc).ps_spilled
-Proof
-  ntac 2 gen_tac >> Induct_on `items` >> simp[] >> metis_tac[]
-QED
+Theorem foldl_plan_inventory_subset[local] = fnPlanLineageInventoryTheory.foldl_plan_inventory_subset
 
-Theorem popmany_individual_inventory_subset:
-  !to_pop ps ops ps'.
-    popmany_individual to_pop ps = (ops,ps') ==>
-    !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
-         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
-Proof
-  rpt gen_tac >> simp[popmany_individual_def] >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `FOLDL f acc0 sorted` >>
-  `ps' = SND (FOLDL f acc0 sorted) /\ ps = SND acc0` by
-    gvs[Abbr `acc0`] >>
-  pop_assum SUBST1_TAC >> pop_assum SUBST1_TAC >>
-  match_mp_tac foldl_plan_inventory_subset >>
-  simp[Abbr `f`, pairTheory.FORALL_PROD] >>
-  rpt gen_tac >>
-  Cases_on `stack_get_depth x p_2.ps_stack` >> simp[] >>
-  rename1 `stack_get_depth x p_2.ps_stack = SOME dist` >>
-  drule stack_get_depth_props >> strip_tac >>
-  Cases_on `dist = 0` >> simp[]
-  >- (simp[stack_pop_def] >> metis_tac[MEM_TAKE]) >>
-  pairarg_tac >> simp[stack_pop_def] >> strip_tac >>
-  `MEM at ps''.ps_stack \/ at IN FDOM ps''.ps_spilled` by
-    metis_tac[MEM_TAKE] >>
-  metis_tac[do_swap_inventory_subset]
-QED
+Theorem popmany_individual_inventory_subset = fnPlanLineageInventoryTheory.popmany_individual_inventory_subset
 
-Theorem popmany_plan_inventory_subset:
-  !to_pop ps ops ps'.
-    popmany_plan to_pop ps = (ops,ps') ==>
-    !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
-         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
-Proof
-  Cases
-  >- (simp[popmany_plan_def] >> rpt strip_tac >> gvs[]) >>
-  simp[popmany_plan_def] >> rpt gen_tac >>
-  reverse IF_CASES_TAC
-  >- metis_tac[popmany_individual_inventory_subset] >>
-  reverse IF_CASES_TAC
-  >- metis_tac[popmany_individual_inventory_subset] >>
-  qmatch_asmsub_abbrev_tac `is_contiguous_top depths` >>
-  `!v. IS_SOME (stack_get_depth v ps.ps_stack) ==>
-       THE (stack_get_depth v ps.ps_stack) < LENGTH ps.ps_stack` by
-    (rpt strip_tac >> Cases_on `stack_get_depth v ps.ps_stack` >> gvs[] >>
-     drule stack_get_depth_props >> simp[]) >>
-  `!d. MEM d depths ==> d < LENGTH ps.ps_stack` by
-    (simp[Abbr `depths`, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
-     gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
-  `MEM (SUC (LENGTH t)) depths` by
-    (`LENGTH depths = SUC (LENGTH t)` by simp[Abbr `depths`] >>
-     `MEM (SUC (LENGTH t)) (QSORT (\a b. a <= b) depths)` by
-       gvs[is_contiguous_top_def, LET_THM, MEM_GENLIST] >>
-     metis_tac[sortingTheory.QSORT_PERM, sortingTheory.PERM_MEM_EQ]) >>
-  `SUC (LENGTH t) < LENGTH ps.ps_stack` by metis_tac[] >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[stack_pop_def] >>
-  rpt strip_tac >>
-  `MEM at ps''.ps_stack \/ at IN FDOM ps''.ps_spilled` by
-    metis_tac[MEM_TAKE] >>
-  metis_tac[do_swap_inventory_subset]
-QED
+Theorem popmany_plan_inventory_subset = fnPlanLineageInventoryTheory.popmany_plan_inventory_subset
 
-Theorem optimistic_swap_plan_inventory_subset:
-  !dfg inst nl nt ps ops ps'.
-    optimistic_swap_plan dfg inst nl nt ps = (ops,ps') ==>
-    !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
-         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
-Proof
-  rpt gen_tac >> simp[optimistic_swap_plan_def] >>
-  strip_tac >> gen_tac >> disch_tac >>
-  BasicProvers.every_case_tac >> gvs[] >>
-  drule stack_get_depth_props >> strip_tac >>
-  metis_tac[do_swap_inventory_subset]
-QED
+Theorem optimistic_swap_plan_inventory_subset = fnPlanLineageInventoryTheory.optimistic_swap_plan_inventory_subset
 
-Theorem release_dead_spills_inventory_subset:
-  !nl ps at.
-    MEM at (release_dead_spills nl ps).ps_stack \/
-    at IN FDOM (release_dead_spills nl ps).ps_spilled ==>
-    MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
-Proof
-  `!(f : plan_state -> operand # num -> plan_state) l ps.
-     (!ps x. (f ps x).ps_stack = ps.ps_stack /\
-             FDOM (f ps x).ps_spilled SUBSET FDOM ps.ps_spilled) ==>
-     (FOLDL f ps l).ps_stack = ps.ps_stack /\
-     FDOM (FOLDL f ps l).ps_spilled SUBSET FDOM ps.ps_spilled` by
-    (ntac 2 gen_tac >> Induct_on `l` >> simp[] >> rpt strip_tac >>
-     metis_tac[SUBSET_TRANS]) >>
-  rpt gen_tac >> simp[release_dead_spills_def] >>
-  qmatch_goalsub_abbrev_tac `FOLDL f ps dead` >>
-  `(FOLDL f ps dead).ps_stack = ps.ps_stack /\
-   FDOM (FOLDL f ps dead).ps_spilled SUBSET FDOM ps.ps_spilled` by
-    (first_x_assum irule >>
-     simp[Abbr `f`, pairTheory.FORALL_PROD, SUBSET_DEF]) >>
-  gvs[SUBSET_DEF] >> metis_tac[]
-QED
+Theorem release_dead_spills_inventory_subset = fnPlanLineageInventoryTheory.release_dead_spills_inventory_subset
 
-Theorem generate_emit_ops_slots:
-  !inst ltc ps ops ps'.
-    generate_emit_ops inst ltc ps = (ops, ps') ==>
-    ps'.ps_stack = ps.ps_stack /\ ps'.ps_spilled = ps.ps_spilled
-Proof
-  rpt gen_tac >> simp[generate_emit_ops_def] >>
-  Cases_on `venom_to_evm_name inst.inst_opcode` >> simp[] >>
-  strip_tac >> gvs[] >>
-  Cases_on `inst.inst_opcode = JNZ` >> gvs[]
-  >- (BasicProvers.every_case_tac >> gvs[]) >>
-  Cases_on `inst.inst_opcode = JMP` >> gvs[]
-  >- (BasicProvers.every_case_tac >> gvs[]) >>
-  Cases_on `inst.inst_opcode = DJMP` >> gvs[] >>
-  Cases_on `inst.inst_opcode = INVOKE` >> gvs[]
-  >- (Cases_on `HD inst.inst_operands` >> gvs[] >>
-      pairarg_tac >> gvs[fresh_label_def]) >>
-  Cases_on `inst.inst_opcode = RET` >> gvs[] >>
-  Cases_on `inst.inst_opcode = ASSERT` >> gvs[] >>
-  Cases_on `inst.inst_opcode = ASSERT_UNREACHABLE` >> gvs[]
-  >- (pairarg_tac >> gvs[fresh_label_def]) >>
-  Cases_on `inst.inst_opcode = LOG` >> gvs[] >>
-  Cases_on `inst.inst_opcode = ISTORE` >> gvs[] >>
-  Cases_on `inst.inst_opcode = INITIAL_FMP` >> gvs[] >>
-  Cases_on `inst.inst_opcode = BUMP` >> gvs[]
-QED
+Theorem generate_emit_ops_slots = fnPlanLineageReorderTheory.generate_emit_ops_slots
 
 Theorem foldl_push_outputs_inventory[local]:
   !outs ps at.

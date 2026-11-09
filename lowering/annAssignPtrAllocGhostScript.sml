@@ -3,7 +3,7 @@ Theory annAssignPtrAllocGhost
 Ancestors
   allocationPtr robustCopyTransportPtr bodyPtrDefs loweringPosts loweringHalt
   venomState venomExecSemantics venomInst finite_map pred_set
-  exprSimProps exprLoweringProps compileEnv localPtrsProps ptrDiscipline venomMemDefs
+  exprSimProps exprLoweringProps compileEnv loweringStateRelDefs localPtrsProps ptrDiscipline venomMemDefs
 
 Theorem annassign_fresh_alloca_robust_ptr:
   !id n out s u tn tv v b.

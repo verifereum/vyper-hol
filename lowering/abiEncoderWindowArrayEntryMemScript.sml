@@ -10,8 +10,8 @@ Ancestors
   abiEncoderWindowArrayInvariant abiEncoderWindowArrayBody abiEncoderWindowArrayRound
   abiEncoderWindowStructuralMembers abiEncoderRegisteredEffect
   abiEncoderWindowContract abiEncoderPrimitiveEffect freshWrites
-  emitHelperProps exprLoweringProps compileEnv emitHelper fragExec
-  venomState venomMemDefs valueEncoding valueEncodingProps finite_map pred_set words list arithmetic
+  emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs emitHelper fragExec
+  venomState venomMemDefs valueEncoding valueEncodingDefs valueEncodingProps finite_map pred_set words list arithmetic
 
 Theorem window_array_length_copy_phase_mem:
   emit_op MLOAD [src] st = (count_op,mid) /\

@@ -16,8 +16,8 @@ Ancestors
   list pair vyperMisc fragExec loweringSlice exprSimHyps
   exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
-  exprLoweringProps emitHelper compileEnv localPtrsProps valueEncoding
-  vyperAST vyperInterpreter vyperState vyperValue vyperTyping
+  exprLoweringProps emitHelper compileEnv loweringStateRelDefs localPtrsProps valueEncoding
+  vyperAST vyperInterpreter vyperCallOutcomeFrame vyperState vyperValue vyperTyping
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
   venomExecSemantics venomInst venomState rich_list bodyUnopFragMemory

@@ -2,7 +2,7 @@ Theory dftGasInvOracleAvailability
 Ancestors
   dftGasOracleDefs dftGasInvSSAProbe dftAvailability
   venomExecSemantics venomExecProofs venomInstProps venomState venomInst
-  venomWf sccpCorrectnessProofs list finite_map pred_set option
+  venomWf venomWfProps list finite_map pred_set option
 
 Theorem inv_ev_step_not_phi:
   ev_step orc p d fuel ctx i s = OK t ==> i.inst_opcode <> PHI

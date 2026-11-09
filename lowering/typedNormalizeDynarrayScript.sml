@@ -2,7 +2,7 @@ Theory typedNormalizeDynarray
 Ancestors
   exprSimBufferStore typedNormalizeFrame typedNormalizeLoop typedBytesArrayMem memContinuation allocaFootprint instMemFrontier
   fragExec fragExecMem emitHelperProps exprLoweringProps venomExecSemantics venomExecProofs venomState venomInst
-  context compileEnv emitHelper valueEncoding valueEncodingProps words arithmetic list rich_list
+  context compileEnv loweringStateRelDefs emitHelper valueEncoding valueEncodingDefs valueEncodingProps words arithmetic list rich_list
 
 (* Runtime length, not capacity, determines the data copy.  Register names
    are explicit here so the same boundary serves both compiler branches. *)

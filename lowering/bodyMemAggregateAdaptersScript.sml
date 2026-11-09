@@ -3,7 +3,7 @@ Theory bodyMemAggregateAdapters
 Ancestors
   bodyMemAggregateLoops exprSimAggregateLayout exprSimAggregateLoops
   gasOutcome gasSummary valueEncoding vyperTypeABI bodyDeclWordMemory
-  exprLowering compileEnv exprLoweringProps emitHelperProps loweringSlice
+  exprLowering compileEnv loweringStateRelDefs exprLoweringProps emitHelperProps loweringSlice
   localPtrsProps venomState venomMemDefs stmtSimProps stmtSimDefs
   stmtSimDeclCompose gasSummaryCompose fragGasMode fragGasPathMem fragExec
   exprSimDefs loweringPosts abiStaticAggregateProps exprBopSimProps
@@ -284,7 +284,7 @@ Proof
        (simp[Abbr `sh`, mstore_def, lookup_var_def] >>
         gvs[lookup_var_def]) >>
      simp[] >> rpt strip_tac >> first_x_assum drule_all >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac)) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >>
   strip_tac >> conj_tac >- simp[] >>
   irule bodyDeclMemoryComposeTheory.gas_outcome_zero_prefix_mem >>
   qexists_tac `sh` >> conj_tac
@@ -382,7 +382,7 @@ Resume aggregate_make_array_sim_mem[header_boundary]:
   irule array_header_store_boundary >>
   simp[] >> conj_tac
   >- (rpt strip_tac >> first_x_assum drule_all >>
-      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   qexistsl_tac [`asz`, `inst`, `x`] >> simp[]
 QED
 

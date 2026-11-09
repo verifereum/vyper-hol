@@ -2,7 +2,7 @@ Theory makeSsaCurrentCleanupTransparent
 Ancestors
   makeSsaCurrentCleanupBoundary makeSsaCurrentNonDegCleanup makeSsaCurrentRetainedEffect
   makeSsaCurrentLockstepShape makeSsaCurrentNonDegTransport
-  makeSsaCurrentDefs makeSsaCurrentWfSsa makeSsaHelper venomExecProps venomWf
+  makeSsaDefs makeSsaCurrentWfSsa venomExecProps venomWf
   makeSsaCurrentEdgeTrace o1FrameLockstep venomExecSemantics venomInst list
 
 Theorem current_nondeg_phi_fixed:

@@ -1,7 +1,7 @@
 Theory makeSsaCurrentDominanceAvailability
 Ancestors
-  sccpCorrectnessProofs cfgNormSupplySim makeSsaCurrentOutputSurvival
-  makeSsaCurrentWfSsa makeSsaCurrentDefs venomState finite_map
+  venomWfProps cfgNormSupplySim makeSsaCurrentOutputSurvival
+  makeSsaCurrentWfSsa makeSsaDefs venomState finite_map
 
 Theorem current_strict_dom_producer_lookup:
   strict_dom_vars_defined f st /\ MEM b f.fn_blocks /\

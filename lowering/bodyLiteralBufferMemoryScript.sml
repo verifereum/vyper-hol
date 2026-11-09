@@ -17,7 +17,7 @@ Ancestors
   fragExecMem fragGasPathMem fragGasMode gasSummary gasOutcome
   exprSimVVFrame exprSimAlloc exprSimProps exprSimDefs exprSimHypsDefs
   loweringPosts allocLimits exprLoweringProps exprLowering emitHelperProps
-  emitHelper context compileEnv valueEncoding vyperAST vyperInterpreter
+  emitHelper context compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs vyperAST vyperInterpreter
   vyperState vyperValue vyperValueOperation vyperTypeSystem
   venomState venomInst venomExecSemantics venomMemDefs venomMemProps
   list rich_list finite_map words arithmetic

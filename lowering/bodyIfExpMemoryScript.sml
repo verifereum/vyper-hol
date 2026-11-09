@@ -27,7 +27,7 @@ Proof
   >- (simp[GSYM mk_inst_def, run_inst_seq_mem_ok_last] >>
       irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
   disj1_tac >>
-  simp[run_inst_seq_def, step_inst_base_def, exec_pure1_def, comp_bind_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, exec_pure1_def, comp_bind_def,
        comp_return_def] >> gvs[]
 QED
 
@@ -44,7 +44,7 @@ Proof
   `emitted_insts st st' = [mk_inst st.cs_next_id ASSIGN [src] [out]]` by
     simp[emitted_insts_def, DROP_LENGTH_APPEND] >>
   `run_inst_seq (emitted_insts st st') s = OK (update_var out w s)` by
-    simp[run_inst_seq_def, mk_inst_def, step_inst_base_def, exec_pure1_def,
+    simp[run_inst_seq_def, mk_inst_def, step_inst_base_opcode_eqs, exec_pure1_def,
          comp_bind_def, comp_return_def] >>
   `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
       DROP s.vs_inst_idx bb.bb_instructions = emitted_insts st st' ++ rest) /\
@@ -109,7 +109,7 @@ Proof
     (irule (SRULE [mk_inst_def] (Q.INST
        [`i` |-> `mk_inst sa.cs_next_id ASSIGN [op] [rv]`,
         `u` |-> `update_var rv w s`] straight_line_mem_edge)) >>
-     simp[step_inst_base_def, exec_pure1_def, mk_inst_def,
+     simp[step_inst_base_opcode_eqs, exec_pure1_def, mk_inst_def,
           is_terminator_def, inst_dload_in_section_def] >>
      qexistsl_tac [`op`, `sa`] >> simp[GSYM mk_inst_def] >>
      conj_tac >- metis_tac[] >>
@@ -548,11 +548,20 @@ Proof
       drule place_type_value_state >> strip_tac >> gvs[] >>
       `!tail. place_type_value cx p (ee with gas_obs := tail) =
          (pr,ee with gas_obs := tail)` by
-        (Cases_on `p` >>
-         gvs[place_type_value_def, get_scopes_def, get_immutables_def,
-             get_address_immutables_def, bind_def, return_def,
-             lift_option_type_def, raise_def, AllCaseEqs()] >>
-         rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
+        (qpat_x_assum `place_type_value cx p ee = _` mp_tac >>
+         Cases_on `p` >>
+         simp[place_type_value_def, get_scopes_def, get_immutables_def,
+              get_address_immutables_def, bind_def, return_def]
+         >- (rename1 `lookup_scopes id ee.scopes` >>
+             Cases_on `lookup_scopes id ee.scopes` >> simp[] >>
+             rename1 `subscripts_type entry.type path` >>
+             Cases_on `subscripts_type entry.type path` >> simp[]) >>
+         rename1 `get_source_immutables src` >>
+         Cases_on `ALOOKUP ee.immutables cx.txn.target` >> simp[] >>
+         rename1 `FLOOKUP (get_source_immutables src imms) id` >>
+         Cases_on `FLOOKUP (get_source_immutables src imms) id` >> simp[] >>
+         rename1 `subscripts_type (FST tva) path` >>
+         Cases_on `subscripts_type (FST tva) path` >> simp[]) >>
       simp[] >> Cases_on `pr` >> simp[] >>
       IF_CASES_TAC >> simp[return_def] >>
       Cases_on `read_place cx p ee` >>

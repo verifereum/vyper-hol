@@ -5,7 +5,7 @@ Ancestors
   abiEncoderWindowMembers abiEncoderWindowContract abiEncoderWindowPhase
   abiEncoderWindow abiEncoderInput abiEncoderRegisteredEffect windowPhaseMem memContinuation
   allocaSiteResource exprLoweringProps venomMemDefs venomState finite_map pred_set
-  compileEnv emitHelper valueEncoding valueEncodingProps contractABI abiEncoderMembersDefs
+  compileEnv loweringStateRelDefs emitHelper valueEncoding valueEncodingDefs valueEncodingProps contractABI abiEncoderMembersDefs
   abiCanonicalWindows abiDecodeRanges list rich_list arithmetic words
 
 Theorem window_complex_allocate_cursor_mem:

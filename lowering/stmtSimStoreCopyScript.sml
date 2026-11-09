@@ -20,7 +20,7 @@ Ancestors
   list rich_list finite_map pred_set
   fragExec loweringSlice
   emitHelper emitHelperProps exprLoweringProps
-  context compileEnv
+  context compileEnv loweringStateRelDefs
   venomExecSemantics venomInst venomState
 Libs
   monadsyntax

@@ -26,7 +26,7 @@
  *)
 Theory makeSsaCurrentSim
 Ancestors
-  o1PassLift makeSsaCurrentDefs venomWf cfgWf venomInst irSupply
+  o1PassLift makeSsaDefs venomWf cfgWf venomInst irSupply
   unitShapeDefs o1PassContract makeSsaCurrentLockstep o1FrameLockstep
   makeSsaCurrentForwardBlock makeSsaCurrentEdgePrefix
   makeSsaCurrentSuccessorRelation makeSsaCurrentPrefixTransport
@@ -123,7 +123,7 @@ Proof
      simp[contextCodegenRelTheory.enters_block_def] >> rpt strip_tac >>
      drule venomExecProofsTheory.eval_phis_preserves_current_bb >> simp[]) >>
   `LENGTH (collect_phis old.bb_instructions) <= LENGTH old.bb_instructions` by
-    simp[makeSsaCurrentDemandDominanceTheory.current_collect_phis_length] >>
+    simp[livenessTransferProofsTheory.current_collect_phis_length] >>
   `LENGTH (collect_phis old.bb_instructions) <= LENGTH (collect_phis old.bb_instructions)` by simp[] >>
   `post'.vs_inst_idx = phi_prefix_length bb'.bb_instructions` by
     (qpat_x_assum `enters_block fn' raw' post'` mp_tac >>

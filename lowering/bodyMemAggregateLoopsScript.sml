@@ -3,9 +3,9 @@ Theory bodyMemAggregateLoops
 Ancestors
   bodyMemAggregateLoopBoundary bodyMemAggregateCons bodyMemoryPreds
   exprSimAggregateChildren exprSimAggregateLayout exprSimHyps
-  exprLowering exprLoweringProps exprOperandVar compileEnv loweringPosts
+  exprLowering exprLoweringProps exprOperandVar compileEnv loweringStateRelDefs loweringPosts
   gasOutcome gasSummary exprSimWordArgs vyperState vyperInterpreter
-  freshWrites valueEncoding fragExec exprSimDefs exprSimMemDefs
+  freshWrites valueEncoding valueEncodingDefs fragExec exprSimDefs exprSimMemDefs
   fragGasMode fragGasPath exprSimAggregateLoops valueEncodingProofs
 
 Theorem aggregate_make_tuple_sim_mem:
@@ -65,9 +65,11 @@ Proof
       gvs[compile_make_tuple_def, comp_return_def] >>
       irule aggregate_tuple_nil_outcome_mem >>
       simp[val_in_memory_def, stmt_state_rel_gas_obs]) >>
-  rpt gen_tac >> strip_tac >>
-  `out = Var x` by metis_tac[compiler_make_tuple_result] >>
-  gvs[] >>
+  pop_assum (fn ih =>
+    rpt gen_tac >> strip_tac >>
+    `out = Var x` by metis_tac[compiler_make_tuple_result] >>
+    gvs[] >>
+    assume_tac ih) >>
   `expr_body_pre ce cx env h es` by metis_tac[listTheory.MEM] >>
   drule aggregate_mem_tuple_cons_compile >> strip_tac >>
   rename1 `compile_expr ce (expr_type h) h sa = (vv,sm)` >>

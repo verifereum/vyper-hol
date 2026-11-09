@@ -3,7 +3,7 @@ Ancestors
   makeSsaCurrentDominanceAvailability makeSsaCurrentForwardReadiness
   makeSsaCurrentPrefixCopyOccurrence makeSsaCurrentPrefixPayload
   makeSsaCurrentCopyPrefixRuntime makeSsaCurrentCleanupBoundary
-  makeSsaCurrentLockstepShape makeSsaCurrentWfSsa makeSsaCurrentDefs
+  makeSsaCurrentLockstepShape makeSsaCurrentWfSsa makeSsaDefs
   venomExecProofs venomExecSemantics venomState list pred_set
 
 Theorem current_copy_prefix_ready_from_sources:

@@ -1,9 +1,9 @@
 Theory makeSsaCurrentCarrierOwner
 Ancestors
-  makeSsaCurrentHistoryOwner makeSsaCurrentCleanupBoundary makeSsaCurrentDefs
+  makeSsaCurrentHistoryOwner makeSsaCurrentCleanupBoundary makeSsaDefs
   makeSsaCurrentWfSsa makeSsaCurrentCertificate makeSsaCurrentTreeTrace
   makeSsaCurrentAllocation
-  makeSsaHelper venomInst list rich_list makeSsaRfAllocation
+  venomExecProps venomInst list rich_list makeSsaRfAllocation
 Theorem current_carrier_copy_source_slot:
   inst.inst_opcode = PHI /\ inst.inst_outputs = [out] /\
   inst.inst_operands = current_phi_slots slots /\

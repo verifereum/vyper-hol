@@ -2,7 +2,7 @@ Theory bodyMemBiBlockHashPath
 Ancestors
   bodyUnopFragMemory builtinProps builtinSimple builtinMisc fragGasFresh fragGasSeqMem
   allocaHistoryFragment instMemFrontier memSafeRun fragExec fragExecMem varsExt fragGasMode
-  compileEnv exprLoweringProps exprSimProps venomInstProofs emitHelper
+  compileEnv loweringStateRelDefs exprLoweringProps exprSimProps venomInstProofs emitHelper
   exprSimDefs finite_map
   list rich_list arithmetic venomInst venomExecSemantics venomState
 

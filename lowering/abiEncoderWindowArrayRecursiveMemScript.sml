@@ -6,8 +6,8 @@ Ancestors
   abiEncoderWindowSequence abiEncoderWindowArrayLayout abiEncoderWindow
   abiEncoderRegisteredEffect abiEncoderWindowStructuralMembers abiEncoderArrayBodyCode
   abiEncoderArrayCode abiEncoderArrayDynamicMemory abiDecoderReentry abiEncoderAdmissible abiEncoderProps abiEncoder
-  memContinuation windowTransitionMem freshWrites exprLoweringProps emitHelperProps compileEnv fragExec allocaFootprint instMemFrontier venomMemDefs finite_map
-  valueEncoding valueEncodingProps contractABI venomState words list pred_set arithmetic
+  memContinuation windowTransitionMem freshWrites exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs fragExec allocaFootprint instMemFrontier venomMemDefs finite_map
+  valueEncoding valueEncodingDefs valueEncodingProps contractABI venomState words list pred_set arithmetic
 
 Theorem window_array_element_run_mem:
   window_array_root ctx func owner ids ei asz msz active ty avs src dst sb cap d s /\

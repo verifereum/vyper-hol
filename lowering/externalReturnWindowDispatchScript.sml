@@ -33,7 +33,10 @@ Theorem return_window_run:
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `source_cap = 0`
   >- (irule zero_window_run >> goal_assum (drule_at Any) >>
-      simp_tac bool_ss [zero_window_pre_def] >> gvs[] >> metis_tac[]) >>
+      simp_tac bool_ss [zero_window_pre_def] >> qexists_tac `sb` >>
+      (* Rewrite with the assumptions only; gvs[] here took 4.7 s. *)
+      qpat_x_assum `source_cap = 0` SUBST_ALL_TAC >> asm_rewrite_tac[] >>
+      metis_tac[]) >>
   `0 < source_cap` by decide_tac >>
   simp_tac bool_ss [abi_encoder_window_result_def] >>
   irule compile_abi_encode_to_buf_window_run >> asm_rewrite_tac[] >>

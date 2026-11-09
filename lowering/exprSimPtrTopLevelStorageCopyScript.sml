@@ -961,10 +961,10 @@ Theorem toplevel_copy_backedge_path:
 Proof
   strip_tac >> irule toplevel_copy_jump_inv_path >>
   simp[] >>
-  simp[step_inst_base_def, mk_inst_def, ptr_inst_ok_def, access_ok_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, ptr_inst_ok_def, access_ok_def,
        taint_ok_def, allocas_from_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def,
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
        mk_inst_def, jump_to_def, op_taint_def]
 QED
 
@@ -1190,7 +1190,10 @@ Theorem toplevel_copy_counter_suffix_ghost:
 Proof
   strip_tac >>
   Cases_on `lookup_var cv s`
-  >- gvs[exprLoweringPropsTheory.run_inst_seq_def, step_inst_base_def,
+  (* The per-opcode equations: unfolding the whole step_inst_base dispatch
+     took more than 2.5 s. *)
+  >- gvs[exprLoweringPropsTheory.run_inst_seq_def,
+         venomExecSemanticsTheory.step_inst_base_opcode_eqs,
          exec_pure2_def, mk_inst_def, eval_operands_def, eval_operand_def] >>
   rename1 `lookup_var cv s = SOME w` >>
   qabbrev_tac `i = mk_inst id ADD [Var cv;Lit 1w] [nv]` >>
@@ -1729,7 +1732,7 @@ Proof
   strip_tac >> conj_tac
   >- (gvs[GENLIST] >>
       rpt conj_tac >> irule emitHelperPropsTheory.fresh_var_distinct >> decide_tac) >>
-  rpt strip_tac >> gvs[MEM_GENLIST, compileEnvTheory.not_fresh_at_def] >>
+  rpt strip_tac >> gvs[MEM_GENLIST, loweringStateRelDefsTheory.not_fresh_at_def] >>
   first_x_assum (qspec_then `sa.cs_next_var+i` mp_tac) >> simp[]
 QED
 
@@ -1810,11 +1813,11 @@ Theorem toplevel_copy_jmp_path:
 Proof
   strip_tac >> irule toplevel_copy_raw_jump_path >>
   conj_tac >- simp[] >> qexistsl_tac [`bb`, `mk_inst id JMP [Label lbl] []`] >>
-  simp[mk_inst_def, step_inst_base_def, ptr_inst_ok_def, access_ok_def,
+  simp[mk_inst_def, step_inst_base_opcode_eqs, ptr_inst_ok_def, access_ok_def,
        taint_ok_def, allocas_from_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def] >>
   simp[GSYM mk_inst_def, step_inst_non_invoke, jump_to_def] >>
-  simp[step_inst_base_def, mk_inst_def, jump_to_def, op_taint_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, jump_to_def, op_taint_def]
 QED
 
 

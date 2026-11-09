@@ -1,7 +1,7 @@
 Theory makeSsaCurrentLastOutput
 Ancestors
   makeSsaCurrentTokens makeSsaCurrentRuntime makeSsaCurrentCutTransport
-  makeSsaCurrentWfSsa makeSsaCurrentCertificate makeSsaHelper
+  makeSsaCurrentWfSsa makeSsaCurrentCertificate venomExecProps
   makeSsaCurrentFinalBlock list rich_list arithmetic
 
 Theorem current_output_token_last_slot:

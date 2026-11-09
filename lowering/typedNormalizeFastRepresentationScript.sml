@@ -1,7 +1,7 @@
 (* One-layer fast-copy lifting. Element and default transport remain explicit. *)
 Theory typedNormalizeFastRepresentation
 Ancestors
-  valueEncoding vyperValue
+  valueEncoding valueEncodingDefs vyperValue
 
 Theorem elems_in_memory_type_transport:
   !vs s d b mem.

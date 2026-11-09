@@ -1,0 +1,35 @@
+diff --git a/vyper/codegen_venom/builtins/convert.py b/vyper/codegen_venom/builtins/convert.py
+index b9eebef3..e5847b87 100644
+--- a/vyper/codegen_venom/builtins/convert.py
++++ b/vyper/codegen_venom/builtins/convert.py
+@@ -58,15 +58,28 @@ def lower_convert(node: vy_ast.Call, ctx: VenomCodegenContext) -> IROperand:
+     elif isinstance(out_t, BytesM_T):
+         return _to_bytes_m(arg, in_t, out_t, arg_node, ctx)
+     elif isinstance(out_t, BytesT):
+-        return _to_bytes(arg, in_t, out_t, arg_node, ctx)
++        ptr = _to_bytes(arg, in_t, out_t, arg_node, ctx)
++        return _bytestring_convert_value(ptr, arg_vv.typ, out_t, ctx)
+     elif isinstance(out_t, StringT):
+-        return _to_string(arg, in_t, out_t, arg_node, ctx)
++        ptr = _to_string(arg, in_t, out_t, arg_node, ctx)
++        return _bytestring_convert_value(ptr, arg_vv.typ, out_t, ctx)
+     elif isinstance(out_t, FlagT):
+         return _to_flag(arg, in_t, out_t, ctx)
+     else:  # pragma: nocover
+         raise CompilerPanic(f"Unsupported conversion target: {out_t}")
+ 
+ 
++def _bytestring_convert_value(ptr, src_t, out_t, ctx):
++    # Backport vyper#5338 to the bounded bytestring types at this pin.
++    # Consumers can read the result up to its type's size.
++    if src_t.memory_bytes_required < out_t.memory_bytes_required:
++        ret = ctx.new_temporary_value(out_t, annotation="convert")
++        assert isinstance(ret.operand, IRVariable)
++        ctx.copy_memory(ret.operand, ptr, src_t.memory_bytes_required)
++        return ret.operand
++    return ptr
++
++
+ def _get_folded_value(node: vy_ast.VyperNode):
+     """
+     Get the compile-time constant value for a node if available.

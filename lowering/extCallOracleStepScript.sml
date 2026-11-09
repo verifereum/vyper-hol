@@ -41,7 +41,7 @@
 Theory extCallOracleStep
 Ancestors
   list words
-  compileEnv localPtrsProps exprLoweringProps accountsRelProps
+  compileEnv loweringStateRelDefs localPtrsProps exprLoweringProps accountsRelProps
   vyperInterpreter vyperState vyperValue vyperCallOutcome extCallOracle
   venomCallOracleDefs venomExecSemantics venomInst venomState venomMemProps
 

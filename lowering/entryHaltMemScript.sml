@@ -364,7 +364,7 @@ Proof
   rename1 `eval_operand src s = SOME a` >>
   `!id out. step_inst_base (mk_inst id CALLDATALOAD [src] [out]) s =
       OK (update_var out (mem_word_at (w2n a) s.vs_call_ctx.cc_calldata) s)` by
-    (rpt gen_tac >> drule step_CALLDATALOAD >> simp[valueEncodingTheory.mem_word_at_def]) >>
+    (rpt gen_tac >> drule step_CALLDATALOAD >> simp[valueEncodingDefsTheory.mem_word_at_def]) >>
   drule decode_emit_update_frame >>
   disch_then (qspecl_then [`s`, `mem_word_at (w2n a) s.vs_call_ctx.cc_calldata`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>

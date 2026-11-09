@@ -30,7 +30,7 @@
  *)
 Theory loweringShapeProps
 Ancestors
-  list rich_list loweringShapeDefs loweringShapeRules compileEnv context
+  list rich_list loweringShapeDefs loweringShapeRules compileEnv loweringStateRelDefs context
   emitHelper exprLowering stmtLowering moduleLowering vyperCompiler
   compileVyper abiEncoder supportedProgram supportedNames
   supportedStmtTraverse supportedExprTraverse supportedTargets unitShapeDefs venomInst vyperAST

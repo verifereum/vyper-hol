@@ -1,7 +1,66 @@
 Theory jsonConstEval
 Ancestors
-  jsonConstAST jsonToVyperExpr vyperConstEval vyperValue vyperValueOperation
+  jsonConstAST jsonToVyperExpr vyperInterpreter vyperContext vyperState vyperValue
+  vyperValueOperation vyperAST
   alist int_bitwise
+
+(* Integer constant expressions have no dependency on runtime state or nominal
+   type resolution. Their arithmetic is the existing runtime arithmetic. *)
+Definition closed_integer_def:
+  closed_integer (Literal (BaseT (UintT bits)) (IntL i)) = T /\
+  closed_integer (Literal (BaseT (IntT bits)) (IntL i)) = T /\
+  closed_integer (Builtin (BaseT (UintT bits)) (Bop bop) [e1; e2]) =
+    (closed_integer e1 /\ closed_integer e2) /\
+  closed_integer (Builtin (BaseT (IntT bits)) (Bop bop) [e1; e2]) =
+    (closed_integer e1 /\ closed_integer e2) /\
+  closed_integer _ = F
+End
+
+(* Failure includes unsupported syntax and runtime arithmetic errors. *)
+Definition eval_integer_constant_def:
+  eval_integer_constant e =
+    if closed_integer e then
+      case eval_expr empty_evaluation_context e empty_state of
+      | (INL (Value (IntV i)), _) => SOME i
+      | _ => NONE
+    else NONE
+End
+
+Theorem closed_integer_expr_type[local]:
+  !e. closed_integer e ==> ?bt. expr_type e = BaseT bt
+Proof
+  ho_match_mp_tac closed_integer_ind >> rw[closed_integer_def, expr_type_def]
+QED
+
+(* A closed integer expression reads nothing from its context or state and
+   leaves the state unchanged.  The membership operators read the second
+   operand's type through evaluate_type, which only consults the type
+   environment for named types; a closed integer operand has a base type. *)
+Theorem closed_integer_eval[local]:
+  !e. closed_integer e ==>
+    ?r. (!cx st. eval_expr cx e st = (r, st)) /\
+        (!x. r = INL x ==> ?v. x = Value v)
+Proof
+  ho_match_mp_tac closed_integer_ind >> rw[closed_integer_def] >>
+  TRY (simp[evaluate_def, return_def] >> NO_TAC) >>
+  imp_res_tac closed_integer_expr_type >> gvs[] >>
+  Cases_on `r` >> Cases_on `r'` >> gvs[] >>
+  simp[evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+       builtin_args_length_ok_def, return_def, read_result_def,
+       get_accounts_def, evaluate_builtin_def, evaluate_type_def] >>
+  qmatch_goalsub_abbrev_tac `lift_sum X` >>
+  Cases_on `X` >>
+  simp[lift_sum_def, return_def, raise_def, precompile_call_success_def,
+       precompile_builtin_def]
+QED
+
+Theorem eval_integer_constant_sound:
+  eval_integer_constant e = SOME i ==>
+  eval_expr cx e st = (INL (Value (IntV i)), st)
+Proof
+  rw[eval_integer_constant_def, AllCaseEqs()] >>
+  drule closed_integer_eval >> strip_tac >> gvs[]
+QED
 
 (* Literals and substituted constants are polymorphic here. A local operand
    fixes the type of its arithmetic expression; a shift's count does not fix

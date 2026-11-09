@@ -2,7 +2,7 @@
 Theory exprSimPtrTopLevelForce
 Ancestors
   exprSimPtrTopLevelViews exprSimPtrTopLevelCopy exprSimPtrProps bodyPtrDefs
-  compileEnv context vyperValue vyperAST ptrDiscipline words pred_set exprSimUnwrap
+  compileEnv loweringStateRelDefs context vyperValue vyperAST ptrDiscipline words pred_set exprSimUnwrap
   emitHelper emitHelperProps fragExec venomInst venomState decoderGhostFramePtr memLocDefs codegenRel
   exprSimTopLevelStorage exprSimTopLevelImmutable exprSimTopLevelProps exprSimUnwrapProps exprSimProps exprSimMemorySource
   exprSimHypsDefs exprSimHyps exprSimDefs exprLowering exprLoweringProps loweringPosts
@@ -215,8 +215,12 @@ Resume toplevel_storage_word_sim_ptr[load]:
       [STRING #"%" (toString sa.cs_next_var)]) s0 =
     OK (update_var (STRING #"%" (toString sa.cs_next_var))
       (typed_val_to_w256 tvt v) s0)` by
-    (Cases_on `tr` >>
-     gvs[step_inst_base_def, exec_read1_def, eval_operand_def]) >>
+    (* Only the loaded value matters; gvs over the whole context took 5.9 s. *)
+    (qpat_assum `(if tr then tload _ _ else sload _ _) = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `tr`
+     >- simp[step_inst_base_def, exec_read1_def, eval_operand_def, mk_inst_def] >>
+     simp[step_inst_base_def, exec_read1_def, eval_operand_def, mk_inst_def]) >>
   `op_taint tn0 (Lit (n2w slot)) = {} /\
     MEM (if tr then TLOAD else SLOAD) [SLOAD;TLOAD;DLOAD]` by
     (Cases_on `tr` >> simp[op_taint_def]) >>

@@ -3,8 +3,8 @@ Ancestors
   externalReturnZeroWindow externalReturnZeroRun abiEncoderWindowContract
   abiEncoderWindowStructuralMembers abiEncoderWindowMembers abiEncoderWindow
   abiEncoderInput abiEncoderWindowPhase abiEncoderRegisteredEffect
-  abiEncoderExtendSim abiEncoderProps compileEnv venomState venomInst venomMemDefs
-  contractABI valueEncoding words list finite_map pred_set
+  abiEncoderExtendSim abiEncoderProps compileEnv loweringStateRelDefs venomState venomInst venomMemDefs
+  contractABI valueEncoding valueEncodingDefs words list finite_map pred_set
   abiEncoderWindowLeaves abiEncoderLeaves abiEncoderPrimitiveEffect
   emitHelperProps exprLoweringProps venomExecSemantics
 
@@ -43,7 +43,8 @@ Proof
   strip_tac >>
   `abi_encoder_window_input ei at av 0 0 s.vs_memory` by
     metis_tac[zero_window_relocate] >>
-  fs[regions_disjoint_def] >> simp[eval_operand_def] >> metis_tac[]
+  `!x. regions_disjoint (0,0) x` by (Cases >> simp[regions_disjoint_def]) >>
+  simp[eval_operand_def] >> metis_tac[]
 QED
 
 Definition zero_members_inv_def:

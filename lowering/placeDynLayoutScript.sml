@@ -1,6 +1,6 @@
 Theory placeDynLayout
 Ancestors
-  typedMemoryCopy exprSimAggregateEncoding vyperTyping vyperValue valueEncoding valueEncodingProps
+  typedMemoryCopy exprSimAggregateEncoding vyperTyping vyperValue valueEncoding valueEncodingDefs valueEncodingProps
   words arithmetic list rich_list
 
 Theorem place_dyn_element_layout:

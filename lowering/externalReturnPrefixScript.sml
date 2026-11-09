@@ -5,7 +5,8 @@ Ancestors
   compileEnv entryHaltMem fragExecMem fragExec entryStateRel bodySim compileVyper moduleLowering
 
 (* Sequence ci_mono through binds, lets, conditionals and case splits,
-   down to the operations named in rws (as in stmtLoweringMono). *)
+   down to the operations named in rws (as in stmtLoweringMono); the
+   caller closes what is left, one goal at a time. *)
 fun ci_mono_chain_tac rws =
   let val close =
         FIRST (map MATCH_ACCEPT_TAC
@@ -16,8 +17,7 @@ fun ci_mono_chain_tac rws =
                 close, FIRST_ASSUM MATCH_ACCEPT_TAC,
                 IF_CASES_TAC, BasicProvers.TOP_CASE_TAC] >>
          rpt conj_tac >> rpt gen_tac >> PURE_REWRITE_TAC[LET_THM] >>
-         BETA_TAC) >>
-    simp (ci_mono_comp_return :: rws)
+         BETA_TAC)
   end;
 
 Theorem ci_mono_bind_after[local]:
@@ -41,7 +41,9 @@ Proof
   irule ci_mono_bind_after >> simp[] >>
   ci_mono_chain_tac
     [ci_mono_return_helpers, ci_mono_emit_op, ci_mono_compile_alloc_buffer,
-     cj 1 ci_mono_typed_memory_family]
+     cj 1 ci_mono_typed_memory_family] >>
+  FIRST [simp [ci_mono_comp_return, ci_mono_return_helpers, ci_mono_emit_op,
+               ci_mono_compile_alloc_buffer, cj 1 ci_mono_typed_memory_family]]
 QED
 
 Theorem update_cenv_ret_abi_frame[local]:

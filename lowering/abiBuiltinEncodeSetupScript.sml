@@ -3,7 +3,7 @@ Ancestors
   abiBuiltinEncodeCode abiBuiltinEncodeContext abiBuiltinAllocation abiBuiltinSetupFrames
   abiBuiltinPrefix abiEncoderSequence abiEncoderBytesPrefix abiDecoderReentry
   abiDecoderDynamicLoopSetup abiDecoderGuards abiDecoderContract abiDecoderLoop fragExec
-  instIdxIndep compileEnv emitHelperProps exprLoweringProps venomState venomExecSemantics
+  instIdxIndep compileEnv loweringStateRelDefs emitHelperProps exprLoweringProps venomState venomExecSemantics
   finite_map words list arithmetic abiEncoderInputFrame abiEncoderInput abiDecoderArrayInitExec
   abiDecoderAllocation abiDecoderFrameCompose abiDecoderRange
 

@@ -2,7 +2,7 @@ Theory immutableCopyExecution
 Ancestors
   bytestringCopyExecution fragExec stmtSimStoreCopy
   fragGasPath fragGasMode fragGasSeq placeCopyControlPath immutableWordExecution immutableMemoryFrame emitHelperProps
-  context compileEnv emitHelper exprLoweringProps venomState venomExecSemantics venomInst
+  context compileEnv loweringStateRelDefs emitHelper exprLoweringProps venomState venomExecSemantics venomInst
   mmCopyEquiv venomMemProps mmInterval
 Libs
   stepInstBaseLib

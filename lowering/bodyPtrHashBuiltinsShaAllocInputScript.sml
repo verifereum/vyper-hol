@@ -1,7 +1,7 @@
 (* Input ownership keeps allocation's new taint away from hash read bytes. *)
 Theory bodyPtrHashBuiltinsShaAllocInput
 Ancestors
-  bodyPtrHashBuiltinsInputWindow bodyPtrHashBuiltinsAllocFrame arithmetic compileEnv pred_set exprSimAlloc emitHelperProps exprLoweringProps
+  bodyPtrHashBuiltinsInputWindow bodyPtrHashBuiltinsAllocFrame arithmetic compileEnv loweringStateRelDefs pred_set exprSimAlloc emitHelperProps exprLoweringProps
   bodyPtrDefs ptrDiscipline venomState venomInst words finite_map loweringHalt
 
 Theorem hash_owned_window_excludes_allocation:

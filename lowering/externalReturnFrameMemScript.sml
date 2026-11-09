@@ -111,16 +111,32 @@ Theorem external_frame_ret_run_mem:
                 mem_safe_run fuel unit.cu_context func t)
 Proof
   rpt gen_tac >> strip_tac >> rpt conj_tac
-  >- metis_tac[return_value_code_prefix]
+  >- (rpt strip_tac >> drule_all return_value_code_prefix >> simp[])
   >- (rpt strip_tac >> drule_all external_package_frame_exit >> strip_tac >>
-      irule return_none_external_run_mem >> metis_tac[])
+      drule_all return_none_external_run_mem >> simp[])
   >> rpt strip_tac >>
   Cases_on `lowered_value_type cenv' e = expr_type e \/
             is_bytestring_type (expr_type e) /\
             is_bytestring_type (lowered_value_type cenv' e) /\
             arg_type_fits (lowered_value_type cenv' e) (expr_type e)`
-  >- (drule_all (Ho_Rewrite.PURE_REWRITE_RULE [PULL_EXISTS] external_frame_ret_value_run_mem) >>
-      simp[])
-  >> drule_all (Ho_Rewrite.PURE_REWRITE_RULE [PULL_EXISTS] external_frame_ret_widened_call_mem) >>
-      simp[]
+  >- (qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `vs`, `mut`,
+                   `args`, `fbody`, `env0`, `lbl`, `cenv0`, `pos_args`,
+                   `min_cds`, `is_payable`, `nkey`, `ut'`, `iv`, `rt`, `st`,
+                   `cenv`, `sa0`, `func`] mp_tac external_frame_ret_value_run_mem >>
+      asm_rewrite_tac[] >>
+      disch_then (qspecl_then [`cenv'`, `env`, `lctx`, `e`, `es`, `sa`, `sb`,
+                               `cenv''`, `s0`, `op`, `s1`, `ee`, `v`, `t`] mp_tac) >>
+      asm_rewrite_tac[] >>
+      impl_tac >- (qexistsl [`gs`, `ee'`] >> first_assum ACCEPT_TAC) >>
+      disch_then ACCEPT_TAC)
+  >> qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `vs`, `mut`,
+                  `args`, `fbody`, `env0`, `lbl`, `cenv0`, `pos_args`,
+                  `min_cds`, `is_payable`, `nkey`, `ut'`, `iv`, `rt`, `st`,
+                  `cenv`, `sa0`, `func`] mp_tac external_frame_ret_widened_call_mem >>
+     asm_rewrite_tac[] >>
+     disch_then (qspecl_then [`cenv'`, `env`, `lctx`, `e`, `es`, `sa`, `sb`,
+                              `cenv''`, `s0`, `op`, `s1`, `ee`, `v`, `t`] mp_tac) >>
+     asm_rewrite_tac[] >>
+     impl_tac >- (qexistsl [`gs`, `ee'`] >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC
 QED

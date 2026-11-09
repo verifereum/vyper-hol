@@ -4,8 +4,8 @@ Ancestors
   bodyMemAssignTupleLocalsFacts bodyDeclWordMemory bodyMemAssignLocalWord
   tupleLocalStoreRun stmtSimAssignStore stmtSimDeclStore
   fragGasMode fragGasPathMem fragExecMem emitHelperProps emitHelper
-  stmtSimDefs exprLoweringProps localPtrsProps valueEncoding valueEncodingProofs
-  venomState venomInst vyperState vyperLookup finite_map list compileEnv
+  stmtSimDefs exprLoweringProps localPtrsProps valueEncoding valueEncodingDefs valueEncodingProofs
+  venomState venomInst vyperState vyperLookup finite_map list compileEnv loweringStateRelDefs
   valueEncodingProps valueCopy valueCopyBytes bodyDeclMemoryCore exprSimProps
   valueTypingMemoryProps bodyMemAssignLocalMem bodyDeclMemoryCounted
   stmtLowering vyperInterpreter fragGasPath tupleLocalStoreProps tupleMemoryFrame
