@@ -325,3 +325,49 @@ Proof
   >- (drule scratch_frame_region >> simp[] >> metis_tac[]) >>
   irule sym_kinds_ok_spill_change >> simp[] >> metis_tac[]
 QED
+
+Theorem scratch_swap_restore_indices:
+  LENGTH items = dist+1 /\ 0 < dist /\ LENGTH offsets = LENGTH items /\
+  EVERY (\off. off < dimword(:256)) offsets ==>
+  EVERY (\k. k < LENGTH (REVERSE items) /\ EL k offsets < dimword(:256))
+    (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`n` |-> `dist+1`] scratch_swap_indices_bounded) >> simp[]
+QED
+
+Theorem LIST_REL_scratch_swap_order[local]:
+  LENGTH items = dist+1 /\ 0 < dist /\
+  LIST_REL R (MAP (\k. EL k (REVERSE items))
+    ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0])) top ==>
+  LIST_REL R (REVERSE (MAP (\k. EL k items)
+    ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))) top
+Proof
+  simp[reverse_desired_values]
+QED
+
+Theorem sym_restore_scratch_swap_bounded:
+  scratch_kinds_ok fn ret (REVERSE items) offsets ss.sym_mem_labels /\
+  LENGTH items = dist+1 /\ 0 < dist /\
+  EVERY (\k. k < LENGTH (REVERSE items) /\ EL k offsets < dimword(:256))
+    (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0])) /\
+  ss.sym_stack = stk /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan initial_fmp (MAP (\k. SORestore (EL k offsets))
+      (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0])))) ==>
+  ?last top. sym_steps p env
+    (LENGTH (execute_plan initial_fmp (MAP (\k. SORestore (EL k offsets))
+      (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))))) ss = SymOK last /\
+    last.sym_stack = top ++ stk /\
+    LIST_REL (op_kind_ok fn ret)
+      (REVERSE (MAP (\k. EL k items) ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))) top /\
+    last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc +
+      LENGTH (execute_plan initial_fmp (MAP (\k. SORestore (EL k offsets))
+        (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))))
+Proof
+  strip_tac >>
+  drule_all_then (qspec_then `env` mp_tac o
+    PURE_REWRITE_RULE [MAP_REVERSE, REVERSE_REVERSE]) sym_restore_scratch_list >>
+  metis_tac[LIST_REL_scratch_swap_order, MAP_REVERSE]
+QED
