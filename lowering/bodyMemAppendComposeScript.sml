@@ -4,7 +4,7 @@ Ancestors
   bodyMemAppendPath bodyMemAppendFacts stmtSimAppendStorageCompose
   stmtSimForced exprSimMemDefs exprSimDefs stmtSimDefs stmtSimProps
   loweringPosts exprSimProps exprOperandVar exprLoweringProps emitHelperProps
-  compileEnv exprLowering emitHelper freshWrites gasOutcome gasSummary fragGasMode
+  compileEnv loweringStateRelDefs exprLowering emitHelper freshWrites gasOutcome gasSummary fragGasMode
   vyperInterpreter vyperState venomState venomInst venomExecSemantics
   bodyMemoryDefs vyperStorage vyperStorageBackend list finite_map
 Libs

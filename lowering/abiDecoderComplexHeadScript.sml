@@ -1,15 +1,15 @@
 (* The optional head-window check before decoding tuple or struct members. *)
 Theory abiDecoderComplexHead
 Ancestors
-  abiDecoderBytesBound abiDecoderGuard abiDecoderGuards abiDecoderReservation abiDecoderContract
-  compileEnv emitHelper emitHelperProps exprLoweringProps venomExecSemantics venomState
+  abiDecoderRange abiDecoderBytesBound abiDecoderGuard abiDecoderGuards abiDecoderReservation abiDecoderContract
+  abiEncoder compileEnv emitHelper emitHelperProps exprLoweringProps venomExecSemantics venomState
   venomInst words arithmetic rich_list
 
 Definition abi_decode_complex_head_guard_def:
   abi_decode_complex_head_guard src hi head_sz =
     if hi = Lit 0w then return ()
     else do end_op <- emit_op ADD [src; Lit (n2w head_sz)];
-            abi_decode_le_guard end_op hi
+            compile_abi_decode_range_check src end_op hi
          od
 End
 
@@ -35,13 +35,17 @@ Proof
   `eval_operand (Lit (n2w head_sz)) s = SOME (n2w head_sz)` by simp[eval_operand_def] >>
   drule_all abi_decode_add_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
-  `eval_operand hi s1 = SOME (n2w hb)` by metis_tac[] >>
-  `sb + head_sz < dimword (:256)` by decide_tac >>
-  `w2n ((n2w sb : bytes32) + n2w head_sz) <= w2n (n2w hb : bytes32)` by
-    simp[word_add_n2w, w2n_n2w] >>
-  drule_all abi_decode_le_guard_sequence >> strip_tac >>
+  gvs[word_add_n2w] >>
+  `eval_operand src s1 = SOME (n2w sb) /\
+   eval_operand hi s1 = SOME (n2w hb)` by metis_tac[] >>
+  `eval_operand end_op s1 = SOME (n2w (sb + head_sz))` by simp[ADD_COMM] >>
+  `sb < dimword (:256) /\ sb + head_sz < dimword (:256)` by decide_tac >>
+  `w2n (n2w sb : bytes32) <= w2n (n2w (sb + head_sz) : bytes32) /\
+   w2n (n2w (sb + head_sz) : bytes32) <= w2n (n2w hb : bytes32)` by
+    simp[w2n_n2w] >>
+  drule_all compile_abi_decode_range_check_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts c1 st') s1 = OK t` >>
-  drule abi_decode_le_guard_shape >> strip_tac >>
+  drule compile_abi_decode_range_check_shape >> strip_tac >>
   drule_all abi_decode_sequence_chain >> strip_tac >>
   qexists_tac `t` >> gvs[] >> metis_tac[]
 QED
@@ -53,7 +57,7 @@ Theorem abi_decode_complex_head_guard_shape:
     (emitted_insts st st')
 Proof
   Cases_on `hi = Lit 0w` >>
-  simp[abi_decode_complex_head_guard_def, abi_decode_le_guard_def,
+  simp[abi_decode_complex_head_guard_def, compile_abi_decode_range_check_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def, emit_void_def,
        fresh_var_def, fresh_id_def, emit_def, emitted_insts_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>

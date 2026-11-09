@@ -4,7 +4,7 @@ Theory appendStorageStageTransportPtr
 Ancestors appendStorageStageRuns stmtAppendStorageSuffixPtr stmtAppendStorageGuardPtr
   varsExt freshWrites
   stateFrame venomState venomInst finite_map exprLoweringProps emitHelperProps
-  venomExecSemantics compileEnv venomInstProps
+  venomExecSemantics compileEnv loweringStateRelDefs venomInstProps
 
 Theorem run_inst_seq_vars_ext_ok:
   vars_ext s s' /\

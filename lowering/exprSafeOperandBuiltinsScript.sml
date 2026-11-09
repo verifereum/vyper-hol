@@ -18,7 +18,7 @@
 Theory exprSafeOperandBuiltins
 Ancestors
   exprSafeOperand
-  exprLoweringProps freshWrites compileEnv emitHelper context
+  exprLoweringProps freshWrites compileEnv loweringStateRelDefs emitHelper context
   exprLowering exprCallBounds vyperTypeSystem vyperValue vyperAST vyperTypeBuiltins
   builtinSimple builtinMath builtinHashing builtinMisc builtinBytes builtinSystem
   builtinCreate

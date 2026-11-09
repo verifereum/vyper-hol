@@ -1,7 +1,7 @@
 Theory o1MakeSsaVisitPaths
 Ancestors
   o1MakeSsaVisitTrace o1MakeSsaReachableTree o1MakeSsaRootedTree
-  o1MakeSsaActualMaps makeSsaCurrentDefs makeSsaCurrentInduct
+  o1MakeSsaActualMaps makeSsaDefs makeSsaCurrentInduct
   dominatorAnalysisProps venomInst list pair
 
 Definition tree_parent_paths_def:

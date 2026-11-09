@@ -1,9 +1,10 @@
 Theory cfgNormSupplySim
 Ancestors
   cfgNormSupplyProofs cfgTransformProps cfgNormDefs cfgTransform venomExecProps venomInst venomWf
-  sccpCorrectnessProofs finite_map venomFnScheduleRunner unitShapeDefs stateFrame
+  finite_map venomFnScheduleRunner unitShapeDefs stateFrame
   analysisSimProofsBase analysisSimDefs cfgNormSim execEquivParamProps passSharedDefs
   prevBbIndep o1PassLift simplifyCfgPhiRepair simplifyCfgWfssa
+  venomWfProps
 
 Theorem find_and_split_supply_cases:
   !bbs fn s fn' changed s'.
