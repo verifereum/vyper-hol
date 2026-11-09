@@ -861,3 +861,21 @@ Proof
   mp_tac materialize_zero_probe_endpoint >>
   simp[materialize_zero_probe_trace_def]
 QED
+
+(* Test whether a nonempty final copy alone prevents an aliased cut. *)
+Theorem materialize_positive_cut_alias_probe:
+  let ty = TupleT [BaseT (UintT 256); BaseT (UintT 256)];
+      vv = LocatedValue ty (mk_ptr (Lit 0w) LocStorage);
+      base = initial_compile_state "@wcopy_exit_2";
+      end0 = SND (compile_materialize_vv ce ty vv base);
+      sa = base with cs_current_insts := end0.cs_current_insts;
+      sb = SND (compile_materialize_vv ce ty vv sa);
+      fn = venomInst$mk_raw_function "positive-cut-probe" sb.cs_blocks
+  in
+    0 < type_memory_bytes ce ty /\
+    sb.cs_current_insts <> [] /\
+    fragExec$fn_has_code sa sb fn /\ venomWf$fn_inst_ids_distinct fn /\
+    ~frag_gas_free sa sb
+Proof
+  EVAL_TAC >> rpt conj_tac >> rpt strip_tac >> gvs[] >> EVAL_TAC
+QED
