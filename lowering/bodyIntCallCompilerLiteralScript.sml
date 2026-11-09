@@ -2,7 +2,7 @@ Theory bodyIntCallCompilerLiteral
 Ancestors
   bodyIntCallCompilerContext bodyIntCallCompilerFloor bodyIntCallCompilerEmit
   bodyIntCallCompilerScalar bodyIntCallCompilerUnwrap bodyIntCallCompilerInterval
-  bodyIntCallCompilerAggregate exprLowering compileEnv
+  bodyIntCallCompilerAggregate exprLowering exprBopLowering compileEnv
 
 Theorem intcall_interval_store_byte_chunks:
   !p bs off k a. k <= a.cs_next_var ==>
@@ -55,4 +55,37 @@ Proof
   rename1 `SOME vl` >> Cases_on `vl` >> simp[intcall_interval_return] >>
   irule intcall_compiler_interval_ignore_bind >>
   simp[intcall_interval_return] >> irule intcall_interval_emit_inst >> simp[]
+QED
+
+Theorem intcall_interval_addmod_names:
+  k <= st.cs_next_var ==>
+  intcall_compiler_interval k st
+    (SND (compile_addmod_names ce rt aty a bty b mty m st))
+Proof
+  strip_tac >> simp[compile_addmod_names_def] >>
+  rpt (irule intcall_interval_pair_bind_floor >>
+       simp[intcall_interval_name_vv, intcall_interval_unwrap_value,
+            as_stack_val_pair, intcall_interval_addmod] >> rpt strip_tac)
+QED
+
+Theorem intcall_interval_mulmod_names:
+  k <= st.cs_next_var ==>
+  intcall_compiler_interval k st
+    (SND (compile_mulmod_names ce rt aty a bty b mty m st))
+Proof
+  strip_tac >> simp[compile_mulmod_names_def] >>
+  rpt (irule intcall_interval_pair_bind_floor >>
+       simp[intcall_interval_name_vv, intcall_interval_unwrap_value,
+            as_stack_val_pair, intcall_interval_mulmod] >> rpt strip_tac)
+QED
+
+Theorem intcall_interval_powmod256_names:
+  k <= st.cs_next_var ==>
+  intcall_compiler_interval k st
+    (SND (compile_powmod256_names ce rt aty a bty b st))
+Proof
+  strip_tac >> simp[compile_powmod256_names_def] >>
+  rpt (irule intcall_interval_pair_bind_floor >>
+       simp[intcall_interval_name_vv, intcall_interval_unwrap_value,
+            as_stack_val_pair, intcall_interval_pow_mod256] >> rpt strip_tac)
 QED
