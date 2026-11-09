@@ -1164,10 +1164,10 @@ Proof
   PairCases_on `cf` >>
   simp[set_constructor_package_target_def, package_constructor_def,
        update_cenv_nonreentrant_def] >> strip_tac >> gvs[] >>
-  simp[body_inv_def, cenv_module_pins_def, deploy_evaluation_context_def,
+  simp[body_inv_def, deploy_evaluation_context_def,
        initial_evaluation_context_def, get_module_code_def, get_tenv_def,
        type_env_all_modules_def, GSYM type_env_def,
-       build_compile_env_def] >>
+       build_compile_env_def, cenv_module_pins_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   rpt conj_tac >>
   TRY (qexistsl [`rpolicy`, `dunit`] >> simp[] >> metis_tac[] >> NO_TAC) >>
@@ -1457,23 +1457,21 @@ Proof
   >- (drule_at (Pat `env_consistent _ _ _`)
         deploy_frame_bare_global_hashmap_exclusion >> simp[] >>
       disch_then (qspec_then `cenv` mp_tac) >> simp[]) >>
-  conj_tac
-  >- (drule_at (Pat `env_consistent _ _ _`) deploy_ctor_bare_global_bounds >>
-      simp[] >> disch_then drule >> simp[] >> metis_tac[]) >>
-  simp[exprSimHypsDefsTheory.bare_globals_layout_def] >> conj_tac
+  drule_at (Pat `env_consistent _ _ _`) deploy_ctor_bare_global_bounds >>
+  simp[] >> disch_then drule >> simp[] >> strip_tac >>
+  conj_tac >- metis_tac[] >>
+  simp[exprSimHypsDefsTheory.bare_globals_layout_def] >> rpt conj_tac
   >- (rpt strip_tac >>
       `cenv_module_pins tops cenv` by fs[body_inv_def] >>
       `get_module_code (deploy_evaluation_context tops am tx) NONE = SOME tops` by
         fs[body_inv_def] >>
-      `bare_globals_complete env_t.bare_globals
-         (deploy_evaluation_context tops am tx)` by
+      `bare_globals_complete env_t.bare_globals (deploy_evaluation_context tops am tx)` by
         fs[env_consistent_def, env_context_consistent_def] >>
       fs[cenv_module_pins_def] >>
       drule add_immutable_locations_cases >> strip_tac
       >- (drule add_module_var_locations_FLOOKUP >> simp[]) >>
-      gvs[bare_globals_complete_def] >> metis_tac[]) >>
-  conj_tac >- simp[deploy_evaluation_context_def] >>
-  conj_tac
+      gvs[bare_globals_complete_def] >> metis_tac[])
+  >- simp[deploy_evaluation_context_def]
   >- (rpt strip_tac >>
       `FLOOKUP env_t.bare_globals (src,id) = SOME ty` by simp[] >>
       drule_all body_inv_bare_global_type >> simp[]) >>
@@ -1484,14 +1482,15 @@ Proof
    cenv.ce_module_var_type (src,id2) = SOME ty2` by
     metis_tac[body_inv_bare_global_type] >>
   `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
-    (drule check_contract_namespaces_ok >>
-     simp[contract_namespaces_ok_def, contract_keys_def]) >>
+    (qpat_assum `check_contract F _ _ _ = SOME _` mp_tac >>
+     simp_tac std_ss [check_contract_def, LET_THM] >> strip_tac >>
+     drule contract_namespaces_ok_module_type_def_keys >>
+     disch_then (qspecl_then [`tops`, `NONE`] mp_tac) >> simp[]) >>
   `get_tenv (deploy_evaluation_context tops am tx) = type_env tops` by
-    simp[deploy_evaluation_context_def, initial_evaluation_context_def,
-         get_tenv_def, type_env_all_modules_def, GSYM type_env_def] >>
+    simp[get_tenv_def, deploy_evaluation_context_def, initial_evaluation_context_def,
+         type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2] >>
   `cenv_module_pins tops cenv /\
-   ALL_DISTINCT
-     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
     fs[body_inv_def] >>
   gvs[] >> irule cenv_module_pins_immutables_disjoint >> metis_tac[]
 QED

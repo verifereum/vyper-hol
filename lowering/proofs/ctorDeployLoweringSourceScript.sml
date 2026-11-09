@@ -229,7 +229,7 @@ Theorem outcomes_replace_get_address_immutables:
     (FST (get_address_immutables cx s),
      SND (get_address_immutables cx s) with outcomes := oc)
 Proof
-  simp[get_address_immutables_def, outcomes_replace_lifts]
+  rewrite_tac[get_address_immutables_def, outcomes_replace_lifts] >> simp[]
 QED
 
 Theorem outcomes_replace_get_immutables:
@@ -433,7 +433,7 @@ Theorem outcomes_replace_lookup_global:
      SND (lookup_global cx src nm s) with outcomes := oc)
 Proof
   rewrite_tac[lookup_global_def] >> irule outcomes_replace_bind >>
-  simp[outcomes_replace_lifts] >> qx_gen_tac `ts` >>
+  rewrite_tac[outcomes_replace_lifts] >> simp[] >> qx_gen_tac `ts` >>
   simp[] >>
   Cases_on `find_var_decl_by_name nm ts`
   >- (simp[] >> irule outcomes_replace_bind >>
