@@ -2750,3 +2750,46 @@ Proof
   drule_at (Pat `MEM (Var _) _.ps_stack ==> _`) analyzed_edge_setup_stack_support >>
   simp[] >> disch_then (qspecl_then [`bb`, `[]`, `after`] mp_tac) >> simp[]
 QED
+
+(* Stack support does not require spill-debt support at the seed.  If the
+   observer is dead there, its absent stack occurrence cannot resurrect. *)
+Theorem native_stack_supported_ordinary_suffix:
+  !fn bb dfg p incoming k qs v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    ~bb_is_halting bb /\
+    LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+      (if Var v IN FDOM incoming.ps_spilled then 1 else 0) <= 1 /\
+    (MEM (Var v) incoming.ps_stack ==>
+      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (LENGTH (get_params bb.bb_instructions)+p))) /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)
+      (LENGTH (get_params bb.bb_instructions)+p) (LENGTH bb.bb_instructions)
+      (DROP p (non_param_insts bb)) incoming k qs /\
+    (!j. j < k ==> (EL j (DROP p (non_param_insts bb))).inst_opcode <> PHI /\
+      (EL j (DROP p (non_param_insts bb))).inst_opcode <> JMP /\
+      ~is_param_opcode (EL j (DROP p (non_param_insts bb))).inst_opcode /\
+      ~MEM v (EL j (DROP p (non_param_insts bb))).inst_outputs) /\
+    (!j before w. j < k /\
+      fnPlanLineageEntryProduction$native_inst_prefix
+        (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)
+        (LENGTH (get_params bb.bb_instructions)+p) (LENGTH bb.bb_instructions)
+        (DROP p (non_param_insts bb)) incoming j before /\
+      MEM (Var w) (compute_operands (EL j (DROP p (non_param_insts bb)))) ==>
+      MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) ==>
+    MEM (Var v) qs.ps_stack ==>
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (get_params bb.bb_instructions)+p+k))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (LENGTH (get_params bb.bb_instructions)+p))`
+  >- (strip_tac >> irule native_supported_ordinary_suffix_demand_support >>
+      simp[] >> qexistsl_tac [`dfg`,`incoming`,`qs`] >>
+      gvs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+      metis_tac[]) >>
+  `~MEM (Var v) incoming.ps_stack` by metis_tac[] >>
+  drule native_ordinary_interval_dead_stack >>
+  disch_then (qspecl_then [`bb`,`p`,`v`] mp_tac) >> simp[] >>
+  (impl_tac >- (rpt strip_tac >> metis_tac[])) >> simp[]
+QED
