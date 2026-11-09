@@ -210,3 +210,44 @@ Proof
       gvs[Once ao_transform_insts_supply_def] >> metis_tac[]) >>
   simp[venomExecSemanticsTheory.phi_prefix_length_def, ao_transform_insts_supply_def]
 QED
+
+Theorem ao_transform_blocks_supply_lookup_none:
+  !bbs supply bbs' last lbl.
+    ao_transform_blocks_supply dfg ra targets supply bbs = (bbs',last) /\
+    lookup_block lbl bbs = NONE ==>
+    lookup_block lbl bbs' = NONE
+Proof
+  Induct >- simp[ao_transform_blocks_supply_def] >>
+  rpt gen_tac >>
+  Cases_on `ao_transform_insts_supply dfg ra h.bb_label targets supply 0 h.bb_instructions` >>
+  Cases_on `ao_transform_blocks_supply dfg ra targets r bbs` >>
+  simp[ao_transform_blocks_supply_def, ao_transform_block_supply_def,
+       lookup_block_def, FIND_thm] >>
+  rpt strip_tac >> gvs[FIND_thm] >> metis_tac[lookup_block_def]
+QED
+
+Theorem ao_transform_blocks_supply_lookup_some:
+  !bbs supply bbs' last lbl bb V.
+    ao_transform_blocks_supply dfg ra targets supply bbs = (bbs',last) /\
+    ir_supply_inst_ok supply /\ V SUBSET set supply.irs_used_vars /\
+    lookup_block lbl bbs = SOME bb ==>
+    ?enter outs finish.
+      lookup_block lbl bbs' = SOME (bb with bb_instructions := outs) /\
+      ao_transform_insts_supply dfg ra bb.bb_label targets enter 0
+        bb.bb_instructions = (outs,finish) /\
+      ir_supply_inst_ok enter /\ V SUBSET set enter.irs_used_vars
+Proof
+  Induct >- simp[lookup_block_def, FIND_thm] >>
+  rpt gen_tac >>
+  Cases_on `ao_transform_insts_supply dfg ra h.bb_label targets supply 0 h.bb_instructions` >>
+  rename1 `ao_transform_insts_supply dfg ra h.bb_label targets supply 0 h.bb_instructions = (outs,next)` >>
+  Cases_on `ao_transform_blocks_supply dfg ra targets next bbs` >>
+  gvs[ao_transform_blocks_supply_def, ao_transform_block_supply_def] >>
+  strip_tac >> gvs[] >>
+  Cases_on `h.bb_label = lbl`
+  >- (gvs[lookup_block_def, FIND_thm] >> metis_tac[]) >>
+  gvs[lookup_block_def, FIND_thm] >>
+  `ir_supply_inst_ok next /\ set supply.irs_used_vars SUBSET set next.irs_used_vars` by
+    metis_tac[ao_transform_insts_supply_mono] >>
+  first_x_assum irule >> metis_tac[SUBSET_TRANS]
+QED
