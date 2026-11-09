@@ -42,6 +42,9 @@ Theorem staged_region_typed_copy_path_mem:
     stmt_state_rel ctx fn ce cx es r /\ r.vs_memory = s.vs_memory /\
     FLOOKUP r.vs_allocas sa.cs_next_id = SOME (w2n tw,n) /\
     s.vs_alloca_next <= r.vs_alloca_next /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
     (t with <|vs_vars := r.vs_vars; vs_memory := r.vs_memory;
       vs_current_bb := r.vs_current_bb; vs_inst_idx := r.vs_inst_idx;
       vs_prev_bb := r.vs_prev_bb|>) = r /\
@@ -134,6 +137,10 @@ Resume staged_region_typed_copy_path_mem[finish]:
     (irule (cj 1 gas_path_mem_history) >>
      first_assum (irule_at (Pat `gas_path_mem _ _ t _ _`)) >>
      simp[] >> fs[stmt_state_rel_def]) >>
+  `u.vs_allocas = r.vs_allocas /\ u.vs_alloca_next = r.vs_alloca_next` by
+    (qpat_x_assum `(u with <|vs_vars := r.vs_vars; vs_memory := r.vs_memory;
+       vs_current_bb := _; vs_inst_idx := _; vs_prev_bb := _|>) = r` mp_tac >>
+     simp[venom_state_component_equality]) >>
   qexistsl_tac [`r`, `t`, `u`, `tw`, `g`] >> asm_rewrite_tac[] >>
   rpt strip_tac >>
   qpat_x_assum `!a k. _ ==> mem_bytes_at a k u.vs_memory = _` (qspecl_then [`a`, `k`] mp_tac) >>
