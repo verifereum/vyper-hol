@@ -20,7 +20,7 @@ Theory taintAgree
 Ancestors
   o1LowerDloadJointStorageWrite o1LowerDloadStackFrontier
   o1LowerDloadRangeTransport o1LowerDloadJointMemoryRead
-  o1LowerDloadMemoryConsumer
+  o1LowerDloadMemoryConsumer o1LowerDloadJointInternalEffects
   o1LowerDloadRelocationKernel o1LowerDloadShared o1PassContract ptrDiscipline codegenRel contextCodegenRel
   venomExecSemantics venomState finite_map pred_set list
 
@@ -271,6 +271,65 @@ Proof
       first_x_assum irule >> simp[] >> metis_tac[]) >>
   irule taint_agree_memory >>
   qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >> gvs[]
+QED
+
+Theorem taint_agree_istore:
+  taint_agree D X tn s t /\ word_agree_except m v w ==>
+  taint_agree D X
+    (tn with <|t_mem := (tn.t_mem DIFF {i | off <= i /\ i < off+32}) UNION
+                         {off+k | k IN m};
+               t_imm := key_update tn.t_imm off m|>)
+    (istore off v s) (istore off w t)
+Proof
+  strip_tac >>
+  drule_all taint_agree_mstore >>
+  disch_then (qspec_then `off` assume_tac) >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address
+     (tn with t_imm := key_update tn.t_imm off m)
+     (istore off v s) (istore off w t)` by
+    (irule ld_shared_istore >> simp[] >> metis_tac[taint_agree_shared]) >>
+  fs[taint_agree_def] >>
+  simp[taint_agree_def, istore_def, mstore_def, op_taint_def] >>
+  conj_tac >- (gvs[ld_shared_agree_def, istore_def, mstore_def] >> metis_tac[]) >>
+  gvs[venom_state_component_equality, istore_def, mstore_def, op_taint_def] >>
+  metis_tac[]
+QED
+
+Theorem taint_agree_word_store_step:
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\
+  MEM inst.inst_opcode [MSTORE; ISTORE] /\ inst.inst_outputs = [] /\ 
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base inst t = OK t' /\
+       taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >> fs[MEM] >>
+  gvs[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs()] >>
+  rename1 `inst.inst_operands = [op1; op2]` >>
+  rename1 `eval_operand op1 s = SOME addr` >>
+  `op_taint tn op1 = {}` by (fs[taint_ok_def] >> metis_tac[]) >>
+  `eval_operand op1 s = eval_operand op1 t` by
+    (drule_all taint_agree_operand_clean >> simp[]) >>
+  drule_all taint_agree_operand_value >> strip_tac >> gvs[] >>
+  simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+       imm_taint_def, adopt_reset_def, new_site_bytes_def, mstore_def,
+       set_var_taint_def, step_writes_def, source_memory_write_ranges_def,
+       written_taint_def, range_bytes_def, FLOOKUP_DEF, SF CONJ_ss,
+       DRESTRICT_UNIV] >>
+  qmatch_goalsub_abbrev_tac `taint_agree D X mask` >>
+  Cases_on `inst.inst_opcode = MSTORE` >> gvs[]
+  >- (`mask = tn with t_mem := mask.t_mem` by
+        simp[Abbr `mask`, taint_component_equality] >>
+      pop_assum SUBST1_TAC >> simp[Abbr `mask`] >>
+      drule_all taint_agree_mstore >>
+      disch_then (qspec_then `w2n addr` mp_tac) >>
+      simp[mstore_def, fixed_source_write_range_def, arithmeticTheory.ADD_COMM]) >>
+  `mask = tn with <|t_mem := mask.t_mem; t_imm := mask.t_imm|>` by
+    simp[Abbr `mask`, taint_component_equality] >>
+  pop_assum SUBST1_TAC >> simp[Abbr `mask`] >>
+  drule_all taint_agree_istore >>
+  disch_then (qspec_then `w2n addr` mp_tac) >>
+  simp[istore_def, mstore_def, fixed_source_write_range_def,
+       arithmeticTheory.ADD_COMM, SF CONJ_ss]
 QED
 
 Theorem taint_agree_load_word:
