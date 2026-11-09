@@ -353,3 +353,85 @@ Resume store_slots_loop_round_mem[backedge]:
   qexists_tac `t` >> conj_tac >> first_assum ACCEPT_TAC
 QED
 Finalise store_slots_loop_round_mem
+
+Theorem store_slots_elements_run_mem:
+  !cenv ctx elem etv el N src slot cnt tr sa sb func s sw dw.
+    compile_copy_elements_to_slots cenv src slot elem cnt tr sa = ((),sb) /\
+    type_memory_bytes cenv elem = type_memory_size etv /\
+    (!r. r < N ==>
+      (!src slot tr sa sb func s sw dw writes.
+        compile_store_slots cenv src slot elem tr sa = ((),sb) /\
+        (!x. src = Var x \/ slot = Var x ==> not_fresh_at sa x) /\
+        eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+        val_in_memory etv (el r) (w2n sw) s.vs_memory /\
+        w2n sw + type_memory_size etv < dimword (:256) /\
+        w2n sw + type_memory_size etv <= s.vs_alloca_next /\
+        w2n dw + type_slot_size etv <= dimword (:256) /\
+        encode_value etv (el r) = SOME writes /\
+        fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+        ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_call_ctx.cc_static ==>
+        ?t ks. gas_marked_path T ctx func s 0 (OK t) /\
+          store_copy_normalize s t =
+            FOLDL (\q j. (if tr then tstore else sstore) (dw + n2w j)
+              (mload (w2n sw + 32*j) s) q) s ks /\
+          (!j. MEM j ks <=> MEM j (MAP FST writes)) /\
+          (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+          t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
+          t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+          t.vs_alloca_next = s.vs_alloca_next /\
+          ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts) /\
+      IS_SOME (encode_value etv (el r)) /\
+      val_in_memory etv (el r) (w2n sw + r * type_memory_size etv) s.vs_memory) /\
+    (!x. src = Var x \/ slot = Var x \/ cnt = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+    eval_operand cnt s = SOME (n2w N) /\ N < dimword (:256) /\
+    w2n sw + N * type_memory_size etv < dimword (:256) /\
+    w2n sw + N * type_memory_size etv <= s.vs_alloca_next /\
+    w2n dw + N * type_slot_size etv <= dimword (:256) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_call_ctx.cc_static ==>
+    ?t ks. gas_marked_path T ctx func s 0 (OK t) /\
+      store_copy_normalize s t =
+        FOLDL (\q j. (if tr then tstore else sstore) (dw + n2w j)
+          (mload (w2n sw + 32*j) s) q) s ks /\
+      (!k. MEM k ks <=>
+        ?i writes j. i < N /\ encode_value etv (el i) = SOME writes /\
+          MEM j (MAP FST writes) /\ k = i * type_slot_size etv + j) /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
+      t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+      t.vs_alloca_next = s.vs_alloca_next /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all store_slots_loop_code >> strip_tac >> PairCases_on `layout` >>
+  `!i. i <= N ==> ?u ks.
+    gas_marked_path T ctx func s 0 (OK u) /\
+    store_slots_prefix sa etv el tr sw dw s i ks u /\
+    u.vs_alloca_next = s.vs_alloca_next /\
+    lookup_var layout3 u = SOME (n2w i) /\
+    u.vs_current_bb = layout0 /\ u.vs_inst_idx = 0` by
+    (Induct_on `i`
+     >- (strip_tac >> drule_all store_slots_loop_init_mem >>
+         disch_then (qspecl_then [`ctx`,`etv`,`el`,`sw`,`dw`] strip_assume_tac) >>
+         qexistsl_tac [`u`,`[]`] >> fs[]) >>
+     strip_tac >> `i <= N /\ i < N` by decide_tac >>
+     first_x_assum drule >> strip_tac >>
+     drule_all store_slots_loop_round_mem >> strip_tac >>
+     qexistsl_tac [`v`,`ks'`] >> simp[] >>
+     irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+     qexists_tac `u` >> simp[]) >>
+  first_x_assum (qspec_then `N` mp_tac) >> simp[] >> strip_tac >>
+  `!x. cnt = Var x ==> not_fresh_at sa x` by metis_tac[] >>
+  drule_all store_slots_loop_exit_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexistsl_tac [`t`,`ks`] >>
+  conj_tac
+  >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+      qexists_tac `u` >> simp[]) >>
+  fs[store_slots_prefix_def]
+QED

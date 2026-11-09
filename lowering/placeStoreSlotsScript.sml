@@ -1340,7 +1340,7 @@ Proof
   >> disj2_tac >> metis_tac[]
 QED
 
-Theorem store_slots_sarray_support[local]:
+Theorem store_slots_sarray_support:
   value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV sparse)) /\
   encode_value (ArrayTV tv (Fixed n)) (ArrayV (SArrayV sparse)) = SOME writes ==>
   !k. MEM k (MAP FST writes) <=>
