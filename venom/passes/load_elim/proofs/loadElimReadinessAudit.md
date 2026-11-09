@@ -61,7 +61,7 @@ The later column applies separately to f1, f2, f3 and f4 unless stated otherwise
 | ctx.lctx_dfg = dfg_build_function source (73) | B: record projection | B: record projection; does NOT imply DFG soundness |
 | all bp_get_ptrs empty (74) | A/B: le_step_preserves_analyze_empty, instantiate bp/dfg to frozen analyses and s to initial s | A/B: identical b is reused; original empty-BP fact suffices, no recomputation |
 | wf_alias_sets aliases (75), generalized in .45 | A/B: le_function_alias_maps_wf, mk_load_context_def | A/B: the same theorem covers A_T, A_S and A_M for every later source and configured address space; no reanalysis equality is required |
-| entry label = SOME s.current_bb (76) | B: frozen premise | C: entry preservation (structural, no execution theorem needed) |
+| entry label = SOME s.current_bb (76) | B: frozen premise | A: le_round_entry in loadElimRoundStructure; unconditional, arbitrary explicit CFG |
 | load analysis fixpoint (77-80) | A/B: le_load_analyze_fixpoint + le_solver_process_def, using wf_function f0 | A/B conditional on wf_function fi; fixpoint theorem itself works for any ctx, no alias equality needed |
 | dfg_assigns_sound rebuilt DFG s (81) | B: frozen premise | C: new ASSIGN chains and PHI definitions change DFG; original DFG soundness is not this fact |
 | bp_ptr_sound b s (82) | B: frozen premise | B: exactly same b and s |
@@ -71,7 +71,7 @@ The later column applies separately to f1, f2, f3 and f4 unless stated otherwise
 | le_step_preserves b rebuilt_DFG source (84) | B: unfold le_step_preserves_def and le_step_invariants_def; precisely frozen universal-step premise | C: universal premise ranges over new PHI/ASSIGN/NOP instructions and rebuilt DFG; original premise covers only original instructions and original DFG |
 | successful PHIs preserve rebuilt DFG (85-89) | B: precisely frozen PHI premise | C: augmented batches and rebuilt DFG; original premise does not quantify over these |
 | prefix freshness of fn_all_vars (90) | B: frozen premise | C: NOT a preservation invariant: a successful inserting round introduces variables with this prefix |
-| no MEMTOP in source (91) | B: EVERY_MEM + frozen premise | C: simple structural opcode preservation needed; replacements add only ASSIGN/NOP/PHI, but no checked per-round wrapper located |
+| no MEMTOP in source (91) | B: EVERY_MEM + frozen premise | A: le_round_no_memtop in loadElimRoundStructure, using configured context |
 | context functions no MEMTOP (92) | B: EVERY_MEM, frozen premise | B: execution context C is unchanged in all five calls |
 
 Initial `le_padded_control V s s` is B by padded_exec_equiv_refl and
@@ -263,3 +263,21 @@ by specialization to the whole reserved prefix:
    Result transitivity and wf_ssa alone establish none of these DFG facts.
 5. Package result composition and the clear_nops bridge with their structural
    hypotheses discharged. The frozen final theorem remains untouched.
+
+## Checked round structure (.47)
+
+`loadElimRoundStructureTheory` builds at the default tactic timeout. Its public
+wrappers are `le_round_cfg`, `le_round_entry`, and `le_round_no_memtop`.
+`le_round_cfg` requires only `le_configured_context ctx` and accepts any explicit
+CFG `g`; the entry wrapper is unconditional. Internal `le_prepend_cfg` and
+`le_prepend_no_memtop` accept arbitrary analysis results and arbitrary actions.
+The successor proof covers empty and all-PHI blocks, not just well-formed
+terminator-ending blocks. CFG equality follows from identical labels and block
+successors, without unfolding DFS. The existing `fn_insts_EVERY_block` from
+`ctxLookupAgreeHelpers` is reused rather than duplicated.
+
+Thus the original explicit CFG is suitable at every later round once its context
+is configured. This does not prove wf_function, fn_inst_wf, or wf_ssa preservation,
+new-name disjointness, nor any rebuilt-DFG semantic readiness clause. Those remain
+separate obligations; neither structural equality nor opcode exclusion supplies
+them. The frozen target and the accepted arbitrary-G execution proof are unchanged.
