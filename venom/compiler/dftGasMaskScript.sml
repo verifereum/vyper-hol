@@ -887,6 +887,82 @@ Proof
   simp[Abbr `st`] >> irule mask_prefix_extend >> simp[]
 QED
 
+Theorem stopped_invoke_fixed_entry_family[local]:
+  y.inst_opcode = INVOKE /\
+  EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x) pre /\
+  (!fg tail.
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) focus_slots fg ==>
+    (?extra. focus_sites = gas_events_step fuel C owner y
+      (s with <|vs_inst_idx := s.vs_inst_idx + LENGTH pre;
+                vs_gas_readings := fg ++ tail|>) ++ extra) /\
+    (!v. step_inst fuel C y
+      (s with <|vs_inst_idx := s.vs_inst_idx + LENGTH pre;
+                vs_gas_readings := fg ++ tail|>) <> OK v)) ==>
+  !pg fg tail u.
+    LENGTH pg = LENGTH (FILTER (\i. i.inst_opcode = GAS) pre) /\
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) focus_slots fg /\
+    FOLDR (dft_exec_cons fuel C) OK pre
+      (s with vs_gas_readings := pg ++ fg ++ tail) = OK u ==>
+    (?extra. focus_sites = gas_events_step fuel C owner y u ++ extra) /\
+    (!v. step_inst fuel C y u <> OK v)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `FOLDR (dft_exec_cons fuel C) OK pre
+     (s with vs_gas_readings := pg ++ (fg ++ tail)) = OK u` by
+    simp[APPEND_ASSOC] >>
+  drule_all invoke_partner_prefix_concrete >> strip_tac >>
+  `EVERY (\q. ~MEM (Var (FST q)) y.inst_operands /\
+                ~MEM (FST q) y.inst_outputs) us` by
+    (fs[EVERY_MEM, MEM_FLAT, MEM_MAP] >> rpt strip_tac >>
+     metis_tac[dft_swap_output_frame]) >>
+  qpat_x_assum `!fg tail. _` (qspecl_then [`fg`, `tail`] mp_tac) >>
+  simp[] >> strip_tac >>
+  drule_all invoke_updates_concrete_frame >>
+  disch_then (qspecl_then [`fuel`, `C`,
+    `s with <|vs_inst_idx := s.vs_inst_idx + LENGTH pre;
+              vs_gas_readings := fg ++ tail|>`] mp_tac) >>
+  strip_tac >> gvs[] >>
+  conj_tac
+  >- (qexists_tac `extra` >> AP_THM_TAC >> AP_TERM_TAC >>
+      sym_tac >> irule gas_events_invoke_updates >>
+      fs[EVERY_MEM] >> metis_tac[]) >>
+  Cases_on `step_inst fuel C y
+    (s with <|vs_inst_idx := s.vs_inst_idx + LENGTH pre;
+              vs_gas_readings := fg ++ tail|>)` >> gvs[]
+QED
+
+Theorem stopped_invoke_fixed_entry_prefix[local]:
+  y.inst_opcode = INVOKE /\
+  EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x) pre /\
+  (!fg tail.
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) focus_slots fg ==>
+    (?extra. focus_sites = gas_events_step fuel C owner y
+      (s with <|vs_inst_idx := s.vs_inst_idx + LENGTH pre;
+                vs_gas_readings := fg ++ tail|>) ++ extra) /\
+    (!v. step_inst fuel C y
+      (s with <|vs_inst_idx := s.vs_inst_idx + LENGTH pre;
+                vs_gas_readings := fg ++ tail|>) <> OK v)) ==>
+  !pg fg tail.
+    LENGTH pg = LENGTH (FILTER (\i. i.inst_opcode = GAS) pre) /\
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) focus_slots fg ==>
+    ?extra.
+      MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) pre) ++
+        focus_sites =
+      gas_events_block fuel C owner
+        <|bb_label := owner; bb_instructions :=
+          REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ (pre ++ y::post)|>
+        (s with vs_gas_readings := pg ++ fg ++ tail) ++ extra
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  irule stopped_focus_prefix_family >>
+  simp[] >> conj_tac
+  >- (fs[EVERY_MEM] >> rpt strip_tac >>
+      metis_tac[dft_gas_swap_pair_sym,
+                dftGasInvCallPartnerTheory.inv_call_partner_class]) >>
+  qexists_tac `focus_slots` >> simp[] >>
+  metis_tac[stopped_invoke_fixed_entry_family]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
