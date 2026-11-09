@@ -30,7 +30,15 @@ Proof
   simp_tac pure_ss [compile_vyper_def, compile_vyper_with_def] >> entry_stage "resolve_o1_policy" >>
   simp_tac pure_ss [optionTheory.option_case_def] >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
   entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
-  entry_choose_grouped_path >> entry_stage "package_external_fn" >> entry_guard "EVERY" >> entry_immutables_guard >> entry_admin >> entry_stage "run_lowering" >>
+  entry_choose_grouped_path >> entry_stage "package_external_fn" >> entry_guard "EVERY" >> entry_immutables_guard >> entry_admin >>
+  entry_eval_stage (computeLib.RESTR_EVAL_CONV [``lowering_context_ok``])
+    "run_lowering" >>
+  entry_eval_stage (computeLib.RESTR_EVAL_CONV
+    [``ptr_ok_check``, ``fn_defs_reach_uses_check``]) "lowering_context_ok" >>
+  entry_eval_stage (computeLib.RESTR_EVAL_CONV
+    [``fn_ptr_ok_check``, ``fn_reachable_blocks``]) "ptr_ok_check" >>
+  entry_stage "fn_reachable_blocks" >> entry_guard "fn_ptr_ok_check" >>
+  entry_guard "fn_defs_reach_uses_check" >> entry_admin >>
   simp_tac pure_ss [NOT_CLAUSES, OR_CLAUSES, COND_CLAUSES, optionTheory.option_case_def, checked_unit_pipeline_def] >>
   simp_tac pure_ss [venomPipelineDriverTheory.run_venom_pipeline_def] >> entry_stage "pipeline_spec_wf" >> entry_stage "unit_wf" >>
   entry_stage "raw_static_inputs_wf" >> simp_tac pure_ss [NOT_CLAUSES, COND_CLAUSES, combinTheory.K_THM] >> entry_stage "init_ir_supply" >>
@@ -66,6 +74,9 @@ Proof
   entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
   entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
   entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
-  entry_plan_finish >> entry_stage "generate_context_regions" >> entry_admin >> CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >> entry_report_result >>
+  entry_plan_finish >> entry_stage "generate_context_regions" >> entry_admin >>
+  entry_guard "spill_plan_in_region" >> entry_plan_admin >>
+  entry_stage "OPTION_MAP" >> entry_admin >>
+  CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >> entry_report_result >>
   EVAL_TAC
 QED
