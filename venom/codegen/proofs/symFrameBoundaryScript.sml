@@ -372,9 +372,10 @@ Theorem sym_push_offset_then:
     sym_step p env inst pushed = SymOK out ==>
     sym_steps p env 2 ss = SymOK out
 Proof
-  rpt strip_tac >> irule sym_steps_two >>
-  qexistsl_tac [`AsmPush (encode_num_bytes off)`, `inst`, `pushed`] >>
-  gvs[sym_step_push_offset, asmSemTheory.asm_next_def]
+  rpt strip_tac >>
+  `pushed.sym_base.as_pc = ss.sym_base.as_pc + 1` by
+    gvs[asmSemTheory.asm_next_def] >>
+  metis_tac[sym_steps_two, sym_step_push_offset]
 QED
 
 Theorem sym_pushed_mstore:
@@ -479,19 +480,28 @@ Proof
   gvs[scratch_labels_store_def, arithmeticTheory.MULT_CLAUSES]
 QED
 
-Theorem sym_spill_offsets_steps:
-  !xs p env ss stk initial_fmp.
-    EVERY (\p. FST p < dimword(:256)) xs /\
-    ss.sym_stack = MAP SND xs ++ stk /\
+Theorem sym_spill_offsets_cons_step:
+  !xs.
+    (!p env ss stk initial_fmp.
+      EVERY (\p. FST p < dimword(:256)) xs /\
+      ss.sym_stack = MAP SND xs ++ stk /\
+      asm_block_at p ss.sym_base.as_pc
+        (execute_plan initial_fmp (MAP SOSpill (MAP FST xs))) ==>
+      ?out. sym_steps p env (2 * LENGTH xs) ss = SymOK out /\
+        out.sym_stack = stk /\
+        out.sym_mem_labels = scratch_labels_store ss.sym_mem_labels xs /\
+        out.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH xs) ==>
+    !off sv p env ss stk initial_fmp.
+    EVERY (\p. FST p < dimword(:256)) ((off,sv)::xs) /\
+    ss.sym_stack = MAP SND ((off,sv)::xs) ++ stk /\
     asm_block_at p ss.sym_base.as_pc
-      (execute_plan initial_fmp (MAP SOSpill (MAP FST xs))) ==>
-    ?out. sym_steps p env (2 * LENGTH xs) ss = SymOK out /\
+      (execute_plan initial_fmp (MAP SOSpill (MAP FST ((off,sv)::xs)))) ==>
+    ?out. sym_steps p env (2 * LENGTH ((off,sv)::xs)) ss = SymOK out /\
       out.sym_stack = stk /\
-      out.sym_mem_labels = scratch_labels_store ss.sym_mem_labels xs /\
-      out.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH xs
+      out.sym_mem_labels = scratch_labels_store ss.sym_mem_labels ((off,sv)::xs) /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH ((off,sv)::xs)
 Proof
-  Induct >- simp[sym_steps_def, scratch_labels_store_def] >>
-  gen_tac >> PairCases_on `h` >>
+  gen_tac >> disch_tac >> rpt gen_tac >>
   pure_rewrite_tac[listTheory.EVERY_DEF, listTheory.MAP,
        pairTheory.FST, pairTheory.SND, listTheory.LENGTH,
        execute_plan_def, listTheory.FLAT, exec_stack_op_def,
@@ -504,7 +514,24 @@ Proof
     (execute_plan initial_fmp (MAP SOSpill (MAP FST xs)))` by simp[] >>
   first_x_assum drule_all >>
   disch_then (qspec_then `env` strip_assume_tac) >>
+  `out.sym_base.as_pc = mid.sym_base.as_pc + 2 * LENGTH xs` by
+    metis_tac[arithmeticTheory.ADD_COMM] >>
   drule_all sym_spill_offsets_cons_result >> simp[]
+QED
+
+Theorem sym_spill_offsets_steps:
+  !xs p env ss stk initial_fmp.
+    EVERY (\p. FST p < dimword(:256)) xs /\
+    ss.sym_stack = MAP SND xs ++ stk /\
+    asm_block_at p ss.sym_base.as_pc
+      (execute_plan initial_fmp (MAP SOSpill (MAP FST xs))) ==>
+    ?out. sym_steps p env (2 * LENGTH xs) ss = SymOK out /\
+      out.sym_stack = stk /\
+      out.sym_mem_labels = scratch_labels_store ss.sym_mem_labels xs /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH xs
+Proof
+  Induct >- simp[sym_steps_def, scratch_labels_store_def] >>
+  Cases >> drule sym_spill_offsets_cons_step >> metis_tac[]
 QED
 
 Theorem sym_restore_offsets_cons_result:
@@ -534,22 +561,33 @@ Proof
   qexists_tac `sv' :: vals` >> simp[]
 QED
 
-Theorem sym_restore_offsets_steps:
-  !xs p env ss initial_fmp.
+Theorem sym_restore_offsets_cons_step:
+  !xs.
+    (!p env ss initial_fmp.
+      EVERY (\p. FST p < dimword(:256) /\
+        mem_sval_at ss.sym_mem_labels (FST p) (SND p)) xs /\
+      asm_block_at p ss.sym_base.as_pc
+        (execute_plan initial_fmp (MAP SORestore (MAP FST xs))) ==>
+      ?out vals. sym_steps p env (2 * LENGTH xs) ss = SymOK out /\
+        out.sym_stack = REVERSE vals ++ ss.sym_stack /\
+        LIST_REL (\sv sv'. !fn ret op.
+          op_kind_ok fn ret op sv ==> op_kind_ok fn ret op sv') (MAP SND xs) vals /\
+        out.sym_mem_labels = ss.sym_mem_labels /\
+        out.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH xs) ==>
+    !off sv p env ss initial_fmp.
     EVERY (\p. FST p < dimword(:256) /\
-      mem_sval_at ss.sym_mem_labels (FST p) (SND p)) xs /\
+      mem_sval_at ss.sym_mem_labels (FST p) (SND p)) ((off,sv)::xs) /\
     asm_block_at p ss.sym_base.as_pc
-      (execute_plan initial_fmp (MAP SORestore (MAP FST xs))) ==>
-    ?out vals. sym_steps p env (2 * LENGTH xs) ss = SymOK out /\
+      (execute_plan initial_fmp (MAP SORestore (MAP FST ((off,sv)::xs)))) ==>
+    ?out vals. sym_steps p env (2 * LENGTH ((off,sv)::xs)) ss = SymOK out /\
       out.sym_stack = REVERSE vals ++ ss.sym_stack /\
       LIST_REL (\sv sv'. !fn ret op.
         op_kind_ok fn ret op sv ==> op_kind_ok fn ret op sv')
-        (MAP SND xs) vals /\
+        (MAP SND ((off,sv)::xs)) vals /\
       out.sym_mem_labels = ss.sym_mem_labels /\
-      out.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH xs
+      out.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH ((off,sv)::xs)
 Proof
-  Induct >- simp[sym_steps_def] >>
-  gen_tac >> PairCases_on `h` >>
+  gen_tac >> disch_tac >> rpt gen_tac >>
   pure_rewrite_tac[listTheory.EVERY_DEF, listTheory.MAP,
        pairTheory.FST, pairTheory.SND, listTheory.LENGTH,
        execute_plan_def, listTheory.FLAT, exec_stack_op_def,
@@ -565,6 +603,24 @@ Proof
   first_x_assum drule_all >>
   disch_then (qspec_then `env` strip_assume_tac) >>
   drule_all sym_restore_offsets_cons_result >> simp[]
+QED
+
+Theorem sym_restore_offsets_steps:
+  !xs p env ss initial_fmp.
+    EVERY (\p. FST p < dimword(:256) /\
+      mem_sval_at ss.sym_mem_labels (FST p) (SND p)) xs /\
+    asm_block_at p ss.sym_base.as_pc
+      (execute_plan initial_fmp (MAP SORestore (MAP FST xs))) ==>
+    ?out vals. sym_steps p env (2 * LENGTH xs) ss = SymOK out /\
+      out.sym_stack = REVERSE vals ++ ss.sym_stack /\
+      LIST_REL (\sv sv'. !fn ret op.
+        op_kind_ok fn ret op sv ==> op_kind_ok fn ret op sv')
+        (MAP SND xs) vals /\
+      out.sym_mem_labels = ss.sym_mem_labels /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH xs
+Proof
+  Induct >- simp[sym_steps_def] >>
+  Cases >> drule sym_restore_offsets_cons_step >> metis_tac[]
 QED
 
 Theorem scratch_labels_store_restore_ready:
