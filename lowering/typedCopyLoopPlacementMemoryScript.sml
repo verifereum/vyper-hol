@@ -36,6 +36,7 @@ Theorem typed_copy_sarray_loop_placement:
     ctr = "%" ++ toString sa.cs_next_var /\
     compile_store_memory_typed ce (Var dp) dty (Var sp) sty si = ((),se) /\
     fn_has_code si se func /\
+    not_fresh_at si sp /\ not_fresh_at si dp /\
     ci_mono sa sc /\ ci_mono sc si /\
     not_fresh_at sc ctr /\ ~not_fresh_at sa ctr /\
     ~not_fresh_at sa ("%" ++ toString se.cs_next_var) /\
@@ -78,6 +79,8 @@ Proof
   `ci_mono sa sc` by
     (simp[ci_mono_def, cs_extends_def] >>
      qexists_tac `[HD sc.cs_blocks]` >> simp[]) >>
+  `not_fresh_at si sp /\ not_fresh_at si dp` by
+    simp[not_fresh_at_def, toString_inj] >>
   `sc.cs_current_bb = cond /\ sc.cs_current_insts = []` by simp[] >>
   `ci_mono sc si` by
     (qpat_x_assum `sc = _` kall_tac >>
