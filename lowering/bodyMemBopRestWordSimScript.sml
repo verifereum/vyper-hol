@@ -212,6 +212,7 @@ Resume compile_rest_word_membership_sim_mem[safe_tail]:
           else ~evaluate_in_array (ArrayTV et bd) v1 av))` by
     (qpat_assum `!tail. read_result cx tv (fin with gas_obs := tail) = _`
        (qspec_then `[]` assume_tac) >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value _) _ _` kall_tac >>
      Cases_on `bd` >> gnvs[]
      >- (drule (Q.INST [`loc` |-> `(case vv_location vv of SOME l => l | NONE => LocMemory)`]
            rest_word_fixed_tail_mem) >>
