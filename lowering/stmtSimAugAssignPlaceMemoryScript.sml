@@ -1259,6 +1259,8 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      metis_tac[expr_body_pre_word_result, ETA_THM]) >>
   `is_word_type (expr_type e)` by metis_tac[word_value_type_word] >>
+  `post_value_type cenv e = expr_type e` by simp[] >>
+  gvs[] >>
   `eval_operand rhs t' = SOME (val_to_w256 v'')` by
     (irule exprBopSimPropsTheory.expr_val_rel_word >> simp[] >>
      qexistsl_tac [`cx`, `expr_type e`] >> simp[]) >>
@@ -1278,15 +1280,19 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)` by
     (irule aug_place_binop_store_outcome >>
      conj_tac >- (first_assum ACCEPT_TAC) >>
-     conj_tac >- (first_assum ACCEPT_TAC) >>
+     conj_tac >- (metis_tac[]) >>
      conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
      asm_simp_tac std_ss [] >>
+     conj_tac >- (qexistsl_tac [`entry'`, `old`] >> simp[]) >>
+     conj_tac >- simp[gasContextTheory.gas_admissible_gas_obs] >>
      conj_tac >- (qexists_tac `env` >> simp[]) >>
+     conj_tac >- simp[] >>
      goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
-     asm_simp_tac std_ss []) >>
+     asm_simp_tac std_ss [exprBopSimPropsTheory.bop_result_gas_obs] >>
+     metis_tac[]) >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
     (stmt_post ctx func cx lctx cenv cenv sa sb s0)

@@ -47,6 +47,7 @@ QED
 (* A memory value in a live local's region, including a recorded popped
    element, supplies both value and location parts of the post. *)
 Theorem local_memory_vv_post:
+  post_value_type cenv e = expr_type e /\
   stmt_state_rel ctx func cenv cx es' u /\
   wb_frame cenv es sa s0 u /\
   read_result cx result es' = (INL v,es') /\
@@ -62,6 +63,7 @@ Theorem local_memory_vv_post:
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) u
 Proof
   strip_tac >> simp[vv_post_def] >>
+  qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >>
   conj_tac
   >- (simp[vv_holds_def, contextTheory.mk_ptr_def] >>
       strip_tac >> drule_all val_in_memory_word_type >> simp[]) >>
@@ -69,6 +71,7 @@ Proof
   >- (simp[vv_at_def, contextTheory.mk_ptr_def] >>
       disj2_tac >> disj1_tac >>
       qexistsl_tac [`id`, `locbase`, `sz`] >> simp[]) >>
+  conj_tac >- simp[contextTheory.mk_ptr_def] >>
   gvs[wb_frame_def] >> first_assum ACCEPT_TAC
 QED
 
@@ -165,6 +168,7 @@ QED
 (* Post assembly uses only the live root encoding before the store.  The
    source transition supplies read_result, including its history fallback. *)
 Theorem pop_path_vv_post:
+  post_value_type cenv e = expr_type e /\
   stmt_state_rel ctx func cenv cx es' u /\ wb_frame cenv es sa s0 u /\
   read_result cx result es' = (INL (LAST vs),es') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\

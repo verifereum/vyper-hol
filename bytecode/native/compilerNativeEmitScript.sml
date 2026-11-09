@@ -193,6 +193,7 @@ val suite_fixtures = [
     "g8_a_iter_struct_elem", "g8_a_iter_transient"]),
   ("immutables", [
     "i01_immut_uint", "i06_multiple_immutables", "i08_immut_read_in_ctor",
+    "i09_immut_widen_bytes",
     "p23_imm_uint256", "p24_imm_uint8", "p25_imm_address",
     "p29b_imm_multi_nostr", "p59_imm_with_runtime_internal"]),
   ("internal-frames", [

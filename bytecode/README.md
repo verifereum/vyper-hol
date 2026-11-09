@@ -41,6 +41,10 @@ removed when a new pin includes them. The current series contains:
   call's parameter type), whose layout differs for nested bounded types.
 - vyperlang/vyper#5254: the inliner binds the unused return-PC parameter
   to zero instead of the removed callee's label.
+- vyperlang/vyper#5332: constructor immutable bytestring stores copy the
+  length word and live data words, rather than the declared capacity.
+- vyperlang/vyper#5338: widening bytestring conversions allocate enough
+  memory for the result type.
 
 The provenance's `vyper_commit` names the unpatched base revision.
 

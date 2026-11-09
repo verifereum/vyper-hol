@@ -74,6 +74,7 @@ Theorem pop_memory_live_suffix_post:
   read_result cx result (mid with scopes := scopes') =
     (INL (LAST vs),mid with scopes := scopes') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
+  post_value_type cenv e = expr_type e /\
   eval_operand op u = SOME w /\
   w2n w = w2n b + k + 32 + (LENGTH vs - 1) * type_memory_size etv /\
   local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv)

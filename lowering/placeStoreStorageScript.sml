@@ -938,7 +938,7 @@ Proof
   drule_all typedMemoryCopyTheory.typed_copy_word_widening >> strip_tac >> gvs[] >>
   `type_memory_size dtv = 32` by suspend "size" >>
   `mem_word_at (w2n sw) s.vs_memory = typed_val_to_w256 dtv v` by
-    metis_tac[entryDecodePropsTheory.val_in_memory_word] >>
+    metis_tac[exprSimPropsTheory.val_in_memory_word] >>
   drule_all typedMemoryCopyTheory.typed_copy_word_run_seq >> strip_tac >>
   qmatch_asmsub_abbrev_tac `run_inst_seq _ _ = OK u` >>
   `?bb. lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\
@@ -993,7 +993,7 @@ Resume place_store_typed_word_path[post]:
      (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     simp[Abbr `u`, typedMemoryCopyTheory.typed_copy_word_state_frame] >>
   `val_in_memory dtv v (w2n dw) u.vs_memory` by
-    (drule_all entryDecodePropsTheory.val_in_memory_word >>
+    (drule_all exprSimPropsTheory.val_in_memory_word >>
      disch_then (fn th => rewrite_tac[th]) >>
      simp[Abbr `u`, valueEncodingPropsTheory.mstore_mem_word_at_same,
           GSYM valueEncodingPropsTheory.mem_word_at_eq_mload]) >>
@@ -3750,7 +3750,7 @@ Theorem place_store_copy_shape:
   (slot_copy_body cs, place_store_copy_final cs src dst n tr)
 Proof
   Cases_on `tr` >>
-  simp[contextTheory.compile_word_copy_loop_def, word_scale_def,
+  simp[contextTheory.compile_word_copy_loop_def, contextTheory.compile_word_copy_loop_op_def, contextTheory.compile_word_copy_loop_base_def, word_scale_def,
        contextTheory.compile_ptr_load_def, contextTheory.compile_ptr_store_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_label_def, fresh_var_def, fresh_id_def,
