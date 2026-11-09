@@ -2,6 +2,7 @@
 Theory bodyPtrEnvBuiltinsGas
 Ancestors
   bodyPtrEnvBuiltinsScalar bodyPtrEnvBuiltinsEdges bodyPtrDefs bodyPtrPreds
+  decoderGhostFramePtr
   msgGasSim msgGasPost fragGasPathPtr fragGasSeqPtr gasSummary
   ptrDiscipline ptrSafeRun emitHelper emitHelperProps exprLoweringProps
   compileEnv exprLowering exprPtrUnwrap exprSimProps stmtFragPtr
@@ -62,6 +63,44 @@ Proof
        stor_taint_ok_def, lookup_var_def]
 QED
 
+Theorem gas_builtin_indexed_ghosts_at:
+  ghost_inv_at D lo d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  ~not_fresh_at sa out ==>
+  ghost_inv_at D lo d cenv cx es
+    (step_prov PG G (mk_inst id GAS [] [out])
+      (update_var out w (s with vs_gas_readings := gs)))
+    (step_taint (mk_inst id GAS [] [out]) s
+      (update_var out w (s with vs_gas_readings := gs)) tn)
+    (update_var out w (s with <|vs_gas_readings := gs; vs_inst_idx := k|>)) /\
+  ghost_kept_at lo cenv es sa G tn s
+    (step_prov PG G (mk_inst id GAS [] [out])
+      (update_var out w (s with vs_gas_readings := gs)))
+    (step_taint (mk_inst id GAS [] [out]) s
+      (update_var out w (s with vs_gas_readings := gs)) tn)
+Proof
+  strip_tac >>
+  qmatch_goalsub_abbrev_tac `step_prov PG G inst u` >>
+  `(step_taint inst s u tn).t_mem = tn.t_mem` by
+    (irule step_taint_no_memory_effect >>
+     simp[Abbr `inst`, Abbr `u`, source_memory_write_ranges_def,
+          written_taint_def, mk_inst_def, update_var_def]) >>
+  conj_tac
+  >- (irule ghost_inv_at_register_transport >>
+      qexistsl_tac [`G`, `s`, `sa`, `tn`] >>
+      simp[update_var_def] >>
+      `((step_taint inst s u tn).t_stor = tn.t_stor) /\
+       ((step_taint inst s u tn).t_trans = tn.t_trans) /\
+       ((step_taint inst s u tn).t_imm = tn.t_imm)` by
+        (irule step_taint_nonmemory_frame >> simp[Abbr `inst`, mk_inst_def]) >>
+      simp[] >> rpt strip_tac >> `x <> out` by metis_tac[] >>
+      simp[Abbr `inst`, step_prov_other_output, step_taint_other_output,
+           mk_inst_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+  unabbrev_all_tac >> irule single_output_ghost_kept_at >>
+  simp[ghost_kept_at_def]
+QED
+
 Theorem gas_builtin_indexed_ghosts:
   ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -79,18 +118,8 @@ Theorem gas_builtin_indexed_ghosts:
     (step_taint (mk_inst id GAS [] [out]) s
       (update_var out w (s with vs_gas_readings := gs)) tn)
 Proof
-  strip_tac >>
-  `!t. t = update_var out w (s with vs_gas_readings := gs) ==>
-    ghost_inv d cenv cx es (step_prov PG G (mk_inst id GAS [] [out]) t)
-      (step_taint (mk_inst id GAS [] [out]) s t tn) t /\
-    ghost_kept cenv es sa G tn s (step_prov PG G (mk_inst id GAS [] [out]) t)
-      (step_taint (mk_inst id GAS [] [out]) s t tn)` by
-    metis_tac[gas_builtin_ghosts] >>
-  `update_var out w (s with <|vs_gas_readings := gs; vs_inst_idx := k|>) =
-    (update_var out w (s with vs_gas_readings := gs)) with vs_inst_idx := k` by
-    simp[update_var_def] >>
-  asm_rewrite_tac[ghost_inv_inst_idx] >>
-  metis_tac[]
+  pure_rewrite_tac[ghost_inv_cx_dead, ghost_kept_zero] >>
+  metis_tac[gas_builtin_indexed_ghosts_at]
 QED
 
 Theorem gas_builtin_counted_post:
