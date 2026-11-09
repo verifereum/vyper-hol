@@ -6,7 +6,8 @@
 Theory bodyMemBiSliceNonSelf
 Ancestors
   bodyMemoryPreds exprLowering bodyMemSliceScratch bodyMemSliceTypedContinue
-  bodyMemSliceDynamicCapture
+  bodyMemSliceDynamicCapture bodyMemSliceNonselfResult
+  exprSimHypsDefs exprSimSliceSource vyperContext
 
 Theorem body_builtin_slice_nonself_mem:
   !cx ty n es.
@@ -25,5 +26,16 @@ Theorem body_builtin_slice_nonself_mem:
     ~is_self_code (HD es) ==>
     body_expr_mem_ok cx (Builtin ty (Slice n) es)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  match_mp_tac body_expr_mem_ok_intro >> conj_tac >- (rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  `builtin_args_length_ok (Slice n) (LENGTH es)` by
+    (`well_typed_expr env (Builtin ty (Slice n) es)` by fs[expr_body_pre_def] >>
+     drule slice_typed_args >> strip_tac >> gvs[builtin_args_length_ok_def]) >>
+  `expr_vv_sim_mem ctx func cenv cx ty' (Builtin ty (Slice n) es) es'` by
+    (irule slice_nonself_vv_mem >> simp[] >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >- metis_tac[] >> metis_tac[]) >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  irule slice_nonself_sim_mem >> simp[] >> metis_tac[]
 QED

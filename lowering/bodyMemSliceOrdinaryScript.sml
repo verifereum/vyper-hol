@@ -50,7 +50,8 @@ Proof
      (qpat_x_assum `body_exprs_mem_ok _ _` mp_tac >>
       simp[body_exprs_mem_ok_def] >>
       qpat_x_assum `bind _ _ _ = (INL _,_)` mp_tac >>
-      simp[vyperStateTheory.bind_def, AllCaseEqs()] >> metis_tac[]) >>
+      simp[vyperStateTheory.bind_def, AllCaseEqs()] >>
+      rpt (pop_assum kall_tac) >> metis_tac[]) >>
    `!e st. MEM e [start;len] /\ expr_sim_inv cenv cx env st ==>
        expr_body_pre cenv cx env e st` by
      (rpt strip_tac >> gvs[] >> irule expr_body_pre_builtin_typed_arg >>
