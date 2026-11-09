@@ -166,3 +166,35 @@ Resume concat_fixed_seq_ptr[outputs]:
 QED
 
 Finalise concat_fixed_seq_ptr
+
+(* Endpoint coverage is intentional: off may equal capacity when n is zero. *)
+Theorem concat_offset_seq_ptr:
+  lookup_var root s = SOME a /\ ptr_covers G tn root s capacity /\
+  eval_operand delta s = SOME (n2w off) /\ op_taint tn delta = {} /\
+  off+n <= capacity /\ w2n a+off < dimword (:256) /\
+  ~ctx_has_dalloca ctx ==>
+  ?Gf tnf t.
+    run_inst_seq [mk_inst id ADD [Var root;delta] [out]] s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id ADD [Var root;delta] [out]] s Gf tnf /\
+    t = update_var out (a+n2w off) s /\ ptr_covers Gf tnf out t n /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!p. p <> out ==> FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `op_taint tn (Var root) = {}` by fs[bodyPtrDefsTheory.ptr_covers_def] >>
+  mp_tac (Q.SPECL [`D`,`ctx`,`fn`,`PG`,`G`,`tn`,`s`,`id`,`ADD`,
+    `Var root`,`delta`,`out`,`word_add`,`a`,`n2w off`]
+    assignTuplePtrLocalBytesCopyTheory.copy_len_binop_seq_ptr) >>
+  simp[eval_operand_def] >> strip_tac >>
+  qexistsl_tac [`G'`,`tn'`] >> simp[] >>
+  `step_inst_base (mk_inst id ADD [Var root;delta] [out]) s =
+    OK (update_var out (a+n2w off) s)` by
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+  qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[inst_seq_ptr_def] >> strip_tac >>
+  irule (SRULE [] bodyPtrBytestringBuiltinsAllocationTheory.pointer_offset_covers) >>
+  metis_tac[]
+QED
