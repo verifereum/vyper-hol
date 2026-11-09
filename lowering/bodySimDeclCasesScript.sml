@@ -42,7 +42,7 @@ Ancestors
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeValues
   vyperTypeEvalSoundness vyperTypeEnvPreservation vyperTypeEnvExtension
   vyperTypeScopePop vyperEvalOutcomeSuffix vyperTypeCallGraph
-  vyperEvalPreservesScopes
+  vyperEvalPreservesScopes bodyStorageCases evalNoHalt
   vyperTypeCallStackSoundness compileVyper moduleLowering intCallCallee
 Libs
   monadsyntax
