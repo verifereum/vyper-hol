@@ -206,11 +206,13 @@ Resume compile_rest_word_membership_sim_mem[safe_tail]:
        q.vs_current_bb = sb.cs_current_bb /\
        q.vs_inst_idx = LENGTH sb.cs_current_insts /\
        vv_post ctx func cenv cx e2 (mid with gas_obs := []) st1 st2 t
-         (fin with gas_obs := []) (Value (ArrayV av)) arr_vv q /\
+         (fin with gas_obs := []) tv arr_vv q /\
        eval_operand op q = SOME (bool_to_word
          (if bop = In then evaluate_in_array (ArrayTV et bd) v1 av
           else ~evaluate_in_array (ArrayTV et bd) v1 av))` by
-    (Cases_on `bd` >> gnvs[]
+    (qpat_assum `!tail. read_result cx tv (fin with gas_obs := tail) = _`
+       (qspec_then `[]` assume_tac) >>
+     Cases_on `bd` >> gnvs[]
      >- (drule (Q.INST [`loc` |-> `(case vv_location vv of SOME l => l | NONE => LocMemory)`]
            rest_word_fixed_tail_mem) >>
          simp[] >> disch_then drule >> simp[] >> disch_then drule >>
@@ -230,8 +232,7 @@ Resume compile_rest_word_membership_sim_mem[safe_tail]:
   qexistsl [`[]`, `fin`, `q`, `BoolV answer`] >>
   simp[gasSummaryTheory.gas_marked_exec_def] >>
   conj_tac
-  >- (qpat_assum `!tail. read_result _ _ _ = _` (qspec_then `[]` assume_tac) >>
-      drule vv_post_read_result >> simp[] >> metis_tac[]) >>
+  >- simp[] >>
   simp[loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
        compileEnvTheory.is_word_type_def, vyperValueTheory.evaluate_type_def,
        valueEncodingTheory.typed_val_to_w256_def, valueEncodingTheory.val_to_w256_def,
