@@ -17,8 +17,6 @@ Theorem le_occ_latest_join_multivalue_retention:
     (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
     (load_analyze ctx fn) /\
   le_occ_prefix C fn s0 (pre ++ PhiOcc bb u p :: suffix) i s /\
-  (!b n fuel x y. MEM (StepOcc b n fuel x y)
-    (pre ++ PhiOcc bb u p :: suffix) ==> dfg_assigns_sound ctx.lctx_dfg x) /\
   compute_phi_action m (cfg_analyze fn) (load_analyze ctx fn) key
     s.vs_current_bb i = SOME pa /\
   bb.bb_label = pa.pa_join_lbl /\
