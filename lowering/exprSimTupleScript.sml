@@ -1019,7 +1019,7 @@ Proof
 QED
 
 (* The element's selection reads no gas observation. *)
-Theorem tuple_select_gas_obs[local]:
+Theorem tuple_select_gas_obs:
   !cx ty tv i ee r.
     select_result cx ty tv (ValueSubscript (IntV i)) ee = (r, ee) ==>
     !tail. select_result cx ty tv (ValueSubscript (IntV i))
