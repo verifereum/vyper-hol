@@ -422,6 +422,45 @@ Proof
   simp[]
 QED
 
+Theorem taint_agree_fixed_write_range:
+  taint_agree D X tn s t /\ op_taint tn dst = {} ==>
+  fixed_source_write_range t dst value len =
+  fixed_source_write_range s dst value len
+Proof
+  strip_tac >>
+  `eval_operand dst s = eval_operand dst t` by
+    metis_tac[taint_agree_operand_clean] >>
+  drule taint_agree_operand_defined >>
+  disch_then (qspec_then `value` assume_tac) >>
+  Cases_on `eval_operand value s` >> Cases_on `eval_operand value t` >>
+  gvs[fixed_source_write_range_def] >>
+  Cases_on `eval_operand dst t` >> simp[]
+QED
+
+Theorem taint_agree_write_ranges:
+  taint_ok fn tn inst s /\ taint_agree D X tn s t /\
+  inst.inst_opcode <> DRET ==>
+  source_memory_write_ranges inst t = source_memory_write_ranges inst s
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode` >>
+  gvs[source_memory_write_ranges_def] >>
+  namedCases_on `inst.inst_operands` ["", "o1 os1"] >> gvs[] >>
+  namedCases_on `os1` ["", "o2 os2"] >> gvs[] >>
+  namedCases_on `os2` ["", "o3 os3"] >> gvs[]
+  >>~- ([`fixed_source_write_range _ _ _ _ = _`],
+        irule taint_agree_fixed_write_range >> simp[] >>
+        gvs[taint_ok_def] >> metis_tac[]) >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule taint_agree_operand_clean >> simp[] >>
+     gvs[taint_ok_def] >> metis_tac[]) >>
+  simp[sized_source_write_range_def] >>
+  namedCases_on `os3` ["", "o4 os4"] >> gvs[] >>
+  namedCases_on `os4` ["", "o5 os5"] >> gvs[] >>
+  namedCases_on `os5` ["", "o6 os6"] >> gvs[] >>
+  namedCases_on `os6` ["", "o7 os7"] >> gvs[] >>
+  Cases_on `os7` >> gvs[]
+QED
+
 Theorem taint_agree_jump_to:
   taint_agree D X tn s t ==>
   taint_agree D X tn (jump_to lbl s) (jump_to lbl t)
