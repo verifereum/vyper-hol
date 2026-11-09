@@ -9,7 +9,7 @@
 
 Theory phiBlock
 Ancestors
-  venomInstProofs phiWellFormed execEquivProps venomExecProofs venomInstProps venomExecSemantics venomState venomInst venomWf phiDefs phiOrigins phiTransform stateEquiv stateEquivProps analysisSim
+  venomInstProofs phiWellFormed execEquivProps venomExecProofs venomInstProps venomExecSemantics venomState venomInst venomWf phiDefs phiOrigins phiTransform stateEquiv stateEquivProps analysisSimDefs analysisSimProofsBase instIdxIndep runInstsProps finite_map list
   venomWfProps
 Libs
   pairLib
