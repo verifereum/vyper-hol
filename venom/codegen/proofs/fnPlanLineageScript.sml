@@ -5322,3 +5322,52 @@ Resume lineage_dfs_join_block_replay_actual[nonjmp_layout]:
 QED
 
 Finalise lineage_dfs_join_block_replay_actual
+
+
+(* With no PHIs the incoming join target is predecessor-independent.  Unit
+   resources exclude live copies from each otherwise arbitrary residual. *)
+Theorem lineage_dfs_empty_phi_join_seed_actual:
+  codegen_ready_fn fn /\ fn_entry_label fn <> SOME lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+  collect_phis bb.bb_instructions = [] /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops,ps_end) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psL /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psD ==>
+  ?prefixL prefixD.
+    psL.ps_stack = prefixL ++ MAP Var (live_vars_at (liveness_analyze fn) lbl 0) /\
+    psD.ps_stack = prefixD ++ MAP Var (live_vars_at (liveness_analyze fn) lbl 0) /\
+    psL.ps_spilled = FEMPTY /\ psD.ps_spilled = FEMPTY /\
+    psL = psD with ps_stack :=
+      prefixL ++ MAP Var (live_vars_at (liveness_analyze fn) lbl 0) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) lbl 0) ==>
+      ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)
+Proof
+  strip_tac >>
+  drule_all lineage_state_join_boundary >>
+  simp[livenessDefsTheory.input_vars_from_def] >> strip_tac >>
+  drule_all dfs_block_state_join_boundary >>
+  simp[livenessDefsTheory.input_vars_from_def] >> strip_tac >>
+  rename1 `psL.ps_stack = prefixL ++ _` >>
+  rename1 `psD.ps_stack = prefixD ++ _` >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psD` by
+    metis_tac[dfs_block_state_lineage_state] >>
+  `psL = psD with ps_stack := psL.ps_stack` by
+    metis_tac[lineage_state_actual_dfs_fields] >>
+  qexists_tac `prefixD` >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  gen_tac >> strip_tac >>
+  `MEM (Var v) (MAP Var (live_vars_at (liveness_analyze fn) lbl 0))` by
+    simp[listTheory.MEM_MAP] >>
+  `LIST_ELEM_COUNT (Var v) psL.ps_stack +
+    (if Var v IN FDOM psL.ps_spilled then 1 else 0) <= 1` by
+    metis_tac[lineage_state_unit_resources] >>
+  `LIST_ELEM_COUNT (Var v) psD.ps_stack +
+    (if Var v IN FDOM psD.ps_spilled then 1 else 0) <= 1` by
+    metis_tac[lineage_state_unit_resources] >>
+  metis_tac[fnPlanLineageNativeResourcesTheory.resource_suffix_cancel]
+QED
