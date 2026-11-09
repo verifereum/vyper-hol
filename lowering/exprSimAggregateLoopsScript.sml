@@ -407,7 +407,7 @@ Proof
 QED
 
 (* The rest of the tuple, with the child's value in front. *)
-Theorem aggregate_tuple_values_outcome[local]:
+Theorem aggregate_tuple_values_outcome:
   gas_outcome F tops (ctx,func) (eval_exprs cx args) (es,s) Q1 R1 /\
   (!res ee r. Q1 res ee r ==>
      Q (case res of INL vs => INL (v::vs) | INR exc => INR exc) ee r) /\
