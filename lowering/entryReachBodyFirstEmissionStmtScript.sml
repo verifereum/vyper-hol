@@ -649,16 +649,16 @@ Resume first_emission_store_slots_family[slots]:
   Cases_on `ty` >> pure_rewrite_tac[vyperASTTheory.type_case_def] >> BETA_TAC
   >~ [`ArrayT elem bd`]
   >- (Cases_on `bd` >> pure_rewrite_tac[vyperASTTheory.bound_case_def] >> BETA_TAC
-      >- (ho_match_mp_tac first_emission_strong >>
-          ho_match_mp_tac first_emission_strong_bind >> conj_tac
-          >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
-          gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
-          rpt (FIRST [irule cs_appends_bind >> conj_tac,
-                      irule cs_appends_ignore_bind >> conj_tac, gen_tac] >> BETA_TAC >>
-               simp[cs_appends_emit_helpers])) >>
-      first_x_assum irule >> simp[])
-  >~ [`TupleT tys`] >- (first_x_assum irule >> simp[])
-  >~ [`StructT nsid`] >- (first_x_assum irule >> simp[]) >>
+      >- (rpt strip_tac >> gvs[] >> first_x_assum drule >> simp[]) >>
+      ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+      gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
+      rpt (FIRST [irule cs_appends_bind >> conj_tac,
+                  irule cs_appends_ignore_bind >> conj_tac, gen_tac] >> BETA_TAC >>
+           simp[cs_appends_emit_helpers]))
+  >~ [`TupleT tys`] >- (rpt strip_tac >> gvs[] >> first_x_assum drule >> simp[])
+  >~ [`StructT nsid`] >- (rpt strip_tac >> gvs[] >> first_x_assum drule >> simp[]) >>
   rpt strip_tac >> drule_at Any (cj 2 first_emission_emit_helpers) >> simp[] >> metis_tac[]
 QED
 Finalise first_emission_store_slots_family
@@ -748,7 +748,7 @@ Resume first_emission_tuple_store_all[base_target]:
   ho_match_mp_tac first_emission_bind >> conj_tac
   >- (match_mp_tac first_emission_get_target_ptr >> metis_tac[first_emission_compile_expr]) >>
   gen_tac >> BETA_TAC >>
-  ntac 10 (ho_match_mp_tac first_emission_bind >> conj_tac
+  ntac 9 (ho_match_mp_tac first_emission_bind >> conj_tac
      >- metis_tac[first_emission_return] >> gen_tac >> BETA_TAC) >>
   ho_match_mp_tac first_emission_ignore_bind >> conj_tac
   >- (IF_CASES_TAC
@@ -897,8 +897,8 @@ val fe_append_suffix =
   all_tac
   >>~- ([`cs_appends (compile_store_memory _ _ _ _ _)`],
     rw[cs_appends_def] >> metis_tac[first_emission_store_memory])
-  >>~- ([`cs_appends (compile_word_copy_loop _ _ _ _ _ _)`],
-    rw[cs_appends_def] >> metis_tac[compile_word_copy_loop_labels, pairTheory.SND]);
+  >>~- ([`cs_appends (compile_store_slots _ _ _ _ _)`],
+    rw[cs_appends_def] >> metis_tac[cj 1 compile_store_slots_labels, pairTheory.SND]);
 
 Theorem first_emission_compile_stmt:
   (!ce lc ty stmt a x b. compile_stmt ce lc ty stmt a = (x,b) ==>
@@ -981,7 +981,7 @@ Resume first_emission_compile_stmt[assign]:
   ho_match_mp_tac first_emission_bind >> conj_tac
   >- metis_tac[first_emission_unwrap_value] >>
   gen_tac >> BETA_TAC >>
-  ntac 5 (ho_match_mp_tac first_emission_bind >> conj_tac
+  ntac 4 (ho_match_mp_tac first_emission_bind >> conj_tac
     >- metis_tac[first_emission_return] >> gen_tac >> BETA_TAC) >>
   Cases_on `dst_loc_opt` >> pure_rewrite_tac[optionTheory.option_case_def] >> BETA_TAC
   >- (rpt strip_tac >> drule_at Any (cj 2 first_emission_emit_helpers) >> simp[] >> metis_tac[]) >>
