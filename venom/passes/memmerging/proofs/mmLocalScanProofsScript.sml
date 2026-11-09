@@ -4,7 +4,7 @@ Ancestors
   mmSupplyWfProofs mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
   venomFnScheduleRunner allocaRemapSSA o1MakeSsaCfg makeSsaCurrentWfSsa
   cfgWf venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
-  simplifyCfgPhiSemantics basePtrProofs mmTraceProofs frameViewMemory
+  simplifyCfgPhiSemantics basePtrProofs mmTraceProofs frameViewMemory dftCommutation
 Libs
   wordsLib finite_mapLib
 
@@ -4287,6 +4287,82 @@ Proof
       mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
       mmIntervalTheory.interval_end_def,
       arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >> decide_tac
+QED
+
+Theorem mm_local_live_load_empty[local]:
+  !v src. FLOOKUP empty_scan_state.ss_loads v = SOME src ==>
+    lookup_var v s = SOME (mload src s)
+Proof
+  simp[empty_scan_state_def]
+QED
+
+Theorem mm_local_live_load_barrier[local]:
+  !v src. FLOOKUP (hard_barrier ss).ss_loads v = SOME src ==>
+    lookup_var v s = SOME (mload src s)
+Proof
+  simp[hard_barrier_def]
+QED
+
+Theorem mm_local_live_load_create[local]:
+  inst.inst_opcode = MLOAD /\ inst.inst_operands = [Lit a] /\
+  inst.inst_outputs = [out] /\ step_inst_base inst s = OK t /\
+  (!v src. FLOOKUP ss.ss_loads v = SOME src ==>
+     lookup_var v s = SOME (mload src s)) /\
+  (!v src. FLOOKUP ss.ss_loads v = SOME src /\ v <> out ==>
+     lookup_var v t = lookup_var v s) ==>
+  !v src. FLOOKUP (scan_load Mem2Mem ss inst).ss_loads v = SOME src ==>
+    lookup_var v t = SOME (mload src t)
+Proof
+  strip_tac >>
+  `t = update_var out (mload (w2n a) s) s` by
+    gvs[venomExecSemanticsTheory.step_inst_base_def,
+        venomExecSemanticsTheory.exec_read1_def,
+        venomStateTheory.eval_operand_def] >>
+  gvs[scan_load_def, operand_lit_val_def, mode_allows_overlap_def] >>
+  IF_CASES_TAC >>
+  simp[flush_copies_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> Cases_on `out = v` >>
+  gvs[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+      venomStateTheory.mload_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem mm_local_live_load_write[local]:
+  (!v src. FLOOKUP ss.ss_loads v = SOME src ==>
+     lookup_var v s = SOME (mload src s)) /\
+  t.vs_memory = (write_memory_with_expansion dst bytes s).vs_memory /\
+  (!v src.
+     FLOOKUP (invalidate_loads ss (mk_interval dst (LENGTH bytes))).ss_loads v = SOME src ==>
+     lookup_var v t = lookup_var v s) ==>
+  !v src.
+    FLOOKUP (invalidate_loads ss (mk_interval dst (LENGTH bytes))).ss_loads v = SOME src ==>
+    lookup_var v t = SOME (mload src t)
+Proof
+  rpt strip_tac >>
+  drule mm_local_invalidate_binding >> strip_tac >>
+  drule mm_local_invalidate_read >> strip_tac >>
+  `mload src t = mload src s` by simp[venomStateTheory.mload_def] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_known_value_frame[local]:
+  lookup_var x s = SOME value /\ step_inst_base inst s = OK t /\
+  ~MEM (Var x) inst.inst_operands /\ ~MEM x inst.inst_outputs ==>
+  lookup_var x t = SOME value
+Proof
+  strip_tac >>
+  `update_var x value s = s` by
+    (simp[venomStateTheory.update_var_def] >>
+     `s.vs_vars |+ (x,value) = s.vs_vars` by
+       (irule finite_mapTheory.FUPDATE_ELIM >>
+        gvs[venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_DEF]) >>
+     simp[]) >>
+  `step_inst_base inst (update_var x value s) =
+   map_result_state (update_var x value) (step_inst_base inst s)` by
+    (irule step_inst_base_frame >> metis_tac[]) >>
+  gvs[map_result_state_def] >>
+  qpat_x_assum `t = update_var x value t` (fn th => once_rewrite_tac[th]) >>
+  simp[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem mm_local_read_write_disjoint[local]:
