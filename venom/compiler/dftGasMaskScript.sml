@@ -6,6 +6,40 @@ Ancestors
   dftRunRel dftDefs o1PassContract gasEvents gasCount
   venomExecSemantics venomState list rich_list sorting option
 
+Theorem gas_events_invoke_update_var[local]:
+  i.inst_opcode = INVOKE /\
+  (!v. MEM (Var v) i.inst_operands ==> out <> v) ==>
+  gas_events_step fuel C owner i (update_var out value s) =
+  gas_events_step fuel C owner i s
+Proof
+  rpt strip_tac >> simp[gas_events_step_def] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  rename1 `decode_invoke i = SOME decoded` >>
+  PairCases_on `decoded` >> simp[] >>
+  `i.inst_operands = Label decoded0 :: decoded1`
+    by (gvs[decode_invoke_def] >>
+        Cases_on `i.inst_operands` >> gvs[] >>
+        Cases_on `h` >> gvs[]) >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  `eval_operands decoded1 (update_var out value s) = eval_operands decoded1 s`
+    by (irule dftCommutationTheory.eval_operands_update_var >> rw[] >> gvs[MEM]) >>
+  simp[dftCommutationTheory.setup_callee_update_var]
+QED
+
+Theorem gas_events_invoke_updates[local]:
+  !us s.
+  i.inst_opcode = INVOKE /\
+  EVERY (\q. !v. MEM (Var v) i.inst_operands ==> FST q <> v) us ==>
+  gas_events_step fuel C owner i
+    (FOLDL (\u q. update_var (FST q) (SND q) u) s us) =
+  gas_events_step fuel C owner i s
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum (qspec_then `update_var (FST h) (SND h) s` mp_tac) >>
+  simp[] >> disch_then SUBST1_TAC >>
+  irule gas_events_invoke_update_var >> simp[]
+QED
+
 (* A stopped extracted head cannot cross an unexecuted call. *)
 Theorem stopped_head_no_crossed_invoke[local]:
   dft_gas_swap_pair x y /\
@@ -66,6 +100,110 @@ Proof
       disch_then (qspec_then `v' with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
       simp[] >> gvs[]) >>
   simp[Once gas_events_block_def, venomInstTheory.get_instruction_def, DROP_EQ_NIL]
+QED
+
+Theorem gas_events_block_suffix_cong[local]:
+  !xs s bb bb'.
+    DROP s.vs_inst_idx bb.bb_instructions = xs /\
+    DROP s.vs_inst_idx bb'.bb_instructions = xs ==>
+    gas_events_block fuel C owner bb s = gas_events_block fuel C owner bb' s
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (`LENGTH bb.bb_instructions <= s.vs_inst_idx /\
+       LENGTH bb'.bb_instructions <= s.vs_inst_idx` by
+        gvs[DROP_EQ_NIL] >>
+      simp[Once gas_events_block_def, venomInstTheory.get_instruction_def] >>
+      simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]) >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions /\
+   s.vs_inst_idx < LENGTH bb'.bb_instructions` by
+    (qpat_x_assum `DROP _ bb.bb_instructions = _`
+       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
+     qpat_x_assum `DROP _ bb'.bb_instructions = _`
+       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
+     simp[LENGTH_DROP]) >>
+  `EL s.vs_inst_idx bb.bb_instructions = h /\
+   EL s.vs_inst_idx bb'.bb_instructions = h /\
+   DROP (SUC s.vs_inst_idx) bb.bb_instructions = xs /\
+   DROP (SUC s.vs_inst_idx) bb'.bb_instructions = xs` by
+    gvs[rich_listTheory.DROP_CONS_EL] >>
+  once_rewrite_tac[gas_events_block_def] >>
+  simp[venomInstTheory.get_instruction_def] >>
+  Cases_on `step_inst fuel C h s` >> simp[] >>
+  Cases_on `is_terminator h.inst_opcode` >> simp[] >>
+  first_x_assum irule >> simp[] >>
+  fs[rich_listTheory.DROP_CONS_EL]
+QED
+
+Theorem noninvoke_prefix_events_continue[local]:
+  !pre s bb xs upper.
+    DROP s.vs_inst_idx bb.bb_instructions = pre ++ xs /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pre /\
+    (!u. FOLDR (dft_exec_cons fuel C) OK pre s = OK u ==>
+         ?extra. upper = gas_events_block fuel C owner bb u ++ extra) ==>
+    ?extra.
+      MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) pre) ++ upper =
+      gas_events_block fuel C owner bb s ++ extra
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (gvs[] >> first_x_assum (qspec_then `s` mp_tac) >> simp[]) >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `DROP _ _ = _`
+       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[LENGTH_DROP]) >>
+  `EL s.vs_inst_idx bb.bb_instructions = h /\
+   DROP (SUC s.vs_inst_idx) bb.bb_instructions = pre ++ xs` by
+    gvs[rich_listTheory.DROP_CONS_EL] >>
+  fs[EVERY_DEF] >>
+  simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+       gas_events_step_def] >>
+  Cases_on `step_inst fuel C h s`
+  >- (`?extra.
+        MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) pre) ++ upper =
+        gas_events_block fuel C owner bb (v with vs_inst_idx := SUC s.vs_inst_idx) ++ extra`
+        by (first_x_assum irule >> simp[] >> rpt strip_tac >>
+            first_x_assum irule >> simp[dftIndexedExecTheory.dft_exec_cons_def]) >>
+      Cases_on `h.inst_opcode = GAS` >> gvs[] >> metis_tac[]) >>
+  Cases_on `h.inst_opcode = GAS` >> simp[]
+QED
+
+Theorem prefix_ok_cursor[local]:
+  !pre s u.
+    EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+    FOLDR (dft_exec_cons fuel C) OK pre s = OK u ==>
+    u.vs_inst_idx = s.vs_inst_idx + LENGTH pre
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  fs[dftIndexedExecTheory.dft_exec_cons_def] >>
+  Cases_on `step_inst fuel C h s` >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem noninvoke_prefix_events_family[local]:
+  !pre s xs upper.
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pre /\
+    (!u. FOLDR (dft_exec_cons fuel C) OK pre s = OK u ==>
+      ?extra. upper = gas_events_block fuel C owner
+        <|bb_label := owner; bb_instructions :=
+          REPLICATE u.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> u ++ extra) ==>
+    ?extra.
+      MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) pre) ++ upper =
+      gas_events_block fuel C owner
+        <|bb_label := owner; bb_instructions :=
+          REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ (pre ++ xs)|> s ++ extra
+Proof
+  rpt strip_tac >> irule noninvoke_prefix_events_continue >>
+  (reverse conj_tac >- simp[DROP_APPEND]) >> rpt strip_tac >>
+  `u.vs_inst_idx = s.vs_inst_idx + LENGTH pre` by
+    (irule prefix_ok_cursor >> simp[] >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  `gas_events_block fuel C owner
+     <|bb_label := owner; bb_instructions :=
+       REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ (pre ++ xs)|> u =
+   gas_events_block fuel C owner
+     <|bb_label := owner; bb_instructions :=
+       REPLICATE u.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> u` by
+    (irule gas_events_block_suffix_cong >> qexists_tac `xs` >>
+     simp[DROP_APPEND, DROP_DROP_T]) >>
+  gvs[]
 QED
 
 Theorem noninvoke_block_padding_mask[local]:
