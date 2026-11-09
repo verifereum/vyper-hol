@@ -2,7 +2,7 @@
 Theory whitelistForIterImmFrag
 Ancestors
   whitelistForIterImmLoop whitelistForIterDynFrag stmtSimForArrayFrag
-  loweringPosts stmtLowering stmtSimProps context emitHelper compileEnv exprLoweringProps
+  loweringPosts stmtLowering stmtSimProps context emitHelper compileEnv loweringStateRelDefs exprLoweringProps
   localPtrsProps emitHelperProps fragExec venomInst list finite_map arithmetic
   allocationPtr stmtSimForArrayLoop stmtSimDeclCompose words fragGasMode
   stmtLoweringMono vyperAST stmtSimDefs gasSummary vyperInterpreter

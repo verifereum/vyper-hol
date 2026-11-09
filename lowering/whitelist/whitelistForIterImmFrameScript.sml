@@ -3,7 +3,7 @@ Theory whitelistForIterImmFrame
 Ancestors
   vyperBareGlobalName vyperPlaceFrames vyperState vyperTypeSystem
   stmtSimForArrayFrame vyperStatePreservation supportedExprs supportedExprForms supportedExprTraverse
-  vyperTypeInvariants vyperInterpreter vyperAST list rich_list finite_map alist
+  vyperTypeInvariants vyperInterpreter vyperCallOutcomeFrame vyperAST list rich_list finite_map alist
   supportedStmts supportedStmtTraverse
 
 Theorem lookup_immutable_set_other:

@@ -164,7 +164,8 @@ Resume inv_cone_work_at_cut[empty]:
   EVAL_TAC
 QED
 Resume inv_cone_work_at_cut[ordered]:
-  EVAL_TAC
+  PURE_REWRITE_TAC[inv_cone_cases_def, listTheory.EVERY_DEF] >>
+  rpt conj_tac >> FIRST [EVAL_TAC]
 QED
 Finalise inv_cone_work_at_cut
 

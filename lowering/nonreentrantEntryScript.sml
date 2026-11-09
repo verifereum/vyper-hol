@@ -1,7 +1,7 @@
 Theory nonreentrantEntry
 Ancestors
   list rich_list words finite_map
-  context compileEnv emitHelper emitHelperProps exprLoweringProps
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   moduleLoweringProps fragExec fragExecMem instMemFrontier
   venomState venomInst venomExecSemantics
 
@@ -53,16 +53,16 @@ Theorem transient_lock_steps[local]:
      | NONE => Error "undefined operand")
 Proof
   conj_tac
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[lock_opcode]) >>
+  >- (simp[step_inst_base_opcode_eqs, lock_opcode]) >>
   conj_tac
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[lock_opcode]) >>
+  >- (simp[step_inst_base_opcode_eqs, lock_opcode]) >>
   conj_tac
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[lock_opcode] >>
+  >- (simp[step_inst_base_opcode_eqs, lock_opcode] >>
       CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC) >>
   conj_tac
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[lock_opcode] >>
+  >- (simp[step_inst_base_opcode_eqs, lock_opcode] >>
       CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[mk_inst_def]) >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[lock_opcode] >>
+  simp[step_inst_base_opcode_eqs, lock_opcode] >>
   simp[mk_inst_def]
 QED
 

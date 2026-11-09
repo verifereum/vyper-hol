@@ -2,7 +2,7 @@
 Theory stmtSimForArrayFrame
 Ancestors
   list rich_list finite_map vyperState vyperLookup vyperScopePreservation
-  supportedStmts vyperPlaceFrames supportedExprs vyperInterpreter
+  supportedStmts vyperPlaceFrames supportedExprs vyperInterpreter vyperCallOutcomeFrame
   vyperStatePreservation supportedExprForms supportedExprTraverse
   vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperTypeSystem vyperTypeEnvExtension vyperTypeArgFits
 

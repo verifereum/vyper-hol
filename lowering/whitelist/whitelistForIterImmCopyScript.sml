@@ -2,7 +2,7 @@
    constructor flag remains explicit: runtime uses DLOAD; constructors ILOAD. *)
 Theory whitelistForIterImmCopy
 Ancestors
-  stmtLowering context compileEnv exprSimTopLevelImmutable exprSimCopy stmtSimForArray
+  stmtLowering context compileEnv loweringStateRelDefs exprSimTopLevelImmutable exprSimCopy stmtSimForArray
   immutableCopyExecution vyperValue valueEncodingProps emitHelper venomInst venomExecSemantics
 Libs
   monadsyntax
@@ -373,12 +373,12 @@ Proof
   `eval_operand (Var p) s = SOME w` by simp[venomStateTheory.eval_operand_def] >>
   `(cenv.ce_is_ctor ==> regions_disjoint (w2n a) bytes (w2n w) bytes)` by
     (strip_tac >> drule_all immutable_holds_alloca_disjoint >>
-     gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `(!region. cenv.ce_is_ctor /\ cenv.ce_imm_alloca = SOME region ==>
     eval_operand region s = SOME 0w /\ copy_old_operand sa region)` by
     (rpt strip_tac
      >- (gvs[exprLoweringPropsTheory.stmt_state_rel_def,
-             compileEnvTheory.immutable_base_zero_def]) >>
+             loweringStateRelDefsTheory.immutable_base_zero_def]) >>
      Cases_on `region` >> simp[copy_old_operand_def] >>
      metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_imm_base]) >>
   drule_all immutable_iter_copy_typed_run_full >> strip_tac >>

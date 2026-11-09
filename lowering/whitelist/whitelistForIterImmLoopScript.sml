@@ -3,7 +3,7 @@
 Theory whitelistForIterImmLoop
 Ancestors
   whitelistForIterImmCopy whitelistForIterImmFrame whitelistForIterDynLoop
-  exprSimTopLevelImmutable stmtLowering exprLoweringProps compileEnv context
+  exprSimTopLevelImmutable stmtLowering exprLoweringProps compileEnv loweringStateRelDefs context
   vyperAST list finite_map stmtSimForArrayParts stmtSimProps emitHelper venomInst fragExec
   stmtSimForArrayLoop stmtSimForArrayFrag stmtSimDefs venomState venomExecSemantics
   venomExecProofs loweringPosts fragGasMode fragGasPath

@@ -60,7 +60,7 @@ Ancestors
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs list finite_map
   bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps
   stmtSimDecl stmtSimFor stmtSimForParts stmtLowering stmtLoweringMono
-  stmtSimForArray stmtSimForArrayFrag vyperTyping fragExec compileEnv
+  stmtSimForArray stmtSimForArrayFrag vyperTyping fragExec compileEnv loweringStateRelDefs
   supportedStmts supportedStmtTraverse compileVyper vyperTypeCallGraph vyperTypeCallStackSoundness vyperAST vyperInterpreter vyperState vyperValue
   vyperValueOperation vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv valueEncoding valueEncodingProps valueEncodingTyping exprSimAggregateEncoding

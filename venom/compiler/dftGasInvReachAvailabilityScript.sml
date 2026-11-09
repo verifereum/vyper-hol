@@ -2,7 +2,7 @@ Theory dftGasInvReachAvailability
 Ancestors
   dftGasInvReachSlice dftGasInvPrefixRun dftGasInvPrefixReach
   dftGasInvOracleAvailability dftGasInvSSAProbe dftGasOracleDefs
-  dftRunRel dftAvailability sccpCorrectnessProofs venomExecSemantics
+  dftRunRel dftAvailability venomWfProps venomExecSemantics
   venomExecProofs venomWf venomInst venomState contextCodegenRel
   dftGasInvPseudoPrefix dftIndexedExec venomInstProofs1 venomExecProps
   dftCorrectness

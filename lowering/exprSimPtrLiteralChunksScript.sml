@@ -3,7 +3,7 @@ Theory exprSimPtrLiteralChunks
 Ancestors
   exprSimPtrLiteralOps fragGasSeqPtr exprLowering exprLoweringProps
   exprSimLiteralBuffer fragExecPtr bodyPtrDefs ptrDiscipline venomState
-  venomExecSemantics venomInst words finite_map compileEnv fragExec instIdxIndep
+  venomExecSemantics venomInst words finite_map compileEnv loweringStateRelDefs fragExec instIdxIndep
   emitHelper context rich_list freshWrites ASCIInumbers vfmConstants integer
 
 Theorem literal_chunk_pair_ptr:
@@ -22,8 +22,7 @@ Proof
   `b < dimword (:256) /\ b+off < dimword (:256)` by decide_tac >>
   `step_inst_base (mk_inst id ADD [Var src; Lit (n2w off)] [dst]) s =
    OK (update_var dst (n2w (b+off)) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def, word_add_n2w]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, word_add_n2w]) >>
   drule literal_add_ghost >> disch_then assume_tac >>
   simp[Once inst_seq_ptr_def, literal_add_ptr_inst_ok] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ _ u` >>
@@ -35,8 +34,7 @@ Proof
      decide_tac) >>
   `step_inst_base (mk_inst (id+1) MSTORE [Var dst; Lit w] []) u =
    OK (mstore (w2n (n2w (b+off):bytes32)) w u)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def]) >>
   drule literal_mstore_ghost >> disch_then assume_tac >>
   gvs[w2n_n2w] >>
   simp[inst_seq_ptr_def, literal_mstore_ptr_inst_ok]
@@ -107,13 +105,11 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id ADD [Var src; Lit (n2w off)] [dst]) s =
    OK (update_var dst (n2w (b+off)) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def, word_add_n2w]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, word_add_n2w]) >>
   qmatch_goalsub_abbrev_tac `mstore _ _ u` >>
   `step_inst_base (mk_inst (id+1) MSTORE [Var dst; Lit w] []) u =
    OK (mstore (w2n (n2w (b+off):bytes32)) w u)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def,
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def,
           Abbr `u`, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   simp[run_inst_seq_def] >> simp[mk_inst_def, is_terminator_def]
 QED

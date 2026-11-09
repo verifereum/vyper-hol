@@ -3,7 +3,7 @@
 Theory abiEncoderOpenInput
 Ancestors
   abiEncoderInput
-  abiDecodeRanges abiCanonicalWindows valueEncoding contractABI list rich_list arithmetic byte words
+  abiDecodeRanges abiCanonicalWindows valueEncoding valueEncodingDefs contractABI list rich_list arithmetic byte words
 
 Inductive abi_encoder_structural_valid:
 [typed:]

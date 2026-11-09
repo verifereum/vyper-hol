@@ -1,7 +1,7 @@
 Theory ctorReturnFrame
 Ancestors
   bodySim stmtSimReturn immutableDeployExecution nonreentrantSource loweringHalt
-  moduleLowering stmtLowering stmtSimDefs stmtSimProps exprLoweringProps fragExec compileEnv
+  moduleLowering stmtLowering stmtSimDefs stmtSimProps exprLoweringProps fragExec compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperContext vyperStorageLayoutSafety
   venomExecSemantics venomState venomInst
 

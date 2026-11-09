@@ -44,9 +44,9 @@ Theory whitelistForIterMem
 Ancestors
   whitelistForIterDynFrag stmtSimForArrayFrame exprSimSubscriptMap exprSimDefs loweringPosts
   stmtSimDefs gasOutcome gasSummary supportedStmts vyperTypeSystem vyperState
-  vyperInterpreter valueEncoding valueEncodingProps valueEncodingProofs
+  vyperInterpreter valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs
   stmtLowering exprLowering venomState exprSimPopImmutableTarget
-  compileEnv exprLoweringProps list finite_map arithmetic words bodySimAugPlaceMemory
+  compileEnv loweringStateRelDefs exprLoweringProps list finite_map arithmetic words bodySimAugPlaceMemory
 
 (* A statement fragment as stmt_frag says, that also keeps Q: started in a
    state where Q holds, it ends where Q holds.  stmt_frag_keep (K T) is

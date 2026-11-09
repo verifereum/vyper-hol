@@ -1,7 +1,7 @@
 Theory exprSimPopNestedLocalRun
 Ancestors
   exprSimPopNestedBase exprSimPop emitHelperProps emitHelper exprLowering
-  exprLoweringProps compileEnv venomState venomExecSemantics venomInst
+  exprLoweringProps compileEnv loweringStateRelDefs venomState venomExecSemantics venomInst
   exprSimHash fragGasSeqAbort gasSummaryCompose gasExemptCert gasSummary
   exprSimPopNestedLocalProps vyperState
   list rich_list finite_map arithmetic words

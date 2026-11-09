@@ -63,7 +63,7 @@ Ancestors
   stmtSimLogArgsRun stmtSimLogArgsGrowth stmtSimLogSuffix stmtSimLogSource
   exprSimWordArgs stmtSimLogSuffixActual stmtSimLogSuffixFrame
   stmtSimLogSuffixCode stmtSimLogArgs freshWrites
-  compileEnv stmtLowering fragExec loweringSlice exprLoweringProps
+  compileEnv loweringStateRelDefs stmtLowering fragExec loweringSlice exprLoweringProps
   emitHelperProps vyperInterpreter vyperState vyperTyping list
   stmtSimLogTrace emitHelper context venomInst
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext

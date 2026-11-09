@@ -17,7 +17,7 @@ Theory whitelistForIterDynFrag
 Ancestors
   loweringPosts stmtSimDefs stmtSimProps whitelistForIterDynLoop
   stmtSimForArrayFrag stmtSimForArrayLoop stmtSimForArrayParts
-  stmtLowering exprLowering compileEnv context emitHelper
+  stmtLowering exprLowering compileEnv loweringStateRelDefs context emitHelper
   exprLoweringProps fragExec loweringSlice localPtrsProps emitHelperProps
   venomInst venomState venomExecSemantics list rich_list finite_map
   arithmetic words stmtSimForParts gasOutcome gasContext stmtSimForRounds

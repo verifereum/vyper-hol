@@ -30,7 +30,7 @@ Ancestors
   exprSimAlloc
    exprSimHyps exprSimUnwrap exprSimBufferStore exprSimBuffer
   vyperInterpreter vyperValueOperation vyperState fragExec
-  compileEnv context exprSimLiteralBuffer exprSimOps venomState
+  compileEnv loweringStateRelDefs context exprSimLiteralBuffer exprSimOps venomState
   exprSimHash exprOperandVar emitHelperProps ASCIInumbers exprLoweringProps venomInst
   vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes oracleExecProps
 

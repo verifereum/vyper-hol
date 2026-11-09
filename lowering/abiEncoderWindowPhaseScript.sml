@@ -5,6 +5,7 @@ Ancestors
   abiEncoderWindowLeaves abiEncoderPrimitiveEffect emitHelperProps emitHelper
   abiEncoderRegisteredEffect abiEncoderExtendSim exprLoweringProps freshWrites
   compileEnv venomState venomExecSemantics venomMemDefs fragExec finite_map list pred_set
+  abiEncoderWindowLookup
 
 Definition window_phase_def:
   window_phase ctx func st en ids outs s t <=>
@@ -159,6 +160,46 @@ Proof
   fs[window_pure_seq_def]
 QED
 
+Theorem window_seq_high_vars:
+  window_seq st en s raw /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ EVERY (not_fresh_at en) i.inst_outputs)
+    (emitted_insts st en) ==>
+  !x. ~not_fresh_at en x ==>
+    lookup_var x (raw with vs_inst_idx := ix) = lookup_var x s
+Proof
+  strip_tac >>
+  `run_inst_seq (emitted_insts st en) s = OK raw` by gvs[window_seq_def] >>
+  drule abi_window_seq_high_vars >>
+  disch_then (qspec_then `en` mp_tac) >> simp[lookup_var_def]
+QED
+
+Theorem window_emit_add_phase_observed:
+  emit_op ADD [lhs;rhs] st = (out,en) /\
+  eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME b /\
+  fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. window_phase ctx func st en {} [] s t /\
+    eval_operand out t = SOME (a+b) /\
+    (!x. out = Var x ==> not_fresh_at en x) /\ t.vs_labels = s.vs_labels /\
+    (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule_all window_emit_add_pure >> strip_tac >>
+  `!x. ~not_fresh_at en x ==>
+    lookup_var x (t with vs_inst_idx := LENGTH en.cs_current_insts) = lookup_var x s` by
+    (rpt strip_tac >> irule window_seq_high_vars >> qexistsl_tac [`en`, `st`] >>
+     simp[] >> conj_tac
+     >- (irule abi_window_emit_register_bounds >>
+         qexistsl_tac [`[lhs;rhs]`, `ADD`, `out`] >> simp[]) >>
+     metis_tac[window_pure_seq_def]) >>
+  qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
+  (conj_tac >- metis_tac[window_pure_seq_phase]) >>
+  simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
+  `t.vs_labels = s.vs_labels` by
+    metis_tac[window_pure_seq_def, window_seq_labels] >>
+  Cases_on `out` >> fs[eval_operand_def, lookup_var_def]
+QED
+
 Theorem window_emit_add_phase:
   emit_op ADD [lhs;rhs] st = (out,en) /\
   eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME b /\
@@ -169,7 +210,28 @@ Theorem window_emit_add_phase:
     eval_operand out t = SOME (a+b) /\
     (!x. out = Var x ==> not_fresh_at en x) /\ t.vs_labels = s.vs_labels
 Proof
-  strip_tac >> drule_all window_emit_add_pure >> strip_tac >>
+  metis_tac[window_emit_add_phase_observed]
+QED
+
+Theorem window_cursor_load_phase_observed:
+  emit_op MLOAD [ptr_op] st = (out,en) /\
+  eval_operand ptr_op s = SOME (n2w b) /\ b < dimword (:256) /\
+  fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. window_phase ctx func st en {} [] s t /\
+    eval_operand out t = SOME (mload b s) /\
+    (!x. out = Var x ==> not_fresh_at en x) /\ t.vs_labels = s.vs_labels /\
+    (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule_all window_cursor_load_sequence >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ EVERY (not_fresh_at en) i.inst_outputs)
+    (emitted_insts st en)` by
+    (irule abi_window_emit_register_bounds >>
+     qexistsl_tac [`[ptr_op]`, `MLOAD`, `out`] >> simp[]) >>
+  `!x. ~not_fresh_at en x ==>
+    lookup_var x (t with vs_inst_idx := LENGTH en.cs_current_insts) = lookup_var x s` by
+    metis_tac[window_seq_high_vars, window_pure_seq_def] >>
   qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
   (conj_tac >- metis_tac[window_pure_seq_phase]) >>
   simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
@@ -188,13 +250,7 @@ Theorem window_cursor_load_phase:
     eval_operand out t = SOME (mload b s) /\
     (!x. out = Var x ==> not_fresh_at en x) /\ t.vs_labels = s.vs_labels
 Proof
-  strip_tac >> drule_all window_cursor_load_sequence >> strip_tac >>
-  qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
-  (conj_tac >- metis_tac[window_pure_seq_phase]) >>
-  simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
-  `t.vs_labels = s.vs_labels` by
-    metis_tac[window_pure_seq_def, window_seq_labels] >>
-  Cases_on `out` >> fs[eval_operand_def, lookup_var_def]
+  metis_tac[window_cursor_load_phase_observed]
 QED
 
 (* One store boundary covers both registered cursors and destination words.
@@ -265,7 +321,7 @@ Proof
   irule abi_encoder_output_store >> simp[]
 QED
 
-Theorem window_emit_alloca32_phase:
+Theorem window_emit_alloca32_phase_observed:
   emit_op ALLOCA [Lit 32w] st = (out,en) /\
   MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
@@ -278,9 +334,17 @@ Theorem window_emit_alloca32_phase:
     (!x. out = Var x ==> not_fresh_at en x) /\
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,32) /\
     b+32 <= t.vs_alloca_next /\ t.vs_memory = s.vs_memory /\
-    t.vs_labels = s.vs_labels
+    t.vs_labels = s.vs_labels /\
+    (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule_all window_emit_alloca32_sequence >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ EVERY (not_fresh_at en) i.inst_outputs)
+    (emitted_insts st en)` by
+    (irule abi_window_emit_register_bounds >>
+     qexistsl_tac [`[Lit 32w]`, `ALLOCA`, `out`] >> simp[]) >>
+  `!x. ~not_fresh_at en x ==>
+    lookup_var x (t with vs_inst_idx := LENGTH en.cs_current_insts) = lookup_var x s` by
+    metis_tac[window_seq_high_vars] >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH en.cs_current_insts`, `b`] >>
   (conj_tac >- metis_tac[window_seq_phase]) >>
   simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
@@ -301,4 +365,104 @@ Theorem window_phase_operand:
 Proof
   Cases_on `op` >> simp[eval_operand_def] >>
   metis_tac[window_phase_vars, window_phase_labels]
+QED
+
+Theorem window_phase_chain_observed:
+  window_phase ctx func st mid left left_out s t /\
+  window_phase ctx func mid en right right_out t u /\
+  st.cs_next_var <= mid.cs_next_var /\ left SUBSET ids /\ right SUBSET ids /\
+  (!a. EVERY (\(b,n). a < b \/ b+n <= a) outs ==>
+    EVERY (\(b,n). a < b \/ b+n <= a) left_out) /\
+  (!a. EVERY (\(b,n). a < b \/ b+n <= a) outs ==>
+    EVERY (\(b,n). a < b \/ b+n <= a) right_out) /\
+  (!x. ~not_fresh_at mid x ==> lookup_var x t = lookup_var x s) /\
+  (!x. ~not_fresh_at en x ==> lookup_var x u = lookup_var x t) /\
+  mid.cs_next_var <= en.cs_next_var ==>
+  window_phase ctx func st en ids outs s u /\
+  (!x. ~not_fresh_at en x ==> lookup_var x u = lookup_var x s)
+Proof
+  strip_tac >> conj_tac
+  >- (irule window_phase_chain >> metis_tac[]) >>
+  metis_tac[abi_window_high_vars_trans]
+QED
+
+Theorem window_seq_phase_observed:
+  window_seq st en s raw /\ fn_has_code st en func /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  abi_encoder_registered_effect ids outs s raw /\ window_alloca_growth s raw /\
+  alloca_inv raw /\ alloca_room ctx func raw /\
+  raw.vs_halted = s.vs_halted /\ raw.vs_current_bb = s.vs_current_bb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ EVERY (not_fresh_at en) i.inst_outputs)
+    (emitted_insts st en) ==>
+  window_phase ctx func st en ids outs s
+    (raw with vs_inst_idx := LENGTH en.cs_current_insts) /\
+  (!x. ~not_fresh_at en x ==>
+    lookup_var x (raw with vs_inst_idx := LENGTH en.cs_current_insts) = lookup_var x s)
+Proof
+  strip_tac >> conj_tac
+  >- (irule window_seq_phase >> simp[]) >>
+  metis_tac[window_seq_high_vars]
+QED
+
+Theorem window_phase_refl_observed:
+  alloca_inv s /\ alloca_room ctx func s /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  window_phase ctx func st st ids outs s s /\
+  (!x. ~not_fresh_at st x ==> lookup_var x s = lookup_var x s)
+Proof
+  simp[window_phase_refl]
+QED
+
+Theorem window_emit_alloca32_phase:
+  emit_op ALLOCA [Lit 32w] st = (out,en) /\
+  MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
+  fn_has_code st en func /\ alloca_room ctx func s /\ alloca_inv s /\
+  (!b sz. FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,sz) ==> sz = 32) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t b. window_phase ctx func st en {st.cs_next_id} [] s t /\
+    eval_operand out t = SOME (n2w b) /\
+    (!x. out = Var x ==> not_fresh_at en x) /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,32) /\
+    b+32 <= t.vs_alloca_next /\ t.vs_memory = s.vs_memory /\
+    t.vs_labels = s.vs_labels
+Proof
+  metis_tac[window_emit_alloca32_phase_observed]
+QED
+
+Theorem window_cursor_store_phase_observed:
+  emit_void MSTORE [ptr_op;value] st = ((),en) /\
+  eval_operand ptr_op s = SOME (n2w b) /\ eval_operand value s = SOME w /\
+  b < dimword (:256) /\ FLOOKUP s.vs_allocas id = SOME (b,32) /\
+  fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  window_phase ctx func st en {id} [] s
+    ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) /\
+  (!x. ~not_fresh_at en x ==>
+    lookup_var x ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) = lookup_var x s)
+Proof
+  strip_tac >> conj_tac
+  >- (irule window_cursor_store_phase >> simp[] >> metis_tac[]) >>
+  simp[lookup_var_def, mstore_def, write_memory_with_expansion_def]
+QED
+
+Theorem window_output_store_phase_observed:
+  emit_void MSTORE [ptr_op;value] st = ((),en) /\
+  eval_operand ptr_op s = SOME (n2w b) /\ eval_operand value s = SOME w /\
+  b < dimword (:256) /\ fn_has_code st en func /\
+  alloca_inv s /\ alloca_room ctx func s /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  window_phase ctx func st en {} [(b,32)] s
+    ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) /\
+  (!x. ~not_fresh_at en x ==>
+    lookup_var x ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) = lookup_var x s)
+Proof
+  strip_tac >> conj_tac
+  >- (irule window_output_store_phase >> simp[] >> metis_tac[]) >>
+  simp[lookup_var_def, mstore_def, write_memory_with_expansion_def]
 QED
