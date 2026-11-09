@@ -673,7 +673,7 @@ Theorem inventory_dup_count[local]:
   LENGTH (FILTER (\a. a = Var v) ps.ps_stack) + (if op = Var v then 1 else 0)
 Proof
   strip_tac >> drule stack_get_depth_props >> strip_tac >>
-  drule do_dup_stack_exact >> simp[] >>
+  drule (cj 2 do_dup_stack_exact) >> simp[] >>
   disch_then SUBST1_TAC >> simp[FILTER_APPEND] >>
   Cases_on `op = Var v` >> simp[]
 QED
@@ -958,7 +958,7 @@ Proof
   qmatch_asmsub_abbrev_tac `do_dup dist before` >>
   `stack_get_depth (Var s) before.ps_stack = SOME dist` by simp[Abbr `before`] >>
   drule stack_get_depth_props >> strip_tac >>
-  drule do_dup_stack_exact >> simp[] >> strip_tac >> gvs[Abbr `before`]
+  drule (cj 2 do_dup_stack_exact) >> simp[] >> strip_tac >> gvs[Abbr `before`]
 QED
 
 Theorem inventory_emit_physical_origin:
@@ -989,7 +989,7 @@ Proof
   qmatch_asmsub_abbrev_tac `do_dup dist before` >>
   `stack_get_depth (Var s) before.ps_stack = SOME dist` by simp[Abbr `before`] >>
   drule stack_get_depth_props >> strip_tac >>
-  drule do_dup_stack_exact >> simp[] >> strip_tac >>
+  drule (cj 2 do_dup_stack_exact) >> simp[] >> strip_tac >>
   gvs[Abbr `before`, LIST_ELEM_COUNT_DEF, FILTER_APPEND, FILTER_SNOC] >>
   Cases_on `x = Var s` >> gvs[stackPlanTypesTheory.is_var_operand_def]
 QED

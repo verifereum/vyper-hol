@@ -87,7 +87,7 @@ Proof
  drule_all do_dup_multiplicity_layout >> strip_tac >>
  drule_all do_dup_slots_bounded >> strip_tac >>
  `p.ps_stack = ps.ps_stack ++ [stack_peek d ps.ps_stack]` by
-   (drule do_dup_stack_exact >> simp[]) >>
+   (drule (cj 2 do_dup_stack_exact) >> simp[]) >>
  conj_tac
  >- (gvs[lineage_core_def, stack_poke_def, LUPDATE_APPEND2, LUPDATE_def, APPEND_ASSOC]) >>
  conj_tac >- simp[EVERY_APPEND, is_var_operand_def] >>
@@ -175,7 +175,7 @@ Proof
  qpat_x_assum `phi_write_phase _ _ _ _ = _` mp_tac >>
  simp[phi_write_phase_def] >> IF_CASES_TAC
  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-     drule do_dup_stack_exact >> simp[] >> strip_tac >>
+     drule (cj 2 do_dup_stack_exact) >> simp[] >> strip_tac >>
      gvs[stack_poke_def, LUPDATE_APPEND2, LUPDATE_def, MEM_APPEND] >>
      metis_tac[]) >>
  strip_tac >> gvs[] >> conj_tac
@@ -327,7 +327,7 @@ Proof
  Cases_on `MEM (operand_to_string x) nl` >> simp[]
  >- (Cases_on `do_dup d ps` >> simp[] >>
      `r.ps_stack = ps.ps_stack ++ [x]` by
-       (drule do_dup_stack_exact >> simp[]) >>
+       (drule (cj 2 do_dup_stack_exact) >> simp[]) >>
      `stack_poke 0 (Var (HD inst.inst_outputs)) r.ps_stack =
         ps.ps_stack ++ [Var (HD inst.inst_outputs)]` by
        simp[stack_poke_def, LUPDATE_APPEND2, LUPDATE_def] >>
