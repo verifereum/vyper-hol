@@ -25,10 +25,10 @@ Definition abi_args_ready_def:
           expr_res_ok res) /\
        (!v es'. (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') ==>
           Inv es' /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-          (~is_word_type (expr_type e) /\ exprs_can_mutate ce args ==>
-           ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+          (~is_word_type (expr_type e) ==>
+           ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
                 value_has_type tv v /\ val_wf tv v /\
-                type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+                type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
                 type_memory_size tv < 2 ** 64 /\
                 type_memory_size tv + 64 < dimword (:256)))) /\
      ((?s tv t s1 v t1. eval_expr cx e s = (INL tv,t) /\
@@ -180,23 +180,15 @@ Theorem abi_args_location_kept:
   expr_val_at ce cx ty sa sb es v op s0 ==>
   expr_val_at ce cx ty sa sb es' v op s1
 Proof
-  strip_tac >> rewrite_tac[expr_val_at_def] >> rpt strip_tac >>
-  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_val_at_def] >> strip_tac >>
-  `eval_operand op s1 = SOME w` by metis_tac[abi_args_operand_kept] >>
-  simp[]
-  >- (disj1_tac >> qexistsl [`aid`, `b`, `sz`] >>
-      conj_tac >- (gvs[wb_frame_def] >> metis_tac[]) >> simp[] >>
-      rpt strip_tac >> first_x_assum irule >> qexists `n` >>
-      irule exprSimPropsTheory.local_region_frame >>
-      conj_tac
-      >- (qexists `func` >>
-          gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def]) >>
-      qexistsl [`st`, `es'.scopes`, `s1`] >> gvs[wb_frame_def])
-  >- (disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[] >>
-      irule exprSimPropsTheory.local_region_frame_fwd >>
-      qexistsl [`s0`, `st`, `es.scopes`] >> gvs[wb_frame_def])
-  >> simp[]
+  strip_tac >> Cases_on `is_word_type ty`
+  >- simp[expr_val_at_def] >>
+  Cases_on `evaluate_type (get_tenv cx) ty`
+  >- simp[expr_val_at_def] >>
+  `?w. eval_operand op s0 = SOME w` by
+    metis_tac[expr_val_at_def] >>
+  `eval_operand op s0 = eval_operand op s1` by
+    metis_tac[abi_args_operand_kept] >>
+  irule abi_args_location_kept_eq >> metis_tac[]
 QED
 
 Theorem abi_args_value_kept_eq:
@@ -285,28 +277,40 @@ Theorem abi_args_ready_head:
      expr_res_ok res) /\
   (!v es'. (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') ==>
      Inv es' /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-     (~is_word_type (expr_type e) /\ exprs_can_mutate ce args ==>
-      ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+     (~is_word_type (expr_type e) ==>
+      ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
            value_has_type tv v /\ val_wf tv v /\
-           type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+           type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
            type_memory_size tv < 2 ** 64 /\
            type_memory_size tv + 64 < dimword (:256)))
 Proof
-  cheat
+  simp[abi_args_ready_def] >> metis_tac[]
 QED
 
 Theorem abi_args_compile_mono:
   !args ce st.
     ci_mono st (SND (compile_abi_encode_args compile_expr ce args st))
 Proof
-  cheat
+  Induct >> rpt gen_tac >> rewrite_tac[exprLoweringTheory.compile_abi_encode_args_def] >>
+  simp[exprLoweringPropsTheory.ci_mono_comp_return] >>
+  ho_match_mp_tac exprLoweringPropsTheory.ci_mono_bind >> conj_tac
+  >- simp[cj 1 exprLoweringPropsTheory.compile_expr_ci_mono] >>
+  rpt strip_tac >> ho_match_mp_tac exprLoweringPropsTheory.ci_mono_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp[exprLoweringPropsTheory.ci_mono_compile_materialize_vv,
+                           exprLoweringPropsTheory.ci_mono_unwrap_value]) >>
+  rpt strip_tac >> ho_match_mp_tac exprLoweringPropsTheory.ci_mono_bind >> conj_tac
+  >- simp[] >>
+  simp[exprLoweringPropsTheory.ci_mono_comp_return]
 QED
 
 Theorem abi_args_location_end_mono:
   sm.cs_next_id <= sb.cs_next_id /\ expr_val_at ce cx ty sa sm es v op s ==>
   expr_val_at ce cx ty sa sb es v op s
 Proof
-  cheat
+  simp[expr_val_at_def] >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >> qexists `w` >> simp[]
+  >- (disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >> metis_tac[]) >>
+  disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[]
 QED
 
 Theorem abi_args_post_start_mono:
@@ -315,7 +319,10 @@ Theorem abi_args_post_start_mono:
   wb_frame ce es es' sa s0 s ==>
   abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s
 Proof
-  cheat
+  simp[abi_args_post_def] >> rpt strip_tac >>
+  irule listTheory.LIST_REL_mono >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  irule expr_val_at_start_mono >> metis_tac[]
 QED
 
 Theorem abi_args_post_cons_frame:
@@ -324,11 +331,18 @@ Theorem abi_args_post_cons_frame:
   stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  expr_val_rel cx (expr_type e) v op u /\
-  expr_val_at ce cx (expr_type e) sa sb es' v op u ==>
+  expr_val_rel cx (lowered_value_type ce e) v op u /\
+  expr_val_at ce cx (lowered_value_type ce e) sa sb es' v op u ==>
   abi_args_post ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
 Proof
-  cheat
+  strip_tac >> rewrite_tac[abi_args_post_cons] >> simp[] >>
+  `wb_frame ce es es' sa s0 u` by
+    (irule wb_frame_trans >>
+     gvs[abi_args_post_def] >> metis_tac[expr_post_frame]) >>
+  qpat_x_assum `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[abi_args_post_def] >> strip_tac >> simp[] >>
+  irule listTheory.LIST_REL_mono >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac >> irule expr_val_at_start_mono >> metis_tac[]
 QED
 
 Theorem abi_args_post_cons_uncaptured:
@@ -394,18 +408,26 @@ Theorem abi_args_compile_cons:
   ?vv mid op sm tail.
     compile_expr ce (expr_type e) e sa = (vv,mid) /\
     (if ~is_word_type (expr_type e) /\ exprs_can_mutate ce args
-     then compile_materialize_vv ce (expr_type e) vv mid
+     then compile_materialize_vv ce (lowered_value_type ce e) vv mid
      else unwrap_value ce vv mid) = (op,sm) /\
     compile_abi_encode_args compile_expr ce args sm = (tail,sb) /\
     ops = op::tail
 Proof
-  cheat
+  simp[exprLoweringTheory.compile_abi_encode_args_def,
+       comp_bind_def, comp_return_def,
+       pairTheory.pair_case_thm] >>
+  rpt (pairarg_tac >> simp[]) >>
+  Cases_on `~is_word_type (expr_type e) /\ exprs_can_mutate ce args` >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem abi_args_materialize_not_label:
   compile_materialize_vv ce ty vv sa = (op,sb) ==> !l. op <> Label l
 Proof
-  cheat
+  simp[exprLoweringTheory.compile_materialize_vv_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  metis_tac[exprSafeOperandTheory.alloc_buffer_not_label]
 QED
 
 Theorem abi_args_name_label_forward[local]:
@@ -413,7 +435,12 @@ Theorem abi_args_name_label_forward[local]:
   ~is_word_type (expr_type (Name ann id)) ==>
   lower_value compile_expr ce ty (Name ann id) sa = (Label l,sa)
 Proof
-  cheat
+  simp[exprLoweringTheory.lower_value_def, comp_bind_def,
+       Once exprLoweringTheory.compile_expr_def,
+       exprLoweringTheory.compile_expr_body_def,
+       exprLoweringTheory.compile_name_vv_def,
+       exprLoweringTheory.unwrap_value_def, contextTheory.mk_ptr_def,
+       comp_return_def]
 QED
 
 
@@ -421,7 +448,10 @@ Theorem abi_args_operand_live:
   (!x. op = Var x ==> not_fresh_at sm x) /\ ci_mono sm sb ==>
   abi_decoder_operand_live sb.cs_next_var op
 Proof
-  cheat
+  Cases_on `op` >>
+  simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+       not_fresh_at_def, exprLoweringPropsTheory.ci_mono_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem abi_args_uncaptured_cons_sim_live:
@@ -536,21 +566,29 @@ Theorem abi_args_vv_post_read:
   vv_post ctx func ce cx e es sa sb s0 es' tvv vv s ==>
   ?v. read_result cx tvv es' = (INL v,es')
 Proof
-  cheat
+  Cases_on `vv` >>
+  simp[vv_post_def, vv_holds_def] >> rpt strip_tac
+  >- metis_tac[] >>
+  Cases_on `p.ptr_location` >>
+  gvs[storage_holds_def, immutable_holds_def] >> metis_tac[]
 QED
 
 Theorem abi_args_read_vv_res_ok:
   read_result cx tvv es = (res,es') /\ expr_res_ok res ==>
   expr_vv_res_ok (INL tvv)
 Proof
-  cheat
+  Cases_on `tvv` >>
+  simp[expr_vv_res_ok_def, vyperStateTheory.read_result_def,
+       expr_res_ok_def] >> EVAL_TAC >> rpt strip_tac >> gvs[]
 QED
 
 Theorem abi_args_exit_inr:
   expr_exit (INR exc : 'a + exception) =
   expr_exit (INR exc : value list + exception)
 Proof
-  cheat
+  simp[FUN_EQ_THM] >> qx_gen_tac `r` >> Cases_on `exc` >> Cases_on `r` >>
+  simp[expr_exit_def] >> rename1 `Error err` >> Cases_on `err` >>
+  simp[expr_exit_def]
 QED
 
 Theorem abi_args_vv_error_prefix:
