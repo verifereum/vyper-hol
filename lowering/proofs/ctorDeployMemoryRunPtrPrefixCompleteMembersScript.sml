@@ -182,7 +182,7 @@ Proof
 QED
 
 Theorem prefix_member_setup_shift_execution_frame:
-  abi_decode_member_setup dst src DLOAD (Lit 0w) dyn ao vo st = (ops,middle) /\
+  abi_decode_member_setup dst src DLOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,middle) /\
   run_inst_seq (emitted_insts st middle) initial = OK t /\
   fn_has_code st middle func /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\
@@ -383,7 +383,9 @@ Resume prefix_members_complete_shift_cons[tail_inputs]:
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [MAP_APPEND, MAP, SUM_APPEND, SUM, ADD_0, ADD_ASSOC]) >>
   asm_simp_tac bool_ss [MAP_APPEND, MAP, SUM_APPEND, SUM, ADD_0, ADD_ASSOC,
     GSYM APPEND_ASSOC, APPEND] >>
-  conj_tac >- (rpt strip_tac >> fs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  conj_tac >- (rpt strip_tac >>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [not_fresh_at_def]) >>
+    pure_rewrite_tac [not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
   conj_tac >-
     (qpat_x_assum `frag_ids st final SUBSET ids` mp_tac >>
      simp_tac (srw_ss()) [frag_ids_def, SUBSET_DEF, IN_DIFF, IN_COUNT] >>
