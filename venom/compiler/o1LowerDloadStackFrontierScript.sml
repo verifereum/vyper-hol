@@ -1,6 +1,7 @@
 Theory o1LowerDloadStackFrontier
 Ancestors
   o1LowerDloadOccurrence venomMemProps venomMemProofs venomExecProofs
+  allocaFrontierBound localPtrsProps ptrDiscipline
   contextCodegenRel venomExecSemantics venomInstProofs1 venomInst list
 
 Theorem ld_step_frontier_mono:
@@ -116,4 +117,97 @@ Proof
   disch_then (qspec_then `0` assume_tac) >>
   simp[EVERY_EL] >> rpt strip_tac >>
   first_x_assum (qspec_then `SUC n'` mp_tac) >> simp[EL_MAP]
+QED
+
+Theorem ld_frame_reachable_alloca_inv:
+  !vs C stk PG G tn fn inst s.
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  vs.vs_allocas = FEMPTY ==>
+  alloca_inv s /\ EVERY (\f. alloca_inv f.cf_state) stk
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> strip_tac >> simp[] >>
+      drule enters_block_alloca_fields >> strip_tac >>
+      irule alloca_inv_empty >> simp[])
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume ld_frame_reachable_alloca_inv[next]:
+  rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+  `alloca_inv s'` by metis_tac[alloca_inv_step_inst] >>
+  irule alloca_inv_fields >> qexists `s'` >> simp[]
+QED
+
+Resume ld_frame_reachable_alloca_inv[block]:
+  rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+  `alloca_inv s'` by metis_tac[alloca_inv_step_inst] >>
+  drule enters_block_alloca_fields >> strip_tac >>
+  irule alloca_inv_fields >> qexists `s'` >> simp[]
+QED
+
+Resume ld_frame_reachable_alloca_inv[call]:
+  rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+  drule enters_block_alloca_fields >> strip_tac >>
+  irule alloca_inv_empty >>
+  gvs[setup_callee_def, AllCaseEqs()]
+QED
+
+Resume ld_frame_reachable_alloca_inv[ret]:
+  rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+  qspec_then `\s. (s.vs_allocas, s.vs_alloca_next)` mp_tac
+    bind_outputs_preserves >>
+  simp[venomStateTheory.update_var_def] >> disch_then drule >>
+  Cases_on `ret.iret_adopt_fmp` >>
+  simp[adopt_return_fmp_def, merge_callee_state_def] >> strip_tac >>
+  irule alloca_inv_fields >> qexists `f.cf_state` >> simp[]
+QED
+Finalise ld_frame_reachable_alloca_inv
+
+Theorem ld_frame_reachable_current_alloca_inv:
+  frame_reachable vs C stk PG G tn fn inst s /\ vs.vs_allocas = FEMPTY ==>
+  alloca_inv s
+Proof
+  metis_tac[ld_frame_reachable_alloca_inv]
+QED
+
+Theorem ld_frame_reachable_saved_alloca_inv:
+  frame_reachable vs C stk PG G tn fn inst s /\ vs.vs_allocas = FEMPTY ==>
+  EVERY (\f. alloca_inv f.cf_state) stk
+Proof
+  metis_tac[ld_frame_reachable_alloca_inv]
+QED
+
+Theorem ld_frame_reachable_initial_frontier:
+  !vs C stk PG G tn fn inst s.
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  vs.vs_alloca_next <= s.vs_alloca_next /\
+  EVERY (\f. vs.vs_alloca_next <= f.cf_state.vs_alloca_next) stk
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule ld_enters_block_frontier >> simp[])
+  >- (rpt gen_tac >> strip_tac >> simp[] >>
+      `s.vs_alloca_next <= s'.vs_alloca_next` by
+        (irule ld_step_frontier_mono >> metis_tac[]) >> decide_tac)
+  >- (rpt gen_tac >> strip_tac >> simp[] >>
+      `inst.inst_opcode <> INVOKE` by
+        (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]) >>
+      `s.vs_alloca_next <= s'.vs_alloca_next` by
+        (irule ld_step_frontier_mono >> metis_tac[]) >>
+      drule ld_enters_block_frontier >> decide_tac)
+  >- (rpt gen_tac >> strip_tac >> simp[] >>
+      drule ld_setup_callee_frontier >> strip_tac >>
+      drule ld_enters_block_frontier >> simp[])
+  >> rpt gen_tac >> strip_tac >> gvs[] >>
+  drule ld_return_frontier >> simp[]
+QED
+
+Theorem ld_frame_reachable_current_initial_frontier:
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  vs.vs_alloca_next <= s.vs_alloca_next
+Proof
+  metis_tac[ld_frame_reachable_initial_frontier]
 QED
