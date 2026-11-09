@@ -825,7 +825,7 @@ Proof
   rpt strip_tac >> gvs[get_successors_def, get_label_def, is_terminator_def]
 QED
 
-Theorem sym_body_jmp_step:
+Theorem sym_body_jmp_prefix:
   gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
   body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
@@ -837,9 +837,17 @@ Theorem sym_body_jmp_step:
   sym_unit_static_ok unit /\ asm_static_wf prog /\
   (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
   sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
-  ~vs1.vs_halted /\
-  sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
-    as ss (run_blocks fuel ctx fn vs1)
+  ?n as1 ss1 t off.
+    asm_steps lo o2pc prog n as = AsmOK as1 /\
+    sym_steps prog env n ss = SymOK ss1 /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps_after vs1 as1 /\
+    sym_frame_inv prog env ctx cpl fn ret srest labs0 ps_after as1 ss1 /\
+    (!at. MEM at ps_after.ps_stack \/ at IN FDOM ps_after.ps_spilled ==>
+      operand_val (frame_view fn ra vs1) lo at =
+      operand_val (frame_view fn ra vs1) lo (normalize_operand dfg [] at)) /\
+    is_terminator inst.inst_opcode /\ MEM t (get_successors inst) /\
+    vs1 = jump_to t vs /\
+    FLOOKUP lo t = SOME off /\ FLOOKUP o2pc off = SOME as1.as_pc
 Proof
   strip_tac >> drule body_inv_facts >> strip_tac >>
   drule_all body_inv_inst >> strip_tac >>
@@ -883,8 +891,150 @@ Proof
     (leaf_matches 2 (match_mp_tac o REWRITE_RULE [AND_IMP_INTRO]) (anchored_leaf_core false
       ["generate_inst_plan", "step_inst"] fnAliasStepTheory.alias_step_preserve) >>
      metis_tac[]) >>
-  irule sym_body_jump_continue >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  qexistsl_tac [`n`, `as1`, `ss1`, `target`, `toff`] >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem body_succ_sym_label:
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  is_terminator inst.inst_opcode /\ MEM t (get_successors inst) ==>
+  ?off pc. FLOOKUP lo t = SOME off /\ off < dimword (:256) /\
+    FLOOKUP o2pc off = SOME pc /\ MEM (AsmLabel t) prog
+Proof
+  strip_tac >> drule_all fnBlockBodyClassesTheory.body_succ_placed >> strip_tac >>
+  drule body_inv_facts >> strip_tac >>
+  drule_all placed_nonentry_sym_code_label >> metis_tac[]
+QED
+
+Theorem jnz_wf_operands:
+  inst_wf inst /\ inst_shape_ok inst /\ inst.inst_opcode = JNZ ==>
+  ?c l1 l2. inst.inst_operands = [c; Label l1; Label l2] /\
+    inst.inst_outputs = [] /\ ~is_label_operand c /\
+    is_terminator inst.inst_opcode /\ MEM c (compute_operands inst) /\
+    MEM l1 (get_successors inst) /\ MEM l2 (get_successors inst)
+Proof
+  simp[venomWfTheory.inst_wf_def, inst_shape_ok_def,
+       label_positions_ok_def, is_terminator_def] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `c` >>
+  gvs[stackPlanGenTheory.compute_operands_def, asmIRTheory.get_non_label_operands_def,
+      get_successors_def, get_label_def, stackPlanTypesTheory.is_label_operand_def,
+      is_terminator_def]
+QED
+
+Theorem jnz_condition_frame_view:
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = JNZ /\ inst.inst_operands = [c; Label l1; Label l2] ==>
+  eval_operand c vs = eval_operand c (frame_view fn ra vs)
+Proof
+  strip_tac >> irule eval_operand_frame_view_vs >> rpt strip_tac >>
+  `MEM (Var x) inst.inst_operands` by gvs[] >>
+  drule_all opaque_use_ok_retpc_use >> simp[retpc_use_ok_def]
+QED
+
+Theorem sym_body_jnz_prefix:
+  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  inst.inst_opcode = JNZ /\ step_inst fuel ctx inst vs = OK vs1 /\
+  label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
+  sym_unit_static_ok unit /\ asm_static_wf prog /\
+  (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
+  ?n as1 ss1 t off.
+    asm_steps lo o2pc prog n as = AsmOK as1 /\
+    sym_steps prog env n ss = SymOK ss1 /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps_after vs1 as1 /\
+    sym_frame_inv prog env ctx cpl fn ret srest labs0 ps_after as1 ss1 /\
+    (!at. MEM at ps_after.ps_stack \/ at IN FDOM ps_after.ps_spilled ==>
+      operand_val (frame_view fn ra vs1) lo at =
+      operand_val (frame_view fn ra vs1) lo (normalize_operand dfg [] at)) /\
+    is_terminator inst.inst_opcode /\ MEM t (get_successors inst) /\
+    vs1 = jump_to t vs /\
+    FLOOKUP lo t = SOME off /\ FLOOKUP o2pc off = SOME as1.as_pc
+Proof
+  strip_tac >> drule body_inv_facts >> strip_tac >>
+  drule_all body_inv_inst >> strip_tac >>
+  drule_all body_inv_step >> strip_tac >>
+  drule_all body_inv_static >> strip_tac >>
+  drule body_inv_equiv >> disch_then drule >> disch_then drule >> strip_tac >>
+  drule_all jnz_wf_operands >> strip_tac >>
+  drule_all jnz_condition_frame_view >> strip_tac >>
+  `eval_operand c vs = operand_val (frame_view fn ra vs) lo c` by metis_tac[] >>
+  drule_all fnBlockBodyClassesTheory.body_terminator_last >> strip_tac >>
+  `?off1 pc1. FLOOKUP lo l1 = SOME off1 /\ off1 < dimword (:256) /\
+    FLOOKUP o2pc off1 = SOME pc1 /\ MEM (AsmLabel l1) prog` by
+    (irule body_succ_sym_label >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `?off2 pc2. FLOOKUP lo l2 = SOME off2 /\ off2 < dimword (:256) /\
+    FLOOKUP o2pc off2 = SOME pc2 /\ MEM (AsmLabel l2) prog` by
+    (irule body_succ_sym_label >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  qhdtm_assum `body_inv` (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
+  `fn_shape_ok fn` by
+    (gvs[unit_shape_ok_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `?n as1 ss1. asm_steps lo o2pc prog n as = AsmOK as1 /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps' vs1 as1 /\
+    ((vs1 = jump_to l1 vs /\ as1.as_pc = pc1) \/
+     (vs1 = jump_to l2 vs /\ as1.as_pc = pc2)) /\
+    sym_steps prog env n ss = SymOK ss1 /\
+    sym_frame_inv prog env ctx cpl fn ret srest labs0 ps' as1 ss1` by
+    (leaf_matches 5 irule (anchored_leaf
+      ["fn_frame_inv", "generate_inst_plan", "sym_frame_inv", "step_inst",
+       "generated_plan_state_wf_marked"] sym_jnz_frame_sim_deep) >> metis_tac[]) >>
+  `!at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+      operand_val (frame_view fn ra vs1) lo at =
+      operand_val (frame_view fn ra vs1) lo (normalize_operand dfg [] at)` by
+    (leaf_matches 2 (match_mp_tac o REWRITE_RULE [AND_IMP_INTRO]) (anchored_leaf_core false
+      ["generate_inst_plan", "step_inst"] fnAliasStepTheory.alias_step_preserve) >>
+     metis_tac[]) >>
+  qexistsl_tac [`n`, `as1`, `ss1`] >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem sym_body_jmp_step:
+  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  inst.inst_opcode = JMP /\ step_inst fuel ctx inst vs = OK vs1 /\
+  label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
+  sym_unit_static_ok unit /\ asm_static_wf prog /\
+  (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
+  ~vs1.vs_halted /\
+  sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
+    as ss (run_blocks fuel ctx fn vs1)
+Proof
+  strip_tac >> drule_all sym_body_jmp_prefix >> strip_tac >>
+  drule_all sym_body_jump_continue >> simp[]
+QED
+
+Theorem sym_body_jnz_step:
+  gen_fn_frame_sim_at fuel /\ sym_fn_frame_sim_at fuel /\
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  inst.inst_opcode = JNZ /\ step_inst fuel ctx inst vs = OK vs1 /\
+  label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
+  sym_unit_static_ok unit /\ asm_static_wf prog /\
+  (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
+  ~vs1.vs_halted /\
+  sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
+    as ss (run_blocks fuel ctx fn vs1)
+Proof
+  strip_tac >> drule_all sym_body_jnz_prefix >> strip_tac >>
+  drule_all sym_body_jump_continue >> simp[]
 QED
 
 (* body_inv bundles block_body_frame_sim's premises. *)
