@@ -309,7 +309,7 @@ Proof
 QED
 
 (* The header and data writes together affect only the live destination. *)
-Theorem typed_dynarray_equal_exterior[local]:
+Theorem typed_dynarray_equal_exterior:
   !s d p l stride a k.
     a+k <= d \/ d+32+l*stride <= a ==>
     mem_bytes_at a k
