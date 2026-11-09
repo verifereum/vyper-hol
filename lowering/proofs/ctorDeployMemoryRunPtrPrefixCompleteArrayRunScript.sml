@@ -1,6 +1,7 @@
 (* Shifted same-witness array traversal boundaries. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteArrayRun
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixCompleteArrayIteration
   ctorDeployMemoryRunPtrPrefixLoopHeader ctorDeployLoweringEntryCompleteArrayRun
   abiDecoderLoop abiDecoderExecution abiDecoderContract abiDecoderReentry

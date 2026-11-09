@@ -1,6 +1,7 @@
 (* Semantic support observes initialized live bytes, not spare array capacity. *)
 Theory ctorDeployMemoryRunPtrPrefixCopySupport
 Ancestors
+  valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixCanonical valueEncodingProps valueEncodingTyping
   abiDecoderCoherence abiDecoderTypedContract ptrDiscipline
   valueEncoding vyperTyping list pred_set

@@ -1,6 +1,7 @@
 (* Source-input boundary without the unused EntryPrefix dependency. *)
 Theory ctorDeployMemoryRunPtrPrefixEntryInputs
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
  ctorDeployLoweringEntryAggregateInputs ctorDeployLoweringEntryTransport
  ctorDeployLoweringEntrySelection
  ctorDeployLoweringEntryRegisterRun abiDecoderTypedContract ctorSourceInputs

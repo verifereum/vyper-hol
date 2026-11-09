@@ -9,6 +9,7 @@
  *)
 Theory ctorDeployMemoryRunPtrEntry
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrDefs ctorDeployLoweringDefs gasSummary ptrSafeRun
   stmtSimDefs venomInst
   ctorDeployMemoryRunPtrPrefixInit ctorDeployMemoryRunPtrPrefixPrepare

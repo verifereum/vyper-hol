@@ -1,6 +1,7 @@
 (* Canonical copy decoder endpoints: concrete execution and ghost pairing. *)
 Theory ctorDeployMemoryRunPtrPrefixCopy
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixCanonical ctorDeployMemoryRunPtrPrefixCopyRun
   ctorDeployMemoryRunPtrPrefixCopySupport ctorAbiActualLabelBytes
   ctorAbiActualBytes ctorAbiActualObservations ctorAbiActualWorld

@@ -1,6 +1,7 @@
 (* Clamp-independent scalar endpoint packaging. *)
 Theory ctorDeployMemoryRunPtrPrefixScalarPackage
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixCanonical ctorAbiActualWordRun
   ctorAbiActualWorld ctorAbiActualObservations abiDecoderReentryPointer
   abiDecoderReentry abiDecoderClampedWord

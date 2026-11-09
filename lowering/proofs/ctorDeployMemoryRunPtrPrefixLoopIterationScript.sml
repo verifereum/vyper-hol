@@ -1,6 +1,7 @@
 (* Finite-support boundaries for paired recursive array iterations. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopIteration
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixLoopBackedge ctorDeployMemoryRunPtrPrefixMembersCons
   ctorAbiActualArrayInvariant abiDecoderArrayBackedge abiDecoderExecution
   abiDecoderContract abiDecoderReentry abiDecoderArrayPrefix abiDecoderLoop compileEnv

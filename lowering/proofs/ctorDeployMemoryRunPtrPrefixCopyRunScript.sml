@@ -1,6 +1,7 @@
 (* Successful zero-hi copy decoders, with the supplied execution endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixCopyRun
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixCopyStep ctorDeployMemoryRunPtrPrefixBoolPreheader
   ctorDeployMemoryRunPtrPrefixBoolWord ctorDeployMemoryRunPtrPrefixSequence
   abiDecoderBytes abiDecoderGuards abiDecoderContract abiDecoderComposition

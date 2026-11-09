@@ -1,6 +1,7 @@
 (* Code framing comes from concrete sequence witnesses, not continuation inclusion. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteCode
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixCompleteMembers
   ctorDeployMemoryRunPtrPrefixCompleteMemberSetup
   ctorDeployMemoryRunPtrPrefixCompleteScalar

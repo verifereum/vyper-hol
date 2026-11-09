@@ -1,6 +1,7 @@
 (* Rebase the paired array traversal onto its original input. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteArrayBaseline
 Ancestors
+  valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixCompleteArrayCompose
   abiDecoderArraySetupCode abiDecoderIndexInit abiDecoderDynamicLoopSetup
   abiDecoderArrayLoopInit abiDecoderContract

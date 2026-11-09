@@ -1,6 +1,7 @@
 (* Arithmetic and two-region frames for the repeatedly visited Bool body. *)
 Theory ctorDeployMemoryRunPtrPrefixBoolBody
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixBoolHeader ctorDeployMemoryRunPtrPrefixBoolWord
   ctorDeployMemoryRunPtrPrefixWordRead ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixSequence instIdxIndep

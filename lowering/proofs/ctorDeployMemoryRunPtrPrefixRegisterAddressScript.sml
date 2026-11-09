@@ -1,6 +1,7 @@
 (* Constructor argument address preparation, with same-endpoint ghosts. *)
 Theory ctorDeployMemoryRunPtrPrefixRegisterAddress
 Ancestors
+  loweringStateRelDefs
   ctorRegisterArgs ctorDeployMemoryRunPtrPrefixMemberSetup
   ctorDeployMemoryRunPtrPrefixBoolBody
   ctorDeployMemoryRunPtrPrefixRegisterAlloc

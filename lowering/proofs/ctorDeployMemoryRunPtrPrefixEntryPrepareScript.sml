@@ -1,6 +1,7 @@
 (* Preparation with an explicit ambient frame at the paired endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixEntryPrepare
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixPrepare
   ctorDeployMemoryRunPtrPrefixRegisterAddress ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixSequence context compileEnv emitHelper emitHelperProps exprLoweringProps

@@ -1,6 +1,7 @@
 (* BoolClamp ghosts at a named successful scalar endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixScalarBool
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixScalarPackage
   ctorDeployMemoryRunPtrPrefixCanonical ctorDeployMemoryRunPtrPrefixBoolWord
   abiEncoder abiDecoderContract abiDecoderClampedWord compileEnv exprLoweringProps

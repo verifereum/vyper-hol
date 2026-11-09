@@ -1,6 +1,7 @@
 (* Zero-high-bound member-address setup. *)
 Theory ctorDeployMemoryRunPtrPrefixMemberSetup
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixBoolBody ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixSequence ctorDeployMemoryRunPtrPrefixCopyRun
   abiDecoderMemberCode

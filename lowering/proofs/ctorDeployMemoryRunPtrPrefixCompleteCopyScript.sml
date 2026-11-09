@@ -1,6 +1,7 @@
 (* Exact frames for the concrete bytestring decoder sequence. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteCopy
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixCompleteCode ctorDeployMemoryRunPtrPrefixCanonicalFloor
   ctorDeployMemoryRunPtrPrefixCopy ctorDeployMemoryRunPtrPrefixCopySupport
   ctorDeployMemoryRunPtrPrefixCopyRun ctorDeployMemoryRunPtrPrefixCompleteScalar

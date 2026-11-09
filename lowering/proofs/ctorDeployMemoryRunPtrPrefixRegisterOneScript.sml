@@ -1,6 +1,7 @@
 (* Allocation-aware singleton constructor argument registration. *)
 Theory ctorDeployMemoryRunPtrPrefixRegisterOne
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixRegisterAddress ctorDeployMemoryRunPtrPrefixRecursive
   ctorDeployMemoryRunPtrPrefixRegisterAlloc
   ctorRegisterArgs abiDecoderCode abiDecoderContract abiEncoderRegisteredEffect
@@ -241,7 +242,7 @@ Theorem prefix_register_alloc_semantic_frame:
   fresh_vars_wrt sa a /\ not_fresh_at sa (STRING #"%" (toString st.cs_next_var)) /\
   (!aid. sa.cs_next_id <= aid ==> FLOOKUP a.vs_allocas aid = NONE) /\
   (!name b sz. local_region ce scopes a name b sz ==>
-    compileEnv$regions_disjoint initial.vs_alloca_next n b sz) /\
+    loweringStateRelDefs$regions_disjoint initial.vs_alloca_next n b sz) /\
   (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==> lookup_var x a = SOME w) /\
   abi_encoder_registered_effect (frag_ids st sa) [] initial a
 Proof

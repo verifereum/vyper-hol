@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunPtrPrefixEntryAmbient
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixEntrySemantic ctorDeployLoweringEntrySourceFrame
   ctorDeployDefs e2eDeployDefs e2eDefs e2eEntry compileEnv o1PassContract
   vyperInterpreter vyperState vyperContext accountsRelProps venomState

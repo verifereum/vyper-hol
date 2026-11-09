@@ -1,6 +1,7 @@
 (* Address computation with ambient projections at the paired endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixEntryRegisterAddress
 Ancestors
+  loweringStateRelDefs
  ctorDeployMemoryRunPtrPrefixRegisterAddress ctorDeployMemoryRunPtrPrefixBoolBody
  ctorDeployMemoryRunPtrPrefixMemberSetup abiDecoderReentryAddress
  ctorRegisterArgs compileEnv emitHelperProps fragExec abiDecoderLoop exprLoweringProps

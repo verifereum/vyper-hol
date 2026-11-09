@@ -1,6 +1,7 @@
 (* Canonical value semantics at the concrete checked decoder endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixCanonical
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixWord ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixBoolWord
   venomState venomInst venomExecSemantics ctorAbiActualWordRun

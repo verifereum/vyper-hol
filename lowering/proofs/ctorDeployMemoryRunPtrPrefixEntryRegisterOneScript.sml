@@ -1,6 +1,7 @@
 (* Shifted singleton registration with concrete endpoint frames. *)
 Theory ctorDeployMemoryRunPtrPrefixEntryRegisterOne
 Ancestors
+  loweringStateRelDefs
  ctorDeployMemoryRunPtrPrefixEntryRegisterAlloc ctorDeployMemoryRunPtrPrefixEntryRegisterDecode
  ctorDeployMemoryRunPtrPrefixRegisterOne ctorDeployMemoryRunPtrPrefixRegisterAlloc
  ctorRegisterArgs abiDecoderCode abiDecoderContract abiEncoderRegisteredEffect

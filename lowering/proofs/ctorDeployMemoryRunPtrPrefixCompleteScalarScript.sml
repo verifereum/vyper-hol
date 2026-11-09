@@ -1,6 +1,7 @@
 (* Canonical scalar execution producer at a single operational witness. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteScalar
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixChildShift
   ctorDeployMemoryRunPtrPrefixScalarPackage ctorDeployMemoryRunPtrPrefixScalarBool
   ctorAbiActualWordRun ctorAbiActualWorld ctorAbiActualObservations

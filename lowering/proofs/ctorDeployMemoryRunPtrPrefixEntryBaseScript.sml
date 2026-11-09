@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunPtrPrefixEntryBase
 Ancestors
+  loweringStateRelDefs
  ctorDeployDefs ctorDeployLoweringDefs entryLocals deployEntryLayout
  e2eEntry o1PassContract compileEnv asmDataSuffixProps finite_map
 

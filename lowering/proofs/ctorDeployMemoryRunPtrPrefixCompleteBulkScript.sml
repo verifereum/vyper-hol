@@ -2,6 +2,7 @@
  * bulk copy; the complete paired decoder contract for that case. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteBulk
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixCompleteCopy
   ctorDeployMemoryRunPtrPrefixCompleteCode
   ctorDeployLoweringEntryCompleteNoAlloc abiDecoderBulkReentry abiDecoderBulk

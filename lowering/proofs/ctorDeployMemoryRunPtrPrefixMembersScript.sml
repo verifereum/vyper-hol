@@ -1,6 +1,7 @@
 (* Paired execution of the remaining complex members; support excludes the processed prefix. *)
 Theory ctorDeployMemoryRunPtrPrefixMembers
 Ancestors
+  valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixMemberSetup ctorDeployMemoryRunPtrPrefixRecursiveSupport
   ctorAbiActualMemberRun ctorAbiActualMemberInputs ctorAbiActualMemberBoundary
   ctorAbiActualChildFrame ctorAbiActualMemory ctorAbiActualSites

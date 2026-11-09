@@ -1,6 +1,7 @@
 (* Same-witness registration decoder with literal allocation sizes. *)
 Theory ctorDeployMemoryRunPtrPrefixEntryRegisterSizes
 Ancestors
+  loweringStateRelDefs
  ctorDeployMemoryRunPtrPrefixEntryLiteralSizes
  ctorDeployLoweringEntryRegisterSizes ctorDeployMemoryRunPtrPrefixEntryRegisterOne
  ctorDeployMemoryRunPtrPrefixEntryRegisterAlloc

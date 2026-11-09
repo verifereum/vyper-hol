@@ -1,6 +1,7 @@
 (* Same-witness shifted array backedge and child composition. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteArrayIteration
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixCompleteCode ctorDeployMemoryRunPtrPrefixLoopIteration
   ctorDeployLoweringEntryArrayRun ctorDeployLoweringEntryArrayFrame
   ctorDeployLoweringEntryCompleteArrayBody

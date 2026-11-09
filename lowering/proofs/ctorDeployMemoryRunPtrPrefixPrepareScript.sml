@@ -1,6 +1,7 @@
 (* Successful finite deployment prefix before argument registration. *)
 Theory ctorDeployMemoryRunPtrPrefixPrepare
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixRegisterAddress ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixSequence context compileEnv emitHelper emitHelperProps exprLoweringProps
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst

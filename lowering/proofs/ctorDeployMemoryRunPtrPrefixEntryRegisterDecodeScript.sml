@@ -1,6 +1,7 @@
 (* Shifted registration decoder with the full complete-code frame. *)
 Theory ctorDeployMemoryRunPtrPrefixEntryRegisterDecode
 Ancestors
+  loweringStateRelDefs
  ctorDeployMemoryRunPtrPrefixCompleteCoherent
  ctorDeployMemoryRunPtrPrefixEntryRegisterAddress
  ctorDeployMemoryRunPtrPrefixRegisterOne

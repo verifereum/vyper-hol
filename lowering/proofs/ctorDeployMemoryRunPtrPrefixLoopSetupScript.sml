@@ -1,6 +1,7 @@
 (* Paired boundaries for canonical dynamic-array loop preparation. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopSetup
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixLoopSlot ctorDeployMemoryRunPtrPrefixCopyRun
   ctorDeployMemoryRunPtrPrefixSteps ctorDeployMemoryRunPtrPrefixSequence
   abiDecoderContract abiDecoderArrayHeader abiDecoderArrayLoopInit

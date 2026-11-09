@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunPtrPrefixEntrySeparation
 Ancestors
+  loweringStateRelDefs
  ctorDeployMemoryRunPtrPrefixEntrySemantic
  compileEnv vyperCall vyperState finite_map list rich_list
  exprLoweringProps ptrDiscipline immutableRelation immutableSectionRel

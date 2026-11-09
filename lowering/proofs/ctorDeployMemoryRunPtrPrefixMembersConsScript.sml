@@ -1,6 +1,7 @@
 (* Same-endpoint head/tail composition of the floor-aware member contract. *)
 Theory ctorDeployMemoryRunPtrPrefixMembersCons
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixCanonicalFloor ctorDeployMemoryRunPtrPrefixMembersFloor
   ctorDeployMemoryRunPtrPrefixMemberFloor ctorDeployMemoryRunPtrPrefixEmptyFloor
   ctorDeployMemoryRunPtrPrefixMemberInputs

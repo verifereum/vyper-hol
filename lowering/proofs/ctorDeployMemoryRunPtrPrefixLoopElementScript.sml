@@ -1,6 +1,7 @@
 (* Zero-hi element preparation: concrete code boundaries for paired execution. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopElement
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixLoopHeader ctorDeployMemoryRunPtrPrefixMemberSetup
   ctorDeployMemoryRunPtrPrefixBoolBody ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixWordRead

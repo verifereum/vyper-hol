@@ -1,6 +1,7 @@
 (* Compiled dynamic-array loop case of the complete paired decoder contract. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteArrayContract
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixCompleteArrayBaseline
   ctorDeployMemoryRunPtrPrefixCompleteCode
   ctorDeployLoweringEntryCompleteArray ctorDeployLoweringEntryArrayOps

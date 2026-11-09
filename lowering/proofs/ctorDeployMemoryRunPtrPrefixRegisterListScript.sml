@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunPtrPrefixRegisterList
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixRegisterOne ctorRegisterArgs
   abiEncoderRegisteredEffect abiEncoderProps venomMemDefs ptrDiscipline pred_set
   compileVyper moduleLowering compileEnv abiDecoderLoop abiDecoderMembers abiDecoderCounters emitHelperProps loweringHalt list rich_list arithmetic finite_map

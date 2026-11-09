@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunPtrPrefixEntrySemantic
 Ancestors
+  loweringStateRelDefs
   ctorDeployLoweringFrame ctorDeployMemoryRunPtrPrefixEntryImmutable
   ctorDeployDefs e2eDeployDefs e2eDefs e2eEntry compileEnv compileVyper
   immutableLocationProps immutableRelation entryStateRel entryLocals

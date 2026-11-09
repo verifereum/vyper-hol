@@ -1,6 +1,7 @@
 (* Zero immutable initialization, isolated from optimizer execution. *)
 Theory ctorDeployMemoryRunPtrPrefixEntryImmutable
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployLoweringDefs ctorDeployDefs e2eDeployDefs
   ctorDeployLoweringEntryTransport ctorDeployLoweringEntrySourceFrame
   compileVyper vyperInterpreter moduleLowering

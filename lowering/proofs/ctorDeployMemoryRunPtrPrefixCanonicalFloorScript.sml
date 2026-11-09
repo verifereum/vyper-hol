@@ -1,6 +1,7 @@
 (* Additive paired interface: allocation origin belongs to the semantic endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixCanonicalFloor
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixAllocationFloor
   ctorDeployMemoryRunPtrPrefixScalar ctorDeployMemoryRunPtrPrefixCopy
   ctorDeployMemoryRunPtrPrefixScalarClamps ctorDeployMemoryRunPtrPrefixScalarPackage

@@ -2,6 +2,7 @@
    state, its ghosts and the finite semantic support; E composes their frames. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopClose
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixLoopElement ctorDeployMemoryRunPtrPrefixLoopHeader
   ctorDeployMemoryRunPtrPrefixLoopIteration ctorAbiActualArrayFinite
   ctorAbiActualArrayRun ctorAbiActualArrayLayout ctorAbiActualArrayContext

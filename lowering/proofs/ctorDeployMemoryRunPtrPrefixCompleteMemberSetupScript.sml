@@ -1,6 +1,7 @@
 (* Execution-producing member setup, with the ghost at the same cutpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteMemberSetup
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixMemberShift ctorDeployMemoryRunPtrPrefixMemberSetup
   abiDecoderMemberSetup abiDecoderDynamicLoopSetup abiDecoderReentry
   abiDecoderContract abiDecoderVarSequence ctorAbiActualAlloc ctorAbiActualObservations

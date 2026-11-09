@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunPtrPrefixChildShift
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixScalarClamps
   ctorDeployMemoryRunPtrPrefixExecutionAttach ctorDeployMemoryRunPtrPrefixMemberShift
   ctorDeployLoweringEntryRegistration ctorDeployLoweringEntryAllocation

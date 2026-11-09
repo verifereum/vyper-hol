@@ -1,6 +1,7 @@
 (* Finite pure clamp instruction interfaces. *)
 Theory ctorDeployMemoryRunPtrPrefixScalarClamps
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixScalarPackage ctorDeployMemoryRunPtrPrefixScalarBool
   ctorDeployMemoryRunPtrPrefixBoolWord ctorDeployMemoryRunPtrPrefixSteps
   abiEncoder emitHelper compileEnv exprLoweringProps

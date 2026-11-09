@@ -1,6 +1,7 @@
 (* Complete shifted contracts: every semantic and ghost fact shares one endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteMembers
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixCompleteMemberSetup
   ctorDeployMemoryRunPtrPrefixCompleteScalar ctorDeployMemoryRunPtrPrefixMembersCons
   ctorDeployMemoryRunPtrPrefixEmptyFloor abiDecoderEmpty

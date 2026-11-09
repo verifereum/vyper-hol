@@ -1,6 +1,7 @@
 (* Exact finite compiler specialization; no runtime correctness is asserted. *)
 Theory ctorDeployMemoryRunPtrPrefixBoolShape
 Ancestors
+  loweringStateRelDefs
   abiEncoder abiDecoderExecution context emitHelper compileEnv fragExec
   exprLoweringProps emitHelperProps words arithmetic list ASCIInumbers
 

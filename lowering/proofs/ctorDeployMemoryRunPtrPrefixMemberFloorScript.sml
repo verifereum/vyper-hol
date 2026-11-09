@@ -1,6 +1,7 @@
 (* Allocation-aware member setup at the supplied raw execution endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixMemberFloor
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixMemberSetup
   ctorDeployMemoryRunPtrPrefixAllocationFloor
   abiDecoderDynamicLoopSetup instIdxIndep venomState ptrDiscipline ptrSafeRun

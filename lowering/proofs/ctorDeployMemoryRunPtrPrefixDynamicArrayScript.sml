@@ -2,6 +2,7 @@
    finite clean support and pointer-safe continuation at the actual endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixDynamicArray
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixLoopClose ctorAbiActualArrayRun ctorAbiActualArrayInvariant
   ctorAbiActualArrayContext valueEncoding valueEncodingProps
   abiDecoderContract abiDecoderTypedContract abiDecoderCorrectPrimitiveArray

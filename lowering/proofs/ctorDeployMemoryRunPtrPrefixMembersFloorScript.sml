@@ -1,6 +1,7 @@
 (* Allocation-aware member contract, with a single semantic and ghost endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixMembersFloor
 Ancestors
+  valueEncodingDefs
   ctorDeployMemoryRunPtrPrefixMembers ctorDeployMemoryRunPtrPrefixAllocationFloor
   abiDecoderMembers abiDecoderMemberInfos abiDecoderEmpty abiDecoderEmptyMember
   ctorAbiActualMembers ctorAbiActualEmpty abiEncoderRegisteredEffect

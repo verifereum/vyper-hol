@@ -1,6 +1,7 @@
 (* Shifted, same-witness array preheader boundaries for Entry. *)
 Theory ctorDeployMemoryRunPtrPrefixCompleteArraySetup
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunPtrPrefixCompleteArrayRun
   ctorDeployLoweringEntryCompletePrefix ctorDeployLoweringEntryArrayOps
   ctorDeployMemoryRunPtrPrefixLoopSetup ctorDeployMemoryRunPtrPrefixLoopSlot
@@ -669,7 +670,7 @@ Proof
   `mem_bytes_at d 32 mem = mem_bytes_at d 32 s.vs_memory` by
     (irule abiEncoderZeroFrameTheory.abi_encoder_mem_bytes_singletons >>
      fs[range_bytes_def]) >>
-  fs[mload_def,valueEncodingTheory.mem_bytes_at_def]
+  fs[mload_def,valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem prefix_complete_array_slot_separation[local]:
@@ -824,7 +825,7 @@ Resume prefix_complete_array_setup_loop_pair_exact[loop_zero]:
   >- (irule prefix_complete_array_protected_header >> simp[] >>
       qpat_assum `(^Ok) _ _ _ _ _ _ _ _ _ st.cs_next_var _ _ _ _ _ initial _ _ prepared`
         (strip_assume_tac o BETA_RULE) >> simp[]) >>
-  simp[valueEncodingTheory.val_in_memory_def]
+  simp[valueEncodingDefsTheory.val_in_memory_def]
 QED
 
 Resume prefix_complete_array_setup_loop_pair_exact[slot_bound]:
