@@ -86,8 +86,7 @@ Theorem typed_array_child_rank_path_mem[local]:
     w2n dw + type_memory_size dtv < dimword(:256) /\
     (w2n sw + type_memory_size stv <= w2n dw \/
       w2n dw + type_memory_size dtv <= w2n sw) /\
-    phi_prefix_length sa.cs_current_insts = 0 /\
-    fn_has_code sa sb fn /\ ~s.vs_halted /\
+      fn_has_code sa sb fn /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
     (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) ==>
@@ -177,8 +176,7 @@ Theorem typed_store_sarray_entry_path_mem:
     w2n dw + type_memory_size dtv < dimword(:256) /\
     (w2n sw + type_memory_size stv <= w2n dw \/
       w2n dw + type_memory_size dtv <= w2n sw) /\
-    phi_prefix_length sa.cs_current_insts = 0 /\
-    fn_has_code sa sb fn /\ ~s.vs_halted /\
+      fn_has_code sa sb fn /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
     (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) ==>
@@ -274,8 +272,7 @@ Theorem typed_store_dynarray_slow_entry_path_mem[local]:
     w2n dw + type_memory_size dtv < dimword(:256) /\
     (w2n sw + type_memory_size stv <= w2n dw \/
       w2n dw + type_memory_size dtv <= w2n sw) /\
-    phi_prefix_length sa.cs_current_insts = 0 /\
-    fn_has_code sa sb fn /\ ~s.vs_halted /\
+      fn_has_code sa sb fn /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
     (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) ==>
@@ -342,7 +339,6 @@ Theorem typed_store_array_entry_path_mem:
   w2n dw + type_memory_size dtv < dimword(:256) /\
   (w2n sw + type_memory_size stv <= w2n dw \/
     w2n dw + type_memory_size dtv <= w2n sw) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
@@ -360,8 +356,7 @@ Theorem typed_store_array_entry_path_mem:
     w2n dw + type_memory_size dtv < dimword(:256) /\
     (w2n sw + type_memory_size stv <= w2n dw \/
       w2n dw + type_memory_size dtv <= w2n sw) /\
-    phi_prefix_length sa.cs_current_insts = 0 /\
-    fn_has_code sa sb fn /\ ~s.vs_halted /\
+      fn_has_code sa sb fn /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
     (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) ==>

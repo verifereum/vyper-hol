@@ -13,7 +13,6 @@ Theorem staged_local_typed_copy_path_mem:
   stmt_state_rel ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sa /\ alloca_history fn s /\
   fn_has_code sa sn fn /\ fn_has_code sn sb fn /\
-  phi_prefix_length sn.cs_current_insts = 0 /\
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
   eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
   n = type_memory_size stv /\ n < dimword(:256) /\

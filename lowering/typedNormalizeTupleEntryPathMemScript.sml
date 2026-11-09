@@ -118,7 +118,7 @@ Theorem normalize_tuple_semantic_path_mem:
     eval_operand dp u = SOME (n2w (d i)) /\
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
-    phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
+    fn_has_code sd se fn /\
     ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
@@ -136,7 +136,6 @@ Theorem normalize_tuple_semantic_path_mem:
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
         vs_prev_bb := u.vs_prev_bb|>) = u) /\
   compile_typed_copy_fields ce dst src DT ST 0 0 sa = ((),sb) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME (n2w b) /\ eval_operand src s = SOME (n2w a) /\
@@ -227,8 +226,7 @@ Theorem typed_ordered_fields_child_rank_path_mem:
     w2n dw + type_memory_size dtv < dimword(:256) /\
     (w2n sw + type_memory_size stv <= w2n dw \/
       w2n dw + type_memory_size dtv <= w2n sw) /\
-    phi_prefix_length sa.cs_current_insts = 0 /\
-    fn_has_code sa sb fn /\ ~s.vs_halted /\
+      fn_has_code sa sb fn /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
     (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) ==>
@@ -248,7 +246,7 @@ Theorem typed_ordered_fields_child_rank_path_mem:
     eval_operand dp u = SOME (n2w (d i)) /\
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
-    phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
+    fn_has_code sd se fn /\
     ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
@@ -322,7 +320,6 @@ Theorem typed_store_tuple_entry_path_mem:
   w2n dw + type_memory_size dtv < dimword(:256) /\
   (w2n sw + type_memory_size stv <= w2n dw \/
     w2n dw + type_memory_size dtv <= w2n sw) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
@@ -340,8 +337,7 @@ Theorem typed_store_tuple_entry_path_mem:
     w2n dw + type_memory_size dtv < dimword(:256) /\
     (w2n sw + type_memory_size stv <= w2n dw \/
       w2n dw + type_memory_size dtv <= w2n sw) /\
-    phi_prefix_length sa.cs_current_insts = 0 /\
-    fn_has_code sa sb fn /\ ~s.vs_halted /\
+      fn_has_code sa sb fn /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
     (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) ==>

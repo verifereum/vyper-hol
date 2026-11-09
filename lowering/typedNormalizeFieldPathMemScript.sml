@@ -140,14 +140,13 @@ Theorem normalize_field_child_path_mem:
   compile_store_memory_typed ce dp dt sp st sd = ((),se) /\
   eval_operand dst s = SOME d /\ eval_operand src s = SOME p /\
   (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\
   fn_has_code sa se fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ Src s.vs_memory /\
   (!u. eval_operand dp u = SOME (d + n2w doff) /\
     eval_operand sp u = SOME (p + n2w soff) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
-    phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
+    fn_has_code sd se fn /\
     ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
@@ -180,8 +179,6 @@ Proof
   `cs_extends sa sd` by metis_tac[cs_extends_trans] >>
   `fn_has_code sa sd fn /\ fn_has_code sd se fn` by
     metis_tac[fn_has_code_split] >>
-  `phi_prefix_length sd.cs_current_insts = 0` by
-    metis_tac[typedNormalizeContinuationTheory.normalize_offset_prefix_zero] >>
   drule_all normalize_field_offsets_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `u.vs_memory = s.vs_memory /\ u.vs_alloca_next = s.vs_alloca_next` by
@@ -267,18 +264,14 @@ Theorem normalize_field_suffix_boundary[local]:
   compile_with_byte_offset src soff sc = (sp,sd) /\
   compile_store_memory_typed ce dp dt sp st sd = ((),se) /\
   compile_typed_copy_fields ce dst src (dt::dts) (st::sts) doff soff sa = ((),sb) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\ fn_has_code sa sb fn ==>
-  fn_has_code sa se fn /\ fn_has_code se sb fn /\
-  phi_prefix_length se.cs_current_insts = 0
+  fn_has_code sa sb fn ==>
+  fn_has_code sa se fn /\ fn_has_code se sb fn
 Proof
   strip_tac >>
   `compile_typed_copy_fields ce dst src dts sts
     (doff + type_memory_bytes ce dt) (soff + type_memory_bytes ce st) se = ((),sb)` by
     (drule normalize_fields_cons_states >> strip_tac >> gvs[]) >>
   drule_all normalize_fields_suffix_code >> strip_tac >>
-  `phi_prefix_length se.cs_current_insts = 0` by
-    metis_tac[typedNormalizeContinuationTheory.normalize_typed_prefix_zero,
-      typedNormalizeContinuationTheory.normalize_offset_prefix_zero] >>
   simp[]
 QED
 Theorem normalize_fields_tail_equation[local]:
@@ -381,7 +374,6 @@ Theorem normalize_field_bounded_child_path_mem[local]:
   compile_store_memory_typed ce dp dt sp st sd = ((),se) /\
   eval_operand dst s = SOME (n2w b) /\ eval_operand src s = SOME (n2w a) /\
   (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\
   fn_has_code sa se fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ Src s.vs_memory /\
@@ -390,7 +382,7 @@ Theorem normalize_field_bounded_child_path_mem[local]:
   (!u. eval_operand dp u = SOME (n2w di) /\
     eval_operand sp u = SOME (n2w hi) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
-    phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
+    fn_has_code sd se fn /\
     ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
@@ -449,7 +441,7 @@ Theorem normalize_tuple_fields_certificate[local]:
     eval_operand dp u = SOME (n2w (d i)) /\
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
-    phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
+    fn_has_code sd se fn /\
     ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
@@ -466,7 +458,6 @@ Theorem normalize_tuple_fields_certificate[local]:
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
         vs_prev_bb := u.vs_prev_bb|>) = u) /\
   compile_typed_copy_fields ce dst src DT ST d0 s0 sa = ((),sb) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -513,7 +504,6 @@ Proof
       mem_bytes_at (h 0) (h N - h 0) s.vs_memory /\
     (!j. j < i ==> Dst j u.vs_memory) /\
     (!j. j < N ==> Src j u.vs_memory) /\
-    phi_prefix_length sc.cs_current_insts = 0 /\
     LENGTH s.vs_memory <= LENGTH u.vs_memory` >>
   BETA_TAC >> conj_tac
   >- (simp[abi_decode_footprint_frame_def, venom_state_component_equality] >>
@@ -572,7 +562,7 @@ Theorem normalize_tuple_fields_path_mem:
     eval_operand dp u = SOME (n2w (d i)) /\
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
-    phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
+    fn_has_code sd se fn /\
     ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
@@ -589,7 +579,6 @@ Theorem normalize_tuple_fields_path_mem:
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
         vs_prev_bb := u.vs_prev_bb|>) = u) /\
   compile_typed_copy_fields ce dst src DT ST d0 s0 sa = ((),sb) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -638,7 +627,7 @@ Theorem normalize_tuple_fields_memory_path_mem:
     eval_operand dp u = SOME (n2w (d i)) /\
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
-    phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
+    fn_has_code sd se fn /\
     ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
@@ -656,7 +645,6 @@ Theorem normalize_tuple_fields_memory_path_mem:
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
         vs_prev_bb := u.vs_prev_bb|>) = u) /\
   compile_typed_copy_fields ce dst src DT ST d0 s0 sa = ((),sb) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -716,7 +704,7 @@ Theorem normalize_nominal_struct_fields_memory_path_mem:
     eval_operand dp u = SOME (n2w (d i)) /\
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
-    phi_prefix_length sd.cs_current_insts = 0 /\ fn_has_code sd se fn /\
+    fn_has_code sd se fn /\
     ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
@@ -734,7 +722,6 @@ Theorem normalize_nominal_struct_fields_memory_path_mem:
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
         vs_prev_bb := u.vs_prev_bb|>) = u) /\
   compile_struct_typed_copy ce dst src fields src_fields d0 s0 sa = ((),sb) /\
-  phi_prefix_length sa.cs_current_insts = 0 /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
