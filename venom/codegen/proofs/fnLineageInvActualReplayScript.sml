@@ -705,7 +705,8 @@ Proof
   Cases_on `MEM (operand_to_string (stack_peek x ps.ps_stack)) nl` >> simp[do_dup_cleanup_frame] >>
   Cases_on `do_dup x ps` >> simp[] >>
   `r.ps_stack = stack_dup x ps.ps_stack` by
-    (qspecl_then [`x`, `ps`] mp_tac stackPlanOpsTheory.do_dup_stack >> gvs[]) >>
+    (qspecl_then [`x`, `ps`] mp_tac stackPlanOpsTheory.do_dup_stack >>
+     asm_rewrite_tac[pairTheory.SND]) >>
   Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) nl` >> simp[popmany_plan_cleanup_frame] >>
   rpt (pairarg_tac >> gvs[])
   >- (qspecl_then [`[Var (HD inst.inst_outputs)]`,
