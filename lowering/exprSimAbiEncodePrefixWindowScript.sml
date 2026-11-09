@@ -343,13 +343,13 @@ QED
    declared-capacity or literal ABI typing premise is used. *)
 Theorem abi_encode_nonword_expr_window:
   expr_post ctx func ce cx e es origin sa s0 es' v op s /\
-  ~is_word_type (expr_type e) /\
-  abi_enc_plan (get_tenv cx) (expr_type e) ei /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  ~is_word_type (post_value_type ce e) /\
+  abi_enc_plan (get_tenv cx) (post_value_type ce e) ei /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av ==>
+  vyper_to_abi (get_tenv cx) (post_value_type ce e) v = SOME av ==>
   ?w ct rv. eval_operand op s = SOME w /\
-    enc ct rv = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av /\
+    enc ct rv = enc (vyper_to_abi_type (get_tenv cx) (post_value_type ce e)) av /\
     abi_encoder_window_input ei ct rv (w2n w) (val_footprint tv v) s.vs_memory
 Proof
   strip_tac >>
@@ -362,13 +362,13 @@ QED
 
 Theorem abi_encode_nonword_expr_bound:
   expr_post ctx func ce cx e es origin sa s0 es' v op s /\
-  ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  ~is_word_type (post_value_type ce e) /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   eval_operand op s = SOME w ==>
   val_footprint tv v = 0 \/ w2n w + val_footprint tv v <= s.vs_alloca_next
 Proof
   strip_tac >>
-  `expr_val_at ce cx (expr_type e) origin sa es' v op s /\
+  `expr_val_at ce cx (post_value_type ce e) origin sa es' v op s /\
    alloca_inv s /\ local_ptrs_rel func ce es'.scopes s` by
     fs[expr_post_def, stmt_state_rel_def, state_rel_def] >>
   drule_all expr_val_at_footprint >> strip_tac
@@ -380,8 +380,8 @@ QED
 
 Theorem abi_encode_nonword_expr_site_disjoint:
   expr_post ctx func ce cx e es origin sa s0 es' v op s /\
-  ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  ~is_word_type (post_value_type ce e) /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   eval_operand op s = SOME w /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
   not_local_ptr ce es'.scopes q /\ sa.cs_next_id <= inst.inst_id /\
