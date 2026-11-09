@@ -1,4 +1,4 @@
-(* Seam 2 joint induction, a family leaf of the stmt step: Raise, Assert and Log. *)
+(* Seam 2 joint induction, a family leaf of the stmt step: Raise and Assert. *)
 Theory bodyIntCallFamStmtExit
 Ancestors
   bodyIntCallJointContract
@@ -8,7 +8,7 @@ Theorem intcall_exit_stmt_step:
        intcall_map_producer fp e) /\
   (!ss. list_size stmt_size ss < stmt_size st ==>
          intcall_stmts_producer fp ss) /\
-  ((?r. st = Raise r) \/ (?e r. st = Assert e r) \/ (?n es. st = Log n es)) ==>
+  ((?r. st = Raise r) \/ (?e r. st = Assert e r)) ==>
   intcall_stmts_producer fp [st]
 Proof
   cheat
