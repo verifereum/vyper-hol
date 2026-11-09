@@ -61,3 +61,40 @@ Theorem staged_args_lower_frontier:
 Proof
   simp[listTheory.EVERY_MEM] >> metis_tac[staged_arg_lower_frontier]
 QED
+
+Theorem intcall_stage_word_code:
+  unwrap_value ce vv sa = (op,sm) /\
+  compile_stage_intcall_args ce vals flags tys sm = (rest,sn) /\
+  fn_has_code sa sn func ==>
+  ci_mono sa sm /\ ci_mono sm sn /\
+  fn_has_code sa sm func /\ fn_has_code sm sn func
+Proof
+  strip_tac >>
+  `ci_mono sa sm` by
+    (mp_tac (Q.SPECL [`ce`,`vv`,`sa`] ci_mono_unwrap_value) >> simp[]) >>
+  drule intcall_stage_mono >> strip_tac >>
+  gvs[ci_mono_def] >> metis_tac[fn_has_code_split]
+QED
+
+Theorem intcall_stage_memory_code:
+  unwrap_value ce vv sa = (op,sm) /\
+  compile_alloc_buffer cap sm = (buf,si) /\
+  compile_store_memory ce op buf.buf_operand ty ty si = ((),sj) /\
+  compile_stage_intcall_args ce vals flags tys sj = (rest,sn) /\
+  fn_has_code sa sn func ==>
+  ci_mono sa sm /\ ci_mono sm si /\ ci_mono si sj /\ ci_mono sj sn /\
+  fn_has_code sa sm func /\ fn_has_code sm si func /\
+  fn_has_code si sj func /\ fn_has_code sj sn func
+Proof
+  strip_tac >>
+  `ci_mono sa sm` by
+    (mp_tac (Q.SPECL [`ce`,`vv`,`sa`] ci_mono_unwrap_value) >> simp[]) >>
+  `ci_mono sm si` by
+    (mp_tac (Q.SPECL [`cap`,`sm`] ci_mono_compile_alloc_buffer) >> simp[]) >>
+  `ci_mono si sj` by
+    (mp_tac (Q.SPECL [`ce`,`op`,`buf.buf_operand`,`ty`,`ty`,`si`]
+       ci_mono_compile_store_memory) >> simp[]) >>
+  drule intcall_stage_mono >> strip_tac >>
+  gvs[ci_mono_def] >>
+  metis_tac[fn_has_code_split, compileEnvTheory.cs_extends_trans]
+QED
