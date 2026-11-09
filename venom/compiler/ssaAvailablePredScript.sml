@@ -109,3 +109,10 @@ Proof
     metis_tac[fn_dominates_predecessor] >>
   metis_tac[dom_pred_def]
 QED
+
+Theorem boundary_pred_index_le:
+  boundary_pred fn bb n P /\ m <= n ==> boundary_pred fn bb m P
+Proof
+  rw[boundary_pred_def, prefix_pred_def] >>
+  first_x_assum irule >> qexists_tac `j` >> simp[] >> decide_tac
+QED

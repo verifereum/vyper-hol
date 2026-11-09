@@ -734,3 +734,116 @@ Proof
   gvs[enters_block_def] >>
   metis_tac[ircf_alias_site_block_entry, wf_ssa_def, lookup_block_label]
 QED
+
+Theorem ircf_alias_frames_reachable:
+  !vs C stk PG G tn fn inst s.
+    frame_reachable vs C stk PG G tn fn inst s ==>
+    EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+    EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY ==>
+    ircf_alias_frames C stk fn inst s G
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- (rpt strip_tac >>
+      `MEM fn C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+      simp[ircf_alias_frames_def] >>
+      irule ircf_alias_boundary_entry >> simp[] >>
+      conj_tac >- metis_tac[EVERY_MEM, wf_ssa_def] >>
+      qexists_tac `vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>` >>
+      simp[])
+  >- (rpt strip_tac >>
+      `ircf_alias_frames C stk fn inst s G` by metis_tac[] >>
+      gvs[ircf_alias_frames_def] >>
+      irule ircf_alias_boundary_next >> simp[] >>
+      metis_tac[EVERY_MEM])
+  >- (rpt strip_tac >>
+      `ircf_alias_frames C stk fn inst s G` by metis_tac[] >>
+      gvs[ircf_alias_frames_def] >>
+      irule ircf_alias_boundary_block >> simp[] >>
+      metis_tac[EVERY_MEM])
+  >- (rpt strip_tac >>
+      `ircf_alias_frames C stk fn inst s G` by metis_tac[] >>
+      `MEM fn' C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+      gvs[ircf_alias_frames_def, ircf_alias_saved_def] >>
+      irule ircf_alias_boundary_call >> simp[] >>
+      metis_tac[EVERY_MEM, wf_ssa_def])
+  >> rpt strip_tac >>
+  `ircf_alias_frames C (f::stk) fn inst s G` by metis_tac[] >>
+  `ircf_alias_saved C f` by metis_tac[ircf_alias_frames_stack, ircf_alias_saved_cons] >>
+  gvs[ircf_alias_frames_def] >>
+  `MEM f.cf_fn C.ctx_functions` by metis_tac[ircf_alias_saved_def] >>
+  simp[] >> irule ircf_alias_saved_return >> simp[] >>
+  metis_tac[EVERY_MEM, wf_ssa_def]
+QED
+
+Theorem ircf_alias_reachable_operand:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  inst.inst_opcode <> PHI /\ MEM (Var v) inst.inst_operands ==>
+  ircf_alias_site_value fn s G v
+Proof
+  strip_tac >> drule_all ircf_alias_frames_reachable >> strip_tac >>
+  drule ircf_alias_frames_current >> strip_tac >>
+  irule ircf_alias_boundary_operand >> metis_tac[EVERY_MEM]
+QED
+
+Theorem ircf_alias_reachable_saved_operand:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  MEM f stk /\ MEM (Var v) f.cf_inst.inst_operands ==>
+  ircf_alias_site_value f.cf_fn f.cf_state f.cf_prov v
+Proof
+  strip_tac >> drule_all ircf_alias_frames_reachable >> strip_tac >>
+  drule ircf_alias_frames_stack >> strip_tac >>
+  `ircf_alias_saved C f` by metis_tac[EVERY_MEM] >>
+  gvs[ircf_alias_saved_def] >>
+  `wf_ssa f.cf_fn /\ wf_function f.cf_fn /\ fn_inst_wf f.cf_fn` by
+    metis_tac[EVERY_MEM] >>
+  irule ircf_alias_boundary_operand >> simp[] >>
+  qexists_tac `f.cf_inst` >> simp[]
+QED
+
+Theorem ircf_alias_boundary_earlier_operand:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  j <= s.vs_inst_idx /\ j < LENGTH bb.bb_instructions /\
+  (EL j bb.bb_instructions).inst_opcode <> PHI /\
+  MEM (Var v) (EL j bb.bb_instructions).inst_operands ==>
+  ircf_alias_site_value fn s G v
+Proof
+  rw[ircf_alias_boundary_def] >>
+  irule boundary_pred_operand >> simp[] >>
+  qexistsl_tac [`bb`, `fn`, `j`] >> simp[] >>
+  gvs[] >> conj_tac >- metis_tac[lookup_block_MEM] >>
+  irule boundary_pred_index_le >> goal_assum drule >> simp[]
+QED
+
+Theorem ircf_alias_reachable_earlier_operand:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  j <= s.vs_inst_idx /\ j < LENGTH bb.bb_instructions /\
+  (EL j bb.bb_instructions).inst_opcode <> PHI /\
+  MEM (Var v) (EL j bb.bb_instructions).inst_operands ==>
+  ircf_alias_site_value fn s G v
+Proof
+  strip_tac >> drule_all ircf_alias_frames_reachable >> strip_tac >>
+  drule ircf_alias_frames_current >> strip_tac >>
+  irule ircf_alias_boundary_earlier_operand >> metis_tac[EVERY_MEM]
+QED
+
+Theorem ircf_alias_site_value_elim:
+  ircf_alias_site_value fn s G v /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\
+  ai.inst_outputs = [root] /\ ai.inst_operands = [Lit sz] /\
+  ircf_alias fn root v ==>
+  ?b. lookup_var v s = SOME (n2w b) /\
+    lookup_var root s = SOME (n2w b) /\
+    FLOOKUP s.vs_allocas ai.inst_id = SOME (b,w2n sz) /\
+    FLOOKUP G v = SOME (b,w2n sz)
+Proof
+  metis_tac[ircf_alias_site_value_def]
+QED
