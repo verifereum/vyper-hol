@@ -219,3 +219,196 @@ Proof
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   gvs[vv_at_def] >> metis_tac[]
 QED
+
+Theorem assign_immutable_holds_frame[local]:
+  immutable_holds cenv cx ty r w es s /\
+  target_pure_frame cenv cx es s t ==>
+  immutable_holds cenv cx ty r w es t
+Proof
+  strip_tac >> gvs[immutable_holds_def]
+  >- metis_tac[] >>
+  qexistsl_tac [`name`, `off`, `itv`, `iv`, `k`] >> simp[] >>
+  disj2_tac >> simp[] >>
+  irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
+  conj_tac >- metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  qexistsl_tac [`type_memory_size tvt`, `s.vs_memory`] >> simp[] >>
+  `mem_bytes_at off (type_memory_size itv) t.vs_memory =
+   mem_bytes_at off (type_memory_size itv) s.vs_memory` by
+    (gvs[target_pure_frame_def] >> first_x_assum irule >> metis_tac[]) >>
+  drule mem_bytes_at_agree_window >> simp[]
+QED
+
+Theorem assign_stack_value_frame[local]:
+  expr_val_rel cx ty v rhs s /\
+  expr_val_at cenv cx ty sa sm es v rhs s /\
+  (!w. eval_operand rhs s = SOME w ==> eval_operand rhs t = SOME w) /\
+  target_post ctx func cenv cx es sm sc s ee pv vt op t /\
+  target_pure_frame cenv cx es s t ==>
+  expr_val_rel cx ty v rhs t
+Proof
+  strip_tac >> gvs[expr_val_rel_def] >>
+  rpt strip_tac >>
+  Cases_on `is_word_type ty` >> gvs[] >>
+  `val_wf tv v` by (gvs[expr_val_at_def] >> metis_tac[]) >>
+  irule val_in_memory_footprint_agree >> simp[] >>
+  qexists_tac `s.vs_memory` >> simp[] >>
+  irule EQ_SYM >> irule assign_target_region_window >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  gvs[expr_val_at_def] >> metis_tac[]
+QED
+
+Theorem assign_word_footprint[local]:
+  is_word_type ty /\ evaluate_type tenv ty = SOME tv ==>
+  val_footprint tv v = 32
+Proof
+  Cases_on `ty` >> simp[is_word_type_def, vyperValueTheory.evaluate_type_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  Cases_on `v` >> simp[val_footprint_def, type_memory_size_def] >>
+  gvs[is_word_type_def, AllCaseEqs(), type_memory_size_def]
+QED
+
+
+Theorem assign_located_memory_frame[local]:
+  vv_holds cenv cx ty r (LocatedValue lty p) es s /\
+  vv_at cenv cx ty sa sm es r (LocatedValue lty p) s /\
+  p.ptr_location = LocMemory /\
+  (!w. eval_operand p.ptr_operand s = SOME w ==>
+       eval_operand p.ptr_operand t = SOME w) /\
+  target_post ctx func cenv cx es sm sc s ee pv vt op t /\
+  target_pure_frame cenv cx es s t ==>
+  vv_holds cenv cx ty r (LocatedValue lty p) es t
+Proof
+  strip_tac >> fs[vv_holds_def] >>
+  (qexists_tac `w` >> simp[] >> gen_tac >> disch_tac >>
+  `val_wf tvt v` by (gvs[vv_at_def] >> metis_tac[]) >>
+  `mem_bytes_at (w2n w) (val_footprint tvt v) t.vs_memory =
+   mem_bytes_at (w2n w) (val_footprint tvt v) s.vs_memory` by
+    (irule assign_located_value_bytes >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  conj_tac
+  >- (irule val_in_memory_footprint_agree >> simp[] >> metis_tac[]) >>
+  strip_tac >>
+  `val_footprint tvt v = 32` by metis_tac[assign_word_footprint] >>
+  gvs[] >>
+  `mem_word_at (w2n w) t.vs_memory = mem_word_at (w2n w) s.vs_memory` by
+    (pure_rewrite_tac[abiStaticAggregatePropsTheory.mem_word_at_bytes] >>
+     asm_rewrite_tac[]) >>
+  metis_tac[])
+QED
+
+Theorem assign_vv_holds_target_frame:
+  vv_holds cenv cx ty r vv es s /\ vv_at cenv cx ty sa sm es r vv s /\
+  (!w. eval_operand (vv_operand vv) s = SOME w ==>
+       eval_operand (vv_operand vv) t = SOME w) /\
+  target_post ctx func cenv cx es sm sc s ee pv vt op t /\
+  target_pure_frame cenv cx es s t ==>
+  vv_holds cenv cx ty r vv es t
+Proof
+  Cases_on `vv`
+  >- (simp[contextTheory.vv_operand_def, vv_holds_def, vv_at_def] >>
+      rpt strip_tac >> qexists_tac `v` >> simp[] >>
+      irule assign_stack_value_frame >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  strip_tac >> fs[contextTheory.vv_operand_def] >> Cases_on `p.ptr_location`
+  >- (irule assign_located_memory_frame >> goal_assum (drule_at Any) >>
+      simp[contextTheory.vv_operand_def] >> metis_tac[]) >>
+  gvs[vv_holds_def, contextTheory.vv_operand_def]
+  >- gvs[storage_holds_def, target_pure_frame_def]
+  >- gvs[storage_holds_def, target_pure_frame_def] >>
+  irule assign_immutable_holds_frame >> metis_tac[]
+QED
+
+Theorem assign_vv_holds_source_frame[local]:
+  supported_target_pure tops bt /\ eval_target_place cx bt es = (res,ee) /\
+  vv_holds cenv cx ty r vv es s ==>
+  vv_holds cenv cx ty r vv ee s
+Proof
+  strip_tac >>
+  `ee.scopes = es.scopes /\ ee.immutables = es.immutables /\
+   (!tr. get_storage cx ee tr = get_storage cx es tr)` by
+    metis_tac[assign_pure_target_views] >>
+  `!v. read_result cx r es = (INL v,es) ==>
+       read_result cx r ee = (INL v,ee)` by
+    (rpt strip_tac >>
+     `FST (read_result cx r ee) = INL v` by
+       metis_tac[assign_pure_target_read_frame, FST] >>
+     Cases_on `read_result cx r ee` >> gvs[] >>
+     drule read_result_state >> simp[]) >>
+  `!tr w tv v. read_storage_slot cx tr w tv es = (INL v,es) ==>
+              read_storage_slot cx tr w tv ee = (INL v,ee)` by
+    (simp[read_storage_slot_eq] >> rpt gen_tac >> CASE_TAC >> simp[]) >>
+  Cases_on `vv`
+  >- (fs[vv_holds_def] >> metis_tac[]) >>
+  Cases_on `p.ptr_location` >> fs[vv_holds_def]
+  >- (qexists_tac `v` >> simp[])
+  >- (qexists_tac `v` >> simp[])
+  >- (fs[storage_holds_def] >> qexists_tac `v` >> simp[])
+  >- (fs[storage_holds_def] >> qexists_tac `v` >> simp[]) >>
+  fs[immutable_holds_def] >>
+  qexistsl_tac [`name`, `off`, `itv`, `iv`, `k`, `v`] >> simp[]
+QED
+
+Theorem assign_pure_target_vv_holds:
+  supported_target_pure tops bt /\ eval_target_place cx bt es = (res,ee) /\
+  vv_holds cenv cx ty r vv es s /\ vv_at cenv cx ty sa sm es r vv s /\
+  (!w. eval_operand (vv_operand vv) s = SOME w ==>
+       eval_operand (vv_operand vv) t = SOME w) /\
+  target_post ctx func cenv cx es sm sc s ee pv vt op t /\
+  target_pure_frame cenv cx es s t ==>
+  vv_holds cenv cx ty r vv ee t
+Proof
+  strip_tac >> irule assign_vv_holds_source_frame >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  irule assign_vv_holds_target_frame >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+Theorem assign_pure_target_vv_at:
+  supported_target_pure tops bt /\ eval_target_place cx bt es = (res,ee) /\
+  vv_at cenv cx ty sa sm es r vv s /\
+  (!w. eval_operand (vv_operand vv) s = SOME w ==>
+       eval_operand (vv_operand vv) t = SOME w) /\
+  local_ptrs_reserved cenv sm /\ local_ptrs_rel func cenv es.scopes s /\
+  sm.cs_next_id <= sc.cs_next_id /\
+  target_post ctx func cenv cx es sm sc s ee pv vt op t ==>
+  vv_at cenv cx ty sa sc ee r vv t
+Proof
+  strip_tac >>
+  `ee.scopes = es.scopes` by metis_tac[assign_pure_target_views] >>
+  `!n b sz. local_region cenv ee.scopes t n b sz <=>
+             local_region cenv es.scopes s n b sz` by
+    (rpt gen_tac >> eq_tac >> strip_tac
+     >- (irule local_region_frame >> conj_tac >- metis_tac[] >>
+         gvs[target_post_def] >> metis_tac[]) >>
+     irule local_region_frame_fwd >>
+     gvs[target_post_def] >> metis_tac[]) >>
+  `!v. read_result cx r ee = (INL v,ee) ==>
+       read_result cx r es = (INL v,es)` by
+    (rpt strip_tac >>
+     `FST (read_result cx r es) = INL v` by
+       metis_tac[assign_pure_target_read_frame, FST] >>
+     Cases_on `read_result cx r es` >> gvs[] >>
+     drule read_result_state >> simp[]) >>
+  `!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+            FLOOKUP t.vs_allocas aid = SOME b` by gvs[target_post_def] >>
+  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  Cases_on `vv`
+  >- (gvs[vv_at_def, expr_val_at_def, contextTheory.vv_operand_def] >>
+      rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+      `read_result cx r es = (INL v,es)` by metis_tac[] >>
+      qpat_x_assum `!v. read_result cx r es = _ ==> _` drule_all >>
+      strip_tac >> simp[] >> qexists_tac `w` >> simp[]
+      >- (disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+          first_assum ACCEPT_TAC) >>
+      disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]) >>
+  gvs[vv_at_def, contextTheory.vv_operand_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `read_result cx r es = (INL v,es)` by metis_tac[] >>
+  qpat_x_assum `p.ptr_location = LocMemory ==> _` (drule_all_then strip_assume_tac) >>
+  simp[] >>
+  qexists_tac `w` >> simp[]
+  >- (disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+      first_assum ACCEPT_TAC)
+  >- (disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]) >>
+  simp[]
+QED
