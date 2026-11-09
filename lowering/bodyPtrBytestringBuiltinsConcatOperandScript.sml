@@ -4,7 +4,7 @@ Theory bodyPtrBytestringBuiltinsConcatOperand
 Ancestors
   bodyPtrDefs loweringPosts representationCleanPtr
   vyperAST vyperValue vyperContext compileEnv vyperTypeSystem vyperTyping
-  words list venomState
+  exprLowering valueEncoding compileEnv words list venomState
 
 Theorem concat_operand_bytes_read:
   expr_post ctx fn ce cx e es sa sb s0 ee v op s /\
@@ -21,7 +21,10 @@ Theorem concat_operand_bytes_read:
     LENGTH (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) < dimword (:256) /\
     w2n w + 32 + LENGTH (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) <= dimword (:256) /\
     w2n w + 32 < dimword (:256) /\
-    mem_word_at (w2n w) s.vs_memory = n2w (LENGTH (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []))
+    mem_word_at (w2n w) s.vs_memory = n2w (LENGTH (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => [])) /\
+    mem_bytes_at (w2n w + 32) (LENGTH (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => [])) s.vs_memory =
+      (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) /\
+    LENGTH (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) <= concat_payload_capacity (expr_type e)
 Proof
   strip_tac >>
   `post_value_type ce e = expr_type e` by simp[] >>
@@ -41,9 +44,13 @@ Proof
   >- (Cases_on `bd` >> gvs[is_bytestring_type_def, evaluate_type_def] >>
       Cases_on `v` >> gvs[value_has_type_def] >>
       drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`) expr_val_at_raw_return_resources >>
-      gvs[is_word_type_def, evaluate_type_def, val_footprint_def] >>
+      gvs[is_word_type_def, evaluate_type_def, val_footprint_def,
+          expr_val_rel_def, val_in_memory_def, concat_payload_capacity_def,
+          eval_operand_def] >>
       metis_tac[]) >>
   gvs[evaluate_type_def] >> Cases_on `v` >> gvs[value_has_type_def] >>
   drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`) expr_val_at_raw_return_resources >>
-  gvs[is_word_type_def, evaluate_type_def, val_footprint_def] >> metis_tac[]
+  gvs[is_word_type_def, evaluate_type_def, val_footprint_def,
+          expr_val_rel_def, val_in_memory_def, concat_payload_capacity_def,
+          eval_operand_def] >> metis_tac[]
 QED
