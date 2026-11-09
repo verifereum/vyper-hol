@@ -7251,6 +7251,44 @@ Proof
   drule_all LIST_REL_MEM_IMP >> strip_tac >> gvs[]
 QED
 
+Theorem mm_local_hazards_destination_alternative[local]:
+  MEM h (flush_hazards mode ss c).ss_copies ==>
+  ~copy_overwrites c (copy_dst_interval h) \/
+  copy_can_merge h c \/ copy_can_merge c h
+Proof
+  simp[flush_hazards_def] >> rpt IF_CASES_TAC >>
+  gvs[flush_copies_def, MEM_FILTER, waw_hazards_def, FILTER_EQ_NIL, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+(* Temporary actual-scanner interface probe; remove at delivery. *)
+Theorem mm_local_empty_blocker_probe[local]:
+  !dfg.
+  (FOLDL (scan_inst dfg Mem2Mem) empty_scan_state
+    [mk_inst 1 MCOPY [Lit 0w; Lit 1000w; Lit 100w] [];
+     mk_inst 2 MCOPY [Lit 50w; Lit 3000w; Lit 0w] [];
+     mk_inst 3 MCOPY [Lit 90w; Lit 1090w; Lit 10w] []]).ss_copies =
+    [<|cg_dst := 0; cg_src := 1000; cg_length := 100; cg_inst_ids := [1]|>;
+     <|cg_dst := 50; cg_src := 3000; cg_length := 0; cg_inst_ids := [2]|>;
+     <|cg_dst := 90; cg_src := 1090; cg_length := 10; cg_inst_ids := [3]|>] /\
+  (FOLDL (\ss i. scan_bulk_copy Mem2Mem ss i) empty_scan_state
+    [mk_inst 1 MCOPY [Lit 0w; Lit 1000w; Lit 100w] [];
+     mk_inst 2 MCOPY [Lit 50w; Lit 3000w; Lit 0w] [];
+     mk_inst 3 MCOPY [Lit 90w; Lit 1090w; Lit 10w] []]).ss_copies =
+    [<|cg_dst := 0; cg_src := 1000; cg_length := 100; cg_inst_ids := [1]|>;
+     <|cg_dst := 50; cg_src := 3000; cg_length := 0; cg_inst_ids := [2]|>;
+     <|cg_dst := 90; cg_src := 1090; cg_length := 10; cg_inst_ids := [3]|>] /\
+  copy_overwrites
+    <|cg_dst := 90; cg_src := 1090; cg_length := 10; cg_inst_ids := [3]|>
+    (copy_dst_interval
+      <|cg_dst := 0; cg_src := 1000; cg_length := 100; cg_inst_ids := [1]|>) /\
+  copy_can_merge
+    <|cg_dst := 0; cg_src := 1000; cg_length := 100; cg_inst_ids := [1]|>
+    <|cg_dst := 90; cg_src := 1090; cg_length := 10; cg_inst_ids := [3]|>
+Proof
+  gen_tac >> EVAL_TAC
+QED
+
 Theorem mm_local_two_copy_read[local]:
   mm_local_history is H (n+2) /\
   (EL n is).inst_opcode = MCOPY /\
