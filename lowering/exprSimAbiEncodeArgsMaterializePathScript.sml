@@ -51,9 +51,6 @@ Theorem compile_materialize_vv_owned_path:
   type_memory_size tv < 2 ** 64 /\
   type_memory_size tv + 64 < dimword (:256) /\
   cs_extends sm sb /\ frag_gas_free sm sb /\
-  (sm.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
-   !bb. lookup_block sb.cs_current_bb func.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t. gas_marked_path F ctx func r 0 (OK t) /\
