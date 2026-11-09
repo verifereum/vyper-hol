@@ -106,7 +106,8 @@ Resume alloc_run_abi_decode_mutual[bytes]:
       SRULE [SF ETA_ss] alloc_run_compile_abi_dec_addr,
       SRULE [SF ETA_ss] alloc_run_compile_abi_decode_range_check, comp_return_def] >>
       simp[alloc_run_def, comp_return_def, alloc_frame_refl]) >> gen_tac >> simp[]) >>
-  rpt BasicProvers.TOP_CASE_TAC >> simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh] >>
+  Cases_on `opc:opcode` >> simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
       SRULE [SF ETA_ss] alloc_run_compile_abi_dec_addr,
       SRULE [SF ETA_ss] alloc_run_compile_abi_decode_range_check]
 QED
@@ -127,7 +128,7 @@ Resume alloc_run_abi_decode_mutual[array]:
     >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
       SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
       SRULE [SF ETA_ss] alloc_run_compile_alloc_buffer] >> gen_tac >> simp[]) >>
-  rpt BasicProvers.TOP_CASE_TAC >> simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
+  Cases_on `opc:opcode` >> simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
       SRULE [SF ETA_ss] alloc_run_compile_abi_dec_addr,
       SRULE [SF ETA_ss] alloc_run_compile_abi_decode_range_check]
 QED
