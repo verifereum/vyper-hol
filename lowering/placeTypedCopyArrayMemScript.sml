@@ -712,3 +712,137 @@ Resume typed_memory_sarray_slow_forward_mem[exit]:
 QED
 
 Finalise typed_memory_sarray_slow_forward_mem
+
+Theorem typed_memory_dynarray_fast_bytes_forward_mem:
+  compile_copy_dynarray_typed cenv dst et cap src et sa = ((),sb) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  mload (w2n sw) s = n2w n /\ n <= cap /\ cap < dimword (:256) /\
+  n * type_memory_bytes cenv et < dimword (:256) /\
+  w2n sw + 32 < dimword (:256) /\ w2n dw + 32 < dimword (:256) /\
+  (w2n sw + 32 + n * type_memory_bytes cenv et <= w2n dw \/
+   w2n dw + 32 <= w2n sw) /\
+  w2n sw + 32 + n * type_memory_bytes cenv et <= s.vs_alloca_next /\
+  w2n dw + 32 + n * type_memory_bytes cenv et <= s.vs_alloca_next /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      mem_word_at (w2n dw) t.vs_memory = n2w n /\
+      mem_bytes_at (w2n dw + 32) (n * type_memory_bytes cenv et) t.vs_memory =
+        mem_bytes_at (w2n sw + 32) (n * type_memory_bytes cenv et) s.vs_memory /\
+      typed_copy_effect ctx func sa sb s t (w2n dw)
+        (32 + n * type_memory_bytes cenv et)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule typed_memory_dynarray_fast_split >> strip_tac >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    (gvs[fragExecTheory.fn_has_code_def, same_blocks_def,
+         fragExecTheory.emitted_blocks_def] >>
+     metis_tac[IS_PREFIX_TRANS]) >>
+  `w2n sw + 32 <= s.vs_alloca_next /\
+   w2n dw + 32 <= s.vs_alloca_next` by decide_tac >>
+  drule_all typed_memory_dynarray_setup_path_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `gas_path_mem ctx func s 0 (OK mid)` >>
+  `w2n (sw + 32w) = w2n sw + 32 /\ w2n (dw + 32w) = w2n dw + 32` by
+    simp[wordsTheory.word_add_def, wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
+  `mid.vs_alloca_next = s.vs_alloca_next /\
+   ~mid.vs_halted /\ mid.vs_current_bb = sm.cs_current_bb /\
+   mid.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    gvs[typed_copy_effect_def, venom_state_component_equality] >>
+  `w2n (sw + 32w) + n * type_memory_bytes cenv et <= mid.vs_alloca_next /\
+   w2n (dw + 32w) + n * type_memory_bytes cenv et <= mid.vs_alloca_next` by simp[] >>
+  drule_all typed_memory_dynarray_data_path_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `gas_path_mem ctx func mid 0 (OK t)` >>
+  qexists_tac `t` >> conj_tac
+  >- metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES] >>
+  conj_tac >- suspend "header" >>
+  conj_tac >- suspend "data" >> suspend "effect"
+QED
+
+Resume typed_memory_dynarray_fast_bytes_forward_mem[header]:
+  markerLib.RESUME_TAC >>
+  `mem_bytes_at (w2n dw) 32 t.vs_memory =
+   mem_bytes_at (w2n dw) 32 mid.vs_memory` by
+    (irule typed_copy_effect_bytes >>
+     qpat_assum `typed_copy_effect ctx func sm sb mid t _ _` (irule_at Any) >>
+     simp[]) >>
+  `mem_word_at (w2n dw) mid.vs_memory = n2w n` by
+    simp[mstore_mem_word_at_same] >>
+  gvs[valueEncodingTheory.mem_word_at_def, valueEncodingTheory.mem_bytes_at_def]
+QED
+Resume typed_memory_dynarray_fast_bytes_forward_mem[data]:
+  markerLib.RESUME_TAC >>
+  `mem_bytes_at (w2n sw + 32) (n * type_memory_bytes cenv et) mid.vs_memory =
+   mem_bytes_at (w2n sw + 32) (n * type_memory_bytes cenv et) s.vs_memory` by
+    (irule typed_copy_effect_bytes >>
+     qpat_assum `typed_copy_effect ctx func sa sm s mid _ _` (irule_at Any) >>
+     decide_tac) >>
+  simp[mcopy_mem_bytes_at_same]
+QED
+Resume typed_memory_dynarray_fast_bytes_forward_mem[effect]:
+  markerLib.RESUME_TAC >>
+  irule typed_copy_effect_then >> qexistsl_tac [`sm`,`sm`,`mid`] >>
+  conj_tac >- simp[] >> conj_tac
+  >- (irule typed_copy_effect_enlarge >>
+      qpat_assum `typed_copy_effect ctx func sm sb mid t _ _` (irule_at Any) >>
+      simp[]) >>
+  irule typed_copy_effect_enlarge >>
+  qpat_assum `typed_copy_effect ctx func sa sm s mid _ _` (irule_at Any) >>
+  simp[]
+QED
+Finalise typed_memory_dynarray_fast_bytes_forward_mem
+
+Theorem typed_memory_dynarray_fast_forward_mem:
+  compile_copy_dynarray_typed cenv dst et cap src et sa = ((),sb) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  value_has_type (ArrayTV tv (Dynamic scap)) (ArrayV (DynArrayV vs)) /\
+  val_wf (ArrayTV tv (Dynamic scap)) (ArrayV (DynArrayV vs)) /\
+  val_in_memory (ArrayTV tv (Dynamic scap)) (ArrayV (DynArrayV vs)) (w2n sw) s.vs_memory /\
+  type_memory_bytes cenv et = type_memory_size tv /\
+  LENGTH vs <= cap /\ cap < dimword (:256) /\
+  LENGTH vs * type_memory_size tv < dimword (:256) /\
+  w2n sw + 32 < dimword (:256) /\ w2n dw + 32 < dimword (:256) /\
+  (w2n sw + 32 + LENGTH vs * type_memory_size tv <= w2n dw \/
+   w2n dw + type_memory_size (ArrayTV tv (Dynamic cap)) <= w2n sw) /\
+  w2n sw + 32 + LENGTH vs * type_memory_size tv <= s.vs_alloca_next /\
+  w2n dw + type_memory_size (ArrayTV tv (Dynamic cap)) <= s.vs_alloca_next /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) (w2n dw) t.vs_memory /\
+      typed_copy_effect ctx func sa sb s t (w2n dw)
+        (type_memory_size (ArrayTV tv (Dynamic cap)))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `LENGTH vs * type_memory_size tv <= cap * type_memory_size tv` by simp[] >>
+  `mload (w2n sw) s = n2w (LENGTH vs)` by
+    gvs[val_in_memory_dynarray, mem_word_at_eq_mload] >>
+  Q.SUBGOAL_THEN
+    `w2n sw + 32 + LENGTH vs * type_memory_bytes cenv et <= w2n dw \/
+     w2n dw + 32 <= w2n sw` assume_tac
+  >- (qpat_x_assum `_ \/ _` mp_tac >>
+      simp[valueEncodingTheory.type_memory_size_def] >> decide_tac) >>
+  `w2n dw + 32 + LENGTH vs * type_memory_bytes cenv et <= s.vs_alloca_next` by
+    (qpat_x_assum `w2n dw + type_memory_size _ <= _` mp_tac >>
+     simp[valueEncodingTheory.type_memory_size_def] >> decide_tac) >>
+  `LENGTH vs * type_memory_bytes cenv et < dimword (:256) /\
+   w2n sw + 32 + LENGTH vs * type_memory_bytes cenv et <= s.vs_alloca_next` by simp[] >>
+  drule_all typed_memory_dynarray_fast_bytes_forward_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `t` >> simp[] >> conj_tac
+  >- (simp[val_in_memory_dynarray] >>
+      irule (cj 3 valueEncodingProofsTheory.val_in_memory_relocate_proof) >>
+      conj_tac >- gvs[valueEncodingTheory.val_wf_def] >>
+      qexistsl_tac [`w2n sw + 32`, `s.vs_memory`] >>
+      gvs[val_in_memory_dynarray, valueEncodingTheory.val_wf_def]) >>
+  irule typed_copy_effect_enlarge >>
+  qpat_assum `typed_copy_effect ctx func sa sb s t _ _` (irule_at Any) >>
+  simp[valueEncodingTheory.type_memory_size_def]
+QED
