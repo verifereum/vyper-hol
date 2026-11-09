@@ -1621,3 +1621,54 @@ Proof
       inline_shared_frame_def, stateFrameTheory.execution_frame_def, lookup_var_def,
       inline_opaque_available_def]
 QED
+
+Theorem inline_caller_available_entry_phis:
+  inline_caller_entry caller final lbl i ret N opaque rb b s t /\
+  inline_opaque_available opaque s t /\
+  lookup_block lbl caller.fn_blocks = SOME call_bb /\
+  lookup_block b caller.fn_blocks = SOME bb /\
+  lookup_block b final.fn_blocks = SOME tb /\
+  final = renumber_fn_inst_ids (fix_inline_phis lbl ret rb
+    (inline_call_site p ret caller callee lbl i)) /\
+  i < LENGTH call_bb.bb_instructions /\
+  (EL i call_bb.bb_instructions).inst_opcode = INVOKE /\
+  inline_opacity_ok caller opaque /\
+  inliner_phi_labels_closed caller /\ fn_inst_wf caller /\
+  ~MEM ret (fn_labels caller) /\
+  (s.vs_prev_bb = SOME lbl ==> MEM b (bb_succs rb)) /\
+  (!ins y. MEM ins (fn_insts caller) /\ MEM (Var y) ins.inst_operands ==> y IN N) /\
+  eval_phis s bb.bb_instructions = OK u ==>
+  ?v. eval_phis t tb.bb_instructions = OK v /\
+    inline_caller_point caller final lbl i ret N opaque b 0 u v /\
+    inline_opaque_available opaque u v
+Proof
+  strip_tac >>
+  `eval_phis t tb.bb_instructions = eval_phis t
+    (if MEM b (bb_succs rb) then
+       MAP (\inst. if inst.inst_opcode <> PHI then inst
+                    else subst_label_inst lbl ret inst) bb.bb_instructions
+     else bb.bb_instructions)` by
+    (irule inline_caller_layout_eval_phis >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[]) >>
+  `MEM bb caller.fn_blocks` by metis_tac[phiTransformTheory.lookup_block_MEM] >>
+  `?v. eval_phis t tb.bb_instructions = OK v /\ inline_caller_data N opaque u v /\
+       inline_opaque_available opaque u v` by
+    (Cases_on `MEM b (bb_succs rb)`
+     >- (fs[] >> irule inline_caller_available_repaired_phis >>
+         qexistsl [`caller`, `s`] >>
+         gvs[inline_caller_entry_def, inline_caller_point_def] >> gvs[]) >>
+     `t.vs_prev_bb = s.vs_prev_bb` by
+       (gvs[inline_caller_entry_def] >> Cases_on `s.vs_prev_bb` >> gvs[] >>
+        IF_CASES_TAC >> gvs[]) >>
+     fs[] >> irule inline_caller_available_phis >>
+     conj_tac >- (qexists `caller` >> simp[] >> gvs[]) >>
+     qexists `s` >> gvs[inline_caller_entry_def, inline_caller_point_def]) >>
+  qexists `v` >> simp[] >>
+  qpat_assum `eval_phis s _ = OK u`
+    (mp_then Any assume_tac eval_phis_only_updates_vs_vars) >>
+  qpat_assum `eval_phis t _ = OK v`
+    (mp_then Any assume_tac eval_phis_only_updates_vs_vars) >>
+  gvs[inline_caller_entry_def, inline_caller_point_def] >>
+  qpat_x_assum `u = _ with vs_vars := _` SUBST1_TAC >>
+  qpat_x_assum `v = _ with vs_vars := _` SUBST1_TAC >> simp[] >> metis_tac[]
+QED
