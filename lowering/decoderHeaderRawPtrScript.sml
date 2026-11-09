@@ -5,6 +5,11 @@ Ancestors abiDecoderComposition decoderArrayInitPtr calldataDynOwned abiDecoderA
   decoderArraySetupPtr bodyPtrDefs ptrDiscipline ptrSafeRun venomState venomExecSemantics
   fragExec venomInst words list arithmetic finite_map pred_set instIdxIndep moduleLoweringProps
 
+(* The calldata address step: base Lit 0w adds no instruction. *)
+val calldata_pos_addr = prove(
+  ``compile_abi_dec_addr (Lit 0w) pos st = (pos,st)``,
+  simp[abiEncoderTheory.compile_abi_dec_addr_def, compileEnvTheory.comp_return_def]);
+
 Theorem calldata_array_header_raw_endpoint_ptr:
   abi_decode_array_header (Var root) src CALLDATALOAD sa = (cnt,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
@@ -71,7 +76,7 @@ Proof
   strip_tac >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
     (qpat_x_assum `abi_decode_bulk_payload _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[abi_decode_bulk_payload_def, compile_abi_dec_addr_def, comp_bind_def] >>
+     simp[abi_decode_bulk_payload_def, calldata_pos_addr, comp_bind_def] >>
      pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
      rename1 `emit_op MUL [cnt; Lit (n2w mem_sz)] sa = (sz,c1)` >>
      rename1 `emit_op ADD [src; Lit 32w] c1 = (sd,c2)` >>

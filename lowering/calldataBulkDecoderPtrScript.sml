@@ -7,6 +7,11 @@ Ancestors decoderHeaderRawPtr calldataBulkPayloadPtr decoderArrayInitPtr calldat
   bodyPtrDefs ptrDiscipline ptrSafeRun fragExec fragExecPtr words list arithmetic
   venomInst venomState venomExecSemantics instIdxIndep finite_map pred_set
 
+(* The calldata address step: base Lit 0w adds no instruction. *)
+val calldata_pos_addr = prove(
+  ``compile_abi_dec_addr (Lit 0w) pos st = (pos,st)``,
+  simp[abiEncoderTheory.compile_abi_dec_addr_def, compileEnvTheory.comp_return_def]);
+
 (* The calldata instance of trunk's position-form decoder lemmas: the source
    base operand is Lit 0w and the numeric base is 0. *)
 val calldata_pos_live_lit = prove(
@@ -44,7 +49,7 @@ Proof
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [(calldata_pos abi_decode_bulk_phases),
-    abi_decode_dynarray_position_prefix_def, compile_abi_dec_addr_def,
+    abi_decode_dynarray_position_prefix_def, calldata_pos_addr,
     abiDecoderBytesBoundTheory.abi_decode_bytes_head_def, abiDecoderDynarrayBoundTheory.abi_decode_dynarray_payload_guard_def,
     abi_decode_dynarray_end_guard_def, abi_decode_bulk_body_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
@@ -56,7 +61,7 @@ Proof
     (imp_res_tac abi_decode_count_guard_shape >>
      qpat_x_assum `abi_decode_array_header _ _ _ _ = _` mp_tac >>
      qpat_x_assum `abi_decode_bulk_payload _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[abi_decode_bulk_payload_def, compile_abi_dec_addr_def, abi_decode_array_header_def, comp_bind_def,
+     simp[abi_decode_bulk_payload_def, calldata_pos_addr, abi_decode_array_header_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
      rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
      imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
@@ -126,7 +131,7 @@ Proof
     (fs[cs_extends_def, same_blocks_def, inst_extends_def]) >>
   `cs_extends c2 sb` by
     (qpat_x_assum `abi_decode_bulk_payload _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[abi_decode_bulk_payload_def, compile_abi_dec_addr_def, comp_bind_def] >>
+     simp[abi_decode_bulk_payload_def, calldata_pos_addr, comp_bind_def] >>
      rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
      imp_res_tac emit_op_same_blocks >> imp_res_tac emit_void_same_blocks >>
      imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>

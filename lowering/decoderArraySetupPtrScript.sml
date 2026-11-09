@@ -6,6 +6,11 @@ Ancestors decoderNavigationPtr abiDecoderLoopSetup abiDecoderIndexedAddress
   finite_map pred_set arithmetic list instIdxIndep calldataDynOwned venomInst
   exprLoweringProps codegenRel abiDecoderReentry
 
+(* The calldata address step: base Lit 0w adds no instruction. *)
+val calldata_pos_addr = prove(
+  ``compile_abi_dec_addr (Lit 0w) pos st = (pos,st)``,
+  simp[abiEncoderTheory.compile_abi_dec_addr_def, compileEnvTheory.comp_return_def]);
+
 Theorem run_inst_seq_append_ok:
   run_inst_seq (xs ++ ys) s = OK t ==>
   ?m. run_inst_seq xs s = OK m /\ run_inst_seq ys m = OK t
@@ -111,7 +116,7 @@ Theorem calldata_dynamic_element_source_structure:
   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st ready) /\
   LENGTH (emitted_insts st ready) = 2
 Proof
-  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, comp_bind_def,
+  simp[compile_abi_decode_dyn_elem_ptr_def, calldata_pos_addr, comp_bind_def,
     comp_ignore_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [head] st = (off,mid)` >>
@@ -338,7 +343,7 @@ Theorem calldata_dynamic_element_source_endpoint_ptr_core:
         (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
-  rpt gen_tac >> simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, comp_bind_def,
+  rpt gen_tac >> simp[compile_abi_decode_dyn_elem_ptr_def, calldata_pos_addr, comp_bind_def,
     comp_ignore_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [head] st = (off,mid)` >>

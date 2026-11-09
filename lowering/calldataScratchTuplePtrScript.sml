@@ -15,6 +15,11 @@ Ancestors calldataScratchBytesPtr decoderMemberPrefixPtr abiScratchDecoderTuple 
   venomState venomExecSemantics bodyPtrDefs ptrDiscipline list arithmetic
   abiScratchDecoderRecursive abiDecoderFixedMemory rich_list abiStaticDynarrayLayout
 
+(* The calldata address step: base Lit 0w adds no instruction. *)
+val calldata_pos_addr = prove(
+  ``compile_abi_dec_addr (Lit 0w) pos st = (pos,st)``,
+  simp[abiEncoderTheory.compile_abi_dec_addr_def, compileEnvTheory.comp_return_def]);
+
 (* The calldata instance of trunk's position-form decoder lemmas: the source
    base operand is Lit 0w and the numeric base is 0. *)
 val calldata_pos_live_lit = prove(
@@ -58,7 +63,7 @@ Theorem calldata_scratch_members_nil_ptr:
     ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
 Proof
-  simp_tac (srw_ss()) [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def] >>
+  simp_tac (srw_ss()) [Once compile_abi_decode_to_buf_def, calldata_pos_addr, comp_return_def] >>
   rpt strip_tac >>
   qexistsl_tac [`initial`, `G`, `tn`] >>
   simp[val_in_memory_def, abi_decode_sim_refl] >>

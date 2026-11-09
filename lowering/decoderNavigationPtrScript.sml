@@ -7,6 +7,11 @@ Ancestors wordLoadStorePtr ptrSafetyTransport decoderSetupStepPtr typedCopyPtr b
   compileEnv emitHelper abiDecoderReentry calldataDynOwned instIdxIndep fragExec list
   abiDecoderMemberSetup decoderMemberValidEndpoint memLocDefs venomInstProofs contextCodegenRel
 
+(* The calldata address step: base Lit 0w adds no instruction. *)
+val calldata_pos_addr = prove(
+  ``compile_abi_dec_addr (Lit 0w) pos st = (pos,st)``,
+  simp[abiEncoderTheory.compile_abi_dec_addr_def, compileEnvTheory.comp_return_def]);
+
 (* The calldata instance of trunk's position-form decoder lemmas: the source
    base operand is Lit 0w and the numeric base is 0. *)
 val calldata_pos_live_lit = prove(
@@ -552,7 +557,7 @@ Theorem calldata_ep_source_frag_ptr:
 Proof
   rpt gen_tac >> Cases_on `dyn`
   >- suspend "dynamic"
-  >> simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def, comp_return_def] >>
+  >> simp[compile_getelemptr_abi_def, calldata_pos_addr, comp_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   `eval_operand (Lit (n2w ao)) s = SOME (n2w ao) /\
    op_taint tn (Lit (n2w ao)) = {} /\ op_prov G (Lit (n2w ao)) = NONE` by
@@ -564,7 +569,7 @@ Proof
 QED
 
 Resume calldata_ep_source_frag_ptr[dynamic]:
-  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def, comp_return_def] >>
+  simp[compile_getelemptr_abi_def, calldata_pos_addr, comp_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   rename1 `emit_op ADD [src; Lit (n2w ao)] sa = (head,c1)` >>
   rename1 `emit_op CALLDATALOAD [head] c1 = (off,c2)` >>
@@ -790,7 +795,7 @@ Proof
     (conj_tac >-
       (Cases_on `dyn` >>
        qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ _ = _` mp_tac >>
-       simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
+       simp[compile_getelemptr_abi_def, calldata_pos_addr, comp_bind_def, comp_ignore_bind_def,
          comp_return_def] >> rpt (pairarg_tac >> gvs[]) >>
        strip_tac >> gvs[] >>
        imp_res_tac inst_extends_emit_op >>
@@ -829,7 +834,7 @@ Proof
     (conj_tac >-
       (Cases_on `dyn` >>
        qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ _ = _` mp_tac >>
-       simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
+       simp[compile_getelemptr_abi_def, calldata_pos_addr, comp_bind_def, comp_ignore_bind_def,
          comp_return_def] >> rpt (pairarg_tac >> gvs[]) >>
        metis_tac[emit_op_same_blocks, same_blocks_trans]) >>
      metis_tac[emit_op_same_blocks]) >>

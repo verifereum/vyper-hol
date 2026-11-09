@@ -9,6 +9,11 @@ Ancestors wordLoadStorePtr decoderIndexInitCorePtr decoderSetupStepPtr ptrSafety
   abiDecoderReentry calldataDynOwned abiDecoderArrayLoopInit abiDecoderDynarrayPrefix
   abiDecoderDynarrayBound abiDecoderArrayHeader abiDecoderIndexInit abiDecoderAllocation
 
+(* The calldata address step: base Lit 0w adds no instruction. *)
+val calldata_pos_addr = prove(
+  ``compile_abi_dec_addr (Lit 0w) pos st = (pos,st)``,
+  simp[abiEncoderTheory.compile_abi_dec_addr_def, compileEnvTheory.comp_return_def]);
+
 (* The calldata instance of trunk's position-form decoder lemmas: the source
    base operand is Lit 0w and the numeric base is 0. *)
 val calldata_pos_live_lit = prove(
@@ -548,7 +553,7 @@ Proof
   drule (calldata_pos abi_decode_array_loop_init_trace) >> strip_tac >>
   gnvs[] >>
   qpat_x_assum `abi_decode_dynarray_position_prefix _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[abi_decode_dynarray_position_prefix_def, abiEncoderTheory.compile_abi_dec_addr_def,
+  simp[abi_decode_dynarray_position_prefix_def, calldata_pos_addr,
     abiDecoderBytesBoundTheory.abi_decode_bytes_head_def, abiDecoderDynarrayBoundTheory.abi_decode_dynarray_payload_guard_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def] >> pairarg_tac >> simp[] >> strip_tac >> gnvs[] >>
   rename1 `abi_decode_count_guard CALLDATALOAD src maxn sa = (guard_cnt,guard_st)` >>

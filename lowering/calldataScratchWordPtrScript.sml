@@ -10,6 +10,11 @@ Ancestors calldataTypedRobustPtr abiScratchDecoderTuple abiScratchLeafEffect
   valueEncodingProps abiDecoderTypedContract abiDecoderReentry bodyPtrDefs loweringPosts exprSimDefs exprSimProps
   abiDecoderLoop list
 
+(* The calldata address step: base Lit 0w adds no instruction. *)
+val calldata_pos_addr = prove(
+  ``compile_abi_dec_addr (Lit 0w) pos st = (pos,st)``,
+  simp[abiEncoderTheory.compile_abi_dec_addr_def, compileEnvTheory.comp_return_def]);
+
 (* The calldata instance of trunk's position-form decoder lemmas: the source
    base operand is Lit 0w and the numeric base is 0. *)
 val calldata_pos_live_lit = prove(
@@ -83,7 +88,7 @@ Proof
      rpt (pop_assum kall_tac) >>
      Cases_on `clamp` >>
      FIRST [rename1 `IntClamp bits signed` >> Cases_on `signed`, all_tac] >>
-     simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_static_def,
+     simp[compile_abi_decode_to_buf_def, calldata_pos_addr, compile_abi_decode_static_def,
        compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
        compile_abi_bytes_clamp_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
