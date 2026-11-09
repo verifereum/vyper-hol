@@ -10,7 +10,7 @@ Theorem intcall_return_buffer_bound:
   intcall_joint_res fp ce env es sa s /\ fp.jc_rb = SOME (bw,cap) ==>
   w2n bw + cap < dimword (:256)
 Proof
-  simp[intcall_joint_res_def] >> strip_tac >>
+  simp[intcall_joint_res_def, intcall_expr_res_def] >> strip_tac >>
   `s.vs_alloca_next < dimword (:256)` by
     (irule alloca_room_next_lt >>
      fs[stmt_state_rel_def] >> goal_assum (drule_at Any)) >>
@@ -37,7 +37,7 @@ Theorem intcall_joint_res_next_var:
   sa.cs_next_var <= sb.cs_next_var ==>
   intcall_joint_res fp ce env es sb s
 Proof
-  simp[intcall_joint_res_def] >> strip_tac >>
+  simp[intcall_joint_res_def, intcall_expr_res_def] >> strip_tac >>
   `local_ptrs_reserved ce sb` by
     (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
   `ret_pc_ok ce sb s` by

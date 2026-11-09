@@ -2,7 +2,7 @@
 Theory bodyIntCallJointStmt
 Ancestors
   bodyIntCallJointContract bodyIntCallFamStmtList bodyIntCallFamStmtSimple
-  bodyIntCallFamStmtExit bodyIntCallFamStmtMutation bodyIntCallFamStmtReturn
+  bodyIntCallFamStmtExit bodyIntCallFamStmtLog bodyIntCallFamStmtMutation bodyIntCallFamStmtReturn
   bodyIntCallFamStmtIf bodyIntCallFamStmtFor
 
 (* L-stmt (C1.3.16): a single statement (the list [st]) of any form, given
@@ -24,7 +24,7 @@ Proof
       >~ [`Return _`] >- (irule intcall_return_stmt_step >> metis_tac[])
       >~ [`Raise _`] >- (irule intcall_exit_stmt_step >> metis_tac[])
       >~ [`Assert _ _`] >- (irule intcall_exit_stmt_step >> metis_tac[])
-      >~ [`Log _ _`] >- (irule intcall_exit_stmt_step >> metis_tac[])
+      >~ [`Log _ _`] >- (irule intcall_log_stmt_step >> metis_tac[])
       >~ [`Assign _ _`] >- (irule intcall_mutation_stmt_step >> metis_tac[])
       >~ [`AugAssign _ _ _ _`] >- (irule intcall_mutation_stmt_step >> metis_tac[])
       >~ [`Append _ _`] >- (irule intcall_mutation_stmt_step >> metis_tac[])

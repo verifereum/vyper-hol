@@ -74,7 +74,9 @@ Proof
   `evaluate_type (get_tenv cx) ann = SOME rtv` by
     fs[intcall_entry_def] >>
   `wb_frame cenv es0 sa s0 t` by
-    (fs[intcall_entry_def, wb_frame_def] >> metis_tac[]) >>
+    (qpat_x_assum `intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o PURE_REWRITE_RULE [intcall_entry_def]) >>
+     rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `!n b sz. local_region cenv es0.scopes s0 n b sz ==>
             local_region cenv prev t n b sz` by
     (rpt strip_tac >>
@@ -223,7 +225,9 @@ Proof
     fs[expr_body_pre_def, expr_sim_inv_def] >>
   `evaluate_type (get_tenv cx) ret = SOME rtv` by fs[intcall_entry_def] >>
   `wb_frame cenv es0 sa s0 t` by
-    (fs[intcall_entry_def, wb_frame_def] >> metis_tac[]) >>
+    (qpat_x_assum `intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o PURE_REWRITE_RULE [intcall_entry_def]) >>
+     rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `!n b sz. local_region cenv es0.scopes s0 n b sz ==>
             local_region cenv prev t n b sz` by
     (rpt strip_tac >>

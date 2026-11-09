@@ -36,7 +36,7 @@ Proof
   rw[arg_type_fits_def, is_word_type_def] >> gvs[]
 QED
 
-Theorem typed_return_empty_state_frame[local]:
+Theorem typed_return_empty_state_frame:
   stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
   copy_static t = copy_static s /\
   LENGTH s.vs_memory <= LENGTH t.vs_memory /\
