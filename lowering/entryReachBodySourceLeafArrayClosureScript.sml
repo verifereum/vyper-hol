@@ -76,7 +76,7 @@ Resume entry_source_dynamic_producer[nonbulk]:
       (is_abi_dynamic ce.ce_struct_fields ty) n` by simp[Once type_to_abi_dec_info_def] >>
   irule entry_source_nonbulk_array_constructor >>
   qpat_assum `entry_source_metadata _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` (irule_at Any) >>
   simp[Excl "enc_def", GSYM vyper_to_abi_type_def] >>
   goal_assum (drule_at Any) >> simp[Excl "enc_def"] >>
   qexists_tac `sb` >> simp[Excl "enc_def"] >> decide_tac

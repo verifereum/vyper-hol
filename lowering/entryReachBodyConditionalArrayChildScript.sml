@@ -35,7 +35,7 @@ Theorem entry_conditional_canonical_array_child:
   s.vs_inst_idx = LENGTH st.cs_current_insts /\ entry_owned_region oid root extent d total s /\
   entry_scratch_ready ambient b cap s /\ alloca_inv s /\
   abi_alloca_history (fn_insts fn) s /\ alloca_frontier_inv ctx fn site s /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) mid = ((),last) /\
   last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code mid last fn /\
   abi_decoder_code mid last /\ fn_inst_ids_distinct fn /\
@@ -64,7 +64,7 @@ Proof
      simp[abi_decode_backedge_insts_def, phi_prefix_length_def, mk_inst_def]) >>
   qhdtm_x_assum `entry_conditional_array_child_producer`
     (mp_tac o PURE_REWRITE_RULE [entry_conditional_array_child_producer_def]) >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)) >>
   disch_then (qspecl_then [`sb+off`, `cell`, `u`] mp_tac) >>
   asm_simp_tac bool_ss [] >> (impl_tac >- metis_tac[]) >> strip_tac >>
   `child_ids SUBSET abi_decoder_ids mid.cs_next_id last.cs_next_id` by

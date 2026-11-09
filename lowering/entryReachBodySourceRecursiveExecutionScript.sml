@@ -52,7 +52,7 @@ QED
 (* Direct consumer boundary: source conversion replaces aggregate ABI typing;
    installation, scratch ownership and the no-PHI certificate remain explicit. *)
 Theorem entry_source_canonical_window_endpoint:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\
   abi_decoder_coherent ce env sf ty tv /\
   entry_source_metadata ce env sf ty tv (type_to_abi_dec_info sf ce ty) av v /\

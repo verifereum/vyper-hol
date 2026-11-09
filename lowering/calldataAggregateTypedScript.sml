@@ -54,7 +54,7 @@ Proof
 QED
 
 Theorem calldata_complex_tuple_owned_run:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecComplex dyn xs) st = ((),final) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecComplex dyn xs) st = ((),final) /\
   fn_has_code st final fn /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -75,20 +75,20 @@ Theorem calldata_complex_tuple_owned_run:
   LENGTH tvs = LENGTH xs /\
   (!i. i < LENGTH xs ==> (\(ei,az,mz). mz) (EL i xs) = type_memory_size (EL i tvs)) /\
   (!ys ao vo a b.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) ys ao vo a = ((),b) ==>
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) ys ao vo a = ((),b) ==>
     cs_extends a b) /\
   (!ei ao vo a b.
-    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w vo)];
-        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),b) ==>
+        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),b) ==>
     cs_extends a b) /\
   (!i a mid b ep dp ei az mz.
     i < LENGTH xs /\ EL i xs = (ei,az,mz) /\
     (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei)
-          (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))) CALLDATALOAD (Lit 0w);
+          (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))) CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w (0+SUM (MAP (\(ei,az,mz). mz) (TAKE i xs))))];
         return (ep,dp) od) a = ((ep,dp),mid) /\
-    compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei mid = ((),b) /\
+    compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei mid = ((),b) /\
     cs_extends st a /\ cs_extends b final /\ fn_has_code mid b fn /\
     ci_mono st a /\ ci_mono b final ==>
     !u w e. ~u.vs_halted /\ u.vs_current_bb = mid.cs_current_bb /\
@@ -157,7 +157,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all calldata_tuple_layout >> disch_then (assume_tac o GSYM) >>
   drule_all calldata_tuple_prefix_layout >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   simp_tac std_ss [Once compile_abi_decode_to_buf_def, LET_THM] >>
   strip_tac >>
   `!i. i < LENGTH xs ==> type_memory_size (EL i tvs) <= (\(ei,az,mz). mz) (EL i xs)` by
@@ -230,7 +230,7 @@ Proof
 QED
 
 Theorem calldata_complex_struct_owned_run:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecComplex dyn xs) st = ((),final) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecComplex dyn xs) st = ((),final) /\
   fn_has_code st final fn /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -251,20 +251,20 @@ Theorem calldata_complex_struct_owned_run:
   LENGTH (MAP SND ftypes) = LENGTH xs /\
   (!i. i < LENGTH xs ==> (\(ei,az,mz). mz) (EL i xs) = type_memory_size (EL i (MAP SND ftypes))) /\
   (!ys ao vo a b.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) ys ao vo a = ((),b) ==>
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) ys ao vo a = ((),b) ==>
     cs_extends a b) /\
   (!ei ao vo a b.
-    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w vo)];
-        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),b) ==>
+        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),b) ==>
     cs_extends a b) /\
   (!i a mid b ep dp ei az mz.
     i < LENGTH xs /\ EL i xs = (ei,az,mz) /\
     (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei)
-          (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))) CALLDATALOAD (Lit 0w);
+          (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))) CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w (0+SUM (MAP (\(ei,az,mz). mz) (TAKE i xs))))];
         return (ep,dp) od) a = ((ep,dp),mid) /\
-    compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei mid = ((),b) /\
+    compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei mid = ((),b) /\
     cs_extends st a /\ cs_extends b final /\ fn_has_code mid b fn /\
     ci_mono st a /\ ci_mono b final ==>
     !u w e. ~u.vs_halted /\ u.vs_current_bb = mid.cs_current_bb /\
@@ -389,7 +389,7 @@ QED
 Theorem calldata_coherent_fixed_array_owned_run:
   abi_decoder_coherent ce env sf (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n)) /\
   xs = abi_decoder_member_infos sf ce (REPLICATE n ty) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT ty (Fixed n))) st = ((),final) /\
   fn_has_code st final fn /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\
@@ -409,21 +409,21 @@ Theorem calldata_coherent_fixed_array_owned_run:
   d+type_memory_size (ArrayTV tv (Fixed n)) <= base_addr+cap /\
   d+type_memory_size (ArrayTV tv (Fixed n)) < dimword (:256) /\
   (!ys ao vo a b.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) ys ao vo a = ((),b) ==>
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) ys ao vo a = ((),b) ==>
     cs_extends a b) /\
   (!ei ao vo a b.
-    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w vo)];
-        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),b) ==>
+        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),b) ==>
     cs_extends a b) /\
   (!i a mid b ep dp ei az mz.
     abi_decoder_coherent ce env sf ty tv /\
     i < LENGTH xs /\ EL i xs = (ei,az,mz) /\
     (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei)
-          (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))) CALLDATALOAD (Lit 0w);
+          (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))) CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w (0+SUM (MAP (\(ei,az,mz). mz) (TAKE i xs))))];
         return (ep,dp) od) a = ((ep,dp),mid) /\
-    compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei mid = ((),b) /\
+    compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei mid = ((),b) /\
     cs_extends st a /\ cs_extends b final /\ fn_has_code mid b fn /\
     ci_mono st a /\ ci_mono b final ==>
     !u w e. ~u.vs_halted /\ u.vs_current_bb = mid.cs_current_bb /\
@@ -495,12 +495,12 @@ Proof
      simp[abi_decoder_coherent_array_iff]) >>
   drule abi_decoder_coherent_header >> strip_tac >>
   drule_all calldata_fixed_infos_layout >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
   `d+SUM (MAP (\(ei,az,mz). mz) xs) <= base_addr+cap /\
    d+SUM (MAP (\(ei,az,mz). mz) xs) < dimword (:256)` by
     asm_rewrite_tac[GSYM calldata_tuple_size, calldata_fixed_tuple_size] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   qpat_x_assum `xs = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   disch_tac >>
   mp_tac (Q.INST [`tvs` |-> `REPLICATE n tv`,
@@ -512,7 +512,7 @@ Proof
        `EL i (REPLICATE n tv) = tv` by simp[EL_REPLICATE] >>
        asm_rewrite_tac[] >>
        qpat_x_assum `!i a mid b ep dp ei az mz. _`
-         (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+         (drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)) >>
        disch_then (qspecl_then [`i`, `a`, `az`, `mz`] mp_tac) >>
        asm_rewrite_tac[])])) >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -550,7 +550,7 @@ Theorem calldata_coherent_nonbulk_array_owned_run:
     ((hdr,body_lbl,exit_lbl),st0) /\
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
     (Lit 0w) di middle = ((),st1) /\
   abi_decode_loop_suffix ip (FST ops) hdr exit_lbl st1 = ((),end_st) /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -693,7 +693,7 @@ QED
 
 (* Tail-aware companions retain the installed suffix needed by recursive calls. *)
 Theorem calldata_complex_tuple_owned_run_tail:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecComplex dyn xs) st = ((),final) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecComplex dyn xs) st = ((),final) /\
   fn_has_code st final fn /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -714,23 +714,23 @@ Theorem calldata_complex_tuple_owned_run_tail:
   LENGTH tvs = LENGTH xs /\
   (!i. i < LENGTH xs ==> (\(ei,az,mz). mz) (EL i xs) = type_memory_size (EL i tvs)) /\
   (!ys ao vo a b.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) ys ao vo a = ((),b) ==>
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) ys ao vo a = ((),b) ==>
     cs_extends a b) /\
   (!ei ao vo a b.
-    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w vo)];
-        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),b) ==>
+        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),b) ==>
     cs_extends a b) /\
   (!i a mid b ep dp ei az mz.
     i < LENGTH xs /\ EL i xs = (ei,az,mz) /\
     (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei)
-          (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))) CALLDATALOAD (Lit 0w);
+          (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))) CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w (0+SUM (MAP (\(ei,az,mz). mz) (TAKE i xs))))];
         return (ep,dp) od) a = ((ep,dp),mid) /\
-    compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei mid = ((),b) /\
+    compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei mid = ((),b) /\
     cs_extends st a /\ cs_extends b final /\ fn_has_code mid b fn /\
     ci_mono st a /\ ci_mono b final /\
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (DROP (SUC i) xs)
       (az + (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))))
       (mz + (0+SUM (MAP (\(ei,az,mz). mz) (TAKE i xs)))) b = ((),final) /\
@@ -801,7 +801,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all calldata_tuple_layout >> disch_then (assume_tac o GSYM) >>
   drule_all calldata_tuple_prefix_layout >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   simp_tac std_ss [Once compile_abi_decode_to_buf_def, LET_THM] >>
   strip_tac >>
   `!i. i < LENGTH xs ==> type_memory_size (EL i tvs) <= (\(ei,az,mz). mz) (EL i xs)` by
@@ -834,7 +834,7 @@ Proof
 QED
 
 Theorem calldata_complex_struct_owned_run_tail:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecComplex dyn xs) st = ((),final) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecComplex dyn xs) st = ((),final) /\
   fn_has_code st final fn /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -855,23 +855,23 @@ Theorem calldata_complex_struct_owned_run_tail:
   LENGTH (MAP SND ftypes) = LENGTH xs /\
   (!i. i < LENGTH xs ==> (\(ei,az,mz). mz) (EL i xs) = type_memory_size (EL i (MAP SND ftypes))) /\
   (!ys ao vo a b.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) ys ao vo a = ((),b) ==>
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) ys ao vo a = ((),b) ==>
     cs_extends a b) /\
   (!ei ao vo a b.
-    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w vo)];
-        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),b) ==>
+        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),b) ==>
     cs_extends a b) /\
   (!i a mid b ep dp ei az mz.
     i < LENGTH xs /\ EL i xs = (ei,az,mz) /\
     (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei)
-          (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))) CALLDATALOAD (Lit 0w);
+          (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))) CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w (0+SUM (MAP (\(ei,az,mz). mz) (TAKE i xs))))];
         return (ep,dp) od) a = ((ep,dp),mid) /\
-    compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei mid = ((),b) /\
+    compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei mid = ((),b) /\
     cs_extends st a /\ cs_extends b final /\ fn_has_code mid b fn /\
     ci_mono st a /\ ci_mono b final /\
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (DROP (SUC i) xs)
       (az + (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))))
       (mz + (0+SUM (MAP (\(ei,az,mz). mz) (TAKE i xs)))) b = ((),final) /\
@@ -952,7 +952,7 @@ QED
 Theorem calldata_coherent_fixed_array_owned_run_tail:
   abi_decoder_coherent ce env sf (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n)) /\
   xs = abi_decoder_member_infos sf ce (REPLICATE n ty) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT ty (Fixed n))) st = ((),final) /\
   fn_has_code st final fn /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\
@@ -972,24 +972,24 @@ Theorem calldata_coherent_fixed_array_owned_run_tail:
   d+type_memory_size (ArrayTV tv (Fixed n)) <= base_addr+cap /\
   d+type_memory_size (ArrayTV tv (Fixed n)) < dimword (:256) /\
   (!ys ao vo a b.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) ys ao vo a = ((),b) ==>
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) ys ao vo a = ((),b) ==>
     cs_extends a b) /\
   (!ei ao vo a b.
-    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w vo)];
-        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),b) ==>
+        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),b) ==>
     cs_extends a b) /\
   (!i a mid b ep dp ei az mz.
     abi_decoder_coherent ce env sf ty tv /\
     i < LENGTH xs /\ EL i xs = (ei,az,mz) /\
     (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei)
-          (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))) CALLDATALOAD (Lit 0w);
+          (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))) CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w (0+SUM (MAP (\(ei,az,mz). mz) (TAKE i xs))))];
         return (ep,dp) od) a = ((ep,dp),mid) /\
-    compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei mid = ((),b) /\
+    compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei mid = ((),b) /\
     cs_extends st a /\ cs_extends b final /\ fn_has_code mid b fn /\
     ci_mono st a /\ ci_mono b final /\
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (DROP (SUC i) xs)
       (az + (0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))))
       (mz + (0+SUM (MAP (\(ei,az,mz). mz) (TAKE i xs)))) b = ((),final) /\
@@ -1063,12 +1063,12 @@ Proof
      simp[abi_decoder_coherent_array_iff]) >>
   drule abi_decoder_coherent_header >> strip_tac >>
   drule_all calldata_fixed_infos_layout >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
   `d+SUM (MAP (\(ei,az,mz). mz) xs) <= base_addr+cap /\
    d+SUM (MAP (\(ei,az,mz). mz) xs) < dimword (:256)` by
     asm_rewrite_tac[GSYM calldata_tuple_size, calldata_fixed_tuple_size] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   qpat_x_assum `xs = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   disch_tac >>
   mp_tac (Q.INST [`tvs` |-> `REPLICATE n tv`,
@@ -1080,7 +1080,7 @@ Proof
        `EL i (REPLICATE n tv) = tv` by simp[EL_REPLICATE] >>
        asm_rewrite_tac[] >>
        qpat_x_assum `!i a mid b ep dp ei az mz. _`
-         (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+         (drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)) >>
        disch_then (qspecl_then [`i`, `a`, `az`, `mz`] mp_tac) >>
        asm_rewrite_tac[])])) >>
   POP_ASSUM_LIST (K all_tac) >>

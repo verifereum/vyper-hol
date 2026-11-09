@@ -636,7 +636,7 @@ QED
 
 Theorem calldata_element_pointer_repeat:
   !head data stride st ptr st' s hp dp.
-  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) stride st =
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) stride st =
     (ptr,st') /\ eval_operand head s = SOME hp /\ eval_operand data s = SOME dp /\
   abi_decoder_operand_live st.cs_next_var head /\
   abi_decoder_operand_live st.cs_next_var data ==>
@@ -764,7 +764,7 @@ Theorem calldata_shell_static_producer:
   abi_decode_index_init header_st = (ip,loop_st) /\
   abi_decode_loop_prefix ip src opc loop_st = (labels,st0) /\
   abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi di middle = ((),st1) ==>
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc (Lit 0w) hi di middle = ((),st1) ==>
   abi_decoder_operand_live middle.cs_next_var (FST ops) /\
   abi_decoder_operand_live middle.cs_next_var (FST (SND ops)) /\
   abi_decoder_operand_live middle.cs_next_var (SND (SND ops)) /\
@@ -913,7 +913,7 @@ QED
 
 Theorem calldata_element_pointer_code_shape:
   !head data stride st ptr st'.
-  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) stride st =
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) stride st =
     (ptr,st') ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\
@@ -955,7 +955,7 @@ QED
 
 Theorem calldata_element_pointer_repeat_frag_mem:
   !head data stride st ptr st' initial hp dp ctx.
-  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) stride st =
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) stride st =
     (ptr,st') /\ eval_operand head initial = SOME hp /\
   eval_operand data initial = SOME dp /\
   abi_decoder_operand_live st.cs_next_var head /\
@@ -1255,7 +1255,7 @@ Proof
   PairCases_on `src_ops` >> PairCases_on `head_ops` >> gvs[] >>
   pairarg_tac >> gvs[] >>
   rename1 `abi_decode_array_head_setup ip src abi_sz st = ((idx,data,head),c1)` >>
-  rename1 `compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) abi_sz c1 =
+  rename1 `compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) abi_sz c1 =
     (child_src,c2)` >>
   rename1 `abi_decode_indexed_address dst idx mem_sz c2 = (child_dst,end_st)` >>
   imp_res_tac abi_decode_array_head_setup_counters >>
@@ -3017,7 +3017,7 @@ Theorem calldata_nonbulk_owned:
     ((hdr,body_lbl,exit_lbl),st0) /\
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
     (Lit 0w) di middle = ((),st1) /\
   abi_decode_loop_suffix ip (FST ops) hdr exit_lbl st1 = ((),end_st) /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -4414,7 +4414,7 @@ Theorem calldata_nonbulk_owned_repeat:
     ((hdr,body_lbl,exit_lbl),st0) /\
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
     (Lit 0w) di middle = ((),st1) /\
   abi_decode_loop_suffix ip (FST ops) hdr exit_lbl st1 = ((),end_st) /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -5697,7 +5697,7 @@ Theorem calldata_nonbulk_owned_repeat_observed:
     ((hdr,body_lbl,exit_lbl),st0) /\
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
     (Lit 0w) di middle = ((),st1) /\
   abi_decode_loop_suffix ip (FST ops) hdr exit_lbl st1 = ((),end_st) /\
   st.cs_next_id <= header_st.cs_next_id /\

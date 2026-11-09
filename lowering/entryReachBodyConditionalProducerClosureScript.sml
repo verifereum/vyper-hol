@@ -25,8 +25,8 @@ Proof
        (strip_assume_tac o PURE_REWRITE_RULE [abi_decoder_metadata_def]) >>
      drule_all abi_decoder_descended_encoding_length >> simp[]) >>
   `sb < dimword (:256) /\ cell < dimword (:256)` by decide_tac >>
-  `compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),last)` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >> simp[]) >>
+  `compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),last)` by
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >> simp[]) >>
   `abi_decoder_metadata ce env ty tv (DecPrimWord clamp) av v` by
     (qpat_x_assum `abi_decoder_metadata _ _ _ _ _ _ _` mp_tac >> simp[]) >>
   `mem_bytes_at sb 32 (abi_decode_source CALLDATALOAD s) = enc (vyper_to_abi_type env ty) av` by fs[] >>
@@ -54,8 +54,8 @@ Proof
      simp[abi_decode_bytes_copy_size_def]) >>
   `n < dimword (:256) /\ cell+abi_decode_bytes_copy_size n < dimword (:256)` by
     (gvs[] >> decide_tac) >>
-  `compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring n) st = ((),last)` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >> simp[]) >>
+  `compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),last)` by
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >> simp[]) >>
   `abi_decoder_metadata ce env ty tv (DecBytestring n) av v` by
     (qpat_x_assum `abi_decoder_metadata _ _ _ _ _ _ _` mp_tac >> simp[]) >>
   `entry_owned_region oid root extent cell (type_memory_bytes ce ty) s` by fs[] >>
@@ -153,7 +153,7 @@ Resume entry_conditional_dynamic_array_producer[nonbulk]:
       (is_abi_dynamic ce.ce_struct_fields ty) n` by simp[Once type_to_abi_dec_info_def] >>
   irule entry_conditional_nonbulk_array_constructor >>
   qpat_assum `abi_decoder_metadata _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` (irule_at Any) >>
   simp[Excl "enc_def", GSYM vyper_to_abi_type_def] >>
   goal_assum (drule_at Any) >> simp[Excl "enc_def"]
 QED

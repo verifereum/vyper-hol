@@ -37,7 +37,7 @@ Proof
 QED
 
 Theorem word_opcode_shape[local]:
-  compile_abi_decode_to_buf dst src CALLDATALOAD hi (DecPrimWord clamp) st = ((),last) ==>
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),last) ==>
   EVERY (\i. MEM i.inst_opcode
     [CALLDATALOAD; SIGNEXTEND; EQ; SHR; SHL; ISZERO; ASSERT; MSTORE])
     (emitted_insts st last)
@@ -81,7 +81,7 @@ Proof
 QED
 
 Theorem entry_canonical_word_owned_endpoint:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_metadata ce env ty tv (DecPrimWord clamp) av v /\

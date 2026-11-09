@@ -6,7 +6,7 @@ Ancestors
 Definition entry_certified_child_producer_def:
   entry_certified_child_producer cert ce env ty tv av v ctx fn oid root extent ambient b cap site limit_st <=>
     !st last dst src sb cell s.
-      compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+      compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
         (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),last) /\
       abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
       abi_decoder_metadata ce env ty tv (type_to_abi_dec_info ce.ce_struct_fields ce ty) av v /\
@@ -51,7 +51,7 @@ QED
 
 Theorem entry_certified_child_apply:
   entry_certified_child_producer cert ce env ty tv av v ctx fn oid root extent ambient b cap site limit_st /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),last) /\
   abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
   abi_decoder_metadata ce env ty tv (type_to_abi_dec_info ce.ce_struct_fields ce ty) av v /\

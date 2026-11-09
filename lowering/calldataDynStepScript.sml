@@ -208,14 +208,14 @@ QED
 
 Theorem calldata_element_pointer_prefix_safe:
   !head data stride st ptr st'.
-  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) stride st =
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) stride st =
     (ptr,st') ==>
   !pre i post u.
     emitted_insts st st' = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
     inst_mem_below_frontier i u
 Proof
   rpt gen_tac >> strip_tac >> ho_match_mp_tac (GEN_ALL calldata_prefix_safe_every) >>
-  qpat_x_assum `compile_abi_decode_dyn_elem_ptr _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_dyn_elem_ptr _ (Lit 0w) _ _ _ _ _ = _` mp_tac >>
   simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_return_def,
        comp_ignore_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
@@ -229,7 +229,7 @@ QED
    canonical encoding or nonwrapping premise is used. *)
 Theorem calldata_element_pointer_reentry:
   !head data stride st ptr st' s hp dp limit_st.
-  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) stride st =
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) stride st =
     (ptr,st') /\
   eval_operand head s = SOME hp /\ eval_operand data s = SOME dp /\
   abi_decoder_operand_live st.cs_next_var data /\

@@ -41,13 +41,13 @@ Proof
 QED
 
 Theorem entry_bytes_code_fields[local]:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),st') /\
   run_inst_seq (emitted_insts st st') s = OK t ==> entry_loop_fields s t
 Proof
   strip_tac >>
   `EVERY (\i. MEM i.inst_opcode [CALLDATALOAD; GT; ISZERO; ASSERT; CALLDATACOPY])
     (emitted_insts st st')` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
      simp[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
        fresh_id_def, emit_def] >> rpt strip_tac >> gvs[emitted_insts_def] >>
@@ -57,7 +57,7 @@ Proof
 QED
 
 Theorem entry_canonical_bytes_observed[local]:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),st') /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\
   abi_decoder_operand_live st.cs_next_var dst /\
@@ -109,7 +109,7 @@ Proof
 QED
 
 Theorem entry_bytes_outputs[local]:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring n) st = ((),st') ==>
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),st') ==>
   EVERY (\i. MEM i.inst_opcode [CALLDATALOAD; GT; ISZERO; ASSERT; CALLDATACOPY] /\
     EVERY (\x. ?k. x = STRING #"%" (toString k) /\ k < st'.cs_next_var)
       i.inst_outputs) (emitted_insts st st')
@@ -122,7 +122,7 @@ Proof
 QED
 
 Theorem entry_bytes_final_fresh[local]:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),st') /\
   run_inst_seq (emitted_insts st st') s = OK t /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
   fresh_vars_wrt limit_st t
@@ -140,7 +140,7 @@ QED
 
 (* Endpoint contract used by the array callback: no child-entry freshness. *)
 Theorem entry_canonical_bytes_endpoint[local]:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),st') /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\
   abi_decoder_operand_live st.cs_next_var dst /\
@@ -177,7 +177,7 @@ QED
 Theorem entry_bytes_element_shape[local]:
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di az mz st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
-    CALLDATALOAD (Lit 0w) (DecBytestring n) middle = ((),last) ==>
+    CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) middle = ((),last) ==>
   last.cs_blocks = st.cs_blocks /\ last.cs_current_bb = st.cs_current_bb /\
   inst_extends st last /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -204,7 +204,7 @@ Theorem entry_canonical_bytes_element_sequence[local]:
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
-    CALLDATALOAD (Lit 0w) (DecBytestring n) middle = ((),last) /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) middle = ((),last) /\
   type_to_abi_dec_info sf ce ty = DecBytestring n /\ n < dimword (:256) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
@@ -392,7 +392,7 @@ Theorem entry_bytes_element_after_header[local]:
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
-    CALLDATALOAD (Lit 0w) (DecBytestring n) middle = ((),last) /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) middle = ((),last) /\
   type_to_abi_dec_info sf ce ty = DecBytestring n /\ n < dimword (:256) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
@@ -531,7 +531,7 @@ Definition entry_bytes_array_config_def:
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
-    CALLDATALOAD (Lit 0w) (DecBytestring n) middle = ((),last) /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) middle = ((),last) /\
   type_to_abi_dec_info sf ce ty = DecBytestring n /\ n < dimword (:256) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
@@ -1113,7 +1113,7 @@ Proof
 QED
 
 Theorem entry_bytes_array_compile_phases:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray (DecBytestring n) asz msz T maxn) start = ((),final) /\
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz start =
     ((ip,cnt),loop_st) ==>
@@ -1121,7 +1121,7 @@ Theorem entry_bytes_array_compile_phases:
     abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,body_st) /\
     abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
       (DecBytestring n) asz msz body_st = (ops,middle) /\
-    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
+    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
       (Lit 0w) (DecBytestring n) middle = ((),last) /\
     abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) last =
       ((),final)
@@ -1183,7 +1183,7 @@ Proof
 QED
 
 Theorem entry_bytes_array_code_split:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray (DecBytestring n) asz msz T maxn) st = ((),final) /\
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz st =
     ((ip,cnt),loop_st) /\ fn_has_code st final fn ==>
@@ -1202,7 +1202,7 @@ Theorem entry_bytes_array_phase_layout:
   abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,body_st) /\
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
     (DecBytestring n) asz msz body_st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
     (Lit 0w) (DecBytestring n) middle = ((),last) /\
   abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) last =
     ((),final) /\ fn_has_code loop_st final fn /\
@@ -1249,7 +1249,7 @@ Theorem entry_bytes_array_concrete_config:
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
     (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) body_st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
     (Lit 0w) (DecBytestring n) middle = ((),last) /\
   abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) last =
     ((),final) /\ fn_has_code loop_st final fn /\
@@ -1307,7 +1307,7 @@ Proof
 QED
 
 Theorem entry_bytes_array_compiled_config[local]:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
       (type_memory_bytes ce ty) T maxn) st = ((),final) /\
   fn_has_code st final fn /\
@@ -1377,7 +1377,7 @@ Proof
 QED
 
 Theorem entry_canonical_bytes_array_execution:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
       (type_memory_bytes ce ty) T maxn) st = ((),final) /\
   fn_has_code st final fn /\
@@ -1423,7 +1423,7 @@ Proof
   `LENGTH avs <= maxn` by decide_tac >>
   qmatch_asmsub_abbrev_tac `entry_bytes_array_config cfg` >>
   drule_all entry_array_init_canonical >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf dst src _ _ _ st = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf dst src _ (Lit 0w) _ _ st = _` kall_tac >>
   qpat_x_assum `abi_decoder_metadata _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `abi_decoder_coherent _ _ _ _ _` kall_tac >>
   `FLOOKUP t.vs_allocas oid = SOME (d,capacity)` by metis_tac[] >>

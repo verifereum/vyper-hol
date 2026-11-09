@@ -29,7 +29,7 @@ Proof
 QED
 
 Theorem entry_packaged_slot_scratch:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info last0 = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info last0 = ((),last) /\
   cs_extends last entry_end /\
   fn = mk_raw_function "__entry" (all_blocks entry_end) /\
   fn_inst_ids_distinct fn ==>
@@ -55,7 +55,7 @@ Theorem entry_slot_compiler_counters:
     emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
     emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
    else src = head /\ first = after_head) /\
-  compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w) info first = ((),last) /\
+  compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last) /\
   last.cs_next_var <= limit.cs_next_var ==>
   st.cs_next_id < first.cs_next_id /\ first.cs_next_id <= last.cs_next_id /\
   st.cs_next_var <= first.cs_next_var /\ first.cs_next_var <= last.cs_next_var /\
@@ -110,7 +110,7 @@ Theorem entry_selected_slot_allocation:
       emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
       emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
      else src = head /\ first = after_head) /\
-    compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w) info first = ((),last) /\
+    compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last) /\
     fn_has_code st allocated fn /\ fn_has_code allocated first fn /\ fn_has_code first last fn /\
     abi_decoder_code first last /\
     cs_extends st allocated /\ cs_extends allocated first /\ cs_extends first last

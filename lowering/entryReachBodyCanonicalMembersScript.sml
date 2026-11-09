@@ -117,7 +117,7 @@ Theorem canonical_members_empty_advance[local]:
   type_to_abi_dec_info ce.ce_struct_fields ce ty = DecComplex T [] /\
   vo = SUM (MAP (type_memory_bytes ce) pretys) /\
   abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) F ao vo st = (ops,mid) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecComplex T []) mid = ((),last) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\
@@ -193,7 +193,7 @@ End
 Definition canonical_member_child_def:
   canonical_member_child ce env ty tv av v ctx fn oid root extent sites b cap site limit_st <=>
     !st last dst src sb d s.
-      compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+      compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
         (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),last) /\
       abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
       abi_decoder_metadata ce env ty tv (type_to_abi_dec_info ce.ce_struct_fields ce ty) av v /\
@@ -313,7 +313,7 @@ Theorem canonical_members_nonempty_advance[local]:
   abi_alloca_history (fn_insts fn) s /\ alloca_frontier_inv ctx fn site s /\
   abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info ce.ce_struct_fields ce ty)) ao vo st = (ops,mid) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) mid = ((),last) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
@@ -335,7 +335,7 @@ Proof
   strip_tac >> drule_all canonical_members_navigation >> strip_tac >>
   qpat_x_assum `canonical_member_child _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_tac o PURE_REWRITE_RULE [canonical_member_child_def]) >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)) >>
   simp[] >>
   disch_then (qspecl_then [`sb + abi_tuple_child_offset
     (MAP (vyper_to_abi_type env) fulltys) fullavs (LENGTH pretys)`, `d+vo`, `u`] mp_tac) >>
@@ -386,7 +386,7 @@ Theorem canonical_members_advance[local]:
   abi_alloca_history (fn_insts fn) s /\ alloca_frontier_inv ctx fn site s /\
   abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info ce.ce_struct_fields ce ty)) ao vo st = (ops,mid) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) mid = ((),last) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
@@ -528,7 +528,7 @@ Theorem canonical_members_cons_step[local]:
   canonical_members_semantics ce env fulltys fulltvs fullavs fullvs sb d
     pretys pretvs preavs prevs (ty::tys) (tv::tvs) (av::avs) (v::vs) s /\
   canonical_member_child ce env ty tv av v ctx fn oid root extent sites b cap site limit_st /\
-  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos ce.ce_struct_fields ce (ty::tys))
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
     (SUM (MAP (type_memory_bytes ce) pretys)) st = ((),last) /\
@@ -541,7 +541,7 @@ Theorem canonical_members_cons_step[local]:
   oid NOTIN abi_decoder_ids st.cs_next_id last.cs_next_id /\
   window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id) SUBSET sites ==>
   ?mid t.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (abi_decoder_member_infos ce.ce_struct_fields ce tys)
       (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) (pretys ++ [ty]))))
       (SUM (MAP (type_memory_bytes ce) (pretys ++ [ty]))) mid = ((),last) /\
@@ -564,7 +564,7 @@ Proof
   `end_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   qpat_assum `canonical_members_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o PURE_REWRITE_RULE [canonical_members_frame_def]) >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`) canonical_members_advance >>
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`) canonical_members_advance >>
   disch_then (drule_at (Pat `abi_decode_member_setup _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `canonical_members_semantics _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then drule_all >> strip_tac >>
@@ -576,7 +576,7 @@ Proof
      qpat_assum `canonical_member_result _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
      asm_rewrite_tac[] >> simp[]) >>
   qexistsl_tac [`end_st`, `t`] >> asm_rewrite_tac[] >>
-  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ end_st = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ (Lit 0w) _ _ _ _ end_st = _` mp_tac >>
   simp[MAP_APPEND, SUM_APPEND]
 QED
 
@@ -606,7 +606,7 @@ Theorem canonical_members_suffix[local]:
   (!i. i < LENGTH tys ==> canonical_member_child ce env
     (EL i tys) (EL i tvs) (EL i avs) (EL i vs)
     ctx fn oid root extent sites b cap site limit_st) /\
-  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos ce.ce_struct_fields ce tys)
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
     (SUM (MAP (type_memory_bytes ce) pretys)) st = ((),last) /\
@@ -659,7 +659,7 @@ Theorem entry_canonical_members_endpoint:
   (!i. i < LENGTH tys ==> canonical_member_child ce env
     (EL i tys) (EL i tvs) (EL i avs) (EL i vs)
     ctx fn oid root extent sites b cap site limit_st) /\
-  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos ce.ce_struct_fields ce tys) 0 0 st = ((),last) /\
   canonical_members_frame ctx fn oid root extent sites b cap site limit_st
     dst src sb d (SUM (MAP (type_memory_bytes ce) tys)) st s /\

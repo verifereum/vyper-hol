@@ -306,7 +306,7 @@ QED
 
 (* Compiler-only extraction: semantic states are quantified after witnesses. *)
 Theorem callback_array_compiler_config:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray (type_to_abi_dec_info sf ce ty)
       (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) dyn maxn)
     st = ((),final) /\
@@ -335,7 +335,7 @@ Theorem callback_array_compiler_config:
     abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
       (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
       (type_memory_bytes ce ty) body_st = (ops,middle) /\
-    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) middle = ((),last) /\
     (!prepared pnum root_di sb d env tv avs xs ctx (site : instruction) oid (root : num) (extent : num) ambient (b : num) (reserve : num).
       abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
@@ -368,12 +368,12 @@ Proof
   drule_all calldata_nonbulk_parent_shell_conditional >> strip_tac >>
   rename1 `abi_decode_index_init header_st = (ip,loop_st)` >>
   rename1 `abi_decode_array_element_setup _ _ _ _ _ _ _ _ body_st = (ops,middle)` >>
-  rename1 `compile_abi_decode_to_buf _ _ _ _ _ middle = ((),last)` >>
+  rename1 `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ middle = ((),last)` >>
   drule_all entry_bytes_array_initial_live >> strip_tac >>
   drule abi_decoder_loop_prefix_facts >> strip_tac >>
   qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ body_st = _`
     (mp_then Any strip_assume_tac abi_decode_array_element_setup_operands) >>
-  qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ middle = _`
+  qpat_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ middle = _`
     (mp_then Any strip_assume_tac abi_decoder_variable_counter) >>
   qpat_assum `abi_decode_loop_suffix _ _ _ _ last = _` mp_tac >>
   qpat_assum `FST ops = _` (fn th => pure_rewrite_tac [th]) >>
@@ -408,7 +408,7 @@ QED
 Resume callback_array_compiler_config[static_config]:
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `abi_decoder_code middle last` by
-    (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ middle = _`
+    (qpat_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ middle = _`
        (mp_then Any mp_tac abi_decoder_to_buf_code) >>
      simp[abi_decode_source_opcode_def]) >>
   `oid <> header_st.cs_next_id` by metis_tac[SUBSET_DEF] >>
@@ -431,7 +431,7 @@ Theorem entry_conditional_nonbulk_array_constructor:
   parent_di = DecDynArray (type_to_abi_dec_info ce.ce_struct_fields ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) dyn maxn /\
   (dyn \/ dec_info_needs_clamp (type_to_abi_dec_info ce.ce_struct_fields ce ty)) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) parent_di st = ((),final) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) parent_di st = ((),final) /\
   abi_decoder_coherent ce env ce.ce_struct_fields (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\

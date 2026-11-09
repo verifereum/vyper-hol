@@ -82,7 +82,7 @@ Theorem source_empty_member_endpoint[local]:
   type_to_abi_dec_info sf ce ty = DecComplex T [] /\
   abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
     (dec_info_needs_offset (DecComplex T [])) ao vo st = (ops,mid) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecComplex T []) mid = ((),last) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\
@@ -99,7 +99,7 @@ Theorem source_empty_member_endpoint[local]:
 Proof
   strip_tac >>
   `last = mid` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
      simp[abi_decode_empty_complex_phases, abi_decode_complex_head_guard_def, comp_return_def]) >>
   gvs[] >>
   drule_all entry_source_empty_descriptor_value >> strip_tac >>
@@ -129,7 +129,7 @@ Theorem source_member_child_endpoint[local]:
     dst src sb d outsz st s /\
   abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
     (dec_info_needs_offset ei) ao vo st = (ops,mid) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     ei mid = ((),next) /\
   entry_source_certified_child_producer cert ce env sf ty tv av v
     ctx fn oid root extent sites b cap site limit_st /\
@@ -156,7 +156,7 @@ Proof
   qpat_x_assum `canonical_members_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qhdtm_x_assum `entry_source_certified_child_producer`
     (mp_tac o PURE_REWRITE_RULE [entry_source_certified_child_producer_def]) >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)) >>
   disch_then drule_all >> strip_tac >>
   qexists_tac `t` >>
   qhdtm_x_assum `array_child_result`
@@ -189,7 +189,7 @@ Theorem source_empty_member_child_result[local]:
     dst src sb d outsz st s /\ vo <= outsz /\
   abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
     (dec_info_needs_offset (DecComplex T [])) ao vo st = (ops,mid) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecComplex T []) mid = ((),next) /\
   next.cs_next_var <= limit_st.cs_next_var /\ fn_has_code st next fn ==>
   ?t. array_child_result ctx fn oid root extent sites ids b cap site limit_st
@@ -299,9 +299,9 @@ Proof
     suspend "child" >>
   rename1 `array_child_result _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ endpoint` >>
   qpat_x_assum `!i. _ ==> _` kall_tac >>
-  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ (Lit 0w) _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` kall_tac >>
   qhdtm_assum `canonical_members_frame`
     (strip_assume_tac o PURE_REWRITE_RULE [canonical_members_frame_def]) >>
   `entry_source_probe_cursor ce env sf fulltys fulltvs fullavs fullvs sb d
@@ -360,11 +360,11 @@ Theorem entry_source_certified_members_endpoint:
     (abi_decode_source CALLDATALOAD s) =
     enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs) /\
   (!a z elems ao vo.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) elems ao vo a = ((),z) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) elems ao vo a = ((),z) /\
     fn_has_code a z fn /\ cert z ==> cert a) /\ cert last /\
   canonical_members_frame ctx fn oid root extent sites b cap site limit_st
     dst src sb d outsz st s /\
-  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos sf ce tys) 0 0 st = ((),last) /\
   last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code st last fn /\
   fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword(:256) /\

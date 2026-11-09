@@ -71,12 +71,12 @@ Theorem source_probe_execution:
     (entry_source_probe_cursor ce env sf tys tvs avs vs sb d)
     cert sf ce ctx fn oid root extent sites b cap site limit_st dst src sb d outsz /\
   (!a z elems ao vo.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) elems ao vo a = ((),z) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) elems ao vo a = ((),z) /\
     fn_has_code a z fn /\ cert z ==> cert a) /\ cert last /\
   entry_source_probe_cursor ce env sf tys tvs avs vs sb d [] tys st s /\
   canonical_members_frame ctx fn oid root extent sites b cap site limit_st
     dst src sb d outsz st s /\
-  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos sf ce tys) 0 0 st = ((),last) /\
   last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code st last fn /\
   fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword(:256) /\

@@ -47,7 +47,7 @@ Theorem entry_source_nonbulk_array_constructor:
   parent_di = DecDynArray (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) dyn maxn /\
   (dyn \/ dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) parent_di st = ((),final) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) parent_di st = ((),final) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   entry_source_metadata ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     root_di (ListV avs) (ArrayV (DynArrayV xs)) /\

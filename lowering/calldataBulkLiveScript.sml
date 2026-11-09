@@ -144,7 +144,7 @@ Proof
 QED
 
 Theorem calldata_bulk_accepted_live:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
@@ -165,7 +165,7 @@ Theorem calldata_bulk_accepted_live:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_bulk_phases,
     abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_prefix_def,
     abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
@@ -202,7 +202,7 @@ Proof
 QED
 
 Theorem calldata_bulk_rejected_live:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src s = SOME p /\
   maxn < dimword (:256) /\ maxn < w2n (abi_decode_load CALLDATALOAD p s) ==>
@@ -215,7 +215,7 @@ Theorem calldata_bulk_rejected_live:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_bulk_phases,
     abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_prefix_def,
     abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
@@ -349,7 +349,7 @@ Proof
 QED
 
 Theorem calldata_bulk_live_prefix_safe:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src s = SOME p /\
   eval_operand dst s = SOME (n2w d) /\ maxn < dimword (:256) /\
@@ -362,7 +362,7 @@ Theorem calldata_bulk_live_prefix_safe:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [calldata_bulk_sentinel, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   rename1 `abi_decode_count_guard CALLDATALOAD src maxn st = (count_op,c1)` >>
@@ -401,7 +401,7 @@ Proof
 QED
 
 Theorem calldata_bulk_live_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src initial = SOME p /\
   eval_operand dst initial = SOME (n2w d) /\ maxn < dimword (:256) /\
@@ -451,7 +451,7 @@ Proof
 QED
 
 Theorem calldata_bulk_accepted_live_mod:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
@@ -472,7 +472,7 @@ Theorem calldata_bulk_accepted_live_mod:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_bulk_phases,
     abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_prefix_def,
     abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
@@ -509,7 +509,7 @@ Proof
 QED
 
 Theorem calldata_bulk_rejected_live_mod:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src s = SOME p /\
   maxn MOD dimword (:256) < w2n (abi_decode_load CALLDATALOAD p s) ==>
@@ -522,7 +522,7 @@ Theorem calldata_bulk_rejected_live_mod:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_bulk_phases,
     abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_prefix_def,
     abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
@@ -537,7 +537,7 @@ Proof
 QED
 
 Theorem calldata_bulk_live_prefix_safe_mod:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src s = SOME p /\
   eval_operand dst s = SOME (n2w d) /\
@@ -550,7 +550,7 @@ Theorem calldata_bulk_live_prefix_safe_mod:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [calldata_bulk_sentinel, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   rename1 `abi_decode_count_guard CALLDATALOAD src maxn st = (count_op,c1)` >>
@@ -590,7 +590,7 @@ Proof
 QED
 
 Theorem calldata_bulk_live_frag_mem_mod:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src initial = SOME p /\
   eval_operand dst initial = SOME (n2w d) /\

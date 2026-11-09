@@ -162,7 +162,7 @@ Theorem owned_bytes_body_to_backedge[local]:
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
-    CALLDATALOAD (Lit 0w) (DecBytestring n) middle = ((),last) /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) middle = ((),last) /\
   type_to_abi_dec_info sf ce ty = DecBytestring n /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
@@ -432,7 +432,7 @@ Proof
 QED
 
 Theorem entry_owned_canonical_bytes_array_execution:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
       (type_memory_bytes ce ty) T maxn) st = ((),final) /\
   fn_has_code st final fn /\

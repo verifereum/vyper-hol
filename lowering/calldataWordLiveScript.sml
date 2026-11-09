@@ -204,7 +204,7 @@ Proof
 QED
 
 Theorem calldata_word_accepted_live:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   d < dimword (:256) /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var src /\
@@ -259,7 +259,7 @@ Proof
 QED
 
 Theorem calldata_word_rejected_live:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
   eval_operand src s = SOME p /\ abi_decoder_operand_live st.cs_next_var src /\
   ~abi_clamp_ok clamp (abi_decode_load CALLDATALOAD p s) ==>
   ?t. run_inst_seq (emitted_insts st last) s = Abort Revert_abort t /\
@@ -315,7 +315,7 @@ Proof
 QED
 
 Theorem calldata_word_prefix_live:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   d < dimword (:256) /\ d + 32 <= s.vs_alloca_next /\
   abi_decoder_operand_live st.cs_next_var dst /\
@@ -356,7 +356,7 @@ Proof
 QED
 
 Theorem calldata_word_live_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
   d < dimword (:256) /\ d + 32 <= initial.vs_alloca_next /\
   abi_decoder_operand_live st.cs_next_var dst /\

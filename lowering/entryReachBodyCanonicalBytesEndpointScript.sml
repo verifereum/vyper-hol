@@ -30,7 +30,7 @@ Proof
 QED
 
 Theorem bytes_observation_code[local]:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring n) st = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),last) /\
   last.cs_next_var <= limit_st.cs_next_var ==>
   EVERY (\i. MEM i.inst_opcode
     [MLOAD; ADD; MUL; CALLDATALOAD; GT; ISZERO; ASSERT; CALLDATACOPY] /\
@@ -46,7 +46,7 @@ Proof
 QED
 
 Theorem bytes_canonical_typed_sequence[local]:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring n) st = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),last) /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecBytestring n /\
   abi_decoder_metadata ce env ty tv (DecBytestring n) av v /\
@@ -72,7 +72,7 @@ Proof
 QED
 
 Theorem entry_canonical_bytes_owned_endpoint:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring n) st = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),last) /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecBytestring n /\
   abi_decoder_metadata ce env ty tv (DecBytestring n) av v /\

@@ -7,7 +7,7 @@ Ancestors
 Definition entry_descending_certified_child_producer_def:
   entry_descending_certified_child_producer cert ce env sf ty tv av v ctx fn oid root extent ambient b cap site limit_st <=>
     !st last dst src sb cell s.
-      compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+      compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
         (type_to_abi_dec_info sf ce ty) st = ((),last) /\
       abi_decoder_coherent ce env sf ty tv /\
       entry_descending_metadata ce env sf ty tv (type_to_abi_dec_info sf ce ty) av v /\

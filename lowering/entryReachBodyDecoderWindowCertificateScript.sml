@@ -42,7 +42,7 @@ Proof
 QED
 
 Theorem entry_decoder_to_buf_window_shape:
-  compile_abi_decode_to_buf dst src opc hi info a = ((),b) /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) hi info a = ((),b) /\
   abi_decode_source_opcode opc /\
   (!j. MEM j (state_insts b) ==> MEM j (fn_insts func)) /\
   fn_inst_ids_distinct func /\ MEM i (fn_insts func) /\
@@ -55,7 +55,7 @@ Proof
 QED
 
 Theorem entry_decoder_complex_elems_window_shape:
-  compile_abi_decode_complex_elems dst src opc hi elems ao vo a = ((),b) /\
+  compile_abi_decode_complex_elems dst src opc (Lit 0w) hi elems ao vo a = ((),b) /\
   abi_decode_source_opcode opc /\
   (!j. MEM j (state_insts b) ==> MEM j (fn_insts func)) /\
   fn_inst_ids_distinct func /\ MEM i (fn_insts func) /\
@@ -68,7 +68,7 @@ Proof
 QED
 
 Theorem entry_decoder_dyn_loop_window_shape:
-  compile_abi_decode_dyn_loop dst src opc hi ei asz msz ip cnt a = ((),b) /\
+  compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi ei asz msz ip cnt a = ((),b) /\
   abi_decode_source_opcode opc /\
   (!j. MEM j (state_insts b) ==> MEM j (fn_insts func)) /\
   fn_inst_ids_distinct func /\ MEM i (fn_insts func) /\

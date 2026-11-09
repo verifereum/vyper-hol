@@ -10,7 +10,7 @@ Ancestors
 (* The calldata decoders emit no INVOKE, terminator, DLOAD or DLOADBYTES,
    as frag_exec_mem_run_inst_seq requires. *)
 Theorem calldata_word_opcodes:
-  compile_abi_decode_to_buf dst src CALLDATALOAD hi (DecPrimWord clamp) st = ((),st') ==>
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') ==>
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
              i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
     (emitted_insts st st')
@@ -42,7 +42,7 @@ Proof
 QED
 
 Theorem calldata_word_accepted_sequence:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   d < dimword (:256) /\ fresh_vars_wrt st s /\
   abi_clamp_ok clamp (abi_decode_load CALLDATALOAD p s) ==>
@@ -79,7 +79,7 @@ Proof
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
     (irule abi_decode_sequence_allocation_frame >>
      qexists_tac `emitted_insts st st'` >> simp[] >>
-     `compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+     `compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
         (DecPrimWord clamp) st = ((),st')` by
        simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
             comp_bind_def, comp_ignore_bind_def] >>
@@ -93,7 +93,7 @@ Proof
 QED
 
 Theorem calldata_word_rejected_sequence:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
   eval_operand src s = SOME p /\ fresh_vars_wrt st s /\
   ~abi_clamp_ok clamp (abi_decode_load CALLDATALOAD p s) ==>
   ?t. run_inst_seq (emitted_insts st st') s = Abort Revert_abort t
@@ -203,7 +203,7 @@ Proof
 QED
 
 Theorem calldata_word_prefix_safe:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   d < dimword (:256) /\ d + 32 <= s.vs_alloca_next /\ fresh_vars_wrt st s ==>
   !pre i post u. emitted_insts st st' = pre ++ i::post /\
@@ -247,7 +247,7 @@ Proof
 QED
 
 Theorem calldata_word_accepted_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
   d < dimword (:256) /\ d + 32 <= initial.vs_alloca_next /\
   fresh_vars_wrt st initial /\
@@ -277,7 +277,7 @@ Proof
 QED
 
 Theorem calldata_word_rejected_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
   d < dimword (:256) /\ d + 32 <= initial.vs_alloca_next /\
   fresh_vars_wrt st initial /\
@@ -302,7 +302,7 @@ QED
 (* Operational totality: arbitrary calldata either passes the actual clamp or
    exits through the generated assertion. No source-encoding premise is used. *)
 Theorem calldata_word_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
   d < dimword (:256) /\ d + 32 <= initial.vs_alloca_next /\
   fresh_vars_wrt st initial ==>

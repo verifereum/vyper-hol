@@ -42,7 +42,7 @@ Proof
 QED
 
 Theorem bulk_core_sequence[local]:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),last) /\
   ~dec_info_needs_clamp ei /\
   static_layout_compatible ce env ty tv /\ all_have_type tv xs /\
@@ -93,7 +93,7 @@ Proof
 QED
 
 Theorem bulk_core_store_code[local]:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),last) /\
   ~dec_info_needs_clamp ei /\ last.cs_next_var <= limit_st.cs_next_var ==>
   ?pre store post.
@@ -121,7 +121,7 @@ Proof
 QED
 
 Theorem bulk_core_observations[local]:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),last) /\
   ~dec_info_needs_clamp ei /\ last.cs_next_var <= limit_st.cs_next_var /\
   run_inst_seq (emitted_insts st last) s = OK t /\ fresh_vars_wrt limit_st s ==>
@@ -146,7 +146,7 @@ Proof
 QED
 
 Theorem entry_bulk_owned_core:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),last) /\
   ~dec_info_needs_clamp ei /\
   static_layout_compatible ce env ty tv /\ all_have_type tv xs /\

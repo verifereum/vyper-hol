@@ -45,7 +45,7 @@ QED
 Theorem entry_decoder_id_coverage_getelemptr:
   opc <> ALLOCA ==>
   !st. entry_decoder_id_coverage st
-    (SND (compile_getelemptr_abi src dyn off opc hi st))
+    (SND (compile_getelemptr_abi src dyn off opc (Lit 0w) hi st))
 Proof
   strip_tac >> rewrite_tac[compile_getelemptr_abi_def] >>
   coverage_db entry_decoder_id_coverage_emit_op >> Cases_on `dyn` >>
@@ -61,7 +61,7 @@ QED
 Theorem entry_decoder_id_coverage_dyn_elem_ptr:
   opc <> ALLOCA ==>
   !st. entry_decoder_id_coverage st
-    (SND (compile_abi_decode_dyn_elem_ptr opc src data hi sz st))
+    (SND (compile_abi_decode_dyn_elem_ptr opc (Lit 0w) src data hi sz st))
 Proof
   strip_tac >> rewrite_tac[compile_abi_decode_dyn_elem_ptr_def] >>
   ntac 2 (coverage_db entry_decoder_id_coverage_emit_op) >>
@@ -77,13 +77,13 @@ QED
 Theorem entry_decoder_id_coverage_mutual:
   (!dst src opc hi info. opc <> ALLOCA ==>
      !st. entry_decoder_id_coverage st
-       (SND (compile_abi_decode_to_buf dst src opc hi info st))) /\
+       (SND (compile_abi_decode_to_buf dst src opc (Lit 0w) hi info st))) /\
   (!dst src opc hi elems ao vo. opc <> ALLOCA ==>
      !st. entry_decoder_id_coverage st
-       (SND (compile_abi_decode_complex_elems dst src opc hi elems ao vo st))) /\
+       (SND (compile_abi_decode_complex_elems dst src opc (Lit 0w) hi elems ao vo st))) /\
   (!dst src opc hi ei asz msz ip cnt. opc <> ALLOCA ==>
      !st. entry_decoder_id_coverage st
-       (SND (compile_abi_decode_dyn_loop dst src opc hi ei asz msz ip cnt st)))
+       (SND (compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi ei asz msz ip cnt st)))
 Proof
   ho_match_mp_tac compile_abi_decode_to_buf_ind >>
   rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac)
@@ -175,7 +175,7 @@ QED
 Finalise entry_decoder_id_coverage_mutual
 
 Theorem entry_decoder_to_buf_id_coverage:
-  compile_abi_decode_to_buf dst src opc hi info st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) hi info st = ((),st') /\
   abi_decode_source_opcode opc ==>
   entry_decoder_id_coverage st st'
 Proof
@@ -184,7 +184,7 @@ Proof
 QED
 
 Theorem entry_decoder_complex_elems_id_coverage:
-  compile_abi_decode_complex_elems dst src opc hi elems ao vo st = ((),st') /\
+  compile_abi_decode_complex_elems dst src opc (Lit 0w) hi elems ao vo st = ((),st') /\
   abi_decode_source_opcode opc ==>
   entry_decoder_id_coverage st st'
 Proof
@@ -193,7 +193,7 @@ Proof
 QED
 
 Theorem entry_decoder_dyn_loop_id_coverage:
-  compile_abi_decode_dyn_loop dst src opc hi ei asz msz ip cnt st = ((),st') /\
+  compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi ei asz msz ip cnt st = ((),st') /\
   abi_decode_source_opcode opc ==>
   entry_decoder_id_coverage st st'
 Proof

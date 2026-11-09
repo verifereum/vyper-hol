@@ -171,7 +171,7 @@ Resume entry_selected_slot_run[decoder]:
      qpat_assum `compile_register_positional_args cei1 _ _ _ = _` (irule_at Any) >>
      simp[] >>
      qpat_assum `LIST_REL _ (MAP SND args) tx.args` (irule_at Any) >>
-     qpat_assum `compile_abi_decode_to_buf _ src _ _ _ _ = _` (irule_at Any) >>
+     qpat_assum `compile_abi_decode_to_buf _ src _ (Lit 0w) _ _ _ = _` (irule_at Any) >>
      qexistsl_tac [`DROP (SUC i) avs`, `TAKE i avs`,
        `TAKE i (MAP (vyper_to_abi_type (type_env tops)) (MAP SND args))`,
        `DROP (SUC i) (MAP (vyper_to_abi_type (type_env tops)) (MAP SND args))`] >>

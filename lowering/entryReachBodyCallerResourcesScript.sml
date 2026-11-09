@@ -32,7 +32,7 @@ Theorem caller_singleton_compiler_shell:
       emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
       emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
      else src = head /\ first = after_head) /\
-    compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w) info first = ((),last) /\
+    compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last) /\
     fn_has_code st allocated fn /\ fn_has_code allocated first fn /\ fn_has_code first last fn /\
     abi_decoder_code first last /\
     cs_extends st allocated /\ cs_extends allocated first /\ cs_extends first last

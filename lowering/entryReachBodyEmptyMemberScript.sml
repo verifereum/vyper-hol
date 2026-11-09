@@ -6,7 +6,7 @@ Ancestors
   abiEncoder compileEnv valueEncoding words list arithmetic
 
 Theorem entry_empty_member_decoder[local]:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecComplex T []) st = ((),last) ==> last = st
 Proof
   simp[abi_decode_empty_complex_phases, abi_decode_complex_head_guard_def,
@@ -19,7 +19,7 @@ Theorem entry_empty_dynamic_member_endpoint:
   ei = type_to_abi_dec_info ce.ce_struct_fields ce ty /\ ei = DecComplex T [] /\
   abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
     (dec_info_needs_offset ei) ao vo st = (ops,mid) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     ei mid = ((),last) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\

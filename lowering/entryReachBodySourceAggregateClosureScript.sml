@@ -22,7 +22,7 @@ Theorem source_complex_result[local]:
       phi_prefix_length bb.bb_instructions = 0) ce env sf
     (EL i tys) (EL i tvs) (EL i avs) (EL i vs)
     ctx fn oid root extent ambient b cap site limit_st) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecComplex dyn (abi_decoder_member_infos sf ce tys)) st = ((),last) /\
   canonical_members_frame ctx fn oid root extent ambient b cap site limit_st
     dst src sb d (SUM (MAP (type_memory_bytes ce) tys)) st s /\
@@ -39,7 +39,7 @@ Theorem source_complex_result[local]:
     b cap site limit_st st last d outtv outv s t
 Proof
   strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`
     (assume_tac o SIMP_RULE (srw_ss()) [Once compile_abi_decode_to_buf_def, LET_THM]) >>
   `?t. tuple_in_memory vs tvs d t.vs_memory /\
     canonical_members_frame ctx fn oid root extent ambient b cap site limit_st

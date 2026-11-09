@@ -100,7 +100,7 @@ QED
 (* Recursive execution checkpoint (proposal only; not an admitted theorem).
 
    General decoder interface, with all parameters universally generalized:
-   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) di st = ((),last),
+   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) di st = ((),last),
    di = type_to_abi_dec_info sf ce ty, coherent ce env sf ty tv,
    metadata ce env ty tv di av v, canonical bytes at sb, eval src = n2w sb,
    eval dst = n2w d, sb+LENGTH(enc (vyper_to_abi_type env ty) av) < 2^256,

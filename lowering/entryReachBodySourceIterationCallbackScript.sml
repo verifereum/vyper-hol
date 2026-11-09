@@ -17,7 +17,7 @@ Theorem entry_source_certified_iteration_callback:
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
     (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,mid) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) mid = ((),last) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   entry_source_metadata ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
@@ -58,7 +58,7 @@ Resume entry_source_certified_iteration_callback[execute]:
     (SIMP_RULE bool_ss [] entry_source_certified_array_child) >>
   disch_then (drule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `entry_source_metadata _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)) >>
   disch_then (drule_at (Pat `entry_owned_region _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = _`)) >>
   disch_then (drule_at (Pat `bb.bb_instructions = _`)) >>

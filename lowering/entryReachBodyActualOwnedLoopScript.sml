@@ -217,7 +217,7 @@ Theorem entry_actual_owned_compiler_backedge:
   abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,body_st) /\
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
     (DecBytestring n) asz msz body_st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
     (Lit 0w) (DecBytestring n) middle = ((),last) /\
   abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) last =
     ((),final) /\ fn_has_code loop_st final fn /\

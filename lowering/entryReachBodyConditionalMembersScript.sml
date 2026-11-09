@@ -15,7 +15,7 @@ Theorem entry_conditional_local_members_endpoint:
   (!i. i < LENGTH tys ==> entry_conditional_array_child_producer ce env
     (EL i tys) (EL i tvs) (EL i avs) (EL i vs)
     ctx fn oid root extent sites b cap site limit_st) /\
-  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos ce.ce_struct_fields ce tys) 0 0 st = ((),last) /\
   (last.cs_current_insts = [] ==> !bb.
     lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
@@ -42,7 +42,7 @@ Proof
     phi_prefix_length bb.bb_instructions = 0`] entry_certified_local_members_endpoint) >>
   simp[entry_certified_child_conditional, Excl "enc_def"] >>
   (impl_tac >- (rpt strip_tac >>
-    qpat_assum `compile_abi_decode_complex_elems _ _ _ _ elems ao vo a = ((),z)`
+    qpat_assum `compile_abi_decode_complex_elems _ _ _ (Lit 0w) _ elems ao vo a = ((),z)`
       (mp_then (Pos hd) mp_tac calldata_member_tail_empty_exit_phi) >>
     disch_then (qspec_then `fn` mp_tac) >> simp[])) >> simp[]
 QED
@@ -56,7 +56,7 @@ Theorem entry_conditional_local_complex_endpoint:
   (!i. i < LENGTH tys ==> entry_conditional_array_child_producer ce env
     (EL i tys) (EL i tvs) (EL i avs) (EL i vs)
     ctx fn oid root extent sites b cap site limit_st) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecComplex dyn (abi_decoder_member_infos ce.ce_struct_fields ce tys)) st = ((),last) /\
   (last.cs_current_insts = [] ==> !bb.
     lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
@@ -83,7 +83,7 @@ Proof
     phi_prefix_length bb.bb_instructions = 0`] entry_certified_local_complex_endpoint) >>
   simp[entry_certified_child_conditional, Excl "enc_def"] >>
   (impl_tac >- (rpt strip_tac >>
-    qpat_assum `compile_abi_decode_complex_elems _ _ _ _ elems ao vo a = ((),z)`
+    qpat_assum `compile_abi_decode_complex_elems _ _ _ (Lit 0w) _ elems ao vo a = ((),z)`
       (mp_then (Pos hd) mp_tac calldata_member_tail_empty_exit_phi) >>
     disch_then (qspec_then `fn` mp_tac) >> simp[])) >> simp[]
 QED
@@ -99,7 +99,7 @@ Theorem entry_conditional_local_fixed_array_endpoint:
       (REPLICATE n ty) (REPLICATE n tv) avs vs ==>
     !i. i < n ==> entry_conditional_array_child_producer ce env ty tv (EL i avs) (EL i vs)
       ctx fn oid root extent sites b cap site limit_st) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Fixed n))) st = ((),last) /\
   (last.cs_current_insts = [] ==> !bb.
     lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
@@ -126,7 +126,7 @@ Proof
     phi_prefix_length bb.bb_instructions = 0`] entry_certified_local_fixed_array_endpoint) >>
   simp[entry_certified_child_conditional, Excl "enc_def"] >>
   (impl_tac >- (rpt strip_tac >>
-    qpat_assum `compile_abi_decode_complex_elems _ _ _ _ elems ao vo a = ((),z)`
+    qpat_assum `compile_abi_decode_complex_elems _ _ _ (Lit 0w) _ elems ao vo a = ((),z)`
       (mp_then (Pos hd) mp_tac calldata_member_tail_empty_exit_phi) >>
     disch_then (qspec_then `fn` mp_tac) >> simp[])) >> simp[]
 QED

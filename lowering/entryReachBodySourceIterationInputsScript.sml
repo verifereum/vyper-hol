@@ -57,7 +57,7 @@ Theorem entry_source_iteration_callback_config:
   abi_decoder_operand_live next dst /\ next+4 <= st.cs_next_var /\
   st.cs_next_var <= mid.cs_next_var /\ mid.cs_next_var <= limit_st.cs_next_var /\
   fn_has_code st mid fn /\ st.cs_current_bb = body_lbl /\ st.cs_current_insts = [] /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) mid = ((),last) /\
   last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code mid last fn /\
   abi_decoder_code mid last /\ fn_inst_ids_distinct fn /\
