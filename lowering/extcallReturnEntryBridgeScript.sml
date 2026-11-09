@@ -6,7 +6,7 @@ Ancestors
   abiDecoderReentry exprSafeOperand placeMemoryStaging exprSimAlloc loweringHalt
   exprLoweringProps emitHelperProps venomInst venomExecSemantics fragGasMode words
   abiReturnSize varsExt freshWrites builtinSimple rich_list exprLowering emitHelper
-  appendStorageStageTransportPtr
+  appendStorageStageTransportPtr abiMalformedPruneState
 
 Theorem return_decoder_ceiling_exists:
   !s en. ?ceiling. en.cs_next_var <= ceiling.cs_next_var /\
@@ -133,4 +133,85 @@ Proof
   rpt strip_tac >> irule abi_return_size_reserved >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
   qexistsl_tac [`cap`, `hi`, `lo`] >> simp[]
+QED
+
+Theorem return_decode_ready_prune[local]:
+  abi_return_decode_ready ctx func cenv cx es a sites dstid live base_op dst
+    B cap bs d n s ==>
+  abi_return_decode_ready ctx func cenv cx es a sites dstid live base_op dst
+    B cap bs d n (drop_fresh a s)
+Proof
+  strip_tac >> fs[abi_return_decode_ready_def] >>
+  `stmt_state_rel ctx func cenv cx es (drop_fresh a s)` by
+    (simp[drop_fresh_def] >> irule abi_malformed_reserved_vars_state >>
+     reverse conj_tac >- simp[] >> qexists_tac `a` >>
+     simp[GSYM drop_fresh_def, lookup_var_drop_fresh]) >>
+  `eval_operand base_op (drop_fresh a s) = eval_operand base_op s /\
+   eval_operand dst (drop_fresh a s) = eval_operand dst s` by
+    (conj_tac >> irule eval_operand_drop_fresh >>
+     fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+        not_fresh_at_def] >> Cases_on `base_op` >> Cases_on `dst` >> gvs[]) >>
+  simp[abi_return_decode_ready_def] >>
+  fs[abi_malformed_allocated_window_def, abi_malformed_destination_def,
+     drop_fresh_def] >> qexistsl_tac [`inst`, `q`] >> simp[]
+QED
+
+Theorem return_decode_ready_entry:
+  compile_return_value_decode lo cap a = (hi,b) /\
+  lo < dimword (:256) /\ cap < dimword (:256) /\
+  s.vs_returndata = bs /\ LENGTH bs < dimword (:256) /\ lo <= LENGTH bs /\
+  abi_return_decode_ready ctx func cenv cx es a sites dstid live base_op dst
+    B cap bs d n s ==>
+  ?u. run_inst_seq (emitted_insts a b) s = OK u /\
+    abi_malformed_entry ctx func cenv cx es b sites dstid live base_op hi
+      (Lit 0w) dst B (LENGTH (TAKE cap bs)) (TAKE cap bs) 0 d n
+      (u with vs_inst_idx := LENGTH b.cs_current_insts) /\
+    u = s with vs_vars := u.vs_vars /\
+    (!x. not_fresh_at a x ==> lookup_var x u = lookup_var x s)
+Proof
+  strip_tac >>
+  drule return_decode_ready_prune >> strip_tac >>
+  `fresh_vars_wrt a (drop_fresh a s)` by simp[fresh_vars_wrt_drop_fresh] >>
+  `LENGTH (drop_fresh a s).vs_returndata < dimword (:256) /\
+   (drop_fresh a s).vs_returndata = bs` by simp[drop_fresh_def] >>
+  drule_all abi_return_prefix_transport >>
+  disch_then (qx_choose_then `v` strip_assume_tac) >>
+  `hi <> Lit 0w /\ abi_decoder_operand_live b.cs_next_var hi` by
+    fs[abi_malformed_entry_def] >>
+  qhdtm_x_assum `abi_malformed_entry` kall_tac >>
+  `LENGTH s.vs_returndata < dimword (:256)` by simp[] >>
+  drule_all return_size_actual_run >> simp[] >>
+  disch_then (qx_choose_then `u` strip_assume_tac) >>
+  `a.cs_next_var <= b.cs_next_var` by
+    (mp_tac (Q.SPECL [`lo`, `cap`, `a`] ci_mono_compile_return_value_decode) >>
+     simp[ci_mono_def]) >>
+  fs[abi_return_decode_ready_def] >>
+  `stmt_state_rel ctx func cenv cx es u` by
+    (qpat_assum `u = s with vs_vars := _` SUBST1_TAC >>
+     irule abi_malformed_reserved_vars_state >>
+     reverse conj_tac >- simp[] >> qexists_tac `a` >> simp[] >>
+     qpat_assum `u = s with vs_vars := _` (fn th => rewrite_tac[GSYM th]) >>
+     simp[]) >>
+  `local_ptrs_reserved cenv b` by
+    (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+  `abi_decoder_operand_live b.cs_next_var base_op /\
+   abi_decoder_operand_live b.cs_next_var dst` by
+    metis_tac[abi_decoder_operand_live_mono] >>
+  `u.vs_labels = s.vs_labels` by
+    (qpat_assum `u = s with vs_vars := _` SUBST1_TAC >> simp[]) >>
+  `eval_operand base_op u = SOME (n2w B) /\
+   eval_operand dst u = SOME (n2w d)` by
+    (Cases_on `base_op` >> Cases_on `dst` >>
+     gvs[eval_operand_def, abi_decoder_operand_live_def,
+         abi_decoder_older_vars_def, GSYM not_fresh_at_def] >>
+     metis_tac[]) >>
+  pure_rewrite_tac[abi_malformed_entry_def] >>
+  simp[stmt_state_rel_inst_idx,
+       abiBytesFinalExecutionTheory.abi_bytes_eval_operand_inst_idx,
+       abi_decoder_operand_live_def, eval_operand_def] >>
+  fs[abi_malformed_allocated_window_def, abi_malformed_destination_def] >>
+  qpat_assum `u = s with vs_vars := _` SUBST1_TAC >>
+  simp[] >> conj_tac
+  >- (qexistsl_tac [`inst`, `q`] >> simp[]) >>
+  simp[LENGTH_TAKE_EQ, arithmeticTheory.MIN_DEF]
 QED
