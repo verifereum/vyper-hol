@@ -4144,6 +4144,44 @@ Proof
   simp[write_as_replace, replace_bytes_def, TAKE_DROP]
 QED
 
+Definition mm_local_write_compatible_def:
+  mm_local_write_compatible d bs a cs <=>
+    !x. d <= x /\ x < d + LENGTH bs /\ a <= x /\ x < a + LENGTH cs ==>
+      EL (x-d) bs = EL (x-a) cs
+End
+
+Theorem mm_local_write_compatible_sym[local]:
+  mm_local_write_compatible d bs a cs <=> mm_local_write_compatible a cs d bs
+Proof
+  metis_tac[mm_local_write_compatible_def]
+QED
+
+Theorem mm_local_write_compatible_disjoint[local]:
+  d + LENGTH bs <= a \/ a + LENGTH cs <= d ==>
+  mm_local_write_compatible d bs a cs
+Proof
+  rw[mm_local_write_compatible_def] >> gvs[]
+QED
+
+Theorem mm_local_write_compatible_empty[local]:
+  mm_local_write_compatible d [] a cs /\ mm_local_write_compatible a cs d []
+Proof
+  simp[mm_local_write_compatible_def]
+QED
+
+Theorem mm_local_replace_compatible_commute[local]:
+  mm_local_write_compatible d1 bs1 d2 bs2 /\
+  MAX (d1 + LENGTH bs1) (d2 + LENGTH bs2) <= LENGTH mem ==>
+  replace_bytes d2 bs2 (replace_bytes d1 bs1 mem) =
+  replace_bytes d1 bs1 (replace_bytes d2 bs2 mem)
+Proof
+  rw[LIST_EQ_REWRITE, replace_bytes_def, LENGTH_APPEND, LENGTH_TAKE,
+    LENGTH_DROP] >>
+  rw[EL_APPEND_EQN, EL_TAKE, EL_DROP, LENGTH_APPEND,
+    LENGTH_TAKE, LENGTH_DROP, arithmeticTheory.MAX_DEF] >> gvs[] >>
+  fs[mm_local_write_compatible_def] >> metis_tac[]
+QED
+
 Theorem mm_local_replace_disjoint_commute[local]:
   (d1 + LENGTH bs1 <= d2 \/ d2 + LENGTH bs2 <= d1) /\
   MAX (d1 + LENGTH bs1) (d2 + LENGTH bs2) <= LENGTH mem ==>
@@ -4171,6 +4209,37 @@ Proof
   simp[arithmeticTheory.MAX_COMM] >>
   irule mm_local_replace_disjoint_commute >> simp[] >>
   simp[arithmeticTheory.MAX_DEF]
+QED
+
+Theorem mm_local_write_compatible_commute[local]:
+  mm_local_write_compatible d1 bs1 d2 bs2 ==>
+  write_memory_with_expansion d2 bs2 (write_memory_with_expansion d1 bs1 s) =
+  write_memory_with_expansion d1 bs1 (write_memory_with_expansion d2 bs2 s)
+Proof
+  strip_tac >> simp[write_as_replace] >>
+  `d1 + LENGTH bs1 <= LENGTH (expand_mem s.vs_memory (d1 + LENGTH bs1))` by
+    simp[expand_mem_ge] >>
+  `d2 + LENGTH bs2 <= LENGTH (expand_mem s.vs_memory (d2 + LENGTH bs2))` by
+    simp[expand_mem_ge] >>
+  simp[expand_replace, mm_local_expand_mem_max,
+       venomStateTheory.venom_state_component_equality] >>
+  simp[arithmeticTheory.MAX_COMM] >>
+  irule mm_local_replace_compatible_commute >> simp[] >>
+  simp[arithmeticTheory.MAX_DEF]
+QED
+
+Theorem mm_local_write_log_compatible_commute[local]:
+  !ws s. EVERY (\(d,bs). mm_local_write_compatible d bs a bytes) ws ==>
+  write_memory_with_expansion a bytes
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s ws) =
+  FOLDL (\st (d,bs). write_memory_with_expansion d bs st)
+    (write_memory_with_expansion a bytes s) ws
+Proof
+  Induct_on `ws` >- simp[] >>
+  Cases_on `h` >> simp[] >> rpt strip_tac >>
+  first_x_assum (drule_then (fn th => rewrite_tac[th])) >>
+  AP_THM_TAC >> AP_TERM_TAC >>
+  irule mm_local_write_compatible_commute >> simp[]
 QED
 
 Theorem mm_local_write_log_commute[local]:
