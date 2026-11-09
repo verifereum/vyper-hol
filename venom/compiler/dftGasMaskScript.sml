@@ -963,6 +963,39 @@ Proof
   metis_tac[stopped_invoke_fixed_entry_family]
 QED
 
+(* Successful instruction cuts expose the concrete remaining reading budget,
+   including variable-length INVOKE segments. *)
+Theorem prefix_ok_readings_events[local]:
+  !xs s t bb.
+    EVERY (\i. ~is_terminator i.inst_opcode) xs /\
+    DROP s.vs_inst_idx bb.bb_instructions = xs /\
+    FOLDR (dft_exec_cons fuel C) OK xs s = OK t ==>
+    t.vs_gas_readings =
+      DROP (LENGTH (gas_events_block fuel C owner bb s)) s.vs_gas_readings
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (gvs[DROP_EQ_NIL] >>
+      simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]) >>
+  fs[EVERY_DEF, dftIndexedExecTheory.dft_exec_cons_def] >>
+  Cases_on `step_inst fuel C h s` >> gvs[] >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `DROP _ _ = _::_`
+       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
+     simp[LENGTH_DROP]) >>
+  `EL s.vs_inst_idx bb.bb_instructions = h /\
+   DROP (SUC s.vs_inst_idx) bb.bb_instructions = xs` by
+    gvs[rich_listTheory.DROP_CONS_EL] >>
+  first_x_assum (qspec_then `v with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >> disch_then (drule_then assume_tac) >>
+  mp_tac (cj 1 gas_count_suffix) >>
+  disch_then (qspecl_then [`fuel`, `C`, `h`, `s`] mp_tac) >>
+  simp[gas_count_suffix_def] >> strip_tac >>
+  simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+       gas_events_length, rich_listTheory.DROP_DROP_T] >>
+  simp[SimpRHS, Once gas_count_block_def, venomInstTheory.get_instruction_def] >>
+  simp[arithmeticTheory.ADD_COMM]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
