@@ -2796,16 +2796,6 @@ QED
 
 (* --- SSA structural helpers --- *)
 
-(* MEM v (operand_vars ops) ==> MEM (Var v) ops
-   NB: must use venomInst operand_vars to match inst_uses_def *)
-Triviality mem_operand_vars_var[local]:
-  !ops v. MEM v (venomInst$operand_vars ops) ==> MEM (Var v) ops
-Proof
-  Induct >> simp[venomInstTheory.operand_vars_def] >> rpt strip_tac >>
-  Cases_on `venomInst$operand_var h` >> gvs[] >>
-  Cases_on `h` >> gvs[venomInstTheory.operand_var_def]
-QED
-
 (* inst output not in own uses: from def_dominates_uses + ssa_form.
    The definer of v must be strictly before inst in the block, but by SSA
    uniqueness, the definer IS inst — contradiction with "strictly before". *)
@@ -2818,7 +2808,7 @@ Triviality ssa_no_self_use[local]:
 Proof
   rpt strip_tac >>
   fs[inst_uses_def] >>
-  drule mem_operand_vars_var >> strip_tac >>
+  drule (iffLR MEM_operand_vars_eq_Var) >> strip_tac >>
   `MEM out inst.inst_outputs` by (
     fs[inst_output_def] >>
     Cases_on `inst.inst_outputs` >> gvs[] >>

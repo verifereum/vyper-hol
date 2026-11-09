@@ -30,8 +30,8 @@ Ancestors
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
   (* lowering: ABI encoder read windows, typed calldata decoding, entry
      allocation frames and registration, nonreentrancy, byte-builtin and
-     concat memory, conversion from bytes *)
-  abiEncoderWindowSourceRun calldataFiniteTyped calldataAggregateTyped
+     concat memory, conversion from bytes, constructor bytestring decoding *)
+  abiEncoderWindowSourceRun ctorAbiActualBytesRun calldataFiniteTyped calldataAggregateTyped
   actualDecoderPackaging actualRegistrationCode actualEntryAllocationFrame
   allocaHistoryFragment nonreentrantEntry nonreentrantSource nonreentrantExit
   builtinBytesMemory concatMemory exprSimConvertFromBytes

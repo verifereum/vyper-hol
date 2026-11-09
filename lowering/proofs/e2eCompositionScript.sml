@@ -233,6 +233,9 @@ Proof
   Cases_on `y` >> TRY (rename1 `Error err` >> Cases_on `err`) >> simp[]
 QED
 
+(* Move the first goal whose conclusion contains the pattern to the front. *)
+fun concl_goal_lt pat = FIRST_LT (qmatch_goalsub_rename_tac pat);
+
 (* The source relation holds of every run that matches one it holds of up
    to the source's dead bytes. *)
 Theorem external_call_result_rel_dead_transport:

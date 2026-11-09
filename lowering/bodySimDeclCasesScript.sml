@@ -874,6 +874,7 @@ Proof
   simp_tac (srw_ss()) [pairTheory.FORALL_PROD] >>
   map_every qx_gen_tac [`cx`, `id`, `typ`, `e1`, `e2`, `bound`, `stmts`, `tyv`] >>
   rpt gen_tac >> strip_tac >>
+  `hi <> lo` by (strip_tac >> gvs[]) >>
   `eval_iterator cx (Range e1 e2) es0 =
    (INL (GENLIST (\j. Value (IntV (lo + &j))) (Num (hi - lo))), es2)` by
     (gvs[bind_def, AllCaseEqs()] >>
