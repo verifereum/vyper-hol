@@ -113,8 +113,9 @@ Theorem spill_fold_no_ref:
   ~plan_ref l acc_ops ==> ~plan_ref l ops
 Proof
   Induct >> simp[] >> rpt gen_tac >>
-  Cases_on `alloc_spill_slot al` >> simp[] >> strip_tac >>
-  first_x_assum (qspec_then `acc_ops ++ [SOSpill q]` mp_tac) >>
+  Cases_on `alloc_spill_slot al` >>
+  rename1 `alloc_spill_slot al = (off, alloc_next)` >> simp[] >> strip_tac >>
+  first_x_assum (qspec_then `acc_ops ++ [SOSpill off]` mp_tac) >>
   simp[plan_ref_append, plan_ref_def] >> disch_then drule >> simp[]
 QED
 
@@ -146,8 +147,9 @@ Proof
   Induct >> simp[reduce_depth_plan_def, plan_ref_def] >> rpt gen_tac >>
   IF_CASES_TAC >> simp[] >>
   Cases_on `stack_get_unfixed_depth target_op f n ps.ps_stack` >> simp[] >>
+  rename1 `stack_get_unfixed_depth target_op f n ps.ps_stack = SOME depth` >>
   IF_CASES_TAC >> simp[] >>
-  Cases_on `select_spill_candidate ps.ps_stack target_ops x n` >> simp[] >>
+  Cases_on `select_spill_candidate ps.ps_stack target_ops depth n` >> simp[] >>
   pairarg_tac >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   pairarg_tac >> gvs[] >> metis_tac[do_spill_at_no_ref, plan_ref_def]
 QED
@@ -183,8 +185,11 @@ Theorem reorder_fold_no_ref:
     (ops, ps') /\ ~plan_ref l acc_ops ==> ~plan_ref l ops
 Proof
   Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >> simp[] >>
-  Cases_on `reorder_one dfg target_ops h0 h1 ps` >> simp[] >> strip_tac >>
-  first_x_assum (qspec_then `acc_ops ++ q` mp_tac) >>
+  rename1 `reorder_one dfg target_ops idx operand ps` >>
+  Cases_on `reorder_one dfg target_ops idx operand ps` >>
+  rename1 `reorder_one dfg target_ops idx operand ps = (step_ops, next_ps)` >>
+  simp[] >> strip_tac >>
+  first_x_assum (qspec_then `acc_ops ++ step_ops` mp_tac) >>
   simp[plan_ref_append] >> disch_then drule >>
   drule reorder_one_no_ref >> simp[]
 QED
@@ -212,12 +217,14 @@ Proof
   Induct >> simp[] >> rpt gen_tac >>
   Cases_on `stack_get_depth h ps.ps_stack` >> simp[]
   >- metis_tac[] >>
-  Cases_on `x = 0` >> simp[]
+  rename1 `stack_get_depth h ps.ps_stack = SOME depth` >>
+  Cases_on `depth = 0` >> simp[]
   >- (strip_tac >>
       first_x_assum (qspec_then `acc_ops ++ [SOPop 1]` mp_tac) >>
       simp[plan_ref_append, plan_ref_def] >> disch_then drule >> simp[]) >>
-  Cases_on `do_swap x ps` >> simp[] >> strip_tac >>
-  first_x_assum (qspec_then `acc_ops ++ q ++ [SOPop 1]` mp_tac) >>
+  Cases_on `do_swap depth ps` >>
+  rename1 `do_swap depth ps = (swap_ops, next_ps)` >> simp[] >> strip_tac >>
+  first_x_assum (qspec_then `acc_ops ++ swap_ops ++ [SOPop 1]` mp_tac) >>
   simp[plan_ref_append, plan_ref_def] >> disch_then drule >>
   drule do_swap_no_ref >> simp[plan_ref_def]
 QED
