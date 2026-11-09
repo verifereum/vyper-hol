@@ -42,6 +42,32 @@ Definition block_reach_def:
       frame_reachable vs C stk PG G tn fn inst s1
 End
 
+Theorem frame_reachable_block_reach:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  active_inst fn inst s /\ is_terminator inst.inst_opcode /\
+  step_inst fuel C inst s = OK s' /\ ~s'.vs_halted ==>
+  block_reach vs C stk PG (entry_prov fn s' G)
+    (entry_taint_vars fn s' tn) fn s'
+Proof
+  rw[block_reach_def] >> irule frame_reachable_block >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem frame_reachable_call_block_reach:
+  frame_reachable vs C stk PG G tn caller callinst s /\
+  active_inst caller callinst s /\ callinst.inst_opcode = INVOKE /\
+  decode_invoke callinst = SOME (nm, ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs ==>
+  block_reach vs C
+    (<| cf_fn := caller; cf_inst := callinst; cf_state := s;
+        cf_params := PG; cf_prov := G; cf_tvar := tn.t_var |> :: stk)
+    (MAP (op_prov G) ops) FEMPTY (tn with t_var := FEMPTY) callee cs
+Proof
+  rw[block_reach_def] >> irule frame_reachable_call >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
 (* Related results of a whole function run.  R_ret sees the returned
    values and the ghosts at the return. *)
 Definition fn_run_rel_def:
@@ -86,6 +112,114 @@ End
    on internal return at a reachable return instruction; a function run
    from a reachable boundary returns from a reachable return instruction.
    Pass proofs use it to know their INVOKE sites and block ends reachable. *)
+Theorem frame_reachable_walk_mutual:
+  (!fuel C inst s vs stk PG G tn fn s'.
+     frame_reachable vs C stk PG G tn fn inst s /\
+     active_inst fn inst s /\ ~is_terminator inst.inst_opcode /\
+     step_inst fuel C inst s = OK s' ==>
+     ?G' tn'. !inst'.
+       active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
+       frame_reachable vs C stk PG G' tn' fn inst'
+         (s' with vs_inst_idx := SUC s.vs_inst_idx)) /\
+  (!fuel C bb s vs stk PG G tn fn r.
+     frame_reachable vs C stk PG G tn fn
+       (EL s.vs_inst_idx bb.bb_instructions) s /\
+     MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb /\
+     s.vs_inst_idx < LENGTH bb.bb_instructions /\
+     exec_block fuel C bb s = r ==>
+     (!s'. r = OK s' ==> ?G' tn'. block_reach vs C stk PG G' tn' fn s') /\
+     (!v se. r = IntRet v se ==>
+        ?G' tn' rinst sr fuel'.
+          frame_reachable vs C stk PG G' tn' fn rinst sr /\
+          active_inst fn rinst sr /\
+          step_inst fuel' C rinst sr = IntRet v se)) /\
+  (!fuel C fn s vs stk PG G tn v se.
+     block_reach vs C stk PG G tn fn s /\
+     run_blocks fuel C fn s = IntRet v se ==>
+     ?G' tn' rinst sr fuel'.
+       frame_reachable vs C stk PG G' tn' fn rinst sr /\
+       active_inst fn rinst sr /\
+       step_inst fuel' C rinst sr = IntRet v se)
+Proof
+  ho_match_mp_tac run_defs_ind >> rpt conj_tac
+  >- suspend "step"
+  >- suspend "block"
+  >> suspend "run"
+QED
+
+Resume frame_reachable_walk_mutual[step]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+      simp[Once step_inst_def] >> strip_tac >>
+      gvs[AllCaseEqs()] >>
+      drule_all frame_reachable_call_block_reach >> strip_tac >>
+      first_x_assum drule_all >> strip_tac >>
+      qexistsl [`DRESTRICT G (COMPL (set inst.inst_outputs))`,
+        `tn' with t_var := DRESTRICT tn.t_var (COMPL (set inst.inst_outputs))`] >>
+      rpt strip_tac >>
+      drule frame_reachable_ret >> simp[] >>
+      disch_then irule >> goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[])
+  >> qexistsl [`step_prov PG G inst s'`, `step_taint inst s s' tn`] >>
+  rpt strip_tac >> irule frame_reachable_next >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Resume frame_reachable_walk_mutual[block]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `active_inst fn (EL s.vs_inst_idx bb.bb_instructions) s` by
+    (simp[active_inst_def] >> metis_tac[]) >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  simp[Once exec_block_def, get_instruction_def] >>
+  Cases_on `step_inst fuel C (EL s.vs_inst_idx bb.bb_instructions) s` >>
+  simp[] >> strip_tac >> gvs[]
+  >- (Cases_on `is_terminator (EL s.vs_inst_idx bb.bb_instructions).inst_opcode`
+      >- (gvs[AllCaseEqs()] >> rpt strip_tac >>
+          drule_all frame_reachable_block_reach >> metis_tac[]) >>
+      drule_all venomInstPropsTheory.step_preserves_control_flow >> strip_tac >>
+      Cases_on `SUC s.vs_inst_idx < LENGTH bb.bb_instructions`
+      >- (gvs[get_instruction_def] >>
+          qpat_x_assum `!vs stk PG G tn fn. _ ==> ?G' tn'. _` drule_all >> strip_tac >>
+          `active_inst fn (EL (SUC s.vs_inst_idx) bb.bb_instructions)
+             (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+            (simp[active_inst_def] >> metis_tac[]) >>
+          first_x_assum drule >> strip_tac >>
+          first_x_assum drule_all >> simp[]) >>
+      conj_tac >> simp[Once exec_block_def, get_instruction_def])
+  >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Resume frame_reachable_walk_mutual[run]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `run_blocks _ _ _ _ = _` mp_tac >>
+  simp[Once run_blocks_def] >>
+  Cases_on `fuel` >> simp[] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> simp[] >>
+  rename1 `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs >> simp[] >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  rename1 `eval_phis s bb.bb_instructions = OK sphi` >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = sphi.vs_current_bb` by
+    (drule venomExecProofsTheory.eval_phis_preserves_current_bb >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM,
+       venomExecPropsTheory.lookup_block_label]) >>
+  `phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions` by
+    (spose_not_then assume_tac >> gvs[Once exec_block_def, get_instruction_def]) >>
+  (`active_inst fn (EL (phi_prefix_length bb.bb_instructions) bb.bb_instructions)
+          (sphi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
+        (simp[active_inst_def] >> metis_tac[]) >>
+      `frame_reachable vs C stk PG G tn fn
+         (EL (phi_prefix_length bb.bb_instructions) bb.bb_instructions)
+         (sphi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
+        (gvs[block_reach_def] >> first_x_assum irule >>
+         simp[enters_block_def] >> metis_tac[]) >>
+      first_x_assum drule_all >> strip_tac >> metis_tac[])
+QED
+
+Finalise frame_reachable_walk_mutual
+
 Theorem frame_reachable_walk:
   (!fuel C bb s vs stk PG G tn fn r.
      frame_reachable vs C stk PG G tn fn
@@ -107,7 +241,7 @@ Theorem frame_reachable_walk:
        active_inst fn rinst sr /\
        step_inst fuel' C rinst sr = IntRet v se)
 Proof
-  cheat
+  ACCEPT_TAC (CONJUNCT2 frame_reachable_walk_mutual)
 QED
 
 (* A block that stops the run (halted OK, Halt, Abort, IntRet) stops both
