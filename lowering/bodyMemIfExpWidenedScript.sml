@@ -8,7 +8,7 @@
    have. *)
 Theory bodyMemIfExpWidened
 Ancestors
-  fragGasMemoryLength bodyMemoryPreds bodyIfExpWidenedTyping bodyIfExpTypedMemory typedArrayCopyPathsMem typedFieldCopyPathsMem typedFieldCopyCuts typedFieldCopyAggregateMem
+  bodyIfExpNormalizationSuffix fragGasMemoryLength bodyMemoryPreds bodyIfExpWidenedTyping bodyIfExpTypedMemory typedArrayCopyPathsMem typedFieldCopyPathsMem typedFieldCopyCuts typedFieldCopyAggregateMem
 
 Theorem body_ifexp_widened_call_arm_mem:
   !cx v5 e1 e2 e3.
