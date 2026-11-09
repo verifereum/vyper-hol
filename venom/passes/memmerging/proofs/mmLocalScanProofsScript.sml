@@ -3507,6 +3507,183 @@ Proof
   metis_tac[mm_local_insert_sorted_mem, mm_local_insert_sorted_order, MEM]
 QED
 
+Theorem mm_local_flush_fragment[local]:
+  MEM h (ss.ss_copies ++ ss.ss_flushed) ==>
+  MEM h ((flush_copies ss cs).ss_copies ++ (flush_copies ss cs).ss_flushed)
+Proof
+  simp[flush_copies_def, MEM_APPEND, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem mm_local_flush_order[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies ==>
+  SORTED (\a b. a.cg_dst <= b.cg_dst) (flush_copies ss cs).ss_copies
+Proof
+  simp[flush_copies_def] >> strip_tac >> irule sortingTheory.SORTED_FILTER >>
+  simp[relationTheory.transitive_def]
+QED
+
+Theorem mm_local_hazards_fragment[local]:
+  MEM h (ss.ss_copies ++ ss.ss_flushed) ==>
+  MEM h ((flush_hazards mode ss c).ss_copies ++
+         (flush_hazards mode ss c).ss_flushed)
+Proof
+  simp[flush_hazards_def] >> rpt strip_tac >>
+  rpt IF_CASES_TAC >> metis_tac[mm_local_flush_fragment, MEM_APPEND]
+QED
+
+Theorem mm_local_hazards_order[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies ==>
+  SORTED (\a b. a.cg_dst <= b.cg_dst) (flush_hazards mode ss c).ss_copies
+Proof
+  simp[flush_hazards_def] >> rpt strip_tac >>
+  rpt IF_CASES_TAC >> metis_tac[mm_local_flush_order]
+QED
+
+Theorem mm_local_load_order[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies ==>
+  SORTED (\a b. a.cg_dst <= b.cg_dst) (scan_load mode ss inst).ss_copies
+Proof
+  strip_tac >> simp[scan_load_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  simp[hard_barrier_def] >> rpt IF_CASES_TAC >> simp[mm_local_flush_order]
+QED
+
+Theorem mm_local_store_order[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies ==>
+  SORTED (\a b. a.cg_dst <= b.cg_dst) (scan_store dfg mode ss inst).ss_copies
+Proof
+  strip_tac >> simp[scan_store_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  simp[hard_barrier_def] >> irule mm_local_add_copy_order >>
+  irule mm_local_hazards_order >>
+  simp[invalidate_loads_def]
+QED
+
+Theorem mm_local_bulk_order[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies ==>
+  SORTED (\a b. a.cg_dst <= b.cg_dst) (scan_bulk_copy mode ss inst).ss_copies
+Proof
+  strip_tac >> simp[scan_bulk_copy_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  simp[hard_barrier_def] >> irule mm_local_add_copy_order >>
+  irule mm_local_hazards_order >>
+  simp[invalidate_loads_def]
+QED
+
+Theorem mm_local_inst_order[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies ==>
+  SORTED (\a b. a.cg_dst <= b.cg_dst) (scan_inst dfg mode ss inst).ss_copies
+Proof
+  simp[scan_inst_def] >> rpt IF_CASES_TAC >>
+  simp[mm_local_load_order, mm_local_store_order, mm_local_bulk_order,
+       hard_barrier_def]
+QED
+
+Theorem mm_local_insert_fragment[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
+  MEM h (ss.ss_copies ++ ss.ss_flushed) ==>
+  ?g. MEM g (add_copy ss.ss_copies c ++ ss.ss_flushed) /\
+    mm_local_copy_ancestor h g
+Proof
+  simp[MEM_APPEND] >> rpt strip_tac
+  >- (drule mm_local_add_copy_ancestry >>
+      disch_then (qspecl_then [`h`, `c`] mp_tac) >>
+      simp[] >> metis_tac[]) >>
+  metis_tac[mm_local_copy_ancestor_refl]
+QED
+
+Theorem mm_local_load_fragment[local]:
+  MEM h (ss.ss_copies ++ ss.ss_flushed) ==>
+  MEM h ((scan_load mode ss inst).ss_copies ++ (scan_load mode ss inst).ss_flushed)
+Proof
+  strip_tac >> simp[scan_load_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  simp[hard_barrier_def] >> metis_tac[mm_local_flush_fragment, MEM_APPEND]
+QED
+
+Theorem mm_local_barrier_fragment[local]:
+  MEM h (ss.ss_copies ++ ss.ss_flushed) ==>
+  ?g. MEM g ((hard_barrier ss).ss_copies ++ (hard_barrier ss).ss_flushed) /\
+    mm_local_copy_ancestor h g
+Proof
+  simp[hard_barrier_def, MEM_APPEND] >>
+  metis_tac[mm_local_copy_ancestor_refl]
+QED
+
+Theorem mm_local_hazards_insert_fragment[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
+  MEM h (ss.ss_copies ++ ss.ss_flushed) ==>
+  ?g. MEM g (add_copy (flush_hazards mode ss c).ss_copies c ++
+             (flush_hazards mode ss c).ss_flushed) /\
+    mm_local_copy_ancestor h g
+Proof
+  strip_tac >> irule mm_local_insert_fragment >>
+  simp[mm_local_hazards_fragment, mm_local_hazards_order]
+QED
+
+Theorem mm_local_store_fragment[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
+  MEM h (ss.ss_copies ++ ss.ss_flushed) ==>
+  ?g. MEM g ((scan_store dfg mode ss inst).ss_copies ++
+             (scan_store dfg mode ss inst).ss_flushed) /\
+    mm_local_copy_ancestor h g
+Proof
+  strip_tac >> simp[scan_store_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  gvs[MEM_APPEND] >>
+  simp[SRULE [MEM_APPEND] mm_local_barrier_fragment] >>
+  irule (SRULE [MEM_APPEND] mm_local_hazards_insert_fragment) >>
+  simp[invalidate_loads_def]
+QED
+
+Theorem mm_local_bulk_fragment[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
+  MEM h (ss.ss_copies ++ ss.ss_flushed) ==>
+  ?g. MEM g ((scan_bulk_copy mode ss inst).ss_copies ++
+             (scan_bulk_copy mode ss inst).ss_flushed) /\
+    mm_local_copy_ancestor h g
+Proof
+  strip_tac >> simp[scan_bulk_copy_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  gvs[MEM_APPEND] >>
+  simp[SRULE [MEM_APPEND] mm_local_barrier_fragment] >>
+  irule (SRULE [MEM_APPEND] mm_local_hazards_insert_fragment) >>
+  simp[invalidate_loads_def]
+QED
+
+Theorem mm_local_inst_fragment[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
+  MEM h (ss.ss_copies ++ ss.ss_flushed) ==>
+  ?g. MEM g ((scan_inst dfg mode ss inst).ss_copies ++
+             (scan_inst dfg mode ss inst).ss_flushed) /\
+    mm_local_copy_ancestor h g
+Proof
+  strip_tac >> simp[scan_inst_def] >> rpt IF_CASES_TAC >>
+  metis_tac[mm_local_load_fragment, mm_local_copy_ancestor_refl,
+    mm_local_store_fragment, mm_local_bulk_fragment,
+    mm_local_barrier_fragment, MEM_APPEND]
+QED
+
+Theorem mm_local_fold_order[local]:
+  !xs ss. SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies ==>
+  SORTED (\a b. a.cg_dst <= b.cg_dst)
+    (FOLDL (scan_inst dfg mode) ss xs).ss_copies
+Proof
+  Induct >> simp[] >> metis_tac[mm_local_inst_order]
+QED
+
+Theorem mm_local_fold_fragment[local]:
+  !xs ss h. SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
+  MEM h (ss.ss_copies ++ ss.ss_flushed) ==>
+  ?g. MEM g ((FOLDL (scan_inst dfg mode) ss xs).ss_copies ++
+             (FOLDL (scan_inst dfg mode) ss xs).ss_flushed) /\
+    mm_local_copy_ancestor h g
+Proof
+  Induct
+  >- (simp[] >> metis_tac[mm_local_copy_ancestor_refl]) >>
+  pure_rewrite_tac[FOLDL] >> rpt strip_tac >>
+  drule_all mm_local_inst_fragment >>
+  disch_then (qspecl_then [`mode`, `h`, `dfg`] strip_assume_tac) >>
+  first_x_assum (qspec_then `scan_inst dfg mode ss h` mp_tac) >>
+  simp[mm_local_inst_order] >>
+  disch_then (qspec_then `g` mp_tac) >>
+  simp[] >> metis_tac[mm_local_copy_ancestor_trans, MEM_APPEND]
+QED
+
 Theorem mm_local_memzero_merge_effect[local]:
   d1 <= d2 /\ d2 <= d1+n1 /\
   cg = copy_merge (copy_memzero d1 n1 ids1) (copy_memzero d2 n2 ids2) ==>
