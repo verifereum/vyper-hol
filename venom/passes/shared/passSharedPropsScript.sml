@@ -260,25 +260,7 @@ QED
 (* Non-terminator step_inst at different idx: OK results agree modulo idx.
    Covers both INVOKE and non-INVOKE non-terminator instructions.
    Why: step_inst never reads vs_inst_idx; it only reads/writes other fields. *)
-Triviality foldl_update_var_idx:
-  !ps st j.
-    FOLDL (\s' (out,val). update_var out val s') (st with vs_inst_idx := j) ps =
-    FOLDL (\s' (out,val). update_var out val s') st ps with vs_inst_idx := j
-Proof
-  Induct >> simp[pairTheory.FORALL_PROD] >> rpt gen_tac >>
-  `update_var p_1 p_2 (st with vs_inst_idx := j) =
-   update_var p_1 p_2 st with vs_inst_idx := j` by
-    simp[update_var_def] >>
-  simp[]
-QED
-
-Triviality bind_outputs_idx:
-  !outs vals st j.
-    bind_outputs outs vals (st with vs_inst_idx := j) =
-    OPTION_MAP (\s'. s' with vs_inst_idx := j) (bind_outputs outs vals st)
-Proof
-  rw[bind_outputs_def, foldl_update_var_idx]
-QED
+(* foldl_update_var_idx and bind_outputs_idx live in venomExecSemantics. *)
 
 
 Triviality adopt_return_fmp_idx:

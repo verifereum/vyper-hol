@@ -1633,6 +1633,27 @@ Proof
   pop_assum (SUBST1_TAC o SYM) >> simp_tac bind_outputs_projection_ss []
 QED
 
+(* Cursor transport for variable-only return binding. *)
+Theorem foldl_update_var_idx:
+  !ps st j.
+    FOLDL (\s' (out,val). update_var out val s') (st with vs_inst_idx := j) ps =
+    FOLDL (\s' (out,val). update_var out val s') st ps with vs_inst_idx := j
+Proof
+  Induct >> simp[pairTheory.FORALL_PROD] >> rpt gen_tac >>
+  `update_var p_1 p_2 (st with vs_inst_idx := j) =
+   update_var p_1 p_2 st with vs_inst_idx := j` by
+    simp[update_var_def] >>
+  simp[]
+QED
+
+Theorem bind_outputs_idx:
+  !outs vals st j.
+    bind_outputs outs vals (st with vs_inst_idx := j) =
+    OPTION_MAP (\s'. s' with vs_inst_idx := j) (bind_outputs outs vals st)
+Proof
+  rw[bind_outputs_def, foldl_update_var_idx]
+QED
+
 (* --------------------------------------------------------------------------
    Parallel PHI evaluation
 
