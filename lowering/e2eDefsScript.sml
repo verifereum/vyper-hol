@@ -198,8 +198,12 @@ Proof
                  | SOME sid => get_module_code cx (SOME sid))` >> simp[] >>
       Cases_on `lookup_exported_function cx (clear_machine_logs am) tx.function_name` >> simp[] >>
       rename1 `SOME fn` >> PairCases_on `fn` >> simp[] >>
-      Cases_on `call_external_function orc gobs (clear_machine_logs am) cx fn1 fn0 x'' x' fn2 fn3 tx.args fn5 fn4` >>
+      qmatch_goalsub_abbrev_tac
+        `call_external_function orc gobs am0 cx nr0 mut0 ts0 mods0 args0 dflts0 vals0 body0 ret0` >>
+      Cases_on `call_external_function orc gobs am0 cx nr0 mut0 ts0 mods0 args0 dflts0 vals0 body0 ret0` >>
       rename1 `(res, tail)` >> PairCases_on `tail` >> Cases_on `res` >> simp[] >>
+      TRY (rename1 `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = (INR exc,_,_)` >>
+           Cases_on `exc` >> simp[]) >>
       rw[] >> simp[finalize_pending_deletions_metadata]) >>
   rename1 `call_external orc gobs (clear_machine_logs am) tx = (INR exn, am', rqs)` >>
   reverse (Cases_on `exn = HaltException`)
@@ -214,9 +218,12 @@ Proof
              | SOME sid => get_module_code cx (SOME sid))` >> simp[] >>
   Cases_on `lookup_exported_function cx (clear_machine_logs am) tx.function_name` >> simp[] >>
   rename1 `SOME fn` >> PairCases_on `fn` >> simp[] >>
-  Cases_on `call_external_function orc gobs (clear_machine_logs am) cx fn1 fn0 x'' x' fn2 fn3 tx.args fn5 fn4` >>
+  qmatch_goalsub_abbrev_tac
+        `call_external_function orc gobs am0 cx nr0 mut0 ts0 mods0 args0 dflts0 vals0 body0 ret0` >>
+      Cases_on `call_external_function orc gobs am0 cx nr0 mut0 ts0 mods0 args0 dflts0 vals0 body0 ret0` >>
   rename1 `(res, tail)` >> PairCases_on `tail` >> Cases_on `res` >> simp[] >>
-  rename1 `INR ex` >> Cases_on `ex` >> simp[] >>
+  rename1 `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = (INR exc,_,_)` >>
+  Cases_on `exc` >> simp[] >>
   rw[] >> simp[finalize_pending_deletions_metadata]
 QED
 
