@@ -5,7 +5,7 @@ Ancestors
   loadElimPaddedCalls loadElimPaddedNoncall loadElimMemoryRel
   loadElimActionSelection loadElimLatestJoin loadElimOccurrence loadElimDefs
   loadElimSentinelHelpers loadElimKeyShapeInvariant cfgAnalysisProps
-  instIdxIndep analysisSimProofsBase
+  instIdxIndep analysisSimProofsBase venomInstProps contextCodegenRel
   venomState venomInst venomExecSemantics venomExecProps venomExecProofs stateFrame stateEquiv list
 
 (* Entry/edge coupling is le_padded_control.  Inside a block only the
@@ -439,3 +439,127 @@ Proof
   Cases_on `step_inst fuel C i (t with vs_inst_idx := 0)` >>
   fs[lift_result_def] >> metis_tac[le_padded_control_idx]
 QED
+
+Theorem le_transformed_nonterm:
+  ~is_terminator i.inst_opcode ==>
+  ~is_terminator (load_elim_inst ctx actions ll i).inst_opcode
+Proof
+  strip_tac >> Cases_on `load_elim_inst ctx actions ll i = i` >- simp[] >>
+  drule_at (Pat `transformed <> inst`) loadElimOriginHelpersTheory.load_elim_inst_changed >>
+  disch_then (qspecl_then [`ll`, `ctx`, `actions`] mp_tac) >>
+  simp[] >> strip_tac >>
+  gvs[passSharedDefsTheory.mk_assign_inst_def, passSharedDefsTheory.mk_nop_inst_def,
+      is_terminator_def]
+QED
+
+(* Successful block exits retain the final source instruction occurrence.
+   This is the evidence needed to enter successor PHIs, not merely a
+   relation on the two exit states. *)
+Theorem le_coupled_block_OK:
+  !n s h t i u.
+  n = LENGTH bb.bb_instructions - s.vs_inst_idx /\
+  le_round_ready C fn ctx s0 /\
+  le_occ_prefix C fn s0 h i s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  le_body_coupling m ctx (cfg_analyze fn) (load_analyze ctx fn)
+    (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) h bb s t /\
+  exec_block k C bb s = OK u ==>
+  ?v h' j x.
+    exec_block k C
+      (analysis_block_transform_prepend NONE (load_analyze ctx fn)
+        (load_phi_prepend (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn))
+        (\ll inst. [load_elim_inst ctx
+          (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ll inst]) bb) t = OK v /\
+    le_padded_control {v | isPREFIX "$le_phi_" v} u v /\
+    le_occ_prefix C fn s0 h' j x /\
+    lookup_block x.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb x.vs_inst_idx = SOME j /\
+    is_terminator j.inst_opcode /\ step_inst k C j x = OK u /\ ~u.vs_halted /\
+    le_latest_captures m ctx (cfg_analyze fn) (load_analyze ctx fn)
+      (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn)
+      (h' ++ [StepOcc bb x.vs_inst_idx k x u]) v
+Proof
+  completeInduct_on `n` >> rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `MEM i bb.bb_instructions` by
+    (fs[get_instruction_def] >> metis_tac[MEM_EL]) >>
+  `inst_wf i` by
+    (fs[le_round_ready_def] >> metis_tac[fn_inst_wf_every_bb, EVERY_MEM]) >>
+  qpat_x_assum `exec_block k C bb s = OK u` mp_tac >>
+  simp[Once exec_block_def, Excl "isPREFIX"] >>
+  Cases_on `step_inst k C i s` >> simp[Excl "isPREFIX"] >>
+  rename1 `step_inst k C i s = OK w` >>
+  Cases_on `is_terminator i.inst_opcode`
+  >- suspend "term"
+  >> suspend "next"
+QED
+
+Resume le_coupled_block_OK[term]:
+  qpat_x_assum `!m'. _` kall_tac >>
+  Cases_on `w.vs_halted` >> simp[Excl "isPREFIX"] >> strip_tac >>
+  gvs[Excl "isPREFIX"] >>
+  `le_configured_context ctx` by fs[le_round_ready_def] >>
+  `load_elim_inst ctx
+    (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn)
+    (df_at NONE (load_analyze ctx fn) bb.bb_label s.vs_inst_idx) i = i` by
+    metis_tac[le_configured_terminator_unchanged] >>
+  `?v. step_inst k C i t = OK v /\
+     le_padded_control {v | isPREFIX "$le_phi_" v} u v` by
+    (irule le_coupled_unchanged_term >>
+     `padded_exec_equiv {v | isPREFIX "$le_phi_" v} s t` by
+       fs[le_body_coupling_def] >>
+     `!v. MEM (Var v) i.inst_operands ==> lookup_var v s = lookup_var v t` by
+       (rpt strip_tac >> irule le_source_operand_lookup_agreement >>
+        fs[le_round_ready_def] >> metis_tac[]) >>
+     `i.inst_opcode <> MEMTOP` by
+       (fs[le_round_ready_def, EVERY_MEM, fn_insts_def] >>
+        metis_tac[o1PassContractTheory.fn_insts_blocks_MEM]) >>
+     metis_tac[le_body_coupling_normalize, le_round_ready_def]) >>
+  `get_instruction
+    (analysis_block_transform_prepend NONE (load_analyze ctx fn)
+      (load_phi_prepend (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn))
+      (\ll inst. [load_elim_inst ctx
+        (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ll inst]) bb)
+    t.vs_inst_idx = SOME i` by metis_tac[le_body_coupling_fetch] >>
+  `~v.vs_halted` by fs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def] >>
+  qexistsl_tac [`v`, `h`, `i`, `s`] >> simp[Once exec_block_def, Excl "isPREFIX"] >>
+  irule le_latest_captures_transformed_step >>
+  rule_assum_tac (PURE_REWRITE_RULE [le_round_ready_def, le_body_coupling_def]) >>
+  RULE_L_ASSUM_TAC CONJUNCTS >>
+  rpt (goal_assum (drule_at Any) >> simp[Excl "isPREFIX"]) >>
+  metis_tac[]
+QED
+Resume le_coupled_block_OK[next]:
+  strip_tac >>
+  drule_all le_coupled_nonterm_step >> strip_tac >>
+  `w.vs_current_bb = s.vs_current_bb` by
+    (drule_all step_preserves_control_flow >> simp[]) >>
+  `lookup_block (w with vs_inst_idx := SUC s.vs_inst_idx).vs_current_bb
+     fn.fn_blocks = SOME bb` by simp[] >>
+  `?j. get_instruction bb (SUC s.vs_inst_idx) = SOME j` by
+    (Cases_on `get_instruction bb (SUC s.vs_inst_idx)` >> simp[] >>
+     qpat_x_assum `(if _ then _ else _) = OK u` mp_tac >>
+     simp[Once exec_block_def]) >>
+  `le_occ_prefix C fn s0 (h ++ [StepOcc bb s.vs_inst_idx k s w]) j
+    (w with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule (cj 2 le_occ_prefix_rules) >>
+     `bb.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+     fs[get_instruction_def, active_inst_def, Excl "isPREFIX"] >>
+     metis_tac[]) >>
+  qpat_x_assum `!m'. _`
+    (qspec_then `LENGTH bb.bb_instructions - SUC s.vs_inst_idx` mp_tac) >>
+  (impl_tac >- fs[get_instruction_def]) >>
+  disch_then (qspecl_then
+    [`w with vs_inst_idx := SUC s.vs_inst_idx`,
+     `h ++ [StepOcc bb s.vs_inst_idx k s w]`,
+     `v with vs_inst_idx := SUC t.vs_inst_idx`, `j`, `u`] mp_tac) >>
+  simp[Excl "isPREFIX"] >>
+  (impl_tac >- gvs[Excl "isPREFIX"]) >> strip_tac >>
+  `le_configured_context ctx` by fs[le_round_ready_def] >>
+  `bb.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+  drule_all le_body_coupling_fetch >> strip_tac >>
+  qexistsl_tac [`v'`, `h'`, `j'`, `x`] >>
+  simp[Once exec_block_def, le_transformed_nonterm, Excl "isPREFIX"]
+QED
+Finalise le_coupled_block_OK
