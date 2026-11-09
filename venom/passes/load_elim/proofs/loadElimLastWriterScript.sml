@@ -132,3 +132,25 @@ Proof
     (irule ssa_form_output_unique >> gvs[wf_ssa_def] >> metis_tac[]) >>
   gvs[]
 QED
+
+(* Availability is stronger than occurrence at an immediate instruction use;
+   recursive normalization sources consume this interface too. *)
+Theorem le_occ_available_last_writer:
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  le_occ_prefix C fn s0 es i s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  i.inst_opcode <> PHI /\ def_available_at fn bb (SOME i) v ==>
+  ?pre e suffix.
+    es = pre ++ e::suffix /\ v IN le_occ_writes e /\
+    EVERY (\q. v NOTIN le_occ_writes q) suffix /\
+    le_occ_valid C fn e /\ lookup_var v s = lookup_var v (le_occ_post e)
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `def_on_all_paths fn bb (SOME i) v` by
+    (irule def_available_on_all_paths >> metis_tac[]) >>
+  `?e. MEM e es /\ v IN le_occ_writes e` by
+    (irule le_occ_prefix_use_writer >> metis_tac[]) >>
+  irule le_occ_prefix_last_writer >> metis_tac[]
+QED
