@@ -563,6 +563,98 @@ Proof
   metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_IS_SOME_EQ_NONE]
 QED
 
+(* Instantiate the body producer at the very endpoint of the framed entry. *)
+Theorem intcall_for_range_producer_round:
+  for_code fp.jc_func ce bc
+    (if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty)
+    stmts id tyv p sz ainst cv ev dv nv
+    cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
+  intcall_stmts_producer fp stmts /\ intcall_frame_ok fp /\
+  intcall_joint_res fp ce env es sa cc /\
+  declare_local ce id fty sd = (bc,sd') /\ ce.ce_alloca_locals /\
+  FLOOKUP ce.ce_vars id = NONE /\ id NOTIN FDOM env.var_types /\
+  evaluate_type (get_tenv fp.jc_cx) fty = SOME tyv /\
+  value_has_type tyv (IntV (n1 + &k)) /\ type_memory_bytes ce fty < 2 ** 64 /\
+  sa.cs_next_var <= sb0.cs_next_var /\
+  (!x. not_fresh_at sa x ==> not_fresh_at sb0 x /\ x <> dv /\ x <> cv /\ x <> nv) /\
+  not_local_ptr bc (FEMPTY :: es.scopes) p /\
+  local_ptrs_reserved ce sb1 /\ local_ptrs_reserved ce sa /\
+  (!op x. fp.jc_reserved op /\ op = Var x ==> not_fresh_at sa x) /\
+  (!op. fp.jc_reserved op ==> op <> Var cv /\ op <> Var nv) /\
+  cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
+  lookup_var cv cc = SOME (i2w (n1 + &k)) /\
+  lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
+  FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w,sz) /\
+  n1 <= n2 /\ k < Num (n2 - n1) /\ Num (n2 - n1) < dimword (:256) /\
+  body_inv fp.jc_tops fp.jc_ctx bc fp.jc_cx /\
+  supported_program fp.jc_tops /\ get_module_code fp.jc_cx NONE = SOME fp.jc_tops /\
+  supported_stmts fp.jc_tops bindings stmts /\
+  (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) stmts ==>
+     occurs_abi_decode_target target fp.jc_tops) /\
+  type_stmts (extend_local env id fty F) fp.jc_ret_ty stmts = SOME env_b /\
+  IS_SOME (type_stmts ((extend_local env id fty F) with bare_global_assignable := FEMPTY)
+    fp.jc_ret_ty stmts) /\
+  EVERY (stmt_exprs_ok bc) stmts /\
+  calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_stmts stmts) /\
+  call_evaluation_safe fp.jc_cx (int_calls_stmts stmts) /\
+  stmts_env bc (InLoop exit_lbl incr_lbl)
+    (if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty) stmts sb0 = (ce_b,sb1) /\
+  gas_admissible (eval_for fp.jc_cx tyv id stmts (IntV (n1 + &k) :: vs))
+    (stmt_res_ok lctx) es ==>
+  gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (ignore_bind (push_scope_with_var id tyv (IntV (n1 + &k)))
+      (finally (try (ignore_bind (eval_stmts fp.jc_cx stmts) (return F))
+                     handle_loop_exception) pop_scope))
+    (es,cc)
+    (\res ee u. ?broke. res = INL broke /\
+      u.vs_inst_idx = 0 /\ ~u.vs_halted /\
+      intcall_joint_res fp ce env ee sa u /\
+      (!x z. not_fresh_at sa x /\ lookup_var x cc = SOME z ==> lookup_var x u = SOME z) /\
+      (!aid b. FLOOKUP cc.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
+      cc.vs_alloca_next <= u.vs_alloca_next /\
+      (broke ==> u.vs_current_bb = exit_lbl) /\
+      (~broke ==> u.vs_current_bb = cond_lbl /\
+        lookup_var cv u = SOME (i2w (n1 + &(k+1))) /\
+        lookup_var ev u = SOME (i2w n2) /\ lookup_var p u = SOME w))
+    (\res ee r. ?ex. res = INR ex /\ intcall_stmt_exit fp (INR ex) ee r)
+Proof
+  strip_tac >>
+  `env_scopes_consistent env fp.jc_cx es` by
+    fs[intcall_joint_res_def, exprSimHypsDefsTheory.expr_sim_inv_def,
+       vyperTypeInvariantsTheory.env_consistent_def] >>
+  `lookup_scopes id es.scopes = NONE` by
+    (drule_all intcall_for_scope_absent >> simp[]) >>
+  `!x. not_fresh_at sa x ==> x <> dv` by metis_tac[] >>
+  drule_all intcall_for_range_entry >> strip_tac >>
+  `gas_admissible (eval_stmts fp.jc_cx stmts)
+     (stmt_res_ok (InLoop exit_lbl incr_lbl))
+     (es with scopes := (FEMPTY |+ (id,
+       <|assignable := F; type := tyv; value := IntV (n1 + &k); popped := []|>)) :: es.scopes)` by
+    (irule stmtForRangeMemoryRoundTheory.for_round_body_admissible >>
+     goal_assum (drule_at Any)) >>
+  `cenv_top_ext ce bc ((FEMPTY |+ (id,
+     <|assignable := F; type := tyv; value := IntV (n1 + &k); popped := []|>)) :: es.scopes)` by
+    (drule stmtSimDeclComposeTheory.cenv_top_ext_declare_local >>
+     disch_then irule >> simp[]) >>
+  `(!scs. not_local_ptr ce scs cv /\ not_local_ptr ce scs nv) /\
+   ev <> cv /\ p <> cv /\ ev <> nv /\ p <> nv /\
+   cv <> dv /\ ev <> dv /\ p <> dv /\
+   not_fresh_at sb0 cv /\ not_fresh_at sb0 ev /\ not_fresh_at sb0 p` by
+    (fs[for_code_def] >> metis_tac[]) >>
+  `~fp.jc_reserved (Var nv)` by metis_tac[] >>
+  irule (SRULE [LET_THM] intcall_for_range_round) >> simp[] >>
+  reverse conj_tac
+  >- (qhdtm_assum `for_code` (irule_at Any) >> simp[] >>
+      qexistsl_tac [`s2`, `fty`, `env_b`, `ce_b`] >> simp[] >>
+      qpat_assum `s2.vs_allocas = cc.vs_allocas`
+        (fn th => pure_once_rewrite_tac [GSYM th]) >>
+      qpat_x_assum `intcall_stmts_producer _ _` mp_tac >>
+      rewrite_tac[intcall_stmts_producer_def] >>
+      disch_then irule >> simp[] >>
+      fs[for_code_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem intcall_for_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
        intcall_map_producer fp e) /\
