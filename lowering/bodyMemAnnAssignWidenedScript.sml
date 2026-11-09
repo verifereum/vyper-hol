@@ -19,6 +19,9 @@ Theorem body_annassign_widened_aggregate_call_mem:
        body_expr_mem_ok cx e) /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
