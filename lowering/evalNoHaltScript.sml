@@ -4,13 +4,13 @@
    program.  Only selfdestruct raises the halt, and an internal call passes
    on its callee body's halt; external calls, send and raw_call surface a
    callee's halt as a successful call.
-   TOP-LEVEL: eval_no_halt. *)
+   TOP-LEVEL: eval_no_halt, external_body_no_halt. *)
 Theory evalNoHalt
 Ancestors
   pair list rich_list sorting vyperAST vyperState vyperInterpreter
   vyperContext vyperMisc vyperValue vyperCallOutcome vyperCallOutcomeProps
   vyperStatePreservation vyperExprNoControl vyperCall vyperTypeCallGraph
-  supportedExprTraverse supportedStmtTraverse supportedProgram
+  supportedExprTraverse supportedStmtTraverse supportedDecls supportedProgram
   bodyStorageCases
 Libs
   pairLib monadsyntax
@@ -88,12 +88,6 @@ Theorem return_nh[local]:
   return x s = (INR HaltException, s') ==> F
 Proof
   simp[return_def]
-QED
-
-Theorem raise_nh[local]:
-  raise e s = (INR HaltException, s') ==> e = HaltException
-Proof
-  simp[raise_def]
 QED
 
 Theorem state_ops_nh[local]:
@@ -698,4 +692,35 @@ Proof
       metis_tac[cj 6 eval_no_halt_every])
   >- metis_tac[cj 1 eval_no_halt_every] >>
   metis_tac[cj 2 eval_no_halt_every]
+QED
+
+Theorem lookup_external_MEM[local]:
+  !tops. lookup_function src name External tops =
+           SOME (mut,nr,args,dflts,ret,fbody) ==>
+  (?raw. MEM (FunctionDecl External mut nr raw name args dflts ret fbody) tops) \/
+  (?pnr m ty x. MEM (VariableDecl (Public pnr) m name ty x) tops) \/
+  (?pnr b kt vt x. MEM (HashMapDecl (Public pnr) b name kt vt x) tops)
+Proof
+  Induct >- rw[lookup_function_def] >>
+  gen_tac >> Cases_on `h` >> rw[lookup_function_def] >>
+  TRY (Cases_on `v`) >> gvs[lookup_function_def] >> metis_tac[]
+QED
+
+(* The body an external entry runs never halts in a supported program. *)
+Theorem external_body_no_halt:
+  supported_program tops /\ get_module_code cx NONE = SOME tops /\
+  lookup_function src name External tops =
+    SOME (mut,nr,args,dflts,ret,fbody) ==>
+  eval_stmts cx fbody st <> (INR HaltException, st')
+Proof
+  strip_tac >> drule lookup_external_MEM >> strip_tac
+  >- (drule_all supported_program_function >>
+      simp[supported_function_body_def] >> strip_tac >>
+      drule (cj 2 supported_stmts_storage_syntax) >> strip_tac >>
+      irule (cj 4 eval_no_halt) >> metis_tac[]) >>
+  qpat_x_assum `supported_program _` mp_tac >>
+  simp[supported_program_def, supported_declaration_headers_def, EVERY_MEM] >>
+  strip_tac >>
+  qpat_x_assum `!e. MEM e tops ==> supported_declaration_header tops e`
+    drule >> simp[supported_declaration_header_def]
 QED
