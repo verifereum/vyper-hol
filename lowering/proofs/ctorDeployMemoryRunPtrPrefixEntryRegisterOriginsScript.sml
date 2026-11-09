@@ -160,7 +160,8 @@ Resume prefix_entry_register_suffix_origins[cons]:
   `i < LENGTH fargs` by
     (`LENGTH ((h0,h1)::rest) = LENGTH (DROP i fargs)` by
        (qpat_assum `_::rest = DROP i fargs` (fn th => rewrite_tac[th])) >>
-     fs[LENGTH_DROP] >> decide_tac) >>
+     qpat_x_assum `LENGTH (_::rest) = LENGTH (DROP i fargs)` mp_tac >>
+     pure_rewrite_tac [LENGTH, LENGTH_DROP] >> decide_tac) >>
   `EL i fargs = (h0,h1) /\ rest = DROP (SUC i) fargs` by
     (qspecl_then [`fargs`,`i`] mp_tac DROP_EL_CONS >>
      (impl_tac >- simp[]) >> pure_rewrite_tac[GSYM ADD1] >>
