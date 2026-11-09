@@ -127,6 +127,7 @@ Resume alloc_run_abi_decode_mutual[array]:
   rpt (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >> reverse conj_tac
     >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
       SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
+      SRULE [SF ETA_ss] alloc_run_compile_abi_dec_addr,
       SRULE [SF ETA_ss] alloc_run_compile_alloc_buffer] >> gen_tac >> simp[]) >>
   Cases_on `opc:opcode` >> simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
       SRULE [SF ETA_ss] alloc_run_compile_abi_dec_addr,
