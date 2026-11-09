@@ -32,7 +32,7 @@ Proof
   strip_tac >> drule_all normalize_nonbytes_footprint >> strip_tac >>
   drule_all expr_val_at_frontier >> strip_tac >>
   qexists_tac `w` >> simp[] >>
-  drule_all stmtSimReturnTheory.expr_val_at_bound >> simp[]
+  drule_all exprSimTypedAllocTheory.expr_val_at_bound >> simp[]
 QED
 
 (* A real normalization site, including re-entry at an already recorded site.
