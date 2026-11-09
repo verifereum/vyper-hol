@@ -18,4 +18,3 @@ arr_local_elem_assign
 c10_assign_empty_struct
 c11_annassign_empty_fixed_array
 p20_nested_pop
-w01_return_intcall_dynarray_bytes_widen
