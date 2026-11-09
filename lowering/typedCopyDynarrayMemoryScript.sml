@@ -577,3 +577,209 @@ Resume typed_copy_dynarray_bulk_data_frag_mem[copy]:
 QED
 
 Finalise typed_copy_dynarray_bulk_data_frag_mem
+
+Theorem typed_copy_dynarray_frag_mem:
+  compile_copy_dynarray_typed cenv dst dty C src sty sa = ((),sb) /\
+  type_memory_bytes cenv dty = type_memory_size dtv /\
+  type_memory_bytes cenv sty = type_memory_size stv /\
+  (dty = sty ==> dtv = stv) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  LENGTH vs <= C /\ C < dimword (:256) /\
+  val_wf (ArrayTV stv (Dynamic scap)) (ArrayV (DynArrayV vs)) /\
+  val_wf (ArrayTV dtv (Dynamic C)) (ArrayV (DynArrayV vs)) /\
+  val_in_memory (ArrayTV stv (Dynamic scap)) (ArrayV (DynArrayV vs))
+    (w2n sw) s.vs_memory /\
+  (!i. i < LENGTH vs ==>
+    !dst src sa sb s dw sw.
+      compile_store_memory_typed cenv dst dty src sty sa = ((),sb) /\
+      (!x. dst = Var x ==> not_fresh_at sa x) /\
+      (!x. src = Var x ==> not_fresh_at sa x) /\
+      eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
+      val_in_memory stv (EL i vs) (w2n sw) s.vs_memory /\
+      w2n sw + type_memory_size stv < dimword (:256) /\
+      w2n dw + type_memory_size dtv < dimword (:256) /\
+      (w2n sw + type_memory_size stv <= w2n dw \/
+       w2n dw + type_memory_size dtv <= w2n sw) /\
+      w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+      w2n dw + type_memory_size dtv <= s.vs_alloca_next ==>
+      frag_exec_mem ctx sa sb (\u. u = s)
+        (\t. val_in_memory dtv (EL i vs) (w2n dw) t.vs_memory /\
+             typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t) (\r. F)) /\
+  w2n sw + type_memory_size (ArrayTV stv (Dynamic scap)) < dimword (:256) /\
+  w2n dw + type_memory_size (ArrayTV dtv (Dynamic C)) < dimword (:256) /\
+  (w2n sw + type_memory_size (ArrayTV stv (Dynamic scap)) <= w2n dw \/
+   w2n dw + type_memory_size (ArrayTV dtv (Dynamic C)) <= w2n sw) /\
+  w2n sw + type_memory_size (ArrayTV stv (Dynamic scap)) <= s.vs_alloca_next /\
+  w2n dw + type_memory_size (ArrayTV dtv (Dynamic C)) <= s.vs_alloca_next ==>
+  frag_exec_mem ctx sa sb (\u. u = s)
+    (\t. val_in_memory (ArrayTV dtv (Dynamic C)) (ArrayV (DynArrayV vs))
+           (w2n dw) t.vs_memory /\
+      typed_copy_state_frame sa (w2n dw)
+        (type_memory_size (ArrayTV dtv (Dynamic C))) s t) (\r. F)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `compile_copy_dynarray_typed _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_memory_typed_def] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gnvs[]) >>
+  rename1 `emit_op ADD [dst; Lit 32w] a6 = (dd,b)` >>
+  rename1 `emit_op ADD [src; Lit 32w] a5 = (sd,a6)` >> disch_tac >>
+  drule_all typed_copy_dyn_prefix_mono >> strip_tac >>
+  `frag_exec_mem ctx sa b (\u. u = s)
+    (\t. eval_operand length t = SOME (n2w (LENGTH vs)) /\
+      eval_operand sd t = SOME (sw + 32w) /\ eval_operand dd t = SOME (dw + 32w) /\
+      mem_bytes_at (w2n dw) 32 t.vs_memory = word_to_bytes (n2w (LENGTH vs) : bytes32) T /\
+      (!i. i < LENGTH vs ==> val_in_memory stv (EL i vs)
+         (w2n sw + 32 + i * type_memory_size stv) t.vs_memory) /\
+      typed_copy_state_frame sa (w2n dw) 32 s t) (\r. F)` by
+    (irule typed_copy_dynarray_prefix_rep_frag_mem >>
+     goal_assum (drule_at (Pat `emit_op MLOAD _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_op GT _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_op ISZERO _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_void MSTORE _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_op ADD _ a5 = _`)) >>
+     goal_assum (drule_at Any) >> qexistsl_tac [`dtv`, `scap`] >> simp[]) >>
+  drule frag_exec_mem_then >> disch_then irule >>
+  conj_tac >- suspend "suffix" >> suspend "extensions"
+QED
+
+Resume typed_copy_dynarray_frag_mem[suffix]:
+  simp[] >> rpt gen_tac >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  rename1 `typed_copy_state_frame sa (w2n dw) 32 s t` >>
+  qpat_x_assum `frag_exec_mem ctx sa b _ _ _` kall_tac >>
+  rpt (qpat_x_assum `emit_op _ _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `emit_void _ _ _ = _` kall_tac) >>
+  `LENGTH vs <= scap` by gvs[typed_copy_dynarray_wf] >>
+  `LENGTH vs * type_memory_size stv <= scap * type_memory_size stv /\
+   LENGTH vs * type_memory_size dtv <= C * type_memory_size dtv` by
+    simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+  `w2n (sw + 32w) = w2n sw + 32 /\
+   w2n (dw + 32w) = w2n dw + 32` by
+    (fs[type_memory_size_def] >> simp[word_add_def, w2n_n2w, LESS_MOD]) >>
+  `t.vs_alloca_next = s.vs_alloca_next` by
+    gvs[typed_copy_state_frame_def, venom_state_component_equality] >>
+  `w2n (sw + 32w) + LENGTH vs * type_memory_size stv < dimword (:256) /\
+   w2n (dw + 32w) + LENGTH vs * type_memory_size dtv < dimword (:256) /\
+   (w2n (sw + 32w) + LENGTH vs * type_memory_size stv <= w2n (dw + 32w) \/
+    w2n (dw + 32w) + LENGTH vs * type_memory_size dtv <= w2n (sw + 32w)) /\
+   w2n (sw + 32w) + LENGTH vs * type_memory_size stv <= t.vs_alloca_next /\
+   w2n (dw + 32w) + LENGTH vs * type_memory_size dtv <= t.vs_alloca_next` by
+    (gns[type_memory_size_def, Excl "LE_MULT_RCANCEL"] >> decide_tac) >>
+  (`frag_exec_mem ctx b sb (\u. u = t)
+    (\u. (!i. i < LENGTH vs ==> val_in_memory dtv (EL i vs)
+       (w2n (dw + 32w) + i * type_memory_size dtv) u.vs_memory) /\
+      typed_copy_state_frame b (w2n (dw + 32w))
+        (LENGTH vs * type_memory_size dtv) t u) (\r. F)` by
+    suspend "data") >> suspend "reconstruct"
+QED
+
+Resume typed_copy_dynarray_frag_mem[data]:
+  markerLib.RESUME_TAC >>
+  rpt (qpat_x_assum `ci_mono _ _` kall_tac) >>
+  qpat_x_assum `val_in_memory _ _ _ s.vs_memory` kall_tac >>
+  qpat_x_assum `typed_copy_state_frame sa _ _ s t` kall_tac >>
+  qpat_x_assum `mem_bytes_at _ _ _ = _` kall_tac >>
+  `LENGTH vs < dimword (:256)` by decide_tac >>
+  (Cases_on `type_memory_size dtv = type_memory_size stv /\ dty = sty`
+   >- suspend "bulk_data" >> suspend "slow_data")
+QED
+
+Resume typed_copy_dynarray_frag_mem[bulk_data]:
+  markerLib.RESUME_TAC >>
+  qpat_x_assum `w2n (dw + 32w) = _` kall_tac >>
+  qpat_x_assum `w2n (sw + 32w) = _` kall_tac >>
+  `dtv = stv` by simp[] >> gvs[] >>
+  qpat_x_assum `_ b = ((),sb)` mp_tac >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gnvs[]) >> strip_tac >>
+  ho_match_mp_tac (GEN_ALL typed_copy_dynarray_bulk_data_frag_mem) >>
+  goal_assum (drule_at (Pat `emit_op MUL _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_copy_memory_dynamic _ _ _ _ = _`)) >>
+  qexists_tac `sw + 32w` >> simp[] >>
+  `w2n (sw + 32w) = w2n sw + 32` by
+    (fs[type_memory_size_def] >> simp[word_add_def, w2n_n2w, LESS_MOD]) >>
+  gvs[typed_copy_dynarray_wf]
+QED
+
+Resume typed_copy_dynarray_frag_mem[slow_data]:
+  markerLib.RESUME_TAC >>
+  qpat_x_assum `w2n (dw + 32w) = _` kall_tac >>
+  qpat_x_assum `w2n (sw + 32w) = _` kall_tac >>
+  qpat_x_assum `_ b = ((),sb)` mp_tac >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  ntac 5 (pairarg_tac >> asm_simp_tac std_ss []) >>
+  ntac 5 (pairarg_tac >> asm_simp_tac std_ss []) >>
+  ntac 5 (pairarg_tac >> asm_simp_tac std_ss []) >>
+  rpt (pairarg_tac >> asm_simp_tac std_ss []) >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >> gnvs[] >>
+  `LENGTH vs < dimword (:256)` by decide_tac >>
+  ho_match_mp_tac (GEN_ALL typed_copy_dynarray_slow_data_sizes_frag_mem) >>
+  goal_assum (drule_at (Pat `fresh_label "typed_dyn_cond" _ = _`)) >>
+  goal_assum (drule_at (Pat `fresh_label "typed_dyn_body" _ = _`)) >>
+  goal_assum (drule_at (Pat `fresh_label "typed_dyn_exit" _ = _`)) >>
+  goal_assum (drule_at (Pat `fresh_var _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_inst ASSIGN [Lit 0w] _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `new_block _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_op LT _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_op ISZERO _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `new_block _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_op MUL [Var _; Lit (n2w (type_memory_size stv))] _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_op MUL _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_op ADD _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_op ADD _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_op ADD _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_inst ASSIGN _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `new_block _ _ = _`)) >>
+  qexists_tac `sw + 32w` >> simp[] >>
+  `w2n (sw + 32w) = w2n sw + 32` by
+    (fs[type_memory_size_def] >> simp[word_add_def, w2n_n2w, LESS_MOD]) >>
+  gvs[typed_copy_dynarray_wf] >>
+  metis_tac[]
+QED
+
+Resume typed_copy_dynarray_frag_mem[reconstruct]:
+  markerLib.RESUME_TAC >>
+  qpat_x_assum `_ b = ((),sb)` kall_tac >>
+  qpat_x_assum `frag_exec_mem ctx b sb _ _ _` mp_tac >>
+  disch_then (mp_then Any irule frag_exec_mem_conseq) >> simp[] >>
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  (conj_tac
+  >- (irule typed_copy_dynarray_reconstruct >> conj_tac
+      >- (qpat_assum `!i. _ ==> val_in_memory dtv _ _ _` mp_tac >>
+          simp_tac std_ss [AC ADD_ASSOC ADD_COMM]) >>
+      goal_assum (drule_at (Pat `typed_copy_state_frame _ _ _ _ _`)) >>
+      simp[mem_word_at_def, GSYM mem_bytes_at_def]) >>
+  `typed_copy_state_frame sa (w2n dw + 32)
+      (LENGTH vs * type_memory_size dtv) t s''` by
+    (irule typed_copy_state_frame_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  irule (GEN_ALL typed_copy_state_frame_trans) >> qexists_tac `t` >> conj_tac
+  >- (irule typed_copy_state_frame_subinterval >>
+      goal_assum (drule_at (Pat `typed_copy_state_frame _ _ _ s t`)) >>
+      simp[type_memory_size_def]) >>
+  irule typed_copy_state_frame_subinterval >>
+  goal_assum (drule_at (Pat `typed_copy_state_frame sa _ _ t _`)) >>
+  simp[type_memory_size_def, Excl "LE_MULT_RCANCEL"])
+QED
+
+Resume typed_copy_dynarray_frag_mem[extensions]:
+  reverse conj_tac >- gvs[ci_mono_def] >>
+  qmatch_asmsub_abbrev_tac `suffix b = ((),sb)` >>
+  `ci_mono b (SND (suffix b))` suffices_by gvs[ci_mono_def] >>
+  unabbrev_all_tac >>
+  IF_CASES_TAC >>
+  rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind] >>
+       rpt conj_tac >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_emit_op, ci_mono_emit_inst, ci_mono_new_block,
+       ci_mono_fresh_label, ci_mono_fresh_var, ci_mono_comp_return,
+       cj 1 ci_mono_typed_memory_family,
+       contextTheory.compile_copy_memory_dynamic_def, ci_mono_emit_void]
+QED
+
+Finalise typed_copy_dynarray_frag_mem
