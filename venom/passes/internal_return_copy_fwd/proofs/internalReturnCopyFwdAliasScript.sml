@@ -3,7 +3,8 @@ Theory internalReturnCopyFwdAlias
 Ancestors
   internalReturnCopyFwdPlan ptrDiscipline venomWfProps venomInst list finite_map words
   venomExecSemantics venomState o1LowerDloadPairedAllocation
-  venomMemProps basePtrProofs o1FrameLockstep ssaAvailablePred venomExecProofs venomWf rangeAnalysisProofs
+  venomMemProps basePtrProofs o1FrameLockstep ssaAvailablePred venomExecProofs venomWf rangeAnalysisProofs contextCodegenRel
+  tailMergeStep venomInstProofs1
 
 Definition ircf_alias_value_def:
   ircf_alias_value fn s G v <=>
@@ -427,4 +428,146 @@ Proof
     metis_tac[ircf_alias_site_eval_phis] >>
   gvs[entry_prov_def] >>
   gvs[ircf_alias_site_value_def, lookup_var_def]
+QED
+
+Theorem ircf_alias_site_entry:
+  ssa_form fn /\ fn_entry_label fn = SOME s.vs_current_bb /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  enters_block fn s t ==>
+  boundary_pred fn bb t.vs_inst_idx (ircf_alias_site_value fn t G)
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  gvs[enters_block_def] >>
+  simp[boundary_pred_def] >> conj_tac
+  >- (`bb.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+      metis_tac[dom_pred_entry]) >>
+  metis_tac[ircf_alias_site_phi_prefix]
+QED
+
+Theorem ircf_alias_site_call_entry:
+  ssa_form callee /\ setup_callee callee args s = SOME cs /\
+  lookup_block cs.vs_current_bb callee.fn_blocks = SOME bb /\
+  enters_block callee cs t ==>
+  boundary_pred callee bb t.vs_inst_idx (ircf_alias_site_value callee t G)
+Proof
+  strip_tac >> irule ircf_alias_site_entry >> simp[] >>
+  qexists_tac `cs` >> simp[] >>
+  gvs[setup_callee_def, fn_entry_label_def, entry_block_def]
+QED
+
+Theorem ircf_size_coherent_enters_block:
+  ircf_size_coherent fn s /\ enters_block fn s t ==>
+  ircf_size_coherent fn t
+Proof
+  rw[enters_block_def] >>
+  drule eval_phis_only_updates_vs_vars >>
+  disch_then (fn th => once_rewrite_tac[th]) >>
+  gvs[ircf_size_coherent_def] >> metis_tac[]
+QED
+
+Theorem ircf_size_coherent_call_entry:
+  setup_callee callee args s = SOME cs /\ enters_block callee cs t ==>
+  ircf_size_coherent callee t
+Proof
+  strip_tac >> irule ircf_size_coherent_enters_block >>
+  qexists_tac `cs` >> simp[] >> irule ircf_size_coherent_empty >>
+  gvs[setup_callee_def]
+QED
+
+Theorem ircf_alias_site_bind_invoke:
+  ssa_form fn /\ MEM callinst (fn_insts fn) /\ callinst.inst_opcode = INVOKE /\
+  ircf_alias_site_value fn s G v /\
+  bind_outputs callinst.inst_outputs vals s = SOME t ==>
+  ircf_alias_site_value fn t (DRESTRICT G (COMPL (set callinst.inst_outputs))) v
+Proof
+  strip_tac >>
+  `t.vs_allocas = s.vs_allocas` by
+    (irule bind_outputs_preserves >> simp[update_var_def] >> metis_tac[]) >>
+  simp[ircf_alias_site_value_def] >> rpt strip_tac >>
+  `~MEM v callinst.inst_outputs /\ ~MEM root callinst.inst_outputs` by
+    (conj_tac >> strip_tac >>
+     `ircf_alias fn root root` by simp[ircf_alias_refl] >>
+     drule_all ircf_alias_output_inv >> strip_tac >> gvs[]) >>
+  `lookup_var v t = lookup_var v s` by
+    metis_tac[tailMergeStepTheory.bind_outputs_lookup_outside] >>
+  `lookup_var root t = lookup_var root s` by
+    metis_tac[tailMergeStepTheory.bind_outputs_lookup_outside] >>
+  simp[FLOOKUP_DRESTRICT] >> metis_tac[ircf_alias_site_value_def]
+QED
+
+Theorem ircf_alias_site_return:
+  ssa_form fn /\ MEM callinst (fn_insts fn) /\ callinst.inst_opcode = INVOKE /\
+  ircf_alias_site_value fn s G v /\
+  bind_outputs callinst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state s e)) = SOME t ==>
+  ircf_alias_site_value fn (t with vs_inst_idx := n)
+    (DRESTRICT G (COMPL (set callinst.inst_outputs))) v
+Proof
+  strip_tac >>
+  `ircf_alias_site_value fn (adopt_return_fmp ret (merge_callee_state s e)) G v` by
+    (Cases_on `ret.iret_adopt_fmp` >>
+     gvs[adopt_return_fmp_def, merge_callee_state_def,
+         ircf_alias_site_value_def, lookup_var_def] >> metis_tac[]) >>
+  drule_all ircf_alias_site_bind_invoke >>
+  simp[ircf_alias_site_value_def, lookup_var_def]
+QED
+
+Theorem ircf_size_coherent_return:
+  ircf_size_coherent fn s /\
+  bind_outputs outs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state s e)) = SOME t ==>
+  ircf_size_coherent fn (t with vs_inst_idx := n)
+Proof
+  strip_tac >>
+  `t.vs_allocas = (adopt_return_fmp ret (merge_callee_state s e)).vs_allocas` by
+    (irule bind_outputs_preserves >> simp[update_var_def] >> metis_tac[]) >>
+  `t.vs_allocas = s.vs_allocas` by
+    (Cases_on `ret.iret_adopt_fmp` >> gvs[adopt_return_fmp_def, merge_callee_state_def]) >>
+  gvs[ircf_size_coherent_def] >> metis_tac[]
+QED
+
+Theorem ircf_alias_site_boundary_return:
+  ssa_form fn /\ MEM bb fn.fn_blocks /\ n < LENGTH bb.bb_instructions /\
+  callinst = EL n bb.bb_instructions /\ callinst.inst_opcode = INVOKE /\
+  boundary_pred fn bb n (ircf_alias_site_value fn s G) /\
+  bind_outputs callinst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state s e)) = SOME t ==>
+  boundary_pred fn bb (SUC n)
+    (ircf_alias_site_value fn (t with vs_inst_idx := SUC n)
+      (DRESTRICT G (COMPL (set callinst.inst_outputs))))
+Proof
+  strip_tac >>
+  `MEM callinst (fn_insts fn)` by
+    (gvs[fn_insts_def] >> metis_tac[o1PassContractTheory.fn_insts_blocks_MEM, EL_MEM]) >>
+  `!v. ircf_alias_site_value fn s G v ==>
+     ircf_alias_site_value fn (t with vs_inst_idx := SUC n)
+       (DRESTRICT G (COMPL (set callinst.inst_outputs))) v` by
+    metis_tac[ircf_alias_site_return] >>
+  simp[boundary_pred_def] >> conj_tac
+  >- metis_tac[boundary_pred_def, dom_pred_mono] >>
+  irule prefix_pred_suc >> reverse conj_tac
+  >- metis_tac[boundary_pred_def, prefix_pred_mono] >>
+  rpt strip_tac >> irule ircf_alias_site_other_output >> simp[] >>
+  qexists_tac `callinst` >> simp[]
+QED
+
+Theorem ircf_alias_site_boundary_exit:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  MEM bb fn.fn_blocks /\ bb_well_formed bb /\ n < LENGTH bb.bb_instructions /\
+  callinst = EL n bb.bb_instructions /\ is_terminator callinst.inst_opcode /\
+  fn_reachable fn bb.bb_label /\ fn_cfg_edge fn bb.bb_label lbl /\
+  boundary_pred fn bb n (ircf_alias_site_value fn s G) /\
+  ircf_size_coherent fn s /\ step_inst fuel C callinst s = OK t ==>
+  dom_pred fn lbl (ircf_alias_site_value fn t (step_prov PG G callinst t))
+Proof
+  strip_tac >>
+  `callinst.inst_opcode <> PHI` by
+    (Cases_on `callinst.inst_opcode` >> gvs[is_terminator_def]) >>
+  `boundary_pred fn bb (SUC n) (ircf_alias_site_value fn t (step_prov PG G callinst t))` by
+    metis_tac[ircf_alias_site_boundary_step] >>
+  irule boundary_pred_exit >> simp[] >>
+  qexistsl_tac [`bb`, `n`] >> simp[] >>
+  gvs[boundary_pred_def, prefix_pred_def] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> goal_assum drule >> simp[]
 QED
