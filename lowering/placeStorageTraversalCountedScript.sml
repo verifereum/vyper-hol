@@ -214,3 +214,181 @@ Proof
   (impl_tac >- (simp[ALL_DISTINCT, MEM] >> metis_tac[])) >>
   simp[gas_marked_path_def]
 QED
+
+Theorem storage_traversal_word_iteration[local]:
+  lookup_block hdr fn.fn_blocks = SOME hb /\
+  hb.bb_instructions =
+    [mk_inst hid LT [Var ctr; Var len] [cmp];
+     mk_inst (hid+1) ISZERO [Var cmp] [done];
+     mk_inst (hid+2) JNZ [Var done; Label exit; Label body_lbl] []] /\
+  code =
+    [mk_inst id MUL [Var ctr; Lit 32w] [mv];
+     mk_inst (id+1) ADD [Lit 32w; Var mv] [so];
+     mk_inst (id+2) ADD [src; Var so] [sp];
+     mk_inst (id+3) MLOAD [Var sp] [v];
+     mk_inst (id+4) ADD [Var ctr; Lit 1w] [off];
+     mk_inst (id+5) ADD [dst; Var off] [dp];
+     mk_inst (id+6) (if tr then TSTORE else SSTORE) [Var dp; Var v] []] /\
+  lookup_block body_lbl fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = code ++ typed_sa_backedge_insts tid ctr nv hdr /\
+  ALL_DISTINCT [ctr; len; cmp; done; nv] /\
+  ALL_DISTINCT [ctr; mv; so; sp; v; off; dp] /\
+  ~MEM len [mv; so; sp; v; off; dp] /\
+  (!x. not_fresh_at sa x ==> ~MEM x [ctr; cmp; done; nv; mv; so; sp; v; off; dp]) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  H = (\i. FOLDL (\a j. store_copy_prefix (if tr then LocTransient else LocStorage)
+         (p + n2w (32 + j*32)) (d + n2w (1+j)) a 1) sbase (COUNT_LIST i)) /\
+  eval_operand src sbase = SOME p /\ eval_operand dst sbase = SOME d /\
+  ~sbase.vs_call_ctx.cc_static /\
+  (!j. j < n ==> w2n (p + n2w (32+j*32)) + 32 <= sbase.vs_alloca_next) /\
+  n < dimword(:256) /\
+  store_copy_normalize sbase s = H 0 /\
+  (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase) /\
+  lookup_var ctr s = SOME 0w /\ lookup_var len s = SOME (n2w n) /\
+  ~s.vs_halted /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 ==>
+  ?t. gas_path_mem ctx fn s 0 (OK t) /\
+      store_copy_normalize sbase t = H n /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x sbase) /\
+      lookup_var ctr t = SOME (n2w n) /\ lookup_var len t = SOME (n2w n) /\
+      ~t.vs_halted /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `loop_inv = \j u.
+    store_copy_normalize sbase u = H j /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x sbase) /\
+    lookup_var ctr u = SOME (n2w j) /\ lookup_var len u = SOME (n2w n) /\
+    ~u.vs_halted /\ u.vs_current_bb = hdr /\ u.vs_inst_idx = 0` >>
+  `?t. gas_path_mem ctx fn s 0 (OK t) /\ loop_inv n t` suffices_by
+    simp[Abbr `loop_inv`] >>
+  irule (Q.SPECL [`n`, `0`] gas_path_mem_finite_iteration) >>
+  simp[Abbr `loop_inv`, IgnAsm `H = _`] >> rpt strip_tac >>
+  mp_tac (Q.INST [`s` |-> `u`] storage_traversal_word_round) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
+QED
+
+Theorem storage_traversal_multi_round[local]:
+  lookup_block hdr fn.fn_blocks = SOME hb /\
+  hb.bb_instructions =
+    [mk_inst hid LT [Var ctr; Var len] [cmp];
+     mk_inst (hid+1) ISZERO [Var cmp] [done];
+     mk_inst (hid+2) JNZ [Var done; Label exit; Label body_lbl] []] /\
+  code =
+    [mk_inst id MUL [Var ctr; Lit (n2w em)] [mv];
+     mk_inst (id+1) ADD [Lit 32w; Var mv] [so];
+     mk_inst (id+2) ADD [src; Var so] [sp];
+     mk_inst (id+3) MUL [Var ctr; Lit (n2w ew)] [dm];
+     mk_inst (id+4) ADD [Lit 1w; Var dm] [off];
+     mk_inst (id+5) ADD [dst; Var off] [dp]] /\
+  lookup_block body_lbl fn.fn_blocks = SOME bb /\ isPREFIX code bb.bb_instructions /\
+  body_lbl = sc.cs_current_bb /\ LENGTH sc.cs_current_insts = 6 /\
+  lookup_block sd.cs_current_bb fn.fn_blocks = SOME tb /\
+  tb.bb_instructions = prefix ++ typed_sa_backedge_insts tid ctr nv hdr /\
+  LENGTH prefix = LENGTH sd.cs_current_insts /\
+  ALL_DISTINCT [ctr; len; cmp; done; nv] /\
+  ALL_DISTINCT [ctr; mv; so; sp; dm; off; dp] /\
+  ~MEM len [mv; so; sp; dm; off; dp] /\
+  (!x. not_fresh_at sa x ==> ~MEM x [ctr; cmp; done; nv; mv; so; sp; dm; off; dp]) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  (loc = LocStorage \/ loc = LocTransient) /\
+  compile_word_copy_loop (Var sp) (Var dp) ew LocMemory loc F sc = (res,sd) /\
+  fn_has_code sc sd fn /\ ew < dimword(:256) /\
+  not_fresh_at sc sp /\ not_fresh_at sc dp /\
+  not_fresh_at sc ctr /\ not_fresh_at sc len /\
+  (!x. not_fresh_at sa x ==> not_fresh_at sc x) /\
+  H = (\i. FOLDL (\a j. store_copy_prefix loc
+         (p + n2w (32 + j*em)) (d + n2w (1+j*ew)) a ew) sbase (COUNT_LIST i)) /\
+  eval_operand src sbase = SOME p /\ eval_operand dst sbase = SOME d /\
+  ~sbase.vs_call_ctx.cc_static /\
+  w2n (p + n2w (32+j*em)) + 32*ew <= sbase.vs_alloca_next /\
+  j < n /\ n < dimword(:256) /\
+  store_copy_normalize sbase s = H j /\
+  (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase) /\
+  lookup_var ctr s = SOME (n2w j) /\ lookup_var len s = SOME (n2w n) /\
+  ~s.vs_halted /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 ==>
+  ?t. gas_path_mem ctx fn s 0 (OK t) /\
+      store_copy_normalize sbase t = H (SUC j) /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x sbase) /\
+      lookup_var ctr t = SOME (n2w (SUC j)) /\ lookup_var len t = SOME (n2w n) /\
+      ~t.vs_halted /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0
+Proof
+  strip_tac >>
+  qpat_x_assum `ALL_DISTINCT [ctr; len; cmp; done; nv]`
+    (strip_assume_tac o REWRITE_RULE [ALL_DISTINCT, MEM]) >>
+  irule storage_traversal_round >>
+  qpat_assum `hb.bb_instructions = _` (irule_at Any) >>
+  qpat_assum `tb.bb_instructions = _` (irule_at Any) >>
+  qpat_assum `lookup_block sd.cs_current_bb _ = _` (irule_at Any) >>
+  fs[IgnAsm `H = _`, ALL_DISTINCT, MEM] >> rpt strip_tac >>
+  `u.vs_memory = sbase.vs_memory /\ u.vs_allocas = sbase.vs_allocas /\
+   u.vs_alloca_next = sbase.vs_alloca_next /\
+   u.vs_call_ctx = sbase.vs_call_ctx /\ u.vs_labels = sbase.vs_labels` by
+    (irule (Q.INST [`stride` |-> `em`] storage_traversal_fold_fields) >>
+     qpat_assum `store_copy_normalize sbase u = _` (irule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  `eval_operand src u = SOME p /\ eval_operand dst u = SOME d` by
+    (conj_tac >- (Cases_on `src` >> gvs[eval_operand_def] >> metis_tac[]) >>
+     Cases_on `dst` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  qpat_x_assum `isPREFIX code _` (strip_assume_tac o REWRITE_RULE [IS_PREFIX_APPEND]) >>
+  mp_tac (Q.INST [`s` |-> `u`] (Q.INST [`u` |-> `res`] storage_element_multi_path)) >>
+  (impl_tac >- (simp[ALL_DISTINCT, MEM] >> metis_tac[])) >>
+  simp[gas_marked_path_def]
+QED
+
+Theorem storage_traversal_multi_iteration[local]:
+  lookup_block hdr fn.fn_blocks = SOME hb /\
+  hb.bb_instructions =
+    [mk_inst hid LT [Var ctr; Var len] [cmp];
+     mk_inst (hid+1) ISZERO [Var cmp] [done];
+     mk_inst (hid+2) JNZ [Var done; Label exit; Label body_lbl] []] /\
+  code =
+    [mk_inst id MUL [Var ctr; Lit (n2w em)] [mv];
+     mk_inst (id+1) ADD [Lit 32w; Var mv] [so];
+     mk_inst (id+2) ADD [src; Var so] [sp];
+     mk_inst (id+3) MUL [Var ctr; Lit (n2w ew)] [dm];
+     mk_inst (id+4) ADD [Lit 1w; Var dm] [off];
+     mk_inst (id+5) ADD [dst; Var off] [dp]] /\
+  lookup_block body_lbl fn.fn_blocks = SOME bb /\ isPREFIX code bb.bb_instructions /\
+  body_lbl = sc.cs_current_bb /\ LENGTH sc.cs_current_insts = 6 /\
+  lookup_block sd.cs_current_bb fn.fn_blocks = SOME tb /\
+  tb.bb_instructions = prefix ++ typed_sa_backedge_insts tid ctr nv hdr /\
+  LENGTH prefix = LENGTH sd.cs_current_insts /\
+  ALL_DISTINCT [ctr; len; cmp; done; nv] /\
+  ALL_DISTINCT [ctr; mv; so; sp; dm; off; dp] /\
+  ~MEM len [mv; so; sp; dm; off; dp] /\
+  (!x. not_fresh_at sa x ==> ~MEM x [ctr; cmp; done; nv; mv; so; sp; dm; off; dp]) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  (loc = LocStorage \/ loc = LocTransient) /\
+  compile_word_copy_loop (Var sp) (Var dp) ew LocMemory loc F sc = (res,sd) /\
+  fn_has_code sc sd fn /\ ew < dimword(:256) /\
+  not_fresh_at sc sp /\ not_fresh_at sc dp /\
+  not_fresh_at sc ctr /\ not_fresh_at sc len /\
+  (!x. not_fresh_at sa x ==> not_fresh_at sc x) /\
+  H = (\i. FOLDL (\a j. store_copy_prefix loc
+         (p + n2w (32 + j*em)) (d + n2w (1+j*ew)) a ew) sbase (COUNT_LIST i)) /\
+  eval_operand src sbase = SOME p /\ eval_operand dst sbase = SOME d /\
+  ~sbase.vs_call_ctx.cc_static /\
+  (!j. j < n ==> w2n (p + n2w (32+j*em)) + 32*ew <= sbase.vs_alloca_next) /\
+  n < dimword(:256) /\
+  store_copy_normalize sbase s = H 0 /\
+  (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase) /\
+  lookup_var ctr s = SOME 0w /\ lookup_var len s = SOME (n2w n) /\
+  ~s.vs_halted /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 ==>
+  ?t. gas_path_mem ctx fn s 0 (OK t) /\
+      store_copy_normalize sbase t = H n /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x sbase) /\
+      lookup_var ctr t = SOME (n2w n) /\ lookup_var len t = SOME (n2w n) /\
+      ~t.vs_halted /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `loop_inv = \j u.
+    store_copy_normalize sbase u = H j /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x sbase) /\
+    lookup_var ctr u = SOME (n2w j) /\ lookup_var len u = SOME (n2w n) /\
+    ~u.vs_halted /\ u.vs_current_bb = hdr /\ u.vs_inst_idx = 0` >>
+  `?t. gas_path_mem ctx fn s 0 (OK t) /\ loop_inv n t` suffices_by
+    simp[Abbr `loop_inv`] >>
+  irule (Q.SPECL [`n`, `0`] gas_path_mem_finite_iteration) >>
+  simp[Abbr `loop_inv`, IgnAsm `H = _`] >> rpt strip_tac >>
+  mp_tac (Q.INST [`s` |-> `u`] storage_traversal_multi_round) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
+QED
