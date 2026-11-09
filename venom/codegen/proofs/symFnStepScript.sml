@@ -162,9 +162,26 @@ Resume sym_block_prefix_step[single]:
      combinTheory.K_THM, fnPlanPrefixTheory.wf_marked_cleanup_fields,
      fn_frame_inv_cleanup_fields, sym_frame_inv_cleanup_fields]
     sym_single_pred_prefix_frame_sim) >> simp[] >>
-  conj_tac >- gvs[listTheory.MEM_APPEND] >>
-  conj_tac >- metis_tac[] >>
-  qexistsl_tac [`ch`, `growth`, `h`, `lbl_ctr`, `pred`, `promised`, `ps_l`, `spill_base`, `vs`] >> gvs[] >> metis_tac[]
+  suspend "single_inputs"
+QED
+
+Resume sym_block_prefix_step[single_inputs]:
+  conj_tac >- suspend "single_spill_bounds" >>
+  conj_tac >- suspend "single_operand_stability" >>
+  suspend "single_lineage_witnesses"
+QED
+
+Resume sym_block_prefix_step[single_spill_bounds]:
+  gvs[listTheory.MEM_APPEND]
+QED
+
+Resume sym_block_prefix_step[single_operand_stability]:
+  metis_tac[]
+QED
+
+Resume sym_block_prefix_step[single_lineage_witnesses]:
+  qexistsl_tac [`ch`, `growth`, `h`, `lbl_ctr`, `pred`, `promised`, `ps_l`, `spill_base`, `vs`] >>
+  gvs[] >> metis_tac[]
 QED
 
 Resume sym_block_prefix_step[join]:
@@ -180,10 +197,23 @@ Resume sym_block_prefix_step[join]:
      fnPlanPrefixTheory.wf_marked_cleanup_fields,
      fn_frame_inv_cleanup_fields, sym_frame_inv_cleanup_fields]
     sym_phi_prefix_frame_sim) >>
+  suspend "join_frame_inputs"
+QED
+
+Resume sym_block_prefix_step[join_frame_inputs]:
   disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  suspend "join_lineage_region_inputs"
+QED
+
+Resume sym_block_prefix_step[join_lineage_region_inputs]:
   disch_then (drule_at (Pat `lineage_entry _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `MEM _ _.cp_regions`)) >> simp[] >> (impl_tac >- metis_tac[]) >> simp[]
+  disch_then (drule_at (Pat `MEM _ _.cp_regions`)) >>
+  suspend "join_side_conditions"
+QED
+
+Resume sym_block_prefix_step[join_side_conditions]:
+  simp[] >> (impl_tac >- metis_tac[]) >> simp[]
 QED
 
 Finalise sym_block_prefix_step
