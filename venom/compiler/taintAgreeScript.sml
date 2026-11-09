@@ -18,7 +18,7 @@
 
 Theory taintAgree
 Ancestors
-  o1LowerDloadJointStorageWrite o1LowerDloadStackFrontier
+  o1LowerDloadHaltResult o1LowerDloadJointStorageWrite o1LowerDloadStackFrontier
   o1LowerDloadRangeTransport o1LowerDloadJointMemoryRead
   o1LowerDloadMemoryConsumer o1LowerDloadJointInternalEffects
   o1LowerDloadRelocationKernel o1LowerDloadShared o1PassContract ptrDiscipline codegenRel contextCodegenRel
@@ -968,6 +968,82 @@ Proof
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`s.vs_call_ctx.cc_address`, `tn`] >>
   gvs[taint_agree_def, ld_shared_agree_def]
+QED
+
+Theorem taint_agree_selfdestruct_halt:
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  ptr_discipline lo C vs /\ taint_within D C vs /\
+  taint_agree D X tn s t /\ inst.inst_opcode = SELFDESTRUCT /\
+  step_inst_base inst s = Halt sh ==>
+  ?th. step_inst_base inst t = Halt th /\ dead_result_rel D (Halt sh) (Halt th)
+Proof
+  strip_tac >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule taint_agree_operand_clean >>
+     gvs[taint_ok_def] >> metis_tac[]) >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t /\
+   s.vs_call_ctx = t.vs_call_ctx` by
+    metis_tac[taint_agree_call_ctx, taint_agree_def] >>
+  `step_inst 0 C inst s = Halt sh` by simp[step_inst_non_invoke] >>
+  drule_all ld_shared_selfdestruct_step >>
+  disch_then (qspec_then `C` strip_assume_tac) >>
+  qexists_tac `t1` >> conj_tac
+  >- gvs[step_inst_non_invoke] >>
+  irule taint_agree_halt_result >>
+  qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem taint_agree_terminal_step:
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\ ~in_revert_forward fn s /\
+  taint_within D C vs /\ taint_agree D X tn s t /\ inst_wf inst /\
+  (!off len i. MEM (off,len) (source_memory_read_ranges inst s) /\
+               off <= i /\ i < off + len ==> i NOTIN X) /\
+  MEM inst.inst_opcode [RET; STOP; SINK; RETURN; SELFDESTRUCT;
+                       ASSERT; ASSERT_UNREACHABLE; INVALID; REVERT] ==>
+  (!s'. step_inst_base inst s = OK s' ==>
+    ?t'. step_inst_base inst t = OK t' /\
+         taint_agree D X (step_taint inst s s' tn) s' t') /\
+  (!v s'. step_inst_base inst s = IntRet v s' ==>
+    ?t'. step_inst_base inst t = IntRet v t' /\ taint_agree D X tn s' t') /\
+  (!s'. step_inst_base inst s = Halt s' ==>
+    ?t'. step_inst_base inst t = Halt t' /\ dead_result_rel D (Halt s') (Halt t')) /\
+  (!a s'. step_inst_base inst s = Abort a s' ==>
+    ?t'. step_inst_base inst t = Abort a t')
+Proof
+  strip_tac >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  Cases_on `MEM inst.inst_opcode [ASSERT; ASSERT_UNREACHABLE; INVALID; REVERT]`
+  >- (irule taint_agree_assert_step >> metis_tac[]) >>
+  `MEM inst.inst_opcode [RET; STOP; SINK; RETURN; SELFDESTRUCT]` by fs[MEM] >>
+  conj_tac
+  >- (rpt strip_tac >> fs[MEM] >>
+      gvs[step_inst_base_opcode_eqs, AllCaseEqs()]) >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `inst.inst_opcode = RET`
+      >- (irule taint_agree_ret >> metis_tac[]) >>
+      fs[MEM] >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()]) >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `inst.inst_opcode = RETURN`
+      >- (irule taint_agree_return_halt >> metis_tac[]) >>
+      Cases_on `inst.inst_opcode = SELFDESTRUCT`
+      >- (irule taint_agree_selfdestruct_halt >> metis_tac[]) >>
+      Cases_on `inst.inst_opcode = RET`
+      >- gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      irule taint_agree_simple_halt >> fs[MEM] >> metis_tac[]) >>
+  rpt strip_tac >> fs[MEM] >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
+  conj_tac >- metis_tac[] >>
+  mp_tac o1LowerDloadOpaqueTheory.eval_operands_defined_iff >>
+  disch_then (qspecl_then [`inst.inst_operands`, `s`, `t`] mp_tac) >>
+  simp[] >> disch_then irule >> rpt strip_tac >>
+  `eval_operand op s = eval_operand op t` by
+    (irule taint_agree_operand_clean >> gvs[taint_ok_def] >> metis_tac[]) >>
+  simp[]
 QED
 
 (* Why it holds: taint_ok gives each operand of a non-propagating opcode
