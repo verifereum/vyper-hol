@@ -1752,3 +1752,177 @@ Proof
   gvs[inline_opaque_available_fdom, SUBSET_DEF] >>
   rpt strip_tac >> irule lookup_var_fdom >> qexists `d` >> simp[] >> metis_tac[]
 QED
+
+(* Output-only framing deliberately imposes no restriction on parameter reads:
+   arguments may read an opaque caller token without writing it. *)
+Theorem inline_rewrite_outputs_disjoint:
+  !inst args outs ret pi ri P.
+    EVERY (\x. x NOTIN P) inst.inst_outputs /\
+    EVERY (\x. x NOTIN P) outs /\
+    ((inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) ==>
+      raw_return_user_arity inst = SOME (LENGTH outs)) /\
+    MEM ri (FST (rewrite_inline_inst args outs ret inst pi)) ==>
+    EVERY (\x. x NOTIN P) ri.inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `is_param_opcode inst.inst_opcode`
+  >- gvs[rewrite_inline_inst_def, SF boolSimps.COND_elim_ss] >>
+  Cases_on `inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP`
+  >- (simp[EVERY_MEM] >> rpt strip_tac >>
+      `MEM x outs` by
+        (irule functionInlinerReturnBoundaryTheory.inline_return_static_write_boundary >>
+         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      gvs[EVERY_MEM]) >>
+  gvs[rewrite_inline_inst_def]
+QED
+
+Theorem inline_rewrite_insts_outputs_disjoint:
+  !insts args outs ret pi ris pi' P.
+    EVERY (\inst. EVERY (\x. x NOTIN P) inst.inst_outputs) insts /\
+    EVERY (\x. x NOTIN P) outs /\
+    (!inst. MEM inst insts /\
+      (inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) ==>
+      raw_return_user_arity inst = SOME (LENGTH outs)) /\
+    rewrite_inline_insts args outs ret insts pi = (ris,pi') ==>
+    EVERY (\inst. EVERY (\x. x NOTIN P) inst.inst_outputs) ris
+Proof
+  Induct >> simp[rewrite_inline_insts_def] >> rpt gen_tac >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  conj_tac
+  >- (pure_once_rewrite_tac[EVERY_MEM] >> gen_tac >> disch_tac >> BETA_TAC >>
+      irule inline_rewrite_outputs_disjoint >> metis_tac[pairTheory.FST]) >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem inline_rewrite_blocks_outputs_disjoint:
+  !bbs args outs ret pi bbs' pi' P.
+    EVERY (\bb. EVERY (\inst. EVERY (\x. x NOTIN P) inst.inst_outputs)
+      bb.bb_instructions) bbs /\
+    EVERY (\x. x NOTIN P) outs /\
+    (!bb inst. MEM bb bbs /\ MEM inst bb.bb_instructions /\
+      (inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) ==>
+      raw_return_user_arity inst = SOME (LENGTH outs)) /\
+    rewrite_inline_blocks args outs ret bbs pi = (bbs',pi') ==>
+    EVERY (\bb. EVERY (\inst. EVERY (\x. x NOTIN P) inst.inst_outputs)
+      bb.bb_instructions) bbs'
+Proof
+  Induct >> simp[rewrite_inline_blocks_def] >> rpt gen_tac >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  conj_tac
+  >- (qpat_x_assum `rewrite_inline_block _ _ _ _ _ = _` mp_tac >>
+      simp[rewrite_inline_block_def] >> pairarg_tac >> simp[] >>
+      strip_tac >> gvs[] >> irule inline_rewrite_insts_outputs_disjoint >>
+      metis_tac[]) >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem inline_clone_outputs_disjoint:
+  (!x. STRCAT p x NOTIN P) ==>
+  EVERY (\bb. EVERY (\inst. EVERY (\x. x NOTIN P) inst.inst_outputs)
+    bb.bb_instructions) (clone_function p callee).fn_blocks
+Proof
+  simp[clone_function_def, clone_basic_block_def, clone_instruction_def,
+       EVERY_MAP, EVERY_MEM, MEM_MAP] >> rpt strip_tac >> gvs[] >>
+  gvs[clone_basic_block_def, MEM_MAP, clone_instruction_def]
+QED
+
+Theorem inline_clone_rewrite_outputs_disjoint:
+  !p P outs callee args ret pi bbs pi'.
+  (!x. STRCAT p x NOTIN P) /\ EVERY (\x. x NOTIN P) outs /\
+  (!r. MEM r (fn_insts callee) /\
+    (r.inst_opcode = RET \/ r.inst_opcode = RETFMP) ==>
+    raw_return_user_arity r = SOME (LENGTH outs)) /\
+  rewrite_inline_blocks args outs ret (clone_function p callee).fn_blocks pi = (bbs,pi') ==>
+  EVERY (\bb. EVERY (\inst. EVERY (\x. x NOTIN P) inst.inst_outputs)
+    bb.bb_instructions) bbs
+Proof
+  rpt gen_tac >> strip_tac >> irule inline_rewrite_blocks_outputs_disjoint >>
+  goal_assum (drule_at Any) >> simp[inline_clone_outputs_disjoint] >>
+  metis_tac[functionInlinerNamespaceTheory.clone_blocks_return_arity]
+QED
+
+Theorem inline_protected_exec_block:
+  exec_block fuel ctx bb t = OK v /\
+  EVERY (\inst. EVERY (\x. x NOTIN P) inst.inst_outputs) bb.bb_instructions /\
+  (!x. x IN P ==> lookup_var x t = lookup_var x d) ==>
+  !x. x IN P ==> lookup_var x v = lookup_var x d
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  `~MEM x (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by
+    (gvs[EVERY_MEM, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  metis_tac[exec_block_preserves_non_output_vars]
+QED
+
+Theorem inline_qualified_clone_outputs_disjoint:
+  !ctx0 n caller callee opaque call args ret pi bbs pi'.
+  qualified_origin ctx0 n caller /\ qualified_origin ctx0 n callee /\
+  opaque SUBSET set (cfgTransform$fn_all_vars caller) /\
+  inline_opacity_ok caller opaque /\ MEM call (fn_insts caller) /\
+  call.inst_opcode = INVOKE /\ call.inst_operands = Label callee.fn_name::args /\
+  rewrite_inline_blocks (rotate_invoke_ops call.inst_operands) call.inst_outputs ret
+    (clone_function (inline_prefix n) callee).fn_blocks pi = (bbs,pi') ==>
+  EVERY (\bb. EVERY (\inst. EVERY (\x. x NOTIN opaque) inst.inst_outputs)
+      bb.bb_instructions) bbs
+Proof
+  rpt gen_tac >> strip_tac >>
+  (`!z. STRCAT (inline_prefix n) z NOTIN opaque` by
+       (qpat_assum `qualified_origin ctx0 n caller`
+          (mp_then Any mp_tac functionInlinerNamespaceTheory.qualified_origin_clone_disjoint) >>
+        gvs[SUBSET_DEF] >> metis_tac[]) >>
+     `EVERY (\z. z NOTIN opaque) call.inst_outputs` by
+       (simp[EVERY_MEM] >> metis_tac[inline_opacity_invoke_output]) >>
+     `!r. MEM r (fn_insts callee) /\
+         (r.inst_opcode = RET \/ r.inst_opcode = RETFMP) ==>
+         raw_return_user_arity r = SOME (LENGTH call.inst_outputs)` by
+       (rpt strip_tac >>
+        irule functionInlinerOriginTheory.qualified_origin_call_return_arity >>
+        goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     irule inline_clone_rewrite_outputs_disjoint >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[])
+QED
+
+Theorem inline_site_exit_caller_available:
+  inline_caller_data N opaque_caller c d /\
+  inline_opaque_available opaque_caller c d /\
+  inline_site_exit N opaque_caller p V opaque outs c d ret ir u v /\
+  (!x. x IN opaque_caller ==> lookup_var x v = lookup_var x d) /\
+  (!x. MEM x outs ==> x NOTIN opaque_caller) /\
+  bind_outputs outs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state c u)) = SOME w ==>
+  inline_caller_data N opaque_caller w v /\
+  inline_opaque_available opaque_caller w v
+Proof
+  strip_tac >> conj_tac
+  >- (irule inline_site_exit_caller_data >> metis_tac[]) >>
+  irule inline_opaque_available_return >> metis_tac[]
+QED
+
+Theorem inline_protected_phis:
+  !insts t v P.
+  EVERY (\inst. EVERY (\x. x NOTIN P) inst.inst_outputs) insts /\
+  eval_phis t insts = OK v ==>
+  !x. x IN P ==> lookup_var x v = lookup_var x t
+Proof
+  Induct >> simp[eval_phis_def] >> rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >> strip_tac >>
+  gvs[AllCaseEqs()] >> rpt strip_tac >>
+  rename1 `eval_one_phi t h = SOME (out,a)` >>
+  `MEM out h.inst_outputs` by metis_tac[inline_phi_selected_output] >>
+  gvs[EVERY_MEM, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Theorem inline_protected_run_block:
+  run_block fuel ctx bb t = OK v /\
+  EVERY (\inst. EVERY (\x. x NOTIN P) inst.inst_outputs) bb.bb_instructions /\
+  (!x. x IN P ==> lookup_var x t = lookup_var x d) ==>
+  !x. x IN P ==> lookup_var x v = lookup_var x d
+Proof
+  strip_tac >>
+  qspecl_then [`t`, `bb.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs >>
+  gvs[run_block_def] >> gen_tac >> strip_tac >>
+  irule inline_protected_exec_block >> qexists `P` >>
+  goal_assum (drule_at (Pat `exec_block _ _ _ _ = _`)) >>
+  simp[lookup_var_def] >>
+  metis_tac[inline_protected_phis, lookup_var_def]
+QED
