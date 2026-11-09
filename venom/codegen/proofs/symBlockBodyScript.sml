@@ -666,6 +666,67 @@ Proof
   simp[sym_body_result_error]
 QED
 
+Theorem body_step_entry_inv:
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  is_terminator inst.inst_opcode /\ step_inst fuel ctx inst vs = OK vs1 /\
+  ~vs1.vs_halted ==>
+  fn_entry_inv Inv ctx fn vs1
+Proof
+  strip_tac >> drule_all body_inv_inst >> strip_tac >>
+  qhdtm_assum `body_inv` (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
+  pure_rewrite_tac [fn_entry_inv_def] >> rpt strip_tac >>
+  qhdtm_assum `reachability_closed`
+    (mp_tac o cj 2 o REWRITE_RULE [reachability_closed_def]) >>
+  disch_then (fn th => leaf_matches 3 mp_tac (anchored_leaf_core false
+    ["step_inst", "enters_block", "active_inst"] th)) >> simp[]
+QED
+
+Theorem body_jump_entry_lineage:
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  MEM t (cfg_succs_of cfg bb.bb_label) /\
+  dfs_block_state liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) t ps_tdfs ==>
+  lineage_entry liveness dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) bb.bb_label t
+    (ps_tdfs with <| ps_stack := ps_after.ps_stack;
+                     ps_spilled := ps_after.ps_spilled |>)
+Proof
+  strip_tac >> drule body_inv_facts >> strip_tac >>
+  qhdtm_assum `body_inv` (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
+  `ps_dfs_after.ps_spilled = ps_tdfs.ps_spilled` by
+    (irule fnBlockPlanStaticRegionTheory.dfs_edge_spilled >> simp[] >>
+     metis_tac[]) >>
+  pure_rewrite_tac [fnPlanLineageTheory.lineage_entry_def] >>
+  qexistsl_tac [`ps_l`, `bb`, `ps_dfs`, `block_ops`, `ps_dfs_after`, `h`,
+               `promised`, `ps_after`, `ps_tdfs`] >> simp[]
+QED
+
+Theorem body_jump_entry_frame:
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  ps_tdfs.ps_alloc.sa_spill_base = spill_base /\
+  ps_tdfs.ps_alloc.sa_next_offset <= ps_end.ps_alloc.sa_next_offset /\
+  fn_frame_inv ctx cpl lo fn ra rest mem0 ps_after vs1 as1 ==>
+  fn_frame_inv ctx cpl lo fn ra rest mem0
+    (ps_tdfs with <| ps_stack := ps_after.ps_stack;
+                     ps_spilled := ps_after.ps_spilled |>) vs1 as1
+Proof
+  strip_tac >> drule body_inv_facts >> strip_tac >>
+  qhdtm_assum `body_inv` (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
+  irule fnBlockBodyHelpersTheory.fn_frame_inv_same_slots >>
+  conj_tac >- (qexists_tac `r` >> simp[]) >>
+  qexists_tac `ps_after` >> simp[]
+QED
+
 (* body_inv bundles block_body_frame_sim's premises. *)
 Theorem sym_block_body_frame_sim:
   !fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
