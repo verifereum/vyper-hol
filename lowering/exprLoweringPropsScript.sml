@@ -421,7 +421,7 @@ Proof
   first_x_assum (drule_all_then strip_assume_tac) >>
   `!b sz. ss.vs_alloca_next <= b ==>
           regions_disjoint off (type_memory_size tv) b sz` by
-    (rw[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+    (rw[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   rpt conj_tac >- decide_tac >> metis_tac[])
 QED
 

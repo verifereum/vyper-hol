@@ -2461,7 +2461,7 @@ Theorem immutable_base_memory_bytes:
 Proof
   Cases_on `bt` >> Cases_on `v` >>
   gvs[immutable_value_admissible_def, AllCaseEqs()] >>
-  gvs[valueEncodingTheory.val_in_memory_def, immutable_value_bytes_rel_def,
+  gvs[valueEncodingDefsTheory.val_in_memory_def, immutable_value_bytes_rel_def,
       immutable_value_mask_def, encode_immutable_value_def,
       immutable_word_bytes_def, valueEncodingTheory.type_memory_size_def] >>
   all_tac
@@ -2482,7 +2482,7 @@ Proof
              immutable_mask_same_bytes] >>
       irule (SRULE [arithmeticTheory.ADD_COMM] immutable_payload_memory_bytes) >> simp[] >>
       mp_tac (Q.SPEC `n` exprSimPropsTheory.le_word_size_mul) >> decide_tac) >>
-  gvs[valueEncodingTheory.val_in_memory_def, immutable_value_bytes_rel_def,
+  gvs[valueEncodingDefsTheory.val_in_memory_def, immutable_value_bytes_rel_def,
       immutable_value_mask_def, encode_immutable_value_def,
       valueEncodingTheory.type_memory_size_def, immutable_mask_fit_def, immutable_fit_def,
       immutable_word_bytes_def, valueEncodingTheory.typed_val_to_w256_def,
@@ -2499,7 +2499,7 @@ Theorem immutable_flag_memory_bytes:
       (mem_bytes_at base (type_memory_size (FlagTV n)) mem)
 Proof
   Cases_on `v` >>
-  gvs[immutable_value_admissible_def, valueEncodingTheory.val_in_memory_def,
+  gvs[immutable_value_admissible_def, valueEncodingDefsTheory.val_in_memory_def,
       immutable_value_bytes_rel_def, immutable_value_mask_def,
       encode_immutable_value_def, immutable_word_bytes_def,
       valueEncodingTheory.type_memory_size_def, abi_encoder_word_window,
@@ -2526,7 +2526,7 @@ Theorem immutable_none_memory_bytes:
 Proof
   simp[immutable_value_bytes_rel_def, immutable_value_mask_def,
        valueEncodingTheory.type_memory_size_def, encode_immutable_value_def,
-       valueEncodingTheory.mem_bytes_at_def]
+       valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem immutable_base_default_memory_bytes[local]:
@@ -2540,7 +2540,7 @@ Proof
   >- metis_tac[immutable_base_memory_bytes] >>
   Cases_on `bt` >>
   gvs[immutable_value_admissible_def, vyperValueTheory.default_value_def,
-      valueEncodingTheory.val_in_memory_def,
+      valueEncodingDefsTheory.val_in_memory_def,
       immutable_value_bytes_rel_def, immutable_value_mask_def,
       encode_immutable_value_def, immutable_word_bytes_def,
       valueEncodingTheory.type_memory_size_def,
@@ -2550,7 +2550,7 @@ Proof
       listTheory.TAKE_LENGTH_TOO_LONG, immutable_mask_same_bytes] >>
   Cases_on `b` >>
   gvs[immutable_value_admissible_def, vyperValueTheory.default_value_def,
-      valueEncodingTheory.val_in_memory_def,
+      valueEncodingDefsTheory.val_in_memory_def,
       valueEncodingTheory.type_memory_size_def,
       valueEncodingTheory.typed_val_to_w256_def,
       abi_encoder_word_window, immutable_mask_fit_def, immutable_fit_def,
@@ -2628,11 +2628,11 @@ Theorem immutable_tuple_memory_bytes[local]:
                  encode_immutable_tuple tvs vs)))
 Proof
   Induct >- simp[immutable_value_mask_def, valueEncodingTheory.type_memory_size_def,
-                encode_immutable_value_def, valueEncodingTheory.mem_bytes_at_def] >>
+                encode_immutable_value_def, valueEncodingDefsTheory.mem_bytes_at_def] >>
   rpt gen_tac >>
   disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
   drule immutableEncodingProofsTheory.section_tuple_cons_valid >>
-  strip_tac >> gvs[valueEncodingTheory.val_in_memory_def] >>
+  strip_tac >> gvs[valueEncodingDefsTheory.val_in_memory_def] >>
   irule immutable_tuple_cons_memory_bytes >> conj_tac
   >- (first_x_assum irule >> simp[] >> metis_tac[]) >>
   first_x_assum irule >> simp[] >> metis_tac[]
@@ -2676,11 +2676,11 @@ Theorem immutable_fields_memory_bytes[local]:
                  encode_immutable_fields fields vs)))
 Proof
   Induct >- simp[immutable_value_mask_def, valueEncodingTheory.type_memory_size_def,
-                encode_immutable_value_def, valueEncodingTheory.mem_bytes_at_def] >>
+                encode_immutable_value_def, valueEncodingDefsTheory.mem_bytes_at_def] >>
   qx_gen_tac `entry` >> PairCases_on `entry` >> rpt gen_tac >>
   disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
   drule immutableEncodingProofsTheory.section_fields_cons_valid >>
-  strip_tac >> gvs[valueEncodingTheory.val_in_memory_def] >>
+  strip_tac >> gvs[valueEncodingDefsTheory.val_in_memory_def] >>
   irule immutable_fields_cons_memory_bytes >> conj_tac
   >- (first_x_assum irule >> simp[] >> metis_tac[]) >>
   first_x_assum irule >> simp[] >> metis_tac[]
@@ -2705,14 +2705,14 @@ Theorem immutable_elems_memory_bytes[local]:
             ZIP (mem_bytes_at off (LENGTH vs * type_memory_size tv) mem,
                  FLAT (MAP (encode_immutable_value tv) vs))))
 Proof
-  Induct >- simp[valueEncodingTheory.mem_bytes_at_def] >>
+  Induct >- simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
   map_every qx_gen_tac [`head`, `tv`, `off`, `mem`] >> strip_tac >>
   qspecl_then [`immutable_value_mask tv head`, `FLAT (MAP (immutable_value_mask tv) vs)`,
                `encode_immutable_value tv head`, `FLAT (MAP (encode_immutable_value tv) vs)`]
     mp_tac immutable_masked_memory_append >>
   simp[immutable_elems_mask_length, immutableEncodingProofsTheory.immutable_flat_map_length] >>
   disch_then (qspec_then `off` (qspec_then `mem` assume_tac)) >>
-  gvs[valueEncodingTheory.val_in_memory_def] >>
+  gvs[valueEncodingDefsTheory.val_in_memory_def] >>
   simp[arithmeticTheory.MULT_CLAUSES, immutable_value_bytes_rel_def] >>
   qpat_x_assum `!v. v = head \/ _ ==> _` (qspec_then `head` mp_tac) >>
   simp[immutable_value_bytes_rel_def]
@@ -2733,7 +2733,7 @@ Proof
   Cases_on `n < LENGTH expected` >>
   gvs[immutable_mask_fit_def, immutable_fit_def, listTheory.EL_TAKE,
       listTheory.EL_APPEND_EQN, rich_listTheory.EL_REPLICATE,
-      valueEncodingTheory.mem_bytes_at_def, listTheory.EL_ZIP] >>
+      valueEncodingDefsTheory.mem_bytes_at_def, listTheory.EL_ZIP] >>
   first_x_assum (qspec_then `n` mp_tac) >> simp[]
 QED
 
@@ -2764,7 +2764,7 @@ Proof
        immutableEncodingProofsTheory.immutable_flat_map_length,
        immutable_word_bytes_def, byteTheory.LENGTH_word_to_bytes] >>
   disch_then (qspec_then `off` (qspec_then `mem` assume_tac)) >>
-  gvs[valueEncodingTheory.val_in_memory_def] >>
+  gvs[valueEncodingDefsTheory.val_in_memory_def] >>
   conj_tac >- (gvs[abi_encoder_word_window] >>
     irule immutable_mask_same_bytes >> simp[byteTheory.LENGTH_word_to_bytes]) >>
   irule immutable_elems_memory_bytes >> simp[]
@@ -2787,7 +2787,7 @@ Theorem immutable_slots_memory_bytes[local]:
       (ZIP (FLAT (GENLIST masks n),
         ZIP (mem_bytes_at off (n * stride) mem, FLAT (GENLIST bytes n))))
 Proof
-  Induct >- simp[valueEncodingTheory.mem_bytes_at_def] >>
+  Induct >- simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
   map_every qx_gen_tac [`masks`, `bytes`, `stride`, `off`, `mem`] >> strip_tac >>
   `LENGTH (masks 0) = stride /\ LENGTH (bytes 0) = stride` by simp[] >>
   `LENGTH (FLAT (GENLIST (masks o SUC) n)) = n * stride /\
@@ -2847,14 +2847,14 @@ Proof
   irule immutable_slots_memory_bytes >> rpt strip_tac >>
   Cases_on `ALOOKUP kvs i` >> gvs[]
   >- (irule immutable_default_memory_mask >> first_x_assum irule >>
-      gvs[valueEncodingTheory.val_in_memory_def]) >>
+      gvs[valueEncodingDefsTheory.val_in_memory_def]) >>
   rename1 `ALOOKUP kvs i = SOME child` >>
   `immutable_value_admissible tv child` by
     (imp_res_tac alistTheory.ALOOKUP_MEM >>
      gvs[listTheory.EVERY_MEM] >>
      first_x_assum (qspec_then `(i,child)` mp_tac) >> simp[]) >>
   `val_in_memory tv child (off + i * type_memory_size tv) mem` by
-    (gvs[valueEncodingTheory.val_in_memory_def] >>
+    (gvs[valueEncodingDefsTheory.val_in_memory_def] >>
      drule_all valueEncodingProofsTheory.kvs_in_memory_lookup >> simp[]) >>
   `immutable_value_bytes_rel tv child
     (mem_bytes_at (off + i * type_memory_size tv) (type_memory_size tv) mem)` by
@@ -2890,7 +2890,7 @@ Proof
              POP_ASSUM_LIST (K all_tac) >> Induct_on `tvs` >>
              simp[listTheory.list_size_def] >> rpt strip_tac >> gvs[] >>
              decide_tac) >> simp[]) >>
-      gvs[valueEncodingTheory.val_in_memory_def])
+      gvs[valueEncodingDefsTheory.val_in_memory_def])
   >- (rename1 `ArrayTV et bound` >>
       `!v off mem. (immutable_value_admissible et v \/ v = default_value et) /\
          val_in_memory et v off mem ==>
@@ -2909,7 +2909,7 @@ Proof
       >- (irule immutable_dynamic_memory_bytes >> simp[] >>
           gvs[listTheory.EVERY_MEM] >> metis_tac[])
       >> (irule immutable_dynamic_memory_bytes >> simp[] >>
-          gvs[valueEncodingTheory.val_in_memory_def]))
+          gvs[valueEncodingDefsTheory.val_in_memory_def]))
   >- (rename1 `StructTV fields` >> rpt gen_tac >>
       Cases_on `v` >> simp[Once immutable_value_admissible_def,
         vyperValueTheory.default_value_def,
@@ -2930,7 +2930,7 @@ Proof
              qx_gen_tac `entry` >> PairCases_on `entry` >>
              simp[basicSizeTheory.pair_size_def] >> rpt strip_tac >> gvs[] >>
              decide_tac) >> simp[]) >>
-      gvs[valueEncodingTheory.val_in_memory_def])
+      gvs[valueEncodingDefsTheory.val_in_memory_def])
   >- (rpt gen_tac >> strip_tac >> irule immutable_flag_memory_bytes >>
       gvs[vyperValueTheory.default_value_def, immutable_value_admissible_def])
   >> rpt gen_tac >> strip_tac >> irule immutable_none_memory_bytes >>

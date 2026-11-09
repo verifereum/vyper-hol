@@ -15,7 +15,7 @@ Ancestors
   exprLowering vyperAST vyperInterpreter vyperState vyperContext
   vyperTypeSystem vyperTypeCallGraph vyperCompiler stmtLowering
   venomExecSemantics venomInst venomState emitHelper emitHelperProps
-  exprLoweringProps compileEnv finite_map vyperPureExpr
+  exprLoweringProps compileEnv loweringStateRelDefs finite_map vyperPureExpr
   vyperStoragePlaceRegion vyperStoragePlaceProvenance
   vyperPlaceFrames vyperStatePreservation
 
@@ -635,7 +635,7 @@ Proof
       eval_operand region t = SOME 0w` by
     fs[stmt_state_rel_def, state_rel_def, immutable_base_zero_def] >>
   `mload (off+k) t = n2w (LENGTH vs)` by
-    (simp[mload_def, GSYM valueEncodingTheory.mem_word_at_def] >>
+    (simp[mload_def, GSYM valueEncodingDefsTheory.mem_word_at_def] >>
      drule_at (Pat `FLOOKUP cenv.ce_module_vars _ = _`)
        imm_readable_dynarray_length >>
      simp[] >> disch_then irule >>
