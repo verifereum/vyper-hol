@@ -485,7 +485,7 @@ Proof
   simp[wordsTheory.w2n_n2w] >> decide_tac
 QED
 
-Theorem store_slots_addresses_sequence[local]:
+Theorem store_slots_addresses_sequence:
   (do so <- emit_op MUL [Var counter; Lit (n2w ss)];
       sp <- emit_op ADD [src; so];
       doff <- emit_op MUL [Var counter; Lit (n2w ds)];
