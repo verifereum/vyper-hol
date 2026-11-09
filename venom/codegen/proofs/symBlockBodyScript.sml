@@ -215,14 +215,17 @@ QED
 
 (* Application-only view: preserve each quantified/conditional premise intact.
    This generic transformation does not depend on concrete block terms. *)
-fun anchored_leaf names th = let
+fun anchored_leaf_core expose names th = let
   val th = SPEC_ALL th
   val (ant, _) = dest_imp (concl th)
   val premises = strip_conj ant
-  val body = SPEC_ALL (MP th (LIST_CONJ (map ASSUME premises)))
-  val (step, _) = dest_imp (concl body)
-  val body = UNDISCH body
-  val premises = premises @ [step]
+  val body = MP th (LIST_CONJ (map ASSUME premises))
+  val body = if expose then SPEC_ALL body else body
+  val steps = if expose andalso is_imp (concl body)
+              then strip_conj (fst (dest_imp (concl body))) else []
+  val body = if null steps then body
+             else MP body (LIST_CONJ (map ASSUME steps))
+  val premises = premises @ steps
   fun named n t = let
     val t = if is_eq t then lhs t else t
   in fst (dest_const (fst (strip_comb t))) = n end
@@ -238,6 +241,8 @@ fun anchored_leaf names th = let
 in
   foldr (fn (p, th) => DISCH p th) body (anchors @ others)
 end;
+
+fun anchored_leaf names th = anchored_leaf_core true names th;
 
 fun leaf_matches 0 ttac th = ttac th
   | leaf_matches n ttac th = first_assum (fn a =>
@@ -317,6 +322,138 @@ Proof
     sym_inst_frame_sim_deep) >>
   simp[] >> strip_tac >>
   metis_tac[]
+QED
+
+Theorem sym_body_gas_ok:
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  inst.inst_opcode = GAS /\ (!j. ~revert_forward_pair bb k j) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  step_inst fuel ctx inst vs = OK vs1 /\
+  label_flow_ok ctx /\ asm_static_wf prog /\
+  sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
+  ?ops ps' rest' n as1 ss1.
+    generate_inst_plan liveness dfg cfg fn inst
+      (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+      (k + 1 < LENGTH bb.bb_instructions /\
+       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+      bb.bb_label ps = SOME (ops, ps') /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions)
+      (SUC k - LENGTH (get_params bb.bb_instructions))
+      (DROP (SUC k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
+      ps' = SOME (rest', ps_after) /\
+    rest_ops = ops ++ rest' /\
+    asm_steps lo o2pc prog n as = AsmOK as1 /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps' vs1 as1 /\
+    as1.as_pc = as.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp ops) /\
+    sym_steps prog env n ss = SymOK ss1 /\
+    sym_frame_inv prog env ctx cpl fn ret srest labs0 ps' as1 ss1
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by simp[] >>
+  drule body_inv_facts >> strip_tac >>
+  drule_all body_inv_inst >> strip_tac >>
+  drule_all body_inv_step >> strip_tac >>
+  drule_all body_inv_static >> strip_tac >>
+  drule body_inv_equiv >> disch_then drule >> disch_then drule >> strip_tac >>
+  drule body_inv_not_in_rf >> disch_then drule >> strip_tac >>
+  drule_all body_inv_memory >> strip_tac >>
+  `!e. step_inst fuel ctx inst vs <> Error e` by simp[] >>
+  drule body_inv_label_resolve >> disch_then drule >> disch_then drule >>
+  disch_then drule >> disch_then drule >> strip_tac >>
+  qhdtm_assum `body_inv` (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
+  `fn_shape_ok fn` by
+    (gvs[unit_shape_ok_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `context_spill_step_safe cpl vs vs1` by metis_tac[] >>
+  leaf_matches 6 mp_tac (anchored_leaf
+    ["fn_frame_inv", "generate_inst_plan", "sym_frame_inv",
+     "generated_plan_state_wf_marked", "IN", "step_inst"]
+    sym_gas_frame_sim_deep) >>
+  simp[venomInstTheory.is_terminator_def] >> strip_tac >> metis_tac[]
+QED
+
+Theorem invoke_operands_wf_shape:
+  !inst. invoke_operands_wf inst ==>
+    ?nm args. inst.inst_operands = Label nm :: args
+Proof
+  gen_tac >> namedCases_on `inst.inst_operands` ["", "op ops"]
+  >- simp[stackPlanGenTheory.invoke_operands_wf_def] >>
+  Cases_on `op` >> simp[stackPlanGenTheory.invoke_operands_wf_def]
+QED
+
+Theorem sym_body_invoke_step:
+  gen_fn_sim_at fuel /\ sym_fn_sim_at fuel /\
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  inst.inst_opcode = INVOKE /\ LENGTH (compute_operands inst) <= 16 /\
+  label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\ sym_unit_static_ok unit /\
+  asm_static_wf prog /\ (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
+  ?ops ps' rest'.
+    generate_inst_plan liveness dfg cfg fn inst
+      (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+      (k + 1 < LENGTH bb.bb_instructions /\
+       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+      bb.bb_label ps = SOME (ops, ps') /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions)
+      (SUC k - LENGTH (get_params bb.bb_instructions))
+      (DROP (SUC k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
+      ps' = SOME (rest', ps_after) /\
+    rest_ops = ops ++ rest' /\
+    (!vs1. step_inst fuel ctx inst vs = OK vs1 ==>
+      ?n as1 ss1.
+        asm_steps lo o2pc prog n as = AsmOK as1 /\
+        fn_frame_inv ctx cpl lo fn ra rest mem0 ps' vs1 as1 /\
+        as1.as_pc = as.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp ops) /\
+        sym_steps prog env n ss = SymOK ss1 /\
+        sym_frame_inv prog env ctx cpl fn ret srest labs0 ps' as1 ss1) /\
+    (!vs1. step_inst fuel ctx inst vs = Halt vs1 ==>
+      sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
+        as ss (Halt vs1)) /\
+    (!a vs1. step_inst fuel ctx inst vs = Abort a vs1 ==>
+      sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
+        as ss (Abort a vs1))
+Proof
+  strip_tac >>
+  drule body_inv_facts >> strip_tac >>
+  drule_all body_inv_inst >> strip_tac >>
+  drule_all body_inv_step >> strip_tac >>
+  drule_all body_inv_static >> strip_tac >>
+  drule body_inv_equiv >> disch_then drule >> disch_then drule >> strip_tac >>
+  qhdtm_assum `body_inv` (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
+  `fn_shape_ok fn` by
+    (gvs[unit_shape_ok_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `?nm arg_ops. inst.inst_operands = Label nm :: arg_ops` by
+    (irule invoke_operands_wf_shape >>
+     qpat_x_assum `codegen_ready_inst inst` mp_tac >>
+     simp[stackPlanGenTheory.codegen_ready_inst_def]) >>
+  leaf_matches 2 mp_tac (anchored_leaf_core false
+    ["codegen_context_obligations", "codegen_assembly"]
+    fnBlockBodyClassesTheory.body_callee_placed) >> simp[] >> strip_tac >>
+  leaf_matches 3 mp_tac (anchored_leaf_core false
+    ["codegen_context_obligations", "codegen_assembly", "gen_fn_sim_at"]
+    fnBlockBodyClassesTheory.body_callee_sim) >> simp[] >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  leaf_matches 9 mp_tac (anchored_leaf
+    ["fn_frame_inv", "generate_inst_plan", "sym_frame_inv",
+     "generated_plan_state_wf_marked", "recordtype.spill_region.seldef.sr_fn_name", "sym_fn_sim_at",
+     "codegen_context_obligations", "codegen_assembly", "recordtype.instruction.seldef.inst_operands"]
+    sym_invoke_frame_sim_deep) >>
+  gvs[] >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  strip_tac >> simp[sym_body_result_def]
 QED
 
 (* body_inv bundles block_body_frame_sim's premises. *)
