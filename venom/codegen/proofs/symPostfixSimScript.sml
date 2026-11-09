@@ -42,9 +42,7 @@ Theorem release_spill_fold_lookup[local]:
   FLOOKUP ps.ps_spilled op = SOME off
 Proof
   Induct_on `xs` >- simp[] >>
-  rpt gen_tac >> PairCases_on `h` >>
-  simp[] >> strip_tac >> first_x_assum drule >>
-  simp[DOMSUB_FLOOKUP_THM, AllCaseEqs()] >> metis_tac[]
+  Cases >> simp[] >> metis_tac[release_spill_fold_cons_lookup]
 QED
 
 Theorem release_dead_spills_lookup:
