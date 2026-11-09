@@ -3023,7 +3023,9 @@ Proof
      `fn.fn_blocks <> []` by metis_tac[listTheory.MEM] >>
      drule_all fnPlanLineageEntryProductionTheory.ready_entry_static_boundary >>
      strip_tac >> gvs[]) >>
-  drule_all fnPlanLineageObserverTransportTheory.ready_jmp_block_terminal_factor >>
+  `is_terminator (LAST bb.bb_instructions).inst_opcode` by
+    simp[venomInstTheory.is_terminator_def] >>
+  drule_all fnPlanLineageObserverTransportTheory.ready_block_terminal_factor >>
   strip_tac >> gvs[] >>
   `MEM (Var v) before.ps_stack ==>
      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
@@ -3087,3 +3089,150 @@ Proof
   drule_at (Pat `LRC _ _ _ _`) lineage_history_first_ordinary_demand_support >>
   simp[] >> disch_then drule >> simp[] >> metis_tac[]
 QED
+
+Theorem lineage_state_incoming_block_exit_support:
+  !fn dfg ch growth spill_base lbl_ctr entry pred pb pred_input pred_ops pred_after
+   lbl ps h promised bb ops after succ v.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+    cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb pred_input =
+      SOME (pred_ops,pred_after) /\
+    (MEM (Var v) pred_after.ps_stack ==>
+      MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))) /\
+    LIST_ELEM_COUNT (Var v) pred_after.ps_stack +
+      (if Var v IN FDOM pred_after.ps_spilled then 1 else 0) <= 1 /\
+    ps.ps_stack = pred_after.ps_stack /\ ps.ps_spilled = pred_after.ps_spilled /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb
+      (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      SOME (ops,after) /\
+    MEM succ (cfg_succs_of (cfg_analyze fn) lbl) /\
+    EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions ==>
+    (MEM (Var v) after.ps_stack ==>
+      MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions))) /\
+    LIST_ELEM_COUNT (Var v) after.ps_stack +
+      (if Var v IN FDOM after.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >> reverse conj_tac
+  >- (irule lineage_state_block_nondefining_observer_upper >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl /\ fn_reachable fn lbl` by
+    metis_tac[livenessTransferProofsTheory.lookup_block_mem,
+      venomExecPropsTheory.lookup_block_label, lineage_state_reachable,
+      fn_reachable_cfg_analyze, codegen_ready_fn_def] >>
+  qpat_x_assum `bb.bb_label = lbl` (SUBST_ALL_TAC o SYM) >>
+  `bb <> HD fn.fn_blocks` by
+    metis_tac[fnPlanLineageObserverTransportTheory.ready_incoming_block_nonentry] >>
+  `~bb_is_halting bb` by
+    metis_tac[fnPlanLineageObserverTransportTheory.ready_edge_source_nonhalting] >>
+  `bb.bb_instructions <> [] /\ is_terminator (LAST bb.bb_instructions).inst_opcode /\
+    inst_wf (LAST bb.bb_instructions)` by suspend "terminal" >>
+  `bb = HD fn.fn_blocks ==> LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) <> 1`
+    by simp[] >>
+  drule_all fnPlanLineageObserverTransportTheory.ready_block_terminal_factor >>
+  strip_tac >>
+  `MEM (Var v) before.ps_stack ==> MEM v
+    (live_vars_at (liveness_analyze fn) bb.bb_label (PRE (LENGTH bb.bb_instructions)))` by
+    suspend "prefix_support" >>
+  Cases_on `(LAST bb.bb_instructions).inst_opcode = JMP`
+  >- metis_tac[fnPlanLineageObserverTransportTheory.native_terminal_jmp_demand_support] >>
+  `LIST_ELEM_COUNT (Var v) before.ps_stack +
+    (if Var v IN FDOM before.ps_spilled then 1 else 0) <= 1` by suspend "prefix_bound" >>
+  `!w. MEM (Var w) (compute_operands (LAST bb.bb_instructions)) ==>
+    MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled` by suspend "available" >>
+  `~MEM (Var v) after.ps_stack /\ Var v NOTIN FDOM after.ps_spilled \/
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))` by
+    suspend "regular" >> metis_tac[]
+QED
+
+Resume lineage_state_incoming_block_exit_support[terminal]:
+  `bb_well_formed bb` by
+    (gvs[codegen_ready_fn_def, venomWfTheory.wf_function_def] >> metis_tac[]) >>
+  `inst_wf (LAST bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def,
+         venomWfTheory.bb_well_formed_def] >> metis_tac[rich_listTheory.LAST_MEM]) >>
+  gvs[venomWfTheory.bb_well_formed_def]
+QED
+
+Resume lineage_state_incoming_block_exit_support[prefix_support]:
+  strip_tac >>
+  `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (LENGTH (get_params bb.bb_instructions) + PRE (LENGTH (non_param_insts bb))))`
+    suffices_by metis_tac[] >>
+  irule lineage_state_incoming_ordinary_stack_support >> simp[] >>
+  goal_assum (drule_at (Pat `lineage_state _ _ _ _ _ _ _`)) >> simp[] >>
+  goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >> simp[] >>
+  suspend "compose_prefix"
+QED
+
+Resume lineage_state_incoming_block_exit_support[compose_prefix]:
+  qexistsl_tac [`pb`,`pred`,`pred_after`,`pred_input`,`pred_ops`,
+    `before`,`setup_ops`,`start`] >> gvs[]
+QED
+
+Resume lineage_state_incoming_block_exit_support[prefix_bound]:
+  `LIST_ELEM_COUNT (Var v) start.ps_stack +
+    (if Var v IN FDOM start.ps_spilled then 1 else 0) <= 1` by
+    (Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) = 1` >> gvs[]
+     >- (drule fnPlanLineageObserverTransportTheory.clean_stack_plan_resource_nonincrease >>
+         disch_then (qspec_then `v` mp_tac) >> simp[] >>
+         metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >> simp[]) >>
+  drule fnPlanLineageObserverTransportTheory.native_inst_prefix_nondefining_observer_bound >>
+  disch_then (qspecl_then [`bb`,`v`,`1`] mp_tac) >> simp[] >>
+  disch_then irule >> rpt gen_tac >> strip_tac >>
+  conj_tac >- (strip_tac >> irule lineage_state_ordinary_prefix_live_available >>
+    goal_assum (drule_at Any) >> simp[] >>
+    goal_assum (drule_at Any) >> simp[] >>
+    goal_assum (drule_at Any) >> simp[] >>
+    metis_tac[arithmeticTheory.LESS_TRANS]) >>
+  suspend "bound_computed"
+QED
+
+Resume lineage_state_incoming_block_exit_support[available]:
+  rpt strip_tac >> irule lineage_state_ordinary_prefix_available >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexists_tac `setup_ops` >> gvs[rich_listTheory.EL_PRE_LENGTH]
+QED
+
+Resume lineage_state_incoming_block_exit_support[regular]:
+  `PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions /\
+   SUC (PRE (LENGTH bb.bb_instructions)) = LENGTH bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  `~MEM v (LAST bb.bb_instructions).inst_outputs` by
+    (qpat_x_assum `EVERY _ bb.bb_instructions` mp_tac >>
+     simp[listTheory.EVERY_MEM] >>
+     disch_then irule >> simp[rich_listTheory.LAST_MEM]) >>
+  `(LAST bb.bb_instructions).inst_opcode <> PHI /\
+   (LAST bb.bb_instructions).inst_opcode <> OFFSET /\
+   ~is_param_opcode (LAST bb.bb_instructions).inst_opcode /\
+   (LAST bb.bb_instructions).inst_opcode <> NOP` by
+    (qpat_x_assum `is_terminator _` mp_tac >>
+     Cases_on `(LAST bb.bb_instructions).inst_opcode` >>
+     simp[venomInstTheory.is_terminator_def, venomInstTheory.is_param_opcode_def]) >>
+  qspecl_then [`fn`,`bb`,`PRE (LENGTH bb.bb_instructions)`] mp_tac
+    fnPlanLineageObserverTransportTheory.native_indexed_regular_stack_support >>
+  simp[rich_listTheory.EL_PRE_LENGTH] >>
+  disch_then (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (qspec_then `v` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Resume lineage_state_incoming_block_exit_support[bound_computed]:
+  `j < LENGTH (non_param_insts bb)` by decide_tac >>
+  `EL j (non_param_insts bb) =
+    EL (LENGTH (get_params bb.bb_instructions)+j) bb.bb_instructions` by
+    metis_tac[fnPlanLineageCallersTheory.ready_block_suffix_index] >>
+  strip_tac >> irule lineage_state_ordinary_prefix_available >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`ch`,`growth`,`lbl_ctr`,`setup_ops`,`spill_base`] >>
+  gvs[arithmeticTheory.ADD_COMM]
+QED
+
+Finalise lineage_state_incoming_block_exit_support

@@ -2582,10 +2582,10 @@ Proof
   metis_tac[]
 QED
 
-Theorem ready_jmp_block_terminal_factor:
+Theorem ready_block_terminal_factor:
   !fn bb lv dfg cfg ps ops after.
     codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
-    bb.bb_instructions <> [] /\ (LAST bb.bb_instructions).inst_opcode = JMP /\
+    bb.bb_instructions <> [] /\ is_terminator (LAST bb.bb_instructions).inst_opcode /\
     (bb = HD fn.fn_blocks ==> LENGTH (cfg_preds_of cfg bb.bb_label) <> 1) /\
     generate_block_plan lv dfg cfg fn bb ps = SOME (ops,after) ==>
     ?setup_ops start before chunk.
@@ -2605,7 +2605,10 @@ Theorem ready_jmp_block_terminal_factor:
 Proof
   rpt gen_tac >> strip_tac >>
   `MEM (LAST bb.bb_instructions) (non_param_insts bb)` by
-    simp[non_param_insts_def, MEM_FILTER, LAST_MEM, venomInstTheory.is_param_opcode_def] >>
+    (simp[non_param_insts_def, MEM_FILTER, LAST_MEM] >>
+     qpat_x_assum `is_terminator _` mp_tac >>
+     Cases_on `(LAST bb.bb_instructions).inst_opcode` >>
+     simp[venomInstTheory.is_terminator_def, venomInstTheory.is_param_opcode_def]) >>
   `non_param_insts bb <> []` by metis_tac[MEM] >>
   `bb.bb_instructions = get_params bb.bb_instructions ++ non_param_insts bb` by
     metis_tac[fnPlanLineageCallersTheory.ready_block_parameter_suffix] >>
@@ -2638,19 +2641,20 @@ Proof
   Cases_on `non_param_insts bb` >> gvs[]
 QED
 
-Resume ready_jmp_block_terminal_factor[phi_bound]:
+Resume ready_block_terminal_factor[phi_bound]:
   mp_tac (Q.SPEC `bb` fnPlanLineageEntryProductionTheory.non_param_insts_phi_prefix) >>
   strip_tac >>
   `tail <> []` by
     (strip_tac >> gvs[] >>
      `MEM (LAST bb.bb_instructions) (collect_phis bb.bb_instructions)` by metis_tac[] >>
-     drule livenessProofsTheory.collect_phis_mem >> simp[]) >>
+     drule livenessProofsTheory.collect_phis_mem >>
+     strip_tac >> gvs[venomInstTheory.is_terminator_def]) >>
   qpat_x_assum `non_param_insts bb = _ ++ _`
     (fn th => once_rewrite_tac[th]) >> simp[] >>
   Cases_on `tail` >> gvs[]
 QED
 
-Resume ready_jmp_block_terminal_factor[setup_worker]:
+Resume ready_block_terminal_factor[setup_worker]:
   qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
   Cases_on `bb = HD fn.fn_blocks`
   >- (simp[generate_block_plan_def] >> pairarg_tac >> simp[AllCaseEqs()] >>
@@ -2661,7 +2665,7 @@ Resume ready_jmp_block_terminal_factor[setup_worker]:
       gvs[] >> metis_tac[]) >>
   simp[AllCaseEqs()] >> strip_tac >> metis_tac[]
 QED
-Finalise ready_jmp_block_terminal_factor
+Finalise ready_block_terminal_factor
 
 Theorem analyzed_supported_join_phi_output_absent:
   !fn pred pb bb v dfg ps ops after.
@@ -2797,4 +2801,64 @@ Proof
     native_ordinary_dead_stack_release >>
   simp[venomInstTheory.is_param_opcode_def] >>
   disch_then drule >> simp[] >> metis_tac[]
+QED
+
+(* Stack-only support suffices at a regular release, even with spill debt. *)
+Theorem native_indexed_regular_stack_support:
+  !fn bb i inst dfg ps ops qs v halt term.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    i < LENGTH bb.bb_instructions /\ inst = EL i bb.bb_instructions /\
+    inst.inst_opcode <> PHI /\ inst.inst_opcode <> OFFSET /\
+    ~is_param_opcode inst.inst_opcode /\ inst.inst_opcode <> NOP /\ inst.inst_opcode <> JMP /\
+    ~MEM v inst.inst_outputs /\
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1 /\
+    (!w. MEM (Var w) (compute_operands inst) ==>
+      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
+    (MEM (Var v) ps.ps_stack ==>
+      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i)) /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn inst
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) halt term bb.bb_label ps =
+      SOME (ops,qs) ==>
+    ((MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))`
+  >- simp[] >>
+  `~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled` suffices_by metis_tac[] >>
+  Cases_on `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i)`
+  >- (`MEM (Var v) (compute_operands inst)` by
+        metis_tac[analyzed_live_loss_compute_operand] >>
+      `inst_wf inst /\ codegen_ready_inst inst` by
+        (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, EVERY_MEM] >>
+         metis_tac[EL_MEM]) >>
+      drule_all fnPlanLineageSetupTheory.native_inst_last_use_extinction >> simp[]) >>
+  `~MEM (Var v) ps.ps_stack` by metis_tac[] >>
+  drule_all native_ordinary_dead_stack_release >> simp[]
+QED
+
+Theorem ready_edge_source_nonhalting:
+  !fn bb succ.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    MEM succ (cfg_succs_of (cfg_analyze fn) bb.bb_label) ==>
+    ~bb_is_halting bb
+Proof
+  rpt gen_tac >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  drule_all cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs >>
+  disch_then (fn th => fs[th]) >>
+  strip_tac >>
+  gvs[cfgTransformTheory.bb_is_halting_def] >>
+  `codegen_ready_inst (LAST bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, EVERY_MEM] >> metis_tac[LAST_MEM]) >>
+  qpat_x_assum `MEM succ (bb_succs bb)` mp_tac >>
+  simp[venomInstTheory.bb_succs_def] >>
+  Cases_on `bb.bb_instructions` >> gvs[] >>
+  Cases_on `(LAST (h::t)).inst_opcode` >>
+  gvs[cfgTransformTheory.is_halting_opcode_def, venomInstTheory.get_successors_def,
+    codegen_ready_inst_def, venomInstTheory.is_terminator_def, EVERY_MEM] >>
+  `FILTER IS_SOME (MAP get_label (LAST (h::t)).inst_operands) = []` by
+    (simp[FILTER_EQ_NIL, EVERY_MEM, MEM_MAP] >> metis_tac[optionTheory.NOT_IS_SOME_EQ_NONE]) >>
+  simp[]
 QED
