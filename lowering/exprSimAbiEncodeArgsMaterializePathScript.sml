@@ -256,6 +256,204 @@ Proof
   irule (cj 1 fragGasPathTheory.gas_path_rules) >> simp[]
 QED
 
+Theorem materialize_zero_loop_layout:
+  compile_word_copy_loop src dst 0 loc LocMemory F sa = (u,sb) /\
+  (loc = LocStorage \/ loc = LocTransient) /\ fn_has_code sa sb fn ==>
+  lookup_block (fresh_label_output "wcopy_cond" sa.cs_next_label) fn.fn_blocks =
+    SOME <|bb_label := fresh_label_output "wcopy_cond" sa.cs_next_label;
+      bb_instructions :=
+        [mk_inst (sa.cs_next_id+2) EQ
+          [Var ("%" ++ toString sa.cs_next_var); Lit 0w]
+          ["%" ++ toString (sa.cs_next_var+1)];
+         mk_inst (sa.cs_next_id+3) JNZ
+          [Var ("%" ++ toString (sa.cs_next_var+1));
+           Label (fresh_label_output "wcopy_exit" (sa.cs_next_label+2));
+           Label (fresh_label_output "wcopy_body" (sa.cs_next_label+1))] []]|> /\
+  lookup_block sa.cs_current_bb fn.fn_blocks =
+    SOME <|bb_label := sa.cs_current_bb;
+      bb_instructions := sa.cs_current_insts ++
+        [mk_inst sa.cs_next_id ASSIGN [Lit 0w] ["%" ++ toString sa.cs_next_var];
+         mk_inst (sa.cs_next_id+1) JMP
+           [Label (fresh_label_output "wcopy_cond" sa.cs_next_label)] []]|> /\
+  sb.cs_current_bb = fresh_label_output "wcopy_exit" (sa.cs_next_label+2) /\
+  sb.cs_current_insts = []
+Proof
+  strip_tac >> gvs[] >>
+  gvs[contextTheory.compile_word_copy_loop_def, word_scale_def,
+       contextTheory.compile_ptr_load_def, contextTheory.compile_ptr_store_def,
+       emitHelperTheory.emit_op_def, emitHelperTheory.emit_inst_def,
+       emitHelperTheory.emit_void_def, fresh_var_def, fresh_id_def,
+       fresh_label_def, emit_def, new_block_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  strip_tac >> gvs[] >>
+  gvs[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def,
+      DISJ_IMP_THM, FORALL_AND_THM, listTheory.APPEND_ASSOC]
+QED
+
+Theorem materialize_zero_assign_edge:
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSIGN [Lit 0w] [ctr]) ==>
+  fragGasPath$gas_path_edge ctx fn s 0
+    (OK ((update_var ctr 0w s) with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >> simp[fragGasPathTheory.gas_path_edge_def] >>
+  qexists_tac `0` >>
+  simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def,
+       gasCountTheory.gas_count_step_def] >>
+  disj1_tac >> qexists_tac `update_var ctr 0w s` >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+       venomExecSemanticsTheory.step_inst_base_def,
+       venomStateTheory.eval_operand_def, venomStateTheory.update_var_def]
+QED
+
+Theorem materialize_zero_jump_edge:
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label dest] []) ==>
+  fragGasPath$gas_path_edge ctx fn s 0 (OK (jump_to dest s))
+Proof
+  strip_tac >> simp[fragGasPathTheory.gas_path_edge_def] >>
+  qexists_tac `0` >>
+  simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def,
+       gasCountTheory.gas_count_step_def] >>
+  disj2_tac >> disj1_tac >> qexists_tac `dest` >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+       venomExecSemanticsTheory.step_inst_base_def]
+QED
+
+Theorem materialize_zero_loop_path:
+  compile_word_copy_loop src dst 0 loc LocMemory F sa = (u,sb) /\
+  (loc = LocStorage \/ loc = LocTransient) /\ fn_has_code sa sb fn /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_marked_path F ctx fn s 0
+    (OK (jump_to sb.cs_current_bb
+      (update_var ("%" ++ toString (sa.cs_next_var+1)) 1w
+        (jump_to (fresh_label_output "wcopy_cond" sa.cs_next_label)
+          (update_var ("%" ++ toString sa.cs_next_var) 0w s)))))
+Proof
+  strip_tac >> drule materialize_zero_loop_layout >>
+  disch_then (qspec_then `fn` mp_tac) >> simp[] >> strip_tac >>
+  qabbrev_tac `ctr = "%" ++ toString sa.cs_next_var` >>
+  qabbrev_tac `done = "%" ++ toString (sa.cs_next_var+1)` >>
+  qabbrev_tac `hdr = fresh_label_output "wcopy_cond" sa.cs_next_label` >>
+  `fragGasPath$gas_path_edge ctx fn s 0
+    (OK ((update_var ctr 0w s) with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (irule materialize_zero_assign_edge >>
+     simp[venomInstTheory.get_instruction_def, listTheory.EL_APPEND_EQN,
+          Abbr `ctr`] >> metis_tac[]) >>
+  `fragGasPath$gas_path_edge ctx fn
+    ((update_var ctr 0w s) with vs_inst_idx := SUC s.vs_inst_idx) 0
+    (OK (jump_to hdr ((update_var ctr 0w s) with
+       vs_inst_idx := SUC s.vs_inst_idx)))` by
+    (irule materialize_zero_jump_edge >>
+     simp[venomStateTheory.update_var_def, venomStateTheory.jump_to_def,
+          venomInstTheory.get_instruction_def, listTheory.EL_APPEND_EQN,
+          Abbr `ctr`, Abbr `hdr`] >> metis_tac[]) >>
+  `gas_marked_path F ctx fn (jump_to hdr (update_var ctr 0w s)) 0
+    (OK (jump_to sb.cs_current_bb
+      (update_var done 1w (jump_to hdr (update_var ctr 0w s)))))` by
+    (irule materialize_zero_loop_test_path >>
+     simp[venomStateTheory.jump_to_def, venomStateTheory.update_var_def,
+          venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+          venomInstTheory.mk_inst_def,
+          Abbr `ctr`, Abbr `done`, Abbr `hdr`]) >>
+  gvs[fragGasModeTheory.gas_marked_path_def, venomStateTheory.jump_to_def] >>
+  qpat_x_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `fn_has_code _ _ _` kall_tac >>
+  qpat_x_assum `lookup_block hdr _ = _` kall_tac >>
+  qpat_x_assum `lookup_block sa.cs_current_bb _ = _` kall_tac >>
+  fs[] >> metis_tac[fragGasPathTheory.gas_path_rules, arithmeticTheory.ADD]
+QED
+
+(* The explicit fresh zero allocation leaves the frontier unchanged. *)
+Definition materialize_zero_alloc_def:
+  materialize_zero_alloc id out s =
+    (update_var out (n2w s.vs_alloca_next)
+      (s with vs_allocas := s.vs_allocas |+ (id,(s.vs_alloca_next,0))))
+      with vs_inst_idx := SUC s.vs_inst_idx
+End
+
+Theorem materialize_zero_alloc_edge:
+  ~s.vs_halted /\ FLOOKUP s.vs_allocas id = NONE /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id ALLOCA [Lit 0w] [out]) ==>
+  fragGasPath$gas_path_edge ctx fn s 0
+    (OK (materialize_zero_alloc id out s))
+Proof
+  strip_tac >> simp[fragGasPathTheory.gas_path_edge_def] >>
+  qexists_tac `0` >>
+  simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def,
+       gasCountTheory.gas_count_step_def] >>
+  disj1_tac >>
+  qexists_tac `update_var out (n2w s.vs_alloca_next)
+    (s with vs_allocas := s.vs_allocas |+ (id,(s.vs_alloca_next,0)))` >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+       venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_alloca_def,
+       venomStateTheory.eval_operand_def, materialize_zero_alloc_def,
+       venomStateTheory.update_var_def]
+QED
+
+Theorem materialize_zero_alloc_fields:
+  (materialize_zero_alloc id out s).vs_memory = s.vs_memory /\
+  (materialize_zero_alloc id out s).vs_alloca_next = s.vs_alloca_next /\
+  (materialize_zero_alloc id out s).vs_allocas =
+    s.vs_allocas |+ (id,(s.vs_alloca_next,0)) /\
+  (materialize_zero_alloc id out s).vs_vars =
+    s.vs_vars |+ (out,n2w s.vs_alloca_next) /\
+  (materialize_zero_alloc id out s).vs_halted = s.vs_halted /\
+  (materialize_zero_alloc id out s).vs_current_bb = s.vs_current_bb /\
+  (materialize_zero_alloc id out s).vs_inst_idx = SUC s.vs_inst_idx
+Proof
+  simp[materialize_zero_alloc_def, venomStateTheory.update_var_def]
+QED
+Theorem materialize_zero_alloc_buffer_path:
+  compile_alloc_buffer 0 sa = (buf,sb) /\ fn_has_code sa sb fn /\
+  FLOOKUP s.vs_allocas sa.cs_next_id = NONE /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_marked_path F ctx fn s 0
+    (OK (materialize_zero_alloc sa.cs_next_id
+      ("%" ++ toString sa.cs_next_var) s)) /\
+  ~ (materialize_zero_alloc sa.cs_next_id
+      ("%" ++ toString sa.cs_next_var) s).vs_halted /\
+  (materialize_zero_alloc sa.cs_next_id
+      ("%" ++ toString sa.cs_next_var) s).vs_current_bb = sb.cs_current_bb /\
+  (materialize_zero_alloc sa.cs_next_id
+      ("%" ++ toString sa.cs_next_var) s).vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb (LENGTH sa.cs_current_insts) =
+      SOME (mk_inst sa.cs_next_id ALLOCA [Lit 0w]
+        ["%" ++ toString sa.cs_next_var])` by
+    (gvs[contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
+         fresh_id_def, fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def,
+         fragExecTheory.fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
+     simp[venomInstTheory.get_instruction_def, listTheory.EL_APPEND_EQN] >>
+     metis_tac[]) >>
+  `fragGasPath$gas_path_edge ctx fn s 0
+    (OK (materialize_zero_alloc sa.cs_next_id
+      ("%" ++ toString sa.cs_next_var) s))` by
+    (irule materialize_zero_alloc_edge >> metis_tac[]) >>
+  `~ (materialize_zero_alloc sa.cs_next_id
+      ("%" ++ toString sa.cs_next_var) s).vs_halted /\
+   (materialize_zero_alloc sa.cs_next_id
+      ("%" ++ toString sa.cs_next_var) s).vs_current_bb = sb.cs_current_bb /\
+   (materialize_zero_alloc sa.cs_next_id
+      ("%" ++ toString sa.cs_next_var) s).vs_inst_idx = LENGTH sb.cs_current_insts` by
+    (gvs[contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
+         fresh_id_def, fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def,
+         materialize_zero_alloc_fields]) >>
+  fs[fragGasModeTheory.gas_marked_path_def] >>
+  qpat_x_assum `compile_alloc_buffer _ _ = _` kall_tac >>
+  qpat_x_assum `fn_has_code _ _ _` kall_tac >>
+  metis_tac[fragGasPathTheory.gas_path_rules, arithmeticTheory.ADD]
+QED
+
+
 (* A zero-sized destination can leave the unwrap loop's exit empty. *)
 Theorem materialize_zero_destination_alias_probe:
   let sa = initial_compile_state "@wcopy_exit_2";
@@ -360,8 +558,8 @@ Proof
   CONV_TAC (computeLib.RESTR_EVAL_CONV [``fragGasPath$gas_path_edge``]) >>
   simp[fragGasPathTheory.gas_path_edge_def] >>
   qexists_tac `0` >>
-  simp[venomInstTheory.lookup_block_def, listTheory.FIND_thm,
-       venomInstTheory.get_instruction_def] >> EVAL_TAC >> simp[] >>
+  CONV_TAC (BINDER_CONV (BINDER_CONV (LAND_CONV (RAND_CONV EVAL)))) >>
+  simp[venomInstTheory.get_instruction_def] >> EVAL_TAC >> simp[] >>
   disj2_tac >>
   CONV_TAC (RAND_CONV (REWR_CONV (GSYM boolTheory.ETA_THM))) >>
   qexists_tac `"@wcopy_cond_0"` >> simp[]
