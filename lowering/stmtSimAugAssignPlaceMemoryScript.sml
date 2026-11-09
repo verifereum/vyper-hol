@@ -871,7 +871,7 @@ Proof
   goal_assum (drule_at Any) >> fs[ignore_bind_def]
 QED
 
-Theorem aug_place_memory_reads_outcome[local]:
+Theorem aug_place_memory_reads_outcome:
   read_place cx (MemoryPlace id path) st = (INL cur,st) /\
   place_type_value cx (MemoryPlace id path) st = (INL ptv,st) /\
   gas_outcome memory tops (ctx,func) (k cur ptv) (st,s) Q R ==>
