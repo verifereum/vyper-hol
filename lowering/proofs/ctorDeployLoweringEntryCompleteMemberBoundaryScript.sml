@@ -44,6 +44,12 @@ Proof
   `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode)
     (emitted_insts st st')` by fs[EVERY_CONJ] >>
   irule frag_exec_run_inst_seq >> simp[] >>
+  `abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
+    simp[abi_decoder_operand_live_def] >>
+  `dyn ==> eval_operand (Lit 0w) initial = SOME (n2w 0) /\
+    abi_decode_load DLOAD (n2w (0 + (sb + ao)) : bytes32) initial = n2w payload_off /\
+    sb + payload_off < dimword (:256)` by
+    (asm_rewrite_tac[eval_operand_def, ADD]) >>
   drule_all abi_decode_member_setup_reentry >> strip_tac >>
   drule_all deploy_ctor_decoder_sequence_ambient >> strip_tac >>
   drule_all deploy_ctor_decoder_sequence_observations >> strip_tac >>
