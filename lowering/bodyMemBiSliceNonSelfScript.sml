@@ -6,6 +6,7 @@
 Theory bodyMemBiSliceNonSelf
 Ancestors
   bodyMemoryPreds exprLowering bodyMemSliceScratch bodyMemSliceTypedContinue
+  bodyMemSliceDynamicCapture
 
 Theorem body_builtin_slice_nonself_mem:
   !cx ty n es.
