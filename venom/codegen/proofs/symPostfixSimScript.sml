@@ -285,3 +285,137 @@ Proof
   gvs[] >> drule_all sym_popmany_plan_top_singleton_sim >>
   metis_tac[sym_kinds_ok_release_dead_spills, arithmeticTheory.ADD_COMM]
 QED
+
+Theorem assign_output_kind:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
+  label_positions_ok inst ==>
+  (op_kind_ok fn ret (Var x) sv <=> op_kind_ok fn ret op sv)
+Proof
+  strip_tac >> Cases_on `op`
+  >- metis_tac[assign_lit_output_kind]
+  >- metis_tac[assign_var_output_kind] >>
+  gvs[unitShapeDefsTheory.label_positions_ok_def,
+      stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem sym_assign_rename_top:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
+  label_positions_ok inst /\ stack_peek 0 ps.ps_stack = op /\
+  sym_kinds_ok cplan fn ret srest ps ss ==>
+  sym_kinds_ok cplan fn ret srest
+    (ps with ps_stack := stack_poke 0 (Var x) ps.ps_stack) ss
+Proof
+  strip_tac >> irule sym_kinds_ok_poke >>
+  simp[] >> metis_tac[assign_output_kind]
+QED
+
+Theorem phi_depth_operand:
+  stack_get_phi_depth (FILTER is_var_operand ops) stk = SOME d ==>
+  ?y. stack_peek d stk = Var y /\ MEM (Var y) ops
+Proof
+  strip_tac >>
+  `d < LENGTH stk` by
+    metis_tac[stack_get_phi_depth_def, planWfTheory.stack_find_bound, LENGTH_REVERSE] >>
+  `MEM (stack_peek d stk) (FILTER is_var_operand ops)` by
+    (gvs[stack_get_phi_depth_def, stack_peek_def] >>
+     drule genBlockSimTheory.stack_find_el >>
+     simp[EL_REVERSE, arithmeticTheory.PRE_SUB1]) >>
+  Cases_on `stack_peek d stk` >>
+  gvs[MEM_FILTER, stackPlanTypesTheory.is_var_operand_def]
+QED
+
+Theorem sym_phi_rename:
+  ssa_form fn /\ retpc_shape_ok fn /\ label_flow_ok ctx /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  MEM x inst.inst_outputs /\ inst.inst_opcode = PHI /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+    ps.ps_stack = SOME d /\
+  sym_kinds_ok cplan fn ret srest ps ss ==>
+  sym_kinds_ok cplan fn ret srest
+    (ps with ps_stack := stack_poke d (Var x) ps.ps_stack) ss
+Proof
+  strip_tac >> drule phi_depth_operand >> strip_tac >>
+  irule sym_kinds_ok_poke >> simp[] >> metis_tac[phi_var_output_kind]
+QED
+
+Theorem mem_sval_at_range_cong:
+  (!b. in_mem_range off 32 b ==> FLOOKUP labs' b = FLOOKUP labs b) ==>
+  (mem_sval_at labs' off sv <=> mem_sval_at labs off sv)
+Proof
+  strip_tac >> Cases_on `sv` >>
+  simp[mem_sval_at_def, mem_label_at_def] >>
+  `FLOOKUP labs' off = FLOOKUP labs off` by
+    (first_x_assum irule >> simp[in_mem_range_def]) >>
+  simp[] >>
+  `!i. MEM i (COUNT_LIST 32) ==>
+       FLOOKUP labs' (off + i) = FLOOKUP labs (off + i)` by
+    (rpt strip_tac >> first_x_assum irule >>
+     gvs[in_mem_range_def, MEM_COUNT_LIST]) >>
+  simp[EVERY_MEM, GSYM (cj 1 flookup_thm)] >> gvs[]
+QED
+
+Theorem temporary_spill_ranges_avoid_inventory:
+  spill_alloc_layout_wf al sp /\
+  MEM tmp (FST (spill_alloc_n [] al items)) /\
+  FLOOKUP sp op = SOME old /\ in_mem_range old 32 b ==>
+  ~in_mem_range tmp 32 b
+Proof
+  strip_tac >>
+  drule spill_alloc_n_temporary_layout >> simp[] >>
+  disch_then (qspec_then `items` strip_assume_tac) >>
+  `old + 32 <= tmp \/ tmp + 32 <= old` by
+    (gvs[MEM_EL] >> metis_tac[]) >>
+  gvs[in_mem_range_def] >> decide_tac
+QED
+
+Theorem sym_kinds_ok_retained_spills:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  ss'.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE qs.ps_stack) top /\
+  (!op off. FLOOKUP qs.ps_spilled op = SOME off ==>
+     FLOOKUP ps.ps_spilled op = SOME off) /\
+  (!op off b. FLOOKUP qs.ps_spilled op = SOME off /\
+      in_mem_range off 32 b ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+  (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cplan b) ==>
+  sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  simp[sym_kinds_ok_def] >> rpt strip_tac >>
+  metis_tac[mem_sval_at_range_cong]
+QED
+
+Theorem do_dup_spill_inventory_untouched:
+  do_dup d ps = (ops,qs) /\ d < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM (SOSpill tmp) ops /\ FLOOKUP ps.ps_spilled op = SOME old /\
+  in_mem_range old 32 b ==>
+  ~in_mem_range tmp 32 b
+Proof
+  strip_tac >> Cases_on `d <= 15`
+  >- gvs[do_dup_def] >>
+  mp_tac (Q.SPECL [`d`, `ps`] do_dup_big_decompose) >>
+  simp[] >> strip_tac >>
+  `MEM tmp (FST (spill_alloc_n [] ps.ps_alloc
+      (REVERSE (top_n (d - 15) ps.ps_stack))))` by
+    (gvs[MEM_MAP, MEM_FLAT] >> Cases_on `d - 15 <= 16` >>
+     gvs[MEM_MAP, MEM_FLAT]) >>
+  metis_tac[temporary_spill_ranges_avoid_inventory]
+QED
+
+Theorem do_swap_spill_inventory_untouched:
+  do_swap d ps = (ops,qs) /\ d < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM (SOSpill tmp) ops /\ FLOOKUP ps.ps_spilled op = SOME old /\
+  in_mem_range old 32 b ==>
+  ~in_mem_range tmp 32 b
+Proof
+  strip_tac >> Cases_on `d <= 16`
+  >- (Cases_on `d = 0` >> gvs[do_swap_def]) >>
+  mp_tac (Q.SPECL [`d`, `ps`] do_swap_big_decompose) >>
+  simp[] >> strip_tac >>
+  `MEM tmp (FST (spill_alloc_n [] ps.ps_alloc
+      (top_n (d + 1) ps.ps_stack)))` by gvs[MEM_MAP] >>
+  metis_tac[temporary_spill_ranges_avoid_inventory]
+QED
