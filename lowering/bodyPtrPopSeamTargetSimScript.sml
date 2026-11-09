@@ -13,7 +13,8 @@ Theory bodyPtrPopSeamTargetSim
 Ancestors
   bodyPtrPopTargetDefs bodyPtrPreds bodyPtrDefs bodySim exprSimHypsDefs
   targetPlaceSim targetPlaceLive vyperPureExpr vyperInterpreter vyperState
-  vyperAST
+  vyperAST bodyPtrPopTargetSimCases bodyPtrPopTargetSimBoundary
+  bodyPtrPopTargetSimRoots bodyPtrPopTargetSimAttribute targetPlaceSimCasesBase
 
 (* Hints, not part of the statement:
    - By induction on the target (targetPlaceSimCasesBase's
@@ -50,5 +51,11 @@ Theorem body_target_sim_ptr:
               EVERY pure_expr (target_indices bt)) ==>
     target_sim_ptr d ctx PG func cenv cx env bt es
 Proof
-  cheat
+  recInduct base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- (irule target_name_sim_ptr >> simp[])
+  >- (rename1 `TopLevelNameTarget ns` >> PairCases_on `ns` >> irule target_toplevel_sim_ptr >> simp[])
+  >- (rpt gen_tac >> strip_tac >> drule_all target_subscript_ptr_premises >> strip_tac >>
+      irule target_subscript_sim_ptr >> simp[target_root_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> drule_all target_attribute_ptr_premises >> strip_tac >>
+  irule target_attribute_sim_ptr >> metis_tac[]
 QED
