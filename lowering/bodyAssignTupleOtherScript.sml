@@ -431,20 +431,10 @@ Proof
   >- (Cases_on `t` >> gvs[target_indices_pre_def])
 QED
 
-Theorem tuple_other_arg_type_fits_refl[local]:
-  !t. arg_type_fits t t
-Proof
-  Induct >> simp[arg_type_fits_def]
-  >- (Cases >> simp[arg_type_fits_def] >>
-      rename1 `BytesT bd` >> Cases_on `bd` >> simp[arg_type_fits_def])
-  >- (Induct_on `l` >> simp[arg_type_fits_def]) >>
-  Cases >> simp[arg_type_fits_def]
-QED
-
 Theorem tuple_other_arg_types_fit_refl[local]:
   !ts. arg_types_fit ts ts
 Proof
-  gen_tac >> mp_tac (Q.SPEC `TupleT ts` tuple_other_arg_type_fits_refl) >>
+  gen_tac >> mp_tac (Q.SPEC `TupleT ts` exprSimHypsTheory.ifexp_arg_type_fits_refl) >>
   simp[arg_type_fits_def]
 QED
 
