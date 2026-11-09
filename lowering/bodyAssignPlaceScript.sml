@@ -120,7 +120,7 @@ Proof
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
   irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[] >>
   metis_tac[call_evaluation_safe_append_right]
 QED
@@ -155,6 +155,7 @@ Theorem target_indices_body_pre[local]:
     type_place_target env t = SOME pt /\
     (supported_target tops bindings t \/
      IS_SOME (supported_target_info tops bindings t)) /\
+    alloc_limits_target cenv t /\
     ~supported_target_exists
       (\e. ~is_extcode e /\
            ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
@@ -171,7 +172,7 @@ Proof
   ntac 2 gen_tac >>
   Induct using base_assignment_target_induct >>
   simp[target_indices_pre_def, supported_expr_exists_def, int_calls_expr_def,
-       listTheory.EVERY_APPEND] >> rpt strip_tac >>
+       allocLimitsTheory.alloc_limits_expr_def, listTheory.EVERY_APPEND] >> rpt strip_tac >>
   imp_res_tac supported_subscript_target_shape >>
   imp_res_tac supported_attribute_target_shape >>
   imp_res_tac supported_expr_body_calls >>
@@ -211,7 +212,8 @@ Proof
     (fs[supported_assignment_def] >>
      Cases_on `supported_target_info tops bindings t` >> fs[]) >>
   irule (Q.SPECL [`tops`, `bindings`] target_indices_body_pre) >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
+      allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_assignment_def,
       supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def] >>
   metis_tac[call_evaluation_safe_append_left]
 QED

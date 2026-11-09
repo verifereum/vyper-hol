@@ -105,14 +105,15 @@ Definition immutable_root_def:
 End
 
 (* Every index of the target meets expr_body_pre wherever expr_sim_inv
-   holds: the static part of expr_body_pre. *)
+   holds, the static part of expr_body_pre, and no subscript of it is a
+   rejected overlap (target_subscript_overlap). *)
 Definition target_indices_pre_def:
   target_indices_pre cenv cx env (NameTarget id) = T /\
   target_indices_pre cenv cx env (TopLevelNameTarget nsid) = T /\
   target_indices_pre cenv cx env (AttributeTarget t fld) =
     target_indices_pre cenv cx env t /\
   target_indices_pre cenv cx env (SubscriptTarget t e) =
-    (target_indices_pre cenv cx env t /\
+    (target_indices_pre cenv cx env t /\ ~target_subscript_overlap cenv t e /\
      !es. expr_sim_inv cenv cx env es ==> expr_body_pre cenv cx env e es)
 End
 

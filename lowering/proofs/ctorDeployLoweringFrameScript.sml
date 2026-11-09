@@ -33,7 +33,7 @@ Theorem deploy_ctor_body_frame:
         (es0 with outcomes := SOME vs.vs_outcomes) /\
       ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
       type_stmts env_t NoneT body = SOME env' /\
-      EVERY (stmt_exprs_ok cenv) body /\
+      stmts_exprs_ok cenv body /\
       call_evaluation_safe (deploy_evaluation_context tops am tx) (int_calls_stmts body)
 Proof
   cheat

@@ -26,7 +26,7 @@ Proof
     fs[body_inv_def] >>
   `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
   irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supportedExprTraverseTheory.supported_expr_exists_def,
       int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>
   rpt conj_tac

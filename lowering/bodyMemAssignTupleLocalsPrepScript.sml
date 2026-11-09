@@ -40,7 +40,7 @@ Proof
       is_dynamic (vyper_to_abi_type (type_env tops) target)` by
     gvs[body_inv_def] >>
   irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[] >>
   metis_tac[call_evaluation_safe_append_right]
 QED
@@ -89,7 +89,7 @@ Theorem tuple_staging_bound:
 Proof
   rpt strip_tac >>
   `type_memory_bytes cenv (TupleT tys) < 2 ** 64` by
-    gvs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+    gvs[stmt_exprs_ok_flat, alloc_limits_stmt_def] >>
   `type_memory_bytes cenv (TupleT tys) = type_memory_size (TupleTV tvs)` by
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   `type_memory_size (TupleTV tvs) + 64 < dimword (:256)` by

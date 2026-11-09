@@ -190,7 +190,7 @@ Theorem body_stmts_sim_mem:
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
-    EVERY (stmt_exprs_ok cenv) ss /\
+    stmts_exprs_ok cenv ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
     frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv

@@ -39,8 +39,8 @@ Proof
   `eval_stmts cx ss es1 = (res, es')` by
     (qpat_x_assum `eval_stmts _ (_::_) _ = _` mp_tac >>
      simp[Once evaluate_def, bind_def, ignore_bind_def]) >>
-  `stmt_exprs_ok c = stmt_exprs_ok cenv` by
-    metis_tac[stmt_exprs_ok_same_frame] >>
+  `stmts_exprs_ok c = stmts_exprs_ok (decl_var_type cenv s)` by
+    metis_tac[stmt_env_stmts_exprs_ok] >>
   `expr_sim_inv c cx env1 es1` by
     (irule expr_sim_inv_stmt >> fs[body_inv_def] >>
      metis_tac[call_evaluation_safe_append_left]) >>
@@ -73,8 +73,8 @@ Proof
   rpt strip_tac >>
   rename1 `stmt_env cenv lctx ret_ty s sa = (c, sm)` >>
   `same_frame cenv c` by metis_tac[cenv_top_ext_same_frame] >>
-  `stmt_exprs_ok c = stmt_exprs_ok cenv` by
-    metis_tac[stmt_exprs_ok_same_frame] >>
+  `stmts_exprs_ok c = stmts_exprs_ok (decl_var_type cenv s)` by
+    metis_tac[stmt_env_stmts_exprs_ok] >>
   `expr_sim_inv c cx env1 es1` by
     (irule expr_sim_inv_stmt >> fs[body_inv_def] >>
      metis_tac[expr_sim_inv_gas_obs, call_evaluation_safe_append_left]) >>

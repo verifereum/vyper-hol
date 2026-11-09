@@ -111,19 +111,27 @@ Definition locals_alloc_ok_def:
             type_memory_bytes cenv ty < 2 ** 64
 End
 
-(* expr_sim_pre's byte_widths_expr and alloc_limits_expr for every
-   expression of a statement, targets' keys included, but a slice's .code
-   source (is_extcode), which alloc_limits_expr checks through its address,
-   and alloc_limits_stmt, which also bounds the type of each local the
-   statement declares and rules out a bare .code. *)
+(* expr_sim_pre's byte_widths_expr for every expression of a statement,
+   targets' keys included, but a slice's .code source (is_extcode), and
+   alloc_limits_stmt, which checks alloc_limits_expr of each expression
+   under the local types compile_stmt sees there (decl_var_type), bounds
+   the type of each local the statement declares and rules out a bare
+   .code. *)
 Definition stmt_exprs_ok_def:
   stmt_exprs_ok cenv s <=>
     ~supported_stmt_expr_exists
-       (\e. ~is_extcode e /\
-             ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) s /\
+       (\e. ~is_extcode e /\ ~byte_widths_expr e) s /\
     alloc_limits_stmt cenv s /\
     (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
        return_buffer_ok cenv)
+End
+
+(* stmt_exprs_ok of each statement of a block, under the local types
+   compile_stmts threads to it. *)
+Definition stmts_exprs_ok_def[simp]:
+  stmts_exprs_ok cenv [] = T /\
+  stmts_exprs_ok cenv (s::ss) =
+    (stmt_exprs_ok cenv s /\ stmts_exprs_ok (decl_var_type cenv s) ss)
 End
 
 (* The compile envs of one function's body: cenv' is cenv but for the
@@ -217,7 +225,7 @@ Definition body_stmts_ok_def:
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
-      EVERY (stmt_exprs_ok cenv) ss /\
+      stmts_exprs_ok cenv ss /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
       frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
       stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ret_ty ss)

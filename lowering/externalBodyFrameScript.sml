@@ -26,68 +26,6 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem supported_expr_exists_disj:
-  (!p e q. supported_expr_exists (\x. p x \/ q x) e =
-    (supported_expr_exists p e \/ supported_expr_exists q e)) /\
-  (!p t q. supported_target_exists (\x. p x \/ q x) t =
-    (supported_target_exists p t \/ supported_target_exists q t)) /\
-  (!p es q. supported_exprs_exists (\x. p x \/ q x) es =
-    (supported_exprs_exists p es \/ supported_exprs_exists q es)) /\
-  (!p opt q. supported_opt_exists (\x. p x \/ q x) opt =
-    (supported_opt_exists p opt \/ supported_opt_exists q opt)) /\
-  (!p fs q. supported_fields_exists (\x. p x \/ q x) fs =
-    (supported_fields_exists p fs \/ supported_fields_exists q fs))
-Proof
-  ho_match_mp_tac supported_expr_exists_ind >>
-  simp[supported_expr_exists_def] >> metis_tac[]
-QED
-
-Theorem supported_assignment_exists_disj:
-  (!p t q. supported_assignment_exists (\x. p x \/ q x) t =
-    (supported_assignment_exists p t \/ supported_assignment_exists q t)) /\
-  (!p ts q. supported_assignments_exists (\x. p x \/ q x) ts =
-    (supported_assignments_exists p ts \/ supported_assignments_exists q ts))
-Proof
-  ho_match_mp_tac supported_assignment_exists_ind >>
-  simp[supported_assignment_exists_def, supported_expr_exists_disj] >> metis_tac[]
-QED
-
-Theorem supported_iterator_exists_disj:
-  !p it q. supported_iterator_exists (\x. p x \/ q x) it =
-    (supported_iterator_exists p it \/ supported_iterator_exists q it)
-Proof
-  Cases_on `it` >> simp[supported_iterator_exists_def,
-    supported_expr_exists_disj] >> metis_tac[]
-QED
-
-Theorem supported_assert_exists_disj:
-  !p r q. supported_assert_exists (\x. p x \/ q x) r =
-    (supported_assert_exists p r \/ supported_assert_exists q r)
-Proof
-  Cases_on `r` >> simp[supported_assert_exists_def,
-    supported_expr_exists_disj, EXISTS_MEM] >> metis_tac[]
-QED
-
-Theorem supported_raise_exists_disj:
-  !p r q. supported_raise_exists (\x. p x \/ q x) r =
-    (supported_raise_exists p r \/ supported_raise_exists q r)
-Proof
-  Cases_on `r` >> simp[supported_raise_exists_def,
-    supported_expr_exists_disj, EXISTS_MEM] >> metis_tac[]
-QED
-
-Theorem supported_stmt_expr_exists_disj:
-  (!p s q. supported_stmt_expr_exists (\x. p x \/ q x) s =
-    (supported_stmt_expr_exists p s \/ supported_stmt_expr_exists q s)) /\
-  (!p ss q. supported_stmts_expr_exists (\x. p x \/ q x) ss =
-    (supported_stmts_expr_exists p ss \/ supported_stmts_expr_exists q ss))
-Proof
-  ho_match_mp_tac supported_stmt_expr_exists_ind >>
-  simp[supported_stmt_expr_exists_def, supported_expr_exists_disj,
-       supported_assignment_exists_disj, supported_iterator_exists_disj,
-       supported_assert_exists_disj, supported_raise_exists_disj] >> metis_tac[]
-QED
-
 Theorem collect_locals_supported_bindings_mem:
   !ss n. MEM n (MAP FST (collect_locals ss)) <=>
     MEM n (MAP FST (supported_stmts_bindings T ss)) \/
@@ -591,41 +529,18 @@ QED
 
 Theorem stmt_exprs_ok_from_traversal_bounds:
   ~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss /\
-  ~supported_stmts_expr_exists
-     (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) ss /\
   alloc_limits_stmts cenv ss /\
   (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
    return_buffer_ok cenv) ==>
-  EVERY (stmt_exprs_ok cenv) ss
+  stmts_exprs_ok cenv ss
 Proof
-  strip_tac >>
-  `~supported_stmts_expr_exists
-      (\e. ~is_extcode e /\ ~byte_widths_expr e) ss` by
-    (qpat_x_assum `~supported_stmts_expr_exists (\e. ~byte_widths_expr e) _`
-       mp_tac >>
-     `(\e. ~byte_widths_expr e) =
-      (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
-           (is_extcode e /\ ~byte_widths_expr e))` by
-       (simp[FUN_EQ_THM] >> metis_tac[]) >>
-     pop_assum SUBST1_TAC >> simp[supported_stmt_expr_exists_disj]) >>
-  `~supported_stmts_expr_exists
-      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e))
-      ss` by
-    (`(\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) =
-      (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
-           (~is_extcode e /\ ~alloc_limits_expr cenv e))` by
-       (simp[FUN_EQ_THM] >> metis_tac[]) >>
-     pop_assum SUBST1_TAC >> simp[supported_stmt_expr_exists_disj]) >>
-  qpat_x_assum `~supported_stmts_expr_exists (\e. ~is_extcode e /\ ~(_ /\ _)) _`
-    mp_tac >>
-  qpat_x_assum `alloc_limits_stmts _ _` mp_tac >>
-  qpat_x_assum `_ ==> return_buffer_ok _` mp_tac >>
-  rpt (pop_assum kall_tac) >>
-  simp[EVERY_MEM, stmt_exprs_ok_def, supported_stmts_expr_exists_list,
-       EXISTS_MEM] >>
-  Induct_on `ss` >>
-  simp[allocLimitsTheory.alloc_limits_stmt_def, stmt_valued_return_def] >>
-  metis_tac[]
+  rw[bodyExprPreFactsTheory.stmts_exprs_ok_thm] >>
+  qpat_x_assum `~supported_stmts_expr_exists _ _` mp_tac >>
+  `(\e. ~byte_widths_expr e) =
+   (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
+        (is_extcode e /\ ~byte_widths_expr e))` by
+    (simp[FUN_EQ_THM] >> metis_tac[]) >>
+  pop_assum SUBST1_TAC >> simp[supported_stmt_expr_exists_disj]
 QED
 
 Theorem build_compile_env_return_buffer_ok:
@@ -912,7 +827,7 @@ Theorem external_body_support_bounds:
   type_stmts env ret ss = SOME env' /\
   (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
    return_buffer_ok cenv) ==>
-  locals_alloc_ok cenv env /\ EVERY (stmt_exprs_ok cenv) ss /\
+  locals_alloc_ok cenv env /\ stmts_exprs_ok cenv ss /\
   ?bindings. supported_stmts tops bindings ss
 Proof
   disch_then strip_assume_tac >>
@@ -920,7 +835,7 @@ Proof
   drule_all fn_allocs_ok_body >> strip_tac >>
   `~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss` by
     (drule_all typed_parameter_body_excludes_bad_widths >> simp[]) >>
-  `EVERY (stmt_exprs_ok cenv) ss` by
+  `stmts_exprs_ok cenv ss` by
     (irule stmt_exprs_ok_from_traversal_bounds >> simp[]) >>
   conj_tac
   >- (simp[locals_alloc_ok_def] >> rpt strip_tac >>
@@ -1341,7 +1256,7 @@ Theorem external_body_frame:
         (initial_evaluation_context am.sources am.layouts tx NONE) env_t es0 /\
       ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
       type_stmts env_t ret fbody = SOME env' /\
-      EVERY (stmt_exprs_ok cenv) fbody /\
+      stmts_exprs_ok cenv fbody /\
       call_evaluation_safe
         (initial_evaluation_context am.sources am.layouts tx NONE)
         (int_calls_stmts fbody)
