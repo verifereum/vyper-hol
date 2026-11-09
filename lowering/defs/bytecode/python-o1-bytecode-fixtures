@@ -62,7 +62,8 @@ constraints=$script_dir/python-o1-oracle-constraints.txt
 git clone --quiet --no-checkout --no-local "$vyper_repo" "$staged_vyper"
 git -c advice.detachedHead=false -C "$staged_vyper" checkout --quiet --detach "$pin"
 # Backport the upstream fixes the HOL lowering follows, which the pin
-# predates (vyperlang/vyper#5127, #5239; see README).
+# predates (vyperlang/vyper#5127, #5239, #5322, #5336), and the HOL DFT's
+# local departures from #5336 (see README).
 git -C "$staged_vyper" apply "$script_dir/vyper-pin.patch"
 
 UV_PYTHON_INSTALL_DIR="$stage/python" \
