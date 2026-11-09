@@ -29,7 +29,7 @@ Theorem aug_place_target_mem_continuation:
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
       (INL p, mid with gas_obs := tail)) /\
     gas_marked_path T ctx func s0 (LENGTH marks) (OK t) ==>
-    gas_outcome T (cx_tops cx) (ctx,func) ((k p) : evaluation_state -> eval_result evaluation_result) (mid,t) Q R) /\
+    gas_outcome T (cx_tops cx) (ctx,func) ((k p) : evaluation_state -> 'a evaluation_result) (mid,t) Q R) /\
   (!res ee rr. expr_exit (res : eval_result + exception) rr ==> ?ex. res = INR ex /\ R (INR ex) ee rr) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (eval_target_place cx bt) k) (es,s0) Q R
@@ -49,7 +49,7 @@ Proof
   disch_then (qspecl_then [`Type ty`, `sa`, `sp`, `r`, `s0`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
   rewrite_tac[aug_place_target_bind_base] >>
-  drule (INST_TYPE [alpha |-> ``:eval_result``] aug_place_result_bind_outcome_path) >>
+  drule aug_place_result_bind_outcome_path >>
   disch_then irule >> simp[] >>
   rpt gen_tac >> strip_tac >>
   `?p. v = PlaceR p` by
