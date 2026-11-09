@@ -5,10 +5,37 @@ Ancestors
   bodyPtrPopMemoryStore loweringHalt bodyPtrIfExpAllocCompiler
   annAssignPtrAllocGhost annAssignPtrStore bodyPtrHashBuiltinsAllocFrame
   bodyPtrEnvBuiltinsScalar exprSimAlloc ghostPcTransportPtr
-  bodyPtrAttributeAdd typedCopyPtr fragExec exprLoweringProps
+  bodyPtrAttributeAdd typedCopyPtr fragExec exprLoweringProps exprSimLiteralBuffer
   fragGasPathPtr fragGasSeqPtr loweringPosts bodyPtrDefs context emitHelper
   emitHelperProps compileEnv venomState venomInst venomExecSemantics
   ptrDiscipline words finite_map pred_set list
+
+Theorem concat_alloc_raw_frame:
+  compile_alloc_buffer n sa = (buf,sm) /\ buf.buf_operand = Var out /\
+  stmt_state_rel ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved ce sa /\ n < dimword (:256) /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
+  step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
+  ?w. lookup_var out u = SOME w /\
+    FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
+    w2n w+n < dimword (:256) /\ u.vs_memory = s.vs_memory /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!aid b k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,k) ==>
+      regions_disjoint (w2n w) n b k) /\
+    (!name b k. local_region ce es.scopes u name b k ==>
+      regions_disjoint (w2n w) n b k)
+Proof
+  strip_tac >> drule compile_alloc_buffer_parts >> strip_tac >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn)` by gvs[] >>
+  drule_all alloc_buffer_frame_run >> strip_tac >>
+  `emitted_insts sa sm = [mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
+    [STRING #"%" (toString sa.cs_next_var)]]` by
+    (drule compile_alloc_buffer_emission >> strip_tac >>
+     drule emitted_insts_emit_inst >> simp[emitted_insts_def] >> strip_tac >> gvs[]) >>
+  gvs[run_inst_seq_def, eval_operand_def, AllCaseEqs()] >> metis_tac[]
+QED
 
 Theorem concat_alloc_zero_counted:
   compile_alloc_buffer n sa = (buf,sm) /\
