@@ -108,7 +108,7 @@ Theorem prefix_canonical_coherent_complete_code:
 Proof
   qabbrev_tac `P = \ce env sf. (^CshiftCode)` >>
   `!ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> P ce env sf ty tv` suffices_by
-    simp[Abbr `P`] >>
+    simp_tac bool_ss [Abbr `P`] >>
   ho_match_mp_tac abi_decoder_coherent_ind >>
   conj_tac
   >- (rpt gen_tac >> disch_tac >> simp_tac bool_ss [Abbr `P`] >>
