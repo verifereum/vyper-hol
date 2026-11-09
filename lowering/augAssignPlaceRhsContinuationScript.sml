@@ -7,8 +7,8 @@ Ancestors
   vyperState exprSimWordArgs
 
 Theorem aug_place_rhs_mem_continuation[local]:
-  expr_sim_mem ctx func cenv cx (expr_type e) e es /\
-  lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
+  expr_sim_mem ctx func cenv cx ty e es /\
+  lower_value compile_expr cenv ty e sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
@@ -131,8 +131,8 @@ Proof
 QED
 
 Theorem aug_place_rhs_operator_write_mem:
-  expr_sim_mem ctx func cenv cx (expr_type e) e es /\
-  lower_value compile_expr cenv (expr_type e) e s1 = (y,s2) /\
+  expr_sim_mem ctx func cenv cx ty e es /\
+  lower_value compile_expr cenv ty e s1 = (y,s2) /\
   compile_binop bop x y ty NONE el s2 = (op,s3) /\
   emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE
                        | _ => MSTORE) [dst;op] s3 = ((),sf) /\
@@ -184,7 +184,7 @@ Proof
   >- (rpt strip_tac >> simp[stmtSimDefsTheory.stmt_exit_def] >>
       ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
         stmtSimPropsTheory.expr_exit_INR_type] >> simp[]) >>
-  qexistsl_tac [`cenv`, `y`, `s1`, `s2`] >> simp[] >>
+  qexistsl_tac [`cenv`, `y`, `s1`, `s2`, `ty`] >> simp[] >>
   rpt strip_tac >>
   qpat_x_assum `!rhs ee. _ ==> _`
     (qspecl_then [`v`, `ee`] mp_tac) >>
