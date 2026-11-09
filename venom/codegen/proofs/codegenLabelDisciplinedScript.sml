@@ -234,7 +234,13 @@ Theorem initial_ctx_codegen_asm_entry_rel:
     initial_ctx_rel cp prog ctx vs es ==>
     codegen_asm_entry_rel cp prog vs (entry_asm_state vs es)
 Proof
-  cheat
+  rw[initial_ctx_rel_def] >>
+  gvs[initial_state_rel_def, initial_codegen_state_rel_def,
+      stack_params_rel_def, msg_ctx_rel_def] >>
+  simp[codegen_asm_entry_rel_def, entry_asm_state_def,
+       shared_state_rel_def, venom_asm_terminal_rel_def] >>
+  Cases_on `ctxt.stack` >> gvs[] >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[]
 QED
 
 Theorem codegen_entry_asm_sim_state:
@@ -261,7 +267,18 @@ Theorem codegen_entry_asm_sim_state:
              (build_offset_to_pc prog) prog n as = AsmFault as')) /\
          venom_asm_terminal_rel vs' as')
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_entry_selection >> strip_tac >>
+  `lookup_function fe.fn_name unit.cu_context.ctx_functions = SOME fe`
+    by simp[lookup_function_def, listTheory.FIND_thm] >>
+  `EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET]) (fn_insts fe)`
+    by metis_tac[codegen_entry_no_returns] >>
+  conj_tac
+  >- (rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >> gvs[]) >>
+  `run_context fuel unit.cu_context vs = run_blocks fuel unit.cu_context fe
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)`
+    by metis_tac[run_context_run_blocks] >>
+  drule_all codegen_entry_blocks_sim >> disch_then (qspec_then `fuel` mp_tac) >> simp[]
 QED
 
 Theorem codegen_label_disciplined:
@@ -281,5 +298,19 @@ Theorem codegen_label_disciplined:
     ==>
     label_disciplined env prog as
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_entry_selection >> strip_tac >>
+  `lookup_function fe.fn_name unit.cu_context.ctx_functions = SOME fe`
+    by simp[lookup_function_def, listTheory.FIND_thm] >>
+  `run_context fuel unit.cu_context vs = run_blocks fuel unit.cu_context fe
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)`
+    by metis_tac[run_context_run_blocks] >>
+  `asm_static_wf prog`
+    by metis_tac[codegen_context_obligations_def, codegen_asm_static_wf] >>
+  drule_all codegen_entry_blocks_sym_sim >>
+  disch_then (qspec_then `fuel` strip_assume_tac) >>
+  `?n. sym_terminal (sym_steps prog env n (sym_init as))` by metis_tac[] >>
+  irule sym_terminal_disciplined >> simp[] >>
+  qexists_tac `n` >>
+  drule sym_steps_terminal_run >> disch_then (qspec_then `0` mp_tac) >> simp[]
 QED
