@@ -3390,6 +3390,123 @@ Proof
   irule mm_local_zero_replace_merge >> simp[]
 QED
 
+(* Analysis ancestry retains empty-copy endpoints as well as byte geometry.
+   Defining-load IDs may be shared; this relation does not assert ownership. *)
+Definition mm_local_copy_ancestor_def:
+  mm_local_copy_ancestor h g <=>
+    (!id. MEM id h.cg_inst_ids ==> MEM id g.cg_inst_ids) /\
+    g.cg_dst <= h.cg_dst /\
+    h.cg_dst + h.cg_length <= g.cg_dst + g.cg_length /\
+    h.cg_src + g.cg_dst = h.cg_dst + g.cg_src
+End
+
+Theorem mm_local_copy_ancestor_refl[local]:
+  mm_local_copy_ancestor h h
+Proof
+  simp[mm_local_copy_ancestor_def]
+QED
+
+Theorem mm_local_copy_ancestor_trans[local]:
+  mm_local_copy_ancestor h g /\ mm_local_copy_ancestor g f ==>
+  mm_local_copy_ancestor h f
+Proof
+  rw[mm_local_copy_ancestor_def]
+QED
+
+Theorem mm_local_copy_merge_ancestors[local]:
+  c1.cg_dst <= c2.cg_dst /\ copy_can_merge c1 c2 ==>
+  mm_local_copy_ancestor c1 (copy_merge c1 c2) /\
+  mm_local_copy_ancestor c2 (copy_merge c1 c2)
+Proof
+  simp[mm_local_copy_ancestor_def, copy_merge_def, copy_can_merge_def,
+       MEM_APPEND] >>
+  rpt strip_tac >>
+  simp[arithmeticTheory.MAX_DEF] >> decide_tac
+QED
+
+Theorem mm_local_insert_sorted_mem[local]:
+  !cs c h. MEM h (insert_sorted cs c) <=> h = c \/ MEM h cs
+Proof
+  Induct >> simp[insert_sorted_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> simp[] >> metis_tac[]
+QED
+
+Theorem mm_local_insert_sorted_order[local]:
+  !cs c. SORTED (\a b. a.cg_dst <= b.cg_dst) cs ==>
+    SORTED (\a b. a.cg_dst <= b.cg_dst) (insert_sorted cs c)
+Proof
+  Induct >> simp[insert_sorted_def] >>
+  rpt gen_tac >>
+  simp[sortingTheory.SORTED_EQ, relationTheory.transitive_def] >>
+  strip_tac >> IF_CASES_TAC >>
+  simp[sortingTheory.SORTED_EQ, relationTheory.transitive_def,
+       mm_local_insert_sorted_mem] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+       arithmeticTheory.LESS_IMP_LESS_OR_EQ, arithmeticTheory.NOT_LESS]
+QED
+
+Theorem mm_local_merge_adjacent_lower_bound[local]:
+  !cs. EVERY (\g. d <= g.cg_dst) cs ==>
+    EVERY (\g. d <= g.cg_dst) (merge_adjacent cs)
+Proof
+  ho_match_mp_tac mm_local_merge_every >> simp[copy_merge_def]
+QED
+
+Theorem mm_local_merge_adjacent_order[local]:
+  !cs. SORTED (\a b. a.cg_dst <= b.cg_dst) cs ==>
+    SORTED (\a b. a.cg_dst <= b.cg_dst) (merge_adjacent cs)
+Proof
+  recInduct merge_adjacent_ind >> simp[merge_adjacent_def] >>
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  Cases_on `copy_can_merge c1 c2`
+  >- (gvs[] >> first_x_assum match_mp_tac >>
+      gvs[sortingTheory.SORTED_EQ, relationTheory.transitive_def,
+          copy_merge_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  gvs[] >>
+  simp[sortingTheory.SORTED_EQ, relationTheory.transitive_def] >>
+  mp_tac (Q.SPEC `c2::rest`
+    (Q.INST [`d` |-> `c1.cg_dst`] mm_local_merge_adjacent_lower_bound)) >>
+  simp[EVERY_MEM] >>
+  gvs[sortingTheory.SORTED_EQ, relationTheory.transitive_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem mm_local_merge_adjacent_ancestry[local]:
+  !cs. SORTED (\a b. a.cg_dst <= b.cg_dst) cs ==>
+    !h. MEM h cs ==> ?g. MEM g (merge_adjacent cs) /\
+      mm_local_copy_ancestor h g
+Proof
+  recInduct merge_adjacent_ind >>
+  simp[merge_adjacent_def, mm_local_copy_ancestor_refl] >>
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  Cases_on `copy_can_merge c1 c2`
+  >- (gvs[] >>
+      `SORTED (\a b. a.cg_dst <= b.cg_dst) (copy_merge c1 c2::rest)` by
+        (gvs[sortingTheory.SORTED_EQ, relationTheory.transitive_def,
+             copy_merge_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+      first_x_assum drule >> strip_tac >>
+      `c1.cg_dst <= c2.cg_dst` by gvs[sortingTheory.SORTED_DEF] >>
+      drule_all mm_local_copy_merge_ancestors >> strip_tac >>
+      metis_tac[mm_local_copy_ancestor_trans]) >>
+  gvs[] >> metis_tac[mm_local_copy_ancestor_refl]
+QED
+
+Theorem mm_local_add_copy_order[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) cs ==>
+  SORTED (\a b. a.cg_dst <= b.cg_dst) (add_copy cs c)
+Proof
+  simp[add_copy_def] >>
+  metis_tac[mm_local_insert_sorted_order, mm_local_merge_adjacent_order]
+QED
+
+Theorem mm_local_add_copy_ancestry[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) cs /\ MEM h (c::cs) ==>
+  ?g. MEM g (add_copy cs c) /\ mm_local_copy_ancestor h g
+Proof
+  strip_tac >> simp[add_copy_def] >>
+  irule mm_local_merge_adjacent_ancestry >>
+  metis_tac[mm_local_insert_sorted_mem, mm_local_insert_sorted_order, MEM]
+QED
+
 Theorem mm_local_memzero_merge_effect[local]:
   d1 <= d2 /\ d2 <= d1+n1 /\
   cg = copy_merge (copy_memzero d1 n1 ids1) (copy_memzero d2 n2 ids2) ==>
