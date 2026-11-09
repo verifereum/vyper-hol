@@ -4,6 +4,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallFamStmtMutationResource
   bodyIntCallFamStmtMutationEffectful
   bodyIntCallFamStmtMutationInactiveStore
+  bodyIntCallFamStmtMutationActivate
   bodyIntCallFamStmtMutationLocalStore bodyIntCallFamStmtMutationResourceLanding
   bodyIntCallFamStmtMutationAppendSuffix bodyIntCallFamStmtMutationAppendExec
   bodyIntCallFamStmtMutationDeclEntry bodyIntCallFamStmtMutationDeclAlloc
