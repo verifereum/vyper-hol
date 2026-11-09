@@ -22,8 +22,8 @@ QED
 
 Theorem abi_encode_nonword_scratch_row:
   expr_post ctx func ce cx e es origin sa s0 es' v op s /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-  ~is_word_type (expr_type e) /\ eval_operand op s = SOME w /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
+  ~is_word_type (post_value_type ce e) /\ eval_operand op s = SOME w /\
   abi_builtin_encode_setup mid maxlen sa = (ops,ready) /\
   compile_abi_encode_to_buf dst src ei ready = (out,body_end) /\
   fn_has_code ready body_end obs /\ fn_inst_ids_distinct obs /\
@@ -62,8 +62,8 @@ QED
    separated by the expression's ownership certificate. *)
 Theorem abi_encode_nonword_output_site:
   expr_post ctx func ce cx e es origin sa s0 es' v op s /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-  ~is_word_type (expr_type e) /\ eval_operand op s = SOME w /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
+  ~is_word_type (post_value_type ce e) /\ eval_operand op s = SOME w /\
   (0 < val_footprint tv v ==> w2n w + val_footprint tv v <= s.vs_alloca_next) /\
   fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -95,8 +95,8 @@ QED
 
 Theorem abi_encode_nonword_setup_output:
   expr_post ctx func ce cx e es origin sa s0 es' v op s /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-  ~is_word_type (expr_type e) /\ eval_operand op s = SOME w /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
+  ~is_word_type (post_value_type ce e) /\ eval_operand op s = SOME w /\
   (0 < val_footprint tv v ==> w2n w + val_footprint tv v <= s.vs_alloca_next) /\
   abi_builtin_encode_setup mid maxlen sa = (ops,ready) /\
   fn_has_code sa ready func /\ fn_inst_ids_distinct func /\

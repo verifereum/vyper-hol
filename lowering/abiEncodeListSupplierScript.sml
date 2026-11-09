@@ -57,24 +57,24 @@ Theorem abi_encode_args_zero_input_representatives:
   abi_args_post ctx func ce cx es sa st s0 es' args ops vs s /\
   EVERY (abi_decoder_operand_live next) ops /\ s.vs_alloca_next <= lo /\
   LIST_REL (\(e,v) av. ?tv.
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
-    vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
-    abi_enc_plan (get_tenv cx) (expr_type e) (type_to_abi_enc_info sf ce (expr_type e)) /\
-    type_memory_bytes ce (expr_type e) = type_memory_size tv /\
-    type_memory_bytes ce (expr_type e) < dimword (:256) /\
-    abi_embedded_static_size ce.ce_struct_fields (expr_type e) =
-      abi_member_head_size (vyper_to_abi_type (get_tenv cx) (expr_type e)) /\
-    is_abi_dynamic ce.ce_struct_fields (expr_type e) =
-      is_dynamic (vyper_to_abi_type (get_tenv cx) (expr_type e)))
+    evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\ value_has_type tv v /\
+    vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
+    abi_enc_plan (get_tenv cx) (lowered_value_type ce e) (type_to_abi_enc_info sf ce (lowered_value_type ce e)) /\
+    type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
+    type_memory_bytes ce (lowered_value_type ce e) < dimword (:256) /\
+    abi_embedded_static_size ce.ce_struct_fields (lowered_value_type ce e) =
+      abi_member_head_size (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) /\
+    is_abi_dynamic ce.ce_struct_fields (lowered_value_type ce e) =
+      is_dynamic (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)))
     (ZIP (args,vs)) cavs ==>
   ?ats avs.
-    abi_tuple_encode_zero_inputs sf ce (ZIP (ops,MAP expr_type args)) ats avs next lo hi s /\
-    abi_tuple_encode_layout ce (ZIP (ops,MAP expr_type args)) ats /\
+    abi_tuple_encode_zero_inputs sf ce (ZIP (ops,MAP (lowered_value_type ce) args)) ats avs next lo hi s /\
+    abi_tuple_encode_layout ce (ZIP (ops,MAP (lowered_value_type ce) args)) ats /\
     LIST_REL (\(at,av) (bt,bv).
       enc at av = enc bt bv /\ is_dynamic at = is_dynamic bt /\
       abi_member_head_size at = abi_member_head_size bt)
       (ZIP (ats,avs))
-      (ZIP (MAP (vyper_to_abi_type (get_tenv cx) o expr_type) args,cavs))
+      (ZIP (MAP (vyper_to_abi_type (get_tenv cx) o lowered_value_type ce) args,cavs))
 Proof
   Induct
   >- (simp[abi_args_post_nil] >> rpt strip_tac >> gvs[] >>
@@ -85,7 +85,7 @@ Proof
   Cases_on `vs` >> Cases_on `ops` >> Cases_on `cavs` >> gvs[] >>
   gvs[abi_args_post_cons] >>
   `stmt_state_rel ctx func ce cx es' s` by gvs[abi_args_post_def] >>
-  `type_memory_bytes ce (expr_type h) < dimword (:256)` by simp[] >>
+  `type_memory_bytes ce (lowered_value_type ce h) < dimword (:256)` by simp[] >>
   drule_all abi_encode_fresh_zero_input_supplier >>
   disch_then (qspec_then `hi` strip_assume_tac) >>
   first_x_assum drule_all >> strip_tac >>
@@ -98,21 +98,21 @@ Theorem abi_encode_args_zero_input_supplier:
   abi_args_post ctx func ce cx es sa st s0 es' args ops vs s /\
   EVERY (abi_decoder_operand_live next) ops /\ s.vs_alloca_next <= lo /\
   LIST_REL (\(e,v) av. ?tv.
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
-    vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
-    abi_enc_plan (get_tenv cx) (expr_type e) (type_to_abi_enc_info sf ce (expr_type e)) /\
-    type_memory_bytes ce (expr_type e) = type_memory_size tv /\
-    type_memory_bytes ce (expr_type e) < dimword (:256) /\
-    abi_embedded_static_size ce.ce_struct_fields (expr_type e) =
-      abi_member_head_size (vyper_to_abi_type (get_tenv cx) (expr_type e)) /\
-    is_abi_dynamic ce.ce_struct_fields (expr_type e) =
-      is_dynamic (vyper_to_abi_type (get_tenv cx) (expr_type e)))
+    evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\ value_has_type tv v /\
+    vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
+    abi_enc_plan (get_tenv cx) (lowered_value_type ce e) (type_to_abi_enc_info sf ce (lowered_value_type ce e)) /\
+    type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
+    type_memory_bytes ce (lowered_value_type ce e) < dimword (:256) /\
+    abi_embedded_static_size ce.ce_struct_fields (lowered_value_type ce e) =
+      abi_member_head_size (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) /\
+    is_abi_dynamic ce.ce_struct_fields (lowered_value_type ce e) =
+      is_dynamic (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)))
     (ZIP (args,vs)) cavs ==>
   ?ats avs.
-    abi_tuple_encode_zero_inputs sf ce (ZIP (ops,MAP expr_type args)) ats avs next lo hi s /\
-    abi_tuple_encode_layout ce (ZIP (ops,MAP expr_type args)) ats /\
+    abi_tuple_encode_zero_inputs sf ce (ZIP (ops,MAP (lowered_value_type ce) args)) ats avs next lo hi s /\
+    abi_tuple_encode_layout ce (ZIP (ops,MAP (lowered_value_type ce) args)) ats /\
     enc (Tuple ats) (ListV avs) =
-      enc (Tuple (MAP (vyper_to_abi_type (get_tenv cx) o expr_type) args)) (ListV cavs)
+      enc (Tuple (MAP (vyper_to_abi_type (get_tenv cx) o lowered_value_type ce) args)) (ListV cavs)
 Proof
   strip_tac >>
   `LENGTH args = LENGTH vs` by metis_tac[abi_args_post_lengths] >>

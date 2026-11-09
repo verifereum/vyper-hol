@@ -64,11 +64,11 @@ QED
 
 Theorem abi_encode_nonword_zero_window_shape:
   expr_post ctx func ce cx e es origin sa s0 es' v op s /\
-  ~is_word_type (expr_type e) /\
-  abi_enc_plan (get_tenv cx) (expr_type e) ei /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  ~is_word_type (post_value_type ce e) /\
+  abi_enc_plan (get_tenv cx) (post_value_type ce e) ei /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
+  vyper_to_abi (get_tenv cx) (post_value_type ce e) v = SOME av /\
   val_footprint tv v = 0 ==>
   ei = AbiCopy 0 \/ ?infos. ei = AbiComplex infos
 Proof
@@ -159,11 +159,11 @@ QED
 
 Theorem abi_encode_nonword_zero_plan:
   expr_post ctx func ce cx e es origin sa s0 es' v op s /\
-  ~is_word_type (expr_type e) /\
-  abi_enc_plan (get_tenv cx) (expr_type e) ei /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  ~is_word_type (post_value_type ce e) /\
+  abi_enc_plan (get_tenv cx) (post_value_type ce e) ei /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
+  vyper_to_abi (get_tenv cx) (post_value_type ce e) v = SOME av /\
   val_footprint tv v = 0 ==> ei = AbiCopy 0
 Proof
   metis_tac[abi_encode_zero_footprint_plan]
