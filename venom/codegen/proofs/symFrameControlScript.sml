@@ -2363,6 +2363,27 @@ Proof
   goal_assum (drule_at Any) >> decide_tac
 QED
 
+Theorem terminal_source_memory_reads_safe:
+  !cp.
+  MEM inst.inst_opcode [STOP; RETURN; SELFDESTRUCT; REVERT; INVALID;
+    CREATE; CREATE2; RETURNDATACOPY] /\ inst_wf inst /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  venom_to_evm_name inst.inst_opcode = SOME name /\
+  (!b. b IN FDOM labs ==> context_spill_byte cp b) /\
+  source_memory_reads_disjoint cp inst vs ==>
+  ~mem_labels_hit labs (asm_op_mem_reads name args)
+Proof
+  gen_tac >> strip_tac >>
+  fs[listTheory.MEM] >>
+  gvs[venomWfTheory.inst_wf_def, asmIRTheory.venom_to_evm_name_def,
+      asm_op_mem_reads_def, asmSemTheory.log_table_def, mem_labels_hit_def,
+      listTheory.LENGTH_EQ_NUM_compute, eval_operands_def, AllCaseEqs()] >>
+  irule (SRULE [mem_labels_hit_def] source_memory_range_label_free) >>
+  goal_assum (drule_at (Pat `source_memory_reads_disjoint _ _ _`)) >>
+  simp[contextCodegenRelTheory.source_memory_read_ranges_def,
+       contextCodegenRelTheory.memory_range_of_operands_def]
+QED
+
 Theorem mem_labels_clear_read_safe:
   ~mem_labels_hit (mem_labels_clear labs P) P
 Proof
@@ -3506,8 +3527,7 @@ Proof
     ?w. sv = Val w` by
     (rpt strip_tac >>
      `op <> dead_stack_marker` by
-       (qpat_x_assum `EVERY _ _` mp_tac >>
-        pure_rewrite_tac[listTheory.EVERY_MEM] >>
+       (qpat_x_assum `EVERY _ _` (mp_tac o REWRITE_RULE [listTheory.EVERY_MEM]) >>
         disch_then (qspec_then `op` mp_tac) >> simp[]) >>
      drule_all terminal_operand_word_kind >> simp[]) >>
   drule_all arranged_word_prepared_symbolic_stack >> strip_tac >>
@@ -3613,6 +3633,112 @@ Proof
   drule_all terminal_arranged_word_stack >> simp[]
 QED
 
+Theorem assert_selected_prefix_decompose:
+  inst.inst_opcode = ASSERT /\ inst_wf inst /\ inst.inst_operands = [cond] /\
+  generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops,final) ==>
+  compute_operands inst = [cond] /\
+  ?iops prepared rops arranged.
+    emit_input_plan inst.inst_opcode (compute_operands inst) nl ps = (iops,prepared) /\
+    reorder_plan dfg (compute_operands inst) prepared = (rops,arranged) /\
+    ops = iops ++ rops ++ [SOEmit "ISZERO"; SOPushLabel "revert"; SOEmit "JUMPI"] /\
+    arranged.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
+    arranged.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset
+Proof
+  strip_tac >> drule_all genBlockSimTheory.assert_plan_decompose >> strip_tac >>
+  rename1 `emit_input_plan ASSERT [cond] nl ps = (iops,prepared)` >>
+  rename1 `reorder_plan dfg [cond] prepared = (rops,arranged)` >>
+  conj_tac >- simp[] >> qexistsl [`iops`, `prepared`, `rops`, `arranged`] >>
+  gvs[allocMonoTheory.release_dead_spills_spill_base, allocMonoTheory.release_dead_spills_next_offset]
+QED
+
+Theorem assert_unreachable_selected_prefix_decompose:
+  inst.inst_opcode = ASSERT_UNREACHABLE /\ inst_wf inst /\ inst.inst_operands = [cond] /\
+  generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops,final) ==>
+  compute_operands inst = [cond] /\
+  ?iops prepared rops arranged lbl.
+    emit_input_plan inst.inst_opcode (compute_operands inst) nl ps = (iops,prepared) /\
+    reorder_plan dfg (compute_operands inst) prepared = (rops,arranged) /\
+    ops = iops ++ rops ++ [SOPushLabel lbl; SOEmit "JUMPI"; SOEmit "INVALID"; SOLabel lbl] /\
+    arranged.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
+    arranged.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset
+Proof
+  strip_tac >> drule_all genBlockSimTheory.assert_unreachable_plan_decompose >> strip_tac >>
+  rename1 `emit_input_plan ASSERT_UNREACHABLE [cond] nl ps = (iops,prepared)` >>
+  rename1 `reorder_plan dfg [cond] prepared = (rops,arranged)` >>
+  rename1 `fresh_label "reachable" _ = (endlabel,after)` >>
+  conj_tac >- simp[] >> qexistsl [`iops`, `prepared`, `rops`, `arranged`, `endlabel`] >>
+  gvs[allocMonoTheory.release_dead_spills_spill_base, allocMonoTheory.release_dead_spills_next_offset,
+      fresh_label_def, plan_state_component_equality]
+QED
+
+Theorem sym_conditional_abort_frame_prefix_deep:
+  !base.
+  (inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE) /\
+  inst_wf inst /\ inst.inst_operands = [cond] /\
+  generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops,final) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  generated_plan_state_wf_marked base ps /\
+  LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps)).ps_stack /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    IS_SOME (stack_get_depth op ps.ps_stack) \/ IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) /\
+  (!op at. MEM op (compute_operands inst) /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at (compute_operands inst)) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st /\
+  asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
+  lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  asm_static_wf prog /\ sym_frame_inv prog env ctx cplan fn ret srest labs0 ps st ss ==>
+  ?pre arranged mid ss_mid suffix.
+    ops = pre ++ suffix /\
+    ((inst.inst_opcode = ASSERT /\
+      suffix = [SOEmit "ISZERO"; SOPushLabel "revert"; SOEmit "JUMPI"]) \/
+     (inst.inst_opcode = ASSERT_UNREACHABLE /\ ?lbl.
+      suffix = [SOPushLabel lbl; SOEmit "JUMPI"; SOEmit "INVALID"; SOLabel lbl])) /\
+    arranged.ps_stack = stack_pop 1 arranged.ps_stack ++ [cond] /\
+    asm_steps lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp pre)) st =
+      AsmOK (mid with as_stack := mid.as_stack ++ rest) /\
+    venom_asm_rel lo arranged (frame_view fn ra vs with vs_memory := st.as_memory) mid /\
+    venom_asm_terminal_rel vs (mid with as_stack := mid.as_stack ++ rest) /\
+    asm_block_at prog mid.as_pc (execute_plan cplan.cp_initial_fmp suffix) /\
+    sym_steps prog env (LENGTH (execute_plan cplan.cp_initial_fmp pre)) ss = SymOK ss_mid /\
+    sym_frame_inv prog env ctx cplan fn ret srest labs0 arranged
+      (mid with as_stack := mid.as_stack ++ rest) ss_mid
+Proof
+  gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `?iops prepared rops arranged suffix.
+    emit_input_plan inst.inst_opcode (compute_operands inst) nl ps = (iops,prepared) /\
+    reorder_plan dfg (compute_operands inst) prepared = (rops,arranged) /\
+    ops = iops ++ rops ++ suffix /\
+    arranged.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
+    arranged.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset /\
+    compute_operands inst = [cond] /\
+    ((inst.inst_opcode = ASSERT /\
+      suffix = [SOEmit "ISZERO"; SOPushLabel "revert"; SOEmit "JUMPI"]) \/
+     (inst.inst_opcode = ASSERT_UNREACHABLE /\ ?lbl.
+      suffix = [SOPushLabel lbl; SOEmit "JUMPI"; SOEmit "INVALID"; SOLabel lbl]))` by
+    (Cases_on `inst.inst_opcode = ASSERT`
+     >- (drule_all assert_selected_prefix_decompose >> metis_tac[])
+     >> metis_tac[assert_unreachable_selected_prefix_decompose]) >>
+  `inst.inst_opcode <> INVOKE /\
+   PERM (compute_operands inst) (compute_operands inst) /\
+   LENGTH (compute_operands inst) <= LENGTH prepared.ps_stack` by gvs[] >>
+  drule_all sym_frame_entry_selected_prefix_sim_marked >> strip_tac >>
+  qexistsl [`iops ++ rops`, `arranged`, `mid`, `ss_mid`, `suffix`] >> simp[] >>
+  qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
+  simp[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >> gvs[]
+QED
+
 Theorem sym_regular_abort_frame_prefix_deep:
   !base.
   venom_to_evm_name inst.inst_opcode = SOME name /\
@@ -3660,10 +3786,7 @@ Proof
     simp[generatedPrefixSimTheory.emit_output_fold_alloc] >>
   `emitted.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
    emitted.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset` by
-    (irule generatedPrefixSimTheory.regular_postfix_alloc_frame >>
-     goal_assum (drule_at (Pat `final = release_dead_spills _ _`)) >>
-     goal_assum (drule_at (Pat `if _ then _ else optimistic_swap_plan _ _ _ _ _ = _`)) >>
-     goal_assum (drule_at (Pat `if _ then _ else popmany_plan _ _ = _`)) >> gvs[]) >>
+    (drule_all generatedPrefixSimTheory.regular_postfix_alloc_frame >> simp[]) >>
   `arranged.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
    arranged.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset /\
    PERM (compute_operands inst) selected /\
