@@ -3312,3 +3312,11 @@ Proof
   disch_then (qspec_then `ret` assume_tac) >>
   drule_all taint_agree_bind_outputs_clean >> simp[]
 QED
+
+Theorem taint_agree_inst_idx:
+  taint_agree D X tn s t ==>
+  taint_agree D X tn (s with vs_inst_idx := n) (t with vs_inst_idx := n)
+Proof
+  simp[taint_agree_def, ld_shared_agree_def] >>
+  rpt strip_tac >> gvs[venom_state_component_equality]
+QED

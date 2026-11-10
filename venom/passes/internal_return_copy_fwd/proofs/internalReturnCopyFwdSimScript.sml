@@ -657,6 +657,64 @@ Proof
   drule_all taint_agree_memory >> simp[]
 QED
 
+Theorem ircf_cross_memory_transport:
+  ircf_cross tn gam s t /\ s'.vs_memory = s.vs_memory /\
+  t'.vs_memory = t.vs_memory /\ tn'.t_mem = tn.t_mem ==>
+  ircf_cross tn' gam s' t'
+Proof
+  simp[ircf_cross_def] >> metis_tac[]
+QED
+
+Theorem ircf_R_ret_reachable_restore:
+  ircf_R_ret_reachable vs D fn_meta rma C (f::stk) PG G tn fn ret se te /\
+  vs.vs_allocas = FEMPTY /\ lo <= vs.vs_alloca_next /\ ~ctx_has_dalloca C /\
+  taint_agree D X0 saved f.cf_state t /\ saved.t_var = f.cf_tvar /\
+  f.cf_state.vs_call_ctx.cc_address = se.vs_call_ctx.cc_address /\
+  bind_outputs f.cf_inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state f.cf_state se)) = SOME s' /\
+  active_inst f.cf_fn inst'
+    (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx) /\
+  ircf_gam_cur fn_meta rma C f.cf_fn
+    (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx) =
+    ircf_gam_cur fn_meta rma C f.cf_fn f.cf_state ==>
+  ?t'. bind_outputs f.cf_inst.inst_outputs ret.iret_values
+         (adopt_return_fmp ret (merge_callee_state t te)) = SOME t' /\
+    frame_reachable vs C stk f.cf_params
+      (DRESTRICT f.cf_prov (COMPL (set f.cf_inst.inst_outputs)))
+      (tn with t_var := DRESTRICT f.cf_tvar (COMPL (set f.cf_inst.inst_outputs)))
+      f.cf_fn inst' (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx) /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) f.cf_state stk)
+      (tn with t_var := DRESTRICT f.cf_tvar (COMPL (set f.cf_inst.inst_outputs)))
+      (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx)
+      (t' with vs_inst_idx := SUC f.cf_state.vs_inst_idx) /\
+    ircf_cross
+      (tn with t_var := DRESTRICT f.cf_tvar (COMPL (set f.cf_inst.inst_outputs)))
+      (ircf_gam_cur fn_meta rma C f.cf_fn
+         (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx) UNION
+       ircf_gam_stk fn_meta rma C stk)
+      (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx)
+      (t' with vs_inst_idx := SUC f.cf_state.vs_inst_idx)
+Proof
+  strip_tac >>
+  `!i. i NOTIN ircf_dead (ircf_dst_ids fn_meta rma C) f.cf_state stk /\
+       i NOTIN tn.t_mem /\ i < f.cf_state.vs_alloca_next ==>
+       read_byte i se.vs_memory = read_byte i te.vs_memory` by
+    (rpt strip_tac >> drule_all ircf_R_ret_reachable_caller_memory >> simp[]) >>
+  drule_all ircf_R_ret_reachable_resume >> strip_tac >>
+  `taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) se (f::stk)) tn se te` by
+    gvs[ircf_R_ret_def] >>
+  drule_all taint_agree_resume_caller >> strip_tac >>
+  qexists_tac `t'` >> simp[] >> conj_tac
+  >- (irule taint_agree_inst_idx >> gvs[]) >>
+  `s'.vs_memory = se.vs_memory /\ t'.vs_memory = te.vs_memory` by
+    (imp_res_tac o1LowerDloadJointRestoreTheory.ld_bind_outputs_vars_only >>
+     Cases_on `ret.iret_adopt_fmp` >>
+     gvs[adopt_return_fmp_def, merge_callee_state_def,
+         venom_state_component_equality]) >>
+  gvs[ircf_R_ret_def] >> irule ircf_cross_memory_transport >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem ircf_R_boundary:
   s.vs_prev_bb <> NONE /\
   taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
