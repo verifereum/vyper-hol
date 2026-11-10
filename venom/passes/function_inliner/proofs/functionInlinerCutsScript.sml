@@ -364,3 +364,146 @@ Proof
   irule inline_tracked_resume_return >> simp[] >>
   gvs[EVERY_MEM] >> metis_tac[]
 QED
+
+(* Inactive observations for one physical owner.  This is storage only, not
+   a reachability certificate or an assertion about saved shared state. *)
+Definition inline_suspended_observations_def:
+  inline_suspended_observations obs frame <=>
+    EVERY (\(a,route,snap).
+      inline_tracked_snapshot a.ia_function a route snap frame) obs
+End
+
+Definition inline_suspended_avoids_def:
+  inline_suspended_avoids obs d <=>
+    EVERY (\(a,route,snap).
+      (!x. x IN snap.ils_defined ==> d <> route.ir_rename x) /\
+      (!x. x IN snap.ils_protected ==> d <> snap.ils_parent_rename x)) obs
+End
+
+Theorem inline_suspended_empty[simp]:
+  inline_suspended_observations [] frame /\ inline_suspended_avoids [] d
+Proof
+  simp[inline_suspended_observations_def, inline_suspended_avoids_def]
+QED
+
+Theorem inline_tracked_physical_write:
+  inline_tracked_snapshot fn a route snap frame /\
+  (!x. x IN snap.ils_defined ==> d <> route.ir_rename x) /\
+  (!x. x IN snap.ils_protected ==> d <> snap.ils_parent_rename x) ==>
+  inline_tracked_snapshot fn a route snap
+    (frame with ipf_state := update_var d w frame.ipf_state)
+Proof
+  strip_tac >>
+  `inline_snapshot_data a route snap
+     (frame with ipf_state := update_var d w frame.ipf_state)` by
+    (irule inline_snapshot_write >> fs[inline_tracked_snapshot_def] >> metis_tac[]) >>
+  fs[inline_tracked_snapshot_def]
+QED
+
+Theorem inline_suspended_write:
+  !obs frame.
+    inline_suspended_observations obs frame /\ inline_suspended_avoids obs d ==>
+    inline_suspended_observations obs
+      (frame with ipf_state := update_var d w frame.ipf_state)
+Proof
+  Induct >> simp[inline_suspended_observations_def, inline_suspended_avoids_def] >>
+  gen_tac >> PairCases_on `h` >> simp[] >> rpt strip_tac
+  >- (irule inline_tracked_physical_write >> simp[]) >>
+  fs[GSYM inline_suspended_observations_def,
+     GSYM inline_suspended_avoids_def]
+QED
+
+Theorem inline_suspended_writes:
+  !writes frame.
+    inline_suspended_observations obs frame /\
+    EVERY (\(d,w). inline_suspended_avoids obs d) writes ==>
+    inline_suspended_observations obs
+      (frame with ipf_state :=
+        FOLDL (\s (d,w). update_var d w s) frame.ipf_state writes)
+Proof
+  Induct >> simp[] >> gen_tac >> PairCases_on `h` >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  drule_all inline_suspended_write >>
+  disch_then (qspec_then `h1` assume_tac) >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem inline_suspended_root:
+  a.ia_entry.vs_labels = FEMPTY ==>
+  ?snap frame.
+    inline_tracked_snapshot a.ia_function a (inline_route_identity a.ia_id) snap frame /\
+    snap.ils_state = a.ia_entry /\ frame.ipf_state = a.ia_entry /\
+    inline_suspended_observations [] frame
+Proof
+  strip_tac >>
+  drule (inline_tracked_snapshot_identity |> Q.INST [`fn` |-> `a.ia_function`]) >>
+  strip_tac >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem inline_suspended_push_child:
+  inline_original_child C fuel parent q call psnap.ils_state r child cr /\
+  inline_tracked_snapshot pa.ia_function pa proute psnap frame /\
+  inline_suspended_observations obs frame ==>
+  ?csnap.
+    csnap.ils_state = child.ia_entry /\ csnap.ils_defined = {} /\
+    csnap.ils_saved = psnap.ils_state /\
+    csnap.ils_protected =
+      (psnap.ils_defined DIFF psnap.ils_opaque) DIFF set call.inst_outputs /\
+    csnap.ils_parent_rename = proute.ir_rename /\
+    inline_tracked_snapshot child.ia_function child route csnap frame /\
+    inline_suspended_observations ((pa,proute,psnap)::obs) frame
+Proof
+  strip_tac >> drule_all inline_tracked_child_entry >>
+  disch_then (qspec_then `route` assume_tac) >>
+  goal_assum (drule_at Any) >>
+  gvs[inline_suspended_observations_def]
+QED
+
+Theorem inline_suspended_original_call_push:
+  call.inst_opcode = INVOKE /\
+  step_inst fuel C call psnap.ils_state = r /\ terminates r /\
+  inline_tracked_snapshot pa.ia_function pa proute psnap frame /\
+  inline_suspended_observations obs frame ==>
+  ?child cr csnap.
+    inline_original_child C fuel pa.ia_id q call psnap.ils_state r child cr /\
+    inline_original_call_result call psnap.ils_state cr r /\
+    csnap.ils_state = child.ia_entry /\ csnap.ils_defined = {} /\
+    csnap.ils_saved = psnap.ils_state /\
+    csnap.ils_protected =
+      (psnap.ils_defined DIFF psnap.ils_opaque) DIFF set call.inst_outputs /\
+    csnap.ils_parent_rename = proute.ir_rename /\
+    inline_tracked_snapshot child.ia_function child route csnap frame /\
+    inline_suspended_observations ((pa,proute,psnap)::obs) frame
+Proof
+  strip_tac >> drule_all inline_original_child_exists >>
+  disch_then (qspecl_then [`q`, `pa.ia_id`] strip_assume_tac) >>
+  drule_all inline_suspended_push_child >>
+  disch_then (qspec_then `route` strip_assume_tac) >>
+  qexistsl [`child`, `cr`, `csnap`] >> simp[] >>
+  fs[inline_original_child_def]
+QED
+
+(* The avoidance premise observes ALL suspended ancestors of this owner,
+   including routed opaque destinations.  Deriving it from actual edit
+   namespaces and reachable source stacks remains the layout frontier's job. *)
+Theorem inline_suspended_original_call_push_writes:
+  call.inst_opcode = INVOKE /\
+  step_inst fuel C call psnap.ils_state = r /\ terminates r /\
+  inline_tracked_snapshot pa.ia_function pa proute psnap frame /\
+  inline_suspended_observations obs frame /\
+  EVERY (\(d,w). inline_suspended_avoids ((pa,proute,psnap)::obs) d) writes ==>
+  ?child cr csnap.
+    inline_original_child C fuel pa.ia_id q call psnap.ils_state r child cr /\
+    inline_original_call_result call psnap.ils_state cr r /\
+    csnap.ils_state = child.ia_entry /\ csnap.ils_defined = {} /\
+    csnap.ils_saved = psnap.ils_state /\
+    inline_tracked_snapshot child.ia_function child route csnap frame /\
+    inline_suspended_observations ((pa,proute,psnap)::obs)
+      (frame with ipf_state :=
+        FOLDL (\s (d,w). update_var d w s) frame.ipf_state writes)
+Proof
+  strip_tac >> drule_all inline_suspended_original_call_push >>
+  disch_then (qspecl_then [`route`, `q`] strip_assume_tac) >>
+  qexistsl [`child`, `cr`, `csnap`] >> simp[] >>
+  irule inline_suspended_writes >> simp[]
+QED
