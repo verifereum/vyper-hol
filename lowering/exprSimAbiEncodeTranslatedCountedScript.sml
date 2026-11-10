@@ -25,10 +25,10 @@ Theorem abi_encode_translated_counted_suffix:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
   ~is_word_type (expr_type e) /\
-  ei = type_to_abi_enc_info ce.ce_struct_fields ce (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
-  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (expr_type e)) sa = (out,sb) /\
+  ei = type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
+  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)) sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
   (!l. op <> Label l) /\ (!x. op = Var x ==> not_fresh_at sa x) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -38,7 +38,7 @@ Theorem abi_encode_translated_counted_suffix:
         phi_prefix_length bb.bb_instructions = 0) ==>
   ?p actual.
     gas_marked_path F ctx func s 0 (OK actual) /\
-    let bytes = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av in
+    let bytes = enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av in
     let m = case mid of NONE => 0 | SOME _ => 4 in
     eval_operand out actual = SOME (n2w p) /\
     mload p actual = n2w (LENGTH bytes+m) /\
@@ -59,8 +59,8 @@ Theorem abi_encode_translated_counted_suffix:
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
-      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
-    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
     actual.vs_alloca_next < dimword (:256)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -78,15 +78,15 @@ Proof
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
     ?p. FLOOKUP actual.vs_allocas sa.cs_next_id =
-      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
-    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
     actual.vs_alloca_next < dimword (:256) /\
     eval_operand out actual = SOME (n2w p) /\
-    mload p actual = n2w (LENGTH (enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av) +
+    mload p actual = n2w (LENGTH (enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av) +
       (case mid of NONE => 0 | SOME _ => 4)) /\
     mem_bytes_at (p+32+(case mid of NONE => 0 | SOME _ => 4))
-      (LENGTH (enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av)) actual.vs_memory =
-      enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av /\
+      (LENGTH (enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av)) actual.vs_memory =
+      enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av /\
     (case mid of NONE => T | SOME selector =>
       mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes selector)` >>
   `(!t rd. Q t ==> Q (t with vs_returndata := rd)) /\
