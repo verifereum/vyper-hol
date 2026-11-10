@@ -208,6 +208,22 @@ End
 
 val () = cv_auto_trans check_def;
 
+(* A static frame fails where the EVM fails with WriteInStaticContext. *)
+Definition check_not_static_def:
+  check_not_static cx = check (~cx.txn.is_static) "write in static context"
+End
+
+val () = cv_auto_trans check_not_static_def;
+
+Theorem check_not_static_eq[simp]:
+  check_not_static cx st =
+    ((if cx.txn.is_static then INR (Error (RuntimeError "write in static context"))
+      else INL ()), st)
+Proof
+  Cases_on `cx.txn.is_static` >>
+  simp[check_not_static_def, check_def, assert_def]
+QED
+
 Definition type_check_def:
   type_check b str = assert b (Error (TypeError str))
 End
@@ -437,6 +453,7 @@ val () = read_storage_slot_def
 (* Write a value to storage at a slot *)
 Definition write_storage_slot_def:
   write_storage_slot cx is_transient slot tv v = do
+    check_not_static cx;
     storage <- get_storage_backend cx is_transient;
     writes <- lift_option_type (encode_value tv v) "write_storage_slot encode";
     storage' <<- apply_writes slot writes storage;
@@ -445,8 +462,9 @@ Definition write_storage_slot_def:
 End
 
 val () = write_storage_slot_def
-  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, set_storage_backend_def,
-            update_transient_def, update_accounts_def]
+  |> SRULE [bind_def, ignore_bind_def, FUN_EQ_THM, LET_THM,
+            set_storage_backend_def, check_not_static_def, check_def,
+            assert_def, update_transient_def, update_accounts_def]
   |> cv_auto_trans;
 
 (* Module-aware immutables lookup *)
@@ -771,6 +789,17 @@ Proof
        (Rewrite.add_rewrites pre_constructor_rewrites ihs)))
 QED
 
+Theorem evaluate_subscripts_error_shape:
+  !tv v path err. evaluate_subscripts tv v path = INR err ==>
+    err = RuntimeError "evaluate_subscripts array_index" \/
+    ?msg. err = TypeError msg
+Proof
+  recInduct evaluate_subscripts_ind >>
+  rpt strip_tac >>
+  gvs[evaluate_subscripts_def, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
 (* mutating inside arrays, structs, hashmaps *)
 
 Datatype:
@@ -949,6 +978,15 @@ Definition read_memory_path_def:
          | SOME v => INL v
          | NONE => INR err)
 End
+
+Theorem read_memory_path_error_shape:
+  read_memory_path entry path = INR err ==>
+    err = RuntimeError "evaluate_subscripts array_index" \/
+    ?msg. err = TypeError msg
+Proof
+  simp[read_memory_path_def, AllCaseEqs()] >>
+  rpt strip_tac >> drule evaluate_subscripts_error_shape >> simp[]
+QED
 
 val () = cv_auto_trans read_memory_path_def;
 
@@ -1370,6 +1408,16 @@ Proof
   imp_res_tac read_result_state >> gvs[return_def] >> metis_tac[]
 QED
 
+Theorem get_scopes_read_results:
+  bind get_scopes (\prev. bind (read_results cx results) (\vs. k prev vs)) =
+  bind (read_results cx results) (\vs. bind get_scopes (\prev. k prev vs))
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `read_results cx results x` >>
+  drule read_results_state >> strip_tac >> gvs[] >>
+  Cases_on `q` >> simp[bind_def, get_scopes_def, return_def]
+QED
+
 Theorem read_results_length:
   !results st vs st'.
     read_results cx results st = (INL vs,st') ==> LENGTH vs = LENGTH results
@@ -1377,4 +1425,47 @@ Proof
   Induct >> simp[read_results_def, return_def] >>
   rpt gen_tac >> simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[return_def] >> first_x_assum drule >> simp[]
+QED
+
+Theorem ignore_bind_try_unit:
+  ignore_bind (try a h) (return ()) =
+  try (ignore_bind a (return ())) (\e. ignore_bind (h e) (return ()))
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `a x` >> rename1 `_ = (res,st)` >> Cases_on `res` >>
+  simp[try_def, ignore_bind_def, bind_def, return_def]
+QED
+
+Theorem ignore_bind_finally_unit:
+  ignore_bind (finally a cleanup) (return ()) =
+  finally (ignore_bind a (return ())) cleanup
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `a x` >> rename1 `_ = (res,st)` >> Cases_on `res` >>
+  simp[finally_def, ignore_bind_def, bind_def, return_def] >>
+  Cases_on `cleanup st` >> rename1 `_ = (res,st2)` >> Cases_on `res` >>
+  simp[raise_def]
+QED
+
+Theorem ignore_bind_return_twice:
+  ignore_bind (ignore_bind a (return v)) (return w) =
+  ignore_bind a (return w)
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `a x` >> rename1 `_ = (res,st)` >> Cases_on `res` >>
+  simp[ignore_bind_def, bind_def, return_def]
+QED
+
+Theorem bind_assoc:
+  bind (bind a b) c = bind a (\x. bind (b x) c)
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `a x` >> rename1 `_ = (res,st)` >> Cases_on `res` >>
+  simp[bind_def]
+QED
+
+Theorem bind_return:
+  bind (return v) k = k v
+Proof
+  simp[FUN_EQ_THM, bind_def, return_def]
 QED

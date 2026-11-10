@@ -7,10 +7,12 @@
  * attributes (exprSimAttribute's compile_attribute_vv_sim), tuple
  * subscripts (exprSimTuple's compile_subscript_tuple_sim), a dispatch that
  * disagrees with the base's type and subscripts of any base but an array, a
- * tuple or a mapping, which do not type.  Cheated, for the later #636 PRs:
- * array and mapping subscripts and pop on any other target, by kind
- * (compile_pop_storage_sim, compile_pop_nested_sim). Root immutable pop is
- * rejected by the source checker, as in Python.
+ * tuple or a mapping, which do not type.  Array and mapping subscripts
+ * are compile_subscript_array_case (exprSimSubscriptArray) and
+ * compile_subscript_map_case (exprSimSubscriptMap).  Pop on a storage variable is
+ * compile_pop_storage_sim; pop on a nested target is compile_pop_nested_sim,
+ * by exprSimPopNested's pop_nested_sim, whose residuals are listed there.
+ * Root immutable pop is rejected by the source checker, as in Python.
  *
  * TOP-LEVEL:
  *   compile_subscript_case — static and dynamic arrays with the
@@ -32,10 +34,9 @@
  * expr_sim_case; expr_vv_case describes a base's value_vv, captured memory,
  * storage and transient places included.  It does not cover a hashmap
  * base: that evaluates to a HashMapRef and is typed by type_place_expr, not
- * well_typed_expr, so for a nested mapping (m[a][b]) nothing judges the
- * inner key a.  The mapping lemma's proof needs expr_vv_case to describe a
- * HashMapRef result (the operand holding the mapping's slot), which then
- * carries the inner keys' simulation to the outer subscript.
+ * well_typed_expr.  A mapping base is judged by expr_map_case
+ * (exprSimMapDefs) instead, which compile_subscript_case takes for a
+ * MapPT base and compile_subscript_sim supplies via expr_map_case_below.
  *
  * compile_subscript dispatches on place_type of the base, the base's own
  * type for a nested place, and pop takes its target's place from
@@ -46,8 +47,9 @@
 
 Theory exprSimPlaces
 Ancestors
-  list exprSim exprSimHyps exprSimPop exprSimPopStorage exprSimAttribute exprSimTuple
-  exprSimArrayIndex
+  exprSimSubscriptMap exprSimSubscriptArray exprSimPopNestedTargetFrag
+  exprSimSource exprSimHypsDefs list exprSimHyps exprSimPop exprSimAttribute exprSimTuple exprSimPopStorage exprSimPopNested
+  exprSimArrayIndex targetPlaceSim targetPlaceSimCases exprSimPopNestedBase
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
 
 (* ===== Subscripts ===== *)
@@ -57,34 +59,6 @@ Ancestors
    body_subscript_case (bodySimExprCases), where an operand may call an
    internal function, uses them with nocalls = F, as compile_subscript_sim
    does with T. *)
-
-(* A subscript of a mapping (place_type MapPT).  Cheated: the base
-   evaluates to a HashMapRef, which expr_vv_res_ok, and so the base's
-   judgment, leaves out, and which well_typed_expr does not type
-   (type_place_expr does), so for a nested mapping the hypotheses say
-   nothing of the inner keys.  The proof needs expr_vv_case to describe a
-   HashMapRef result, the operand holding the mapping's slot (see the
-   header), and the slot computation:
-   compile_mapping_subscript's SHA3 over the slot and key words stored in a
-   64-byte buffer against hashmap_slot slot (encode_hashmap_key kt kv), with
-   compile_keccak256_key for a bytes or string key.  expr_sim_inv's map
-   table clauses make MapPT mean a declared mapping.  For a storage or
-   transient subscript, here and in compile_subscript_array_case,
-   storage_holds also asks that the element's or hashmap leaf's slots are in
-   range (slots_in_range); the proof gets that from static_/dyn_slots_in_range
-   and the hashmap regions of contract_storage_well_formed, as
-   toplevel_storage_slots_in_range and storage_field_slots_in_range do for
-   names and struct fields. *)
-Theorem compile_subscript_map_case:
-  !nocalls ctx func cenv cx ann obj idx kt vt.
-    expr_vv_case nocalls ctx func cenv cx obj /\
-    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) /\
-    place_type cenv obj = MapPT kt vt ==>
-    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
-Proof
-  cheat
-QED
 
 (* The compiler's dispatch type disagrees with the base's type: place_type
    says ValPT bt with bt not the base's expr_type.  Unreachable: under
@@ -121,34 +95,6 @@ Proof
   Cases_on `expr_type obj` >> gvs[subscript_vtype_def]
 QED
 
-(* An element of a static or dynamic array, with the bounds-check abort.
-   Cheated: compile_subscript lowers the index after the base, and the
-   base's value_vv must still hold its value when the index's fragment
-   ends.  Where the base points into a live local's region (x[i] for a
-   local x), the index can change that local (x[x.pop()]), and expr_post
-   then says only that the local holds its new value, at its region: the
-   base's pointer is the local's place at a path, but vv_holds does not say
-   so, so the element's value at the base's pointer does not follow.  The
-   proof needs vv_holds to relate a pointer into a local's region to the
-   place it reads (a place-pointer relation), or a fragment for the index
-   that keeps the base's bytes (exprSimOperands keeps a base in the
-   expression's own allocations only).  The bounds check itself, a source
-   RuntimeError for an index out of range against compile_array_subscript's
-   ASSERT, which aborts, is in expr_exit's allowance (exprSimArrayIndex).
-   A dynamic array in code (an immutable, LocCode) reads its length with
-   compile_ptr_load's compile_imm_load_word (ILOAD or DLOAD), for which
-   exprSimArrayIndex has no array_len_ok lemma yet. *)
-Theorem compile_subscript_array_case:
-  !nocalls ctx func cenv cx ann obj idx et bd.
-    expr_vv_case nocalls ctx func cenv cx obj /\
-    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) /\
-    expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) ==>
-    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
-Proof
-  cheat
-QED
-
 (* By place_type of the base: compile_subscript_map_case for a mapping,
    compile_subscript_mismatch_case for a dispatch type other than the
    base's, exprSimTuple's compile_subscript_tuple_sim for a tuple and
@@ -156,6 +102,8 @@ QED
 Theorem compile_subscript_case:
   !nocalls ctx func cenv cx ann obj idx.
     expr_vv_case nocalls ctx func cenv cx obj /\
+    (!kt vt. place_type cenv obj = MapPT kt vt ==>
+             expr_map_case nocalls ctx func cenv cx obj) /\
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
               expr_sim_case nocalls ctx func cenv cx idx) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
@@ -188,8 +136,11 @@ Proof
   `expr_ok cenv obj /\ expr_ok cenv idx` by
     (fs[expr_sim_below_def] >> rpt strip_tac >> first_x_assum irule >>
      simp[expr_size_def]) >>
+  `expr_sim_below cenv (expr_size obj)` by
+    (irule expr_sim_below_mono >>
+     qexists_tac `expr_size (Subscript ann obj idx)` >> simp[expr_size_def]) >>
   gvs[expr_ok_case, expr_vv_ok_case] >> rpt gen_tac >>
-  irule compile_subscript_case >> simp[]
+  irule compile_subscript_case >> simp[expr_map_case_below]
 QED
 
 (* ===== Attributes ===== *)
@@ -274,26 +225,33 @@ Proof
     (qspec_then `ts` mp_tac) >> simp[]
 QED
 
-(* pop on a nested target (x.a.pop(), x[i].pop(), self.s.a.pop()).
-   Cheated: the lowering takes the array's pointer, location and type from
-   compile_get_target_ptr, as an assignment does, but no lemma relates
-   compile_get_target_ptr to the source's eval_target_place for a target
-   deeper than a name.  The proof needs that target/place judgment: by
-   induction on the target, with the hypothesis for the indices, the
-   pointer is the place's in memory (with the array bounds abort of each
-   index) or its slot in storage (with the mapping slot of each key); the
-   subscript lemmas need the same judgment for their bases (this file's
-   header).  Given it, a memory target pops as compile_pop_name_sim does at
-   the array's pointer, inside the local's region (locals_kept), and a
-   storage target as compile_pop_storage_sim does, which waits on the new
-   storage statement of #713. *)
+(* pop on a nested target (x.a.pop(), x[i].pop(), self.s.a.pop()):
+   exprSimPopNested's pop_nested_sim, by the target's root, with the
+   target's fragment judgment from pop_nested_expr_target_frag and, for an
+   immutable root in the constructor, the compile-env premises from
+   pop_nested_immutable_root_ctor. *)
 Theorem compile_pop_nested_sim:
   !cenv ann tgt.
     (!id. tgt <> NameTarget id) /\ (!nid. tgt <> TopLevelNameTarget nid) /\
     expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
     expr_vv_ok cenv (Pop ann tgt)
 Proof
-  cheat
+  rewrite_tac[expr_vv_ok_def] >> rpt strip_tac >>
+  irule pop_nested_sim >> conj_tac
+  >- (strip_tac >> qexists_tac `T` >>
+      `int_calls_target tgt = []` by
+        gvs[expr_sim_pre_def, int_calls_expr_def] >>
+      simp[] >> irule target_idx_case_ok >> rw[] >>
+      fs[expr_sim_below_def] >> first_x_assum irule >>
+      drule nested_pop_index_size >> simp[expr_size_def]) >>
+  qexists_tac `env` >> rpt conj_tac
+  >~ [`pop_target_frag`] >- metis_tac[pop_nested_expr_target_frag]
+  >~ [`cenv.ce_is_ctor`]
+  >- (strip_tac >> gvs[immutable_root_def, expr_sim_pre_body, expr_body_pre_def] >>
+      `!ts. get_module_code cx src = SOME ts ==>
+            find_var_decl_by_name id ts = NONE` by (rpt strip_tac >> gvs[]) >>
+      drule_all pop_nested_immutable_root_ctor >> simp[]) >>
+  gvs[expr_sim_pre_body]
 QED
 
 (* pop on a target other than a local: compile_pop_storage_sim,

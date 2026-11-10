@@ -1,9 +1,8 @@
 (*
  * Memmerging — Block / Function / Pass Simulation (Proofs)
  *
- * Builds on mmCorrectness (per-instruction simulation, invariants)
+ * Builds on mmCorrectnessProofs (per-instruction simulation, invariants)
  * to prove block-level, function-level, and pass-level correctness.
- * Re-exported by mmBlockSimScript.sml.
  *)
 
 Theory mmBlockSimProofs
@@ -16,6 +15,7 @@ Ancestors
   venomInst venomState venomEffects pred_set finite_map
   list rich_list arithmetic words alist
   mmCopy mmScan mmEntryProofs passSharedField passSharedDefs execEquivProps
+  passTransform
 
 (* apply_groups_inst on non-terminators produces non-terminators/non-INVOKE *)
 Theorem apply_groups_inst_non_term[local]:

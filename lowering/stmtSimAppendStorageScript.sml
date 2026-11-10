@@ -1,9 +1,9 @@
 (* Source and machine boundaries for word storage/transient Append. *)
 Theory stmtSimAppendStorage
 Ancestors
-  bodyAppendStorageFacts stmtSimAssignStorage vyperState vyperStorage
+  bodyAppendStorageFacts vyperState vyperStorage
   vyperStorageBackend vyperValue valueEncoding valueEncodingProofs
-  vyperTyping words exprLowering compileEnv emitHelper emitHelperProps
+  vyperTyping words exprLowering compileEnv loweringStateRelDefs emitHelper emitHelperProps
   exprLoweringProps venomExecSemantics venomInst venomState stateFrame
 
 Theorem append_storage_full:
@@ -32,6 +32,7 @@ Proof
 QED
 
 Theorem append_storage_word_success:
+  ~cx.txn.is_static /\
   len = w2n (lookup_storage slot (get_storage cx es tr)) /\
   len < cap /\ type_slot_size tv = 1 /\
   encode_value tv v = SOME [(0,w)] ==>
@@ -57,7 +58,7 @@ Theorem append_storage_step_frame[local]:
 Proof
   pure_rewrite_tac[listTheory.MEM] >> strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  asm_rewrite_tac[Once step_inst_base_def, opcode_case_def] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, opcode_case_def, venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds, combinTheory.K_THM] >>
   simp[exec_read1_def, exec_pure2_def, AllCaseEqs()] >>
   strip_tac >> gvs[update_var_def]
 QED
@@ -104,7 +105,7 @@ Proof
      >- (drule_all emit_op_SLOAD_correct >> metis_tac[]) >>
      qspecl_then [`TLOAD`, `tload`] mp_tac emit_op_read1_correct >>
      disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
-     simp[step_inst_base_def, exec_read1_def] >> strip_tac >>
+     simp[step_inst_base_opcode_eqs, exec_read1_def] >> strip_tac >>
      first_x_assum (qspecl_then [`slot`, `ss`] mp_tac) >>
      simp[] >> metis_tac[]) >>
   `eval_operand (Lit (n2w cap)) ss1 = SOME (n2w cap)` by
@@ -182,7 +183,7 @@ QED
 Theorem append_storage_store_run:
   emit_void (if tr then TSTORE else SSTORE) [aop; vop] st = ((),st') /\
   eval_operand aop ss = SOME addr /\ eval_operand vop ss = SOME w /\
-  fresh_vars_wrt st ss ==>
+  fresh_vars_wrt st ss /\ ~ss.vs_call_ctx.cc_static ==>
   run_inst_seq (emitted_insts st st') ss =
     OK (if tr then tstore addr w ss else sstore addr w ss) /\
   same_blocks st st' /\
@@ -195,7 +196,7 @@ Proof
   drule emitted_insts_emit_void >> strip_tac >>
   `step_inst_base (mk_inst st.cs_next_id TSTORE [aop; vop] []) ss =
     OK (tstore addr w ss)` by
-    simp[step_inst_base_def, mk_inst_def, exec_write2_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def] >>
   gvs[run_inst_seq_def] >>
   drule emit_void_extends >> simp[same_blocks_def] >> strip_tac >>
   conj_tac >-
@@ -255,7 +256,8 @@ Theorem append_storage_suffix_run:
   emit_op ADD [lop; Lit 1w] st7 = (nop,st8) /\
   emit_void (if tr then TSTORE else SSTORE) [bop; nop] st8 = ((),st9) /\
   eval_operand bop ss = SOME slot /\ eval_operand lop ss = SOME len /\
-  eval_operand vop ss = SOME w /\ fresh_vars_wrt st3 ss ==>
+  eval_operand vop ss = SOME w /\ fresh_vars_wrt st3 ss /\
+  ~ss.vs_call_ctx.cc_static ==>
   ?t. run_inst_seq (emitted_insts st3 st9) ss = OK t /\
     same_blocks st3 st9 /\ fresh_vars_wrt st9 t /\
     (!op x. eval_operand op ss = SOME x ==> eval_operand op t = SOME x) /\
@@ -266,6 +268,10 @@ Proof
   strip_tac >> drule_all append_storage_address_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st3 st6) ss = OK ss6` >>
   `eval_operand vop ss6 = SOME w` by metis_tac[] >>
+  `~ss6.vs_call_ctx.cc_static` by
+    (qpat_x_assum `state_frame ss6 = state_frame ss`
+       (mp_tac o Q.AP_TERM `\x. x.vs_call_ctx`) >>
+     simp[state_frame_def]) >>
   drule_all append_storage_store_run >> strip_tac >>
   qmatch_asmsub_abbrev_tac `fresh_vars_wrt st7 ss7` >>
   `eval_operand lop ss7 = SOME len /\
@@ -274,12 +280,17 @@ Proof
   drule_all emit_op_ADD_correct >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st7 st8) ss7 = OK ss8` >>
   `eval_operand bop ss8 = SOME slot` by metis_tac[] >>
-  drule_all append_storage_store_run >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `fresh_vars_wrt st9 ss9` >>
   `state_frame ss8 = state_frame ss7` by
     (irule append_storage_seq_frame >>
      qexists_tac `emitted_insts st7 st8` >> simp[] >>
      imp_res_tac emitted_insts_emit_op >> simp[mk_inst_def]) >>
+  `~ss8.vs_call_ctx.cc_static` by
+    (qpat_x_assum `state_frame ss8 = state_frame ss7`
+       (mp_tac o Q.AP_TERM `\x. x.vs_call_ctx`) >>
+     qunabbrev_tac `ss7` >> Cases_on `tr` >>
+     simp[state_frame_def, sstore_def, tstore_def, LET_THM]) >>
+  drule_all append_storage_store_run >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `fresh_vars_wrt st9 ss9` >>
   `state_frame ss7 = state_frame
     (if tr then tstore (slot+1w+len) w ss else sstore (slot+1w+len) w ss)` by
     (qunabbrev_tac `ss7` >> irule append_storage_store_frame >>
@@ -313,7 +324,8 @@ Theorem compile_dynarray_append_word_run:
     (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) s0 = ((),s9) /\
   eval_operand bop ss = SOME slot /\ eval_operand vop ss = SOME w /\
   fresh_vars_wrt s0 ss /\ cap < dimword (:256) /\
-  len = w2n (if tr then tload slot ss else sload slot ss) /\ len < cap ==>
+  len = w2n (if tr then tload slot ss else sload slot ss) /\ len < cap /\
+  ~ss.vs_call_ctx.cc_static ==>
   ?t. run_inst_seq (emitted_insts s0 s9) ss = OK t /\
     same_blocks s0 s9 /\ fresh_vars_wrt s9 t /\
     (!op x. eval_operand op ss = SOME x ==> eval_operand op t = SOME x) /\
@@ -328,6 +340,10 @@ Proof
   asm_rewrite_tac [] >> strip_tac >>
   `eval_operand bop ss' = SOME slot /\ eval_operand vop ss' = SOME w` by
     metis_tac[] >>
+  `~ss'.vs_call_ctx.cc_static` by
+    (qpat_x_assum `state_frame ss' = state_frame ss`
+       (mp_tac o Q.AP_TERM `\x. x.vs_call_ctx`) >>
+     simp[state_frame_def]) >>
   drule_all append_storage_suffix_run >> strip_tac >>
   imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
   `inst_extends s0 s3 /\ inst_extends s3 s9` by metis_tac[inst_extends_trans] >>

@@ -143,6 +143,15 @@ Proof
   rw[exec_read0_def] >> gvs[AllCaseEqs()]
 QED
 
+Triviality exec_gas_ok_transfer[local]:
+  !inst s v s'.
+    exec_gas inst s = OK v ==>
+    ?v'. exec_gas inst s' = OK v'
+Proof
+  rw[exec_gas_def] >> gvs[AllCaseEqs()] >>
+  Cases_on `s'.vs_gas_readings` >> simp[]
+QED
+
 Triviality exec_read1_ok_transfer[local]:
   !f inst s v s'.
     exec_read1 f inst s = OK v /\
@@ -163,15 +172,29 @@ QED
 
 val exec_ok_transfer_thms =
   [exec_pure1_ok_transfer, exec_pure2_ok_transfer, exec_pure3_ok_transfer,
-   exec_read0_ok_transfer, exec_read1_ok_transfer, exec_write2_ok_transfer];
+   exec_read0_ok_transfer, exec_gas_ok_transfer, exec_read1_ok_transfer,
+   exec_write2_ok_transfer];
 
 val exec_ok_transfer_tac =
   FIRST (map (fn th => drule_all th >> simp[]) exec_ok_transfer_thms);
+
+(* A state write first tests the static flag and its operands, which agree
+   in both states: split on that guard when the dispatch exposes it. *)
+fun static_guard_tac (g as (_, w)) = let
+  val (ante, _) = boolSyntax.dest_imp w
+  val (l, _) = boolSyntax.dest_eq ante
+  val (_, t, _) = boolSyntax.dest_cond l
+  val is_abort = same_const (fst (strip_comb t)) ``Abort``
+ in
+  if is_abort then (IF_CASES_TAC >- simp[] >> REWRITE_TAC[]) g
+  else ALL_TAC g
+ end handle HOL_ERR _ => ALL_TAC g;
 
 val ok_transfer_finish_tac =
   qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[opcode_case_def] >>
+  static_guard_tac >>
   rpt strip_tac >>
   TRY (exec_ok_transfer_tac >> NO_TAC) >>
   gvs[AllCaseEqs()] >>
@@ -190,7 +213,7 @@ val transfer_determined_finish_tac =
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[opcode_case_def] >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def] >>
+       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def] >>
   ntac 2 strip_tac >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
@@ -202,7 +225,7 @@ val output_vars_finish_tac =
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[opcode_case_def] >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def] >>
+       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def] >>
   rpt strip_tac >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
@@ -237,13 +260,16 @@ Theorem step_inst_base_ok_transfer:
     (inst.inst_opcode = PARAM ==> s.vs_params = s'.vs_params) /\
     (inst.inst_opcode = FMP_PARAM ==> s.vs_params = s'.vs_params) /\
     (inst.inst_opcode = RETURNDATACOPY ==>
-       s.vs_returndata = s'.vs_returndata) ==>
+       s.vs_returndata = s'.vs_returndata) /\
+    s.vs_call_ctx = s'.vs_call_ctx ==>
     ?v'. step_inst_base inst s' = OK v'
 Proof
   rpt gen_tac >> strip_tac >>
   `!op. MEM op inst.inst_operands ==>
         eval_operand op s' = eval_operand op s` by
     (rpt strip_tac >> res_tac >> gvs[]) >>
+  `eval_operands inst.inst_operands s' = eval_operands inst.inst_operands s`
+    by (irule eval_operands_agree_lem >> metis_tac[]) >>
   Cases_on `inst.inst_opcode` >>
   gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def]
   >- ok_transfer_finish_tac
@@ -450,6 +476,7 @@ Theorem step_inst_base_scalar_agree:
     s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
     s1.vs_initial_fmp = s2.vs_initial_fmp /\
     s1.vs_return_pc_token = s2.vs_return_pc_token /\
+    s1.vs_gas_readings = s2.vs_gas_readings /\
     (s1.vs_halted <=> s2.vs_halted) /\
     s1.vs_returndata = s2.vs_returndata /\
     (Eff_MEMORY IN read_effects inst.inst_opcode ==>
@@ -474,7 +501,8 @@ Theorem step_inst_base_scalar_agree:
     v1.vs_prev_bb = v2.vs_prev_bb /\
     v1.vs_current_bb = v2.vs_current_bb /\
     v1.vs_inst_idx = v2.vs_inst_idx /\
-    v1.vs_prev_hashes = v2.vs_prev_hashes
+    v1.vs_prev_hashes = v2.vs_prev_hashes /\
+    v1.vs_gas_readings = v2.vs_gas_readings
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `inst.inst_opcode` >>
@@ -494,7 +522,7 @@ Proof
       PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
       ASM_REWRITE_TAC[opcode_case_def] >>
       simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-           exec_read0_def, exec_read1_def, exec_write2_def] >>
+           exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def] >>
       ntac 2 strip_tac >>
       gvs[AllCaseEqs()] >>
       rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
@@ -504,7 +532,7 @@ Proof
       PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
       ASM_REWRITE_TAC[opcode_case_def] >>
       simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-           exec_read0_def, exec_read1_def, exec_write2_def] >>
+           exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def] >>
       ntac 2 strip_tac >>
       gvs[AllCaseEqs()] >>
       rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
@@ -578,7 +606,7 @@ Proof
       PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
       ASM_REWRITE_TAC[opcode_case_def] >>
       simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-           exec_read0_def, exec_read1_def, exec_write2_def] >>
+           exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def] >>
       ntac 2 strip_tac >>
       gvs[AllCaseEqs()] >>
       rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
@@ -624,6 +652,7 @@ Theorem step_inst_base_output_vars_agree:
     s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
     s1.vs_initial_fmp = s2.vs_initial_fmp /\
     s1.vs_return_pc_token = s2.vs_return_pc_token /\
+    s1.vs_gas_readings = s2.vs_gas_readings /\
     (s1.vs_halted <=> s2.vs_halted) /\
     s1.vs_returndata = s2.vs_returndata /\
     LENGTH s1.vs_memory = LENGTH s2.vs_memory /\
@@ -987,70 +1016,413 @@ Theorem step_inst_base_effect_free_output_determined_vars:
        s1.vs_logs = s2.vs_logs) ==>
     !v. MEM v inst.inst_outputs ==> lookup_var v v1 = lookup_var v v2
 Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_effect_free_op_def, is_terminator_def,
-      read_effects_def, write_effects_def,
-      all_effects_def, empty_effects_def]
-  >- transfer_determined_finish_tac  (* ADD *)
-  >- transfer_determined_finish_tac  (* SUB *)
-  >- transfer_determined_finish_tac  (* MUL *)
-  >- transfer_determined_finish_tac  (* Div *)
-  >- transfer_determined_finish_tac  (* SDIV *)
-  >- transfer_determined_finish_tac  (* Mod *)
-  >- transfer_determined_finish_tac  (* SMOD *)
-  >- transfer_determined_finish_tac  (* Exp *)
-  >- transfer_determined_finish_tac  (* ADDMOD *)
-  >- transfer_determined_finish_tac  (* MULMOD *)
-  >- transfer_determined_finish_tac  (* EQ *)
-  >- transfer_determined_finish_tac  (* LT *)
-  >- transfer_determined_finish_tac  (* GT *)
-  >- transfer_determined_finish_tac  (* SLT *)
-  >- transfer_determined_finish_tac  (* SGT *)
-  >- transfer_determined_finish_tac  (* ISZERO *)
-  >- transfer_determined_finish_tac  (* AND *)
-  >- transfer_determined_finish_tac  (* OR *)
-  >- transfer_determined_finish_tac  (* XOR *)
-  >- transfer_determined_finish_tac  (* NOT *)
-  >- transfer_determined_finish_tac  (* SHL *)
-  >- transfer_determined_finish_tac  (* SHR *)
-  >- transfer_determined_finish_tac  (* SAR *)
-  >- transfer_determined_finish_tac  (* SIGNEXTEND *)
-  >- transfer_determined_finish_tac  (* BYTE *)
-  >- transfer_determined_finish_tac  (* MLOAD *)
-  >- transfer_determined_finish_tac  (* SLOAD *)
-  >- transfer_determined_finish_tac  (* TLOAD *)
-  >- transfer_determined_finish_tac  (* ILOAD *)
-  >- transfer_determined_finish_tac  (* DLOAD *)
-  >- transfer_determined_finish_tac  (* MEMTOP *)
-  >- transfer_determined_finish_tac  (* SHA3 *)
-  >- transfer_determined_finish_tac  (* CALLER *)
-  >- transfer_determined_finish_tac  (* ADDRESS *)
-  >- transfer_determined_finish_tac  (* CALLVALUE *)
-  >- transfer_determined_finish_tac  (* GAS *)
-  >- transfer_determined_finish_tac  (* ORIGIN *)
-  >- transfer_determined_finish_tac  (* GASPRICE *)
-  >- transfer_determined_finish_tac  (* CHAINID *)
-  >- transfer_determined_finish_tac  (* COINBASE *)
-  >- transfer_determined_finish_tac  (* TIMESTAMP *)
-  >- transfer_determined_finish_tac  (* NUMBER *)
-  >- transfer_determined_finish_tac  (* PREVRANDAO *)
-  >- transfer_determined_finish_tac  (* GASLIMIT *)
-  >- transfer_determined_finish_tac  (* BASEFEE *)
-  >- transfer_determined_finish_tac  (* BLOBBASEFEE *)
-  >- transfer_determined_finish_tac  (* BLOCKHASH *)
-  >- transfer_determined_finish_tac  (* BLOBHASH *)
-  >- transfer_determined_finish_tac  (* BALANCE *)
-  >- transfer_determined_finish_tac  (* SELFBALANCE *)
-  >- transfer_determined_finish_tac  (* CALLDATASIZE *)
-  >- transfer_determined_finish_tac  (* CALLDATALOAD *)
-  >- transfer_determined_finish_tac  (* RETURNDATASIZE *)
-  >- transfer_determined_finish_tac  (* CODESIZE *)
-  >- transfer_determined_finish_tac  (* EXTCODESIZE *)
-  >- transfer_determined_finish_tac  (* EXTCODEHASH *)
-  >- transfer_determined_finish_tac  (* ASSIGN *)
-  >- transfer_determined_finish_tac  (* PARAM *)
-  >> transfer_determined_finish_tac  (* remaining effect-free opcodes *)
+  (* Normalize each constructor in its own bounded replay branch. *)
+    rpt gen_tac >> strip_tac >>
+    Cases_on `inst.inst_opcode`
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* ADD *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SUB *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* MUL *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* Div *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SDIV *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* Mod *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SMOD *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* Exp *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* ADDMOD *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* MULMOD *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* EQ *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* LT *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* GT *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SLT *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SGT *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* ISZERO *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* AND *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* OR *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* XOR *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* NOT *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SHL *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SHR *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SAR *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SIGNEXTEND *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* BYTE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* MLOAD *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* MSTORE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* MSTORE8 *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* MCOPY *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* MEMTOP *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SLOAD *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SSTORE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* TLOAD *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* TSTORE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* ILOAD *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* ISTORE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* JMP *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* JNZ *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* DJMP *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* RET *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* RETURN *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* REVERT *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* STOP *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SINK *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* PHI *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* PARAM *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* ASSIGN *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* NOP *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* ALLOCA *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* DALLOCA *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* DRET *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* GETFMP *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SETFMP *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* RETFMP *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* INITIAL_FMP *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* BUMP *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* INVOKE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* FMP_PARAM *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* RETPC_PARAM *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* CALLER *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* CALLVALUE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* CALLDATALOAD *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* CALLDATASIZE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* CALLDATACOPY *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* ADDRESS *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* ORIGIN *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* GASPRICE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* GAS *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* GASLIMIT *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* COINBASE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* TIMESTAMP *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* NUMBER *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* PREVRANDAO *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* CHAINID *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SELFBALANCE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* BALANCE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* BLOCKHASH *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* BASEFEE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* CODESIZE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* CODECOPY *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* EXTCODESIZE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* EXTCODEHASH *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* EXTCODECOPY *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* RETURNDATASIZE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* RETURNDATACOPY *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* BLOBHASH *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* BLOBBASEFEE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SHA3 *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* CALL *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* STATICCALL *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* DELEGATECALL *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* CREATE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* CREATE2 *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* LOG *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* SELFDESTRUCT *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* INVALID *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* ASSERT *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* ASSERT_UNREACHABLE *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* DLOAD *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* DLOADBYTES *)
+    >- (gvs[is_effect_free_op_def, is_terminator_def,
+            read_effects_def, write_effects_def,
+            all_effects_def, empty_effects_def] >>
+        transfer_determined_finish_tac) (* OFFSET *)
 QED
 
 

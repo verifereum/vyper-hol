@@ -12,9 +12,9 @@
 
 Theory structFieldsProps
 Ancestors
-  compileVyper compileEnv typedCopyMetadata typedCopyProducer
+  compileVyper compileEnv loweringStateRelDefs typedCopyMetadata typedCopyProducer
   vyperTypeContract vyperTypeExprSoundness vyperContext vyperValue
-  valueEncoding vfmConstants
+  valueEncoding vfmConstants vyperTypeSystem
   finite_map list pair combin
 
 Theorem type_env_for_module_struct_mem:
@@ -161,3 +161,52 @@ Proof
   simp[build_compile_env_ce_struct_fields] >>
   metis_tac[distinct_type_keys_struct_args_unique]
 QED
+
+Theorem type_mem_bytes_type_memory_bytes:
+  !cenv ty.
+    type_mem_bytes (get_struct_fields cenv.ce_struct_fields) ty =
+    type_memory_bytes cenv ty
+Proof
+  ho_match_mp_tac type_memory_bytes_ind >>
+  rw[type_mem_bytes_def, type_memory_bytes_def] >>
+  AP_TERM_TAC >> irule MAP_CONG >> simp[]
+QED
+
+(* An evaluated type's memory size is the byte count compute_immutables_len
+   sums for it. *)
+Theorem evaluated_type_mem_bytes:
+  ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
+  evaluate_type (type_env tops) ty = SOME tv ==>
+  type_memory_size tv =
+    type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty
+Proof
+  strip_tac >>
+  `type_memory_bytes
+     (build_compile_env tops Deploy Payable "__init__" [] NoneT [] F) ty =
+     type_memory_size tv` by
+    (irule build_compile_env_type_memory_bytes >> simp[]) >>
+  gvs[GSYM type_mem_bytes_type_memory_bytes, build_compile_env_ce_struct_fields]
+QED
+
+Theorem struct_literal_decl_types:
+  well_typed_expr env (StructLit ann nsid kes) ==>
+  ann = StructT nsid /\
+  ?args. FLOOKUP env.type_defs nsid = SOME (StructArgs args) /\
+         MAP FST kes = MAP FST args /\
+         MAP (expr_type o SND) kes = MAP SND args
+Proof
+  simp[well_typed_expr_def] >> metis_tac[]
+QED
+
+Theorem struct_literal_layout_types:
+  well_typed_expr env (StructLit ann nsid kes) /\
+  sfields_tenv_consistent cenv.ce_struct_fields env.type_defs ==>
+  ann = StructT nsid /\
+  ?fields. FLOOKUP cenv.ce_struct_fields (nsid_to_string nsid) = SOME fields /\
+           MAP FST fields = MAP FST kes /\
+           MAP (FST o SND) fields = MAP (expr_type o SND) kes
+Proof
+  strip_tac >> drule struct_literal_decl_types >> strip_tac >>
+  gvs[sfields_tenv_consistent_def] >> metis_tac[]
+QED
+

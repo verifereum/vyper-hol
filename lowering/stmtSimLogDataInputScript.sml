@@ -3,7 +3,7 @@ Ancestors
   stmtSimLogDataRun stmtSimLogSource abiEncoderSourceCorrect
   abiBuiltinEncodeWord entryDecodeProps entryDecodeStaticProps
   supportedTypes vyperTyping vyperABI contractABI vyperValue words integer arithmetic typedCopyMetadata
-  abiEncoderInput valueEncoding compileEnv exprLowering stmtSimLogData
+  abiEncoderInput valueEncoding valueEncodingDefs compileEnv exprLowering stmtSimLogData
   valueEncodingProps list abiDecodeRanges exprSimAttributeFields vyperTypeDefaults abiDecoderMembers
 
 Theorem log_word_abi_type:
@@ -188,7 +188,7 @@ Proof
   drule_all log_tuple_types >> disch_then (qspec_then `ce` strip_assume_tac) >>
   `type_slot_size (TupleTV tvs) <= dimword (:256)` by
     (gvs[type_memory_size_def, type_slot_size_def] >>
-     mp_tac (cj 2 storageDecodeMemoryTheory.type_memory_size_slots) >>
+     mp_tac (cj 2 valueEncodingPropsTheory.type_memory_size_slots) >>
      disch_then (qspec_then `tvs` assume_tac) >> decide_tac) >>
   qexists_tac `TupleTV tvs` >>
   simp[Once evaluate_type_def, value_has_type_def, val_in_memory_def,

@@ -6,7 +6,7 @@ Ancestors
   abiDecoderStaticLoopSetup abiDecoderDynamicLoopSetup abiDecoderDynamic abiDecoderOffset
   abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiDecoderReentry
   abiDecoderLoop abiDecodeRanges abiValidMember abiValidMembers abiEncoder fragExec instIdxIndep
-  compileEnv valueEncoding vyperABI vyperValue contractABI venomState venomExecSemantics words
+  compileEnv loweringStateRelDefs valueEncoding vyperABI vyperValue contractABI venomState venomExecSemantics words
   list arithmetic
 
 Definition abi_scratch_decoder_array_setup_post_def:
@@ -32,10 +32,10 @@ Proof
 QED
 
 Theorem abi_scratch_decoder_array_static_prefix:
-  abi_decode_array_element_setup ip src dst opc hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst opc base_op hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,ready) /\
   abi_decoder_coherent ce env sf ty tv /\ ~is_dynamic (vyper_to_abi_type env ty) /\
-  abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs) d outsz first last b cap initial /\
+  abi_scratch_decoder_ranges opc base_op hi src dst B sb (LENGTH bs) d outsz first last b cap initial /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   ready.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
@@ -48,7 +48,7 @@ Proof
   drule abi_decoder_coherent_dynamic >> strip_tac >>
   qpat_assum `abi_decoder_header ce env ty tv`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_header_def]) >>
-  qpat_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_ranges_def]) >>
   `~abi_decoder_dynamic (type_to_abi_dec_info sf ce ty)` by fs[is_dynamic_def] >>
   `~dec_info_needs_offset (type_to_abi_dec_info sf ce ty)` by
@@ -62,17 +62,18 @@ Proof
 QED
 
 Theorem abi_scratch_decoder_array_dynamic_prefix:
-  abi_decode_array_element_setup ip src dst opc hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst opc base_op hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,ready) /\
   abi_decoder_coherent ce env sf ty tv /\ is_dynamic (vyper_to_abi_type env ty) /\
   (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
   vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\ j < abi_head_word bs /\
-  abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs) d outsz first last b cap initial /\
-  mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) = bs /\
+  abi_scratch_decoder_ranges opc base_op hi src dst B sb (LENGTH bs) d outsz first last b cap initial /\
+  mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc initial) = bs /\
   abi_decoder_budget first last b cap initial /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var hi /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   ready.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   ?t. run_inst_seq (emitted_insts st ready) initial = OK t /\
     abi_scratch_decoder_array_setup_post ce env ty bs j ready ops sb d
@@ -82,13 +83,14 @@ Proof
   drule_all abi_scratch_decoder_ranges_point >> strip_tac >>
   drule_all (SIMP_RULE bool_ss [LET_THM] abi_decoder_valid_array_setup_inputs) >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_decode_dynamic_element_setup_reentry >> strip_tac >>
+  `eval_operand base_op initial = SOME (n2w B)` by fs[abi_decoder_ranges_def] >>
+  drule_all (SIMP_RULE bool_ss [ADD_ASSOC] abi_decode_dynamic_element_setup_reentry) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st ready) initial = OK t` >>
   qexists_tac `t` >> asm_simp_tac bool_ss [abi_scratch_decoder_array_setup_post_def, GSYM ADD_ASSOC]
 QED
 
 Theorem abi_scratch_decoder_array_setup_sequence:
-  abi_decode_array_element_setup ip src dst opc hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst opc base_op hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,ready) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) di
@@ -96,13 +98,14 @@ Theorem abi_scratch_decoder_array_setup_sequence:
   vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\ j < LENGTH vs /\
   (is_dynamic (vyper_to_abi_type env ty) ==>
     !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
-  abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs)
+  abi_scratch_decoder_ranges opc base_op hi src dst B sb (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) first last b cap initial /\
-  mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) = bs /\
+  mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc initial) = bs /\
   abi_decoder_budget first last b cap initial /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var hi /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   ready.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   ?t. run_inst_seq (emitted_insts st ready) initial = OK t /\
     abi_scratch_decoder_array_setup_post ce env ty bs j ready ops sb d

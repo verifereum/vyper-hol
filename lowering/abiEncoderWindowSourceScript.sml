@@ -1,7 +1,8 @@
 (* Actual bytes/string source windows, retaining declared singleton layout. *)
 Theory abiEncoderWindowSource
 Ancestors
-  abiEncoderWindow abiEncoderSourceWindow abiEncoderOpenInput exprSim
+  exprSimDefs exprSimProps exprSimStack loweringPosts
+  abiEncoderWindow abiEncoderSourceWindow abiEncoderOpenInput 
   vyperABI valueEncoding vyperTyping contractABI list arithmetic words
 
 Theorem abi_encoder_window_bytes_source:

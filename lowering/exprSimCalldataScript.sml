@@ -16,9 +16,13 @@
 
 Theory exprSimCalldata
 Ancestors
-  list fragExec loweringSlice exprSim exprSimHyps exprSimWordBuiltins
+  exprSimProps
+  exprSimHypsDefs
+  exprSimValues
+  loweringPosts
+  list fragExec loweringSlice exprSimStack gasNormalPrefix gasSummary gasContext fragGasMode fragGasPath
   exprBopLowering exprLowering exprLoweringProps builtinSimple emitHelper
-  compileEnv valueEncoding
+  compileEnv loweringStateRelDefs valueEncoding emitHelperProps
   venomExecSemantics venomInst venomState vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeSystem
 
@@ -74,6 +78,71 @@ Proof
   rw[] >> gvs[]
 QED
 
+Theorem calldata_source_all_tails:
+  !cx es tail.
+    bind (eval_expr cx (Builtin (BaseT (UintT 256)) CalldataLen []))
+      (read_result cx) (es with gas_obs := tail) =
+    (INL (IntV &LENGTH cx.txn.calldata), es with gas_obs := tail)
+Proof
+  rpt gen_tac >>
+  Cases_on `eval_expr cx (Builtin (BaseT (UintT 256)) CalldataLen [])
+    (es with gas_obs := tail)` >>
+  drule eval_expr_calldata_len >> strip_tac >>
+  gvs[bind_def, read_result_def, return_def]
+QED
+
+Theorem calldata_target_prefix:
+  lower_value compile_expr cenv ty (Builtin (BaseT (UintT 256)) CalldataLen []) sa = (op,sb) /\
+  fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_path ctx func s0 0 (OK t) /\
+      expr_post ctx func cenv cx (Builtin (BaseT (UintT 256)) CalldataLen [])
+        es sa sb s0 (es with gas_obs := [])
+        (IntV &LENGTH cx.txn.calldata) op t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> gvs[lower_value_calldata_len] >>
+  `!out. step_inst_base (mk_inst sa.cs_next_id CALLDATASIZE [] [out]) s0 =
+     OK (update_var out (val_to_w256 (IntV &LENGTH cx.txn.calldata)) s0)` by
+    (simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
+     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
+        val_to_w256_def, integer_wordTheory.i2w_def]) >>
+  qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
+  qexists_tac `update_var out (val_to_w256 (IntV &LENGTH cx.txn.calldata)) s0
+                with vs_inst_idx := SUC s0.vs_inst_idx` >>
+  conj_tac
+  >- (`CALLDATASIZE <> GAS /\ CALLDATASIZE <> INVOKE /\
+       ~is_terminator CALLDATASIZE` by simp[is_terminator_def] >>
+      drule_all emit_op_zero_path >> simp[Abbr `out`]) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+        comp_ignore_bind_def, comp_return_def, emit_def] >>
+  `!x. not_fresh_at sa x ==> x <> out` by
+    (simp[not_fresh_at_def, Abbr `out`] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `not_local_ptr cenv es.scopes out` by
+    (simp[Abbr `out`] >> irule local_ptrs_reserved_fresh >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `stmt_state_rel ctx func cenv cx es
+      (update_var out (val_to_w256 (IntV &LENGTH cx.txn.calldata)) s0)` by
+    (irule stmt_state_rel_update_var >> simp[]) >>
+  drule msg_gas_state_frame >>
+  disch_then (qspecl_then [
+    `(update_var out (val_to_w256 (IntV &LENGTH cx.txn.calldata)) s0).vs_gas_readings`,
+    `SUC s0.vs_inst_idx`, `[]`] mp_tac) >>
+  simp[] >> strip_tac >>
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+       vyperASTTheory.expr_type_def, is_word_type_def,
+       typed_val_to_w256_word_value, word_value_def, locals_kept_mem,
+       stmt_state_rel_inst_idx, update_var_def,
+       eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, Abbr `out`] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
 (* len(msg.data): one CALLDATASIZE, whose word is the length of the
    transaction's calldata (call_ctx_rel), as a uint256. *)
 Theorem compile_calldatasize_sim:
@@ -91,31 +160,16 @@ Proof
   `args = [] /\ ann = BaseT (UintT 256)` by
     gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
   gvs[] >>
-  `!st. eval_expr cx (Builtin (BaseT (UintT 256)) CalldataLen []) st =
-        (INL (Value (IntV &LENGTH cx.txn.calldata)), st)` by
-    (gen_tac >>
-     Cases_on `eval_expr cx (Builtin (BaseT (UintT 256)) CalldataLen []) st` >>
-     drule eval_expr_calldata_len >> simp[] >> strip_tac >> gvs[]) >>
-  irule expr_sim_values >> simp[bind_def, read_result_def, return_def] >>
-  rpt strip_tac >>
-  gvs[lower_value_calldata_len] >>
-  irule frag_exec_conseq >>
-  qexistsl_tac [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
-                `\s. stmt_state_rel ctx func cenv cx es s /\
-                     eval_operand op s =
-                       SOME (val_to_w256 (IntV &LENGTH cx.txn.calldata)) /\
-                     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-                            lookup_var x s = SOME w) /\
-                     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-                              FLOOKUP s.vs_allocas aid = SOME b) /\
-                     s.vs_memory = s0.vs_memory`,
-                `\r. F`] >>
-  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
-       vyperASTTheory.expr_type_def, is_word_type_def,
-       typed_val_to_w256_word_value, word_value_def, locals_kept_mem] >>
-  drule emit_op_frag >> disch_then irule >>
-  simp[is_terminator_def] >> rpt strip_tac >>
-  simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
-  fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
-     val_to_w256_def, integer_wordTheory.i2w_def]
+  irule expr_sim_values >> rpt strip_tac >>
+  `?t. gas_path ctx func s0 0 (OK t) /\
+       expr_post ctx func cenv cx (Builtin (BaseT (UintT 256)) CalldataLen [])
+         es sa sb s0 (es with gas_obs := [])
+         (IntV &LENGTH cx.txn.calldata) op t /\
+       t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts` by
+    metis_tac[calldata_target_prefix] >>
+  qexistsl_tac [`[]`, `IntV &LENGTH cx.txn.calldata`, `es`, `t`] >>
+  simp[gas_value_prefix_def, gas_marked_exec_def, gas_marked_path_def,
+       calldata_source_all_tails, GSYM ETA_THM]
 QED
+

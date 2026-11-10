@@ -10,6 +10,18 @@
  * TOP-LEVEL:
  *   fields_layout, struct_fields_layout — ce_struct_fields lays a struct out
  *                                  as its evaluated type, under expr_sim_inv
+ *   mem_field_offset_layout, struct_field_type — a field's offset and type
+ *                                  value in a laid out struct
+ *   opt_mmap_el                  — an element of an OPT_MMAP result
+ *   type_path_offset_mem, mem_path_offset_type — a path's offset in a
+ *                                  declared type is its mem_path_offset in
+ *                                  the type value, and back
+ *   local_path_at_dynarray_len_at — a dynamic array where local_path_at puts
+ *                                  it has its length word exempt
+ *   local_path_at_dynarray_apart, local_val_at_dynarray_apart — a value
+ *                                  with no dynamic array in it, in a local,
+ *                                  is apart from the local's length words
+ *                                  locals_kept exempts
  *   fields_in_memory_field, fields_val_wf_field, struct_field_offset_le,
  *   struct_field_offset_slots_eq — a field of a laid out struct
  *   read_storage_slot_field      — a field of a struct read from storage
@@ -23,7 +35,9 @@
  *   read_popped_snoc_attr, read_memory_path_snoc_attr — steps of the
  *                                  field reads, exported for reuse
  *
- * Helpers: fields_layout_zip, read_slots_n2w, select_attr_read_immutable
+ * Helpers: fields_layout_zip, read_slots_n2w, select_attr_read_immutable,
+ *   alookup_zip_field, tuple_take_memory_bytes,
+ *   type_step_offset_mem, fields_layout_alookup, mem_step_offset_type
  *
  * select_attr_read leaves out a local's place that memory no longer holds
  * and whose popped history has a snapshot at the field itself
@@ -33,9 +47,12 @@
 
 Theory exprSimAttributeFields
 Ancestors
+  loweringPosts
+  exprSimFieldLayout
+  exprSimHypsDefs
   storageDecodeMemory
   list rich_list finite_map pair
-  exprSimHyps compileEnv valueEncoding
+  exprSimProps exprSimHyps compileEnv loweringStateRelDefs valueEncoding
   vyperAST vyperInterpreter vyperState vyperStorage vyperValue
   vyperTyping vyperTypeSystem vyperTypeExprSoundness
 Libs
@@ -44,41 +61,50 @@ Libs
 (* ===== Struct layout ===== *)
 
 
-Theorem slot_count_of_memory_size:
-  !tv. (type_memory_size tv + 31) DIV 32 = type_slot_size tv
-Proof
-  rw[type_memory_size_slots] >>
-  once_rewrite_tac[arithmeticTheory.MULT_COMM] >>
-  irule arithmeticTheory.DIV_MULT >> simp[]
-QED
+
 
 (* The compile environment's fields of a struct, field by field: the same
    name and type_memory_size of the evaluated field type as size. *)
-Definition fields_layout_def:
-  fields_layout (fields : (string # type # num) list)
-                (fs : (string # type_value) list) <=>
-    LIST_REL (\(n,fty,sz) (n',tv). n = n' /\ sz = type_memory_size tv)
-      fields fs
-End
 
-Theorem fields_layout_zip[local]:
-  !fields tvs.
-    OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs /\
-    EVERY (\(name, ty, sz). !tv. evaluate_type tenv ty = SOME tv ==>
-                                 sz = type_memory_size tv) fields ==>
-    fields_layout fields (ZIP (MAP FST fields, tvs))
+
+
+(* A field of a struct ce_struct_fields lays out as its type value: its
+   offset is struct_field_offset's. *)
+Theorem mem_field_offset_layout:
+  !flds fs fld ftv.
+    fields_layout flds fs /\ ALOOKUP fs fld = SOME ftv ==>
+    mem_field_offset fs fld = SOME (struct_field_offset flds fld, ftv)
 Proof
   simp[fields_layout_def] >>
-  Induct >> simp[] >> PairCases >> rpt strip_tac >> gvs[]
+  Induct >> simp[] >> PairCases >> Cases >> simp[] >>
+  PairCases_on `h` >>
+  simp[struct_field_offset_def, mem_field_offset_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >> IF_CASES_TAC >> gvs[] >>
+  first_x_assum drule_all >> simp[]
 QED
 
-Theorem struct_fields_layout:
-  !cenv cx env es sid stv.
+
+Theorem alookup_zip_field[local]:
+  !fields tvs f fld fty fsz.
+    OPT_MMAP f (MAP (FST o SND) fields) = SOME tvs /\
+    ALOOKUP fields fld = SOME (fty, fsz) ==>
+    ?ftv. ALOOKUP (ZIP (MAP FST fields, tvs)) fld = SOME ftv /\
+          f fty = SOME ftv
+Proof
+  Induct >> simp[] >> PairCases >> rpt gen_tac >> strip_tac >> gvs[] >>
+  rename1 `if h0 = fld then _ else _` >> Cases_on `h0 = fld` >> gvs[]
+QED
+
+(* A field of the lowering's struct table has, in the struct's type value,
+   the type value its declared type evaluates to. *)
+Theorem struct_field_type:
+  !cenv cx env es sid fs fld fty fsz.
     expr_sim_inv cenv cx env es /\
-    evaluate_type (get_tenv cx) (StructT sid) = SOME stv ==>
-    ?fs. stv = StructTV fs /\
-         fields_layout
-           (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fs
+    evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
+    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+      fld = SOME (fty, fsz) ==>
+    ?ftv. ALOOKUP fs fld = SOME ftv /\
+          evaluate_type (get_tenv cx) fty = SOME ftv
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
@@ -87,76 +113,218 @@ Proof
   qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
   simp[sfields_tenv_consistent_def] >> strip_tac >>
   first_x_assum drule >> strip_tac >>
-  `EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
-            sz = type_memory_size tv) fields` by
-    (fs[expr_sim_inv_def] >> metis_tac[]) >>
-  simp[get_struct_fields_def] >>
-  qpat_x_assum `MAP FST fields = _` (SUBST1_TAC o SYM) >>
-  irule fields_layout_zip >> simp[] >>
-  drule (cj 2 evaluate_type_mono) >> strip_tac >>
-  gvs[vyperValueTheory.evaluate_types_OPT_MMAP] >>
-  qexists_tac `get_tenv cx` >> simp[]
+  gvs[get_struct_fields_def, vyperValueTheory.evaluate_types_OPT_MMAP] >>
+  qpat_x_assum `MAP FST fields = _` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `MAP (FST o SND) fields = _` (SUBST_ALL_TAC o SYM) >>
+  drule_all alookup_zip_field >> strip_tac >> simp[] >>
+  metis_tac[cj 1 evaluate_type_mono]
 QED
 
-Theorem fields_in_memory_field:
-  !fields fs vals off mem id fv ftv.
-    fields_layout fields fs /\ struct_has_type fs vals /\
-    fields_in_memory vals fs off mem /\
-    ALOOKUP vals id = SOME fv /\ ALOOKUP fs id = SOME ftv ==>
-    val_in_memory ftv fv (off + struct_field_offset fields id) mem
+(* ===== Offsets of declared types and of their type values ===== *)
+
+Theorem opt_mmap_el:
+  !l l' k f.
+    OPT_MMAP f l = SOME l' /\ k < LENGTH l ==>
+    LENGTH l' = LENGTH l /\ f (EL k l) = SOME (EL k l')
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `f h` >> simp[] >> Cases_on `OPT_MMAP f l` >> simp[] >>
+  strip_tac >> gvs[] >> rename1 `OPT_MMAP f l = SOME tl` >>
+  first_x_assum (qspecl_then [`tl`, `PRE k`, `f`] mp_tac) >>
+  Cases_on `k` >> gvs[] >> drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]
+QED
+
+Theorem tuple_take_memory_bytes[local]:
+  !tys tvs cenv cx env es i.
+    expr_sim_inv cenv cx env es /\
+    OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs ==>
+    SUM (MAP (type_memory_bytes cenv) (TAKE i tys)) =
+      type_memory_size_list (TAKE i tvs)
+Proof
+  Induct >> simp[type_memory_size_def] >> rpt gen_tac >> strip_tac >>
+  gvs[] >> Cases_on `i` >> simp[type_memory_size_def] >>
+  drule_all expr_sim_inv_memory_size >> strip_tac >> simp[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+(* One step over a declared type is the same step over its type value. *)
+Theorem type_step_offset_mem[local]:
+  !cenv cx env es t tv sb k et.
+    expr_sim_inv cenv cx env es /\
+    evaluate_type (get_tenv cx) t = SOME tv /\
+    type_step_offset cenv t sb = SOME (k,et) ==>
+    ?etv. mem_step_offset tv sb = SOME (k,etv) /\
+          evaluate_type (get_tenv cx) et = SOME etv
+Proof
+  rpt gen_tac >> Cases_on `t` >> Cases_on `sb` >>
+  TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
+  TRY (rename1 `ArrayT _ bd` >> Cases_on `bd`) >>
+  simp[type_step_offset_def] >> rpt strip_tac >> gvs[]
+  >~ [`StructT sid`]
+  >- (rename1 `ALOOKUP _ _ = SOME z` >> PairCases_on `z` >> gvs[] >>
+      drule_all struct_fields_layout >> strip_tac >> gvs[] >>
+      drule_all struct_field_type >> strip_tac >>
+      drule_all mem_field_offset_layout >> strip_tac >>
+      simp[mem_step_offset_def])
+  >~ [`TupleT tys`]
+  >- (qpat_x_assum `evaluate_type _ (TupleT _) = _` mp_tac >>
+      simp[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+           vyperValueTheory.evaluate_types_OPT_MMAP] >>
+      strip_tac >> gvs[] >>
+      drule_all opt_mmap_el >> strip_tac >>
+      simp[mem_step_offset_def] >>
+      irule (GSYM tuple_take_memory_bytes) >> metis_tac[]) >>
+  qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
+  simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  strip_tac >> gvs[mem_step_offset_def] >>
+  drule_all expr_sim_inv_memory_size >> simp[]
+QED
+
+(* A path's offset in a declared type is its offset in the type value. *)
+Theorem type_path_offset_mem:
+  !path cenv cx env es t tv k pt.
+    expr_sim_inv cenv cx env es /\
+    evaluate_type (get_tenv cx) t = SOME tv /\
+    type_path_offset cenv t path = SOME (k,pt) ==>
+    ?ptv. mem_path_offset tv path = SOME (k,ptv) /\
+          evaluate_type (get_tenv cx) pt = SOME ptv
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[type_path_offset_def, mem_path_offset_def] >>
+  gvs[type_path_offset_def, AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
+  drule_all type_step_offset_mem >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  simp[mem_path_offset_def]
+QED
+
+Theorem fields_layout_alookup[local]:
+  !flds fs fld ftv.
+    fields_layout flds fs /\ ALOOKUP fs fld = SOME ftv ==>
+    ?fty fsz. ALOOKUP flds fld = SOME (fty,fsz)
 Proof
   simp[fields_layout_def] >>
   Induct >> simp[] >> PairCases >> Cases >> simp[] >>
-  PairCases_on `h` >> Cases >> simp[value_has_type_def] >>
-  PairCases_on `h` >>
-  simp[value_has_type_def, val_in_memory_def, struct_field_offset_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  Cases_on `h0 = id` >> gvs[] >>
-  first_x_assum drule_all >> simp[]
+  PairCases_on `h` >> rw[] >> metis_tac[]
 QED
 
-Theorem fields_val_wf_field:
-  !vals fs id fv ftv.
-    struct_has_type fs vals /\ fields_val_wf vals fs /\
-    ALOOKUP vals id = SOME fv /\ ALOOKUP fs id = SOME ftv ==>
-    val_wf ftv fv
+(* One step over a type value is the same step over the declared type it
+   evaluates from. *)
+Theorem mem_step_offset_type[local]:
+  !cenv cx env es t tv sb k etv.
+    expr_sim_inv cenv cx env es /\
+    evaluate_type (get_tenv cx) t = SOME tv /\
+    mem_step_offset tv sb = SOME (k,etv) ==>
+    ?et. type_step_offset cenv t sb = SOME (k,et) /\
+         evaluate_type (get_tenv cx) et = SOME etv
 Proof
-  Induct >> simp[] >> PairCases >> Cases >> simp[value_has_type_def] >>
-  PairCases_on `h` >> simp[value_has_type_def, val_wf_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  Cases_on `h0 = id` >> gvs[] >> metis_tac[]
+  rpt strip_tac >>
+  `?r. type_step_offset cenv t sb = SOME r` suffices_by
+    (strip_tac >> PairCases_on `r` >> drule_all type_step_offset_mem >>
+     strip_tac >> metis_tac[optionTheory.SOME_11, PAIR_EQ]) >>
+  drule mem_step_offset_shape >> strip_tac >> gvs[]
+  >- (`?sid. t = StructT sid` by
+        (qpat_x_assum `evaluate_type _ t = _` mp_tac >>
+         Cases_on `t` >>
+         simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+      gvs[] >> drule_all struct_fields_layout >> strip_tac >> gvs[] >>
+      drule mem_field_offset_sound >> strip_tac >>
+      drule_all fields_layout_alookup >> strip_tac >>
+      simp[type_step_offset_def])
+  >- (`?et. t = ArrayT et (Fixed n)` by
+        (qpat_x_assum `evaluate_type _ t = _` mp_tac >>
+         Cases_on `t` >>
+         simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+      gvs[type_step_offset_def])
+  >- (`?et. t = ArrayT et (Dynamic n)` by
+        (qpat_x_assum `evaluate_type _ t = _` mp_tac >>
+         Cases_on `t` >>
+         simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+      gvs[type_step_offset_def]) >>
+  `?tys. t = TupleT tys` by
+    (qpat_x_assum `evaluate_type _ t = _` mp_tac >>
+     Cases_on `t` >>
+     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+  gvs[] >>
+  qpat_x_assum `evaluate_type _ (TupleT _) = _` mp_tac >>
+  simp[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+       vyperValueTheory.evaluate_types_OPT_MMAP] >>
+  strip_tac >> drule vyperTypeABITheory.OPT_MMAP_LENGTH >>
+  simp[type_step_offset_def]
 QED
 
-Theorem struct_field_offset_le:
-  !fields fs id ftv.
-    fields_layout fields fs /\ ALOOKUP fs id = SOME ftv ==>
-    struct_field_offset fields id + type_memory_size ftv <=
-      type_memory_size_fields fs
+(* A path's offset in a type value is its offset in the declared type the
+   type value evaluates from. *)
+Theorem mem_path_offset_type:
+  !path cenv cx env es t tv k ptv.
+    expr_sim_inv cenv cx env es /\
+    evaluate_type (get_tenv cx) t = SOME tv /\
+    mem_path_offset tv path = SOME (k,ptv) ==>
+    ?pt. type_path_offset cenv t path = SOME (k,pt) /\
+         evaluate_type (get_tenv cx) pt = SOME ptv
 Proof
-  simp[fields_layout_def] >>
-  Induct >> simp[] >> PairCases >> Cases >> simp[] >>
-  PairCases_on `h` >>
-  simp[struct_field_offset_def, type_memory_size_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  Cases_on `h0 = id` >> gvs[] >>
-  first_x_assum drule_all >> simp[]
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[type_path_offset_def, mem_path_offset_def] >>
+  gvs[mem_path_offset_def, AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
+  drule_all mem_step_offset_type >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  simp[type_path_offset_def]
 QED
 
-Theorem struct_field_offset_slots_eq:
-  !fields fs id off ftv.
-    fields_layout fields fs /\ struct_field_slot fs id = SOME (off, ftv) ==>
-    struct_field_offset_slots fields id = off
+(* A dynamic array where local_path_at puts it in a local has its length
+   word exempt in locals_kept. *)
+Theorem local_path_at_dynarray_len_at:
+  !cenv cx env es n k etv m.
+    expr_sim_inv cenv cx env es /\
+    local_path_at cenv cx n k (ArrayTV etv (Dynamic m)) ==>
+    dynarray_len_at cenv n k
 Proof
-  simp[fields_layout_def] >>
-  Induct >> simp[struct_field_slot_def] >> PairCases >> Cases >>
-  simp[struct_field_slot_def] >>
-  PairCases_on `h` >>
-  simp[struct_field_offset_slots_def, struct_field_slot_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  Cases_on `h0 = id` >> gvs[slot_count_of_memory_size] >>
-  rename1 `struct_field_slot t id = SOME z` >> PairCases_on `z` >> gvs[] >>
-  first_x_assum drule_all >> simp[]
+  rw[local_path_at_def, dynarray_len_at_def] >>
+  drule_all mem_path_offset_type >> strip_tac >>
+  `?et. pt = ArrayT et (Dynamic m)` by
+    (qpat_x_assum `evaluate_type _ pt = _` mp_tac >>
+     Cases_on `pt` >>
+     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+  gvs[] >> metis_tac[]
 QED
+
+(* A value with no dynamic array in it, where local_path_at puts it in a
+   local, is apart from every length word locals_kept exempts there. *)
+Theorem local_path_at_dynarray_apart:
+  !cenv cx env es n k tv k'.
+    expr_sim_inv cenv cx env es /\ local_path_at cenv cx n k tv /\
+    dynarray_free tv /\ dynarray_len_at cenv n k' ==>
+    k + type_memory_size tv <= k' \/ k' + 32 <= k
+Proof
+  rw[local_path_at_def, dynarray_len_at_def] >> gvs[] >>
+  drule_all type_path_offset_mem >> strip_tac >>
+  qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
+  simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> strip_tac >>
+  gvs[] >> drule_all mem_path_offset_dynarray_apart >> simp[]
+QED
+
+(* The same where local_val_at puts a well-formed value. *)
+Theorem local_val_at_dynarray_apart:
+  !cenv cx env es n k tv v k'.
+    expr_sim_inv cenv cx env es /\ local_val_at cenv cx n k tv v /\
+    val_wf tv v /\ dynarray_free tv /\ dynarray_len_at cenv n k' ==>
+    k + val_footprint tv v <= k' \/ k' + 32 <= k
+Proof
+  rw[local_val_at_def]
+  >- (drule_all local_path_at_dynarray_apart >> drule val_footprint_le >>
+      decide_tac) >>
+  `dynarray_free (BaseTV bt0)` by simp[dynarray_free_base] >>
+  drule_all local_path_at_dynarray_apart >> decide_tac
+QED
+
+
+
+
+
+
+
+
+
+
 
 (* ===== A struct field in storage ===== *)
 

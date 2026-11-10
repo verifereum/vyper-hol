@@ -1,7 +1,8 @@
 (* A single storage instruction, with all non-storage state framed. *)
 Theory storageStoreFrame
 Ancestors
-  list rich_list finite_map fragExec stmtSim stmtSimDecl emitHelper emitHelperProps
+  loweringPosts stmtSimDefs stmtSimProps
+  list rich_list finite_map fragExec  stmtSimDecl emitHelper emitHelperProps
   exprLoweringProps venomExecSemantics venomInst venomState
 
 Theorem storage_emit_frame_frag:
@@ -34,8 +35,13 @@ Proof
      `step_inst_base (mk_inst st.cs_next_id (if tr then TSTORE else SSTORE)
                         [dst; op] []) s =
         OK (if tr then tstore addr w s else sstore addr w s)` by
-       (Cases_on `tr` >>
-        simp[step_inst_base_def, exec_write2_def, mk_inst_def]) >>
+       (`~s.vs_call_ctx.cc_static` by
+          (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+           Cases_on `tr` >>
+           simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
+                tstore_def, sstore_def, LET_THM]) >>
+        Cases_on `tr` >>
+        gvs[step_inst_base_opcode_eqs, exec_write2_def, mk_inst_def]) >>
      Cases_on `tr` >> gvs[] >>
      simp[run_inst_seq_def, stmt_state_rel_inst_idx] >>
      gvs[lookup_var_def, sstore_def, tstore_def, LET_THM]) >>

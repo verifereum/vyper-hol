@@ -3,7 +3,6 @@
  *
  * Definitions (invariants, fresh sets, block wf predicates) and
  * proof infrastructure for the memmerging correctness argument.
- * Re-exported by mmCorrectnessScript.sml.
  *)
 
 Theory mmCorrectnessProofs
@@ -16,6 +15,7 @@ Ancestors
   venomInst venomState venomEffects pred_set finite_map
   list rich_list arithmetic words alist
   mmCopy mmScan passSharedField execEquivProps memzeroFrame
+  passTransform
 Libs
   memzeroFrameLib stepInstBaseLib
 
@@ -640,7 +640,7 @@ Theorem step_mem_write_only_memory[local]:
     s' with vs_memory := s.vs_memory = s
 Proof
   rpt strip_tac >> gvs[] >> gvs[inst_wf_def] >>
-  gvs[step_inst_non_invoke, step_inst_base_def, is_terminator_def,
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, is_terminator_def,
       exec_write2_def, mstore_def, mcopy_def, LET_THM] >>
   BasicProvers.every_case_tac >> gvs[wmexp_only_changes_memory] >>
   simp[venom_state_component_equality]
@@ -1352,11 +1352,9 @@ Proof
   (impl_tac >- fs[]) >> simp[]
 QED
 
-(* mode_run_insts_lift_result and mm_block_simulates_mode are after
-   flat_map_same_start_block_bridge and bb_wf_decompose below. *)
-
-(* mm_block_simulates_mode: proved in mmBlockSimScript as
-   mm_block_simulates_mode_proof. No forward declaration needed. *)
+(* mode_run_insts_lift_result is after flat_map_same_start_block_bridge
+   and bb_wf_decompose below; mm_block_simulates_mode_proof is in
+   mmBlockSimProofs. *)
 
 (* Generalized run_insts simulation for memzero transform.
    Starts from memzero_inv-related states (needed for within-group induction).
@@ -2304,10 +2302,12 @@ Proof
   (* Chain: bb ← orig → trans → bb'.
      All three are non-OK, so case-split on result constructors *)
   >> Cases_on `run_insts fuel ctx non_terms s`
-  >> Cases_on `exec_block fuel ctx bb s`
-  >> Cases_on `run_insts fuel ctx (FLAT (MAP f non_terms)) s`
-  >> Cases_on `exec_block fuel ctx bb' s`
   >> fs[lift_result_def]
+  >> Cases_on `exec_block fuel ctx bb s`
+  >> fs[lift_result_def]
+  >> Cases_on `run_insts fuel ctx (FLAT (MAP f non_terms)) s`
+  >> fs[lift_result_def]
+  >> Cases_on `exec_block fuel ctx bb' s` >> fs[lift_result_def]
   >> metis_tac[execution_equiv_sym, execution_equiv_trans]
 QED
 
@@ -2653,7 +2653,7 @@ local
   ) non_abort_ops;
   val exec_helper_defs = [
     exec_pure1_def, exec_pure2_def, exec_pure3_def,
-    exec_read0_def, exec_read1_def, exec_write2_def,
+    exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
     exec_alloca_def, exec_ext_call_def, exec_create_def,
     exec_delegatecall_def, LET_THM, AllCaseEqs()];
   val direct_clause_pairs = ListPair.zip(non_abort_ops, base_clauses);
@@ -2682,6 +2682,7 @@ Theorem step_inst_base_non_volatile_no_abort[local]:
     inst.inst_opcode <> ASSERT /\
     inst.inst_opcode <> ASSERT_UNREACHABLE /\
     ~is_volatile_memory inst /\
+    Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode ==>
     step_inst_base inst s <> Abort a s'
@@ -2708,7 +2709,7 @@ Triviality mm_exec_helpers_no_halt_intret[simp]:
   (!inst s sz vs s'. exec_alloca inst s sz <> IntRet vs s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def, exec_alloca_def] >>
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def, exec_alloca_def] >>
   gvs[AllCaseEqs()]
 QED
 
@@ -2735,14 +2736,18 @@ Theorem step_inst_base_non_term_no_halt[local]:
   !inst s s'. step_inst_base inst s = Halt s' ==>
     is_terminator inst.inst_opcode
 Proof
-  rw[step_inst_base_def] >> gvs[AllCaseEqs(), is_terminator_def]
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_halt_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem step_inst_base_non_term_no_intret[local]:
   !inst s vs s'. step_inst_base inst s = IntRet vs s' ==>
     is_terminator inst.inst_opcode
 Proof
-  rw[step_inst_base_def] >> gvs[AllCaseEqs(), is_terminator_def]
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_intret_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem step_inst_base_non_term_only_ok_error_abort[local]:
@@ -2771,7 +2776,8 @@ QED
 
 
 (* Non-terminator, non-INVOKE, non-ASSERT, non-ASSERT_UNREACHABLE,
-   non-volatile-memory, non-alloca, non-ext_call: step_inst cannot Abort. *)
+   non-volatile-memory, non-memory-reading (so not LOG, which aborts in a
+   static frame), non-alloca, non-ext_call: step_inst cannot Abort. *)
 Theorem step_inst_non_volatile_no_abort[local]:
   !fuel ctx inst s a s'.
     ~is_terminator inst.inst_opcode /\
@@ -2779,6 +2785,7 @@ Theorem step_inst_non_volatile_no_abort[local]:
     inst.inst_opcode <> ASSERT /\
     inst.inst_opcode <> ASSERT_UNREACHABLE /\
     ~is_volatile_memory inst /\
+    Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode ==>
     step_inst fuel ctx inst s <> Abort a s'

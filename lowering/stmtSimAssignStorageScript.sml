@@ -35,11 +35,16 @@
 
 Theory stmtSimAssignStorage
 Ancestors
+  stmtSimForced stmtSimDeclPath gasContext fragGasMode
+  stmtSimProps
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map pred_set
-  storageStoreFrame fragExec exprSim exprSimLeaves stmtSim stmtSimDecl stmtSimDeclMem
-  stmtSimAssign stmtSimAssignMem accountsRelProps
+  fragExec exprSimLeaves stmtSimDecl stmtSimDeclMem storageStoreFrame
+  stmtSimAssign stmtSimAssignMem accountsRelProps exprSimTopLevelProps
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding valueEncodingProofs
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingProofs
   vyperInterpreter vyperState vyperStorage vyperStorageBackend vyperValue
   vyperTyping vyperExprNoControl
   venomExecSemantics venomInst venomState
@@ -128,6 +133,7 @@ Theorem stmt_state_rel_write_storage_word:
       (if tr then tstore slot w s else sstore slot w s)
 Proof
   rpt gen_tac >> strip_tac >>
+  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   gvs[write_storage_slot_eq, apply_writes_def, LET_THM] >>
   `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel cx es s` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
@@ -262,78 +268,139 @@ Proof
   drule_all storage_emit_frame_run >> metis_tac[]
 QED
 
-(* On a value: e's fragment reaches the store in expr_post, at the state e
-   leaves, and the store writes x's slot there. *)
-Theorem assign_storage_word_success_run:
-  !ctx func cenv cx src id e es es' ts tr typ id_str slot tvt etv
-   sa sb sf op s0.
-    eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) es =
-      (INL (), es') /\
+(* As an action, self.x = e is e's forced value written at x's slot:
+   looking x up reads only cx. *)
+Theorem eval_assign_toplevel_action:
+  !cx src id e ts tr typ id_str slot tvt.
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    evaluate_type (get_tenv cx) typ = SOME tvt ==>
+    eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) =
+    bind (bind (eval_expr cx e) (read_result cx))
+      (write_storage_slot cx tr (n2w slot) tvt)
+Proof
+  rpt gen_tac >> strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `eval_expr cx e x` >> rename1 `eval_expr cx e x = (r1, es1)` >>
+  Cases_on `r1` >> simp[] >>
+  simp[Once evaluate_def, bind_def] >>
+  simp[Once evaluate_def, lookup_global_def, bind_def,
+       lift_option_type_def, return_def, LET_THM, get_place_def] >>
+  Cases_on `read_result cx x' es1` >>
+  rename1 `read_result cx _ es1 = (r2, es2)` >>
+  Cases_on `r2` >> simp[write_place_def]
+QED
+
+(* A storage write reads no gas. *)
+Theorem write_storage_slot_gas_obs:
+  !cx tr slot tv v es g.
+    write_storage_slot cx tr slot tv v (es with gas_obs := g) =
+    (FST (write_storage_slot cx tr slot tv v es),
+     SND (write_storage_slot cx tr slot tv v es) with gas_obs := g)
+Proof
+  rpt gen_tac >> simp[write_storage_slot_eq] >>
+  Cases_on `cx.txn.is_static` >> Cases_on `encode_value tv v` >>
+  Cases_on `tr` >> simp[set_storage_def, get_storage_def]
+QED
+
+(* The SSTORE or TSTORE of e's word at x's slot reads no gas. *)
+Theorem assign_storage_store_path:
+  !ctx func s tr slot op w st st'.
+    emit_void (if tr then TSTORE else SSTORE) [Lit slot; op] st = ((), st') /\
+    fn_has_code st st' func /\ ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+    s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    eval_operand op s = SOME w ==>
+    gas_marked_path F ctx func s 0
+      (OK ((if tr then tstore slot w s else sstore slot w s)
+             with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  rpt strip_tac >> irule emit_inst_zero_marked_path >> simp[] >>
+  qexistsl_tac [`[Lit slot; op]`, `if tr then TSTORE else SSTORE`, `[]`,
+                `st`, `st'`] >>
+  Cases_on `tr` >> gvs[emit_void_def, emit_inst_def, is_terminator_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  fs[mk_inst_def, exec_write2_def, eval_operand_def]
+QED
+
+(* From e's post at a value whose word is x's encoding of it: the write
+   at x's slot and the store keep stmt_state_rel, and land past the
+   store. *)
+Theorem assign_storage_word_suffix:
+  !ctx func cx lctx cenv e es ee v op t sa sb sf s0 src id ts tr typ id_str
+   slot tvt etv.
+    expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\ type_slot_size tvt = 1 /\
-    is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    (!v es1.
-       (do result <- eval_expr cx e; read_result cx result od) es =
-         (INL v, es1) ==>
-       encode_value tvt v = SOME [(0, typed_val_to_w256 etv v)]) /\
-    expr_sim ctx func cenv cx (expr_type e) e es /\
-    lower_value compile_expr cenv (expr_type e) e sa = (op, sb) /\
+    is_word_type (expr_type e) /\
+    encode_value tvt v = SOME [(0, typed_val_to_w256 etv v)] /\
     emit_void (if tr then TSTORE else SSTORE) [Lit (n2w slot); op] sb =
       ((), sf) /\
-    fn_has_code sa sb func /\ fn_has_code sb sf func /\
-    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
-    s0.vs_current_bb = sa.cs_current_bb /\
-    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
-        t.vs_current_bb = sf.cs_current_bb /\
-        t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-        (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
-               lookup_var x t = SOME u) /\
-        (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-                 FLOOKUP t.vs_allocas aid = SOME b) /\
-        !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
-                 ?fuel'. run_from fuel' ctx func s0 = r
+    fn_has_code sb sf func /\ ~t.vs_halted /\ ee.gas_obs = [] ==>
+    ?ee' r.
+      (!tail. write_storage_slot cx tr (n2w slot) tvt v
+                (ee with gas_obs := tail) = (INL (), ee' with gas_obs := tail)) /\
+      gas_marked_path F ctx func t 0 r /\
+      ?t'. r = OK t' /\
+           stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ())
+             (ee' with gas_obs := []) t'
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all eval_assign_toplevel >> strip_tac >>
-  Cases_on `r` >> gvs[] >>
-  rename1 `write_storage_slot cx tr (n2w slot) tvt v es1 = (INL (), es')` >>
-  `encode_value tvt v = SOME [(0, typed_val_to_w256 etv v)]` by
-    metis_tac[] >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es1`, `s0`] mp_tac) >>
-  impl_tac >- simp[expr_res_ok_def] >>
-  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
-  impl_tac >- simp[] >> simp[] >> strip_tac >>
-  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
-  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-  `eval_operand op s1 = SOME (typed_val_to_w256 etv v)` by
+  `eval_operand op t = SOME (typed_val_to_w256 etv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
   `declared_storage_region cx src id [] = SOME (tr, n2w slot, tvt)` by
     simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
   drule_all storage_dead_update_word_region >> strip_tac >>
-  drule_all stmt_state_rel_write_storage_word >> strip_tac >>
-  drule_all assign_storage_store_run >>
-  strip_tac >>
-  qexists_tac `t` >> simp[] >> metis_tac[]
+  Cases_on `write_storage_slot cx tr (n2w slot) tvt v ee` >>
+  rename1 `_ = (res, ee')` >>
+  `~t.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
+  drule_all assign_storage_store_path >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  `ee'.gas_obs = [] /\ ee'.scopes = ee.scopes` by
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     simp[write_storage_slot_eq] >> Cases_on `tr` >>
+     simp[set_storage_def] >> strip_tac >> gvs[]) >>
+  `ee' with gas_obs := [] = ee'` by
+    simp[evaluation_state_component_equality] >>
+  qexistsl_tac [`ee'`,
+    `OK ((if tr then tstore (n2w slot) (typed_val_to_w256 etv v) t
+          else sstore (n2w slot) (typed_val_to_w256 etv v) t)
+         with vs_inst_idx := SUC t.vs_inst_idx)`] >>
+  conj_tac >- fs[write_storage_slot_gas_obs] >>
+  `sf.cs_current_bb = sb.cs_current_bb /\
+   LENGTH sf.cs_current_insts = SUC (LENGTH sb.cs_current_insts)` by
+    (Cases_on `tr` >>
+     gvs[emit_void_def, comp_bind_def, fresh_id_def,
+         comp_ignore_bind_def, comp_return_def, emit_def]) >>
+  `~block_is_terminated sf` by
+    (Cases_on `tr` >> gvs[] >> drule emit_void_nonterminator_open >>
+     simp[is_terminator_def]) >>
+  simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl,
+       stmt_state_rel_inst_idx] >>
+  Cases_on `tr` >>
+  gvs[sstore_def, tstore_def, lookup_var_def, LET_THM]
 QED
 
 (* self.x = e for a storage or transient variable x the lowering holds in
    one word (is_word_type vtyp) and e of a word type, for every outcome:
    e's errors exit, and on a value its word is stored at x's slot.  x's
    declared type tvt is constrained only by the encoding premise: e's word
-   is how tvt encodes e's value.  compile_assign_storage_typed_stmt_frag
-   discharges it when e has x's declared type. *)
+   is how tvt encodes e's value, at whatever readings e runs on.
+   compile_assign_storage_typed_stmt_frag discharges it when e has x's
+   declared type. *)
 Theorem compile_assign_storage_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty src id e es res es' ts tr typ id_str slot
+  !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot
    tvt vtyp etv.
-    eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) es =
-      (res, es') /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -342,57 +409,54 @@ Theorem compile_assign_storage_stmt_frag:
     cenv.ce_module_var_type (src, id) = SOME vtyp /\
     is_word_type vtyp /\ is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    (!v es1.
-       (do result <- eval_expr cx e; read_result cx result od) es =
-         (INL v, es1) ==>
+    (!gs v es1.
+       (do result <- eval_expr cx e; read_result cx result od)
+         (es with gas_obs := gs) = (INL v, es1) ==>
        encode_value tvt v = SOME [(0, typed_val_to_w256 etv v)]) /\
     expr_sim ctx func cenv cx (expr_type e) e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assign (BaseTarget (TopLevelNameTarget (src, id))) e))
-      es res es'
+      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src, id))) e))
+      es
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
+  simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
   `FLOOKUP cenv.ce_module_vars (src, id) =
      SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))` by
     (irule toplevel_storage_ce_vars >>
      gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
   drule_all assign_storage_word_code_parts >> strip_tac >>
   rename1 `lower_value _ _ _ _ sa = (op, sB)` >> gvs[] >>
-  Cases_on `res`
-  >- (rename1 `eval_stmt _ _ _ = (INL u, _)` >> Cases_on `u` >>
-      drule_all assign_storage_word_success_run >> strip_tac >>
-      disj1_tac >> qexistsl [`t`, `cenv`] >>
-      simp[stmt_lands_def, cenv_top_ext_refl] >>
-      Cases_on `tr` >> gvs[] >> drule emit_void_nonterminator_open >>
-      simp[is_terminator_def]) >>
-  rename1 `eval_stmt _ _ _ = (INR y, _)` >>
-  drule_all eval_assign_toplevel >> strip_tac >>
-  `r = INR y /\ es1 = es'` by
-    (Cases_on `r` >> gvs[] >> rename1 `write_storage_slot _ _ _ _ v` >>
-     `encode_value tvt v = SOME [(0, typed_val_to_w256 etv v)]` by
-       metis_tac[] >>
-     gvs[write_storage_slot_eq]) >>
-  qpat_x_assum `r = INR y` SUBST_ALL_TAC >>
-  qpat_x_assum `es1 = es'` SUBST_ALL_TAC >>
-  `expr_res_ok (INR y : value + exception)` by
-    (qpat_x_assum `stmt_res_ok _ _` mp_tac >>
-     qpat_x_assum `!ex. _` (qspec_then `y` mp_tac) >>
-     simp[stmt_res_ok_def, expr_res_ok_def, no_control_exc_def] >>
-     rpt strip_tac >> gvs[]) >>
-  drule_all expr_sim_error_run >> strip_tac >>
-  drule exit_result_not_error >> strip_tac >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[]
+  drule_all eval_assign_toplevel_action >>
+  disch_then (qspec_then `e` assume_tac) >>
+  irule forced_then_stmt_outcome >>
+  qexistsl_tac [
+    `\v ee t. expr_post ctx func cenv cx e es sa sB s0 ee v op t /\
+              t.vs_current_bb = sB.cs_current_bb /\
+              t.vs_inst_idx = LENGTH sB.cs_current_insts`,
+    `e`, `write_storage_slot cx tr (n2w slot) tvt`] >>
+  reverse conj_tac
+  >- (conj_tac >- first_assum ACCEPT_TAC >>
+      qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+        (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+      disch_then (qspecl_then [`sa`, `sB`, `op`, `s0`] mp_tac) >>
+      impl_tac >- (fs[] >> metis_tac[forced_then_admissible]) >>
+      simp[]) >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  `encode_value tvt v = SOME [(0, typed_val_to_w256 etv v)]` by
+    (qpat_x_assum `!gs v es1. _ ==> encode_value _ _ = _` irule >>
+     fs[ETA_THM] >> metis_tac[]) >>
+  drule_all assign_storage_word_suffix >>
+  disch_then (qspec_then `lctx` strip_assume_tac) >>
+  qexistsl_tac [`INL ()`, `ee'`, `r`] >> simp[]
 QED
 
 (* self.x = e when e has x's declared word type typ and its values are of
    that type: the encoding premise is encode_value_word_typed. *)
 Theorem compile_assign_storage_typed_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty src id e es res es' ts tr typ id_str slot
+  !ctx func cx lctx RetQ cenv ty src id e es ts tr typ id_str slot
    tvt vtyp.
-    eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) es =
-      (res, es') /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -401,20 +465,21 @@ Theorem compile_assign_storage_typed_stmt_frag:
     cenv.ce_hashmap_info (src, id) = NONE /\
     cenv.ce_module_var_type (src, id) = SOME vtyp /\
     is_word_type vtyp /\
-    (!v es1.
-       (do result <- eval_expr cx e; read_result cx result od) es =
-         (INL v, es1) ==>
+    (!gs v es1.
+       (do result <- eval_expr cx e; read_result cx result od)
+         (es with gas_obs := gs) = (INL v, es1) ==>
        value_has_type tvt v) /\
     expr_sim ctx func cenv cx (expr_type e) e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assign (BaseTarget (TopLevelNameTarget (src, id))) e))
-      es res es'
+      (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src, id))) e))
+      es
 Proof
   rpt strip_tac >>
-  `!v es1.
-     (do result <- eval_expr cx e; read_result cx result od) es =
-       (INL v, es1) ==>
+  `!gs v es1.
+     (do result <- eval_expr cx e; read_result cx result od)
+       (es with gas_obs := gs) = (INL v, es1) ==>
      encode_value tvt v = SOME [(0, typed_val_to_w256 tvt v)]` by
     (rpt strip_tac >> irule encode_value_word_typed >> metis_tac[]) >>
   drule_all exprSimUnwrapTheory.word_type_slot_size >> strip_tac >>

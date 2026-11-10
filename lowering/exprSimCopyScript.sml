@@ -21,10 +21,13 @@
 
 Theory exprSimCopy
 Ancestors
+  valueEncodingProps
+  exprSimProps
+  loweringPosts
   exprSimAlloc exprSimOps
   list finite_map
-  exprSim exprLowering compileEnv context vyperAST vyperInterpreter
-  vyperState valueEncoding
+   exprLowering compileEnv loweringStateRelDefs context vyperAST vyperInterpreter
+  vyperState valueEncoding valueEncodingDefs
   fragExec localPtrsProps loweringSlice exprLoweringProps emitHelperProps
   exprSimStorageCopy immutableCopyExecution storageDecodeMemory
   vyperTypeStatePreservation vyperTypeValues valueEncodingTyping vyperStorageBackend
@@ -499,7 +502,7 @@ QED
 Theorem immutable_holds_data:
   !func cenv cx es s t tv w ctx.
     stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
-    immutable_holds cenv cx t tv w es ==>
+    immutable_holds cenv cx t tv w es s' ==>
     ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
             read_result cx tv es = (INL v, es) /\
             val_in_memory tvt v (w2n w) s.vs_data_section
@@ -513,7 +516,7 @@ Proof
 QED
 
 Theorem immutable_holds_bounds:
-  immutable_holds cenv cx t (Value v) a es /\
+  immutable_holds cenv cx t (Value v) a es s /\
   evaluate_type (get_tenv cx) t = SOME tv ==>
   val_wf tv v /\ w2n a + type_memory_size tv < dimword (:256)
 Proof
@@ -524,21 +527,23 @@ QED
 
 Theorem immutable_holds_memory:
   stmt_state_rel ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
-  immutable_holds cenv cx t (Value v) a es /\
+  immutable_holds cenv cx t (Value v) a es uu /\
   evaluate_type (get_tenv cx) t = SOME tv ==>
   val_in_memory tv v (w2n a) uu.vs_memory
 Proof
   rw[immutable_holds_def, stmt_state_rel_def, state_rel_def,
-     immutables_rel_def, read_result_def, return_def] >>
-  gvs[] >> first_x_assum drule_all >> strip_tac >>
-  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-  `off + k < dimword (:256)` by decide_tac >>
-  gvs[arithmeticTheory.ADD_COMM]
+     immutables_rel_def, read_result_def, return_def]
+  >~ [`sub_layout`]
+  >- (gvs[] >> first_x_assum drule_all >> strip_tac >>
+      gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
+      `off + k < dimword (:256)` by decide_tac >>
+      gvs[arithmeticTheory.ADD_COMM]) >>
+  `off + k < dimword (:256)` by decide_tac >> gvs[]
 QED
 
 Theorem immutable_holds_alloca_disjoint:
   stmt_state_rel ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
-  immutable_holds cenv cx t (Value v) a es /\
+  immutable_holds cenv cx t (Value v) a es uu /\
   evaluate_type (get_tenv cx) t = SOME tv /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP uu.vs_allocas inst.inst_id = SOME (dst,sz) ==>
@@ -554,9 +559,9 @@ Proof
 QED
 
 Theorem copy_runtime_contents:
-  !ctx func cenv cx es u t v a tv w z.
+  !ctx func cenv cx es u t v a tv w z s.
     stmt_state_rel ctx func cenv cx es u /\ ~cenv.ce_is_ctor /\
-    immutable_holds cenv cx t (Value v) a es /\
+    immutable_holds cenv cx t (Value v) a es s /\
     evaluate_type (get_tenv cx) t = SOME tv /\
     w2n w + type_memory_size tv < dimword (:256) /\
     z.vs_memory = (immutable_transfers F F a w (type_slot_size tv) 0 u).vs_memory ==>
@@ -1122,7 +1127,7 @@ QED
 
 Theorem copy_ctor_contents:
   stmt_state_rel ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
-  immutable_holds cenv cx t (Value v) a es /\
+  immutable_holds cenv cx t (Value v) a es uu /\
   evaluate_type (get_tenv cx) t = SOME tv /\
   w2n w + type_memory_size tv < dimword (:256) /\
   regions_disjoint (w2n a) (type_memory_size tv) (w2n w) (type_memory_size tv) /\
@@ -1181,7 +1186,7 @@ Proof
   irule frag_exec_pointwise >> qx_gen_tac `s1` >> simp[] >> strip_tac >>
   `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
   `?a. eval_operand p.ptr_operand s1 = SOME a /\
-       immutable_holds cenv cx t (Value v) a es'` by
+       immutable_holds cenv cx t (Value v) a es' s1` by
     gvs[vv_post_def, vv_holds_def] >>
   `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
     (gvs[immutable_holds_def] >> metis_tac[]) >>
@@ -1293,7 +1298,7 @@ Proof
   irule frag_exec_pointwise >> qx_gen_tac `s1` >> simp[] >> strip_tac >>
   `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
   `?a. eval_operand p.ptr_operand s1 = SOME a /\
-       immutable_holds cenv cx t (Value v) a es'` by
+       immutable_holds cenv cx t (Value v) a es' s1` by
     gvs[vv_post_def, vv_holds_def] >>
   `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
     (gvs[immutable_holds_def] >> metis_tac[]) >>
@@ -1317,6 +1322,8 @@ Proof
   `stmt_state_rel ctx func cenv cx es' s1` by gvs[vv_post_def] >>
   drule_all alloc_buffer_source_frag_labels >>
   disch_then (qspec_then `R` strip_assume_tac) >>
+  `immutable_holds cenv cx t (Value v) a es' u` by
+    metis_tac[immutable_holds_memory_cong] >>
   `copy_old_operand mid p.ptr_operand /\ copy_old_operand mid buf.buf_operand` by
     (rw[copy_old_operand_def] >> gvs[] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
@@ -1404,3 +1411,179 @@ Proof
   strip_tac >> irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
   simp[]
 QED
+
+Theorem runtime_code_copy_memory_frame:
+  w2n a + type_memory_size tv < dimword (:256) /\
+  w2n w + type_memory_size tv < dimword (:256) /\
+  z.vs_memory = (immutable_transfers F F a w (type_slot_size tv) 0 u).vs_memory ==>
+  LENGTH u.vs_memory <= LENGTH z.vs_memory /\
+  (!off len. off + len <= w2n w \/ w2n w + type_memory_size tv <= off ==>
+    mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory)
+Proof
+  strip_tac >> Cases_on `type_slot_size tv = 0`
+  >- gvs[immutable_transfers_def] >>
+  `immutable_transfers F F a w (type_slot_size tv) 0 u =
+    write_memory_with_expansion (w2n w)
+      (mem_bytes_at (w2n a) (type_memory_size tv) u.vs_data_section) u` by
+    (qspecl_then [`type_slot_size tv`, `w2n a`, `w2n w`, `0`, `u`] mp_tac
+       immutable_runtime_transfers_snapshot >>
+     simp[mem_bytes_at_def, type_memory_size_slots] >>
+     gvs[type_memory_size_slots]) >>
+  gvs[] >> conj_tac
+  >- simp[immutableMemoryFrameTheory.immutable_write_memory_capacity] >>
+  rpt strip_tac >>
+  simp[valueEncodingPropsTheory.write_memory_mem_bytes_at_disjoint]
+QED
+
+Theorem runtime_code_copy_alloc_run:
+  compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sm /\ sz < dimword (:256) /\
+  eval_operand src s = SOME a /\
+  (!x. src = Var x ==> not_fresh_at sm x) ==>
+  ?u w. run_inst_seq (emitted_insts sm mid) s = OK u /\
+    eval_operand src u = SOME a /\
+    stmt_state_rel ctx func cenv cx es u /\
+    eval_operand buf.buf_operand u = SOME w /\
+    FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
+    w2n w + sz < dimword (:256) /\ u.vs_memory = s.vs_memory /\
+    sm.cs_next_id < mid.cs_next_id /\
+    (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!aid b len. aid < sm.cs_next_id /\
+       FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+       regions_disjoint (w2n w) sz b len) /\
+    (!name b len. local_region cenv es.scopes u name b len ==>
+       regions_disjoint (w2n w) sz b len) /\
+    (?p. buf.buf_operand = Var p /\ not_fresh_at mid p)
+Proof
+  strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
+  drule_all literal_alloc_buffer_run >> strip_tac >>
+  `t.vs_labels = s.vs_labels` by metis_tac[hash_alloc_buffer_labels] >>
+  `eval_operand src t = SOME a` by
+    (Cases_on `src` >> gvs[eval_operand_def]) >>
+  qexistsl_tac [`t`, `w`] >> simp[] >> metis_tac[]
+QED
+
+Theorem runtime_code_copy_run_post:
+  !ctx func cenv cx e es sa sm sb s0 es' v t p op s.
+    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
+    p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type t /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
+           type_memory_bytes cenv t = type_memory_size tvt) /\
+    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s ==>
+    ?code z. same_blocks sm sb /\
+      sb.cs_current_insts = sm.cs_current_insts ++ code /\
+      EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; DLOAD; MSTORE]) code /\
+      run_inst_seq code s = OK z /\
+      expr_post ctx func cenv cx e es sa sb s0 es' v op z
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
+  simp[unwrap_value_def, compile_ensure_in_memory_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+  gvs[] >> rename1 `compile_alloc_buffer _ sm = (buf,mid)` >>
+  `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
+  `?a. eval_operand p.ptr_operand s = SOME a /\
+       immutable_holds cenv cx t (Value v) a es' s` by
+    gvs[vv_post_def, vv_holds_def] >>
+  `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
+    (gvs[immutable_holds_def] >> metis_tac[]) >>
+  `val_wf tv v /\ w2n a + type_memory_size tv < dimword (:256)` by
+    (drule_all immutable_holds_bounds >> simp[]) >>
+  `type_memory_bytes cenv t = type_memory_size tv` by metis_tac[] >>
+  `type_memory_bytes cenv t < dimword (:256)` by decide_tac >>
+  `ci_mono sm mid` by
+    (qspecl_then [`type_memory_bytes cenv t`, `sm`] mp_tac
+       ci_mono_compile_alloc_buffer >> simp[]) >>
+  `ci_mono mid cs''` by
+    (qpat_assum `compile_imm_copy_to_memory _ _ _ _ _ _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> strip_tac >>
+     metis_tac[ci_mono_compile_imm_copy_to_memory, pairTheory.SND]) >>
+  `cs_extends sm mid /\ cs_extends mid cs'' /\
+   sm.cs_next_var <= mid.cs_next_var /\ mid.cs_next_id <= cs''.cs_next_id` by
+    gvs[ci_mono_def] >>
+  `fn_has_code sm mid func` by metis_tac[fn_has_code_split] >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `stmt_state_rel ctx func cenv cx es' s` by gvs[vv_post_def] >>
+  drule_all runtime_code_copy_alloc_run >> strip_tac >>
+  suspend "copy"
+QED
+
+Resume runtime_code_copy_run_post[copy]:
+  `copy_old_operand mid p.ptr_operand /\ copy_old_operand mid buf.buf_operand` by
+    (rw[copy_old_operand_def] >> gvs[] >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `(type_memory_bytes cenv t + 31) DIV 32 = type_slot_size tv` by
+    (simp[type_memory_size_slots] >> decide_tac) >>
+  drule_all copy_runtime_run >> strip_tac >>
+  suspend "finish"
+QED
+
+Resume runtime_code_copy_run_post[finish]:
+  `expr_post ctx func cenv cx e es sa cs'' s0 es' v buf.buf_operand s'` by
+    suspend "post" >>
+  suspend "code"
+QED
+
+Resume runtime_code_copy_run_post[post]:
+  `s'.vs_memory = (immutable_transfers F F a w (type_slot_size tv) 0 u).vs_memory` by
+    metis_tac[] >>
+  `w2n w + type_memory_size tv < dimword (:256)` by metis_tac[] >>
+  drule_all copy_runtime_contents >> strip_tac >>
+  drule_all runtime_code_copy_memory_frame >> strip_tac >>
+  `eval_operand buf.buf_operand s' = SOME w` by
+    metis_tac[copy_runtime_frame_operand] >>
+  `MEM (mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv t))]
+       [STRING #"%" (toString sm.cs_next_var)]) (fn_insts func)` by
+    metis_tac[buffer_alloc_code] >>
+  qmatch_asmsub_abbrev_tac `MEM inst (fn_insts func)` >>
+  `inst.inst_opcode = ALLOCA /\ inst.inst_id = sm.cs_next_id` by
+    simp[Abbr `inst`, mk_inst_def] >>
+  `sm.cs_next_id < cs''.cs_next_id` by decide_tac >>
+  fs[copy_runtime_frame_def] >>
+  gvs[] >>
+  drule copy_buffer_post_transport >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
+  disch_then (drule_at (Pat `copy_static _ = _`)) >>
+  disch_then (drule_at (Pat `!x. not_fresh_at _ x ==> lookup_var x _ = lookup_var x _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
+  disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
+  disch_then (qspecl_then [`cs''`, `Var p'`] mp_tac) >>
+  simp[] >>
+  disch_then irule >> metis_tac[]
+QED
+
+Resume runtime_code_copy_run_post[code]:
+  `same_blocks sm mid /\
+   mid.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm mid /\
+   EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; DLOAD; MSTORE])
+     (emitted_insts sm mid)` by
+    (qpat_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
+          comp_bind_def, comp_return_def] >>
+     pairarg_tac >> strip_tac >> gvs[] >>
+     gvs[fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+         comp_ignore_bind_def, comp_return_def, emitted_insts_def,
+         rich_listTheory.DROP_LENGTH_APPEND, same_blocks_def, mk_inst_def]) >>
+  drule code_copy_insts >> strip_tac >>
+  fs[copy_runtime_frame_def] >>
+  qexists_tac `s'` >> simp[run_inst_seq_append] >>
+  conj_tac >- gvs[same_blocks_def] >>
+  fs[EVERY_MEM] >>
+  conj_tac
+  >- (qpat_assum `run_inst_seq (emitted_insts sm mid) s = OK u`
+        (mp_then Any mp_tac run_inst_seq_append) >>
+      disch_then (qspec_then `emitted_insts mid cs''` mp_tac) >> simp[]) >>
+  gvs[]
+QED
+
+Finalise runtime_code_copy_run_post

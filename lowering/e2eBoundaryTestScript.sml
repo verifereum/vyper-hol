@@ -71,7 +71,7 @@ Theorem block_environment_bounds:
   LENGTH tx.block_hashes <= 256 /\
   tp.prevRandao = n2w tx.prev_randao /\ tp.prevHashes = tx.block_hashes
 Proof
-  simp[tx_block_fields_rel_def, compileEnvTheory.tx_env_ok_def]
+  simp[tx_block_fields_rel_def, loweringStateRelDefsTheory.tx_env_ok_def]
 QED
 
 Theorem no_genesis_or_unbounded_hash_environment:
@@ -81,7 +81,7 @@ Theorem no_genesis_or_unbounded_hash_environment:
   (MIN 256 tx.block_number > LENGTH hashes ==>
     ~tx_env_ok (tx with block_hashes := hashes))
 Proof
-  simp[compileEnvTheory.tx_env_ok_def, arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
+  simp[loweringStateRelDefsTheory.tx_env_ok_def, arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
 QED
 
 (* ===== Exact source module/layout and independent hypotheses ===== *)
@@ -268,8 +268,7 @@ End
 
 Theorem decoding_exemption_exact:
   (unspecified_behaviour_exempt dynamic_decode_program e <=>
-    e = RuntimeError "abi_decode invalid" \/
-    e = RuntimeError "convert empty bytes to signed") /\
+    e = RuntimeError "abi_decode invalid") /\
   ~unspecified_behaviour_exempt [] (RuntimeError "abi_decode invalid") /\
   ~unspecified_behaviour_exempt dynamic_decode_program (RuntimeError "abi_decode conversion") /\
   ~unspecified_behaviour_exempt dynamic_decode_program (TypeError "abi_decode invalid")
@@ -308,10 +307,11 @@ Proof
 QED
 
 (* ===== Result cases: success REQUESTS, not remaining OUTCOMES ===== *)
+(* At fixed (empty) gas observations: call_result_rel is ?gobs. call_result_rel_at gobs. *)
 Theorem success_requires_requests_and_effects:
   call_external (SOME (MAP SND (call_trace es))) [] am tx = (INL v,am',rqs) /\
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE ==>
-  (call_result_rel tops ret am tx es r es' <=>
+  (call_result_rel_at [] tops ret am tx es r es' <=>
     ?out lgs. frame_outcome es r es' NONE out lgs /\
       tx_return_bytes tops ret tx v out /\
       accounts_agree cx am'.accounts
@@ -320,57 +320,40 @@ Theorem success_requires_requests_and_effects:
       logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
       LIST_REL (request_agree cx) rqs (call_requests es))
 Proof
-  simp[call_result_rel_def]
+  simp[call_result_rel_at_def]
 QED
 
 Theorem assert_result_does_not_compare_requests:
   call_external (SOME (MAP SND (call_trace es))) [] am tx =
     (INR (AssertException s),am',rqs) ==>
-  (call_result_rel tops ret am tx es r es' <=>
+  (call_result_rel_at [] tops ret am tx es r es' <=>
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
       (exc = Reverted \/ s = "UNREACHABLE"))
 Proof
-  simp[call_result_rel_def]
+  simp[call_result_rel_at_def]
 QED
 
 Theorem error_result_only_exact_exemption_or_failure:
   call_external (SOME (MAP SND (call_trace es))) [] am tx = (INR (Error e),am',rqs) ==>
-  (call_result_rel tops ret am tx es r es' <=>
+  (call_result_rel_at [] tops ret am tx es r es' <=>
     unspecified_behaviour_exempt tops e \/
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs)
 Proof
-  simp[call_result_rel_def]
-QED
-
-Theorem empty_signed_conversion_accepts_any_outcome:
-  call_external (SOME (MAP SND (call_trace es))) [] am tx =
-    (INR (Error (RuntimeError "convert empty bytes to signed")),am',rqs) ==>
-  call_result_rel tops ret am tx es r es'
-Proof
-  simp[call_result_rel_def, unspecified_behaviour_exempt_def]
-QED
-
-Theorem empty_signed_conversion_exemption_exact:
-  unspecified_behaviour_exempt [] (RuntimeError "convert empty bytes to signed") /\
-  ~unspecified_behaviour_exempt [] (RuntimeError "convert BytesV int bound") /\
-  ~unspecified_behaviour_exempt [] (RuntimeError "convert BytesV decimal bound") /\
-  ~unspecified_behaviour_exempt [] (TypeError "convert empty bytes to signed")
-Proof
-  simp[unspecified_behaviour_exempt_def, occurs_abi_decode_target_def]
+  simp[call_result_rel_at_def]
 QED
 
 Theorem escaped_control_is_not_related:
   (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR BreakException,am',rqs) ==>
-     ~call_result_rel tops ret am tx es r es') /\
+     ~call_result_rel_at [] tops ret am tx es r es') /\
   (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR ContinueException,am',rqs) ==>
-     ~call_result_rel tops ret am tx es r es') /\
+     ~call_result_rel_at [] tops ret am tx es r es') /\
   (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR (ReturnException v),am',rqs) ==>
-     ~call_result_rel tops ret am tx es r es')
+     ~call_result_rel_at [] tops ret am tx es r es')
 Proof
-  simp[call_result_rel_def]
+  simp[call_result_rel_at_def]
 QED
 
 (* Boundary regressions must be kernel-closed, not inherited admissions. *)

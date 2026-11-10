@@ -6,80 +6,20 @@ name = "vyper-hol"
 version = "0.2.3"
 
 [build]
-roots = ["tests/createSizeBoundaryTestScript.sml",
-  "tests/createSizeClassificationCounterexampleScript.sml",
+roots = [
+  # the results: semantics, analyses, passes, lowering and compiler proofs
   "vyperHolScript.sml",
-         "lowering/typedMemoryCopyScript.sml",
-         "lowering/calldataRecursiveExecutionScript.sml",
-         "lowering/actualAllocExecScript.sml",
-         "lowering/calldataFiniteTypedScript.sml",
-         "lowering/calldataAggregateTypedScript.sml",
-         "lowering/actualDecoderPackagingScript.sml",
-         "lowering/actualRegistrationCodeScript.sml",
-         "lowering/ctorRegisterArgsScript.sml",
-         "lowering/actualEntryAllocationFrameScript.sml",
-         "lowering/abiEncoderWindowSourceRunScript.sml",
-         "lowering/abiTypeBoundPropsScript.sml",
-         "lowering/exprSimConvertFromBytesScript.sml",
-         "lowering/exprSimConvertBytesScript.sml",
-         "tests/vyperExternalHeadersTestScript.sml",
-         "tests/vyperExternalDefaultsTestScript.sml",
-         "tests/vyperRawSystemTypingTestScript.sml",
-         "tests/selfdestructReturnDataTestScript.sml",
-         "tests/vyperPopTypingTestScript.sml",
-         "tests/vyperCreateTypingTestScript.sml",
-         "tests/vyperArgWriteTypingTestScript.sml",
-         "venom/proofs/allocaHistoryScript.sml",
-         "lowering/allocaHistoryFragmentScript.sml",
-         "lowering/nonreentrantEntryScript.sml",
-         "lowering/nonreentrantSourceScript.sml",
-         "lowering/nonreentrantExitScript.sml",
-         "lowering/concatMemoryScript.sml",
-         "tests/vyperTestsHolScript.sml",
-         "lowering/e2eBoundaryTestScript.sml",
-         "lowering/evalCompilerWitnessesScript.sml",
-         "tests/vyperCreateOracleTestScript.sml",
-         "tests/createOracleResultTestScript.sml",
-         "tests/createSourceSizeBoundaryTestScript.sml",
-         "tests/vyperCreateMemoryTestScript.sml",
-         "tests/createImmutableBytecodeTestScript.sml",
-         "tests/create/vyperCtorAliasTestScript.sml",
-         "tests/create/vyperCtorStorageAliasTestScript.sml",
-         "tests/createSemanticAuditScript.sml",
-         "tests/createLoweringAuditScript.sml",
-         "lowering/createOracleClosureAuditScript.sml",
-         "venom/codegen/proofs/asmCallActivationRegressionScript.sml",
-         "tests/vyperOracleInitialStateTestScript.sml",
-         "tests/conversionProofAuditScript.sml",
-         "lowering/targetPlaceTestScript.sml",
-         "lowering/targetPlaceSimCasesScript.sml",
-         "lowering/bodyMemoryDefsScript.sml",
-         "lowering/entryHaltMemScript.sml",
-         "lowering/loweringMemCorrectScript.sml",
-         "lowering/builtinBytesMemoryScript.sml",
-         "venom/passes/dft/tests/dftEffectOrderTestScript.sml",
-         "venom/passes/dft/proofs/dftCallChecksScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerAbiTupleStringScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerAbiCodegenScript.sml",
-         "lowering/defs/bytecode/eval/evalCompilerRangeScript.sml",
-         "lowering/abiProofsScript.sml",
-         "lowering/supported/supportedTypePropsScript.sml",
-         "lowering/supported/supportedNamePropsScript.sml",
-         "lowering/supported/supportedDeclPropsScript.sml",
-         "lowering/supported/supportedExprFormPropsScript.sml",
-         "lowering/supported/supportedExprPropsScript.sml",
-         "lowering/supported/supportedStmtPropsScript.sml",
-         "lowering/supported/supportedStmtTraversePropsScript.sml",
-         "lowering/supported/supportedProgramPropsScript.sml",
-         "venom/codegen/proofs/contextReachabilityChecksScript.sml",
-         "venom/codegen/proofs/genFrameSimScript.sml",
-         "venom/compiler/o1PassLiftScript.sml",
-         "tests/vyperPlaceProbesTestScript.sml",
-         "tests/vyperPlaceSanityTestScript.sml"]
+  # hand-written tests of the semantics, frontend and test runner
+  "tests/vyperTestsHolScript.sml",
+  # concrete checks of the lowering and compiler
+  "lowering/loweringChecksScript.sml",
+  # concrete checks of Venom execution, the passes and codegen
+  "venom/venomChecksScript.sml",
+]
 
 [[executable]]
 name = "bytecode_parity_native"
-output = "lowering/defs/bytecode/native/bytecode_parity_native.exe"
+output = "bytecode/native/bytecode_parity_native.exe"
 objects = ["compilerNativeParity"]
 
 [actions.compilerNativeParity]

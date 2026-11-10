@@ -2,7 +2,7 @@
 Theory builtinBytesMemory
 Ancestors
   builtinBytes allocaFootprint fragExecMem instMemFrontier abiBuiltinAllocation
-  exprLoweringProps emitHelperProps emitHelper compileEnv context venomInst
+  exprLoweringProps emitHelperProps emitHelper compileEnv loweringStateRelDefs context venomInst
   venomState venomExecSemantics venomMemDefs finite_map list words arithmetic
 
 Theorem slice_bounds_shape[local]:
@@ -395,4 +395,51 @@ val () = List.app (fn th =>
      else raise Fail "byte memory footprint inherited admission"
   end) [compile_assert_slice_bounds_mem_ok, compile_bytestring_src_mem_ok,
         compile_extract32_load_mem_ok, compile_slice_data_mem_ok];
+
+
+(* Probe the body entry boundary: a source-visible local owns enough room
+   for the bytestring header read, including an unsuccessful read prefix. *)
+Theorem compile_bytestring_src_local_mem_ok:
+  !ctx func cenv cx es s name entry p sz sa result sb.
+    stmt_state_rel ctx func cenv cx es s /\
+    lookup_scopes name es.scopes = SOME entry /\
+    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
+    32 <= sz /\
+    compile_bytestring_src (Var p) sa = (result, sb) ==>
+    run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  rpt gen_tac >> strip_tac >>
+  `local_ptrs_rel func cenv es.scopes s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  drule_all local_ptr_below_frontier >> strip_tac >>
+  irule compile_bytestring_src_mem_ok >>
+  qexistsl_tac [`w`, `result`, `Var p`] >>
+  simp[eval_operand_def] >> decide_tac
+QED
+
+(* Actual allocation followed by its header store.  Site reuse is allowed;
+   the allocation lookup identifies the reused region's size. *)
+Theorem compile_alloc_buffer_header_store_mem_ok:
+  !n sa buf sm value sb s p.
+    compile_alloc_buffer n sa = (buf, sm) /\
+    emit_void MSTORE [buf.buf_operand; value] sm = ((), sb) /\
+    fresh_vars_wrt sa s /\ alloca_next_valid s /\
+    FLOOKUP (abi_builtin_allocate_state sa.cs_next_id n s).vs_allocas
+      sa.cs_next_id = SOME (p,n) /\
+    32 <= n /\ n < dimword (:256) ==>
+    run_inst_seq_mem_ok
+      (emitted_insts sa sm ++ emitted_insts sm sb) s
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_alloc_buffer_mem_ok >> strip_tac >>
+  irule run_inst_seq_mem_ok_append >> simp[] >>
+  rpt strip_tac >>
+  gvs[run_inst_seq_def] >>
+  irule emit_mstore_mem_ok >>
+  goal_assum (drule_at Any) >>
+  qexists_tac `n2w p` >>
+  simp[eval_operand_def, lookup_var_update_var] >>
+  `p MOD dimword (:256) <= p` by simp[MOD_LESS_EQ] >>
+  decide_tac
+QED
 

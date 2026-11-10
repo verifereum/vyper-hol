@@ -161,8 +161,8 @@ End
 (* Parameterized word-copy loop between two address spaces.
    Mirrors Python: context.py _word_copy_loop
    Used for storage↔memory and transient↔memory bulk copies. *)
-Definition compile_word_copy_loop_def:
-  compile_word_copy_loop src_op dst_op word_count load_loc store_loc is_ctor =
+Definition compile_word_copy_loop_base_def:
+  compile_word_copy_loop_base src_op dst_op count_op load_loc store_loc is_ctor imm =
     let src_scale = word_scale load_loc in
     let dst_scale = word_scale store_loc in
     do
@@ -176,7 +176,7 @@ Definition compile_word_copy_loop_def:
       emit_inst JMP [Label cond_lbl] [];
       (* Cond block *)
       new_block cond_lbl;
-      done_op <- emit_op EQ [Var counter_var; Lit (n2w word_count)];
+      done_op <- emit_op EQ [Var counter_var; count_op];
       emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [];
       (* Body block *)
       new_block body_lbl;
@@ -188,7 +188,7 @@ Definition compile_word_copy_loop_def:
         emit_op ADD [src_op; scaled]
       od);
       (* Load from source *)
-      val_loaded <- compile_ptr_load is_ctor NONE load_loc src_off;
+      val_loaded <- compile_ptr_load is_ctor imm load_loc src_off;
       (* Compute dest offset *)
       dst_off <- (if dst_scale = 1 then
         emit_op ADD [dst_op; Var counter_var]
@@ -197,13 +197,43 @@ Definition compile_word_copy_loop_def:
         emit_op ADD [dst_op; scaled]
       od);
       (* Store to dest *)
-      compile_ptr_store is_ctor NONE store_loc dst_off val_loaded;
+      compile_ptr_store is_ctor imm store_loc dst_off val_loaded;
       (* Increment counter *)
       new_ctr <- emit_op ADD [Var counter_var; Lit 1w];
       emit_inst ASSIGN [new_ctr] [counter_var];
       emit_inst JMP [Label cond_lbl] [];
       (* Exit block *)
       new_block exit_lbl
+    od
+End
+
+(* Operand-count loop without an immutable allocation base. *)
+Definition compile_word_copy_loop_op_def:
+  compile_word_copy_loop_op src dst count load_loc store_loc is_ctor =
+    compile_word_copy_loop_base src dst count load_loc store_loc is_ctor NONE
+End
+
+Definition compile_word_copy_loop_def:
+  compile_word_copy_loop src_op dst_op word_count load_loc store_loc is_ctor =
+    compile_word_copy_loop_op src_op dst_op (Lit (n2w word_count))
+      load_loc store_loc is_ctor
+End
+
+Definition compile_bytestring_word_count_def:
+  compile_bytestring_word_count src =
+    do len_op <- emit_op MLOAD [src];
+       sum_op <- emit_op ADD [len_op; Lit 63w];
+       emit_op SHR [Lit 5w; sum_op]
+    od
+End
+
+(* Constructor bytestring writes use their live word count.  The immutable
+   allocation base remains part of each word's address computation. *)
+Definition compile_store_immutable_bytestring_def:
+  compile_store_immutable_bytestring imm src dst =
+    do count <- compile_bytestring_word_count src;
+       compile_word_copy_loop_base src dst count LocMemory LocCode T imm;
+       return ()
     od
 End
 
@@ -839,6 +869,35 @@ Definition compile_store_memory_def:
     else if dst_ty ≠ src_ty then
       compile_store_memory_typed cenv dst dst_ty src src_ty
     else compile_copy_memory dst src (type_memory_bytes cenv dst_ty)
+End
+
+(* Memory laid out as src_ty can be read as dst_ty: nested arrays and tuples
+   need equal element and member sizes, which fix strides and offsets; a
+   wider top-level bound or capacity keeps the layout of the data present.
+   Mirrors Python: codegen/core.py punnable. *)
+Definition punnable_def:
+  punnable cenv (ArrayT src_elem _) (ArrayT dst_elem _) =
+    (type_memory_bytes cenv src_elem = type_memory_bytes cenv dst_elem ∧
+     punnable cenv src_elem dst_elem) ∧
+  punnable cenv src_ty (ArrayT _ _) = F ∧
+  punnable cenv (TupleT src_tys) (TupleT dst_tys) =
+    punnable_list cenv src_tys dst_tys ∧
+  punnable cenv src_ty (TupleT _) = F ∧
+  punnable cenv src_ty dst_ty = T ∧
+  punnable_list cenv [] [] = T ∧
+  punnable_list cenv (src_ty::src_tys) (dst_ty::dst_tys) =
+    (type_memory_bytes cenv src_ty = type_memory_bytes cenv dst_ty ∧
+     punnable cenv src_ty dst_ty ∧ punnable_list cenv src_tys dst_tys) ∧
+  punnable_list cenv _ _ = F
+End
+
+(* A flat copy of dst_ty's size from memory laid out as src_ty is a valid
+   dst_ty value, so the src_ty value can be used as dst_ty without a copy.
+   Mirrors Python: context.py same_memory_layout (vyperlang/vyper#5331). *)
+Definition same_memory_layout_def:
+  same_memory_layout cenv src_ty dst_ty =
+    (punnable cenv src_ty dst_ty ∧
+     type_memory_bytes cenv src_ty = type_memory_bytes cenv dst_ty)
 End
 
 (* NOTE: compile_store_complex_type and compile_copy_complex_type deleted —

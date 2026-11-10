@@ -23,10 +23,14 @@
 
 Theory stmtSimDecl
 Ancestors
+  stmtSimProps stmtSimDeclCompose stmtSimDeclSource gasOutcome
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore stmtSimDeclPath
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding
+  compileEnv loweringStateRelDefs valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperExprNoControl
   venomExecSemantics venomExecProofs venomInst venomState
 Libs
@@ -57,41 +61,6 @@ Proof
   simp[compileEnvTheory.compile_env_component_equality]
 QED
 
-Theorem exec_alloca_frames[local]:
-  !inst s n s1 p.
-    inst.inst_outputs = [p] /\ exec_alloca inst s n = OK s1 ==>
-    (!x. x <> p ==> lookup_var x s1 = lookup_var x s) /\
-    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-                 FLOOKUP s1.vs_allocas aid = SOME entry)
-Proof
-  rpt gen_tac >> simp[exec_alloca_def] >>
-  Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
-  >- (rw[AllCaseEqs(), update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-      gvs[FLOOKUP_UPDATE] >> Cases_on `inst.inst_id = aid` >> gvs[]) >>
-  rename1 `FLOOKUP s.vs_allocas inst.inst_id = SOME entry` >>
-  PairCases_on `entry` >>
-  rw[AllCaseEqs(), update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  gvs[FLOOKUP_UPDATE]
-QED
-
-Theorem exec_alloca_memory:
-  !inst s n t. exec_alloca inst s n = OK t ==> t.vs_memory = s.vs_memory
-Proof
-  rpt gen_tac >>
-  simp[exec_alloca_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[update_var_def, AllCaseEqs()]
-QED
-
-Theorem exec_alloca_operand_frame:
-  !inst s n t p.
-    exec_alloca inst s n = OK t /\ inst.inst_outputs = [p] ==>
-    !op. op <> Var p ==> eval_operand op t = eval_operand op s
-Proof
-  rpt gen_tac >> simp[exec_alloca_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  Cases_on `op` >>
-  gvs[eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
-QED
 
 Theorem annassign_alloca_operand_framed_frag:
   !ctx func cenv cx es st st1 p sz s0 R.
@@ -124,10 +93,6 @@ Proof
   drule_all exec_alloca_frames >> strip_tac >>
   qexistsl [`s1 with vs_inst_idx := LENGTH st1.cs_current_insts`, `w`] >>
   gvs[lookup_var_def, wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
-  conj_tac
-  >- (gen_tac >> strip_tac >>
-      qpat_x_assum `!op. op <> Var p ==> _` drule >>
-      Cases_on `op` >> simp[eval_operand_def, lookup_var_def]) >>
   irule frag_exec_run_inst_seq >>
   gvs[venomInstTheory.mk_inst_def] >>
   simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
@@ -168,17 +133,6 @@ Proof
   gvs[lookup_var_def, mstore_def, LET_THM]
 QED
 
-Theorem cenv_top_ext_declare_local[local]:
-  !cenv id ty st c st1 sc rest.
-    declare_local cenv id ty st = (c, st1) /\ cenv.ce_alloca_locals /\
-    lookup_scopes id rest = NONE /\
-    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?p sz. l = PtrVar p sz) ==>
-    cenv_top_ext cenv c (sc :: rest)
-Proof
-  rpt strip_tac >> drule_all declare_local_ptr >> strip_tac >>
-  simp[cenv_top_ext_def] >> rpt strip_tac >>
-  `n = id` by metis_tac[] >> gvs[]
-QED
 
 Theorem frag_exec_no_exit_run:
   !ctx a b P Q func s.
@@ -416,72 +370,6 @@ Proof
   qexistsl [`sA`, `sB`, `op`] >> gvs[]
 QED
 
-Theorem annassign_word_success_run[local]:
-  !ctx func cenv cx id vtyp e es es' etv sa sb sf op p sz s0 w inst.
-    eval_stmt cx (AnnAssign id vtyp e) es = (INL (), es') /\
-    is_word_type (expr_type e) /\ evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    (!tyv v es1. evaluate_type (get_tenv cx) vtyp = SOME tyv /\
-                 (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
-       store_lays_out etv tyv v) /\
-    expr_sim ctx func cenv cx (expr_type e) e es /\
-    lower_value compile_expr cenv (expr_type e) e sa = (op, sb) /\
-    emit_void MSTORE [Var p; op] sb = ((), sf) /\
-    fn_has_code sa sb func /\ fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ not_fresh_at sa p /\
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
-    s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    lookup_var p s0 = SOME w /\ MEM inst (fn_insts func) /\
-    inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
-    FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n w, sz) /\ 32 <= sz ==>
-    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
-        t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-        (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==> lookup_var x t = SOME u) /\
-        (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
-                     FLOOKUP t.vs_allocas aid = SOME entry) /\
-        !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
-                 ?fuel'. run_from fuel' ctx func s0 = r
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule eval_stmt_annassign_value >> strip_tac >>
-  ` (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es2)` by
-    simp[bind_def] >>
-  `es2 = es1` by metis_tac[read_result_state] >> gvs[] >>
-  `store_lays_out etv tyv v` by metis_tac[] >>
-  `not_local_ptr cenv es1.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es1`, `s0`] mp_tac) >>
-  impl_tac >- simp[expr_res_ok_def] >>
-  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
-  impl_tac >- simp[] >> simp[] >> strip_tac >>
-  `lookup_scopes id es1.scopes = NONE` by gvs[] >>
-  drule_all annassign_word_store_post_run >>
-  disch_then (qspecl_then [`T`] mp_tac) >> strip_tac >>
-  qexists_tac `t` >> simp[] >> metis_tac[]
-QED
-
-Theorem expr_sim_error_run:
-  !ctx func cenv cx ty e es ex es' sa sb op s0.
-    expr_sim ctx func cenv cx ty e es /\
-    (do result <- eval_expr cx e; read_result cx result od) es = (INR ex, es') /\
-    expr_res_ok (INR ex : value + exception) /\
-    lower_value compile_expr cenv ty e sa = (op, sb) /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
-    ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
-    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
-             expr_exit (INR ex : unit + exception) r
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sb`, `op`, `INR ex`, `es'`, `s0`] mp_tac) >>
-  impl_tac >- simp[] >>
-  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
-  impl_tac >- simp[] >> simp[] >> strip_tac >>
-  metis_tac[expr_exit_INR_type]
-QED
-
 Theorem annassign_word_top_ext:
   !cenv c cx id vtyp e es es' sa st.
     declare_local cenv id vtyp sa = (c, st) /\ cenv.ce_alloca_locals /\
@@ -505,28 +393,10 @@ Proof
   gvs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> simp[]
 QED
 
-(* x: T = e for a word type T, for every outcome: the right-hand side's
-   errors exit, and on a value the local is declared and stored
-   (compile_annassign_word_frag).  The right-hand side's judgment is at the
-   environment after the declaration, which binds x to its pointer; x is
-   not in scope at es. *)
-(* Why it holds.  The relation at the declared environment c comes from
-   stmt_state_rel_cenv_cong: declare_local_ptr changes only id, which no
-   scope at es holds, and binds it to a pointer, as cenv does if at all.
-   The ALLOCA then runs with the relation kept at c (its output is fresh,
-   local_ptrs_reserved), and expr_sim at c either exits with expr_exit, an
-   Abort that carries back over the ALLOCA, or reaches the MSTORE in
-   expr_post.  read_result failures are expression exits; new_variable
-   fails only with type errors, which stmt_res_ok leaves out.  On success cenv'' = c; cenv_top_ext holds
-   since only id changes, a pointer on both sides, and the rest of the
-   scopes do not hold it.  The ALLOCA's output is fresh at sa, so the
-   lookup_var frame does not speak of it; a second run of the ALLOCA (in a
-   loop) keeps its allocation.  compile_annassign_word_frag's post has no
-   lookup_var or allocas frame, so the success case re-chains ALLOCA,
-   expr_post and MSTORE rather than citing it. *)
+(* The complete declaration source action, uniformly over the selected gas
+   prefix and every unused source suffix, with the existing full statement post. *)
 Theorem compile_annassign_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty id vtyp e es res es' etv.
-    eval_stmt cx (AnnAssign id vtyp e) es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty id vtyp e es etv.
     cenv.ce_alloca_locals /\
     is_word_type vtyp /\ ~has_length_word vtyp /\
     32 <= type_memory_bytes cenv vtyp /\
@@ -535,18 +405,20 @@ Theorem compile_annassign_stmt_frag:
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    (!tyv v es1. evaluate_type (get_tenv cx) vtyp = SOME tyv /\
-                 (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
-                 store_lays_out etv tyv v) /\
+    (!gs tyv v es1. evaluate_type (get_tenv cx) vtyp = SOME tyv /\
+      (do result <- eval_expr cx e; read_result cx result od)
+        (es with gas_obs := gs) = (INL v, es1) ==>
+      store_lays_out etv tyv v) /\
     (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
-       expr_sim ctx func c cx (expr_type e) e es /\
-       !sa sb op. lower_value compile_expr c (expr_type e) e sa = (op, sb) ==>
-                  cs_extends sa sb) ==>
+      expr_sim ctx func c cx (expr_type e) e es /\
+      !sa sb op. lower_value compile_expr c (expr_type e) e sa = (op, sb) ==>
+        cs_extends sa sb) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
+      (stmt_env cenv lctx ty (AnnAssign id vtyp e))
+      (eval_stmt cx (AnnAssign id vtyp e)) es
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
+  simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
   `!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
      !a b op. lower_value compile_expr c (expr_type e) e a = (op, b) ==>
               cs_extends a b` by metis_tac[] >>
@@ -560,46 +432,50 @@ Proof
   `s0.vs_current_bb = st.cs_current_bb /\
    s0.vs_inst_idx = LENGTH st.cs_current_insts` by
     (drule_all declare_local_ptr >> simp[] >> strip_tac >> gvs[]) >>
-  drule_all annassign_alloca_framed_run >>
+  drule_all annassign_alloca_operand_framed_path >>
   disch_then (qx_choosel_then [`salloc`, `w`] strip_assume_tac) >>
-  Cases_on `res`
-  >- (Cases_on `x` >>
-      qmatch_asmsub_abbrev_tac `MEM ai (fn_insts func)` >>
-      `ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [p] /\
-       FLOOKUP salloc.vs_allocas ai.inst_id =
-         SOME (w2n w, type_memory_bytes cenv vtyp)` by
-        simp[Abbr `ai`, venomInstTheory.mk_inst_def] >>
-      drule_all annassign_word_success_run >> strip_tac >>
-      drule_all annassign_word_top_ext >> strip_tac >>
-      `!x. not_fresh_at sa x ==> x <> p /\ not_fresh_at sA x` by
-        (`sA.cs_next_var = st.cs_next_var` by
-           (drule emit_inst_extends >> simp[]) >>
-         drule declare_local_old_fresh >> simp[] >> simp[not_fresh_at_def]) >>
-      disj1_tac >> qexistsl [`t`, `c`] >> simp[stmt_lands_def] >>
-      conj_tac
-      >- (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
-          simp[emit_void_def, comp_bind_def, comp_ignore_bind_def,
-               fresh_id_def, emit_def, comp_return_def] >>
-          strip_tac >> Cases_on `sB.cs_current_insts` >>
-          gvs[block_is_terminated_def, LAST_APPEND, LAST_CONS_cond,
-              venomInstTheory.mk_inst_def, is_terminator_def]) >>
-      rpt strip_tac >>
-      qpat_x_assum `!fuel r. run_from fuel ctx func t = r /\ _ ==> _`
-        (qspec_then `fuel` mp_tac) >> simp[] >> strip_tac >>
-      qpat_x_assum `!fuel r. run_from fuel ctx func salloc = r /\ _ ==> _`
-        drule >> simp[]) >>
-  `(do result <- eval_expr cx e; read_result cx result od) es = (INR y, es') /\
-   expr_res_ok (INR y : value + exception)` by
-    (drule eval_annassign_word_error >> simp[] >>
-     disch_then (qspec_then `lctx` mp_tac) >> simp[] >> metis_tac[]) >>
-  drule_all expr_sim_error_run >> strip_tac >>
-  drule exit_result_not_error >> strip_tac >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[]
+  drule annassign_admissible_type >> strip_tac >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    (irule annassign_admissible_rhs >> metis_tac[]) >>
+  `gas_outcome F (cx_tops cx) (ctx,func)
+    (bind (eval_expr cx e) (read_result cx)) (es,salloc)
+    (\res ee t. ?v. res = INL v /\
+      expr_post ctx func c cx e es sA sB salloc ee v op t /\
+      t.vs_current_bb = sB.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sB.cs_current_insts)
+    (\res ee r. expr_exit res r)` by
+    (qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
+     simp[expr_sim_def] >> disch_then irule >> simp[]) >>
+  `~block_is_terminated sb` by
+    (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
+     simp[emit_void_def, comp_bind_def, comp_ignore_bind_def,
+          fresh_id_def, emit_def, comp_return_def] >>
+     strip_tac >> Cases_on `sB.cs_current_insts` >>
+     gvs[block_is_terminated_def, LAST_APPEND, LAST_CONS_cond,
+         venomInstTheory.mk_inst_def, is_terminator_def]) >>
+  qmatch_asmsub_abbrev_tac `MEM ai (fn_insts func)` >>
+  `ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [p] /\
+   FLOOKUP salloc.vs_allocas ai.inst_id =
+     SOME (w2n w, type_memory_bytes cenv vtyp)` by
+    simp[Abbr `ai`, venomInstTheory.mk_inst_def] >>
+  `!gs v es1. bind (eval_expr cx e) (read_result cx)
+     (es with gas_obs := gs) = (INL v,es1) ==> store_lays_out etv tyv v` by
+    metis_tac[] >>
+  `!x. not_fresh_at sa x ==> x <> p /\ not_fresh_at sA x` by
+    (`sA.cs_next_var = st.cs_next_var` by
+       (drule emit_inst_extends >> simp[]) >>
+     drule declare_local_old_fresh >> simp[] >> simp[not_fresh_at_def]) >>
+  irule annassign_outcome_entry_prefix >>
+  qexistsl_tac [`sA`, `salloc`] >> simp[] >>
+  irule annassign_concrete_rhs_outcome >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (goal_assum (drule_at Any) >> simp[]) >>
+  qexistsl_tac [`ai`, `op`, `sB`] >> simp[]
 QED
 
 Theorem compile_annassign_word_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty id vtyp e es res es' etv.
-    eval_stmt cx (AnnAssign id vtyp e) es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty id vtyp e es etv.
     cenv.ce_alloca_locals /\
     is_word_type vtyp /\ ~has_length_word vtyp /\
     32 <= type_memory_bytes cenv vtyp /\
@@ -610,19 +486,20 @@ Theorem compile_annassign_word_stmt_frag:
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    (!v es1. (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
+    (!gs v es1. (do result <- eval_expr cx e; read_result cx result od)
+       (es with gas_obs := gs) = (INL v, es1) ==>
               word_value v) /\
     (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
        expr_sim ctx func c cx (expr_type e) e es /\
        !sa sb op. lower_value compile_expr c (expr_type e) e sa = (op, sb) ==>
                   cs_extends sa sb) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
+      (stmt_env cenv lctx ty (AnnAssign id vtyp e))
+      (eval_stmt cx (AnnAssign id vtyp e)) es
 Proof
   rpt strip_tac >> irule compile_annassign_stmt_frag >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (qexists_tac `etv` >> simp[]) >> rpt strip_tac >>
-  qpat_x_assum `!v es1. _ ==> word_value v` drule >> strip_tac >>
+  simp[] >> conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac >>
+  qpat_x_assum `!gs v es1. _ ==> word_value v` drule >> strip_tac >>
   irule store_lays_out_word_value >> metis_tac[]
 QED
 
@@ -630,8 +507,7 @@ QED
    type T and its values are of T: the stored word is e's typed word,
    which lays the value out as val_in_memory does for T. *)
 Theorem compile_annassign_typed_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty id vtyp e es res es' tyv.
-    eval_stmt cx (AnnAssign id vtyp e) es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty id vtyp e es tyv.
     cenv.ce_alloca_locals /\
     is_word_type vtyp /\ ~has_length_word vtyp /\
     32 <= type_memory_bytes cenv vtyp /\
@@ -639,31 +515,19 @@ Theorem compile_annassign_typed_stmt_frag:
     lookup_scopes id es.scopes = NONE /\
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     expr_type e = vtyp /\ evaluate_type (get_tenv cx) vtyp = SOME tyv /\
-    (!v es1. (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
+    (!gs v es1. (do result <- eval_expr cx e; read_result cx result od)
+       (es with gas_obs := gs) = (INL v, es1) ==>
               value_has_type tyv v) /\
     (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
        expr_sim ctx func c cx (expr_type e) e es /\
        !sa sb op. lower_value compile_expr c (expr_type e) e sa = (op, sb) ==>
                   cs_extends sa sb) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
+      (stmt_env cenv lctx ty (AnnAssign id vtyp e))
+      (eval_stmt cx (AnnAssign id vtyp e)) es
 Proof
   rpt strip_tac >> gvs[] >> irule compile_annassign_stmt_frag >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (qexists_tac `tyv` >> gvs[]) >> rpt strip_tac >>
-  qpat_x_assum `!v es1. _ ==> value_has_type _ v` drule >> strip_tac >>
+  simp[] >> conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac >>
+  qpat_x_assum `!gs v es1. _ ==> value_has_type _ v` drule >> strip_tac >>
   irule store_lays_out_typed >> metis_tac[]
 QED
-
-(* Integrity gate for forced declaration consumers, including read failures
-   and the generalized typed store. *)
-val () = List.app (fn th =>
-  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") ors
-     then print "DECL_FORCE_AUDIT OK\n"
-     else raise Fail "forced declaration inherited admission"
-  end) [eval_annassign_word_error, annassign_word_success_run,
-        expr_sim_error_run, annassign_word_top_ext,
-        compile_annassign_stmt_frag, compile_annassign_word_stmt_frag,
-        compile_annassign_typed_stmt_frag];

@@ -1,7 +1,7 @@
 Theory nonreentrantEntry
 Ancestors
   list rich_list words finite_map
-  context compileEnv emitHelper emitHelperProps exprLoweringProps
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   moduleLoweringProps fragExec fragExecMem instMemFrontier
   venomState venomInst venomExecSemantics
 
@@ -43,7 +43,9 @@ Theorem transient_lock_steps[local]:
   step_inst_base (mk_inst id TLOAD ops outs) s =
     exec_read1 tload (mk_inst id TLOAD ops outs) s /\
   step_inst_base (mk_inst id TSTORE ops outs) s =
-    exec_write2 tstore (mk_inst id TSTORE ops outs) s /\
+    (if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands ops s) then
+       Abort ExHalt_abort (halt_state (set_returndata [] s))
+     else exec_write2 tstore (mk_inst id TSTORE ops outs) s) /\
   step_inst_base (mk_inst id ASSERT [a] []) s =
     (case eval_operand a s of
        SOME c => if c = 0w then
@@ -51,22 +53,22 @@ Theorem transient_lock_steps[local]:
      | NONE => Error "undefined operand")
 Proof
   conj_tac
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[lock_opcode]) >>
+  >- (simp[step_inst_base_opcode_eqs, lock_opcode]) >>
   conj_tac
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[lock_opcode]) >>
+  >- (simp[step_inst_base_opcode_eqs, lock_opcode]) >>
   conj_tac
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[lock_opcode] >>
+  >- (simp[step_inst_base_opcode_eqs, lock_opcode] >>
       CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC) >>
   conj_tac
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[lock_opcode] >>
-      CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC) >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[lock_opcode] >>
+  >- (simp[step_inst_base_opcode_eqs, lock_opcode] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[mk_inst_def]) >>
+  simp[step_inst_base_opcode_eqs, lock_opcode] >>
   simp[mk_inst_def]
 QED
 
 Theorem transient_lock_run[local]:
   compile_nonreentrant_lock nkey T is_view st = ((), st') /\
-  fresh_vars_wrt st s0 ==>
+  fresh_vars_wrt st s0 /\ (~is_view ==> ~s0.vs_call_ctx.cc_static) ==>
   (?t. run_inst_seq (emitted_insts st st') s0 = OK t /\
        tload (n2w nkey) s0 <> 1w /\
        vars_pc_only (if is_view then s0 else tstore (n2w nkey) 1w s0) t /\
@@ -121,11 +123,12 @@ Proof
 QED
 
 (* Transient locks leave the memory and allocation frame intact. A view
-   checks the same lock but never acquires it. *)
+   checks the same lock but never acquires it, so only a non-view lock
+   needs a non-static frame for its TSTORE. *)
 Theorem compile_nonreentrant_lock_frag_mem:
   !ctx nkey is_view st st' s0.
     compile_nonreentrant_lock nkey T is_view st = ((), st') /\
-    fresh_vars_wrt st s0 ==>
+    fresh_vars_wrt st s0 /\ (~is_view ==> ~s0.vs_call_ctx.cc_static) ==>
     frag_exec_mem ctx st st' (\s. s = s0)
       (\t. tload (n2w nkey) s0 <> 1w /\
            vars_pc_only (if is_view then s0

@@ -398,6 +398,13 @@ Definition compile_assign_value_def:
                        (src_loc : data_location option)
                        (dst_ty : type) (src_ty : type)
                        (dynarray_info : (num # num) option) mem_size =
+    (* A bytestring source keeps its own, possibly narrower, buffer, so a
+       storage or transient target gets only the words it holds.
+       Immutable bytestring stores use their runtime length below.
+       Mirrors Python: stmt.py _store_complex_type with copy_typ
+       (vyperlang/vyper#5332). *)
+    let copy_size = (if is_bytestring_type dst_ty
+                     then type_memory_bytes cenv src_ty else mem_size) in
     case dst_loc of
       LocMemory =>
         if is_prim_word then emit_void MSTORE [dst_op; val_op]
@@ -437,13 +444,13 @@ Definition compile_assign_value_def:
                      Mirrors Python: vyper/codegen_venom/context.py:Context.copy_dynarray_to_storage *)
                   compile_dynarray_to_storage val_op' dst_op ew ems F
               | NONE =>
-                if mem_size ≤ 32 then
+                if copy_size ≤ 32 then
                   do loaded <- emit_op MLOAD [val_op'];
                      emit_void SSTORE [dst_op; loaded]
                   od
                 else
                   do compile_memory_to_storage val_op' dst_op
-                                               (mem_size DIV 32);
+                                               (copy_size DIV 32);
                      return ()
                   od)
         od
@@ -463,13 +470,13 @@ Definition compile_assign_value_def:
                 SOME (ew, ems) =>
                   compile_dynarray_to_storage val_op' dst_op ew ems T
               | NONE =>
-                if mem_size ≤ 32 then
+                if copy_size ≤ 32 then
                   do loaded <- emit_op MLOAD [val_op'];
                      emit_void TSTORE [dst_op; loaded]
                   od
                 else
                   do compile_memory_to_transient val_op' dst_op
-                                                 (mem_size DIV 32);
+                                                 (copy_size DIV 32);
                      return ()
                   od)
         od
@@ -485,6 +492,8 @@ Definition compile_assign_value_def:
               else return val_op);
            if is_prim_word then
              compile_imm_store_word cenv.ce_imm_alloca dst_op val_op'
+           else if is_bytestring_type dst_ty then
+             compile_store_immutable_bytestring cenv.ce_imm_alloca val_op' dst_op
            else if mem_size ≤ 32 then
              do loaded <- emit_op MLOAD [val_op'];
                 compile_imm_store_word cenv.ce_imm_alloca dst_op loaded
@@ -1034,11 +1043,12 @@ Definition compile_stmt_def:
        (case cenv.ce_return_pc of
           SOME (MemLoc rpc_off _) =>
             do rpc <- emit_op MLOAD [Lit (n2w rpc_off)];
-               compile_internal_return_from_env cenv ty (expr_type e)
-                 val_op rpc
+               compile_internal_return_from_env cenv ty
+                 (lowered_value_type cenv e) val_op rpc
             od
         | SOME (PtrVar rpc _) =>
-            compile_internal_return_from_env cenv ty (expr_type e) val_op rpc
+            compile_internal_return_from_env cenv ty (lowered_value_type cenv e)
+              val_op rpc
         | _ =>
             (* External return: ABI encoding + nonreentrant unlock.
                Mirrors Python: vyper/codegen_venom/stmt.py:_lower_external_return which unlocks
@@ -1046,7 +1056,7 @@ Definition compile_stmt_def:
                Normalize when ret_src_typ ≠ ret_typ for non-prim,
                non-bytestring-to-bytestring. Python lines 936-945. *)
             let is_prim = is_word_type ty in
-            let src_ty = expr_type e in
+            let src_ty = lowered_value_type cenv e in
             let needs_normalize =
               (¬is_prim ∧
                ¬(is_bytestring_type ty ∧ is_bytestring_type src_ty) ∧
@@ -1112,8 +1122,8 @@ Definition compile_stmt_def:
      Mirrors Python: vyper/codegen_venom/stmt.py:_lower_tuple_unpack
      First evaluate RHS, then assign each element to its target. *)
   compile_stmt cenv lctx ty (Assign (TupleTarget targets) e) =
-    (let src_ty = expr_type e in
-     do src_vv <- compile_expr cenv src_ty e;
+    (let src_ty = lowered_value_type cenv e in
+     do src_vv <- compile_expr cenv (expr_type e) e;
         src_op <- unwrap_value cenv src_vv;
         compile_tuple_unpack cenv src_ty
           (is_memory_view e ∧ vv_location src_vv = SOME LocMemory) targets src_op

@@ -4,7 +4,8 @@
    Metadata premises are the field-layout clauses of expr_sim_inv. *)
 Theory typedMemoryCopy
 Ancestors
-  context typedCopyDomain compileEnv emitHelper emitHelperProps structFieldsProps valueEncoding valueEncodingProps
+  exprSimProps loweringPosts
+  context typedCopyDomain compileEnv loweringStateRelDefs emitHelper emitHelperProps structFieldsProps valueEncoding valueEncodingDefs valueEncodingProps
   valueEncodingProofs valueCopy fragExec exprLoweringProps exprSimHyps
   vyperTypeSystem vyperTypeArgFits vyperValue vyperTyping
   venomExecSemantics venomState venomInst words list pair finite_map arithmetic vfmConstants
@@ -2118,7 +2119,7 @@ Proof
   strip_tac >>
   `stv = dtv` by metis_tac[typed_copy_static_widening] >>
   qpat_x_assum `stv = dtv` (SUBST_ALL_TAC o SYM) >>
-  simp[exprSimTheory.val_footprint_def, type_memory_size_def]
+  simp[loweringPostsTheory.val_footprint_def, type_memory_size_def]
 QED
 
 Theorem typed_copy_dynarray_mload_step:
@@ -2758,7 +2759,7 @@ Proof
           qexistsl_tac [`w2n sw + i * type_memory_size tv`,
                         `type_memory_size tv`, `t.vs_memory`] >>
           simp[] >> conj_tac
-          >- metis_tac[exprSimTheory.val_footprint_le] >>
+          >- metis_tac[exprSimPropsTheory.val_footprint_le] >>
           irule valueEncodingProofsTheory.mem_bytes_at_translated_window >>
           qexists_tac `N * type_memory_size tv` >>
           simp[mcopy_mem_bytes_at_same] >>
@@ -3239,7 +3240,7 @@ Proof
   metis_tac[typed_copy_memory_size]
 QED
 
-Theorem typed_copy_tuple_children_widen[local]:
+Theorem typed_copy_tuple_children_widen:
   !stys dtys dtvs.
     (stys = dtys \/ arg_types_fit stys dtys) /\
     OPT_MMAP (evaluate_type tenv) dtys = SOME dtvs ==>
@@ -3303,7 +3304,7 @@ Proof
                  decide_tac)) >> simp[]
 QED
 
-Theorem typed_copy_struct_values[local]:
+Theorem typed_copy_struct_values:
   !names tvs fields.
     LENGTH names = LENGTH tvs /\
     struct_has_type (ZIP (names,tvs)) fields /\
@@ -3318,7 +3319,7 @@ Proof
   qexists_tac `h'1::vs` >> simp[value_has_type_def, val_wf_def]
 QED
 
-Theorem typed_copy_struct_field_bytes[local]:
+Theorem typed_copy_struct_field_bytes:
   !fields tvs.
     OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs /\
     EVERY (\(fname,fty,sz). !tv. evaluate_type tenv fty = SOME tv ==>
@@ -3466,22 +3467,22 @@ Proof
       `(?cap. dtv = BaseTV (BytesT (Dynamic cap))) \/
        (?cap. dtv = BaseTV (StringT cap))` by metis_tac[] >>
       `val_footprint dtv v <= type_memory_size dtv` by
-        metis_tac[exprSimTheory.val_footprint_le] >>
+        metis_tac[exprSimPropsTheory.val_footprint_le] >>
       `val_footprint stv v <= type_memory_size stv` by
-        metis_tac[exprSimTheory.val_footprint_le] >>
+        metis_tac[exprSimPropsTheory.val_footprint_le] >>
       gvs[] >> Cases_on `v` >> gvs[value_has_type_def] >>
       (irule typed_copy_bytestring_frag_exact >>
        conj_tac >- simp[] >>
        goal_assum (drule_at (Pat `compile_store_bytestring _ _ _ = _`)) >>
        FIRST [rename1 `StringV str` >> qexistsl_tac [`STRLEN str`, `sw`],
               rename1 `BytesV bs` >> qexistsl_tac [`LENGTH bs`, `sw`]] >>
-       gvs[val_in_memory_def, exprSimTheory.val_footprint_def,
+  gvs[val_in_memory_def, loweringPostsTheory.val_footprint_def,
            type_memory_size_def] >>
        qmatch_goalsub_abbrev_tac `word_size len <= word_size capacity` >>
        `word_size len <= word_size capacity` by
          (irule exprSimHypsTheory.word_size_monotone >>
           simp[Abbr `len`]) >>
-       qspec_then `len` assume_tac exprSimTheory.le_word_size_mul >>
+       qspec_then `len` assume_tac exprSimPropsTheory.le_word_size_mul >>
        decide_tac)) >>
   Cases_on `dty`
   >~ [`BaseT bt`]

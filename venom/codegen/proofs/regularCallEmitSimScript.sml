@@ -626,6 +626,9 @@ Resume external_arranged_emit_sim[create]:
        ir_specific_operand_order_def, venom_to_evm_name_def] >>
   rename1 `exec_create inst vs value off sz NONE = _` >>
   rename1 `inst.inst_operands = [vop; oop; sop]` >>
+  (* the static-frame guard's undefined-operand case is impossible here *)
+  TRY (qpat_x_assum `eval_operands _ _ = NONE` mp_tac >>
+       simp[eval_operands_def] >> NO_TAC) >>
   `eval_operands [vop; oop; sop] vs = SOME [value; off; sz]` by
     simp[eval_operands_def] >>
   drule_at (Pat `eval_operands _ _ = _`) arranged_eval_operands_stack >>
@@ -655,6 +658,9 @@ Resume external_arranged_emit_sim[create2]:
        ir_specific_operand_order_def, venom_to_evm_name_def] >>
   rename1 `exec_create inst vs value off sz (SOME salt) = _` >>
   rename1 `inst.inst_operands = [vop; oop; sop; salt_op]` >>
+  (* the static-frame guard's undefined-operand case is impossible here *)
+  TRY (qpat_x_assum `eval_operands _ _ = NONE` mp_tac >>
+       simp[eval_operands_def] >> NO_TAC) >>
   `eval_operands [vop; oop; sop; salt_op] vs = SOME [value; off; sz; salt]` by
     simp[eval_operands_def] >>
   drule_at (Pat `eval_operands _ _ = _`) arranged_eval_operands_stack >>

@@ -1,9 +1,10 @@
 (* Fixed-array compiler boundary: dynamic length/check code is absent. *)
 Theory stmtSimForArrayParts
 Ancestors
+  loweringPosts stmtSimDefs stmtSimProps
   stmtSimForArray stmtSimForParts stmtLowering exprLowering compileEnv
   emitHelper finite_map vyperAST fragExec venomExecSemantics
-  venomExecProofs venomInst venomState context stmtSim loweringSlice
+  venomExecProofs venomInst venomState context  loweringSlice
   exprLoweringProps emitHelperProps list rich_list
 Libs
   monadsyntax

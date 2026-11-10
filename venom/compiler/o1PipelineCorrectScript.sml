@@ -5,8 +5,8 @@
  * the eleven contract theorems, one per pass run.  S5 follows from the
  * output's memory invariant and the generated plan's spill layout.
  * No compiler hook or final-unit check is changed to obtain output shape.
- * run_venom_pipeline_mem_inv is the output's memory invariant in lowered
- * form, which codegen consumes.
+ * S4 supplies the lowered output invariant at its chosen input oracle;
+ * S5 consumes that same output invariant for codegen.
  *)
 Theory o1PipelineCorrect
 Ancestors
@@ -48,97 +48,103 @@ QED
  * invariants from ConcretizeMemLoc on need for max_live_eom; and every
  * DLOAD/DLOADBYTES offset stays below 2^256 once added to the code
  * prefix's length (mem_inv dload_offset_ok), so LowerDload's code_end
- * offset does not wrap.
+ * offset does not wrap; and the alloca frontier stays below 2^256 with
+ * 32 bytes to spare per DLOAD (mem_inv dload_headroom_ok), so LowerDload's
+ * new scratch sites do not wrap either.
  * The runs match up to any well-formed set D of dead bytes (dead_wf):
  * ConcretizeMemLoc moves buffers, so bytes nothing reads may differ.
- * The source's other invariant rows (o1_src_inv) are premises too: no
- * function has an eom, its pointers follow the discipline above a
- * reserved fixed region, and what it writes out or returns reads only
- * bytes in D (taint_within).  No DALLOCA follows from o1_source_unit_ok. *)
+ * The source's static invariant rows remain premises: no function has
+ * an eom, and the fixed region is reserved. Raw memory safety, pointer
+ * discipline, taint bounds and DLOAD bounds guard the reconstructed
+ * input oracle together. No DALLOCA follows from o1_source_unit_ok. *)
 Theorem run_venom_pipeline_correct:
-  !D lo rpolicy unit out vs.
+  !D lo rpolicy unit out vs_out.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_entry_no_params unit /\
-    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs /\
+    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
-    raw_unit_memory_ok unit.cu_context vs /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-    fixed_region_reserved lo unit.cu_context /\
-    ptr_discipline lo unit.cu_context vs /\
-    taint_within D unit.cu_context vs /\
-    mem_inv dload_offset_ok unit.cu_context vs /\ dead_wf D
+    fixed_region_reserved lo unit.cu_context /\ dead_wf D
     ==>
-    ctx_sim D unit.cu_context out.po_unit.cu_context vs vs
+    ?vs_in. gas_variant vs_in vs_out /\
+      (raw_unit_memory_ok unit.cu_context vs_in /\
+       ptr_discipline lo unit.cu_context vs_in /\
+       taint_within D unit.cu_context vs_in /\
+       mem_inv dload_offset_ok unit.cu_context vs_in /\
+       mem_inv dload_headroom_ok unit.cu_context vs_in ==>
+       ctx_sim D unit.cu_context out.po_unit.cu_context vs_in vs_out /\
+       o1_lowered_inv out.po_unit.cu_context vs_out)
 Proof
   rpt strip_tac >>
   `fmp_free_ctx unit.cu_context` by (irule source_fmp_free >> fs[]) >>
-  `o1_src_inv D unit.cu_context vs` by
-    (fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv,
-        o1_source_unit_ok_no_dalloca] >> metis_tac[]) >>
+  `!vi. raw_unit_memory_ok unit.cu_context vi /\
+        ptr_discipline lo unit.cu_context vi /\
+        taint_within D unit.cu_context vi /\
+        mem_inv dload_offset_ok unit.cu_context vi /\
+        mem_inv dload_headroom_ok unit.cu_context vi ==>
+        o1_pre_walk_inv D unit.cu_context vi` by
+    (rpt strip_tac >>
+     `o1_src_inv D unit.cu_context vi` by
+       (fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv,
+           o1_source_unit_ok_no_dalloca] >> metis_tac[]) >>
+     irule o1_source_pre_walk_inv >> simp[]) >>
   fs[o1_pipeline_def] >>
-  drule_all o1_source_pre_walk_inv >> strip_tac >>
   drule_all o1_pipeline_stage_facts >> strip_tac >> metis_tac[]
+QED
+
+Theorem o1_lowered_inv_fixed_pointer[local]:
+  o1_lowered_inv C vs ==>
+  ?eom. max_live_eom C = SOME eom /\
+        mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp)) C vs
+Proof
+  strip_tac >> fs[o1_lowered_inv_def] >>
+  fs[mem_inv_raw_reachable] >>
+  rpt strip_tac >> first_x_assum drule >>
+  drule raw_reachable_initial_fmp >> simp[lowered_mem_fact_def]
 QED
 
 (* The output's memory invariant: every access is static (below some
  * layout end) or dynamic (at or above the initial frame pointer). *)
 Theorem run_venom_pipeline_mem_inv:
-  !lo rpolicy unit out vs.
+  !lo rpolicy unit out vs_out.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_entry_no_params unit /\
-    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs /\
+    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
-    raw_unit_memory_ok unit.cu_context vs /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-    fixed_region_reserved lo unit.cu_context /\
-    ptr_discipline lo unit.cu_context vs /\
-    mem_inv dload_offset_ok unit.cu_context vs
+    fixed_region_reserved lo unit.cu_context
     ==>
-    ?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
-          mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))
-            out.po_unit.cu_context vs
+    ?vs_in. gas_variant vs_in vs_out /\
+      (raw_unit_memory_ok unit.cu_context vs_in /\
+       ptr_discipline lo unit.cu_context vs_in /\
+       mem_inv dload_offset_ok unit.cu_context vs_in /\
+       mem_inv dload_headroom_ok unit.cu_context vs_in ==>
+       ?eom. max_live_eom out.po_unit.cu_context = SOME eom /\
+             mem_inv (lowered_mem_ok eom (w2n vs_out.vs_initial_fmp))
+               out.po_unit.cu_context vs_out)
 Proof
   rpt strip_tac >>
-  (* Any well-formed dead-byte set will do; take every byte, which bounds
-     any taint. *)
   qabbrev_tac `D = <| d_stor := K (K UNIV); d_trans := K (K UNIV);
                       d_imm := K UNIV; d_ret := K UNIV |>` >>
-  `dead_wf D /\ taint_within D unit.cu_context vs` by
-    simp[Abbr `D`, dead_wf_def, taint_within_def] >>
-  `fmp_free_ctx unit.cu_context` by (irule source_fmp_free >> fs[]) >>
-  `o1_src_inv D unit.cu_context vs` by
-    (fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv,
-        o1_source_unit_ok_no_dalloca] >> metis_tac[]) >>
-  fs[o1_pipeline_def] >>
-  drule_all o1_source_pre_walk_inv >> strip_tac >>
-  drule_all o1_pipeline_stage_facts >> strip_tac >>
-  first_x_assum (qspecl_then [`D`, `vs`] mp_tac) >> simp[] >> strip_tac >>
-  fs[o1_lowered_inv_def, mem_inv_raw_reachable] >>
-  rpt strip_tac >> first_x_assum drule >>
-  drule raw_reachable_initial_fmp >> simp[lowered_mem_fact_def]
+  `dead_wf D` by simp[Abbr `D`, dead_wf_def] >>
+  drule_all run_venom_pipeline_correct >> strip_tac >>
+  qexists_tac `vs_in` >> simp[] >> strip_tac >>
+  `taint_within D unit.cu_context vs_in` by
+    simp[Abbr `D`, taint_within_def] >>
+  irule o1_lowered_inv_fixed_pointer >> metis_tac[]
 QED
 
 (* ===== S5: output codegen memory obligations ===== *)
 
-(* S5 -- Milestone 5.  The output's memory invariant
- * (run_venom_pipeline_mem_inv, so it takes that theorem's premises), the
- * plan's spill regions inside [max_live_eom, cp_initial_fmp)
- * (generate_context_plan_spill_gap) and the step write footprint, which
- * holds for every context (step_write_footprint_holds), give codegen its
- * memory obligations with raw_reachable vs as the invariant
- * (mem_inv_codegen_obligations). *)
+(* S5 -- Milestone 5. The output row supplied by S4, the plan's spill
+ * regions inside [max_live_eom, cp_initial_fmp), and the step write
+ * footprint give codegen its memory obligations with raw_reachable vs
+ * as the invariant. This consumes S4's output row without choosing
+ * another input oracle. *)
 Theorem o1_pipeline_memory_obligations:
-  !lo rpolicy unit out cp vs.
-    o1_pipeline rpolicy unit = SOME out /\
+  !out cp vs.
     generate_context_plan out.po_unit.cu_context = SOME cp /\
-    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
-    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs /\
-    reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
-    raw_unit_memory_ok unit.cu_context vs /\
-    EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-    fixed_region_reserved lo unit.cu_context /\
-    ptr_discipline lo unit.cu_context vs /\
-    mem_inv dload_offset_ok unit.cu_context vs /\
+    o1_lowered_inv out.po_unit.cu_context vs /\
     vs.vs_initial_fmp = n2w cp.cp_initial_fmp
     ==>
     ?Inv. codegen_memory_obligations Inv out.po_unit.cu_context cp /\
@@ -146,7 +152,7 @@ Theorem o1_pipeline_memory_obligations:
 Proof
   rpt strip_tac >>
   drule generate_context_plan_spill_gap >> strip_tac >>
-  drule_all run_venom_pipeline_mem_inv >> strip_tac >>
+  drule o1_lowered_inv_fixed_pointer >> strip_tac >>
   gvs[w2n_n2w, arithmeticTheory.LESS_MOD] >>
   qexists_tac `raw_reachable vs` >>
   metis_tac[mem_inv_codegen_obligations, step_write_footprint_holds]
@@ -155,12 +161,14 @@ QED
 (* ===== S6: output shape without new compiler checks ===== *)
 
 (* S6 -- Milestone 3, from the per-pass contracts.
- * Premise added from the original admission: unit_entry_no_params, as
- * S4. *)
+ * Premises added from the original admission: unit_entry_no_params,
+ * unit_defs_reach_uses and unit_fmp_unsealed, as S4: the walk's runs
+ * read their function rows (o1_fn_row), which start from these. *)
 Theorem run_venom_pipeline_output_shape:
   !rpolicy unit out.
     o1_pipeline rpolicy unit = SOME out /\ o1_source_unit_ok unit /\
-    unit_entry_no_params unit
+    unit_entry_no_params unit /\ unit_defs_reach_uses unit /\
+    unit_fmp_unsealed unit
     ==> unit_shape_ok out.po_unit
 Proof
   rpt strip_tac >> fs[o1_pipeline_def] >>

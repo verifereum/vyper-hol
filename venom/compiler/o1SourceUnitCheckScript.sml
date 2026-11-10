@@ -2,8 +2,8 @@
  * Computable sufficient check for o1_source_unit_ok on concrete units.
  * TOP-LEVEL: o1_source_unit_check, o1_source_unit_check_sound.
  * Helpers: copy_phi_closed is a closure certificate for copy_phi_var, and
- *   copy_phi_vars iterates the closure rules from the seeds; gas_use_check /
- *   retpc_use_check replace the existentials in gas_use_ok / retpc_use_ok.
+ *   copy_phi_vars iterates the closure rules from the seeds; retpc_use_check
+ *   replaces the existential in retpc_use_ok.
  * EVAL cannot decide o1_source_unit_ok itself: entry_fn_first is existential
  * and copy_phi_var is inductive.
  *)
@@ -76,15 +76,6 @@ End
 
 (* ===== Opaque uses ===== *)
 
-Definition gas_use_check_def:
-  gas_use_check inst x <=>
-    inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
-    ((inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
-     case inst.inst_operands of
-       [] => F
-     | op :: rest => op = Var x /\ ~MEM (Var x) rest)
-End
-
 Definition retpc_use_check_def:
   retpc_use_check inst x <=>
     inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
@@ -92,12 +83,6 @@ Definition retpc_use_check_def:
      LAST inst.inst_operands = Var x /\
      ~MEM (Var x) (FRONT inst.inst_operands))
 End
-
-Theorem gas_use_check_sound:
-  gas_use_check inst x ==> gas_use_ok inst x
-Proof
-  rw[gas_use_check_def, gas_use_ok_def] >> Cases_on `inst.inst_operands` >> gvs[]
-QED
 
 Theorem retpc_use_check_sound:
   retpc_use_check inst x ==> retpc_use_ok inst x
@@ -109,14 +94,11 @@ QED
 
 Definition opaque_use_check_def:
   opaque_use_check fn <=>
-    let gas = copy_phi_vars GAS fn;
-        retpc = copy_phi_vars RETPC_PARAM fn in
-    copy_phi_closed GAS fn gas /\ copy_phi_closed RETPC_PARAM fn retpc /\
+    let retpc = copy_phi_vars RETPC_PARAM fn in
+    copy_phi_closed RETPC_PARAM fn retpc /\
     EVERY (\inst. EVERY (\op.
       case op of
-        Var x =>
-          (MEM x gas ==> gas_use_check inst x) /\
-          (MEM x retpc ==> retpc_use_check inst x)
+        Var x => (MEM x retpc ==> retpc_use_check inst x)
       | _ => T)
       inst.inst_operands) (fn_insts fn)
 End
@@ -124,10 +106,10 @@ End
 Theorem opaque_use_check_sound:
   opaque_use_check fn ==> opaque_use_ok fn
 Proof
-  rw[opaque_use_check_def, opaque_use_ok_def, gas_var_def, retpc_var_def,
+  rw[opaque_use_check_def, opaque_use_ok_def, retpc_var_def,
      EVERY_MEM, LET_THM] >>
   first_x_assum drule >> disch_then drule >> simp[] >>
-  metis_tac[copy_phi_closed_sound, gas_use_check_sound, retpc_use_check_sound]
+  metis_tac[copy_phi_closed_sound, retpc_use_check_sound]
 QED
 
 (* A RET's last operand must be a RETPC_PARAM output of the entry block

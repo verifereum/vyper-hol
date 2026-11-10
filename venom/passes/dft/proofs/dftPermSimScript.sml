@@ -66,28 +66,16 @@ Definition bi_independent_def:
     ~is_terminator i1.inst_opcode /\ ~is_terminator i2.inst_opcode /\
     ~is_alloca_op i1.inst_opcode /\ ~is_alloca_op i2.inst_opcode /\
     ~is_ext_call_op i1.inst_opcode /\ ~is_ext_call_op i2.inst_opcode /\
-    i1.inst_opcode <> INVOKE /\ i2.inst_opcode <> INVOKE
+    i1.inst_opcode <> INVOKE /\ i2.inst_opcode <> INVOKE /\
+    ~gas_pair i1.inst_opcode i2.inst_opcode
 End
 
-Triviality bi_independent_sym:
+Theorem bi_independent_sym:
   !i1 i2. bi_independent i1 i2 <=> bi_independent i2 i1
 Proof
-  rw[bi_independent_def, effects_independent_def, abort_compatible_def] >>
+  rw[bi_independent_def, effects_independent_def, abort_compatible_def,
+     gas_pair_def] >>
   metis_tac[DISJOINT_SYM]
-QED
-
-(* bi_independent implies the preconditions of effects_independent_commute *)
-Triviality bi_independent_commute_pre:
-  !i1 i2.
-    bi_independent i1 i2 ==>
-    DISJOINT (set (inst_defs i1)) (set (inst_uses i2)) /\
-    DISJOINT (set (inst_defs i2)) (set (inst_uses i1)) /\
-    DISJOINT (set (inst_defs i1)) (set (inst_defs i2)) /\
-    effects_independent i1.inst_opcode i2.inst_opcode /\
-    ~is_terminator i1.inst_opcode /\ ~is_terminator i2.inst_opcode /\
-    ~is_alloca_op i1.inst_opcode /\ ~is_alloca_op i2.inst_opcode
-Proof
-  simp[bi_independent_def]
 QED
 
 (* ===== Extended bilateral independence (allows INVOKE) ===== *)
@@ -105,14 +93,15 @@ Definition ext_bi_independent_def:
     abort_compatible i1.inst_opcode i2.inst_opcode /\
     ~is_terminator i1.inst_opcode /\ ~is_terminator i2.inst_opcode /\
     ~is_alloca_op i1.inst_opcode /\ ~is_alloca_op i2.inst_opcode /\
-    ~is_ext_call_op i1.inst_opcode /\ ~is_ext_call_op i2.inst_opcode
+    ~is_ext_call_op i1.inst_opcode /\ ~is_ext_call_op i2.inst_opcode /\
+    ~gas_pair i1.inst_opcode i2.inst_opcode
 End
 
 (* Extended bilateral independence is symmetric. *)
 Theorem ext_bi_independent_sym:
   !i1 i2. ext_bi_independent i1 i2 <=> ext_bi_independent i2 i1
 Proof
-  rw[ext_bi_independent_def, effects_independent_def,
+  rw[ext_bi_independent_def, effects_independent_def, gas_pair_def,
      abort_compatible_def] >>
   metis_tac[DISJOINT_SYM]
 QED
@@ -257,25 +246,6 @@ Proof
   gvs[inst_defs_def, inst_uses_def]
 QED
 
-(* Adjacent swap in run_insts context *)
-Triviality run_insts_swap_adjacent_ok:
-  !fuel ctx prefix a b suffix s s_result.
-    bi_independent a b /\
-    run_insts fuel ctx (prefix ++ [a; b] ++ suffix) s = OK s_result ==>
-    run_insts fuel ctx (prefix ++ [b; a] ++ suffix) s = OK s_result
-Proof
-  rpt strip_tac >>
-  gvs[run_insts_append] >>
-  Cases_on `run_insts fuel ctx prefix s` >>
-  gvs[run_insts_def, AllCaseEqs()] >>
-  Cases_on `step_inst fuel ctx a v` >>
-  gvs[run_insts_def, AllCaseEqs()] >>
-  Cases_on `step_inst fuel ctx b v'` >>
-  gvs[run_insts_def, AllCaseEqs()] >>
-  drule_all step_swap_ok >> strip_tac >>
-  simp[]
-QED
-
 (* If every element in prefix is bi_independent with x, bubble x
    from after the prefix to the front, preserving the OK result. *)
 Theorem run_insts_bubble_to_front:
@@ -352,7 +322,7 @@ QED
 Triviality pure_step_is_update_var:
   !fuel ctx b s sb.
     step_inst fuel ctx b s = OK sb /\
-    b.inst_opcode <> INVOKE /\
+    b.inst_opcode <> INVOKE /\ b.inst_opcode <> GAS /\
     ~is_terminator b.inst_opcode /\
     ~is_alloca_op b.inst_opcode /\
     ~is_ext_call_op b.inst_opcode /\
@@ -426,6 +396,9 @@ Proof
       step_preserves_params >> simp[]) >>
   `a.inst_opcode = RETURNDATACOPY ==> s.vs_returndata = sb.vs_returndata` by (
     strip_tac >> gvs[read_effects_def]) >>
+  `s.vs_call_ctx = sb.vs_call_ctx` by (
+    qspecl_then [`fuel`, `ctx`, `b`, `s`, `sb`] mp_tac
+      step_preserves_call_ctx >> simp[]) >>
   simp[]
 QED
 
@@ -466,6 +439,9 @@ Proof
   `sa.vs_params = s.vs_params` by
     (qspecl_then [`fuel`, `ctx`, `a`, `s`, `sa`] mp_tac
        step_preserves_params >> simp[]) >>
+  `sa.vs_call_ctx = s.vs_call_ctx` by
+    (qspecl_then [`fuel`, `ctx`, `a`, `s`, `sa`] mp_tac
+       step_preserves_call_ctx >> simp[]) >>
   simp[] >>
   (* RETURNDATACOPY: vs_returndata preserved *)
   strip_tac >>
@@ -520,7 +496,7 @@ Triviality step_ok_transfer_forward_ext_invoke:
     DISJOINT (set b.inst_outputs) (set (operand_vars a.inst_operands)) /\
     DISJOINT (set (inst_defs a)) (set (inst_defs b)) /\
     effects_independent a.inst_opcode b.inst_opcode /\
-    inst_wf b ==>
+    inst_wf b /\ b.inst_opcode <> GAS ==>
     ?sba. step_inst fuel ctx a sb = OK sba
 Proof
   rpt strip_tac >>
@@ -587,12 +563,13 @@ Triviality step_ok_transfer_forward_ext:
     DISJOINT (set b.inst_outputs) (set (operand_vars a.inst_operands)) /\
     DISJOINT (set (inst_defs a)) (set (inst_defs b)) /\
     effects_independent a.inst_opcode b.inst_opcode /\
-    inst_wf b ==>
+    inst_wf b /\ ~gas_pair a.inst_opcode b.inst_opcode ==>
     ?sba. step_inst fuel ctx a sb = OK sba
 Proof
   rpt strip_tac >>
   Cases_on `a.inst_opcode = INVOKE`
-  >- (irule step_ok_transfer_forward_ext_invoke >> metis_tac[])
+  >- (`b.inst_opcode <> GAS` by gvs[gas_pair_def] >>
+      irule step_ok_transfer_forward_ext_invoke >> metis_tac[])
   >> (irule step_ok_transfer_forward_ext_non_invoke >> metis_tac[])
 QED
 
@@ -667,7 +644,7 @@ Triviality step_swap_ok_ext_invoke_fold:
     MAP FST pairs = a.inst_outputs /\
     step_inst_base a s =
       OK (FOLDL (\st (out,value). update_var out value st) s pairs) /\
-    a.inst_opcode <> INVOKE /\
+    a.inst_opcode <> INVOKE /\ a.inst_opcode <> GAS /\
     write_effects a.inst_opcode = {} /\
     read_effects a.inst_opcode = {} /\
     inst_wf a /\ inst_wf b /\
@@ -706,7 +683,7 @@ Proof
   qexistsl_tac
     [`ctx`, `fuel`, `a`, `b`, `s`,
      `FOLDL (\st (out,value). update_var out value st) s pairs`, `sb`] >>
-  gvs[]
+  gvs[gas_pair_def]
 QED
 
 (* Helper: INVOKE b case. a must be pure (invoke_implies_pure). *)
@@ -724,6 +701,7 @@ Proof
   `effects_independent INVOKE a.inst_opcode` by
     metis_tac[effects_independent_sym] >>
   drule invoke_implies_pure >> strip_tac >>
+  `a.inst_opcode <> GAS` by gvs[gas_pair_def] >>
   `step_inst_base a s = OK sa` by gvs[step_inst_non_invoke] >>
   qspecl_then [`a`, `s`, `sa`] mp_tac pure_step_structure >>
   simp[] >> strip_tac >> gvs[] >>
@@ -747,25 +725,6 @@ Proof
   Cases_on `b.inst_opcode = INVOKE`
   >- (drule_all step_swap_ok_ext_invoke >> simp[])
   >> (drule_all step_swap_ok_ext_non_invoke >> simp[])
-QED
-
-(* Adjacent swap in run_insts context, ext version *)
-Triviality run_insts_swap_adjacent_ok_ext:
-  !fuel ctx prefix a b suffix s s_result.
-    ext_bi_independent a b /\ inst_wf a /\ inst_wf b /\
-    run_insts fuel ctx (prefix ++ [a; b] ++ suffix) s = OK s_result ==>
-    run_insts fuel ctx (prefix ++ [b; a] ++ suffix) s = OK s_result
-Proof
-  rpt strip_tac >>
-  gvs[run_insts_append] >>
-  Cases_on `run_insts fuel ctx prefix s` >>
-  gvs[run_insts_def, AllCaseEqs()] >>
-  Cases_on `step_inst fuel ctx a v` >>
-  gvs[run_insts_def, AllCaseEqs()] >>
-  Cases_on `step_inst fuel ctx b v'` >>
-  gvs[run_insts_def, AllCaseEqs()] >>
-  drule_all step_swap_ok_ext >> strip_tac >>
-  simp[]
 QED
 
 (* If every element in prefix is ext-bi-independent with x and all are
@@ -800,17 +759,6 @@ Definition pairwise_ext_bi_independent_def:
   pairwise_ext_bi_independent (x :: rest) =
     (EVERY (ext_bi_independent x) rest /\ pairwise_ext_bi_independent rest)
 End
-
-Triviality pairwise_ext_bi_independent_perm:
-  !l1 l2. PERM l1 l2 ==>
-    (pairwise_ext_bi_independent l1 ==> pairwise_ext_bi_independent l2) /\
-    (!x. EVERY (ext_bi_independent x) l1 ==> EVERY (ext_bi_independent x) l2)
-Proof
-  ho_match_mp_tac PERM_IND >>
-  rw[pairwise_ext_bi_independent_def, EVERY_DEF] >>
-  gvs[pairwise_ext_bi_independent_def, EVERY_DEF] >>
-  metis_tac[ext_bi_independent_sym]
-QED
 
 Triviality run_insts_perm_ok_ext_strong:
   !l1 l2.
@@ -862,40 +810,6 @@ Definition pairwise_bi_independent_def:
   pairwise_bi_independent (x :: rest) =
     (EVERY (bi_independent x) rest /\ pairwise_bi_independent rest)
 End
-
-Triviality pairwise_bi_independent_cons:
-  !x rest.
-    pairwise_bi_independent (x :: rest) <=>
-    EVERY (bi_independent x) rest /\ pairwise_bi_independent rest
-Proof
-  simp[pairwise_bi_independent_def]
-QED
-
-Triviality pairwise_bi_independent_swap:
-  !x y rest.
-    pairwise_bi_independent (x :: y :: rest) ==>
-    pairwise_bi_independent (y :: x :: rest)
-Proof
-  rw[pairwise_bi_independent_def, EVERY_MEM] >>
-  metis_tac[bi_independent_sym]
-QED
-
-(* Key: pairwise bi-independence is preserved by PERM.
-   Proved by PERM induction on the strengthened property
-   that also preserves EVERY (bi_independent x) for all x. *)
-Triviality pairwise_bi_independent_perm:
-  !l1 l2. PERM l1 l2 ==>
-    pairwise_bi_independent l1 ==> pairwise_bi_independent l2
-Proof
-  `!l1 l2. PERM l1 l2 ==>
-     (pairwise_bi_independent l1 ==> pairwise_bi_independent l2) /\
-     (!x. EVERY (bi_independent x) l1 ==> EVERY (bi_independent x) l2)`
-    suffices_by metis_tac[] >>
-  ho_match_mp_tac PERM_IND >> rpt conj_tac >>
-  simp[pairwise_bi_independent_def, EVERY_DEF] >>
-  rpt strip_tac >> gvs[] >>
-  metis_tac[bi_independent_sym]
-QED
 
 (* ===== Main OK-case permutation theorem ===== *)
 
@@ -1274,7 +1188,7 @@ val nfnt_clauses = map (fn op_tm =>
 
 val exec_helper_defs = [
   exec_pure1_def, exec_pure2_def, exec_pure3_def,
-  exec_read0_def, exec_read1_def, exec_write2_def,
+  exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
   exec_alloca_def, exec_ext_call_def, exec_create_def,
   exec_delegatecall_def, LET_THM, AllCaseEqs()];
 

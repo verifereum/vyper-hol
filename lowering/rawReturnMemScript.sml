@@ -1,8 +1,22 @@
 Theory rawReturnMem
 Ancestors
   rawReturnHalt fragExec fragExecMem memSafeRun instMemFrontier
-  allocaFootprint loweringHalt compileEnv stmtLowering context venomState
+  allocaFootprint loweringHalt compileEnv loweringStateRelDefs stmtLowering context venomState
   venomInst venomExecSemantics emitHelper emitHelperProps
+
+(* An instruction that aborts ends the run, so the run is memory safe
+   when that instruction is. *)
+Theorem mem_safe_run_abort_step[local]:
+  !fuel ctx fn s bb inst a t.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    step_inst fuel ctx inst s = Abort a t /\
+    mem_safe_step fuel ctx inst s ==>
+    mem_safe_run fuel ctx fn s
+Proof
+  rw[mem_safe_run_def] >>
+  simp[Once mem_safe_block_def, Once exec_block_def]
+QED
 
 Theorem compile_external_return_raw_mem_parts[local]:
   !op prim ei msz nr nkey ut iv st x st'.
@@ -113,11 +127,30 @@ Proof
   >- (qpat_x_assum `!i. _` (fn th =>
         map_every (fn n => mp_tac (Q.SPEC n th)) [`0`, `1`, `2`, `3`]) >>
       simp[] >> rpt strip_tac >>
+      (* in a static frame the unlock's TSTORE aborts at once *)
+      Cases_on `s.vs_call_ctx.cc_static`
+      >- (`step_inst fuel ctx (mk_inst st.cs_next_id TSTORE
+             [Lit (n2w nkey); Lit 0w] []) s =
+           Abort ExHalt_abort (halt_state (set_returndata [] s))` by
+            (simp[step_inst_non_invoke] >>
+             qspecl_then [`Lit (n2w nkey)`, `Lit 0w`, `n2w nkey`, `0w`,
+                          `st.cs_next_id`, `s`] mp_tac step_TSTORE >>
+             gvs[eval_operand_def]) >>
+          irule (Q.SPECL [`fuel`, `ctx`, `fn`, `s`, `bb`,
+            `mk_inst st.cs_next_id TSTORE [Lit (n2w nkey); Lit 0w] []`,
+            `ExHalt_abort`, `halt_state (set_returndata [] s)`]
+            mem_safe_run_abort_step) >>
+          gvs[mem_safe_step_non_invoke, mk_inst_def] >>
+          qexistsl [`nkey`, `st`] >> gvs[] >>
+          irule below_frontier_no_ranges >> simp[]) >>
       qabbrev_tac `u = tstore (n2w nkey) 0w s with
                          vs_inst_idx := s.vs_inst_idx + 1` >>
       `step_inst fuel ctx (mk_inst st.cs_next_id TSTORE
           [Lit (n2w nkey); Lit 0w] []) s = OK (tstore (n2w nkey) 0w s)` by
-        (simp[step_inst_non_invoke] >> irule step_TSTORE >> simp[eval_operand_def]) >>
+        (simp[step_inst_non_invoke] >>
+         qspecl_then [`Lit (n2w nkey)`, `Lit 0w`, `n2w nkey`, `0w`,
+                      `st.cs_next_id`, `s`] mp_tac step_TSTORE >>
+         gvs[eval_operand_def]) >>
       `inst_mem_below_frontier (mk_inst st.cs_next_id TSTORE
           [Lit (n2w nkey); Lit 0w] []) s` by
         (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
@@ -145,6 +178,7 @@ Theorem compile_external_return_raw_unlock_frag_mem:
     compile_external_return (SOME op) prim T ei msz nr nkey ut iv st =
       (x, st') /\
     (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
     (!y. op = Var y ==> not_fresh_at st y) /\
     LENGTH bs < dimword (:256) /\
     (!s. P s ==>

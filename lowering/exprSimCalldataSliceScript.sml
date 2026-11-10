@@ -16,24 +16,34 @@
  * Also exported: bytes_buffer_write_encoding, bytes_buffer_write_state_rel,
  *   bytes_buffer_write_frame (a bytes value written into a fresh buffer);
  *   mstore_equal_memory, write_memory_with_expansion_equal_memory;
- *   vv_at_start_mono, vv_post_prefix_frame.
+ *   vv_at_start_mono, vv_post_prefix_frame;
+ *   compile_unary_builtin_rel_vv_sim (a unary builtin whose counted suffix
+ *   also has the entry state relation).
  *)
 
 Theory exprSimCalldataSlice
 Ancestors
+  exprSimVVFrame
+  exprSimSource
+  exprSimUnwrapProps
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
+  loweringPosts
   exprSimAlloc
   allocLimits
-  list fragExec loweringSlice builtinBytes exprSim exprSimHyps exprBopLowering
+  list fragExec loweringSlice builtinBytes  exprSimHyps exprBopLowering
   exprSimOperators vyperEvalExprPreservesScopesDom
-  exprLowering exprLoweringProps builtinSimple emitHelper compileEnv
-  valueEncoding venomExecSemantics venomInst venomState vyperAST
+  exprLowering exprLoweringProps builtinSimple emitHelper compileEnv loweringStateRelDefs
+  valueEncoding valueEncodingDefs venomExecSemantics venomInst venomState vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeSystem
   vyperTypeInvariants vyperTyping vyperValueOperation vyperValue
   exprSimWordBuiltins exprSimWordArgs emitHelperProps freshWrites
   exprSimPrecompiles exprSimHash valueEncodingProps valueCopy exprSimLiteralBuffer
   loweringHalt valueTypingMemoryProps
+  gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext fragGasPath
 
-Theorem calldata_slice_typing[local]:
+Theorem calldata_slice_typing:
   well_typed_expr env (Builtin ann (CalldataSlice n) args) ==>
   ?e. args = [e] /\ expr_type e = BaseT (UintT 256) /\
       ann = BaseT (BytesT (Dynamic n)) /\ 0 < n /\ n < 2 ** 256
@@ -43,7 +53,7 @@ Proof
   rename1 `MAP expr_type rest = []` >> Cases_on `rest` >> gvs[]
 QED
 
-Theorem names_builtin_calldata_slice[local]:
+Theorem names_builtin_calldata_slice:
   !args. ~names_builtin (CalldataSlice n) args
 Proof
   `!bt args. names_builtin bt args ==> bt <> CalldataSlice n` suffices_by
@@ -51,7 +61,7 @@ Proof
   ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]
 QED
 
-Theorem compile_calldata_slice_parts[local]:
+Theorem compile_calldata_slice_parts:
   !cenv ty ann n e sa.
     compile_expr cenv ty (Builtin ann (CalldataSlice n) [e]) sa =
     let (start_op, sb) = lower_value compile_expr cenv (expr_type e) e sa in
@@ -67,7 +77,7 @@ Proof
   simp[lower_value_child_call, vyperASTTheory.expr_size_def, list_size_def]
 QED
 
-Theorem evaluate_calldata_slice_uint[local]:
+Theorem evaluate_calldata_slice_uint:
   evaluate_calldata_slice bs (IntV &start) n =
   if n = 0 \/ 2 ** 256 <= start + n then
     INR (RuntimeError "calldata slice overflow")
@@ -79,7 +89,7 @@ Proof
        compatible_bound_def]
 QED
 
-Theorem eval_calldata_slice_cases[local]:
+Theorem eval_calldata_slice_cases:
   eval_expr cx (Builtin ann (CalldataSlice n) [e]) es = (res, es') ==>
   (?exc. eval_exprs cx [e] es = (INR exc, es') /\ res = INR exc) \/
   ?vs. eval_exprs cx [e] es = (INL vs, es') /\
@@ -104,7 +114,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem slice_bounds_mod[local]:
+Theorem slice_bounds_mod:
   a < modulus /\ n < modulus /\ limit < modulus ==>
   ((a + n) MOD modulus < a \/ limit < (a + n) MOD modulus <=>
    modulus <= a + n \/ limit < a + n)
@@ -117,7 +127,7 @@ Proof
   simp[] >> decide_tac
 QED
 
-Theorem slice_bounds_word[local]:
+Theorem slice_bounds_word:
   a < 2 ** 256 /\ n < 2 ** 256 /\ limit < 2 ** 256 ==>
   (((n2w a + n2w n):bytes32) <+ n2w a \/
     (n2w limit:bytes32) <+ n2w a + n2w n <=>
@@ -129,7 +139,7 @@ Proof
   irule slice_bounds_mod >> simp[]
 QED
 
-Theorem slice_bounds_shape[local]:
+Theorem slice_bounds_shape:
   compile_assert_slice_bounds a n limit sa = ((), sb) ==>
   sb.cs_next_var = sa.cs_next_var + 5 /\
   sb.cs_next_id = sa.cs_next_id + 6 /\
@@ -161,7 +171,7 @@ Proof
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1, same_blocks_def]
 QED
 
-Theorem slice_bounds_run[local]:
+Theorem slice_bounds_run:
   compile_assert_slice_bounds a n limit sa = ((), sb) /\
   eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
   eval_operand limit s = SOME wl /\
@@ -197,7 +207,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem slice_bounds_run_frame[local]:
+Theorem slice_bounds_run_frame:
   compile_assert_slice_bounds a n limit sa = ((), sb) /\
   eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
   eval_operand limit s = SOME wl /\
@@ -226,7 +236,7 @@ Proof
   simp[mstore_mem_bytes_at_disjoint, hash_write_memory_read_self]
 QED
 
-Theorem calldata_slice_no_padding[local]:
+Theorem calldata_slice_no_padding:
   a + n <= LENGTH bs ==>
   TAKE n (DROP a bs ++ REPLICATE n z) = TAKE n (DROP a bs)
 Proof
@@ -302,7 +312,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem calldata_copy_step[local]:
+Theorem calldata_copy_step:
   !dst off count s wd wa wn iid.
   eval_operand dst s = SOME wd /\ eval_operand off s = SOME wa /\
   eval_operand count s = SOME wn /\
@@ -315,7 +325,7 @@ Proof
                        calldata_slice_no_padding]
 QED
 
-Theorem calldata_slice_write_encoding[local]:
+Theorem calldata_slice_write_encoding:
   !a n bs p bound s. a + n <= LENGTH bs ==>
   val_in_memory (BaseTV (BytesT (Dynamic bound)))
     (BytesV (TAKE n (DROP a bs))) p
@@ -327,7 +337,7 @@ Proof
   metis_tac[bytes_buffer_write_encoding]
 QED
 
-Theorem slice_calldata_parts[local]:
+Theorem slice_calldata_parts:
   !start_op length_op sz sa ptr sb.
   compile_slice_calldata start_op length_op sz sa = (ptr, sb) ==>
   ?buf sm data s1 len s2 s3 s4.
@@ -346,7 +356,7 @@ Proof
   rpt (goal_assum $ drule_at Any) >> simp[]
 QED
 
-Theorem slice_calldata_copy_store_run[local]:
+Theorem slice_calldata_copy_store_run:
   !dst src num_op buf_op sa sm sb s wd wa wn wp.
   emit_void CALLDATACOPY [dst; src; num_op] sa = ((),sm) /\
   emit_void MSTORE [buf_op; num_op] sm = ((),sb) /\
@@ -398,7 +408,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem slice_calldata_shape[local]:
+Theorem slice_calldata_shape:
   !op num_op sz sa buf_op sb.
   compile_slice_calldata op num_op sz sa = (buf_op,sb) ==>
   same_blocks sa sb /\
@@ -435,7 +445,7 @@ Proof
   rpt strip_tac >> simp[write_memory_with_expansion_def]
 QED
 
-Theorem slice_calldata_after_alloc_run[local]:
+Theorem slice_calldata_after_alloc_run:
   !buf_op op data_op len_op sa s1 s2 s3 s4 sb s w a n.
   emit_op ADD [buf_op; Lit 32w] sa = (data_op,s1) /\
   emit_op CALLDATASIZE [] s1 = (len_op,s2) /\
@@ -587,7 +597,7 @@ Proof
 QED
 
 
-Theorem slice_calldata_run[local]:
+Theorem slice_calldata_run:
   !op n sa ptr sb func cenv cx es s a ctx.
   compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa = (ptr,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -643,7 +653,10 @@ Proof
      simp[mk_inst_def]) >>
   `t.vs_call_ctx.cc_calldata = cx.txn.calldata /\
    LENGTH t.vs_call_ctx.cc_calldata < dimword (:256)` by
-    (gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ t` mp_tac >>
+     qpat_x_assum `context_well_typed cx` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
          context_well_typed_def, wordsTheory.dimword_def]) >>
   `t.vs_labels = s.vs_labels` by
     (drule compile_alloc_buffer_insts >> strip_tac >>
@@ -776,7 +789,7 @@ Proof
   reverse conj_tac
   >- (rpt strip_tac >>
       `local_region cenv es.scopes t nm lb len` by
-        (irule exprSimOpsTheory.local_region_frame >> conj_tac
+        (irule exprSimPropsTheory.local_region_frame >> conj_tac
          >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
          qexistsl [`sa`, `es.scopes`, `u`] >> simp[] >>
          rpt strip_tac >>
@@ -787,7 +800,7 @@ Proof
   irule locals_kept_regions >> rpt strip_tac >>
   rename1 `local_region cenv es.scopes s nm b sz` >>
   `local_region cenv es.scopes t nm b sz` by
-    (irule exprSimOpsTheory.local_region_frame_fwd >>
+    (irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl [`s`, `sa`, `es.scopes`] >> simp[]) >>
   `b + sz <= w2n w \/ w2n w + 32 + n <= b` by
     (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _` drule >>
@@ -795,7 +808,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem slice_calldata_vv_post[local]:
+Theorem slice_calldata_vv_post:
   !func cenv cx e es sa sb s t p a n w ctx.
   expr_type e = BaseT (BytesT (Dynamic n)) /\ p.ptr_location = LocMemory /\
   eval_operand p.ptr_operand t = SOME w /\ a+n <= LENGTH cx.txn.calldata /\
@@ -880,6 +893,59 @@ Proof
   irule slice_calldata_vv_post >> simp[] >> metis_tac[]
 QED
 
+Theorem slice_calldata_path[local]:
+  !ctx func cenv cx e es sa sb op p n a s0 bres.
+  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa =
+    (p.ptr_operand,sb) /\ p.ptr_location = LocMemory /\
+  expr_type e = BaseT (BytesT (Dynamic n)) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ context_well_typed cx /\
+  0 < n /\ n < 2 ** 256 /\ a < 2 ** 256 /\
+  32 + 32 * word_size n < 2 ** 64 /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\
+  bres = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
+           INL v => INL v | INR err => INR (Error err)) /\
+  stmt_state_rel ctx func cenv cx es s0 /\ eval_operand op s0 = SOME (n2w a) /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?m r. gas_marked_path F ctx func s0 m r /\
+    ((?u. r = OK u /\
+          (?rv. bres = INL rv /\ vv_post ctx func cenv cx e es sa sb s0 es
+             (Value rv) (LocatedValue (expr_type e) p) u) /\
+          u.vs_current_bb = sb.cs_current_bb /\
+          u.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+     (exit_result r /\ expr_exit bres r))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule slice_calldata_shape >> strip_tac >>
+  qspecl_then [`ctx`, `func`, `sa`, `sb`, `s0`,
+    `\u. ?rv. bres = INL rv /\ vv_post ctx func cenv cx e es sa sb s0 es
+            (Value rv) (LocatedValue (expr_type e) p) u`, `expr_exit bres`]
+    mp_tac run_inst_seq_gas_path >>
+  BETA_TAC >> reverse impl_tac >- (disch_then ACCEPT_TAC) >>
+  reverse (rpt conj_tac)
+  >- (gvs[same_blocks_def] >>
+  drule_all (SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
+    [wordsTheory.dimword_def] slice_calldata_run) >>
+  Cases_on `dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n` >>
+  gns[wordsTheory.dimword_def] >> strip_tac
+  >- (disj2_tac >> qexistsl_tac [`Revert_abort`,`t`] >> simp[] >>
+      Cases_on `dimword (:256) <= a+n` >>
+      fs[wordsTheory.dimword_def] >>
+      simp[CONV_RULE numLib.REDUCE_CONV
+        evaluate_calldata_slice_uint, expr_exit_def]) >>
+  disj1_tac >> qexists_tac `t` >> simp[] >>
+  `a+n <= LENGTH cx.txn.calldata` by decide_tac >>
+  simp[evaluate_calldata_slice_uint] >>
+  qpat_x_assum `expr_type e = _` (assume_tac o GSYM) >>
+  asm_rewrite_tac[] >>
+  `t = t with vs_inst_idx := t.vs_inst_idx` by
+    simp[venom_state_component_equality] >>
+  pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>
+  irule slice_calldata_vv_post >> simp[] >> metis_tac[]) >>
+  gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]
+QED
+
 Theorem vv_at_start_mono:
   sa.cs_next_id <= sm.cs_next_id /\
   vv_at cenv cx ty sm sb es tv vv u ==>
@@ -908,68 +974,93 @@ Proof
   metis_tac[wb_frame_trans]
 QED
 
-Theorem slice_calldata_uint_compose[local]:
-  expr_type e = BaseT (UintT 256) /\
-  expr_body_pre cenv cx env e es /\
-  expr_sim ctx func cenv cx (expr_type e) e es /\
-  (do r <- eval_expr cx e; read_result cx r od) es = (INL (IntV (&a)),es') /\
-  lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
-  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sm = (out,sc) /\
-  context_well_typed cx /\ 0 < n /\ n < 2 ** 256 /\ a < 2 ** 256 /\
-  32 + 32 * word_size n < 2 ** 64 /\
-  fn_has_code sa sc func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  res = (case evaluate_calldata_slice cx.txn.calldata (IntV (&a)) n of
-           INL v => INL (Value v) | INR err => INR (Error err)) ==>
-  frag_exec ctx sa sc (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-    (\s. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e])
-        es sa sc s0 es' tv
-        (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)) s)
-    (expr_exit res)
+Theorem slice_expr_exit_INR_cast[local]:
+  expr_exit (INR exc : value + exception) r ==>
+  expr_exit (INR exc : eval_result + exception) r
 Proof
-  strip_tac >>
-  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
-  >- (`(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) = (\s. F)` by
-        (simp[FUN_EQ_THM] >> metis_tac[]) >>
-      simp[] >> irule frag_exec_false_pre) >>
-  `is_word_type (expr_type e)` by simp[is_word_type_def] >>
-  drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
-  drule slice_calldata_shape >> strip_tac >>
-  `cs_extends sm sc` by
-    (simp[cs_extends_def] >> qexists_tac `[]` >>
-     fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]) >>
-  `fn_has_code sa sm func /\ fn_has_code sm sc func` by
-    metis_tac[fn_has_code_mid, cs_extends_refl] >>
-  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
-    (qpat_x_assum `bind _ _ es = (INL _,es')` mp_tac >>
-     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
-     imp_res_tac read_result_state >> gvs[] >>
-     drule eval_expr_preserves_scopes_dom >> simp[]) >>
-  `expr_exit (INL (IntV (&a))) = (\r. F)` by simp[FUN_EQ_THM] >>
-  `expr_res_ok (INL (IntV (&a)))` by simp[expr_res_ok_def] >>
-  drule_all expr_sim_apply >> disch_then (qspec_then `s0` mp_tac) >>
+  Cases_on `exc` >> Cases_on `r` >> simp[expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
+QED
+
+(* compile_typed_unary_builtin_vv_sim (exprSimHash) whose suffix also has
+   the entry state relation. *)
+(* Unary composition keeps the complete argument postcondition available to
+   the suffix, including the footprint and protected-allocation frame. The
+   suffix is an actual counted target path from every operand endpoint. *)
+Theorem compile_unary_builtin_rel_vv_sim:
+  expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
+  expr_sim ctx func cenv cx (expr_type e) e es /\ expr_type e = BaseT bty /\
+  ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 /\
+  (!sa sb vv. compile_expr cenv ty (Builtin ann bt [e]) sa = (vv,sb) ==>
+    ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+      code x sm = (vv,sb)) /\
+  (!x. cs_appends (code x)) /\
+  (!sa sm sb x vv s0 v gs es' s.
+    lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+    code x sm = (vv,sb) /\ fn_has_code sm sb func /\
+    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+    local_ptrs_reserved cenv sm /\
+    bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+      (INL v,es') /\
+    value_has_type (BaseTV bty) v /\ expr_sim_inv cenv cx env es' /\
+    expr_res_ok (builtin_result cx es'.accounts ann bt [expr_type e] [v]) /\
+    stmt_state_rel ctx func cenv cx es s0 /\
+    expr_post ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
+    s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?n r. gas_marked_path F ctx func s n r /\
+      ((?t rv. r = OK t /\
+          builtin_result cx es'.accounts ann bt [expr_type e] [v] = INL rv /\
+          vv_post ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es'
+            (Value rv) vv t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+       (exit_result r /\
+        expr_exit (builtin_result cx es'.accounts ann bt [expr_type e] [v]) r))) ==>
+  expr_vv_sim ctx func cenv cx ty (Builtin ann bt [e]) es
+Proof
+  strip_tac >> rewrite_tac[expr_vv_sim_def] >> rpt strip_tac >>
+  `!n. bt <> Slice n` by
+    (rpt strip_tac >> gvs[builtin_args_length_ok_def]) >>
+  `expr_body_pre cenv cx env e es` by
+    (drule expr_body_pre_builtin_arg >>
+     disch_then irule >> gvs[expr_body_pre_def]) >>
+  qpat_x_assum `!sa sb vv. _` drule >> strip_tac >>
+  `cs_appends (code x)` by simp[] >>
+  drule_all hash_unary_suffix_cut >> strip_tac >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[expr_body_pre_gas_admissible] >>
+  `eval_expr cx (Builtin ann bt [e]) =
+   bind (bind (eval_expr cx e) (read_result cx))
+     (\v es. ((case builtin_result cx es.accounts ann bt [expr_type e] [v] of
+                 INL w => INL (Value w) | INR exc => INR exc), es))` by
+    (irule eval_expr_unary_builtin_action >> simp[]) >>
+  qpat_x_assum `gas_admissible (eval_expr _ _) _ _`
+    (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
+  asm_rewrite_tac[] >> strip_tac >>
+  irule expr_sim_suffix >>
+  first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> irule slice_expr_exit_INR_cast >> simp[]) >>
+  rpt strip_tac >>
+  drule_at (Pat `bind _ _ _ = _`)
+    (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_base_result) >>
+  disch_then (qspecl_then [`env`, `cenv`] mp_tac) >>
   simp[] >> strip_tac >>
-  irule wb_frag_then >>
-  qexistsl_tac [`\s. expr_post ctx func cenv cx e es sa sm s0 es' (IntV (&a)) op s`, `sm`] >>
-  reverse conj_tac
-  >- (simp[] >> irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]) >> simp[] >>
-  qx_gen_tac `t` >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' t` by metis_tac[expr_post_state] >>
-  `eval_operand op t = SOME (n2w a)` by
-    (drule expr_post_word_operand >>
-     simp[evaluate_type_def, is_word_type_def, word_value_def, val_to_w256_def,
-          integer_wordTheory.i2w_pos]) >>
-  irule frag_exec_conseq >>
-  irule_at Any slice_calldata_frag >>
-  qexistsl_tac [`t`, `res`, `mk_ptr out LocMemory`, `op`, `n`, `func`,
-    `es'`, `Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]`,
-    `cx`, `cenv`, `a`] >>
-  simp[contextTheory.mk_ptr_def, vyperASTTheory.expr_type_def] >>
-  rpt strip_tac >> gvs[] >>
-  irule vv_post_prefix_frame >>
-  goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[expr_post_frame]
+  `expr_res_ok (builtin_result cx ee.accounts ann bt [expr_type e] [v])` by
+    (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[bind_def] >>
+     Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
+     gvs[expr_vv_res_ok_def, expr_res_ok_def]) >>
+  qpat_x_assum `!sa sm sb x vv s0 v gs es' s. _` drule_all >> strip_tac >>
+  `ee with gas_obs := [] = ee` by
+    simp[evaluation_state_component_equality] >>
+  qexists_tac `REPLICATE n F` >>
+  rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
+  qexistsl_tac [`case builtin_result cx ee.accounts ann bt [expr_type e] [v] of
+                   INL w => INL (Value w) | INR exc => INR exc`, `ee`, `r`] >>
+  simp[expr_exit_success_map] >>
+  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[]
 QED
 
 Theorem compile_calldata_slice_call_case:
@@ -985,49 +1076,90 @@ Proof
   `expr_body_pre cenv cx env e es /\
    expr_sim ctx func cenv cx (expr_type e) e es` by
     metis_tac[unop_operand_sim] >>
-  rewrite_tac[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
-  simp[compile_calldata_slice_parts] >>
-  pairarg_tac >> rename1 `_ = (start_op, s_start)` >>
-  Cases_on `compile_slice_calldata start_op (Lit (n2w n))
-    (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) s_start` >>
-  simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
-  rename1 `compile_slice_calldata _ _ _ sm = (out_op,sc)` >>
-  `cs_extends sa sm /\ sa.cs_next_id <= sm.cs_next_id /\
-   sa.cs_next_var <= sm.cs_next_var` by
-    (drule (cj 2 compile_expr_grows) >> simp[]) >>
-  drule slice_calldata_shape >> strip_tac >>
-  `cs_extends sm sc` by
-    gvs[cs_extends_def, same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
-  `fn_has_code sa sm func /\ fn_has_code sm sc func` by
-    metis_tac[fn_has_code_mid, cs_extends_refl] >>
-  drule eval_calldata_slice_cases >> strip_tac
-  >- (gvs[] >> drule eval_exprs_cons_cases >> strip_tac
-      >- (gvs[] >>
-          `expr_res_ok (INR exc)` by
-            (irule expr_body_pre_res_ok >> simp[] >>
-             goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
-          drule_all expr_sim_apply >>
-          disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
-          irule frag_exec_exit_prefix >> qexists_tac `sm` >> simp[] >>
-          irule frag_exec_conseq >> goal_assum (drule_at Any) >>
-          simp[exprSimUnwrapTheory.expr_exit_exception_transport]) >>
-      gvs[eval_exprs_nil]) >>
-  drule eval_exprs_cons_cases >> strip_tac
-  >- gvs[] >>
-  gvs[eval_exprs_nil] >>
-  `word_value_type (expr_type e)` by simp[word_value_type_def] >>
-  drule_all expr_body_pre_word_result >> simp[] >> strip_tac >>
-  gvs[vyperValueTheory.evaluate_type_def, value_has_type_def] >>
+  `!sa sb vv.
+     compile_expr cenv ty (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e])
+       sa = (vv,sb) ==>
+     ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+       as_ptr_val (BaseT (BytesT (Dynamic n))) LocMemory
+         (compile_slice_calldata x (Lit (n2w n))
+            (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) sm) = (vv,sb)` by
+    (rpt strip_tac >> qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+     simp[compile_calldata_slice_parts] >> pairarg_tac >> gvs[]) >>
+  `!x. cs_appends (\sm. as_ptr_val (BaseT (BytesT (Dynamic n))) LocMemory
+         (compile_slice_calldata x (Lit (n2w n))
+            (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) sm))` by
+    (rw[cs_appends_def] >>
+     qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac >>
+     qmatch_goalsub_abbrev_tac `as_ptr_val _ _ cc` >>
+     Cases_on `cc` >> fs[markerTheory.Abbrev_def, as_ptr_val_def] >>
+     strip_tac >> qpat_x_assum `(_,_) = _` (assume_tac o SYM) >>
+     drule slice_calldata_shape >> strip_tac >>
+     gvs[cs_extends_def, same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+  `!tys acc a. builtin_result cx acc (BaseT (BytesT (Dynamic n)))
+       (CalldataSlice n) tys [IntV (&a)] =
+     (case evaluate_calldata_slice cx.txn.calldata (IntV (&a)) n of
+        INL v => INL v | INR err => INR (Error err))` by
+    simp[builtin_result_def, evaluate_builtin_def] >>
+  irule (Q.INST [`ann` |-> `BaseT (BytesT (Dynamic n))`,
+                 `bt` |-> `CalldataSlice n`,
+                 `bty` |-> `UintT 256`,
+                 `code` |-> `\x sm. as_ptr_val (BaseT (BytesT (Dynamic n)))
+                    LocMemory (compile_slice_calldata x (Lit (n2w n))
+                      (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) sm)`]
+           (SPEC_ALL compile_unary_builtin_rel_vv_sim)) >>
+  BETA_TAC >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (simp[builtin_args_length_ok_def, precompile_builtin_def] >> NO_TAC) >>
+  qexists_tac `env` >> BETA_TAC >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (simp[builtin_args_length_ok_def, precompile_builtin_def] >> NO_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac >>
+  Cases_on `compile_slice_calldata x (Lit (n2w n))
+    (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) sm` >>
+  simp[as_ptr_val_def] >> strip_tac >>
+  rename1 `compile_slice_calldata _ _ _ sm = (out,sb')` >>
+  `sb' = sb` by gvs[] >> pop_assum SUBST_ALL_TAC >>
+  `is_word_type (expr_type e)` by simp[is_word_type_def] >>
+  drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
   `?a. v = IntV (&a) /\ a < 2 ** 256` by
-    (Cases_on `v` >> gvs[value_has_type_inv, word_value_def] >>
-     rename1 `0 <= i` >> qexists_tac `Num i` >> simp[]) >>
-  gvs[] >>
-  irule slice_calldata_uint_compose >>
-  goal_assum (drule_at Any) >>
-  simp[type_memory_bytes_def] >>
-  conj_tac >- fs[expr_body_pre_def, expr_sim_inv_def] >>
-  conj_tac >- fs[expr_body_pre_def, alloc_limits_expr_def] >>
-  conj_tac >- fs[type_memory_bytes_def, vfmConstantsTheory.word_size_def] >>
-  qexists_tac `env` >> simp[]
+    (Cases_on `v` >> gvs[value_has_type_def] >>
+     `?m. i = &m` by (qexists_tac `Num i` >> intLib.COOPER_TAC) >>
+     gvs[]) >>
+  qpat_x_assum `v = IntV _` SUBST_ALL_TAC >>
+  qpat_x_assum `LocatedValue _ _ = vv` (SUBST_ALL_TAC o SYM) >>
+  `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `eval_operand x s = SOME (n2w a)` by
+    (drule expr_post_word_operand >>
+     simp[evaluate_type_def, is_word_type_def, word_value_def, val_to_w256_def,
+          integer_wordTheory.i2w_pos]) >>
+  `wb_frame cenv es sa s0 s` by metis_tac[expr_post_frame] >>
+  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+    (qpat_x_assum `bind _ _ (es with gas_obs := gs) = _` mp_tac >>
+     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+     imp_res_tac read_result_state >> gvs[] >>
+     drule eval_expr_preserves_scopes_dom >> simp[]) >>
+  asm_rewrite_tac[] >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`,
+    `Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]`, `es'`,
+    `sm`, `sb`, `x`, `mk_ptr out LocMemory`, `n`, `a`, `s`,
+    `case evaluate_calldata_slice cx.txn.calldata (IntV (&a)) n of
+       INL v => INL v | INR err => INR (Error err)`] mp_tac slice_calldata_path >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      TRY (gvs[contextTheory.mk_ptr_def, vyperASTTheory.expr_type_def,
+               type_memory_bytes_def] >> NO_TAC) >>
+      TRY (fs[expr_body_pre_def, expr_sim_inv_def] >> NO_TAC) >>
+      TRY (fs[expr_body_pre_def, alloc_limits_expr_def] >> NO_TAC) >>
+      TRY (qpat_x_assum `compile_slice_calldata _ _ _ _ = _` mp_tac >>
+           simp[contextTheory.mk_ptr_def, type_memory_bytes_def,
+                vfmConstantsTheory.word_size_def] >> NO_TAC) >>
+      fs[expr_body_pre_def, alloc_limits_expr_def, type_alloc_ok_def,
+         is_word_type_def, type_memory_bytes_def,
+         vfmConstantsTheory.word_size_def]) >>
+  strip_tac >> qexistsl_tac [`m`, `r`] >>
+  asm_simp_tac (srw_ss()) [vyperASTTheory.expr_type_def] >>
+  gvs[vyperASTTheory.expr_type_def] >>
+  irule vv_post_prefix_frame >>
+  first_assum (irule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[]
 QED

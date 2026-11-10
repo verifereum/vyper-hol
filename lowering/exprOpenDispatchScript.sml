@@ -78,6 +78,7 @@ QED
 
 Theorem compile_dispatch_make_array_open:
   !cfn tops cenv rty ty elem bnd args sa vv sb.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     (case elem of NONE => T | SOME et =>
        supported_literal_elements tops (ArrayT et bnd) args) /\
     compile_builtin_dispatch_body cfn cenv rty ty (MakeArray elem bnd) args sa = (vv,sb) ==>

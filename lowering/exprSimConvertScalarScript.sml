@@ -13,7 +13,8 @@
 
 Theory exprSimConvertScalar
 Ancestors
-  exprSim exprSimHyps exprSimConvert exprSimUnop compileEnv vyperAST
+  exprSimDefs exprSimProps exprSimStack loweringPosts
+   exprSimHypsDefs exprSimSource exprSimHyps exprSimConvert exprSimUnop compileEnv vyperAST
   convertScalarBridge convertScalarSim convertScalarTyping convertScalarDispatch
   exprSimOperators
 
@@ -21,12 +22,7 @@ Theorem compile_convert_scalar_case:
   !nocalls ctx func cenv cx ann t e1.
     exprs_case nocalls ctx func cenv cx [e1] /\
     ~is_bytestring_type (expr_type e1) /\ ~is_bytestring_type t /\
-    ~int_convert_pair (expr_type e1) t /\
-    (* Interim exclusion, dropped once the expression contract exempts it:
-       bytes0 to a signed integer or decimal, where the source raises
-       "convert empty bytes to signed". *)
-    ~(expr_type e1 = BaseT (BytesT (Fixed 0)) /\
-      ((?k. t = BaseT (IntT k)) \/ t = BaseT DecimalT)) ==>
+    ~int_convert_pair (expr_type e1) t ==>
     expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t [e1])
 Proof
   rw[expr_vv_case_def] >>
@@ -48,10 +44,12 @@ Proof
     (case t of FlagT name => ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
              | _ => mk_convert_op (expr_type e1) t)` >>
   rpt conj_tac
-  >- metis_tac[lower_value_convert]
+  >~ [`lower_value _ _ _ _ _ = _`] >- metis_tac[lower_value_convert]
+  >~ [`unop_frag _ _ _ _ _ _ _ _ _`]
   >- (rpt gen_tac >> strip_tac >> gvs[] >>
-      drule_all scalar_dispatch_extends >> simp[]) >>
-  rpt gen_tac >> strip_tac >>
-  drule scalar_operand_typed_frag >>
-  disch_then (qspecl_then [`ctx`, `func`] mp_tac) >> simp[]
+      qspecl_then [`ctx`, `func`, `cenv`, `cx`, `env`, `ann`, `ann`, `e1`,
+                   `es with gas_obs := gs1`, `v1`, `es1`]
+        mp_tac scalar_operand_typed_frag >> simp[]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all scalar_dispatch_extends >> simp[]
 QED

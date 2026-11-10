@@ -41,7 +41,7 @@
 Theory extCallOracleStep
 Ancestors
   list words
-  compileEnv localPtrsProps exprLoweringProps accountsRelProps
+  compileEnv loweringStateRelDefs localPtrsProps exprLoweringProps accountsRelProps
   vyperInterpreter vyperState vyperValue vyperCallOutcome extCallOracle
   venomCallOracleDefs venomExecSemantics venomInst venomState venomMemProps
 
@@ -251,16 +251,19 @@ Theorem send_call_oracle_step:
 Proof
   rpt gen_tac >> strip_tac >>
   `es.outcomes = SOME s.vs_outcomes /\
-   local_ptrs_rel func cenv es.scopes s /\ ~s.vs_call_ctx.cc_static` by
+   local_ptrs_rel func cenv es.scopes s /\ ~s.vs_call_ctx.cc_static /\
+   ~cx.txn.is_static` by
     fs[state_rel_def] >>
   `step_inst_base inst s =
      exec_ext_call inst s (THE (eval_operand gas_op s)) aw vw 0w 0w
        (0w:bytes32) (0w:bytes32) F` by
     (Cases_on `eval_operand gas_op s` >> fs[] >>
-     simp[step_inst_base_def, eval_operand_def]) >>
+     simp[step_inst_base_opcode_eqs, eval_operand_def]) >>
   qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
-       check_def, lift_option_type_def, vyperStateTheory.return_def] >>
+  qpat_x_assum `~cx.txn.is_static` (fn th =>
+    simp[eval_send_def, frame_call_value_def, th, bind_def, ignore_bind_def,
+         type_check_def, assert_def, check_def, lift_option_type_def,
+         vyperStateTheory.return_def]) >>
   Cases_on `take_call_outcome (w2w aw) [] (SOME (w2n vw)) es` >>
   qmatch_asmsub_rename_tac `take_call_outcome _ _ _ _ = (tr, es1)` >>
   Cases_on `tr` >> simp[]

@@ -12,7 +12,7 @@ val EXT_CALL_FIXTURE_SIMP =
    counter_request_def, counter_calldata, counter_address, evaluate_def,
    bind_def, ignore_bind_def, return_def, type_check_def, check_def,
    assert_def, raise_def, lift_option_type_def, lift_option_def,
-   lift_sum_runtime_def, eval_ext_call_def, eval_ext_call_effects_def, ext_call_opts_ok_def,
+   lift_sum_runtime_def, eval_ext_call_def, frame_call_value_def, COND_RATOR, eval_ext_call_effects_def, ext_call_opts_ok_def,
    ext_call_kwarg_def, ext_call_precheck_ok_def, ext_call_has_code_def,
    lookup_account_def, empty_accounts_def, empty_account_state_def,
    evaluate_literal_def, dest_AddressV_def, read_result_def, read_results_def,
@@ -20,7 +20,8 @@ val EXT_CALL_FIXTURE_SIMP =
    get_scopes_def, lookup_scopes_def,
    take_call_outcome_def, call_outcome_request_def, take_outcome_def,
    record_request_def, computed_precompile_addresses, failed_outcome_def,
-   empty_state_def, UNCURRY, sum_CASE_rator, option_CASE_rator];
+   empty_state_def, UNCURRY, sum_CASE_rator, option_CASE_rator,
+   EVAL ``empty_call_txn.is_static``];
 
 Theorem activated_NONE_keeps_concrete_code_check:
   eval_expr empty_evaluation_context

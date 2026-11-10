@@ -152,7 +152,7 @@ Proof
   drule scfg_bypass_image_var >> strip_tac >>
   `MEM i (fn_insts fn)` by metis_tac[fn_insts_MEM] >>
   drule scfg_bypass_opaque_vars >> strip_tac >>
-  metis_tac[opaque_use_ok_gas_use, opaque_use_ok_retpc_use,
+  metis_tac[opaque_use_ok_retpc_use,
     scfg_bypass_image_opaque_use]
 QED
 

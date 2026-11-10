@@ -3,7 +3,7 @@ Theory abiEncoderWindowArrayInvariant
 Ancestors
   abiEncoderWindowArrayLayout abiEncoderWindowPhase abiEncoderWindowChild
   abiEncoderWindowContract abiEncoderRegisteredEffect abiEncoderExtendSim
-  exprLoweringProps venomState finite_map pred_set list
+  exprLoweringProps venomState finite_map pred_set list abiEncoderArrayPrefix
 
 Definition window_sizes32_def:
   window_sizes32 ids (s:venom_state) <=>
@@ -100,7 +100,7 @@ Proof
   `mem_bytes_at slot 32 t.vs_memory = mem_bytes_at slot 32 s.vs_memory` by
     (irule abi_encoder_window_effect_parent >>
      metis_tac[window_array_transition_effect, window_array_transition_resources]) >>
-  fs[valueEncodingTheory.mem_word_at_def, GSYM valueEncodingTheory.mem_bytes_at_def]
+  fs[valueEncodingDefsTheory.mem_word_at_def, GSYM valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Definition window_array_root_def:
@@ -185,7 +185,7 @@ Theorem window_array_inv_init:
   window_array_inv ctx func owner ids ei asz msz active ty avs src dst
     ip isite islot dp dsite dslot count_op label sb cap d 0 s
 Proof
-  simp[window_array_inv_def, window_array_prefix_zero]
+  simp[window_array_inv_def, abi_encoder_array_prefix_empty]
 QED
 
 Theorem window_array_root_live_pre:

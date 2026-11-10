@@ -46,9 +46,9 @@ Theory allocaFootprint
 Ancestors
   fragExecMem instMemFrontier loweringHalt abiBuiltinAllocation
   abiEncoderWrites builtinHashing exprLowering
-  context emitHelper emitHelperProps exprLoweringProps compileEnv
+  context emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   venomState venomInst venomExecSemantics venomMemDefs memSafeRun
-  finite_map list rich_list words arithmetic
+  finite_map list rich_list words arithmetic abiDecoderIndexInit
 
 (* ===== State facts ===== *)
 
@@ -74,12 +74,6 @@ Theorem eval_operand_same_vars:
     eval_operand op s' = eval_operand op s
 Proof
   Cases >> simp[eval_operand_def, lookup_var_def]
-QED
-
-Theorem eval_operand_mstore_eq[simp]:
-  eval_operand op (mstore p w s) = eval_operand op s
-Proof
-  irule eval_operand_same_vars >> simp[]
 QED
 
 Theorem allocate_state_fields[simp]:
@@ -292,8 +286,7 @@ Proof
   rpt gen_tac >> strip_tac >> Cases_on `FLOOKUP s.vs_allocas id`
   >- gvs[abi_builtin_allocate_state_def, FLOOKUP_UPDATE, step_alloca_fresh]
   >> gvs[abi_builtin_allocate_state_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_alloca_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def]
 QED
 
 Theorem alloca_site_frontier:

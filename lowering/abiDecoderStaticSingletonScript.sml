@@ -3,7 +3,7 @@ Theory abiDecoderStaticSingleton
 Ancestors
   abiDecoderSingletonSetup
   abiDecoderSingletonTyped abiDecoderTypedContract abiDecoderTypedCompose abiDecoderComplexHead
-  abiDecoderGuard abiDecoderGuards abiDecoderDynamic abiDecoderBytesBound abiDecoderOffset
+  abiDecoderGuard abiDecoderRange abiDecoderGuards abiDecoderDynamic abiDecoderBytesBound abiDecoderOffset
   abiDecoderReservation abiDecoderContract abiEncoder compileEnv emitHelper emitHelperProps
   exprLoweringProps valueEncoding vyperABI contractABI venomExecSemantics venomState venomInst
   words arithmetic list rich_list
@@ -16,10 +16,10 @@ QED
 
 Theorem abi_decoder_static_singleton_pre_child:
   abi_decoder_pre ce env (TupleT [ty]) (TupleTV [tv]) di
-    (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc hi sb d b cap s /\
+    (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc base_op hi B sb d b cap s /\
   ~is_dynamic (vyper_to_abi_type env ty) ==>
   abi_decoder_pre ce env ty tv (type_to_abi_dec_info ce.ce_struct_fields ce ty)
-    av v st last src dst opc hi sb d b cap s
+    av v st last src dst opc base_op hi B sb d b cap s
 Proof
   pure_rewrite_tac[abi_decoder_pre_def] >> strip_tac >>
   drule_all abi_decoder_singleton_metadata_child >> strip_tac >>
@@ -94,7 +94,8 @@ Theorem abi_decode_static_singleton_setup_shape:
 Proof
   Cases_on `hi = Lit 0w` >>
   simp[abi_decode_static_singleton_setup_def, abi_decode_complex_head_guard_def,
-       abi_decode_le_guard_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       abi_decode_le_guard_def, compile_abi_decode_range_check_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
        emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
        emitted_insts_def, IS_PREFIX_APPEND] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
@@ -104,10 +105,10 @@ QED
 
 Theorem abi_static_singleton_members[local]:
   ~abi_decoder_dynamic di ==>
-  compile_abi_decode_complex_elems dst src opc hi [(di,head_sz,mem_sz)] 0 0 =
+  compile_abi_decode_complex_elems dst src opc base_op hi [(di,head_sz,mem_sz)] 0 0 =
     do child_src <- emit_op ADD [src; Lit 0w];
        child_dst <- emit_op ADD [dst; Lit 0w];
-       compile_abi_decode_to_buf child_dst child_src opc hi di
+       compile_abi_decode_to_buf child_dst child_src opc base_op hi di
     od
 Proof
   strip_tac >>
@@ -121,9 +122,9 @@ QED
 
 Theorem abi_decode_static_singleton_phases:
   ~abi_decoder_dynamic di ==>
-  compile_abi_decode_to_buf dst src opc hi (DecComplex F [(di,head_sz,mem_sz)]) =
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex F [(di,head_sz,mem_sz)]) =
     do child_ops <- abi_decode_static_singleton_setup dst src hi head_sz;
-       compile_abi_decode_to_buf (SND child_ops) (FST child_ops) opc hi di
+       compile_abi_decode_to_buf (SND child_ops) (FST child_ops) opc base_op hi di
     od
 Proof
   strip_tac >>

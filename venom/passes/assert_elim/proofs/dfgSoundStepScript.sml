@@ -421,7 +421,7 @@ Theorem dfg_sound_fresh_untracked_extension:
     ==>
     dfg_sound dfg env'
 Proof
-  rpt strip_tac >> fs[dfg_sound_def] >> rpt conj_tac
+  rpt gen_tac >> strip_tac >> fs[dfg_sound_def] >> rpt conj_tac
   >- (PURE_ONCE_REWRITE_TAC[dfg_assign_sound_def] >> rpt strip_tac >>
       `v IN FDOM env` by metis_tac[dfg_tracked_opcode_def] >>
       `u IN FDOM env` by
@@ -462,9 +462,15 @@ Proof
          metis_tac[dfg_tracked_opcode_def, listTheory.MEM]) >>
       qpat_x_assum `dfg_compare_sound dfg env` mp_tac >>
       PURE_ONCE_REWRITE_TAC[dfg_compare_sound_def] >> strip_tac >>
-      first_x_assum drule_all >> strip_tac >>
-      rpt conj_tac >> rpt strip_tac >>
-      metis_tac[listTheory.MEM])
+      `FLOOKUP env' u = FLOOKUP env u` by
+        (qpat_x_assum `!u. MEM (Var u) [lhs; rhs] ==> _`
+           (qspec_then `u` mp_tac) >>
+         simp[listTheory.MEM]) >>
+      `FLOOKUP env u = SOME wu` by metis_tac[] >>
+      qpat_x_assum `!v inst lhs rhs. _`
+        (qspecl_then [`v`, `inst`, `lhs`, `rhs`] mp_tac) >>
+      simp[] >> disch_then (qspec_then `w` mp_tac) >>
+      simp[] >> disch_then (qspec_then `wu` mp_tac) >> simp[])
 QED
 (* Every instruction in a well-formed function's flat instruction list
    satisfies inst_wf. *)
@@ -488,7 +494,7 @@ fun dfg_eq_condition_tac () =
 
 fun step_vars_fupdate_finish_tac () =
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_ext_call_def, exec_delegatecall_def,
      exec_create_def, exec_alloca_def,
      extract_venom_result_def] >>
@@ -1150,25 +1156,6 @@ Proof
   Induct >> rw[fn_insts_blocks_def] >> metis_tac[MEM_APPEND]
 QED
 
-(* If dfg_get_def v = SOME inst and inst not in bb, then
-   no instruction in bb outputs v (by SSA uniqueness + DFG correctness) *)
-Theorem no_output_in_block_from_ssa[local]:
-  !fn bb v inst.
-    dfg_get_def (dfg_build_function fn) v = SOME inst /\
-    ~MEM inst bb.bb_instructions /\
-    MEM bb fn.fn_blocks /\
-    (!w i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-       MEM w i1.inst_outputs /\ MEM w i2.inst_outputs ==> (i1 = i2)) ==>
-    !inst'. MEM inst' bb.bb_instructions ==> ~MEM v inst'.inst_outputs
-Proof
-  rpt strip_tac >>
-  `MEM v inst.inst_outputs /\ MEM inst (fn_insts fn)` by
-    metis_tac[dfg_build_function_correct] >>
-  `MEM inst' (fn_insts fn)` by metis_tac[mem_bb_fn_insts] >>
-  `inst' = inst` by metis_tac[] >>
-  gvs[]
-QED
-
 (* Case A: For variables whose defining instruction is NOT in bb,
    FLOOKUP is unchanged for v and all its operands, so dfg conditions
    are inherited from entry. The operands' definers are also outside bb
@@ -1506,34 +1493,6 @@ Proof
     (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks)` by
     (simp[MEM_MAP] >> metis_tac[]) >>
   metis_tac[ALL_DISTINCT_FLAT_unique]
-QED
-
-(* If two instructions have the same ID and are in the same block,
-   they are at the same position, hence equal. *)
-Theorem inst_id_determines_inst_in_block[local]:
-  !fn bb i1 i2.
-    fn_inst_ids_distinct fn /\
-    MEM bb fn.fn_blocks /\
-    MEM i1 bb.bb_instructions /\ MEM i2 bb.bb_instructions /\
-    i1.inst_id = i2.inst_id ==>
-    i1 = i2
-Proof
-  rpt strip_tac >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
-    (gvs[fn_inst_ids_distinct_def] >>
-     irule ALL_DISTINCT_FLAT_IMP >>
-     qexists_tac `MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
-       fn.fn_blocks` >>
-     simp[MEM_MAP] >> metis_tac[]) >>
-  `?k1. k1 < LENGTH bb.bb_instructions /\ EL k1 bb.bb_instructions = i1` by
-    metis_tac[MEM_EL] >>
-  `?k2. k2 < LENGTH bb.bb_instructions /\ EL k2 bb.bb_instructions = i2` by
-    metis_tac[MEM_EL] >>
-  `EL k1 (MAP (\i. i.inst_id) bb.bb_instructions) =
-   EL k2 (MAP (\i. i.inst_id) bb.bb_instructions)` by
-    simp[EL_MAP] >>
-  `k1 = k2` by metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP] >>
-  gvs[]
 QED
 
 (* Reverse of mem_bb_fn_insts: MEM in fn_insts implies MEM in some block *)
@@ -2704,20 +2663,6 @@ Proof
   >- (rpt strip_tac >> qspecl_then [`fn`, `bb`, `fuel`, `ctx`, `s`, `r`]
       mp_tac dfg_ops_defined_run_block >>
       simp[] >> disch_then drule_all >> simp[])
-QED
-
-(* Like step_jnz_behavior but without constraining inst_outputs *)
-Theorem step_jnz_behavior_gen[local]:
-  !s cond_op if_nonzero if_zero id outputs cond.
-    eval_operand cond_op s = SOME cond ==>
-    step_inst_base
-      <|inst_id := id; inst_opcode := JNZ;
-        inst_operands := [cond_op; Label if_nonzero; Label if_zero];
-        inst_outputs := outputs|> s =
-    if cond <> 0w then OK (jump_to if_nonzero s)
-    else OK (jump_to if_zero s)
-Proof
-  rw[step_inst_base_def]
 QED
 
 (* After running a block ending with JNZ [Var var; Label t; Label f],

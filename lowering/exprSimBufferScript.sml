@@ -16,43 +16,18 @@
  *)
 Theory exprSimBuffer
 Ancestors
+  exprSimProps
+  loweringPosts
   exprSimAlloc
   exprSimLiteralBuffer emitHelperProps exprLoweringProps compileEnv
   context venomInst venomState words fragExec rich_list list
-  exprSimWordArgs exprSimOps exprSim
+  exprSimWordArgs exprSimOps
 
-Theorem buffer_offset_no_wrap:
-  !w:bytes32. !off sz.
-    w2n w + sz < dimword (:256) /\ off <= sz ==>
-    w2n (w + n2w off) = w2n w + off
-Proof
-  rpt strip_tac >>
-  `off < dimword (:256)` by decide_tac >>
-  `w2n (w + n2w off) = w2n w + w2n ((n2w off):bytes32)`
-    suffices_by simp[] >>
-  irule wordsTheory.w2n_add_2 >> simp[] >> decide_tac
-QED
+
 
 (* Unlike emit_op_ADD_correct, this exact execution boundary does not
    require all existing variables to satisfy fresh_vars_wrt. *)
-Theorem buffer_emit_add_run:
-  !sa sb ptr dst s w off.
-    emit_op ADD [ptr; Lit (n2w off)] sa = (dst, sb) /\
-    eval_operand ptr s = SOME w ==>
-    run_inst_seq (emitted_insts sa sb) s =
-      OK (update_var (STRING #"%" (toString sa.cs_next_var))
-                     (w + n2w off) s)
-Proof
-  rpt strip_tac >> rename1 `eval_operand pop s = SOME w` >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  `step_inst_base
-     (mk_inst sa.cs_next_id ADD [pop; Lit (n2w off)]
-       [STRING #"%" (toString sa.cs_next_var)]) s =
-   OK (update_var (STRING #"%" (toString sa.cs_next_var))
-                  (w + n2w off) s)` by
-    (irule step_ADD >> simp[eval_operand_def]) >>
-  simp[run_inst_seq_def]
-QED
+
 
 Theorem buffer_memory_vv_post_general:
   !func cenv cx e es sa sb s0 es' t v tvt p w sz ctx.

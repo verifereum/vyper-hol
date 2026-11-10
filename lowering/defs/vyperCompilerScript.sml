@@ -24,6 +24,8 @@ Ancestors
   venomCompilerTypes
   venomWf
   fcgDefs
+  pointerConfinedDefs
+  defsReachCheck
 
 (* ===== Compile State Initialization ===== *)
 
@@ -273,21 +275,258 @@ Definition unit_alloca_budget_def:
       SUM (MAP alloca_size (FILTER (\i. i.inst_opcode = ALLOCA) insts))
 End
 
-(* The last two conjuncts are what the memory-safety bridge
+(* ===== Checked pointer confinement ===== *)
+
+(* For a unit without DALLOCA, ptr_ok_check decides ptrDiscipline's
+   fn_ptr_ok for every function and its reachable part, with the pointer
+   parameters it computes (ctx_ptr_param_list); ptrOkCheck proves it sound.
+   It is executable as the rest of the lowering is: no quantifiers and no
+   SET_TO_LIST (the native parity runner cannot run them), so the closures
+   are lists from a fuel-bounded iteration of pointer_use_step_step, each
+   checked closed. *)
+
+Definition pointer_use_vars_fuel_def:
+  pointer_use_vars_fuel 0 fn vars = vars /\
+  pointer_use_vars_fuel (SUC n) fn vars =
+    case pointer_use_step_step fn vars of
+      NONE => vars
+    | SOME vs => pointer_use_vars_fuel n fn vs
+End
+
+(* The pointer-derived variables of roots, if the iteration closes. *)
+Definition pv_closure_def:
+  pv_closure fn roots =
+    let vs = pointer_use_vars_fuel (LENGTH (fn_insts fn) + 1) fn roots in
+    if pointer_use_step_step fn vs = NONE then SOME vs else NONE
+End
+
+Definition opcode_root_list_def:
+  opcode_root_list opc fn =
+    FLAT (MAP (\inst. if inst.inst_opcode = opc then
+                        case inst_output inst of SOME out => [out] | NONE => []
+                      else [])
+              (fn_insts fn))
+End
+
+(* The outputs of fn's PARAMs at the positions pl. *)
+Definition param_root_list_def:
+  param_root_list (pl : num list) fn =
+    FLAT (MAP (\inst. if inst.inst_opcode = PARAM then
+                        case (inst.inst_operands, inst_output inst) of
+                          ([Lit idx], SOME out) =>
+                            if MEM (w2n idx) pl then [out] else []
+                        | _ => []
+                      else [])
+              (fn_insts fn))
+End
+
+(* ptr_use_ok on the pointer variables pv, with pointer parameters pl. *)
+Definition invoke_args_ok_def:
+  invoke_args_ok (pl : num list) pv (k : num) [] = T /\
+  invoke_args_ok pl pv k (a :: args) =
+    ((case a of Var v => MEM v pv ==> MEM k pl | _ => T) /\
+     invoke_args_ok pl pv (k + 1) args)
+End
+
+Definition addr_operand_is_def:
+  addr_operand_is v inst <=>
+    (case mem_write_ops inst of
+       SOME ops => ops.iao_ofst = Var v
+     | NONE => F) \/
+    (case mem_read_ops inst of
+       SOME ops => ops.iao_ofst = Var v
+     | NONE => F)
+End
+
+Definition ptr_cmp_exempt_def:
+  ptr_cmp_exempt pv inst <=>
+    (inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
+     inst.inst_opcode = EQ) /\
+    case inst.inst_operands of
+      [Var u; Var w] => MEM u pv /\ MEM w pv
+    | _ => F
+End
+
+Definition ptr_use_ok_check_def:
+  ptr_use_ok_check (PL : string -> num list) pv inst <=>
+    (inst.inst_opcode = INVOKE ==>
+     case decode_invoke inst of
+       SOME (nm, args) => invoke_args_ok (PL nm) pv 0 args
+     | NONE => F) /\
+    EVERY (\op. case op of
+                  Var v =>
+                    MEM v pv /\ inst.inst_opcode <> INVOKE /\
+                    ~is_pointer_preserving_op inst.inst_opcode /\
+                    ~ptr_cmp_exempt pv inst ==>
+                    FILTER ($= (Var v)) inst.inst_operands = [Var v] /\
+                    addr_operand_is v inst
+                | _ => T)
+      inst.inst_operands
+End
+
+Definition inst_ptr_ok_check_def:
+  inst_ptr_ok_check PL pv inst <=>
+    inst.inst_opcode <> MEMTOP /\ inst.inst_opcode <> DRET /\
+    inst.inst_opcode <> GETFMP /\ inst.inst_opcode <> SETFMP /\
+    inst.inst_opcode <> RETFMP /\ inst.inst_opcode <> FMP_PARAM /\
+    ((inst.inst_opcode = ISTORE \/ inst.inst_opcode = ILOAD) ==>
+     EVERY (\op. case op of Var v => ~MEM v pv | _ => T)
+       inst.inst_operands) /\
+    ((inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
+     EXISTS (\op. case op of Var v => MEM v pv | _ => F) inst.inst_operands ==>
+     EVERY (\op. case op of Label _ => F | _ => T) inst.inst_operands) /\
+    ptr_use_ok_check PL pv inst
+End
+
+Definition affine_check_def:
+  affine_check pv inst <=>
+    (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) ==>
+    case inst.inst_operands of
+      [op1; op2] =>
+        ~(case (op1, op2) of
+            (Var v1, Var v2) => MEM v1 pv /\ MEM v2 pv
+          | _ => F) /\
+        (inst.inst_opcode = SUB ==>
+         case op2 of Var v => ~MEM v pv | _ => T)
+    | _ => T
+End
+
+Definition phi_check_def:
+  phi_check pv inst <=>
+    inst.inst_opcode = PHI /\
+    EXISTS (\op. case op of Var v => MEM v pv | _ => F) inst.inst_operands ==>
+    EVERY (\op. case op of
+                  Var v => MEM v pv
+                | Label l => T
+                | _ => F)
+      inst.inst_operands
+End
+
+Definition write_excl_check_def:
+  write_excl_check pva pvo inst <=>
+    case mem_write_ops inst of
+      SOME ops =>
+        (case ops.iao_ofst of
+           Var v => ~(MEM v pva /\ MEM v pvo)
+         | _ => T)
+    | NONE => T
+End
+
+(* Each definition of a pointer variable is a root (an ALLOCA, or a DALLOCA
+   or pointer PARAM whose output no ALLOCA writes), or a pointer-preserving
+   op on a pointer variable. *)
+Definition pv_def_check_def:
+  pv_def_check (pl : num list) ar pv inst <=>
+    EVERY (\v. MEM v pv ==>
+             inst.inst_opcode = ALLOCA \/
+             ((inst.inst_opcode = DALLOCA \/
+               (inst.inst_opcode = PARAM /\
+                case inst.inst_operands of
+                  [Lit idx] => MEM (w2n idx) pl
+                | _ => F)) /\
+              ~MEM v ar) \/
+             (is_pointer_preserving_op inst.inst_opcode /\
+              EXISTS (\op. case op of Var u => MEM u pv | _ => F)
+                inst.inst_operands))
+      inst.inst_outputs
+End
+
+Definition fn_ptr_ok_check_def:
+  fn_ptr_ok_check PL fn <=>
+    let ar = opcode_root_list ALLOCA fn in
+    let pr = opcode_root_list DALLOCA fn ++ param_root_list (PL fn.fn_name) fn in
+    case (pv_closure fn (ar ++ pr), pv_closure fn ar,
+          pv_closure fn (FILTER (\v. ~MEM v ar) pr)) of
+      (SOME pv, SOME pva, SOME pvo) =>
+        fn.fn_forced_alloc_positions = FEMPTY /\
+        EVERY (\inst. inst_ptr_ok_check PL pv inst /\ affine_check pv inst /\
+                      phi_check pv inst /\ write_excl_check pva pvo inst /\
+                      pv_def_check (PL fn.fn_name) ar pv inst)
+          (fn_insts fn)
+    | _ => F
+End
+
+(* Position k is a pointer parameter of fn when the closure of its PARAM's
+   output is used, outside INVOKEs, only as ptr_use_ok allows.  A stack
+   parameter is stored as a value (MSTORE [ptr; param]), so it is not one.
+   Soundness does not depend on this choice. *)
+Definition fn_ptr_params_def:
+  fn_ptr_params fn =
+    FLAT (MAP (\inst.
+      if inst.inst_opcode = PARAM then
+        case (inst.inst_operands, inst_output inst) of
+          ([Lit idx], SOME out) =>
+            (case pv_closure fn [out] of
+               SOME c =>
+                 if EVERY (\i. i.inst_opcode = INVOKE \/
+                               ptr_use_ok_check (K []) c i)
+                      (fn_insts fn)
+                 then [w2n idx] else []
+             | NONE => [])
+        | _ => []
+      else [])
+      (fn_insts fn))
+End
+
+Definition ctx_ptr_param_list_def:
+  ctx_ptr_param_list ctx nm =
+    case lookup_function nm ctx.ctx_functions of
+      SOME f => fn_ptr_params f
+    | NONE => []
+End
+
+(* ptr_discipline asks fn_ptr_ok of each function's reachable part too
+   (reachable_fn), which dropping dead code can change.  The lowering emits
+   no PHIs, so for a well-formed function that part is the blocks
+   cfg_analyze marks reachable. *)
+Definition fn_reachable_blocks_def:
+  fn_reachable_blocks fn =
+    fn with fn_blocks :=
+      FILTER (\bb. cfg_reachable_of (cfg_analyze fn) bb.bb_label) fn.fn_blocks
+End
+
+(* S3's pointer discipline covers units without DALLOCA, the O1 source
+   shape (o1_source_unit_ok), so a unit with DALLOCA passes unchecked: the
+   lowering restores the free memory pointer with SETFMP after a
+   dynamically sized buffer (create_copy_of, create_from_blueprint, raw_call
+   with msg.data), which the pointer discipline does not admit. *)
+Definition ptr_ok_check_def:
+  ptr_ok_check ctx <=>
+    EXISTS (\fn. EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts fn))
+      ctx.ctx_functions \/
+    EVERY (\fn. fn_ptr_ok_check (ctx_ptr_param_list ctx) fn /\
+                wf_function fn /\
+                EVERY (\i. i.inst_opcode <> PHI) (fn_insts fn) /\
+                fn_ptr_ok_check (ctx_ptr_param_list ctx) (fn_reachable_blocks fn))
+      ctx.ctx_functions
+End
+
+(* The labels and call-graph conjuncts are what the memory-safety bridge
    (mem_safe_raw_unit_memory_ok, alloca_frontier_inv_entry) asks of the
    unit: every function's labels distinct and an entry block, and the
-   reachable call graph acyclic.  Like the inst-id and budget checks, they
-   are decided on the unit rather than proved of the lowering. *)
+   reachable call graph acyclic.  ptr_ok_check is what S3's pointer
+   discipline asks of a unit without DALLOCA (fn_ptr_ok).  The last
+   conjunct is definite assignment (every use is written on every path to
+   it), which SimplifyCFG's input contract asks for.  Like the inst-id and
+   budget checks, they are decided on the unit rather than proved of the
+   lowering.  The budget check leaves room for 32 bytes per DLOAD:
+   LowerDload gives each DLOAD a 32-byte scratch ALLOCA, so its output's
+   frontier runs that far past the input's. *)
 Definition lowering_context_ok_def:
   lowering_context_ok ctx <=>
     ALL_DISTINCT (ctx_fn_names ctx) /\
     wf_invoke_targets_check ctx /\
     ctx_inst_ids_distinct ctx /\
     forced_alloc_inputs_check ctx /\
-    unit_alloca_budget ctx < dimword (:256) /\
+    unit_alloca_budget ctx +
+      32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
+                     (FLAT (MAP fn_insts ctx.ctx_functions))) <
+      dimword (:256) /\
     EVERY (\fn. ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn)
       ctx.ctx_functions /\
-    reachable_fcg_acyclic ctx (fcg_analyze ctx)
+    reachable_fcg_acyclic ctx (fcg_analyze ctx) /\
+    ptr_ok_check ctx /\
+    EVERY fn_defs_reach_uses_check ctx.ctx_functions
 End
 (* ===== Policy Boundary ===== *)
 
@@ -327,6 +566,16 @@ Theorem lowering_context_ok_alloca_budget:
   !ctx. lowering_context_ok ctx ==>
         unit_alloca_budget ctx < dimword (:256)
 Proof
+  simp[lowering_context_ok_def] >> rpt strip_tac >> decide_tac
+QED
+
+Theorem lowering_context_ok_dload_budget:
+  !ctx. lowering_context_ok ctx ==>
+        unit_alloca_budget ctx +
+          32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
+                         (FLAT (MAP fn_insts ctx.ctx_functions))) <
+          dimword (:256)
+Proof
   simp[lowering_context_ok_def]
 QED
 
@@ -337,6 +586,14 @@ Theorem lowering_context_ok_bridge:
         reachable_fcg_acyclic ctx (fcg_analyze ctx)
 Proof
   simp[lowering_context_ok_def]
+QED
+
+Theorem lowering_context_ok_defs_reach_uses:
+  !ctx. lowering_context_ok ctx ==>
+        EVERY fn_defs_reach_uses ctx.ctx_functions
+Proof
+  rw[lowering_context_ok_def, listTheory.EVERY_MEM] >>
+  metis_tac[fn_defs_reach_uses_check_sound]
 QED
 
 Definition internal_fn_matches_descriptor_def:
@@ -437,7 +694,11 @@ Definition install_immutable_reservation_def:
     ctx with ctx_global_reserved :=
       (if immutables_len = 0 then [] else [(0, immutables_len)])
 End
-(* Deploy lowering owns both the runtime size and runtime data installation. *)
+(* Deploy lowering owns both the runtime size and runtime data installation.
+   The constructor's immutables occupy [0, immutables_len), and the unit's
+   alloca frontier starts past them, so the budget check also leaves room
+   for that region below 2^256; and the epilogue returns runtime_size +
+   immutables_len bytes, so it leaves room for the runtime code too. *)
 Definition run_deploy_lowering_def:
   run_deploy_lowering has_constructor (rpolicy : resolved_compiler_policy)
                        (runtime_bytecode : byte list) immutables_len
@@ -455,7 +716,13 @@ Definition run_deploy_lowering_def:
         NONE => NONE
       | SOME (ctx, data) =>
           let ctx' = install_immutable_reservation immutables_len ctx in
-          if lowering_context_ok ctx' then
+          if lowering_context_ok ctx' /\
+             LENGTH runtime_bytecode + immutables_len +
+               unit_alloca_budget ctx' +
+               32 * LENGTH (FILTER (\i. i.inst_opcode = DLOAD)
+                              (FLAT (MAP fn_insts ctx'.ctx_functions))) <
+               dimword (:256)
+          then
             SOME <| cu_context := ctx';
                     cu_data_segment :=
                       data ++

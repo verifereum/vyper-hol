@@ -216,6 +216,13 @@ Definition account_item_type_def:
   account_item_type Code = BaseT (BytesT (Dynamic 24576))
 End
 
+(* Static capacities used by Vyper's concat result inference. *)
+Definition bytelike_type_bound_def:
+  bytelike_type_bound (BaseT (BytesT bd)) = bound_length bd /\
+  bytelike_type_bound (BaseT (StringT n)) = n /\
+  bytelike_type_bound _ = 0
+End
+
 Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (Bop bop) ts =
     (LENGTH ts = 2 /\ well_typed_binop ty bop (EL 0 ts) (EL 1 ts)) /\
@@ -238,7 +245,7 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (AsWeiValue _) ts =
     (LENGTH ts = 1 ∧ ty = BaseT (UintT 256) ∧ is_uint_type (HD ts)) ∧
   well_typed_builtin_app ty (Concat n) ts =
-    (2 <= LENGTH ts /\
+    (2 <= LENGTH ts /\ SUM (MAP bytelike_type_bound ts) <= n /\
      ((ty = BaseT (BytesT (Dynamic n)) /\ EVERY (\t. ?bd. t = BaseT (BytesT bd)) ts) \/
       (ty = BaseT (StringT n) /\ EVERY (\t. ?m. t = BaseT (StringT m)) ts))) /\
   well_typed_builtin_app ty (Slice n) ts =
@@ -315,6 +322,27 @@ Termination
   disj1_tac >>
   CCONTR_TAC >>
   fs[]
+End
+
+(* ABI decoding admits Python's bytes1 through bytes32, including inside
+   aggregates. General assignability alone also permits bytes0. *)
+Definition abi_decode_bytes_widths_def:
+  abi_decode_bytes_widths tenv (BaseT bt) =
+    (case bt of BytesT (Fixed n) => 0 < n | _ => T) /\
+  abi_decode_bytes_widths tenv (TupleT tys) =
+    EVERY (abi_decode_bytes_widths tenv) tys /\
+  abi_decode_bytes_widths tenv (ArrayT elem bd) =
+    abi_decode_bytes_widths tenv elem /\
+  abi_decode_bytes_widths tenv (StructT nsid) =
+    (case FLOOKUP tenv nsid of
+       SOME (StructArgs args) =>
+         EVERY (abi_decode_bytes_widths (tenv \\ nsid) o SND) args
+     | _ => F) /\
+  abi_decode_bytes_widths tenv (FlagT nsid) = T /\
+  abi_decode_bytes_widths tenv NoneT = T
+Termination
+  WF_REL_TAC `inv_image ($< LEX $<) (\(tenv, ty). (CARD (FDOM tenv), type_size ty))` >>
+  rw[FLOOKUP_DEF] >> disj1_tac >> CCONTR_TAC >> fs[]
 End
 
 Theorem assignable_type_not_NoneT:
@@ -562,10 +590,11 @@ Definition well_typed_type_builtin_args_def:
   well_typed_type_builtin_args Convert target_ty ts =
     (LENGTH ts = 1 /\ valid_conversion (HD ts) target_ty) /\
   well_typed_type_builtin_args Extract32 target_ty ts =
-    (LENGTH ts = 2 /\ (?bd. EL 0 ts = BaseT (BytesT bd)) /\ is_int_type (EL 1 ts) /\
+    (LENGTH ts = 2 /\ (?m. EL 0 ts = BaseT (BytesT (Dynamic m))) /\
+     is_uint_type (EL 1 ts) /\
      (?bt. target_ty = BaseT bt /\ extract32_result_base_ok bt)) /\
   well_typed_type_builtin_args (AbiDecode _) target_ty ts =
-    (LENGTH ts = 1 /\ ?bd. HD ts = BaseT (BytesT bd)) /\
+    (LENGTH ts = 1 /\ ?n. HD ts = BaseT (BytesT (Dynamic n))) /\
   well_typed_type_builtin_args (AbiEncode _ method_id) target_ty ts =
     (ts <> [] /\ target_ty = TupleT ts /\
      case method_id of NONE => T | SOME bs => LENGTH bs = 4)
@@ -594,7 +623,9 @@ Definition type_builtin_result_ok_def:
   type_builtin_result_ok tenv Epsilon result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv Convert result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv Extract32 result_ty target_ty arg_tys = (result_ty = target_ty) ∧
-  type_builtin_result_ok tenv (AbiDecode _) result_ty target_ty arg_tys = (result_ty = target_ty)
+  type_builtin_result_ok tenv (AbiDecode _) result_ty target_ty arg_tys =
+    (result_ty = target_ty /\ assignable_type tenv target_ty /\
+     abi_decode_bytes_widths tenv target_ty)
 End
 
 Definition bound_at_most_def[simp]:
@@ -768,6 +799,11 @@ Definition well_typed_expr_def:
         assignable, as params_ok requires of InterfaceDecl. *)
      (ret_ty <> NoneT ==> assignable_type env.type_defs ret_ty) /\
      EVERY (assignable_type env.type_defs) arg_types /\
+     (* Vyper has only bytes1 through bytes32 (RANGE_1_32 in
+        semantics/types/primitives.py), so no ABI type of the call,
+        nested or not, contains bytes0. *)
+     abi_decode_bytes_widths env.type_defs ret_ty /\
+     EVERY (abi_decode_bytes_widths env.type_defs) arg_types /\
      LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
      expr_type (HD args) = BaseT AddressT /\
      (* positional arguments may be narrower than the declared types *)
@@ -787,7 +823,7 @@ Definition well_typed_expr_def:
      LENGTH args = 2 + LENGTH flags.rcf_kws /\
      raw_call_kws_ok flags (DROP 2 args) /\
      EL 0 (MAP expr_type args) = BaseT AddressT /\
-     (?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd))) /\
+     (?n. EL 1 (MAP expr_type args) = BaseT (BytesT (Dynamic n)))) /\
   well_typed_expr env (Call ty (RawCallCalldataTarget flags) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
      flags.rcf_max_outsize < dimword(:256) /\

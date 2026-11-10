@@ -61,7 +61,7 @@ is `e2eCorrectness.vyper_call_correct`.
 | Hypothesis | Class | Current producer / absence |
 |---|---|---|
 | compiler returns `(deploy_bc,runtime_bc)` | boundary | Caller supplies success; L1 extracts raw phases and exact assembled runtime bytes. No universal success producer. |
-| `supported_program tops` | computational boundary | 101 named `supportedFixtures*.*_supported_program` exports/plain EVAL at TASK022; exact manifest whitelist on `tops` alone. No universal membership, typing or semantic correctness producer. |
+| `supported_program tops` | computational boundary | Plain EVAL on concrete `tops`; exact whitelist on `tops` alone. No universal membership, typing or semantic correctness producer. |
 | `source_typing_ok tops am tx` | boundary + environmental | Checker artifact; partial `load_contract_establishes_checked_contract_runtime_ready`, `load_contract_establishes_machine_well_typed`, `checked_call_external_preserves_machine_well_typed`. No complete arbitrary-environment producer. |
 | `source_storage_ok tops am tx` | environmental/layout/hash guard | Conditional `eval_stmt_preserves_contract_storage_well_formed` family and `take_adopt_call_outcome_storage_suffix`. No complete deployment/transaction producer; Milestone 7. |
 | `call_state_rel tops runtime_bc am tx es` | environmental | No general producer or satisfiability theorem. L6/L8 **consume**, not produce, it; transaction corollary deferred to Milestone 7. |
@@ -95,7 +95,7 @@ admissions. Generic composition and each L1–L13 have none. See [source owners 
 |---|---|---|---|
 | S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` | raw lowering, boundary/entry facts -> terminating source-unit execution | Milestone 6 |
 | S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` | lowering + supported syntax -> `o1_source_unit_ok` | Milestone 5 |
-| S3 | `vyperLoweringCorrect.lower_vyper_runtime_unit_memory_ok` | S1 boundary + non-exemption -> `raw_unit_memory_ok` | Milestone 5 |
+| S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` | S1 boundary + non-exemption + no `DALLOCA` -> `raw_unit_memory_ok` | Milestone 5 |
 | S3d | `loweringMemCorrect.lower_vyper_runtime_unit_dload_offset_ok` | S1 boundary + `code_layout_valid` + non-exemption -> `mem_inv dload_offset_ok` (DLOAD/DLOADBYTES offsets plus the code prefix stay below 2^256) | Milestone 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` | exact O1 success, raw shape/entry/memory, `o1_run_state_ok` (incl. `code_layout_valid`), DLOAD offset bound (`mem_inv dload_offset_ok`) -> forward simulation up to any well-formed dead-byte set `D` (`ctx_sim D`, `dead_wf D`) | Milestone 3 |
 | S5 | `o1PipelineCorrect.o1_pipeline_memory_obligations` | O1, generated plan, raw shape/entry/memory -> existential `Inv`, output memory/reachability | Milestone 5 |
@@ -158,7 +158,7 @@ producers remain Milestone 7 work.
 
 ## Deployment, function simulation and retired contracts
 
-`e2eCorrectness.e2e_deploy_correctness` is a meaningful **ADMITTED** single-frame
+`e2eDeployCorrectness.e2e_deploy_correctness` is a meaningful **ADMITTED** single-frame
 creation statement (Milestone 6 item7), not the old proved `T` placeholder.
 It requires Call-free constructor bodies, canonical arguments, actual deployment
 typing/storage/pre-constant readiness and an uninstalled source target; success

@@ -529,16 +529,21 @@ Proof
   rpt strip_tac >>
   `s1.vs_accounts = s2.vs_accounts /\ s1.vs_call_ctx = s2.vs_call_ctx`
     by gvs[execution_equiv_def] >>
+  `LENGTH inst1.inst_operands = LENGTH inst2.inst_operands`
+    by metis_tac[listTheory.LENGTH_MAP] >>
+  `eval_operands inst1.inst_operands s1 = eval_operands inst2.inst_operands s2`
+    by (irule eval_operands_match >> rw[] >>
+        qpat_x_assum `MAP _ _ = MAP _ _` (mp_tac o Q.AP_TERM `EL i`) >>
+        gvs[listTheory.EL_MAP]) >>
   ASM_REWRITE_TAC[step_inst_base_def] >>
   Cases_on `inst1.inst_operands` >> Cases_on `inst2.inst_operands` >>
   gvs[result_equiv_def] >>
   TRY (Cases_on `t`) >> TRY (Cases_on `t'`) >>
   gvs[AllCaseEqs(), result_equiv_def, LET_THM] >>
   TRY (BasicProvers.TOP_CASE_TAC >> gvs[result_equiv_def]) >>
-  irule halt_state_ee_UNIV >>
-  irule set_returndata_ee_UNIV >>
-  irule ee_UNIV_with_accounts >>
-  ASM_REWRITE_TAC[]
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[result_equiv_def]) >>
+  gvs[execution_equiv_def, halt_state_def, set_returndata_def,
+      lookup_var_def]
 QED
 
 Theorem halting_term_sim:

@@ -48,8 +48,10 @@
 
 Theory exprSimArith
 Ancestors
+  exprBopSimDefs exprBopStraight
+  exprSimDefs
   arithmetic list rich_list bit integer words fcp integer_word int_bitwise
-  intBits fragExec varsExt exprSim freshWrites exprSimOps exprSimCompare
+  intBits fragExec varsExt  freshWrites exprSimOps exprSimCompare
   loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps arithmeticProps
   compileEnv vyperAST vyperInterpreter vyperContext vyperValue
@@ -799,10 +801,10 @@ Proof
   rpt gen_tac >> simp[binop_frag_def, binop_frag_words_def] >> strip_tac >> rpt gen_tac >>
   strip_tac >>
   first_x_assum (qspecl_then [`sa`, `sb`, `x`, `y`, `op`, `s0`] mp_tac) >>
-  (impl_tac >- gvs[expr_res_ok_def]) >>
-  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
+  (impl_tac >- gvs[expr_res_ok_def, val_to_w256_def]) >>
+  strip_tac >> qexists_tac `r` >> asm_rewrite_tac[] >>
   gvs[val_to_w256_def, word_value_def] >>
-  Cases >> simp[expr_exit_def]
+  Cases_on `r` >> gvs[expr_exit_def]
 QED
 
 Theorem compile_decimal_add_sub_mod_sim:

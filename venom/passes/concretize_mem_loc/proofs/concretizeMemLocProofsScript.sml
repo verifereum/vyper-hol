@@ -21,13 +21,14 @@
 
 Theory concretizeMemLocProofs
 Ancestors
-  concretizeMemLocDefs allocaRemapDefs pointerConfinedDefs passResidualFrame
+  concretizeAnalysisSizeLookup concretizeMemLocDefs allocaRemapDefs pointerConfinedDefs passResidualFrame
   passSimulationProps passSimulationDefs passSharedProps passSharedDefs
   venomWf venomExecSemantics venomExecProofs opcodeClass
   venomMemDefs venomMemProofs stateEquiv
   venomInst venomState
   list finite_map pair arithmetic sorting enumeral toto
   words pred_set combin
+  passTransform
 Libs
   fcpLib
 
@@ -1906,7 +1907,7 @@ val exec_ok_or_error_thms = let
 in
   map prove_for
     [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def]
+     exec_read0_def, exec_gas_def, exec_read1_def]
 end;
 
 Triviality exec_result_helpers_not_intret_cml[simp]:
@@ -1925,7 +1926,7 @@ Triviality exec_result_helpers_not_intret_cml[simp]:
      exec_create inst s v off sz salt <> IntRet vals s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def, exec_ext_call_def, exec_delegatecall_def,
      exec_create_def, extract_venom_result_def] >>
   gvs[AllCaseEqs()]
@@ -1936,8 +1937,9 @@ Triviality step_inst_base_intret_terminator[local]:
     step_inst_base inst s = IntRet vals s' ==>
     is_terminator inst.inst_opcode
 Proof
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def]
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_intret_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 (* Effect-free ops only return OK or Error *)
@@ -2694,6 +2696,41 @@ Proof
   irule cr_update_var_non_pv >> simp[] >>
   irule concretize_rel_update_fmp_same >> simp[]
 QED
+(* GAS pops the same reading on both sides: CR's frame includes the
+   readings, and the output is non-pv. *)
+Triviality concretize_step_gas:
+  !inst amap fn livesets init s1 s2.
+    inst.inst_opcode = GAS /\
+    (!v. MEM v inst.inst_outputs ==>
+         v NOTIN pointer_derived_vars fn (FDOM amap)) /\
+    concretize_rel amap fn livesets init s1 s2 ==>
+    lift_result
+      (concretize_rel amap fn livesets init)
+      (concretize_rel amap fn livesets init)
+      (concretize_rel amap fn livesets init)
+      (step_inst_base inst s1)
+      (step_inst_base inst s2)
+Proof
+  rpt strip_tac >>
+  `concretize_frame s1 = concretize_frame s2` by fs[concretize_rel_def, LET_THM] >>
+  `s1.vs_gas_readings = s2.vs_gas_readings` by
+    (qpat_x_assum `concretize_frame _ = _`
+       (mp_tac o AP_TERM ``venom_state_vs_gas_readings``) >>
+     simp[concretize_frame_def]) >>
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+  simp[exec_gas_def] >>
+  Cases_on `inst.inst_outputs` >> simp[lift_result_def] >>
+  Cases_on `t` >> simp[lift_result_def] >>
+  Cases_on `s2.vs_gas_readings` >> gvs[lift_result_def] >>
+  irule cr_update_var_non_pv >> simp[] >>
+  irule concretize_rel_frame >> conj_tac
+  >- (`!s r. concretize_frame (s with vs_gas_readings := r) =
+             concretize_frame s with vs_gas_readings := r` by
+        simp[concretize_frame_def, venom_state_component_equality] >>
+      fs[concretize_rel_def, LET_THM]) >>
+  qexistsl [`s1`, `s2`] >> simp[]
+QED
+
 (* Non-memory, non-ext-call, non-effect-free, non-branch ops:
    Covers SSTORE, TSTORE, and non-branch terminators (STOP, SINK,
    INVALID, SELFDESTRUCT, RET). Operands non-pv, scalar fields agree,
@@ -2710,6 +2747,7 @@ Triviality concretize_step_non_mem_identity:
     inst.inst_opcode <> DJMP /\
     inst.inst_opcode <> INVOKE /\
     inst.inst_opcode <> NOP /\
+    inst.inst_opcode <> GAS /\
     Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -2765,7 +2803,7 @@ Proof
    s1.vs_pending_deletions = s2.vs_pending_deletions` by
     fs[concretize_rel_def, LET_THM] >>
   `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests /\
-   s1.vs_pending_deletions = s2.vs_pending_deletions` by
+   s1.vs_gas_readings = s2.vs_gas_readings` by
     fs[concretize_rel_def, LET_THM] >>
   (* Step 5: case split on opcode — SSTORE, TSTORE, STOP, SINK,
      INVALID, SELFDESTRUCT, RET remain (RETURN/REVERT eliminated by
@@ -5594,6 +5632,11 @@ Proof
     metis_tac[non_alloca_non_pp_output_not_pv]
   ) >>
   (* Non-effect-free ops *)
+  Cases_on `inst.inst_opcode = GAS`
+  >- (`~is_pointer_preserving_op inst.inst_opcode` by
+        simp[is_pointer_preserving_op_def] >>
+      qexists `init` >> irule concretize_step_gas >>
+      metis_tac[non_alloca_non_pp_output_not_pv]) >>
   Cases_on `inst.inst_opcode = RETURN`
   >- (qexists `init` >> irule concretize_step_return >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = DALLOCA`
@@ -6405,21 +6448,7 @@ Proof
   rpt strip_tac >> drule_all alloca_size_le_remaining >> simp[]
 QED
 
-(* FIND with predicate Q /\ id = FIND with id /\ Q (needed because
-   find_by_inst_id puts inst_id first, but get_alloca_size_def puts Q first) *)
-Triviality find_by_inst_id_alt:
-  !Q l inst.
-    ALL_DISTINCT (MAP (\i. i.inst_id) l) /\
-    MEM inst l /\ Q inst ==>
-    FIND (\i. Q i /\ i.inst_id = inst.inst_id) l = SOME inst
-Proof
-  gen_tac >>
-  Induct >> simp[FIND_thm] >>
-  rpt strip_tac >> gvs[] >>
-  IF_CASES_TAC >> gvs[ALL_DISTINCT_APPEND, MEM_MAP]
-QED
-
-(* get_alloca_size for a known ALLOCA instruction in the function *)
+(* Literal-size extraction is shared with the stage analysis boundary. *)
 Triviality get_alloca_size_from_inst:
   !fn bb inst sz.
     fn_inst_ids_distinct fn /\
@@ -6428,18 +6457,8 @@ Triviality get_alloca_size_from_inst:
     get_alloca_size fn (Allocation inst.inst_id) = w2n sz
 Proof
   rpt strip_tac >>
-  simp[get_alloca_size_def] >>
-  `MEM inst (FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks))` by
-    (`MEM inst (fn_insts fn)` by metis_tac[mem_fn_insts] >>
-     gvs[fn_insts_def, fn_insts_blocks_flat]) >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id)
-     (FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks)))` by
-    gvs[fn_inst_ids_distinct_alt, fn_insts_def, fn_insts_blocks_flat] >>
-  `FIND (\i. is_alloca_op i.inst_opcode /\ i.inst_id = inst.inst_id)
-        (FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks)) = SOME inst` by
-    (match_mp_tac (find_by_inst_id_alt |> Q.SPEC `is_alloca_op o inst_opcode`
-       |> SIMP_RULE (srw_ss()) []) >> simp[is_alloca_op_def]) >>
-  gvs[]
+  irule concretizeAnalysisSizeLookupTheory.get_alloca_size_from_inst >>
+  metis_tac[mem_fn_insts]
 QED
 
 (* alloca_sizes_match preserved by step_inst for non-INVOKE instructions *)

@@ -28,7 +28,7 @@ Theory entryDispatchProps
 Ancestors
   list rich_list words
   moduleLoweringProps selectorDispatch compileVyper vyperInterpreter
-  vyperTypeBytesCrypto contractABI moduleLowering compileEnv fragExec
+  vyperTypeBytesCrypto contractABI moduleLowering compileEnv loweringStateRelDefs fragExec
   emitHelper emitHelperProps venomState
 Libs
   wordsLib
@@ -305,7 +305,7 @@ Proof
   simp[venomInstTheory.mk_inst_def] >>
   simp[exprLoweringPropsTheory.run_inst_seq_def,
        venomExecSemanticsTheory.step_inst_base_opcode_eqs,
-       venomExecSemanticsTheory.exec_read0_def,
+       venomExecSemanticsTheory.exec_read0_def, venomExecSemanticsTheory.exec_gas_def,
        venomExecSemanticsTheory.exec_pure1_def,
        venomInstTheory.mk_inst_def, eval_operand_def,
        lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>

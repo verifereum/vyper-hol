@@ -2,7 +2,7 @@
 Theory stmtSimLogStoreContinue
 Ancestors
   stmtSimLogDataRun stmtSimLogDataFrame stmtSimLogAllocate stmtSimLogEncodeFrame
-  stmtSimLogExecFields abiDecoderFrame compileEnv exprLoweringProps
+  stmtSimLogExecFields abiDecoderFrame compileEnv loweringStateRelDefs exprLoweringProps
   stmtSimLogEncodeFields exprSimBufferStore context emitHelper emitHelperProps
   stmtSimLogData stmtSimLogTopics stmtSimLogDataInput vyperABI supportedTypes stmtLowering venomInst venomState words list rich_list arithmetic
 
@@ -41,6 +41,10 @@ Proof
     (rpt strip_tac >>
      `not_fresh_at st p` by
        (fs[local_ptrs_reserved_def] >> first_x_assum drule >> simp[]) >>
+     fs[log_write_frame_def]) >>
+  `!x. ce.ce_imm_alloca = SOME (Var x) ==> lookup_var x t = lookup_var x s` by
+    (rpt strip_tac >>
+     `not_fresh_at st x` by fs[local_ptrs_reserved_def] >>
      fs[log_write_frame_def]) >>
   irule log_encode_continuation >>
   qexistsl_tac [`F`,`[(b,n)]`,`32`,`s`,`0`] >>

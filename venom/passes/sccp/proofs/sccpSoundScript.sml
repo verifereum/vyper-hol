@@ -68,30 +68,6 @@ Proof
   fs[lookup_var_def]
 QED
 
-Theorem const_sound_foldl_bottom[local]:
-  !vars st s.
-    const_sound st s ==>
-    const_sound (FOLDL (\l v. l |+ (v, CL_Bottom)) st vars) s
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  first_x_assum irule >>
-  fs[const_sound_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> Cases_on `v = h` >> gvs[]
-QED
-
-(* const_sound is only about vs_vars, not other fields *)
-Theorem const_sound_update_var[local]:
-  !st s v c.
-    const_sound st s /\
-    (!v' c'. v' <> v /\ FLOOKUP st v' = SOME (CL_Const c') ==>
-             FLOOKUP s.vs_vars v' = SOME c') ==>
-    const_sound (st |+ (v, CL_Const c))
-      (s with vs_vars := s.vs_vars |+ (v, c))
-Proof
-  rw[const_sound_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> Cases_on `v' = v` >> gvs[]
-QED
-
 (* Bottom-marking output vars in FLOOKUP preserves constants for non-member vars *)
 Theorem foldl_bottom_preserves_const[local]:
   !outs st v c.
@@ -376,15 +352,6 @@ Proof
   fs[const_sound_def, lookup_var_def]
 QED
 
-(* Helper: const_sound preserved when only sl_targets changes *)
-Theorem const_sound_targets_update[local]:
-  !lat tgts s.
-    const_sound lat.sl_vals s ==>
-    const_sound (lat with sl_targets := tgts).sl_vals s
-Proof
-  simp[]
-QED
-
 (* Helper: terminators preserve const_sound *)
 Theorem const_sound_after_terminator[local]:
   !lat fuel ctx inst s s'.
@@ -532,44 +499,75 @@ Proof
   gvs[update_var_def, FLOOKUP_UPDATE]
 QED
 
+Theorem sccp_transfer_terminator_vals:
+  !fn inst lat. is_terminator inst.inst_opcode ==>
+    (sccp_transfer_inst fn inst lat).sl_vals = lat.sl_vals
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> PHI` by (strip_tac >> gvs[is_terminator_def]) >>
+  simp[sccp_transfer_inst_def] >>
+  Cases_on `inst.inst_opcode = JMP`
+  >- (simp[] >>
+      Cases_on `inst.inst_operands` >> simp[] >>
+      Cases_on `t` >> simp[] >> Cases_on `h` >> simp[]) >>
+  Cases_on `inst.inst_opcode = JNZ`
+  >- (simp[] >>
+      Cases_on `inst.inst_operands` >> simp[] >>
+      Cases_on `t` >> simp[] >>
+      Cases_on `h'` >> simp[] >>
+      Cases_on `t'` >> simp[] >>
+      Cases_on `h'` >> simp[] >>
+      Cases_on `t` >> simp[] >>
+      Cases_on `const_eval_operand lat.sl_vals h` >> simp[] >>
+      IF_CASES_TAC >> simp[]) >>
+  simp[] >> Cases_on `inst.inst_opcode = DJMP` >> simp[]
+QED
+
 Theorem sccp_transfer_sound:
   !fn. transfer_sound (\lat. const_sound lat.sl_vals)
          sccp_transfer_inst fn
 Proof
   rw[transfer_sound_def] >> rpt strip_tac >>
-  simp[sccp_transfer_inst_def] >>
-  rpt (IF_CASES_TAC >> gvs[]) >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
-  rpt (IF_CASES_TAC >> gvs[]) >>
-  REWRITE_TAC [FOLDL] >>
-  (* Terminator goals *)
-  TRY (irule const_sound_after_terminator >> metis_tac[] >> NO_TAC) >>
-  (* No-output goals *)
-  TRY (irule const_sound_no_outputs >> metis_tac[] >> NO_TAC) >>
-  (* FOLDL-bottom goals (direct) *)
-  TRY (irule const_sound_after_step_bottom >>
-       simp[is_terminator_def] >> metis_tac[] >> NO_TAC) >>
-  (* Multi-output partially-evaluated FOLDL *)
-  TRY (`const_sound (FOLDL (\l v. l |+ (v, CL_Bottom))
-          lat.sl_vals inst.inst_outputs) s'`
-         by (irule const_sound_after_step_bottom >>
-             simp[is_terminator_def] >> metis_tac[]) >>
-       gvs[] >> NO_TAC) >>
-  (* Single-output CL_Bottom goals *)
-  TRY (irule const_sound_single_output >> simp[] >>
-       rpt strip_tac >> gvs[] >> NO_TAC) >>
-  (* Remaining 2 goals: ASSIGN and foldable single-output.
-     Both need const_sound_single_output, which requires proving the
-     FLOOKUP obligation: if the lattice value is CL_Const c then
-     FLOOKUP s'.vs_vars out = SOME c. *)
-  irule const_sound_single_output >> simp[] >>
-  rpt strip_tac >>
-  (* Existential side-goals from const_sound_single_output *)
-  TRY (qexistsl_tac [`run_ctx`, `fuel`, `inst`, `s`] >> simp[] >> NO_TAC) >>
-  imp_res_tac step_assign_result >> gvs[update_var_def, FLOOKUP_UPDATE] >>
-  (* Goal 1: val = c from eval_operand + const_eval_operand_sound *)
-  TRY (imp_res_tac const_eval_operand_sound >> gvs[] >> NO_TAC) >>
-  (* Goal 2: foldable FLOOKUP from const_try_fold_sound *)
-  irule const_try_fold_sound >> metis_tac[]
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (simp[sccp_transfer_terminator_vals] >>
+      irule const_sound_after_terminator >> metis_tac[]) >>
+  `const_sound (FOLDL (\l v. l |+ (v, CL_Bottom))
+      lat.sl_vals inst.inst_outputs) s'` by
+    (irule const_sound_after_step_bottom >> metis_tac[]) >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- simp[sccp_transfer_inst_def] >>
+  Cases_on `inst.inst_outputs`
+  >- (simp[sccp_transfer_inst_def] >>
+      irule const_sound_no_outputs >> metis_tac[]) >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs`
+  >- (Cases_on `inst.inst_opcode = ASSIGN`
+      >- (Cases_on `inst.inst_operands`
+          >- gvs[sccp_transfer_inst_def, FOLDL] >>
+          rename1 `inst.inst_operands = op::ops` >>
+          Cases_on `ops`
+          >- (simp[sccp_transfer_inst_def] >>
+              irule const_sound_single_output >>
+              reverse conj_tac
+              >- (qexistsl_tac [`run_ctx`, `fuel`, `inst`, `s`] >> simp[]) >>
+              rpt strip_tac >>
+              drule_all step_assign_result >> strip_tac >>
+              drule_all const_eval_operand_sound >> strip_tac >>
+              gvs[update_var_def, FLOOKUP_UPDATE]) >>
+          gvs[sccp_transfer_inst_def, FOLDL]) >>
+      Cases_on `is_sccp_foldable inst.inst_opcode`
+      >- (simp[sccp_transfer_inst_def] >>
+          irule const_sound_single_output >>
+          reverse conj_tac
+          >- (qexistsl_tac [`run_ctx`, `fuel`, `inst`, `s`] >> simp[]) >>
+          rpt strip_tac >>
+          irule const_try_fold_sound >> metis_tac[]) >>
+      gvs[sccp_transfer_inst_def, FOLDL]) >>
+  Cases_on `inst.inst_opcode = ASSIGN`
+  >- (Cases_on `inst.inst_operands`
+      >- gvs[sccp_transfer_inst_def, FOLDL] >>
+      rename1 `inst.inst_operands = src::rest` >>
+      Cases_on `rest` >> gvs[sccp_transfer_inst_def, FOLDL]) >>
+  gvs[sccp_transfer_inst_def, FOLDL]
 QED
 

@@ -1,46 +1,28 @@
 (*
- * Statement simulation: an augmented assignment to a word storage or
- * transient variable (#637)
- *
- * self.x op= e for a module variable x in storage or transient storage of
- * a word type.  As for a local (stmtSimAugAssign), self.x op= e is
- * self.x = self.x op e on both sides: the source looks x up (a
- * StoragePlace at x's layout slot), reads it, evaluates e, runs the
- * operator and writes the slot, as evaluating self.x op e and then
- * assigning it would; the lowering is an SLOAD or TLOAD of x's slot, e
- * lowered at x's type, compile_binop and an SSTORE or TSTORE at the slot,
- * which is the code of that assignment, since the lowered read of self.x is
- * the same load.  So the statement is stmtSimAssignStorage's
- * compile_assign_storage_typed_stmt_frag for self.x op e, whose simulation
- * is compile_bop_word_case's (exprSimOperators): the checked operators'
- * aborts are among its exits, and ** and the narrow or negative shifts rest
- * on exprSimBinopFrag's cheats (#572).  The read of self.x is exprSimLeaves'
- * storage read, lifted to expr_sim by exprSimUnwrap's expr_sim_of_vv_sim,
- * which carries that theory's cheats for copies and constructor immutables.
- *
- * TOP-LEVEL:
- *   compile_augassign_toplevel_case — self.x op= e on a word storage or
- *                                     transient x, for every outcome,
- *                                     given e's expr_sim_case
- *   eval_augassign_toplevel_assign  — self.x op= e runs as
- *                                     self.x = self.x op e
- *   stmt_env_augassign_toplevel     — and has its code
- *   expr_body_pre_augassign_toplevel — self.x op e meets expr_body_pre
- *                                     where e does
- *
- * Helpers: eval_target_place_toplevel, eval_augassign_toplevel,
- *   eval_assign_pure_target, augassign_toplevel_code_parts,
- *   lower_value_toplevel_word, augassign_toplevel_code_bop,
- *   assign_toplevel_code_parts, toplevel_storage_name_case
+ * Counted simulation of self.x op= e for word storage/transient variables.
+ * The compiler stages are slot load, RHS, binary operator and slot store.
+ * Source certificates must use AugAssign itself, not a synthetic assignment:
+ * equality of source runs does not transport syntactic exempt certificates.
  *)
 
 Theory stmtSimAugAssignStorage
 Ancestors
+  gasContext exprSimDefs vyperExprNoControl fragGasPath exprBopSimDefs
+  gasExemptCert gasSummary fragGasMode fragGasPathMem fragGasSeq fragGasFresh
+  freshWrites venomExecSemantics venomInst venomState
+  exprSimUnwrap exprSimProps accountsRelProps
+  vyperStorageLayoutSafety vyperStorageBackend
+  exprBopSimProps
+  exprSimSource
+  exprSimHypsDefs
+  stmtSimDefs
+  loweringPosts
   allocLimits list finite_map
-  fragExec exprSim exprSimHyps exprSimOps exprSimOperators exprSimLeaves
-  stmtSim stmtSimAssign stmtSimAssignMem stmtSimAssignStorage
+  fragExec  exprSimHyps exprSimOps exprSimOperators exprSimLeaves
+  exprSimTopLevelProps
+   stmtSimAssign stmtSimAssignMem stmtSimAssignStorage
   stmtSimAugAssign
-  exprLowering exprBopLowering exprLoweringProps stmtLowering compileEnv
+  exprLowering exprBopLowering exprLoweringProps stmtLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValue vyperTypeSystem vyperTyping
   vyperTypeCallGraph vyperAST
 Libs
@@ -66,117 +48,455 @@ Proof
        return_def, LET_THM, get_place_def, place_type_value_def]
 QED
 
-(* self.x op= e on a storage or transient x whose slot decodes to v0: x's
-   place and type are read without changing the state, e is evaluated,
-   then the operator runs on v0 and e's value, and the result is written
-   to x's slot. *)
-Theorem eval_augassign_toplevel:
-  !cx ty src id bop e es res es' ts tr typ id_str slot tvt v0.
-    eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e) es =
-      (res, es') /\
-    get_module_code cx src = SOME ts /\
-    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
-    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-    evaluate_type (get_tenv cx) typ = SOME tvt /\
-    read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) ==>
-    ?r1 es1.
-      (do tv <- eval_expr cx e; read_result cx tv od) es = (r1, es1) /\
-      case r1 of
-        INR ex => res = INR ex /\ es' = es1
-      | INL v =>
-          case evaluate_binop
-                 (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-                 tvt bop v0 v of
-            INR err => res = INR (Error err) /\ es' = es1
-          | INL r =>
-              write_place cx (StoragePlace tr (n2w slot) tvt) r es1 =
-                (res, es')
+Theorem read_storage_slot_gas_obs:
+  read_storage_slot cx tr slot tv es = (res, ee) ==>
+  read_storage_slot cx tr slot tv (es with gas_obs := gs) =
+    (res, ee with gas_obs := gs)
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all eval_target_place_toplevel >>
+  Cases_on `tr` >>
+  simp[read_storage_slot_def, get_storage_backend_def, bind_def,
+       get_accounts_def, get_transient_storage_def]
+  >- (Cases_on `decode_value (lookup_transient_storage cx.txn.target es.tStorage)
+        (w2n slot) tv` >>
+      simp[lift_option_def, return_def, raise_def] >> strip_tac >> gvs[return_def, raise_def]) >>
+  Cases_on `decode_value (lookup_account cx.txn.target es.accounts).storage
+    (w2n slot) tv` >>
+  simp[lift_option_def, return_def, raise_def] >> strip_tac >> gvs[return_def, raise_def]
+QED
+
+
+(* Pointwise action boundary, not a certificate transport rule. *)
+Theorem eval_augassign_toplevel_forced:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) ==>
+  eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e) es =
+  (do v <- bind (eval_expr cx e) (read_result cx);
+      r <- lift_sum (evaluate_binop
+        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+        tvt bop v0 v);
+      write_storage_slot cx tr (n2w slot) tvt r od) es
+Proof
+  strip_tac >> drule_all eval_target_place_toplevel >>
   disch_then (qspec_then `es` strip_assume_tac) >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, LET_THM,
-       read_place_def] >>
-  Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r0, st0)` >>
-  Cases_on `r0` >> simp[] >>
-  rename1 `eval_expr cx e es = (INL raw, st0)` >>
-  Cases_on `read_result cx raw st0` >> rename1 `_ = (r1, es1)` >>
-  Cases_on `r1` >> simp[] >>
-  qmatch_goalsub_abbrev_tac `evaluate_binop u tvt bop v0 v1` >>
-  Cases_on `evaluate_binop u tvt bop v0 v1` >>
-  simp[lift_sum_def, return_def, raise_def]
+  simp[Once evaluate_def, bind_def, ignore_bind_def, read_place_def,
+       write_place_def] >>
+  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw, st)` >>
+  Cases_on `raw` >> simp[bind_def]
 QED
 
-(* An assignment to a target whose place is p wherever it is evaluated:
-   e's forced value, then the write of it at p. *)
-Theorem eval_assign_pure_target:
-  !cx t e p es.
-    (!s. eval_target_place cx t s = (INL p, s)) ==>
-    eval_stmt cx (Assign (BaseTarget t) e) es =
-      case (do tv <- eval_expr cx e; read_result cx tv od) es of
-        (INL v, es1) => write_place cx p v es1
-      | (INR ex, es1) => (INR ex, es1)
+Theorem augassign_toplevel_rhs_exception:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
+  bind (eval_expr cx e) (read_result cx) es = (INR ex, ee) ==>
+  eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e) es =
+    (INR ex, ee)
 Proof
-  rpt strip_tac >> simp[Once evaluate_def, bind_def] >>
-  Cases_on `eval_expr cx e es` >> rename1 `_ = (r0, st0)` >>
-  Cases_on `r0` >> simp[] >>
-  rename1 `eval_expr cx e es = (INL raw, st0)` >>
-  Cases_on `read_result cx raw st0` >> rename1 `_ = (r1, st1)` >>
-  Cases_on `r1` >> simp[]
+  strip_tac >> drule_all eval_augassign_toplevel_forced >>
+  disch_then (qspecl_then [`ty`, `e`, `bop`] mp_tac) >>
+  simp[Once bind_def]
 QED
 
-(* self.x op= e runs as self.x = self.x op e, the read annotated with the
-   statement's type. *)
-Theorem eval_augassign_toplevel_assign:
-  !cx ty src id bop e es res es' ts tr typ id_str slot tvt v0.
-    eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e) es =
-      (res, es') /\
-    get_module_code cx src = SOME ts /\
-    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
-    lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-    evaluate_type (get_tenv cx) typ = SOME tvt /\
-    read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
-    bop <> In /\ bop <> NotIn ==>
-    eval_stmt cx
-      (Assign (BaseTarget (TopLevelNameTarget (src, id)))
-         (Builtin ty (Bop bop) [TopLevelName ty (src, id); e])) es =
-      (res, es')
+Theorem augassign_toplevel_rhs_normal:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
+  bind (eval_expr cx e) (read_result cx) es = (INL v, ee) ==>
+  eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e) es =
+  bind (lift_sum (evaluate_binop
+    (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+    tvt bop v0 v)) (write_storage_slot cx tr (n2w slot) tvt) ee
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all eval_augassign_toplevel >> strip_tac >>
-  `!s. eval_target_place cx (TopLevelNameTarget (src, id)) s =
-         (INL (StoragePlace tr (n2w slot) tvt), s)` by
-    metis_tac[eval_target_place_toplevel] >>
-  drule eval_assign_pure_target >> simp[] >> disch_then kall_tac >>
-  `(do r0 <- eval_expr cx (TopLevelName ty (src, id)); read_result cx r0 od)
-     es = (INL v0, es)` by
-    (Cases_on `eval_expr cx (TopLevelName ty (src, id)) es` >>
-     drule_all eval_expr_toplevel_storage >> strip_tac >>
-     gvs[bind_def]) >>
-  Cases_on `(do tv <- eval_expr cx (Builtin ty (Bop bop)
-                                     [TopLevelName ty (src, id); e]);
-                read_result cx tv od) es` >>
-  rename1 `_ = (rr, es2)` >>
-  drule eval_expr_bop_cases >> simp[] >> strip_tac >>
-  `!w st. bop_result cx ty bop [ty; expr_type e] v0 w st =
-          case evaluate_binop
-                 (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-                 tvt bop v0 w of
-            INL v => INL v
-          | INR err => INR (Error err)` by
-    (rpt gen_tac >> irule bop_result_augassign >> simp[]) >>
-  gvs[vyperASTTheory.expr_type_def] >>
+  strip_tac >> drule_all eval_augassign_toplevel_forced >>
+  disch_then (qspecl_then [`ty`, `e`, `bop`] mp_tac) >>
+  simp[Once bind_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
+QED
+
+Theorem augassign_toplevel_rhs_admissible:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
+  gas_admissible (eval_stmt cx
+    (AugAssign ty (TopLevelNameTarget (src,id)) bop e)) (stmt_res_ok lctx) es ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+Proof
+  strip_tac >> rw[gas_admissible_def] >>
+  Cases_on `res` >- simp[expr_res_ok_def] >>
+  rename1 `INR ex` >>
+  `read_storage_slot cx tr (n2w slot) tvt (es with gas_obs := gs) =
+     (INL v0, es with gas_obs := gs)` by
+    metis_tac[read_storage_slot_gas_obs] >>
+  `eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e)
+     (es with gas_obs := gs) = (INR ex, ee)` by
+    (irule augassign_toplevel_rhs_exception >> metis_tac[]) >>
+  `stmt_res_ok lctx (INR ex)` by metis_tac[gas_admissible_result] >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >> simp[bind_def] >>
+  Cases_on `eval_expr cx e (es with gas_obs := gs)` >>
+  rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+  imp_res_tac read_result_no_control >>
+  imp_res_tac (cj 1 eval_expr_no_control) >>
+  gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]
+QED
+
+Theorem augassign_toplevel_binop_admissible:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
+  bop <> In /\ bop <> NotIn /\
+  gas_admissible (eval_stmt cx
+    (AugAssign ty (TopLevelNameTarget (src,id)) bop e)) (stmt_res_ok lctx) es /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v, ee) ==>
+  expr_res_ok (bop_result cx ty bop [ty; expr_type e] v0 v ee)
+Proof
+  strip_tac >>
+  `bop_result cx ty bop [ty; expr_type e] v0 v ee =
+   case evaluate_binop
+     (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+     tvt bop v0 v of INL w => INL w | INR err => INR (Error err)` by
+    (irule bop_result_augassign >> simp[]) >>
+  pop_assum SUBST1_TAC >>
   Cases_on `evaluate_binop
-              (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-              tvt bop v0 v2` >> gvs[write_place_def]
+    (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+    tvt bop v0 v` >- simp[expr_res_ok_def] >>
+  rename1 `_ = INR err` >>
+  `read_storage_slot cx tr (n2w slot) tvt (es with gas_obs := gs) =
+     (INL v0, es with gas_obs := gs)` by
+    metis_tac[read_storage_slot_gas_obs] >>
+  `eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e)
+     (es with gas_obs := gs) = (INR (Error err), ee)` by
+    (drule_all augassign_toplevel_rhs_normal >>
+     disch_then (qspecl_then [`ty`, `bop`] mp_tac) >>
+     simp[lift_sum_def, bind_def, raise_def]) >>
+  `stmt_res_ok lctx (INR (Error err))` by metis_tac[gas_admissible_result] >>
+  gvs[stmt_res_ok_def, expr_res_ok_def]
 QED
 
-(* ===== The code ===== *)
+Theorem augassign_storage_load_path:
+  emit_op (if tr then TLOAD else SLOAD) [Lit slot] sa = (op,sb) /\
+  fn_has_code sa sb func /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?out. op = Var out /\
+    gas_marked_path F ctx func s0 0
+      (OK ((update_var out (if tr then tload slot s0 else sload slot s0) s0)
+        with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  strip_tac >>
+  `sa.cs_current_bb = sb.cs_current_bb` by
+    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
+  drule emitted_insts_emit_op_local >> strip_tac >>
+  gvs[fn_has_code_def] >>
+  qmatch_asmsub_abbrev_tac `sa.cs_current_insts ++ [inst]` >>
+  qmatch_goalsub_abbrev_tac `OK (last with vs_inst_idx := _)` >>
+  `run_inst_seq [inst] s0 = OK last` by
+    (Cases_on `tr` >>
+     simp[Abbr `inst`, Abbr `last`, run_inst_seq_def, step_inst_base_def,
+          mk_inst_def, exec_read1_def, eval_operand_def]) >>
+  qspecl_then [`[inst]`, `s0`, `last`] mp_tac tuple_run_inst_seq_gas_path >>
+  Cases_on `tr` >>
+  simp[gas_marked_path_def, Abbr `inst`, mk_inst_def, is_terminator_def] >>
+  disch_then irule >> qexists_tac `bb` >> simp[] >>
+  qpat_x_assum `_ ++ [_] <<= _` mp_tac >>
+  simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+  qpat_x_assum `bb.bb_instructions = _` SUBST1_TAC >>
+  pure_once_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def]
+QED
 
-(* self.x op= e on a storage or transient x: no declaration, x's target is
-   its slot with no code, then the load of the slot, e lowered at x's type,
-   the operator and the store at the slot. *)
+Theorem declared_storage_holds_value:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) ty = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v, es) /\
+  contract_storage_well_formed cx es /\ storage_layout_safe cx /\
+  stmt_state_rel ctx func cenv cx es s ==>
+  storage_holds cx tr ty (Value v) (n2w slot) es s
+Proof
+  strip_tac >>
+  `slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tvt` by
+    (irule toplevel_storage_slots_in_range >> metis_tac[]) >>
+  `declared_storage_region cx src id [] = SOME (tr,n2w slot,tvt)` by
+    simp[declared_storage_region_def] >>
+  `!st. storage_read_live cx tr st (n2w slot) tvt` by
+    (gen_tac >> irule declared_storage_region_read_live >> metis_tac[]) >>
+  `w2n ((n2w slot):bytes32) + type_slot_size tvt <= dimword (:256)` by
+    (drule_all storage_layout_safe_region_nonoverflow >> simp[]) >>
+  `storage_range_agree (get_storage cx es tr)
+    (if tr then contract_transient s else contract_storage s) (n2w slot) tvt` by
+    (irule storage_range_agree_of_live >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`cx`, `tr`] >> simp[] >> Cases_on `tr` >>
+     gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
+         transient_rel_def, get_storage_def, vfmStateTheory.lookup_account_def]) >>
+  gvs[storage_holds_def, read_result_def, return_def]
+QED
+
+Theorem augassign_storage_load_frame:
+  emit_op (if tr then TLOAD else SLOAD) [Lit slot] sa = (op,sb) /\
+  fn_has_code sa sb func /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  is_word_type ty /\ storage_holds cx tr ty (Value v) slot es s0 /\
+  evaluate_type (get_tenv cx) ty = SOME tvt ==>
+  ?t. gas_marked_path F ctx func s0 0 (OK t) /\
+    eval_operand op t = SOME (typed_val_to_w256 tvt v) /\
+    stmt_state_rel ctx func cenv cx es t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    local_ptrs_reserved cenv sb /\
+    (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
+    t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+    (?out. op = Var out /\ not_fresh_at sb out)
+Proof
+  strip_tac >> drule_all augassign_storage_load_path >> strip_tac >>
+  drule emitted_insts_emit_op_local >> strip_tac >> gvs[] >>
+  first_x_assum (qspec_then `ctx` assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_marked_path F ctx func s0 0 (OK t)` >>
+  qexists_tac `t` >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (simp[Abbr `t`, stmt_state_rel_inst_idx] >>
+     irule stmt_state_rel_update_var >> simp[] >>
+     irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
+  `local_ptrs_reserved cenv sb` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `sa.cs_current_bb = sb.cs_current_bb` by
+    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
+  drule_all storage_holds_load >> strip_tac >>
+  simp[Abbr `t`, update_var_def, eval_operand_def, lookup_var_def,
+       FLOOKUP_UPDATE, not_fresh_at_def] >>
+  rpt strip_tac >> gvs[not_fresh_at_def]
+QED
+
+Theorem augassign_toplevel_place_exec:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  gas_marked_path memory ctx func s0 0 (OK t) ==>
+  gas_marked_exec memory (ctx,func)
+    (eval_target_place cx (TopLevelNameTarget (src,id)))
+    (es,s0) [] (INL (StoragePlace tr (n2w slot) tvt)) es (OK t)
+Proof
+  strip_tac >> simp[gas_marked_exec_def, gas_explicit_def] >>
+  gen_tac >> irule (cj 1 eval_target_place_toplevel) >> metis_tac[]
+QED
+
+Theorem augassign_toplevel_rhs_exempt:
+  read_storage_slot cx tr slot tvt es = (INL v0, es) /\
+  gas_marked_exec memory (ctx,func)
+    (eval_target_place cx (TopLevelNameTarget (src,id)))
+    (es,s0) [] (INL (StoragePlace tr slot tvt)) es (OK t) /\
+  ~t.vs_halted /\
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+    (es with gas_obs := [],t) marks (err,ee) (leaf,fin) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_stmt cx
+      (AugAssign ty (TopLevelNameTarget (src,id)) bop e)) (return ()))
+    (es,s0) marks (err,ee) (leaf,fin)
+Proof
+  strip_tac >>
+  `ignore_bind (eval_stmt cx
+     (AugAssign ty (TopLevelNameTarget (src,id)) bop e)) (return ()) =
+   do p <- eval_target_place cx (TopLevelNameTarget (src,id));
+      cur <- read_place cx p;
+      ptv <- place_type_value cx p;
+      v <- bind (eval_expr cx e) (read_result cx);
+      r <- lift_sum (evaluate_binop
+        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+        ptv bop cur v);
+      ignore_bind (write_place cx p r) (return ()) od` by
+    simp[Once evaluate_def, ignore_bind_def, bind_assoc] >>
+  pop_assum SUBST1_TAC >>
+  drule gas_exempt_cert_bind_place >> simp[] >> disch_then irule >>
+  `gas_marked_exec memory (ctx,func) (read_place cx (StoragePlace tr slot tvt))
+     (es with gas_obs := [],t) [] (INL v0)
+     (es with gas_obs := []) (OK t)` by
+    (simp[gas_marked_exec_def, gas_explicit_def] >> conj_tac
+     >- (gen_tac >> simp[read_place_def] >>
+         metis_tac[read_storage_slot_gas_obs]) >>
+     irule gas_marked_path_from_mem >> simp[gas_path_mem_rules]) >>
+  drule gas_exempt_cert_bind_value >> simp[] >> disch_then irule >>
+  simp[place_type_value_def, bind_return] >>
+  irule gas_exempt_cert_error_value >> simp[]
+QED
+
+(* Typed storage operands, independently of storage changes made by the RHS. *)
+Theorem augassign_storage_binop_ready:
+  expr_body_pre cenv cx env e es /\
+  evaluate_type (get_tenv cx) ty = SOME tvt /\
+  well_formed_type env.type_defs ty /\
+  read_storage_slot cx tr slot tvt es = (INL v0, es) /\
+  (bop = Exp ==> nonneg_int_literal e) /\
+  (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+  well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v, ee) ==>
+  value_has_type tvt v0 /\ word_value v0 /\ expr_sim_inv cenv cx env ee /\
+  (!w. bop_result cx ty bop [ty; expr_type e] v0 v est = INL w ==>
+       value_has_type tvt w) /\
+  binop_frag ctx func cenv cx bop ty ty NONE
+    (if bop = Exp then expr_int_literal e else NONE)
+    [ty; expr_type e] v0 v est
+Proof
+  strip_tac >>
+  `word_value_type ty /\ word_value_type (expr_type e)` by
+    metis_tac[well_typed_binop_augassign_word] >>
+  `well_formed_type_value tvt` by
+    metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
+  `value_has_type tvt v0` by
+    metis_tac[vyperTypeStatePreservationTheory.read_storage_slot_success_type] >>
+  `word_value v0` by metis_tac[word_value_type_typed] >>
+  `type_bits ty MOD 8 = 0` by metis_tac[well_formed_type_bits] >>
+  `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_result) >> strip_tac >> gvs[] >>
+  drule (REWRITE_RULE [ETA_AX] eval_expr_read_INL) >> strip_tac >>
+  `!n. expr_int_literal e = SOME n ==> v = IntV n` by
+    metis_tac[eval_expr_int_literal_agrees] >>
+  `(bop = ShL \/ bop = ShR ==> ?i. v = IntV i /\ 0 <= i)` by
+    metis_tac[eval_expr_shift_amount] >>
+  conj_tac
+  >- (gen_tac >>
+      `bop_result cx ty bop [ty; expr_type e] v0 v est =
+       case evaluate_binop
+         (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+         tvt bop v0 v of
+           INL w => INL w | INR err => INR (Error err)` by
+        (irule bop_result_augassign >> simp[]) >>
+      pop_assum SUBST1_TAC >>
+      simp[AllCaseEqs()] >> strip_tac >>
+      irule vyperTypeBuiltinsTheory.well_typed_binop_success_type >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qexistsl_tac [`ty`, `expr_type e`, `get_tenv cx`, `tvt`, `tyv`, `ty`] >> simp[]) >>
+  irule exprSimBinopFragTheory.binop_frag_word_typed >> simp[] >> conj_tac
+  >- (strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
+      Cases_on `expr_int_literal e` >> gvs[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`expr_type e`, `get_tenv cx`, `tvt`, `tyv`] >> simp[]
+QED
+
+Theorem augassign_storage_store_post_path:
+  emit_void (if tr then TSTORE else SSTORE) [Lit (n2w slot); op] st = ((), sf) /\
+  fn_has_code st sf func /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  stmt_state_rel ctx func cenv cx ee s /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) ty = SOME tvt /\ type_slot_size tvt = 1 /\
+  is_word_type ty /\ value_has_type tvt w /\
+  eval_operand op s = SOME (typed_val_to_w256 tvt w) /\
+  (!x wd. not_fresh_at sa x /\ lookup_var x s0 = SOME wd ==>
+          lookup_var x s = SOME wd) /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP s.vs_allocas aid = SOME b) ==>
+  ?fin last. write_storage_slot cx tr (n2w slot) tvt w ee = (INL (),fin) /\
+    gas_marked_path F ctx func s 0 (OK last) /\
+    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) fin last
+Proof
+  strip_tac >>
+  `declared_storage_region cx src id [] = SOME (tr,n2w slot,tvt)` by
+    simp[declared_storage_region_def] >>
+  `!u sto. storage_dead cx tr (update_storage (n2w slot) u sto) =
+           storage_dead cx tr sto` by
+    metis_tac[storage_dead_update_word_region] >>
+  `encode_value tvt w = SOME [(0, typed_val_to_w256 tvt w)]` by
+    metis_tac[encode_value_word_typed] >>
+  Cases_on `write_storage_slot cx tr (n2w slot) tvt w ee` >>
+  `~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
+  drule_all assign_storage_store_path >> strip_tac >>
+  `sf.cs_current_bb = st.cs_current_bb /\
+   LENGTH sf.cs_current_insts = SUC (LENGTH st.cs_current_insts)` by
+    gvs[emitHelperTheory.emit_void_def, comp_bind_def, fresh_id_def,
+        comp_ignore_bind_def, comp_return_def, emit_def] >>
+  `~block_is_terminated sf` by
+    (drule exprOpenPrimitivesTheory.emit_void_terminated >> Cases_on `tr` >> simp[is_terminator_def]) >>
+  first_x_assum (qspec_then `ctx` assume_tac) >>
+  goal_assum (drule_at Any) >>
+  simp[stmt_post_def, stmt_lands_def, stmtSimPropsTheory.cenv_top_ext_refl,
+       stmt_state_rel_inst_idx] >>
+  Cases_on `tr` >>
+  gvs[sstore_def, tstore_def, lookup_var_def]
+QED
+
+Theorem augassign_toplevel_rhs_exception_exec:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
+  gas_marked_path F ctx func s0 0 (OK t) /\
+  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+    (es with gas_obs := [],t) marks (INR ex) ee r ==>
+  gas_marked_exec F (ctx,func)
+    (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e))
+    (es,s0) marks (INR ex) ee r
+Proof
+  strip_tac >> drule_all gas_marked_exec_zero_prefix >>
+  simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
+  gen_tac >> irule augassign_toplevel_rhs_exception >> simp[] >>
+  qexists_tac `v0` >> metis_tac[read_storage_slot_gas_obs]
+QED
+
+Theorem augassign_toplevel_rhs_normal_exec:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
+  gas_marked_path F ctx func s0 0 (OK t) /\
+  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+    (es with gas_obs := [],t) marks (INL v) ee (OK u) /\
+  gas_marked_exec F (ctx,func)
+    (bind (lift_sum (evaluate_binop
+      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+      tvt bop v0 v)) (write_storage_slot cx tr (n2w slot) tvt))
+    (ee with gas_obs := [],u) [] res fin r ==>
+  gas_marked_exec F (ctx,func)
+    (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e))
+    (es,s0) marks res fin r
+Proof
+  strip_tac >> drule_all gas_marked_exec_zero_prefix >> strip_tac >>
+  gvs[gas_marked_exec_def] >> conj_tac
+  >- (gen_tac >>
+      qpat_x_assum `!tail. bind (eval_expr cx e) _ _ = _`
+        (qspec_then `tail` assume_tac) >>
+      `read_storage_slot cx tr (n2w slot) tvt
+         (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+         (INL v0, es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail)` by
+        metis_tac[read_storage_slot_gas_obs] >>
+      drule_all augassign_toplevel_rhs_normal >>
+      disch_then (qspecl_then [`ty`, `bop`] mp_tac) >> simp[]) >>
+  drule_all gas_marked_path_then >> simp[]
+QED
+Theorem augassign_storage_continuation_exec:
+  bind (lift_sum br) (write_storage_slot cx tr slot tvt) ee = (res,fin) /\
+  gas_marked_path F ctx func u 0 r ==>
+  gas_marked_exec F (ctx,func)
+    (bind (lift_sum br) (write_storage_slot cx tr slot tvt))
+    (ee,u) [] res fin r
+Proof
+  Cases_on `br` >>
+  simp[gas_marked_exec_def, lift_sum_def, bind_def, return_def, raise_def] >>
+  strip_tac >> simp[] >> gen_tac >>
+  simp[write_storage_slot_gas_obs] >> gvs[]
+QED
+
+
 Theorem augassign_toplevel_code_parts:
   !cenv lctx ty0 ty nsid bop e sa c sf tr slot.
     stmt_env cenv lctx ty0 (AugAssign ty (TopLevelNameTarget nsid) bop e) sa =
@@ -212,174 +532,6 @@ Proof
   Cases_on `emit_void st [Lit slot; res_op] s3` >> simp[oneTheory.one]
 QED
 
-(* The lowered value of a word storage or transient variable is one load
-   of its slot. *)
-Theorem lower_value_toplevel_word:
-  !cenv ty ann nsid tr slot sa op sb.
-    FLOOKUP cenv.ce_module_vars nsid =
-      SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-    is_word_type ann /\
-    lower_value compile_expr cenv ty (TopLevelName ann nsid) sa = (op, sb) ==>
-    emit_op (if tr then TLOAD else SLOAD) [Lit slot] sa = (op, sb)
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
-  Cases_on `tr` >>
-  simp[lower_value_def, compile_expr_def, comp_bind_def, unwrap_value_def,
-       contextTheory.compile_ptr_load_def, contextTheory.mk_ptr_def,
-       vyperASTTheory.expr_type_def]
-QED
-
-(* The code of self.x op= e is the lowering of self.x op e at x's type,
-   then the store of its result at x's slot. *)
-Theorem augassign_toplevel_code_bop:
-  !cenv lctx ty0 ty nsid bop e sa c sf tr slot.
-    stmt_env cenv lctx ty0 (AugAssign ty (TopLevelNameTarget nsid) bop e) sa =
-      (c, sf) /\
-    FLOOKUP cenv.ce_module_vars nsid =
-      SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-    cenv.ce_hashmap_info nsid = NONE /\
-    word_value_type ty /\ bop <> In /\ bop <> NotIn ==>
-    c = cenv /\
-    ?s3 res_op.
-      lower_value compile_expr cenv ty
-        (Builtin ty (Bop bop) [TopLevelName ty nsid; e]) sa = (res_op, s3) /\
-      emit_void (if tr then TSTORE else SSTORE) [Lit slot; res_op] s3 =
-        ((), sf)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all augassign_toplevel_code_parts >> strip_tac >> simp[] >>
-  `is_word_type ty /\ ~is_bytestring_type ty` by
-    metis_tac[word_value_type_word] >>
-  Cases_on `lower_value compile_expr cenv ty
-              (Builtin ty (Bop bop) [TopLevelName ty nsid; e]) sa` >>
-  rename1 `_ = (op', s')` >>
-  drule lower_value_bop >> simp[vyperASTTheory.expr_type_def] >>
-  strip_tac >>
-  drule_all lower_value_toplevel_word >> strip_tac >>
-  gvs[expr_int_literal_def]
-QED
-
-(* The code of self.x = e for a storage or transient x the lowering holds
-   in one word and word-typed e: e's value, then the store at x's slot
-   (assign_storage_word_code_parts without its fn_has_code facts). *)
-Theorem assign_toplevel_code_parts[local]:
-  !cenv lctx ty nsid e sa c sf tr slot vtyp.
-    stmt_env cenv lctx ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e)
-      sa = (c, sf) /\
-    FLOOKUP cenv.ce_module_vars nsid =
-      SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-    cenv.ce_hashmap_info nsid = NONE /\
-    cenv.ce_module_var_type nsid = SOME vtyp /\ is_word_type vtyp /\
-    is_word_type (expr_type e) ==>
-    c = cenv /\
-    ?sb op.
-      lower_value compile_expr cenv (expr_type e) e sa = (op, sb) /\
-      emit_void (if tr then TSTORE else SSTORE) [Lit slot; op] sb = ((), sf)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `~has_length_word (expr_type e)` by
-    metis_tac[is_word_type_no_length_word] >>
-  drule_all compile_get_target_ptr_toplevel >> strip_tac >>
-  drule stmt_env_assign >> strip_tac >>
-  qpat_x_assum `c = cenv` SUBST_ALL_TAC >> simp[] >>
-  qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac (srw_ss())
-    [compile_stmt_def, compile_assign_value_def, comp_bind_def,
-     comp_ignore_bind_def, comp_return_def, LET_THM, lower_value_def] >>
-  Cases_on `compile_expr cenv (expr_type e) e sa` >>
-  rename1 `compile_expr _ _ _ _ = (src_vv, st2)` >>
-  Cases_on `unwrap_value cenv src_vv st2` >>
-  rename1 `unwrap_value _ _ _ = (op, sb)` >>
-  Cases_on `tr` >> simp[]
-  >- (Cases_on `emit_void TSTORE [Lit slot; op] sb` >>
-      rename1 `emit_void _ _ _ = (u, sc)` >> Cases_on `u` >>
-      simp[] >> strip_tac >> gvs[comp_bind_def, comp_return_def]) >>
-  Cases_on `emit_void SSTORE [Lit slot; op] sb` >>
-  rename1 `emit_void _ _ _ = (u, sc)` >> Cases_on `u` >>
-  simp[] >> strip_tac >> gvs[comp_bind_def, comp_return_def]
-QED
-
-(* The code of self.x op= e is the code of self.x = self.x op e. *)
-Theorem stmt_env_augassign_toplevel:
-  !cenv lctx ty0 ty nsid bop e tr slot vtyp.
-    FLOOKUP cenv.ce_module_vars nsid =
-      SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-    cenv.ce_hashmap_info nsid = NONE /\
-    cenv.ce_module_var_type nsid = SOME vtyp /\ is_word_type vtyp /\
-    word_value_type ty /\ bop <> In /\ bop <> NotIn ==>
-    stmt_env cenv lctx ty0 (AugAssign ty (TopLevelNameTarget nsid) bop e) =
-    stmt_env cenv lctx ty0
-      (Assign (BaseTarget (TopLevelNameTarget nsid))
-         (Builtin ty (Bop bop) [TopLevelName ty nsid; e]))
-Proof
-  rpt strip_tac >> simp[FUN_EQ_THM] >> qx_gen_tac `sa` >>
-  `is_word_type ty` by metis_tac[word_value_type_word] >>
-  Cases_on `stmt_env cenv lctx ty0
-              (AugAssign ty (TopLevelNameTarget nsid) bop e) sa` >>
-  rename1 `_ = (c1, sf1)` >>
-  Cases_on `stmt_env cenv lctx ty0
-              (Assign (BaseTarget (TopLevelNameTarget nsid))
-                 (Builtin ty (Bop bop) [TopLevelName ty nsid; e])) sa` >>
-  rename1 `_ = (c2, sf2)` >>
-  drule_all augassign_toplevel_code_bop >> strip_tac >>
-  drule assign_toplevel_code_parts >>
-  disch_then (qspecl_then [`tr`, `slot`, `vtyp`] mp_tac) >>
-  simp[vyperASTTheory.expr_type_def] >> strip_tac >> gvs[]
-QED
-
-(* ===== The operator ===== *)
-
-(* The typing side: self.x op e meets expr_body_pre where e does, x is a
-   module variable of type ty and the type checker accepts self.x op= e. *)
-Theorem expr_body_pre_augassign_toplevel:
-  !cenv cx env ty nsid bop e es.
-    expr_body_pre cenv cx env e es /\
-    FLOOKUP env.toplevel_vtypes nsid = SOME (Type ty) /\
-    well_formed_type env.type_defs ty /\
-    (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
-    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
-    expr_body_pre cenv cx env (Builtin ty (Bop bop) [TopLevelName ty nsid; e])
-      es
-Proof
-  rpt strip_tac >>
-  drule well_formed_type_bits >> strip_tac >>
-  `ty <> NoneT` by
-    (strip_tac >> drule_all well_typed_binop_augassign_word >>
-     simp[word_value_type_def]) >>
-  `type_alloc_ok cenv ty` by
-    (drule_all well_typed_binop_augassign_word >> strip_tac >>
-     imp_res_tac exprSimOperatorsTheory.word_value_type_word >>
-     simp[type_alloc_ok_def]) >>
-  PairCases_on `nsid` >>
-  gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
-      byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
-      builtin_operands_ok_def, int_literal_value_def,
-      supportedExprTraverseTheory.expr_has_evm_run_thm,
-      vyperASTTheory.expr_type_def] >>
-  metis_tac[]
-QED
-
-(* A storage or transient variable's read simulates: exprSimLeaves' read
-   of its slot, or its undecodable read's type error. *)
-Theorem toplevel_storage_name_case[local]:
-  !nocalls ctx func cenv cx ann src id ts tr typ id_str.
-    get_module_code cx src = SOME ts /\
-    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) ==>
-    expr_sim_case nocalls ctx func cenv cx (TopLevelName ann (src, id))
-Proof
-  rpt strip_tac >> irule expr_sim_case_of_vv >>
-  rw[expr_vv_case_def] >>
-  `expr_sim_pre cenv cx env (TopLevelName ann (src, id)) es` by
-    simp[expr_sim_pre_body, int_calls_expr_def] >>
-  Cases_on `?slot tvt v.
-              lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-              evaluate_type (get_tenv cx) typ = SOME tvt /\
-              read_storage_slot cx tr (n2w slot) tvt es = (INL v, es)`
-  >- (gvs[] >> irule compile_toplevel_storage_vv_sim >> metis_tac[]) >>
-  irule compile_toplevel_storage_undecodable_sim >> metis_tac[]
-QED
 
 (* ===== The statement ===== *)
 
@@ -387,18 +539,9 @@ QED
    outcome, given e's expr_sim_case (so e may make internal calls unless
    nocalls).  The statement's type ty is x's declared type, and the
    typing gives x that type (toplevel_vtypes). *)
-(* Why it holds.  x's slot decodes wherever expr_sim_inv holds
-   (toplevel_storage_read_decodes), so the source runs as
-   self.x = self.x op e (eval_augassign_toplevel_assign), and the code is
-   that assignment's (stmt_env_augassign_toplevel) once stmt_state_rel
-   gives cenv's view of x's slot.  self.x op e meets expr_body_pre, its
-   operands simulate, so it does (compile_bop_word_case), and its values
-   are of x's type: compile_assign_storage_typed_stmt_frag applies. *)
 Theorem compile_augassign_toplevel_case:
-  !nocalls ctx func cx lctx RetQ cenv ty0 env ty src id bop e es res es'
+  !nocalls ctx func cx lctx RetQ cenv ty0 env ty src id bop e es
    ts tr id_str slot tvt vtyp.
-    eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e) es =
-      (res, es') /\
     expr_sim_case nocalls ctx func cenv cx e /\
     expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
     get_module_code cx src = SOME ts /\
@@ -415,66 +558,204 @@ Theorem compile_augassign_toplevel_case:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
          (AugAssign ty (TopLevelNameTarget (src, id)) bop e))
-      es res es'
+      (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e)) es
 Proof
   rpt gen_tac >> strip_tac >>
+  simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   `word_value_type ty /\ word_value_type (expr_type e)` by
     metis_tac[well_typed_binop_augassign_word] >>
   `is_word_type ty` by metis_tac[word_value_type_word] >>
-  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-  `?v0. read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es)` by
-    (irule toplevel_storage_read_decodes >>
-     gvs[expr_sim_inv_def] >> metis_tac[]) >>
-  drule_all eval_augassign_toplevel_assign >> strip_tac >>
-  `expr_body_pre cenv cx env
-     (Builtin ty (Bop bop) [TopLevelName ty (src, id); e]) es` by
-    (irule expr_body_pre_augassign_toplevel >> simp[] >> metis_tac[]) >>
-  `expr_sim_case nocalls ctx func cenv cx
-     (Builtin ty (Bop bop) [TopLevelName ty (src, id); e])` by
-    (irule compile_bop_word_case >>
-     simp[vyperASTTheory.expr_type_def] >>
-     metis_tac[toplevel_storage_name_case]) >>
-  `expr_sim ctx func cenv cx ty
-     (Builtin ty (Bop bop) [TopLevelName ty (src, id); e]) es` by
-    (irule expr_sim_case_apply >> simp[int_calls_expr_def] >> metis_tac[]) >>
-  `stmt_frag ctx func cx lctx RetQ cenv
-     (stmt_env cenv lctx ty0
-        (Assign (BaseTarget (TopLevelNameTarget (src, id)))
-           (Builtin ty (Bop bop) [TopLevelName ty (src, id); e])))
-     es res es'` by
-    (qspecl_then [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ty0`, `src`,
-                  `id`, `Builtin ty (Bop bop) [TopLevelName ty (src, id); e]`,
-                  `es`, `res`, `es'`, `ts`, `tr`, `ty`, `id_str`, `slot`,
-                  `tvt`, `vtyp`] mp_tac
-       compile_assign_storage_typed_stmt_frag >>
-     simp[vyperASTTheory.expr_type_def] >> disch_then irule >>
-     rpt strip_tac >>
-     qspecl_then [`cenv`, `cx`, `env`,
-                  `Builtin ty (Bop bop) [TopLevelName ty (src, id); e]`,
-                  `es`, `INL v`, `es1`] mp_tac expr_body_pre_word_result >>
-     simp[vyperASTTheory.expr_type_def] >> strip_tac >> gvs[]) >>
-  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  `FLOOKUP cenv.ce_module_vars (src, id) =
-     SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))` by
-    (irule toplevel_storage_ce_vars >>
-     gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
-  `stmt_env cenv lctx ty0 (AugAssign ty (TopLevelNameTarget (src, id)) bop e) =
-   stmt_env cenv lctx ty0
-     (Assign (BaseTarget (TopLevelNameTarget (src, id)))
-        (Builtin ty (Bop bop) [TopLevelName ty (src, id); e]))` by
-    (irule stmt_env_augassign_toplevel >> simp[] >> metis_tac[]) >>
-  qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [stmt_frag_def]) >>
-  gvs[] >> disch_then drule_all >> simp[]
+  `contract_storage_well_formed cx es /\ storage_layout_safe cx /\
+   storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
+    fs[expr_sim_inv_def, stmt_state_rel_def, state_rel_def] >>
+  drule_all toplevel_storage_ce_vars >> strip_tac >>
+  drule_all toplevel_storage_read_decodes >> strip_tac >>
+  drule_all augassign_toplevel_code_parts >> strip_tac >> gvs[] >>
+  suspend "load_prefix"
 QED
 
-(* Integrity gate: the source and code sides carry no admission; the
-   statement itself inherits exprSimBinopFrag's (#572) and exprSimUnwrap's. *)
-val () = List.app (fn th =>
-  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") ors
-     then print "AUGASSIGN_STORAGE_AUDIT OK\n"
-     else raise Fail "storage augmented assignment inherited admission"
-  end) [eval_augassign_toplevel_assign, stmt_env_augassign_toplevel,
-        expr_body_pre_augassign_toplevel];
+Resume compile_augassign_toplevel_case[load_prefix]:
+  `cs_extends sa s1` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  drule (cj 2 compile_expr_grows) >> strip_tac >>
+  drule compile_binop_grows >> strip_tac >>
+  `cs_extends s3 sb` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `cs_extends s1 s3 /\ cs_extends s1 sb /\ cs_extends s2 sb /\
+   cs_extends sa s2 /\ cs_extends sa s3` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa s1 func /\ fn_has_code s1 s2 func /\
+   fn_has_code s2 s3 func /\ fn_has_code s3 sb func` by
+    metis_tac[fn_has_code_mid, cs_extends_refl] >>
+  drule_all declared_storage_holds_value >> strip_tac >>
+  drule_all augassign_storage_load_frame >> strip_tac >>
+  rename1 `read_storage_slot cx tr (n2w slot) tvt es = (INL v0,es)` >>
+  suspend "rhs_outcome"
+QED
+
+Resume compile_augassign_toplevel_case[rhs_outcome]:
+  `expr_sim ctx func cenv cx ty e (es with gas_obs := [])` by
+    (irule expr_sim_case_apply >> simp[] >> conj_tac
+     >- (qexists_tac `env` >> simp[]) >>
+     qexists_tac `nocalls` >> simp[]) >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok
+    (es with gas_obs := [])` by
+    (simp[] >> irule augassign_toplevel_rhs_admissible >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) t` by simp[] >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  disch_then (qspecl_then [`s1`, `s2`, `rhs_op`, `t`] mp_tac) >>
+  impl_tac >- simp[] >>
+  simp[gasOutcomeTheory.gas_outcome_def] >> strip_tac
+  >- suspend "rhs_summary" >>
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  irule augassign_toplevel_rhs_exempt >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  irule augassign_toplevel_place_exec >> metis_tac[]
+QED
+
+Resume compile_augassign_toplevel_case[rhs_summary]:
+  qexists_tac `marks` >> disj1_tac >>
+  qpat_x_assum `gasSummary$gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+  simp[gas_summary_at_def] >> strip_tac
+  >- suspend "rhs_normal" >>
+  `?ex. res = INR ex` by (Cases_on `res` >> gvs[]) >> gvs[] >>
+  qexistsl_tac [`INR ex`, `es_end`, `r`] >> conj_tac
+  >- (irule augassign_toplevel_rhs_exception_exec >>
+      conj_tac >- metis_tac[] >>
+      qexists_tac `t` >> simp[]) >>
+  disj2_tac >> simp[] >> gen_tac >> simp[stmt_exit_def] >> disj1_tac >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
+QED
+
+Resume compile_augassign_toplevel_case[rhs_normal]:
+  gvs[] >>
+  rename1 `expr_post ctx func cenv cx e _ s1 s2 t (ee with gas_obs := []) v rhs_op u` >>
+  `bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := gas_explicit marks t.vs_gas_readings) =
+      (INL v, ee with gas_obs := [])` by
+    (drule gas_marked_exec_observation >>
+     disch_then (qspec_then `[]` mp_tac) >> simp[]) >>
+  drule_all augassign_storage_binop_ready >>
+  disch_then (qspecl_then [`func`, `ee with gas_obs := []`, `ctx`] strip_assume_tac) >>
+  `expr_res_ok (bop_result cx ty bop [ty; expr_type e] v0 v ee)` by
+    (`expr_res_ok (bop_result cx ty bop [ty; expr_type e]
+        v0 v (ee with gas_obs := []))` suffices_by simp[] >>
+     irule augassign_toplevel_binop_admissible >> metis_tac[]) >>
+  suspend "binop_ready"
+QED
+
+Resume compile_augassign_toplevel_case[binop_ready]:
+  `expr_body_pre cenv cx env e
+     (es with gas_obs := gas_explicit marks t.vs_gas_readings)` by simp[] >>
+  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_result) >>
+  strip_tac >> gvs[] >>
+  `eval_operand (Var out) t = SOME (val_to_w256 v0)` by
+    simp[typed_val_to_w256_word_value] >>
+  `eval_operand rhs_op u = SOME (val_to_w256 v)` by
+    (irule expr_val_rel_word >> fs[expr_post_def] >>
+     goal_assum (drule_at Any) >> simp[word_value_type_word]) >>
+  `eval_operand (Var out) u = SOME (val_to_w256 v0)` by
+    (irule eval_operand_frame >> simp[] >>
+     qexistsl_tac [`s1`, `t`] >> gvs[expr_post_def]) >>
+  `not_fresh_at s2 out /\ local_ptrs_reserved cenv s2` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono, local_ptrs_reserved_next_var] >>
+  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) u` by
+    fs[expr_post_def] >>
+  `~u.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  qpat_x_assum `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [binop_frag_def, binop_frag_words_def]) >>
+  disch_then (qspecl_then [`s2`, `s3`, `Var out`, `rhs_op`, `res_op`, `u`] mp_tac) >>
+  impl_tac >- (simp[] >> metis_tac[exprOperandVarTheory.compile_lower_value_var]) >>
+  strip_tac >- suspend "operator_normal" >> suspend "operator_exit"
+QED
+
+Resume compile_augassign_toplevel_case[operator_normal]:
+  gvs[] >> rename1 `eval_operand res_op s = SOME (val_to_w256 result)` >>
+  qpat_x_assum `expr_sim_case _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_admissible _ _ es` kall_tac >>
+  `bop_result cx ty bop [ty; expr_type e] v0 v ee =
+     case evaluate_binop
+       (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+       tvt bop v0 v of
+       INL x => INL x | INR err => INR (Error err)` by
+    (irule bop_result_augassign >> simp[]) >>
+  `evaluate_binop
+     (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+     tvt bop v0 v = INL result` by gvs[AllCaseEqs()] >>
+  `value_has_type tvt result` by simp[] >>
+  `type_slot_size tvt = 1` by
+    metis_tac[word_type_slot_size] >>
+  `eval_operand res_op s = SOME (typed_val_to_w256 tvt result)` by
+    simp[typed_val_to_w256_word_value] >>
+  `?fin last. write_storage_slot cx tr (n2w slot) tvt result
+      (ee with gas_obs := []) = (INL (),fin) /\
+    gas_marked_path F ctx func s 0 (OK last) /\
+    stmt_post ctx func cx lctx cenv cenv s3 sb s (INL ()) fin last` by
+    (irule augassign_storage_store_post_path >> simp[] >>
+     conj_tac >- metis_tac[] >>
+     qexistsl_tac [`res_op`, `s3`] >> simp[]) >>
+  suspend "store_post"
+QED
+
+Resume compile_augassign_toplevel_case[store_post]:
+  `stmt_post ctx func cx lctx cenv cenv s2 sb u (INL ()) fin last` by
+    (irule stmtSimDeclComposeTheory.stmt_post_entry_frame >>
+     qexistsl_tac [`s`, `s3`] >> simp[] >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `stmt_post ctx func cx lctx cenv cenv s1 sb t (INL ()) fin last` by
+    (irule stmt_post_expr_entry_frame >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `stmt_post ctx func cx lctx cenv cenv sa sb s0 (INL ()) fin last` by
+    (irule stmtSimDeclComposeTheory.stmt_post_entry_frame >>
+     qexistsl_tac [`t`, `s1`] >> simp[] >>
+     rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> simp[] >>
+     qspecl_then [`if tr then TLOAD else SLOAD`, `[Lit (n2w slot)]`, `sa`]
+       mp_tac ci_mono_emit_op >>
+     simp[ci_mono_def]) >>
+  `gas_marked_path F ctx func u 0 (OK last)` by
+    (drule_all gas_marked_path_then >> simp[]) >>
+  `fin = fin with gas_obs := []` by
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     once_rewrite_tac[write_storage_slot_gas_obs] >>
+     simp[] >> strip_tac >> gvs[]) >>
+  qexistsl_tac [`INL ()`, `fin`, `OK last`] >> simp[] >>
+  reverse conj_tac
+  >- (disj1_tac >> metis_tac[]) >>
+  irule augassign_toplevel_rhs_normal_exec >>
+  qexistsl_tac [`ee`, `id_str`, `slot`, `t`, `tr`, `ts`, `tvt`, `ty`,
+                `u`, `v`, `v0`] >> simp[] >>
+  irule augassign_storage_continuation_exec >> simp[] >>
+  simp[lift_sum_def, bind_def, return_def]
+QED
+
+Resume compile_augassign_toplevel_case[operator_exit]:
+  `bop_result cx ty bop [ty; expr_type e] v0 v ee =
+     case evaluate_binop
+       (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+       tvt bop v0 v of
+       INL x => INL x | INR err => INR (Error err)` by
+    (irule bop_result_augassign >> simp[]) >>
+  Cases_on `evaluate_binop
+       (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+       tvt bop v0 v`
+  >- (gvs[] >> fs[expr_exit_def, exit_result_def]) >>
+  gvs[] >>
+  qexistsl_tac [`INR (Error y)`, `ee with gas_obs := []`, `r`] >>
+  conj_tac
+  >- (irule augassign_toplevel_rhs_normal_exec >>
+      qexistsl_tac [`ee`, `id_str`, `slot`, `t`, `tr`, `ts`, `tvt`, `ty`,
+                    `u`, `v`, `v0`] >> simp[] >>
+      irule augassign_storage_continuation_exec >>
+      simp[lift_sum_def, bind_def, raise_def]) >>
+  disj2_tac >> simp[stmt_exit_def] >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
+QED
+
+Finalise compile_augassign_toplevel_case
+

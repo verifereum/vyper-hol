@@ -2,9 +2,9 @@
 Theory stmtSimForArrayFrame
 Ancestors
   list rich_list finite_map vyperState vyperLookup vyperScopePreservation
-  supportedStmts vyperPlaceFrames supportedExprs vyperInterpreter
+  supportedStmts vyperPlaceFrames supportedExprs vyperInterpreter vyperCallOutcomeFrame
   vyperStatePreservation supportedExprForms supportedExprTraverse
-  vyperPlaceResultTyping vyperTypeSystem vyperTypeEnvExtension vyperTypeArgFits
+  vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperTypeSystem vyperTypeEnvExtension vyperTypeArgFits
 
 Theorem scope_projection_lookup:
   !a b name.
@@ -165,11 +165,10 @@ QED
 Resume supported_pure_scopes_mutual[builtin]:
   `blt <> Len` by
     (Cases_on `blt = Len` >> gvs[supported_builtin_form_def, AllCaseEqs()]) >>
-  `blt <> Env MsgGas` by
-    (Cases_on `blt = Env MsgGas` >>
-     gvs[supported_builtin_form_def, AllCaseEqs()] >> Cases_on `exprs` >> gvs[]) >>
+  Cases_on `blt = Env MsgGas` >>
   gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
       ignore_bind_def, return_def, raise_def, AllCaseEqs(), get_accounts_def] >>
+  imp_res_tac next_gas_reading_state >>
   imp_res_tac lift_sum_state >>
   imp_res_tac precompile_call_success_state >> gvs[] >> metis_tac[]
 QED
@@ -1173,7 +1172,8 @@ Resume typed_projection_frames_mutual[log]:
   gvs[supported_stmt_def, supported_log_def,
       supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  Cases_on `cx.txn.is_static` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac supported_pure_exprs_scopes >> imp_res_tac read_results_state >>
   imp_res_tac lift_option_state >> imp_res_tac push_log_scopes >> gvs[]
 QED

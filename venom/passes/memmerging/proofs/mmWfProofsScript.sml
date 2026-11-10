@@ -2,7 +2,6 @@
  * Memmerging — Well-formedness Preservation (Proofs)
  *
  * All proof infrastructure for bb_well_formed / wf_function preservation.
- * Re-exported by mmWfScript.sml.
  *)
 
 Theory mmWfProofs
@@ -12,6 +11,7 @@ Ancestors
   pred_set finite_map list rich_list arithmetic words alist
   mmCopyEquiv mmCopy mmScan passSharedField
   dfgAnalysisProps dfgDefs passSimulationDefs passSimulationProps
+  passTransform
 
 (* ===== Structural helpers for wf preservation ===== *)
 
@@ -384,7 +384,7 @@ Proof
 QED
 
 (* fn_inst_ids_distinct: same inst_id implies same instruction *)
-Theorem fn_inst_ids_distinct_inj[local]:
+Theorem fn_inst_ids_distinct_inj:
   !fn x y. fn_inst_ids_distinct fn /\ MEM x (fn_insts fn) /\
             MEM y (fn_insts fn) /\ x.inst_id = y.inst_id ==> x = y
 Proof

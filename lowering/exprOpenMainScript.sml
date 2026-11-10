@@ -11,9 +11,10 @@
 
 Theory exprOpenMain
 Ancestors
+  exprSimHypsDefs
   exprOpenDispatch exprOpenFirstOperand exprOpenChild exprOpenCases
   exprOpenPrimitives exprOpenCopies exprOpenTerminals exprOpenBuiltins
-  bodySim exprSimHyps supportedExprs supportedExprForms supportedTypes
+  bodySim  supportedExprs supportedExprForms supportedTypes
   exprLowering exprCallBounds compileEnv vyperAST vyperTypeSystem list
   supportedDecls vyperTypeInvariants
 
@@ -62,6 +63,7 @@ Theorem compile_expr_open_general:
     ~block_is_terminated sa ==> ~block_is_terminated sb
 Proof
   measureInduct_on `expr_size e` >> rpt gen_tac >> strip_tac >>
+  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
   Cases_on `e`
   >~ [`compile_expr _ _ (Name _ _) _ = _`]
     >- (irule compile_expr_name_open >>
@@ -121,7 +123,12 @@ Resume compile_expr_open_general[builtin]:
      simp[] >> disch_then irule >>
      rpt gen_tac >> strip_tac >>
      drule eval_builtin_head_success >> strip_tac >>
-     drule expr_body_pre_builtin_head >> disch_tac >>
+     drule expr_body_pre_builtin_head >>
+     impl_tac
+     >- (disj1_tac >> rpt strip_tac >>
+         gvs[supported_expr_def, supported_pure_expr_def,
+             supported_effect_expr_def, supported_builtin_form_def]) >>
+     disch_tac >>
      `supported_expr tops arg` by
        gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
            supported_pure_exprs_every] >>
@@ -216,3 +223,4 @@ Resume compile_expr_open_general[builtin_dispatch]:
 QED
 
 Finalise compile_expr_open_general
+

@@ -16,7 +16,6 @@
  *   mcopy_val_in_memory    — MCOPY of at least the footprint does that
  *   mem_bytes_at_mcopy_disjoint — and leaves the bytes outside its
  *                            destination alone
- *   word_tv_memory_size    — a word type's value takes 32 bytes
  *   compile_store_memory_run_size_bound — compile_store_memory at one type puts the
  *                            value at the destination and changes memory
  *                            only there
@@ -26,9 +25,10 @@
 
 Theory valueCopy
 Ancestors
+  exprSimProps
   list rich_list arithmetic
-  valueEncoding valueEncodingProps valueEncodingProofs exprSim valueCopyBytes
-  compileEnv context exprLoweringProps emitHelper emitHelperProps
+  valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs  valueCopyBytes
+  compileEnv loweringStateRelDefs context exprLoweringProps emitHelper emitHelperProps
   entryDecodeProps vyperValue vyperTyping vfmConstants immutableMemoryFrame
   venomInst venomState venomExecSemantics venomMemProps
 Libs
@@ -145,19 +145,6 @@ QED
 
 
 (* ===== Storing a value into memory ===== *)
-
-Theorem word_tv_memory_size:
-  !tenv t tv.
-    is_word_type t /\ evaluate_type tenv t = SOME tv ==>
-    type_memory_size tv = 32
-Proof
-  Cases_on `t` >> simp[is_word_type_def]
-  >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def] >>
-      TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_word_type_def]) >>
-      simp[evaluate_type_def, type_memory_size_def]) >>
-  simp[evaluate_type_def, AllCaseEqs()] >> rw[] >>
-  simp[type_memory_size_def]
-QED
 
 Theorem eval_operand_update_not_fresh[local]:
   !op sa n w s.
@@ -331,7 +318,7 @@ Proof
   drule_all store_bytestring_run_exact >> simp[]
 QED
 
-Theorem emit_mstore_run[local]:
+Theorem emit_mstore_run:
   !sa sb dst src s d w.
     emit_void MSTORE [dst; src] sa = ((),sb) /\
     eval_operand dst s = SOME d /\ eval_operand src s = SOME w ==>

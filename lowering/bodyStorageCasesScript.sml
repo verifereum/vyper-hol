@@ -10,6 +10,7 @@
 
 Theory bodyStorageCases
 Ancestors
+  vyperCall
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeExprSoundness vyperTypeCallStackSoundness vyperTypeInvariants
   vyperStorageLayoutSafety vyperTypeStoragePreservation
@@ -695,7 +696,7 @@ Proof
           drule_all transfer_value_preserves_contract_storage_well_formed >>
           Cases_on `transfer_res` >>
           gvs[bind_apply, ignore_bind_apply, return_def, raise_def] >>
-          rpt strip_tac >> gvs[]) >>
+          rpt strip_tac >> Cases_on `cx.txn.is_static` >> gvs[]) >>
       rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED
@@ -1083,8 +1084,9 @@ Proof
   Cases_on `args_res` >> gvs[]
   >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
       Cases_on `encode_source_event (get_tenv cx) cx.sources cx.txn.target id vs` >>
-      gvs[lift_option_def, bind_def, return_def, raise_def, push_log_def] >>
-      rpt strip_tac >> gvs[] >>
+      gvs[lift_option_def, bind_def, ignore_bind_def, return_def, raise_def,
+          push_log_def] >>
+      Cases_on `cx.txn.is_static` >> rpt strip_tac >> gvs[] >>
       irule contract_storage_well_formed_backends_frame >>
       qexists_tac `args_st` >> simp[]) >>
   rpt strip_tac >> gvs[]
@@ -1522,13 +1524,6 @@ Proof
   >> rpt strip_tac >> gvs[]
 QED
 
-Theorem body_empty_defaults_finally:
-  finally (do set_scopes scopes; eval_exprs cx [] od)
-    (set_scopes st.scopes) st = (INL [],st)
-Proof
-  simp[Once evaluate_def, finally_def, ignore_bind_apply, set_scopes_def,
-       return_def]
-QED
 
 Theorem body_try_handle_function_predicate:
   (!r s. f st = (r,s) ==> P s) /\
@@ -1614,8 +1609,9 @@ Theorem body_intcall_lock_storage:
 Proof
   strip_tac >> Cases_on `nr` >> gvs[lock_if_nr_def, return_def]
   >- (Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
+      gvs[ignore_bind_def, bind_def, AllCaseEqs()] >>
       drule_all acquire_nonreentrant_lock_preserves_contract_storage_well_formed >>
-      simp[])
+      Cases_on `is_view` >> gvs[return_def])
 QED
 
 Theorem body_intcall_lock_oracle_entry:
@@ -1632,33 +1628,12 @@ Proof
     (Cases_on `nr` >>
      gvs[lock_if_nr_def, return_def] >>
      Cases_on `cx.nonreentrant_slot` >>
-     gvs[raise_def, acquire_nonreentrant_lock_eq, AllCaseEqs()] >>
-     rpt strip_tac >> gvs[]) >>
+     gvs[raise_def, ignore_bind_def, bind_def, acquire_nonreentrant_lock_eq,
+         AllCaseEqs()] >>
+     gvs[return_def, COND_RATOR, AllCaseEqs()]) >>
   gvs[oracle_storage_ok_payload]
 QED
 
-Theorem body_eval_intcall_empty_defaults:
-  ~MEM (NONE,fn) cx.stk /\ get_module_code cx NONE = SOME tops /\
-  lookup_callable_function cx.in_deploy fn tops = SOME (mut,nr,args,[],ret,ss) /\
-  LENGTH es = LENGTH args ==>
-  eval_expr cx (Call ty (IntCall (NONE,fn)) es kw) =
-  (do results <- eval_expr_results cx es;
-      prev <- get_scopes;
-      vs <- read_results cx results;
-      call_env <- lift_option_type (bind_arguments (get_tenv cx) args vs)
-        "IntCall bind_arguments";
-      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
-      lock_if_nr cx nr (is_view_mut mut);
-      cxf <- push_function (NONE,fn) call_env cx;
-      rv <- finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
-        (do pop_function prev; unlock_if_nr cx nr (is_view_mut mut) od);
-      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
-      return (Value crv) od)
-Proof
-  strip_tac >> simp[Once evaluate_def, type_check_def, assert_def,
-    lift_option_type_def, bind_apply, ignore_bind_apply, return_def, FUN_EQ_THM,
-    get_scopes_def, body_empty_defaults_finally]
-QED
 
 Theorem body_assign_base_consumer:
   (!s0 pv s1. eval_expr cx e s0 = (INL pv,s1) ==>
@@ -1935,43 +1910,6 @@ Proof
   disch_then drule_all >> simp[]
 QED
 
-Theorem body_update_place_tail_storage:
-  contract_storage_well_formed cx st /\ storage_layout_safe cx /\
-  storage_place_region cx p /\ runtime_place_typed cx st p ptv /\
-  evaluate_type env.type_defs ty = SOME ptv /\ value_has_type ptv cur /\
-  well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
-  state_well_typed st /\ live_memory_result st rhs /\
-  eval_result_typed (env,cx,st) rhs (Type (expr_type e)) /\
-  (do v <- read_result cx rhs;
-      result <- lift_sum (evaluate_binop
-        (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0) ptv bop cur v);
-      write_place cx p result od) st = (res,st') ==>
-  contract_storage_well_formed cx st'
-Proof
-  strip_tac >> qpat_x_assum `do _ od _ = _` mp_tac >>
-  simp_tac (srw_ss()) [bind_def] >> Cases_on `read_result cx rhs st` >>
-  rename1 `read_result cx rhs st = (answer,middle)` >>
-  imp_res_tac read_result_state >> gvs[] >>
-  reverse (Cases_on `answer`) >- (simp[] >> strip_tac >> gvs[]) >>
-  rename1 `read_result cx rhs st = (INL right,st)` >>
-  `value_runtime_typed env (expr_type e) right` by
-    (drule_all vyperTypeEvalSoundnessTheory.read_live_result_success_type >> simp[]) >>
-  simp[] >> strip_tac >> gvs[] >>
-  fs[value_runtime_typed_def] >>
-  qpat_x_assum `_ = (res,st')` mp_tac >>
-  simp_tac (srw_ss()) [bind_def, lift_sum_def] >>
-  Cases_on `evaluate_binop
-    (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0) ptv bop cur right` >>
-  simp[return_def, raise_def] >> strip_tac >> gvs[] >>
-  rename1 `evaluate_binop _ ptv bop cur right = INL result` >>
-  `value_has_type ptv result` by
-    (drule_at (Pat `evaluate_binop _ _ _ _ _ = _`)
-       vyperTypeBuiltinsTheory.well_typed_binop_success_type >>
-     disch_then (qspec_then `ty` mp_tac) >>
-     simp[] >> disch_then drule_all >> simp[]) >>
-  drule_all write_place_preserves_contract_storage >> simp[]
-QED
-
 Theorem body_augassign_rhs_storage:
   well_typed_expr env e /\ runtime_storage_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
@@ -2000,7 +1938,7 @@ Proof
     (drule_all vyperTypeEvalSoundnessTheory.runtime_place_typed_transport >> simp[]) >>
   `storage_layout_safe cx` by metis_tac[runtime_storage_consistent_layout] >>
   `state_well_typed st1` by gvs[runtime_consistent_def] >>
-  drule_all body_update_place_tail_storage >> simp[]
+  drule_all update_place_tail_preserves_storage >> simp[]
 QED
 
 Theorem body_eval_augassign_storage:
@@ -3104,5 +3042,5 @@ Proof
   goal_assum $ drule_at Any >>
   qexistsl_tac [`args_st`, `args_st`, `[]`, `args_st`, `args_st`, `args_st`,
                `args_st`, `rtv`, `args_st`] >>
-  simp[body_empty_defaults_finally, lift_option_type_def, return_def]
+  simp[eval_empty_defaults_finally, lift_option_type_def, return_def]
 QED

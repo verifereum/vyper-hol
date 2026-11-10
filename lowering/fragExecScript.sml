@@ -428,7 +428,7 @@ Proof
   Cases_on `step_inst_base h s` >> gvs[exec_result_map_def]
 QED
 
-Theorem DROP_EQ_CONS[local]:
+Theorem DROP_EQ_CONS:
   !l n h rest.
     DROP n l = h :: rest ==>
     n < LENGTH l /\ EL n l = h /\ DROP (SUC n) l = rest
@@ -659,7 +659,7 @@ Proof
   `(mk_inst id STOP [] []).inst_opcode = STOP` by simp[mk_inst_def] >>
   `step_inst_base (mk_inst id STOP [] []) s =
    Halt (halt_state (s with vs_returndata := []))` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[mk_inst_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def]) >>
   `run_from 0 ctx fn s = Halt (halt_state (s with vs_returndata := []))` by
     (irule run_from_halt >>
      qexistsl_tac [`bb`, `mk_inst id STOP [] []`] >> simp[]) >>
@@ -700,7 +700,7 @@ Proof
   simp[]
 QED
 
-Theorem eval_phis_no_phi[local]:
+Theorem eval_phis_no_phi:
   !l s. phi_prefix_length l = 0 ==> eval_phis s l = OK s
 Proof
   Cases >> rw[eval_phis_def, phi_prefix_length_def]
@@ -766,7 +766,27 @@ Theorem step_inst_base_phi[local]:
     inst.inst_opcode = PHI ==>
     step_inst_base inst s = Error "phi outside prefix"
 Proof
-  rw[step_inst_base_def]
+  rw[step_inst_base_opcode_eqs]
+QED
+
+Theorem run_from_jump_target:
+  !fuel ctx fn s lbl.
+    ~s.vs_halted /\
+    (!e. run_from fuel ctx fn (jump_to lbl s) <> Error e) ==>
+    ?bb. lookup_block lbl fn.fn_blocks = SOME bb /\
+         phi_prefix_length bb.bb_instructions = 0
+Proof
+  rpt strip_tac >>
+  Cases_on `lookup_block lbl fn.fn_blocks`
+  >- gvs[run_from_def, jump_to_def] >>
+  rename1 `lookup_block lbl _ = SOME bb` >>
+  Cases_on `phi_prefix_length bb.bb_instructions = 0`
+  >- simp[] >>
+  `?phi rest. bb.bb_instructions = phi :: rest /\ phi.inst_opcode = PHI` by
+    (Cases_on `bb.bb_instructions` >> gvs[phi_prefix_length_def] >>
+     rename1 `h.inst_opcode` >> Cases_on `h.inst_opcode = PHI` >> gvs[]) >>
+  gvs[run_from_def, jump_to_def, Once exec_block_def, get_instruction_def,
+      step_inst_non_invoke, step_inst_base_phi]
 QED
 
 (* Every non-Error result after a jump is the result before it, one unit of
@@ -783,17 +803,10 @@ Theorem run_from_jump_result:
     run_from (SUC fuel) ctx fn s = r
 Proof
   rpt strip_tac >>
-  Cases_on `lookup_block lbl fn.fn_blocks`
-  >- gvs[run_from_def, jump_to_def] >>
-  rename1 `lookup_block lbl _ = SOME bb'` >>
-  Cases_on `phi_prefix_length bb'.bb_instructions = 0`
-  >- (drule_all run_from_jump >> simp[]) >>
-  `?phi rest. bb'.bb_instructions = phi :: rest /\ phi.inst_opcode = PHI` by
-    (Cases_on `bb'.bb_instructions` >> gvs[phi_prefix_length_def] >>
-     rename1 `h.inst_opcode` >> Cases_on `h.inst_opcode = PHI` >> gvs[]) >>
-  qpat_x_assum `run_from _ _ _ _ = _` mp_tac >>
-  simp[run_from_def, jump_to_def, Once exec_block_def, get_instruction_def,
-       step_inst_non_invoke, step_inst_base_phi]
+  `?target. lookup_block lbl fn.fn_blocks = SOME target /\
+            phi_prefix_length target.bb_instructions = 0` by
+    (irule run_from_jump_target >> simp[] >> metis_tac[]) >>
+  drule_all run_from_jump >> simp[]
 QED
 
 (* A jump to the start of a fragment's first block: what the fragment
@@ -918,7 +931,7 @@ QED
 
 (* ===== Loops ===== *)
 
-Theorem frag_exec_loop_layout[local]:
+Theorem frag_exec_loop_layout:
   !st0 st1 sth stj st2 stb ste st3 stx hdr body exit cnd
    x0 x1 x2 x3 x4 x5 fn.
   emit_inst JMP [Label hdr] [] st0 = (x0, st1) /\
@@ -983,9 +996,9 @@ Theorem frag_outcome_jmp[local]:
   frag_outcome ctx fn s sb Q R
 Proof
   rpt strip_tac >> irule frag_outcome_jump >>
-  conj_tac >- simp[] >>
-  qexistsl [`bb`, `mk_inst id JMP [Label lbl] []`, `lbl`] >>
-  simp[mk_inst_def, is_terminator_def, Once step_inst_base_def]
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`bb`, `mk_inst id JMP [Label lbl] []`, `lbl`] >>
+  simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs]
 QED
 
 Theorem frag_outcome_jnz[local]:
@@ -999,15 +1012,14 @@ Theorem frag_outcome_jnz[local]:
   frag_outcome ctx fn (jump_to (if w = 0w then body else exit) s) sb Q R ==>
   frag_outcome ctx fn s sb Q R
 Proof
-  rpt strip_tac >> irule frag_outcome_jump >>
-  conj_tac >- simp[] >>
-  rename1 `eval_operand cnd s = SOME w` >>
-  rename1 `frag_outcome ctx fn (jump_to (if w = 0w then body_lbl else exit) s) sb Q R` >>
+  rpt strip_tac >>
+  rename1 `get_instruction bb _ =
+    SOME (mk_inst id JNZ [cnd; Label exit; Label body_lbl] [])` >>
+  irule frag_outcome_jump >> goal_assum (drule_at Any) >>
   qexistsl_tac [`bb`, `mk_inst id JNZ [cnd; Label exit; Label body_lbl] []`,
-                 `if w = 0w then body_lbl else exit`] >>
-  Cases_on `w = 0w` >>
-  simp[mk_inst_def, is_terminator_def] >>
-  simp[step_inst_base_opcode_eqs]
+                `if w = 0w then body_lbl else exit`] >>
+  simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs] >>
+  Cases_on `w = 0w` >> gvs[]
 QED
 
 Theorem frag_outcome_loop_cond[local]:

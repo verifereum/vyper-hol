@@ -35,7 +35,7 @@
 Theory entryLocals
 Ancestors
   list finite_map
-  compileEnv compileVyper moduleLowering context abiEncoder emitHelper
+  compileEnv loweringStateRelDefs compileVyper moduleLowering context abiEncoder emitHelper
   exprLoweringProps loweringHalt intCallCallee
 Libs
   monadsyntax
@@ -59,12 +59,12 @@ Proof
 QED
 
 Theorem compile_abi_decode_to_buf_next_var[local]:
-  !dst src opc hi info st x st'.
-    compile_abi_decode_to_buf dst src opc hi info st = (x, st') ==>
+  !dst src opc base_op hi info st x st'.
+    compile_abi_decode_to_buf dst src opc base_op hi info st = (x, st') ==>
     st.cs_next_var <= st'.cs_next_var
 Proof
   rpt strip_tac >>
-  qspecl_then [`dst`, `src`, `opc`, `hi`, `info`, `st`] mp_tac
+  qspecl_then [`dst`, `src`, `opc`, `base_op`, `hi`, `info`, `st`] mp_tac
     (cj 1 ci_mono_compile_abi_decode) >>
   simp[ci_mono_def]
 QED
@@ -232,9 +232,26 @@ Proof
   register_args_reserved_tac compile_register_constructor_args_def
 QED
 
+Theorem compile_register_constructor_args_fields:
+  !args cenv off dsz st cenv' st'.
+    compile_register_constructor_args cenv args off dsz st = (cenv', st') ==>
+    cenv'.ce_is_ctor = cenv.ce_is_ctor /\
+    cenv'.ce_imm_alloca = cenv.ce_imm_alloca
+Proof
+  Induct >- simp[compile_register_constructor_args_def, comp_return_def] >>
+  PairCases >> rpt gen_tac >>
+  Cases_on `FLOOKUP cenv.ce_vars h0` >>
+  simp[Once compile_register_constructor_args_def] >- metis_tac[] >>
+  rename1 `FLOOKUP cenv.ce_vars h0 = SOME loc` >>
+  Cases_on `var_location_memory_size loc` >> simp[] >- metis_tac[] >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
 (* ===== Each entry kind ===== *)
 
-Theorem build_positional_args_FST[local]:
+Theorem build_positional_args_FST:
   !cenv fargs. MAP FST (build_positional_args cenv fargs) = MAP FST fargs
 Proof
   Induct_on `fargs` >> fs[build_positional_args_def] >>

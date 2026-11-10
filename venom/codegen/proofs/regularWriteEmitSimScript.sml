@@ -205,6 +205,9 @@ Proof
   rename1 `inst.inst_operands = [kop; vop]` >>
   rename1 `operand_val vs lo kop = SOME key` >>
   rename1 `operand_val vs lo vop = SOME value` >>
+  (* the static-frame guard's undefined-operand case is impossible here *)
+  TRY (qpat_x_assum `eval_operands _ _ = NONE` mp_tac >>
+       simp[eval_operands_def] >> NO_TAC) >>
   `eval_operands [kop; vop] vs = SOME [key; value]` by
     simp[eval_operands_def] >>
   drule_at (Pat `eval_operands _ _ = _`) arranged_eval_operands_stack >>
@@ -250,6 +253,9 @@ Proof
   rename1 `inst.inst_operands = [kop; vop]` >>
   rename1 `operand_val vs lo kop = SOME key` >>
   rename1 `operand_val vs lo vop = SOME value` >>
+  (* the static-frame guard's undefined-operand case is impossible here *)
+  TRY (qpat_x_assum `eval_operands _ _ = NONE` mp_tac >>
+       simp[eval_operands_def] >> NO_TAC) >>
   `eval_operands [kop; vop] vs = SOME [key; value]` by
     simp[eval_operands_def] >>
   drule_at (Pat `eval_operands _ _ = _`) arranged_eval_operands_stack >>

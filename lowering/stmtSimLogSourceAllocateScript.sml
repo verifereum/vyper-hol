@@ -1,9 +1,10 @@
 (* Captured argument ownership across the first actual-site Log allocation. *)
 Theory stmtSimLogSourceAllocate
 Ancestors
+  exprSimDefs exprSimProps exprSimStack loweringPosts
   stmtSimLogAllocate stmtSimLogDataFrame stmtSimLogDataRun stmtSimLogArgs
-  abiBuiltinAllocation abiDecoderReentry exprSimWordArgs exprSim
-  exprLoweringProps compileEnv venomState venomMemDefs valueTypingMemoryProps
+  abiBuiltinAllocation abiDecoderReentry exprSimWordArgs 
+  exprLoweringProps compileEnv loweringStateRelDefs venomState venomMemDefs valueTypingMemoryProps
   valueEncoding supportedTypes finite_map words list arithmetic emitHelperProps ASCIInumbers
 
 Theorem log_allocation_wb_frame[local]:
@@ -32,10 +33,6 @@ Theorem log_allocated_arg[local]:
   log_arg_rel ce cx sa st es t arg v
 Proof
   strip_tac >> drule log_allocation_wb_frame >> strip_tac >>
-  `~dynarray_type (SND arg)` by
-    (qpat_x_assum `supported_scalar_type _` mp_tac >> Cases_on `SND arg` >>
-     simp[supported_scalar_type_def, supported_word_type_def,
-       supported_string_type_def, dynarray_type_def]) >>
   irule log_arg_rel_frame >> simp[] >> goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any)
 QED

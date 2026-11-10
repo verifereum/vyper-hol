@@ -1,6 +1,6 @@
 Theory rawReturnHalt
 Ancestors
-  loweringHalt fragExec stmtLowering compileEnv venomState emitHelper emitHelperProps venomExecSemantics venomInst
+  loweringHalt fragExec stmtLowering compileEnv loweringStateRelDefs venomState emitHelper emitHelperProps venomExecSemantics venomInst
 
 Theorem compile_external_return_raw_parts[local]:
   !op prim ei msz nkey ut iv st x st'.
@@ -127,6 +127,7 @@ Theorem compile_external_return_raw_unlock_frag:
     compile_external_return (SOME op) prim T ei msz nr nkey ut iv st =
       (x, st') /\
     (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
     (!y. op = Var y ==> not_fresh_at st y) /\
     LENGTH bs < dimword (:256) /\
     (!s. P s ==>
@@ -144,6 +145,7 @@ Theorem compile_external_return_raw_unlock_frag:
 Proof
   rpt gen_tac >> strip_tac >>
   drule compile_external_return_unlock_seq >> simp[] >> disch_then irule >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   gen_tac >> strip_tac >>
   conj_tac
   >- (drule compile_external_return_raw_parts >> simp[]) >>

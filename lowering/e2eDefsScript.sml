@@ -19,7 +19,7 @@ Ancestors
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
   vyperStorageLayoutSafety vyperRuntimeAccounts
-  supportedProgram compileEnv selectorDispatch immutableSectionRel
+  supportedProgram compileEnv loweringStateRelDefs selectorDispatch immutableSectionRel
 
 (* ===== Source deployment, typing and storage ===== *)
 
@@ -41,6 +41,20 @@ Definition source_deployment_rel_def:
     ALOOKUP am.exports tx.target = NONE /\
     layouts_agree tops am tx
 End
+
+Theorem source_deployment_context:
+  source_deployment_rel tops am tx ==>
+  get_tenv (initial_evaluation_context am.sources am.layouts tx NONE) =
+    type_env tops /\
+  get_module_code (initial_evaluation_context am.sources am.layouts tx NONE)
+    NONE = SOME tops
+Proof
+  simp[source_deployment_rel_def, initial_evaluation_context_def,
+       vyperContextTheory.get_tenv_def, vyperContextTheory.get_module_code_def,
+       vyperContextTheory.type_env_all_modules_def,
+       vyperContextTheory.type_env_def, finite_mapTheory.FUNION_FEMPTY_2] >>
+  rpt strip_tac >> simp[]
+QED
 
 Definition source_typing_ok_def:
   source_typing_ok tops am tx <=>
@@ -116,7 +130,7 @@ Definition call_state_rel_def:
     ?ctxt rb rest.
       es.contexts = (ctxt, rb) :: rest /\
       wf_state es /\ (?d. es.msdomain = Collect d) /\
-      ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\
+      ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\ ~tx.is_static /\
       (?mr. ctxt.msgParams.outputTo = Memory mr) /\
       installed_code_rel tops runtime_bc (account_immutables am tx.target)
         ctxt.msgParams.code /\
@@ -213,10 +227,9 @@ End
 
 Definition unspecified_behaviour_exempt_def:
   unspecified_behaviour_exempt tops e <=>
-    (e = RuntimeError "abi_decode invalid" /\
-     ?ty. occurs_abi_decode_target ty tops /\
-          is_dynamic (vyper_to_abi_type (type_env tops) ty)) \/
-    e = RuntimeError "convert empty bytes to signed"
+    e = RuntimeError "abi_decode invalid" /\
+    ?ty. occurs_abi_decode_target ty tops /\
+         is_dynamic (vyper_to_abi_type (type_env tops) ty)
 End
 
 Definition source_exempt_def:
@@ -391,10 +404,10 @@ End
    agree with the source's: equal except at storage bytes the source
    leaves dead (accounts_agree, compileEnv). *)
 
-Definition call_result_rel_def:
-  call_result_rel tops ret am tx es r es' <=>
+Definition call_result_rel_at_def:
+  call_result_rel_at gobs tops ret am tx es r es' <=>
     let trace = call_trace es in
-    case call_external (SOME (MAP SND trace)) [] am tx of
+    case call_external (SOME (MAP SND trace)) gobs am tx of
       (INL v, am', rqs) =>
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?out lgs.
@@ -416,3 +429,20 @@ Definition call_result_rel_def:
     | (INR ContinueException, _, _) => F
     | (INR (ReturnException _), _, _) => F
 End
+
+(* OPEN ITEM, must land before main: the top-level gas observations gobs
+   are not yet tied to the EVM's gas readings (gas_readings es).
+   run_venom_pipeline_correct only gives ?vs_in. gas_variant vs_in vs, so
+   the source-side readings are unconstrained here; tying them needs the
+   O1 contract to relate vs_in's readings to vs's. *)
+Definition call_result_rel_def:
+  call_result_rel tops ret am tx es r es' <=>
+    ?gobs. call_result_rel_at gobs tops ret am tx es r es'
+End
+
+Theorem call_result_rel_at_imp:
+  call_result_rel_at gobs tops ret am tx es r es' ==>
+  call_result_rel tops ret am tx es r es'
+Proof
+  metis_tac[call_result_rel_def]
+QED

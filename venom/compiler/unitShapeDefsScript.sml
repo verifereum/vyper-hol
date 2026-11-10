@@ -1,14 +1,14 @@
 (*
  * Syntactic unit hypotheses for PLAN §5.8 (not compiler checks).
- * TOP-LEVEL: gas_var, retpc_var, opaque_use_ok, retpc_shape_ok,
- *   label_positions_ok, reserved_label, entry_fn_first, unit_shape_ok,
- *   o1_source_unit_ok;
+ * TOP-LEVEL: retpc_var, opaque_use_ok, retpc_shape_ok,
+ *   label_positions_ok,
+ *   reserved_label, entry_fn_first, unit_shape_ok, o1_source_unit_ok;
  *   entry_fn_first_lookup (L4).
  * Helpers: copy_phi_var is the least seeded ASSIGN/PHI closure;
- *   gas_use_ok / retpc_use_ok specify opaque operand positions;
+ *   retpc_use_ok specifies the opaque return-PC operand positions;
  *   inst_shape_ok / fn_shape_ok collect output-shape restrictions;
- *   call_checks_ok: a failed CALL/STATICCALL always ends the frame with an
- *   exception (revert_path, flag_fails, flag_path, calls_flagged).
+ *   call_checks_ok: failed calls end the frame with an exception
+ *   (revert_path, flag_fails, flag_path, calls_flagged).
  * Raw-only restrictions are deliberately absent from unit_shape_ok.
  *)
 Theory unitShapeDefs
@@ -82,16 +82,8 @@ End
 Definition opaque_use_ok_def:
   opaque_use_ok fn <=>
     !inst x. MEM inst (fn_insts fn) /\ MEM (Var x) inst.inst_operands ==>
-      (gas_var fn x ==> gas_use_ok inst x) /\
       (retpc_var fn x ==> retpc_use_ok inst x)
 End
-
-Theorem opaque_use_ok_gas_use:
-  opaque_use_ok fn /\ gas_var fn x /\ MEM inst (fn_insts fn) /\
-  MEM (Var x) inst.inst_operands ==> gas_use_ok inst x
-Proof
-  metis_tac[opaque_use_ok_def]
-QED
 
 Theorem opaque_use_ok_retpc_use:
   opaque_use_ok fn /\ retpc_var fn x /\ MEM inst (fn_insts fn) /\
@@ -314,7 +306,9 @@ Definition inst_shape_ok_def:
     ~MEM inst.inst_opcode
       [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT; DJMP; OFFSET] /\
     (is_read0_opcode inst.inst_opcode ==> inst.inst_operands = []) /\
-    (inst.inst_opcode = PHI ==> 2 <= LENGTH (phi_pairs inst.inst_operands)) /\
+    (inst.inst_opcode = PHI ==>
+       2 <= LENGTH (phi_pairs inst.inst_operands) /\
+       ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands))) /\
     label_positions_ok inst
 End
 

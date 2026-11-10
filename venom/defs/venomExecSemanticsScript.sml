@@ -276,6 +276,25 @@ Definition exec_read0_def:
     | _ => Error "read0 requires single output"
 End
 
+(* GAS pops the frame's next gas reading, exactly as assembly does
+   (asm_gas): an exhausted list reads 0w. *)
+Definition exec_gas_def:
+  exec_gas inst s =
+    case inst.inst_outputs of
+      [out] =>
+        (case s.vs_gas_readings of
+           [] => OK (update_var out 0w s)
+         | r :: rest => OK (update_var out r (s with vs_gas_readings := rest)))
+    | _ => Error "read0 requires single output"
+End
+
+Theorem exec_gas_not_terminal[simp]:
+  exec_gas inst s <> Halt s' /\ exec_gas inst s <> Abort a s' /\
+  exec_gas inst s <> IntRet vals s'
+Proof
+  rw[exec_gas_def, AllCaseEqs()]
+QED
+
 (* State-read 1-operand: eval operand, read from state, update output *)
 Definition exec_read1_def:
   exec_read1 f inst s =
@@ -376,7 +395,8 @@ Definition make_venom_call_state_def:
     <| contexts := [(ctxt, rb)];
        txParams := venom_to_tx_params s;
        rollback := rb;
-       originalAccounts := rb.accounts;
+       originalAccounts := if s.vs_call_ctx.cc_created_in_tx then
+         update_account caller empty_account_state rb.accounts else rb.accounts;
        msdomain := Collect empty_domain |>
 End
 
@@ -399,7 +419,8 @@ Definition make_venom_delegatecall_state_def:
     <| contexts := [(ctxt, rb)];
        txParams := venom_to_tx_params s;
        rollback := rb;
-       originalAccounts := rb.accounts;
+       originalAccounts := if s.vs_call_ctx.cc_created_in_tx then
+         update_account caller empty_account_state rb.accounts else rb.accounts;
        msdomain := Collect empty_domain |>
 End
 
@@ -627,13 +648,23 @@ Definition step_inst_base_def:
             | _ => Error "undefined operand")
         | _ => Error "mcopy requires 3 operands")
 
-    (* Storage *)
+    (* Storage.  A static frame (cc_static) halts exceptionally at every
+       state write: SSTORE, TSTORE, LOG, SELFDESTRUCT, CREATE/CREATE2 and a
+       CALL with value, as the EVM fails with WriteInStaticContext.  The
+       check comes after the operands are evaluated, so an undefined operand
+       is still an Error. *)
     | SLOAD => exec_read1 (\key s. sload key s) inst s
-    | SSTORE => exec_write2 (\key val s. sstore key val s) inst s
+    | SSTORE =>
+        if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) then
+          Abort ExHalt_abort (halt_state (set_returndata [] s))
+        else exec_write2 (\key val s. sstore key val s) inst s
 
     (* Transient storage *)
     | TLOAD => exec_read1 (\key s. tload key s) inst s
-    | TSTORE => exec_write2 (\key val s. tstore key val s) inst s
+    | TSTORE =>
+        if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) then
+          Abort ExHalt_abort (halt_state (set_returndata [] s))
+        else exec_write2 (\key val s. tstore key val s) inst s
 
     (* Control flow - JMP *)
     | JMP =>
@@ -845,7 +876,7 @@ Definition step_inst_base_def:
     | CALLER => exec_read0 (\s. w2w s.vs_call_ctx.cc_caller) inst s
     | ADDRESS => exec_read0 (\s. w2w s.vs_call_ctx.cc_address) inst s
     | CALLVALUE => exec_read0 (\s. s.vs_call_ctx.cc_callvalue) inst s
-    | GAS => exec_read0 (\s. n2w s.vs_call_ctx.cc_gas) inst s
+    | GAS => exec_gas inst s
 
     (* Environment - Transaction context *)
     | ORIGIN => exec_read0 (\s. w2w s.vs_tx_ctx.tc_origin) inst s
@@ -1018,6 +1049,8 @@ Definition step_inst_base_def:
        first; the remaining operands are in Python's physical stack order:
        topics, size, offset (rightmost operand at the top of the stack). *)
     | LOG =>
+        if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) then
+          Abort ExHalt_abort (halt_state (set_returndata [] s)) else
         (case inst.inst_operands of
           Lit tc :: rest =>
             let n = w2n tc in
@@ -1041,9 +1074,11 @@ Definition step_inst_base_def:
               | _ => Error "log: undefined operand")
         | _ => Error "log requires Lit topic_count as first operand")
 
-    (* Selfdestruct: transfer balance to beneficiary, then halt.
-       Deprecated post-Cancun but still defined in Venom IR. *)
+    (* EIP-6780: transfer balance; only transaction-created accounts are
+       zeroed and scheduled for deletion, including a self-beneficiary. *)
     | SELFDESTRUCT =>
+        if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) then
+          Abort ExHalt_abort (halt_state (set_returndata [] s)) else
         (case inst.inst_operands of
           [addr_op] =>
             (case eval_operand addr_op s of
@@ -1053,13 +1088,15 @@ Definition step_inst_base_def:
                 let beneficiary = w2w addr in
                 let accts = s.vs_accounts in
                 let self_acct = lookup_account self accts in
-                let ben_acct = lookup_account beneficiary accts in
-                let accts' = (\a. if a = self then
-                                    self_acct with balance := 0
-                                  else if a = beneficiary then
-                                    ben_acct with balance := ben_acct.balance + bal
-                                  else accts a) in
-                Halt (halt_state (set_returndata [] (s with vs_accounts := accts')))
+                let transferred = transfer_value self beneficiary bal accts in
+                let created = s.vs_call_ctx.cc_created_in_tx in
+                let accts' = if created then
+                    update_account self (self_acct with balance := 0) transferred
+                  else transferred in
+                Halt (halt_state (set_returndata [] (s with <|
+                  vs_accounts := accts';
+                  vs_pending_deletions := if created then
+                    self :: s.vs_pending_deletions else s.vs_pending_deletions |>)))
             | NONE => Error "selfdestruct: undefined operand")
         | _ => Error "selfdestruct requires 1 operand")
 
@@ -1077,7 +1114,9 @@ Definition step_inst_base_def:
                    eval_operand as_op s, eval_operand ro_op s,
                    eval_operand rs_op s) of
               (SOME gas, SOME addr, SOME value, SOME ao, SOME as_, SOME ro, SOME rs) =>
-                exec_ext_call inst s gas addr value ao as_ ro rs
+                if s.vs_call_ctx.cc_static /\ value <> 0w then
+                  Abort ExHalt_abort (halt_state (set_returndata [] s))
+                else exec_ext_call inst s gas addr value ao as_ ro rs
                   s.vs_call_ctx.cc_static
             | _ => Error "undefined operand")
         | _ => Error "call requires 7 operands")
@@ -1105,6 +1144,8 @@ Definition step_inst_base_def:
         | _ => Error "delegatecall requires 6 operands")
 
     | CREATE =>
+        if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) then
+          Abort ExHalt_abort (halt_state (set_returndata [] s)) else
         (case inst.inst_operands of
           [val_op; off_op; sz_op] =>
             (case (eval_operand val_op s, eval_operand off_op s,
@@ -1115,6 +1156,8 @@ Definition step_inst_base_def:
         | _ => Error "create requires 3 operands")
 
     | CREATE2 =>
+        if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) then
+          Abort ExHalt_abort (halt_state (set_returndata [] s)) else
         (case inst.inst_operands of
           [val_op; off_op; sz_op; salt_op] =>
             (case (eval_operand val_op s, eval_operand off_op s,
@@ -1263,7 +1306,7 @@ val preserves_idx_result = prove (
    dispatch cases in the goal; never simplify the whole assumption context. *)
 val preserves_idx_projection_rewrites = let
   val defs = [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-    exec_read0_def, exec_read1_def, exec_ext_call_def,
+    exec_read0_def, exec_gas_def, exec_read1_def, exec_ext_call_def,
     consume_call_outcome_eq, consume_create_outcome_eq, exec_delegatecall_def, exec_create_def,
     extract_venom_result_def, exec_write2_def, exec_alloca_def,
     step_inst_base_def]
@@ -1307,7 +1350,7 @@ fun preserves_idx_cases_tac ss =
 
 val value_preserves_idx_ss = preserves_idx_ss ++ rewrites
   [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-   exec_read0_def, exec_read1_def];
+   exec_read0_def, exec_read1_def, exec_gas_def];
 
 (* Value-producing helpers only update variables, regardless of computation. *)
 Theorem exec_value_preserves_inst_idx:
@@ -1315,7 +1358,8 @@ Theorem exec_value_preserves_inst_idx:
   (exec_pure2 f2 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
   (exec_pure3 f3 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
   (exec_read0 r0 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
-  (exec_read1 r1 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx)
+  (exec_read1 r1 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
+  (exec_gas inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx)
 Proof
   rpt conj_tac >> preserves_idx_cases_tac value_preserves_idx_ss
 QED
@@ -1418,8 +1462,8 @@ End
 (* Merge callee's side effects back into caller after INVOKE.
    Internal function calls share the same contract, so mutable state
    (memory, transient storage, accounts, returndata, logs, immutables,
-   remaining outcomes, recorded requests and pending deletions) propagates
-   from callee to caller.
+   remaining outcomes, recorded requests, pending deletions and remaining
+   gas readings) propagates from callee to caller.
    The allocation frame is the caller's: vs_allocas and vs_alloca_next stay
    as they were at the call, so the callee's allocations are reclaimed and the
    next call reuses their regions.  Memory returns go through a buffer the
@@ -1436,6 +1480,7 @@ Definition merge_callee_state_def:
       vs_outcomes   := callee.vs_outcomes;
       vs_requests   := callee.vs_requests;
       vs_pending_deletions := callee.vs_pending_deletions;
+      vs_gas_readings := callee.vs_gas_readings;
       vs_immutables := callee.vs_immutables
     |>
 End

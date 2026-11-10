@@ -20,8 +20,11 @@
  *)
 Theory exprSimBufferStore
 Ancestors
+  exprSimVVFrame
+  exprSimProps
+  loweringPosts
   exprSimBuffer exprSimLiteralBuffer words integer_word vfmConstants emitHelperProps
-  exprLoweringProps context venomExecSemantics venomState compileEnv
+  exprLoweringProps context venomExecSemantics venomState compileEnv loweringStateRelDefs
   copyFwdEquiv allocaRemapDefs valueEncodingProofs list rich_list
   exprSimMemoryTransport valueEncodingProps entryDecodeProps entryDecodeStaticProps
   loweringSlice intCallResult valueCopy localPtrsProps fragExec
@@ -46,7 +49,7 @@ Theorem buffer_round_size:
      n2w (32 + 32 * word_size len))
 Proof
   rpt strip_tac >> drule buffer_round_no_wrap >> strip_tac >>
-  rewrite_tac[exprSimTheory.buffer_round_mask, word_add_n2w] >>
+  rewrite_tac[exprSimPropsTheory.buffer_round_mask, word_add_n2w] >>
   `n2w (len + 31):bytes32 >>> 5 = n2w ((len + 31) DIV 32)` by
     (simp[GSYM n2w_DIV]) >>
   simp[word_size_def, word_lsl_n2w, word_add_n2w] >>
@@ -273,7 +276,7 @@ Theorem buffer_bytes_header:
     val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) src s.vs_memory ==>
     mload src s = n2w (LENGTH bs)
 Proof
-  simp[valueEncodingTheory.val_in_memory_def, mem_word_at_eq_mload]
+  simp[valueEncodingDefsTheory.val_in_memory_def, mem_word_at_eq_mload]
 QED
 
 Theorem buffer_string_header:
@@ -281,7 +284,7 @@ Theorem buffer_string_header:
     val_in_memory (BaseTV (StringT cap)) (StringV str) src s.vs_memory ==>
     mload src s = n2w (LENGTH str)
 Proof
-  simp[valueEncodingTheory.val_in_memory_def, mem_word_at_eq_mload]
+  simp[valueEncodingDefsTheory.val_in_memory_def, mem_word_at_eq_mload]
 QED
 
 Theorem buffer_store_memory_shape:
@@ -320,7 +323,7 @@ Proof
   strip_tac >> Cases_on `n = 0`
   >- (gvs[] >> irule val_in_memory_relocate_footprint >> simp[] >>
       qexistsl_tac [`s.vs_memory`, `w2n w`] >>
-      simp[valueEncodingTheory.mem_bytes_at_def]) >>
+      simp[valueEncodingDefsTheory.mem_bytes_at_def]) >>
   gvs[] >> conj_tac
   >- (irule buffer_mcopy_encoding >> simp[]) >>
   simp[buffer_mcopy_restore] >> rpt gen_tac >> strip_tac >>
@@ -369,9 +372,9 @@ Theorem buffer_store_bytestring_encoding:
 Proof
   rpt gen_tac >> strip_tac >>
   `32 + 32 * word_size len <= type_memory_size tv` by
-    metis_tac[exprSimTheory.val_store_size_le] >>
+    metis_tac[exprSimPropsTheory.val_store_size_le] >>
   `val_footprint tv v <= 32 + 32 * word_size len` by
-    metis_tac[exprSimTheory.val_footprint_le_store_size] >>
+    metis_tac[exprSimPropsTheory.val_footprint_le_store_size] >>
   `32 + 32 * word_size len < dimword (:256)` by decide_tac >>
   drule_all buffer_store_bytestring_run >> strip_tac >>
   qexists_tac `q` >> simp[] >> conj_tac
@@ -393,11 +396,11 @@ Proof
       gvs[is_bytestring_type_def, vyperValueTheory.evaluate_type_def] >>
       Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
       drule buffer_bytes_header >> strip_tac >>
-      qexists_tac `LENGTH l` >> simp[exprSimTheory.val_store_size_def]) >>
+      qexists_tac `LENGTH l` >> simp[exprSimPropsTheory.val_store_size_def]) >>
   gvs[vyperValueTheory.evaluate_type_def] >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
   drule buffer_string_header >> strip_tac >>
-  qexists_tac `LENGTH s'` >> simp[exprSimTheory.val_store_size_def]
+  qexists_tac `LENGTH s'` >> simp[exprSimPropsTheory.val_store_size_def]
 QED
 
 Theorem buffer_store_memory_encoding:
@@ -416,7 +419,7 @@ Theorem buffer_store_memory_encoding:
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[exprSimTheory.expr_val_rel_def] >>
+  gvs[loweringPostsTheory.expr_val_rel_def] >>
   Cases_on `is_word_type ty`
   >- (gvs[compile_store_memory_def] >>
       drule_all (SRULE [] buffer_store_word_encoding) >> strip_tac >>
@@ -437,7 +440,7 @@ Proof
       rpt gen_tac >> strip_tac >> first_x_assum irule >> decide_tac) >>
   gvs[compile_store_memory_def] >>
   `val_footprint tv v <= type_memory_size tv` by
-    simp[exprSimTheory.val_footprint_le] >>
+    simp[exprSimPropsTheory.val_footprint_le] >>
   drule_all (SRULE [] buffer_copy_memory_encoding) >> strip_tac >>
   `q.vs_vars = s.vs_vars` by
     (qpat_assum `q with vs_memory := _ = s`
@@ -462,7 +465,7 @@ Theorem buffer_store_memory_capacity:
     LENGTH s.vs_memory <= LENGTH q.vs_memory
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[exprSimTheory.expr_val_rel_def] >>
+  gvs[loweringPostsTheory.expr_val_rel_def] >>
   Cases_on `is_word_type ty`
   >- (gvs[compile_store_memory_def] >>
       drule_all literal_emit_mstore_run >> strip_tac >> gvs[] >>
@@ -472,7 +475,7 @@ Proof
   >- (gvs[compile_store_memory_def] >>
       drule_all buffer_typed_bytestring_header >> strip_tac >>
       `32 + 32 * word_size len <= type_memory_size tv` by
-        metis_tac[exprSimTheory.val_store_size_le] >>
+        metis_tac[exprSimPropsTheory.val_store_size_le] >>
       `32 + 32 * word_size len < dimword (:256)` by
         (simp[dimword_def] >> decide_tac) >>
       drule_all buffer_store_bytestring_run >> strip_tac >> gvs[] >>
@@ -551,7 +554,7 @@ Proof
      strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> strip_tac >>
      qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   irule result_state_memory_frame >> reverse conj_tac
   >- (qexists_tac `s` >> simp[] >>
       rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
@@ -559,7 +562,7 @@ Proof
         (irule local_ptrs_rel_alloca_disjoint >>
          qexistsl_tac [`cenv`, `func`, `inst`, `name`, `p`, `es.scopes`, `s`] >>
          fs[stmt_state_rel_def, state_rel_def]) >>
-      fs[compileEnvTheory.regions_disjoint_def]) >> first_assum ACCEPT_TAC
+      fs[loweringStateRelDefsTheory.regions_disjoint_def]) >> first_assum ACCEPT_TAC
 QED
 
 Theorem mcopy_alloca_framed_frag:

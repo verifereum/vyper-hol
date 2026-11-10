@@ -16,9 +16,9 @@
  *   rets_scoped                  — every RET returns to a return PC of its
  *                                  own function's entry block
  *   added_insts, added_labels    — what a compile action appended
- *   opaque_out, opaque_insts_ok  — GAS / RETPC_PARAM outputs used only where
- *                                  gas_use_ok / retpc_use_ok allow, and never
- *                                  copied
+ *   opaque_out, opaque_insts_ok  — tracks output provenance; RETPC_PARAM
+ *                                  outputs used only where retpc_use_ok
+ *                                  allows, while GAS outputs are ordinary values
  *   plain_operand                — an operand the lowering may pass anywhere
  *   label_or_plain               — a plain operand or a label
  *   compiler_label, jump_label_ok, inst_jump_labels_ok
@@ -39,7 +39,7 @@
  *)
 Theory loweringShapeDefs
 Ancestors
-  list rich_list compileEnv emitHelper emitHelperProps fragExec venomInst
+  list rich_list compileEnv loweringStateRelDefs emitHelper emitHelperProps fragExec venomInst
   unitShapeDefs
 
 (* ===== Code held by a compile state ===== *)
@@ -104,14 +104,11 @@ Definition opaque_out_def:
     ?inst. MEM inst insts /\ inst.inst_opcode = opc /\ MEM x inst.inst_outputs
 End
 
-(* Stricter than opaque_use_ok: no ASSIGN/PHI copies at all, so the
-   copy/PHI closure is just the seeds. *)
+(* RETPC_PARAM outputs cannot be used by ASSIGN/PHI, so their
+   copy/PHI closure is just the seeds. GAS values may propagate normally. *)
 Definition opaque_insts_ok_def:
   opaque_insts_ok insts <=>
     !inst x. MEM inst insts /\ MEM (Var x) inst.inst_operands ==>
-      (opaque_out GAS insts x ==>
-         (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
-         ?rest. inst.inst_operands = Var x :: rest /\ ~MEM (Var x) rest) /\
       (opaque_out RETPC_PARAM insts x ==>
          inst.inst_opcode = RET /\
          ?front. inst.inst_operands = front ++ [Var x] /\ ~MEM (Var x) front)
@@ -129,13 +126,12 @@ Definition rets_scoped_def:
 End
 
 (* An operand that may appear in any position: no label, no compiler
-   variable still to be allocated, and no GAS or return-PC value. *)
+   variable still to be allocated, and no return-PC value. *)
 Definition plain_operand_def:
   plain_operand (st : compile_state) op <=>
     ~is_label_operand op /\
     !x. op = Var x ==>
         not_fresh_at st x /\
-        ~opaque_out GAS (state_insts st) x /\
         ~opaque_out RETPC_PARAM (state_insts st) x
 End
 
@@ -448,7 +444,7 @@ Definition shape_stable_def:
     !internal LP st st'. R st /\ shape_extends internal LP st st' ==> R st'
 End
 
-(* Opaque values that may only go where opaque_insts_ok allows. *)
+(* GAS provenance and the return-PC operand restricted by opaque_insts_ok. *)
 Definition gas_operand_def:
   gas_operand (st : compile_state) op <=>
     ?g. op = Var g /\ not_fresh_at st g /\

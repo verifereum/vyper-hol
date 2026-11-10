@@ -1,7 +1,9 @@
 Theory stmtSimLogTopics
 Ancestors
-  stmtSimLogArgs stmtSimLogSource stmtLowering compileEnv context
-  exprSimHash exprSim exprSimWordArgs vyperEvent valueEncoding
+  exprBopSimProps
+  exprSimDefs exprSimProps exprSimStack loweringPosts
+  stmtSimLogArgs stmtSimLogSource stmtLowering compileEnv loweringStateRelDefs context
+  exprSimHash  exprSimWordArgs vyperEvent valueEncoding valueEncodingDefs
   emitHelper emitHelperProps exprLoweringProps venomExecSemantics venomState
   venomInst freshWrites words string finite_map list ASCIInumbers supportedTypes
   vyperTyping vyperValue exprSimLiteralBuffer byte exprSimOps
@@ -284,10 +286,6 @@ Theorem log_readonly_arg:
   log_arg_rel cenv cx sa sb es t arg v
 Proof
   strip_tac >>
-  `~dynarray_type (SND arg)` by
-    (qpat_x_assum `supported_scalar_type _` mp_tac >> Cases_on `SND arg` >>
-     simp[supported_scalar_type_def, supported_word_type_def,
-          supported_string_type_def, dynarray_type_def]) >>
   `wb_frame cenv es sm s t` by (irule log_readonly_frame >> simp[]) >>
   irule log_arg_rel_frame >> simp[] >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>

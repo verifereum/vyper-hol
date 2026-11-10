@@ -600,7 +600,7 @@ Theorem exec_read0_ok[local]:
   !f inst s. LENGTH inst.inst_outputs = 1 ==> ?s'. exec_read0 f inst s = OK s'
 Proof
   rpt strip_tac >>
-  simp[venomExecSemanticsTheory.exec_read0_def] >>
+  simp[venomExecSemanticsTheory.exec_read0_def, venomExecSemanticsTheory.exec_gas_def] >>
   Cases_on `inst.inst_outputs` >> fs[] >> Cases_on `t` >> fs[]
 QED
 
@@ -695,7 +695,7 @@ val blobhash_ok_tac =
 val blobbasefee_ok_tac =
   qpat_assum `inst.inst_opcode = BLOBBASEFEE` (fn _ =>
     simp[step_inst_base_BLOBBASEFEE_local] >>
-    simp[venomExecSemanticsTheory.exec_read0_def] >>
+    simp[venomExecSemanticsTheory.exec_read0_def, venomExecSemanticsTheory.exec_gas_def] >>
     Cases_on `inst.inst_outputs` >> fs[] >>
     Cases_on `t` >> fs[]);
 Theorem effect_free_step_inst_base_ok:

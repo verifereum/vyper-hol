@@ -18,9 +18,13 @@
 
 Theory stmtSimAssign
 Ancestors
+  stmtSimProps
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
-  stmtSimDecl stmtSimAssignStore
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore
+  stmtSimDecl stmtSimAssignStore stmtSimAssignSource stmtSimAssignCompose
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperLookup vyperExprNoControl
@@ -125,102 +129,75 @@ Proof
   metis_tac[]
 QED
 
-(* On a value: e's fragment reaches the MSTORE in expr_post, at the scopes
-   e leaves, and the MSTORE writes x there. *)
-Theorem assign_local_word_success_run:
-  !ctx func cenv cx id e es es' etv sa sb sf op p sz s0.
-    eval_stmt cx (Assign (BaseTarget (NameTarget id)) e) es = (INL (), es') /\
-    is_word_type (expr_type e) /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    (!v es1 entry.
-       (do result <- eval_expr cx e; read_result cx result od) es =
-         (INL v, es1) /\
-       lookup_scopes id es1.scopes = SOME entry ==>
-       store_lays_out etv entry.type v) /\
-    expr_sim ctx func cenv cx (expr_type e) e es /\
-    lower_value compile_expr cenv (expr_type e) e sa = (op, sb) /\
-    emit_void MSTORE [Var p; op] sb = ((), sf) /\
-    fn_has_code sa sb func /\ fn_has_code sb sf func /\
-    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
-    s0.vs_current_bb = sa.cs_current_bb /\
-    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
-        t.vs_current_bb = sf.cs_current_bb /\
-        t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-        (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
-               lookup_var x t = SOME u) /\
-        (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-                 FLOOKUP t.vs_allocas aid = SOME b) /\
-        !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
-                 ?fuel'. run_from fuel' ctx func s0 = r
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule eval_assign_local >> simp[] >> strip_tac >>
-  Cases_on `r` >> gvs[] >>
-  rename1 `write_place cx (MemoryPlace id []) v es1 = (INL (), es')` >>
-  drule write_place_local >> simp[] >> strip_tac >> gvs[] >>
-  `lookup_scopes id es1.scopes = SOME entry` by
-    metis_tac[find_containing_scope_lookup] >>
-  `store_lays_out etv entry.type v` by metis_tac[] >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es1`, `s0`] mp_tac) >>
-  impl_tac >- simp[expr_res_ok_def] >>
-  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
-  impl_tac >- simp[] >> simp[] >> strip_tac >>
-  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
-  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-  `eval_operand op s1 = SOME (typed_val_to_w256 etv v)` by
-    (gvs[expr_val_rel_def] >> metis_tac[]) >>
-  drule_all assign_local_store_run >>
-  strip_tac >>
-  qexists_tac `t` >> simp[] >> metis_tac[]
-QED
-
 (* x = e for a local x of a word type and e of a word type, for every
    outcome: e's errors exit, and on a value it is stored at x's pointer.
    store_lays_out says the stored word is how x's type lays e's value out:
    a word_value, or an address or bytesN of x's type
-   (store_lays_out_word_value, store_lays_out_typed). *)
-Theorem compile_assign_local_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty id e es res es' p sz vtyp etv.
-    eval_stmt cx (Assign (BaseTarget (NameTarget id)) e) es = (res, es') /\
+   (store_lays_out_word_value, store_lays_out_typed).
+   The first hypothesis is gas_exempt_cert's unforce_result rule, which
+   compile_assign_local_stmt_frag discharges. *)
+Theorem assign_local_stmt_frag_given_unforce[local]:
+  !ctx func cx lctx RetQ cenv ty id e es p sz vtyp etv.
+    (!memory tops ctx' func' cx' e' es' s0 marks err ee leaf finish.
+       gas_exempt_cert memory tops (ctx', func')
+         (ignore_bind (bind (eval_expr cx' e') (read_result cx')) (return ()))
+         (es', s0) marks (err, ee) (leaf, finish) ==>
+       gas_exempt_cert memory tops (ctx', func')
+         (ignore_bind (eval_expr cx' e') (return ()))
+         (es', s0) marks (err, ee) (leaf, finish)) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     cenv.ce_var_type id = SOME vtyp /\ is_word_type vtyp /\
     is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    (!v es1 entry.
-       (do result <- eval_expr cx e; read_result cx result od) es =
-         (INL v, es1) /\
+    (!gs v es1 entry.
+       (do result <- eval_expr cx e; read_result cx result od)
+         (es with gas_obs := gs) = (INL v, es1) /\
        lookup_scopes id es1.scopes = SOME entry ==>
        store_lays_out etv entry.type v) /\
     expr_sim ctx func cenv cx (expr_type e) e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assign (BaseTarget (NameTarget id)) e))
-      es res es'
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  drule_all assign_local_word_code_parts >> strip_tac >>
-  rename1 `lower_value _ _ _ _ sa = (op, sB)` >> gvs[] >>
-  Cases_on `res`
-  >- (rename1 `eval_stmt _ _ _ = (INL u, _)` >> Cases_on `u` >>
-      drule_all assign_local_word_success_run >> strip_tac >>
-      disj1_tac >> qexistsl [`t`, `cenv`] >>
-      simp[stmt_lands_def, cenv_top_ext_refl] >>
-      qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
-      simp[emit_void_def, comp_bind_def, comp_ignore_bind_def,
-           fresh_id_def, emit_def, comp_return_def] >>
-      strip_tac >> Cases_on `sB.cs_current_insts` >>
-      gvs[block_is_terminated_def, LAST_APPEND, LAST_CONS_cond,
-          venomInstTheory.mk_inst_def, is_terminator_def]) >>
-  rename1 `eval_stmt _ _ _ = (INR y, _)` >>
-  `(do result <- eval_expr cx e; read_result cx result od) es = (INR y, es') /\
-   expr_res_ok (INR y : value + exception)` by
-    (drule eval_assign_local_error >> disch_then drule >> simp[]) >>
-  drule_all expr_sim_error_run >> strip_tac >>
-  drule exit_result_not_error >> strip_tac >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[]
+  simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
+  drule_all assign_local_word_code_parts >> strip_tac >> gvs[] >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    (drule assign_local_admissible_rhs >> simp[]) >>
+  `~block_is_terminated sb` by
+    (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
+     simp[emit_void_def, comp_bind_def, comp_ignore_bind_def,
+          fresh_id_def, emit_def, comp_return_def] >>
+     strip_tac >> Cases_on `sb'.cs_current_insts` >>
+     gvs[block_is_terminated_def, LAST_APPEND, LAST_CONS_cond,
+         venomInstTheory.mk_inst_def, is_terminator_def]) >>
+  irule assign_local_rhs_outcome >> simp[] >>
+  (conj_tac >- gvs[SF ETA_ss]) >>
+  qexistsl [`op`, `sb'`] >> simp[] >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  disch_then irule >> simp[]
+QED
+
+(* x = e for a local x of a word type and e of a word type, for every
+   outcome, as assign_local_stmt_frag_given_unforce with its certificate
+   rule discharged by gas_exempt_cert's unforce_result rule. *)
+Theorem compile_assign_local_stmt_frag:
+  !ctx func cx lctx RetQ cenv ty id e es p sz vtyp etv.
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    cenv.ce_var_type id = SOME vtyp /\ is_word_type vtyp /\
+    is_word_type (expr_type e) /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
+    (!gs v es1 entry.
+       (do result <- eval_expr cx e; read_result cx result od)
+         (es with gas_obs := gs) = (INL v, es1) /\
+       lookup_scopes id es1.scopes = SOME entry ==>
+       store_lays_out etv entry.type v) /\
+    expr_sim ctx func cenv cx (expr_type e) e es ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty (Assign (BaseTarget (NameTarget id)) e))
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
+Proof
+  rpt strip_tac >> irule assign_local_stmt_frag_given_unforce >>
+  metis_tac[gasExemptCertTheory.gas_exempt_cert_unforce_result]
 QED

@@ -1,7 +1,7 @@
 (* Byte observations for storage values copied to memory. *)
 Theory storageDecodeMemory
 Ancestors
-  list rich_list words valueEncoding valueEncodingProps compileEnv
+  list rich_list words valueEncoding valueEncodingDefs valueEncodingProps compileEnv loweringStateRelDefs
   vyperLookupStorage vyperStorage vyperValue accountsRelProps venomMemProps
   exprSimAggregateEncoding vyperTyping valueTypingMemoryProps
 
@@ -17,15 +17,6 @@ Definition storage_live_memory_def:
     copy_bytes st bs (type_slot_size tv) (dead_bytes st bs tv) dst mem
 End
 
-Theorem type_memory_size_slots:
-  (!tv. type_memory_size tv = 32 * type_slot_size tv) /\
-  (!tvs. type_memory_size_list tvs = 32 * type_slot_size_list tvs) /\
-  (!fields. type_memory_size_fields fields = 32 * type_slot_size_fields fields)
-Proof
-  ho_match_mp_tac type_memory_size_ind >>
-  simp[type_memory_size_def, type_slot_size_def,
-       arithmeticTheory.LEFT_ADD_DISTRIB]
-QED
 
 Theorem copy_bytes_word:
   !dst mem (w:bytes32).

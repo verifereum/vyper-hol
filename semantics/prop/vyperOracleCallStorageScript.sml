@@ -19,14 +19,14 @@ Proof
   Cases_on `st.outcomes` >> simp[] >>
   Cases_on `vs` >- (simp[eval_send_def, raise_def] >> rw[] >> gvs[]) >>
   Cases_on `t` >- (simp[eval_send_def, raise_def] >> rw[] >> gvs[]) >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def, assert_def,
        check_def, lift_option_type_def, lift_option_def, return_def, raise_def,
        COND_RATOR, vfmTypesTheory.option_CASE_rator,
        vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()] >>
   gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
       combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
-      raise_def, assert_def, adopt_call_outcome_INR_storage] >>
+      raise_def, assert_def, vyperTypeExtCallSoundnessTheory.adopt_call_outcome_INR] >>
   metis_tac[take_call_outcome_storage_suffix,
             take_adopt_call_outcome_storage_suffix]
 QED
@@ -44,7 +44,7 @@ Proof
   strip_tac >> gvs[AllCaseEqs()] >>
   gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
       combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
-      raise_def, adopt_call_outcome_INR_storage] >>
+      raise_def, vyperTypeExtCallSoundnessTheory.adopt_call_outcome_INR] >>
   metis_tac[take_call_outcome_storage_suffix,
             take_adopt_call_outcome_storage_suffix]
 QED
@@ -57,13 +57,85 @@ Theorem eval_ext_call_oracle_storage_preserved:
 Proof
   PairCases_on `sig` >>
   Cases_on `vs` >- (simp[eval_ext_call_def, raise_def] >> rw[] >> gvs[]) >>
-  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
+  Cases_on `cx.txn.is_static` >> Cases_on `static` >>
+  simp[eval_ext_call_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, check_def, lift_option_type_def, lift_option_def,
        lift_sum_runtime_def, get_accounts_def, return_def, raise_def,
        COND_RATOR, vfmTypesTheory.option_CASE_rator,
        vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()] >>
-  drule_all eval_ext_call_effects_oracle_storage_preserved >> simp[]
+  (* Split the do-block one case at a time, normalising the hypotheses each
+     split produces; a plain gvs[AllCaseEqs()] is too slow on the whole term. *)
+  strip_tac >> pop_assum mp_tac >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC) >>
+  BasicProvers.TOP_CASE_TAC >>
+  RULE_ASSUM_TAC (SRULE [AllCaseEqs()]) >> fs[] >>
+  TRY (strip_tac >> gvs[] >>
+       imp_res_tac eval_ext_call_effects_oracle_storage_preserved >>
+       gvs[] >> NO_TAC)
 QED
 
 (* A call or staticcall raw_call adopts its oracle outcome; a delegate
@@ -75,14 +147,14 @@ Theorem eval_raw_call_oracle_storage_preserved:
   contract_storage_well_formed cx st'
 Proof
   Cases_on `st.outcomes` >> simp[] >>
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_raw_call_def, frame_call_value_def, check_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, COND_RATOR,
        vfmTypesTheory.option_CASE_rator, vfmTypesTheory.prod_CASE_rator,
        vfmTypesTheory.sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()] >>
   gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
       combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
-      raise_def, assert_def, adopt_call_outcome_INR_storage] >>
+      raise_def, assert_def, vyperTypeExtCallSoundnessTheory.adopt_call_outcome_INR] >>
   metis_tac[take_call_outcome_storage_suffix,
             take_adopt_call_outcome_storage_suffix]
 QED

@@ -21,7 +21,10 @@
 
 Theory exprSimMain
 Ancestors
-  list exprSim exprSimHyps exprSimLeaves exprSimOperators exprSimPlaces
+  exprSimTopLevel
+  exprSimName
+  exprSimHypsDefs
+  list  exprSimHyps exprSimLeaves exprSimOperators exprSimPlaces
   exprSimAggregates exprSimBuiltins exprSimCalls exprLowering
   vyperAST vyperTypeCallGraph vyperTypeSystem exprSimWordBuiltins
   exprSimCalldataSlice exprSimPrecompiles exprSimLen
@@ -84,7 +87,10 @@ QED
 
 Theorem compile_type_builtin_case:
   !nocalls ctx func cenv cx ann tb t args.
-    exprs_case nocalls ctx func cenv cx args ==>
+    exprs_case nocalls ctx func cenv cx args /\
+    (tb = Convert ==> ~nocalls ==>
+     !e1 a f cargs d. args = [e1] /\ e1 = Call a (IntCall f) cargs d ==>
+       lowered_value_type cenv e1 = expr_type e1) ==>
     expr_sim_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args) /\
     expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args)
 Proof
@@ -158,7 +164,7 @@ Proof
   >~ [`Call _ _ _ _`] >- (irule compile_call_case_sim >> gvs[])
   >~ [`Name _ _`] >- simp[compile_name_case_sim]
   >~ [`Literal _ _`] >- simp[compile_literal_case_sim]
-  >~ [`FlagMember _ _ _`] >- simp[compile_flag_member_case_sim] >>
+  >~ [`FlagMember _ _ _`] >- simp[exprSimFlagWordTheory.compile_flag_member_case_sim] >>
   FIRST (map (fn th => irule expr_ok_of_vv >> irule th >> gvs[])
     [compile_toplevel_name_sim, compile_ifexp_sim,
      compile_struct_lit_sim, compile_subscript_sim, compile_attribute_sim,

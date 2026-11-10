@@ -7,7 +7,8 @@
  *)
 Theory valueCopySource
 Ancestors
-  valueCopy valueCopyBytes valueTypingMemoryProps exprSim arithmetic
+  exprSimProps
+  valueCopy valueCopyBytes valueTypingMemoryProps  arithmetic
 
 Theorem compile_store_memory_run_source_bound_with_capacity:
   !cenv src dst dty sty sa sb s tenv dtv stv v sw dw.

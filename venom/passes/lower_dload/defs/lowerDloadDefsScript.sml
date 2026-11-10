@@ -15,7 +15,7 @@
  * No analysis needed - pure per-instruction expansion (1:N).
  * Framework: function_map_transform with FLAT o MAP.
  *
- * LEGACY SEMANTIC MODEL (used only by the existing simulation proof):
+ * ARITHMETIC-ID MODEL (venomPipeline's model; the dispatcher doesn't run it):
  *   lower_dload_inst      - arithmetic-ID per-instruction expansion
  *   lower_dload_block     - legacy block-level transform
  *   lower_dload_function  - legacy function-level transform
@@ -25,7 +25,7 @@
  *   lower_dload_configured_with_supply - unit transform plus final supply
  *   lower_dload_configured             - transformed unit projection
  *
- *   code_layout_valid     - precondition for legacy semantic correctness
+ *   code_layout_valid     - code_end marks the code/data boundary
  *
  * Helper:
  *   ld_alloca_var         - fresh variable name for alloca output
@@ -36,7 +36,7 @@
 
 Theory lowerDloadDefs
 Ancestors
-  lowerDloadFrame passSimulationDefs venomExecSemantics venomInst irSupply
+  passTransform venomExecSemantics venomInst irSupply
 (* ===== Fresh Variable Names ===== *)
 
 (* Fresh variable for alloca output.
@@ -134,8 +134,8 @@ End
    lower_dload_configured below: they initialize one supply from the whole unit
    and thread it across every function.  Future pipeline composition must call
    a configured unit wrapper once, never invoke this function-level API
-   independently for each function.  The arithmetic-ID transform above remains
-   only the model used by the existing legacy simulation proof. *)
+   independently for each function.  The arithmetic-ID transform above is
+   only venomPipeline's model. *)
 Definition lower_dload_inst_supply_def:
   lower_dload_inst_supply s inst =
     if inst.inst_opcode = DLOAD then
@@ -274,130 +274,21 @@ Definition dload_offset_ok_def:
         dimword (:256)
 End
 
-(* ===== Variable Tracking ===== *)
-
-(* Fresh variables introduced by expanding a single instruction.
-   - DLOAD: two fresh intermediates (ld_alloca_var, ld_add_var)
-   - DLOADBYTES: one fresh intermediate (ld_add_var)
-   These variables do not exist in the original function. *)
-Definition ld_fresh_vars_inst_def:
-  ld_fresh_vars_inst inst =
-    if inst.inst_opcode = DLOAD then
-      {ld_alloca_var inst.inst_id; ld_add_var inst.inst_id}
-    else if inst.inst_opcode = DLOADBYTES then
-      {ld_add_var inst.inst_id}
-    else {}
+(* The number of DLOAD instructions in a context. *)
+Definition ctx_dload_count_def:
+  ctx_dload_count (ctx:venom_context) =
+    SUM (MAP (\fn. LENGTH (FILTER (\inst. inst.inst_opcode = DLOAD)
+                                  (fn_insts fn)))
+             ctx.ctx_functions)
 End
 
-(* Fresh variables in a function (from DLOAD/DLOADBYTES expansion only). *)
-Definition ld_fresh_vars_fn_def:
-  ld_fresh_vars_fn fn =
-    BIGUNION (set (MAP (\bb.
-      BIGUNION (set (MAP ld_fresh_vars_inst bb.bb_instructions)))
-      fn.fn_blocks))
-End
-
-(* Exempt variables: precisely the fresh intermediates introduced by lowering.
-   Under the ld_no_original_alloca precondition, no original ALLOCA
-   instructions exist, so the only differing variables are ld_alloca_var
-   and ld_add_var from the DLOAD/DLOADBYTES expansion. *)
-Definition ld_exempt_vars_fn_def:
-  ld_exempt_vars_fn fn = ld_fresh_vars_fn fn
-End
-
-(* No original ALLOCA instructions in the function.
-   This is a precondition only of the legacy arithmetic-ID simulation: DLOAD
-   expansion inserts scratch ALLOCAs that shift vs_alloca_next, so an original
-   ALLOCA could receive a different address.  It is not an O1 input invariant:
-   raw frontend units admitted by the current pipeline boundary may contain
-   ALLOCA.  Consequently the legacy correctness theorem below must not be cited
-   as semantic correctness of the configured supply-aware O1 transform. *)
-Definition ld_no_original_alloca_def:
-  ld_no_original_alloca fn <=>
-    !bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
-      inst.inst_opcode <> ALLOCA
-End
-
-(* ===== Memory-Observing Opcode Exclusion ===== *)
-
-(* Opcodes excluded from lower_dload functions.
-   DLOAD expansion introduces ALLOCA+CODECOPY scratch that changes
-   vs_memory layout.  We exclude all opcodes whose behavior depends on
-   vs_memory, vs_allocas, or vs_returndata — fields that diverge.
-
-   Memory readers: MLOAD, ILOAD, MEMTOP, SHA3, MCOPY, LOG
-   External calls: CALL, STATICCALL, DELEGATECALL, CREATE, CREATE2
-   INVOKE: callee inherits vs_memory → different returns on divergent memory
-   RETURNDATASIZE/RETURNDATACOPY: read vs_returndata (may differ)
-
-   NOT excluded (safe):
-   - MSTORE/CODECOPY/CALLDATACOPY/EXTCODECOPY: write-only to memory
-   - RETURN/REVERT: terminal; ld_equiv omits vs_returndata
-   - ALLOCA: output is exempt (in ld_exempt_vars_fn)
-   - DLOAD/DLOADBYTES: transformation targets *)
-Definition reads_memory_def:
-  reads_memory op <=>
-    op = MLOAD \/ op = ILOAD \/ op = MEMTOP \/ op = SHA3 \/ op = MCOPY \/
-    op = LOG \/
-    op = CALL \/ op = STATICCALL \/ op = DELEGATECALL \/
-    op = CREATE \/ op = CREATE2 \/
-    op = INVOKE \/
-    op = RETURNDATASIZE \/ op = RETURNDATACOPY
-End
-
-Definition ld_no_mem_read_def:
-  ld_no_mem_read fn <=>
-    !bb inst.
-      MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
-      ~reads_memory inst.inst_opcode
-End
-
-(* ===== DLOAD pointer safety ===== *)
-
-(* The DLOAD lowering performs ptr + code_end in word arithmetic.
-   This overflows when w2n ptr + LENGTH prefix >= dimword(:256).
-   In Vyper, DLOAD operands are compile-time data section offsets (small).
-   We require the ptr operand (for DLOAD) or src operand (for DLOADBYTES)
-   evaluates to a value safe from overflow in any reachable state.
-
-   Sufficient static condition: the relevant operand is a Lit whose value
-   plus the code prefix length fits in a word. Since code_layout_valid
-   gives LENGTH prefix <= dimword(:256) DIV 2, requiring the literal
-   value < dimword(:256) DIV 2 ensures the sum < dimword(:256). *)
-Definition ld_dload_safe_def:
-  ld_dload_safe fn <=>
-    !bb inst.
-      MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
-      (inst.inst_opcode = DLOAD ==>
-        ?v. inst.inst_operands = [Lit v] /\
-            w2n v < dimword(:256) DIV 2) /\
-      (inst.inst_opcode = DLOADBYTES ==>
-        ?dst_op v size_op.
-          inst.inst_operands = [dst_op; Lit v; size_op] /\
-          w2n v < dimword(:256) DIV 2)
-End
-
-(* ===== Lower-DLOAD Equivalence ===== *)
-
-(* Tightest correct equivalence for lower_dload: everything in
-   execution_equiv except vs_memory, vs_allocas, vs_alloca_next, and
-   vs_returndata. Control fields remain ignored, as in execution_equiv.
-
-   Why these are excluded:
-   - vs_memory: DLOAD lowering uses ALLOCA+CODECOPY as scratch space,
-     modifying memory beyond what the original DLOAD touches.
-   - vs_allocas / vs_alloca_next: ALLOCA introduces entries and bumps its
-     scratch allocation pointer.
-   - vs_returndata: RETURN/REVERT reads vs_memory to produce returndata;
-     since memory can differ, returndata can too.
-
-   All other fields are preserved:
-   - Variables (excluding fresh ld_alloca_*/ld_add_* introduced by lowering)
-   - Accounts, logs, transient, immutables (no instructions touch these)
-   - Context fields (call_ctx, tx_ctx, block_ctx)
-   - Data section, labels, code, params, prev_hashes (read-only) *)
-Definition ld_equiv_def:
-  ld_equiv vars s1 s2 <=>
-    (!v. v NOTIN vars ==> lookup_var v s1 = lookup_var v s2) /\
-    ld_execution_frame s1 = ld_execution_frame s2
+(* The expansion gives each DLOAD a fresh 32-byte ALLOCA site, and a frame
+   allocates each site once, so the output's alloca frontier runs at most
+   32 bytes per DLOAD in the context ahead of the input's.  This bound keeps
+   that frontier below 2^256, where exec_alloca's offsets would wrap onto
+   live sites.  Stated per reachable state (mem_inv), like the frontier
+   bound in raw_mem_ok. *)
+Definition dload_headroom_ok_def:
+  dload_headroom_ok (ctx:venom_context) (fn:ir_function) inst s <=>
+    s.vs_alloca_next + 32 * ctx_dload_count ctx < dimword (:256)
 End

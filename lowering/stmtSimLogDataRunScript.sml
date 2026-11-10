@@ -1,6 +1,7 @@
 Theory stmtSimLogDataRun
 Ancestors
-  stmtSimLogData stmtSimLogDataFrame exprSim valueEncoding compileEnv
+  exprSimDefs exprSimProps exprSimStack loweringPosts
+  stmtSimLogData stmtSimLogDataFrame  valueEncoding valueEncodingDefs compileEnv
   context stmtLowering words list arithmetic emitHelper emitHelperProps
   exprSimBufferStore exprLoweringProps
 

@@ -20,6 +20,7 @@
 
 Theory bodyStoragePreservation
 Ancestors
+  vyperCall
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeExprSoundness vyperTypeCallStackSoundness vyperTypeInvariants
   vyperStorageLayoutSafety vyperTypeStoragePreservation
@@ -736,8 +737,8 @@ Resume body_oracle_storage_mutual[intcall_live]:
   asm_x "intcall_ih1" mp_tac >> simp[] >> disch_then assume_tac >>
   asm_x "intcall_ih2" mp_tac >> simp[] >> disch_then assume_tac >>
   rule_assum_tac (SRULE [type_check_def, assert_def, return_def,
-                        body_empty_defaults_finally, get_scopes_def]) >>
-  drule_all body_eval_intcall_empty_defaults >>
+                        eval_empty_defaults_finally, get_scopes_def]) >>
+  drule_all eval_expr_intcall_empty_defaults >>
   disch_then (fn th => qpat_x_assum `eval_expr _ _ _ = _` (mp_tac o REWRITE_RULE [th])) >>
   simp_tac bool_ss [bind_def, ignore_bind_def] >>
   Cases_on `eval_expr_results cx es st` >>

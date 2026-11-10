@@ -52,7 +52,7 @@ Their exact premises are in the linked owners and
 |---|---|---|---|
 | S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + supported syntax + typing/storage/deployment/valid call/initial state/outcome guards -> terminating `source_unit_execution_correct` | 6 |
 | S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` (same owner) | Lowering + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | 5 |
-| S3 | `vyperLoweringCorrect.lower_vyper_runtime_unit_memory_ok` (same owner) | S1 boundary + **non-exemption** -> `raw_unit_memory_ok` | 5 |
+| S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` (same owner) | S1 boundary + **non-exemption** + no `DALLOCA` -> `raw_unit_memory_ok` | 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` ([source](../venom/compiler/o1PipelineCorrectScript.sml)) | Actual O1 success + raw shape/entry/memory -> forward simulation up to any well-formed dead-byte set `D` (`ctx_sim D`, `dead_wf D`) | 3 |
 | S5 | `o1PipelineCorrect.o1_pipeline_memory_obligations` (same owner) | O1 + generated plan + raw shape/entry/memory + initial FMP -> **one existential `Inv`** with output memory/reachability | 5 |
 | S6 | `o1PipelineCorrect.run_venom_pipeline_output_shape` (same owner) | Actual O1 success + raw shape -> `unit_shape_ok` | 3 |
@@ -64,7 +64,7 @@ caller for one. S2/S6 produce shape. L5 consumes S5 memory; layout or empty
 entry memory does not manufacture memory safety.
 
 **Off the runtime call path:** `venomToAsmProps.gen_fn_simulation` is separately
-ADMITTED (4.2); meaningful `e2eCorrectness.e2e_deploy_correctness` is separately
+ADMITTED (4.2); meaningful `e2eDeployCorrectness.e2e_deploy_correctness` is separately
 ADMITTED (6 item 7), not the old proved `T` placeholder. Current top/generic
 logical closures contain neither, nor any retired API.
 
@@ -189,9 +189,7 @@ Failed-run requests, leftover terminal outcomes, revert data/reason and general
 abort kind are not compared. `unspecified_behaviour_exempt` covers exact
 `RuntimeError "abi_decode invalid"` with a dynamic ABI target occurring in a
 function body; it may also cover a callee-return rejection with that exact
-message, not arbitrary ReturnReject/conversion/static decode failure. It also
-covers exact `RuntimeError "convert empty bytes to signed"` for
-stale-memory-dependent conversion to signed integers or decimals.
+message, not arbitrary ReturnReject/conversion/static decode failure.
 Callee/reentrant execution is absorbed into an outcome, not certified as
 source-equivalent. Full nested-run decomposition and repeated-entry/transaction
 corollaries remain Milestone 7.
@@ -213,7 +211,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D6 | SOME send requests a real call outcome, not pure transfer | Source Send uses empty-data nonstatic request and requires success; NONE retains concrete transfer behavior. | 6 |
 | D7 | Restrict ExtCall syntax, not reorder source evaluation | `supportedExprs`/`supportedExprForms`: effect-free operands, word arguments/returns, exact interface/count, distinct `value=`/`gas=`/`default_return_value=` operands evaluated in source order (#553); SOME code check follows return-kind policy and `skip_contract_check`. `NoneT` ExtCall is **not admitted**, despite a general helper branch. | 6 |
 | D8 | Runtime failure requires Abort/failing frame, not anything/fuel0 | `external_call_result_rel` rejects OK/IntRet and other Errors, relates a failed external call's `RevertData` to a Revert abort, and requires terminating run; `call_result_rel` failure clause. TypeError is excluded by typing, not treated as source success. | 6 |
-| D9 | Exact unspecified-behaviour exemptions, not weakened source checks | `unspecified_behaviour_exempt`, `occurs_abi_decode_target` inspect function bodies for dynamic decoding. Exact decode message also admits matching return rejection in such a program; not arbitrary ReturnReject. The separate exact error `convert empty bytes to signed` exempts stale-memory-dependent signed integer/decimal conversion. | 6 |
+| D9 | Exact unspecified-behaviour exemptions, not weakened source checks | `unspecified_behaviour_exempt`, `occurs_abi_decode_target` inspect function bodies for dynamic decoding. Exact decode message also admits matching return rejection in such a program; not arbitrary ReturnReject. | 6 |
 | D10 | Typing separate from plain-EVAL syntax | `source_typing_ok` contains checker/readiness/machine/tx; `supported_program` depends on tops alone. Partial readiness producers are not the whole premise. | 7 |
 | D11 | Whitelist, not open-ended exclusions | `supportedProgram` combines headers/names/body predicates; 101 named fixture membership proofs. No universal membership/compile-success witness. | 6 / 7 |
 | D12 | Ten source/type corrections, not remove fixtures | Invalid EC RuntimeError; Pop length-only storage update; empty codehash zero; decimal bound-before-truncate; bytes->address/decimal/narrow-zero-tail conversions; UnsafeDiv0 zero; minimum decimal Mul; abi_encode size rule. Actual owners `vyperContext`, `vyperState`, `vyperValueOperation`, `vyperTypeSystem`; historical source checkpoint retained. | 6 comparison proof |
@@ -261,8 +259,8 @@ S1 is actual `lower_vyper_runtime_unit_correct`, replacing the retired
 source deployment, exact valid call, `initial_venom_state_rel` and outcome
 guards. Its existential fuel must give a terminating raw result; runtime
 failure is Abort, not Error/fuel0. Success relates canonical return bytes and
-whole effects/requests. UNREACHABLE permits ExHalt; dynamic strict decoding and
-empty-byte signed conversion have the precise D9 exemptions. Proving this
+whole effects/requests. UNREACHABLE permits ExHalt; dynamic strict decoding
+has the precise D9 exemption. Proving this
 contract belongs to Milestone 6.
 
 ### 1.4 Pipeline statement
@@ -599,7 +597,6 @@ unit simulation by themselves.
 | Arithmetic/conversion/bounds/runtime checks | Each H6-compare path must end in Abort on non-exempt RuntimeError, never Error/fuel exhaustion/OK/IntRet. |
 | Oracle exhausted/failed/ill-typed successful accounts | Failed call -> ASSERT/REVERT; ill-typed accounts excluded by `call_outcomes_ok`, whose storage guard remains separate. |
 | Exact `"abi_decode invalid"` | Dynamic target occurrence in **function bodies** gives D9 program-wide exemption; includes identical return-decode rejection. Static-only decoding, arbitrary ReturnReject and `"abi_decode conversion"` do not. Even exemption needs an actual EVM run; S3 safety is not claimed there. |
-| Exact `"convert empty bytes to signed"` | D9 also exempts empty-byte conversion to signed integers or decimals, whose lowering may depend on stale memory. No dynamic ABI target occurrence is required; an actual EVM run is still required, and S3 safety is not claimed. |
 
 Comparison work of the 2026-10-01 plan (including finite8-bit arithmetic and
 boundary samples) is not a kernel stage proof. Future owners must recheck
@@ -634,7 +631,7 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    `raw_create` are excluded, not future missing cases of S1. Wire conversion
    proofs into the actual lowering rollup without inventing gas-number reads.
 7. **H6-deploy / owner Milestone 6 item7:** prove actual separately ADMITTED
-   `e2eCorrectness.e2e_deploy_correctness` using
+   `e2eDeployCorrectness.e2e_deploy_correctness` using
    [e2eDeployDefs](../lowering/e2eDeployDefsScript.sml): `constructor_args_encode`,
    `constructor_call_free`, `deploy_typing_ok`, `deploy_storage_ok`,
    `deploy_state_rel`, `deploy_result_rel`. Constructor is source-Call-free,

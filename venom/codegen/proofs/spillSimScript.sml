@@ -516,6 +516,7 @@ Theorem spill_asm_steps:
           st'.as_outcomes = st.as_outcomes /\
           st'.as_requests = st.as_requests /\
           st'.as_pending_deletions = st.as_pending_deletions /\
+          st'.as_gas_readings = st.as_gas_readings /\
           st'.as_call_ctx = st.as_call_ctx /\
           st'.as_tx_ctx = st.as_tx_ctx /\
           st'.as_block_ctx = st.as_block_ctx /\
@@ -565,6 +566,7 @@ Theorem restore_asm_steps:
           st'.as_outcomes = st.as_outcomes /\
           st'.as_requests = st.as_requests /\
           st'.as_pending_deletions = st.as_pending_deletions /\
+          st'.as_gas_readings = st.as_gas_readings /\
           st'.as_call_ctx = st.as_call_ctx /\
           st'.as_tx_ctx = st.as_tx_ctx /\
           st'.as_block_ctx = st.as_block_ctx /\
@@ -584,20 +586,6 @@ Proof
   simp[Once asm_steps_def] >>
   simp[asm_step_def, asm_step_op_mload, asm_mload_def,
        asm_next_def, asm_steps_def]
-QED
-
-(* =========================================================================
-   memory_rel through MSTORE in spill region
-   ========================================================================= *)
-
-(* memory_rel through asm_expand_memory *)
-Theorem memory_rel_expand[local]:
-  !alloc vm am n.
-    memory_rel alloc vm am ==>
-    memory_rel alloc vm (asm_expand_memory n am)
-Proof
-  rw[memory_rel_def] >> rpt strip_tac >>
-  res_tac >> simp[read_byte_expand]
 QED
 
 (* =========================================================================

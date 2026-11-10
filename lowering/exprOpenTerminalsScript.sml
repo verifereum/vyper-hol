@@ -36,7 +36,7 @@ Theorem compile_word_copy_loop_open:
     ~block_is_terminated sb
 Proof
   rpt gen_tac >>
-  simp[compile_word_copy_loop_def, comp_bind_def, comp_ignore_bind_def] >>
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_loop_base_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
   drule new_block_open >> simp[]
 QED
@@ -138,8 +138,8 @@ Proof
 QED
 
 Theorem compile_abi_decode_dyn_loop_open:
-  !dst src load hi info asz msz ip cnt sa u sb.
-    compile_abi_decode_dyn_loop dst src load hi info asz msz ip cnt sa = (u,sb) ==>
+  !dst src load base_op hi info asz msz ip cnt sa u sb.
+    compile_abi_decode_dyn_loop dst src load base_op hi info asz msz ip cnt sa = (u,sb) ==>
     ~block_is_terminated sb
 Proof
   rpt gen_tac >>
@@ -150,22 +150,24 @@ Proof
 QED
 
 Theorem compile_abi_decode_open_mutual:
-  (!dst src load hi info sa u sb.
+  (!dst src load base_op hi info sa u sb.
      ~block_is_terminated sa /\
-     compile_abi_decode_to_buf dst src load hi info sa = (u,sb) ==>
+     compile_abi_decode_to_buf dst src load base_op hi info sa = (u,sb) ==>
      ~block_is_terminated sb) /\
-  (!dst src load hi elems ao vo sa u sb.
+  (!dst src load base_op hi elems ao vo sa u sb.
      ~block_is_terminated sa /\
-     compile_abi_decode_complex_elems dst src load hi elems ao vo sa = (u,sb) ==>
+     compile_abi_decode_complex_elems dst src load base_op hi elems ao vo sa = (u,sb) ==>
      ~block_is_terminated sb) /\
-  (!dst src load hi info asz msz ip cnt sa u sb.
+  (!dst src load base_op hi info asz msz ip cnt sa u sb.
      ~block_is_terminated sa /\
-     compile_abi_decode_dyn_loop dst src load hi info asz msz ip cnt sa = (u,sb) ==>
+     compile_abi_decode_dyn_loop dst src load base_op hi info asz msz ip cnt sa = (u,sb) ==>
      ~block_is_terminated sb)
 Proof
   ho_match_mp_tac compile_abi_decode_to_buf_ind >> rpt conj_tac
-  >- (simp[NoAsms, Once compile_abi_decode_to_buf_def] >>
-      metis_tac[compile_abi_decode_static_open])
+  >- (rpt gen_tac >>
+      simp[NoAsms, Once compile_abi_decode_to_buf_def, comp_bind_def] >>
+      pairarg_tac >> simp[] >> strip_tac >>
+      drule compile_abi_decode_static_open >> simp[])
   >- suspend "bytes"
   >- suspend "dynarray"
   >- suspend "complex"
@@ -177,12 +179,17 @@ QED
 Resume compile_abi_decode_open_mutual[bytes]:
   rpt gen_tac >>
   simp[NoAsms, Once compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def] >>
-  ntac 5 (pairarg_tac >> simp[]) >>
-  Cases_on `load = CALLDATALOAD`
-  >- (gvs[] >> strip_tac >> drule emit_void_terminated >> simp[is_terminator_def]) >>
-  Cases_on `load = DLOAD`
-  >- (gvs[] >> strip_tac >> drule emit_void_terminated >> simp[is_terminator_def]) >>
-  Cases_on `load` >> gvs[] >> strip_tac >>
+  Cases_on `base_op = Lit 0w`
+  >- (Cases_on `load = CALLDATALOAD`
+      >- (simp[] >> rpt (pairarg_tac >> simp[]) >> strip_tac >>
+          drule emit_void_terminated >> simp[is_terminator_def]) >>
+      Cases_on `load = DLOAD`
+      >- (simp[] >> rpt (pairarg_tac >> simp[]) >> strip_tac >>
+          drule emit_void_terminated >> simp[is_terminator_def]) >>
+      Cases_on `load` >> gvs[] >> rpt (pairarg_tac >> simp[]) >> strip_tac >>
+      drule emit_void_terminated >> simp[is_terminator_def]) >>
+  simp[comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
   drule emit_void_terminated >> simp[is_terminator_def]
 QED
 
@@ -190,10 +197,10 @@ Resume compile_abi_decode_open_mutual[dynarray]:
   rpt gen_tac >> disch_tac >> rpt gen_tac >>
   simp[NoAsms, Once compile_abi_decode_to_buf_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
-  ntac 7 (pairarg_tac >> simp[]) >>
+  ntac 9 (pairarg_tac >> simp[]) >>
   qpat_x_assum `!can_bulk_copy ip i_ptr_alloc cnt. _` kall_tac >>
   IF_CASES_TAC
-  >- (simp[comp_bind_def] >> ntac 3 (pairarg_tac >> simp[]) >>
+  >- (simp[comp_bind_def] >> ntac 4 (pairarg_tac >> simp[]) >>
       Cases_on `load = CALLDATALOAD`
       >- (gvs[] >> strip_tac >> drule emit_void_terminated >> simp[is_terminator_def]) >>
       Cases_on `load = DLOAD`
@@ -211,8 +218,8 @@ Resume compile_abi_decode_open_mutual[complex]:
   Cases_on `hi = Lit 0w`
   >- (gvs[] >> metis_tac[]) >>
   gvs[] >>
-  simp[comp_bind_def, comp_ignore_bind_def] >>
-  ntac 4 (pairarg_tac >> simp[]) >> strip_tac >>
+  simp[compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   drule emit_void_terminated >> simp[is_terminator_def] >>
   metis_tac[]
 QED
@@ -230,9 +237,9 @@ QED
 Finalise compile_abi_decode_open_mutual
 
 Theorem compile_abi_decode_to_buf_open:
-  !dst src load hi info sa u sb.
+  !dst src load base_op hi info sa u sb.
     ~block_is_terminated sa /\
-    compile_abi_decode_to_buf dst src load hi info sa = (u,sb) ==>
+    compile_abi_decode_to_buf dst src load base_op hi info sa = (u,sb) ==>
     ~block_is_terminated sb
 Proof
   metis_tac[compile_abi_decode_open_mutual]
@@ -246,20 +253,20 @@ Proof
   rpt gen_tac >>
   simp[lower_abi_decode_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def] >>
-  ntac 6 (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-  drule emit_op_nonterminator_open >> simp[is_terminator_def] >>
-  metis_tac[compile_abi_decode_to_buf_open]
+  ntac 5 (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  drule compile_alloc_buffer_open >> strip_tac >>
+  drule_all compile_abi_decode_to_buf_open >> simp[]
 QED
 
 Theorem compile_return_value_decode_open:
-  !buf min_size max_size sa v sb.
-    compile_return_value_decode buf min_size max_size sa = (v,sb) ==>
+  !min_size max_size sa v sb.
+    compile_return_value_decode min_size max_size sa = (v,sb) ==>
     ~block_is_terminated sb
 Proof
   rpt gen_tac >>
   simp[compile_return_value_decode_def, comp_bind_def, comp_ignore_bind_def] >>
-  ntac 6 (pairarg_tac >> simp[]) >> strip_tac >>
-  drule emit_op_nonterminator_open >> simp[is_terminator_def]
+  ntac 5 (pairarg_tac >> simp[]) >> strip_tac >>
+  drule compile_select_open >> simp[]
 QED
 
 Theorem compile_default_return_path_open:
@@ -288,7 +295,7 @@ Proof
   ntac 5 (pairarg_tac >> simp[]) >>
   ntac 5 (pairarg_tac >> simp[]) >>
   ntac 5 (pairarg_tac >> simp[]) >>
-  Cases_on `retsz = 0`
+  Cases_on `rty = NoneT`
   >- (simp[comp_return_def] >> strip_tac >> gvs[] >>
       drule new_block_open >> simp[]) >>
   simp[] >> Cases_on `has_default`

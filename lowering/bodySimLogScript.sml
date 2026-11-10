@@ -18,7 +18,7 @@
 
 Theory bodySimLog
 Ancestors
-  list bodySim bodySimStmtCases bodyExprPreFacts stmtSimLog stmtSim exprSim exprSimHyps
+  exprSimSource bodyExprPreFacts exprSimHypsDefs list bodySim bodySimStmtCases stmtSimLog exprSimHyps
   compileEnv compileVyper supportedStmts supportedDecls supportedTypes
   supportedExprs supportedExprTraverse supportedStmtTraverse vyperEvent vyperInterpreter
   vyperState vyperTypeSystem supportedProgram supportedNames vyperContext
@@ -111,8 +111,11 @@ Theorem log_arg_body_pre[local]:
     body_inv tops ctx cenv cx /\ supported_pure_expr tops e /\
     well_typed_expr env e /\
     ~supported_expr_exists
-       (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+       (\e. ~is_extcode e /\
+            ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
+    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+              occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es ==>
     expr_body_pre cenv cx env e es
 Proof
@@ -120,7 +123,11 @@ Proof
   `int_calls_expr e = []` by metis_tac[supported_pure_int_calls] >>
   `supported_expr tops e` by simp[supported_expr_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
-  irule stmt_expr_body_pre >> simp[] >> qexists_tac `calls` >> gvs[]
+  `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+  `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
+  irule stmt_expr_body_pre >> simp[] >>
+  conj_tac >- (fs[body_inv_def] >> metis_tac[]) >>
+  qexists_tac `calls` >> gvs[]
 QED
 
 (* The arguments of a supported log are pure, so each meets expr_body_pre
@@ -131,8 +138,11 @@ Theorem body_log_args_ready:
     body_inv tops ctx cenv cx /\ body_exprs_ok cx args /\
     supported_pure_exprs tops args /\ well_typed_exprs env args /\
     ~supported_exprs_exists
-       (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
-    call_evaluation_safe cx (int_calls_exprs args) ==>
+       (\e. ~is_extcode e /\
+            ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+    call_evaluation_safe cx (int_calls_exprs args) /\
+    (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
+              occurs_abi_decode_target target tops) ==>
     log_args_ready ctx func cenv cx (\es. expr_sim_inv cenv cx env es) args
 Proof
   Induct_on `args` >> simp[log_args_ready_def] >>
@@ -145,6 +155,9 @@ Proof
     SIMP_RULE std_ss [Once supported_expr_exists_def, DE_MORGAN_THM]) >>
   qpat_x_assum `call_evaluation_safe _ _` (assume_tac o
     SIMP_RULE std_ss [Once int_calls_expr_def]) >>
+  qpat_x_assum `!target. supported_exprs_exists _ _ ==> _` (strip_assume_tac o
+    SIMP_RULE std_ss [Once supported_expr_exists_def, DISJ_IMP_THM,
+                      FORALL_AND_THM]) >>
   gvs[body_exprs_ok_def] >>
   `call_evaluation_safe cx (int_calls_exprs args)` by
     (irule call_evaluation_safe_append_right >>
@@ -156,7 +169,8 @@ Proof
   conj_tac >- metis_tac[body_expr_ok_def] >>
   rpt gen_tac >> strip_tac >>
   drule_all expr_body_pre_eval >> strip_tac >>
-  gvs[vyperTypeExprResultTheory.expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def] >>
+  gvs[vyperTypeExprResultTheory.expr_result_typed_def, expr_runtime_typed_def,
+      value_result_typed_def, value_runtime_typed_def] >>
   `env.type_defs = get_tenv cx` suffices_by metis_tac[] >>
   gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def]
 QED
@@ -181,10 +195,15 @@ Proof
          allocLimitsTheory.log_alloc_ok_def] >>
      conj_tac >> irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
      qexists_tac `2 ** 64` >> gvs[wordsTheory.dimword_def]) >>
+  `well_typed_exprs env es /\
+   !id t. FLOOKUP env.var_types id = SOME t ==>
+     ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    gvs[type_stmt_def, expr_sim_inv_def, AllCaseEqs()] >>
   irule compile_log_stmt_frag >> simp[] >>
   conj_tac
   >- (qpat_x_assum `MAP expr_type _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
       simp[]) >>
+  conj_tac >- (qexists_tac `env` >> simp[]) >>
   qexists_tac `\s. expr_sim_inv cenv cx env s` >> simp[] >>
   irule body_log_args_ready >>
   gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,

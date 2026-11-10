@@ -2,7 +2,7 @@ Theory slotCopyExecution
 Ancestors
   copyExecution createMemoryInterface createSourceCallback createFrameInterface emitHelperProps fragExec
   exprLoweringProps venomExecSemantics venomMemProps
-  compileEnv emitHelper venomInst venomState list rich_list words
+  compileEnv loweringStateRelDefs emitHelper venomInst venomState list rich_list words
 Libs
   wordsLib
 
@@ -33,13 +33,7 @@ Definition slot_copy_body_result_def:
     in jump_to (slot_copy_cond cs) s7
 End
 
-Theorem slot_copy_operand_update[simp]:
-  eval_operand op (update_var name value s) =
-    if op = Var name then SOME value else eval_operand op s
-Proof
-  Cases_on `op` >> simp[eval_operand_def, lookup_var_def, update_var_def,
-    finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
-QED
+val _ = export_rewrites ["emitHelperProps.slot_copy_operand_update"];
 
 Theorem slot_copy_load_update[simp]:
   slot_copy_word load (update_var name value s) key = slot_copy_word load s key
@@ -60,7 +54,7 @@ Theorem slot_copy_step_add[local]:
   step_inst_base (mk_inst id ADD [a;b] [out]) s =
     OK (update_var out (x+y) s)
 Proof
-  simp[step_inst_base_def, mk_inst_def, exec_pure2_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def]
 QED
 
 Theorem slot_copy_step_mul[local]:
@@ -68,7 +62,7 @@ Theorem slot_copy_step_mul[local]:
   step_inst_base (mk_inst id MUL [a;b] [out]) s =
     OK (update_var out (x*y) s)
 Proof
-  simp[step_inst_base_def, mk_inst_def, exec_pure2_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def]
 QED
 
 Theorem slot_copy_step_load[local]:
@@ -76,7 +70,7 @@ Theorem slot_copy_step_load[local]:
   step_inst_base (mk_inst id load [a] [out]) s =
     OK (update_var out (slot_copy_word load s x) s)
 Proof
-  strip_tac >> gvs[step_inst_base_def, mk_inst_def, exec_read1_def,
+  strip_tac >> gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
     slot_copy_word_def]
 QED
 
@@ -84,20 +78,20 @@ Theorem slot_copy_step_store[local]:
   eval_operand a s = SOME x /\ eval_operand b s = SOME y ==>
   step_inst_base (mk_inst id MSTORE [a;b] []) s = OK (mstore (w2n x) y s)
 Proof
-  simp[step_inst_base_def, mk_inst_def, exec_write2_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def]
 QED
 
 Theorem slot_copy_step_assign[local]:
   eval_operand a s = SOME x ==>
   step_inst_base (mk_inst id ASSIGN [a] [out]) s = OK (update_var out x s)
 Proof
-  simp[step_inst_base_def, mk_inst_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
 Theorem slot_copy_step_jump[local]:
   step_inst_base (mk_inst id JMP [Label l] []) s = OK (jump_to l s)
 Proof
-  simp[step_inst_base_def, mk_inst_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
 Theorem slot_copy_body_execution:
@@ -218,7 +212,7 @@ Proof
   `((n2w i : bytes32) = n2w n) <=> (i=n)` by
     (pure_rewrite_tac[n2w_11] >> fs[dimword_def]) >>
   simp[slot_copy_cond_insts_def, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+       step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
   simp[slot_copy_cond_result_def, eval_operand_lit_local,
        eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, bool_to_word_def] >>
@@ -429,11 +423,13 @@ Proof
   strip_tac >>
   `((n2w i : bytes32) = n2w n) <=> (i=n)` by
     (pure_rewrite_tac[n2w_11] >> fs[dimword_def]) >>
+  (* Unfold the step and the EQ case in separate steps: together they are
+     too slow for one step. *)
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
-       mk_inst_def, Once step_inst_def, step_inst_base_def, exec_pure2_def,
-       eval_operand_def] >>
+       mk_inst_def, Once step_inst_def] >>
+  simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def] >>
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
-       mk_inst_def, Once step_inst_def, step_inst_base_def,
+       mk_inst_def, Once step_inst_def, step_inst_base_opcode_eqs,
        eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def,
        slot_copy_cond_result_def, jump_to_def, bool_to_word_def] >>
@@ -626,7 +622,7 @@ Proof
      Cases_on `h.inst_opcode = PHI` >> simp[] >>
      qpat_x_assum `run_from _ _ _ _ = _` mp_tac >>
      simp[run_from_def, Once exec_block_def, get_instruction_def,
-          Once step_inst_def, step_inst_base_def] >> metis_tac[]) >>
+          Once step_inst_def, step_inst_base_opcode_eqs] >> metis_tac[]) >>
   drule_all run_blocks_run_from_no_phi >>
   `s with vs_inst_idx := 0 = s` by simp[venom_state_component_equality] >>
   simp[]
@@ -648,7 +644,7 @@ Proof
     `[mk_inst cs.cs_next_id ASSIGN [Lit 0w] [slot_copy_var cs 0]]`,
     `cs.cs_current_insts`, `slot_copy_cond cs`] >>
   simp[slot_copy_init_insts_def, mk_inst_def, is_terminator_def,
-       run_inst_seq_def, step_inst_base_def, eval_operand_def,
+       run_inst_seq_def, step_inst_base_opcode_eqs, eval_operand_def,
        update_var_def, jump_to_def]
 QED
 

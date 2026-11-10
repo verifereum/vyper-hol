@@ -121,18 +121,18 @@ QED
 (* Strong recursive precondition; the older candidate remains unchanged. *)
 Definition abi_decoder_recursive_pre_def:
   abi_decoder_recursive_pre ce env sf ty tv di av v st last
-      src dst opc hi sb d b cap s <=>
+      src dst opc base_op hi src_base sb d b cap s <=>
     abi_decoder_coherent ce env sf ty tv /\
     di = type_to_abi_dec_info sf ce ty /\
     abi_decoder_pre ce env ty tv
       (type_to_abi_dec_info ce.ce_struct_fields ce ty) av v st last
-      src dst opc hi sb d b cap s
+      src dst opc base_op hi src_base sb d b cap s
 End
 
 Theorem abi_decoder_recursive_pre_root:
   abi_decoder_recursive_pre ce env ce.ce_struct_fields ty tv di av v
-    st last src dst opc hi sb d b cap s ==>
-  abi_decoder_pre ce env ty tv di av v st last src dst opc hi sb d b cap s
+    st last src dst opc base_op hi src_base sb d b cap s ==>
+  abi_decoder_pre ce env ty tv di av v st last src dst opc base_op hi src_base sb d b cap s
 Proof
   simp[abi_decoder_recursive_pre_def]
 QED
@@ -279,4 +279,36 @@ Theorem abi_decoder_coherent_tuple_child:
 Proof
   simp[abi_decoder_coherent_tuple_iff] >> rpt strip_tac >>
   metis_tac[listTheory.LIST_REL_EL_EQN]
+QED
+
+Theorem abi_decoder_header_layout_cong:
+  ce'.ce_struct_fields = ce.ce_struct_fields ==>
+  (abi_decoder_header ce' env ty tv <=> abi_decoder_header ce env ty tv)
+Proof
+  strip_tac >> drule type_memory_bytes_frame >>
+  simp[abi_decoder_header_def]
+QED
+
+Theorem abi_decoder_coherent_layout_transport:
+  !ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==>
+  !ce'. ce'.ce_struct_fields = ce.ce_struct_fields /\
+        ce'.ce_flag_n_members = ce.ce_flag_n_members ==>
+        abi_decoder_coherent ce' env sf ty tv
+Proof
+  ho_match_mp_tac abi_decoder_coherent_ind >> rpt strip_tac >>
+  drule type_memory_bytes_frame >> strip_tac >>
+  `!ty tv. abi_decoder_header ce' env ty tv =
+            abi_decoder_header ce env ty tv` by
+    simp[abi_decoder_header_def] >>
+  simp[Once abi_decoder_coherent_cases] >>
+  gvs[listTheory.LIST_REL_EL_EQN] >> metis_tac[]
+QED
+
+Theorem abi_decoder_coherent_layout_cong:
+  ce'.ce_struct_fields = ce.ce_struct_fields /\
+  ce'.ce_flag_n_members = ce.ce_flag_n_members ==>
+  (abi_decoder_coherent ce' env sf ty tv <=>
+   abi_decoder_coherent ce env sf ty tv)
+Proof
+  metis_tac[abi_decoder_coherent_layout_transport]
 QED

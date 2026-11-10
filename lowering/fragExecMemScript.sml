@@ -393,19 +393,10 @@ Proof
   Cases_on `r` >> gvs[]
 QED
 
-Theorem resolve_block_assigns_non_var[local]:
-  !l op. (!v. op <> Var v) ==> resolve_block_assigns l op = op
+Theorem same_after_assigns_refl[local]:
+  !l op. same_after_assigns l op op
 Proof
-  Cases_on `l` >> Cases_on `op` >> simp[resolve_block_assigns_def]
-QED
-
-Theorem resolve_block_assigns_no_outputs[local]:
-  !inst rest op.
-    inst.inst_outputs = [] ==>
-    resolve_block_assigns (inst :: rest) op = resolve_block_assigns rest op
-Proof
-  rpt strip_tac >> Cases_on `op` >>
-  simp[resolve_block_assigns_def, resolve_block_assigns_non_var]
+  Cases >> simp[same_after_assigns_def]
 QED
 
 (* Adjacent RETURNDATACOPY [p; 0; rds] and REVERT [p; rds] form a pair. *)
@@ -426,8 +417,7 @@ Proof
         (TAKE i bb.bb_instructions)` by
     metis_tac[rich_listTheory.SNOC_EL_TAKE] >>
   gvs[revert_forward_pair_def, listTheory.REVERSE_SNOC,
-      resolve_block_assigns_no_outputs, resolve_block_assigns_non_var,
-      mk_inst_def] >>
+      resolve_block_assigns_def, same_after_assigns_refl, mk_inst_def] >>
   rpt strip_tac >>
   `~(k < SUC i)` by (qpat_x_assum `i < k` mp_tac >> simp[]) >>
   gvs[]
@@ -733,3 +723,38 @@ Proof
     mem_safe_run_inst_seq >> simp[]
 QED
 
+
+(* A raw actual jump with a non-error continuation enters a zero-PHI target. *)
+Theorem mem_safe_run_jump_result:
+  !a fuel ctx fn s bb inst lbl out.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    step_inst a ctx inst s = OK (jump_to lbl s) /\
+    (revert_forward_at bb s.vs_inst_idx \/ mem_safe_step a ctx inst s) /\
+    run_from fuel ctx fn (jump_to lbl s) = out /\ (!e. out <> Error e) ==>
+    run_from (SUC fuel) ctx fn s = out /\
+    (mem_safe_run fuel ctx fn (jump_to lbl s) ==>
+     mem_safe_run (SUC fuel) ctx fn s)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `step_inst_base inst s = OK (jump_to lbl s)` by
+    gvs[step_inst_non_invoke] >>
+  conj_tac >- (irule run_from_jump_result >> metis_tac[]) >>
+  strip_tac >>
+  `?target. lookup_block lbl fn.fn_blocks = SOME target /\
+            phi_prefix_length target.bb_instructions = 0` by
+    (irule run_from_jump_target >> simp[] >> metis_tac[]) >>
+  `eval_phis (jump_to lbl s) target.bb_instructions = OK (jump_to lbl s)` by
+    simp[eval_phis_no_phi] >>
+  `mem_safe_blocks (SUC fuel) ctx fn (jump_to lbl s)` by
+    (drule_at Any mem_safe_blocks_run >>
+     disch_then (qspecl_then [`fuel`, `ctx`, `fn`] mp_tac) >>
+     gvs[jump_to_def]) >>
+  `revert_forward_at bb s.vs_inst_idx \/ mem_safe_step (SUC fuel) ctx inst s` by
+    metis_tac[mem_safe_step_non_invoke] >>
+  simp[mem_safe_run_def, Once mem_safe_block_def, Once exec_block_def,
+       step_inst_non_invoke, jump_to_def] >>
+  fs[jump_to_def]
+QED

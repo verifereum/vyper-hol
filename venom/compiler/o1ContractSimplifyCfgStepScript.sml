@@ -12,7 +12,7 @@
 Theory o1ContractSimplifyCfgStep
 Ancestors
   o1PassContract simplifyCfgCorrectness simplifyCfgCallChecks simplifyCfgLabelProps
-  simplifyCfgDefs simplifyCfgInvariant simplifyCfgCollapseShape
+  simplifyCfgDefs simplifyCfgInvariant simplifyCfgCollapseShape simplifyCfgRetpc
   simplifyCfgOpaque unitShapeDefs cfgTransform venomPassDispatcher venomWf
   venomInst list
 
@@ -116,6 +116,9 @@ Proof
   `wf_function f /\ fn_inst_wf f` by gvs[o1_fn_shape_def] >>
   mp_tac (Q.INST [`fn` |-> `f`] simplify_cfg_phi_two_pairs) >>
   simp[simplify_cfg_fn_def] >> strip_tac >>
+  mp_tac (Q.INST [`fn` |-> `f`] simplify_cfg_phi_labels_distinct) >>
+  impl_tac >- gvs[o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM, inst_shape_ok_def] >>
+  simp[simplify_cfg_fn_def] >> strip_tac >>
   gvs[EVERY_MEM, inst_shape_ok_def] >> metis_tac[]
 QED
 
@@ -126,7 +129,7 @@ Theorem simplify_cfg_retpc_shape_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   retpc_shape_ok (simplify_cfg_fn fn)
 Proof
-  cheat
+  MATCH_ACCEPT_TAC simplify_cfg_preserves_retpc_shape
 QED
 
 Theorem simplify_cfg_fn_shape:

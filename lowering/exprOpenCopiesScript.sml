@@ -10,13 +10,184 @@
 
 Theory exprOpenCopies
 Ancestors
+  exprSimHypsDefs
   exprOpenPrimitives exprOpenTerminals exprLowering context compileEnv
   supportedExprForms supportedTypes typedCopyMetadata list rich_list pair alist finite_map venomInst
-  exprSimAggregateLayout exprSimHyps vyperTypeInvariants vyperTypeSystem
+  structFieldsProps  vyperTypeInvariants vyperTypeSystem
+
+Theorem compile_copy_memory_open[local]:
+  !dst src n sa r sb.
+    ~block_is_terminated sa /\ compile_copy_memory dst src n sa = (r,sb) ==>
+    ~block_is_terminated sb
+Proof
+  rpt gen_tac >> Cases_on `n` >>
+  simp[compile_copy_memory_def, comp_return_def] >> strip_tac >> gvs[] >>
+  drule emit_void_terminated >> simp[is_terminator_def]
+QED
+
+Theorem compile_with_byte_offset_open[local]:
+  !base off sa r sb.
+    ~block_is_terminated sa /\ compile_with_byte_offset base off sa = (r,sb) ==>
+    ~block_is_terminated sb
+Proof
+  rw[compile_with_byte_offset_def] >> gvs[comp_return_def] >>
+  drule emit_op_nonterminator_open >> simp[is_terminator_def]
+QED
+
+(* Past the word and bytestring cases, acyclic metadata sends the typed
+   copy to one of its helpers or to a plain copy. *)
+Theorem compile_store_memory_typed_complex_cases[local]:
+  !cenv dst dst_ty src src_ty sa r sb.
+    ~is_word_type dst_ty /\
+    ~(is_bytestring_type dst_ty /\ is_bytestring_type src_ty) /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    compile_store_memory_typed cenv dst dst_ty src src_ty sa = (r,sb) ==>
+    (?de dc se sc. dst_ty = ArrayT de (Dynamic dc) /\
+       src_ty = ArrayT se (Dynamic sc) /\
+       compile_copy_dynarray_typed cenv dst de dc src se sa = (r,sb)) \/
+    (?de n se m. dst_ty = ArrayT de (Fixed n) /\ src_ty = ArrayT se (Fixed m) /\
+       compile_copy_sarray_typed cenv dst de src se n sa = (r,sb)) \/
+    (?ds ss. dst_ty = TupleT ds /\ src_ty = TupleT ss /\
+       compile_typed_copy_fields cenv dst src ds ss 0 0 sa = (r,sb)) \/
+    (?dn sn. dst_ty = StructT dn /\ src_ty = StructT sn /\
+       compile_struct_typed_copy cenv dst src
+         (get_struct_fields cenv.ce_struct_fields (nsid_to_string dn))
+         (get_struct_fields cenv.ce_struct_fields (nsid_to_string sn)) 0 0 sa =
+       (r,sb)) \/
+    compile_copy_memory dst src (type_memory_bytes cenv dst_ty) sa = (r,sb)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_memory_typed_def, LET_THM] >>
+  Cases_on `src_ty` >> simp[] >>
+  Cases_on `dst_ty` >> simp[] >>
+  rpt BasicProvers.TOP_CASE_TAC >> simp[]
+QED
+
+(* With acyclic struct metadata the typed copy never takes its INVALID
+   fallback: word and bytestring stores, MCOPY fast paths, and per-field
+   copies keep the block open, and the array loops end by opening their
+   exit block. *)
+Theorem compile_store_memory_typed_open_family[local]:
+  (!cenv dst dst_ty src src_ty sa r sb.
+     acyclic_struct_metadata cenv.ce_struct_fields /\ ~block_is_terminated sa /\
+     compile_store_memory_typed cenv dst dst_ty src src_ty sa = (r,sb) ==>
+     ~block_is_terminated sb) /\
+  (!cenv dst src dst_tys src_tys dst_off src_off sa r sb.
+     acyclic_struct_metadata cenv.ce_struct_fields /\ ~block_is_terminated sa /\
+     compile_typed_copy_fields cenv dst src dst_tys src_tys dst_off src_off sa =
+       (r,sb) ==>
+     ~block_is_terminated sb) /\
+  (!cenv dst dst_ty src src_ty count sa r sb.
+     acyclic_struct_metadata cenv.ce_struct_fields /\ ~block_is_terminated sa /\
+     compile_copy_sarray_typed cenv dst dst_ty src src_ty count sa = (r,sb) ==>
+     ~block_is_terminated sb) /\
+  (!cenv dst dst_ty cap src src_ty sa r sb.
+     acyclic_struct_metadata cenv.ce_struct_fields /\ ~block_is_terminated sa /\
+     compile_copy_dynarray_typed cenv dst dst_ty cap src src_ty sa = (r,sb) ==>
+     ~block_is_terminated sb) /\
+  (!cenv dst src dst_fields src_fields dst_off src_off sa r sb.
+     acyclic_struct_metadata cenv.ce_struct_fields /\ ~block_is_terminated sa /\
+     compile_struct_typed_copy cenv dst src dst_fields src_fields dst_off src_off
+       sa = (r,sb) ==>
+     ~block_is_terminated sb)
+Proof
+  ho_match_mp_tac compile_store_memory_typed_ind
+  >> rpt conj_tac
+  >- suspend "dispatch"
+  >- simp[Once compile_store_memory_typed_def, comp_return_def]
+  >- simp[Once compile_store_memory_typed_def, comp_return_def]
+  >- suspend "fields_cons"
+  >- suspend "sarray"
+  >- suspend "dynarray"
+  >- simp[Once compile_store_memory_typed_def, comp_return_def]
+  >> suspend "struct_cons"
+QED
+
+Resume compile_store_memory_typed_open_family[dispatch]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `is_word_type dst_ty`
+  >- (gvs[Once compile_store_memory_typed_def, comp_bind_def] >>
+      pairarg_tac >> gvs[] >>
+      drule emit_void_terminated >> simp[is_terminator_def]) >>
+  Cases_on `is_bytestring_type dst_ty /\ is_bytestring_type src_ty`
+  >- (gvs[Once compile_store_memory_typed_def] >>
+      gvs[compile_store_bytestring_def, comp_bind_def] >>
+      pairarg_tac >> gvs[] >>
+      drule emit_void_terminated >> simp[is_terminator_def]) >>
+  drule_all compile_store_memory_typed_complex_cases >> strip_tac
+  >- metis_tac[]
+  >- metis_tac[]
+  >- metis_tac[]
+  >- metis_tac[] >>
+  metis_tac[compile_copy_memory_open]
+QED
+
+Resume compile_store_memory_typed_open_family[fields_cons]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_typed_copy_fields _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_memory_typed_def, LET_THM, comp_bind_def,
+       comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  imp_res_tac compile_with_byte_offset_open >>
+  imp_res_tac compile_with_byte_offset_open >>
+  metis_tac[]
+QED
+
+Resume compile_store_memory_typed_open_family[sarray]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_copy_sarray_typed _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_memory_typed_def, LET_THM] >>
+  IF_CASES_TAC >- metis_tac[compile_copy_memory_open] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  metis_tac[new_block_open]
+QED
+
+Resume compile_store_memory_typed_open_family[dynarray]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_copy_dynarray_typed _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_memory_typed_def, LET_THM] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >>
+  IF_CASES_TAC
+  >- (simp[comp_bind_def, compile_copy_memory_dynamic_def] >>
+      rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+      drule emit_void_terminated >> simp[is_terminator_def]) >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  metis_tac[new_block_open]
+QED
+
+Resume compile_store_memory_typed_open_family[struct_cons]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `ALOOKUP src_fields name` >>
+  TRY (rename1 `SOME p` >> PairCases_on `p`) >>
+  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
+  qpat_x_assum `compile_struct_typed_copy _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_memory_typed_def, LET_THM, comp_bind_def,
+       comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  imp_res_tac compile_with_byte_offset_open >>
+  imp_res_tac compile_with_byte_offset_open >>
+  metis_tac[]
+QED
+
+Finalise compile_store_memory_typed_open_family
+
+Theorem compile_store_memory_typed_open:
+  !cenv dst dst_ty src src_ty sa r sb.
+    acyclic_struct_metadata cenv.ce_struct_fields /\ ~block_is_terminated sa /\
+    compile_store_memory_typed cenv dst dst_ty src src_ty sa = (r,sb) ==>
+    ~block_is_terminated sb
+Proof
+  metis_tac[compile_store_memory_typed_open_family]
+QED
 
 Theorem compile_store_memory_open:
   !cenv src dst dty sty sa r sb.
-    (is_word_type dty \/ is_bytestring_type dty \/ dty = sty) /\
+    (is_word_type dty \/ is_bytestring_type dty \/ dty = sty \/
+     acyclic_struct_metadata cenv.ce_struct_fields) /\
     ~block_is_terminated sa /\
     compile_store_memory cenv src dst dty sty sa = (r,sb) ==>
     ~block_is_terminated sb
@@ -28,10 +199,9 @@ Proof
   >- (simp[compile_store_bytestring_def, comp_bind_def] >>
       pairarg_tac >> simp[] >> strip_tac >>
       drule emit_void_terminated >> simp[is_terminator_def]) >>
-  simp[] >> strip_tac >> gvs[] >>
-  Cases_on `type_memory_bytes cenv dty` >>
-  gvs[compile_copy_memory_def, comp_return_def] >>
-  drule emit_void_terminated >> simp[is_terminator_def]
+  Cases_on `dty = sty`
+  >- (simp[] >> metis_tac[compile_copy_memory_open]) >>
+  simp[] >> metis_tac[compile_store_memory_typed_open]
 QED
 
 Theorem supported_copy_types_store_path:
@@ -54,6 +224,7 @@ QED
 
 Theorem compile_make_tuple_open:
   !cfn cenv es buf off sa r sb.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     ~block_is_terminated sa /\
     compile_make_tuple cfn cenv es buf off sa = (r,sb) ==>
     ~block_is_terminated sb
@@ -71,6 +242,7 @@ QED
 
 Theorem compile_make_array_elems_open:
   !cfn cenv es elem size lw buf idx sa r sb.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     EVERY (\e. is_word_type elem \/ is_bytestring_type elem \/ elem = expr_type e) es /\
     ~block_is_terminated sa /\
     compile_make_array_elems cfn cenv es elem size lw buf idx sa = (r,sb) ==>
@@ -89,6 +261,7 @@ QED
 
 Theorem compile_make_array_open:
   !cfn cenv es elem size lw buf sa r sb.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     EVERY (\e. is_word_type elem \/ is_bytestring_type elem \/ elem = expr_type e) es /\
     ~block_is_terminated sa /\
     compile_make_array cfn cenv es elem size lw buf sa = (r,sb) ==>
@@ -105,6 +278,7 @@ QED
 
 Theorem compile_struct_lit_open:
   !cfn cenv ty fields buf off sa r sb.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     (!name e fty sz.
        MEM (name,e) fields /\
        ALOOKUP (get_struct_fields cenv.ce_struct_fields
@@ -123,11 +297,6 @@ Proof
   drule_all unwrap_value_open >> disch_tac >>
   drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)
     compile_store_memory_open >> simp[] >>
-  impl_tac
-  >- (BasicProvers.TOP_CASE_TAC >> gvs[] >>
-      qmatch_goalsub_rename_tac `case fld_pair of (fty,sz) => fty` >>
-      PairCases_on `fld_pair` >> gvs[] >>
-      metis_tac[]) >>
   disch_tac >> first_x_assum irule >>
   goal_assum (drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`)) >>
   simp[] >> metis_tac[]

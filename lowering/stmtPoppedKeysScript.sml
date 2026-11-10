@@ -14,8 +14,10 @@
 
 Theory stmtPoppedKeys
 Ancestors
-  list finite_map exprSimHyps vyperInterpreter vyperState
-  vyperPlaceResultTyping vyperScopePreservation vyperLookup
+  exprSimSource
+  exprSimHypsDefs
+  list finite_map vyperInterpreter vyperState
+  vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperScopePreservation vyperLookup
   vyperTypeInvariants vyperPlaceInvariants vyperTypeEvalSoundness
   vyperTypeExprSoundness vyperTypeSystem vyperTypeCallGraph vyperTypeValues
   vyperTypeCallStackSoundness vyperTypeEnvPreservation vyperTypeStatePreservation
@@ -267,7 +269,9 @@ Theorem stmt_log_popped_keys_indexed:
     popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes
 Proof
   rpt strip_tac >> qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  Cases_on `cx.txn.is_static` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  strip_tac >>
   imp_res_tac lift_option_scopes >> imp_res_tac push_log_scopes >> gvs[] >>
   metis_tac[eval_exprs_popped_keys_indexed]
 QED

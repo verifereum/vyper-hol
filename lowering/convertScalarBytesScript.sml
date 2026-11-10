@@ -1,8 +1,9 @@
 Theory convertScalarBytes
 Ancestors
+  exprUnopStraight
   convertScalarBytesRun convertScalarEncoding convertScalarTyping convertScalarProps exprSimConvert exprSimUnop
   valueEncodingProofs exprLowering compileEnv vyperValueOperation valueEncoding
-  vyperValue venomExecSemantics list exprLoweringProps
+  vyperValue venomExecSemantics list exprLoweringProps venomState words integer_word
 
 Theorem scalar_bytes_bool_frag:
   !ctx func cenv cx m bs es0. LENGTH bs <= 32 ==>
@@ -240,4 +241,57 @@ Proof
   rpt strip_tac >> Cases_on `m <= n`
   >- (irule scalar_bytes_widen_result_frag >> simp[]) >>
   irule scalar_bytes_narrow_result_frag >> simp[]
+QED
+
+Theorem scalar_bytes0_int_result_frag:
+  !ctx func cenv cx b es0. 1 < b /\ b <= 256 ==>
+    unop_frag ctx func cenv cx
+      (\x. compile_type_convert x (ConvBytesToInt 0 T b))
+      (typed_val_to_w256 (BaseTV (BytesT (Fixed 0))) (BytesV []))
+      (BaseT (IntT b))
+      (convert_result cx (BaseT (BytesT (Fixed 0))) (BaseT (IntT b)) (BytesV [])) es0
+Proof
+  rpt strip_tac >> simp[scalar_bytes0_encoding, scalar_bytes0_int_result] >>
+  irule unop_frag_straight >>
+  simp[straight_fresh_convert_scalar, is_word_type_def] >> strip_tac >>
+  qexists_tac `0w` >>
+  simp[evaluate_type_def, typed_val_to_w256_def, val_to_w256_def,
+       integer_wordTheory.i2w_def] >>
+  rpt strip_tac >>
+  gvs[compile_type_convert_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >>
+  drule (Q.SPEC `T` scalar_emit_shift |> SRULE []) >>
+  simp[eval_operand_def] >>
+  disch_then drule >> simp[] >>
+  `word_asr (0w:bytes32) 256 = 0w` by
+    simp[fcpTheory.CART_EQ, wordsTheory.word_asr_def, fcpTheory.FCP_BETA,
+         wordsTheory.word_msb_def, wordsTheory.word_0] >>
+  simp[wordsTheory.dimword_def] >> metis_tac[]
+QED
+
+Theorem scalar_bytes0_decimal_result_frag:
+  !ctx func cenv cx divisor es0.
+    unop_frag ctx func cenv cx
+      (\x. compile_type_convert x
+        (ConvBytesMToDecimal 0 divisor (-&(2**167)) (&(2**167)-1)))
+      (typed_val_to_w256 (BaseTV (BytesT (Fixed 0))) (BytesV []))
+      (BaseT DecimalT)
+      (convert_result cx (BaseT (BytesT (Fixed 0))) (BaseT DecimalT) (BytesV [])) es0
+Proof
+  rpt strip_tac >> simp[scalar_bytes0_encoding, scalar_bytes0_decimal_result] >>
+  irule unop_frag_straight >>
+  simp[straight_fresh_convert_scalar, is_word_type_def] >> strip_tac >>
+  qexists_tac `0w` >>
+  simp[evaluate_type_def, typed_val_to_w256_def, val_to_w256_def,
+       integer_wordTheory.i2w_def] >>
+  rpt strip_tac >>
+  gvs[compile_type_convert_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >>
+  drule (Q.SPEC `T` scalar_emit_shift |> SRULE []) >>
+  simp[eval_operand_def] >>
+  disch_then drule >> simp[] >>
+  `word_asr (0w:bytes32) 256 = 0w` by
+    simp[fcpTheory.CART_EQ, wordsTheory.word_asr_def, fcpTheory.FCP_BETA,
+         wordsTheory.word_msb_def, wordsTheory.word_0] >>
+  simp[wordsTheory.dimword_def] >> metis_tac[]
 QED

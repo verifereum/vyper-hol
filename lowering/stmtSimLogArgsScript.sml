@@ -1,17 +1,20 @@
 (* Frame interfaces for typed log arguments. *)
 Theory stmtSimLogArgs
 Ancestors
-  exprSim exprSimOps exprSimOperands compileEnv venomState stmtLowering
-  exprSimWordArgs
+  exprBopSimProps
+  exprSimDefs exprSimProps exprSimStack loweringPosts
+  exprSimOps exprSimOperands compileEnv venomState stmtLowering
+  exprSimWordArgs exprSimHyps exprSimAttributeFields
 
 (* A captured value in a live local survives a later expression whenever
-   its footprint avoids the one local word that expressions may change. *)
+   its footprint avoids the local's dynamic array length words, the only
+   local bytes expressions may change (locals_kept). *)
 Theorem log_local_footprint_kept:
   !cenv es s t n b sz off len.
     locals_kept cenv es s t /\
     local_region cenv es.scopes s n b sz /\
     b <= off /\ off + len <= b + sz /\
-    (dynarray_local cenv n ==> b + 32 <= off) ==>
+    (!k. dynarray_len_at cenv n k ==> off + len <= b + k \/ b + k + 32 <= off) ==>
     mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory
 Proof
   rw[locals_kept_def] >> first_x_assum irule >>
@@ -26,7 +29,8 @@ Theorem log_local_value_kept:
     locals_kept cenv es s t /\
     local_region cenv es.scopes s n b sz /\
     b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
-    (dynarray_local cenv n ==> b + 32 <= w2n w) ==>
+    (!k. dynarray_len_at cenv n k ==>
+         w2n w + val_footprint tv v <= b + k \/ b + k + 32 <= w2n w) ==>
     expr_val_rel cx ty v op t
 Proof
   rpt strip_tac >> irule expr_val_rel_footprint_agree >>
@@ -35,11 +39,32 @@ Proof
   qexistsl [`b`, `cenv`, `es`, `n`, `sz`] >> simp[]
 QED
 
+(* Wherever a value of type ty sits in a live local, it is apart from the
+   local's dynamic array length words. *)
+Definition log_arg_clear_def:
+  log_arg_clear cenv cx ty v <=>
+    !tv n j k.
+      evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv v /\
+      local_val_at cenv cx n j tv v /\ dynarray_len_at cenv n k ==>
+      j + val_footprint tv v <= k \/ k + 32 <= j
+End
+
+(* A base type value holds no dynamic array, so it is clear of them. *)
+Theorem log_arg_clear_base:
+  expr_sim_inv cenv cx env es ==> log_arg_clear cenv cx (BaseT bt) v
+Proof
+  rw[log_arg_clear_def] >>
+  drule vyperTypeValuesTheory.evaluate_type_BaseT_cases >> strip_tac >>
+  gvs[] >>
+  `dynarray_free (BaseTV btv)` by simp[dynarray_free_base] >>
+  drule_all local_val_at_dynarray_apart >> simp[]
+QED
+
 Theorem log_argument_footprint_kept:
   !cenv cx ty tv v op sa sb es s t w.
     expr_val_at cenv cx ty sa sb es v op s /\
     evaluate_type (get_tenv cx) ty = SOME tv /\
-    ~is_word_type ty /\ ~dynarray_type ty /\
+    ~is_word_type ty /\ log_arg_clear cenv cx ty v /\
     eval_operand op s = SOME w /\
     wb_frame cenv es sb s t ==>
     mem_bytes_at (w2n w) (val_footprint tv v) t.vs_memory =
@@ -59,8 +84,12 @@ Proof
       strip_tac >> sym_tac >> first_x_assum irule >> simp[])
   >- (gvs[] >> irule log_local_footprint_kept >>
       qexistsl [`b`, `cenv`, `es`, `n`, `sz`] >>
-      gvs[wb_frame_def]) >>
-  gvs[valueEncodingTheory.mem_bytes_at_def]
+      gvs[wb_frame_def] >> rpt strip_tac >>
+      qpat_x_assum `log_arg_clear _ _ _ _`
+        (mp_tac o REWRITE_RULE [log_arg_clear_def]) >>
+      disch_then (qspecl_then [`tv`, `n`, `w2n w - b`, `k`] mp_tac) >>
+      simp[]) >>
+  gvs[valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem log_argument_value_kept:
@@ -69,7 +98,7 @@ Theorem log_argument_value_kept:
     expr_val_at cenv cx ty sa sb es v op s /\
     wb_frame cenv es sb s t /\
     (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l) /\
-    ~dynarray_type ty ==>
+    log_arg_clear cenv cx ty v ==>
     expr_val_rel cx ty v op t
 Proof
   rpt gen_tac >> strip_tac >>
@@ -172,7 +201,7 @@ Proof
       conj_tac
       >- (qexists_tac `func` >>
           gvs[exprLoweringPropsTheory.stmt_state_rel_def,
-              compileEnvTheory.state_rel_def]) >>
+              loweringStateRelDefsTheory.state_rel_def]) >>
       qexistsl_tac [`sb`, `es'.scopes`, `t`] >> gvs[wb_frame_def]) >>
   strip_tac >> irule local_region_frame_fwd >>
   qexistsl_tac [`s`, `sb`, `es.scopes`] >> gvs[wb_frame_def]
@@ -206,7 +235,8 @@ QED
 
 Definition log_arg_rel_def:
   log_arg_rel cenv cx sa sb es s (op,ty) v <=>
-    expr_val_rel cx ty v op s /\ expr_val_at cenv cx ty sa sb es v op s
+    expr_val_rel cx ty v op s /\ expr_val_at cenv cx ty sa sb es v op s /\
+    log_arg_clear cenv cx ty v
 End
 
 Theorem log_arg_rel_start_mono:
@@ -224,14 +254,15 @@ Theorem log_arg_rel_frame:
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   sb.cs_next_id <= sc.cs_next_id /\ wb_frame cenv es sb s t /\
   (!z. FST arg = Var z ==> not_fresh_at sb z) /\
-  (!l. FST arg <> Label l) /\ ~dynarray_type (SND arg) /\
+  (!l. FST arg <> Label l) /\
   log_arg_rel cenv cx sa sb es s arg v ==>
   log_arg_rel cenv cx sa sc es' t arg v
 Proof
   Cases_on `arg` >> simp[log_arg_rel_def] >> strip_tac >>
-  conj_tac
-  >- (drule_all log_argument_value_kept >> simp[]) >>
-  drule_all log_frame_placement >> simp[]
+  rpt conj_tac
+  >- (drule_all log_argument_value_kept >> simp[])
+  >- (drule_all log_frame_placement >> simp[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Definition log_args_post_def:
@@ -288,7 +319,7 @@ Theorem log_args_post_cons:
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   sm.cs_next_id <= sb.cs_next_id /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ (!l. x <> Label l) /\
-  ~dynarray_type (expr_type e) /\
+  expr_sim_inv cenv cx env0 es0 /\ expr_type e = BaseT bt /\
   expr_post ctx func cenv cx e es sa sm s0 es1 v x t /\
   log_args_post ctx func cenv cx es1 sm sb t es' ys vs u ==>
   log_args_post ctx func cenv cx es sa sb s0 es'
@@ -300,11 +331,12 @@ Proof
   `wb_frame cenv es sa s0 t` by (drule_all expr_post_frame >> simp[]) >>
   `wb_frame cenv es1 sm t u` by (drule_all log_args_post_frame >> simp[]) >>
   `log_arg_rel cenv cx sa sm es1 t (x,expr_type e) v` by
-    gvs[expr_post_def, log_arg_rel_def] >>
+    (gvs[expr_post_def, log_arg_rel_def] >>
+     irule log_arg_clear_base >> metis_tac[]) >>
   `log_arg_rel cenv cx sa sb es' u (x,expr_type e) v` by
     (irule log_arg_rel_frame >> simp[] >>
      qexistsl_tac [`ctx`, `es1`, `func`] >>
-     qexistsl_tac [`t`, `sm`] >> simp[]) >>
+     qexistsl_tac [`t`, `sm`] >> gvs[]) >>
   simp[log_args_post_def] >> conj_tac
   >- (drule_all log_args_post_state >> simp[]) >>
   conj_tac

@@ -1,9 +1,10 @@
 (* Live-byte agreement for a primitive storage Append. *)
 Theory appendStorageRel
 Ancestors
-  stmtSimAppendStorage accountsRelProps vyperStorageFrame compileEnv
+  exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
+  stmtSimAppendStorage accountsRelProps vyperStorageFrame compileEnv loweringStateRelDefs
   vyperValue vyperStorageBackend vyperStorage words vfmState venomState
-  stmtSim exprLoweringProps exprSim varsExt stateFrame finite_map
+   exprLoweringProps  varsExt stateFrame finite_map
 
 Theorem append_dead_bytes_word[local]:
   type_slot_size tv = 1 ==> ~dead_bytes st bs tv j b
@@ -237,6 +238,7 @@ Proof
   strip_tac >>
   drule_all stmt_state_rel_append_storage_updates >>
   disch_then (qspec_then `w` assume_tac) >>
+  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   drule_all append_storage_word_success >> strip_tac >> gvs[] >>
   `!st1 st2. set_storage cx (set_storage cx es tr st1) tr st2 =
     set_storage cx es tr st2` by

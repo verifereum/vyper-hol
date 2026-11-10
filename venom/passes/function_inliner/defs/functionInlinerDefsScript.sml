@@ -93,34 +93,33 @@ End
 
 (* ===== Parameter / Return Rewriting ===== *)
 
-(* Rotate INVOKE operands for PARAM binding.
-   Python: ops = call_site.operands[1:] + [call_site.operands[0]]
-   Moves the callee label (return PC) to the end so PARAM indices
-   match argument positions. *)
+(* Bind arguments followed by a dummy return PC, matching upstream #5254.
+   Inlined returns jump directly to the continuation, so the return-PC
+   parameter needs no code address. *)
 Definition rotate_invoke_ops_def:
   rotate_invoke_ops [] = [] ∧
-  rotate_invoke_ops (first::rest) = rest ++ [first]
+  rotate_invoke_ops (first::rest) = rest ++ [Lit 0w]
 End
 
 (* Rewrite a single instruction in a cloned block.
    Returns (replacement instructions, updated param_idx).
-   PARAM → ASSIGN from caller's operand (rotated).
-     The last PARAM gets a Label operand (return PC). Python assigns it
-     because labels are addresses at runtime. Our eval_operand returns
-     NONE for Labels — the correctness proof must show this assign is
-     dead code (output unused after RET → JMP).
-   RET → assign return values to INVOKE outputs, then JMP to return block.
+   Matches Python _inline_call_site:
+   param-class (PARAM, FMP_PARAM, RETPC_PARAM) → ASSIGN from the rotated
+     INVOKE operand at param_idx. The return-PC parameter gets zero; its
+     output is unused once RET becomes JMP.
+   RET / RETFMP → assign return values to INVOKE outputs, then JMP to the
+     return block.
    Others → unchanged. *)
 Definition rewrite_inline_inst_def:
   rewrite_inline_inst invoke_ops invoke_outs return_label inst param_idx =
-    if inst.inst_opcode = PARAM then
+    if is_param_opcode inst.inst_opcode then
       if param_idx < LENGTH invoke_ops then
         ([inst with <| inst_opcode := ASSIGN;
                        inst_operands := [EL param_idx invoke_ops] |>],
          param_idx + 1)
       else
         ([inst], param_idx)
-    else if inst.inst_opcode = RET then
+    else if inst.inst_opcode = RET ∨ inst.inst_opcode = RETFMP then
       let all_but_last =
         TAKE (LENGTH inst.inst_operands - 1) inst.inst_operands in
       let ret_vals = FILTER (λop. ¬is_label_op op) all_but_last in
@@ -160,8 +159,9 @@ Definition rewrite_inline_block_def:
     (bb with bb_instructions := insts, pi')
 End
 
-(* Rewrite all cloned blocks. param_idx is shared across blocks
-   (matching Python's shared param_idx counter). *)
+(* Rewrite all cloned blocks. param_idx is reset to its initial value for each
+   block (matching Python _inline_call_site, which sets param_idx = 0 at the
+   top of the per-block loop). *)
 Definition rewrite_inline_blocks_def:
   rewrite_inline_blocks invoke_ops invoke_outs return_label [] param_idx =
     ([], param_idx) ∧
@@ -170,7 +170,7 @@ Definition rewrite_inline_blocks_def:
     let (bb', pi') =
       rewrite_inline_block invoke_ops invoke_outs return_label bb param_idx in
     let (rest', pi'') =
-      rewrite_inline_blocks invoke_ops invoke_outs return_label rest pi' in
+      rewrite_inline_blocks invoke_ops invoke_outs return_label rest param_idx in
     (bb' :: rest', pi'')
 End
 

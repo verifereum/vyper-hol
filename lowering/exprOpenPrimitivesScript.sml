@@ -87,8 +87,8 @@ Proof
 QED
 
 Theorem compile_dynarray_pop_open:
-  !base scale size load store sa v sb.
-    compile_dynarray_pop base scale size load store sa = (v,sb) ==>
+  !base scale size is_ctor imm loc sa v sb.
+    compile_dynarray_pop base scale size is_ctor imm loc sa = (v,sb) ==>
     ~block_is_terminated sb
 Proof
   rpt gen_tac >>

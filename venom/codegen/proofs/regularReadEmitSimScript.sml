@@ -10,8 +10,12 @@ Theorem read_outputs_singleton[local]:
    inst.inst_opcode = SHA3) /\ inst_wf inst ==>
   ?out. inst.inst_outputs = [out]
 Proof
-  strip_tac >>
-  gvs[ef_read0_def, ef_read1_def, inst_wf_def, LENGTH_EQ_NUM_compute]
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `LENGTH inst.inst_outputs = 1` suffices_by
+    simp[LENGTH_EQ_NUM_compute] >>
+  qpat_x_assum `ef_read0 _ \/ _` mp_tac >>
+  pure_rewrite_tac[ef_read0_def, ef_read1_def] >>
+  strip_tac >> fs[inst_wf_def]
 QED
 
 Theorem read0_compute_operands[local]:

@@ -1,7 +1,6 @@
 Theory vyperInterpreter
 Ancestors
   vyperCallOutcome[ignore_grammar]
-  vyperCallOutcomeFrame[ignore_grammar]
   arithmetic alist combin option list finite_map pair
   rich_list sorting cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperGetter vyperABI
@@ -823,7 +822,8 @@ Definition make_delegate_call_state_def:
        Only code lookup uses the target; the message still belongs to the proxy. *)
     let (code, accesses) =
       code_from_tx accounts accesses (tx with to := SOME target_addr) in
-    let ctxt = initial_context cx.txn.target code F empty_return_destination tx in
+    let ctxt = initial_context cx.txn.target code cx.txn.is_static
+                 empty_return_destination tx in
     let rollback =
       <| accounts := accounts; tStorage := tStorage; accesses := accesses;
          toDelete := [] |> in
@@ -856,7 +856,7 @@ Definition run_raw_call_def:
     if flags.rcf_is_delegate then
       run_delegate_call cx target_addr calldata gas accounts tStorage
     else run_ext_call cx.txn.target target_addr calldata
-      (if flags.rcf_is_static then NONE else SOME amount)
+      (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount)
       gas accounts tStorage (vyper_to_tx_params cx.txn)
 End
 
@@ -881,6 +881,30 @@ End
 
 val () = cv_auto_trans ext_call_precheck_ok_def;
 
+(* A static frame may call only without value, and every call it makes is
+   static: NONE stands for a static call (call_outcome_request,
+   make_ext_call_state). *)
+Definition frame_call_value_def:
+  frame_call_value cx value_opt =
+    if cx.txn.is_static then do
+      check (value_opt = NONE \/ value_opt = SOME 0)
+        "write in static context";
+      return NONE
+    od else return value_opt
+End
+
+val () = frame_call_value_def
+  |> SRULE [FUN_EQ_THM, COND_RATOR, ignore_bind_def, bind_def, check_def,
+            assert_def]
+  |> cv_auto_trans;
+
+Theorem frame_call_value_state:
+  frame_call_value cx value_opt st = (res, st') ==> st' = st
+Proof
+  rw[frame_call_value_def, ignore_bind_def, bind_def, check_def, assert_def,
+     return_def] >> gvs[AllCaseEqs()]
+QED
+
 (* Shared execution after raw_call operands have been evaluated and decoded.
    Both input forms retain the same static/revert/output and state effects.
    A call or staticcall takes its outcome from the external-call oracle when
@@ -892,11 +916,13 @@ Definition eval_raw_call_def:
       (¬(flags.rcf_is_delegate ∧ flags.rcf_is_static) ∧
        ((flags.rcf_is_delegate ∨ flags.rcf_is_static) ⇒ amount = 0))
       "raw_call flags/value";
+    value_opt <- frame_call_value cx
+      (if flags.rcf_is_static then NONE else SOME amount);
     outcomes <- (λst. return st.outcomes st);
     (success, returnData) <-
       if IS_SOME outcomes ∧ ¬flags.rcf_is_delegate then do
         (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata
-          (if flags.rcf_is_static then NONE else SOME amount);
+          value_opt;
         vyperCallOutcome$adopt_call_outcome rq outcome;
         return (call_outcome_success outcome, call_outcome_return_data outcome)
       od else do
@@ -943,6 +969,7 @@ Proof
        update_transient_def, append_logs_def, UNCURRY, COND_RATOR,
        option_CASE_rator, prod_CASE_rator, sum_CASE_rator, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
+  imp_res_tac frame_call_value_state >>
   imp_res_tac take_call_outcome_frame >> imp_res_tac adopt_call_outcome_frame >>
   gvs[evaluation_state_component_equality]
 QED
@@ -1052,6 +1079,7 @@ Definition eval_ext_call_def:
     accounts <- get_accounts;
     check (ext_call_precheck_ok skip_check ret_type target_addr accounts)
           "ExtCall target has no code";
+    value_opt <- frame_call_value cx value_opt;
     returnData <- eval_ext_call_effects cx target_addr calldata value_opt
       (forwarded_gas default_evm_gas_limit gas_opt) accounts;
     case (if returnData = [] then default_opt else NONE) of
@@ -1086,10 +1114,11 @@ Definition eval_send_def:
     amount <- lift_option_type (dest_NumV amount_v) "Send not NumV";
     (* the gas operand is send's only keyword argument *)
     gas_opt <<- ext_call_kwarg EKGas [EKGas] gas_vs;
+    value_opt <- frame_call_value cx (SOME amount);
     outcomes <- (λst. return st.outcomes st);
     case outcomes of
     | SOME _ => do
-      (rq, outcome) <- vyperCallOutcome$take_call_outcome toAddr [] (SOME amount);
+      (rq, outcome) <- vyperCallOutcome$take_call_outcome toAddr [] value_opt;
       check (call_outcome_success outcome) "send failed";
       vyperCallOutcome$adopt_call_outcome rq outcome;
       return $ Value $ NoneV
@@ -1098,7 +1127,7 @@ Definition eval_send_def:
       accounts <- get_accounts;
       tStorage <- get_transient_storage;
       result <- lift_option
-        (run_ext_call cx.txn.target toAddr [] (SOME amount)
+        (run_ext_call cx.txn.target toAddr [] value_opt
                       (forwarded_gas 0 gas_opt)
                       accounts tStorage (vyper_to_tx_params cx.txn))
         "send run failed";
@@ -1121,66 +1150,6 @@ val () = eval_send_def
             prod_CASE_rator, sum_CASE_rator, option_CASE_rator, UNCURRY,
             lift_option_type_def, type_check_def, check_def, assert_def]
   |> cv_auto_trans;
-
-(* Compose local-state frames without expanding the external-call oracle. *)
-Theorem append_logs_locals[local]:
-  vyperCallOutcomeFrame$state_rel_frame
-    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables) (append_logs logs)
-Proof
-  simp[state_rel_frame_def, append_logs_def, return_def]
-QED
-
-val call_locals_relation =
-  ``\s:evaluation_state t. t.scopes = s.scopes /\ t.immutables = s.immutables``;
-val call_locals_primitives =
-  state_rel_frame_locals_primitives |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
-val call_locals_take =
-  state_rel_frame_locals_take |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
-val call_locals_bind =
-  state_rel_frame_bind_guarded |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
-
-val CALL_LOCALS_STEP = FIRST [
-  FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS call_locals_primitives)),
-  MATCH_ACCEPT_TAC call_locals_take,
-  MATCH_ACCEPT_TAC append_logs_locals,
-  MATCH_MP_TAC call_locals_bind >> conj_tac,
-  gen_tac, strip_tac,
-  CHANGED_TAC (simp_tac bool_ss
-    [FORALL_PROD, LET_THM, ignore_bind_def, UNCURRY, pair_case_thm]),
-  BasicProvers.TOP_CASE_TAC];
-
-Theorem eval_ext_call_locals[local]:
-  vyperCallOutcomeFrame$state_rel_frame
-    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables)
-    (eval_ext_call cx static skip_check sig opts vs)
-Proof
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >>
-  rpt CALL_LOCALS_STEP
-QED
-
-Theorem eval_ext_call_preserves_non_accounts:
-  eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables
-Proof
-  mp_tac (REWRITE_RULE [state_rel_frame_result] eval_ext_call_locals) >> simp[]
-QED
-
-Theorem eval_send_preserves_non_accounts:
-  eval_send cx has_gas vs st = (res, st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables
-Proof
-  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
-  Cases_on `t` >- simp[eval_send_def, raise_def] >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, lift_option_type_def, check_def,
-       get_accounts_def, update_accounts_def, get_transient_storage_def,
-       lift_option_def, update_transient_def, append_logs_def,
-       vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()]
-QED
 
 (* ===== Reentrancy Lock Helpers ===== *)
 (* Vyper's @nonreentrant uses transient storage (EIP-1153 on Cancun+).
@@ -1287,12 +1256,19 @@ Definition lock_if_nr_def:
     if nr then
       case cx.nonreentrant_slot of
       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+      | SOME slot => do
+          (* A static frame checks the lock and then fails before taking
+             it, as the compiled TLOAD, ASSERT, TSTORE does. *)
+          acquire_nonreentrant_lock cx.txn.target slot
+            (is_view \/ cx.txn.is_static);
+          if is_view then return () else check_not_static cx
+        od
     else return ()
 End
 
 val () = lock_if_nr_def
-  |> SRULE [FUN_EQ_THM, COND_RATOR, option_CASE_rator]
+  |> SRULE [FUN_EQ_THM, COND_RATOR, option_CASE_rator, ignore_bind_def,
+            bind_def]
   |> cv_auto_trans;
 
 Definition unlock_if_nr_def:
@@ -1403,6 +1379,7 @@ Definition evaluate_def:
     event <- lift_option
       (encode_source_event (get_tenv cx) cx.sources cx.txn.target id vs)
       "Log encode event";
+    check_not_static cx;
     push_log event
   od ∧
   eval_stmt cx (AnnAssign id typ e) = do
@@ -1632,6 +1609,7 @@ Definition evaluate_def:
     topic_vals <<- (case topics of
        TupleV vs => vs | DynArrayV vs => vs | _ => []);
     type_check (LENGTH topic_vals ≤ 4) "raw_log too many topics";
+    check_not_static cx;
     push_log (encode_raw_event_values cx.txn.target topic_vals data);
     return $ Value NoneV
   od ∧
@@ -1646,6 +1624,7 @@ Definition evaluate_def:
     vs <- eval_exprs cx es;
     type_check (LENGTH vs = 1) "selfdestruct args";
     target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
+    check_not_static cx;
     accounts <- get_accounts;
     self_acct <<- lookup_account cx.txn.target accounts;
     balance <<- self_acct.balance;
@@ -1930,6 +1909,13 @@ Definition abstract_machine_from_state_def:
 End
 
 val () = cv_auto_trans abstract_machine_from_state_def;
+
+Theorem abstract_machine_from_state_gas_obs:
+  abstract_machine_from_state srcs exps layouts (st with gas_obs := readings) =
+  abstract_machine_from_state srcs exps layouts st
+Proof
+  simp[abstract_machine_from_state_def]
+QED
 
 (* Top-level entry-points into the semantics: loading (deploying) a contract,
 * and calling its external functions *)

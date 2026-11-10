@@ -8,10 +8,11 @@
  *)
 Theory tupleTypedLoad
 Ancestors
+  exprSimProps
   tupleLoadProps tupleMemoryLayout tupleStageProps stmtSimReturn exprSimLeaves
-  stmtLowering compileEnv valueEncoding vyperTyping
+  stmtLowering compileEnv loweringStateRelDefs valueEncoding vyperTyping
   list rich_list words arithmetic valueEncodingProofs vyperTypeDefaults
-  exprLoweringProps venomMemDefs finite_map exprSim venomState fragExec
+  exprLoweringProps venomMemDefs finite_map  venomState fragExec
   emitHelperProps venomExecSemantics
 
 Theorem tuple_prefix_sizes:

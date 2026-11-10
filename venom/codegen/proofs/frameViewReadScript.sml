@@ -116,6 +116,12 @@ Proof
     (irule padded_memory_read_cong >> rpt strip_tac >> first_x_assum irule >>
      simp[source_memory_read_byte_def, source_memory_read_ranges_def,
           memory_range_of_operands_def, byte_in_memory_range_def]) >>
+  (* the static-frame guard's undefined-operand case is impossible here *)
+  TRY (qpat_x_assum `eval_operands (Lit tc::rest) s = NONE` mp_tac >>
+       qspecl_then [`rest`, `s`, `off`, `sz`, `topics`] mp_tac
+         venomExecProofsTheory.log_operands_defined >>
+       simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+       simp[eval_operands_def, eval_operand_def] >> NO_TAC) >>
   simp[frame_view_def]
 QED
 

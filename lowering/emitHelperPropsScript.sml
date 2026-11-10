@@ -29,8 +29,9 @@
 
 Theory emitHelperProps
 Ancestors
-  exprLoweringProps localPtrsProps emitHelper compileEnv
-  venomExecSemantics venomState venomInst
+  fragGasPath gasCount fragExec
+  exprLoweringProps localPtrsProps emitHelper compileEnv loweringStateRelDefs
+  venomExecSemantics venomExecProofs venomState venomInst
   instIdxIndep vfmState freshLabelStringProps ASCIInumbers
   list pred_set arithmetic
 Libs
@@ -39,6 +40,7 @@ Libs
 (* ===== Pure Opcode Execution ===== *)
 
 (* exec_pure1: 1-operand pure instruction succeeds when operand is defined *)
+
 Theorem exec_pure1_ok:
   ∀ f op1 v1 id opc out ss v.
     eval_operand op1 ss = SOME v1 ∧ v = f v1 ⇒
@@ -388,6 +390,14 @@ Proof
   rw[lookup_var_def, mstore_def]
 QED
 
+Theorem slot_copy_operand_update:
+  eval_operand op (update_var name value s) =
+    if op = Var name then SOME value else eval_operand op s
+Proof
+  Cases_on `op` >> simp[eval_operand_def, lookup_var_def, update_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
 (* Lookup the variable just written *)
 Theorem eval_operand_update_var:
   ∀ v w ss.
@@ -721,6 +731,27 @@ QED
 
 (* ===== Layer 1: Connecting run_inst_seq to exec_block ===== *)
 
+Theorem exec_block_prefix_step[local]:
+  !i ss mid idx fuel ctx bb.
+    ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+    step_inst_base i ss = OK mid /\
+    get_instruction bb idx = SOME i ==>
+    exec_block fuel ctx bb (ss with vs_inst_idx := idx) =
+    exec_block fuel ctx bb (mid with vs_inst_idx := SUC idx)
+Proof
+  rpt strip_tac >>
+  `step_inst_base i (ss with vs_inst_idx := idx) =
+     OK (mid with vs_inst_idx := idx)` by
+    (asm_simp_tac bool_ss [step_inst_inst_idx_indep, exec_result_map_def,
+                           combinTheory.K_THM]) >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  asm_simp_tac bool_ss
+    [venom_state_accfupds, step_inst_def, exec_result_case_def,
+     optionTheory.option_case_def, venom_state_fupdfupds,
+     combinTheory.K_THM] >>
+  simp_tac bool_ss [combinTheory.o_DEF, combinTheory.K_DEF]
+QED
+
 (* Running non-terminator, non-INVOKE instructions within a block:
    If instructions at indices [idx .. idx + LENGTH insts) match `insts`,
    and run_inst_seq succeeds, then exec_block from idx reaches
@@ -739,24 +770,27 @@ Theorem exec_block_inst_seq_prefix:
     exec_block fuel ctx bb (ss with vs_inst_idx := idx) =
       exec_block fuel ctx bb (ss' with vs_inst_idx := idx + LENGTH insts)
 Proof
-  Induct_on `insts` >>
-  rw[run_inst_seq_def] >>
-  Cases_on `step_inst_base h ss` >> gvs[] >>
-  simp[Once exec_block_def] >>
-  CASE_TAC >- (first_x_assum(qspec_then`0`mp_tac) >> rw[]) >>
-  first_assum(qspec_then`0`mp_tac) >>
-  impl_tac >- rw[] >> simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
-  simp[Once step_inst_def] >>
-  drule step_inst_inst_idx_indep >>
-  simp[] >> disch_then kall_tac >>
-  simp[exec_result_map_def] >>
-  first_x_assum drule >>
+  Induct_on `insts`
+  >- simp[run_inst_seq_def] >>
+  rpt gen_tac >>
+  simp_tac bool_ss [run_inst_seq_def, EVERY_DEF, LENGTH] >>
+  strip_tac >>
+  Cases_on `step_inst_base h ss` >>
+  gvs[exec_result_case_def, exec_result_distinct, exec_result_11] >>
+  `get_instruction bb idx = SOME h` by
+    (qpat_x_assum `!k. k < SUC _ ==> _` (qspec_then `0` mp_tac) >>
+     simp[]) >>
+  `!k. k < LENGTH insts ==>
+       get_instruction bb (SUC idx + k) = SOME (EL k insts)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!k. k < SUC _ ==> _` (qspec_then `SUC k` mp_tac) >>
+     simp[ADD_CLAUSES]) >>
+  drule_all exec_block_prefix_step >>
+  disch_then (qspecl_then [`fuel`, `ctx`] SUBST1_TAC) >>
   `idx + SUC (LENGTH insts) = SUC idx + LENGTH insts` by simp[] >>
-  pop_assum SUBST_ALL_TAC >>
-  disch_then irule >>
-  rw[] >>
-  first_x_assum(qspec_then`SUC k`mp_tac) >>
-  rw[] >> gvs[arithmeticTheory.ADD1]
+  pop_assum SUBST1_TAC >>
+  first_x_assum irule >>
+  simp[]
 QED
 
 (* Full single-block execution ending with JMP:
@@ -1446,9 +1480,11 @@ Theorem step_SSTORE:
     eval_operand op1 ss = SOME v1 ∧
     eval_operand op2 ss = SOME v2 ⇒
     step_inst_base (mk_inst id SSTORE [op1; op2] []) ss =
-      OK (sstore v1 v2 ss)
+      if ss.vs_call_ctx.cc_static then
+        Abort ExHalt_abort (halt_state (set_returndata [] ss))
+      else OK (sstore v1 v2 ss)
 Proof
-  rw[step_inst_base_def, exec_write2_def]
+  rw[step_inst_base_def, exec_write2_def, eval_operands_def]
 QED
 
 Theorem step_ASSERT_ok:
@@ -1633,7 +1669,8 @@ Theorem emit_void_SSTORE_correct:
     emit_void SSTORE [op1; op2] st = ((), st') ∧
     eval_operand op1 ss = SOME v1 ∧
     eval_operand op2 ss = SOME v2 ∧
-    fresh_vars_wrt st ss
+    fresh_vars_wrt st ss ∧
+    ¬ss.vs_call_ctx.cc_static
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
@@ -1646,7 +1683,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
   `step_inst_base (mk_inst st.cs_next_id SSTORE [op1; op2] []) ss =
-     OK (sstore v1 v2 ss)` by simp[step_SSTORE] >>
+     OK (sstore v1 v2 ss)` by
+    (qspecl_then [`op1`, `op2`, `v1`, `v2`, `st.cs_next_id`, `ss`]
+       mp_tac step_SSTORE >> gvs[]) >>
   simp[run_inst_seq_def] >>
   drule emit_void_extends >> simp[same_blocks_def] >> strip_tac >> gvs[] >>
   simp[] >>
@@ -1737,12 +1776,6 @@ Proof
 QED
 
 (* same_blocks is transitive *)
-Theorem same_blocks_trans:
-  ∀ st1 st2 st3.
-    same_blocks st1 st2 ∧ same_blocks st2 st3 ⇒ same_blocks st1 st3
-Proof
-  rw[same_blocks_def]
-QED
 
 
 (* ===== Instruction sequence composition ===== *)
@@ -1827,11 +1860,6 @@ Proof
 QED
 
 (* same_blocks is reflexive *)
-Theorem same_blocks_refl:
-  ∀ st. same_blocks st st
-Proof
-  simp[same_blocks_def]
-QED
 
 (* ===== Generic: emit_op for 0-operand read opcode ===== *)
 (* Covers CALLVALUE, CALLDATASIZE, etc. — reads a field from state. *)
@@ -1887,7 +1915,7 @@ Proof
   qspecl_then [`CALLVALUE`, `λs. s.vs_call_ctx.cc_callvalue`,
                `st`, `v`, `st'`, `ss`] mp_tac emit_op_read0_correct >>
   simp[] >> disch_then irule >>
-  rw[step_inst_base_def, exec_read0_def, mk_inst_def]
+  rw[step_inst_base_def, exec_read0_def, exec_gas_def, mk_inst_def]
 QED
 
 (* Instantiation: CALLDATASIZE *)
@@ -1911,7 +1939,7 @@ Proof
                `λs. n2w (LENGTH s.vs_call_ctx.cc_calldata)`,
                `st`, `v`, `st'`, `ss`] mp_tac emit_op_read0_correct >>
   simp[] >> disch_then irule >>
-  rw[step_inst_base_def, exec_read0_def, mk_inst_def]
+  rw[step_inst_base_def, exec_read0_def, exec_gas_def, mk_inst_def]
 QED
 
 (* ===== Generic: emit_op for 1-operand pure opcode ===== *)
@@ -2153,7 +2181,8 @@ Proof
   conj_tac >- (
     gvs[fresh_vars_wrt_def, write_memory_with_expansion_def, LET_THM,
         emit_void_def, comp_bind_def, fresh_id_def, emit_def]) >>
-  simp[write_memory_with_expansion_def, LET_THM]
+  simp[write_memory_with_expansion_def, LET_THM,
+       venomMemPropsTheory.eval_operand_with_memory]
 QED
 
 (* ===== ALLOCA ===== *)
@@ -2583,7 +2612,56 @@ Proof
   metis_tac[compiler_labels_future_antimono, SUBSET_DEF]
 QED
 
-(* Successful pure steps update only their declared output variable. *)
+Theorem emit_op_zero_path:
+  emit_op opc args sa = (op, sb) /\ fn_has_code sa sb func /\
+  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!out. step_inst_base (mk_inst sa.cs_next_id opc args [out]) s =
+         OK (update_var out w s)) ==>
+  gas_path ctx func s 0
+    (OK ((update_var (STRING #"%" (toString sa.cs_next_var)) w s)
+      with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+       comp_ignore_bind_def, comp_return_def, emit_def] >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH sa.cs_current_insts) =
+    SOME (mk_inst sa.cs_next_id opc args
+      [STRING #"%" (toString sa.cs_next_var)])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `gas_path_edge ctx func s 0
+    (OK (update_var (STRING #"%" (toString sa.cs_next_var)) w s
+      with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (rw[gas_path_edge_def] >>
+      qexists_tac `0` >>
+      simp[step_inst_def, gas_count_defs, venomInstTheory.mk_inst_def,
+           update_var_def]) >>
+  `~(update_var (STRING #"%" (toString sa.cs_next_var)) w s
+      with vs_inst_idx := SUC s.vs_inst_idx).vs_halted` by simp[update_var_def] >>
+  drule (cj 1 gas_path_rules) >> strip_tac >>
+  metis_tac[cj 2 gas_path_rules, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem step_revert_zero:
+  !id s.
+    ?s'. step_inst_base (mk_inst id REVERT [Lit 0w; Lit 0w] []) s =
+         Abort Revert_abort s'
+Proof
+  rpt gen_tac >> simp[venomInstTheory.mk_inst_def] >>
+  irule_at Any step_revert_behavior >> simp[eval_operand_def]
+QED
+
+Theorem step_invalid:
+  !id s.
+    ?s'. step_inst_base (mk_inst id INVALID [] []) s = Abort ExHalt_abort s'
+Proof
+  simp[venomInstTheory.mk_inst_def, step_inst_base_def]
+QED
+
 Theorem exec_pure_ok_update:
   (!f inst s t. exec_pure1 f inst s = OK t ==>
      ?out v. inst.inst_outputs = [out] /\ t = update_var out v s) /\
@@ -2654,4 +2732,23 @@ Proof
       rpt (pop_assum kall_tac) >>
       simp[venom_state_component_equality]) >>
   metis_tac[]
+QED
+
+Theorem buffer_emit_add_run:
+  !sa sb ptr dst s w off.
+    emit_op ADD [ptr; Lit (n2w off)] sa = (dst, sb) /\
+    eval_operand ptr s = SOME w ==>
+    run_inst_seq (emitted_insts sa sb) s =
+      OK (update_var (STRING #"%" (toString sa.cs_next_var))
+                     (w + n2w off) s)
+Proof
+  rpt strip_tac >> rename1 `eval_operand pop s = SOME w` >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `step_inst_base
+     (mk_inst sa.cs_next_id ADD [pop; Lit (n2w off)]
+       [STRING #"%" (toString sa.cs_next_var)]) s =
+   OK (update_var (STRING #"%" (toString sa.cs_next_var))
+                  (w + n2w off) s)` by
+    (irule step_ADD >> simp[eval_operand_def]) >>
+  simp[run_inst_seq_def]
 QED

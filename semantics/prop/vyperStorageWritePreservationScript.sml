@@ -1487,6 +1487,7 @@ Theorem uint256_header_write_read_exact:
   read_slot (get_storage cx st' b) off = n2w len
 Proof
   rpt strip_tac >>
+  Cases_on `cx.txn.is_static` >>
   gvs[vyperStorageBackendTheory.write_storage_slot_eq,
       vyperStorageTheory.encode_value_def,
       vyperStorageTheory.encode_base_to_slot_def] >>
@@ -2934,13 +2935,15 @@ Theorem update_toplevel_name_typed_write[local]:
   storage_var_info cx mid n = SOME (b,off,tv) /\
   value_has_type tv v ==>
   write_storage_slot cx b (n2w off) tv v st =
-    (INL (),update_toplevel_name cx st mid n v)
+    if cx.txn.is_static then
+      (INR (Error (RuntimeError "write in static context")), st)
+    else (INL (),update_toplevel_name cx st mid n v)
 Proof
   rpt strip_tac >>
   drule vyperStorageFrameTheory.update_toplevel_name_eq_write >>
   disch_then (qspecl_then [`st`, `v`] assume_tac) >>
   drule (CONJUNCT1 vyperTypingTheory.value_has_type_equiv) >> strip_tac >>
-  Cases_on `encode_value tv v` >>
+  Cases_on `encode_value tv v` >> Cases_on `cx.txn.is_static` >>
   gvs[vyperStorageBackendTheory.write_storage_slot_eq]
 QED
 
@@ -2955,6 +2958,7 @@ Theorem update_toplevel_name_preserves_contract_storage_well_formed:
   contract_storage_well_formed cx (update_toplevel_name cx st mid n v)
 Proof
   rpt strip_tac >>
+  Cases_on `cx.txn.is_static` >- simp[update_toplevel_name_static] >>
   `well_formed_storage cx (update_toplevel_name cx st mid n v)` by
     (irule update_toplevel_name_preserves_well_formed_storage >>
      simp[contract_storage_well_formed_storage,
@@ -2971,7 +2975,7 @@ Proof
     (irule declared_storage_region_ordinary >> simp[]) >>
   `write_storage_slot cx b1 (n2w off1) tv1 v st =
      (INL (),update_toplevel_name cx st mid n v)` by
-    (irule update_toplevel_name_typed_write >> simp[]) >>
+    (drule_all update_toplevel_name_typed_write >> simp[]) >>
   `slots_in_range (get_storage cx st b) (w2n slot) tv` by
     (qpat_x_assum `contract_storage_well_formed cx st` mp_tac >>
      simp[contract_storage_well_formed_def,

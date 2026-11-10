@@ -80,6 +80,14 @@ Proof
       [exec_result_map_def, scfg_ctrl_update_var])
 QED
 
+Theorem scfg_ctrl_exec_gas:
+  exec_gas i (scfg_ctrl c p n s) =
+  exec_result_map (scfg_ctrl c p n) (exec_gas i s)
+Proof
+  simp[exec_gas_def] >>
+  rpt (TOP_CASE_TAC >> gvs[exec_result_map_def, update_var_def, scfg_ctrl_def])
+QED
+
 Definition scfg_result_def:
   scfg_result (OK s) (OK t) = scfg_payload s t /\
   scfg_result (Halt s) (Halt t) = scfg_payload s t /\
@@ -361,7 +369,7 @@ val ctrl_opcode_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
 val ctrl_envelope_tac =
   asm_simp_tac ctrl_opcode_ss [] >>
   rpt (PURE_TOP_CASE_TAC >> asm_simp_tac ctrl_opcode_ss []) >>
-  gvs[scfg_ctrl_def];
+  gvs[scfg_ctrl_def, halt_state_def, set_returndata_def];
 
 Theorem scfg_ctrl_nonbranch:
   ~MEM i.inst_opcode [JMP; JNZ; DJMP; INVOKE] ==>
@@ -377,7 +385,10 @@ Proof
     (irule scfg_ctrl_exec_read0 >> simp[] >> simp[scfg_ctrl_def] >> NO_TAC),
     (irule scfg_ctrl_exec_read1 >> simp[] >> simp[scfg_ctrl_def] >> NO_TAC),
     (irule scfg_ctrl_exec_write2 >> simp[] >> NO_TAC),
-    ctrl_envelope_tac]
+    (MATCH_ACCEPT_TAC scfg_ctrl_exec_gas),
+    ctrl_envelope_tac >>
+    irule (SRULE [scfg_ctrl_def] scfg_ctrl_exec_write2) >>
+    simp[sstore_def, tstore_def]]
 QED
 
 Theorem scfg_result_map_payload:

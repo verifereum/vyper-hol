@@ -78,7 +78,7 @@ Triviality exec_result_helpers_no_halt_abort[simp]:
   (!inst s alloc_size a s'. exec_alloca inst s alloc_size <> Abort a s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def] >>
   gvs[AllCaseEqs()]
 QED
@@ -93,7 +93,7 @@ Triviality exec_result_helpers_not_intret[simp]:
   (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def] >>
   gvs[AllCaseEqs()]
 QED
@@ -400,7 +400,7 @@ Theorem step_inst_ok_state_equiv[local]:
     step_inst fuel ctx inst s = OK s' /\
     ~is_terminator inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
-    write_effects inst.inst_opcode = {} ==>
+    write_effects inst.inst_opcode = {} /\ inst.inst_opcode <> GAS ==>
     state_equiv (set inst.inst_outputs) s s'
 Proof
   rpt strip_tac >>
@@ -462,9 +462,35 @@ Proof
   >- (Cases_on `op2` >> EVAL_TAC)
 QED
 
+(* Helper: eval_operand agrees when lookup_var agrees on Var operands *)
+Theorem eval_operand_agree[local]:
+  !op s s'.
+    (!x. MEM (Var x) [op] ==> lookup_var x s = lookup_var x s') /\
+    s.vs_labels = s'.vs_labels ==>
+    eval_operand op s = eval_operand op s'
+Proof
+  Cases >> rw[eval_operand_def]
+QED
+
+(* eval_operands agrees when all Var operands have same lookup *)
+Theorem eval_operands_agree[local]:
+  !ops s s'.
+    (!x. MEM (Var x) ops ==> lookup_var x s = lookup_var x s') /\
+    s.vs_labels = s'.vs_labels ==>
+    eval_operands ops s = eval_operands ops s'
+Proof
+  Induct >> rw[eval_operands_def] >>
+  `eval_operand h s = eval_operand h s'` by (
+    Cases_on `h` >> gvs[eval_operand_def]) >>
+  `eval_operands ops s = eval_operands ops s'` by (
+    first_x_assum irule >> rw[]) >>
+  simp[]
+QED
+
 (* Non-terminator non-INVOKE step_inst_base can only Abort from
    ASSERT (Revert_abort), ASSERT_UNREACHABLE (ExHalt_abort),
-   RETURNDATACOPY (ExHalt_abort). All set returndata to []. *)
+   RETURNDATACOPY (ExHalt_abort), or, in a static frame, from a state
+   write (ExHalt_abort). All set returndata to []. *)
 Theorem step_inst_base_abort_opcode:
   !inst s a s'.
     step_inst_base inst s = Abort a s' /\
@@ -473,20 +499,91 @@ Theorem step_inst_base_abort_opcode:
     inst.inst_opcode = ASSERT_UNREACHABLE \/
     inst.inst_opcode = CREATE \/
     inst.inst_opcode = CREATE2 \/
-    inst.inst_opcode = RETURNDATACOPY
+    inst.inst_opcode = RETURNDATACOPY \/
+    (s.vs_call_ctx.cc_static /\
+     (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+      inst.inst_opcode = LOG \/ inst.inst_opcode = CALL))
 Proof
   rpt strip_tac >>
   drule opcodeClassTheory.step_inst_base_abort_opcodes >>
   strip_tac >> gvs[is_terminator_def]
 QED
 
-Theorem step_inst_base_abort_returndata[local]:
+(* A LOG that steps to OK ran outside a static frame: its operands all
+   evaluate, so a static frame would have aborted. *)
+Theorem log_ok_not_static:
+  !inst s v. inst.inst_opcode = LOG /\ step_inst_base inst s = OK v ==>
+             ~s.vs_call_ctx.cc_static
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule_all venomExecProofsTheory.log_operands_defined >> strip_tac >>
+  gvs[optionTheory.IS_SOME_EXISTS, eval_operands_def, eval_operand_def]
+QED
+
+(* A state write aborts only through the static-frame guard. *)
+Theorem step_inst_base_static_write_abort:
+  !inst s a s'.
+    step_inst_base inst s = Abort a s' /\
+    (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+     inst.inst_opcode = LOG \/ inst.inst_opcode = CALL) ==>
+    s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) /\
+    a = ExHalt_abort /\ s' = halt_state (set_returndata [] s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  step_inst_base_opcode_tac >> rw[AllCaseEqs()] >>
+  gvs[exec_write2_def, AllCaseEqs(), eval_operands_def]
+QED
+
+(* In a static frame, a state write other than CALL aborts once its
+   operands evaluate. *)
+Theorem step_inst_base_static_write_guard:
+  !inst s.
+    (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+     inst.inst_opcode = LOG \/ inst.inst_opcode = CREATE \/
+     inst.inst_opcode = CREATE2) /\
+    s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) ==>
+    step_inst_base inst s = Abort ExHalt_abort (halt_state (set_returndata [] s))
+Proof
+  rpt gen_tac >> strip_tac >> step_inst_base_opcode_tac >> ASM_REWRITE_TAC[]
+QED
+
+(* A state write aborts only through the static-frame guard, with ExHalt and
+   empty returndata; a state with the same cc_static and operand values
+   aborts alike. *)
+Theorem step_inst_base_static_abort_input_equiv[local]:
+  !inst s1 s2 a s1'.
+    step_inst_base inst s1 = Abort a s1' /\
+    (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+     inst.inst_opcode = LOG \/ inst.inst_opcode = CALL) /\
+    (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) /\
+    s1.vs_labels = s2.vs_labels /\
+    s1.vs_call_ctx.cc_static = s2.vs_call_ctx.cc_static ==>
+    a = ExHalt_abort /\ s1' = halt_state (set_returndata [] s1) /\
+    step_inst_base inst s2 = Abort a (halt_state (set_returndata [] s2))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `eval_operands inst.inst_operands s2 = eval_operands inst.inst_operands s1`
+    by metis_tac[eval_operands_agree] >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s2 = eval_operand op s1`
+    by (Cases >> rw[eval_operand_def] >> metis_tac[]) >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  step_inst_base_opcode_tac >> gvs[AllCaseEqs()] >> rw[] >> gvs[]
+QED
+
+Theorem step_inst_base_abort_returndata:
   !inst s a s'.
     step_inst_base inst s = Abort a s' /\
     ~is_terminator inst.inst_opcode ==>
     s'.vs_returndata = []
 Proof
   rpt strip_tac >>
+  Cases_on `inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+               inst.inst_opcode = LOG \/ inst.inst_opcode = CALL`
+  >- (drule_then (qspec_then `s` mp_tac) step_inst_base_static_abort_input_equiv >>
+      gvs[halt_state_def, set_returndata_def]) >>
   imp_res_tac step_inst_base_abort_opcode >> gvs[]
   >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
       step_inst_base_opcode_tac >>
@@ -527,6 +624,24 @@ Proof
   rw[is_terminator_def, AllCaseEqs(), exec_create_abort_iff]
 QED
 
+(* A non-terminator abort's type is fixed by its opcode's fail class. *)
+Theorem step_inst_base_abort_fail_class:
+  !inst s a s'.
+    step_inst_base inst s = Abort a s' /\
+    ~is_terminator inst.inst_opcode ==>
+    (opcode_fail_class inst.inst_opcode = CanRevert /\ a = Revert_abort) \/
+    (opcode_fail_class inst.inst_opcode = CanExHalt /\ a = ExHalt_abort)
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+            inst.inst_opcode = LOG \/ inst.inst_opcode = CALL`
+  >- (drule_all step_inst_base_static_write_abort >> strip_tac >>
+      gvs[opcode_fail_class_def]) >>
+  drule_all step_inst_base_abort_opcode >>
+  drule_all step_inst_base_abort_type >>
+  rpt strip_tac >> gvs[opcode_fail_class_def]
+QED
+
 (* Non-INVOKE aborters (ASSERT, ASSERT_UNREACHABLE, RETURNDATACOPY) are all
    abort_incompatible with INVOKE. So step_inst_base can't abort for a
    non-INVOKE instruction that is abort_compatible with INVOKE. *)
@@ -559,7 +674,7 @@ QED
 Theorem cross_case_result_equiv[local]:
   !fuel ctx inst_a inst_b s v.
     step_inst fuel ctx inst_a s = OK v /\
-    write_effects inst_a.inst_opcode = {} /\
+    write_effects inst_a.inst_opcode = {} /\ inst_a.inst_opcode <> GAS /\
     DISJOINT (set (inst_defs inst_a)) (set (inst_uses inst_b)) /\
     ~is_terminator inst_a.inst_opcode /\
     ~is_terminator inst_b.inst_opcode /\
@@ -577,8 +692,9 @@ Proof
   metis_tac[pred_setTheory.IN_DISJOINT]
 QED
 
-(* If a non-terminator aborts, it must be ASSERT/ASSERT_UNREACHABLE/RETURNDATACOPY.
-   These only read operand values (+ returndata for RETURNDATACOPY).
+(* If a non-terminator aborts, it must be ASSERT/ASSERT_UNREACHABLE/RETURNDATACOPY
+   or a state write in a static frame. These only read operand values
+   (+ returndata for RETURNDATACOPY, + cc_static for the state writes).
    If those agree, the same Abort is produced on any state. *)
 Theorem step_inst_base_abort_input_equiv:
   !inst s1 s2 a s1'.
@@ -586,13 +702,20 @@ Theorem step_inst_base_abort_input_equiv:
     ~is_terminator inst.inst_opcode /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) /\
     s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_labels = s2.vs_labels ==>
+    s1.vs_labels = s2.vs_labels /\
+    s1.vs_call_ctx.cc_static = s2.vs_call_ctx.cc_static ==>
     ?s2'. step_inst_base inst s2 = Abort a s2'
 Proof
   rpt strip_tac >>
   `!op. MEM op inst.inst_operands ==>
         eval_operand op s1 = eval_operand op s2` by
     (Cases >> simp[eval_operand_def] >> metis_tac[]) >>
+  `eval_operands inst.inst_operands s1 = eval_operands inst.inst_operands s2` by
+    (irule eval_operands_agree >> simp[]) >>
+  Cases_on `inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+               inst.inst_opcode = LOG \/ inst.inst_opcode = CALL`
+  >- (drule_then (qspec_then `s2` mp_tac) step_inst_base_static_abort_input_equiv >>
+      gvs[]) >>
   drule_all step_inst_base_abort_opcode >> strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   step_inst_base_opcode_tac >>
@@ -630,6 +753,13 @@ Proof
     irule (GSYM step_preserves_non_output_vars) >> metis_tac[]) >>
   `v.vs_labels = s.vs_labels` by
     metis_tac[step_preserves_labels] >>
+  `v.vs_call_ctx = s.vs_call_ctx` by metis_tac[step_preserves_call_ctx] >>
+  `eval_operands inst_b.inst_operands s = eval_operands inst_b.inst_operands v` by
+    (irule eval_operands_agree >> simp[]) >>
+  Cases_on `inst_b.inst_opcode = SSTORE \/ inst_b.inst_opcode = TSTORE \/
+               inst_b.inst_opcode = LOG \/ inst_b.inst_opcode = CALL`
+  >- (drule_then (qspec_then `v` mp_tac) step_inst_base_static_abort_input_equiv >>
+      gvs[halt_state_def, set_returndata_def]) >>
   imp_res_tac step_inst_base_abort_opcode >> gvs[]
   >- (
     (* ASSERT *)
@@ -654,7 +784,8 @@ Proof
     qpat_x_assum `step_inst_base inst_b s = _` mp_tac >>
     step_inst_base_opcode_tac >> simp[] >>
     gvs[AllCaseEqs()] >> rpt strip_tac >>
-    gvs[exec_create_abort_iff, halt_state_def, set_returndata_def])
+    gvs[exec_create_abort_iff, halt_state_def, set_returndata_def] >>
+    qexists_tac `v with <|vs_returndata := []; vs_halted := T|>` >> simp[])
   >- (
     `!op. MEM op inst_b.inst_operands ==>
           eval_operand op s = eval_operand op v` by
@@ -662,7 +793,8 @@ Proof
     qpat_x_assum `step_inst_base inst_b s = _` mp_tac >>
     step_inst_base_opcode_tac >> simp[] >>
     gvs[AllCaseEqs()] >> rpt strip_tac >>
-    gvs[exec_create_abort_iff, halt_state_def, set_returndata_def])
+    gvs[exec_create_abort_iff, halt_state_def, set_returndata_def] >>
+    qexists_tac `v with <|vs_returndata := []; vs_halted := T|>` >> simp[])
   >> (
     (* RETURNDATACOPY: need returndata agreement *)
     `Eff_RETURNDATA NOTIN write_effects inst_a.inst_opcode` by (
@@ -727,31 +859,6 @@ QED
    any state and produces state_equiv outputs.
    Key: write_effects = {} means is_effect_free_op or ASSERT/ASSERT_UNREACHABLE.
    All of these return OK iff operands evaluate (+ condition nonzero for ASSERT). *)
-(* Helper: eval_operand agrees when lookup_var agrees on Var operands *)
-Theorem eval_operand_agree[local]:
-  !op s s'.
-    (!x. MEM (Var x) [op] ==> lookup_var x s = lookup_var x s') /\
-    s.vs_labels = s'.vs_labels ==>
-    eval_operand op s = eval_operand op s'
-Proof
-  Cases >> rw[eval_operand_def]
-QED
-
-(* eval_operands agrees when all Var operands have same lookup *)
-Theorem eval_operands_agree[local]:
-  !ops s s'.
-    (!x. MEM (Var x) ops ==> lookup_var x s = lookup_var x s') /\
-    s.vs_labels = s'.vs_labels ==>
-    eval_operands ops s = eval_operands ops s'
-Proof
-  Induct >> rw[eval_operands_def] >>
-  `eval_operand h s = eval_operand h s'` by (
-    Cases_on `h` >> gvs[eval_operand_def]) >>
-  `eval_operands ops s = eval_operands ops s'` by (
-    first_x_assum irule >> rw[]) >>
-  simp[]
-QED
-
 (* When state_equiv holds between s and s', step returns OK on s' too.
    This is a simple wrapper around step_inst_result_equiv_full. *)
 Theorem step_inst_transfer_via_equiv[local]:
@@ -809,7 +916,7 @@ Theorem ok_ok_case_a[local]:
     DISJOINT (set (inst_defs inst_a)) (set (inst_uses inst_b)) /\
     DISJOINT (set (inst_defs inst_b)) (set (inst_uses inst_a)) /\
     DISJOINT (set (inst_defs inst_a)) (set (inst_defs inst_b)) /\
-    inst_a.inst_opcode <> INVOKE /\
+    inst_a.inst_opcode <> INVOKE /\ inst_a.inst_opcode <> GAS /\
     ~is_terminator inst_a.inst_opcode /\
     ~is_terminator inst_b.inst_opcode /\
     ~is_alloca_op inst_a.inst_opcode /\
@@ -854,6 +961,8 @@ Proof
     metis_tac[step_preserves_control_flow] >>
   `v_b.vs_params = s.vs_params` by
     metis_tac[step_preserves_params] >>
+  `v_b.vs_call_ctx = s.vs_call_ctx` by
+    metis_tac[step_preserves_call_ctx] >>
   `inst_a.inst_opcode = RETURNDATACOPY ==>
    s.vs_returndata = v_b.vs_returndata` by (
     strip_tac >> gvs[] >>
@@ -1418,7 +1527,8 @@ Theorem ok_ok_case_general[local]:
     ~is_terminator inst1.inst_opcode /\ ~is_terminator inst2.inst_opcode /\
     ~is_alloca_op inst1.inst_opcode /\ ~is_alloca_op inst2.inst_opcode /\
     ~is_ext_call_op inst1.inst_opcode /\ ~is_ext_call_op inst2.inst_opcode /\
-    inst1.inst_opcode <> INVOKE /\ inst2.inst_opcode <> INVOKE ==>
+    inst1.inst_opcode <> INVOKE /\ inst2.inst_opcode <> INVOKE /\
+    inst1.inst_opcode <> GAS /\ inst2.inst_opcode <> GAS ==>
     ?s12 s21.
       step_inst fuel ctx inst2 v1 = OK s12 /\
       step_inst fuel ctx inst1 v2 = OK s21 /\
@@ -1455,6 +1565,8 @@ Proof
     metis_tac[step_preserves_control_flow] >>
   `v1.vs_params = s.vs_params /\ v2.vs_params = s.vs_params` by
     metis_tac[step_preserves_params] >>
+  `v1.vs_call_ctx = s.vs_call_ctx /\ v2.vs_call_ctx = s.vs_call_ctx` by
+    metis_tac[step_preserves_call_ctx] >>
   (* Returndata agreement (needed for RETURNDATACOPY) *)
   `inst2.inst_opcode = RETURNDATACOPY ==>
    s.vs_returndata = v1.vs_returndata` by (
@@ -1515,6 +1627,7 @@ Proof
    inst2.inst_opcode <> DELEGATECALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   imp_res_tac step_inst_base_oracle >>
+  imp_res_tac step_inst_base_gas_readings >>
   (* Close commute_equiv — all needed equalities are in assumptions.
      Each field is s12.F = X = ... = s21.F via transitivity of 2-4 equalities.
      metis_tac[] handles this since all equalities are in assumptions. *)
@@ -1563,9 +1676,8 @@ Proof
   rpt strip_tac >> (
     step_inst_to_base >>
     imp_res_tac step_inst_base_abort_returndata >> simp[] >>
-    imp_res_tac step_inst_base_abort_opcode >>
-    imp_res_tac step_inst_base_abort_type >> gvs[] >>
-    qpat_x_assum `abort_compatible _ _` mp_tac >> EVAL_TAC)
+    imp_res_tac step_inst_base_abort_fail_class >>
+    gvs[abort_compatible_def])
 QED
 
 (* Comprehensive case 4c: neither INVOKE nor ext_call.
@@ -1580,7 +1692,8 @@ Theorem commute_base_case[local]:
     ~is_terminator inst1.inst_opcode /\ ~is_terminator inst2.inst_opcode /\
     ~is_alloca_op inst1.inst_opcode /\ ~is_alloca_op inst2.inst_opcode /\
     ~is_ext_call_op inst1.inst_opcode /\ ~is_ext_call_op inst2.inst_opcode /\
-    inst1.inst_opcode <> INVOKE /\ inst2.inst_opcode <> INVOKE ==>
+    inst1.inst_opcode <> INVOKE /\ inst2.inst_opcode <> INVOKE /\
+    inst1.inst_opcode <> GAS /\ inst2.inst_opcode <> GAS ==>
     let r1 = (case step_inst fuel ctx inst1 s of
                 OK s1 => step_inst fuel ctx inst2 s1
               | other => other) in
@@ -1650,6 +1763,7 @@ Theorem commute_one_empty_write[local]:
   !fuel ctx inst1 inst2 s.
     write_effects inst1.inst_opcode = {} /\
     inst1.inst_opcode <> INVOKE /\
+    inst1.inst_opcode <> GAS /\ inst2.inst_opcode <> GAS /\
     DISJOINT (set (inst_defs inst1)) (set (inst_uses inst2)) /\
     DISJOINT (set (inst_defs inst2)) (set (inst_uses inst1)) /\
     DISJOINT (set (inst_defs inst1)) (set (inst_defs inst2)) /\
@@ -1745,6 +1859,7 @@ Theorem commute_one_empty_write_sym[local]:
   !fuel ctx inst1 inst2 s.
     write_effects inst2.inst_opcode = {} /\
     inst2.inst_opcode <> INVOKE /\
+    inst1.inst_opcode <> GAS /\ inst2.inst_opcode <> GAS /\
     DISJOINT (set (inst_defs inst1)) (set (inst_uses inst2)) /\
     DISJOINT (set (inst_defs inst2)) (set (inst_uses inst1)) /\
     DISJOINT (set (inst_defs inst1)) (set (inst_defs inst2)) /\
@@ -1803,7 +1918,8 @@ Theorem effects_independent_commute:
     ~is_terminator inst1.inst_opcode /\
     ~is_terminator inst2.inst_opcode /\
     ~is_alloca_op inst1.inst_opcode /\
-    ~is_alloca_op inst2.inst_opcode ==>
+    ~is_alloca_op inst2.inst_opcode /\
+    inst1.inst_opcode <> GAS /\ inst2.inst_opcode <> GAS ==>
     let r1 = (case step_inst fuel ctx inst1 s of
                 OK s1 => step_inst fuel ctx inst2 s1
               | other => other) in

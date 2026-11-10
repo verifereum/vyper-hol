@@ -34,14 +34,19 @@
 
 Theory exprSimWordBuiltins
 Ancestors
+  exprWordOperand
+  exprSimSource
+  exprSimHypsDefs
+  exprSimStack
   list words integer_word vfmExecution valueEncoding loweringSlice
   vyperEvalExprPreservesScopesDom
-  exprSim exprSimHyps exprSimOperators exprSimWordArgs exprLowering
+   exprSimHyps exprSimOperators exprSimWordArgs exprLowering
   vyperTypeSystem vyperTyping vyperInterpreter vyperState vyperContext
   exprBopLowering builtinMath builtinMisc builtinSimple arithmeticProps
-  compileEnv exprSimOps freshWrites fragExec varsExt exprLoweringProps
+  compileEnv loweringStateRelDefs exprSimOps freshWrites fragExec varsExt exprLoweringProps
   venomExecSemantics venomState emitHelper emitHelperProps venomInst
   builtinProps
+  exprSimNameWord
 Libs
   stepInstBaseLib
 
@@ -159,48 +164,7 @@ Proof
               is_decimal_type_def, is_signed_type_def]
 QED
 
-Theorem compile_expr_body_builtin_dispatch:
-  !f g h cenv ty ann bt args st.
-    ~names_builtin bt args ==>
-    compile_expr_body f g h cenv ty (Builtin ann bt args) st =
-    g cenv ann ty bt args st
-Proof
-  rpt gen_tac >>
-  Cases_on `args` >> simp[compile_expr_body_def, names_builtin_def,
-                             vyperASTTheory.expr_type_def] >>
-  rename1 `names_builtin bt (a::rest)` >>
-  Cases_on `a` >> simp[compile_expr_body_def, names_builtin_def,
-                       vyperASTTheory.expr_type_def] >>
-  Cases_on `rest` >> simp[compile_expr_body_def, names_builtin_def,
-                          vyperASTTheory.expr_type_def] >>
-  rename1 `names_builtin bt (_::b::rest)` >>
-  Cases_on `b` >> simp[compile_expr_body_def, names_builtin_def,
-                       vyperASTTheory.expr_type_def] >>
-  Cases_on `rest`
-  >- (Cases_on `bt` >> simp[compile_expr_body_def, names_builtin_def,
-                            vyperASTTheory.expr_type_def]) >>
-  simp[compile_expr_body_def, names_builtin_def,
-       vyperASTTheory.expr_type_def] >>
-  rename1 `names_builtin bt (_::_::c::rest)` >>
-  Cases_on `c` >> simp[compile_expr_body_def, names_builtin_def,
-                       vyperASTTheory.expr_type_def] >>
-  Cases_on `rest` >> simp[compile_expr_body_def, names_builtin_def,
-                          vyperASTTheory.expr_type_def] >>
-  Cases_on `bt` >> simp[compile_expr_body_def, names_builtin_def,
-                        vyperASTTheory.expr_type_def]
-QED
 
-Theorem compile_expr_builtin_dispatch:
-  !cenv ty ann bt args st.
-    ~names_builtin bt args ==>
-    compile_expr cenv ty (Builtin ann bt args) st =
-    compile_builtin_dispatch cenv ann ty bt args st
-Proof
-  rpt strip_tac >>
-  simp[Once (CONJUNCT1 compile_expr_raw_def),
-       compile_expr_body_builtin_dispatch, vyperASTTheory.expr_size_def,
-       list_size_def, basicSizeTheory.option_size_def]
-QED
 
 Theorem lower_value_name:
   !cenv ty ann id st.
@@ -609,7 +573,7 @@ Proof
   simp[Once run_inst_seq_def] >>
   simp[stepInstBaseLib.simp_opcode_clause ``MUL``, mk_inst_def, exec_pure2_def, eval_operand_def] >>
   simp[Once run_inst_seq_def] >>
-  simp[stepInstBaseLib.simp_opcode_clause ``Div``, mk_inst_def, exec_pure2_def,
+  simp[stepInstBaseLib.simp_opcode_clause ``venomInst$Div``, mk_inst_def, exec_pure2_def,
        eval_operand_update_var, eval_operand_update_not_fresh] >>
   simp[Once run_inst_seq_def] >>
   simp[stepInstBaseLib.simp_opcode_clause ``EQ``, mk_inst_def, exec_pure2_def,
@@ -864,8 +828,8 @@ Proof
   `word_value_type (expr_type e)` by
     (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
-    (drule expr_body_pre_builtin_arg >> disch_then irule >>
-     gvs[expr_body_pre_def]) >>
+    (drule expr_body_pre_builtin_typed_arg >> disch_then irule >>
+     gvs[expr_body_pre_def] >> strip_tac >> gvs[word_value_type_def]) >>
   drule expr_body_pre_lower_value_word_shape >> disch_then drule >>
   simp[word_value_type_word]
 QED
@@ -912,15 +876,21 @@ Proof
   `wb_args_shape cenv arg_ty args` by metis_tac[typed_word_args_shape] >>
   irule compile_word_builtin_sim >> simp[] >>
   qexistsl_tac [`expr_sim_inv cenv cx env`, `arg_ty`, `code`] >> simp[] >>
-  conj_tac >- gvs[expr_body_pre_def] >> conj_tac
+  rpt conj_tac
+  >~ [`cs_extends`]
   >- (rpt strip_tac >> first_x_assum (qspec_then `xs` mp_tac) >>
       simp[straight_fresh_def] >> disch_then drule >> strip_tac >>
-      simp[cs_extends_def] >> qexists_tac `[]` >> simp[]) >>
+      simp[cs_extends_def] >> qexists_tac `[]` >> simp[])
+  >~ [`expr_sim_inv cenv cx env es`]
+  >- gvs[expr_body_pre_def] >>
   rpt strip_tac >> first_x_assum irule >>
   irule word_args_values_typed >> goal_assum (drule_at Any) >>
   qexistsl_tac [`cenv`, `env`] >> conj_tac
   >- (rpt gen_tac >> strip_tac >> conj_tac
-      >- (irule expr_body_pre_builtin_arg >> simp[] >>
+      >- (irule expr_body_pre_builtin_typed_arg >> simp[] >>
+          conj_tac
+          >- (strip_tac >> gvs[EVERY_MEM] >> first_x_assum drule >>
+              simp[word_value_type_def]) >>
           qexistsl_tac [`ann`, `args`, `bt`, `es`] >> simp[]) >>
       gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
   gvs[expr_body_pre_def]
@@ -1133,7 +1103,8 @@ Proof
   qexists_tac `env` >> simp[] >>
   gen_tac >> irule wb_args_ready_of_case >> qexists_tac `nocalls` >> simp[] >>
   rpt gen_tac >> strip_tac >> rpt conj_tac
-  >- metis_tac[expr_body_pre_builtin_arg]
+  >- (`!n. bt <> Slice n` by (rpt strip_tac >> gvs[]) >>
+      metis_tac[expr_body_pre_builtin_arg])
   >- metis_tac[int_calls_builtin_arg] >>
   drule_all word_builtin_operand_types >> simp[EVERY_MEM]
 QED
@@ -1176,6 +1147,8 @@ Proof
   gen_tac >> irule wb_args_ready_of_ok >> simp[] >>
   rpt gen_tac >> strip_tac >>
   `MEM (expr_type e) (MAP expr_type args)` by metis_tac[MEM_MAP] >>
-  `expr_sim_pre cenv cx env e s` by metis_tac[expr_sim_pre_builtin_arg] >>
+  `expr_sim_pre cenv cx env e s` by
+    (irule expr_sim_pre_builtin_typed_arg >> simp[] >>
+     conj_tac >- (strip_tac >> gvs[]) >> metis_tac[]) >>
   gvs[]
 QED

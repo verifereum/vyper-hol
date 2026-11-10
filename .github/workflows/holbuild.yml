@@ -3,13 +3,15 @@ name: holbuild
 on:
   workflow_dispatch:
   pull_request:
-    # Ready PRs from branches of this repository run jobs, whatever their
-    # base: pushing a branch here needs write access, and those runs get the
-    # cache login. Fork and draft PRs run nothing; for PRs into main, the merge
-    # queue tests them.
+    # Only ready PRs into main from branches of this repository run jobs:
+    # pushing a branch here needs write access, and those runs get the cache
+    # login. Fork and draft PRs run nothing; the merge queue tests them. PRs
+    # into other branches run nothing either; their base's own PR into main
+    # tests them together.
     # ready_for_review starts CI when a draft is marked ready; converted_to_draft
     # cancels the run of a PR turned back into a draft. edited starts CI when a
-    # PR is retargeted; any other edit (title, description) runs no jobs.
+    # PR is retargeted to main; any other edit (title, description) runs no jobs.
+    branches: [main]
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited]
   merge_group:
   push:
@@ -55,155 +57,10 @@ jobs:
       - name: Build schema-2 HOL toolchain
         run: holbuild buildhol
 
-      - name: Build project except the witnesses
-        env:
-          TMPDIR: ${{ runner.temp }}
-        run: |
-          # The witnesses build in the witnesses jobs; build-rollup adds them.
-          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $(python3 tools/ci_targets.py build-roots)
-
-      - name: Verify no successful-build checkpoints remain
-        run: |
-          if find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | grep -q .; then
-            echo "checkpoint files remained after holbuild run" >&2
-            find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | head -50 >&2
-            exit 1
-          fi
-
-  compiler:
-    # Builds what the witnesses load besides each other, once for all
-    # witness groups.
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'edited' || github.event.changes.base)))
-    runs-on: ubuntu-26.04-arm
-    timeout-minutes: 240
-    # The cache login is a secret of the bazel-cache environment, which every
-    # branch of this repository may deploy to.
-    environment: bazel-cache
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-holbuild-project
-
-      - name: Configure remote cache
-        uses: ./.github/actions/setup-remote-cache
-        with:
-          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
-
-      - name: Build schema-2 HOL toolchain
-        run: holbuild buildhol
-
-      - name: Build witness dependencies
-        env:
-          TMPDIR: ${{ runner.temp }}
-        run: |
-          targets=$(python3 tools/ci_targets.py compiler)
-          echo "Building: $targets"
-          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
-
-  witnesses:
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'edited' || github.event.changes.base)))
-    needs: compiler
-    runs-on: ubuntu-26.04-arm
-    timeout-minutes: 90
-    # The cache login is a secret of the bazel-cache environment, which every
-    # branch of this repository may deploy to.
-    environment: bazel-cache
-    strategy:
-      fail-fast: false
-      matrix:
-        group: [0, 1, 2, 3]
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-holbuild-project
-
-      - name: Configure remote cache
-        uses: ./.github/actions/setup-remote-cache
-        with:
-          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
-
-      - name: Build witness group ${{ matrix.group }}
-        id: witnesses
-        env:
-          TMPDIR: ${{ runner.temp }}
-        run: |
-          # Groups are balanced by .github/witness-times.txt, scaled by each
-          # witness's fixture count; rerun `tools/ci_targets.py witness-times`
-          # when witness times drift.
-          targets=$(python3 tools/ci_targets.py witnesses --group ${{ matrix.group }} --groups ${{ strategy.job-total }})
-          echo "Building: $targets"
-          echo "targets=$targets" >> "$GITHUB_OUTPUT"
-          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
-
-      - name: Verify no successful-build checkpoints remain
-        run: |
-          if find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | grep -q .; then
-            echo "checkpoint files remained after holbuild witness run" >&2
-            find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | head -50 >&2
-            exit 1
-          fi
-
-      - name: Export witness group HBX
-        run: holbuild export -o witnesses-${{ matrix.group }}.hbx ${{ steps.witnesses.outputs.targets }}
-
-      - name: Upload witness group HBX
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: witnesses-${{ github.sha }}-${{ matrix.group }}
-          path: witnesses-${{ matrix.group }}.hbx
-          if-no-files-found: error
-          retention-days: 1
-          overwrite: true
-
-  build-rollup:
-    # Adds the witness groups to what build published, builds the witness
-    # rollup and exports the HBX of the whole project.
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'edited' || github.event.changes.base)))
-    needs: [build, witnesses]
-    runs-on: ubuntu-26.04-arm
-    timeout-minutes: 240
-    # The cache login is a secret of the bazel-cache environment, which every
-    # branch of this repository may deploy to.
-    environment: bazel-cache
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-holbuild-project
-
-      - name: Download witness group HBXs
-        uses: actions/download-artifact@v8.0.1
-        with:
-          pattern: witnesses-${{ github.sha }}-*
-          path: witness-hbx
-          merge-multiple: true
-
-      - name: Import witness group HBXs
-        run: |
-          for archive in witness-hbx/*.hbx; do
-            holbuild import "$archive"
-          done
-
-      - name: Configure remote cache
-        uses: ./.github/actions/setup-remote-cache
-        with:
-          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
-
       - name: Build project with holbuild
         env:
           TMPDIR: ${{ runner.temp }}
-        run: |
-          # Bound total HOL memory on the hosted runner, including fixture builds.
-          jobs=$(nproc)
-          if [ "$jobs" -gt 2 ]; then jobs=2; fi
-          memory_mib=$(( $(getconf _PHYS_PAGES) * $(getconf PAGE_SIZE) / 1024 / 1024 ))
-          if [ "$memory_mib" -lt 12288 ]; then jobs=1; fi
-          holbuild --max-heap 4096 --verbose -j"$jobs" build --skip-checkpoints --skip-proof-steps
+        run: holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
 
       - name: Verify no successful-build checkpoints remain
         run: |
@@ -231,6 +88,41 @@ jobs:
             ${{ env.HBX_BASENAME }}.hbx.sha256
           if-no-files-found: error
           retention-days: 90
+
+  native-parity:
+    # Compiles every bytecode fixture with the extracted compiler and compares
+    # it with the pinned Python compiler's output (bytecode/native/README.md).
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'edited' || github.event.changes.base)))
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 240
+    # The cache login is a secret of the bazel-cache environment, which every
+    # branch of this repository may deploy to.
+    environment: bazel-cache
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-holbuild-project
+
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
+
+      - name: Build schema-2 HOL toolchain
+        run: holbuild buildhol
+
+      - name: Build native bytecode parity runner
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps compilerNativeEmitTheory
+          holbuild -j"$(nproc)" executable bytecode_parity_native
+
+      - name: Check native bytecode parity
+        working-directory: bytecode
+        run: ./native/bytecode_parity_native.exe .
 
   tested:
     # On a push to main, whether a merge-group run already passed this commit:
@@ -281,7 +173,7 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          targets=$(python3 tools/ci_targets.py test-deps)
+          targets=$(python3 tools/ci_targets.py)
           echo "Building: $targets"
           holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
 
@@ -304,7 +196,7 @@ jobs:
           pin=$(tr -d '[:space:]' < VYPER_PIN)
           git clone https://github.com/vyperlang/vyper.git vyper-src
           git -C vyper-src checkout --detach "$pin"
-          sh lowering/defs/bytecode/python-o1-bytecode-fixtures --check \
+          sh bytecode/python-o1-bytecode-fixtures --check \
             --vyper-repo vyper-src
 
   export-vyper-tests:
@@ -405,11 +297,11 @@ jobs:
     name: ${{ (github.event.action == 'edited' && !github.event.changes.base) && 'holbuild-success (no-op edit)' || 'holbuild-success' }}
     if: always() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'edited' || github.event.changes.base)))
     runs-on: ubuntu-26.04-arm
-    needs: [build, compiler, witnesses, build-rollup, tested, test-deps, python-o1-oracle, export-vyper-tests, vyper-tests]
+    needs: [build, native-parity, tested, test-deps, python-o1-oracle, export-vyper-tests, vyper-tests]
     steps:
       - name: Check all jobs succeeded
         env:
-          BUILD_RESULTS: ${{ needs.build.result }} ${{ needs.compiler.result }} ${{ needs.witnesses.result }} ${{ needs.build-rollup.result }}
+          BUILD_RESULTS: ${{ needs.build.result }} ${{ needs.native-parity.result }}
           TEST_RESULTS: ${{ needs.test-deps.result }} ${{ needs.python-o1-oracle.result }} ${{ needs.export-vyper-tests.result }} ${{ needs.vyper-tests.result }}
           MERGE_GROUP_PASSED: ${{ needs.tested.outputs.merge-group-passed }}
         run: |

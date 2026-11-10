@@ -17,7 +17,7 @@ Ancestors
   analysisSimDefs analysisSimProps
   passSimulationDefs passSimulationProps passSharedDefs passSharedProps
   stateEquiv stateEquivProps
-  basePtrDefs basePtrProps basePtrProofs
+  basePtrDefs basePtrProps basePtrProofs basePtrConvergence
   venomWf venomInst venomInstProps venomEffects venomExecSemantics venomExecProps
   venomState venomMemDefs venomMemProps
   dfgAnalysisProps dfgCorrectnessProof dfgSoundStep dfgDefs dfAnalyzeDefs
@@ -25,6 +25,7 @@ Ancestors
   memAliasDefs memAliasProofs memLocDefs
   cfgDefs cfgHelpers cfgAnalysisProps
   finite_map list pred_set arithmetic words pair
+  passTransform
 
 (* ===== Arithmetic helpers ===== *)
 
@@ -770,21 +771,7 @@ Proof
   metis_tac[]
 QED
 
-(* ===== bp_ptr_sound preservation =====
-   Per-instruction preservation via DRESTRICT.
-   At the fixpoint, for each instruction with output out:
-   - bp_handle_inst bp inst = (F, bp') with same ptrs as bp
-   - DRESTRICT bp (COMPL {out}) gives bp0 with bp_get_ptrs bp0 out = []
-   - bp_handle_inst_sound on bp0 gives bp_ptr_sound bp0' s'
-   - bp0' has same ptrs as bp (operand agreement under SSA + fixpoint)
-   - bp_ptr_sound_ext: bp_ptr_sound bp s'
-
-   Key helpers:
-   - bp_get_ptrs_drestrict_neq: DRESTRICT doesn't affect other vars
-   - bp_handle_inst_drestrict_output_eq: output ptrs match when input
-     agrees on operands (operand vars ≠ out under SSA)
-   - For pass-through: bp_get_ptrs bp out = [] (no FUPDATE, FDOM argument)
-*)
+(* ===== bp_ptr_sound helpers ===== *)
 
 Triviality bp_leq_fempty[local]:
   !f. (!v. set (bp_get_ptrs (FEMPTY : bp_result) v) SUBSET
@@ -800,20 +787,6 @@ Proof
   simp[bp_get_ptrs_def, FLOOKUP_DEF]
 QED
 
-(* Monotonicity: bp_ptr_sound is monotone under removing entries *)
-Triviality bp_ptr_sound_restrict[local]:
-  !bp s ks.
-    bp_ptr_sound bp s ==>
-    bp_ptr_sound (DRESTRICT bp ks) s
-Proof
-  rw[bp_ptr_sound_def, bp_get_ptrs_def, FLOOKUP_DRESTRICT] >>
-  rpt strip_tac >> gvs[] >>
-  Cases_on `v IN ks` >> gvs[] >>
-  first_x_assum irule >> simp[]
-QED
-
-(* Per-instruction bp_ptr_sound preservation at the fixpoint.
-   Uses DRESTRICT trick for the output variable. *)
 (* DRESTRICT for output var: bp_get_ptrs gives [] *)
 Triviality bp_get_ptrs_drestrict_out[local]:
   !bp out. bp_get_ptrs (DRESTRICT bp (COMPL {out})) out = []
@@ -948,18 +921,17 @@ QED
 (* bp_analyze FDOM only contains pointer-opcode outputs of the blocks it
    visits, those in cfg.cfg_dfs_pre *)
 Triviality bp_analyze_ptr_fdom_visited[local]:
-  !cfg fn. fn_inst_wf fn ==>
+  !cfg fn. fn_inst_wf fn /\ ssa_form fn ==>
            FDOM (bp_analyze cfg fn) SUBSET
            fn_ptr_defs (fn with fn_blocks :=
              FILTER (\bb. MEM bb.bb_label cfg.cfg_dfs_pre) fn.fn_blocks)
 Proof
   rpt strip_tac >>
-  simp[bp_analyze_def] >>
-  qabbrev_tac `f = \r. SND (bp_one_pass fn cfg.cfg_dfs_pre r)` >>
   qabbrev_tac `ds = fn_ptr_defs (fn with fn_blocks :=
     FILTER (\bb. MEM bb.bb_label cfg.cfg_dfs_pre) fn.fn_blocks)` >>
-  `!r0. FDOM r0 SUBSET ds ==> FDOM (f r0) SUBSET ds` by (
-    rpt strip_tac >> simp[Abbr `f`] >>
+  `!r0. FDOM r0 SUBSET ds ==>
+        FDOM (SND (bp_one_pass fn cfg.cfg_dfs_pre r0)) SUBSET ds` by (
+    rpt strip_tac >>
     Cases_on `bp_one_pass fn cfg.cfg_dfs_pre r0` >>
     rename1 `_ = (ch, r1)` >> simp[] >>
     qspecl_then [`fn`,`cfg.cfg_dfs_pre`,`r0`,`ch`,`r1`,`ds`]
@@ -968,29 +940,9 @@ Proof
     simp[Abbr `ds`, fn_ptr_defs_def, SUBSET_DEF, PULL_EXISTS, MEM_MAP,
          MEM_FILTER] >>
     metis_tac[]) >>
-  `FDOM (FEMPTY : bp_result) SUBSET ds` by simp[] >>
-  qspecl_then [`f`, `\r. CARD (FDOM r)`, `CARD ds`,
-               `\r. FDOM r SUBSET ds`, `FEMPTY`]
-    mp_tac df_iterate_invariant >>
-  simp[] >> disch_then irule >>
-  conj_tac
-  >- cheat  (* termination: CARD strictly increases when f changes *)
-  >> rpt strip_tac >> irule CARD_SUBSET >>
-  simp[Abbr `ds`, fn_ptr_defs_def, SUBSET_FINITE,
-       MEM_MAP, PULL_EXISTS, FINITE_BIGUNION] >>
-  rpt strip_tac >> IF_CASES_TAC >> simp[]
-QED
-
-(* bp_analyze FDOM only contains pointer-opcode outputs *)
-Triviality bp_analyze_ptr_fdom[local]:
-  !cfg fn. fn_inst_wf fn ==>
-           FDOM (bp_analyze cfg fn) SUBSET fn_ptr_defs fn
-Proof
-  rpt strip_tac >>
-  drule_then (qspec_then `cfg` assume_tac) bp_analyze_ptr_fdom_visited >>
-  irule SUBSET_TRANS >> first_assum (irule_at Any) >>
-  simp[fn_ptr_defs_def, SUBSET_DEF, PULL_EXISTS, MEM_MAP, MEM_FILTER] >>
-  metis_tac[]
+  qspecl_then [`cfg`, `fn`, `\r. FDOM r SUBSET ds`] mp_tac
+    basePtrConvergenceTheory.bp_analyze_invariant >>
+  simp[]
 QED
 
 (* SSA helpers *)
@@ -1019,64 +971,6 @@ Proof
   disch_then (qspecl_then [`i1`, `i2`, `v`] mp_tac) >> simp[]
 QED
 
-(* Under SSA, non-pointer-opcode outputs are not tracked in bp *)
-Triviality bp_non_ptr_opcode_no_ptrs[local]:
-  !bp fn inst out bb.
-    bp = bp_analyze (cfg_analyze fn) fn /\
-    fn_inst_wf fn /\ ssa_form fn /\
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-    inst_output inst = SOME out /\ ~is_ptr_opcode inst.inst_opcode ==>
-    bp_get_ptrs bp out = []
-Proof
-  rpt strip_tac >>
-  irule bp_get_ptrs_not_in_fdom >>
-  `FDOM bp SUBSET fn_ptr_defs fn` by metis_tac[bp_analyze_ptr_fdom] >>
-  CCONTR_TAC >> gvs[SUBSET_DEF] >>
-  `out IN fn_ptr_defs fn` by metis_tac[] >>
-  gvs[fn_ptr_defs_def, MEM_MAP, PULL_EXISTS] >>
-  (* Extract ptr-opcode inst from fn_ptr_defs membership *)
-  first_x_assum (qspec_then `out` strip_assume_tac) >> gvs[] >>
-  `is_ptr_opcode inst'.inst_opcode` by (CCONTR_TAC >> gvs[]) >> gvs[] >>
-  `MEM out inst.inst_outputs` by (
-    gvs[inst_output_def] >>
-    Cases_on `inst.inst_outputs` >> gvs[] >>
-    Cases_on `t` >> gvs[]) >>
-  `MEM out inst'.inst_outputs` by gvs[inst_defs_def] >>
-  `MEM inst (fn_insts fn)` by
-    (simp[fn_insts_def] >> metis_tac[mem_block_mem_fn_insts]) >>
-  `MEM inst' (fn_insts fn)` by
-    (simp[fn_insts_def] >> metis_tac[mem_block_mem_fn_insts]) >>
-  `inst = inst'` by metis_tac[ssa_unique_definer] >>
-  gvs[]
-QED
-
-(* Under SSA, outputs of non-ptr-opcode instructions are not in FDOM bp.
-   Generalizes bp_non_ptr_opcode_no_ptrs to work with MEM v inst.inst_outputs
-   directly (needed for INVOKE which has inst_output = NONE with 2+ outputs). *)
-Triviality bp_non_ptr_outputs_not_tracked[local]:
-  !bp fn inst v bb.
-    bp = bp_analyze (cfg_analyze fn) fn /\
-    fn_inst_wf fn /\ ssa_form fn /\
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-    MEM v inst.inst_outputs /\ ~is_ptr_opcode inst.inst_opcode ==>
-    v NOTIN FDOM bp
-Proof
-  rpt strip_tac >>
-  `FDOM bp SUBSET fn_ptr_defs fn` by metis_tac[bp_analyze_ptr_fdom] >>
-  `v IN fn_ptr_defs fn` by metis_tac[SUBSET_DEF] >>
-  fs[fn_ptr_defs_def, MEM_MAP, PULL_EXISTS] >>
-  rename1 `MEM bb' fn.fn_blocks` >>
-  rename1 `MEM inst' bb'.bb_instructions` >>
-  `is_ptr_opcode inst'.inst_opcode` by (CCONTR_TAC >> gvs[]) >>
-  `MEM v inst'.inst_outputs` by gvs[inst_defs_def] >>
-  `MEM inst (fn_insts fn)` by
-    (simp[fn_insts_def] >> metis_tac[mem_block_mem_fn_insts]) >>
-  `MEM inst' (fn_insts fn)` by
-    (simp[fn_insts_def] >> metis_tac[mem_block_mem_fn_insts]) >>
-  `inst = inst'` by metis_tac[ssa_unique_definer] >>
-  gvs[is_ptr_opcode_def]
-QED
-
 (* inst_wf + inst_output SOME ⟹ singleton outputs *)
 Triviality inst_wf_outputs_some[local]:
   !inst out. inst_wf inst /\ inst_output inst = SOME out ==>
@@ -1085,473 +979,6 @@ Proof
   rw[inst_output_def] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
   Cases_on `t` >> gvs[]
-QED
-
-(* Pointer-producing opcodes have exactly one output, so NONE excludes them. *)
-Triviality inst_wf_output_none_not_ptr_opcode[local]:
-  !inst. inst_wf inst /\ inst_output inst = NONE ==>
-    ~is_ptr_opcode inst.inst_opcode
-Proof
-  rpt strip_tac >> CCONTR_TAC >>
-  fs[is_ptr_opcode_def] >>
-  gvs[inst_wf_def, inst_output_def] >>
-  Cases_on `inst.inst_outputs` >> gvs[] >>
-  Cases_on `t` >> gvs[]
-QED
-
-(* Output of instruction is not in its own uses (from block-level self-use
-   condition + inst_wf giving singleton outputs). Used in both
-   bp_ptr_sound_step_non_invoke and bp_fixpoint_drestrict_or_match delegation. *)
-Triviality inst_output_not_self_use[local]:
-  !inst out bb.
-    inst_wf inst /\ inst_output inst = SOME out /\
-    MEM inst bb.bb_instructions /\
-    (!inst' out'. MEM inst' bb.bb_instructions /\
-       inst_output inst' = SOME out' ==> ~MEM out' (inst_uses inst')) ==>
-    EVERY (\v. v <> out) (inst_uses inst)
-Proof
-  rpt strip_tac >>
-  imp_res_tac inst_wf_outputs_some >>
-  simp[EVERY_MEM]
-QED
-
-(* If a variable is tracked in bp (bp_get_ptrs ≠ []) and is the output of
-   some instruction, that instruction must be a ptr opcode. Contrapositive
-   of bp_non_ptr_outputs_not_tracked + bp_get_ptrs_not_in_fdom. *)
-Triviality bp_tracked_implies_ptr_opcode[local]:
-  !bp fn inst out bb.
-    bp_get_ptrs bp out <> [] /\ inst_output inst = SOME out /\
-    inst_wf inst /\
-    bp = bp_analyze (cfg_analyze fn) fn /\
-    ssa_form fn /\ fn_inst_wf fn /\
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
-    is_ptr_opcode inst.inst_opcode
-Proof
-  rpt strip_tac >> CCONTR_TAC >> gvs[] >>
-  qspecl_then [`bp_analyze (cfg_analyze fn) fn`, `fn`, `inst`, `out`, `bb`]
-    mp_tac bp_non_ptr_outputs_not_tracked >>
-  imp_res_tac inst_wf_outputs_some >>
-  simp[] >> metis_tac[bp_get_ptrs_not_in_fdom]
-QED
-
-(* FLOOKUP allocas preserved through non-ALLOCA step_inst. *)
-Triviality step_inst_preserves_alloca_ptrs[local]:
-  !fuel ctx inst s0 s1 bp aid off v.
-    step_inst fuel ctx inst s0 = OK s1 /\
-    inst.inst_opcode <> ALLOCA /\
-    MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ==>
-    FLOOKUP s1.vs_allocas aid = FLOOKUP s0.vs_allocas aid
-Proof
-  rpt strip_tac >>
-  irule (SIMP_RULE std_ss [] step_inst_alloca_flookup) >>
-  qexistsl [`ctx`, `fuel`, `inst`] >> simp[]
-QED
-
-(* When bp_handle_inst at fixpoint + DRESTRICT'd version both produce
-   nonempty output ptrs, they must agree. This is because:
-   - Nonempty output from DRESTRICT'd version means FUPDATE fired (started from [])
-   - FUPDATE value depends only on operand ptrs (which agree since operands ≠ out)
-   - At fixpoint, FUPDATE value = bp_get_ptrs bp out (changed=F) *)
-Triviality bp_handle_inst_drestrict_output_eq[local]:
-  !bp inst out bp0 c0 bp0'.
-    FST (bp_handle_inst bp inst) = F /\
-    inst_output inst = SOME out /\ inst_wf inst /\
-    inst.inst_opcode <> PHI /\
-    EVERY (\v. v <> out) (inst_uses inst) /\
-    bp0 = DRESTRICT bp (COMPL {out}) /\
-    bp_handle_inst bp0 inst = (c0, bp0') /\
-    bp_get_ptrs bp0' out <> [] ==>
-    bp_get_ptrs bp0' out = bp_get_ptrs bp out
-Proof
-  rpt strip_tac >>
-  imp_res_tac inst_wf_outputs_some >>
-  (* Substitute bp0 = DRESTRICT bp (COMPL {out}) *)
-  qpat_x_assum `bp0 = _` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >>
-    rewrite_tac[th]) >>
-  `bp_get_ptrs (DRESTRICT bp (COMPL {out})) out = []` by
-    simp[bp_get_ptrs_def, FLOOKUP_DRESTRICT] >>
-  `!v. v <> out ==>
-    bp_get_ptrs (DRESTRICT bp (COMPL {out})) v = bp_get_ptrs bp v` by
-    simp[bp_get_ptrs_def, FLOOKUP_DRESTRICT] >>
-  `!v. MEM v (inst_uses inst) ==>
-    bp_get_ptrs (DRESTRICT bp (COMPL {out})) v = bp_get_ptrs bp v` by
-    (rpt strip_tac >> first_x_assum irule >>
-     gvs[EVERY_MEM] >> metis_tac[]) >>
-  (* Expand bp_handle_inst for both bp and DRESTRICT'd bp *)
-  qpat_x_assum `~FST _` mp_tac >>
-  qpat_x_assum `bp_handle_inst (DRESTRICT _ _) inst = _` mp_tac >>
-  rewrite_tac[bp_handle_inst_def, inst_output_def] >>
-  asm_rewrite_tac[] >>
-  simp_tac std_ss [LET_THM] >> BETA_TAC >>
-  Cases_on `inst.inst_opcode` >> gvs[]
-  >> rpt strip_tac >> gvs[bp_get_ptrs_def, FLOOKUP_UPDATE] >>
-  gvs[inst_uses_def, venomInstTheory.operand_vars_def,
-       venomInstTheory.operand_var_def] >>
-  Cases_on `inst.inst_operands` >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  Cases_on `t` >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY (Cases_on `t'`) >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY (Cases_on `h`) >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY (Cases_on `h'`) >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  (* Remaining: ADD/SUB Var-Var with out as operand (contradiction) *)
-  gvs[EVERY_MEM, venomInstTheory.operand_vars_def,
-       venomInstTheory.operand_var_def, MEM_FLAT, MEM_MAP,
-       bp_get_ptrs_def, FLOOKUP_DRESTRICT] >>
-  BasicProvers.EVERY_CASE_TAC >>
-  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
-QED
-
-(* Per-instruction bp_ptr_sound preservation at the fixpoint.
-   Case v≠out: step_inst_preserves_lookup + ptr_matches_var_preserved.
-   Case v=out with bp_get_ptrs bp out = []: vacuously true.
-   Case v=out with bp_get_ptrs bp out ≠ []:
-     Apply bp_handle_inst_sound_proof to DRESTRICT bp (COMPL {out}).
-     If bp0' also has nonempty ptrs, use drestrict_output_eq to transfer.
-     The caller (bp_ptr_sound_exec_block) proves bp0' has nonempty ptrs
-     from the global fixpoint invariant. *)
-Triviality bp_handle_inst_fixpoint_sound[local]:
-  !bp inst fuel ctx s s'.
-    bp_ptr_sound bp s /\
-    FST (bp_handle_inst bp inst) = F /\
-    step_inst fuel ctx inst s = OK s' /\
-    inst_wf inst /\
-    (!out. inst_output inst = SOME out ==>
-       EVERY (\v. v <> out) (inst_uses inst) /\
-       (is_ptr_opcode inst.inst_opcode \/ out NOTIN FDOM bp)) /\
-    (inst_output inst = NONE ==>
-       !out. MEM out inst.inst_outputs ==> bp_get_ptrs bp out = []) /\
-    (!v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ==>
-       FLOOKUP s'.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
-    (!v. inst.inst_opcode = PHI /\
-         MEM v (MAP SND (phi_pairs inst.inst_operands)) /\
-         IS_SOME (lookup_var v s) ==>
-         bp_get_ptrs bp v <> []) /\
-    (* For stale ptrs: either DRESTRICT'd version has nonempty output
-       (normal case), or all stale ptrs directly match s' (ADD/SUB Var-Var) *)
-    (!out. inst_output inst = SOME out /\ bp_get_ptrs bp out <> [] ==>
-       bp_get_ptrs (SND (bp_handle_inst (DRESTRICT bp (COMPL {out})) inst))
-         out <> [] \/
-       !p. MEM p (bp_get_ptrs bp out) ==> ptr_matches_var p out s') ==>
-    bp_ptr_sound bp s'
-Proof
-  rpt strip_tac >>
-  CONV_TAC (REWR_CONV bp_ptr_sound_def) >> rpt gen_tac >> strip_tac >>
-  Cases_on `inst_output inst`
-  >- (
-    (* NONE: any outputs are untracked by bp, so the currently tracked v
-       cannot be overwritten. *)
-    `bp_get_ptrs bp v <> []` by metis_tac[] >>
-    `~MEM v inst.inst_outputs` by metis_tac[] >>
-    `lookup_var v s' = lookup_var v s` by (
-      irule step_inst_preserves_lookup >>
-      qexistsl [`ctx`, `fuel`, `inst`] >> simp[]) >>
-    `IS_SOME (lookup_var v s)` by fs[] >>
-    `?p. MEM p (bp_get_ptrs bp v) /\ ptr_matches_var p v s` by
-      metis_tac[bp_ptr_sound_def] >>
-    qexists `p` >> simp[] >>
-    irule ptr_matches_var_preserved >> qexistsl [`s`, `v`] >> simp[] >>
-    metis_tac[]
-  ) >>
-  rename1 `SOME out` >>
-  reverse (Cases_on `v = out`)
-  >- (
-    (* v ≠ out: lookup_var v preserved *)
-    `~MEM v inst.inst_outputs` by (
-      gvs[inst_output_def] >>
-      Cases_on `inst.inst_outputs` >> gvs[] >>
-      Cases_on `t` >> gvs[]) >>
-    `lookup_var v s' = lookup_var v s` by (
-      irule step_inst_preserves_lookup >>
-      qexistsl [`ctx`, `fuel`, `inst`] >> simp[]) >>
-    `IS_SOME (lookup_var v s)` by fs[] >>
-    `?p. MEM p (bp_get_ptrs bp v) /\ ptr_matches_var p v s` by
-      metis_tac[bp_ptr_sound_def] >>
-    qexists `p` >> simp[] >>
-    irule ptr_matches_var_preserved >> qexistsl [`s`, `v`] >> simp[] >>
-    metis_tac[]
-  ) >>
-  (* v = out *)
-  gvs[] >>
-  (* If bp_get_ptrs bp out = [], vacuously true *)
-  reverse (Cases_on `bp_get_ptrs bp out`)
-  >- suspend "out_nonempty"
-  >> gvs[bp_get_ptrs_not_in_fdom]
-QED
-
-Resume bp_handle_inst_fixpoint_sound[out_nonempty]:
-  (* bp_get_ptrs bp out ≠ []: case split on DRESTRICT'd output ptrs *)
-  rename1 `bp_get_ptrs bp out = ph::pt` >>
-  qabbrev_tac `bp0 = DRESTRICT bp (COMPL {out})` >>
-  Cases_on `bp_handle_inst bp0 inst` >>
-  rename1 `bp_handle_inst bp0 inst = (c0, bp0')` >>
-  reverse (Cases_on `bp_get_ptrs bp0' out`)
-  >- (
-    (* Case A: DRESTRICT'd version has nonempty output — transfer *)
-    `bp_ptr_sound bp0 s` by
-      (simp[Abbr `bp0`] >> irule bp_ptr_sound_restrict >> simp[]) >>
-    `bp_get_ptrs bp0 out = []` by
-      simp[Abbr `bp0`, bp_get_ptrs_def, FLOOKUP_DRESTRICT] >>
-    `!v. v <> out ==> bp_get_ptrs bp0 v = bp_get_ptrs bp v` by
-      simp[Abbr `bp0`, bp_get_ptrs_def, FLOOKUP_DRESTRICT] >>
-    `!v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp0 v) ==>
-       FLOOKUP s'.vs_allocas aid = FLOOKUP s.vs_allocas aid` by
-      (rpt strip_tac >> Cases_on `v = out` >> gvs[] >>
-       metis_tac[]) >>
-    `!v. inst.inst_opcode = PHI /\
-       MEM v (MAP SND (phi_pairs inst.inst_operands)) /\
-       IS_SOME (lookup_var v s) ==> bp_get_ptrs bp0 v <> []` by
-      (rpt strip_tac >> Cases_on `v = out` >> gvs[EVERY_MEM, inst_uses_def] >>
-       metis_tac[phi_pairs_mem_operand_vars]) >>
-    `bp_ptr_sound bp0' s'` by (
-      qspecl_then [`bp0`, `inst`, `c0`, `bp0'`, `fuel`, `ctx`, `s`, `s'`]
-        mp_tac bp_handle_inst_sound_proof >>
-      simp[] >> disch_then match_mp_tac >>
-      first_assum ACCEPT_TAC) >>
-    (* Transfer: bp0' has the same output ptrs as bp *)
-    `bp_get_ptrs bp0' out = bp_get_ptrs bp out` by (
-      qspecl_then [`bp`, `inst`, `out`, `bp0`, `c0`, `bp0'`]
-        mp_tac bp_handle_inst_drestrict_output_eq >>
-      `inst.inst_opcode <> PHI` by
-        metis_tac[venomExecProofsTheory.step_inst_ok_imp_not_phi] >>
-      simp[Abbr `bp0`] >>
-      disch_then match_mp_tac >>
-      Cases_on `bp_handle_inst bp inst` >> gvs[]) >>
-    qpat_x_assum `bp_ptr_sound bp0' s'` mp_tac >>
-    simp[bp_ptr_sound_def] >>
-    disch_then (qspec_then `out` mp_tac) >> simp[])
-  (* Case B: DRESTRICT'd output empty — stale ptrs match s' directly *)
-  >> `!p. MEM p (ph::pt) ==> ptr_matches_var p out s'` by
-       (first_x_assum match_mp_tac >> gvs[]) >>
-  qexists `ph` >> simp[]
-QED
-
-Finalise bp_handle_inst_fixpoint_sound
-
-
-(* Invariant: ADD/SUB [Var;Var] outputs only contain NONE-offset ptrs *)
-Definition bp_vv_inv_def:
-  bp_vv_inv fn r <=>
-    !inst out. MEM inst (fn_insts fn) /\ inst_output inst = SOME out /\
-      (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
-      (?l r'. inst.inst_operands = [Var l; Var r']) ==>
-      !p. MEM p (bp_get_ptrs r out) ==> ?aid. p = Ptr (Allocation aid) NONE
-End
-
-(* Member of MAP (offset_by _ NONE) is always Ptr _ NONE *)
-Triviality mem_map_offset_none[local]:
-  !p l. MEM p (MAP (\q. offset_by q NONE) l) ==>
-        ?aid. p = Ptr (Allocation aid) NONE
-Proof
-  simp[MEM_MAP] >> rpt strip_tac >> gvs[] >>
-  Cases_on `q` >> Cases_on `o'` >>
-  gvs[offset_by_def] >>
-  metis_tac[TypeBase.nchotomy_of ``:allocation``]
-QED
-
-(* bp_handle_inst for ADD/SUB Var-Var: any NEW ptrs written are NONE-offset *)
-Triviality bp_handle_inst_vv_none[local]:
-  !bp inst out.
-    inst_output inst = SOME out /\
-    (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
-    (?lhs rhs. inst.inst_operands = [Var lhs; Var rhs]) ==>
-    !p. MEM p (bp_get_ptrs (SND (bp_handle_inst bp inst)) out) /\
-        ~MEM p (bp_get_ptrs bp out) ==>
-        ?aid. p = Ptr (Allocation aid) NONE
-Proof
-  rpt strip_tac >> gvs[inst_output_def] >>
-  (Cases_on `inst.inst_outputs` >> gvs[] >>
-   Cases_on `t` >> gvs[]) >>
-  qpat_x_assum `MEM p _` mp_tac >>
-  qpat_x_assum `~MEM p _` mp_tac >>
-  simp[bp_handle_inst_def, inst_output_def, LET_THM,
-       bp_get_ptrs_def, FLOOKUP_UPDATE] >>
-  rpt (IF_CASES_TAC >> gvs[]) >>
-  simp[FLOOKUP_UPDATE] >>
-  rpt strip_tac >>
-  irule mem_map_offset_none >> metis_tac[]
-QED
-
-(* bp_handle_inst preserves bp_vv_inv under SSA *)
-Triviality bp_handle_inst_preserves_vv_inv[local]:
-  !fn bp inst c bp'.
-    bp_handle_inst bp inst = (c, bp') /\
-    bp_vv_inv fn bp /\
-    MEM inst (fn_insts fn) /\
-    ssa_form fn ==>
-    bp_vv_inv fn bp'
-Proof
-  rpt strip_tac >>
-  CONV_TAC (REWR_CONV bp_vv_inv_def) >>
-  qx_gen_tac `inst2` >> qx_gen_tac `out` >>
-  DISCH_TAC >> rpt strip_tac >>
-  rename1 `MEM p (bp_get_ptrs bp' out)` >>
-  `MEM inst2 (fn_insts fn) /\ inst_output inst2 = SOME out`
-    by fs[] >>
-  Cases_on `inst_output inst = SOME out`
-  >- suspend "same_out"
-  >> suspend "diff_out"
-QED
-
-Resume bp_handle_inst_preserves_vv_inv[same_out]:
-  `MEM out inst.inst_outputs` by
-    (fs[inst_output_def] >>
-     Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[]) >>
-  `MEM out inst2.inst_outputs` by
-    (fs[inst_output_def] >>
-     Cases_on `inst2.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[]) >>
-  `inst = inst2` by metis_tac[ssa_unique_definer] >>
-  BasicProvers.VAR_EQ_TAC >>
-  Cases_on `MEM p (bp_get_ptrs bp out)`
-  >- (fs[bp_vv_inv_def] >> metis_tac[])
-  >> `bp' = SND (bp_handle_inst bp inst)` by fs[] >>
-  pop_assum SUBST_ALL_TAC >>
-  irule bp_handle_inst_vv_none >> fs[] >> metis_tac[]
-QED
-
-Resume bp_handle_inst_preserves_vv_inv[diff_out]:
-  `bp_get_ptrs bp' out = bp_get_ptrs bp out` by
-    (drule bp_handle_inst_other_var >>
-     disch_then (qspec_then `out` mp_tac) >> simp[]) >>
-  fs[bp_vv_inv_def] >> metis_tac[]
-QED
-
-Finalise bp_handle_inst_preserves_vv_inv
-
-(* bp_process_block preserves bp_vv_inv *)
-Triviality bp_process_block_preserves_vv_inv[local]:
-  !fn bp insts c bp'.
-    bp_process_block bp insts = (c, bp') /\
-    bp_vv_inv fn bp /\
-    (!inst. MEM inst insts ==> MEM inst (fn_insts fn)) /\
-    ssa_form fn ==>
-    bp_vv_inv fn bp'
-Proof
-  Induct_on `insts` >> simp[bp_process_block_def] >>
-  rpt gen_tac >> strip_tac >>
-  gvs[LET_THM] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  first_x_assum irule >> simp[] >>
-  qexists `r1` >> simp[] >>
-  irule bp_handle_inst_preserves_vv_inv >>
-  simp[] >> qexistsl [`bp`, `c1`, `h`] >> simp[]
-QED
-
-
-(* bp_one_pass_aux preserves bp_vv_inv *)
-Triviality bp_one_pass_aux_preserves_vv_inv[local]:
-  !fn order bp c bp'.
-    bp_one_pass_aux fn bp order = (c, bp') /\
-    bp_vv_inv fn bp /\
-    ssa_form fn ==>
-    bp_vv_inv fn bp'
-Proof
-  Induct_on `order` >> simp[bp_one_pass_aux_def] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `FIND (\bb. bb.bb_label = h) fn.fn_blocks` >> gvs[]
-  >- (first_x_assum irule >> simp[] >> qexistsl [`bp`, `c`] >> simp[]) >>
-  rename1 `FIND _ _ = SOME bb` >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  `!inst. MEM inst bb.bb_instructions ==> MEM inst (fn_insts fn)` by
-    (simp[fn_insts_def] >> metis_tac[mem_block_mem_fn_insts, venomExecPropsTheory.FIND_MEM]) >>
-  `bp_vv_inv fn r1` by
-    metis_tac[bp_process_block_preserves_vv_inv] >>
-  first_x_assum irule >> simp[] >>
-  qexistsl [`r1`, `c2`] >> simp[]
-QED
-
-(* bp_one_pass preserves bp_vv_inv *)
-Triviality bp_one_pass_preserves_vv_inv[local]:
-  !fn order bp c bp'.
-    bp_one_pass fn order bp = (c, bp') /\
-    bp_vv_inv fn bp /\
-    ssa_form fn ==>
-    bp_vv_inv fn bp'
-Proof
-  simp[bp_one_pass_def] >> metis_tac[bp_one_pass_aux_preserves_vv_inv]
-QED
-
-(* At fixpoint: ADD/SUB [Var;Var] outputs have NONE-offset ptrs *)
-Triviality bp_analyze_vv_inv[local]:
-  !cfg fn.
-    fn_inst_wf fn /\ ssa_form fn ==>
-    bp_vv_inv fn (bp_analyze cfg fn)
-Proof
-  rpt strip_tac >>
-  simp[bp_analyze_def] >>
-  qabbrev_tac `f = \r. SND (bp_one_pass fn cfg.cfg_dfs_pre r)` >>
-  qabbrev_tac `ds = fn_ptr_defs fn` >>
-  (* Use df_iterate_invariant with P = bp_vv_inv fn *)
-  `bp_vv_inv fn (FEMPTY : bp_result)` by
-    simp[bp_vv_inv_def, bp_get_ptrs_def, FLOOKUP_DEF] >>
-  `!r. bp_vv_inv fn r ==> bp_vv_inv fn (f r)` by (
-    rpt strip_tac >> simp[Abbr `f`] >>
-    Cases_on `bp_one_pass fn cfg.cfg_dfs_pre r` >>
-    rename1 `_ = (ch, r')` >> simp[] >>
-    irule bp_one_pass_preserves_vv_inv >>
-    simp[] >> qexistsl [`r`, `ch`, `cfg.cfg_dfs_pre`] >> simp[]) >>
-  `!r. FDOM r SUBSET ds ==> bp_vv_inv fn r ==> FDOM (f r) SUBSET ds` by (
-    rpt strip_tac >> simp[Abbr `f`] >>
-    Cases_on `bp_one_pass fn cfg.cfg_dfs_pre r` >>
-    rename1 `_ = (ch, r')` >> simp[] >>
-    qspecl_then [`fn`,`cfg.cfg_dfs_pre`,`r`,`ch`,`r'`,`ds`]
-      mp_tac bp_one_pass_ptr_fdom >>
-    disch_then match_mp_tac >>
-    simp[Abbr `ds`, fn_ptr_defs_def, SUBSET_DEF, PULL_EXISTS, MEM_MAP] >>
-    metis_tac[]) >>
-  qspecl_then [`f`, `\r. CARD (FDOM r)`, `CARD ds`,
-               `\r. bp_vv_inv fn r /\ FDOM r SUBSET ds`, `FEMPTY`]
-    mp_tac df_iterate_invariant >>
-  simp[] >> strip_tac >>
-  `(bp_vv_inv fn (df_iterate f FEMPTY) /\
-    FDOM (df_iterate f FEMPTY) SUBSET ds)` suffices_by simp[] >>
-  first_x_assum irule >>
-  conj_tac
-  >- cheat  (* termination: same as bp_analyze_ptr_fdom *)
-  >> rpt strip_tac >> irule CARD_SUBSET >>
-  simp[Abbr `ds`, fn_ptr_defs_def, SUBSET_FINITE,
-       MEM_MAP, PULL_EXISTS, FINITE_BIGUNION] >>
-  rpt strip_tac >> IF_CASES_TAC >> simp[]
 QED
 
 (* bp_process_block preserves ptrs for variables not in any output *)
@@ -1725,17 +1152,6 @@ Proof
     metis_tac[bp_handle_inst_snd_output_ext] >>
   ASM_REWRITE_TAC[]
 QED
-
-(* For opcodes that always FUPDATE (PHI, ALLOCA, ASSIGN [Var src]):
-   bp_get_ptrs of the output depends only on bp_get_ptrs of the operands,
-   so DRESTRICT on output doesn't change the result.
-   Used in bp_fixpoint_drestrict_or_match to derive contradiction. *)
-
-(* Shared contradiction tactic for fixpoint + DRESTRICT:
-   If FST(bp_handle_inst bp inst) = F and the output ptrs from bp0
-   equal those from bp (because operands agree), then bp0 output ≠ []. *)
-(* bp_fixpoint_drestrict_or_match: approach is to show each case inline,
-   using the fact that FUPDATE makes output ptrs operand-dependent. *)
 
 (* At fixpoint (same ptrs in SND as input), each handle_inst returns F *)
 Triviality bp_process_block_fixpoint_each[local]:
@@ -2037,15 +1453,17 @@ Proof
   gvs[]
 QED
 
-(* At fixpoint, bp_one_pass_aux doesn't change bp.
-   Depends on df_iterate convergence (shared termination gap). *)
-Triviality bp_analyze_fixpoint[local]:
+(* At fixpoint, bp_one_pass_aux doesn't change bp. *)
+Triviality bp_analyze_aux_fixpoint[local]:
   !cfg fn.
-    fn_inst_wf fn ==>
+    ssa_form fn ==>
     SND (bp_one_pass_aux fn (bp_analyze cfg fn) cfg.cfg_dfs_pre) =
     bp_analyze cfg fn
 Proof
-  cheat  (* shared gap: df_iterate termination for bp_analyze *)
+  rpt strip_tac >>
+  drule_then (qspec_then `cfg` mp_tac)
+    basePtrConvergenceTheory.bp_analyze_fixpoint >>
+  simp[bp_one_pass_def]
 QED
 
 Triviality find_mem_block_label[local]:
@@ -2068,7 +1486,7 @@ Proof
 QED
 
 (* At fixpoint, each bp_handle_inst returns changed=F.
-   Consequence of bp_analyze_fixpoint + bp_one_pass_aux_fixpoint_each.
+   Consequence of bp_analyze_aux_fixpoint + bp_one_pass_aux_fixpoint_each.
    Needs MEM bb.bb_label dfs_pre because only reachable blocks are processed,
    and uses block-label uniqueness to align MEM blocks with FIND lookup. *)
 Triviality bp_analyze_handle_inst_stable[local]:
@@ -2089,7 +1507,7 @@ Proof
     simp[Abbr `p`, Abbr `c`, Abbr `bp'`, PAIR] >>
   `bp' = bp` by
     (simp[Abbr `bp'`, Abbr `p`, Abbr `bp`, Abbr `order`] >>
-     irule bp_analyze_fixpoint >> simp[]) >>
+     irule bp_analyze_aux_fixpoint >> simp[]) >>
   `ALL_DISTINCT order` by
     simp[Abbr `order`, cfgAnalysisPropsTheory.cfg_analyze_dfs_pre_distinct] >>
   `ALL_DISTINCT (fn_labels fn)` by gvs[wf_function_def] >>
@@ -2116,8 +1534,8 @@ Proof
   rpt strip_tac >>
   `out IN FDOM (bp_analyze (cfg_analyze fn) fn)` by
     metis_tac[bp_get_ptrs_not_in_fdom] >>
-  drule_then (qspec_then `cfg_analyze fn` assume_tac)
-    bp_analyze_ptr_fdom_visited >>
+  qspecl_then [`cfg_analyze fn`, `fn`] mp_tac bp_analyze_ptr_fdom_visited >>
+  simp[] >> strip_tac >>
   `out IN fn_ptr_defs (fn with fn_blocks :=
      FILTER (\bb. MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre)
        fn.fn_blocks)` by metis_tac[SUBSET_DEF] >>
@@ -2161,322 +1579,7 @@ Proof
   simp[]
 QED
 
-(* Disjunction helper for bp_handle_inst_fixpoint_sound's last precondition.
-   At fixpoint with nonempty output ptrs, either:
-   (a) DRESTRICT'd version also produces nonempty output (most opcodes), OR
-   (b) all stale ptrs trivially match s' (ADD/SUB Var-Var with NONE offsets).
-   Case (b) uses bp_vv_inv (NONE offset) + n2w_exists_offset.
-   Cases where operand ptrs are empty but output ptrs are non-empty (e.g.
-   ADD Var-Lit with empty operand) are unreachable at the true fixpoint
-   (starting from FEMPTY, only FUPDATE establishes ptrs, requiring non-empty
-   operand ptrs). This unreachability is blocked on the fixpoint termination
-   shared gap (same as bp_analyze_fixpoint, bp_analyze_ptr_fdom etc). *)
-Triviality bp_fixpoint_drestrict_or_match[local]:
-  !bp inst out fn fuel ctx s0 s1.
-    FST (bp_handle_inst bp inst) = F /\
-    inst_output inst = SOME out /\
-    inst_wf inst /\
-    is_ptr_opcode inst.inst_opcode /\
-    EVERY (\v. v <> out) (inst_uses inst) /\
-    bp_get_ptrs bp out <> [] /\
-    bp_vv_inv fn bp /\
-    MEM inst (fn_insts fn) /\
-    bp_ptr_sound bp s0 /\
-    step_inst fuel ctx inst s0 = OK s1 /\
-    alloca_inv s0 /\
-    (!v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ==>
-       FLOOKUP s1.vs_allocas aid = FLOOKUP s0.vs_allocas aid) ==>
-    bp_get_ptrs (SND (bp_handle_inst (DRESTRICT bp (COMPL {out})) inst))
-      out <> [] \/
-    !p. MEM p (bp_get_ptrs bp out) ==> ptr_matches_var p out s1
-Proof
-  rpt strip_tac >>
-  imp_res_tac inst_wf_outputs_some >>
-  qabbrev_tac `bp0 = DRESTRICT bp (COMPL {out})` >>
-  `bp_get_ptrs bp0 out = []` by
-    simp[bp_get_ptrs_def, FLOOKUP_DRESTRICT, Abbr `bp0`] >>
-  `!v. v <> out ==> bp_get_ptrs bp0 v = bp_get_ptrs bp v` by
-    simp[bp_get_ptrs_def, FLOOKUP_DRESTRICT, Abbr `bp0`] >>
-  `!v. MEM v (inst_uses inst) ==> bp_get_ptrs bp0 v = bp_get_ptrs bp v` by
-    (rpt strip_tac >> first_x_assum irule >> gvs[EVERY_MEM] >> metis_tac[]) >>
-  (* Strategy: Show bp_handle_inst bp0 gives same output ptrs as bp
-     (because operand ptrs agree). Since bp output is non-empty, bp0
-     output is too → antecedent of the implication is false.
-     Subcases where no FUPDATE occurs (empty operands) are unreachable
-     at the true fixpoint — these are shared-gap cheats.
-     Order after Cases_on: ADD, SUB, ASSIGN, ALLOCA (PHI cannot step). *)
-  `inst.inst_opcode <> PHI` by
-    metis_tac[venomExecProofsTheory.step_inst_ok_imp_not_phi] >>
-  Cases_on `inst.inst_opcode` >> gvs[is_ptr_opcode_def]
-  >- cheat (* ADD: shared gap — needs fixpoint for bp_handle_inst soundness *)
-  >- cheat (* SUB: shared gap — needs fixpoint for bp_handle_inst soundness *)
-  (* ASSIGN *)
-  >- suspend "assign_case"
-  (* ALLOCA *)
-  >> suspend "alloca_case"
-QED
-
-(* Helper for assign_case: ASSIGN with [Var src] operand.
-   Extracted as helper. Only the [Var src] case
-   is provable without fixpoint reachability — other operand shapes
-   (Lit/Label/[]) don't FUPDATE so drestrict ≠ original. *)
-Triviality bp_assign_drestrict_ptrs_eq[local]:
-  !bp bp0 inst out.
-    inst.inst_opcode = ASSIGN /\
-    inst_wf inst /\
-    inst.inst_outputs = [out] /\
-    Abbrev (bp0 = DRESTRICT bp (COMPL {out})) /\
-    EVERY (\v. v <> out) (inst_uses inst) /\
-    (!v. v <> out ==> bp_get_ptrs bp0 v = bp_get_ptrs bp v) ==>
-    bp_get_ptrs (SND (bp_handle_inst bp0 inst)) out =
-    bp_get_ptrs (SND (bp_handle_inst bp inst)) out
-Proof
-  rpt strip_tac >>
-  (* inst_wf + ASSIGN => LENGTH operands = 1 *)
-  `LENGTH inst.inst_operands = 1` by gvs[inst_wf_def] >>
-  Cases_on `inst.inst_operands` >> gvs[] >>
-  (* Now: inst.inst_operands = [h], 3 subcases: Lit, Var, Label *)
-  qpat_x_assum `inst.inst_opcode = _` (fn eq =>
-    PURE_REWRITE_TAC [eq, bp_handle_inst_def, inst_output_def]) >>
-  simp[LET_THM, bp_get_ptrs_def, FLOOKUP_UPDATE] >>
-  Cases_on `h` >> gvs[]
-  >- cheat (* Lit — shared gap: unreachable at fixpoint *)
-  >- (rename1 `[Var src]` >>
-      `src <> out` by (
-        gvs[EVERY_MEM, inst_uses_def, venomInstTheory.operand_vars_def,
-            venomInstTheory.operand_var_def]) >>
-      simp[FLOOKUP_UPDATE] >>
-      first_x_assum (qspec_then `src` mp_tac) >> simp[bp_get_ptrs_def])
-  >> cheat (* Label — shared gap: unreachable at fixpoint *)
-QED
-
-Resume bp_fixpoint_drestrict_or_match[assign_case]:
-  strip_tac >>
-  `bp_get_ptrs (SND (bp_handle_inst bp inst)) out = bp_get_ptrs bp out` by (
-    qspecl_then [`bp`, `inst`, `out`] mp_tac bp_handle_inst_fst_eq >>
-    simp[]) >>
-  `bp_get_ptrs (SND (bp_handle_inst bp0 inst)) out =
-   bp_get_ptrs (SND (bp_handle_inst bp inst)) out` by (
-    irule bp_assign_drestrict_ptrs_eq >> simp[]) >>
-  gvs[]
-QED
-
-Resume bp_fixpoint_drestrict_or_match[alloca_case]:
-  simp[Abbr `bp0`, bp_handle_inst_def, inst_output_def, LET_THM,
-       bp_get_ptrs_def, FLOOKUP_UPDATE]
-QED
-
-Finalise bp_fixpoint_drestrict_or_match
-
-(* ALLOCA may create the allocation tracked by its output.  The generic
-   fixpoint helper requires all tracked allocation entries to be unchanged,
-   so handle ALLOCA directly. *)
-Triviality step_alloca_preserves_matched_alloca[local]:
-  !fuel ctx inst s s' aid off v.
-    step_inst fuel ctx inst s = OK s' /\
-    inst.inst_opcode = ALLOCA /\
-    ptr_matches_var (Ptr (Allocation aid) off) v s ==>
-    FLOOKUP s'.vs_allocas aid = FLOOKUP s.vs_allocas aid
-Proof
-  rpt strip_tac >>
-  Cases_on `aid = inst.inst_id`
-  >- (
-    `inst.inst_opcode <> INVOKE` by simp[] >>
-    `step_inst_base inst s = OK s'` by
-      metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
-    Cases_on `off` >> gvs[ptr_matches_var_def] >>
-    gvs[venomExecSemanticsTheory.step_inst_base_def,
-        venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs(),
-        venomStateTheory.update_var_def, FLOOKUP_UPDATE]) >>
-  irule (SIMP_RULE std_ss [] step_inst_alloca_flookup) >>
-  qexistsl [`ctx`, `fuel`, `inst`] >> simp[]
-QED
-
-Triviality bp_ptr_sound_step_alloca[local]:
-  !bp inst fuel ctx s s'.
-    bp_ptr_sound bp s /\
-    step_inst fuel ctx inst s = OK s' /\
-    FST (bp_handle_inst bp inst) = F /\
-    inst_wf inst /\
-    inst.inst_opcode = ALLOCA ==>
-    bp_ptr_sound bp s'
-Proof
-  rpt strip_tac >>
-  simp[bp_ptr_sound_def] >> rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by simp[] >>
-  `step_inst_base inst s = OK s'` by
-    metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  `?out. inst_output inst = SOME out` by
-    (gvs[inst_wf_def, inst_output_def] >>
-     Cases_on `inst.inst_outputs` >> gvs[] >>
-     Cases_on `t` >> gvs[] >> metis_tac[]) >>
-  Cases_on `v = out`
-  >- (
-    gvs[] >>
-    `inst.inst_outputs = [out]` by
-      (drule_all inst_wf_outputs_some >> simp[]) >>
-    qpat_x_assum `~FST (bp_handle_inst bp inst)` mp_tac >>
-    simp[bp_handle_inst_def, LET_THM] >>
-    qpat_x_assum `inst_output inst = SOME out` (fn th => rewrite_tac[th]) >>
-    simp[] >> strip_tac >>
-    `bp_get_ptrs bp out = [ptr_from_alloca inst]` by
-      (pop_assum mp_tac >> simp[bp_get_ptrs_def, FLOOKUP_UPDATE]) >>
-    qexists_tac `ptr_from_alloca inst` >> simp[] >>
-    qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-    simp[venomExecSemanticsTheory.step_inst_base_def,
-         venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs(),
-         venomWfTheory.inst_wf_def] >> strip_tac >>
-    gvs[ptr_from_alloca_def, ptr_matches_var_def,
-        venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
-        FLOOKUP_UPDATE]) >>
-  `~MEM v inst.inst_outputs` by
-    (gvs[inst_output_def] >>
-     Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[]) >>
-  `lookup_var v s' = lookup_var v s` by
-    (irule step_inst_preserves_lookup >>
-     qexistsl [`ctx`, `fuel`, `inst`] >> simp[]) >>
-  `IS_SOME (lookup_var v s)` by gvs[] >>
-  `?p. MEM p (bp_get_ptrs bp v) /\ ptr_matches_var p v s` by
-    metis_tac[bp_ptr_sound_def] >>
-  qexists_tac `p` >> simp[] >>
-  irule ptr_matches_var_preserved >>
-  qexistsl [`s`, `v`] >> simp[] >>
-  rpt strip_tac >> gvs[] >>
-  irule step_alloca_preserves_matched_alloca >>
-  metis_tac[]
-QED
-
-(* Standalone helper: bp_ptr_sound step for non-INVOKE at fixpoint.
-   Extracted as helper (irule/drule need manual instantiation). *)
-Triviality bp_ptr_sound_step_non_invoke[local]:
-  !bp inst fuel ctx s0 s1 fn bb.
-    bp_ptr_sound bp s0 /\
-    step_inst fuel ctx inst s0 = OK s1 /\
-    FST (bp_handle_inst bp inst) = F /\
-    inst_wf inst /\
-    inst.inst_opcode <> INVOKE /\
-    bp = bp_analyze (cfg_analyze fn) fn /\
-    ssa_form fn /\ fn_inst_wf fn /\
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-    alloca_inv s0 /\
-    (!v. inst.inst_opcode = PHI /\
-       MEM v (MAP SND (phi_pairs inst.inst_operands)) /\
-       IS_SOME (lookup_var v s0) ==> bp_get_ptrs bp v <> []) /\
-    (!inst' out. MEM inst' bb.bb_instructions /\
-       inst_output inst' = SOME out ==> ~MEM out (inst_uses inst')) ==>
-    bp_ptr_sound bp s1
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode = ALLOCA`
-  >- (irule bp_ptr_sound_step_alloca >>
-      qexistsl [`ctx`, `fuel`, `inst`, `s0`] >> simp[]) >>
-  match_mp_tac bp_handle_inst_fixpoint_sound >>
-  qexistsl [`inst`, `fuel`, `ctx`, `s0`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- suspend "goal1"
-  >- suspend "goal2"
-  >- suspend "goal3"
-  >> suspend "goal4"
-QED
-
-Resume bp_ptr_sound_step_non_invoke[goal1]:
-  rpt gen_tac >> strip_tac >>
-  conj_tac
-  >- (match_mp_tac inst_output_not_self_use >>
-      qexists `bb` >> simp[])
-  >> (Cases_on `is_ptr_opcode inst.inst_opcode` >> simp[] >>
-      drule_then (qspecl_then [`inst`, `out`, `bb`] mp_tac)
-        bp_non_ptr_outputs_not_tracked >>
-      imp_res_tac inst_wf_outputs_some >> simp[])
-QED
-
-Resume bp_ptr_sound_step_non_invoke[goal2]:
-  rpt strip_tac >>
-  irule bp_get_ptrs_not_in_fdom >>
-  irule bp_non_ptr_outputs_not_tracked >>
-  qexistsl [`bb`, `fn`, `inst`] >>
-  simp[] >>
-  metis_tac[inst_wf_output_none_not_ptr_opcode]
-QED
-
-Resume bp_ptr_sound_step_non_invoke[goal3]:
-  rpt strip_tac >>
-  irule step_inst_preserves_alloca_ptrs >>
-  metis_tac[]
-QED
-
-Resume bp_ptr_sound_step_non_invoke[goal4]:
-  rpt gen_tac >> strip_tac >>
-  imp_res_tac inst_wf_outputs_some >>
-  match_mp_tac bp_fixpoint_drestrict_or_match >>
-  MAP_EVERY qexists [`fn`, `fuel`, `ctx`, `s0`] >>
-  simp[fn_insts_def] >>
-  `is_ptr_opcode inst.inst_opcode` by (
-    qspecl_then [`bp`, `fn`, `inst`, `out`, `bb`] mp_tac
-      bp_tracked_implies_ptr_opcode >> simp[]) >>
-  `EVERY (\v. v <> out) (inst_uses inst)` by (
-    qspecl_then [`inst`, `out`, `bb`] mp_tac
-      inst_output_not_self_use >> simp[]) >>
-  simp[] >>
-  `bp_vv_inv fn (bp_analyze (cfg_analyze fn) fn)` by
-    metis_tac[bp_analyze_vv_inv] >>
-  `MEM inst (fn_insts_blocks fn.fn_blocks)` by
-    metis_tac[mem_block_mem_fn_insts] >>
-  simp[] >>
-  rpt strip_tac >>
-  irule step_inst_preserves_alloca_ptrs >>
-  metis_tac[]
-QED
-
-Finalise bp_ptr_sound_step_non_invoke
-
-(* Standalone helper: bp_ptr_sound step for INVOKE at fixpoint.
-   INVOKE is not a pointer opcode, so it doesn't modify any tracked variable.
-   Extracted as helper (irule/by need manual instantiation). *)
-Triviality bp_ptr_sound_step_invoke[local]:
-  !bp inst fuel ctx s0 s1 fn bb.
-    bp_ptr_sound bp s0 /\
-    step_inst fuel ctx inst s0 = OK s1 /\
-    inst_wf inst /\
-    inst.inst_opcode = INVOKE /\
-    bp = bp_analyze (cfg_analyze fn) fn /\
-    ssa_form fn /\ fn_inst_wf fn /\
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-    alloca_inv s0 ==>
-    bp_ptr_sound bp s1
-Proof
-  rpt strip_tac >>
-  simp[bp_ptr_sound_def] >> rpt strip_tac >>
-  (* v is tracked (bp_get_ptrs bp v ≠ []), show ptr_matches_var preserved *)
-  (* Step 1: all INVOKE outputs are not in FDOM bp *)
-  `!w. MEM w inst.inst_outputs ==> w NOTIN FDOM bp` by (
-    rpt strip_tac >>
-    drule_then (qspecl_then [`inst`, `w`, `bb`] mp_tac)
-      bp_non_ptr_outputs_not_tracked >>
-    simp[is_ptr_opcode_def]) >>
-  (* Step 2: v is not modified by inst *)
-  `~MEM v inst.inst_outputs` by (
-    CCONTR_TAC >> gvs[] >>
-    first_x_assum drule >> strip_tac >>
-    metis_tac[bp_get_ptrs_not_in_fdom]) >>
-  (* Step 3: lookup_var v preserved *)
-  `lookup_var v s1 = lookup_var v s0` by
-    metis_tac[step_inst_preserves_lookup] >>
-  (* Step 4: Get matching pointer from bp_ptr_sound bp s0 *)
-  `?p. MEM p (bp_get_ptrs bp v) /\ ptr_matches_var p v s0` by
-    metis_tac[bp_ptr_sound_def] >>
-  qexists `p` >> gvs[] >>
-  (* Step 5: ptr_matches_var preserved *)
-  irule ptr_matches_var_preserved >>
-  qexistsl [`s0`, `v`] >> simp[] >>
-  (* Allocas preserved: INVOKE ≠ ALLOCA *)
-  rpt strip_tac >>
-  irule (SIMP_RULE std_ss [] step_inst_alloca_flookup) >>
-  qexistsl [`ctx`, `fuel`, `inst`] >> simp[]
-QED
-
 (* --- Obligation: per-inst state_inv preservation --- *)
-(* Placed here (after bp_ptr_sound_step_{invoke,non_invoke}) so helpers are in scope *)
 Resume stage1_correct[state_inv_pres]:
   rpt gen_tac >> strip_tac >> gvs[] >>
   qpat_x_assum `!fuel' run_ctx bb' inst' s0 s1.
@@ -2498,254 +1601,6 @@ Resume stage1_correct[state_inv_pres]:
   strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   irule alloca_inv_step_inst >>
   qexistsl [`ctx'`, `fuel`, `inst`, `s'`] >> simp[]
-QED
-
-
-(* bp_ptr_sound preserved through exec_block at the fixpoint.
-   Internal lemma: n counts remaining instructions. *)
-Triviality bp_ptr_sound_exec_block_gen[local]:
-  !n fuel ctx bb s0 s' bp fn.
-    n + s0.vs_inst_idx = LENGTH bb.bb_instructions /\
-    bp_ptr_sound bp s0 /\
-    exec_block fuel ctx bb s0 = OK s' /\
-    s0.vs_inst_idx <= LENGTH bb.bb_instructions /\
-    MEM bb fn.fn_blocks /\
-    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
-    wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
-    bp = bp_analyze (cfg_analyze fn) fn /\
-    alloca_inv s0 /\
-    (!i inst v. i >= s0.vs_inst_idx /\ i < LENGTH bb.bb_instructions /\
-               EL i bb.bb_instructions = inst /\ inst.inst_opcode = PHI /\
-               MEM v (MAP SND (phi_pairs inst.inst_operands)) /\
-               IS_SOME (lookup_var v s0) ==>
-               bp_get_ptrs bp v <> []) /\
-    ALL_DISTINCT (MAP (\i. i.inst_id)
-      (FILTER (\i. i.inst_opcode = ALLOCA) bb.bb_instructions)) /\
-    (!inst out. MEM inst bb.bb_instructions /\
-               inst_output inst = SOME out ==>
-               ~MEM out (inst_uses inst)) /\
-    (* PHI operands are not defined by earlier instructions in the executed suffix. *)
-    (!i j v. s0.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions /\ i < j /\
-             j < LENGTH bb.bb_instructions /\
-             (EL j bb.bb_instructions).inst_opcode = PHI /\
-             MEM v (MAP SND (phi_pairs
-               (EL j bb.bb_instructions).inst_operands)) ==>
-             ~MEM v (EL i bb.bb_instructions).inst_outputs) ==>
-    bp_ptr_sound bp s'
-Proof
-  Induct_on `n`
-  >- (
-    rpt strip_tac >>
-    `s0.vs_inst_idx = LENGTH bb.bb_instructions` by decide_tac >>
-    fs[Once exec_block_def, get_instruction_def])
-  >> rpt strip_tac >>
-  `s0.vs_inst_idx < LENGTH bb.bb_instructions` by decide_tac >>
-  qabbrev_tac `inst = EL s0.vs_inst_idx bb.bb_instructions` >>
-  `MEM inst bb.bb_instructions` by
-    (simp[Abbr `inst`, MEM_EL] >> qexists `s0.vs_inst_idx` >> simp[]) >>
-  `inst_wf inst` by
-    (qpat_assum `fn_inst_wf _` (mp_tac o REWRITE_RULE [fn_inst_wf_def]) >>
-     disch_then (qspecl_then [`bb`, `inst`] mp_tac) >> simp[]) >>
-  (* Unfold exec_block one step *)
-  qpat_x_assum `exec_block _ _ _ _ = OK _` mp_tac >>
-  ONCE_REWRITE_TAC[exec_block_def] >>
-  simp[get_instruction_def, Abbr `inst`] >>
-  qabbrev_tac `inst = EL s0.vs_inst_idx bb.bb_instructions` >>
-  (* Case split on step_inst result *)
-  Cases_on `step_inst fuel ctx inst s0`
-  >- suspend "step_ok"
-  (* Non-OK step_inst cases *)
-  >> simp[venomExecSemanticsTheory.exec_result_case_def]
-QED
-
-Resume bp_ptr_sound_exec_block_gen[step_ok]:
-  rename1 `step_inst _ _ inst s0 = OK s1` >>
-  simp[venomExecSemanticsTheory.exec_result_case_def] >>
-  strip_tac >>
-  (* Get fixpoint property for this instruction *)
-  suspend "fixpoint_stable"
-QED
-
-Resume bp_ptr_sound_exec_block_gen[fixpoint_stable]:
-  (* Establish FST (bp_handle_inst bp inst) = F at fixpoint *)
-  `FST (bp_handle_inst bp inst) = F` by (
-    qpat_assum `bp = _` (fn th => PURE_REWRITE_TAC[th]) >>
-    mp_tac (Q.SPECL [`fn`, `bb`, `inst`] bp_analyze_handle_inst_stable) >>
-    simp[]) >>
-  suspend "per_inst_sound"
-QED
-
-Resume bp_ptr_sound_exec_block_gen[per_inst_sound]:
-  (* Use qsuff_tac to create clean subgoals for bp_ptr_sound bp s1 *)
-  qsuff_tac `bp_ptr_sound bp s1`
-  >- suspend "apply_ih"
-  >> suspend "bp_ptr_sound_s1"
-QED
-
-Resume bp_ptr_sound_exec_block_gen[bp_ptr_sound_s1]:
-  (* Case split: INVOKE needs separate handling because inst_output=NONE
-     with 2+ outputs, so precondition 6 of fixpoint_sound doesn't hold. *)
-  Cases_on `inst.inst_opcode = INVOKE`
-  >- suspend "bp_ptr_sound_s1_invoke"
-  >>
-  (* Non-INVOKE: apply bp_handle_inst_fixpoint_sound *)
-  suspend "bp_ptr_sound_s1_non_invoke"
-QED
-
-Resume bp_ptr_sound_exec_block_gen[bp_ptr_sound_s1_non_invoke]:
-  match_mp_tac bp_ptr_sound_step_non_invoke >>
-  qexistsl [`inst`, `fuel`, `ctx`, `s0`, `fn`, `bb`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  rpt strip_tac >>
-  qpat_x_assum `∀i inst v. i ≥ _ ∧ _ ⇒ _`
-    (qspecl_then [`s0.vs_inst_idx`, `inst`, `v`] mp_tac) >>
-  gvs[markerTheory.Abbrev_def]
-QED
-
-(* INVOKE case: use standalone helper *)
-Resume bp_ptr_sound_exec_block_gen[bp_ptr_sound_s1_invoke]:
-  match_mp_tac bp_ptr_sound_step_invoke >>
-  qexistsl [`inst`, `fuel`, `ctx`, `s0`, `fn`, `bb`] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Resume bp_ptr_sound_exec_block_gen[apply_ih]:
-  (* Goal: bp_ptr_sound bp s1 ⇒ bp_ptr_sound bp s' *)
-  strip_tac >>
-  (* Case split: terminator or not *)
-  reverse (Cases_on `is_terminator inst.inst_opcode`)
-  >- suspend "apply_ih_cont"
-  >>
-  (* Terminator: s' = s1 (OK s1 = OK s') *)
-  gvs[] >>
-  Cases_on `s1.vs_halted` >>
-  gvs[venomExecSemanticsTheory.exec_result_distinct]
-QED
-
-Resume bp_ptr_sound_exec_block_gen[apply_ih_cont]:
-  gvs[] >>
-  (* Establish alloca_inv s1 *)
-  `alloca_inv s1` by metis_tac[alloca_inv_step_inst] >>
-  (* Apply IH *)
-  last_x_assum (qspecl_then
-    [`fuel`, `ctx`, `bb`,
-     `s1 with vs_inst_idx := SUC s0.vs_inst_idx`,
-     `s'`, `fn`] mp_tac) >>
-  simp[] >>
-  disch_then match_mp_tac >>
-  simp[alloca_inv_def] >>
-  suspend "apply_ih_phi_ptrs"
-QED
-
-Resume bp_ptr_sound_exec_block_gen[apply_ih_phi_ptrs]:
-  (* Two conjuncts: (1) PHI condition at SUC idx, (2) same-block pass-through *)
-  conj_tac
-  >- (
-    rpt strip_tac >>
-    reverse (Cases_on `MEM v inst.inst_outputs`)
-    >- (
-      (* v ∉ inst.inst_outputs: lookup_var v preserved *)
-      `lookup_var v s1 = lookup_var v s0` by
-        metis_tac[step_inst_preserves_lookup] >>
-      `IS_SOME (lookup_var v s0)` by gvs[] >>
-      (* Use outer PHI condition at >= s0.vs_inst_idx *)
-      first_x_assum (qspecl_then [`i`, `v`] mp_tac) >>
-      simp[])
-    >>
-    (* v ∈ inst.inst_outputs: contradicted by same-block condition.
-       inst = EL s0.vs_inst_idx, PHI at position i > s0.vs_inst_idx *)
-    `s0.vs_inst_idx < i` by decide_tac >>
-    `s0.vs_inst_idx < LENGTH bb.bb_instructions` by decide_tac >>
-    qpat_x_assum `!i j v. _ ==> ~MEM v _` (qspecl_then
-      [`s0.vs_inst_idx`, `i`, `v`] mp_tac) >>
-    simp[Abbr `inst`])
-  >>
-  (* Same-block condition: inherited for the smaller suffix. *)
-  rpt strip_tac >>
-  qpat_x_assum `!i j v. s0.vs_inst_idx <= i /\ _ ==> _`
-    (qspecl_then [`i`, `j`, `v`] mp_tac) >>
-  simp[]
-QED
-
-Finalise bp_ptr_sound_exec_block_gen
-
-(* Wrapper with vs_inst_idx = 0 *)
-Triviality bp_ptr_sound_exec_block[local]:
-  !bp fn bb fuel ctx s s'.
-    bp_ptr_sound bp s /\
-    exec_block fuel ctx bb s = OK s' /\
-    MEM bb fn.fn_blocks /\
-    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
-    wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
-    s.vs_inst_idx = 0 /\
-    bp = bp_analyze (cfg_analyze fn) fn /\
-    alloca_inv s /\
-    (!inst v. MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
-              MEM v (MAP SND (phi_pairs inst.inst_operands)) /\
-              IS_SOME (lookup_var v s) ==>
-              bp_get_ptrs bp v <> []) /\
-    ALL_DISTINCT (MAP (\i. i.inst_id)
-      (FILTER (\i. i.inst_opcode = ALLOCA) bb.bb_instructions)) /\
-    (!inst out. MEM inst bb.bb_instructions /\
-               inst_output inst = SOME out ==>
-               ~MEM out (inst_uses inst)) /\
-    (!i j v. i < LENGTH bb.bb_instructions /\ i < j /\
-             j < LENGTH bb.bb_instructions /\
-             (EL j bb.bb_instructions).inst_opcode = PHI /\
-             MEM v (MAP SND (phi_pairs
-               (EL j bb.bb_instructions).inst_operands)) ==>
-             ~MEM v (EL i bb.bb_instructions).inst_outputs) ==>
-    bp_ptr_sound bp s'
-Proof
-  rpt strip_tac >>
-  mp_tac (Q.SPECL [`LENGTH bb.bb_instructions`, `fuel`, `ctx`, `bb`,
-    `s`, `s'`, `bp`, `fn`] bp_ptr_sound_exec_block_gen) >>
-  disch_then irule >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
-  >- (rpt strip_tac >> gvs[] >>
-      qpat_x_assum `!inst v. MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\ _ ==> bp_get_ptrs _ v <> []`
-        (qspecl_then [`EL i bb.bb_instructions`, `v`] mp_tac) >>
-      simp[MEM_EL] >> metis_tac[]) >>
-  rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!i j v. _ ==> ~MEM v (EL i bb.bb_instructions).inst_outputs`
-    (qspecl_then [`i`, `j`, `v`] mp_tac) >>
-  simp[]
-QED
-
-Triviality bp_ptr_sound_exec_block_from_idx[local]:
-  !bp fn bb fuel ctx s s'.
-    bp_ptr_sound bp s /\
-    exec_block fuel ctx bb s = OK s' /\
-    MEM bb fn.fn_blocks /\
-    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
-    wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
-    s.vs_inst_idx <= LENGTH bb.bb_instructions /\
-    bp = bp_analyze (cfg_analyze fn) fn /\
-    alloca_inv s /\
-    (!i inst v. i >= s.vs_inst_idx /\ i < LENGTH bb.bb_instructions /\
-               EL i bb.bb_instructions = inst /\ inst.inst_opcode = PHI /\
-               MEM v (MAP SND (phi_pairs inst.inst_operands)) /\
-               IS_SOME (lookup_var v s) ==>
-               bp_get_ptrs bp v <> []) /\
-    ALL_DISTINCT (MAP (\i. i.inst_id)
-      (FILTER (\i. i.inst_opcode = ALLOCA) bb.bb_instructions)) /\
-    (!inst out. MEM inst bb.bb_instructions /\
-               inst_output inst = SOME out ==>
-               ~MEM out (inst_uses inst)) /\
-    (!i j v. s.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions /\ i < j /\
-             j < LENGTH bb.bb_instructions /\
-             (EL j bb.bb_instructions).inst_opcode = PHI /\
-             MEM v (MAP SND (phi_pairs
-               (EL j bb.bb_instructions).inst_operands)) ==>
-             ~MEM v (EL i bb.bb_instructions).inst_outputs) ==>
-    bp_ptr_sound bp s'
-Proof
-  rpt strip_tac >>
-  mp_tac (Q.SPECL [`LENGTH bb.bb_instructions - s.vs_inst_idx`,
-    `fuel`, `ctx`, `bb`, `s`, `s'`, `bp`, `fn`]
-    bp_ptr_sound_exec_block_gen) >>
-  disch_then irule >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
 QED
 
 (* --- Cross-block helpers --- *)
@@ -3085,32 +1940,6 @@ Proof
           memloc_within_alloca_def, ml_undefined_def, LET_THM] >>
       BasicProvers.every_case_tac >> gvs[bp_ptr_from_op_def])
 QED
-
-(* cf_alloca_ok_opt of joined value: entries in the joined lattice are
-   from the first non-NONE predecessor (foldl_join_opt_sub). For any entry
-   (ml, cf), the same KEY ml exists in bb.bb_label (from cf_agree in
-   copy_fact_join_raw). Part 1 (memloc_within_alloca ml) transfers directly
-   via cf_alloca_ok_join_raw_mono (first-arg mono — values from f1).
-   Part 2 (source memloc within alloca for MCOPY) also transfers via first-arg
-   mono since values come from f1, not f2.
-   Key insight: join_raw takes VALUES from f1 (first arg), so first-arg mono
-   suffices. Second-arg reasoning (via normalize chain) is NOT needed because
-   we propagate cf_alloca_ok forward through the FOLDL from the first non-NONE
-   predecessor, not from an arbitrary nbr. *)
-Triviality cf_alloca_ok_opt_joined[local]:
-  !dfg bp s preds result nbr ctx lbl.
-    bp_assigns_stable bp dfg /\
-    MEM nbr preds /\
-    cf_alloca_ok_opt bp (df_boundary NONE result nbr) s /\
-    df_boundary NONE result nbr <> NONE ==>
-    !cfl. FOLDL (copy_fact_join dfg) NONE
-            (MAP (\p. copy_fact_edge_transfer ctx p lbl
-                        (df_boundary NONE result p)) preds) = SOME cfl ==>
-    cf_alloca_ok bp cfl s
-Proof
-  cheat (* shared gap: needs memloc_within_alloca *)
-QED
-
 
 Triviality mce_run_block_successor_in_cfg_dfs_pre[local]:
   !fn bb fuel ctx s v.
@@ -3863,7 +2692,8 @@ Triviality cf_process_boundary_bilateral[local]:
   !ctx fn lbl st (P : copy_fact_lattice -> bool).
     P NONE /\ P (SOME FEMPTY) /\
     (!a b. P a /\ P b ==> P (copy_fact_join ctx.ce_dfg a b)) /\
-    (!inst a. P a ==> P (copy_fact_transfer ctx inst a)) /\
+    (!bb inst a. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       P a ==> P (copy_fact_transfer ctx inst a)) /\
     (!(src:string) (dst:string) a. P a ==> P (copy_fact_edge_transfer ctx src dst a)) /\
     (!k v. FLOOKUP st.ds_boundary k = SOME v ==> P v)
     ==>
@@ -3873,7 +2703,6 @@ Triviality cf_process_boundary_bilateral[local]:
                       (cfg_analyze fn) fn.fn_blocks lbl st).ds_boundary
                    k = SOME v ==> P v)
 Proof
-  (* Main structure proven, needs cf_alloca_ok_opt_joined completion. *)
   rpt gen_tac >> strip_tac >>
   simp_tac std_ss [df_process_block_def, LET_THM] >>
   pairarg_tac >> asm_rewrite_tac[] >>
@@ -3898,8 +2727,14 @@ Proof
     Cases_on `fn_entry_label fn` >> simp[])
   >>
   `P final_val` by (
-    drule (cj 1 dfAnalyzeProofsTheory.df_fold_block_P) >>
-    disch_then irule >> metis_tac[])
+    drule dfAnalyzeProofsTheory.df_fold_block_forward_invariant >>
+    disch_then (qspec_then `P` mp_tac) >>
+    impl_tac
+    >- (simp[] >> rpt strip_tac >>
+        qpat_x_assum `!bb inst a. _` irule >>
+        Cases_on `lookup_block k fn.fn_blocks` >> gvs[] >>
+        metis_tac[lookup_block_def, venomExecPropsTheory.FIND_MEM]) >>
+    simp[])
   >>
   metis_tac[]
 QED
@@ -3966,7 +2801,8 @@ Triviality cf_boundary_invariant_general[local]:
                      ce_dfg := dfg_build_function fn |>) /\
     Q NONE /\ Q (SOME FEMPTY) /\
     (!a b. Q a /\ Q b ==> Q (copy_fact_join ctx.ce_dfg a b)) /\
-    (!inst a. Q a ==> Q (copy_fact_transfer ctx inst a)) /\
+    (!bb inst a. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       Q a ==> Q (copy_fact_transfer ctx inst a)) /\
     (!(src:string) (dst:string) a. Q a ==>
        Q (copy_fact_edge_transfer ctx src dst a))
     ==>
@@ -4053,6 +2889,58 @@ Proof
   simp[cf_keys_ok_opt_def, cf_keys_ok_def, copy_fact_edge_transfer_def]
 QED
 
+Theorem cf_alloca_ok_opt_join[local]:
+  !dfg bp a b s.
+    cf_alloca_ok_opt bp a s /\ cf_alloca_ok_opt bp b s ==>
+    cf_alloca_ok_opt bp (copy_fact_join dfg a b) s
+Proof
+  Cases_on `a` >> Cases_on `b` >>
+  simp[copy_fact_join_def, cf_alloca_ok_opt_def, cf_alloca_ok_join_raw_mono]
+QED
+
+Theorem cf_keys_alloca_ok_boundary[local]:
+  !ctx fn bp s.
+    fn_inst_wf fn /\ wf_function fn /\
+    bp_assigns_stable bp (dfg_build_function fn) /\
+    bp_ptrs_bounded bp fn s /\
+    Abbrev (ctx = <| ce_aliases := memory_alias_analyze bp fn;
+                     ce_bp := bp;
+                     ce_dfg := dfg_build_function fn |>) ==>
+    !k v. FLOOKUP (df_analyze Forward NONE (copy_fact_join ctx.ce_dfg)
+             copy_fact_transfer copy_fact_edge_transfer ctx
+             (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn))
+             fn).ds_boundary k = SOME v ==>
+      cf_keys_ok_opt bp v /\ cf_alloca_ok_opt bp v s
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!a b. (cf_keys_ok_opt bp a /\ cf_alloca_ok_opt bp a s) /\
+           (cf_keys_ok_opt bp b /\ cf_alloca_ok_opt bp b s) ==>
+      cf_keys_ok_opt bp (copy_fact_join ctx.ce_dfg a b) /\
+      cf_alloca_ok_opt bp (copy_fact_join ctx.ce_dfg a b) s` by
+    metis_tac[cf_keys_ok_opt_join, cf_alloca_ok_opt_join] >>
+  `!bb inst a. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+      (cf_keys_ok_opt bp a /\ cf_alloca_ok_opt bp a s) ==>
+      cf_keys_ok_opt bp (copy_fact_transfer ctx inst a) /\
+      cf_alloca_ok_opt bp (copy_fact_transfer ctx inst a) s` by
+    (rpt strip_tac
+     >- (irule cf_keys_ok_opt_transfer >> simp[Abbr `ctx`]) >>
+     qspec_then `ctx` mp_tac cf_alloca_ok_opt_transfer >>
+     simp[Abbr `ctx`] >> disch_then irule >>
+     metis_tac[]) >>
+  qspecl_then [`ctx`, `fn`, `bp`,
+    `\a. cf_keys_ok_opt bp a /\ cf_alloca_ok_opt bp a s`]
+    mp_tac cf_boundary_invariant_general >>
+  impl_tac
+  >- (simp[copy_fact_edge_transfer_def] >>
+      conj_tac
+      >- simp[cf_keys_ok_opt_def, cf_keys_ok_def,
+              cf_alloca_ok_opt_def, cf_alloca_ok_def] >>
+      conj_tac
+      >- simp[cf_keys_ok_opt_def, cf_keys_ok_def,
+              cf_alloca_ok_opt_def, cf_alloca_ok_def] >>
+      metis_tac[]) >>
+  simp[]
+QED
 
 (* cf_keys_ok_opt of joined value — bilateral invariant + df_joined_val_P *)
 Resume stage1_correct[cf_keys_ok_joined]:
@@ -4071,12 +2959,40 @@ Resume stage1_correct[cf_keys_ok_joined]:
   simp[cf_keys_ok_opt_def, cf_keys_ok_def]
 QED
 
-(* cf_alloca_ok_opt of joined value *)
+(* cf_alloca_ok_opt of joined value.
+   Intuition (the prover may ignore it): prove a boundary-wide invariant
+   cf_keys_ok_opt bp v /\ cf_alloca_ok_opt bp v s for every ds_boundary entry,
+   shaped like cf_keys_ok_boundary, then close this with df_joined_val_P as
+   cf_keys_ok_joined does.  The conjunction is needed because a forwarded
+   MCOPY source is resized to the current copy's size, which cf_keys_ok
+   relates.  cf_boundary_invariant_general requires preservation by
+   copy_fact_transfer for EVERY instruction, which is false for
+   cf_alloca_ok_opt (an instruction outside fn can insert an out-of-bounds
+   key); weakening that premise to instructions of fn's blocks makes it hold,
+   from bp_ptrs_bounded bp fn s (the transfer is static: the state s is
+   fixed).  bp_ptrs_bounded bp fn v is in scope here (cross_block proves it
+   for the successor state).  Join values come from the first argument
+   (copy_fact_join_raw = DRESTRICT f1 ...), see cf_alloca_ok_join_raw_mono. *)
 Resume stage1_correct[cf_alloca_ok_joined]:
-  cheat (* shared gap: needs memloc_within_alloca for joined value *)
+  simp[Abbr `joined`] >>
+  qspec_then `\a. cf_alloca_ok_opt bp a v`
+    (fn th => match_mp_tac (BETA_RULE th))
+    (GEN_ALL dfAnalyzeProofsTheory.df_joined_val_P) >>
+  `!a b. cf_alloca_ok_opt bp a v /\ cf_alloca_ok_opt bp b v ==>
+     cf_alloca_ok_opt bp (copy_fact_join dfg a b) v` by
+    metis_tac[cf_alloca_ok_opt_join] >>
+  `!k a. FLOOKUP result.ds_boundary k = SOME a ==>
+     cf_alloca_ok_opt bp a v` by
+    (qspecl_then [`ce_ctx`, `fn`, `bp`, `v`] mp_tac cf_keys_alloca_ok_boundary >>
+     simp[Abbr `ce_ctx`, Abbr `result`] >> metis_tac[]) >>
+  simp[copy_fact_edge_transfer_def] >>
+  rpt conj_tac
+  >- simp[cf_alloca_ok_opt_def]
+  >- simp[cf_alloca_ok_opt_def, cf_alloca_ok_def]
+  >> metis_tac[]
 QED
 
-(* --- SSA structural helpers for bp_ptr_sound_exec_block --- *)
+(* --- SSA structural helpers --- *)
 
 (* ALL_DISTINCT of inst_ids within a block: from fn_inst_ids_distinct *)
 Triviality block_inst_ids_distinct[local]:
@@ -4656,7 +3572,6 @@ irule bp_analyze_eval_phis_sound >>
   simp[]
 QED
 
-(* bp_ptr_sound preserved through exec_block — use bp_ptr_sound_exec_block *)
 Resume stage1_correct[eval_phis_sound]:
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `ce_ctx = <| ce_aliases := aliases; ce_bp := bp; ce_dfg := dfg |>` >>
@@ -4723,6 +3638,108 @@ Finalise stage1_correct
 
 (* ===== Stage 2: load_store_elim_block correctness ===== *)
 
+Theorem bp_segment_absolute[local]:
+  !bp ops k.
+    (bp_segment_from_ops bp ops).ml_alloca = NONE /\
+    (bp_segment_from_ops bp ops).ml_offset = SOME k ==>
+    ops.iao_ofst = Lit (n2w k) /\ k < dimword (:256)
+Proof
+  rpt gen_tac >>
+  Cases_on `ops.iao_ofst` >>
+  simp[bp_segment_from_ops_def, ml_undefined_def, LET_THM]
+  >- (rpt strip_tac >> gvs[] >> simp[wordsTheory.w2n_lt]) >>
+  rename1 `ops.iao_ofst = Var v` >>
+  Cases_on `bp_ptr_from_op bp (Var v)` >> gvs[] >>
+  rename1 `bp_ptr_from_op bp (Var v) = SOME p` >>
+  Cases_on `p` >> gvs[]
+QED
+
+Theorem bp_unit_segment_absolute[local]:
+  !bp op k s.
+    (bp_segment_from_ops bp
+      <|iao_ofst := op; iao_size := SOME (Lit 1w);
+        iao_max_size := SOME (Lit 1w)|>).ml_alloca = NONE /\
+    (bp_segment_from_ops bp
+      <|iao_ofst := op; iao_size := SOME (Lit 1w);
+        iao_max_size := SOME (Lit 1w)|>).ml_offset = SOME k ==>
+    op = Lit (n2w k) /\ k < dimword (:256) /\
+    eval_operand op s = SOME (n2w k) /\
+    bp_segment_from_ops bp
+      <|iao_ofst := op; iao_size := SOME (Lit 1w);
+        iao_max_size := SOME (Lit 1w)|> =
+      <|ml_offset := SOME k; ml_size := SOME 1;
+        ml_alloca := NONE; ml_volatile := F|>
+Proof
+  rpt strip_tac >> drule_all bp_segment_absolute >>
+  simp[] >> strip_tac >> gvs[] >>
+  simp[eval_operand_def, bp_segment_from_ops_def]
+QED
+
+Theorem copy_tracked_locations[local]:
+  !bp inst sp.
+    (is_copy_opcode inst.inst_opcode \/ inst.inst_opcode = NOP) /\
+    (sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==>
+    bp_get_read_location bp inst sp = ml_empty /\
+    bp_get_write_location bp inst sp = ml_empty
+Proof
+  rpt gen_tac >> Cases_on `inst.inst_opcode` >>
+  simp[is_copy_opcode_def] >> strip_tac >>
+  gvs[bp_get_read_location_def, bp_get_write_location_def]
+QED
+
+Theorem ce_inst_tracked_alloca[local]:
+  !bp dfg v inst sp.
+    (sp = AddrSp_Storage \/ sp = AddrSp_Transient) /\
+    (bp_get_read_location bp inst sp).ml_alloca = NONE /\
+    (bp_get_write_location bp inst sp).ml_alloca = NONE ==>
+    (bp_get_read_location bp (copy_elision_inst bp dfg v inst) sp).ml_alloca = NONE /\
+    (bp_get_write_location bp (copy_elision_inst bp dfg v inst) sp).ml_alloca = NONE
+Proof
+  rpt gen_tac >> strip_tac >> (gvs[] >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- gvs[copy_elision_inst_def] >>
+  Cases_on `inst.inst_opcode = MCOPY`
+  >- (fs[copy_elision_inst_def, LET_THM] >>
+      namedCases_on `inst.inst_operands` ["", "dst ops"] >> fs[] >>
+      namedCases_on `ops` ["", "src rest"] >> fs[] >>
+      namedCases_on `rest` ["", "sz tail"] >> fs[] >>
+      Cases_on `tail` >> fs[] >>
+      BasicProvers.TOP_CASE_TAC >> fs[] >>
+      rpt (IF_CASES_TAC >> fs[mk_nop_inst_def,
+        copy_tracked_locations, ml_empty_def]) >>
+      BasicProvers.TOP_CASE_TAC >> fs[] >>
+      rpt (IF_CASES_TAC >> fs[copy_tracked_locations, ml_empty_def]) >>
+      fs[copy_tracked_locations, ml_empty_def]) >>
+  gvs[copy_elision_inst_def])
+QED
+
+Theorem ce_function_tracked_alloca[local]:
+  !bp dfg result fn.
+    (!bb inst sp. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       (sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==>
+       (bp_get_read_location bp inst sp).ml_alloca = NONE /\
+       (bp_get_write_location bp inst sp).ml_alloca = NONE) ==>
+    !bb inst sp.
+      MEM bb (analysis_function_transform NONE result
+        (\v inst. [copy_elision_inst bp dfg v inst]) fn).fn_blocks /\
+      MEM inst bb.bb_instructions /\
+      (sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==>
+      (bp_get_read_location bp inst sp).ml_alloca = NONE /\
+      (bp_get_write_location bp inst sp).ml_alloca = NONE
+Proof
+  rpt gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
+  gvs[analysis_function_transform_def, function_map_transform_def, MEM_MAP,
+      analysis_block_transform_def,
+      passSimulationPropsTheory.flat_mapi_singleton] >>
+  rename1 `MEM bb0 fn.fn_blocks` >>
+  qpat_x_assum `MEM inst (MAPi _ bb0.bb_instructions)`
+    (strip_assume_tac o REWRITE_RULE
+      [MEM_EL, indexedListsTheory.LENGTH_MAPi]) >>
+  gvs[indexedListsTheory.EL_MAPi] >>
+  irule ce_inst_tracked_alloca >> simp[] >>
+  metis_tac[EL_MEM]
+QED
+
 (* FOLDL with load_store_step preserves accumulated list length *)
 Triviality lse_foldl_length[local]:
   !insts lf acc aliases bp uc.
@@ -4772,6 +3789,76 @@ QED
 
 (* Stage2 takes the specific fn1 produced by stage1 (analysis_function_transform)
    and applies load_store_elim_block. Preconditions use original fn. *)
+(* Intuition for stage 2 (load-store elision):
+   - Only SLOAD/TLOAD create load facts (is_load_fact_opcode MLOAD = F), and
+     the last premise makes every storage/transient location have
+     ml_alloca = NONE.  For those, resolve_memloc_offset is the static
+     offset, so lf_sound depends only on variables and storage/transient,
+     not on allocas or memory; bp_ptr_sound/alloca_inv/allocas_in_word/
+     bp_ptrs_bounded need not be carried through fn1's execution.
+   - fn1's instructions are fn's, NOPs, or rewritten copy opcodes; the
+     latter two have ml_empty storage/transient locations, so the premise
+     transfers from fn to fn1 for the spaces that matter.
+   - A fact is dropped by any SSTORE/TSTORE that may alias it (fixed
+     offsets, no alloca: ma_may_alias_sound_no_alloca), and by any other
+     instruction whose write_effects include the space (CALL, INVOKE,
+     CREATE, ...).  An elided `sstore k x` with x = sload k is the identity
+     (sstore_sload_id; likewise tstore_tload_id). *)
+(* The call context (in particular cc_static) is constant along a run. *)
+Triviality mce_step_inst_ok_call_ctx[local]:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  rpt strip_tac >>
+  reverse (Cases_on `is_terminator inst.inst_opcode`)
+  >- (drule_all step_preserves_call_ctx >> simp[]) >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  simp[Once step_inst_def] >>
+  Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
+  gs[step_inst_base_opcode_eqs] >>
+  simp[AllCaseEqs(), jump_to_def] >>
+  rpt strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[]
+QED
+
+Triviality mce_exec_block_ok_call_ctx[local]:
+  !fuel ctx bb s s'.
+    exec_block fuel ctx bb s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  simp[Once exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  Cases_on `step_inst fuel ctx x s` >> simp[] >>
+  rename1 `step_inst fuel ctx inst s = OK s_mid` >>
+  imp_res_tac mce_step_inst_ok_call_ctx >>
+  Cases_on `is_terminator inst.inst_opcode` >> fs[] >>
+  strip_tac
+  >- (fs[AllCaseEqs()] >> gvs[]) >>
+  first_x_assum (qspec_then
+    `LENGTH bb.bb_instructions - SUC s.vs_inst_idx` mp_tac) >>
+  (impl_tac >- (fs[get_instruction_def, AllCaseEqs()] >> simp[])) >>
+  disch_then (qspecl_then [`bb`,
+    `s_mid with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+  simp[] >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `s'`] mp_tac) >>
+  simp[]
+QED
+
+Triviality mce_run_block_ok_call_ctx[local]:
+  !fuel ctx bb s s'.
+    run_block fuel ctx bb s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  rpt strip_tac >> drule venomExecProofsTheory.run_block_OK_decompose >>
+  strip_tac >> imp_res_tac mce_exec_block_ok_call_ctx >>
+  drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+  disch_then (mp_tac o AP_TERM ``\st:venom_state. st.vs_call_ctx``) >> simp[]
+QED
+
 Triviality stage2_correct[local]:
   !fuel ctx fn s.
     let cfg = cfg_analyze fn in
@@ -4789,11 +3876,17 @@ Triviality stage2_correct[local]:
     fn_inst_wf fn /\
     ssa_form fn /\
     s.vs_inst_idx = 0 /\
+    ~s.vs_call_ctx.cc_static /\
     bp_ptr_sound bp s /\
     alloca_inv s /\
     allocas_in_word s /\
     bp_ptrs_bounded bp fn s /\
     bp_phis_closed bp fn /\
+    (!bb inst sp.
+       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       sp <> AddrSp_Memory ==>
+       (bp_get_read_location bp inst sp).ml_alloca = NONE /\
+       (bp_get_write_location bp inst sp).ml_alloca = NONE) /\
     LENGTH s.vs_memory < dimword (:256) ==>
     (?e. run_blocks fuel ctx fn1 s = Error e) \/
     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
@@ -4810,9 +3903,7 @@ Proof
     (\v inst.
        [copy_elision_inst bp (dfg_build_function fn) v inst]) fn` >>
   qabbrev_tac `uc = \v. count_var_uses v fn1` >>
-  qabbrev_tac `P = \s. bp_ptr_sound bp s /\ alloca_inv s /\
-    allocas_in_word s /\ bp_ptrs_bounded bp fn s /\
-    LENGTH s.vs_memory < dimword (:256)` >>
+  qabbrev_tac `P = \s:venom_state. ~s.vs_call_ctx.cc_static` >>
   mp_tac (Q.SPECL [`P`, `state_equiv {}`, `execution_equiv {}`,
     `load_store_elim_block aliases bp uc`, `fn1`]
     block_sim_function_with_pred) >>
@@ -4820,22 +3911,15 @@ Proof
   disch_then irule >>
   (* Solve easy conjuncts: P s, state_equiv_refl, vs_inst_idx *)
   simp[Abbr `P`, state_equiv_refl] >>
+  (* The frame stays non-static *)
+  conj_tac >- (rpt strip_tac >> imp_res_tac mce_run_block_ok_call_ctx >> gvs[]) >>
   (* Label preservation *)
-  conj_tac >- suspend "s2_pred_pres" >>
   conj_tac >- (
     gen_tac >> simp[load_store_elim_block_def, LET_THM] >>
     pairarg_tac >> simp[]) >>
   conj_tac >- suspend "s2_block_sim" >>
   conj_tac >- (rpt strip_tac >> imp_res_tac state_equiv_empty_eq >> gvs[]) >>
   metis_tac[state_equiv_implies_execution_equiv]
-QED
-
-(* Stage 2 predicate preservation: P preserved by exec_block.
-   Since state_equiv {} = equality, simplifies to: exec_block preserves
-   bp_ptr_sound, alloca_inv, allocas_in_word, bp_ptrs_bounded, LENGTH vs_memory. *)
-Resume stage2_correct[s2_pred_pres]:
-  rpt strip_tac >> imp_res_tac state_equiv_empty_eq >> gvs[] >>
-  cheat (* shared gap: needs bp_ptr_sound + allocas_in_word + bp_ptrs_bounded *)
 QED
 
 (* ===== Stage 2 helpers: store idempotency ===== *)
@@ -4862,38 +3946,6 @@ Proof
        vfmStateTheory.update_storage_def,
        combinTheory.APPLY_UPDATE_ID,
        venom_state_component_equality]
-QED
-
-(* mstore(offset, mload(offset, s), s) = s when memory is large enough *)
-Triviality mstore_mload_id[local]:
-  !offset s.
-    offset + 32 <= LENGTH s.vs_memory ==>
-    mstore offset (mload offset s) s = s
-Proof
-  rpt strip_tac >>
-  simp[mstore_def, mload_def, venom_state_component_equality] >>
-  (* No expansion needed *)
-  `~(offset + 32 - LENGTH s.vs_memory > 0)` by decide_tac >>
-  simp[] >>
-  (* DROP has enough elements *)
-  `LENGTH (DROP offset s.vs_memory) >= 32` by simp[LENGTH_DROP] >>
-  `TAKE 32 (DROP offset s.vs_memory ++ REPLICATE 32 0w) =
-   TAKE 32 (DROP offset s.vs_memory)` by
-    (irule TAKE_APPEND1 >> simp[]) >>
-  simp[] >>
-  (* Bytes roundtrip *)
-  `LENGTH (TAKE 32 (DROP offset s.vs_memory)) = 32` by
-    simp[LENGTH_TAKE] >>
-  simp[word_bytes_roundtrip_256] >>
-  (* Splice identity: TAKE n l ++ TAKE 32 (DROP n l) ++ DROP (n+32) l = l *)
-  `DROP offset s.vs_memory =
-   TAKE 32 (DROP offset s.vs_memory) ++ DROP 32 (DROP offset s.vs_memory)` by
-    simp[TAKE_DROP] >>
-  `TAKE offset s.vs_memory ++ DROP offset s.vs_memory = s.vs_memory` by
-    simp[TAKE_DROP] >>
-  `DROP 32 (DROP offset s.vs_memory) = DROP (offset + 32) s.vs_memory` by
-    simp[rich_listTheory.DROP_DROP_T, arithmeticTheory.ADD_COMM] >>
-  metis_tac[APPEND_ASSOC]
 QED
 
 (* exec_block with state-dependent pointwise step_inst refinement.
@@ -4996,6 +4048,204 @@ Definition lf_at_def[nocompute]:
     else lf_at aliases bp uc insts i
 End
 
+Theorem lse_lookup_origin[local]:
+  !aliases bp uc lf inst v f.
+    FLOOKUP (FST (load_store_step aliases bp uc (lf, inst))) v = SOME f ==>
+    FLOOKUP lf v = SOME f \/
+    (is_load_fact_opcode inst.inst_opcode /\
+     ml_is_fixed (bp_get_read_location bp inst
+       (load_opcode_addr_space inst.inst_opcode)) /\
+     f = <|lf_memloc := bp_get_read_location bp inst
+             (load_opcode_addr_space inst.inst_opcode);
+           lf_opcode := inst.inst_opcode|>)
+Proof
+  rpt gen_tac >>
+  Cases_on `is_load_fact_opcode inst.inst_opcode`
+  >- (fs[load_store_step_def, LET_THM] >>
+      namedCases_on `inst.inst_operands` ["", "addr ops"] >> simp[] >>
+      Cases_on `ops` >> simp[] >>
+      namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[] >>
+      Cases_on `outs` >> simp[] >>
+      IF_CASES_TAC >> simp[FLOOKUP_UPDATE] >>
+      Cases_on `out = v` >> simp[] >> metis_tac[]) >>
+  fs[load_store_step_def, LET_THM] >>
+  rpt IF_CASES_TAC >>
+  simp[invalidate_loads_def, LET_THM] >>
+  rpt IF_CASES_TAC >>
+  simp[FLOOKUP_DRESTRICT] >> metis_tac[]
+QED
+
+Theorem tracked_read_metadata[local]:
+  !bp inst.
+    is_load_fact_opcode inst.inst_opcode /\
+    ml_is_fixed (bp_get_read_location bp inst
+      (load_opcode_addr_space inst.inst_opcode)) /\
+    (bp_get_read_location bp inst
+      (load_opcode_addr_space inst.inst_opcode)).ml_alloca = NONE ==>
+    (bp_get_read_location bp inst
+      (load_opcode_addr_space inst.inst_opcode)).ml_size = SOME 1 /\
+    ?k. (bp_get_read_location bp inst
+      (load_opcode_addr_space inst.inst_opcode)).ml_offset = SOME k /\
+        k < dimword (:256)
+Proof
+  rpt gen_tac >> Cases_on `inst.inst_opcode` >>
+  simp[is_load_fact_opcode_def, load_opcode_addr_space_def,
+       bp_get_read_location_def] >>
+  namedCases_on `inst.inst_operands` ["", "addr ops"] >>
+  simp[ml_is_fixed_def, ml_undefined_def] >>
+  Cases_on `ops` >> simp[ml_is_fixed_def, ml_undefined_def] >>
+  rpt strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >>
+  drule_all bp_segment_absolute >> simp[] >> strip_tac >> gvs[] >>
+  gvs[bp_segment_from_ops_def]
+QED
+
+Theorem lf_at_metadata[local]:
+  !i aliases bp uc insts.
+    (!inst sp. MEM inst insts /\
+       (sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==>
+       (bp_get_read_location bp inst sp).ml_alloca = NONE) ==>
+    !v f. FLOOKUP (lf_at aliases bp uc insts i) v = SOME f ==>
+      (f.lf_opcode = SLOAD \/ f.lf_opcode = TLOAD) /\
+      f.lf_memloc.ml_alloca = NONE /\ f.lf_memloc.ml_size = SOME 1 /\
+      ?k. f.lf_memloc.ml_offset = SOME k /\ k < dimword (:256)
+Proof
+  Induct_on `i` >- simp[lf_at_def] >>
+  rpt gen_tac >> disch_tac >> rpt gen_tac >>
+  simp[lf_at_def] >> IF_CASES_TAC
+  >- (strip_tac >> drule lse_lookup_origin >> strip_tac
+      >- metis_tac[] >>
+      gvs[] >>
+      `EL i insts IN set insts` by simp[EL_MEM] >>
+      `is_load_fact_opcode (EL i insts).inst_opcode` by simp[] >>
+      `((EL i insts).inst_opcode = SLOAD \/
+        (EL i insts).inst_opcode = TLOAD)` by
+        (Cases_on `(EL i insts).inst_opcode` >>
+         gvs[is_load_fact_opcode_def]) >>
+      ` (bp_get_read_location bp (EL i insts)
+           (load_opcode_addr_space (EL i insts).inst_opcode)).ml_alloca = NONE`
+        by (fs[load_opcode_addr_space_def] >> metis_tac[]) >>
+      drule_all tracked_read_metadata >>
+      gvs[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem lf_at_opcode_inv[local]:
+  !i aliases bp uc insts v lfact.
+    FLOOKUP (lf_at aliases bp uc insts i) v = SOME lfact ==>
+    is_load_fact_opcode lfact.lf_opcode
+Proof
+  Induct_on `i` >> simp[lf_at_def, FLOOKUP_EMPTY] >>
+  rpt gen_tac >> IF_CASES_TAC >> simp[]
+  >- (strip_tac >> drule lse_lookup_origin >> strip_tac >>
+      gvs[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+(* Static SSA infrastructure, before the execution invariant consumers. *)
+Triviality copy_elision_inst_outputs[local]:
+  !bp dfg v inst.
+    (copy_elision_inst bp dfg v inst).inst_outputs = inst.inst_outputs \/
+    (copy_elision_inst bp dfg v inst).inst_outputs = []
+Proof
+  rpt gen_tac >>
+  simp[copy_elision_inst_def, LET_THM] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  BasicProvers.every_case_tac >> simp[mk_nop_inst_def]
+QED
+
+Triviality load_store_step_fdom_mono[local]:
+  !aliases bp uc lf inst.
+    FDOM (FST (load_store_step aliases bp uc (lf, inst))) SUBSET
+    FDOM lf UNION set inst.inst_outputs
+Proof
+  rpt gen_tac >>
+  simp[load_store_step_def, LET_THM] >>
+  rpt IF_CASES_TAC >> simp[]
+  >- (BasicProvers.every_case_tac >> simp[] >>
+      rpt IF_CASES_TAC >> simp[] >>
+      simp[FDOM_FUPDATE, SUBSET_DEF] >> metis_tac[])
+  >- (BasicProvers.every_case_tac >> simp[] >>
+      simp[invalidate_loads_def] >> rpt IF_CASES_TAC >>
+      simp[FDOM_DRESTRICT, SUBSET_DEF] >> metis_tac[])
+  >- (simp[invalidate_loads_def] >> rpt IF_CASES_TAC >>
+      simp[FDOM_DRESTRICT, SUBSET_DEF] >> metis_tac[])
+  >> simp[FDOM_DRESTRICT, SUBSET_DEF]
+QED
+
+Triviality lf_at_fdom_earlier_outputs[local]:
+  !i aliases bp uc insts v.
+    v IN FDOM (lf_at aliases bp uc insts i) ==>
+    ?j. j < i /\ j < LENGTH insts /\ MEM v (EL j insts).inst_outputs
+Proof
+  Induct >- simp[lf_at_def] >> rpt strip_tac >> gvs[lf_at_def] >>
+  Cases_on `i < LENGTH insts` >> gvs[]
+  >- (qspecl_then [`aliases`, `bp`, `uc`, `lf_at aliases bp uc insts i`,
+                    `EL i insts`] mp_tac load_store_step_fdom_mono >>
+      simp[SUBSET_DEF] >> strip_tac >> first_x_assum drule >> strip_tac
+      >- (first_x_assum drule >> strip_tac >> qexists `j` >> simp[])
+      >> qexists `i` >> simp[]) >>
+  first_x_assum drule >> strip_tac >> qexists `j` >> simp[]
+QED
+
+Triviality all_distinct_flat_map_el_disjoint[local]:
+  !f (l:'a list) j i v.
+    ALL_DISTINCT (FLAT (MAP f l)) /\
+    j < LENGTH l /\ i < LENGTH l /\ j <> i /\
+    MEM v (f (EL j l)) ==> ~MEM v (f (EL i l))
+Proof
+  Induct_on `l` >> simp[] >> rpt strip_tac >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  Cases_on `j` >> Cases_on `i` >> gvs[] >>
+  gvs[MEM_FLAT, MEM_MAP] >> metis_tac[EL_MEM]
+QED
+
+Triviality lf_at_non_clobber[local]:
+  !aliases bp uc fn fn1 bb.
+    ssa_form fn /\
+    fn1 = analysis_function_transform NONE
+      (copy_fact_analyze
+         <|ce_aliases := aliases; ce_bp := bp;
+           ce_dfg := dfg_build_function fn|> fn)
+      (\v inst. [copy_elision_inst bp (dfg_build_function fn) v inst]) fn /\
+    MEM bb fn1.fn_blocks ==>
+    !i. i < LENGTH bb.bb_instructions /\
+        ~is_terminator (EL i bb.bb_instructions).inst_opcode ==>
+        !v. v IN FDOM (lf_at aliases bp uc bb.bb_instructions i) ==>
+            ~MEM v (EL i bb.bb_instructions).inst_outputs
+Proof
+  rpt strip_tac >>
+  gvs[analysis_function_transform_def, function_map_transform_def,
+      analysis_block_transform_def, MEM_MAP] >>
+  rename1 `MEM bb0 fn.fn_blocks` >>
+  CONV_TAC (DEPTH_CONV (HO_REWR_CONV
+    passSimulationPropsTheory.flat_mapi_singleton)) >>
+  RULE_ASSUM_TAC (CONV_RULE (TRY_CONV (DEPTH_CONV (HO_REWR_CONV
+    passSimulationPropsTheory.flat_mapi_singleton)))) >>
+  gvs[indexedListsTheory.LENGTH_MAPi] >>
+  drule_all lf_at_fdom_earlier_outputs >> strip_tac >>
+  rename1 `j < i` >>
+  `MEM v (EL j bb0.bb_instructions).inst_outputs` by (
+    qspecl_then [`bp`, `dfg_build_function fn`,
+      `df_at NONE (copy_fact_analyze
+         <|ce_aliases := aliases; ce_bp := bp;
+           ce_dfg := dfg_build_function fn|> fn) bb0.bb_label j`,
+      `EL j bb0.bb_instructions`] strip_assume_tac copy_elision_inst_outputs >>
+    gvs[indexedListsTheory.EL_MAPi]) >>
+  `MEM v (EL i bb0.bb_instructions).inst_outputs` by (
+    qspecl_then [`bp`, `dfg_build_function fn`,
+      `df_at NONE (copy_fact_analyze
+         <|ce_aliases := aliases; ce_bp := bp;
+           ce_dfg := dfg_build_function fn|> fn) bb0.bb_label i`,
+      `EL i bb0.bb_instructions`] strip_assume_tac copy_elision_inst_outputs >>
+    gvs[indexedListsTheory.EL_MAPi]) >>
+  `ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb0.bb_instructions))` by (
+    irule ssa_block_outputs_all_distinct >>
+    gvs[ssa_form_def, fn_insts_def] >> metis_tac[]) >>
+  qspecl_then [`\inst. inst.inst_outputs`, `bb0.bb_instructions`,
+               `j`, `i`, `v`] mp_tac all_distinct_flat_map_el_disjoint >>
+  gvs[indexedListsTheory.LENGTH_MAPi]
+QED
+
 (* inst_at: the transformed instruction at index i *)
 Definition inst_at_def[nocompute]:
   inst_at aliases bp uc insts i =
@@ -5060,58 +4310,6 @@ Proof
   BasicProvers.every_case_tac >> gvs[]
 QED
 
-(* Bridge: resolve_memloc_offset of bp_segment_from_ops gives same address
-   as eval_operand of the offset operand, via bp_ptr_sound.
-   Formulated with explicit record so callers don't need accessor reduction. *)
-Triviality write_loc_eval_operand_raw[local]:
-  !bp addr_op sz msz s addr_resolved v1.
-    bp_ptr_sound bp s /\
-    resolve_memloc_offset
-      (bp_segment_from_ops bp
-        <|iao_ofst := addr_op; iao_size := sz; iao_max_size := msz|>) s =
-      SOME addr_resolved /\
-    eval_operand addr_op s = SOME v1 ==>
-    v1 = n2w addr_resolved
-Proof
-  rpt strip_tac >>
-  Cases_on `addr_op`
-  >- ((* Lit case *)
-      gvs[bp_segment_from_ops_def, LET_THM,
-          resolve_memloc_offset_def, eval_operand_def])
-  >- ((* Var case: use bp_ptr_from_op_sound *)
-      rename1 `eval_operand (Var vn) s = SOME v1` >>
-      gvs[bp_segment_from_ops_def, LET_THM, eval_operand_def] >>
-      Cases_on `bp_ptr_from_op bp (Var vn)` >>
-      gvs[resolve_memloc_offset_def] >>
-      Cases_on `x` >> gvs[] >>
-      Cases_on `a` >> gvs[] >>
-      Cases_on `o'` >> gvs[resolve_memloc_offset_def] >>
-      BasicProvers.every_case_tac >> gvs[] >>
-      drule bp_ptr_from_op_sound_proof >>
-      disch_then drule >> simp[eval_operand_def] >>
-      strip_tac >> gvs[])
-  (* Label case *)
-  >> gvs[bp_segment_from_ops_def, LET_THM,
-         resolve_memloc_offset_def, ml_undefined_def]
-QED
-
-(* Same as write_loc_eval_operand_raw but with opaque ops record *)
-Triviality write_loc_eval_operand[local]:
-  !bp ops s addr_resolved v1.
-    bp_ptr_sound bp s /\
-    resolve_memloc_offset (bp_segment_from_ops bp ops) s =
-      SOME addr_resolved /\
-    eval_operand ops.iao_ofst s = SOME v1 ==>
-    v1 = n2w addr_resolved
-Proof
-  rpt gen_tac >> strip_tac >>
-  `?a b c. ops = <|iao_ofst := a; iao_size := b; iao_max_size := c|>` by
-    (qexistsl [`ops.iao_ofst`, `ops.iao_size`, `ops.iao_max_size`] >>
-     simp[memLocDefsTheory.inst_access_ops_component_equality]) >>
-  gvs[] >> metis_tac[write_loc_eval_operand_raw]
-QED
-
-
 Triviality resolve_memloc_offset_bp_segment_lt_dimword[local]:
   !bp ops s addr_res.
     resolve_memloc_offset (bp_segment_from_ops bp ops) s = SOME addr_res /\
@@ -5159,17 +4357,21 @@ Proof
 QED
 
 (* For MSTORE/SSTORE/TSTORE, step_inst_base = exec_write2 with the
-   appropriate write function. *)
+   appropriate write function (SSTORE/TSTORE abort first in a static frame). *)
 Triviality store_step_is_exec_write2[local]:
   (inst.inst_opcode = MSTORE ==>
    step_inst_base inst s =
      exec_write2 (\addr val s. mstore (w2n addr) val s) inst s) /\
   (inst.inst_opcode = SSTORE ==>
    step_inst_base inst s =
-     exec_write2 (\key val s. sstore key val s) inst s) /\
+     if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)
+     then Abort ExHalt_abort (halt_state (set_returndata [] s))
+     else exec_write2 (\key val s. sstore key val s) inst s) /\
   (inst.inst_opcode = TSTORE ==>
    step_inst_base inst s =
-     exec_write2 (\key val s. tstore key val s) inst s)
+     if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)
+     then Abort ExHalt_abort (halt_state (set_returndata [] s))
+     else exec_write2 (\key val s. tstore key val s) inst s)
 Proof
   rpt conj_tac
   >- (strip_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
@@ -5182,65 +4384,47 @@ QED
 
 (* Key helper 1: transformed instruction produces same step_inst result
    when lf_sound holds. *)
-(* Per-instruction step refinement: when the original succeeds, the
-   transformed instruction also succeeds with the same result.
-   The NOP case uses lf_sound (value = what's already at address) +
-   bp_ptr_sound (address evaluates correctly) to show store is idempotent. *)
-Triviality lse_step_equiv[local]:
+(* Reachable facts have absolute storage/transient locations. Soundness
+   identifies the stored value with the current cell, so an elided store
+   is the identity without any dynamic pointer invariant. *)
+Theorem lse_step_equiv[local]:
   !aliases bp uc insts i s s'.
     i < LENGTH insts /\
+    (!inst sp. MEM inst insts /\
+       (sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==>
+       (bp_get_read_location bp inst sp).ml_alloca = NONE) /\
     lf_sound (lf_at aliases bp uc insts i) s /\
-    bp_ptr_sound bp s /\
     s.vs_inst_idx = i /\
     step_inst fuel ctx (EL i insts) s = OK s' ==>
     step_inst fuel ctx (inst_at aliases bp uc insts i) s = OK s'
 Proof
-  rpt strip_tac >>
-  simp[inst_at_def] >>
+  rpt strip_tac >> fs[inst_at_def] >>
   qabbrev_tac `inst = EL i insts` >>
   qabbrev_tac `lf = lf_at aliases bp uc insts i` >>
-  Cases_on `load_store_step aliases bp uc (lf, inst)` >>
-  simp[] >>
+  Cases_on `load_store_step aliases bp uc (lf, inst)` >> simp[] >>
   rename1 `load_store_step _ _ _ _ = (lf', inst')` >>
-  (* If inst' = inst, the transformed instruction is the original — trivial *)
   Cases_on `inst' = inst` >- gvs[] >>
-  (* NOP case: inst' = mk_nop_inst inst *)
   drule_all load_store_step_nop_info >> strip_tac >> gvs[] >>
   rename1 `FLOOKUP lf val_name = SOME lfact` >>
   rename1 `inst.inst_operands = [addr_op; Var val_name]` >>
   simp[mk_nop_inst_correct] >>
-  (* Suffices to show s' = s *)
   `s' = s` suffices_by simp[] >>
-  (* From lf_sound, get the load-fact soundness *)
+  fs[Abbr `lf`] >> drule_all lf_at_metadata >> strip_tac >>
   `?addr_res. resolve_memloc_offset lfact.lf_memloc s = SOME addr_res /\
-    lookup_var val_name s = SOME (read_at_offset lfact.lf_opcode addr_res s) /\
-    (lfact.lf_opcode = MLOAD ==> addr_res + 32 <= LENGTH s.vs_memory)` by
-      fs[lf_sound_def, Abbr `lf`] >>
-  (* step_inst → step_inst_base for non-INVOKE *)
+    lookup_var val_name s = SOME (read_at_offset lfact.lf_opcode addr_res s)` by
+      (fs[lf_sound_def] >> metis_tac[]) >>
   `inst.inst_opcode <> INVOKE` by
     (Cases_on `inst.inst_opcode` >> gvs[is_store_opcode_def]) >>
   gvs[step_inst_non_invoke] >>
-  (* Split on store opcode, eliminate MSTORE8/ISTORE, pin load opcode *)
   Cases_on `inst.inst_opcode` >> gvs[is_store_opcode_def] >>
   imp_res_tac load_store_compatible_elim >> gvs[] >>
-  (* 3 cases: MLOAD/MSTORE, SLOAD/SSTORE, TLOAD/TSTORE *)
   gvs[store_opcode_addr_space_def, read_at_offset_def,
-      store_step_is_exec_write2] >>
+      store_step_is_exec_write2, bool_case_eq] >>
   drule_all exec_write2_ok_vals >> strip_tac >> gvs[eval_operand_def] >>
-  (* Show v1 = n2w addr_res by unfolding bp_get_write_location for
-     each concrete opcode+space, exposing bp_segment_from_ops *)
-  qpat_x_assum `resolve_memloc_offset _ _ = _` mp_tac >>
-  gvs[bp_get_write_location_def, is_raw_fmp_opcode_def,
-      venomEffectsTheory.write_effects_def, mem_write_ops_def, LET_THM] >>
-  strip_tac >>
-  `v1 = n2w addr_res` by
-    metis_tac[write_loc_eval_operand_raw] >>
-  gvs[sstore_sload_id, tstore_tload_id] >>
-  (* MSTORE: need addr_res < dimword(:256) for w2n/n2w roundtrip.
-     Shared gap: requires allocas_in_word + bp_ptrs_bounded. *)
-  `addr_res < dimword (:256)` by
-    cheat (* shared gap: needs bp_ptrs_bounded + allocas_in_word *) >>
-  gvs[mstore_mload_id]
+  gvs[bp_get_write_location_def, addr_space_word_scale_def,
+      resolve_memloc_offset_def] >>
+  drule_all bp_segment_absolute >> simp[] >> strip_tac >> gvs[] >>
+  gvs[eval_operand_def, sstore_sload_id, tstore_tload_id]
 QED
 
 (* read_at_offset depends only on vs_memory, vs_accounts, vs_call_ctx,
@@ -5257,19 +4441,6 @@ Proof
     contract_storage_def, contract_transient_def]
 QED
 
-(* Weaker variant: non-Memory opcodes don't use vs_memory *)
-Triviality read_at_offset_non_memory_eq[local]:
-  !op off s s'.
-    load_opcode_addr_space op <> AddrSp_Memory /\
-    s'.vs_accounts = s.vs_accounts /\
-    s'.vs_call_ctx = s.vs_call_ctx /\
-    s'.vs_transient = s.vs_transient ==>
-    read_at_offset op off s' = read_at_offset op off s
-Proof
-  Cases >> simp[read_at_offset_def, load_opcode_addr_space_def, sload_def,
-    tload_def, contract_storage_def, contract_transient_def]
-QED
-
 (* State preservation for Branch 4 opcodes: non-INVOKE, non-ext_call opcodes
    with Eff_MEMORY ∈ write_effects that aren't load/store/copy.
    These are exactly EXTCODECOPY (is_mem_write_op) and ISTORE.
@@ -5281,84 +4452,10 @@ Proof
   simp[lf_sound_def, FLOOKUP_DRESTRICT]
 QED
 
-Triviality branch4_state_preserves[local]:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    inst.inst_opcode <> INVOKE /\
-    ~is_ext_call_op inst.inst_opcode /\
-    ~is_effect_free_op inst.inst_opcode /\
-    Eff_MEMORY IN write_effects inst.inst_opcode /\
-    ~is_copy_opcode inst.inst_opcode /\
-    ~is_store_opcode inst.inst_opcode /\
-    ~is_load_fact_opcode inst.inst_opcode /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
-    s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_allocas = s.vs_allocas /\
-    (!v. lookup_var v s' = lookup_var v s)
-Proof
-  rpt gen_tac >> strip_tac >>
-  (* Only ISTORE survives all the exclusions *)
-  Cases_on `is_mem_write_op inst.inst_opcode`
-  >- (qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
-        step_mem_write_preserves >> simp[]) >>
-  `inst.inst_opcode = ISTORE` by
-    (Cases_on `inst.inst_opcode` >>
-     gvs[is_mem_write_op_def, is_ext_call_op_def, is_terminator_def,
-         venomEffectsTheory.write_effects_def,
-         venomEffectsTheory.all_effects_def,
-         venomEffectsTheory.empty_effects_def,
-         is_copy_opcode_def, is_store_opcode_def,
-         is_load_fact_opcode_def, is_effect_free_op_def,
-         pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
-  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
-    step_istore_preserves >> simp[] >> strip_tac >>
-  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
-    step_inst_preserves_all >>
-  simp[is_terminator_def, is_alloca_op_def, is_ext_call_op_def]
-QED
-
-(* DRESTRICT to non-Memory entries preserves lf_sound when
-   accounts/transient/call_ctx/allocas/lookup_var are unchanged.
-   Used for Branch 4 (Eff_MEMORY ∈ write_effects) where MLOAD entries are
-   removed but SLOAD/TLOAD entries survive. *)
-(* DRESTRICT to entries whose address-space effect is not in weffs.
-   Requires that the surviving facts' state components are preserved.
-   Used for Branch 4 where volatile instructions clear affected loads. *)
-Triviality lf_sound_drestrict_non_memory[local]:
-  !lf weffs s s'.
-    lf_sound lf s /\
-    Eff_MEMORY IN weffs /\
-    s'.vs_accounts = s.vs_accounts /\
-    s'.vs_transient = s.vs_transient /\
-    s'.vs_call_ctx = s.vs_call_ctx /\
-    s'.vs_allocas = s.vs_allocas /\
-    (!v. lookup_var v s' = lookup_var v s) ==>
-    lf_sound (DRESTRICT lf
-      {v | !lfact eff. FLOOKUP lf v = SOME lfact /\
-           effect_of_addr_space
-             (load_opcode_addr_space lfact.lf_opcode) = SOME eff ==>
-           eff NOTIN weffs}) s'
-Proof
-  simp[lf_sound_def, FLOOKUP_DRESTRICT] >>
-  rpt strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  (* The surviving entry has effect_of_addr_space ... = SOME eff
-     with eff NOTIN weffs, so in particular eff <> Eff_MEMORY,
-     meaning the load opcode is SLOAD or TLOAD, not MLOAD. *)
-  `load_opcode_addr_space lfact.lf_opcode <> AddrSp_Memory` by
-    (CCONTR_TAC >> gvs[load_opcode_addr_space_def,
-       effect_of_addr_space_def]) >>
-  qexists `addr` >> rpt conj_tac
-  >- gvs[resolve_memloc_offset_def]
-  >- (qpat_x_assum `lookup_var _ _ = _` mp_tac >>
-      simp[read_at_offset_non_memory_eq])
-  >> strip_tac >> gvs[load_opcode_addr_space_def]
-QED
-
-(* Like lf_sound_drestrict_non_memory but with weaker hypotheses:
-   contract_storage equality instead of vs_accounts, and
-   lookup_var equality only for FDOM lf entries. *)
+(* DRESTRICT to non-Memory entries preserves lf_sound when contract
+   storage, transient storage, call context and allocas are unchanged and
+   the variables lf tracks keep their values.  Used for writers with
+   Eff_MEMORY in write_effects but not storage or transient. *)
 Triviality lf_sound_drestrict_non_memory_weak[local]:
   !lf weffs s s'.
     lf_sound lf s /\
@@ -5522,478 +4619,327 @@ Proof
   qexists `s` >> gvs[]
 QED
 
-(* When ml_is_fixed and bp_ptr_sound hold, resolve_memloc_offset succeeds.
-   Lit case: ml_alloca=NONE, ml_offset=SOME → SOME directly.
-   Var case: bp_segment_from_ops_sound_proof gives FLOOKUP allocas. *)
-Triviality bp_segment_resolve_some[local]:
-  !bp ops s.
-    ml_is_fixed (bp_segment_from_ops bp ops) /\
-    bp_ptr_sound bp s /\
-    IS_SOME (eval_operand ops.iao_ofst s) ==>
-    ?addr. resolve_memloc_offset (bp_segment_from_ops bp ops) s = SOME addr
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[resolve_memloc_offset_def] >>
-  qabbrev_tac `ml = bp_segment_from_ops bp ops` >>
-  Cases_on `ml.ml_alloca`
-  >- gvs[ml_is_fixed_def, optionTheory.IS_SOME_EXISTS] >>
-  Cases_on `x` >>
-  Cases_on `ml.ml_offset`
-  >- gvs[ml_is_fixed_def] >>
-  rename1 `ml.ml_offset = SOME off` >>
-  qspecl_then [`bp`, `ops`, `ml`, `n`, `off`, `s`]
-    mp_tac bp_segment_from_ops_sound_proof >>
-  simp[Abbr `ml`, ml_is_fixed_def] >> strip_tac >> simp[]
-QED
-
-(* For load opcodes with their natural addr_sp, bp_get_read_location
-   gives bp_segment_from_ops with iao_ofst = addr_op. *)
-Triviality load_bp_get_read_bridge[local]:
-  !bp inst addr_op.
-    is_load_fact_opcode inst.inst_opcode /\
-    inst.inst_operands = [addr_op] ==>
-    ?ops. bp_get_read_location bp inst
-            (load_opcode_addr_space inst.inst_opcode) =
-          bp_segment_from_ops bp ops /\ ops.iao_ofst = addr_op
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_load_fact_opcode_def, load_opcode_addr_space_def,
-      bp_get_read_location_def, is_raw_fmp_opcode_def, mem_read_ops_def,
-      venomEffectsTheory.read_effects_def] >>
-  irule_at Any EQ_REFL >> simp[]
-QED
-
 (* New load entry is sound: after executing a load instruction with
    bp_get_read_location giving a fixed memloc, the output variable holds
    exactly read_at_offset at the resolved address.
    Produces the existential witness needed by lf_sound_fupdate. *)
-Triviality load_new_entry_sound[local]:
+Theorem load_new_entry_sound[local]:
   !bp inst s s' fuel ctx out addr_op.
     is_load_fact_opcode inst.inst_opcode /\
     inst.inst_operands = [addr_op] /\
     inst.inst_outputs = [out] /\
-    bp_ptr_sound bp s /\
+    (bp_get_read_location bp inst
+      (load_opcode_addr_space inst.inst_opcode)).ml_alloca = NONE /\
     step_inst fuel ctx inst s = OK s' /\
     ml_is_fixed (bp_get_read_location bp inst
-                   (load_opcode_addr_space inst.inst_opcode)) /\
-    s'.vs_memory = s.vs_memory /\
-    s'.vs_accounts = s.vs_accounts /\
-    s'.vs_transient = s.vs_transient /\
-    s'.vs_call_ctx = s.vs_call_ctx /\
-    s'.vs_allocas = s.vs_allocas ==>
+                   (load_opcode_addr_space inst.inst_opcode)) ==>
     ?addr.
       resolve_memloc_offset
         (bp_get_read_location bp inst
            (load_opcode_addr_space inst.inst_opcode)) s' = SOME addr /\
       lookup_var out s' = SOME (read_at_offset inst.inst_opcode addr s') /\
-      (inst.inst_opcode = MLOAD ==>
-       addr + 32 <= LENGTH s'.vs_memory ==>
-       addr + 32 <= LENGTH s.vs_memory)
+      (inst.inst_opcode = MLOAD ==> addr + 32 <= LENGTH s'.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
-  (* Bridge: bp_get_read_location = bp_segment_from_ops bp ops *)
-  `?ops. bp_get_read_location bp inst
-           (load_opcode_addr_space inst.inst_opcode) =
-         bp_segment_from_ops bp ops /\ ops.iao_ofst = addr_op` by
-    (mp_tac load_bp_get_read_bridge >> simp[]) >>
-  (* Case split on the 3 load opcodes; all use exec_read1 *)
   Cases_on `inst.inst_opcode` >> gvs[is_load_fact_opcode_def] >>
+  gvs[load_opcode_addr_space_def, bp_get_read_location_def,
+      ml_is_fixed_def, optionTheory.IS_SOME_EXISTS] >>
+  drule_all bp_segment_absolute >> simp[] >> strip_tac >> gvs[] >>
   gvs[step_inst_def, is_terminator_def] >>
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
   ONCE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
-  strip_tac >>
-  gvs[exec_read1_def] >>
-  (* From OK result: eval_operand ops.iao_ofst s = SOME v *)
-  Cases_on `eval_operand ops.iao_ofst s` >> gvs[] >>
-  rename1 `eval_operand _ s = SOME v` >>
-  gvs[update_var_def] >>
-  (* Get resolve = SOME addr_res via proven helper *)
-  `?addr_res. resolve_memloc_offset (bp_segment_from_ops bp ops) s =
-              SOME addr_res` by
-    (irule bp_segment_resolve_some >> simp[]) >>
-  qexists `addr_res` >>
-  (* v = n2w addr_res from write_loc_eval_operand *)
-  `v = n2w addr_res` by (
-    qspecl_then [`bp`, `ops`, `s`, `addr_res`, `v`]
-      mp_tac write_loc_eval_operand >> simp[]
-  ) >> gvs[] >>
-  (* resolve only depends on vs_allocas (not vs_vars), so resolve in s'
-     equals resolve in s. read_at_offset/lookup_var close for SLOAD/TLOAD.
-     MLOAD leaves addr_res MOD dimword = addr_res — shared gap. *)
-  gvs[resolve_memloc_offset_def, lookup_var_def, FLOOKUP_UPDATE,
-      read_at_offset_def, mload_def, sload_def, tload_def,
-      contract_storage_def, contract_transient_def] >>
-  `addr_res < dimword (:256)` by
-    cheat (* shared gap: needs bp_ptrs_bounded + allocas_in_word *) >>
-  gvs[]
+  simp[exec_read1_def, eval_operand_def] >> strip_tac >>
+  gvs[update_var_def, bp_segment_from_ops_def, resolve_memloc_offset_def,
+      lookup_var_def, FLOOKUP_UPDATE, read_at_offset_def,
+      sload_def, tload_def, contract_storage_def, contract_transient_def]
 QED
 
 (* Key helper 2: lf_sound is preserved after executing an instruction.
    Requires: alloca_inv (for alias reasoning), wf_alias_sets (alias soundness),
    non-terminator (for variable frame), variable non-clobber (SSA consequence). *)
-Triviality lse_inv_preserved[local]:
+Theorem tracked_read_effect_frame[local]:
+  !fuel ctx inst s s' op addr eff.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode /\
+    (op = SLOAD \/ op = TLOAD) /\
+    effect_of_addr_space (load_opcode_addr_space op) = SOME eff /\
+    eff NOTIN write_effects inst.inst_opcode ==>
+    read_at_offset op addr s' = read_at_offset op addr s
+Proof
+  rpt strip_tac >> (
+  `s'.vs_call_ctx = s.vs_call_ctx` by
+    metis_tac[step_preserves_call_ctx] >>
+  Cases_on `is_alloca_op inst.inst_opcode`
+  >- (drule_all step_alloca_preserves >> strip_tac >>
+      gvs[read_at_offset_def, sload_def, tload_def,
+          contract_storage_def, contract_transient_def]) >>
+  gvs[load_opcode_addr_space_def, effect_of_addr_space_def,
+      read_at_offset_def, sload_def, tload_def] >>
+  metis_tac[write_effects_sound_storage, write_effects_sound_transient,
+            contract_transient_def])
+QED
+
+Theorem lf_sound_effect_filter[local]:
+  !fuel ctx inst s s' lf.
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode /\
+    lf_sound lf s /\
+    (!v. v IN FDOM lf ==> ~MEM v inst.inst_outputs) /\
+    (!v f. FLOOKUP lf v = SOME f ==>
+       (f.lf_opcode = SLOAD \/ f.lf_opcode = TLOAD) /\
+       f.lf_memloc.ml_alloca = NONE) ==>
+    lf_sound (DRESTRICT lf
+      {v | !f eff. FLOOKUP lf v = SOME f /\
+        effect_of_addr_space (load_opcode_addr_space f.lf_opcode) = SOME eff ==>
+        eff NOTIN write_effects inst.inst_opcode}) s'
+Proof
+  rpt strip_tac >> irule lf_sound_frame >>
+  qexistsl [`lf`, `s`] >> simp[FLOOKUP_DRESTRICT] >>
+  rpt gen_tac >> strip_tac >> gen_tac >> disch_tac >>
+  `lfact.lf_opcode = SLOAD \/ lfact.lf_opcode = TLOAD` by metis_tac[] >> (
+  `lfact.lf_memloc.ml_alloca = NONE` by metis_tac[] >>
+  rpt conj_tac
+  >- gvs[resolve_memloc_offset_def]
+  >- (irule step_inst_preserves_lookup >>
+      goal_assum (first_assum o mp_then Any mp_tac) >>
+      metis_tac[flookup_thm])
+  >- (irule tracked_read_effect_frame >>
+      simp[load_opcode_addr_space_def, effect_of_addr_space_def] >>
+      qexistsl [`ctx`, `fuel`, `inst`] >>
+      gvs[load_opcode_addr_space_def, effect_of_addr_space_def] >>
+      metis_tac[]) >>
+  gvs[])
+QED
+
+Theorem lf_sound_copy_preserved[local]:
+  !fuel ctx inst s s' lf aliases bp.
+    step_inst fuel ctx inst s = OK s' /\
+    is_copy_opcode inst.inst_opcode /\
+    lf_sound lf s /\
+    (!v. v IN FDOM lf ==> ~MEM v inst.inst_outputs) /\
+    (!v f. FLOOKUP lf v = SOME f ==>
+       (f.lf_opcode = SLOAD \/ f.lf_opcode = TLOAD) /\
+       f.lf_memloc.ml_alloca = NONE) ==>
+    lf_sound (invalidate_loads aliases lf
+      (bp_get_write_location bp inst AddrSp_Memory) AddrSp_Memory) s'
+Proof
+  rpt strip_tac >>
+  irule lf_sound_frame >> qexistsl [`lf`, `s`] >> simp[] >>
+  Cases_on `ml_is_fixed (bp_get_write_location bp inst AddrSp_Memory)` >> (
+  simp[invalidate_loads_def, FLOOKUP_DRESTRICT] >>
+  rpt gen_tac >> strip_tac >> gen_tac >> disch_tac >>
+  `lfact.lf_opcode = SLOAD \/ lfact.lf_opcode = TLOAD` by metis_tac[] >> (
+  `lfact.lf_memloc.ml_alloca = NONE` by metis_tac[] >>
+  rpt conj_tac
+  >- gvs[resolve_memloc_offset_def]
+  >- (irule step_inst_preserves_lookup >>
+      goal_assum (first_assum o mp_then Any mp_tac) >>
+      metis_tac[flookup_thm])
+  >- (irule tracked_read_effect_frame >>
+      simp[load_opcode_addr_space_def, effect_of_addr_space_def] >>
+      qexistsl [`ctx`, `fuel`, `inst`] >> simp[] >>
+      Cases_on `inst.inst_opcode` >>
+      gvs[is_copy_opcode_def, is_terminator_def, write_effects_def,
+          empty_effects_def]) >>
+  gvs[]))
+QED
+
+Theorem tracked_write_absolute[local]:
+  !bp inst k.
+    (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE) /\
+    (bp_get_write_location bp inst
+      (store_opcode_addr_space inst.inst_opcode)).ml_alloca = NONE /\
+    (bp_get_write_location bp inst
+      (store_opcode_addr_space inst.inst_opcode)).ml_offset = SOME k ==>
+    ?value. inst.inst_operands = [Lit (n2w k); value] /\
+      k < dimword (:256) /\
+      (bp_get_write_location bp inst
+        (store_opcode_addr_space inst.inst_opcode)).ml_size = SOME 1
+Proof
+  rpt gen_tac >> strip_tac >> (
+  gvs[store_opcode_addr_space_def, bp_get_write_location_def,
+      addr_space_word_scale_def, LET_THM] >>
+  namedCases_on `inst.inst_operands` ["", "addr ops"] >>
+  gvs[ml_undefined_def] >>
+  namedCases_on `ops` ["", "value rest"] >> gvs[ml_undefined_def] >>
+  Cases_on `rest` >> gvs[ml_undefined_def] >>
+  drule_all bp_unit_segment_absolute >> simp[] >> strip_tac >> gvs[])
+QED
+
+Theorem absolute_nonalias_keys[local]:
+  !aliases loc1 loc2 k1 k2.
+    wf_alias_sets aliases /\ ~ma_may_alias aliases loc1 loc2 /\
+    loc1.ml_alloca = NONE /\ loc2.ml_alloca = NONE /\
+    loc1.ml_offset = SOME k1 /\ loc2.ml_offset = SOME k2 /\
+    loc1.ml_size = SOME 1 /\ loc2.ml_size = SOME 1 /\
+    k1 < dimword (:256) /\ k2 < dimword (:256) ==>
+    (n2w k1 : bytes32) <> n2w k2
+Proof
+  rpt strip_tac >>
+  drule memAliasPropsTheory.ma_may_alias_sound_no_alloca >>
+  disch_then drule >> simp[regions_disjoint_def] >> strip_tac >>
+  `k1 = k2` by metis_tac[wordsTheory.w2n_n2w, LESS_MOD] >>
+  gvs[]
+QED
+
+Theorem tracked_read_store_distinct[local]:
+  !fuel ctx inst s s' op addr key value.
+    step_inst fuel ctx inst s = OK s' /\
+    (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE) /\
+    inst.inst_operands = [Lit key; value] /\
+    (op = SLOAD \/ op = TLOAD) /\ (n2w addr : bytes32) <> key ==>
+    read_at_offset op addr s' = read_at_offset op addr s
+Proof
+  rpt strip_tac >> (
+  `inst.inst_opcode <> INVOKE` by simp[] >>
+  gvs[step_inst_non_invoke] >>
+  fs[store_step_is_exec_write2] >>
+  gvs[exec_write2_def, eval_operand_def, AllCaseEqs()] >>
+  simp[read_at_offset_def, sload_def, tload_def, sstore_def, tstore_def,
+       contract_storage_def, contract_transient_def, vfmStateTheory.lookup_storage_def,
+       vfmStateTheory.update_storage_def, vfmStateTheory.lookup_account_def,
+       combinTheory.APPLY_UPDATE_THM])
+QED
+
+Theorem tracked_read_store_survivor[local]:
+  !fuel ctx inst s s' aliases bp f addr.
+    step_inst fuel ctx inst s = OK s' /\ is_store_opcode inst.inst_opcode /\
+    wf_alias_sets aliases /\
+    (f.lf_opcode = SLOAD \/ f.lf_opcode = TLOAD) /\
+    f.lf_memloc.ml_alloca = NONE /\ f.lf_memloc.ml_offset = SOME addr /\
+    f.lf_memloc.ml_size = SOME 1 /\ addr < dimword (:256) /\
+    (load_opcode_addr_space f.lf_opcode = store_opcode_addr_space inst.inst_opcode ==>
+      (bp_get_write_location bp inst (store_opcode_addr_space inst.inst_opcode)).ml_alloca = NONE) /\
+    (load_opcode_addr_space f.lf_opcode <> store_opcode_addr_space inst.inst_opcode \/
+     (ml_is_fixed (bp_get_write_location bp inst (store_opcode_addr_space inst.inst_opcode)) /\
+      ~ma_may_alias aliases f.lf_memloc
+        (bp_get_write_location bp inst (store_opcode_addr_space inst.inst_opcode)))) ==>
+    read_at_offset f.lf_opcode addr s' = read_at_offset f.lf_opcode addr s
+Proof
+  rpt gen_tac >> strip_tac >> (
+  Cases_on `load_opcode_addr_space f.lf_opcode = store_opcode_addr_space inst.inst_opcode`
+  >- (gvs[] >>
+      `inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE` by
+        (Cases_on `inst.inst_opcode` >>
+         gvs[is_store_opcode_def, store_opcode_addr_space_def, load_opcode_addr_space_def]) >> (
+      fs[ml_is_fixed_def, optionTheory.IS_SOME_EXISTS] >>
+      qmatch_asmsub_rename_tac `(bp_get_write_location bp inst _).ml_offset = SOME keyoff` >>
+      qspecl_then [`bp`, `inst`, `keyoff`] mp_tac tracked_write_absolute >>
+      impl_tac >- gvs[store_opcode_addr_space_def, load_opcode_addr_space_def] >>
+      strip_tac >>
+      irule tracked_read_store_distinct >>
+      simp[] >> qexistsl [`ctx`, `fuel`, `inst`, `n2w keyoff`, `value`] >> simp[] >>
+      `(n2w addr : bytes32) <> n2w keyoff` suffices_by metis_tac[] >>
+      irule absolute_nonalias_keys >>
+      goal_assum (first_assum o mp_then Any mp_tac) >>
+      gvs[store_opcode_addr_space_def, load_opcode_addr_space_def] >> metis_tac[])) >>
+  irule tracked_read_effect_frame >>
+  simp[load_opcode_addr_space_def, effect_of_addr_space_def] >>
+  qexistsl [`ctx`, `fuel`, `inst`] >> simp[] >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_store_opcode_def, store_opcode_addr_space_def, load_opcode_addr_space_def,
+      is_terminator_def, write_effects_def, empty_effects_def])
+QED
+
+Theorem lf_sound_store_preserved[local]:
+  !fuel ctx inst s s' lf aliases bp.
+    step_inst fuel ctx inst s = OK s' /\ is_store_opcode inst.inst_opcode /\
+    wf_alias_sets aliases /\ lf_sound lf s /\
+    (!v. v IN FDOM lf ==> ~MEM v inst.inst_outputs) /\
+    (!v f. FLOOKUP lf v = SOME f ==>
+       (f.lf_opcode = SLOAD \/ f.lf_opcode = TLOAD) /\
+       f.lf_memloc.ml_alloca = NONE /\ f.lf_memloc.ml_size = SOME 1 /\
+       ?k. f.lf_memloc.ml_offset = SOME k /\ k < dimword (:256)) /\
+    (!sp. sp = AddrSp_Storage \/ sp = AddrSp_Transient ==>
+      (bp_get_write_location bp inst sp).ml_alloca = NONE) ==>
+    lf_sound (invalidate_loads aliases lf
+      (bp_get_write_location bp inst (store_opcode_addr_space inst.inst_opcode))
+      (store_opcode_addr_space inst.inst_opcode)) s'
+Proof
+  rpt strip_tac >> irule lf_sound_frame >> qexistsl [`lf`, `s`] >> simp[] >>
+  Cases_on `ml_is_fixed (bp_get_write_location bp inst (store_opcode_addr_space inst.inst_opcode))` >> (
+  simp[invalidate_loads_def, FLOOKUP_DRESTRICT] >>
+  rpt gen_tac >> strip_tac >> gen_tac >> disch_tac >>
+  qpat_assum `!v f. FLOOKUP lf v = SOME f ==> _` drule >> strip_tac >> (
+  `addr = k` by gvs[resolve_memloc_offset_def] >> gvs[] >>
+  rpt conj_tac
+  >- gvs[resolve_memloc_offset_def]
+  >- (irule step_inst_preserves_lookup >>
+      goal_assum (first_assum o mp_then Any mp_tac) >> metis_tac[flookup_thm])
+  >- (qpat_assum `lfact.lf_opcode = _`
+        (fn th => pure_once_rewrite_tac[GSYM th]) >>
+      irule tracked_read_store_survivor >> simp[] >>
+      qexistsl [`aliases`, `bp`, `ctx`, `fuel`, `inst`] >> simp[] >>
+      gvs[load_opcode_addr_space_def] >> metis_tac[]) >>
+  gvs[]))
+QED
+
+Theorem lf_sound_load_preserved[local]:
+  !fuel ctx inst s s' lf aliases bp uc.
+    step_inst fuel ctx inst s = OK s' /\ is_load_fact_opcode inst.inst_opcode /\
+    lf_sound lf s /\
+    (!v. v IN FDOM lf ==> ~MEM v inst.inst_outputs) /\
+    (bp_get_read_location bp inst (load_opcode_addr_space inst.inst_opcode)).ml_alloca = NONE ==>
+    lf_sound (FST (load_store_step aliases bp uc (lf,inst))) s'
+Proof
+  rpt strip_tac >>
+  `is_effect_free_op inst.inst_opcode` by metis_tac[load_fact_is_effect_free] >>
+  `lf_sound lf s'` by metis_tac[lf_sound_effect_free] >>
+  simp[load_store_step_def, LET_THM] >>
+  namedCases_on `inst.inst_operands` ["", "addr ops"] >> simp[] >>
+  Cases_on `ops` >> simp[] >>
+  namedCases_on `inst.inst_outputs` ["", "out outputs"] >> simp[] >>
+  Cases_on `outputs` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  irule lf_sound_fupdate >> simp[] >>
+  irule load_new_entry_sound >> simp[] >> metis_tac[]
+QED
+
+Theorem lse_inv_preserved[local]:
   !aliases bp uc insts i s s'.
     i < LENGTH insts /\
     lf_sound (lf_at aliases bp uc insts i) s /\
-    bp_ptr_sound bp s /\
-    alloca_inv s /\
     wf_alias_sets aliases /\
+    (!inst sp. MEM inst insts /\ (sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==>
+      (bp_get_read_location bp inst sp).ml_alloca = NONE /\
+      (bp_get_write_location bp inst sp).ml_alloca = NONE) /\
     ~is_terminator (EL i insts).inst_opcode /\
     (!v. v IN FDOM (lf_at aliases bp uc insts i) ==>
          ~MEM v (EL i insts).inst_outputs) /\
-    s.vs_inst_idx = i /\
     step_inst fuel ctx (EL i insts) s = OK s' ==>
-    lf_sound (lf_at aliases bp uc insts (SUC i)) (s' with vs_inst_idx := SUC i) /\
-    bp_ptr_sound bp s' /\ alloca_inv s'
+    lf_sound (lf_at aliases bp uc insts (SUC i)) (s' with vs_inst_idx := SUC i)
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> simp[lf_sound_inst_idx] >>
   qabbrev_tac `inst = EL i insts` >>
   qabbrev_tac `lf = lf_at aliases bp uc insts i` >>
-  (* alloca_inv s' *)
-  `alloca_inv s'` by
-    (qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
-       alloca_inv_step_inst >> simp[Abbr `inst`]) >>
-  (* bp_ptr_sound: cheat — needs fixpoint investigation *)
-  `bp_ptr_sound bp s'` by cheat >>
-  (* Remaining: lf_sound (lf_at ... (SUC i)) (s' with vs_inst_idx := SUC i)
-     Case split on the 5 branches of load_store_step *)
+  `MEM inst insts` by metis_tac[EL_MEM] >>
+  `!v f. FLOOKUP lf v = SOME f ==>
+     (f.lf_opcode = SLOAD \/ f.lf_opcode = TLOAD) /\
+     f.lf_memloc.ml_alloca = NONE /\ f.lf_memloc.ml_size = SOME 1 /\
+     ?k. f.lf_memloc.ml_offset = SOME k /\ k < dimword (:256)` by
+    (fs[Abbr `lf`] >>
+     `!inst sp. MEM inst insts /\ (sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==>
+       (bp_get_read_location bp inst sp).ml_alloca = NONE` by metis_tac[] >>
+     rpt gen_tac >> disch_tac >> drule_all lf_at_metadata >> simp[]) >>
   `lf_at aliases bp uc insts (SUC i) =
-     FST (load_store_step aliases bp uc (lf, inst))` by
+     FST (load_store_step aliases bp uc (lf,inst))` by
     simp[lf_at_def, Abbr `lf`, Abbr `inst`] >>
-  Cases_on `is_load_fact_opcode inst.inst_opcode`
-  >- suspend "branch1_load"
-  >>
-  Cases_on `is_store_opcode inst.inst_opcode`
-  >- (simp[load_store_step_def, LET_THM] >> suspend "branch2_store")
-  >>
-  Cases_on `is_copy_opcode inst.inst_opcode`
-  >- (simp[load_store_step_def, LET_THM] >> suspend "branch3_copy")
-  >>
-  Cases_on `Eff_MEMORY IN write_effects inst.inst_opcode`
-  >- suspend "branch4"
-  >>
-  (* Branch 5: Other — lf unchanged *)
-  simp[load_store_step_def, LET_THM] >>
-  (* Split off ext_call and ALLOCA as accepted cheats *)
-  Cases_on `is_ext_call_op inst.inst_opcode`
-  >- cheat (* CREATE/CREATE2: shared gap (write effects unclear) *) >>
-  Cases_on `is_alloca_op inst.inst_opcode`
-  >- suspend "branch5_alloca" >>
-  (* Remaining: non-ext_call, non-ALLOCA, non-terminator, non-store/load/copy,
-     Eff_MEMORY NOTIN write_effects. Split effect-free vs not. *)
-  Cases_on `is_effect_free_op inst.inst_opcode`
-  >- (
-    (* Effect-free: state_equiv gives all fields equal *)
-    drule_all step_effect_free_state_equiv >>
-    simp[state_equiv_def, execution_equiv_def] >> strip_tac >>
-    irule lf_sound_state_eq >>
-    qexists `s` >> gvs[])
-  >>
-  (* Non-effect-free remainder: LOG, ASSERT, ASSERT_UNREACHABLE etc.
-     All preserve lf_sound-relevant state fields. *)
-  suspend "branch5_nonef"
-QED
-
-Triviality step_inst_alloca_flookup_eq[local]:
-  !fuel ctx inst s s' p.
-    step_inst fuel ctx inst s = OK s' /\ is_alloca_op inst.inst_opcode /\
-    FLOOKUP s.vs_allocas inst.inst_id = SOME p ==>
-    FLOOKUP s'.vs_allocas inst.inst_id = SOME p
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def] >>
-  gvs[step_inst_non_invoke, Once step_inst_base_def, exec_alloca_def,
-      AllCaseEqs(), update_var_def, LET_THM]
-QED
-
-Triviality step_inst_alloca_flookup_all[local]:
-  !fuel ctx inst s s' aid p.
-    step_inst fuel ctx inst s = OK s' /\ is_alloca_op inst.inst_opcode /\
-    FLOOKUP s.vs_allocas aid = SOME p ==>
-    FLOOKUP s'.vs_allocas aid = SOME p
-Proof
-  rpt strip_tac >>
-  Cases_on `aid = inst.inst_id`
-  >- (gvs[] >> irule step_inst_alloca_flookup_eq >> metis_tac[])
-  >>
-  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`, `aid`]
-    mp_tac step_inst_alloca_flookup >>
-  simp[is_alloca_op_def]
-QED
-
-Triviality lf_sound_alloca_preserved[local]:
-  !fuel ctx inst s s' lf.
-    step_inst fuel ctx inst s = OK s' /\ is_alloca_op inst.inst_opcode /\
-    lf_sound lf s /\
-    (!v. v IN FDOM lf ==> ~MEM v inst.inst_outputs) ==>
-    lf_sound lf s'
-Proof
-  rpt strip_tac >>
-  drule_all (SRULE [GSYM AND_IMP_INTRO] step_alloca_preserves) >>
-  strip_tac >>
-  irule lf_sound_frame >>
-  qexistsl [`lf`, `s`] >>
   simp[] >>
-  rpt strip_tac >> gvs[] >>
-  TRY (
-    (* lookup_var preserved *)
-    first_x_assum irule >>
-    first_x_assum irule >>
-    gvs[flookup_thm] >> NO_TAC) >>
-  TRY (
-    (* read_at_offset preserved *)
-    Cases_on `lfact.lf_opcode` >>
-    gvs[read_at_offset_def, mload_def, sload_def, tload_def,
-        contract_storage_def, contract_transient_def] >> NO_TAC) >>
-  (* remaining: resolve_memloc_offset + MLOAD bound *)
-  qpat_x_assum `lf_sound lf s` mp_tac >>
-  simp[lf_sound_def] >>
-  disch_then drule >> strip_tac >>
-  gvs[] >>
-  (* resolve_memloc_offset preserved *)
-  qpat_x_assum `resolve_memloc_offset _ s = SOME _` mp_tac >>
-  simp[Once resolve_memloc_offset_def] >>
-  simp[Once resolve_memloc_offset_def] >>
-  BasicProvers.every_case_tac >> rw[] >>
-  rename1 `FLOOKUP s.vs_allocas aid = SOME q` >>
-  drule_all (SRULE [GSYM AND_IMP_INTRO] step_inst_alloca_flookup_all) >>
-  simp[]
+  Cases_on `is_load_fact_opcode inst.inst_opcode`
+  >- (irule lf_sound_load_preserved >>
+      goal_assum (first_assum o mp_then Any mp_tac) >> simp[] >>
+      Cases_on `inst.inst_opcode` >> gvs[is_load_fact_opcode_def, load_opcode_addr_space_def] >>
+      metis_tac[]) >>
+  Cases_on `is_store_opcode inst.inst_opcode`
+  >- (simp[load_store_step_def, LET_THM] >> irule lf_sound_store_preserved >>
+      goal_assum (first_assum o mp_then Any mp_tac) >> simp[] >> metis_tac[]) >>
+  Cases_on `is_copy_opcode inst.inst_opcode`
+  >- (simp[load_store_step_def, LET_THM] >> irule lf_sound_copy_preserved >>
+      goal_assum (first_assum o mp_then Any mp_tac) >> simp[] >> metis_tac[]) >>
+  simp[load_store_step_def, LET_THM] >> irule lf_sound_effect_filter >>
+  goal_assum (first_assum o mp_then Any mp_tac) >> simp[] >> metis_tac[]
 QED
-
-Resume lse_inv_preserved[branch5_alloca]:
-  simp[lf_sound_inst_idx] >>
-  irule lf_sound_alloca_preserved >>
-  goal_assum (first_assum o mp_then Any mp_tac) >>
-  simp[is_alloca_op_def] >>
-  metis_tac[]
-QED
-
-Triviality lf_sound_residual_preserved[local]:
-  !fuel ctx inst s s' lf.
-    step_inst fuel ctx inst s = OK s' /\
-    lf_sound lf s /\
-    (!v. v IN FDOM lf ==> ~MEM v inst.inst_outputs) /\
-    ~is_terminator inst.inst_opcode /\
-    ~is_ext_call_op inst.inst_opcode /\
-    ~is_alloca_op inst.inst_opcode /\
-    ~is_effect_free_op inst.inst_opcode /\
-    ~is_load_fact_opcode inst.inst_opcode /\
-    ~is_store_opcode inst.inst_opcode /\
-    ~is_copy_opcode inst.inst_opcode /\
-    Eff_MEMORY NOTIN write_effects inst.inst_opcode ==>
-    lf_sound lf s'
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA` by
-    (Cases_on `inst.inst_opcode` >>
-     gvs[is_ext_call_op_def, is_alloca_op_def,
-         venomEffectsTheory.write_effects_def,
-         venomEffectsTheory.all_effects_def]) >>
-  `step_inst_base inst s = OK s'` by
-    metis_tac[step_inst_non_invoke] >>
-  `s'.vs_allocas = s.vs_allocas` by
-    metis_tac[venomMemProofsTheory.step_inst_base_preserves_alloca_fields] >>
-  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
-    step_inst_preserves_all >>
-  impl_tac >- simp[] >> strip_tac >>
-  `s'.vs_memory = s.vs_memory /\
-   s'.vs_accounts = s.vs_accounts /\
-   s'.vs_transient = s.vs_transient` by
-    (Cases_on `inst.inst_opcode` >>
-     gvs[is_effect_free_op_def, is_ext_call_op_def, is_alloca_op_def,
-         is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def,
-         is_terminator_def, venomEffectsTheory.write_effects_def,
-         venomEffectsTheory.all_effects_def,
-         venomEffectsTheory.empty_effects_def]) >>
-  irule lf_sound_state_eq >>
-  qexists `s` >> simp[] >>
-  rpt strip_tac >>
-  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`, `var`]
-    mp_tac step_inst_preserves_lookup >> simp[]
-QED
-
-Resume lse_inv_preserved[branch5_nonef]:
-  simp[lf_sound_inst_idx] >>
-  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`, `lf`]
-    mp_tac lf_sound_residual_preserved >>
-  simp[]
-QED
-
-Triviality lf_at_opcode_inv_early[local]:
-  !i aliases bp uc insts v lfact.
-    FLOOKUP (lf_at aliases bp uc insts i) v = SOME lfact ==>
-    is_load_fact_opcode lfact.lf_opcode
-Proof
-  Induct_on `i` >> simp[lf_at_def, FLOOKUP_EMPTY] >>
-  rpt gen_tac >> reverse IF_CASES_TAC >> gvs[] >- metis_tac[] >>
-  simp[load_store_step_def, LET_THM] >> rpt COND_CASES_TAC >>
-  gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, invalidate_loads_def] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  rpt strip_tac >> gvs[] >> res_tac
-QED
-
-Triviality staticcall_lf_sound_helper[local]:
-  !lf s s' fuel ctx inst.
-    lf_sound lf s /\
-    inst.inst_opcode = STATICCALL /\
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode /\
-    (!v. v IN FDOM lf ==> ~MEM v inst.inst_outputs) ==>
-    lf_sound (DRESTRICT lf
-      {v | !lfact eff. FLOOKUP lf v = SOME lfact /\
-           effect_of_addr_space
-             (load_opcode_addr_space lfact.lf_opcode) = SOME eff ==>
-           eff NOTIN write_effects STATICCALL}) s'
-Proof
-  rpt strip_tac >>
-  `is_ext_call_op inst.inst_opcode` by simp[is_ext_call_op_def] >> drule_all step_ext_call_preserves >> strip_tac >>
-  `contract_storage s' = contract_storage s` by (
-  drule write_effects_sound_storage >>
-  simp[is_alloca_op_def, is_terminator_def, write_effects_def, all_effects_def, empty_effects_def]
-) >>
-`s'.vs_transient = s.vs_transient` by (
-  drule write_effects_sound_transient >>
-  simp[is_alloca_op_def, is_terminator_def, write_effects_def, all_effects_def, empty_effects_def]
-) >>
-  irule lf_sound_drestrict_non_memory_weak >> rpt conj_tac >> gvs[write_effects_def, all_effects_def, empty_effects_def] >> metis_tac[]
-QED
-
-Resume lse_inv_preserved[branch4]:
-  (* Branch 4: Eff_MEMORY IN write_effects, not load/store/copy.
-     Analysis removes MLOAD entries via DRESTRICT. *)
-  Cases_on `inst.inst_opcode = INVOKE`
-  >- (
-    simp[] >>
-    simp[lf_sound_inst_idx] >>
-    qpat_x_assum `lf_at _ _ _ _ (SUC i) = _` (fn eq => rewrite_tac[eq]) >>
-    simp[load_store_step_def, LET_THM,
-         is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def,
-         write_effects_def, all_effects_def] >>
-    simp[lf_sound_def, FLOOKUP_DRESTRICT] >>
-    rpt strip_tac >>
-    gvs[markerTheory.Abbrev_def] >>
-    imp_res_tac lf_at_opcode_inv_early >>
-    Cases_on `lfact.lf_opcode` >>
-    gvs[is_load_fact_opcode_def, load_opcode_addr_space_def,
-        effect_of_addr_space_def]
-  ) >>
-  Cases_on `is_ext_call_op inst.inst_opcode`
-  >- (
-    (* ext_call: case split on the 5 ext_call opcodes *)
-    Cases_on `inst.inst_opcode` >> gvs[is_ext_call_op_def] >>
-    gvs[write_effects_def, all_effects_def, empty_effects_def]
-    (* CREATE/CREATE2: Eff_MEMORY NOTIN write_effects — contradiction *)
-    (* CALL/DELEGATECALL: all load effects in weffs — DRESTRICT = FEMPTY *)
-    >- (simp[lf_sound_inst_idx] >>
-        qpat_x_assum `lf_at _ _ _ _ (SUC i) = _` (fn eq => rewrite_tac[eq]) >>
-        simp[load_store_step_def, LET_THM,
-             is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def,
-             write_effects_def, all_effects_def] >>
-        simp[lf_sound_def, FLOOKUP_DRESTRICT] >>
-        rpt strip_tac >>
-        gvs[markerTheory.Abbrev_def] >>
-        imp_res_tac lf_at_opcode_inv_early >>
-        Cases_on `lfact.lf_opcode` >>
-        gvs[is_load_fact_opcode_def, load_opcode_addr_space_def,
-            effect_of_addr_space_def])
-    (* STATICCALL: surviving SLOAD/TLOAD — needs state preservation *)
-    >- (simp[lf_sound_inst_idx] >>
-        qpat_x_assum `lf_at _ _ _ _ (SUC _) = _` (fn eq => rewrite_tac[eq]) >>
-        simp[load_store_step_def, LET_THM,
-             is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def,
-             write_effects_def, all_effects_def, empty_effects_def] >>
-        irule (SIMP_RULE (srw_ss()) [] (REWRITE_RULE [write_effects_def, all_effects_def, empty_effects_def] staticcall_lf_sound_helper)) >> gvs[markerTheory.Abbrev_def] >> metis_tac[])
-    (* DELEGATECALL: same as CALL *)
-    >> (simp[lf_sound_inst_idx] >>
-        qpat_x_assum `lf_at _ _ _ _ (SUC _) = _` (fn eq => rewrite_tac[eq]) >>
-        simp[load_store_step_def, LET_THM,
-             is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def,
-             write_effects_def, all_effects_def] >>
-        simp[lf_sound_def, FLOOKUP_DRESTRICT] >>
-        rpt strip_tac >>
-        gvs[markerTheory.Abbrev_def] >>
-        imp_res_tac lf_at_opcode_inv_early >>
-        Cases_on `lfact.lf_opcode` >>
-        gvs[is_load_fact_opcode_def, load_opcode_addr_space_def,
-            effect_of_addr_space_def])
-  ) >>
-  (* Effect-free (e.g. DLOAD): state_equiv gives fields, then sub-map *)
-  Cases_on `is_effect_free_op inst.inst_opcode`
-  >- (simp[load_store_step_def, LET_THM] >>
-      irule lf_sound_drestrict >>
-      drule_all step_effect_free_state_equiv >>
-      simp[state_equiv_def, execution_equiv_def] >> strip_tac >>
-      irule lf_sound_state_eq >> qexists `s` >> gvs[]) >>
-  (* Remaining (ISTORE/EXTCODECOPY): forward-chain state preservation *)
-  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
-    branch4_state_preserves >> simp[] >> strip_tac >>
-  simp[load_store_step_def, LET_THM] >>
-  irule lf_sound_drestrict_non_memory >>
-  simp[] >> qexists_tac `s` >> simp[]
-QED
-
-Resume lse_inv_preserved[branch1_load]:
-  (* Strip bp_ptr_sound ∧ alloca_inv (in assumptions) *)
-  (reverse conj_tac >- simp[]) >>
-  (* Simplify vs_inst_idx *)
-  simp[lf_sound_inst_idx] >>
-  (* Rewrite lf_at SUC *)
-  qpat_x_assum `lf_at _ _ _ _ (SUC i) = _` (fn eq => rewrite_tac[eq]) >>
-  simp[load_store_step_def, LET_THM] >>
-  (* Derive effect-free and state equivalence early *)
-  `is_effect_free_op inst.inst_opcode`
-    by (irule load_fact_is_effect_free >> simp[]) >>
-  drule_all step_effect_free_state_equiv >>
-  simp[state_equiv_def, execution_equiv_def] >> strip_tac >>
-  (* Derive lf_sound lf s' for degenerate cases *)
-  `lf_sound lf s'` by
-    (irule lf_sound_state_eq >> qexists `s` >> gvs[]) >>
-  (* All degenerate operand/output patterns yield (lf,inst), so FST = lf.
-     Case-split and close degenerate, leaving main case [addr_op],[out]. *)
-  BasicProvers.every_case_tac >> gvs[] >>
-  rename1 `inst.inst_outputs = [out_var]` >>
-  rename1 `inst.inst_operands = [addr_op]` >>
-  (* Remaining: lf_sound (lf |+ (out_var, new_lfact)) s'
-     where out_var is the load output, new_lfact records the loaded location. *)
-  irule lf_sound_fupdate >> simp[] >>
-  (* Use load_new_entry_sound to produce ∃addr with all 3 conjuncts *)
-  qspecl_then [`bp`, `inst`, `s`, `s'`, `fuel`, `ctx`, `out_var`, `addr_op`]
-    mp_tac load_new_entry_sound >>
-  simp[] >> strip_tac >>
-  qexists `addr` >> simp[] >>
-  cheat (* shared gap: MLOAD memory bound — needs bp_ptrs_bounded + allocas_in_word *)
-QED
-
-(* Branch 2 (store): invalidate_loads removes aliasing entries.
-   Surviving entries are in different addr space OR non-aliasing.
-   Different-space entries: read_at_offset uses different state field → trivially preserved.
-   Same-space non-aliasing: needs ma_may_alias_sound → memloc_within_alloca (shared gap). *)
-Resume lse_inv_preserved[branch2_store]:
-  simp[lf_sound_inst_idx] >>
-  cheat (* Blocked on memloc_within_alloca for same-space alias soundness.
-           Proof plan: irule lf_sound_frame. Surviving entries either:
-           (a) different addr space → read_at_offset trivially preserved, or
-           (b) same space, ¬ma_may_alias → needs ma_may_alias_sound_proof
-               → needs memloc_within_alloca (shared gap) *)
-QED
-
-(* Branch 3 (copy): same structure as branch 2 but writes to AddrSp_Memory.
-   Copy opcodes invalidate MEMORY loads only. *)
-Resume lse_inv_preserved[branch3_copy]:
-  simp[lf_sound_inst_idx] >>
-  cheat (* Same alias reasoning as branch 2 *)
-QED
-
-Finalise lse_inv_preserved
 
 (* FOLDL invariant: after processing TAKE k, the accumulated list
    contains inst_at values and lf matches lf_at k *)
@@ -6270,58 +5216,6 @@ Proof
   metis_tac[copy_opcode_not_term, copy_opcode_not_phi]
 QED
 
-(* State-equality transfer lemmas for bp_ptr_sound and alloca_inv *)
-Triviality ptr_matches_var_state_eq[local]:
-  !p v s s'.
-    s'.vs_allocas = s.vs_allocas /\
-    (!v. lookup_var v s' = lookup_var v s) ==>
-    (ptr_matches_var p v s' <=> ptr_matches_var p v s)
-Proof
-  rpt gen_tac >> Cases_on `p` >> Cases_on `a` >> Cases_on `o'` >>
-  simp[ptr_matches_var_def, lookup_var_def]
-QED
-
-Triviality bp_ptr_sound_state_eq[local]:
-  !bp s s'.
-    s'.vs_allocas = s.vs_allocas /\
-    (!v. lookup_var v s' = lookup_var v s) ==>
-    (bp_ptr_sound bp s' <=> bp_ptr_sound bp s)
-Proof
-  rpt strip_tac >> simp[bp_ptr_sound_def] >>
-  metis_tac[ptr_matches_var_state_eq]
-QED
-
-Triviality alloca_inv_state_eq[local]:
-  !s s'.
-    s'.vs_allocas = s.vs_allocas /\
-    s'.vs_alloca_next = s.vs_alloca_next ==>
-    (alloca_inv s' <=> alloca_inv s)
-Proof
-  simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]
-QED
-
-(* Terminators returning OK preserve the metadata needed by bp_ptr_sound and
-   alloca_inv.  DRET may change memory, so deliberately do not claim broader
-   state equality here. *)
-Triviality step_terminator_ok_preserves[local]:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    is_terminator inst.inst_opcode ==>
-    s'.vs_allocas = s.vs_allocas /\
-    s'.vs_alloca_next = s.vs_alloca_next /\
-    (!v. lookup_var v s' = lookup_var v s)
-Proof
-  rpt gen_tac >> strip_tac >>
-  imp_res_tac step_terminator_preserves_vars >>
-  `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA` by (
-    Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
-  `step_inst_base inst s = OK s'` by
-    metis_tac[step_inst_non_invoke] >>
-  qspecl_then [`inst`, `s`, `s'`] mp_tac
-    venomMemProofsTheory.step_inst_base_preserves_alloca_fields >>
-  simp[]
-QED
-
 (* DRET changes only memory among the state observations used by load facts.
    Its transfer removes facts whose address spaces may observe that change. *)
 Triviality dret_lf_sound[local]:
@@ -6386,14 +5280,11 @@ Proof
       qspecl_then [`lf`, `fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
         dret_lf_sound >>
       simp[write_effects_def, all_effects_def, empty_effects_def]) >>
-  `FST (load_store_step aliases bp uc (lf, inst)) = lf` by
-    (Cases_on `inst.inst_opcode` >>
-     fs[is_terminator_def, load_store_step_def, LET_THM,
-        is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def,
-        write_effects_def, all_effects_def, empty_effects_def]) >>
-  simp[] >>
-  qspecl_then [`lf`, `fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
-    non_dret_terminator_lf_sound >> simp[]
+  `lf_sound lf s'` by metis_tac[non_dret_terminator_lf_sound] >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, load_store_step_def, LET_THM,
+      is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def] >>
+  irule lf_sound_drestrict >> simp[]
 QED
 
 (* is_terminator is preserved by load_store_step *)
@@ -6437,7 +5328,7 @@ QED
 (* Store opcodes only produce OK or Error via exec_write2 *)
 Triviality store_step_ok_or_error[local]:
   !fuel ctx inst s.
-    is_store_opcode inst.inst_opcode ==>
+    is_store_opcode inst.inst_opcode /\ ~s.vs_call_ctx.cc_static ==>
     (?s'. step_inst fuel ctx inst s = OK s') \/
     (?e. step_inst fuel ctx inst s = Error e)
 Proof
@@ -6450,7 +5341,7 @@ QED
 (* inst_at preserves non-OK non-Error step_inst results *)
 Triviality lse_step_passthrough[local]:
   !aliases bp uc insts i s r.
-    i < LENGTH insts /\
+    i < LENGTH insts /\ ~s.vs_call_ctx.cc_static /\
     step_inst fuel ctx (EL i insts) s = r /\
     (!s'. r <> OK s') /\ (!e. r <> Error e) ==>
     step_inst fuel ctx (inst_at aliases bp uc insts i) s = r
@@ -6529,15 +5420,16 @@ Proof
   BasicProvers.every_case_tac >> gvs[]
 QED
 
-
-(* Helper: pointwise hypotheses for exec_block_pointwise_inv.
-   Threads lf_sound + bp_ptr_sound + alloca_inv as the inner invariant.
-   Additional structural hypotheses: wf_alias_sets, non-terminator,
-   and variable non-clobber (from SSA). *)
+(* Pointwise hypotheses for exec_block_pointwise_inv. Only lf_sound is
+   dynamic; absolute tracked locations and SSA non-clobber are static. *)
 Triviality lse_pointwise_hyps[local]:
   !aliases bp uc bb fuel ctx s.
+    ~s.vs_call_ctx.cc_static /\
     0 < LENGTH bb.bb_instructions /\
-    bp_ptr_sound bp s /\ alloca_inv s /\
+    (!inst sp. MEM inst bb.bb_instructions /\
+       (sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==>
+       (bp_get_read_location bp inst sp).ml_alloca = NONE /\
+       (bp_get_write_location bp inst sp).ml_alloca = NONE) /\
     lf_at aliases bp uc bb.bb_instructions s.vs_inst_idx = FEMPTY /\
     wf_alias_sets aliases /\
     (!i. i < LENGTH bb.bb_instructions /\
@@ -6551,24 +5443,24 @@ Triviality lse_pointwise_hyps[local]:
             (load_store_elim_block aliases bp uc bb).bb_instructions❲i❳.
             inst_opcode)) /\
     (!s_i s_i'.
-       (lf_sound (lf_at aliases bp uc bb.bb_instructions s_i.vs_inst_idx) s_i /\
-        bp_ptr_sound bp s_i /\ alloca_inv s_i) /\
+       ~s_i.vs_call_ctx.cc_static /\
+       lf_sound (lf_at aliases bp uc bb.bb_instructions s_i.vs_inst_idx) s_i /\
        s_i.vs_inst_idx < LENGTH bb.bb_instructions /\
        step_inst fuel ctx bb.bb_instructions❲s_i.vs_inst_idx❳ s_i = OK s_i' ==>
        step_inst fuel ctx
          (load_store_elim_block aliases bp uc bb).bb_instructions❲
            s_i.vs_inst_idx❳ s_i = OK s_i') /\
     (!s_i s_i'.
-       (lf_sound (lf_at aliases bp uc bb.bb_instructions s_i.vs_inst_idx) s_i /\
-        bp_ptr_sound bp s_i /\ alloca_inv s_i) /\
+       ~s_i.vs_call_ctx.cc_static /\
+       lf_sound (lf_at aliases bp uc bb.bb_instructions s_i.vs_inst_idx) s_i /\
        s_i.vs_inst_idx < LENGTH bb.bb_instructions /\
        step_inst fuel ctx bb.bb_instructions❲s_i.vs_inst_idx❳ s_i = OK s_i' ==>
+       ~s_i'.vs_call_ctx.cc_static /\
        lf_sound (lf_at aliases bp uc bb.bb_instructions (SUC s_i.vs_inst_idx))
-         (s_i' with vs_inst_idx := SUC s_i.vs_inst_idx) /\
-       bp_ptr_sound bp s_i' /\ alloca_inv s_i') /\
+         (s_i' with vs_inst_idx := SUC s_i.vs_inst_idx)) /\
     (!s_i.
-       (lf_sound (lf_at aliases bp uc bb.bb_instructions s_i.vs_inst_idx) s_i /\
-        bp_ptr_sound bp s_i /\ alloca_inv s_i) /\
+       ~s_i.vs_call_ctx.cc_static /\
+       lf_sound (lf_at aliases bp uc bb.bb_instructions s_i.vs_inst_idx) s_i /\
        s_i.vs_inst_idx < LENGTH bb.bb_instructions /\
        (!s'. step_inst fuel ctx bb.bb_instructions❲s_i.vs_inst_idx❳ s_i <> OK s') /\
        (!e. step_inst fuel ctx bb.bb_instructions❲s_i.vs_inst_idx❳ s_i <> Error e) ==>
@@ -6583,6 +5475,7 @@ Proof
   >- (rpt strip_tac >> fs[lse_inst_at_eq] >>
       irule lse_step_equiv >> simp[] >> metis_tac[])
   >- (rpt gen_tac >> strip_tac >>
+      conj_tac >- (imp_res_tac mce_step_inst_ok_call_ctx >> gs[]) >>
       Cases_on `is_terminator (EL s_i.vs_inst_idx bb.bb_instructions).inst_opcode`
       >- suspend "terminator_ok"
       >> (
@@ -6593,27 +5486,63 @@ Proof
         qspecl_then [`aliases`, `bp`, `uc`, `bb.bb_instructions`,
                      `s_i.vs_inst_idx`, `s_i`, `s_i'`]
           mp_tac lse_inv_preserved >>
-        simp[]
+        simp[] >> metis_tac[]
       ))
   >> (rpt strip_tac >> fs[lse_inst_at_eq] >>
-      irule lse_step_passthrough >> simp[])
+      irule lse_step_passthrough >> gs[])
 QED
 
 Resume lse_pointwise_hyps[terminator_ok]:
-  drule_all step_terminator_ok_preserves >> strip_tac >>
-  simp[lf_at_def] >>
-  conj_tac
-  >- (simp[lf_sound_inst_idx] >>
-      qspecl_then
-        [`aliases`, `bp`, `uc`,
-         `lf_at aliases bp uc bb.bb_instructions s_i.vs_inst_idx`,
-         `fuel`, `ctx`, `EL s_i.vs_inst_idx bb.bb_instructions`,
-         `s_i`, `s_i'`] mp_tac lse_terminator_lf_sound >>
-      simp[])
-  >> metis_tac[bp_ptr_sound_state_eq, alloca_inv_state_eq]
+  simp[lf_at_def, lf_sound_inst_idx] >>
+  irule lse_terminator_lf_sound >>
+  simp[] >> qexistsl_tac [`ctx`, `fuel`, `s_i`] >> simp[]
 QED
 
 Finalise lse_pointwise_hyps
+
+Theorem lse_run_block_eq[local]:
+  !aliases bp uc bb fuel ctx s.
+    ~s.vs_call_ctx.cc_static /\
+    bb_well_formed bb /\ wf_alias_sets aliases /\
+    (!inst sp. MEM inst bb.bb_instructions /\
+       (sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==>
+       (bp_get_read_location bp inst sp).ml_alloca = NONE /\
+       (bp_get_write_location bp inst sp).ml_alloca = NONE) /\
+    (!i. i < LENGTH bb.bb_instructions /\
+         ~is_terminator (EL i bb.bb_instructions).inst_opcode ==>
+         !v. v IN FDOM (lf_at aliases bp uc bb.bb_instructions i) ==>
+             ~MEM v (EL i bb.bb_instructions).inst_outputs) ==>
+    (?e. run_block fuel ctx bb s = Error e) \/
+    run_block fuel ctx (load_store_elim_block aliases bp uc bb) s =
+      run_block fuel ctx bb s
+Proof
+  rpt gen_tac >> strip_tac >>
+  once_rewrite_tac[run_block_def] >>
+  simp[lse_eval_phis, lse_phi_prefix_length] >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs
+  >- (gvs[] >> rename1 `eval_phis s bb.bb_instructions = OK sp` >>
+      qabbrev_tac `st = sp with vs_inst_idx := phi_prefix_length bb.bb_instructions` >>
+      `st.vs_inst_idx < LENGTH bb.bb_instructions` by
+        simp[Abbr `st`, phi_prefix_length_lt_wf] >>
+      `0 < LENGTH bb.bb_instructions` by decide_tac >>
+      `lf_at aliases bp uc bb.bb_instructions st.vs_inst_idx = FEMPTY` by
+        simp[Abbr `st`, lf_at_phi_prefix_empty] >>
+      `~st.vs_call_ctx.cc_static` by
+        (drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+         disch_then (mp_tac o AP_TERM ``\st:venom_state. st.vs_call_ctx``) >>
+         simp[Abbr `st`]) >>
+      drule_all lse_pointwise_hyps >> strip_tac >>
+      qspecl_then [`LENGTH bb.bb_instructions - st.vs_inst_idx`, `fuel`, `ctx`,
+        `bb`, `load_store_elim_block aliases bp uc bb`, `st`,
+        `\x. ~x.vs_call_ctx.cc_static /\
+             lf_sound (lf_at aliases bp uc bb.bb_instructions x.vs_inst_idx) x`]
+        mp_tac exec_block_pointwise_inv >>
+      simp[lse_length] >>
+      (impl_tac >- (rpt conj_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
+         metis_tac[])) >>
+      simp[])
+  >> gvs[]
+QED
 
 Triviality lse_inv_inst_idx[local]:
   !aliases bp uc insts i s.
@@ -6629,401 +5558,39 @@ Proof
   >> simp[alloca_inv_inst_idx]
 QED
 
-Triviality lse_inv_after_suc_inst_idx[local]:
-  !aliases bp uc insts i s.
-    lf_sound (lf_at aliases bp uc insts (SUC i))
-      (s with vs_inst_idx := SUC i) /\
-    bp_ptr_sound bp s /\ alloca_inv s ==>
-    lf_sound (lf_at aliases bp uc insts
-        (s with vs_inst_idx := SUC i).vs_inst_idx)
-      (s with vs_inst_idx := SUC i) /\
-    bp_ptr_sound bp (s with vs_inst_idx := SUC i) /\
-    alloca_inv (s with vs_inst_idx := SUC i)
-Proof
-  rpt strip_tac >> rpt conj_tac
-  >- (simp[] >> first_assum ACCEPT_TAC)
-  >- simp[bp_ptr_sound_inst_idx]
-  >> simp[alloca_inv_inst_idx]
-QED
-
-Triviality result_not_ok_eq[local]:
-  !r1 r2. r1 = r2 /\ (!s. r2 <> OK s) ==> !s. r1 <> OK s
-Proof
-  rw[]
-QED
-
-Triviality result_not_error_eq[local]:
-  !r1 r2. r1 = r2 /\ (!e. r2 <> Error e) ==> !e. r1 <> Error e
-Proof
-  rw[]
-QED
-
-Triviality copy_elision_inst_phi_eq[local]:
-  !bp dfg v inst. inst.inst_opcode = PHI ==>
-    copy_elision_inst bp dfg v inst = inst
-Proof
-  simp[copy_elision_inst_def]
-QED
-
-(* Helper: copy_elision_inst either keeps outputs or empties them *)
-Triviality copy_elision_inst_outputs[local]:
-  !bp dfg v inst.
-    (copy_elision_inst bp dfg v inst).inst_outputs = inst.inst_outputs \/
-    (copy_elision_inst bp dfg v inst).inst_outputs = []
-Proof
-  rpt gen_tac >>
-  simp[copy_elision_inst_def, LET_THM] >>
-  rpt IF_CASES_TAC >> simp[] >>
-  BasicProvers.every_case_tac >> simp[mk_nop_inst_def]
-QED
-
-(* Helper: load_store_step FDOM monotonicity —
-   FDOM only grows by inst.inst_outputs, never adds other vars *)
-Triviality load_store_step_fdom_mono[local]:
-  !aliases bp uc lf inst.
-    FDOM (FST (load_store_step aliases bp uc (lf, inst))) SUBSET
-    FDOM lf UNION set inst.inst_outputs
-Proof
-  rpt gen_tac >>
-  simp[load_store_step_def, LET_THM] >>
-  rpt IF_CASES_TAC >> simp[]
-  (* Branch 1: load_fact — FUPDATE adds out from inst_outputs *)
-  >- (BasicProvers.every_case_tac >> simp[] >>
-      rpt IF_CASES_TAC >> simp[] >>
-      simp[FDOM_FUPDATE, SUBSET_DEF] >>
-      metis_tac[])
-  (* Branch 2: store — invalidate_loads uses DRESTRICT *)
-  >- (BasicProvers.every_case_tac >> simp[] >>
-      simp[invalidate_loads_def] >>
-      rpt IF_CASES_TAC >>
-      simp[FDOM_DRESTRICT, SUBSET_DEF] >>
-      metis_tac[])
-  (* Branch 3: copy — invalidate_loads uses DRESTRICT *)
-  >- (simp[invalidate_loads_def] >>
-      rpt IF_CASES_TAC >>
-      simp[FDOM_DRESTRICT, SUBSET_DEF] >>
-      metis_tac[])
-  (* Branch 4: Eff_MEMORY — explicit DRESTRICT *)
-  >> simp[FDOM_DRESTRICT, SUBSET_DEF]
-QED
-
-(* Helper: FDOM of lf_at at position i only contains outputs of earlier insts *)
-Triviality lf_at_fdom_earlier_outputs[local]:
-  !i aliases bp uc insts v.
-    v IN FDOM (lf_at aliases bp uc insts i) ==>
-    ?j. j < i /\ j < LENGTH insts /\ MEM v (EL j insts).inst_outputs
-Proof
-  Induct >- simp[lf_at_def] >>
-  rpt strip_tac >>
-  gvs[lf_at_def] >>
-  Cases_on `i < LENGTH insts` >> gvs[]
-  (* Case: i < LENGTH — use load_store_step_fdom_mono *)
-  >- (qspecl_then [`aliases`, `bp`, `uc`, `lf_at aliases bp uc insts i`,
-                    `EL i insts`] mp_tac load_store_step_fdom_mono >>
-      simp[SUBSET_DEF] >> strip_tac >>
-      first_x_assum drule >> strip_tac
-      >- (first_x_assum drule >> strip_tac >>
-          qexists `j` >> simp[])
-      >> qexists `i` >> simp[])
-  (* Case: i >= LENGTH — lf_at (SUC i) = lf_at i, trivial from IH *)
-  >> first_x_assum drule >> strip_tac >>
-  qexists `j` >> simp[]
-QED
-
-Triviality lf_at_opcode_inv[local]:
-  !i aliases bp uc insts v lfact.
-    FLOOKUP (lf_at aliases bp uc insts i) v = SOME lfact ==>
-    is_load_fact_opcode lfact.lf_opcode
-Proof
-  Induct_on `i` >> simp[lf_at_def, FLOOKUP_EMPTY] >>
-  rpt gen_tac >> reverse IF_CASES_TAC >> gvs[] >- metis_tac[] >>
-  simp[load_store_step_def, LET_THM] >> rpt COND_CASES_TAC >>
-  gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, invalidate_loads_def] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-  rpt strip_tac >> gvs[] >> res_tac
-QED
-
-(* ALL_DISTINCT flat-map disjointness at different indices *)
-Triviality all_distinct_flat_map_el_disjoint[local]:
-  !f (l:'a list) j i v.
-    ALL_DISTINCT (FLAT (MAP f l)) /\
-    j < LENGTH l /\ i < LENGTH l /\ j <> i /\
-    MEM v (f (EL j l)) ==> ~MEM v (f (EL i l))
-Proof
-  Induct_on `l` >> simp[] >> rpt strip_tac >>
-  gvs[ALL_DISTINCT_APPEND] >>
-  Cases_on `j` >> Cases_on `i` >> gvs[] >>
-  gvs[MEM_FLAT, MEM_MAP] >> metis_tac[EL_MEM]
-QED
-
-(* A PHI of a block of fn1 is a PHI of a block of fn: copy elision keeps
-   PHIs unchanged. *)
-Triviality fn1_phi_from_fn[local]:
-  !aliases bp fn fn1 bb inst.
-    fn1 = analysis_function_transform NONE
-      (copy_fact_analyze
-         <|ce_aliases := aliases; ce_bp := bp;
-           ce_dfg := dfg_build_function fn|> fn)
-      (\v inst. [copy_elision_inst bp (dfg_build_function fn) v inst]) fn /\
-    fn_inst_wf fn /\
-    MEM bb fn1.fn_blocks /\ MEM inst bb.bb_instructions /\
-    inst.inst_opcode = PHI ==>
-    inst_wf inst /\ ?bb0. MEM bb0 fn.fn_blocks /\ MEM inst bb0.bb_instructions
-Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[analysis_function_transform_def, function_map_transform_def, MEM_MAP] >>
-  rename1 `MEM bb0 fn.fn_blocks` >>
-  gvs[analysis_block_transform_def,
-      passSimulationPropsTheory.flat_mapi_singleton] >>
-  qpat_x_assum `MEM inst (MAPi _ bb0.bb_instructions)`
-    (strip_assume_tac o
-       REWRITE_RULE [MEM_EL, indexedListsTheory.LENGTH_MAPi]) >>
-  rename1 `i < LENGTH bb0.bb_instructions` >>
-  gvs[indexedListsTheory.EL_MAPi] >>
-  qabbrev_tac `inst0 = EL i bb0.bb_instructions` >>
-  `inst0.inst_opcode = PHI` by metis_tac[copy_elision_inst_wf_props] >>
-  gvs[copy_elision_inst_phi_eq] >>
-  `MEM inst0 bb0.bb_instructions` by simp[Abbr `inst0`, EL_MEM] >>
-  gvs[fn_inst_wf_def] >> metis_tac[]
-QED
-
-Triviality lf_at_non_clobber[local]:
-  !aliases bp uc fn fn1 bb.
-    ssa_form fn /\
-    fn1 = analysis_function_transform NONE
-      (copy_fact_analyze
-         <|ce_aliases := aliases; ce_bp := bp;
-           ce_dfg := dfg_build_function fn|> fn)
-      (\v inst. [copy_elision_inst bp (dfg_build_function fn) v inst]) fn /\
-    MEM bb fn1.fn_blocks ==>
-    !i. i < LENGTH bb.bb_instructions /\
-        ~is_terminator (EL i bb.bb_instructions).inst_opcode ==>
-        !v. v IN FDOM (lf_at aliases bp uc bb.bb_instructions i) ==>
-            ~MEM v (EL i bb.bb_instructions).inst_outputs
-Proof
-  rpt strip_tac >>
-  (* Unfold fn1 to expose MAPi structure *)
-  gvs[analysis_function_transform_def, function_map_transform_def,
-      analysis_block_transform_def, MEM_MAP] >>
-  rename1 `MEM bb0 fn.fn_blocks` >>
-  CONV_TAC (DEPTH_CONV (HO_REWR_CONV
-    passSimulationPropsTheory.flat_mapi_singleton)) >>
-  RULE_ASSUM_TAC (CONV_RULE (TRY_CONV (DEPTH_CONV (HO_REWR_CONV
-    passSimulationPropsTheory.flat_mapi_singleton)))) >>
-  gvs[indexedListsTheory.LENGTH_MAPi] >>
-  (* Get j < i with MEM v (EL j transformed_insts).inst_outputs *)
-  drule_all lf_at_fdom_earlier_outputs >> strip_tac >>
-  rename1 `j < i` >>
-  (* Bridge: outputs of transformed inst j ⊆ outputs of original j *)
-  `MEM v (EL j bb0.bb_instructions).inst_outputs` by (
-    qspecl_then [`bp`, `dfg_build_function fn`,
-      `df_at NONE (copy_fact_analyze
-         <|ce_aliases := aliases; ce_bp := bp;
-           ce_dfg := dfg_build_function fn|> fn) bb0.bb_label j`,
-      `EL j bb0.bb_instructions`] strip_assume_tac copy_elision_inst_outputs >>
-    gvs[indexedListsTheory.EL_MAPi]) >>
-  (* Bridge: outputs of transformed inst i ⊆ outputs of original i *)
-  `MEM v (EL i bb0.bb_instructions).inst_outputs` by (
-    qspecl_then [`bp`, `dfg_build_function fn`,
-      `df_at NONE (copy_fact_analyze
-         <|ce_aliases := aliases; ce_bp := bp;
-           ce_dfg := dfg_build_function fn|> fn) bb0.bb_label i`,
-      `EL i bb0.bb_instructions`] strip_assume_tac copy_elision_inst_outputs >>
-    gvs[indexedListsTheory.EL_MAPi]) >>
-  (* SSA gives ALL_DISTINCT for this block's outputs *)
-  `ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb0.bb_instructions))` by (
-    irule ssa_block_outputs_all_distinct >>
-    gvs[ssa_form_def, fn_insts_def] >> metis_tac[]) >>
-  (* Disjointness at different indices *)
-  qspecl_then [`\inst. inst.inst_outputs`, `bb0.bb_instructions`,
-               `j`, `i`, `v`] mp_tac all_distinct_flat_map_el_disjoint >>
-  gvs[indexedListsTheory.LENGTH_MAPi]
-QED
-
 Resume stage2_correct[s2_block_sim]:
-  rpt strip_tac >>
-  imp_res_tac state_equiv_empty_eq >> gvs[] >>
-  `wf_function fn1` by (
-    simp[Abbr `fn1`] >>
-    irule aft_singleton_preserves_wf >>
-    simp[copy_elision_inst_wf_props]) >>
+  rpt strip_tac >> imp_res_tac state_equiv_empty_eq >> gvs[] >>
+  `wf_function fn1` by
+    (simp[Abbr `fn1`] >> irule aft_singleton_preserves_wf >>
+     simp[copy_elision_inst_wf_props]) >>
   `bb_well_formed bb` by gvs[wf_function_def] >>
-  `0 < LENGTH bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> gvs[bb_well_formed_def]) >>
   `wf_alias_sets aliases` by
-    (qpat_x_assum `Abbrev (aliases = _)` (SUBST1_TAC o
-       REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     rewrite_tac[memory_alias_analyze_def] >>
-     MATCH_ACCEPT_TAC memAliasProofsTheory.ma_analyze_wf) >>
-  ONCE_REWRITE_TAC [run_block_def] >>
-  simp[lse_eval_phis, lse_phi_prefix_length] >>
-  qspecl_then [`s1`, `bb.bb_instructions`] strip_assume_tac
-    eval_phis_ok_or_error_defs
-  >- (
-    gvs[] >>
-    rename1 `eval_phis s1 bb.bb_instructions = OK s_phi` >>
-    qabbrev_tac `p = phi_prefix_length bb.bb_instructions` >>
-    qabbrev_tac `s0 = s_phi with vs_inst_idx := p` >>
-    `p < LENGTH bb.bb_instructions` by
-      (simp[Abbr `p`] >> irule phi_prefix_length_lt_wf >> simp[]) >>
-    `bp = bp_analyze (cfg_analyze fn) fn` by simp[Abbr `bp`] >>
-    `fn1 = analysis_function_transform NONE
-       (copy_fact_analyze
-          <|ce_aliases := aliases; ce_bp := bp;
-            ce_dfg := dfg_build_function fn|> fn)
-       (\v inst. [copy_elision_inst bp (dfg_build_function fn) v inst]) fn` by
-      simp[Abbr `fn1`] >>
-    `bp_ptr_sound bp s_phi` by (
-      irule bp_analyze_eval_phis_sound >>
-      qexistsl_tac [`fn`, `bb.bb_instructions`, `s1`] >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      rpt strip_tac >> drule_all fn1_phi_from_fn >> simp[]) >>
-    `bp_ptr_sound bp s0` by
-      simp[Abbr `s0`, bp_ptr_sound_inst_idx] >>
-    `alloca_inv s_phi` by (
-      `s_phi.vs_allocas = s1.vs_allocas /\
-       s_phi.vs_alloca_next = s1.vs_alloca_next` by (
-        mp_tac (Q.SPECL [`s1`, `bb.bb_instructions`, `s_phi`]
-          venomExecProofsTheory.eval_phis_preserves_alloca_fields) >>
-        impl_tac >- first_assum ACCEPT_TAC >>
-        simp[]) >>
-      `alloca_inv s_phi <=> alloca_inv s1` by (
-        irule alloca_inv_state_eq >> simp[]) >>
-      pop_assum (fn th => rewrite_tac [th]) >>
-      first_assum ACCEPT_TAC) >>
-    `alloca_inv s0` by
-      simp[Abbr `s0`, alloca_inv_inst_idx] >>
-    qspecl_then [`aliases`, `bp`, `uc`, `bb`, `fuel`, `ctx`, `s0`]
-      mp_tac lse_pointwise_hyps >>
-    impl_tac >- (
-      conj_tac >- first_assum ACCEPT_TAC >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      conj_tac >- (simp[Abbr `s0`, Abbr `p`, lf_at_phi_prefix_empty]) >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      mp_tac (Q.SPECL [`aliases`, `bp`, `uc`, `fn`, `fn1`, `bb`]
-        lf_at_non_clobber) >>
-      impl_tac >- (
-        conj_tac >- first_assum ACCEPT_TAC >>
-        conj_tac >- first_assum ACCEPT_TAC >>
-        first_assum ACCEPT_TAC) >>
-      disch_then ACCEPT_TAC) >>
-    strip_tac >>
-    qspecl_then [`LENGTH bb.bb_instructions - p`, `fuel`, `ctx`, `bb`,
-                 `load_store_elim_block aliases bp uc bb`, `s0`,
-                 `\st. lf_sound (lf_at aliases bp uc bb.bb_instructions
-                        st.vs_inst_idx) st /\
-                       bp_ptr_sound bp st /\ alloca_inv st`]
-      mp_tac exec_block_pointwise_inv >>
-    impl_tac >- (
-      conj_tac >- simp[lse_length] >>
-      conj_tac >- (simp[Abbr `s0`, Abbr `p`] >> decide_tac) >>
-      conj_tac >- simp[Abbr `s0`] >>
-      conj_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      conj_tac >- (
-        rpt strip_tac >>
-        qpat_x_assum
-          `!s_i s_i'. _ ==> step_inst fuel ctx (load_store_elim_block aliases bp uc bb).bb_instructions❲s_i.vs_inst_idx❳ s_i = OK s_i'`
-          (qspecl_then [`s_i`, `s_i'`] mp_tac) >>
-        impl_tac >- (
-          conj_tac >- (qpat_x_assum `(\st. _) s_i` (strip_assume_tac o BETA_RULE) >>
-              rpt conj_tac >> first_assum ACCEPT_TAC) >>
-          conj_tac >- (qpat_x_assum `s_i.vs_inst_idx = i` mp_tac >> decide_tac) >>
-          qpat_x_assum `s_i.vs_inst_idx = i` (fn th => PURE_REWRITE_TAC[th]) >>
-          first_assum ACCEPT_TAC) >>
-        qpat_x_assum `s_i.vs_inst_idx = i` (fn th => PURE_REWRITE_TAC[th]) >>
-        disch_then ACCEPT_TAC) >>
-      conj_tac >- (
-        rpt strip_tac >>
-        qpat_x_assum
-          `!s_i s_i'. _ ==> lf_sound _ _ /\ bp_ptr_sound _ _ /\ alloca_inv _`
-          (qspecl_then [`s_i`, `s_i'`] mp_tac) >>
-        impl_tac >- (
-          conj_tac >- (qpat_x_assum `(\st. _) s_i` (strip_assume_tac o BETA_RULE) >>
-              rpt conj_tac >> first_assum ACCEPT_TAC) >>
-          conj_tac >- (qpat_x_assum `s_i.vs_inst_idx = i` mp_tac >> decide_tac) >>
-          qpat_x_assum `s_i.vs_inst_idx = i` (fn th => PURE_REWRITE_TAC[th]) >>
-          first_assum ACCEPT_TAC) >>
-        BETA_TAC >>
-        qpat_x_assum `s_i.vs_inst_idx = i` (fn th => PURE_REWRITE_TAC[th]) >>
-        strip_tac >>
-        irule lse_inv_after_suc_inst_idx >>
-        rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      rpt strip_tac >>
-      qpat_x_assum
-        `!s_i. _ ==> step_inst fuel ctx (load_store_elim_block aliases bp uc bb).bb_instructions❲s_i.vs_inst_idx❳ s_i = step_inst fuel ctx bb.bb_instructions❲s_i.vs_inst_idx❳ s_i`
-        (qspec_then `s_i` mp_tac) >>
-      impl_tac >- (
-        conj_tac >- (qpat_x_assum `(\st. _) s_i` (strip_assume_tac o BETA_RULE) >>
-            rpt conj_tac >> first_assum ACCEPT_TAC) >>
-        conj_tac >- (qpat_x_assum `s_i.vs_inst_idx = i` mp_tac >> decide_tac) >>
-        conj_tac >- (
-          irule result_not_ok_eq >>
-          qexists_tac `r` >>
-          conj_tac >- first_assum ACCEPT_TAC >>
-          qpat_x_assum `s_i.vs_inst_idx = i` (fn idx_th =>
-            qpat_x_assum `step_inst fuel ctx bb.bb_instructions❲i❳ s_i = r`
-              (fn step_th => ACCEPT_TAC (PURE_REWRITE_RULE [GSYM idx_th] step_th)))) >>
-        irule result_not_error_eq >>
-        qexists_tac `r` >>
-        conj_tac >- first_assum ACCEPT_TAC >>
-        qpat_x_assum `s_i.vs_inst_idx = i` (fn idx_th =>
-          qpat_x_assum `step_inst fuel ctx bb.bb_instructions❲i❳ s_i = r`
-            (fn step_th => ACCEPT_TAC (PURE_REWRITE_RULE [GSYM idx_th] step_th)))) >>
-      qpat_x_assum `s_i.vs_inst_idx = i` (fn th => PURE_REWRITE_TAC[th]) >>
-      disch_then (fn th => PURE_REWRITE_TAC[th]) >>
-      first_assum ACCEPT_TAC) >>
-    strip_tac >>
-    first_x_assum (qspec_then `exec_block fuel ctx bb s0` mp_tac) >>
-    impl_tac >- REFL_TAC >>
-    strip_tac
-    >- (disj1_tac >> qexists_tac `e` >> first_assum ACCEPT_TAC) >>
-    disj2_tac >>
-    pop_assum (fn th => PURE_REWRITE_TAC[th]) >>
-    Cases_on `exec_block fuel ctx bb s0` >>
-    simp[lift_result_def, state_equiv_refl, execution_equiv_refl])
-  >> (gvs[] >> disj1_tac >> simp[])
-(*
-  rpt strip_tac >>
-  imp_res_tac state_equiv_empty_eq >> gvs[] >>
-  (* Empty block: both sides return Error *)
-  Cases_on `bb.bb_instructions = []`
-  >- (disj1_tac >> ONCE_REWRITE_TAC [run_block_def] >>
-      simp[eval_phis_def] >> once_rewrite_tac [exec_block_def] >>
-      simp[get_instruction_def]) >>
-  `0 < LENGTH bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> gvs[]) >>
-  (* Apply exec_block_pointwise_inv *)
-  qspecl_then [`LENGTH bb.bb_instructions`, `fuel`, `ctx`, `bb`,
-    `load_store_elim_block aliases bp uc bb`, `s1`,
-    `\st. lf_sound (lf_at aliases bp uc bb.bb_instructions st.vs_inst_idx) st /\
-          bp_ptr_sound bp st /\ alloca_inv st`]
-    mp_tac exec_block_pointwise_inv >>
-  simp[lse_length] >>
-  `wf_alias_sets aliases` by
-    (qpat_x_assum `Abbrev (aliases = _)` (SUBST1_TAC o
-       REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     rewrite_tac[memory_alias_analyze_def] >>
-     MATCH_ACCEPT_TAC memAliasProofsTheory.ma_analyze_wf) >>
-  (impl_tac >- (
-    irule lse_pointwise_hyps >> simp[] >>
-    qspecl_then [`aliases`, `bp`, `uc`, `fn`, `fn1`, `bb`]
-      mp_tac lf_at_non_clobber >>
-    simp[Abbr `fn1`])) >>
-  strip_tac
-  >- (disj1_tac >> metis_tac[])
-  >> disj2_tac >> pop_assum (fn th => rewrite_tac[th]) >>
-  Cases_on `exec_block fuel ctx bb s1` >>
+    (simp[Abbr `aliases`, memory_alias_analyze_def,
+          memAliasProofsTheory.ma_analyze_wf]) >>
+  `!bb inst sp. MEM bb fn1.fn_blocks /\ MEM inst bb.bb_instructions /\
+       (sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==>
+       (bp_get_read_location bp inst sp).ml_alloca = NONE /\
+       (bp_get_write_location bp inst sp).ml_alloca = NONE` by
+    (qspecl_then [`bp`, `dfg_build_function fn`,
+       `copy_fact_analyze <|ce_aliases := aliases; ce_bp := bp;
+         ce_dfg := dfg_build_function fn|> fn`, `fn`]
+       mp_tac ce_function_tracked_alloca >>
+     (impl_tac >- (rpt gen_tac >> strip_tac >>
+       first_x_assum irule >> simp[] >> metis_tac[])) >>
+     simp[Abbr `fn1`]) >>
+  `!i. i < LENGTH bb.bb_instructions /\
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode ==>
+       !v. v IN FDOM (lf_at aliases bp uc bb.bb_instructions i) ==>
+           ~MEM v (EL i bb.bb_instructions).inst_outputs` by
+    (qspecl_then [`aliases`, `bp`, `uc`, `fn`, `fn1`, `bb`]
+       mp_tac lf_at_non_clobber >> simp[Abbr `fn1`]) >>
+  qspecl_then [`aliases`, `bp`, `uc`, `bb`, `fuel`, `ctx`, `s1`]
+    mp_tac lse_run_block_eq >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  strip_tac >- (disj1_tac >> simp[]) >>
+  disj2_tac >> simp[] >>
+  Cases_on `run_block fuel ctx bb s1` >>
   simp[lift_result_def, state_equiv_refl, execution_equiv_refl]
-*)
 QED
 
 Finalise stage2_correct
@@ -7064,6 +5631,7 @@ Theorem copy_elision_function_correct_proof:
     fn_inst_wf fn /\
     wf_ssa fn /\
     s.vs_inst_idx = 0 /\
+    ~s.vs_call_ctx.cc_static /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_assigns_sound dfg s /\
     bp_ptr_sound bp s /\
@@ -7092,6 +5660,11 @@ Theorem copy_elision_function_correct_proof:
        allocas_non_overlapping (s1 with vs_inst_idx := 0) /\
        allocas_in_word (s1 with vs_inst_idx := 0) /\
        bp_ptrs_bounded bp fn (s1 with vs_inst_idx := 0)) /\
+    (!bb inst sp.
+       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       sp <> AddrSp_Memory ==>
+       (bp_get_read_location bp inst sp).ml_alloca = NONE /\
+       (bp_get_write_location bp inst sp).ml_alloca = NONE) /\
     LENGTH s.vs_memory < dimword (:256) ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
@@ -7160,6 +5733,7 @@ QED
 Resume copy_elision_function_correct_proof[stage2]:
   mp_tac (Q.SPECL [`fuel`, `ctx`, `fn`, `s`] stage2_correct) >>
   simp_tac std_ss [LET_THM] >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
   simp[Abbr `fn1`, Abbr `fn2`]
 QED
 
