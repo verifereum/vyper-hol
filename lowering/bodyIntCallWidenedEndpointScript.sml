@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallAssemblyFrame bodyIntCallAssemblyModes bodyIntCallCompilerBoundary
   intCallFrame arithmetic venomMemDefs loweringHalt compileEnv exprLoweringProps venomState venomExecSemantics
   fragGasPath fragGasFocus emitHelperProps emitHelper list valueTypingMemoryProps vyperValue
-  bodyIntCallEmitBoundary valueEncodingProofs bodyIntCallCompletedPath exprSimProps loweringPosts
+  bodyIntCallEmitBoundary valueEncodingProofs bodyIntCallCompletedPath exprSimProps loweringPosts loweringStateRelDefs
 
 Theorem owned_endpoint_index_region[local]:
   local_region ce scopes (z with vs_inst_idx := k) id lb lsz =

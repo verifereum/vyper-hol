@@ -6,7 +6,7 @@ Ancestors
   compileEnv loweringPosts exprLoweringProps venomExecSemantics venomState
   venomInst list rich_list loweringHalt venomMemDefs context
   bodyIntCallReturnLayout exprSimProps valueEncoding valueEncodingProofs
-  valueTypingMemoryProps vyperTyping
+  valueTypingMemoryProps vyperTyping loweringStateRelDefs
 
 Theorem emit_void_invoke_instruction:
   emit_void INVOKE ops si = ((),sb) /\ fn_has_code si sb func /\

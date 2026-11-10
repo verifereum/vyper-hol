@@ -3,7 +3,7 @@ Ancestors
   bodyIntCallAssemblyFrame bodyIntCallCompletedModes bodyIntCallCompletedFrame
   compileEnv exprLoweringProps loweringPosts venomExecSemantics venomState
   fragGasFocus fragGasPath finite_map list bodyIntCallEmitBoundary
-  localPtrsProps emitHelper emitHelperProps intCallFrame words
+  localPtrsProps emitHelper emitHelperProps intCallFrame words loweringStateRelDefs
 
 Theorem void_return_endpoint:
   post_value_type ce e = expr_type e /\

@@ -3,7 +3,7 @@ Ancestors
   bodyIntCallCompletedPath bodyIntCallCallerFrame bodyIntCallRestoreFrame
   exprSimRawCallCalldata exprLoweringProps loweringPosts compileEnv
   fragGasPath fragGasFocus intCallFrame venomExecSemantics venomState
-  finite_map list
+  finite_map list loweringStateRelDefs
 
 Theorem counted_return_stmt_state_rel:
   gas_invoke_entry (ctx,func) t callee entered /\

@@ -2,7 +2,7 @@
 Theory extCallSeamFrame
 Ancestors
   extCallSeamOracle exprSimProps loweringPosts valueCopy compileEnv
-  venomState valueEncoding words list
+  venomState valueEncoding words list loweringStateRelDefs
 
 Theorem extcall_default_write_frame:
   expr_val_rel cx ty d op s /\

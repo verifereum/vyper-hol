@@ -8,7 +8,10 @@ Theorem wb_frame_scopes_cong:
   es1.scopes = es2.scopes /\ wb_frame ce es0 es1 sa s0 s ==>
   wb_frame ce es0 es2 sa s0 s
 Proof
-  strip_tac >> pop_assum mp_tac >> simp[wb_frame_def, locals_kept_def, popped_kept_def]
+  strip_tac >>
+  `locals_kept ce es0 es2 s0 s <=> locals_kept ce es0 es1 s0 s` by
+    simp[locals_kept_def, popped_kept_def] >>
+  fs[wb_frame_def]
 QED
 
 (* Restore the caller's entire expression frame, not just its locals.

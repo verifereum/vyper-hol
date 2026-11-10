@@ -3,7 +3,7 @@ Theory extCallSeamFinish
 Ancestors
   extCallSeamOracle rawCallFragPath exprSimRawCallCalldata exprLoweringProps
   emitHelperProps emitHelper exprLowering venomState venomInst list rich_list
-  fragGasPath compileEnv fragExec
+  fragGasPath compileEnv fragExec loweringStateRelDefs
 
 Theorem extcall_finish_branch_path:
   emit_inst JNZ [cond;Label ok;Label fl] [] sa = (a,sx) /\

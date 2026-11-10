@@ -2,7 +2,7 @@ Theory bodyIntCallStoreRun
 Ancestors
   bodyIntCallStorePost bodyIntCallReturnLayout intCallResult loweringSlice localPtrsProps
   exprSimProps compileEnv exprLoweringProps finite_map list valueEncodingProps
-  venomState venomMemDefs
+  venomState venomMemDefs loweringStateRelDefs
 
 Theorem owned_memory_tail_state_rel:
   stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce si /\

@@ -3,7 +3,7 @@ Theory extCallSeamPrecheck
 Ancestors
   extCallSeamOracle exprSimDefs fragGasPath accountsRelProps vyperRuntimeAccounts
   exprLowering exprLoweringProps rawCallFragPath emitHelperProps venomExecSemantics venomInst
-  compileEnv emitHelper venomState exprSimProps loweringPosts vyperInterpreter vyperState vfmState list words
+  compileEnv emitHelper venomState exprSimProps loweringPosts vyperInterpreter vyperState vfmState list words loweringStateRelDefs
 
 Theorem extcall_precheck_code_word:
   stmt_state_rel ctx func cenv cx es s /\

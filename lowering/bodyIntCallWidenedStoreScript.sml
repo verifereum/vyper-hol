@@ -3,7 +3,7 @@ Ancestors
   bodyIntCallStoreRun bodyIntCallStorePost bodyIntCallReturnLayout
   intCallResult compileEnv exprLoweringProps venomState venomMemDefs
   finite_map list rich_list valueTypingMemoryProps exprSimProps fragGasSeq
-  fragGasPath fragExec
+  fragGasPath fragExec loweringStateRelDefs
 
 (* Keep the allocation witness rather than consuming it in vv_at. *)
 Theorem stack_buffer_run_owned:

@@ -3,7 +3,7 @@ Ancestors
   bodyIntCallRestoreResults bodyIntCallReturnLayout exprSimProps
   loweringPosts compileEnv exprLoweringProps intCallResult
   finite_map arithmetic list venomMemDefs exprSimHash valueTypingMemoryProps
-  fragExec venomState
+  fragExec venomState loweringStateRelDefs
 
 (* A write inside a fresh owned allocation preserves the original frame.
    Source scopes need not be identical: transport the original regions. *)
