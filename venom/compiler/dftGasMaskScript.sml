@@ -2425,6 +2425,47 @@ Proof
   simp[update_var_def, passSimulationDefsTheory.terminates_def])
 QED
 
+Theorem prefix_cursor_ok[local]:
+  !xs s k u.
+    EVERY (\i. ~is_terminator i.inst_opcode) xs ==>
+    (FOLDR (dft_exec_cons fuel C) OK xs (s with vs_inst_idx := k) = OK u <=>
+     ?v. FOLDR (dft_exec_cons fuel C) OK xs s = OK v /\
+         u = v with vs_inst_idx := k + LENGTH xs)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (simp[] >> metis_tac[]) >>
+  qpat_x_assum `!s k u. _` (fn ih =>
+  fs[EVERY_DEF] >>
+  Cases_on `h.inst_opcode = INVOKE`
+  >- (simp[dftIndexedExecTheory.dft_exec_cons_def,
+           analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
+      Cases_on `step_inst fuel C h s` >> simp[] >>
+      qspecl_then [`v with vs_inst_idx := SUC s.vs_inst_idx`, `SUC k`, `u`]
+        mp_tac ih >> simp[arithmeticTheory.ADD_CLAUSES]) >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def,
+       analysisSimProofsBaseTheory.step_inst_idx_indep] >>
+  Cases_on `step_inst fuel C h s` >>
+  simp[instIdxIndepTheory.exec_result_map_def] >>
+  qspecl_then [`v with vs_inst_idx := SUC s.vs_inst_idx`, `SUC k`, `u`]
+    mp_tac ih >> simp[arithmeticTheory.ADD_CLAUSES])
+QED
+
+Theorem prefix_independent_update_cursor_ok[local]:
+  !xs s out w k u.
+    EVERY (\i. ~is_terminator i.inst_opcode /\
+      (!v. MEM (Var v) i.inst_operands ==> out <> v) /\
+      ~MEM out i.inst_outputs) xs ==>
+    (FOLDR (dft_exec_cons fuel C) OK xs
+       ((update_var out w s) with vs_inst_idx := k) = OK u <=>
+     ?v. FOLDR (dft_exec_cons fuel C) OK xs s = OK v /\
+         u = (update_var out w v) with vs_inst_idx := k + LENGTH xs)
+Proof
+  rpt strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) xs` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  simp[prefix_cursor_ok, prefix_independent_update_ok] >> metis_tac[]
+QED
+
 Theorem prefix_nonterminator_no_intret[local]:
   !xs s ir u.
     EVERY (\i. ~is_terminator i.inst_opcode) xs ==>
@@ -2969,7 +3010,18 @@ Proof
     >- (gvs[Abbr `a`, EVERY_APPEND, EVERY_DEF]) >>
     disch_then (qx_choose_then `pm` (qx_choose_then `pe`
       (qx_choose_then `pu` strip_assume_tac))) >>
-    FAIL_TAC "GAS identity certificate obtained"
+    qexistsl_tac [`pm ++ [SOME v]`, `pe ++ [(s.vs_current_bb,y.inst_id)]`, `pu`] >>
+    conj_tac >- simp[] >>
+    conj_tac
+    >- (simp[FILTER_APPEND, Abbr `a`] >>
+        irule PERM_TRANS >>
+        qexists_tac `v::(MAP THE (FILTER IS_SOME pm) ++ pu)` >>
+        conj_tac >- (once_rewrite_tac[PERM_SYM] >>
+          pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+          irule CONS_PERM >> simp[]) >>
+        gvs[]) >>
+    conj_tac >- (FAIL_TAC "GAS target returning slots") >>
+    FAIL_TAC "GAS filling assembly"
   ) >>
   FAIL_TAC "noninvoke extraction pending"
 QED
