@@ -20,17 +20,17 @@ Theorem abi_encode_tuple_staged_observer:
   eval_exprs cx args es = (INL vs,es') /\
   vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
   abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
-  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) st = (buf,allocated) /\
-  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP expr_type args)) allocated = ((),staged) /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
   s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_allocas /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_allocas /\
   s.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_alloca_next /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_alloca_next /\
   eval_operand buf.buf_operand s = SOME (n2w sb) /\
-  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) /\
-  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) s.vs_memory /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) /\
+  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) s.vs_memory /\
   enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) /\
-  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)))
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)))
     staged = (ops,ready) /\
   compile_abi_encode_to_buf (SND ops) buf.buf_operand ei ready = (len,body_end) /\
   abi_builtin_encode_finish (FST ops) len (case mid of NONE => 0 | SOME _ => 4)
@@ -54,7 +54,7 @@ Theorem abi_encode_tuple_staged_observer:
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_exec_frame obs s actual /\
     abi_encode_staged_observation ctx func ce cx es' staged (FST ops) mid
-      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+
+      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
         (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -84,17 +84,17 @@ Theorem abi_encode_tuple_relabel_resources:
   eval_exprs cx args es = (INL vs,es') /\
   vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
   abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
-  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) st = (buf,allocated) /\
-  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP expr_type args)) allocated = ((),staged) /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
   s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_allocas /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_allocas /\
   s.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_alloca_next /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_alloca_next /\
   eval_operand buf.buf_operand s = SOME (n2w sb) /\
-  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) /\
-  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) s.vs_memory /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) /\
+  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) s.vs_memory /\
   enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) /\
-  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)))
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)))
     staged = (ops,ready) /\
   compile_abi_encode_to_buf (SND ops) buf.buf_operand ei ready = (len,body_end) /\
   fn_has_code st allocated func /\ fn_has_code staged ready func /\
@@ -103,10 +103,10 @@ Theorem abi_encode_tuple_relabel_resources:
   (!j. MEM j (fn_insts obs) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
     MEM j (fn_insts func)) /\ local_ptrs_reserved ce st /\
   LENGTH ids = LENGTH staged.cs_current_insts ==>
-  let n = abi_tuple_bytes ce (ZIP (values,MAP expr_type args)) in
+  let n = abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)) in
   let m = case mid of NONE => 0 | SOME _ => 4 in
   let mw = case mid of NONE => 0 | SOME _ => 32 in
-  let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+m) in
+  let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+m) in
   let rs = s with vs_current_bb := L in
   let rst = start_relabel L ids staged in
   let rr = start_swap staged L ids ready in
@@ -164,18 +164,18 @@ Theorem abi_encode_tuple_relabel_observer:
   eval_exprs cx args es = (INL vs,es') /\
   vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
   abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
-  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) st = (buf,allocated) /\
-  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP expr_type args)) allocated = ((),staged) /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
   s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_allocas /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_allocas /\
   s.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_alloca_next /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_alloca_next /\
   eval_operand buf.buf_operand s = SOME (n2w sb) /\
-  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) /\
-  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) s.vs_memory /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) /\
+  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) s.vs_memory /\
   enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) /\
   lower_abi_encode ensure mid buf.buf_operand ei
-    (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))) staged = (out,final) /\
+    (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) staged = (out,final) /\
   fn_has_code st allocated func /\ fn_has_code staged final func /\
   fn_inst_ids_distinct func /\ fn_inst_ids_distinct obs /\ obs.fn_name = func.fn_name /\
   (!j. MEM j (fn_insts obs) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
@@ -193,7 +193,7 @@ Theorem abi_encode_tuple_relabel_observer:
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_exec_frame obs (s with vs_current_bb := L) actual /\
     abi_encode_staged_observation ctx func ce cx es' staged out mid
-      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+
+      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
         (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -253,7 +253,7 @@ Resume abi_encode_tuple_relabel_observer[phases]:
     actual.vs_inst_idx = LENGTH rf.cs_current_insts /\
     abi_encode_exec_frame obs rs actual /\
     abi_encode_staged_observation ctx func ce cx es' rst (FST ops) mid
-      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+
+      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
         (case mid of NONE => 0 | SOME _ => 4))) p ct rv rs actual` by
     (irule abi_encode_staged_observer >>
      qpat_assum `abi_builtin_encode_setup _ _ rst = _` (irule_at Any) >>
@@ -281,18 +281,18 @@ Theorem abi_encode_tuple_raw_phases:
   eval_exprs cx args es = (INL vs,es') /\
   vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
   abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
-  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) st = (buf,allocated) /\
-  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP expr_type args)) allocated = ((),staged) /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
   s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_allocas /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_allocas /\
   s.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_alloca_next /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_alloca_next /\
   eval_operand buf.buf_operand s = SOME (n2w sb) /\
-  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) /\
-  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) s.vs_memory /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) /\
+  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) s.vs_memory /\
   enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) /\
-  ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)) /\
-  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)))
+  ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)) /\
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)))
     staged = (ops,ready) /\
   compile_abi_encode_to_buf (SND ops) buf.buf_operand ei ready = (len,body_end) /\
   abi_builtin_encode_finish (FST ops) len (case mid of NONE => 0 | SOME _ => 4)
@@ -311,7 +311,7 @@ Theorem abi_encode_tuple_raw_phases:
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_exec_frame func s actual /\
     abi_encode_staged_observation ctx func ce cx es' staged (FST ops) mid
-      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+
+      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
         (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -334,7 +334,7 @@ Proof
   drule abi_encoder_counters >> strip_tac >>
   `staged.cs_next_var <= ready.cs_next_var /\ staged.cs_next_var <= body_end.cs_next_var` by
     (qpat_assum `ready.cs_next_var = _` mp_tac >> Cases_on `mid` >> simp_tac arith_ss [] >> decide_tac) >>
-  `abi_tuple_bytes ce (ZIP (values,MAP expr_type args)) = 0 ==>
+  `abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)) = 0 ==>
     (ei = AbiCopy 0 \/ ei = AbiComplex []) /\ enc ct rv = []` by
     (strip_tac >> drule abi_args_post_lengths >> strip_tac >>
      drule_all abi_encode_tuple_zero_descriptor >> disch_then assume_tac >>
@@ -360,19 +360,19 @@ Theorem abi_encode_tuple_no_block_observer:
   eval_exprs cx args es = (INL vs,es') /\
   vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
   abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
-  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) st = (buf,allocated) /\
-  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP expr_type args)) allocated = ((),staged) /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
   s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_allocas /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_allocas /\
   s.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_alloca_next /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_alloca_next /\
   eval_operand buf.buf_operand s = SOME (n2w sb) /\
-  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) /\
-  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) s.vs_memory /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) /\
+  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) s.vs_memory /\
   enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) /\
-  ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)) /\
+  ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)) /\
   lower_abi_encode ensure mid buf.buf_operand ei
-    (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))) staged = (out,final) /\
+    (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) staged = (out,final) /\
   fn_has_code st allocated func /\ fn_has_code staged final func /\ fn_inst_ids_distinct func /\
   staged.cs_blocks = final.cs_blocks /\ fn_has_code staged final obs /\
   local_ptrs_reserved ce st /\ local_ptrs_reserved ce staged /\
@@ -385,7 +385,7 @@ Theorem abi_encode_tuple_no_block_observer:
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_exec_frame func s actual /\
     abi_encode_staged_observation ctx func ce cx es' staged out mid
-      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+
+      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
         (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -409,19 +409,19 @@ Theorem abi_encode_tuple_counted_encoder:
   eval_exprs cx args es = (INL vs,es') /\
   vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
   abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
-  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) st = (buf,allocated) /\
-  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP expr_type args)) allocated = ((),staged) /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
   s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_allocas /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_allocas /\
   s.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_alloca_next /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_alloca_next /\
   eval_operand buf.buf_operand s = SOME (n2w sb) /\
-  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) /\
-  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) s.vs_memory /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) /\
+  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) s.vs_memory /\
   enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) /\
-  ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)) /\
+  ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)) /\
   lower_abi_encode ensure mid buf.buf_operand ei
-    (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))) staged = (out,final) /\
+    (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) staged = (out,final) /\
   fn_has_code st allocated func /\ fn_has_code staged final func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ local_ptrs_reserved ce staged /\
   stmt_state_rel ctx func ce cx es' s /\ abi_encoder_admissible ei /\
@@ -433,14 +433,14 @@ Theorem abi_encode_tuple_counted_encoder:
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_staged_observation ctx func ce cx es' staged out mid
-      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+
+      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
         (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all lower_abi_encode_frag_facts >> strip_tac >>
   qabbrev_tac `Q = \actual. ?p.
     abi_encode_staged_observation ctx func ce cx es' staged out mid
-      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+
+      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
         (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual` >>
   `(!t rd. Q t ==> Q (t with vs_returndata := rd)) /\
    (!t prev. Q t ==> Q (t with vs_prev_bb := prev))` by simp[Abbr `Q`] >>
