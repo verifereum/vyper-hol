@@ -162,6 +162,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all entry_array_init_operational >> strip_tac >>
   drule_all entry_initializer_input_fields >> strip_tac >>
+  drule_all entry_initializer_code >> strip_tac >>
   `entry_loop_fields initial t` by simp[entry_loop_fields_def] >>
   `p < dimword (:256)` by
     (`initial.vs_alloca_next < dimword (:256)` by

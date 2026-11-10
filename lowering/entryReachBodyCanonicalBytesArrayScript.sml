@@ -1084,6 +1084,7 @@ Proof
      qexists_tac `aty` >> asm_rewrite_tac[]) >>
   drule_all entry_array_init_accepted_live >> strip_tac >>
   drule_all entry_array_initializer_final_fresh >> strip_tac >>
+  drule_all entry_initializer_code >> strip_tac >>
   qpat_assum `abi_decode_footprint_frame _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decode_footprint_frame_def]) >>
   qpat_x_assum `mem_bytes_at _ _ (abi_decode_source _ _) = _`

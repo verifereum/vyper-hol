@@ -58,7 +58,7 @@ Theorem slice_allocated_window_preserved:
   i + n <= sz ==>
   mem_bytes_at (b+i) n t.vs_memory = mem_bytes_at (b+i) n s.vs_memory
 Proof
-  strip_tac >>
+  rpt strip_tac >>
   `mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
     (qpat_x_assum `wb_frame _ _ _ _ _ _`
        (mp_tac o el 3 o CONJUNCTS o REWRITE_RULE [wb_frame_def]) >>
