@@ -6,62 +6,6 @@ Ancestors
   bodyBinopFamiliesMemory bodyBinopFragMemory
   stmtSimProps stmtSimDefs loweringPosts exprSimDefs gasOutcome gasSummary fragGasMode
 
-Theorem aug_place_binop_write_callback_mem:
-  compile_binop bop x y ty NONE el s2 = (op,s3) /\
-  binop_frag_val_mem ctx func cenv cx bop ty ty NONE el tys cur rhs ee /\
-  expr_res_ok (bop_result cx ty bop tys cur rhs ee) /\
-  (!z. x = Var z ==> not_fresh_at s2 z) /\
-  (!z. y = Var z ==> not_fresh_at s2 z) /\
-  fn_has_code s2 s3 func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv s2 /\
-  stmt_state_rel ctx func cenv cx ee s /\ alloca_history func s /\
-  eval_operand x s = SOME (val_to_w256 cur) /\
-  eval_operand y s = SOME (val_to_w256 rhs) /\
-  ~s.vs_halted /\ s.vs_current_bb = s2.cs_current_bb /\
-  s.vs_inst_idx = LENGTH s2.cs_current_insts /\
-  k ee = (res,ff) /\
-  (!tail. k (ee with gas_obs := tail) = (res,ff with gas_obs := tail)) /\
-  (!ex. bop_result cx ty bop tys cur rhs ee = INR ex ==> res = INR ex) /\
-  (!v t. bop_result cx ty bop tys cur rhs ee = INL v /\ word_value v /\
-     gas_marked_path T ctx func s 0 (OK t) /\
-     stmt_state_rel ctx func cenv cx ee t /\
-     eval_operand op t = SOME (val_to_w256 v) /\
-     (!z w. not_fresh_at s2 z /\ lookup_var z s = SOME w ==>
-            lookup_var z t = SOME w) /\
-     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-              FLOOKUP t.vs_allocas aid = SOME b) /\
-     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
-     t.vs_current_bb = s3.cs_current_bb /\
-     t.vs_inst_idx = LENGTH s3.cs_current_insts /\
-     alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next ==>
-     ?u. gas_marked_path T ctx func t 0 (OK u) /\
-         Q res (ff with gas_obs := []) u) ==>
-  gas_outcome T (cx_tops cx) (ctx,func) k (ee,s) Q
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
-Proof
-  strip_tac >>
-  qpat_x_assum `binop_frag_val_mem _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [binop_frag_val_mem_def, binop_frag_mem_def]) >>
-  disch_then (qspecl_then [`s2`, `s3`, `x`, `y`, `op`, `s`] mp_tac) >>
-  impl_tac >- simp[] >> strip_tac
-  >- (gvs[] >>
-      qpat_x_assum `!t. gas_marked_path _ _ _ _ _ _ /\ _ ==> _`
-        (qspec_then `s''` mp_tac) >> simp[] >> strip_tac >>
-      `gas_marked_path T ctx func s 0 (OK u)` by
-        (drule_all gas_marked_path_then >> simp[]) >>
-      simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-      simp[gas_summary_at_def, gas_marked_exec_def] >>
-      qexistsl_tac [`res`, `ff`, `OK u`] >> simp[]) >>
-  simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-  simp[gas_summary_at_def, gas_marked_exec_def] >>
-  qexistsl_tac [`res`, `ff`, `r`] >> simp[] >>
-  disj2_tac >> gen_tac >>
-  Cases_on `bop_result cx ty bop tys cur rhs ee` >>
-  gvs[expr_exit_def, stmt_exit_def] >> disj1_tac >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``] expr_exit_INR_type] >>
-  first_assum ACCEPT_TAC
-QED
-
 (* Transport the saved destination and its numerical bound across the operator.
    The same adapter handles local memory, storage, and transient words. *)
 Theorem aug_place_word_store_after_operator_mem:

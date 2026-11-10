@@ -9,7 +9,7 @@ Ancestors
   stmtSimAugAssignPlaceStorage gasContext targetPlaceSimCases stmtSimDefs
   vyperExprNoControl vyperInterpreter vyperState
 
-Theorem aug_place_memory_word_frontier:
+Theorem aug_place_memory_word_frontier[local]:
   stmt_state_rel ctx func cenv cx es s /\
   expr_sim_inv cenv cx env es /\
   lookup_scopes id es.scopes = SOME entry /\
@@ -77,7 +77,7 @@ Proof
 QED
 
 (* Storage and transient loads have no linear-memory footprint. *)
-Theorem aug_place_storage_access_path:
+Theorem aug_place_storage_access_path[local]:
   emit_op (if tr then TLOAD else SLOAD) [arg] sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
