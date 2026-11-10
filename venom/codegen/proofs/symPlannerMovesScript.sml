@@ -2295,6 +2295,188 @@ Proof
     arithmeticTheory.NOT_LESS, arithmeticTheory.LT1_EQ0]
 QED
 
+Theorem sym_reduce_depth_mid_ready[local]:
+  do_spill_at cand ps = (spill_ops,qs) /\
+  reduce_depth_plan fuel targets op f n qs = (rest_ops,out) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled /\
+  r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
+  qs.ps_alloc.sa_next_offset <= r.sr_spill_end
+Proof
+  metis_tac[do_spill_at_layout_wf, do_spill_at_spill_base,
+    reduce_depth_plan_next_offset, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem sym_spill_address_projection[local]:
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops ==>
+  EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) ops
+Proof
+  strip_tac >> irule EVERY_MONOTONIC >>
+  goal_assum (drule_at Any) >> Cases >> simp[]
+QED
+
+Theorem sym_plan_append_runs[local]:
+  sym_steps p env (LENGTH (execute_plan initial_fmp pre)) ss = SymOK mid /\
+  sym_steps p env (LENGTH (execute_plan initial_fmp post)) mid = SymOK last /\
+  sym_kinds_ok cplan fn ret srest out last /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp pre) /\
+  last.sym_base.as_pc = mid.sym_base.as_pc + LENGTH (execute_plan initial_fmp post) /\
+  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+    FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+    FLOOKUP last.sym_mem_labels b = FLOOKUP mid.sym_mem_labels b) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp (pre ++ post))) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (pre ++ post)) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rw[execute_plan_append] >> drule_all_then assume_tac sym_steps_compose_ok >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem sym_reduce_depth_branch_ready[local]:
+  stack_get_unfixed_depth op f n ps.ps_stack = SOME dist /\
+  select_spill_candidate ps.ps_stack targets dist n = SOME cand /\
+  do_spill_at cand ps = (spill_ops,qs) /\
+  reduce_depth_plan fuel targets op f n qs = (rest_ops,out) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) spill_ops ==>
+  cand <= 16 /\ cand < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled /\
+  r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
+  qs.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) spill_ops
+Proof
+  strip_tac >> drule_all_then strip_assume_tac sym_reduce_depth_candidate >>
+  metis_tac[sym_reduce_depth_mid_ready, sym_spill_address_projection]
+QED
+
+Theorem sym_spill_at_prefix_ready[local]:
+  do_spill_at cand ps = (spill_ops,qs) /\ cand <= 16 /\ cand < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) spill_ops /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  qs.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (spill_ops ++ rest_ops)) ==>
+  ?mid. sym_steps p env (LENGTH (execute_plan initial_fmp spill_ops)) ss = SymOK mid /\
+    sym_kinds_ok cplan fn ret srest qs mid /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp spill_ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp rest_ops)
+Proof
+  rw[execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  drule_all_then (qspec_then `env` strip_assume_tac) sym_do_spill_at >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem sym_reduce_depth_prefix_ready[local]:
+  stack_get_unfixed_depth op f n ps.ps_stack = SOME dist /\
+  select_spill_candidate ps.ps_stack targets dist n = SOME cand /\
+  do_spill_at cand ps = (spill_ops,qs) /\
+  reduce_depth_plan fuel targets op f n qs = (rest_ops,out) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) spill_ops /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (spill_ops ++ rest_ops)) ==>
+  ?mid. spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled /\
+    r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp spill_ops)) ss = SymOK mid /\
+    sym_kinds_ok cplan fn ret srest qs mid /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp spill_ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp rest_ops)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac sym_reduce_depth_branch_ready >>
+  drule_all_then (qspec_then `env` (fn th => metis_tac[th])) sym_spill_at_prefix_ready
+QED
+
+Theorem sym_reduce_depth_tail_continue[local]:
+  (!qs rs final st.
+    reduce_depth_plan fuel targets op f n qs = (rs,final) /\
+    spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled /\
+    EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) rs /\
+    MEM r cplan.cp_regions /\ r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
+    final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    sym_kinds_ok cplan fn ret srest qs st /\
+    asm_block_at p st.sym_base.as_pc (execute_plan initial_fmp rs) ==>
+    ?last. sym_steps p env (LENGTH (execute_plan initial_fmp rs)) st = SymOK last /\
+      sym_kinds_ok cplan fn ret srest final last /\
+      last.sym_base.as_pc = st.sym_base.as_pc + LENGTH (execute_plan initial_fmp rs) /\
+      (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+        FLOOKUP last.sym_mem_labels b = FLOOKUP st.sym_mem_labels b)) /\
+  reduce_depth_plan fuel targets op f n qs = (rest_ops,out) /\
+  spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) rest_ops /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_steps p env (LENGTH (execute_plan initial_fmp spill_ops)) ss = SymOK mid /\
+  sym_kinds_ok cplan fn ret srest qs mid /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp spill_ops) /\
+  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+    FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+  asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp rest_ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp (spill_ops ++ rest_ops))) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (spill_ops ++ rest_ops)) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> first_x_assum (drule_all_then strip_assume_tac) >>
+  drule_all_then MATCH_ACCEPT_TAC sym_plan_append_runs
+QED
+
+Theorem sym_reduce_depth_spill_tail[local]:
+  (!qs rs final st.
+    reduce_depth_plan fuel targets op f n qs = (rs,final) /\
+    spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled /\
+    EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) rs /\
+    MEM r cplan.cp_regions /\ r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
+    final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    sym_kinds_ok cplan fn ret srest qs st /\
+    asm_block_at p st.sym_base.as_pc (execute_plan initial_fmp rs) ==>
+    ?last. sym_steps p env (LENGTH (execute_plan initial_fmp rs)) st = SymOK last /\
+      sym_kinds_ok cplan fn ret srest final last /\
+      last.sym_base.as_pc = st.sym_base.as_pc + LENGTH (execute_plan initial_fmp rs) /\
+      (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+        FLOOKUP last.sym_mem_labels b = FLOOKUP st.sym_mem_labels b)) /\
+  stack_get_unfixed_depth op f n ps.ps_stack = SOME dist /\
+  select_spill_candidate ps.ps_stack targets dist n = SOME cand /\
+  do_spill_at cand ps = (spill_ops,qs) /\
+  reduce_depth_plan fuel targets op f n qs = (rest_ops,out) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (spill_ops ++ rest_ops) /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (spill_ops ++ rest_ops)) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp (spill_ops ++ rest_ops))) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (spill_ops ++ rest_ops)) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rw_tac pure_ss [EVERY_APPEND] >>
+  drule_all_then (qspec_then `env` strip_assume_tac) sym_reduce_depth_prefix_ready >>
+  drule_all_then MATCH_ACCEPT_TAC sym_reduce_depth_tail_continue
+QED
+
 Theorem sym_reduce_depth_plan:
   !fuel targets op f n ps ops out ss.
   reduce_depth_plan fuel targets op f n ps = (ops,out) /\
@@ -2311,9 +2493,11 @@ Theorem sym_reduce_depth_plan:
     (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  Induct >> simp[Once reduce_depth_plan_def]
-  >- simp[execute_plan_def, sym_steps_compute] >>
-  rpt gen_tac >> strip_tac >>
+  Induct
+  >- simp[Once reduce_depth_plan_def, execute_plan_def, sym_steps_compute] >>
+  pop_assum (mk_asm "ih") >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `reduce_depth_plan (SUC _) _ _ _ _ _ = _` mp_tac >>
+  simp[Once reduce_depth_plan_def] >> strip_tac >>
   Cases_on `f + 1 < n` >> gvs[]
   >- simp[execute_plan_def, sym_steps_compute] >>
   Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> gvs[]
@@ -2324,24 +2508,7 @@ Proof
   Cases_on `select_spill_candidate ps.ps_stack targets dist n` >> gvs[]
   >- simp[execute_plan_def, sym_steps_compute] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  drule_all sym_reduce_depth_candidate >> strip_tac >>
-  `spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled /\
-   r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
-   ps'.ps_alloc.sa_next_offset <= r.sr_spill_end` by
-    metis_tac[do_spill_at_layout_wf, do_spill_at_spill_base,
-      reduce_depth_plan_next_offset, arithmeticTheory.LESS_EQ_TRANS] >>
-  qpat_x_assum `asm_block_at _ _ _` mp_tac >>
-  simp[execute_plan_append, stackOpSimTheory.asm_block_at_append] >> strip_tac >>
-  `EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) spill_ops` by
-    (irule EVERY_MONOTONIC >> goal_assum (drule_at Any) >> Cases >> simp[]) >>
-  drule_all_then (qspec_then `env` strip_assume_tac) sym_do_spill_at >>
-  rename1 `sym_kinds_ok cplan fn ret srest ps' mid` >>
-  `asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp rest_ops)` by
-    metis_tac[arithmeticTheory.ADD_COMM] >>
-  first_x_assum (qspecl_then [`targets`, `op`, `f`, `n`] mp_tac) >>
-  disch_then drule_all >> strip_tac >>
-  qexists `last` >> simp[execute_plan_append] >>
-  reverse conj_tac >- metis_tac[] >>
-  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
-  simp[sym_steps_add]
+  asm_x "ih" (qspecl_then [`targets`, `op`, `f`, `n`] assume_tac) >>
+  drule_all_then (qspec_then `env` strip_assume_tac) sym_reduce_depth_prefix_ready >>
+  drule_all_then (fn th => metis_tac[th, arithmeticTheory.ADD_COMM]) sym_reduce_depth_tail_continue
 QED
