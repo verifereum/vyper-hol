@@ -633,3 +633,239 @@ Proof
   Cases_on `SUC c.ic_index = e.ise_index` >> simp[] >>
   gvs[] >> decide_tac
 QED
+
+Theorem inline_cell_focus_nonempty:
+  0 < LENGTH (FST (inline_cell_focus e bb cb j))
+Proof
+  simp[inline_cell_focus_def, rewrite_inline_inst_def] >>
+  rpt IF_CASES_TAC >> simp[LET_THM]
+QED
+
+Theorem inline_cell_next_source:
+  inline_cell_at c ==>
+  (?src. inline_cell_at
+    (inline_make_cell c.ic_function c.ic_block (SUC c.ic_index)
+      (inline_inst_fields src))) \/
+  (?bb. lookup_block c.ic_block c.ic_function.fn_blocks = SOME bb /\
+    SUC c.ic_index = LENGTH bb.bb_instructions)
+Proof
+  simp[inline_cell_at_def, inline_fetched_fields_def, inline_make_cell_def,
+    get_instruction_def] >> rpt strip_tac >>
+  Cases_on `SUC c.ic_index < LENGTH bb.bb_instructions`
+  >- (disj1_tac >> qexistsl_tac [`EL (SUC c.ic_index) bb.bb_instructions`, `bb`] >> simp[]) >>
+  `SUC c.ic_index = LENGTH bb.bb_instructions` by decide_tac >>
+  metis_tac[]
+QED
+
+(* The source successor may be the selected call itself.  Its emitted JMP is
+   still fetched even though the ordinary path-location action is NONE. *)
+Theorem inline_keep_next_produce:
+  inline_cell_frame (KeepCell e) c d /\ inline_cell_at n /\
+  n.ic_function = c.ic_function /\ n.ic_block = c.ic_block /\
+  n.ic_index = SUC c.ic_index ==>
+  ?tag out. (tag = KeepCell e \/ tag = SelectedJump e) /\
+    inline_cell_frame tag n out /\ inline_cell_at out /\
+    out.ic_function = d.ic_function /\ out.ic_block = d.ic_block /\
+    out.ic_index = SUC d.ic_index
+Proof
+  strip_tac >>
+  Cases_on `n.ic_block = e.ise_block /\ n.ic_index = e.ise_index`
+  >- (`?out. inline_cell_frame (SelectedJump e) n out` by
+        (irule inline_selected_cell_produce >>
+         gvs[inline_cell_frame_def] >> metis_tac[]) >>
+      qexistsl_tac [`SelectedJump e`, `out`] >>
+      `inline_cell_at out` by metis_tac[inline_cell_frame_sound] >>
+      gvs[inline_cell_frame_def, inline_make_cell_def]) >>
+  `?out. inline_cell_frame (KeepCell e) n out` by
+    (irule inline_keep_cell_produce >>
+     gvs[inline_cell_frame_def] >> metis_tac[]) >>
+  qexistsl_tac [`KeepCell e`, `out`] >>
+  `inline_cell_at out` by metis_tac[inline_cell_frame_sound] >>
+  gvs[inline_cell_frame_def, inline_make_cell_def] >>
+  Cases_on `c.ic_block = e.ise_block` >> gvs[] >>
+  Cases_on `e.ise_index < c.ic_index` >> gvs[] >> decide_tac
+QED
+
+Theorem inline_enter_next_produce:
+  inline_cell_frame (EnterCell e k) c d /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+  lookup_block c.ic_block e.ise_callee.fn_blocks = SOME cb /\
+  get_instruction cb c.ic_index = SOME src /\
+  ~MEM src.inst_opcode [PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] /\
+  inline_cell_at n /\ n.ic_function = c.ic_function /\
+  n.ic_block = c.ic_block /\ n.ic_index = SUC c.ic_index ==>
+  ?out. inline_cell_frame (EnterCell e 0) n out /\ inline_cell_at out /\
+    out.ic_function = d.ic_function /\ out.ic_block = d.ic_block /\
+    out.ic_index = SUC d.ic_index
+Proof
+  strip_tac >>
+  `?out. inline_cell_frame (EnterCell e 0) n out` by
+    (irule inline_enter_cell_produce >>
+     gvs[inline_cell_frame_def] >>
+     metis_tac[inline_cell_focus_nonempty]) >>
+  qexists_tac `out` >>
+  `inline_cell_at out` by metis_tac[inline_cell_frame_sound] >>
+  drule_all inline_cell_focus_singleton >> strip_tac >>
+  drule_all inline_cell_prefix_singleton_suc >> strip_tac >>
+  gvs[inline_cell_frame_def, inline_make_cell_def]
+QED
+
+Theorem inline_cell_frame_next_produce:
+  inline_cell_frame tag c d /\ c.ic_fields = inline_inst_fields src /\
+  ~MEM src.inst_opcode [PHI; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] /\
+  (!e. tag <> SelectedJump e) /\
+  inline_cell_at n /\ n.ic_function = c.ic_function /\
+  n.ic_block = c.ic_block /\ n.ic_index = SUC c.ic_index ==>
+  ?next_tag out. inline_cell_choice next_tag = inline_cell_choice tag /\
+    (!e k. next_tag = EnterCell e k ==> k = 0) /\
+    inline_cell_frame next_tag n out /\ inline_cell_at out /\
+    out.ic_function = d.ic_function /\ out.ic_block = d.ic_block /\
+    out.ic_index = SUC d.ic_index
+Proof
+  strip_tac >> Cases_on `tag` >> gvs[]
+  >- (drule_all inline_keep_next_produce >> strip_tac >>
+      qexistsl_tac [`tag`, `out`] >>
+      gvs[inline_cell_choice_def] >> metis_tac[inline_cell_choice_def]) >>
+  `?bb cb inst. lookup_block i.ise_block i.ise_caller.fn_blocks = SOME bb /\
+    lookup_block c.ic_block i.ise_callee.fn_blocks = SOME cb /\
+    get_instruction cb c.ic_index = SOME inst /\
+    inline_inst_fields inst = inline_inst_fields src` by
+      (gvs[inline_cell_frame_def] >> metis_tac[]) >>
+  `~MEM inst.inst_opcode [PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP]` by
+    gvs[inline_inst_fields_def] >>
+  drule_all inline_enter_next_produce >> strip_tac >>
+  qexistsl_tac [`EnterCell i 0`, `out`] >> simp[inline_cell_choice_def]
+QED
+
+(* Recompute every outer frame from the newly emitted successor, rather than
+   reusing the source counter or incrementing saved frame indices. *)
+Theorem inline_cell_zipper_next_produce:
+  !frames c d src n.
+  inline_cell_zipper c frames d /\ c.ic_fields = inline_inst_fields src /\
+  ~MEM src.inst_opcode [PHI; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames /\
+  inline_cell_at n /\ n.ic_function = c.ic_function /\
+  n.ic_block = c.ic_block /\ n.ic_index = SUC c.ic_index ==>
+  ?next_frames out. inline_cell_zipper n next_frames out /\ inline_cell_at out /\
+    EVERY (\(tag,next). !e k. tag = EnterCell e k ==> k = 0) next_frames /\
+    MAP (\(tag,next). inline_cell_choice tag) next_frames =
+      MAP (\(tag,next). inline_cell_choice tag) frames /\
+    out.ic_function = d.ic_function /\ out.ic_block = d.ic_block /\
+    out.ic_index = SUC d.ic_index
+Proof
+  Induct
+  >- (simp[inline_cell_zipper_def] >> rpt strip_tac >>
+      qexistsl_tac [`[]`, `n`] >> simp[]) >>
+  qx_gen_tac `h` >> PairCases_on `h` >>
+  simp[inline_cell_zipper_def] >> rpt strip_tac >>
+  `?next_tag mid. inline_cell_choice next_tag = inline_cell_choice h0 /\
+    (!e k. next_tag = EnterCell e k ==> k = 0) /\
+    inline_cell_frame next_tag n mid /\ inline_cell_at mid /\
+    mid.ic_function = h1.ic_function /\ mid.ic_block = h1.ic_block /\
+    mid.ic_index = SUC h1.ic_index` by
+      (irule inline_cell_frame_next_produce >> simp[] >>
+       qexistsl_tac [`c`, `src`] >> simp[]) >>
+  `h1.ic_fields = inline_inst_fields
+    (case h0 of EnterCell e k =>
+      clone_instruction e.ise_prefix (fn_labels e.ise_callee) src | _ => src)` by
+    (irule inline_cell_frame_ordinary_fields >> simp[] >>
+     qexists_tac `c` >> simp[]) >>
+  first_x_assum drule >>
+  disch_then (qspec_then
+    `case h0 of EnterCell e k =>
+       clone_instruction e.ise_prefix (fn_labels e.ise_callee) src | _ => src`
+    (qspec_then `mid` mp_tac)) >>
+  impl_tac
+  >- (Cases_on `h0` >> gvs[clone_instruction_def]) >>
+  strip_tac >>
+  qexistsl_tac [`(next_tag,mid)::next_frames`, `out`] >>
+  simp[inline_cell_zipper_def]
+QED
+
+Theorem inline_cell_zipper_successor_cases:
+  inline_cell_at c /\ inline_cell_zipper c frames d /\
+  c.ic_fields = inline_inst_fields src /\
+  ~MEM src.inst_opcode [PHI; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames ==>
+  (?n next_frames out.
+    inline_cell_at n /\ n.ic_function = c.ic_function /\
+    n.ic_block = c.ic_block /\ n.ic_index = SUC c.ic_index /\
+    inline_cell_zipper n next_frames out /\ inline_cell_at out /\
+    EVERY (\(tag,next). !e k. tag = EnterCell e k ==> k = 0) next_frames /\
+    MAP (\(tag,next). inline_cell_choice tag) next_frames =
+      MAP (\(tag,next). inline_cell_choice tag) frames /\
+    out.ic_function = d.ic_function /\ out.ic_block = d.ic_block /\
+    out.ic_index = SUC d.ic_index) \/
+  (?bb. lookup_block c.ic_block c.ic_function.fn_blocks = SOME bb /\
+    SUC c.ic_index = LENGTH bb.bb_instructions)
+Proof
+  strip_tac >> drule inline_cell_next_source >> strip_tac
+  >- (disj1_tac >>
+      qmatch_asmsub_abbrev_tac `inline_cell_at n` >>
+      `n.ic_function = c.ic_function /\ n.ic_block = c.ic_block /\
+       n.ic_index = SUC c.ic_index` by simp[Abbr `n`, inline_make_cell_def] >>
+      drule_all inline_cell_zipper_next_produce >> strip_tac >>
+      qexistsl_tac [`n`, `next_frames`, `out`] >> simp[]) >>
+  disj2_tac >> metis_tac[]
+QED
+
+Theorem inline_cell_selected_projection:
+  inline_cell_frame (SelectedJump e) c d ==>
+  inline_choice_location (InlineKeep e) (inline_cell_location c counter) = NONE
+Proof
+  simp[inline_cell_frame_def, inline_cell_location_def,
+    inline_choice_location_def] >> rpt strip_tac >> simp[]
+QED
+
+Theorem inline_cell_frame_path_projection:
+  inline_cell_frame tag c d /\
+  (!e k. tag = EnterCell e k ==> k = 0 /\
+    ALL_DISTINCT (fn_labels e.ise_caller)) ==>
+  (!e. tag <> SelectedJump e) /\
+    (?counter'. inline_choice_location (inline_cell_choice tag)
+      (inline_cell_location c counter) = SOME (inline_cell_location d counter')) \/
+  ((?e. tag = SelectedJump e) /\
+    inline_choice_location (inline_cell_choice tag)
+      (inline_cell_location c counter) = NONE)
+Proof
+  Cases_on `tag` >> simp[inline_cell_choice_def] >> strip_tac
+  >- metis_tac[inline_keep_cell_projection]
+  >- metis_tac[inline_cell_selected_projection] >>
+  gvs[] >>
+  `?bb cb. lookup_block i.ise_block i.ise_caller.fn_blocks = SOME bb /\
+    lookup_block c.ic_block i.ise_callee.fn_blocks = SOME cb /\
+    i.ise_index < LENGTH bb.bb_instructions` by
+    (gvs[inline_cell_frame_def] >>
+     qpat_x_assum `inline_site_edit_valid i` mp_tac >>
+     simp[inline_site_edit_valid_def] >> strip_tac >>
+     drule_all functionInlinerWfTheory.find_invoke_site_lookup >>
+     simp[]) >>
+  metis_tac[inline_enter_cell_projection]
+QED
+
+Theorem inline_cell_zipper_path_projection:
+  !frames c d counter.
+  inline_cell_zipper c frames d /\
+  EVERY (\(tag,next). !e k. tag = EnterCell e k ==> k = 0 /\
+    ALL_DISTINCT (fn_labels e.ise_caller)) frames ==>
+  (EVERY (\(tag,next). !e. tag <> SelectedJump e) frames /\
+    ?counter'. inline_path_location
+      (MAP (\(tag,next). inline_cell_choice tag) frames)
+      (SOME (inline_cell_location c counter)) = SOME (inline_cell_location d counter')) \/
+  ((?tag next. MEM (tag,next) frames /\ ?e. tag = SelectedJump e) /\
+    inline_path_location (MAP (\(tag,next). inline_cell_choice tag) frames)
+      (SOME (inline_cell_location c counter)) = NONE)
+Proof
+  Induct >> simp[inline_cell_zipper_def, inline_path_location_def]
+  >- metis_tac[] >>
+  qx_gen_tac `h` >> PairCases_on `h` >>
+  simp[inline_cell_zipper_def] >> rpt strip_tac >>
+  drule_all inline_cell_frame_path_projection >>
+  disch_then (qspec_then `counter` strip_assume_tac)
+  >- (first_x_assum drule >> disch_then drule >>
+      disch_then (qspec_then `counter'` mp_tac) >> strip_tac >>
+      pure_rewrite_tac[inline_path_location_def, MAP, FOLDL] >>
+      simp[inline_location_step_def, GSYM inline_path_location_def] >> metis_tac[]) >>
+  pure_rewrite_tac[inline_path_location_def, MAP, FOLDL] >>
+  simp[inline_location_step_def, GSYM inline_path_location_def] >> metis_tac[]
+QED
