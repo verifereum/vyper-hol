@@ -493,6 +493,51 @@ Theorem deploy_ctor_array_loop_complete_gas_finite:
     t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
     t.vs_block_ctx = s.vs_block_ctx
 Proof
-  FAIL_TAC "pending"
+  disch_then (CONJUNCTS_THEN2 (mk_asm "child") (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  qabbrev_tac `R = \j u. (^Ok) k ctx func site ids D N d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
+    tv vs slot_id slot initial j j u /\
+    ~u.vs_halted /\ u.vs_current_bb = hdr /\ u.vs_inst_idx = 0 /\
+    u.vs_outcomes = s.vs_outcomes /\ u.vs_tx_ctx = s.vs_tx_ctx /\
+    u.vs_block_ctx = s.vs_block_ctx /\ gas_path ctx func s 0 (OK u)` >>
+  qabbrev_tac `Post = \u. gas_path ctx func s 0 (OK u) /\
+    (^Ok) k ctx func site ids D N d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
+    tv vs slot_id slot initial (LENGTH vs) (LENGTH vs) u /\
+    ~u.vs_halted /\ u.vs_current_bb = exit_lbl /\ u.vs_inst_idx = 0 /\
+    u.vs_outcomes = s.vs_outcomes /\ u.vs_tx_ctx = s.vs_tx_ctx /\
+    u.vs_block_ctx = s.vs_block_ctx` >>
+  `i <= LENGTH vs /\ R i s` by
+    (simp[Abbr `R`, cj 1 gas_path_rules] >> fs[]) >>
+  `!j u. j < LENGTH vs /\ R j u ==>
+    ?v. R (SUC j) v /\ abi_decode_sim ctx func u v` by
+    (simp[Abbr `R`] >> rpt strip_tac >> asm "child" assume_tac >>
+     `(^Ok) k ctx func site ids D N d
+       (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
+       tv vs slot_id slot initial j j u` by simp[] >>
+     drule_all deploy_ctor_array_loop_complete_gas_step >>
+     disch_then (qx_choose_then `v` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+     `gas_path ctx func s 0 (OK v)` by
+       (qpat_x_assum `gas_path _ _ s _ _` mp_tac >>
+        qpat_x_assum `gas_path _ _ u _ _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_path_then, ADD_0]) >>
+     qexists `v` >> fs[]) >>
+  `!u. R (LENGTH vs) u ==> ?v. Post v /\ abi_decode_sim ctx func u v` by
+    (simp[Abbr `R`, Abbr `Post`] >> rpt strip_tac >>
+     `(^Ok) k ctx func site ids D N d
+       (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
+       tv vs slot_id slot initial (LENGTH vs) (LENGTH vs) u` by simp[] >>
+     drule_all (Q.INST [`s` |-> `u:venom_state`, `j` |-> `LENGTH (vs:vyperValue$value list)`]
+       deploy_ctor_array_header_complete_gas_reach) >>
+     disch_then (qx_choose_then `v` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+     `gas_path ctx func s 0 (OK v)` by
+       (qpat_x_assum `gas_path _ _ s _ _` mp_tac >>
+        qpat_x_assum `gas_path _ _ u _ _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_path_then, ADD_0]) >>
+     qexists `v` >> fs[]) >>
+  `?t. Post t /\ abi_decode_sim ctx func s t` by
+    (irule deploy_ctor_array_complete_finite_bridge >> qexistsl [`R`, `i`, `LENGTH vs`] >>
+     asm_simp_tac bool_ss []) >>
+  gvs[Abbr `Post`] >> goal_assum (drule_at Any) >> simp[]
 QED
 
