@@ -279,7 +279,9 @@ Theorem ctor_word_copy_loop_appends:
   !src dst n load_loc store_loc is_ctor.
     cs_appends (compile_word_copy_loop src dst n load_loc store_loc is_ctor)
 Proof
-  rpt gen_tac >> rewrite_tac[compile_word_copy_loop_def] >>
+  rpt gen_tac >>
+  rewrite_tac[compile_word_copy_loop_def, compile_word_copy_loop_op_def,
+              compile_word_copy_loop_base_def] >>
   simp_tac (srw_ss()) [LET_THM] >>
   Cases_on `word_scale load_loc = 1` >>
   Cases_on `word_scale store_loc = 1` >> simp[] >>
