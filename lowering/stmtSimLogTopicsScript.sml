@@ -1,5 +1,6 @@
 Theory stmtSimLogTopics
 Ancestors
+  exprSimHashBoundary
   exprBopSimProps
   exprSimDefs exprSimProps exprSimStack loweringPosts
   stmtSimLogArgs stmtSimLogSource stmtLowering compileEnv loweringStateRelDefs context
@@ -264,7 +265,7 @@ QED
 Theorem log_readonly_frame:
   (t with vs_vars := s.vs_vars) = s /\
   (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s) ==>
-  wb_frame cenv es sa s t
+  wb_frame cenv es es sa s t
 Proof
   strip_tac >>
   `t = s with vs_vars := t.vs_vars` by
@@ -273,7 +274,7 @@ Proof
   `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `_ with vs_vars := _ = _`
       (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas)`) >> simp[]) >>
-  simp[wb_frame_def, locals_kept_def]
+  simp[wb_frame_def, exprSimPropsTheory.locals_kept_mem]
 QED
 
 Theorem log_readonly_arg:
@@ -286,7 +287,7 @@ Theorem log_readonly_arg:
   log_arg_rel cenv cx sa sb es t arg v
 Proof
   strip_tac >>
-  `wb_frame cenv es sm s t` by (irule log_readonly_frame >> simp[]) >>
+  `wb_frame cenv es es sm s t` by (irule log_readonly_frame >> simp[]) >>
   irule log_arg_rel_frame >> simp[] >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any)
@@ -477,7 +478,7 @@ Theorem compile_split_log_topics_run:
     stmt_state_rel ctx func cenv cx es t /\
     LIST_REL (log_arg_rel cenv cx sa sb es t)
       (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
-    wb_frame cenv es sm s t /\
+    wb_frame cenv es es sm s t /\
     EVERY (\op. (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) ops
 Proof
   strip_tac >>

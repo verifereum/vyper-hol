@@ -215,23 +215,11 @@ Proof
 QED
 
 
-Theorem ifexp_vv_post_of_expr_post_read[local]:
-  expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s /\
-  read_result cx tv es' = (INL v, es') ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' tv
-    (if is_word_type (expr_type e) then StackValue (expr_type e) (Var rv)
-     else LocatedValue (expr_type e) (mk_ptr (Var rv) LocMemory)) s
-Proof
-  rw[expr_post_def, vv_post_def] >>
-  gvs[vv_holds_def, vv_at_def, contextTheory.mk_ptr_def] >>
-  fs[expr_val_rel_def, expr_val_at_def] >>
-  rpt strip_tac >> res_tac >> gvs[] >> metis_tac[]
-QED
-
 Theorem ifexp_finish_post[local]:
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
   read_result cx tv ee = (INL v,ee) /\ expr_type e = t /\
+  post_value_type cenv e = expr_type e /\
   eval_operand op u = SOME w /\ (!x. not_fresh_at sa x ==> x <> rv) /\
   local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
@@ -245,59 +233,11 @@ Theorem ifexp_finish_post[local]:
 Proof
   strip_tac >>
   irule (SRULE [vyperASTTheory.expr_type_def]
-    (Q.INST [`e` |-> `IfExp t c a b`] ifexp_vv_post_of_expr_post_read)) >>
+    (Q.INST [`e` |-> `IfExp t c a b`] exprSimIfExpTheory.ifexp_root_vv_post_of_expr_post_read)) >>
   goal_assum (drule_at Any) >>
   irule expr_post_ifexp >>
   `~not_fresh_at sa rv` by metis_tac[] >>
   simp[] >> metis_tac[]
-QED
-
-Theorem ifexp_arm_finish_mem[local]:
-  expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
-  expr_type e = t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
-  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-  sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
-  sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
-  sd.cs_next_id <= sb.cs_next_id /\ sb.cs_current_bb = xl /\ sb.cs_current_insts = [] /\
-  emit_inst ASSIGN [op] [rv] sd = ((),sy) /\
-  emit_inst JMP [Label xl] [] sy = ((),sz) /\
-  fn_has_code sd sy func /\ fn_has_code sy sz func /\ fn_inst_ids_distinct func /\
-  s0.vs_alloca_next <= tt.vs_alloca_next /\
-  gas_outcome T tops (ctx,func) source (es1,jump_to lbl tt)
-    (\res ee u. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
-      expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
-      (~is_word_type t ==> vv_store_bound cx t (lowered_value_type cenv (IfExp t c a b))
-        ee tv (LocatedValue t (mk_ptr op LocMemory)) u) /\
-      u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts /\
-      alloca_history func u /\ tt.vs_alloca_next <= u.vs_alloca_next) R ==>
-  gas_outcome T tops (ctx,func) source (es1,jump_to lbl tt)
-    (\res ee u. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
-        (if is_word_type t then StackValue t (Var rv)
-         else LocatedValue t (mk_ptr (Var rv) LocMemory)) u /\
-      vv_store_bound cx t (lowered_value_type cenv (IfExp t c a b)) ee tv
-        (if is_word_type t then StackValue t (Var rv)
-         else LocatedValue t (mk_ptr (Var rv) LocMemory)) u /\
-      u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next) R
-Proof
-  strip_tac >> irule ifexp_outcome_suffix_mem >>
-  goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
-  `?w. eval_operand op u = SOME w` by fs[expr_post_def, expr_val_rel_def] >>
-  qexists_tac `jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)` >>
-  conj_tac >- (irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>
-  qexists_tac `tv` >> simp[] >> conj_tac
-  >- (irule ifexp_finish_post >> simp[] >> metis_tac[]) >>
-  conj_tac
-  >- (Cases_on `is_word_type t` >> simp[vv_store_bound_stack_word] >>
-      irule ifexp_pointer_bound_assign >> metis_tac[]) >>
-  `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
-  `alloca_history func ((update_var rv w u) with
-      vs_inst_idx := LENGTH sy.cs_current_insts)` by
-    (irule assign_history >> metis_tac[]) >>
-  drule ifexp_history_jump >> disch_then (qspec_then `xl` assume_tac) >>
-  simp[jump_to_def, update_var_def]
 QED
 
 Theorem ifexp_forced_arm_finish_mem[local]:
@@ -325,11 +265,13 @@ Theorem ifexp_forced_arm_finish_mem[local]:
 Proof
   strip_tac >> irule ifexp_outcome_suffix_mem >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[loweringPostsTheory.post_value_type_word] >>
   `?w. eval_operand op u = SOME w` by fs[expr_post_def, expr_val_rel_def] >>
   qexists_tac `jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)` >>
   conj_tac >- (irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>
   qexists_tac `v` >> simp[] >> conj_tac
-  >- (irule expr_post_ifexp >> metis_tac[]) >>
+  >- (irule expr_post_ifexp >> metis_tac[post_value_type_word]) >>
   `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
   `alloca_history func ((update_var rv w u) with
       vs_inst_idx := LENGTH sy.cs_current_insts)` by
@@ -718,7 +660,7 @@ Resume compile_ifexp_word_vv_sim_mem[route_after_unwrap]:
         (mp_then Any mp_tac ifexp_finish_post) >>
       disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
-      simp[] >> disch_then irule >> gvs[]) >>
+      simp[] >> disch_then irule >> gvs[post_value_type_word]) >>
   `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
   `alloca_history func (update_var rv w u with
       vs_inst_idx := LENGTH sy.cs_current_insts)` by

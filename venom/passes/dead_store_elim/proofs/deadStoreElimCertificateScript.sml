@@ -16,7 +16,7 @@ val _ = augment_srw_ss [deadStoreElimFrameLib.frame_ss];
    the initial construction, never asserted on transformed states. *)
 Definition dse_occ_safe_def:
   dse_occ_safe fn inst s <=>
-    ~s.vs_call_ctx.cc_static /\
+    ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
     alloca_inv s /\
     (!aid base sz. FLOOKUP s.vs_allocas aid = SOME (base, sz) ==>
                    base + sz < dimword (:256)) /\
@@ -48,8 +48,19 @@ Proof
   metis_tac[step_preserves_call_ctx]
 QED
 
+Theorem step_inst_ok_preserves_halted[local]:
+  step_inst fuel ctx inst s = OK s1 ==> s1.vs_halted = s.vs_halted
+Proof
+  strip_tac >> Cases_on `is_terminator inst.inst_opcode`
+  >- (`inst.inst_opcode <> INVOKE` by
+        (drule_all step_inst_ok_terminator_jump >> rw[] >> simp[]) >>
+      gvs[step_inst_non_invoke] >>
+      metis_tac[step_inst_base_OK_preserves_halted]) >>
+  metis_tac[step_preserves_halted]
+QED
+
 Theorem dse_certificate_initial:
-  s.vs_inst_idx = 0 /\ ~s.vs_call_ctx.cc_static /\ safe_inv s /\
+  s.vs_inst_idx = 0 /\ ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\ safe_inv s /\
   (!bb s0 s1.
     lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
     s0.vs_inst_idx = 0 /\ safe_inv s0 /\
@@ -76,15 +87,18 @@ Proof
   strip_tac >> gvs[dse_run_certificate_def] >>
   irule decorated_run_invariant >>
   reverse conj_tac >- metis_tac[] >>
-  qexists_tac `\s0. ~s0.vs_call_ctx.cc_static /\ safe_inv s0` >>
+  qexists_tac `\s0. ~s0.vs_call_ctx.cc_static /\ ~s0.vs_halted /\ safe_inv s0` >>
   simp[dse_occ_safe_def] >> rpt conj_tac
   >- (rpt strip_tac
       >- (drule step_inst_ok_preserves_call_ctx >> strip_tac >>
+          Cases_on `is_terminator inst.inst_opcode` >> gvs[])
+      >- (drule step_inst_ok_preserves_halted >> strip_tac >>
           Cases_on `is_terminator inst.inst_opcode` >> gvs[])
       >> first_x_assum irule >> simp[] >> metis_tac[])
   >- (rpt strip_tac >> first_x_assum drule >> strip_tac >> simp[] >> res_tac)
   >> rpt strip_tac
   >- (drule eval_phis_preserves_call_ctx >> strip_tac >> gvs[])
+  >- (drule eval_phis_preserves_halted >> strip_tac >> gvs[])
   >> first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
@@ -120,7 +134,7 @@ QED
 
 Theorem dse_occ_safe_agrees:
   dse_safety_agrees s t /\ s.vs_call_ctx = t.vs_call_ctx /\
-  dse_occ_safe fn inst s ==>
+  s.vs_halted = t.vs_halted /\ dse_occ_safe fn inst s ==>
   dse_occ_safe fn inst t
 Proof
   strip_tac >> gvs[dse_occ_safe_def] >>
@@ -132,7 +146,7 @@ QED
 Theorem dse_occ_safe_single_pass:
   wf_function fn /\ all_dead_stores ids cfg aliases bp sp fn /\
   dse_safety_agrees s t /\ s.vs_call_ctx = t.vs_call_ctx /\
-  dse_occ_safe fn inst s ==>
+  s.vs_halted = t.vs_halted /\ dse_occ_safe fn inst s ==>
   dse_occ_safe (dse_single_pass ids sp fn) (dse_inst ids sp inst) t
 Proof
   strip_tac >>
@@ -171,13 +185,13 @@ Theorem dse_decorated_block:
       sp fn bb s.vs_inst_idx P s ==>
     ?r'. decorated_block (dse_occ_safe (dse_single_pass ids sp fn)) fuel ctx
         (block_map_transform (dse_inst ids sp) bb) t r' /\
-      lift_result (dse_block_post sp fn) (dse_equiv sp) (dse_equiv sp) r r'
+      lift_result (dse_block_post sp fn) dse_term_equiv (dse_equiv sp) r r'
 Proof
   ho_match_mp_tac decorated_block_ind >> rpt conj_tac >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `dse_occ_safe fn inst s` by metis_tac[] >>
   `dse_safety_agrees s t /\ s.vs_inst_idx = t.vs_inst_idx /\
-   s.vs_call_ctx = t.vs_call_ctx` by
+   s.vs_call_ctx = t.vs_call_ctx /\ s.vs_halted = t.vs_halted` by
     fs[dse_local_agrees_def, dse_operational_agrees_def,
        dse_pending_space_def, dse_equiv_def] >>
   `dse_occ_safe (dse_single_pass ids sp fn) (dse_inst ids sp inst) t` by
@@ -223,12 +237,14 @@ Resume dse_decorated_block[jump]:
     fs[dse_local_agrees_def, dse_pending_space_def] >>
   `s1.vs_halted = t1.vs_halted` by
     fs[dse_equiv_def] >>
+  `~s1.vs_halted` by
+    (drule step_inst_ok_preserves_halted >> fs[dse_occ_safe_def]) >>
   qexists_tac `if t1.vs_halted then Halt t1 else OK t1` >>
   conj_tac
   >- (irule (cj 2 decorated_block_rules) >>
       qexists_tac `inst` >> simp[] >> metis_tac[]) >>
-  Cases_on `t1.vs_halted` >> simp[lift_result_def] >>
-  simp[dse_block_post_def] >> qexists_tac `P` >> simp[] >>
+  `~t1.vs_halted` by metis_tac[] >>
+  simp[lift_result_def, dse_block_post_def] >> qexists_tac `P` >> simp[] >>
   rpt strip_tac >> irule dse_jump_pending_step >>
   metis_tac[lookup_block_MEM]
 QED
@@ -275,7 +291,7 @@ Theorem dse_decorated_run:
         sp fn bb 0 P s) ==>
     ?r'. decorated_run (dse_occ_safe (dse_single_pass ids sp fn)) fuel ctx
         (dse_single_pass ids sp fn) t r' /\
-      lift_result (dse_equiv sp) (dse_equiv sp) (dse_equiv sp) r r'
+      lift_result (dse_equiv sp) dse_term_equiv (dse_equiv sp) r r'
 Proof
   ho_match_mp_tac decorated_run_ind >> rpt conj_tac >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -326,21 +342,15 @@ Resume dse_decorated_run[continue]:
   simp[]
 QED
 Resume dse_decorated_run[halted]:
-  qpat_x_assum `lift_result _ _ _ (OK _) _` mp_tac >>
-  Cases_on `r'` >> simp[lift_result_def] >> strip_tac >>
-  rename1 `dse_block_post sp fn next target` >>
-  `dse_equiv sp next target` by
-    fs[dse_block_post_def, dse_local_agrees_def, dse_pending_space_def] >>
-  `target.vs_halted` by fs[dse_equiv_def] >>
-  qexists_tac `Halt target` >> simp[lift_result_def] >>
-  irule (cj 2 decorated_run_rules) >> simp[] >>
-  qexistsl_tac [`block_map_transform (dse_inst ids sp) bb`, `t1`] >>
-  simp[]
+  rename1 `decorated_block Q fuel ctx bb _ (OK next)` >>
+  `~next.vs_halted` by
+    metis_tac[decorated_block_erase, exec_block_OK_not_halted] >>
+  gvs[]
 QED
 Resume dse_decorated_run[halt]:
   qpat_x_assum `lift_result _ _ _ (Halt _) _` mp_tac >>
   Cases_on `r'` >> simp[lift_result_def] >> strip_tac >>
-  rename1 `dse_equiv sp source target` >>
+  rename1 `dse_term_equiv source target` >>
   qexists_tac `Halt target` >> simp[lift_result_def] >>
   irule (cj 3 decorated_run_rules) >>
   qexistsl_tac [`block_map_transform (dse_inst ids sp) bb`, `t1`] >> simp[]
@@ -383,7 +393,7 @@ Theorem dse_certificate_round:
     (bp_analyze (cfg_analyze fn) fn) sp fn /\
   dse_run_certificate fn fuel ctx s r ==>
   ?r'. dse_run_certificate (dse_single_pass ids sp fn) fuel ctx s r' /\
-    lift_result (dse_equiv sp) (dse_equiv sp) (dse_equiv sp) r r'
+    lift_result (dse_equiv sp) dse_term_equiv (dse_equiv sp) r r'
 Proof
   strip_tac >>
   Cases_on `sp IN {AddrSp_Memory; AddrSp_Storage; AddrSp_Transient}`
@@ -408,7 +418,7 @@ QED
 
 Theorem dse_occ_safe_clear_nops:
   wf_function fn /\ dse_safety_agrees s t /\ s.vs_call_ctx = t.vs_call_ctx /\
-  dse_occ_safe fn inst s ==>
+  s.vs_halted = t.vs_halted /\ dse_occ_safe fn inst s ==>
   dse_occ_safe (clear_nops_function fn) inst t
 Proof
   strip_tac >>

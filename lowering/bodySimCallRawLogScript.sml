@@ -286,6 +286,7 @@ Proof
     (fs[EVERY_MEM] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   `LENGTH ops <= 4 /\ LENGTH vs <= 4 /\ sa.cs_next_var <= sn.cs_next_var` by decide_tac >>
   `expr_type call = NoneT` by simp[Abbr `call`, expr_type_def] >>
+  `post_value_type cenv call = expr_type call` by simp[Abbr `call`] >>
   `fn_has_code sn sb func` by metis_tac[fn_has_code_mid, cs_extends_refl, cs_extends_trans] >>
   qpat_assum `LENGTH ops = LENGTH topics`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [GSYM th])) >>
@@ -299,7 +300,7 @@ QED
 
 Theorem raw_log_alloc_args_post:
   wb_args_post ctx func cenv cx es0 sa s0 es ops vals t /\
-  stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es0 sa s0 u /\
+  stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es0 es sa s0 u /\
   EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\
               (!l. op <> Label l)) ops /\
   (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x t) ==>
@@ -410,7 +411,7 @@ Proof
   drule_all raw_log_topics_marked_post >> strip_tac >>
   drule_all raw_log_marked_data_ready >> strip_tac >>
   `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t /\
-   wb_frame cenv es sa s0 t` by fs[wb_args_post_def] >>
+   wb_frame cenv es (mid with gas_obs := []) sa s0 t` by fs[wb_args_post_def] >>
   `~t.vs_halted` by
     (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[gas_marked_exec_def, gas_marked_path_def] >>
@@ -489,16 +490,20 @@ Proof
      rpt strip_tac >> first_x_assum drule >> simp[]) >>
   `LENGTH ops <= 4 /\ LENGTH vs <= 4` by decide_tac >>
   `expr_type call = NoneT` by simp[Abbr `call`, expr_type_def] >>
+  `post_value_type cenv call = expr_type call` by simp[Abbr `call`] >>
   `fn_has_code sn sb func` by metis_tac[fn_has_code_mid, cs_extends_refl, cs_extends_trans] >>
   `LENGTH bs = 32` by fs[vyperTypingTheory.value_has_type_def] >>
   `evaluate_type (get_tenv cx) (expr_type data) =
      SOME (BaseTV (BytesT (Fixed 32)))` by simp[vyperValueTheory.evaluate_type_def] >>
   `eval_operand data_op t'' = SOME
      (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) (BytesV bs))` by
-    (qpat_assum `expr_post _ _ _ _ data _ _ _ _ _ _ _ _` mp_tac >>
-     pure_rewrite_tac[expr_post_def, expr_val_at_def] >> strip_tac >>
+    (`post_value_type cenv data = expr_type data` by
+       (irule post_value_type_word >> simp[is_word_type_def]) >>
+     qpat_assum `expr_post _ _ _ _ data _ _ _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[expr_post_def, expr_val_at_def] >>
+     asm_simp_tac std_ss [post_value_type_word, is_word_type_def] >> strip_tac >>
      drule exprBopSimPropsTheory.expr_val_rel_typed >>
-     simp[is_word_type_def]) >>
+     simp[is_word_type_def] >> disch_then irule >> gvs[]) >>
   `TAKE 32 (word_to_bytes_be
      (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) (BytesV bs))) = bs` by
     (qpat_assum `LENGTH bs = 32` mp_tac >>

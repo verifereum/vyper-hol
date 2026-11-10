@@ -163,12 +163,12 @@ Theorem augassign_binop_admissible_mem_src[local]:
   expr_res_ok (bop_result cx ty bop [ty; expr_type e] entry.value v ee)
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty; expr_type e] entry.value v ee =
-   case evaluate_binop
+  `expr_res_ok (bop_result cx ty bop [ty; expr_type e] entry.value v ee) <=>
+   expr_res_ok (case evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      entry.type bop entry.value v of
-       INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+       INL w => INL w | INR err => INR (Error err))` by
+    (irule bop_result_augassign_res_ok >> simp[]) >>
   pop_assum SUBST1_TAC >>
   Cases_on `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
@@ -195,24 +195,23 @@ Theorem augassign_write_admissible_mem_src[local]:
   !m. res <> INR (Error (TypeError m))
 Proof
   strip_tac >>
-  `evaluate_binop
+  `?actual. evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-     entry.type bop entry.value v = INL w` by
-    (`bop_result cx ty bop [ty; expr_type e] entry.value v ee =
-       case evaluate_binop
-         (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-         entry.type bop entry.value v of
-         INL x => INL x | INR err => INR (Error err)` by
-       (irule bop_result_augassign >> simp[]) >>
-     gvs[AllCaseEqs()]) >>
+     entry.type bop entry.value v = INL actual` by
+    metis_tac[bop_result_augassign_success] >>
+  Cases_on `write_place cx (MemoryPlace id []) actual ee` >>
+  rename1 `_ = (actual_res, actual_fin)` >>
   `eval_stmt cx (AugAssign ty (NameTarget id) bop e)
-     (es with gas_obs := gs) = (res, fin)` by
+     (es with gas_obs := gs) = (actual_res, actual_fin)` by
     (`lookup_scopes id (es with gas_obs := gs).scopes = SOME entry` by simp[] >>
      drule_all augassign_rhs_normal_mem_src >>
      disch_then (qspecl_then [`ty`, `bop`] mp_tac) >>
      simp[lift_sum_def, bind_def, return_def]) >>
-  `stmt_res_ok lctx res` by metis_tac[gas_admissible_result] >>
-  fs[stmt_res_ok_def, expr_res_ok_def]
+  `stmt_res_ok lctx actual_res` by metis_tac[gas_admissible_result] >>
+  `res = actual_res` by
+    (qspecl_then [`[]`, `cx`, `id`, `w`, `ee`, `actual`]
+       mp_tac write_place_short_memory_result >> simp[]) >>
+  gvs[stmt_res_ok_def, expr_res_ok_def]
 QED
 
 (* S1 stmtSimAugAssign's gas_marked_exec_zero_prefix, at either memory
@@ -559,7 +558,8 @@ Resume compile_augassign_local_mem[operator_normal]:
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      entry.type bop entry.value v = INL result` by gvs[AllCaseEqs()] >>
@@ -659,7 +659,8 @@ Resume compile_augassign_local_mem[operator_exit]:
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   Cases_on `evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v`

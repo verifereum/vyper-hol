@@ -44,7 +44,7 @@ Proof
       `?w. eval_operand x t = SOME w` by
         metis_tac[expr_post_def, expr_val_rel_def] >>
       drule_all word_operand_frame >> simp[]) >>
-  `wb_frame cenv es sa s0 t` by (gvs[expr_post_def, wb_frame_def] >> metis_tac[]) >>
+  `wb_frame cenv es es1 sa s0 t` by (gvs[expr_post_def, wb_frame_def] >> metis_tac[]) >>
   drule_all ghost_kept_wb_trans >> simp[]
 QED
 

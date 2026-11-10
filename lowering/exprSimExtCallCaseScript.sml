@@ -14,16 +14,6 @@
  *   compile_extcall_case — extcall's expr_sim_case and expr_vv_case from
  *     its operands' judgments
  *
- * ADMITTED:
- *   vv_post_storage_live — what the conjunct
- *     (~expr_has_effect e ==> vv_storage_live cx vv es' s) that vv_post_def
- *     is to gain gives, written out: an effect-free operand's storage or
- *     transient pointer reads live slots at es'.  It lets a storage or
- *     transient positional operand, read only after the later operands,
- *     still read live slots.  Held for the posts-interface round after the
- *     branch merge, which adds the conjunct to vv_post_def; then it
- *     follows from vv_post_def.
- *
  * Why it holds: the call request agrees with the source's.  The selector is
  * cenv.ce_method_id, which expr_sim_inv pins to function_selector of the
  * declared ABI types; the calldata is the selector followed by the arguments
@@ -59,9 +49,7 @@ Theorem vv_post_storage_live:
     (p.ptr_location = LocTransient ==>
      storage_read_live cx T (get_storage cx es' T) w tvt)
 Proof
-  (* Held for the posts-interface round: follows from vv_post_def once it
-     has the vv_storage_live conjunct. *)
-  cheat
+  rpt strip_tac >> gvs[vv_post_def] >> metis_tac[]
 QED
 
 (* Source boundary: positional locations are read only after kwargs. *)
@@ -116,7 +104,7 @@ Definition extcall_request_ready_def:
       addr_op value_op gas_op buf_op call_offset call_len cap
       target value_opt calldata has_default default_op default_ty default_opt
       ee t <=>
-    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
+    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sp.cs_current_bb /\
     t.vs_inst_idx = LENGTH sp.cs_current_insts /\ ee.gas_obs = [] /\
     outcomes_accounts_typed ee.outcomes /\
@@ -168,7 +156,7 @@ End
 Definition extcall_returned_def:
   extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
       has_default default_op default_ty default_opt returnData ee t <=>
-    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
+    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sr.cs_current_bb /\
     t.vs_inst_idx = LENGTH sr.cs_current_insts /\ ee.gas_obs = [] /\
     sa.cs_next_var <= sr.cs_next_var /\ sa.cs_next_id <= sr.cs_next_id /\

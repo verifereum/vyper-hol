@@ -799,7 +799,7 @@ Proof
   conj_tac >- simp[Abbr `g`] >>
   conj_tac
   >- (`active_inst fn' ti (q with vs_inst_idx := SUC t.vs_inst_idx)` by
-        (irule stepWriteFootprintBaseTheory.lookup_instruction_active >>
+        (irule contextCodegenRelPropsTheory.lookup_instruction_active >>
          qexists_tac `bb` >>
          qpat_assum `lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb` mp_tac >>
          qpat_assum `get_instruction bb (SUC t.vs_inst_idx) = SOME ti` mp_tac >>
