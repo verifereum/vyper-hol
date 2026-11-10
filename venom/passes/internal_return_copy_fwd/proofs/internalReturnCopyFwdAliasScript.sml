@@ -1424,8 +1424,7 @@ Resume ircf_saved_destination_suffix_absent[call]:
       drule occ_frame_reachable_origin_certificate >> simp[] >>
       strip_tac >> drule occurrence_origin_certificate_current >> strip_tac >>
       irule ircf_planned_dst_call_args_absent >> simp[] >>
-      metis_tac[frameAllocationHistoryTheory.frame_reachable_current_allocation_syntax,
-                allocaFrontierBoundTheory.active_inst_mem_fn_insts]) >>
+      metis_tac[allocaFrontierBoundTheory.active_inst_mem_fn_insts]) >>
   simp[] >> rpt gen_tac >> strip_tac >>
   irule occurrence_suffix_absent_push >> first_x_assum irule >>
   simp[] >> metis_tac[]
@@ -1439,3 +1438,174 @@ Resume ircf_saved_destination_suffix_absent[ret]:
 QED
 
 Finalise ircf_saved_destination_suffix_absent
+
+Theorem ircf_saved_destination_sites_exclusion:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\ j < LENGTH stk /\
+  MEM bb (EL j stk).cf_fn.fn_blocks /\
+  fn_inst_wf (EL j stk).cf_fn /\ fn_inst_ids_distinct (EL j stk).cf_fn /\
+  ircf_no_dst_write_alias (EL j stk).cf_fn /\
+  ircf_fwd_ok (EL j stk).cf_fn bb k d sr sz /\
+  ircf_copy_roots (EL j stk).cf_fn (EL k bb.bb_instructions) =
+    SOME (d,sr,sz) /\
+  MEM ai (fn_insts (EL j stk).cf_fn) /\
+  ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [d] /\
+  FLOOKUP (EL j stk).cf_state.vs_allocas ai.inst_id = SOME (b,z) /\
+  FLOOKUP G v = SOME (c,w) /\ 0 < z /\ 0 < w ==>
+  b+z <= c \/ c+w <= b
+Proof
+  strip_tac >>
+  `occurrence_suffix_absent ((EL j U).of_owner,ai.inst_id) j H HP U` by
+    (drule ircf_saved_destination_suffix_absent >> simp[] >>
+     disch_then irule >> metis_tac[]) >>
+  drule occurrence_suffix_absent_current >> strip_tac >>
+  drule occ_frame_reachable_annotation >> simp[] >> strip_tac >>
+  drule occ_frame_reachable_geometry >> simp[] >>
+  disch_then (qspec_then `lo` mp_tac) >> simp[] >> strip_tac >>
+  `FLOOKUP B ((EL j U).of_owner,ai.inst_id) = SOME (b,z)` by
+    (fs[occurrence_annotation_ok_def] >>
+     metis_tac[occurrence_saved_ok_allocas]) >>
+  fs[occurrence_annotation_ok_def] >>
+  drule_all occurrence_env_site_exclusion >> simp[]
+QED
+
+Theorem ircf_saved_destination_read_disjoint:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\ j < LENGTH stk /\
+  MEM bb (EL j stk).cf_fn.fn_blocks /\
+  fn_inst_wf (EL j stk).cf_fn /\ fn_inst_ids_distinct (EL j stk).cf_fn /\
+  ircf_no_dst_write_alias (EL j stk).cf_fn /\
+  ircf_fwd_ok (EL j stk).cf_fn bb k d sr sz /\
+  ircf_copy_roots (EL j stk).cf_fn (EL k bb.bb_instructions) =
+    SOME (d,sr,sz) /\
+  MEM ai (fn_insts (EL j stk).cf_fn) /\
+  ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [d] /\
+  FLOOKUP (EL j stk).cf_state.vs_allocas ai.inst_id = SOME (b,z) /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  MEM (off,len) (source_memory_read_ranges inst s) /\ b <= i /\ i < b+z ==>
+  ~(off <= i /\ i < off+len)
+Proof
+  strip_tac >> strip_tac >>
+  `0 < z /\ len <> 0` by decide_tac >>
+  drule_then strip_assume_tac occ_frame_reachable_annotation >> fs[] >>
+  drule_then assume_tac occ_frame_reachable_geometry >> fs[] >>
+  qpat_x_assum `!lo. _` (qspec_then `lo` assume_tac) >> fs[] >>
+  `FLOOKUP B ((EL j U).of_owner,ai.inst_id) = SOME (b,z)` by
+    (fs[occurrence_annotation_ok_def] >>
+     metis_tac[occurrence_saved_ok_allocas]) >>
+  `lo <= b` by metis_tac[occurrence_geometry_site_bounds] >>
+  `lo < off+len` by decide_tac >>
+  `?ops v c w. mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+     FLOOKUP G v = SOME (c,w) /\ c <= off /\ off+len <= c+w` by
+    (fs[access_ok_def] >> metis_tac[]) >>
+  `0 < w` by decide_tac >>
+  `b+z <= c \/ c+w <= b` by
+    (irule ircf_saved_destination_sites_exclusion >> simp[] >> metis_tac[]) >>
+  decide_tac
+QED
+
+Theorem ircf_unchanged_reader_occurrence_exclusion:
+  wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  MEM bb fn.fn_blocks /\ ircf_block_plan fn bb bb2 /\
+  i < LENGTH bb.bb_instructions /\ inst = EL i bb.bb_instructions /\
+  i NOTIN ircf_fwds bb bb2 /\ inst.inst_opcode <> ASSIGN /\
+  EL i bb2.bb_instructions = inst /\
+  k IN ircf_fwds bb bb2 /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  occurrence_syntax_origin fn a H /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [d] /\
+  mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v ==>
+  FLOOKUP H v <> SOME (a,ai.inst_id)
+Proof
+  strip_tac >> strip_tac >>
+  `MEM (Var v) inst.inst_operands` by
+    metis_tac[allocaRemapProofsTheory.mem_ops_ofst_is_operand] >>
+  `v IN pointer_derived_vars fn {d}` by
+    (drule_all occurrence_syntax_origin_planned_root >> simp[]) >>
+  `ircf_fwd_ok fn bb k d sr sz` by
+    (drule_all ircf_block_plan_fwd_ok >> simp[]) >>
+  `ircf_alias fn d v` by
+    (drule_all ircf_fwd_dst_pointer_closure >> fs[pred_setTheory.SUBSET_DEF]) >>
+  metis_tac[ircf_unchanged_operand_not_dst_alias]
+QED
+
+Theorem ircf_unchanged_reader_sites_exclusion:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  ircf_block_plan fn bb bb2 /\ s.vs_inst_idx NOTIN ircf_fwds bb bb2 /\
+  inst.inst_opcode <> ASSIGN /\ EL s.vs_inst_idx bb2.bb_instructions = inst /\
+  k IN ircf_fwds bb bb2 /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [d] /\
+  FLOOKUP s.vs_allocas ai.inst_id = SOME (b,z) /\
+  mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  FLOOKUP G v = SOME (c,w) /\ 0 < z /\ 0 < w ==>
+  b+z <= c \/ c+w <= b
+Proof
+  strip_tac >>
+  `active_inst fn inst s` by
+    (qpat_assum `occ_frame_reachable _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     once_rewrite_tac[occ_frame_reachable_cases] >> metis_tac[]) >>
+  `MEM bb fn.fn_blocks /\ s.vs_inst_idx < LENGTH bb.bb_instructions /\
+   inst = EL s.vs_inst_idx bb.bb_instructions` by
+    (`MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+     fs[active_inst_def] >>
+     `bb' = bb` by
+       metis_tac[lookup_block_label, same_label_same_block] >> gvs[]) >>
+  `occurrence_syntax_origin fn a H` by
+    (drule_then assume_tac occ_frame_reachable_origin_certificate >> fs[] >>
+     metis_tac[occurrence_origin_certificate_current]) >>
+  `FLOOKUP H v <> SOME (a,ai.inst_id)` by
+    (irule ircf_unchanged_reader_occurrence_exclusion >> metis_tac[]) >>
+  drule_then strip_assume_tac occ_frame_reachable_annotation >> fs[] >>
+  drule_then assume_tac occ_frame_reachable_geometry >> fs[] >>
+  qpat_x_assum `!lo. _` (qspec_then `lo` assume_tac) >> fs[] >>
+  `FLOOKUP B (a,ai.inst_id) = SOME (b,z)` by
+    fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>
+  `?jd. FLOOKUP H v = SOME jd /\ FLOOKUP B jd = SOME (c,w)` by
+    (fs[occurrence_annotation_ok_def, occurrence_env_ok_def] >>
+     metis_tac[FLOOKUP_DEF]) >>
+  metis_tac[occurrence_geometry_sites_disjoint]
+QED
+
+Theorem ircf_unchanged_reader_read_disjoint:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  ircf_block_plan fn bb bb2 /\ s.vs_inst_idx NOTIN ircf_fwds bb bb2 /\
+  inst.inst_opcode <> ASSIGN /\ EL s.vs_inst_idx bb2.bb_instructions = inst /\
+  k IN ircf_fwds bb bb2 /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [d] /\
+  FLOOKUP s.vs_allocas ai.inst_id = SOME (b,z) /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  MEM (off,len) (source_memory_read_ranges inst s) /\ b <= p /\ p < b+z ==>
+  ~(off <= p /\ p < off+len)
+Proof
+  strip_tac >> strip_tac >>
+  `0 < z /\ len <> 0` by decide_tac >>
+  drule_then strip_assume_tac occ_frame_reachable_annotation >> fs[] >>
+  drule_then assume_tac occ_frame_reachable_geometry >> fs[] >>
+  qpat_x_assum `!lo. _` (qspec_then `lo` assume_tac) >> fs[] >>
+  `FLOOKUP B (a,ai.inst_id) = SOME (b,z)` by
+    fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>
+  `lo <= b` by metis_tac[occurrence_geometry_site_bounds] >>
+  `lo < off+len` by decide_tac >>
+  `?ops v c w. mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+     FLOOKUP G v = SOME (c,w) /\ c <= off /\ off+len <= c+w` by
+    (fs[access_ok_def] >> metis_tac[]) >>
+  `0 < w` by decide_tac >>
+  `b+z <= c \/ c+w <= b` by
+    (irule ircf_unchanged_reader_sites_exclusion >> simp[] >> metis_tac[]) >>
+  decide_tac
+QED

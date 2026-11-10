@@ -230,6 +230,68 @@ Proof
   gvs[lookup_function_def] >> metis_tac[]
 QED
 
+Theorem ircf_dst_ids_owned:
+  ctx_inst_ids_distinct C /\ MEM fn C.ctx_functions /\
+  MEM ai (fn_insts fn) /\ ai.inst_id IN ircf_dst_ids fn_meta rma C ==>
+  ?bb k d sr sz.
+    MEM bb fn.fn_blocks /\
+    k IN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+    ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+    ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [d]
+Proof
+  strip_tac >> fs[ircf_dst_ids_def] >>
+  `ALL_DISTINCT (FLAT (MAP (\f. MAP (\i. i.inst_id) (fn_insts f))
+     C.ctx_functions))` by
+    fs[ctx_inst_ids_distinct_def, fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat,
+       MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF] >>
+  `fn' = fn` by
+    (irule (venomWfPropsTheory.all_distinct_flat_map_inj |> INST_TYPE [alpha |-> ``:num``]) >> simp[] >>
+     qexists_tac `\f. MAP (\i. i.inst_id) (fn_insts f)` >>
+     qexists_tac `C.ctx_functions` >> simp[MEM_MAP] >> metis_tac[]) >>
+  gvs[] >>
+  `ai' = ai` by
+    (irule venomWfPropsTheory.fn_inst_ids_distinct_inj >> simp[] >> qexists_tac `fn` >>
+     metis_tac[allocaFrontierBoundTheory.ctx_inst_ids_distinct_fn,
+               fn_inst_ids_distinct_def, fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat,
+               MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem ircf_saved_dead_read_disjoint:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\ ctx_inst_ids_distinct C /\
+  EVERY wf_function C.ctx_functions /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\
+  EVERY fn_inst_ids_distinct C.ctx_functions /\
+  EVERY ircf_no_dst_write_alias C.ctx_functions /\
+  j < LENGTH stk /\ MEM (EL j stk).cf_fn C.ctx_functions /\
+  p IN site_bytes (ircf_dst_ids fn_meta rma C) (EL j stk).cf_state.vs_allocas /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  MEM (off,len) (source_memory_read_ranges inst s) ==>
+  ~(off <= p /\ p < off+len)
+Proof
+  strip_tac >>
+  qpat_x_assum `_ IN site_bytes _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [site_bytes_def]) >>
+  `MEM (EL j stk) stk` by metis_tac[EL_MEM] >>
+  `?ai w. MEM ai (fn_insts (EL j stk).cf_fn) /\ ai.inst_id = id /\
+    ai.inst_opcode = ALLOCA /\ ai.inst_operands = [Lit w] /\ sz = w2n w` by
+    metis_tac[frameAllocationHistoryTheory.occ_frame_reachable_saved_allocation_syntax] >>
+  `?bb k d sr amount.
+    MEM bb (EL j stk).cf_fn.fn_blocks /\
+    k IN ircf_fwds bb (ircf_tbb fn_meta rma C (EL j stk).cf_fn bb) /\
+    ircf_copy_roots (EL j stk).cf_fn (EL k bb.bb_instructions) = SOME (d,sr,amount) /\
+    ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [d]` by
+    (irule ircf_dst_ids_owned >> metis_tac[]) >>
+  `ircf_block_plan (EL j stk).cf_fn bb
+     (ircf_tbb fn_meta rma C (EL j stk).cf_fn bb)` by
+    (fs[EVERY_MEM] >> simp[ircf_tbb_def, ircf_transform_block_plan]) >>
+  `ircf_fwd_ok (EL j stk).cf_fn bb k d sr amount` by
+    (drule_all ircf_block_plan_fwd_ok >> simp[]) >>
+  irule ircf_saved_destination_read_disjoint >> fs[EVERY_MEM] >> metis_tac[]
+QED
+
 Theorem ircf_gam_allocations:
   wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
   ircf_no_dst_write_alias fn /\ MEM bb fn.fn_blocks /\

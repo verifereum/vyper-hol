@@ -1169,3 +1169,34 @@ Proof
      qexists_tac `i` >> simp[EL_MEM]) >>
   fs[ircf_block_plan_def] >> simp[]
 QED
+
+Theorem ircf_unchanged_operand_not_dst_alias:
+  wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+  ircf_no_dst_write_alias fn /\ MEM bb fn.fn_blocks /\
+  ircf_block_plan fn bb bb2 /\ i < LENGTH bb.bb_instructions /\
+  i NOTIN ircf_fwds bb bb2 /\
+  (EL i bb.bb_instructions).inst_opcode <> ASSIGN /\
+  EL i bb2.bb_instructions = EL i bb.bb_instructions /\
+  MEM (Var v) (EL i bb.bb_instructions).inst_operands /\
+  k IN ircf_fwds bb bb2 /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) ==>
+  ~ircf_alias fn d v
+Proof
+  strip_tac >> strip_tac >>
+  `ircf_redirect fn bb bb2 v = sr` by
+    (irule ircf_redirect_source >> simp[] >>
+     conj_tac >- metis_tac[ircf_block_plan_fwd_ok] >> metis_tac[]) >>
+  `MAP (ircf_redirect_op fn bb bb2) (EL i bb.bb_instructions).inst_operands =
+     (EL i bb.bb_instructions).inst_operands` by
+    (fs[ircf_block_plan_def] >>
+     first_x_assum (qspec_then `i` mp_tac) >> simp[] >>
+     simp[instruction_component_equality]) >>
+  `ircf_redirect_op fn bb bb2 (Var v) = Var v` by
+    (`MAP (ircf_redirect_op fn bb bb2) (EL i bb.bb_instructions).inst_operands =
+      MAP I (EL i bb.bb_instructions).inst_operands` by simp[] >>
+     fs[MAP_EQ_f]) >>
+  `ircf_alias fn d sr` by fs[ircf_redirect_op_def] >>
+  `ircf_fwd_ok fn bb k d sr sz` by
+    (drule_all ircf_block_plan_fwd_ok >> simp[]) >>
+  fs[ircf_fwd_ok_def] >> metis_tac[ircf_alloca_alias_root]
+QED
