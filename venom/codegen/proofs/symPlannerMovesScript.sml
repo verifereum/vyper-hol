@@ -1579,8 +1579,11 @@ Theorem sym_dup_residual_restore[local]:
     last.sym_mem_labels = ss.sym_mem_labels /\
     last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ([SODup 16] ++ tail))
 Proof
-  strip_tac >> drule_all_then (qspec_then `env` strip_assume_tac) sym_dup_sixteen_residual >>
-  `scratch_kinds_ok fn ret a offsets mid.sym_mem_labels` by metis_tac[] >>
+  disch_then (fn th => CHOOSE_THEN (fn result => strip_assume_tac
+    (CONJ (PURE_ONCE_REWRITE_RULE [GSYM (cj 4 result)] th) result))
+    (SIMP_RULE bool_ss [] (CONV_RULE
+      (LAND_CONV (SIMP_CONV bool_ss (CONJUNCTS th)))
+      (Q.INST [`f` |-> `initial_fmp`] sym_dup_sixteen_residual)))) >>
   drule_all_then (qspec_then `env` strip_assume_tac) sym_dup_restore_tail >>
   drule_all_then MATCH_ACCEPT_TAC sym_dup_residual_restore_finish
 QED
@@ -1630,6 +1633,13 @@ Proof
     PURE_REWRITE_RULE [APPEND_ASSOC] th]) sym_dup_save_finish
 QED
 
+(* Normalize a shared equality witness without eliminating its name. *)
+Theorem conj_eq_shared_right[local]:
+  (x = z /\ y = z /\ P) = (x = z /\ y = x /\ P)
+Proof
+  metis_tac[]
+QED
+
 Theorem sym_dup_scratch_roundtrip[local]:
   LIST_REL (op_kind_ok fn ret) a vals /\
   LENGTH a = k /\ LENGTH offsets = k /\ 0 < k /\
@@ -1652,12 +1662,11 @@ Theorem sym_dup_scratch_roundtrip[local]:
     last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp
       (MAP SOSpill offsets ++ [SODup 16] ++ tail))
 Proof
-  strip_tac >>
-  `LENGTH offsets = LENGTH a` by metis_tac[] >>
+  disch_then (strip_assume_tac o PURE_ONCE_REWRITE_RULE [conj_eq_shared_right]) >>
   drule_all_then (qspec_then `env` strip_assume_tac)
     (PURE_REWRITE_RULE [APPEND_ASSOC]
       (Q.INST [`loads` |-> `[SODup 16] ++ tail`] sym_spill_scratch_prefix)) >>
-  drule_all_then MATCH_ACCEPT_TAC sym_dup_save_continue
+  gvs[sym_dup_save_continue]
 QED
 
 Theorem LIST_REL_deep_dup_join[local]:
@@ -1775,11 +1784,8 @@ Theorem sym_dup_shaped_ready[local]:
     EVERY (\off. off < dimword(:256)) offsets
 Proof
   strip_tac >> drule_all_then strip_assume_tac sym_dup_frame_ready >>
-  qpat_x_assum `out.ps_alloc = al` (SUBST_ALL_TAC o SYM) >>
-  drule_all_then strip_assume_tac
-    (PURE_REWRITE_RULE [APPEND_ASSOC]
-      (Q.INST [`tail` |-> `[SODup 16] ++ tail`] sym_swap_geometry)) >>
-  metis_tac[]
+  metis_tac[PURE_REWRITE_RULE [APPEND_ASSOC]
+    (Q.INST [`tail` |-> `[SODup 16] ++ tail`] sym_swap_geometry)]
 QED
 
 Theorem sym_dup_shaped_run[local]:
@@ -1832,7 +1838,9 @@ Theorem sym_dup_shaped_sim[local]:
     (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  strip_tac >> drule_all_then strip_assume_tac sym_dup_shaped_ready >>
+  disch_then (fn th => strip_assume_tac
+    (CONJ th (SIMP_RULE bool_ss [] (CONV_RULE
+      (LAND_CONV (SIMP_CONV bool_ss (CONJUNCTS th))) sym_dup_shaped_ready)))) >>
   drule_all_then (qspec_then `env` strip_assume_tac) sym_dup_shaped_run >>
   drule_all_then MATCH_ACCEPT_TAC sym_dup_scratch_complete
 QED
