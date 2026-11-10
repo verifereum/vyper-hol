@@ -1384,3 +1384,68 @@ Proof
   qexistsl [`bb`, `dst`] >> simp[] >>
   irule inline_owner_storage_assign_ok_step >> simp[] >> metis_tac[]
 QED
+
+(* Each evaluator advances from its own fetched position.  No equality of
+   logical and physical instruction indices is needed. *)
+Theorem inline_owner_storage_advance:
+  get_instruction sb snap.ils_state.vs_inst_idx = SOME src /\
+  get_instruction tb frame.ipf_state.vs_inst_idx = SOME dst /\
+  ~is_terminator src.inst_opcode /\ ~is_terminator dst.inst_opcode /\
+  step_inst fuel C src snap.ils_state = OK s' /\
+  step_inst tfuel Tctx dst frame.ipf_state = OK t' /\
+  inline_owner_storage cert
+    ((p,a,route,snap with <|ils_state := s'; ils_defined := V|>)::rest)
+    (frame with ipf_state := t') /\
+  inline_shared_frame s' = inline_shared_frame t' ==>
+  exec_block fuel C sb snap.ils_state =
+    exec_block fuel C sb (s' with vs_inst_idx := SUC snap.ils_state.vs_inst_idx) /\
+  exec_block tfuel Tctx tb frame.ipf_state =
+    exec_block tfuel Tctx tb (t' with vs_inst_idx := SUC frame.ipf_state.vs_inst_idx) /\
+  inline_owner_storage cert
+    ((p,a,route,snap with <|
+      ils_state := s' with vs_inst_idx := SUC snap.ils_state.vs_inst_idx;
+      ils_defined := V|>)::rest)
+    (frame with ipf_state := t' with vs_inst_idx := SUC frame.ipf_state.vs_inst_idx) /\
+  inline_shared_frame (s' with vs_inst_idx := SUC snap.ils_state.vs_inst_idx) =
+    inline_shared_frame (t' with vs_inst_idx := SUC frame.ipf_state.vs_inst_idx)
+Proof
+  strip_tac >>
+  conj_tac >- simp[Once exec_block_def] >>
+  conj_tac >- simp[Once exec_block_def] >>
+  reverse conj_tac
+  >- gvs[inline_shared_frame_def, stateFrameTheory.execution_frame_def] >>
+  drule inline_owner_storage_index >> simp[]
+QED
+
+(* Branch operands use the composed cell action, not one clone prefix. *)
+Theorem inline_owner_branch_step:
+  MEM src.inst_opcode [JMP; JNZ; DJMP] /\
+  dst.inst_opcode = src.inst_opcode /\
+  dst.inst_operands = MAP (inline_rename_operand ren lab) src.inst_operands /\
+  (!op. MEM op src.inst_operands ==>
+    eval_operand (inline_rename_operand ren lab op) t = eval_operand op s) /\
+  step_inst fuel C src s = OK u ==>
+  u = jump_to u.vs_current_bb s /\
+  step_inst tfuel Tctx dst t = OK (jump_to (lab u.vs_current_bb) t)
+Proof
+  strip_tac >> gvs[listTheory.MEM] >>
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  simp[jump_to_def, inline_rename_operand_def,
+    inline_rename_extract_labels, listTheory.EL_MAP] >>
+  gvs[] >> rw[]
+QED
+
+(* Terminal constructors bypass instruction-index advancement in exec_block.
+   In particular the Error arm relates constructors, not diagnostic strings. *)
+Theorem inline_owner_terminal_block:
+  get_instruction sb s.vs_inst_idx = SOME src /\
+  get_instruction tb t.vs_inst_idx = SOME dst /\
+  inline_ordinary_result R (step_inst fuel C src s) (step_inst tfuel Tctx dst t) /\
+  (!u. step_inst fuel C src s <> OK u) ==>
+  inline_ordinary_result R (exec_block fuel C sb s) (exec_block tfuel Tctx tb t)
+Proof
+  strip_tac >>
+  once_rewrite_tac[exec_block_def] >> simp[] >>
+  Cases_on `step_inst fuel C src s` >>
+  gvs[inline_ordinary_result_cases]
+QED
