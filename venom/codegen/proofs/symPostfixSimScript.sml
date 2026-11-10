@@ -1117,3 +1117,179 @@ Proof
   >- simp[scratch_replay_step_cases, listTheory.LUPDATE_compute] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> first_x_assum irule >> simp[]
 QED
+
+Theorem scratch_replay_restore_below_indices:
+  ALL_DISTINCT offsets /\ LENGTH offsets = LENGTH items /\
+  EVERY (\off. off < dimword (:256)) offsets /\
+  EVERY (\i. i < LENGTH offsets) indices ==>
+  scratch_replay cplan R
+    (FLAT (MAP (\i. [SORestore (EL i offsets); SOSwap 1]) indices))
+    (value :: g) (slots |++ ZIP (offsets,items))
+    (value :: (REVERSE (MAP (\i. EL i items) indices) ++ g))
+    (slots |++ ZIP (offsets,items))
+Proof
+  strip_tac >>
+  `LIST_REL (\off op. off < dimword (:256) /\
+       FLOOKUP (slots |++ ZIP (offsets,items)) off = SOME op)
+     (MAP (\i. EL i offsets) indices) (MAP (\i. EL i items) indices)` by
+    (simp[LIST_REL_EL_EQN, EL_MAP, EVERY_MEM] >>
+     rpt strip_tac >>
+     gvs[doSwapSimTheory.flookup_fupdate_list_el, EVERY_EL, MEM_EL]) >>
+  drule scratch_replay_restore_below >> simp[MAP_MAP_o, combinTheory.o_DEF]
+QED
+
+Theorem scratch_replay_dup_restore_large:
+  ALL_DISTINCT offsets /\ LENGTH offsets = LENGTH items /\
+  EVERY (\off. off < dimword (:256)) offsets ==>
+  scratch_replay cplan R
+    (FLAT (MAP (\i. [SORestore (EL i offsets); SOSwap 1])
+      (GENLIST (\i. LENGTH items - 1 - i) (LENGTH items))))
+    (value :: g) (slots |++ ZIP (offsets,items))
+    (value :: (items ++ g)) (slots |++ ZIP (offsets,items))
+Proof
+  strip_tac >>
+  `GENLIST (\i. LENGTH items - 1 - i) (LENGTH items) =
+    REVERSE (GENLIST I (LENGTH items))` by
+    simp[REVERSE_GENLIST, combinTheory.I_THM, arithmeticTheory.PRE_SUB1] >>
+  `items = REVERSE (MAP (\i. EL i items)
+    (GENLIST (\i. LENGTH items - 1 - i) (LENGTH items)))` by
+    simp[doSwapSimTheory.map_el_reverse_indices] >>
+  pop_assum (fn th =>
+    GEN_REWRITE_TAC (RATOR_CONV o RAND_CONV o ONCE_DEPTH_CONV)
+      empty_rewrites [th]) >>
+  irule scratch_replay_restore_below_indices >>
+  gvs[EVERY_MEM, MEM_GENLIST] >> rpt strip_tac >> decide_tac
+QED
+
+Theorem scratch_replay_dup_chunk_large:
+  16 <= LENGTH g /\ LENGTH offsets = LENGTH items /\ ALL_DISTINCT offsets /\
+  EVERY (\off. off < dimword (:256) /\
+    (!b. in_mem_range off 32 b ==> R b /\ context_spill_byte cplan b)) offsets /\
+  (!off old. MEM off offsets /\ MEM old offsets /\ off <> old ==>
+    off + 32 <= old \/ old + 32 <= off) ==>
+  scratch_replay cplan R
+    (MAP SOSpill offsets ++ [SODup 16] ++
+      FLAT (MAP (\i. [SORestore (EL i offsets); SOSwap 1])
+        (GENLIST (\i. LENGTH items - 1 - i) (LENGTH items))))
+    (items ++ g) FEMPTY (EL 15 g :: (items ++ g))
+    (FEMPTY |++ ZIP (offsets,items))
+Proof
+  strip_tac >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  irule scratch_replay_append >>
+  qexistsl [`FEMPTY |++ ZIP (offsets,items)`, `g`] >> reverse conj_tac
+  >- (irule scratch_replay_spill_list >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  pure_rewrite_tac[APPEND] >> irule (cj 2 scratch_replay_rules) >>
+  qexistsl [`FEMPTY |++ ZIP (offsets,items)`, `EL 15 g :: g`] >> reverse conj_tac
+  >- simp[scratch_replay_step_cases] >>
+  irule scratch_replay_dup_restore_large >> gvs[EVERY_MEM]
+QED
+
+Theorem scratch_replay_swap_ends:
+  0 < LENGTH front + 1 /\ LENGTH front + 1 <= 16 ==>
+  scratch_replay cplan R [SOSwap (LENGTH front + 1)]
+    (last :: (front ++ value :: g)) slots
+    (value :: (front ++ last :: g)) slots
+Proof
+  strip_tac >> irule (cj 2 scratch_replay_rules) >>
+  qexistsl [`slots`, `value :: (front ++ last :: g)`] >>
+  simp[scratch_replay_rules] >>
+  simp[scratch_replay_step_cases, EL_APPEND_EQN, listTheory.LUPDATE_compute,
+    GSYM arithmeticTheory.ADD1, LUPDATE_APPEND2] >>
+  simp[listTheory.LUPDATE_def, rich_listTheory.LUPDATE_APPEND1,
+    listTheory.lupdate_append2]
+QED
+
+Theorem scratch_dup_restore_small_orientation:
+  items = front ++ [last] ==>
+  REVERSE (MAP (\i. EL i items)
+    (GENLIST (\i. LENGTH items - 2 - i) (LENGTH items - 1) ++
+       [LENGTH items - 1])) = last :: front
+Proof
+  strip_tac >>
+  qspecl_then [`last`, `REVERSE front`] mp_tac
+    doSwapSimTheory.dup_restore_small_values >>
+  simp[DECIDE ``SUC n - (i + 2) = n - (i + 1)``] >> strip_tac >> gvs[]
+QED
+
+Theorem scratch_replay_dup_restore_small:
+  ALL_DISTINCT offsets /\ LENGTH offsets = LENGTH items /\
+  items = front ++ [last] /\ LENGTH items <= 16 /\
+  EVERY (\off. off < dimword (:256)) offsets ==>
+  scratch_replay cplan R
+    (MAP (\i. SORestore (EL i offsets))
+      (GENLIST (\i. LENGTH items - 2 - i) (LENGTH items - 1) ++
+         [LENGTH items - 1]) ++ [SOSwap (LENGTH items)])
+    (value :: g) (slots |++ ZIP (offsets,items))
+    (value :: (items ++ g)) (slots |++ ZIP (offsets,items))
+Proof
+  strip_tac >>
+  `REVERSE (MAP (\i. EL i items)
+    (GENLIST (\i. LENGTH items - 2 - i) (LENGTH items - 1) ++
+      [LENGTH items - 1])) = last :: front` by
+    (irule scratch_dup_restore_small_orientation >> simp[]) >>
+  irule scratch_replay_append >>
+  qexistsl [`slots |++ ZIP (offsets,items)`,
+    `REVERSE (MAP (\i. EL i items)
+      (GENLIST (\i. LENGTH items - 2 - i) (LENGTH items - 1) ++
+        [LENGTH items - 1])) ++ value :: g`] >>
+  reverse conj_tac
+  >- (irule scratch_replay_restore_indices >>
+      gvs[EVERY_MEM, MEM_GENLIST] >> rpt strip_tac >> decide_tac) >>
+  `LENGTH items = LENGTH front + 1` by simp[] >>
+  asm_rewrite_tac[] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  irule scratch_replay_swap_ends >> gvs[]
+QED
+
+Theorem scratch_replay_dup_chunk_small:
+  16 <= LENGTH g /\ LENGTH offsets = LENGTH items /\ ALL_DISTINCT offsets /\
+  items = front ++ [last] /\ LENGTH items <= 16 /\
+  EVERY (\off. off < dimword (:256) /\
+    (!b. in_mem_range off 32 b ==> R b /\ context_spill_byte cplan b)) offsets /\
+  (!off old. MEM off offsets /\ MEM old offsets /\ off <> old ==>
+    off + 32 <= old \/ old + 32 <= off) ==>
+  scratch_replay cplan R
+    (MAP SOSpill offsets ++ [SODup 16] ++
+      MAP (\i. SORestore (EL i offsets))
+        (GENLIST (\i. LENGTH items - 2 - i) (LENGTH items - 1) ++
+          [LENGTH items - 1]) ++ [SOSwap (LENGTH items)])
+    (items ++ g) FEMPTY (EL 15 g :: (items ++ g))
+    (FEMPTY |++ ZIP (offsets,items))
+Proof
+  strip_tac >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  irule scratch_replay_append >>
+  qexistsl [`FEMPTY |++ ZIP (offsets,items)`, `g`] >> reverse conj_tac
+  >- (irule scratch_replay_spill_list >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  pure_rewrite_tac[APPEND] >> irule (cj 2 scratch_replay_rules) >>
+  qexistsl [`FEMPTY |++ ZIP (offsets,items)`, `EL 15 g :: g`] >> reverse conj_tac
+  >- simp[scratch_replay_step_cases] >>
+  irule scratch_replay_dup_restore_small >> simp[EVERY_MEM] >>
+  gvs[EVERY_MEM]
+QED
+
+Theorem scratch_replay_dup_chunk:
+  16 <= LENGTH g /\ LENGTH offsets = LENGTH items /\ ALL_DISTINCT offsets /\
+  0 < LENGTH items /\
+  EVERY (\off. off < dimword (:256) /\
+    (!b. in_mem_range off 32 b ==> R b /\ context_spill_byte cplan b)) offsets /\
+  (!off old. MEM off offsets /\ MEM old offsets /\ off <> old ==>
+    off + 32 <= old \/ old + 32 <= off) ==>
+  scratch_replay cplan R
+    (MAP SOSpill offsets ++ [SODup 16] ++
+      FLAT (MAP (\i. SORestore (EL i offsets) ::
+        (if LENGTH items <= 16 then [] else [SOSwap 1]))
+        (if LENGTH items <= 16 then
+          GENLIST (\i. LENGTH items - 2 - i) (LENGTH items - 1) ++
+            [LENGTH items - 1]
+         else GENLIST (\i. LENGTH items - 1 - i) (LENGTH items))) ++
+      (if LENGTH items <= 16 then [SOSwap (LENGTH items)] else []))
+    (items ++ g) FEMPTY (EL 15 g :: (items ++ g))
+    (FEMPTY |++ ZIP (offsets,items))
+Proof
+  strip_tac >> Cases_on `LENGTH items <= 16`
+  >- (asm_rewrite_tac[] >> simp_tac std_ss [doSwapSimTheory.flat_map_singleton] >>
+      irule scratch_replay_dup_chunk_small >>
+      gvs[] >> metis_tac[SNOC_CASES, SNOC_APPEND, LENGTH, numeralTheory.numeral_distrib]) >>
+  asm_rewrite_tac[] >> pure_rewrite_tac[APPEND_NIL] >>
+  irule scratch_replay_dup_chunk_large >> simp[]
+QED

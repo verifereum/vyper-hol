@@ -1787,7 +1787,7 @@ Proof
        LUPDATE_APPEND1, APPEND_ASSOC, LUPDATE_def]
 QED
 
-Theorem map_el_reverse_indices[local]:
+Theorem map_el_reverse_indices:
   !xs:'a list.
     MAP (\i. EL i xs) (REVERSE (GENLIST I (LENGTH xs))) = REVERSE xs
 Proof
@@ -1795,7 +1795,7 @@ Proof
   irule GENLIST_EL >> simp[]
 QED
 
-Theorem dup_restore_small_values[local]:
+Theorem dup_restore_small_values:
   !h (tail:'a list).
     MAP (\i. EL i (REVERSE (h::tail)))
       (GENLIST (\i. LENGTH (h::tail) - 2 - i) (LENGTH (h::tail) - 1) ++
@@ -4677,7 +4677,7 @@ Proof
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem flat_map_singleton[local]:
+Theorem flat_map_singleton:
   !xs (f:'a -> 'b). FLAT (MAP (\x. [f x]) xs) = MAP f xs
 Proof
   Induct >> simp[]
