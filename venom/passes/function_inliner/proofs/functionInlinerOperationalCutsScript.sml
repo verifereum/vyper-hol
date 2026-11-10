@@ -2,6 +2,7 @@
 Theory functionInlinerOperationalCuts
 Ancestors
   functionInlinerReachableCuts functionInlinerStackSupports functionInlinerCuts
+  functionInlinerOccurrences
   functionInlinerActivation functionInlinerEnvelopes venomState cfgTransform list pred_set
   venomExecSemantics
 
@@ -408,4 +409,40 @@ Proof
   qexistsl [`snap`, `frame`] >> gvs[inline_route_identity_def] >>
   Cases_on `a.ia_function.fn_blocks` >>
   gvs[venomInstTheory.lookup_block_def, FIND_thm]
+QED
+
+(* The nonempty compiled path is a control witness, separate from the identity
+   data-storage route. No equality of source and transformed instructions. *)
+Theorem inline_owner_transformed_root_control:
+  inline_annotated_origin ctx n root cert /\
+  a.ia_function = inline_entry_function cert /\
+  a.ia_function.fn_blocks <> [] /\ a.ia_entry.vs_labels = FEMPTY /\
+  a.ia_entry.vs_current_bb = (HD a.ia_function.fn_blocks).bb_label /\
+  a.ia_entry.vs_inst_idx = 0 ==>
+  ?path snap frame.
+    inline_routed_leaf cert root (inline_entry_address cert) a.ia_function path /\
+    inline_path_rename path = I /\ EVERY (\c. ?e. c = InlineKeep e) path /\
+    inline_owner_storage cert
+      [(inline_entry_address cert,a,inline_route_identity a.ia_id,snap)] frame /\
+    snap.ils_state = a.ia_entry /\ frame.ipf_state = a.ia_entry /\
+    root.fn_blocks <> [] /\
+    lookup_block snap.ils_state.vs_current_bb a.ia_function.fn_blocks =
+      SOME (HD a.ia_function.fn_blocks) /\
+    lookup_block frame.ipf_state.vs_current_bb root.fn_blocks =
+      SOME (HD root.fn_blocks) /\
+    snap.ils_state.vs_inst_idx = 0 /\ frame.ipf_state.vs_inst_idx = 0 /\
+    inline_shared_frame snap.ils_state = inline_shared_frame frame.ipf_state /\
+    inline_path_location path
+      (SOME (inline_before_phi_location snap.ils_state.vs_current_bb 0)) =
+      SOME (inline_before_phi_location frame.ipf_state.vs_current_bb 0)
+Proof
+  strip_tac >>
+  `inline_namespace_leaf_at cert (inline_entry_address cert) I a.ia_function` by
+    metis_tac[inline_entry_leaf] >>
+  drule_all inline_owner_root_control >> strip_tac >>
+  drule inline_annotated_entry_route >> strip_tac >>
+  drule inline_annotated_entry_first_label >> simp[] >> strip_tac >>
+  qexistsl [`path`, `snap`, `frame`] >>
+  simp[inline_before_phi_keep_path] >>
+  Cases_on `root.fn_blocks` >> gvs[venomInstTheory.lookup_block_def, FIND_thm]
 QED

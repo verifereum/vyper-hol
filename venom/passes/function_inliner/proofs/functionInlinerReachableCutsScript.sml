@@ -371,3 +371,13 @@ Proof
   strip_tac >> drule_all inline_cell_zipper_ordinary_fields >>
   drule_all inline_cell_zipper_sound >> simp[inline_cell_at_def] >> metis_tac[]
 QED
+
+Theorem inline_before_phi_keep_path:
+  !path. EVERY (\c. ?e. c = InlineKeep e) path ==>
+  inline_path_location path (SOME (inline_before_phi_location l counter)) =
+    SOME (inline_before_phi_location l counter)
+Proof
+  Induct >> simp[inline_path_location_def] >> rpt strip_tac >> gvs[] >>
+  gvs[inline_location_step_def, inline_before_phi_keep,
+      GSYM inline_path_location_def]
+QED

@@ -38,12 +38,24 @@ Proof
 QED
 
 Theorem inline_annotated_entry_route:
-  inline_annotated_origin ctx n root cert ==>
+  !ctx n root cert. inline_annotated_origin ctx n root cert ==>
   ?path. inline_routed_leaf cert root (inline_entry_address cert)
            (inline_entry_function cert) path /\
-         inline_path_rename path = I
+         inline_path_rename path = I /\
+         EVERY (\c. ?e. c = InlineKeep e) path
 Proof
-  metis_tac[inline_annotated_origin_routed_leaf, inline_entry_leaf]
+  ho_match_mp_tac inline_annotated_origin_ind >> rpt conj_tac
+  >- (rpt strip_tac >> qexists `[]` >>
+      simp[inline_entry_address_def, inline_entry_function_def,
+           inline_path_rename_def, inline_routed_leaf_rules])
+  >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  drule inline_one_site_edit_exists >> strip_tac >>
+  qexists `path ++ [InlineKeep e]` >>
+  simp[inline_entry_address_def, inline_entry_function_def,
+       inline_path_rename_append, inline_path_rename_def,
+       inline_choice_rename_def, EVERY_APPEND, FUN_EQ_THM] >>
+  metis_tac[inline_routed_leaf_rules]
 QED
 
 (* A non-PHI call never changes during predecessor-label repair. *)
@@ -1052,4 +1064,20 @@ Proof
     metis_tac[inline_call_incidence_residual_target] >>
   drule inline_annotated_entry_identity >> strip_tac >>
   gvs[] >> metis_tac[]
+QED
+
+Theorem inline_annotated_entry_first_label:
+  !ctx n root cert. inline_annotated_origin ctx n root cert ==>
+  (inline_entry_function cert).fn_blocks <> [] ==>
+  root.fn_blocks <> [] /\
+  (HD root.fn_blocks).bb_label =
+    (HD (inline_entry_function cert).fn_blocks).bb_label
+Proof
+  ho_match_mp_tac inline_annotated_origin_strongind >> rpt conj_tac >>
+  simp[inline_entry_function_def] >> rpt strip_tac >>
+  `wf_function root` by
+    metis_tac[inline_annotated_origin_erasure, qualified_origin_erasure,
+              inliner_fn_origin_structure] >>
+  `ALL_DISTINCT (fn_labels root)` by gvs[venomWfTheory.wf_function_def] >>
+  metis_tac[functionInlinerSiteLayoutTheory.inline_one_site_first_label]
 QED

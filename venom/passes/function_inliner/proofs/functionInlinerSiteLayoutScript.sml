@@ -420,3 +420,28 @@ Proof
   disch_then (qspec_then `i2` strip_assume_tac) >>
   gvs[]
 QED
+
+Theorem inline_one_site_first_label:
+  ALL_DISTINCT (fn_labels caller) /\ caller.fn_blocks <> [] /\
+  inline_one_site caller callee ist = SOME (final,next) ==>
+  final.fn_blocks <> [] /\
+  (HD final.fn_blocks).bb_label = (HD caller.fn_blocks).bb_label
+Proof
+  strip_tac >>
+  Cases_on `find_invoke_site callee.fn_name caller.fn_blocks`
+  >- gvs[inline_one_site_def] >>
+  PairCases_on `x` >>
+  drule_all find_invoke_site_lookup >> strip_tac >>
+  drule inline_call_site_labels >>
+  disch_then (qspecl_then [`callee`, `inline_prefix ist.is_inline_count`,
+    `return_block_label (inline_prefix ist.is_inline_count) ist.is_label_counter`,
+    `x1`] assume_tac) >>
+  `fn_labels final = fn_labels caller ++
+     [return_block_label (inline_prefix ist.is_inline_count) ist.is_label_counter] ++
+     MAP (STRCAT (inline_prefix ist.is_inline_count)) (fn_labels callee)` by
+    (qpat_x_assum `inline_one_site _ _ _ = _` mp_tac >>
+     simp[inline_one_site_def, LET_THM] >> CASE_TAC >> strip_tac >>
+     gvs[renumber_fn_labels, fix_inline_phis_structure]) >>
+  Cases_on `caller.fn_blocks` >> Cases_on `final.fn_blocks` >>
+  gvs[fn_labels_def]
+QED
