@@ -57,7 +57,10 @@ Resume ifexp_selected_arm_path_mem[same]:
   qpat_x_assum `vt = t` SUBST_ALL_TAC >>
   `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
    p.ptr_location = LocCode` by
-    (Cases_on `p.ptr_location` >> fs[vv_post_def, vv_holds_def]) >>
+    (Cases_on `p.ptr_location` >> fs[] >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ raw _ _` mp_tac >>
+     qpat_assum `p.ptr_location = LocCalldata` (fn th =>
+       simp_tac (srw_ss()) [vv_post_def, vv_holds_def, th])) >>
   (`unwrap_value ce (LocatedValue t p) sm = (op,sb)` by
     fs[compile_ifexp_arm_def] >>
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_copy_capacity_path_mem >>
