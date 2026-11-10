@@ -2,7 +2,7 @@
 Theory ctorDeployLoweringEntryCanonical
 Ancestors
  ctorDeployLoweringEntryAddress compileEnv exprLoweringProps abiDecoderTypedContract
- abiEncoderProps finite_map
+ abiEncoderProps finite_map fragGasPath
  ctorRegisterArgs abiDecoderReentryAddress abiDecoderMemberSlice abiDecoderMemberBody
  abiDecoderCoherence abiDecoderContract abiEncoder vyperABI venomState venomInst venomExecSemantics
  words list rich_list arithmetic
@@ -157,6 +157,89 @@ Proof
  drule abi_decoder_coherent_header >>
  simp_tac bool_ss [abi_decoder_header_def] >> strip_tac >>
  drule_all deploy_ctor_singleton_address_prefix >>
+ disch_then (qspec_then `ctx`
+   (qx_choose_then `src` (qx_choose_then `middle`
+     (qx_choose_then `prepared` (map_every assume_tac o CONJUNCTS))))) >>
+ `eval_operand (Var pvar) prepared = SOME (n2w d)` by
+   (simp[eval_operand_def] >> metis_tac[]) >>
+ `prepared.vs_memory = initial.vs_memory /\ prepared.vs_allocas = initial.vs_allocas /\
+  prepared.vs_alloca_next = initial.vs_alloca_next /\
+  prepared.vs_data_section = initial.vs_data_section /\
+  prepared.vs_call_ctx = initial.vs_call_ctx /\ prepared.vs_labels = initial.vs_labels /\
+  prepared.vs_gas_readings = initial.vs_gas_readings /\ prepared.vs_code = initial.vs_code` by
+   (qpat_x_assum `_ with <|vs_vars := _; vs_inst_idx := _|> = initial` mp_tac >>
+    simp[venom_state_component_equality]) >>
+ qexistsl [`src`, `middle`, `prepared`, `abi_tuple_child_offset atys avs i`] >>
+ asm_rewrite_tac[] >>
+ conj_tac
+ >- (Cases_on `is_abi_dynamic ce.ce_struct_fields ty` >>
+     fs[deploy_ctor_word_type_static] >> metis_tac[deploy_ctor_word_type_static]) >>
+ conj_tac
+ >- metis_tac[deploy_ctor_eval_operand_not_fresh, operand_distinct] >>
+ qpat_assum `EL i atys = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
+ asm_rewrite_tac[] >>
+ metis_tac[LESS_EQ_LESS_TRANS, LESS_EQ_TRANS]
+QED
+
+Theorem deploy_ctor_canonical_singleton_prefix_gas_path:
+ !ptr. i < LENGTH atys /\ LENGTH avs = LENGTH atys /\
+ EL i atys = vyper_to_abi_type env ty /\ has_types atys avs /\
+ encoded = enc (Tuple atys) (ListV avs) /\
+ mem_bytes_at 0 (LENGTH encoded) initial.vs_data_section = encoded /\
+ LENGTH encoded < dimword (:256) /\
+ (data_size = 0 \/ LENGTH encoded <= data_size /\ data_size < dimword (:256)) /\
+ off = SUM (MAP abi_member_head_size (TAKE i atys)) /\
+ abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
+ FLOOKUP ce.ce_vars name = SOME (PtrVar (Var ptr) (type_memory_bytes ce ty)) /\
+ lookup_var ptr initial = SOME (n2w d) /\ not_fresh_at st ptr /\
+ compile_decode_args ce [build_positional_arg ce (name,ty)] off
+   DLOAD (Lit (n2w data_size)) 0 st = ((),last) /\
+ fresh_vars_wrt st initial /\ fn_has_code st last func /\
+ (st.cs_blocks = last.cs_blocks \/
+   !bb. lookup_block last.cs_current_bb func.fn_blocks = SOME bb ==>
+     phi_prefix_length bb.bb_instructions = 0) /\
+ ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+ ?src middle prepared sb.
+   gas_path ctx func initial 0 (OK prepared) /\
+   compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+     (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
+   eval_operand src prepared = SOME (n2w sb) /\
+   eval_operand (Var ptr) prepared = SOME (n2w d) /\
+   (!x. src = Var x \/ Var ptr = Var x \/ Lit (n2w data_size) = Var x ==>
+     not_fresh_at middle x) /\
+   mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env ty) (EL i avs)))
+     prepared.vs_data_section = enc (vyper_to_abi_type env ty) (EL i avs) /\
+   sb + LENGTH (enc (vyper_to_abi_type env ty) (EL i avs)) < dimword (:256) /\
+   (data_size <> 0 ==> sb + LENGTH (enc (vyper_to_abi_type env ty) (EL i avs)) <= data_size /\
+     data_size < dimword (:256)) /\
+   fresh_vars_wrt middle prepared /\ cs_extends st middle /\
+   middle.cs_blocks = st.cs_blocks /\
+   st.cs_next_var <= middle.cs_next_var /\ st.cs_next_id <= middle.cs_next_id /\
+   fn_has_code middle last func /\
+   (middle.cs_blocks = last.cs_blocks \/
+     !bb. lookup_block last.cs_current_bb func.fn_blocks = SOME bb ==>
+       phi_prefix_length bb.bb_instructions = 0) /\
+   frag_ids middle last SUBSET frag_ids st last /\
+   prepared.vs_memory = initial.vs_memory /\ prepared.vs_allocas = initial.vs_allocas /\
+   prepared.vs_alloca_next = initial.vs_alloca_next /\
+   prepared.vs_data_section = initial.vs_data_section /\
+   prepared.vs_call_ctx = initial.vs_call_ctx /\ prepared.vs_labels = initial.vs_labels /\
+   prepared.vs_gas_readings = initial.vs_gas_readings /\ prepared.vs_code = initial.vs_code /\
+   prepared with <|vs_vars := initial.vs_vars; vs_inst_idx := initial.vs_inst_idx|> = initial /\
+   abi_encoder_registered_effect {} [] initial prepared /\
+   (!x v. not_fresh_at st x /\ lookup_var x initial = SOME v ==>
+     lookup_var x prepared = SOME v) /\
+   ~prepared.vs_halted /\ prepared.vs_current_bb = middle.cs_current_bb /\
+   prepared.vs_inst_idx = LENGTH middle.cs_current_insts /\
+   abi_decode_sim ctx func initial prepared
+Proof
+ qx_gen_tac `pvar` >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ drule_all deploy_ctor_canonical_member_source >>
+ disch_then (map_every assume_tac o CONJUNCTS) >>
+ drule abi_decoder_coherent_header >>
+ simp_tac bool_ss [abi_decoder_header_def] >> strip_tac >>
+ drule_all deploy_ctor_singleton_address_prefix_gas_path >>
  disch_then (qspec_then `ctx`
    (qx_choose_then `src` (qx_choose_then `middle`
      (qx_choose_then `prepared` (map_every assume_tac o CONJUNCTS))))) >>
