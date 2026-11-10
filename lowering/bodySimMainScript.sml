@@ -79,8 +79,8 @@ Proof
     (* 34 *) MATCH_ACCEPT_TAC body_subscript_case,
     (* 35 *) MATCH_ACCEPT_TAC body_attribute_case,
     (* 36 *) rpt strip_tac >> irule body_builtin_case >> rpt conj_tac >> rpt strip_tac >>
-               Cases_on `bt = Bop In \/ bt = Bop NotIn`
-               >- (gvs[] >> metis_tac[]) >> metis_tac[],
+               (Cases_on `bt = Bop In \/ bt = Bop NotIn`
+                >- (gvs[] >> metis_tac[]) >> metis_tac[]),
     (* 37 *) MATCH_ACCEPT_TAC body_pop_case,
     (* 38 *) MATCH_ACCEPT_TAC body_type_builtin_case,
     (* 39 *) MATCH_ACCEPT_TAC body_send_case,
