@@ -1756,6 +1756,80 @@ Resume identity_suffix_mask[terminator_head]:
 QED
 Finalise identity_suffix_mask
 
+Theorem prefix_extract_mask[local]:
+  !fuel C C'.
+  let CalleeIH = (!fn fn' t.
+      LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+      LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+      o1_ctx_shape C /\ o1_ctx_shape C' /\
+      MEM fn C.ctx_functions /\ fn' = dft_fn fn /\
+      dft_fn_rel fn fn' /\ strict_dom_vars_defined fn t /\
+      fn_reachable fn t.vs_current_bb /\
+      ctx_labels_bound C t.vs_labels /\ ctx_labels_bound C' t.vs_labels /\
+      ~t.vs_call_ctx.cc_static /\ terminates (run_blocks fuel C' fn' t) /\
+      gas_count_blocks fuel C' fn' t <= LENGTH t.vs_gas_readings ==>
+      ?m es unused.
+        LENGTH m = LENGTH es /\
+        PERM (MAP THE (FILTER IS_SOME m) ++ unused) t.vs_gas_readings /\
+        (!u. (?ir. run_blocks fuel C' fn' t = IntRet ir u) ==>
+          EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+        !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+          (?extra. es = gas_events_blocks fuel C fn
+             (t with vs_gas_readings := gs ++ tail) ++ extra) /\
+          ((?j. terminates (run_blocks j C fn
+             (t with vs_gas_readings := gs ++ tail))) ==>
+           terminates (run_blocks fuel C fn (t with vs_gas_readings := gs ++ tail)) /\
+           dft_res_rel
+             (restore_result [] (run_blocks fuel C fn (t with vs_gas_readings := gs ++ tail)))
+             (restore_result [] (run_blocks fuel C' fn' t)) /\
+           (!u. (?ir. run_blocks fuel C' fn' t = IntRet ir u) ==>
+             gas_events_blocks fuel C fn (t with vs_gas_readings := gs ++ tail) = es /\
+             residual_result tail (run_blocks fuel C' fn' t)
+               (run_blocks fuel C fn (t with vs_gas_readings := gs ++ tail)))));
+      R = (\n D xs st. FOLDR (dft_exec_cons n D) OK xs st);
+      E = (\D xs st. gas_events_block fuel D st.vs_current_bb
+        <|bb_label := st.vs_current_bb; bb_instructions :=
+          REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> st)
+  in
+  !fn bb pre y post s.
+    CalleeIH /\
+    LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+    LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+    o1_ctx_shape C /\ o1_ctx_shape C' /\ MEM fn C.ctx_functions /\
+    wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+    EVERY inst_wf bb.bb_instructions /\
+    EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+    EVERY (\i. MEM i bb.bb_instructions) (pre ++ y::post) /\
+    dft_remaining_inv fn bb (pre ++ y::post) s /\
+    EVERY (\x. dft_gas_swap_pair x y /\ ~dft_must_order x y) pre /\
+    ctx_labels_bound C s.vs_labels /\ ctx_labels_bound C' s.vs_labels /\
+    ~s.vs_call_ctx.cc_static /\ terminates (R fuel C' (y::pre) s) /\
+    LENGTH (E C' (y::pre) s) <= LENGTH s.vs_gas_readings ==>
+    (!u. EVERY (\i. ~is_terminator i.inst_opcode) (y::pre) /\
+      R fuel C' (y::pre) s = OK u ==>
+      u.vs_current_bb = s.vs_current_bb /\
+      u.vs_inst_idx = s.vs_inst_idx + LENGTH (y::pre) /\
+      u.vs_halted = s.vs_halted /\ dft_remaining_inv fn bb post u) /\
+    ?m es unused.
+      LENGTH m = LENGTH es /\
+      PERM (MAP THE (FILTER IS_SOME m) ++ unused) s.vs_gas_readings /\
+      (!u. (R fuel C' (y::pre) s = OK u \/ (?ir. R fuel C' (y::pre) s = IntRet ir u)) ==>
+        EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+      !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+        (?extra. es = E C (pre ++ [y]) (s with vs_gas_readings := gs ++ tail) ++ extra) /\
+        ((?j. terminates (R j C (pre ++ [y]) (s with vs_gas_readings := gs ++ tail))) ==>
+          terminates (R fuel C (pre ++ [y]) (s with vs_gas_readings := gs ++ tail)) /\
+          dft_res_rel
+            (restore_result [] (R fuel C (pre ++ [y]) (s with vs_gas_readings := gs ++ tail)))
+            (restore_result [] (R fuel C' (y::pre) s)) /\
+          (((?u. R fuel C' (y::pre) s = OK u) \/ (?ir u. R fuel C' (y::pre) s = IntRet ir u)) ==>
+            E C (pre ++ [y]) (s with vs_gas_readings := gs ++ tail) = es /\
+            residual_result tail (R fuel C' (y::pre) s)
+              (R fuel C (pre ++ [y]) (s with vs_gas_readings := gs ++ tail))))
+Proof
+  FAIL_TAC "prefix extraction proof pending"
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
