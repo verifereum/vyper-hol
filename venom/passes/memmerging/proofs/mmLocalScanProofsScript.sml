@@ -8813,6 +8813,88 @@ Proof
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
+Theorem mm_local_interval_overlap_point[local]:
+  interval_overlaps u v <=>
+  ?x. u.iv_start <= x /\ x < interval_end u /\
+      v.iv_start <= x /\ x < interval_end v
+Proof
+  rewrite_tac[mmIntervalTheory.interval_overlaps_def] >> eq_tac
+  >- (strip_tac >> qexists `MAX u.iv_start v.iv_start` >>
+      fs[arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  strip_tac >>
+  fs[arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >> decide_tac
+QED
+
+Theorem mm_local_copy_merge_source_interval[local]:
+  a.cg_dst <= b.cg_dst /\ copy_can_merge a b ==>
+  (!x. ((copy_merge a b).cg_src <= x /\
+        x < (copy_merge a b).cg_src + (copy_merge a b).cg_length) <=>
+       (a.cg_src <= x /\ x < a.cg_src + a.cg_length) \/
+       (b.cg_src <= x /\ x < b.cg_src + b.cg_length))
+Proof
+  simp[copy_can_merge_def, copy_merge_def, arithmeticTheory.MAX_DEF] >>
+  rpt strip_tac >> IF_CASES_TAC >> decide_tac
+QED
+
+Theorem mm_local_copy_merge_overwrites[local]:
+  a.cg_dst <= b.cg_dst /\ copy_can_merge a b ==>
+  (copy_overwrites (copy_merge a b) iv <=>
+   copy_overwrites a iv \/ copy_overwrites b iv)
+Proof
+  strip_tac >> drule_all mm_local_copy_merge_interval >> strip_tac >>
+  simp[copy_overwrites_def, copy_dst_interval_def, mm_local_interval_overlap_point,
+    mmIntervalTheory.mk_interval_def, mmIntervalTheory.interval_end_def] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_copy_merge_source_overwritten[local]:
+  a.cg_dst <= b.cg_dst /\ copy_can_merge a b ==>
+  (copy_overwrites c (copy_src_interval (copy_merge a b)) <=>
+   copy_overwrites c (copy_src_interval a) \/
+   copy_overwrites c (copy_src_interval b))
+Proof
+  strip_tac >> drule_all mm_local_copy_merge_source_interval >> strip_tac >>
+  simp[copy_overwrites_def, copy_dst_interval_def, copy_src_interval_def,
+    mm_local_interval_overlap_point,
+    mmIntervalTheory.mk_interval_def, mmIntervalTheory.interval_end_def] >>
+  metis_tac[arithmeticTheory.ADD_SYM]
+QED
+
+Theorem mm_local_copy_merge_destination_overwritten[local]:
+  a.cg_dst <= b.cg_dst /\ copy_can_merge a b ==>
+  (copy_overwrites c (copy_dst_interval (copy_merge a b)) <=>
+   copy_overwrites c (copy_dst_interval a) \/
+   copy_overwrites c (copy_dst_interval b))
+Proof
+  strip_tac >> drule_all mm_local_copy_merge_interval >> strip_tac >>
+  simp[copy_overwrites_def, copy_dst_interval_def, mm_local_interval_overlap_point,
+    mmIntervalTheory.mk_interval_def, mmIntervalTheory.interval_end_def] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_copy_geometry_merge[local]:
+  a.cg_dst <= b.cg_dst /\ copy_can_merge a b /\
+  mm_local_copy_geometry a c /\ mm_local_copy_geometry b c ==>
+  mm_local_copy_geometry (copy_merge a b) c
+Proof
+  strip_tac >>
+  drule_all mm_local_copy_merge_overwrites >>
+  disch_then (qspec_then `copy_src_interval c` assume_tac) >>
+  drule_all mm_local_copy_merge_source_overwritten >>
+  disch_then (qspec_then `c` assume_tac) >>
+  simp[mm_local_copy_geometry_def] >>
+  conj_tac >- metis_tac[mm_local_copy_geometry_def] >>
+  conj_tac >- metis_tac[mm_local_copy_geometry_def] >>
+  drule_all mm_local_copy_merge_overwrites >>
+  disch_then (qspec_then `copy_dst_interval c` assume_tac) >>
+  Cases_on `copy_overwrites a (copy_dst_interval c)`
+  >- (fs[mm_local_copy_geometry_def] >> simp[copy_merge_def]) >>
+  Cases_on `copy_overwrites b (copy_dst_interval c)`
+  >- (fs[mm_local_copy_geometry_def, copy_can_merge_def] >>
+      simp[copy_merge_def] >> decide_tac) >>
+  simp[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
