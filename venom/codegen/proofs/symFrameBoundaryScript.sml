@@ -2055,6 +2055,113 @@ Proof
   simp[execute_plan_def, sym_steps_def] >> metis_tac[]
 QED
 
+Theorem clean_stack_plan_frame_sim_exact:
+  !ctx cp lo o2pc prog liveness cfg fn bb base ps vs as clean_ops ps2
+   r ra rest mem0.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    generated_plan_state_wf_marked base ps /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    clean_stack_plan liveness cfg fn bb ps = (clean_ops, ps2) /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps2.ps_alloc.sa_spill_base /\
+    ps2.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    (!off. MEM (SOSpill off) clean_ops \/ MEM (SORestore off) clean_ops ==>
+           off < dimword (:256)) /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp clean_ops)
+    ==>
+    ?as2.
+      asm_steps lo o2pc prog (LENGTH (execute_plan cp.cp_initial_fmp clean_ops)) as = AsmOK as2 /\
+      as2.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp clean_ops) /\
+      fn_frame_inv ctx cp lo fn ra rest mem0 ps2 vs as2 /\
+      generated_plan_state_wf_marked base ps2 /\
+      (!op. MEM op ps2.ps_stack \/ op IN FDOM ps2.ps_spilled ==>
+            op = dead_stack_marker \/ MEM op ps.ps_stack \/
+            op IN FDOM ps.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `generated_plan_state_wf_marked spillbase ps` >>
+  rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st` >>
+  `EVERY (\s. case s of SOSpill off => off < dimword (:256)
+    | SORestore off => off < dimword (:256) | _ => T) clean_ops` by
+    (simp[listTheory.EVERY_MEM] >> gen_tac >> strip_tac >>
+     Cases_on `s` >> simp[] >> metis_tac[]) >>
+  drule fnFrameTerminalPrepTheory.fn_frame_inv_local_state >> strip_tac >>
+  `asm_block_at prog (st with as_stack := top).as_pc
+    (execute_plan cplan.cp_initial_fmp clean_ops)` by simp[] >>
+  drule_all fnFrameCleanStackTheory.clean_stack_plan_local_sim >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  rename1 `venom_asm_rel lo ps2 _ endpoint` >>
+  drule asmFrameTheory.asm_steps_frame >> disch_then (qspec_then `rest` assume_tac) >>
+  `st with as_stack := top ++ rest = st` by
+    simp[asm_state_component_equality] >>
+  qexists `endpoint with as_stack := endpoint.as_stack ++ rest` >>
+  conj_tac >- gvs[] >>
+  conj_tac >- gvs[] >>
+  conj_tac
+  >- (irule fnFrameBoundaryInvokeTheory.invoke_prefix_frame_transport >> metis_tac[]) >>
+  simp[] >> metis_tac[fnFrameCleanStackTheory.clean_stack_plan_inventory]
+QED
+
+Theorem allocator_interval_own_spill:
+  !ctx cp fn r ps b.
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+    ps.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    ps.ps_alloc.sa_spill_base <= b /\ b < ps.ps_alloc.sa_next_offset ==>
+    context_spill_byte cp b /\ closure_spill_byte ctx cp fn.fn_name b
+Proof
+  rpt strip_tac >>
+  `r.sr_spill_base <= b /\ b < r.sr_spill_end` by decide_tac >>
+  metis_tac[contextCodegenRelPropsTheory.context_spill_byte_of_region,
+            genFrameSimTheory.closure_spill_byte_own]
+QED
+
+Theorem sym_clean_stack_plan_frame_sim:
+  !ctx cp lo o2pc prog liveness cfg fn bb base ps vs as clean_ops ps2
+   r ra rest mem0 env ret srest labs0 ss.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    generated_plan_state_wf_marked base ps /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    clean_stack_plan liveness cfg fn bb ps = (clean_ops, ps2) /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps2.ps_alloc.sa_spill_base /\
+    ps2.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    (!off. MEM (SOSpill off) clean_ops \/ MEM (SORestore off) clean_ops ==>
+           off < dimword (:256)) /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp clean_ops) /\
+    asm_static_wf prog /\
+    sym_frame_inv prog env ctx cp fn ret srest labs0 ps as ss
+    ==>
+    ?as2 ss2.
+      asm_steps lo o2pc prog (LENGTH (execute_plan cp.cp_initial_fmp clean_ops)) as = AsmOK as2 /\
+      as2.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp clean_ops) /\
+      fn_frame_inv ctx cp lo fn ra rest mem0 ps2 vs as2 /\
+      generated_plan_state_wf_marked base ps2 /\
+      (!op. MEM op ps2.ps_stack \/ op IN FDOM ps2.ps_spilled ==>
+            op = dead_stack_marker \/ MEM op ps.ps_stack \/
+            op IN FDOM ps.ps_spilled) /\
+      sym_steps prog env (LENGTH (execute_plan cp.cp_initial_fmp clean_ops)) ss = SymOK ss2 /\
+      sym_frame_inv prog env ctx cp fn ret srest labs0 ps2 as2 ss2
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st` >>
+  drule_all clean_stack_plan_frame_sim_exact >> strip_tac >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    fs[fnPlanPrefixTheory.generated_plan_state_wf_marked_def] >>
+  `sym_kinds_ok cplan fn ret srest ps ss` by fs[sym_frame_inv_def] >>
+  `asm_block_at prog ss.sym_base.as_pc (execute_plan cplan.cp_initial_fmp clean_ops)` by
+    gvs[sym_frame_inv_def, asm_sym_rel_def] >>
+  `!b. ps2.ps_alloc.sa_spill_base <= b /\ b < ps2.ps_alloc.sa_next_offset ==>
+    context_spill_byte cplan b /\ closure_spill_byte ctx cplan fn.fn_name b` by
+    (gen_tac >> strip_tac >> drule_all allocator_interval_own_spill >> simp[]) >>
+  drule_all sym_clean_stack_plan_numeric >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexistsl [`as2`, `out`] >> simp[] >>
+  metis_tac[sym_frame_inv_same_count]
+QED
+
 Theorem sym_phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0
