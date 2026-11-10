@@ -45,6 +45,7 @@ own, and no revert of the other changes restores those fixtures.
 - `external-calls/e04_ret_string`
 - `external-calls/e05_ret_bytes`
 - `external-calls/e37_default_ret_string`
+- `immutables/i09_immut_widen_bytes`
 - `internal-frames/p76_int_assert_raise`
 - `main/assert_reason`
 - `main/raise_reason`
