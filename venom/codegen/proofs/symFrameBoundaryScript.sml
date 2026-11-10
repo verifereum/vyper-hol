@@ -2891,7 +2891,74 @@ Theorem sym_single_pred_prefix_frame_sim:
       sym_steps prog env n ss = SymOK ss' /\
       sym_frame_inv prog env ctx cp fn ret srest labs0 ps1 as' ss'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st` >>
+  `MEM bb.bb_label (cfg_succs_of cfg pred)` by
+    (qpat_x_assum `lineage_entry _ _ _ _ _ _ _ _` mp_tac >>
+     simp[fnPlanLineageTheory.lineage_entry_def] >> strip_tac) >>
+  `ps2.ps_alloc.sa_spill_base = ps3.ps_alloc.sa_spill_base /\
+   ps2.ps_alloc.sa_next_offset <= ps3.ps_alloc.sa_next_offset` by
+    (drule allocMonoTheory.generate_block_insts_plan_spill_base >>
+     drule allocMonoTheory.generate_block_insts_plan_next_offset >> simp[]) >>
+  qpat_x_assum `asm_block_at _ _ _`
+    (strip_assume_tac o REWRITE_RULE
+      [stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append]) >>
+  `r.sr_spill_base <= ps2.ps_alloc.sa_spill_base /\
+   ps2.ps_alloc.sa_next_offset <= r.sr_spill_end` by simp[] >>
+  `!off. MEM (SOSpill off) clean_ops \/ MEM (SORestore off) clean_ops ==>
+    off < dimword (:256)` by metis_tac[listTheory.MEM_APPEND] >>
+  `!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==>
+    off < dimword (:256)` by metis_tac[listTheory.MEM_APPEND] >>
+  drule_all sym_clean_stack_plan_frame_sim >> strip_tac >>
+  `!inst op. MEM inst phis /\ is_var_operand op /\ MEM op inst.inst_operands /\
+     MEM op ps2.ps_stack ==> resolve_phi pred inst.inst_operands = SOME op` by
+    metis_tac[fnFrameSinglePredTheory.single_pred_phi_operand_hits] >>
+  `normalize_operand dfg [] dead_stack_marker = dead_stack_marker` by
+    simp[stackPlanGenTheory.dead_stack_marker_def, normalize_operand_def] >>
+  `!op v. (MEM op ps2.ps_stack \/ op IN FDOM ps2.ps_spilled) /\
+     ~(MEM op ps2.ps_stack /\ ?inst. MEM inst (collect_phis bb.bb_instructions) /\
+       resolve_phi pred inst.inst_operands = SOME op) /\
+     (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+     ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
+    metis_tac[operand_distinct, stackPlanGenTheory.dead_stack_marker_def] >>
+  `!at. MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled ==>
+    operand_val (frame_view fn ra vs) lo at =
+    operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)` by
+    metis_tac[] >>
+  rename1 `non_param_insts bb = phis ++ suffix` >>
+  `asm_block_at prog as2.as_pc (execute_plan cplan.cp_initial_fmp ops)` by
+    metis_tac[] >>
+  `?phi_ops ps1 body_ops n as' ss'.
+     ops = phi_ops ++ body_ops /\
+     generate_block_insts_prefix liveness dfg cfg fn bb.bb_label (bb_is_halting bb)
+       (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions) 0
+       (LENGTH phis) (phis ++ suffix) ps2 = SOME (phi_ops,ps1) /\
+     generate_block_insts_plan liveness dfg cfg fn bb.bb_label (bb_is_halting bb)
+       (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions)
+       (LENGTH phis) suffix ps1 = SOME (body_ops,ps3) /\
+     asm_steps lo o2pc prog n as2 = AsmOK as' /\
+     as'.as_pc = as2.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp phi_ops) /\
+     fn_frame_inv ctx cplan lo fn ra rest mem0 ps1
+       (s_phi with vs_inst_idx := LENGTH phis) as' /\
+     (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+       operand_val (frame_view fn ra s_phi) lo at =
+       operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at)) /\
+     sym_steps prog env n ss2 = SymOK ss' /\
+     sym_frame_inv prog env ctx cplan fn ret srest labs0 ps1 as' ss'` by
+    (match_mp_tac sym_phi_prefix_hits_frame_sim >>
+     qpat_assum `generated_plan_state_wf_marked bound ps2` (irule_at Any) >>
+     qexistsl [`vs`, `r`, `pred`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qexistsl [`phi_ops`, `ps1`, `body_ops`,
+    `LENGTH (execute_plan cplan.cp_initial_fmp clean_ops) + n`, `as'`, `ss'`] >>
+  ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >- (once_rewrite_tac[stackOpSimTheory.asm_steps_add] >>
+    gvs[])) >>
+  (conj_tac >- (rewrite_tac[stackOpSimTheory.execute_plan_append,
+    listTheory.LENGTH_APPEND] >> metis_tac[arithmeticTheory.ADD_ASSOC])) >>
+  ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- (once_rewrite_tac[sym_steps_add] >> gvs[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem sym_entry_prefix_frame_sim:
