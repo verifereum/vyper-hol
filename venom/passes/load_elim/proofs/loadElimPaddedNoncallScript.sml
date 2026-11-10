@@ -185,6 +185,35 @@ Proof
   simp[mcopy_def, le_padded_control_write_memory]
 QED
 
+Theorem le_padded_operands_eq:
+  !ops. (!op. MEM op ops ==> eval_operand op s = eval_operand op t) ==>
+  eval_operands ops s = eval_operands ops t
+Proof
+  Induct >- simp[eval_operands_def] >>
+  rpt strip_tac >>
+  `eval_operand h s = eval_operand h t` by simp[] >>
+  `eval_operands ops s = eval_operands ops t` by metis_tac[MEM] >>
+  simp[eval_operands_def]
+QED
+
+Theorem le_padded_exec_gas:
+  le_padded_control V s t ==>
+  lift_result (le_padded_control V) (padded_exec_equiv V) (padded_exec_equiv V)
+    (exec_gas i s) (exec_gas i t)
+Proof
+  strip_tac >>
+  `s.vs_gas_readings = t.vs_gas_readings` by
+    gvs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def,
+        venom_state_component_equality] >>
+  simp[exec_gas_def] >>
+  namedCases_on `i.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def] >>
+  Cases_on `t.vs_gas_readings` >> simp[lift_result_def, le_padded_control_update_var] >>
+  irule le_padded_control_update_var >>
+  gvs[le_padded_control_def, padded_exec_equiv_def, lookup_var_def,
+      read_memory_def, execution_frame_def, venom_state_component_equality]
+QED
+
 Theorem le_padded_context_reads:
   MEM i.inst_opcode
     [CALLER; ADDRESS; CALLVALUE; GAS; ORIGIN; GASPRICE; CHAINID;
@@ -199,7 +228,7 @@ Theorem le_padded_context_reads:
 Proof
   Cases_on `i.inst_opcode` >> simp[] >> strip_tac >>
   simp[step_inst_base_opcode_eqs] >>
-  (irule le_padded_exec_read0 ORELSE irule le_padded_exec_read1) >>
+  FIRST [irule le_padded_exec_gas, irule le_padded_exec_read0, irule le_padded_exec_read1] >>
   simp[] >>
   `padded_exec_equiv V s t` by gvs[le_padded_control_def] >>
   drule padded_exec_equiv_mload >> strip_tac >>
@@ -228,6 +257,18 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem le_padded_terminal_updates:
+  padded_exec_equiv V s t ==>
+  padded_exec_equiv V (halt_state s) (halt_state t) /\
+  padded_exec_equiv V (revert_state s) (revert_state t) /\
+  padded_exec_equiv V (set_returndata rd s) (set_returndata rd t)
+Proof
+  simp[padded_exec_equiv_def, halt_state_def, revert_state_def,
+       set_returndata_def, lookup_var_def, read_memory_def,
+       execution_frame_def, venom_state_component_equality] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem le_padded_store_ops:
   MEM i.inst_opcode [MSTORE; MSTORE8; SSTORE; TSTORE] /\
   le_padded_control V s t /\
@@ -235,8 +276,17 @@ Theorem le_padded_store_ops:
   lift_result (le_padded_control V) (padded_exec_equiv V) (padded_exec_equiv V)
     (step_inst_base i s) (step_inst_base i t)
 Proof
-  Cases_on `i.inst_opcode` >> simp[] >> strip_tac >>
-  simp[step_inst_base_opcode_eqs] >> irule le_padded_exec_write2 >>
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    gvs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def,
+        venom_state_component_equality] >>
+  `padded_exec_equiv V s t` by gvs[le_padded_control_def] >>
+  `eval_operands i.inst_operands s = eval_operands i.inst_operands t` by
+    (irule le_padded_operands_eq >> simp[]) >>
+  Cases_on `i.inst_opcode` >> gvs[] >>
+  simp[step_inst_base_opcode_eqs] >>
+  TRY (IF_CASES_TAC >- simp[lift_result_def, le_padded_terminal_updates]) >>
+  simp[] >> irule le_padded_exec_write2 >>
   simp[le_padded_control_mstore, le_padded_control_mstore8,
        le_padded_control_sstore, le_padded_control_tstore]
 QED
@@ -286,18 +336,6 @@ Proof
    eval_operand w s = eval_operand w t` by simp[] >>
   Cases_on `eval_operand off t` >> gvs[lift_result_def] >>
   Cases_on `eval_operand w t` >> gvs[lift_result_def, le_padded_control_istore]
-QED
-
-Theorem le_padded_terminal_updates:
-  padded_exec_equiv V s t ==>
-  padded_exec_equiv V (halt_state s) (halt_state t) /\
-  padded_exec_equiv V (revert_state s) (revert_state t) /\
-  padded_exec_equiv V (set_returndata rd s) (set_returndata rd t)
-Proof
-  simp[padded_exec_equiv_def, halt_state_def, revert_state_def,
-       set_returndata_def, lookup_var_def, read_memory_def,
-       execution_frame_def, venom_state_component_equality] >>
-  rpt strip_tac >> gvs[]
 QED
 
 Theorem le_padded_return_revert:
@@ -634,7 +672,9 @@ QED
 
 Theorem le_padded_control_accounts:
   le_padded_control V s t ==>
-  le_padded_control V (s with vs_accounts := a) (t with vs_accounts := a)
+  le_padded_control V
+    (s with <|vs_accounts := a; vs_pending_deletions := d|>)
+    (t with <|vs_accounts := a; vs_pending_deletions := d|>)
 Proof
   simp[le_padded_control_def, padded_exec_equiv_def, lookup_var_def,
        read_memory_def, execution_frame_def, venom_state_component_equality] >>
@@ -648,10 +688,15 @@ Theorem le_padded_selfdestruct:
     (step_inst_base i s) (step_inst_base i t)
 Proof
   strip_tac >>
-  `s.vs_accounts = t.vs_accounts /\ s.vs_call_ctx = t.vs_call_ctx` by
+  `s.vs_accounts = t.vs_accounts /\ s.vs_call_ctx = t.vs_call_ctx /\
+   s.vs_pending_deletions = t.vs_pending_deletions` by
     gvs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def,
         venom_state_component_equality] >>
+  `eval_operands i.inst_operands s = eval_operands i.inst_operands t` by
+    (irule le_padded_operands_eq >> simp[]) >>
   simp[step_inst_base_opcode_eqs] >>
+  IF_CASES_TAC >-
+    (simp[lift_result_def] >> metis_tac[le_padded_terminal_updates, le_padded_control_def]) >>
   namedCases_on `i.inst_operands` ["", "op rest"] >> simp[lift_result_def] >>
   namedCases_on `rest` ["", "extra tail"] >> simp[lift_result_def] >>
   `eval_operand op s = eval_operand op t` by simp[] >>
@@ -728,7 +773,11 @@ Proof
   `s.vs_call_ctx = t.vs_call_ctx /\ s.vs_logs = t.vs_logs` by
     gvs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def,
         venom_state_component_equality] >>
+  `eval_operands i.inst_operands s = eval_operands i.inst_operands t` by
+    (irule le_padded_operands_eq >> simp[]) >>
   simp[step_inst_base_opcode_eqs] >>
+  IF_CASES_TAC >-
+    (simp[lift_result_def] >> metis_tac[le_padded_terminal_updates, le_padded_control_def]) >>
   namedCases_on `i.inst_operands` ["", "op rest"] >> simp[lift_result_def] >>
   Cases_on `op` >> simp[lift_result_def] >>
   Cases_on `LENGTH rest = w2n c + 2` >> simp[lift_result_def] >>
@@ -932,6 +981,8 @@ Proof
   Cases_on `eval_operand az t` >> gvs[lift_result_def] >>
   Cases_on `eval_operand ro t` >> gvs[lift_result_def] >>
   Cases_on `eval_operand rz t` >> gvs[lift_result_def] >>
+  IF_CASES_TAC >-
+    (simp[lift_result_def] >> metis_tac[le_padded_terminal_updates, le_padded_control_def]) >>
   simp[le_padded_exec_ext_call]
 QED
 
@@ -971,7 +1022,15 @@ Theorem le_padded_create:
   lift_result (le_padded_control V) (padded_exec_equiv V) (padded_exec_equiv V)
     (step_inst_base i s) (step_inst_base i t)
 Proof
-  strip_tac >> simp[step_inst_base_opcode_eqs] >>
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    gvs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def,
+        venom_state_component_equality] >>
+  `eval_operands i.inst_operands s = eval_operands i.inst_operands t` by
+    (irule le_padded_operands_eq >> simp[]) >>
+  simp[step_inst_base_opcode_eqs] >>
+  IF_CASES_TAC >-
+    (simp[lift_result_def] >> metis_tac[le_padded_terminal_updates, le_padded_control_def]) >>
   namedCases_on `i.inst_operands` ["", "value r1"] >> simp[lift_result_def] >>
   namedCases_on `r1` ["", "off r2"] >> simp[lift_result_def] >>
   namedCases_on `r2` ["", "sz r3"] >> simp[lift_result_def] >>
@@ -991,7 +1050,15 @@ Theorem le_padded_create2:
   lift_result (le_padded_control V) (padded_exec_equiv V) (padded_exec_equiv V)
     (step_inst_base i s) (step_inst_base i t)
 Proof
-  strip_tac >> simp[step_inst_base_opcode_eqs] >>
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    gvs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def,
+        venom_state_component_equality] >>
+  `eval_operands i.inst_operands s = eval_operands i.inst_operands t` by
+    (irule le_padded_operands_eq >> simp[]) >>
+  simp[step_inst_base_opcode_eqs] >>
+  IF_CASES_TAC >-
+    (simp[lift_result_def] >> metis_tac[le_padded_terminal_updates, le_padded_control_def]) >>
   namedCases_on `i.inst_operands` ["", "value r1"] >> simp[lift_result_def] >>
   namedCases_on `r1` ["", "off r2"] >> simp[lift_result_def] >>
   namedCases_on `r2` ["", "sz r3"] >> simp[lift_result_def] >>

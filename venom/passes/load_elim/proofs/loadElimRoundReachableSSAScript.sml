@@ -2,7 +2,7 @@ Theory loadElimRoundReachableSSA
 Ancestors
   loadElimStaticPointClosure loadElimStaticPhiClosure loadElimRoundUniqueness
   loadElimStaticAvailability loadElimStaticPhiPlacement loadElimReachableSSA
-  loadElimTargetWrites loadElimOriginHelpers loadElimDefs loadElimPrependIndex
+  loadElimTargetWrites loadElimOriginHelpers loadElimDefs loadElimPrependIndex passTransform
   analysisSimDefs passSimulationDefs passSimulationProps passSharedDefs venomWf venomInst
   venomExecSemantics venomExecProofs indexedLists list rich_list finite_map
   loadElimActionSelection loadElimPhiCapture cfgAnalysisProps

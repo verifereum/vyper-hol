@@ -1,7 +1,7 @@
 Theory loadElimRoundStructure
 Ancestors
   loadElimPrependIndex loadElimTargetWrites loadElimOriginHelpers
-  loadElimDefs loadElimKeyShapeInvariant passSharedDefs
+  loadElimDefs loadElimKeyShapeInvariant passSharedDefs passTransform
   analysisSimDefs passSimulationDefs passSimulationProps cfgDefs venomInst venomExecSemantics
   list rich_list indexedLists ctxLookupAgreeHelpers
 

@@ -1,7 +1,7 @@
 Theory loadElimRoundUniqueness
 Ancestors
   loadElimRoundWf loadElimListInsertion loadElimTargetWrites
-  loadElimDefs loadElimOriginHelpers loadElimActionFreshness
+  loadElimDefs loadElimOriginHelpers loadElimActionFreshness passTransform
   venomWf venomInst passSharedDefs irSupply indexedLists list rich_list pred_set
   analysisSimDefs passSimulationDefs passSimulationProps cfgTransform
 

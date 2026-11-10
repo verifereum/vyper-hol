@@ -8,6 +8,7 @@ Theorem le_load_elim_one_run_structural:
   le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
   (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
   wf_alias_sets ctx.lctx_aliases /\
+  ~s.vs_call_ctx.cc_static /\
   fn_entry_label fn = SOME s.vs_current_bb /\
   ir_cfg = cfg_analyze fn /\
   DISJOINT G (set (fn_all_vars fn)) /\

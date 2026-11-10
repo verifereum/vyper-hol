@@ -2,7 +2,7 @@ Theory loadElimActualPhiFrame
 Ancestors
   loadElimPhiTransport loadElimMemoryRel loadElimPaddedSimHelpers loadElimDynamicCapture
   loadElimHistoryHelpers loadElimOperationalHistory venomState stateFrame
-  list finite_map pred_set venomExecSemantics analysisSimDefs loadElimDefs
+  list finite_map pred_set venomExecSemantics analysisSimDefs passTransform loadElimDefs
   loadElimTargetWrites loadElimOccurrenceCoverage loadElimPhiCapture
 
 Theorem padded_exec_equiv_update_fresh_right:

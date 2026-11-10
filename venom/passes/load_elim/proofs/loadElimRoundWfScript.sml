@@ -1,7 +1,7 @@
 Theory loadElimRoundWf
 Ancestors
   loadElimDefs loadElimOriginHelpers loadElimPhiCapture loadElimActionFreshness
-  loadElimRoundStructure venomWf venomInst venomExecSemantics passSharedDefs list rich_list
+  loadElimRoundStructure venomWf venomInst venomExecSemantics passSharedDefs passTransform list rich_list
 
 Theorem le_phi_ops_well_formed:
   !pairs. phi_well_formed (mk_phi_ops_from_pairs pairs)
@@ -51,8 +51,8 @@ Theorem le_round_preserves_fn_inst_wf:
   fn_inst_wf fn ==> fn_inst_wf (load_elim_one ctx g fn)
 Proof
   simp[fn_inst_wf_def, load_elim_one_def,
-       analysisSimDefsTheory.analysis_function_transform_prepend_def,
-       passSimulationDefsTheory.function_map_transform_def] >>
+       passTransformTheory.analysis_function_transform_prepend_def,
+       passTransformTheory.function_map_transform_def] >>
   rpt strip_tac >> gvs[MEM_MAP] >>
   rename1 `MEM bb fn.fn_blocks` >>
   `EVERY inst_wf bb.bb_instructions` by
@@ -64,7 +64,7 @@ Proof
     (gvs[EVERY_EL, indexedListsTheory.LENGTH_MAPi, indexedListsTheory.EL_MAPi] >>
      metis_tac[le_inst_preserves_inst_wf]) >>
   qpat_x_assum `MEM inst _` mp_tac >>
-  simp[analysisSimDefsTheory.analysis_block_transform_prepend_def,
+  simp[passTransformTheory.analysis_block_transform_prepend_def,
        load_phi_prepend_def, passSimulationPropsTheory.flat_mapi_singleton, MEM_APPEND] >>
   metis_tac[le_phis_for_block_inst_wf, EVERY_MEM, EVERY_TAKE, EVERY_DROP]
 QED
@@ -152,13 +152,13 @@ QED
 Theorem le_prepend_bb_well_formed:
   le_configured_context ctx /\ bb_well_formed bb ==>
   bb_well_formed
-    (analysisSimDefs$analysis_block_transform_prepend NONE result (load_phi_prepend actions)
+    (analysis_block_transform_prepend NONE result (load_phi_prepend actions)
       (\ll inst. [load_elim_inst ctx actions ll inst]) bb)
 Proof
   strip_tac >> drule_all le_mapi_bb_well_formed >>
   disch_then (qspecl_then [`\n. df_at NONE result bb.bb_label n`, `actions`] mp_tac) >>
   Cases_on `bb` >>
-  simp[analysisSimDefsTheory.analysis_block_transform_prepend_def,
+  simp[passTransformTheory.analysis_block_transform_prepend_def,
        load_phi_prepend_def, passSimulationPropsTheory.flat_mapi_singleton] >>
   simp[basic_block_fn_updates] >> strip_tac >>
   irule le_insert_phis_bb_well_formed >>
@@ -170,8 +170,8 @@ Theorem le_round_wf_from_ids:
   fn_inst_ids_distinct (load_elim_one ctx g fn) ==>
   wf_function (load_elim_one ctx g fn)
 Proof
-  simp[load_elim_one_def, analysisSimDefsTheory.analysis_function_transform_prepend_def] >>
+  simp[load_elim_one_def, passTransformTheory.analysis_function_transform_prepend_def] >>
   strip_tac >> irule passSimulationPropsTheory.fmt_preserves_wf_function >>
-  simp[analysisSimDefsTheory.analysis_block_transform_prepend_def,
+  simp[passTransformTheory.analysis_block_transform_prepend_def,
        le_prepend_bb_well_formed, le_prepend_bb_succs]
 QED

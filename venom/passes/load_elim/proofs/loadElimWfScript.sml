@@ -10,7 +10,7 @@
 Theory loadElimWf
 Ancestors
   loadElimDefs analysisSimDefs passSharedDefs passSharedProps venomWf
-  venomInst cfgTransform removeUnusedSsaProofs loadElimRoundUniqueness
+  venomInst cfgTransform removeUnusedSsaProofs venomWfProps loadElimRoundUniqueness
   loadElimRoundNames loadElimIterationReadiness list pred_set
 
 Theorem load_elim_function_preserves_wf:

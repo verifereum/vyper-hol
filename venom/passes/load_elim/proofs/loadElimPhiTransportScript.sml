@@ -1,7 +1,7 @@
 Theory loadElimPhiTransport
 Ancestors
   loadElimTargetWrites loadElimOperationalHistory loadElimHistoryHelpers
-  venomExecSemantics venomState list abiEncoderObserver lowerDloadClassify
+  venomExecSemantics venomState list abiEncoderObserver
 
 Theorem le_snapshot_batch_transport:
   !xs s t s'.
@@ -38,6 +38,14 @@ Proof
   metis_tac[loadElimOccurrenceCoverageTheory.le_phi_prefix_take, eval_phis_prefix]
 QED
 
+Triviality resolve_phi_MEM:
+  !prev ops val_op.
+    resolve_phi prev ops = SOME val_op ==> MEM val_op ops
+Proof
+  ho_match_mp_tac venomExecSemanticsTheory.resolve_phi_ind >>
+  rw[resolve_phi_def] >> gvs[] >> res_tac >> simp[]
+QED
+
 Theorem le_eval_one_phi_agreement:
   s.vs_prev_bb = t.vs_prev_bb /\ s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) inst.inst_operands ==> lookup_var v s = lookup_var v t) ==>
@@ -51,7 +59,7 @@ Proof
   Cases_on `t'` >> simp[] >>
   Cases_on `t.vs_prev_bb` >> simp[] >>
   Cases_on `resolve_phi x inst.inst_operands` >> simp[] >>
-  drule lowerDloadClassifyTheory.resolve_phi_MEM >>
+  drule resolve_phi_MEM >>
   strip_tac >> metis_tac[]
 QED
 

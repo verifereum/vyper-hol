@@ -71,7 +71,7 @@ QED
 Theorem le_fixed_segment_runtime_word:
   bp_ptr_sound bp s /\ allocas_in_word s /\
   bp_segment_from_ops bp ops = ml /\ ml_is_fixed ml /\
-  ops.iao_max_size = SOME (Lit (n2w (addr_space_word_scale space))) /\
+  ops.iao_size = SOME (Lit (n2w (addr_space_word_scale space))) /\
   eval_operand ops.iao_ofst s = SOME w /\ memloc_within_alloca ml s ==>
   memloc_runtime_region ml s = SOME (w2n w, addr_space_word_scale space)
 Proof

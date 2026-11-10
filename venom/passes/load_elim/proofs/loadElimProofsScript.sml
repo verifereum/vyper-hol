@@ -81,6 +81,7 @@ Theorem load_elim_one_correct_proof:
     EVERY (\f. !inst. MEM inst (fn_insts f) ==> inst.inst_opcode <> MEMTOP)
       run_ctx.ctx_functions /\
     s.vs_inst_idx = 0 /\
+    ~s.vs_call_ctx.cc_static /\
     fn_entry_label fn = SOME s.vs_current_bb ==>
     (?e. run_blocks fuel run_ctx fn s = Error e) \/
     lift_result
@@ -109,6 +110,7 @@ Theorem load_elim_function_correct_proof:
     EVERY (\f. !inst. MEM inst (fn_insts f) ==> inst.inst_opcode <> MEMTOP)
       ctx.ctx_functions /\
     s.vs_inst_idx = 0 /\
+    ~s.vs_call_ctx.cc_static /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_assigns_sound (dfg_build_function fn) s /\
     bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s /\

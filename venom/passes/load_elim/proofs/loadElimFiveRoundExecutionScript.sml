@@ -30,6 +30,7 @@ Theorem le_iteration_run_step:
   ~MEM config.lc_load ops /\
   ctx = mk_load_context bp aliases (dfg_build_function fn) config /\
   (!v. bp_get_ptrs bp v = []) /\ wf_alias_sets aliases /\
+  ~s.vs_call_ctx.cc_static /\
   fn_entry_label original = SOME s.vs_current_bb /\
   EVERY (\f. EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts f)) C.ctx_functions ==>
   le_prefix_run_sim fuel C s fn
@@ -60,6 +61,7 @@ Theorem le_iteration_config_run_step:
               dload_config; calldataload_config] /\
   ~MEM config.lc_load ops /\
   (!v. bp_get_ptrs bp v = []) /\ wf_alias_sets aliases /\
+  ~s.vs_call_ctx.cc_static /\
   fn_entry_label original = SOME s.vs_current_bb /\
   EVERY (\f. EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts f)) C.ctx_functions ==>
   le_prefix_run_sim fuel C s fn
@@ -82,6 +84,7 @@ Theorem le_five_rounds_run:
   EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
   (!v. bp_get_ptrs bp v = []) /\
   wf_alias_sets ma /\ wf_alias_sets ta /\ wf_alias_sets sa /\
+  ~s.vs_call_ctx.cc_static /\
   fn_entry_label fn = SOME s.vs_current_bb /\
   EVERY (\f. EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts f)) C.ctx_functions ==>
   le_prefix_run_sim fuel C s fn (le_calldata_round bp ma ta sa fn)
@@ -128,6 +131,7 @@ Theorem le_function_rounds_run:
   EVERY (\i. i.inst_opcode <> MEMTOP) (fn_insts fn) /\
   EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
   (!v. bp_get_ptrs (bp_analyze (cfg_analyze fn) fn) v = []) /\
+  ~s.vs_call_ctx.cc_static /\
   fn_entry_label fn = SOME s.vs_current_bb /\
   EVERY (\f. EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts f)) C.ctx_functions ==>
   le_prefix_run_sim fuel C s fn (le_function_rounds fn)

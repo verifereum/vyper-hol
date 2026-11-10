@@ -1,7 +1,7 @@
 Theory loadElimCoupledExecution
 Ancestors
   loadElimCaptureEntry loadElimCaptureSteps loadElimCaptureInvariant loadElimPrependIndex
-  loadElimReachedLoad loadElimReachedStore
+  loadElimReachedLoad loadElimReachedStore loadElimKeyReadOperational
   loadElimPaddedCalls loadElimPaddedNoncall loadElimMemoryRel
   loadElimActionSelection loadElimLatestJoin loadElimOccurrence loadElimDefs
   loadElimSentinelHelpers loadElimKeyShapeInvariant cfgAnalysisProps
@@ -73,6 +73,7 @@ Definition le_round_ready_names_def:
     le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
     (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
     wf_alias_sets ctx.lctx_aliases /\
+    ~s0.vs_call_ctx.cc_static /\
     fn_entry_label fn = SOME s0.vs_current_bb /\
     is_fixpoint (df_process_block Forward NONE load_join load_transfer
       load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
@@ -82,6 +83,17 @@ Definition le_round_ready_names_def:
     EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts fn) /\
     EVERY (\f. EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts f)) C.ctx_functions
 End
+
+Theorem le_occ_prefix_call_ctx:
+  !C fn s0 es i s. le_occ_prefix C fn s0 es i s ==>
+    s.vs_call_ctx = s0.vs_call_ctx
+Proof
+  ho_match_mp_tac le_occ_prefix_ind >> rpt strip_tac >> simp[]
+  >- (drule eval_phis_only_updates_vs_vars >> disch_then SUBST1_TAC >> simp[])
+  >- (drule_all step_preserves_call_ctx >> simp[]) >>
+  drule eval_phis_only_updates_vs_vars >> disch_then SUBST1_TAC >> simp[] >>
+  drule_all le_terminator_readonly_fields >> simp[]
+QED
 
 Definition le_round_ready_disjoint_def:
   le_round_ready_disjoint G m C fn ctx s0 <=>
@@ -573,7 +585,7 @@ QED
 Finalise le_coupled_block_OK
 
 Theorem le_configured_terminal_unchanged:
-  le_configured_context ctx /\
+  le_configured_context ctx /\ ~s.vs_call_ctx.cc_static /\
   (case step_inst k C i s of OK u => F | Error e => F | _ => T) ==>
   load_elim_inst ctx actions ll i = i
 Proof
@@ -584,7 +596,7 @@ Proof
      RET; RETFMP; DRET]` by
     (Cases_on `step_inst k C i s` >> gvs[]
      >- metis_tac[step_inst_halt_opcodes, MEM]
-     >- metis_tac[step_inst_abort_opcodes, MEM] >>
+     >- (drule step_inst_abort_opcodes >> strip_tac >> gvs[]) >>
      Cases_on `i.inst_opcode = INVOKE` >- simp[] >>
      fs[step_inst_non_invoke] >>
      metis_tac[step_inst_base_intret_opcodes]) >>
@@ -654,6 +666,9 @@ Proof
   Cases_on `step_inst k C i s` >> simp[Excl "isPREFIX"]
   >- suspend "ok" >>
   disch_then (SUBST_ALL_TAC o SYM) >> fs[Excl "isPREFIX"] >>
+  `~s.vs_call_ctx.cc_static` by
+    (drule le_occ_prefix_call_ctx >>
+     fs[le_round_ready_disjoint_def, le_round_ready_names_def]) >>
   `load_elim_inst ctx
     (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn)
     (df_at NONE (load_analyze ctx fn) bb.bb_label s.vs_inst_idx) i = i` by
@@ -866,10 +881,10 @@ Proof
       (load_phi_prepend (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn))
       (\ll inst. [load_elim_inst ctx
         (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ll inst]) fn).fn_blocks = SOME bt` by
-    simp[analysisSimDefsTheory.analysis_function_transform_prepend_def,
-      passSimulationDefsTheory.function_map_transform_def,
+    simp[passTransformTheory.analysis_function_transform_prepend_def,
+      passTransformTheory.function_map_transform_def,
       passSimulationPropsTheory.lookup_block_map,
-      analysisSimDefsTheory.analysis_block_transform_prepend_def, Abbr `bt`] >>
+      passTransformTheory.analysis_block_transform_prepend_def, Abbr `bt`] >>
   Cases_on `exec_block fuel C bb
     (p with vs_inst_idx := phi_prefix_length bb.bb_instructions)`
   >- suspend "exit"

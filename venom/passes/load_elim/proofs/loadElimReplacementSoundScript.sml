@@ -64,8 +64,8 @@ Proof
   gvs[le_configured_context_def, memory_config_def, storage_config_def,
       transient_config_def, dload_config_def, calldataload_config_def] >>
   simp[Once step_inst_def] >>
-  simp[step_inst_base_opcode_eqs, exec_write2_def] >>
-  strip_tac >> gvs[]
+  simp[step_inst_base_opcode_eqs, exec_write2_def, eval_operands_def] >>
+  rpt IF_CASES_TAC >> strip_tac >> gvs[]
   >- (conj_tac
       >- metis_tac[padded_exec_equiv_mstore_mload, padded_exec_equiv_sym] >>
       simp[mstore_def])

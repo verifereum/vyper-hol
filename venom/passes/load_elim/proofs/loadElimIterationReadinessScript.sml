@@ -3,7 +3,7 @@ Ancestors
   loadElimDefs loadElimKeyShapeInvariant loadElimRoundUniqueness
   loadElimRoundWf loadElimCoupledExecution loadElimRoundNames
   loadElimRoundReachableSSA loadElimRoundStructure cfgTransform
-  removeUnusedSsaProofs venomWf venomInst list pred_set
+  removeUnusedSsaProofs venomWfProps venomWf venomInst list pred_set
 
 (* The wrapper caches BP and aliases, but may rebuild DFG at every round. *)
 Theorem le_mk_load_context_projections[simp]:

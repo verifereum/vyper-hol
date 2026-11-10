@@ -4,7 +4,7 @@ Ancestors
   loadElimAllBlockPopulation loadElimConvergence loadElimSolverHelpers
   loadElimSupportHelpers loadElimGeneratedSupport loadElimActionFreshness
   localPtrsProps
-  dfgAnalysisProps cfgTransform removeUnusedSsaProofs livenessTransferProofs
+  dfgAnalysisProps cfgTransform removeUnusedSsaProofs venomWfProps livenessTransferProofs
   venomInst venomWf venomExecProps cfgDefs cfgAnalysisProps list rich_list finite_map pred_set
 
 Theorem le_generated_var_source:
@@ -117,7 +117,7 @@ Theorem le_prepend_other_opcode_origin:
   j.inst_opcode = op /\ op <> PHI /\ op <> ASSIGN /\ op <> NOP ==>
   MEM j bb.bb_instructions
 Proof
-  simp[analysisSimDefsTheory.analysis_block_transform_prepend_def,
+  simp[passTransformTheory.analysis_block_transform_prepend_def,
        load_phi_prepend_def, passSimulationPropsTheory.flat_mapi_singleton,
        MEM_APPEND] >> rpt strip_tac
   >- (drule MEM_TAKE >> strip_tac >> gvs[indexedListsTheory.MEM_MAPi] >>
@@ -133,8 +133,8 @@ Theorem le_round_other_opcode_origin:
   j.inst_opcode = op /\ op <> PHI /\ op <> ASSIGN /\ op <> NOP ==>
   MEM j (fn_insts fn)
 Proof
-  simp[load_elim_one_def, analysisSimDefsTheory.analysis_function_transform_prepend_def,
-       passSimulationDefsTheory.function_map_transform_def,
+  simp[load_elim_one_def, passTransformTheory.analysis_function_transform_prepend_def,
+       passTransformTheory.function_map_transform_def,
        fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
   rpt strip_tac >> drule_all le_prepend_other_opcode_origin >> strip_tac >>
   metis_tac[]
@@ -169,7 +169,7 @@ Proof
      simp[] >> metis_tac[]) >>
   qpat_x_assum `MEM v (FLAT _)` mp_tac >>
   simp[MEM_FLAT, MEM_MAP, PULL_EXISTS,
-       analysisSimDefsTheory.analysis_block_transform_prepend_def,
+       passTransformTheory.analysis_block_transform_prepend_def,
        load_phi_prepend_def, passSimulationPropsTheory.flat_mapi_singleton,
        MEM_APPEND] >> rpt strip_tac
   >>~- ([`MEM _ (TAKE _ _)`],
@@ -192,8 +192,8 @@ Proof
   strip_tac >>
   qpat_x_assum `MEM v _` mp_tac >>
   simp[load_elim_one_def,
-    analysisSimDefsTheory.analysis_function_transform_prepend_def,
-    passSimulationDefsTheory.function_map_transform_def,
+    passTransformTheory.analysis_function_transform_prepend_def,
+    passTransformTheory.function_map_transform_def,
     cfgTransformTheory.fn_all_vars_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
   rpt strip_tac >> rename1 `MEM bb fn.fn_blocks` >>
   `(!n k vs u. n < LENGTH bb.bb_instructions /\

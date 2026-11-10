@@ -105,8 +105,8 @@ Proof
   simp[] >> strip_tac >>
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
   simp[Once step_inst_def] >>
-  simp[step_inst_base_opcode_eqs, exec_write2_def] >>
-  gvs[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  simp[step_inst_base_opcode_eqs, exec_write2_def, eval_operands_def] >>
+  rpt IF_CASES_TAC >> gvs[AllCaseEqs()] >> strip_tac >> gvs[] >>
   fs[addr_space_word_scale_def]
   >- (irule mload_mstore_disjoint >> gvs[regions_disjoint_def])
   >- (irule sload_sstore_disjoint >> simp[n2w_11] >>

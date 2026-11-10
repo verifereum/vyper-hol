@@ -1,6 +1,6 @@
 Theory loadElimStaticPointClosure
 Ancestors
-  loadElimStaticPhiClosure loadElimPrependIndex loadElimDefs
+  loadElimStaticPhiClosure loadElimPrependIndex loadElimDefs passTransform
   analysisSimDefs analysisSimProofsBase passSimulationProps venomWf venomInst venomExecSemantics
   list indexedLists rich_list venomExecProofs passSimulationDefs arithmetic
 

@@ -1,7 +1,7 @@
 Theory loadElimPrependIndex
 Ancestors
   loadElimActualPhiFrame loadElimTargetWrites loadElimOccurrenceCoverage
-  loadElimPaddedNoncall analysisSimDefs analysisSimProofsBase
+  loadElimPaddedNoncall analysisSimDefs analysisSimProofsBase passTransform
   passSimulationProps venomExecProofs instIdxIndep
   list indexedLists rich_list venomInst loadElimDefs
 

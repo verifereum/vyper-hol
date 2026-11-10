@@ -2,7 +2,7 @@ Theory loadElimStaticPhiClosure
 Ancestors
   loadElimStaticPhiInputs loadElimStaticPhiPlacement loadElimRoundStructure
   loadElimCoupledExecution cfgAnalysisProps loadElimPhiCapture codegenReadyCompute
-  loadElimRoundWf loadElimDefs loadElimOriginHelpers
+  loadElimRoundWf loadElimDefs loadElimOriginHelpers passTransform
   loadElimKeyShapeInvariant analysisSimDefs passSimulationDefs passSimulationProps
   loadElimReachableSSA venomWf venomInst cfgDefs list pred_set
 

@@ -23,7 +23,7 @@ Theorem le_function_padded_run:
   EVERY (\i. i.inst_opcode <> MEMTOP) (fn_insts fn) /\
   EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
   (!v. bp_get_ptrs (bp_analyze (cfg_analyze fn) fn) v = []) /\
-  s.vs_inst_idx = 0 /\ fn_entry_label fn = SOME s.vs_current_bb /\
+  s.vs_inst_idx = 0 /\ ~s.vs_call_ctx.cc_static /\ fn_entry_label fn = SOME s.vs_current_bb /\
   EVERY (\f. EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts f)) C.ctx_functions ==>
   le_prefix_run_sim fuel C s fn (load_elim_function fn)
 Proof
