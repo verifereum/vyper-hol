@@ -1001,3 +1001,171 @@ Proof
   drule named_compute_operands_membership >>
   simp[EVERY_MEM] >> metis_tac[]
 QED
+
+Theorem memory_family_selected_order:
+  MEM inst.inst_opcode [MLOAD; SHA3; MSTORE; MSTORE8; MCOPY;
+    CALLDATACOPY; RETURNDATACOPY; CODECOPY; EXTCODECOPY;
+    CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
+  inst_wf inst /\
+  (selected = compute_operands inst \/
+   (is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) /\
+    selected = TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+      [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+       EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)])) ==>
+  REVERSE selected = inst.inst_operands
+Proof
+  strip_tac >>
+  gvs[venomEffectsTheory.is_commutative_def, stackPlanGenTheory.compute_operands_def,
+      venomInstTheory.python_stack_operands_def,
+      venomInstTheory.ir_specific_operand_order_def, venomWfTheory.inst_wf_def,
+      LENGTH_EQ_1]
+QED
+
+Theorem iload_source_read_coverage:
+  inst.inst_opcode = ILOAD /\ inst.inst_operands = [off] /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  asm_op_mem_reads "MLOAD" args b ==>
+  source_memory_read_byte inst vs b
+Proof
+  rpt strip_tac >>
+  gvs[venomStateTheory.eval_operands_def, AllCaseEqs()] >>
+  gvs[asm_op_mem_reads_def, source_memory_read_byte_def,
+      source_memory_read_ranges_def, byte_in_memory_range_def, in_mem_range_def]
+QED
+
+Theorem named_source_footprint_families:
+  venom_to_evm_name inst.inst_opcode = SOME name /\
+  step_inst fuel ctx inst vs = OK vs' ==>
+  MEM inst.inst_opcode [ILOAD; MLOAD; SHA3; MSTORE; MSTORE8; MCOPY;
+    CALLDATACOPY; RETURNDATACOPY; CODECOPY; EXTCODECOPY;
+    CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] \/
+  (~MEM name ["MLOAD"; "SHA3"; "RETURN"; "REVERT";
+    "LOG0"; "LOG1"; "LOG2"; "LOG3"; "LOG4";
+    "MCOPY"; "CREATE"; "CREATE2"; "CALL"; "STATICCALL"; "DELEGATECALL"] /\
+   ~MEM name ["MSTORE"; "MSTORE8"; "MCOPY"; "CALLDATACOPY";
+             "RETURNDATACOPY"; "CODECOPY"; "EXTCODECOPY"])
+Proof
+  strip_tac >> drule_all regularPlanSimTheory.regular_named_ok_nonterminator >>
+  Cases_on `inst.inst_opcode` >>
+  qpat_x_assum `venom_to_evm_name _ = _` mp_tac >>
+  pure_rewrite_tac[asmIRTheory.venom_to_evm_name_def, optionTheory.SOME_11,
+                  optionTheory.NOT_NONE_SOME] >>
+  strip_tac >> gvs[venomInstTheory.is_terminator_def] >> EVAL_TAC
+QED
+
+Theorem memory_family_source_read_coverage:
+  MEM inst.inst_opcode [ILOAD; MLOAD; SHA3; MSTORE; MSTORE8; MCOPY;
+    CALLDATACOPY; RETURNDATACOPY; CODECOPY; EXTCODECOPY;
+    CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
+  venom_to_evm_name inst.inst_opcode = SOME name /\ inst_wf inst /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  asm_op_mem_reads name args b ==>
+  source_memory_read_byte inst vs b \/
+  (?rng. MEM rng (source_memory_write_ranges inst vs) /\ byte_in_memory_range rng b)
+Proof
+  strip_tac >> gvs[asmIRTheory.venom_to_evm_name_def,
+    nonmemory_emission_reads_empty, venomWfTheory.inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  simp[call_source_read_write_coverage, readonly_call_source_read_write_coverage,
+    mload_source_read_coverage, iload_source_read_coverage, sha3_source_read_coverage,
+    copy_create_source_read_coverage, create2_source_read_coverage, MEM,
+    asmIRTheory.venom_to_evm_name_def]
+QED
+
+Theorem memory_family_source_write_coverage:
+  MEM inst.inst_opcode [ILOAD; MLOAD; SHA3; MSTORE; MSTORE8; MCOPY;
+    CALLDATACOPY; RETURNDATACOPY; CODECOPY; EXTCODECOPY;
+    CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
+  venom_to_evm_name inst.inst_opcode = SOME name /\ inst_wf inst /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  asm_op_mem_writes name args b ==>
+  ?rng. MEM rng (source_memory_write_ranges inst vs) /\ byte_in_memory_range rng b
+Proof
+  strip_tac >> gvs[asmIRTheory.venom_to_evm_name_def,
+    nonmemory_emission_writes_empty, venomWfTheory.inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  simp[copy_source_write_coverage, extcodecopy_source_write_coverage,
+    mstore_source_write_coverage, MEM, asmIRTheory.venom_to_evm_name_def]
+QED
+
+Theorem named_source_order_read_coverage:
+  venom_to_evm_name inst.inst_opcode = SOME name /\ inst_wf inst /\
+  ~is_pre_codegen_opcode inst.inst_opcode /\
+  step_inst fuel ctx inst vs = OK vs' /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  asm_op_mem_reads name args b ==>
+  source_memory_read_byte inst vs b \/
+  (?rng. MEM rng (source_memory_write_ranges inst vs) /\ byte_in_memory_range rng b)
+Proof
+  strip_tac >> drule_all named_source_footprint_families >> strip_tac
+  >- (irule memory_family_source_read_coverage >> metis_tac[]) >>
+  metis_tac[nonmemory_emission_reads_empty]
+QED
+
+Theorem named_source_order_write_coverage:
+  venom_to_evm_name inst.inst_opcode = SOME name /\ inst_wf inst /\
+  step_inst fuel ctx inst vs = OK vs' /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  asm_op_mem_writes name args b ==>
+  ?rng. MEM rng (source_memory_write_ranges inst vs) /\ byte_in_memory_range rng b
+Proof
+  strip_tac >> drule_all named_source_footprint_families >> strip_tac
+  >- (irule memory_family_source_write_coverage >> metis_tac[]) >>
+  metis_tac[nonmemory_emission_writes_empty]
+QED
+
+Theorem memory_family_selected_source_order:
+  MEM inst.inst_opcode [ILOAD; MLOAD; SHA3; MSTORE; MSTORE8; MCOPY;
+    CALLDATACOPY; RETURNDATACOPY; CODECOPY; EXTCODECOPY;
+    CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
+  inst_wf inst /\
+  (selected = compute_operands inst \/
+   (is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) /\
+    selected = TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+      [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+       EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)])) ==>
+  REVERSE selected = inst.inst_operands
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> Cases_on `inst.inst_opcode = ILOAD`
+  >- gvs[venomEffectsTheory.is_commutative_def, stackPlanGenTheory.compute_operands_def,
+      venomInstTheory.python_stack_operands_def, venomInstTheory.ir_specific_operand_order_def,
+      venomWfTheory.inst_wf_def, LENGTH_EQ_1] >>
+  irule memory_family_selected_order >> gvs[MEM]
+QED
+
+Theorem named_selected_read_coverage:
+  venom_to_evm_name inst.inst_opcode = SOME name /\ inst_wf inst /\
+  step_inst fuel ctx inst vs = OK vs' /\
+  (selected = compute_operands inst \/
+   (is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) /\
+    selected = TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+      [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+       EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)])) /\
+  eval_operands (REVERSE selected) vs = SOME args /\
+  asm_op_mem_reads name args b ==>
+  source_memory_read_byte inst vs b \/
+  (?rng. MEM rng (source_memory_write_ranges inst vs) /\ byte_in_memory_range rng b)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all named_source_footprint_families >> strip_tac
+  >- (drule_all memory_family_selected_source_order >> strip_tac >>
+      irule memory_family_source_read_coverage >> metis_tac[]) >>
+  metis_tac[nonmemory_emission_reads_empty]
+QED
+
+Theorem named_selected_write_coverage:
+  venom_to_evm_name inst.inst_opcode = SOME name /\ inst_wf inst /\
+  step_inst fuel ctx inst vs = OK vs' /\
+  (selected = compute_operands inst \/
+   (is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) /\
+    selected = TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+      [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+       EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)])) /\
+  eval_operands (REVERSE selected) vs = SOME args /\
+  asm_op_mem_writes name args b ==>
+  ?rng. MEM rng (source_memory_write_ranges inst vs) /\ byte_in_memory_range rng b
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all named_source_footprint_families >> strip_tac
+  >- (drule_all memory_family_selected_source_order >> strip_tac >>
+      irule memory_family_source_write_coverage >> metis_tac[]) >>
+  metis_tac[nonmemory_emission_writes_empty]
+QED
