@@ -242,13 +242,13 @@ QED
    empty case its actual pointer remains unconstrained by the frontier. *)
 Theorem abi_encode_nonword_producer_source_split:
   expr_post ctx func ce cx e es origin sa s0 es' v op s /\
-  ~is_word_type (expr_type e) /\
-  abi_enc_plan (get_tenv cx) (expr_type e) ei /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  ~is_word_type (post_value_type ce e) /\
+  abi_enc_plan (get_tenv cx) (post_value_type ce e) ei /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av ==>
+  vyper_to_abi (get_tenv cx) (post_value_type ce e) v = SOME av ==>
   ?w ct rv. eval_operand op s = SOME w /\
-    enc ct rv = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av /\
+    enc ct rv = enc (vyper_to_abi_type (get_tenv cx) (post_value_type ce e)) av /\
     abi_encoder_window_input ei ct rv (w2n w) (val_footprint tv v) s.vs_memory /\
     ((val_footprint tv v = 0 /\ ei = AbiCopy 0) \/
      (0 < val_footprint tv v /\
@@ -271,11 +271,11 @@ Theorem abi_encode_nonword_phase_resources:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
   ~is_word_type (expr_type e) /\
-  abi_enc_plan (get_tenv cx) (expr_type e) ei /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  abi_enc_plan (get_tenv cx) (lowered_value_type ce e) ei /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
-  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (expr_type e))
+  vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
     sa = (ops,ready) /\
   compile_abi_encode_to_buf (SND ops) op ei ready = (len,body_end) /\
   fn_has_code sa ready func /\ fn_has_code ready body_end obs /\
@@ -284,10 +284,10 @@ Theorem abi_encode_nonword_phase_resources:
        j.inst_opcode <> NOP ==> MEM j (fn_insts func)) /\
   local_ptrs_reserved ce sa ==>
   ?w ct rv p.
-    let bytes = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av in
+    let bytes = enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av in
     let m = case mid of NONE => 0 | SOME _ => 4 in
     let mw = case mid of NONE => 0 | SOME _ => 32 in
-    let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (expr_type e)+m) in
+    let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+m) in
     let a = abi_builtin_allocate_state sa.cs_next_id outsz s in
     eval_operand op s = SOME w /\ enc ct rv = bytes /\
     abi_encoder_window_input ei ct rv (w2n w) (val_footprint tv v) s.vs_memory /\
@@ -312,9 +312,30 @@ Theorem abi_encode_nonword_phase_resources:
       venomMemDefs$regions_disjoint (p+32+m,LENGTH bytes) (b,sz) /\
       venomMemDefs$regions_disjoint (p+32,m) (b,sz))
 Proof
-  strip_tac >> drule_all abi_encode_nonword_producer_source_split >>
-  disch_then (qx_choose_then `w` (qx_choose_then `ct`
-    (qx_choose_then `rv` (MAP_EVERY assume_tac o CONJUNCTS)))) >>
+  strip_tac >>
+  drule_all abiEncodeMaterializeTheory.materialize_expr_post_lowered_source >>
+  disch_then (qx_choose_then `w` strip_assume_tac) >>
+  drule_all abiEncoderSourceFootprintTheory.abi_encoder_source_footprint >> strip_tac >>
+  drule abiEncoderWindowTheory.abi_encoder_open_input_window >> strip_tac >>
+  drule_all abi_encode_post_lowered_footprint >>
+  disch_then (qx_choose_then `ptv` strip_assume_tac) >>
+  `val_footprint tv v = 0 /\ ei = AbiCopy 0 \/
+   0 < val_footprint tv v /\ w2n w + val_footprint tv v <= s.vs_alloca_next` by
+    (drule_all abi_encode_nonword_expr_bound >>
+     qpat_assum `val_footprint ptv v = _` (fn th => rewrite_tac[th]) >>
+     strip_tac >- metis_tac[abi_encode_zero_footprint_plan] >>
+     Cases_on `val_footprint tv v = 0` >>
+     metis_tac[abi_encode_zero_footprint_plan, arithmeticTheory.NOT_ZERO_LT_ZERO]) >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[exprSimHypsTheory.expr_body_pre_lowered_fits] >>
+  `?stv. evaluate_type (get_tenv cx) (expr_type e) = SOME stv` by
+    metis_tac[optionTheory.IS_SOME_EXISTS,
+      exprSimHypsTheory.expr_body_pre_type_evaluates] >>
+  `vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av` by
+    metis_tac[exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_conversion] >>
+  `vyper_to_abi_type (get_tenv cx) (expr_type e) =
+    vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)` by
+    metis_tac[exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_abi_type] >>
   drule_all abi_encode_nonword_numerical_capacity >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   `(case mid0 of NONE => 0 | SOME _ => 4) =
@@ -331,8 +352,11 @@ Proof
   qpat_x_assum `(case mid of NONE => 0 | SOME _ => 4) = _` kall_tac >>
   qpat_x_assum `(case mid of NONE => 0 | SOME _ => 32) = _` kall_tac >>
   `0 < val_footprint tv v ==> w2n w+val_footprint tv v <= s.vs_alloca_next` by
-    (qpat_x_assum `(_ = 0 /\ _) \/ _` mp_tac >> rw[] >> fs[]) >>
+    (simp[]) >>
+  `0 < val_footprint ptv v ==> w2n w+val_footprint ptv v <= s.vs_alloca_next` by
+    metis_tac[] >>
   drule_all abi_encode_nonword_setup_output >>
+  qpat_assum `val_footprint ptv v = _` (fn th => rewrite_tac[th]) >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `alloca_inv (abi_builtin_allocate_state _ outsz _)` >>
   qmatch_asmsub_abbrev_tac `alloca_inv a` >>
@@ -346,17 +370,17 @@ Proof
      Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >> simp[]) >>
   `p < dimword (:256) /\ (mid <> NONE ==> p+32 < dimword (:256)) /\
    p+32+(case mid of NONE => 0 | SOME _ => 4)+
-     LENGTH (enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av) <= a.vs_alloca_next` by
-    (fs[Abbr `outsz`] >> decide_tac) >>
+     LENGTH (enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av) <= a.vs_alloca_next` by
+    (fs[Abbr `outsz`] >> gvs[]) >>
   `0 < val_footprint tv v ==>
     w2n w+val_footprint tv v <= a.vs_alloca_next /\
     venomMemDefs$regions_disjoint (w2n w,val_footprint tv v)
       (p+32+(case mid of NONE => 0 | SOME _ => 4),
-       LENGTH (enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av)) /\
+       LENGTH (enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av)) /\
     (w2n w+val_footprint tv v <= p+32 \/
      p+32+(case mid of NONE => 0 | SOME _ => 32) <= w2n w)` by
     (strip_tac >> Cases_on `mid` >>
-     fs[Abbr `outsz`, venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+     fs[Abbr `outsz`, venomMemDefsTheory.regions_disjoint_def] >> gvs[]) >>
   qexistsl [`w`, `ct`, `rv`, `p`] >> simp_tac bool_ss [LET_THM] >>
   unabbrev_all_tac >> asm_rewrite_tac [] >>
   conj_tac >- simp[venomMemDefsTheory.regions_disjoint_def] >>
@@ -365,8 +389,9 @@ Proof
   disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `abi_builtin_encode_setup _ _ _ = _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (b,sz)`)) >>
-  disch_then (qspecl_then [`w`, `tv`, `obs`] mp_tac) >>
-  (impl_tac >- asm_rewrite_tac []) >> strip_tac >>
+  disch_then (qspecl_then [`w`, `ptv`, `obs`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac []) >>
+  qpat_assum `val_footprint ptv v = _` (fn th => rewrite_tac[th]) >> strip_tac >>
   drule_all abi_encode_setup_scratch_slices >>
   strip_tac >> asm_rewrite_tac [] >>
   qpat_x_assum `venomMemDefs$regions_disjoint (p+32,_) (b,sz)` mp_tac >>
@@ -394,11 +419,11 @@ Theorem abi_encode_nonword_producer_phases:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
   ~is_word_type (expr_type e) /\
-  abi_enc_plan (get_tenv cx) (expr_type e) ei /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  abi_enc_plan (get_tenv cx) (lowered_value_type ce e) ei /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
-  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (expr_type e))
+  vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
     sa = (ops,ready) /\
   compile_abi_encode_to_buf (SND ops) op ei ready = (len,body_end) /\
   abi_builtin_encode_finish (FST ops) len
@@ -419,7 +444,7 @@ Theorem abi_encode_nonword_producer_phases:
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?actual.
-      let bytes = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av in
+      let bytes = enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av in
       let m = case mid of NONE => 0 | SOME _ => 4 in
       eval_operand (FST ops) actual = SOME (n2w p) /\
       mload p actual = n2w (LENGTH bytes+m) /\
@@ -501,7 +526,7 @@ Resume abi_encode_nonword_producer_phases[empty]:
       (assume_tac o PURE_REWRITE_RULE [zero])) >>
   `alloca_room (ctx with ctx_functions := [obs]) obs
     (abi_builtin_allocate_state sa.cs_next_id
-      (32+32*word_size (abi_size_bound ce.ce_struct_fields (expr_type e) +
+      (32+32*word_size (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e) +
         (case mid of NONE => 0 | SOME _ => 4))) s)` by
     (irule abi_encode_bridge_local_room >>
      conj_tac >- first_assum ACCEPT_TAC >>
