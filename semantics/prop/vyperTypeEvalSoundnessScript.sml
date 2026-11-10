@@ -1933,7 +1933,7 @@ Proof
   drule_all immutable_metadata_frame_lookup >> strip_tac >> metis_tac[]
 QED
 
-Theorem eval_result_typed_transport[local]:
+Theorem eval_result_typed_transport:
   typed_scope_transition st st' /\ vyperImmutableMetadataFrame$immutable_metadata_frame st st' /\
   eval_result_typed (env,cx,st) pv vt ==> eval_result_typed (env,cx,st') pv vt
 Proof
@@ -8665,7 +8665,7 @@ QED
 
 
 
-Theorem typed_result_read_sound[local]:
+Theorem typed_result_read_sound:
   state_well_typed st /\
   eval_result_typed (env,cx,st) pv (Type ty) /\ live_memory_result st pv /\
   read_result cx pv st = (res,st') ==>
