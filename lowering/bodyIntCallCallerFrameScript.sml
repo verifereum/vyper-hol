@@ -57,7 +57,7 @@ QED
 (* Whole-region agreement composes the entry frame without identifying the
    saved caller scopes with the scopes before argument evaluation. *)
 Theorem locals_kept_window_return:
-  locals_kept ce es0 s0 t /\
+  locals_kept ce es0 es' s0 t /\
   (!n b sz. local_region ce es0.scopes s0 n b sz ==>
     local_region ce es.scopes t n b sz) /\
   stmt_state_rel ctx func ce cx es t /\
@@ -70,7 +70,7 @@ Theorem locals_kept_window_return:
       lo <= aid /\ aid < hi ==> regions_disjoint b sz off asz) ==>
     mem_bytes_at b sz mem = mem_bytes_at b sz t.vs_memory) /\
   u.vs_memory = mem ==>
-  locals_kept ce es0 s0 u
+  locals_kept ce es0 es' s0 u
 Proof
   strip_tac >> irule locals_kept_regions_tail >>
   qexists_tac `t` >> simp[] >> rpt strip_tac >>

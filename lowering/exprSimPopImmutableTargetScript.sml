@@ -156,7 +156,7 @@ Definition imm_target_post_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
+    locals_kept cenv es es' s0 s
 End
 
 Theorem imm_place_at_gas_obs[local,simp]:
@@ -188,7 +188,7 @@ Theorem imm_target_post_frame[local]:
     (?w. eval_operand (FST r) s = SOME w /\ imm_place_at cenv cx ee pv w ty) /\
     FST (SND r) = SOME LocCode /\ SND (SND r) = SOME (ValPT ty) /\
     (!x. FST r = Var x ==> not_fresh_at sb x) /\
-    wb_frame cenv es sa s0 s
+    wb_frame cenv es ee sa s0 s
 Proof
   simp[imm_target_post_def, wb_frame_def]
 QED
@@ -203,7 +203,7 @@ Theorem imm_target_post_trans[local]:
     imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r s2
 Proof
   simp[imm_target_post_frame] >> rpt strip_tac >>
-  irule wb_frame_trans >> simp[] >> conj_tac
+  irule wb_frame_trans >> simp[] >> reverse conj_tac
   >- (qexistsl_tac [`em`, `sm`, `s1`] >> simp[]) >>
   goal_assum $ drule_at Any
 QED
@@ -779,7 +779,7 @@ Theorem imm_array_ctor_counted[local]:
         (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
           lookup_var x t = SOME w) /\
         t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
-        locals_kept cenv es s t
+        locals_kept cenv es es s t
     else ?t. gas_marked_path F ctx func s 0 (Abort Revert_abort t)
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
@@ -924,7 +924,7 @@ Theorem imm_array_ctor_counted_optional[local]:
         (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
           lookup_var x t = SOME w) /\
         t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
-        locals_kept cenv es s t
+        locals_kept cenv es es s t
     else ?t. gas_marked_path F ctx func s 0 (Abort Revert_abort t)
 Proof
   rpt gen_tac >> Cases_on `imm` >> simp[] >> strip_tac
@@ -1104,7 +1104,7 @@ Proof
   simp[eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >> rpt conj_tac
   >~ [`not_fresh_at sb _`]
   >- simp[Abbr `x`, not_fresh_at_def, ASCIInumbersTheory.toString_11]
-  >~ [`locals_kept _ _ _ (update_var _ _ _)`]
+  >~ [`locals_kept _ _ _ _ (update_var _ _ _)`]
   >- (irule exprSimPropsTheory.locals_kept_mem_tail >> qexists_tac `s` >> simp[update_var_def]) >>
   simp[update_var_def] >> metis_tac[]
 QED
@@ -1566,7 +1566,7 @@ Proof
   >- fs[imm_target_post_frame]
   >- fs[imm_target_post_frame]
   >- (fs[imm_target_post_frame] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  irule wb_frame_trans >> simp[] >> conj_tac
+  irule wb_frame_trans >> simp[] >> reverse conj_tac
   >- (qexistsl_tac [`em`, `sm`, `t`] >>
       fs[imm_target_post_frame] >>
       metis_tac[expr_post_frame]) >>
@@ -2244,7 +2244,7 @@ Resume imm_target_subscript_step[in_bounds]:
           wordsTheory.word_add_n2w, wordsTheory.word_mul_n2w,
           arithmeticTheory.ADD_CLAUSES] >>
      simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
-  `wb_frame cenv es sa s0 t` by
+  `wb_frame cenv es (es with gas_obs := []) sa s0 t` by
     (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
      qexistsl_tac [`sn`, `t'`] >> simp[] >>
      fs[imm_target_post_frame] >> decide_tac) >>

@@ -62,7 +62,7 @@ Proof
   >- (disj1_tac >>
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
       simp[gas_summary_at_def, gas_marked_exec_def,
-           expr_post_def, locals_kept_def]) >>
+           expr_post_def, locals_kept_def, popped_kept_def]) >>
   disj2_tac >> drule gas_exempt_cert_start_gas_obs >>
   disch_then (qspec_then `gs` mp_tac) >> simp[] >> metis_tac[]
 QED

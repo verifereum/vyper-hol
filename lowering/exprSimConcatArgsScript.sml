@@ -292,7 +292,7 @@ QED
    arm's store (t to t2) and the tail's frames (t2 to u) give the loop's
    frames from s0 to u. *)
 Theorem concat_args_glue:
-  !ctx func cenv cx e es sa s1 s2 s0 es1 v op t t2 u B bsz ow k bv bvs.
+  !ctx func cenv cx e es sa s1 s2 s0 es1 es2 v op t t2 u B bsz ow k bv bvs.
     expr_post ctx func cenv cx e es sa s1 s0 es1 v op t /\
     stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
@@ -320,7 +320,7 @@ Theorem concat_args_glue:
        (!name lo sz. local_region cenv es1.scopes t2 name lo sz ==>
                      p + n <= lo \/ lo + sz <= p) ==>
        mem_bytes_at p n u.vs_memory = mem_bytes_at p n t2.vs_memory) /\
-    locals_kept cenv es1 t2 u ==>
+    locals_kept cenv es1 es2 t2 u ==>
     mem_bytes_at (B + 32) (k + LENGTH (bv ++ bvs)) u.vs_memory =
       mem_bytes_at (B + 32) k s0.vs_memory ++ (bv ++ bvs) /\
     (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -332,7 +332,7 @@ Theorem concat_args_glue:
        (!name lo sz. local_region cenv es.scopes s0 name lo sz ==>
                      p + n <= lo \/ lo + sz <= p) ==>
        mem_bytes_at p n u.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-    locals_kept cenv es s0 u
+    locals_kept cenv es es2 s0 u
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -354,12 +354,12 @@ Proof
     (rpt strip_tac >> irule local_region_frame >>
      conj_tac >- (qexists_tac `func` >> first_assum ACCEPT_TAC) >>
      qexistsl_tac [`sa`, `es1.scopes`, `t2`] >> asm_rewrite_tac[]) >>
-  `locals_kept cenv es1 t t2` by
+  `locals_kept cenv es1 es1 t t2` by
     (irule locals_kept_regions >> rpt strip_tac >>
      first_x_assum irule >>
      `local_region cenv es.scopes s0 n b sz` by metis_tac[] >>
      metis_tac[]) >>
-  `locals_kept cenv es s0 t2` by
+  `locals_kept cenv es es1 s0 t2` by
     (irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t`] >>
      asm_rewrite_tac[]) >>
   rpt conj_tac
@@ -913,7 +913,7 @@ Theorem concat_args_sim:
             (!name lo sz. local_region cenv es.scopes s0 name lo sz ==>
                           p + n <= lo \/ lo + sz <= p) ==>
             mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-         locals_kept cenv es s0 t)
+         locals_kept cenv es ee s0 t)
       (\rr ee r. ?exc. rr = INR exc /\
          expr_exit (INR exc : eval_result + exception) r)
 Proof
@@ -1076,7 +1076,8 @@ Resume concat_args_sim[tail_normal]:
      >- decide_tac >>
      decide_tac) >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `s1`, `s2`, `s0`,
-               `es_end with gas_obs := []`, `v`, `op`, `t`, `t2`, `tu`, `B`,
+               `es_end with gas_obs := []`, `es_end' with gas_obs := []`,
+               `v`, `op`, `t`, `t2`, `tu`, `B`,
                `bsz`, `ow`, `k`, `(case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => [])`, `FLAT (MAP (\v. case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) vs)`]
     mp_tac concat_args_glue >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
