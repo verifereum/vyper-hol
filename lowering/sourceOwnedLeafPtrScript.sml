@@ -5,6 +5,8 @@ Theory sourceOwnedLeafPtr
 Ancestors
   sourceOwnedArrayLoopPtr sourcePrimitiveReentryPtr abiDecoderSequenceReach
   decoderPrimitiveObservations decoderWorldFramePtr
+  sourceBulkArrayLayout calldataBulkReentry calldataBulkUniformPtr
+  abiDecoderBulkExecute abiStaticDynarrayLayout calldataTypedRobustPtr dynarrayLiveRobustPtr
   abiDecoderClampedWord abiDecoderBytesTyped abiValueEncoding
   abiDecoderCoherence sourceBytesRepresentation calldataDecodePtr abiDecoderReentry
   venomState abiDecoderBytes calldataDynOwned abiDecoderFrameCompose
@@ -240,5 +242,124 @@ Theorem source_owned_bulk_array_ptr:
     t.vs_gas_readings = r.vs_gas_readings /\
     t.vs_allocas = r.vs_allocas /\ t.vs_alloca_next = r.vs_alloca_next
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all source_bulk_array_layout >> strip_tac >>
+  `evaluate_type env (ArrayT ety (Dynamic maxn)) = SOME tv` by
+    metis_tac[abi_decoder_coherent_header, abi_decoder_header_def] >>
+  `type_to_abi_dec_info sf ce (ArrayT ety (Dynamic maxn)) =
+    DecDynArray (type_to_abi_dec_info sf ce ety) (abi_embedded_static_size ce.ce_struct_fields ety)
+      (type_memory_size etv) F maxn` by
+    simp[exprLoweringTheory.type_to_abi_dec_info_def] >>
+  `0 < type_slot_size etv /\
+   1 + maxn * type_slot_size etv < dimword (:256)` by
+    (qpat_x_assum `evaluate_type env (ArrayT _ _) = _` mp_tac >>
+     pure_asm_rewrite_tac [Once vyperValueTheory.evaluate_type_def] >>
+     simp_tac (srw_ss()) [LET_THM, AllCaseEqs(), vyperValueTheory.type_slot_size_def]) >>
+  `maxn <= maxn * type_slot_size etv` by
+    (Cases_on `type_slot_size etv` >- decide_tac >> simp[MULT_SUC]) >>
+  `maxn < dimword (:256)` by decide_tac >>
+  `type_memory_size tv = 32 + maxn * type_memory_size etv` by
+    metis_tac[valueEncodingTheory.type_memory_size_def] >>
+  `LENGTH vs * type_memory_size etv <= maxn * type_memory_size etv` by
+    simp[LE_MULT_RCANCEL] >>
+  `32 + LENGTH vs * type_memory_size etv <= type_memory_size tv /\
+   e+32 < dimword (:256) /\ LENGTH vs * type_memory_size etv < dimword (:256)` by
+    decide_tac >>
+  `LENGTH (enc (vyper_to_abi_type env (ArrayT ety (Dynamic maxn))) av) =
+    32 + LENGTH vs * type_memory_size etv` by
+    (pure_asm_rewrite_tac [listTheory.LENGTH_APPEND] >> simp_tac (srw_ss()) []) >>
+  `srcpos+32 < dimword (:256) /\ srcpos < dimword (:256)` by decide_tac >>
+  `mem_word_at srcpos r.vs_call_ctx.cc_calldata = n2w (LENGTH vs) /\
+   mem_bytes_at (srcpos+32) (LENGTH vs * type_memory_size etv)
+     r.vs_call_ctx.cc_calldata = FLAT (MAP (enc (vyper_to_abi_type env ety)) avs)` by
+    (irule abiDecoderBulkTheory.static_dynarray_source_windows >>
+     pure_asm_rewrite_tac [] >>
+     conj_tac >-
+       (qpat_x_assum `mem_bytes_at srcpos _ _ = _` mp_tac >>
+        pure_rewrite_tac [vyperABITheory.vyper_to_abi_type_def] >>
+        pure_asm_rewrite_tac [] >> simp_tac bool_ss []) >>
+     metis_tac[]) >>
+  `abi_decode_load CALLDATALOAD (n2w srcpos : bytes32) r = n2w (LENGTH vs)` by
+    (qpat_x_assum `mem_word_at srcpos _ = _` mp_tac >>
+     simp_tac (srw_ss()) [abiDecoderContractTheory.abi_decode_load_def,
+       abiDecoderContractTheory.abi_decode_source_def, valueEncodingTheory.mem_word_at_def,
+       valueEncodingTheory.mem_bytes_at_def, wordsTheory.w2n_n2w] >>
+     `srcpos MOD dimword (:256) = srcpos` by simp[] >>
+     pure_asm_rewrite_tac [] >> simp_tac bool_ss []) >>
+  `eval_operand (Var child) r = SOME (n2w e)` by simp[eval_operand_def] >>
+  qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+    (assume_tac o PURE_ONCE_REWRITE_RULE
+      [exprLoweringTheory.type_to_abi_dec_info_def]) >>
+  `compile_abi_decode_to_buf (Var child) childsrc CALLDATALOAD (Lit 0w) (Lit 0w)
+    (DecDynArray (type_to_abi_dec_info sf ce ety)
+      (abi_embedded_static_size ce.ce_struct_fields ety) (type_memory_size etv) F maxn)
+      middle = ((),end_st)` by metis_tac[] >>
+  drule_all calldata_bulk_reentry_sequence >> strip_tac >>
+  `not_fresh_at middle child /\ not_fresh_at middle root /\
+   (!x. childsrc = Var x ==> not_fresh_at middle x)` by
+    (conj_tac >- metis_tac[calldata_operand_live_not_fresh] >>
+     conj_tac >- metis_tac[calldata_operand_live_not_fresh] >>
+     rpt strip_tac >> metis_tac[calldata_operand_live_not_fresh]) >>
+  drule_all calldata_bulk_decoder_endpoint_ptr_uniform >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  `val_in_memory tv v e t.vs_memory` by
+    (pure_asm_rewrite_tac [] >>
+     irule static_dynarray_canonical_layout >> metis_tac[]) >>
+  `!mem. mem_agree_outside u.t_mem t.vs_memory mem ==> val_in_memory tv v e mem` by
+    (rpt strip_tac >> pure_asm_rewrite_tac [] >> irule clean_live_prefix_dynarray_robust >>
+     metis_tac[vyperTypingTheory.all_have_type_EVERY]) >>
+  `abi_decode_source_opcode CALLDATALOAD` by
+    simp[abiDecoderContractTheory.abi_decode_source_opcode_def] >>
+  drule_all abiDecoderBulkTheory.abi_decoder_bulk_shape >> strip_tac >>
+  drule_all abi_decoder_bulk_allocation_shape >> strip_tac >>
+  `inst_extends middle end_st` by
+    (pure_asm_rewrite_tac [emitHelperPropsTheory.inst_extends_def,
+       exprLoweringPropsTheory.emitted_insts_def] >>
+     metis_tac[rich_listTheory.IS_PREFIX_APPEND, rich_listTheory.DROP_LENGTH_APPEND]) >>
+  drule_all abi_decoder_run_sequence_reach >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qpat_x_assum `t' = _` SUBST_ALL_TAC >>
+  `t.vs_labels = r.vs_labels` by
+    metis_tac[ctorAbiActualObservationsTheory.ctor_actual_sequence_labels] >>
+  `!op. abi_decoder_operand_live middle.cs_next_var op ==>
+    eval_operand op t = eval_operand op r` by
+    (rpt strip_tac >> Cases_on `op` >>
+     simp_tac (srw_ss()) [eval_operand_def] >>
+     metis_tac[calldata_operand_live_not_fresh]) >>
+  drule_all decoder_run_world_frame >> strip_tac >>
+  `alloca_inv t` by
+    (qpat_x_assum `alloca_inv r` mp_tac >>
+     pure_asm_rewrite_tac [alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
+     simp_tac bool_ss []) >>
+  `alloca_frontier_inv ctx fn site t` by
+    (qpat_x_assum `alloca_frontier_inv ctx fn site r` mp_tac >>
+     pure_asm_rewrite_tac [alloca_frontier_inv_def, remaining_alloca_budget_def] >>
+     simp_tac bool_ss []) >>
+  `allocas_from lower (t with vs_inst_idx := LENGTH end_st.cs_current_insts)` by
+    (qpat_x_assum `allocas_from lower r` mp_tac >>
+     simp_tac (srw_ss()) [allocas_from_def] >> pure_asm_rewrite_tac [] >> simp_tac bool_ss []) >>
+  `ptr_covers H u root t outsz` by
+    (irule decoderGhostFramePtrTheory.ptr_covers_frame >> metis_tac[]) >>
+  `abi_decode_frame e (type_memory_size tv) r t` by
+    (irule abiDecoderFrameComposeTheory.abi_decode_frame_widen >>
+     qexistsl [`e`,`32 + LENGTH vs * type_memory_size etv`] >>
+     pure_asm_rewrite_tac [] >> decide_tac) >>
+  `abi_decode_footprint_frame [(e,type_memory_size tv)] r
+     (t with vs_inst_idx := LENGTH end_st.cs_current_insts)` by
+    (simp_tac (srw_ss()) [GSYM abi_decode_frame_footprint,
+       abiDecoderContractTheory.abi_decode_frame_def] >>
+     metis_tac[abiDecoderContractTheory.abi_decode_frame_def]) >>
+  qpat_x_assum `tv = _` SUBST_ALL_TAC >>
+  qpat_x_assum `v = _` SUBST_ALL_TAC >>
+  qexistsl [`t with vs_inst_idx := LENGTH end_st.cs_current_insts`,`H`,`u`] >>
+  pure_asm_rewrite_tac [] >>
+  simp_tac (srw_ss()) [compileEnvTheory.fresh_vars_wrt_def,
+    lookup_var_def, eval_operand_def] >>
+  pure_asm_rewrite_tac [] >> simp_tac bool_ss [] >>
+  conj_tac >- (qpat_assum `fresh_vars_wrt _ t` mp_tac >>
+    simp_tac (srw_ss()) [compileEnvTheory.fresh_vars_wrt_def]) >>
+  simp_tac arith_ss [] >>
+  conj_tac >- (qpat_x_assum `ptr_covers H u child t _` mp_tac >>
+    pure_asm_rewrite_tac [] >> simp_tac arith_ss []) >>
+  metis_tac[]
 QED
