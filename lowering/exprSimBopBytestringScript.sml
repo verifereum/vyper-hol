@@ -525,9 +525,8 @@ Proof
              first_x_assum irule >> simp[]) >>
           `wb_frame cenv es ee2 sa s0 t2` by
             (qspecl_then [`func`, `cenv`, `cx`, `es`, `s0`, `sa`,
-               `ee with gas_obs := gs2`, `ee2`, `sh1`, `t'`, `t2`, `ctx`]
+               `ee`, `ee2`, `sh1`, `t'`, `t2`, `ctx`]
                irule exprSimWordArgsTheory.wb_frame_trans >>
-             simp[exprSimWordArgsTheory.wb_frame_gas_obs] >>
              simp[] >> imp_res_tac (cj 2 compile_expr_grows) >>
              imp_res_tac (SIMP_RULE std_ss [ci_mono_def] compile_bytestring_hash_shape) >>
              metis_tac[exprSimWordArgsTheory.expr_post_frame,
