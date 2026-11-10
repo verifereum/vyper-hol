@@ -6,7 +6,7 @@
 Theory bodyMemAnnAssignWidened
 Ancestors
   bodyMemoryPreds widenedLocalContinuationMem widenedLocalOutcomeMem
-  widenedAssignValueParts widenedLocalRuntimeMem
+  widenedAssignValueParts widenedLocalRuntimeMem widenedDeclareContinuationMem
   bodyExprPreFacts supportedStmtTraverse supportedStmts vyperTypeInvariants
   vyperTypeSystem vyperTypeExprResult vyperTyping bodySim exprSimHypsDefs
   gasContext supportedTypes vyperInterpreter vyperTypeCallGraph vyperState
