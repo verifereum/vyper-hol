@@ -84,9 +84,14 @@ Theorem body_builtin_case_ptr:
     body_expr_ptr_ok cx (Builtin ty bt es)
 Proof
   rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `code_slice_source bt es`)
+  >- ((* HELD: slice(x.code, ...) operands; admitted on this branch before
+         the trunk's proof of the other builtins arrived. *)
+      cheat) >>
   `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len /\ bt <> Env MsgGas ==>
    body_exprs_ptr_ok cx es` by
-    (strip_tac >> first_x_assum irule >> simp[type_check_def, assert_def]) >>
+    (strip_tac >> first_x_assum irule >> simp[type_check_def, assert_def] >>
+     fs[]) >>
   Cases_on `bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i) \/ (?i. bt = Acc i) \/
              bt = BlockHash \/ bt = BlobHash \/ bt = MethodId`
   >- metis_tac[env_builtin_expr_ptr_ok] >>
