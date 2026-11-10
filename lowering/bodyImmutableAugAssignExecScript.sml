@@ -226,7 +226,8 @@ Theorem immutable_augassign_binop_admissible:
           (INL p,es with gas_obs := gs) /\
         read_place cx p (es with gas_obs := gs) = (INL v0,es with gas_obs := gs) /\
         place_type_value cx p (es with gas_obs := gs) = (INL tv,es with gas_obs := gs)) /\
-  evaluate_type (get_tenv cx) ty = SOME tv /\ bop <> In /\ bop <> NotIn /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ word_value v0 /\
+  bop <> In /\ bop <> NotIn /\
   gas_admissible (eval_stmt cx (AugAssign ty (TopLevelNameTarget nsid) bop e))
     (stmt_res_ok lctx) es /\
   bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) ==>
@@ -237,7 +238,7 @@ Proof
    case evaluate_binop
      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
      tv bop v0 v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> metis_tac[word_value_not_bytes]) >>
   pop_assum SUBST1_TAC >>
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
