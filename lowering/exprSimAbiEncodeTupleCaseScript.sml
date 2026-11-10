@@ -11,6 +11,13 @@ Ancestors
   vyperEvalExprPreservesScopesDom exprSimAbiEncodeRuntimeInputs
   pair vyperTypeSystem vyperTypeDefaults
 
+Theorem expr_size_member[local]:
+  !es e. MEM e es ==> expr_size e < list_size expr_size es
+Proof
+  Induct >> simp[list_size_def] >> rpt strip_tac >>
+  gvs[] >> res_tac >> simp[]
+QED
+
 Theorem abi_encode_tuple_lowering_shape[local]:
   ~(LENGTH args = 1 /\ ~ensure) ==>
   compile_expr ce cty (TypeBuiltin ann (AbiEncode ensure mid) target args) sa =
@@ -31,7 +38,7 @@ Proof
   AP_TERM_TAC >> AP_THM_TAC >>
   irule compile_abi_encode_args_callback_cong >>
   rpt strip_tac >> simp[FUN_EQ_THM] >> rpt gen_tac >>
-  simp[exprRecursionRegressionTheory.expr_size_member]
+  simp[expr_size_member]
 QED
 
 Theorem abi_encode_args_ci_mono[local]:

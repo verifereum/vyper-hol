@@ -5,7 +5,7 @@ Ancestors
   exprSimAbiEncodeStagedObserver exprSimAbiEncodePrefixWindow exprSimAbiEncodeStagedFrame
   abiBuiltinEncodeWord abiBuiltinAllocation exprSimHash abiDecoderGuards context emitHelper emitHelperProps
   exprLoweringProps compileEnv venomState venomInst list rich_list
-  abiBuiltinEncodeCode abiCopyExecution abiEncoder
+  abiBuiltinEncodeCode abiEncoder copyExecution
   words finite_map compileEnv venomMemDefs
   exprSimAbiEncodeBoundaryProbe exprSimAbiEncodeTranslatedNoBlock
   abiEncoderCounters abiBuiltinEncodeSetup abiDecoderReentry localPtrsProps
@@ -15,6 +15,16 @@ Ancestors
   exprSimAbiEncodeNoBlockBoundary exprSimAbiEncodeNoBlockSafety
   exprSimAbiEncodeOblivious exprSimAbiGasBridge exprSimAlloc fragExec
   exprSimAbiEncodeOriginFrame loweringPosts
+
+Theorem compile_abi_copy_shape[local]:
+  compile_abi_encode_to_buf dst src (AbiCopy n) cs = (result,cs') <=>
+  result = Lit (n2w n) /\
+  compile_copy_memory_dynamic dst src (Lit (n2w n)) cs = ((),cs')
+Proof
+  simp[Once compile_abi_encode_child_def, compile_copy_memory_dynamic_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  Cases_on `emit_void MCOPY [dst;src;Lit (n2w n)] cs` >> simp[] >> metis_tac[]
+QED
 
 Theorem abi_encode_word_staging_path:
   compile_alloc_buffer 32 sa = (buf,sm) /\
