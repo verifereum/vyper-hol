@@ -9,7 +9,7 @@ Libs
 
 val _ = hide "count";
 
-Theorem place_store_runtime_copy_code[local]:
+Theorem place_store_runtime_copy_code:
   (loc = LocStorage \/ loc = LocTransient) /\
   compile_word_copy_loop_op src dst count LocMemory loc ctor sa = (u,sb) /\
   fn_has_code sa sb func ==>
@@ -78,7 +78,7 @@ Proof
   simp[store_copy_prefix_def, COUNT_LIST_SNOC, FOLDL_SNOC]
 QED
 
-Theorem place_store_frame_control[local]:
+Theorem place_store_frame_control:
   (store_copy_frame sa loc b k s0 i (jump_to lbl s) <=>
    store_copy_frame sa loc b k s0 i s) /\
   (store_copy_frame sa loc b k s0 i (s with vs_inst_idx := idx) <=>
@@ -99,7 +99,7 @@ Proof
   Cases_on `loc = LocStorage` >> gvs[sstore_def, tstore_def]
 QED
 
-Theorem place_store_frame_fields[local]:
+Theorem place_store_frame_fields:
   store_copy_frame sa loc b k s0 i s ==>
   s.vs_memory = s0.vs_memory /\ s.vs_labels = s0.vs_labels /\
   s.vs_call_ctx = s0.vs_call_ctx /\ s.vs_allocas = s0.vs_allocas /\
@@ -123,7 +123,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem place_store_copy_init_path[local]:
+Theorem place_store_copy_init_path:
   ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id ASSIGN [Lit 0w] [cv]]
@@ -152,7 +152,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem place_store_runtime_copy_test_path[local]:
+Theorem place_store_runtime_copy_test_path:
   ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id EQ [Var cv; count] [tv]]
