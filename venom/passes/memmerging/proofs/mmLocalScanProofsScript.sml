@@ -8895,6 +8895,118 @@ Proof
   simp[]
 QED
 
+Theorem mm_local_write_log_length[local]:
+  !ws s. LENGTH (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s ws).vs_memory =
+    MAX (LENGTH s.vs_memory) (MAX_LIST (MAP (\(d,bs). d + LENGTH bs) ws))
+Proof
+  Induct_on `ws` >- simp[] >>
+  Cases_on `h` >> simp[venomMemPropsTheory.LENGTH_write_memory_with_expansion,
+    arithmeticTheory.MAX_ASSOC]
+QED
+
+Theorem mm_local_write_log_byte[local]:
+  !ws s. (!d bs. MEM (d,bs) ws /\ d <= a /\ a < d + LENGTH bs ==>
+      EL (a-d) bs = b) ==>
+    read_byte a (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s ws).vs_memory =
+      if (?d bs. MEM (d,bs) ws /\ d <= a /\ a < d + LENGTH bs)
+      then b else read_byte a s.vs_memory
+Proof
+  Induct_on `ws` >- simp[] >>
+  Cases_on `h` >> simp[] >> rpt strip_tac >>
+  simp[regularCallEmitSimTheory.read_byte_write_memory_with_expansion] >>
+  Cases_on `?d bs. MEM (d,bs) ws /\ d <= a /\ a < d + LENGTH bs`
+  >- (simp[] >> metis_tac[]) >>
+  Cases_on `q <= a /\ a < q + LENGTH r` >> simp[] >> metis_tac[]
+QED
+
+Theorem mm_local_write_log_frame[local]:
+  !ws s. ?m. FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s ws =
+    s with vs_memory := m
+Proof
+  Induct_on `ws` >- simp[venomStateTheory.venom_state_component_equality] >>
+  Cases_on `h` >> simp[] >> gen_tac >>
+  first_x_assum (qspec_then `write_memory_with_expansion q r s` strip_assume_tac) >>
+  qexists `m` >> simp[write_as_replace]
+QED
+
+Theorem mm_local_write_log_realize[local]:
+  (!d bs. MEM (d,bs) ws ==> D <= d /\ d + LENGTH bs <= D+L /\
+    bs = mm_local_bytes B (src+(d-D)) (LENGTH bs)) /\
+  (!a. D <= a /\ a < D+L ==> ?d bs. MEM (d,bs) ws /\ d <= a /\ a < d + LENGTH bs) /\
+  MAX_LIST (MAP (\(d,bs). d + LENGTH bs) ws) = D+L ==>
+  FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v ws =
+    write_memory_with_expansion D (mm_local_bytes B src L) v
+Proof
+  rpt strip_tac >>
+  `!a. read_byte a (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v ws).vs_memory =
+    read_byte a (write_memory_with_expansion D (mm_local_bytes B src L) v).vs_memory` by
+   (gen_tac >>
+    `!d bs. MEM (d,bs) ws /\ d <= a /\ a < d + LENGTH bs ==>
+      EL (a-d) bs = B (src+(a-D))` by
+     (rpt strip_tac >>
+      first_x_assum (drule_then strip_assume_tac) >>
+      `a-d < LENGTH bs /\ src+(d-D)+(a-d) = src+(a-D)` by decide_tac >>
+      qpat_x_assum `bs = mm_local_bytes _ _ _` (fn th => pure_once_rewrite_tac[th]) >>
+      simp[mm_local_bytes_def, EL_GENLIST]) >>
+    drule mm_local_write_log_byte >> disch_then (qspec_then `v` mp_tac) >>
+    simp[regularCallEmitSimTheory.read_byte_write_memory_with_expansion] >>
+    `(?d bs. MEM (d,bs) ws /\ d <= a /\ a < d + LENGTH bs) <=>
+       D <= a /\ a < D+L` by
+      (eq_tac >- (rpt strip_tac >>
+         qpat_x_assum `!d bs. MEM (d,bs) ws ==> _` (drule_then strip_assume_tac) >> decide_tac) >>
+       metis_tac[]) >>
+    simp[] >> Cases_on `D <= a /\ a < D+L` >> simp[] >>
+    `a-D < L` by decide_tac >> simp[mm_local_bytes_def, EL_GENLIST]) >>
+  `LENGTH (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v ws).vs_memory =
+   LENGTH (write_memory_with_expansion D (mm_local_bytes B src L) v).vs_memory` by
+    simp[mm_local_write_log_length, venomMemPropsTheory.LENGTH_write_memory_with_expansion] >>
+  ` (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v ws).vs_memory =
+    (write_memory_with_expansion D (mm_local_bytes B src L) v).vs_memory` by
+    (irule LIST_EQ >> simp[] >> rpt strip_tac >>
+     qpat_x_assum `!a. read_byte a _ = _` (qspec_then `x` mp_tac) >>
+     simp[codegenRelTheory.read_byte_def]) >>
+  qspecl_then [`ws`,`v`] strip_assume_tac mm_local_write_log_frame >>
+  gvs[write_as_replace, venomStateTheory.venom_state_component_equality]
+QED
+
+Theorem mm_local_write_log_endpoint[local]:
+  (!d bs. MEM (d,bs) ws ==> d + LENGTH bs <= e) /\
+  (?d bs. MEM (d,bs) ws /\ d + LENGTH bs = e) ==>
+  MAX_LIST (MAP (\(d,bs). d + LENGTH bs) ws) = e
+Proof
+  rpt strip_tac >> sym_tac >> irule MAX_LIST_TEST >>
+  simp[MEM_MAP, pairTheory.EXISTS_PROD] >>
+  metis_tac[MEM]
+QED
+
+Theorem mm_local_write_log_endpoint_birth[local]:
+  (!d bs. MEM (d,bs) [(g.cg_dst,mm_local_bytes B g.cg_src g.cg_length)] ==>
+      d + LENGTH bs <= g.cg_dst + g.cg_length) /\
+  (?d bs. MEM (d,bs) [(g.cg_dst,mm_local_bytes B g.cg_src g.cg_length)] /\
+      d + LENGTH bs = g.cg_dst + g.cg_length)
+Proof
+  simp[]
+QED
+
+Theorem mm_local_write_log_endpoint_merge[local]:
+  (!d bs. MEM (d,bs) xs ==> d + LENGTH bs <= a.cg_dst + a.cg_length) /\
+  (?d bs. MEM (d,bs) xs /\ d + LENGTH bs = a.cg_dst + a.cg_length) /\
+  (!d bs. MEM (d,bs) ys ==> d + LENGTH bs <= b.cg_dst + b.cg_length) /\
+  (?d bs. MEM (d,bs) ys /\ d + LENGTH bs = b.cg_dst + b.cg_length) ==>
+  (!d bs. MEM (d,bs) (xs ++ ys) ==>
+      d + LENGTH bs <= (copy_merge a b).cg_dst + (copy_merge a b).cg_length) /\
+  (?d bs. MEM (d,bs) (xs ++ ys) /\
+      d + LENGTH bs = (copy_merge a b).cg_dst + (copy_merge a b).cg_length)
+Proof
+  rpt strip_tac >>
+  `(copy_merge a b).cg_dst + (copy_merge a b).cg_length =
+    MAX (a.cg_dst + a.cg_length) (b.cg_dst + b.cg_length)` by
+    (simp[copy_merge_def, arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  simp[MEM_APPEND] >>
+  Cases_on `a.cg_dst + a.cg_length <= b.cg_dst + b.cg_length` >>
+  simp[arithmeticTheory.MAX_DEF] >> metis_tac[MEM_APPEND]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
