@@ -233,7 +233,11 @@ Proof
   gvs[run_inst_seq_def, AllCaseEqs()] >>
   `abi_decoder_operand_live (st.cs_next_var + 1) op /\
    abi_decoder_operand_live (st.cs_next_var + 2) op` by
-    (Cases_on `op` >>
+    (Cases_on `op`
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac)
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac) >>
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   qpat_x_assum `step_inst_base _ s = _` mp_tac >>
@@ -370,7 +374,11 @@ Resume calldata_array_loop_init_safe_live[live]:
   rpt strip_tac >>
   `abi_decoder_operand_live guard_st.cs_next_var op /\
    abi_decoder_operand_live header_st.cs_next_var op` by
-    (Cases_on `op` >>
+    (Cases_on `op`
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac)
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac) >>
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   `eval_operand op g = eval_operand op initial` by
@@ -3778,7 +3786,11 @@ Resume calldata_array_loop_init_repeat_safe[live]:
   rpt strip_tac >>
   `abi_decoder_operand_live guard_st.cs_next_var op /\
    abi_decoder_operand_live header_st.cs_next_var op` by
-    (Cases_on `op` >>
+    (Cases_on `op`
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac)
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac) >>
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   `eval_operand op h = eval_operand op initial` by metis_tac[] >>

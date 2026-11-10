@@ -242,9 +242,6 @@ fun literal_buffer_consumer_parts is_expr norm bound_tac rep e size tv value vvp
    gvs[vyperASTTheory.expr_type_def, contextTheory.base_ptr_def,
        ptr_vv_ok_def, ptr_val_ok_def, vyperStateTheory.read_result_def]];
 
-fun literal_buffer_consumer_tac is_expr norm bound_tac rep e size tv value vvpost =
-  EVERY (literal_buffer_consumer_parts is_expr norm bound_tac rep e size tv value vvpost);
-
 fun literal_bytes_consumer_parts is_expr =
   literal_buffer_consumer_parts is_expr I
     (`LENGTH (bs:word8 list) <= n` by gvs[vyperValueTheory.compatible_bound_def])
@@ -257,16 +254,15 @@ fun literal_bytes_consumer_parts is_expr =
       (Value (BytesV bs)) (LocatedValue (BaseT (BytesT (Dynamic n))) (base_ptr buf))
       (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`;
 
-fun literal_bytes_consumer_tac is_expr = EVERY (literal_bytes_consumer_parts is_expr);
-
 val literal_bytes_vv_parts = literal_bytes_consumer_parts false;
+val literal_bytes_expr_parts = literal_bytes_consumer_parts true;
 
 fun literal_string_norm th =
   GEN_ALL (SRULE [listTheory.LENGTH_MAP]
     (Q.INST [`bs` |-> `(MAP (n2w o ORD) str : word8 list)`] (SPEC_ALL th)));
 
-fun literal_string_consumer_tac is_expr =
-  literal_buffer_consumer_tac is_expr literal_string_norm all_tac literal_ptr_string_representation
+fun literal_string_consumer_parts is_expr =
+  literal_buffer_consumer_parts is_expr literal_string_norm all_tac literal_ptr_string_representation
     `Literal (BaseT (StringT n)) (StringL str)`
     `32+32*word_size (LENGTH (str:string))`
     `BaseTV (StringT n)` `StringV str`
@@ -274,6 +270,9 @@ fun literal_string_consumer_tac is_expr =
       (Literal (BaseT (StringT n)) (StringL str)) es sa cs' s0 (es with gas_obs := [])
       (Value (StringV str)) (LocatedValue (BaseT (StringT n)) (base_ptr buf))
       (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`;
+
+val literal_string_vv_parts = literal_string_consumer_parts false;
+val literal_string_expr_parts = literal_string_consumer_parts true;
 
 (* Both judgments use the same allocation, stores and ghost witnesses. *)
 Theorem literal_buffer_sim_ptr:
@@ -295,13 +294,22 @@ Resume literal_buffer_sim_ptr[bytes_vv]:
   el 7 literal_bytes_vv_parts
 QED
 Resume literal_buffer_sim_ptr[bytes_expr]:
-  literal_bytes_consumer_tac true
+  el 1 literal_bytes_expr_parts >> el 2 literal_bytes_expr_parts >>
+  el 3 literal_bytes_expr_parts >> el 4 literal_bytes_expr_parts >>
+  el 5 literal_bytes_expr_parts >> el 6 literal_bytes_expr_parts >>
+  el 7 literal_bytes_expr_parts
 QED
 Resume literal_buffer_sim_ptr[string_vv]:
-  literal_string_consumer_tac false
+  el 1 literal_string_vv_parts >> el 2 literal_string_vv_parts >>
+  el 3 literal_string_vv_parts >> el 4 literal_string_vv_parts >>
+  el 5 literal_string_vv_parts >> el 6 literal_string_vv_parts >>
+  el 7 literal_string_vv_parts
 QED
 Resume literal_buffer_sim_ptr[string_expr]:
-  literal_string_consumer_tac true
+  el 1 literal_string_expr_parts >> el 2 literal_string_expr_parts >>
+  el 3 literal_string_expr_parts >> el 4 literal_string_expr_parts >>
+  el 5 literal_string_expr_parts >> el 6 literal_string_expr_parts >>
+  el 7 literal_string_expr_parts
 QED
 Finalise literal_buffer_sim_ptr
 

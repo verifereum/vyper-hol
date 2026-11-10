@@ -1481,5 +1481,8 @@ Proof
   `cenv_module_pins tops cenv /\
    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
     fs[body_inv_def] >>
-  gvs[] >> irule cenv_module_pins_immutables_disjoint >> metis_tac[]
+  gvs[] >> irule cenv_module_pins_immutables_disjoint >>
+  qexistsl_tac [`cenv`, `deploy_evaluation_context tops am tx`,
+                `id1`, `id2`, `tops`, `ty1`, `ty2`] >>
+  fs[]
 QED
