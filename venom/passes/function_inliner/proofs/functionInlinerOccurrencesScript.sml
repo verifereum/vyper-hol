@@ -612,3 +612,137 @@ Proof
   metis_tac[cj 6 inline_call_incidence_rules]
 QED
 
+(* Invert caller-derived calls by their physical block and instruction index. *)
+Theorem inline_edit_raw_caller_invoke_inverse:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb /\
+  e.ise_index < LENGTH source_bb.bb_instructions /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  (MEM l (fn_labels e.ise_caller) \/ l = e.ise_return) /\
+  lookup_block l
+    (inline_call_site e.ise_prefix e.ise_return e.ise_caller e.ise_callee
+       e.ise_block e.ise_index).fn_blocks = SOME bb /\
+  get_instruction bb k = SOME call /\ call.inst_opcode = INVOKE ==>
+  ?loc. inline_choice_location (InlineKeep e) loc = SOME
+      <|il_block := l; il_phase := InlineAtInstruction k; il_counter := 0|> /\
+    inline_fetched_fields e.ise_caller loc.il_block
+      (case loc.il_phase of InlineAtInstruction j => j | _ => 0)
+      (inline_inst_fields call)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `e.ise_block <> e.ise_return` by
+    (qpat_assum `lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb`
+       (mp_then Any assume_tac venomExecPropsTheory.lookup_block_MEM) >>
+     qpat_assum `lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb`
+       (mp_then Any assume_tac venomExecPropsTheory.lookup_block_label) >>
+     gvs[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  (Cases_on `l = e.ise_block`
+  >- (gvs[] >>
+      qpat_assum `lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb`
+        (mp_then Any mp_tac functionInlinerSiteLayoutTheory.inline_call_site_lookup_call) >>
+      disch_then (qspecl_then [`e.ise_return`,`e.ise_prefix`,`e.ise_index`,`e.ise_callee`] mp_tac) >>
+      strip_tac >> gvs[get_instruction_def] >>
+      Cases_on `k < e.ise_index`
+      >- (qexists_tac `<|il_block := e.ise_block; il_phase := InlineAtInstruction k; il_counter := 0|>` >>
+          simp[inline_choice_location_def,
+               functionInlinerSiteLayoutTheory.inline_fetched_fields_def,
+               get_instruction_def] >>
+          gvs[EL_APPEND_EQN, EL_TAKE] >> metis_tac[]) >>
+      `k = e.ise_index` by decide_tac >>
+      gvs[EL_APPEND_EQN, LENGTH_TAKE]) >>
+  Cases_on `l = e.ise_return`
+  >- (gvs[] >>
+      qpat_assum `lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb`
+        (mp_then Any mp_tac functionInlinerSiteLayoutTheory.inline_call_site_lookup_return) >>
+      disch_then (qspecl_then [`e.ise_return`,`e.ise_prefix`,`e.ise_index`,`e.ise_callee`] mp_tac) >>
+      simp[] >> strip_tac >> gvs[get_instruction_def] >>
+      qexists_tac `<|il_block := e.ise_block; il_phase := InlineAtInstruction (k + e.ise_index + 1); il_counter := 0|>` >>
+      simp[inline_choice_location_def,
+           functionInlinerSiteLayoutTheory.inline_fetched_fields_def,
+           get_instruction_def, EL_DROP]) >>
+  `?old. lookup_block l e.ise_caller.fn_blocks = SOME old` by
+    (gvs[] >> fs[fn_labels_def] >>
+     metis_tac[dfAnalyzeProofsTheory.lookup_block_exists]) >>
+  `bb = old` by
+    metis_tac[functionInlinerSiteLayoutTheory.inline_call_site_lookup_other,
+              optionTheory.SOME_11] >>
+  gvs[] >>
+  qexists_tac `<|il_block := l; il_phase := InlineAtInstruction k; il_counter := 0|>` >>
+  simp[inline_choice_location_def,
+       functionInlinerSiteLayoutTheory.inline_fetched_fields_def] >>
+  metis_tac[])
+QED
+
+Theorem inline_edit_raw_clone_invoke_inverse:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb /\
+  e.ise_index < LENGTH source_bb.bb_instructions /\
+  lookup_block l e.ise_callee.fn_blocks = SOME cb /\
+  ~MEM (STRCAT e.ise_prefix l) (fn_labels e.ise_caller) /\
+  STRCAT e.ise_prefix l <> e.ise_return /\
+  lookup_block (STRCAT e.ise_prefix l)
+    (inline_call_site e.ise_prefix e.ise_return e.ise_caller e.ise_callee
+      e.ise_block e.ise_index).fn_blocks = SOME bb /\
+  get_instruction bb k = SOME call /\ call.inst_opcode = INVOKE ==>
+  ?j inst c. get_instruction cb j = SOME inst /\ inst.inst_opcode = INVOKE /\
+    inline_choice_location (InlineEnter e)
+      <|il_block := l; il_phase := InlineAtInstruction j; il_counter := 0|> =
+      SOME <|il_block := STRCAT e.ise_prefix l;
+             il_phase := InlineAtInstruction k; il_counter := c|> /\
+    inline_inst_fields call =
+      inline_inst_fields (clone_instruction e.ise_prefix (fn_labels e.ise_callee) inst)
+Proof
+  strip_tac >>
+  `bb = FST (rewrite_inline_block
+      (rotate_invoke_ops (EL e.ise_index source_bb.bb_instructions).inst_operands)
+      (EL e.ise_index source_bb.bb_instructions).inst_outputs e.ise_return
+      (clone_basic_block e.ise_prefix (fn_labels e.ise_callee) cb) 0)` by
+    metis_tac[functionInlinerSiteLayoutTheory.inline_call_site_lookup_clone,
+              optionTheory.SOME_11] >>
+  gvs[] >> drule_all inline_rewrite_clone_invoke_inverse >> strip_tac >>
+  qexistsl_tac [`j`,`inst`] >>
+  gvs[get_instruction_def] >>
+  simp[inline_choice_location_def]
+QED
+
+(* Every physical residual call comes from exactly one side of an edit. *)
+Theorem inline_edit_invoke_preimage:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb /\
+  e.ise_index < LENGTH source_bb.bb_instructions /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  (!cl. MEM cl (fn_labels e.ise_callee) ==>
+     ~MEM (STRCAT e.ise_prefix cl) (fn_labels e.ise_caller) /\
+     STRCAT e.ise_prefix cl <> e.ise_return) /\
+  inline_fetched_fields e.ise_final l k (inline_inst_fields call) /\
+  call.inst_opcode = INVOKE ==>
+  (?loc. inline_choice_location (InlineKeep e) loc = SOME
+      <|il_block := l; il_phase := InlineAtInstruction k; il_counter := 0|> /\
+     inline_fetched_fields e.ise_caller loc.il_block
+       (case loc.il_phase of InlineAtInstruction j => j | _ => 0)
+       (inline_inst_fields call)) \/
+  (?cl j inst cb c. lookup_block cl e.ise_callee.fn_blocks = SOME cb /\
+     get_instruction cb j = SOME inst /\ inst.inst_opcode = INVOKE /\
+     inline_choice_location (InlineEnter e)
+       <|il_block := cl; il_phase := InlineAtInstruction j; il_counter := 0|> =
+       SOME <|il_block := l; il_phase := InlineAtInstruction k; il_counter := c|> /\
+     inline_inst_fields call = inline_inst_fields
+       (clone_instruction e.ise_prefix (fn_labels e.ise_callee) inst))
+Proof
+  strip_tac >> drule_all inline_edit_final_invoke_inverse >> strip_tac >>
+  `MEM l (fn_labels (inline_call_site e.ise_prefix e.ise_return e.ise_caller
+        e.ise_callee e.ise_block e.ise_index))` by
+    (simp[fn_labels_def, MEM_MAP] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM,
+               venomExecPropsTheory.lookup_block_label]) >>
+  Cases_on `MEM l (fn_labels e.ise_caller) \/ l = e.ise_return`
+  >- (disj1_tac >> drule_all inline_edit_raw_caller_invoke_inverse >>
+      strip_tac >> metis_tac[]) >>
+  disj2_tac >>
+  `?cl. MEM cl (fn_labels e.ise_callee) /\ l = STRCAT e.ise_prefix cl` by
+    gvs[functionInlinerWfTheory.inline_call_site_labels, MEM_MAP] >>
+  gvs[] >>
+  `?cb. lookup_block cl e.ise_callee.fn_blocks = SOME cb` by
+    metis_tac[dfAnalyzeProofsTheory.lookup_block_exists, fn_labels_def] >>
+  metis_tac[inline_edit_raw_clone_invoke_inverse]
+QED
