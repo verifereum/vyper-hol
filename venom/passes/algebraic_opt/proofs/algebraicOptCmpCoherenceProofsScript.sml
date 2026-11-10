@@ -4,6 +4,7 @@ Ancestors
   algebraicOptCmpScanProofs dfgAnalysisProps dfgDefs venomInst list pred_set
   allocaRemapSSA irSupply venomFnScheduleRunner venomInstProps unitShapeDefs
   alist passSharedDefs
+  venomFnInstsProofs
 
 (* Only producers actually selected by this scan contribute complemented names. *)
 Definition ao_cmp_flipped_def:

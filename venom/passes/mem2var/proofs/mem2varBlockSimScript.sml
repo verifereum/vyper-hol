@@ -16,6 +16,7 @@ Ancestors
   pointerConfinedDefs memLocDefs
   venomEffects venomMemDefs venomMemProps venomMemProofs
   finite_map list rich_list pred_set pair
+  opcodeClass
 Libs
   HolKernel boolLib bossLib BasicProvers dep_rewrite markerLib mem2varFrameLib
 

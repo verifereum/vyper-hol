@@ -3,6 +3,7 @@ Ancestors cseDefs availExprDefs availExprProofs
           dfAnalyzeDefs dfAnalyzeProofs dfAnalyzeProps
           worklistWfProofs worklistProps cfgAnalysisProps venomExecProofs
           analysisSimProofsBase analysisSimProps
+  cfgCorrectnessProof cfgHelpers
 
 (* These are syntactic matching facts, not runtime value equalities. *)
 Theorem operand_ids_match_length:

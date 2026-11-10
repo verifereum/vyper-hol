@@ -39,6 +39,15 @@ Proof
                        venom_state_component_equality]
 QED
 
+val typed_dynarray_mem_ok_tac =
+  simp[run_inst_seq_mem_ok_cons, run_inst_seq_mem_ok_last,
+       below_frontier_MLOAD, below_frontier_MSTORE, below_frontier_no_ranges,
+       step_inst_base_opcode_eqs, mk_inst_def,
+       exec_pure1_def, exec_pure2_def, exec_read1_def, exec_write2_def,
+       eval_operand_def, lookup_var_update_var, w2n_n2w, bool_to_word_def,
+       mstore_def, write_memory_with_expansion_def, update_var_def,
+       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE];
+
 Theorem typed_dynarray_prologue_mem_ok[local]:
   code =
     [mk_inst id MLOAD [src] [len];
@@ -58,14 +67,16 @@ Theorem typed_dynarray_prologue_mem_ok[local]:
 Proof
   strip_tac >> `l < dimword(:256)` by decide_tac >>
   Cases_on `src` >> Cases_on `dst` >>
-  gvs[eval_operand_def, lookup_var_def] >>
-  simp[run_inst_seq_mem_ok_cons, run_inst_seq_mem_ok_last,
-       below_frontier_MLOAD, below_frontier_MSTORE, below_frontier_no_ranges,
-       step_inst_base_opcode_eqs, mk_inst_def,
-       exec_pure1_def, exec_pure2_def, exec_read1_def, exec_write2_def,
-       eval_operand_def, lookup_var_update_var, w2n_n2w, bool_to_word_def,
-       mstore_def, write_memory_with_expansion_def, update_var_def,
-       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+  gvs[eval_operand_def, lookup_var_def]
+  >- typed_dynarray_mem_ok_tac
+  >- typed_dynarray_mem_ok_tac
+  >- typed_dynarray_mem_ok_tac
+  >- typed_dynarray_mem_ok_tac
+  >- typed_dynarray_mem_ok_tac
+  >- typed_dynarray_mem_ok_tac
+  >- typed_dynarray_mem_ok_tac
+  >- typed_dynarray_mem_ok_tac
+  >> typed_dynarray_mem_ok_tac
 QED
 
 Theorem typed_dynarray_prologue_window_run:
