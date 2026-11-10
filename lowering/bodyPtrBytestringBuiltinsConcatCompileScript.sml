@@ -74,7 +74,7 @@ Theorem concat_prefix_args_ready:
     ~t.vs_halted /\ t.vs_current_bb = s4.cs_current_bb /\
     t.vs_inst_idx = LENGTH s4.cs_current_insts /\
     MEM binst (fn_insts fn) /\ binst.inst_opcode = ALLOCA /\
-    binst.inst_id < s4.cs_next_id /\
+    binst.inst_id = sa.cs_next_id /\ binst.inst_id < s4.cs_next_id /\
     FLOOKUP t.vs_allocas binst.inst_id = SOME (w2n a,bsz) /\
     MEM oinst (fn_insts fn) /\ oinst.inst_opcode = ALLOCA /\
     oinst.inst_id < s4.cs_next_id /\
@@ -96,7 +96,9 @@ Theorem concat_prefix_args_ready:
     not_fresh_at s4 r /\ not_fresh_at s4 p /\ not_fresh_at s4 off /\
     local_ptrs_reserved ce s4 /\
     (!x k. ce.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at s4 x) /\
-    (!x k. ce.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at s4 x)
+    (!x k. ce.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at s4 x) /\
+    (!b k. b+k <= w2n ow \/ w2n ow+64 <= b ==>
+      mem_bytes_at b k t.vs_memory = mem_bytes_at b k s.vs_memory)
 Proof
   strip_tac >> drule_all concat_prefix_counted >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
@@ -148,7 +150,7 @@ Resume concat_prefix_args_ready[fresh]:
      rpt (pop_assum kall_tac) >> simp[regions_disjoint_def] >> decide_tac) >>
   fs[regions_disjoint_def] >>
   simp[not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
-  conj_tac >> first_assum ACCEPT_TAC
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Finalise concat_prefix_args_ready

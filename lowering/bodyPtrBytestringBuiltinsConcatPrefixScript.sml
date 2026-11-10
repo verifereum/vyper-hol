@@ -8,7 +8,7 @@ Ancestors
   bodyPtrAttributeAdd typedCopyPtr fragExec exprLoweringProps exprSimLiteralBuffer
   fragGasPathPtr fragGasSeqPtr loweringPosts bodyPtrDefs context emitHelper
   emitHelperProps compileEnv venomState venomInst venomExecSemantics
-  ptrDiscipline words finite_map pred_set list
+  ptrDiscipline words finite_map pred_set list valueEncodingProps
 
 Theorem concat_alloc_raw_frame:
   compile_alloc_buffer n sa = (buf,sm) /\ buf.buf_operand = Var out /\
@@ -73,7 +73,9 @@ Theorem concat_alloc_zero_counted:
     (!name b k. local_region ce es.scopes t name b k ==>
       regions_disjoint (w2n a) n b k) /\
     (!name b k. local_region ce es.scopes s name b k <=>
-      local_region ce es.scopes t name b k)
+      local_region ce es.scopes t name b k) /\
+    (!b k. b+k <= w2n a \/ w2n a+n <= b ==>
+      mem_bytes_at b k t.vs_memory = mem_bytes_at b k s.vs_memory)
 Proof
   strip_tac >> drule_all bodyPtrBytestringBuiltinsBufferTheory.compile_alloc_buffer_counted >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
@@ -135,6 +137,10 @@ Resume concat_alloc_zero_counted[finish]:
        (rpt strip_tac >> `not_fresh_at sa p` by
           (fs[local_ptrs_reserved_def] >> metis_tac[]) >> simp[]) >>
      metis_tac[]) >>
+  `!b k. b+k <= a \/ a+n <= b ==>
+    mem_bytes_at b k t.vs_memory = mem_bytes_at b k s.vs_memory`
+    by suspend "memory" >>
+  `w2n (n2w a : 256 word) = a` by simp[w2n_n2w] >>
   qexistsl_tac [`out`,`G1`,`tn'`,`t`,`n2w a`] >> simp[] >>
   `!ss z k. mload z (ss with vs_inst_idx := k) = mload z ss` by
     simp[mload_def] >>
@@ -168,6 +174,10 @@ Resume concat_alloc_zero_counted[store_frame]:
   conj_tac >- suspend "inv" >>
   reverse conj_tac >-
     (conj_tac >- metis_tac[] >>
+     reverse conj_tac >-
+       (rpt gen_tac >> strip_tac >>
+        `b+k <= a \/ a+32 <= b` by decide_tac >>
+        simp[mstore_mem_bytes_at_disjoint]) >>
      simp[local_region_def, lookup_var_def, mstore_def] >>
      qpat_x_assum `!name b len. local_region ce es.scopes u name b len ==> _`
        mp_tac >> simp[local_region_def, lookup_var_def]) >>
@@ -210,6 +220,16 @@ Resume concat_alloc_zero_counted[sites]:
   gvs[Abbr `uh`, mstore_def, lookup_var_def] >> metis_tac[]
 QED
 
+Resume concat_alloc_zero_counted[memory]:
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn)` by
+    (drule_all compile_alloc_buffer_raw_step >> strip_tac >> gvs[]) >>
+  drule_all concat_alloc_raw_frame >> strip_tac >>
+  `w2n (n2w a : 256 word) = a` by simp[w2n_n2w] >>
+  rpt gen_tac >> strip_tac >>
+  `b+k <= a \/ a+32 <= b` by decide_tac >>
+  gvs[Abbr `uh`] >> simp[mstore_mem_bytes_at_disjoint]
+QED
+
 Finalise concat_alloc_zero_counted
 
 Theorem concat_slice_out_buf_counted_frame:
@@ -243,7 +263,7 @@ Theorem concat_slice_out_buf_counted_frame:
     (!name b k. local_region ce es.scopes t name b k ==>
       regions_disjoint (w2n a) n b k) /\
     (!name b k. local_region ce es.scopes s name b k <=>
-      local_region ce es.scopes t name b k)
+      local_region ce es.scopes t name b k) /\ t.vs_memory = s.vs_memory
 Proof
   strip_tac >> drule_all compile_slice_out_buf_counted >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
@@ -365,7 +385,9 @@ Theorem concat_prefix_counted:
       local_region ce es.scopes t name b k) /\
     (!x. not_fresh_at sa x ==>
       lookup_var x t = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
-      op_taint tnf (Var x) = op_taint tn (Var x))
+      op_taint tnf (Var x) = op_taint tn (Var x)) /\
+    (!b k. b+k <= w2n ow \/ w2n ow+64 <= b ==>
+      mem_bytes_at b k t.vs_memory = mem_bytes_at b k s.vs_memory)
 Proof
   strip_tac >>
   `compile_slice_out_buf bsz sa = ((buf.buf_operand,data),s2)` by

@@ -2,7 +2,7 @@
 Theory bodyPtrBytestringBuiltinsConcatPostFrame
 Ancestors
   bodyPtrBytestringBuiltinsConcatSuffix exprSimProps
-  loweringPosts compileEnv finite_map arithmetic
+  loweringPosts compileEnv finite_map arithmetic exprBopSimProps exprSimCopy wordArgsPtr
 
 Theorem concat_original_site_memory:
   FLOOKUP s0.vs_allocas aid = SOME (b,k) /\ aid < sa.cs_next_id /\
@@ -38,4 +38,66 @@ Proof
      metis_tac[LESS_LESS_EQ_TRANS]) >>
   `b+k <= B \/ B+32 <= b` by decide_tac >>
   metis_tac[]
+QED
+
+Theorem concat_original_locals_frame:
+  local_ptrs_reserved ce sa /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x s = SOME w) /\
+  (!name b k. local_region ce es.scopes s0 name b k <=>
+    local_region ce es.scopes s name b k) /\
+  (!name b k. local_region ce es.scopes s name b k ==>
+    (B+bsz <= b \/ b+k <= B) /\ (obase+64 <= b \/ b+k <= obase)) /\
+  32 <= bsz /\
+  (!b k. b+k <= obase \/ obase+64 <= b ==>
+    mem_bytes_at b k s.vs_memory = mem_bytes_at b k s0.vs_memory) /\
+  locals_kept ce es s u /\
+  (!b k. b+k <= B \/ B+32 <= b ==>
+    mem_bytes_at b k t.vs_memory = mem_bytes_at b k u.vs_memory) ==>
+  locals_kept ce es s0 t
+Proof
+  strip_tac >>
+  `locals_kept ce es s0 s` by
+    (irule locals_kept_regions >> rpt strip_tac >>
+     qpat_x_assum `!b k. b+k <= obase \/ _ ==> _` irule >> metis_tac[]) >>
+  `locals_kept ce es s0 u` by
+    (irule exprBopSimPropsTheory.locals_kept_trans >>
+     qexistsl_tac [`es`,`sa`,`s`] >> simp[]) >>
+  irule exprSimCopyTheory.copy_buffer_locals_kept_frame >>
+  qexistsl_tac [`B`,`u`,`32`] >>
+  conj_tac >- (rpt strip_tac >>
+    `B+bsz <= lb \/ lb+len <= B` by metis_tac[] >> decide_tac) >>
+  conj_tac >- metis_tac[ADD_SYM] >> first_assum ACCEPT_TAC
+QED
+
+Theorem concat_original_wb_frame:
+  local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x s0) /\
+  (!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==> lookup_var x u = SOME w) /\
+  (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x u) /\
+  (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+    FLOOKUP s.vs_allocas aid = SOME entry) /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP u.vs_allocas aid = SOME entry) /\ t.vs_allocas = u.vs_allocas /\
+  (!aid b k. FLOOKUP s0.vs_allocas aid = SOME (b,k) /\ aid < sa.cs_next_id /\
+    (!name lo sz. local_region ce es.scopes s0 name lo sz ==> b+k <= lo \/ lo+sz <= b) ==>
+    mem_bytes_at b k t.vs_memory = mem_bytes_at b k s0.vs_memory) /\
+  (!name b k. local_region ce es.scopes s0 name b k <=>
+    local_region ce es.scopes s name b k) /\
+  (!name b k. local_region ce es.scopes s name b k ==>
+    (B+bsz <= b \/ b+k <= B) /\ (obase+64 <= b \/ b+k <= obase)) /\
+  32 <= bsz /\
+  (!b k. b+k <= obase \/ obase+64 <= b ==>
+    mem_bytes_at b k s.vs_memory = mem_bytes_at b k s0.vs_memory) /\
+  locals_kept ce es s u /\
+  (!b k. b+k <= B \/ B+32 <= b ==>
+    mem_bytes_at b k t.vs_memory = mem_bytes_at b k u.vs_memory) ==>
+  wb_frame ce es sa s0 t
+Proof
+  strip_tac >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
+    (simp[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+     lookup_var x s = SOME w` by metis_tac[] >>
+  `locals_kept ce es s0 t` by (drule_all concat_original_locals_frame >> simp[]) >>
+  simp[wb_frame_def] >> rpt conj_tac >> metis_tac[]
 QED
