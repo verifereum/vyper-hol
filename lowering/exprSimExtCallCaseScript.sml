@@ -822,10 +822,45 @@ Resume extcall_return_default[default_success]:
   strip_tac >> conj_tac >> first_assum ACCEPT_TAC
 QED
 Resume extcall_return_default[default_holds]:
-  cheat
+  `safe_operand de buf.buf_operand` by
+    (drule exprSafeOperandTheory.alloc_buffer_not_label >> strip_tac >>
+     irule exprSafeOperandTheory.safe_operand_mono >> qexists_tac `ds` >>
+     simp[safe_operand_def]) >>
+  `eval_operand buf.buf_operand checked = SOME (n2w d)` by metis_tac[] >>
+  simp[vv_holds_def, contextTheory.mk_ptr_def, vyperStateTheory.read_result_def,
+       return_def, extCallSeamFinishTheory.extcall_jump_fields] >>
+  metis_tac[exprSimPropsTheory.val_in_memory_word_type]
 QED
 Resume extcall_return_default[default_at]:
-  cheat
+  simp[vv_at_def, contextTheory.mk_ptr_def, vyperStateTheory.read_result_def,
+       return_def, extCallSeamFinishTheory.extcall_jump_fields] >>
+  rpt strip_tac >>
+  `safe_operand de buf.buf_operand` by
+    (drule exprSafeOperandTheory.alloc_buffer_not_label >> strip_tac >>
+     irule exprSafeOperandTheory.safe_operand_mono >> qexists_tac `ds` >>
+     simp[safe_operand_def]) >>
+  `eval_operand buf.buf_operand checked = SOME (n2w d)` by metis_tac[] >>
+  qexists_tac `n2w d` >> simp[] >> disj1_tac >>
+  qpat_x_assum `abi_malformed_destination func cenv ee.scopes _ _ _ u` mp_tac >>
+  simp[abiMalformedRecursiveInterfaceTheory.abi_malformed_destination_def] >>
+  strip_tac >>
+  qexistsl_tac [`sr.cs_next_id`, `b`, `sz`] >> simp[] >>
+  `val_footprint rtv dv <= type_memory_size rtv` by
+    metis_tac[exprSimPropsTheory.val_footprint_le] >>
+  conj_tac >-
+    (drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >>
+     `allocated.cs_next_id <= sb.cs_next_id` by
+       (qpat_x_assum `compile_default_return_path _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        metis_tac[ci_mono_compile_default_return_path, ci_mono_def, pairTheory.SND]) >>
+     decide_tac) >>
+  conj_tac >- decide_tac >>
+  rpt strip_tac >>
+  irule exprSimOperandsTheory.alloca_clear_of_locals >>
+  qexistsl_tac [`cenv`, `ctx`, `cx`, `ee`, `func`, `inst`, `n`, `q`,
+                `jump_to xl checked`] >>
+  simp[exprLoweringPropsTheory.stmt_state_rel_jump_to,
+       extCallSeamFinishTheory.extcall_jump_fields]
 QED
 Resume extcall_return_default[decode]:
   cheat
