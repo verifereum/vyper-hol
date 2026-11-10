@@ -1849,3 +1849,151 @@ Proof
   qexists `ss'` >> simp[] >> irule sym_emit_kinds_pop >>
   qexistsl [`3`, `ps`, `ss`] >> simp[]
 QED
+
+Theorem sym_code_end_add_prepared_layout:
+  opaque_use_ok fn /\ label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = ADD /\
+  inst.inst_operands = [op; Label "code_end"] /\ label_positions_ok inst /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  ps.ps_stack = residual ++ selected /\
+  (selected = [op; Label "code_end"] \/ selected = [Label "code_end"; op]) ==>
+  ?w tail.
+    (selected = [op; Label "code_end"] /\
+     ss.sym_stack = Lab "code_end" 0 :: Val w :: tail) \/
+    (selected = [Label "code_end"; op] /\
+     ss.sym_stack = Val w :: Lab "code_end" 0 :: tail)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~is_label_operand op` by gvs[unitShapeDefsTheory.label_positions_ok_def] >>
+  `!sv. op_kind_ok fn ret op sv <=> ?w. sv = Val w` by
+    (gen_tac >> irule ordinary_source_input_numeric_kind >> simp[] >>
+     conj_tac >- metis_tac[] >> qexists `inst` >> gvs[MEM]) >>
+  gvs[sym_kinds_ok_def, REVERSE_APPEND, LIST_REL_SPLIT1, LIST_REL_CONS1,
+      op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def] >> metis_tac[]
+QED
+
+Theorem asm_sym_code_end_add_value:
+  asm_sym_rel p env cs ss /\
+  ((ss.sym_stack = Lab "code_end" 0 :: Val w :: tail /\
+    eval_operands [Label "code_end"; op] vs = SOME (TAKE 2 cs.as_stack)) \/
+   (ss.sym_stack = Val w :: Lab "code_end" 0 :: tail /\
+    eval_operands [op; Label "code_end"] vs = SOME (TAKE 2 cs.as_stack))) ==>
+  eval_operand op vs = SOME w
+Proof
+  strip_tac >>
+  gvs[asmSymBridgeTheory.asm_sym_rel_def, LIST_REL_CONS1,
+      asmSymBridgeTheory.sval_conc_def, venomStateTheory.eval_operands_def,
+      AllCaseEqs()]
+QED
+
+Theorem sym_code_end_add_prepared_safe:
+  inst.inst_opcode = ADD /\ inst.inst_operands = [op; Label "code_end"] /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ fn_shape_ok fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  asm_sym_rel p env cs ss /\ sym_kinds_ok cplan fn ret srest ps ss /\
+  venom_asm_rel lo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  ps.ps_stack = residual ++ selected /\
+  (selected = [op; Label "code_end"] \/ selected = [Label "code_end"; op]) /\
+  EVERY (\at. at <> dead_stack_marker) selected /\
+  (!at. MEM at selected ==>
+    eval_operand at (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) lo at) /\
+  (!w. eval_operand op vs = SOME w ==> w2n w < dimword (:256) DIV 2) ==>
+  ?w tail. sym_delta_ok (w2n w) /\
+    (ss.sym_stack = Lab "code_end" 0 :: Val w :: tail \/
+     ss.sym_stack = Val w :: Lab "code_end" 0 :: tail)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `label_positions_ok inst` by
+    metis_tac[unitShapeDefsTheory.fn_shape_ok_def, EVERY_MEM,
+              unitShapeDefsTheory.inst_shape_ok_def] >>
+  `eval_operands (REVERSE selected) vs = SOME (TAKE (LENGTH selected) cs.as_stack)` by
+    (irule ordinary_prepared_source_evaluation >> simp[] >>
+     qexistsl [`fn`, `inst`, `lo`, `m`, `ps`, `ra`, `residual`] >>
+     fs[MEM] >> metis_tac[MEM]) >>
+  drule_all sym_code_end_add_prepared_layout >> strip_tac >>
+  `eval_operand op vs = SOME w` by
+    (irule asm_sym_code_end_add_value >>
+     qexistsl [`cs`, `env`, `p`, `ss`, `tail`] >> gvs[]) >>
+  metis_tac[sym_delta_ok_def]
+QED
+
+Theorem sym_code_end_add_run:
+  (ss.sym_stack = Lab "code_end" 0 :: Val w :: tail \/
+   ss.sym_stack = Val w :: Lab "code_end" 0 :: tail) /\
+  sym_delta_ok (w2n w) /\ sym_data_label p env "code_end" /\
+  asm_block_at p ss.sym_base.as_pc [AsmOp "ADD"] ==>
+  sym_steps p env 1 ss = SymOK
+    (ss with <|sym_base := asm_next ss.sym_base;
+               sym_stack := Lab "code_end" (w2n w) :: tail|>)
+Proof
+  strip_tac >> irule sym_steps_single_emit >> qexists `AsmOp "ADD"` >>
+  simp[] >> metis_tac[sym_step_add_data_left, sym_step_add_data_right,
+                     arithmeticTheory.ADD]
+QED
+
+Theorem sym_code_end_add_result_kinds:
+  retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ADD /\ inst.inst_operands = [op; Label "code_end"] /\
+  inst.inst_outputs = [x] /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  ps.ps_stack = residual ++ selected /\ LENGTH selected = 2 /\
+  ss'.sym_mem_labels = ss.sym_mem_labels /\
+  ss'.sym_stack = Lab "code_end" d :: DROP 2 ss.sym_stack /\
+  qs = ps with ps_stack := stack_push (Var x) (stack_pop 2 ps.ps_stack) ==>
+  sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  strip_tac >>
+  `op_kind_ok fn ret (Var x) (Lab "code_end" d)` by
+    (`MEM x inst.inst_outputs` by simp[] >>
+     drule_all code_end_add_output_kind >> simp[]) >>
+  gvs[sym_kinds_ok_def] >> qexists `Lab "code_end" d :: DROP 2 top` >>
+  `LENGTH top = LENGTH ps.ps_stack` by metis_tac[LIST_REL_LENGTH, LENGTH_REVERSE] >>
+  simp[stackModelTheory.stack_push_def, stackModelTheory.stack_pop_def,
+       SNOC_APPEND, REVERSE_APPEND, rich_listTheory.DROP_REVERSE,
+       rich_listTheory.BUTLASTN_TAKE_UNCOND, DROP_APPEND1] >>
+  drule rich_listTheory.LIST_REL_DROP >>
+  disch_then (qspec_then `2` mp_tac) >>
+  `DROP 2 (REVERSE selected) = []` by simp[DROP_EQ_NIL] >>
+  simp[REVERSE_APPEND, DROP_APPEND, TAKE_APPEND1]
+QED
+
+Theorem sym_code_end_add_source_emit:
+  inst.inst_opcode = ADD /\ inst.inst_operands = [op; Label "code_end"] /\
+  inst.inst_outputs = [x] /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ fn_shape_ok fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  venom_asm_rel lo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  ps.ps_stack = residual ++ selected /\
+  (selected = [op; Label "code_end"] \/ selected = [Label "code_end"; op]) /\
+  EVERY (\at. at <> dead_stack_marker) selected /\
+  (!at. MEM at selected ==>
+    eval_operand at (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) lo at) /\
+  (!w. eval_operand op vs = SOME w ==> w2n w < dimword (:256) DIV 2) /\
+  sym_data_label p env "code_end" /\
+  qs = ps with ps_stack := stack_push (Var x) (stack_pop 2 ps.ps_stack) /\
+  asm_block_at p ss.sym_base.as_pc [AsmOp "ADD"] /\
+  asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p)
+    p 1 cs = AsmOK cs' ==>
+  ?ss'. sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all sym_code_end_add_prepared_safe >>
+  disch_then (qx_choose_then `w` (qx_choose_then `tail`
+    (map_every assume_tac o CONJUNCTS))) >>
+  drule_all sym_code_end_add_run >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `sym_steps p env 1 ss = SymOK final` >>
+  qexists `final` >> simp[] >> conj_tac
+  >- (irule sym_emit_run_endpoint >> metis_tac[]) >>
+  conj_tac >- simp[Abbr `final`] >>
+  irule sym_code_end_add_result_kinds >>
+  conj_tac >- gvs[unitShapeDefsTheory.fn_shape_ok_def] >>
+  qexistsl [`w2n w`, `inst`, `op`, `ps`, `residual`, `selected`, `ss`, `x`] >>
+  simp[Abbr `final`] >>
+  gvs[unitShapeDefsTheory.fn_shape_ok_def, LENGTH]
+QED
