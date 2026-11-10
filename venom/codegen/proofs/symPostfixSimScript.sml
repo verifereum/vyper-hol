@@ -1293,3 +1293,43 @@ Proof
   asm_rewrite_tac[] >> pure_rewrite_tac[APPEND_NIL] >>
   irule scratch_replay_dup_chunk_large >> simp[]
 QED
+
+
+Theorem scratch_replay_do_dup_deep:
+  15 < dist /\ dist < LENGTH ps.ps_stack /\
+  do_dup dist ps = (ops,qs) /\
+  offsets = FST (doSwapSim$spill_alloc_n [] ps.ps_alloc
+    (REVERSE (top_n (dist - 15) ps.ps_stack))) /\
+  LENGTH offsets = dist - 15 /\ ALL_DISTINCT offsets /\
+  EVERY (\off. off < dimword (:256) /\
+    (!b. in_mem_range off 32 b ==> R b /\ context_spill_byte cplan b)) offsets /\
+  (!off old. MEM off offsets /\ MEM old offsets /\ off <> old ==>
+    off + 32 <= old \/ old + 32 <= off) ==>
+  ?inventory. scratch_replay cplan R ops (REVERSE ps.ps_stack) FEMPTY
+    (REVERSE qs.ps_stack) inventory
+Proof
+  strip_tac >>
+  qspecl_then [`dist`, `ps`] mp_tac doSwapSimTheory.do_dup_big_decompose >>
+  (impl_tac >- simp[arithmeticTheory.GREATER_DEF]) >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  pure_asm_rewrite_tac[pairTheory.PAIR_EQ] >> strip_tac >>
+  `LENGTH (top_n (dist - 15) ps.ps_stack) = dist - 15` by
+    simp[top_n_def] >>
+  `TAKE (LENGTH ps.ps_stack - (dist - 15)) ps.ps_stack ++
+    top_n (dist - 15) ps.ps_stack = ps.ps_stack` by
+    (irule doSwapSimTheory.top_n_suffix >> simp[]) >>
+  `REVERSE ps.ps_stack = REVERSE (top_n (dist - 15) ps.ps_stack) ++
+    REVERSE (TAKE (LENGTH ps.ps_stack - (dist - 15)) ps.ps_stack)` by
+    metis_tac[REVERSE_APPEND] >>
+  `REVERSE qs.ps_stack = stack_peek dist ps.ps_stack :: REVERSE ps.ps_stack` by
+    gvs[stack_dup_def, REVERSE_APPEND] >>
+  `stack_peek dist ps.ps_stack =
+    EL 15 (REVERSE (TAKE (LENGTH ps.ps_stack - (dist - 15)) ps.ps_stack))` by
+    simp[stack_peek_def, EL_REVERSE, EL_TAKE, arithmeticTheory.PRE_SUB1] >>
+  qexists `FEMPTY |++ ZIP (offsets,REVERSE (top_n (dist - 15) ps.ps_stack))` >>
+  mp_tac (Q.ISPECL [`REVERSE (TAKE (LENGTH ps.ps_stack - (dist - 15)) ps.ps_stack)`,
+    `REVERSE (top_n (dist - 15) ps.ps_stack)`]
+    (Q.GENL [`g`, `items`] scratch_replay_dup_chunk)) >>
+  (impl_tac >- simp[]) >>
+  simp[]
+QED
