@@ -3,7 +3,8 @@ Ancestors
   placeMemoryStaging placeMemoryTypedPrimitive exprLoweringProps
   placeMemoryCopyEffect fragGasMode exprSimProps valueCopy
   context compileEnv venomState venomInst exprSimAlloc fragExec
-  loweringHalt abiTupleProps rich_list
+  loweringHalt abiTupleProps rich_list exprSimCopy localMemoryStorePath
+  stmtSimDefs venomMemDefs emitHelperProps exprSimStorageCopy
 
 (* The staging copy is a snapshot. Only the value's live footprint needs
    to be valid at the source; the dead capacity may overlap the temporary. *)
@@ -51,7 +52,9 @@ Theorem assign_place_staging_live:
     LENGTH s.vs_memory <= LENGTH u.vs_memory /\
     ~u.vs_halted /\ u.vs_current_bb = sn.cs_current_bb /\
     u.vs_inst_idx = LENGTH sn.cs_current_insts /\
-    eval_operand buf.buf_operand u = SOME tw
+    eval_operand buf.buf_operand u = SOME tw /\
+    stmt_state_rel ctx func cenv cx ee u /\
+    alloca_frame cenv ee sa s cenv ee u
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `cs_extends sa sm` by metis_tac[compile_alloc_buffer_extends] >>
@@ -72,8 +75,46 @@ Proof
   `val_in_memory stv v (w2n tw) t.vs_memory` by
     (irule valueCopyTheory.val_in_memory_relocate >> simp[] >>
      qexistsl_tac [`w2n sw`, `n`, `s.vs_memory`] >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx ee t` by suspend "copy_state" >>
+  `alloca_frame cenv ee sa s cenv ee t` by suspend "copy_frame" >>
   qexistsl_tac [`r`, `t`, `tw`] >> simp[] >>
   rpt conj_tac >> rpt strip_tac >>
-  gvs[regions_disjoint_def, eval_operand_def, lookup_var_def] >>
+  gvs[compileEnvTheory.regions_disjoint_def, eval_operand_def, lookup_var_def] >>
   metis_tac[]
 QED
+
+Resume assign_place_staging_live[copy_state]:
+  markerLib.RESUME_TAC >> (rpt strip_tac >>
+  drule compile_alloc_buffer_emission >>
+  disch_then (qx_choosel_then [`sx`, `q`] strip_assume_tac) >>
+  `local_ptrs_reserved cenv sm` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `fn_has_code sx sm func` by metis_tac[fn_has_code_split] >>
+  `MEM (mk_inst sx.cs_next_id ALLOCA [Lit (n2w n)] [q]) (fn_insts func)` by
+    (irule emit_inst_fn_member >> qexists_tac `sm` >> simp[]) >>
+  `sx.cs_next_id = sa.cs_next_id` by simp[] >>
+  irule copy_buffer_state_rel_frame >>
+  qexistsl_tac [`w2n tw`, `mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [q]`, `r`, `sm`, `n`] >>
+  simp[mk_inst_def, compileEnvTheory.regions_disjoint_def] >>
+  conj_tac >- (fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> fs[] >>
+    qpat_x_assum `!a len. _ ==> mem_bytes_at a len _ = _` irule >> decide_tac) >>
+  conj_tac
+  >- gvs[copy_static_def, venom_state_component_equality] >>
+  qpat_x_assum `MEM _ _` mp_tac >> simp[mk_inst_def])
+QED
+
+Resume assign_place_staging_live[copy_frame]:
+  markerLib.RESUME_TAC >> (rpt strip_tac >>
+  `allocas_non_overlapping t` by
+    fs[stmt_state_rel_def, state_rel_def, alloca_inv_def] >>
+  `!ad len. ad + len <= w2n tw \/ w2n tw + n <= ad ==>
+    mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory` by
+    (gvs[] >> metis_tac[]) >>
+  irule alloca_frame_owned_copy >> simp[] >>
+  rpt conj_tac
+  >- (qexistsl_tac [`w2n tw`, `sa.cs_next_id`, `n`] >> gvs[] >> metis_tac[]) >>
+  qexistsl_tac [`ctx`, `cx`, `func`] >> simp[])
+QED
+
+Finalise assign_place_staging_live
