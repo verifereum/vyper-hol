@@ -42,16 +42,6 @@ Proof
   simp[expr_val_rel_def] >> metis_tac[]
 QED
 
-Theorem literal_word_post_operand:
-  expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
-  is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
-  eval_operand op s = SOME (typed_val_to_w256 tv v)
-Proof
-  rw[expr_post_def] >> gvs[post_value_type_word] >>
-  metis_tac[literal_word_operand]
-QED
-
 Theorem literal_word_post_cons:
   expr_post ctx func cenv cx e es sa s1 s0 es1 v x t /\
   stmt_state_rel ctx func cenv cx es' u /\
@@ -69,7 +59,7 @@ Theorem literal_word_post_cons:
 Proof
   strip_tac >>
   `eval_operand x t = SOME (typed_val_to_w256 tv v)` by
-    metis_tac[literal_word_post_operand] >>
+    metis_tac[expr_post_typed_stack_operand] >>
   `wb_frame cenv es sa s0 t` by metis_tac[expr_post_frame] >>
   simp[] >> conj_tac
   >- (irule eval_operand_frame >> goal_assum (drule_at Any) >>
@@ -127,7 +117,7 @@ Theorem literal_word_post_singleton:
   wb_frame cenv es sa s0 s
 Proof
   strip_tac >> simp[] >>
-  metis_tac[literal_word_post_operand, expr_post_state, expr_post_frame]
+  metis_tac[expr_post_typed_stack_operand, expr_post_state, expr_post_frame]
 QED
 
 Theorem literal_enumerate_membership:

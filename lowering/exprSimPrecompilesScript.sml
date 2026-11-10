@@ -39,7 +39,7 @@
  *     stack_args_values_typed, stack_args_values_typed_body,
  *     typed_builtin_stack_args_values, expr_body_pre_stack_result,
  *     expr_sim_pre_stack_result,
- *     expr_post_typed_stack_operand, expr_post_typed_stack_intro
+ *     expr_post_typed_stack_intro (operand extraction is in loweringPosts)
  *   - scratch buffers: scratch_mstore_frame, mem_bytes_at_store_append,
  *     scratch_three_word_stores, scratch_four_word_stores,
  *     scratch_memory_frame
@@ -306,18 +306,6 @@ Theorem ecrecover_typing:
   EVERY (\t. t = BaseT (UintT 256) \/ t = BaseT (BytesT (Fixed 32))) (TL (TL ts))
 Proof
   simp[well_typed_builtin_app_def]
-QED
-
-Theorem expr_post_typed_stack_operand:
-  expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
-  is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
-  eval_operand op s = SOME (typed_val_to_w256 tv v)
-Proof
-  rpt strip_tac >>
-  `post_value_type cenv e = expr_type e` by
-    metis_tac[post_value_type_word] >>
-  gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]
 QED
 
 Theorem expr_post_typed_stack_intro:

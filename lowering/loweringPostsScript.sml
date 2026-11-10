@@ -338,6 +338,18 @@ Definition expr_post_def:
     locals_kept cenv es s0 s
 End
 
+Theorem expr_post_typed_stack_operand:
+  expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+  is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
+  eval_operand op s = SOME (typed_val_to_w256 tv v)
+Proof
+  rpt strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[post_value_type_word] >>
+  gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]
+QED
+
 (* The slot w holds the value obtained by reading the captured source
    result at es, the slots it occupies are in range (slots_in_range):
    a word's slot holds its value's encoding, so a load of the slot gives

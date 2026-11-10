@@ -8,7 +8,7 @@ Ancestors
   exprSimDefs
   loweringPosts exprSimTypedAlloc
   gasContext gasExemptCert
-  fragGasOriginPtr bodyPtrDefs gasSummary bodySimFull gasOutcomeFull bodySim
+  fragGasOriginPtr fragGasOriginPtrExec bodyPtrDefs gasSummary bodySimFull gasOutcomeFull bodySim
   list rich_list finite_map fragExec freshWrites
   vyperTypeABI
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
@@ -483,6 +483,111 @@ Proof
   pop_assum SUBST1_TAC >> irule gas_exempt_cert_error_value >> simp[]
 QED
 
+Theorem compile_return_word_int_code[local]:
+  cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+  cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
+  is_word_type ty ==>
+  compile_stmt cenv lctx ty (Return (SOME e)) =
+    comp_bind (lower_value compile_expr cenv ty e)
+      (\op. emit_inst RET [op; Var rpc] [])
+Proof
+  strip_tac >>
+  simp[Once compile_stmt_def, compile_internal_return_from_env_def,
+       word_type_elem_types, compile_internal_return_def,
+       comp_bind_def, comp_return_def, FUN_EQ_THM]
+QED
+
+Theorem return_word_compile_parts[local]:
+  cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+  cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
+  is_word_type ty /\
+  stmt_env cenv lctx ty (Return (SOME e)) sa = (cenv', sb) /\
+  fn_has_code sa sb func ==>
+  cenv' = cenv /\
+  ?op sm. lower_value compile_expr cenv ty e sa = (op, sm) /\
+    emit_inst RET [op; Var rpc] [] sm = ((), sb) /\
+    fn_has_code sa sm func /\ fn_has_code sm sb func
+Proof
+  strip_tac >>
+  `compile_stmt cenv lctx ty (Return (SOME e)) =
+    comp_bind (lower_value compile_expr cenv ty e)
+      (\op. emit_inst RET [op; Var rpc] [])` by
+    metis_tac[compile_return_word_int_code] >>
+  gvs[stmt_env_def, declare_stmt_local_def, comp_bind_def,
+      comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[fn_has_code_split, cs_extends_emit_inst, compile_expr_grows]
+QED
+
+Theorem emitted_ret_shadow_prefix[local]:
+  emit_inst RET [op; Var rpc] [] sm = ((), sb) /\
+  emit_inst RET [shadow_op; Var rpc] [] shadow_sm = ((), shadow_sb) /\
+  gas_shadow_state sb shadow_sb ==>
+  op = shadow_op /\ gas_shadow_state sm shadow_sm
+Proof
+  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  strip_tac >> gvs[gasShadowStateTheory.gas_shadow_state_def,
+    gasShadowStateTheory.gas_shadow_inst_def, mk_inst_def]
+QED
+
+Theorem return_word_operand[local]:
+  IS_SOME (type_stmt env ty (Return (SOME e))) /\ is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  expr_post ctx func cenv cx e es sa sb s0 ee v op s ==>
+  eval_operand op s = SOME (typed_val_to_w256 tv v)
+Proof
+  strip_tac >>
+  `expr_type e = ty` by
+    (gvs[type_stmt_def, AllCaseEqs()] >>
+     metis_tac[compileEnvTheory.type_widens_to_word]) >>
+  metis_tac[expr_post_typed_stack_operand]
+QED
+
+Theorem emitted_ret_origin_ptr[local]:
+  emit_inst RET (ops ++ [Var rpc]) [] sa = ((), sb) /\
+  fn_has_code sa sb func /\ eval_operands ops s = SOME vals /\
+  lookup_var rpc s = SOME pc /\
+  EVERY (\op. op_taint tn op = {}) (ops ++ [Var rpc]) /\
+  ~ctx_has_dalloca ctx /\
+  ghost_inv_at D lo d cenv cx es G tn s /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
+    (s, G, tn) []
+    (IntRet <| iret_values := vals; iret_adopt_fmp := NONE |> s, G, tn)
+Proof
+  strip_tac >>
+  qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
+  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  drule fn_has_code_same_block >> simp[] >> strip_tac >>
+  `!fuel. step_inst fuel ctx
+     (mk_inst sa.cs_next_id RET (ops ++ [Var rpc]) []) s =
+     IntRet <| iret_values := vals; iret_adopt_fmp := NONE |> s` by
+    (simp[step_inst_non_invoke, mk_inst_def] >>
+     metis_tac[step_ret_values, mk_inst_def]) >>
+  irule (cj 3 gas_origin_ptr_path_rules) >>
+  simp[exit_result_def, gas_origin_ptr_edge_def,
+       fragGasOriginTheory.gas_origin_edge_def,
+       fragGasPathPtrTheory.gas_path_ptr_edge_def] >>
+  conj_tac
+  >- (qexists_tac `0` >>
+      simp[gasEventsTheory.gas_events_step_def, mk_inst_def,
+           memSafeRunTheory.mem_safe_step_non_invoke,
+           unitTransformDefsTheory.inst_mem_below_frontier_def,
+           contextCodegenRelTheory.source_memory_read_ranges_def,
+           codegenRelTheory.source_memory_write_ranges_def]) >>
+  qexists_tac `0` >>
+  simp[gasCountTheory.gas_count_step_def,
+       ptrSafeRunTheory.ptr_safe_step_def,
+       ptrSafeRunTheory.ptr_inst_ok_def, mk_inst_def] >>
+  simp[ptrDisciplineTheory.access_ok_def,
+       ptrDisciplineTheory.taint_ok_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def] >>
+  gvs[EVERY_MEM] >> metis_tac[ghost_inv_at_def]
+QED
+
 Theorem compile_return_none_int_origin_ptr:
   cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
   compile_stmt cenv lctx ty (Return NONE) sa = ((), sb) /\
@@ -508,36 +613,9 @@ Proof
     metis_tac[ghost_inv_at_def] >>
   `?pc. lookup_var rpc s = SOME pc` by
     metis_tac[ret_pc_ok_def] >>
-  qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
-  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
-  strip_tac >> gvs[] >>
-  drule fn_has_code_same_block >> simp[] >> strip_tac >>
-  `!fuel. step_inst fuel ctx (mk_inst sa.cs_next_id RET [Var rpc] []) s =
-     IntRet <| iret_values := []; iret_adopt_fmp := NONE |> s` by
-    (simp[step_inst_non_invoke, mk_inst_def] >>
-     mp_tac (Q.SPECL [`sa.cs_next_id`, `[]`, `rpc`, `s`, `[]`, `pc`]
-       step_ret_values) >> simp[eval_operands_def, mk_inst_def]) >>
-  conj_tac
-  >- (irule (cj 3 gas_origin_ptr_path_rules) >>
-      simp[exit_result_def, gas_origin_ptr_edge_def,
-           fragGasOriginTheory.gas_origin_edge_def,
-           fragGasPathPtrTheory.gas_path_ptr_edge_def] >>
-      conj_tac
-      >- (qexists_tac `0` >>
-          simp[gasEventsTheory.gas_events_step_def, mk_inst_def,
-               memSafeRunTheory.mem_safe_step_non_invoke,
-               unitTransformDefsTheory.inst_mem_below_frontier_def,
-               contextCodegenRelTheory.source_memory_read_ranges_def,
-               codegenRelTheory.source_memory_write_ranges_def]) >>
-      qexists_tac `0` >>
-      simp[gasCountTheory.gas_count_step_def,
-           ptrSafeRunTheory.ptr_safe_step_def,
-           ptrSafeRunTheory.ptr_inst_ok_def, mk_inst_def] >>
-      simp[ptrDisciplineTheory.access_ok_def,
-           ptrDisciplineTheory.taint_ok_def,
-           contextCodegenRelTheory.source_memory_read_ranges_def,
-           codegenRelTheory.source_memory_write_ranges_def] >>
-      metis_tac[ghost_inv_at_def]) >>
+  simp[] >> conj_tac
+  >- (irule (Q.INST [`ops` |-> `[]`] emitted_ret_origin_ptr) >>
+      simp[eval_operands_def] >> metis_tac[]) >>
   conj_tac >- simp[Once evaluate_def, raise_def] >>
   simp[intret_q_def, result_rel_def, intret_vals_match_def] >>
   irule state_rel_scopes_nil >> gvs[stmt_state_rel_def]
@@ -594,6 +672,128 @@ Proof
     [`D`, `lo`, `d`, `ctx`, `shadow_ctx`, `PG`, `func`, `shadow_func`,
      `cx`, `lctx`, `cenv'`, `NoneT`, `ret_tv`, `es`, `rpc`, `slot_size`]
     compile_return_none_int_frag_full) >>
+  simp[] >>
+  pure_rewrite_tac[stmt_frag_full_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  irule gas_outcome_full_post_mono >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  first_x_assum (qspec_then `tail` mp_tac) >>
+  simp[stmt_exit_ptr_def] >> strip_tac >> simp[] >>
+  disj2_tac >> gvs[intret_q_def, result_rel_def] >>
+  drule_all (Q.INST
+    [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
+    constructor_exit_state_rel) >> simp[]
+QED
+
+(* Scalar internal returns retain the expression's joint source prefix. *)
+Theorem compile_return_word_int_frag_full:
+  !D lo d ctx shadow_ctx PG func shadow_func cx lctx cenv ty tv es e env rpc slot_size.
+   cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+   cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
+   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+   expr_sim_inv cenv cx env es /\
+   stmt_exprs_ok cenv (Return (SOME e)) /\
+   IS_SOME (type_stmt env ty (Return (SOME e))) /\
+   call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
+   (!ety. expr_sim_full (D,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ety e es /\
+           expr_vv_sim_full (D,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ety e es)
+   ==>
+   stmt_frag_full (D,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx lctx
+     (\v ee gt r. intret_q func cenv cx tv v ee r) cenv
+     (stmt_env cenv lctx ty (Return (SOME e)))
+     (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
+     (eval_stmt cx (Return (SOME e))) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  qpat_assum `stmt_env _ _ _ (Return (SOME e)) sa = _`
+    (mp_then Any mp_tac return_word_compile_parts) >> simp[] >>
+    disch_then drule_all >> strip_tac >>
+  qpat_assum `stmt_env _ _ _ (Return (SOME (gas_shadow_expr e))) shadow_sa = _`
+    (mp_then Any mp_tac return_word_compile_parts) >> simp[] >>
+    disch_then drule_all >> strip_tac >>
+  drule_all emitted_ret_shadow_prefix >> strip_tac >> gvs[] >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[return_forced_admissible] >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+     not_fresh_at sa x` by metis_tac[ret_pc_ok_def] >>
+  qpat_x_assum `!ety. _` (qspec_then `ty` strip_assume_tac) >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[expr_sim_full_def] >> strip_tac >>
+  qpat_x_assum `!sa sb shadow_sa shadow_sb op s0 G0 tn0. _`
+    (qspecl_then [`sa`, `sm`, `shadow_sa`, `sm'`, `op`, `s0`, `G0`, `tn0`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `gas_outcome_full _ _ (bind _ _) _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def])
+  >- (gvs[] >>
+      `~t.vs_halted` by
+        (drule gas_origin_ptr_path_exec >> simp[exit_result_def] >> metis_tac[]) >>
+      `eval_operand op t = SOME (typed_val_to_w256 tv v)` by
+        metis_tac[return_word_operand] >>
+      `?pc. lookup_var rpc t = SOME pc` by
+        metis_tac[ret_pc_ok_def, expr_post_def] >>
+      `op_taint tn' op = {} /\ op_taint tn' (Var rpc) = {}` by
+        metis_tac[ptr_val_ok_def, ghost_inv_at_def] >>
+      `gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (t,G',tn') []
+        (IntRet <|iret_values := [typed_val_to_w256 tv v]; iret_adopt_fmp := NONE|> t,G',tn')` by
+        (irule (Q.INST [`ops` |-> `[op]`] emitted_ret_origin_ptr) >>
+         simp[eval_operands_def] >> conj_tac
+         >- (qexistsl_tac [`op`, `pc`, `rpc`, `sm`, `sb`] >> simp[]) >>
+         metis_tac[]) >>
+      `gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        (s0,G0,tn0) marks
+        (IntRet <|iret_values := [typed_val_to_w256 tv v]; iret_adopt_fmp := NONE|> t,G',tn')` by
+        metis_tac[gas_origin_ptr_path_append, APPEND_NIL] >>
+      pure_rewrite_tac[gas_outcome_full_def] >>
+      qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`INR (ReturnException v)`, `ee`,
+        `IntRet <|iret_values := [typed_val_to_w256 tv v]; iret_adopt_fmp := NONE|> t`, `G'`, `tn'`] >>
+      conj_tac
+      >- (gen_tac >> gvs[eval_return_forced, bind_def, raise_def]) >>
+      simp[exit_result_def, stmt_exit_ptr_def, intret_q_gas_obs] >>
+      gen_tac >> disj2_tac >> simp[intret_q_def, result_rel_def] >>
+      reverse conj_tac >- metis_tac[intret_vals_match_word] >>
+      simp[state_rel_gas_obs] >> irule state_rel_scopes_nil >>
+      gvs[expr_post_def, stmt_state_rel_def, state_rel_gas_obs])
+  >- (gvs[] >> Cases_on `res`
+      >- gvs[expr_exit_def] >>
+      rename1 `expr_exit (INR err) r` >>
+      pure_rewrite_tac[gas_outcome_full_def] >>
+      qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`INR err`, `ee`, `r`, `G'`, `tn'`] >>
+      conj_tac
+      >- (gen_tac >> gvs[eval_return_forced, bind_def]) >>
+      simp[] >> disj2_tac >>
+      Cases_on `err` >> Cases_on `r` >>
+      gvs[stmt_exit_ptr_def, expr_exit_def] >>
+      rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
+  simp[gas_outcome_full_def] >> qexists_tac `marks` >> disj2_tac >>
+  metis_tac[return_forced_exempt]
+QED
+
+Theorem internal_frame_ret_word_full:
+  !D lo d ctx shadow_ctx PG func shadow_func cx cenv ty tv rpc slot_size.
+    cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+    cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
+    is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv ==>
+    frame_ret_ok_full
+      (D, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
+      (\v ee gt r. intret_q func cenv cx tv v ee r) cenv ty
+Proof
+  rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac[frame_ret_ok_full_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `eo`
+  >- gvs[type_stmt_def, is_word_type_def] >>
+  rename1 `Return (SOME e)` >>
+  `cenv'.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+   cenv'.ce_returns_count = 1 /\ cenv'.ce_return_buf = NONE` by
+    fs[same_frame_def, compile_env_component_equality] >>
+  mp_tac (Q.SPECL
+    [`D`, `lo`, `d`, `ctx`, `shadow_ctx`, `PG`, `func`, `shadow_func`,
+     `cx`, `lctx`, `cenv'`, `ty`, `tv`, `es`, `e`, `env`, `rpc`, `slot_size`]
+    compile_return_word_int_frag_full) >>
   simp[] >>
   pure_rewrite_tac[stmt_frag_full_def] >> strip_tac >>
   rpt gen_tac >> strip_tac >>
