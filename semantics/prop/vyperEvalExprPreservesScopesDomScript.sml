@@ -469,7 +469,7 @@ Proof
       Cases_on `bt = Env MsgGas` >> simp[] >>
       Cases_on `bt = Bop In \/ bt = Bop NotIn` >> simp[]
       >- (ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-          >- (first_x_assum irule >> metis_tac[]) >>
+          >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
           gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[] >>
           ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
       ho_match_mp_tac scope_pop_effect_bind >> conj_tac

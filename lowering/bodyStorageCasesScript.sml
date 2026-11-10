@@ -620,6 +620,8 @@ Proof
       qexists_tac `st` >> simp[]) >>
   Cases_on `bt = Bop In \/ bt = Bop NotIn`
   >- (simp[] >>
+      `code_slice_source bt es = NONE` by
+        (qpat_x_assum `bt = Bop In \/ bt = Bop NotIn` strip_assume_tac >> gvs[]) >>
       qpat_x_assum `bt = Bop In \/ bt = Bop NotIn` kall_tac >>
       Cases_on `eval_exprs cx es st` >>
       rename1 `eval_exprs cx es st = (args_res,args_st)` >>
