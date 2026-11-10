@@ -1,6 +1,7 @@
 (* Common RawLog source/compiler and LOG execution interfaces. *)
 Theory exprSimRawLog
 Ancestors
+  exprSimHashBoundary
   list exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimHyps exprSimPrecompiles exprSimWordArgs exprSimSend exprSimAggregateSource compileEnv loweringStateRelDefs extCallOracleStep allocLimits
   vyperAST vyperTypeSystem vyperInterpreter vyperContext vyperValue vyperState
   vyperEvent venomExecSemantics venomInst venomState venomMemDefs exprLowering exprLoweringProps

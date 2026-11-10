@@ -24,6 +24,7 @@
 
 Theory exprSimRawCallCalldata
 Ancestors
+  exprSimHashBoundary
   exprSimSource exprSimHypsDefs exprSimDefs exprSimStack exprSimProps
   gasSummary gasSummaryCompose gasOutcome gasExemptCert
   fragGasMode fragGasPath fragGasSeq fragGasSeqAbort rawCallFragPath gasContext
