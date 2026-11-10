@@ -45,11 +45,14 @@ Proof
   TRY (simp[evaluate_def, return_def] >> NO_TAC) >>
   imp_res_tac closed_integer_expr_type >> gvs[] >>
   Cases_on `r` >> Cases_on `r'` >> gvs[] >>
+  Cases_on `bop = In` >> Cases_on `bop = NotIn` >> gvs[] >>
   simp[evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
        builtin_args_length_ok_def, return_def, read_result_def,
        get_accounts_def, evaluate_builtin_def, evaluate_type_def] >>
-  qmatch_goalsub_abbrev_tac `lift_sum X` >>
-  Cases_on `X` >>
+  rpt (qmatch_goalsub_abbrev_tac `lift_option_type X _` >>
+       Cases_on `X` >>
+       simp[lift_option_type_def, bind_def, return_def, raise_def]) >>
+  qmatch_goalsub_abbrev_tac `lift_sum X` >> Cases_on `X` >>
   simp[lift_sum_def, return_def, raise_def, precompile_call_success_def,
        precompile_builtin_def]
 QED

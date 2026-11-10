@@ -188,7 +188,8 @@ Theorem intcall_body_expr_ok:
        body_results_ok cx es) ==>
     body_expr_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >>
+  conj_tac >- gvs[] >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func cenv cx (Call v16 (IntCall (src_id_opt,fn)) es v17)`
     suffices_by metis_tac[expr_sim_case_of_vv] >>
   simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>

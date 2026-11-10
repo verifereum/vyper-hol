@@ -5,6 +5,7 @@
 
 Theory exprSimCallRawLog
 Ancestors
+  exprSimHashBoundary
   list exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimSource exprSimHyps exprSimSend vyperAST vyperTypeSystem
   vyperTypeCallGraph allocLimits supportedExprTraverse exprLowering
   vyperInterpreter vyperContext vyperValue vyperState exprCallbackContracts exprCallBounds

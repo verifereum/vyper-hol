@@ -922,7 +922,9 @@ Proof
       >- asm_simp_tac bool_ss [update_var_fields, map_result_state_def,
            update_var_halt_state_commute, update_var_set_returndata_commute] >>
       asm_simp_tac bool_ss [update_var_fields] >>
-      base_frame_body_tac)
+      base_frame_body_tac >>
+      simp[update_var_def, halt_state_def, set_returndata_def,
+           venom_state_component_equality])
   >- base_frame_tac (* INVALID *)
   >- base_frame_tac (* ASSERT *)
   >- base_frame_tac (* ASSERT_UNREACHABLE *)

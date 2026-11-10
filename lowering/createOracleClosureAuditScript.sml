@@ -24,12 +24,6 @@ val _ = app (fn thy =>
     app (fn (name, th) =>
       if null (List.filter (fn s => s <> "DISK_THM")
                  (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-      else if thy = "deadStoreElimProofs" andalso
-              List.exists (fn n => n = name)
-                ["dse_function_space_correct", "dse_function_correct"] then
-        (* Unchanged pre-existing whole-pass admissions.  Neither is used by
-           the CREATE boundary or the repaired effects classification. *)
-        print ("UNCHANGED ORACLE DEBT: " ^ thy ^ "." ^ name ^ "\n")
       else raise Fail ("Oracle dependency in " ^ thy ^ "." ^ name)) thms;
     print ("CREATE boundary audit: inspected " ^ thy ^ "\n")
   end) audited_create_boundary_theories;

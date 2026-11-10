@@ -369,7 +369,7 @@ val ctrl_opcode_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
 val ctrl_envelope_tac =
   asm_simp_tac ctrl_opcode_ss [] >>
   rpt (PURE_TOP_CASE_TAC >> asm_simp_tac ctrl_opcode_ss []) >>
-  gvs[scfg_ctrl_def];
+  gvs[scfg_ctrl_def, halt_state_def, set_returndata_def];
 
 Theorem scfg_ctrl_nonbranch:
   ~MEM i.inst_opcode [JMP; JNZ; DJMP; INVOKE] ==>

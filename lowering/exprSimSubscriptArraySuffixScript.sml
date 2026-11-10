@@ -1,7 +1,8 @@
 (* Source selection and counted suffix summaries for framed arrays. *)
 Theory exprSimSubscriptArraySuffix
 Ancestors
-  exprSimSubscriptArrayEndpoint exprSimSubscriptArrayFramed
+  exprSimHashBoundary
+  loweringStateRelDefs exprSimSubscriptArrayEndpoint exprSimSubscriptArrayFramed
   exprSimSubscriptArraySource gasSummary exprSimDefs vyperState
   vyperPlaceTyping vyperValueOperation vyperArray integer_word words integer
   exprSimSource exprSimCopy exprSimLen valueEncodingProps valueEncoding valueEncodingDefs
@@ -65,6 +66,10 @@ Proof
   simp[select_result_def, extend_place_def, place_type_value_def,
        read_place_def, get_immutables_def, get_address_immutables_def,
        lift_option_type_def, lift_sum_def, bind_def, ignore_bind_def, return_def, raise_def] >>
+  Cases_on `ALOOKUP s.immutables cx.txn.target` >> simp[return_def, raise_def] >>
+  Cases_on `FLOOKUP (get_source_immutables o' x) s'` >>
+  simp[return_def, raise_def] >>
+  Cases_on `subscripts_type (FST x') l` >> simp[return_def, raise_def] >>
   rpt (CASE_TAC >> simp[bind_def, ignore_bind_def, return_def, raise_def])
 QED
 
@@ -250,9 +255,9 @@ Proof
   simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_at_def] >>
   rpt strip_tac >>
   first_x_assum (drule_then strip_assume_tac) >> gvs[]
-  >- (irule (SIMP_RULE (srw_ss()) [] exprSimHashTheory.hash_live_footprint_bound) >>
+  >- (irule (SIMP_RULE (srw_ss()) [] exprSimHashBoundaryTheory.hash_live_footprint_bound) >>
       goal_assum (drule_at Any) >> metis_tac[]) 
-  >- (irule (SIMP_RULE (srw_ss()) [] exprSimHashTheory.hash_live_footprint_bound) >>
+  >- (irule (SIMP_RULE (srw_ss()) [] exprSimHashBoundaryTheory.hash_live_footprint_bound) >>
       goal_assum (drule_at Any) >> metis_tac[]) >>
   irule (SIMP_RULE (srw_ss()) [] (INST_TYPE [alpha |-> ``:256``] wordsTheory.w2n_lt))
 QED

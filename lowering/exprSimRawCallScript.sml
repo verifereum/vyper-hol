@@ -37,7 +37,7 @@ Ancestors
   vyperTypeExtCallSoundness vyperTypeEvalSoundness exprSimECArith exprSimUnwrap
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
   venomExecSemantics venomInst venomState exprSimSend
-  exprSimHash exprSimAlloc exprSimBuffer builtinSystem exprWordOperand exprSafeOperand exprOperandVar
+  exprSimHash exprSimHashBoundary exprSimAlloc exprSimBuffer builtinSystem exprWordOperand exprSafeOperand exprOperandVar
 Libs
   pairLib
 
@@ -3078,6 +3078,9 @@ Proof
      qpat_x_assum `!a w. eval_operand a t = SOME w ==> _`
        (qspec_then `Var x` mp_tac) >>
      simp[eval_operand_def, lookup_var_def]) >>
+  `immutable_alloca_sep func cenv cx es u` by
+    (irule immutable_alloca_sep_frame >> qexistsl_tac [`t`, `es`] >>
+     fs[stmt_state_rel_def] >> metis_tac[]) >>
   fs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
     accounts_rel_def, logs_rel_def, immutables_rel_def, venomMemDefsTheory.alloca_inv_def,
     venomMemDefsTheory.allocas_non_overlapping_def,
@@ -3924,8 +3927,8 @@ Theorem raw_call_output_alloca_sep[local]:
   cap <= rounded /\ initial.cs_next_id <= new_id ==>
   !aid b sz. aid < initial.cs_next_id /\
     FLOOKUP t.vs_allocas aid = SOME (b,sz) ==>
-    compileEnv$regions_disjoint outbase 32 b sz /\
-    compileEnv$regions_disjoint (outbase+32) cap b sz
+    loweringStateRelDefs$regions_disjoint outbase 32 b sz /\
+    loweringStateRelDefs$regions_disjoint (outbase+32) cap b sz
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   `aid <> new_id` by decide_tac >>
@@ -3938,10 +3941,10 @@ QED
 
 Theorem raw_call_output_local_sep[local]:
   (!name b sz. local_region cenv scopes t name b sz ==>
-    compileEnv$regions_disjoint outbase (rounded+32) b sz) /\ cap <= rounded ==>
+    loweringStateRelDefs$regions_disjoint outbase (rounded+32) b sz) /\ cap <= rounded ==>
   !name b sz. local_region cenv scopes t name b sz ==>
-    compileEnv$regions_disjoint outbase 32 b sz /\
-    compileEnv$regions_disjoint (outbase+32) cap b sz
+    loweringStateRelDefs$regions_disjoint outbase 32 b sz /\
+    loweringStateRelDefs$regions_disjoint (outbase+32) cap b sz
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   first_x_assum drule >>
@@ -3954,14 +3957,14 @@ Theorem raw_call_oracle_frame[local]:
   t.vs_memory = (write_memory_with_expansion dst payload s).vs_memory /\
   (!aid b sz. aid < sa.cs_next_id /\
     FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-    compileEnv$regions_disjoint dst (LENGTH payload) b sz) /\
+    loweringStateRelDefs$regions_disjoint dst (LENGTH payload) b sz) /\
   (!name b sz. local_region cenv es.scopes s0 name b sz ==>
-    compileEnv$regions_disjoint dst (LENGTH payload) b sz) /\
+    loweringStateRelDefs$regions_disjoint dst (LENGTH payload) b sz) /\
   ~not_fresh_at sa out ==>
   wb_frame cenv es sa s0 (update_var out result t)
 Proof
   strip_tac >>
-  `!b sz. compileEnv$regions_disjoint dst (LENGTH payload) b sz ==>
+  `!b sz. loweringStateRelDefs$regions_disjoint dst (LENGTH payload) b sz ==>
     mem_bytes_at b sz (update_var out result t).vs_memory =
     mem_bytes_at b sz s.vs_memory` by
     (rpt strip_tac >> simp[update_var_def] >>
@@ -3984,10 +3987,10 @@ Theorem raw_call_output_initial_locals[local]:
   wb_frame cenv es sa s0 t /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\ cap <= rounded /\
   (!name b sz. local_region cenv es'.scopes t name b sz ==>
-    compileEnv$regions_disjoint outbase (rounded+32) b sz) ==>
+    loweringStateRelDefs$regions_disjoint outbase (rounded+32) b sz) ==>
   !name b sz. local_region cenv es.scopes s0 name b sz ==>
-    compileEnv$regions_disjoint outbase 32 b sz /\
-    compileEnv$regions_disjoint (outbase+32) cap b sz
+    loweringStateRelDefs$regions_disjoint outbase 32 b sz /\
+    loweringStateRelDefs$regions_disjoint (outbase+32) cap b sz
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   `local_region cenv es'.scopes t name b sz` by
@@ -4034,9 +4037,9 @@ Theorem raw_call_oracle_path[local]:
     off + type_memory_size tv <= w2n ro \/ w2n ro + cap <= off) /\
   wb_frame cenv initial_es initial s0 s /\ initial.cs_next_var <= sa.cs_next_var /\
   (!aid b sz. aid < initial.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-    compileEnv$regions_disjoint (w2n ro) cap b sz) /\
+    loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz) /\
   (!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
-    compileEnv$regions_disjoint (w2n ro) cap b sz) ==>
+    loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz) ==>
   frag_path ctx sa sb (\u. u = s)
     (\u. stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
       wb_frame cenv initial_es initial s0 u /\
@@ -4121,9 +4124,9 @@ Theorem raw_call_allocated_tail_frag_aged[local]:
       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
     off + type_memory_size tv <= w2n ro \/ w2n ro + cap <= off) /\
   (!aid b sz. aid < initial.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-    compileEnv$regions_disjoint (w2n ro) cap b sz) /\
+    loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz) /\
   (!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
-    compileEnv$regions_disjoint (w2n ro) cap b sz) /\
+    loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz) /\
   (0 < cap ==>
     eval_operand ov s = SOME addr /\
     (!x. ov = Var x ==> not_fresh_at sa x) /\
@@ -4133,9 +4136,9 @@ Theorem raw_call_allocated_tail_frag_aged[local]:
       (!name lb lsz. local_region cenv es.scopes s name lb lsz ==>
         b + sz <= lb \/ lb + lsz <= b)) /\
     (!aid b sz. aid < initial.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-      compileEnv$regions_disjoint (w2n addr) 32 b sz) /\
+      loweringStateRelDefs$regions_disjoint (w2n addr) 32 b sz) /\
     (!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
-      compileEnv$regions_disjoint (w2n addr) 32 b sz)) ==>
+      loweringStateRelDefs$regions_disjoint (w2n addr) 32 b sz)) ==>
   frag_exec ctx sa sb (\u. u = s)
     (\u. outcome.co_success /\
       stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\

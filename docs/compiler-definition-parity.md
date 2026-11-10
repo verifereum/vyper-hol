@@ -154,7 +154,7 @@ are described in [abi-encoder-contracts.md](abi-encoder-contracts.md).
 | HOL file/area | Purpose | Status | Notes |
 |---|---|---|---|
 | `bytecode/eval/evalCompilerScript.sml` and `evalCompilerSubset*` | checked compiler fixture programs | reviewed for the frozen 101-fixture supported-subset corpus | Program definitions correspond to the tracked Vyper sources; the original 23 fixtures remain the first milestone. |
-| `bytecode/native/compilerNativeEmitScript.sml` and `bytecode_parity_native` | HOL-to-Python bytecode parity tests | 311 of 316 fixtures match; 5 known stale oracles | `compile_vyper` is emitted to native code and its deployment and runtime bytes compared with the pinned-Python oracle fixtures. |
+| `bytecode/native/compilerNativeEmitScript.sml` and `bytecode_parity_native` | HOL-to-Python bytecode parity tests | 286 of 316 fixtures match byte for byte; the other 30 are the expected bounded-decode differences (`decoder_divergent`) | `compile_vyper` is emitted to native code and its deployment and runtime bytes compared with the pinned-Python oracle fixtures. |
 | `bytecode/python-o1-bytecode-fixtures`, `python_o1_bytecode_oracle.py`, and `python-o1-no-asm-opt*/` | independently generated pinned-Python O1 bytecode oracle and comparison entrypoint | reproducible from pin | The generator verifies a clean checkout against `VYPER_PIN` and uses pinned `PASSES_O1`, `evm_version="prague"`, disabled metadata, and disabled final assembly optimization. |
 | `tests/vyper-test-exports` and generators | language-test AST/metadata export | uses repository pin by policy | Keep aligned with `VYPER_PIN`. |
 
