@@ -26,8 +26,8 @@ Ancestors
   exprSimDefs exprSimVVFrame exprSimSource exprSimHypsDefs
   stmtSimProps gasContext gasOutcome gasSummary gasSummaryCompose gasExemptCert
   fragGasPath fragGasMode fragGasSeq vyperStatePreservation
-  loweringPosts
-  list rich_list finite_map marker exprSimHyps
+  loweringPosts typedMemoryCopy exprSimTypedAlloc
+  list rich_list finite_map marker exprSimHyps exprSimIfExpCompat exprSimLayoutTransport
   fragExec  exprSimOps exprSimUnwrap freshWrites exprBopLowering loweringSlice
   vyperEvalExprPreservesScopesDom exprLowering emitHelperProps
   exprLoweringProps compileEnv loweringStateRelDefs context vyperAST vyperInterpreter vyperState
@@ -287,6 +287,24 @@ Proof
         disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[])
 QED
 
+Theorem ifexp_vv_own_alloc_frame[local]:
+  vv_own cenv cx ty sa sb es raw vv s /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+               FLOOKUP q.vs_allocas aid = SOME entry) /\
+  eval_operand (vv_operand vv) q = eval_operand (vv_operand vv) s /\
+  (!n b sz. local_region cenv es.scopes q n b sz <=>
+            local_region cenv es.scopes s n b sz) /\
+  sb.cs_next_id <= sm.cs_next_id ==>
+  vv_own cenv cx ty sa sm es raw vv q
+Proof
+  Cases_on `vv` >>
+  simp[vv_own_def, vv_operand_def, expr_val_own_def] >>
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP s.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+        metis_tac[])
+QED
+
 Theorem ifexp_alloc_local_regions[local]:
   !ctx func cenv cx es sa s q.
     stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
@@ -317,6 +335,267 @@ Proof
   gvs[compile_ifexp_arm_def, compile_store_memory_def,
       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[])
+QED
+
+(* Aggregate adapters copy from the physical arm layout into the annotation. *)
+Theorem ifexp_zero_source_fits[local]:
+  (!sty dty. arg_type_fits sty dty ==>
+    !tenv tv. evaluate_type tenv sty = SOME tv /\
+      type_memory_size tv = 0 ==> sty = dty) /\
+  (!stys dtys. arg_types_fit stys dtys ==>
+    !tenv tvs. OPT_MMAP (evaluate_type tenv) stys = SOME tvs /\
+      type_memory_size_list tvs = 0 ==> stys = dtys)
+Proof
+  ho_match_mp_tac vyperTypeSystemTheory.arg_type_fits_ind >>
+  simp[vyperTypeSystemTheory.arg_type_fits_def] >>
+  rpt strip_tac >>
+  gvs[evaluate_type_def, evaluate_types_OPT_MMAP, type_memory_size_def,
+      AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem ifexp_widened_source_positive[local]:
+  type_widens_to tenv sty dty /\ sty <> dty /\
+  evaluate_type tenv sty = SOME stv ==>
+  0 < type_memory_size stv
+Proof
+  simp[vyperTypeSystemTheory.type_widens_to_def] >> strip_tac >>
+  spose_not_then assume_tac >>
+  `type_memory_size stv = 0` by decide_tac >>
+  metis_tac[ifexp_zero_source_fits]
+QED
+
+Theorem ifexp_physical_source_positive[local]:
+  expr_body_pre cenv cx env e es /\
+  post_value_type cenv e <> expr_type e /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME stv ==>
+  0 < type_memory_size stv
+Proof
+  strip_tac >> irule ifexp_widened_source_positive >>
+  qexistsl_tac [`expr_type e`, `post_value_type cenv e`, `get_tenv cx`] >>
+  simp[] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_body_pre_def, expr_sim_inv_def,
+        vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  gvs[expr_body_pre_def] >>
+  drule_all post_value_type_widens >> simp[]
+QED
+
+Theorem ifexp_aggregate_footprint[local]:
+  !tenv t tv v.
+    evaluate_type tenv t = SOME tv /\ ~is_bytestring_type t ==>
+    val_footprint tv v = type_memory_size tv
+Proof
+  rpt gen_tac >> Cases_on `t` >>
+  simp[evaluate_type_def, is_bytestring_type_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs(), is_bytestring_type_def] >>
+  Cases_on `v` >> simp[val_footprint_def]
+QED
+
+Theorem ifexp_aggregate_source_region[local]:
+  expr_val_at cenv cx ty origin sa es v src s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  ~is_word_type ty /\ ~is_bytestring_type ty /\
+  eval_operand src s = SOME w ==>
+  type_memory_size tv = 0 \/
+  (?aid b sz. aid < sa.cs_next_id /\
+    FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
+    b <= w2n w /\ w2n w + type_memory_size tv <= b + sz) \/
+  (?n b sz. local_region cenv es.scopes s n b sz /\
+    b <= w2n w /\ w2n w + type_memory_size tv <= b + sz)
+Proof
+  strip_tac >>
+  `val_footprint tv v = type_memory_size tv` by
+    metis_tac[ifexp_aggregate_footprint] >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem ifexp_typed_adapter_parts[local]:
+  ~is_word_type t /\ ~same_memory_layout cenv arm_ty t /\
+  ~is_bytestring_type t /\ arm_ty <> t /\
+  compile_ifexp_arm cenv t arm_ty vv sa = (op,sb) ==>
+  ?buf sm src sn.
+    compile_alloc_buffer (type_memory_bytes cenv t) sa = (buf,sm) /\
+    unwrap_value cenv vv sm = (src,sn) /\
+    compile_store_memory_typed cenv buf.buf_operand t src arm_ty sn = ((),sb) /\
+    op = buf.buf_operand
+Proof
+  strip_tac >>
+  gvs[compile_ifexp_arm_def, compile_store_memory_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem ifexp_typed_alloc_source[local]:
+  compile_alloc_buffer (type_memory_bytes cenv dty) sa = (buf,sm) /\
+  compile_store_memory_typed cenv buf.buf_operand dty src sty sm = ((),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  type_widens_to (get_tenv cx) sty dty /\ sty <> dty /\
+  ~is_word_type sty /\ ~is_bytestring_type sty /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  type_memory_bytes cenv dty = type_memory_size dtv /\
+  type_memory_size dtv < dimword (:256) /\
+  value_has_type stv v /\ value_has_type dtv v /\ val_wf dtv v /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  stmt_state_rel ctx func cenv cx es s /\
+  expr_val_at cenv cx sty origin sa es v src s /\
+  eval_operand src s = SOME sw /\
+  val_in_memory stv v (w2n sw) s.vs_memory ==>
+  frag_exec ctx sa sb (\z. z = s)
+    (\u. ?w. stmt_state_rel ctx func cenv cx es u /\
+      eval_operand buf.buf_operand u = SOME w /\
+      w2n w + type_memory_size dtv < dimword (:256) /\
+      val_in_memory dtv v (w2n w) u.vs_memory /\
+      FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size dtv) /\
+      (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+        FLOOKUP u.vs_allocas aid = SOME entry) /\
+      (!off len. off + len <= w2n w \/ w2n w + type_memory_size dtv <= off ==>
+        mem_bytes_at off len u.vs_memory = mem_bytes_at off len s.vs_memory) /\
+      (!aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+        regions_disjoint (w2n w) (type_memory_size dtv) b len) /\
+      (!name b len. local_region cenv es.scopes s name b len ==>
+        regions_disjoint (w2n w) (type_memory_size dtv) b len)) R
+Proof
+  strip_tac >>
+  `w2n sw + type_memory_size stv < dimword (:256)` by
+    (drule_all expr_val_at_bound >>
+     `val_footprint stv v = type_memory_size stv` by
+       metis_tac[ifexp_aggregate_footprint] >> simp[]) >>
+  `0 < type_memory_size stv` by
+    (drule_all ifexp_widened_source_positive >> simp[]) >>
+  drule_all ifexp_aggregate_source_region >> strip_tac >> gvs[] >>
+  `val_wf stv v` by gvs[expr_val_at_def] >>
+  irule (SRULE [arithmeticTheory.ADD_COMM] compile_return_normalize_framed_frag) >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+(* Restore the expression frame after a fresh typed normalization. *)
+Theorem ifexp_typed_copy_post[local]:
+  expr_post ctx func ce cx e es origin sa s0 es' v src r /\
+  local_ptrs_reserved ce origin /\ local_ptrs_reserved ce sa /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  origin.cs_next_var <= sa.cs_next_var /\
+  origin.cs_next_id <= sa.cs_next_id /\ sa.cs_next_id < sb.cs_next_id /\
+  ~is_word_type dty /\ ~is_bytestring_type dty /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  value_has_type dtv v /\ val_wf dtv v /\
+  stmt_state_rel ctx func ce cx es' u /\ eval_operand op u = SOME w /\
+  val_in_memory dtv v (w2n w) u.vs_memory /\
+  FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size dtv) /\
+  (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x r) /\
+  (!aid entry. FLOOKUP r.vs_allocas aid = SOME entry ==>
+    FLOOKUP u.vs_allocas aid = SOME entry) /\
+  (!off len. off + len <= w2n w \/ w2n w + type_memory_size dtv <= off ==>
+    mem_bytes_at off len u.vs_memory = mem_bytes_at off len r.vs_memory) /\
+  (!aid b len. aid < sa.cs_next_id /\ FLOOKUP r.vs_allocas aid = SOME (b,len) ==>
+    regions_disjoint (w2n w) (type_memory_size dtv) b len) /\
+  (!name b len. local_region ce es'.scopes r name b len ==>
+    regions_disjoint (w2n w) (type_memory_size dtv) b len) ==>
+  expr_post ctx func ce cx (IfExp dty c a b) es origin sb s0 es' v op u
+Proof
+  strip_tac >>
+  `!name lb len. local_region ce es'.scopes u name lb len <=>
+    local_region ce es'.scopes r name lb len` by
+    (drule_all exprSimCopyTheory.copy_buffer_local_region_frame >> simp[]) >>
+  `!name lb len. local_region ce es.scopes s0 name lb len ==>
+    w2n w + type_memory_size dtv <= lb \/ lb + len <= w2n w` by
+    (rpt strip_tac >>
+     qpat_x_assum `!name b len. local_region ce es'.scopes r _ _ _ ==> _` mp_tac >>
+     simp[regions_disjoint_def] >> disch_then irule >> qexists_tac `name` >>
+     irule local_region_frame_fwd >> qexistsl_tac [`s0`, `origin`, `es.scopes`] >>
+     gvs[expr_post_def]) >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_post_def] >> strip_tac >>
+  simp[expr_post_def, expr_type_def, expr_val_rel_def] >>
+  conj_tac >- suspend "value_at" >>
+  conj_tac >- suspend "vars" >>
+  conj_tac >- suspend "memory" >>
+  suspend "locals"
+QED
+
+Resume ifexp_typed_copy_post[value_at]:
+  markerLib.RESUME_TAC >> simp[expr_val_at_def] >>
+  disj1_tac >> qexistsl_tac [`sa.cs_next_id`, `w2n w`, `type_memory_size dtv`] >>
+  simp[] >> conj_tac >- metis_tac[val_footprint_le] >>
+  rpt strip_tac >> gvs[regions_disjoint_def] >> metis_tac[]
+QED
+Resume ifexp_typed_copy_post[vars]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  `not_fresh_at sa x` by (irule not_fresh_at_mono >> qexists_tac `origin` >> simp[]) >>
+  metis_tac[]
+QED
+Resume ifexp_typed_copy_post[memory]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  `FLOOKUP r.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
+  `regions_disjoint (w2n w) (type_memory_size dtv) off sz` by
+    (qpat_x_assum `!aid b len. aid < sa.cs_next_id /\ _ ==> _` irule >>
+     qexists_tac `aid` >> simp[] >> decide_tac) >>
+  gvs[regions_disjoint_def] >> metis_tac[]
+QED
+Resume ifexp_typed_copy_post[locals]:
+  markerLib.RESUME_TAC >> irule exprSimCopyTheory.copy_buffer_locals_kept_frame >>
+  qexistsl_tac [`w2n w`, `r`, `type_memory_size dtv`] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ u.vs_memory = _` irule >> decide_tac) >>
+  simp[]
+QED
+Finalise ifexp_typed_copy_post[local]
+
+Theorem ifexp_typed_normalize_post[local]:
+  compile_alloc_buffer (type_memory_bytes ce dty) sa = (buf,sm) /\
+  compile_store_memory_typed ce buf.buf_operand dty src sty sm = ((),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce origin /\ local_ptrs_reserved ce sa /\
+  origin.cs_next_var <= sa.cs_next_var /\ origin.cs_next_id <= sa.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  sty = post_value_type ce e /\
+  type_widens_to (get_tenv cx) sty dty /\ sty <> dty /\
+  ~is_word_type sty /\ ~is_bytestring_type sty /\
+  ~is_word_type dty /\ ~is_bytestring_type dty /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  type_memory_bytes ce dty = type_memory_size dtv /\
+  type_memory_size dtv < dimword (:256) /\
+  value_has_type stv v /\ value_has_type dtv v /\ val_wf dtv v /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
+  sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields) ==>
+  frag_exec ctx sa sb
+    (\r. expr_post ctx func ce cx e es origin sa s0 es' v src r)
+    (\u. expr_post ctx func ce cx (IfExp dty c a b) es origin sb s0 es' v buf.buf_operand u) R
+Proof
+  strip_tac >> irule frag_exec_pointwise >> qx_gen_tac `r` >> strip_tac >>
+  `stmt_state_rel ctx func ce cx es' r /\
+   expr_val_at ce cx sty origin sa es' v src r /\
+   value_has_type stv v /\
+   ?sw. eval_operand src r = SOME sw /\ val_in_memory stv v (w2n sw) r.vs_memory` by
+    gvs[expr_post_def, expr_val_rel_def] >>
+  drule_all ifexp_typed_alloc_source >>
+  disch_then (qspec_then `R` (mp_tac o MATCH_MP frag_exec_weaken)) >>
+  disch_then irule >> simp[] >> rpt strip_tac >>
+  irule ifexp_typed_copy_post >>
+  simp[] >> qexistsl_tac [`e`, `r`, `sa`, `src`] >> simp[] >>
+  drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >>
+  `ci_mono sm sb` by
+    (qspecl_then [`ce`, `buf.buf_operand`, `dty`, `src`, `sty`, `sm`] mp_tac
+       (cj 1 ci_mono_typed_memory_family) >> simp[]) >>
+  gvs[ci_mono_def] >>
+  `sa.cs_next_id < sb.cs_next_id` by decide_tac >> metis_tac[]
 QED
 
 Theorem ifexp_mcopy_window[local]:
@@ -470,18 +749,23 @@ Proof
     metis_tac[exprSimAllocTheory.alloc_buffer_storage] >>
   `eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s` by
     (Cases_on `vv_operand vv` >> gvs[eval_operand_def]) >>
-  `vv_holds cenv cx (expr_type e) raw vv es' t` by
+  `vv_holds cenv cx (post_value_type cenv e) raw vv es' t` by
     (fs[vv_post_def] >> Cases_on `vv` >>
      gvs[vv_holds_def, vv_operand_def, expr_val_rel_def, storage_holds_def] >>
      BasicProvers.every_case_tac >> gvs[] >> metis_tac[immutable_holds_memory_cong]) >>
   `!n b len. local_region cenv es'.scopes t n b len <=>
              local_region cenv es'.scopes s n b len` by
     (drule_all ifexp_alloc_local_regions >> simp[]) >>
-  `vv_at cenv cx (expr_type e) origin sm es' raw vv t` by
+  `vv_at cenv cx (post_value_type cenv e) origin sm es' raw vv t` by
     (irule ifexp_vv_at_alloc_frame >> qexistsl_tac [`s`, `sa`] >>
      fs[vv_post_def] >> decide_tac) >>
+  `post_value_type cenv e <> expr_type e ==>
+   vv_own cenv cx (post_value_type cenv e) origin sm es' raw vv t` by
+    (strip_tac >> irule ifexp_vv_own_alloc_frame >>
+     qexistsl_tac [`s`, `sa`] >> fs[vv_post_def] >> decide_tac) >>
   qexistsl_tac [`t`, `w`] >> simp[vv_post_def] >>
   fs[vv_post_def] >> rpt conj_tac
+  >- (strip_tac >> fs[] >> Cases_on `vv` >> gvs[vv_operand_def])
   >- (rpt strip_tac >>
       `not_fresh_at sa x` by metis_tac[not_fresh_at_mono] >> metis_tac[])
   >- metis_tac[] >>
@@ -501,6 +785,13 @@ Theorem ifexp_vv_at_start_var[local,simp]:
   vv_at ce cx ty sa sb es tv vv s
 Proof
   Cases_on `vv` >> simp[vv_at_def]
+QED
+
+Theorem ifexp_vv_own_start_var[local,simp]:
+  vv_own ce cx ty (sa with cs_next_var := n) sb es tv vv s <=>
+  vv_own ce cx ty sa sb es tv vv s
+Proof
+  Cases_on `vv` >> simp[vv_own_def, expr_val_own_def]
 QED
 
 Theorem ifexp_vv_post_rebase[local]:
@@ -708,7 +999,7 @@ Proof
   `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
     (Cases >> simp[eval_operand_def, lookup_var_def]) >>
   simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
-       expr_val_at_def, lookup_var_def, local_region_def]
+       expr_val_at_def, expr_val_own_def, lookup_var_def, local_region_def]
 QED
 
 Theorem ifexp_store_bytestring_straight[local]:
@@ -734,11 +1025,124 @@ Proof
   `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
     (Cases >> simp[eval_operand_def, lookup_var_def]) >>
   Cases_on `vv` >>
-  simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
-       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def,
-       storage_holds_def, immutable_holds_def,
+  simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def, vv_own_def,
+       expr_val_rel_def, expr_val_at_def, expr_val_own_def, lookup_var_def,
+       local_region_def, storage_holds_def, immutable_holds_def,
        venomStateTheory.contract_storage_def,
        venomStateTheory.contract_transient_def]
+QED
+
+Theorem ifexp_different_type_unwrap_pure[local]:
+  !ce e ty sa vv sb.
+    lowered_value_type ce e <> expr_type e /\
+    ~is_word_type (expr_type e) /\
+    ~is_word_type (lowered_value_type ce e) /\
+    compile_expr ce ty e sa = (vv,sb) ==>
+    ?op. unwrap_value ce vv = comp_return op
+Proof
+  ho_match_mp_tac lowered_value_type_ind >>
+  simp[lowered_value_type_def, expr_type_def] >>
+  rpt strip_tac
+  >- (qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+      simp[Once (cj 1 compile_expr_raw_def), compile_expr_body_def,
+           compile_literal_vv_def, expr_type_def, comp_bind_def, comp_return_def] >>
+      pairarg_tac >> gvs[] >> rpt strip_tac >> gvs[expr_type_def] >>
+      simp[unwrap_value_def, base_ptr_def, is_word_type_def, expr_type_def,
+           comp_return_def, lower_value_def, comp_bind_def,
+           Once (cj 1 compile_expr_raw_def), compile_expr_body_def,
+           compile_literal_vv_def] >> metis_tac[])
+  >- suspend "bytes"
+  >- suspend "concat"
+  >- suspend "abi"
+  >> suspend "call"
+QED
+
+Resume ifexp_different_type_unwrap_pure[bytes]:
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[Once (cj 1 compile_expr_raw_def), compile_expr_body_def,
+       compile_literal_vv_def, expr_type_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >> rpt strip_tac >> gvs[expr_type_def] >>
+  simp[unwrap_value_def, base_ptr_def, is_word_type_def, expr_type_def,
+       comp_return_def, lower_value_def, comp_bind_def,
+       Once (cj 1 compile_expr_raw_def), compile_expr_body_def,
+       compile_literal_vv_def] >> metis_tac[]
+QED
+Resume ifexp_different_type_unwrap_pure[concat]:
+  rename1 `Builtin _ (Concat cn) cargs` >>
+  `~names_builtin (Concat cn) cargs` by
+    (`!bt args. names_builtin bt args ==> !n. bt <> Concat n` suffices_by
+       metis_tac[] >>
+     ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]) >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[compile_expr_builtin_dispatch] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  simp[unwrap_value_def, base_ptr_def] >> metis_tac[]
+QED
+Resume ifexp_different_type_unwrap_pure[abi]:
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[Once (cj 1 compile_expr_def), compile_expr_body_def, expr_type_def] >>
+  simp[Once (cj 3 compile_expr_def), compile_type_builtin_dispatch_body_def] >>
+  rpt IF_CASES_TAC >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[oneline as_ptr_val_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  gvs[oneline as_ptr_val_def, AllCaseEqs()] >>
+  simp[unwrap_value_def, mk_ptr_def, comp_return_def] >> metis_tac[]
+QED
+Resume ifexp_different_type_unwrap_pure[call]:
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[Once (cj 1 compile_expr_def), compile_expr_body_def,
+       expr_type_def, compile_call_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  simp[unwrap_value_def, base_ptr_def, comp_return_def] >> metis_tac[]
+QED
+Finalise ifexp_different_type_unwrap_pure[local]
+
+Theorem ifexp_post_annotated[local]:
+  (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+     type_memory_bytes ce ty = type_memory_size tv) /\
+  (~is_word_type (expr_type e) ==>
+    lowered_value_type ce e = expr_type e \/
+    is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
+      arg_type_fits (lowered_value_type ce e) (expr_type e) \/
+    same_memory_layout ce (lowered_value_type ce e) (expr_type e) /\
+      arg_type_fits (lowered_value_type ce e) (expr_type e) /\
+      ?tvp. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tvp) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
+  expr_post ctx func ce cx e es sa sb s0 es' v op s ==>
+  expr_post ctx func ce cx (IfExp (expr_type e) c a b) es sa sb s0 es' v op s
+Proof
+  strip_tac >> Cases_on `post_value_type ce e = expr_type e`
+  >- (gvs[expr_post_def, vyperASTTheory.expr_type_def] >> metis_tac[]) >>
+  `~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e)` by
+    metis_tac[post_value_type_word, post_value_type_bytestring] >>
+  `post_value_type ce e = lowered_value_type ce e` by
+    (Cases_on `e` >> gvs[post_value_type_def] >>
+     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> gvs[post_value_type_def, vyperASTTheory.expr_type_def]) >>
+  `lowered_value_type ce e <> expr_type e` by metis_tac[] >>
+  gvs[] >> fs[expr_post_def, vyperASTTheory.expr_type_def] >>
+  conj_tac >- (irule expr_val_rel_layout_transport >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  conj_tac >- (irule expr_val_at_layout_transport >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem ifexp_aggregate_source_kind[local]:
+  !sty dty. arg_type_fits sty dty /\
+    ~is_word_type dty /\ ~is_bytestring_type dty ==>
+    ~is_word_type sty /\ ~is_bytestring_type sty
+Proof
+  Cases >> Cases >> simp[vyperTypeSystemTheory.arg_type_fits_def, is_word_type_def, is_bytestring_type_def] >>
+  rename1 `arg_type_fits (BaseT sb) (BaseT db)` >>
+  Cases_on `sb` >> Cases_on `db` >>
+  simp[vyperTypeSystemTheory.arg_type_fits_def, is_word_type_def, is_bytestring_type_def] >>
+  rename1 `arg_type_fits (BaseT (BytesT sb)) (BaseT (BytesT db))` >>
+  Cases_on `sb` >> Cases_on `db` >>
+  simp[vyperTypeSystemTheory.arg_type_fits_def, is_word_type_def, is_bytestring_type_def]
 QED
 
 (* What compile_expr emits for an IfExp. *)
@@ -850,6 +1254,7 @@ Theorem expr_post_ifexp:
              rv v1 v lbl w k xl ctx.
     expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
     expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) es' v aop u /\
+    post_value_type cenv e = expr_type e /\
     expr_type e = t /\ eval_operand aop u = SOME w /\
     (!x. not_fresh_at sa x ==> x <> rv) /\
     local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
@@ -860,7 +1265,7 @@ Theorem expr_post_ifexp:
     expr_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' v (Var rv)
       (jump_to xl (update_var rv w u with vs_inst_idx := k))
 Proof
-  rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
+  rpt gen_tac >> simp[expr_post_def] >> strip_tac >> rfs[] >>
   qabbrev_tac `ss = jump_to xl (update_var rv w u with vs_inst_idx := k)` >>
   `ss.vs_memory = u.vs_memory /\ ss.vs_allocas = u.vs_allocas /\
    lookup_var rv ss = SOME w /\
@@ -882,10 +1287,12 @@ Proof
      simp[lookup_var_def, FLOOKUP_UPDATE]) >>
   asm_rewrite_tac[] >> simp[vyperASTTheory.expr_type_def] >>
   conj_tac
-  >- (qpat_x_assum `expr_val_rel cx (expr_type e) v aop u` mp_tac >>
+  >- (qpat_x_assum `expr_val_rel cx (post_value_type cenv e) v aop u` mp_tac >>
+      asm_rewrite_tac[] >>
       simp[expr_val_rel_def, eval_operand_def] >> strip_tac >> gvs[]) >>
   conj_tac
-  >- (qpat_x_assum `expr_val_at cenv cx (expr_type e) sc sd es' v aop u` mp_tac >>
+  >- (qpat_x_assum `expr_val_at cenv cx (post_value_type cenv e) sc sd es' v aop u` mp_tac >>
+      asm_rewrite_tac[] >>
       simp[expr_val_at_def, eval_operand_def] >> rpt strip_tac >>
       first_x_assum drule_all >> strip_tac
       >- (disj1_tac >> qexists_tac `aid` >> first_assum (irule_at Any) >>
@@ -910,7 +1317,12 @@ Proof
   >- (rpt strip_tac >> rename1 `lookup_var z s0 = SOME w'` >>
       `z <> rv` by metis_tac[] >>
       `lookup_var z tt = SOME w'` by metis_tac[] >>
-      metis_tac[]) >>
+      `not_fresh_at sc z` by
+        (qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >> simp[]) >>
+      `lookup_var z u = SOME w'` by
+        (qpat_x_assum `!x w. not_fresh_at sc x /\ _ ==> _` irule >>
+         simp[]) >>
+      fs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   (* the locals' memory: kept by c, then by e *)
   `locals_kept cenv es s0 ss` by
     (irule locals_kept_mem_tail >> qexists_tac `u` >>
@@ -966,6 +1378,7 @@ QED
    compile_expr makes of the variable. *)
 Theorem vv_post_of_expr_post:
   !func cenv cx e es sa sb s0 es' v rv s ctx.
+    post_value_type cenv e = expr_type e /\
     expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s ==>
     vv_post ctx func cenv cx e es sa sb s0 es' (Value v)
       (if is_word_type (expr_type e) then StackValue (expr_type e) (Var rv)
@@ -1086,6 +1499,7 @@ Proof
 QED
 
 Theorem ifexp_root_vv_post_of_expr_post_read[local]:
+  post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s /\
   read_result cx tv es' = (INL v, es') ==>
   vv_post ctx func cenv cx e es sa sb s0 es' tv
@@ -1247,236 +1661,13 @@ Proof
                `s11`,`bv`,`s11a`,`bop`,`s12`,`s13`,`s14`] >> simp[]
 QED
 
-Theorem ifexp_sfields_partial[local]:
-  sfields_tenv_consistent sf env ==>
-  !nsid args fields.
-    FLOOKUP env nsid = SOME (StructArgs args) /\
-    FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
-    MAP (\(name,ty,sz). (name,ty)) fields = args
-Proof
-  simp[sfields_tenv_consistent_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!nsid args. FLOOKUP env nsid = SOME (StructArgs args) ==> _` drule >>
-  strip_tac >> gvs[] >>
-  qpat_x_assum `MAP FST fields = _` mp_tac >>
-  qpat_x_assum `MAP (FST o SND) fields = _` mp_tac >>
-  rpt (pop_assum kall_tac) >>
-  qid_spec_tac `args` >> Induct_on `fields` >> Cases_on `args` >>
-  simp[pairTheory.FORALL_PROD] >> rpt strip_tac >> gvs[] >> metis_tac[]
-QED
-
-Theorem ifexp_sfields_partial_delete[local]:
-  (!nsid args fields.
-    FLOOKUP env nsid = SOME (StructArgs args) /\
-    FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
-    MAP (\(name,ty,sz). (name,ty)) fields = args) ==>
-  !key nsid args fields.
-    FLOOKUP (env \\ key) nsid = SOME (StructArgs args) /\
-    FLOOKUP (sf \\ nsid_to_string key) (nsid_to_string nsid) = SOME fields ==>
-    MAP (\(name,ty,sz). (name,ty)) fields = args
-Proof
-  simp[DOMSUB_FLOOKUP_THM, AllCaseEqs()] >> metis_tac[]
-QED
-
-Theorem ifexp_sfields_partial_types[local]:
-  (!nsid args fields.
-    FLOOKUP env nsid = SOME (StructArgs args) /\
-    FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
-    MAP (\(name,ty,sz). (name,ty)) fields = args) /\
-  FLOOKUP env nsid = SOME (StructArgs args) /\
-  FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
-  MAP (FST o SND) fields = MAP SND args
-Proof
-  strip_tac >> first_x_assum drule_all >> disch_then (SUBST1_TAC o SYM) >>
-  simp[MAP_MAP_o, combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
-QED
-
-Theorem ifexp_abi_missing_struct[local]:
-  FLOOKUP sf (nsid_to_string nsid) = NONE ==>
-  ~is_abi_dynamic sf (StructT nsid) /\
-  abi_size_bound sf (StructT nsid) = 0 /\
-  abi_static_size sf (StructT nsid) = 0
-Proof
-  simp[Once is_abi_dynamic_def, Once abi_size_bound_def,
-       Once abi_static_size_def]
-QED
-
-Theorem ifexp_abi_members_dynamic[local]:
-  !tys. EVERY (\ty. is_abi_dynamic sf ty ==> vyper_is_dynamic env ty) tys ==>
-  EXISTS (is_abi_dynamic sf) tys ==> vyper_any_dynamic env tys
-Proof
-  Induct >> simp[vyperABITheory.vyper_is_dynamic_def] >> metis_tac[]
-QED
-
-Theorem ifexp_abi_members_bound[local]:
-  !tys. EVERY (\ty.
-    (is_abi_dynamic sf ty ==> vyper_is_dynamic env ty) /\
-    abi_size_bound sf ty <= vyper_abi_size_bound env ty /\
-    (~is_abi_dynamic sf ty ==>
-       abi_static_size sf ty <= vyper_abi_size_bound env ty)) tys ==>
-  SUM (MAP (\t. (if is_abi_dynamic sf t then 32 else abi_static_size sf t) +
-                 (if is_abi_dynamic sf t then abi_size_bound sf t else 0)) tys)
-    <= vyper_abi_size_bound_list env tys
-Proof
-  Induct >> simp[vyperABITheory.vyper_abi_size_bound_def] >> rpt strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  Cases_on `is_abi_dynamic sf h` >> Cases_on `vyper_is_dynamic env h` >>
-  gvs[] >> decide_tac
-QED
-
-Theorem ifexp_abi_static_members_bound[local]:
-  !tys. EVERY (\ty.
-    (is_abi_dynamic sf ty ==> vyper_is_dynamic env ty) /\
-    abi_size_bound sf ty <= vyper_abi_size_bound env ty /\
-    (~is_abi_dynamic sf ty ==>
-       abi_static_size sf ty <= vyper_abi_size_bound env ty)) tys /\
-  ~EXISTS (is_abi_dynamic sf) tys ==>
-  SUM (MAP (abi_static_size sf) tys) <= vyper_abi_size_bound_list env tys
-Proof
-  Induct >> simp[vyperABITheory.vyper_abi_size_bound_def] >> rpt strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  Cases_on `vyper_is_dynamic env h` >> gvs[] >> decide_tac
-QED
-
-Theorem ifexp_abi_bound_induction[local]:
-  (!env ty. !tv (sf : (string, (string # type # num) list) fmap).
-    evaluate_type env ty = SOME tv /\
-    (!nsid args fields.
-      FLOOKUP env nsid = SOME (StructArgs args) /\
-      FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
-      MAP (\(name,ty,sz). (name,ty)) fields = args) ==>
-    (is_abi_dynamic sf ty ==> vyper_is_dynamic env ty) /\
-    abi_size_bound sf ty <= vyper_abi_size_bound env ty /\
-    (~is_abi_dynamic sf ty ==> abi_static_size sf ty <= vyper_abi_size_bound env ty)) /\
-  (!env tys acc. !tvs (sf : (string, (string # type # num) list) fmap).
-    evaluate_types env tys acc = SOME tvs /\
-    (!nsid args fields.
-      FLOOKUP env nsid = SOME (StructArgs args) /\
-      FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
-      MAP (\(name,ty,sz). (name,ty)) fields = args) ==>
-    EVERY (\ty.
-      (is_abi_dynamic sf ty ==> vyper_is_dynamic env ty) /\
-      abi_size_bound sf ty <= vyper_abi_size_bound env ty /\
-      (~is_abi_dynamic sf ty ==> abi_static_size sf ty <= vyper_abi_size_bound env ty)) tys)
-Proof
-  ho_match_mp_tac evaluate_type_ind >>
-  conj_tac >- suspend "base" >>
-  conj_tac >- suspend "tuple" >>
-  conj_tac >- suspend "array" >>
-  conj_tac >- suspend "struct" >>
-  conj_tac >- suspend "flag" >>
-  conj_tac >- suspend "none" >>
-  conj_tac >- simp[] >>
-  suspend "cons"
-QED
-
-Resume ifexp_abi_bound_induction[base]:
-  Cases_on `bt` >> simp[is_abi_dynamic_def, abi_size_bound_def,
-    abi_static_size_def, vyperABITheory.vyper_is_dynamic_def,
-    vyperABITheory.vyper_abi_size_bound_def, contractABITheory.ceil32_def] >>
-  rename1 `BytesT bound` >> Cases_on `bound` >> simp[is_abi_dynamic_def, abi_size_bound_def,
-    abi_static_size_def, vyperABITheory.vyper_is_dynamic_def,
-    vyperABITheory.vyper_abi_size_bound_def, contractABITheory.ceil32_def]
-QED
-Resume ifexp_abi_bound_induction[tuple]:
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  gvs[Once evaluate_type_def, AllCaseEqs()] >>
-  qpat_x_assum `!sf. _ ==> EVERY _ tys` mp_tac >>
-  disch_then (qspec_then `sf` mp_tac) >>
-  (impl_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[])) >>
-  strip_tac >>
-  simp[Once is_abi_dynamic_def, Once abi_size_bound_def,
-       Once abi_static_size_def, abi_embedded_static_size_def,
-       Once vyperABITheory.vyper_is_dynamic_def,
-       Once vyperABITheory.vyper_abi_size_bound_def] >>
-  conj_tac >- (strip_tac >> irule (INST_TYPE [``:'a`` |-> ``:string``, ``:'b`` |-> ``:num``] ifexp_abi_members_dynamic) >>
-    qexists_tac `sf` >> gvs[EVERY_MEM, ETA_THM] >> metis_tac[]) >>
-  conj_tac >- (irule ifexp_abi_members_bound >> simp[]) >>
-  strip_tac >>
-  gvs[Once is_abi_dynamic_def, Once vyperABITheory.vyper_abi_size_bound_def] >>
-  `MAP (\t. if is_abi_dynamic sf t then 32 else abi_static_size sf t) tys =
-   MAP (abi_static_size sf) tys` by
-    (irule MAP_CONG >> gvs[EVERY_MEM, combinTheory.o_DEF] >> metis_tac[]) >>
-  simp[] >> irule ifexp_abi_static_members_bound >>
-  gvs[EVERY_MEM, combinTheory.o_DEF] >> metis_tac[]
-QED
-Resume ifexp_abi_bound_induction[array]:
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  gvs[Once evaluate_type_def, AllCaseEqs()] >>
-  qpat_x_assum `!sf. _ ==> (_ /\ _ /\ _)` (qspec_then `sf` mp_tac) >>
-  (impl_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[])) >>
-  strip_tac >> Cases_on `bd` >>
-  simp[is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
-       abi_embedded_static_size_def, vyperABITheory.vyper_is_dynamic_def,
-       vyperABITheory.vyper_abi_size_bound_def] >>
-  Cases_on `is_abi_dynamic sf ty` >> Cases_on `vyper_is_dynamic env ty` >>
-  gvs[]
-QED
-Resume ifexp_abi_bound_induction[struct]:
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  gvs[Once evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `FLOOKUP sf (nsid_to_string nsid)`
-  >- (drule ifexp_abi_missing_struct >> simp[]) >>
-  rename1 `FLOOKUP sf (nsid_to_string nsid) = SOME fields` >>
-  `MAP (FST o SND) fields = MAP SND args` by
-    (irule ifexp_sfields_partial_types >> metis_tac[]) >>
-  qpat_x_assum `!sf. _ ==> EVERY _ _`
-    (qspec_then `sf \\ nsid_to_string nsid` mp_tac) >>
-  (impl_tac >- (rpt gen_tac >> strip_tac >>
-    irule ifexp_sfields_partial_delete >> metis_tac[])) >>
-  strip_tac >>
-  simp[Once is_abi_dynamic_def, Once abi_size_bound_def,
-       Once abi_static_size_def, abi_embedded_static_size_def,
-       Once vyperABITheory.vyper_is_dynamic_def,
-       Once vyperABITheory.vyper_abi_size_bound_def] >>
-  conj_tac >- (strip_tac >>
-    irule (INST_TYPE [``:'a`` |-> ``:string``, ``:'b`` |-> ``:num``]
-      ifexp_abi_members_dynamic) >>
-    qexists_tac `sf \\ nsid_to_string nsid` >>
-    gvs[EVERY_MEM, combinTheory.o_DEF] >> metis_tac[]) >>
-  conj_tac >- (irule ifexp_abi_members_bound >> simp[]) >>
-  strip_tac >>
-  gvs[Once is_abi_dynamic_def, Once vyperABITheory.vyper_abi_size_bound_def] >>
-  qmatch_goalsub_abbrev_tac `SUM (MAP (\t. if is_abi_dynamic sf1 t then 32 else abi_static_size sf1 t) tys)` >>
-  `MAP (\t. if is_abi_dynamic sf1 t then 32 else abi_static_size sf1 t) tys =
-   MAP (abi_static_size sf1) tys` by
-    (irule MAP_CONG >> gvs[EVERY_MEM, combinTheory.o_DEF, Abbr `sf1`, Abbr `tys`] >>
-     metis_tac[]) >>
-  simp[] >> irule ifexp_abi_static_members_bound >>
-  gvs[EVERY_MEM, combinTheory.o_DEF, Abbr `sf1`, Abbr `tys`] >> metis_tac[]
-QED
-Resume ifexp_abi_bound_induction[flag]:
-  simp[is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
-       vyperABITheory.vyper_is_dynamic_def, vyperABITheory.vyper_abi_size_bound_def]
-QED
-Resume ifexp_abi_bound_induction[none]:
-  simp[is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
-       vyperABITheory.vyper_is_dynamic_def, vyperABITheory.vyper_abi_size_bound_def]
-QED
-Resume ifexp_abi_bound_induction[cons]:
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  gvs[Once evaluate_type_def, AllCaseEqs()] >>
-  qpat_x_assum `!sf. _ ==> EVERY _ tys` (qspec_then `sf` mp_tac) >>
-  (impl_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[])) >>
-  strip_tac >> simp[] >>
-  qpat_x_assum `!sf. _ ==> (_ /\ _ /\ _)` (qspec_then `sf` mp_tac) >>
-  (impl_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[])) >> simp[]
-QED
-Finalise ifexp_abi_bound_induction[local]
-
+(* Compatibility support is checked independently of the arm composition. *)
 Theorem ifexp_abi_size_bound_source:
   evaluate_type env ty = SOME tv /\
   sfields_tenv_consistent (sf : (string, (string # type # num) list) fmap) env ==>
   abi_size_bound sf ty <= vyper_abi_size_bound env ty
 Proof
-  strip_tac >>
-  `!nsid args fields.
-    FLOOKUP env nsid = SOME (StructArgs args) /\
-    FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
-    MAP (\(name,ty,sz). (name,ty)) fields = args` by
-      (rpt gen_tac >> strip_tac >> irule ifexp_sfields_partial >> metis_tac[]) >>
-  drule (cj 1 ifexp_abi_bound_induction) >>
-  disch_then (qspec_then `sf` mp_tac) >>
-  (impl_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[])) >> simp[]
+  ACCEPT_TAC ifexp_compat_abi_size_bound_source
 QED
 
 Theorem ifexp_abi_tuple_size_bound_source:
@@ -1484,44 +1675,7 @@ Theorem ifexp_abi_tuple_size_bound_source:
   sfields_tenv_consistent (sf : (string, (string # type # num) list) fmap) env ==>
   abi_size_bound sf (TupleT tys) <= vyper_abi_size_bound env (TupleT tys)
 Proof
-  strip_tac >>
-  `!nsid args fields.
-    FLOOKUP env nsid = SOME (StructArgs args) /\
-    FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
-    MAP (\(name,ty,sz). (name,ty)) fields = args` by
-      (rpt gen_tac >> strip_tac >> irule ifexp_sfields_partial >> metis_tac[]) >>
-  drule (cj 2 ifexp_abi_bound_induction) >>
-  disch_then (qspec_then `sf` mp_tac) >>
-  (impl_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[])) >>
-  strip_tac >>
-  simp[Once abi_size_bound_def, abi_embedded_static_size_def,
-       Once vyperABITheory.vyper_abi_size_bound_def] >>
-  irule ifexp_abi_members_bound >> simp[]
-QED
-
-Theorem ifexp_concat_lowered_fits[local]:
-  !ty n args.
-    well_typed_builtin_app ty (Concat n) (MAP expr_type args) ==>
-    is_bytestring_type ty /\
-    is_bytestring_type
-      (concat_buffer_type ty (SUM (MAP (concat_payload_capacity o expr_type) args))) /\
-    arg_type_fits
-      (concat_buffer_type ty (SUM (MAP (concat_payload_capacity o expr_type) args))) ty
-Proof
-  rpt gen_tac >> simp[vyperTypeSystemTheory.well_typed_builtin_app_def] >>
-  strip_tac >>
-  `!ts. EVERY (\t. (?bd. t = BaseT (BytesT bd)) \/ ?m. t = BaseT (StringT m)) ts ==>
-        MAP bytelike_type_bound ts = MAP concat_payload_capacity ts` by
-    (Induct >> simp[] >> rpt strip_tac >>
-     gvs[vyperTypeSystemTheory.bytelike_type_bound_def, concat_payload_capacity_def] >>
-     rename1 `BytesT bd` >> Cases_on `bd` >>
-     simp[vyperASTTheory.bound_length_def, concat_payload_capacity_def]) >>
-  `MAP bytelike_type_bound (MAP expr_type args) =
-   MAP concat_payload_capacity (MAP expr_type args)` by
-    (first_x_assum irule >> fs[EVERY_MEM]) >>
-  fs[MAP_MAP_o] >>
-  gvs[concat_buffer_type_def, is_bytestring_type_def,
-      vyperTypeSystemTheory.arg_type_fits_def]
+  ACCEPT_TAC ifexp_compat_abi_tuple_size_bound_source
 QED
 
 Theorem ifexp_lowered_type_compatible:
@@ -1536,62 +1690,20 @@ Theorem ifexp_lowered_type_compatible:
     arg_type_fits (lowered_value_type ce e) (expr_type e) \/
   same_memory_layout ce (lowered_value_type ce e) (expr_type e)
 Proof
-  ho_match_mp_tac lowered_value_type_ind >>
-  simp[lowered_value_type_def, expr_type_def,
-       vyperTypeSystemTheory.well_typed_expr_def,
-       vyperTypeSystemTheory.type_builtin_result_ok_def,
-       vyperTypeCallGraphTheory.int_calls_expr_def,
-       is_bytestring_type_def] >>
-  rpt strip_tac >> gvs[vyperTypeSystemTheory.well_typed_literal_def,
-    vyperTypeSystemTheory.arg_type_fits_def, vyperValueTheory.compatible_bound_def] >>
-  `!xs. well_typed_exprs env xs ==>
-         EVERY (well_formed_type env.type_defs o expr_type) xs` by
-    (Induct >> simp[vyperTypeSystemTheory.well_typed_expr_def] >>
-     rpt strip_tac >> irule exprSafeOperandTheory.well_typed_expr_type_well_formed >>
-     goal_assum drule >> simp[]) >>
-  `EVERY (well_formed_type env.type_defs o expr_type) args` by metis_tac[] >>
-  `!xs acc. EVERY (well_formed_type env.type_defs o expr_type) xs ==>
-     ?tvs. evaluate_types env.type_defs (MAP expr_type xs) acc = SOME tvs` by
-    (Induct >> simp[evaluate_type_def, vyperTypeSystemTheory.well_formed_type_def] >>
-     rpt strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >> simp[]) >>
-  `?tvs. evaluate_types env.type_defs (MAP expr_type args) [] = SOME tvs` by metis_tac[] >>
-  TRY (disj2_tac >> disj1_tac >> irule ifexp_concat_lowered_fits >>
-       goal_assum drule >> NO_TAC) >>
-  qmatch_goalsub_abbrev_tac `abi_size_bound ce.ce_struct_fields enc_ty` >>
-  `abi_size_bound ce.ce_struct_fields enc_ty <= vyper_abi_size_bound env.type_defs enc_ty` by
-    (simp[Abbr `enc_ty`] >> IF_CASES_TAC >-
-       (`?tv. evaluate_type env.type_defs (expr_type (HD args)) = SOME tv` by
-          (gvs[LENGTH_EQ_NUM_compute, combinTheory.o_DEF,
-               evaluate_type_def, AllCaseEqs()]) >>
-        irule ifexp_abi_size_bound_source >> simp[] >> metis_tac[]) >>
-     irule ifexp_abi_tuple_size_bound_source >> simp[] >> metis_tac[]) >>
-  `abi_encode_method_id_size method_id = if IS_SOME method_id then 4 else 0` by
-    (Cases_on `method_id` >>
-     gvs[vyperTypeSystemTheory.well_typed_type_builtin_args_def,
-         vyperTypeSystemTheory.abi_encode_method_id_size_def,
-         vyperASTTheory.abi_encode_method_id_bytes_def]) >>
-  qpat_x_assum `abi_encode_size_ok _ _ _ _ _` mp_tac >>
-  simp[vyperTypeSystemTheory.abi_encode_size_ok_def] >>
-  Cases_on `args` >-
-    gvs[vyperTypeSystemTheory.well_typed_type_builtin_args_def] >>
-  simp[Abbr `enc_ty`, is_bytestring_type_def] >>
-  rename1 `h::rest` >> Cases_on `rest` >>
-  gvs[is_bytestring_type_def] >>
-  Cases_on `ensure` >> gvs[] >> decide_tac
+  ACCEPT_TAC ifexp_compat_lowered_type
 QED
+
 Theorem ifexp_body_pre_lowered_type_compatible:
   expr_body_pre ce cx env e es /\
   (int_calls_expr e = [] \/ same_memory_layout ce (lowered_value_type ce e) (expr_type e)) ==>
   lowered_value_type ce e = expr_type e \/
   is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
     arg_type_fits (lowered_value_type ce e) (expr_type e) \/
-  same_memory_layout ce (lowered_value_type ce e) (expr_type e)
+  (same_memory_layout ce (lowered_value_type ce e) (expr_type e) /\
+   arg_type_fits (lowered_value_type ce e) (expr_type e) /\
+   (?tvp. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tvp))
 Proof
-  strip_tac >> drule expr_body_pre_var_types_well_formed >> strip_tac >>
-  irule ifexp_lowered_type_compatible >> simp[] >> qexists_tac `env` >>
-  gvs[expr_body_pre_def, expr_sim_inv_def,
-      vyperTypeInvariantsTheory.env_consistent_def,
-      vyperTypeInvariantsTheory.env_context_consistent_def] >> metis_tac[]
+  ACCEPT_TAC ifexp_compat_body_pre_lowered_type
 QED
 
 Theorem ifexp_body_pre_read_typed:
@@ -1646,6 +1758,7 @@ Proof
 QED
 
 Theorem ifexp_arm_rebased_unwrap_path[local]:
+  post_value_type ce e = expr_type e /\
   unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= sm.cs_next_id /\
   read_result cx tv es' = (INL v,es') /\
@@ -1732,6 +1845,7 @@ Proof
     ~is_word_type (expr_type e) ==>
     type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
     type_memory_size tvt < 2 ** 64` by (rpt strip_tac >> gvs[]) >>
+  `post_value_type ce e = expr_type e` by metis_tac[post_value_type_bytestring] >>
   drule_all ifexp_arm_rebased_unwrap_path >> strip_tac >>
   `type_memory_size tv < dimword (:256)` by (fs[dimword_def] >> decide_tac) >>
   fs[ci_mono_def] >>
@@ -1975,6 +2089,7 @@ Proof
 QED
 
 Theorem ifexp_arm_suffix_path[local]:
+  post_value_type ce e = expr_type e /\
   compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sm = (op,sb) /\
   (~is_word_type (expr_type e) ==>
     lowered_value_type ce e = expr_type e \/
@@ -2017,6 +2132,7 @@ Proof
 QED
 
 Theorem ifexp_arm_marked_suffix[local]:
+  post_value_type ce e = expr_type e /\
   gas_marked_exec F (ctx,func) (eval_expr cx e) (es,s0) marks (INL raw) ee (OK s) /\
   vv_post ctx func ce cx e es sa sm s0 (ee with gas_obs := []) raw vv s /\
   compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sm = (op,sb) /\
@@ -2107,6 +2223,7 @@ QED
 
 Theorem ifexp_arm_outcome[local]:
   !ctx func cenv cx ty e es1 sa sm sb vv op u.
+    post_value_type cenv e = expr_type e /\
     expr_vv_sim ctx func cenv cx ty e es1 /\
     compile_expr cenv ty e sa = (vv, sm) /\
     compile_ifexp_arm cenv (expr_type e) (lowered_value_type cenv e) vv sm =
@@ -2164,6 +2281,7 @@ QED
 Resume ifexp_arm_outcome[success]:
   drule (SRULE [] ifexp_arm_marked_suffix) >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`sb`, `op`] mp_tac) >>
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qexistsl_tac [`INL tv'`, `es_end with gas_obs := []`, `OK q`] >> simp[] >>
@@ -2227,6 +2345,7 @@ Proof
 QED
 
 Theorem ifexp_root_finish_post[local]:
+  post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
   read_result cx tv ee = (INL v,ee) /\ expr_type e = t /\
@@ -2251,6 +2370,7 @@ Proof
 QED
 
 Theorem ifexp_root_arm_finish[local]:
+  post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_type e = t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
   local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
@@ -2391,6 +2511,7 @@ Theorem compile_ifexp_vv_sim:
          is_bytestring_type (lowered_value_type cenv e) /\
          arg_type_fits (lowered_value_type cenv e) (expr_type e) \/
          same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+    (!e. (e = a \/ e = b) ==> post_value_type cenv e = expr_type e) /\
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ ~is_word_type t ==>
        type_memory_bytes cenv t = type_memory_size tvt /\
        type_memory_size tvt < 2 ** 64) /\
@@ -2484,6 +2605,7 @@ Resume compile_ifexp_vv_sim[routed]:
   simp[] >> conj_tac >- (Cases_on `sel` >> simp[]) >>
   `stmt_state_rel ctx func cenv cx mid (jump_to (if sel then tl else el) t')` by
     (simp[stmt_state_rel_jump_to] >> fs[expr_post_def]) >>
+  conj_tac >- (Cases_on `sel` >> simp[]) >>
   irule ifexp_arm_outcome >>
   simp[] >>
   conj_tac
@@ -2515,5 +2637,5 @@ Theorem compile_ifexp_word_vv_sim:
        expr_vv_sim ctx func cenv cx ty b es1) ==>
     expr_vv_sim ctx func cenv cx ty (IfExp t c a b) es
 Proof
-  rpt strip_tac >> irule compile_ifexp_vv_sim >> simp[] >> metis_tac[]
+  rpt strip_tac >> irule compile_ifexp_vv_sim >> simp[] >> metis_tac[post_value_type_word]
 QED

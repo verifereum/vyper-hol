@@ -33,7 +33,7 @@ Theorem body_send_case_ptr:
     body_expr_ptr_ok cx (Call v12 (Send has_gas) es v13)
 Proof
   rpt gen_tac >> disch_tac >> rewrite_tac[body_expr_ptr_ok_def] >>
-  rpt gen_tac >> strip_tac >>
+  reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
   drule send_pre_types >> strip_tac >>
   `body_exprs_ptr_ok cx es` by
     (first_x_assum irule >>

@@ -1,0 +1,33 @@
+Upstream PR: https://github.com/vyperlang/vyper/pull/5322
+Status: merged 2026-11-06 (d994ad4991aa3710bdaf838b25c3ec384f511e8d)
+
+Mask the data word of an empty bytestring before the signed shift in the
+Bytes/String to signed integer and decimal conversions (the pin had no mask).
+
+diff --git a/vyper/codegen_venom/builtins/convert.py b/vyper/codegen_venom/builtins/convert.py
+index b9eebef..6e27f1a 100644
+--- a/vyper/codegen_venom/builtins/convert.py
++++ b/vyper/codegen_venom/builtins/convert.py
+@@ -182,6 +182,12 @@ def _to_int(
+         length = b.mload(val)
+         data_ptr = b.add(val, IRLiteral(32))
+         data = b.mload(data_ptr)
++        if out_t.is_signed:
++            # the data word of an empty bytestring may hold garbage (an
++            # emptied storage bytestring keeps its old data); mask it so sar
++            # of an empty value yields 0 (sar with shift >= 256 propagates
++            # the sign bit)
++            data = b.mul(data, b.iszero(b.iszero(length)))
+         # Right-shift to convert left-aligned bytes to right-aligned int
+         # num_zero_bits = (32 - len) * 8
+         num_zero_bits = b.mul(b.sub(IRLiteral(32), length), IRLiteral(8))
+@@ -264,6 +270,9 @@ def _to_decimal(
+         length = b.mload(val)
+         data_ptr = b.add(val, IRLiteral(32))
+         data = b.mload(data_ptr)
++        # the data word of an empty bytestring may hold garbage (see
++        # `_to_int`); mask it so sar of an empty value yields 0
++        data = b.mul(data, b.iszero(b.iszero(length)))
+         num_zero_bits = b.mul(b.sub(IRLiteral(32), length), IRLiteral(8))
+         val = b.sar(num_zero_bits, data)
+         # Clamp to decimal bounds if needed

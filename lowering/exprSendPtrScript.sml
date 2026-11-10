@@ -350,7 +350,7 @@ QED
 Theorem send_tail_none_post:
   stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es sa s0 s /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  ~not_fresh_at sm out /\ expr_type e = NoneT /\
+  ~not_fresh_at sm out /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   es'.scopes = es1.scopes /\ es'.immutables = es1.immutables /\
   state_rel fn cenv cx es' t /\
   t = s with <| vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
@@ -401,7 +401,7 @@ Theorem send_tail_path_ptr:
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
-      read_result cx tv od) es1 = (res, es') /\ expr_type e = NoneT ==>
+      read_result cx tv od) es1 = (res, es') /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   ?G' tn' r. gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0 G' tn' r /\
     ((?z. r = OK z /\ res = INL NoneV /\
           expr_post ctx fn cenv cx e es sa sb s0 es' NoneV (Lit 0w) z /\
@@ -503,7 +503,7 @@ Theorem send_tail_summary_ptr:
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
-  expr_type e = NoneT /\ es1.gas_obs = [] ==>
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\ es1.gas_obs = [] ==>
   gas_summary_ptr_at (cx_dead cx) (ctx,fn) PG []
     (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs); read_result cx tv od)
     (es1,s,G,tn)
@@ -635,6 +635,8 @@ Resume send_expr_sim_ptr[tail_summary]:
   `!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p` by
     metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `expr_type (Call NoneT (Send has_gas) (a::v::gs) dflt) = NoneT` by simp[vyperASTTheory.expr_type_def] >>
+  `post_value_type cenv (Call NoneT (Send has_gas) (a::v::gs) dflt) =
+   expr_type (Call NoneT (Send has_gas) (a::v::gs) dflt)` by simp[] >>
   drule_all (Q.INST [`e` |-> `Call NoneT (Send has_gas) (a::v::gs) dflt`]
     send_tail_summary_ptr) >>
   disch_then (qspec_then `PG` mp_tac) >>

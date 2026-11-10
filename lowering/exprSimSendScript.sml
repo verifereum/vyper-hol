@@ -323,11 +323,13 @@ QED
 (* ===== The CALL and the ASSERT ===== *)
 
 Theorem expr_post_none_intro:
+  post_value_type cenv e = expr_type e /\
   expr_type e = NoneT /\ stmt_state_rel ctx func cenv cx es' s /\
   wb_frame cenv es sa s0 s ==>
   expr_post ctx func cenv cx e es sa sb s0 es' NoneV (Lit 0w) s
 Proof
-  simp[expr_post_def, expr_val_rel_def, expr_val_at_def, wb_frame_def,
+  strip_tac >>
+  fs[expr_post_def, expr_val_rel_def, expr_val_at_def, wb_frame_def,
        eval_operand_def, vyperValueTheory.evaluate_type_def,
        is_word_type_def, val_in_memory_def, val_wf_def, val_footprint_def,
        type_memory_size_def] >>
@@ -409,7 +411,7 @@ Theorem send_tail_frag:
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es1 = (res, es') /\
-  expr_type e = NoneT ==>
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   frag_exec ctx sm sb (\s. s = t)
     (\s. ?v. res = INL v /\
              expr_post ctx func cenv cx e es sa sb s0 es' v (Lit 0w) s)
@@ -591,7 +593,7 @@ Theorem send_tail_path[local]:
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es1 = (res, es') /\
-  expr_type e = NoneT ==>
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   ?n r. gas_marked_path F ctx func t n r /\
     ((?w. r = OK w /\
           (?v. res = INL v /\
@@ -669,7 +671,7 @@ Theorem send_tail_summary[local]:
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   bind (eval_send cx has_gas (to_v :: amount_v :: gas_vs)) (read_result cx)
     es1 = (res, es') /\
-  expr_type e = NoneT ==>
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   ?marks. gas_summary_at F (ctx,func) marks
     (bind (eval_send cx has_gas (to_v :: amount_v :: gas_vs)) (read_result cx))
     (es1, t)

@@ -15,7 +15,7 @@ Ancestors
 
 (* Every index of a typed target meets expr_body_pre wherever expr_sim_inv
    holds, from the target's part of an expression's expr_body_pre. *)
-Theorem target_indices_pre_of_body[local]:
+Theorem target_indices_pre_of_body:
   !bt vt cenv cx env.
     type_place_target env bt = SOME vt /\ byte_widths_target bt /\
     alloc_limits_target cenv bt /\

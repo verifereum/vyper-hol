@@ -1,6 +1,6 @@
 Theory mem2varProofs
 Ancestors
-  mem2varDefs mem2varFrame basePtrProps pointerConfinedDefs passSimulationProps
+  mem2varDefs mem2varFrame mem2varInvariant basePtrProps pointerConfinedDefs passSimulationProps
   memLocDefs venomExecProofs venomInstProofs venomMemDefs venomMemProps
   basePtrDefs
   passSimulationDefs
@@ -46,211 +46,41 @@ Proof
   simp[]
 QED
 
-(* Relate the combined scan to the individual promo/fresh FOLDLs *)
-(* General FOLDL projection lemma:
-   If proj commutes with step functions, it commutes with FOLDL. *)
-Theorem FOLDL_proj:
-  !proj f g.
-    (!acc x. proj (f acc x) = g (proj acc) x) ==>
-    !xs acc. proj (FOLDL f acc xs) = FOLDL g (proj acc) xs
-Proof
-  rpt gen_tac >> strip_tac >> Induct_on `xs` >> simp[]
-QED
-
-(* Projection: (ctr, promos) from combined scan = separate promo scan *)
-Theorem m2v_scan_ctr_promo_sync:
-  !xs dfg ctr0 promos0 fresh0.
-    (FST (FOLDL (m2v_scan_step dfg) (ctr0,promos0,fresh0) xs),
-     FST (SND (FOLDL (m2v_scan_step dfg) (ctr0,promos0,fresh0) xs))) =
-    FOLDL (\(ctr,promos) (i : instruction).
-      case i.inst_outputs of
-        [alloca_out] =>
-          let uses = dfg_get_uses dfg alloca_out in
-          let size_val = case i.inst_operands of
-                           Lit w :: _ => w2n w | _ => 0 in
-          if m2v_can_promote_alloca uses then
-            let var = m2v_fresh_var alloca_out ctr in
-            (ctr + 1, (alloca_out, var, size_val) :: promos)
-          else (ctr, promos)
-        | _ => (ctr, promos)) (ctr0, promos0) xs
-Proof
-  rpt gen_tac >>
-  mp_tac (Q.ISPECL [
-    `\x:num # (string # string # num) list # string set. (FST x, FST (SND x))`,
-    `m2v_scan_step (dfg : dfg_analysis)`,
-    `\(ctr:num, promos:(string # string # num) list) (i:instruction).
-      case i.inst_outputs of
-        [alloca_out] =>
-          let uses = dfg_get_uses dfg alloca_out in
-          let size_val = case i.inst_operands of
-                           Lit w :: _ => w2n w | _ => 0 in
-          if m2v_can_promote_alloca uses then
-            let var = m2v_fresh_var alloca_out ctr in
-            (ctr + 1, (alloca_out, var, size_val) :: promos)
-          else (ctr, promos)
-        | _ => (ctr, promos)`] FOLDL_proj) >>
-  simp[] >>
-  (impl_tac >- (
-    rpt gen_tac >> PairCases_on `acc` >>
-    simp[m2v_scan_step_def] >>
-    Cases_on `x.inst_outputs` >> simp[] >>
-    Cases_on `t` >> simp[] >>
-    IF_CASES_TAC >> simp[]
-  )) >>
-  simp[]
-QED
-
-(* Projection: (ctr, fresh) from combined scan = separate fresh scan *)
-Theorem m2v_scan_ctr_fresh_sync:
-  !xs dfg ctr0 promos0 fresh0.
-    (FST (FOLDL (m2v_scan_step dfg) (ctr0,promos0,fresh0) xs),
-     SND (SND (FOLDL (m2v_scan_step dfg) (ctr0,promos0,fresh0) xs))) =
-    FOLDL (\(ctr,fresh) (i : instruction).
-      case i.inst_outputs of
-        [alloca_out] =>
-          let uses = dfg_get_uses dfg alloca_out in
-          let size_val = case i.inst_operands of
-                           Lit w :: _ => w2n w | _ => 0 in
-          if m2v_can_promote_alloca uses then
-            let var = m2v_fresh_var alloca_out ctr in
-            (ctr + 1, var INSERT fresh)
-          else (ctr, fresh)
-        | _ => (ctr, fresh)) (ctr0, fresh0) xs
-Proof
-  rpt gen_tac >>
-  mp_tac (Q.ISPECL [
-    `\x:num # (string # string # num) list # string set. (FST x, SND (SND x))`,
-    `m2v_scan_step (dfg : dfg_analysis)`,
-    `\(ctr:num, fresh:string set) (i:instruction).
-      case i.inst_outputs of
-        [alloca_out] =>
-          let uses = dfg_get_uses dfg alloca_out in
-          let size_val = case i.inst_operands of
-                           Lit w :: _ => w2n w | _ => 0 in
-          if m2v_can_promote_alloca uses then
-            let var = m2v_fresh_var alloca_out ctr in
-            (ctr + 1, var INSERT fresh)
-          else (ctr, fresh)
-        | _ => (ctr, fresh)`] FOLDL_proj) >>
-  simp[] >>
-  (impl_tac >- (
-    rpt gen_tac >> PairCases_on `acc` >>
-    simp[m2v_scan_step_def] >>
-    Cases_on `x.inst_outputs` >> simp[] >>
-    Cases_on `t` >> simp[] >>
-    IF_CASES_TAC >> simp[]
-  )) >>
-  simp[]
-QED
-
-(* The linking lemma: promo entries have their pvars in the fresh set *)
-Theorem m2v_scan_promo_in_fresh:
-  !xs (dfg : dfg_analysis) ctr0 promos0 fresh0.
-    (!ao pvar sz. MEM (ao, pvar, sz) promos0 ==> pvar IN fresh0) ==>
-    !ao pvar sz.
-      MEM (ao, pvar, sz)
-        (SND (FOLDL (\(ctr, promos) (i : instruction).
-          case i.inst_outputs of
-            [alloca_out] =>
-              let uses = dfg_get_uses dfg alloca_out in
-              let size_val = case i.inst_operands of
-                               Lit w :: _ => w2n w | _ => 0 in
-              if m2v_can_promote_alloca uses then
-                let var = m2v_fresh_var alloca_out ctr in
-                (ctr + 1, (alloca_out, var, size_val) :: promos)
-              else (ctr, promos)
-            | _ => (ctr, promos)) (ctr0, promos0) xs)) ==>
-      pvar IN
-        (SND (FOLDL (\(ctr, fresh) (i : instruction).
-          case i.inst_outputs of
-            [alloca_out] =>
-              let uses = dfg_get_uses dfg alloca_out in
-              let size_val = case i.inst_operands of
-                               Lit w :: _ => w2n w | _ => 0 in
-              if m2v_can_promote_alloca uses then
-                let var = m2v_fresh_var alloca_out ctr in
-                (ctr + 1, var INSERT fresh)
-              else (ctr, fresh)
-            | _ => (ctr, fresh)) (ctr0, fresh0) xs))
-Proof
-  rpt strip_tac >>
-  mp_tac (Q.SPECL [`xs`, `dfg`, `ctr0`, `promos0`, `fresh0`]
-    m2v_scan_invariant) >>
-  mp_tac (Q.SPECL [`xs`, `dfg`, `ctr0`, `promos0`, `fresh0`]
-    m2v_scan_ctr_promo_sync) >>
-  mp_tac (Q.SPECL [`xs`, `dfg`, `ctr0`, `promos0`, `fresh0`]
-    m2v_scan_ctr_fresh_sync) >>
-  simp[LET_THM] >>
-  Cases_on `FOLDL (m2v_scan_step dfg) (ctr0, promos0, fresh0) xs` >>
-  Cases_on `r` >> simp[] >>
-  ntac 2 (disch_then (assume_tac o GSYM)) >>
-  rpt strip_tac >> gvs[] >>
-  first_x_assum drule >>
-  disch_then drule >> simp[]
-QED
-
 Theorem m2v_promo_list_in_fresh_vars:
   !fn ao pvar sz. MEM (ao, pvar, sz) (m2v_promo_list fn) ==>
     pvar IN m2v_fresh_vars fn
 Proof
-  rw[m2v_promo_list_def, m2v_fresh_vars_def, LET_THM] >>
-  mp_tac (SRULE [LET_THM] m2v_scan_promo_in_fresh) >>
-  disch_then (qspecl_then [`FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts fn)`,
-    `dfg_build_function fn`, `0`, `[]`, `{}`] mp_tac) >>
+  rw[m2v_promo_list_def, m2v_fresh_vars_def, m2v_scan_def] >>
+  mp_tac (Q.SPECL [`FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts fn)`,
+    `dfg_build_function fn`, `0`, `[]`, `{}`] m2v_scan_invariant) >>
   simp[] >> metis_tac[]
 QED
 
-(* Every promo_list entry was added because m2v_can_promote_alloca held.
-   FOLDL invariant: entries in accumulated promos satisfy the predicate. *)
+(* The sole scan preserves promotability of accumulated candidates. *)
 Theorem m2v_promo_foldl_can_promote[local]:
-  !xs dfg ctr0 promos0.
-    EVERY (\(ao,pvar,sz). m2v_can_promote_alloca (dfg_get_uses dfg ao))
+  !xs dfg ctr0 promos0 fresh0.
+    EVERY (\(ao,pvar,sz). m2v_can_promote_alloca ao (dfg_get_uses dfg ao))
           promos0 ==>
-    EVERY (\(ao,pvar,sz). m2v_can_promote_alloca (dfg_get_uses dfg ao))
-      (SND (FOLDL (\(ctr, promos) (i : instruction).
-        case i.inst_outputs of
-          [alloca_out] =>
-            let uses = dfg_get_uses dfg alloca_out in
-            let size_val = case i.inst_operands of
-                             Lit w :: _ => w2n w | _ => 0 in
-            if m2v_can_promote_alloca uses then
-              let var = m2v_fresh_var alloca_out ctr in
-              (ctr + 1, (alloca_out, var, size_val) :: promos)
-            else (ctr, promos)
-          | _ => (ctr, promos)) (ctr0, promos0) xs))
+    EVERY (\(ao,pvar,sz). m2v_can_promote_alloca ao (dfg_get_uses dfg ao))
+      (FST (SND (FOLDL (m2v_scan_step dfg) (ctr0,promos0,fresh0) xs)))
 Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  Cases_on `h.inst_outputs` >> gvs[] >>
-  TRY (first_x_assum irule >> simp[] >> NO_TAC) >>
-  Cases_on `t` >> gvs[] >>
-  TRY (first_x_assum irule >> simp[] >> NO_TAC) >>
-  IF_CASES_TAC >> gvs[]
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >> simp[] >>
+  Cases_on `m2v_scan_step dfg (ctr0,promos0,fresh0) h` >>
+  Cases_on `r` >> simp[] >>
+  first_x_assum irule >>
+  gvs[m2v_scan_step_def, AllCaseEqs(), m2v_can_promote_alloca_def]
 QED
 
 Theorem m2v_promo_list_can_promote:
   !fn ao pvar sz.
     MEM (ao, pvar, sz) (m2v_promo_list fn) ==>
-    m2v_can_promote_alloca (dfg_get_uses (dfg_build_function fn) ao)
+    m2v_can_promote_alloca ao (dfg_get_uses (dfg_build_function fn) ao)
 Proof
-  rw[m2v_promo_list_def, LET_THM] >>
-  mp_tac (Q.SPECL [`FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts fn)`,
-    `dfg_build_function fn`, `0`, `[]`]
-    m2v_promo_foldl_can_promote) >>
-  simp[] >>
-  (* Need to connect the combined FOLDL (m2v_scan_step) to the projected FOLDL *)
+  rw[m2v_promo_list_def, m2v_scan_def] >>
   mp_tac (Q.SPECL [`FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts fn)`,
     `dfg_build_function fn`, `0`, `[]`, `{}`]
-    m2v_scan_ctr_promo_sync) >>
-  simp[LET_THM] >>
-  Cases_on `FOLDL (m2v_scan_step (dfg_build_function fn)) (0,[],{})
-    (FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts fn))` >>
-  Cases_on `r` >> simp[] >>
-  disch_then (assume_tac o GSYM) >> gvs[] >>
-  disch_then mp_tac >> simp[] >>
-  strip_tac >>
-  qpat_x_assum `EVERY _ _` mp_tac >>
-  rewrite_tac[EVERY_MEM] >>
-  disch_then (qspec_then `(ao,pvar,sz)` mp_tac) >> simp[]
+    m2v_promo_foldl_can_promote) >>
+  simp[EVERY_MEM] >> disch_then drule >> simp[]
 QED
 
 (* ================================================================
@@ -258,9 +88,9 @@ QED
    ================================================================ *)
 
 Theorem m2v_transform_eq_fmt:
-  !fn. m2v_transform_function fn = function_map_transform (m2v_bt fn) fn
+  !fn. m2v_transform_function_raw fn = function_map_transform (m2v_bt fn) fn
 Proof
-  simp[m2v_transform_function_def, function_map_transform_def,
+  simp[m2v_transform_function_raw_def, function_map_transform_def,
        m2v_bt_def, m2v_promo_list_def, LET_THM,
        ir_function_component_equality, MAP_EQ_f,
        basic_block_component_equality]
@@ -381,54 +211,33 @@ QED
 
 (* FOLDL invariant: promo entries come from ALLOCA instructions in xs *)
 Theorem m2v_promo_foldl_is_alloca[local]:
-  !xs dfg ctr0 promos0.
+  !xs dfg ctr0 promos0 fresh0.
     !ao pvar sz.
-      MEM (ao,pvar,sz) (SND (FOLDL (\(ctr, promos) (i : instruction).
-        case i.inst_outputs of
-          [alloca_out] =>
-            let uses = dfg_get_uses dfg alloca_out in
-            let size_val = case i.inst_operands of
-                             Lit w :: _ => w2n w | _ => 0 in
-            if m2v_can_promote_alloca uses then
-              let var = m2v_fresh_var alloca_out ctr in
-              (ctr + 1, (alloca_out, var, size_val) :: promos)
-            else (ctr, promos)
-          | _ => (ctr, promos)) (ctr0, promos0) xs)) ==>
+      MEM (ao,pvar,sz)
+        (FST (SND (FOLDL (m2v_scan_step dfg) (ctr0,promos0,fresh0) xs))) ==>
       MEM (ao,pvar,sz) promos0 \/
       ?i. MEM i xs /\ i.inst_outputs = [ao] /\
-          (case i.inst_operands of Lit w :: _ => w2n w | _ => 0) = sz
+          (case i.inst_operands of Lit w :: _ => w2n w | _ => 0) = sz /\
+          (?w. i.inst_operands = [Lit w] /\ w2n w = sz)
 Proof
-  Induct >> simp[] >> rpt gen_tac >>
-  Cases_on `h.inst_outputs` >> gvs[]
-  >- metis_tac[]
-  >> Cases_on `t` >> gvs[]
-  >- (IF_CASES_TAC >> gvs[]
-      >- (rpt strip_tac >>
-          first_x_assum drule >> strip_tac >> gvs[] >> metis_tac[])
-      >> metis_tac[])
-  >> metis_tac[]
+  Induct >- simp[] >> rpt gen_tac >> simp[] >>
+  Cases_on `m2v_scan_step dfg (ctr0,promos0,fresh0) h` >>
+  Cases_on `r` >> simp[] >> strip_tac >>
+  first_x_assum drule >> strip_tac
+  >- (gvs[m2v_scan_step_def, AllCaseEqs()] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem m2v_promo_list_is_alloca:
   !fn ao pvar sz. MEM (ao,pvar,sz) (m2v_promo_list fn) ==>
     ?inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
            inst.inst_outputs = [ao] /\
-           (case inst.inst_operands of Lit w :: _ => w2n w | _ => 0) = sz
+           (case inst.inst_operands of Lit w :: _ => w2n w | _ => 0) = sz /\
+           (?w. inst.inst_operands = [Lit w] /\ w2n w = sz)
 Proof
-  rw[m2v_promo_list_def, LET_THM] >>
-  mp_tac (Q.SPECL [`FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts fn)`,
-    `dfg_build_function fn`, `0`, `[]`]
-    m2v_promo_foldl_is_alloca) >>
-  mp_tac (Q.SPECL [`FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts fn)`,
-    `dfg_build_function fn`, `0`, `[]`, `{}`]
-    m2v_scan_ctr_promo_sync) >>
-  simp[LET_THM] >>
-  Cases_on `FOLDL (m2v_scan_step (dfg_build_function fn)) (0,[],{})
-    (FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts fn))` >>
-  Cases_on `r` >> simp[] >>
-  disch_then (assume_tac o GSYM) >> gvs[] >>
-  disch_then drule >> strip_tac >> gvs[] >>
-  qexists `i` >> gvs[MEM_FILTER]
+  rw[m2v_promo_list_def, m2v_scan_def] >>
+  drule m2v_promo_foldl_is_alloca >> simp[] >>
+  strip_tac >> qexists `i` >> gvs[MEM_FILTER]
 QED
 
 (* ao from promo_list is NOT a fresh var *)
@@ -509,34 +318,16 @@ QED
 (* FOLDL invariant: MAP FST of accumulated promos stays ALL_DISTINCT
    when input list has ALL_DISTINCT outputs and initial promos are disjoint *)
 Theorem m2v_promo_foldl_fst_distinct[local]:
-  !xs dfg ctr0 promos0.
+  !xs dfg ctr0 promos0 fresh0.
     ALL_DISTINCT (MAP FST promos0 ++ FLAT (MAP instruction_inst_outputs xs)) ==>
     ALL_DISTINCT (MAP FST
-      (SND (FOLDL (\(ctr, promos) (i : instruction).
-        case i.inst_outputs of
-          [] => (ctr, promos)
-        | [alloca_out] =>
-            if m2v_can_promote_alloca (dfg_get_uses dfg alloca_out) then
-              (ctr + 1, (alloca_out, m2v_fresh_var alloca_out ctr,
-                case i.inst_operands of
-                  [] => 0 | Lit w :: v3 => w2n w
-                | Var v8 :: v3 => 0 | Label v9 :: v3 => 0) :: promos)
-            else (ctr, promos)
-        | alloca_out :: v10 :: v11 => (ctr, promos))
-        (ctr0, promos0) xs)))
+      (FST (SND (FOLDL (m2v_scan_step dfg) (ctr0,promos0,fresh0) xs))))
 Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  Cases_on `h.inst_outputs` >> gvs[] >>
-  TRY (first_x_assum irule >>
-       fs[ALL_DISTINCT_APPEND] >> NO_TAC) >>
-  Cases_on `t` >> gvs[] >>
-  TRY (first_x_assum irule >>
-       fs[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >>
-       metis_tac[] >> NO_TAC) >>
-  IF_CASES_TAC >> gvs[] >>
-  first_x_assum irule >>
-  fs[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >>
-  rpt strip_tac >> gvs[] >> res_tac >> metis_tac[]
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >> simp[] >>
+  Cases_on `m2v_scan_step dfg (ctr0,promos0,fresh0) h` >>
+  Cases_on `r` >> simp[] >> first_x_assum irule >>
+  gvs[m2v_scan_step_def, AllCaseEqs(), ALL_DISTINCT_APPEND] >>
+  metis_tac[]
 QED
 
 (* General: ALL_DISTINCT of FLAT MAP is preserved under FILTER *)
@@ -553,43 +344,18 @@ QED
 
 (* FOLDL invariant: every accumulated promo entry has pvar = m2v_fresh_var ao c *)
 Theorem m2v_promo_foldl_pvar_fresh[local]:
-  !xs dfg ctr0 promos0.
+  !xs dfg ctr0 promos0 fresh0.
     (!ao pvar sz. MEM (ao,pvar,sz) promos0 ==> ?c. pvar = m2v_fresh_var ao c) ==>
-    !ao pvar sz. MEM (ao,pvar,sz) (SND (FOLDL (\(ctr, promos) (i : instruction).
-        case i.inst_outputs of
-          [] => (ctr, promos)
-        | [alloca_out] =>
-            if m2v_can_promote_alloca (dfg_get_uses dfg alloca_out) then
-              (ctr + 1, (alloca_out, m2v_fresh_var alloca_out ctr,
-                case i.inst_operands of
-                  [] => 0 | Lit w :: v3 => w2n w
-                | Var v8 :: v3 => 0 | Label v9 :: v3 => 0) :: promos)
-            else (ctr, promos)
-        | alloca_out :: v10 :: v11 => (ctr, promos))
-        (ctr0, promos0) xs)) ==>
+    !ao pvar sz. MEM (ao,pvar,sz)
+      (FST (SND (FOLDL (m2v_scan_step dfg) (ctr0,promos0,fresh0) xs))) ==>
     ?c. pvar = m2v_fresh_var ao c
 Proof
-  Induct >> simp[]
-  >> rpt gen_tac >> strip_tac
-  >> rpt gen_tac >> strip_tac
-  >> Cases_on `h.inst_outputs` >> fs[]
-  >- (last_x_assum
-        (qspecl_then [`dfg`,`ctr0`,`promos0`] mp_tac) >>
-      impl_tac >- first_assum ACCEPT_TAC >> disch_then drule >> simp[])
-  >> Cases_on `t` >> fs[]
-  >- (Cases_on `m2v_can_promote_alloca (dfg_get_uses dfg h')` >> fs[]
-      >- (last_x_assum (qspecl_then [`dfg`,`ctr0 + 1`,
-            `(h',m2v_fresh_var h' ctr0,
-              case h.inst_operands of
-                [] => 0 | Lit w :: v3 => w2n w
-              | Var v8 :: v3 => 0 | Label v9 :: v3 => 0) :: promos0`]
-              mp_tac) >>
-          (impl_tac >- (rpt strip_tac >> fs[] >> metis_tac[])) >>
-          disch_then drule >> simp[])
-      >> last_x_assum (qspecl_then [`dfg`,`ctr0`,`promos0`] mp_tac) >>
-         impl_tac >- first_assum ACCEPT_TAC >> disch_then drule >> simp[])
-  >> last_x_assum (qspecl_then [`dfg`,`ctr0`,`promos0`] mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> disch_then drule >> simp[]
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `m2v_scan_step dfg (ctr0,promos0,fresh0) h` >>
+  Cases_on `r` >> simp[] >>
+  first_x_assum (qspecl_then [`dfg`,`q`,`q'`,`r''`] mp_tac) >>
+  (impl_tac >- (gvs[m2v_scan_step_def, AllCaseEqs()] >> metis_tac[])) >>
+  simp[]
 QED
 
 (* Top-level: promo list entries have pvar = m2v_fresh_var ao c *)
@@ -597,11 +363,9 @@ Theorem m2v_promo_list_pvar_is_fresh[local]:
   !fn ao pvar sz.
     MEM (ao,pvar,sz) (m2v_promo_list fn) ==> ?c. pvar = m2v_fresh_var ao c
 Proof
-  rpt strip_tac >> fs[m2v_promo_list_def, LET_THM] >>
-  qmatch_asmsub_abbrev_tac `FOLDL _ (0,[]) alloca_list` >>
-  mp_tac (Q.SPECL [`alloca_list`, `dfg_build_function fn`, `0`,
-    `[]:(string#string#num) list`] m2v_promo_foldl_pvar_fresh) >>
-  simp[Abbr `alloca_list`] >> disch_then drule >> simp[]
+  rpt strip_tac >> fs[m2v_promo_list_def, m2v_scan_def] >>
+  irule m2v_promo_foldl_pvar_fresh >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 (* SSA ==> MAP FST (m2v_promo_list fn) is ALL_DISTINCT *)
@@ -609,7 +373,7 @@ Theorem m2v_promo_list_fst_distinct[local]:
   !fn. ssa_form fn ==> ALL_DISTINCT (MAP FST (m2v_promo_list fn))
 Proof
   rpt strip_tac >>
-  simp[m2v_promo_list_def, LET_THM] >>
+  simp[m2v_promo_list_def, m2v_scan_def] >>
   irule m2v_promo_foldl_fst_distinct >> simp[] >>
   fs[ssa_form_def] >>
   irule ALL_DISTINCT_FLAT_MAP_FILTER >>
@@ -711,11 +475,23 @@ Proof
   metis_tac[m2v_fresh_not_in_operands]
 QED
 
-(* fresh_undef preserved through individual non-terminal step_inst *)
+(* Any step_inst preserves lookup_var for non-output variables. *)
+Theorem step_inst_preserves_non_output:
+  !fuel ctx inst s s' v.
+    step_inst fuel ctx inst s = OK s' /\
+    ~MEM v inst.inst_outputs ==>
+    lookup_var v s' = lookup_var v s
+Proof
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- metis_tac[step_terminator_preserves_vars]
+  >> metis_tac[step_preserves_non_output_vars]
+QED
+
+(* Fresh undefinedness is preserved by every successful instruction step. *)
 Theorem m2v_fresh_undef_preserved_step:
   !fn inst fuel ctx s s'.
     step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode /\
     m2v_fresh_names_disjoint fn /\
     MEM inst (fn_insts fn) /\
     m2v_fresh_undef fn s ==>
@@ -724,7 +500,7 @@ Proof
   rw[m2v_fresh_undef_def] >>
   `~MEM v inst.inst_outputs` by
     (fs[m2v_fresh_names_disjoint_def] >> metis_tac[]) >>
-  drule_all step_preserves_non_output_vars >> simp[]
+  drule_all step_inst_preserves_non_output >> simp[]
 QED
 
 (* exec_block on original function preserves fresh_undef *)
@@ -780,19 +556,6 @@ QED
    Two clauses:
    1. Forward: lookup_var ao = SOME addr => FLOOKUP allocas = SOME (w2n addr, sz)
    2. Size consistency: FLOOKUP allocas = SOME (base, sz') => sz' = sz *)
-Definition alloca_bridge_def:
-  alloca_bridge fn s <=>
-    (!ao pvar sz inst.
-      MEM (ao, pvar, sz) (m2v_promo_list fn) /\
-      MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
-      inst.inst_outputs = [ao] ==>
-      (!addr. lookup_var ao s = SOME addr ==>
-        FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n addr, sz)) /\
-      (!base sz'. FLOOKUP s.vs_allocas inst.inst_id = SOME (base, sz') ==>
-        sz' = sz /\
-        ?addr. lookup_var ao s = SOME addr /\ w2n addr = base))
-End
-
 (* Bridge holds when alloca outputs are undefined and allocas empty *)
 Theorem alloca_bridge_undef:
   !fn s.
@@ -803,19 +566,6 @@ Theorem alloca_bridge_undef:
 Proof
   rw[alloca_bridge_def] >>
   first_x_assum (qspecl_then [`ao`, `pvar`, `sz`] mp_tac) >> simp[]
-QED
-
-(* Any step_inst preserves lookup_var for non-output variables *)
-Theorem step_inst_preserves_non_output:
-  !fuel ctx inst s s' v.
-    step_inst fuel ctx inst s = OK s' /\
-    ~MEM v inst.inst_outputs ==>
-    lookup_var v s' = lookup_var v s
-Proof
-  rpt strip_tac >>
-  Cases_on `is_terminator inst.inst_opcode`
-  >- metis_tac[step_terminator_preserves_vars]
-  >> metis_tac[step_preserves_non_output_vars]
 QED
 
 (* Helper: extract clause 1 (forward) from bridge *)
@@ -932,7 +682,6 @@ Theorem alloca_bridge_step_alloca:
     inst.inst_opcode = ALLOCA /\
     inst.inst_opcode <> INVOKE /\
     ssa_form fn /\ wf_function fn /\ MEM inst (fn_insts fn) /\
-    m2v_promo_sizes_bounded fn /\
     alloca_inv s /\
     s.vs_alloca_next < dimword (:256) /\
     alloca_bridge fn s ==>
@@ -1037,7 +786,6 @@ Theorem alloca_bridge_step:
     step_inst fuel ctx inst s = OK s' /\
     inst.inst_opcode <> INVOKE /\
     ssa_form fn /\ wf_function fn /\ MEM inst (fn_insts fn) /\
-    m2v_promo_sizes_bounded fn /\
     alloca_inv s /\
     s.vs_alloca_next < dimword (:256) /\
     alloca_bridge fn s ==>
@@ -1084,82 +832,3 @@ QED
 (* Exported version without [simp] — for downstream theories *)
 Theorem vs_inst_idx_update_transparent_export =
   vs_inst_idx_update_transparent
-
-Triviality get_instruction_not_invoke:
-  !bb idx inst.
-    get_instruction bb idx = SOME inst ==>
-    EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions ==>
-    inst.inst_opcode <> INVOKE
-Proof
-  rw[get_instruction_def] >> gvs[EVERY_EL]
-QED
-
-(* Bridge preserved by exec_block *)
-Theorem alloca_bridge_exec_block:
-  !fuel ctx bb s s' fn.
-    exec_block fuel ctx bb s = OK s' /\
-    MEM bb fn.fn_blocks /\
-    ssa_form fn /\ wf_function fn /\
-    m2v_promo_sizes_bounded fn /\
-    EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
-    alloca_inv s /\
-    s.vs_alloca_next < dimword (:256) /\
-    (!inst fuel' ctx' s1 s1'.
-      MEM inst (fn_insts fn) /\
-      s1.vs_alloca_next < dimword (:256) /\
-      step_inst fuel' ctx' inst s1 = OK s1' ==>
-      s1'.vs_alloca_next < dimword (:256)) /\
-    alloca_bridge fn s ==>
-    alloca_bridge fn s'
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `alloca_bridge _ _` mp_tac >>
-  qpat_x_assum `_.vs_alloca_next < _` mp_tac >>
-  qpat_x_assum `alloca_inv _` mp_tac >>
-  qpat_x_assum `EVERY _ _` mp_tac >>
-  qpat_x_assum `MEM _ _` mp_tac >>
-  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
-  MAP_EVERY qid_spec_tac [`s'`, `s`, `bb`, `ctx`, `fuel`] >>
-  ho_match_mp_tac (cj 2 run_defs_ind) >>
-  qexists_tac `\fuel ctx inst s. T` >>
-  qexists_tac `\fuel ctx fn' s. T` >> rw[] >>
-  suspend "body"
-QED
-
-Resume alloca_bridge_exec_block[body]:
-  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
-  ONCE_REWRITE_TAC[exec_block_def] >>
-  Cases_on `get_instruction bb s.vs_inst_idx`
-  >- simp[]
-  >> simp[]
-  >> rename1 `SOME inst0`
-  >> `MEM inst0 (fn_insts fn)` by (
-       gvs[get_instruction_def] >> metis_tac[MEM_fn_insts, EL_MEM])
-  >> `inst0.inst_opcode <> INVOKE` by (
-       imp_res_tac get_instruction_not_invoke >> simp[])
-  >> suspend "step_cases"
-QED
-
-Resume alloca_bridge_exec_block[step_cases]:
-  strip_tac >>
-  Cases_on `step_inst fuel ctx inst0 s` >> gvs[] >>
-  rename1 `step_inst fuel ctx inst0 s = OK s_mid` >>
-  Cases_on `is_terminator inst0.inst_opcode` >> gvs[]
-  >- (
-    (* Terminator case: resolve if-halted in assumption *)
-    Cases_on `s_mid.vs_halted` >> gvs[] >>
-    mp_tac (Q.SPECL [`fn`,`fuel`,`ctx`,`inst0`,`s`,`s'`]
-              alloca_bridge_step) >>
-    simp[])
-  >- (
-    (* Non-terminator case *)
-    qpat_x_assum `alloca_inv _ ==> _` mp_tac >> simp[] >>
-    strip_tac >> first_x_assum irule >> rpt conj_tac
-    >- metis_tac[venomMemPropsTheory.alloca_inv_step_inst]
-    >- (qpat_x_assum `!inst. _` (qspecl_then
-          [`inst0`,`fuel`,`ctx`,`s`,`s_mid`] mp_tac) >> simp[])
-    >> (mp_tac (Q.SPECL [`fn`,`fuel`,`ctx`,`inst0`,`s`,`s_mid`]
-                  alloca_bridge_step) >> simp[]))
-QED
-
-Finalise alloca_bridge_exec_block

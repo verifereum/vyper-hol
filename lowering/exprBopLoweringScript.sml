@@ -85,3 +85,59 @@ Proof
   rw[] >> gvs[as_stack_val_pair, unwrap_value_def, comp_return_def] >>
   RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >> metis_tac[]
 QED
+
+(* Both dispatcher operands use the left operand's type. *)
+Theorem lower_value_bytestring_compare:
+  (bop = vyperAST$Eq \/ bop = NotEq) /\
+  is_bytestring_type (expr_type e1) ==>
+  lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa =
+  (let (h1,s1) =
+     (case bytestring_literal_hash e1 of
+        SOME h => (Lit h,sa)
+      | NONE => let (p,sm) = lower_value compile_expr cenv (expr_type e1) e1 sa in
+                compile_bytestring_hash p sm) in
+   let (h2,s2) =
+     (case bytestring_literal_hash e2 of
+        SOME h => (Lit h,s1)
+      | NONE => let (p,sm) = lower_value compile_expr cenv (expr_type e1) e2 s1 in
+                compile_bytestring_hash p sm) in
+   if bop = vyperAST$Eq then emit_op EQ [h1;h2] s2
+   else let (q,sm) = emit_op EQ [h1;h2] s2 in emit_op ISZERO [q] sm)
+Proof
+  strip_tac >>
+  simp[Once lower_value_def, comp_bind_def, compile_expr_bop] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def, lower_value_child_call] >>
+  Cases_on `bytestring_literal_hash e1` >>
+  Cases_on `bytestring_literal_hash e2` >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[as_stack_val_pair, unwrap_value_def, comp_return_def] >>
+  RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >> gvs[]
+QED
+
+Theorem comparison_compile_cut:
+  (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) /\
+  lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1; e2]) sa =
+    (op, sb) ==>
+  ?h1 sh1 h2 sh2.
+    (case bytestring_literal_hash e1 of
+       SOME h => h1 = Lit h /\ sh1 = sa
+     | NONE => ?p sm. lower_value compile_expr cenv (expr_type e1) e1 sa =
+                       (p, sm) /\ compile_bytestring_hash p sm = (h1, sh1)) /\
+    (case bytestring_literal_hash e2 of
+       SOME h => h2 = Lit h /\ sh2 = sh1
+     | NONE => ?p sm. lower_value compile_expr cenv (expr_type e1) e2 sh1 =
+                       (p, sm) /\ compile_bytestring_hash p sm = (h2, sh2)) /\
+    (if bop = Eq then emit_op EQ [h1; h2] sh2 = (op, sb)
+     else ?q sq. emit_op EQ [h1; h2] sh2 = (q, sq) /\
+                 emit_op ISZERO [q] sq = (op, sb))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all lower_value_bytestring_compare >>
+  disch_then (fn th => fs[th]) >>
+  Cases_on `bytestring_literal_hash e1` >>
+  Cases_on `bytestring_literal_hash e2` >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `bop = Eq` >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED

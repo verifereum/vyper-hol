@@ -125,16 +125,17 @@ Proof
   rpt gen_tac >> Cases_on `h`
   >- (rename1 `ValueSubscript key` >> Cases_on `key` >>
       Cases_on `a` >>
-      (* FIRST makes holbuild time this per goal, not over all 81 cases *)
-      FIRST [simp[Once evaluate_subscripts_def, Once assign_subscripts_def] >>
-             simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]]
+      PURE_ONCE_REWRITE_TAC[evaluate_subscripts_def] >>
+      PURE_ONCE_REWRITE_TAC[assign_subscripts_def] >>
+      simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]
       >~ [`array_set_index _ _ _ _ = INR _`]
       >- (gvs[vyperValueOperationTheory.array_set_index_def,
               vyperValueOperationTheory.array_index_def, AllCaseEqs(),
               listTheory.oEL_THM] >> metis_tac[]) >>
       first_x_assum drule_all >> simp[]) >>
   Cases_on `a` >>
-  simp[Once evaluate_subscripts_def, Once assign_subscripts_def] >>
+  PURE_ONCE_REWRITE_TAC[evaluate_subscripts_def] >>
+      PURE_ONCE_REWRITE_TAC[assign_subscripts_def] >>
   simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   first_x_assum drule_all >> simp[]
 QED
@@ -185,14 +186,9 @@ Theorem aug_place_bop_write_result_ok:
   expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur rhs st)
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty;expr_type e] cur rhs st =
-   case evaluate_binop
-     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-     NoneTV bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
-  Cases_on `evaluate_binop
-     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-     NoneTV bop cur rhs` >> gvs[expr_res_ok_def, stmt_res_ok_def]
+  Cases_on `bop_result cx ty bop [ty;expr_type e] cur rhs st` >>
+  gvs[expr_res_ok_def, stmt_res_ok_def] >>
+  gvs[exprBopSimDefsTheory.bop_result_def, AllCaseEqs()]
 QED
 
 
@@ -440,6 +436,7 @@ QED
 
 Theorem aug_place_binop_store_outcome:
   bop <> In /\ bop <> NotIn /\
+  ((bop = Eq \/ bop = NotEq) ==> !bs. cur <> BytesV bs) /\
   compile_binop bop x y ty NONE el s2 = (op,s3) /\
   emit_void MSTORE [dst;op] s3 = ((),sf) /\
   binop_frag ctx func cenv cx bop ty ty NONE el [ty;expr_type e] cur rhs ee /\
@@ -504,7 +501,7 @@ Proof
       case evaluate_binop
         (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
         ptv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-       (irule bop_result_augassign >> simp[]) >>
+       (irule bop_result_augassign >> metis_tac[]) >>
      simp[] >>
      qpat_x_assum `k ee = _` mp_tac >>
      simp[Abbr `k`, bind_def, lift_sum_def, return_def, raise_def] >>
@@ -595,7 +592,8 @@ Proof
    case evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      dtv bop cur rhs of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   pop_assum SUBST1_TAC >> simp[AllCaseEqs()] >> strip_tac >>
   irule well_typed_binop_success_type >>
   goal_assum (drule_at Any) >> simp[] >>
@@ -1258,6 +1256,8 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      metis_tac[expr_body_pre_word_result, ETA_THM]) >>
   `is_word_type (expr_type e)` by metis_tac[word_value_type_word] >>
+  `post_value_type cenv e = expr_type e` by simp[] >>
+  gvs[] >>
   `eval_operand rhs t' = SOME (val_to_w256 v'')` by
     (irule exprBopSimPropsTheory.expr_val_rel_word >> simp[] >>
      qexistsl_tac [`cx`, `expr_type e`] >> simp[]) >>
@@ -1277,15 +1277,26 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)` by
     (irule aug_place_binop_store_outcome >>
      conj_tac >- (first_assum ACCEPT_TAC) >>
-     conj_tac >- (first_assum ACCEPT_TAC) >>
+     conj_tac >- (metis_tac[]) >>
+     conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
      conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
      asm_simp_tac std_ss [] >>
+     conj_tac >-
+       (qpat_assum `word_value_type ty` mp_tac >>
+        qpat_assum `evaluate_type (get_tenv cx) ty = SOME ptv` mp_tac >>
+        qpat_assum `value_has_type ptv v` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        metis_tac[word_value_type_typed, word_value_not_bytes]) >>
+     conj_tac >- (qexistsl_tac [`entry'`, `old`] >> simp[]) >>
+     conj_tac >- simp[gasContextTheory.gas_admissible_gas_obs] >>
      conj_tac >- (qexists_tac `env` >> simp[]) >>
+     conj_tac >- simp[] >>
      goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
-     asm_simp_tac std_ss []) >>
+     asm_simp_tac std_ss [exprBopSimPropsTheory.bop_result_gas_obs] >>
+     metis_tac[]) >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
     (stmt_post ctx func cx lctx cenv cenv sa sb s0)

@@ -7,6 +7,7 @@
 
 Theory exprSimPopNestedBase
 Ancestors
+  exprSimHashBoundary
   loweringPosts bodySim
   list fragExec exprSimDefs exprSimProps exprSimHypsDefs exprSimHyps exprSimPop exprSimPopStorage
   targetPlaceSim targetPlaceSimCases targetPlaceLive vyperTypeEnv vyperTypeInvariants

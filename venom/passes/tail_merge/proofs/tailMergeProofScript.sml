@@ -11,7 +11,7 @@ Ancestors
   tailMergeMap tailMergeSim tailMergeHelpers tailMergeStep tailMergeDefs stateEquiv
   cfgTransform venomState venomExecSemantics venomInst
   venomWf cfgTransformProofs execEquivProofs stateEquivProofs
-  venomInstProps venomExecProps execEquivParamProps unitShapeDefs
+  venomInstProps venomExecProofs venomExecProps execEquivParamProps unitShapeDefs
 Libs
   stepInstBaseLib
 
@@ -2065,33 +2065,6 @@ Proof
   Cases_on `r` >> simp[execution_equiv_def]
 QED
 
-val term_ok_jump_tac =
-  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  with_opcode_clause (fn ths =>
-    simp (ths @ [eval_operands_def, eval_operand_def, AllCaseEqs()])) >>
-  rpt CASE_TAC >> gvs[] >> TRY pairarg_tac >> gvs[];
-
-Theorem step_inst_base_ok_terminator_jump[local]:
-  !inst s s'.
-    is_terminator inst.inst_opcode /\
-    step_inst_base inst s = OK s' ==>
-    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
-    inst.inst_opcode = DJMP
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- (term_ok_jump_tac >> rpt strip_tac >>
-      Cases_on `pack_dret_dynamic s.vs_call_entry_fmp pairs s` >>
-      Cases_on `r` >> gvs[])
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-QED
 
 (* Non-jump terminators never return OK *)
 Theorem step_inst_base_non_jump_term_not_ok[local]:

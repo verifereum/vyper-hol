@@ -56,6 +56,11 @@ selected fixture that has no fixture. The one exception is the pending list in
 `compilerNativeParity.sml` (`builtin-forms/oracle/uint2str_local.hex`; see
 `../pending-uint2str-buffer.md`).
 
+The fixtures in `decoder_divergent` there are expected to compile and to
+differ from the oracle: they print `PASS` when they differ, and `FAIL` if one
+matches, so a resolved entry gets removed (see
+`../pending-bounded-decode-guards.md`).
+
 Run the `build` step first: the executable compiles `compilerNativeML.sml`,
 which the generator theory writes as an extra output rather than a declared
 source.
