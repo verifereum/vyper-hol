@@ -209,6 +209,19 @@ Resume eval_mutual_scopes_progress[Builtin]:
   >- (Cases_on `bt = Len` >> rpt gen_tac >> strip_tac >>
       Cases_on `bt = Env MsgGas` >>
       Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+      Cases_on `code_slice_source bt es`
+      >>~- ([`code_slice_source bt es = SOME _`],
+            rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
+            gvs[code_slice_source_SOME] >>
+            qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+            simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+                 assert_def, return_def, raise_def, AllCaseEqs()] >>
+            strip_tac >> gvs[] >>
+            imp_res_tac precompile_call_success_state >>
+            imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
+            gvs[] >> metis_tac[scopes_progress_trans]) >>
+      (* the code-slice IHs are vacuous from here on *)
+      rpt (qpat_x_assum `!s'' x t v. _` kall_tac) >>
       gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
           assert_def, return_def, raise_def, lift_option_type_def,
           vyperMiscTheory.option_CASE_rator,
