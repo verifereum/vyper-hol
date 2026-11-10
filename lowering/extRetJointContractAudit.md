@@ -355,3 +355,25 @@ checked rejection suffix. Remaining finite semantic boundaries are widening
 transitivity and evaluated/encodable arbitrary-ret package plan and size
 (including empty struct), before the simultaneous allocation-resource work.
 No generic recursive implementation or frozen statement has been proved.
+
+## 7. Finite semantic boundaries after entry validation
+
+`extRetWideningTransPtr` now exports mutual arg-fit transitivity and
+`ext_ret_type_widens_trans`. `ext_ret_aggregate_return_widens` composes
+post-to-annotation and annotation-to-return widening using only expr_sim_inv,
+Return typing and non-word/non-bytes annotation guards.
+
+`extRetEncodableMetadataPtr` supplies update/package/frame ABI plan and exact
+size metadata under `encodable_ret_shape (type_env tops) ret`, not
+assignability. Package construction need not correspond to a source lookup.
+Registration and same_frame transport are checked, with separate plan/size
+consumers and supported_place_type + successful evaluate_type variants.
+The local empty-struct update regression passes. No toolkit source changed.
+
+Remaining caller requirement: arbitrary widened-frame Return guards must
+supply `encodable_ret_shape (type_env tops) ret`, or a checked compiler
+fallback must avoid needing an encoder plan. Successful evaluate_type alone
+does not exclude NoneT components. These finite metadata results do not
+establish the simultaneous source/destination/live-scratch allocation
+contract, general dynamic-child recursion, or layout-converting counted copy.
+Do not treat these prerequisites as discharge of either frozen frame theorem.
