@@ -608,6 +608,53 @@ Proof
       inline_address_links_def, EVERY_MEM, SUBSET_DEF] >> metis_tac[]
 QED
 
+Theorem inline_owner_storage_call_step:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  inline_shared_frame snap.ils_state = inline_shared_frame frame.ipf_state /\
+  inst.inst_opcode = CALL /\ LENGTH inst.inst_operands = 7 /\
+  inst.inst_outputs = [x] /\
+  MEM x (cfgTransform$fn_all_vars a.ia_function) /\ ~retpc_var a.ia_function x /\
+  INJ route.ir_rename (x INSERT snap.ils_defined) UNIV /\
+  route.ir_rename x = STRCAT pref x /\
+  eval_operands (MAP (functionInlinerDefs$clone_operand pref labels)
+      inst.inst_operands) frame.ipf_state =
+    eval_operands inst.inst_operands snap.ils_state /\
+  step_inst fuel C inst snap.ils_state = OK s ==>
+  ?t. step_inst tfuel Tctx (clone_instruction pref labels inst) frame.ipf_state = OK t /\
+    inline_owner_storage cert
+      ((p,a,route,snap with <|ils_state := s;
+        ils_defined := x INSERT snap.ils_defined|>)::rest)
+      (frame with ipf_state := t) /\
+    inline_shared_frame s = inline_shared_frame t
+Proof
+  strip_tac >> drule inline_owner_storage_head >> strip_tac >>
+  `inline_opaque_frame_rel route.ir_rename snap.ils_defined snap.ils_opaque
+    FEMPTY {} snap.ils_state frame.ipf_state` by
+    gvs[inline_tracked_snapshot_def, inline_snapshot_data_def,
+        inline_opaque_frame_rel_def, inline_frame_rel_def] >>
+  `!v. v IN snap.ils_defined ==>
+     (route.ir_rename v = route.ir_rename x <=> v = x)` by
+    (qpat_x_assum `INJ _ _ _` mp_tac >>
+     pure_rewrite_tac [INJ_DEF, IN_INSERT, IN_UNIV] >> metis_tac[]) >>
+  `route.ir_rename x NOTIN ({} : string set)` by simp[] >>
+  drule_all inline_call_clone_success >>
+  disch_then (qspecl_then [`tfuel`, `Tctx`] strip_assume_tac) >>
+  qexists `t'` >> conj_tac >- simp[] >>
+  `inline_success_footprint [x] snap.ils_state s` by
+    (qpat_assum `step_inst fuel C inst _ = OK s`
+       (mp_then Any mp_tac inline_ordinary_success_footprint) >>
+     simp[inline_ordinary_opcode_def]) >>
+  `inline_success_footprint [route.ir_rename x] frame.ipf_state t'` by
+    (qpat_assum `step_inst tfuel Tctx _ _ = OK t'`
+       (mp_then Any mp_tac inline_ordinary_success_footprint) >>
+     simp[functionInlinerDefsTheory.clone_instruction_def,
+          inline_ordinary_opcode_def]) >>
+  irule (inline_owner_storage_success_footprint |>
+    Q.INST [`outs` |-> `[x]`] |> SRULE [INSERT_UNION_EQ]) >>
+  metis_tac[]
+QED
+
 (* Logical and physical control locations need not be equal. Storage ignores
    both, and shared-frame agreement is maintained separately. *)
 Theorem inline_owner_storage_control:

@@ -1945,6 +1945,31 @@ Proof
   Cases_on `r` >> simp[] >> metis_tac[inline_opaque_frame_restrict]
 QED
 
+Theorem inline_call_clone_success:
+  inst.inst_opcode = CALL /\ LENGTH inst.inst_operands = 7 /\
+  inst.inst_outputs = [x] /\
+  eval_operands (MAP (clone_operand pref labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT pref x /\ step_inst fuel ctx inst s = OK s' ==>
+  ?t'. step_inst tfuel tctx (clone_instruction pref labels inst) t = OK t' /\
+    inline_opaque_frame_rel ren (x INSERT V) opaque saved P s' t'
+Proof
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      venom_state_component_equality] >>
+  `(clone_instruction pref labels inst).inst_opcode = CALL /\
+    LENGTH (clone_instruction pref labels inst).inst_operands = 7 /\
+    (clone_instruction pref labels inst).inst_operands =
+      MAP (clone_operand pref labels) inst.inst_operands` by
+    simp[clone_instruction_def] >>
+  gvs[step_inst_non_invoke, inline_call_eval_list, AllCaseEqs()] >>
+  metis_tac[inline_ext_call_clone_frame]
+QED
+
 Theorem inline_call_clone_result:
   inst.inst_opcode = CALL /\ LENGTH inst.inst_operands = 7 /\
   inst.inst_outputs = [x] /\
