@@ -334,6 +334,18 @@ Theorem registration_alloc_buffer_ptr:
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_data_section = s.vs_data_section /\
     t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
+    (fresh_vars_wrt st s ==> fresh_vars_wrt last t) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    (!id. id <> st.cs_next_id ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\
     (!p sz. p <> q /\ ptr_covers G tn p s sz ==> ptr_covers H u p t sz) /\
     (!D lower ctx' func.
       fn_has_code st last func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
@@ -368,7 +380,20 @@ Proof
   drule_at (Pos (el 2)) registration_owner_alloca_ptr >> simp[] >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
-  qexistsl_tac [`t`, `q`, `p`] >>
+  `fresh_vars_wrt st s ==> fresh_vars_wrt last t` by
+    (strip_tac >>
+     qpat_x_assum `exec_alloca _ _ _ = OK t` mp_tac >>
+     simp[exec_alloca_def, mk_inst_def] >>
+     strip_tac >> gvs[AllCaseEqs(), fresh_vars_wrt_def, update_var_def] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+     eval_operand op t = eval_operand op s` by
+    (rpt strip_tac >> first_x_assum irule >>
+     Cases_on `op` >> gvs[abiDecoderReentryTheory.abi_decoder_operand_live_def,
+         abiDecoderReentryTheory.abi_decoder_older_vars_def]) >>
+  drule_at (Pos (el 2)) decoderWorldFramePtrTheory.decoder_step_world_frame >>
+  simp[mk_inst_def, abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def] >>
+  strip_tac >> qexistsl_tac [`t`, `p`] >>
   gvs[run_inst_seq_def, mk_inst_def]
 QED
 
