@@ -2279,3 +2279,39 @@ Proof
   gvs[sym_step_op_def, MEM] >>
   irule sym_step_concrete_ok_stack_suffix >> simp[]
 QED
+
+Theorem sym_named_steps_ok_stack_suffix:
+  asm_block_at p ss.sym_base.as_pc [AsmOp name] /\
+  ~MEM name ["POP"; "JUMP"; "JUMPI"; "CODESIZE"] /\
+  ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE /\
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  sym_steps p env 1 ss = SymOK ss' ==>
+  sym_steps p env 1 (ss with sym_stack := ss.sym_stack ++ tail) =
+    SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
+Proof
+  simp[asm_block_at_def] >>
+  rpt strip_tac >>
+  gvs[codegenSymRelTheory.sym_steps_compute, sym_step_def, AllCaseEqs()] >>
+  simp[sym_named_op_ok_stack_suffix]
+QED
+
+Theorem sym_named_emit_restore_stack:
+  asm_block_at p ss.sym_base.as_pc [AsmOp name] /\
+  ~MEM name ["POP"; "JUMP"; "JUMPI"; "CODESIZE"] /\
+  ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE /\
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
+    stail wtail /\
+  sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss' /\
+  ss'.sym_mem_labels = ss.sym_mem_labels /\
+  sym_kinds_ok cplan fn ret [] qs ss' ==>
+  ?full. sym_steps p env 1 (ss with sym_stack := ss.sym_stack ++ stail) =
+      SymOK full /\
+    asm_sym_rel p env (cs' with as_stack := cs'.as_stack ++ wtail) full /\
+    full.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret stail qs full
+Proof
+  strip_tac >> qexists_tac `ss' with sym_stack := ss'.sym_stack ++ stail` >>
+  simp[asm_sym_rel_restore_stack, sym_kinds_ok_restore_stack] >>
+  irule sym_named_steps_ok_stack_suffix >> simp[] >> qexists_tac `name` >> gvs[MEM]
+QED
