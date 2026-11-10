@@ -70,8 +70,10 @@ Proof
   >- (simp[vv_at_def, contextTheory.mk_ptr_def] >>
       disj2_tac >> disj1_tac >>
       qexistsl_tac [`id`, `locbase`, `sz`] >> simp[]) >>
-  conj_tac >- simp[contextTheory.mk_ptr_def] >>
-  gvs[wb_frame_def] >> first_assum ACCEPT_TAC
+  qpat_x_assum `wb_frame _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  simp[contextTheory.mk_ptr_def]
 QED
 
 Theorem pop_path_result_bounds:

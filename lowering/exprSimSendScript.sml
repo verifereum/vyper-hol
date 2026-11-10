@@ -333,8 +333,6 @@ Proof
        eval_operand_def, vyperValueTheory.evaluate_type_def,
        is_word_type_def, val_in_memory_def, val_wf_def, val_footprint_def,
        type_memory_size_def] >>
-  qpat_x_assum `wb_frame _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 

@@ -472,9 +472,7 @@ Proof
       rpt strip_tac >> gvs[] >>
       irule accountsRelPropsTheory.storage_read_live_field >>
       metis_tac[])
-  >~ [`~expr_has_effect (Attribute _ _ _) ==> _`]
-  >- (rewrite_tac[loweringPostsTheory.expr_has_effect_thm] >> first_assum ACCEPT_TAC) >>
-  first_assum ACCEPT_TAC
+  >> first_assum ACCEPT_TAC
 QED
 
 (* ===== The simulation ===== *)
