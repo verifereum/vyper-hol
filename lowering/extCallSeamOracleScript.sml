@@ -20,7 +20,7 @@ Theorem oracle_ext_call_source:
 Proof
   strip_tac >>
   `~cx.txn.is_static /\ es.outcomes = SOME s.vs_outcomes` by
-    fs[compileEnvTheory.state_rel_def] >>
+    fs[loweringStateRelDefsTheory.state_rel_def] >>
   simp[frame_call_value_def, eval_ext_call_effects_def,
        bind_def, ignore_bind_def, return_def, raise_def] >>
   Cases_on `oc.co_success` >>
@@ -49,7 +49,7 @@ Theorem oracle_ext_call_source_cases:
 Proof
   strip_tac >>
   `state_rel func cenv cx es s /\ IS_SOME es.outcomes` by
-    fs[stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   drule_all raw_call_typed_outcome >>
   disch_then (qspecl_then [`target`, `data`, `amount`] strip_assume_tac) >>
   drule_all calldata_take_call_outcome_bound >> strip_tac >>

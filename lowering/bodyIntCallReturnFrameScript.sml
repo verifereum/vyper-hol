@@ -1,6 +1,6 @@
 Theory bodyIntCallReturnFrame
 Ancestors
-  intCallReturn intCallFrame exprLoweringProps compileEnv localPtrsProps
+  intCallReturn intCallFrame exprLoweringProps compileEnv loweringStateRelDefs localPtrsProps
   finite_map option list rich_list
   venomExecSemantics venomState accountsRelProps
 

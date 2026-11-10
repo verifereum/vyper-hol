@@ -70,8 +70,8 @@ Proof
   simp[vv_holds_def, vv_at_def, read_result_def, return_def,
     expr_val_rel_def, expr_val_at_def, eval_operand_def,
     evaluate_type_def, is_word_type_def,
-    valueEncodingTheory.val_in_memory_def,
-    valueEncodingTheory.val_wf_def, val_footprint_def,
+    valueEncodingDefsTheory.val_in_memory_def,
+    valueEncodingDefsTheory.val_wf_def, val_footprint_def,
     valueEncodingTheory.type_memory_size_def]
 QED
 
