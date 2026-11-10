@@ -2910,6 +2910,34 @@ Proof
             step, events, venomInstTheory.is_terminator_def])) >>
       simp[NoAsms, Once gas_events_block_def,
         venomInstTheory.get_instruction_def] ) >>
+  Cases_on `y.inst_opcode = GAS`
+  >- (
+    `inst_wf y` by (fs[EVERY_MEM, EVERY_APPEND, EVERY_DEF] >> metis_tac[]) >>
+    drule_all dft_gas_ok_shape >> strip_tac >>
+    `EVERY (\i. ~is_terminator i.inst_opcode /\
+      (!v. MEM (Var v) i.inst_operands ==> out <> v) /\
+      ~MEM out i.inst_outputs) pre` by
+      (fs[EVERY_MEM] >> rpt strip_tac >>
+       `dft_gas_swap_pair y i` by metis_tac[dft_gas_swap_pair_sym] >>
+       metis_tac[dft_independent_gas_output, dft_gas_swap_pair_def]) >>
+    qpat_x_assum `LENGTH (gas_events_block _ _ _ _ _) <= _` mp_tac >>
+    simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+      EL_APPEND_EQN, gas_events_step_def, venomInstTheory.is_terminator_def] >>
+    strip_tac >>
+    Cases_on `s.vs_gas_readings` >- gvs[] >>
+    rename1 `s.vs_gas_readings = v::rs` >>
+    qabbrev_tac `a = s with vs_gas_readings := rs` >>
+    `dft_remaining_inv fn bb (pre ++ y::post) a` by
+      (irule dft_remaining_inv_gas_variant >> qexists_tac `s` >>
+       simp[Abbr `a`, venom_state_component_equality]) >>
+    `terminates (FOLDR (dft_exec_cons fuel C') OK pre a)` by
+      (qpat_x_assum `terminates (FOLDR _ _ (y::pre) s)` mp_tac >>
+       simp[dftIndexedExecTheory.dft_exec_cons_def, venomInstTheory.is_terminator_def] >>
+       mp_tac (Q.SPECL [`pre`, `a`, `out`, `v`, `SUC s.vs_inst_idx`]
+         (Q.INST [`C` |-> `C'`] prefix_independent_update_terminates)) >>
+       simp[Abbr `a`, update_var_def]) >>
+    FAIL_TAC "GAS relocation inspection"
+  ) >>
   FAIL_TAC "noninvoke extraction pending"
 QED
 
