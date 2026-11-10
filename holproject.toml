@@ -16,6 +16,7 @@ roots = [
   "lowering/whitelist/whitelistS2ExtrasScript.sml",
   "lowering/whitelist/whitelistCheckerTypesScript.sml",
   "lowering/whitelist/whitelistCheckerDeclsScript.sml",
+  "lowering/whitelist/whitelistCheckerDeployScript.sml",
   "lowering/whitelist/whitelistFlagsScript.sml",
   "lowering/whitelist/whitelistForIterScript.sml",
   "lowering/whitelist/whitelistScopesScript.sml",

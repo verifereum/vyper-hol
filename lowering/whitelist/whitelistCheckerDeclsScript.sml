@@ -25,14 +25,18 @@
      type_stmt_for_range_integer_type                (S56)
      type_stmt_for_range_bound_pos                   (S60)
      type_stmt_for_array_name_elem                   (S62)
-     type_place_target_attribute_subscript_base      (S69) *)
+     type_place_target_attribute_subscript_base      (S69)
+     well_typed_expr_int_calls_main, type_stmts_int_calls_main,
+     check_contract_callable_main_calls              (L1: FST c = NONE)
+     well_typed_expr_int_calls_internal,
+     type_stmts_int_calls_internal                   (L2: callee lookup) *)
 Theory whitelistCheckerDecls
 Ancestors
   list rich_list arithmetic finite_map pred_set pair option words
   vyperAST vyperValue vyperContext vyperInterpreter vyperTypeSystem
   vyperTypeContract vyperABIEntries
   vyperTypeContractStaticMaps vyperTypeContractContext vyperTypeEnvExtension
-  vyperTypeEventLookup
+  vyperTypeEventLookup vyperTypeCallGraph vyperTypeInvariants
   supportedTypes supportedDecls supportedNames supportedExprForms
   supportedStmtTraverse compileVyper selectorDispatch contractABI
   entryDispatchProps
@@ -181,7 +185,7 @@ Proof
   rw[supported_function_names_def, GSYM sublist_cons]
 QED
 
-Theorem function_names_external_sublist[local]:
+Theorem function_names_external_sublist:
   !tops.
     sublist (MAP (\n. (NONE, n))
                (supported_function_names (FILTER (\t. ?m nr rr n a d r b. t = FunctionDecl External m nr rr n a d r b) tops)))
@@ -540,4 +544,227 @@ Theorem type_stmt_for_array_name_elem:
   elem = ty
 Proof
   simp[type_stmt_def, well_typed_iterator_def, expr_type_def]
+QED
+
+(* ===== L1, L2: internal calls of a checked single-module program ===== *)
+
+(* Every internal call of a well-typed expression names a key of the typing
+   environment's fn_sigs: the IntCall rule looks the callee up there. *)
+Theorem well_typed_int_calls_fn_sigs:
+  (!env e. well_typed_expr env e ==>
+     EVERY (\c. c IN FDOM env.fn_sigs) (int_calls_expr e)) /\
+  (!env e. IS_SOME (type_place_expr env e) ==>
+     EVERY (\c. c IN FDOM env.fn_sigs) (int_calls_expr e)) /\
+  (!env tgt. IS_SOME (type_place_target env tgt) ==>
+     EVERY (\c. c IN FDOM env.fn_sigs) (int_calls_target tgt)) /\
+  (!env es. well_typed_exprs env es ==>
+     EVERY (\c. c IN FDOM env.fn_sigs) (int_calls_exprs es)) /\
+  (!env opt. well_typed_opt env opt ==>
+     EVERY (\c. c IN FDOM env.fn_sigs) (int_calls_opt opt)) /\
+  (!env kes. well_typed_named_exprs env kes ==>
+     EVERY (\c. c IN FDOM env.fn_sigs) (int_calls_named_exprs kes))
+Proof
+  ho_match_mp_tac well_typed_expr_ind >> rpt conj_tac >> rpt gen_tac >>
+  TRY strip_tac >>
+  simp[well_typed_expr_def, int_calls_expr_def, EVERY_APPEND] >>
+  rpt strip_tac >> gvs[IS_SOME_EXISTS, AllCaseEqs(), FLOOKUP_DEF] >>
+  gvs[well_typed_expr_def]
+QED
+
+Theorem well_typed_atarget_int_calls_fn_sigs[local]:
+  (!tgt env ty. well_typed_atarget env tgt ty ==>
+     EVERY (\c. c IN FDOM env.fn_sigs) (int_calls_atarget tgt)) /\
+  (!tgts env tys. LIST_REL (\tgt ty. well_typed_atarget env tgt ty) tgts tys ==>
+     EVERY (\c. c IN FDOM env.fn_sigs) (int_calls_atargets tgts))
+Proof
+  ho_match_mp_tac int_calls_atarget_ind >>
+  simp[well_typed_atarget_def, well_typed_target_def, int_calls_atarget_def,
+       EVERY_APPEND] >>
+  rpt strip_tac >> gvs[]
+  >- (irule (cj 3 well_typed_int_calls_fn_sigs) >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem type_place_target_int_calls_fn_sigs[local]:
+  type_place_target env tgt = SOME vt ==>
+  EVERY (\c. c IN FDOM env.fn_sigs) (int_calls_target tgt)
+Proof
+  strip_tac >> irule (cj 3 well_typed_int_calls_fn_sigs) >> simp[]
+QED
+
+Theorem atarget_accepts_int_calls_fn_sigs[local]:
+  atarget_accepts env tgt t ==>
+  EVERY (\c. c IN FDOM env.fn_sigs) (int_calls_atarget tgt)
+Proof
+  Cases_on `tgt` >> simp[atarget_accepts_def, int_calls_atarget_def] >>
+  strip_tac
+  >- (Cases_on `type_place_target env b` >> gvs[] >>
+      imp_res_tac type_place_target_int_calls_fn_sigs)
+  >> drule (cj 1 well_typed_atarget_int_calls_fn_sigs) >>
+  simp[int_calls_atarget_def]
+QED
+
+Theorem well_typed_iterator_int_calls_fn_sigs[local]:
+  well_typed_iterator env typ it ==>
+  EVERY (\c. c IN FDOM env.fn_sigs) (int_calls_iterator it)
+Proof
+  Cases_on `it` >>
+  simp[well_typed_iterator_def, int_calls_iterator_def, EVERY_APPEND] >>
+  metis_tac[cj 1 well_typed_int_calls_fn_sigs]
+QED
+
+Theorem type_stmt_int_calls_fn_sigs:
+  (!env ret s env'. type_stmt env ret s = SOME env' ==>
+     EVERY (\c. c IN FDOM env.fn_sigs) (int_calls_stmt s)) /\
+  (!env ret ss env'. type_stmts env ret ss = SOME env' ==>
+     EVERY (\c. c IN FDOM env.fn_sigs) (int_calls_stmts ss))
+Proof
+  ho_match_mp_tac type_stmt_ind >> rpt conj_tac >> rpt gen_tac >>
+  TRY strip_tac >> rpt gen_tac >> rpt strip_tac >>
+  gvs[type_stmt_def, AllCaseEqs(), int_calls_stmt_def, EVERY_APPEND,
+      IS_SOME_EXISTS, well_typed_custom_error_def,
+      int_calls_assert_reason_def, int_calls_raise_reason_def,
+      int_calls_expr_def, well_typed_target_def, extend_local_def] >>
+  imp_res_tac (cj 1 well_typed_int_calls_fn_sigs) >>
+  imp_res_tac (cj 4 well_typed_int_calls_fn_sigs) >>
+  imp_res_tac type_place_target_int_calls_fn_sigs >>
+  imp_res_tac atarget_accepts_int_calls_fn_sigs >>
+  imp_res_tac well_typed_iterator_int_calls_fn_sigs >>
+  imp_res_tac type_stmt_preserve_nonlocal_fields >> gvs[]
+QED
+
+Theorem function_entry_env_fn_sigs:
+  (function_entry_env art mods src vis args).fn_sigs = art.cta_fn_sigs
+Proof
+  simp[function_entry_env_def] >>
+  `!env. (FOLDL (\env (id,ty). extend_local env id ty (vis = Internal))
+            env args).fn_sigs = env.fn_sigs` suffices_by simp[artifact_env_def] >>
+  Induct_on `args` >> simp[] >> Cases >> simp[extend_local_def]
+QED
+
+(* L1, static half: the checked artifact's fn_sigs keys are main-module
+   functions. *)
+Theorem check_contract_fn_sigs_main:
+  check_contract b layouts addr [(NONE, tops)] = SOME art /\
+  k IN FDOM art.cta_fn_sigs ==> FST k = NONE
+Proof
+  strip_tac >> drule check_contract_namespaces_ok >> strip_tac >>
+  qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+  simp[check_contract_def] >> strip_tac >> gvs[FDOM_DRESTRICT] >>
+  PairCases_on `k` >>
+  `?sig. FLOOKUP (build_contract_type_artifact b [(NONE,tops)]).cta_fn_sigs
+           (k0,k1) = SOME sig` by simp[FLOOKUP_DEF] >>
+  drule_all build_contract_type_artifact_fn_sigs_declared_sound >>
+  rw[] >> gvs[AllCaseEqs()]
+QED
+
+Theorem fn_sigs_consistent_main[local]:
+  fn_sigs_consistent fs cx /\
+  (!src ts. get_module_code cx src = SOME ts ==> src = NONE) /\
+  k IN FDOM fs ==> FST k = NONE
+Proof
+  PairCases_on `k` >> rw[fn_sigs_consistent_def, FLOOKUP_DEF] >>
+  metis_tac[]
+QED
+
+(* L1 at an expression or a statement list, in expr_body_pre's context:
+   expr_sim_inv gives fn_sigs_consistent, body_inv the single module. *)
+Theorem well_typed_expr_int_calls_main:
+  well_typed_expr env e /\ fn_sigs_consistent env.fn_sigs cx /\
+  (!src ts. get_module_code cx src = SOME ts ==> src = NONE) ==>
+  EVERY (\c. FST c = NONE) (int_calls_expr e)
+Proof
+  strip_tac >> drule (cj 1 well_typed_int_calls_fn_sigs) >>
+  match_mp_tac EVERY_MONOTONIC >> metis_tac[fn_sigs_consistent_main]
+QED
+
+Theorem type_stmts_int_calls_main:
+  type_stmts env ret ss = SOME env' /\ fn_sigs_consistent env.fn_sigs cx /\
+  (!src ts. get_module_code cx src = SOME ts ==> src = NONE) ==>
+  EVERY (\c. FST c = NONE) (int_calls_stmts ss)
+Proof
+  strip_tac >> drule (cj 2 type_stmt_int_calls_fn_sigs) >>
+  match_mp_tac EVERY_MONOTONIC >> metis_tac[fn_sigs_consistent_main]
+QED
+
+(* L1 for a callee: the body and defaults that lookup_callable_function
+   finds in a checked single-module program, in either mode (the storage
+   mutual's callee facts). *)
+Theorem check_contract_callable_main_calls:
+  check_contract deploy layouts addr [(NONE, tops)] = SOME art /\
+  lookup_callable_function deploy name tops =
+    SOME (mut,nr,args,dflts,ret,stmts) ==>
+  EVERY (\c. FST c = NONE) (int_calls_stmts stmts) /\
+  EVERY (\c. FST c = NONE) (int_calls_exprs dflts)
+Proof
+  strip_tac >>
+  `?vis raw. (MEM (FunctionDecl vis mut nr raw name args dflts ret stmts) tops /\
+              (vis = Deploy ==> deploy)) \/
+             (dflts = [] /\ stmts = [])` by
+    (Cases_on `deploy`
+     >- (drule lookup_callable_function_T_SOME_cases >> rw[] >> metis_tac[])
+     >> drule lookup_callable_function_F_SOME_MEM >> rw[] >>
+     qexistsl [`Internal`, `raw`] >> simp[]) >>
+  gvs[int_calls_stmt_def, int_calls_expr_def] >>
+  `check_function_body layouts addr [(NONE,tops)] art NONE vis mut nr args
+     dflts ret stmts` by
+    (Cases_on `deploy`
+     >- (irule check_contract_deploy_function_body_MEM >> simp[] >>
+         metis_tac[])
+     >> irule check_contract_single_body >> Cases_on `vis` >> gvs[] >>
+     metis_tac[]) >>
+  gvs[check_function_body_def, IS_SOME_EXISTS] >>
+  `!k. k IN FDOM art.cta_fn_sigs ==> FST k = NONE` by
+    metis_tac[check_contract_fn_sigs_main] >>
+  imp_res_tac (cj 2 type_stmt_int_calls_fn_sigs) >>
+  imp_res_tac (cj 4 well_typed_int_calls_fn_sigs) >>
+  gvs[defaults_env_def, function_entry_env_fn_sigs, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+(* L2: the internal callee of a runtime call is a main-module Internal
+   declaration, so supported_function_decl finds it. *)
+Theorem supported_function_decl_internal_MEM:
+  !tops fn mut nr raw args dflts ret body.
+    MEM (FunctionDecl Internal mut nr raw fn args dflts ret body) tops ==>
+    IS_SOME (supported_function_decl tops (NONE,fn) Internal)
+Proof
+  Induct >> simp[supported_function_decl_def] >> rpt gen_tac >>
+  Cases_on `h` >> simp[supported_function_decl_def] >> rw[] >>
+  metis_tac[]
+QED
+
+Theorem fn_sigs_consistent_internal_decl[local]:
+  fn_sigs_consistent fs cx /\ ~cx.in_deploy /\
+  get_module_code cx NONE = SOME tops /\
+  (!src ts. get_module_code cx src = SOME ts ==> src = NONE) /\
+  k IN FDOM fs ==> IS_SOME (supported_function_decl tops k Internal)
+Proof
+  PairCases_on `k` >> rw[fn_sigs_consistent_def, FLOOKUP_DEF] >>
+  first_x_assum (qspecl_then [`k0`,`k1`] mp_tac) >> simp[] >> strip_tac >>
+  `k0 = NONE` by metis_tac[] >> gvs[] >>
+  drule lookup_callable_function_F_SOME_MEM >> strip_tac >>
+  metis_tac[supported_function_decl_internal_MEM]
+QED
+
+Theorem well_typed_expr_int_calls_internal:
+  well_typed_expr env e /\ fn_sigs_consistent env.fn_sigs cx /\
+  ~cx.in_deploy /\ get_module_code cx NONE = SOME tops /\
+  (!src ts. get_module_code cx src = SOME ts ==> src = NONE) ==>
+  EVERY (\c. IS_SOME (supported_function_decl tops c Internal))
+    (int_calls_expr e)
+Proof
+  strip_tac >> drule (cj 1 well_typed_int_calls_fn_sigs) >>
+  match_mp_tac EVERY_MONOTONIC >> metis_tac[fn_sigs_consistent_internal_decl]
+QED
+
+Theorem type_stmts_int_calls_internal:
+  type_stmts env ret ss = SOME env' /\ fn_sigs_consistent env.fn_sigs cx /\
+  ~cx.in_deploy /\ get_module_code cx NONE = SOME tops /\
+  (!src ts. get_module_code cx src = SOME ts ==> src = NONE) ==>
+  EVERY (\c. IS_SOME (supported_function_decl tops c Internal))
+    (int_calls_stmts ss)
+Proof
+  strip_tac >> drule (cj 2 type_stmt_int_calls_fn_sigs) >>
+  match_mp_tac EVERY_MONOTONIC >> metis_tac[fn_sigs_consistent_internal_decl]
 QED
