@@ -840,6 +840,98 @@ Proof
      deepInstSimTheory.regular_inst_prepared_emit_marked) >>
   disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
   disch_then (drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  rename1 `generated_plan_state_wf_marked sb ps` >>
+  disch_then (qspecl_then [`o2pc`, `prog`, `sb`, `name`, `cplan.cp_initial_fmp`] mp_tac) >>
+  simp[venomMemPropsTheory.eval_operand_with_memory,
+       genFrameSimTheory.operand_val_memory_update, genFrameSimTheory.frame_view_control_fields] >>
+  (impl_tac >- (conj_tac >- metis_tac[] >>
+    fs[listTheory.EVERY_MEM] >> metis_tac[])) >>
+  strip_tac >>
+  `PERM (compute_operands inst) selected` by
+    metis_tac[generatedPrefixSimTheory.regular_plan_selected_perm] >>
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (qpat_x_assum `!op. MEM op _ /\ is_var_operand op ==> IS_SOME _ \/ _` mp_tac >>
+     simp[fnPlanLineageInventoryTheory.stack_get_depth_is_some,
+       finite_mapTheory.FLOOKUP_DEF, COND_RAND]) >>
+  qmatch_asmsub_abbrev_tac `generated_plan_state_wf_marked sb
+    (arranged with ps_stack := estack)` >>
+  qabbrev_tac `emitted = arranged with ps_stack := estack` >>
+  `emitted = arranged with ps_stack := FOLDL (\stk out. stack_push (Var out) stk)
+    (stack_pop (LENGTH selected) arranged.ps_stack) inst.inst_outputs` by
+    simp[Abbr `emitted`, Abbr `estack`] >>
+  `((if inst.inst_outputs = [] \/ is_halting then ([],emitted)
+     else popmany_plan (MAP Var (FILTER (\out. ~MEM out next_liveness) inst.inst_outputs)) emitted)
+       = (popops,popped)) /\
+   ((if FILTER (\out. MEM out next_liveness) inst.inst_outputs = [] then ([],popped)
+     else optimistic_swap_plan (dfg_build_function fn) inst next_liveness next_is_term popped)
+       = (optops,tail))` by
+    (qpat_x_assum `if _ then popops = _ /\ _ else _` mp_tac >>
+     qpat_x_assum `if _ then optops = _ /\ _ else _` mp_tac >>
+     qpat_x_assum `LENGTH inst.inst_outputs <= 1` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `inst.inst_outputs = []` >> simp[COND_EXPAND] >> metis_tac[]) >>
+  `LENGTH (compute_operands inst) <= LENGTH prepared.ps_stack` by
+    (qpat_x_assum `LENGTH _ <= LENGTH (SND _) .ps_stack` mp_tac >> simp[]) >>
+  drule_at (Pat `emit_input_plan _ _ _ _ = _`) sym_regular_prefix_applicability >>
+  disch_then (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
+  disch_then (drule_at (Pat `MEM _ _.cp_regions`)) >>
+  disch_then (drule_at (Pat `emitted = _`)) >>
+  disch_then (drule_at (Pat `_ = (popops,popped)`)) >>
+  disch_then (drule_at (Pat `_ = (optops,tail)`)) >>
+  disch_then (drule_at (Pat `_ = release_dead_spills _ _`)) >>
+  simp[] >> strip_tac >>
+  `ssa_form fn` by
+    (qpat_x_assum `codegen_ready_fn fn` mp_tac >>
+     simp[stackPlanGenTheory.codegen_ready_fn_def]) >>
+  `asm_sym_rel prog env as ss /\ sym_kinds_ok cplan fn ret srest ps ss` by
+    metis_tac[sym_frame_inv_def] >>
+  `EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops)` by
+    (qpat_x_assum `EVERY _ ops` mp_tac >>
+     simp[listTheory.EVERY_APPEND]) >>
+  `ss.sym_base.as_pc = as.as_pc` by
+    (qpat_x_assum `asm_sym_rel prog env as ss` mp_tac >>
+     simp[asmSymBridgeTheory.asm_sym_rel_def] >> rpt strip_tac >> simp[]) >>
+  `asm_block_at prog ss.sym_base.as_pc
+    (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
+    (qpat_x_assum `asm_block_at prog as.as_pc _` mp_tac >>
+     simp[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append]) >>
+  drule_at (Pat `emit_input_plan _ _ _ _ = _`) sym_selected_prefix_sim_marked >>
+  disch_then (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `asm_block_at _ _ _`)) >>
   simp[] >>
+  disch_then (qspecl_then [`sb`, `r`, `env`] mp_tac) >>
+  simp[] >>
+  (impl_tac >-
+    (qpat_x_assum `EVERY _ (compute_operands inst)` mp_tac >>
+     simp[listTheory.EVERY_MEM] >> metis_tac[])) >>
+  strip_tac >>
+  drule_at (Pat `sym_steps _ _ _ _ = _`) sym_prepared_prefix_endpoint >>
+  disch_then (drule_at (Pat `asm_steps _ _ _ _ _ = _`)) >>
+  simp[] >> strip_tac >>
+  drule_all sym_prepared_emit_localize >> strip_tac >>
+  `!op. MEM op selected <=> MEM op (compute_operands inst)` by
+    metis_tac[sortingTheory.PERM_MEM_EQ] >>
+  `EVERY (\op. op <> dead_stack_marker) selected` by
+    (qpat_x_assum `EVERY _ (compute_operands inst)` mp_tac >>
+     simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `!op. MEM op selected ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := as.as_memory) =
+    operand_val (frame_view fn ra vs with vs_memory := as.as_memory) lo op` by
+    simp[venomMemPropsTheory.eval_operand_with_memory,
+      genFrameSimTheory.operand_val_memory_update] >>
+  qpat_assum `step_inst fuel ctx inst vs = OK vs'`
+    (mp_then (Pat `step_inst _ _ _ _ = _`) mp_tac sym_named_source_emit) >>
+  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `asm_sym_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `asm_steps _ _ _ 1 _ = _`)) >>
+  disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `emitted = _`)) >>
+  disch_then (qspecl_then [`stack_pop (LENGTH selected) arranged.ps_stack`, `name`] mp_tac) >>
   cheat
+
 QED
