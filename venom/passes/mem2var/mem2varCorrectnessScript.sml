@@ -1,86 +1,20 @@
 Theory mem2varCorrectness
 Ancestors
-  mem2varProofs mem2varBlockSim
+  mem2varProofs mem2varReach mem2varInvariant mem2varBlockSim
+  ptrDiscipline ptrSafeRun unitTransformDefs
   mem2varDefs mem2varBlockSimHelpers mem2varFrame
   passSimulationDefs passSimulationProps
   stateEquiv
   venomExecSemantics venomState venomWf
   venomMemDefs venomMemProps venomExecProofs venomInst
   pointerConfinedDefs memLocDefs instIdxIndep
-  irSupply
+  irSupply analysisSimProofsBase venomWfProps
   finite_map list pred_set rich_list
   While
 Libs
   pairLib mem2varFrameLib
 
 val _ = augment_srw_ss [mem2varFrameLib.frame_ss];
-
-(* eval_phis/run_block ignore the entry state's vs_inst_idx: PHIs read operands
-   and run_block overwrites vs_inst_idx with phi_prefix_length before exec_block. *)
-Triviality eval_one_phi_inst_idx:
-  !inst s n.
-    eval_one_phi (s with vs_inst_idx := n) inst = eval_one_phi s inst
-Proof
-  simp[eval_one_phi_def, eval_op_inst_idx]
-QED
-
-Triviality eval_phis_inst_idx:
-  !insts s n.
-    eval_phis (s with vs_inst_idx := n) insts =
-    exec_result_map (\s'. s' with vs_inst_idx := n) (eval_phis s insts)
-Proof
-  Induct >> simp[eval_phis_def, exec_result_map_def, eval_one_phi_inst_idx] >>
-  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
-  Cases_on `eval_one_phi s h` >> gvs[eval_one_phi_inst_idx]
-  >- simp[exec_result_map_def] >>
-  Q.SPEC_THEN `x` STRIP_ASSUME_TAC pairTheory.pair_CASES >>
-  Cases_on `eval_phis s insts` >>
-  gvs[exec_result_map_def, update_var_def]
-QED
-
-Triviality run_block_inst_idx_irrel:
-  !fuel ctx bb s.
-    run_block fuel ctx bb s =
-    run_block fuel ctx bb (s with vs_inst_idx := 0)
-Proof
-  ONCE_REWRITE_TAC[run_block_def] >>
-  simp[eval_phis_inst_idx] >>
-  Cases_on `eval_phis s bb.bb_instructions` >>
-  simp[exec_result_map_def]
-QED
-
-(* run_blocks ignores vs_inst_idx: it resets before each block *)
-Theorem run_blocks_inst_idx_irrel[local]:
-  !fuel ctx fn s.
-    run_blocks fuel ctx fn s =
-    run_blocks fuel ctx fn (s with vs_inst_idx := 0)
-Proof
-  Induct_on `fuel` >> rpt gen_tac
-  >- (simp[run_blocks_def]) >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV[run_blocks_unfold])) >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[run_blocks_unfold])) >>
-  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
-  >- (simp_tac (srw_ss()) [] >>
-      qpat_x_assum `lookup_block s.vs_current_bb fn.fn_blocks = NONE`
-        (fn th => REWRITE_TAC [th]) >>
-      simp_tac std_ss []) >>
-  simp_tac (srw_ss()) [] >>
-  qpat_x_assum `lookup_block s.vs_current_bb fn.fn_blocks = SOME x`
-    (fn th => REWRITE_TAC [th]) >>
-  PURE_ONCE_REWRITE_TAC [GSYM run_block_inst_idx_irrel] >>
-  simp_tac (srw_ss()) []
-QED
-
-(* lift_result weakening: R1 ==> R2 everywhere *)
-Theorem lift_result_weaken[local]:
-  !R1 R2 r1 r2.
-    (!s1 s2. R1 s1 s2 ==> R2 s1 s2) /\
-    lift_result R1 R2 R2 r1 r2 ==>
-    lift_result R2 R2 R2 r1 r2
-Proof
-  rpt strip_tac >>
-  Cases_on `r1` >> Cases_on `r2` >> fs[lift_result_def]
-QED
 
 (* pvars_set for the current block — derivable from state alone *)
 Definition m2v_pvars_at_current_def:
@@ -416,41 +350,6 @@ Proof
       metis_tac[m2v_bt_front_el_phi])
 QED
 
-(* pointer_use_vars preserves initial variables *)
-Theorem pointer_use_vars_initial[local]:
-  !fn vars x. MEM x vars ==> MEM x (pointer_use_vars fn vars)
-Proof
-  rpt strip_tac >>
-  simp[pointer_use_vars_def] >>
-  qmatch_goalsub_abbrev_tac `OWHILE ISL f (INL vars)` >>
-  Cases_on `OWHILE ISL f (INL vars)` >> simp[] >>
-  rename1 `SOME result` >>
-  Cases_on `result` >> simp[] >>
-  rename1 `SOME (INR final)` >>
-  mp_tac (OWHILE_INV_IND
-    |> INST_TYPE [alpha |-> ``:string list + string list``]
-    |> Q.INST [`P` |-> `\v. case v of INL l => MEM x l | INR l => MEM x l`]
-    |> Q.SPECL [`ISL`, `f`, `INL vars`]) >>
-  simp[] >> disch_then irule >>
-  rpt strip_tac >> Cases_on `x'` >> gvs[Abbr `f`] >>
-  gvs[pointer_use_step_step_def, LET_THM] >>
-  CASE_TAC >> gvs[]
-QED
-
-(* alloca_roots is finite *)
-Theorem alloca_roots_finite[local]:
-  !fn. FINITE (alloca_roots fn)
-Proof
-  rpt strip_tac >> simp[alloca_roots_def] >>
-  irule SUBSET_FINITE >>
-  qexists `set (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn)))` >>
-  conj_tac >- simp[FINITE_LIST_TO_SET] >>
-  simp[SUBSET_DEF, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-  rpt strip_tac >> qexists `inst` >> simp[] >>
-  Cases_on `inst.inst_outputs` >> gvs[inst_output_def] >>
-  Cases_on `t` >> gvs[inst_output_def]
-QED
-
 (* Output variables of instructions in a list appear in the flattened output list *)
 Triviality mem_flat_map_inst_outputs:
   !inst insts x.
@@ -460,372 +359,561 @@ Proof
   Induct_on `insts` >> simp[] >> metis_tac[]
 QED
 
-(* Evaluating PHI nodes preserves fresh variable undefinedness *)
-Triviality eval_phis_m2v_fresh_undef:
-  !fn bb s s'.
-    eval_phis s bb.bb_instructions = OK s' /\
-    MEM bb fn.fn_blocks /\
-    m2v_fresh_names_disjoint fn /\
-    m2v_fresh_undef fn s ==>
-    m2v_fresh_undef fn s'
+Theorem m2v_promote_inst_wf[local]:
+  !inst pvar ao sz. inst_wf inst ==>
+    EVERY inst_wf (m2v_promote_inst pvar ao sz inst)
 Proof
-  rw[m2v_fresh_undef_def, lookup_var_def] >>
-  rename1 `fresh IN m2v_fresh_vars fn` >>
-  `FLOOKUP s'.vs_vars fresh = FLOOKUP s.vs_vars fresh` by (
-    irule eval_phis_flookup_not_phi_output >>
-    qexists_tac `bb.bb_instructions` >> simp[] >>
-    rpt strip_tac >>
-    `~MEM fresh (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by (
-      mp_tac (Q.SPECL [`fn`, `bb`, `fresh`]
-        m2v_fresh_not_in_block_outputs) >> simp[]) >>
-    CCONTR_TAC >>
-    `MEM fresh (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by (
-      irule mem_flat_map_inst_outputs >>
-      qexists_tac `inst` >> simp[]) >>
-    fs[]) >>
-  gvs[m2v_fresh_undef_def, lookup_var_def]
+  rpt strip_tac >> rw[m2v_promote_inst_def] >>
+  rpt (CASE_TAC >> gvs[]) >> gvs[inst_wf_def]
 QED
 
-(* Fresh variable undefinedness is independent of instruction index *)
-Triviality m2v_fresh_undef_inst_idx:
-  !fn s n.
-    m2v_fresh_undef fn (s with vs_inst_idx := n) =
-    m2v_fresh_undef fn s
+Theorem m2v_rewrite_inst_wf[local]:
+  !fn inst. inst_wf inst ==> EVERY inst_wf (m2v_rewrite_inst fn inst)
 Proof
-  simp[m2v_fresh_undef_def, lookup_var_def]
+  rpt strip_tac >> simp[m2v_rewrite_inst_def] >>
+  CASE_TAC >> simp[] >> PairCases_on `x` >>
+  simp[m2v_promote_inst_wf]
 QED
 
-(* run_block preserves the alloca_next field bound *)
-Triviality run_block_alloca_next_bound:
-  !fn bb fuel ctx s s'.
-    run_block fuel ctx bb s = OK s' /\
-    MEM bb fn.fn_blocks /\
-    s.vs_alloca_next < dimword (:256) /\
-    (!bb fuel ctx s s'.
-      MEM bb fn.fn_blocks /\
-      s.vs_alloca_next < dimword (:256) /\
-      exec_block fuel ctx bb s = OK s' ==>
-      s'.vs_alloca_next < dimword (:256)) ==>
-    s'.vs_alloca_next < dimword (:256)
+Theorem m2v_bt_inst_wf[local]:
+  !fn bb. fn_inst_wf fn /\ MEM bb fn.fn_blocks ==>
+    EVERY inst_wf (m2v_bt fn bb).bb_instructions
 Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `run_block _ _ _ _ = OK _` mp_tac >>
-  ONCE_REWRITE_TAC[run_block_def] >>
-  DISJ_CASES_TAC (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs)
-  >- (qpat_x_assum `?s_phi. eval_phis s bb.bb_instructions = OK s_phi`
-        (qx_choose_then `s_phi` assume_tac) >>
-      ASM_REWRITE_TAC[] >> strip_tac >>
-      pop_assum mp_tac >> simp[] >> strip_tac >>
-      drule eval_phis_preserves_alloca_fields >> strip_tac >>
-      first_x_assum (qspecl_then [`bb`, `fuel`, `ctx`,
-        `s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`, `s'`] mp_tac) >>
-      impl_tac >- simp[] >>
-      DISCH_THEN ACCEPT_TAC) >>
-  qpat_x_assum `?e. eval_phis s bb.bb_instructions = Error e`
-    strip_assume_tac >>
-  ASM_REWRITE_TAC[] >> simp[]
+  rpt strip_tac >> simp[m2v_bt_instructions, EVERY_FLAT, EVERY_MAP] >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  `inst_wf x` by metis_tac[fn_inst_wf_MEM, MEM_fn_insts] >>
+  drule m2v_rewrite_inst_wf >> simp[EVERY_MEM] >> metis_tac[]
 QED
 
-(* run_block preserves fresh variable undefinedness *)
-Triviality m2v_fresh_undef_preserved_run_block:
-  !fuel ctx bb s s' fn.
-    run_block fuel ctx bb s = OK s' /\
-    MEM bb fn.fn_blocks /\
-    m2v_fresh_names_disjoint fn /\
-    m2v_fresh_undef fn s ==>
-    m2v_fresh_undef fn s'
+Theorem m2v_rewrite_promoted_store[local]:
+  !fn bb inst ao pvar.
+    ssa_form fn /\ MEM bb fn.fn_blocks /\
+    MEM inst bb.bb_instructions /\ inst.inst_opcode = MSTORE /\
+    MEM (ao,pvar,32) (m2v_promo_list fn) /\
+    MEM (Var ao) inst.inst_operands ==>
+    ?val_op. m2v_rewrite_inst fn inst =
+      [inst with <|inst_opcode := ASSIGN; inst_operands := [val_op];
+                   inst_outputs := [pvar]|>]
 Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `run_block _ _ _ _ = OK _` mp_tac >>
-  ONCE_REWRITE_TAC[run_block_def] >>
-  DISJ_CASES_TAC (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs)
-  >- (qpat_x_assum `?s_phi. eval_phis s bb.bb_instructions = OK s_phi`
-        (qx_choose_then `s_phi` assume_tac) >>
-      ASM_REWRITE_TAC[] >> strip_tac >>
-      pop_assum mp_tac >> simp[] >> strip_tac >>
-      `m2v_fresh_undef fn s_phi` by (
-        mp_tac (Q.SPECL [`fn`, `bb`, `s`, `s_phi`] eval_phis_m2v_fresh_undef) >>
-        impl_tac >- simp[] >>
-        DISCH_THEN ACCEPT_TAC) >>
-      `m2v_fresh_undef fn
-         (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
-        simp[m2v_fresh_undef_inst_idx] >>
-      MATCH_MP_TAC (Q.SPECL [`fuel`, `ctx`, `bb`,
-        `s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`, `s'`, `fn`]
-        m2v_fresh_undef_preserved_block) >>
-      rpt conj_tac
-      >- qpat_x_assum `run_block_non_phis fuel ctx bb
-           (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = OK s'`
-           ACCEPT_TAC
-      >- qpat_x_assum `MEM bb fn.fn_blocks` ACCEPT_TAC
-      >- qpat_x_assum `m2v_fresh_names_disjoint fn` ACCEPT_TAC
-      >- qpat_x_assum `m2v_fresh_undef fn
-           (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)`
-           ACCEPT_TAC) >>
-  qpat_x_assum `?e. eval_phis s bb.bb_instructions = Error e`
-    strip_assume_tac >>
-  ASM_REWRITE_TAC[] >> simp[]
+  rpt strip_tac >>
+  `?val_op. inst.inst_operands = [Var ao; val_op]` by
+    metis_tac[m2v_pointer_confined_mstore_ao_is_offset] >>
+  simp[m2v_rewrite_inst_def] >>
+  Cases_on `FIND (\(a,_,_). MEM (Var a) inst.inst_operands)
+                (m2v_promo_list fn)`
+  >- (gvs[FIND_NONE_EVERY, EVERY_MEM] >>
+      first_x_assum (qspec_then `(ao,pvar,32)` mp_tac) >> simp[]) >>
+  PairCases_on `x` >>
+  `MEM (x0,x1,x2) (m2v_promo_list fn) /\
+   MEM (Var x0) inst.inst_operands` by
+    (conj_tac
+     >- metis_tac[venomExecProofsTheory.FIND_MEM] >>
+     drule venomExecProofsTheory.FIND_P >> simp[]) >>
+  `?v. inst.inst_operands = [Var x0; v]` by
+    metis_tac[m2v_pointer_confined_mstore_ao_is_offset] >>
+  `x0 = ao` by gvs[] >>
+  `x1 = pvar /\ x2 = 32` by metis_tac[m2v_promo_list_ao_unique] >>
+  gvs[m2v_promote_inst_def] >> metis_tac[]
 QED
 
-(* Main correctness theorem: mem-to-register promotion preserves
-   function execution. States agree on all non-fresh variables and
-   all observable fields (memory, storage, accounts, logs, etc.).
-   Either the original errors, or both results are related by
-   m2v_equiv through OK/Halt/Revert outcomes. *)
-Theorem m2v_transform_function_correct:
-  !fuel ctx fn s.
-    wf_function fn /\
-    fn_inst_wf fn /\
-    ssa_form fn /\
-    m2v_promotable_wf fn /\
-    m2v_fresh_names_disjoint fn /\
-    m2v_fresh_undef fn s /\
-    alloca_inv s /\
-    s.vs_allocas = FEMPTY /\
-    m2v_nonpromoted_access_safe fn s /\
-    (* NAS preserved by any step in fn *)
-    (!inst fuel' ctx' s' s''.
-      MEM inst (fn_insts fn) /\
-      m2v_nonpromoted_access_safe fn s' /\
-      step_inst fuel' ctx' inst s' = OK s'' ==>
-      m2v_nonpromoted_access_safe fn s'') /\
-    (* NAS preserved by full block execution, including PHI prefixes *)
-    (!bb fuel' ctx' s' s''.
-      MEM bb fn.fn_blocks /\
-      m2v_nonpromoted_access_safe fn s' /\
-      run_block fuel' ctx' bb s' = OK s'' ==>
-      m2v_nonpromoted_access_safe fn s'') /\
-    (* alloca_next bounded per-step *)
-    (!inst fuel' ctx' s' s''.
-      MEM inst (fn_insts fn) /\
-      s'.vs_alloca_next < dimword (:256) /\
-      step_inst fuel' ctx' inst s' = OK s'' ==>
-      s''.vs_alloca_next < dimword (:256)) /\
-    (* alloca_next bounded throughout execution *)
-    (!bb fuel' ctx' s' s''.
-      MEM bb fn.fn_blocks /\
-      s'.vs_alloca_next < dimword (:256) /\
-      exec_block fuel' ctx' bb s' = OK s'' ==>
-      s''.vs_alloca_next < dimword (:256)) /\
-    alloca_pointer_confined fn /\
-    all_mem_via_pointer fn (alloca_roots fn) /\
-    m2v_promo_sizes_bounded fn /\
-    m2v_return_size_bounded fn /\
-    s.vs_alloca_next < dimword (:256) /\
-    EVERY (\bb. EVERY (\i. i.inst_opcode <> INVOKE)
-      bb.bb_instructions) fn.fn_blocks /\
-    EVERY (\bb. EVERY (\i. i.inst_opcode <> MEMTOP)
-      bb.bb_instructions) fn.fn_blocks /\
-    EVERY (\bb. EVERY (\i. i.inst_opcode <> MSIZE)
-      bb.bb_instructions) fn.fn_blocks /\
-    alloca_bridge fn s /\
-    (!bb fuel' ctx' s' s''.
-      MEM bb fn.fn_blocks /\
-      alloca_bridge fn s' /\
-      run_block fuel' ctx' bb s' = OK s'' ==>
-      alloca_bridge fn s'') /\
-    fn_reachable fn s.vs_current_bb /\
-    m2v_pvars_at_current fn s /\
-    (!bb fuel' ctx' s1 s2 s1' s2'.
-      wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
-      alloca_pointer_confined fn /\ MEM bb fn.fn_blocks /\
-      bb.bb_label = s2.vs_current_bb /\
-      s1.vs_current_bb = s2.vs_current_bb /\
-      fn_reachable fn s1.vs_current_bb /\
-      run_block fuel' ctx' bb s1 = OK s1' /\
-      run_block fuel' ctx' (m2v_bt fn bb) s2 = OK s2' /\
-      ~s1'.vs_halted /\ s1'.vs_current_bb = s2'.vs_current_bb /\
-      m2v_pvars_at_current fn s2 ==>
-      m2v_pvars_at_current fn s2') /\
-    (!bb fuel' ctx' s1 s2.
-      wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
-      m2v_promotable_wf fn /\ m2v_fresh_names_disjoint fn /\
-      m2v_promo_sizes_bounded fn /\ m2v_return_size_bounded fn /\
-      alloca_pointer_confined fn /\ all_mem_via_pointer fn (alloca_roots fn) /\
-      EVERY (\bb. EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions) fn.fn_blocks /\
-      EVERY (\bb. EVERY (\i. i.inst_opcode <> MSIZE) bb.bb_instructions) fn.fn_blocks /\
-      MEM bb fn.fn_blocks /\
-      m2v_inv fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
-      m2v_ao_undef_sync fn s1 s2 /\ m2v_fresh_undef fn s1 /\
-      alloca_inv s1 /\ alloca_bridge fn s1 /\
-      s1.vs_alloca_next < dimword (:256) /\
-      m2v_nonpromoted_access_safe fn s1 /\
-      s1.vs_alloca_next = s2.vs_alloca_next /\
-      m2v_pvars_at_current fn s2 ==>
-      (?e. run_block fuel' ctx' bb s1 = Error e) \/
-      lift_result (\s1 s2. m2v_inv fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
-                           m2v_ao_undef_sync fn s1 s2 /\
-                           s1.vs_alloca_next = s2.vs_alloca_next)
-                  (m2v_equiv (m2v_fresh_vars fn))
-                  (m2v_equiv (m2v_fresh_vars fn))
-        (run_block fuel' ctx' bb s1)
-        (run_block fuel' ctx' (m2v_bt fn bb) s2)) ==>
-    (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (m2v_equiv (m2v_fresh_vars fn))
-               (m2v_equiv (m2v_fresh_vars fn))
-               (m2v_equiv (m2v_fresh_vars fn))
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (m2v_transform_function fn) s)
+Theorem m2v_promoted_store_output[local]:
+  !fn bb inst ao pvar.
+    ssa_form fn /\ MEM bb fn.fn_blocks /\
+    MEM inst bb.bb_instructions /\ inst.inst_opcode = MSTORE /\
+    MEM (ao,pvar,32) (m2v_promo_list fn) /\
+    MEM (Var ao) inst.inst_operands ==>
+    ?j. j < LENGTH (m2v_bt fn bb).bb_instructions /\
+        phi_prefix_length (m2v_bt fn bb).bb_instructions <= j /\
+        ~is_terminator (EL j (m2v_bt fn bb).bb_instructions).inst_opcode /\
+        MEM pvar (EL j (m2v_bt fn bb).bb_instructions).inst_outputs
 Proof
-  rpt strip_tac
-  >> ONCE_REWRITE_TAC[run_blocks_inst_idx_irrel]
-  >> ONCE_REWRITE_TAC[m2v_transform_eq_fmt]
-  >> qsuff_tac
-       `(?e. run_blocks fuel ctx fn (s with vs_inst_idx := 0) = Error e) \/
-        lift_result (\s1 s2. m2v_inv fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
-                             m2v_ao_undef_sync fn s1 s2 /\
-                             s1.vs_alloca_next = s2.vs_alloca_next)
-                    (m2v_equiv (m2v_fresh_vars fn))
-                    (m2v_equiv (m2v_fresh_vars fn))
-          (run_blocks fuel ctx fn (s with vs_inst_idx := 0))
-          (run_blocks fuel ctx (function_map_transform (m2v_bt fn) fn)
-             (s with vs_inst_idx := 0))`
-  >- (disch_then (fn th =>
-        DISJ_CASES_TAC th
-        >- (DISJ1_TAC >> gvs[])
-        >> (DISJ2_TAC >> irule lift_result_weaken >>
-            qexists `\s1 s2. m2v_inv fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
-                             m2v_ao_undef_sync fn s1 s2 /\
-                             s1.vs_alloca_next = s2.vs_alloca_next` >>
-            simp[] >> metis_tac[m2v_inv_implies_equiv])))
-  >> irule (SRULE [] block_sim_function_with_pred2_bb)
-  >> BETA_TAC
-  >> conj_tac >- (rpt strip_tac >> irule m2v_bt_preserves_label)
-  >> conj_tac >- (rpt strip_tac >> gvs[] >>
-       metis_tac[m2v_inv_implies_equiv])
-  >> conj_tac >- (rpt strip_tac >> gvs[] >>
-       metis_tac[m2v_inv_control_flow])
-  (* predicate: original-side invariants + fn_reachable + pvars_at_current *)
-  >> conj_tac
-  >- (qexists `\s1 s2. m2v_fresh_undef fn s1 /\ alloca_inv s1 /\
-       s1.vs_alloca_next < dimword (:256) /\
-       m2v_nonpromoted_access_safe fn s1 /\
-       alloca_bridge fn s1 /\
-       fn_reachable fn s1.vs_current_bb /\
-       m2v_pvars_at_current fn s2`
-  >> BETA_TAC >> rpt conj_tac
-  (* P preserved across blocks *)
-  >- (qx_gen_tac `bk` >> qx_gen_tac `fl` >> qx_gen_tac `cx` >>
-      qx_gen_tac `sa` >> qx_gen_tac `sb` >>
-      qx_gen_tac `sa'` >> qx_gen_tac `sb'` >>
-      rpt strip_tac >> rpt conj_tac
-      >- (mp_tac (Q.SPECL [`fl`, `cx`, `bk`, `sa`, `sa'`, `fn`]
-            m2v_fresh_undef_preserved_run_block) >>
-          impl_tac >- simp[] >>
-          DISCH_THEN ACCEPT_TAC)
-      >- (mp_tac (Q.SPECL [`fl`, `cx`, `bk`, `sa`, `sa'`]
-            venomMemPropsTheory.alloca_inv_run_block) >>
-          impl_tac >- simp[] >>
-          DISCH_THEN ACCEPT_TAC)
-      >- (mp_tac (Q.SPECL [`fn`, `bk`, `fl`, `cx`, `sa`, `sa'`]
-            run_block_alloca_next_bound) >>
-          impl_tac >- (
-            simp[] >>
-            qpat_x_assum `!bb fuel' ctx' s' s''.
-              MEM bb fn.fn_blocks /\ s'.vs_alloca_next < dimword (:256) /\
-              run_block_non_phis fuel' ctx' bb s' = OK s'' ==>
-              s''.vs_alloca_next < dimword (:256)` ACCEPT_TAC) >>
-          DISCH_THEN ACCEPT_TAC)
-      >- suspend "nas"
-      >- suspend "bridge"
-      >- suspend "reach"
-      >> suspend "pvars")
-  (* per-block simulation *)
-  >- suspend "blocksim"
-  (* P s s ==> R_ok s s *)
-  >- (rpt strip_tac >> gvs[] >> rpt conj_tac
-      >- (irule m2v_inv_refl >> simp[])
-      >- (irule m2v_non32_ok_refl >> simp[])
-      >- (irule m2v_ao_undef_sync_refl >>
-          simp[vs_inst_idx_update_transparent_export])
-      >> simp[])
-  (* P (s with vs_inst_idx := 0) (s with vs_inst_idx := 0) *)
-  >> simp[vs_inst_idx_update_transparent_export] >>
-  qpat_x_assum `m2v_pvars_at_current _ _`
-    (mp_tac o REWRITE_RULE[m2v_pvars_at_current_def, m2v_pvars_set_def,
-                           lookup_var_def]) >>
-  simp[m2v_pvars_at_current_def, m2v_pvars_set_def, lookup_var_def])
-  >- simp[]
+  rpt strip_tac >> drule_all m2v_rewrite_promoted_store >> strip_tac >>
+  `?out. MEM out (m2v_bt fn bb).bb_instructions /\
+         out.inst_opcode = ASSIGN /\ out.inst_outputs = [pvar]` by
+    (qexists_tac `inst with <|inst_opcode := ASSIGN;
+        inst_operands := [val_op]; inst_outputs := [pvar]|>` >>
+     simp[m2v_bt_instructions, MEM_FLAT, MEM_MAP] >>
+     qexists_tac `m2v_rewrite_inst fn inst` >> simp[] >>
+     metis_tac[]) >>
+  drule (iffLR MEM_EL) >> strip_tac >>
+  qexists_tac `n` >> simp[] >>
+  `phi_prefix_length (m2v_bt fn bb).bb_instructions <= n` by
+    (spose_not_then assume_tac >>
+     mp_tac (Q.SPEC `(m2v_bt fn bb).bb_instructions` phi_prefix_all_phi) >>
+     rewrite_tac[EVERY_MEM] >>
+     disch_then (qspec_then `out` mp_tac) >>
+     simp[] >>
+     `n < phi_prefix_length (m2v_bt fn bb).bb_instructions` by decide_tac >>
+     simp[MEM_EL] >> qexists_tac `n` >> simp[EL_TAKE, LENGTH_TAKE_EQ]) >>
+  qpat_x_assum `out = _` (fn th => rewrite_tac[GSYM th]) >>
+  simp[is_terminator_def]
 QED
 
-Resume m2v_transform_function_correct[nas]:
-  qpat_x_assum `!bb fuel' ctx' s' s''.
-    MEM bb fn.fn_blocks /\ m2v_nonpromoted_access_safe fn s' /\
-    run_block fuel' ctx' bb s' = OK s'' ==>
-    m2v_nonpromoted_access_safe fn s''`
-    (qspecl_then [`bk`, `fl`, `cx`, `sa`, `sa'`] mp_tac) >>
-  simp[]
+Theorem m2v_run_block_defined_preserved[local]:
+  !fn bb fuel ctx s t pvar.
+    wf_function fn /\ fn_inst_wf fn /\ MEM bb fn.fn_blocks /\
+    run_block fuel ctx (m2v_bt fn bb) s = OK t /\
+    IS_SOME (lookup_var pvar s) ==>
+    IS_SOME (lookup_var pvar t)
+Proof
+  rpt strip_tac >>
+  `bb_well_formed (m2v_bt fn bb)` by
+    metis_tac[wf_function_def, m2v_bt_well_formed] >>
+  `EVERY inst_wf (m2v_bt fn bb).bb_instructions` by
+    metis_tac[m2v_bt_inst_wf] >>
+  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+  rewrite_tac[run_block_def] >>
+  DISJ_CASES_TAC (Q.SPECL [`s`, `(m2v_bt fn bb).bb_instructions`]
+    eval_phis_ok_or_error_defs)
+  >- (pop_assum strip_assume_tac >> simp[] >> strip_tac >>
+      drule exec_block_lookup_mono >> simp[] >>
+      disch_then irule >>
+      drule eval_phis_vars_grow >>
+      gvs[lookup_var_def, FLOOKUP_DEF, SUBSET_DEF] >>
+      Cases_on `pvar IN FDOM s.vs_vars` >> gvs[] >>
+      strip_tac >>
+      `pvar IN FDOM s'.vs_vars` by metis_tac[] >> simp[]) >>
+  pop_assum strip_assume_tac >> simp[]
 QED
 
-Resume m2v_transform_function_correct[bridge]:
-  qpat_x_assum `!bb fuel' ctx' s' s''.
-    MEM bb fn.fn_blocks /\ alloca_bridge fn s' /\
-    run_block fuel' ctx' bb s' = OK s'' ==>
-    alloca_bridge fn s''`
-    (qspecl_then [`bk`, `fl`, `cx`, `sa`, `sa'`] mp_tac) >>
-  simp[]
-QED
-
-Resume m2v_transform_function_correct[reach]:
-  irule fn_reachable_step >>
-  qexists `sa.vs_current_bb` >> simp[] >>
-  `bb_well_formed bk` by metis_tac[wf_function_bb_well_formed] >>
-  `EVERY inst_wf bk.bb_instructions` by
-    metis_tac[fn_inst_wf_every_bb] >>
-  simp[fn_cfg_edge_def] >> qexists `bk` >> simp[] >>
-  mp_tac (Q.SPECL [`fl`, `cx`, `bk`, `sa`, `sa'`]
-    venomExecPropsTheory.run_block_current_bb_in_succs) >>
-  impl_tac >- (
-    qpat_x_assum `bb_well_formed bk`
-      (strip_assume_tac o REWRITE_RULE[bb_well_formed_def]) >>
-    rpt conj_tac
-    >- simp[]
-    >- (rpt strip_tac >>
-        `i = PRE (LENGTH bk.bb_instructions)` by
-          (first_x_assum irule >> simp[]) >>
-        qpat_x_assum `i = PRE _` SUBST_ALL_TAC >>
-        qpat_x_assum `PRE _ < _ - 1` mp_tac >> simp[])
-    >- simp[]
-    >- simp[]) >>
-  simp[]
-QED
-
-Resume m2v_transform_function_correct[pvars]:
-  `sa.vs_current_bb = sb.vs_current_bb /\
-    sa'.vs_current_bb = sb'.vs_current_bb` by
-    metis_tac[m2v_inv_control_flow] >>
-  qpat_x_assum `!bb fuel' ctx' s1 s2 s1' s2'.
+Theorem m2v_run_block_store_defined[local]:
+  !fn bb inst ao pvar fuel ctx s t.
     wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
-    alloca_pointer_confined fn /\ MEM bb fn.fn_blocks /\
-    bb.bb_label = s2.vs_current_bb /\
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    inst.inst_opcode = MSTORE /\
+    MEM (ao,pvar,32) (m2v_promo_list fn) /\
+    MEM (Var ao) inst.inst_operands /\
+    run_block fuel ctx (m2v_bt fn bb) s = OK t ==>
+    IS_SOME (lookup_var pvar t)
+Proof
+  rpt strip_tac >>
+  `bb_well_formed (m2v_bt fn bb)` by
+    metis_tac[wf_function_def, m2v_bt_well_formed] >>
+  `EVERY inst_wf (m2v_bt fn bb).bb_instructions` by
+    metis_tac[m2v_bt_inst_wf] >>
+  drule_all m2v_promoted_store_output >> strip_tac >>
+  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+  rewrite_tac[run_block_def] >>
+  DISJ_CASES_TAC (Q.SPECL [`s`, `(m2v_bt fn bb).bb_instructions`]
+    eval_phis_ok_or_error_defs)
+  >- (pop_assum strip_assume_tac >> simp[] >> strip_tac >>
+      `pvar IN FDOM t.vs_vars` by
+        (irule exec_block_output_in_fdom_aux >>
+         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      simp[lookup_var_def, FLOOKUP_DEF]) >>
+  pop_assum strip_assume_tac >> simp[]
+QED
+
+(* Promoted variables remain initialized when control crosses a block edge. *)
+Theorem m2v_pvars_at_current_successor:
+  !fn bb fuel ctx s1 s2 s1' s2'.
+    wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+    m2v_fresh_names_disjoint fn /\
+    MEM bb fn.fn_blocks /\ bb.bb_label = s2.vs_current_bb /\
     s1.vs_current_bb = s2.vs_current_bb /\
     fn_reachable fn s1.vs_current_bb /\
-    run_block fuel' ctx' bb s1 = OK s1' /\
-    run_block fuel' ctx' (m2v_bt fn bb) s2 = OK s2' /\
+    run_block fuel ctx bb s1 = OK s1' /\
+    run_block fuel ctx (m2v_bt fn bb) s2 = OK s2' /\
     ~s1'.vs_halted /\ s1'.vs_current_bb = s2'.vs_current_bb /\
     m2v_pvars_at_current fn s2 ==>
-    m2v_pvars_at_current fn s2'`
-    (qspecl_then [`bk`, `fl`, `cx`, `sa`, `sb`, `sa'`, `sb'`] mp_tac) >>
-  simp[]
+    m2v_pvars_at_current fn s2'
+Proof
+  rpt strip_tac >>
+  `ssa_form fn` by gvs[wf_ssa_def] >>
+  `bb_well_formed bb` by metis_tac[wf_function_def] >>
+  `EVERY inst_wf bb.bb_instructions` by
+    metis_tac[fn_inst_wf_MEM, MEM_fn_insts, EVERY_MEM] >>
+  `MEM s1'.vs_current_bb (bb_succs bb)` by
+    (`!i. i < LENGTH bb.bb_instructions - 1 ==>
+          ~is_terminator (EL i bb.bb_instructions).inst_opcode` by
+       (gvs[bb_well_formed_def] >> rpt strip_tac >>
+        qpat_x_assum `!i. _ ==> i = _` (qspec_then `i` mp_tac) >>
+        simp[] >> decide_tac) >>
+     irule venomExecPropsTheory.run_block_current_bb_in_succs >>
+     metis_tac[bb_well_formed_def]) >>
+  rw[m2v_pvars_at_current_def] >>
+  irule m2v_pvars_set_init >> rpt strip_tac >> gvs[] >>
+  `store_bb.bb_label <> bb'.bb_label` by
+    metis_tac[same_label_same_block] >>
+  `fn_dominates fn store_bb.bb_label bb.bb_label` by
+    (irule fn_dominates_predecessor >> conj_tac >- metis_tac[] >>
+     qexists_tac `bb'.bb_label` >> simp[fn_cfg_edge_def] >>
+     metis_tac[]) >>
+  Cases_on `store_bb = bb`
+  >- (gvs[] >> irule m2v_run_block_store_defined >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  `IS_SOME (lookup_var pvar s2)` by
+    (gvs[m2v_pvars_at_current_def, m2v_pvars_set_def] >> metis_tac[]) >>
+  metis_tac[m2v_run_block_defined_preserved]
 QED
 
-Resume m2v_transform_function_correct[blocksim]:
-  rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  rename1 `MEM bk fn.fn_blocks` >>
-  rename1 `m2v_pvars_at_current fn s2` >>
-  qpat_x_assum `!bb fuel' ctx' s1 s2. _`
-    (qspecl_then [`bk`, `fuel`, `ctx`, `s1`, `s2`] mp_tac) >>
-  simp[]
+
+Theorem m2v_entry_pvars_set[local]:
+  !fn bb s. wf_function fn /\ MEM bb fn.fn_blocks /\
+    fn_entry_label fn = SOME bb.bb_label ==> m2v_pvars_set fn bb 0 s
+Proof
+  rpt strip_tac >> irule m2v_pvars_set_init >> rpt strip_tac >>
+  `store_bb.bb_label = bb.bb_label` by
+    (qpat_x_assum `fn_dominates _ _ _` mp_tac >>
+     simp[fn_dominates_def] >> strip_tac >>
+     first_x_assum (qspec_then `[bb.bb_label]` mp_tac) >>
+     simp[is_fn_path_def]) >>
+  metis_tac[same_label_same_block]
 QED
 
-Finalise m2v_transform_function_correct
+Theorem m2v_checked_entry_label[local]:
+  !fn fn'. m2v_transform_function_checked fn = SOME fn' ==>
+    fn_entry_label fn' = fn_entry_label fn
+Proof
+  rw[m2v_transform_function_checked_def] >>
+  simp[m2v_transform_function_raw_def, fn_entry_label_def, entry_block_def] >>
+  Cases_on `fn.fn_blocks` >> simp[]
+QED
+
+Theorem m2v_checked_lookup_block[local]:
+  !fn fn' lbl. m2v_transform_function_checked fn = SOME fn' ==>
+    lookup_block lbl fn'.fn_blocks =
+      OPTION_MAP (m2v_bt fn) (lookup_block lbl fn.fn_blocks)
+Proof
+  rw[m2v_transform_function_checked_def] >>
+  `!bbs. lookup_block lbl (MAP (m2v_bt fn) bbs) =
+          OPTION_MAP (m2v_bt fn) (lookup_block lbl bbs)` by
+    (Induct >> simp[lookup_block_def, FIND_thm, m2v_bt_def] >>
+     rw[] >> gvs[lookup_block_def, m2v_bt_def]) >>
+  first_x_assum (qspec_then `fn.fn_blocks` mp_tac) >>
+  simp[m2v_transform_function_raw_def, lambdify m2v_bt_def]
+QED
+
+Theorem m2v_initial_fresh_undef[local]:
+  !fn s. o1_initial_state_ok s ==> m2v_fresh_undef fn s
+Proof
+  simp[o1_initial_state_ok_def, m2v_fresh_undef_def, lookup_var_def]
+QED
+
+(* Initial empty environments make synchronization obligations vacuous. *)
+Theorem m2v_initial_inv_noix[local]:
+  !fn s. o1_initial_state_ok s ==> m2v_inv_noix fn s s
+Proof
+  simp[o1_initial_state_ok_def, m2v_inv_noix_def, lookup_var_def,
+       allocas_non_overlapping_def]
+QED
+
+(* Rewriting preserves the PHI prefix, including its evaluation errors. *)
+Theorem m2v_rewrite_phis[local]:
+  !fn insts s.
+    phi_prefix_length (FLAT (MAP (m2v_rewrite_inst fn) insts)) =
+      phi_prefix_length insts /\
+    eval_phis s (FLAT (MAP (m2v_rewrite_inst fn) insts)) =
+      eval_phis s insts
+Proof
+  gen_tac >> Induct >> simp[phi_prefix_length_def, eval_phis_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI`
+  >- (simp[m2v_rewrite_inst_phi, phi_prefix_length_def, eval_phis_def] >>
+      Cases_on `eval_one_phi s h` >> simp[] >>
+      PairCases_on `x` >> simp[] >>
+      Cases_on `eval_phis s insts` >> simp[]) >>
+  `m2v_rewrite_inst fn h <> []` by
+    metis_tac[m2v_rewrite_inst_len_ge1, LENGTH_NIL,
+              DECIDE ``1n <= n ==> n <> 0``] >>
+  Cases_on `m2v_rewrite_inst fn h` >> gvs[] >>
+  `h'.inst_opcode <> PHI` by
+    metis_tac[m2v_rewrite_inst_preserves_phi, MEM] >>
+  simp[phi_prefix_length_def, eval_phis_def]
+QED
+
+Theorem m2v_one_phi_agrees[local]:
+  !fn inst s t.
+    m2v_inv_noix fn s t /\ m2v_fresh_names_disjoint fn /\
+    MEM inst (fn_insts fn) ==>
+    eval_one_phi s inst = eval_one_phi t inst
+Proof
+  rpt strip_tac >>
+  `s.vs_prev_bb = t.vs_prev_bb` by
+    (gvs[m2v_inv_noix_def]) >>
+  simp[eval_one_phi_def] >>
+  Cases_on `inst.inst_outputs` >> simp[] >>
+  Cases_on `t'` >> simp[] >>
+  Cases_on `t.vs_prev_bb` >> simp[] >>
+  Cases_on `resolve_phi x inst.inst_operands` >> simp[] >>
+  `MEM x' inst.inst_operands` by metis_tac[dftCommutationTheory.resolve_phi_MEM] >>
+  `eval_operand x' s = eval_operand x' t` by
+    metis_tac[m2v_inv_noix_eval_agrees] >> simp[]
+QED
+
+Theorem m2v_phi_update[local]:
+  !fn inst out value s t.
+    ssa_form fn /\ m2v_fresh_names_disjoint fn /\
+    MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
+    MEM out inst.inst_outputs /\
+    m2v_inv_noix fn s t /\ m2v_non32_ok fn s t /\
+    m2v_ao_undef_sync fn s t ==>
+    m2v_inv_noix fn (update_var out value s) (update_var out value t) /\
+    m2v_non32_ok fn (update_var out value s) (update_var out value t) /\
+    m2v_ao_undef_sync fn (update_var out value s) (update_var out value t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `out NOTIN m2v_fresh_vars fn /\
+   !pv sz. ~MEM (out,pv,sz) (m2v_promo_list fn)` by
+    (irule m2v_output_safe >> simp[] >>
+     qexists_tac `inst` >> simp[is_alloca_op_def]) >>
+  conj_tac
+  >- (irule m2v_inv_noix_update_var >> simp[]) >>
+  `!ao pv sz. MEM (ao,pv,sz) (m2v_promo_list fn) ==> pv <> out` by
+    metis_tac[m2v_promo_list_in_fresh_vars] >>
+  gvs[m2v_non32_ok_def, m2v_ao_undef_sync_def, lookup_var_def,
+      update_var_def, FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem m2v_eval_phis[local]:
+  !insts fn s t s'.
+    ssa_form fn /\ m2v_fresh_names_disjoint fn /\
+    EVERY (\i. MEM i (fn_insts fn)) insts /\
+    m2v_inv_noix fn s t /\ m2v_non32_ok fn s t /\
+    m2v_ao_undef_sync fn s t /\ eval_phis s insts = OK s' ==>
+    ?t'. eval_phis t insts = OK t' /\
+      m2v_inv_noix fn s' t' /\ m2v_non32_ok fn s' t' /\
+      m2v_ao_undef_sync fn s' t'
+Proof
+  Induct >> rpt gen_tac >> simp[eval_phis_def] >> strip_tac
+  >- (gvs[] >> metis_tac[]) >>
+  gvs[EVERY_DEF] >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[]
+  >- (`eval_one_phi s h = eval_one_phi t h` by
+        metis_tac[m2v_one_phi_agrees] >>
+      Cases_on `eval_one_phi s h` >> gvs[] >>
+      PairCases_on `x` >> gvs[] >>
+      Cases_on `eval_phis s insts` >> gvs[] >>
+      first_x_assum drule_all >> strip_tac >>
+      qexists_tac `update_var x0 x1 t'` >>
+      qpat_x_assum `SOME _ = eval_one_phi _ _` (assume_tac o SYM) >>
+      simp[] >>
+      irule m2v_phi_update >> simp[] >>
+      qexists_tac `h` >> simp[] >>
+      metis_tac[eval_one_phi_output_mem]) >>
+  metis_tac[]
+QED
+
+Theorem m2v_phis_pvars[local]:
+  !fn bb s s'.
+    m2v_fresh_names_disjoint fn /\ MEM bb fn.fn_blocks /\
+    m2v_pvars_set fn bb 0 s /\
+    eval_phis s bb.bb_instructions = OK s' ==>
+    m2v_pvars_set fn bb (phi_prefix_length bb.bb_instructions) s'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!ao pv sz. MEM (ao,pv,sz) (m2v_promo_list fn) ==>
+      lookup_var pv s' = lookup_var pv s` by
+    (rpt strip_tac >> simp[lookup_var_def] >>
+     irule eval_phis_flookup_not_phi_output >>
+     qexists_tac `bb.bb_instructions` >> simp[] >>
+     metis_tac[m2v_promo_list_in_fresh_vars,
+               m2v_fresh_not_in_block_outputs, mem_flat_map_inst_outputs]) >>
+  rw[m2v_pvars_set_def]
+  >- (gvs[m2v_pvars_set_def] >> metis_tac[]) >>
+  `(EL j bb.bb_instructions).inst_opcode = PHI` by
+    (mp_tac (Q.SPEC `bb.bb_instructions` phi_prefix_all_phi) >>
+     rewrite_tac[EVERY_EL] >> disch_then (qspec_then `j` mp_tac) >>
+     simp[LENGTH_TAKE_EQ, EL_TAKE, phi_prefix_length_le]) >> gvs[]
+QED
+
+Theorem m2v_phi_entry_package[local]:
+  !fn bb s t s'.
+    wf_ssa fn /\ m2v_fresh_names_disjoint fn /\ MEM bb fn.fn_blocks /\
+    m2v_inv_noix fn s t /\ m2v_non32_ok fn s t /\
+    m2v_ao_undef_sync fn s t /\ m2v_pvars_set fn bb 0 t /\
+    eval_phis s bb.bb_instructions = OK s' ==>
+    ?t'. eval_phis t (m2v_bt fn bb).bb_instructions = OK t' /\
+      m2v_inv_noix fn
+        (s' with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+        (t' with vs_inst_idx := phi_prefix_length bb.bb_instructions) /\
+      m2v_non32_ok fn
+        (s' with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+        (t' with vs_inst_idx := phi_prefix_length bb.bb_instructions) /\
+      m2v_ao_undef_sync fn
+        (s' with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+        (t' with vs_inst_idx := phi_prefix_length bb.bb_instructions) /\
+      m2v_pvars_set fn bb (phi_prefix_length bb.bb_instructions)
+        (t' with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ssa_form fn` by gvs[wf_ssa_def] >>
+  `EVERY (\i. MEM i (fn_insts fn)) bb.bb_instructions` by
+    (simp[EVERY_MEM] >> metis_tac[MEM_fn_insts]) >>
+  drule_all m2v_eval_phis >> strip_tac >>
+  qexists_tac `t'` >>
+  simp[m2v_bt_instructions, m2v_rewrite_phis] >>
+  conj_tac >- metis_tac[m2v_inv_noix_update_idx] >>
+  conj_tac >- (gvs[m2v_non32_ok_def, lookup_var_def] >> metis_tac[]) >>
+  conj_tac >- (gvs[m2v_ao_undef_sync_def, lookup_var_def] >> metis_tac[]) >>
+  irule m2v_pvars_set_update_idx >>
+  irule m2v_phis_pvars >> metis_tac[]
+QED
+
+(* A runner boundary carries reachability of successful post-PHI entries,
+   not reachability of arbitrary pre-PHI states. The root vs stays fixed
+   through the fuel induction and every block continuation. *)
+Theorem m2v_run_blocks_correct[local]:
+  !fuel ctx name fn vs fn' s t.
+    ctx.ctx_entry = SOME name /\
+    lookup_function name ctx.ctx_functions = SOME fn /\
+    wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+    o1_initial_state_ok vs /\
+    ptr_discipline vs.vs_alloca_next ctx vs /\ raw_unit_memory_ok ctx vs /\
+    m2v_promotable_wf fn /\ m2v_fresh_names_disjoint fn /\
+    m2v_return_size_bounded fn /\
+    EVERY (\i. i.inst_opcode <> INVOKE) (fn_insts fn) /\
+    m2v_transform_function_checked fn = SOME fn' /\
+    m2v_inv_noix fn s t /\ m2v_non32_ok fn s t /\
+    m2v_ao_undef_sync fn s t /\ m2v_pvars_at_current fn t /\
+    fn_reachable fn s.vs_current_bb /\
+    (!u inst. enters_block fn s u /\ active_inst fn inst u ==>
+      ?G tn. frame_reachable vs ctx [] [] G tn fn inst u) ==>
+    (?e. run_blocks fuel ctx fn s = Error e) \/
+    lift_result (m2v_public_rel fn) (m2v_public_rel fn) (m2v_public_rel fn)
+      (run_blocks fuel ctx fn s) (run_blocks fuel ctx fn' t)
+Proof
+  Induct_on `fuel` >> rpt gen_tac >> strip_tac
+  >- simp[run_blocks_def] >>
+  `s.vs_current_bb = t.vs_current_bb` by gvs[m2v_inv_noix_def] >>
+  `lookup_block t.vs_current_bb fn'.fn_blocks =
+    OPTION_MAP (m2v_bt fn) (lookup_block s.vs_current_bb fn.fn_blocks)` by
+    metis_tac[m2v_checked_lookup_block] >>
+  once_rewrite_tac[run_blocks_unfold] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+  >- simp[] >>
+  rename1 `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `m2v_pvars_set fn bb 0 t` by
+    metis_tac[m2v_pvars_at_current_def] >>
+  `EVERY inst_wf bb.bb_instructions` by
+    metis_tac[fn_inst_wf_MEM, MEM_fn_insts, EVERY_MEM] >>
+  DISJ_CASES_TAC (Q.SPECL [`s`, `bb.bb_instructions`]
+    eval_phis_ok_or_error_defs)
+  >- (pop_assum strip_assume_tac >>
+      rename1 `eval_phis s bb.bb_instructions = OK sp` >>
+      drule_all m2v_phi_entry_package >> strip_tac >>
+      rename1 `eval_phis t (m2v_bt fn bb).bb_instructions = OK tp` >>
+      simp[run_block_def, m2v_bt_instructions, m2v_rewrite_phis] >>
+      Cases_on `get_instruction bb (phi_prefix_length bb.bb_instructions)`
+      >- (simp[Once exec_block_def]) >>
+      rename1 `get_instruction bb (phi_prefix_length bb.bb_instructions) = SOME inst` >>
+      suspend "block") >>
+  pop_assum strip_assume_tac >> simp[run_block_def]
+QED
+
+Resume m2v_run_blocks_correct[block]:
+  qmatch_asmsub_abbrev_tac `m2v_inv_noix fn a b` >>
+  `sp.vs_current_bb = s.vs_current_bb` by
+    metis_tac[eval_phis_preserves_current_bb] >>
+  `lookup_block a.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb a.vs_inst_idx = SOME inst` by
+    (simp[Abbr `a`] >> metis_tac[]) >>
+  `active_inst fn inst a` by
+    (irule contextCodegenRelPropsTheory.lookup_instruction_active >> metis_tac[]) >>
+  `enters_block fn s a` by
+    (simp[contextCodegenRelTheory.enters_block_def, Abbr `a`] >> metis_tac[]) >>
+  `?G tn. frame_reachable vs ctx [] [] G tn fn inst a` by metis_tac[] >>
+  `m2v_promo_sizes_bounded fn` by
+    gvs[m2v_transform_function_checked_def, AllCaseEqs()] >>
+  `(?e. exec_block fuel ctx bb a = Error e) \/
+   lift_result
+     (\u v. m2v_inv_noix fn u v /\ m2v_non32_ok fn u v /\
+             m2v_ao_undef_sync fn u v)
+     (m2v_public_rel fn) (m2v_public_rel fn)
+     (exec_block fuel ctx bb a) (exec_block fuel ctx (m2v_bt fn bb) b)` by
+    (irule m2v_per_block_sim >> simp[Abbr `a`, Abbr `b`] >> metis_tac[]) >>
+  gvs[] >>
+  Cases_on `exec_block fuel ctx bb a` >>
+  Cases_on `exec_block fuel ctx (m2v_bt fn bb) b` >>
+  gvs[lift_result_def] >>
+  rename1 `exec_block fuel ctx bb a = OK u` >>
+  rename1 `exec_block fuel ctx (m2v_bt fn bb) b = OK v` >>
+  `u.vs_halted = v.vs_halted /\ u.vs_current_bb = v.vs_current_bb` by
+    gvs[m2v_inv_noix_def] >>
+  Cases_on `v.vs_halted`
+  >- (simp[lift_result_def] >>
+      gvs[m2v_public_rel_def, m2v_inv_noix_def, m2v_equiv_def]) >>
+  simp[] >> suspend "continue"
+QED
+Resume m2v_run_blocks_correct[continue]:
+  `run_block fuel ctx bb s = OK u /\
+   run_block fuel ctx (m2v_bt fn bb) t = OK v` by
+    simp[run_block_def, m2v_bt_instructions, m2v_rewrite_phis,
+         Abbr `a`, Abbr `b`] >>
+  `m2v_pvars_at_current fn v` by
+    (irule m2v_pvars_at_current_successor >> metis_tac[]) >>
+  `bb_well_formed bb` by metis_tac[wf_function_def] >>
+  `MEM u.vs_current_bb (bb_succs bb)` by
+    (irule venomExecPropsTheory.run_block_current_bb_in_succs >>
+     metis_tac[wf_front_nonterm, bb_well_formed_def]) >>
+  `fn_reachable fn u.vs_current_bb` by
+    (irule fn_reachable_step >>
+     qexists_tac `s.vs_current_bb` >>
+     simp[fn_cfg_edge_def] >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions` by
+    (gvs[EVERY_MEM] >> metis_tac[MEM_fn_insts]) >>
+  `!z j. enters_block fn u z /\ active_inst fn j z ==>
+      ?G' tn'. frame_reachable vs ctx [] [] G' tn' fn j z` by
+    (rpt strip_tac >> irule frame_reachable_exec_block_successor >>
+     metis_tac[]) >>
+  first_x_assum irule >> metis_tac[]
+QED
+Finalise m2v_run_blocks_correct
+
+(* Entry reachability supplies the source allocation and access invariants.
+   Block continuation keeps promoted-variable initialization; terminal
+   results expose only the public memory relation. *)
+Theorem m2v_transform_function_correct:
+  !fuel ctx name fn vs fn'.
+    ctx.ctx_entry = SOME name /\
+    lookup_function name ctx.ctx_functions = SOME fn /\
+    wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+    o1_initial_state_ok vs /\
+    ptr_discipline vs.vs_alloca_next ctx vs /\
+    raw_unit_memory_ok ctx vs /\
+    m2v_promotable_wf fn /\ m2v_fresh_names_disjoint fn /\
+    m2v_return_size_bounded fn /\
+    EVERY (\i. i.inst_opcode <> INVOKE) (fn_insts fn) /\
+    m2v_transform_function_checked fn = SOME fn' ==>
+    (?e. run_function fuel ctx fn (vs with vs_prev_bb := NONE) = Error e) \/
+    lift_result (m2v_public_rel fn) (m2v_public_rel fn) (m2v_public_rel fn)
+      (run_function fuel ctx fn (vs with vs_prev_bb := NONE))
+      (run_function fuel ctx fn' (vs with vs_prev_bb := NONE))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `fn_entry_label fn' = fn_entry_label fn` by
+    metis_tac[m2v_checked_entry_label] >>
+  simp[run_function_def] >>
+  Cases_on `fn_entry_label fn` >- simp[] >> simp[] >>
+  rename1 `fn_entry_label fn = SOME lbl` >>
+  qmatch_goalsub_abbrev_tac `run_blocks fuel ctx fn cs` >>
+  `o1_initial_state_ok cs` by gvs[o1_initial_state_ok_def, Abbr `cs`] >>
+  `m2v_inv_noix fn cs cs` by metis_tac[m2v_initial_inv_noix] >>
+  `m2v_fresh_undef fn cs` by metis_tac[m2v_initial_fresh_undef] >>
+  `m2v_non32_ok fn cs cs /\ m2v_ao_undef_sync fn cs cs` by
+    metis_tac[m2v_non32_ok_refl, m2v_ao_undef_sync_refl] >>
+  `m2v_pvars_at_current fn cs` by
+    (rw[m2v_pvars_at_current_def] >> irule m2v_entry_pvars_set >>
+     gvs[Abbr `cs`]) >>
+  `fn_reachable fn cs.vs_current_bb` by
+    (simp[fn_reachable_def, Abbr `cs`] >> metis_tac[relationTheory.RTC_REFL]) >>
+  `!u inst. enters_block fn cs u /\ active_inst fn inst u ==>
+      ?G tn. frame_reachable vs ctx [] [] G tn fn inst u` by
+    (rpt strip_tac >> qexistsl [`FEMPTY`, `entry_taint`] >>
+     irule frame_reachable_entry >> simp[] >>
+     gvs[Abbr `cs`]) >>
+  irule m2v_run_blocks_correct >> metis_tac[]
+QED
 
 (* ===== Structural obligation: supply-aware transform keeps wf_function =====
 
-   m2v_transform_function_supply rewrites exactly like m2v_bt up to inst_ids,
+   m2v_transform_function_supply_raw rewrites exactly like m2v_bt up to inst_ids,
    and the only new id (the mstore before a promoted return) comes from the
-   supply, above every id of the input function. *)
+   supply, above every id of the input function. This independent structural
+   result is retained for the supply-aware compiler pipeline. The semantic
+   wrapper above uses the checked transform directly and needs no transformed
+   instruction-ID distinctness premise. *)
 
 Overload m2v_erase[local] = ``\i:instruction. i with inst_id := 0``
 Overload m2v_ids[local] = ``MAP (\i:instruction. i.inst_id)``
@@ -969,9 +1057,9 @@ QED
 Theorem m2v_preserves_wf_function:
   !s fn.
     wf_function fn /\ EVERY (\id. id < s.irs_next_inst) (fn_ir_inst_ids fn) ==>
-    wf_function (FST (m2v_transform_function_supply s fn))
+    wf_function (FST (m2v_transform_function_supply_raw s fn))
 Proof
-  rpt strip_tac >> simp[m2v_transform_function_supply_def] >>
+  rpt strip_tac >> simp[m2v_transform_function_supply_raw_def] >>
   Cases_on `m2v_rewrite_blocks_supply (m2v_promo_list fn) s fn.fn_blocks` >>
   simp[] >>
   drule m2v_rewrite_blocks_supply_props >> strip_tac >>

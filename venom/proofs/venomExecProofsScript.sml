@@ -1140,16 +1140,6 @@ QED
    Operand FDOM Properties
    ========================================================================== *)
 
-(* An operand list evaluates exactly when each operand does. *)
-Theorem eval_operands_IS_SOME_EVERY:
-  !ops s. IS_SOME (eval_operands ops s) <=>
-          EVERY (\op. IS_SOME (eval_operand op s)) ops
-Proof
-  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
-  first_x_assum (qspec_then `s` mp_tac) >>
-  Cases_on `eval_operand h s` >> Cases_on `eval_operands ops s` >> simp[]
-QED
-
 (* LOG reads its offset, size and topics off the reversed operand list, so
    when they all evaluate, the whole list does. *)
 Theorem log_operands_defined:
@@ -2003,6 +1993,15 @@ Theorem run_blocks_abort:
     run_blocks (SUC fuel) ctx fn ss = Abort a ss'
 Proof
   rw[run_blocks_unfold]
+QED
+
+Theorem eval_phis_no_prev:
+  s.vs_prev_bb = NONE /\ eval_phis s ins = OK s1 ==>
+  s1 = s /\ phi_prefix_length ins = 0
+Proof
+  Cases_on `ins` >> simp[eval_phis_def, phi_prefix_length_def] >>
+  strip_tac >> Cases_on `h.inst_opcode = PHI` >>
+  gvs[eval_phis_def, eval_one_phi_def, phi_prefix_length_def, AllCaseEqs()]
 QED
 
 Theorem eval_phis_preserves_alloca_fields:
