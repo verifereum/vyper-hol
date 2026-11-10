@@ -1697,8 +1697,7 @@ Proof
 QED
 
 Resume sym_reorder_one_frame_sim_marked[restore_only]:
-  gvs[] >>
-  drule_all control_plan_address_bounds >> strip_tac >>
+  drule_all_then strip_assume_tac control_plan_address_bounds >>
   drule_all sym_reorder_restore_frame_sim >> simp[]
 QED
 
@@ -1856,6 +1855,125 @@ Proof
   qpat_x_assum `reorder_plan _ _ _ = _`
     (assume_tac o REWRITE_RULE [reorderSimTheory.reorder_plan_eq_plan_steps]) >>
   drule_all sym_plan_steps_reorder_frame_sim_marked >> simp[]
+QED
+
+Theorem sym_restore_spilled_cons_frame_sim:
+  (!qs tail_ops qs' ac sy.
+    restore_spilled_plan targets qs = (tail_ops,qs') /\
+    spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled /\
+    (!off. MEM (SORestore off) tail_ops ==> off < dimword(:256)) /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 qs ac sy /\
+    asm_block_at p ac.as_pc (execute_plan initial_fmp tail_ops) ==>
+    ?ac' sy'.
+      asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+        (LENGTH (execute_plan initial_fmp tail_ops)) ac = AsmOK ac' /\
+      sym_steps p env (LENGTH (execute_plan initial_fmp tail_ops)) sy = SymOK sy' /\
+      sym_frame_inv p env ctx cplan fn ret srest labs0 qs' ac' sy' /\
+      ac'.as_pc = LENGTH (execute_plan initial_fmp tail_ops) + ac.as_pc) /\
+  do_restore op ps = (ops1,ps1) /\
+  restore_spilled_plan targets ps1 = (ops2,ps') /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SORestore off) ops1 \/ MEM (SORestore off) ops2 ==> off < dimword(:256)) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp (ops1 ++ ops2)) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp (ops1 ++ ops2))) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp (ops1 ++ ops2))) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 ps' cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (ops1 ++ ops2))
+Proof
+  strip_tac >>
+  drule_all_then strip_assume_tac generatedPrefixSimTheory.do_restore_layout_wf >>
+  gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  `!off. MEM (SORestore off) ops1 ==> off < dimword(:256)` by metis_tac[] >>
+  `!off. MEM (SORestore off) ops2 ==> off < dimword(:256)` by metis_tac[] >>
+  drule_all_then strip_assume_tac sym_do_restore_frame_sim >>
+  `asm_block_at p cs'.as_pc (execute_plan initial_fmp ops2)` by
+    metis_tac[arithmeticTheory.ADD_COMM] >>
+  first_x_assum drule_all >> strip_tac >>
+  rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 ps' ac' sy'` >>
+  qexistsl [`ac'`, `sy'`] >>
+  simp[stackOpSimTheory.asm_steps_add, sym_steps_add] >> decide_tac
+QED
+
+Theorem sym_restore_spilled_plan_frame_sim:
+  !targets ps ops ps' cs ss.
+  restore_spilled_plan targets ps = (ops,ps') /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SORestore off) ops ==> off < dimword(:256)) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp ops) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp ops)) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 ps' cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  Induct
+  >- simp[stackPlanOpsTheory.restore_spilled_plan_def, execute_plan_def,
+          asm_steps_def, sym_steps_def] >>
+  rpt gen_tac >>
+  simp[stackPlanOpsTheory.restore_spilled_plan_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  suspend "cons"
+QED
+
+Resume sym_restore_spilled_plan_frame_sim[cons]:
+  drule_all sym_restore_spilled_cons_frame_sim >> simp[]
+QED
+
+Finalise sym_restore_spilled_plan_frame_sim
+
+Theorem sym_jmp_prepare_frame_sim:
+  !base.
+  generated_plan_state_wf_marked base ps /\
+  pending_inventory_wf pending ps /\
+  restore_spilled_plan pending ps = (restore_ops,prepared) /\
+  reorder_plan dfg pending prepared = (reorder_ops,arranged) /\
+  (!off. MEM (SORestore off) restore_ops ==> off < dimword(:256)) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) reorder_ops /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) pending /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp (restore_ops ++ reorder_ops)) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp (restore_ops ++ reorder_ops))) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp (restore_ops ++ reorder_ops))) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 arranged cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (restore_ops ++ reorder_ops))
+Proof
+  gen_tac >> strip_tac >>
+  drule_all_then strip_assume_tac restore_spilled_plan_generated_facts_marked >>
+  `pending_inventory_wf pending prepared` by metis_tac[] >>
+  drule_all_then strip_assume_tac fnPlanLineageInventoryTheory.restore_spilled_plan_length_floor >>
+  drule_all_then strip_assume_tac deepResidualSimTheory.generated_plan_state_wf_marked_residual_nil >>
+  drule_then (qspec_then `pending` assume_tac) residual_budget_wf_marked_nil_pending >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    fs[fnPlanPrefixTheory.generated_plan_state_wf_marked_def] >>
+  gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  drule_all_then strip_assume_tac sym_restore_spilled_plan_frame_sim >>
+  `asm_block_at p cs'.as_pc (execute_plan initial_fmp reorder_ops)` by
+    metis_tac[arithmeticTheory.ADD_COMM] >>
+  `pending_inventory_wf pending prepared` by metis_tac[] >>
+  qpat_x_assum `residual_budget_wf_marked _ [] prepared` kall_tac >>
+  drule_all_then strip_assume_tac (SRULE []
+    (Q.INST [`dfg` |-> `dfg_build_function fn`] sym_reorder_plan_frame_sim_marked)) >>
+  qexistsl [`cs''`, `ss''`] >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  simp[stackOpSimTheory.asm_steps_add, sym_steps_add] >> decide_tac
 QED
 
 (* A branch condition cannot carry either class of symbolic label. *)

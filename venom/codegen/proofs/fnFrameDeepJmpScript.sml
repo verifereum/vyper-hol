@@ -52,7 +52,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem restore_spilled_plan_generated_facts_marked[local]:
+Theorem restore_spilled_plan_generated_facts_marked:
   !targets sb ps ops ps'.
     restore_spilled_plan targets ps = (ops,ps') /\
     generated_plan_state_wf_marked sb ps ==>
@@ -68,7 +68,7 @@ Proof
   first_x_assum drule_all >> strip_tac >> metis_tac[]
 QED
 
-Theorem residual_budget_wf_marked_nil_pending[local]:
+Theorem residual_budget_wf_marked_nil_pending:
   !base pending ps.
     residual_budget_wf_marked base [] ps ==>
     residual_budget_wf_marked base pending ps
