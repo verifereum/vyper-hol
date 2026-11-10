@@ -1,6 +1,6 @@
 Theory loadElimNormalizedCuts
 Ancestors
-  loadElimSelectedGeneration loadElimDefinitionCuts loadElimNormalizeAvailability
+  loadElimSelectedGeneration loadElimDefinitionCuts loadElimNormalizeAvailability venomWfProps
   loadElimNormalizeHelpers loadElimTransferProvenance loadElimDefs loadElimConfiguredGeneration loadElimKeyShapeInvariant
   dfgDefs dfgAnalysisProps venomWf venomInst venomExecProofs
   simplifyCfgLabelProps simplifyCfgPhiRepair simplifyCfgWfssa simplifyCfgStruct simplifyCfgPhiSemantics
