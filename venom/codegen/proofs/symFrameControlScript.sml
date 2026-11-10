@@ -1265,6 +1265,16 @@ Proof
   simp[stackOpSimTheory.asm_steps_add, sym_steps_add] >> decide_tac
 QED
 
+Theorem control_plan_address_bounds:
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops ==>
+  (!off. MEM (SORestore off) ops ==> off < dimword(:256)) /\
+  (!off. MEM (SOSpill off) ops ==> off < dimword(:256))
+Proof
+  rewrite_tac[listTheory.EVERY_MEM] >> strip_tac >> conj_tac >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
 Theorem sym_reorder_restore_frame_sim:
   (case stack_get_unfixed_depth op f (LENGTH pending) ps.ps_stack of
      SOME d => ([],ps)
@@ -1288,6 +1298,47 @@ Proof
       >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def]) >>
       strip_tac >> drule_all sym_do_restore_frame_sim >> simp[]) >>
   strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def]
+QED
+
+Theorem sym_reorder_prepare_reduce_frame_sim:
+  residual_budget_wf_marked spill_base pending ps1 /\
+  LENGTH pending <= LENGTH ps1.ps_stack /\
+  reduce_depth_plan (LENGTH ps1.ps_stack) pending op f (LENGTH pending) ps1 =
+    (reduce_ops,ps2) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) reduce_ops /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= spill_base /\ ps2.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps1 mid smid /\
+  asm_static_wf p /\
+  asm_block_at p (cs.as_pc + LENGTH (execute_plan initial_fmp restore_ops))
+    (execute_plan initial_fmp reduce_ops) /\
+  asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+    (LENGTH (execute_plan initial_fmp restore_ops)) cs = AsmOK mid /\
+  sym_steps p env (LENGTH (execute_plan initial_fmp restore_ops)) ss = SymOK smid /\
+  mid.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp restore_ops) ==>
+  residual_budget_wf_marked spill_base pending ps2 /\
+  LENGTH pending <= LENGTH ps2.ps_stack /\
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp (restore_ops ++ reduce_ops))) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp (restore_ops ++ reduce_ops))) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 ps2 cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (restore_ops ++ reduce_ops))
+Proof
+  strip_tac >>
+  `residual_budget_wf_marked spill_base pending ps2` by
+    metis_tac[deepResidualBudgetTheory.reduce_depth_plan_residual_budget_wf_marked] >>
+  `LENGTH pending <= LENGTH ps2.ps_stack` by
+    metis_tac[deepResidualBudgetTheory.reduce_depth_plan_target_len_floor] >>
+  `!off. MEM (SOSpill off) reduce_ops ==> off < dimword(:256)` by
+    metis_tac[control_plan_address_bounds] >>
+  `asm_block_at p mid.as_pc (execute_plan initial_fmp reduce_ops)` by gvs[] >>
+  drule_all sym_reduce_depth_plan_frame_sim >> strip_tac >>
+  simp[] >> qexistsl [`cs'`, `ss'`] >>
+  simp[stackOpSimTheory.execute_plan_append] >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  simp[stackOpSimTheory.asm_steps_add, sym_steps_add] >> decide_tac
 QED
 
 Theorem sym_reorder_prepare_frame_sim:
@@ -1328,9 +1379,7 @@ Proof
   gvs[listTheory.EVERY_APPEND, stackOpSimTheory.execute_plan_append,
     stackOpSimTheory.asm_block_at_append] >>
   `!off. MEM (SORestore off) restore_ops ==> off < dimword(:256)` by
-    (fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-     qpat_x_assum `!s. MEM s restore_ops ==> _`
-       (qspec_then `SORestore off` mp_tac) >> simp[]) >>
+    metis_tac[control_plan_address_bounds] >>
   drule_all sym_reorder_restore_frame_sim >> strip_tac >>
   Cases_on `dist > 16` >> gvs[]
   >- suspend "reduce" >>
@@ -1343,9 +1392,7 @@ Resume sym_reorder_prepare_frame_sim[reduce]:
   `LENGTH pending <= LENGTH ps2.ps_stack` by
     metis_tac[deepResidualBudgetTheory.reduce_depth_plan_target_len_floor] >>
   `!off. MEM (SOSpill off) reduce_ops ==> off < dimword(:256)` by
-    (fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-     qpat_x_assum `!s. MEM s reduce_ops ==> _`
-       (qspec_then `SOSpill off` mp_tac) >> simp[]) >>
+    metis_tac[control_plan_address_bounds] >>
   `asm_block_at p cs'.as_pc (execute_plan initial_fmp reduce_ops)` by
     metis_tac[arithmeticTheory.ADD_COMM] >>
   drule_all sym_reduce_depth_plan_frame_sim >> strip_tac >>
@@ -1526,9 +1573,7 @@ Proof
 QED
 
 Resume sym_reorder_one_decompose[placement]:
-  qpat_x_assum `LENGTH pending = num_ops` (SUBST_ALL_TAC o SYM) >>
-  gvs[AllCaseEqs()] >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  gvs[pairTheory.UNCURRY_pair_CASE, AllCaseEqs()] >>
   metis_tac[allocMonoTheory.do_swap_next_offset, arithmeticTheory.LESS_EQ_TRANS,
     listTheory.APPEND_ASSOC]
 QED
@@ -1603,10 +1648,7 @@ QED
 
 Resume sym_reorder_one_frame_sim_marked[restore_only]:
   gvs[] >>
-  `!off. MEM (SORestore off) ops ==> off < dimword(:256)` by
-    (fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-     qpat_x_assum `!s. MEM s ops ==> _`
-       (qspec_then `SORestore off` mp_tac) >> simp[]) >>
+  drule_all control_plan_address_bounds >> strip_tac >>
   drule_all sym_reorder_restore_frame_sim >> simp[]
 QED
 
