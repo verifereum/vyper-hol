@@ -2430,6 +2430,52 @@ Proof
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
 QED
 
+Theorem sym_label_numeric:
+  !lbl ps p env cp fn ret srest initial_fmp R ss.
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOLabel lbl]) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp [SOLabel lbl])) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp [SOLabel lbl]) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def,
+    stackOpSimTheory.asm_block_at_cons] >>
+  qexists `ss with sym_base := (asm_next ss.sym_base) with as_stack := []` >>
+  pure_once_rewrite_tac[arithmeticTheory.ONE] >>
+  gvs[sym_steps_def, asmSymSemTheory.sym_step_def, asmSymSemTheory.sym_lift_def,
+    asmSemTheory.asm_step_def, asmSemTheory.asm_next_def, sym_kinds_ok_def,
+    asmSymSemTheory.sym_state_component_equality]
+QED
+
+Theorem sym_label_prepare_numeric:
+  !ch growth spill_base lbl_ctr ps0 params installed liveness fn ops ps1
+    p env cp ret srest initial_fmp R ss lbl.
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+    params = get_params (HD fn.fn_blocks).bb_instructions /\
+    installed = ps0 with ps_stack := MAP (\i. Var (HD i.inst_outputs)) params /\
+    codegen_ready_fn fn /\
+    prepare_params_plan liveness fn ps0 = (ops,ps1) /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword(:256)) /\
+    (!b. ps1.ps_alloc.sa_spill_base <= b /\ b < ps1.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest installed ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (SOLabel lbl :: ops)) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp (SOLabel lbl :: ops))) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps1 out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (SOLabel lbl :: ops)) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `SOLabel lbl :: ops = [SOLabel lbl] ++ ops` by simp[] >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >>
+  irule sym_numeric_seq >> (conj_tac >- simp[]) >>
+  qexistsl [`installed`, `installed`] >> asm_rewrite_tac[] >> conj_tac
+  >- (rpt strip_tac >> irule sym_label_numeric >> simp[]) >>
+  rpt strip_tac >> irule sym_prepare_params_numeric >> metis_tac[]
+QED
+
 Theorem sym_phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0
