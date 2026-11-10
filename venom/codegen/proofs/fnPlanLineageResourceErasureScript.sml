@@ -277,3 +277,81 @@ Proof
   simp[top_n_def, LENGTH_TAKE, MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF,
        erase_spill_address_def]
 QED
+
+Theorem do_swap_erased_spill_count[local]:
+  !d p. d < LENGTH p.ps_stack ==>
+    LENGTH (FILTER ($= (SOSpill 0))
+      (MAP erase_spill_address (FST (do_swap d p)))) =
+    if d <= 16 then 0 else d + 1
+Proof
+  rpt strip_tac >> drule do_swap_erased_code >> strip_tac >>
+  simp[] >> Cases_on `d = 0` >> Cases_on `d <= 16` >>
+  simp[FILTER_APPEND_DISTRIB, iffRL FILTER_EQ_ID, iffRL FILTER_EQ_NIL, EVERY_MAP,
+       rich_listTheory.EVERY_REPLICATE]
+QED
+
+Theorem do_dup_erased_spill_count[local]:
+  !d p. d < LENGTH p.ps_stack ==>
+    LENGTH (FILTER ($= (SOSpill 0))
+      (MAP erase_spill_address (FST (do_dup d p)))) = d - 15
+Proof
+  rpt strip_tac >> drule do_dup_erased_code >> strip_tac >>
+  simp[] >> Cases_on `d <= 15` >> Cases_on `d - 15 <= 16` >>
+  simp[FILTER_APPEND_DISTRIB, iffRL FILTER_EQ_ID, iffRL FILTER_EQ_NIL, EVERY_MAP,
+       EVERY_FLAT, rich_listTheory.EVERY_REPLICATE]
+QED
+
+Theorem do_swap_erased_code_injective:
+  !d e p q. d < LENGTH p.ps_stack /\ e < LENGTH q.ps_stack ==>
+    ((MAP erase_spill_address (FST (do_swap d p)) =
+      MAP erase_spill_address (FST (do_swap e q))) <=> d = e)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`d`,`p`] mp_tac do_swap_erased_code >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  qspecl_then [`e`,`q`] mp_tac do_swap_erased_code >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  reverse eq_tac >- (strip_tac >> gvs[]) >> strip_tac >>
+  qspecl_then [`d`,`p`] mp_tac do_swap_erased_spill_count >>
+  qspecl_then [`e`,`q`] mp_tac do_swap_erased_spill_count >>
+  simp[] >>
+  Cases_on `d <= 16` >> Cases_on `e <= 16` >>
+  Cases_on `d = 0` >> Cases_on `e = 0` >> gvs[]
+QED
+
+Theorem do_dup_erased_code_injective:
+  !d e p q. d < LENGTH p.ps_stack /\ e < LENGTH q.ps_stack ==>
+    ((MAP erase_spill_address (FST (do_dup d p)) =
+      MAP erase_spill_address (FST (do_dup e q))) <=> d = e)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`d`,`p`] mp_tac do_dup_erased_code >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  qspecl_then [`e`,`q`] mp_tac do_dup_erased_code >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  reverse eq_tac >- (strip_tac >> gvs[]) >> strip_tac >>
+  qspecl_then [`d`,`p`] mp_tac do_dup_erased_spill_count >>
+  qspecl_then [`e`,`q`] mp_tac do_dup_erased_spill_count >>
+  simp[] >> Cases_on `d <= 15` >> Cases_on `e <= 15` >> gvs[]
+QED
+
+Theorem do_swap_dup_erased_code_distinct:
+  !d e p q. d < LENGTH p.ps_stack /\ e < LENGTH q.ps_stack ==>
+    MAP erase_spill_address (FST (do_swap d p)) <>
+    MAP erase_spill_address (FST (do_dup e q))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`d`,`p`] mp_tac do_swap_erased_code >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  qspecl_then [`e`,`q`] mp_tac do_dup_erased_code >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  `!n. ~MEM (SODup n) (MAP erase_spill_address (FST (do_swap d p)))`
+    by (simp[] >> Cases_on `d = 0` >> Cases_on `d <= 16` >>
+        simp[MEM_MAP, rich_listTheory.MEM_REPLICATE]) >>
+  Cases_on `e <= 15`
+  >- ( `MEM (SODup (e + 1))
+          (MAP erase_spill_address (FST (do_dup e q)))` by simp[] >>
+       metis_tac[]) >>
+  `MEM (SODup 16) (MAP erase_spill_address (FST (do_dup e q)))`
+    by simp[] >> metis_tac[]
+QED
