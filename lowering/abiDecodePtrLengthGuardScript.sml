@@ -3,7 +3,7 @@ Theory abiDecodePtrLengthGuard
 Ancestors
   abiBuiltinLengthGuard abiBuiltinBoundTests bodyPtrBopScalarCompile
   bodyPtrBopScalarSeq bodyPtrBopScalarDynamic emitHelper exprLoweringProps
-  emitHelperProps compileEnv freshWrites ptrDiscipline list pred_set
+  emitHelperProps compileEnv freshWrites ptrDiscipline list pred_set fragGasSeqPtr
 
 Theorem abi_builtin_bound_test_scalar:
   abi_builtin_bound_test opc lhs rhs st = (v,st') /\
@@ -68,6 +68,7 @@ Theorem abi_builtin_length_guard_success_path:
   isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) /\
   run_inst_seq (emitted_insts st st') s = OK t ==>
   ?G' tn'.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st') s G' tn' /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st st'))) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
@@ -82,11 +83,17 @@ Proof
      op_prov G op = NONE /\ op_taint tn op = {}` by
     (pure_rewrite_tac [IN_UNION, IN_SING, IN_IMAGE, IN_UNIV] >>
      rpt strip_tac >> gvs[op_prov_def, op_taint_def]) >>
-  drule_all bop_scalar_seq_path >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  drule_all bop_scalar_seq_run >>
+  disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts st st') /\
+   FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st') = []` by
+    (drule bop_scalar_seq_opcodes >>
+     simp[EVERY_CONJ] >> strip_tac >>
+     fs[EVERY_MEM, FILTER_EQ_NIL] >> metis_tac[]) >>
+  drule_all run_inst_seq_gas_path_ptr >> simp[] >> strip_tac >>
   qexistsl_tac [`G'`, `tn'`] >>
-  pure_once_rewrite_tac [arithmeticTheory.ADD_COMM] >>
-  asm_rewrite_tac []
+  simp[]
 QED
 
 Theorem abi_builtin_length_guard_abort_path:

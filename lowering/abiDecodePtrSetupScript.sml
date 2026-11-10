@@ -7,7 +7,7 @@ Ancestors
   exprSimPtrProps appendStorageGhostPtr bodyPtrBopScalarCompile
   bodyPtrBopScalarOutcome bodyPtrBopScalarSeq exprSimAccounts instIdxIndep
   fragExec fragGasPathPtr emitHelper emitHelperProps exprLoweringProps
-  compileEnv freshWrites ptrDiscipline venomState list rich_list pred_set
+  compileEnv freshWrites ptrDiscipline venomState venomInst list rich_list pred_set
 
 Theorem abi_builtin_decode_header_trace_ptr:
   abi_builtin_decode_header data mn mx sa = (inputs,sh) ==>
@@ -37,6 +37,7 @@ Theorem abi_builtin_decode_header_success_path_ptr:
   ?G' tn' q r.
     src = Var q /\ len = Var r /\
     not_fresh_at sh q /\ not_fresh_at sh r /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sh) s G' tn' /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := LENGTH sh.cs_current_insts)) /\
     eval_operand len t = SOME (mload (w2n w) s) /\
@@ -135,6 +136,8 @@ Resume abi_builtin_decode_header_success_path_ptr[transport]:
   `gas_path_ptr D 0 ctx func PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := LENGTH sh.cs_current_insts))` by
     (drule_all gas_path_ptr_then >> simp[]) >>
+  `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sh) s G' tn'` by
+    suspend "sequence" >>
   qexistsl_tac [`G'`, `tn'`, `q`, `r`] >> simp[] >>
   suspend "fields"
 QED
@@ -161,6 +164,26 @@ Resume abi_builtin_decode_header_success_path_ptr[fields]:
     (fs[bodyPtrDefsTheory.ptr_covers_def] >> metis_tac[]) >>
   gvs[eval_operand_def] >>
   qpat_x_assum `t = u with <|vs_vars := _; vs_inst_idx := _|>` (fn th => once_rewrite_tac[th]) >> simp[]
+QED
+Resume abi_builtin_decode_header_success_path_ptr[sequence]:
+  qpat_assum `emit_op MLOAD _ _ = _` (mp_then Any strip_assume_tac emit_op_extends) >>
+  qpat_assum `emit_op ADD _ _ = _` (mp_then Any strip_assume_tac emit_op_extends) >>
+  `sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb` by
+    metis_tac[arithmeticPropsTheory.extends_trans] >>
+  `emitted_insts sa sh = emitted_insts sa sb ++ emitted_insts sb sh` by
+    (irule emitted_insts_append >> simp[]) >>
+  `s.vs_inst_idx + LENGTH (emitted_insts sa sb) = u.vs_inst_idx` by
+    metis_tac[LENGTH_APPEND] >>
+  asm_rewrite_tac[] >>
+  irule bop_inst_seq_ptr_append >>
+  conj_tac >-
+    (qpat_assum `emit_op MLOAD _ _ = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     qpat_assum `emit_op ADD _ _ = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+       (irule emitted_insts_append >> simp[]) >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  qexistsl_tac [`H`, `u with vs_inst_idx := s.vs_inst_idx`, `tm`] >>
+  gvs[]
 QED
 Finalise abi_builtin_decode_header_success_path_ptr
 

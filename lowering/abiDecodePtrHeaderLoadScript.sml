@@ -2,7 +2,7 @@
 Theory abiDecodePtrHeaderLoad
 Ancestors
   assignTuplePtrLoadStep typedCopyPtr venomExecSemantics venomInst emitHelper
-  exprSimAccounts freshWrites fragGasPathPtr
+  exprSimAccounts freshWrites fragGasPathPtr fragGasSeqPtr
   abiDecodeStaticProps bodyPtrDefs emitHelperProps exprLoweringProps compileEnv fragExec venomState ptrDiscipline stateFrame words arithmetic
 
 Theorem abi_decode_header_load_path_ptr:
@@ -19,6 +19,7 @@ Theorem abi_decode_header_load_path_ptr:
     src = Var q /\ len = Var r /\
     not_fresh_at sb q /\ not_fresh_at sb r /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
     run_inst_seq (emitted_insts sa sb) s =
       OK (t with vs_inst_idx := s.vs_inst_idx) /\
     eval_operand len t = SOME (mload (w2n w) s) /\
@@ -120,6 +121,7 @@ Resume abi_decode_header_load_path_ptr[outputs]:
     gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
         comp_ignore_bind_def, comp_return_def, emit_def] >>
   asm_rewrite_tac[] >>
+  conj_tac >- suspend "sequence" >>
   conj_tac >- suspend "raw" >>
   conj_tac >- simp[Abbr `t`, Abbr `u`, eval_operand_def,
                          update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
@@ -188,6 +190,14 @@ Resume abi_decode_header_load_path_ptr[taint_frame]:
   simp[Abbr `tn'`, copy_len_binop_ghost_frame, Abbr `tm`,
        mload_ghost_clean, eval_operand_def] >>
   simp[step_taint_def, imm_taint_def, mk_inst_def]
+QED
+
+Resume abi_decode_header_load_path_ptr[sequence]:
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  simp[inst_seq_ptr_def, Abbr `u`, Abbr `H`, Abbr `tm`,
+       Abbr `t`, Abbr `G'`, Abbr `tn'`] >>
+  gvs[]
 QED
 
 Finalise abi_decode_header_load_path_ptr
