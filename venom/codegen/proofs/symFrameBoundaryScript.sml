@@ -2807,7 +2807,21 @@ Theorem sym_phi_prefix_frame_sim:
       sym_steps prog env n ss = SymOK ss' /\
       sym_frame_inv prog env ctx cp fn ret srest labs0 ps1 as' ss'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `!inst op. MEM inst phis /\ is_var_operand op /\ MEM op inst.inst_operands /\
+     MEM op ps.ps_stack ==> resolve_phi pred inst.inst_operands = SOME op` by
+    metis_tac[fnFrameStepsPhiTheory.phi_join_entry_hits] >>
+  `!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+     ~(MEM op ps.ps_stack /\ ?inst. MEM inst (collect_phis bb.bb_instructions) /\
+       resolve_phi pred inst.inst_operands = SOME op) /\
+     (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+     ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
+    (match_mp_tac fnFrameStepsPhiTheory.phi_join_entry_fresh >>
+     metis_tac[]) >>
+  match_mp_tac sym_phi_prefix_hits_frame_sim >>
+  qpat_assum `generated_plan_state_wf_marked bound ps` (irule_at Any) >>
+  qexistsl [`vs`, `r`, `pred`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem sym_single_pred_prefix_frame_sim:
