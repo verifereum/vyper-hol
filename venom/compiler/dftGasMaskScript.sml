@@ -2460,6 +2460,39 @@ Proof
   simp[update_var_def]
 QED
 
+Theorem invoke_partner_nongas_outputs[local]:
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  dft_remaining_inv fn bb (pre ++ i::post) s /\
+  EVERY (\x. ~dft_must_order x i) pre /\
+  c.inst_opcode = INVOKE /\ dft_gas_swap_pair c i /\
+  i.inst_opcode <> GAS ==>
+  ?pairs. MAP FST pairs = i.inst_outputs /\
+    step_inst n D i s =
+      OK (FOLDL (\st (out,w). update_var out w st) s pairs)
+Proof
+  strip_tac >>
+  drule_all dftGasInvCallPartnerTheory.inv_call_partner_class >> strip_tac >>
+  `dft_gas_swap_pair i c` by metis_tac[dft_gas_swap_pair_sym] >>
+  drule_all invoke_partner_total_guards >> strip_tac >>
+  `!v. MEM (Var v) i.inst_operands ==> v IN FDOM s.vs_vars` by
+    (Cases_on `pre = []` >- (gvs[] >> metis_tac[remaining_head_ready]) >>
+     metis_tac[dft_remaining_inv_ready]) >>
+  `!l. MEM (Label l) i.inst_operands ==> l IN FDOM s.vs_labels` by
+    (fs[dft_remaining_inv_def] >> metis_tac[]) >>
+  `!op. MEM op i.inst_operands ==> ?v. eval_operand op s = SOME v` by
+    metis_tac[dft_swap_operand_defined] >>
+  `inst_wf i` by
+    (fs[dftRunRelTheory.dft_remaining_inv_def, EVERY_MEM] >> metis_tac[]) >>
+  `?t. step_inst n D i s = OK t` by
+    (irule dft_swap_guarded_nofail_total >> simp[]) >>
+  simp[] >>
+  irule dftBlockSimTheory.pure_step_structure >>
+  simp[] >>
+  qpat_x_assum `step_inst n D i s = OK _` mp_tac >>
+  simp[step_inst_non_invoke]
+QED
+
 Theorem prefix_extract_mask[local]:
   !fuel C C'.
   let CalleeIH = (!fn fn' t.
