@@ -132,3 +132,108 @@ Proof
   metis_tac[SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
     fragGasPathMemTheory.gas_path_mem_then)]
 QED
+
+Theorem dyn_storage_multi_header[local]:
+  compile_dynarray_to_storage src dst ew em tr sa = ((),sb) /\
+  ew <> 1 /\ ew < dimword(:256) /\ fn_has_code sa sb fn /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  ~s.vs_call_ctx.cc_static /\ w2n p + 32 <= s.vs_alloca_next /\
+  mload (w2n p) s = n2w n /\ n < dimword(:256) /\
+  (!j. j < n ==> w2n (p + n2w (32+j*em)) + 32*ew <= s.vs_alloca_next) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_path_mem ctx fn s 0 (OK t) /\
+      store_copy_normalize s t =
+        FOLDL (\a j. store_copy_prefix (if tr then LocTransient else LocStorage)
+          (p+n2w (32+j*em)) (d+n2w (1+j*ew)) a ew) s (COUNT_LIST n) /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      lookup_var ("%" ++ toString (sa.cs_next_var+1)) t = SOME (n2w n) /\
+      lookup_var ("%" ++ toString sa.cs_next_var) t = SOME (n2w n) /\
+      ~t.vs_halted /\ t.vs_current_bb = fresh_label_output "dyn_cond" sa.cs_next_label /\
+      t.vs_inst_idx = 0
+Proof
+  strip_tac >> drule_all dyn_storage_multi_split >> strip_tac >>
+  `cs_extends sa sc` by
+    (simp[compileEnvTheory.cs_extends_def] >> qexists_tac `TAKE 2 sc.cs_blocks` >>
+     simp[IS_PREFIX_APPEND]) >>
+  `cs_extends sd sb` by metis_tac[dyn_storage_suffix_extends] >>
+  `cs_extends sc sd /\ sd.cs_current_insts = []` by
+    (drule_at (Pat `compile_word_copy_loop _ _ _ _ _ _ _ = _`)
+       bodyMemAssignTopCopyCompilerTheory.topcopy_compile_certificate >>
+     (impl_tac >- (Cases_on `tr` >> simp[])) >> strip_tac >>
+     conj_tac >- metis_tac[compileEnvTheory.cs_extends_trans] >>
+     qpat_x_assum `new_block _ _ = (_,sd)` mp_tac >>
+     simp[compileEnvTheory.new_block_def] >> strip_tac >> gvs[]) >>
+  `fn_has_code sa sc fn /\ fn_has_code sc sd fn /\ fn_has_code sd sb fn` by
+    metis_tac[fragExecTheory.fn_has_code_split, compileEnvTheory.cs_extends_trans] >>
+  `!bb. MEM bb (TAKE 2 sc.cs_blocks) ==>
+      lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (fs[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def] >>
+     gvs[] >> metis_tac[]) >>
+  `cs_extends sa sd` by metis_tac[compileEnvTheory.cs_extends_trans] >>
+  drule_all dyn_storage_suffix_code >> strip_tac >>
+  drule dyn_storage_suffix_layout >> strip_tac >>
+  gvs[TAKE, MEM, DISJ_IMP_THM, FORALL_AND_THM] >>
+  qmatch_asmsub_abbrev_tac `lookup_block sa.cs_current_bb fn.fn_blocks = SOME entry_bb` >>
+  `entry_bb.bb_instructions = sa.cs_current_insts ++
+    [mk_inst sa.cs_next_id MLOAD [src] ["%" ++ toString sa.cs_next_var];
+     mk_inst (sa.cs_next_id+1) ASSIGN [Lit 0w] ["%" ++ toString (sa.cs_next_var+1)];
+     mk_inst (sa.cs_next_id+2) JMP [Label (fresh_label_output "dyn_cond" sa.cs_next_label)] []]`
+    by simp[Abbr `entry_bb`] >>
+  drule_at (Pat `bb.bb_instructions = _`) storage_traversal_entry >>
+  disch_then (qspecl_then [`s`,`p`,`n`,`fn`,`ctx`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `u` strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `lookup_block (fresh_label_output "dyn_cond" sa.cs_next_label) fn.fn_blocks = SOME hb` >>
+  `?wb. lookup_block sc.cs_current_bb fn.fn_blocks = SOME wb /\
+        isPREFIX sc.cs_current_insts wb.bb_instructions` by
+    (fs[fragExecTheory.fn_has_code_def] >> gvs[]) >>
+  suspend "iterate"
+QED
+
+Resume dyn_storage_multi_header[iterate]:
+  qabbrev_tac `H = \i. FOLDL (\a j. store_copy_prefix (if tr then LocTransient else LocStorage)
+    (p+n2w (32+j*em)) (d+n2w (1+j*ew)) a ew) s (COUNT_LIST i)` >>
+  `?v. gas_path_mem ctx fn u 0 (OK v) /\
+       store_copy_normalize s v = H n /\
+       (!x. not_fresh_at sa x ==> lookup_var x v = lookup_var x s) /\
+       lookup_var ("%" ++ toString (sa.cs_next_var+1)) v = SOME (n2w n) /\
+       lookup_var ("%" ++ toString sa.cs_next_var) v = SOME (n2w n) /\
+       ~v.vs_halted /\ v.vs_current_bb = fresh_label_output "dyn_cond" sa.cs_next_label /\
+       v.vs_inst_idx = 0` by
+    (irule (REWRITE_RULE [GSYM arithmeticTheory.ADD_ASSOC]
+       (Q.INST [`hid` |-> `sa.cs_next_id+3`, `id` |-> `sa.cs_next_id+6`,
+                `tid` |-> `sd.cs_next_id`, `hb` |-> `hb`, `bb` |-> `wb`]
+         storage_traversal_multi_iteration)) >>
+     qpat_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _` (irule_at Any) >>
+     simp[Abbr `hb`, venomInstTheory.mk_inst_def, IgnAsm `store_copy_normalize s u = s`] >>
+     simp[typedArrayLoopControlMemTheory.typed_sa_backedge_insts_def,
+          venomInstTheory.mk_inst_def, IgnAsm `store_copy_normalize s u = s`] >>
+     qexistsl_tac [`src`, `"%" ++ toString (sa.cs_next_var+5)`, `p`,
+       `"%" ++ toString (sa.cs_next_var+8)`, `"%" ++ toString (sa.cs_next_var+4)`,
+       `em`, `dst`, `"%" ++ toString (sa.cs_next_var+7)`, `d`] >>
+     `sc.cs_next_var <= sd.cs_next_var` by
+       (metis_tac[exprOperandVarTheory.compiler_counter_word_copy, pairTheory.SND]) >>
+     qpat_x_assum `isPREFIX sc.cs_current_insts _` mp_tac >>
+     simp[IS_PREFIX_APPEND] >> strip_tac >>
+     simp[venomInstTheory.mk_inst_def, Abbr `H`, COUNT_LIST_def,
+          IgnAsm `store_copy_normalize s u = s`] >>
+     conj_tac
+     >- (rpt strip_tac >> first_x_assum irule >>
+         fs[not_fresh_at_def] >>
+         metis_tac[arithmeticTheory.LESS_EQ_REFL, arithmeticTheory.LESS_EQ_ADD]) >>
+     conj_tac
+     >- (simp[not_fresh_at_def] >> rpt strip_tac >>
+         first_x_assum irule >> decide_tac) >>
+     conj_tac >- metis_tac[] >>
+     conj_tac
+     >- (simp[not_fresh_at_def] >> rpt strip_tac >>
+         first_x_assum irule >> decide_tac) >>
+     Cases_on `tr` >> simp[not_fresh_at_def]) >>
+  qexists_tac `v` >> fs[Abbr `H`] >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
+    fragGasPathMemTheory.gas_path_mem_then)) >>
+  qexists_tac `u` >> simp[]
+QED
+Finalise dyn_storage_multi_header

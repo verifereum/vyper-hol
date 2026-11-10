@@ -334,7 +334,7 @@ Proof
   simp[gas_marked_path_def]
 QED
 
-Theorem storage_traversal_multi_iteration[local]:
+Theorem storage_traversal_multi_iteration:
   lookup_block hdr fn.fn_blocks = SOME hb /\
   hb.bb_instructions =
     [mk_inst hid LT [Var ctr; Var len] [cmp];
