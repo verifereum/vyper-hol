@@ -3,6 +3,9 @@ Theory bodyIntCallFamAggSubscriptArraySuffix
 Ancestors
   bodyIntCallFamAggSubscriptArrayRun exprSimSubscriptArraySuffix
   exprOperandVar bodyIntCallJointContract exprSimSubscriptArrayFramed
+  bodyIntCallFamAggSubscriptArrayPost vyperArray
+  bodyIntCallFamAggSubscriptArrayWindow vyperAssignPreservesType
+  valueTypingMemoryProps
 
 Theorem intcall_framed_array_valid_suffix:
   ((?ty. vv_location (FST (compile_expr ce ty obj sa)) = SOME LocCode) \/
@@ -202,3 +205,125 @@ Resume intcall_framed_array_invalid_suffix[dynamic]:
 QED
 
 Finalise intcall_framed_array_invalid_suffix
+
+(* Exact producer post at the counted suffix endpoint. *)
+Theorem intcall_framed_array_suffix_summary:
+  ((?ty. vv_location (FST (compile_expr ce ty obj sa)) = SOME LocCode) \/
+   (?n. bd = Fixed n)) /\
+  expr_body_pre ce fp.jc_cx env (Subscript et obj idx) es /\
+  expr_body_pre ce fp.jc_cx env obj es /\ expr_type obj = ArrayT et bd /\
+  post_value_type ce obj = expr_type obj /\
+  eval_expr fp.jc_cx obj es = (INL r,t) /\
+  ee.scopes = t.scopes /\ ee.immutables = t.immutables /\ ee.gas_obs = [] /\
+  (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
+  ((~ce.ce_is_ctor /\ p.ptr_location = LocCode) \/
+   ((?n. bd = Fixed n) /\
+    (!tv. evaluate_type (get_tenv fp.jc_cx) et = SOME tv ==> dynarray_free tv) /\
+    p.ptr_location = LocMemory)) /\
+  local_ptrs_reserved ce sc /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sc x) /\
+  (!l. p.ptr_operand <> Label l) /\
+  (!x. iop = Var x ==> not_fresh_at sc x) /\ (!l. iop <> Label l) /\
+  compile_array_subscript p.ptr_operand iop
+    (case bd of Fixed _ => F | Dynamic _ => T)
+    (case bd of Fixed n => n | Dynamic _ => 0)
+    (word_scale p.ptr_location) (elem_size_in_location ce p.ptr_location et)
+    (is_signed_type (expr_type idx))
+    (compile_ptr_load ce.ce_is_ctor ce.ce_imm_alloca p.ptr_location) sc = (dst,sd) /\
+  fn_has_code sc sd fp.jc_func /\ ~s.vs_halted /\
+  s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts /\
+  stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee s /\
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sc s0 ee r
+    (LocatedValue (ArrayT et bd) p) s /\
+  evaluate_type (get_tenv fp.jc_cx) et = SOME etv /\
+  evaluate_type (get_tenv fp.jc_cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+  read_result fp.jc_cx r ee = (INL (ArrayV av),ee) /\
+  val_wf (ArrayTV etv bd) (ArrayV av) /\
+  value_has_type (ArrayTV etv bd) (ArrayV av) /\
+  eval_operand p.ptr_operand s = SOME w /\ eval_operand iop s = SOME iw /\
+  i = (if is_signed_type (expr_type idx) then w2i iw else &(w2n iw)) /\
+  array_length (ArrayTV etv bd) av < dimword (:256) /\
+  (!al. av = SArrayV al ==> ?n. bd = Fixed n) /\
+  (!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
+       (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
+       q.vs_memory = s.vs_memory /\ stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee q ==>
+       vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sd s0 ee r
+         (LocatedValue (ArrayT et bd) p) q) /\
+  intcall_frame_ok fp /\ intcall_expr_cont fp ce env es sa s0 ee sc s /\
+  sa.cs_next_var <= sc.cs_next_var /\
+  (p.ptr_location = LocMemory ==>
+    ?n a k. bd = Fixed n /\ a <= w2n w /\
+      w2n w + type_memory_size (ArrayTV etv bd) <= a + k /\
+      a + k < dimword (:256) /\
+      (fp.jc_lo <= a \/
+       ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) ==>
+  gas_summary_at F (fp.jc_ctx,fp.jc_func) []
+    (select_result fp.jc_cx (ArrayT et bd) r (ValueSubscript (IntV i))) (ee,s)
+    (\res ee' u. ?tv. res = INL tv /\
+      vv_holds ce fp.jc_cx (post_value_type ce (Subscript et obj idx)) tv
+        (LocatedValue et (mk_ptr dst p.ptr_location)) ee' u /\
+      vv_at ce fp.jc_cx (post_value_type ce (Subscript et obj idx)) sa sd ee' tv
+        (LocatedValue et (mk_ptr dst p.ptr_location)) u /\
+      (post_value_type ce (Subscript et obj idx) <> expr_type (Subscript et obj idx) ==>
+        vv_own ce fp.jc_cx (post_value_type ce (Subscript et obj idx)) sa sd ee' tv
+          (LocatedValue et (mk_ptr dst p.ptr_location)) u) /\
+      (~expr_has_effect (Subscript et obj idx) ==>
+        vv_storage_live fp.jc_cx (LocatedValue et (mk_ptr dst p.ptr_location)) ee' u) /\
+      (!x. vv_operand (LocatedValue et (mk_ptr dst p.ptr_location)) = Var x ==>
+        not_fresh_at sd x) /\
+      (post_value_type ce (Subscript et obj idx) <> NoneT /\
+       ~is_word_type (post_value_type ce (Subscript et obj idx)) /\
+       ~is_bytestring_type (post_value_type ce (Subscript et obj idx)) /\
+       (case LocatedValue et (mk_ptr dst p.ptr_location) of StackValue _ _ => T
+         | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+       !tv'. evaluate_type (get_tenv fp.jc_cx)
+         (post_value_type ce (Subscript et obj idx)) = SOME tv' ==>
+         ?w a k. eval_operand (vv_operand (LocatedValue et (mk_ptr dst p.ptr_location))) u = SOME w /\
+           a <= w2n w /\ w2n w + type_memory_size tv' <= a + k /\
+           a + k < dimword (:256) /\
+           (fp.jc_lo <= a \/
+            ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) /\
+      intcall_expr_cont fp ce env es sa s0 ee' sd u)
+    (\res ee' outcome. expr_exit res outcome)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `valid_index (ArrayTV etv bd) av i`
+  >- suspend "valid" >>
+  irule intcall_framed_array_invalid_suffix >>
+  simp[Excl "valid_index_def"] >>
+  conj_tac >- metis_tac[] >>
+  goal_assum (drule_at Any) >> simp[Excl "valid_index_def"] >> metis_tac[]
+QED
+
+Resume intcall_framed_array_suffix_summary[valid]:
+  drule_all intcall_framed_array_valid_suffix >> strip_tac >>
+  rename1 `gas_marked_path F _ _ s 0 (OK q)` >>
+  drule array_index_valid >>
+  pure_rewrite_tac[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+  rename1 `array_index (ArrayTV etv bd) av i = SOME v` >>
+  `value_has_type etv v` by
+    (irule array_index_has_type >> conj_tac
+     >- metis_tac[vyperTypingTheory.evaluate_type_well_formed] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `val_wf etv v` by
+    metis_tac[value_has_type_memory_wf] >>
+  `p.ptr_location = LocMemory ==>
+    w2n (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) +
+                   Num i * type_memory_size etv)) =
+      w2n w + ((case bd of Fixed _ => 0 | Dynamic _ => 32) +
+                Num i * type_memory_size etv)` by
+    (strip_tac >> qpat_x_assum `i = _` kall_tac >> gvs[] >>
+     `array_length (ArrayTV etv (Fixed n)) av = n` by
+       (Cases_on `av` >>
+        gvs[vyperTypingTheory.value_has_type_def, vyperValueOperationTheory.array_length_def]) >>
+     `Num i < n` by
+       (qspecl_then [`&n`,`i`] mp_tac (GEN_ALL integerTheory.NUM_LT) >> gvs[]) >>
+     fs[valueEncodingTheory.type_memory_size_def] >>
+     drule_all intcall_array_element_window >> simp[]) >>
+  qpat_x_assum `i = _` kall_tac >>
+  irule intcall_array_element_summary >>
+  goal_assum (drule_at Any) >> simp[Excl "valid_index_def"] >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Finalise intcall_framed_array_suffix_summary
