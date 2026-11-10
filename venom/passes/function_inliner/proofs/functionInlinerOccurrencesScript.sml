@@ -3,7 +3,7 @@ Theory functionInlinerOccurrences
 Ancestors
   functionInlinerRoutedProvenance functionInlinerLocation
   functionInlinerEnvelopes functionInlinerOrigin functionInlinerActivation
-  functionInlinerDefs venomInst list combin
+  functionInlinerDefs venomInst list combin dfAnalyzeProofs
 
 Definition inline_entry_address_def:
   (inline_entry_address (InlineNamespaceLeaf fn) = []) /\
@@ -460,3 +460,44 @@ Proof
   CASE_TAC >> simp[functionInlinerWfTheory.fix_inline_phis_structure]
 QED
 
+
+Theorem inline_edit_final_invoke_inverse:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  inline_fetched_fields e.ise_final l k (inline_inst_fields call) /\
+  call.inst_opcode = INVOKE ==>
+  ?bb inst. lookup_block l
+      (inline_call_site e.ise_prefix e.ise_return e.ise_caller e.ise_callee
+        e.ise_block e.ise_index).fn_blocks = SOME bb /\
+    get_instruction bb k = SOME inst /\ inst.inst_opcode = INVOKE /\
+    inline_inst_fields inst = inline_inst_fields call
+Proof
+  strip_tac >>
+  `fn_labels e.ise_final =
+    fn_labels (inline_call_site e.ise_prefix e.ise_return e.ise_caller
+      e.ise_callee e.ise_block e.ise_index)` by
+    metis_tac[inline_edit_final_labels] >>
+  gvs[functionInlinerSiteLayoutTheory.inline_fetched_fields_def] >>
+  `MEM l (fn_labels e.ise_final)` by
+    (gvs[fn_labels_def] >>
+     metis_tac[venomExecPropsTheory.lookup_block_label,
+               venomExecPropsTheory.lookup_block_MEM, MEM_MAP]) >>
+  `?bb. lookup_block l
+      (inline_call_site e.ise_prefix e.ise_return e.ise_caller e.ise_callee
+        e.ise_block e.ise_index).fn_blocks = SOME bb` by
+    (metis_tac[dfAnalyzeProofsTheory.lookup_block_exists, fn_labels_def]) >>
+  gvs[inline_site_edit_valid_def] >>
+  drule_at (Pat `inline_one_site _ _ _ = _`)
+    functionInlinerPhiTransportTheory.inline_one_site_lookup_fields >>
+  simp[] >> disch_then drule >> strip_tac >> gvs[] >>
+  qpat_x_assum `MAP inline_inst_fields _ = _` mp_tac >>
+  simp[LIST_EQ_REWRITE] >> strip_tac >>
+  gvs[get_instruction_def] >>
+  first_x_assum (qspec_then `k` mp_tac) >>
+  qmatch_goalsub_abbrev_tac `if guard then _ else _` >>
+  Cases_on `guard` >>
+  gvs[EL_MAP, functionInlinerSiteLayoutTheory.inline_inst_fields_def,
+      cfgTransformTheory.subst_label_inst_def, AllCaseEqs()] >>
+  Cases_on `(EL k bb'.bb_instructions).inst_opcode = PHI` >> gvs[]
+QED
