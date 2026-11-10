@@ -254,3 +254,98 @@ Proof
   >- (irule sym_input_spilled >> metis_tac[]) >>
   irule sym_emit_one_input_unspilled >> metis_tac[]
 QED
+
+Theorem input_cons_ready[local]:
+  emit_one_input opc nl op ps = (hops,midps) /\
+  emit_input_plan opc rest next_live midps = (tops,out) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  spill_alloc_layout_wf midps.ps_alloc midps.ps_spilled /\
+  r.sr_spill_base <= midps.ps_alloc.sa_spill_base /\
+  midps.ps_alloc.sa_next_offset <= r.sr_spill_end
+Proof
+  strip_tac >> drule_then assume_tac emit_one_input_spill_base >>
+  drule_then assume_tac emit_input_plan_next_offset >>
+  metis_tac[emit_one_input_layout_wf, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem sym_input_cons_run[local]:
+  (!ps ops out ss.
+    opc <> INVOKE /\
+    emit_input_plan opc rest nl ps = (ops,out) /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+    out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) ops /\
+    sym_kinds_ok cplan fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+      sym_kinds_ok cplan fn ret srest out last /\
+      last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+        FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)) ==>
+  !ps ops out ss.
+  opc <> INVOKE /\
+  emit_input_plan opc (op::rest) nl ps = (ops,out) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `emit_one_input opc (operand_vars rest ++ nl) op ps` >>
+  rename1 `emit_one_input opc (operand_vars rest ++ nl) op ps = (hops,midps)` >>
+  Cases_on `emit_input_plan opc rest nl midps` >>
+  rename1 `emit_input_plan opc rest nl midps = (tops,finalps)` >>
+  `ops = hops ++ tops /\ out = finalps` by
+    (qpat_x_assum `emit_input_plan opc (op::rest) nl ps = _` mp_tac >>
+     simp[emit_input_plan_def]) >>
+  qpat_x_assum `ops = _` SUBST_ALL_TAC >>
+  qpat_x_assum `out = _` SUBST_ALL_TAC >>
+  drule_all_then strip_assume_tac input_cons_ready >>
+  rule_assum_tac (PURE_REWRITE_RULE [EVERY_APPEND, execute_plan_append,
+    asm_block_at_append]) >>
+  rpt (qpat_x_assum `_ /\ _` strip_assume_tac) >>
+  drule_all_then (qspec_then `env` (qx_choose_then `mid` strip_assume_tac))
+    sym_emit_one_input >>
+  `asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp tops)`
+    by asm_rewrite_tac[] >>
+  qpat_x_assum `!ps ops out ss. _`
+    (qspecl_then [`midps`, `tops`, `finalps`, `mid`]
+      (drule_all_then (qx_choose_then `last` strip_assume_tac))) >>
+  qexists_tac `last` >>
+  pure_rewrite_tac[execute_plan_append, LENGTH_APPEND] >>
+  ho_match_mp_tac sym_steps_frame_compose >> asm_rewrite_tac[]
+QED
+
+Theorem sym_emit_input_plan:
+  !operands ps ops out ss.
+  opc <> INVOKE /\
+  emit_input_plan opc operands nl ps = (ops,out) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  Induct
+  >- simp[emit_input_plan_def, execute_plan_def, sym_steps_def] >>
+  drule_then MATCH_ACCEPT_TAC sym_input_cons_run
+QED
