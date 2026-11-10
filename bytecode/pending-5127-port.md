@@ -119,6 +119,7 @@ own, and no revert of the other changes restores those fixtures.
 - `builtin-forms/concat_storage`
 - `builtin-forms/concat_string3`
 - `builtin-forms/concat_string3args`
+- `builtin-forms/concat_wide_local`
 - `builtin-forms/p103_rbuf_control_word_ret_concat_arg`
 - `builtin-forms/p97_rbuf_stack_tuple_ret_concat_arg`
 - `builtin-forms/struct_code_slice`
