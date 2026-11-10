@@ -49,7 +49,8 @@ Proof
   `n < dimword (:256)` by metis_tac[abi_decode_bytes_extent_capacity_bound] >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> disch_tac >>
-  drule_all abi_decoder_valid_bytes_reentry >> strip_tac >>
+  drule_all (SRULE [] (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_valid_bytes_reentry)) >>
+  strip_tac >>
   qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   drule valid_bytes_source_count >> disch_tac >>
