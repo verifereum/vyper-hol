@@ -5,8 +5,56 @@ Theory bodyIntCallFamCallIntReturn
 Ancestors
   bodyIntCallJointContract bodyIntCallSeamDefs
   bodyIntCallFamCallIntReturnFrame
+  vyperPlaceWriteSoundness vyperImmutableMetadataFrame
+  exprLoweringProps stmtSimProps bodyMemoryDefs freshWrites
 Libs
   monadsyntax
+
+(* Resource transport uses immutable metadata, not equality of values: a
+   constructor call may initialize an immutable without changing its type. *)
+Theorem intcall_expr_res_metadata_frame:
+  intcall_frame_ok fp /\
+  intcall_expr_res fp ce env es sa s /\
+  stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee u /\
+  expr_sim_inv ce fp.jc_cx env ee /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  s.vs_alloca_next <= u.vs_alloca_next /\
+  allocas_above fp.jc_lo u /\
+  (!a k. fp.jc_prot a k ==>
+     mem_bytes_at a k u.vs_memory = mem_bytes_at a k s.vs_memory) /\
+  (!op. fp.jc_reserved op ==> eval_operand op u = eval_operand op s) /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+     lookup_var x u = SOME w) /\
+  (!n p k. local_region ce ee.scopes u n p k ==>
+     local_region ce es.scopes s n p k) /\
+  immutable_metadata_frame es ee ==>
+  intcall_expr_res fp ce env ee sb u
+Proof
+  strip_tac >>
+  qpat_x_assum `intcall_expr_res _ _ _ _ _ _` mp_tac >>
+  simp[intcall_expr_res_def] >> strip_tac >>
+  `local_ptrs_reserved ce sb` by
+    (irule local_ptrs_reserved_next_var >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `ret_pc_ok ce sb u` by
+    (irule ret_pc_ok_frame >> goal_assum (drule_at Any) >> simp[] >>
+     qexistsl [`sa`, `s`] >> simp[]) >>
+  `return_buf_frame fp.jc_rb ce sb u` by
+    (irule return_buf_frame_frame >> goal_assum (drule_at Any) >> simp[] >>
+     qexistsl [`sa`, `s`] >> simp[]) >>
+  `fp.jc_reserved fp.jc_rpc` by fs[intcall_frame_ok_def] >>
+  simp[] >> rpt conj_tac
+  >- (rpt strip_tac >> irule not_fresh_at_mono >>
+      qexists `sa` >> simp[])
+  >- (rpt strip_tac >> metis_tac[])
+  >- metis_tac[] >>
+  rpt strip_tac >>
+  drule immutable_metadata_frame_value_lookup >>
+  disch_then (qspecl_then [`fp.jc_cx.txn.target`,`ce.ce_module`,`nm`,`tv`,`iv`]
+    mp_tac) >>
+  simp[AllCaseEqs(), vyperStateTheory.get_source_immutables_def] >>
+  metis_tac[]
+QED
 
 Theorem intcall_nested_return:
   !fp ce env ann name es dflt ty sa sb vv s0 es0 mut args ret ss rr
