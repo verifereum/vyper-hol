@@ -9050,6 +9050,96 @@ Proof
   `j < LENGTH is` by decide_tac >> metis_tac[EL_MEM]
 QED
 
+(* Temporary refutation of the proposed hereditary irreducibility interface. *)
+Theorem mm_local_hereditary_irreducibility_probe[local]:
+  !dfg. ~(!xs pre a mid b post.
+    (FOLDL (scan_inst dfg Mem2Mem) empty_scan_state xs).ss_copies =
+      pre ++ [a] ++ mid ++ [b] ++ post ==> ~copy_can_merge a b)
+Proof
+  gen_tac >> strip_tac >>
+  qspec_then `dfg` strip_assume_tac mm_local_empty_blocker_probe >>
+  first_x_assum (qspecl_then
+    [`[mk_inst 1 MCOPY [Lit 0w; Lit 1000w; Lit 100w] [];
+       mk_inst 2 MCOPY [Lit 50w; Lit 3000w; Lit 0w] [];
+       mk_inst 3 MCOPY [Lit 90w; Lit 1090w; Lit 10w] []]`,
+     `[]`,
+     `<|cg_dst := 0; cg_src := 1000; cg_length := 100; cg_inst_ids := [1]|>`,
+     `[<|cg_dst := 50; cg_src := 3000; cg_length := 0; cg_inst_ids := [2]|>]`,
+     `<|cg_dst := 90; cg_src := 1090; cg_length := 10; cg_inst_ids := [3]|>`,
+     `[]`] mp_tac) >> simp[]
+QED
+
+Theorem mm_local_empty_copy_overwrites[local]:
+  h.cg_length = 0 ==>
+  ~copy_overwrites h iv /\ ~copy_overwrites c (copy_dst_interval h) /\
+  ~copy_overwrites c (copy_src_interval h)
+Proof
+  simp[copy_overwrites_def, copy_dst_interval_def, copy_src_interval_def,
+    mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.interval_end_def,
+    mmIntervalTheory.mk_interval_def,
+    arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >> decide_tac
+QED
+
+Theorem mm_local_empty_copy_hazards[local]:
+  h.cg_length = 0 /\ MEM h ss.ss_copies ==>
+  MEM h (flush_hazards mode ss c).ss_copies
+Proof
+  strip_tac >>
+  `~copy_overwrites h (copy_src_interval c) /\
+   ~copy_overwrites c (copy_dst_interval h) /\
+   ~copy_overwrites c (copy_src_interval h)` by
+    metis_tac[mm_local_empty_copy_overwrites] >>
+  simp[flush_hazards_def] >> rpt IF_CASES_TAC >>
+  gvs[flush_copies_def, MEM_FILTER, waw_hazards_def,
+    raw_hazards_def, war_hazards_def, copies_that_overwrite_def]
+QED
+
+(* Temporary bounded continuation checks; remove at delivery. *)
+Theorem mm_local_empty_blocker_continuations_probe[local]:
+  !dfg. EVERY (\i.
+    MEM <|cg_dst := 50; cg_src := 3000; cg_length := 0; cg_inst_ids := [2]|>
+      (scan_inst dfg Mem2Mem
+        (FOLDL (scan_inst dfg Mem2Mem) empty_scan_state
+          [mk_inst 1 MCOPY [Lit 0w; Lit 1000w; Lit 100w] [];
+           mk_inst 2 MCOPY [Lit 50w; Lit 3000w; Lit 0w] [];
+           mk_inst 3 MCOPY [Lit 90w; Lit 1090w; Lit 10w] []]) i).ss_copies)
+    [mk_inst 4 MCOPY [Lit 3000w; Lit 5000w; Lit 32w] [];
+     mk_inst 4 MCOPY [Lit 50w; Lit 5000w; Lit 32w] [];
+     mk_inst 4 MCOPY [Lit 5000w; Lit 50w; Lit 32w] [];
+     mk_inst 4 MLOAD [Lit 50w] ["v"]]
+Proof
+  gen_tac >> EVAL_TAC
+QED
+
+Theorem mm_local_collection_discharge[local]:
+  mm_local_pending cap js s t /\
+  (!pre j mid k post d bs a cs.
+    js = pre ++ [j] ++ mid ++ [k] ++ post /\ ~P j /\ P k /\
+    cap j = SOME (d,bs) /\ cap k = SOME (a,cs) ==>
+    mm_local_write_compatible d bs a cs) /\
+  LIST_REL (\j w. cap j = SOME w) (FILTER P js) old /\
+  LIST_REL (\j w. cap j = SOME w) (FILTER (\j. ~P j) js) rest /\
+  (!a bs. MEM (a,bs) (old ++ [(d,payload)]) ==>
+    dst <= a /\ a + LENGTH bs <= dst+len /\
+    bs = mm_local_bytes B (src+(a-dst)) (LENGTH bs)) /\
+  (!a. dst <= a /\ a < dst+len ==>
+    ?q bs. MEM (q,bs) (old ++ [(d,payload)]) /\ q <= a /\ a < q + LENGTH bs) /\
+  MAX_LIST (MAP (\(a,bs). a + LENGTH bs) (old ++ [(d,payload)])) = dst+len /\
+  EVERY (\(a,bs). mm_local_write_compatible a bs d payload) rest /\
+  s'.vs_memory = (write_memory_with_expansion d payload s).vs_memory /\
+  t'.vs_memory = (write_memory_with_expansion dst (mm_local_bytes B src len) t).vs_memory ==>
+  mm_local_pending cap (FILTER (\j. ~P j) js) s' t'
+Proof
+  strip_tac >>
+  `!v. write_memory_with_expansion d payload
+    (FOLDL (\st (a,bs). write_memory_with_expansion a bs st) v old) =
+    write_memory_with_expansion dst (mm_local_bytes B src len) v` by
+   (gen_tac >>
+    drule_all mm_local_write_log_realize >>
+    disch_then (qspec_then `v` mp_tac) >> simp[FOLDL_APPEND]) >>
+  drule_all mm_local_pending_compatible_discharge_filter >> simp[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
