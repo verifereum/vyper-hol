@@ -7,12 +7,12 @@ Libs monadsyntax
 
 Theorem value_read_outcome_mem:
   gas_outcome T tops (ctx,func) (eval_expr cx e) (es,s0)
-    (\res ee t. ?raw. res = INL raw /\ P raw ee t)
-    (\res ee r. expr_exit res r) /\
-  (!raw ee t. P raw ee t ==> ?v. read_result cx raw ee = (INL v,ee)) ==>
+    P (\res ee r. expr_exit res r) /\
+  (!res ee t. P res ee t ==>
+    ?raw v. res = INL raw /\ read_result cx raw ee = (INL v,ee)) ==>
   gas_outcome T tops (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
-    (\res ee t. ?raw v. res = INL v /\ P raw ee t /\
+    (\res ee t. ?raw v. res = INL v /\ P (INL raw) ee t /\
        read_result cx raw ee = (INL v,ee))
     (\res ee r. expr_exit res r)
 Proof
