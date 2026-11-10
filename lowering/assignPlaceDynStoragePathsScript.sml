@@ -3,7 +3,8 @@
    and typed_memory_array_backedge_path_mem for increment/ASSIGN/JMP. *)
 Theory assignPlaceDynStoragePaths
 Ancestors
-  assignPlaceDynStorageLayout placeTypedCopyPrimitiveMem bodyMemAssignTopCopyPaths
+  assignPlaceDynStorageLayout assignPlaceDynStorageControl
+  placeTypedCopyPrimitiveMem bodyMemAssignTopCopyPaths
   fragExecMem fragExec memSafeRun instMemFrontier fragGasMode venomExecSemantics venomState
   venomInst emitHelperProps exprLoweringProps storageCopyGasPath compileEnv
   fragGasPathMem stmtSimStoreCopy words arithmetic list rich_list finite_map
@@ -195,4 +196,46 @@ Proof
   qpat_x_assum `emitted_insts sa sb = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
   simp[emitted_insts_def, LENGTH_DROP] >>
   drule IS_PREFIX_LENGTH >> decide_tac
+QED
+
+Theorem dyn_storage_singleton_compile_path_mem:
+  emit_op MLOAD [sp] sa = (value,s1) /\
+  emit_op ADD [Var cv;Lit 1w] s1 = (off,s2) /\
+  emit_op ADD [dst;off] s2 = (dp,s3) /\
+  emit_void (if tr then TSTORE else SSTORE) [dp;value] s3 = ((),sb) /\
+  fn_has_code sa sb func /\ not_fresh_at sa cv /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand sp s = SOME b /\ eval_operand dst s = SOME k /\
+  eval_operand (Var cv) s = SOME i /\ w2n b + 32 <= s.vs_alloca_next /\
+  ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path T ctx func s 0 (OK t) /\
+    (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) =
+      (if tr then tstore else sstore) (k + (i + 1w)) (mload (w2n b) s) s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> drule_all dyn_storage_singleton_layout >> strip_tac >>
+  drule_all storage_copy_code_prefix >> strip_tac >>
+  `cv <> vv /\ (!x. dst = Var x ==> x <> vv /\ x <> ov)` by gvs[] >>
+  `gas_marked_path T ctx func s 0
+    (OK (((if tr then tstore else sstore) (k + (i + 1w)) (mload (w2n b) s)
+      (update_var pv (k + (i + 1w))
+       (update_var ov (i + 1w) (update_var vv (mload (w2n b) s) s))))
+      with vs_inst_idx := s.vs_inst_idx + 4))` by
+    (irule dyn_storage_singleton_path_mem >> fs[ALL_DISTINCT] >>
+     qexistsl_tac [`cv`, `dst`, `sa.cs_next_id`, `sp`] >> gvs[]) >>
+  qexists_tac `((if tr then tstore else sstore) (k + (i + 1w)) (mload (w2n b) s)
+      (update_var pv (k + (i + 1w))
+       (update_var ov (i + 1w) (update_var vv (mload (w2n b) s) s))))
+      with vs_inst_idx := s.vs_inst_idx + 4` >>
+  Cases_on `tr` >> (
+  gvs[same_blocks_def, ALL_DISTINCT, eval_operand_def, tstore_def, sstore_def,
+      lookup_var_update_var, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  conj_tac >- simp[venom_state_component_equality] >>
+  qpat_x_assum `emitted_insts sa sb = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+  simp[emitted_insts_def, LENGTH_DROP] >>
+  drule IS_PREFIX_LENGTH >> decide_tac)
 QED
