@@ -214,34 +214,39 @@ fun literal_buffer_prepare_tac is_expr =
       Once evaluate_def, return_def, evaluate_literal_def,
       alloc_limits_expr_def, literal_alloc_ok_def];
 
-fun literal_buffer_consumer_tac is_expr norm bound_tac rep e size tv value vvpost =
-  literal_buffer_prepare_tac is_expr >>
-  literal_buffer_run_tac norm (size @ ` < dimword (:256)`) >>
-  bound_tac >>
-  drule_all rep >> strip_tac >>
-  Q.SUBGOAL_THEN vvpost ASSUME_TAC
-    >- literal_buffer_vv_post_tac norm e size tv >>
-  literal_buffer_ghost_tac size >>
-  (if is_expr then
-     (drule (GEN_ALL (SRULE [vyperASTTheory.expr_type_def, is_word_type_def]
-        (Q.INST [`e` |-> e] (SPEC_ALL literal_memory_vv_expr_post)))) >>
-      simp[vyperASTTheory.expr_type_def, is_word_type_def] >> strip_tac)
-   else all_tac) >>
-  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
-  rewrite_tac[gas_summary_ptr_at_def] >>
-  Q.EXISTS_TAC (if is_expr then `INL (` @ value @ `)`
-               else `INL (Value (` @ value @ `))`) >>
-  qexistsl_tac [`es`, `G'`, `tn'`,
-    `OK (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`] >>
-  simp[gas_explicit_def, Once evaluate_def, return_def, evaluate_literal_def,
-       vyperStateTheory.bind_def, vyperStateTheory.read_result_def] >>
-  simp[literal_ptr_ghost_inv_normalize, vv_post_initial_gas] >>
-  literal_buffer_value_tac e size tv value >>
-  gvs[vyperASTTheory.expr_type_def, contextTheory.base_ptr_def,
-      ptr_vv_ok_def, ptr_val_ok_def, vyperStateTheory.read_result_def];
+(* The consumer proof as separate phases, so a caller can run each phase as
+   its own proof step. *)
+fun literal_buffer_consumer_parts is_expr norm bound_tac rep e size tv value vvpost =
+  [literal_buffer_prepare_tac is_expr,
+   literal_buffer_run_tac norm (size @ ` < dimword (:256)`) >>
+   bound_tac >>
+   drule_all rep >> strip_tac,
+   Q.SUBGOAL_THEN vvpost ASSUME_TAC
+     >- literal_buffer_vv_post_tac norm e size tv,
+   literal_buffer_ghost_tac size >>
+   (if is_expr then
+      (drule (GEN_ALL (SRULE [vyperASTTheory.expr_type_def, is_word_type_def]
+         (Q.INST [`e` |-> e] (SPEC_ALL literal_memory_vv_expr_post)))) >>
+       simp[vyperASTTheory.expr_type_def, is_word_type_def] >> strip_tac)
+    else all_tac),
+   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+   rewrite_tac[gas_summary_ptr_at_def] >>
+   Q.EXISTS_TAC (if is_expr then `INL (` @ value @ `)`
+                else `INL (Value (` @ value @ `))`) >>
+   qexistsl_tac [`es`, `G'`, `tn'`,
+     `OK (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`],
+   simp[gas_explicit_def, Once evaluate_def, return_def, evaluate_literal_def,
+        vyperStateTheory.bind_def, vyperStateTheory.read_result_def] >>
+   simp[literal_ptr_ghost_inv_normalize, vv_post_initial_gas],
+   literal_buffer_value_tac e size tv value >>
+   gvs[vyperASTTheory.expr_type_def, contextTheory.base_ptr_def,
+       ptr_vv_ok_def, ptr_val_ok_def, vyperStateTheory.read_result_def]];
 
-fun literal_bytes_consumer_tac is_expr =
-  literal_buffer_consumer_tac is_expr I
+fun literal_buffer_consumer_tac is_expr norm bound_tac rep e size tv value vvpost =
+  EVERY (literal_buffer_consumer_parts is_expr norm bound_tac rep e size tv value vvpost);
+
+fun literal_bytes_consumer_parts is_expr =
+  literal_buffer_consumer_parts is_expr I
     (`LENGTH (bs:word8 list) <= n` by gvs[vyperValueTheory.compatible_bound_def])
     literal_ptr_bytes_representation
     `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`
@@ -251,6 +256,10 @@ fun literal_bytes_consumer_tac is_expr =
       (Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) es sa cs' s0 (es with gas_obs := [])
       (Value (BytesV bs)) (LocatedValue (BaseT (BytesT (Dynamic n))) (base_ptr buf))
       (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`;
+
+fun literal_bytes_consumer_tac is_expr = EVERY (literal_bytes_consumer_parts is_expr);
+
+val literal_bytes_vv_parts = literal_bytes_consumer_parts false;
 
 fun literal_string_norm th =
   GEN_ALL (SRULE [listTheory.LENGTH_MAP]
@@ -280,7 +289,10 @@ Proof
 QED
 
 Resume literal_buffer_sim_ptr[bytes_vv]:
-  literal_bytes_consumer_tac false
+  el 1 literal_bytes_vv_parts >> el 2 literal_bytes_vv_parts >>
+  el 3 literal_bytes_vv_parts >> el 4 literal_bytes_vv_parts >>
+  el 5 literal_bytes_vv_parts >> el 6 literal_bytes_vv_parts >>
+  el 7 literal_bytes_vv_parts
 QED
 Resume literal_buffer_sim_ptr[bytes_expr]:
   literal_bytes_consumer_tac true
