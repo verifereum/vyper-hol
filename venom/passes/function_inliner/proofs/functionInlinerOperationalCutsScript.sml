@@ -382,3 +382,30 @@ Proof
           stateFrameTheory.execution_frame_def]) >>
   gvs[mstore_def]
 QED
+
+(* Base control cut before any compiler edits: the initial logical and
+   physical owner both start at the actual first block, before its PHI batch. *)
+Theorem inline_owner_root_control:
+  a.ia_entry.vs_labels = FEMPTY /\
+  inline_namespace_leaf_at cert p I a.ia_function /\
+  a.ia_function.fn_blocks <> [] /\
+  a.ia_entry.vs_current_bb = (HD a.ia_function.fn_blocks).bb_label /\
+  a.ia_entry.vs_inst_idx = 0 ==>
+  ?snap frame.
+    inline_owner_storage cert [(p,a,inline_route_identity a.ia_id,snap)] frame /\
+    snap.ils_state = a.ia_entry /\ frame.ipf_state = a.ia_entry /\
+    lookup_block snap.ils_state.vs_current_bb a.ia_function.fn_blocks =
+      SOME (HD a.ia_function.fn_blocks) /\
+    lookup_block frame.ipf_state.vs_current_bb a.ia_function.fn_blocks =
+      SOME (HD a.ia_function.fn_blocks) /\
+    snap.ils_state.vs_inst_idx = 0 /\ frame.ipf_state.vs_inst_idx = 0 /\
+    inline_shared_frame snap.ils_state = inline_shared_frame frame.ipf_state /\
+    inline_path_location (inline_route_identity a.ia_id).ir_path
+      (SOME (inline_before_phi_location snap.ils_state.vs_current_bb 0)) =
+      SOME (inline_before_phi_location frame.ipf_state.vs_current_bb 0)
+Proof
+  strip_tac >> drule_all inline_owner_storage_root >> strip_tac >>
+  qexistsl [`snap`, `frame`] >> gvs[inline_route_identity_def] >>
+  Cases_on `a.ia_function.fn_blocks` >>
+  gvs[venomInstTheory.lookup_block_def, FIND_thm]
+QED

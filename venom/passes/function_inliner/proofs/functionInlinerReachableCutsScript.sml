@@ -343,3 +343,31 @@ Proof
   first_x_assum irule >> simp[] >>
   Cases_on `h0` >> gvs[clone_instruction_def] >> metis_tac[]
 QED
+
+(* All emitted prefix offsets and parameter counters are generated from zero,
+   including empty expansions and multi-instruction return adapters. *)
+Theorem inline_cell_prefix_positions:
+  !j. j <= LENGTH cb.bb_instructions ==>
+  inline_cell_prefix e bb cb j =
+    FOLDL (\pre n.
+      (FST pre ++ FST (inline_cell_focus e bb cb n),
+       SND (inline_cell_focus e bb cb n))) ([],0) (GENLIST I j)
+Proof
+  Induct >> simp[GENLIST, FOLDL_SNOC] >> strip_tac >>
+  rw[inline_cell_prefix_suc] >> gvs[]
+QED
+
+Theorem inline_cell_zipper_ordinary_fetch:
+  inline_cell_at c /\ inline_cell_zipper c frames d /\
+  c.ic_fields = inline_inst_fields src /\
+  ~MEM src.inst_opcode [PHI; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames ==>
+  inline_fetched_fields d.ic_function d.ic_block d.ic_index
+    (inline_inst_fields
+      (FOLDL (\inst (tag,next). case tag of
+         EnterCell e k => clone_instruction e.ise_prefix (fn_labels e.ise_callee) inst
+       | _ => inst) src frames))
+Proof
+  strip_tac >> drule_all inline_cell_zipper_ordinary_fields >>
+  drule_all inline_cell_zipper_sound >> simp[inline_cell_at_def] >> metis_tac[]
+QED
