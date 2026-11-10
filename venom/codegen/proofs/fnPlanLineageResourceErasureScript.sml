@@ -355,3 +355,79 @@ Proof
   `MEM (SODup 16) (MAP erase_spill_address (FST (do_dup e q)))`
     by simp[] >> metis_tac[]
 QED
+
+Theorem replicate_nonmatching_head_cancel[local]:
+  !n m a b c xs ys.
+    b <> a /\ c <> a ==>
+    ((REPLICATE n a ++ (b::xs) = REPLICATE m a ++ (c::ys)) <=>
+     n = m /\ b = c /\ xs = ys)
+Proof
+  Induct_on `n` >> Cases_on `m` >> simp[rich_listTheory.REPLICATE] >> gvs[]
+QED
+
+Theorem do_swap_erased_code_suffix_cancel:
+  !d e p q xs ys.
+    0 < d /\ 0 < e /\ d < LENGTH p.ps_stack /\ e < LENGTH q.ps_stack /\
+    MAP erase_spill_address (FST (do_swap d p)) ++ xs =
+    MAP erase_spill_address (FST (do_swap e q)) ++ ys ==>
+    d = e /\ xs = ys
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`d`,`p`] mp_tac do_swap_erased_code >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  qspecl_then [`e`,`q`] mp_tac do_swap_erased_code >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  qpat_x_assum `_ ++ xs = _ ++ ys` mp_tac >> asm_rewrite_tac[] >>
+  qpat_x_assum `MAP _ (FST (do_swap d p)) = _` kall_tac >>
+  qpat_x_assum `MAP _ (FST (do_swap e q)) = _` kall_tac >>
+  Cases_on `d <= 16` >> Cases_on `e <= 16` >>
+  simp[replicate_nonmatching_head_cancel, GSYM arithmeticTheory.ADD1,
+       rich_listTheory.REPLICATE] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  simp_tac (srw_ss()) [replicate_nonmatching_head_cancel] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem do_dup_erased_code_suffix_cancel:
+  !d e p q xs ys.
+    d < LENGTH p.ps_stack /\ e < LENGTH q.ps_stack /\
+    MAP erase_spill_address (FST (do_dup d p)) ++ xs =
+    MAP erase_spill_address (FST (do_dup e q)) ++ ys ==>
+    d = e /\ xs = ys
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`d`,`p`] mp_tac do_dup_erased_code >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  qspecl_then [`e`,`q`] mp_tac do_dup_erased_code >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  qpat_x_assum `_ ++ xs = _ ++ ys` mp_tac >> asm_rewrite_tac[] >>
+  qpat_x_assum `MAP _ (FST (do_dup d p)) = _` kall_tac >>
+  qpat_x_assum `MAP _ (FST (do_dup e q)) = _` kall_tac >>
+  Cases_on `d <= 15` >> Cases_on `e <= 15` >>
+  Cases_on `d - 15` >> Cases_on `e - 15` >>
+  simp[rich_listTheory.REPLICATE] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  simp_tac (srw_ss()) [replicate_nonmatching_head_cancel] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem do_swap_dup_erased_code_suffix_distinct:
+  !d e p q xs ys.
+    0 < d /\ d < LENGTH p.ps_stack /\ e < LENGTH q.ps_stack ==>
+    MAP erase_spill_address (FST (do_swap d p)) ++ xs <>
+    MAP erase_spill_address (FST (do_dup e q)) ++ ys
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`d`,`p`] mp_tac do_swap_erased_code >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  qspecl_then [`e`,`q`] mp_tac do_dup_erased_code >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `MAP _ (FST (do_swap d p)) = _` kall_tac >>
+  qpat_x_assum `MAP _ (FST (do_dup e q)) = _` kall_tac >>
+  Cases_on `d <= 16` >> Cases_on `e <= 15` >>
+  Cases_on `e - 15` >>
+  simp[GSYM arithmeticTheory.ADD1, rich_listTheory.REPLICATE] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  simp_tac (srw_ss()) [replicate_nonmatching_head_cancel] >> gvs[]
+QED
