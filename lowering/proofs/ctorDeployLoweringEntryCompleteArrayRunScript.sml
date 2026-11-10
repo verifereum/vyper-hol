@@ -478,3 +478,21 @@ Proof
   asm_simp_tac bool_ss [] >> metis_tac[abi_decode_sim_trans]
 QED
 
+Theorem deploy_ctor_array_loop_complete_gas_finite:
+  (^CcompleteGas) ty tv /\ ^Pk /\
+  (^Ok) k ctx func site ids D N d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
+    tv vs slot_id slot initial i i s /\
+  ~s.vs_halted /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 ==>
+  ?t. gas_path ctx func s 0 (OK t) /\
+    (^Ok) k ctx func site ids D N d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
+      tv vs slot_id slot initial (LENGTH vs) (LENGTH vs) t /\
+    ~t.vs_halted /\ t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\
+    abi_decode_sim ctx func s t /\
+    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx
+Proof
+  FAIL_TAC "pending"
+QED
+
