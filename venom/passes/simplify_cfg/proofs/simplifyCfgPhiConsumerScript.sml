@@ -2,7 +2,7 @@ Theory simplifyCfgPhiConsumer
 Ancestors
   simplifyCfgPhiBlockSemantics simplifyCfgAvailability
   simplifyCfgPhiSemantics simplifyCfgDefs venomExecSemantics venomWf venomInst
-  venomExecProofs cfgTransform analysisSimProofsBase list
+  venomExecProofs venomWfProps cfgTransform analysisSimProofsBase list
 
 (* The equivalent inversion in concretizeMemLocProofs is local. *)
 Theorem scfg_resolve_phi_var:
@@ -28,7 +28,7 @@ Proof
     gvs[inst_wf_def] >>
   `?v. op = Var v` by metis_tac[scfg_resolve_phi_var] >> gvs[] >>
   `MEM (pb.bb_label,v) (phi_pairs i.inst_operands)` by
-    metis_tac[scfg_resolve_phi_pair] >>
+    metis_tac[resolve_phi_pair] >>
   `IS_SOME (lookup_var v s)` by (irule scfg_phi_edge_defined >> metis_tac[]) >>
   Cases_on `i.inst_outputs` >> gvs[LENGTH_EQ_NUM_compute] >>
   simp[eval_one_phi_def, venomStateTheory.eval_operand_def] >>

@@ -2,8 +2,7 @@
 Theory entryReachBodyRegistrationEndpointAudit
 Ancestors
   valueEncodingDefs entryReachBodyRegistrationPrefixValues entryReachBodyRegistrationPrefixSupport
-  entryReachBodyRegistrationIndexedShell entryReachBodyRegistrationSizeBoundary
-  entryReachBodyRegistrationCanonical entryReachBodyRegistrationPrefixCaller
+  entryReachBodyRegistrationCanonical
   entryReachBodyDecoderWindowCertificate abiDecoderReentry
   compileEnv finite_map words arithmetic
 

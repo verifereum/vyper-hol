@@ -16,6 +16,7 @@
 
 Theory stmtSimAssignStorageCopy
 Ancestors
+  exprSimHashBoundary
   valueEncodingProps exprSimTopLevelProps gasOutcome gasSummary gasContext
   stmtSimProps stmtSimForced
   exprSimProps

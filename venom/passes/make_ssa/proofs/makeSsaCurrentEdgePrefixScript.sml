@@ -4,6 +4,7 @@ Ancestors
   makeSsaCurrentCopyPrefixRuntime makeSsaCurrentLockstepShape
   makeSsaCurrentForwardReadiness cfgNormSupplySim
   venomExecProofs venomExecSemantics venomState stateFrame list rich_list pred_set option
+  venomWfProps
 
 Theorem current_completed_edge_cleaned_prefix_total:
   current_wf_phi_context s fn renamed s' A H events /\
