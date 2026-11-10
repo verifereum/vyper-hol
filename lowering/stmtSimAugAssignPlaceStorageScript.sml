@@ -278,7 +278,8 @@ Proof
   rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
   qpat_x_assum `storage_subregion _ _ _ _` mp_tac >>
   simp_tac (srw_ss()) [Once vyperStoragePlaceRegionTheory.storage_subregion_def] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >> gvs[] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  full_simp_tac bool_ss [arithmeticTheory.ADD_CLAUSES] >>
   drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac
   >- (`Num i * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
         (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
