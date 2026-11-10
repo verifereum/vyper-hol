@@ -32,9 +32,8 @@ revision in C-locale filename order, using `git apply` for each file. A failed
 patch stops generation; an empty series leaves the pin unchanged. Each file
 backports one upstream PR so independent fixes can be added separately and
 removed when a new pin includes them. The pin already contains
-vyperlang/vyper#5127 (external calls send `4 + encoded length` bytes) and
-vyperlang/vyper#5322 (empty `Bytes`/`String` to signed conversions mask the
-data word). The current series contains:
+vyperlang/vyper#5127 (external calls send `4 + encoded length` bytes). The
+current series contains:
 
 - `5239-declared-variable-type.patch`, vyperlang/vyper#5239: a storage,
   transient or immutable variable is read at its own declared type, not at a
