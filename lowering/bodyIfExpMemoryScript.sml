@@ -480,7 +480,7 @@ Proof
   qexists_tac `jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)` >>
   conj_tac >- (irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>
   qexists_tac `v` >> simp[] >> conj_tac
-  >- (irule expr_post_ifexp >> metis_tac[post_value_type_word]) >>
+  >- (irule expr_post_ifexp >> simp[] >> metis_tac[post_value_type_word]) >>
   `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
   `alloca_history func ((update_var rv w u) with
       vs_inst_idx := LENGTH sy.cs_current_insts)` by
