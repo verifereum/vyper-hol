@@ -424,3 +424,68 @@ Proof
   rpt strip_tac >> irule sym_two_swaps >>
   metis_tac[stack_get_unfixed_depth_props]
 QED
+
+Theorem append_two_pairs_cont[local]:
+  (!suffix out.
+    (case first of (xs,mid) => case next mid of (ys,last) => (xs ++ ys,last)) =
+      (suffix,out) ==> P (prefix ++ suffix) out) ==>
+  !ops out.
+    (\(xs,mid). (\(ys,last). (prefix ++ xs ++ ys,last)) (next mid)) first = (ops,out) ==>
+    P ops out
+Proof
+  Cases_on `first` >> rename1 `(xs,mid)` >>
+  Cases_on `next mid` >> simp[]
+QED
+
+Theorem reorder_one_phase_cases[local]:
+  (!rops ps1.
+    (case stack_get_unfixed_depth op (LENGTH pending - (idx + 1)) (LENGTH pending) ps.ps_stack of
+       SOME d => ([],ps)
+     | NONE => (case FLOOKUP ps.ps_spilled op of
+         SOME off => do_restore op ps | NONE => ([],ps))) = (rops,ps1) /\
+    stack_get_unfixed_depth op (LENGTH pending - (idx + 1)) (LENGTH pending) ps1.ps_stack = NONE ==>
+    P rops ps1) /\
+  (!rops ps1 dist dops ps2 suffix out.
+    (case stack_get_unfixed_depth op (LENGTH pending - (idx + 1)) (LENGTH pending) ps.ps_stack of
+       SOME d => ([],ps)
+     | NONE => (case FLOOKUP ps.ps_spilled op of
+         SOME off => do_restore op ps | NONE => ([],ps))) = (rops,ps1) /\
+    stack_get_unfixed_depth op (LENGTH pending - (idx + 1)) (LENGTH pending) ps1.ps_stack = SOME dist /\
+    (if dist > 16 then
+       reduce_depth_plan (LENGTH ps1.ps_stack) pending op
+         (LENGTH pending - (idx + 1)) (LENGTH pending) ps1
+     else ([],ps1)) = (dops,ps2) /\
+    (case stack_get_unfixed_depth op (LENGTH pending - (idx + 1)) (LENGTH pending) ps2.ps_stack of
+       NONE => ([],ps2)
+     | SOME d =>
+       if d = LENGTH pending - (idx + 1) then ([],ps2)
+       else if LENGTH pending - (idx + 1) < LENGTH ps2.ps_stack then
+         if operand_equiv dfg op (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack) then
+           ([],ps2 with ps_stack := stack_poke (LENGTH pending - (idx + 1)) op
+             (stack_poke d (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack) ps2.ps_stack))
+         else (case do_swap d ps2 of (xs,mid) =>
+           case do_swap (LENGTH pending - (idx + 1)) mid of (ys,last) => (xs ++ ys,last))
+       else (case do_swap d ps2 of (xs,mid) =>
+         case do_swap (LENGTH pending - (idx + 1)) mid of (ys,last) => (xs ++ ys,last))) = (suffix,out) ==>
+    P ((rops ++ dops) ++ suffix) out) ==>
+  !ops out. reorder_one dfg pending idx op ps = (ops,out) ==> P ops out
+Proof
+  strip_tac >> simp[stackPlanOpsTheory.reorder_one_def, LET_THM] >>
+  pairarg_tac >> simp[] >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH pending - (idx + 1)) (LENGTH pending) ps1.ps_stack`
+  >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  simp[] >> pairarg_tac >> simp[] >>
+  qpat_x_assum `!rops ps1 dist dops ps2 suffix out. _` (drule_then mp_tac) >>
+  simp[] >> rpt (pop_assum kall_tac) >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH pending - (idx + 1)) (LENGTH pending) ps2.ps_stack`
+  >- (simp[] >> disch_then (qspec_then `[]` mp_tac) >> simp[]) >>
+  rename1 `SOME d` >> Cases_on `d = LENGTH pending - (idx + 1)`
+  >- (simp[] >> disch_then (qspec_then `[]` mp_tac) >> simp[]) >>
+  Cases_on `LENGTH pending - (idx + 1) < LENGTH ps2.ps_stack`
+  >- (Cases_on `operand_equiv dfg op (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack)`
+      >- (simp[] >> disch_then (qspec_then `[]` mp_tac) >> simp[]) >>
+      simp[] >> MATCH_ACCEPT_TAC (SRULE [APPEND_ASSOC]
+        (Q.INST [`prefix` |-> `restore_ops ++ reduce_ops`] append_two_pairs_cont))) >>
+  simp[] >> MATCH_ACCEPT_TAC (SRULE [APPEND_ASSOC]
+    (Q.INST [`prefix` |-> `restore_ops ++ reduce_ops`] append_two_pairs_cont))
+QED
