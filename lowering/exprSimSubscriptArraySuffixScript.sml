@@ -1,6 +1,7 @@
 (* Source selection and counted suffix summaries for framed arrays. *)
 Theory exprSimSubscriptArraySuffix
 Ancestors
+  exprSimHashBoundary
   loweringStateRelDefs exprSimSubscriptArrayEndpoint exprSimSubscriptArrayFramed
   exprSimSubscriptArraySource gasSummary exprSimDefs vyperState
   vyperPlaceTyping vyperValueOperation vyperArray integer_word words integer
@@ -254,9 +255,9 @@ Proof
   simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_at_def] >>
   rpt strip_tac >>
   first_x_assum (drule_then strip_assume_tac) >> gvs[]
-  >- (irule (SIMP_RULE (srw_ss()) [] exprSimHashTheory.hash_live_footprint_bound) >>
+  >- (irule (SIMP_RULE (srw_ss()) [] exprSimHashBoundaryTheory.hash_live_footprint_bound) >>
       goal_assum (drule_at Any) >> metis_tac[]) 
-  >- (irule (SIMP_RULE (srw_ss()) [] exprSimHashTheory.hash_live_footprint_bound) >>
+  >- (irule (SIMP_RULE (srw_ss()) [] exprSimHashBoundaryTheory.hash_live_footprint_bound) >>
       goal_assum (drule_at Any) >> metis_tac[]) >>
   irule (SIMP_RULE (srw_ss()) [] (INST_TYPE [alpha |-> ``:256``] wordsTheory.w2n_lt))
 QED
