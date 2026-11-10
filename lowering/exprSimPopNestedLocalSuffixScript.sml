@@ -48,13 +48,17 @@ Theorem pop_memory_live_suffix_post:
   expr_sim_inv cenv cx env es /\
   stmt_state_rel ctx func cenv cx es s0 /\
   stmt_state_rel ctx func cenv cx mid s /\
-  wb_frame cenv es sa s0 s /\
+  wb_frame cenv es mid sa s0 s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM mid.scopes /\
   MAP FDOM mid.scopes = MAP FDOM scopes' /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  popped_keys_indexed mid.scopes /\
   lookup_scopes id mid.scopes = SOME entry /\
-  lookup_scopes id scopes' = SOME (entry with <|value := updated; popped := hist|>) /\
+  lookup_scopes id scopes' =
+    SOME (entry with <|value := updated;
+            popped := (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))], LAST vs)
+                      :: entry.popped|>) /\
   (!j. j <> id ==> lookup_scopes j scopes' = lookup_scopes j mid.scopes) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\ lookup_var p s = SOME b /\
   local_region cenv mid.scopes s id (w2n b) sz /\ k + 32 <= sz /\
@@ -95,10 +99,24 @@ Proof
     (drule_all pop_path_stmt_state_rel >> simp[]) >>
   `dynarray_len_at cenv id k` by
     (drule_all local_path_at_dynarray_len_at >> simp[]) >>
-  `wb_frame cenv mid sm s u` by
-    (irule pop_path_wb_frame >> goal_assum (drule_at Any) >>
-     simp[] >> metis_tac[]) >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv mid (mid with scopes := scopes') sm s u` by
+    (qspecl_then [`func`, `cenv`, `mid`, `mid with scopes := scopes'`, `s`, `u`,
+                  `id`, `w2n b`, `sz`, `k`, `n2w (LENGTH vs - 1)`, `sm`, `entry`,
+                  `updated`,
+                  `(path ++ [ValueSubscript (IntV &(LENGTH vs - 1))], LAST vs)`,
+                  `path`, `ArrayV (DynArrayV vs)`, `etv`, `n`]
+       mp_tac pop_path_wb_frame >>
+     impl_tac
+     >- (fs[] >> rpt conj_tac
+         >~ [`snapshot_in`]
+         >- (`k + w2n b = w2n b + k` by decide_tac >>
+             pop_assum (fn th => rewrite_tac[th]) >>
+             irule pop_path_snapshot_in >> simp[] >> metis_tac[])
+         >~ [`EVERY`]
+         >- metis_tac[exprSimSourceTheory.popped_keys_indexed_lookup_dead] >>
+         metis_tac[]) >>
+     simp[]) >>
+  `wb_frame cenv es (mid with scopes := scopes') sa s0 u` by
     (drule_all wb_frame_trans >> simp[]) >>
   `local_region cenv scopes' u id (w2n b) sz` by
     (simp[local_region_def] >> metis_tac[]) >>

@@ -300,7 +300,7 @@ QED
 
 Theorem raw_log_alloc_args_post[local]:
   wb_args_post ctx func cenv cx es0 sa s0 es ops vals t /\
-  stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es0 sa s0 u /\
+  stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es0 es sa s0 u /\
   EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\
               (!l. op <> Label l)) ops /\
   (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x t) ==>
@@ -411,7 +411,7 @@ Proof
   drule_all raw_log_topics_marked_post >> strip_tac >>
   drule_all raw_log_marked_data_ready >> strip_tac >>
   `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t /\
-   wb_frame cenv es sa s0 t` by fs[wb_args_post_def] >>
+   wb_frame cenv es (mid with gas_obs := []) sa s0 t` by fs[wb_args_post_def] >>
   `~t.vs_halted` by
     (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[gas_marked_exec_def, gas_marked_path_def] >>

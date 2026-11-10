@@ -303,7 +303,7 @@ Theorem aggregate_tuple_store_marked[local]:
       off <= a /\ a + k <= off + sz /\
       (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q
+    locals_kept ce es' es' r q
 Proof
   strip_tac >>
   drule_all aggregate_store_rebased_slice_run >> strip_tac >>
@@ -506,7 +506,7 @@ Theorem aggregate_make_tuple_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r)
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -868,7 +868,7 @@ Resume aggregate_make_tuple_sim[exterior_join]:
 QED
 
 Resume aggregate_make_tuple_sim[locals_join]:
-  `locals_kept ce es1 q s` by
+  `locals_kept ce es1 es' q s` by
     (irule locals_kept_trans >> qexistsl_tac [`es1`, `sn`, `t'`] >>
      asm_rewrite_tac[]) >>
   irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `q`] >>
@@ -949,7 +949,7 @@ Theorem aggregate_struct_fields_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r)
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -1040,7 +1040,7 @@ Theorem array_header_store_boundary:
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
     regions_disjoint io (type_memory_size tv) b 32) ==>
   stmt_state_rel ctx func ce cx es (mstore b w s) /\
-  locals_kept ce es s (mstore b w s) /\
+  locals_kept ce es es s (mstore b w s) /\
   mem_word_at b (mstore b w s).vs_memory = w /\
   (!p n. p+n <= b \/ b+32 <= p ==>
     mem_bytes_at p n (mstore b w s).vs_memory = mem_bytes_at p n s.vs_memory)
@@ -1053,7 +1053,7 @@ Proof
        aggregate_alloca_slice_excludes_local)) >> simp[]) >>
   conj_tac >- (irule array_header_store_state_rel >> metis_tac[]) >>
   conj_tac
-  >- (simp[locals_kept_def] >> rpt strip_tac >>
+  >- (irule locals_kept_regions >> rpt strip_tac >>
       irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
       first_x_assum drule >> strip_tac >> decide_tac) >>
   conj_tac >- simp[valueEncodingPropsTheory.mstore_mem_word_at_same] >>
@@ -1113,7 +1113,7 @@ Theorem aggregate_make_array_elems_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r)
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -1205,7 +1205,7 @@ Theorem aggregate_make_array_start_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r)
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -1286,7 +1286,7 @@ Theorem aggregate_make_array_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r)
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -1318,7 +1318,7 @@ Proof
      disch_then (qspecl_then [`n2w (LENGTH args)`, `n2w b`, `s0`, `func`, `ctx`] mp_tac) >>
      simp[eval_operand_def, Abbr `sh`]) >>
   `stmt_state_rel ctx func ce cx es (mstore b (n2w (LENGTH args)) s0) /\
-   locals_kept ce es s0 (mstore b (n2w (LENGTH args)) s0) /\
+   locals_kept ce es es s0 (mstore b (n2w (LENGTH args)) s0) /\
    mem_word_at b (mstore b (n2w (LENGTH args)) s0).vs_memory = n2w (LENGTH args) /\
    (!p n. p+n <= b \/ b+32 <= p ==>
      mem_bytes_at p n (mstore b (n2w (LENGTH args)) s0).vs_memory =
