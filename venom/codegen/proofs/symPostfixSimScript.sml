@@ -1919,3 +1919,51 @@ Proof
   strip_tac >> drule_all popmany_singleton_ops_spill_bounded >> strip_tac >>
   metis_tac[scratch_ops_region_confined]
 QED
+
+Theorem sym_optimistic_swap_plan_postfix_sim_marked:
+  optimistic_swap_plan dfg inst nl next_term ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest qs ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule optimistic_swap_result_cases >> strip_tac
+  >- (gvs[] >> qexists `ss` >> simp[execute_plan_def, sym_steps_def]) >>
+  drule_all sym_do_swap_sim_marked_ops_bounded >> simp[]
+QED
+
+Theorem sym_regular_generated_postfix_sim_marked:
+  LENGTH inst.inst_outputs <= 1 /\
+  (!out. inst.inst_outputs = [out] ==>
+    stack_get_depth (Var out) ps7.ps_stack = SOME 0) /\
+  spill_alloc_layout_wf ps7.ps_alloc ps7.ps_spilled /\
+  (if inst.inst_outputs = [] \/ is_halting then ([],ps7)
+   else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl)
+     inst.inst_outputs)) ps7) = (pop_ops,ps8) /\
+  (if FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([],ps8)
+   else optimistic_swap_plan dfg inst nl next_term ps8) = (opt_ops,ps9) /\
+  qs = release_dead_spills nl ps9 /\
+  (!off. MEM (SOSpill off) (pop_ops ++ opt_ops) ==> off < dimword (:256)) /\
+  (!off b. MEM (SOSpill off) (pop_ops ++ opt_ops) /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest ps7 ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (pop_ops ++ opt_ops)) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp (pop_ops ++ opt_ops))) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest qs ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (pop_ops ++ opt_ops)) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all regular_postfix_cases >> strip_tac
+  >- (gvs[] >> qexists `ss` >>
+      simp[execute_plan_def, sym_steps_def, sym_kinds_ok_release_dead_spills])
+  >- (gvs[] >> drule_all sym_optimistic_swap_plan_postfix_sim_marked >>
+      metis_tac[sym_kinds_ok_release_dead_spills, arithmeticTheory.ADD_COMM]) >>
+  gvs[] >> drule_all sym_popmany_plan_singleton_sim_marked_ops_bounded >>
+  metis_tac[sym_kinds_ok_release_dead_spills, arithmeticTheory.ADD_COMM]
+QED
