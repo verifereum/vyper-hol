@@ -494,3 +494,32 @@ Proof
   drule inline_fetched_fields_elim >> strip_tac >>
   metis_tac[]
 QED
+
+(* All observations, including opaque definedness, are protected here. *)
+Theorem inline_snapshot_write:
+  inline_snapshot_data a route snap frame /\
+  (!v. v IN snap.ils_defined ==> route.ir_rename v <> x) /\
+  (!v. v IN snap.ils_protected ==> snap.ils_parent_rename v <> x) ==>
+  inline_snapshot_data a route snap
+    (frame with ipf_state := update_var x w frame.ipf_state)
+Proof
+  simp[inline_snapshot_data_def, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[pred_setTheory.IN_DIFF, pred_setTheory.IN_INTER]
+QED
+
+Theorem inline_snapshot_writes:
+  !writes frame.
+  inline_snapshot_data a route snap frame /\
+  EVERY (\(x,w).
+    (!v. v IN snap.ils_defined ==> route.ir_rename v <> x) /\
+    (!v. v IN snap.ils_protected ==> snap.ils_parent_rename v <> x)) writes ==>
+  inline_snapshot_data a route snap
+    (frame with ipf_state :=
+      FOLDL (\t (x,w). update_var x w t) frame.ipf_state writes)
+Proof
+  Induct >> simp[] >> gen_tac >> PairCases_on `h` >> simp[] >> rpt strip_tac >>
+  drule_all inline_snapshot_write >>
+  disch_then (qspec_then `h1` assume_tac) >>
+  first_x_assum drule_all >> simp[]
+QED
