@@ -792,38 +792,10 @@ Proof
   drule_all checked_single_module_defined_map_agreement >> simp[]
 QED
 
-Theorem deploy_frame_supported_no_flags:
-  !tops fid.
-    supported_program tops ==> lookup_flag fid tops = NONE
-Proof
-  rpt gen_tac >> strip_tac >>
-  `!ts. EVERY (supported_declaration_body tops) ts ==>
-         lookup_flag fid ts = NONE` suffices_by
-    (disch_then irule >> fs[supported_program_def]) >>
-  Induct >- simp[lookup_flag_def] >>
-  Cases_on `h` >>
-  simp[supported_declaration_body_def, lookup_flag_def]
-QED
-
-Theorem deploy_frame_supported_no_flag_types:
-  !tops nsid n.
-    supported_program tops ==>
-    FLOOKUP (type_env tops) nsid <> SOME (FlagArgs n)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `!ts. EVERY (supported_declaration_body tops) ts ==>
-        FLOOKUP (type_env_for_module NONE ts) nsid <> SOME (FlagArgs n)`
-    suffices_by (disch_then (qspec_then `tops` mp_tac) >>
-                 fs[type_env_def, supported_program_def]) >>
-  Induct >- simp[type_env_for_module_def] >>
-  Cases_on `h` >>
-  simp[supported_declaration_body_def, type_env_for_module_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> gvs[AllCaseEqs()]
-QED
-
 Theorem deploy_frame_flag_compatibility:
   !tops am tx cenv.
-    supported_program tops ==>
+    ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
+    cenv_module_pins tops cenv ==>
     (!src fid ts ls mid i.
        get_module_code (deploy_evaluation_context tops am tx) src = SOME ts /\
        lookup_flag fid ts = SOME ls /\ INDEX_OF mid ls = SOME i ==>
@@ -837,9 +809,10 @@ Proof
   simp[deploy_evaluation_context_def, initial_evaluation_context_def,
        get_module_code_def, get_tenv_def, type_env_all_modules_def,
        GSYM type_env_def] >>
-  conj_tac
-  >- metis_tac[deploy_frame_supported_no_flags, optionTheory.NOT_SOME_NONE] >>
-  metis_tac[deploy_frame_supported_no_flag_types]
+  gvs[cenv_module_pins_def] >> conj_tac
+  >- (rpt strip_tac >> gvs[AllCaseEqs(), nsid_to_string_def] >>
+      irule build_flag_info_member_id >> metis_tac[]) >>
+  rpt strip_tac >> irule build_flag_info_n_members >> gvs[type_env_def]
 QED
 
 Theorem deploy_frame_checked_struct_metadata:
@@ -1441,6 +1414,10 @@ Proof
     (drule deploy_ctor_checked_pointer_domain >> simp[] >>
      disch_then (qspec_then `env_t` mp_tac) >> simp[] >> metis_tac[]) >>
   drule deploy_ctor_formal_var_types >> simp[] >> strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
+    (drule check_contract_namespaces_ok >>
+     simp[contract_namespaces_ok_def, contract_keys_def]) >>
+  `cenv_module_pins tops cenv` by fs[body_inv_def] >>
   drule_all deploy_frame_flag_compatibility >> strip_tac >>
   drule_all deploy_ctor_struct_compatibility >> strip_tac >>
   drule_all deploy_ctor_defined_map_agreement >> strip_tac >>

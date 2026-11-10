@@ -1073,28 +1073,19 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem supported_lookup_flag_none:
-  !ts fid members.
-  EVERY (supported_declaration_header tops) ts ==>
-  lookup_flag fid ts <> SOME members
-Proof
-  Induct >> simp[lookup_flag_def] >>
-  Cases >> simp[lookup_flag_def, supported_flags_rejected] >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
-QED
-
 Theorem external_source_no_flags:
-  supported_program tops /\ source_deployment_rel tops am tx /\
+  ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
+  cenv_module_pins tops cenv /\ source_deployment_rel tops am tx /\
   get_module_code
-    (initial_evaluation_context am.sources am.layouts tx NONE) src = SOME ts ==>
-  lookup_flag fid ts <> SOME members
+    (initial_evaluation_context am.sources am.layouts tx NONE) src = SOME ts /\
+  lookup_flag fid ts = SOME ls /\ INDEX_OF mid ls = SOME i ==>
+  cenv.ce_flag_member_id (nsid_to_string (src, fid)) mid = i
 Proof
   strip_tac >>
   gvs[source_deployment_rel_def, get_module_code_def,
-      initial_evaluation_context_def, AllCaseEqs()] >>
-  irule supported_lookup_flag_none >>
-  gvs[supported_program_def, supported_declaration_headers_def] >>
-  qexists `tops` >> simp[]
+      initial_evaluation_context_def, AllCaseEqs(), cenv_module_pins_def,
+      nsid_to_string_def] >>
+  irule build_flag_info_member_id >> metis_tac[]
 QED
 
 Theorem external_package_struct_fields:
@@ -1400,8 +1391,8 @@ Proof
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[])
   >- (rpt strip_tac >> irule external_entry_target_param_type >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[])
-  >- (rpt strip_tac >> drule_all external_source_no_flags >>
-      disch_then (qspecl_then [`ls`, `fid`] mp_tac) >> simp[])
+  >- (rpt strip_tac >> irule external_source_no_flags >>
+      gvs[body_inv_def] >> metis_tac[source_typing_ok_type_def_keys_distinct])
   >- gvs[dec_cenv_agrees_def]
   >- (drule_all external_package_method_id >> simp[])
   >- gvs[dec_cenv_agrees_def]
