@@ -1200,3 +1200,45 @@ Proof
     (drule_all ircf_block_plan_fwd_ok >> simp[]) >>
   fs[ircf_fwd_ok_def] >> metis_tac[ircf_alloca_alias_root]
 QED
+
+Theorem ircf_fwd_dst_use_block:
+  fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\ MEM cur fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d sr sz /\ i < LENGTH cur.bb_instructions /\
+  inst = EL i cur.bb_instructions /\ inst.inst_opcode <> ASSIGN /\
+  ircf_alias fn d v /\ MEM (Var v) inst.inst_operands ==>
+  bb = cur
+Proof
+  strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (simp[fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[EL_MEM]) >>
+  `MEM inst bb.bb_instructions` by
+    (Cases_on `inst.inst_id = (EL k bb.bb_instructions).inst_id`
+     >- (drule_all ircf_fwd_copy_id >> strip_tac >> gvs[] >>
+         metis_tac[ircf_fwd_ok_def, EL_MEM]) >>
+     fs[ircf_fwd_ok_def] >> metis_tac[EL_MEM]) >>
+  irule (all_distinct_flat_map_inj |> INST_TYPE [alpha |-> ``:num``]) >>
+  qexistsl_tac [`\b. MAP (\i. i.inst_id) b.bb_instructions`,
+                `fn.fn_blocks`, `inst.inst_id`] >>
+  fs[fn_inst_ids_distinct_def, MEM_MAP] >> metis_tac[EL_MEM]
+QED
+
+Theorem ircf_redirect_changed_forward:
+  wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+  ircf_no_dst_write_alias fn /\ MEM bb fn.fn_blocks /\
+  ircf_block_plan fn bb bb2 /\ ircf_redirect fn bb bb2 v <> v ==>
+  ?k d sr sz. k IN ircf_fwds bb bb2 /\
+    ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+    ircf_fwd_ok fn bb k d sr sz /\ ircf_alias fn d v /\
+    ircf_redirect fn bb bb2 v = sr
+Proof
+  strip_tac >>
+  `?k d sr sz. k IN ircf_fwds bb bb2 /\
+    ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+    ircf_alias fn d v` by metis_tac[ircf_redirect_unaffected] >>
+  `ircf_fwd_ok fn bb k d sr sz` by
+    (drule_all ircf_block_plan_fwd_ok >> simp[]) >>
+  qexistsl_tac [`k`, `d`, `sr`, `sz`] >> simp[] >>
+  irule ircf_redirect_source >> simp[] >>
+  metis_tac[ircf_block_plan_fwd_ok]
+QED

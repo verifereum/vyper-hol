@@ -1609,3 +1609,146 @@ Proof
     (irule ircf_unchanged_reader_sites_exclusion >> simp[] >> metis_tac[]) >>
   decide_tac
 QED
+
+Theorem ircf_planned_destination_reader_occurrence_exclusion:
+  wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  MEM bb fn.fn_blocks /\ MEM pb fn.fn_blocks /\
+  ircf_block_plan fn bb (tr bb) /\ ircf_block_plan fn pb (tr pb) /\
+  i < LENGTH bb.bb_instructions /\ inst = EL i bb.bb_instructions /\
+  i NOTIN ircf_fwds bb (tr bb) /\ inst.inst_opcode <> ASSIGN /\
+  EL i (tr bb).bb_instructions = inst /\ k IN ircf_fwds pb (tr pb) /\
+  ircf_copy_roots fn (EL k pb.bb_instructions) = SOME (d,sr,sz) /\
+  occurrence_syntax_origin fn a H /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [d] /\
+  mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v ==>
+  FLOOKUP H v <> SOME (a,ai.inst_id)
+Proof
+  strip_tac >> strip_tac >>
+  `MEM (Var v) inst.inst_operands` by
+    metis_tac[allocaRemapProofsTheory.mem_ops_ofst_is_operand] >>
+  `v IN pointer_derived_vars fn {d}` by
+    (drule_all occurrence_syntax_origin_planned_root >> simp[]) >>
+  `ircf_fwd_ok fn pb k d sr sz` by
+    (drule_all ircf_block_plan_fwd_ok >> simp[]) >>
+  `ircf_alias fn d v` by
+    (drule_all ircf_fwd_dst_pointer_closure >> fs[pred_setTheory.SUBSET_DEF]) >>
+  `pb = bb` by (irule ircf_fwd_dst_use_block >> metis_tac[]) >>
+  gvs[] >> metis_tac[ircf_unchanged_operand_not_dst_alias]
+QED
+
+Theorem ircf_planned_destination_read_disjoint:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ lo <= vs.vs_alloca_next /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  MEM pb fn.fn_blocks /\ ircf_block_plan fn bb (tr bb) /\
+  ircf_block_plan fn pb (tr pb) /\ s.vs_inst_idx NOTIN ircf_fwds bb (tr bb) /\
+  inst.inst_opcode <> ASSIGN /\ EL s.vs_inst_idx (tr bb).bb_instructions = inst /\
+  k IN ircf_fwds pb (tr pb) /\
+  ircf_copy_roots fn (EL k pb.bb_instructions) = SOME (d,sr,sz) /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [d] /\
+  FLOOKUP s.vs_allocas ai.inst_id = SOME (b,z) /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  MEM (off,len) (source_memory_read_ranges inst s) /\ b <= p /\ p < b+z ==>
+  ~(off <= p /\ p < off+len)
+Proof
+  strip_tac >> strip_tac >>
+  `0 < z /\ len <> 0` by decide_tac >>
+  drule_then strip_assume_tac occ_frame_reachable_annotation >> fs[] >>
+  drule_then assume_tac occ_frame_reachable_geometry >> fs[] >>
+  qpat_x_assum `!lo. _` (qspec_then `lo` assume_tac) >> fs[] >>
+  `FLOOKUP B (a,ai.inst_id) = SOME (b,z)` by
+    fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>
+  `lo <= b` by metis_tac[occurrence_geometry_site_bounds] >>
+  `lo < off+len` by decide_tac >>
+  `?ops v c w. mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+     FLOOKUP G v = SOME (c,w) /\ c <= off /\ off+len <= c+w` by
+    (fs[access_ok_def] >> metis_tac[]) >>
+  `active_inst fn inst s` by
+    (qpat_assum `occ_frame_reachable _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     once_rewrite_tac[occ_frame_reachable_cases] >> metis_tac[]) >>
+  `MEM bb fn.fn_blocks /\ s.vs_inst_idx < LENGTH bb.bb_instructions /\
+   inst = EL s.vs_inst_idx bb.bb_instructions` by
+    (`MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+     fs[active_inst_def] >>
+     `bb' = bb` by metis_tac[lookup_block_label, same_label_same_block] >> gvs[]) >>
+  `occurrence_syntax_origin fn a H` by
+    (drule_then assume_tac occ_frame_reachable_origin_certificate >> fs[] >>
+     metis_tac[occurrence_origin_certificate_current]) >>
+  `FLOOKUP H v <> SOME (a,ai.inst_id)` by
+    (irule ircf_planned_destination_reader_occurrence_exclusion >> metis_tac[]) >>
+  `?jd. FLOOKUP H v = SOME jd /\ FLOOKUP B jd = SOME (c,w)` by
+    (fs[occurrence_annotation_ok_def, occurrence_env_ok_def] >>
+     metis_tac[FLOOKUP_DEF]) >>
+  `0 < w` by decide_tac >>
+  `b+z <= c \/ c+w <= b` by metis_tac[occurrence_geometry_sites_disjoint] >>
+  decide_tac
+QED
+
+Theorem ircf_fwd_dst_use_later:
+  fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d sr sz /\ i < LENGTH bb.bb_instructions /\
+  i <> k /\ (EL i bb.bb_instructions).inst_opcode <> ASSIGN /\
+  MEM (Var v) (EL i bb.bb_instructions).inst_operands /\
+  ircf_alias fn d v ==> k < i
+Proof
+  strip_tac >>
+  `k < LENGTH bb.bb_instructions` by fs[ircf_fwd_ok_def] >>
+  `MEM (EL i bb.bb_instructions) (fn_insts fn) /\
+   MEM (EL k bb.bb_instructions) (fn_insts fn)` by
+    (conj_tac >> simp[fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[EL_MEM]) >>
+  `(EL i bb.bb_instructions).inst_id <> (EL k bb.bb_instructions).inst_id` by
+    (strip_tac >>
+     `EL i bb.bb_instructions = EL k bb.bb_instructions` by
+       metis_tac[fn_inst_ids_distinct_inj] >> metis_tac[inst_ids_el_eq]) >>
+  `?j. k < j /\ j < LENGTH bb.bb_instructions /\
+       EL j bb.bb_instructions = EL i bb.bb_instructions` by
+    (fs[ircf_fwd_ok_def] >> metis_tac[]) >>
+  `j = i` by metis_tac[inst_ids_el_eq] >> gvs[]
+QED
+
+Theorem ircf_redirect_read_sites:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  ircf_block_plan fn bb bb2 /\ s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  s.vs_inst_idx NOTIN ircf_fwds bb bb2 /\ inst.inst_opcode <> ASSIGN /\
+  mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  ircf_redirect fn bb bb2 v <> v /\ lookup_var v s = SOME w /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  MEM (w2n w,len) (source_memory_read_ranges inst s) /\ len <> 0 ==>
+  ?k d sr sz dai sai sb.
+    k < s.vs_inst_idx /\ k IN ircf_fwds bb bb2 /\
+    ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+    ircf_redirect fn bb bb2 v = sr /\
+    MEM dai (fn_insts fn) /\ dai.inst_opcode = ALLOCA /\ dai.inst_outputs = [d] /\
+    MEM sai (fn_insts fn) /\ sai.inst_opcode = ALLOCA /\ sai.inst_outputs = [sr] /\
+    FLOOKUP s.vs_allocas dai.inst_id = SOME (w2n w,w2n sz) /\
+    FLOOKUP s.vs_allocas sai.inst_id = SOME (sb,w2n sz) /\
+    lookup_var sr s = SOME (n2w sb) /\ len <= w2n sz
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ fn_inst_ids_distinct fn` by
+    metis_tac[lookup_block_MEM, wf_function_def] >>
+  `ssa_form fn` by fs[wf_ssa_def] >>
+  drule_all ircf_redirect_changed_forward >> strip_tac >>
+  `MEM (Var v) inst.inst_operands` by
+    metis_tac[allocaRemapProofsTheory.mem_ops_ofst_is_operand] >>
+  `k <> s.vs_inst_idx` by metis_tac[] >>
+  `k < s.vs_inst_idx` by (irule ircf_fwd_dst_use_later >> metis_tac[]) >>
+  `active_inst fn inst s` by
+    (simp[active_inst_def] >> qexists_tac `bb` >> metis_tac[lookup_block_label]) >>
+  `inst.inst_opcode <> PHI` by
+    (strip_tac >> fs[memLocDefsTheory.mem_read_ops_def]) >>
+  `ircf_alias_site_value fn s G v` by
+    (irule ircf_alias_boundary_operand >> metis_tac[]) >>
+  `ircf_alloca_of fn d sz` by metis_tac[ircf_fwd_ok_def] >>
+  fs[ircf_alloca_of_def] >>
+  drule_all ircf_alias_read_site >> strip_tac >>
+  `k <= s.vs_inst_idx` by decide_tac >>
+  drule_all ircf_fwd_source_root_later >> strip_tac >>
+  metis_tac[]
+QED
