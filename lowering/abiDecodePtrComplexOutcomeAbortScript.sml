@@ -1,6 +1,7 @@
 Theory abiDecodePtrComplexOutcomeAbort
 Ancestors
   abiDecodePtrComplexAbort abiDecodePtrComplexHeader abiDecodePtrFlatRun abiDecodePtrFlatLayout
+  instSeqComposePtr bodyPtrBopScalarSeq
   abiDecodePtrRejectCode abiDecoderVarSequence
   emitHelper freshWrites fragExec exprSimAccounts venomInst instIdxIndep
   abiDecodePtrBytesMember abiDecodePtrMemberInterface
@@ -40,7 +41,8 @@ Theorem abi_decode_complex_observed_abort:
   compile_abi_decode_to_buf (Var dst) (Lit 0w) MLOAD (Var src) hi
     (DecComplex dyn (abi_decoder_member_infos ce.ce_struct_fields ce tys)) sa = ((),sb) /\
   fn_has_code sa sb func /\ run_inst_seq (emitted_insts sa sb) s = Abort a u ==>
-  ?H tf n j. gas_path_ptr D 0 ctx func PG G tn s n H tf
+  ?H tf n j. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
+    gas_path_ptr D 0 ctx func PG G tn s n H tf
     (Abort a (u with vs_inst_idx := j))
 Proof
   strip_tac >>
@@ -72,7 +74,13 @@ Proof
   >- (pop_assum strip_assume_tac >> suspend "suffix") >>
   `run_inst_seq (emitted_insts sa middle) s = Abort a u` by
     metis_tac[run_inst_seq_append_err] >>
-  drule_all abi_decode_complex_header_abort >> metis_tac[]
+  drule_all abi_decode_complex_header_abort >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa middle)` by
+    (`?B. bop_scalar_seq {} UNIV (emitted_insts sa middle) B` by
+       (irule abi_decode_complex_header_scalar >> simp[] >> metis_tac[]) >>
+     drule bop_scalar_seq_opcodes >> simp[EVERY_MEM]) >>
+  drule_all inst_seq_ptr_abort_append >> metis_tac[]
 QED
 
 Resume abi_decode_complex_observed_abort[suffix]:
@@ -102,6 +110,15 @@ Resume abi_decode_complex_observed_abort[suffix]:
      goal_assum (drule_at Any) >>
      qexistsl_tac [`abi_decoder_member_infos ce.ce_struct_fields ce tys`, `0`, `0`] >> simp[]
      >- (irule abi_decode_supported_flat_layout >> simp[])) >>
+  `s.vs_inst_idx + LENGTH (emitted_insts sa middle) = LENGTH middle.cs_current_insts` by
+    (fs[inst_extends_def] >> metis_tac[LENGTH_APPEND]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa middle)` by
+    (`?B. bop_scalar_seq {} UNIV (emitted_insts sa middle) B` by
+       (irule abi_decode_complex_header_scalar >> simp[] >> metis_tac[]) >>
+     drule bop_scalar_seq_opcodes >> simp[EVERY_MEM]) >>
+  `inst_seq_ptr D 0 ctx func PG H tf (emitted_insts middle sb)
+     (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa middle)) K' tk` by simp[] >>
+  drule_all bop_inst_seq_ptr_append >> disch_tac >>
   suspend "path"
 QED
 
@@ -117,8 +134,10 @@ Resume abi_decode_complex_observed_abort[path]:
     (drule_all fn_has_code_code >> simp[] >> metis_tac[]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts middle sb)` by suspend "opcodes" >>
-  drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
-    run_inst_seq_abort_gas_path_ptr >>
+  qpat_assum `inst_seq_ptr _ _ _ _ _ _ _ (emitted_insts middle sb)
+      (t with vs_inst_idx := LENGTH middle.cs_current_insts) _ _`
+    (mp_then (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`) mp_tac
+      run_inst_seq_abort_gas_path_ptr) >>
   disch_then (qspecl_then [`u with vs_inst_idx := LENGTH middle.cs_current_insts`, `a`, `bb`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   fs[] >> metis_tac[gas_path_ptr_then]

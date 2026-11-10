@@ -10,7 +10,8 @@ Theorem abi_decode_complex_header_abort:
   emit_op ADD [pos;Lit (n2w static_sz)] sa = (e,sm) /\
   compile_abi_decode_range_check pos e hi sm = ((),sb) /\
   fn_has_code sa sb func /\ run_inst_seq (emitted_insts sa sb) s = Abort a u ==>
-  ?H tf j. gas_path_ptr D 0 ctx func PG G tn s 0 H tf
+  ?H tf j. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 H tf
     (Abort a (u with vs_inst_idx := j))
 Proof
   strip_tac >>
