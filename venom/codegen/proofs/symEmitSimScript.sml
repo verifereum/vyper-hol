@@ -1212,3 +1212,82 @@ Proof
       irule memory_family_source_write_coverage >> metis_tac[]) >>
   metis_tac[nonmemory_emission_writes_empty]
 QED
+
+Theorem sym_named_numeric_source_emit:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p cs.as_pc [AsmOp name] /\
+  asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
+    (AsmOp name) cs = AsmOK cs' /\
+  venom_to_evm_name inst.inst_opcode = SOME name /\ inst_wf inst /\
+  step_inst fuel ctx inst vs = OK vs' /\
+  ~is_pre_codegen_opcode inst.inst_opcode /\ inst.inst_opcode <> GAS /\
+  inst.inst_opcode <> CODECOPY /\
+  (ef_read0 inst.inst_opcode ==> inst.inst_operands = []) /\
+  ~(?op. inst.inst_opcode = ADD /\ inst.inst_operands = [op; Label "code_end"]) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
+  fn_shape_ok fn /\ ssa_form fn /\ MEM inst (fn_insts fn) /\
+  (selected = compute_operands inst \/
+   (is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) /\
+    selected = TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+      [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+       EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)])) /\
+  ps.ps_stack = residual ++ selected /\
+  EVERY (\op. op <> dead_stack_marker) selected /\
+  (!op. MEM op selected ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) lo op) /\
+  venom_asm_rel lo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  venom_asm_rel lo qs vsout cs' /\
+  qs = ps with ps_stack := FOLDL (\stk out. stack_push (Var out) stk)
+    (stack_pop (LENGTH selected) ps.ps_stack) inst.inst_outputs /\
+  source_memory_reads_disjoint cplan inst vs /\
+  context_source_memory_writes_disjoint cplan inst vs ==>
+  ?ss'. sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `inst.inst_opcode <> CODESIZE` by metis_tac[label_flow_inst_not_codesize] >>
+  `~MEM inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET; CODECOPY; RETPC_PARAM]` by
+    (qpat_x_assum `venom_to_evm_name _ = _` mp_tac >>
+     Cases_on `inst.inst_opcode` >>
+     simp[asmIRTheory.venom_to_evm_name_def] >> fs[]) >>
+  drule_all named_numeric_selected_operands >> strip_tac >>
+  drule_all named_numeric_emission_arity >> strip_tac >>
+  `eval_operands (REVERSE selected) vs =
+     SOME (TAKE (LENGTH selected) cs.as_stack)` by
+    (irule ordinary_prepared_source_evaluation >> simp[] >>
+     qexistsl [`fn`, `inst`, `lo`, `m`, `ps`, `ra`, `residual`] >> fs[MEM]) >>
+  `LENGTH selected <= LENGTH ss.sym_stack /\
+   EVERY (\sv. ?w. sv = Val w) (TAKE (LENGTH selected) ss.sym_stack)` by
+    (irule ordinary_prepared_selected_numeric >>
+     qexistsl [`cplan`, `ctx`, `fn`, `inst`, `ps`, `residual`, `ret`, `srest`] >>
+     fs[MEM]) >>
+  `!b. b IN FDOM ss.sym_mem_labels ==>
+    ~asm_op_mem_reads name (TAKE (LENGTH selected) cs.as_stack) b /\
+    ~asm_op_mem_writes name (TAKE (LENGTH selected) cs.as_stack) b` by
+    (ho_match_mp_tac source_footprint_symbolic_memory_safe >>
+     simp[] >>
+     conj_tac >- fs[sym_kinds_ok_def] >>
+     conj_tac >- (gen_tac >> strip_tac >> irule named_selected_read_coverage >>
+       metis_tac[]) >>
+     gen_tac >> strip_tac >> irule named_selected_write_coverage >>
+     metis_tac[]) >>
+  `qs.ps_spilled = ps.ps_spilled /\
+   REVERSE qs.ps_stack = REVERSE (MAP Var inst.inst_outputs) ++
+     DROP (asm_op_arity name) (REVERSE ps.ps_stack)` by
+    (irule sym_numeric_emit_output_plan >> simp[]) >>
+  `LENGTH (compute_operands inst) <= LENGTH ps.ps_stack` by simp[] >>
+  `LENGTH cs'.as_stack + asm_op_arity name =
+   LENGTH cs.as_stack + LENGTH (REVERSE (MAP Var inst.inst_outputs))` by
+    (irule sym_emit_concrete_output_count >> simp[] >>
+     metis_tac[]) >>
+  drule_all named_numeric_dispatch_names >> strip_tac >>
+  irule sym_prepared_numeric_emit >> simp[] >>
+  qexistsl [`cs`, `name`, `REVERSE (MAP Var inst.inst_outputs)`, `ps`] >>
+  simp[] >> conj_tac
+  >- (simp[MEM_MAP] >> rpt strip_tac >> gvs[] >>
+      irule ordinary_output_kind >> fs[MEM] >> metis_tac[]) >>
+  metis_tac[MEM]
+QED
