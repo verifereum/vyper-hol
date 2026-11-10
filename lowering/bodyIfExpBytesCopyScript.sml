@@ -108,7 +108,9 @@ Resume ifexp_copy_post_transport[post]:
     (strip_tac >>
      `expr_val_own cenv cx (post_value_type cenv e) origin sb ee v op m` by
        (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ m` mp_tac >>
-        simp[loweringPostsTheory.expr_post_def]) >>
+        qpat_assum `post_value_type cenv e <> expr_type e` (fn th =>
+          rewrite_tac[loweringPostsTheory.expr_post_def, th]) >>
+        rpt strip_tac >> first_assum ACCEPT_TAC) >>
      pop_assum mp_tac >>
      qpat_assum `eval_operand op q = _` (fn th1 =>
        qpat_assum `q.vs_allocas = _` (fn th2 =>
