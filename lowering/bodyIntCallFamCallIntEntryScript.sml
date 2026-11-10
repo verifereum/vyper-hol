@@ -9,7 +9,7 @@ Ancestors
   bodyIntCallFamCallIntCertificateIntro bodyIntCallFamCallIntTraverse
   bodyIntCallFamCallIntWordStage bodyIntCallFamCallIntAllocatedStage
   bodyIntCallFamCallIntEntryHeadStage bodyIntCallFamCallIntEntryRoom
-  bodyIntCallFamCallIntEntrySource
+  bodyIntCallFamCallIntEntrySource bodyIntCallFamCallIntEntryFrame
 Libs
   monadsyntax
 
