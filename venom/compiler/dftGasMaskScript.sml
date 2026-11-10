@@ -2297,6 +2297,146 @@ Proof
   simp[update_var_def]
 QED
 
+Theorem prefix_independent_update_halt[local]:
+  !xs s out w k u.
+    EVERY (\i. ~is_terminator i.inst_opcode /\
+      (!v. MEM (Var v) i.inst_operands ==> out <> v) /\
+      ~MEM out i.inst_outputs) xs ==>
+    (FOLDR (dft_exec_cons fuel C) OK xs
+       ((update_var out w s) with vs_inst_idx := k) = Halt u <=>
+     FOLDR (dft_exec_cons fuel C) OK xs s = Halt u)
+Proof
+  Induct >> rpt gen_tac >> strip_tac >- simp[] >>
+  qpat_x_assum `!s out w k u. _` (fn ih =>
+  fs[EVERY_DEF] >>
+  Cases_on `h.inst_opcode = INVOKE`
+  >- (simp[dftIndexedExecTheory.dft_exec_cons_def,
+           analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only,
+           dftCommutationTheory.step_inst_invoke_frame] >>
+      Cases_on `step_inst fuel C h s` >> simp[] >>
+      qspecl_then
+        [`v with vs_inst_idx := SUC s.vs_inst_idx`, `out`, `w`, `SUC k`, `u`] mp_tac ih >>
+      simp[update_var_def]) >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def,
+       analysisSimProofsBaseTheory.step_inst_idx_indep,
+       dftCommutationTheory.step_inst_frame] >>
+  Cases_on `step_inst fuel C h s` >>
+  simp[dftCommutationTheory.map_result_state_def,
+       instIdxIndepTheory.exec_result_map_def]
+  >- (qspecl_then
+        [`v with vs_inst_idx := SUC s.vs_inst_idx`, `out`, `w`, `SUC k`, `u`] mp_tac ih >>
+      simp[update_var_def]) >>
+  metis_tac[dftRunRelTheory.dft_swap_nonterminator_halt_invoke])
+QED
+
+Theorem prefix_independent_update_error[local]:
+  !xs s out w k e.
+    EVERY (\i. ~is_terminator i.inst_opcode /\
+      (!v. MEM (Var v) i.inst_operands ==> out <> v) /\
+      ~MEM out i.inst_outputs) xs ==>
+    (FOLDR (dft_exec_cons fuel C) OK xs
+       ((update_var out w s) with vs_inst_idx := k) = Error e <=>
+     FOLDR (dft_exec_cons fuel C) OK xs s = Error e)
+Proof
+  Induct >> rpt gen_tac >> strip_tac >- simp[] >>
+  qpat_x_assum `!s out w k e. _` (fn ih =>
+  fs[EVERY_DEF] >>
+  Cases_on `h.inst_opcode = INVOKE`
+  >- (simp[dftIndexedExecTheory.dft_exec_cons_def,
+           analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only,
+           dftCommutationTheory.step_inst_invoke_frame] >>
+      Cases_on `step_inst fuel C h s` >> simp[] >>
+      qspecl_then
+        [`v with vs_inst_idx := SUC s.vs_inst_idx`, `out`, `w`, `SUC k`, `e`] mp_tac ih >>
+      simp[update_var_def]) >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def,
+       analysisSimProofsBaseTheory.step_inst_idx_indep,
+       dftCommutationTheory.step_inst_frame] >>
+  Cases_on `step_inst fuel C h s` >>
+  simp[dftCommutationTheory.map_result_state_def,
+       instIdxIndepTheory.exec_result_map_def] >>
+  qspecl_then
+    [`v with vs_inst_idx := SUC s.vs_inst_idx`, `out`, `w`, `SUC k`, `e`] mp_tac ih >>
+  simp[update_var_def])
+QED
+
+Theorem prefix_independent_update_abort[local]:
+  !xs s out w k a.
+    EVERY (\i. ~is_terminator i.inst_opcode /\
+      (!v. MEM (Var v) i.inst_operands ==> out <> v) /\
+      ~MEM out i.inst_outputs) xs ==>
+    ((?u. FOLDR (dft_exec_cons fuel C) OK xs
+       ((update_var out w s) with vs_inst_idx := k) = Abort a u) <=>
+     ?u. FOLDR (dft_exec_cons fuel C) OK xs s = Abort a u)
+Proof
+  Induct >> rpt gen_tac >> strip_tac >- simp[] >>
+  qpat_x_assum `!s out w k a. _` (fn ih =>
+  fs[EVERY_DEF] >>
+  Cases_on `h.inst_opcode = INVOKE`
+  >- (simp[dftIndexedExecTheory.dft_exec_cons_def,
+           analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only,
+           dftCommutationTheory.step_inst_invoke_frame] >>
+      Cases_on `step_inst fuel C h s` >> simp[] >>
+      qspecl_then
+        [`v with vs_inst_idx := SUC s.vs_inst_idx`, `out`, `w`, `SUC k`, `a`] mp_tac ih >>
+      simp[update_var_def]) >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def,
+       analysisSimProofsBaseTheory.step_inst_idx_indep,
+       dftCommutationTheory.step_inst_frame] >>
+  Cases_on `step_inst fuel C h s` >>
+  simp[dftCommutationTheory.map_result_state_def,
+       instIdxIndepTheory.exec_result_map_def] >>
+  qspecl_then
+    [`v with vs_inst_idx := SUC s.vs_inst_idx`, `out`, `w`, `SUC k`, `a`] mp_tac ih >>
+  simp[update_var_def])
+QED
+
+Theorem prefix_independent_update_terminates[local]:
+  !xs s out w k.
+    EVERY (\i. ~is_terminator i.inst_opcode /\
+      (!v. MEM (Var v) i.inst_operands ==> out <> v) /\
+      ~MEM out i.inst_outputs) xs ==>
+    (terminates (FOLDR (dft_exec_cons fuel C) OK xs
+       ((update_var out w s) with vs_inst_idx := k)) <=>
+     terminates (FOLDR (dft_exec_cons fuel C) OK xs s))
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- simp[passSimulationDefsTheory.terminates_def] >>
+  qpat_x_assum `!s out w k. _` (fn ih =>
+  fs[EVERY_DEF] >>
+  Cases_on `h.inst_opcode = INVOKE`
+  >- (simp[dftIndexedExecTheory.dft_exec_cons_def,
+           analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only,
+           dftCommutationTheory.step_inst_invoke_frame] >>
+      Cases_on `step_inst fuel C h s` >>
+      simp[passSimulationDefsTheory.terminates_def] >>
+      qspecl_then
+        [`v with vs_inst_idx := SUC s.vs_inst_idx`, `out`, `w`, `SUC k`] mp_tac ih >>
+      simp[update_var_def, passSimulationDefsTheory.terminates_def]) >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def,
+       analysisSimProofsBaseTheory.step_inst_idx_indep,
+       dftCommutationTheory.step_inst_frame] >>
+  Cases_on `step_inst fuel C h s` >>
+  simp[dftCommutationTheory.map_result_state_def,
+       instIdxIndepTheory.exec_result_map_def,
+       passSimulationDefsTheory.terminates_def] >>
+  qspecl_then
+    [`v with vs_inst_idx := SUC s.vs_inst_idx`, `out`, `w`, `SUC k`] mp_tac ih >>
+  simp[update_var_def, passSimulationDefsTheory.terminates_def])
+QED
+
+Theorem prefix_nonterminator_no_intret[local]:
+  !xs s ir u.
+    EVERY (\i. ~is_terminator i.inst_opcode) xs ==>
+    FOLDR (dft_exec_cons fuel C) OK xs s <> IntRet ir u
+Proof
+  Induct >> rpt gen_tac >> strip_tac >- simp[] >>
+  fs[EVERY_DEF] >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def] >>
+  Cases_on `step_inst fuel C h s` >> simp[] >>
+  metis_tac[dftRunRelTheory.dft_swap_nonterminator_no_intret]
+QED
+
 Theorem prefix_extract_mask[local]:
   !fuel C C'.
   let CalleeIH = (!fn fn' t.
