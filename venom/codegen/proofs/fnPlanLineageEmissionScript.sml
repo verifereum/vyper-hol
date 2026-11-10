@@ -333,3 +333,111 @@ Proof
   first_x_assum (qspecl_then [`opc`, `live`, `ps1`] mp_tac) >>
   gvs[]
 QED
+
+Theorem optimistic_swap_plan_emission:
+  !dfg inst live term ps.
+    emission_projection (FST (optimistic_swap_plan dfg inst live term ps)) = [] /\
+    (SND (optimistic_swap_plan dfg inst live term ps)).ps_label_counter =
+      ps.ps_label_counter
+Proof
+  rpt gen_tac >> simp[optimistic_swap_plan_def] >>
+  rpt IF_CASES_TAC >> simp[emission_projection_def] >>
+  BasicProvers.TOP_CASE_TAC >- simp[] >>
+  qspecl_then [`x`, `ps`] mp_tac do_swap_emission >>
+  simp[emission_projection_def]
+QED
+
+Theorem generate_phi_plan_emission:
+  !inst live halt ps.
+    emission_projection (FST (generate_phi_plan inst live halt ps)) = [] /\
+    (SND (generate_phi_plan inst live halt ps)).ps_label_counter = ps.ps_label_counter
+Proof
+  rpt gen_tac >> simp[generate_phi_plan_def] >>
+  BasicProvers.TOP_CASE_TAC >- simp[emission_projection_def] >>
+  pairarg_tac >> gvs[] >>
+  `emission_projection ops = [] /\
+   ps'.ps_label_counter = ps.ps_label_counter` by
+    (qpat_x_assum `_ = (ops,ps')` mp_tac >>
+     IF_CASES_TAC
+     >- (Cases_on `do_dup x ps` >> gvs[] >> strip_tac >>
+         qspecl_then [`x`, `ps`] mp_tac do_dup_emission >>
+         gvs[emission_projection_def, emission_anchor_def, rich_listTheory.FILTER_APPEND]) >>
+     strip_tac >> gvs[emission_projection_def, emission_anchor_def]) >>
+  IF_CASES_TAC >- (pairarg_tac >> gvs[] >>
+    qspecl_then [`[Var (HD inst.inst_outputs)]`, `ps'`] mp_tac popmany_plan_emission >>
+    gvs[]) >> gvs[]
+QED
+
+Theorem generate_offset_plan_emission:
+  !inst ps.
+    FST (generate_offset_plan inst ps) = FST (generate_offset_plan inst q) /\
+    (SND (generate_offset_plan inst ps)).ps_label_counter = ps.ps_label_counter
+Proof
+  rpt gen_tac >> simp[generate_offset_plan_def] >>
+  BasicProvers.TOP_CASE_TAC >> simp[]
+QED
+
+Theorem clean_stack_plan_emission:
+  !liveness cfg fn bb ps.
+    emission_projection (FST (clean_stack_plan liveness cfg fn bb ps)) = [] /\
+    (SND (clean_stack_plan liveness cfg fn bb ps)).ps_label_counter = ps.ps_label_counter
+Proof
+  rpt gen_tac >> simp[clean_stack_plan_def] >>
+  Cases_on `cfg_preds_of cfg bb.bb_label` >- simp[emission_projection_def] >>
+  Cases_on `t` >> simp[emission_projection_def] >>
+  IF_CASES_TAC >- simp[] >>
+  BasicProvers.TOP_CASE_TAC >- simp[] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  TRY (pairarg_tac >> gvs[] >>
+    rename1 `popmany_plan xs ps = (ops,ps')` >>
+    qspecl_then [`xs`, `ps`] mp_tac popmany_plan_emission >>
+    gvs[emission_projection_def] >> NO_TAC) >>
+  qmatch_goalsub_abbrev_tac `popmany_plan xs ps` >>
+  qspecl_then [`xs`, `ps`] mp_tac popmany_plan_emission >>
+  simp[emission_projection_def]
+QED
+
+Theorem foldl_observation_preserved:
+  !xs step observe init.
+    (!s x. observe (step s x) = observe s) ==>
+    observe (FOLDL step init xs) = observe init
+Proof
+  Induct >> simp[]
+QED
+
+Theorem release_dead_spills_label_counter[simp]:
+  !live ps. (release_dead_spills live ps).ps_label_counter = ps.ps_label_counter
+Proof
+  rpt gen_tac >> simp[stackPlanOpsTheory.release_dead_spills_def] >>
+  irule foldl_observation_preserved >>
+  simp[pairTheory.FORALL_PROD]
+QED
+
+Theorem push_outputs_label_counter[simp]:
+  !outs ps.
+    (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+      ps outs).ps_label_counter = ps.ps_label_counter
+Proof
+  rpt gen_tac >> irule foldl_observation_preserved >> simp[]
+QED
+
+Theorem prepare_params_plan_emission:
+  !live fn ps.
+    emission_projection (FST (prepare_params_plan live fn ps)) = [] /\
+    (SND (prepare_params_plan live fn ps)).ps_label_counter = ps.ps_label_counter
+Proof
+  rpt gen_tac >> simp[prepare_params_plan_def] >>
+  IF_CASES_TAC >- simp[emission_projection_def] >>
+  pairarg_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `popmany_plan xs start = (pop_ops,ps'')` >>
+  qspecl_then [`xs`, `start`] mp_tac popmany_plan_emission >>
+  gvs[] >> strip_tac >>
+  pairarg_tac >> gvs[] >>
+  rename1 `optimistic_swap_plan dfg_empty inst nl nt ps'' = (swap_ops,ps''')` >>
+  qspecl_then [`dfg_empty`, `inst`, `nl`, `nt`, `ps''`]
+    mp_tac optimistic_swap_plan_emission >>
+  gvs[] >> strip_tac >>
+  gvs[emission_projection_def, rich_listTheory.FILTER_APPEND] >>
+  simp[Abbr `start`] >>
+  irule foldl_observation_preserved >> simp[]
+QED
