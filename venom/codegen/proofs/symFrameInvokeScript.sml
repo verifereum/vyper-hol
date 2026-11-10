@@ -2558,5 +2558,9 @@ Theorem sym_invoke_frame_sim_deep:
                venom_asm_terminal_rel vs' as' /\
                sym_terminal (sym_steps prog env n ss))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> drule_all sym_invoke_source_ok >> simp[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> drule_all sym_invoke_source_halt >> simp[]) >>
+  rpt gen_tac >> strip_tac >> drule_all sym_invoke_source_abort >> simp[]
 QED
