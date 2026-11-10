@@ -453,7 +453,7 @@ Proof
   >- (rewrite_tac[result_array_length_def] >> irule outcomes_replace_bind >>
       simp[outcomes_replace_read_result] >>
       Cases >> simp[return_def, raise_def] >>
-      BasicProvers.CASE_TAC >> simp[return_def])
+      Cases_on `a` >> simp[return_def])
   >- (rename1 `PlaceR p` >> Cases_on `p`
       >- (rename1 `StoragePlace tr slot ty` >> Cases_on `ty` >>
           rewrite_tac[result_array_length_def]
@@ -463,15 +463,15 @@ Proof
               simp[outcomes_replace_storage_backend, return_def])
           >> irule outcomes_replace_bind >> simp[outcomes_replace_read_result] >>
           Cases >> simp[return_def, raise_def] >>
-          BasicProvers.CASE_TAC >> simp[return_def])
+          Cases_on `a` >> simp[return_def])
       >> rewrite_tac[result_array_length_def] >> irule outcomes_replace_bind >>
       simp[outcomes_replace_read_result] >>
       Cases >> simp[return_def, raise_def] >>
-      BasicProvers.CASE_TAC >> simp[return_def])
+      Cases_on `a` >> simp[return_def])
   >> rewrite_tac[result_array_length_def] >> irule outcomes_replace_bind >>
   simp[outcomes_replace_read_result] >>
   Cases >> simp[return_def, raise_def] >>
-  BasicProvers.CASE_TAC >> simp[return_def]
+  Cases_on `a` >> simp[return_def]
 QED
 
 Theorem outcomes_replace_array_iterator_results:

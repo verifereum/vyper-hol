@@ -73,6 +73,8 @@ Proof
   Induct >- simp[materialize_internal_params_def, comp_return_def] >>
   PairCases >> rpt gen_tac >> simp[Once materialize_internal_params_def] >>
   Cases_on `h1` >> simp[LET_THM] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
   rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
   simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>

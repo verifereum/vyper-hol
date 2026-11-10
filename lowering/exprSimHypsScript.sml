@@ -1397,6 +1397,7 @@ Proof
   rw[lowered_value_type_def, expr_type_def, is_bytestring_type_def, LET_THM] >>
   gvs[well_typed_expr_def, well_typed_builtin_app_def, type_builtin_result_ok_def,
       concat_buffer_type_def, is_bytestring_type_def]
+QED
 
 (* Shared physical internal-call typing, formerly local to memoryLocalRhsProps. *)
 Theorem frame_signature_return_well_formed:
