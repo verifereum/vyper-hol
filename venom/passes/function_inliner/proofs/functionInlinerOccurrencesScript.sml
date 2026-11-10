@@ -501,3 +501,51 @@ Proof
       cfgTransformTheory.subst_label_inst_def, AllCaseEqs()] >>
   Cases_on `(EL k bb'.bb_instructions).inst_opcode = PHI` >> gvs[]
 QED
+
+Theorem inline_call_incidence_residual_fetch:
+  !cert root p fn l j orig outcome.
+    inline_call_incidence cert root p fn l j orig outcome ==>
+    !ctx n loc inst. inline_annotated_origin ctx n root cert /\
+      outcome = InlineResidual loc inst ==>
+      ?k. loc.il_phase = InlineAtInstruction k /\
+        inline_fetched_fields root loc.il_block k (inline_inst_fields inst)
+Proof
+  ho_match_mp_tac inline_call_incidence_strongind >> rpt conj_tac
+  >- simp[functionInlinerSiteLayoutTheory.inline_fetched_fields_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[] >>
+  drule inline_annotated_origin_edit_elim >> simp[] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule_all inline_annotated_edit_fetch_facts >> strip_tac >>
+  drule inline_call_incidence_residual_phase >> simp[] >> strip_tac >>
+  gvs[functionInlinerSiteLayoutTheory.inline_fetched_fields_def] >>
+  `inst'.inst_opcode = INVOKE` by
+    gvs[functionInlinerSiteLayoutTheory.inline_inst_fields_def] >>
+  Cases_on `loc` >> gvs[]
+  >- (`s <> e.ise_block \/ k <> e.ise_index` by
+        (spose_not_then strip_assume_tac >>
+         gvs[inline_choice_location_def]) >>
+      drule inline_edit_keep_invoke >> disch_then drule >> simp[] >>
+      disch_then (drule_at (Pat `get_instruction _ _ = _`)) >>
+      disch_then (qspecl_then [`s`,`n'`] mp_tac) >>
+      simp[] >> strip_tac >>
+      gvs[functionInlinerSiteLayoutTheory.inline_fetched_fields_def,
+          inline_choice_location_def, AllCaseEqs()] >> metis_tac[]) >>
+  `MEM s (fn_labels e.ise_callee)` by
+    (simp[fn_labels_def, MEM_MAP] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM,
+               venomExecPropsTheory.lookup_block_label]) >>
+  first_x_assum drule >> strip_tac >>
+  drule_all inline_edit_enter_invoke >>
+  disch_then (qspec_then `n'` strip_assume_tac) >>
+  gvs[functionInlinerSiteLayoutTheory.inline_fetched_fields_def] >>
+  `<|il_block := s; il_phase := InlineAtInstruction k; il_counter := n'|> =
+   inline_location s (InlineAtInstruction k) n'` by
+    simp[inline_location_component_equality] >>
+  gvs[] >>
+  `inline_inst_fields (clone_instruction e.ise_prefix (fn_labels e.ise_callee) inst') =
+   inline_inst_fields (clone_instruction e.ise_prefix (fn_labels e.ise_callee) inst)` by
+    (irule functionInlinerSiteLayoutTheory.inline_clone_fields_cong >> simp[]) >>
+  qexists_tac `i` >> simp[] >>
+  qexistsl_tac [`bb''`,`inst''`] >> simp[]
+QED
