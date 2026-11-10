@@ -848,3 +848,79 @@ Proof
   simp[TAKE_APPEND1] >> irule numeric_operand_kinds_list >>
   qexistsl [`fn`, `REVERSE selected`, `ret`] >> simp[]
 QED
+
+Theorem ordinary_prepared_selected_numeric:
+  opaque_use_ok fn /\ label_flow_ok ctx /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  (!op. MEM op selected ==> MEM op inst.inst_operands /\ ~is_label_operand op) /\
+  ~MEM inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET; CODECOPY] /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  ps.ps_stack = residual ++ selected ==>
+  LENGTH selected <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE (LENGTH selected) ss.sym_stack)
+Proof
+  strip_tac >> irule sym_prepared_selected_numeric >>
+  qexistsl [`cplan`, `fn`, `ps`, `residual`, `ret`, `srest`] >> simp[] >>
+  rw[EVERY_MEM] >> metis_tac[ordinary_source_input_numeric_kind]
+QED
+
+Theorem sym_numeric_emit_output_plan:
+  k <= LENGTH ps.ps_stack /\
+  qs = ps with ps_stack := FOLDL (\stk out. stack_push (Var out) stk)
+    (stack_pop k ps.ps_stack) outs ==>
+  qs.ps_spilled = ps.ps_spilled /\
+  REVERSE qs.ps_stack = REVERSE (MAP Var outs) ++ DROP k (REVERSE ps.ps_stack)
+Proof
+  `!stk. FOLDL (\stk out. stack_push (Var out) stk) stk outs =
+    stk ++ MAP Var outs` by
+    (Induct_on `outs` >> simp[stackModelTheory.stack_push_def,
+       SNOC_APPEND, APPEND_ASSOC]) >>
+  simp[stackModelTheory.stack_pop_def, REVERSE_APPEND,
+       rich_listTheory.DROP_REVERSE, rich_listTheory.BUTLASTN_TAKE_UNCOND]
+QED
+
+Theorem sym_emit_concrete_output_count:
+  venom_asm_rel lo ps vs cs /\ venom_asm_rel lo qs vs' cs' /\
+  k <= LENGTH ps.ps_stack /\
+  REVERSE qs.ps_stack = outputs ++ DROP k (REVERSE ps.ps_stack) ==>
+  LENGTH cs'.as_stack + k = LENGTH cs.as_stack + LENGTH outputs
+Proof
+  strip_tac >>
+  `LENGTH ps.ps_stack = LENGTH cs.as_stack /\
+   LENGTH qs.ps_stack = LENGTH cs'.as_stack` by
+    fs[venom_asm_rel_def, plan_stack_rel_def] >>
+  qpat_x_assum `REVERSE _ = _` (mp_tac o AP_TERM ``LENGTH:operand list -> num``) >>
+  simp[] >> decide_tac
+QED
+
+Theorem named_numeric_dispatch_names:
+  venom_to_evm_name opc = SOME name /\ opc <> CODECOPY /\ opc <> CODESIZE ==>
+  ~MEM name ["POP"; "JUMP"; "JUMPI"; "CODECOPY"; "CODESIZE"] /\
+  ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE
+Proof
+  Cases_on `opc` >>
+  simp[asmIRTheory.venom_to_evm_name_def] >> strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+Theorem named_numeric_emission_arity:
+  venom_to_evm_name inst.inst_opcode = SOME name /\ inst_wf inst /\
+  step_inst fuel ctx inst vs = OK vs' /\
+  ~is_pre_codegen_opcode inst.inst_opcode /\ inst.inst_opcode <> GAS /\
+  inst.inst_opcode <> CODESIZE /\ inst.inst_opcode <> CODECOPY /\
+  (ef_read0 inst.inst_opcode ==> inst.inst_operands = []) ==>
+  asm_op_arity name = LENGTH (compute_operands inst)
+Proof
+  strip_tac >> drule_all regularPlanSimTheory.regular_named_ok_families >>
+  Cases_on `inst.inst_opcode` >>
+  simp[asmIRTheory.venom_to_evm_name_def, opcodeClassTheory.ef_pure1_def,
+       opcodeClassTheory.ef_arith1_def, opcodeClassTheory.ef_arith2_def,
+       opcodeClassTheory.ef_cmp_def, opcodeClassTheory.ef_bits_def,
+       opcodeClassTheory.ef_pure3_def, opcodeClassTheory.ef_read0_def,
+       opcodeClassTheory.ef_read1_def] >>
+  gvs[asmIRTheory.venom_to_evm_name_def, opcodeClassTheory.ef_read0_def] >>
+  fs[venomWfTheory.inst_wf_def] >>
+  simp[stackPlanGenTheory.compute_operands_def] >>
+  simp[venomInstTheory.python_stack_operands_def] >>
+  simp[venomInstTheory.ir_specific_operand_order_def] >>
+  EVAL_TAC
+QED
