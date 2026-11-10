@@ -19,6 +19,25 @@ Proof
     supported_string_type_def]
 QED
 
+Theorem log_scalar_word_or_bytestring[local]:
+  !ty. supported_scalar_type ty ==> is_word_type ty \/ is_bytestring_type ty
+Proof
+  Cases >> simp[supported_scalar_type_def, supported_word_type_def,
+    supported_string_type_def] >>
+  rename1 `BaseT b` >> Cases_on `b` >>
+  simp[supported_word_type_def, supported_string_type_def, is_word_type_def,
+    is_bytestring_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[supported_word_type_def, supported_string_type_def, is_word_type_def,
+    is_bytestring_type_def]
+QED
+
+Theorem log_scalar_post_value_type[local]:
+  supported_scalar_type (expr_type e) ==> post_value_type cenv e = expr_type e
+Proof
+  strip_tac >> drule log_scalar_word_or_bytestring >> strip_tac >> simp[]
+QED
+
 (* ===== Source sequencing ===== *)
 
 Theorem eval_exprs_cons_bind:
@@ -153,6 +172,8 @@ Proof
     (drule_all lower_compile_expr_not_label >> simp[]) >>
   `local_ptrs_reserved cenv sm` by
     metis_tac[local_ptrs_reserved_next_var] >>
+  `post_value_type cenv e = expr_type e` by
+    (drule_all log_scalar_post_value_type >> simp[]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sm`, `x`, `s0`] mp_tac) >>
   impl_tac >- fs[] >>

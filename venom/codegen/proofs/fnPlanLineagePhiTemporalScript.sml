@@ -285,13 +285,6 @@ Proof
        stack_swap_def, LENGTH_LUPDATE, LUPDATE_MAP, EL_MAP]
 QED
 
-Theorem stack_pop_bottom_extension:
-  !n prefix core. n <= LENGTH core ==>
-    stack_pop n (prefix ++ core) = prefix ++ stack_pop n core
-Proof
-  rpt strip_tac >> simp[stack_pop_def, TAKE_APPEND]
-QED
-
 Theorem phi_origin_write_suffix_projection:
   !left keep d ret prefix cells.
     d < LENGTH cells ==>
@@ -1324,7 +1317,7 @@ QED
 Theorem phi_origin_stage_every:
   !P inst next halting p q cells cells1.
     phi_origin_stage inst next halting p q cells cells1 /\
-    EVERY P cells /\ (!op. P (PhiCommon op)) ==>
+    EVERY P cells /\ P (PhiCommon (Var (HD inst.inst_outputs))) ==>
     EVERY P cells1
 Proof
   rpt gen_tac >> rewrite_tac[phi_origin_stage_def] >> strip_tac >>
@@ -1333,6 +1326,36 @@ Proof
   Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next`
   >- (gvs[] >> irule phi_origin_pop_every >> simp[]) >>
   gvs[]
+QED
+
+Theorem phi_origin_schedule_every:
+  !steps p q cells cells_end P.
+    phi_origin_schedule_ready steps p q cells cells_end /\
+    EVERY P cells /\
+    (!inst next halting. MEM (inst,next,halting) steps ==>
+      P (PhiCommon (Var (HD inst.inst_outputs)))) ==>
+    EVERY P cells_end
+Proof
+  Induct >> simp[phi_origin_schedule_ready_def] >>
+  gen_tac >> PairCases_on `h` >>
+  simp[phi_origin_schedule_ready_def] >> rpt strip_tac >>
+  first_x_assum irule >> rpt (goal_assum (drule_at Any)) >>
+  metis_tac[phi_origin_stage_every]
+QED
+
+Theorem phi_origin_schedule_common_origin:
+  !steps p q cells cells_end op.
+    phi_origin_schedule_ready steps p q cells cells_end /\
+    (!inst next halting. MEM (inst,next,halting) steps ==>
+      op <> Var (HD inst.inst_outputs)) /\
+    MEM (PhiCommon op) cells_end ==>
+    MEM (PhiCommon op) cells
+Proof
+  rpt strip_tac >>
+  `EVERY (\c. c = PhiCommon op ==> MEM (PhiCommon op) cells) cells_end` by
+    (irule phi_origin_schedule_every >> rpt (goal_assum (drule_at Any)) >>
+     simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  gvs[listTheory.EVERY_MEM]
 QED
 
 Theorem phi_origin_stage_selected_extinction:
@@ -1604,7 +1627,7 @@ Proof
   simp[arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem phi_origin_tagged_schedule_projection:
+Theorem phi_origin_tagged_schedule_common:
   !steps n class_of cells p q cells_end.
     phi_origin_schedule_ready steps p q cells cells_end /\
     phi_origin_tagged class_of cells /\
@@ -1616,7 +1639,7 @@ Theorem phi_origin_tagged_schedule_projection:
       (!op. class_of op = SOME (n+i) ==> ~MEM (operand_to_string op) next)) /\
     EVERY (\c. !k a b. c = PhiOriginal k a b ==>
       ?i. i < LENGTH steps /\ k = n+i) cells ==>
-    MAP (phi_cell_value T) cells_end = MAP (phi_cell_value F) cells_end
+    EVERY (\c. ?op. c = PhiCommon op) cells_end
 Proof
   rpt gen_tac >> strip_tac >>
   `!i. i < LENGTH steps ==> phi_origin_count (n+i) cells_end = 0` by
@@ -1631,9 +1654,150 @@ Proof
         gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
      drule phi_origin_schedule_count_le >> disch_then (qspec_then `k` mp_tac) >>
      simp[]) >>
-  irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >> Cases_on `x`
+  simp[listTheory.EVERY_MEM] >> rpt strip_tac >> Cases_on `c`
   >- (qpat_x_assum `!k. phi_origin_count k cells_end = 0`
         (qspec_then `n'` mp_tac) >>
       simp[phi_origin_count_zero, listTheory.EVERY_MEM] >> metis_tac[]) >>
-  simp[phi_cell_value_def]
+  simp[]
+QED
+
+Theorem phi_common_cells_projection:
+  !cells. EVERY (\c. ?op. c = PhiCommon op) cells ==>
+    MAP (phi_cell_value T) cells = MAP (phi_cell_value F) cells
+Proof
+  rpt strip_tac >> irule listTheory.MAP_CONG >>
+  gvs[listTheory.EVERY_MEM, phi_cell_value_def] >> metis_tac[phi_cell_value_def]
+QED
+
+(* Demand support: a retained write changes only the newly duplicated top. *)
+Theorem phi_origin_write_keep_member:
+  !cells x d ret. MEM x cells ==>
+    MEM x (phi_origin_write T d ret cells)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?j. j < LENGTH cells /\ EL j cells = x` by metis_tac[listTheory.MEM_EL] >>
+  simp[phi_origin_write_def, stack_poke_def, stack_dup_def,
+       listTheory.MEM_LUPDATE] >>
+  disj2_tac >> qexists_tac `j` >> simp[listTheory.EL_SNOC]
+QED
+
+Theorem phi_origin_write_live_member:
+  !inst next p q cells d keep v.
+    d < LENGTH cells /\ phi_origin_selected next p q cells d keep /\
+    MEM v next /\
+    (MEM (Var v) (MAP (phi_cell_value T) cells) \/ v = HD inst.inst_outputs) ==>
+    MEM (Var v) (MAP (phi_cell_value T)
+      (phi_origin_write keep d (Var (HD inst.inst_outputs)) cells))
+Proof
+  rpt gen_tac >> strip_tac
+  >- (gvs[listTheory.MEM_MAP] >> rename1 `MEM x cells` >>
+      `MEM x (phi_origin_write keep d (Var (HD inst.inst_outputs)) cells)` by
+        (Cases_on `keep` >- metis_tac[phi_origin_write_keep_member] >>
+         irule phi_origin_write_preserves_other_member >> simp[] >>
+         strip_tac >> gvs[phi_origin_selected_def, stack_peek_suffix_map,
+                           stackPlanTypesTheory.operand_to_string_def] >>
+         metis_tac[stackPlanTypesTheory.operand_to_string_def]) >>
+      metis_tac[listTheory.MEM_MAP]) >>
+  gvs[] >>
+  `MEM (PhiCommon (Var (HD inst.inst_outputs)))
+    (phi_origin_write keep d (Var (HD inst.inst_outputs)) cells)` suffices_by
+      metis_tac[listTheory.MEM_MAP, phi_cell_value_def] >>
+  Cases_on `keep` >>
+  simp[phi_origin_write_def, stack_poke_def, stack_dup_def, listTheory.MEM_LUPDATE] >>
+  decide_tac
+QED
+
+Theorem phi_origin_stage_live_member:
+  !inst next halting p q cells cells' v.
+    phi_origin_stage inst next halting p q cells cells' /\
+    MEM v next /\
+    (MEM (Var v) (MAP (phi_cell_value T) cells) \/ v = HD inst.inst_outputs) ==>
+    MEM (Var v) (MAP (phi_cell_value T) cells')
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `phi_origin_stage _ _ _ _ _ _ _` mp_tac >>
+  simp[phi_origin_stage_def] >> strip_tac >>
+  `d < LENGTH cells` by fs[phi_origin_incoming_def] >>
+  `MEM (Var v) (MAP (phi_cell_value T)
+     (phi_origin_write keep d (Var (HD inst.inst_outputs)) cells))` by
+    metis_tac[phi_origin_write_live_member] >>
+  Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next` >> gvs[] >>
+  gvs[listTheory.MEM_MAP] >> rename1 `MEM x (phi_origin_write _ _ _ _)` >>
+  `Var v <> Var (HD inst.inst_outputs)` by (strip_tac >> gvs[]) >>
+  `phi_cell_value T (stack_peek e
+    (phi_origin_write keep d (Var (HD inst.inst_outputs)) cells)) =
+    Var (HD inst.inst_outputs)` by
+    metis_tac[stack_get_depth_props, stack_peek_suffix_map] >>
+  qexists_tac `x` >> simp[] >>
+  irule phi_origin_pop_preserves_other_member >> simp[] >> metis_tac[]
+QED
+
+(* One demanded name is tracked only while it is live; a defining PHI
+   supplies its representative even when it had none at entry. *)
+Theorem phi_origin_schedule_live_member:
+  !steps live p q cells cells_end v.
+    phi_origin_schedule_ready steps p q cells cells_end /\
+    (MEM v (live 0) ==> MEM (Var v) (MAP (phi_cell_value T) cells)) /\
+    (!i inst next halting. i < LENGTH steps /\ EL i steps = (inst,next,halting) ==>
+      next = live (SUC i) /\
+      (MEM v next ==> MEM v (live i) \/ v = HD inst.inst_outputs)) ==>
+    MEM v (live (LENGTH steps)) ==>
+    MEM (Var v) (MAP (phi_cell_value T) cells_end)
+Proof
+  Induct >- simp[phi_origin_schedule_ready_def] >>
+  Cases_on `h` >> Cases_on `r` >> rename1 `(inst,next,halting)::steps` >>
+  rpt gen_tac >> strip_tac >>
+  `next = live 1 /\ (MEM v next ==> MEM v (live 0) \/ v = HD inst.inst_outputs)` by
+    (qpat_x_assum `!i inst next halting. _` (qspec_then `0` mp_tac) >> simp[]) >>
+  qpat_x_assum `phi_origin_schedule_ready _ _ _ _ _` mp_tac >>
+  simp[phi_origin_schedule_ready_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`\i. live (SUC i)`, `p`, `q`, `cells1`, `cells_end`, `v`] mp_tac) >>
+  simp[] >> impl_tac
+  >- (strip_tac >> irule phi_origin_stage_live_member >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  simp[]
+QED
+
+(* Physical PHI execution is independent of scratch allocator/bookkeeping.
+   Emitted scratch offsets need not agree for this resource-only boundary. *)
+Theorem popmany_singleton_physical_stack:
+  !ret ps. (SND (popmany_plan [ret] ps)).ps_stack =
+    case stack_get_depth ret ps.ps_stack of
+      NONE => ps.ps_stack
+    | SOME d => stack_pop 1 (stack_swap d ps.ps_stack)
+Proof
+  rpt gen_tac >> Cases_on `stack_get_depth ret ps.ps_stack`
+  >- simp[popmany_plan_def, popmany_individual_def, is_contiguous_top_def,
+           QSORT_DEF, PARTITION_DEF, PART_DEF] >>
+  simp[popmany_singleton_stack_projection]
+QED
+
+Theorem generate_phi_plan_physical_cong:
+  !inst live halt ps qs.
+    ps.ps_stack = qs.ps_stack /\ ps.ps_spilled = qs.ps_spilled ==>
+    (SND (generate_phi_plan inst live halt ps)).ps_stack =
+      (SND (generate_phi_plan inst live halt qs)).ps_stack /\
+    (SND (generate_phi_plan inst live halt ps)).ps_spilled =
+      (SND (generate_phi_plan inst live halt qs)).ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!rs. (SND (generate_phi_plan inst live halt rs)).ps_spilled = rs.ps_spilled` by
+    (gen_tac >> qspecl_then [`inst`, `live`, `halt`, `rs`] mp_tac generate_phi_plan_state_frame >>
+     simp[stackPlanTypesTheory.plan_state_component_equality]) >>
+  reverse conj_tac >- simp[] >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) qs.ps_stack`
+  >- simp[generate_phi_plan_def] >>
+  `x < LENGTH ps.ps_stack /\ x < LENGTH qs.ps_stack` by
+    (gvs[stack_get_phi_depth_def] >>
+     drule planWfTheory.stack_find_bound >> simp[]) >>
+  simp[generate_phi_plan_def] >>
+  Cases_on `MEM (operand_to_string (stack_peek x ps.ps_stack)) live` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `halt` >> Cases_on `MEM (HD inst.inst_outputs) live` >> gvs[] >>
+  rpt (qpat_x_assum `popmany_plan _ _ = _`
+    (mp_tac o AP_TERM ``\r : stack_op list # plan_state. (SND r).ps_stack``)) >>
+  simp[popmany_singleton_physical_stack] >>
+  rpt (qpat_x_assum `do_dup _ _ = _`
+    (mp_tac o AP_TERM ``\r : stack_op list # plan_state. (SND r).ps_stack``)) >>
+  simp[do_dup_stack_exact] >> rpt strip_tac >> gvs[]
 QED

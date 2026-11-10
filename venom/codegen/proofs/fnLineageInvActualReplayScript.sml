@@ -303,7 +303,7 @@ Resume generate_regular_plan_bottom_frame[tail]:
      (ps4 with ps_stack := stack_pop (LENGTH operands) (prefix ++ ps4.ps_stack))
      inst.inst_outputs = pushed with ps_stack := prefix ++ pushed.ps_stack` by
     simp[Abbr `pushed`, Abbr `consumed`, parameter_push_fold,
-         fnPlanLineagePhiTemporalTheory.stack_pop_bottom_extension, APPEND_ASSOC] >>
+         fnPlanLineageInventoryTheory.stack_pop_bottom_extension, APPEND_ASSOC] >>
   suspend "reconstruction"
 QED
 

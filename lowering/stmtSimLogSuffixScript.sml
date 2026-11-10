@@ -92,7 +92,7 @@ QED
 Theorem log_empty_suffix_finish[local]:
   compile_log_topic_ops raw sm = (ops,st) /\
   run_inst_seq (emitted_insts sm st) s = OK u /\
-  wb_frame ce es sm s u /\
+  wb_frame ce es es sm s u /\
   LIST_REL (\op w. eval_operand op u = SOME w) ops topics /\
   stmt_state_rel ctx func ce cx es u /\ fresh_vars_wrt limit_st s /\
   sb.cs_next_var <= limit_st.cs_next_var /\

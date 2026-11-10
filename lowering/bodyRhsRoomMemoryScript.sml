@@ -18,11 +18,13 @@ Ancestors
   bodyAllocMemory bodyDeclMemoryCounted valueEncodingProps abiBuiltinAllocation
   freshWrites allocaHistory immutableMemoryFrame venomMemDefs
   venomExecSemantics venomInst venomState list rich_list finite_map
+  valueCopyBytes
 
 (* unwrap_value_path_mem for a non-word expression, plus the room of a
    value left in memory. *)
 Theorem unwrap_value_path_mem_room[local]:
   !ctx func cenv cx e es sa sm sb s0 es' v vv op s.
+    post_value_type cenv e = expr_type e /\
     unwrap_value cenv vv sm = (op, sb) /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -60,11 +62,12 @@ Proof
            return_def] >>
       metis_tac[]) >>
   rename1 `LocatedValue t p` >>
-  `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
   reverse (Cases_on `p.ptr_location = LocMemory`)
   >- (drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_path_mem >>
       disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       simp[vv_location_def] >> strip_tac >> qexists_tac `u` >> simp[]) >>
+  `~is_word_type t` by
+    (gvs[vv_post_def, vv_holds_def] >> metis_tac[is_bytestring_word_type]) >>
   gvs[unwrap_value_def, comp_return_def, vv_location_def] >>
   qexists_tac `s` >> simp[cj 1 gas_path_mem_rules] >>
   conj_tac >- metis_tac[expr_post_of_vv_post_memory] >>
@@ -77,6 +80,7 @@ QED
 (* The counted read suffix, memory-checked, with the room. *)
 Theorem unwrap_value_marked_read_mem_room[local]:
   !ctx func cenv cx e es sa sm sb s0 ee tv vv op s.
+    post_value_type cenv e = expr_type e /\
     unwrap_value cenv vv sm = (op, sb) /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -132,6 +136,7 @@ QED
    unwrap. *)
 Theorem expr_sim_mem_room:
   !ctx func cenv cx ty e es.
+    post_value_type cenv e = expr_type e /\
     expr_vv_sim_mem ctx func cenv cx ty e es /\
     ~is_word_type (expr_type e) /\
     (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>

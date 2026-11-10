@@ -47,7 +47,7 @@ Theorem return_selected_forced_prefix:
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ((!ann fid args drv. e <> Call ann (IntCall fid) args drv) \/
-       lowered_value_type ce e = expr_type e \/
+       (?ann fid args drv. e = Call ann (IntCall fid) args drv) \/
        (?ann fid args drv pvs. e = Call ann (IntCall fid) args drv /\
           ce.ce_func_info (nsid_to_string fid) = (0,0,pvs) /\ op = Lit 0w)))
     (\res ee r. expr_exit res r)
@@ -59,7 +59,7 @@ Proof
       drule_all return_compile_intcall_output >> strip_tac >> gvs[]
       >- (drule_all return_intcall_located_force >> strip_tac >>
           irule return_prefix_post_weaken >> goal_assum (drule_at Any) >>
-          simp[lowered_value_type_def, expr_type_def] >> metis_tac[]) >>
+          simp[] >> metis_tac[]) >>
       gvs[unwrap_value_def, comp_return_def] >>
       drule_all return_intcall_stack_force >> strip_tac >>
       irule return_prefix_post_weaken >> goal_assum (drule_at Any) >>

@@ -258,14 +258,9 @@ Resume compile_for_range_checked_frag_active_mem[checked_tail]:
   `!x w. not_fresh_at s1 x /\ lookup_var x t1 = SOME w ==>
          lookup_var x t2 = SOME w` by fs[expr_post_def] >>
   `eval_operand op1 t2 = SOME (i2w n1)` by
-    (* Only these three facts matter; gvs over the whole context took 14 s. *)
-    (qpat_assum `eval_operand op1 t1 = _` mp_tac >>
-     qpat_assum `!x w. not_fresh_at s1 x /\ lookup_var x t1 = SOME w ==> _`
-       mp_tac >>
-     qpat_assum `!x. op1 = Var x ==> _` mp_tac >>
-     qpat_assum `!l. op1 <> Label l` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     Cases_on `op1` >> rw[eval_operand_def] >> metis_tac[]) >>
+    (qspecl_then [`op1`, `s1`, `t1`, `t2`, `i2w n1`] mp_tac
+       exprBopSimPropsTheory.eval_operand_frame >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   `local_ptrs_reserved cenv s2` by
     metis_tac[local_ptrs_reserved_next_var] >>
   qabbrev_tac `bad = (
@@ -493,7 +488,7 @@ Resume compile_for_range_checked_frag_active_mem[finish_loop]:
      `not_fresh_at s2 x` by (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[] >> decide_tac) >>
      first_x_assum irule >> simp[]) >>
   Cases_on `d`
-  >- (qpat_x_assum `return_buf_frame NONE cenv sa _` mp_tac >>
+  >- (qpat_x_assum `return_buf_frame NONE _ _ _` mp_tac >>
       simp[return_buf_frame_def]) >>
   rename1 `SOME desc` >> PairCases_on `desc` >>
   `sa.cs_next_var <= r.cs_next_var` by

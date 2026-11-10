@@ -9,6 +9,108 @@ Ancestors externalReturnSelectedResources externalReturnSiteSemantics
   externalReturnBufferlessNormalize vyperTypeContract supportedDecls supportedProgram
   vyperInterpreter
 
+Theorem selected_arg_fits_trans_mutual[local]:
+  (!a b. !c. arg_type_fits a b /\ arg_type_fits b c ==> arg_type_fits a c) /\
+  (!as_ bs. !cs. arg_types_fit as_ bs /\ arg_types_fit bs cs ==>
+    arg_types_fit as_ cs)
+Proof
+  ho_match_mp_tac arg_type_fits_ind >>
+  rw[arg_type_fits_def]
+  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
+      rename1 `arg_type_fits _ (BaseT bt)` >> Cases_on `bt` >> gvs[arg_type_fits_def])
+  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
+      rename1 `arg_type_fits _ (BaseT bt)` >> Cases_on `bt` >> gvs[arg_type_fits_def] >>
+      rename1 `arg_type_fits _ (BaseT (BytesT bd))` >> Cases_on `bd` >> gvs[arg_type_fits_def])
+  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
+      rename1 `arg_type_fits _ (ArrayT ct bd)` >> Cases_on `bd` >> gvs[arg_type_fits_def] >>
+      metis_tac[arithmeticTheory.LESS_EQ_TRANS])
+  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
+      rename1 `arg_type_fits _ (ArrayT ct bd)` >> Cases_on `bd` >> gvs[arg_type_fits_def] >>
+      metis_tac[])
+  >- (Cases_on `c` >> gvs[arg_type_fits_def] >> metis_tac[])
+  >> Cases_on `cs` >> gvs[arg_type_fits_def] >> metis_tac[]
+QED
+
+Theorem selected_widens_trans[local]:
+  type_widens_to tenv a b /\ type_widens_to tenv b c ==>
+  type_widens_to tenv a c
+Proof
+  simp[type_widens_to_def] >> metis_tac[selected_arg_fits_trans_mutual]
+QED
+
+(* The returned value read at the type expr_post states it at
+   (post_value_type): typed there, and widening to the return type. *)
+Theorem return_site_post_semantics:
+  expr_sim_inv ce cx env es /\
+  IS_SOME (type_stmt env ret (Return (SOME e))) /\
+  call_evaluation_safe cx (int_calls_expr e) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) ==>
+  type_widens_to (get_tenv cx) (post_value_type ce e) ret /\
+  ?ptv dtv.
+    evaluate_type (get_tenv cx) (post_value_type ce e) =
+      SOME ptv /\
+    evaluate_type (get_tenv cx) ret = SOME dtv /\
+    value_has_type ptv v /\ value_has_type dtv v /\
+    val_wf dtv v /\ safe_cast dtv v = SOME v
+Proof
+  strip_tac >> drule_all return_site_value_semantics >> strip_tac >>
+  Cases_on `post_value_type ce e = expr_type e`
+  >- (gvs[] >> metis_tac[]) >>
+  `?ann fid args drv. e = Call ann (IntCall fid) args drv` by
+    (spose_not_then strip_assume_tac >>
+     `!ty fid args drv. e <> Call ty (IntCall fid) args drv` by metis_tac[] >>
+     drule post_value_type_not_int_call >>
+     disch_then (qspec_then `ce` mp_tac) >> simp[]) >>
+  gvs[] >>
+  `well_typed_expr env (Call ann (IntCall fid) args drv)` by
+    gvs[type_stmt_def, AllCaseEqs()] >>
+  `~is_word_type ann /\ ~is_bytestring_type ann` by
+    (CCONTR_TAC >>
+     gvs[post_value_type_def, vyperASTTheory.expr_type_def]) >>
+  `post_value_type ce (Call ann (IntCall fid) args drv) =
+   lowered_value_type ce (Call ann (IntCall fid) args drv)` by
+    simp[post_value_type_def] >>
+  pop_assum SUBST1_TAC >>
+  drule_all return_intcall_physical_typed >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[exprSimHypsDefsTheory.expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  drule_all return_intcall_lowered_widens >> strip_tac >>
+  gvs[vyperASTTheory.expr_type_def] >>
+  metis_tac[selected_widens_trans]
+QED
+
+Theorem selected_bytestring_target[local]:
+  is_bytestring_type sty /\ type_widens_to tenv sty dty ==>
+  is_bytestring_type dty
+Proof
+  simp[type_widens_to_def] >> strip_tac >> Cases_on `sty` >>
+  gvs[is_bytestring_type_def] >>
+  rename1 `BaseT sb` >> Cases_on `sb` >> gvs[is_bytestring_type_def] >>
+  Cases_on `dty` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `BaseT db` >> Cases_on `db` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  Cases_on `b` >> Cases_on `b'` >> gvs[arg_type_fits_def, is_bytestring_type_def]
+QED
+
+(* An internal call's post type is its callee's declared return type, or a
+   bytestring (which the call site may widen) whose layout reads the same. *)
+Theorem return_intcall_post_lowered:
+  expr_sim_inv ce cx env es /\ well_typed_expr env (Call ann (IntCall fid) args drv) ==>
+  post_value_type ce (Call ann (IntCall fid) args drv) =
+    lowered_value_type ce (Call ann (IntCall fid) args drv) \/
+  is_bytestring_type (post_value_type ce (Call ann (IntCall fid) args drv)) /\
+  is_bytestring_type (lowered_value_type ce (Call ann (IntCall fid) args drv))
+Proof
+  strip_tac >> drule_all return_intcall_lowered_widens >> strip_tac >>
+  Cases_on `is_word_type ann`
+  >- (drule_all typed_copy_word_widening >> strip_tac >>
+      gvs[post_value_type_def]) >>
+  Cases_on `is_bytestring_type ann`
+  >- (drule_all typed_copy_bytestring_source >> strip_tac >>
+      gvs[post_value_type_def]) >>
+  gvs[post_value_type_def]
+QED
+
 (* Word destinations force the annotation to be exactly the destination.
    Use typed encoding, including address and bytesN, not word_value. *)
 Theorem return_site_word_operand:
@@ -123,8 +225,8 @@ Theorem return_site_nocopy_memory:
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
   expr_post ctx func ce cx e es sa sb s0 ee v op s /\
   ~is_word_type ret /\
-  (expr_type e = ret \/
-    (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)) ==>
+  (post_value_type ce e = ret \/
+    (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)) ==>
   ?tv w. evaluate_type (get_tenv cx) ret = SOME tv /\
     safe_cast tv v = SOME v /\ val_wf tv v /\
     stmt_state_rel ctx func ce cx ee s /\
@@ -133,11 +235,11 @@ Theorem return_site_nocopy_memory:
     expr_val_at ce cx ret sa sb ee v op s /\
     w2n w + val_footprint tv v < dimword (:256)
 Proof
-  strip_tac >> drule_all return_site_value_semantics >> strip_tac >>
+  strip_tac >> drule_all return_site_post_semantics >> strip_tac >>
   `expr_val_rel cx ret v op s /\ expr_val_at ce cx ret sa sb ee v op s` by
     (fs[expr_post_def] >>
      (conj_tac
-      >- (`~is_word_type (expr_type e)` by metis_tac[is_bytestring_word_type] >>
+      >- (`~is_word_type (post_value_type ce e)` by metis_tac[is_bytestring_word_type] >>
           fs[expr_val_rel_def] >>
           drule_all bytestring_val_in_memory_transfer >> simp[])) >>
      drule_all return_bytestring_val_at >> simp[]) >>
@@ -146,7 +248,7 @@ Proof
   (conj_tac
    >- (qpat_x_assum `!tv. evaluate_type _ ret = SOME tv ==> _`
          (qspec_then `dtv` mp_tac) >> simp[])) >>
-  drule_all expr_val_at_bound >> simp[]
+  drule_all exprSimTypedAllocTheory.expr_val_at_bound >> simp[]
 QED
 
 Theorem return_selected_nocopy_window:
@@ -164,8 +266,8 @@ Theorem return_selected_nocopy_window:
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
   expr_post ctx func ce cx e es sa sb s0 ee v op s /\
   ~is_word_type ret /\ ret <> NoneT /\
-  (expr_type e = ret \/
-    (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)) ==>
+  (post_value_type ce e = ret \/
+    (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)) ==>
   ?tv w ct rv. evaluate_type (type_env tops) ret = SOME tv /\
     safe_cast tv v = SOME v /\
     stmt_state_rel ctx func ce cx ee s /\
@@ -183,8 +285,8 @@ Theorem return_selected_nocopy_window:
         b <= w2n w /\ w2n w + val_footprint tv v <= b + len))
 Proof
   strip_tac >> drule_all return_selected_consumer_resources >> strip_tac >>
-  (Q.SUBGOAL_THEN `expr_type e = ret \/
-    (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)` assume_tac
+  (Q.SUBGOAL_THEN `post_value_type ce e = ret \/
+    (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)` assume_tac
     >- simp[]) >>
   drule_all return_site_nocopy_memory >> strip_tac >>
   qpat_x_assum `ret <> NoneT ==> _` mp_tac >> simp[] >> strip_tac >>
@@ -272,9 +374,11 @@ Theorem return_selected_nocopy_path:
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
-  lowered_value_type ce e = expr_type e /\
-  (expr_type e = ret \/
-    (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)) /\
+  (post_value_type ce e <> lowered_value_type ce e ==>
+    is_bytestring_type (post_value_type ce e) /\
+    is_bytestring_type (lowered_value_type ce e)) /\
+  (post_value_type ce e = ret \/
+    (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)) /\
   return_consumer_suffix ce ret (lowered_value_type ce e) op sb = (u,sf) /\
   (!y. op = Var y ==> not_fresh_at sb y) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sb /\
@@ -289,10 +393,12 @@ Theorem return_selected_nocopy_path:
          ee.requests) r)
 Proof
   strip_tac >> drule_all return_selected_consumer_resources >> strip_tac >>
-  (Q.SUBGOAL_THEN `expr_type e = ret \/
-    (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)` assume_tac
+  (Q.SUBGOAL_THEN `post_value_type ce e = ret \/
+    (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)` assume_tac
     >- simp[]) >>
   drule_all return_selected_nocopy_window >> strip_tac >>
+  `(is_bytestring_type ret /\ is_bytestring_type (lowered_value_type ce e)) \/
+    lowered_value_type ce e = ret` by metis_tac[] >>
   `ce.ce_max_return_size < dimword (:256)` by
     (drule_all return_site_output_buffer_bound >> simp[]) >>
   `compile_external_return (SOME op) F F ce.ce_ret_enc_info
@@ -446,12 +552,12 @@ Theorem return_selected_located_normalize_path:
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
   expr_post ctx func ce cx e es se sa s0 ee v src s /\
-  ~is_word_type ret /\ ~is_word_type (expr_type e) /\ ~ce.ce_raw_return /\
+  ~is_word_type ret /\ ~is_word_type (post_value_type ce e) /\ ~ce.ce_raw_return /\
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
   compile_alloc_buffer (type_memory_bytes ce ret) sa = (buf,sm) /\
-  compile_store_memory_typed ce buf.buf_operand ret src (expr_type e) sm = ((),sn) /\
+  compile_store_memory_typed ce buf.buf_operand ret src (post_value_type ce e) sm = ((),sn) /\
   compile_external_return (SOME buf.buf_operand) F F ce.ce_ret_enc_info
     ce.ce_max_return_size F nkey ut (mut = View) sn = (u,sf) /\
   fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
@@ -468,13 +574,13 @@ Theorem return_selected_located_normalize_path:
          ee.requests) r)
 Proof
   strip_tac >> drule_all return_selected_consumer_resources >> strip_tac >>
-  drule_all return_site_value_semantics >> strip_tac >>
+  drule_all return_site_post_semantics >> strip_tac >>
   drule return_site_copy_metadata >> strip_tac >>
   drule_all return_normalize_compiler_context >> strip_tac >>
   `type_memory_bytes ce ret = type_memory_size dtv` by
     (irule return_site_memory_size >> metis_tac[]) >>
   `type_memory_size dtv < dimword (:256)` by metis_tac[] >>
-  drule_all (SRULE [] (Q.INST [`sty` |-> `expr_type e`]
+  drule_all (SRULE [] (Q.INST [`sty` |-> `post_value_type ce e`]
     return_consumer_located_normalize)) >> strip_tac >>
   drule return_normalizing_prefix_path >>
   disch_then (qspec_then `func` mp_tac) >> simp[] >>
@@ -770,7 +876,9 @@ Theorem return_selected_located_suffix:
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
-  lowered_value_type ce e = expr_type e /\
+  (post_value_type ce e <> lowered_value_type ce e ==>
+    is_bytestring_type (post_value_type ce e) /\
+    is_bytestring_type (lowered_value_type ce e)) /\
   return_consumer_suffix ce ret (lowered_value_type ce e) op sa = (u,sf) /\
   fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ (!y. op = Var y ==> not_fresh_at sa y) /\
@@ -784,7 +892,8 @@ Theorem return_selected_located_suffix:
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
 Proof
-  strip_tac >> drule_all return_selected_consumer_resources >> strip_tac >>
+  strip_tac >>
+  drule_all return_selected_consumer_resources >> strip_tac >>
   drule return_site_valued_not_none >> strip_tac >>
   Cases_on `ce.ce_raw_return`
   >- (`lookup_raw_return_or_F (NONE:num option) tx.function_name External tops` by fs[] >>
@@ -801,16 +910,17 @@ Proof
       drule_all return_selected_raw_copy_path >> simp[]) >>
   Cases_on `is_word_type ret`
   >- (drule_all return_site_nonraw_word_path >> simp[]) >>
-  Cases_on `expr_type e = ret \/
-    (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)`
+  Cases_on `post_value_type ce e = ret \/
+    (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)`
   >- (drule_all return_selected_nocopy_path >> simp[]) >>
-  `~is_word_type (expr_type e)` by
-    (drule_all return_site_value_semantics >> strip_tac >>
-     metis_tac[selected_source_word_eq]) >>
+  drule_all return_site_post_semantics >> strip_tac >>
+  `~is_word_type (post_value_type ce e)` by metis_tac[selected_source_word_eq] >>
+  `post_value_type ce e = lowered_value_type ce e` by
+    metis_tac[selected_bytestring_target] >>
   `~(is_bytestring_type ret /\ is_bytestring_type (lowered_value_type ce e)) /\
     lowered_value_type ce e <> ret` by metis_tac[] >>
   drule_all return_consumer_normalize_split >> strip_tac >>
-  `compile_store_memory_typed ce buf.buf_operand ret op (expr_type e) sm = ((),sn)`
+  `compile_store_memory_typed ce buf.buf_operand ret op (post_value_type ce e) sm = ((),sn)`
     by metis_tac[] >>
   `compile_external_return (SOME buf.buf_operand) F F ce.ce_ret_enc_info
     ce.ce_max_return_size F nkey ut (mut = View) sn = (u,sf)` by gvs[] >>

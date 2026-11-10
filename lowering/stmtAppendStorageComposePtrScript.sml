@@ -106,7 +106,7 @@ Resume compile_append_storage_word_stmt_frag_ptr[operand]:
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `!aid b. FLOOKUP _ _ = _ ==> _` kall_tac >>
   qpat_x_assum `!aid off sz. _ ==> mem_bytes_at _ _ _ = _` kall_tac >>
-  qpat_x_assum `locals_kept _ _ _ _` kall_tac >>
+  qpat_x_assum `locals_kept _ _ _ _ _` kall_tac >>
   qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `stmt_state_rel _ _ _ _ es s0` kall_tac >>
   qpat_x_assum `ghost_inv _ _ _ es _ _ _` kall_tac >>

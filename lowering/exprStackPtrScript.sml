@@ -28,7 +28,7 @@ Proof
           >- (gen_tac >> drule eval_expr_force_value >>
               disch_then (qspec_then `es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >> simp[]) >>
           gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-              read_result_def, return_def] >> first_assum ACCEPT_TAC) >>
+              read_result_def, return_def, vv_own_def] >> first_assum ACCEPT_TAC) >>
       qexistsl_tac [`case res of INL v => INL (Value v) | INR ex => INR ex`,
                    `es_end`, `G`, `tn`, `r`] >>
       simp[expr_exit_success_map] >> gen_tac >>

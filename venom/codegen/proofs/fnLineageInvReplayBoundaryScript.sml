@@ -376,7 +376,9 @@ Theorem native_regular_stack_live_inventory:
       residual_budget_wf base [] (qs with ps_stack := rest)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all native_regular_stages >> strip_tac >>
+  drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    native_regular_stages >>
+  impl_tac >- simp[] >> strip_tac >>
   `!v. MEM (Var v) (compute_operands inst) ==>
     MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by metis_tac[] >>
   qabbrev_tac `consumed = ps4 with ps_stack :=
@@ -402,10 +404,12 @@ Resume native_regular_stack_live_inventory[tail]:
   `!v. MEM v nl ==>
     MEM (Var v) (stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack ++ MAP Var inst.inst_outputs) \/
     Var v IN FDOM ps4.ps_spilled` by
-    (qpat_assum `ps.ps_stack = _` (mp_then Any mp_tac emit_reorder_output_live_coverage) >>
-     disch_then drule >> disch_then drule >> disch_then drule >>
-     disch_then drule >> disch_then drule >> disch_then drule >>
-     disch_then drule >> simp[]) >>
+    (mp_tac (Q.SPECL [`ps`, `compute_operands inst`, `selected`,
+       `inst.inst_opcode`, `nl`, `inst.inst_outputs`, `dfg`, `iops`, `ps1`,
+       `rops`, `ps4`] emit_reorder_output_live_coverage) >>
+     ntac 2 (impl_tac >- first_assum ACCEPT_TAC) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   drule generate_emit_ops_slots >> strip_tac >>
   `ps7.ps_stack = REPLICATE m dead_stack_marker ++ (rest ++ MAP Var inst.inst_outputs)` by metis_tac[] >>
   `stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack =
