@@ -437,6 +437,22 @@ Proof
   gvs[updates_readings_cursor, FOLDL_APPEND, arithmeticTheory.ADD_CLAUSES]
 QED
 
+Theorem invoke_return_partner_inputs[local]:
+  y.inst_opcode = INVOKE /\ dft_gas_swap_pair x y /\
+  step_inst fuel C y s = OK t ==>
+  dftGasInvCallPartner$inv_partner_inputs x s t
+Proof
+  strip_tac >>
+  drule_all dftBlockSimTheory.invoke_preserves_structural >> strip_tac >>
+  `dft_gas_swap_pair y x` by metis_tac[dft_gas_swap_pair_sym] >>
+  qpat_assum `dft_gas_swap_pair y x`
+    (mp_tac o MATCH_MP dftRunRelTheory.dft_swap_output_frame) >> strip_tac >>
+  simp[dftGasInvCallPartnerTheory.inv_partner_inputs_def] >>
+  rpt strip_tac >> Cases_on `op` >> simp[eval_operand_def] >>
+  sym_tac >> irule venomInstPropsTheory.step_preserves_non_output_vars >>
+  qexistsl_tac [`C`, `fuel`, `y`] >> simp[venomInstTheory.is_terminator_def] >> metis_tac[]
+QED
+
 Theorem invoke_partner_prefix_portable[local]:
   !pre s t pg rs rt u.
     y.inst_opcode = INVOKE /\
@@ -2510,7 +2526,138 @@ Proof
           qpat_x_assum `!fg tail pg u n. _`
             (qspecl_then [`fg`, `tail`, `pg`, `u'`, `fuel`] mp_tac) >>
           simp[]) >>
-      suspend "returning_invoke_simulation") >>
+      `pg = TAKE k uf` by
+        (qpat_x_assum `LIST_REL _ (MAP SOME _) pg` mp_tac >>
+         simp[LIST_REL_MAP1, combinTheory.o_DEF, SF ETA_ss]) >>
+      `?w. FOLDR (dft_exec_cons fuel C) OK pre
+        (s with vs_gas_readings := pg ++ (fg ++ tail)) = OK w` by
+        (irule invoke_partner_prefix_total >> conj_tac
+         >- (qexists `y` >> fs[EVERY_MEM]) >>
+         qexistsl [`bb`, `fn`, `y::post`] >>
+         simp[] >> irule dftRunRelTheory.dft_remaining_inv_gas_variant >>
+         qexists `s` >> simp[]) >>
+      `EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x /\
+        dftGasInvCallPartner$inv_partner_inputs x s
+          (v with vs_inst_idx := SUC s.vs_inst_idx)) pre` by
+        (fs[EVERY_MEM] >> rpt strip_tac >>
+         `dftGasInvCallPartner$inv_partner_inputs x s v` by
+           (irule invoke_return_partner_inputs >> metis_tac[]) >>
+         gvs[dftGasInvCallPartnerTheory.inv_partner_inputs_def, eval_operand_def] >>
+         Cases_on `op` >> simp[eval_operand_def, lookup_var_def]) >>
+      drule_at (Pat `FOLDR _ _ _ _ = OK _`)
+        (Q.INST [`D` |-> `C'`] invoke_partner_prefix_portable) >>
+      disch_then (qspecl_then [`y`, `C'`,
+        `v with vs_inst_idx := SUC s.vs_inst_idx`, `DROP k uf`] mp_tac) >>
+      (impl_tac >- simp[Abbr `k`]) >>
+      strip_tac >>
+      `pg ++ DROP k uf = v.vs_gas_readings` by
+        (asm_rewrite_tac[TAKE_DROP]) >>
+      qpat_x_assum `FOLDR _ _ pre (v with <|vs_gas_readings := _; vs_inst_idx := _|>) = _`
+        mp_tac >>
+      simp[IgnAsm `uf = _`, IgnAsm `v.vs_gas_readings = _`] >>
+      disch_tac >>
+      disch_then (qx_choose_then `j` assume_tac) >>
+      `terminates (step_inst j C y w)` by
+        (`terminates (FOLDR (dft_exec_cons j C) OK [y] w)` by
+           (irule prefix_exact_cut_terminates >>
+            qexistsl [`fuel`, `pre`, `s with vs_gas_readings := gs ++ tail`] >>
+            conj_tac
+            >- (qpat_x_assum `terminates (FOLDR _ _ (pre ++ [y]) _)` mp_tac >> simp[]) >>
+            conj_tac
+            >- (qpat_x_assum `FOLDR _ _ pre _ = OK w` mp_tac >> simp[APPEND_ASSOC]) >>
+            fs[EVERY_MEM]) >>
+         qpat_x_assum `terminates (FOLDR _ _ [y] _)` mp_tac >>
+         qpat_assum `y.inst_opcode = INVOKE` (fn th =>
+           simp[NoAsms, th, FOLDR, dftIndexedExecTheory.dft_exec_cons_def,
+             venomInstTheory.is_terminator_def]) >>
+         Cases_on `step_inst j C y w` >>
+         simp[NoAsms, passSimulationDefsTheory.terminates_def]) >>
+      qpat_x_assum `!fg tail pg u n. _`
+        (qspecl_then [`fg`, `tail`, `pg`, `w`, `fuel`] mp_tac) >>
+      (impl_tac >-
+        (conj_tac >- asm_rewrite_tac[] >>
+         conj_tac >- asm_rewrite_tac[] >>
+         qpat_x_assum `FOLDR _ _ pre _ = OK w` mp_tac >> simp[APPEND_ASSOC])) >>
+      strip_tac >>
+      qpat_x_assum `(?j. terminates (step_inst j C y w)) ==> _` mp_tac >>
+      (impl_tac >- (qexists `j` >> asm_rewrite_tac[])) >>
+      strip_tac >>
+      qpat_x_assum `(_ \/ _) ==> _` mp_tac >>
+      (impl_tac >- metis_tac[]) >> strip_tac >>
+      `step_inst fuel C' y (s with vs_inst_idx := LENGTH pre + s.vs_inst_idx) =
+        OK (v with vs_inst_idx := LENGTH pre + s.vs_inst_idx)` by
+        (simp[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only]) >>
+      qpat_assum `step_inst fuel C' y (s with vs_inst_idx := _) = OK _`
+        (fn th => qpat_x_assum `residual_result tail _ _`
+          (strip_assume_tac o SIMP_RULE (srw_ss())
+            [th, residual_result_def, stateEquivTheory.lift_result_def])) >>
+      `EVERY (\q. ~MEM (Var (FST q)) y.inst_operands /\
+                    ~MEM (FST q) y.inst_outputs) us` by
+        (fs[EVERY_MEM] >> metis_tac[]) >>
+      drule_all invoke_updates_concrete_frame >>
+      disch_then (qspecl_then [`fuel`, `C`,
+        `s with <|vs_inst_idx := LENGTH pre + s.vs_inst_idx;
+                  vs_gas_readings := fg ++ tail|>`] mp_tac) >>
+      strip_tac >>
+      `step_inst fuel C y
+        (s with <|vs_inst_idx := LENGTH pre + s.vs_inst_idx;
+                  vs_gas_readings := fg ++ tail|>) =
+        OK (v with <|vs_inst_idx := LENGTH pre + s.vs_inst_idx;
+                     vs_gas_readings := tail|>)` by
+        (qpat_x_assum `stateEquiv$lift_result _ _ _ _ _` mp_tac >>
+         Cases_on `step_inst fuel C y
+           (s with <|vs_inst_idx := LENGTH pre + s.vs_inst_idx;
+                     vs_gas_readings := fg ++ tail|>)` >>
+         simp[NoAsms, stateEquivTheory.lift_result_def]) >>
+      `step_inst fuel C y w = OK
+        (FOLDL (\st q. update_var (FST q) (SND q) st)
+          (v with <|vs_inst_idx := LENGTH pre + s.vs_inst_idx;
+                    vs_gas_readings := tail|>) us)` by
+        (qpat_x_assum `step_inst fuel C y (FOLDL _ _ _) = _` mp_tac >>
+         qpat_assum `w = _` (fn th => rewrite_tac[GSYM th]) >>
+         simp[IgnAsm `uf = _`, IgnAsm `v.vs_gas_readings = _`]) >>
+      `EVERY (\i. ~is_terminator i.inst_opcode) pre` by fs[EVERY_MEM] >>
+      `FOLDR (dft_exec_cons fuel C) OK pre
+        (s with vs_gas_readings := TAKE k uf ++ fg ++ tail) = OK w` by
+        (qpat_x_assum `FOLDR _ _ pre _ = OK w` mp_tac >> simp[APPEND_ASSOC]) >>
+      `FOLDR (dft_exec_cons fuel C) OK (pre ++ [y])
+        (s with vs_gas_readings := TAKE k uf ++ fg ++ tail) =
+        OK (u with vs_gas_readings := tail)` by
+        (pure_rewrite_tac[FOLDR_APPEND] >>
+         simp[Once dftRunRelTheory.dft_exec_prefix_continue] >>
+         simp[dftIndexedExecTheory.dft_exec_cons_def,
+           venomInstTheory.is_terminator_def, updates_readings_cursor,
+           arithmeticTheory.ADD_CLAUSES] >>
+         ` (\st q. update_var (FST q) (SND q) st) =
+           (\st (out,value). update_var out value st)` by
+           simp[FUN_EQ_THM, pairTheory.FORALL_PROD] >>
+         pop_assum (fn th => pure_rewrite_tac[th]) >>
+         simp[venomExecSemanticsTheory.foldl_update_var_inst_idx,
+           venomExecSemanticsTheory.foldl_update_var_idx,
+           gasOracleReplayTheory.gas_fold_updates]) >>
+      qpat_x_assum `ef = _ ++ extra` kall_tac >>
+      qpat_x_assum `uf = _` kall_tac >>
+      qpat_x_assum `v.vs_gas_readings = _` kall_tac >>
+      simp[dftIndexedExecTheory.dft_exec_cons_def,
+        venomInstTheory.is_terminator_def,
+        passSimulationDefsTheory.terminates_def, restore_result_def,
+        dftRunRelTheory.dft_res_rel_def, residual_result_def,
+        stateEquivTheory.lift_result_def] >>
+      drule_all noninvoke_prefix_events_exact >>
+      disch_then (qspecl_then [`owner`, `[y]`] mp_tac) >>
+      simp[NoAsms] >> disch_then SUBST1_TAC >>
+      `EVERY (\q. !z. MEM (Var z) y.inst_operands ==> FST q <> z) us` by
+        (fs[EVERY_MEM] >> metis_tac[]) >>
+      `gas_events_step fuel C owner y w = ef` by
+        (qpat_assum `w = _` (fn th => rewrite_tac[th]) >>
+         simp[gas_events_invoke_updates, arithmeticTheory.ADD_COMM]) >>
+      qpat_assum `step_inst fuel C y w = OK _` (fn step =>
+        qpat_assum `gas_events_step fuel C owner y w = ef` (fn events =>
+          simp[NoAsms, Once gas_events_block_def,
+            venomInstTheory.get_instruction_def, EL_APPEND_EQN,
+            step, events, venomInstTheory.is_terminator_def])) >>
+      simp[NoAsms, Once gas_events_block_def,
+        venomInstTheory.get_instruction_def] ) >>
   FAIL_TAC "noninvoke extraction pending"
 QED
 
