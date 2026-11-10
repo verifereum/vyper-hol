@@ -42,11 +42,28 @@ Theorem dyn_storage_compile_boundaries:
     emit_inst ASSIGN [next] [cv] b9 = ((),be) /\
     emit_inst JMP [Label hdr] [] be = ((),bx) /\
     new_block exit bx = (olde,b1') /\
-    emit_void (if tr then TSTORE else SSTORE) [dst;len] b1' = ((),sb)
+    emit_void (if tr then TSTORE else SSTORE) [dst;len] b1' = ((),sb) /\
+    (!func. fn_has_code sa sb func ==>
+      fn_has_code sa b7 func /\ fn_has_code b7 b8 func /\
+      fn_has_code b8 sb func)
 Proof
   strip_tac >> Cases_on `ew = 1` >> Cases_on `tr` >>
   gvs[Once compile_dynarray_to_storage_def, comp_ignore_bind_def,
       comp_bind_assoc, immutable_comp_bind_cases]
+  >> IF (rename1 `compile_word_copy_loop sp dp ew LocMemory loc F mid = (u,en)`)
+    (`cs_extends mid en` by
+      (qpat_x_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _` mp_tac >>
+       rpt (pop_assum kall_tac) >>
+       metis_tac[ci_mono_compile_word_copy_loop, ci_mono_def, pairTheory.SND]))
+    all_tac >>
+  imp_res_tac (REWRITE_RULE [cs_appends_def] cs_appends_emit_helpers) >>
+  imp_res_tac cs_extends_fresh_label >>
+  imp_res_tac cs_extends_fresh_var >> imp_res_tac cs_extends_new_block >>
+  gen_tac >> strip_tac >> rpt conj_tac >>
+  match_mp_tac fn_has_code_mid >> goal_assum (drule_at Any) >>
+  simp[cs_extends_refl] >> rpt conj_tac >>
+  rpt (irule cs_extends_trans >> first_assum (irule_at (Pos hd)) >>
+       simp[cs_extends_refl])
 QED
 
 Theorem dyn_storage_entry_layout:
