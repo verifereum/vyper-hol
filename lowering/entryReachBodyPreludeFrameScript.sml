@@ -16,7 +16,8 @@ Definition entry_prelude_frame_def:
     t.vs_block_ctx = s.vs_block_ctx /\ t.vs_outcomes = s.vs_outcomes /\
     t.vs_requests = s.vs_requests /\
     t.vs_pending_deletions = s.vs_pending_deletions /\
-    t.vs_gas_readings = s.vs_gas_readings /\ t.vs_fmp = s.vs_fmp
+    t.vs_gas_readings = s.vs_gas_readings /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_code = s.vs_code
 End
 
 Theorem entry_prelude_frame_refl[local]:
