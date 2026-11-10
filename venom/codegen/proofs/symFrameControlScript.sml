@@ -1436,6 +1436,55 @@ Proof
   simp[]
 QED
 
+Theorem sym_reorder_one_decompose:
+  reorder_one dfg pending idx op ps = (ops,ps') ==>
+  ?restore_ops ps1.
+    (case stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
+        (LENGTH pending) ps.ps_stack of
+       NONE => (case FLOOKUP ps.ps_spilled op of NONE => ([],ps)
+                  | SOME off => do_restore op ps)
+     | SOME d => ([],ps)) = (restore_ops,ps1) /\
+    ((stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
+       (LENGTH pending) ps1.ps_stack = NONE /\ ops = restore_ops /\ ps' = ps1) \/
+     ?dist reduce_ops ps2 suffix.
+       stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
+         (LENGTH pending) ps1.ps_stack = SOME dist /\
+       (if dist > 16 then reduce_depth_plan (LENGTH ps1.ps_stack) pending op
+         (LENGTH pending - (idx + 1)) (LENGTH pending) ps1
+        else ([],ps1)) = (reduce_ops,ps2) /\
+       ops = (restore_ops ++ reduce_ops) ++ suffix /\
+       ps2.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset /\
+       (case stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
+          (LENGTH pending) ps2.ps_stack of
+          NONE => ([],ps2)
+        | SOME d => if d = LENGTH pending - (idx + 1) then ([],ps2)
+          else if LENGTH pending - (idx + 1) < LENGTH ps2.ps_stack /\
+            operand_equiv dfg op (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack)
+          then ([], ps2 with ps_stack := stack_poke (LENGTH pending - (idx + 1)) op
+            (stack_poke d (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack) ps2.ps_stack))
+          else (case do_swap d ps2 of (os1,p1) =>
+            case do_swap (LENGTH pending - (idx + 1)) p1 of (os2,p2) => (os1 ++ os2,p2)))
+        = (suffix,ps'))
+Proof
+  rewrite_tac[stackPlanOpsTheory.reorder_one_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  rename1 `LENGTH pending = num_ops` >>
+  Cases_on `stack_get_unfixed_depth op (num_ops - (idx + 1)) num_ops ps1.ps_stack` >> simp[]
+  >> pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `(if _ > 16 then _ else _) = (reduce_ops,ps2)` >>
+  suspend "placement"
+QED
+
+Resume sym_reorder_one_decompose[placement]:
+  qpat_x_assum `LENGTH pending = num_ops` (SUBST_ALL_TAC o SYM) >>
+  gvs[AllCaseEqs()] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  metis_tac[allocMonoTheory.do_swap_next_offset, arithmeticTheory.LESS_EQ_TRANS,
+    listTheory.APPEND_ASSOC]
+QED
+
+Finalise sym_reorder_one_decompose
+
 Theorem sym_reorder_one_frame_sim_marked:
   !base.
   residual_budget_wf_marked base pending ps /\ pending_inventory_wf pending ps /\
