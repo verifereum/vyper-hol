@@ -2,7 +2,7 @@
 Theory symEmitSim
 Ancestors
   symInstKinds symPostfixSim codegenSymRel asmSymSem asmSem
-  strongPrefixSim asmSplice finite_map list
+  strongPrefixSim asmSplice contextCodegenRel codegenRel finite_map list
 
 Theorem sval_val_map:
   !ws. OPT_MMAP sval_val (MAP Val ws) = SOME ws
@@ -394,4 +394,99 @@ Proof
   `?ss'. sym_step p env inst ss = SymOK ss' /\ asm_sym_rel p env cs' ss'` by
     metis_tac[asm_sym_step_success_from_safe] >>
   qexists `ss'` >> simp[] >> irule sym_steps_single_emit >> metis_tac[]
+QED
+
+(* Ordinary operand lists may be evaluated in the source state even when
+   preparation uses a frame view with compiler-owned memory. *)
+Theorem ordinary_selected_operands_frame_view:
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> PHI /\
+  inst.inst_opcode <> RET /\ inst.inst_opcode <> RETFMP /\
+  inst.inst_opcode <> DRET /\
+  (!op. MEM op operands ==> MEM op inst.inst_operands) ==>
+  eval_operands operands (frame_view fn ra vs with vs_memory := m) =
+    eval_operands operands vs
+Proof
+  strip_tac >> irule frameViewFactsTheory.eval_operands_frame_view >>
+  metis_tac[frameViewFactsTheory.ordinary_operand_not_retpc]
+QED
+
+Theorem ordinary_prepared_source_arguments:
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> PHI /\
+  inst.inst_opcode <> RET /\ inst.inst_opcode <> RETFMP /\
+  inst.inst_opcode <> DRET /\
+  (!op. MEM op selected ==> MEM op inst.inst_operands) /\
+  venom_asm_rel lo ps (frame_view fn ra vs with vs_memory := m) st /\
+  ps.ps_stack = residual ++ selected /\
+  EVERY (\op. op <> dead_stack_marker) selected /\
+  (!op. MEM op selected ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) lo op) /\
+  eval_operands (REVERSE selected) vs = SOME args ==>
+  st.as_stack = args ++ DROP (LENGTH selected) st.as_stack
+Proof
+  strip_tac >>
+  `eval_operands (REVERSE selected)
+     (frame_view fn ra vs with vs_memory := m) = SOME args` by
+    (sg `eval_operands (REVERSE selected)
+       (frame_view fn ra vs with vs_memory := m) =
+       eval_operands (REVERSE selected) vs`
+     >- (irule ordinary_selected_operands_frame_view >> simp[] >>
+         qexists `inst` >> simp[]) >> simp[]) >>
+  drule_at (Pat `eval_operands _ _ = SOME _`)
+    emitSimTheory.arranged_eval_operands_stack >>
+  simp[] >> disch_then irule >>
+  qexistsl_tac [`lo`, `ps`, `residual`] >> simp[]
+QED
+
+Theorem commutative_emission_memory_empty:
+  is_commutative opc /\ venom_to_evm_name opc = SOME name ==>
+  ~asm_op_mem_reads name args b /\ ~asm_op_mem_writes name args b
+Proof
+  Cases_on `opc` >>
+  simp[venomEffectsTheory.is_commutative_def, asmIRTheory.venom_to_evm_name_def,
+       asm_op_mem_reads_def, asm_op_mem_writes_def, log_table_def]
+QED
+
+Theorem call_source_read_write_coverage:
+  inst.inst_opcode = CALL /\
+  inst.inst_operands = [gas; addr; value; off; len; ret_off; ret_len] /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  asm_op_mem_reads "CALL" args b ==>
+  source_memory_read_byte inst vs b \/
+  (?range. MEM range (source_memory_write_ranges inst vs) /\
+           byte_in_memory_range range b)
+Proof
+  rpt strip_tac >>
+  gvs[venomStateTheory.eval_operands_def, AllCaseEqs()] >>
+  gvs[asm_op_mem_reads_def, source_memory_read_byte_def,
+      source_memory_read_ranges_def, source_memory_write_ranges_def,
+      memory_range_of_operands_def, byte_in_memory_range_def,
+      in_mem_range_def, log_table_def]
+QED
+
+Theorem readonly_call_source_read_write_coverage:
+  MEM inst.inst_opcode [STATICCALL; DELEGATECALL] /\
+  venom_to_evm_name inst.inst_opcode = SOME name /\
+  inst.inst_operands = [gas; addr; off; len; ret_off; ret_len] /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  asm_op_mem_reads name args b ==>
+  source_memory_read_byte inst vs b \/
+  (?range. MEM range (source_memory_write_ranges inst vs) /\
+           byte_in_memory_range range b)
+Proof
+  rpt strip_tac >>
+  gvs[venomStateTheory.eval_operands_def, AllCaseEqs()] >>
+  gvs[asmIRTheory.venom_to_evm_name_def, asm_op_mem_reads_def,
+      source_memory_read_byte_def, source_memory_read_ranges_def,
+      source_memory_write_ranges_def, memory_range_of_operands_def,
+      byte_in_memory_range_def, in_mem_range_def, log_table_def]
+QED
+
+Theorem call_emission_memory_writes_empty:
+  MEM name ["CALL"; "STATICCALL"; "DELEGATECALL"] ==>
+  ~asm_op_mem_writes name args b
+Proof
+  strip_tac >> gvs[asm_op_mem_writes_def]
 QED
