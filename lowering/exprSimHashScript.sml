@@ -361,7 +361,7 @@ Resume hash_alloc_mstore_frame[compose]:
        (fn th => pure_rewrite_tac[GSYM th]) >>
      irule mstore_region_frame >>
      qexistsl [`w2n addr`, `32`] >> simp[] >>
-     gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   qexistsl_tac [`mstore (w2n addr) w allocated`, `addr`] >>
   simp[] >> gvs[mstore_def, lookup_var_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
@@ -1128,7 +1128,7 @@ Resume hash_alloc_sha256_tail_frame[compose]:
      rpt strip_tac >>
      qpat_x_assum `!b len. _ \/ _ ==> mem_bytes_at b len final.vs_memory = _`
        (qspecl_then [`off`, `len`] mp_tac) >>
-     gvs[compileEnvTheory.regions_disjoint_def]) >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   qexists_tac `final` >> simp[] >> conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sn x` by gvs[not_fresh_at_def] >>
@@ -1764,7 +1764,7 @@ Resume hash_alloc_single_word_buffer_frame[compose]:
      rpt strip_tac >>
      qpat_x_assum `allocated.vs_memory = _` (fn th => once_rewrite_tac[GSYM th]) >>
      qpat_x_assum `!off len. regions_disjoint _ _ off len ==> _` irule >>
-     fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   qexistsl_tac [`t`, `addr`] >> simp[] >> conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sm x` by gvs[not_fresh_at_def] >>

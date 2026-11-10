@@ -298,7 +298,7 @@ Proof
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (gvs[] >> NO_TAC) >>
      rpt strip_tac >>
      qpat_x_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = _` irule >>
-     fs[compileEnvTheory.regions_disjoint_def]) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   drule copy_static_fields >> strip_tac >>
   irule copy_buffer_expr_post_physical >>
   simp[] >> conj_tac

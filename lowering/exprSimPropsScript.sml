@@ -973,7 +973,7 @@ Proof
       `regions_disjoint b sz bb bsz` by
         (qpat_x_assum `!n lb lsz. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _`
            drule >>
-         simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+         simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
       `mem_bytes_at b sz z.vs_memory = mem_bytes_at b sz s.vs_memory` by
         (qpat_x_assum `!off len. regions_disjoint _ _ _ _ ==> _` irule >>
          first_assum ACCEPT_TAC) >>

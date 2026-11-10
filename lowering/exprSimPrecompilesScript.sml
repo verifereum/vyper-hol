@@ -1472,7 +1472,7 @@ Proof
      qpat_assum `!b len. regions_disjoint (w2n wi) insz b len ==>
        mem_bytes_at b len t.vs_memory = _` irule >>
      qpat_x_assum `regions_disjoint off len _ _` mp_tac >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   qpat_x_assum `!b len. regions_disjoint (w2n wi) insz b len ==>
     mem_bytes_at b len t.vs_memory = _` kall_tac >>
   qpat_x_assum `!b len. regions_disjoint (w2n wi) insz b len ==>
@@ -1643,7 +1643,7 @@ Proof
      rpt strip_tac >>
      irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
      qpat_x_assum `regions_disjoint off len _ _` mp_tac >>
-     simp[compileEnvTheory.regions_disjoint_def]) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   qexistsl_tac [`mstore (w2n wo) 0w s3`,`wi`,`wo`] >>
   conj_tac
   >- (`emitted_insts sf sm = emitted_insts sf sc ++ emitted_insts sc sm` by
@@ -2063,7 +2063,7 @@ Proof
   strip_tac >>
   irule valueEncodingPropsTheory.write_memory_mem_bytes_at_disjoint >>
   `LENGTH (TAKE n bs) <= n` by rw[listTheory.LENGTH_TAKE_EQ] >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem ecrecover_suffix_core:

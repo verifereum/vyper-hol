@@ -1008,7 +1008,7 @@ Proof
           (irule exprSimPropsTheory.local_region_frame_fwd >>
            qexistsl_tac [`s0`, `origin`, `es.scopes`] >> simp[]) >>
         qpat_x_assum `!n b k. local_region ce es'.scopes r n b k ==> _` drule >>
-        simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+        simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
      match_mp_tac exprSimPropsTheory.pure_frame_buffer_tail >>
      qexistsl_tac [`s`, `inst`, `w2n d`, `type_memory_size tv`] >>
      rpt conj_tac
@@ -1021,7 +1021,7 @@ Proof
      >- first_assum ACCEPT_TAC >>
      rpt strip_tac >>
      qpat_x_assum `!a k. _ ==> mem_bytes_at a k q.vs_memory = _` irule >>
-     fs[compileEnvTheory.regions_disjoint_def]) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   qexists_tac `q` >> simp[expr_post_def] >>
   fs[vv_post_def] >> conj_tac
   >- (rpt strip_tac >>
