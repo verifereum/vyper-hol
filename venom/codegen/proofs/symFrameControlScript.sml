@@ -2673,6 +2673,199 @@ Proof
   metis_tac[emit_one_input_spill_free_stack_replay]
 QED
 
+Theorem do_swap_no_restore_shallow:
+  do_swap d ps = (ops, ps') /\
+  (!off. ~MEM (SORestore off) ops) ==> d <= 16
+Proof
+  Cases_on `d <= 16` >- simp[] >>
+  simp[stackPlanOpsTheory.do_swap_def] >> rpt strip_tac >>
+  pairarg_tac >> gvs[listTheory.MEM_APPEND, listTheory.MEM_MAP] >>
+  metis_tac[listTheory.MEM, listTheory.MEM_REVERSE, listTheory.MEM_APPEND]
+QED
+
+Theorem list_rel_stack_swap:
+  LIST_REL R xs ys ==> LIST_REL R (stack_swap d xs) (stack_swap d ys)
+Proof
+  strip_tac >> Cases_on `xs = []`
+  >- gvs[stackModelTheory.stack_swap_def, listTheory.LUPDATE_def] >>
+  fs[listTheory.LIST_REL_EL_EQN] >>
+  rw[listTheory.LIST_REL_EL_EQN, stackModelTheory.stack_swap_def,
+     listTheory.EL_LUPDATE] >>
+  rpt IF_CASES_TAC >> simp[] >> first_x_assum irule >> decide_tac
+QED
+
+Theorem do_swap_spill_free_kind_replay:
+  do_swap d ps = (ops, ps') /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    qs.ps_stack ps.ps_stack /\
+  (!off. ~MEM (SORestore off) ops) ==>
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack
+Proof
+  strip_tac >> drule do_swap_no_restore_shallow >> simp[] >> strip_tac >>
+  Cases_on `d = 0`
+  >- gvs[stackPlanOpsTheory.do_swap_def, mixedPrefixSimTheory.apply_prefix_ops_def] >>
+  gvs[stackPlanOpsTheory.do_swap_def, mixedPrefixSimTheory.apply_prefix_ops_def,
+      mixedPrefixSimTheory.apply_prefix_op_def, strongPrefixSimTheory.apply_simple_op_def] >>
+  irule list_rel_stack_swap >> simp[]
+QED
+
+Theorem list_rel_op_kind_equiv_trans:
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv) xs ys /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv) ys zs ==>
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv) xs zs
+Proof
+  rw[listTheory.LIST_REL_EL_EQN] >> metis_tac[]
+QED
+
+Theorem reorder_restore_no_restore_identity:
+  (case stack_get_unfixed_depth op f n ps.ps_stack of
+     NONE => (case FLOOKUP ps.ps_spilled op of NONE => ([],ps)
+                | SOME off => do_restore op ps)
+   | SOME d => ([],ps)) = (ops,ps1) /\
+  (!off. ~MEM (SORestore off) ops) ==> ops = [] /\ ps1 = ps
+Proof
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[] >>
+  Cases_on `FLOOKUP ps.ps_spilled op` >>
+  simp[stackPlanOpsTheory.do_restore_def] >> metis_tac[listTheory.MEM]
+QED
+
+Theorem do_swap_pair_spill_free_kind_replay:
+  do_swap d ps = (ops1,ps1) /\ do_swap f ps1 = (ops2,ps2) /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    qs.ps_stack ps.ps_stack /\
+  (!off. ~MEM (SORestore off) (ops1 ++ ops2)) ==>
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    (apply_prefix_ops fmp lo (ops1 ++ ops2) qs).ps_stack ps2.ps_stack
+Proof
+  simp[listTheory.MEM_APPEND, planAlignTheory.apply_prefix_ops_append] >>
+  metis_tac[do_swap_spill_free_kind_replay]
+QED
+
+Theorem stack_exchange_kind_replay:
+  stack_get_unfixed_depth op f n ps.ps_stack = SOME d /\
+  f < LENGTH ps.ps_stack /\ dfg = dfg_build_function fn /\
+  ssa_form fn /\ fn_shape_ok fn /\
+  operand_equiv dfg op (stack_peek f ps.ps_stack) /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    qs.ps_stack ps.ps_stack ==>
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    qs.ps_stack (stack_poke f op (stack_poke d (stack_peek f ps.ps_stack) ps.ps_stack))
+Proof
+  strip_tac >> drule stackModelTheory.stack_get_unfixed_depth_props >> strip_tac >>
+  metis_tac[stack_exchange_op_kind_equiv, list_rel_op_kind_equiv_trans]
+QED
+
+Theorem reorder_swap_pair_case_kind_replay:
+  (case do_swap d ps of (ops1,ps1) =>
+     case do_swap f ps1 of (ops2,ps2) => (ops1 ++ ops2,ps2)) = (ops,ps') /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    qs.ps_stack ps.ps_stack /\
+  (!off. ~MEM (SORestore off) ops) ==>
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack
+Proof
+  strip_tac >> gvs[AllCaseEqs()] >>
+  irule do_swap_pair_spill_free_kind_replay >>
+  simp[listTheory.MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem control_reorder_place_spill_free_kind_replay:
+  control_reorder_place dfg pending op f ps = (ops,ps') /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    qs.ps_stack ps.ps_stack /\
+  (!off. ~MEM (SORestore off) ops) ==>
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack
+Proof
+  simp[control_reorder_place_def] >>
+  Cases_on `stack_get_unfixed_depth op f (LENGTH pending) ps.ps_stack` >> simp[]
+  >- (rpt strip_tac >> gvs[mixedPrefixSimTheory.apply_prefix_ops_def]) >>
+  rename1 `_ = SOME d` >> Cases_on `d = f` >> simp[]
+  >- (rpt strip_tac >> gvs[mixedPrefixSimTheory.apply_prefix_ops_def]) >>
+  Cases_on `f < LENGTH ps.ps_stack /\ operand_equiv dfg op (stack_peek f ps.ps_stack)` >> simp[]
+  >- (strip_tac >> gvs[mixedPrefixSimTheory.apply_prefix_ops_def] >>
+      metis_tac[stack_exchange_kind_replay]) >>
+  metis_tac[reorder_swap_pair_case_kind_replay]
+QED
+
+Theorem reorder_reduce_no_spill_identity:
+  (if (dist:num) > 16 then reduce_depth_plan (LENGTH ps.ps_stack) pending op f n ps
+   else ([],ps)) = (ops,ps1) /\
+  (!off. ~MEM (SOSpill off) ops) ==> ops = [] /\ ps1 = ps
+Proof
+  Cases_on `dist > 16` >> simp[] >>
+  metis_tac[fnFrameStepsRevertForwardTheory.rf_reduce_spill_free]
+QED
+
+Theorem reorder_one_spill_free_placement:
+  reorder_one dfg pending idx op ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
+  control_reorder_place dfg pending op (LENGTH pending - (idx + 1)) ps = (ops,ps')
+Proof
+  strip_tac >> drule control_reorder_one_decompose >> strip_tac
+  >- (`restore_ops = [] /\ ps1 = ps` by
+        metis_tac[reorder_restore_no_restore_identity] >>
+      gvs[control_reorder_place_def]) >>
+  `restore_ops = [] /\ ps1 = ps` by
+    (irule reorder_restore_no_restore_identity >>
+     fs[listTheory.MEM_APPEND] >> metis_tac[]) >>
+  gvs[] >>
+  `reduce_ops = [] /\ ps2 = ps` by
+    (irule reorder_reduce_no_spill_identity >>
+     fs[listTheory.MEM_APPEND] >> metis_tac[]) >>
+  gvs[]
+QED
+
+Theorem reorder_one_spill_free_kind_replay:
+  reorder_one dfg pending idx op ps = (ops,ps') /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    qs.ps_stack ps.ps_stack /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack
+Proof
+  metis_tac[reorder_one_spill_free_placement, control_reorder_place_spill_free_kind_replay]
+QED
+
+Theorem reorder_steps_spill_free_kind_replay:
+  !items ps qs ops ps' dfg pending fn ret fmp lo.
+  plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items ps = (ops,ps') /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    qs.ps_stack ps.ps_stack /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack
+Proof
+  Induct
+  >- simp[foldlSimTheory.plan_steps_def, mixedPrefixSimTheory.apply_prefix_ops_def] >>
+  Cases_on `h` >> rpt gen_tac >>
+  simp[foldlSimTheory.plan_steps_def] >>
+  Cases_on `reorder_one dfg pending q r ps` >>
+  rename1 `reorder_one _ _ _ _ _ = (step_ops,mid)` >>
+  Cases_on `plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items mid` >>
+  simp[] >> strip_tac >>
+  gvs[listTheory.MEM_APPEND, planAlignTheory.apply_prefix_ops_append] >>
+  first_x_assum irule >> simp[] >>
+  metis_tac[reorder_one_spill_free_kind_replay]
+QED
+
+Theorem reorder_plan_spill_free_kind_replay:
+  reorder_plan dfg pending ps = (ops,ps') /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    qs.ps_stack ps.ps_stack /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack
+Proof
+  rewrite_tac[reorderSimTheory.reorder_plan_eq_plan_steps] >>
+  metis_tac[reorder_steps_spill_free_kind_replay]
+QED
+
 (* Diagnostic: the spill-free prefix contract needs no spill kinds or budget. *)
 Theorem sym_rf_stack_only_interface_probe[local]:
   !ops lo ps ss top srest fn ret cp p fmp env.

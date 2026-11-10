@@ -1408,7 +1408,7 @@ Proof
   Cases_on `Var x IN FDOM ps1.ps_spilled` >> gvs[] >> decide_tac
 QED
 
-Theorem rf_reduce_spill_free[local]:
+Theorem rf_reduce_spill_free:
   !fuel pending op f n ps ops ps'.
     reduce_depth_plan fuel pending op f n ps = (ops,ps') /\
     (!off. ~MEM (SOSpill off) ops) ==> ps' = ps /\ ops = []
