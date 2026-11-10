@@ -888,6 +888,45 @@ Proof
   metis_tac[]
 QED
 
+Theorem ircf_invoke_recursive_result:
+  ctx_wf C /\
+  fn_sim_below D vs C (ircf_transform_ctx fn_meta rma C)
+    (ircf_R D fn_meta rma C) (ircf_R_ret_reachable vs D fn_meta rma C) (SUC k) /\
+  frame_reachable vs C stk PG G tn caller inst s /\
+  active_inst caller inst s /\ inst.inst_opcode = INVOKE /\
+  decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  taint_ok caller tn inst s /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+  ircf_cross tn (ircf_gam_cur fn_meta rma C caller s UNION
+                ircf_gam_stk fn_meta rma C stk) s t /\
+  terminates (step_inst k C inst s) ==>
+  let f = <| cf_fn := caller; cf_inst := inst; cf_state := s;
+             cf_params := PG; cf_prov := G; cf_tvar := tn.t_var |>;
+      callee' = ircf_transform_function fn_meta C.ctx_functions rma callee
+  in ?ct m. eval_operands ops t = SOME args /\
+    setup_callee callee' args t = SOME ct /\
+    fn_run_rel D (ircf_R_ret_reachable vs D fn_meta rma C)
+      (f::stk) (MAP (op_prov G) ops) callee
+      (run_blocks k C callee cs)
+      (run_blocks m (ircf_transform_ctx fn_meta rma C) callee' ct)
+Proof
+  simp[] >> strip_tac >>
+  `terminates (run_blocks k C callee cs)` by
+    (drule_at (Pat `terminates _`) ld_terminating_invoke_inversion >>
+     disch_then (qspecl_then [`s`, `k`, `inst`, `C`] mp_tac) >>
+     simp[] >> strip_tac >> gvs[]) >>
+  drule_all ircf_setup_entry >> simp[] >> strip_tac >>
+  `MEM callee C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  drule_all ircf_transform_ctx_lookup >>
+  disch_then (qspecl_then [`fn_meta`, `rma`] assume_tac) >>
+  `k < SUC k` by simp[] >>
+  qpat_x_assum `fn_sim_below _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[fn_sim_below_def] >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+
 Theorem ircf_block_sim:
   !D lo vs C fn_meta rma k stk PG G tn fn fn' s t bb.
     o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
