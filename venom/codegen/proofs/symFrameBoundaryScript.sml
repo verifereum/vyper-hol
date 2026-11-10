@@ -1476,6 +1476,198 @@ Proof
   irule sym_phi_plan_hit_no_dup_numeric >> metis_tac[]
 QED
 
+Theorem phi_run_inst_kind:
+  phi_run_context fn bb pred entry source final /\
+  MEM inst (collect_phis bb.bb_instructions) /\
+  MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
+  MEM (Var y) inst.inst_operands /\ op_kind_ok fn ret (Var y) sv ==>
+  op_kind_ok fn ret (Var (HD inst.inst_outputs)) sv
+Proof
+  rewrite_tac[fnFrameStepsPhiTheory.phi_run_context_def] >> strip_tac >>
+  drule_all fnPlanPrefixTheory.phi_codegen_inst_shape >> strip_tac >>
+  `MEM (HD inst.inst_outputs) inst.inst_outputs` by
+    (Cases_on `inst.inst_outputs` >> gvs[]) >>
+  irule phi_operand_kind_transport >>
+  gvs[codegen_ready_fn_def] >>
+  metis_tac[livenessProofsTheory.collect_phis_mem,
+    unitShapeDefsTheory.MEM_fn_insts_blocks_iff, venomInstTheory.fn_insts_def]
+QED
+
+Theorem phi_run_hit_dead:
+  phi_run_context fn bb pred entry source final /\
+  collect_phis bb.bb_instructions = done ++ inst::todo /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d ==>
+  ~MEM (operand_to_string (stack_peek d ps.ps_stack))
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (LENGTH done)))
+Proof
+  rewrite_tac[fnFrameStepsPhiTheory.phi_run_context_def] >> strip_tac >>
+  drule fnFrameStepsPhiTheory.phi_stack_hit_operand >> strip_tac >>
+  Cases_on `stack_peek d ps.ps_stack` >>
+  gvs[is_var_operand_def, operand_to_string_def] >>
+  irule fnFrameStepsPhiTheory.phi_input_dead_at_successor >>
+  simp[listTheory.EL_APPEND_EQN]
+QED
+
+Theorem phi_run_hit_kind:
+  phi_run_context fn bb pred entry source final /\
+  collect_phis bb.bb_instructions = done ++ inst::todo /\
+  MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d ==>
+  (!sv. op_kind_ok fn ret (stack_peek d ps.ps_stack) sv ==>
+    op_kind_ok fn ret (Var (HD inst.inst_outputs)) sv)
+Proof
+  strip_tac >> drule fnFrameStepsPhiTheory.phi_stack_hit_operand >> strip_tac >>
+  Cases_on `stack_peek d ps.ps_stack` >> gvs[is_var_operand_def] >>
+  metis_tac[phi_run_inst_kind, listTheory.MEM_APPEND, listTheory.MEM]
+QED
+
+Theorem sym_phi_run_step:
+  !fn bb pred entry source final done inst todo ps halt ops next
+    prog initial_fmp cp ctx ret srest R env ss.
+  phi_run_context fn bb pred entry source final /\
+  collect_phis bb.bb_instructions = done ++ inst::todo /\
+  MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
+  generate_phi_plan inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (LENGTH done))) halt ps =
+    (ops,next) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+  (!b. next.ps_alloc.sa_spill_base <= b /\ b < next.ps_alloc.sa_next_offset ==>
+    context_spill_byte cp b /\ R b) /\
+  sym_kinds_ok cp fn ret srest ps ss /\
+  asm_block_at prog ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?out. sym_steps prog env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+    sym_kinds_ok cp fn ret srest next out /\
+    out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >> irule sym_phi_plan_no_dup_numeric >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[phi_run_hit_dead, phi_run_hit_kind,
+    genBlockSimTheory.stack_get_phi_depth_var_not_marker]
+QED
+
+Theorem paired_phi_run_step:
+  !base fn bb pred entry source final done inst todo ra lo m ps st halt ops next
+    prog initial_fmp o2pc cp ctx ret srest R env ss.
+  phi_run_context fn bb pred entry source final /\
+  collect_phis bb.bb_instructions = done ++ inst::todo /\
+  phi_run_config fn ra lo base pred entry source m done (inst::todo) ps st /\
+  MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
+  generate_phi_plan inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (LENGTH done))) halt ps =
+    (ops,next) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  (!b. next.ps_alloc.sa_spill_base <= b /\ b < next.ps_alloc.sa_next_offset ==>
+    context_spill_byte cp b /\ R b) /\
+  sym_kinds_ok cp fn ret srest ps ss /\ ss.sym_base.as_pc = st.as_pc /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?st' out.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    phi_run_config fn ra lo base pred entry source m (done ++ [inst]) todo next st' /\
+    sym_steps prog env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+    sym_kinds_ok cp fn ret srest next out /\ out.sym_base.as_pc = st'.as_pc /\
+    (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all fnFrameStepsPhiTheory.phi_run_step >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    gvs[fnFrameStepsPhiTheory.phi_run_config_def] >>
+  `!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)` by
+    (fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  `asm_block_at prog ss.sym_base.as_pc (execute_plan initial_fmp ops)` by simp[] >>
+  drule_all sym_phi_run_step >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem block_insts_prefix_alloc_mono:
+  !j insts lv dfg cfg fn lbl halt np bl i ps ops qs.
+  generate_block_insts_prefix lv dfg cfg fn lbl halt np bl i j insts ps = SOME (ops,qs) ==>
+  qs.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base /\
+  ps.ps_alloc.sa_next_offset <= qs.ps_alloc.sa_next_offset
+Proof
+  Induct >> simp[fnPlanPrefixTheory.generate_block_insts_prefix_def] >>
+  rpt gen_tac >> Cases_on `insts` >> simp[fnPlanPrefixTheory.generate_block_insts_prefix_def] >>
+  gvs[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule allocMonoTheory.generate_inst_plan_spill_base >> strip_tac >>
+  drule allocMonoTheory.generate_inst_plan_next_offset >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem paired_phi_run_prefix:
+  !todo done base fn bb pred entry source final ra lo m ps st body block_len
+    dfg cfg halt ops last prog initial_fmp o2pc cp ctx ret srest R env ss.
+  phi_run_context fn bb pred entry source final /\
+  collect_phis bb.bb_instructions = done ++ todo /\
+  phi_run_config fn ra lo base pred entry source m done todo ps st /\
+  block_len = LENGTH done + LENGTH (todo ++ body) /\
+  generate_block_insts_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label
+    halt 0 block_len (LENGTH done) (LENGTH todo) (todo ++ body) ps = SOME (ops,last) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
+  (!b. last.ps_alloc.sa_spill_base <= b /\ b < last.ps_alloc.sa_next_offset ==>
+    context_spill_byte cp b /\ R b) /\
+  sym_kinds_ok cp fn ret srest ps ss /\ ss.sym_base.as_pc = st.as_pc /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?st' out.
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    phi_run_config fn ra lo base pred entry source m (done ++ todo) [] last st' /\
+    sym_steps prog env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+    sym_kinds_ok cp fn ret srest last out /\ out.sym_base.as_pc = st'.as_pc /\
+    (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  Induct >- (rpt gen_tac >> simp[fnPlanPrefixTheory.generate_block_insts_prefix_def] >>
+    strip_tac >> gvs[] >> qexistsl [`st`, `ss`] >>
+    simp[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+  rpt gen_tac >> strip_tac >> rename1 `collect_phis _ = done ++ inst::todo` >>
+  `inst.inst_opcode = PHI` by
+    (irule (cj 1 fnPlanPrefixTheory.phi_codegen_inst_shape) >>
+     gvs[fnFrameStepsPhiTheory.phi_run_context_def] >> metis_tac[listTheory.MEM_APPEND, listTheory.MEM]) >>
+  rename1 `block_len = LENGTH done + LENGTH (inst::todo ++ suffix)` >>
+  `block_len = SUC (LENGTH done) + LENGTH (todo ++ suffix)` by simp[] >>
+  qpat_x_assum `generate_block_insts_prefix _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[fnFrameStepsPhiTheory.phi_prefix_cons_plan] >>
+  Cases_on `generate_phi_plan inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (LENGTH done))) halt ps` >>
+  rename1 `generate_phi_plan _ _ _ _ = (step_ops, next)` >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  qmatch_asmsub_rename_tac `context_spill_byte cplan` >>
+  `next.ps_alloc.sa_spill_base = last.ps_alloc.sa_spill_base /\
+   next.ps_alloc.sa_next_offset <= last.ps_alloc.sa_next_offset` by
+    (drule block_insts_prefix_alloc_mono >> simp[]) >>
+  gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
+    listTheory.EVERY_APPEND] >>
+  `!b. next.ps_alloc.sa_spill_base <= b /\ b < next.ps_alloc.sa_next_offset ==>
+    context_spill_byte cplan b /\ R b` by metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS] >>
+  `collect_phis bb.bb_instructions = done ++ inst::todo` by simp[] >>
+  drule_all paired_phi_run_step >>
+  disch_then (qspecl_then [`o2pc`, `env`] strip_assume_tac) >>
+  rename1 `asm_steps lo o2pc prog _ st = AsmOK middle` >>
+  `collect_phis bb.bb_instructions = (done ++ [inst]) ++ todo` by simp[] >>
+  `asm_block_at prog middle.as_pc (execute_plan initial_fmp tail_ops)` by simp[] >>
+  first_x_assum (qspec_then `done ++ [inst]` mp_tac) >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then (qspec_then `suffix` mp_tac) >>
+  rule_assum_tac (SIMP_RULE bool_ss
+    [arithmeticTheory.ADD1, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  simp_tac bool_ss [listTheory.LENGTH_APPEND, listTheory.LENGTH,
+    arithmeticTheory.ADD1, arithmeticTheory.ADD_CLAUSES,
+    AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  disch_then drule_all >> disch_then (qspecl_then [`o2pc`, `env`] strip_assume_tac) >>
+  rename1 `asm_steps lo o2pc prog _ middle = AsmOK result_st` >>
+  qmatch_asmsub_rename_tac `sym_kinds_ok cplan fn ret srest last result_ss` >>
+  qexistsl [`result_st`, `result_ss`] >>
+  simp[stackOpSimTheory.asm_steps_add_ok, sym_steps_add, listTheory.APPEND_ASSOC] >>
+  metis_tac[stackOpSimTheory.asm_steps_add_ok]
+QED
+
 Theorem sym_phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0
