@@ -11,6 +11,14 @@ val () = computeLib.upd_compset (computeLib.add_thms
   [fmap_to_alist_FEMPTY, i2w_pos])
 val fixture_root = "../memory-stores/oracle"
 
+val a01_str_local_reassign = memoryStoreWitnessLib.evaluate fixture_root "a01_str_local_reassign"
+Theorem a01_str_local_reassign_matches_python_oracle:
+  ^(#term a01_str_local_reassign) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "a01_str_local_reassign")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation a01_str_local_reassign))) >> EVAL_TAC
+QED
+
 val c03_annassign_empty_dynarray = memoryStoreWitnessLib.evaluate fixture_root "c03_annassign_empty_dynarray"
 Theorem c03_annassign_empty_dynarray_matches_python_oracle:
   ^(#term c03_annassign_empty_dynarray) =
@@ -43,12 +51,36 @@ Proof
   CONV_TAC (LAND_CONV (K (#evaluation a09_local_array_from_storage))) >> EVAL_TAC
 QED
 
+val long_string_literal = memoryStoreWitnessLib.evaluate fixture_root "long_string_literal"
+Theorem long_string_literal_matches_python_oracle:
+  ^(#term long_string_literal) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "long_string_literal")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation long_string_literal))) >> EVAL_TAC
+QED
+
+val long_bytes_literal = memoryStoreWitnessLib.evaluate fixture_root "long_bytes_literal"
+Theorem long_bytes_literal_matches_python_oracle:
+  ^(#term long_bytes_literal) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "long_bytes_literal")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation long_bytes_literal))) >> EVAL_TAC
+QED
+
 val storage_one_word_array = memoryStoreWitnessLib.evaluate fixture_root "storage_one_word_array"
 Theorem storage_one_word_array_matches_python_oracle:
   ^(#term storage_one_word_array) =
     SOME ^(memoryStoreWitnessLib.oracle fixture_root "storage_one_word_array")
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation storage_one_word_array))) >> EVAL_TAC
+QED
+
+val method_id_lit = memoryStoreWitnessLib.evaluate fixture_root "method_id_lit"
+Theorem method_id_lit_matches_python_oracle:
+  ^(#term method_id_lit) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "method_id_lit")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation method_id_lit))) >> EVAL_TAC
 QED
 
 val p20_nested_pop = memoryStoreWitnessLib.evaluate fixture_root "p20_nested_pop"

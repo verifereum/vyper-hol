@@ -36,13 +36,13 @@ Proof
     (drule_all abi_flat_bytes_geometry >> simp[]) >>
   `abi_bytes_field_pre fields tail_offset dst_addr dyn_addr (root_addr + n2w source_offset) bs ss` by
     (irule abi_bytes_field_ready >> fs[abi_flat_source_def]) >>
-  mp_tac (Q.SPECL [`cs.cs_next_var`, `cs.cs_next_var`, `src`, `dst`, `dyn_ptr`, `13`]
+  mp_tac (Q.SPECL [`cs.cs_next_var`, `cs.cs_next_var`, `src`, `dst`, `dyn_ptr`, `14`]
     abi_field_operands_names) >> impl_tac >- simp[] >> DISCH_TAC >>
   mp_tac (Q.SPECL [`ctx`, `func`, `dst`, `src`, `cap`, `dyn_ptr`, `mem_size`, `MAP abi_flat_entry rest`,
     `source_offset`, `cs`, `ret`, `cs'`, `ss`, `dst_addr`, `dyn_addr`, `root_addr`, `bs`, `fields`, `tail_offset`]
     compile_abi_bytes_field_step) >> impl_tac >- fs[abi_flat_entry_def] >>
   disch_then (qx_choose_then `mid` (qx_choose_then `out` strip_assume_tac)) >>
-  mp_tac (Q.SPECL [`cs.cs_next_var`, `cs.cs_next_var`, `13`, `ss`, `out`]
+  mp_tac (Q.SPECL [`cs.cs_next_var`, `cs.cs_next_var`, `14`, `ss`, `out`]
     abi_operand_before_frame) >> impl_tac >- simp[] >> DISCH_TAC >>
   `abi_writes_cover [(w2n dst_addr,capacity);(w2n dyn_addr,32)]
       [(w2n (dst_addr + n2w (tail_offset + abi_field_tail_size fields)),LENGTH (enc (Bytes NONE) (contractABI$BytesV bs)));

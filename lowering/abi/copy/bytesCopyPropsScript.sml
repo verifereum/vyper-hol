@@ -24,7 +24,7 @@ Theorem compile_store_bytestring_execution:
   !dst src cs ret cs' ss dst_addr src_addr.
     compile_store_bytestring src dst cs = (ret,cs') /\
     eval_operand dst ss = SOME dst_addr /\ eval_operand src ss = SOME src_addr /\
-    EVERY (\name. dst <> Var name /\ src <> Var name) (compiler_var_names cs.cs_next_var 4) ==>
+    EVERY (\name. dst <> Var name /\ src <> Var name) (compiler_var_names cs.cs_next_var 5) ==>
     run_inst_seq (emitted_insts cs cs') ss =
       OK (bytes_copy_result cs.cs_next_var dst_addr src_addr ss)
 Proof
@@ -40,13 +40,13 @@ Theorem compile_store_bytestring_path:
     lowered_value_rel aty atv v src ss /\
     eval_operand dst ss = SOME dst_addr /\ eval_operand src ss = SOME src_addr /\
     type_memory_size atv < dimword(:256) /\
-    EVERY (\name. dst <> Var name /\ src <> Var name) (compiler_var_names cs.cs_next_var 4) /\
+    EVERY (\name. dst <> Var name /\ src <> Var name) (compiler_var_names cs.cs_next_var 5) /\
     fn_has_code cs cs' func /\ ss.vs_current_bb = cs.cs_current_bb /\
     ss.vs_inst_idx = LENGTH cs.cs_current_insts ==>
     ?out. fragment_path ctx func ss out /\
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\
       out.vs_halted = ss.vs_halted /\ copy_state_frame ss out /\ lowered_value_rel fty ftv v dst out /\
-      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 4) ==>
+      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 5) ==>
         eval_operand arg_op out = eval_operand arg_op ss) /\
       (!other_tv other_v offset.
         memory_value_rel other_tv other_v offset ss.vs_memory /\ val_wf other_tv other_v /\
@@ -67,7 +67,7 @@ Proof
     (bytes_copy_result cs.cs_next_var dst_addr src_addr ss).vs_memory` by
     (mp_tac (Q.SPECL [`tenv`, `fty`, `aty`, `ftv`, `atv`, `v`, `cs.cs_next_var`,
        `dst_addr`, `src_addr`, `ss`] bytes_copy_result_widened_layout) >> simp[]) >>
-  `EVERY (\name. dst <> Var name) (compiler_var_names cs.cs_next_var 4)` by fs[EVERY_CONJ] >>
+  `EVERY (\name. dst <> Var name) (compiler_var_names cs.cs_next_var 5)` by fs[EVERY_CONJ] >>
   mp_tac (Q.SPECL [`ctx`, `func`, `cs`, `cs'`, `ss`,
     `bytes_copy_result cs.cs_next_var dst_addr src_addr ss`] fragment_path_emitted) >>
   impl_tac >- simp[bytes_copy_straight] >> strip_tac >>
@@ -88,13 +88,13 @@ Theorem compile_store_memory_bytes_path:
     lowered_value_rel aty atv v src ss /\
     eval_operand dst ss = SOME dst_addr /\ eval_operand src ss = SOME src_addr /\
     type_memory_size atv < dimword(:256) /\
-    EVERY (\name. dst <> Var name /\ src <> Var name) (compiler_var_names cs.cs_next_var 4) /\
+    EVERY (\name. dst <> Var name /\ src <> Var name) (compiler_var_names cs.cs_next_var 5) /\
     fn_has_code cs cs' func /\ ss.vs_current_bb = cs.cs_current_bb /\
     ss.vs_inst_idx = LENGTH cs.cs_current_insts ==>
     ?out. fragment_path ctx func ss out /\
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\
       out.vs_halted = ss.vs_halted /\ copy_state_frame ss out /\ lowered_value_rel fty ftv v dst out /\
-      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 4) ==>
+      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 5) ==>
         eval_operand arg_op out = eval_operand arg_op ss) /\
       (!other_tv other_v offset.
         memory_value_rel other_tv other_v offset ss.vs_memory /\ val_wf other_tv other_v /\

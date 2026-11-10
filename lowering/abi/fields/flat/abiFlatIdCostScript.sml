@@ -8,7 +8,7 @@ Ancestors
 Definition abi_flat_id_cost_def:
   abi_flat_id_cost (AbiFlatStatic info mem_size payload) =
     (if info = AbiPrimWord then 4 else if info = AbiComplex [] then 2 else 3) /\
-  abi_flat_id_cost (AbiFlatBytes cap mem_size bs) = 17
+  abi_flat_id_cost (AbiFlatBytes cap mem_size bs) = 18
 End
 
 Theorem compile_abi_flat_static_singleton_cost:
@@ -33,7 +33,7 @@ Theorem compile_abi_flat_bytes_singleton_cost:
   !dst src cap mem_size bs source_offset head_offset dyn_ptr cs cs'.
     abi_flat_valid (AbiFlatBytes cap mem_size bs) /\
     compile_abi_encode_complex_elems dst src [abi_flat_entry (AbiFlatBytes cap mem_size bs)]
-      source_offset head_offset dyn_ptr cs = (Lit 0w,cs') ==> cs'.cs_next_id = cs.cs_next_id + 17
+      source_offset head_offset dyn_ptr cs = (Lit 0w,cs') ==> cs'.cs_next_id = cs.cs_next_id + 18
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_abi_encode_complex_elems _ _ [_] _ _ _ _ = _`

@@ -75,14 +75,14 @@ Theorem checked_materialize_bytes_path:
     compile_materialize_vv cenv ty (StackValue ty src) cs = (op,cs') /\
     type_memory_size tv < dimword(:256) /\
     lowered_value_rel ty tv v src ss /\ eval_operand src ss = SOME src_addr /\
-    EVERY (\name. src <> Var name) (compiler_var_names cs.cs_next_var 5) /\
+    EVERY (\name. src <> Var name) (compiler_var_names cs.cs_next_var 6) /\
     fn_has_code cs cs' func /\ ss.vs_current_bb = cs.cs_current_bb /\
     ss.vs_inst_idx = LENGTH cs.cs_current_insts ==>
     ?out. fragment_path ctx func ss out /\
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\
       out.vs_halted = ss.vs_halted /\ lowered_value_rel ty tv v op out /\
       eval_operand op out = SOME (memory_snapshot_addr cs.cs_next_id ss) /\
-      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 5) ==>
+      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 6) ==>
         eval_operand arg_op out = eval_operand arg_op ss)
 Proof
   rpt strip_tac >> drule checked_contract_struct_args_unique >> DISCH_TAC >>
@@ -102,14 +102,14 @@ Theorem checked_materialize_path:
     type_memory_size tv < dimword(:256) /\
     lowered_value_rel ty tv v src ss /\ eval_operand src ss = SOME src_addr /\
     EVERY (\name. src <> Var name)
-      (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 5 else 1)) /\
+      (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 6 else 1)) /\
     fn_has_code cs cs' func /\ ss.vs_current_bb = cs.cs_current_bb /\
     ss.vs_inst_idx = LENGTH cs.cs_current_insts ==>
     ?out. fragment_path ctx func ss out /\
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\
       out.vs_halted = ss.vs_halted /\ lowered_value_rel ty tv v op out /\
       (!arg_op. EVERY (\name. arg_op <> Var name)
-        (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 5 else 1)) ==>
+        (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 6 else 1)) ==>
         eval_operand arg_op out = eval_operand arg_op ss)
 Proof
   rpt strip_tac >> Cases_on `is_bytestring_type ty` >> fs[]
@@ -131,14 +131,14 @@ Theorem compile_log_save_arg_correct:
     (~is_word_type ty /\ ~EVERY pure_expr es ==>
       type_memory_size tv < dimword(:256) /\
       EVERY (\name. src <> Var name)
-        (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 5 else 1))) /\
+        (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 6 else 1))) /\
     fn_has_code cs cs' func /\ ss.vs_current_bb = cs.cs_current_bb /\
     ss.vs_inst_idx = LENGTH cs.cs_current_insts ==>
     ?out. fragment_path ctx func ss out /\
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\
       out.vs_halted = ss.vs_halted /\ lowered_value_rel ty tv v op out /\
       (!arg_op. EVERY (\name. arg_op <> Var name)
-        (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 5 else 1)) ==>
+        (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 6 else 1)) ==>
         eval_operand arg_op out = eval_operand arg_op ss)
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `is_word_type ty \/ EVERY pure_expr es`
@@ -146,7 +146,7 @@ Proof
   `~is_word_type ty /\ ~EVERY pure_expr es` by fs[] >>
   `type_memory_size tv < dimword(:256) /\
     EVERY (\name. src <> Var name)
-      (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 5 else 1))` by
+      (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 6 else 1))` by
     (first_x_assum irule >> asm_simp_tac bool_ss []) >>
   `?src_addr. eval_operand src ss = SOME src_addr` by fs[lowered_value_rel_def] >>
   qpat_x_assum `compile_log_save_arg _ _ _ _ _ = _` mp_tac >>

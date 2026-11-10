@@ -93,10 +93,10 @@ Proof
   rpt strip_tac >>
   `mload (w2n p) s = n2w (LENGTH bs)` by
     metis_tac[abi_bytes_mload_length] >>
-  `s' = abi_bytes_state10 cs (n2w (LENGTH bs))
+  `s' = abi_bytes_state11 cs (n2w (LENGTH bs))
     (abi_bytes_state7 cs d p (n2w (LENGTH bs)) s)` by
     (drule_all abi_bytes_full_execution >> simp[]) >>
-  asm_rewrite_tac[abi_bytes_state10_memory] >>
+  asm_rewrite_tac[abi_bytes_state11_memory] >>
   irule abi_bytes_state7_frame >> simp[]
 QED
 
@@ -104,7 +104,7 @@ Theorem compile_abi_bytes_frag_frame:
   compile_abi_encode_to_buf dst src (AbiBytestring bound) cs = (result,cs') ∧
   LENGTH bs + 32 < dimword (:256) ∧
   w2n d + venomLayout$ceil32 (LENGTH bs) < dimword (:256) ⇒
-  result = Var (abi_bytes_var cs 7) ∧ cs_extends cs cs' ∧
+  result = Var (abi_bytes_var cs 8) ∧ cs_extends cs cs' ∧
   frag_exec ctx cs cs'
     (λs. fresh_vars_wrt cs s ∧
          eval_operand src s = SOME p ∧ eval_operand dst s = SOME d ∧

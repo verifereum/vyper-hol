@@ -35,6 +35,14 @@ Proof
   CONV_TAC (LAND_CONV (K (#evaluation e30_default_ret_tuple))) >> EVAL_TAC
 QED
 
+val e37_default_ret_string = memoryStoreWitnessLib.evaluate fixture_root "e37_default_ret_string"
+Theorem e37_default_ret_string_matches_python_oracle:
+  ^(#term e37_default_ret_string) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e37_default_ret_string")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation e37_default_ret_string))) >> EVAL_TAC
+QED
+
 val e38_default_ret_local_array = memoryStoreWitnessLib.evaluate fixture_root "e38_default_ret_local_array"
 Theorem e38_default_ret_local_array_matches_python_oracle:
   ^(#term e38_default_ret_local_array) =
