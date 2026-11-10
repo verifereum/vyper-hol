@@ -2395,6 +2395,113 @@ Proof
   simp[sym_step_concrete_def]
 QED
 
+Theorem sym_step_concrete_word_prefix_not_bad:
+  ss.sym_stack = MAP Val args ++ tail /\ LENGTH args = asm_op_arity name /\
+  ~mem_labels_hit ss.sym_mem_labels (asm_op_mem_reads name args) ==>
+  sym_step_concrete name ss <> SymBad e
+Proof
+  strip_tac >> drule_all sym_step_concrete_word_prefix >>
+  disch_then SUBST1_TAC >>
+  Cases_on `asm_step_op FEMPTY name (ss.sym_base with as_stack := args)` >>
+  simp[sym_lift_def]
+QED
+
+Theorem asm_sym_step_rel_terminal:
+  asm_sym_step_rel p env sr cr /\ (!e. sr <> SymBad e) /\
+  ((?s. cr = AsmHalt s) \/ (?s. cr = AsmRevert s) \/ (?s. cr = AsmFault s)) ==>
+  sym_terminal sr
+Proof
+  Cases_on `sr` >> Cases_on `cr` >>
+  simp[asm_sym_step_rel_def, sym_terminal_def]
+QED
+
+Theorem sym_terminal_opcode_concrete:
+  MEM name ["STOP"; "RETURN"; "REVERT"; "INVALID"; "SELFDESTRUCT";
+            "CREATE"; "CREATE2"; "RETURNDATACOPY"] ==>
+  sym_step_op p env name ss = sym_step_concrete name ss
+Proof
+  simp[listTheory.MEM] >> strip_tac >>
+  gvs[sym_step_op_def, asmSemTheory.dup_table_def, asmSemTheory.swap_table_def]
+QED
+
+Theorem sym_terminal_step_runs:
+  asm_block_at p ss.sym_base.as_pc [inst] /\
+  sym_terminal (sym_step p env inst ss) ==>
+  sym_steps p env 1 ss = sym_step p env inst ss
+Proof
+  strip_tac >> rewrite_tac[arithmeticTheory.ONE, sym_steps_def] >>
+  gvs[asm_block_at_def] >>
+  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> gvs[sym_terminal_def]
+QED
+
+Theorem sym_terminal_opcode_safe:
+  MEM name ["STOP"; "RETURN"; "REVERT"; "INVALID"; "SELFDESTRUCT";
+            "CREATE"; "CREATE2"; "RETURNDATACOPY"] /\
+  ss.sym_stack = MAP Val args ++ tail /\ LENGTH args = asm_op_arity name /\
+  ~mem_labels_hit ss.sym_mem_labels (asm_op_mem_reads name args) ==>
+  !e. sym_step p env (AsmOp name) ss <> SymBad e
+Proof
+  strip_tac >> simp[sym_step_def, sym_terminal_opcode_concrete] >>
+  metis_tac[sym_step_concrete_word_prefix_not_bad]
+QED
+
+Theorem sym_terminal_step_transfer:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  asm_block_at p cs.as_pc [inst] /\
+  asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p) inst cs = cr /\
+  (!e. sym_step p env inst ss <> SymBad e) /\
+  ((?s. cr = AsmHalt s) \/ (?s. cr = AsmRevert s) \/ (?s. cr = AsmFault s)) ==>
+  sym_terminal (sym_steps p env 1 ss)
+Proof
+  strip_tac >> drule asm_sym_rel_pc >> strip_tac >>
+  `cs.as_pc < LENGTH p /\ EL cs.as_pc p = inst` by
+    fs[asm_block_at_def] >>
+  drule_all asm_sym_step >> simp[] >> strip_tac >>
+  `sym_terminal (sym_step p env inst ss)` by
+    metis_tac[asm_sym_step_rel_terminal] >>
+  metis_tac[sym_terminal_step_runs]
+QED
+
+Theorem sym_terminal_opcode_transfer:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  asm_block_at p cs.as_pc [AsmOp name] /\
+  MEM name ["STOP"; "RETURN"; "REVERT"; "INVALID"; "SELFDESTRUCT";
+            "CREATE"; "CREATE2"; "RETURNDATACOPY"] /\
+  ss.sym_stack = MAP Val args ++ tail /\ LENGTH args = asm_op_arity name /\
+  ~mem_labels_hit ss.sym_mem_labels (asm_op_mem_reads name args) /\
+  asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
+    (AsmOp name) cs = cr /\
+  ((?s. cr = AsmHalt s) \/ (?s. cr = AsmRevert s) \/ (?s. cr = AsmFault s)) ==>
+  sym_terminal (sym_steps p env 1 ss)
+Proof
+  strip_tac >> irule sym_terminal_step_transfer >>
+  drule_all sym_terminal_opcode_safe >> metis_tac[]
+QED
+
+Theorem sym_revert_postamble_steps:
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp revert_postamble) ==>
+  sym_terminal (sym_steps p env 4 ss)
+Proof
+  strip_tac >>
+  fs[revert_postamble_def, execute_plan_def, exec_stack_op_def,
+     stackOpSimTheory.asm_block_at_cons] >>
+  rewrite_tac[numLib.num_CONV ``4:num``, numLib.num_CONV ``3:num``,
+              arithmeticTheory.TWO, arithmeticTheory.ONE, sym_steps_def] >>
+  `word_of_bytes F (0w:bytes32) (REVERSE (encode_num_bytes_fuel 32 0)) = 0w`
+    by EVAL_TAC >>
+  simp[Once sym_step_def, sym_lift_def, asm_step_def, asm_next_def] >>
+  simp[Once sym_step_def, sym_lift_def, asm_step_def, asm_next_def] >>
+  simp[Once sym_step_def] >>
+  simp[sym_step_op_def, asmSemTheory.dup_table_def, asmSemTheory.swap_table_def,
+       sym_dup_def, sym_set_stack_def, asm_next_def] >>
+  simp[Once sym_step_def, sym_terminal_opcode_concrete] >>
+  simp[sym_step_concrete_def, asm_op_arity_def, asm_op_arity_table_def,
+       sval_val_def, asm_op_mem_reads_def, asmSemTheory.log_table_def,
+       mem_labels_hit_def, in_mem_range_def] >>
+  simp[SRULE [asm_step_def] stackOpAsmSimTheory.asm_step_revert,
+       asm_revert_op_def, sym_lift_def, sym_terminal_def]
+QED
+
 Theorem sym_jmp_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
