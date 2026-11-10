@@ -684,6 +684,7 @@ Theorem deploy_frame_register_static_fields:
     cenv'.ce_module_var_type = cenv.ce_module_var_type /\
     cenv'.ce_module_vars = cenv.ce_module_vars /\
     cenv'.ce_func_return_type = cenv.ce_func_return_type /\
+    cenv'.ce_func_mutability = cenv.ce_func_mutability /\
     cenv'.ce_method_id = cenv.ce_method_id /\
     cenv'.ce_module = cenv.ce_module /\
     cenv'.ce_modules = cenv.ce_modules /\
