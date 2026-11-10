@@ -153,3 +153,104 @@ Proof
   qexistsl_tac [`mid`, `reached`] >>
   simp[mk_inst_def, abi_decoder_reentry_opcode_def]
 QED
+
+Theorem abi_decode_unsigned_clamp_reject_witness:
+  compile_abi_int_clamp op bits F st = ((),last) /\
+  eval_operand op s = SOME w /\
+  w >>> w2n (n2w bits : bytes32) <> 0w /\ fresh_vars_wrt st s ==>
+  ?u. abi_decode_reject_witness (emitted_insts st last) s u
+Proof
+  simp_tac bool_ss [compile_abi_int_clamp_def, comp_bind_def,
+    comp_ignore_bind_def, LET_THM] >> pairarg_tac >> strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  rename1 `emit_op SHR [Lit (n2w bits); op] st = (shifted,c1)` >>
+  `eval_operand (Lit (n2w bits)) s = SOME (n2w bits)` by simp[eval_operand_def] >>
+  drule_all emit_op_SHR_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st c1) s = OK reached` >>
+  fs[] >> drule_all abi_decode_zero_test_reject_witness >> strip_tac >>
+  imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+  imp_res_tac emitted_insts_emit_op >>
+  `inst_extends c1 last` by metis_tac[inst_extends_trans] >>
+  qexists_tac `u` >> irule abi_decode_emit_reject_chain >>
+  qexistsl_tac [`c1`, `reached`] >>
+  simp[mk_inst_def, abi_decoder_reentry_opcode_def]
+QED
+
+Theorem abi_decode_bytes_clamp_reject_witness:
+  compile_abi_bytes_clamp op m st = ((),last) /\
+  eval_operand op s = SOME w /\
+  w << w2n (n2w (8 * m) : bytes32) <> 0w /\ fresh_vars_wrt st s ==>
+  ?u. abi_decode_reject_witness (emitted_insts st last) s u
+Proof
+  simp_tac bool_ss [compile_abi_bytes_clamp_def, comp_bind_def,
+    comp_ignore_bind_def, LET_THM] >> pairarg_tac >> strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  rename1 `emit_op SHL [Lit (n2w (8 * m)); op] st = (shifted,c1)` >>
+  `step_inst_base (mk_inst st.cs_next_id SHL [Lit (n2w (8 * m)); op]
+      [STRING #"%" (toString st.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString st.cs_next_var))
+      (w << w2n (n2w (8 * m) : bytes32)) s)` by
+    (irule step_SHL >> simp[mk_inst_def, eval_operand_def]) >>
+  drule_all decode_emit_update_frame >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st c1) s = OK reached` >>
+  fs[] >> drule_all abi_decode_zero_test_reject_witness >> strip_tac >>
+  imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+  imp_res_tac emitted_insts_emit_op >>
+  `inst_extends c1 last` by metis_tac[inst_extends_trans] >>
+  qexists_tac `u` >> irule abi_decode_emit_reject_chain >>
+  qexistsl_tac [`c1`, `reached`] >>
+  simp[mk_inst_def, abi_decoder_reentry_opcode_def]
+QED
+
+Theorem abi_decode_signed_clamp_reject_witness:
+  compile_abi_int_clamp op bits T st = ((),last) /\
+  eval_operand op s = SOME w /\
+  sign_extend (n2w (bits DIV 8 - 1)) w <> w /\ fresh_vars_wrt st s ==>
+  ?u. abi_decode_reject_witness (emitted_insts st last) s u
+Proof
+  simp_tac bool_ss [compile_abi_int_clamp_def, comp_bind_def,
+    comp_ignore_bind_def, LET_THM] >> pairarg_tac >> strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  rename1 `emit_op SIGNEXTEND [Lit (n2w (bits DIV 8 - 1)); op] st = (canon,c1)` >>
+  rename1 `emit_op EQ [op;canon] c1 = (ok,c2)` >>
+  `step_inst_base (mk_inst st.cs_next_id SIGNEXTEND
+      [Lit (n2w (bits DIV 8 - 1)); op]
+      [STRING #"%" (toString st.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString st.cs_next_var))
+      (sign_extend (n2w (bits DIV 8 - 1)) w) s)` by
+    (irule step_SIGNEXTEND >> simp[mk_inst_def, eval_operand_def]) >>
+  drule_all decode_emit_update_frame >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
+  `eval_operand op s1 = SOME w` by metis_tac[] >>
+  drule_all emit_op_EQ_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts c1 c2) s1 = OK s2` >>
+  `eval_operand ok s2 = SOME 0w` by gvs[bool_to_word_def] >>
+  drule_all abi_decode_ASSERT_reject_witness >> strip_tac >>
+  imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+  imp_res_tac emitted_insts_emit_op >>
+  `inst_extends c1 last /\ inst_extends c2 last` by metis_tac[inst_extends_trans] >>
+  qexists_tac `revert_state (set_returndata [] s2)` >>
+  irule abi_decode_emit_reject_chain >> qexistsl_tac [`c1`, `s1`] >>
+  simp[mk_inst_def, abi_decoder_reentry_opcode_def] >>
+  irule abi_decode_emit_reject_chain >> qexistsl_tac [`c2`, `s2`] >>
+  simp[mk_inst_def, abi_decoder_reentry_opcode_def]
+QED
+
+Theorem abi_decode_clamp_reject_witness:
+  compile_abi_clamp_basetype op clamp st = ((),last) /\
+  eval_operand op s = SOME w /\ ~abi_clamp_ok clamp w /\ fresh_vars_wrt st s ==>
+  ?u. abi_decode_reject_witness (emitted_insts st last) s u
+Proof
+  Cases_on `clamp`
+  >- simp[abi_clamp_ok_def]
+  >- (rename1 `IntClamp bits signed` >> Cases_on `signed` >>
+      simp[compile_abi_clamp_basetype_def, abi_clamp_ok_def] >> strip_tac
+      >- (drule_all abi_decode_signed_clamp_reject_witness >> simp[]) >>
+      drule_all (SIMP_RULE (srw_ss()) [] abi_decode_unsigned_clamp_reject_witness) >> simp[])
+  >- (simp[compile_abi_clamp_basetype_def, abi_clamp_ok_def] >>
+      strip_tac >> irule abi_decode_bytes_clamp_reject_witness >>
+      simp[] >> qexistsl_tac [`n`, `op`, `w`] >> simp[]) >>
+  simp[compile_abi_clamp_basetype_def, abi_clamp_ok_def] >> strip_tac >>
+  irule abi_decode_unsigned_clamp_reject_witness >>
+  simp[] >> qexistsl_tac [`1`, `op`, `w`] >> simp[compile_abi_int_clamp_def]
+QED
