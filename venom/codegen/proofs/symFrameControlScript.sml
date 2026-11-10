@@ -3096,6 +3096,199 @@ Proof
   qexistsl_tac [`lo`, `ps`] >> simp[]
 QED
 
+Theorem rf_assign_preparation_stack_facts:
+  emit_input_plan ASSIGN [rhs] nl ps = (ins,ps1) /\
+  reorder_plan dfg [rhs] ps1 = (ros,ps2) /\
+  ~is_label_operand rhs /\
+  (is_var_operand rhs ==> MEM rhs ps.ps_stack \/ rhs IN FDOM ps.ps_spilled) /\
+  (!off. ~MEM (SOSpill off) (ins ++ ros) /\
+         ~MEM (SORestore off) (ins ++ ros)) ==>
+  EVERY is_simple_stack_op (ins ++ ros) /\
+  prefix_wf (lo:string |-> num) (LENGTH ps.ps_stack) (ins ++ ros) /\
+  ps2.ps_stack = stack_pop 1 ps2.ps_stack ++ [rhs]
+Proof
+  strip_tac >> rpt conj_tac
+  >- metis_tac[fnFrameStepsRevertForwardTheory.spill_free_preparation_simple]
+  >- (irule fnFrameStepsRevertForwardTheory.available_preparation_prefix_wf >>
+      qexistsl_tac [`dfg`, `[rhs]`, `nl`, `ASSIGN`, `ps1`, `ps2`] >>
+      simp[] >> metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
+  `!op. MEM op [rhs] /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by simp[] >>
+  `LENGTH [rhs] <= 16` by simp[] >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_preparation_arranged >> simp[]
+QED
+
+Theorem sym_assign_prepared_stack_sim:
+  !ps2 tail rhs fn inst out ret ss top srest.
+  codegen_ready_fn fn /\ fn_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ ~is_label_operand rhs /\
+  ps2.ps_stack = tail ++ [rhs] /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps2.ps_stack) top ==>
+  LIST_REL (op_kind_ok fn ret)
+    (REVERSE (ps2 with ps_stack := stack_push (Var out) tail).ps_stack) top
+Proof
+  rpt gen_tac >> strip_tac >> simp[] >>
+  irule assign_prepared_stack_op_kind >> metis_tac[]
+QED
+
+Theorem sym_rf_suffix_preparation_execution:
+  !fn ps opc inputs nl ins ps1 ros ps2 ra lo entry s stk st rest prog fmp
+   env ss top srest ret cp.
+  lo = SND (compute_label_offsets prog) /\
+  codegen_ready_fn fn /\ fn_shape_ok fn /\ rf_spills_separated ps /\
+  emit_input_plan opc inputs nl ps = (ins,ps1) /\
+  reorder_plan (dfg_build_function fn) inputs ps1 = (ros,ps2) /\
+  opc <> INVOKE /\ LENGTH inputs <= 16 /\
+  (!op. MEM op inputs /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  EVERY (\op. ~is_label_operand op) inputs /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  (!op. MEM op inputs ==> operand_val (frame_view fn ra s) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)) /\
+  (!off. ~MEM (SOSpill off) (ins ++ ros) /\
+         ~MEM (SORestore off) (ins ++ ros)) /\
+  EVERY is_simple_stack_op (ins ++ ros) /\
+  prefix_wf lo (LENGTH ps.ps_stack) (ins ++ ros) /\
+  plan_stack_rel lo (frame_view fn ra s) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\
+  asm_block_at prog st.as_pc (execute_plan fmp (ins ++ ros)) /\
+  asm_static_wf prog /\ asm_sym_rel prog env st ss /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) ==>
+  ?mid ss' stk' top'.
+    asm_steps lo (build_offset_to_pc prog) prog
+      (LENGTH (execute_plan fmp (ins ++ ros))) st = AsmOK mid /\
+    mid.as_pc = st.as_pc + LENGTH (execute_plan fmp (ins ++ ros)) /\
+    mid.as_stack = stk' ++ rest /\
+    plan_stack_rel lo (frame_view fn ra s) ps2.ps_stack stk' /\
+    rf_inventory_inv fn ra lo entry ps2 s /\
+    ps2.ps_stack = stack_pop (LENGTH inputs) ps2.ps_stack ++ inputs /\
+    sym_steps prog env (LENGTH (execute_plan fmp (ins ++ ros))) ss = SymOK ss' /\
+    asm_sym_rel prog env mid ss' /\
+    ss'.sym_stack = top' ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE ps2.ps_stack) top' /\
+    (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ssa_form fn` by fs[codegen_ready_fn_def] >>
+  `asm_block_at prog ss.sym_base.as_pc (execute_plan fmp (ins ++ ros))` by
+    metis_tac[asm_sym_rel_pc] >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_suffix_preparation_execution >>
+  disch_then (qspec_then `build_offset_to_pc prog` strip_assume_tac) >>
+  drule_all sym_rf_preparation_stack_sim >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem rf_assign_postfix_simple:
+  (if halting then ([],ps)
+   else popmany_plan (if MEM out nl then [] else [Var out]) ps) = (pops,ps8) /\
+  (if MEM out nl then optimistic_swap_plan dfg inst nl term ps8
+   else ([],ps8)) = (opts,ps9) /\
+  (!off. ~MEM (SOSpill off) (pops ++ opts) /\
+         ~MEM (SORestore off) (pops ++ opts)) ==>
+  EVERY is_simple_stack_op (pops ++ opts)
+Proof
+  strip_tac >>
+  irule fnFrameStepsRevertForwardTheory.spill_free_postfix_simple >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`dfg`, `~halting`, `inst`,
+    `if MEM out nl then [] else [Var out]`, `nl`, `~MEM out nl`,
+    `term`, `ps`, `ps8`, `ps9`] >>
+  Cases_on `halting` >> Cases_on `MEM out nl` >> gvs[]
+QED
+
+Theorem sym_rf_assign_plan_execution:
+  !fn inst ps rhs out ra lo entry s fuel ctx s' lv cfg nl halting term lbl ops ps'
+   stk st rest prog fmp env ss top srest ret cp.
+  lo = SND (compute_label_offsets prog) /\
+  codegen_ready_fn fn /\ fn_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  rf_spills_separated ps /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ ~is_label_operand rhs /\
+  (is_var_operand rhs ==> MEM rhs ps.ps_stack \/ rhs IN FDOM ps.ps_spilled) /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  operand_val (frame_view fn ra s) lo rhs =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] rhs) /\
+  step_inst fuel ctx inst s = OK s' /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  plan_stack_rel lo (frame_view fn ra s) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\
+  asm_block_at prog st.as_pc (execute_plan fmp ops) /\
+  asm_static_wf prog /\ asm_sym_rel prog env st ss /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) ==>
+  ?st' ss' stk' top'.
+    asm_steps lo (build_offset_to_pc prog) prog
+      (LENGTH (execute_plan fmp ops)) st = AsmOK st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan fmp ops) /\
+    st'.as_stack = stk' ++ rest /\
+    plan_stack_rel lo (frame_view fn ra s') ps'.ps_stack stk' /\
+    sym_steps prog env (LENGTH (execute_plan fmp ops)) ss = SymOK ss' /\
+    asm_sym_rel prog env st' ss' /\
+    ss'.sym_stack = top' ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE ps'.ps_stack) top' /\
+    (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b)
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `context_spill_byte cplan` >>
+  Cases_on `emit_input_plan ASSIGN [rhs] nl ps` >> rename1 `_ = (ins,ps1)` >>
+  Cases_on `reorder_plan (dfg_build_function fn) [rhs] ps1` >>
+  rename1 `_ = (ros,ps2)` >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_assign_plan_result >> strip_tac >>
+  `asm_block_at prog st.as_pc (execute_plan fmp (ins ++ ros)) /\
+   asm_block_at prog (st.as_pc + LENGTH (execute_plan fmp (ins ++ ros)))
+     (execute_plan fmp (pops ++ opts))` by
+    gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
+        listTheory.APPEND_ASSOC] >>
+  `!off. ~MEM (SOSpill off) (ins ++ ros) /\
+    ~MEM (SORestore off) (ins ++ ros)` by fs[listTheory.MEM_APPEND] >>
+  `!off. ~MEM (SOSpill off) (pops ++ opts) /\
+    ~MEM (SORestore off) (pops ++ opts)` by fs[listTheory.MEM_APPEND] >>
+  drule_all rf_assign_preparation_stack_facts >>
+  disch_then (qspec_then `lo` strip_assume_tac) >>
+  `ASSIGN <> INVOKE /\ LENGTH [rhs] <= 16 /\
+   EVERY (\op. ~is_label_operand op) [rhs] /\
+   (!op. MEM op [rhs] /\ is_var_operand op ==>
+     MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+   (!op. MEM op [rhs] ==> operand_val (frame_view fn ra s) lo op =
+     operand_val entry lo (normalize_operand (dfg_build_function fn) [] op))` by gvs[] >>
+  drule_all sym_rf_suffix_preparation_execution >> strip_tac >>
+  rename1 `sym_steps prog env _ ss = SymOK ss1` >>
+  qabbrev_tac `pushed = ps2 with ps_stack :=
+    stack_push (Var out) (stack_pop 1 ps2.ps_stack)` >>
+  `LIST_REL (op_kind_ok fn ret) (REVERSE pushed.ps_stack) top'` by
+    (simp[Abbr `pushed`] >> irule assign_prepared_stack_op_kind >> metis_tac[]) >>
+  `EVERY is_simple_stack_op (pops ++ opts)` by metis_tac[rf_assign_postfix_simple] >>
+  `!b. b IN FDOM ss1.sym_mem_labels ==> context_spill_byte cplan b` by
+    metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
+  `asm_block_at prog ss1.sym_base.as_pc (execute_plan fmp (pops ++ opts))` by
+    metis_tac[asm_sym_rel_pc] >>
+  `pushed.ps_stack = stack_push (Var out) (stack_pop 1 ps2.ps_stack)` by simp[Abbr `pushed`] >>
+  drule_all sym_assign_postfix_stack_sim >>
+  disch_then (qspecl_then [`lo`, `env`] strip_assume_tac) >>
+  `sym_steps prog env (LENGTH (execute_plan fmp ops)) ss = SymOK ss'` by
+    (`LENGTH (execute_plan fmp ops) =
+       LENGTH (execute_plan fmp (ins ++ ros)) +
+       LENGTH (execute_plan fmp (pops ++ opts))` by
+       simp[stackOpSimTheory.execute_plan_append] >>
+     qpat_x_assum `LENGTH (execute_plan fmp ops) = _` SUBST1_TAC >>
+     once_rewrite_tac[sym_steps_add] >> simp[]) >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_assign_plan_execution >>
+  disch_then (qspec_then `build_offset_to_pc prog` strip_assume_tac) >>
+  qspecl_then [`LENGTH (execute_plan fmp ops)`, `st`, `ss`, `ss'`]
+    mp_tac (Q.INST [`p` |-> `prog`] asm_sym_steps_lockstep) >>
+  simp[] >> strip_tac >> gvs[] >>
+  metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]
+QED
+
 Theorem sym_jmp_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
