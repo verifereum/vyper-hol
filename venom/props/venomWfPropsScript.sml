@@ -368,6 +368,18 @@ QED
 
 (* ---- from phiWellFormed ---- *)
 
+Theorem phi_pairs_resolve_phi_some:
+  !ops l v. MEM (l,v) (phi_pairs ops) ==> ?op. resolve_phi l ops = SOME op
+Proof
+  recInduct phi_pairs_ind >> simp[phi_pairs_def, resolve_phi_def] >>
+  rpt strip_tac >> gvs[] >>
+  rpt CASE_TAC >> simp[]
+  >- metis_tac[] >>
+  rename1 `resolve_phi _ (head::_::_)` >>
+  Cases_on `head` >> gvs[resolve_phi_def] >>
+  rpt CASE_TAC >> simp[] >> metis_tac[]
+QED
+
 Theorem resolve_phi_well_formed:
   !prev_bb ops v.
     phi_well_formed ops /\
@@ -674,6 +686,339 @@ Proof
     irule MEM_lookup_block >>
     gvs[wf_function_def, fn_labels_def])
   >- metis_tac[fn_cfg_edge_target_block]
+QED
+
+(* Availability is a path property independently of any compiler pipeline. *)
+Theorem def_available_on_all_paths:
+  wf_function fn /\ MEM bb fn.fn_blocks /\ def_available_at fn bb point v ==>
+  def_on_all_paths fn bb point v
+Proof
+  simp[def_available_at_def] >> rpt strip_tac >>
+  simp[def_on_all_paths_def] >> rpt strip_tac >>
+  Cases_on `def_bb = bb`
+  >- (gvs[] >> disj2_tac >> Cases_on `point` >> gvs[]
+      >- metis_tac[MEM_EL] >>
+      qexists_tac `i` >> simp[] >> metis_tac[arithmeticTheory.LESS_TRANS]) >>
+  disj1_tac >>
+  `MEM def_bb.bb_label path` by metis_tac[fn_dominates_def] >>
+  `def_bb.bb_label <> bb.bb_label` by metis_tac[same_label_same_block] >>
+  qpat_x_assum `MEM def_bb.bb_label path` mp_tac >>
+  disch_then (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  rename1 `k < LENGTH path` >>
+  qexistsl_tac [`k`, `def_bb`, `def_inst`] >> simp[] >>
+  `LAST path = EL (LENGTH path - 1) path` by
+    (qspec_then `path` mp_tac LAST_EL >> simp[arithmeticTheory.PRE_SUB1]) >>
+  Cases_on `k = LENGTH path - 1` >> gvs[] >> decide_tac
+QED
+
+Theorem wf_ssa_defs_reach_uses:
+  wf_ssa fn /\ wf_function fn ==> fn_defs_reach_uses fn
+Proof
+  simp[wf_ssa_def, fn_defs_reach_uses_def, def_dominates_uses_def] >>
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[]
+  >- (rpt strip_tac >>
+      `phi_edge_uses_wf fn bb inst` by metis_tac[] >>
+      qpat_x_assum `phi_edge_uses_wf _ _ _` mp_tac >>
+      pure_rewrite_tac[phi_edge_uses_wf_def] >> strip_tac >>
+      qpat_x_assum `!pred v. MEM (pred,v) _ ==> _` drule >>
+      strip_tac >> rename1 `def_available_at fn source NONE v` >>
+      `source = pred_bb` by metis_tac[same_label_same_block] >>
+      gvs[] >> irule def_available_on_all_paths >> metis_tac[]) >>
+  rpt strip_tac >> irule def_available_on_all_paths >> metis_tac[]
+QED
+
+Theorem is_fn_path_take:
+  !path n. is_fn_path fn path ==> is_fn_path fn (TAKE n path)
+Proof
+  Induct >> simp[] >> Cases_on `n` >> simp[] >>
+  Cases_on `path` >> simp[is_fn_path_def] >> rpt strip_tac >>
+  rename1 `is_fn_path fn (head::TAKE k (next::rest))` >>
+  Cases_on `k` >> simp[is_fn_path_def] >>
+  rename1 `is_fn_path fn (next::TAKE nn rest)` >>
+  first_x_assum (qspec_then `SUC nn` mp_tac) >>
+  simp[is_fn_path_def]
+QED
+
+Theorem is_fn_path_prefix_at:
+  is_fn_path fn path /\ k < LENGTH path ==>
+  is_fn_path fn (TAKE (SUC k) path) /\
+  TAKE (SUC k) path <> [] /\
+  HD (TAKE (SUC k) path) = HD path /\
+  LAST (TAKE (SUC k) path) = EL k path /\
+  LENGTH (TAKE (SUC k) path) = SUC k
+Proof
+  strip_tac >> simp[is_fn_path_take, listTheory.LENGTH_TAKE] >>
+  `TAKE (SUC k) path <> []` by
+    (Cases_on `path` >> gvs[]) >>
+  simp[listTheory.LAST_EL, listTheory.LENGTH_TAKE, listTheory.EL_TAKE] >>
+  Cases_on `path` >> gvs[]
+QED
+
+Theorem distinct_projection_member_eq:
+  !xs. ALL_DISTINCT (FLAT (MAP f xs)) ==>
+  !x y v. MEM x xs /\ MEM y xs /\ MEM v (f x) /\ MEM v (f y) ==> x = y
+Proof
+  Induct >> simp[ALL_DISTINCT_APPEND] >> rpt strip_tac >>
+  fs[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem wf_function_instruction_block:
+  wf_function fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  MEM inst a.bb_instructions /\ MEM inst b.bb_instructions ==> a = b
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
+     fn.fn_blocks))` by fs[wf_function_def, fn_inst_ids_distinct_def] >>
+  drule distinct_projection_member_eq >>
+  disch_then (qspecl_then [`a`, `b`, `inst.inst_id`] mp_tac) >>
+  simp[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem ssa_form_output_unique:
+  ssa_form fn /\ MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+  MEM bb' fn.fn_blocks /\ MEM inst' bb'.bb_instructions /\
+  MEM v inst.inst_outputs /\ MEM v inst'.inst_outputs ==> inst' = inst
+Proof
+  strip_tac >> fs[ssa_form_def] >>
+  drule distinct_projection_member_eq >>
+  disch_then (qspecl_then [`inst'`, `inst`, `v`] mp_tac) >>
+  simp[] >> fs[fn_insts_def] >> metis_tac[fmp_fn_insts_blocks_intro]
+QED
+
+Theorem is_fn_path_first_arrival:
+  !path. path <> [] /\ is_fn_path fn path /\ LAST path = b ==>
+  ?pre. is_fn_path fn (pre ++ [b]) /\ HD (pre ++ [b]) = HD path /\
+        ~MEM b pre
+Proof
+  Induct >> simp[] >> qx_gen_tac `a` >> strip_tac >>
+  Cases_on `a = b`
+  >- (qexists `[]` >> simp[is_fn_path_def]) >>
+  Cases_on `path` >- gvs[] >>
+  fs[is_fn_path_def] >>
+  qexists `a::pre` >> Cases_on `pre` >> gvs[is_fn_path_def]
+QED
+
+Theorem def_on_all_paths_first_witness:
+  MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+  def_on_all_paths fn bb use_opt v ==>
+  ?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+    MEM v di.inst_outputs /\
+    (db = bb ==> case use_opt of NONE => T | SOME use =>
+      ?i j. i < j /\ j < LENGTH bb.bb_instructions /\
+            EL i bb.bb_instructions = di /\ EL j bb.bb_instructions = use)
+Proof
+  strip_tac >> fs[fn_reachable_def] >>
+  drule rtc_to_fn_path >> strip_tac >>
+  `?pre. is_fn_path fn (pre ++ [bb.bb_label]) /\
+     HD (pre ++ [bb.bb_label]) = entry /\ ~MEM bb.bb_label pre` by
+    metis_tac[is_fn_path_first_arrival] >>
+  qpat_x_assum `def_on_all_paths fn bb use_opt v` mp_tac >>
+  simp[def_on_all_paths_def] >>
+  disch_then (qspec_then `pre ++ [bb.bb_label]` mp_tac) >>
+  simp[] >> strip_tac
+  >- (qexistsl [`def_bb`, `def_inst`] >> simp[] >>
+      `MEM def_bb.bb_label pre` by
+        (simp[MEM_EL] >> qexists `k` >> fs[EL_APPEND1]) >>
+      `def_bb <> bb` by metis_tac[] >> simp[]) >>
+  qexistsl [`bb`, `EL i bb.bb_instructions`] >> simp[EL_MEM] >>
+  Cases_on `use_opt` >> gvs[] >> metis_tac[]
+QED
+
+Theorem def_on_all_paths_dominating_witness:
+  wf_function fn /\ ssa_form fn /\ MEM bb fn.fn_blocks /\
+  fn_reachable fn bb.bb_label /\ def_on_all_paths fn bb use_opt v /\
+  MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\ MEM v di.inst_outputs ==>
+  fn_dominates fn db.bb_label bb.bb_label
+Proof
+  strip_tac >> simp[fn_dominates_def] >> rpt strip_tac >>
+  qpat_x_assum `def_on_all_paths fn bb use_opt v` mp_tac >>
+  simp[def_on_all_paths_def] >>
+  disch_then (qspec_then `path` mp_tac) >> simp[] >> strip_tac
+  >- (`def_inst = di` by metis_tac[ssa_form_output_unique] >>
+      `def_bb = db` by metis_tac[wf_function_instruction_block] >>
+      gvs[] >> simp[MEM_EL] >> qexists `k` >> simp[]) >>
+  `MEM (EL i bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+  `EL i bb.bb_instructions = di` by metis_tac[ssa_form_output_unique] >>
+  `bb = db` by metis_tac[wf_function_instruction_block] >>
+  metis_tac[LAST_MEM]
+QED
+
+Theorem def_on_all_paths_available:
+  wf_function fn /\ ssa_form fn /\ MEM bb fn.fn_blocks /\
+  fn_reachable fn bb.bb_label /\ def_on_all_paths fn bb use_opt v ==>
+  def_available_at fn bb use_opt v
+Proof
+  strip_tac >> drule_all def_on_all_paths_first_witness >> strip_tac >>
+  simp[def_available_at_def] >> qexistsl [`db`, `di`] >> simp[] >>
+  irule def_on_all_paths_dominating_witness >> metis_tac[]
+QED
+
+Theorem resolve_phi_pair:
+  !p ops v. resolve_phi p ops = SOME (Var v) ==>
+    MEM (p,v) (phi_pairs ops)
+Proof
+  recInduct resolve_phi_ind >>
+  rw[resolve_phi_def, phi_pairs_def]
+  >- (Cases_on `val_op` >> gvs[phi_pairs_def] >> metis_tac[]) >>
+  Cases_on `v2` >> gvs[phi_pairs_def] >> metis_tac[]
+QED
+
+Theorem resolved_phi_input_available:
+  wf_ssa fn /\ MEM bb fn.fn_blocks /\ MEM i bb.bb_instructions /\
+  i.inst_opcode = PHI /\ resolve_phi pred i.inst_operands = SOME (Var v) ==>
+  ?pb. MEM pb fn.fn_blocks /\ pb.bb_label = pred /\
+    fn_cfg_edge fn pred bb.bb_label /\ def_available_at fn pb NONE v
+Proof
+  strip_tac >> drule resolve_phi_pair >> strip_tac >>
+  fs[wf_ssa_def, def_dominates_uses_def, phi_edge_uses_wf_def] >>
+  metis_tac[]
+QED
+
+Theorem exec_block_outputs_in_fdom_from_prefix:
+  exec_block fuel ctx bb st = OK st' /\
+  bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
+  (!j w. j < st.vs_inst_idx /\ j < LENGTH bb.bb_instructions /\
+         MEM w (EL j bb.bb_instructions).inst_outputs ==>
+         w IN FDOM st.vs_vars) /\
+  idx < LENGTH bb.bb_instructions /\
+  ~is_terminator (EL idx bb.bb_instructions).inst_opcode /\
+  MEM v (EL idx bb.bb_instructions).inst_outputs ==>
+  v IN FDOM st'.vs_vars
+Proof
+  rpt strip_tac >> Cases_on `idx < st.vs_inst_idx`
+  >- (`v IN FDOM st.vs_vars` by metis_tac[] >>
+      drule exec_block_fdom_mono >>
+      simp[pred_setTheory.SUBSET_DEF]) >>
+  irule exec_block_output_in_fdom_aux >>
+  qexistsl [`bb`, `ctx`, `fuel`, `idx`,
+            `LENGTH bb.bb_instructions - st.vs_inst_idx`, `st`] >> simp[]
+QED
+
+Theorem strict_dom_vars_defined_preserved_from_prefix:
+  wf_function f /\ MEM bb f.fn_blocks /\
+  bb.bb_label = st.vs_current_bb /\
+  exec_block fuel ctx bb st = OK st' /\
+  st.vs_inst_idx <= LENGTH bb.bb_instructions /\
+  strict_dom_vars_defined f st /\ fn_reachable f st.vs_current_bb /\
+  EVERY inst_wf bb.bb_instructions /\
+  (!j w. j < st.vs_inst_idx /\ j < LENGTH bb.bb_instructions /\
+         MEM w (EL j bb.bb_instructions).inst_outputs ==>
+         w IN FDOM st.vs_vars) ==>
+  strict_dom_vars_defined f st'
+Proof
+  rpt strip_tac >>
+  `bb_well_formed bb` by gvs[wf_function_def] >>
+  simp[strict_dom_vars_defined_def] >> rpt strip_tac >>
+  Cases_on `d_bb.bb_label = st.vs_current_bb`
+  >- (`d_bb = bb` by
+        metis_tac[venomExecProofsTheory.same_label_same_block] >> gvs[] >>
+      `?idx. idx < LENGTH bb.bb_instructions /\
+             EL idx bb.bb_instructions = d_inst` by
+        metis_tac[listTheory.MEM_EL] >>
+      `~is_terminator d_inst.inst_opcode` by
+        (strip_tac >>
+         `d_inst.inst_outputs = []` by
+           metis_tac[venomExecProofsTheory.terminator_no_outputs,
+                     listTheory.EVERY_MEM] >> gvs[]) >>
+      irule exec_block_outputs_in_fdom_from_prefix >>
+      qexistsl [`bb`, `ctx`, `fuel`, `idx`, `st`] >> simp[] >>
+      metis_tac[]) >>
+  `MEM st'.vs_current_bb (bb_succs bb)` by
+    (irule exec_block_current_bb_in_succs >>
+     conj_tac
+     >- (gvs[bb_well_formed_def] >> rpt strip_tac >>
+         `i < LENGTH bb.bb_instructions` by decide_tac >>
+         `i = PRE (LENGTH bb.bb_instructions)` by metis_tac[] >>
+         decide_tac) >>
+     `bb.bb_instructions <> []` by gvs[bb_well_formed_def] >>
+     simp[] >> qexistsl [`ctx`, `fuel`, `st`] >> simp[]) >>
+  `fn_cfg_edge f st.vs_current_bb st'.vs_current_bb` by
+    (simp[fn_cfg_edge_def] >> metis_tac[]) >>
+  `fn_dominates f d_bb.bb_label st.vs_current_bb` by
+    metis_tac[venomExecProofsTheory.fn_dominates_predecessor] >>
+  `v IN FDOM st.vs_vars` by
+    (gvs[strict_dom_vars_defined_def] >> metis_tac[]) >>
+  drule exec_block_fdom_mono >> simp[pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem strict_dom_vars_defined_eval_phis:
+  strict_dom_vars_defined f st /\ eval_phis st insts = OK st' ==>
+  strict_dom_vars_defined f st'
+Proof
+  rpt strip_tac >>
+  `st'.vs_current_bb = st.vs_current_bb` by
+    metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
+  drule venomExecProofsTheory.eval_phis_vars_grow >>
+  gvs[strict_dom_vars_defined_def, pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem strict_dom_vars_defined_inst_idx[simp]:
+  strict_dom_vars_defined f (st with vs_inst_idx := idx) <=>
+  strict_dom_vars_defined f st
+Proof
+  simp[strict_dom_vars_defined_def]
+QED
+
+Theorem strict_dom_vars_defined_run_block_entry:
+  wf_function f /\ MEM bb f.fn_blocks /\
+  bb.bb_label = st.vs_current_bb /\
+  run_block_entry fuel ctx bb st = OK st' /\
+  strict_dom_vars_defined f st /\ fn_reachable f st.vs_current_bb /\
+  EVERY inst_wf bb.bb_instructions ==>
+  strict_dom_vars_defined f st'
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`st`, `bb.bb_instructions`]
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs) >> strip_tac >>
+  gvs[venomExecSemanticsTheory.run_block_def] >>
+  rename1 `eval_phis st bb.bb_instructions = OK st_phi` >>
+  irule strict_dom_vars_defined_preserved_from_prefix >> simp[] >>
+  qexistsl [`bb`, `ctx`, `fuel`,
+            `st_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`] >>
+  simp[venomExecProofsTheory.phi_prefix_length_le] >>
+  `st_phi.vs_current_bb = st.vs_current_bb` by
+    metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      drule_all venomExecProofsTheory.eval_phis_outputs_in_fdom_idx >> simp[]) >>
+  drule_all strict_dom_vars_defined_eval_phis >> simp[]
+QED
+
+(* Contiguous predicate prefixes, shared by pass and pipeline proofs. *)
+Theorem every_prefix_split:
+  !P l. (!i j. i < j /\ j < LENGTH l /\ P (EL j l) ==> P (EL i l)) <=>
+        ?ps rs. l = ps ++ rs /\ EVERY P ps /\ EVERY (\x. ~P x) rs
+Proof
+  rpt gen_tac >> eq_tac
+  >- (qid_spec_tac `l` >> Induct >- simp[] >>
+      rpt strip_tac >>
+      `?ps rs. l = ps ++ rs /\ EVERY P ps /\ EVERY (\x. ~P x) rs` by
+        (first_x_assum irule >> rpt strip_tac >>
+         first_x_assum (qspecl_then [`SUC i`,`SUC j`] mp_tac) >> simp[]) >>
+      Cases_on `P h`
+      >- (qexistsl [`h::ps`,`rs`] >> simp[]) >>
+      qexistsl [`[]`,`h::l`] >> simp[listTheory.EVERY_EL] >>
+      rpt strip_tac >>
+      first_x_assum (qspecl_then [`0`,`SUC n`] mp_tac) >> simp[]) >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `j < LENGTH ps`
+  >- (`i < LENGTH ps` by simp[] >>
+      gvs[rich_listTheory.EL_APPEND1, listTheory.EVERY_EL]) >>
+  gvs[rich_listTheory.EL_APPEND2, listTheory.EVERY_EL, arithmeticTheory.NOT_LESS] >>
+  first_x_assum (qspec_then `j - LENGTH ps` mp_tac) >> simp[]
+QED
+
+Theorem pseudos_prefix_split:
+  pseudos_prefix bb <=>
+  ?ps rs. bb.bb_instructions = ps ++ rs /\
+    EVERY (\i. is_pseudo i.inst_opcode) ps /\
+    EVERY (\i. ~is_pseudo i.inst_opcode) rs
+Proof
+  simp[pseudos_prefix_def] >>
+  qspecl_then [`\i. is_pseudo i.inst_opcode`, `bb.bb_instructions`]
+    mp_tac every_prefix_split >>
+  simp[]
 QED
 
 Theorem phi_well_formed_uses_pairs:
