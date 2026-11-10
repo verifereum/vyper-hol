@@ -17,10 +17,10 @@ Theorem abi_encode_nonword_origin_frame:
     mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory) /\
   (!name b n. local_region ce es'.scopes s name b n ==>
     mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) ==>
-  wb_frame ce es origin s0 actual
+  wb_frame ce es es' origin s0 actual
 Proof
   simp_tac bool_ss [expr_post_def] >> strip_tac >>
-  `locals_kept ce es' s actual` by
+  `locals_kept ce es' es' s actual` by
     (irule locals_kept_regions >> first_assum ACCEPT_TAC) >>
   simp_tac bool_ss [wb_frame_def] >>
   conj_tac
