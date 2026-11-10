@@ -232,26 +232,6 @@ QED
 
 (* ===== The block's code ===== *)
 
-Theorem generate_block_plan_nonentry:
-  !liveness dfg cfg fn bb ps ops ps'.
-    bb <> HD fn.fn_blocks /\
-    generate_block_plan liveness dfg cfg fn bb ps = SOME (ops, ps') ==>
-    ?clean_ops ps2 inst_ops.
-      (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
-       then clean_stack_plan liveness cfg fn bb ps
-       else ([], ps)) = (clean_ops, ps2) /\
-      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
-        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
-        (LENGTH bb.bb_instructions) 0 (non_param_insts bb) ps2 =
-        SOME (inst_ops, ps') /\
-      ops = SOLabel bb.bb_label :: clean_ops ++ inst_ops
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
-  simp[generate_block_plan_def] >> pairarg_tac >> simp[] >>
-  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]
-QED
-
 Theorem label_block_steps:
   !lo o2pc prog as fmp lbl ops.
     asm_block_at prog as.as_pc (execute_plan fmp (SOLabel lbl :: ops)) ==>
