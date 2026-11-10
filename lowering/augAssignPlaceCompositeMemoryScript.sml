@@ -6,7 +6,8 @@ Ancestors
   augAssignPlaceMemoryContinuation bodyMemoryDefs exprSimMemDefs
   bodyAugAssignOther targetPlaceSimMem stmtSimDefs stmtSimAugAssignPlace
   augAssignPlaceMemoryTarget augAssignPlaceTargetReadiness
-  augAssignPlaceEndpointMemory
+  augAssignPlaceEndpointMemory augAssignPlaceStorageContinuation
+  augAssignPlaceLoadedStorage
   vyperInterpreter exprSimDefs bodySim exprSimHyps
 
 Theorem aug_place_memory_post[local]:
