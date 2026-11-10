@@ -9410,6 +9410,121 @@ Proof
   metis_tac[mm_local_insert_sorted_order, mm_local_copies_geometry_insert]
 QED
 
+Theorem mm_local_flush_geometry[local]:
+  mm_local_copies_geometry ss.ss_copies ==>
+  mm_local_copies_geometry (flush_copies ss cs).ss_copies
+Proof
+  simp[flush_copies_def, mm_local_copies_geometry_filter]
+QED
+
+Theorem mm_local_hazards_geometry[local]:
+  mm_local_copies_geometry ss.ss_copies ==>
+  mm_local_copies_geometry (flush_hazards mode ss c).ss_copies
+Proof
+  simp[flush_hazards_def] >> rpt strip_tac >>
+  rpt IF_CASES_TAC >> metis_tac[mm_local_flush_geometry]
+QED
+
+Theorem mm_local_load_geometry[local]:
+  mm_local_copies_geometry ss.ss_copies ==>
+  mm_local_copies_geometry (scan_load mode ss inst).ss_copies
+Proof
+  strip_tac >> simp[scan_load_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  simp[hard_barrier_def, mm_local_copies_geometry_def] >>
+  rpt IF_CASES_TAC >> simp[mm_local_flush_geometry]
+QED
+
+Theorem mm_local_hazards_add_geometry[local]:
+  mm_local_copies_geometry ss.ss_copies /\
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies ==>
+  mm_local_copies_geometry (add_copy (flush_hazards Mem2Mem ss c).ss_copies c)
+Proof
+  strip_tac >> irule mm_local_copies_geometry_add >>
+  simp[mm_local_hazards_geometry, mm_local_hazards_order, EVERY_MEM] >>
+  metis_tac[mm_local_hazards_new_geometry, mm_local_copy_geometry_sym]
+QED
+
+Theorem mm_local_store_geometry[local]:
+  mm_local_copies_geometry ss.ss_copies /\
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies ==>
+  mm_local_copies_geometry (scan_store dfg Mem2Mem ss inst).ss_copies
+Proof
+  strip_tac >> simp[scan_store_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  simp[hard_barrier_def, mm_local_copies_geometry_def] >>
+  irule mm_local_hazards_add_geometry >> simp[invalidate_loads_def]
+QED
+
+Theorem mm_local_bulk_geometry[local]:
+  mm_local_copies_geometry ss.ss_copies /\
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies ==>
+  mm_local_copies_geometry (scan_bulk_copy Mem2Mem ss inst).ss_copies
+Proof
+  strip_tac >> simp[scan_bulk_copy_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  simp[hard_barrier_def, mm_local_copies_geometry_def] >>
+  irule mm_local_hazards_add_geometry >> simp[invalidate_loads_def]
+QED
+
+Theorem mm_local_inst_geometry[local]:
+  mm_local_copies_geometry ss.ss_copies /\
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies ==>
+  mm_local_copies_geometry (scan_inst dfg Mem2Mem ss inst).ss_copies
+Proof
+  strip_tac >> simp[scan_inst_def] >> rpt IF_CASES_TAC >>
+  simp[mm_local_load_geometry, mm_local_store_geometry, mm_local_bulk_geometry,
+       hard_barrier_def, mm_local_copies_geometry_def]
+QED
+
+Theorem mm_local_fold_geometry[local]:
+  !is ss. mm_local_copies_geometry ss.ss_copies /\
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies ==>
+  mm_local_copies_geometry (FOLDL (scan_inst dfg Mem2Mem) ss is).ss_copies
+Proof
+  Induct >> simp[] >> metis_tac[mm_local_inst_geometry, mm_local_inst_order]
+QED
+
+Theorem mm_local_scan_geometry[local]:
+  mm_local_copies_geometry
+    (FOLDL (scan_inst dfg Mem2Mem) empty_scan_state is).ss_copies
+Proof
+  irule mm_local_fold_geometry >>
+  simp[empty_scan_state_def, mm_local_copies_geometry_def]
+QED
+
+Theorem mm_local_copies_geometry_members[local]:
+  !gs a b. mm_local_copies_geometry gs /\ MEM a gs /\ MEM b gs /\ a <> b ==>
+  mm_local_copy_geometry a b
+Proof
+  Induct >> simp[mm_local_copies_geometry_def, EVERY_MEM] >>
+  metis_tac[mm_local_copy_geometry_sym]
+QED
+
+Theorem mm_local_active_emission_captures[local]:
+  mm_local_copies_geometry gs /\ MEM g gs /\
+  EVERY (mm_local_group_captures is cap B) gs /\
+  (!a l. mm_local_bytes B a l = read_memory a l t) /\
+  LENGTH payload = g.cg_length /\
+  t'.vs_memory = (write_memory_with_expansion g.cg_dst payload t).vs_memory /\
+  (!a l. mm_local_bytes C a l = read_memory a l t') ==>
+  EVERY (mm_local_group_captures is cap C) (FILTER (\h. h <> g) gs)
+Proof
+  simp[EVERY_MEM, MEM_FILTER] >> rpt strip_tac >>
+  rename1 `mm_local_group_captures is cap C h` >>
+  irule mm_local_group_captures_rebase >> qexists `B` >> simp[] >>
+  `mm_local_copy_geometry g h` by
+    (irule mm_local_copies_geometry_members >> metis_tac[]) >>
+  `h.cg_length = 0 \/ payload = [] \/
+   h.cg_src + h.cg_length <= g.cg_dst \/
+   g.cg_dst + LENGTH payload <= h.cg_src` by
+    (gvs[mm_local_copy_geometry_def, copy_overwrites_def,
+       copy_src_interval_def, copy_dst_interval_def,
+       mmIntervalTheory.interval_overlaps_def,
+       mmIntervalTheory.mk_interval_def, mmIntervalTheory.interval_end_def,
+       arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
+     Cases_on `payload` >> gvs[] >> decide_tac) >>
+  simp[venomStateTheory.read_memory_def] >>
+  metis_tac[mm_local_read_write_disjoint, venomStateTheory.read_memory_def]
+QED
+
 Theorem mm_local_collection_discharge[local]:
   mm_local_pending cap js s t /\
   (!pre j mid k post d bs a cs.
