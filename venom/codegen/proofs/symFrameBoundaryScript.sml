@@ -1381,6 +1381,101 @@ Proof
   drule_all sym_popmany_individual_numeric >> simp[]
 QED
 
+Theorem sym_poke_popmany_numeric:
+  !items ps d op ops next p env cp fn ret srest initial_fmp R ss.
+    (\(pop_ops,ps'). (SOPoke d op :: pop_ops,ps'))
+      (popmany_plan items (ps with ps_stack := stack_poke d op ps.ps_stack)) = (ops,next) /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    d < LENGTH ps.ps_stack /\
+    (!sv. op_kind_ok fn ret (stack_peek d ps.ps_stack) sv ==> op_kind_ok fn ret op sv) /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. next.ps_alloc.sa_spill_base <= b /\ b < next.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest next out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >> pairarg_tac >> gvs[] >>
+  drule_all sym_kinds_stack_poke >> strip_tac >>
+  `spill_alloc_layout_wf
+    (ps with ps_stack := stack_poke d op ps.ps_stack).ps_alloc
+    (ps with ps_stack := stack_poke d op ps.ps_stack).ps_spilled` by simp[] >>
+  rename1 `popmany_plan items _ = (pops,next)` >>
+  `execute_plan initial_fmp (SOPoke d op :: pops) = execute_plan initial_fmp pops`
+    by simp[planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def] >>
+  asm_rewrite_tac[] >> once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule sym_popmany_numeric >> metis_tac[]
+QED
+
+Theorem sym_poke_numeric:
+  !ps d op p env cp fn ret srest initial_fmp R ss.
+    sym_kinds_ok cp fn ret srest ps ss /\ d < LENGTH ps.ps_stack /\
+    (!sv. op_kind_ok fn ret (stack_peek d ps.ps_stack) sv ==> op_kind_ok fn ret op sv) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp [SOPoke d op])) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest (ps with ps_stack := stack_poke d op ps.ps_stack) out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp [SOPoke d op]) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >> drule_all sym_kinds_stack_poke >> strip_tac >>
+  qexists `ss` >> simp[planExecTheory.execute_plan_def,
+    planExecTheory.exec_stack_op_def, sym_steps_def]
+QED
+
+Theorem sym_phi_plan_hit_no_dup_numeric:
+  !inst live halt ps ops next d p env cp fn ret srest initial_fmp R ss.
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+    ~MEM (operand_to_string (stack_peek d ps.ps_stack)) live /\
+    d < LENGTH ps.ps_stack /\
+    (!sv. op_kind_ok fn ret (stack_peek d ps.ps_stack) sv ==>
+          op_kind_ok fn ret (Var (HD inst.inst_outputs)) sv) /\
+    generate_phi_plan inst live halt ps = (ops,next) /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. next.ps_alloc.sa_spill_base <= b /\ b < next.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest next out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all fnFrameStepsPhiTheory.phi_plan_hit_no_dup >> strip_tac >>
+  Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) live`
+  >- (gvs[] >> drule_all sym_poke_popmany_numeric >> simp[]) >>
+  gvs[] >> drule_all sym_poke_numeric >> simp[]
+QED
+
+Theorem sym_phi_plan_no_dup_numeric:
+  !inst live halt ps ops next p env cp fn ret srest initial_fmp R ss.
+    generate_phi_plan inst live halt ps = (ops,next) /\
+    (!d. stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d ==>
+      d < LENGTH ps.ps_stack /\
+      ~MEM (operand_to_string (stack_peek d ps.ps_stack)) live /\
+      (!sv. op_kind_ok fn ret (stack_peek d ps.ps_stack) sv ==>
+            op_kind_ok fn ret (Var (HD inst.inst_outputs)) sv)) /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. next.ps_alloc.sa_spill_base <= b /\ b < next.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest next out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- (drule fnFrameStepsPhiTheory.phi_plan_no_hit >> strip_tac >>
+      gvs[planExecTheory.execute_plan_def, sym_steps_def]) >>
+  irule sym_phi_plan_hit_no_dup_numeric >> metis_tac[]
+QED
+
 Theorem sym_phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0
