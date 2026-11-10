@@ -4722,6 +4722,97 @@ Proof
   qexistsl [`n`,`out`] >> simp[]
 QED
 
+Theorem sym_rf_entry_future_non_phi:
+  revert_forward_pair bb i j ==>
+  !r ti. SUC i <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
+    ti.inst_opcode <> PHI
+Proof
+  rpt strip_tac >>
+  `i <= r /\ r <> i` by decide_tac >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_forward_instruction_opcode >>
+  simp[] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem sym_rf_entry_success_terminal:
+  !cp.
+  lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
+  codegen_ready_fn fn /\ opaque_use_ok fn /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  revert_forward_pair bb i j /\ vs.vs_inst_idx = i /\ i < j /\
+  LENGTH (get_params bb.bb_instructions) <= i /\
+  get_instruction bb i = SOME inst /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  inst.inst_operands = [dop;sop;zop] /\
+  EVERY (\ti. EVERY (\op. ~is_label_operand op) ti.inst_operands)
+    (DROP i bb.bb_instructions) /\
+  rf_spills_separated ps /\
+  rf_value_inv fn ra bb j lo (frame_view fn ra vs) i vs /\
+  rf_inventory_inv fn ra lo (frame_view fn ra vs) ps vs /\
+  (!op. rf_live_use bb i j op /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  generate_regular_inst_plan (liveness_analyze fn) (dfg_build_function fn)
+    (cfg_analyze fn) fn inst (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))
+    halting term bb.bb_label ps = (step_ops,ps1) /\
+  (!off. ~MEM (SOSpill off) step_ops /\ ~MEM (SORestore off) step_ops) /\
+  operand_val (frame_view fn ra vs) lo dop = SOME dst /\
+  operand_val (frame_view fn ra vs) lo zop = SOME sz /\
+  step_inst fuel ctx inst vs = OK copied /\
+  exec_block fuel ctx bb vs = Abort a vs_end /\
+  asm_steps lo (build_offset_to_pc prog) prog
+    (LENGTH (execute_plan fmp step_ops)) ast = AsmOK out /\
+  out.as_pc = ast.as_pc + LENGTH (execute_plan fmp step_ops) /\
+  out.as_stack = stk_out ++ rest /\
+  plan_stack_rel lo (frame_view fn ra copied) ps1.ps_stack stk_out /\
+  venom_asm_terminal_rel copied out /\
+  TAKE (w2n sz) (DROP (w2n dst) copied.vs_memory) =
+    TAKE (w2n sz) (DROP (w2n dst) out.as_memory) /\
+  generate_block_insts_plan (liveness_analyze fn) (dfg_build_function fn)
+    (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)
+    (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions)
+    (SUC i - LENGTH (get_params bb.bb_instructions)) (DROP (SUC i) bb.bb_instructions)
+    ps1 = SOME (rest_ops,ps_end) /\
+  (!off. ~MEM (SOSpill off) rest_ops /\ ~MEM (SORestore off) rest_ops) /\
+  asm_block_at prog (ast.as_pc + LENGTH (execute_plan fmp step_ops))
+    (execute_plan fmp rest_ops) /\
+  MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\ label_flow_ok ctx /\
+  asm_static_wf prog /\
+  sym_steps prog env (LENGTH (execute_plan fmp step_ops)) ss = SymOK ss_out /\
+  asm_sym_rel prog env out ss_out /\ ss_out.sym_stack = top_out ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps1.ps_stack) top_out /\
+  (!b. b IN FDOM ss_out.sym_mem_labels ==> context_spill_byte cp b) /\
+  ~mem_labels_hit ss_out.sym_mem_labels (in_mem_range (w2n dst) (w2n sz)) ==>
+  ?n ast_end.
+    ((a = Revert_abort /\ asm_steps lo o2pc prog n ast = AsmRevert ast_end) \/
+     (a = ExHalt_abort /\ asm_steps lo o2pc prog n ast = AsmFault ast_end)) /\
+    venom_asm_terminal_rel vs_end ast_end /\ sym_terminal (sym_steps prog env n ss)
+Proof
+  gen_tac >> strip_tac >>
+  `i <= j` by decide_tac >>
+  drule_all sym_rf_abort_source_success >> disch_tac >>
+  `LENGTH (compute_operands inst) <= 16` by
+    simp[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def] >>
+  drule sym_rf_entry_future_non_phi >> disch_tac >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_suffix_copy_success_invariants >> strip_tac >>
+  drule_all sym_rf_copy_normalized_range >> strip_tac >>
+  `i < SUC i /\ SUC i <= j /\ LENGTH (get_params bb.bb_instructions) <= SUC i` by decide_tac >>
+  `plan_stack_rel lo (frame_view fn ra (copied with vs_inst_idx := SUC i)) ps1.ps_stack stk_out /\
+   venom_asm_terminal_rel (copied with vs_inst_idx := SUC i) out /\
+   TAKE (w2n sz) (DROP (w2n dst) (copied with vs_inst_idx := SUC i).vs_memory) =
+     TAKE (w2n sz) (DROP (w2n dst) out.as_memory)` by
+    simp[sym_plan_stack_rel_inst_idx, sym_terminal_rel_inst_idx] >>
+  `(copied with vs_inst_idx := SUC i).vs_inst_idx = SUC i` by simp[] >>
+  `asm_block_at prog out.as_pc (execute_plan fmp rest_ops)` by metis_tac[] >>
+  qpat_assum `rf_inventory_inv _ _ _ _ ps1 _`
+    (mp_then (Pat `rf_inventory_inv _ _ _ _ _ _`) mp_tac
+      (Q.SPEC `SUC i` sym_rf_strict_suffix_abort)) >>
+  disch_then drule_all >> strip_tac >>
+  qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  qpat_x_assum `o2pc = _` SUBST_ALL_TAC >>
+  drule_all sym_rf_revert_runs_compose >> strip_tac >>
+  qexistsl [`LENGTH (execute_plan fmp step_ops) + n`, `out'`] >>
+  ASM_SIMP_TAC bool_ss []
+QED
+
 Theorem sym_rf_entry_forward_abort:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn bb i j ps vs ast ops
    ps_end ra rest mem0 a vs_end env ret srest labs0 ss.
@@ -4781,58 +4872,28 @@ Proof
     (TAKE (w2n sz) (DROP (w2n src) vs.vs_returndata)) vs` >>
   `copied = write_memory_with_expansion (w2n dst)
     (TAKE (w2n sz) (DROP (w2n src) vs.vs_returndata)) vs` by simp[Abbr `copied`] >>
+  `!off. ~MEM (SOSpill off) rest_ops /\ ~MEM (SORestore off) rest_ops` by metis_tac[] >>
   drule_all sym_rf_entry_copy_execution >>
   reverse (Cases_on `w2n src + w2n sz <= LENGTH vs.vs_returndata`) >>
-  pure_asm_rewrite_tac[COND_CLAUSES] >> strip_tac
+  pure_asm_rewrite_tac[COND_CLAUSES] >> strip_tac >>
+  qpat_x_assum `step_inst fuel ctx inst vs = _` mp_tac >>
+  pure_asm_rewrite_tac[COND_CLAUSES] >> disch_tac >>
+  qpat_x_assum `copied = write_memory_with_expansion _ _ _`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th])) >>
+  qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  qpat_x_assum `o2pc = _` SUBST_ALL_TAC
   >- suspend "fault" >> suspend "success"
 QED
 
 Resume sym_rf_entry_forward_abort[fault]:
-  qpat_x_assum `step_inst fuel ctx inst vs = _` mp_tac >>
-  pure_asm_rewrite_tac[COND_CLAUSES] >> disch_tac >>
   `i <= j` by decide_tac >>
   drule_all sym_rf_entry_fault_terminal >> simp[]
 QED
 
 Resume sym_rf_entry_forward_abort[success]:
-  qpat_x_assum `step_inst fuel ctx inst vs = _` mp_tac >>
-  pure_asm_rewrite_tac[COND_CLAUSES] >> disch_tac >>
-  `i <= j` by decide_tac >>
-  drule_all sym_rf_abort_source_success >> disch_tac >>
-  `LENGTH (compute_operands inst) <= 16` by
-    simp[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def] >>
-  `!r ti. SUC i <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
-     ti.inst_opcode <> PHI` by
-    (rpt strip_tac >> `i <= r` by decide_tac >>
-     drule_all fnFrameStepsRevertForwardTheory.rf_forward_instruction_opcode >>
-     simp[] >> rpt IF_CASES_TAC >> simp[]) >>
-  `i <= j` by decide_tac >>
-  drule_all fnFrameStepsRevertForwardTheory.rf_suffix_copy_success_invariants >> strip_tac >>
-  `operand_val (frame_view fn ra vs) lo
-     (normalize_operand (dfg_build_function fn) [] dop) = SOME dst /\
-   operand_val (frame_view fn ra vs) lo
-     (normalize_operand (dfg_build_function fn) [] zop) = SOME sz` by
-    (drule_all sym_rf_copy_normalized_range >> simp[]) >>
-  `i < SUC i /\ SUC i <= j /\ LENGTH (get_params bb.bb_instructions) <= SUC i` by decide_tac >>
-  `!off. ~MEM (SOSpill off) rest_ops /\ ~MEM (SORestore off) rest_ops` by metis_tac[] >>
-  `asm_block_at prog out.as_pc (execute_plan cp'.cp_initial_fmp rest_ops)` by metis_tac[] >>
-  qpat_x_assum `copied = write_memory_with_expansion _ _ _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th])) >>
-  `plan_stack_rel lo (frame_view fn ra (copied with vs_inst_idx := SUC i)) ps1.ps_stack stk_out /\
-   venom_asm_terminal_rel (copied with vs_inst_idx := SUC i) out /\
-   TAKE (w2n sz) (DROP (w2n dst) (copied with vs_inst_idx := SUC i).vs_memory) =
-     TAKE (w2n sz) (DROP (w2n dst) out.as_memory)` by
-    simp[sym_plan_stack_rel_inst_idx, sym_terminal_rel_inst_idx] >>
-  `(copied with vs_inst_idx := SUC i).vs_inst_idx = SUC i` by simp[] >>
-
-  qpat_assum `rf_inventory_inv _ _ _ _ ps1 _`
-    (mp_then (Pat `rf_inventory_inv _ _ _ _ _ _`) mp_tac
-      (Q.SPEC `SUC i` sym_rf_strict_suffix_abort)) >>
-  disch_then drule_all >> strip_tac >>
-  qpat_x_assum `lo = _` SUBST_ALL_TAC >>
-  qpat_x_assum `o2pc = _` SUBST_ALL_TAC >>
-  drule_all sym_rf_revert_runs_compose >> strip_tac >>
-  qexistsl [`LENGTH (execute_plan cp'.cp_initial_fmp step_ops) + n`, `out'`] >>
-  ASM_SIMP_TAC bool_ss []
+  drule_all (SRULE [] (Q.INST
+    [`lo` |-> `SND (compute_label_offsets prog)`,
+     `o2pc` |-> `build_offset_to_pc prog`] sym_rf_entry_success_terminal)) >> simp[]
 QED
 
 Finalise sym_rf_entry_forward_abort
