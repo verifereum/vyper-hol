@@ -3366,6 +3366,74 @@ Proof
   metis_tac[listTheory.TAKE_DROP, listTheory.APPEND_ASSOC]
 QED
 
+Theorem sym_frame_entry_selected_prefix_sim_marked:
+  opc <> INVOKE /\
+  lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
+  (!l. MEM (Label l) operands ==> IS_SOME (FLOOKUP lo l)) /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    IS_SOME (stack_get_depth op ps.ps_stack) \/
+    IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  emit_input_plan opc operands nl ps = (iops,prepared) /\
+  reorder_plan dfg selected prepared = (rops,arranged) /\
+  PERM operands selected /\ LENGTH operands <= 16 /\
+  LENGTH operands <= LENGTH prepared.ps_stack /\
+  generated_plan_state_wf_marked spillbase ps /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) operands /\
+  (!op at. MEM op operands /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at operands) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  ops = iops ++ rops ++ suffix /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st /\
+  asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  arranged.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  asm_static_wf prog /\
+  sym_frame_inv prog env ctx cplan fn ret srest labs0 ps st ss ==>
+  plan_state_residual_wf_marked spillbase selected (LENGTH selected) arranged /\
+  arranged.ps_stack = stack_pop (LENGTH selected) arranged.ps_stack ++ selected /\
+  ?mid ss_mid.
+    asm_steps lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) st =
+      AsmOK (mid with as_stack := mid.as_stack ++ rest) /\
+    venom_asm_rel lo arranged
+      (frame_view fn ra vs with vs_memory := st.as_memory) mid /\
+    context_memory_rel cplan vs.vs_memory mid.as_memory /\
+    mid.as_pc = st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) /\
+    venom_asm_terminal_rel vs (mid with as_stack := mid.as_stack ++ rest) /\
+    sym_steps prog env (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) ss =
+      SymOK ss_mid /\
+    sym_frame_inv prog env ctx cplan fn ret srest labs0 arranged
+      (mid with as_stack := mid.as_stack ++ rest) ss_mid
+Proof
+  strip_tac >> drule_all frame_entry_selected_prefix_sim_marked >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  `!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    metis_tac[deepInstSimTheory.marked_operand_owned] >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+   plan_slots_bounded spillbase ps /\ residual_budget_wf_marked spillbase [] ps` by
+    metis_tac[fnPlanPrefixTheory.generated_plan_state_wf_marked_def,
+              deepResidualSimTheory.generated_plan_state_wf_marked_residual_nil] >>
+  `r.sr_spill_base <= ps.ps_alloc.sa_spill_base` by
+    metis_tac[allocMonoTheory.reorder_plan_spill_base,
+              allocMonoTheory.emit_input_plan_spill_base] >>
+  `EVERY (\s. case s of SOSpill off => off < dimword(:256)
+     | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
+   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
+    gvs[listTheory.EVERY_APPEND, stackOpSimTheory.execute_plan_append,
+        stackOpSimTheory.asm_block_at_append] >>
+  `arranged.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
+  drule_all sym_selected_prefix_frame_sim_marked >> strip_tac >>
+  gvs[] >> metis_tac[]
+QED
+
 Theorem sym_revert_operand_kind:
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
   opaque_use_ok fn /\ label_flow_ok ctx /\ inst.inst_opcode = REVERT /\
