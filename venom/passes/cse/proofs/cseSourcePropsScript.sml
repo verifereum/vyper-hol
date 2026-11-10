@@ -265,7 +265,7 @@ Proof
  conj_tac
  >- metis_tac[dfAnalyzePropsTheory.cfg_dfs_pre_subset_fn_labels] >>
  conj_tac
- >- metis_tac[cfgAnalysisPropsTheory.cfg_analyze_succ_labels] >>
+ >- metis_tac[cfgCorrectnessProofTheory.cfg_analyze_succ_labels] >>
  rpt strip_tac >> irule cse_process_boundary_rank >> simp[]
 QED
 
