@@ -325,6 +325,103 @@ Proof
   decide_tac
 QED
 
+Theorem ircf_forward_source_bytes:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\ ctx_inst_ids_distinct C /\
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  MEM bb fn.fn_blocks /\
+  k IN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [sr] /\
+  FLOOKUP s.vs_allocas ai.inst_id = SOME (rb,z) /\ q < z ==>
+  rb+q NOTIN ircf_dead (ircf_dst_ids fn_meta rma C) s stk /\
+  rb+q < s.vs_alloca_next
+Proof
+  strip_tac >>
+  drule occ_frame_reachable_annotation >> simp[] >> strip_tac >>
+  `occurrence_natural_geometry lo a U B stk s` by
+    metis_tac[occ_frame_reachable_geometry] >>
+  `ALL_DISTINCT (a::MAP (\u. u.of_owner) U)` by
+    metis_tac[occ_frame_reachable_owner_fresh] >>
+  `ai.inst_id NOTIN ircf_dst_ids fn_meta rma C` by
+    metis_tac[ircf_forward_source_not_dst_id] >>
+  `rb <= rb+q /\ rb+q < rb+z` by decide_tac >>
+  conj_tac
+  >- (drule_all ircf_dead_current_site_exclusion >>
+      simp[arithmeticTheory.ADD_COMM]) >>
+  `FLOOKUP B (a,ai.inst_id) = SOME (rb,z)` by
+    fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>
+  `rb+z <= s.vs_alloca_next` by metis_tac[occurrence_geometry_site_bounds] >>
+  decide_tac
+QED
+
+Theorem ircf_forward_source_agreement:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\ ctx_inst_ids_distinct C /\
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  MEM bb fn.fn_blocks /\
+  k IN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [sr] /\
+  FLOOKUP s.vs_allocas ai.inst_id = SOME (rb,z) /\ q < z /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+  rb+q NOTIN tn.t_mem ==>
+  read_byte (rb+q) s.vs_memory = read_byte (rb+q) t.vs_memory
+Proof
+  strip_tac >> drule_all ircf_forward_source_bytes >> strip_tac >>
+  drule_all taint_agree_memory >> simp[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem ircf_forward_copy_sites:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\ ctx_inst_ids_distinct C /\
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\ s.vs_inst_idx = k /\
+  k IN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) ==>
+  ?dai rai db rb.
+    MEM dai (fn_insts fn) /\ dai.inst_opcode = ALLOCA /\ dai.inst_outputs = [d] /\
+    MEM rai (fn_insts fn) /\ rai.inst_opcode = ALLOCA /\ rai.inst_outputs = [sr] /\
+    FLOOKUP s.vs_allocas dai.inst_id = SOME (db,w2n sz) /\
+    FLOOKUP s.vs_allocas rai.inst_id = SOME (rb,w2n sz) /\
+    lookup_var d s = SOME (n2w db) /\ lookup_var sr s = SOME (n2w rb) /\
+    db+w2n sz <= s.vs_alloca_next /\ rb+w2n sz <= s.vs_alloca_next /\
+    (db+w2n sz <= rb \/ rb+w2n sz <= db) /\
+    (!q. q < w2n sz ==> rb+q NOTIN ircf_dead (ircf_dst_ids fn_meta rma C) s stk)
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+    simp[wf_ssa_def, ircf_tbb_def, ircf_transform_block_plan] >>
+  `ircf_fwd_ok fn bb k d sr sz` by metis_tac[ircf_block_plan_fwd_ok] >>
+  drule_all ircf_fwd_operand_sites >> strip_tac >>
+  drule occ_frame_reachable_annotation >> simp[] >> strip_tac >>
+  `occurrence_natural_geometry lo a U B stk s` by
+    metis_tac[occ_frame_reachable_geometry] >>
+  `FLOOKUP B (a,dai.inst_id) = SOME (db,w2n sz) /\
+   FLOOKUP B (a,rai.inst_id) = SOME (rb,w2n sz)` by
+    fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>
+  `db+w2n sz <= s.vs_alloca_next /\ rb+w2n sz <= s.vs_alloca_next` by
+    metis_tac[occurrence_geometry_site_bounds] >>
+  `dai.inst_id <> rai.inst_id` by
+    (strip_tac >> `dai = rai` by
+       (irule venomWfPropsTheory.fn_inst_ids_distinct_inj >> simp[] >>
+        qexists_tac `fn` >> simp[] >>
+        gvs[wf_function_def]) >>
+     gvs[ircf_fwd_ok_def]) >>
+  `db+w2n sz <= rb \/ rb+w2n sz <= db` by
+    (Cases_on `w2n sz = 0` >- decide_tac >>
+     `0 < w2n sz` by decide_tac >>
+     metis_tac[occurrence_geometry_sites_disjoint, pairTheory.PAIR_EQ]) >>
+  qexistsl_tac [`dai`, `rai`, `db`, `rb`] >> simp[] >>
+  gen_tac >> strip_tac >>
+  drule_all ircf_forward_source_bytes >> simp[]
+QED
+
 Theorem ircf_saved_dead_read_disjoint:
   occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
