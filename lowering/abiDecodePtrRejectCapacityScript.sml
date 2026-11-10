@@ -1,6 +1,7 @@
 Theory abiDecodePtrRejectCapacity
 Ancestors
-  abiDecodePtrRejectChecks abiDecodePtrOverCapacity abiDecoderBytesBound abiDecoderBytesPrefix
+  abiDecodePtrRejectChecks abiDecodePtrOverCapacity abiDecodePtrMemberInterface
+  abiDecoderMemberBound abiDecoderBytesBound abiDecoderBytesPrefix
   abiDecoderBytesPhases abiDecoderBytesFrame abiDecoderGuards abiDecoderVarSequence
   abiDecoderReentryPointer abiDecoderComposition abiDecoderRange abiDecoderContract
   abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper fragExec
@@ -128,3 +129,49 @@ Resume abi_decode_bytes_capacity_reject_witness[suffix]:
 QED
 
 Finalise abi_decode_bytes_capacity_reject_witness
+
+Theorem abi_decode_selected_bytes_capacity_reject_witness:
+  abi_decode_member_code dst pos src hi (DecBytestring n) off q sa sb /\
+  eval_operand pos s = SOME (n2w z) /\
+  eval_operand (Var src) s = SOME (n2w b) /\
+  eval_operand hi s = SOME (n2w h) /\ hi <> Lit 0w /\
+  eval_operand (Var dst) s = SOME d /\
+  abi_decode_load MLOAD (n2w (b+(z+off)) : bytes32) s = n2w delta /\
+  z+delta+32 <= h /\ h < dimword (:256) /\ n < dimword (:256) /\
+  n < w2n (abi_decode_load MLOAD (n2w (b+(z+delta)) : bytes32) s) /\
+  fresh_vars_wrt sa s ==>
+  ?t. abi_decode_reject_witness (emitted_insts sa sb) s t
+Proof
+  strip_tac >>
+  qpat_x_assum `abi_decode_member_code _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[abi_decode_member_code_def, dec_info_needs_offset_def] >> strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_member_pointer_code >> strip_tac >>
+  `z+delta < dimword(:256)` by decide_tac >>
+  drule_all abi_decode_dynamic_member_pointer >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK s1` >>
+  `eval_operand (Var dst) s1 = SOME d` by metis_tac[] >>
+  `eval_operand (Lit (n2w q)) s1 = SOME (n2w q)` by simp[eval_operand_def] >>
+  drule_all emit_op_ADD_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm sn) s1 = OK s2` >>
+  drule_all (abi_decode_pure_emit_frame |> Q.INST [`opc` |-> `ADD`] |> SRULE []) >>
+  strip_tac >>
+  `eval_operand v s2 = SOME (n2w (z+delta)) /\
+   eval_operand (Var src) s2 = SOME (n2w b) /\
+   eval_operand hi s2 = SOME (n2w h)` by metis_tac[] >>
+  `n < w2n (abi_decode_load MLOAD (n2w (b+(z+delta)) : bytes32) s2)` by
+    gvs[abi_decode_load_def, mload_def] >>
+  `?t. abi_decode_reject_witness (emitted_insts sn sb) s2 t` by
+    (irule abi_decode_bytes_capacity_reject_witness >> simp[] >>
+     goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
+     qexistsl_tac [`b`, `h`, `z+delta`] >> simp[]) >>
+  `inst_extends sm sn` by metis_tac[inst_extends_emit_op] >>
+  `inst_extends sn sb` by
+    (drule abi_decode_bytes_position_shape >> simp[] >> metis_tac[]) >>
+  `inst_extends sm sb` by metis_tac[inst_extends_trans] >>
+  qexists_tac `t` >> irule abi_decode_emit_reject_chain >>
+  qexistsl_tac [`sm`, `s1`] >> simp[] >>
+  irule abi_decode_emit_op_reject_chain >>
+  goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+  qexists_tac `s2` >> simp[abi_decoder_reentry_opcode_def]
+QED
