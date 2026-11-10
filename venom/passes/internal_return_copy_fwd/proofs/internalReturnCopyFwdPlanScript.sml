@@ -1266,6 +1266,22 @@ Proof
   fs[ircf_fwd_ok_def] >> metis_tac[EL_MEM]
 QED
 
+Theorem ircf_redirect_non_address_operand:
+  wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  MEM bb fn.fn_blocks /\ ircf_block_plan fn bb bb2 /\
+  i < LENGTH bb.bb_instructions /\ i NOTIN ircf_fwds bb bb2 /\
+  inst = EL i bb.bb_instructions /\ inst.inst_opcode <> ASSIGN /\
+  pos < LENGTH inst.inst_operands /\ EL pos inst.inst_operands = op /\
+  ~is_mem_addr_position inst.inst_opcode pos ==>
+  ircf_redirect_op fn bb bb2 op = op
+Proof
+  strip_tac >> Cases_on `op` >> simp[ircf_redirect_op_def] >>
+  rename1 `EL pos inst.inst_operands = Var v` >>
+  Cases_on `ircf_redirect fn bb bb2 v = v` >> simp[] >>
+  metis_tac[ircf_redirect_changed_position]
+QED
+
 Theorem ircf_block_plan_assign:
   ircf_block_plan fn bb bb2 /\ i < LENGTH bb.bb_instructions /\
   i NOTIN ircf_fwds bb bb2 /\

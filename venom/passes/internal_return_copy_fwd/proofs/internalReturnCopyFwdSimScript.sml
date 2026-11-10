@@ -803,6 +803,67 @@ Proof
   qexistsl_tac [`sr`, `n2w sb`, `sz`] >> simp[]
 QED
 
+Theorem ircf_redirect_read_address_defined:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  inst.inst_opcode <> ASSIGN /\ MEM (Var v) inst.inst_operands /\
+  ircf_redirect fn bb (ircf_tbb fn_meta rma C fn bb) v <> v /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY ssa_form C.ctx_functions /\ taint_agree D X tn s t ==>
+  ?r. eval_operand (Var (ircf_redirect fn bb (ircf_tbb fn_meta rma C fn bb) v)) t = SOME r
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ fn_inst_ids_distinct fn` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM, venomWfTheory.wf_function_def] >>
+  `ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+    simp[ircf_tbb_def, ircf_transform_block_plan] >>
+  `ssa_form fn` by fs[venomWfTheory.wf_ssa_def] >>
+  drule_all ircf_redirect_changed_forward >> strip_tac >>
+  `s.vs_inst_idx <> k` by metis_tac[] >>
+  `k < s.vs_inst_idx` by metis_tac[ircf_fwd_dst_use_later] >>
+  `k <= s.vs_inst_idx` by decide_tac >>
+  drule_all ircf_fwd_source_root_later >> strip_tac >>
+  `op_taint tn (Var sr) = {}` by
+    (irule frame_reachable_alloca_root_clean >> metis_tac[]) >>
+  drule_all taint_agree_operand_clean >> simp[eval_operand_def] >> metis_tac[]
+QED
+
+Theorem ircf_redirect_clean_read_slice:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  inst.inst_opcode <> ASSIGN /\ mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  MEM (Var v) inst.inst_operands /\
+  ircf_redirect fn bb (ircf_tbb fn_meta rma C fn bb) v <> v /\
+  lookup_var v s = SOME w /\ access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  MEM (w2n w,len) (source_memory_read_ranges inst s) /\
+  (!q. q < len ==> w2n w+q NOTIN tn.t_mem) /\
+  ircf_cross tn (ircf_gam_cur fn_meta rma C fn s) s t /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  ptr_discipline lo C vs /\ taint_agree D X tn s t ==>
+  ?r. eval_operand (Var (ircf_redirect fn bb (ircf_tbb fn_meta rma C fn bb) v)) t = SOME r /\
+    read_memory (w2n w) len s = read_memory (w2n r) len t
+Proof
+  strip_tac >> Cases_on `len = 0`
+  >- (`EVERY ssa_form C.ctx_functions` by
+        (fs[EVERY_MEM, venomWfTheory.wf_ssa_def] >> metis_tac[]) >>
+      drule_all ircf_redirect_read_address_defined >> strip_tac >>
+      qexists_tac `r` >> simp[read_memory_def]) >>
+  drule_all ircf_redirect_read_effective_observation >> strip_tac >>
+  qexists_tac `r` >> simp[] >>
+  irule o1LowerDloadRangeTransportTheory.read_memory_eq_from_bytes >>
+  metis_tac[]
+QED
+
 Theorem ircf_gam_cur_write_disjoint:
   occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ lo <= vs.vs_alloca_next /\
