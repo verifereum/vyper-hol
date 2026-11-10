@@ -3200,3 +3200,18 @@ QED
 
 
 Finalise taint_agree_step_base
+
+
+Theorem taint_agree_setup_callee:
+  taint_agree D X tn s t /\ setup_callee fn args s = SOME cs /\
+  fn'.fn_blocks <> [] /\
+  (HD fn'.fn_blocks).bb_label = (HD fn.fn_blocks).bb_label ==>
+  ?ct. setup_callee fn' args t = SOME ct /\
+       taint_agree D X (tn with t_var := FEMPTY) cs ct
+Proof
+  strip_tac >>
+  gvs[setup_callee_def, NULL_EQ] >>
+  gvs[taint_agree_def, ld_shared_agree_def] >>
+  simp[taint_agree_def, ld_shared_agree_def] >>
+  gvs[venomStateTheory.venom_state_component_equality]
+QED
