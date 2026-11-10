@@ -383,7 +383,7 @@ Proof
        MEM pred' (cfg_preds_of (cfg_analyze fn) succ)` by
         metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
       gvs[LENGTH_EQ_NUM_compute] >>
-      `B = pin` by metis_tac[dfs_block_state_unique] >> gvs[]) >>
+      `B = pin` by metis_tac[fnBlockPlanStaticDfsTraceTheory.dfs_block_state_unique] >> gvs[]) >>
   strip_tac >> gvs[] >>
   `1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ)` by
     (`MEM pred (cfg_preds_of (cfg_analyze fn) succ)` by
@@ -4244,7 +4244,7 @@ Proof
     metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
   gvs[] >>
   rename1 `generate_block_plan _ _ _ _ pred_bb origin_in = SOME _` >>
-  `origin_in = pin` by metis_tac[dfs_block_state_unique] >> gvs[]
+  `origin_in = pin` by metis_tac[fnBlockPlanStaticDfsTraceTheory.dfs_block_state_unique] >> gvs[]
 QED
 
 Theorem regional_single_successor_recompute_out:

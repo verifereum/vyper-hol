@@ -244,12 +244,12 @@ QED
 Theorem native_inst_ops_prefix_exec:
   !k lv dfg cfg fn lbl halt np bl xs p0 ops q.
     native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 k ops q <=>
-    fnPlanLineagePrefix$generate_block_insts_prefix
+    fnPlanPrefix$generate_block_insts_prefix
       lv dfg cfg fn lbl halt np bl 0 k xs p0 = SOME (ops,q)
 Proof
   Induct_on `k`
   >- (simp[native_inst_ops_prefix_zero,
-           fnPlanLineagePrefixTheory.generate_block_insts_prefix_def] >>
+           fnPlanPrefixTheory.generate_block_insts_prefix_def] >>
       metis_tac[]) >>
   simp[native_inst_ops_prefix_suc,
        fnPlanLineagePrefixTheory.generate_block_insts_prefix_suc]
@@ -292,7 +292,7 @@ Theorem native_inst_ops_prefix_split:
 Proof
   rpt strip_tac >> rewrite_tac[native_inst_ops_prefix_exec] >>
   irule (SRULE [] (Q.INST [`i` |-> `0`]
-    (SPEC_ALL fnPlanLineagePrefixTheory.generate_block_insts_plan_split))) >>
+    (SPEC_ALL fnPlanPrefixTheory.generate_block_insts_plan_split))) >>
   simp[]
 QED
 

@@ -538,7 +538,7 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   mp_tac (Q.SPECL [`liveness`, `dfg`, `cfg`, `fn`, `bb`,
     `ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>`,
-    `block_ops`, `ps_after`] generate_block_plan_nonentry) >>
+    `block_ops`, `ps_after`] fnPlanLineageEntryProductionTheory.generate_block_plan_nonentry) >>
   impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   mp_tac (Q.SPECL [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `fn`,
     `spill_base`, `lbl_ctr`, `fn_ops`, `ps_end`, `bb.bb_label`, `ps_dfs`,
@@ -577,12 +577,12 @@ Proof
     (qpat_x_assum `asm_steps _ _ _ 1 as = _`
        (fn th => REWRITE_TAC [MATCH_MP asm_steps_add_ok th]) >>
      first_assum ACCEPT_TAC) >>
-  `?prefixL prefixD core.
+  Q.SUBGOAL_THEN `?prefixL prefixD core.
      ps_after.ps_stack = prefixL ++ core /\
      ps_dfs_after.ps_stack = prefixD ++ core /\
      (!v. MEM v (live_vars_at liveness bb.bb_label (LENGTH bb.bb_instructions)) ==>
-        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` by
-    (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> simp[]) >>
+        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` ASSUME_TAC
+  >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> simp[]) >>
   qexistsl_tac [`h`, `promised`, `ps_after`, `clean_ops ++ phi_ops`,
                 `body_ops`, `ps1`, `1 + n`, `as'`] >>
   rpt conj_tac >> REWRITE_TAC [operand_val_frame_view_inst_idx] >>
