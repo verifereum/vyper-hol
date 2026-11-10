@@ -8,9 +8,7 @@ Theorem caller_runtime_context_ok:
   lower_vyper_runtime_unit tops policy = SOME unit ==>
   lowering_context_ok unit.cu_context
 Proof
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  rw[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
-  drule vyperCompilerTheory.run_lowering_context_ok >> simp[]
+  metis_tac[vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry]
 QED
 
 Theorem caller_runtime_entry:
@@ -18,9 +16,7 @@ Theorem caller_runtime_entry:
   unit.cu_context.ctx_entry = SOME "__entry" /\
   ?fn. venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn
 Proof
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  rw[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
-  drule vyperCompilerTheory.run_lowering_entry >> simp[]
+  metis_tac[vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry]
 QED
 
 Theorem caller_runtime_entry_integrity:

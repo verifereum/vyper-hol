@@ -65,7 +65,7 @@ Theorem external_registered_frame_metadata:
   supported_program tops /\ source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\ ALL_DISTINCT (MAP FST args) /\
   set_external_package_target target
-    (package_external_fn tops F nkeys
+    (package_external_fn tops T nkeys
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,ce,pos,cds,pay,F,key,ut,view,fbody,rt) /\
   compile_register_positional_args ce pos 4 start = (cef,registered) ==>
@@ -77,7 +77,7 @@ Proof
   strip_tac >>
   drule compile_register_positional_args_cenv >> strip_tac >>
   qpat_x_assum `cef = _` SUBST1_TAC >>
-  Cases_on `package_external_fn tops F nkeys
+  Cases_on `package_external_fn tops T nkeys
     (mut,F,rr,tx.function_name,args,[],ret,fbody)` >>
   PairCases_on `r` >> gvs[set_external_package_target_def] >>
   drule_all package_external_fn_vars >> strip_tac >>

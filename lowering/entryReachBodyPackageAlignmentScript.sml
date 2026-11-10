@@ -205,7 +205,7 @@ Theorem entry_selected_indexed_metadata:
     SOME (mut,F,args,[],ret,fbody) /\
   bind_arguments (type_env tops) args tx.args = SOME scope /\
   set_external_package_target target
-    (package_external_fn tops F keys
+    (package_external_fn tops T keys
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,ce,pos,cds,pay,F,key,ut,view,fbody,rt) /\
   compile_register_positional_args ce (TAKE i pos) off st = (next,last) /\
@@ -253,7 +253,7 @@ Theorem entry_selected_indexed_location:
   lookup_function NONE tx.function_name External tops =
     SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F keys
+    (package_external_fn tops T keys
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,ce,pos,cds,pay,F,key,ut,view,fbody,rt) /\
   compile_register_positional_args ce (TAKE i pos) off st = (next,last) /\
