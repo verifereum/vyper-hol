@@ -62,6 +62,11 @@ selected fixture that has no fixture. The one exception is the pending list in
 [`pending-5127-port.md`](../pending-5127-port.md), which run only when their
 own path is requested until their port lands.
 
+The fixtures in `decoder_divergent` there are expected to compile and to
+differ from the oracle: they print `PASS` when they differ, and `FAIL` if one
+matches, so a resolved entry gets removed (see
+`../pending-bounded-decode-guards.md`).
+
 Run the `build` step first: the executable compiles `compilerNativeML.sml`,
 which the generator theory writes as an extra output rather than a declared
 source.

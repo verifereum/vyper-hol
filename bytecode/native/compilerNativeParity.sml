@@ -65,6 +65,43 @@ structure compilerNativeParity = struct
   (* Out of parity on purpose; see ../pending-uint2str-buffer.md. *)
   val pending = ["builtin-forms/oracle/uint2str_local.hex"]
 
+  (* Fixtures that must compile but differ from the pinned oracle, so that a
+     list entry that starts to match fails and gets removed: bounded memory
+     decoding checks relative positions and head words before forming
+     pointers, which the pinned Python does not (see
+     ../pending-bounded-decode-guards.md). *)
+  val decoder_divergent = [
+      "python-o1-no-asm-opt/abi_dynamic.hex",
+      "python-o1-no-asm-opt/abi_static.hex",
+      "python-o1-no-asm-opt/interface_calls.hex",
+      "abi-codegen/oracle/dec_bytes_unwrapT.hex",
+      "abi-codegen/oracle/dec_uint_unwrapT.hex",
+      "external-calls/oracle/e04_ret_string.hex",
+      "external-calls/oracle/e05_ret_bytes.hex",
+      "external-calls/oracle/e19_gas_kw.hex",
+      "external-calls/oracle/e21_default_ret.hex",
+      "external-calls/oracle/e22_static_default.hex",
+      "external-calls/oracle/e29_default_ret_skip.hex",
+      "external-calls/oracle/e30_default_ret_tuple.hex",
+      "external-calls/oracle/e37_default_ret_string.hex",
+      "external-calls/oracle/e38_default_ret_local_array.hex",
+      "external-calls/oracle/e40_extcall_gas.hex",
+      "external-calls/oracle/e41_staticcall_gas.hex",
+      "external-calls/oracle/e42_extcall_gas_value_order.hex",
+      "external-calls/oracle/e43_extcall_all_kwargs.hex",
+      "external-calls/oracle/e45_default_ret_ifexp.hex",
+      "external-calls/oracle/i02_iface_default_param.hex",
+      "external-calls/oracle/i03_two_ifaces_same_name.hex",
+      "external-calls/oracle/i09_iface_ret_iface.hex",
+      "external-calls/oracle/i13_ext_fn_before_iface.hex",
+      "external-calls/oracle/i15_iface_ret_iface_direct.hex",
+      "external-calls/oracle/m10c_iface_storage_main.hex",
+      "internal-frames/oracle/p74_int_ext_call.hex",
+      "memory-stores/oracle/dec_from_memory2.hex",
+      "memory-stores/oracle/t03_tuple_assign_abi_decode.hex",
+      "memory-stores/oracle/t04_tuple_assign_extcall.hex",
+      "memory-stores/oracle/t11_tuple_onew_decode_mem.hex"]
+
   fun hex_files root dir = let
     val d = OS.FileSys.openDir (OS.Path.concat (root, dir))
     fun loop acc = case OS.FileSys.readDir d of
@@ -101,9 +138,14 @@ structure compilerNativeParity = struct
          NONE => SOME "compiler returned NONE"
        | SOME (deploy, runtime) => let
            val (d, r) = oracle (OS.Path.concat (dir, name))
-         in case compare "deploy" d (hex_bytes deploy) of
-              SOME e => SOME e
-            | NONE => compare "runtime" r (hex_bytes runtime)
+           val d_diff = compare "deploy" d (hex_bytes deploy)
+           val r_diff = compare "runtime" r (hex_bytes runtime)
+         in
+           if List.exists (fn k => k = name) decoder_divergent
+           then (case (d_diff, r_diff) of
+                   (NONE, NONE) => SOME "matches the oracle: remove it from decoder_divergent"
+                 | _ => NONE)
+           else (case d_diff of NONE => r_diff | e => e)
          end)
       handle Stuck s => SOME ("stuck: " ^ s)
            | e => SOME ("exception: " ^ General.exnMessage e)
