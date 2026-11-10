@@ -202,3 +202,171 @@ Proof
      disch_then (SUBST1_TAC o SYM) >> simp[]) >>
   gvs[merge_callee_state_def]
 QED
+
+Theorem intcall_physical_return_resources:
+  !nret.
+  compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
+  compile_stage_intcall_args ce vals flags tys s2 = (args,si) /\
+  fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
+  (nret = 0 /\ cty = NoneT ==>
+    s2 = s1 /\ (?u. emit_void INVOKE (Label lbl::args) si = (u,sb)) /\
+    vv = StackValue cty (Lit 0w)) /\
+  (0 < nret \/ cty <> NoneT ==>
+    ?buf aid off.
+      compile_alloc_buffer (if 0 < nret then 32 * nret else rbs) s1 = (buf,s2) /\
+      vv = LocatedValue cty (base_ptr buf) /\
+      eval_operand buf.buf_operand t = SOME (n2w off) /\
+      FLOOKUP t.vs_allocas aid = SOME (off,buf.buf_size) /\
+      (?ai. MEM ai (fn_insts func) /\ ai.inst_opcode = ALLOCA /\ ai.inst_id = aid) /\
+      sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+      (0 < nret ==>
+        ?results sj u. emit_multi_op INVOKE (Label lbl::args) nret si = (results,sj) /\
+          store_multi_results buf.buf_operand results 0 sj = (u,sb)) /\
+      (nret = 0 ==>
+        (?u. emit_void INVOKE (Label lbl::buf.buf_operand::args) si = (u,sb)) /\
+        (w:256 word) = n2w off /\ type_memory_size tv <= buf.buf_size)) /\
+  t.vs_current_bb = si.cs_current_bb /\
+  t.vs_inst_idx = LENGTH si.cs_current_insts /\
+  gas_invoke_entry (ctx,func) t callee entered /\
+  gas_path ctx callee entered n (IntRet ir cs) /\
+  ir.iret_adopt_fmp = NONE /\ LENGTH ir.iret_values = nret /\
+  (nret = 0 /\ cty <> NoneT ==> val_in_memory tv v (w2n w) cs.vs_memory) /\
+  evaluate_type (get_tenv cx) cty = SOME tv /\
+  sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
+  (0 < nret ==> 0 < returns_stack_count
+    (\name. MAP (FST o SND) (get_struct_fields ce.ce_struct_fields name)) cty) /\
+  value_has_type tv v /\ intret_vals_match tv v ir.iret_values /\
+  stmt_state_rel ctx func ce cx (es1 with scopes := prev) t /\
+  state_rel other ce cx (ee with <|scopes := []; gas_obs := []|>) cs /\
+  immutable_alloca_sep func ce cx (ee with scopes := prev) t /\
+  wb_frame ce es0 sa s0 t /\
+  (!id b sz. local_region ce es0.scopes s0 id b sz ==>
+    local_region ce prev t id b sz) /\
+  (!id b sz aid off asz.
+    local_region ce prev t id b sz /\ FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
+    sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==> regions_disjoint b sz off asz) /\
+  (!b sz. b + sz <= t.vs_alloca_next /\
+    (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
+      sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==> regions_disjoint b sz off asz) ==>
+    mem_bytes_at b sz cs.vs_memory = mem_bytes_at b sz t.vs_memory) /\
+  allocas_above lo t /\ (!a k. P a k ==> a + k <= lo) ==>
+  ?k out. gas_path ctx func t (n + k) (OK out) /\
+    out.vs_current_bb = sb.cs_current_bb /\
+    out.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    stmt_state_rel ctx func ce cx (ee with <|scopes := prev; gas_obs := []|>) out /\
+    wb_frame ce es0 sa s0 out /\
+    allocas_above lo out /\ out.vs_allocas = t.vs_allocas /\
+    t.vs_alloca_next <= out.vs_alloca_next /\
+    (!x. not_fresh_at sa x ==> lookup_var x out = lookup_var x t) /\
+    (!a k. P a k ==> mem_bytes_at a k out.vs_memory = mem_bytes_at a k t.vs_memory) /\
+    ((cty = NoneT /\ nret = 0 /\ vv = StackValue NoneT (Lit 0w) /\ v = NoneV) \/
+     (?buf aid off. vv = LocatedValue cty (base_ptr buf) /\
+       eval_operand buf.buf_operand out = SOME (n2w off) /\
+       val_in_memory tv v off out.vs_memory /\
+       FLOOKUP out.vs_allocas aid = SOME (off,buf.buf_size) /\
+       sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+       val_footprint tv v <= buf.buf_size /\
+       type_memory_size tv <= buf.buf_size /\ off + buf.buf_size < dimword (:256) /\
+       (!id lb lsz. local_region ce prev out id lb lsz ==>
+         off + buf.buf_size <= lb \/ lb + lsz <= off)))
+Proof
+  gen_tac >> strip_tac >>
+  `intcall_callee_exit other ce cx tv nret NONE sa.cs_next_id sb.cs_next_id t
+    (INL v) (ee with gas_obs := []) (IntRet ir cs)` by
+    (simp[intcall_callee_exit_def] >> metis_tac[]) >>
+  `immutable_alloca_sep func ce cx (ee with <|scopes := prev; gas_obs := []|>) t` by
+    (irule immutable_alloca_sep_fields >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  Cases_on `nret = 0`
+  >- (`ir.iret_values = []` by (Cases_on `ir.iret_values` >> fs[]) >>
+      Cases_on `cty = NoneT` >- suspend "void" >> suspend "memory") >>
+  suspend "stack"
+QED
+
+Resume intcall_physical_return_resources[void]:
+  gvs[] >>
+  `ci_mono s1 s1` by simp[ci_mono_refl] >>
+  drule_all (intcall_zero_return_prepare |> Q.INST [`ee` |-> `ee with gas_obs := []`] |> SRULE []) >> strip_tac >>
+  qexistsl [`0`,`merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx`] >>
+  gvs[]
+QED
+
+Resume intcall_physical_return_resources[memory]:
+  gvs[] >>
+  `ci_mono s1 s2` by
+    (qspecl_then [`rbs`,`s1`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
+  drule_all (intcall_zero_return_prepare |> Q.INST [`ee` |-> `ee with gas_obs := []`] |> SRULE []) >> strip_tac >>
+  qexistsl [`0`,`merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx`] >>
+  gvs[] >>
+  `off + buf.buf_size < dimword (:256)` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ t` mp_tac >>
+     pure_rewrite_tac[stmt_state_rel_def] >> strip_tac >>
+     drule alloca_room_next_lt >>
+     fs[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     qpat_x_assum `!aid base sz. _`
+       (qspecl_then [`ai.inst_id`,`off`,`buf.buf_size`] mp_tac) >>
+     simp[] >> decide_tac) >>
+  `off < dimword (:256)` by decide_tac >>
+  qexistsl [`buf`,`ai.inst_id`,`off`] >>
+  simp[merge_callee_state_def, eval_operand_def, lookup_var_def] >>
+  conj_tac >- (Cases_on `buf.buf_operand` >> gvs[eval_operand_def, lookup_var_def]) >>
+  conj_tac >- gvs[] >>
+  conj_tac >- (drule value_has_type_memory_wf >> strip_tac >>
+    drule val_footprint_le >> strip_tac >> decide_tac) >>
+  rpt strip_tac >> fs[regions_disjoint_def] >> metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Resume intcall_physical_return_resources[stack]:
+  `0 < nret` by decide_tac >> gvs[] >>
+  `ci_mono s1 s2` by
+    (qspecl_then [`32 * LENGTH ir.iret_values`,`s1`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
+  drule_all (intcall_stack_return_prepare |> Q.INST [`nret` |-> `LENGTH ir.iret_values`] |> SRULE []) >>
+  disch_then (qspecl_then [`prev`,`cs`] strip_assume_tac) >>
+  drule_all (intcall_return_restored_frame |> Q.INST [`ee` |-> `ee with gas_obs := []`] |> SRULE []) >>
+  disch_then (qspec_then `LENGTH sj.cs_current_insts` strip_assume_tac) >>
+  drule_all intcall_return_bound_resources >>
+  disch_then (qspec_then `LENGTH sj.cs_current_insts` strip_assume_tac) >>
+  gvs[] >>
+  `!id b sz. local_region ce prev (u with vs_inst_idx := LENGTH sj.cs_current_insts) id b sz ==>
+     local_region ce prev t id b sz` by metis_tac[] >>
+  drule_all (intcall_bound_return_buffer |>
+    Q.INST [`t` |-> `t`, `ee` |-> `ee with scopes := prev`,
+      `idx` |-> `LENGTH sj.cs_current_insts`] |> SRULE []) >> strip_tac >>
+  `!id lb lsz. local_region ce prev (u with vs_inst_idx := LENGTH sj.cs_current_insts) id lb lsz ==>
+     regions_disjoint lb lsz off buf.buf_size` by metis_tac[] >>
+  drule_all (intcall_return_buffer_prepare |>
+    Q.INST [`es` |-> `ee with <|scopes := prev; gas_obs := []|>`,
+      `s` |-> `u with vs_inst_idx := LENGTH sj.cs_current_insts`,
+      `aid` |-> `ai.inst_id`, `ws` |-> `ir.iret_values`,
+      `nret` |-> `LENGTH ir.iret_values`] |> SRULE []) >> strip_tac >>
+  `!id b sz. local_region ce es0.scopes s0 id b sz ==>
+     local_region ce prev (u with vs_inst_idx := LENGTH sj.cs_current_insts) id b sz` by metis_tac[] >>
+  gvs[] >>
+  mp_tac (intcall_stack_buffer_run_resources |>
+    Q.INST [`s` |-> `u with vs_inst_idx := LENGTH sj.cs_current_insts`,
+      `si` |-> `sj`, `w` |-> `n2w off`, `ws` |-> `ir.iret_values`,
+      `results` |-> `MAP Var outs`, `aid` |-> `ai.inst_id`,
+      `es'` |-> `ee with <|scopes := prev; gas_obs := []|>`]) >>
+  simp[] >> (impl_tac >- metis_tac[]) >> strip_tac >>
+  `gas_path ctx func t n (OK (u with vs_inst_idx := LENGTH sj.cs_current_insts))` by
+    (drule bodyIntCallCompletedPathTheory.invoke_intret_counted_path >>
+     disch_then drule >> simp[] >> disch_then drule >> simp[] >>
+     disch_then drule >> simp[] >> disch_then drule >> simp[]) >>
+  `~u.vs_halted` by (drule fragGasPathTheory.gas_path_normal >> simp[]) >>
+  mp_tac (intcall_store_run_counted_resources |>
+    Q.INST [`s` |-> `u with vs_inst_idx := LENGTH sj.cs_current_insts`,
+      `si` |-> `sj`, `w` |-> `n2w off`, `ops` |-> `MAP Var outs`,
+      `aid` |-> `ai.inst_id`, `buf` |-> `Var p`, `u` |-> `u'`,
+      `es'` |-> `ee with <|scopes := prev; gas_obs := []|>`]) >>
+  simp[] >> (impl_tac >- metis_tac[]) >> strip_tac >>
+  qexistsl [`LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sj sb))`,
+    `u' with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
+  conj_tac >- metis_tac[fragGasPathTheory.gas_path_then, arithmeticTheory.ADD_COMM] >>
+  simp[] >>
+  conj_tac >- (rpt strip_tac >>
+    `not_fresh_at sj x` by (irule loweringShapeDefsTheory.not_fresh_at_mono >>
+      goal_assum (drule_at Any) >> simp[]) >> metis_tac[]) >>
+  qexistsl [`buf`,`ai.inst_id`,`off`] >> gvs[] >> gvs[]
+QED
+
+Finalise intcall_physical_return_resources
