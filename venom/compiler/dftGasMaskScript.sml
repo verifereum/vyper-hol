@@ -3059,13 +3059,184 @@ Proof
             `u = t with vs_gas_readings := v::tail` by
               simp[] >>
             `u.vs_inst_idx = s.vs_inst_idx + LENGTH pre` by
-              (qpat_assum `FOLDR _ _ pre st = OK u` mp_tac >>
-               disch_then (mp_tac o MATCH_MP prefix_ok_cursor o
-                 CONJ (ASSUME ``EVERY (\i. ~is_terminator i.inst_opcode) pre``)) >>
-               simp[Abbr `st`]) >>
-            FAIL_TAC "GAS exact prefix cut") >>
-        FAIL_TAC "GAS target OK source stopped") >>
-    FAIL_TAC "GAS target stopped"
+              (drule_all prefix_ok_cursor >> simp[Abbr `st`]) >>
+            qabbrev_tac `whole = <|bb_label := s.vs_current_bb;
+              bb_instructions := REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre ++ [y]|>` >>
+            `DROP st.vs_inst_idx whole.bb_instructions = pre ++ [y]` by
+              (simp[NoAsms, Abbr `st`, Abbr `whole`] >>
+               pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+               simp[NoAsms, DROP_APPEND] >>
+               `s.vs_inst_idx - (LENGTH pre + s.vs_inst_idx) = 0` by decide_tac >>
+               simp[]) >>
+            drule_all prefix_events_splice >>
+            disch_then (qspec_then `s.vs_current_bb` mp_tac) >>
+            strip_tac >>
+            `gas_events_block fuel C s.vs_current_bb whole u = [(s.vs_current_bb,y.inst_id)]` by
+              (simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+                 Abbr `whole`, EL_APPEND_EQN, gas_events_step_def,
+                 venomInstTheory.is_terminator_def] >>
+               simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+                 update_var_def]) >>
+            `gas_events_block fuel C s.vs_current_bb whole st =
+              gas_events_block fuel C a.vs_current_bb
+                <|bb_label := a.vs_current_bb; bb_instructions :=
+                  REPLICATE a.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre|> st ++
+              [(s.vs_current_bb,y.inst_id)]` by
+              (qpat_x_assum `gas_events_block _ _ _ whole st = _` mp_tac >>
+               qpat_x_assum `gas_events_block _ _ _ whole u = _` mp_tac >>
+               simp[NoAsms, Abbr `a`, Abbr `st`]) >>
+            conj_tac >- (qexists_tac `[]` >> simp[]) >>
+            `t.vs_inst_idx = s.vs_inst_idx + LENGTH pre` by
+              (mp_tac (Q.SPECL [`pre`, `a`, `t`]
+                 (Q.INST [`C` |-> `C'`] prefix_ok_cursor)) >>
+               (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+               simp[NoAsms, Abbr `a`]) >>
+            `!k. FOLDR (dft_exec_cons fuel C) k pre st = k u` by
+              (gen_tac >>
+               qspecl_then [`pre`, `st`] mp_tac
+                 (Q.INST [`fuel` |-> `fuel`, `C` |-> `C`, `k` |-> `k`]
+                   dftRunRelTheory.dft_exec_prefix_continue) >>
+               (impl_tac >- first_assum ACCEPT_TAC) >>
+               qpat_assum `FOLDR (dft_exec_cons fuel C) OK pre st = OK u`
+                 (fn th => simp[NoAsms, th])) >>
+            `FOLDR (dft_exec_cons fuel C) OK (pre ++ [y]) st =
+              OK ((update_var out v u) with
+                <|vs_inst_idx := SUC u.vs_inst_idx; vs_gas_readings := tail|>)` by
+              (pure_rewrite_tac[FOLDR_APPEND] >>
+               simp[] >>
+               simp[dftIndexedExecTheory.dft_exec_cons_def,
+                 venomInstTheory.is_terminator_def, update_var_def]) >>
+            `dft_exec_cons fuel C' y (FOLDR (dft_exec_cons fuel C') OK pre) s =
+              OK ((update_var out v t) with vs_inst_idx := SUC s.vs_inst_idx + LENGTH pre)` by
+              (simp[dftIndexedExecTheory.dft_exec_cons_def,
+                 venomInstTheory.is_terminator_def] >>
+               `update_var out v s with
+                  <|vs_inst_idx := SUC s.vs_inst_idx; vs_gas_readings := rs|> =
+                (update_var out v a) with vs_inst_idx := SUC s.vs_inst_idx` by
+                  simp[Abbr `a`, update_var_def] >>
+               simp[prefix_independent_update_cursor_ok] >>
+               metis_tac[]) >>
+            simp[passSimulationDefsTheory.terminates_def,
+              restore_result_def, dftRunRelTheory.dft_res_rel_def,
+              residual_result_def, stateEquivTheory.lift_result_def,
+              update_var_def, venom_state_component_equality,
+              arithmeticTheory.ADD_CLAUSES]) >>
+        `gas_events_block fuel C s.vs_current_bb
+           <|bb_label := s.vs_current_bb; bb_instructions :=
+             REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre ++ [y]|> st =
+         gas_events_block fuel C a.vs_current_bb
+           <|bb_label := a.vs_current_bb; bb_instructions :=
+             REPLICATE a.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre|> st` by
+          (qspecl_then [`pre`, `st`,
+             `<|bb_label := s.vs_current_bb; bb_instructions :=
+               REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre ++ [y]|>`, `[y]`]
+             mp_tac (Q.INST [`owner` |-> `s.vs_current_bb`] prefix_events_stopped) >>
+           (impl_tac >- (conj_tac
+             >- (simp[NoAsms, Abbr `st`] >>
+                 pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+                 simp[NoAsms, DROP_APPEND] >>
+                 `s.vs_inst_idx - (LENGTH pre + s.vs_inst_idx) = 0` by decide_tac >>
+                 simp[]) >>
+             conj_tac >> first_assum ACCEPT_TAC)) >>
+           simp[NoAsms, Abbr `a`, Abbr `st`]) >>
+        conj_tac
+        >- (qexists_tac `extra ++ [(s.vs_current_bb,y.inst_id)]` >> simp[]) >>
+        strip_tac >>
+        `?j. terminates (FOLDR (dft_exec_cons j C) OK pre st)` by
+          (qexists_tac `j` >>
+           qpat_x_assum `terminates (FOLDR _ _ (pre ++ [y]) st)` mp_tac >>
+           pure_rewrite_tac[FOLDR_APPEND] >>
+           qspecl_then [`pre`, `st`] mp_tac
+             (Q.INST [`fuel` |-> `j`, `k` |-> `FOLDR (dft_exec_cons j C) OK [y]`]
+               dftRunRelTheory.dft_exec_prefix_continue) >>
+           (impl_tac >- first_assum ACCEPT_TAC) >>
+           disch_then SUBST1_TAC >>
+           Cases_on `FOLDR (dft_exec_cons j C) OK pre st` >>
+           simp[passSimulationDefsTheory.terminates_def]) >>
+        qpat_x_assum `(?j. terminates (FOLDR _ _ pre st)) ==> _` mp_tac >>
+        simp[] >> strip_tac >>
+        metis_tac[]) >>
+    `~?u. FOLDR (dft_exec_cons fuel C) OK pre st = OK u` by
+      (strip_tac >>
+       `?j. terminates (FOLDR (dft_exec_cons j C) OK pre st)` by
+         (qexists_tac `fuel` >> simp[passSimulationDefsTheory.terminates_def]) >>
+       qpat_x_assum `(?j. terminates (FOLDR _ _ pre st)) ==> _` mp_tac >>
+       (impl_tac >- metis_tac[]) >> strip_tac >>
+       qpat_x_assum `dft_res_rel _ _` mp_tac >>
+       qpat_x_assum `~?t. FOLDR (dft_exec_cons fuel C') OK pre a = OK t` mp_tac >>
+       Cases_on `FOLDR (dft_exec_cons fuel C') OK pre a` >>
+       simp[restore_result_def, dftRunRelTheory.dft_res_rel_def]) >>
+    `gas_events_block fuel C s.vs_current_bb
+       <|bb_label := s.vs_current_bb; bb_instructions :=
+         REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre ++ [y]|> st =
+     gas_events_block fuel C a.vs_current_bb
+       <|bb_label := a.vs_current_bb; bb_instructions :=
+         REPLICATE a.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre|> st` by
+      (qspecl_then [`pre`, `st`,
+         `<|bb_label := s.vs_current_bb; bb_instructions :=
+           REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre ++ [y]|>`, `[y]`]
+         mp_tac (Q.INST [`owner` |-> `s.vs_current_bb`] prefix_events_stopped) >>
+       (impl_tac >- (conj_tac
+         >- (simp[NoAsms, Abbr `st`] >>
+             pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+             simp[NoAsms, DROP_APPEND] >>
+             `s.vs_inst_idx - (LENGTH pre + s.vs_inst_idx) = 0` by decide_tac >>
+             simp[]) >>
+         conj_tac >> first_assum ACCEPT_TAC)) >>
+       simp[NoAsms, Abbr `a`, Abbr `st`]) >>
+    conj_tac
+    >- (qexists_tac `extra ++ [(s.vs_current_bb,y.inst_id)]` >> simp[]) >>
+    strip_tac >>
+    `?j. terminates (FOLDR (dft_exec_cons j C) OK pre st)` by
+      (qexists_tac `j` >>
+       qpat_x_assum `terminates (FOLDR _ _ (pre ++ [y]) st)` mp_tac >>
+       pure_rewrite_tac[FOLDR_APPEND] >>
+       qspecl_then [`pre`, `st`] mp_tac
+         (Q.INST [`fuel` |-> `j`, `k` |-> `FOLDR (dft_exec_cons j C) OK [y]`]
+           dftRunRelTheory.dft_exec_prefix_continue) >>
+       (impl_tac >- first_assum ACCEPT_TAC) >>
+       disch_then SUBST1_TAC >>
+       Cases_on `FOLDR (dft_exec_cons j C) OK pre st` >>
+       simp[passSimulationDefsTheory.terminates_def]) >>
+    qpat_x_assum `(?j. terminates (FOLDR _ _ pre st)) ==> _` mp_tac >>
+    (impl_tac >- metis_tac[]) >> strip_tac >>
+    `!k. FOLDR (dft_exec_cons fuel C) k pre st =
+       FOLDR (dft_exec_cons fuel C) OK pre st` by
+      (gen_tac >>
+       qspecl_then [`pre`, `st`] mp_tac
+         (Q.INST [`k` |-> `k`] dftRunRelTheory.dft_exec_prefix_continue) >>
+       (impl_tac >- first_assum ACCEPT_TAC) >>
+       qpat_x_assum `~?u. FOLDR (dft_exec_cons fuel C) OK pre st = OK u` mp_tac >>
+       Cases_on `FOLDR (dft_exec_cons fuel C) OK pre st` >> simp[]) >>
+    pure_rewrite_tac[FOLDR_APPEND] >> simp[] >>
+    `update_var out v s with
+       <|vs_inst_idx := SUC s.vs_inst_idx; vs_gas_readings := rs|> =
+     (update_var out v a) with vs_inst_idx := SUC s.vs_inst_idx` by
+      simp[Abbr `a`, update_var_def] >>
+    simp[dftIndexedExecTheory.dft_exec_cons_def,
+      venomInstTheory.is_terminator_def] >>
+    Cases_on `FOLDR (dft_exec_cons fuel C') OK pre a`
+    >- gvs[]
+    >- (rename1 `FOLDR (dft_exec_cons fuel C') OK pre a = Halt h` >>
+        `FOLDR (dft_exec_cons fuel C') OK pre
+           ((update_var out v a) with vs_inst_idx := SUC s.vs_inst_idx) = Halt h` by
+          simp[prefix_independent_update_halt] >>
+        simp[])
+    >- (rename1 `FOLDR (dft_exec_cons fuel C') OK pre a = Abort code h` >>
+        `?u. FOLDR (dft_exec_cons fuel C') OK pre
+           ((update_var out v a) with vs_inst_idx := SUC s.vs_inst_idx) = Abort code u` by
+          simp[prefix_independent_update_abort] >>
+        qpat_x_assum `dft_res_rel _ (restore_result [] (Abort code h))` mp_tac >>
+        Cases_on `FOLDR (dft_exec_cons fuel C) OK pre st` >>
+        simp[restore_result_def, dft_res_rel_def])
+    >- (qpat_assum `EVERY (\i. ~is_terminator i.inst_opcode) pre` mp_tac >>
+        disch_then (mp_tac o MATCH_MP prefix_nonterminator_no_intret) >>
+        metis_tac[]) >>
+    rename1 `FOLDR (dft_exec_cons fuel C') OK pre a = Error err` >>
+    `FOLDR (dft_exec_cons fuel C') OK pre
+       ((update_var out v a) with vs_inst_idx := SUC s.vs_inst_idx) = Error err` by
+      simp[prefix_independent_update_error] >>
+    simp[]
   ) >>
   FAIL_TAC "noninvoke extraction pending"
 QED
