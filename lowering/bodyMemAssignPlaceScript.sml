@@ -10,6 +10,7 @@ Ancestors
   placeTypedCopyMem assignPlaceValueFrame placeTypedCopyPrimitiveMem
   placeTypedCopyArrayMem placeTypedFieldsMem placeTypedCopyForwardMem
   placeAssignStagingMem assignPlaceDynStorageLayout assignPlaceDynStoragePaths
+  assignPlaceDynStorageElement
 
 Theorem body_assign_place_mem_case:
   !cx t e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
