@@ -513,7 +513,8 @@ Proof
          SIMP_RULE (srw_ss()) [compile_env_component_equality]) >>
       `(place_map_tables_agree_on_defined c (extend_local env id typ T) <=>
         place_map_tables_agree_on_defined cenv env) /\
-       (extend_local env id typ T).bare_globals = env.bare_globals` by
+       (extend_local env id typ T).bare_globals = env.bare_globals /\
+       (extend_local env id typ T).fn_sigs = env.fn_sigs` by
         (conj_tac >- (irule placeTypingPropsTheory.place_map_tables_agree_on_defined_cong >> fs[extend_local_def]) >>
          simp[extend_local_def]) >>
       qpat_x_assum `expr_sim_inv _ _ _ es`

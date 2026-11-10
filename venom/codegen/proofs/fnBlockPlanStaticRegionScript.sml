@@ -130,7 +130,7 @@ Proof
   goal_assum (drule_at (Pat `lookup_block _ _ = _`)) >>
   goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
   qexistsl_tac [`pin.ps_cleanup_height`, `pin.ps_cleanup_promised`] >>
-  simp[]
+  simp[] >> qexistsl_tac [`[]`, `[]`, `pout.ps_stack`] >> simp[]
 QED
 
 Theorem dfs_lineage_mutual[local]:
@@ -294,7 +294,8 @@ Proof
   goal_assum (drule_at (Pat `lineage_state _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
   qexistsl_tac [`pin.ps_cleanup_height`, `pin.ps_cleanup_promised`] >>
-  simp[] >> goal_assum (drule_at Any) >> simp[]
+  simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`[]`, `[]`, `pout.ps_stack`] >> simp[]
 QED
 
 Theorem regional_ret_operand_support_empty:
@@ -382,7 +383,7 @@ Proof
        MEM pred' (cfg_preds_of (cfg_analyze fn) succ)` by
         metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
       gvs[LENGTH_EQ_NUM_compute] >>
-      `B = pin` by metis_tac[dfs_block_state_unique] >> gvs[]) >>
+      `B = pin` by metis_tac[fnBlockPlanStaticDfsTraceTheory.dfs_block_state_unique] >> gvs[]) >>
   strip_tac >> gvs[] >>
   `1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ)` by
     (`MEM pred (cfg_preds_of (cfg_analyze fn) succ)` by
@@ -4243,7 +4244,7 @@ Proof
     metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
   gvs[] >>
   rename1 `generate_block_plan _ _ _ _ pred_bb origin_in = SOME _` >>
-  `origin_in = pin` by metis_tac[dfs_block_state_unique] >> gvs[]
+  `origin_in = pin` by metis_tac[fnBlockPlanStaticDfsTraceTheory.dfs_block_state_unique] >> gvs[]
 QED
 
 Theorem regional_single_successor_recompute_out:

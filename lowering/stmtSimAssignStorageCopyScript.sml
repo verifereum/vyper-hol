@@ -16,6 +16,7 @@
 
 Theory stmtSimAssignStorageCopy
 Ancestors
+  exprSimHashBoundary
   valueEncodingProps exprSimTopLevelProps gasOutcome gasSummary gasContext
   stmtSimProps stmtSimForced
   exprSimProps
@@ -664,6 +665,7 @@ QED
 Theorem storage_copy_post_words[local]:
   !ctx func cenv cx e es sa sm s0 es1 v op s tv w writes k st.
     expr_post ctx func cenv cx e es sa sm s0 es1 v op s /\
+    post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     ~is_word_type (expr_type e) /\ eval_operand op s = SOME w /\
     value_has_type tv v /\ encode_value tv v = SOME writes /\
@@ -1442,6 +1444,7 @@ QED
 Theorem storage_copy_post_region[local]:
   !ctx func cenv cx e es sa sm s0 es1 v op s tv tr mid id slot es'.
     expr_post ctx func cenv cx e es sa sm s0 es1 v op s /\
+    post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     ~is_word_type (expr_type e) /\ value_has_type tv v /\
     declared_storage_region cx mid id [] = SOME (tr,n2w slot,tv) /\
@@ -1603,6 +1606,8 @@ Proof
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   `local_ptrs_reserved cenv sm` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
   drule_all storage_copy_post_region >> strip_tac >>
   RULE_ASSUM_TAC (REWRITE_RULE [valueEncodingPropsTheory.type_memory_size_slots]) >>
   drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)

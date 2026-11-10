@@ -65,7 +65,7 @@ Proof
    (simp[lineage_inventory_def] >> qexistsl_tac [`0`, `r.ps_stack`] >>
     simp[lineage_core_def, EVERY_MEM] >>
     gvs[EXTENSION, MEM_MAP] >> metis_tac[is_var_operand_def]) >>
- drule_all native_parameter_residual_budget >>
+ drule_all fnLineageInvSupportTheory.native_parameter_residual_budget >>
  disch_then (qspecl_then [`ch`, `growth`, `spillbase`, `ctr`, `[]`, `promise`] mp_tac) >>
  asm_rewrite_tac[] >> simp[] >> disch_tac >>
  `?m core. lineage_core m core r /\

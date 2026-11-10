@@ -58,6 +58,10 @@ removed when a new pin includes them. The current series contains:
 - vyperlang/vyper#5350: an array subscript whose base is a `pop()` result is
   rejected (`CompilerPanic("risky overlap")`) when the index can write a
   variable the base reads, or makes a risky call.
+- vyperlang/vyper#5354: PHI origin traversal uses an active recursion path and
+  guarded memoization, so shared multi-origin PHIs cannot disappear from a
+  sibling operand. The pass is used by O2/O3/Os; the O1 fixture schedule does
+  not run it.
 
 The pin has no subscript overlap check at all, so the #5350 patch brings
 `_subscript_read_write_overlap` and its helpers over from a later upstream
