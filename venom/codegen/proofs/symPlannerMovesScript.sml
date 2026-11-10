@@ -2314,8 +2314,7 @@ Theorem sym_spill_address_projection[local]:
     | SORestore off => off < dimword(:256) | _ => T) ops ==>
   EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) ops
 Proof
-  strip_tac >> irule EVERY_MONOTONIC >>
-  goal_assum (drule_at Any) >> Cases >> simp[]
+  ho_match_mp_tac EVERY_MONOTONIC >> Cases >> simp[]
 QED
 
 Theorem sym_plan_append_runs[local]:
@@ -2477,6 +2476,20 @@ Proof
   drule_all_then MATCH_ACCEPT_TAC sym_reduce_depth_tail_continue
 QED
 
+Theorem reduce_depth_plan_step_elim[local]:
+  P [] ps /\
+  (!dist cand spill_ops qs rest_ops out.
+    stack_get_unfixed_depth op f n ps.ps_stack = SOME dist /\
+    select_spill_candidate ps.ps_stack targets dist n = SOME cand /\
+    do_spill_at cand ps = (spill_ops,qs) /\
+    reduce_depth_plan fuel targets op f n qs = (rest_ops,out) ==>
+    P (spill_ops ++ rest_ops) out) ==>
+  !ops out. reduce_depth_plan (SUC fuel) targets op f n ps = (ops,out) ==>
+    P ops out
+Proof
+  rpt strip_tac >> gvs[Once reduce_depth_plan_def, AllCaseEqs(), pairTheory.UNCURRY_EQ] >> metis_tac[]
+QED
+
 Theorem sym_reduce_depth_plan:
   !fuel targets op f n ps ops out ss.
   reduce_depth_plan fuel targets op f n ps = (ops,out) /\
@@ -2493,22 +2506,11 @@ Theorem sym_reduce_depth_plan:
     (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  Induct
+  Induct >> simp_tac pure_ss [GSYM AND_IMP_INTRO, RIGHT_FORALL_IMP_THM]
   >- simp[Once reduce_depth_plan_def, execute_plan_def, sym_steps_compute] >>
-  pop_assum (mk_asm "ih") >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `reduce_depth_plan (SUC _) _ _ _ _ _ = _` mp_tac >>
-  simp[Once reduce_depth_plan_def] >> strip_tac >>
-  Cases_on `f + 1 < n` >> gvs[]
+  ntac 5 gen_tac >> ho_match_mp_tac reduce_depth_plan_step_elim >> conj_tac
   >- simp[execute_plan_def, sym_steps_compute] >>
-  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> gvs[]
-  >- simp[execute_plan_def, sym_steps_compute] >>
-  rename1 `stack_get_unfixed_depth op f n ps.ps_stack = SOME dist` >>
-  Cases_on `dist <= 16` >> gvs[]
-  >- simp[execute_plan_def, sym_steps_compute] >>
-  Cases_on `select_spill_candidate ps.ps_stack targets dist n` >> gvs[]
-  >- simp[execute_plan_def, sym_steps_compute] >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  asm_x "ih" (qspecl_then [`targets`, `op`, `f`, `n`] assume_tac) >>
-  drule_all_then (qspec_then `env` strip_assume_tac) sym_reduce_depth_prefix_ready >>
-  drule_all_then (fn th => metis_tac[th, arithmeticTheory.ADD_COMM]) sym_reduce_depth_tail_continue
+  rpt strip_tac >>
+  first_x_assum (qspecl_then [`targets`, `op`, `f`, `n`] assume_tac) >>
+  drule_all_then MATCH_ACCEPT_TAC sym_reduce_depth_spill_tail
 QED
