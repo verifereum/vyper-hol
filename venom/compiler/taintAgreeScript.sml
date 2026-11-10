@@ -1212,6 +1212,76 @@ Proof
     Excl "consume_create_outcome_eq"]
 QED
 
+Theorem taint_agree_translated_exec_create:
+  taint_agree D X tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
+  MEM inst.inst_opcode [CREATE; CREATE2] /\
+  ti.inst_outputs = inst.inst_outputs /\ out_taint tn inst s = {} /\
+  read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
+  exec_create inst s value off sz salt = OK s' ==>
+  ?t'. exec_create ti t value off' sz salt = OK t' /\
+    taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `venom_create_request s value off sz salt =
+   venom_create_request t value off' sz salt` by
+    (irule venom_create_request_eq_from_slice >> simp[]) >>
+  drule_all taint_agree_exec_create_request >> strip_tac >>
+  `step_taint inst s s' tn =
+     tn with t_var := set_var_taint tn.t_var [out] {}` by
+    (gvs[Excl "consume_create_outcome_eq"] >>
+     irule taint_agree_create_mask >>
+     qpat_assum `consume_create_outcome _ _ = _` (irule_at Any) >> simp[]) >>
+  `exec_create ti t value off' sz salt = exec_create inst t value off' sz salt` by
+    gvs[exec_create_def, Excl "consume_create_outcome_eq"] >>
+  metis_tac[]
+QED
+
+Theorem taint_agree_translated_create_step:
+  taint_agree D X tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
+  inst.inst_opcode = CREATE /\ ti.inst_opcode = CREATE /\
+  ti.inst_outputs = inst.inst_outputs /\ out_taint tn inst s = {} /\
+  inst.inst_operands = [valop; addr; len] /\
+  ti.inst_operands = [tvalop; taddr; tlen] /\
+  eval_operand valop s = SOME value /\ eval_operand tvalop t = SOME value /\
+  eval_operand addr s = SOME off /\ eval_operand taddr t = SOME off' /\
+  eval_operand len s = SOME sz /\ eval_operand tlen t = SOME sz /\
+  read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base ti t = OK t' /\
+    taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
+  gvs[step_inst_base_opcode_eqs, eval_operands_def, AllCaseEqs()] >>
+  irule taint_agree_translated_exec_create >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem taint_agree_translated_create2_step:
+  taint_agree D X tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
+  inst.inst_opcode = CREATE2 /\ ti.inst_opcode = CREATE2 /\
+  ti.inst_outputs = inst.inst_outputs /\ out_taint tn inst s = {} /\
+  inst.inst_operands = [valop; addr; len; saltop] /\
+  ti.inst_operands = [tvalop; taddr; tlen; tsaltop] /\
+  eval_operand valop s = SOME value /\ eval_operand tvalop t = SOME value /\
+  eval_operand addr s = SOME off /\ eval_operand taddr t = SOME off' /\
+  eval_operand len s = SOME sz /\ eval_operand tlen t = SOME sz /\
+  eval_operand saltop s = SOME salt /\ eval_operand tsaltop t = SOME salt /\
+  read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base ti t = OK t' /\
+    taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
+  gvs[step_inst_base_opcode_eqs, eval_operands_def, AllCaseEqs()] >>
+  irule taint_agree_translated_exec_create >> simp[] >>
+  metis_tac[]
+QED
+
 Theorem taint_agree_create_ok:
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
   o1_ctx_shape C /\ MEM fn C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
@@ -1900,6 +1970,35 @@ Proof
   simp[word_agree_except_def]
 QED
 
+Theorem taint_agree_translated_hash_step:
+  taint_agree D X tn s t /\
+  inst.inst_opcode = SHA3 /\ ti.inst_opcode = SHA3 /\
+  inst.inst_outputs = [out] /\ ti.inst_outputs = [out] /\
+  inst.inst_operands = [addr; len] /\ ti.inst_operands = [taddr; tlen] /\
+  eval_operand addr s = SOME p /\ eval_operand taddr t = SOME r /\
+  eval_operand len s = SOME n /\ eval_operand tlen t = SOME n /\
+  read_memory (w2n p) (w2n n) s = read_memory (w2n r) (w2n n) t /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base ti t = OK t' /\
+    taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  simp[GSYM read_memory_def] >>
+  simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+       imm_taint_def, adopt_reset_def, new_site_bytes_def,
+       set_var_taint_def, step_writes_def, source_memory_write_ranges_def,
+       written_taint_def, range_bytes_def, FLOOKUP_DEF, SF CONJ_ss,
+       update_var_def] >>
+  qmatch_goalsub_abbrev_tac `taint_agree D X mask` >>
+  `mask = tn with t_var := mask.t_var` by
+    simp[Abbr `mask`, taint_component_equality] >>
+  pop_assum SUBST1_TAC >> simp[Abbr `mask`] >>
+  rewrite_tac[GSYM update_var_def] >>
+  irule (SRULE [set_var_taint_def] taint_agree_update_var) >>
+  simp[word_agree_except_def]
+QED
+
 Theorem taint_agree_logs_append:
   taint_agree D X tn s t ==>
   taint_agree D X tn
@@ -1912,6 +2011,53 @@ Proof
   fs[taint_agree_def] >> simp[taint_agree_def] >>
   qpat_x_assum `_ = s` (mp_tac o Q.AP_TERM `\u. u with vs_logs := u.vs_logs ++ [ev]`) >>
   simp[]
+QED
+
+Theorem step_taint_log_logs:
+  inst.inst_opcode = LOG /\ inst.inst_outputs = [] ==>
+  step_taint inst s (s with vs_logs := logs) tn = tn
+Proof
+  strip_tac >>
+  simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+       imm_taint_def, adopt_reset_def, new_site_bytes_def,
+       set_var_taint_def, step_writes_def, source_memory_write_ranges_def,
+       range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, DRESTRICT_UNIV,
+       taint_component_equality] >>
+  Cases_on `inst.inst_operands` >> simp[written_taint_def] >>
+  rename1 `inst.inst_operands = h::tl` >>
+  Cases_on `tl` >> simp[] >>
+  rename1 `inst.inst_operands = h::h2::tail` >>
+  Cases_on `tail` >> simp[] >>
+  rename1 `inst.inst_operands = h::h2::h3::rest` >>
+  Cases_on `rest` >> simp[]
+QED
+
+Theorem taint_agree_translated_log_step:
+  taint_agree D X tn s t /\
+  inst.inst_opcode = LOG /\ ti.inst_opcode = LOG /\
+  inst.inst_outputs = [] /\ ti.inst_outputs = [] /\
+  inst.inst_operands = Lit tc :: REVERSE (addr::len::tops) /\
+  ti.inst_operands = Lit tc :: REVERSE (taddr::tlen::ttops) /\
+  LENGTH tops = w2n tc /\ LENGTH ttops = w2n tc /\
+  eval_operand addr s = SOME p /\ eval_operand taddr t = SOME r /\
+  eval_operand len s = SOME n /\ eval_operand tlen t = SOME n /\
+  eval_operands tops s = SOME topics /\ eval_operands ttops t = SOME topics /\
+  read_memory (w2n p) (w2n n) s = read_memory (w2n r) (w2n n) t /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base ti t = OK t' /\
+    taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
+  `IS_SOME (eval_operands inst.inst_operands s)` by
+    (simp[ld_eval_operands_defined, eval_operand_def, MEM_REVERSE] >>
+     qpat_assum `eval_operands tops s = SOME topics` mp_tac >>
+     simp[GSYM ld_eval_operands_defined]) >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  gvs[REVERSE_APPEND] >>
+  simp[GSYM read_memory_def] >>
+  simp[step_taint_log_logs] >>
+  irule taint_agree_logs_append >> simp[]
 QED
 
 Theorem taint_agree_log_step:
