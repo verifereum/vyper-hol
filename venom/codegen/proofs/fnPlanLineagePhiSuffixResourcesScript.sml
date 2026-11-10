@@ -123,11 +123,11 @@ Proof
   `ALL_DISTINCT (FLAT (MAP (\b. FLAT (MAP (\i. i.inst_outputs) b.bb_instructions))
     fn.fn_blocks))` by
     (gvs[stackPlanGenTheory.codegen_ready_fn_def, venomWfTheory.ssa_form_def,
-      venomInstTheory.fn_insts_def, removeUnusedSsaProofsTheory.fn_insts_blocks_flat,
+      venomInstTheory.fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat,
       listTheory.MAP_FLAT, rich_listTheory.FLAT_FLAT, listTheory.MAP_MAP_o,
       combinTheory.o_DEF]) >>
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by
-    (irule removeUnusedSsaProofsTheory.all_distinct_flat_map_member >>
+    (irule venomWfPropsTheory.all_distinct_flat_map_member >>
      qexists_tac `MAP (\b. MAP (\i. i.inst_outputs) b.bb_instructions) fn.fn_blocks` >>
      simp[listTheory.MAP_MAP_o, combinTheory.o_DEF, listTheory.MEM_MAP] >> metis_tac[]) >>
   `?rest. bb.bb_instructions = collect_phis bb.bb_instructions ++ rest` by

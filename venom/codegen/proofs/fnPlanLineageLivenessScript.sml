@@ -289,7 +289,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `wf_function fn` by gvs[stackPlanGenTheory.codegen_ready_fn_def] >>
   `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre] >>
+    metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre] >>
   `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
     metis_tac[removeUnusedProofsTheory.wf_lookup_block] >>
   qspec_then `bb.bb_instructions` strip_assume_tac collect_phis_prefix >>

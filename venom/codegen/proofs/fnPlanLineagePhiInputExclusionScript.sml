@@ -111,7 +111,7 @@ Proof
      gvs[venomWfTheory.def_available_at_def, venomWfTheory.fn_dominates_def] >>
      metis_tac[]) >>
   `MEM p (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre] >>
+    metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre] >>
   `cfg_reachable_of (cfg_analyze fn) p` by
     (drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
      simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
@@ -140,7 +140,7 @@ Theorem phi_unkilled_exit_live[local]:
 Proof
   strip_tac >>
   `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre] >>
+    metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre] >>
   irule (SRULE [LET_THM] livenessProofsTheory.live_vars_at_propagate_range) >>
   goal_assum drule >> simp[] >> qexists_tac `LENGTH bb.bb_instructions` >>
   simp[] >> rpt strip_tac >>
@@ -167,7 +167,7 @@ Proof
     (gvs[venomWfTheory.fn_reachable_def] >>
      metis_tac[relationTheory.RTC_RULES_RIGHT1]) >>
   `MEM p (cfg_analyze fn).cfg_dfs_pre /\ MEM q (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre] >>
+    metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre] >>
   `MEM q (cfg_succs_of (cfg_analyze fn) p)` by
     (gvs[venomWfTheory.fn_cfg_edge_def] >>
      metis_tac[cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs]) >>
@@ -259,7 +259,7 @@ Proof
   `fn_reachable fn (HD path)` by
     (simp[venomWfTheory.fn_reachable_def] >> metis_tac[relationTheory.RTC_REFL]) >>
   `!lbl. MEM lbl path ==> fn_reachable fn lbl` by
-    metis_tac[removeUnusedSsaProofsTheory.is_fn_path_all_reachable] >>
+    metis_tac[venomWfPropsTheory.is_fn_path_all_reachable] >>
   drule_all phi_path_last_suffix >> strip_tac >>
   `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
     (irule venomExecPropsTheory.MEM_lookup_block >>
@@ -268,13 +268,13 @@ Proof
   simp[] >> qexists_tac `pb` >> simp[] >>
   qexists_tac `tail` >> simp[] >>
   reverse conj_tac
-  >- (rpt strip_tac >> metis_tac[removeUnusedSsaProofsTheory.fn_reachable_has_block, listTheory.MEM]) >>
+  >- (rpt strip_tac >> metis_tac[venomWfPropsTheory.fn_reachable_has_block, listTheory.MEM]) >>
   rpt gen_tac >> strip_tac >>
   rename1 `lookup_block lbl fn.fn_blocks = SOME other_bb` >>
   `MEM other_bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
   `other_bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
   strip_tac >> gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
-  `other_bb = bb` by metis_tac[removeUnusedSsaProofsTheory.ssa_unique_output_block] >>
+  `other_bb = bb` by metis_tac[venomWfPropsTheory.ssa_unique_output_block] >>
   metis_tac[]
 QED
 
@@ -306,13 +306,13 @@ Proof
   strip_tac >>
   `wf_function fn /\ ssa_form fn` by gvs[codegen_ready_fn_def] >>
   `ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
-    metis_tac[phiBlockTheory.ssa_form_block_outputs_distinct] >>
+    metis_tac[venomWfPropsTheory.ssa_form_block_outputs_distinct] >>
   `~MEM v (FLAT (MAP (\inst. inst.inst_outputs)
     (DROP (LENGTH (collect_phis bb.bb_instructions)) bb.bb_instructions)))` by
     (irule phi_prefix_outputs_disjoint_suffix >> simp[] >>
      simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]) >>
   `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre] >>
+    metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre] >>
   `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
     (irule venomExecPropsTheory.MEM_lookup_block >>
      gvs[venomWfTheory.wf_function_def, fn_labels_def]) >>
@@ -357,7 +357,7 @@ Proof
     (qpat_x_assum `def_available_at _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [venomWfTheory.def_available_at_def]) >>
      `def_bb = bb` by
-       metis_tac[removeUnusedSsaProofsTheory.ssa_unique_output_block] >>
+       metis_tac[venomWfPropsTheory.ssa_unique_output_block] >>
      gvs[]) >>
   `MEM v (live_vars_at (liveness_analyze fn) p (LENGTH pb.bb_instructions))` by
     (irule phi_pair_live_out >> goal_assum drule >> metis_tac[]) >>
@@ -368,6 +368,6 @@ Proof
     (LENGTH (collect_phis bb.bb_instructions)))` by
     (irule phi_output_exit_live_prefix >> goal_assum drule >> metis_tac[]) >>
   `MEM v (inst_uses phi)` by
-    metis_tac[removeUnusedSsaProofsTheory.operand_var_in_inst_uses] >>
+    metis_tac[venomWfPropsTheory.operand_var_in_inst_uses] >>
   metis_tac[phi_codegen_input_dead_after_prefix]
 QED

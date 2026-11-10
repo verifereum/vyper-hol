@@ -130,7 +130,7 @@ Proof
   goal_assum (drule_at (Pat `lookup_block _ _ = _`)) >>
   goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
   qexistsl_tac [`pin.ps_cleanup_height`, `pin.ps_cleanup_promised`] >>
-  simp[]
+  simp[] >> qexistsl_tac [`[]`, `[]`, `pout.ps_stack`] >> simp[]
 QED
 
 Theorem dfs_lineage_mutual[local]:
@@ -294,7 +294,8 @@ Proof
   goal_assum (drule_at (Pat `lineage_state _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
   qexistsl_tac [`pin.ps_cleanup_height`, `pin.ps_cleanup_promised`] >>
-  simp[] >> goal_assum (drule_at Any) >> simp[]
+  simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`[]`, `[]`, `pout.ps_stack`] >> simp[]
 QED
 
 Theorem regional_ret_operand_support_empty:

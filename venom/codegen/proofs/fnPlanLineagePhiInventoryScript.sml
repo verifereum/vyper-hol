@@ -137,8 +137,8 @@ Proof
      >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
          drule_at (Pat `do_dup _ _ = _`) do_dup_inventory_subset >>
          simp[] >> strip_tac >>
-         metis_tac[stack_poke_mem_subset_nb]) >>
-     strip_tac >> gvs[] >> metis_tac[stack_poke_mem_subset_nb]) >>
+         metis_tac[deepResidualBudgetTheory.stack_poke_mem_subset_nb]) >>
+     strip_tac >> gvs[] >> metis_tac[deepResidualBudgetTheory.stack_poke_mem_subset_nb]) >>
   Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next` >> simp[]
   >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
       metis_tac[popmany_plan_inventory_subset]) >>

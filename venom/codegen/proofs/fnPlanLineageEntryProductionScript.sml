@@ -429,7 +429,7 @@ Proof
   conj_tac
   >- (gvs[entry_boundary_resources_def, prefix_inventory_origins_def,
           fnPlanLineageInventoryTheory.release_dead_spills_stack,
-          fnPlanLineageInventoryTheory.release_dead_spills_domain] >>
+          fnPlanPrefixTheory.phi_release_dead_spills_domain] >>
       rpt strip_tac >>
       qpat_x_assum `!v. MEM (Var v) ps.ps_stack \/ _ ==> _`
         (qspec_then `v` mp_tac) >> simp[] >>
@@ -437,7 +437,7 @@ Proof
   conj_tac
   >- (gvs[entry_boundary_resources_def,
           fnPlanLineageInventoryTheory.release_dead_spills_stack,
-          fnPlanLineageInventoryTheory.release_dead_spills_domain,
+          fnPlanPrefixTheory.phi_release_dead_spills_domain,
           MEM_MAP] >>
       metis_tac[]) >>
   rpt strip_tac >>
@@ -683,9 +683,19 @@ Theorem generate_inst_plan_jmp_live_terminal:
     (!v. MEM v next ==>
       LIST_ELEM_COUNT (Var v) qs.ps_stack = LIST_ELEM_COUNT (Var v) targets)
 Proof
+  rpt gen_tac >> strip_tac >>
+  `?succ. inst.inst_operands = [Label succ]` by
+    (gvs[join_target_ops_def, AllCaseEqs()] >> metis_tac[]) >>
+  `qs.ps_spilled = FEMPTY` by
+    (irule fnPlanPrefixTheory.phi_jmp_plan_spills_empty >>
+     qexistsl_tac [`cfg`, `dfg`, `fn`, `halt`, `inst`, `cur`, `lv`, `next`,
+                   `term`, `ops`, `ps`, `succ`, `targets`] >>
+     asm_rewrite_tac[] >> rpt strip_tac >>
+     qpat_x_assum `set (MAP Var next) SUBSET set targets` mp_tac >>
+     simp[pred_setTheory.SUBSET_DEF, MEM_MAP] >>
+     disch_then irule >> gvs[]) >>
   metis_tac[generate_inst_plan_jmp_live_residual_zero,
-    generate_inst_plan_jmp_live_target_count,
-    fnPlanLineageInventoryTheory.generate_inst_plan_jmp_spilled_empty]
+    generate_inst_plan_jmp_live_target_count]
 QED
 
 (* Demand transport needs a reachable instruction position. This is not an
@@ -1712,7 +1722,7 @@ Proof
         metis_tac[venomExecPropsTheory.lookup_block_label, venomExecPropsTheory.lookup_block_MEM] >>
       `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
         (gvs[codegen_ready_fn_def] >>
-         metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre]) >>
+         metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre]) >>
       `phi_block_ready (liveness_analyze fn) bb` by metis_tac[phi_codegen_block_ready] >>
       disj1_tac >> irule successful_join_live_through_stack_seed >>
       goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
@@ -1894,7 +1904,7 @@ Proof
          `SUC (PRE (LENGTH bb.bb_instructions)) = LENGTH bb.bb_instructions` by decide_tac >>
          asm_rewrite_tac[]) >>
       gvs[fnPlanLineageInventoryTheory.release_dead_spills_stack,
-          fnPlanLineageInventoryTheory.release_dead_spills_domain, MEM_MAP] >>
+          fnPlanPrefixTheory.phi_release_dead_spills_domain, MEM_MAP] >>
       metis_tac[]) >>
   rename1 `join_target_ops _ _ _ _ = SOME targets` >>
   `set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label

@@ -486,6 +486,11 @@ Theorem block_step_prefix:
         SOME (block_ops, ps_after) /\
       ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
       ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
+      (?prefixL prefixD core.
+         ps_after.ps_stack = prefixL ++ core /\
+         ps_dfs_after.ps_stack = prefixD ++ core /\
+         (!v. MEM v (live_vars_at liveness bb.bb_label (LENGTH bb.bb_instructions)) ==>
+            ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
       block_plan_state liveness dfg cfg fn bb
         (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
         (phi_prefix_length bb.bb_instructions) ps1 /\
@@ -572,6 +577,12 @@ Proof
     (qpat_x_assum `asm_steps _ _ _ 1 as = _`
        (fn th => REWRITE_TAC [MATCH_MP asm_steps_add_ok th]) >>
      first_assum ACCEPT_TAC) >>
+  `?prefixL prefixD core.
+     ps_after.ps_stack = prefixL ++ core /\
+     ps_dfs_after.ps_stack = prefixD ++ core /\
+     (!v. MEM v (live_vars_at liveness bb.bb_label (LENGTH bb.bb_instructions)) ==>
+        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` by
+    (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> simp[]) >>
   qexistsl_tac [`h`, `promised`, `ps_after`, `clean_ops ++ phi_ops`,
                 `body_ops`, `ps1`, `1 + n`, `as'`] >>
   rpt conj_tac >> REWRITE_TAC [operand_val_frame_view_inst_idx] >>

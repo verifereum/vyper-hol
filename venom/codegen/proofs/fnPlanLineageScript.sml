@@ -17,8 +17,10 @@
  *                                 replays each block's DFS code
  *   lineage_entry               — one lineage step, from an explicit
  *                                 predecessor into its successor
- *   lineage_state_block_plan    — CHEATED successor transfer: a lineage
- *                                 state regenerates the block's DFS code
+ *   lineage_state_block_plan    — successor transfer: a lineage state
+ *                                 regenerates the block's DFS code, and
+ *                                 the outgoing stacks share a core below
+ *                                 prefixes free of the block's live-out
  * Helper:
  *   lineage_state_dfs_fields    — a lineage state is a DFS state with its
  *                                 stack and spill map replaced
@@ -130,7 +132,12 @@ Inductive lineage_state:
     SOME (block_ops, ps_after) /\
   MEM succ (cfg_succs_of cfg lbl) /\
   dfs_block_state liveness dfg cfg fn ps0 succ ps_succ /\
-  ps_after.ps_spilled = ps_succ.ps_spilled ==>
+  ps_after.ps_spilled = ps_succ.ps_spilled /\
+  (?prefixL prefixD core.
+     ps_after.ps_stack = prefixL ++ core /\
+     ps_dfs_after.ps_stack = prefixD ++ core /\
+     (!v. MEM v (live_vars_at liveness lbl (LENGTH bb.bb_instructions)) ==>
+        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) ==>
   lineage_state liveness dfg cfg fn ps0 succ
     (ps_succ with <| ps_stack := ps_after.ps_stack;
                      ps_spilled := ps_after.ps_spilled |>)
@@ -150,6 +157,11 @@ Definition lineage_edge_def:
       MEM succ (cfg_succs_of cfg lbl) /\
       dfs_block_state lv dfg cfg fn ps0 succ ps_succ /\
       ps_after.ps_spilled = ps_succ.ps_spilled /\
+      (?prefixL prefixD core.
+         ps_after.ps_stack = prefixL ++ core /\
+         ps_dfs_after.ps_stack = prefixD ++ core /\
+         (!v. MEM v (live_vars_at lv lbl (LENGTH bb.bb_instructions)) ==>
+            ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
       qs = ps_succ with <|ps_stack := ps_after.ps_stack;
                          ps_spilled := ps_after.ps_spilled|>
 End
@@ -180,7 +192,8 @@ Proof
   qexists_tac `ps_dfs` >>
   qexists_tac `block_ops` >> qexists_tac `ps_dfs_after` >>
   qexists_tac `ch` >> qexists_tac `promised` >>
-  qexists_tac `ps_after` >> qexists_tac `ps_succ` >> simp[]
+  qexists_tac `ps_after` >> qexists_tac `ps_succ` >> simp[] >>
+  qexistsl_tac [`prefixL`, `prefixD`, `core`] >> simp[]
 QED
 
 Theorem lineage_history_reconstruct:
@@ -334,7 +347,8 @@ Proof
       conj_tac >- simp[Abbr `target`] >>
       conj_tac >- simp[] >>
       qexistsl_tac [`pb`, `ops`, `before.ps_cleanup_height`, `pred`,
-        `before.ps_cleanup_promised`, `before`, `before`, `after`] >> simp[])
+        `before.ps_cleanup_promised`, `before`, `before`, `after`] >> simp[] >>
+      qexistsl_tac [`[]`, `[]`, `after.ps_stack`] >> simp[])
   >- (irule dfs_aux_call_sibling >> goal_assum (drule_at Any) >> simp[]) >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   simp[] >> goal_assum (drule_at Any) >> simp[]
@@ -1147,6 +1161,11 @@ Definition lineage_entry_def:
       MEM succ (cfg_succs_of cfg pred) /\
       dfs_block_state liveness dfg cfg fn ps0 succ ps_succ /\
       ps_after.ps_spilled = ps_succ.ps_spilled /\
+      (?prefixL prefixD core.
+         ps_after.ps_stack = prefixL ++ core /\
+         ps_dfs_after.ps_stack = prefixD ++ core /\
+         (!v. MEM v (live_vars_at liveness pred (LENGTH bb.bb_instructions)) ==>
+            ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
       ps = ps_succ with <| ps_stack := ps_after.ps_stack;
                            ps_spilled := ps_after.ps_spilled |>
 End
@@ -1213,6 +1232,8 @@ Proof
         initialized_entry_block_available >>
       simp[init_cleanup_plan_state_def, init_plan_state_def] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `ps_after.ps_stack = prefixL ++ core` kall_tac >>
+  qpat_x_assum `ps_dfs_after.ps_stack = prefixD ++ core` kall_tac >>
   `wf_function fn` by gvs[codegen_ready_fn_def] >>
   `cfg_reachable_of (cfg_analyze fn) lbl /\ fn_reachable fn lbl'` by
     metis_tac[dfs_block_state_reachable, fn_reachable_cfg_analyze] >>
@@ -1579,7 +1600,7 @@ Proof
   `LIST_ELEM_COUNT (Var v) ps.ps_stack = 0` by
     simp[fnPlanLineageObserverTransportTheory.elem_count_zero_iff] >>
   `ssa_form fn` by gvs[codegen_ready_fn_def] >>
-  drule_all fnPlanLineageCallersTheory.ssa_form_block_outputs_distinct >>
+  drule_all venomWfPropsTheory.ssa_form_block_outputs_distinct >>
   `bb.bb_instructions = get_params bb.bb_instructions ++ non_param_insts bb` by
     metis_tac[fnPlanLineageCallersTheory.ready_block_parameter_suffix] >>
   disch_then (fn th => mp_tac th) >>
@@ -1836,7 +1857,7 @@ Proof
       venomExecPropsTheory.lookup_block_label, codegen_ready_fn_def,
       lineage_state_reachable, fn_reachable_cfg_analyze] >>
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by
-    metis_tac[fnPlanLineageCallersTheory.ssa_form_block_outputs_distinct] >>
+    metis_tac[venomWfPropsTheory.ssa_form_block_outputs_distinct] >>
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (non_param_insts bb)))` by
     (drule_all fnPlanLineageCallersTheory.ready_block_parameter_suffix >>
      disch_then (fn th => qpat_x_assum `ALL_DISTINCT _`
@@ -1955,7 +1976,7 @@ Resume lineage_state_fresh_phi_ordinary_joint[suffix_support]:
   `((MEM (Var v) seed.ps_stack \/ Var v IN FDOM seed.ps_spilled) ==>
     MEM v (live_vars_at (liveness_analyze fn) lbl p))` by
     (`MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
-       (irule removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre >>
+       (irule venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre >>
         gvs[codegen_ready_fn_def]) >>
      simp[Abbr `p`] >> disch_tac >> gvs[] >>
      drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)
@@ -2295,7 +2316,7 @@ Proof
   `!other. MEM other bb.bb_instructions /\ MEM v other.inst_outputs ==> other = inst` by
     (rpt strip_tac >>
      `ssa_form fn` by gvs[codegen_ready_fn_def] >>
-     metis_tac[removeUnusedSsaProofsTheory.ssa_unique_output_block]) >>
+     metis_tac[venomWfPropsTheory.ssa_unique_output_block]) >>
   qpat_x_assum `bb.bb_label = lbl` (SUBST_ALL_TAC o SYM) >>
   `~MEM (Var v) start.ps_stack /\ Var v NOTIN FDOM start.ps_spilled` by
     (drule_at (Pat `(if _ then _ else _) = _`)
@@ -2942,37 +2963,6 @@ Proof
   simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-(* KEY LEMMA (cheated, for alan): a lineage state regenerates the block's
-   DFS code, so the code at the block's label is the plan of a state that
-   carries the run-time path's stack and spill map.  With the cleanup
-   fields taken from the DFS state the code can differ: entered from a
-   predecessor whose path elided a cleanup, the stack carries more
-   dead_stack_marker entries than on the DFS path, and a later
-   clean_stack_plan whose DFS state has no promise may fail its height
-   test only on the run-time path; hence the existential h, promised.
-
-   Why it should hold: lineage and DFS states share alloc, label counter
-   and the planner inputs.  The entry block has no predecessors
-   (block_entries_ready), so its only lineage state is the initial one.  At
-   a join every predecessor ends in a JMP (block_entries_ready), whose
-   reorder produces the target stack with no spills left, so the stacks
-   agree except for a bottom prefix of dead_stack_marker entries and, before
-   the PHI prefix, the names at PHI slots (phi_operands_ready makes the PHI
-   code the same).  No operand of the function is a dead_stack_marker, so
-   the operand searches never stop in that prefix.  Along other edges the
-   induction carries the agreement.
-
-   The planner does not fail on an operand missing from the stack, so the
-   agreement alone does not carry through: the length-dependent branches
-   (reorder_one's final_dist < LENGTH, stack_swap's truncated index) need
-   an invariant of lineage states, e.g. ps_stack is a dead_stack_marker
-   prefix followed by distinct variables, disjoint from FDOM ps_spilled,
-   which together are the live set at the edge (at a join entry: exactly
-   input_vars_from P lbl (live_vars_at liveness lbl 0), in that order, with
-   ps_spilled = FEMPTY).  That invariant is static (planner against
-   liveness_analyze; livenessAnalysisProps, livenessConvergenceProofs), not
-   about execution.  Every DFS state is also a lineage state, since
-   generate_succs_plan restores the parent's stack and spill map. *)
 Theorem lineage_state_seeded_ordinary_stack_support:
   !fn dfg ch growth spill_base lbl_ctr lbl ps h promised bb ops after
    setup_ops start a seed k qs v.
@@ -3202,33 +3192,6 @@ Resume lineage_state_incoming_ordinary_stack_support[seed_bound]:
 QED
 
 Finalise lineage_state_incoming_ordinary_stack_support
-
-Theorem lineage_state_block_plan:
-  !liveness dfg cfg ch growth spill_base lbl_ctr fn fn_ops ps_end lbl bb
-   ps ps_dfs block_ops ps_dfs_after.
-    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
-    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
-    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
-      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
-    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
-      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
-    lookup_block lbl fn.fn_blocks = SOME bb /\
-    lineage_state liveness dfg cfg fn
-      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
-    dfs_block_state liveness dfg cfg fn
-      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps_dfs /\
-    generate_block_plan liveness dfg cfg fn bb ps_dfs =
-      SOME (block_ops, ps_dfs_after)
-    ==>
-    ?h promised ps_after.
-      generate_block_plan liveness dfg cfg fn bb
-        (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
-        SOME (block_ops, ps_after) /\
-      ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
-      ps_after.ps_spilled = ps_dfs_after.ps_spilled
-Proof
-  cheat
-QED
 
 Theorem lineage_state_supported_outgoing_production:
   !fn dfg ch growth spill_base lbl_ctr entry lbl ps bb h promised ops after succ v.
@@ -4164,7 +4127,8 @@ Theorem lineage_state_native_post_phi_available:
 Proof
   strip_tac >>
   qpat_x_assum `lineage_state _ _ _ _ _ _ _` mp_tac >>
-  simp[Once lineage_state_cases] >> strip_tac >> gvs[] >>
+  simp[Once lineage_state_cases] >> strip_tac >>
+  rpt (qpat_x_assum `_.ps_stack = _ ++ core` kall_tac) >> gvs[] >>
   `wf_function fn` by gvs[codegen_ready_fn_def] >>
   `cfg_reachable_of (cfg_analyze fn) lbl' /\ fn_reachable fn lbl` by
     metis_tac[dfs_block_state_reachable, fn_reachable_cfg_analyze] >>
@@ -4458,7 +4422,8 @@ Theorem lineage_state_entry_initial:
   lineage_state lv dfg (cfg_analyze fn) fn ps0 lbl ps ==> ps = ps0
 Proof
   strip_tac >> qpat_x_assum `lineage_state _ _ _ _ _ _ _` mp_tac >>
-  simp[Once lineage_state_cases] >> strip_tac >> gvs[] >>
+  simp[Once lineage_state_cases] >> strip_tac >>
+  rpt (qpat_x_assum `_.ps_stack = _ ++ core` kall_tac) >> gvs[] >>
   `fn.fn_blocks <> [] /\ lbl = (HD fn.fn_blocks).bb_label` by
     (gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def,
          listTheory.NULL_EQ, AllCaseEqs()]) >>
@@ -4543,8 +4508,10 @@ Proof
   rpt gen_tac >> strip_tac >> ho_match_mp_tac lineage_state_strongind >>
   conj_tac >- simp[init_cleanup_plan_state_def, init_plan_state_def,
                    rich_listTheory.LIST_ELEM_COUNT_THM] >>
-  rpt gen_tac >> strip_tac >> gen_tac >> gvs[] >>
-  metis_tac[lineage_state_block_unit_preservation]
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  qpat_x_assum `ps_after.ps_stack = prefixL ++ core` kall_tac >>
+  qpat_x_assum `ps_dfs_after.ps_stack = prefixD ++ core` kall_tac >>
+  gvs[] >> metis_tac[lineage_state_block_unit_preservation]
 QED
 
 Theorem lineage_state_successful_exit_unit_resources:
@@ -5769,4 +5736,189 @@ Proof
     simp[stackPlanTypesTheory.plan_state_component_equality] >>
   simp[] >> strip_tac >> gvs[] >>
   qexistsl_tac [`prefixL`,`prefixD`,`out.ps_stack`] >> simp[]
+QED
+
+(* A non-entry block with a single CFG predecessor is planned from the stack
+   its predecessor's DFS code leaves. *)
+Theorem dfs_block_state_singleton_incoming_stack:
+  !fn lv dfg ch growth spill_base lbl_ctr fn_ops ps_end lbl pred psD psP pb ops
+   afterP.
+  fn_entry_label fn <> SOME lbl /\
+  generate_fn_plan_with_cleanup_analyzed lv dfg (cfg_analyze fn) ch growth fn
+    spill_base lbl_ctr = SOME (fn_ops,ps_end) /\
+  cfg_preds_of (cfg_analyze fn) lbl = [pred] /\
+  dfs_block_state lv dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psD /\
+  dfs_block_state lv dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred psP /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  generate_block_plan lv dfg (cfg_analyze fn) fn pb psP = SOME (ops,afterP) ==>
+  psD.ps_stack = afterP.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `dfs_block_state _ _ _ _ _ lbl _`
+    (mp_then Any mp_tac dfs_block_state_initialized_trace) >>
+  simp[] >> strip_tac >>
+  `MEM (pred,psP) (pre ++ (lbl,psD)::post)` by
+    (irule dfs_block_state_trace_event >> metis_tac[]) >>
+  drule plan_aux_trace_singleton_physical_ancestry >>
+  disch_then (qspecl_then [`psD`,`pre`,`post`,`lbl`] mp_tac) >> simp[] >>
+  strip_tac >- gvs[] >>
+  rename1 `MEM (p,before) pre` >>
+  `MEM p (cfg_preds_of (cfg_analyze fn) lbl)` by
+    metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+  `p = pred` by gvs[] >>
+  `before = psP` by
+    metis_tac[plan_aux_trace_event_unique, listTheory.MEM_APPEND, listTheory.MEM] >>
+  gvs[]
+QED
+
+(* The single-predecessor case of lineage_state_block_plan: the step into
+   lbl carries the shared core of its predecessor's outgoing stacks. *)
+Theorem lineage_state_singleton_block_plan:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ lbl <> entry /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops,ps_end) /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  ~(1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl)) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps_dfs /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb ps_dfs =
+    SOME (block_ops,ps_dfs_after) ==>
+  ?h promised ps_after.
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb
+      (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
+      SOME (block_ops,ps_after) /\
+    ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+    ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
+    ?prefixL prefixD core.
+      ps_after.ps_stack = prefixL ++ core /\
+      ps_dfs_after.ps_stack = prefixD ++ core /\
+      (!v. MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions)) ==>
+         ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)
+Proof
+  strip_tac >>
+  qpat_assum `lineage_state _ _ _ _ _ lbl ps`
+    (mp_tac o ONCE_REWRITE_RULE [lineage_state_cases]) >>
+  strip_tac >- gvs[] >>
+  rename1 `MEM lbl (cfg_succs_of _ p)` >>
+  `MEM p (cfg_preds_of (cfg_analyze fn) lbl)` by
+    metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+  `cfg_preds_of (cfg_analyze fn) lbl = [p]` by
+    (Cases_on `cfg_preds_of (cfg_analyze fn) lbl` >> gvs[] >>
+     Cases_on `t` >> gvs[]) >>
+  `ps_dfs.ps_stack = prefixD ++ core` by
+    (qspecl_then [`fn`, `liveness_analyze fn`, `dfg`, `ch`, `growth`,
+       `spill_base`, `lbl_ctr`, `fn_ops`, `ps_end`, `lbl`, `p`, `ps_dfs`,
+       `ps_dfs'`, `bb'`, `block_ops'`, `ps_dfs_after'`] mp_tac
+       dfs_block_state_singleton_incoming_stack >>
+     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
+     disch_then SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  `cfg_reachable_of (cfg_analyze fn) p` by
+    metis_tac[dfs_block_state_reachable, codegen_ready_fn_def] >>
+  `generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb
+     (ps_dfs with <|ps_cleanup_height := ps_dfs.ps_cleanup_height;
+                    ps_cleanup_promised := ps_dfs.ps_cleanup_promised|>) =
+     SOME (block_ops,ps_dfs_after)` by
+    simp[stackPlanTypesTheory.plan_state_component_equality] >>
+  `ps.ps_stack = prefixL ++ core` by gvs[] >>
+  mp_tac (Q.SPECL [`p`, `bb'`, `ps`, `ps_dfs`, `ps_dfs.ps_cleanup_height`,
+                   `ps_dfs.ps_cleanup_promised`, `block_ops`, `ps_dfs_after`]
+            (Q.GENL [`pred`, `pred_bb`, `psL`, `psD`, `hD`, `bD`, `bops`,
+                     `afterD`] lineage_singleton_block_physical_transfer)) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> rpt strip_tac >>
+      gvs[]) >>
+  strip_tac >>
+  qexistsl_tac [`NONE`, `choice`, `afterL`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `afterL = _` SUBST1_TAC >>
+  qpat_x_assum `ps_dfs_after = _` SUBST1_TAC >> simp[] >>
+  qexistsl_tac [`residualL`, `residualD`, `q.ps_stack`] >> simp[] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* An outgoing shared core, as the entry and join cases produce it, in the
+   form lineage_state_block_plan states. *)
+Theorem outgoing_core_block_plan[local]:
+  generate_block_plan lv dfg cfg fn bb ps = SOME (ops,afterL) /\
+  afterL = out with ps_stack := prefixL ++ out.ps_stack /\
+  afterD = out with ps_stack := prefixD ++ out.ps_stack /\
+  (!v. MEM v live ==> ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD) ==>
+  ?h promised ps_after.
+    generate_block_plan lv dfg cfg fn bb
+      (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
+      SOME (ops,ps_after) /\
+    ps_after.ps_alloc = afterD.ps_alloc /\
+    ps_after.ps_spilled = afterD.ps_spilled /\
+    ?prefixL prefixD core.
+      ps_after.ps_stack = prefixL ++ core /\
+      afterD.ps_stack = prefixD ++ core /\
+      (!v. MEM v live ==> ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)
+Proof
+  strip_tac >>
+  qexistsl_tac [`ps.ps_cleanup_height`,`ps.ps_cleanup_promised`,`afterL`] >>
+  `ps with <|ps_cleanup_height := ps.ps_cleanup_height;
+             ps_cleanup_promised := ps.ps_cleanup_promised|> = ps` by
+    simp[stackPlanTypesTheory.plan_state_component_equality] >>
+  pop_assum SUBST1_TAC >> gvs[] >>
+  qexistsl_tac [`prefixL`,`prefixD`,`out.ps_stack`] >> simp[]
+QED
+
+(* A lineage state regenerates the block's DFS code, so the code at the
+   block's label is the plan of a state that carries the run-time path's
+   stack and spill map.  With the cleanup fields taken from the DFS state
+   the code can differ: entered from a predecessor whose path elided a
+   cleanup, the stack carries more dead_stack_marker entries than on the
+   DFS path, and a later clean_stack_plan whose DFS state has no promise
+   may fail its height test only on the run-time path; hence the
+   existential h, promised.  The two outgoing stacks share a core below
+   prefixes that hold none of the block's live-out variables, which is
+   what the step into a single-predecessor successor needs. *)
+Theorem lineage_state_block_plan:
+  !liveness dfg cfg ch growth spill_base lbl_ctr fn fn_ops ps_end lbl bb
+   ps ps_dfs block_ops ps_dfs_after.
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    lineage_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps_dfs /\
+    generate_block_plan liveness dfg cfg fn bb ps_dfs =
+      SOME (block_ops, ps_dfs_after)
+    ==>
+    ?h promised ps_after.
+      generate_block_plan liveness dfg cfg fn bb
+        (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
+        SOME (block_ops, ps_after) /\
+      ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+      ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
+      (?prefixL prefixD core.
+         ps_after.ps_stack = prefixL ++ core /\
+         ps_dfs_after.ps_stack = prefixD ++ core /\
+         (!v. MEM v (live_vars_at liveness lbl (LENGTH bb.bb_instructions)) ==>
+            ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD))
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `?entry. fn_entry_label fn = SOME entry` by metis_tac[lineage_state_has_entry] >>
+  Cases_on `lbl = entry`
+  >- (gvs[] >> drule_all lineage_dfs_entry_block_outgoing_core >> strip_tac >>
+      irule outgoing_core_block_plan >> metis_tac[]) >>
+  Cases_on `1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl)`
+  >- (`cfg_reachable_of (cfg_analyze fn) lbl` by
+        metis_tac[dfs_block_state_reachable, codegen_ready_fn_def] >>
+      `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
+        (drule (codegen_ready_fn_def |> iffLR) >> strip_tac >>
+         drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+         simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+      drule_all lineage_dfs_join_block_outgoing_core_actual >> strip_tac >>
+      irule outgoing_core_block_plan >> metis_tac[]) >>
+  irule lineage_state_singleton_block_plan >> metis_tac[]
 QED

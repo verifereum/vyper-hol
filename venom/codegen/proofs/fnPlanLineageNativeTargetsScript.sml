@@ -56,7 +56,7 @@ Proof
      drule build_phi_maps_operand_class >>
      disch_then (qspecl_then [`v`, `p`, `k`] mp_tac) >>
      gvs[venomInstTheory.inst_uses_def,
-         fnPlanLineageDemandSupportTheory.phi_well_formed_uses_pairs,
+         venomWfPropsTheory.phi_well_formed_uses_pairs,
          listTheory.MEM_MAP] >>
      strip_tac >> gen_tac >> PairCases_on `y` >> simp[] >> metis_tac[]) >>
   drule analyzed_use_free_prefix_partition >>

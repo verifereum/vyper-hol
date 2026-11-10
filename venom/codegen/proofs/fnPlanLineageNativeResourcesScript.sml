@@ -62,8 +62,8 @@ Proof
     (gvs[codegen_ready_fn_def, EVERY_MEM, codegen_ready_inst_def] >>
      metis_tac[EL_MEM]) >>
   `ALL_DISTINCT (EL i bb.bb_instructions).inst_outputs` by
-    (irule codegen_ready_inst_outputs_distinct >> qexists_tac `fn` >>
-     simp[fn_insts_def, removeUnusedSsaProofsTheory.fn_insts_blocks_flat,
+    (irule genBlockSimTheory.codegen_ready_inst_outputs_distinct >> qexists_tac `fn` >>
+     simp[fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat,
        MEM_FLAT, MEM_MAP] >> metis_tac[EL_MEM]) >>
   `!v. MEM (Var v) (compute_operands (EL i bb.bb_instructions)) \/
       (MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) /\

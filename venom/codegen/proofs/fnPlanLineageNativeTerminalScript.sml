@@ -128,7 +128,7 @@ Proof
       simp[] >> strip_tac >> gvs[] >>
       simp_tac bool_ss [native_live_boundary_def] >> conj_tac
       >- (gvs[native_live_boundary_def, release_dead_spills_stack,
-              release_dead_spills_domain, MEM_MAP] >> metis_tac[]) >>
+              fnPlanPrefixTheory.phi_release_dead_spills_domain, MEM_MAP] >> metis_tac[]) >>
       rpt strip_tac >> irule arithmeticTheory.LESS_EQ_TRANS >>
       irule_at Any release_dead_spills_resource_nonincrease >>
       gvs[native_live_boundary_def] >> metis_tac[]) >>

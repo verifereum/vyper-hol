@@ -1004,7 +1004,7 @@ Proof
         simp[lineage_entry_def] >>
         qexistsl_tac [`pin`, `pin`, `ops`, `pout`,
           `pin.ps_cleanup_height`, `pin.ps_cleanup_promised`, `pout`, `sin`] >>
-        gvs[]) >>
+        gvs[] >> qexistsl_tac [`[]`, `[]`, `pout.ps_stack`] >> simp[]) >>
   qpat_x_assum `bb.bb_label = succ` (SUBST_ALL_TAC o SYM) >>
   drule_all lineage_entry_join_stack >> simp[] >> strip_tac >>
   `pre = []` by (Cases_on `pre` >> gvs[listTheory.EVERY_DEF]) >> gvs[]

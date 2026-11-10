@@ -689,7 +689,7 @@ Proof
         metis_tac[venomExecPropsTheory.lookup_block_label, venomExecPropsTheory.lookup_block_MEM] >>
       `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
         (gvs[codegen_ready_fn_def] >>
-         metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre]) >>
+         metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre]) >>
       `phi_block_ready (liveness_analyze fn) bb` by
         (Cases_on `collect_phis bb.bb_instructions` >> gvs[]
          >- (gvs[phi_block_ready_def, phi_uses_disjoint_def]) >>

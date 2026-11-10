@@ -342,7 +342,7 @@ Proof
   Cases_on `join_target_ops (liveness_analyze fn) fn bb.bb_label (LAST bb.bb_instructions)`
   >- (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
         fnPlanLineageEntryProductionTheory.jmp_no_target_state >>
-      simp[] >> strip_tac >> gvs[fnPlanLineageInventoryTheory.release_dead_spills_domain,
+      simp[] >> strip_tac >> gvs[fnPlanPrefixTheory.phi_release_dead_spills_domain,
           fnPlanLineageInventoryTheory.release_dead_spills_stack]) >>
   rename1 `join_target_ops _ _ _ _ = SOME targets` >>
   `!at. MEM at targets ==> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
@@ -377,7 +377,7 @@ Proof
   `inst_wf inst /\ codegen_ready_inst inst` by
     (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
   `ALL_DISTINCT inst.inst_outputs` by
-    (irule fnPlanLineageCallersTheory.codegen_ready_inst_outputs_distinct >>
+    (irule genBlockSimTheory.codegen_ready_inst_outputs_distinct >>
      qexists_tac `fn` >> simp[] >>
      gvs[venomInstTheory.fn_insts_def] >>
      metis_tac[venomInstTheory.fmp_fn_insts_blocks_intro]) >>
@@ -1002,7 +1002,7 @@ Proof
   simp[generate_regular_inst_plan_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >>
   IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
-  simp[fnPlanLineageInventoryTheory.release_dead_spills_domain, MEM_MAP]
+  simp[fnPlanPrefixTheory.phi_release_dead_spills_domain, MEM_MAP]
 QED
 
 Theorem generate_regular_inst_plan_dead_stack_absence_total:
@@ -2551,7 +2551,7 @@ Theorem native_defined_ordinary_suffix_production:
 Proof
   rpt gen_tac >> strip_tac >>
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by
-    (irule fnPlanLineageCallersTheory.ssa_form_block_outputs_distinct >>
+    (irule venomWfPropsTheory.ssa_form_block_outputs_distinct >>
      qexists_tac `fn` >> gvs[codegen_ready_fn_def]) >>
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (non_param_insts bb)))` by
     (drule_all fnPlanLineageCallersTheory.ready_block_parameter_suffix >>
@@ -3098,7 +3098,7 @@ Theorem ready_parameter_suffix_nondefining:
 Proof
   rpt gen_tac >> strip_tac >>
   `ssa_form fn` by gvs[codegen_ready_fn_def] >>
-  drule_all fnPlanLineageCallersTheory.ssa_form_block_outputs_distinct >>
+  drule_all venomWfPropsTheory.ssa_form_block_outputs_distinct >>
   drule_all fnPlanLineageCallersTheory.ready_block_parameter_suffix >>
   disch_then (fn th => once_rewrite_tac[th]) >>
   simp[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND, EVERY_MEM,

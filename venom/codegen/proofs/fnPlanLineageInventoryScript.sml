@@ -1,6 +1,6 @@
 Theory fnPlanLineageInventory
 Ancestors
-  fnPlanPrefix fnPlanLineageSort fnPlanLineageSuffix fnPlanLineageReplay fnPlanLineageReduction genericInputReady reorderSim fnPlanLineageReorder doSwapSim stackPlanGen stackModel list rich_list
+  fnPlanPrefix fnPlanLineageSort fnPlanLineageSuffix fnPlanLineageReplay fnPlanLineageReduction genericInputReady reorderSim deepResidualBudget fnPlanLineageReorder doSwapSim stackPlanGen stackModel list rich_list
 Libs
   pred_setTheory finite_mapTheory stackPlanOpsTheory
 
@@ -4481,7 +4481,8 @@ Proof
   >- metis_tac[reorder_plan_inventory_subset_nb,
                restore_spilled_plan_inventory_subset] >>
   `FDOM mid.ps_spilled = FDOM ps.ps_spilled DIFF set targets` by
-    (qspecl_then [`targets`, `ps`] mp_tac restore_spilled_plan_domain >> simp[]) >>
+    (qpat_x_assum `restore_spilled_plan _ _ = _` mp_tac >>
+     disch_then (ACCEPT_TAC o MATCH_MP phi_restore_spilled_domain)) >>
   `DISJOINT (set targets) (FDOM mid.ps_spilled)` by ASM_SET_TAC[] >>
   `LENGTH mid.ps_stack <= LENGTH targets` by decide_tac >>
   `LENGTH qs.ps_stack <= LENGTH targets /\ qs.ps_spilled = mid.ps_spilled` by
@@ -5015,9 +5016,9 @@ Theorem release_dead_spills_resource_nonincrease:
       (if x IN FDOM (release_dead_spills nl ps).ps_spilled then 1 else 0) <=
     LIST_ELEM_COUNT x ps.ps_stack + (if x IN FDOM ps.ps_spilled then 1 else 0)
 Proof
-  rpt gen_tac >> simp[release_dead_spills_stack, release_dead_spills_domain] >>
+  rpt gen_tac >> simp[release_dead_spills_stack, phi_release_dead_spills_domain] >>
   Cases_on `x IN FDOM ps.ps_spilled` >> simp[] >>
-  Cases_on `MEM x (MAP Var nl)` >> simp[]
+  Cases_on `?v. x = Var v /\ MEM v nl` >> simp[]
 QED
 
 Theorem emit_reorder_pop_variable_absent:
@@ -5615,7 +5616,8 @@ Proof
         metis_tac[reorder_plan_stack_support] >>
       metis_tac[restore_spilled_plan_stack_support]) >>
   `FDOM mid.ps_spilled = FDOM ps.ps_spilled DIFF set targets` by
-    (qspecl_then [`targets`, `ps`] mp_tac restore_spilled_plan_domain >> simp[]) >>
+    (qpat_x_assum `restore_spilled_plan _ _ = _` mp_tac >>
+     disch_then (ACCEPT_TAC o MATCH_MP phi_restore_spilled_domain)) >>
   `DISJOINT (set targets) (FDOM mid.ps_spilled)` by ASM_SET_TAC[] >>
   `LENGTH mid.ps_stack <= LENGTH targets` by decide_tac >>
   `LENGTH qs.ps_stack <= LENGTH targets` by
