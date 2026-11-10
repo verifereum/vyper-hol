@@ -432,7 +432,7 @@ Theorem abi_encode_word_staged_counted:
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_staged_observation ctx func ce cx es' sh out mid
       (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4)))
-      p ct rv initial actual /\ wb_frame ce es origin s0 actual
+      p ct rv initial actual /\ wb_frame ce es es' origin s0 actual
 Proof
   strip_tac >> drule abi_builtin_alloc_buffer_shape >> strip_tac >>
   `fn_has_code sa sm func` by
@@ -485,13 +485,13 @@ Proof
      metis_tac[inst_extends_emit_op, inst_extends_emit_void]) >>
   `t = staged` by gvs[] >>
   qpat_x_assum `t = staged` SUBST_ALL_TAC >>
-  `wb_frame ce es origin s0 staged` by
+  `wb_frame ce es es' origin s0 staged` by
     (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_then Any irule abi_encode_nonword_origin_frame) >>
      simp[] >> metis_tac[]) >>
-  `wb_frame ce es origin s0 initial` by
+  `wb_frame ce es es' origin s0 initial` by
     (qunabbrev_tac `initial` >>
-     qpat_assum `wb_frame _ _ _ _ staged` mp_tac >>
+     qpat_assum `wb_frame _ _ _ _ _ staged` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[wb_frame_def, lookup_var_def, locals_kept_def] >>
      metis_tac[]) >>
