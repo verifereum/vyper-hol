@@ -257,7 +257,8 @@ Theorem assign_place_bytes_storage_run:
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     stmt_state_rel ctx func cenv cx ff t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-    t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
+    alloca_frame cenv ee sa s cenv ff t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -300,7 +301,17 @@ Proof
     (fn meta => qpat_assum `~is_word_type dty`
       (fn word => drule_all (SRULE [meta,word] place_store_storage_compile))) >>
   simp[] >> strip_tac >>
-  suspend "suffix"
+  qmatch_goalsub_abbrev_tac `alloca_frame cenv ee sa s cenv final _` >>
+  `?t. gas_marked_path F ctx func s 0 (OK t) /\
+       stmt_state_rel ctx func cenv cx final t /\
+       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+       t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
+       t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts` by suspend "suffix" >>
+  qexists_tac `t` >> simp[] >>
+  irule stmtSimDefsTheory.alloca_frame_of_mem_frame >>
+  simp[Abbr `final`, vyperStorageBackendTheory.set_storage_scopes] >>
+  qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
 QED
 Resume assign_place_bytes_storage_run[count]:
   `dst_cap < dimword (:256)` by
@@ -314,6 +325,7 @@ Resume assign_place_bytes_storage_run[count]:
   decide_tac
 QED
 Resume assign_place_bytes_storage_run[suffix]:
+  unabbrev_all_tac >>
   qpat_x_assum `n2w (w2n root+delta) = root+n2w delta`
     (fn th => rewrite_tac[GSYM th] >> assume_tac th) >>
   irule assign_place_wrapped_memory_suffix_run >>
