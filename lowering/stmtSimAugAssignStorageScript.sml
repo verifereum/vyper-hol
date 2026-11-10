@@ -15,7 +15,7 @@ Ancestors
   exprBopSimProps
   exprSimSource
   exprSimHypsDefs
-  stmtSimDefs
+  stmtSimDefs stmtSimAugAssign
   loweringPosts
   allocLimits list finite_map
   fragExec  exprSimHyps exprSimOps exprSimOperators exprSimLeaves
@@ -637,6 +637,7 @@ Resume compile_augassign_toplevel_case[rhs_normal]:
       (INL v, ee with gas_obs := [])` by
     (drule gas_marked_exec_observation >>
      disch_then (qspec_then `[]` mp_tac) >> simp[]) >>
+  drule augassign_operand_ok_operands >> strip_tac >>
   drule_all augassign_storage_binop_ready >>
   disch_then (qspecl_then [`func`, `ee with gas_obs := []`, `ctx`] strip_assume_tac) >>
   `expr_res_ok (bop_result cx ty bop [ty; expr_type e] v0 v ee)` by

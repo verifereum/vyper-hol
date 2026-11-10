@@ -2052,9 +2052,8 @@ Proof
   `body_expr_ok cx e` by
     (first_x_assum irule >> metis_tac[eval_target_place_local]) >>
   `expr_sim_case F ctx func cenv cx e` by metis_tac[body_expr_ok_case] >>
-  irule compile_augassign_local_case >> simp[DISJ_IMP_THM] >>
-  conj_tac >- (qexists_tac `env` >> simp[]) >>
-  qexists_tac `F` >> simp[]
+  drule augassign_operand_ok_operands >> strip_tac >>
+  irule (Q.SPEC `F` compile_augassign_local_case) >> simp[] >> metis_tac[]
 QED
 
 (* x.f op= e on a field of a local struct: stmtSimAugAssignAttr's

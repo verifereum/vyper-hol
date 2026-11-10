@@ -1065,10 +1065,9 @@ Theorem compile_augassign_local_stmt_frag:
       (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e))
       (eval_stmt cx (AugAssign ty (NameTarget id) bop e)) es
 Proof
-  rpt strip_tac >> irule compile_augassign_local_case >>
-  fs[expr_sim_pre_body, expr_sim_ok_case, DISJ_IMP_THM] >>
-  conj_tac >- (qexists_tac `env` >> simp[]) >>
-  qexists_tac `T` >> simp[]
+  rpt strip_tac >> drule augassign_operand_ok_operands >> strip_tac >>
+  fs[expr_sim_pre_body, expr_sim_ok_case] >>
+  irule (Q.SPEC `T` compile_augassign_local_case) >> simp[] >> metis_tac[]
 QED
 
 (* Integrity gate: the source and code sides and the store carry no

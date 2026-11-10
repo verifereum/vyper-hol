@@ -236,7 +236,8 @@ Proof
    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
    (bop = Exp ==> nonneg_int_literal e) /\
    (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
-    gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+    (gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+     metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]) >>
   `FLOOKUP env.bare_global_assignable (NONE,id) = NONE` by
     (Cases_on `FLOOKUP env.bare_global_assignable (NONE,id)` >> simp[] >>
      drule_all aug_assignable_find_NONE >> strip_tac >> gvs[]) >>
@@ -339,6 +340,7 @@ Proof
   `expr_sim_case F ctx func cenv cx e` by
     metis_tac[body_expr_ok_case] >>
   drule_all augassign_toplevel_metadata >> strip_tac >>
+  `augassign_operand_ok ty bop e` by gvs[type_stmt_def, AllCaseEqs()] >>
   irule compile_augassign_toplevel_case >>
   simp[] >> metis_tac[]
 QED
