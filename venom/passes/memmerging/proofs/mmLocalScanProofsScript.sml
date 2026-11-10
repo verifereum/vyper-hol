@@ -6931,58 +6931,6 @@ Proof
   metis_tac[mm_local_future_id_not_prefix]
 QED
 
-Theorem mm_local_indexed_bulk_source_survival[local]:
-  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
-  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
-  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
-  is = bb.bb_instructions /\ j < r /\ r < LENGTH is /\ r <= N /\
-  mm_local_history is H N /\
-  (EL j is).inst_opcode = MCOPY /\
-  (EL j is).inst_operands = [Lit dst; Lit src; Lit len] /\
-  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
-  MEM (EL j is).inst_id g.cg_inst_ids /\
-  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
-  read_memory (w2n src) (w2n len) (H r) =
-    read_memory (w2n src) (w2n len) (H (SUC j))
-Proof
-  strip_tac >>
-  `!q. SUC j <= q /\ q < r ==>
-    read_memory (w2n src) (w2n len) (H (SUC q)) =
-      read_memory (w2n src) (w2n len) (H q)` by
-    (rpt strip_tac >>
-     qabbrev_tac `ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
-       empty_scan_state (TAKE q is)` >>
-     `?h. MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
-       h.cg_dst <= w2n dst /\ w2n dst + w2n len <= h.cg_dst + h.cg_length /\
-       mm_local_copy_ancestor
-         <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
-            cg_inst_ids := [(EL j is).inst_id] |> h` by
-       (`j < q /\ q <= r` by decide_tac >>
-        irule mm_local_indexed_bulk_owner >>
-        qpat_assum `mm_local_prefix _ _ _ _ = _` mp_tac >>
-        simp[Abbr `ss`] >> metis_tac[]) >>
-     `scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is) =
-        FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
-          empty_scan_state (TAKE (SUC q) is)` by
-       (`q < LENGTH is` by decide_tac >>
-        simp[Abbr `ss`, rich_listTheory.TAKE_SUC, rich_listTheory.DROP_EL_CONS,
-             FOLDL_APPEND]) >>
-     `~MEM h (scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is)).ss_flushed` by
-       (`SUC q <= r /\ j < LENGTH is` by decide_tac >>
-        `(EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by simp[] >>
-        irule mm_local_indexed_future_not_flushed >>
-        goal_assum (drule_at Any) >> metis_tac[]) >>
-     `q < N` by decide_tac >>
-     `h.cg_src <= w2n src /\ w2n src + w2n len <= h.cg_src + h.cg_length` by
-       (gvs[mm_local_copy_ancestor_def] >> decide_tac) >>
-     drule mm_local_surviving_source_read >> disch_then irule >> metis_tac[]) >>
-  `!q. SUC j <= q /\ q <= r ==>
-    read_memory (w2n src) (w2n len) (H q) =
-      read_memory (w2n src) (w2n len) (H (SUC j))` suffices_by simp[] >>
-  Induct >> simp[] >> rpt strip_tac >>
-  Cases_on `SUC j = SUC q` >- gvs[] >>
-  `SUC j <= q /\ q < r` by decide_tac >> simp[]
-QED
 
 Theorem mm_local_indexed_store_owner[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
@@ -9709,6 +9657,103 @@ Proof
      `(EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by simp[] >>
      drule_all mm_local_indexed_pending_ancestor >> simp[]) >>
   qexists `h` >> gvs[]
+QED
+
+Theorem mm_local_indexed_bulk_trajectory[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ SUC j <= q /\ q < r /\ r < LENGTH is /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE q is) /\
+  (EL j is).inst_opcode = MCOPY /\
+  (EL j is).inst_operands = [Lit dst; Lit src; Lit len] /\
+  c = <|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+         cg_inst_ids := [(EL j is).inst_id]|> /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  ?h. MEM h ss.ss_copies /\ mm_local_copy_ancestor c h /\
+      ~MEM h (scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is)).ss_flushed
+Proof
+  strip_tac >>
+  `j < q /\ q <= r` by decide_tac >>
+  drule_all mm_local_indexed_bulk_ancestry >> strip_tac >>
+  `scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is) =
+     FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+       empty_scan_state (TAKE (SUC q) is)` by
+    (`q < LENGTH is` by decide_tac >>
+     simp[rich_listTheory.TAKE_SUC, rich_listTheory.DROP_EL_CONS, FOLDL_APPEND]) >>
+  `~MEM h (scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is)).ss_flushed` by
+    (`SUC q <= r /\ j < LENGTH is` by decide_tac >>
+     `(EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by simp[] >>
+     drule_all mm_local_indexed_future_not_flushed >> simp[]) >>
+  qexists `h` >> simp[]
+QED
+
+Theorem mm_local_indexed_store_trajectory[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ SUC j <= q /\ q < r /\ r < LENGTH is /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE q is) /\
+  (EL j is).inst_opcode = MSTORE /\
+  (EL j is).inst_operands = [Lit dst; Var v] /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  FLOOKUP s0.ss_loads v = SOME src /\
+  c = <|cg_dst := w2n dst; cg_src := src; cg_length := 32;
+         cg_inst_ids := [(EL j is).inst_id] ++
+           (case dfg_get_def (dfg_build_function fn0) v of NONE => [] | SOME li => [li.inst_id])|> /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  ?h. MEM h ss.ss_copies /\ mm_local_copy_ancestor c h /\
+      ~MEM h (scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is)).ss_flushed
+Proof
+  strip_tac >>
+  `j < q /\ q <= r` by decide_tac >>
+  drule_all mm_local_indexed_store_ancestry >> strip_tac >>
+  `scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is) =
+     FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+       empty_scan_state (TAKE (SUC q) is)` by
+    (`q < LENGTH is` by decide_tac >>
+     simp[rich_listTheory.TAKE_SUC, rich_listTheory.DROP_EL_CONS, FOLDL_APPEND]) >>
+  `~MEM h (scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is)).ss_flushed` by
+    (`SUC q <= r /\ j < LENGTH is` by decide_tac >>
+     `(EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by simp[] >>
+     drule_all mm_local_indexed_future_not_flushed >> simp[]) >>
+  qexists `h` >> simp[]
+QED
+
+Theorem mm_local_indexed_bulk_source_survival[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < r /\ r < LENGTH is /\ r <= N /\
+  mm_local_history is H N /\
+  (EL j is).inst_opcode = MCOPY /\
+  (EL j is).inst_operands = [Lit dst; Lit src; Lit len] /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  read_memory (w2n src) (w2n len) (H r) =
+    read_memory (w2n src) (w2n len) (H (SUC j))
+Proof
+  strip_tac >>
+  qabbrev_tac `c = <|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+                    cg_inst_ids := [(EL j is).inst_id]|>` >>
+  qabbrev_tac `cuts = \q. FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+                    empty_scan_state (TAKE q is)` >>
+  `!q. SUC j <= q /\ q < r ==>
+    ?h. MEM h (cuts q).ss_copies /\ mm_local_copy_ancestor c h /\
+        ~MEM h (scan_inst (dfg_build_function fn0) Mem2Mem (cuts q) (EL q is)).ss_flushed` by
+    (rpt strip_tac >>
+     `cuts q = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+                  empty_scan_state (TAKE q is)` by simp[Abbr `cuts`] >>
+     `c = <|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+            cg_inst_ids := [(EL j is).inst_id]|>` by simp[Abbr `c`] >>
+     drule_all mm_local_indexed_bulk_trajectory >> simp[]) >>
+  `SUC j <= r` by decide_tac >>
+  drule_all mm_local_ancestral_interval_read >> simp[Abbr `c`]
 QED
 
 Theorem mm_local_collection_discharge[local]:
