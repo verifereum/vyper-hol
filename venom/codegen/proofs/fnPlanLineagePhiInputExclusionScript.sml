@@ -1,7 +1,7 @@
 Theory fnPlanLineagePhiInputExclusion
 Ancestors
   fnPlanLineagePhiActivation fnPlanLineageLiveness
-  removeUnusedSsaProofs phiBlock venomExecProofs cfgAnalysisProps
+  removeUnusedSsaProofs venomExecProofs cfgAnalysisProps
   stackPlanGen livenessDefs venomInst list rich_list
 
 (* Exact statement copies from fnFrameStepsPhi, under the task's approved
