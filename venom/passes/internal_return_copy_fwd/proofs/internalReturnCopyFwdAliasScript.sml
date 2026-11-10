@@ -1856,7 +1856,8 @@ Theorem ircf_completed_bases_submap:
 Proof
   rw[ircf_completed_bases_def] >>
   first_x_assum drule_all >> strip_tac >>
-  fs[SUBMAP_FLOOKUP_EQN] >> metis_tac[]
+  fs[SUBMAP_FLOOKUP_EQN] >>
+  qexistsl_tac [`dai`, `rai`, `db`, `rb`] >> simp[]
 QED
 
 Theorem ircf_completed_bases_noncopy_suc:
@@ -1887,4 +1888,130 @@ Proof
   `w2n (n2w db : bytes32) = db /\ w2n (n2w rb : bytes32) = rb` by
     (irule ircf_fwd_allocated_bases_roundtrip >> metis_tac[]) >>
   qexistsl_tac [`dai`, `rai`, `db`, `rb`] >> gvs[]
+QED
+
+Theorem ircf_completed_bases_enters_block:
+  enters_block fn s t ==> ircf_completed_bases fn t
+Proof
+  strip_tac >>
+  drule enters_block_current_bb >> strip_tac >>
+  gvs[enters_block_def] >>
+  irule ircf_completed_bases_phi_prefix >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem ircf_completed_bases_next:
+  ircf_completed_bases fn s /\ wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\ active_inst fn inst s /\
+  access_ok lo G fn inst s /\ ~is_terminator inst.inst_opcode /\
+  inst.inst_opcode <> INVOKE /\ step_inst fuel C inst s = OK t ==>
+  ircf_completed_bases fn (t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  strip_tac >>
+  `ircf_completed_bases fn (s with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule ircf_completed_bases_copy_suc >>
+     gvs[active_inst_def] >>
+     qexistsl_tac [`G`, `bb`, `lo`] >> simp[] >>
+     irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
+  irule ircf_completed_bases_submap >>
+  qexists_tac `s with vs_inst_idx := SUC s.vs_inst_idx` >>
+  simp[] >> conj_tac
+  >- metis_tac[step_preserves_control_flow] >>
+  metis_tac[step_inst_noninvoke_allocas_submap]
+QED
+
+Theorem ircf_completed_bases_return:
+  ircf_completed_bases fn s /\ wf_function fn /\
+  active_inst fn callinst s /\ callinst.inst_opcode = INVOKE /\
+  bind_outputs callinst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state s e)) = SOME t ==>
+  ircf_completed_bases fn (t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  strip_tac >>
+  `ircf_completed_bases fn (s with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule ircf_completed_bases_noncopy_suc >>
+     gvs[active_inst_def] >> qexists_tac `bb` >> simp[] >>
+     irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
+  `t.vs_allocas = s.vs_allocas` by
+    (drule (bind_outputs_preserves |> Q.ISPEC `\u:venom_state. u.vs_allocas` |> SIMP_RULE (srw_ss()) [update_var_def]) >>
+     simp[adopt_return_fmp_def, merge_callee_state_def]) >>
+  irule ircf_completed_bases_submap >>
+  qexists_tac `s with vs_inst_idx := SUC s.vs_inst_idx` >>
+  simp[] >> metis_tac[bind_return_current_bb]
+QED
+
+Theorem ircf_completed_bases_frames_reachable:
+  !vs C stk PG G tn fn inst s.
+    frame_reachable vs C stk PG G tn fn inst s ==>
+    EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+    EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+    ptr_discipline lo C vs ==>
+    ircf_completed_bases fn s /\
+    EVERY (\f. ircf_completed_bases f.cf_fn f.cf_state) stk
+Proof
+  ho_match_mp_tac frame_reachable_strongind >> rpt conj_tac
+  >- (rpt strip_tac >> simp[] >>
+      metis_tac[ircf_completed_bases_enters_block])
+  >- (rpt strip_tac >>
+      `ircf_completed_bases fn s /\ EVERY (\f. ircf_completed_bases f.cf_fn f.cf_state) stk`
+        by metis_tac[] >>
+      simp[] >> irule ircf_completed_bases_next >>
+      `ircf_alias_frames C stk fn inst s G` by
+        metis_tac[ircf_alias_frames_reachable] >>
+      gvs[ircf_alias_frames_def] >>
+      metis_tac[EVERY_MEM, ptr_discipline_def])
+  >- (rpt strip_tac >>
+      `ircf_completed_bases fn s /\ EVERY (\f. ircf_completed_bases f.cf_fn f.cf_state) stk`
+        by metis_tac[] >>
+      simp[] >> metis_tac[ircf_completed_bases_enters_block])
+  >- (rpt strip_tac >>
+      `ircf_completed_bases fn s /\ EVERY (\f. ircf_completed_bases f.cf_fn f.cf_state) stk`
+        by metis_tac[] >>
+      simp[] >> metis_tac[ircf_completed_bases_enters_block])
+  >> rpt strip_tac >>
+  `ircf_completed_bases fn s /\ EVERY (\f. ircf_completed_bases f.cf_fn f.cf_state) (f::stk)`
+    by metis_tac[] >>
+  `ircf_alias_frames C (f::stk) fn inst s G` by
+    metis_tac[ircf_alias_frames_reachable] >>
+  gvs[ircf_alias_frames_def, ircf_alias_saved_def] >>
+  simp[] >> irule ircf_completed_bases_return >>
+  metis_tac[EVERY_MEM]
+QED
+
+Theorem ircf_completed_bases_reachable:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  ptr_discipline lo C vs ==> ircf_completed_bases fn s
+Proof
+  metis_tac[ircf_completed_bases_frames_reachable]
+QED
+
+Theorem ircf_completed_bases_saved_reachable:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  ptr_discipline lo C vs /\ MEM f stk ==>
+  ircf_completed_bases f.cf_fn f.cf_state
+Proof
+  strip_tac >> drule_all ircf_completed_bases_frames_reachable >>
+  simp[EVERY_MEM] >> strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem ircf_completed_bases_source_roundtrip:
+  ircf_completed_bases fn s /\ ssa_form fn /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  k < s.vs_inst_idx /\ ircf_fwd_ok fn bb k d r sz /\ w2n sz <> 0 /\
+  MEM ai (fn_insts fn) /\ ai.inst_outputs = [r] /\
+  FLOOKUP s.vs_allocas ai.inst_id = SOME (sb,w2n sz) ==>
+  w2n (n2w sb : bytes32) = sb
+Proof
+  strip_tac >>
+  qpat_x_assum `ircf_completed_bases _ _` mp_tac >>
+  pure_rewrite_tac [ircf_completed_bases_def] >>
+  disch_then drule_all >> strip_tac >>
+  `ai = rai` by
+    (irule ssa_outputs_same_inst >>
+     gvs[fn_insts_def] >> qexists_tac `fn` >> simp[]) >>
+  gvs[]
 QED

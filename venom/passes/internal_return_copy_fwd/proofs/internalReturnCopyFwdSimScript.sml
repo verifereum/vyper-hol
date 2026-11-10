@@ -747,6 +747,62 @@ Proof
   metis_tac[]
 QED
 
+Theorem ircf_gam_cur_source_roundtrip:
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  ircf_no_dst_write_alias fn /\ ircf_size_coherent fn s /\
+  ircf_completed_bases fn s /\
+  (db,sb,sz) IN ircf_gam_cur fn_meta rma C fn s /\ sz <> 0 ==>
+  w2n (n2w sb : bytes32) = sb
+Proof
+  strip_tac >>
+  qpat_x_assum `_ IN ircf_gam_cur _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [ircf_gam_cur_def]) >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  drule_all ircf_gam_allocations >> strip_tac >>
+  `sz = w2n amount` by
+    (irule ircf_alloca_of_coherent_size >>
+     gvs[wf_ssa_def] >> metis_tac[ircf_fwd_ok_def]) >>
+  irule ircf_completed_bases_source_roundtrip >>
+  gvs[wf_ssa_def] >> metis_tac[]
+QED
+
+Theorem ircf_redirect_read_effective_observation:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  inst.inst_opcode <> ASSIGN /\ mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  ircf_redirect fn bb (ircf_tbb fn_meta rma C fn bb) v <> v /\
+  lookup_var v s = SOME w /\ access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  MEM (w2n w,len) (source_memory_read_ranges inst s) /\ len <> 0 /\
+  ircf_cross tn (ircf_gam_cur fn_meta rma C fn s) s t /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  ptr_discipline lo C vs /\ taint_agree D X tn s t ==>
+  ?sr r sz.
+    ircf_redirect fn bb (ircf_tbb fn_meta rma C fn bb) v = sr /\
+    eval_operand (Var sr) t = SOME r /\ len <= sz /\
+    (!q. q < len ==>
+      (w2n w+q IN tn.t_mem <=> w2n r+q IN tn.t_mem) /\
+      (w2n w+q NOTIN tn.t_mem ==>
+       read_byte (w2n w+q) s.vs_memory = read_byte (w2n r+q) t.vs_memory))
+Proof
+  strip_tac >>
+  `EVERY ssa_form C.ctx_functions` by
+    (fs[EVERY_MEM, wf_ssa_def] >> metis_tac[]) >>
+  drule_all ircf_redirect_read_observation >> strip_tac >>
+  `ircf_completed_bases fn s` by
+    (irule ircf_completed_bases_reachable >> metis_tac[]) >>
+  `ircf_size_coherent fn s` by fs[ircf_alias_boundary_def] >>
+  `sz <> 0` by decide_tac >>
+  `w2n (n2w sb : bytes32) = sb` by
+    (irule ircf_gam_cur_source_roundtrip >> metis_tac[]) >>
+  qexistsl_tac [`sr`, `n2w sb`, `sz`] >> simp[]
+QED
+
 Theorem ircf_gam_cur_write_disjoint:
   occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ lo <= vs.vs_alloca_next /\
