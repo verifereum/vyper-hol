@@ -32,7 +32,7 @@ val deferred_list = ``\fp ce ds vs rs b es s.
 Theorem intcall_deferred_prefix_step:
   ^deferred_list fp ce ds vs rs b ee t /\
   ^deferred fp ce child child_vv child_r d ef u /\
-  intcall_joint_res fp ce env es a s /\
+  intcall_expr_res fp ce env es a s /\
   intcall_expr_cont fp ce env es a s ee b t /\
   intcall_expr_cont fp ce env ee b t ef d u /\
   a.cs_next_id <= b.cs_next_id /\ a.cs_next_var <= b.cs_next_var /\
@@ -47,7 +47,7 @@ Theorem intcall_deferred_prefix_step:
   MAP FDOM es.scopes = MAP FDOM ef.scopes
 Proof
   BETA_TAC >> strip_tac >>
-  `intcall_joint_res fp ce env ee b t` by
+  `intcall_expr_res fp ce env ee b t` by
     fs[intcall_expr_cont_def] >>
   `b.cs_next_id <= b.cs_next_id /\ b.cs_next_var <= b.cs_next_var` by simp[] >>
   drule_all (BETA_RULE intcall_deferred_list_pure_child) >> disch_tac >>

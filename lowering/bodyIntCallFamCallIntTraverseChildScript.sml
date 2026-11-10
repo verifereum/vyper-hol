@@ -40,14 +40,14 @@ Theorem intcall_expr_cont_final_gas:
   intcall_expr_cont fp ce env es a s (ee with gas_obs := gs) b u <=>
   intcall_expr_cont fp ce env es a s ee b u
 Proof
-  simp[intcall_expr_cont_def, intcall_joint_res_gas_obs,
+  simp[intcall_expr_cont_def, intcall_expr_res_def, compileEnvTheory.local_region_def,
        loweringPostsTheory.locals_kept_def]
 QED
 
 Theorem intcall_marked_prefix_step:
   ^deferred_list fp ce ds vs rs b ee t /\
   ^deferred fp ce child vv child_r d (mid with gas_obs := []) u /\
-  intcall_joint_res fp ce env es a s /\
+  intcall_expr_res fp ce env es a s /\
   intcall_expr_cont fp ce env es a s ee b t /\
   intcall_expr_cont fp ce env ee b t (mid with gas_obs := []) d u /\
   a.cs_next_id <= b.cs_next_id /\ a.cs_next_var <= b.cs_next_var /\
@@ -89,7 +89,7 @@ QED
 
 Theorem intcall_counted_prefix_child:
   ^deferred_list fp ce ds vs rs b ee t /\
-  intcall_joint_res fp ce env es a s /\
+  intcall_expr_res fp ce env es a s /\
   intcall_expr_cont fp ce env es a s ee b t /\
   a.cs_next_id <= b.cs_next_id /\ a.cs_next_var <= b.cs_next_var /\
   b.cs_next_id <= d.cs_next_id /\ b.cs_next_var <= d.cs_next_var /\

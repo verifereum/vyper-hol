@@ -26,7 +26,7 @@ Theorem intcall_expr_cont_gas_obs:
     (ee with gas_obs := hs) b u <=>
   intcall_expr_cont fp ce env es a s ee b u
 Proof
-  simp[intcall_expr_cont_def, intcall_joint_res_gas_obs,
+  simp[intcall_expr_cont_def, intcall_expr_res_def, compileEnvTheory.local_region_def,
        loweringPostsTheory.locals_kept_def]
 QED
 
@@ -34,11 +34,11 @@ QED
    directly from typing and I; no list-wide gas-admissibility is needed. *)
 Theorem intcall_traverse_child_admissible:
   expr_body_pre ce fp.jc_cx env e es /\
-  intcall_joint_res fp ce env ee b u ==>
+  intcall_expr_res fp ce env ee b u ==>
   gas_admissible (eval_expr fp.jc_cx e) expr_vv_res_ok ee
 Proof
   strip_tac >> irule expr_body_pre_vv_gas_admissible >>
   qexistsl [`ce`, `env`] >> irule expr_body_pre_state_transport >>
-  conj_tac >- fs[intcall_joint_res_def] >>
+  conj_tac >- fs[intcall_expr_res_def] >>
   qexists `es` >> simp[]
 QED

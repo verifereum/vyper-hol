@@ -106,7 +106,7 @@ val deferred_list = ``\fp ce ds vs rs b es s.
 val staging_candidate = ``
   compile_stage_intcall_args ce vs flags (MAP expr_type ds) sa = (ops,sb) /\
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
-  intcall_joint_res fp ce env es sa s /\
+  intcall_expr_res fp ce env es sa s /\
   ^deferred_list fp ce ds vs rs sa es s /\
   read_results fp.jc_cx rs es = (INL values,es) /\
   LENGTH flags = LENGTH ds /\ MAP vv_type vs = MAP expr_type ds /\
@@ -142,7 +142,7 @@ val staging_candidate = ``
       mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory)``;
 
 Theorem intcall_stage_empty_endpoint:
-  intcall_joint_res fp ce env es sa s /\ ~s.vs_halted /\
+  intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   compile_stage_intcall_args ce [] [] [] sa = ([],sa) /\

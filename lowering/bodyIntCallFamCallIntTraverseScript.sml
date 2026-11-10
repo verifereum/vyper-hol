@@ -38,7 +38,7 @@ Theorem intcall_deferred_child_run:
   compile_expr ce (expr_type child) child b = (vv,d) /\
   fn_has_code b d fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   gas_admissible (eval_expr fp.jc_cx child) expr_vv_res_ok ee /\
-  intcall_joint_res fp ce env ee b t /\ ~t.vs_halted /\
+  intcall_expr_res fp ce env ee b t /\ ~t.vs_halted /\
   t.vs_current_bb = b.cs_current_bb /\
   t.vs_inst_idx = LENGTH b.cs_current_insts ==>
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
@@ -74,7 +74,7 @@ val prefix_inv = ``\fp ce env es a s d de dv dr (rest:expr list) ee b u.
 
 Theorem intcall_deferred_suffix:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
-  fn_inst_ids_distinct fp.jc_func /\ intcall_joint_res fp ce env es a s /\
+  fn_inst_ids_distinct fp.jc_func /\ intcall_expr_res fp ce env es a s /\
   (!e. MEM e whole ==>
     intcall_expr_producer fp e /\ supported_pure_expr fp.jc_tops e /\
     expr_body_pre ce fp.jc_cx env e es /\
@@ -123,13 +123,13 @@ Resume intcall_deferred_suffix[child]:
   qpat_x_assum `!e. MEM e whole ==> _` (qspec_then `child` mp_tac) >>
   asm_rewrite_tac[] >> strip_tac >>
   drule_all intcall_traverse_code_split >> strip_tac >>
-  `intcall_joint_res fp ce env live c v /\ ~v.vs_halted /\
+  `intcall_expr_res fp ce env live c v /\ ~v.vs_halted /\
    v.vs_current_bb = c.cs_current_bb /\
    v.vs_inst_idx = LENGTH c.cs_current_insts` by
     fs[intcall_expr_cont_def] >>
   `expr_body_pre ce fp.jc_cx env child live` by
     (irule expr_body_pre_state_transport >>
-     conj_tac >- fs[intcall_joint_res_def] >>
+     conj_tac >- fs[intcall_expr_res_def] >>
      qexists `es` >> first_assum ACCEPT_TAC) >>
   drule_all intcall_traverse_child_admissible >> disch_tac >>
   drule_all (BETA_RULE intcall_deferred_child_run) >> disch_tac >>
