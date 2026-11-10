@@ -1,6 +1,6 @@
 (* Joint count validation, count store and scratch-index initialization. *)
 Theory decoderArrayInitPtr
-Ancestors wordLoadStorePtr decoderIndexInitCorePtr decoderSetupStepPtr ptrSafetyTransport decoderGuardClampCorePtr decoderCountComparisonCorePtr decoderCountLoadCorePtr abiDecoderGuards abiDecoderArrayInitExec decoderArraySetupPtr decoderIndexInitPtr
+Ancestors physicalArrayInitSequence actualIndexInitPtr wordLoadStorePtr decoderIndexInitCorePtr decoderSetupStepPtr ptrSafetyTransport decoderGuardClampCorePtr decoderCountComparisonCorePtr decoderCountLoadCorePtr abiDecoderGuards abiDecoderArrayInitExec decoderArraySetupPtr decoderIndexInitPtr
   decoderNavigationPtr calldataClampPtr typedCopyPtr bodyPtrDefs
   compileEnv emitHelper venomInst venomExecSemantics venomState words list
   rich_list arithmetic finite_map ptrDiscipline ptrSafeRun venomInstProofs codegenRel contextCodegenRel
@@ -513,8 +513,8 @@ Proof
   qexistsl_tac [`H`,`u`] >> simp[]
 QED
 
-Theorem calldata_array_init_endpoint_ptr_core:
-  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
+Theorem actual_array_init_endpoint_ptr_core:
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w)
     maxn abi_sz sa = (setup,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
   lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
@@ -522,11 +522,15 @@ Theorem calldata_array_init_endpoint_ptr_core:
   32 <= totalbytes /\ not_fresh_at sa root /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
-  abi_decoder_budget first last b cap s /\ first <= sa.cs_next_id /\
-  sb.cs_next_id <= last ==>
+  ((FLOOKUP s.vs_allocas (sb.cs_next_id - 2) = NONE /\
+      s.vs_alloca_next + 32 < dimword (:256)) \/
+   (?p. FLOOKUP s.vs_allocas (sb.cs_next_id - 2) = SOME (p,32) /\
+      p + 32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword (:256))) ==>
   ?H u q p. FST setup = Var q /\
     eval_operand (FST setup) t = SOME (n2w p) /\
-    b <= p /\ p + 32 <= b + cap /\ p + 32 < dimword (:256) /\
+    p + 32 < dimword (:256) /\
+    (case FLOOKUP s.vs_allocas (sb.cs_next_id - 2) of
+       NONE => p = s.vs_alloca_next | SOME (slot,sz) => p = slot) /\
     mload p t = 0w /\
     ptr_covers H u q
       (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) 32 /\
@@ -578,9 +582,7 @@ Proof
   rename1 `op_prov H1 guard_cnt = NONE` >>
   `eval_operand src s1 = SOME a /\ op_taint u1 src = {}` by
     (Cases_on `src` >> fs[eval_operand_def, op_taint_def] >> metis_tac[]) >>
-  `abi_decoder_budget first last b cap s1 /\ ~s1.vs_halted` by
-    (conj_tac >-
-       (irule (iffRL abi_decoder_budget_transport) >> qexists_tac `s` >> simp[]) >> simp[]) >>
+  `~s1.vs_halted` by simp[] >>
   `guard_st.cs_next_var = sa.cs_next_var + 3` by
     (drule calldata_count_guard_layout >> simp[]) >>
   `not_fresh_at guard_st root` by
@@ -610,31 +612,28 @@ Proof
   suspend "joint_index"
 QED
 
-Resume calldata_array_init_endpoint_ptr_core[joint_index]:
+Resume actual_array_init_endpoint_ptr_core[joint_index]:
   rename1 `ptr_covers H2 u2 root s2 totalbytes` >>
-  `abi_decoder_budget first last b cap s2 /\ ~s2.vs_halted` by
-    (conj_tac >-
-      (irule (iffRL abi_decoder_budget_transport) >> qexists_tac `s1` >> simp[]) >> metis_tac[]) >>
-  `header_st.cs_next_id IN abi_decoder_ids first last` by
-    (drule calldata_count_guard_layout >> strip_tac >>
-     simp[abi_decoder_ids_def] >> decide_tac) >>
+  `~s2.vs_halted` by metis_tac[] >>
+  `sb.cs_next_id - 2 = header_st.cs_next_id` by decide_tac >>
   `run_inst_seq (emitted_insts header_st sb)
      (s2 with vs_inst_idx := s.vs_inst_idx + 6) =
      OK (t with vs_inst_idx := s.vs_inst_idx + 6)` by
     (`EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts header_st sb)` by
       (fs[EVERY_MEM] >> metis_tac[]) >>
      simp[run_inst_seq_inst_idx, exec_result_map_def]) >>
-  `abi_decoder_budget first last b cap (s2 with vs_inst_idx := s.vs_inst_idx + 6)` by
-    (irule (iffRL abi_decoder_budget_transport) >> qexists_tac `s2` >> simp[]) >>
+
   `~(s2 with vs_inst_idx := s.vs_inst_idx + 6).vs_halted` by simp[] >>
   qpat_x_assum `run_inst_seq (emitted_insts header_st sb) s2 = _` kall_tac >>
-  drule_all abi_decode_index_init_endpoint_exact_ptr_core >>
+  drule_at (Pat `run_inst_seq _ _ = _`) actual_index_init_endpoint_ptr_core >>
+  disch_then drule >>
   disch_then (qspecl_then [`u2`,`cx`,`ctx`,`R`,`PG`,`H2`] mp_tac) >>
+  impl_tac >- (simp[] >> metis_tac[]) >>
   simp[NoAsms] >> strip_tac >>
   suspend "joint_finish"
 QED
 
-Resume calldata_array_init_endpoint_ptr_core[joint_finish]:
+Resume actual_array_init_endpoint_ptr_core[joint_finish]:
   `!x. not_fresh_at sa x ==> not_fresh_at guard_st x /\ not_fresh_at header_st x` by
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `sa` >> simp[]) >>
@@ -655,8 +654,6 @@ Resume calldata_array_init_endpoint_ptr_core[joint_finish]:
     (drule calldata_count_guard_layout >> strip_tac >>
      rpt conj_tac >> irule cs_extends_same_block >>
      fs[inst_extends_def, same_blocks_def] >> metis_tac[]) >>
-  `p + 32 < dimword (:256)` by
-    (drule abi_decoder_budget_word_bound >> decide_tac) >>
   `!D lower ctx' func.
       fn_has_code sa sb func /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\
       ~ctx_has_dalloca ctx' /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -681,13 +678,14 @@ Resume calldata_array_init_endpoint_ptr_core[joint_finish]:
   suspend "joint_compose"
 QED
 
-Resume calldata_array_init_endpoint_ptr_core[joint_compose]:
+Resume actual_array_init_endpoint_ptr_core[joint_compose]:
   qexistsl_tac [`H`,`u`,`p`] >>
   `mload p t = 0w` by fs[mload_def] >>
   `q = STRING #"%" (toString (guard_st.cs_next_var + 1))` by metis_tac[operand_11] >>
   `eval_operand (Var q) t = SOME (n2w p)` by metis_tac[] >>
   `q = STRING #"%" (toString (sa.cs_next_var + 4))` by simp[] >>
   simp[] >>
+  conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   irule frag_exec_ptr_seq >>
@@ -699,7 +697,7 @@ Resume calldata_array_init_endpoint_ptr_core[joint_compose]:
   simp[ADD_ASSOC, ADD_COMM] >> metis_tac[]
 QED
 
-Resume calldata_array_init_endpoint_ptr_core[joint_continuation]:
+Resume actual_array_init_endpoint_ptr_core[joint_continuation]:
   rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac) >>
   rpt (qpat_x_assum `!x. not_fresh_at _ x ==> _` kall_tac) >>
   rpt gen_tac >> strip_tac >>
@@ -717,7 +715,78 @@ Resume calldata_array_init_endpoint_ptr_core[joint_continuation]:
   gvs[]
 QED
 
-Finalise calldata_array_init_endpoint_ptr_core
+Finalise actual_array_init_endpoint_ptr_core
+
+Theorem calldata_array_init_endpoint_ptr_core:
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    maxn abi_sz sa = (setup,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
+  ptr_covers G tn root s totalbytes /\
+  32 <= totalbytes /\ not_fresh_at sa root /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  abi_decoder_budget first last b cap s /\ first <= sa.cs_next_id /\
+  sb.cs_next_id <= last ==>
+  ?H u q p. FST setup = Var q /\
+    eval_operand (FST setup) t = SOME (n2w p) /\
+    b <= p /\ p + 32 <= b + cap /\ p + 32 < dimword (:256) /\
+    mload p t = 0w /\
+    ptr_covers H u q
+      (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) 32 /\
+    ptr_covers H u root
+      (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) totalbytes /\
+    op_taint u (SND setup) = {} /\ op_prov H (SND setup) = NONE /\
+    frag_exec_ptr cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = H /\ z = u /\
+        v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    u.t_mem = (tn.t_mem DIFF {x | d <= x /\ x < d + 32})
+      DIFF {x | p <= x /\ x < p + 32} /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\
+      ~ctx_has_dalloca ctx' /\ s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  strip_tac >>
+  `sb.cs_next_id - 2 IN abi_decoder_ids first last` by
+    (drule abi_decode_array_loop_init_trace >> strip_tac >>
+     drule abi_decode_index_init_shape >> strip_tac >>
+     drule abi_decode_dynarray_prefix_shape >>
+     simp[abi_decode_source_opcode_def] >> strip_tac >>
+     drule abi_decode_array_header_shape >>
+     simp[abi_decode_source_opcode_def] >> strip_tac >>
+     fs[abi_decoder_ids_def] >> decide_tac) >>
+  `s.vs_alloca_next <= b + cap /\ b + cap < dimword (:256)` by
+    (fs[abi_decoder_budget_def]) >>
+  `FLOOKUP s.vs_allocas (sb.cs_next_id - 2) = NONE ==>
+    s.vs_alloca_next + 32 <= b + cap` by
+    (strip_tac >> drule_all abi_decoder_missing_credit >> strip_tac >>
+     fs[abi_decoder_budget_def, Excl "CARD_DELETE"] >> decide_tac) >>
+  drule_at (Pat `run_inst_seq _ _ = _`) actual_array_init_endpoint_ptr_core >>
+  disch_then drule >>
+  disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> Cases_on `FLOOKUP s.vs_allocas (sb.cs_next_id - 2)` >> simp[]
+      >- gvs[] >>
+      PairCases_on `x` >>
+      qpat_x_assum `abi_decoder_budget _ _ _ _ _` mp_tac >>
+      pure_rewrite_tac [abi_decoder_budget_def] >> strip_tac >> metis_tac[]) >>
+  strip_tac >> qexistsl_tac [`H`,`u`,`q`,`p`] >> simp[] >>
+  Cases_on `FLOOKUP s.vs_allocas (sb.cs_next_id - 2)` >> gvs[]
+  >- fs[abi_decoder_budget_def] >>
+  PairCases_on `x` >> gvs[] >> fs[abi_decoder_budget_def] >>
+  qpat_x_assum `!id off sz. _` drule_all >> strip_tac >> decide_tac
+QED
 
 Theorem calldata_array_init_endpoint_ptr:
   abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)

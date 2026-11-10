@@ -1,11 +1,11 @@
 (* Same-witness immutable frame for the decoder loop header. *)
 Theory decoderLoopHeaderCorePtr
-Ancestors abiDecoderContract instIdxIndep ghostPcTransportPtr memLocDefs bodyPtrDefs decoderGhostFramePtr decoderProtectedScratchPtr typedCopyPtr abiDecoderExecution abiDecoderFrame
+Ancestors compileEnv abiDecoderContract instIdxIndep ghostPcTransportPtr memLocDefs bodyPtrDefs decoderGhostFramePtr decoderProtectedScratchPtr typedCopyPtr abiDecoderExecution abiDecoderFrame
   entryDispatchPtr typedCopyArrayPtr ptrSafeRun ptrDiscipline
   codegenRel emitHelperProps contextCodegenRel exprLoweringProps
   venomExecSemantics venomState venomInst finite_map pred_set words list arithmetic
 
-Theorem decoder_index_header_ptr_core:
+Theorem decoder_index_header_ptr_core_uniform:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   bb.bb_instructions =
     abi_decode_header_insts id (Var q) src CALLDATALOAD iv cv cmp done body_lbl exit_lbl /\
@@ -36,7 +36,7 @@ Theorem decoder_index_header_ptr_core:
        op_taint u (Var x) = op_taint tn (Var x)) /\
     (!x. MEM x [iv;cv;cmp;done] ==>
        op_taint u (Var x) = {} /\ op_prov H (Var x) = NONE) /\
-    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
        !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
   strip_tac >>
@@ -143,7 +143,7 @@ Proof
     (irule ptr_covers_frame >> qexistsl_tac [`G`, `s`, `tn`] >>
      gvs[ALL_DISTINCT]) >>
   qexistsl_tac [`H4`, `u4`, `t`] >> simp[Abbr `t`] >>
-  strip_tac >> gen_tac >>
+  gen_tac >> strip_tac >> gen_tac >>
   `step_inst_base i0 s = OK a /\ step_inst_base i1 a = OK b /\
    step_inst_base i2 b = OK c /\ step_inst_base i3 c = OK d` by
     (`eval_operand src a = SOME srcaddr` by
@@ -311,4 +311,63 @@ Proof
   simp[Once ptr_safe_blocks_def] >>
   gvs[ptr_safe_run_def, Abbr `gg`, jump_to_def] >>
   qpat_x_assum `!fuel. option_CASE _ _ _` (qspec_then `n` mp_tac) >> simp[]
+QED
+
+(* Fixed-D compatibility specialization of the constructive uniform provider. *)
+Theorem decoder_index_header_ptr_core:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions =
+    abi_decode_header_insts id (Var q) src CALLDATALOAD iv cv cmp done body_lbl exit_lbl /\
+  s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  ALL_DISTINCT [q;iv;cv;cmp;done] /\ src <> Var iv /\
+  ptr_covers G tn q s 32 /\ lookup_var q s = SOME (n2w slot) /\
+  slot + 32 < dimword (:256) /\ mload slot s = n2w j /\
+  DISJOINT {a | slot <= a /\ a < slot + 32} tn.t_mem /\
+  eval_operand src s = SOME srcaddr /\ op_taint tn src = {} /\
+  abi_decode_load CALLDATALOAD srcaddr s = n2w ncount /\
+  j <= ncount /\ ncount < dimword (:256) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  lookup_block body_lbl fn.fn_blocks = SOME body_bb /\
+  phi_prefix_length body_bb.bb_instructions = 0 /\
+  lookup_block exit_lbl fn.fn_blocks = SOME exit_bb /\
+  phi_prefix_length exit_bb.bb_instructions = 0 ==>
+  ?H u t.
+    t = jump_to (if j < ncount then body_lbl else exit_lbl)
+          (abi_decode_header_state iv cv cmp done j ncount s) /\
+    t.vs_allocas = s.vs_allocas /\
+    t.vs_initial_fmp = s.vs_initial_fmp /\ t.vs_fmp = s.vs_fmp /\
+    ptr_covers H u q t 32 /\ mload slot t = n2w j /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+    u.t_imm = tn.t_imm /\
+    (!x. ~MEM x [iv;cv;cmp;done] ==>
+       lookup_var x t = lookup_var x s /\
+       FLOOKUP H x = FLOOKUP G x /\
+       op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!x. MEM x [iv;cv;cmp;done] ==>
+       op_taint u (Var x) = {} /\ op_prov H (Var x) = NONE) /\
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all decoder_index_header_ptr_core_uniform >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`H`,`u`,`t`] >> simp[]
+QED
+
+(* Resource frame for the very endpoint returned above, including the exit branch. *)
+Theorem decoder_index_header_replay_frame:
+  t = jump_to lbl (abi_decode_header_state iv cv cmp done j ncount s) /\
+  fresh_vars_wrt limit s /\
+  (!x. MEM x [iv;cv;cmp;done] ==>
+    ?k. x = STRING #"%" (toString k) /\ k < limit.cs_next_var) ==>
+  fresh_vars_wrt limit t /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+  t.vs_call_ctx = s.vs_call_ctx
+Proof
+  strip_tac >> gvs[abi_decode_header_state_def] >>
+  `!x w ss. MEM x [iv;cv;cmp;done] /\ fresh_vars_wrt limit ss ==>
+    fresh_vars_wrt limit (update_var x w ss)` by
+    (rpt strip_tac >> gvs[fresh_vars_wrt_update_var]) >>
+  conj_tac
+  >- simp[jump_to_def, fresh_vars_wrt_def] >>
+  simp[jump_to_def, update_var_def]
 QED
