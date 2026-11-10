@@ -1488,3 +1488,175 @@ Proof
   irule scratch_replay_do_swap_allocated_deep >> simp[] >>
   metis_tac[arithmeticTheory.NOT_LESS]
 QED
+
+Theorem scratch_replay_step_confine:
+  scratch_replay_step cplan R op g slots final inventory /\
+  (!off b. op = SOSpill off /\ in_mem_range off 32 b ==> region b) ==>
+  scratch_replay_step cplan region op g slots final inventory
+Proof
+  simp[Once scratch_replay_step_cases] >> rpt strip_tac >>
+  simp[scratch_replay_step_cases] >> metis_tac[]
+QED
+
+Theorem scratch_replay_confine:
+  !cplan R ops g slots final inventory.
+  scratch_replay cplan R ops g slots final inventory ==>
+  !region. (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==> region b) ==>
+  scratch_replay cplan region ops g slots final inventory
+Proof
+  ho_match_mp_tac scratch_replay_ind >> conj_tac
+  >- simp[scratch_replay_rules] >>
+  rpt strip_tac >> irule (cj 2 scratch_replay_rules) >>
+  metis_tac[scratch_replay_step_confine, MEM]
+QED
+
+Theorem sym_kinds_ok_scratch_initial:
+  sym_kinds_ok cplan fn ret srest ps ss ==>
+  scratch_state_ok cplan fn ret srest (REVERSE ps.ps_stack) FEMPTY ss
+Proof
+  simp[sym_kinds_ok_def, scratch_state_ok_def, scratch_mem_ok_def]
+QED
+
+Theorem scratch_retained_kinds[local]:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  scratch_state_ok cplan fn ret srest (REVERSE qs.ps_stack) inventory ss' /\
+  qs.ps_spilled = ps.ps_spilled /\
+  (!b. (?op off. FLOOKUP ps.ps_spilled op = SOME off /\
+          in_mem_range off 32 b) ==>
+       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
+  sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  simp[scratch_state_ok_def] >> strip_tac >>
+  irule sym_kinds_ok_retained_spills >> metis_tac[]
+QED
+
+Theorem sym_scratch_replay_retained:
+  scratch_replay cplan region ops (REVERSE ps.ps_stack) FEMPTY
+    (REVERSE qs.ps_stack) inventory /\
+  qs.ps_spilled = ps.ps_spilled /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==> R b) /\
+  (!tmp op off b. MEM (SOSpill tmp) ops /\
+     FLOOKUP ps.ps_spilled op = SOME off /\ in_mem_range off 32 b ==>
+     ~in_mem_range tmp 32 b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest qs ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule scratch_replay_confine >>
+  disch_then (qspec_then `\b. R b /\
+    (!op off. FLOOKUP ps.ps_spilled op = SOME off ==> ~in_mem_range off 32 b)` mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  drule sym_kinds_ok_scratch_initial >> strip_tac >>
+  drule_all scratch_replay_sim >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists `ss'` >> simp[] >>
+  irule scratch_retained_kinds >> metis_tac[]
+QED
+
+Theorem sym_do_dup_sim_marked:
+  dist < LENGTH ps.ps_stack /\ do_dup dist ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  qs.ps_alloc.sa_next_offset <= dimword (:256) /\
+  (!b. qs.ps_alloc.sa_spill_base <= b /\ b < qs.ps_alloc.sa_next_offset ==>
+    R b /\ context_spill_byte cplan b) /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==> R b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest qs ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all scratch_replay_do_dup_allocated >> strip_tac >>
+  irule sym_scratch_replay_retained >>
+  simp[] >> (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl [`inventory`, `ps`, `R`] >>
+  metis_tac[do_dup_spill_inventory_untouched, doSwapSimTheory.do_dup_multiplicity_layout]
+QED
+
+Theorem sym_do_swap_sim_marked:
+  dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  qs.ps_alloc.sa_next_offset <= dimword (:256) /\
+  (!b. qs.ps_alloc.sa_spill_base <= b /\ b < qs.ps_alloc.sa_next_offset ==>
+    R b /\ context_spill_byte cplan b) /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==> R b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest qs ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all scratch_replay_do_swap_allocated >> strip_tac >>
+  irule sym_scratch_replay_retained >>
+  simp[] >> (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl [`inventory`, `ps`, `R`] >>
+  metis_tac[do_swap_spill_inventory_untouched, doSwapSimTheory.do_swap_multiplicity_layout]
+QED
+
+Theorem popmany_singleton_swap_decompose:
+  stack_get_depth v ps.ps_stack = SOME d /\ do_swap d ps = (swap_ops,swapped) ==>
+  popmany_plan [v] ps = (swap_ops ++ [SOPop 1],
+    swapped with ps_stack := stack_pop 1 swapped.ps_stack)
+Proof
+  strip_tac >>
+  simp[popmany_plan_def, popmany_individual_def, is_contiguous_top_def,
+       sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF, sortingTheory.PART_DEF] >>
+  Cases_on `d = 1` >- gvs[] >>
+  Cases_on `d = 0` >- gvs[do_swap_def] >> simp[]
+QED
+
+Theorem sym_swap_pop_sim_marked:
+  dist < LENGTH ps.ps_stack /\ do_swap dist ps = (swap_ops,swapped) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  swapped.ps_alloc.sa_next_offset <= dimword (:256) /\
+  (!b. swapped.ps_alloc.sa_spill_base <= b /\ b < swapped.ps_alloc.sa_next_offset ==>
+    R b /\ context_spill_byte cplan b) /\
+  (!off b. MEM (SOSpill off) swap_ops /\ in_mem_range off 32 b ==> R b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (swap_ops ++ [SOPop 1])) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp (swap_ops ++ [SOPop 1]))) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest
+      (swapped with ps_stack := stack_pop 1 swapped.ps_stack) ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (swap_ops ++ [SOPop 1])) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  simp[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >> strip_tac >>
+  `0 < LENGTH swapped.ps_stack` by
+    (drule doSwapSimTheory.do_swap_stack_perm >> simp[] >> strip_tac >>
+     imp_res_tac sortingTheory.PERM_LENGTH >> gvs[] >> decide_tac) >>
+  drule_all sym_do_swap_sim_marked >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  `asm_block_at p ss'.sym_base.as_pc (execute_plan initial_fmp [SOPop 1])` by
+    metis_tac[arithmeticTheory.ADD_COMM] >>
+  drule_all sym_pop_top_sim >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists `ss''` >> simp[sym_steps_add] >> decide_tac
+QED
+
+Theorem sym_popmany_plan_singleton_sim_marked:
+  stack_get_depth v ps.ps_stack = SOME dist /\ popmany_plan [v] ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  qs.ps_alloc.sa_next_offset <= dimword (:256) /\
+  (!b. qs.ps_alloc.sa_spill_base <= b /\ b < qs.ps_alloc.sa_next_offset ==>
+    R b /\ context_spill_byte cplan b) /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==> R b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest qs ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> Cases_on `do_swap dist ps` >>
+  rename1 `do_swap dist ps = (swap_ops,swapped)` >>
+  drule_all popmany_singleton_swap_decompose >> strip_tac >> gvs[] >>
+  `dist < LENGTH ps.ps_stack` by metis_tac[planAlignTheory.stack_get_depth_bound] >>
+  drule_all sym_swap_pop_sim_marked >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists `ss'` >> simp[]
+QED
