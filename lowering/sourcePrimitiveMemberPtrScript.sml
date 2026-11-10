@@ -10,7 +10,7 @@ Ancestors sourceWordDecoderPtr sourceBytesRepresentation sourceEncodingLayout
   vyperABIRoundtrip abiDecodeRanges
 
 Theorem clamped_word_endpoint_physical_frame:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) sa = ((),sb) /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) hi (DecPrimWord clamp) sa = ((),sb) /\
   abi_decode_source_opcode opc /\ eval_operand src s = SOME (n2w srcpos) /\
   eval_operand dst s = SOME (n2w d) /\
   srcpos < dimword (:256) /\ d < dimword (:256) /\
@@ -27,7 +27,7 @@ Proof
 QED
 
 Theorem bytestring_endpoint_physical_frame:
-  compile_abi_decode_to_buf dst src opc (Lit 0w) (DecBytestring n) sa = ((),sb) /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) (Lit 0w) (DecBytestring n) sa = ((),sb) /\
   abi_decode_source_opcode opc /\ eval_operand src s = SOME sw /\
   eval_operand dst s = SOME dw /\ abi_decode_load opc sw s = n2w cnt /\
   cnt <= n /\ n < dimword (:256) /\
@@ -43,7 +43,7 @@ QED
 
 (* One physical/ghost boundary for both nonrecursive decoder descriptors. *)
 Theorem source_primitive_decoder_ptr:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) ei sa = ((),sb) /\
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w) ei sa = ((),sb) /\
   abi_decoder_coherent ce env sf ty tv /\ type_to_abi_dec_info sf ce ty = ei /\
   value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
   ((?clamp. ei = DecPrimWord clamp /\ is_word_type ty /\ C = 32) \/
@@ -118,9 +118,9 @@ Finalise source_primitive_decoder_ptr
 (* The prepared-state certificate concerns only navigation, never the child.
    Both the source value and the ghosts below are produced by execution. *)
 Theorem source_primitive_member_ptr:
-  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     dyn ao vo sa = (ops,mid) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     ei mid = ((),sb) /\
   lookup_var root s = SOME a /\ not_fresh_at sa root /\
   (!q. src = Var q ==> not_fresh_at sa q) /\
@@ -206,9 +206,9 @@ Theorem canonical_source_tuple_primitive_member_ptr:
   ats = MAP (vyper_to_abi_type env) tys /\ i < LENGTH tys /\
   mem_bytes_at cdsbase (LENGTH (enc (Tuple ats) (ListV avs))) r.vs_call_ctx.cc_calldata =
     enc (Tuple ats) (ListV avs) /\
-  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     dyn ao vo sa = (ops,mid) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     ei mid = ((),sb) /\
   lookup_var root s = SOME a /\ not_fresh_at sa root /\
   (!q. src = Var q ==> not_fresh_at sa q) /\
@@ -262,7 +262,7 @@ QED
 (* Zero head and destination offsets still execute two fresh ADDs.  In
    particular navigation is not assumed to be an identity on registers. *)
 Theorem zero_offset_member_setup_certificate[local]:
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) F 0 0 sa = (ops,mid) /\
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w) F 0 0 sa = (ops,mid) /\
   eval_operand src s = SOME (n2w srcpos) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live sa.cs_next_var src /\
   abi_decoder_operand_live sa.cs_next_var dst /\ fresh_vars_wrt mid s ==>

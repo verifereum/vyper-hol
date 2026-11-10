@@ -18,7 +18,7 @@ Ancestors
 Theorem source_owned_array_loop_ptr:
   (!i r G tn child childsrc e srcpos.
     i < LENGTH xs /\
-    compile_abi_decode_to_buf (Var child) childsrc CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var child) childsrc CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
     abi_decoder_coherent ce env sf ty tv /\ value_has_type tv (EL i xs) /\
     vyper_to_abi env ty (EL i xs) = SOME (EL i avs) /\
@@ -96,10 +96,10 @@ Theorem source_owned_array_loop_ptr:
       s.vs_call_ctx.cc_calldata = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
     cdsbase + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword (:256) /\
     abi_decode_load CALLDATALOAD (n2w cdsbase : bytes32) s = n2w (LENGTH xs) /\
-    abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w)
+    abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
       (type_memory_size tv) body_st = (ops,middle) /\
-    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
     fn_has_code body_st end_st fn /\ fn_inst_ids_distinct fn /\
     (!bb. lookup_block end_st.cs_current_bb fn.fn_blocks = SOME bb ==>
@@ -664,7 +664,7 @@ Proof
        [`r.vs_allocas = s.vs_allocas`, `r.vs_alloca_next = s.vs_alloca_next`,
         `!id p k. middle.cs_next_id <= id /\ id < end_st.cs_next_id /\ FLOOKUP s.vs_allocas id = _ ==> _`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
-  `compile_abi_decode_to_buf (Var child) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var child) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
     abi_decoder_operand_live middle.cs_next_var (Var child)` by
     (map_every (fn pat => qpat_assum pat mp_tac)
@@ -674,7 +674,7 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[]) >>
   `end_st.cs_next_var <= limit.cs_next_var` by decide_tac >>
   qpat_assum `!i r G tn child childsrc e srcpos. _`
-    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ child _ _`)) >>
   disch_then (qspecl_then
     [`j`, `d + 32 + j * type_memory_size tv`,

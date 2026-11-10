@@ -60,7 +60,7 @@ QED
 Theorem canonical_recursive_complex_suffix_ptr:
   (!i mid en q childsrc r H u.
     i < LENGTH tys /\
-    compile_abi_decode_to_buf (Var q) childsrc CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var q) childsrc CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce (EL i tys)) mid = ((),en) /\
     eval_operand (Var q) r = SOME (n2w (d + SUM (MAP type_memory_size (TAKE i tvs)))) /\
     eval_operand childsrc r = SOME (n2w (cdsbase + abi_tuple_child_offset ats avs i)) /\
@@ -99,7 +99,7 @@ Theorem canonical_recursive_complex_suffix_ptr:
     (!i. i < LENGTH tys ==>
       EL i elems = (type_to_abi_dec_info sf ce (EL i tys),
         abi_member_head_size (EL i ats), type_memory_size (EL i tvs))) /\
-    compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (DROP k elems) (SUM (MAP abi_member_head_size (TAKE k ats)))
       (SUM (MAP type_memory_size (TAKE k tvs))) sa = ((),sb) /\
     mem_bytes_at cdsbase (LENGTH (enc (Tuple ats) (ListV avs))) s.vs_call_ctx.cc_calldata =
@@ -166,14 +166,14 @@ Proof
           metis_tac[abi_decoder_zero_array_type] >>
         gvs[evaluate_type_def, AllCaseEqs()])) >>
      simp[EL_MAP]) >>
-  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `DROP k elems = _` (fn th => pure_rewrite_tac[th]) >>
   qpat_assum `EL k elems = _` (fn th => pure_rewrite_tac[th]) >>
   rewrite_tac[abi_decode_complex_member_phases] >>
   simp_tac bool_ss [comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
-  rename1 `abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) _ _ _ sa = (ops,mid)` >>
-  rename1 `compile_abi_decode_to_buf _ _ CALLDATALOAD (Lit 0w) _ mid = ((),en)` >>
+  rename1 `abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) _ _ _ sa = (ops,mid)` >>
+  rename1 `compile_abi_decode_to_buf _ _ CALLDATALOAD (Lit 0w) (Lit 0w) _ mid = ((),en)` >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_member_cons_code >> strip_tac >>
   `fn_has_code sa mid fn /\ fn_has_code mid en fn` by metis_tac[fn_has_code_split] >>
@@ -199,7 +199,7 @@ Resume canonical_recursive_complex_suffix_ptr[navigate]:
     cdsbase + abi_tuple_child_offset ats avs k < dimword (:256)` by
     (strip_tac >> conj_tac >- (irule structural_tuple_indexed_offset_load >>
       simp[abi_decode_source_def, Excl "enc_def"] >> gvs[]) >> simp[]) >>
-  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `dec_info_needs_offset _ = _` (fn th => pure_rewrite_tac[th]) >> strip_tac >>
   drule_all calldata_member_setup_source_ptr >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
@@ -213,7 +213,7 @@ Resume canonical_recursive_complex_suffix_ptr[navigate]:
   `ptr_covers H u root r cap` by metis_tac[ptr_covers_frame] >>
   `allocas_from lo r /\ ~r.vs_halted` by
     (gvs[abi_decoder_address_frame_def, allocas_from_def] >> gvs[]) >>
-  `compile_abi_decode_to_buf (Var q) (FST ops) CALLDATALOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var q) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (EL k tys)) mid = ((),en)` by
     gvs[] >>
   `eval_operand (Var q) r = SOME (n2w (d + SUM (MAP type_memory_size (TAKE k tvs))))` by

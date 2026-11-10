@@ -29,7 +29,7 @@ Theorem calldata_source_bytes_ptr_endpoint_uniform:
   type_to_abi_dec_info sf ce ty = DecBytestring m /\
   evaluate_type env ty = SOME tv /\
   value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring m) sa = ((),sb) /\
   C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
   m < dimword (:256) /\

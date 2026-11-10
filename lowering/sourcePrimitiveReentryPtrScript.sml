@@ -12,7 +12,7 @@ Ancestors
   abiDecoderBytesTyped exprSimMemoryTransport exprSim
 
 Theorem source_primitive_decoder_reentry_ptr:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) ei sa = ((),sb) /\
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w) ei sa = ((),sb) /\
   abi_decoder_coherent ce env sf ty tv /\ type_to_abi_dec_info sf ce ty = ei /\
   value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
   ((?clamp. ei = DecPrimWord clamp /\ is_word_type ty /\ C = 32) \/

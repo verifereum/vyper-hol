@@ -80,7 +80,7 @@ Proof
 QED
 
 Theorem calldata_array_loop_init_physical_sequence:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st = (setup,loop_st) /\
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st = (setup,loop_st) /\
   eval_operand src s = SOME (n2w sb) /\
   eval_operand dst s = SOME (n2w d) /\ d < dimword (:256) /\
   abi_decode_load CALLDATALOAD (n2w sb:bytes32) s = n2w n /\

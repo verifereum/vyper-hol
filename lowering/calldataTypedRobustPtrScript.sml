@@ -40,7 +40,7 @@ Proof
 QED
 
 Theorem calldata_bytestring_decoder_typed_robust_uniform:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring m) sa = ((),sb) /\
   C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
   m < dimword (:256) /\
@@ -88,7 +88,7 @@ Proof
 QED
 
 Theorem calldata_canonical_bytestring_typed_robust_uniform:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring m) sa = ((),sb) /\
   C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
   m < dimword (:256) /\

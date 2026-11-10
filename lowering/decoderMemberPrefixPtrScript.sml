@@ -413,7 +413,7 @@ Proof
 QED
 
 Theorem member_navigation_source_endpoint_uniform:
-  compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) sa = (ep,sb) /\
+  compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) (Lit 0w) sa = (ep,sb) /\
   (!q. src = Var q ==> not_fresh_at sa q) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
@@ -514,7 +514,7 @@ QED
 Finalise member_navigation_source_endpoint_uniform
 
 Theorem calldata_member_setup_endpoint_ptr_uniform:
-  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) dyn ao vo sa = (ops,sb) /\
+  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) dyn ao vo sa = (ops,sb) /\
   lookup_var root s = SOME a /\ not_fresh_at sa root /\
   (!q. src = Var q ==> not_fresh_at sa q) /\
   ptr_covers G tn root s cap /\ op_taint tn src = {} /\ op_prov G src = NONE /\

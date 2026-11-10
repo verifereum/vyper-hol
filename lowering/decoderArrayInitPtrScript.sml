@@ -514,7 +514,7 @@ Proof
 QED
 
 Theorem actual_array_init_endpoint_ptr_core:
-  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w)
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     maxn abi_sz sa = (setup,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
   lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\

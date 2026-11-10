@@ -19,7 +19,7 @@ Ancestors
 (* Initialization writes only its own registers, so freshness at the eventual
    decoder limit is preserved, not merely freshness at the initializer limit. *)
 Theorem array_loop_init_future_fresh:
-  abi_decode_array_loop_init dst src opc hi maxn abi_sz sa = (setup,sb) /\
+  abi_decode_array_loop_init dst src opc (Lit 0w) hi maxn abi_sz sa = (setup,sb) /\
   abi_decode_source_opcode opc /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   sb.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s ==>
@@ -30,7 +30,7 @@ Proof
     EVERY (\i. ~is_terminator i.inst_opcode /\
       ~MEM (STRING #"%" (toString n)) i.inst_outputs)
       (emitted_insts sa sb)` by
-    (qpat_x_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _` mp_tac >>
      qpat_assum `abi_decode_source_opcode opc` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      Cases_on `hi = Lit 0w` >>
@@ -114,7 +114,7 @@ Proof
 QED
 
 Theorem calldata_array_loop_init_repeat_physical_sequence:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     (setup,loop_st) /\
   eval_operand src s = SOME (n2w cdsbase) /\
   eval_operand dst s = SOME (n2w d) /\ d < dimword (:256) /\
@@ -224,7 +224,7 @@ QED
 (* Obtain the physical initializer state from actual-site resources, including
    replay.  The owner is outside the whole decoder's scratch interval. *)
 Theorem source_array_init_owned_sequence:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_index_init index_st = (ip,loop_st) /\
   (!ins. MEM ins (emitted_insts index_st loop_st) ==> MEM ins (fn_insts fn)) /\
@@ -365,7 +365,7 @@ Finalise source_array_init_owned_sequence
 Theorem source_owned_nonbulk_array_ptr:
   (!middle end_st i r G tn child childsrc e srcpos.
     i < LENGTH xs /\
-    compile_abi_decode_to_buf (Var child) childsrc CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var child) childsrc CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
     abi_decoder_coherent ce env sf ty tv /\ value_has_type tv (EL i xs) /\
     vyper_to_abi env ty (EL i xs) = SOME (EL i avs) /\
@@ -431,7 +431,7 @@ Theorem source_owned_nonbulk_array_ptr:
       (!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H u t) ==>
         !fuel. ptr_safe_run D lower fuel ctx fn PG G tn r)) ==>
   !s G tn st last.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (DecDynArray (type_to_abi_dec_info sf ce ty)
         (abi_embedded_static_size ce.ce_struct_fields ty)
         (type_memory_size tv) dyn maxn) st = ((),last) /\
@@ -588,9 +588,9 @@ Resume source_owned_nonbulk_array_ptr[initialize]:
      simp_tac bool_ss [pairTheory.FST]) >>
   (* Installed loop entry code. *)
   `labels = (FST labels,FST (SND labels),SND (SND labels))` by simp[] >>
-  `abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
+  `abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st =
      ((FST labels,FST (SND labels),SND (SND labels)),st0)` by
-    (qpat_assum `abi_decode_loop_prefix _ _ _ _ = _` mp_tac >>
+    (qpat_assum `abi_decode_loop_prefix _ _ _ _ _ = _` mp_tac >>
      qpat_assum `labels = _` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
      metis_tac[]) >>
   drule_all calldata_loop_prefix_entry_code >> strip_tac >>
@@ -886,7 +886,7 @@ Resume source_owned_nonbulk_array_ptr[invoke_loop]:
      disch_then (qspecl_then [`STRING #"%" (toString st1.cs_next_var)`,
        `STRING #"%" (toString st0.cs_next_var)`, `FST labels`,
        `<| bb_label := st1.cs_current_bb; bb_instructions := st1.cs_current_insts ++ abi_decode_backedge_insts st1.cs_next_id (STRING #"%" (toString st0.cs_next_var)) (STRING #"%" (toString st1.cs_next_var)) ip (FST labels) |>`] mp_tac) >> simp[]) >>
-  `abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w)
+  `abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
      (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
      (type_memory_size tv) st0 = (ops,middle)` by
     (qpat_assum `ip = Var q` (fn th => rewrite_tac [GSYM th]) >>

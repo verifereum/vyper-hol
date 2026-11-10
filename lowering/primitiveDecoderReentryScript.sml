@@ -9,7 +9,7 @@ Ancestors
   venomState venomExecSemantics words arithmetic list
 
 Theorem clamped_word_reentry_sequence:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) sa = ((),sb) /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) hi (DecPrimWord clamp) sa = ((),sb) /\
   abi_decode_source_opcode opc /\ eval_operand src s = SOME sw /\
   eval_operand dst s = SOME (n2w d) /\ d < dimword (:256) /\
   abi_decoder_clamp_valid clamp (abi_decode_load opc sw s) /\
@@ -45,7 +45,7 @@ Proof
 QED
 
 Theorem bytestring_sentinel_reentry_sequence:
-  compile_abi_decode_to_buf dst src opc (Lit 0w) (DecBytestring n) sa = ((),sb) /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) (Lit 0w) (DecBytestring n) sa = ((),sb) /\
   abi_decode_source_opcode opc /\ eval_operand src s = SOME sw /\
   eval_operand dst s = SOME dw /\ abi_decode_load opc sw s = n2w cnt /\
   cnt <= n /\ n < dimword (:256) /\ abi_decode_bytes_copy_size n < dimword (:256) /\

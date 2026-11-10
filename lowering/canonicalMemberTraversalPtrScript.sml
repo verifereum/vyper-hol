@@ -19,7 +19,7 @@ Proof
 QED
 
 Theorem calldata_member_setup_source_ptr:
-  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     dyn ao vo sa = (ops,mid) /\
   lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\ not_fresh_at sa root /\
   abi_decoder_operand_live sa.cs_next_var src /\
@@ -140,9 +140,9 @@ Theorem canonical_tuple_primitive_traversal_ptr:
     enc (Tuple ats) (ListV avs) /\
   cdsbase + LENGTH (enc (Tuple ats) (ListV avs)) < dimword (:256) /\
   cdsbase + abi_tuple_child_offset ats avs i < dimword (:256) /\
-  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (is_dynamic (EL i ats)) (SUM (MAP abi_member_head_size (TAKE i ats))) vo sa = (ops,mid) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     ei mid = ((),sb) /\
   lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\ not_fresh_at sa root /\
   abi_decoder_operand_live sa.cs_next_var src /\

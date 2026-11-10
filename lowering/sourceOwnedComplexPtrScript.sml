@@ -22,7 +22,7 @@ Proof
 QED
 
 Theorem member_navigation_opcodes[local]:
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) dyn ao vo st = (ops,st') ==>
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,st') ==>
   EVERY (\i. MEM i.inst_opcode [ADD; CALLDATALOAD]) (emitted_insts st st')
 Proof
   Cases_on `dyn` >>
@@ -34,7 +34,7 @@ Proof
 QED
 
 Theorem owned_member_navigation_ptr:
-  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     dyn ao vo sa = (ops,mid) /\
   lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\ not_fresh_at sa root /\
   abi_decoder_operand_live sa.cs_next_var src /\
@@ -143,8 +143,8 @@ QED
 (* The owned fold carries semantic member sizes, not member_infos.  Its
    successor-code argument therefore works for arbitrary compiled triples. *)
 Theorem complex_elems_child_exit_phi:
-  compile_abi_decode_to_buf childdst childsrc opc hi di middle = ((),end_st) /\
-  compile_abi_decode_complex_elems dst src opc hi elems ao vo end_st = ((),final) /\
+  compile_abi_decode_to_buf childdst childsrc opc (Lit 0w) hi di middle = ((),end_st) /\
+  compile_abi_decode_complex_elems dst src opc (Lit 0w) hi elems ao vo end_st = ((),final) /\
   middle.cs_blocks = st.cs_blocks /\ abi_decode_source_opcode opc /\
   fn_has_code end_st final func /\
   (st.cs_blocks = final.cs_blocks \/
@@ -158,7 +158,7 @@ Proof
   >- (simp[Once compile_abi_decode_to_buf_def, comp_return_def] >> metis_tac[]) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   PairCases_on `h` >>
-  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   rewrite_tac[abi_decode_complex_member_phases] >>
   simp_tac bool_ss [comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
@@ -171,7 +171,7 @@ QED
 Theorem source_owned_complex_suffix_ptr:
   (!i mid en q childsrc r H u e srcpos.
     i < LENGTH tys /\
-    compile_abi_decode_to_buf (Var q) childsrc CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var q) childsrc CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce (EL i tys)) mid = ((),en) /\
     abi_decoder_coherent ce env sf (EL i tys) (EL i tvs) /\
     value_has_type (EL i tvs) (EL i vs) /\
@@ -244,7 +244,7 @@ Theorem source_owned_complex_suffix_ptr:
     (!i. i < LENGTH tys ==>
       EL i elems = (type_to_abi_dec_info sf ce (EL i tys),
         abi_member_head_size (EL i ats), type_memory_size (EL i tvs))) /\
-    compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (DROP k elems) (SUM (MAP abi_member_head_size (TAKE k ats)))
       (SUM (MAP type_memory_size (TAKE k tvs))) sa = ((),sb) /\
     mem_bytes_at cdsbase (LENGTH (enc (Tuple ats) (ListV avs))) s.vs_call_ctx.cc_calldata =
@@ -318,7 +318,7 @@ Proof
       disch_then (map_every assume_tac o CONJUNCTS) >>
       `k = LENGTH tys /\ DROP k elems = []` by simp[DROP_EQ_NIL] >>
       `sa = sb` by
-        (qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _` mp_tac >>
+        (qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ _ = _` mp_tac >>
          asm_simp_tac bool_ss [Once compile_abi_decode_to_buf_def, comp_return_def,
            pairTheory.PAIR_EQ]) >>
       qpat_x_assum `sa = sb` SUBST_ALL_TAC >>
@@ -367,7 +367,7 @@ Resume source_owned_complex_suffix_ptr[step]:
           metis_tac[abi_decoder_zero_array_type] >>
         gvs[evaluate_type_def, AllCaseEqs()])) >>
      simp[EL_MAP]) >>
-  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `DROP k elems = _` (fn th => pure_rewrite_tac[th]) >>
   qpat_assum `EL k elems = _` (fn th => pure_rewrite_tac[th]) >>
   rewrite_tac[abi_decode_complex_member_phases] >>
@@ -375,8 +375,8 @@ Resume source_owned_complex_suffix_ptr[step]:
   pairarg_tac >> pop_assum (fn th => assume_tac th >> simp_tac std_ss [th]) >>
   pairarg_tac >> pop_assum (fn th => assume_tac th >> simp_tac std_ss [th]) >>
   strip_tac >>
-  rename1 `abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) _ _ _ sa = (ops,mid)` >>
-  rename1 `compile_abi_decode_to_buf _ _ CALLDATALOAD (Lit 0w) _ mid = (z,en)` >>
+  rename1 `abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) _ _ _ sa = (ops,mid)` >>
+  rename1 `compile_abi_decode_to_buf _ _ CALLDATALOAD (Lit 0w) (Lit 0w) _ mid = (z,en)` >>
   Cases_on `z` >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_member_cons_code >> strip_tac >>
@@ -407,7 +407,7 @@ Resume source_owned_complex_suffix_ptr[navigate]:
     (asm_x "child" kall_tac >> asm_x "ih" kall_tac >>
      strip_tac >> conj_tac >- (irule structural_tuple_indexed_offset_load >>
        metis_tac[abi_decode_source_def]) >> simp[]) >>
-  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `dec_info_needs_offset _ = _` (fn th => pure_rewrite_tac[th]) >> strip_tac >>
   drule_all owned_member_navigation_ptr >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
@@ -456,7 +456,7 @@ Resume source_owned_complex_suffix_ptr[source_window]:
 QED
 
 Resume source_owned_complex_suffix_ptr[child_resources]:
-  `compile_abi_decode_to_buf (Var q) (FST ops) CALLDATALOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var q) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (EL k tys)) mid = ((),en)` by
     (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ mid = _` mp_tac >>
      qpat_assum `SND ops = Var q` (fn th => pure_rewrite_tac[th]) >>
@@ -497,7 +497,7 @@ Resume source_owned_complex_suffix_ptr[child_resources]:
     (asm_x "child" kall_tac >> asm_x "ih" kall_tac >>
      irule complex_elems_child_exit_phi >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-     goal_assum (drule_at (Pat `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ _ = _`)) >>
      asm_rewrite_tac[]) >>
   `abi_decoder_operand_live mid.cs_next_var (Var q)` by
     (asm_x "child" kall_tac >> asm_x "ih" kall_tac >> metis_tac[]) >>

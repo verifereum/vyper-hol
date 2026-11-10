@@ -8,7 +8,7 @@ Ancestors calldataTypedRobustPtr entryDecodeProps abiCanonicalHeadSize
   vyperABI vyperTyping contractABI exprLowering abiDecoderClamp compileEnv vyperValue arithmetic
 
 Theorem calldata_source_word_ptr_endpoint_uniform:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecPrimWord clamp) sa = ((),sb) /\
   abi_decoder_clamp_valid clamp (abi_decode_load CALLDATALOAD sw s) /\
   eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
@@ -68,7 +68,7 @@ Proof
 QED
 
 Theorem calldata_source_word_ptr_endpoint:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecPrimWord clamp) sa = ((),sb) /\
   abi_decoder_clamp_valid clamp (abi_decode_load CALLDATALOAD sw s) /\
   eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\

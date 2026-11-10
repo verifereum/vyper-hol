@@ -8,7 +8,7 @@ Ancestors canonicalMemberTraversalPtr robustCopyTransportPtr abiDecoderFrameComp
   venomState venomExecSemantics ptrDiscipline abiDecoderReentry
 
 Theorem member_setup_entry_freshness[local]:
-  abi_decode_member_setup dst src opc hi dyn ao vo sa = (ops,mid) /\
+  abi_decode_member_setup dst src opc (Lit 0w) hi dyn ao vo sa = (ops,mid) /\
   fresh_vars_wrt sa s ==> fresh_vars_wrt mid s
 Proof
   strip_tac >> drule abi_decode_member_setup_counters >> strip_tac >>
@@ -54,14 +54,14 @@ Proof
 QED
 
 Theorem complex_member_phase_code[local]:
-  compile_abi_decode_complex_elems dst src opc hi ((ei,az,mz)::rest)
+  compile_abi_decode_complex_elems dst src opc (Lit 0w) hi ((ei,az,mz)::rest)
     ao vo sa = ((),sb) /\ abi_decode_source_opcode opc /\
   fn_has_code sa sb fn /\ fresh_vars_wrt sa s ==>
   ?ops mid en.
-    abi_decode_member_setup dst src opc hi (dec_info_needs_offset ei)
+    abi_decode_member_setup dst src opc (Lit 0w) hi (dec_info_needs_offset ei)
       ao vo sa = (ops,mid) /\
-    compile_abi_decode_to_buf (SND ops) (FST ops) opc hi ei mid = ((),en) /\
-    compile_abi_decode_complex_elems dst src opc hi rest (ao+az) (vo+mz) en = ((),sb) /\
+    compile_abi_decode_to_buf (SND ops) (FST ops) opc (Lit 0w) hi ei mid = ((),en) /\
+    compile_abi_decode_complex_elems dst src opc (Lit 0w) hi rest (ao+az) (vo+mz) en = ((),sb) /\
     fn_has_code sa mid fn /\ fn_has_code mid en fn /\ fn_has_code en sb fn /\
     cs_extends sa mid /\ cs_extends mid en /\ cs_extends en sb /\
     fresh_vars_wrt mid s
@@ -69,8 +69,8 @@ Proof
   rewrite_tac[abi_decode_complex_member_phases] >>
   simp_tac bool_ss [comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
-  rename1 `abi_decode_member_setup dst src opc hi _ ao vo sa = (ops,mid)` >>
-  rename1 `compile_abi_decode_to_buf _ _ opc hi ei mid = ((),en)` >>
+  rename1 `abi_decode_member_setup dst src opc (Lit 0w) hi _ ao vo sa = (ops,mid)` >>
+  rename1 `compile_abi_decode_to_buf _ _ opc (Lit 0w) hi ei mid = ((),en)` >>
   drule_all abi_decoder_member_cons_code >> strip_tac >>
   `fn_has_code sa mid fn /\ fn_has_code mid en fn` by
     (metis_tac[fn_has_code_split]) >>
@@ -94,7 +94,7 @@ Theorem canonical_primitive_complex_suffix_ptr:
      (?m. type_to_abi_dec_info sf ce (EL i tys) = DecBytestring m /\
        type_memory_size (EL i tvs) = abi_decode_bytes_copy_size m /\
        m < dimword (:256)))) /\
-  compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DROP k elems) (SUM (MAP abi_member_head_size (TAKE k ats)))
     (SUM (MAP type_memory_size (TAKE k tvs))) sa = ((),sb) /\
   mem_bytes_at cdsbase (LENGTH (enc (Tuple ats) (ListV avs))) s.vs_call_ctx.cc_calldata =
@@ -152,7 +152,7 @@ Proof
     (drule abi_decoder_coherent_dynamic >> strip_tac >>
      qpat_x_assum `(?clamp. _ /\ _ /\ _) \/ (?m. _ /\ _ /\ _)` mp_tac >>
      strip_tac >> gvs[EL_MAP, abi_decoder_dynamic_def, dec_info_needs_offset_def]) >>
-  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `DROP k elems = _` (fn th => pure_rewrite_tac[th]) >>
   qpat_assum `EL k elems = _` (fn th => pure_rewrite_tac[th]) >> strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
@@ -178,7 +178,7 @@ Resume canonical_primitive_complex_suffix_ptr[member]:
    type_memory_size (EL k tvs) < dimword (:256)` by decide_tac >>
   `type_to_abi_dec_info sf ce (EL k tys) = type_to_abi_dec_info sf ce (EL k tys)` by simp[] >>
   `cdsbase + abi_tuple_child_offset ats avs k < dimword (:256)` by simp[] >>
-  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `dec_info_needs_offset _ = _` (fn th => pure_rewrite_tac[th]) >> strip_tac >>
   drule_all canonical_tuple_primitive_traversal_ptr >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
@@ -263,7 +263,7 @@ Theorem canonical_primitive_complex_ptr:
      (?m. type_to_abi_dec_info sf ce (EL i tys) = DecBytestring m /\
        type_memory_size (EL i tvs) = abi_decode_bytes_copy_size m /\
        m < dimword (:256)))) /\
-  compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     elems 0 0 sa = ((),sb) /\
   mem_bytes_at cdsbase (LENGTH (enc (Tuple ats) (ListV avs))) s.vs_call_ctx.cc_calldata =
     enc (Tuple ats) (ListV avs) /\
