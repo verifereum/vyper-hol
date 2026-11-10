@@ -144,3 +144,19 @@ Proof
      metis_tac[exit_result_def, exit_result_not_error, mem_safe_run_all_fuel]) >>
   drule ptr_zero_path_mem_origin >> simp[]
 QED
+
+(* The pointer count fixes the marks; memory safety does not depend on
+   the existential count hidden by a memory producer. *)
+Theorem gas_terminal_zero_ptr_joint:
+  gas_path_mem ctx func s n r /\
+  gas_path_ptr D lo ctx func PG G tn s 0 G' tn' r /\
+  exit_result r ==>
+  gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
+    (s, G, tn) [] (r, G', tn')
+Proof
+  strip_tac >>
+  `!fuel. mem_safe_run fuel ctx func s` by
+    (drule gas_path_mem_exec >>
+     metis_tac[exit_result_def, exit_result_not_error, mem_safe_run_all_fuel]) >>
+  drule ptr_zero_path_mem_origin >> simp[]
+QED

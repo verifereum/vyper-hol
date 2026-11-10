@@ -8,7 +8,7 @@ Ancestors
   venomExecSemantics venomState fragExec freshWrites exprOperandVar
   bodySimFull annAssignPtrDestination ptrSafetyTransport fragGasOriginPtrExec
   gasOutcomeFullCompose context emitHelper venomInst gasShadowState
-  gasOutcomeFull bodyPtrDefs exprSimDefs
+  gasOutcomeFull bodyPtrDefs exprSimDefs annAssignPtrMemorySource annAssignPtrMemoryCont
 
 Theorem internal_return_source_env[local]:
   env_consistent env cx es /\
@@ -298,6 +298,36 @@ Proof
   metis_tac[fn_has_code_split]
 QED
 
+Theorem internal_return_buffer_ret_ptr[local]:
+  emit_inst RET [Var rpc] [] sa = ((),sb) /\
+  fn_has_code sa sb func /\ lookup_var rpc s = SOME pc /\
+  op_taint tn (Var rpc) = {} /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_path_ptr D 0 ctx func PG G tn s 0 G tn
+    (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> s)
+Proof
+  strip_tac >>
+  qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
+  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  drule fn_has_code_same_block >> simp[] >> strip_tac >>
+  `!fuel. step_inst fuel ctx (mk_inst sa.cs_next_id RET [Var rpc] []) s =
+    IntRet <|iret_values := []; iret_adopt_fmp := NONE|> s` by
+    (simp[step_inst_non_invoke, mk_inst_def] >>
+     irule (step_ret_values |> Q.SPEC `sa.cs_next_id` |> Q.SPEC `[]` |> SRULE [mk_inst_def, eval_operands_def]) >>
+     metis_tac[]) >>
+  irule (cj 3 fragGasPathPtrTheory.gas_path_ptr_rules) >>
+  simp[exit_result_def, fragGasPathPtrTheory.gas_path_ptr_edge_def] >>
+  qexists_tac `0` >>
+  simp[gasCountTheory.gas_count_step_def, ptrSafeRunTheory.ptr_safe_step_def,
+       ptrSafeRunTheory.ptr_inst_ok_def, mk_inst_def,
+       ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
+       ptrDisciplineTheory.allocas_from_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def]
+QED
+
 Theorem internal_return_memory_full:
   !D lo ctx shadow_ctx PG func shadow_func tops cx ce cenv env es
    ty tv e lctx bw rpc rsz.
@@ -466,6 +496,70 @@ Resume internal_return_memory_full[normal_joint_suffix]:
        (ee with scopes := []) with gas_obs := []` by simp[] >>
      pop_assum SUBST1_TAC >>
      simp[exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
-  FAIL_TAC "memory suffix obtained"
+  `?a. lookup_var src t = SOME a /\
+     ptr_covers G' tn' src t (type_memory_size tv) /\
+     (!m. mem_agree_outside tn'.t_mem t.vs_memory m ==>
+       val_in_memory tv v (w2n a) m)` by
+    (drule annassign_memory_rhs_layout_ptr >>
+     disch_then (qspecl_then [`G'`, `tn'`, `tv`, `ty`, `tv`] mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  `ptr_covers G' tn' bp t (type_memory_size tv)` by
+    (fs[ghost_inv_at_def, return_buf_ptr_def] >> gvs[]) >>
+  `?len k. k < dimword (:256) /\
+     ptr_covers G' tn' src t k /\ ptr_covers G' tn' bp t k /\
+     (if is_bytestring_type ty then
+       k = 32 + 32 * ((len + 31) DIV 32) /\ mload (w2n a) t = n2w len /\
+       (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn'.t_mem)
+      else k = type_memory_bytes cenv ty) /\ val_footprint tv v <= k` by
+    (Cases_on `is_bytestring_type ty`
+     >- (drule annassign_bytestring_window_ptr >>
+         disch_then (qspecl_then [`get_tenv cx`, `ty`, `tv`, `tv`, `v`, `w2n a`, `t`, `tn'`] mp_tac) >>
+         simp[] >> strip_tac >> qexists_tac `len` >>
+         simp[] >>
+         conj_tac >- (fs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_LESS_EQ_MONO]) >>
+         fs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_LESS_EQ_MONO]) >>
+     qexistsl_tac [`0`, `type_memory_size tv`] >> simp[] >>
+     irule annassign_memory_source_footprint_ptr >> metis_tac[]) >>
+  `cs_extends sm cs' /\ cs_extends cs' sb` by
+    metis_tac[externalEntryShapeTheory.compile_store_memory_labels, cs_extends_emit_inst, pairTheory.SND] >>
+  `fn_has_code sm cs' func /\ fn_has_code cs' sb func` by
+    metis_tac[fn_has_code_split] >>
+  qpat_assum `op = Var src` SUBST_ALL_TAC >>
+  `not_fresh_at sm src` by metis_tac[] >>
+  drule_all (annassign_store_memory_path_ptr |> SPEC_ALL |>
+    Q.INST [`sty` |-> `ty`] |> SRULE []) >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `lookup_var rpc sf = SOME pc /\ op_taint tnf (Var rpc) = {}` by
+    (fs[ghost_inv_at_def] >> metis_tac[]) >>
+  `gas_path_ptr D 0 ctx func PG Gf tnf sf 0 Gf tnf
+    (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> sf)` by
+    (irule internal_return_buffer_ret_ptr >> metis_tac[]) >>
+  `gas_path_ptr D 0 ctx func PG G' tn' t 0 Gf tnf
+    (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> sf)` by
+    metis_tac[fragGasPathPtrTheory.gas_path_ptr_then, arithmeticTheory.ADD_0] >>
+  `?fuel. run_from fuel ctx func t = rr` by
+    metis_tac[fragGasPathMemTheory.gas_path_mem_exec, exit_result_def] >>
+  `?fuel'. run_from fuel' ctx func t =
+    IntRet <|iret_values := []; iret_adopt_fmp := NONE|> sf` by
+    (drule gasPathPtrExecTheory.gas_path_ptr_exec >>
+     simp[exit_result_def] >> metis_tac[]) >>
+  `rr = IntRet <|iret_values := []; iret_adopt_fmp := NONE|> sf` by
+    (metis_tac[fragGasPathTheory.gas_run_from_fuel_mono,
+       exit_result_not_error, exit_result_def, arithmeticTheory.LESS_EQ_CASES]) >>
+  `gas_path_ptr D lo ctx func PG G' tn' t 0 Gf tnf rr` by
+    (irule ptrSafetyTransportTheory.gas_path_ptr_lower_bound_transport >>
+     fs[ghost_inv_at_def] >> qexists_tac `0` >> simp[]) >>
+  `gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (t,G',tn') [] (rr,Gf,tnf)` by
+    (irule gas_terminal_zero_ptr_joint >> metis_tac[]) >>
+  `gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (s0,G0,tn0) marks (rr,Gf,tnf)` by
+    metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append, listTheory.APPEND_NIL] >>
+  pure_rewrite_tac[gas_outcome_full_def] >>
+  qexists_tac `marks` >> disj1_tac >>
+  qexistsl_tac [`INR (ReturnException v)`, `ee`, `rr`, `Gf`, `tnf`] >>
+  conj_tac
+  >- (gen_tac >> gvs[eval_return_forced, bind_def, raise_def]) >>
+  simp[stmt_exit_ptr_def] >> metis_tac[]
 QED
 Finalise internal_return_memory_full
