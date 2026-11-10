@@ -212,7 +212,8 @@ Resume eval_mutual_scopes_progress[Builtin]:
       Cases_on `code_slice_source bt es`
       >>~- ([`code_slice_source bt es = SOME _`],
             rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
-            gvs[code_slice_source_SOME] >>
+            gvs[code_slice_source_SOME, type_check_def, assert_def,
+                return_def, raise_def] >>
             qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
             simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
                  assert_def, return_def, raise_def, AllCaseEqs()] >>
@@ -221,6 +222,7 @@ Resume eval_mutual_scopes_progress[Builtin]:
             imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
             gvs[] >> res_tac >> res_tac >>
             rpt (qpat_x_assum `!x. _` kall_tac) >>
+            imp_res_tac eval_exprs_preserves_scopes_dom >>
             metis_tac[scopes_progress_trans]) >>
       (* the code-slice IHs are vacuous from here on *)
       rpt (qpat_x_assum `!s'' x t v. _` kall_tac) >>

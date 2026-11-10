@@ -8170,7 +8170,8 @@ Resume eval_scc_type_sound_results_mutual[Trace_Builtin_Body]:
   >- (
       qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ (_ \/ _) ==> _`
         (qspecl_then [`st`,`()`,`st`] mp_tac) >>
-      (impl_tac >- gvs[type_check_def, assert_def]) >> strip_tac >>
+      (impl_tac >- (qpat_x_assum `bt = Bop In \/ bt = Bop NotIn` mp_tac >>
+                   simp[type_check_def, assert_def])) >> strip_tac >>
       rpt (qpat_x_assum `!s'' x t. type_check _ _ _ = _ /\ _ ==> _` kall_tac) >>
       qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ _` kall_tac >>
       qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>

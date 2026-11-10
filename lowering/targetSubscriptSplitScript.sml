@@ -282,7 +282,8 @@ Proof
           Cases_on `code_slice_source bt es`
           >>~- ([`code_slice_source bt es = SOME _`],
                 rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
-                gvs[vyperInterpreterTheory.code_slice_source_SOME] >>
+                gvs[vyperInterpreterTheory.code_slice_source_SOME, type_check_def,
+                    assert_def, return_def, raise_def] >>
                 qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
                 simp[Once evaluate_def, bind_def, ignore_bind_def,
                      type_check_def, assert_def, return_def, raise_def,
