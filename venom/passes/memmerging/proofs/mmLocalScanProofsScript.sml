@@ -9111,6 +9111,77 @@ Proof
   gen_tac >> EVAL_TAC
 QED
 
+Theorem mm_local_pending_hazard_read[local]:
+  mm_local_pending cap js s t /\
+  (!j. MEM j js ==> ?d bs h. cap j = SOME (d,bs) /\
+    MEM h (flush_hazards Mem2Mem ss c).ss_copies /\
+    h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length) ==>
+  read_memory c.cg_src c.cg_length s = read_memory c.cg_src c.cg_length t
+Proof
+  strip_tac >>
+  qpat_x_assum `mm_local_pending _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [mm_local_pending_def]) >>
+  irule mm_local_read_write_log_memory >> qexists `ws` >> simp[] >>
+  simp[EVERY_MEM, pairTheory.FORALL_PROD] >> rpt strip_tac >>
+  drule_all LIST_REL_MEM_IMP_R >> strip_tac >>
+  qpat_x_assum `!j. MEM j js ==> _` (drule_then strip_assume_tac) >>
+  gvs[] >> drule mm_local_hazards_source_exclusion >> strip_tac >>
+  drule_all (INST_TYPE [alpha |-> ``:word8``] mm_local_capture_source_exclusion) >>
+  simp[] >> metis_tac[LENGTH_NIL]
+QED
+
+Theorem mm_local_pending_cap_cong[local]:
+  mm_local_pending cap js s t /\ (!j. MEM j js ==> cap' j = cap j) ==>
+  mm_local_pending cap' js s t
+Proof
+  simp[mm_local_pending_def] >> rpt strip_tac >> qexists `ws` >> simp[] >>
+  gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+  `MEM (EL n js) js` by simp[EL_MEM] >> metis_tac[]
+QED
+
+Theorem mm_local_bulk_deferred_capture[local]:
+  j < LENGTH is /\ ALL_DISTINCT (MAP (\i. i.inst_id) is) /\
+  i = EL j is /\ i.inst_opcode = MCOPY /\
+  i.inst_operands = [Lit dst; Lit src; Lit len] /\ step_inst_base i s = OK s' /\
+  c = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+         cg_inst_ids := [i.inst_id] |> /\
+  hs = flush_hazards Mem2Mem
+    (invalidate_loads ss (mk_interval (w2n dst) (w2n len))) c /\
+  cap' = (\q. if q = j then SOME (w2n dst, read_memory (w2n src) (w2n len) s)
+             else cap q) /\
+  mm_local_pending cap js s t /\ ~MEM j js /\
+  (!q. MEM q js ==> ?d bs h. cap q = SOME (d,bs) /\ MEM h hs.ss_copies /\
+    h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length) /\
+  (!a l. mm_local_bytes B a l = read_memory a l t) /\
+  EVERY (mm_local_group_captures is cap B) hs.ss_copies /\
+  SORTED (\a b. a.cg_dst <= b.cg_dst) hs.ss_copies /\
+  (!h. MEM h hs.ss_copies ==> ~MEM i.inst_id h.cg_inst_ids) ==>
+  (scan_inst dfg Mem2Mem ss i).ss_copies = add_copy hs.ss_copies c /\
+  EVERY (mm_local_group_captures is cap' B) (add_copy hs.ss_copies c) /\
+  mm_local_pending cap' (js ++ [j]) s' t
+Proof
+  strip_tac >>
+  `read_memory (w2n src) (w2n len) s = read_memory (w2n src) (w2n len) t` by
+   (`read_memory c.cg_src c.cg_length s = read_memory c.cg_src c.cg_length t` by
+     (irule (INST_TYPE [alpha |-> ``:num``] mm_local_pending_hazard_read) >>
+      qexistsl [`cap`,`js`,`invalidate_loads ss (mk_interval (w2n dst) (w2n len))`] >>
+      metis_tac[]) >>
+    gvs[]) >>
+  `mm_local_bytes B (w2n src) (w2n len) = read_memory (w2n src) (w2n len) s` by metis_tac[] >>
+  drule_all mm_local_bulk_capture_birth >> strip_tac >>
+  conj_tac >- simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  conj_tac
+  >- (irule mm_local_add_copy_captures >> simp[] >>
+      simp[EVERY_MEM] >> rpt strip_tac >>
+      irule mm_local_group_captures_extend >>
+      qexistsl [`read_memory (w2n src) (w2n len) t`,`cap`,`w2n dst`,`j`] >>
+      gvs[EVERY_MEM]) >>
+  `mm_local_pending cap' js s t` by
+    (irule mm_local_pending_cap_cong >> goal_assum (drule_at Any) >>
+     rpt strip_tac >> simp[] >> metis_tac[]) >>
+  irule mm_local_pending_create >> metis_tac[]
+QED
+
 Theorem mm_local_collection_discharge[local]:
   mm_local_pending cap js s t /\
   (!pre j mid k post d bs a cs.
