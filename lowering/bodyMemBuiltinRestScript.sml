@@ -64,7 +64,7 @@ Proof
     (strip_tac >> first_x_assum irule >> simp[type_check_def, assert_def]) >>
   `code_slice_source bt es = NONE` by
     (Cases_on `code_slice_source bt es` >> simp[] >>
-     rename1 `SOME p` >> PairCases_on `p` >> gvs[code_slice_source_SOME]) >>
+     rename1 `SOME p` >> PairCases_on `p` >> gvs[vyperInterpreterTheory.code_slice_source_SOME]) >>
   Cases_on `bt` >> gvs[] >>
   gvs[body_builtin_env_mem, body_builtin_len_mem,
       body_builtin_calldata_slice_mem, body_builtin_keccak256_mem,
