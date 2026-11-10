@@ -7293,6 +7293,81 @@ Proof
   simp[mm_local_pending_indices_def, MEM_FILTER, MEM_COUNT_LIST] >> metis_tac[]
 QED
 
+Definition mm_local_epoch_start_def:
+  mm_local_epoch_start is gs n = MAX_LIST
+    (FILTER (\q. mm_local_pending_indices is gs q = []) (COUNT_LIST (SUC n)))
+End
+
+Theorem mm_local_epoch_start_member[local]:
+  MEM (mm_local_epoch_start is gs n)
+    (FILTER (\q. mm_local_pending_indices is gs q = []) (COUNT_LIST (SUC n)))
+Proof
+  rewrite_tac[mm_local_epoch_start_def] >>
+  irule rich_listTheory.MAX_LIST_MEM >>
+  `MEM 0 (FILTER (\q. mm_local_pending_indices is gs q = []) (COUNT_LIST (SUC n)))`
+    suffices_by (Cases_on `FILTER (\q. mm_local_pending_indices is gs q = [])
+      (COUNT_LIST (SUC n))` >> simp[]) >>
+  simp[MEM_FILTER, MEM_COUNT_LIST, mm_local_pending_indices_def,
+    rich_listTheory.COUNT_LIST_def]
+QED
+
+Theorem mm_local_epoch_start_bound[local]:
+  a = mm_local_epoch_start is gs n ==> a <= n
+Proof
+  strip_tac >> mp_tac mm_local_epoch_start_member >>
+  simp[MEM_FILTER, MEM_COUNT_LIST]
+QED
+
+Theorem mm_local_epoch_start_empty[local]:
+  a = mm_local_epoch_start is gs n ==> mm_local_pending_indices is gs a = []
+Proof
+  strip_tac >> mp_tac mm_local_epoch_start_member >>
+  simp[MEM_FILTER]
+QED
+
+Theorem mm_local_epoch_start_nonempty[local]:
+  a = mm_local_epoch_start is gs n /\ a <= q /\ q < n ==>
+  ?b. MEM b (mm_local_pending_indices is gs (SUC q))
+Proof
+  strip_tac >>
+  Cases_on `mm_local_pending_indices is gs (SUC q) = []`
+  >- (`MEM (SUC q) (FILTER (\u. mm_local_pending_indices is gs u = [])
+        (COUNT_LIST (SUC n)))` by simp[MEM_FILTER, MEM_COUNT_LIST] >>
+      drule rich_listTheory.MAX_LIST_PROPERTY >>
+      gvs[GSYM mm_local_epoch_start_def]) >>
+  Cases_on `mm_local_pending_indices is gs (SUC q)` >> gvs[] >> metis_tac[]
+QED
+
+Theorem mm_local_epoch_start_pending_bound[local]:
+  a = mm_local_epoch_start is gs n /\ MEM j (mm_local_pending_indices is gs n) ==>
+  a <= j
+Proof
+  strip_tac >>
+  `a <= n` by metis_tac[mm_local_epoch_start_bound] >>
+  `mm_local_pending_indices is gs a = []` by metis_tac[mm_local_epoch_start_empty] >>
+  spose_not_then assume_tac >>
+  `MEM j (mm_local_pending_indices is gs a)` suffices_by simp[] >>
+  gvs[mm_local_pending_indices_mem] >>
+  qexistsl [`g`, `r`] >> simp[] >> decide_tac
+QED
+
+Theorem mm_local_epoch_start_suc[local]:
+  mm_local_epoch_start is gs (SUC n) =
+    if mm_local_pending_indices is gs (SUC n) = [] then SUC n
+    else mm_local_epoch_start is gs n
+Proof
+  Cases_on `mm_local_pending_indices is gs (SUC n) = []`
+  >- (simp[] >>
+      `mm_local_epoch_start is gs (SUC n) <= SUC n` by
+        metis_tac[mm_local_epoch_start_bound] >>
+      `MEM (SUC n) (FILTER (\q. mm_local_pending_indices is gs q = [])
+        (COUNT_LIST (SUC (SUC n))))` by simp[MEM_FILTER, MEM_COUNT_LIST] >>
+      drule rich_listTheory.MAX_LIST_PROPERTY >>
+      simp[GSYM mm_local_epoch_start_def]) >>
+  simp[mm_local_epoch_start_def, rich_listTheory.COUNT_LIST_SNOC,
+    rich_listTheory.SNOC_APPEND, FILTER_APPEND]
+QED
+
 Theorem mm_local_pending_indices_order[local]:
   SORTED $< (mm_local_pending_indices is gs n) /\
   ALL_DISTINCT (mm_local_pending_indices is gs n)
