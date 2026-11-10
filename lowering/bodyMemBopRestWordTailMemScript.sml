@@ -9,8 +9,8 @@ Theorem rest_word_fixed_tail_mem:
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\
   vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv s /\
   loc = (case vv_location vv of SOME l => l | NONE => LocMemory) /\ loc <> LocCalldata /\
-  expr_type e = ArrayT ty (Fixed n) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et (Fixed n)) /\
+  post_value_type cenv e = ArrayT ty (Fixed n) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME (ArrayTV et (Fixed n)) /\
   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
   value_has_type (ArrayTV et (Fixed n)) (ArrayV av) /\ value_has_type et needle /\
   eval_operand needleop s = SOME (typed_val_to_w256 et needle) /\
@@ -44,8 +44,8 @@ Theorem rest_word_dynamic_tail_mem:
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\
   vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv s /\
   loc = (case vv_location vv of SOME l => l | NONE => LocMemory) /\ loc <> LocCalldata /\
-  expr_type e = ArrayT ty (Dynamic cap) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et (Dynamic cap)) /\
+  post_value_type cenv e = ArrayT ty (Dynamic pcap) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME (ArrayTV et (Dynamic pcap)) /\
   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
   value_has_type (ArrayTV et (Dynamic cap)) (ArrayV av) /\ value_has_type et needle /\
   eval_operand needleop s = SOME (typed_val_to_w256 et needle) /\

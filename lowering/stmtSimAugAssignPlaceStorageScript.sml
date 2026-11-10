@@ -1817,9 +1817,11 @@ Resume aug_place_storage_suffix_outcome_nofresh[normal]:
     metis_tac[local_ptrs_reserved_next_var] >>
   `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
     fs[expr_post_def] >>
+  `is_word_type (expr_type e)` by metis_tac[word_value_type_word] >>
+  `post_value_type cenv e = expr_type e` by simp[] >>
   `eval_operand rhs_op t = SOME (val_to_w256 v)` by
     (fs[expr_post_def, expr_val_rel_def, typed_val_to_w256_word_value] >>
-     metis_tac[word_value_type_word]) >>
+     metis_tac[]) >>
   `is_word_type (expr_type e)` by metis_tac[word_value_type_word] >>
   drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
   `expr_sim_inv cenv cx env (es_end with gas_obs := [])` by
@@ -2257,7 +2259,7 @@ Proof
     metis_tac[aug_place_supported_stmt_target_info] >>
   `target_post ctx func cenv cx start sa sp s0 mid pv (Type ty) ptrout t` by
     (qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[Abbr `start`, target_post_def, locals_kept_def] >>
+     simp[Abbr `start`, target_post_def, locals_kept_def, popped_kept_def] >>
      strip_tac >> metis_tac[]) >>
   drule_all aug_place_storage_target_ready >> strip_tac >>
   qpat_x_assum `pv = _` SUBST_ALL_TAC >>

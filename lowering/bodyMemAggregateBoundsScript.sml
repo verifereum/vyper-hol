@@ -52,7 +52,7 @@ Theorem aggregate_allocated_result_store_bound_mem:
     (LocatedValue (expr_type e) p) t
 Proof
   strip_tac >> simp[] >> drule vv_store_bound_capacity >>
-  disch_then irule >> simp[] >> disj2_tac >>
+  disch_then irule >> simp[post_value_type_lowered] >> disj2_tac >>
   fs[alloca_inv_def, alloca_next_valid_def] >>
   `b + sz <= t.vs_alloca_next` by metis_tac[] >> decide_tac
 QED

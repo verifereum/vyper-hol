@@ -1091,14 +1091,14 @@ QED
 
 Theorem convert_wb_frame_trans:
   !ctx func cenv cx es es1 sa sm s0 s1 s2.
-    wb_frame cenv es sa s0 s1 /\ wb_frame cenv es1 sm s1 s2 /\
+    wb_frame cenv es es1 sa s0 s1 /\ wb_frame cenv es1 es1 sm s1 s2 /\
     stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id ==>
-    wb_frame cenv es sa s0 s2
+    wb_frame cenv es es1 sa s0 s2
 Proof
   rpt gen_tac >> strip_tac >>
-  `locals_kept cenv es s0 s2` by
+  `locals_kept cenv es es1 s0 s2` by
     (irule exprBopSimPropsTheory.locals_kept_trans >>
      qexistsl_tac [`es1`, `sa`, `s1`] >>
      gvs[loweringPostsTheory.wb_frame_def]) >>
@@ -1125,6 +1125,7 @@ QED
 Theorem convert_buffer_expr_post:
   !ctx func cenv cx e es es' sa sb s0 tt v tv op p sz.
     ~is_word_type (expr_type e) /\
+    post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     val_wf tv v /\ val_in_memory tv v (w2n p) tt.vs_memory /\
     stmt_state_rel ctx func cenv cx es' tt /\ eval_operand op tt = SOME p /\
@@ -1132,7 +1133,7 @@ Theorem convert_buffer_expr_post:
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tv v <= sz /\
     (!name lb lsz. local_region cenv es'.scopes tt name lb lsz ==>
        w2n p + sz <= lb \/ lb + lsz <= w2n p) /\
-    wb_frame cenv es sa s0 tt ==>
+    wb_frame cenv es es' sa s0 tt ==>
     expr_post ctx func cenv cx e es sa sb s0 es' v op tt
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1150,7 +1151,7 @@ Theorem convert_widen_copy_run[local]:
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
     (!z. x = Var z ==> not_fresh_at sm z) /\ eval_operand x s = SOME p /\
-    ~is_word_type (expr_type e) /\
+    ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     val_wf tv v /\ val_in_memory tv v (w2n p) s.vs_memory /\
     val_footprint tv v <= k ==>
@@ -1202,7 +1203,7 @@ Resume convert_widen_copy_run[owned_post]:
          venomStateTheory.write_memory_with_expansion_def] >>
   irule convert_buffer_expr_post >>
   `sm.cs_next_id < sb.cs_next_id` by gvs[ci_mono_def] >>
-  simp[] >> conj_tac
+  qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >> conj_tac
   >- (conj_tac
       >- (rpt strip_tac >>
           qpat_assum `stmt_state_rel _ _ _ _ _ (mcopy _ _ _ _)`
@@ -1243,6 +1244,7 @@ Theorem convert_widen_copy_owned:
     stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
     (!z. x = Var z ==> not_fresh_at sm z) /\
     eval_operand x s = SOME p /\ ~is_word_type (expr_type e) /\
+    post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     val_wf tv v /\ val_in_memory tv v (w2n p) s.vs_memory /\
     val_footprint tv v <= k /\ ~s.vs_halted /\
@@ -1284,16 +1286,19 @@ Theorem convert_expr_post_compose:
     expr_post ctx func cenv cx e es sa sb s0 es1 v op tt
 Proof
   rpt gen_tac >> strip_tac >>
-  `wb_frame cenv es sa s0 s1` by
+  `wb_frame cenv es es1 sa s0 s1` by
     (gvs[expr_post_def, loweringPostsTheory.wb_frame_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `wb_frame cenv es1 sm s1 tt` by
+  `wb_frame cenv es1 es1 sm s1 tt` by
     (gvs[expr_post_def, loweringPostsTheory.wb_frame_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all convert_wb_frame_trans >> strip_tac >>
   gvs[expr_post_def, loweringPostsTheory.wb_frame_def] >>
+  conj_tac
+  >- (irule expr_val_at_start_mono >> goal_assum (drule_at Any) >> simp[]) >>
   reverse conj_tac >- (first_assum ACCEPT_TAC) >>
-  irule expr_val_at_start_mono >> goal_assum (drule_at Any) >> simp[]
+  strip_tac >> irule expr_val_own_start_mono >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem convert_readonly_val_at:
@@ -1323,6 +1328,31 @@ Proof
   disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]
 QED
 
+Theorem convert_readonly_val_own:
+  !func cenv cx ty sa sm sb es v x op s tt p.
+    expr_val_own cenv cx ty sa sm es v x s /\
+    eval_operand x s = SOME p /\ eval_operand op tt = SOME p /\
+    tt.vs_allocas = s.vs_allocas /\ sm.cs_next_id <= sb.cs_next_id /\
+    local_ptrs_rel func cenv es.scopes s /\ local_ptrs_reserved cenv sm /\
+    (!z w. not_fresh_at sm z /\ lookup_var z s = SOME w ==>
+      lookup_var z tt = SOME w) ==>
+    expr_val_own cenv cx ty sa sb es v op tt
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!n b sz. local_region cenv es.scopes tt n b sz <=>
+             local_region cenv es.scopes s n b sz` by
+    (rpt gen_tac >> eq_tac
+     >- (strip_tac >> irule exprSimPropsTheory.local_region_frame >>
+         conj_tac >- (qexists_tac `func` >> simp[]) >>
+         qexistsl_tac [`sm`, `es.scopes`, `tt`] >> simp[]) >>
+     strip_tac >> irule exprSimPropsTheory.local_region_frame_fwd >>
+     qexistsl_tac [`s`, `sm`, `es.scopes`] >> simp[]) >>
+  gvs[expr_val_own_def] >> rpt strip_tac >>
+  qpat_x_assum `!tv. _ ==> _` drule_all >> strip_tac >> gvs[] >>
+  disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem convert_readonly_expr_post:
   !ctx func cenv cx e es es1 sa sm sb s0 s tt v x op p.
     expr_post ctx func cenv cx e es sa sm s0 es1 v x s /\
@@ -1338,11 +1368,15 @@ Proof
   rpt gen_tac >> strip_tac >>
   `local_ptrs_rel func cenv es1.scopes s` by
     gvs[expr_post_def, exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
-  `expr_val_at cenv cx (expr_type e) sa sb es1 v op tt` by
+  `expr_val_at cenv cx (post_value_type cenv e) sa sb es1 v op tt` by
     (irule convert_readonly_val_at >> goal_assum (drule_at Any) >>
      gvs[expr_post_def] >> metis_tac[]) >>
-  `expr_val_rel cx (expr_type e) v op tt` by
+  `expr_val_rel cx (post_value_type cenv e) v op tt` by
     (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  `post_value_type cenv e <> expr_type e ==>
+   expr_val_own cenv cx (post_value_type cenv e) sa sb es1 v op tt` by
+    (strip_tac >> irule convert_readonly_val_own >>
+     goal_assum (drule_at Any) >> gvs[expr_post_def] >> metis_tac[]) >>
   gvs[expr_post_def] >> conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sm x'` by
@@ -1522,6 +1556,7 @@ Proof
      type_memory_bytes cenv (expr_type e)` by decide_tac >>
   `val_in_memory tv2 v' (w2n p) s.vs_memory` by metis_tac[] >>
   `val_footprint tv2 v' <= type_memory_bytes cenv (lowered_value_type cenv e1)` by simp[] >>
+  `post_value_type cenv e = expr_type e` by simp[] >>
   drule_all convert_widen_copy_owned >> strip_tac >>
   qexistsl_tac [`t`, `v'`] >> simp[] >>
   qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _`
@@ -1548,6 +1583,8 @@ Theorem convert_dynamic_cont[local]:
       (expr_exit (convert_result cx (expr_type e1) (expr_type e) v))
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type cenv e1 = expr_type e1` by
+    (irule post_value_type_bytestring >> gvs[is_bytestring_type_def]) >>
   `expr_val_rel cx (expr_type e1) v x s` by gvs[expr_post_def] >>
   drule_all convert_dynamic_view >> strip_tac >>
   drule convert_cast_grows >> strip_tac >>
@@ -1600,6 +1637,8 @@ Theorem convert_dynamic_counted_cont[local]:
         (Abort Revert_abort tt))
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type cenv e1 = expr_type e1` by
+    (irule post_value_type_bytestring >> gvs[is_bytestring_type_def]) >>
   `expr_val_rel cx (expr_type e1) v x s /\
    stmt_state_rel ctx func cenv cx es1 s` by gvs[expr_post_def] >>
   drule_all convert_dynamic_view >> strip_tac >>
