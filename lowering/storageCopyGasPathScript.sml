@@ -277,7 +277,7 @@ Proof
   drule storage_copy_inv_control >> simp[jump_to_def]
 QED
 
-Theorem storage_copy_iterate_path[local]:
+Theorem storage_copy_iterate_path:
   !(remaining:num) k s.
   (!j q. j <= n /\ Inv j q /\ ~q.vs_halted /\
           q.vs_current_bb = hdr /\ q.vs_inst_idx = 0 ==>
