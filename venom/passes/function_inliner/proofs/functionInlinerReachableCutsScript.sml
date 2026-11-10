@@ -302,3 +302,44 @@ Proof
   simp[inline_cell_phase_valid_def, inline_cell_zipper_append,
        inline_cell_zipper_def] >> metis_tac[]
 QED
+
+(* Ordinary cells are never expanded into adapters; each Enter contributes
+   exactly one clone and each Keep preserves the current fields. *)
+Theorem inline_cell_frame_ordinary_fields:
+  inline_cell_frame tag c d /\ c.ic_fields = inline_inst_fields src /\
+  ~MEM src.inst_opcode [PHI; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] /\
+  (!e. tag <> SelectedJump e) ==>
+  d.ic_fields = inline_inst_fields
+    (case tag of EnterCell e k => clone_instruction e.ise_prefix
+                   (fn_labels e.ise_callee) src | _ => src)
+Proof
+  Cases_on `tag` >>
+  simp[inline_cell_frame_def, inline_make_cell_def] >> rpt strip_tac >> gvs[]
+  >- (gvs[inline_edit_repair_def, inline_inst_fields_def] >>
+      Cases_on `inst` >> Cases_on `src` >> gvs[inline_inst_fields_def]) >>
+  gvs[inline_cell_focus_def, rewrite_inline_inst_def,
+      clone_instruction_def, is_param_opcode_def,
+      inline_inst_fields_def, get_instruction_def] >>
+  gvs[inline_edit_repair_def, inline_inst_fields_def, is_param_opcode_iff]
+QED
+
+Theorem inline_cell_zipper_ordinary_fields:
+  !frames c d src.
+  inline_cell_zipper c frames d /\ c.ic_fields = inline_inst_fields src /\
+  ~MEM src.inst_opcode [PHI; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames ==>
+  d.ic_fields = inline_inst_fields
+    (FOLDL (\inst (tag,next). case tag of
+       EnterCell e k => clone_instruction e.ise_prefix (fn_labels e.ise_callee) inst
+     | _ => inst) src frames)
+Proof
+  Induct >> simp[inline_cell_zipper_def] >>
+  qx_gen_tac `h` >> PairCases_on `h` >>
+  simp[inline_cell_zipper_def] >> rpt strip_tac >>
+  `h1.ic_fields = inline_inst_fields
+     (case h0 of EnterCell e k =>
+        clone_instruction e.ise_prefix (fn_labels e.ise_callee) src | _ => src)` by
+    (irule inline_cell_frame_ordinary_fields >> simp[] >> metis_tac[]) >>
+  first_x_assum irule >> simp[] >>
+  Cases_on `h0` >> gvs[clone_instruction_def] >> metis_tac[]
+QED
