@@ -5,10 +5,10 @@ Ancestors
 
 Theorem abi_encode_staged_origin_frame:
   abi_encode_staged_observation ctx func ce cx es' st out mid outsz p at av s actual /\
-  wb_frame ce es origin s0 s /\ local_ptrs_reserved ce origin /\
+  wb_frame ce es es' origin s0 s /\ local_ptrs_reserved ce origin /\
   origin.cs_next_var <= st.cs_next_var /\ origin.cs_next_id <= st.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
-  wb_frame ce es origin s0 actual
+  wb_frame ce es es' origin s0 actual
 Proof
   simp_tac bool_ss [abi_encode_staged_observation_def, wb_frame_def] >>
   strip_tac >> conj_tac
