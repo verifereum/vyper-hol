@@ -1,7 +1,7 @@
 Theory lowerDloadPtrSupport
 Ancestors
   ptrDiscipline lowerDloadPtrClosure lowerDloadPtrStatic execEquivParamBase
-  pointerConfinedDefs venomInst mem2varBlockSimHelpers o1PassContract
+  pointerConfinedDefs pointerConfinedProps venomInst mem2varBlockSimHelpers o1PassContract
   ctxLookupAgreeHelpers finite_map pred_set list
 
 (* Dynamic provenance cannot occur at a statically unsupported operand. *)

@@ -2,9 +2,55 @@
 
 Theory contextCodegenRelProps
 Ancestors
-  contextCodegenRel planSpillBounds codegenRel
+  contextCodegenRel planSpillBounds codegenRel memLocDefs venomWf venomState words
+  venomInst
+
+Theorem lookup_instruction_active:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst ==>
+  active_inst fn inst s
+Proof
+  simp[active_inst_def, get_instruction_def] >>
+  qspec_tac (`fn.fn_blocks`, `bbs`) >>
+  Induct >> simp[lookup_block_def, listTheory.FIND_thm] >>
+  rw[] >> gvs[]
+  >- (qexists_tac `bb` >> simp[]) >>
+  fs[lookup_block_def] >> metis_tac[]
+QED
 
 (* ===== Visited-instruction invariant interface ===== *)
+
+(* The analysis access descriptor denotes an actual byte range once the
+   well-formed instruction's operands have all been evaluated. *)
+Theorem source_memory_access_ranges:
+  !inst s vals ops off len size_op.
+    inst_wf inst /\ eval_operands inst.inst_operands s = SOME vals /\
+    ops.iao_max_size = SOME size_op /\
+    eval_operand ops.iao_ofst s = SOME off /\
+    eval_operand size_op s = SOME len ==>
+    (mem_read_ops inst = SOME ops ==>
+       MEM (w2n off,w2n len) (source_memory_read_ranges inst s)) /\
+    (mem_write_ops inst = SOME ops ==>
+       MEM (w2n off,w2n len) (source_memory_write_ranges inst s))
+Proof
+  rpt strip_tac >> Cases_on `inst.inst_opcode` >>
+  gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()] >>
+  gvs[source_memory_read_ranges_def, source_memory_write_ranges_def,
+      memory_range_of_operands_def, fixed_source_write_range_def,
+      sized_source_write_range_def, eval_operands_def, eval_operand_def,
+      wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``,
+      AllCaseEqs()] >>
+  gvs[inst_wf_def, eval_operands_def, eval_operand_def, AllCaseEqs()] >>
+  `IS_SOME (eval_operands (DROP 2 (REVERSE rest)) s)` by
+    (irule (iffRL eval_operands_IS_SOME_EVERY) >>
+     irule rich_listTheory.EVERY_DROP >>
+     simp[rich_listTheory.EVERY_REVERSE] >>
+     simp[GSYM eval_operands_IS_SOME_EVERY]) >>
+  Cases_on `REVERSE rest` >> gvs[] >>
+  rename1 `REVERSE rest = h::t` >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `eval_operands (DROP 2 (REVERSE rest)) s` >> gvs[]
+QED
 
 Theorem fn_entry_inv_active:
   fn_entry_inv Inv ctx fn s /\ enters_block fn s s1 /\

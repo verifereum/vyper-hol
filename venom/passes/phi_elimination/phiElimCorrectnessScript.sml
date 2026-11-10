@@ -1,77 +1,8 @@
-(*
- * PHI Elimination Pass — Correctness Statement
- *
- * Single top-level theorem, built on the block simulation in proofs/phiBlockScript.sml.
- *)
-
+(* PHI elimination preserves execution from a well-formed SSA entry state. *)
 Theory phiElimCorrectness
 Ancestors
-  passTransform phiTransform phiWellFormed venomWf sorting list
-  phiBlock passSimulationProps passSimulationDefs execEquivParamProps venomExecSemantics venomInst stateEquiv stateEquivProps phiDefs passSimulationProofs
-
-Theorem transform_function_is_function_map_transform[local]:
-  !fn. transform_function fn =
-       function_map_transform (transform_block (dfg_build_function fn)) fn
-Proof
-  simp[transform_function_def, function_map_transform_def, LET_DEF]
-QED
-
-(* After PHI elimination on a well-formed, PHI-elim-safe function, there exists a
-   transformed function in the new context that produces execution-equivalent results
-   (matching OK values, halts, reverts, and errors) under state equivalence.
-   Proof: lift per-block simulation (phi_elim_run_block_lift_result) to function
-   level via block_sim_function_pointwise_reachable. *)
-Theorem phi_elim_pass_correct:
-  !ctx fn_name fuel (func:ir_function) s.
-    MEM func ctx.ctx_functions /\
-    func.fn_name = fn_name /\
-    wf_ir_fn func /\
-    phi_elim_safe_fn func /\
-    wf_function func /\
-    fn_pseudos_prefix func /\
-    func.fn_blocks <> [] /\
-    s.vs_inst_idx = 0 /\
-    (s.vs_prev_bb <> NONE \/
-     s.vs_current_bb = (HD func.fn_blocks).bb_label)
-  ==>
-    ?func'.
-      MEM func' (transform_context ctx).ctx_functions /\
-      func'.fn_name = fn_name /\
-      lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-        (run_blocks fuel ctx func s)
-        (run_blocks fuel ctx func' s)
-Proof
-  rpt gen_tac >>
-  DISCH_TAC >>
-  qexists_tac `transform_function func` >>
-  `MEM func ctx.ctx_functions` by fs[] >>
-  `func.fn_name = fn_name` by fs[] >>
-  `wf_ir_fn func` by fs[] >>
-  `phi_elim_safe_fn func` by fs[] >>
-  `wf_function func` by fs[] >>
-  `fn_pseudos_prefix func` by fs[] >>
-  `func.fn_blocks <> []` by fs[] >>
-  `s.vs_inst_idx = 0` by fs[] >>
-  `phi_wf_fn func` by metis_tac[wf_ir_implies_phi_wf] >>
-  fs[phi_wf_fn_def, LET_DEF] >>
-  conj_tac >- (
-    simp[transform_context_def, MEM_MAP] >>
-    qexists_tac `func` >> simp[]) >>
-  conj_tac >- simp[transform_function_def] >>
-  simp[transform_function_is_function_map_transform] >>
-  irule block_sim_function_pointwise_reachable >>
-  simp[state_equiv_execution_equiv_valid_state_rel, transform_block_label,
-       state_equiv_def, execution_equiv_def] >>
-  (* Per-block simulation: real PHI-prefix/eval_phis simulation. *)
-  rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  rename1 `run_block fuel0 ctx0 bb st` >>
-  qspecl_then [`func`, `bb`, `fuel0`, `ctx0`, `st`]
-    mp_tac phi_elim_run_block_lift_result >>
-  simp[] >>
-  fs[wf_function_def, fn_pseudos_prefix_def] >>
-  Cases_on `st.vs_prev_bb = NONE` >> fs[]
-QED
+  phiTransform phiOrigins phiDefs venomWf o1PassContract unitShapeDefs
+  stateEquiv venomExecSemantics sorting list phiPrefixExecution phiOriginValues
 
 (* ===== Obligations ===== *)
 
@@ -110,16 +41,6 @@ Proof
   metis_tac[transform_block_pseudos_prefix]
 QED
 
-(* SSA form is preserved: instruction outputs remain unique per function after
-   PHI elimination. *)
-Theorem phi_elim_preserves_ssa_form:
-  ∀fn. ssa_form fn ⇒ ssa_form (transform_function fn)
-Proof
-  rw[transform_function_def, LET_DEF, venomWfTheory.ssa_form_def,
-     venomInstTheory.fn_insts_def] >>
-  metis_tac[transform_blocks_outputs_perm, ALL_DISTINCT_PERM]
-QED
-
 (* Every block successor in the transformed function is a valid block label:
    PHI elimination does not introduce dangling successor references. *)
 Theorem phi_elim_preserves_fn_succs_closed:
@@ -154,4 +75,62 @@ Proof
       metis_tac[phi_elim_preserves_fn_succs_closed])
   >- (`fn_inst_ids_distinct fn` by simp[] >>
       metis_tac[phi_elim_preserves_fn_inst_ids_distinct])
+QED
+
+Theorem phi_run_blocks_correct[local]:
+  !fuel ctx fn s0 s.
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ fn_pseudos_prefix fn /\
+  EVERY (\i. i.inst_opcode <> PHI) (HD fn.fn_blocks).bb_instructions /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\ s0.vs_vars = FEMPTY /\
+  source_entry_reachable ctx fn s0 s ==>
+  run_blocks fuel ctx fn s = run_blocks fuel ctx (transform_function fn) s
+Proof
+  Induct >> rpt gen_tac
+  >- simp[run_blocks_def] >>
+  strip_tac >>
+  simp[run_blocks_unfold, transform_function_def, lookup_block_transform] >>
+  namedCases_on `lookup_block s.vs_current_bb fn.fn_blocks` ["", "bb"] >> simp[] >>
+  `pseudos_prefix bb` by
+    (fs[venomWfTheory.fn_pseudos_prefix_def] >>
+     metis_tac[venomExecProofsTheory.lookup_block_MEM]) >>
+  `run_block fuel ctx bb s = run_block fuel ctx (transform_block (dfg_build_function fn) bb) s` by
+    (irule phi_run_block_correct >> metis_tac[]) >>
+  simp[] >>
+  namedCases_on `run_block fuel ctx (transform_block (dfg_build_function fn) bb) s`
+    ["t", "t", "reason t", "vals t", "e"] >> simp[] >>
+  Cases_on `t.vs_halted` >> simp[] >>
+  qpat_x_assum `!ctx fn s0 s. _`
+    (qspecl_then [`ctx`, `fn`, `s0`, `t`] mp_tac) >>
+  simp[transform_function_def] >>
+  disch_then irule >> metis_tac[source_entry_reachable_step]
+QED
+
+(* Origins use variable identity.  A sole origin must be available strictly
+   before the PHI block: an entry-to-block path avoiding its definition would
+   provide another incoming origin.  Entry PHIs and edges into the entry block
+   are excluded by the pipeline's existing entry invariants. *)
+Theorem phi_elim_pass_correct:
+  !fuel ctx (func:ir_function) s.
+    wf_function func /\
+    fn_inst_wf func /\
+    wf_ssa func /\
+    fn_pseudos_prefix func /\
+    first_block_no_preds func /\
+    first_block_no_phi func /\
+    fn_entry_label func = SOME s.vs_current_bb /\
+    s.vs_inst_idx = 0 /\
+    s.vs_prev_bb = NONE /\
+    s.vs_vars = FEMPTY
+  ==>
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
+      (run_blocks fuel ctx func s)
+      (run_blocks fuel ctx (transform_function func) s)
+Proof
+  rpt strip_tac >>
+  `run_blocks fuel ctx func s = run_blocks fuel ctx (transform_function func) s` by
+    (irule phi_run_blocks_correct >>
+     fs[o1PassContractTheory.first_block_no_phi_def] >> qexists `s` >>
+     simp[source_entry_reachable_seed]) >>
+  simp[] >> Cases_on `run_blocks fuel ctx (transform_function func) s` >>
+  simp[lift_result_def, state_equiv_def, execution_equiv_def]
 QED

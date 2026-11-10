@@ -35,7 +35,7 @@ Theorem range_nonneg_in_range_nonneg_w2i:
   !r w. range_nonneg r /\ in_range r w ==> 0 <= w2i w /\ w2i w <= vr_hi r
 Proof
   Cases_on `r` >> simp[range_nonneg_def, in_range_def, vr_hi_def] >>
-  rpt strip_tac >> intLib.ARITH_TAC
+  rpt strip_tac >> Omega.OMEGA_TAC
 QED
 
 (* Helper: non-negative w2i implies w2n = Num(w2i) *)
@@ -46,7 +46,7 @@ Proof
   Cases_on `word_msb w`
   >- (fs[integer_wordTheory.w2i_def] >>
       `w2n w < dimword (:256)` by simp[wordsTheory.w2n_lt] >>
-      intLib.ARITH_TAC)
+      Omega.OMEGA_TAC)
   >- simp[integer_wordTheory.w2i_def]
 QED
 
@@ -76,11 +76,11 @@ Proof
   `w2n wx + w2n wy < dimword (:256)` by
     (`0 <= vr_hi xr /\ 0 <= vr_hi yr` by
        (Cases_on `xr` >> Cases_on `yr` >>
-        fs[range_nonneg_def, vr_hi_def] >> intLib.ARITH_TAC) >>
+        fs[range_nonneg_def, vr_hi_def] >> Omega.OMEGA_TAC) >>
      `Num (w2i wx) + Num (w2i wy) <= Num (vr_hi xr + vr_hi yr)` by
-       intLib.ARITH_TAC >>
+       Omega.OMEGA_TAC >>
      `Num (vr_hi xr + vr_hi yr) <= Num UINT256_MAX_int` by
-       intLib.ARITH_TAC >>
+       Omega.OMEGA_TAC >>
      `Num UINT256_MAX_int < dimword (:256)` by
        (mp_tac Num_UINT256_MAX_int >> DECIDE_TAC) >>
      DECIDE_TAC) >>
@@ -106,7 +106,7 @@ Proof
   `w2n wy <= w2n wx` by
     (Cases_on `xr` >> Cases_on `yr` >>
      fs[range_nonneg_def, vr_lo_def, vr_hi_def, in_range_def] >>
-     intLib.ARITH_TAC) >>
+     Omega.OMEGA_TAC) >>
   `wy <=+ wx` by simp[wordsTheory.WORD_LS] >>
   imp_res_tac wordsTheory.word_sub_w2n >>
   simp[bool_to_word_def]

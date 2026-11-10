@@ -52,7 +52,7 @@ Proof
   Cases_on `r` >> simp[in_range_def, range_excludes_zero_def] >>
   rpt strip_tac >> gvs[] >>
   CCONTR_TAC >> gvs[integer_wordTheory.word_0_w2i] >>
-  intLib.ARITH_TAC
+  Omega.OMEGA_TAC
 QED
 
 (* ===== Per-instruction simulation ===== *)

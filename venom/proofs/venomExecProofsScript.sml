@@ -1233,16 +1233,6 @@ QED
    Operand FDOM Properties
    ========================================================================== *)
 
-(* An operand list evaluates exactly when each operand does. *)
-Theorem eval_operands_IS_SOME_EVERY:
-  !ops s. IS_SOME (eval_operands ops s) <=>
-          EVERY (\op. IS_SOME (eval_operand op s)) ops
-Proof
-  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
-  first_x_assum (qspec_then `s` mp_tac) >>
-  Cases_on `eval_operand h s` >> Cases_on `eval_operands ops s` >> simp[]
-QED
-
 (* LOG reads its offset, size and topics off the reversed operand list, so
    when they all evaluate, the whole list does. *)
 Theorem log_operands_defined:
@@ -2094,6 +2084,15 @@ Proof
   rw[run_blocks_unfold]
 QED
 
+Theorem eval_phis_no_prev:
+  s.vs_prev_bb = NONE /\ eval_phis s ins = OK s1 ==>
+  s1 = s /\ phi_prefix_length ins = 0
+Proof
+  Cases_on `ins` >> simp[eval_phis_def, phi_prefix_length_def] >>
+  strip_tac >> Cases_on `h.inst_opcode = PHI` >>
+  gvs[eval_phis_def, eval_one_phi_def, phi_prefix_length_def, AllCaseEqs()]
+QED
+
 Theorem eval_phis_preserves_alloca_fields:
   !s insts s'. eval_phis s insts = OK s' ==> s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next
 Proof
@@ -2472,6 +2471,17 @@ Proof
     simp[Abbr `s_input`] >>
     decide_tac) >>
   fs[Abbr `s_input`]
+QED
+
+Theorem eval_one_phi_from_eval_operand:
+  !s inst out prev_lbl op w.
+    inst.inst_outputs = [out] /\
+    s.vs_prev_bb = SOME prev_lbl /\
+    resolve_phi prev_lbl inst.inst_operands = SOME op /\
+    eval_operand op s = SOME w ==>
+    eval_one_phi s inst = SOME (out,w)
+Proof
+  rw[eval_one_phi_def]
 QED
 
 (* eval_one_phi returns an output that is a member of inst.inst_outputs *)
@@ -2984,6 +2994,34 @@ Theorem run_function_is_run_blocks:
 Proof
   rpt strip_tac >> simp[run_function_def] >>
   Cases_on `s` >> gvs[venom_state_fn_updates]
+QED
+
+(* Sequential execution consults only the instructions at and after its cursor. *)
+Theorem exec_block_same_suffix:
+  !bb s bb' fuel ctx.
+    DROP s.vs_inst_idx bb.bb_instructions =
+    DROP s.vs_inst_idx bb'.bb_instructions ==>
+    exec_block fuel ctx bb s = exec_block fuel ctx bb' s
+Proof
+  rpt gen_tac >>
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  Cases_on `s.vs_inst_idx < LENGTH bb.bb_instructions`
+  >- (`s.vs_inst_idx < LENGTH bb'.bb_instructions` by
+        (CCONTR_TAC >>
+         `DROP s.vs_inst_idx bb'.bb_instructions = []` by
+           (irule DROP_LENGTH_TOO_LONG >> decide_tac) >>
+         metis_tac[DROP_EQ_NIL, arithmeticTheory.NOT_LESS]) >>
+      `EL s.vs_inst_idx bb.bb_instructions =
+       EL s.vs_inst_idx bb'.bb_instructions` by metis_tac[HD_DROP] >>
+      once_rewrite_tac[exec_block_def] >> simp[get_instruction_def] >>
+      Cases_on `step_inst fuel ctx (EL s.vs_inst_idx bb'.bb_instructions) s` >>
+      simp[] >> IF_CASES_TAC >> simp[] >>
+      first_x_assum irule >> simp[DROP_SUC]) >>
+  `DROP s.vs_inst_idx bb.bb_instructions = []` by
+    (irule DROP_LENGTH_TOO_LONG >> decide_tac) >>
+  `LENGTH bb'.bb_instructions <= s.vs_inst_idx` by metis_tac[DROP_EQ_NIL] >>
+  once_rewrite_tac[exec_block_def] >> simp[get_instruction_def]
 QED
 
 (* An OK terminator must transfer control, rather than finish execution.
