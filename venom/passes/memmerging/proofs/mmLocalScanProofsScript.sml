@@ -8014,6 +8014,44 @@ Proof
   gvs[]
 QED
 
+Theorem mm_local_copy_birth_log[local]:
+  c1.cg_dst <= c2.cg_dst /\ copy_can_merge c1 c2 /\
+  ~copy_overwrites c1 (copy_src_interval c2) /\
+  EVERY (\(d,bs).
+    (c2.cg_src + c2.cg_length <= d \/ d + LENGTH bs <= c2.cg_src) /\
+    (c1.cg_dst + c1.cg_length <= d \/ d + LENGTH bs <= c1.cg_dst)) ws ==>
+  mcopy c2.cg_dst c2.cg_src c2.cg_length
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st)
+      (mcopy c1.cg_dst c1.cg_src c1.cg_length s) ws) =
+  write_memory_with_expansion (copy_merge c1 c2).cg_dst
+    (read_memory (copy_merge c1 c2).cg_src (copy_merge c1 c2).cg_length s)
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s ws)
+Proof
+  strip_tac >>
+  `read_memory c2.cg_src c2.cg_length
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st)
+      (mcopy c1.cg_dst c1.cg_src c1.cg_length s) ws) =
+   read_memory c2.cg_src c2.cg_length s` by
+    (irule EQ_TRANS >>
+     irule_at Any mm_local_read_write_log >>
+     conj_tac >- (gvs[EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
+     simp[venomExecSemanticsTheory.mcopy_def, GSYM venomStateTheory.read_memory_def] >>
+     irule mm_local_read_write_disjoint >>
+     gvs[copy_overwrites_def, copy_src_interval_def, copy_dst_interval_def,
+         mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
+         mmIntervalTheory.interval_end_def, mm_local_read_memory_bytes, mm_local_bytes_length,
+         arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
+     simp[mm_local_bytes_def] >> decide_tac) >>
+  simp[venomExecSemanticsTheory.mcopy_def, GSYM venomStateTheory.read_memory_def] >>
+  `EVERY (\(d,bs). d + LENGTH bs <= c1.cg_dst \/
+    c1.cg_dst + LENGTH (read_memory c1.cg_src c1.cg_length s) <= d) ws` by
+    (gvs[EVERY_MEM, pairTheory.FORALL_PROD, mm_local_read_memory_bytes, mm_local_bytes_length] >> metis_tac[]) >>
+  drule mm_local_write_log_commute >>
+  disch_then (qspec_then `s` (fn th => once_rewrite_tac[GSYM th])) >>
+  simpLib.SIMP_TAC (srw_ss()) [mm_local_read_memory_bytes] >>
+  irule mm_local_bytes_write_merge >> simp[]
+QED
+
 Theorem mm_local_two_copy_merge[local]:
   mm_local_history is H (n+2) /\
   (EL n is).inst_opcode = MCOPY /\
