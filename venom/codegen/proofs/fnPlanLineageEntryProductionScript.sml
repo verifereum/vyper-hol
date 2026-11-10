@@ -2953,3 +2953,110 @@ Proof
   rpt (first_assum $ irule_at Any) >>
   metis_tac[native_inst_ops_prefix_erase]
 QED
+
+Theorem clean_stack_plan_override_normalization:
+  !lv cfg fn bb ps h b.
+    ?choice.
+      clean_stack_plan lv cfg fn bb
+        (ps with <|ps_cleanup_height := NONE; ps_cleanup_promised := choice|>) =
+      (FST (clean_stack_plan lv cfg fn bb
+        (ps with <|ps_cleanup_height := h; ps_cleanup_promised := b|>)),
+       SND (clean_stack_plan lv cfg fn bb
+        (ps with <|ps_cleanup_height := h; ps_cleanup_promised := b|>)) with
+         <|ps_cleanup_height := NONE;
+           ps_cleanup_promised := (SND (clean_stack_plan lv cfg fn bb
+             (ps with <|ps_cleanup_height := NONE;
+                       ps_cleanup_promised := choice|>))).ps_cleanup_promised|>)
+Proof
+  rpt gen_tac >>
+  `!h b. ps with <|ps_cleanup_height := h; ps_cleanup_growth := ps.ps_cleanup_growth;
+       ps_cleanup_promised := b|> =
+     ps with <|ps_cleanup_height := h; ps_cleanup_promised := b|>` by
+    simp[stackPlanTypesTheory.plan_state_component_equality] >>
+  Cases_on `cfg_preds_of cfg bb.bb_label` >- simp[clean_stack_plan_def] >>
+  reverse (Cases_on `t`) >- simp[clean_stack_plan_def] >>
+  Cases_on `LENGTH (cfg_succs_of cfg h') <= 1` >>
+  simp[clean_stack_plan_def] >>
+  Cases_on `lookup_block h' fn.fn_blocks` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `b \/ cleanup_elision_safe h ps.ps_cleanup_growth cfg fn bb depth` >>
+  qabbrev_tac `ok = (b \/ cleanup_elision_safe h ps.ps_cleanup_growth cfg fn bb depth)` >>
+  qexists_tac `ok` >>
+  Cases_on `ok` >> gvs[markerTheory.Abbrev_def] >>
+  Cases_on `NULL (input_vars_from h' bb.bb_instructions (live_vars_at lv bb.bb_label 0))` >>
+  qpat_assum `!h b. _ = _` (fn th =>
+    simp[SRULE [th] (Q.SPECL [`xs`,`ps`,`h`,`ps.ps_cleanup_growth`,`b`]
+      fnPlanLineageReplayTheory.popmany_plan_cleanup_update)])
+QED
+
+Theorem worker_cleanup_growth_preserved[local]:
+  !insts lr dfg cfg fn lbl halt np bl i ps ops after.
+    generate_block_insts_plan lr dfg cfg fn lbl halt np bl i insts ps = SOME (ops,after) ==>
+    after.ps_cleanup_growth = ps.ps_cleanup_growth
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!p. p with <|ps_cleanup_height := p.ps_cleanup_height;
+      ps_cleanup_growth := p.ps_cleanup_growth;
+      ps_cleanup_promised := p.ps_cleanup_promised|> = p` by
+    simp[stackPlanTypesTheory.plan_state_component_equality] >>
+  mp_tac (Q.INST [`h` |-> `ps.ps_cleanup_height`,
+      `g` |-> `ps.ps_cleanup_growth`, `b` |-> `ps.ps_cleanup_promised`]
+    (SPEC_ALL fnPlanLineageReplayTheory.generate_block_insts_plan_cleanup_update)) >>
+  simp[] >> simp[stackPlanTypesTheory.plan_state_component_equality]
+QED
+
+Theorem worker_height_promised_update:
+  !insts lr dfg cfg fn lbl halt np bl i ps ops after.
+    generate_block_insts_plan lr dfg cfg fn lbl halt np bl i insts ps = SOME (ops,after) ==>
+    !h b. generate_block_insts_plan lr dfg cfg fn lbl halt np bl i insts
+      (ps with <|ps_cleanup_height := h; ps_cleanup_promised := b|>) =
+      SOME (ops,after with <|ps_cleanup_height := h; ps_cleanup_promised := b|>)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  drule worker_cleanup_growth_preserved >> disch_tac >>
+  `!h b. ps with <|ps_cleanup_height := h; ps_cleanup_growth := ps.ps_cleanup_growth;
+      ps_cleanup_promised := b|> =
+    ps with <|ps_cleanup_height := h; ps_cleanup_promised := b|>` by
+    simp[stackPlanTypesTheory.plan_state_component_equality] >>
+  mp_tac (Q.INST [`g` |-> `ps.ps_cleanup_growth`]
+    (SPEC_ALL fnPlanLineageReplayTheory.generate_block_insts_plan_cleanup_update)) >>
+  simp[] >> disch_then SUBST1_TAC >>
+  simp[stackPlanTypesTheory.plan_state_component_equality]
+QED
+
+Theorem generate_block_plan_override_normalization:
+  !lv dfg cfg fn bb ps h b ops after.
+    bb <> HD fn.fn_blocks /\
+    generate_block_plan lv dfg cfg fn bb
+      (ps with <|ps_cleanup_height := h; ps_cleanup_promised := b|>) =
+      SOME (ops,after) ==>
+    ?choice afterN.
+      generate_block_plan lv dfg cfg fn bb
+        (ps with <|ps_cleanup_height := NONE; ps_cleanup_promised := choice|>) =
+        SOME (ops,afterN) /\
+      afterN = after with <|ps_cleanup_height := NONE;
+        ps_cleanup_promised := afterN.ps_cleanup_promised|>
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`lv`,`cfg`,`fn`,`bb`,`ps`,`h`,`b`] strip_assume_tac
+    clean_stack_plan_override_normalization >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def] >>
+  Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1`
+  >- (simp[] >>
+      Cases_on `clean_stack_plan lv cfg fn bb
+        (ps with <|ps_cleanup_height := h; ps_cleanup_promised := b|>)` >>
+      gvs[] >>
+      qmatch_asmsub_abbrev_tac `r with <|ps_cleanup_height := NONE; ps_cleanup_promised := prefN|>` >>
+      simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+      drule worker_height_promised_update >>
+      disch_then (qspecl_then [`NONE`,`prefN`] assume_tac) >>
+      qexists_tac `choice` >> simp[] >>
+      qexists_tac `after with <|ps_cleanup_height := NONE; ps_cleanup_promised := prefN|>` >>
+      simp[]) >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule worker_height_promised_update >>
+  disch_then (qspecl_then [`NONE`,`b`] assume_tac) >>
+  qexists_tac `b` >>
+  qexists_tac `after with <|ps_cleanup_height := NONE; ps_cleanup_promised := b|>` >>
+  gvs[]
+QED
