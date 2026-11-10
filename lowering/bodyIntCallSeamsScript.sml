@@ -432,7 +432,7 @@ Proof
   simp[NoAsms] >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   irule source_return_dispatch >> asm_rewrite_tac[] >>
-  reverse conj_tac >- (qexists_tac `es1` >> first_assum ACCEPT_TAC) >>
+  reverse conj_tac >- (qexists_tac `es1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   goal_assum (drule_at (Pat `compile_multi_vvs _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
@@ -595,7 +595,7 @@ Proof
        irule (Q.INST [`cty` |-> `ret`] (Q.SPEC `rc'` physical_source_return_dispatch)
          |> SIMP_RULE (srw_ss()) [th])) >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     TRY (qexists_tac `es1` >> first_assum ACCEPT_TAC) >>
+     TRY (qexists_tac `es1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
      goal_assum (drule_at (Pat `compile_multi_vvs _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
