@@ -303,6 +303,60 @@ Proof
   metis_tac[scratch_region_context_transport]
 QED
 
+Theorem scratch_frame_singleton_region:
+  scratch_frame [off] labs labs' /\
+  r.sr_spill_base <= off /\ off+32 <= r.sr_spill_end ==>
+  !b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+    FLOOKUP labs' b = FLOOKUP labs b
+Proof
+  strip_tac >> drule_then (qspec_then `r` mp_tac) scratch_frame_region >> simp[]
+QED
+
+Theorem sym_spill_kind_complete:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  scratch_frame [off] ss.sym_mem_labels last.sym_mem_labels /\
+  (!op at. FLOOKUP ps.ps_spilled op = SOME at ==> off+32 <= at \/ at+32 <= off) /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= off /\ off+32 <= r.sr_spill_end /\
+  scratch_kinds_ok fn ret [stack_peek 0 ps.ps_stack] [off] last.sym_mem_labels /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (stack_pop 1 ps.ps_stack)) top /\
+  last.sym_stack = top ++ srest /\
+  sym_steps p env n ss = SymOK last /\
+  last.sym_base.as_pc = ss.sym_base.as_pc+n ==>
+  ?last. sym_steps p env n ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest
+      (ps with <| ps_stack := stack_pop 1 ps.ps_stack;
+        ps_spilled := ps.ps_spilled |+ (stack_peek 0 ps.ps_stack, off);
+        ps_alloc := al |>) last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc+n /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all_then assume_tac sym_kinds_ok_spill_change >>
+  metis_tac[scratch_frame_singleton_region]
+QED
+
+Theorem sym_exec_spill_known_head:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  ss.sym_stack = v :: (top ++ srest) /\
+  op_kind_ok fn ret (stack_peek 0 ps.ps_stack) v /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (stack_pop 1 ps.ps_stack)) top /\
+  (!op at. FLOOKUP ps.ps_spilled op = SOME at ==> off+32 <= at \/ at+32 <= off) /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= off /\ off+32 <= r.sr_spill_end /\
+  off < dimword(:256) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOSpill off]) ==>
+  ?last. sym_steps p env 2 ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest
+      (ps with <| ps_stack := stack_pop 1 ps.ps_stack;
+        ps_spilled := ps.ps_spilled |+ (stack_peek 0 ps.ps_stack, off);
+        ps_alloc := al |>) last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all_then (qspec_then `env` strip_assume_tac) sym_spill_scratch_head >>
+  drule_all_then MATCH_ACCEPT_TAC sym_spill_kind_complete
+QED
+
 Theorem sym_exec_spill_kind:
   sym_kinds_ok cplan fn ret srest ps ss /\ ps.ps_stack <> [] /\
   (!op at. FLOOKUP ps.ps_spilled op = SOME at ==> off+32 <= at \/ at+32 <= off) /\
@@ -318,12 +372,8 @@ Theorem sym_exec_spill_kind:
     (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  strip_tac >> drule_all sym_kinds_ok_head >> strip_tac >>
-  drule_all sym_spill_scratch_head >> disch_then (qspec_then `env` strip_assume_tac) >>
-  qexists `last` >> simp[] >>
-  reverse conj_tac
-  >- (drule scratch_frame_region >> simp[] >> metis_tac[]) >>
-  irule sym_kinds_ok_spill_change >> simp[] >> metis_tac[]
+  strip_tac >> drule_all_then strip_assume_tac sym_kinds_ok_head >>
+  drule_all_then MATCH_ACCEPT_TAC sym_exec_spill_known_head
 QED
 
 Theorem scratch_swap_restore_indices:
