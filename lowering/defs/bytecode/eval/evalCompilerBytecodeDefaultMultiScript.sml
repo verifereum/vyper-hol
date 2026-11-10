@@ -41,6 +41,21 @@ Proof
   entry_stage "function_selector" >> EVAL_TAC
 QED
 val () = computeLib.upd_compset (computeLib.add_thms [multi_address_selector])
+(* Close the cleanup-growth equation and lift it at separate timed boundaries. *)
+fun dflt_cleanup_close g = let
+  val equation = valOf (!base_cleanup_equation)
+  val checked = TRANS equation
+    (computeLib.WEAK_CBV_CONV base_cleanup_cs (rhs (concl equation)))
+  val result = rhs (concl checked)
+  val () = if optionSyntax.is_some result orelse optionSyntax.is_none result then ()
+    else raise Fail "cleanup growth remained symbolic"
+in base_cleanup_equation := SOME checked; ALL_TAC g end
+fun dflt_cleanup_lift g = let
+  val checked = valOf (!base_cleanup_equation)
+  val target = lhs (concl checked)
+  val lifted = CONV_TAC (LAND_CONV
+    (base_first_conv (aconv target) (K checked))) g
+in base_cleanup_equation := NONE; lifted end
 Definition dflt_multi_program_def:
   dflt_multi_program = ^(checked_entry_fixture "dflt_multi")
 End
@@ -2032,7 +2047,7 @@ Proof
   entry_compute_once "cfg_analyze" >>
   base_cleanup_begin >> base_cleanup_part "cleanup_cyclic" >>
   base_cleanup_part "cleanup_reach" >> base_cleanup_part "OPT_MMAP" >>
-  base_cleanup_finish >>
+  dflt_cleanup_close >> dflt_cleanup_lift >>
   entry_stage "max_live_eom" >> entry_plan_admin >>
   simp_tac pure_ss [Once stackPlanGenTheory.generate_context_regions_def,
     stackPlanGenTheory.generate_fn_plan_def,
