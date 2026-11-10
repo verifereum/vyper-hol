@@ -1328,6 +1328,50 @@ Proof
   metis_tac[step_inst_non_invoke]
 QED
 
+Theorem ircf_redirect_mload_ok:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  ti = EL s.vs_inst_idx (ircf_tbb fn_meta rma C fn bb).bb_instructions /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  inst.inst_opcode = MLOAD /\ inst.inst_operands = [Var v] /\ inst.inst_outputs = [out] /\
+  ircf_redirect fn bb (ircf_tbb fn_meta rma C fn bb) v <> v /\
+  lookup_var v s = SOME w /\ access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  ptr_discipline lo C vs /\
+  ircf_cross tn (ircf_gam_cur fn_meta rma C fn s) s t /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base ti t = OK t' /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s' stk)
+      (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `?ops. mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v` by
+    simp[memLocDefsTheory.mem_read_ops_def] >>
+  `MEM (w2n w,32) (source_memory_read_ranges inst s) /\ inst.inst_opcode <> ASSIGN` by
+    simp[contextCodegenRelTheory.source_memory_read_ranges_def, eval_operand_def] >>
+  `32 <> (0:num)` by simp[] >>
+  drule_all ircf_redirect_read_effective_observation >> strip_tac >>
+  `ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+    metis_tac[ircf_tbb_def, ircf_transform_block_plan, venomExecPropsTheory.lookup_block_MEM] >>
+  `ti.inst_opcode = MLOAD /\ ti.inst_operands = [Var sr] /\ ti.inst_outputs = [out]` by
+    (gvs[ircf_block_plan_def, ircf_redirect_op_def] >> metis_tac[]) >>
+  `?t'. step_inst_base ti t = OK t' /\
+     taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk)
+       (step_taint inst s s' tn) s' t'` by
+    (irule taint_agree_translated_mload_step >>
+     simp[eval_operand_def] >>
+     gvs[]) >>
+  qexists_tac `t'` >> simp[] >> irule ircf_dead_step_agree >>
+  `inst.inst_opcode <> INVOKE` by simp[] >>
+  metis_tac[step_inst_non_invoke]
+QED
+
 Theorem ircf_R_ret_reachable_caller_memory:
   ircf_R_ret_reachable vs D fn_meta rma C (f::stk) PG G tn fn ret se te /\
   vs.vs_allocas = FEMPTY /\ lo <= vs.vs_alloca_next /\ ~ctx_has_dalloca C /\
