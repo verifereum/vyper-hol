@@ -1,6 +1,6 @@
 Theory bodyIntCallAssemblyFrame
 Ancestors
-  bodyIntCallCompletedFrame bodyIntCallCallerFrame bodyIntCallAssembly
+  bodyIntCallCompletedFrame bodyIntCallRestoreFrame bodyIntCallCallerFrame bodyIntCallAssembly
   compileEnv exprLoweringProps loweringPosts venomExecSemantics venomState
   fragGasFocus fragGasPath finite_map list
 
