@@ -3230,3 +3230,85 @@ Proof
   simp[taint_agree_def, ld_shared_agree_def, init_venom_state_def,
        word_agree_except_def, read_byte_def]
 QED
+
+Theorem taint_agree_merge_callee:
+  taint_agree D X0 saved s t /\ taint_agree D X1 tn se te /\
+  s.vs_call_ctx.cc_address = se.vs_call_ctx.cc_address /\
+  (!i. i NOTIN X /\ i NOTIN tn.t_mem /\ i < s.vs_alloca_next ==>
+       read_byte i se.vs_memory = read_byte i te.vs_memory) ==>
+  taint_agree D X (tn with t_var := saved.t_var)
+    (merge_callee_state s se) (merge_callee_state t te)
+Proof
+  simp[taint_agree_def, merge_callee_state_def, ld_shared_agree_def,
+       op_taint_def] >> rpt strip_tac >> gvs[] >>
+  gvs[venom_state_component_equality]
+QED
+
+Theorem taint_agree_adopt_return_fmp:
+  taint_agree D X tn s t ==>
+  taint_agree D X tn (adopt_return_fmp ret s) (adopt_return_fmp ret t)
+Proof
+  Cases_on `ret.iret_adopt_fmp` >>
+  simp[adopt_return_fmp_def, taint_agree_def, ld_shared_agree_def] >>
+  rpt strip_tac >> gvs[venom_state_component_equality]
+QED
+
+Theorem taint_agree_update_var_clean_restrict:
+  taint_agree D X tn s t ==>
+  taint_agree D X (tn with t_var := DRESTRICT tn.t_var (COMPL {out}))
+    (update_var out w s) (update_var out w t)
+Proof
+  simp[taint_agree_def, update_var_def, ld_shared_agree_def,
+       op_taint_def, FLOOKUP_DRESTRICT] >> rpt strip_tac >> simp[]
+  >- gvs[venom_state_component_equality] >>
+  Cases_on `v = out` >> gvs[FAPPLY_FUPDATE_THM, word_agree_except_def]
+QED
+
+Theorem taint_agree_fold_outputs:
+  !bindings tn s t.
+    taint_agree D X tn s t ==>
+    taint_agree D X
+      (tn with t_var := DRESTRICT tn.t_var (COMPL (set (MAP FST bindings))))
+      (FOLDL (\st (out,w). update_var out w st) s bindings)
+      (FOLDL (\st (out,w). update_var out w st) t bindings)
+Proof
+  Induct >- simp[DRESTRICT_UNIV] >>
+  simp[] >> qx_gen_tac `h` >> PairCases_on `h` >> rpt strip_tac >>
+  drule taint_agree_update_var_clean_restrict >>
+  disch_then (qspecl_then [`h1`,`h0`] mp_tac) >>
+  strip_tac >> first_x_assum drule >>
+  `COMPL {h0} INTER COMPL (set (MAP FST bindings)) =
+   COMPL (h0 INSERT set (MAP FST bindings))` by
+    simp[EXTENSION] >>
+  simp[]
+QED
+
+Theorem taint_agree_bind_outputs_clean:
+  taint_agree D X tn s t /\ bind_outputs outs vals s = SOME s' ==>
+  ?t'. bind_outputs outs vals t = SOME t' /\
+       taint_agree D X
+         (tn with t_var := DRESTRICT tn.t_var (COMPL (set outs))) s' t'
+Proof
+  simp[bind_outputs_def] >> rpt strip_tac >> gvs[] >>
+  drule taint_agree_fold_outputs >>
+  disch_then (qspec_then `ZIP (outs,vals)` mp_tac) >>
+  simp[MAP_ZIP]
+QED
+
+Theorem taint_agree_resume_caller:
+  taint_agree D X0 saved s t /\ taint_agree D X1 tn se te /\
+  s.vs_call_ctx.cc_address = se.vs_call_ctx.cc_address /\
+  (!i. i NOTIN X /\ i NOTIN tn.t_mem /\ i < s.vs_alloca_next ==>
+       read_byte i se.vs_memory = read_byte i te.vs_memory) /\
+  bind_outputs outs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state s se)) = SOME s' ==>
+  ?t'. bind_outputs outs ret.iret_values
+         (adopt_return_fmp ret (merge_callee_state t te)) = SOME t' /\
+       taint_agree D X
+         (tn with t_var := DRESTRICT saved.t_var (COMPL (set outs))) s' t'
+Proof
+  strip_tac >> drule_all taint_agree_merge_callee >>
+  strip_tac >> drule taint_agree_adopt_return_fmp >>
+  disch_then (qspec_then `ret` assume_tac) >>
+  drule_all taint_agree_bind_outputs_clean >> simp[]
+QED
