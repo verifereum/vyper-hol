@@ -116,6 +116,8 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (drule_all ecmul_insts_mem_ok >> simp[]) >>
   `es.outcomes = SOME s.vs_outcomes` by fs[stmt_state_rel_def, state_rel_def] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
   drule_all (cj 1 ec_points_run) >> disch_tac >>
   drule_all (cj 1 ec_memory_semantics) >> strip_tac >>
   gvs[] >>
@@ -173,6 +175,8 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (drule_all ecadd_insts_mem_ok >> simp[]) >>
   `es.outcomes = SOME s.vs_outcomes` by fs[stmt_state_rel_def, state_rel_def] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
   drule_all (cj 2 ec_points_run) >> disch_tac >>
   qpat_assum `expr_val_rel _ _ v p s`
     (mp_then (Pat `expr_val_rel _ _ _ _ _`) mp_tac (cj 2 ec_memory_semantics)) >>
