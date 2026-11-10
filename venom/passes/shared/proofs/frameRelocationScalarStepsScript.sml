@@ -109,16 +109,10 @@ Theorem scalar_binary_taint:
     tn with t_var := tn.t_var |+ (v,{})
 Proof
   strip_tac >>
-  `{i | ?aid b sz. aid NOTIN FDOM s.vs_allocas /\
-       (aid IN FDOM s.vs_allocas /\ s.vs_allocas ' aid = (b,sz)) /\
-       b <= i /\ i < b + sz} = {}` by (simp[EXTENSION] >> metis_tac[]) >>
-  gvs[scalar_binary_opcode_def] >>
-  simp[step_taint_def, mem_taint_def, new_site_bytes_def, update_var_def,
-       step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
-       written_taint_def, range_bytes_def, out_taint_def,
-       set_var_taint_def, adopt_reset_def, store_taint_def, imm_taint_def,
-       FLOOKUP_DEF, EXTENSION] >>
-  simp[taint_component_equality] >> Cases_on `eval_operand a s` >> simp[]
+  `out_taint tn inst s = {}` by
+    (gvs[scalar_binary_opcode_def] >> simp[out_taint_def] >>
+     Cases_on `eval_operand a s` >> simp[]) >>
+  simp[scalar_binary_update_taint]
 QED
 
 Theorem guarded_scalar_binary_step:
