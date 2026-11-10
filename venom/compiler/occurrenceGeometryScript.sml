@@ -364,3 +364,21 @@ Proof
   irule occurrence_geometry_sites_disjoint >>
   metis_tac[]
 QED
+
+Theorem frame_reachable_saved_frontier:
+  frame_reachable vs C (f::stk) PG G tn fn ri sr /\
+  vs.vs_allocas = FEMPTY /\ lo <= vs.vs_alloca_next /\ ~ctx_has_dalloca C ==>
+  f.cf_state.vs_alloca_next <= sr.vs_alloca_next /\
+  (!aid b z. FLOOKUP sr.vs_allocas aid = SOME (b,z) ==>
+             f.cf_state.vs_alloca_next <= b)
+Proof
+  strip_tac >> drule_all frame_reachable_occurrence_geometry >> strip_tac >>
+  `occurrence_allocas_ok B a sr` by gvs[occurrence_annotation_ok_def] >>
+  qpat_x_assum `occurrence_natural_geometry _ _ _ _ _ _` mp_tac >>
+  simp[occurrence_natural_geometry_def] >> strip_tac >>
+  qpat_x_assum `!j. j < SUC (LENGTH stk) ==> _`
+    (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+  simp[] >> rpt strip_tac >>
+  `FLOOKUP B (a,aid) = SOME (b,z)` by gvs[occurrence_allocas_ok_def] >>
+  metis_tac[pairTheory.FST]
+QED
