@@ -902,9 +902,47 @@ Proof
   metis_tac[ctor_dynarray_to_storage_first_emission]
 QED
 
+Theorem ctor_word_copy_loop_base_appends[local]:
+  !src dst cnt load_loc store_loc is_ctor imm.
+    cs_appends (compile_word_copy_loop_base src dst cnt load_loc store_loc is_ctor imm)
+Proof
+  rpt gen_tac >> rewrite_tac[compile_word_copy_loop_base_def] >>
+  simp_tac (srw_ss()) [LET_THM] >>
+  Cases_on `word_scale load_loc = 1` >>
+  Cases_on `word_scale store_loc = 1` >> simp[] >>
+  rpt (FIRST [ho_match_mp_tac cs_appends_bind,
+              ho_match_mp_tac cs_appends_ignore_bind] >> conj_tac
+       >- (simp[cs_appends_prims, cs_appends_emit_helpers,
+                 ctor_ptr_load_appends, ctor_ptr_store_appends] >>
+           ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers]) >>
+       rpt gen_tac) >>
+  simp[cs_appends_prims, cs_appends_emit_helpers]
+QED
+
+Theorem ctor_store_immutable_bytestring_first_emission[local]:
+  !imm src dst a x b.
+    compile_store_immutable_bytestring imm src dst a = (x,b) ==>
+    cs_extends a b /\
+    (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >>
+  pure_rewrite_tac[compile_store_immutable_bytestring_def,
+    compile_bytestring_word_count_def, comp_bind_assoc] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+  gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
+  rpt (FIRST [irule cs_appends_bind >> conj_tac,
+              irule cs_appends_ignore_bind >> conj_tac, gen_tac] >> BETA_TAC >>
+       simp[cs_appends_emit_helpers, cs_appends_return, ctor_word_copy_loop_base_appends])
+QED
+
 Theorem ctor_assign_code_suffix_first_emission[local]:
-  !imm dst value prim sz a x b.
+  !imm dst value prim dt sz a x b.
     (if prim then compile_imm_store_word imm dst value else
+       if is_bytestring_type dt then
+         compile_store_immutable_bytestring imm value dst else
        if sz <= 32 then
          do loaded <- emit_op MLOAD [value]; compile_imm_store_word imm dst loaded od
        else compile_imm_store_words imm value dst ((sz + 31) DIV 32) 0) a = (x,b) ==>
@@ -913,8 +951,10 @@ Theorem ctor_assign_code_suffix_first_emission[local]:
      (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  ntac 5 gen_tac >> Cases_on `prim` >> simp_tac bool_ss [COND_CLAUSES]
+  ntac 6 gen_tac >> Cases_on `prim` >> simp_tac bool_ss [COND_CLAUSES]
   >- metis_tac[ctor_imm_store_word_first_emission] >>
+  IF_CASES_TAC
+  >- metis_tac[ctor_store_immutable_bytestring_first_emission] >>
   IF_CASES_TAC
   >- (ho_match_mp_tac first_emission_bind >> conj_tac
       >- (ho_match_mp_tac first_emission_strong >>
