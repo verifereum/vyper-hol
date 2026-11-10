@@ -10,7 +10,7 @@ Ancestors
   valueEncoding valueEncodingDefs valueEncodingProofs vyperTypeSystem vyperTyping
   venomExecSemantics venomInst venomState
   vyperLookupStorage vyperStorageBackend vyperEvalPreservesScopes
-  vyperPlaceStatePreservation
+  vyperPlaceStatePreservation vyperStoragePlaceProvenance
 Libs
   pairLib
 
@@ -153,19 +153,6 @@ Proof
   gvs[] >> metis_tac[mem_path_offset_snoc]
 QED
 
-Theorem extend_storage_place_storage[local]:
-  !cx tr slot tv sb st p st'.
-    extend_storage_place cx tr slot tv sb st = (INL p, st') ==>
-    ?tr' slot' tv'. p = StoragePlace tr' slot' tv'
-Proof
-  rpt gen_tac >> Cases_on `sb` >> Cases_on `tv` >>
-  TRY (rename1 `ValueSubscript vv` >> Cases_on `vv`) >>
-  simp[extend_storage_place_def, bind_def, return_def, raise_def, check_def,
-       assert_def, ignore_bind_def, lift_option_type_def, AllCaseEqs(),
-       pairTheory.UNCURRY, LET_THM, PULL_EXISTS] >>
-  rw[] >> gvs[]
-QED
-
 (* A selection's result is a memory place exactly when it extends one. *)
 Theorem select_result_memory_place:
   !cx ty tv sb st tv' st'.
@@ -189,7 +176,8 @@ Proof
          gvs[select_result_def, extend_place_def, bind_def, return_def,
              lift_sum_def, raise_def, ignore_bind_def, AllCaseEqs(),
              extend_memory_place_def] >>
-         drule extend_storage_place_storage >> simp[]) >>
+         drule vyperStoragePlaceProvenanceTheory.extend_storage_place_subregion >>
+         simp[]) >>
      rename1 `HashMapRef _ _ _ vt` >> Cases_on `sb` >> Cases_on `vt` >>
      gvs[select_result_def, extend_place_def, bind_def, return_def,
          lift_option_type_def, raise_def, AllCaseEqs(), LET_THM]) >>
