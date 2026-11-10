@@ -60,11 +60,11 @@ Theorem abi_encode_nonword_relabel_observer:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
   ~is_word_type (expr_type e) /\
-  abi_enc_plan (get_tenv cx) (expr_type e) ei /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  abi_enc_plan (get_tenv cx) (lowered_value_type ce e) ei /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
-  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (expr_type e))
+  vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
+  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
     sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\
@@ -79,7 +79,7 @@ Theorem abi_encode_nonword_relabel_observer:
   ~s.vs_halted /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?p actual.
-    let bytes = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av in
+    let bytes = enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av in
     let m = case mid of NONE => 0 | SOME _ => 4 in
     eval_operand out actual = SOME (n2w p) /\
     mload p actual = n2w (LENGTH bytes+m) /\
@@ -101,13 +101,23 @@ Theorem abi_encode_nonword_relabel_observer:
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
-      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
-    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
     actual.vs_alloca_next < dimword (:256)
 Proof
   strip_tac >>
   drule_all abi_encode_nonword_observer_entry >>
   disch_then (qspecl_then [`ids`, `L`] strip_assume_tac) >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[exprSimHypsTheory.expr_body_pre_lowered_fits] >>
+  `?stv. evaluate_type (get_tenv cx) (expr_type e) = SOME stv` by
+    metis_tac[optionTheory.IS_SOME_EXISTS,
+      exprSimHypsTheory.expr_body_pre_type_evaluates] >>
+  `vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av` by
+    metis_tac[exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_conversion] >>
+  `vyper_to_abi_type (get_tenv cx) (expr_type e) =
+    vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)` by
+    metis_tac[exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_abi_type] >>
   drule_all abi_encode_nonword_observer_geometry >>
   simp_tac bool_ss [LET_THM] >>
   disch_then assume_tac >>
@@ -238,6 +248,8 @@ Resume abi_encode_nonword_relabel_observer[empty]:
   strip_tac >> suspend "transport"
 QED
 Resume abi_encode_nonword_relabel_observer[transport]:
+  qpat_assum `vyper_to_abi_type _ (expr_type e) = _`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
   qpat_x_assum `enc ct rv = _` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `!p. 32 + _ <= _ /\ _` (qspec_then `p` strip_assume_tac) >>
   `rst.cs_next_var <= rr.cs_next_var /\ rst.cs_next_var <= re.cs_next_var` by
@@ -247,8 +259,8 @@ Resume abi_encode_nonword_relabel_observer[transport]:
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
-      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
-    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
     actual.vs_alloca_next < dimword (:256)` by
     (drule_all (SIMP_RULE bool_ss [] (Q.INST
        [`outsz` |-> `32+32*word_size (maxlen+(case mid of NONE => 0 | SOME x => 4))`]
@@ -290,6 +302,8 @@ Resume abi_encode_nonword_relabel_observer[transport]:
   asm_rewrite_tac[] >> drule abi_encode_exec_frame_memory_length >> simp_tac (srw_ss()) []
 QED
 Resume abi_encode_nonword_relabel_observer[transport_positive]:
+  qpat_assum `vyper_to_abi_type _ (expr_type e) = _`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
   qpat_x_assum `enc ct rv = _` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `!p. 32 + _ <= _ /\ _` (qspec_then `p` strip_assume_tac) >>
   `rst.cs_next_var <= rr.cs_next_var /\ rst.cs_next_var <= re.cs_next_var` by
@@ -299,8 +313,8 @@ Resume abi_encode_nonword_relabel_observer[transport_positive]:
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
-      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
-    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
     actual.vs_alloca_next < dimword (:256)` by
     (drule_all (SIMP_RULE bool_ss [] (Q.INST
        [`outsz` |-> `32+32*word_size (maxlen+(case mid of NONE => 0 | SOME x => 4))`]
