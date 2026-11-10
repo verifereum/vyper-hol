@@ -453,6 +453,76 @@ Proof
   drule_all ircf_cross_protected_base >> simp[]
 QED
 
+Theorem ircf_block_plan_write_ranges:
+  ircf_block_plan fn bb bb2 /\ MEM bb fn.fn_blocks /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode <> DRET /\
+  taint_ok fn tn (EL i bb.bb_instructions) s /\ taint_agree D X tn s t ==>
+  range_bytes (source_memory_write_ranges (EL i bb2.bb_instructions) t) SUBSET
+  range_bytes (source_memory_write_ranges (EL i bb.bb_instructions) s)
+Proof
+  strip_tac >> Cases_on `i IN ircf_fwds bb bb2`
+  >- (fs[ircf_block_plan_def] >>
+      simp[mk_nop_inst_def, codegenRelTheory.source_memory_write_ranges_def, range_bytes_def]) >>
+  Cases_on `mem_write_ops (EL i bb.bb_instructions) = NONE`
+  >- (fs[ircf_block_plan_def] >>
+      Cases_on `(EL i bb.bb_instructions).inst_opcode = ASSIGN`
+      >- simp[codegenRelTheory.source_memory_write_ranges_def, range_bytes_def] >>
+      `source_memory_write_ranges
+         ((EL i bb.bb_instructions) with inst_operands :=
+           MAP (ircf_redirect_op fn bb bb2) (EL i bb.bb_instructions).inst_operands)
+         t = []` by (irule codegenRelTheory.source_memory_write_ranges_nonwriter >> simp[]) >>
+      simp[range_bytes_def]) >>
+  `EL i bb2.bb_instructions = EL i bb.bb_instructions` by
+    (drule_all ircf_block_plan_writer >> simp[]) >>
+  drule_all taint_agree_write_ranges >> simp[]
+QED
+
+Theorem ircf_cross_block_plan_base:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ lo <= vs.vs_alloca_next /\
+  EVERY wf_function C.ctx_functions /\ EVERY fn_inst_wf C.ctx_functions /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY fn_inst_ids_distinct C.ctx_functions /\
+  EVERY ircf_no_dst_write_alias C.ctx_functions /\ ptr_discipline lo C vs /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  gam = ircf_gam_cur fn_meta rma C fn s UNION ircf_gam_stk fn_meta rma C stk /\
+  ircf_cross tn gam s t /\ taint_agree D X tn s t /\
+  step_inst_base inst s = OK s' /\ step_inst_base ti t = OK t' /\
+  ircf_block_plan fn bb bb2 /\ MEM bb fn.fn_blocks /\
+  i < LENGTH bb.bb_instructions /\ inst = EL i bb.bb_instructions /\
+  ti = EL i bb2.bb_instructions ==>
+  ircf_cross (step_taint inst s s' tn) gam s' t'
+Proof
+  strip_tac >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[occ_frame_reachable_projection] >>
+  `MEM fn C.ctx_functions` by
+    (drule occ_frame_reachable_annotation >> simp[]) >>
+  `MEM inst (fn_insts fn)` by
+    (simp[venomInstTheory.fn_insts_def] >>
+     metis_tac[unitShapeDefsTheory.MEM_fn_insts_blocks, EL_MEM]) >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `inst.inst_opcode <> DRET` by
+    (drule_all o1LowerDloadPtrDisciplineTheory.ptr_discipline_inst_opcode_exclusions >>
+     simp[]) >>
+  `fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  `range_bytes (source_memory_write_ranges ti t) SUBSET
+   range_bytes (source_memory_write_ranges inst s)` by
+    (gvs[] >> irule ircf_block_plan_write_ranges >> simp[] >> metis_tac[]) >>
+  `!db sb sz k. (db,sb,sz) IN gam /\ k < sz ==>
+     sb+k NOTIN range_bytes (source_memory_write_ranges ti t)` by
+    (rpt gen_tac >> strip_tac >>
+     `sb+k NOTIN range_bytes (source_memory_write_ranges inst s)` by
+       (strip_tac >>
+        qpat_x_assum `_ IN range_bytes _`
+          (strip_assume_tac o SIMP_RULE (srw_ss()) [range_bytes_def]) >>
+        metis_tac[ircf_gam_write_disjoint]) >>
+     metis_tac[SUBSET_DEF]) >>
+  drule_all ircf_cross_disciplined_base >> simp[]
+QED
+
 Theorem ircf_gam_phi_prefix:
   ircf_gam fn_meta rma C fn bb allocas
     (phi_prefix_length bb.bb_instructions) = {}
