@@ -28,18 +28,59 @@ Proof
   drule compile_invert_open >> simp[]
 QED
 
+Theorem emit_membership_eqs_open:
+  !elems needle sa cs sb.
+    (elems = [] ==> ~block_is_terminated sa) /\
+    emit_membership_eqs needle elems sa = (cs,sb) ==>
+    ~block_is_terminated sb
+Proof
+  Induct >> rpt gen_tac >>
+  simp[emit_membership_eqs_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  drule emit_op_nonterminator_open >> simp[is_terminator_def] >>
+  metis_tac[]
+QED
+
+Theorem fold_membership_or_open:
+  !elems acc sa v sb.
+    ~block_is_terminated sa /\
+    fold_membership_or acc elems sa = (v,sb) ==>
+    ~block_is_terminated sb
+Proof
+  Induct >> rpt gen_tac >>
+  simp[fold_membership_or_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  drule emit_op_nonterminator_open >> simp[is_terminator_def] >>
+  metis_tac[]
+QED
+
+Theorem fold_membership_and_open:
+  !elems acc sa v sb.
+    ~block_is_terminated sa /\
+    fold_membership_and acc elems sa = (v,sb) ==>
+    ~block_is_terminated sb
+Proof
+  Induct >> rpt gen_tac >>
+  simp[fold_membership_and_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  drule (Q.SPEC `AND` emit_op_nonterminator_open) >>
+  simp[is_terminator_def] >> metis_tac[]
+QED
+
 Theorem compile_list_membership_in_open:
   !needle elems sa v sb.
     (elems = [] ==> ~block_is_terminated sa) /\
     compile_list_membership_in needle elems sa = (v,sb) ==>
     ~block_is_terminated sb
 Proof
-  rpt gen_tac >> Cases_on `elems`
-  >- (simp[compile_list_membership_in_def, comp_return_def] >> metis_tac[]) >>
-  rename1 `h::rest` >> Cases_on `rest` >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_list_membership_in _ _ _ = _` mp_tac >>
   simp[compile_list_membership_in_def, comp_bind_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-  drule emit_op_nonterminator_open >> simp[is_terminator_def]
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  qmatch_asmsub_rename_tac `emit_membership_eqs needle elems sa = (cs,st)` >>
+  drule_all emit_membership_eqs_open >> strip_tac >>
+  Cases_on `cs` >> gvs[comp_return_def] >>
+  metis_tac[fold_membership_or_open]
 QED
 
 Theorem compile_list_membership_notin_open:
@@ -48,17 +89,21 @@ Theorem compile_list_membership_notin_open:
     compile_list_membership_notin needle elems sa = (v,sb) ==>
     ~block_is_terminated sb
 Proof
-  rpt gen_tac >> Cases_on `elems`
-  >- (simp[compile_list_membership_notin_def, comp_return_def] >> metis_tac[]) >>
-  rename1 `h::rest` >> Cases_on `rest` >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_list_membership_notin _ _ _ = _` mp_tac >>
   simp[compile_list_membership_notin_def, comp_bind_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-  drule emit_op_nonterminator_open >> simp[is_terminator_def]
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  qmatch_asmsub_rename_tac `emit_membership_eqs needle elems sa = (cs,st)` >>
+  drule_all emit_membership_eqs_open >> strip_tac >>
+  Cases_on `cs` >> gvs[comp_return_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  drule emit_op_nonterminator_open >> simp[is_terminator_def] >>
+  metis_tac[fold_membership_and_open]
 QED
 
 Theorem compile_array_membership_loop_open:
-  !needle arr len size offset loader is_in sa v sb.
-    compile_array_membership_loop needle arr len size offset loader is_in sa =
+  !needle arr len size offset loader bound is_in sa v sb.
+    compile_array_membership_loop needle arr len size offset loader bound is_in sa =
       (v,sb) ==> ~block_is_terminated sb
 Proof
   rpt gen_tac >>
@@ -120,7 +165,7 @@ Proof
         impl_tac >- (strip_tac >> gvs[] >>
           drule compile_multi_exprs_nil_state >> strip_tac >> gvs[]) >> simp[]]) >>
   IF_CASES_TAC
-  >- (rpt (pairarg_tac >> simp[]) >> IF_CASES_TAC >>
+  >- (simp[pairTheory.UNCURRY] >> IF_CASES_TAC >>
       simp[oneline as_stack_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
       drule emit_op_nonterminator_open >> simp[is_terminator_def]) >>
   rpt (pairarg_tac >> simp[]) >>

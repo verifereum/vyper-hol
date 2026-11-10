@@ -97,6 +97,7 @@ Proof
    c.ce_module = cenv.ce_module /\
    c.ce_module_vars = cenv.ce_module_vars /\
    c.ce_is_ctor = cenv.ce_is_ctor /\
+   c.ce_func_return_type = cenv.ce_func_return_type /\
    c.ce_method_id = cenv.ce_method_id` by
     (qpat_x_assum `_ with <| ce_vars := _; ce_var_type := _;
                              ce_dynarray_capacity := _ |> = cenv`
@@ -544,6 +545,7 @@ Proof
     (conj_tac >- (irule placeTypingPropsTheory.place_map_tables_agree_on_defined_cong >> fs[extend_local_def]) >>
      simp[extend_local_def]) >>
   ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[] >>
+  conj_tac >- fs[extend_local_def] >>
   irule storage_conjs_scopes >> simp[]
 QED
 

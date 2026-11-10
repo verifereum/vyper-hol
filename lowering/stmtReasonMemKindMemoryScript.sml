@@ -45,6 +45,8 @@ Proof
     (simp[evaluate_type_def, type_slot_size_def, word_size_def] >>
      fs[dimword_def]) >>
   `~is_word_type (BaseT (StringT n))` by simp[is_word_type_def] >>
+  `post_value_type cenv se = BaseT (StringT n)` by
+    simp[post_value_type_bytestring, is_bytestring_type_def] >>
   Cases_on `vv` >> fs[reason_vv_def] >> rpt BasicProvers.VAR_EQ_TAC >>
   fs[vv_post_def, vv_holds_def, vv_at_def, expr_val_rel_def,
      expr_val_at_def] >>

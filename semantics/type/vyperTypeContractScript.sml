@@ -182,6 +182,15 @@ Definition external_name_keys_toplevel_def:
   external_name_keys_toplevel _ _ = []
 End
 
+(* Every function visibility and variable kind shares Vyper's self namespace. *)
+Definition self_member_keys_toplevel_def:
+  self_member_keys_toplevel src (FunctionDecl _ _ _ _ name _ _ _ _) =
+    [(src,name)] /\
+  self_member_keys_toplevel src (VariableDecl _ _ name _ _) = [(src,name)] /\
+  self_member_keys_toplevel src (HashMapDecl _ _ name _ _ _) = [(src,name)] /\
+  self_member_keys_toplevel _ _ = []
+End
+
 Definition contract_namespaces_ok_def:
   contract_namespaces_ok in_deploy mods <=>
     ALL_DISTINCT (MAP FST mods) /\
@@ -192,6 +201,7 @@ Definition contract_namespaces_ok_def:
     ALL_DISTINCT (contract_keys type_def_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys event_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys external_name_keys_toplevel mods) /\
+    ALL_DISTINCT (contract_keys self_member_keys_toplevel mods) /\
     EVERY (\(src,tls).
       ALL_DISTINCT (abi_external_method_ids (type_env_all_modules mods) tls)) mods
 End
@@ -402,6 +412,17 @@ Definition constant_value_def:
            if bt = Len then
              (case vs of
               | [v] => OPTION_MAP (\n. IntV (&n)) (constant_length v)
+              | _ => NONE)
+           else if bt = Bop In \/ bt = Bop NotIn then
+             (case vs of
+              | [v1;v2] =>
+                  (case evaluate_type (type_env_all_modules mods)
+                           (expr_type (EL 1 es)) of
+                   | NONE => NONE
+                   | SOME tv =>
+                       (case evaluate_membership tv (bt = Bop NotIn) v1 v2 of
+                        | INL v => SOME v
+                        | INR _ => NONE))
               | _ => NONE)
            else
              case evaluate_builtin (constant_context mods) empty_accounts
