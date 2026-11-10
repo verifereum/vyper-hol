@@ -3472,6 +3472,156 @@ Proof
   asm_simp_tac (srw_ss()) [sym_steps_add]
 QED
 
+Theorem sym_plan_stack_rel_inst_idx:
+  plan_stack_rel lo (frame_view fn ra (s with vs_inst_idx := k)) ops stk <=>
+  plan_stack_rel lo (frame_view fn ra s) ops stk
+Proof
+  simp[codegenRelTheory.plan_stack_rel_def] >>
+  AP_TERM_TAC >> AP_TERM_TAC >> ABS_TAC >>
+  Cases_on `EL i (REVERSE ops)` >>
+  simp[frame_view_def, codegenRelTheory.operand_val_def, venomStateTheory.lookup_var_def]
+QED
+
+Theorem sym_terminal_rel_inst_idx:
+  venom_asm_terminal_rel (s with vs_inst_idx := k) st <=>
+  venom_asm_terminal_rel s st
+Proof
+  simp[venom_asm_terminal_rel_def]
+QED
+
+Theorem sym_rf_strict_suffix_abort:
+  !k s st ps stk ops ps_end ss top.
+  lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
+  codegen_ready_fn fn /\ opaque_use_ok fn /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  revert_forward_pair bb i j /\ i < k /\ k <= j /\ s.vs_inst_idx = k /\
+  LENGTH (get_params bb.bb_instructions) <= k /\
+  get_instruction bb i = SOME copy /\ copy.inst_operands = [cdop;csop;czop] /\
+  operand_val entry lo (normalize_operand (dfg_build_function fn) [] cdop) = SOME dst /\
+  operand_val entry lo (normalize_operand (dfg_build_function fn) [] czop) = SOME sz /\
+  EVERY (\ti. EVERY (\op. ~is_label_operand op) ti.inst_operands)
+    (DROP i bb.bb_instructions) /\
+  rf_spills_separated ps /\ rf_value_inv fn ra bb j lo entry k s /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  (!op. rf_live_use bb k j op /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  plan_stack_rel lo (frame_view fn ra s) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\ venom_asm_terminal_rel s st /\
+  TAKE (w2n sz) (DROP (w2n dst) s.vs_memory) =
+    TAKE (w2n sz) (DROP (w2n dst) st.as_memory) /\
+  generate_block_insts_plan (liveness_analyze fn) (dfg_build_function fn)
+    (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)
+    (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions)
+    (k - LENGTH (get_params bb.bb_instructions)) (DROP k bb.bb_instructions)
+    ps = SOME (ops,ps_end) /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) /\
+  MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\ label_flow_ok ctx /\
+  asm_static_wf prog /\ asm_sym_rel prog env st ss /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cplan b) /\
+  ~mem_labels_hit ss.sym_mem_labels (in_mem_range (w2n dst) (w2n sz)) ==>
+  exec_block fuel ctx bb s = Abort a s_end ==>
+  a = Revert_abort /\
+  ?n out. asm_steps lo o2pc prog n st = AsmRevert out /\
+    venom_asm_terminal_rel s_end out /\ sym_terminal (sym_steps prog env n ss)
+Proof
+  measureInduct_on `j - k` >> rpt gen_tac >> strip_tac >> disch_tac >>
+  `i <= k` by decide_tac >>
+  `?inst. get_instruction bb k = SOME inst` by
+    (irule fnFrameStepsRevertForwardTheory.rf_forward_instruction_exists >> metis_tac[]) >>
+  `MEM inst (fn_insts fn)` by
+    (irule allocaRemapSSATheory.mem_fn_insts_intro >> qexists `bb` >>
+     fs[get_instruction_def] >> metis_tac[livenessTransferProofsTheory.lookup_block_mem, listTheory.EL_MEM]) >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_forward_instruction_opcode >> strip_tac >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_forward_instruction_shape >> strip_tac >>
+  `EVERY (\op. ~is_label_operand op) inst.inst_operands` by
+    (irule fnFrameStepsRevertForwardTheory.rf_suffix_instruction_no_labels >> metis_tac[]) >>
+  `!op. MEM op (compute_operands inst) ==>
+    operand_val (frame_view fn ra s) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)` by
+    (rpt strip_tac >> gvs[fnFrameStepsRevertForwardTheory.rf_value_inv_def] >> first_x_assum irule >>
+     irule fnFrameStepsRevertForwardTheory.rf_live_use_current >> metis_tac[]) >>
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (rpt strip_tac >> first_x_assum irule >> simp[] >>
+     irule fnFrameStepsRevertForwardTheory.rf_live_use_current >> metis_tac[]) >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_block_plan_step >> strip_tac >>
+  `generate_regular_inst_plan (liveness_analyze fn) (dfg_build_function fn)
+     (cfg_analyze fn) fn inst
+     (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k)) (bb_is_halting bb)
+     (case DROP (SUC k) bb.bb_instructions of
+        [] => F | next_i::tail => is_terminator next_i.inst_opcode)
+     bb.bb_label ps = (step_ops,ps1)` by
+    (irule fnFrameStepsRevertForwardTheory.rf_forward_regular_plan_result >>
+     conj_tac >- first_assum ACCEPT_TAC >> qexistsl [`bb`,`i`,`j`,`k`] >> simp[]) >>
+  `asm_block_at prog st.as_pc (execute_plan initial_fmp step_ops) /\
+   asm_block_at prog (st.as_pc + LENGTH (execute_plan initial_fmp step_ops))
+     (execute_plan initial_fmp rest_ops)` by
+    gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  `!off. ~MEM (SOSpill off) step_ops /\ ~MEM (SORestore off) step_ops` by
+    fs[listTheory.MEM_APPEND] >>
+  Cases_on `k = j` >- suspend "revert" >>
+  suspend "assign"
+QED
+
+Resume sym_rf_strict_suffix_abort[revert]:
+  pop_last_assum kall_tac >>
+  `inst.inst_opcode = REVERT /\ inst.inst_outputs = []` by gvs[] >>
+  `?dop zop. inst.inst_operands = [dop;zop]` by
+    gvs[listTheory.LENGTH_EQ_NUM_compute] >>
+  `operand_val (frame_view fn ra s) lo dop = SOME dst /\
+   operand_val (frame_view fn ra s) lo zop = SOME sz` by
+    (irule fnFrameStepsRevertForwardTheory.rf_forward_revert_range >> metis_tac[]) >>
+  `step_inst fuel ctx inst s = Abort a s_end` by
+    (qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+     gvs[Once exec_block_def, is_terminator_def, AllCaseEqs()]) >>
+  drule_all sym_rf_suffix_revert_abort >> strip_tac >>
+  simp[] >> qexistsl [`LENGTH (execute_plan initial_fmp step_ops)`,`out`] >> gvs[]
+QED
+
+Resume sym_rf_strict_suffix_abort[assign]:
+  `k < j /\ inst.inst_opcode = ASSIGN` by gvs[] >>
+  `?rhs out. inst.inst_operands = [rhs] /\ inst.inst_outputs = [out]` by metis_tac[] >>
+  `~is_label_operand rhs` by fs[] >>
+  `?s'. step_inst fuel ctx inst s = OK s' /\
+    exec_block fuel ctx bb (s' with vs_inst_idx := SUC k) = Abort a s_end` by
+    (pop_last_assum kall_tac >>
+     qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+     simp[Once exec_block_def, is_terminator_def] >>
+     Cases_on `eval_operand rhs s` >>
+     `step_inst fuel ctx inst s = step_inst_base inst s` by
+       simp[step_inst_non_invoke] >>
+     pop_assum SUBST1_TAC >> once_rewrite_tac[step_inst_base_def] >>
+     qpat_assum `inst.inst_opcode = ASSIGN` SUBST1_TAC >>
+     qpat_assum `inst.inst_operands = [rhs]` SUBST1_TAC >>
+     qpat_assum `inst.inst_outputs = [out]` SUBST1_TAC >> simp[]) >>
+  `!r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
+    ti.inst_opcode <> PHI` by
+    (rpt strip_tac >>
+     `ti.inst_opcode =
+       (if r = i then RETURNDATACOPY else if r = j then REVERT else ASSIGN)` by
+       (irule fnFrameStepsRevertForwardTheory.rf_forward_instruction_opcode >>
+        conj_tac >- decide_tac >> simp[] >> qexists `bb` >> simp[]) >>
+     Cases_on `r = i` >> fs[] >> Cases_on `r = j` >> fs[]) >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_assign_success_invariants >> strip_tac >>
+  `is_var_operand rhs ==> MEM rhs ps.ps_stack \/ rhs IN FDOM ps.ps_spilled` by
+    (strip_tac >> first_x_assum irule >>
+     simp[compute_operands_def, python_stack_operands_def]) >>
+  `operand_val (frame_view fn ra s) lo rhs =
+   operand_val entry lo (normalize_operand (dfg_build_function fn) [] rhs)` by
+    (first_x_assum irule >> simp[compute_operands_def, python_stack_operands_def]) >>
+  drule_all sym_rf_assign_plan_execution >> strip_tac >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_assign_plan_execution >>
+  disch_then (qspec_then `build_offset_to_pc prog` strip_assume_tac) >>
+  `st' = st with <|as_stack := stk' ++ rest;
+    as_pc := st.as_pc + LENGTH (execute_plan initial_fmp step_ops)|>` by gvs[] >>
+  cheat
+QED
+
+Finalise sym_rf_strict_suffix_abort
+
 Theorem sym_jmp_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
