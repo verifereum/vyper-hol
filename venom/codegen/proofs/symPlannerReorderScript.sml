@@ -843,6 +843,61 @@ Proof
   compose_plan_frame_tac
 QED
 
+Theorem sym_reorder_fold_cons[local]:
+  (!ps ops out ss.
+    EVERY (\(idx,op). idx < LENGTH pending /\ MEM op pending) items /\
+    residual_budget_wf_marked spillbase pending ps /\
+    pending_inventory_wf pending ps /\ LENGTH pending <= LENGTH ps.ps_stack /\
+    plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items ps = (ops,out) /\
+    dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+    MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+    out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) ops /\
+    sym_kinds_ok cplan fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+      sym_kinds_ok cplan fn ret srest out last /\
+      last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+        FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)) ==>
+  !ps ops out ss.
+  EVERY (\(idx,op). idx < LENGTH pending /\ MEM op pending) ((idx,op)::items) /\
+  residual_budget_wf_marked spillbase pending ps /\
+  pending_inventory_wf pending ps /\ LENGTH pending <= LENGTH ps.ps_stack /\
+  plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) ((idx,op)::items) ps = (ops,out) /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  drule_then strip_assume_tac reorderSimTheory.plan_steps_cons_result >>
+  qpat_x_assum `EVERY _ (_::_)`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [EVERY_DEF]) >>
+  qpat_x_assum `(\(idx,op) ps. _) _ _ = _`
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  rename1 `reorder_one dfg pending idx op ps = (head_ops,midps)` >>
+  rename1 `plan_steps _ items midps = (tail_ops,out)` >>
+  drule_all_then strip_assume_tac reorder_fold_head_structure >>
+  drule_all_then assume_tac reorder_fold_tail_limit >>
+  qpat_x_assum `ops = _` SUBST_ALL_TAC >>
+  drule_all sym_reorder_fold_head_run >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  rename1 `sym_kinds_ok cplan fn ret srest midps mid` >>
+  qpat_x_assum `!ps ops out ss. _`
+    (qspecl_then [`midps`, `tail_ops`, `out`, `mid`] assume_tac) >>
+  irule sym_reorder_fold_continue >> metis_tac[EVERY_APPEND]
+QED
+
 Theorem sym_plan_steps_reorder[local]:
   !items ps ops out ss.
   EVERY (\(idx,op). idx < LENGTH pending /\ MEM op pending) items /\
@@ -865,30 +920,7 @@ Proof
   Induct
   >- (simp[foldlSimTheory.plan_steps_def] >> rpt strip_tac >>
       gvs[planExecTheory.execute_plan_def, codegenSymRelTheory.sym_steps_def]) >>
-  rpt gen_tac >> strip_tac >>
-  drule_then strip_assume_tac reorderSimTheory.plan_steps_cons_result >>
-  Cases_on `h` >> fs[] >>
-  rename1 `reorder_one dfg pending idx op ps = (step_ops,midps)` >>
-  drule_all_then strip_assume_tac reorder_fold_head_structure >>
-  drule_all_then assume_tac reorder_fold_tail_limit >>
-  qpat_x_assum `asm_block_at _ _ _` (strip_assume_tac o
-    SRULE [stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append]) >>
-  drule_all sym_reorder_one >>
-  simp[] >> disch_then (qspec_then `env` strip_assume_tac) >>
-  rename1 `sym_kinds_ok cplan fn ret srest midps mid` >>
-  `asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp rest_ops)` by
-    metis_tac[arithmeticTheory.ADD_COMM] >>
-  `r.sr_spill_base <= midps.ps_alloc.sa_spill_base` by simp[] >>
-  qpat_assum `dfg = _` (fn th => rule_assum_tac (PURE_REWRITE_RULE [th])) >>
-  qpat_x_assum `!ps' ops' out' ss'. _`
-    (qspecl_then [`midps`, `rest_ops`, `out`, `mid`] mp_tac) >>
-  asm_simp_tac (srw_ss()) [] >> strip_tac >>
-  rename1 `sym_kinds_ok cplan fn ret srest out last` >>
-  qexists `last` >>
-  pure_rewrite_tac[stackOpSimTheory.execute_plan_append, LENGTH_APPEND,
-    codegenSymRelTheory.sym_steps_add] >>
-  asm_rewrite_tac[asmSymSemTheory.sym_result_case_def] >>
-  conj_tac >- simp[] >> conj_tac >- decide_tac >> metis_tac[]
+  Cases_on `h` >> drule_then MATCH_ACCEPT_TAC sym_reorder_fold_cons
 QED
 
 Theorem reorder_indexed_items_valid[local]:
