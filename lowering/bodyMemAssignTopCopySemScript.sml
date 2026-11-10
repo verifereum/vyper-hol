@@ -1,6 +1,7 @@
 (* Storage assignment compiler and semantic boundaries for the memory proof. *)
 Theory bodyMemAssignTopCopySem
 Ancestors
+  exprSimHashBoundary
   bodyMemAssignTopCopyFacts stmtSimAssignStorageCopy stmtSimStoreCopy
   stmtSimDeclMem stmtSimAssignMem stmtSimAssignStorage stmtSimAssign exprLoweringProps
   stmtLowering exprLowering emitHelper emitHelperProps context compileEnv loweringStateRelDefs
@@ -321,6 +322,7 @@ QED
 
 Theorem topcopy_post_words:
   !ctx func cenv cx e es sa sm s0 es1 v op s tv w.
+    post_value_type cenv e = expr_type e /\
     expr_post ctx func cenv cx e es sa sm s0 es1 v op s /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
@@ -343,6 +345,7 @@ QED
 
 Theorem topcopy_post_region:
   !ctx func cenv cx e es sa sm s0 es1 v op s tv tr mid id slot es'.
+    post_value_type cenv e = expr_type e /\
     expr_post ctx func cenv cx e es sa sm s0 es1 v op s /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
@@ -366,7 +369,7 @@ Proof
   Cases_on `encode_value tv v` >> gvs[] >>
   rename1 `encode_value tv v = SOME writes` >>
   `stmt_state_rel ctx func cenv cx es1 s /\
-   expr_val_rel cx (expr_type e) v op s` by fs[expr_post_def] >>
+   expr_val_rel cx (expr_type e) v op s` by gvs[expr_post_def] >>
   qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
   simp[expr_val_rel_def] >> strip_tac >>
   `well_formed_type_value tv` by

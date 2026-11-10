@@ -7,7 +7,7 @@ Ancestors
   vyperValue vyperTypeInvariants valueEncoding integer_word words byte context
   emitHelper emitHelperProps venomExecSemantics venomInst venomState
   venomMemDefs venomCallOracleDefs extCallOracle fragExec fragGasSeqAbort
-  fragGasSeqMem allocaHistoryFragment exprSimHash venomMemProps venomInstProofs
+  fragGasSeqMem allocaHistoryFragment exprSimHash exprSimHashBoundary venomMemProps venomInstProofs
   fragGasMode bodyMemBiSha256Compose
 
 Theorem ecrecover_seq_path_mem:
@@ -71,7 +71,7 @@ Theorem ecrecover_success_path_mem:
   t.vs_outcomes = co::rest /\ co.co_success /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\
   (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sm x) /\
-  wb_frame cenv es sa s0 t /\
+  wb_frame cenv es es' sa s0 t /\
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -116,7 +116,7 @@ Proof
   simp[stmt_state_rel_inst_idx, expr_type_def, is_word_type_def,
        vyperValueTheory.evaluate_type_def] >>
   irule wb_frame_trans >> conj_tac >- simp[] >>
-  conj_tac
+  reverse conj_tac
   >- (qexistsl_tac [`es'`, `sm`, `t`] >>
       gvs[wb_frame_def, lookup_var_def] >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>

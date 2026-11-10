@@ -460,6 +460,7 @@ QED
 
 (* Postcondition packaging stays independent of the header-write proof. *)
 Theorem pop_storage_vv_post:
+  es'.scopes = es.scopes /\
   stmt_state_rel ctx func cenv cx es' u /\
   storage_holds cx tr ann tv slot es' u /\
   lookup_var x u = SOME slot /\
@@ -468,10 +469,12 @@ Theorem pop_storage_vv_post:
   vv_post ctx func cenv cx (Pop ann tgt) es sa sb s0 es' tv
     (LocatedValue ann (mk_ptr (Var x) (if tr then LocTransient else LocStorage))) u
 Proof
+  strip_tac >>
+  `locals_kept cenv es es' s0 u` by (irule locals_kept_mem >> simp[]) >>
   Cases_on `tr` >>
   simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
        loweringPostsTheory.vv_at_def, contextTheory.mk_ptr_def, eval_operand_def,
-       loweringPostsTheory.locals_kept_def, expr_type_def]
+       expr_type_def]
 QED
 
 Theorem pop_declared_array_agree:
@@ -792,6 +795,7 @@ Resume compile_pop_storage_normalized_sim[positive]:
                  simp[sstore_def, tstore_def, venom_state_component_equality]) >>
      conj_tac >- (qpat_x_assum `u = _` mp_tac >> Cases_on `tr` >>
                  simp[sstore_def, tstore_def, venom_state_component_equality]) >>
+     conj_tac >- simp[] >>
      conj_tac
      >- (irule pop_ssr_gas_obs >> irule pop_storage_updated_state_rel >>
          metis_tac[]) >>

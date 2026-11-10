@@ -55,6 +55,10 @@ removed when a new pin includes them. The current series contains:
 - vyperlang/vyper#5349: an instruction with no outputs and no effects (an
   `assert`) stays a scheduling root even when a later abort depends on it,
   so nothing is hoisted above it.
+- vyperlang/vyper#5354: PHI origin traversal uses an active recursion path and
+  guarded memoization, so shared multi-origin PHIs cannot disappear from a
+  sibling operand. The pass is used by O2/O3/Os; the O1 fixture schedule does
+  not run it.
 
 The provenance's `vyper_commit` names the unpatched base revision.
 
