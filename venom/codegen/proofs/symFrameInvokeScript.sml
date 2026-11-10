@@ -1952,6 +1952,97 @@ Proof
   Cases_on `op IN FDOM ps.ps_spilled` >> simp[]
 QED
 
+(* Source invariants needed only on a successful internal return. *)
+Theorem sym_invoke_return_source_facts:
+  !Inv ctx cp fn inst nm arg_ops base ps nl iops prepared dfg rops arranged
+   vs rvs rv vs'.
+  codegen_context_obligations Inv ctx cp /\ codegen_ready_fn fn /\
+  MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: arg_ops /\
+  generated_plan_state_wf_marked base ps /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    IS_SOME (stack_get_depth op ps.ps_stack) \/ IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  emit_input_plan INVOKE (compute_operands inst) nl ps = (iops,prepared) /\
+  reorder_plan dfg (compute_operands inst) prepared = (rops,arranged) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <= LENGTH prepared.ps_stack /\
+  EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+    inst.inst_outputs) ps.ps_stack /\
+  (!op. op IN FDOM ps.ps_spilled ==>
+    EVERY (\out. case op of Var x => x <> out | _ => T) inst.inst_outputs) /\
+  bind_outputs inst.inst_outputs rv.iret_values
+    (adopt_return_fmp rv (merge_callee_state vs rvs)) = SOME vs' ==>
+  ordered_spill_regions cp.cp_regions /\ ctx_wf ctx /\ ssa_form fn /\
+  fn_directly_calls ctx fn.fn_name nm /\
+  ~TC (fn_directly_calls ctx) fn.fn_name fn.fn_name /\
+  spill_alloc_layout_wf arranged.ps_alloc arranged.ps_spilled /\
+  EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+    inst.inst_outputs) arranged.ps_stack /\
+  (!op. op IN FDOM arranged.ps_spilled ==>
+    EVERY (\out. case op of Var x => x <> out | _ => T) inst.inst_outputs) /\
+  ALL_DISTINCT inst.inst_outputs /\
+  EVERY (\x. ~retpc_var fn x) inst.inst_outputs /\
+  LENGTH rv.iret_values = LENGTH inst.inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `codegen_context_obligations Inv ctx cplan` >>
+  `ordered_spill_regions cplan.cp_regions /\ ctx_wf ctx` by
+    gvs[codegen_context_obligations_def, context_plan_layout_wf_def] >>
+  drule_all fnFrameDeepInvokeTheory.invoke_entry_structural_marked >> strip_tac >>
+  `EVERY (\x. ~retpc_var fn x) inst.inst_outputs` by
+    (simp[EVERY_MEM] >> gen_tac >> disch_tac >>
+     irule frameViewFactsTheory.noncopy_output_not_retpc >>
+     conj_tac >- gvs[codegen_ready_fn_def] >>
+     qexists `inst` >> simp[]) >>
+  `LENGTH rv.iret_values = LENGTH inst.inst_outputs` by
+    gvs[bind_outputs_def, AllCaseEqs()] >>
+  drule_all fnFrameBoundaryInvokeTheory.invoke_direct_call >> strip_tac >>
+  drule_all fnFrameBoundaryInvokeTheory.invoke_context_no_cycle >> strip_tac >>
+  drule_all genBlockSimTheory.codegen_ready_inst_outputs_distinct >> strip_tac >>
+  gvs[codegen_ready_fn_def]
+QED
+
+(* Rebuild the caller's symbolic frame at the callee's internal return. *)
+Theorem sym_invoke_return_frame_from_callee:
+  !cp r fn ctx callee arranged p env ret srest labs0 mid sms scas ssr asr
+   inst vals saved_ops saved_sym ret_lbl called.
+  ordered_spill_regions cp.cp_regions /\ MEM r cp.cp_regions /\
+  r.sr_fn_name = fn.fn_name /\ fn_directly_calls ctx fn.fn_name callee /\
+  ~TC (fn_directly_calls ctx) fn.fn_name fn.fn_name /\
+  spill_alloc_layout_wf arranged.ps_alloc arranged.ps_spilled /\
+  r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 arranged mid sms /\
+  scas.sym_mem_labels = sms.sym_mem_labels /\
+  (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp callee b ==>
+    FLOOKUP ssr.sym_mem_labels b = FLOOKUP scas.sym_mem_labels b) /\
+  (!b. b IN FDOM ssr.sym_mem_labels ==> context_spill_byte cp b) /\
+  asm_sym_rel p env asr ssr /\
+  ssa_form fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  LENGTH vals = LENGTH inst.inst_outputs /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE saved_ops) saved_sym /\
+  ssr.sym_stack = MAP Val (REVERSE vals) ++ (saved_sym ++ srest) /\
+  fresh_label "return_label"
+    (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+      (arranged with ps_stack := saved_ops) inst.inst_outputs) = (ret_lbl,called) ==>
+  sym_frame_inv p env ctx cp fn ret srest labs0 called asr ssr
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `ordered_spill_regions cplan.cp_regions` >>
+  `sym_kinds_ok cplan fn ret srest arranged sms` by gvs[sym_frame_inv_def] >>
+  `!op off. FLOOKUP arranged.ps_spilled op = SOME off ==>
+    r.sr_spill_base <= off /\ off + 32 <= r.sr_spill_end` by
+    (gvs[doSwapSimTheory.spill_alloc_layout_wf_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan callee b ==>
+    FLOOKUP ssr.sym_mem_labels b = FLOOKUP sms.sym_mem_labels b` by metis_tac[] >>
+  `!op off. FLOOKUP arranged.ps_spilled op = SOME off ==>
+    ?sv. op_kind_ok fn ret op sv /\ mem_sval_at ssr.sym_mem_labels off sv` by
+    metis_tac[sym_invoke_return_spill_kinds] >>
+  `ssr.sym_stack = MAP Val (REVERSE vals) ++ saved_sym ++ srest` by simp[APPEND_ASSOC] >>
+  drule_all sym_invoke_return_called_kinds >> strip_tac >>
+  irule sym_invoke_return_frame_transport >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
 (* Source-to-paired-entry boundary, retaining the concrete return witnesses. *)
 Theorem sym_invoke_enter_callee_paired:
   !fuel Inv unit cp prog ctx lo o2pc liveness dfg cfg fn inst nl halting term label
