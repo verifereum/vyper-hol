@@ -39,12 +39,12 @@ Theorem abi_encode_tuple_observation_vv_post:
   expr_type (TypeBuiltin ann (AbiEncode ensure mid0) target args) = BaseT (BytesT (Dynamic N)) /\
   LENGTH (abi_encode_method_id_bytes mid0 ++ enc ct rv) <= N /\
   lower_abi_encode ensure mid src ei
-    (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))) staged = (out,final) /\
+    (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) staged = (out,final) /\
   fn_has_code staged final func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce staged /\
   abi_encode_staged_observation ctx func ce cx es' staged out mid
-    (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+
+    (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
       (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual /\
-  wb_frame ce es origin s0 s /\ local_ptrs_reserved ce origin /\
+  wb_frame ce es es' origin s0 s /\ local_ptrs_reserved ce origin /\
   origin.cs_next_var <= staged.cs_next_var /\ origin.cs_next_id <= staged.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
   vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode ensure mid0) target args)
@@ -61,7 +61,7 @@ Proof
   simp_tac bool_ss [abi_encode_staged_observation_def] >> strip_tac >>
   drule_all abi_encode_tuple_result_memory >> disch_then (qspec_then `N` assume_tac) >>
   `!name b n. local_region ce es'.scopes actual name b n ==>
-    p+(32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+
+    p+(32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
       (case mid of NONE => 0 | SOME _ => 4))) <= b \/ b+n <= p` by
     (drule lower_abi_encode_trace >> strip_tac >>
      drule_all abi_builtin_encode_code >> strip_tac >>
@@ -74,7 +74,7 @@ Proof
   irule abi_encode_bytes_vv_post >> goal_assum (drule_at Any) >>
   simp[read_result_def, return_def] >>
   qexistsl [`staged.cs_next_id`, `p`,
-    `32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+
+    `32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
       (case mid of NONE => 0 | SOME _ => 4))`] >>
   `p < dimword (:256)` by decide_tac >>
   simp[] >> Cases_on `mid0` >>

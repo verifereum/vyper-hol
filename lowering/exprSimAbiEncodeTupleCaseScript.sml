@@ -15,12 +15,12 @@ Theorem abi_encode_tuple_lowering_shape[local]:
   ~(LENGTH args = 1 /\ ~ensure) ==>
   compile_expr ce cty (TypeBuiltin ann (AbiEncode ensure mid) target args) sa =
     let (ops,st) = compile_abi_encode_args compile_expr ce args sa in
-    let (buf,allocated) = compile_alloc_buffer (type_memory_bytes ce (TupleT (MAP expr_type args))) st in
-    let (_,staged) = compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (ops,MAP expr_type args)) allocated in
+    let (buf,allocated) = compile_alloc_buffer (type_memory_bytes ce (TupleT (MAP (lowered_value_type ce) args))) st in
+    let (_,staged) = compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (ops,MAP (lowered_value_type ce) args)) allocated in
     as_ptr_val ann LocMemory
       (lower_abi_encode ensure (OPTION_MAP bytes_method_id_word mid) buf.buf_operand
-        (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)))
-        (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))) staged)
+        (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
+        (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) staged)
 Proof
   strip_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def] >>
@@ -92,8 +92,8 @@ QED
 
 Resume compile_abi_encode_tuple_vv_case[compose]:
   Cases_on `lower_abi_encode ensure (OPTION_MAP bytes_method_id_word mid) buf.buf_operand
-    (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)))
-    (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))) staged` >>
+    (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
+    (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) staged` >>
   rename1 `lower_abi_encode _ _ _ _ _ staged = (out,final)` >>
   gvs[as_ptr_val_def] >>
   `ci_mono sa st` by metis_tac[abi_encode_args_ci_mono, SND] >>
@@ -122,8 +122,8 @@ Resume compile_abi_encode_tuple_vv_case[compose]:
   `fn_has_code st allocated func` by metis_tac[fn_has_code_split] >>
   `local_ptrs_reserved ce st` by metis_tac[local_ptrs_reserved_next_var] >>
   `LENGTH ops = LENGTH args` by metis_tac[compile_abi_encode_args_length, FST] >>
-  `abi_tuple_bytes ce (ZIP (ops,MAP expr_type args)) =
-    type_memory_bytes ce (TupleT (MAP expr_type args))` by
+  `abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)) =
+    type_memory_bytes ce (TupleT (MAP (lowered_value_type ce) args))` by
     (irule abi_tuple_encode_bytes_zip >> simp[]) >>
   `1 <= LENGTH args` by
     (fs[expr_body_pre_def, well_typed_expr_def, well_typed_type_builtin_args_def,
@@ -212,7 +212,8 @@ Resume compile_abi_encode_tuple_vv_case[success]:
   `abi_args_post ctx func ce cx (es with gas_obs := gs) sa st s0 ee args ops vs initial` by
     (qpat_assum `abi_args_post _ _ _ _ es _ _ _ _ _ _ _ _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
-     simp[abi_args_post_def, loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def] >>
+     simp[abi_args_post_def, loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
+       loweringPostsTheory.popped_kept_def] >>
      rpt strip_tac >> metis_tac[]) >>
   `?actual. gas_marked_path F ctx func initial 0 (OK actual) /\
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
@@ -241,7 +242,7 @@ Resume compile_abi_encode_tuple_vv_case[success]:
   qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
   simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.locals_kept_def,
-    contextTheory.mk_ptr_def] >> rpt strip_tac >> metis_tac[]
+    loweringPostsTheory.popped_kept_def, contextTheory.mk_ptr_def] >> rpt strip_tac >> metis_tac[]
 QED
 
 Finalise compile_abi_encode_tuple_vv_case

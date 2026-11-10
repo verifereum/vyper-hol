@@ -20,11 +20,11 @@ Theorem abi_encode_tuple_counted_success:
   evaluate_type_builtin cx (AbiEncode ensure mid0) target (MAP expr_type args) vs = INL result /\
   abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
   EVERY (abi_decoder_operand_live st.cs_next_var) values /\
-  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) st = (buf,allocated) /\
-  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP expr_type args)) allocated = ((),staged) /\
-  ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)) /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
+  ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)) /\
   lower_abi_encode ensure mid buf.buf_operand ei
-    (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))) staged = (out,final) /\
+    (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) staged = (out,final) /\
   fn_has_code st allocated func /\ fn_has_code st staged func /\
   fn_has_code staged final func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce origin /\ local_ptrs_reserved ce st /\
@@ -54,10 +54,10 @@ Proof
     (qx_choose_then `rv` (MAP_EVERY assume_tac o CONJUNCTS))))) >>
   drule_all abi_encode_tuple_staging_path >> strip_tac >>
   `stmt_state_rel ctx func ce cx es' initial /\
-   wb_frame ce es origin s0 initial` by fs[abi_args_post_def] >>
-  `abi_tuple_bytes ce (ZIP (values,MAP expr_type args)) < dimword (:256)` by decide_tac >>
+   wb_frame ce es es' origin s0 initial` by fs[abi_args_post_def] >>
+  `abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)) < dimword (:256)` by decide_tac >>
   `FLOOKUP raw.vs_allocas st.cs_next_id =
-    SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args)))` by metis_tac[] >>
+    SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))` by metis_tac[] >>
   drule_all abi_encode_tuple_staging_cursor >> strip_tac >>
   qabbrev_tac `s = raw with vs_inst_idx := LENGTH staged.cs_current_insts` >>
   `local_ptrs_reserved ce staged` by
@@ -70,7 +70,7 @@ Proof
     (simp[Abbr `s`, eval_op_inst_idx] >>
      qpat_assum `fresh_vars_wrt final raw` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[fresh_vars_wrt_def]) >>
-  `abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP expr_type args)))
+  `abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))
      s.vs_memory` by metis_tac[] >>
   `enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs)` by
     asm_rewrite_tac [vyper_to_abi_types_MAP, MAP_MAP_o] >>
@@ -81,13 +81,13 @@ Proof
     (qpat_assum `abi_decoder_operand_live staged.cs_next_var buf.buf_operand` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> Cases_on `buf.buf_operand` >>
      simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def, IN_DEF]) >>
-  `stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es origin s0 s` by
+  `stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es es' origin s0 s` by
     (simp_tac bool_ss [Abbr `s`] >> asm_rewrite_tac []) >>
   `s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
-     (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_allocas /\
+     (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_allocas /\
    s.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
-     (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_alloca_next /\
-   FLOOKUP s.vs_allocas st.cs_next_id = SOME(sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args)))` by
+     (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_alloca_next /\
+   FLOOKUP s.vs_allocas st.cs_next_id = SOME(sb,abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))` by
     metis_tac[] >>
   drule_all abi_encode_tuple_counted_encoder >>
   disch_then (qx_choose_then `p` (qx_choose_then `actual` (MAP_EVERY assume_tac o CONJUNCTS))) >>

@@ -15,10 +15,10 @@ Proof
 QED
 
 Theorem abi_encode_wb_frame_drop_fresh:
-  wb_frame ce es origin s0 s /\ origin.cs_next_var <= st.cs_next_var ==>
-  wb_frame ce es origin s0 (drop_fresh st s)
+  wb_frame ce es es' origin s0 s /\ origin.cs_next_var <= st.cs_next_var ==>
+  wb_frame ce es es' origin s0 (drop_fresh st s)
 Proof
-  simp[wb_frame_def, locals_kept_def, drop_fresh_def] >>
+  simp[wb_frame_def, locals_kept_def, popped_kept_def, drop_fresh_def] >>
   rpt strip_tac >> simp[GSYM drop_fresh_def] >>
   metis_tac[lookup_var_drop_fresh, freshWritesTheory.not_fresh_at_mono]
 QED
