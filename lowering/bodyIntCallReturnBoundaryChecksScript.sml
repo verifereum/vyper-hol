@@ -1,6 +1,6 @@
 Theory bodyIntCallReturnBoundaryChecks
 Ancestors
-  compileEnv vyperTypeInvariants finite_map option
+  compileEnv loweringStateRelDefs vyperTypeInvariants finite_map option
 
 (* A shared typing environment fixes the live-name domain, even when
    assignments have changed the entries and the scope-stack shape. *)

@@ -1,7 +1,7 @@
 (* Concrete output and instruction boundary for multi-output operations. *)
 Theory bodyIntCallEmitBoundary
 Ancestors
-  emitHelper emitHelperProps compileEnv venomInst list rich_list arithmetic
+  emitHelper emitHelperProps compileEnv loweringStateRelDefs venomInst list rich_list arithmetic
 
 Theorem fresh_vars_result:
   !n sa outs sb.
