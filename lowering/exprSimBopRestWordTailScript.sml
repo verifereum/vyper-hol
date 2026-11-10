@@ -171,7 +171,7 @@ Theorem rest_word_located_search:
   compile_array_membership_loop needleop (vv_operand vv) lenop
     (word_scale loc) (case bd of Fixed _ => 0 | Dynamic _ => word_scale loc)
     (context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc)
-    (case bd of Fixed _ => NONE | Dynamic cap => SOME cap) is_in cs = (out,ct) /\
+    ocap is_in cs = (out,ct) /\
   fn_has_code cs ct fn /\
   vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv s /\
   loc = (case vv_location vv of SOME l => l | NONE => LocMemory) /\ loc <> LocCalldata /\
@@ -187,7 +187,8 @@ Theorem rest_word_located_search:
   (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
   (!z. needleop = Var z \/ vv_operand vv = Var z \/ lenop = Var z ==> not_fresh_at cs z) /\
   len < dimword (:256) /\
-  (case bd of Fixed _ => T | Dynamic cap => len <= cap /\ cap < dimword (:256)) /\
+  (case bd of Fixed _ => ocap = NONE
+   | Dynamic _ => ?c. ocap = SOME c /\ len <= c /\ c < dimword (:256)) /\
   s.vs_current_bb = cs.cs_current_bb /\
   s.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~s.vs_halted ==>
   ?t. gas_marked_path memory execctx fn s 0 (OK t) /\
@@ -217,7 +218,7 @@ Proof
   `!h cl cm v i p.
     rest_word_loop_prefix needleop (vv_operand vv) lenop (word_scale loc)
       (case bd of Fixed _ => 0 | Dynamic _ => word_scale loc)
-      (case bd of Fixed _ => NONE | Dynamic cap => SOME cap) cs = (h,cl) /\
+      ocap cs = (h,cl) /\
     context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc h.rw_addr cl = (v,cm) /\
     i < len /\
     rest_word_search_rep ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv
@@ -235,7 +236,7 @@ Proof
   `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv
       needleop (typed_val_to_w256 et needle) lenop len s` by
     simp[rest_word_search_rep_def] >>
-  `case (case bd of Fixed _ => NONE | Dynamic cap => SOME cap) of
+  `case ocap of
      NONE => T | SOME cap => len <= cap /\ cap < dimword (:256)` by
     (Cases_on `bd` >> gvs[]) >>
   drule_all rest_word_compiled_search >>
@@ -282,7 +283,8 @@ Proof
        not_fresh_at sm z` by (simp[] >> metis_tac[]) >>
   `sm.cs_next_var <= sm.cs_next_var` by simp[] >>
   `eval_operand (Lit (n2w n)) s = SOME (n2w n)` by simp[venomStateTheory.eval_operand_def] >>
-  drule (SRULE [] (Q.INST [`bd` |-> `Fixed n`] rest_word_located_search)) >>
+  drule (SRULE [] (Q.INST [`bd` |-> `Fixed n`, `ocap` |-> `NONE`]
+    rest_word_located_search)) >>
   simp[] >> disch_then irule >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
@@ -720,7 +722,7 @@ Proof
   `evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME (ArrayTV et (Dynamic pcap))` by
     simp[] >>
   `value_has_type (ArrayTV et (Dynamic pcap)) (ArrayV av)` by simp[] >>
-  drule_all (SRULE [] (Q.INST [`bd` |-> `Dynamic pcap`,
+  drule_all (SRULE [] (Q.INST [`bd` |-> `Dynamic pcap`, `ocap` |-> `SOME cap`,
     `len` |-> `array_length (ArrayTV et (Dynamic pcap)) av`] rest_word_located_search)) >>
   disch_then (qspecl_then [`memory`, `execctx`] strip_assume_tac) >>
   `evaluate_in_array (ArrayTV et (Dynamic pcap)) needle av =
