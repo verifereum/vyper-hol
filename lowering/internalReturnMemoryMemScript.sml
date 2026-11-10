@@ -7,7 +7,8 @@ Ancestors
   stmtSimReturn stmtSimReturnWiden intCallReturnMem bodySim ctorReturnFrame
   venomExecSemantics venomState fragExec freshWrites exprOperandVar
   bodySimFull annAssignPtrDestination ptrSafetyTransport fragGasOriginPtrExec
-  gasOutcomeFullCompose
+  gasOutcomeFullCompose context emitHelper venomInst gasShadowState
+  gasOutcomeFull bodyPtrDefs exprSimDefs
 
 Theorem internal_return_source_env[local]:
   env_consistent env cx es /\
@@ -226,6 +227,77 @@ Resume internal_return_memory_mem[resources]:
 QED
 Finalise internal_return_memory_mem
 
+Theorem internal_return_shadow_type[local]:
+  lowered_value_type cenv (gas_shadow_expr e) = lowered_value_type cenv e
+Proof
+  Cases_on `e` >>
+  simp[gasShadowTheory.gas_shadow_expr_def,
+    exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def]
+  >- (Cases_on `b` >>
+      simp[gasShadowTheory.gas_shadow_builtin_def,
+        exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def,
+        listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+      metis_tac[gasShadowTheory.gas_shadow_builtin_def,
+        exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def,
+        listTheory.MAP_MAP_o, combinTheory.o_DEF])
+  >- (Cases_on `t0` >>
+      simp[exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def,
+        listTheory.MAP_MAP_o, combinTheory.o_DEF,
+        gasShadowTheory.gas_shadow_expr_type] >>
+      Cases_on `l` >> simp[gasShadowTheory.gas_shadow_expr_type, ETA_THM])
+  >> Cases_on `c` >>
+  simp[exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def]
+QED
+
+Theorem internal_return_full_shadow_copy[local]:
+  ~is_word_type ty /\ 0 < type_memory_bytes cenv ty /\
+  compile_store_memory cenv op dst ty ty sa = ((),sm) /\
+  emit_inst RET [rpc] [] sm = ((),sb) /\
+  compile_store_memory cenv op' dst ty ty sa' = ((),sm') /\
+  emit_inst RET [rpc] [] sm' = ((),sb') /\
+  gas_shadow_state sb sb' ==>
+  op = op' /\ gas_shadow_state sa sa'
+Proof
+  Cases_on `is_bytestring_type ty` >>
+  simp[compile_store_memory_def, compile_store_bytestring_def,
+    compile_bytestring_copy_len_def, comp_bind_def, comp_ignore_bind_def,
+    emit_op_def, emit_void_def, emit_inst_def, fresh_var_def, fresh_id_def,
+    emit_def, comp_return_def] >>
+  strip_tac >>
+  gvs[comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
+    emit_def, comp_return_def, gas_shadow_state_def, gas_shadow_inst_def,
+    mk_inst_def] >>
+  Cases_on `type_memory_bytes cenv ty` >>
+  gvs[contextTheory.compile_copy_memory_def, emitHelperTheory.emit_void_def,
+    emitHelperTheory.emit_inst_def, comp_ignore_bind_def, comp_bind_def,
+    fresh_id_def, emit_def, comp_return_def,
+    gasShadowStateTheory.gas_shadow_inst_def, venomInstTheory.mk_inst_def]
+QED
+
+Theorem internal_return_full_prefix[local]:
+  cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
+  cenv.ce_returns_count = 0 /\
+  cenv.ce_return_buf = SOME (PtrVar (Var bp) cap) /\
+  stmt_env cenv lctx ty (Return (SOME e)) sa = (cenv',sb) /\
+  fn_has_code sa sb func ==>
+  cenv' = cenv /\
+  ?op sm. lower_value compile_expr cenv ty e sa = (op,sm) /\
+    fn_has_code sa sm func /\ fn_has_code sm sb func
+Proof
+  strip_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    compile_internal_return_from_env_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  `cs_extends sa cs''` by
+    metis_tac[ci_mono_compile_expr_sa, ci_mono_def, pairTheory.SND] >>
+  `cs_extends cs'' cs'` by
+    metis_tac[cj 1 ci_mono_return_helpers, ci_mono_def, pairTheory.SND] >>
+  metis_tac[fn_has_code_split]
+QED
+
 Theorem internal_return_memory_full:
   !D lo ctx shadow_ctx PG func shadow_func tops cx ce cenv env es
    ty tv e lctx bw rpc rsz.
@@ -261,5 +333,139 @@ Theorem internal_return_memory_full:
     (stmt_env cenv lctx ty (Return (SOME (gas_shadow_expr e))))
     (eval_stmt cx (Return (SOME e))) es
 Proof
-  FAIL_TAC "pending"
+  rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  `?bp cap. cenv.ce_return_buf = SOME (PtrVar (Var bp) cap) /\
+    lookup_var bp s0 = SOME bw /\ not_fresh_at sa bp /\
+    w2n bw + type_memory_size tv <= s0.vs_alloca_next` by
+    fs[return_buf_frame_def] >>
+  qpat_assum `stmt_env _ _ _ (Return (SOME e)) sa = _`
+    (mp_then Any mp_tac internal_return_full_prefix) >>
+  simp[] >> disch_then drule_all >> strip_tac >>
+  qpat_assum `stmt_env _ _ _ (Return (SOME (gas_shadow_expr e))) shadow_sa = _`
+    (mp_then Any mp_tac internal_return_full_prefix) >>
+  simp[] >> disch_then drule_all >> strip_tac >>
+  `type_memory_bytes cenv ty = type_memory_size tv` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  `compile_internal_return cenv (SOME op) (Var rpc) 0 ty ty
+    (case ty of TupleT tys => tys | StructT nsid =>
+      MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields
+        (nsid_to_string nsid)) | _ => []) (SOME (Var bp)) sm = ((),sb)` by
+    (qpat_assum `stmt_env _ _ _ (Return (SOME e)) sa = _`
+       (mp_then Any mp_tac internal_return_memory_code) >>
+     simp[] >> disch_then drule_all >> simp[]) >>
+  `lowered_value_type cenv (gas_shadow_expr e) = ty` by
+    simp[internal_return_shadow_type] >>
+  `compile_internal_return cenv (SOME op') (Var rpc) 0 ty ty
+    (case ty of TupleT tys => tys | StructT nsid =>
+      MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields
+        (nsid_to_string nsid)) | _ => []) (SOME (Var bp)) sm' = ((),shadow_sb)` by
+    (qpat_assum `stmt_env _ _ _ (Return (SOME (gas_shadow_expr e))) shadow_sa = _`
+       (mp_then Any mp_tac internal_return_memory_code) >> simp[] >>
+     disch_then drule_all >> simp[]) >>
+  qpat_x_assum `compile_internal_return _ (SOME op) _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_internal_return_def, comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  qpat_x_assum `compile_internal_return _ (SOME op') _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_internal_return_def, comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  fs[oneTheory.one] >>
+  `0 < type_memory_bytes cenv ty` by metis_tac[] >>
+  drule_all internal_return_full_shadow_copy >> strip_tac >>
+  qpat_x_assum `op = op'` (SUBST_ALL_TAC o SYM) >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[return_forced_admissible] >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+     not_fresh_at sa x` by metis_tac[ret_pc_ok_def] >>
+  qpat_x_assum `!ety. _` (qspec_then `ty` strip_assume_tac) >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[expr_sim_full_def] >> strip_tac >>
+  qpat_x_assum `!sa sb shadow_sa shadow_sb op s0 G0 tn0. _`
+    (qspecl_then [`sa`, `sm`, `shadow_sa`, `sm'`, `op`, `s0`, `G0`, `tn0`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `gas_outcome_full _ _ (bind _ _) _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def])
+  >- suspend "normal_joint_suffix"
+  >- (gvs[] >> Cases_on `res`
+      >- gvs[expr_exit_def] >>
+      rename1 `expr_exit (INR err) r` >>
+      pure_rewrite_tac[gas_outcome_full_def] >>
+      qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`INR err`, `ee`, `r`, `G'`, `tn'`] >>
+      conj_tac
+      >- (gen_tac >> gvs[eval_return_forced, bind_def]) >>
+      simp[] >> disj2_tac >>
+      Cases_on `err` >> Cases_on `r` >>
+      gvs[stmt_exit_ptr_def, expr_exit_def] >>
+      rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
+  simp[gas_outcome_full_def] >> qexists_tac `marks` >> disj2_tac >>
+  metis_tac[return_forced_exempt]
 QED
+
+Resume internal_return_memory_full[normal_joint_suffix]:
+  markerLib.RESUME_TAC >> fs[] >>
+  `~t.vs_halted` by
+    (drule gas_origin_ptr_path_exec >> simp[exit_result_def] >> metis_tac[]) >>
+  `post_value_type cenv e = ty` by metis_tac[post_value_type_lowered] >>
+  `?pc. lookup_var rpc t = SOME pc` by
+    (fs[ret_pc_ok_def, expr_post_def] >> metis_tac[]) >>
+  `lookup_var bp t = SOME bw` by (fs[expr_post_def] >> metis_tac[]) >>
+  `not_fresh_at sm bp /\ not_fresh_at sm rpc` by
+    metis_tac[not_fresh_at_mono, ci_mono_compile_expr_sa, ci_mono_def, pairTheory.SND] >>
+  `!x. op = Var x ==> not_fresh_at sm x` by
+    metis_tac[compile_lower_value_var] >>
+  `?w. eval_operand op t = SOME w` by
+    (fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  `?src. op = Var src` by
+    (fs[ptr_buf_ok_def] >> gvs[]) >>
+  `bind (eval_expr cx e) (read_result cx)
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL v,ee with gas_obs := [])` by
+    (qpat_assum `!tail. bind _ _ _ = _`
+       (qspec_then `[]` assume_tac) >> fs[listTheory.APPEND_NIL]) >>
+  `value_has_type tv v` by
+    (drule_all returnValueTypedTheory.return_value_typed >> fs[]) >>
+  `val_wf tv v` by
+    metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  `env_consistent env cx (ee with gas_obs := [])` by
+    (irule internal_return_source_env >> fs[expr_sim_inv_def] >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx
+     ((ee with gas_obs := []) with scopes := []) t` by
+    (fs[expr_post_def, stmt_state_rel_def, immutable_alloca_sep_def,
+        local_region_def, lookup_scopes_def] >> conj_tac
+     >- (irule constructor_exit_state_rel >> qexists_tac `cenv` >> simp[state_rel_gas_obs]) >>
+     metis_tac[]) >>
+  `cenv.ce_is_ctor ==> !name itv iv off.
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       SOME (itv,iv) ==>
+     regions_disjoint off (type_memory_size itv) (w2n bw) (type_memory_size tv)` by
+    (strip_tac >>
+     drule_at (Pos (el 5)) internal_return_immutable_separation >>
+     simp[] >> metis_tac[]) >>
+  `compile_internal_return cenv (SOME op) (Var rpc) 0 ty ty
+     (case ty of TupleT tys => tys | StructT nsid =>
+       MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields
+         (nsid_to_string nsid)) | _ => []) (SOME (Var bp)) sm = ((),sb)` by
+    (qpat_assum `stmt_env _ _ _ (Return (SOME e)) sa = _`
+       (mp_then Any mp_tac internal_return_memory_code) >>
+     simp[] >> disch_then drule_all >> simp[]) >>
+  `?n rr. gas_path_mem ctx func t n rr /\ exit_result rr /\
+     !tail. intret_mem_q func ce cx tv bw v
+       ((ee with gas_obs := tail) with scopes := []) rr` by
+    (irule internal_return_memory_suffix >>
+     qpat_assum `compile_internal_return _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+     qexistsl_tac [`tv`, `pc`] >>
+     `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+     fs[expr_post_def, expr_sim_inv_def] >>
+     rpt conj_tac >- first_assum ACCEPT_TAC
+     >- gvs[] >>
+     qpat_x_assum `stmt_state_rel _ _ _ _ (ee with <|scopes := []; gas_obs := []|>) t` mp_tac >>
+     `ee with <|scopes := []; gas_obs := []|> =
+       (ee with scopes := []) with gas_obs := []` by simp[] >>
+     pop_assum SUBST1_TAC >>
+     simp[exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
+  FAIL_TAC "memory suffix obtained"
+QED
+Finalise internal_return_memory_full
