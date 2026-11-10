@@ -316,8 +316,17 @@ Proof
     (SPEC_ALL ec_allocated_payload_capacity_run)) >>
   (impl_tac >- (simp[wordsTheory.dimword_def] >> rpt strip_tac >>
     `eval_operand p s1 = SOME point /\ eval_operand scalar s1 = SOME wscalar` by
-      (conj_tac >> Cases_on `p` >> Cases_on `scalar` >>
-       gvs[eval_operand_def] >> metis_tac[]) >>
+      (conj_tac
+       >- (qpat_x_assum `eval_operand p s = _` mp_tac >>
+           Cases_on `p` >> simp[eval_operand_def] >>
+           strip_tac >> first_x_assum irule >>
+           qpat_x_assum `!x. MEM (Var x) [Var _;scalar] ==> _`
+             (mp_tac o SRULE [listTheory.MEM]) >> simp[]) >>
+       qpat_x_assum `eval_operand scalar s = _` mp_tac >>
+       Cases_on `scalar` >> simp[eval_operand_def] >>
+       strip_tac >> first_x_assum irule >>
+       qpat_x_assum `!x. MEM (Var x) [p;Var _] ==> _`
+         (mp_tac o SRULE [listTheory.MEM]) >> simp[]) >>
     `!x. MEM (Var x) [p;ib.buf_operand;scalar] ==> not_fresh_at sa x` by
       (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
     `regions_disjoint (w2n wi) 96 (w2n point) 64` by
@@ -391,8 +400,17 @@ Proof
     (SPEC_ALL ec_allocated_payload_capacity_run)) >>
   (impl_tac >- (simp[wordsTheory.dimword_def] >> rpt strip_tac >>
     `eval_operand p s1 = SOME point /\ eval_operand q s1 = SOME point2` by
-      (conj_tac >> Cases_on `p` >> Cases_on `q` >>
-       gvs[eval_operand_def] >> metis_tac[]) >>
+      (conj_tac
+       >- (qpat_x_assum `eval_operand p s = _` mp_tac >>
+           Cases_on `p` >> simp[eval_operand_def] >>
+           strip_tac >> first_x_assum irule >>
+           qpat_x_assum `!x. MEM (Var x) [Var _;q] ==> _`
+             (mp_tac o SRULE [listTheory.MEM]) >> simp[]) >>
+       qpat_x_assum `eval_operand q s = _` mp_tac >>
+       Cases_on `q` >> simp[eval_operand_def] >>
+       strip_tac >> first_x_assum irule >>
+       qpat_x_assum `!x. MEM (Var x) [p;Var _] ==> _`
+         (mp_tac o SRULE [listTheory.MEM]) >> simp[]) >>
     `!x. MEM (Var x) [p;q;ib.buf_operand] ==> not_fresh_at sa x` by
       (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
     `regions_disjoint (w2n wi) 128 (w2n point) 64` by
