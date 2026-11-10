@@ -17,8 +17,8 @@ Theorem compile_abi_encode_word_shape[local]:
     let (_,sh) = emit_void MSTORE [buf.buf_operand;op] sn in
     as_ptr_val ann LocMemory
       (lower_abi_encode F (OPTION_MAP bytes_method_id_word mid) buf.buf_operand
-        (type_to_abi_enc_info ce.ce_struct_fields ce (expr_type e))
-        (abi_size_bound ce.ce_struct_fields (expr_type e)) sh)
+        (type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e))
+        (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)) sh)
 Proof
   strip_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def] >>
@@ -47,6 +47,16 @@ Proof
 QED
 
 Resume compile_abi_encode_word_vv_sim[compose]:
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[exprSimHypsTheory.expr_body_pre_lowered_fits] >>
+  `lowered_value_type ce e = expr_type e` by
+    (Cases_on `expr_type e` >> Cases_on `lowered_value_type ce e` >>
+     gvs[is_word_type_def, vyperTypeSystemTheory.arg_type_fits_def] >>
+     Cases_on `b` >> Cases_on `b'` >>
+     gvs[is_word_type_def, vyperTypeSystemTheory.arg_type_fits_def] >>
+     Cases_on `b` >> Cases_on `b''` >>
+     gvs[is_word_type_def, vyperTypeSystemTheory.arg_type_fits_def]) >>
+  fs[] >>
   Cases_on `lower_abi_encode F (OPTION_MAP bytes_method_id_word mid) buf.buf_operand
     (type_to_abi_enc_info ce.ce_struct_fields ce (expr_type e))
     (abi_size_bound ce.ce_struct_fields (expr_type e)) sh` >>
