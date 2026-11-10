@@ -11,7 +11,7 @@ Ancestors
  actualAllocExec fragExec instIdxIndep loweringHalt vyperCompiler ctorAbiActualArrayRun
  compileVyper moduleLowering rich_list abiDecoderVarSequence
  venomExecSemantics venomState venomInst venomMemDefs
- vyperABI words list finite_map pred_set arithmetic fragGasStraight
+ vyperABI words list finite_map pred_set arithmetic fragGasStraight fragGasPath
 
 Theorem deploy_ctor_decode_buffer_old_prefix_complete:
  !k dst src hi ce env ty tv av v st st' ctx func site initial sb d.
@@ -885,4 +885,70 @@ Proof
  drule_all concat_straight_gas_path >> strip_tac >>
  qexists `a` >> asm_rewrite_tac[] >>
  gvs[Abbr `raw`, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem deploy_ctor_decode_buffer_old_prefix_complete_gas_path:
+ !k dst src hi ce env ty tv av v st st' ctx func site initial sb d.
+ compile_abi_decode_to_buf dst src DLOAD hi
+   (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),st') /\
+ abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
+ abi_decoder_metadata ce env ty tv
+   (type_to_abi_dec_info ce.ce_struct_fields ce ty) av v /\
+ eval_operand src initial = SOME (n2w sb) /\
+ eval_operand dst initial = SOME (n2w d) /\
+ sb + LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
+ mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env ty) av))
+   initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
+ (hi = Lit 0w \/ ?h. eval_operand hi initial = SOME (n2w h) /\
+   sb + LENGTH (enc (vyper_to_abi_type env ty) av) <= h /\ h < dimword (:256)) /\
+ (!x. src = Var x \/ dst = Var x \/ hi = Var x ==> not_fresh_at st x) /\
+ fresh_vars_wrt st initial /\ fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+ (st.cs_blocks = st'.cs_blocks \/
+   !bb. lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
+     phi_prefix_length bb.bb_instructions = 0) /\
+ alloca_inv initial /\ alloca_frontier_inv_from k ctx func site initial /\
+ k + unit_alloca_budget ctx < dimword (:256) /\
+ d + type_memory_bytes ce ty <= initial.vs_alloca_next /\
+ (!aid. st.cs_next_id <= aid ==> FLOOKUP initial.vs_allocas aid = NONE) /\
+ ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+ ?actual.
+   gas_path ctx func initial 0 (OK actual) /\
+   val_in_memory tv v d actual.vs_memory /\
+   abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st'))
+     [(d,type_memory_bytes ce ty)] initial actual /\
+   ctor_actual_scratch func (frag_ids st st') 0 initial.vs_alloca_next actual /\
+   initial.vs_alloca_next <= actual.vs_alloca_next /\
+   alloca_inv actual /\ alloca_frontier_inv_from k ctx func site actual /\
+   fresh_vars_wrt st' actual /\
+   actual.vs_data_section = initial.vs_data_section /\
+   actual.vs_call_ctx = initial.vs_call_ctx /\ actual.vs_labels = initial.vs_labels /\
+   (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==>
+     lookup_var x actual = SOME w) /\
+   ~actual.vs_halted /\ actual.vs_current_bb = st'.cs_current_bb /\
+   actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
+   abi_decode_sim ctx func initial actual /\
+   actual.vs_gas_readings = initial.vs_gas_readings /\ actual.vs_code = initial.vs_code /\
+   actual.vs_outcomes = initial.vs_outcomes /\
+   actual.vs_tx_ctx = initial.vs_tx_ctx /\ actual.vs_block_ctx = initial.vs_block_ctx
+
+Proof
+ rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ `st.cs_next_var <= st'.cs_next_var` by
+   (drule abi_decoder_variable_counter >> simp[]) >>
+ `fresh_vars_wrt st' initial` by
+   (irule fresh_vars_wrt_mono >> qexists `st` >> simp[GREATER_EQ]) >>
+ `ctor_actual_scratch func (frag_ids st st') 0 initial.vs_alloca_next initial` by
+   (simp_tac bool_ss [ctor_actual_scratch_def, frag_ids_def, GSPECIFICATION] >>
+    rpt strip_tac >> res_tac >> gvs[]) >>
+ drule (BETA_RULE deploy_ctor_coherent_run_complete_gas_path) >>
+ disch_then (drule_at Any) >>
+ disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+ disch_then (drule_at (Pat `eval_operand dst initial = _`)) >>
+ disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
+ simp_tac bool_ss [LESS_EQ_REFL, SUBSET_REFL] >>
+ disch_then (qspecl_then [`k`, `ctx`, `site`, `d`] mp_tac) >>
+ simp_tac bool_ss [ADD, ZERO_LESS_EQ, LESS_EQ_REFL] >>
+ disch_then drule_all >> strip_tac >>
+ qexists `actual` >> asm_rewrite_tac[]
 QED
