@@ -116,7 +116,7 @@ Proof
   strip_tac >>
   qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
   simp_tac bool_ss [immutable_alloca_sep_def] >>
-  disch_then drule_all >> strip_tac >>
+  disch_then (drule_all o CONJUNCT2) >> strip_tac >>
   conj_tac >- simp[] >> rpt strip_tac >>
   irule abi_decode_clean_protected_rows >>
   goal_assum (drule_at Any) >> rpt strip_tac >>

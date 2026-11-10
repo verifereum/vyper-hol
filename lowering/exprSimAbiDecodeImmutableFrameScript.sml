@@ -137,7 +137,7 @@ Proof
     loweringStateRelDefs$regions_disjoint b sz off (type_memory_size itv))` by
     (qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
      simp_tac bool_ss [immutable_alloca_sep_def] >>
-     disch_then drule_all >> strip_tac >>
+     disch_then (drule_all o CONJUNCT2) >> strip_tac >>
      fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   irule abi_decode_prefix_region_frame >> asm_rewrite_tac [] >>
   goal_assum (drule_at (Pat `local_prefix _ _ _ _ _`)) >>
