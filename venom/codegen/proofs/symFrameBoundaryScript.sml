@@ -2476,6 +2476,68 @@ Proof
   rpt strip_tac >> irule sym_prepare_params_numeric >> metis_tac[]
 QED
 
+Theorem sym_entry_prefix_asm:
+  !ctx cp lo o2pc prog liveness fn ch growth spill_base lbl_ctr ps0
+   param_ops ps1 r vs a ra rest vp env ret srest ss.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\ liveness = liveness_analyze fn /\
+    codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+    prepare_params_plan liveness fn ps0 = (param_ops, ps1) /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= spill_base /\
+    ps1.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    (!off. MEM (SOSpill off) param_ops ==> off < dimword (:256)) /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
+    fn_entry_state_rel cp fn vs a ra rest /\
+    vp = (entry_bind_pairs
+      (entry_param_pairs vs (get_params (HD fn.fn_blocks).bb_instructions)) vs
+      with vs_inst_idx := LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) /\
+    asm_block_at prog a.as_pc (execute_plan cp.cp_initial_fmp
+      (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+    asm_static_wf prog /\ asm_sym_rel prog env a ss /\
+    ss.sym_stack = (if fn_has_retpc fn then [Lab ret 0] else []) ++
+      MAP Val (REVERSE vs.vs_params) ++ srest /\
+    (fn_has_retpc fn ==> MEM (AsmLabel ret) prog) /\
+    (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) ==>
+    ?a' ss'.
+      asm_steps lo o2pc prog
+        (LENGTH (execute_plan cp.cp_initial_fmp
+          (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) a = AsmOK a' /\
+      a'.as_pc = a.as_pc + LENGTH (execute_plan cp.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+      fn_frame_inv ctx cp lo fn ra rest a.as_memory ps1 vp a' /\
+      sym_steps prog env
+        (LENGTH (execute_plan cp.cp_initial_fmp
+          (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) ss = SymOK ss' /\
+      sym_frame_inv prog env ctx cp fn ret srest ss.sym_mem_labels ps1 a' ss'
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `fn_entry_state_rel cplan fn vs a ra rest` >>
+  qmatch_asmsub_abbrev_tac `LENGTH params < dimword (:256)` >>
+  qabbrev_tac `installed = ps0 with ps_stack := MAP (\i. Var (HD i.inst_outputs)) params` >>
+  `sym_kinds_ok cplan fn ret srest installed ss` by
+    metis_tac[Abbr `installed`, Abbr `params`, fn_entry_state_rel_def, entry_installed_sym_kinds] >>
+  `sym_frame_inv prog env ctx cplan fn ret srest ss.sym_mem_labels installed a ss` by
+    simp[sym_frame_inv_def] >>
+  `r.sr_spill_base <= ps1.ps_alloc.sa_spill_base` by
+    (drule allocMonoTheory.prepare_params_plan_spill_base >>
+     gvs[init_cleanup_plan_state_def, init_plan_state_def, init_spill_alloc_def]) >>
+  `!b. ps1.ps_alloc.sa_spill_base <= b /\ b < ps1.ps_alloc.sa_next_offset ==>
+    context_spill_byte cplan b /\ closure_spill_byte ctx cplan fn.fn_name b` by
+    (rpt strip_tac >> metis_tac[allocator_interval_own_spill]) >>
+  `asm_block_at prog ss.sym_base.as_pc (execute_plan cplan.cp_initial_fmp
+    (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))` by gvs[asm_sym_rel_def] >>
+  `params = get_params (HD fn.fn_blocks).bb_instructions /\
+   installed = ps0 with ps_stack := MAP (\i. Var (HD i.inst_outputs)) params` by
+    simp[Abbr `params`, Abbr `installed`] >>
+  drule_all sym_label_prepare_numeric >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  fs[Abbr `params`] >> drule_all entry_prefix_asm_exact >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists `a'` >> simp[] >> metis_tac[sym_frame_inv_same_count]
+QED
+
 Theorem sym_phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0

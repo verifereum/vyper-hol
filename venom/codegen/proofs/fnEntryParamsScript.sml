@@ -309,7 +309,7 @@ Proof
   metis_tac[entry_params_inventory]
 QED
 
-Theorem entry_prefix_asm:
+Theorem entry_prefix_asm_exact:
   !ctx cp lo o2pc prog liveness fn ch growth spill_base lbl_ctr ps0
    param_ops ps1 r vs a ra rest vp.
     lo = SND (compute_label_offsets prog) /\
@@ -328,7 +328,9 @@ Theorem entry_prefix_asm:
       with vs_inst_idx := LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) /\
     asm_block_at prog a.as_pc (execute_plan cp.cp_initial_fmp
       (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) ==>
-    ?n a'. asm_steps lo o2pc prog n a = AsmOK a' /\
+    ?a'. asm_steps lo o2pc prog
+      (LENGTH (execute_plan cp.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) a = AsmOK a' /\
       a'.as_pc = a.as_pc + LENGTH (execute_plan cp.cp_initial_fmp
         (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
       fn_frame_inv ctx cp lo fn ra rest a.as_memory ps1 vp a'
@@ -374,8 +376,37 @@ Proof
     read_byte b st'.as_memory = read_byte b a.as_memory` by
     gvs[Abbr `start`, Abbr `local`] >>
   drule_all entry_local_run_frame_inv >> strip_tac >>
-  qexistsl [`1 + LENGTH (execute_plan cplan.cp_initial_fmp param_ops)`, `a'`] >>
-  simp[] >> gvs[Abbr `start`, Abbr `local`, execute_plan_def, exec_stack_op_def]
+  qexists `a'` >>
+  simp[] >> gvs[Abbr `start`, Abbr `local`, execute_plan_def, exec_stack_op_def,
+    arithmeticTheory.ADD1]
+QED
+
+Theorem entry_prefix_asm:
+  !ctx cp lo o2pc prog liveness fn ch growth spill_base lbl_ctr ps0
+   param_ops ps1 r vs a ra rest vp.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\ liveness = liveness_analyze fn /\
+    codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+    prepare_params_plan liveness fn ps0 = (param_ops, ps1) /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= spill_base /\
+    ps1.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    (!off. MEM (SOSpill off) param_ops ==> off < dimword (:256)) /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
+    fn_entry_state_rel cp fn vs a ra rest /\
+    vp = (entry_bind_pairs
+      (entry_param_pairs vs (get_params (HD fn.fn_blocks).bb_instructions)) vs
+      with vs_inst_idx := LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) /\
+    asm_block_at prog a.as_pc (execute_plan cp.cp_initial_fmp
+      (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) ==>
+    ?n a'. asm_steps lo o2pc prog n a = AsmOK a' /\
+      a'.as_pc = a.as_pc + LENGTH (execute_plan cp.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+      fn_frame_inv ctx cp lo fn ra rest a.as_memory ps1 vp a'
+Proof
+  rpt gen_tac >> strip_tac >> drule_all entry_prefix_asm_exact >>
+  metis_tac[]
 QED
 
 (* entry_params_frame_sim (same premises, plus the Inv premises and the
