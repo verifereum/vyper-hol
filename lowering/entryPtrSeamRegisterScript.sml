@@ -397,6 +397,141 @@ Proof
   gvs[run_inst_seq_def, mk_inst_def]
 QED
 
+(* Source arithmetic with progressive freshness and compiler-normalized PCs. *)
+Theorem registration_source_add_ptr:
+  emit_op ADD [left;right] sa = (out,sb) /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+  fresh_vars_wrt sa s /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  op_prov G left = NONE /\ op_prov G right = NONE /\
+  fn_has_code sa sb fn /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t H u.
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ fresh_vars_wrt sb t /\
+    eval_operand out t = SOME (a+b) /\ op_taint u out = {} /\
+    op_prov H out = NONE /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_data_section = s.vs_data_section /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint u (Var x) = op_taint tn (Var x)) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >>
+  drule_all abiDecoderBytesBoundTheory.abi_decode_add_sequence >> strip_tac >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`]
+    decoderRawEndpointPtrTheory.emit_scalar_binop_raw_endpoint_ptr)) >>
+  simp[] >> disch_then (qspec_then `PG` strip_assume_tac) >>
+  `t.vs_halted = s.vs_halted /\ sb.cs_current_bb = sa.cs_current_bb` by
+    (drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+         AllCaseEqs()] >>
+     qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+     simp[emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     strip_tac >> gvs[]) >>
+  `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode)
+     (emitted_insts sa sb)` by
+    (drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+     simp[mk_inst_def, abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
+  drule_all decoderWorldFramePtrTheory.decoder_run_world_frame >> strip_tac >>
+  qexistsl_tac [`t with vs_inst_idx := LENGTH sb.cs_current_insts`, `H`, `u`] >>
+  simp[GSYM fresh_vars_wrt_def, instIdxIndepTheory.eval_op_inst_idx] >>
+  conj_tac >- gvs[fresh_vars_wrt_def] >>
+  `s with vs_inst_idx := LENGTH sa.cs_current_insts = s` by
+    simp[venom_state_component_equality] >>
+  metis_tac[]
+QED
+
+(* Dynamic calldata heads contain offsets relative to the tuple at byte 4. *)
+Theorem registration_dynamic_source_ptr:
+  emit_op ADD [Lit 4w; Lit (n2w (off-4))] sa = (head,sb) /\
+  emit_op CALLDATALOAD [head] sb = (delta,sc) /\
+  emit_op ADD [Lit 4w; delta] sc = (src,sd) /\
+  fn_has_code sa sb fn /\ fn_has_code sb sc fn /\ fn_has_code sc sd fn /\
+  fn_inst_ids_distinct fn /\ fresh_vars_wrt sa s /\ allocas_from lo s /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t H u.
+    ~t.vs_halted /\ t.vs_current_bb = sd.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sd.cs_current_insts /\ fresh_vars_wrt sd t /\
+    eval_operand src t = SOME
+      (4w + abi_decode_load CALLDATALOAD (4w + n2w (off-4) : bytes32) s) /\
+    op_taint u src = {} /\ op_prov H src = NONE /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint u (Var x) = op_taint tn (Var x)) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >>
+  `eval_operand (Lit 4w) s = SOME 4w /\
+   eval_operand (Lit (n2w (off-4))) s = SOME (n2w (off-4)) /\
+   op_taint tn (Lit 4w) = {} /\ op_taint tn (Lit (n2w (off-4))) = {} /\
+   op_prov G (Lit 4w) = NONE /\ op_prov G (Lit (n2w (off-4))) = NONE` by
+    simp[eval_operand_def, op_taint_def, op_prov_def] >>
+  drule_all registration_source_add_ptr >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  rename1 `eval_operand head hstate = SOME (4w + n2w (off-4))` >>
+  `allocas_from lo hstate` by (gvs[allocas_from_def] >> metis_tac[]) >>
+  drule_all calldataWordStepsPtrTheory.calldata_load_prefix_framed_uniform >>
+  disch_then (qspecl_then [`PG`, `H`] strip_assume_tac) >>
+  rename1 `eval_operand delta dstate = SOME _` >>
+  `allocas_from lo dstate` by (gvs[allocas_from_def] >> metis_tac[]) >>
+  `eval_operand (Lit 4w) dstate = SOME 4w /\
+   op_taint u' (Lit 4w) = {} /\ op_prov H' (Lit 4w) = NONE` by
+    simp[eval_operand_def, op_taint_def, op_prov_def] >>
+  drule_all registration_source_add_ptr >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode)
+    (emitted_insts sb sc)` by
+    (qpat_assum `emit_op CALLDATALOAD _ _ = _`
+       (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+     simp[mk_inst_def, abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
+  drule_all decoderWorldFramePtrTheory.decoder_run_world_frame >>
+  simp[] >> strip_tac >>
+  `sa.cs_next_var <= sb.cs_next_var /\ sb.cs_next_var <= sc.cs_next_var` by
+    (qpat_assum `emit_op ADD _ sa = _`
+       (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+     qpat_assum `emit_op CALLDATALOAD _ _ = _`
+       (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+     simp[]) >>
+  qexistsl_tac [`t`, `H''`, `u''`] >>
+  simp[abiDecoderContractTheory.abi_decode_load_def,
+       abiDecoderContractTheory.abi_decode_source_def] >>
+  simp[] >> qx_gen_tac `x` >> strip_tac >>
+  `not_fresh_at sb x` by
+    (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+  `not_fresh_at sc x` by
+    (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sb` >> simp[]) >>
+  qpat_x_assum `!x. not_fresh_at sc x ==> _` drule >>
+  qpat_x_assum `!x. not_fresh_at sb x ==> _` drule >>
+  qpat_x_assum `!x. not_fresh_at sa x ==> _` drule >> simp[]
+QED
+
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
    Hints (not binding):
