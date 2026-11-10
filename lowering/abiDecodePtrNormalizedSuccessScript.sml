@@ -2,7 +2,7 @@ Theory abiDecodePtrNormalizedSuccess
 Ancestors
   abiDecodePtrSourceOutcome abiDecodePtrComplexHeader abiDecodePtrFlatValue
   abiDecodePtrCallerMetadata abiDecodePtrMemberInterface abiDecodePtrFlatLayout
-  bodyPtrBopHashSuffix fragExec fragGasSeqPtr fragGasPathPtr
+  bodyPtrBopHashSuffix bodyPtrBopScalarSeq fragExec fragGasSeqPtr fragGasPathPtr
   abiDecodePtrOpcode exprSimAbiDecodeResourceMutual stmtReasonLitFragMemory
   abiDecoderReentry abiDecoderCoherence abiDecoderAppend exprLoweringProps
   abiDecodePtrMemberFrame abiDecoderMemberInfos abiValidMembers emitHelperProps exprSimAccounts abiValidBytesUnwrap
@@ -21,6 +21,7 @@ Theorem abi_decode_normalized_success:
     (DecComplex dyn (abi_decoder_member_infos ce.ce_struct_fields ce tys)) sa = ((),sb) /\
   fn_has_code sa sb func ==>
   ?u H tf. run_inst_seq (emitted_insts sa sb) s = OK u /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
     gas_path_ptr D 0 ctx func PG G tn s 0 H tf
       (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     abi_decode_member_live ret ctx func cenv cx es src b (LENGTH bs) dst d cap
@@ -129,7 +130,8 @@ Proof
   `isPREFIX (emitted_insts middle sb)
       (DROP (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_inst_idx
         bb.bb_instructions)` by simp[] >>
-  drule_all run_inst_seq_gas_path_ptr >>
+  drule_all (Q.INST [`code` |-> `emitted_insts middle sb`,
+    `s` |-> `t with vs_inst_idx := LENGTH middle.cs_current_insts`] run_inst_seq_gas_path_ptr) >>
   `LENGTH middle.cs_current_insts + LENGTH (emitted_insts middle sb) =
      LENGTH sb.cs_current_insts` by
     (qpat_assum `inst_extends middle sb` mp_tac >>
@@ -138,8 +140,9 @@ Proof
      simp[]) >>
   simp[] >> disch_tac >>
   qexistsl_tac [`K'`, `tk`] >>
-  reverse conj_tac >- (conj_tac >- metis_tac[] >> fs[] >> metis_tac[]) >>
-  drule_all gas_path_ptr_then >> simp[] >> gvs[]
+  (conj_tac >- suspend "sequence" >>
+   reverse conj_tac >- (conj_tac >- metis_tac[] >> fs[] >> metis_tac[]) >>
+   drule_all gas_path_ptr_then >> simp[] >> gvs[])
 QED
 
 Resume abi_decode_normalized_success[resources]:
@@ -170,6 +173,20 @@ Resume abi_decode_normalized_success[head_size]:
      fs[supported_word_type_def, supported_string_type_def,
        abi_member_head_size_def, vyper_to_abi_type_def, vyper_base_to_abi_type_def, is_dynamic_def,
        static_length_def]) >> simp[]
+QED
+
+Resume abi_decode_normalized_success[sequence]:
+  markerLib.RESUME_TAC >>
+  `s.vs_inst_idx + LENGTH (emitted_insts sa middle) = LENGTH middle.cs_current_insts` by
+    (drule abi_decode_member_live_compiler >>
+     fs[inst_extends_def] >> metis_tac[LENGTH_APPEND]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa middle)` by
+    (`?B. bop_scalar_seq {} UNIV (emitted_insts sa middle) B` by
+       (irule abi_decode_complex_header_scalar >> simp[] >> metis_tac[]) >>
+     drule bop_scalar_seq_opcodes >> simp[EVERY_MEM]) >>
+  `inst_seq_ptr D 0 ctx func PG H tf (emitted_insts middle sb)
+     (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa middle)) K' tk` by simp[] >>
+  drule_all bop_inst_seq_ptr_append >> simp[]
 QED
 
 Finalise abi_decode_normalized_success
