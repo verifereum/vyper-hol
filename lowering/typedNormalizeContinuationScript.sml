@@ -136,7 +136,7 @@ Proof
   simp[compile_store_bytestring_def, compile_bytestring_copy_len_def, LET_THM] >>
   rpt gen_tac >> ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
   >- (rpt gen_tac >>
-      ntac 3 (ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
+      ntac 4 (ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
         >- simp[abi_decoder_phi_emit_op] >> rpt gen_tac) >>
       simp[abi_decoder_phi_emit_op]) >>
   simp[abi_decoder_phi_emit_void]
