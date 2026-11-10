@@ -412,6 +412,49 @@ Proof
   metis_tac[frameViewFactsTheory.ordinary_operand_not_retpc]
 QED
 
+Theorem prepared_selected_evaluation:
+  plan_stack_rel lo vs (residual ++ selected) astk /\
+  EVERY (\op. op <> dead_stack_marker) selected /\
+  (!op. MEM op selected ==> eval_operand op vs = operand_val vs lo op) ==>
+  eval_operands (REVERSE selected) vs =
+    SOME (TAKE (LENGTH selected) astk)
+Proof
+  strip_tac >> irule venomStateTheory.log_operands_values >>
+  gvs[plan_stack_rel_def, LIST_REL_EL_EQN, EVERY_MEM] >>
+  rpt strip_tac >> simp[EL_TAKE] >>
+  first_x_assum (qspec_then `n` mp_tac) >>
+  simp[REVERSE_APPEND, EL_APPEND_EQN] >>
+  metis_tac[MEM_EL, MEM_REVERSE, LENGTH_REVERSE]
+QED
+
+Theorem ordinary_prepared_source_evaluation:
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> PHI /\
+  inst.inst_opcode <> RET /\ inst.inst_opcode <> RETFMP /\
+  inst.inst_opcode <> DRET /\
+  (!op. MEM op selected ==> MEM op inst.inst_operands) /\
+  venom_asm_rel lo ps (frame_view fn ra vs with vs_memory := m) st /\
+  ps.ps_stack = residual ++ selected /\
+  EVERY (\op. op <> dead_stack_marker) selected /\
+  (!op. MEM op selected ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) lo op) ==>
+  eval_operands (REVERSE selected) vs =
+    SOME (TAKE (LENGTH selected) st.as_stack)
+Proof
+  strip_tac >>
+  `eval_operands (REVERSE selected)
+     (frame_view fn ra vs with vs_memory := m) =
+     SOME (TAKE (LENGTH selected) st.as_stack)` by
+    (irule prepared_selected_evaluation >> simp[] >>
+     qexistsl [`lo`, `residual`] >> fs[venom_asm_rel_def]) >>
+  `eval_operands (REVERSE selected)
+     (frame_view fn ra vs with vs_memory := m) =
+     eval_operands (REVERSE selected) vs` by
+    (irule ordinary_selected_operands_frame_view >> simp[] >>
+     qexists `inst` >> simp[]) >> gvs[]
+QED
+
 Theorem ordinary_prepared_source_arguments:
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> PHI /\

@@ -1381,10 +1381,14 @@ Proof
   >- (irule sym_step_create_sim >> simp[]) >>
   Cases_on `MEM name ["CALL"; "STATICCALL"; "DELEGATECALL"; "SELFDESTRUCT";
     "GAS"; "MLOAD"; "SHA3"; "CALLDATACOPY"; "EXTCODECOPY"; "MCOPY"; "RETURNDATACOPY"]`
-  >- (gvs[MEM] >> simp[sym_step_call_sim, sym_step_staticcall_sim,
-        sym_step_delegatecall_sim, sym_step_selfdestruct_sim, sym_step_gas_sim,
-        sym_step_mload_sim, sym_step_sha3_sim, sym_step_calldatacopy_sim,
-        sym_step_extcodecopy_sim, sym_step_mcopy_sim, sym_step_returndatacopy_sim]) >>
+  >- (qpat_x_assum `MEM name _` mp_tac >> pure_rewrite_tac [MEM] >>
+      strip_tac >> gvs[] >>
+      FIRST [irule sym_step_call_sim, irule sym_step_staticcall_sim,
+        irule sym_step_delegatecall_sim, irule sym_step_selfdestruct_sim,
+        irule sym_step_gas_sim, irule sym_step_mload_sim,
+        irule sym_step_sha3_sim, irule sym_step_calldatacopy_sim,
+        irule sym_step_extcodecopy_sim, irule sym_step_mcopy_sim,
+        irule sym_step_returndatacopy_sim] >> simp[]) >>
   Cases_on `ALOOKUP log_table name`
   >- (gvs[MEM] >> irule sym_step_concrete_good >> simp[] >> rpt strip_tac >>
       simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def] >>
