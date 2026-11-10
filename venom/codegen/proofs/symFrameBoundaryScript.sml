@@ -1668,6 +1668,71 @@ Proof
   metis_tac[stackOpSimTheory.asm_steps_add_ok]
 QED
 
+Theorem sym_frame_inv_local_same_count:
+  !lo o2pc prog env ctx cp fn ret srest labs0 ps cs ss top rest n endpoint out last.
+  lo = SND (compute_label_offsets prog) /\
+  o2pc = build_offset_to_pc prog /\ asm_static_wf prog /\
+  sym_frame_inv prog env ctx cp fn ret srest labs0 ps cs ss /\
+  cs.as_stack = top ++ rest /\
+  asm_steps lo o2pc prog n (cs with as_stack := top) = AsmOK endpoint /\
+  sym_steps prog env n ss = SymOK out /\
+  sym_kinds_ok cp fn ret srest last out /\
+  (!b. ~closure_spill_byte ctx cp fn.fn_name b ==>
+    FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
+  asm_steps lo o2pc prog n cs =
+    AsmOK (endpoint with as_stack := endpoint.as_stack ++ rest) /\
+  sym_frame_inv prog env ctx cp fn ret srest labs0 last
+    (endpoint with as_stack := endpoint.as_stack ++ rest) out
+Proof
+  rpt gen_tac >> strip_tac >> drule asmFrameTheory.asm_steps_frame >>
+  disch_then (qspec_then `rest` mp_tac) >>
+  `cs with as_stack := top ++ rest = cs` by
+    simp[asmSemTheory.asm_state_component_equality] >>
+  simp[] >> strip_tac >> metis_tac[sym_frame_inv_same_count]
+QED
+
+Theorem sym_phi_run_prefix_frame:
+  !todo done base fn bb pred entry source final ra lo m ps cs top rest body
+    block_len dfg cfg halt ops last prog o2pc cp ctx ret srest env ss labs0.
+  lo = SND (compute_label_offsets prog) /\
+  o2pc = build_offset_to_pc prog /\ asm_static_wf prog /\
+  phi_run_context fn bb pred entry source final /\
+  collect_phis bb.bb_instructions = done ++ todo /\
+  phi_run_config fn ra lo base pred entry source m done todo ps
+    (cs with as_stack := top) /\
+  cs.as_stack = top ++ rest /\
+  block_len = LENGTH done + LENGTH (todo ++ body) /\
+  generate_block_insts_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label
+    halt 0 block_len (LENGTH done) (LENGTH todo) (todo ++ body) ps = SOME (ops,last) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
+  (!b. last.ps_alloc.sa_spill_base <= b /\ b < last.ps_alloc.sa_next_offset ==>
+    context_spill_byte cp b /\ closure_spill_byte ctx cp fn.fn_name b) /\
+  sym_frame_inv prog env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_block_at prog cs.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
+  ?endpoint out.
+    asm_steps lo o2pc prog (LENGTH (execute_plan cp.cp_initial_fmp ops)) cs =
+      AsmOK (endpoint with as_stack := endpoint.as_stack ++ rest) /\
+    endpoint.as_pc = cs.as_pc + LENGTH (execute_plan cp.cp_initial_fmp ops) /\
+    phi_run_config fn ra lo base pred entry source m (done ++ todo) [] last endpoint /\
+    sym_steps prog env (LENGTH (execute_plan cp.cp_initial_fmp ops)) ss = SymOK out /\
+    sym_frame_inv prog env ctx cp fn ret srest labs0 last
+      (endpoint with as_stack := endpoint.as_stack ++ rest) out
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `sym_frame_inv prog env ctx cplan fn ret srest labs0 ps cs ss` >>
+  `sym_kinds_ok cplan fn ret srest ps ss /\ ss.sym_base.as_pc = cs.as_pc` by
+    gvs[sym_frame_inv_def, asmSymBridgeTheory.asm_sym_rel_def] >>
+  `asm_block_at prog (cs with as_stack := top).as_pc
+    (execute_plan cplan.cp_initial_fmp ops)` by simp[] >>
+  `ss.sym_base.as_pc = (cs with as_stack := top).as_pc` by simp[] >>
+  drule_all paired_phi_run_prefix >>
+  disch_then (qspecl_then [`o2pc`, `env`] strip_assume_tac) >>
+  drule_all sym_frame_inv_local_same_count >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem sym_phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0
