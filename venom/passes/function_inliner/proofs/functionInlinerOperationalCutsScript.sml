@@ -114,3 +114,62 @@ Proof
   gvs[inline_address_stack_def, inline_address_entry_def,
       inline_address_links_def, SUBSET_DEF] >> metis_tac[]
 QED
+
+Theorem inline_owner_storage_selected_child:
+  inline_owner_storage cert ((p,pa,proute,psnap)::rest) frame /\
+  inline_original_child C fuel pa.ia_id occurrence call psnap.ils_state r child cr /\
+  inline_call_incidence cert root p pa.ia_function l j call
+    (InlineSelected uaddr q e zipper) /\
+  inline_namespace_leaf_at cert q route.ir_rename child.ia_function ==>
+  ?csnap.
+    csnap.ils_state = child.ia_entry /\ csnap.ils_defined = {} /\
+    csnap.ils_saved = psnap.ils_state /\
+    csnap.ils_protected = (psnap.ils_defined DIFF psnap.ils_opaque) DIFF set call.inst_outputs /\
+    csnap.ils_parent_rename = proute.ir_rename /\
+    inline_owner_storage cert
+      ((q,child,route,csnap)::(p,pa,proute,psnap)::rest) frame
+Proof
+  strip_tac >>
+  drule inline_owner_storage_static >> strip_tac >>
+  drule inline_owner_storage_head >> strip_tac >>
+  drule_all inline_suspended_push_child >>
+  disch_then (qspec_then `route` strip_assume_tac) >>
+  `csnap.ils_protected SUBSET set (cfgTransform$fn_all_vars pa.ia_function)` by
+    (gvs[inline_address_stack_def, inline_address_entry_def, SUBSET_DEF] >>
+     metis_tac[]) >>
+  `csnap.ils_defined SUBSET set (cfgTransform$fn_all_vars child.ia_function)` by simp[] >>
+  drule_all inline_address_stack_selected_push >> strip_tac >>
+  qexists `csnap` >>
+  gvs[inline_owner_storage_def, inline_erase_addresses_def,
+      inline_suspended_observations_def]
+QED
+
+Theorem inline_owner_storage_selected_child_writes:
+  inline_owner_storage cert ((p,pa,proute,psnap)::rest) frame /\
+  inline_original_child C fuel pa.ia_id occurrence call psnap.ils_state r child cr /\
+  inline_call_incidence cert root p pa.ia_function l j call
+    (InlineSelected uaddr q e zipper) /\
+  inline_namespace_leaf_at cert q route.ir_rename child.ia_function /\
+  inline_annotated_origin C n root cert ==>
+  ?csnap.
+    csnap.ils_state = child.ia_entry /\ csnap.ils_defined = {} /\
+    csnap.ils_saved = psnap.ils_state /\
+    inline_owner_storage cert
+      ((q,child,route,csnap)::(p,pa,proute,psnap)::rest) frame /\
+    !writes.
+      INJ route.ir_rename (set (MAP FST writes)) UNIV /\
+      EVERY (\(x,w). MEM x (cfgTransform$fn_all_vars child.ia_function) /\
+                       ~retpc_var child.ia_function x) writes ==>
+      inline_owner_storage cert
+        ((q,child,route,csnap with <|ils_state :=
+           FOLDL (\s (x,w). update_var x w s) csnap.ils_state writes;
+           ils_defined := set (MAP FST writes) UNION csnap.ils_defined|>)::
+         (p,pa,proute,psnap)::rest)
+        (frame with ipf_state :=
+           FOLDL (\s (x,w). update_var (route.ir_rename x) w s) frame.ipf_state writes)
+Proof
+  strip_tac >> drule_all inline_owner_storage_selected_child >> strip_tac >>
+  qexists `csnap` >> simp[] >> rpt strip_tac >>
+  `INJ route.ir_rename (set (MAP FST writes) UNION csnap.ils_defined) UNIV` by simp[] >>
+  drule_all inline_owner_storage_writes >> simp[]
+QED
