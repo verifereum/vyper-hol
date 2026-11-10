@@ -4677,7 +4677,7 @@ Proof
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem flat_map_singleton[local]:
+Theorem flat_map_singleton:
   !xs (f:'a -> 'b). FLAT (MAP (\x. [f x]) xs) = MAP f xs
 Proof
   Induct >> simp[]

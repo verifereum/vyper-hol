@@ -1504,3 +1504,22 @@ Proof
       (irule dup_restore_short_ready >> simp[SF SFY_ss]) >>
   drule_all_then MATCH_ACCEPT_TAC sym_dup_restore_short_bounded
 QED
+
+Theorem sym_do_dup_big_shape:
+  15 < dist /\ dist < LENGTH ps.ps_stack /\ do_dup dist ps = (ops,out) /\
+  k = dist-15 /\ a = REVERSE (top_n k ps.ps_stack) /\
+  offsets = FST (spill_alloc_n [] ps.ps_alloc a) /\
+  al = FOLDL (\a off. free_spill_slot off a)
+    (SND (spill_alloc_n [] ps.ps_alloc a)) offsets ==>
+  LENGTH a = k /\ 0 < k /\
+  out.ps_spilled = ps.ps_spilled /\ out.ps_alloc = al /\
+  out.ps_stack = stack_dup dist ps.ps_stack /\
+  ops = MAP SOSpill offsets ++ [SODup 16] ++
+    (if k <= 16 then MAP (\j. SORestore (EL j offsets))
+       (GENLIST (\i. k-2-i) (k-1) ++ [k-1]) ++ [SOSwap k]
+     else FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1])
+       (GENLIST (\i. k-1-i) k)))
+Proof
+  strip_tac >> drule_all (SRULE [arithmeticTheory.GREATER_DEF] do_dup_big_decompose) >>
+  Cases_on `k <= 16` >> gvs[top_n_def, MAP_MAP_o, combinTheory.o_DEF, flat_map_singleton]
+QED
