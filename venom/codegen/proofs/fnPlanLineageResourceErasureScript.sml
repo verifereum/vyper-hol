@@ -239,3 +239,41 @@ Proof
   simp[reorder_plan_def] >> rpt strip_tac >>
   metis_tac[reorder_fold_resource_erasure]
 QED
+
+Theorem do_swap_erased_code:
+  !d p. d < LENGTH p.ps_stack ==>
+    MAP erase_spill_address (FST (do_swap d p)) =
+    if d = 0 then [] else if d <= 16 then [SOSwap d] else
+      REPLICATE (d + 1) (SOSpill 0) ++
+      MAP (\i. SORestore 0)
+        (REVERSE ([d] ++ GENLIST (\i. i + 1) (d - 1) ++ [0]))
+Proof
+  rpt strip_tac >> Cases_on `d = 0` >- simp[do_swap_def] >>
+  Cases_on `d <= 16`
+  >- simp[do_swap_def, erase_spill_address_def] >>
+  simp[do_swap_def] >> rpt (pairarg_tac >> gvs[]) >>
+  drule (SRULE [SNOC_APPEND] spill_allocation_fold_erasure) >>
+  simp[top_n_def, LENGTH_TAKE, MAP_MAP_o, combinTheory.o_DEF,
+       erase_spill_address_def]
+QED
+
+Theorem do_dup_erased_code:
+  !d p. d < LENGTH p.ps_stack ==>
+    MAP erase_spill_address (FST (do_dup d p)) =
+    if d <= 15 then [SODup (d + 1)] else
+      REPLICATE (d - 15) (SOSpill 0) ++ [SODup 16] ++
+      FLAT (MAP (\i. SORestore 0 ::
+              (if d - 15 <= 16 then [] else [SOSwap 1]))
+        (if d - 15 <= 16 then
+           GENLIST (\i. d - 15 - 2 - i) (d - 15 - 1) ++ [d - 15 - 1]
+         else GENLIST (\i. d - 15 - 1 - i) (d - 15))) ++
+      (if d - 15 <= 16 then [SOSwap (d - 15)] else [])
+Proof
+  rpt strip_tac >> Cases_on `d <= 15`
+  >- simp[do_dup_def, erase_spill_address_def] >>
+  simp[do_dup_def] >> rpt (pairarg_tac >> gvs[]) >>
+  drule spill_allocation_fold_erasure >>
+  Cases_on `d <= 31` >>
+  simp[top_n_def, LENGTH_TAKE, MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF,
+       erase_spill_address_def]
+QED
