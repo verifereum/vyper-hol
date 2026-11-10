@@ -375,3 +375,129 @@ correspondence. A strategist must supply a concrete argument for those arrows
 (or an alternative arbitrary-history theorem) before realization/integration
 can proceed. The analysis is not a proof that the frozen theorem is false,
 and authorizes neither a fixture nor more source-free parsing.
+
+## Same-input cleanup rigidity: scalar decision (2026-11-10)
+
+**Outcome: the proposed scalar deduction is underdetermined, even granting
+its strongest useful accounting hypotheses.** This is an algebraic obstruction
+to the proposed argument, not a counterexample to the theorem or to a possible
+stronger physical rigidity result. No SML change is made.
+
+Compare two block runs starting from exactly the same psL except cleanup
+height/promise. Call their cleanup chunks `cF,cE`, cleaned heights `HF,HE`,
+worker chunks `wF,wE` and final heights `ZF,ZE`. They emit the same whole code:
+`cF ++ wF = cE ++ wE`. This comparison correctly avoids unequal incoming
+stacks. It does not, however, remove the unequal cleanup/worker cuts.
+
+### Physical-height ledger
+
+Use integer differences throughout this paragraph; natural subtraction would
+hide underflow. For this audit only, the additive code weight W assigns +1 to
+SOPush, SOPushLabel, SOPushOfst, SODup and SORestore; -1 to SOSpill; -n to
+SOPop n; and zero to SOSwap, SOPoke, SOEmit, SOLabel, SOInitialFmp and the
+remaining constructors. It is a bookkeeping weight, **not EVM stack
+semantics**. In particular emitted opcodes do not directly mutate ps_stack
+in generate_emit_ops. W of an append is the sum of W of its pieces. The
+following is an accounting analysis of the existing definitions, not a new
+proved accounting theorem.
+
+| Planner stage | Actual height change and comparison with W |
+|---|---|
+| do_restore | +1 on SOME, 0 on NONE; exactly W of its actual code. Deleting the map key does not create a silent physical pop. |
+| restore_spilled_plan | Sum of actual successful restores. Repeated requests may later miss; count actual code, not initial domain cardinality. |
+| do_spill_tos / do_spill_at | -1 on a nonempty stack; on empty stack the truncating pop has change 0 rather than W=-1. Actual selected spills need nonemptiness. Swaps themselves preserve height. |
+| Shallow do_swap | Height and W both unchanged, even for saturated indexing. |
+| Deep do_swap | With chunk=dist+1 and H=input height, code spills min(chunk,H) cells and restores chunk; physical change is max(H,chunk)-H, exactly the same W. In the valid-depth case both are zero. Allocation/free effects are not height changes and need not be identity. |
+| Shallow do_dup | Height +1 and W=+1, regardless of the value returned by peek. |
+| Deep do_dup | With k=dist-15, the code spills min(k,H), restores k and duplicates once; W=1+k-min(k,H), whereas stack_dup increases height by 1. Defect is min(k,H)-k. Valid depth implies k<=H and defect zero. |
+| emit_one_input / emit_input_plan | Literal/ordinary label push +1; successful variable dup/restore as above; missing variable with no restore/dup changes height by 0. INVOKE label input is a silent +1, but actual compute_operands INVOKE removes labels, so that exceptional input case is absent in the regular worker. |
+| reduce_depth / reorder | Sum spill/restore/swap changes. An absent unfixed operand may skip everything; equivalent-operand pokes preserve height. Missing operands do not justify enough height for later silent consumption. Adequacy/nonempty hypotheses are required to discard the defects just listed. |
+| Regular silent consumption/output insertion | With M=LENGTH(compute_operands inst), O=LENGTH inst.inst_outputs and H4 the pre-consumption height, exact change is -min(M,H4)+O. It equals O-M plus the nonnegative saturation term max(0,M-H4). |
+| generate_emit_ops | No ps_stack change. Subtract W of this stage's emitted chunk when relating the complete instruction code to planner height. Its weight is fixed by the source branch/shape: e.g. JMP pushes a label in code but not in ps_stack; INVOKE emits two labels without pushing them here. Fresh label text does not affect W. BUMP uses its actual fixed bump_emit_ops weight, not an assumed EVM opcode effect. |
+| Dead-output popmany | Sum actual emitted pop amounts, with negative sign. Search hits give valid depths; the contiguous-top fast path has a valid deepest cell. Missing requests emit nothing and change no height. No assumption that requested-list length equals number actually popped is needed. |
+| optimistic_swap | Swap height/W accounting above; allocator may change in deep paths. |
+| release_dead_spills | Physical height and code both unchanged. Domain shrinkage and freed slots are not physical stack changes. |
+| OFFSET | Label branch pushes an output and SOPushOfst: +1 on both sides; other branch 0. |
+| NOP / parameter dispatch | No action; rejected dispatches cannot be successful. Singleton nonentry workers have no PHIs, so no PHI ledger is needed for this decision. |
+| ASSIGN | Same regular ledger, including silent -M+O and any saturation term. With the usual one input/output and adequate consumption, source correction is zero and no producer opcode is required. Silence does not imply no state change. |
+
+For an adequate regular instruction with valid access windows, the precise
+form of the prospective identity is
+
+`Hout - Hin = W(actual_instruction_code) + O - M - W(emit_chunk)`.
+
+Without adequacy, add the consumption saturation term and the primitive
+access defects just tabulated. This shows why successful SOME alone cannot
+supply the identity with a source-only correction. For a singleton worker,
+all *source-only* corrections sum to a fixed K for its source instruction
+list, after accounting for OFFSET/NOP separately. Restores, releases and
+missing accesses must not be estimated from the final spill map; actual
+code weight handles the restores, while the defects remain explicit until
+appropriate validity facts are supplied.
+
+Cleanup has no source consumption/output correction: inactive and
+empty-input marking have height change 0 and W=0. Pop-and-mark has change
+minus its actual number of popped slots, as does full popmany; marking itself
+changes only identities. The pop counts need not be guessed from list length.
+Starting from the SAME stack fixes physical/retained lists before the branch,
+but does not give equal cleanup chunks. In the best-case simple accounting
+where full cleanup removes r more retained slots than elision, write
+`HE = HF + r`. Equivalently `W(cF)-W(cE) = -r`. The obstruction below already
+holds granting this favorable description; complications with pop counts do
+not rescue it.
+
+### The first algebraic obstruction
+
+Grant, more strongly than currently checked, that *both* workers have zero
+validity/saturation defects and the same source correction K. Whole-code
+equality yields only
+
+`W(wF) - W(wE) = W(cE) - W(cF) = r`.
+
+The worker ledger then gives
+
+`(ZF - HF) - (ZE - HE) = r`.
+
+Since `HF-HE=-r`, substitution gives **`ZF-ZE=0`**, not `r=0`.
+All occurrences of r cancel. This remains underdetermined even if final
+height equality is supplied independently: it is the same equation again.
+Hence the suggested phrase "worker height change is independent of cleanup
+choice" is the missing extra premise, not a consequence of fixed source
+correction K. The actual worker height change includes W of its worker code;
+whole-code equality does not give `W(wF)=W(wE)` across unequal cuts.
+
+In particular a difference in emitted input dup/restore or postprocessing pop
+counts is an explicit term in W(wF)-W(wE); it cannot be set to zero using
+source equality. One need not construct a reachable compensating execution
+to reject this deduction: the conservation equations themselves permit
+exactly the compensation required by whole-code equality. This decision
+asserts no such execution exists or does not exist. Nonzero defects would
+add still more unsupplied terms, not a rigidity proof.
+
+The spill admission equation does not close this scalar system. Even granting
+that both compared endpoints have the same spill map, net restore counts
+cannot be recovered from it: spill insertions can interleave with restores,
+release can delete entries without physical change, and scratch spill/restore
+paths do not change ps_spilled at all. The selected replay is not automatically
+admitted to a particular successor map merely because the arbitrary one is;
+no part of this audit assumes that additional endpoint equality.
+
+Nor does r=0, if obtained elsewhere, automatically prove equal cleanup states:
+full removal uses swaps/pops while elision marks cells, and zero *height*
+difference need not identify the resulting order or allocator. That would
+require a branch-specific physical equivalence theorem, not conservation.
+If one could instead show the exact same cleanup state and code up to
+bookkeeping, existing deterministic cleanup-update worker facts would apply;
+this audit supplies neither antecedent.
+
+### Decision boundary
+
+Reject scalar conservation alone as an arbitrary-cleanup rigidity supplier.
+The first obstruction is the explicit unmatched term W(wF)-W(wE): the equation
+needed to make it zero is precisely not supplied by whole-block code equality.
+A proof that retained cells remain inert throughout both actual workers might
+supply an independent difference invariant, but it is a new physical argument
+and is **not** derived or authorized here. Preserve the selected replay and
+all earlier checked helpers. Return this finite negative algebraic decision
+for strategy review rather than implement accounting helpers whose strongest
+possible identity still cancels the retained-slot variable.
