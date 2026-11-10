@@ -1291,3 +1291,37 @@ Proof
       irule ordinary_output_kind >> fs[MEM] >> metis_tac[]) >>
   metis_tac[MEM]
 QED
+
+Theorem sym_emit_run_endpoint:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  sym_steps p env n ss = SymOK ss' /\
+  asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p)
+    p n cs = AsmOK cs' ==>
+  asm_sym_rel p env cs' ss'
+Proof
+  metis_tac[asm_sym_steps_lockstep, asmSemTheory.asm_result_11]
+QED
+
+Theorem sym_initial_fmp_source_emit:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  inst.inst_opcode = INITIAL_FMP /\ inst.inst_outputs = [x] /\
+  ssa_form fn /\ MEM inst (fn_insts fn) /\
+  qs = ps with ps_stack := stack_push (Var x) ps.ps_stack /\
+  asm_block_at p ss.sym_base.as_pc [AsmPush (encode_num_bytes initial_fmp)] /\
+  asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p)
+    p 1 cs = AsmOK cs' ==>
+  ?ss'. sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  strip_tac >> drule sym_initial_fmp_run >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `sym_steps p env 1 ss = SymOK final` >>
+  qexists `final` >> simp[] >>
+  conj_tac >- (irule sym_emit_run_endpoint >> metis_tac[]) >>
+  simp[Abbr `final`] >>
+  `op_kind_ok fn ret (Var x) (Val (n2w initial_fmp))` by
+    (irule ordinary_output_kind >> simp[] >> qexists `inst` >> simp[]) >>
+  fs[sym_kinds_ok_def, stackModelTheory.stack_push_def, SNOC_APPEND,
+     REVERSE_APPEND] >> metis_tac[]
+QED
