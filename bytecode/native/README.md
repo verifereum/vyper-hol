@@ -1,0 +1,153 @@
+# Native bytecode parity runner
+
+## Overview
+
+The runner checks that `compile_vyper` produces exactly the deployment and
+runtime bytes of the pinned Python compiler. It covers the 101 fixtures in
+`../python-o1-no-asm-opt/` and the witnessed fixtures of each feature suite
+(`abi-codegen`, `builtin-forms`, `conversions`, `ctor-locals`,
+`external-calls`, `for-iterables`, `immutables`, `internal-frames`,
+`internal-labels`, `memory-stores`, `name-collisions`, `phi-pointers`,
+`raw-calls`, `slice-buffers`). A suite's program is read from its
+`oracle/<name>.json` (the annotated AST and storage layout Python compiled) and
+compared with `oracle/<name>.hex`; the generator theory fails unless the HOL
+checker accepts that program in runtime and deployment mode. Membership in the
+supported programs is not checked.
+
+The equations `EVAL` uses for `compile_vyper` are printed by EmitML and compiled
+as Standard ML. The result is trusted rather than kernel-checked. All 101
+original fixtures run in about half a second. CI's `native-parity` job runs
+every suite.
+
+## Files
+
+- `compilerNativeEmitScript.sml`: the generator, a theory script that
+  produces no theorems. It writes `compilerNativeML.sml` (a holbuild extra
+  output, not checked in).
+- `compilerNativeRuntime.sml`: native implementations of the HOL primitives
+  the generated code calls (numbers, integers, words, characters, finite
+  maps, sets).
+- `compilerNativeParity.sml`: the runner. It compiles each fixture natively
+  and compares the bytes with its oracle file.
+- `bytecode_parity_native.mlb`, `compilerNativeMLtonMain.sml`: the MLton
+  build of the runner.
+
+## Use
+
+```sh
+holbuild build --skip-checkpoints --skip-proof-steps compilerNativeEmitTheory
+holbuild executable bytecode_parity_native
+cd bytecode
+./native/bytecode_parity_native.exe .                    # every fixture
+./native/bytecode_parity_native.exe . conversions        # one suite
+./native/bytecode_parity_native.exe . python-o1-no-asm-opt/add_arg.hex   # one fixture
+```
+
+The usage is `bytecode_parity_native.exe BYTECODE_DIR [PATH ...]`. A fixture is
+named by its `.hex` path under `BYTECODE_DIR`, such as
+`conversions/oracle/bys16_to_dec.hex`. A `PATH` selects the fixtures at or
+under it; with none, every fixture runs.
+
+Each fixture prints `PASS` or `FAIL` with its time. The exit status is
+non-zero unless every selected fixture matches. A requested path without a
+compiled-in fixture also fails, as does a `.hex` file in the directory of a
+selected fixture that has no fixture. The one exception is the pending list in
+`compilerNativeParity.sml` (`builtin-forms/oracle/uint2str_local.hex`; see
+`../pending-uint2str-buffer.md`).
+
+The fixtures in `decoder_divergent` there are expected to compile and to
+differ from the oracle: they print `PASS` when they differ, and `FAIL` if one
+matches, so a resolved entry gets removed (see
+`../pending-bounded-decode-guards.md`).
+
+Run the `build` step first: the executable compiles `compilerNativeML.sml`,
+which the generator theory writes as an extra output rather than a declared
+source.
+
+`holbuild executable` builds the theories it loads with proof steps. After a
+`--skip-proof-steps` build it therefore rebuilds the compiler's theories with
+their proofs first (HOL-Theorem-Prover/holbuild#270).
+
+The same sources also build with MLton (it needs the GMP headers), after the
+generator has run. From this directory:
+
+```sh
+mlton -inline 300 -output bytecode_parity_native.mlton bytecode_parity_native.mlb
+```
+
+On an arm64 machine, with all 101 fixtures, this binary ran in 0.37 s
+against 0.42 s for the Poly/ML one. It took 42 s and 1.7 GB to compile;
+Poly/ML takes 6 s. MLton's default inlining gives 0.45 s, and a higher
+threshold gains nothing more.
+
+## What the generator exports
+
+It starts from `compile_vyper (K SOME) (o1_policy all_capabilities)` and the
+fixture programs. From there it follows the constants of `EVAL`'s default
+compset (every rule is a theorem):
+about 1700 constants and 107 datatypes. For each constant it takes the
+compset's rewrite rules that read as definitions: an unconditional equation
+whose left side applies the constant to variables, constructors and literals.
+
+The rest of the pipeline makes those equations printable and executable in
+Standard ML:
+
+- **Equation choice.** When a constant's compset rules are not all of that
+  form, its stored definition is used instead. Examples are numeral patterns
+  such as `TAKE`'s `NUMERAL (BIT1 n)` and side conditions. Without this
+  switch the function would be partial in ML.
+- **Patterns.** Patterns on `SUC` become a guard, because natives are
+  arbitrary-precision integers.
+- **Strings.** HOL's `string` is `char list`; here it is the ML `string`
+  type, so names compare as strings rather than as lists.
+  - `CONS` and `case` on a string become `hn_scons` and `hn_scase`.
+  - A polymorphic list function used at `char` gets its arguments and result
+    converted with `String.explode`/`String.implode`.
+  - Clauses that take a string apart in their pattern (TFL completes a
+    pattern like `"code"` into one clause per character) have no ML pattern.
+    They become one final clause that tests each in turn with `case`
+    expressions. Every clause is a theorem, so the order of the tests does
+    not matter.
+- **Record literals.** `<| f := v; ... |>` is a chain of updates on `ARB`;
+  it becomes a constructor application.
+- **Parentheses.** Nested `case` and `fn` expressions that end a case arm
+  are wrapped so that EmitML prints parentheses. Without them a following
+  arm would parse as part of the nested expression.
+- **Strict evaluation.** Native code is strict where `EVAL` is not.
+  - `EVAL` can carry a quantified condition or an `ARB` placeholder
+    unevaluated in a value it later discards. Native code would have to
+    evaluate it.
+  - So the generator rewrites with proved restatements. `FDOM m SUBSET s`
+    becomes `FEVERY`, and bounded quantifiers become `EXISTS`/`EVERY`. A
+    proved computable equation covers `lower_dload_invalidates_layout`.
+  - Any `ARB` left becomes a default value of its type.
+  - A quantifier still left at run time raises `Stuck` and names its
+    definition.
+
+## Trust
+
+Mismatches and failures are reliable: a `FAIL` means the native compiler
+disagreed with the oracle or stopped. A `PASS` relies on:
+
+- EmitML printing the equations faithfully;
+- the runtime implementing each primitive as its HOL definition;
+- the approximations below.
+
+The approximations:
+
+- Finite maps are association lists with distinct keys, newest first. Direct
+  map equality is extensional (`hn_fmap_eq`). Equality at any other type that
+  contains maps (records, lists, options; `MEM`, set membership, map keys)
+  compares these lists. So two equal maps built in different orders compare
+  unequal there, where HOL says they are equal.
+- `ARB` is a fixed default value; in HOL it is unspecified.
+- Runtime functions replace these definitions, computing the same result:
+  - `EL`, `LENGTH` and `GENLIST`, with ML lists and ints;
+  - `APPEND`, `LENGTH` and `FLAT` at `char`, with the ML string functions;
+  - `list_subset`, `ALL_DISTINCT` and `nub` at `string` and `num` elements,
+    by sorting instead of pairwise `MEM`.
+- Natives are total where `EVAL` might stop. For example, `hn_fmap_eq`
+  decides map equality that `EVAL` may leave unevaluated.
+
+For these reasons a pass is trusted evidence of parity, not a kernel-checked
+proof.

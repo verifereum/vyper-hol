@@ -219,8 +219,9 @@ Theorem storage_write_step_success[local]:
      s' = if i.inst_opcode = SSTORE then sstore x y s else tstore x y s)
 Proof
   simp[] >> strip_tac >> Cases_on `s.vs_call_ctx.cc_static` >>
-  gvs[step_inst_non_invoke, step_inst_base_def, exec_write2_def,
-      AllCaseEqs()] >>
+  gvs[step_inst_non_invoke] >>
+  gvs[step_inst_base_opcode_eqs] >>
+  gvs[exec_write2_def, AllCaseEqs()] >>
   rw[EQ_IMP_THM] >> gvs[venomStateTheory.eval_operands_def]
 QED
 

@@ -299,5 +299,7 @@ Theorem ld_owned_or_forward_current_raw:
   (!fn. MEM fn C.ctx_functions ==> ir_supply_covers_fn (Sigma fn.fn_name) fn) ==>
   raw_mem_ok C' fn' ti t
 Proof
-  metis_tac[ld_owned_current_raw, ld_forward_current_raw]
+  strip_tac
+  >- (drule_all ld_owned_current_raw >> simp[]) >>
+  drule ld_forward_current_raw >> simp[]
 QED

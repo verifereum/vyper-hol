@@ -23,7 +23,7 @@ Ancestors
   exprSimAlloc
   allocLimits
   list finite_map exprLoweringProps
-  exprLowering compileEnv loweringSlice
+  exprLowering compileEnv loweringStateRelDefs loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperValueOperation valueEncoding fragExec venomState
   context emitHelper emitHelperProps freshWrites immutableMemoryFrame localPtrsProps valueEncodingProofs valueEncodingProps venomInst venomMemProps vyperValue
@@ -246,7 +246,7 @@ Proof
          exprLoweringPropsTheory.emitted_insts_def,
          exprLoweringPropsTheory.same_blocks_def,
          exprLoweringPropsTheory.run_inst_seq_def,
-         valueEncodingTheory.mem_bytes_at_def] >>
+         valueEncodingDefsTheory.mem_bytes_at_def] >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   rename1 `compile_store_byte_chunks data_ptr (hd::tl) offset sa = ((),sb)` >>
   qpat_x_assum `compile_store_byte_chunks _ _ _ _ = _` mp_tac >>
@@ -451,7 +451,7 @@ Proof
     (first_x_assum irule >> simp[]) >>
   `mem_word_at b u.vs_memory =
    mem_word_at b (mstore b v t).vs_memory` by
-    gvs[valueEncodingTheory.mem_word_at_def, valueEncodingTheory.mem_bytes_at_def] >>
+    gvs[valueEncodingDefsTheory.mem_word_at_def, valueEncodingDefsTheory.mem_bytes_at_def] >>
   simp[valueEncodingPropsTheory.mstore_mem_word_at_same]
 QED
 
@@ -526,7 +526,7 @@ Proof
      gvs[venomInstTheory.mk_inst_def] >>
      rpt strip_tac >>
      qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _` drule >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   suspend "chunks"
 QED
 
@@ -967,8 +967,8 @@ Resume compile_literal_other_vv_sim[bytes]:
   goal_assum (drule_at Any) >>
   simp[vyperASTTheory.expr_type_def, is_word_type_def,
        vyperValueTheory.evaluate_type_def] >>
-  simp[val_footprint_def, valueEncodingTheory.val_wf_def,
-       valueEncodingTheory.val_in_memory_def, valueEncodingTheory.type_memory_size_def] >>
+  simp[val_footprint_def, valueEncodingDefsTheory.val_wf_def,
+       valueEncodingDefsTheory.val_in_memory_def, valueEncodingTheory.type_memory_size_def] >>
   assume_tac (Q.SPEC `LENGTH (bs:word8 list)` le_word_size_mul) >>
   gvs[vyperValueTheory.compatible_bound_def, vfmConstantsTheory.word_size_def] >>
   qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
@@ -1015,8 +1015,8 @@ Resume compile_literal_other_vv_sim[string]:
   goal_assum (drule_at Any) >>
   simp[vyperASTTheory.expr_type_def, is_word_type_def,
        vyperValueTheory.evaluate_type_def] >>
-  simp[val_footprint_def, valueEncodingTheory.val_wf_def,
-       valueEncodingTheory.val_in_memory_def, valueEncodingTheory.type_memory_size_def] >>
+  simp[val_footprint_def, valueEncodingDefsTheory.val_wf_def,
+       valueEncodingDefsTheory.val_in_memory_def, valueEncodingTheory.type_memory_size_def] >>
   assume_tac (Q.SPEC `LENGTH (str:string)` le_word_size_mul) >>
   gvs[well_formed_type_def, vyperValueTheory.evaluate_type_def,
       vfmConstantsTheory.word_size_def] >>

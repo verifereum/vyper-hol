@@ -31,8 +31,10 @@ Proof
   Induct >- simp[lookup_function_def] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   Cases_on `h` >> gvs[supported_declaration_header_def, lookup_function_def] >>
-  BasicProvers.every_case_tac >> gvs[lookup_function_def, AllCaseEqs()] >>
-  metis_tac[]
+  (* case-split by rewriting: every_case_tac over the six remaining goals ran
+     over the step limit *)
+  gvs[lookup_function_def, AllCaseEqs(), AllCasePreds()] >>
+  simp[EXISTS_OR_THM] >> metis_tac[]
 QED
 
 (* The checked typing of the selected external body (PR #1081's

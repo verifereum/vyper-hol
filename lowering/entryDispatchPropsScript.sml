@@ -28,7 +28,7 @@ Theory entryDispatchProps
 Ancestors
   list rich_list words
   moduleLoweringProps selectorDispatch compileVyper vyperInterpreter
-  vyperTypeBytesCrypto contractABI moduleLowering compileEnv fragExec
+  vyperTypeBytesCrypto contractABI moduleLowering compileEnv loweringStateRelDefs fragExec
   emitHelper emitHelperProps venomState
 Libs
   wordsLib

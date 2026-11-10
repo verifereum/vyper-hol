@@ -11,7 +11,7 @@ Ancestors
   list rich_list finite_map fragExec freshWrites
   vyperTypeABI
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding venomMemDefs
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs venomMemDefs
   vyperInterpreter vyperState vyperValue vyperTyping vyperExprNoControl
   vyperStatePreservation
   venomExecSemantics venomInst venomState

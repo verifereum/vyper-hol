@@ -48,7 +48,7 @@ Proof
 QED
 
 Theorem calldata_decoder_site_size:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD base_op (Lit 0w) info first = ((),last) /\
   abi_decoder_code_member inst last /\ ~abi_decoder_code_member inst first /\
   inst.inst_opcode = ALLOCA ==>
   first.cs_next_id <= inst.inst_id /\ inst.inst_id < last.cs_next_id /\

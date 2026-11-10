@@ -1,6 +1,7 @@
 Theory o1MakeSsaPatchFrames
 Ancestors
-  o1MakeSsaVisitRetention makeSsaCurrentDefs makeSsaHelper list
+  o1MakeSsaVisitRetention makeSsaDefs list
+  venomExecProofs
 
 Theorem patch_instruction_projection:
   (!i ops. i.inst_opcode = PHI ==>

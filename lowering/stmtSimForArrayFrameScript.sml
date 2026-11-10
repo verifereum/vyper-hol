@@ -2,9 +2,9 @@
 Theory stmtSimForArrayFrame
 Ancestors
   list rich_list finite_map vyperState vyperLookup vyperScopePreservation
-  supportedStmts vyperPlaceFrames supportedExprs vyperInterpreter
+  supportedStmts vyperPlaceFrames supportedExprs vyperInterpreter vyperCallOutcomeFrame
   vyperStatePreservation supportedExprForms supportedExprTraverse
-  vyperPlaceResultTyping vyperTypeSystem vyperTypeEnvExtension vyperTypeArgFits
+  vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperTypeSystem vyperTypeEnvExtension vyperTypeArgFits
 
 Theorem scope_projection_lookup:
   !a b name.

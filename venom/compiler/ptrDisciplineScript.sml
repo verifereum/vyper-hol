@@ -182,6 +182,16 @@ Definition first_prov_def:
     | NONE => first_prov G ops
 End
 
+Theorem first_prov_origin:
+  !ops G site. first_prov G ops = SOME site ==>
+    ?v. MEM (Var v) ops /\ FLOOKUP G v = SOME site
+Proof
+  Induct >> simp[first_prov_def] >> rpt gen_tac >>
+  Cases_on `op_prov G h` >> simp[]
+  >- metis_tac[] >>
+  Cases_on `h` >> gvs[op_prov_def] >> metis_tac[]
+QED
+
 (* The site a non-PHI instruction's output points into, after the step
    to s'.  Arithmetic keeps its pointer operand's site. *)
 Definition out_prov_def:
@@ -528,6 +538,7 @@ Inductive frame_reachable:
        (tn with t_var := DRESTRICT f.cf_tvar (COMPL (set f.cf_inst.inst_outputs)))
        f.cf_fn inst' (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx))
 End
+
 
 (* ===== The per-state part and the stage fact ===== *)
 
