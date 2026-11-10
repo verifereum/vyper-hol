@@ -1072,6 +1072,76 @@ Proof
   simp[EXTENSION, ircf_gam_def] >> metis_tac[]
 QED
 
+Theorem ircf_gam_allocas_extension:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_allocas SUBMAP a ==>
+  ircf_gam fn_meta rma C fn bb a s.vs_inst_idx =
+  ircf_gam fn_meta rma C fn bb s.vs_allocas s.vs_inst_idx
+Proof
+  strip_tac >> irule SUBSET_ANTISYM >> reverse conj_tac
+  >- (irule ircf_gam_mono >> simp[]) >>
+  simp[SUBSET_DEF, ircf_gam_def] >> rpt strip_tac >>
+  rename1 `ircf_copy_roots fn _ = SOME (d,root,szw)` >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+    simp[wf_ssa_def, ircf_tbb_def, ircf_transform_block_plan] >>
+  `ircf_fwd_ok fn bb k d root szw` by metis_tac[ircf_block_plan_fwd_ok] >>
+  `?b z. FLOOKUP s.vs_allocas dai.inst_id = SOME (b,z)` by
+    (metis_tac[ircf_fwd_earlier_allocations, arithmeticTheory.LESS_IMP_LESS_OR_EQ]) >>
+  `?b z. FLOOKUP s.vs_allocas sai.inst_id = SOME (b,z)` by
+    (metis_tac[ircf_fwd_earlier_allocations, arithmeticTheory.LESS_IMP_LESS_OR_EQ]) >>
+  fs[SUBMAP_FLOOKUP_EQN] >>
+  `FLOOKUP s.vs_allocas dai.inst_id = SOME (db,sz1) /\
+   FLOOKUP s.vs_allocas sai.inst_id = SOME (sb,sz2)` by metis_tac[optionTheory.SOME_11] >>
+  qexistsl_tac [`k`, `d`, `root`, `dai`, `sai`, `sz1`, `sz2`] >> simp[]
+QED
+
+Theorem ircf_gam_cur_control:
+  ircf_gam_cur fn_meta rma C fn
+    (s with <|vs_current_bb := label; vs_inst_idx := n|>) =
+  {x | ?bb. lookup_block label fn.fn_blocks = SOME bb /\
+    x IN ircf_gam fn_meta rma C fn bb s.vs_allocas n}
+Proof
+  simp[ircf_gam_cur_def]
+QED
+
+Theorem ircf_gam_cur_suc_no_forward:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) ==>
+  ircf_gam_cur fn_meta rma C fn (s with vs_inst_idx := SUC s.vs_inst_idx) =
+  ircf_gam_cur fn_meta rma C fn s
+Proof
+  strip_tac >> simp[ircf_gam_cur_def, ircf_gam_suc_no_forward]
+QED
+
+Theorem ircf_gam_cur_ordinary_step:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+  step_inst fuel C inst s = OK s' ==>
+  ircf_gam_cur fn_meta rma C fn (s' with vs_inst_idx := SUC s.vs_inst_idx) =
+  ircf_gam_cur fn_meta rma C fn s
+Proof
+  strip_tac >>
+  `s'.vs_current_bb = s.vs_current_bb` by
+    metis_tac[venomInstProofsTheory.step_preserves_control_flow] >>
+  `s.vs_allocas SUBMAP s'.vs_allocas` by
+    metis_tac[step_inst_noninvoke_allocas_submap] >>
+  drule_all ircf_gam_allocas_extension >>
+  simp[ircf_gam_cur_def, ircf_gam_suc_no_forward]
+QED
+
+Theorem ircf_dead_control[simp]:
+  ircf_dead ids (s with <|vs_current_bb := label; vs_inst_idx := n|>) stk =
+  ircf_dead ids s stk
+Proof
+  simp[ircf_dead_def]
+QED
+
 Theorem site_bytes_mono:
   ids SUBSET ids' /\ a SUBMAP b ==>
   site_bytes ids a SUBSET site_bytes ids' b

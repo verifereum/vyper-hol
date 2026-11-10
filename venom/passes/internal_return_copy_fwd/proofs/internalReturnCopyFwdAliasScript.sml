@@ -849,6 +849,28 @@ Proof
   metis_tac[ircf_alias_site_value_def]
 QED
 
+Theorem ircf_fwd_earlier_allocations:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  k <= s.vs_inst_idx /\ ircf_fwd_ok fn bb k d r sz /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\
+  (ai.inst_outputs = [d] \/ ai.inst_outputs = [r]) ==>
+  ?b z. FLOOKUP s.vs_allocas ai.inst_id = SOME (b,z)
+Proof
+  strip_tac >>
+  `?dv rv. (EL k bb.bb_instructions).inst_operands = [Var dv;Var rv;Lit sz] /\
+    ircf_alias fn d dv /\ ircf_alias fn r rv` by metis_tac[ircf_fwd_ok_def] >>
+  `ircf_alias_site_value fn s G dv /\ ircf_alias_site_value fn s G rv` by
+    (conj_tac >> irule ircf_alias_boundary_earlier_operand >> simp[] >>
+     qexists_tac `k` >> gvs[ircf_fwd_ok_def]) >>
+  `?amount. ai.inst_operands = [Lit amount]` by
+    (`inst_wf ai` by
+       (fs[fn_inst_wf_def, fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
+     gvs[inst_wf_def]) >>
+  metis_tac[ircf_alias_site_value_elim]
+QED
+
 Theorem ircf_fwd_operand_sites:
   wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
   ircf_alias_boundary fn s G /\

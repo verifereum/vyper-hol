@@ -46,6 +46,12 @@ Definition taint_agree_def:
          read_byte i s.vs_memory = read_byte i t.vs_memory)
 End
 
+Theorem taint_agree_hidden_mono:
+  taint_agree D X tn s t /\ X SUBSET Y ==> taint_agree D Y tn s t
+Proof
+  rw[taint_agree_def] >> fs[SUBSET_DEF] >> metis_tac[]
+QED
+
 Definition var_taint_bounded_def:
   var_taint_bounded (tv : (string, num set) fmap) <=>
     !v m j. FLOOKUP tv v = SOME m /\ j IN m ==> j < 32
