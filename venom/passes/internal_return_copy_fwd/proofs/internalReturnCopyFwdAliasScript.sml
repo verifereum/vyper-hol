@@ -985,6 +985,35 @@ Proof
   drule_all ircf_fwd_later_invoke_not_src_alias >> simp[]
 QED
 
+Theorem ircf_planned_dst_call_args_absent:
+  fn_inst_wf fn /\ fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d sr sz /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  ircf_no_dst_write_alias fn /\ occurrence_syntax_origin fn a H /\
+  MEM call_inst (fn_insts fn) /\ call_inst.inst_opcode = INVOKE /\
+  decode_invoke call_inst = SOME (nm,ops) /\
+  MEM dai (fn_insts fn) /\ dai.inst_opcode = ALLOCA /\
+  dai.inst_outputs = [d] ==>
+  ~MEM (SOME (a,dai.inst_id)) (MAP (op_prov H) ops)
+Proof
+  strip_tac >> strip_tac >>
+  drule_all decode_invoke_prov_mem >> strip_tac >>
+  `v IN pointer_derived_vars fn {d}` by
+    (drule_all occurrence_syntax_origin_planned_root >> simp[]) >>
+  `ircf_alias fn d v` by
+    (drule_all ircf_fwd_dst_pointer_closure >> simp[pred_setTheory.SUBSET_DEF]) >>
+  `call_inst.inst_id <> (EL k bb.bb_instructions).inst_id` by
+    (strip_tac >> drule_all ircf_fwd_copy_id >> strip_tac >>
+     gvs[ircf_fwd_ok_def]) >>
+  `MEM (EL k bb.bb_instructions) bb.bb_instructions` by
+    (gvs[ircf_fwd_ok_def] >> simp[EL_MEM]) >>
+  `?bb2. MEM bb2 fn.fn_blocks /\ MEM call_inst bb2.bb_instructions` by
+    metis_tac[fn_insts_def, MEM_fn_insts_blocks_iff] >>
+  `(EL k bb.bb_instructions).inst_opcode = MCOPY` by
+    metis_tac[ircf_fwd_ok_def] >>
+  drule_all ircf_copy_roots_no_write_use >> simp[]
+QED
+
 Theorem ircf_fwd_dst_call_args_absent:
   fn_inst_wf fn /\ fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
   ircf_fwd_ok fn bb k d sr sz /\
@@ -997,13 +1026,8 @@ Theorem ircf_fwd_dst_call_args_absent:
   dai.inst_outputs = [d] ==>
   ~MEM (SOME (a,dai.inst_id)) (MAP (op_prov H) ops)
 Proof
-  strip_tac >> strip_tac >>
-  drule_all decode_invoke_prov_mem >> strip_tac >>
-  `v IN pointer_derived_vars fn {d}` by
-    (drule_all occurrence_syntax_origin_planned_root >> simp[]) >>
-  `ircf_alias fn d v` by
-    (drule_all ircf_fwd_dst_pointer_closure >> simp[pred_setTheory.SUBSET_DEF]) >>
-  drule_all ircf_fwd_later_invoke_not_dst_alias >> simp[]
+  strip_tac >> irule ircf_planned_dst_call_args_absent >>
+  simp[] >> metis_tac[fn_insts_def, MEM_fn_insts_blocks_iff, EL_MEM]
 QED
 
 Theorem ircf_fwd_revert_use_later:
@@ -1354,3 +1378,64 @@ Proof
      gvs[]) >>
   metis_tac[ircf_size_coherent_def]
 QED
+
+(* Planned destinations cannot be passed, even before their copy executes. *)
+Theorem ircf_saved_destination_suffix_absent:
+  !vs C stk PG G tn fn inst s n a U B HP H.
+    occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H ==>
+    vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C ==>
+    !j bb k d sr sz ai.
+      j < LENGTH stk /\ MEM bb (EL j stk).cf_fn.fn_blocks /\
+      fn_inst_wf (EL j stk).cf_fn /\ fn_inst_ids_distinct (EL j stk).cf_fn /\
+      ircf_no_dst_write_alias (EL j stk).cf_fn /\
+      ircf_fwd_ok (EL j stk).cf_fn bb k d sr sz /\
+      ircf_copy_roots (EL j stk).cf_fn (EL k bb.bb_instructions) =
+        SOME (d,sr,sz) /\
+      MEM ai (fn_insts (EL j stk).cf_fn) /\
+      ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [d] ==>
+      occurrence_suffix_absent ((EL j U).of_owner,ai.inst_id) j H HP U
+Proof
+  ho_match_mp_tac occ_frame_reachable_strongind >> rpt conj_tac
+  >- simp[]
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume ircf_saved_destination_suffix_absent[next]:
+  rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  irule occurrence_suffix_absent_next >>
+  drule occ_frame_reachable_owner_fresh >> strip_tac >>
+  drule occ_frame_reachable_stack_length >> strip_tac >>
+  fs[ALL_DISTINCT, MEM_MAP] >> metis_tac[MEM_EL]
+QED
+
+Resume ircf_saved_destination_suffix_absent[block]:
+  rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  irule occurrence_suffix_absent_block >> first_x_assum irule >>
+  simp[] >> metis_tac[]
+QED
+
+Resume ircf_saved_destination_suffix_absent[call]:
+  rpt gen_tac >> strip_tac >> strip_tac >> gen_tac >> Cases_on `j`
+  >- (simp[] >> rpt gen_tac >> strip_tac >>
+      irule occurrence_suffix_absent_start >>
+      drule occ_frame_reachable_origin_certificate >> simp[] >>
+      strip_tac >> drule occurrence_origin_certificate_current >> strip_tac >>
+      irule ircf_planned_dst_call_args_absent >> simp[] >>
+      metis_tac[frameAllocationHistoryTheory.frame_reachable_current_allocation_syntax,
+                allocaFrontierBoundTheory.active_inst_mem_fn_insts]) >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  irule occurrence_suffix_absent_push >> first_x_assum irule >>
+  simp[] >> metis_tac[]
+QED
+
+Resume ircf_saved_destination_suffix_absent[ret]:
+  rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `_ ==> !j. _` mp_tac >> simp[] >>
+  disch_then (qspec_then `SUC j` mp_tac) >> simp[] >>
+  metis_tac[occurrence_suffix_absent_pop]
+QED
+
+Finalise ircf_saved_destination_suffix_absent
