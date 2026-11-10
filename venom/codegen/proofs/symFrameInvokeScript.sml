@@ -1855,6 +1855,103 @@ Proof
   metis_tac[blockSimHelpersTheory.asm_steps_compose_ok]
 QED
 
+(* Pair the concrete entry witnesses with the symbolic prefix and call. *)
+Theorem sym_invoke_selected_entry_pair:
+  !p env ctx cp fn ret srest labs0 ps cs ss mid nl iops prepared dfg rops
+   arranged base r lo o2pc inst nm arg_ops args saved rest ret_lbl post cas.
+  lo = SND (compute_label_offsets p) /\ o2pc = build_offset_to_pc p /\
+  asm_static_wf p /\ fn_shape_ok fn /\ ssa_form fn /\ label_flow_ok ctx /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: arg_ops /\
+  compute_operands inst = arg_ops /\
+  EVERY (\op. ~is_label_operand op) arg_ops /\
+  (!op. MEM op arg_ops /\ is_var_operand op ==>
+     MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan INVOKE arg_ops nl ps = (iops,prepared) /\
+  reorder_plan dfg arg_ops prepared = (rops,arranged) /\
+  LENGTH arg_ops <= 16 /\ LENGTH arg_ops <= LENGTH prepared.ps_stack /\
+  generated_plan_state_wf_marked base ps /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) arg_ops /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
+  dfg = dfg_build_function fn /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_block_at p cs.as_pc (execute_plan cp.cp_initial_fmp (iops ++ rops)) /\
+  asm_steps lo o2pc p (LENGTH (execute_plan cp.cp_initial_fmp (iops ++ rops))) cs = AsmOK mid /\
+  arranged.ps_stack = stack_pop (LENGTH arg_ops) arranged.ps_stack ++ arg_ops /\
+  mid.as_stack = REVERSE args ++ saved ++ rest /\ LENGTH args = LENGTH arg_ops /\
+  asm_block_at p mid.as_pc (execute_plan cp.cp_initial_fmp
+    ([SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ post)) /\
+  MEM (AsmLabel nm) p /\ asm_steps lo o2pc p 3 mid = AsmOK cas ==>
+  ?sms scas saved_sym.
+    sym_frame_inv p env ctx cp fn ret srest labs0 arranged mid sms /\
+    asm_steps lo o2pc p (LENGTH (execute_plan cp.cp_initial_fmp (iops ++ rops)) + 3)
+      cs = AsmOK cas /\
+    sym_steps p env (LENGTH (execute_plan cp.cp_initial_fmp (iops ++ rops)) + 3)
+      ss = SymOK scas /\
+    asm_sym_rel p env cas scas /\
+    scas.sym_stack = [Lab ret_lbl 0] ++ MAP Val (REVERSE args) ++ saved_sym ++ srest /\
+    LIST_REL (op_kind_ok fn ret)
+      (REVERSE (stack_pop (LENGTH arg_ops) arranged.ps_stack)) saved_sym /\
+    scas.sym_mem_labels = sms.sym_mem_labels /\
+    (!b. b IN FDOM scas.sym_mem_labels ==> context_spill_byte cp b) /\
+    MEM (AsmLabel ret_lbl) p
+Proof
+  rpt gen_tac >> strip_tac >>
+  `r.sr_spill_base <= ps.ps_alloc.sa_spill_base` by
+    metis_tac[allocMonoTheory.emit_input_plan_spill_base,
+              allocMonoTheory.reorder_plan_spill_base] >>
+  drule_all sym_invoke_selected_frame_prefix >> strip_tac >>
+  `EVERY (\op. op <> dead_stack_marker) arg_ops` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  `LENGTH (REVERSE args) = LENGTH arg_ops` by simp[] >>
+  drule_all sym_invoke_entry_symbolic_boundary >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[blockSimHelpersTheory.asm_steps_compose_ok]
+QED
+
+Theorem sym_invoke_selected_entry_facts:
+  !unit ctx fn inst nm arg_ops ps nl iops prepared dfg rops arranged
+   p pc fmp ops post.
+  ctx = unit.cu_context /\ unit_shape_ok unit /\ MEM fn ctx.ctx_functions /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  inst.inst_operands = Label nm :: arg_ops /\ codegen_ready_fn fn /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+     IS_SOME (stack_get_depth op ps.ps_stack) \/ IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps)).ps_stack /\
+  emit_input_plan INVOKE (compute_operands inst) nl ps = (iops,prepared) /\
+  reorder_plan dfg (compute_operands inst) prepared = (rops,arranged) /\
+  ops = iops ++ rops ++ post /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  asm_block_at p pc (execute_plan fmp ops) ==>
+  compute_operands inst = arg_ops /\
+  EVERY (\op. ~is_label_operand op) arg_ops /\ ssa_form fn /\
+  (!op. MEM op arg_ops /\ is_var_operand op ==>
+     MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  LENGTH arg_ops <= LENGTH prepared.ps_stack /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
+  asm_block_at p pc (execute_plan fmp (iops ++ rops))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `ctx = _` SUBST_ALL_TAC >>
+  drule_all fnFrameBoundaryInvokeTheory.invoke_compute_operands >> strip_tac >>
+  gvs[codegen_ready_fn_def, EVERY_APPEND, execute_plan_def,
+      stackOpSimTheory.asm_block_at_append,
+      fnPlanLineageInventoryTheory.stack_get_depth_is_some,
+      finite_mapTheory.FLOOKUP_DEF, AllCaseEqs()] >>
+  rpt strip_tac >>
+  qpat_x_assum `!at. MEM at _ /\ is_var_operand at ==> _`
+    (qspec_then `op` mp_tac) >>
+  Cases_on `op IN FDOM ps.ps_spilled` >> simp[]
+QED
+
 Theorem sym_invoke_frame_sim_deep:
   !fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
    next_liveness is_halting next_is_term bb_label base ps vs as ops ps' r ra
