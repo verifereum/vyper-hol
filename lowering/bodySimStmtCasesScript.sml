@@ -213,14 +213,21 @@ QED
 
 (* Only an internal call is lowered at a type its source type does not
    fix: the callee's declared return type. *)
+Theorem concat_buffer_type_not_word[local]:
+  ~is_word_type (concat_buffer_type ty n)
+Proof
+  simp[exprLoweringTheory.concat_buffer_type_def] >>
+  Cases_on `ty` >> simp[is_word_type_def] >>
+  Cases_on `b` >> simp[is_word_type_def]
+QED
+
 Theorem lowered_value_type_not_call_word[local]:
   !cenv e. (!a t es d. e <> Call a t es d) /\ ~is_word_type (expr_type e) ==>
            ~is_word_type (lowered_value_type cenv e)
 Proof
   ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >>
-  rw[exprLoweringTheory.lowered_value_type_def, is_word_type_def, expr_type_def] >>
-  simp[exprLoweringTheory.concat_buffer_type_def] >> rpt CASE_TAC >>
-  gvs[is_word_type_def]
+  rw[exprLoweringTheory.lowered_value_type_def, is_word_type_def, expr_type_def,
+     concat_buffer_type_not_word]
 QED
 
 (* A supported reason is a string expression (supported_string_reason),
