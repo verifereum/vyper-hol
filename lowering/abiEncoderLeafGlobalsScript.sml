@@ -10,7 +10,7 @@ val leaf_step_eqs = map (fn opc => valOf (List.find (fn th =>
   let val (_, body) = strip_forall (concl th)
   in aconv (rhs (fst (dest_imp body))) opc end)
   (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs)))
-  [``MLOAD``, ``MSTORE``, ``MCOPY``, ``ADD``, ``AND``];
+  [``MLOAD``, ``MSTORE``, ``MCOPY``, ``ADD``, ``AND``, ``NOT``];
 
 Theorem abi_encoder_leaf_step_globals:
   inst.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND; NOT} /\
