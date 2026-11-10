@@ -251,6 +251,20 @@ Proof
   gvs[lookup_function_def] >> metis_tac[]
 QED
 
+Theorem ircf_forward_destination_hidden:
+  MEM fn C.ctx_functions /\ MEM bb fn.fn_blocks /\
+  k IN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [d] /\
+  FLOOKUP s.vs_allocas ai.inst_id = SOME (db,z) ==>
+  {i | db <= i /\ i < db+z} SUBSET ircf_dead (ircf_dst_ids fn_meta rma C) s stk
+Proof
+  strip_tac >>
+  `ai.inst_id IN ircf_dst_ids fn_meta rma C` by
+    (simp[ircf_dst_ids_def] >> metis_tac[]) >>
+  rw[SUBSET_DEF, ircf_dead_def, site_bytes_def] >> metis_tac[]
+QED
+
 Theorem ircf_dst_ids_owned:
   ctx_inst_ids_distinct C /\ MEM fn C.ctx_functions /\
   MEM ai (fn_insts fn) /\ ai.inst_id IN ircf_dst_ids fn_meta rma C ==>
@@ -476,6 +490,41 @@ Proof
   `ircf_fwd_ok (EL j stk).cf_fn bb k d sr amount` by
     (drule_all ircf_block_plan_fwd_ok >> simp[]) >>
   irule ircf_saved_destination_read_disjoint >> fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem ircf_forward_copy_transport:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\ ctx_inst_ids_distinct C /\
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\ s.vs_inst_idx = k /\
+  k IN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t ==>
+  ?db rb.
+    lookup_var d s = SOME (n2w db) /\ lookup_var sr s = SOME (n2w rb) /\
+    let tm = tn with t_mem :=
+      (tn.t_mem DIFF {i | db <= i /\ i < db+w2n sz}) UNION
+      {db+q | q < w2n sz /\ rb+q IN tn.t_mem} in
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tm
+      (mcopy db rb (w2n sz) s) t /\
+    ircf_cross tm {(db,rb,w2n sz)} (mcopy db rb (w2n sz) s) t
+Proof
+  strip_tac >> drule_all ircf_forward_copy_sites >> strip_tac >>
+  `MEM fn C.ctx_functions` by
+    (drule occ_frame_reachable_annotation >> simp[]) >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `{i | db <= i /\ i < db+w2n sz} SUBSET
+    ircf_dead (ircf_dst_ids fn_meta rma C) s stk` by
+    (drule_all ircf_forward_destination_hidden >> simp[]) >>
+  `!q. q < w2n sz /\ rb+q NOTIN tn.t_mem ==>
+    read_byte (rb+q) s.vs_memory = read_byte (rb+q) t.vs_memory` by
+    (rpt strip_tac >> drule_all ircf_forward_source_agreement >> simp[]) >>
+  qexistsl_tac [`db`, `rb`] >> simp[] >>
+  (conj_tac
+   >- (drule_all taint_agree_source_mcopy >> simp[arithmeticTheory.ADD_COMM]) >>
+   gvs[SRULE [arithmeticTheory.ADD_COMM] ircf_cross_source_mcopy])
 QED
 
 Theorem ircf_current_dead_read_disjoint:

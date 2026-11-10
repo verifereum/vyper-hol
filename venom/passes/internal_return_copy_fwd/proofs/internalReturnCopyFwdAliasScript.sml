@@ -882,6 +882,24 @@ Proof
   metis_tac[ircf_alias_site_value_elim]
 QED
 
+Theorem ircf_fwd_mcopy_exec:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx = k /\ ircf_fwd_ok fn bb k d r sz ==>
+  ?dw rw.
+    lookup_var d s = SOME dw /\ lookup_var r s = SOME rw /\
+    step_inst_base (EL k bb.bb_instructions) s =
+      OK (mcopy (w2n dw) (w2n rw) (w2n sz) s) /\
+    step_inst_base (mk_nop_inst (EL k bb.bb_instructions)) t = OK t
+Proof
+  strip_tac >> drule_all ircf_fwd_operand_sites >> strip_tac >>
+  `(EL k bb.bb_instructions).inst_opcode = MCOPY` by fs[ircf_fwd_ok_def] >>
+  qexistsl_tac [`n2w db`, `n2w rb`] >>
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       eval_operand_def, passSharedDefsTheory.mk_nop_inst_def]
+QED
+
 Theorem ircf_fwd_access_ranges:
   wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
   ircf_alias_boundary fn s G /\
