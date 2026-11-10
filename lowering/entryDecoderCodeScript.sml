@@ -62,6 +62,7 @@ Theorem entry_code_decode_dyn_elem_ptr:
 Proof
   strip_tac >> Cases_on `hi = Lit 0w` >>
   simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
+       compile_abi_decode_range_check_def,
        compileEnvTheory.comp_ignore_bind_def] >>
   rpt (irule entry_code_bind >>
        simp[entry_code_emit_op, entry_code_emit_void, entry_code_return] >>
