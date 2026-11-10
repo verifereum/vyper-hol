@@ -260,3 +260,43 @@ Proof
     metis_tac[fnPlanLineagePhiMapsTheory.input_vars_from_distinct] >>
   gvs[] >> irule listTheory.ALL_DISTINCT_MAP_INJ >> simp[]
 QED
+
+(* Core coverage, rather than successful padded planning, supplies the final
+   JMP's materialisation premise. *)
+Theorem ordinary_core_terminal_targets:
+  !fn bb dfg cfg halt p0 k mid inst targets.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    get_params bb.bb_instructions = [] /\ collect_phis bb.bb_instructions = [] /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label 0) ==>
+      MEM (Var v) p0.ps_stack \/ Var v IN FDOM p0.ps_spilled) /\
+    native_inst_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+      (LENGTH bb.bb_instructions) bb.bb_instructions p0 k mid /\
+    DROP k bb.bb_instructions = [inst] /\ inst.inst_opcode = JMP /\
+    join_target_ops (liveness_analyze fn) fn bb.bb_label inst = SOME targets ==>
+    ALL_DISTINCT targets /\
+    (!x. MEM x targets ==> MEM x mid.ps_stack \/ x IN FDOM mid.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `k < LENGTH bb.bb_instructions /\ SUC k = LENGTH bb.bb_instructions` by
+    (qpat_x_assum `DROP k _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[listTheory.LENGTH_DROP] >> decide_tac) >>
+  `bb.bb_instructions <> [] /\ k = PRE (LENGTH bb.bb_instructions)` by
+    (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  `inst = LAST bb.bb_instructions` by
+    (qpat_x_assum `DROP k _ = _` (mp_tac o AP_TERM ``LAST : instruction list -> instruction``) >>
+     simp[listTheory.last_drop]) >>
+  `non_param_insts bb = bb.bb_instructions` by
+    (drule_all ready_block_parameter_suffix >> simp[]) >>
+  `!j. j < k ==> (EL j bb.bb_instructions).inst_opcode <> JMP /\
+    (EL j bb.bb_instructions).inst_opcode <> PHI` by
+    (drule ready_block_ordinary_suffix_layout >>
+     disch_then (qspecl_then [`bb`,`0`] mp_tac) >> simp[] >>
+     rpt strip_tac >> first_x_assum (qspec_then `j` mp_tac) >>
+     simp[] >> decide_tac) >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label k) ==>
+    MEM (Var v) mid.ps_stack \/ Var v IN FDOM mid.ps_spilled` by
+    (drule native_ordinary_interval_available >>
+     disch_then (qspecl_then [`bb`,`0`] mp_tac) >> simp[]) >>
+  conj_tac >- metis_tac[ready_join_target_ops_distinct] >>
+  metis_tac[native_terminal_jmp_target_available]
+QED

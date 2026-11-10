@@ -5453,3 +5453,64 @@ Proof
   drule_all lineage_dfs_join_block_outgoing_core_actual >> strip_tac >>
   qexists_tac `afterL` >> simp[]
 QED
+
+Theorem lineage_singleton_setup_core_seed:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ lbl <> entry /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  cfg_preds_of (cfg_analyze fn) lbl = [pred] /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops,ps_end) /\
+  clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb
+    (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      (setup_ops,start) /\
+  start = p0 with <|ps_stack := prefix ++ p0.ps_stack; ps_cleanup_height := h0;
+    ps_cleanup_growth := g0; ps_cleanup_promised := b0|> /\
+  EVERY (\v. ~MEM (Var v) prefix) (live_vars_at (liveness_analyze fn) lbl 0) ==>
+  (!v. MEM v (live_vars_at (liveness_analyze fn) lbl 0) ==>
+    MEM (Var v) p0.ps_stack \/ Var v IN FDOM p0.ps_spilled) /\
+  (!j. j < LENGTH bb.bb_instructions ==>
+    EVERY (\v. ~MEM (Var v) prefix)
+      (live_vars_at (liveness_analyze fn) lbl (SUC j) ++
+       (EL j bb.bb_instructions).inst_outputs))
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,venomExecPropsTheory.lookup_block_label] >>
+  `collect_phis bb.bb_instructions = []` by
+    (fs[codegen_ready_fn_def,phis_at_joins_def,listTheory.EVERY_MEM] >>
+     gvs[listTheory.NULL_EQ,listTheory.LENGTH,arithmeticTheory.LESS_EQ_REFL]) >>
+  `native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+    (bb_is_halting bb) 0 (LENGTH bb.bb_instructions) bb.bb_instructions start
+    (LENGTH (collect_phis bb.bb_instructions)) start` by
+    simp[fnPlanLineageEntryProductionTheory.native_inst_prefix_zero] >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) lbl 0) ==>
+    MEM (Var v) start.ps_stack \/ Var v IN FDOM start.ps_spilled` by
+    (`(if LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 then
+        clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb
+          (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+       else ([],ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
+       (setup_ops,start)` by simp[] >>
+     drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)
+       lineage_state_native_post_phi_available >> simp[] >> metis_tac[]) >>
+  `!j v. j < LENGTH bb.bb_instructions /\ MEM v (EL j bb.bb_instructions).inst_outputs ==>
+    ~MEM (Var v) prefix` by
+    (rpt strip_tac >>
+     `~MEM (Var v) start.ps_stack` by
+       (irule (cj 1 lineage_state_ordinary_output_body_absent) >>
+        rpt (first_assum $ irule_at Any) >> simp[] >> metis_tac[]) >>
+     gvs[]) >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `fn_reachable fn bb.bb_label` by
+    metis_tac[lineage_state_reachable,fn_reachable_cfg_analyze,codegen_ready_fn_def] >>
+  rpt strip_tac >> simp[listTheory.EVERY_APPEND] >> conj_tac
+  >- (simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+      `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label 0) \/
+       ?k. 0 <= k /\ k < SUC j /\ MEM v (EL k bb.bb_instructions).inst_outputs` by
+        (irule fnPlanLineageCallersTheory.interval_live_origin >> simp[] >> decide_tac) >>
+      gvs[listTheory.EVERY_MEM] >>
+      `k < LENGTH bb.bb_instructions` by decide_tac >> metis_tac[]) >>
+  simp[listTheory.EVERY_MEM] >> metis_tac[]
+QED
