@@ -8,6 +8,7 @@ Ancestors
   list rich_list finite_map pred_set
   fragExec varsExt  freshWrites exprBopLowering loweringSlice
   localPtrsProps vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
+  vyperEvalScopesProgress vyperLookup valueEncodingProps valueEncodingProofs
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValueOperation vyperContext
   valueEncoding venomExecSemantics venomInst venomState
@@ -157,17 +158,143 @@ Proof
 QED
 
 Theorem locals_kept_trans:
-  !cenv es es1 sa s0 t u.
-    local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  !cenv es es1 es' sa s0 t u.
+    local_ptrs_reserved cenv sa /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x t = SOME w) /\
-    locals_kept cenv es s0 t /\ locals_kept cenv es1 t u ==>
-    locals_kept cenv es s0 u
+    locals_kept cenv es es1 s0 t /\ locals_kept cenv es1 es' t u ==>
+    locals_kept cenv es es' s0 u
 Proof
-  rw[locals_kept_def] >>
-  `local_region cenv es1.scopes t n b sz` by
+  rpt gen_tac >> strip_tac >>
+  `MAP FDOM es.scopes = MAP FDOM es1.scopes` by fs[locals_kept_def] >>
+  `!n b sz. local_region cenv es.scopes s0 n b sz ==>
+            local_region cenv es1.scopes t n b sz` by
     metis_tac[local_region_frame_fwd] >>
+  fs[locals_kept_def] >> rpt conj_tac
+  >- metis_tac[]
+  >- metis_tac[scopes_progress_trans]
+  >- (rpt strip_tac >>
+      `?e e1. lookup_scopes n es.scopes = SOME e /\
+              lookup_scopes n es1.scopes = SOME e1` by
+        (gvs[local_region_def] >>
+         metis_tac[lookup_scopes_none_map_fdom, optionTheory.NOT_SOME_NONE,
+                   optionTheory.option_CASES]) >>
+      `e1 = e` by
+        (qpat_x_assum `scopes_progress es.scopes _`
+           (qspecl_then [`n`, `e`, `e1`] mp_tac o
+            SIMP_RULE std_ss [scopes_progress_def]) >>
+         qpat_x_assum `scopes_progress es1.scopes _`
+           (qspecl_then [`n`, `e1`, `e`] mp_tac o
+            SIMP_RULE std_ss [scopes_progress_def]) >>
+         gvs[] >> rw[] >> gvs[]) >>
+      gvs[] >> metis_tac[]) >>
+  fs[popped_kept_def] >> rpt strip_tac >>
+  qpat_x_assum `!n b sz entry' h. local_region _ es1.scopes _ _ _ _ /\ _ ==> _`
+    irule >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `n` >> rpt conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!n b sz entry' h. local_region _ es.scopes _ _ _ _ /\ _ ==> _`
+        irule >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexists_tac `n` >> fs[])
+  >- simp[] >>
   metis_tac[]
+QED
+
+(* A pop of a live dynamic array in the local id stores its new length at
+   offset k of id's region and records one snapshot in id's history.  When
+   the new snapshot sits in memory after the store and no older snapshot's
+   bytes hold the length word, that is a locals_kept step. *)
+Theorem locals_kept_pop_store:
+  !func cenv es es' s0 u id b sz k w entry entry' hnew.
+    local_ptrs_rel func cenv es.scopes s0 /\
+    local_region cenv es.scopes s0 id b sz /\ k + 32 <= sz /\
+    dynarray_len_at cenv id k /\
+    u.vs_memory = (mstore (b + k) w s0).vs_memory /\
+    MAP FDOM es'.scopes = MAP FDOM es.scopes /\
+    lookup_scopes id es.scopes = SOME entry /\
+    lookup_scopes id es'.scopes = SOME entry' /\
+    (!n. n <> id ==> lookup_scopes n es'.scopes = lookup_scopes n es.scopes) /\
+    entry'.type = entry.type /\ entry'.popped = hnew :: entry.popped /\
+    snapshot_in entry.type b sz hnew u.vs_memory /\
+    (!path pv j ptv. MEM (path,pv) entry.popped /\
+       mem_path_offset entry.type path = SOME (j,ptv) ==>
+       j + type_memory_size ptv <= k \/ k + 32 <= j) ==>
+    locals_kept cenv es es' s0 u
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!n b' sz'. local_region cenv es.scopes s0 n b' sz' /\ n <> id ==>
+     mem_bytes_at b' sz' u.vs_memory = mem_bytes_at b' sz' s0.vs_memory` by
+    (rpt strip_tac >> simp[] >> irule mstore_mem_bytes_at_disjoint >>
+     `regions_disjoint b sz b' sz'` by (gvs[local_ptrs_rel_def] >> metis_tac[]) >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `!p. MEM p entry.popped /\ snapshot_in entry.type b sz p s0.vs_memory ==>
+       snapshot_in entry.type b sz p u.vs_memory` by
+    (Cases >> rw[snapshot_in_def] >>
+     rename1 `mem_path_offset _ q = SOME (j,ptv)` >>
+     qexistsl_tac [`j`, `ptv`] >> simp[] >>
+     irule (cj 1 valueEncodingProofsTheory.val_in_memory_mem_agree_proof) >>
+     simp[] >> qexists_tac `s0.vs_memory` >> simp[] >>
+     `j + type_memory_size ptv <= k \/ k + 32 <= j` by metis_tac[] >>
+     qpat_x_assum `u.vs_memory = _` SUBST1_TAC >>
+     irule EQ_SYM >> irule mstore_mem_bytes_at_disjoint >> decide_tac) >>
+  simp[locals_kept_def] >> rpt conj_tac
+  >- (rpt strip_tac >> rename1 `local_region _ _ _ nm b' sz'` >> simp[] >>
+      irule mstore_mem_bytes_at_disjoint >>
+      Cases_on `nm = id`
+      >- (`b' = b` by gvs[local_region_def] >> gvs[] >>
+          qpat_x_assum `!k. dynarray_len_at _ _ k ==> _` drule >> simp[]) >>
+      `regions_disjoint b sz b' sz'` by (gvs[local_ptrs_rel_def] >> metis_tac[]) >>
+      gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
+  >- (rw[scopes_progress_def] >> Cases_on `n = id` >> gvs[])
+  >- (rpt strip_tac >> rename1 `local_region _ _ _ nm b' sz'` >>
+      Cases_on `nm = id`
+      >- (`entry' = entry` by gvs[] >> gvs[listTheory.CONS_ACYCLIC]) >>
+      metis_tac[]) >>
+  simp[popped_kept_def] >> rpt strip_tac >>
+  qpat_x_assum `u.vs_memory = _` (fn th => rewrite_tac[GSYM th]) >>
+  rename1 `lookup_scopes nm es'.scopes = SOME ent` >>
+  rename1 `local_region _ _ _ nm b' sz'` >>
+  Cases_on `nm = id`
+  >- (`b' = b /\ sz' = sz /\ ent = entry'` by gvs[local_region_def] >>
+      gvs[] >> Cases_on `h = hnew` >> gvs[] >> metis_tac[]) >>
+  `lookup_scopes nm es.scopes = SOME ent` by metis_tac[] >>
+  `snapshot_in ent.type b' sz' h s0.vs_memory` by metis_tac[] >>
+  irule snapshot_in_mem_agree >> qexists_tac `s0.vs_memory` >> simp[] >>
+  metis_tac[]
+QED
+
+(* The pop's array is live, at path, and every older snapshot is at a dead
+   path (popped_keys_indexed), so no older snapshot holds its length word. *)
+Theorem locals_kept_live_pop:
+  !func cenv es es' s0 u id b sz k w entry entry' hnew path arr etv n.
+    local_ptrs_rel func cenv es.scopes s0 /\
+    local_region cenv es.scopes s0 id b sz /\ k + 32 <= sz /\
+    dynarray_len_at cenv id k /\
+    u.vs_memory = (mstore (b + k) w s0).vs_memory /\
+    MAP FDOM es'.scopes = MAP FDOM es.scopes /\
+    lookup_scopes id es.scopes = SOME entry /\
+    lookup_scopes id es'.scopes = SOME entry' /\
+    (!n. n <> id ==> lookup_scopes n es'.scopes = lookup_scopes n es.scopes) /\
+    entry'.type = entry.type /\ entry'.popped = hnew :: entry.popped /\
+    snapshot_in entry.type b sz hnew u.vs_memory /\
+    EVERY (\q. ?err. evaluate_subscripts entry.type entry.value q = INR err)
+      (MAP FST entry.popped) /\
+    evaluate_subscripts entry.type entry.value path = INL arr /\
+    mem_path_offset entry.type path = SOME (k, ArrayTV etv (Dynamic n)) ==>
+    locals_kept cenv es es' s0 u
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`func`, `cenv`, `es`, `es'`, `s0`, `u`, `id`, `b`, `sz`, `k`,
+               `w`, `entry`, `entry'`, `hnew`] mp_tac locals_kept_pop_store >>
+  impl_tac
+  >- (fs[] >> rpt strip_tac >> rename1 `MEM (q,pv) entry.popped` >>
+      `?err. evaluate_subscripts entry.type entry.value q = INR err` by
+        (gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+         metis_tac[]) >>
+      metis_tac[mem_path_offset_dead_apart]) >>
+  simp[]
 QED
 
 Theorem expr_post_bop:

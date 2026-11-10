@@ -176,7 +176,7 @@ Theorem target_post_suffix_frame:
     (dst,loc,SOME (value_type_place vt')) u
 Proof
   strip_tac >>
-  `locals_kept cenv es s0 u` by
+  `locals_kept cenv es es' s0 u` by
     (irule locals_kept_mem_tail >> qexists `t` >> gvs[target_post_def]) >>
   gvs[target_post_def] >> rpt conj_tac
   >- (rpt strip_tac >>
