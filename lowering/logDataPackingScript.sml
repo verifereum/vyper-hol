@@ -162,8 +162,17 @@ Proof
            (qspecl_then [`id`,`b`,`n`] mp_tac) >> simp[]) >>
      fs[enc_frame_def] >> qpat_x_assum `!i. i NOTIN frag_ids st st' ==> _`
        (qspec_then `id` mp_tac) >> simp[]) >>
-  fs[log_packing_public_frame_def, enc_frame_def, enc_scratch_def,
-     lookup_var_def, alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
+  qpat_x_assum `enc_frame _ _ _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [enc_frame_def, enc_scratch_def]) >>
+  `alloca_inv after` by
+    (qpat_x_assum `alloca_inv (_ with vs_logs := _)` mp_tac >>
+     simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]) >>
+  `!x w. not_fresh_at st x /\ lookup_var x before = SOME w ==>
+     lookup_var x after = SOME w` by
+    (rpt strip_tac >>
+     qpat_x_assum `!x w. not_fresh_at st x /\ _ ==> _` drule_all >>
+     simp[lookup_var_def]) >>
+  rewrite_tac[log_packing_public_frame_def] >>
   rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
 
