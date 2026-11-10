@@ -1323,7 +1323,7 @@ Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[checked_extcall_grouped] >>
   irule shape_base_step_bind >>
   qexists_tac `\success st. R st /\ plain_operand st success` >>
-  reverse conj_tac >- (irule shape_base_step_emit_op_call >> simp[]) >>
+  reverse conj_tac >- (irule shape_base_step_emit_op_call >> simp[] >> fs[MEM]) >>
   qx_gen_tac `success` >> BETA_TAC >>
   `shape_stable (\st. R st /\ plain_operand st success)` by
     (rw[shape_stable_def] >> metis_tac[shape_stable_def, plain_operand_mono]) >>
@@ -1496,7 +1496,7 @@ Proof
   `shape_extends internal LP st mid /\ shape_base_state mid /\
    plain_operand mid success` by
     (irule shape_base_emit_op_call >> simp[] >>
-     qexistsl [`g`, `opc`, `rest`] >> fs[]) >>
+     qexistsl [`g`, `opc`, `rest`] >> fs[MEM]) >>
   drule emit_op_facts >> strip_tac >>
   Cases_on `emit_inst ASSERT [success] [] mid` >> gvs[] >>
   qmatch_goalsub_rename_tac `shape_extends internal LP st last` >>

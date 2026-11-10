@@ -223,9 +223,13 @@ Theorem compile_raw_call_finish_shape[local]:
       call_ty max_outsize rof out_val out_ptr)
     (\v st. plain_operand st v)
 Proof
-  Cases_on `rof` >> simp[shape_step_def, shape_state_def]
-  >- irule (SRULE [shape_base_step_def] compile_raw_call_finish_base_shape) >>
-  irule (SRULE [shape_base_step_def] compile_raw_call_finish_base_shape_widen)
+  Cases_on `rof`
+  >- (mp_tac compile_raw_call_finish_base_shape >>
+      simp_tac bool_ss [shape_base_step_def, shape_step_def, shape_state_def]) >>
+  qspecl_then [`to_op`, `data_ptr`, `data_len`, `gas_op`, `value_op`,
+    `call_ty`, `max_outsize`, `out_val`, `out_ptr`, `internal`] mp_tac
+    compile_raw_call_finish_base_shape_widen >>
+  simp_tac bool_ss [shape_base_step_def, shape_step_def, shape_state_def]
 QED
 
 (* Both failure modes use a fixed ALLOCA output buffer of unrestricted capacity. *)
