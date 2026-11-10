@@ -1,0 +1,47 @@
+Upstream: https://github.com/vyperlang/vyper/pull/5338
+Status: merged (d447429d495f79436af8035df467b6f496b8db50)
+
+Adapted to VYPER_PIN 577d2534: its `_bytestring_convert_value` gains the source type; bounded widening copy only, as before.
+
+diff --git a/vyper/codegen_venom/builtins/convert.py b/vyper/codegen_venom/builtins/convert.py
+index 570f867..c2bead7 100644
+--- a/vyper/codegen_venom/builtins/convert.py
++++ b/vyper/codegen_venom/builtins/convert.py
+@@ -71,10 +71,10 @@ def lower_convert(node: vy_ast.Call, ctx: VenomCodegenContext) -> IROperand | Vy
+         return _to_bytes_m(arg, in_t, out_t, arg_node, ctx)
+     elif isinstance(out_t, BytesT):
+         ret = _to_bytes(arg, in_t, out_t, arg_node, ctx)
+-        return _bytestring_convert_value(ret, out_t, ctx)
++        return _bytestring_convert_value(ret, in_t, out_t, ctx)
+     elif isinstance(out_t, StringT):
+         ret = _to_string(arg, in_t, out_t, arg_node, ctx)
+-        return _bytestring_convert_value(ret, out_t, ctx)
++        return _bytestring_convert_value(ret, in_t, out_t, ctx)
+     elif isinstance(out_t, FlagT):
+         return _to_flag(arg, in_t, out_t, ctx)
+     else:  # pragma: nocover
+@@ -82,11 +82,23 @@ def lower_convert(node: vy_ast.Call, ctx: VenomCodegenContext) -> IROperand | Vy
+ 
+ 
+ def _bytestring_convert_value(
+-    ptr: IROperand, out_t: _BytestringT, ctx: VenomCodegenContext
++    ptr: IROperand, src_t, out_t: _BytestringT, ctx: VenomCodegenContext
+ ) -> VyperValue:
+     assert isinstance(ptr, IRVariable)
+     if is_unbounded_bytestring_type(out_t):
+         return ctx.dynamic_memory_value(ptr, out_t, annotation="convert")
++    # Backport vyper#5338 to the bounded bytestring types at this pin.
++    # Consumers read a bounded value up to its type's size, which is past
++    # the source's buffer here: copy the value into a buffer of `out_t`.
++    if (
++        isinstance(src_t, _BytestringT)
++        and not is_unbounded_bytestring_type(src_t)
++        and src_t.memory_bytes_required < out_t.memory_bytes_required
++    ):
++        ret = ctx.new_temporary_value(out_t, annotation="convert")
++        assert isinstance(ret.operand, IRVariable)
++        ctx.copy_memory(ret.operand, ptr, src_t.memory_bytes_required)
++        return ret
+     buf = Buffer(_ptr=ptr, size=out_t.memory_bytes_required, annotation="convert")
+     return VyperValue.from_ptr(buf.base_ptr(), out_t)
+ 
