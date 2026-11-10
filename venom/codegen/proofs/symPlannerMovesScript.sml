@@ -1557,8 +1557,8 @@ Theorem sym_dup_residual_restore_finish[local]:
     last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ([SODup 16] ++ tail))
 Proof
   strip_tac >> drule_all_then strip_assume_tac sym_steps_unchanged_mem_compose >>
-  qexistsl [`last`, `top`] >> gvs[execute_plan_append, execute_plan_def,
-    exec_stack_op_def, arithmeticTheory.ADD1]
+  gvs[execute_plan_append, execute_plan_def,
+    exec_stack_op_def, arithmeticTheory.ADD1, SF SFY_ss]
 QED
 
 Theorem sym_dup_residual_restore[local]:
@@ -1599,9 +1599,8 @@ Theorem sym_dup_save_finish[local]:
     last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (saves ++ loads))
 Proof
   strip_tac >> drule_all_then assume_tac sym_steps_compose_ok >>
-  qexistsl [`last`, `v::top`] >>
-  asm_simp_tac bool_ss [execute_plan_append, LENGTH_APPEND, APPEND,
-    LIST_REL_def, arithmeticTheory.ADD_ASSOC]
+  gvs[execute_plan_append, LENGTH_APPEND, APPEND,
+    LIST_REL_def, SF SFY_ss]
 QED
 
 Theorem sym_dup_save_continue[local]:
@@ -1627,8 +1626,8 @@ Theorem sym_dup_save_continue[local]:
       (MAP SOSpill offsets ++ [SODup 16] ++ tail))
 Proof
   strip_tac >> drule_all_then (qspec_then `env` strip_assume_tac) sym_dup_residual_restore >>
-  drule_all_then (mp_tac o PURE_REWRITE_RULE [APPEND_ASSOC]) sym_dup_save_finish >>
-  simp_tac bool_ss [APPEND_ASSOC]
+  drule_all_then (fn th => simp_tac bool_ss [APPEND_ASSOC,
+    PURE_REWRITE_RULE [APPEND_ASSOC] th]) sym_dup_save_finish
 QED
 
 Theorem sym_dup_scratch_roundtrip[local]:
@@ -1673,6 +1672,24 @@ Proof
   metis_tac[LIST_REL_APPEND_suff, APPEND]
 QED
 
+Theorem sym_dup_scratch_kinds[local]:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  scratch_frame offsets ss.sym_mem_labels last.sym_mem_labels /\
+  (!op at. FLOOKUP ps.ps_spilled op = SOME at ==>
+    EVERY (\off. off+32 <= at \/ at+32 <= off) offsets) /\
+  MEM r cplan.cp_regions /\
+  EVERY (\off. r.sr_spill_base <= off /\ off+32 <= r.sr_spill_end) offsets /\
+  out.ps_spilled = ps.ps_spilled /\ out.ps_stack = stack_dup dist ps.ps_stack /\
+  dist < LENGTH ps.ps_stack /\ REVERSE ps.ps_stack = a ++ b /\
+  EL 15 b = EL dist (REVERSE ps.ps_stack) /\
+  LIST_REL (op_kind_ok fn ret) (EL 15 b::a) top /\
+  LIST_REL (op_kind_ok fn ret) b rest /\ last.sym_stack = top ++ (rest ++ srest) ==>
+  sym_kinds_ok cplan fn ret srest out last
+Proof
+  strip_tac >> drule_all_then assume_tac LIST_REL_deep_dup_join >>
+  metis_tac[sym_kinds_ok_scratch_change, APPEND_ASSOC]
+QED
+
 Theorem sym_dup_scratch_complete[local]:
   sym_kinds_ok cplan fn ret srest ps ss /\
   scratch_frame offsets ss.sym_mem_labels last.sym_mem_labels /\
@@ -1692,10 +1709,7 @@ Theorem sym_dup_scratch_complete[local]:
     (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  strip_tac >> drule_all_then assume_tac LIST_REL_deep_dup_join >>
-  `sym_kinds_ok cplan fn ret srest out last` by
-    (irule sym_kinds_ok_scratch_change >>
-     asm_simp_tac bool_ss [APPEND_ASSOC] >> metis_tac[]) >>
+  strip_tac >> drule_all_then assume_tac sym_dup_scratch_kinds >>
   metis_tac[scratch_frame_region]
 QED
 
@@ -1710,8 +1724,8 @@ Theorem sym_dup_frame_ready[local]:
     EL 15 b = EL dist (REVERSE ps.ps_stack)
 Proof
   strip_tac >> drule_all_then strip_assume_tac deep_dup_residual_shape >>
-  `k <= LENGTH ps.ps_stack` by decide_tac >>
-  metis_tac[sym_kinds_ok_scratch_split]
+  metis_tac[sym_kinds_ok_scratch_split, LENGTH_APPEND, LENGTH_REVERSE,
+    arithmeticTheory.LESS_EQ_ADD]
 QED
 
 Theorem sym_dup_shape_witnesses[local]:
@@ -1789,4 +1803,75 @@ Theorem sym_dup_shaped_run[local]:
     last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops)
 Proof
   strip_tac >> gvs[sym_dup_scratch_roundtrip]
+QED
+
+Theorem sym_dup_shaped_sim[local]:
+  k = dist-15 /\ a = REVERSE (top_n k ps.ps_stack) /\
+  b = REVERSE (TAKE (LENGTH ps.ps_stack-k) ps.ps_stack) /\
+  offsets = FST (spill_alloc_n [] ps.ps_alloc a) /\
+  al = FOLDL (\a off. free_spill_slot off a)
+    (SND (spill_alloc_n [] ps.ps_alloc a)) offsets /\
+  LENGTH a = k /\ 0 < k /\ out.ps_spilled = ps.ps_spilled /\
+  out.ps_alloc = al /\ out.ps_stack = stack_dup dist ps.ps_stack /\
+  tail = (if k <= 16 then MAP (\j. SORestore (EL j offsets))
+    (GENLIST (\i. k-2-i) (k-1) ++ [k-1]) ++ [SOSwap k]
+    else FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1])
+      (GENLIST (\i. k-1-i) k))) /\
+  ops = MAP SOSpill offsets ++ [SODup 16] ++ tail /\
+  15 < dist /\ dist < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac sym_dup_shaped_ready >>
+  drule_all_then (qspec_then `env` strip_assume_tac) sym_dup_shaped_run >>
+  drule_all_then MATCH_ACCEPT_TAC sym_dup_scratch_complete
+QED
+
+Theorem sym_do_dup_big:
+  do_dup dist ps = (ops,out) /\ 15 < dist /\ dist < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac sym_dup_shape_witnesses >>
+  drule_all_then MATCH_ACCEPT_TAC sym_dup_shaped_sim
+QED
+
+Theorem sym_do_dup:
+  do_dup dist ps = (ops,out) /\ dist < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> Cases_on `dist <= 15`
+  >- (drule_all_then MATCH_ACCEPT_TAC sym_do_dup_small) >>
+  `15 < dist` by decide_tac >> drule_all_then MATCH_ACCEPT_TAC sym_do_dup_big
 QED
