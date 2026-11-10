@@ -31,6 +31,27 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
+Theorem immutable_word_copy_loop_base_open[local]:
+  !src dst count load store ctor imm sa u sb.
+    compile_word_copy_loop_base src dst count load store ctor imm sa = (u,sb) ==>
+    ~block_is_terminated sb
+Proof
+  rpt gen_tac >>
+  simp[compile_word_copy_loop_base_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  drule new_block_open >> simp[]
+QED
+
+Theorem immutable_bytestring_store_open[local]:
+  compile_store_immutable_bytestring imm src dst sa = ((),sb) ==>
+  ~block_is_terminated sb
+Proof
+  simp[compile_store_immutable_bytestring_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[immutable_word_copy_loop_base_open]
+QED
+
 Theorem immutable_assign_loccode_open:
   compile_assign_value ce dst LocCode src prim loc dt st da bytes sa = ((),sb) ==>
   ~block_is_terminated sb
@@ -40,12 +61,11 @@ Proof
   Cases_on `prim` >> gvs[]
   >- metis_tac[immutable_assign_word_open] >>
   qpat_x_assum `(if dt <> st /\ _ then _ else _) sa = _` kall_tac >>
-  qmatch_asmsub_abbrev_tac `copy_size <= 32` >>
-  Cases_on `copy_size <= 32`
-  >- (gvs[immutable_comp_bind_cases] >>
-      metis_tac[immutable_assign_word_open]) >>
-  gvs[] >>
-  `0 < (copy_size + 31) DIV 32` by
+  Cases_on `is_bytestring_type dt` >> gvs[]
+  >- metis_tac[immutable_bytestring_store_open] >>
+  Cases_on `bytes <= 32` >> gvs[immutable_comp_bind_cases]
+  >- metis_tac[immutable_assign_word_open] >>
+  `0 < (bytes + 31) DIV 32` by
     (irule dividesTheory.DIV_POS >> decide_tac) >>
   metis_tac[immutable_assign_words_open]
 QED
