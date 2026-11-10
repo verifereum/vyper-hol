@@ -1352,7 +1352,8 @@ Proof
   pairarg_tac >> gvs[] >>
   Cases_on `returns_count > 0` >> Cases_on `return_buf_size > 0` >>
   gvs[] >> rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
-  gvs[contextTheory.base_ptr_def]
+  gvs[contextTheory.base_ptr_def] >>
+  Cases_on `return_buf` >> gvs[]
 QED
 
 Theorem aggregate_unequal_post_result_location:

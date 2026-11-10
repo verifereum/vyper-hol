@@ -48,10 +48,10 @@ Proof
   `!n b sz. local_region ce es.scopes s n b sz ==>
      local_region ce ee.scopes t n b sz` by
     (rpt strip_tac >> irule expr_inv_local_regions_transport >>
-     fs[intcall_expr_cont_def, intcall_joint_res_def] >>
+     fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def] >>
      goal_assum (drule_at Any) >>
      qexistsl [`fp.jc_cx`, `env`, `sa`] >> simp[]) >>
-  fs[intcall_expr_cont_def, intcall_joint_res_def] >>
+  fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def] >>
   rpt conj_tac >> simp[]
   >- metis_tac[local_ptrs_reserved_next_var]
   >- metis_tac[freshWritesTheory.not_fresh_at_mono]
@@ -68,7 +68,7 @@ QED
 
 Theorem intcall_joint_window_forcing:
   intcall_frame_ok fp /\
-  intcall_joint_res fp ce env es sa s /\
+  intcall_expr_res fp ce env es sa s /\
   intcall_expr_cont fp ce env es sa s ee sm t /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   unwrap_value ce vv sm = (op,sb) /\
@@ -118,15 +118,15 @@ Proof
     `func` |-> `fp.jc_func`] protected_value_window_forcing) >>
   (impl_tac >-
     (qpat_assum `intcall_expr_cont _ _ _ _ _ _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [intcall_expr_cont_def, intcall_joint_res_def]) >>
+       (strip_assume_tac o REWRITE_RULE [intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def]) >>
      qpat_assum `intcall_frame_ok _`
        (strip_assume_tac o REWRITE_RULE [intcall_frame_ok_def]) >> simp[])) >>
   strip_tac >> qexists `u` >>
   simp[] >>
   irule intcall_expr_cont_suffix >>
   goal_assum (drule_at Any) >>
-  qpat_x_assum `intcall_joint_res _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [intcall_joint_res_def]) >>
+  qpat_x_assum `intcall_expr_res _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [intcall_joint_res_def, intcall_expr_res_def]) >>
   qpat_x_assum `intcall_frame_ok _`
     (strip_assume_tac o REWRITE_RULE [intcall_frame_ok_def]) >>
   simp[] >> qexistsl [`sm`, `t`] >> simp[Abbr `Win`] >>

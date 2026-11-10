@@ -150,11 +150,11 @@ End
    typing, source state, compile state and Venom state.  The write-region
    authorization W(p,k) is written out: lo <= p, or [p,p+k) inside a staged
    allocation. *)
-Definition intcall_joint_res_def:
-  intcall_joint_res fp ce env es sa s <=>
+Definition intcall_expr_res_def:
+  intcall_expr_res fp ce env es sa s <=>
     stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
     expr_sim_inv ce fp.jc_cx env es /\
-    ce_locals_declared ce env /\ locals_alloc_ok ce env /\
+    locals_alloc_ok ce env /\
     local_ptrs_reserved ce sa /\
     allocas_above fp.jc_lo s /\
     (!a k. fp.jc_prot a k ==>
@@ -177,6 +177,14 @@ Definition intcall_joint_res_def:
          regions_disjoint io (type_memory_size tv) (w2n bw) cap)
 End
 
+(* I at a statement boundary: every compile-env local is declared in the
+   typing.  An AnnAssign's initializer is compiled after its name is
+   declared on the compile side only, so expressions get intcall_expr_res. *)
+Definition intcall_joint_res_def:
+  intcall_joint_res fp ce env es sa s <=>
+    intcall_expr_res fp ce env es sa s /\ ce_locals_declared ce env
+End
+
 (* At an expression's normal endpoint u (source state ee, compile state
    sb), from its entry s (source es, compile sa): I again, the position,
    old variables and allocations kept, the frontier monotone, and every
@@ -186,7 +194,7 @@ End
    (E0076's Protected = P or prefix). *)
 Definition intcall_expr_cont_def:
   intcall_expr_cont fp ce env es sa s ee sb u <=>
-    intcall_joint_res fp ce env ee sb u /\ ~u.vs_halted /\
+    intcall_expr_res fp ce env ee sb u /\ ~u.vs_halted /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
@@ -219,7 +227,7 @@ Definition intcall_expr_producer_def:
       compile_expr ce ty e sa = (vv,sb) /\
       fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
       gas_admissible (eval_expr fp.jc_cx e) expr_vv_res_ok es /\
-      intcall_joint_res fp ce env es sa s /\ ~s.vs_halted /\
+      intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
       s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
@@ -260,7 +268,7 @@ Definition intcall_forced_producer_def:
       fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
       gas_admissible (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx))
         expr_res_ok es /\
-      intcall_joint_res fp ce env es sa s /\ ~s.vs_halted /\
+      intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
       s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
@@ -286,18 +294,21 @@ Definition intcall_forced_producer_def:
 End
 
 (* Mapping-place producer: an expression naming a mapping
-   (expr_map_pre, not well_typed_expr), with expr_map_sim's certificate. *)
+   (expr_map_pre, not well_typed_expr), with expr_map_sim's certificate.
+   It covers effectful mapping places too (nested[f()] in nested[f()][k]),
+   since supported_effect_expr's Subscript clause admits them as bases. *)
 Definition intcall_map_producer_def:
   intcall_map_producer fp e <=>
     !ce env es sa sb s ty vv.
       intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
       expr_map_pre ce fp.jc_cx env e es /\
-      supported_place_expr fp.jc_tops e /\
+      (supported_place_expr fp.jc_tops e \/
+       supported_effect_place_expr fp.jc_tops e) /\
       calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e) /\
       compile_expr ce ty e sa = (vv,sb) /\
       fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
       gas_admissible (eval_expr fp.jc_cx e) expr_map_res_ok es /\
-      intcall_joint_res fp ce env es sa s /\ ~s.vs_halted /\
+      intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
       s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)

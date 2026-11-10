@@ -24,7 +24,7 @@ Proof
   rename1 `_ = (vv,sm)` >> simp[] >> strip_tac >> gvs[] >>
   `expr_body_pre ce fp.jc_cx env e es` by
     (irule stmt_expr_body_pre >>
-     fs[intcall_joint_res_def, stmt_exprs_ok_def,
+     fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
         supported_stmt_expr_exists_def, alloc_limits_stmt_def] >>
      drule supported_expr_body_calls >> strip_tac >>
      fs[body_inv_def, cx_tops_def, AllCaseEqs()] >>
@@ -32,6 +32,8 @@ Proof
      fs[intcall_frame_ok_def] >> metis_tac[]) >>
   `gas_admissible (eval_expr fp.jc_cx e) expr_vv_res_ok es` by
     metis_tac[expr_stmt_admissible] >>
+  imp_res_tac (GEN_ALL (DISCH_ALL (CONJUNCT1 (UNDISCH
+    (iffLR (SPEC_ALL intcall_joint_res_def)))))) >>
   qpat_x_assum `intcall_expr_producer _ _`
     (mp_tac o REWRITE_RULE [intcall_expr_producer_def]) >>
   disch_then drule_all >> strip_tac >>
@@ -61,11 +63,11 @@ Resume intcall_stmts_producer_expr[normal]:
        (qspec_then `[]` assume_tac) >>
      fs[] >>
      `storage_vars_rel ce fp.jc_cx /\ transient_vars_rel ce fp.jc_cx` by
-       fs[intcall_joint_res_def, stmt_state_rel_def, state_rel_def] >>
+       fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def, state_rel_def] >>
      `expr_body_pre ce fp.jc_cx env e
         (es with gas_obs := gas_explicit marks s.vs_gas_readings)` by simp[] >>
      drule_all compile_expr_open >> simp[]) >>
-  gvs[intcall_expr_cont_def, stmt_lands_def, cenv_top_ext_refl,
+  gvs[intcall_expr_cont_def, intcall_joint_res_def, stmt_lands_def, cenv_top_ext_refl,
       AllCaseEqs()]
 QED
 

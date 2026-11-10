@@ -13,7 +13,7 @@ Proof
   rpt strip_tac >> irule gas_outcome_return_path >>
   qexists_tac `s` >> simp[gas_marked_path_def, gas_path_rules] >>
   simp[stmt_lands_def, cenv_top_ext_refl] >>
-  fs[intcall_joint_res_def] >>
+  fs[intcall_joint_res_def, intcall_expr_res_def] >>
   metis_tac[]
 QED
 
@@ -30,5 +30,5 @@ Proof
   irule gas_outcome_return_path >>
   qexists_tac `s` >> simp[gas_marked_path_def, gas_path_rules] >>
   simp[stmt_lands_def, cenv_top_ext_refl] >>
-  fs[intcall_joint_res_def] >> metis_tac[]
+  fs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]
 QED

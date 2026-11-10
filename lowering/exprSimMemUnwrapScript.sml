@@ -150,7 +150,7 @@ Proof
   >- (rw[is_terminator_def, Abbr `ld`] >>
       TRY (irule below_frontier_no_ranges >> simp[mk_inst_def] >> NO_TAC) >>
       TRY (simp[inst_dload_in_section_def, mk_inst_def] >> NO_TAC) >>
-      gvs[step_inst_base_def, exec_read1_def, mk_inst_def]) >>
+      simp[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def]) >>
   strip_tac >> rename1 `gas_path_mem _ _ s 0 (OK u)` >>
   qexists_tac `u` >> simp[] >>
   irule expr_post_of_vv_post_load_physical >> simp[] >>
