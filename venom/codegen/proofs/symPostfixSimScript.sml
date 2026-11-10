@@ -1660,3 +1660,262 @@ Proof
   disch_then (qspec_then `env` strip_assume_tac) >>
   qexists `ss'` >> simp[]
 QED
+
+(* Operation-local bounds avoid imposing a word bound on unused allocator cells. *)
+Theorem do_dup_temporary_spill_mem[local]:
+  15 < dist /\ dist < LENGTH ps.ps_stack /\ do_dup dist ps = (ops,qs) /\
+  MEM off (FST (doSwapSim$spill_alloc_n [] ps.ps_alloc
+    (REVERSE (top_n (dist - 15) ps.ps_stack)))) ==>
+  MEM (SOSpill off) ops
+Proof
+  strip_tac >> qspecl_then [`dist`, `ps`] mp_tac doSwapSimTheory.do_dup_big_decompose >>
+  simp[arithmeticTheory.GREATER_DEF] >> strip_tac >> gvs[] >>
+  simp[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem do_swap_temporary_spill_mem[local]:
+  16 < dist /\ dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops,qs) /\
+  MEM off (FST (doSwapSim$spill_alloc_n [] ps.ps_alloc
+    (top_n (dist + 1) ps.ps_stack))) ==>
+  MEM (SOSpill off) ops
+Proof
+  strip_tac >> qspecl_then [`dist`, `ps`] mp_tac doSwapSimTheory.do_swap_big_decompose >>
+  simp[arithmeticTheory.GREATER_DEF] >> strip_tac >> gvs[] >>
+  simp[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem scratch_allocated_offsets_separated[local]:
+  spill_alloc_layout_wf al sp /\
+  offsets = FST (doSwapSim$spill_alloc_n [] al items) ==>
+  LENGTH offsets = LENGTH items /\ ALL_DISTINCT offsets /\
+  (!off old. MEM off offsets /\ MEM old offsets /\ off <> old ==>
+    off + 32 <= old \/ old + 32 <= off)
+Proof
+  strip_tac >>
+  qabbrev_tac `al2 = FOLDL (\a off. free_spill_slot off a)
+    (SND (doSwapSim$spill_alloc_n [] al items)) offsets` >>
+  `al2 = FOLDL (\a off. free_spill_slot off a)
+    (SND (doSwapSim$spill_alloc_n [] al items)) offsets` by simp[Abbr `al2`] >>
+  drule_all spill_alloc_n_temporary_layout >> strip_tac >>
+  simp[] >> rpt strip_tac >> gvs[MEM_EL] >> metis_tac[]
+QED
+
+Theorem scratch_replay_do_dup_ops_bounded_deep[local]:
+  15 < dist /\ dist < LENGTH ps.ps_stack /\ do_dup dist ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) ==>
+  ?inventory. scratch_replay cplan R ops (REVERSE ps.ps_stack) FEMPTY
+    (REVERSE qs.ps_stack) inventory
+Proof
+  strip_tac >>
+  qabbrev_tac `offsets = FST (doSwapSim$spill_alloc_n [] ps.ps_alloc
+    (REVERSE (top_n (dist - 15) ps.ps_stack)))` >>
+  fs[markerTheory.Abbrev_def] >>
+  `LENGTH offsets = dist - 15 /\ ALL_DISTINCT offsets /\
+    (!off old. MEM off offsets /\ MEM old offsets /\ off <> old ==>
+      off + 32 <= old \/ old + 32 <= off)` by
+    (drule_all scratch_allocated_offsets_separated >> simp[top_n_def]) >>
+  `EVERY (\off. off < dimword (:256) /\
+    (!b. in_mem_range off 32 b ==> R b /\ context_spill_byte cplan b)) offsets` by
+    (simp[EVERY_MEM] >> rpt strip_tac >>
+     metis_tac[do_dup_temporary_spill_mem]) >>
+  irule scratch_replay_do_dup_deep >> qexists `dist` >>
+  qexists `offsets` >> metis_tac[]
+QED
+
+Theorem scratch_replay_do_swap_ops_bounded_deep[local]:
+  16 < dist /\ dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) ==>
+  ?inventory. scratch_replay cplan R ops (REVERSE ps.ps_stack) FEMPTY
+    (REVERSE qs.ps_stack) inventory
+Proof
+  strip_tac >>
+  qabbrev_tac `offsets = FST (doSwapSim$spill_alloc_n [] ps.ps_alloc
+    (top_n (dist + 1) ps.ps_stack))` >> fs[markerTheory.Abbrev_def] >>
+  `LENGTH offsets = dist + 1 /\ ALL_DISTINCT offsets /\
+    (!off old. MEM off offsets /\ MEM old offsets /\ off <> old ==>
+      off + 32 <= old \/ old + 32 <= off)` by
+    (drule_all scratch_allocated_offsets_separated >> simp[top_n_def]) >>
+  `EVERY (\off. off < dimword (:256) /\
+    (!b. in_mem_range off 32 b ==> R b /\ context_spill_byte cplan b)) offsets` by
+    (simp[EVERY_MEM] >> rpt strip_tac >>
+     metis_tac[do_swap_temporary_spill_mem]) >>
+  irule scratch_replay_do_swap_deep >> qexists `dist` >>
+  qexists `offsets` >> metis_tac[]
+QED
+
+Theorem scratch_replay_do_dup_ops_bounded:
+  dist < LENGTH ps.ps_stack /\ do_dup dist ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) ==>
+  ?inventory. scratch_replay cplan R ops (REVERSE ps.ps_stack) FEMPTY
+    (REVERSE qs.ps_stack) inventory
+Proof
+  strip_tac >> Cases_on `dist <= 15`
+  >- (qexists `FEMPTY` >> metis_tac[scratch_replay_do_dup_shallow]) >>
+  irule scratch_replay_do_dup_ops_bounded_deep >> simp[] >>
+  metis_tac[arithmeticTheory.NOT_LESS]
+QED
+
+Theorem scratch_replay_do_swap_ops_bounded:
+  dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) ==>
+  ?inventory. scratch_replay cplan R ops (REVERSE ps.ps_stack) FEMPTY
+    (REVERSE qs.ps_stack) inventory
+Proof
+  strip_tac >> Cases_on `dist <= 16`
+  >- (qexists `FEMPTY` >> metis_tac[scratch_replay_do_swap_shallow]) >>
+  irule scratch_replay_do_swap_ops_bounded_deep >> simp[] >>
+  metis_tac[arithmeticTheory.NOT_LESS]
+QED
+
+Theorem sym_do_dup_sim_marked_ops_bounded:
+  dist < LENGTH ps.ps_stack /\ do_dup dist ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest qs ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all scratch_replay_do_dup_ops_bounded >> strip_tac >>
+  irule sym_scratch_replay_retained >>
+  simp[] >> (conj_tac >- metis_tac[]) >>
+  qexistsl [`inventory`, `ps`, `R`] >>
+  metis_tac[do_dup_spill_inventory_untouched, doSwapSimTheory.do_dup_multiplicity_layout]
+QED
+
+Theorem sym_do_swap_sim_marked_ops_bounded:
+  dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest qs ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all scratch_replay_do_swap_ops_bounded >> strip_tac >>
+  irule sym_scratch_replay_retained >>
+  simp[] >> (conj_tac >- metis_tac[]) >>
+  qexistsl [`inventory`, `ps`, `R`] >>
+  metis_tac[do_swap_spill_inventory_untouched, doSwapSimTheory.do_swap_multiplicity_layout]
+QED
+
+Theorem sym_swap_pop_sim_marked_ops_bounded:
+  dist < LENGTH ps.ps_stack /\ do_swap dist ps = (swap_ops,swapped) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SOSpill off) swap_ops ==> off < dimword (:256)) /\
+  (!off b. MEM (SOSpill off) swap_ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (swap_ops ++ [SOPop 1])) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp (swap_ops ++ [SOPop 1]))) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest
+      (swapped with ps_stack := stack_pop 1 swapped.ps_stack) ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (swap_ops ++ [SOPop 1])) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  simp[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >> strip_tac >>
+  `0 < LENGTH swapped.ps_stack` by
+    (drule doSwapSimTheory.do_swap_stack_perm >> simp[] >> strip_tac >>
+     imp_res_tac sortingTheory.PERM_LENGTH >> gvs[] >> decide_tac) >>
+  drule_all sym_do_swap_sim_marked_ops_bounded >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  `asm_block_at p ss'.sym_base.as_pc (execute_plan initial_fmp [SOPop 1])` by
+    metis_tac[arithmeticTheory.ADD_COMM] >>
+  drule_all sym_pop_top_sim >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists `ss''` >> simp[sym_steps_add] >> decide_tac
+QED
+
+Theorem sym_popmany_plan_singleton_sim_marked_ops_bounded:
+  stack_get_depth v ps.ps_stack = SOME dist /\ popmany_plan [v] ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest qs ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> Cases_on `do_swap dist ps` >>
+  rename1 `do_swap dist ps = (swap_ops,swapped)` >>
+  drule_all popmany_singleton_swap_decompose >> strip_tac >> gvs[] >>
+  `dist < LENGTH ps.ps_stack` by metis_tac[planAlignTheory.stack_get_depth_bound] >>
+  drule_all sym_swap_pop_sim_marked_ops_bounded >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists `ss'` >> simp[]
+QED
+
+(* Applicability boundary: region containment is independent of word bounds. *)
+Theorem scratch_ops_region_confined:
+  planSpillBounds$ops_spill_bounded sb upper ops /\ MEM r cplan.cp_regions /\
+  r.sr_fn_name = name /\ r.sr_spill_base <= sb /\ upper <= r.sr_spill_end ==>
+  !off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    closure_spill_byte ctx cplan name b /\ context_spill_byte cplan b
+Proof
+  simp[planSpillBoundsTheory.ops_spill_bounded_def, in_mem_range_def] >>
+  rpt strip_tac >>
+  `r.sr_spill_base <= b /\ b < r.sr_spill_end` by
+    (first_x_assum (qspec_then `off` mp_tac) >> simp[] >> decide_tac) >>
+  simp[frameRelTheory.closure_spill_byte_def, contextCodegenRelTheory.context_spill_byte_def] >>
+  metis_tac[fcgDefsTheory.fcg_path_def, relationTheory.RTC_REFL]
+QED
+
+Theorem do_dup_ops_region_confined:
+  planSpillBounds$plan_slots_bounded sb ps /\
+  dist < LENGTH ps.ps_stack /\ do_dup dist ps = (ops,qs) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
+  r.sr_spill_base <= sb /\ qs.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  !off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    closure_spill_byte ctx cplan name b /\ context_spill_byte cplan b
+Proof
+  strip_tac >> drule_all planSpillBoundsTheory.do_dup_slots_bounded >> strip_tac >>
+  metis_tac[scratch_ops_region_confined]
+QED
+
+Theorem popmany_singleton_ops_spill_bounded:
+  stack_get_depth v ps.ps_stack = SOME d /\ popmany_plan [v] ps = (ops,qs) /\
+  planSpillBounds$plan_slots_bounded sb ps ==>
+  planSpillBounds$ops_spill_bounded sb qs.ps_alloc.sa_next_offset ops
+Proof
+  strip_tac >> Cases_on `do_swap d ps` >>
+  rename1 `do_swap d ps = (swap_ops,swapped)` >>
+  drule_all popmany_singleton_swap_decompose >> strip_tac >> gvs[] >>
+  `d < LENGTH ps.ps_stack` by metis_tac[planAlignTheory.stack_get_depth_bound] >>
+  drule_all planSpillBoundsTheory.do_swap_slots_bounded >>
+  simp[planSpillBoundsTheory.ops_spill_bounded_def] >> metis_tac[]
+QED
+
+Theorem popmany_singleton_ops_region_confined:
+  stack_get_depth v ps.ps_stack = SOME d /\ popmany_plan [v] ps = (ops,qs) /\
+  planSpillBounds$plan_slots_bounded sb ps /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
+  r.sr_spill_base <= sb /\ qs.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  !off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    closure_spill_byte ctx cplan name b /\ context_spill_byte cplan b
+Proof
+  strip_tac >> drule_all popmany_singleton_ops_spill_bounded >> strip_tac >>
+  metis_tac[scratch_ops_region_confined]
+QED
