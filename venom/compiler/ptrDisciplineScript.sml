@@ -624,6 +624,22 @@ Definition taint_ok_def:
      tn.t_stor = {} /\ tn.t_trans = {})
 End
 
+Theorem taint_ok_observation_operand:
+  taint_ok fn tn inst s /\ MEM inst.inst_opcode [SHA3; LOG; CREATE; CREATE2] /\
+  MEM op inst.inst_operands ==> op_taint tn op = {}
+Proof
+  strip_tac >> gvs[taint_ok_def] >> metis_tac[]
+QED
+
+Theorem taint_ok_observation_read:
+  taint_ok fn tn inst s /\ MEM inst.inst_opcode [SHA3; LOG; CREATE; CREATE2] /\
+  ~in_revert_forward fn s /\ MEM (off,len) (source_memory_read_ranges inst s) /\
+  q < len ==> off + q NOTIN tn.t_mem
+Proof
+  strip_tac >> gvs[taint_ok_def, about_to_revert_def] >>
+  `off <= off + q /\ off + q < len + off` by decide_tac >> metis_tac[]
+QED
+
 Definition ctx_has_dalloca_def:
   ctx_has_dalloca ctx <=>
     EXISTS (\fn. EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts fn))
