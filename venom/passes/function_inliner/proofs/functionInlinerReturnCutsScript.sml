@@ -169,3 +169,142 @@ QED
    an inactive saved caller snapshot.  General layout/namespace containment,
    protected remote ancestors, entry/PHI transitions and fuel composition
    remain obligations of the existing recursive transport frontier. *)
+
+Theorem return_cut_destination_layout:
+  !fmp. ?bb.
+    lookup_block "inl1_inl0_inner" (return_cut_produced fmp).fn_blocks = SOME bb /\
+    FLAT (MAP (\i. i.inst_outputs)
+      (TAKE (if fmp then 3 else 2) bb.bb_instructions)) =
+      (if fmp then ["inl1_inl0_arg"; "inl1_inl0_fp"; "inl1_inl0_pc"]
+       else ["inl1_inl0_arg"; "inl1_inl0_pc"]) /\
+    FLAT (MAP (\i. i.inst_outputs)
+      (DROP (if fmp then 3 else 2) bb.bb_instructions)) = ["inl1_answer"]
+Proof
+  Cases >> EVAL_TAC >> simp[]
+QED
+
+Theorem return_cut_namespace_support:
+  !fmp.
+    set (cfgTransform$fn_all_vars (return_cut_middle fmp)) =
+      (if fmp then {"mpc"; "mf"; "answer"} else {"mpc"; "answer"}) /\
+    set (cfgTransform$fn_all_vars return_cut_outer) = {"result"}
+Proof
+  Cases >> EVAL_TAC >> simp[pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem return_cut_entry_avoids:
+  inline_tracked_snapshot (return_cut_middle fmp) ma mr ms frame /\
+  inline_tracked_snapshot return_cut_outer oa opr os frame /\
+  mr.ir_rename = STRCAT "inl1_" /\ opr.ir_rename = I /\
+  ms.ils_protected = {} /\ os.ils_protected = {} /\
+  MEM d (if fmp then ["inl1_inl0_arg"; "inl1_inl0_fp"; "inl1_inl0_pc"]
+         else ["inl1_inl0_arg"; "inl1_inl0_pc"]) ==>
+  inline_suspended_avoids [(ma,mr,ms);(oa,opr,os)] d
+Proof
+  strip_tac >>
+  `ms.ils_defined SUBSET set (cfgTransform$fn_all_vars (return_cut_middle fmp)) /\
+   os.ils_defined SUBSET set (cfgTransform$fn_all_vars return_cut_outer)` by
+    fs[inline_tracked_snapshot_def] >>
+  qpat_x_assum `inline_tracked_snapshot _ _ _ _ _` kall_tac >>
+  qpat_x_assum `inline_tracked_snapshot _ _ _ _ _` kall_tac >>
+  fs[return_cut_namespace_support] >>
+  Cases_on `fmp` >>
+  full_simp_tac bool_ss [COND_CLAUSES, MEM] >>
+  asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [inline_suspended_avoids_def,
+    EVERY_DEF, pred_setTheory.NOT_IN_EMPTY] >>
+  conj_tac >> gen_tac >> disch_tac >>
+  first_x_assum (drule_then mp_tac o REWRITE_RULE [pred_setTheory.SUBSET_DEF]) >>
+  pure_asm_rewrite_tac [pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem return_cut_return_avoids_outer:
+  inline_tracked_snapshot return_cut_outer oa opr os frame /\
+  opr.ir_rename = I /\ os.ils_protected = {} ==>
+  inline_suspended_avoids [(oa,opr,os)] "inl1_answer"
+Proof
+  strip_tac >>
+  `os.ils_defined SUBSET set (cfgTransform$fn_all_vars return_cut_outer)` by
+    fs[inline_tracked_snapshot_def] >>
+  fs[return_cut_namespace_support, pred_setTheory.SUBSET_DEF] >>
+  simp[inline_suspended_avoids_def] >> rpt strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem return_cut_entry_preserves_ancestors:
+  inline_tracked_snapshot (return_cut_middle fmp) ma mr ms frame /\
+  inline_tracked_snapshot return_cut_outer oa opr os frame /\
+  ma.ia_function = return_cut_middle fmp /\ oa.ia_function = return_cut_outer /\
+  mr.ir_rename = STRCAT "inl1_" /\ opr.ir_rename = I /\
+  ms.ils_protected = {} /\ os.ils_protected = {} /\
+  lookup_block "inl1_inl0_inner" (return_cut_produced fmp).fn_blocks = SOME bb /\
+  EVERY (\(d,w). MEM d (FLAT (MAP (\i. i.inst_outputs)
+    (TAKE (if fmp then 3 else 2) bb.bb_instructions)))) writes ==>
+  inline_suspended_observations [(ma,mr,ms);(oa,opr,os)]
+    (frame with ipf_state :=
+      FOLDL (\s (d,w). update_var d w s) frame.ipf_state writes)
+Proof
+  strip_tac >>
+  qspec_then `fmp` strip_assume_tac return_cut_destination_layout >>
+  gvs[] >> irule inline_suspended_writes >>
+  simp[inline_suspended_observations_def] >>
+  fs[EVERY_MEM] >> rpt strip_tac >> PairCases_on `e` >>
+  gvs[] >>
+  qpat_x_assum `!e. MEM e writes ==> _` (qspec_then `(e0,e1)` mp_tac) >>
+  simp[] >> strip_tac >> irule return_cut_entry_avoids >> metis_tac[]
+QED
+
+Theorem return_cut_pop_preserves_outer:
+  inline_tracked_snapshot return_cut_outer oa opr os frame /\
+  oa.ia_function = return_cut_outer /\
+  opr.ir_rename = I /\ os.ils_protected = {} ==>
+  inline_suspended_observations [(oa,opr,os)]
+    (frame with ipf_state := update_var "inl1_answer" w frame.ipf_state)
+Proof
+  strip_tac >> irule inline_suspended_write >>
+  simp[inline_suspended_observations_def] >>
+  irule return_cut_return_avoids_outer >> metis_tac[]
+QED
+
+(* Phase boundary: the middle observation is popped before the output write.
+   The outer tail survives; the resumed middle output is related to the
+   original bind_outputs result, without preserving its old answer binding.
+   General interface still required:
+     original_child ... /\ reachable_cut ... (parent::ancestors) /\
+     original_return ... ==> ?cut'. reachable_cut ... ancestors /\
+       resumed_parent ... /\ administrative_return_segment ... .
+   Here reachable_cut must PRODUCE ancestor namespace containment from actual
+   edits. It must not take all-observation avoidance as a return premise. *)
+Theorem return_cut_source_to_popped_adapter:
+  lookup_var "arg" s = SOME w /\ lookup_var "pc" s = SOME pc /\
+  lookup_var "inl1_inl0_arg" frame.ipf_state = lookup_var "arg" s /\
+  ~frame.ipf_state.vs_halted /\
+  inline_tracked_snapshot return_cut_outer oa opr os frame /\
+  oa.ia_function = return_cut_outer /\ opr.ir_rename = I /\
+  os.ils_protected = {} ==>
+  ?bb ir u.
+    step_inst fuel ctx
+      (LAST (HD (return_cut_inner fmp).fn_blocks).bb_instructions) s =
+      IntRet ir s /\
+    lookup_block "inl1_inl0_inner" (return_cut_produced fmp).fn_blocks = SOME bb /\
+    exec_block fuel ctx bb
+      (frame.ipf_state with vs_inst_idx := if fmp then 3 else 2) =
+      OK (jump_to "inl1_inl0_inline_return0" u) /\
+    inline_suspended_observations [(oa,opr,os)] (frame with ipf_state := u) /\
+    lookup_var "inl1_answer" u =
+      lookup_var "answer" (THE (bind_outputs ["answer"] ir.iret_values caller)) /\
+    inline_shared_frame u = inline_shared_frame frame.ipf_state /\
+    (adopt_return_fmp ir caller).vs_fmp =
+      if fmp then s.vs_fmp else caller.vs_fmp
+Proof
+  strip_tac >>
+  drule_all return_cut_source_to_adapter >>
+  disch_then (qspecl_then [`fmp`, `caller`, `fuel`, `ctx`] strip_assume_tac) >>
+  `ir = <|iret_values := [w];
+          iret_adopt_fmp := if fmp then SOME s.vs_fmp else NONE|>` by
+    (drule_all return_cut_source_return >>
+     disch_then (qspecl_then [`fmp`, `fuel`, `ctx`] mp_tac) >> simp[]) >>
+  `inline_prefix 1 = "inl1_"` by EVAL_TAC >>
+  gvs[] >> qexists `update_var "inl1_answer" w frame.ipf_state` >>
+  simp[] >> irule return_cut_pop_preserves_outer >> metis_tac[]
+QED
