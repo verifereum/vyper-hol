@@ -1391,6 +1391,12 @@ Proof
   simp[integer_wordTheory.i2w_def]
 QED
 
+Theorem imm_is_some_cond[local]:
+  IS_SOME (if b then x else y) <=> if b then IS_SOME x else IS_SOME y
+Proof
+  Cases_on `b` >> simp[]
+QED
+
 Theorem imm_array_index_range[local]:
   !etv bd av ix n sgn i.
     n = array_length (ArrayTV etv bd) av /\ n < dimword (:256) /\
@@ -1406,7 +1412,7 @@ Proof
   Cases_on `av` >> gvs[vyperValueOperationTheory.array_index_def,
                        vyperValueOperationTheory.array_length_def] >>
   simp[listTheory.oEL_THM] >>
-  rpt CASE_TAC >> gvs[]
+  FIRST [simp[imm_is_some_cond, optionTheory.option_case_compute]]
 QED
 
 Theorem imm_typed_array_length[local]:
