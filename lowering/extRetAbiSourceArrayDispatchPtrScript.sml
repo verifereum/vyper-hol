@@ -560,10 +560,7 @@ Proof
      simp[eval_operand_def]) >>
   drule_all source_array_static_suffix_counted_ptr >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  suspend "finish"
-QED
 
-Resume compile_abi_encode_source_dyn_static_counted_ptr[finish]:
   rename1 `gas_path_ptr D 0 ctx fn PG G2 tn2 s2 0 G3 tn3 (OK s3)` >>
   qexistsl_tac [`G3`,`tn3`,`s3`] >>
   conj_tac >-
@@ -607,10 +604,7 @@ Resume compile_abi_encode_source_dyn_static_counted_ptr[finish]:
         qpat_x_assum `w2n (n2w parent:bytes32) = parent` (fn th => rewrite_tac[th]) >>
         decide_tac) >>
      simp[]) >>
-  suspend "frames"
-QED
 
-Resume compile_abi_encode_source_dyn_static_counted_ptr[frames]:
   `!p. not_fresh_at sa p ==>
     lookup_var p s3 = lookup_var p s /\ FLOOKUP G3 p = FLOOKUP G p /\
     op_taint tn3 (Var p) = op_taint tn (Var p)` by
@@ -654,4 +648,4 @@ Resume compile_abi_encode_source_dyn_static_counted_ptr[frames]:
   metis_tac[]
 QED
 
-Finalise compile_abi_encode_source_dyn_static_counted_ptr
+
