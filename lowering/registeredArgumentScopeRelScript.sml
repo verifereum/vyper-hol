@@ -21,8 +21,8 @@ Proof
   simp[entry_slot_witness_def] >> strip_tac >>
   gvs[eval_operand_def] >>
   qexistsl_tac [`p`, `ins`] >> simp[] >>
-  irule val_in_memory_memory_value_rel >> simp[] >>
-  drule_then (qspec_then `i` mp_tac) bind_arguments_word_arg >>
+  irule memoryValueEncodingTheory.val_in_memory_memory_value_rel >> simp[] >>
+  drule_then (qspec_then `i` mp_tac) entryDecodePropsTheory.bind_arguments_word_arg >>
   simp[] >> strip_tac >> gvs[]
 QED
 
