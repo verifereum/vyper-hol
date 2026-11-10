@@ -320,7 +320,7 @@ Theorem regional_dfs_prefix_lower_certificate:
         SOME (pre,q) /\ (EL j bb.bb_instructions).inst_opcode <> PHI ==>
     regional_body_lower_inv lv dfg sb bb j q
 Proof
-  strip_tac >> drule dfs_block_state_lineage_state >> strip_tac >>
+  strip_tac >> drule fnBlockPlanStaticRegionTheory.dfs_block_state_lineage_state >> strip_tac >>
   rpt gen_tac >> strip_tac >>
   irule regional_replay_prefix_lower_certificate >>
   rpt (first_assum $ irule_at Any) >>
@@ -389,7 +389,7 @@ Theorem regional_dfs_ret_body_signed_balance:
   &(LENGTH qs.ps_stack) = (&(LENGTH ps2.ps_stack):int) + trace_weight inst_ops +
     FOLDR ($+) (0:int) (MAP instruction_correction (non_param_insts bb))
 Proof
-  strip_tac >> drule dfs_block_state_lineage_state >> strip_tac >>
+  strip_tac >> drule fnBlockPlanStaticRegionTheory.dfs_block_state_lineage_state >> strip_tac >>
   irule regional_replay_ret_body_signed_balance >>
   rpt (first_assum $ irule_at Any) >>
   qexistsl [`ps_dfs.ps_cleanup_promised`, `param_ops`, `ps_dfs.ps_cleanup_height`] >> gvs[]
@@ -456,7 +456,7 @@ Theorem regional_dfs_ret_block_signed_balance:
     &(LENGTH (get_params bb.bb_instructions)) +
     FOLDR ($+) (0:int) (MAP instruction_correction (non_param_insts bb))
 Proof
-  strip_tac >> drule dfs_block_state_lineage_state >> strip_tac >>
+  strip_tac >> drule fnBlockPlanStaticRegionTheory.dfs_block_state_lineage_state >> strip_tac >>
   irule regional_replay_ret_block_signed_balance >>
   rpt (first_assum $ irule_at Any) >>
   qexistsl [`ps_dfs.ps_cleanup_promised`, `ps_dfs.ps_cleanup_height`] >> gvs[]
@@ -542,7 +542,7 @@ Theorem regional_actual_dfs_phi_upper_cut:
 Proof
   strip_tac >>
   `lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
-    bb.bb_label ps_dfs` by metis_tac[dfs_block_state_lineage_state] >>
+    bb.bb_label ps_dfs` by metis_tac[fnBlockPlanStaticRegionTheory.dfs_block_state_lineage_state] >>
   `regional_selected_phi_inv lv dfg sb bb 0 ps_dfs` by
     (drule_all regional_lineage_selected_phi_inv >> simp[]) >>
   `fn_reachable fn bb.bb_label` by
@@ -681,7 +681,7 @@ Theorem regional_actual_dfs_no_phi_body_upper:
 Proof
   strip_tac >>
   `lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
-    bb.bb_label ps_dfs` by metis_tac[dfs_block_state_lineage_state] >>
+    bb.bb_label ps_dfs` by metis_tac[fnBlockPlanStaticRegionTheory.dfs_block_state_lineage_state] >>
   `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
   drule_all regional_canonical_body_layout >> strip_tac >>
   `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
@@ -759,7 +759,7 @@ Proof
   strip_tac >>
   `MEM inst bb.bb_instructions` by metis_tac[listTheory.EL_MEM] >>
   `lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
-    bb.bb_label ps_dfs` by metis_tac[dfs_block_state_lineage_state] >>
+    bb.bb_label ps_dfs` by metis_tac[fnBlockPlanStaticRegionTheory.dfs_block_state_lineage_state] >>
   `regional_body_lower_inv lv dfg sb bb k ps` by
     (irule regional_actual_lower_inv >> rpt (first_assum $ irule_at Any) >> simp[] >>
      qexistsl [`ps_dfs.ps_cleanup_promised`,`ps_dfs.ps_cleanup_height`] >> gvs[]) >>
@@ -923,7 +923,7 @@ Proof
   `origin = pred` by (gvs[] >> metis_tac[cfg_edge_symmetry_uncond, listTheory.MEM]) >>
   gvs[] >>
   rename1 `generate_block_plan lv dfg _ fn bb other_in = SOME _` >>
-  `other_in = pin` by (irule dfs_block_state_unique >> metis_tac[]) >>
+  `other_in = pin` by (irule fnBlockPlanStaticDfsTraceTheory.dfs_block_state_unique >> metis_tac[]) >>
   gvs[]
 QED
 
@@ -995,7 +995,7 @@ Proof
   `~MEM dead_stack_marker pout.ps_stack` by
     (irule regional_dfs_block_marker_free >> metis_tac[]) >>
   `lineage_state lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr) pred pin`
-    by metis_tac[dfs_block_state_lineage_state] >>
+    by metis_tac[fnBlockPlanStaticRegionTheory.dfs_block_state_lineage_state] >>
   `lineage_entry lv dfg cfg fn (init_cleanup_plan_state ch growth sb ctr)
     pred succ (sin with <|ps_stack := pout.ps_stack; ps_spilled := pout.ps_spilled|>)`
     by (`pout.ps_spilled = sin.ps_spilled` by
@@ -1004,7 +1004,7 @@ Proof
         simp[lineage_entry_def] >>
         qexistsl_tac [`pin`, `pin`, `ops`, `pout`,
           `pin.ps_cleanup_height`, `pin.ps_cleanup_promised`, `pout`, `sin`] >>
-        gvs[]) >>
+        gvs[] >> qexistsl_tac [`[]`, `[]`, `pout.ps_stack`] >> simp[]) >>
   qpat_x_assum `bb.bb_label = succ` (SUBST_ALL_TAC o SYM) >>
   drule_all lineage_entry_join_stack >> simp[] >> strip_tac >>
   `pre = []` by (Cases_on `pre` >> gvs[listTheory.EVERY_DEF]) >> gvs[]
@@ -1145,7 +1145,7 @@ Theorem regional_dfs_block_signed_balance:
     &(LENGTH (get_params bb.bb_instructions)) +
     FOLDR ($+) (0:int) (MAP instruction_correction (non_param_insts bb))
 Proof
-  strip_tac >> drule dfs_block_state_lineage_state >> strip_tac >>
+  strip_tac >> drule fnBlockPlanStaticRegionTheory.dfs_block_state_lineage_state >> strip_tac >>
   irule regional_replay_block_signed_balance >>
   rpt (first_assum $ irule_at Any) >>
   qexistsl [`ps_dfs.ps_cleanup_promised`, `ps_dfs.ps_cleanup_height`] >> gvs[]
@@ -1197,6 +1197,7 @@ Proof
       gvs[] >> drule_all regional_entry_dfs_initial >>
       simp[init_cleanup_plan_state_def, init_plan_state_def]) >>
   rename1 `MEM succ (cfg_succs_of cfg lbl)` >>
+  rpt (qpat_x_assum `_.ps_stack = _ ++ core` kall_tac) >>
   `cfg_path cfg lbl target` by metis_tac[cfg_path_predecessor_closed] >>
   `LENGTH ps.ps_stack = LENGTH ps_dfs.ps_stack` by
     (first_x_assum irule >> metis_tac[]) >>
