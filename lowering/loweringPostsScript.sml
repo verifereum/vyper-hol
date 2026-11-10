@@ -279,7 +279,7 @@ Proof
 QED
 
 (* expr_has_effect by constructor. *)
-Theorem expr_has_effect_thm:
+Theorem expr_has_effect_thm[simp]:
   (expr_has_effect (Name ty name) <=> F) /\
   (expr_has_effect (Literal ty lit) <=> F) /\
   (expr_has_effect (TopLevelName ty id) <=> F) /\
@@ -556,22 +556,6 @@ Definition vv_own_def:
                                     b + sz <= lb \/ lb + lsz <= b)) \/
             val_footprint tvt v = 0))
 End
-
-(* expr_has_effect by constructor, for the expressions whose posts the
-   simulation cases build. *)
-Theorem expr_has_effect_thm[simp]:
-  (expr_has_effect (Pop ty tgt) <=> T) /\
-  (expr_has_effect (Call ty ct es d) <=> T) /\
-  (expr_has_effect (Literal ty l) <=> F) /\
-  (expr_has_effect (Name ty n) <=> F) /\
-  (expr_has_effect (TopLevelName ty id) <=> F) /\
-  (expr_has_effect (FlagMember ty id f) <=> F) /\
-  (expr_has_effect (Attribute ty e1 f) <=> expr_has_effect e1) /\
-  (expr_has_effect (Subscript ty e1 e2) <=>
-     expr_has_effect e1 \/ expr_has_effect e2)
-Proof
-  simp[expr_has_effect_def, supported_expr_exists_def, expr_effect_root_def]
-QED
 
 (* A storage or transient pointer reads live slots at es: no byte of the
    slots it reads is dead but those its own type leaves dead
