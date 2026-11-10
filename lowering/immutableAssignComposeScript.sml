@@ -169,7 +169,7 @@ Theorem immutable_assign_direct_stmt_post:
   ce.ce_module_var_type (ce.ce_module,id) = SOME ity /\
   evaluate_type (get_tenv cx) ity = SOME itv /\
   evaluate_type (get_tenv cx) sty = SOME stv /\
-  (ity = sty \/ (is_bytestring_type ity /\ is_bytestring_type sty)) /\
+  ity = sty /\ ~is_bytestring_type ity /\
   copy_size = (if is_bytestring_type ity then type_memory_bytes ce sty else bytes) /\
   n = (if copy_size <= 32 then 1 else (copy_size+31) DIV 32) /\
   32*n <= type_memory_size itv /\
@@ -380,6 +380,37 @@ Proof
     (drule_all immutable_assign_rhs_memory_positive >> simp[]) >>
   `type_memory_bytes ce ity = type_memory_size itv` by
     metis_tac[expr_sim_inv_memory_size] >>
+  Cases_on `is_bytestring_type ity`
+  >- (`is_bytestring_type (lowered_value_type ce e)` by
+        metis_tac[typed_copy_bytestring_source] >>
+      `~is_word_type (post_value_type ce e)` by
+        metis_tac[immutable_rhs_post_physical_classify, is_bytestring_word_type] >>
+      `expr_val_at ce cx (post_value_type ce e) si su ee v op s` by fs[expr_post_def] >>
+      drule_all immutable_assign_source_range >>
+      disch_then (map_every assume_tac o CONJUNCTS) >>
+      `!region. ce.ce_imm_alloca = SOME region ==> eval_operand region s = SOME 0w` by
+        fs[stmt_state_rel_def, state_rel_def, immutable_base_zero_def] >>
+      `eval_operand (Lit (n2w off)) s = SOME (n2w off)` by simp[eval_operand_def] >>
+      `0 < val_footprint stv v` by
+        (drule_all immutableBytestringFootprintTheory.immutable_bytestring_runtime_extent >>
+         strip_tac >> simp[]) >>
+      qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[] >> disch_tac >>
+      qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+        (mp_then Any mp_tac immutable_assign_bytestring_store) >>
+      disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
+      disch_then (drule_at (Pat `evaluate_type _ ity = _`)) >>
+      disch_then (qspecl_then [`func`,`ctx`,`off`] mp_tac) >>
+      (impl_tac >- (simp[] >> gvs[regions_disjoint_def] >> metis_tac[])) >> strip_tac >>
+      qexists_tac `q` >> conj_tac >- first_assum ACCEPT_TAC >>
+      `q with vs_inst_idx := LENGTH sb.cs_current_insts = q` by
+        simp[venom_state_component_equality] >>
+      pop_assum (fn th => once_rewrite_tac[GSYM th]) >>
+      irule immutable_assign_suffix_stmt_post >> simp[] >>
+      qexistsl_tac [`env`,`id`,`itv`,`ity`,`off`,`v`] >> simp[] >>
+      conj_tac >- (rpt strip_tac >> first_x_assum irule >> fs[regions_disjoint_def]) >>
+      `tu = itv` by metis_tac[optionTheory.SOME_11] >>
+      gvs[] >> metis_tac[evaluated_immutable_admissible]) >>
   Cases_on `ity = lowered_value_type ce e \/
     (is_bytestring_type ity /\ is_bytestring_type (lowered_value_type ce e))`
   >- (`~is_word_type (post_value_type ce e)` by
