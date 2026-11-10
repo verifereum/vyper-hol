@@ -13,7 +13,14 @@ Ancestors
   exprLowering exprLoweringProps
   vyperABI vyperValue valueEncoding valueEncodingProps valueTypingMemoryProps
   finite_map words list rich_list arithmetic pred_set contractABI byte
-  canonicalMemberTraversalPtr abiDecoderOffset
+  canonicalMemberTraversalPtr abiDecoderOffset decoderWorldFramePtr
+  decoderCalldataShell exprSimProps
+
+val world_fields =
+  ["vs_accounts", "vs_transient", "vs_logs", "vs_outcomes", "vs_requests",
+   "vs_pending_deletions", "vs_tx_ctx", "vs_block_ctx", "vs_fmp", "vs_gas_readings"];
+fun world_pats a b =
+  map (fn f => [QUOTE (a ^ "." ^ f ^ " = " ^ b ^ "." ^ f)]) world_fields;
 
 Theorem source_owned_array_loop_ptr:
   (!i r G tn child childsrc e srcpos.
@@ -82,7 +89,13 @@ Theorem source_owned_array_loop_ptr:
       u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\
       u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
       (!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H u t) ==>
-        !fuel. ptr_safe_run D lower fuel ctx fn PG G tn r)) ==>
+        !fuel. ptr_safe_run D lower fuel ctx fn PG G tn r) /\
+      t.vs_accounts = r.vs_accounts /\ t.vs_transient = r.vs_transient /\
+      t.vs_logs = r.vs_logs /\ t.vs_outcomes = r.vs_outcomes /\
+      t.vs_requests = r.vs_requests /\
+      t.vs_pending_deletions = r.vs_pending_deletions /\ t.vs_tx_ctx = r.vs_tx_ctx /\
+      t.vs_block_ctx = r.vs_block_ctx /\ t.vs_fmp = r.vs_fmp /\
+      t.vs_gas_readings = r.vs_gas_readings) ==>
   !n j s G tn.
     LENGTH xs - j = n /\ j <= LENGTH xs /\ LENGTH xs <= maxn /\
     maxn < dimword (:256) /\ outsz = 32 + maxn * type_memory_size tv /\
@@ -172,7 +185,13 @@ Theorem source_owned_array_loop_ptr:
         FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
       u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
       (!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H u t) ==>
-        !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s)
+        !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+      t.vs_requests = s.vs_requests /\
+      t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+      t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+      t.vs_gas_readings = s.vs_gas_readings
 Proof
   disch_tac >> Induct_on `n`
   >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -248,10 +267,18 @@ Proof
             mp_tac (cj 1 abiDecoderCountersTheory.abi_decoder_vars_mono_mutual) >>
             simp_tac bool_ss [abiDecoderCountersTheory.abi_decoder_vars_mono_def] >>
             disch_then (qspecl_then
-              [`SND (SND ops)`,`FST (SND ops)`,`CALLDATALOAD`,`Lit 0w`,
+              [`SND (SND ops)`,`FST (SND ops)`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,
                `type_to_abi_dec_info sf ce ty`,`middle`] mp_tac) >>
             pure_asm_rewrite_tac [pairTheory.SND] >> strip_tac >> decide_tac) >>
          first_assum ACCEPT_TAC) >>
+      `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+        t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+        t.vs_requests = s.vs_requests /\
+        t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+        t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+        t.vs_gas_readings = s.vs_gas_readings` by
+        (qpat_assum `t = jump_to _ _` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+         simp[jump_to_def, abi_decode_header_state_def, update_var_def]) >>
       qpat_x_assum `t = jump_to _ _` kall_tac >>
       qexistsl_tac [`t`,`H`,`u`,`[]`] >>
       pure_asm_rewrite_tac [] >>
@@ -444,11 +471,11 @@ Proof
      qpat_assum `LENGTH (emitted_insts body_st middle) + _ = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
   `cs_extends middle end_st` by
-    (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ middle = _` mp_tac >>
+    (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ middle = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      metis_tac[abiDecoderAppendTheory.cs_extends_abi_decode]) >>
   `cs_extends body_st middle` by
-    (qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ body_st = _` mp_tac >>
+    (qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
      drule abiDecoderArraySetupInputsTheory.abi_decode_array_element_setup_shape >>
      simp[abi_decode_source_opcode_def] >> strip_tac >>
@@ -485,12 +512,12 @@ Proof
        alloca_frontier_inv_def, allocaBudgetPropsTheory.remaining_alloca_budget_def] >>
      metis_tac[]) >>
   `middle.cs_next_var <= end_st.cs_next_var` by
-    (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ middle = _` mp_tac >>
+    (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ middle = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
      mp_tac (cj 1 abiDecoderCountersTheory.abi_decoder_vars_mono_mutual) >>
      simp_tac bool_ss [abiDecoderCountersTheory.abi_decoder_vars_mono_def] >>
      disch_then (qspecl_then
-       [`SND (SND ops)`,`FST (SND ops)`,`CALLDATALOAD`,`Lit 0w`,
+       [`SND (SND ops)`,`FST (SND ops)`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,
         `type_to_abi_dec_info sf ce ty`,`middle`] mp_tac) >>
      pure_asm_rewrite_tac [pairTheory.SND] >> simp[]) >>
   `fresh_vars_wrt limit t` by
@@ -499,7 +526,7 @@ Proof
        [`fresh_vars_wrt limit s`,`iv = _`,`cv = _`,`cmp = _`,`done = _`,
         `first_var+4 <= body_st.cs_next_var`,`end_st.cs_next_var < limit.cs_next_var`,
         `middle.cs_next_var <= end_st.cs_next_var`] >>
-     qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ body_st = _` mp_tac >>
+     qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      drule abiDecoderArraySetupInputsTheory.abi_decode_array_element_setup_operands >>
      strip_tac >> irule (cj 1 decoder_index_header_replay_frame) >>
@@ -507,7 +534,7 @@ Proof
      gvs[] >> decide_tac) >>
   `fresh_vars_wrt limit r` by
     (`middle.cs_next_var <= limit.cs_next_var` by decide_tac >>
-     drule_all calldataDynStepTheory.calldata_element_setup_reentry >> strip_tac >>
+     drule_all decoderCalldataShellTheory.calldata_element_setup_reentry >> strip_tac >>
      `t'' = t'` by
        (map_every (fn pat => qpat_assum pat mp_tac)
          [`run_inst_seq (emitted_insts body_st middle) t = OK t'`,
@@ -624,7 +651,7 @@ Proof
   `abi_decoder_operand_live middle.cs_next_var (Var root)` by
     (map_every (fn pat => qpat_assum pat mp_tac)
        [`abi_decoder_operand_live body_st.cs_next_var (Var root)`,
-        `abi_decode_array_element_setup _ _ _ _ _ _ _ _ body_st = _`] >>
+        `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = _`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      drule abiDecoderArraySetupInputsTheory.abi_decode_array_element_setup_operands >>
      strip_tac >> metis_tac[abi_decoder_operand_live_mono]) >>
@@ -668,7 +695,7 @@ Proof
       (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
     abi_decoder_operand_live middle.cs_next_var (Var child)` by
     (map_every (fn pat => qpat_assum pat mp_tac)
-       [`compile_abi_decode_to_buf _ _ _ _ _ middle = _`,
+       [`compile_abi_decode_to_buf _ _ _ _ _ _ middle = _`,
         `SND (SND ops) = Var child`,
         `abi_decoder_operand_live middle.cs_next_var (SND (SND ops))`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[]) >>
@@ -761,7 +788,7 @@ Proof
      `val_wf tv (EL i xs) /\ val_footprint tv (EL i xs) <= type_memory_size tv` by
        ((qpat_assum `value_has_type tv (EL i xs)` mp_tac >>
         rpt (pop_assum kall_tac) >>
-        metis_tac[value_has_type_memory_wf, exprSimTheory.val_footprint_le])) >>
+        metis_tac[value_has_type_memory_wf, exprSimPropsTheory.val_footprint_le])) >>
      `!mem. mem_agree_outside u'.t_mem r.vs_memory mem ==>
        val_in_memory tv (EL i xs) (d+32+i*type_memory_size tv) mem` by
        (map_every (fn pat => qpat_assum pat mp_tac)
@@ -809,7 +836,7 @@ Proof
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`abi_decoder_operand_live first_var (Var q)`,
        `first_var+4 <= body_st.cs_next_var`,
-       `abi_decode_array_element_setup _ _ _ _ _ _ _ _ body_st = _`] >>
+       `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = _`] >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      drule abiDecoderArraySetupInputsTheory.abi_decode_array_element_setup_operands >>
      strip_tac >>
@@ -845,7 +872,7 @@ Proof
   `abi_decoder_operand_live middle.cs_next_var (Var elem_idx) /\
     not_fresh_at middle elem_idx` by
     (map_every (fn pat => qpat_assum pat mp_tac)
-      [`abi_decode_array_element_setup _ _ _ _ _ _ _ _ body_st = _`,
+      [`abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = _`,
        `FST ops = Var elem_idx`] >> rpt (pop_assum kall_tac) >>
      rpt strip_tac >>
      drule abiDecoderArraySetupInputsTheory.abi_decode_array_element_setup_operands >>
@@ -882,7 +909,7 @@ Proof
      qpat_assum `lookup_var q r = _` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[]) >>
   `middle.cs_next_var <= end_st.cs_next_var` by
-    (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ middle = _` mp_tac >>
+    (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ middle = _` mp_tac >>
      rpt (pop_assum kall_tac) >>
      metis_tac[abiDecoderCountersTheory.abi_decoder_variable_counter]) >>
   `q <> nv` by
@@ -969,7 +996,7 @@ Proof
      `val_wf tv (EL i xs) /\ val_footprint tv (EL i xs) <= type_memory_size tv` by
        (qpat_assum `value_has_type tv (EL i xs)` mp_tac >>
         rpt (pop_assum kall_tac) >>
-        metis_tac[value_has_type_memory_wf, exprSimTheory.val_footprint_le]) >>
+        metis_tac[value_has_type_memory_wf, exprSimPropsTheory.val_footprint_le]) >>
      `!mem. mem_agree_outside childtn.t_mem child_end.vs_memory mem ==>
        val_in_memory tv (EL i xs) (d+32+i*type_memory_size tv) mem` by
        (Cases_on `i = j`
@@ -1042,7 +1069,7 @@ Proof
        `!op. abi_decoder_operand_live first_var op ==> eval_operand op t = _`,
        `!op. abi_decoder_operand_live middle.cs_next_var op ==> eval_operand op child_end = _`,
        `first_var+4 <= body_st.cs_next_var`,
-       `abi_decode_array_element_setup _ _ _ _ _ _ _ _ body_st = _`] >>
+       `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = _`] >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      drule abiDecoderArraySetupInputsTheory.abi_decode_array_element_setup_operands >>
      strip_tac >>
@@ -1052,7 +1079,7 @@ Proof
   `!op. abi_decoder_operand_live first_var op ==> op <> Var nv` by
     (qpat_assum `nv = _` mp_tac >>
      qpat_assum `first_var+4 <= body_st.cs_next_var` mp_tac >>
-     qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ body_st = _` mp_tac >>
+     qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = _` mp_tac >>
      qpat_assum `middle.cs_next_var <= end_st.cs_next_var` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      drule abiDecoderArraySetupInputsTheory.abi_decode_array_element_setup_operands >>
@@ -1082,13 +1109,13 @@ Proof
      irule decoderGhostFramePtrTheory.ptr_covers_frame >>
      qexistsl_tac [`childG`, `child_end`, `childtn`] >> metis_tac[]) >>
   `!x. not_fresh_at body_st x ==> not_fresh_at middle x` by
-    (qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ body_st = _` mp_tac >>
+    (qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = _` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      drule abiDecoderArraySetupInputsTheory.abi_decode_array_element_setup_operands >>
      strip_tac >>
      metis_tac[calldata_operand_live_not_fresh, abi_decoder_operand_live_mono]) >>
   `!x. not_fresh_at body_st x ==> x <> nv` by
-    (qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ body_st = _` mp_tac >>
+    (qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = _` mp_tac >>
      qpat_assum `middle.cs_next_var <= end_st.cs_next_var` mp_tac >>
      qpat_assum `nv = _` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
@@ -1300,6 +1327,32 @@ Proof
        `!D. _ ==> !fuel. ptr_safe_run D lower fuel ctx fn PG childG childtn child_end`,
        `!D. _ ==> !fuel. ptr_safe_run D lower fuel ctx fn PG backG backtn backstate`] >>
      rpt (pop_assum kall_tac) >> metis_tac[]) >>
+  `final.vs_accounts = s.vs_accounts /\ final.vs_transient = s.vs_transient /\
+    final.vs_logs = s.vs_logs /\ final.vs_outcomes = s.vs_outcomes /\
+    final.vs_requests = s.vs_requests /\
+    final.vs_pending_deletions = s.vs_pending_deletions /\ final.vs_tx_ctx = s.vs_tx_ctx /\
+    final.vs_block_ctx = s.vs_block_ctx /\ final.vs_fmp = s.vs_fmp /\
+    final.vs_gas_readings = s.vs_gas_readings` by
+    (`EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts body_st middle)` by
+       (qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[decoder_calldata_array_setup_opcodes]) >>
+     `t'.vs_accounts = t.vs_accounts /\ t'.vs_transient = t.vs_transient /\
+       t'.vs_logs = t.vs_logs /\ t'.vs_outcomes = t.vs_outcomes /\
+       t'.vs_requests = t.vs_requests /\
+       t'.vs_pending_deletions = t.vs_pending_deletions /\ t'.vs_tx_ctx = t.vs_tx_ctx /\
+       t'.vs_block_ctx = t.vs_block_ctx /\ t'.vs_fmp = t.vs_fmp /\
+       t'.vs_gas_readings = t.vs_gas_readings` by
+       (qpat_assum `run_inst_seq (emitted_insts body_st middle) t = OK t'` mp_tac >>
+        qpat_assum `EVERY (\i. abi_decoder_reentry_opcode _) _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+        drule_all decoder_run_world_frame >> simp_tac bool_ss []) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       (world_pats "final" "backstate" @ world_pats "child_end" "r" @
+        world_pats "t'" "t") >>
+     qpat_assum `backstate = _` mp_tac >> qpat_assum `t = jump_to _ _` mp_tac >>
+     simp_tac bool_ss [Abbr `r`] >> POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[jump_to_def, abi_decode_header_state_def, mstore_def,
+       write_memory_with_expansion_def, update_var_def]) >>
   qexistsl_tac [`final`, `finalG`, `finaltn`, `childfp ++ finalfp`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED

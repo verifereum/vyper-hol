@@ -2,13 +2,13 @@
 Theory sourceOwnedArrayConstructorPtr
 Ancestors
   sourceOwnedArrayLoopPtr decoderArrayInitPtr physicalArrayInitSequence abiEncoderSequence
-  calldataRecursiveProducers sourceEncodingWindows sourceEncodingLayout abiDecoderCoherence
+  decoderCalldataShell abiDecoderRange abiDecoderBytesBound abiEncoder sourceEncodingWindows sourceEncodingLayout abiDecoderCoherence
   ctorAbiActualArrayRun entrySinkExtraction fragExec
   abiDecoderRecursiveArray abiDecoderLoop abiDecoderArraySetupCode abiDecoderLoopRegisters
   bodyPtrDefs ptrSafeRun ptrDiscipline allocaBudgetProps
   actualAllocaReplayPtr actualDecoderAllocationPtr actualAllocExec vyperCompiler allocaFrontierBound
-  calldataDynInit calldataDynOwned abiDecoderRecursiveArray abiDecoderRecursiveLoopLayout
-  abiDecoderArrayInit abiDecoderArrayInitExec abiDecoderArrayLoopInit abiDecoderIndexInit
+  calldataDynOwned abiDecoderRecursiveArray abiDecoderRecursiveLoopLayout
+  abiDecoderArrayInit abiDecoderArrayInitExec abiDecoderArrayLoopInit abiDecoderIndexInit abiDecoderArrayInitReentry
   abiDecoderReentry abiDecoderFrame abiDecoderFrameCompose
   abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderArrayHeader
   abiDecoderGuards abiDecoderGuard ctorAbiActualAlloc
@@ -34,7 +34,9 @@ Proof
      qpat_assum `abi_decode_source_opcode opc` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      Cases_on `hi = Lit 0w` >>
-     simp[abi_decode_array_loop_init_def, abi_decode_dynarray_prefix_def,
+     simp[abi_decode_array_loop_init_def, abi_decode_dynarray_position_prefix_def,
+       abi_decode_bytes_head_def, compile_abi_dec_addr_def,
+       abi_decode_dynarray_payload_guard_def, compile_abi_decode_range_check_def,
        abi_decode_count_guard_def, abi_decode_dynarray_end_guard_def,
        abi_decode_dynarray_end_def, abi_decode_le_guard_def,
        abi_decode_array_header_def, abi_decode_index_init_def,
@@ -144,7 +146,7 @@ Theorem calldata_array_loop_init_repeat_physical_sequence:
     t.vs_halted = s.vs_halted /\ inst_extends st loop_st
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule abi_decode_array_loop_init_trace >> strip_tac >>
+  drule calldata_array_loop_init_trace >> strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
@@ -201,7 +203,7 @@ Proof
     (irule abi_decode_sequence_chain >> qexistsl_tac [`prepared`,`header_st`] >> simp[]) >>
   `fresh_vars_wrt limit actual` by
     (map_every (fn pat => qpat_assum pat mp_tac)
-       [`abi_decode_array_loop_init _ _ _ _ _ _ st = _`,
+       [`abi_decode_array_loop_init _ _ _ _ _ _ _ st = _`,
         `abi_decode_source_opcode CALLDATALOAD`,
         `run_inst_seq (emitted_insts st loop_st) s = OK actual`,
         `loop_st.cs_next_var <= limit.cs_next_var`, `fresh_vars_wrt limit s`] >>
@@ -362,6 +364,12 @@ QED
 
 Finalise source_array_init_owned_sequence
 
+val world_fields =
+  ["vs_accounts", "vs_transient", "vs_logs", "vs_outcomes", "vs_requests",
+   "vs_pending_deletions", "vs_tx_ctx", "vs_block_ctx", "vs_fmp", "vs_gas_readings"];
+fun world_pats a b =
+  map (fn f => [QUOTE (a ^ "." ^ f ^ " = " ^ b ^ "." ^ f)]) world_fields;
+
 Theorem source_owned_nonbulk_array_ptr:
   (!middle end_st i r G tn child childsrc e srcpos.
     i < LENGTH xs /\
@@ -429,7 +437,13 @@ Theorem source_owned_nonbulk_array_ptr:
       u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\
       u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
       (!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H u t) ==>
-        !fuel. ptr_safe_run D lower fuel ctx fn PG G tn r)) ==>
+        !fuel. ptr_safe_run D lower fuel ctx fn PG G tn r) /\
+      t.vs_accounts = r.vs_accounts /\ t.vs_transient = r.vs_transient /\
+      t.vs_logs = r.vs_logs /\ t.vs_outcomes = r.vs_outcomes /\
+      t.vs_requests = r.vs_requests /\
+      t.vs_pending_deletions = r.vs_pending_deletions /\ t.vs_tx_ctx = r.vs_tx_ctx /\
+      t.vs_block_ctx = r.vs_block_ctx /\ t.vs_fmp = r.vs_fmp /\
+      t.vs_gas_readings = r.vs_gas_readings) ==>
   !s G tn st last.
     compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (DecDynArray (type_to_abi_dec_info sf ce ty)
@@ -498,7 +512,13 @@ Theorem source_owned_nonbulk_array_ptr:
         op_taint u (Var x) = op_taint tn (Var x)) /\
       u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
       (!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H u t) ==>
-        !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s)
+        !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+      t.vs_requests = s.vs_requests /\
+      t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+      t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+      t.vs_gas_readings = s.vs_gas_readings
 Proof
   disch_tac >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all calldata_nonbulk_parent_shell >> strip_tac >>
@@ -524,9 +544,14 @@ Resume source_owned_nonbulk_array_ptr[initialize]:
      irule abiDecoderAppendTheory.cs_extends_abi_decode >>
      goal_assum (drule_at Any)) >>
   `st0.cs_next_var <= middle.cs_next_var` by
-    metis_tac[abiDecoderArraySetupInputsTheory.abi_decode_array_element_setup_operands] >>
+    (qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ st0 = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
+     drule abiDecoderArraySetupInputsTheory.abi_decode_array_element_setup_operands >>
+     disch_then (ACCEPT_TAC o CONJUNCT1)) >>
   (* Compiler boundaries and actual initialization resources. *)
-  drule abi_decoder_loop_prefix_facts >> strip_tac >>
+  drule (SIMP_RULE (srw_ss()) [abiDecoderExecutionTheory.abi_decode_position_header_zero,
+      abiDecoderExecutionTheory.abi_decode_position_header_delta_def]
+    (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_loop_prefix_facts)) >> strip_tac >>
   `middle.cs_next_var <= st1.cs_next_var` by
     metis_tac[abiDecoderCountersTheory.abi_decoder_variable_counter] >>
   `last.cs_next_var = st1.cs_next_var+1` by
@@ -875,8 +900,8 @@ Resume source_owned_nonbulk_array_ptr[invoke_loop]:
      qpat_assum `lookup_block st1.cs_current_bb fn.fn_blocks = SOME <| bb_label := _; bb_instructions := _ |>`
        (fn th => rewrite_tac [th, optionTheory.SOME_11]) >>
      disch_then (SUBST_ALL_TAC o SYM) >>
-     qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ st0 = _` mp_tac >>
-     qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ middle = ((),st1)` mp_tac >>
+     qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ st0 = _` mp_tac >>
+     qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ middle = ((),st1)` mp_tac >>
      qpat_assum `abi_decode_source_opcode CALLDATALOAD` mp_tac >>
      qpat_assum `st0.cs_current_insts = []` mp_tac >>
      qpat_assum `FST ops = _` mp_tac >>
@@ -1348,6 +1373,34 @@ Resume source_owned_nonbulk_array_ptr[constructor_packaging]:
      qpat_assum `last.cs_current_insts = []` mp_tac >>
      qpat_assum `t'.vs_inst_idx = 0` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  `t'.vs_accounts = s.vs_accounts /\ t'.vs_transient = s.vs_transient /\
+    t'.vs_logs = s.vs_logs /\ t'.vs_outcomes = s.vs_outcomes /\
+    t'.vs_requests = s.vs_requests /\
+    t'.vs_pending_deletions = s.vs_pending_deletions /\ t'.vs_tx_ctx = s.vs_tx_ctx /\
+    t'.vs_block_ctx = s.vs_block_ctx /\ t'.vs_fmp = s.vs_fmp /\
+    t'.vs_gas_readings = s.vs_gas_readings` by
+    (`EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st loop_st)` by
+       (qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ st = _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
+        drule abi_decode_array_loop_init_reentry_code >>
+        simp_tac bool_ss [abi_decode_source_opcode_def]) >>
+     `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+       t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+       t.vs_requests = s.vs_requests /\
+       t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+       t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+       t.vs_gas_readings = s.vs_gas_readings` by
+       (qpat_assum `run_inst_seq (emitted_insts st loop_st) s = OK t` mp_tac >>
+        qpat_assum `EVERY (\i. abi_decoder_reentry_opcode _) _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+        drule_all decoderWorldFramePtrTheory.decoder_run_world_frame >>
+        simp_tac bool_ss []) >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       (world_pats "t'" "h" @ world_pats "t" "s") >>
+     qpat_assum `Abbrev (h = _)` mp_tac >>
+     qpat_assum `init = t with vs_inst_idx := _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[markerTheory.Abbrev_def, jump_to_def]) >>
   (qexistsl [`t'`,`H'`,`u'`,`(p,32)::fp`] >>
    rpt conj_tac >> first_assum ACCEPT_TAC)
 QED

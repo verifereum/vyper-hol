@@ -5,7 +5,7 @@ Ancestors calldataTypedRobustPtr entryDecodeProps abiCanonicalHeadSize
   calldataWordPtr abiDecoderContract list valueEncodingProofs
   abiDecoderPrimitiveCaller abiDecoderNumericWord abiDecoderSigned
   abiDecoderFixedBytes abiDecoderCoherence abiDecoderWordTyped
-  vyperABI vyperTyping contractABI exprLowering abiDecoderClamp compileEnv vyperValue arithmetic
+  vyperABI vyperTyping contractABI exprLowering abiDecoderClamp compileEnv vyperValue arithmetic exprSimProps
 
 Theorem calldata_source_word_ptr_endpoint_uniform:
   compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)

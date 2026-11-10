@@ -1,7 +1,7 @@
 (* Finite canonical complex decoders: compiler and prefix frame boundaries. *)
 Theory sourcePrimitiveComplexPtr
 Ancestors canonicalMemberTraversalPtr robustCopyTransportPtr abiDecoderFrameCompose
-  abiEncoderInput valueTypingMemoryProps exprSim abiDecoderMemberSetup
+  abiEncoderInput valueTypingMemoryProps exprSimProps abiDecoderMemberSetup
   emitHelperProps compileEnv abiDecoderContract bodyPtrDefs
   list rich_list arithmetic pred_set abiDecoderMemberCons abiEncoder
   abiDecoderCode fragExec abiDecoderDynamic decoderGhostFramePtr freshWrites

@@ -1,11 +1,86 @@
 (* Successful array preparation with credit for its actual index slot only. *)
 Theory physicalArrayInitSequence
-Ancestors calldataDynInit actualAllocExec actualDecoderAllocationPtr abiDecoderArrayInitExec abiDecoderIndexInit
+Ancestors actualAllocExec actualDecoderAllocationPtr abiDecoderArrayInitExec abiDecoderIndexInit
   abiDecoderArrayLoopInit abiDecoderDynarrayPrefix abiDecoderArrayHeader
   abiDecoderGuards abiDecoderContract abiDecoderAllocation abiDecoderReentry abiDecoderFrame
   abiDecoderFrameCompose abiDecoderReentryPointer exprLoweringProps emitHelperProps
   compileEnv venomState venomExecSemantics venomInst venomMemDefs valueEncoding
-  exprLowering context finite_map words arithmetic list rich_list
+  exprLowering context abiDecoderLoopEmit abiDecoderExecution venomMemProps emitHelper abiEncoder abiDecoderDynarrayBound
+  fragExec fragExecMem actualAllocCredit allocaFrontierBound abiDecoderReservation
+  allocaBudgetProps valueEncodingProps abiDecoderRange
+  finite_map words arithmetic list rich_list
+
+Theorem calldata_array_loop_init_trace:
+  abi_decode_array_loop_init dst src opc (Lit 0w) (Lit 0w) maxn abi_sz st =
+    (setup,loop_st) ==>
+  ?guard_st header_st cnt ip.
+    abi_decode_dynarray_prefix src opc (Lit 0w) maxn abi_sz st = ((),guard_st) /\
+    abi_decode_dynarray_position_prefix src opc (Lit 0w) (Lit 0w) maxn abi_sz st =
+      (src,guard_st) /\
+    abi_decode_array_header dst src opc guard_st = (cnt,header_st) /\
+    abi_decode_index_init header_st = (ip,loop_st) /\ setup = (ip,cnt)
+Proof
+  strip_tac >> drule abi_decode_array_loop_init_trace >> strip_tac >>
+  qexistsl [`guard_st`,`header_st`,`cnt`,`ip`] >>
+  Cases_on `abi_decode_count_guard opc src maxn st` >>
+  gvs[abi_decode_dynarray_position_prefix_unbounded, compile_abi_dec_addr_def,
+      abi_decode_dynarray_prefix_def, abi_decode_dynarray_end_guard_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def]
+QED
+
+(* Index-slot initialization and loop-prefix code facts (from the pruned
+   calldataDynInit theory). *)
+Theorem calldata_index_init_instructions:
+  abi_decode_index_init st = (ip,st') ==>
+  ip = Var (STRING #"%" (toString st.cs_next_var)) /\
+  emitted_insts st st' =
+    [mk_inst st.cs_next_id ALLOCA [Lit 32w]
+       [STRING #"%" (toString st.cs_next_var)];
+     mk_inst (st.cs_next_id+1) MSTORE [ip;Lit 0w] []]
+Proof
+  simp[abi_decode_index_init_def, compile_alloc_buffer_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[] >> simp[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[DROP_LENGTH_APPEND]
+QED
+
+Theorem calldata_index_init_after_alloca:
+  abi_decode_index_init st = (ip,st') /\
+  step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString st.cs_next_var)]) s = OK allocated /\
+  eval_operand ip allocated = SOME (n2w p) /\ p < dimword (:256) ==>
+  run_inst_seq (emitted_insts st st') s = OK (mstore p 0w allocated) /\
+  eval_operand ip (mstore p 0w allocated) = SOME (n2w p) /\
+  mload p (mstore p 0w allocated) = 0w
+Proof
+  strip_tac >> drule calldata_index_init_instructions >> strip_tac >>
+  simp[run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_write2_def,
+       eval_operand_def, w2n_n2w, mload_mstore_same,
+       abi_decoder_operand_mstore] >>
+  gvs[eval_operand_def]
+QED
+
+Theorem calldata_loop_prefix_entry_code:
+  !ip src start hdr body exit_lbl end_st fn.
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) start = ((hdr,body,exit_lbl),end_st) /\
+  fn_has_code start end_st fn ==>
+  ?bb hb.
+    lookup_block start.cs_current_bb fn.fn_blocks = SOME bb /\
+    bb.bb_instructions = start.cs_current_insts ++
+      [mk_inst start.cs_next_id JMP [Label hdr] []] /\
+    lookup_block hdr fn.fn_blocks = SOME hb /\
+    phi_prefix_length hb.bb_instructions = 0
+Proof
+  rpt gen_tac >> simp_tac bool_ss [abi_decode_loop_prefix_shape] >> strip_tac >>
+  gvs[] >>
+  qpat_x_assum `fn_has_code _ _ _` mp_tac >>
+  simp[fn_has_code_def, emitted_blocks_def,
+       abi_decode_loop_prefix_state_def, abi_decode_position_header_zero, abi_decode_position_header_delta_def, DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt strip_tac >>
+  simp[abi_decode_position_header_zero, abi_decode_header_insts_def, phi_prefix_length_def, mk_inst_def]
+QED
 
 Theorem physical_index_init_sequence[local]:
   abi_decode_index_init st = (ip,en) /\ fresh_vars_wrt en s /\
@@ -105,12 +180,14 @@ Theorem calldata_array_loop_init_physical_sequence:
     t.vs_halted = s.vs_halted /\ inst_extends st loop_st
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule abi_decode_array_loop_init_trace >> strip_tac >>
+  drule calldata_array_loop_init_trace >> strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
-  drule_all (SRULE [] (Q.INST [`hi` |-> `Lit 0w`] abi_decode_array_prepare_sequence)) >>
+  `eval_operand (Lit 0w) s = SOME (n2w 0)` by simp[eval_operand_def] >>
+  drule_all (SRULE [] (Q.INST [`hi` |-> `Lit 0w`, `base_op` |-> `Lit 0w`, `B` |-> `0`]
+    abi_decode_array_prepare_sequence)) >>
   strip_tac >>
   `fresh_vars_wrt loop_st prepared` by
     (irule fresh_vars_wrt_mono >> goal_assum (drule_at Any) >> simp[]) >>

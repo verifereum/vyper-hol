@@ -1,7 +1,7 @@
 (* Scratch-aware observation boundaries for recursive calldata decoders. *)
 Theory sourceRecursiveComplexPtr
 Ancestors sourcePrimitiveComplexPtr robustCopyTransportPtr abiDecoderFrame bodyPtrDefs
-  list rich_list arithmetic valueTypingMemoryProps abiEncoderInput valueEncodingProps exprSim exprLowering vyperABI contractABI abiEncoder
+  list rich_list arithmetic valueTypingMemoryProps abiEncoderInput valueEncodingProps exprSimProps exprLowering vyperABI contractABI abiEncoder
   canonicalMemberTraversalPtr abiDecoderMemberCons abiDecoderMemberSetup
   abiDecoderDynamic abiDecoderOffset abiDecoderOffsetHead abiDecoderCoherence abiDecoderHeadAdequacy
   abiDecoderDynamicLoopSetup sourceEncodingWindows sourceEncodingLayout abiDecoderMemberSlice

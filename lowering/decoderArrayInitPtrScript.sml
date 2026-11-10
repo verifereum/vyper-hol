@@ -758,7 +758,7 @@ Proof
   `sb.cs_next_id - 2 IN abi_decoder_ids first last` by
     (drule abi_decode_array_loop_init_trace >> strip_tac >>
      drule abi_decode_index_init_shape >> strip_tac >>
-     drule abi_decode_dynarray_prefix_shape >>
+     drule abi_decode_dynarray_position_prefix_shape >>
      simp[abi_decode_source_opcode_def] >> strip_tac >>
      drule abi_decode_array_header_shape >>
      simp[abi_decode_source_opcode_def] >> strip_tac >>

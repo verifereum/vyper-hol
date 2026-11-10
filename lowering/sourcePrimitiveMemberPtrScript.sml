@@ -6,8 +6,19 @@ Ancestors sourceWordDecoderPtr sourceBytesRepresentation sourceEncodingLayout
   abiDecoderCoherence abiDecoderDynamicLoopSetup ptrDiscipline abiDecoderWordTyped
   abiDecoderMemberSetup exprLowering vyperABI vyperTyping abiDecoderClamp
   fragExec list finite_map pred_set arithmetic abiCanonicalBytes bodyPtrDefs
-  calldataBytesLeaf exprLoweringProps instIdxIndep sourceEncodingWindows
+  decoderCalldataShell exprLoweringProps instIdxIndep sourceEncodingWindows
   vyperABIRoundtrip abiDecodeRanges
+
+(* The calldata instance of the position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`] th);
 
 Theorem clamped_word_endpoint_physical_frame:
   compile_abi_decode_to_buf dst src opc (Lit 0w) hi (DecPrimWord clamp) sa = ((),sb) /\
@@ -21,7 +32,7 @@ Theorem clamped_word_endpoint_physical_frame:
   (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
   t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
 Proof
-  strip_tac >> drule_all abi_decoder_clamped_word_copied_window >>
+  strip_tac >> drule_all (calldata_pos abi_decoder_clamped_word_copied_window) >>
   strip_tac >> gvs[] >>
   gvs[abi_decode_frame_def, fresh_vars_wrt_def] >> gvs[]
 QED
@@ -37,7 +48,13 @@ Theorem bytestring_endpoint_physical_frame:
   fresh_vars_wrt sb t /\
   (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w)
 Proof
-  strip_tac >> drule_all abi_decode_bytes_sentinel_sequence >> strip_tac >>
+  strip_tac >>
+  `eval_operand src s = SOME (n2w (w2n sw)) /\
+   eval_operand dst s = SOME (n2w (w2n dw)) /\
+   abi_decode_load opc (n2w (w2n sw):bytes32) s = n2w cnt /\
+   w2n sw < dimword (:256) /\ w2n dw < dimword (:256)` by
+    simp[wordsTheory.w2n_lt] >>
+  drule_all abi_decode_bytes_sentinel_sequence >> strip_tac >>
   gvs[] >> gvs[abi_decode_frame_def, fresh_vars_wrt_def] >> gvs[]
 QED
 
@@ -274,6 +291,6 @@ Proof
   strip_tac >>
   drule_all (SRULE [abi_decode_source_opcode_def]
     (Q.INST [`dyn` |-> `F`, `opc` |-> `CALLDATALOAD`, `limit_st` |-> `st'`]
-      abi_decode_member_setup_reentry)) >>
+      (calldata_pos abi_decode_member_setup_reentry))) >>
   strip_tac >> qexists_tac `t` >> gvs[]
 QED

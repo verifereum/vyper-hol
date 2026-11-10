@@ -2,7 +2,7 @@
 Theory sourceBytesRepresentation
 Ancestors abiDecoderBytestring abiDecoderString abiDecoderCoherence
   vyperABI vyperTyping vyperValue compileEnv valueEncoding exprLowering
-  contractABI list abiDecoderBytes calldataTypedRobustPtr
+  contractABI list abiDecoderBytes calldataTypedRobustPtr abiDecoderBytestringCases
 
 Theorem coherent_source_bytes_representation:
   abi_decoder_coherent ce env sf ty tv /\

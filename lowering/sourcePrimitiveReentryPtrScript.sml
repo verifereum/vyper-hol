@@ -9,7 +9,7 @@ Ancestors
   vyperABI vyperTyping exprLowering valueEncoding valueEncodingProofs
   abiDecoderClamp ptrDiscipline fragExec finite_map words arithmetic list pred_set
   entryDecodeProps abiCanonicalHeadSize byte valueEncodingProps abiDecoderWordCopy abiStaticAggregateProps
-  abiDecoderBytesTyped exprSimMemoryTransport exprSim
+  abiDecoderBytesTyped exprSimMemoryTransport exprSimProps loweringPosts
 
 Theorem source_primitive_decoder_reentry_ptr:
   compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w) ei sa = ((),sb) /\

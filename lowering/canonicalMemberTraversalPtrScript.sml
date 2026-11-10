@@ -8,6 +8,17 @@ Ancestors sourcePrimitiveMemberPtr abiDecoderMemberSetup abiDecoderMemberCode
   sourceEncodingWindows sourceEncodingLayout abiCanonicalHeadSize abiDecodeRanges
   contractABI byte abiDecoderMemberSlice rich_list vyperABIRoundtrip
 
+(* The calldata instance of the position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`] th);
+
 Theorem straight_sequence_inst_idx[local]:
   !is s t. EVERY (\i. ~is_terminator i.inst_opcode) is /\
     run_inst_seq is s = OK t ==> t.vs_inst_idx = s.vs_inst_idx
@@ -50,7 +61,7 @@ Proof
   `eval_operand (Var root) s = SOME (n2w d)` by simp[eval_operand_def] >>
   drule_all (SRULE [abi_decode_source_opcode_def]
     (Q.INST [`opc` |-> `CALLDATALOAD`, `limit_st` |-> `st'`]
-      abi_decode_member_setup_reentry)) >> strip_tac >>
+      (calldata_pos abi_decode_member_setup_reentry))) >> strip_tac >>
   drule_all (SRULE [abi_decode_source_opcode_def]
     (Q.INST [`opc` |-> `CALLDATALOAD`] abi_decode_member_setup_shape)) >> strip_tac >>
   `w2n (n2w d : bytes32) + vo < dimword (:256)` by simp[w2n_n2w, LESS_MOD] >>

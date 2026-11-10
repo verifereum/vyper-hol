@@ -25,14 +25,17 @@ Theorem clamped_word_reentry_sequence:
     t.vs_halted = s.vs_halted
 Proof
   strip_tac >>
-  `eval_operand src (abi_decoder_prune_vars sa.cs_next_var s) = SOME sw /\
+  `eval_operand src (abi_decoder_prune_vars sa.cs_next_var s) = SOME (n2w (w2n sw)) /\
+    eval_operand (Lit 0w) (abi_decoder_prune_vars sa.cs_next_var s) = SOME (n2w 0) /\
     eval_operand dst (abi_decoder_prune_vars sa.cs_next_var s) = SOME (n2w d)` by
-    simp[abi_decoder_prune_eval] >>
+    simp[abi_decoder_prune_eval, eval_operand_def] >>
   `abi_decoder_clamp_valid clamp
-    (abi_decode_load opc sw (abi_decoder_prune_vars sa.cs_next_var s))` by simp[] >>
+    (abi_decode_load opc (n2w (0 + w2n sw):bytes32)
+      (abi_decoder_prune_vars sa.cs_next_var s))` by simp[] >>
   `fresh_vars_wrt sa (abi_decoder_prune_vars sa.cs_next_var s)` by
     irule abi_decoder_prune_fresh >>
-  drule_all abi_decoder_clamped_word_sequence >> strip_tac >>
+  drule_all abi_decoder_clamped_word_sequence >>
+  simp_tac std_ss [arithmeticTheory.ADD_CLAUSES, wordsTheory.n2w_w2n] >> strip_tac >>
   drule_all abi_decoder_word_reentry_code >> strip_tac >>
   drule_all abi_decoder_sequence_reentry_prefix >> strip_tac >>
   drule_all abi_decoder_reentry_frame >> strip_tac >>
@@ -63,10 +66,12 @@ Theorem bytestring_sentinel_reentry_sequence:
     t.vs_halted = s.vs_halted
 Proof
   strip_tac >>
-  `eval_operand src (abi_decoder_prune_vars sa.cs_next_var s) = SOME sw /\
-    eval_operand dst (abi_decoder_prune_vars sa.cs_next_var s) = SOME dw` by
+  `eval_operand src (abi_decoder_prune_vars sa.cs_next_var s) = SOME (n2w (w2n sw)) /\
+    eval_operand dst (abi_decoder_prune_vars sa.cs_next_var s) = SOME (n2w (w2n dw))` by
     simp[abi_decoder_prune_eval] >>
-  `abi_decode_load opc sw (abi_decoder_prune_vars sa.cs_next_var s) = n2w cnt` by simp[] >>
+  `w2n sw < dimword (:256) /\ w2n dw < dimword (:256)` by simp[wordsTheory.w2n_lt] >>
+  `abi_decode_load opc (n2w (w2n sw):bytes32)
+    (abi_decoder_prune_vars sa.cs_next_var s) = n2w cnt` by simp[] >>
   `fresh_vars_wrt sa (abi_decoder_prune_vars sa.cs_next_var s)` by
     irule abi_decoder_prune_fresh >>
   drule_all abi_decode_bytes_sentinel_sequence >> strip_tac >>
