@@ -20,7 +20,7 @@ Proof
   qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   Cases_on `dec_info_needs_offset di` >>
   asm_simp_tac bool_ss [abi_decode_array_element_setup_def,
-    abi_decode_indexed_address_def, compile_abi_decode_dyn_elem_ptr_def,
+    abi_decode_indexed_address_def, compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
     comp_bind_def, comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
     fresh_id_def, emit_def, comp_ignore_bind_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
@@ -50,7 +50,7 @@ Proof
   qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   Cases_on `dec_info_needs_offset di` >>
   asm_simp_tac bool_ss [abi_decode_array_element_setup_def, abi_decode_indexed_address_def,
-    compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_return_def,
+    compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, comp_bind_def, comp_return_def,
     emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
     comp_ignore_bind_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
@@ -181,7 +181,8 @@ Theorem entry_member_navigation_outputs[local]:
       ~MEM (STRING #"%" (toString n)) i.inst_outputs)) (emitted_insts st mid)
 Proof
   Cases_on `dyn` >>
-  simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def,
+       comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
   simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
