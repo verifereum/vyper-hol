@@ -1824,3 +1824,67 @@ Proof
   qpat_assum `access_ok _ _ _ _ _` (irule_at Any) >>
   gvs[ircf_fwd_ok_def, eval_operand_def] >> metis_tac[]
 QED
+
+Definition ircf_completed_bases_def:
+  ircf_completed_bases fn s <=>
+    !bb k d r sz.
+      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      k < s.vs_inst_idx /\ ircf_fwd_ok fn bb k d r sz /\ w2n sz <> 0 ==>
+      ?dai rai db rb.
+        MEM dai (fn_insts fn) /\ dai.inst_opcode = ALLOCA /\ dai.inst_outputs = [d] /\
+        MEM rai (fn_insts fn) /\ rai.inst_opcode = ALLOCA /\ rai.inst_outputs = [r] /\
+        FLOOKUP s.vs_allocas dai.inst_id = SOME (db,w2n sz) /\
+        FLOOKUP s.vs_allocas rai.inst_id = SOME (rb,w2n sz) /\
+        w2n (n2w db : bytes32) = db /\ w2n (n2w rb : bytes32) = rb
+End
+
+Theorem ircf_completed_bases_phi_prefix:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx = phi_prefix_length bb.bb_instructions ==>
+  ircf_completed_bases fn s
+Proof
+  rw[ircf_completed_bases_def] >>
+  drule phi_prefix_length_el_phi >>
+  gvs[ircf_fwd_ok_def]
+QED
+
+Theorem ircf_completed_bases_submap:
+  ircf_completed_bases fn s /\
+  s'.vs_current_bb = s.vs_current_bb /\ s'.vs_inst_idx = s.vs_inst_idx /\
+  s.vs_allocas SUBMAP s'.vs_allocas ==>
+  ircf_completed_bases fn s'
+Proof
+  rw[ircf_completed_bases_def] >>
+  first_x_assum drule_all >> strip_tac >>
+  fs[SUBMAP_FLOOKUP_EQN] >> metis_tac[]
+QED
+
+Theorem ircf_completed_bases_noncopy_suc:
+  ircf_completed_bases fn s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  (EL s.vs_inst_idx bb.bb_instructions).inst_opcode <> MCOPY ==>
+  ircf_completed_bases fn (s with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rw[ircf_completed_bases_def] >>
+  `k < s.vs_inst_idx` by (fs[ircf_fwd_ok_def] >> spose_not_then assume_tac >>
+    `k = s.vs_inst_idx` by decide_tac >> gvs[]) >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem ircf_completed_bases_copy_suc:
+  ircf_completed_bases fn s /\ wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  access_ok lo G fn (EL s.vs_inst_idx bb.bb_instructions) s ==>
+  ircf_completed_bases fn (s with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rw[ircf_completed_bases_def] >>
+  Cases_on `k < s.vs_inst_idx`
+  >- (first_x_assum drule_all >> simp[]) >>
+  `s.vs_inst_idx = k` by decide_tac >>
+  drule_all ircf_fwd_operand_sites >> strip_tac >>
+  `w2n sz <> 0` by simp[] >>
+  `w2n (n2w db : bytes32) = db /\ w2n (n2w rb : bytes32) = rb` by
+    (irule ircf_fwd_allocated_bases_roundtrip >> metis_tac[]) >>
+  qexistsl_tac [`dai`, `rai`, `db`, `rb`] >> gvs[]
+QED
