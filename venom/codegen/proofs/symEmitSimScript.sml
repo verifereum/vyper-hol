@@ -327,3 +327,71 @@ Proof
   gvs[asmSymBridgeTheory.asm_sym_rel_def] >>
   metis_tac[rich_listTheory.EVERY2_TAKE]
 QED
+
+Theorem asm_sym_step_success_from_safe:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\ cs.as_pc < LENGTH p /\
+  asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
+    (EL cs.as_pc p) cs = AsmOK cs' /\
+  (!msg. sym_step p env (EL cs.as_pc p) ss <> SymBad msg) ==>
+  ?ss'. sym_step p env (EL cs.as_pc p) ss = SymOK ss' /\
+    asm_sym_rel p env cs' ss'
+Proof
+  strip_tac >> drule_all asmSymBridgeTheory.asm_sym_step >>
+  Cases_on `sym_step p env (EL cs.as_pc p) ss` >>
+  gvs[asmSymBridgeTheory.asm_sym_step_rel_def]
+QED
+
+Theorem sym_step_concrete_numeric_safe:
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE (asm_op_arity name) ss.sym_stack) /\
+  ~mem_labels_hit ss.sym_mem_labels
+    (asm_op_mem_reads name (TAKE (asm_op_arity name) cs.as_stack)) /\
+  asm_sym_rel p env cs ss ==>
+  !msg. sym_step_concrete name ss <> SymBad msg
+Proof
+  strip_tac >> drule_all asm_sym_numeric_take >> strip_tac >>
+  simp[sym_step_concrete_def, sval_val_map] >>
+  Cases_on `asm_step_op FEMPTY name
+    (ss.sym_base with as_stack := TAKE (asm_op_arity name) cs.as_stack)` >>
+  simp[sym_lift_def]
+QED
+
+Theorem sym_step_concrete_numeric_shape:
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE (asm_op_arity name) ss.sym_stack) /\
+  (!b. b IN FDOM ss.sym_mem_labels ==>
+    ~asm_op_mem_writes name (TAKE (asm_op_arity name) cs.as_stack) b) /\
+  asm_sym_rel p env cs ss /\ sym_step_concrete name ss = SymOK ss' ==>
+  ss'.sym_mem_labels = ss.sym_mem_labels /\
+  ?ws. ss'.sym_stack = MAP Val ws ++ DROP (asm_op_arity name) ss.sym_stack
+Proof
+  strip_tac >> drule_all asm_sym_numeric_take >> strip_tac >>
+  `mem_labels_clear ss.sym_mem_labels
+      (asm_op_mem_writes name (TAKE (asm_op_arity name) cs.as_stack)) =
+    ss.sym_mem_labels` by (irule mem_labels_clear_disjoint >> simp[]) >>
+  qpat_x_assum `sym_step_concrete _ _ = _` mp_tac >>
+  simp[sym_step_concrete_def, sval_val_map] >>
+  Cases_on `mem_labels_hit ss.sym_mem_labels
+    (asm_op_mem_reads name (TAKE (asm_op_arity name) cs.as_stack))` >> simp[] >>
+  Cases_on `asm_step_op FEMPTY name
+    (ss.sym_base with as_stack := TAKE (asm_op_arity name) cs.as_stack)` >>
+  simp[sym_lift_def] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem sym_single_step_replay_safe:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  asm_block_at p cs.as_pc [inst] /\
+  asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p) inst cs = AsmOK cs' /\
+  (!msg. sym_step p env inst ss <> SymBad msg) ==>
+  ?ss'. sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss'
+Proof
+  strip_tac >>
+  `cs.as_pc < LENGTH p /\ EL cs.as_pc p = inst` by
+    (fs[asm_block_at_def] >>
+     first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `ss.sym_base.as_pc = cs.as_pc` by
+    fs[asmSymBridgeTheory.asm_sym_rel_def] >>
+  `?ss'. sym_step p env inst ss = SymOK ss' /\ asm_sym_rel p env cs' ss'` by
+    metis_tac[asm_sym_step_success_from_safe] >>
+  qexists `ss'` >> simp[] >> irule sym_steps_single_emit >> metis_tac[]
+QED
