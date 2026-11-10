@@ -74,7 +74,7 @@ QED
 
 (* The live-slot store leaves its block open.  The members of an
    ABI-dynamic tuple or struct are not empty. *)
-Theorem store_slots_open[local]:
+Theorem store_slots_open:
   (!cenv src slot ty tr s u t.
      compile_store_slots cenv src slot ty tr s = (u,t) /\
      acyclic_struct_metadata cenv.ce_struct_fields ==>

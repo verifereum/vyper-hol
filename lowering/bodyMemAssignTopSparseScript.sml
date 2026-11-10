@@ -3,7 +3,13 @@
    stores only its live slots (compile_store_slots). *)
 Theory bodyMemAssignTopSparse
 Ancestors
-  storeSlotsCountedEntries storeSlotsCountedBase storeSlotsMemoryTransfer bodyMemAssignTopCopyOutcome stmtSimAssignStorageSparse placeStoreSlots
+  bodyMemAssignSparseSuccess storeSlotsCountedEntries storeSlotsCountedBase storeSlotsMemoryTransfer bodyMemAssignTopCopyOutcome stmtSimAssignStorageSparse placeStoreSlots
+  bodyMemAssignTopCopySuffix bodyMemAssignTopCopySem bodyMemAssignTopCopyFacts
+  bodyMemAssignTopWord exprSimSource exprSimProps exprLoweringProps
+  stmtSimProps stmtSimAssignStorage stmtSimAssignStorageCopy stmtSimForced
+  stmtLoweringMono exprSimTopLevelProps fragExec emitHelper emitHelperProps
+  gasOutcome gasSummary fragGasMode fragGasPath gasContext vyperStorageBackend
+  list rich_list finite_map words arithmetic
   bodyMemoryDefs bodyMemoryPreds exprSimMemDefs exprSimDefs
   stmtSimDefs stmtLowering exprLowering compileEnv context
   vyperStorageLayoutSafety vyperStorage vyperValue vyperTyping
@@ -47,5 +53,70 @@ Theorem compile_assign_storage_sparse_stmt_frag_mem:
          (Assign (BaseTarget (TopLevelNameTarget (src, id))) e))
       (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src, id))) e)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `expr_type e = typ` (SUBST_ALL_TAC o SYM) >>
+  simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  `FLOOKUP cenv.ce_module_vars (src,id) =
+     SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))` by
+    (irule toplevel_storage_ce_vars >>
+     gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
+  `~(has_length_word (expr_type e) /\ is_empty_value_expr e)` by simp[] >>
+  drule_all assign_storage_copy_code_parts >> strip_tac >>
+  rename1 `lower_value _ _ _ _ sa = (op, sB)` >> gvs[] >> fs[] >>
+  `cs_extends sa sB` by metis_tac[cj 2 compile_expr_grows] >>
+  `cs_extends sB sb` by
+    metis_tac[cj 1 ci_mono_stmt_helpers, ci_mono_def, pairTheory.SND] >>
+  `fn_has_code sa sB func /\ fn_has_code sB sb func` by
+    metis_tac[fn_has_code_split] >>
+  drule_all eval_assign_toplevel_action >>
+  disch_then (qspec_then `e` (fn th =>
+    RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th])) >>
+  drule forced_then_admissible >> strip_tac >>
+  `compile_store_slots cenv op (Lit (n2w slot)) (expr_type e) tr sB = ((),sb)` by
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     Cases_on `tr` >> simp[compile_assign_value_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
+  `~block_is_terminated sb` by metis_tac[cj 1 store_slots_open] >>
+  `sa.cs_next_var <= sb.cs_next_var` by
+    (drule (cj 2 compile_expr_grows) >> strip_tac >>
+     `ci_mono sB sb` by
+       metis_tac[cj 1 ci_mono_stmt_helpers, pairTheory.SND] >>
+     fs[ci_mono_def] >> decide_tac) >>
+  irule forced_then_outcome >>
+  conj_tac
+  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+  qexists_tac `\v ee t.
+    expr_post ctx func cenv cx e es sa sB s0 ee v op t /\
+    expr_store_bound cx (expr_type e) v op t /\
+    t.vs_current_bb = sB.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sB.cs_current_insts /\
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
+  conj_tac >- suspend "success" >>
+  qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
+  disch_then (qspecl_then [`sa`, `sB`, `op`, `s0`] mp_tac) >> simp[]
 QED
+
+Resume compile_assign_storage_sparse_stmt_frag_mem[success]:
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  `value_has_type tvt v` by metis_tac[] >>
+  `~cx.txn.is_static` by fs[expr_post_def, stmt_state_rel_def, state_rel_def] >>
+  drule_all typed_storage_copy_write >>
+  disch_then (qspecl_then [`tr`, `n2w slot`, `ee`] mp_tac) >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `write_storage_slot cx tr (n2w slot) tvt v ee = (INL (), ee')` >>
+  `declared_storage_region cx src id [] = SOME (tr,n2w slot,tvt)` by
+    simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
+  drule_all (SRULE [] storage_sparse_success_run_mem) >> strip_tac >>
+  rename1 `gas_marked_path T ctx func t 0 (OK u)` >>
+  `ee'.gas_obs = [] /\ ee'.scopes = ee.scopes` by
+    (Cases_on `tr` >> simp[Abbr `ee'`, set_storage_def]) >>
+  `ee' with gas_obs := [] = ee'` by
+    simp[evaluation_state_component_equality] >>
+  qexistsl_tac [`INL ()`, `ee'`, `OK u`] >>
+  conj_tac >- metis_tac[topcopy_write_storage_gas_tail] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  disj1_tac >> simp[stmt_lands_def, cenv_top_ext_refl] >>
+  irule return_buf_frame_frame >>
+  qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >> metis_tac[]
+QED
+Finalise compile_assign_storage_sparse_stmt_frag_mem
