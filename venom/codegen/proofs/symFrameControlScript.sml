@@ -2867,7 +2867,7 @@ Proof
 QED
 
 (* Diagnostic: the spill-free prefix contract needs no spill kinds or budget. *)
-Theorem sym_rf_stack_only_interface_probe[local]:
+Theorem sym_spill_free_stack_only_prefix_sim:
   !ops lo ps ss top srest fn ret cp p fmp env.
   EVERY is_simple_stack_op ops /\
   prefix_wf lo (LENGTH ps.ps_stack) ops /\
