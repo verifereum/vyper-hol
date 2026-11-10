@@ -12,6 +12,7 @@ Ancestors
   bodyIntCallFamAggSubscriptHashTail bodyIntCallFamAggSubscriptAllocRun
   bodyIntCallFamAggSubscriptWordRun bodyIntCallFamAggSubscriptArrayWindow
   bodyIntCallFamAggSubscriptArrayRun bodyIntCallFamAggSubscriptArrayPost
+  bodyIntCallFamAggSubscriptArraySuffix
   bodyIntCallFamAggSubscriptBaseOutcome bodyIntCallFamAggSubscriptPosts
 
 Theorem intcall_subscript_step:
