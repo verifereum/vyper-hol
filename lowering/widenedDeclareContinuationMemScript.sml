@@ -196,11 +196,13 @@ Theorem retained_declaration_destination[local]:
   lookup_scopes id ee.scopes = NONE /\
   lookup_var p s0 = SOME w /\ FLOOKUP s0.vs_allocas aid = SOME (w2n w,sz) /\
   n <= sz /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+  gas_marked_exec T (ctx,fn) action (es,s0) marks (INL (v:value)) marked (OK t) /\
   return_buf_frame d ce sa s0 ==>
   lookup_var p t = SOME w /\ FLOOKUP t.vs_allocas aid = SOME (w2n w,sz) /\
   w2n w + n <= t.vs_alloca_next /\ w2n w + n < dimword(:256) /\
   local_ptrs_reserved ce sb /\ not_fresh_at sb p /\
-  not_local_ptr ce ee.scopes p /\ return_buf_frame d ce sb t
+  not_local_ptr ce ee.scopes p /\ return_buf_frame d ce sb t /\
+  stmt_state_rel ctx fn ce cx ee t /\ ~t.vs_halted
 Proof
   strip_tac >>
   `stmt_state_rel ctx fn ce cx ee t /\
@@ -216,7 +218,25 @@ Proof
   conj_tac >- metis_tac[local_ptrs_reserved_next_var] >>
   conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   conj_tac >- metis_tac[local_ptrs_reserved_not_live] >>
-  irule return_buf_frame_frame >> metis_tac[]
+  conj_tac >- (irule return_buf_frame_frame >> metis_tac[]) >>
+  conj_tac >- simp[] >>
+  qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+  simp[gas_marked_exec_def, gas_marked_path_def] >>
+  strip_tac >> drule fragGasPathMemTheory.gas_path_mem_exec >>
+  simp[fragExecTheory.exit_result_def]
+QED
+
+Theorem retained_copy_type_metadata[local]:
+  body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es ==>
+  acyclic_struct_metadata ce.ce_struct_fields /\
+  sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields)
+Proof
+  fs[bodySimTheory.body_inv_def, exprSimHypsDefsTheory.expr_body_pre_def,
+     exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]
 QED
 
 Theorem widened_declare_retained_continuation_mem:
@@ -283,31 +303,20 @@ Proof
    w2n dw + type_memory_size dtv <= t.vs_alloca_next /\
    w2n dw + type_memory_size dtv < dimword(:256) /\
    local_ptrs_reserved ce sb /\ not_fresh_at sb p /\
-   not_local_ptr ce (ee with gas_obs := []).scopes p /\ return_buf_frame d ce sb t` by
-    (irule retained_declaration_destination >>
-     conj_tac >- simp[] >>
+   not_local_ptr ce (ee with gas_obs := []).scopes p /\ return_buf_frame d ce sb t /\
+   stmt_state_rel ctx fn ce cx (ee with gas_obs := []) t /\ ~t.vs_halted` by
+    (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`) retained_declaration_destination >>
+     disch_then irule >>
+     simp[expr_type_def] >>
      conj_tac >- (qexists_tac `id` >> gvs[]) >>
      goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     simp[expr_type_def] >> metis_tac[]) >>
-  `stmt_state_rel ctx fn ce cx (ee with gas_obs := []) t /\ ~t.vs_halted` by
-    (conj_tac >- fs[vv_post_def] >>
-     qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-     simp[gas_marked_exec_def, gas_marked_path_def] >>
-     strip_tac >> drule fragGasPathMemTheory.gas_path_mem_exec >>
-     simp[fragExecTheory.exit_result_def]) >>
+     gvs[expr_type_def]) >>
   `!x. p'.ptr_operand = Var x ==> not_fresh_at sb x` by
     (drule (CONJUNCT1 compiler_compile_var) >> simp[contextTheory.vv_operand_def]) >>
   `type_memory_size stv < dimword(:256)` by
     (`t.vs_alloca_next < dimword(:256)` by
        metis_tac[alloca_room_next_lt, stmt_state_rel_def] >> decide_tac) >>
-  `acyclic_struct_metadata ce.ce_struct_fields /\
-   sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
-   (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
-     ALL_DISTINCT (MAP FST fields) /\
-     EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
-       sz = type_memory_size tv) fields)` by
-    (fs[bodySimTheory.body_inv_def, exprSimHypsDefsTheory.expr_body_pre_def,
-       exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]) >>
+  drule_all retained_copy_type_metadata >> strip_tac >>
   `inst.inst_id < sb.cs_next_id` by
     (drule (CONJUNCT1 compile_expr_grows) >> strip_tac >> decide_tac) >>
   `compile_assign_value ce (Var p) LocMemory p'.ptr_operand F (SOME LocMemory) ann
