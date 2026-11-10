@@ -1,6 +1,7 @@
 (* Member setup reaches a recursive child without changing allocation sites. *)
 Theory exprSimAbiDecodeMemberExecute
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeAbortReentry exprSimAbiDecodeMemberOutcome exprSimAbiDecodeSiteProvenance
   abiDecoderMemberSetup abiDecoderDynamicLoopSetup abiDecoderFiniteControl
   abiDecoderSequenceReach abiDecoderContract abiEncoder compileEnv emitHelper

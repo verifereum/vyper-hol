@@ -1,6 +1,7 @@
 (* Zero-source allocation prefix and external address/tail composition. *)
 Theory exprSimSliceExtcodeContinue
 Ancestors
+  loweringStateRelDefs
   exprSimSliceExtcodeEntry exprSimSliceCompose exprSimSliceExtcode
   exprSimSliceBounds exprSimSliceOrdinaryContinue exprSimSource exprSimHyps
   exprSimPrecompiles exprSimWordArgs emitHelperProps fragGasSeqAbort builtinBytes emitHelper

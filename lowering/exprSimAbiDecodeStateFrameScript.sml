@@ -1,5 +1,6 @@
 Theory exprSimAbiDecodeStateFrame
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeImmutableOutcome exprSimAbiDecodeRegionFrame
   exprSimAbiDecodeLiveFrame exprSimAbiDecodeConsumerProbe
   exprSimAbiDecodeQuantifiedLift exprSimAbiDecodeEndpointFrame

@@ -2362,7 +2362,8 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Builtin]:
     >- (simp_tac(srw_ss())[] >> strip_tac >>
         qpat_x_assum `∀s'' x t. _ ∧ _ ∧ _ ∧ _ ∧ NONE = NONE ⇒ _`
           (qspecl_then [`st`, `()`, `st`] mp_tac) >>
-        (impl_tac >- simp[type_check_def, assert_def]) >>
+        (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
+                   simp[type_check_def, assert_def])) >>
         strip_tac >> first_x_assum drule_all >> simp[]) >>
     rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
     rename1 `code_slice_source bt es = SOME (code_ty,addr)` >>
@@ -2374,7 +2375,8 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Builtin]:
     rename1 `eval_exprs cx (TL es) st = (tail_res,tail_st)` >>
     qpat_x_assum `∀s'' x t v c a. _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ v = (c,a) ⇒ _`
       (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`] mp_tac) >>
-    (impl_tac >- simp[type_check_def, assert_def]) >>
+    (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
+                   simp[type_check_def, assert_def])) >>
     strip_tac >> first_x_assum drule_all >> strip_tac >>
     reverse (Cases_on `tail_res`)
     >- (simp_tac(srw_ss())[] >> strip_tac >>
@@ -2394,7 +2396,8 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Builtin]:
     qpat_x_assum `∀s'' x t v c a s3 tv t'. _ ⇒ _`
       (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`,`st`,
                     `tail_vs`,`tail_st`] mp_tac) >>
-    (impl_tac >- simp[type_check_def, assert_def]) >>
+    (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
+                   simp[type_check_def, assert_def])) >>
     strip_tac >> first_x_assum drule_all >> strip_tac >>
     rpt (qpat_x_assum `!x. _` kall_tac) >>
     reverse (Cases_on `addr_res`) >> simp_tac(srw_ss())[]

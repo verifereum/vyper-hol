@@ -1,6 +1,7 @@
 (* The actual runtime-indexed element setup, not a static tuple member. *)
 Theory exprSimAbiDecodeArrayRuntimeSetup
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeArraySetup exprSimAbiDecodeArrayInvariant abiDecoderDynamicLoopSetup
   exprSimAbiDecodeAbortReentry abiDecoderVarExtend abiDecoderContract
   exprSimAbiDecodeArrayFetched abiDecoderWordOutcome instIdxIndep

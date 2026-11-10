@@ -1,6 +1,7 @@
 (* Guard-first initialization and conditional nonbulk array closure. *)
 Theory exprSimAbiDecodeArrayClosure
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   abiDecoderArrayLoopInit abiDecoderArrayInit abiDecoderCode abiDecoderRecursiveArray
   abiDecoderDynarrayPrefix fragExec emitHelperProps abiCanonicalHeadSize
   exprSimAbiDecodeWidthBoundary abiDecoderCoherence exprLowering vyperValue

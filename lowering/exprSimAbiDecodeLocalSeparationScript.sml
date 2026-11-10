@@ -1,5 +1,6 @@
 Theory exprSimAbiDecodeLocalSeparation
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeCoverageBoundary exprSimAbiDecodeCoverageMutual
   exprSimAbiGasBridge localPtrsProps exprLoweringProps compileEnv
   venomInst venomState venomMemDefs list finite_map arithmetic

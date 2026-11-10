@@ -8,9 +8,9 @@ Theorem abi_decode_interval_row_separation:
   q + n <= s.vs_alloca_next /\
   (!id b sz. first <= id /\ id < last /\
     FLOOKUP s.vs_allocas id = SOME (b,sz) ==>
-    compileEnv$regions_disjoint b sz q n) /\
+    loweringStateRelDefs$regions_disjoint b sz q n) /\
   first <= id /\ id < last /\ FLOOKUP t.vs_allocas id = SOME (b,sz) ==>
-  compileEnv$regions_disjoint b sz q n
+  loweringStateRelDefs$regions_disjoint b sz q n
 Proof
   simp_tac bool_ss [abi_decode_allocation_floor_def] >> strip_tac >>
   qpat_x_assum `!aid b sz. FLOOKUP t.vs_allocas aid = SOME (b,sz) ==> _`
@@ -33,18 +33,18 @@ Theorem abi_decode_write_set_protects:
   q + n <= s.vs_alloca_next /\
   (!id b sz. first <= id /\ id < last /\
     FLOOKUP s.vs_allocas id = SOME (b,sz) ==>
-    compileEnv$regions_disjoint b sz q n) ==>
+    loweringStateRelDefs$regions_disjoint b sz q n) ==>
   decode_protects (abi_decode_write_set d outsz s.vs_alloca_next first last t) {(q,n)}
 Proof
   strip_tac >>
-  `compileEnv$regions_disjoint d outsz q n` by
+  `loweringStateRelDefs$regions_disjoint d outsz q n` by
     (irule abi_decode_interval_row_separation >> metis_tac[]) >>
   simp[decode_protects_def, abi_decode_write_set_def] >>
   rpt gen_tac >> strip_tac >> conj_tac
   >- (gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   rpt gen_tac >> strip_tac >>
   CCONTR_TAC >> gvs[] >>
-  `compileEnv$regions_disjoint b sz q n` by
+  `loweringStateRelDefs$regions_disjoint b sz q n` by
     (irule abi_decode_interval_row_separation >>
      qexistsl_tac [`first`, `id`, `last`, `s`, `t`] >>
      asm_rewrite_tac [] >> decide_tac) >>
@@ -58,7 +58,7 @@ Theorem abi_decode_write_set_memory_frame:
   q + n <= s.vs_alloca_next /\
   (!id b sz. first <= id /\ id < last /\
     FLOOKUP s.vs_allocas id = SOME (b,sz) ==>
-    compileEnv$regions_disjoint b sz q n) /\
+    loweringStateRelDefs$regions_disjoint b sz q n) /\
   decode_site_effect ctx func next
     (abi_decode_write_set d outsz s.vs_alloca_next first last t) s t ==>
   mem_bytes_at q n (t with <|vs_returndata := rd; vs_prev_bb := prev|>).vs_memory =

@@ -1,6 +1,7 @@
 (* Overflow-aware arithmetic boundary for slice bounds checks. *)
 Theory exprSimSliceBounds
 Ancestors
+  loweringStateRelDefs
   builtinBytes emitHelperProps freshWrites fragExec words arithmetic
   compileEnv emitHelper context venomInst venomState venomExecSemantics list
   exprLoweringProps

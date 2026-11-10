@@ -1,6 +1,7 @@
 (* Account-read and copy boundaries at the state after address evaluation. *)
 Theory exprSimSliceExtcode
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   exprSimSliceBounds exprSimSliceData exprSimAccounts accountsRelProps
   builtinBytes emitHelperProps exprLoweringProps fragExec compileEnv context
   venomExecSemantics venomInst venomState vyperTypeInvariants

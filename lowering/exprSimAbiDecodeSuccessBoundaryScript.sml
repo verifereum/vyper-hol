@@ -1,5 +1,6 @@
 Theory exprSimAbiDecodeSuccessBoundary
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeValueFrame exprSimAbiDecodeResources exprSimAbiDecodeEntryTyping
   exprSimAbiDecodeImmutableOutcome exprSimAbiDecodeOblivious
   exprSimAbiDecodeStateFrame freshWrites

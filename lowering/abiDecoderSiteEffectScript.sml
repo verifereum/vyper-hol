@@ -1,6 +1,7 @@
 (* Strong, fixed-origin effects for actual-site decoder execution. *)
 Theory abiDecoderSiteEffect
 Ancestors
+  valueEncodingDefs
   actualDecoderSites abiDecoderReentry valueEncodingProps valueEncoding
   localPtrsProps venomState instIdxIndep exprLoweringProps venomMemDefs finite_map pred_set words arithmetic list rich_list
 

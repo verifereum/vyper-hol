@@ -1,6 +1,7 @@
 (* Source labels for the dynamic-array header and complete-head guards. *)
 Theory exprSimAbiDecodeArraySource
 Ancestors
+  valueEncodingDefs
   abiValidAggregateHeads abiValidMembers abiDecodeRanges vyperABI contractABI
   abiDecoderBytestringSource abiDecoderSourceFacts abiCanonicalHeadSize
   vyperValue valueEncoding words list rich_list arithmetic

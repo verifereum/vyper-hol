@@ -1,5 +1,6 @@
 Theory exprSimAbiDecodeCallerSuffix
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeCountedOutcome exprSimAbiDecodeBodySuccess
   exprSimAbiDecodeInputBound exprSimAbiDecodeReject exprSimAbiDecodeResources
   exprOperandVar exprReasonOperand exprSimAbiDecodeLiveFrame

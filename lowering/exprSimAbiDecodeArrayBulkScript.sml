@@ -1,6 +1,7 @@
 (* Arbitrary-byte source and layout boundaries for the static bulk branch. *)
 Theory exprSimAbiDecodeArrayBulk
 Ancestors
+  valueEncodingDefs
   abiDecoderScalarOutcome abiDecoderLayout abiValidStatic abiDecoderMembers
   abiDecoderPrimitiveSource abiDecoderClamp exprLowering abiEncoder
   vyperABI contractABI valueEncoding valueEncodingProps vyperTypeSystem

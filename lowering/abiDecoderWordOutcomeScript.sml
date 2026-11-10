@@ -1,6 +1,7 @@
 (* Strong finite machine effects for primitive word decoding. *)
 Theory abiDecoderWordOutcome
 Ancestors
+  valueEncodingDefs
   abiDecoderClampedWord abiDecoderClampOutcome abiDecoderSiteEffect
   abiDecoderRange abiDecoderClamp abiDecoderUnsignedClamp abiDecoderGuards
   abiDecoderContract abiDecoderReservation abiEncoder emitHelperProps

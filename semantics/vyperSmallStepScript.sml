@@ -1358,7 +1358,7 @@ Theorem cps_builtin_membership[local]:
   cont (eval_expr_cps cx (Builtin ty bt es) st k) =
   cont (liftk cx ApplyTv (eval_expr cx (Builtin ty bt es) st) k)
 Proof
-  strip_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
   `bt <> Len` by (strip_tac >> fs[]) >>
   pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def] >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
@@ -1371,7 +1371,18 @@ Proof
   simp[liftk1, bind_def] >>
   simp[cont_def, Once OWHILE_THM, stepk_def, apply_vals_def,
        apply_exc_def, bind_def, ignore_bind_def, liftk1, return_def] >>
-  rpt (CASE_TAC >> simp[return_def, raise_def])
+  rename1 `eval_exprs cx es _ = (INL vs,r2)` >>
+  Cases_on `type_check (LENGTH vs = 2) "Membership args" r2` >>
+  rename1 `type_check _ _ _ = (tc_res,r3)` >>
+  Cases_on `tc_res` >> simp[] >>
+  Cases_on `lift_option_type (evaluate_type (get_tenv cx) (expr_type (EL 1 es)))
+              "Membership type" r3` >>
+  rename1 `lift_option_type _ _ _ = (ty_res,r4)` >>
+  Cases_on `ty_res` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `lift_sum mres r4` >>
+  Cases_on `lift_sum mres r4` >>
+  rename1 `lift_sum _ _ = (m_res,r5)` >>
+  Cases_on `m_res` >> simp[]
 QED
 
 Theorem eval_cps_aux:

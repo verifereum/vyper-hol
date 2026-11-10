@@ -1,6 +1,7 @@
 (* Ordinary (non-code) slice operand composition. *)
 Theory exprSimSliceOrdinary
 Ancestors
+  loweringStateRelDefs
   exprSimSliceSource exprSimSliceMemory exprSimSliceDataPost
   exprSimHyps exprSimHypsDefs exprSimSource exprSimVVFrame
   exprSimSliceCompose exprSimSliceOrdinaryFrame exprSimSliceOrdinaryContext

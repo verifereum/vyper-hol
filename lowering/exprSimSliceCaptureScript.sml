@@ -1,6 +1,7 @@
 (* Consumer-facing source-success and dynamic-capture interface. *)
 Theory exprSimSliceCapture
 Ancestors
+  loweringStateRelDefs
   exprSimSliceMemory exprSimSource exprSimProps exprLoweringProps
   exprReasonOperand exprOperandVar compileEnv loweringPosts vyperTypeExprResult
   vyperTypeExprSoundness vyperTypeInvariants vyperTyping

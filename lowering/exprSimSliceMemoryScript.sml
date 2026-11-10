@@ -1,6 +1,7 @@
 (* Source capture boundaries for ordinary slices. *)
 Theory exprSimSliceMemory
 Ancestors
+  loweringStateRelDefs
   builtinBytes emitHelperProps freshWrites fragExec exprLoweringProps
   compileEnv emitHelper context venomInst venomState venomExecSemantics
   venomMemDefs words arithmetic list finite_map loweringPosts valueEncodingProps

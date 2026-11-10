@@ -1,5 +1,6 @@
 Theory exprSimAbiDecodeTupleAssembly
 Ancestors
+  valueEncodingDefs
   exprSimAbiDecodeMemberExecute exprSimAbiDecodeTupleSource
   exprSimAbiDecodeTupleOutcome abiDecodeRanges abiValidMembers rich_list pred_set
   abiValidDecodedMetadata abiDecoderCoherence abiDecoderLayout

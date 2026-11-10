@@ -1,6 +1,7 @@
 (* Concrete dynamic primitive member execution, without source-validity premises. *)
 Theory exprSimAbiDecodeMemberOutcome
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeCompositePrefix abiDecoderMemberSetup abiDecoderMemberBound
   abiDecoderBytesBound abiDecoderRange abiDecoderReservation abiDecoderDynamicLoopSetup
   abiDecoderPrimitiveFetched abiDecoderSiteEffect abiDecoderFiniteControl

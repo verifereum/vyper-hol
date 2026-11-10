@@ -1,6 +1,7 @@
 (* Straight-line memory tail of ordinary slices. *)
 Theory exprSimSliceData
 Ancestors
+  loweringStateRelDefs
   exprSimSliceMemory exprSimSliceBounds exprSimCalldataSlice exprSimPrecompiles
   exprSimBufferStore abiCanonicalHeadSize valueEncodingProps abiDecoderString
   builtinBytes emitHelperProps fragExec exprLoweringProps venomInst

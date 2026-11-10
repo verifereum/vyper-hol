@@ -2,6 +2,7 @@
    deliberately separate from these input/resource preservation facts. *)
 Theory exprSimAbiDecodeFreshProbe
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeBuiltin abiDecoderReentry varsExt actualDecoderSites
   venomMemDefs compileEnv finite_map pred_set arithmetic exprLoweringProps
 

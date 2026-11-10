@@ -197,19 +197,6 @@ in
   | _ => raise Fail "expected unique Builtin preservation case"
 end;
 
-(* Drop the Builtin induction hypotheses (they mention Bop or Len) once the
-   needed instances are derived, so the case splits below stay cheap. *)
-val drop_builtin_ihs_tac =
-  rpt (first_x_assum (fn th =>
-    let
-      val c = concl th
-      fun has n = can (find_term (fn t => is_const t andalso
-                                          fst (dest_const t) = n)) c
-    in
-      if (is_forall c orelse is_imp_only c) andalso (has "Bop" orelse has "Len")
-      then kall_tac th else NO_TAC
-    end));
-
 Theorem case_Builtin[local]:
   ^builtin_state_case
 Proof
@@ -225,17 +212,26 @@ Proof
         (Cases_on `es` >> gvs[builtin_args_length_ok_def]) >>
       fs[type_check_def, assert_def, return_def] >> metis_tac[]) >>
   Cases_on `bt = Bop In \/ bt = Bop NotIn`
-  >- (rpt strip_tac >> fs[pure_expr_def] >>
-      `bt <> Env MsgGas` by (strip_tac >> fs[]) >>
-      drop_builtin_ihs_tac >>
-      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-           assert_def, return_def, raise_def, AllCaseEqs()] >>
+  >- (
       rpt strip_tac >>
-      gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def,
+      (* the code-slice and ordinary IHs don't apply to membership *)
+      rpt (qpat_x_assum `!s'' x t v. _` kall_tac) >>
+      qpat_x_assum `!s'' x t. _ /\ _ /\ ~(_ \/ _) /\ _ ==> _` kall_tac >>
+      gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
+          type_check_def, assert_def, return_def, raise_def,
+          get_accounts_def, lift_sum_def, precompile_call_success_def,
           AllCaseEqs()] >>
-      imp_res_tac lift_option_type_state >> imp_res_tac lift_sum_state >>
-      fs[type_check_def, assert_def, return_def] >> metis_tac[])
+      gvs[get_accounts_def, ETA_THM, return_def, raise_def,
+          sum_CASE_rator, AllCaseEqs()] >>
+      gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def,
+          lift_option_type_def, lift_option_def, get_accounts_def,
+          AllCaseEqs()] >>
+      gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
+      Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
+      gvs[return_def, raise_def, sum_CASE_rator, AllCaseEqs()] >>
+      qpat_x_assum `sum_CASE _ _ _ _ = _` mp_tac >>
+      qmatch_goalsub_abbrev_tac `sum_CASE ans` >>
+      Cases_on `ans` >> gvs[return_def, raise_def] >> metis_tac[])
   >> rpt strip_tac >> fs[pure_expr_def] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >>

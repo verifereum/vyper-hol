@@ -49,7 +49,7 @@ Proof
      first_x_assum drule >> decide_tac) >>
   `!id b sz. start.cs_next_id <= id /\ id < final.cs_next_id /\
       FLOOKUP s.vs_allocas id = SOME (b,sz) ==>
-      compileEnv$regions_disjoint b sz q n` by
+      loweringStateRelDefs$regions_disjoint b sz q n` by
     (rpt strip_tac >> fs[alloca_inv_def, allocas_non_overlapping_def] >>
      `id <> aid` by decide_tac >>
      qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _` drule_all >>

@@ -1,6 +1,7 @@
 (* Source-labelled arbitrary scalar decoder execution. *)
 Theory abiDecoderScalarOutcome
 Ancestors
+  valueEncodingDefs
   abiDecoderPrimitiveSource abiDecoderWordOutcome abiCanonicalHeadSize
   calldataReconstruction abiDecoderCoherence vyperTypeABI vyperTypeSystem
   exprLowering compileEnv vyperValue valueEncoding words list arithmetic

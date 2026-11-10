@@ -1,6 +1,7 @@
 (* Fetched control at the dynamic-array invariant boundaries. *)
 Theory exprSimAbiDecodeArrayControl
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   exprSimAbiDecodeArrayInvariant exprSimAbiDecodeMemberExecute abiDecoderFiniteControl
   abiDecoderExecution abiDecoderLoopData abiDecoderContract abiDecoderReentryAddress
   abiDecoderSiteEffect abiDecoderReentry abiDecoderLoopRegisters

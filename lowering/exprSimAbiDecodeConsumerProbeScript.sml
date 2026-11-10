@@ -1,5 +1,6 @@
 Theory exprSimAbiDecodeConsumerProbe
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeEndpointFrame exprLoweringProps compileEnv venomState
   finite_map vyperTypeABI vyperTyping abiBoundaryChecks
   valueTypingMemoryProps exprSimProps
@@ -11,17 +12,10 @@ Theorem abi_decode_immutable_separation_frame:
     local_region ce es.scopes s name lo sz) ==>
   immutable_alloca_sep func ce cx es t
 Proof
-  simp_tac bool_ss [immutable_alloca_sep_def, abi_decode_allocation_floor_def] >>
-  strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  conj_tac >- decide_tac >>
-  conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!aid b sz. FLOOKUP t.vs_allocas aid = SOME (b,sz) ==> _`
-        drule >> strip_tac
-      >- (first_x_assum drule_all >> simp[]) >>
-      simp[regions_disjoint_def] >> decide_tac) >>
-  metis_tac[]
+  strip_tac >>
+  match_mp_tac (Q.SPECL [`func`,`ce`,`cx`,`es`,`es`,`s`,`t`]
+                  immutable_alloca_sep_frame) >>
+  gvs[abi_decode_allocation_floor_def] >> metis_tac[]
 QED
 
 (* Project the wrapped value at the existing endpoint, without executing again. *)
