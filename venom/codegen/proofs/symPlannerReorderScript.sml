@@ -346,3 +346,81 @@ Proof
   gvs[SF SFY_ss, stackOpSimTheory.execute_plan_append,
     stackOpSimTheory.asm_block_at_append, EVERY_APPEND]
 QED
+
+Theorem reorder_place_cases[local]:
+  f < LENGTH ps.ps_stack /\ P [] ps /\
+  (!d. stack_get_unfixed_depth op f n ps.ps_stack = SOME d /\
+       operand_equiv dfg op (stack_peek f ps.ps_stack) ==>
+       P [] (ps with ps_stack := stack_poke f op
+         (stack_poke d (stack_peek f ps.ps_stack) ps.ps_stack))) /\
+  (!d xs mid ys last.
+     stack_get_unfixed_depth op f n ps.ps_stack = SOME d /\
+     do_swap d ps = (xs,mid) /\ do_swap f mid = (ys,last) ==>
+     P (xs ++ ys) last) ==>
+  !ops out.
+  (case stack_get_unfixed_depth op f n ps.ps_stack of
+     NONE => ([],ps)
+   | SOME d =>
+       if d = f then ([],ps)
+       else if f < LENGTH ps.ps_stack then
+         if operand_equiv dfg op (stack_peek f ps.ps_stack) then
+           ([],ps with ps_stack := stack_poke f op
+             (stack_poke d (stack_peek f ps.ps_stack) ps.ps_stack))
+         else
+           (case do_swap d ps of (xs,mid) =>
+             case do_swap f mid of (ys,last) => (xs ++ ys,last))
+       else
+         (case do_swap d ps of (xs,mid) =>
+           case do_swap f mid of (ys,last) => (xs ++ ys,last))) = (ops,out) ==>
+  P ops out
+Proof
+  rpt strip_tac >> Cases_on `stack_get_unfixed_depth op f n ps.ps_stack`
+  >- gvs[] >> rename1 `SOME d` >>
+  Cases_on `d = f` >- gvs[] >>
+  Cases_on `operand_equiv dfg op (stack_peek f ps.ps_stack)`
+  >- (gvs[] >> metis_tac[]) >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem sym_reorder_place:
+  f < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  (case stack_get_unfixed_depth op f n ps.ps_stack of
+     NONE => ([],ps)
+   | SOME d =>
+       if d = f then ([],ps)
+       else if f < LENGTH ps.ps_stack then
+         if operand_equiv dfg op (stack_peek f ps.ps_stack) then
+           ([],ps with ps_stack := stack_poke f op
+             (stack_poke d (stack_peek f ps.ps_stack) ps.ps_stack))
+         else
+           (case do_swap d ps of (xs,mid) =>
+             case do_swap f mid of (ys,last) => (xs ++ ys,last))
+       else
+         (case do_swap d ps of (xs,mid) =>
+           case do_swap f mid of (ys,last) => (xs ++ ys,last))) = (ops,out) ==>
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  qpat_x_assum `(case stack_get_unfixed_depth _ _ _ _ of _ => _ | _ => _) = _` mp_tac >>
+  map_every qid_spec_tac [`out`, `ops`] >>
+  ho_match_mp_tac reorder_place_cases >> conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- simp[planExecTheory.execute_plan_def, codegenSymRelTheory.sym_steps_def] >>
+  conj_tac
+  >- (simp[planExecTheory.execute_plan_def, codegenSymRelTheory.sym_steps_def] >>
+      metis_tac[stack_get_unfixed_depth_props, sym_kinds_ok_poke_exchange]) >>
+  rpt strip_tac >> irule sym_two_swaps >>
+  metis_tac[stack_get_unfixed_depth_props]
+QED
