@@ -2,6 +2,7 @@ Theory internalReturnCopyFwdLogProbe
 Ancestors
   internalReturnCopyFwdPlan internalReturnCopyFwdDefs
   invokeCopyFwdCommonDefs venomInst callLayoutDefs basePtrDefs memLocDefs venomEffects
+  ptrDiscipline
 
 Definition ircf_log_probe_callee_def:
   ircf_log_probe_callee : ir_function =
@@ -204,4 +205,80 @@ Proof
   mp_tac ircf_log_probe_main_transform >>
   simp[ircf_transform_ctx_def, ircf_log_probe_ctx_def,
        ircf_log_probe_callee_function_transform]
+QED
+
+Theorem ircf_log_probe_no_dst_write_alias:
+  EVERY ircf_no_dst_write_alias ircf_log_probe_ctx.ctx_functions
+Proof
+  simp[ircf_log_probe_ctx_def] >> conj_tac
+  >- (simp[ircf_no_dst_write_alias_def, ircf_log_probe_callee_def,
+           mk_raw_function_def, mk_inst_def] >>
+      rpt gen_tac >> strip_tac >> gvs[]) >>
+  mp_tac ircf_log_probe_dfg >> mp_tac ircf_log_probe_aliases >>
+  simp[ircf_log_probe_main_def, mk_raw_function_def, ircf_log_probe_bb_def] >>
+  ntac 2 strip_tac >>
+  simp[ircf_no_dst_write_alias_def, ircf_log_probe_main_def,
+       mk_raw_function_def, ircf_log_probe_bb_def] >>
+  rpt gen_tac >> strip_tac >> gvs[mk_inst_def] >>
+  simp[ircf_log_probe_dfg, ircf_log_probe_aliases] >>
+  rpt gen_tac >> strip_tac >> gvs[mk_inst_def, mem_write_ops_def]
+QED
+
+Theorem ircf_log_probe_ptr_roots:
+  !P. ptr_roots P ircf_log_probe_main = {"%src"; "%dst"}
+Proof
+  gen_tac >> simp[ptr_roots_def, ircf_log_probe_main_def,
+    ircf_log_probe_bb_def, mk_raw_function_def,
+    pointerConfinedDefsTheory.alloca_roots_def, fn_insts_def, fn_insts_blocks_def,
+    inst_output_def, mk_inst_def] >>
+  simp[pred_setTheory.EXTENSION] >> dsimp[]
+QED
+
+Theorem ircf_log_probe_pointer_step:
+  !vars. pointer_use_step_step ircf_log_probe_main vars = NONE
+Proof
+  gen_tac >> simp[pointerConfinedDefsTheory.pointer_use_step_step_def,
+    pointerConfinedDefsTheory.pointer_use_step_def,
+    ircf_log_probe_main_def, ircf_log_probe_bb_def,
+    mk_raw_function_def, mk_inst_def,
+    pointerConfinedDefsTheory.is_pointer_preserving_op_def]
+QED
+
+Theorem ircf_log_probe_pointer_vars:
+  !P. fn_pv P ircf_log_probe_main = {"%src"; "%dst"}
+Proof
+  gen_tac >> rewrite_tac[fn_pv_def, ircf_log_probe_ptr_roots,
+    pointerConfinedDefsTheory.pointer_derived_vars_def,
+    pointerConfinedDefsTheory.pointer_use_vars_def] >>
+  once_rewrite_tac[WhileTheory.OWHILE_THM] >>
+  simp[ircf_log_probe_pointer_step] >>
+  once_rewrite_tac[WhileTheory.OWHILE_THM] >> simp[listTheory.SET_TO_LIST_INV]
+QED
+
+Theorem ircf_log_probe_topic_not_ptr_use:
+  !P. ~ptr_use_ok P {"%src"; "%dst"}
+    (mk_inst 5 LOG [Lit 1w; Var "%dst"; Lit 0w; Lit 0w] [])
+Proof
+  gen_tac >> simp[ptr_use_ok_def, mk_inst_def,
+    pointerConfinedDefsTheory.is_pointer_preserving_op_def,
+    mem_read_ops_def, mem_write_ops_def] >> EVAL_TAC
+QED
+
+Theorem ircf_log_probe_not_fn_ptr_ok:
+  !P. ~fn_ptr_ok P ircf_log_probe_main
+Proof
+  gen_tac >> strip_tac >>
+  fs[fn_ptr_ok_def] >>
+  qpat_x_assum `!inst. MEM inst (fn_insts _) ==> _` (qspec_then
+    `mk_inst 5 LOG [Lit 1w; Var "%dst"; Lit 0w; Lit 0w] []` mp_tac) >>
+  simp[ircf_log_probe_pointer_vars, ircf_log_probe_topic_not_ptr_use,
+       ircf_log_probe_main_def, ircf_log_probe_bb_def,
+       mk_raw_function_def, fn_insts_def, fn_insts_blocks_def]
+QED
+
+Theorem ircf_log_probe_not_ptr_discipline:
+  !lo vs. ~ptr_discipline lo ircf_log_probe_ctx vs
+Proof
+  simp[ptr_discipline_def, ircf_log_probe_ctx_def,
+       ircf_log_probe_not_fn_ptr_ok]
 QED
