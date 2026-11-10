@@ -2,7 +2,37 @@
 Theory bodyIntCallFamCallIntReturnFrame
 Ancestors
   bodyIntCallSeamDefs intCallFrame exprSimDefs compileEnv intCallResult
-  exprLowering venomExecSemantics
+  exprLowering venomExecSemantics vyperImmutableMetadataFrame
+  vyperInterpreter vyperState gasSummary
+
+Theorem marked_exec_immutable_metadata:
+  (!st result fin. source st = (result,fin) ==>
+     immutable_metadata_frame st fin) /\
+  gas_marked_exec memory (ctx,func) source (es,s) marks res ee r ==>
+  immutable_metadata_frame es ee
+Proof
+  simp[gas_marked_exec_def] >> strip_tac >>
+  first_x_assum (qspec_then `[]` mp_tac) >> strip_tac >>
+  first_x_assum drule >> simp[immutable_metadata_frame_def] >>
+  metis_tac[]
+QED
+
+Theorem intcall_callee_src_metadata:
+  intcall_callee_src cx name ss es = (res,ee) ==>
+  immutable_metadata_frame es ee
+Proof
+  strip_tac >>
+  Cases_on `eval_stmts (cx with stk updated_by CONS (NONE,name)) ss es` >>
+  rename1 `eval_stmts _ _ _ = (result0,st)` >>
+  `immutable_metadata_frame es st` by
+    (irule (cj 2 eval_metadata_frame_with_results) >>
+     goal_assum (drule_at Any)) >>
+  Cases_on `result0` >>
+  gvs[intcall_callee_src_def, try_def, ignore_bind_def, bind_def, return_def] >>
+  rename1 `handle_function ex st = _` >>
+  Cases_on `ex` >>
+  gvs[handle_function_def, return_def, raise_def]
+QED
 
 Theorem intcall_callee_exit_protected:
   allocas_above lo t /\

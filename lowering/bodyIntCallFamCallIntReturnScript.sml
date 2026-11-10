@@ -4,7 +4,7 @@
 Theory bodyIntCallFamCallIntReturn
 Ancestors
   bodyIntCallJointContract bodyIntCallSeamDefs
-  bodyIntCallFamCallIntReturnFrame
+  bodyIntCallFamCallIntReturnFrame bodyIntCallFamCallIntReturnResources
   vyperPlaceWriteSoundness vyperImmutableMetadataFrame
   exprLoweringProps stmtSimProps bodyMemoryDefs freshWrites
 Libs
