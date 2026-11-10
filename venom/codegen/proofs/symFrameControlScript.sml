@@ -2697,6 +2697,152 @@ Proof
   decide_tac
 QED
 
+Theorem do_restore_read_only_replay:
+  do_restore op ps = (ops, ps') /\
+  qs.ps_stack = ps.ps_stack /\ qs.ps_spilled = ps.ps_spilled /\
+  (!op1 off1 op2 off2.
+    FLOOKUP ps.ps_spilled op1 = SOME off1 /\
+    FLOOKUP ps.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
+    off1 + 32 <= off2 \/ off2 + 32 <= off1) /\
+  (!off. MEM (SORestore off) ops ==> off < dimword(:256)) ==>
+  prefix_spill_wf fmp lo ops qs /\
+  (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack /\
+  (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
+Proof
+  strip_tac >> Cases_on `FLOOKUP ps.ps_spilled op` >>
+  gvs[stackPlanOpsTheory.do_restore_def, mixedPrefixSimTheory.apply_prefix_ops_def,
+      mixedPrefixSimTheory.apply_prefix_op_def, mixedPrefixSimTheory.prefix_spill_wf_def,
+      mixedPrefixSimTheory.spill_op_wf_def] >>
+  rename1 `FLOOKUP ps.ps_spilled op = SOME off` >>
+  `spill_lookup off ps.ps_spilled = op` by
+    (simp[mixedPrefixSimTheory.spill_lookup_def] >>
+     metis_tac[planAlignTheory.spill_hilbert_unique]) >> simp[] >> metis_tac[]
+QED
+
+Theorem do_dup_read_only_replay:
+  do_dup d ps = (ops, ps') /\ d < LENGTH ps.ps_stack /\
+  qs.ps_stack = ps.ps_stack /\ qs.ps_spilled = ps.ps_spilled /\
+  (!off. ~MEM (SOSpill off) ops) ==>
+  prefix_spill_wf fmp lo ops qs /\
+  (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack /\
+  (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
+Proof
+  strip_tac >> drule_all do_dup_read_only_shallow >> strip_tac >>
+  gvs[stackPlanOpsTheory.do_dup_def, mixedPrefixSimTheory.apply_prefix_ops_def,
+      mixedPrefixSimTheory.apply_prefix_op_def, strongPrefixSimTheory.apply_simple_op_def,
+      mixedPrefixSimTheory.prefix_spill_wf_def, mixedPrefixSimTheory.spill_op_wf_def,
+      stackModelTheory.stack_dup_def, stackModelTheory.stack_peek_def]
+QED
+
+Theorem emit_var_input_unspilled_read_only_replay:
+  FLOOKUP ps.ps_spilled (Var v) = NONE /\
+  emit_one_input opc nl (Var v) ps = (ops, ps') /\
+  qs.ps_stack = ps.ps_stack /\ qs.ps_spilled = ps.ps_spilled /\
+  (!off. ~MEM (SOSpill off) ops) ==>
+  prefix_spill_wf fmp lo ops qs /\
+  (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack /\
+  (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
+Proof
+  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def] >>
+  strip_tac >> Cases_on `MEM v nl` >>
+  gvs[mixedPrefixSimTheory.apply_prefix_ops_def, mixedPrefixSimTheory.prefix_spill_wf_def] >>
+  Cases_on `stack_get_depth (Var v) ps.ps_stack` >>
+  gvs[mixedPrefixSimTheory.apply_prefix_ops_def, mixedPrefixSimTheory.prefix_spill_wf_def] >>
+  rename1 `stack_get_depth _ _ = SOME dist` >>
+  Cases_on `do_dup dist ps` >> gvs[] >>
+  metis_tac[do_dup_read_only_replay, planAlignTheory.stack_get_depth_bound]
+QED
+
+Theorem emit_var_input_spilled_read_only_replay:
+  FLOOKUP ps.ps_spilled (Var v) = SOME off /\
+  emit_one_input opc nl (Var v) ps = (ops, ps') /\
+  qs.ps_stack = ps.ps_stack /\ qs.ps_spilled = ps.ps_spilled /\
+  (!op1 off1 op2 off2.
+    FLOOKUP ps.ps_spilled op1 = SOME off1 /\
+    FLOOKUP ps.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
+    off1 + 32 <= off2 \/ off2 + 32 <= off1) /\
+  (!off. MEM (SORestore off) ops ==> off < dimword(:256)) ==>
+  prefix_spill_wf fmp lo ops qs /\
+  (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack /\
+  (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
+Proof
+  strip_tac >>
+  `spill_lookup off ps.ps_spilled = Var v` by
+    (simp[mixedPrefixSimTheory.spill_lookup_def] >>
+     metis_tac[planAlignTheory.spill_hilbert_unique]) >>
+  Cases_on `MEM v nl` >>
+  gvs[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+      stackPlanOpsTheory.do_restore_def, stackPlanOpsTheory.do_dup_def,
+      stackModelTheory.stack_get_depth_def, stackModelTheory.stack_find_def,
+      stackModelTheory.stack_push_def, stackModelTheory.stack_dup_def,
+      stackModelTheory.stack_peek_def, listTheory.REVERSE_SNOC, listTheory.EL_SNOC,
+      mixedPrefixSimTheory.apply_prefix_ops_def, mixedPrefixSimTheory.apply_prefix_op_def,
+      strongPrefixSimTheory.apply_simple_op_def,
+      mixedPrefixSimTheory.prefix_spill_wf_def, mixedPrefixSimTheory.spill_op_wf_def] >>
+  metis_tac[]
+QED
+
+Theorem emit_one_input_read_only_replay:
+  emit_one_input opc nl op ps = (ops, ps') /\ opc <> INVOKE /\
+  qs.ps_stack = ps.ps_stack /\ qs.ps_spilled = ps.ps_spilled /\
+  (!op1 off1 op2 off2.
+    FLOOKUP ps.ps_spilled op1 = SOME off1 /\
+    FLOOKUP ps.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
+    off1 + 32 <= off2 \/ off2 + 32 <= off1) /\
+  (!off. ~MEM (SOSpill off) ops) /\
+  (!off. MEM (SORestore off) ops ==> off < dimword(:256)) ==>
+  prefix_spill_wf fmp lo ops qs /\
+  (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack /\
+  (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
+Proof
+  Cases_on `op`
+  >- (rpt strip_tac >>
+      gvs[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+          mixedPrefixSimTheory.apply_prefix_ops_def, mixedPrefixSimTheory.apply_prefix_op_def,
+          strongPrefixSimTheory.apply_simple_op_def, stackModelTheory.stack_push_def,
+          mixedPrefixSimTheory.prefix_spill_wf_def, mixedPrefixSimTheory.spill_op_wf_def])
+  >- (strip_tac >> rename1 `Var v` >> Cases_on `FLOOKUP ps.ps_spilled (Var v)`
+      >- (irule emit_var_input_unspilled_read_only_replay >> simp[] >> metis_tac[]) >>
+      irule emit_var_input_spilled_read_only_replay >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  gvs[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+      mixedPrefixSimTheory.apply_prefix_ops_def, mixedPrefixSimTheory.apply_prefix_op_def,
+      strongPrefixSimTheory.apply_simple_op_def, stackModelTheory.stack_push_def,
+      mixedPrefixSimTheory.prefix_spill_wf_def, mixedPrefixSimTheory.spill_op_wf_def]
+QED
+
+Theorem emit_input_plan_read_only_replay:
+  !inputs ps qs opc nl ins ps1 fmp lo.
+  emit_input_plan opc inputs nl ps = (ins, ps1) /\ opc <> INVOKE /\
+  qs.ps_stack = ps.ps_stack /\ qs.ps_spilled = ps.ps_spilled /\
+  (!op1 off1 op2 off2.
+    FLOOKUP ps.ps_spilled op1 = SOME off1 /\
+    FLOOKUP ps.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
+    off1 + 32 <= off2 \/ off2 + 32 <= off1) /\
+  (!off. ~MEM (SOSpill off) ins) /\
+  (!off. MEM (SORestore off) ins ==> off < dimword(:256)) ==>
+  prefix_spill_wf fmp lo ins qs /\
+  (apply_prefix_ops fmp lo ins qs).ps_stack = ps1.ps_stack /\
+  (apply_prefix_ops fmp lo ins qs).ps_spilled = ps1.ps_spilled
+Proof
+  Induct >> simp[emit_input_plan_def, mixedPrefixSimTheory.apply_prefix_ops_def,
+                mixedPrefixSimTheory.prefix_spill_wf_def] >> rpt gen_tac >>
+  Cases_on `emit_one_input opc (operand_vars inputs ++ nl) h ps` >>
+  Cases_on `emit_input_plan opc inputs nl r` >> simp[] >> strip_tac >>
+  gvs[listTheory.MEM_APPEND, DISJ_IMP_THM, FORALL_AND_THM] >>
+  drule_all emit_one_input_read_only_replay >>
+  disch_then (qspecl_then [`lo`, `fmp`] strip_assume_tac) >>
+  `!op1 off1 op2 off2.
+    FLOOKUP r.ps_spilled op1 = SOME off1 /\
+    FLOOKUP r.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
+    off1 + 32 <= off2 \/ off2 + 32 <= off1` by
+    (drule_at Any doSwapSimTheory.safe_prefix_spilled_separated >>
+     simp[] >> disch_then assume_tac >> rpt strip_tac >>
+     first_x_assum irule >> simp[] >> metis_tac[]) >>
+  simp[doSwapSimTheory.prefix_spill_wf_append, planAlignTheory.apply_prefix_ops_append] >>
+  first_x_assum drule >> disch_then irule >> simp[] >> first_assum ACCEPT_TAC
+QED
+
 Theorem do_dup_spill_free_stack_replay:
   do_dup d ps = (ops, ps') /\ qs.ps_stack = ps.ps_stack /\
   (!off. ~MEM (SORestore off) ops) ==>
