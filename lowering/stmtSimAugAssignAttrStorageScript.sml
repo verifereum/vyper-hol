@@ -259,11 +259,11 @@ Theorem augassign_storage_place_binop_admissible:
   expr_res_ok (bop_result cx ty bop [ty; expr_type e] v0 v ee)
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty; expr_type e] v0 v ee =
-   case evaluate_binop
+  `expr_res_ok (bop_result cx ty bop [ty; expr_type e] v0 v ee) <=>
+   expr_res_ok (case evaluate_binop
      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-     ftv bop v0 v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+     ftv bop v0 v of INL w => INL w | INR err => INR (Error err))` by
+    (irule bop_result_augassign_res_ok >> simp[]) >>
   pop_assum SUBST1_TAC >>
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
@@ -680,7 +680,8 @@ Resume compile_augassign_attr_storage_case[rhs_normal]:
     case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   strip_tac
   >- suspend "store" >>
   gvs[] >>
@@ -725,7 +726,8 @@ Resume compile_augassign_attr_storage_case[store]:
      qexists_tac `case evaluate_binop
        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
        ftv bop fv v of INL w => INL w | INR err => INR (Error err)` >>
-     conj_tac >- (irule bop_result_augassign >> simp[]) >>
+     conj_tac >- (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
      simp[]) >>
   `encode_value ftv result = SOME [(0, typed_val_to_w256 ftv result)]` by
     metis_tac[encode_value_word_typed] >>

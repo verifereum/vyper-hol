@@ -569,6 +569,7 @@ Proof
   fs[dft_remaining_inv_def] >>
   `strict_dom_vars_defined fn (t with vs_inst_idx := SUC s.vs_inst_idx)` by
     (irule dft_prefix_dominators >> qexistsl_tac [`C`, `fuel`, `[y]`, `s`] >> simp[]) >>
+  fs[strict_dom_vars_defined_inst_idx] >>
   simp[dft_remaining_inv_def] >> rpt conj_tac
   >- (gvs[ALL_DISTINCT_APPEND] >> metis_tac[])
   >- (rpt strip_tac >> first_x_assum irule >>

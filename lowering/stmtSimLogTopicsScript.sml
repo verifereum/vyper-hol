@@ -1,5 +1,6 @@
 Theory stmtSimLogTopics
 Ancestors
+  exprSimHashBoundary
   exprBopSimProps
   exprSimDefs exprSimProps exprSimStack loweringPosts
   stmtSimLogArgs stmtSimLogSource stmtLowering compileEnv loweringStateRelDefs context

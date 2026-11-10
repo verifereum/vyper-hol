@@ -1,7 +1,7 @@
 (* Consumer views for the typed write-side subscript continuation. *)
 Theory targetSubscriptContinuation
 Ancestors
-  targetSubscriptMapping targetSubscriptStorage exprSimPopStorage exprSimHash
+  targetSubscriptMapping targetSubscriptStorage exprSimPopStorage exprSimHash exprSimHashBoundary
   targetPlaceLive vyperStoragePlaceProvenance vyperPlaceStoragePreservation
   vyperTyping exprLowering vyperTypeSystem vyperValue vyperStorage
   valueEncoding vyperMisc byte words list compileEnv

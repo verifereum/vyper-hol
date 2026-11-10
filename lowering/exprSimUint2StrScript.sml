@@ -14,6 +14,7 @@
  *)
 Theory exprSimUint2Str
 Ancestors
+  exprSimHashBoundary
   exprBopSimProps
   exprSimDefs exprSimProps exprSimStack loweringPosts
   arithmetic list ASCIInumbers numposrep logroot

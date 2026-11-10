@@ -1,7 +1,7 @@
 Theory simplifyCfgRepairDataflow
 Ancestors
   simplifyCfgPhiRepair simplifyCfgDataflow simplifyCfgStruct simplifyCfgDefs
-  venomWf venomInst venomExecSemantics venomExecProofs cfgTransform cfgWf list rich_list
+  venomWfProps venomWf venomInst venomExecSemantics venomExecProofs cfgTransform cfgWf list rich_list
 
 Theorem fix_all_phis_block_member:
   MEM bb fn.fn_blocks ==>
