@@ -110,7 +110,14 @@ Theorem ILOAD_reads_byte_memory:
   OK (update_var "x" 7w ((init_venom_state "") with
       <| vs_memory := REPLICATE 31 0w ++ [7w]; vs_immutables := FEMPTY |>))
 Proof
-  EVAL_TAC
+  `mload 0 ((init_venom_state "") with
+      <| vs_memory := REPLICATE 31 0w ++ [7w]; vs_immutables := FEMPTY |>) = 7w` by
+    (simp[mload_def] >>
+     rewrite_tac[GSYM byteTheory.word_of_bytes_be_def] >>
+     simp[cv_stdTheory.word_of_bytes_be_eq_num_of_bytes,
+          fcpLib.INDEX_CONV ``dimindex(:256)``, EVAL ``divides 8 256``] >>
+     EVAL_TAC) >>
+  simp[step_inst_base_opcode_eqs, exec_read1_def, eval_operand_def]
 QED
 
 (* Destination ranges are intentionally unchanged, including CALL's original
