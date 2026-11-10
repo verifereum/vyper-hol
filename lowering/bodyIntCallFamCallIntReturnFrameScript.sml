@@ -3,7 +3,7 @@ Theory bodyIntCallFamCallIntReturnFrame
 Ancestors
   bodyIntCallSeamDefs intCallFrame exprSimDefs compileEnv intCallResult
   exprLowering venomExecSemantics vyperImmutableMetadataFrame
-  vyperInterpreter vyperState gasSummary
+  vyperInterpreter vyperState gasSummary bodyIntCallAssemblyFrame
 
 Theorem marked_exec_immutable_metadata:
   (!st result fin. source st = (result,fin) ==>
@@ -92,4 +92,63 @@ Proof
        mp_tac (Q.AP_TERM `\z:venom_state. (z.vs_allocas,z.vs_alloca_next)` th)) >>
      simp[]) >>
   fs[allocas_above_def] >> metis_tac[]
+QED
+
+Theorem intcall_return_bound_resources:
+  allocas_above lo t /\
+  (!a k. P a k ==> a + k <= lo) /\
+  intcall_callee_exit func ce cx rtv rcn rb n m t res ee (IntRet ir cs) /\
+  bind_outputs outs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state t cs)) = SOME u /\
+  (!x. not_fresh_at sa x ==> ~MEM x outs) ==>
+  allocas_above lo (u with vs_inst_idx := idx) /\
+  (u with vs_inst_idx := idx).vs_allocas = t.vs_allocas /\
+  t.vs_alloca_next <= (u with vs_inst_idx := idx).vs_alloca_next /\
+  (!x. not_fresh_at sa x ==>
+    lookup_var x (u with vs_inst_idx := idx) = lookup_var x t) /\
+  (!a k. P a k ==>
+    mem_bytes_at a k (u with vs_inst_idx := idx).vs_memory =
+    mem_bytes_at a k t.vs_memory)
+Proof
+  strip_tac >>
+  drule invoke_return_frame >> strip_tac >>
+  `!a k. P a k ==> mem_bytes_at a k u.vs_memory = mem_bytes_at a k t.vs_memory` by
+    metis_tac[intcall_callee_exit_protected_merge] >>
+  fs[allocas_above_def, venomStateTheory.lookup_var_def] >> metis_tac[]
+QED
+
+Theorem intcall_return_restored_frame:
+  gas_invoke_entry (ctx,func) t callee entered /\
+  gas_path ctx callee entered nsteps (IntRet ir cs) /\
+  intcall_callee_exit other ce cx rtv rcn rb sa.cs_next_id hi t
+    res ee (IntRet ir cs) /\
+  stmt_state_rel ctx func ce cx (es with scopes := prev) t /\
+  immutable_alloca_sep func ce cx (ee with scopes := prev) t /\
+  wb_frame ce es0 sa s0 t /\
+  (!id b sz. local_region ce es0.scopes s0 id b sz ==>
+    local_region ce prev t id b sz) /\
+  (!id b sz aid off asz.
+    local_region ce prev t id b sz /\
+    FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
+    sa.cs_next_id <= aid /\ aid < hi ==> regions_disjoint b sz off asz) /\
+  EVERY (not_local_ptr ce prev) outs /\ EVERY (not_scope_ptr ce prev) outs /\
+  (!x. not_fresh_at sa x ==> ~MEM x outs) /\
+  bind_outputs outs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state t cs)) = SOME u ==>
+  stmt_state_rel ctx func ce cx (ee with scopes := prev)
+    (u with vs_inst_idx := idx) /\
+  wb_frame ce es0 sa s0 (u with vs_inst_idx := idx) /\
+  (!id b sz. local_region ce prev (u with vs_inst_idx := idx) id b sz <=>
+    local_region ce prev t id b sz)
+Proof
+  strip_tac >>
+  qpat_x_assum `intcall_callee_exit _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[intcall_callee_exit_def, expr_exit_def] >> strip_tac >>
+  irule (return_successor_frame |> Q.INST [`es` |-> `es with scopes := prev`] |> SRULE []) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  reverse conj_tac
+  >- (qexists `es` >> simp[]) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[]
 QED
