@@ -12,7 +12,7 @@ Ancestors
   gasContext supportedTypes vyperInterpreter vyperTypeCallGraph vyperState
   bodyDeclMemoryCounted bodyDeclCopyMemory stmtSimDeclCompose stmtSimDecl
   stmtSimDeclMem exprLoweringProps exprSimProps stmtSimProps stmtSimDefs
-  bodySimDeclCases
+  bodySimDeclCases exprSimIfExpCompat exprSimSource compileEnv fragExec
 Libs
   monadsyntax
 
@@ -91,6 +91,44 @@ Resume body_annassign_widened_aggregate_call_mem[compile]:
 QED
 
 Resume body_annassign_widened_aggregate_call_mem[parts]:
+  `!id t. FLOOKUP env.var_types id = SOME t ==>
+     well_formed_type env.type_defs t` by
+    metis_tac[expr_body_pre_var_types_well_formed] >>
+  `sfields_tenv_consistent cenv.ce_struct_fields env.type_defs` by
+    gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+        env_context_consistent_def] >>
+  drule ifexp_lowered_type_classify >>
+  disch_then (qspec_then `cenv` mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >> gvs[] >>
+  `~(has_length_word typ /\
+     is_empty_value_expr (Call ty (IntCall fid) args drv))` by
+    simp[stmtLoweringTheory.is_empty_value_expr_def] >>
+  drule_all annassign_copy_parts_mem >> strip_tac >>
+  `cs_extends sA sB` by metis_tac[cj 2 compile_expr_grows] >>
+  `cs_extends sB sb` by
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+       (mp_tac o AP_TERM ``SND : unit # compile_state -> compile_state``) >>
+     metis_tac[externalEntryShapeTheory.compile_assign_value_labels,
+               pairTheory.SND]) >>
+  `cs_extends sA sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code (sa with cs_next_var := sa.cs_next_var + 1) sb func` by
+    gvs[fn_has_code_def, emitted_blocks_def] >>
+  drule_all annassign_alloca_code >> strip_tac >>
+  `fn_has_code sA sB func /\ fn_has_code sB sb func` by
+    (irule fn_has_code_split >> simp[]) >>
+  `fn_has_code sa sA func` by gvs[fn_has_code_def, emitted_blocks_def] >>
+  `lookup_scopes id es.scopes = NONE` by
+    (Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+     gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     res_tac >> gvs[finite_mapTheory.FLOOKUP_DEF]) >>
+  `type_memory_bytes cenv typ < 2 ** 64` by
+    gvs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def] >>
+  `type_memory_bytes cenv typ < dimword (:256)` by
+    (fs[wordsTheory.dimword_def] >> decide_tac) >>
+  `STRING #"%" (toString sa.cs_next_var) =
+   STRING #"%" (toString sa.cs_next_var)` by simp[] >>
+  drule_all annassign_setup_body_gas_path_mem >>
+  disch_then (qx_choose_then `salloc` strip_assume_tac) >>
   cheat
 QED
 
