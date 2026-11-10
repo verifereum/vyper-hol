@@ -4644,6 +4644,84 @@ QED
 
 Finalise sym_rf_strict_suffix_abort
 
+Theorem sym_rf_current_normalized_value:
+  rf_value_inv fn ra bb j lo entry k s /\
+  get_instruction bb k = SOME inst /\ k <= j /\
+  MEM op (compute_operands inst) /\
+  operand_val (frame_view fn ra s) lo op = value ==>
+  operand_val entry lo (normalize_operand (dfg_build_function fn) [] op) = value
+Proof
+  simp[fnFrameStepsRevertForwardTheory.rf_value_inv_def] >>
+  metis_tac[fnFrameStepsRevertForwardTheory.rf_live_use_current]
+QED
+
+Theorem sym_rf_copy_normalized_range:
+  rf_value_inv fn ra bb j lo entry i s /\
+  get_instruction bb i = SOME inst /\ i <= j /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_operands = [dop;sop;zop] /\
+  operand_val (frame_view fn ra s) lo dop = SOME dst /\
+  operand_val (frame_view fn ra s) lo zop = SOME sz ==>
+  operand_val entry lo (normalize_operand (dfg_build_function fn) [] dop) = SOME dst /\
+  operand_val entry lo (normalize_operand (dfg_build_function fn) [] zop) = SOME sz
+Proof
+  rpt strip_tac >>
+  `MEM dop (compute_operands inst) /\ MEM zop (compute_operands inst)` by
+    simp[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def] >>
+  metis_tac[sym_rf_current_normalized_value]
+QED
+
+Theorem sym_rf_abort_source_fault:
+  revert_forward_pair bb i j /\ vs.vs_inst_idx = i /\ i <= j /\
+  get_instruction bb i = SOME inst /\ exec_block fuel ctx bb vs = Abort a vs_end /\
+  step_inst fuel ctx inst vs = Abort ExHalt_abort fault ==>
+  a = ExHalt_abort /\ vs_end = fault
+Proof
+  rpt strip_tac >>
+  `i <= vs.vs_inst_idx /\ vs.vs_inst_idx <= j /\
+   get_instruction bb vs.vs_inst_idx = SOME inst` by simp[] >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_forward_exec_abort_cases >> simp[]
+QED
+
+Theorem sym_rf_abort_source_success:
+  revert_forward_pair bb i j /\ vs.vs_inst_idx = i /\ i <= j /\
+  get_instruction bb i = SOME inst /\ exec_block fuel ctx bb vs = Abort a vs_end /\
+  step_inst fuel ctx inst vs = OK copied ==>
+  exec_block fuel ctx bb (copied with vs_inst_idx := SUC i) = Abort a vs_end
+Proof
+  rpt strip_tac >>
+  `i <= vs.vs_inst_idx /\ vs.vs_inst_idx <= j /\
+   get_instruction bb vs.vs_inst_idx = SOME inst` by simp[] >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_forward_exec_abort_cases >> simp[]
+QED
+
+Theorem sym_rf_revert_runs_compose:
+  asm_steps lo o2pc prog n1 ast = AsmOK mid /\
+  asm_steps lo o2pc prog n2 mid = AsmRevert out /\
+  sym_steps prog env n1 ss = SymOK ss_mid /\
+  sym_terminal (sym_steps prog env n2 ss_mid) ==>
+  asm_steps lo o2pc prog (n1 + n2) ast = AsmRevert out /\
+  sym_terminal (sym_steps prog env (n1 + n2) ss)
+Proof
+  rpt strip_tac >-
+    (irule blockSimHelpersTheory.asm_steps_compose_revert >> metis_tac[]) >>
+  simp[sym_steps_add]
+QED
+
+Theorem sym_rf_entry_fault_terminal:
+  revert_forward_pair bb i j /\ vs.vs_inst_idx = i /\ i <= j /\
+  get_instruction bb i = SOME inst /\ exec_block fuel ctx bb vs = Abort a vs_end /\
+  step_inst fuel ctx inst vs = Abort ExHalt_abort fault /\
+  asm_steps lo o2pc prog n ast = AsmFault out /\
+  venom_asm_terminal_rel fault out /\ sym_terminal (sym_steps prog env n ss) ==>
+  ?m ast_end.
+    ((a = Revert_abort /\ asm_steps lo o2pc prog m ast = AsmRevert ast_end) \/
+     (a = ExHalt_abort /\ asm_steps lo o2pc prog m ast = AsmFault ast_end)) /\
+    venom_asm_terminal_rel vs_end ast_end /\ sym_terminal (sym_steps prog env m ss)
+Proof
+  rpt strip_tac >> drule_all sym_rf_abort_source_fault >> strip_tac >>
+  qexistsl [`n`,`out`] >> simp[]
+QED
+
 Theorem sym_rf_entry_forward_abort:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn bb i j ps vs ast ops
    ps_end ra rest mem0 a vs_end env ret srest labs0 ss.
@@ -4710,24 +4788,17 @@ Proof
 QED
 
 Resume sym_rf_entry_forward_abort[fault]:
-  `i <= vs.vs_inst_idx /\ vs.vs_inst_idx <= j /\
-   get_instruction bb vs.vs_inst_idx = SOME inst` by simp[] >>
   qpat_x_assum `step_inst fuel ctx inst vs = _` mp_tac >>
   pure_asm_rewrite_tac[COND_CLAUSES] >> disch_tac >>
-  drule_all fnFrameStepsRevertForwardTheory.rf_forward_exec_abort_cases >>
-  ASM_SIMP_TAC bool_ss [] >> strip_tac >>
-  qexistsl [`LENGTH (execute_plan cp'.cp_initial_fmp step_ops)`, `out`] >>
-  ASM_SIMP_TAC bool_ss [] >> gvs[]
+  `i <= j` by decide_tac >>
+  drule_all sym_rf_entry_fault_terminal >> simp[]
 QED
 
 Resume sym_rf_entry_forward_abort[success]:
   qpat_x_assum `step_inst fuel ctx inst vs = _` mp_tac >>
   pure_asm_rewrite_tac[COND_CLAUSES] >> disch_tac >>
-  `i <= vs.vs_inst_idx /\ vs.vs_inst_idx <= j /\
-   get_instruction bb vs.vs_inst_idx = SOME inst` by simp[] >>
-  drule_all fnFrameStepsRevertForwardTheory.rf_forward_exec_abort_cases >>
-  qpat_assum `step_inst fuel ctx inst vs = OK _` (fn th => pure_rewrite_tac[th]) >>
-  simp[NoAsms] >> strip_tac >>
+  `i <= j` by decide_tac >>
+  drule_all sym_rf_abort_source_success >> disch_tac >>
   `LENGTH (compute_operands inst) <= 16` by
     simp[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def] >>
   `!r ti. SUC i <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
@@ -4741,14 +4812,7 @@ Resume sym_rf_entry_forward_abort[success]:
      (normalize_operand (dfg_build_function fn) [] dop) = SOME dst /\
    operand_val (frame_view fn ra vs) lo
      (normalize_operand (dfg_build_function fn) [] zop) = SOME sz` by
-    (qpat_x_assum `rf_value_inv _ _ _ _ _ _ i vs` mp_tac >>
-     simp[NoAsms, fnFrameStepsRevertForwardTheory.rf_value_inv_def] >> strip_tac >>
-     `rf_live_use bb i j dop /\ rf_live_use bb i j zop` by
-       (conj_tac >> (irule fnFrameStepsRevertForwardTheory.rf_live_use_current >>
-        (conj_tac >- decide_tac) >> qexists `inst` >>
-        simp[compute_operands_def, python_stack_operands_def,
-          ir_specific_operand_order_def])) >>
-     metis_tac[]) >>
+    (drule_all sym_rf_copy_normalized_range >> simp[]) >>
   `i < SUC i /\ SUC i <= j /\ LENGTH (get_params bb.bb_instructions) <= SUC i` by decide_tac >>
   `!off. ~MEM (SOSpill off) rest_ops /\ ~MEM (SORestore off) rest_ops` by metis_tac[] >>
   `asm_block_at prog out.as_pc (execute_plan cp'.cp_initial_fmp rest_ops)` by metis_tac[] >>
@@ -4759,23 +4823,16 @@ Resume sym_rf_entry_forward_abort[success]:
      TAKE (w2n sz) (DROP (w2n dst) out.as_memory)` by
     simp[sym_plan_stack_rel_inst_idx, sym_terminal_rel_inst_idx] >>
   `(copied with vs_inst_idx := SUC i).vs_inst_idx = SUC i` by simp[] >>
-  `exec_block fuel ctx bb (copied with vs_inst_idx := SUC i) = Abort a vs_end` by
-    (qpat_x_assum `exec_block fuel ctx bb (copied with vs_inst_idx := _) = _` mp_tac >>
-     qpat_assum `vs.vs_inst_idx = i` (fn th => pure_rewrite_tac[th]) >>
-     simp[NoAsms]) >>
+
   qpat_assum `rf_inventory_inv _ _ _ _ ps1 _`
     (mp_then (Pat `rf_inventory_inv _ _ _ _ _ _`) mp_tac
       (Q.SPEC `SUC i` sym_rf_strict_suffix_abort)) >>
   disch_then drule_all >> strip_tac >>
+  qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  qpat_x_assum `o2pc = _` SUBST_ALL_TAC >>
+  drule_all sym_rf_revert_runs_compose >> strip_tac >>
   qexistsl [`LENGTH (execute_plan cp'.cp_initial_fmp step_ops) + n`, `out'`] >>
-  conj_tac >-
-    (disj1_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-     irule blockSimHelpersTheory.asm_steps_compose_revert >>
-     qexists `out` >> metis_tac[]) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  pure_rewrite_tac[sym_steps_add] >>
-  qpat_assum `sym_steps _ _ _ ss = SymOK _` (fn th => pure_rewrite_tac[th]) >>
-  simp[NoAsms] >> first_assum ACCEPT_TAC
+  ASM_SIMP_TAC bool_ss []
 QED
 
 Finalise sym_rf_entry_forward_abort
