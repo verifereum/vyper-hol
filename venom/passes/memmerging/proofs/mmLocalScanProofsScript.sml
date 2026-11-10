@@ -5451,6 +5451,25 @@ Proof
   disch_then SUBST1_TAC >> simp[venomMemPropsTheory.LENGTH_write_memory_with_expansion]
 QED
 
+Theorem mm_local_nonflushing_write_opcode[local]:
+  ss.ss_copies <> [] /\
+  (scan_inst dfg Mem2Mem ss i).ss_flushed = ss.ss_flushed ==>
+  i.inst_opcode = MSTORE \/ i.inst_opcode = MCOPY \/
+  ~(Eff_MEMORY IN write_effects i.inst_opcode)
+Proof
+  Cases_on `i.inst_opcode = MSTORE` >- simp[] >>
+  Cases_on `i.inst_opcode = MCOPY` >- simp[] >>
+  Cases_on `i.inst_opcode = MLOAD`
+  >- simp[venomEffectsTheory.write_effects_def, venomEffectsTheory.empty_effects_def] >>
+  simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  Cases_on `is_volatile_memory i`
+  >- (simp[hard_barrier_def] >>
+      strip_tac >>
+      `LENGTH (ss.ss_flushed ++ ss.ss_copies) = LENGTH ss.ss_flushed` by simp[] >>
+      gvs[]) >>
+  gvs[is_volatile_memory_def]
+QED
+
 Definition mm_local_owned_def:
   mm_local_owned (cap:num -> (num # word8 list) option) rep n js <=>
     ALL_DISTINCT js /\ SORTED ($<) js /\
