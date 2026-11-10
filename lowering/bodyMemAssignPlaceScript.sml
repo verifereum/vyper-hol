@@ -9,7 +9,7 @@ Ancestors
   bodyMemoryPreds supportedTargets targetPlaceSim targetPlaceSimMem
   placeTypedCopyMem assignPlaceValueFrame placeTypedCopyPrimitiveMem
   placeTypedCopyArrayMem placeTypedFieldsMem placeTypedCopyForwardMem
-  placeAssignStagingMem
+  placeAssignStagingMem assignPlaceDynStorageLayout
 
 Theorem body_assign_place_mem_case:
   !cx t e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
