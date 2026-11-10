@@ -3680,26 +3680,9 @@ Resume sym_rf_strict_suffix_abort[assign]:
   `k < j /\ inst.inst_opcode = ASSIGN` by gvs[] >>
   `?rhs out. inst.inst_operands = [rhs] /\ inst.inst_outputs = [out]` by metis_tac[] >>
   `~is_label_operand rhs` by fs[] >>
-  `?s'. step_inst fuel ctx inst s = OK s' /\
-    exec_block fuel ctx bb (s' with vs_inst_idx := SUC k) = Abort a s_end` by
-    (pop_last_assum kall_tac >>
-     qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
-     simp[Once exec_block_def, is_terminator_def] >>
-     Cases_on `eval_operand rhs s` >>
-     `step_inst fuel ctx inst s = step_inst_base inst s` by
-       gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
-     pop_assum SUBST1_TAC >> once_rewrite_tac[step_inst_base_def] >>
-     qpat_assum `inst.inst_opcode = ASSIGN` SUBST1_TAC >>
-     qpat_assum `inst.inst_operands = [rhs]` SUBST1_TAC >>
-     qpat_assum `inst.inst_outputs = [out]` SUBST1_TAC >> simp[]) >>
+  drule_all sym_assign_block_abort_continuation >> strip_tac >>
   `!r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
-    ti.inst_opcode <> PHI` by
-    (rpt strip_tac >>
-     `ti.inst_opcode =
-       (if r = i then RETURNDATACOPY else if r = j then REVERT else ASSIGN)` by
-       (irule fnFrameStepsRevertForwardTheory.rf_forward_instruction_opcode >>
-        conj_tac >- decide_tac >> simp[] >> qexists `bb` >> simp[]) >>
-     Cases_on `r = i` >> fs[] >> Cases_on `r = j` >> fs[]) >>
+    ti.inst_opcode <> PHI` by metis_tac[sym_rf_future_non_phi] >>
   drule_all fnFrameStepsRevertForwardTheory.rf_assign_success_invariants >> strip_tac >>
   `is_var_operand rhs ==> MEM rhs ps.ps_stack \/ rhs IN FDOM ps.ps_spilled` by
     (strip_tac >> first_x_assum irule >>
@@ -3707,12 +3690,26 @@ Resume sym_rf_strict_suffix_abort[assign]:
   `operand_val (frame_view fn ra s) lo rhs =
    operand_val entry lo (normalize_operand (dfg_build_function fn) [] rhs)` by
     (first_x_assum irule >> simp[compute_operands_def, python_stack_operands_def]) >>
-  drule_all sym_rf_assign_plan_execution >> strip_tac >>
-  drule_all fnFrameStepsRevertForwardTheory.rf_assign_plan_execution >>
-  disch_then (qspec_then `build_offset_to_pc prog` strip_assume_tac) >>
-  `st' = st with <|as_stack := stk' ++ rest;
-    as_pc := st.as_pc + LENGTH (execute_plan initial_fmp step_ops)|>` by gvs[] >>
-  cheat
+  drule_all sym_rf_assign_continuation_execution >>
+  disch_then (qspec_then `SUC k` strip_assume_tac) >>
+  `!off. ~MEM (SOSpill off) rest_ops /\ ~MEM (SORestore off) rest_ops` by
+    fs[listTheory.MEM_APPEND] >>
+  `asm_block_at prog st'.as_pc (execute_plan initial_fmp rest_ops)` by metis_tac[] >>
+  `~mem_labels_hit ss'.sym_mem_labels (in_mem_range (w2n dst) (w2n sz))` by
+    (`ss'.sym_mem_labels = ss.sym_mem_labels` by
+      metis_tac[finite_mapTheory.FLOOKUP_EXT] >> simp[]) >>
+  `j - SUC k < j - k` by decide_tac >>
+  qpat_x_assum `!y. j - y < j - k ==> _`
+    (qspec_then `SUC k` mp_tac) >>
+  simp[] >>
+  disch_then (qspec_then `s' with vs_inst_idx := SUC k` mp_tac) >>
+  gvs[] >> disch_then (qspec_then `st'` mp_tac) >>
+  simp[] >> disch_then drule_all >> strip_tac >> simp[] >>
+  qexistsl [`LENGTH (execute_plan initial_fmp step_ops) + n`, `out'`] >>
+  conj_tac
+  >- (qpat_assum `asm_steps _ _ _ _ st = AsmOK _`
+        (mp_then Any (qspec_then `n` mp_tac) stackOpSimTheory.asm_steps_add_ok) >> gvs[]) >>
+  simp[sym_steps_add]
 QED
 
 Finalise sym_rf_strict_suffix_abort
