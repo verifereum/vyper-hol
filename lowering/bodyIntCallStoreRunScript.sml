@@ -35,7 +35,7 @@ Proof
   Cases_on `ce.ce_is_ctor` >> gvs[] >>
   `mem_bytes_at byte_offset (type_memory_size tv) u.vs_memory =
    mem_bytes_at byte_offset (type_memory_size tv) s.vs_memory` by
-    (first_x_assum irule >> fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+    (first_x_assum irule >> fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   simp[] >> irule val_in_memory_mem_agree >>
   conj_tac >- metis_tac[immutable_admissible_val_wf] >>
   qexistsl_tac [`type_memory_size tv`,`s.vs_memory`] >> simp[]

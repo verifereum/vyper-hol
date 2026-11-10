@@ -208,7 +208,7 @@ Proof
   qpat_x_assum `ce.ce_is_ctor ==> _` (mp_tac o UNDISCH) >>
   disch_then drule_all >> strip_tac >>
   qpat_x_assum `!inst b sz. _` drule_all >>
-  simp[compileEnvTheory.regions_disjoint_def] >> metis_tac[]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]
 QED
 
 Theorem uniform_type_memory_size_list:

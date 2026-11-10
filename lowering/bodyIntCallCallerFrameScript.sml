@@ -97,6 +97,6 @@ Proof
   >- (fs[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
   rpt strip_tac >>
   `aid <> id` by decide_tac >>
-  fs[alloca_inv_def, allocas_non_overlapping_def, compileEnvTheory.regions_disjoint_def] >>
+  fs[alloca_inv_def, allocas_non_overlapping_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED

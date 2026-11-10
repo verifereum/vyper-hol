@@ -1,7 +1,7 @@
 Theory bodyIntCallRestoreResults
 Ancestors
   intCallResult exprSimProps valueTypingMemoryProps exprSimHash
-  loweringPosts compileEnv vyperState vyperValue vyperTyping
+  loweringPosts compileEnv loweringStateRelDefs vyperState vyperValue vyperTyping
   emitHelper emitHelperProps venomState venomExecSemantics
 
 (* Located results need ownership even when the type is a machine word. *)

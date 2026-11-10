@@ -79,7 +79,7 @@ Theorem vv_post_pure_memory_frame:
           MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
           sa.cs_next_id <= inst.inst_id /\
           FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
-          compileEnv$regions_disjoint off len b sz) ==>
+          loweringStateRelDefs$regions_disjoint off len b sz) ==>
        mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory)
 Proof
   (* Held for the posts-interface round: follows from vv_post_def once it
@@ -445,7 +445,7 @@ Proof
   disch_then (drule_at (Pat `eval_operand addr_op pre = SOME _`)) >>
   disch_then (drule_at (Pat `eval_operand gas_op pre = SOME _`)) >>
   simp[] >>
-  (impl_tac >- (fs[compileEnvTheory.regions_disjoint_def, DISJ_COMM] >>
+  (impl_tac >- (fs[loweringStateRelDefsTheory.regions_disjoint_def, DISJ_COMM] >>
                  rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >>
   `cs_extends cs' cs'' /\ cs_extends cs'' sr` by fs[ci_mono_def] >>
@@ -495,7 +495,7 @@ Resume extcall_call_step[call_success]:
      goal_assum (drule_at (Pat `expr_val_rel _ _ _ _ _`)) >>
      simp[] >> qexistsl [`w2n ro`, `TAKE cap oc.co_returnData`] >>
      simp[venomStateTheory.write_memory_with_expansion_def] >>
-     fs[compileEnvTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >>
      strip_tac >> fs[] >>
      Cases_on `cap <= LENGTH oc.co_returnData` >> gvs[] >> decide_tac) >>
   `extcall_default_ready cx ret_type has_default default_op default_ty default_opt

@@ -79,7 +79,7 @@ Proof
       lb + lsz <= w2n (n2w off : bytes32))` by
     (irule stack_buffer_run_owned >> simp[] >>
      rpt conj_tac >> rpt strip_tac >>
-     gvs[compileEnvTheory.regions_disjoint_def] >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def] >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   `gas_path ctx func t n (OK s)` by
     (drule_all invoke_intret_counted_path >> simp[]) >>

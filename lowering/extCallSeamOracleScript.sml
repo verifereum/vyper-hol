@@ -3,7 +3,7 @@ Theory extCallSeamOracle
 Ancestors
   exprLoweringProps extCallOracleStep exprSimRawCallCalldata
   exprSimRawCall exprSimPrecompiles exprSimHash immutableMemoryFrame
-  list rich_list compileEnv loweringSlice venomMemDefs venomState
+  list rich_list compileEnv loweringStateRelDefs loweringSlice venomMemDefs venomState
   loweringPosts exprSimProps venomInst venomExecSemantics exprSimOperands
   emitHelperProps rawCallFragPath exprSafeOperand
   vyperInterpreter vyperCallOutcome vyperState
@@ -170,19 +170,19 @@ Theorem oracle_call_wb_frame:
   t.vs_memory = (write_memory_with_expansion dst payload s).vs_memory /\
   (!aid b sz. aid < sa.cs_next_id /\
     FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-    compileEnv$regions_disjoint dst (LENGTH payload) b sz) /\
+    loweringStateRelDefs$regions_disjoint dst (LENGTH payload) b sz) /\
   (!name b sz. local_region cenv es.scopes s0 name b sz ==>
-    compileEnv$regions_disjoint dst (LENGTH payload) b sz) /\
+    loweringStateRelDefs$regions_disjoint dst (LENGTH payload) b sz) /\
   ~not_fresh_at sa out ==>
   wb_frame cenv es es' sa s0 (update_var out result t)
 Proof
   strip_tac >>
-  `!b sz. compileEnv$regions_disjoint dst (LENGTH payload) b sz ==>
+  `!b sz. loweringStateRelDefs$regions_disjoint dst (LENGTH payload) b sz ==>
     mem_bytes_at b sz (update_var out result t).vs_memory =
     mem_bytes_at b sz s.vs_memory` by
     (rpt strip_tac >> simp[update_var_def] >>
      asm_rewrite_tac[] >> irule hash_write_memory_disjoint >>
-     fs[compileEnvTheory.regions_disjoint_def]) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   fs[wb_frame_def] >> conj_tac
   >- (rpt strip_tac >> simp[lookup_var_def, update_var_def] >>
       `x <> out` by metis_tac[] >>
@@ -312,9 +312,9 @@ Theorem oracle_call_path:
     off + type_memory_size tv <= w2n ro \/ w2n ro + cap <= off) /\
   wb_frame cenv initial_es es' initial s0 s /\ initial.cs_next_var <= sa.cs_next_var /\
   (!aid b sz. aid < initial.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-    compileEnv$regions_disjoint (w2n ro) cap b sz) /\
+    loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz) /\
   (!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
-    compileEnv$regions_disjoint (w2n ro) cap b sz) ==>
+    loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz) ==>
   frag_path ctx sa sb (\u. u = s)
     (\u. stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
       wb_frame cenv initial_es es' initial s0 u /\
@@ -355,7 +355,7 @@ Resume oracle_call_path[frame]:
      qexistsl_tac [`w2n ro`, `TAKE cap outcome.co_returnData`] >> simp[] >>
      conj_tac >> rpt gen_tac >> strip_tac >>
      first_x_assum (drule_all_then mp_tac) >>
-     simp[compileEnvTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
   suspend "post"
 QED
 
