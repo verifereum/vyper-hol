@@ -584,3 +584,35 @@ Proof
     gvs[in_mem_range_def] >>
   simp[contextCodegenRelTheory.context_spill_byte_def] >> metis_tac[]
 QED
+
+(* PHI dispatch does not release spills after generate_phi_plan. *)
+Theorem generated_phi_plan_result:
+  inst.inst_opcode = PHI /\
+  generate_inst_plan lv dfg cfg fn inst nl halt term lbl ps = SOME (ops,qs) ==>
+  generate_phi_plan inst nl halt ps = (ops,qs)
+Proof
+  strip_tac >> gvs[generate_inst_plan_def, AllCaseEqs()]
+QED
+
+Theorem sym_generated_phi_plan_applicability:
+  inst.inst_opcode = PHI /\
+  generate_inst_plan lv dfg cfg fn inst nl halt term lbl ps = SOME (ops,qs) /\
+  generated_plan_state_wf_marked sb ps /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
+  r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
+  qs.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  generate_phi_plan inst nl halt ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    closure_spill_byte ctx cplan name b /\ context_spill_byte cplan b)
+Proof
+  strip_tac >> drule_all generated_phi_plan_result >> strip_tac >>
+  `plan_slots_bounded sb ps /\ spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    fs[fnPlanPrefixTheory.generated_plan_state_wf_marked_def] >>
+  drule_all allocMonoTheory.generate_inst_plan_spill_base >> strip_tac >>
+  `r.sr_spill_base <= sb` by
+    gvs[planSpillBoundsTheory.plan_slots_bounded_def,
+      planSpillBoundsTheory.alloc_slots_bounded_def] >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  drule_all generate_phi_plan_ops_region_confined >> simp[]
+QED
