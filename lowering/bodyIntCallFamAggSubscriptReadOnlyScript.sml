@@ -40,3 +40,32 @@ Proof
   qexistsl_tac [`s`, `si`] >>
   fs[venom_state_component_equality, lookup_var_def]
 QED
+
+(* Fresh straight-line code preserves the entire continuation, not merely
+   the memory projection of an ordinary expression post. *)
+Theorem intcall_straight_fresh_run_landing:
+  intcall_frame_ok fp /\
+  intcall_expr_cont fp ce env es0 sa s0 es si s /\
+  sa.cs_next_var <= si.cs_next_var /\
+  straight_fresh m /\ m si = (op,sb) /\
+  fn_has_code si sb fp.jc_func /\
+  run_inst_seq (emitted_insts si sb) s = OK t ==>
+  gas_marked_path F fp.jc_ctx fp.jc_func s 0
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+  intcall_expr_cont fp ce env es0 sa s0 es sb
+    (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  strip_tac >>
+  `sb.cs_current_bb = si.cs_current_bb /\
+   sb.cs_current_insts = si.cs_current_insts ++ emitted_insts si sb /\
+   si.cs_next_var <= sb.cs_next_var /\
+   writes_fresh si (emitted_insts si sb)` by
+    metis_tac[straight_fresh_def] >>
+  drule_all run_inst_seq_writes_fresh >> strip_tac >>
+  drule fragGasFreshTheory.writes_fresh_path_opcodes >> strip_tac >>
+  irule intcall_readonly_run_landing >> simp[] >>
+  conj_tac
+  >- fs[venom_state_component_equality] >>
+  qexists_tac `si` >>
+  fs[listTheory.EVERY_MEM, lookup_var_def]
+QED
