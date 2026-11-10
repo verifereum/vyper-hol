@@ -774,6 +774,75 @@ Proof
   metis_tac[plan_steps_reorder_next_offset, arithmeticTheory.LESS_EQ_TRANS]
 QED
 
+Theorem sym_plan_head_suffix[local]:
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (xs ++ ys)) /\
+  (?mid. sym_steps p env (LENGTH (execute_plan initial_fmp xs)) ss = SymOK mid /\
+    sym_kinds_ok cplan fn ret srest midps mid /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp xs) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)) ==>
+  ?mid. sym_steps p env (LENGTH (execute_plan initial_fmp xs)) ss = SymOK mid /\
+    sym_kinds_ok cplan fn ret srest midps mid /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp xs) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp ys)
+Proof
+  rw[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  qexists `mid` >> metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem sym_reorder_fold_head_run[local]:
+  residual_budget_wf_marked spillbase pending ps /\
+  idx < LENGTH pending /\ LENGTH pending <= LENGTH ps.ps_stack /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  reorder_one dfg pending idx op ps = (xs,midps) /\
+  midps.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (xs ++ ys) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (xs ++ ys)) ==>
+  ?mid. sym_steps p env (LENGTH (execute_plan initial_fmp xs)) ss = SymOK mid /\
+    sym_kinds_ok cplan fn ret srest midps mid /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp xs) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp ys)
+Proof
+  strip_tac >> irule sym_plan_head_suffix >> reverse conj_tac
+  >- asm_rewrite_tac[] >>
+  irule sym_reorder_one >>
+  gvs[SF SFY_ss, EVERY_APPEND, stackOpSimTheory.execute_plan_append,
+    stackOpSimTheory.asm_block_at_append]
+QED
+
+Theorem sym_reorder_fold_continue[local]:
+  (sym_kinds_ok cplan fn ret srest midps mid /\
+   asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp ys) ==>
+   ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ys)) mid = SymOK last /\
+     sym_kinds_ok cplan fn ret srest out last /\
+     last.sym_base.as_pc = mid.sym_base.as_pc + LENGTH (execute_plan initial_fmp ys) /\
+     (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+       FLOOKUP last.sym_mem_labels b = FLOOKUP mid.sym_mem_labels b)) /\
+  sym_steps p env (LENGTH (execute_plan initial_fmp xs)) ss = SymOK mid /\
+  sym_kinds_ok cplan fn ret srest midps mid /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp xs) /\
+  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+    FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+  asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp ys) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp (xs ++ ys))) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (xs ++ ys)) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  qpat_x_assum `_ /\ asm_block_at _ _ _ ==> _`
+    (drule_all_then strip_assume_tac) >>
+  compose_plan_frame_tac
+QED
+
 Theorem sym_plan_steps_reorder[local]:
   !items ps ops out ss.
   EVERY (\(idx,op). idx < LENGTH pending /\ MEM op pending) items /\
