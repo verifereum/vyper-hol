@@ -104,3 +104,63 @@ Proof
     AC wordsTheory.WORD_ADD_ASSOC wordsTheory.WORD_ADD_COMM,
     arithmeticTheory.ADD_COMM]
 QED
+
+Theorem assign_place_bytes_live_start:
+  !tv v off k writes st cap i b.
+    (tv = BaseTV (BytesT (Dynamic cap)) \/ tv = BaseTV (StringT cap)) /\
+    value_has_type tv v /\ encode_value tv v = SOME writes /\
+    w2n k + type_slot_size tv <= dimword (:256) /\
+    (case v of BytesV bs => off+32+LENGTH bs < dimword (:256)
+             | StringV str => off+32+LENGTH str < dimword (:256) | _ => F) /\
+    i < type_slot_size tv /\ b < 32 /\
+    ~dead_bytes (apply_writes k writes st) (w2n k) tv (w2n k+i) b ==>
+    off+32*i < dimword (:256)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[] >>
+  Cases_on `v` >>
+  gvs[vyperTypingTheory.value_has_type_def, vyperStorageTheory.encode_value_def,
+      compileEnvTheory.dead_bytes_def, vyperValueTheory.type_slot_size_def] >>
+  drule (SRULE [AC ADD_ASSOC ADD_COMM] place_store_dyn_bytes_header) >>
+  disch_then (qspecl_then [`k`, `st`] mp_tac) >>
+  (impl_tac >- decide_tac) >> strip_tac >>
+  gvs[compileEnvTheory.dyn_bytes_dead_def]
+QED
+
+Theorem assign_place_bytestring_wrapped_live_copy:
+  !tv v (sw:bytes32) s k writes st src_cap dst_cap i b.
+    (tv = BaseTV (BytesT (Dynamic dst_cap)) \/ tv = BaseTV (StringT dst_cap)) /\
+    well_formed_type_value tv /\ value_has_type tv v /\
+    val_in_memory tv v (w2n sw) s.vs_memory /\
+    (case v of BytesV bs => LENGTH bs <= src_cap /\
+                              w2n sw+32+LENGTH bs < dimword (:256)
+             | StringV str => LENGTH str <= src_cap /\
+                              w2n sw+32+LENGTH str < dimword (:256) | _ => F) /\
+    src_cap <= dst_cap /\ encode_value tv v = SOME writes /\
+    w2n k + type_slot_size tv <= dimword (:256) /\
+    i < type_slot_size tv /\ b < 32 /\
+    ~dead_bytes (apply_writes k writes st) (w2n k) tv (w2n k+i) b ==>
+    i < 1 + word_size src_cap /\
+    EL b (word_to_bytes
+      (lookup_storage (n2w (w2n k+i)) (apply_writes k writes st)) T) =
+    EL b (word_to_bytes (mload (w2n (sw + n2w i * 32w)) s) T)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `case v of BytesV bs => LENGTH bs <= src_cap
+           | StringV str => LENGTH str <= src_cap | _ => F` by
+    (Cases_on `v` >> gvs[]) >>
+  `case v of BytesV bs => w2n sw+32+LENGTH bs < dimword (:256)
+           | StringV str => w2n sw+32+LENGTH str < dimword (:256) | _ => F` by
+    (Cases_on `v` >> gvs[]) >>
+  `w2n sw+32*i < dimword (:256)` by
+    (irule assign_place_bytes_live_start >> metis_tac[]) >>
+  drule_all place_store_bytestring_live_copy >> strip_tac >>
+  `w2n (sw + n2w i * 32w) = w2n sw + 32*i` by
+    (rewrite_tac[wordsTheory.word_mul_n2w] >>
+     simp_tac (srw_ss()) [wordsTheory.word_add_def, wordsTheory.w2n_n2w,
+       arithmeticTheory.MOD_PLUS, arithmeticTheory.MOD_MOD] >>
+     `w2n sw + i*32 < dimword (:256)` by metis_tac[MULT_COMM] >>
+     asm_simp_tac (srw_ss()) [arithmeticTheory.LESS_MOD, MULT_COMM]) >>
+  simp[valueEncodingPropsTheory.mem_word_at_eq_mload]
+QED
+
