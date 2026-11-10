@@ -3,6 +3,7 @@ Theory functionInlinerOperationalCuts
 Ancestors
   functionInlinerReachableCuts functionInlinerStackSupports functionInlinerCuts
   functionInlinerActivation functionInlinerEnvelopes venomState cfgTransform list pred_set
+  venomExecSemantics
 
 Definition inline_owner_storage_def:
   inline_owner_storage cert entries frame <=>
@@ -172,4 +173,97 @@ Proof
   qexists `csnap` >> simp[] >> rpt strip_tac >>
   `INJ route.ir_rename (set (MAP FST writes) UNION csnap.ils_defined) UNIV` by simp[] >>
   drule_all inline_owner_storage_writes >> simp[]
+QED
+
+Theorem inline_owner_storage_assign_step:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  src.inst_opcode = ASSIGN /\ src.inst_operands = [op] /\ src.inst_outputs = [x] /\
+  step_inst fuel C src snap.ils_state = OK s' /\
+  MEM x (cfgTransform$fn_all_vars a.ia_function) /\ ~retpc_var a.ia_function x /\
+  INJ route.ir_rename (x INSERT snap.ils_defined) UNIV /\
+  (!v. op = Var v ==> MEM v (cfgTransform$fn_all_vars a.ia_function) /\
+                         ~retpc_var a.ia_function v) /\
+  dst.inst_opcode = ASSIGN /\
+  dst.inst_operands = [inline_rename_operand route.ir_rename lab op] /\
+  dst.inst_outputs = [route.ir_rename x] ==>
+  ?t. step_inst tfuel Tctx dst frame.ipf_state = OK t /\
+      inline_owner_storage cert
+        ((p,a,route,snap with <|ils_state := s';
+           ils_defined := x INSERT snap.ils_defined|>)::rest)
+        (frame with ipf_state := t)
+Proof
+  strip_tac >>
+  `?w. eval_operand op snap.ils_state = SOME w /\ s' = update_var x w snap.ils_state` by
+    (gvs[Once step_inst_def, step_inst_base_def, AllCaseEqs()]) >>
+  drule inline_owner_storage_head >> strip_tac >>
+  `eval_operand (inline_rename_operand route.ir_rename lab op) frame.ipf_state = SOME w` by
+    (irule EQ_TRANS >> qexists `eval_operand op snap.ils_state` >>
+     reverse conj_tac >- simp[] >>
+     irule inline_snapshot_eval_operand >>
+     gvs[inline_tracked_snapshot_def] >>
+     `frame.ipf_state.vs_labels = FEMPTY` by
+       metis_tac[inline_snapshot_anchor_empty_labels] >>
+     conj_tac
+     >- (rpt strip_tac >> gvs[eval_operand_def, pred_setTheory.IN_APP]) >>
+     simp[] >> metis_tac[]) >>
+  qexists `update_var (route.ir_rename x) w frame.ipf_state` >>
+  conj_tac
+  >- simp[Once step_inst_def, step_inst_base_def] >>
+  `INJ route.ir_rename (set (MAP FST [(x,w)]) UNION snap.ils_defined) UNIV` by
+    simp[INSERT_UNION_EQ] >>
+  `EVERY (\(y,v). MEM y (cfgTransform$fn_all_vars a.ia_function) /\
+                     ~retpc_var a.ia_function y) [(x,w)]` by simp[] >>
+  drule_all inline_owner_storage_writes >> simp[INSERT_UNION_EQ]
+QED
+
+Theorem inline_owner_storage_assign_cell:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  src.inst_opcode = ASSIGN /\ src.inst_operands = [op] /\ src.inst_outputs = [x] /\
+  step_inst fuel C src snap.ils_state = OK s' /\
+  MEM x (cfgTransform$fn_all_vars a.ia_function) /\ ~retpc_var a.ia_function x /\
+  INJ route.ir_rename (x INSERT snap.ils_defined) UNIV /\
+  (!v. op = Var v ==> MEM v (cfgTransform$fn_all_vars a.ia_function) /\
+                         ~retpc_var a.ia_function v) /\
+  inline_cell_at d /\
+  d.ic_fields = (ASSIGN,[inline_rename_operand route.ir_rename lab op],[route.ir_rename x]) ==>
+  ?bb dst t.
+    lookup_block d.ic_block d.ic_function.fn_blocks = SOME bb /\
+    get_instruction bb d.ic_index = SOME dst /\
+    step_inst tfuel Tctx dst frame.ipf_state = OK t /\
+    inline_owner_storage cert
+      ((p,a,route,snap with <|ils_state := s';
+         ils_defined := x INSERT snap.ils_defined|>)::rest)
+      (frame with ipf_state := t)
+Proof
+  strip_tac >>
+  gvs[inline_cell_at_def, functionInlinerSiteLayoutTheory.inline_fetched_fields_def,
+      functionInlinerSiteLayoutTheory.inline_inst_fields_def] >>
+  drule_all inline_owner_storage_assign_step >> strip_tac >>
+  simp[]
+QED
+
+Theorem inline_owner_storage_assign_zipper:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  src.inst_opcode = ASSIGN /\ src.inst_operands = [op] /\ src.inst_outputs = [x] /\
+  step_inst fuel C src snap.ils_state = OK s' /\
+  MEM x (cfgTransform$fn_all_vars a.ia_function) /\ ~retpc_var a.ia_function x /\
+  INJ route.ir_rename (x INSERT snap.ils_defined) UNIV /\
+  (!v. op = Var v ==> MEM v (cfgTransform$fn_all_vars a.ia_function) /\
+                         ~retpc_var a.ia_function v) /\
+  inline_cell_at c /\ inline_cell_zipper c frames d /\
+  d.ic_fields = (ASSIGN,[inline_rename_operand route.ir_rename lab op],[route.ir_rename x]) ==>
+  ?bb dst t.
+    lookup_block d.ic_block d.ic_function.fn_blocks = SOME bb /\
+    get_instruction bb d.ic_index = SOME dst /\
+    step_inst tfuel Tctx dst frame.ipf_state = OK t /\
+    inline_owner_storage cert
+      ((p,a,route,snap with <|ils_state := s';
+         ils_defined := x INSERT snap.ils_defined|>)::rest)
+      (frame with ipf_state := t)
+Proof
+  strip_tac >> drule_all inline_cell_zipper_sound >> strip_tac >>
+  irule inline_owner_storage_assign_cell >> metis_tac[]
 QED
