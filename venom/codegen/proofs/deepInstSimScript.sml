@@ -3166,6 +3166,74 @@ QED
 
 Finalise gen_inst_ok_sim_marked
 
+(* Local adapters retain the dispatcher's fixed step count. *)
+Theorem nop_inst_ok_count[local]:
+  inst.inst_opcode = NOP /\ venom_asm_rel lo ps vs as /\
+  step_inst fuel ctx inst vs = OK vs' ==>
+  ?as'. asm_steps lo o2pc prog 0 as = AsmOK as' /\
+    venom_asm_rel lo ps vs' as' /\ as'.as_pc = as.as_pc
+Proof
+  strip_tac >> drule step_inst_nop_ok >> strip_tac >>
+  gvs[] >> qexists_tac `as` >> simp[asm_steps_def]
+QED
+
+Theorem regular_dispatch_ok_count[local]:
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> GAS /\
+  ~is_terminator inst.inst_opcode /\ ~is_param_opcode inst.inst_opcode /\
+  inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> LOG /\
+  inst.inst_opcode <> ASSERT /\ inst.inst_opcode <> ASSERT_UNREACHABLE /\
+  inst.inst_opcode <> PHI /\ inst.inst_opcode <> INITIAL_FMP /\
+  inst.inst_opcode <> BUMP /\ inst.inst_opcode <> ISTORE /\
+  inst.inst_opcode <> OFFSET /\
+  venom_to_evm_name inst.inst_opcode = SOME name /\
+  (ef_read0 inst.inst_opcode ==> inst.inst_operands = []) /\
+  EVERY (\(off,len). len = 0 \/ off + len <= ps'.ps_alloc.sa_spill_base \/
+    ps'.ps_alloc.sa_next_offset <= off) (source_memory_read_ranges inst vs) /\
+  generated_plan_state_wf_marked spill_base ps /\ codegen_ready_fn fn /\
+  MEM inst (fn_insts fn) /\ inst_wf inst /\
+  LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <= LENGTH (SND (emit_input_plan inst.inst_opcode
+    (compute_operands inst) next_liveness ps)).ps_stack /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    IS_SOME (stack_get_depth op ps.ps_stack) \/ IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) /\
+  (!op. MEM op (compute_operands inst) ==> eval_operand op vs = operand_val vs lo op) /\
+  (!op at. MEM op (compute_operands inst) /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at (compute_operands inst)) /\
+    operand_equiv dfg op at ==> operand_val vs lo op = operand_val vs lo at) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+  EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+    inst.inst_outputs) ps.ps_stack /\
+  (!op. op IN FDOM ps.ps_spilled ==> EVERY
+    (\out. case op of Var x => x <> out | _ => T) inst.inst_outputs) /\
+  EVERY (\s. case s of SOSpill k => k < dimword(:256)
+    | SORestore k => k < dimword(:256) | _ => T) ops /\
+  venom_asm_rel lo ps vs as /\ n2w initial_fmp = vs.vs_initial_fmp /\
+  generate_inst_plan liveness dfg cfg fn inst next_liveness is_halting next_is_term
+    bb_label ps = SOME (ops, ps') /\
+  asm_block_at prog as.as_pc (execute_plan initial_fmp ops) /\
+  step_inst fuel ctx inst vs = OK vs' /\ inst_memory_safe ps'.ps_alloc inst vs vs' ==>
+  ?n as'. asm_steps lo o2pc prog n as = AsmOK as' /\
+    venom_asm_rel lo ps' vs' as' /\
+    as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    n = LENGTH (execute_plan initial_fmp ops) -
+      (if inst.inst_opcode = ASSERT_UNREACHABLE then 1 else 0)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once generate_inst_plan_def] >> strip_tac >>
+  gvs[is_terminator_def] >>
+  `inst.inst_opcode <> NOP` by
+    (strip_tac >> gvs[venom_to_evm_name_def]) >> gvs[] >>
+  drule_at (Pat `step_inst _ _ _ _ = OK _`) regular_inst_ok_sim_marked_count >>
+  disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `asm_block_at _ _ _`)) >>
+  disch_then (drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
+  disch_then (qspec_then `o2pc` mp_tac) >> simp[] >> metis_tac[]
+QED
+
 Theorem gen_inst_ok_sim_marked_count:
   !fuel ctx lo o2pc prog liveness dfg cfg fn inst next_liveness is_halting
    next_is_term bb_label base ps vs as ops ps' initial_fmp.
@@ -3242,28 +3310,15 @@ Proof
      first_x_assum drule >> simp[inst_shape_ok_def]) >>
   Cases_on `venom_to_evm_name inst.inst_opcode`
   >- suspend "none" >>
-  rename1 `venom_to_evm_name _ = SOME name` >>
-  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[Once generate_inst_plan_def] >> strip_tac >>
-  gvs[is_terminator_def] >>
-  `inst.inst_opcode <> NOP` by
-    (strip_tac >> gvs[venom_to_evm_name_def]) >>
-  gvs[] >>
-  drule_at (Pat `step_inst _ _ _ _ = OK _`) regular_inst_ok_sim_marked_count >>
-  disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
-  disch_then (drule_at (Pat `asm_block_at _ _ _`)) >>
-  disch_then (drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
-  disch_then (qspec_then `build_offset_to_pc prog` mp_tac) >>
-  simp[] >> metis_tac[]
+  drule_all regular_dispatch_ok_count >> simp[]
 QED
 
 Resume gen_inst_ok_sim_marked_count[none]:
   qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once generate_inst_plan_def] >> strip_tac >>
   Cases_on `inst.inst_opcode = NOP`
-  >- (gvs[] >> imp_res_tac step_inst_nop_ok >> gvs[] >>
-      qexists_tac `as` >> simp[asm_steps_def, execute_plan_def]) >>
+  >- (gvs[execute_plan_def] >> drule_all nop_inst_ok_count >>
+      simp[]) >>
   qpat_x_assum `venom_to_evm_name _ = NONE` mp_tac >>
   Cases_on `inst.inst_opcode` >>
   simp_tac (srw_ss()) [venom_to_evm_name_def] >>
