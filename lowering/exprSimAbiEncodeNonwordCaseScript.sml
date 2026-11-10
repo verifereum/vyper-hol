@@ -64,8 +64,8 @@ Theorem compile_abi_encode_nonword_shape:
     let (op,sm) = lower_value compile_expr ce (expr_type e) e sa in
     as_ptr_val ann LocMemory
       (lower_abi_encode F (OPTION_MAP bytes_method_id_word mid) op
-        (type_to_abi_enc_info ce.ce_struct_fields ce (expr_type e))
-        (abi_size_bound ce.ce_struct_fields (expr_type e)) sm)
+        (type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e))
+        (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)) sm)
 Proof
   strip_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def] >>
@@ -83,7 +83,7 @@ Theorem abi_encode_vv_post_pointer_cong:
   (vv_post ctx func ce cx e es sa sb s0 es' tv (LocatedValue ty p) s <=>
    vv_post ctx func ce cx e es sa sb s0 es' tv (LocatedValue ty q) s)
 Proof
-  simp[vv_post_def, vv_holds_def, vv_at_def]
+  simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def]
 QED
 
 Theorem abi_encode_translated_success_mk_ptr[local]:
@@ -92,10 +92,10 @@ Theorem abi_encode_translated_success_mk_ptr[local]:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
   ~is_word_type (expr_type e) /\
-  ei = type_to_abi_enc_info ce.ce_struct_fields ce (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
-  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (expr_type e)) sa = (out,sb) /\
+  ei = type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
+  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)) sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
   (!l. op <> Label l) /\ (!x. op = Var x ==> not_fresh_at sa x) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -141,8 +141,8 @@ Proof
   pairarg_tac >> rename1 `lower_value _ _ _ _ sa = (op,sm)` >>
   simp[] >> simp[as_ptr_val_def] >>
   Cases_on `lower_abi_encode F (OPTION_MAP bytes_method_id_word mid) op
-    (type_to_abi_enc_info ce.ce_struct_fields ce (expr_type e))
-    (abi_size_bound ce.ce_struct_fields (expr_type e)) sm` >>
+    (type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e))
+    (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)) sm` >>
   rename1 `lower_abi_encode _ _ _ _ _ sm = (out,sn)` >>
   simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
   `!l. op <> Label l` by
@@ -184,6 +184,15 @@ Proof
      simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
      drule eval_expr_preserves_scopes_dom >> strip_tac >>
      drule read_result_state >> strip_tac >> gvs[]) >>
+  drule_at (Pat `bind _ _ _ = _`)
+    (CONV_RULE (DEPTH_CONV ETA_CONV) abiEncodeArgsCaseTheory.abi_args_success_ready) >>
+  disch_then (qspecl_then [`env`,`ce`] mp_tac) >> simp[] >> strip_tac >>
+  `?ptv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME ptv /\
+    value_has_type ptv v` by metis_tac[] >>
+  drule exprSimHypsTheory.expr_body_pre_physical_type >> strip_tac >>
+  `vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av` by
+    (drule_all (cj 1 exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_conversion) >>
+     simp[]) >>
   `?actual. gas_marked_path F ctx func t 0 (OK actual) /\
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -195,7 +204,7 @@ Proof
      simp[] >> conj_tac
      >- (qexists_tac `env` >> simp[]) >>
      goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     simp[] >> qexists_tac `tv` >> simp[]) >>
+     gvs[]) >>
   `ee with gas_obs := [] = ee` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   qexists_tac `[]` >> simp[gasSummaryTheory.gas_summary_at_def] >>
