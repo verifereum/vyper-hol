@@ -41,6 +41,20 @@ removed when a new pin includes them. The current series contains:
   call's parameter type), whose layout differs for nested bounded types.
 - vyperlang/vyper#5254: the inliner binds the unused return-PC parameter
   to zero instead of the removed callee's label.
+- vyperlang/vyper#5322: converting a `Bytes`/`String` value to a signed
+  integer or decimal masks the data word to zero when the length is zero, so
+  stale data in an emptied bytestring cannot make the arithmetic shift
+  return -1.
+- vyperlang/vyper#5332: constructor immutable bytestring stores copy the
+  length word and live data words, rather than the declared capacity.
+- vyperlang/vyper#5336: DFT keeps aborting instructions (an `assert`, an
+  internal call) in their order, scheduling each after the previous run of
+  aborting instructions.
+- vyperlang/vyper#5338: widening bytestring conversions allocate enough
+  memory for the result type.
+- vyperlang/vyper#5349: an instruction with no outputs and no effects (an
+  `assert`) stays a scheduling root even when a later abort depends on it,
+  so nothing is hoisted above it.
 
 The provenance's `vyper_commit` names the unpatched base revision.
 
