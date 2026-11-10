@@ -1,6 +1,6 @@
 Theory fnPlanLineageEmission
 Ancestors
-  stackPlanGen list
+  stackPlanGen fnPlanLineagePrefix list
 
 Definition emission_anchor_def:
   emission_anchor op =
@@ -440,4 +440,242 @@ Proof
   gvs[emission_projection_def, rich_listTheory.FILTER_APPEND] >>
   simp[Abbr `start`] >>
   irule foldl_observation_preserved >> simp[]
+QED
+
+Theorem generate_regular_inst_plan_emission:
+  !liveness dfg cfg fn inst live halt term lbl ps.
+    emission_projection (FST (generate_regular_inst_plan liveness dfg cfg fn
+      inst live halt term lbl ps)) =
+      FLAT (MAP (input_emission inst.inst_opcode) (compute_operands inst)) ++
+      emission_projection (FST (generate_emit_ops inst
+        (case inst.inst_opcode of LOG =>
+          (case HD inst.inst_operands of Lit v => w2n v | _ => 0)
+        | _ => 0) ps)) /\
+    (SND (generate_regular_inst_plan liveness dfg cfg fn
+      inst live halt term lbl ps)).ps_label_counter =
+      (SND (generate_emit_ops inst
+        (case inst.inst_opcode of LOG =>
+          (case HD inst.inst_operands of Lit v => w2n v | _ => 0)
+        | _ => 0) ps)).ps_label_counter
+Proof
+  rpt gen_tac >> simp[generate_regular_inst_plan_def] >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topics` >>
+  pairarg_tac >> gvs[] >>
+  qspecl_then [`compute_operands inst`, `inst.inst_opcode`, `live`, `ps`]
+    mp_tac emit_input_plan_emission >> gvs[] >> strip_tac >>
+  pairarg_tac >> gvs[] >>
+  `emission_projection join_ops = [] /\
+   ps2.ps_label_counter = ps1.ps_label_counter` by
+    (qpat_x_assum `_ = (join_ops,ps2)` mp_tac >>
+     IF_CASES_TAC >- (
+       BasicProvers.TOP_CASE_TAC >- (strip_tac >> gvs[emission_projection_def]) >>
+       pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >>
+       qspecl_then [`x`, `ps1`] mp_tac restore_spilled_plan_emission >>
+       qspecl_then [`dfg`, `x`, `ps1'`] mp_tac reorder_plan_emission >> gvs[]) >>
+     strip_tac >> gvs[emission_projection_def]) >>
+  pairarg_tac >> gvs[] >>
+  `emission_projection reorder_ops = [] /\
+   ps4.ps_label_counter = ps2.ps_label_counter` by
+    (qpat_x_assum `_ = (reorder_ops,ps4)` mp_tac >>
+     IF_CASES_TAC >- (
+       pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+       qspecl_then [`dfg`, `compute_operands inst`, `ps2`]
+         mp_tac reorder_plan_emission >> gvs[] >> strip_tac >>
+       qmatch_asmsub_abbrev_tac `reorder_plan dfg swapped ps2 = _` >>
+       qspecl_then [`dfg`, `swapped`, `ps2`] mp_tac reorder_plan_emission >>
+       gvs[] >> strip_tac >> IF_CASES_TAC >> strip_tac >> gvs[]) >>
+     strip_tac >> qspecl_then [`dfg`, `compute_operands inst`, `ps2`]
+       mp_tac reorder_plan_emission >> gvs[]) >>
+  pairarg_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `generate_emit_ops inst topics emit_start = _` >>
+  `emit_start.ps_label_counter = ps.ps_label_counter` by
+    simp[Abbr `emit_start`] >>
+  drule generate_emit_ops_label_counter_congruence >>
+  disch_then (qspecl_then [`inst`, `topics`] mp_tac) >>
+  gvs[] >> strip_tac >>
+  IF_CASES_TAC >- simp[] >>
+  pairarg_tac >> gvs[] >>
+  `emission_projection pop_ops = [] /\
+   ps8.ps_label_counter = ps7.ps_label_counter` by
+    (qpat_x_assum `_ = (pop_ops,ps8)` mp_tac >>
+     IF_CASES_TAC >- (
+       strip_tac >>
+       qmatch_asmsub_abbrev_tac `popmany_plan dead ps7 = _` >>
+       qspecl_then [`dead`, `ps7`] mp_tac popmany_plan_emission >> gvs[]) >>
+     strip_tac >> gvs[emission_projection_def]) >>
+  pairarg_tac >> gvs[] >>
+  `emission_projection opt_ops = [] /\
+   ps9.ps_label_counter = ps8.ps_label_counter` by
+    (qpat_x_assum `_ = (opt_ops,ps9)` mp_tac >>
+     IF_CASES_TAC >- (strip_tac >> gvs[emission_projection_def]) >>
+     strip_tac >> qspecl_then [`dfg`, `inst`, `live`, `term`, `ps8`]
+       mp_tac optimistic_swap_plan_emission >> gvs[]) >>
+  simp[]
+QED
+
+Theorem generate_regular_inst_plan_emission_congruence:
+  !liveness dfg cfg fn inst live halt term lbl p q.
+    p.ps_label_counter = q.ps_label_counter ==>
+    emission_projection (FST (generate_regular_inst_plan liveness dfg cfg fn
+      inst live halt term lbl p)) =
+    emission_projection (FST (generate_regular_inst_plan liveness dfg cfg fn
+      inst live halt term lbl q)) /\
+    (SND (generate_regular_inst_plan liveness dfg cfg fn
+      inst live halt term lbl p)).ps_label_counter =
+    (SND (generate_regular_inst_plan liveness dfg cfg fn
+      inst live halt term lbl q)).ps_label_counter
+Proof
+  rpt strip_tac >> simp[generate_regular_inst_plan_emission] >>
+  drule generate_emit_ops_label_counter_congruence >>
+  disch_then (qspec_then `inst` mp_tac) >>
+  qmatch_goalsub_abbrev_tac `generate_emit_ops inst topics` >>
+  disch_then (qspec_then `topics` strip_assume_tac) >> simp[]
+QED
+
+Theorem generate_inst_plan_emission_congruence:
+  !liveness dfg cfg fn inst live halt term lbl p q ops p' ops' q'.
+    p.ps_label_counter = q.ps_label_counter /\
+    generate_inst_plan liveness dfg cfg fn inst live halt term lbl p = SOME (ops,p') /\
+    generate_inst_plan liveness dfg cfg fn inst live halt term lbl q = SOME (ops',q') ==>
+    emission_projection ops = emission_projection ops' /\
+    p'.ps_label_counter = q'.ps_label_counter
+Proof
+  rpt gen_tac >> simp[generate_inst_plan_def] >>
+  rpt IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
+  TRY (simp[emission_projection_def] >> NO_TAC) >>
+  TRY (rename1 `generate_phi_plan inst live halt p = _` >>
+    qspecl_then [`inst`, `live`, `halt`, `p`] mp_tac generate_phi_plan_emission >>
+    qspecl_then [`inst`, `live`, `halt`, `q`] mp_tac generate_phi_plan_emission >>
+    gvs[] >> NO_TAC) >>
+  TRY (rename1 `generate_offset_plan inst p = _` >>
+    gvs[generate_offset_plan_def, AllCaseEqs()] >> NO_TAC) >>
+  drule generate_regular_inst_plan_emission_congruence >>
+  gvs[quantHeuristicsTheory.PAIR_EQ_EXPAND]
+QED
+
+Theorem generate_block_insts_plan_emission_congruence:
+  !xs i lv dfg cfg fn lbl halt np bl p q ops p' ops' q'.
+    p.ps_label_counter = q.ps_label_counter /\
+    generate_block_insts_plan lv dfg cfg fn lbl halt np bl i xs p = SOME (ops,p') /\
+    generate_block_insts_plan lv dfg cfg fn lbl halt np bl i xs q = SOME (ops',q') ==>
+    emission_projection ops = emission_projection ops' /\
+    p'.ps_label_counter = q'.ps_label_counter
+Proof
+  Induct >> simp[generate_block_insts_plan_def] >>
+  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()] >>
+  drule_all generate_inst_plan_emission_congruence >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+
+(* The prefix keeps the unprocessed original tail for liveness and terminator
+   lookahead; it is not planning a truncated source block. *)
+Theorem generate_block_insts_prefix_emission_congruence:
+  !k xs i lv dfg cfg fn lbl halt np bl p q ops p' ops' q'.
+    p.ps_label_counter = q.ps_label_counter /\
+    generate_block_insts_prefix lv dfg cfg fn lbl halt np bl i k xs p = SOME (ops,p') /\
+    generate_block_insts_prefix lv dfg cfg fn lbl halt np bl i k xs q = SOME (ops',q') ==>
+    emission_projection ops = emission_projection ops' /\
+    p'.ps_label_counter = q'.ps_label_counter
+Proof
+  Induct >- simp[generate_block_insts_prefix_def, emission_projection_def] >>
+  Cases_on `xs` >- simp[generate_block_insts_prefix_def] >>
+  simp[generate_block_insts_prefix_def] >>
+  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()] >>
+  drule_all generate_inst_plan_emission_congruence >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem generate_block_plan_emission_congruence:
+  !lv dfg cfg fn bb p q ops p' ops' q'.
+    p.ps_label_counter = q.ps_label_counter /\
+    generate_block_plan lv dfg cfg fn bb p = SOME (ops,p') /\
+    generate_block_plan lv dfg cfg fn bb q = SOME (ops',q') ==>
+    emission_projection ops = emission_projection ops' /\
+    p'.ps_label_counter = q'.ps_label_counter
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `if bb = HD fn.fn_blocks then prepare_params_plan lv fn p else ([],p)` >>
+  rename1 `_ = (param_ops,ps1)` >>
+  Cases_on `if bb = HD fn.fn_blocks then prepare_params_plan lv fn q else ([],q)` >>
+  rename1 `_ = (param_ops',qs1)` >>
+  `emission_projection param_ops = [] /\ ps1.ps_label_counter = p.ps_label_counter` by
+    (qpat_x_assum `_ = (param_ops,ps1)` mp_tac >>
+     IF_CASES_TAC >- (strip_tac >>
+       qspecl_then [`lv`, `fn`, `p`] mp_tac prepare_params_plan_emission >> gvs[]) >>
+     strip_tac >> gvs[emission_projection_def]) >>
+  `emission_projection param_ops' = [] /\ qs1.ps_label_counter = q.ps_label_counter` by
+    (qpat_x_assum `_ = (param_ops',qs1)` mp_tac >>
+     IF_CASES_TAC >- (strip_tac >>
+       qspecl_then [`lv`, `fn`, `q`] mp_tac prepare_params_plan_emission >> gvs[]) >>
+     strip_tac >> gvs[emission_projection_def]) >>
+  Cases_on `if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+    then clean_stack_plan lv cfg fn bb ps1 else ([],ps1)` >>
+  rename1 `_ = (clean_ops,ps2)` >>
+  Cases_on `if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+    then clean_stack_plan lv cfg fn bb qs1 else ([],qs1)` >>
+  rename1 `_ = (clean_ops',qs2)` >>
+  `emission_projection clean_ops = [] /\ ps2.ps_label_counter = ps1.ps_label_counter` by
+    (qpat_x_assum `_ = (clean_ops,ps2)` mp_tac >>
+     IF_CASES_TAC >- (strip_tac >>
+       qspecl_then [`lv`, `cfg`, `fn`, `bb`, `ps1`] mp_tac clean_stack_plan_emission >> gvs[]) >>
+     strip_tac >> gvs[emission_projection_def]) >>
+  `emission_projection clean_ops' = [] /\ qs2.ps_label_counter = qs1.ps_label_counter` by
+    (qpat_x_assum `_ = (clean_ops',qs2)` mp_tac >>
+     IF_CASES_TAC >- (strip_tac >>
+       qspecl_then [`lv`, `cfg`, `fn`, `bb`, `qs1`] mp_tac clean_stack_plan_emission >> gvs[]) >>
+     strip_tac >> gvs[emission_projection_def]) >>
+  fs[generate_block_plan_def] >>
+  qpat_x_assum `_ = (param_ops,ps1)` kall_tac >>
+  qpat_x_assum `_ = (param_ops',qs1)` kall_tac >>
+  qpat_x_assum `_ = (clean_ops,ps2)` kall_tac >>
+  qpat_x_assum `_ = (clean_ops',qs2)` kall_tac >>
+  gvs[AllCaseEqs()] >>
+  `ps2.ps_label_counter = qs2.ps_label_counter` by simp[] >>
+  drule_all generate_block_insts_plan_emission_congruence >>
+  gvs[emission_projection_def, emission_anchor_def, rich_listTheory.FILTER_APPEND]
+QED
+
+(* These templates classify anchors, not physical execution. ASSIGN can still
+   have literal/label input anchors; its variable renaming and PHI's SOPoke are
+   silent in this projection. BUMP retains ADD but erases its auxiliary DUP.
+   INITIAL_FMP retains its dedicated constructor. INVOKE has four anchors and
+   advances the generated-label counter: it is not a single producer opcode.
+   Neither equal projections nor equal flattened code reconstruct source cuts,
+   alias identities, underflow freedom, or initialized spill memory. *)
+Theorem generate_emit_ops_assign_emission:
+  !inst topics ps.
+    inst.inst_opcode = ASSIGN ==>
+    generate_emit_ops inst topics ps = ([],ps)
+Proof
+  simp[generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def]
+QED
+
+Theorem generate_emit_ops_bump_emission:
+  !inst topics ps.
+    inst.inst_opcode = BUMP ==>
+    emission_projection (FST (generate_emit_ops inst topics ps)) = [SOEmit "ADD"] /\
+    SND (generate_emit_ops inst topics ps) = ps
+Proof
+  simp[generate_emit_ops_def, bump_emit_ops_def,
+    emission_projection_def, emission_anchor_def]
+QED
+
+Theorem generate_emit_ops_initial_fmp_emission:
+  !inst topics ps.
+    inst.inst_opcode = INITIAL_FMP ==>
+    generate_emit_ops inst topics ps = ([SOInitialFmp],ps)
+Proof
+  simp[generate_emit_ops_def]
+QED
+
+Theorem generate_emit_ops_invoke_emission:
+  !inst topics ps l ret.
+    inst.inst_opcode = INVOKE /\ HD inst.inst_operands = Label l /\
+    ret = "return_label_" ++ num_to_dec_string (ps.ps_label_counter + 1) ==>
+    emission_projection (FST (generate_emit_ops inst topics ps)) =
+      [SOPushLabel ret; SOPushLabel l; SOEmit "JUMP"; SOLabel ret] /\
+    (SND (generate_emit_ops inst topics ps)).ps_label_counter = ps.ps_label_counter + 1
+Proof
+  simp[generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def,
+    stackPlanTypesTheory.fresh_label_def, emission_projection_def, emission_anchor_def]
 QED
