@@ -372,24 +372,6 @@ Proof
   rename1 `Error er` >> Cases_on `er` >> fs[expr_exit_def]
 QED
 
-Theorem ifexp_vv_post_of_expr_post_read[local]:
-  post_value_type cenv e = expr_type e /\
-  expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s /\
-  read_result cx tv es' = (INL v, es') ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' tv
-    (if is_word_type (expr_type e) then StackValue (expr_type e) (Var rv)
-     else LocatedValue (expr_type e) (mk_ptr (Var rv) LocMemory)) s
-Proof
-  strip_tac >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  qpat_x_assum `post_value_type _ _ = _`
-    (fn th => rewrite_tac[expr_post_def, vv_post_def, th]) >>
-  strip_tac >> reverse (Cases_on `is_word_type (expr_type e)`) >>
-  gvs[vv_holds_def, vv_at_def, contextTheory.mk_ptr_def] >>
-  fs[expr_val_rel_def, expr_val_at_def] >>
-  rpt strip_tac >> res_tac >> gvs[] >> metis_tac[]
-QED
-
 Theorem ifexp_finish_post[local]:
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
@@ -408,7 +390,7 @@ Theorem ifexp_finish_post[local]:
 Proof
   strip_tac >>
   irule (SRULE [vyperASTTheory.expr_type_def]
-    (Q.INST [`e` |-> `IfExp t c a b`] ifexp_vv_post_of_expr_post_read)) >>
+    (Q.INST [`e` |-> `IfExp t c a b`] exprSimIfExpTheory.ifexp_root_vv_post_of_expr_post_read)) >>
   goal_assum (drule_at Any) >>
   irule expr_post_ifexp >>
   `~not_fresh_at sa rv` by metis_tac[] >>
@@ -450,7 +432,7 @@ Proof
   conj_tac >- (irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>
   qexists_tac `tv` >> simp[vv_store_bound_stack_word] >> conj_tac
   >- (qpat_assum `is_word_type t` (fn th => irule (SRULE [th] ifexp_finish_post)) >>
-      simp[] >> metis_tac[]) >>
+      simp[] >> metis_tac[post_value_type_word]) >>
   `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
   `alloca_history func ((update_var rv w u) with
       vs_inst_idx := LENGTH sy.cs_current_insts)` by
@@ -490,7 +472,7 @@ Proof
   qexists_tac `jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)` >>
   conj_tac >- (irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>
   qexists_tac `v` >> simp[] >> conj_tac
-  >- (irule expr_post_ifexp >> metis_tac[]) >>
+  >- (irule expr_post_ifexp >> metis_tac[post_value_type_word]) >>
   `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
   `alloca_history func ((update_var rv w u) with
       vs_inst_idx := LENGTH sy.cs_current_insts)` by
@@ -994,7 +976,7 @@ Resume compile_ifexp_word_vv_sim_mem[route_after_unwrap]:
         (mp_then Any mp_tac ifexp_finish_post) >>
       disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
-      simp[] >> disch_then irule >> gvs[]) >>
+      simp[] >> disch_then irule >> gvs[post_value_type_word]) >>
   `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
   `alloca_history func (update_var rv w u with
       vs_inst_idx := LENGTH sy.cs_current_insts)` by

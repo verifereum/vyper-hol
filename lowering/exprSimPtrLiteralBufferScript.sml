@@ -323,7 +323,7 @@ Theorem literal_bytelike_ptr_run:
     (!name a len. local_region cenv es.scopes u name a len ==>
       regions_disjoint b (32+32*word_size (LENGTH bs)) a len) /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
-    u.vs_labels = s.vs_labels /\ wb_frame cenv es sa s u /\
+    u.vs_labels = s.vs_labels /\ wb_frame cenv es es sa s u /\
     (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
     LENGTH u.vs_memory <= LENGTH t.vs_memory /\
     (!x. not_fresh_at sh x ==> lookup_var x t = lookup_var x u) /\
@@ -484,7 +484,7 @@ Theorem literal_ptr_memory_vv_post:
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)
 Proof
   rpt gen_tac >> strip_tac >>
-  `locals_kept cenv es s0 t` by
+  `locals_kept cenv es es s0 t` by
     (irule locals_kept_regions >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `!name b len. local_region _ _ s0 _ _ _ ==> _` kall_tac >>
   simp[loweringPostsTheory.vv_post_def, stmt_state_rel_inst_idx,
