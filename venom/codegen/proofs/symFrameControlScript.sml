@@ -1652,6 +1652,63 @@ Proof
   drule allocMonoTheory.reorder_one_next_offset >> simp[]
 QED
 
+Theorem sym_plan_steps_reorder_cons_frame_sim:
+  (!qs tail_ops qs' ac sy.
+    residual_budget_wf_marked spill_base pending qs /\ pending_inventory_wf pending qs /\
+    LENGTH pending <= LENGTH qs.ps_stack /\
+    plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items qs = (tail_ops,qs') /\
+    EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) tail_ops /\
+    r.sr_spill_base <= qs'.ps_alloc.sa_spill_base /\
+    qs'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 qs ac sy /\
+    asm_block_at p ac.as_pc (execute_plan initial_fmp tail_ops) ==>
+    ?ac' sy'.
+      asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+        (LENGTH (execute_plan initial_fmp tail_ops)) ac = AsmOK ac' /\
+      sym_steps p env (LENGTH (execute_plan initial_fmp tail_ops)) sy = SymOK sy' /\
+      sym_frame_inv p env ctx cplan fn ret srest labs0 qs' ac' sy' /\
+      ac'.as_pc = ac.as_pc + LENGTH (execute_plan initial_fmp tail_ops)) ==>
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) pending /\
+  residual_budget_wf_marked spill_base pending ps /\ pending_inventory_wf pending ps /\
+  LENGTH pending <= LENGTH ps.ps_stack /\ idx < LENGTH pending /\ MEM op pending /\
+  reorder_one dfg pending idx op ps = (step_ops,ps1) /\
+  plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items ps1 = (rest_ops,ps') /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (step_ops ++ rest_ops) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+  ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\ asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp (step_ops ++ rest_ops)) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp (step_ops ++ rest_ops))) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp (step_ops ++ rest_ops))) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 ps' cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (step_ops ++ rest_ops))
+Proof
+  strip_tac >> strip_tac >>
+  gvs[listTheory.EVERY_APPEND, stackOpSimTheory.execute_plan_append,
+      stackOpSimTheory.asm_block_at_append] >>
+  drule_all sym_plan_steps_reorder_alloc >> strip_tac >>
+  `r.sr_spill_base <= ps1.ps_alloc.sa_spill_base /\
+   ps1.ps_alloc.sa_next_offset <= r.sr_spill_end` by simp[] >>
+  `op <> dead_stack_marker /\
+   (!at. operand_equiv (dfg_build_function fn) op at ==> at <> dead_stack_marker)` by
+    (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  qpat_x_assum `!at. operand_equiv _ op at ==> _` (assume_tac o SRULE []) >>
+  drule_all (SRULE [] (Q.INST [`dfg` |-> `dfg_build_function fn`]
+    sym_reorder_one_frame_sim_marked)) >> strip_tac >>
+  `asm_block_at p cs'.as_pc (execute_plan initial_fmp rest_ops)` by simp[] >>
+  first_x_assum (qspec_then `ps1` mp_tac) >> disch_then drule_all >> strip_tac >>
+  `ac'.as_pc = cs'.as_pc + LENGTH (execute_plan initial_fmp rest_ops)` by simp[] >>
+  qexistsl [`ac'`, `sy'`] >>
+  drule_all sym_asm_plan_runs_compose >> simp[stackOpSimTheory.execute_plan_append]
+QED
+
 Theorem sym_plan_steps_reorder_frame_sim_marked:
   !items ps ops ps' cs ss.
     EVERY (\(idx,op). idx < LENGTH pending /\ MEM op pending) items /\
@@ -1681,28 +1738,16 @@ Proof
       simp[execute_plan_def, asm_steps_def, sym_steps_def]) >>
   rpt gen_tac >> PairCases_on `h` >> strip_tac >>
   drule reorderSimTheory.plan_steps_cons_result >> strip_tac >>
-  gvs[listTheory.EVERY_APPEND, stackOpSimTheory.execute_plan_append,
-      stackOpSimTheory.asm_block_at_append] >>
-  rename1 `reorder_one _ pending idx op ps = (step_ops,ps1)` >>
+  qpat_x_assum `ops = _` SUBST_ALL_TAC >>
   suspend "step"
 QED
 
 Resume sym_plan_steps_reorder_frame_sim_marked[step]:
-  drule_all sym_plan_steps_reorder_alloc >> strip_tac >>
-  `r.sr_spill_base <= ps1.ps_alloc.sa_spill_base /\
-   ps1.ps_alloc.sa_next_offset <= r.sr_spill_end` by simp[] >>
-  `op <> dead_stack_marker /\
-   (!at. operand_equiv (dfg_build_function fn) op at ==> at <> dead_stack_marker)` by
-    (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
-  qpat_x_assum `!at. operand_equiv _ op at ==> _` (assume_tac o SRULE []) >>
-  drule_all (SRULE [] (Q.INST [`dfg` |-> `dfg_build_function fn`]
-    sym_reorder_one_frame_sim_marked)) >> strip_tac >>
-  `asm_block_at p cs'.as_pc (execute_plan initial_fmp rest_ops)` by simp[] >>
-  first_x_assum (qspec_then `ps1` mp_tac) >> disch_then drule_all >> strip_tac >>
-  qexistsl [`cs''`, `ss''`] >>
-  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
-  once_rewrite_tac[stackOpSimTheory.asm_steps_add, sym_steps_add] >>
-  simp[] >> decide_tac
+  rename1 `(\(idx,op) ps. reorder_one dfg pending idx op ps) (idx,op) ps = (step_ops,ps1)` >>
+  irule sym_plan_steps_reorder_cons_frame_sim >>
+  simp[listTheory.EVERY_DEF] >>
+  qexistsl [`idx`, `items`, `op`, `pending`, `ps`, `ps1`, `r`, `spill_base`] >>
+  simp[] >> rpt gen_tac >> strip_tac >> gvs[]
 QED
 
 Finalise sym_plan_steps_reorder_frame_sim_marked
