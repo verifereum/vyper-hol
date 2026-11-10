@@ -4,14 +4,14 @@ Ancestors
   abiDecoderIndexedAddress abiDecoderDynamic abiEncoder compileEnv emitHelper
 
 Definition abi_decode_array_element_setup_def:
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz =
+  abi_decode_array_element_setup ip src dst opc base_op hi di abi_sz mem_sz =
     do idx <- emit_op MLOAD [ip];
        src_data <- emit_op ADD [src; Lit 32w];
        src_off <- emit_op MUL [idx; Lit (n2w abi_sz)];
        head <- emit_op ADD [src_data; src_off];
        child_src <-
          (if dec_info_needs_offset di then
-            compile_abi_decode_dyn_elem_ptr opc head src_data hi abi_sz
+            compile_abi_decode_dyn_elem_ptr opc base_op head src_data hi abi_sz
           else return head);
        child_dst <- abi_decode_indexed_address dst idx mem_sz;
        return (idx,child_src,child_dst)
@@ -27,20 +27,21 @@ Proof
 QED
 
 Theorem abi_decode_dyn_loop_setup:
-  compile_abi_decode_dyn_loop dst src opc hi di abi_sz mem_sz ip cnt =
+  compile_abi_decode_dyn_loop dst src opc base_op hi di abi_sz mem_sz ip cnt =
     do hdr <- fresh_label "dec_dyn_hdr";
        body <- fresh_label "dec_dyn_body";
        exit <- fresh_label "dec_dyn_exit";
        emit_inst JMP [Label hdr] [];
        new_block hdr;
        idx <- emit_op MLOAD [ip];
-       count_op <- emit_op opc [src];
+       src_addr <- compile_abi_dec_addr base_op src;
+       count_op <- emit_op opc [src_addr];
        cmp <- emit_op LT [idx; count_op];
        done_op <- emit_op ISZERO [cmp];
        emit_inst JNZ [done_op; Label exit; Label body] [];
        new_block body;
-       child_ops <- abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz;
-       compile_abi_decode_to_buf (SND (SND child_ops)) (FST (SND child_ops)) opc hi di;
+       child_ops <- abi_decode_array_element_setup ip src dst opc base_op hi di abi_sz mem_sz;
+       compile_abi_decode_to_buf (SND (SND child_ops)) (FST (SND child_ops)) opc base_op hi di;
        new_idx <- emit_op ADD [FST child_ops; Lit 1w];
        emit_void MSTORE [ip;new_idx];
        emit_inst JMP [Label hdr] [];

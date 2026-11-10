@@ -38,7 +38,7 @@ Ancestors
   list rich_list finite_map arithmetic words
   fragExec loweringSlice  exprSimHyps exprSimLeaves exprSimAggregateLayout
   exprSimAggregateEncoding exprLowering exprLoweringProps emitHelper
-  emitHelperProps compileEnv localPtrsProps valueEncoding valueEncodingProps
+  emitHelperProps compileEnv loweringStateRelDefs localPtrsProps valueEncoding valueEncodingDefs valueEncodingProps
   vyperAST vyperInterpreter vyperState vyperValue vyperValueOperation
   vyperLookup vyperTyping vyperTypeSystem vyperTypeInvariants vyperTypeEnv
   vyperTypeExprResult vyperTypeExprSoundness
@@ -535,7 +535,7 @@ Proof
         (qpat_x_assum `32 <= sz` mp_tac >>
          qpat_x_assum `regions_disjoint _ _ _ _` mp_tac >>
          rpt (pop_assum kall_tac) >>
-         simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+         simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
       qpat_x_assum `u.vs_memory = _` SUBST1_TAC >> irule EQ_SYM >>
       irule mstore_mem_bytes_at_disjoint >> fs[])
   >~ [`type_memory_size _ <= _`] >- fs[type_memory_size_def, pop_name_entry_def]
@@ -665,7 +665,7 @@ Proof
      strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> strip_tac >> metis_tac[]) >>
   simp[] >> irule mstore_mem_bytes_at_disjoint >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 (* The store of the new length is a pop step of locals_kept: the popped
@@ -868,13 +868,13 @@ Proof
   rpt strip_tac >>
   `regions_disjoint off sz' (w2n w) sz` by
     (first_x_assum (qspecl_then [`id`, `w2n w`, `sz`] mp_tac) >>
-     simp[local_region_def, compileEnvTheory.regions_disjoint_def] >>
+     simp[local_region_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
      metis_tac[]) >>
   `off + sz' <= w2n w \/ w2n w + 32 <= off` by
     (qpat_x_assum `32 <= sz` mp_tac >>
      qpat_x_assum `regions_disjoint off _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   simp[] >> qpat_x_assum `u.vs_memory = _` SUBST1_TAC >>
   irule mstore_mem_bytes_at_disjoint >> fs[]
 QED

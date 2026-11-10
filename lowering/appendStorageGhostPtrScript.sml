@@ -2,7 +2,7 @@
 Theory appendStorageGhostPtr
 Ancestors
   bodyPtrDefs appendStorageRel accountsRelProps ptrDiscipline
-  compileEnv venomState vyperStorage words pred_set stmtFragPtr loweringPosts
+  compileEnv loweringStateRelDefs venomState vyperStorage words pred_set stmtFragPtr loweringPosts
 
 Theorem storage_dead_key_taint_empty:
   X SUBSET {(k,b) | storage_dead cx tr st (w2n k) b} /\
@@ -123,7 +123,9 @@ Proof
   >- (Cases_on `d` >> fs[return_buf_ptr_def] >>
       PairCases_on `x` >>
       gvs[return_buf_ptr_def] >>
-      metis_tac[ptr_covers_old_transport]) >>
+      irule ptr_covers_old_transport >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> simp[]) >>
   simp[] >> metis_tac[ret_pc_ok_def]
 QED
 

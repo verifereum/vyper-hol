@@ -48,7 +48,7 @@
 
 Theory bodySimStmtCases
 Ancestors
-  valueEncodingProps assignRelayoutFrag assignRelayoutCaller annassignRelayoutSource
+  loweringStateRelDefs valueEncodingProps assignRelayoutFrag assignRelayoutCaller annassignRelayoutSource
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
@@ -567,7 +567,7 @@ QED
 (* A storage declaration found by name is a variable declaration of tops
    under that name. *)
 
-Theorem find_var_decl_storage_some[local]:
+Theorem find_var_decl_storage_some:
   !ts vis mut id ty init.
     MEM (VariableDecl vis mut id ty init) ts /\
     (mut = Storage \/ mut = Transient) ==>
@@ -596,7 +596,7 @@ Proof
   drule_all build_maps_variable >> simp[]
 QED
 
-Theorem env_assignable_find_NONE[local]:
+Theorem env_assignable_find_NONE:
   !env cx st src id ty.
     env_consistent env cx st /\
     FLOOKUP env.bare_global_assignable (src, id) = SOME ty ==>
@@ -608,7 +608,7 @@ QED
 
 (* A supported scalar target is a word variable of tops in storage or
    transient storage. *)
-Theorem supported_scalar_target_decl[local]:
+Theorem supported_scalar_target_decl:
   !tops src id.
     supported_scalar_target tops (src, id) ==>
     src = NONE /\ find_var_decl_by_name id tops <> NONE /\
@@ -884,7 +884,7 @@ QED
 
 (* A struct field write the supported subset admits is to a storage or
    transient struct of the main module, tops. *)
-Theorem supported_storage_field_write_decl[local]:
+Theorem supported_storage_field_write_decl:
   !tops src id fld.
     supported_storage_field_write tops (src, id) fld ==>
     src = NONE /\ find_var_decl_by_name id tops <> NONE /\
@@ -1479,7 +1479,7 @@ Proof
 QED
 
 (* Both lowering entry points check that the target supports MCOPY. *)
-Theorem body_inv_mcopy[local]:
+Theorem body_inv_mcopy:
   !tops ctx cenv cx. body_inv tops ctx cenv cx ==> cenv.ce_target CapMcopy
 Proof
   rw[body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[]
@@ -1497,7 +1497,7 @@ QED
    through a pointer at its own type, and if in memory, with a size below
    2 ** 64 (locals_alloc_ok), so a bytestring copy's 64 bytes of rounding
    fit below 2 ** 256. *)
-Theorem tuple_target_local_ptr[local]:
+Theorem tuple_target_local_ptr:
   !cenv cx env es id ty tv.
     expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
     FLOOKUP env.var_types id = SOME ty /\ 0 < type_memory_bytes cenv ty /\
@@ -1528,7 +1528,7 @@ QED
 
 (* After the source is read, a local of a tuple target holds a value of its
    own type: a word as stored, otherwise at the type its pointer has. *)
-Theorem tuple_target_local_lays_out[local]:
+Theorem tuple_target_local_lays_out:
   !cenv cx env es1 id ty tv v entry.
     expr_sim_inv cenv cx env es1 /\ FLOOKUP env.var_types id = SOME ty /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
@@ -1549,7 +1549,7 @@ QED
 
 (* The buffer a tuple assignment stages a memory view's value in fits
    below 2 ** 256: alloc_limits_stmt bounds it by 2 ** 64. *)
-Theorem tuple_staging_bound[local]:
+Theorem tuple_staging_bound:
   !cenv cx env es g e tys tvs.
     expr_sim_inv cenv cx env es /\
     stmt_exprs_ok cenv (Assign (TupleTarget g) e) /\
@@ -1650,7 +1650,7 @@ QED
 (* The locals a tuple is assigned to take memory: their types are the
    tuple's element types, which are assignable, so they take a storage slot
    (assignable_type_slot_size_pos). *)
-Theorem assign_tuple_locals_bytes_pos[local]:
+Theorem assign_tuple_locals_bytes_pos:
   !cenv cx env es ret_ty ids e env'.
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty
@@ -1707,7 +1707,7 @@ Proof
   metis_tac[call_evaluation_safe_append_right]
 QED
 
-Theorem body_tuple_target_local_aligned[local]:
+Theorem body_tuple_target_local_aligned:
   expr_sim_inv cenv cx env es /\ FLOOKUP env.var_types id = SOME ty /\
   0 < type_memory_bytes cenv ty /\
   evaluate_type (get_tenv cx) ty = SOME tv ==>
@@ -1721,7 +1721,7 @@ Proof
   metis_tac[expr_sim_inv_local]
 QED
 
-Theorem body_tuple_target_local_layout[local]:
+Theorem body_tuple_target_local_layout:
   expr_sim_inv cenv cx env es /\
   well_typed_atarget env (BaseTarget (NameTarget id)) ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v ==>
@@ -1738,7 +1738,7 @@ Proof
   metis_tac[store_lays_out_typed]
 QED
 
-Theorem body_tuple_target_local_room[local]:
+Theorem body_tuple_target_local_room:
   expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
   FLOOKUP env.var_types id = SOME ty /\
   evaluate_type (get_tenv cx) ty = SOME tv ==>
@@ -1751,7 +1751,7 @@ Proof
   metis_tac[allocation_limit_word_room]
 QED
 
-Theorem body_tuple_target_toplevel_aligned[local]:
+Theorem body_tuple_target_toplevel_aligned:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
   storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
   supported_scalar_target tops nsid /\
@@ -1786,7 +1786,7 @@ Proof
   metis_tac[exprSimUnwrapTheory.word_type_slot_size]
 QED
 
-Theorem body_tuple_target_field_aligned[local]:
+Theorem body_tuple_target_field_aligned:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
   storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
   supported_storage_field_write tops nsid fld /\
@@ -1834,7 +1834,7 @@ Proof
   metis_tac[exprSimUnwrapTheory.word_type_slot_size]
 QED
 
-Theorem body_tuple_target_ready[local]:
+Theorem body_tuple_target_ready:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
   storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
   locals_alloc_ok cenv env /\ well_typed_atarget env g ty /\

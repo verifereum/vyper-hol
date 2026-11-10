@@ -2,8 +2,8 @@
 Theory stmtSimLogSuffix
 Ancestors
   stmtSimLogStoreCompose stmtSimLogEmit stmtSimLogTrace stmtSimLogTopics
-  compileEnv exprLoweringProps emitHelperProps venomExecSemantics venomState
-  valueEncoding words list arithmetic stmtSimLogTopicFresh stmtSimLogSourceAllocate
+  compileEnv loweringStateRelDefs exprLoweringProps emitHelperProps venomExecSemantics venomState
+  valueEncoding valueEncodingDefs words list arithmetic stmtSimLogTopicFresh stmtSimLogSourceAllocate
   exprSimWordArgs stmtSimLogArgs fragExec stmtLowering stmtSimLogStoreEncode
   stmtSimLogDataRun abiEncoderCounters abiDecoderReentry abiEncoderAppend
   loweringHalt vyperABI contractABI abiBuiltinAllocation

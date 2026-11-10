@@ -44,7 +44,7 @@ Ancestors
   fragExec exprSimLeaves stmtSimDecl stmtSimDeclMem storageStoreFrame
   stmtSimAssign stmtSimAssignMem accountsRelProps exprSimTopLevelProps
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding valueEncodingProofs
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingProofs
   vyperInterpreter vyperState vyperStorage vyperStorageBackend vyperValue
   vyperTyping vyperExprNoControl
   venomExecSemantics venomInst venomState

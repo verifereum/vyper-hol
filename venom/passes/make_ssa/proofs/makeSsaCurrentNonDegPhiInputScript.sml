@@ -1,7 +1,7 @@
 Theory makeSsaCurrentNonDegPhiInput
 Ancestors
   makeSsaCurrentNonDegShape makeSsaCurrentSourceCuts
-  makeSsaCurrentNonDegCleanup makeSsaCurrentDefs venomInst
+  makeSsaCurrentNonDegCleanup makeSsaDefs venomInst
 
 Theorem current_nondeg_phi_input:
   wf_function fn /\ fn_inst_wf fn /\

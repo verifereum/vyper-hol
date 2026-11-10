@@ -22,7 +22,7 @@ Ancestors
   exprSimTopLevelProps
    stmtSimAssign stmtSimAssignMem stmtSimAssignStorage
   stmtSimAugAssign
-  exprLowering exprBopLowering exprLoweringProps stmtLowering compileEnv
+  exprLowering exprBopLowering exprLoweringProps stmtLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValue vyperTypeSystem vyperTyping
   vyperTypeCallGraph vyperAST
 Libs

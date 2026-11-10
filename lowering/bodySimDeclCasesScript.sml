@@ -29,7 +29,7 @@
 Theory bodySimDeclCases
 Ancestors
   annassignRelayoutFrag annassignRelayoutSource
-  exprSimSource
+  valueEncodingDefs exprSimSource
   bodyExprPreFacts
   stmtSimProps
   exprSimHypsDefs

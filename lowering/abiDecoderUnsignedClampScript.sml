@@ -1,7 +1,7 @@
 (* Successful unsigned ABI clamps preserve the decoded word and source state. *)
 Theory abiDecoderUnsignedClamp
 Ancestors
-  venomMemProps
+  abiDecoderRange venomMemProps
   abiDecoderGuards abiDecoderContract abiEncoder emitHelperProps exprLoweringProps
   compileEnv emitHelper valueEncoding venomExecSemantics venomState venomInst
   words arithmetic rich_list list

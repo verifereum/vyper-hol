@@ -2,7 +2,7 @@
 Theory normalizationAllocPtr
 Ancestors allocationPtr robustCopyTransportPtr loweringHalt bodyPtrDefs loweringPosts exprSimDefs exprSimProps
   venomState venomExecSemantics venomInst finite_map ptrDiscipline fragExec
-  localPtrsProps compileEnv exprLoweringProps
+  localPtrsProps compileEnv loweringStateRelDefs exprLoweringProps
 
 Theorem alloca_step_expr_robust_preserved:
   !ctx func cenv cx es s t sa sb v op tv w id n out s1 b tn.

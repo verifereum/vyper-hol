@@ -10,8 +10,8 @@ Theory tupleLocalStoreRun
 Ancestors
   stmtSimDefs tupleLocalStoreProps stmtSimAssignStore stmtSimAssignMem tupleMemoryFrame
   localMemoryStorePath stmtSimDeclPath fragGasMode fragGasPath
-  tupleMemoryLayout  exprLoweringProps localPtrsProps compileEnv
-  valueEncoding valueEncodingProps valueEncodingProofs vyperState vyperLookup
+  tupleMemoryLayout  exprLoweringProps localPtrsProps compileEnv loweringStateRelDefs
+  valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs vyperState vyperLookup
   list rich_list finite_map arithmetic venomState venomInst
   stmtSimDeclMem stmtLowering emitHelperProps emitHelper fragExec vyperInterpreter
   vyperTyping valueTypingMemoryProps freshWrites

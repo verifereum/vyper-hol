@@ -17,7 +17,7 @@ Ancestors
   fragExecMem fragGasPathMem fragGasMode gasSummary gasOutcome
   exprSimVVFrame exprSimAlloc exprSimProps exprSimDefs exprSimHypsDefs
   loweringPosts allocLimits exprLoweringProps exprLowering emitHelperProps
-  emitHelper context compileEnv valueEncoding vyperAST vyperInterpreter
+  emitHelper context compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs vyperAST vyperInterpreter
   vyperState vyperValue vyperValueOperation vyperTypeSystem
   venomState venomInst venomExecSemantics venomMemDefs venomMemProps
   list rich_list finite_map words arithmetic
@@ -154,7 +154,7 @@ Proof
 QED
 
 (* The whole literal: memory-safe and frontier-monotone. *)
-Theorem run_inst_seq_mem_ok_append_run[local]:
+Theorem run_inst_seq_mem_ok_append_run:
   run_inst_seq is1 s = OK s1 /\ run_inst_seq_mem_ok is1 s /\
   run_inst_seq_mem_ok is2 s1 ==> run_inst_seq_mem_ok (is1 ++ is2) s
 Proof

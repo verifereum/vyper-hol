@@ -6,8 +6,8 @@ Ancestors
   bodyImmutableCopyMemory bodyAllocMemory allocaHistoryFragment abiBuiltinAllocation
   instMemFrontier storageDecodeMemory venomMemDefs
   exprSimCopy exprSimStorageCopy immutableCopyExecution fragExec fragExecMem
-  exprSimDefs exprSimOps exprLowering valueEncoding localPtrsProps exprSimAlloc
-  context compileEnv exprLoweringProps emitHelperProps venomExecSemantics
+  exprSimDefs exprSimOps exprLowering valueEncoding valueEncodingDefs localPtrsProps exprSimAlloc
+  context compileEnv loweringStateRelDefs exprLoweringProps emitHelperProps venomExecSemantics
   venomState venomInst words arithmetic list rich_list finite_map
 
 Theorem body_code_copy_history[local]:

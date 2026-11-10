@@ -13,7 +13,7 @@ Theory placeStoreStorage
 Ancestors
   stmtSimDefs exprSimHypsDefs typedCopyDomain vyperStoragePlaceProvenance
   loweringPosts fragGasMode accountsRelProps copyExecution stmtSimStoreCopy placeStoreCopyChunk
-  stmtLowering exprLowering compileEnv
+  stmtLowering exprLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   venomState fragGasSeq fragGasPath arithmetic venomExecSemantics venomInst exprLoweringProps
 
@@ -1976,7 +1976,7 @@ Proof
   Cases_on `n = 0` >> simp[]
   >- (conj_tac
       >- (irule valueCopyTheory.val_in_memory_relocate >> simp[] >>
-          qexistsl_tac [`w2n sw`, `0`, `s.vs_memory`] >> simp[valueEncodingTheory.mem_bytes_at_def]) >>
+          qexistsl_tac [`w2n sw`, `0`, `s.vs_memory`] >> simp[valueEncodingDefsTheory.mem_bytes_at_def]) >>
       simp[typedMemoryCopyTheory.typed_copy_state_frame_def,
            typedMemoryCopyTheory.typed_copy_frame_def, lookup_var_def,
            venom_state_component_equality]) >>
@@ -2278,10 +2278,10 @@ Proof
      simp[Once typedCopyDomainTheory.type_rank_def] >>
      `val_wf tv (case ALOOKUP l i of NONE => default_value tv | SOME v => v)` by
        (irule typedMemoryCopyTheory.typed_copy_sparse_lookup_wf >>
-        qexists_tac `cap` >> fs[valueEncodingTheory.val_wf_def]) >>
+        qexists_tac `cap` >> fs[valueEncodingDefsTheory.val_wf_def]) >>
      `val_wf tv' (case ALOOKUP l i of NONE => default_value tv | SOME v => v)` by
        (asm_rewrite_tac[] >> irule typedMemoryCopyTheory.typed_copy_sparse_lookup_wf >>
-        qexists_tac `cap` >> fs[valueEncodingTheory.val_wf_def]) >>
+        qexists_tac `cap` >> fs[valueEncodingDefsTheory.val_wf_def]) >>
      Cases_on `ALOOKUP l i` >> gvs[]
      >- metis_tac[vyperTypingTheory.default_value_well_typed,
                  cj 1 vyperTypingTheory.evaluate_type_well_formed] >>
@@ -2707,7 +2707,7 @@ Resume place_store_counted_dynarray_path[reconstruct]:
           qpat_assum `w2n (dw + 32w) = _` (fn th => rewrite_tac[th]) >>
           simp_tac std_ss [AC ADD_ASSOC ADD_COMM]) >>
       goal_assum (drule_at (Pat `typedMemoryCopy$typed_copy_state_frame _ _ _ _ _`)) >>
-      simp[valueEncodingTheory.mem_word_at_def, GSYM valueEncodingTheory.mem_bytes_at_def]) >>
+      simp[valueEncodingDefsTheory.mem_word_at_def, GSYM valueEncodingDefsTheory.mem_bytes_at_def]) >>
   `typedMemoryCopy$typed_copy_state_frame sa (w2n dw + 32)
       (LENGTH vs * type_memory_size dtv) t u` by
     (irule typedMemoryCopyTheory.typed_copy_state_frame_mono >>
@@ -2812,8 +2812,8 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       Cases_on `vs` >>
       gvs[contextTheory.compile_store_memory_typed_def, comp_return_def,
-          valueEncodingTheory.val_wf_def,
-          valueEncodingTheory.val_in_memory_def, valueEncodingTheory.type_memory_size_def] >>
+          valueEncodingDefsTheory.val_wf_def,
+          valueEncodingDefsTheory.val_in_memory_def, valueEncodingTheory.type_memory_size_def] >>
       qexists_tac `s` >>
       simp[gas_marked_path_def, fragGasPathTheory.gas_path_rules,
            typedMemoryCopyTheory.typed_copy_state_frame_def,
@@ -2823,7 +2823,7 @@ Proof
   Cases_on `stys` >> Cases_on `dtvs` >> Cases_on `stvs` >> Cases_on `vs` >>
   gnvs[] >>
   rename1 `place_store_counted_entry cenv ctx dty sty dtv stv v` >>
-  gnvs[valueEncodingTheory.val_wf_def, valueEncodingTheory.val_in_memory_def,
+  gnvs[valueEncodingDefsTheory.val_wf_def, valueEncodingDefsTheory.val_in_memory_def,
        valueEncodingTheory.type_memory_size_def] >>
   qpat_x_assum `compile_typed_copy_fields _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once contextTheory.compile_store_memory_typed_def, comp_bind_def] >>
@@ -2850,7 +2850,7 @@ Proof
     place_store_counted_entry_offset_path) >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (qspecl_then [`sw`, `s`, `func`, `dw`] mp_tac) >>
-  (impl_tac >- (simp[compileEnvTheory.regions_disjoint_def] >> decide_tac)) >>
+  (impl_tac >- (simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
   qpat_x_assum `compile_with_byte_offset dst _ _ = _` kall_tac >>
   qpat_x_assum `compile_with_byte_offset src _ _ = _` kall_tac >>
@@ -2919,9 +2919,10 @@ Proof
   Induct >> Cases_on `stys` >> Cases_on `dtvs` >>
   Cases_on `stvs` >> Cases_on `vs` >>
   simp[AllCaseEqs(),
-       vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def] >>
+       vyperTypingTheory.value_has_type_def, valueEncodingDefsTheory.val_wf_def] >>
   rpt strip_tac >> gvs[] >>
-  metis_tac[typedMemoryCopyTheory.typed_copy_memory_size]
+  (* FIRST_PROVE gives each of the six goals its own timed step. *)
+  FIRST_PROVE [metis_tac[typedMemoryCopyTheory.typed_copy_memory_size]]
 QED
 
 Theorem place_store_tuple_children_widen:
@@ -2974,8 +2975,8 @@ Proof
       (ZIP (dtys,tvs')) (ZIP (stys,ZIP (tvs,l))) /\
    LENGTH dtys = LENGTH tvs' /\ LENGTH stys = LENGTH tvs /\ LENGTH tvs = LENGTH l` by
     (irule place_store_counted_fields_from_semantics >>
-     (conj_tac >- gvs[valueEncodingTheory.val_wf_def]) >>
-     (conj_tac >- gvs[valueEncodingTheory.val_wf_def]) >>
+     (conj_tac >- gvs[valueEncodingDefsTheory.val_wf_def]) >>
+     (conj_tac >- gvs[valueEncodingDefsTheory.val_wf_def]) >>
      (conj_tac >- simp[]) >> (conj_tac >- simp[]) >>
      qexists_tac `tenv` >> simp[] >>
      (conj_tac >- metis_tac[]) >>
@@ -2988,10 +2989,10 @@ Proof
   drule_at (Pat `compile_typed_copy_fields _ _ _ _ _ _ _ _ = _`)
     place_store_counted_tuple_path >> disch_then drule >>
   disch_then (qspecl_then [`func`, `s`, `dw`, `sw`] mp_tac) >>
-  simp[valueEncodingTheory.type_memory_size_def, valueEncodingTheory.val_in_memory_def] >>
-  (impl_tac >- (gvs[valueEncodingTheory.val_wf_def,
-    valueEncodingTheory.type_memory_size_def, valueEncodingTheory.val_in_memory_def,
-    compileEnvTheory.regions_disjoint_def] >> decide_tac)) >> simp[]
+  simp[valueEncodingTheory.type_memory_size_def, valueEncodingDefsTheory.val_in_memory_def] >>
+  (impl_tac >- (gvs[valueEncodingDefsTheory.val_wf_def,
+    valueEncodingTheory.type_memory_size_def, valueEncodingDefsTheory.val_in_memory_def,
+    loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >> simp[]
 QED
 
 Theorem place_store_struct_tuple_values:
@@ -3004,11 +3005,11 @@ Theorem place_store_struct_tuple_values:
     LENGTH fields = LENGTH tvs /\ MAP FST fields = names
 Proof
   Induct >> Cases_on `tvs` >> Cases_on `fields` >>
-  simp[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def] >>
+  simp[vyperTypingTheory.value_has_type_def, valueEncodingDefsTheory.val_wf_def] >>
   PairCases_on `h'` >>
-  simp[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def] >>
+  simp[vyperTypingTheory.value_has_type_def, valueEncodingDefsTheory.val_wf_def] >>
   rpt strip_tac >> first_x_assum drule >> disch_then drule_all >>
-  strip_tac >> simp[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def]
+  strip_tac >> simp[vyperTypingTheory.value_has_type_def, valueEncodingDefsTheory.val_wf_def]
 QED
 
 Theorem place_store_struct_layout:
@@ -3060,7 +3061,7 @@ Proof
   `LENGTH (MAP FST args) = LENGTH tvs` by
     (gvs[vyperValueTheory.evaluate_types_OPT_MMAP] >>
      drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
-  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def] >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def, valueEncodingDefsTheory.val_wf_def] >>
   `values_have_types tvs (MAP SND l) /\ tuple_val_wf (MAP SND l) tvs /\
    LENGTH l = LENGTH tvs /\ MAP FST l = MAP FST args` by
     metis_tac[place_store_struct_tuple_values, listTheory.LENGTH_MAP] >>
@@ -3113,10 +3114,10 @@ Proof
   qpat_x_assum `!name fields. _` kall_tac >>
   qpat_x_assum `LIST_REL _ (ZIP _) (ZIP _)` kall_tac >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE
-    [valueEncodingTheory.type_memory_size_def, valueEncodingTheory.val_in_memory_def,
-     valueEncodingProofsTheory.fields_in_memory_tuple, compileEnvTheory.regions_disjoint_def]) >>
+    [valueEncodingTheory.type_memory_size_def, valueEncodingDefsTheory.val_in_memory_def,
+     valueEncodingProofsTheory.fields_in_memory_tuple, loweringStateRelDefsTheory.regions_disjoint_def]) >>
   pure_rewrite_tac[valueEncodingTheory.type_memory_size_def,
-      valueEncodingTheory.val_in_memory_def, valueEncodingProofsTheory.fields_in_memory_tuple,
+      valueEncodingDefsTheory.val_in_memory_def, valueEncodingProofsTheory.fields_in_memory_tuple,
       listTheory.LENGTH_MAP, arithmeticTheory.ADD_0] >>
   `MAP SND (ZIP (MAP FST args,tvs)) = tvs` by
     (qpat_x_assum `LENGTH args = LENGTH tvs` mp_tac >>
@@ -3187,7 +3188,7 @@ Proof
       contextTheory.compile_copy_memory_def, comp_return_def] >>
   qexists_tac `s` >>
   simp[gas_marked_path_def, fragGasPathTheory.gas_path_rules,
-       valueEncodingTheory.val_in_memory_def,
+       valueEncodingDefsTheory.val_in_memory_def,
        typedMemoryCopyTheory.typed_copy_state_frame_def,
        typedMemoryCopyTheory.typed_copy_frame_def, venom_state_component_equality]
 QED
@@ -3215,7 +3216,7 @@ Resume place_store_typed_rank_path[bytes]:
    goal_assum (drule_at (Pat `compile_store_bytestring _ _ _ = _`)) >>
    FIRST [rename1 `StringV str` >> qexistsl_tac [`STRLEN str`, `sw`],
           rename1 `BytesV bs` >> qexistsl_tac [`LENGTH bs`, `sw`]] >>
-   gvs[valueEncodingTheory.val_in_memory_def, loweringPostsTheory.val_footprint_def,
+   gvs[valueEncodingDefsTheory.val_in_memory_def, loweringPostsTheory.val_footprint_def,
        valueEncodingTheory.type_memory_size_def] >>
    qmatch_goalsub_abbrev_tac `word_size len <= word_size capacity` >>
    `word_size len <= word_size capacity` by
@@ -3267,7 +3268,7 @@ Proof
   simp[place_store_counted_entry_def] >>
   disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`func`, `s`, `dw`, `sw`] mp_tac) >>
-  simp[compileEnvTheory.regions_disjoint_def] >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
   qexists_tac `u` >>
   gvs[typedMemoryCopyTheory.typed_copy_state_frame_def,
@@ -3473,7 +3474,7 @@ Proof
   simp[local_ptrs_rel_def, local_backed_def, local_region_def,
      lookup_var_def, immutables_rel_def, logs_rel_def,
      venomMemDefsTheory.alloca_inv_def, alloca_room_def, pending_alloca_size_def,
-     fmp_room_def, immutable_alloca_sep_def, immutable_base_zero_def,
+     fmp_room_def, immutable_alloca_sep_def, immutable_decl_sep_def, immutable_base_zero_def,
      venomMemDefsTheory.allocas_non_overlapping_def,
      venomMemDefsTheory.alloca_next_valid_def] >>
   qpat_x_assum `local_ptrs_rel _ _ _ _`
@@ -3496,7 +3497,7 @@ Proof
       [fmp_room_def, pending_alloca_size_def]) >>
   qpat_x_assum `immutable_alloca_sep _ _ _ _ _`
     (assume_tac o SIMP_RULE (boss_ss())
-      [immutable_alloca_sep_def, local_region_def, lookup_var_def]) >>
+      [immutable_alloca_sep_def, immutable_decl_sep_def, local_region_def, lookup_var_def]) >>
   `es.accounts cx.txn.target with storage := mt =
    s.vs_accounts cx.txn.target with storage := mt` by
     (qpat_assum `es.accounts _ with storage := _ = _`
@@ -3676,17 +3677,30 @@ Proof
     place_store_operand_update, place_store_mload_update] >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
     place_store_operand_update] >>
-  Cases_on `tr` >>
-  simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
-    eval_operands_def, place_store_operand_update, place_store_update_static] >>
-  qmatch_goalsub_abbrev_tac `run_inst_seq _ post` >>
-  `eval_operand (Var cv) post = SOME k` by
-    (simp[Abbr `post`, place_store_operand_update,
-      SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `T`] place_store_slot_operand_frame),
-      SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `F`] place_store_slot_operand_frame)]) >>
-  simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
-    emitHelperPropsTheory.eval_operand_lit] >>
-  simp[run_inst_seq_def, step_inst_base_def, place_store_operand_update]
+  (* One case per step: both cases together are too slow for one step. *)
+  Cases_on `tr`
+  >- (
+    simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
+      eval_operands_def, place_store_operand_update, place_store_update_static] >>
+    qmatch_goalsub_abbrev_tac `run_inst_seq _ post` >>
+    `eval_operand (Var cv) post = SOME k` by
+      (simp[Abbr `post`, place_store_operand_update,
+        SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `T`] place_store_slot_operand_frame),
+        SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `F`] place_store_slot_operand_frame)]) >>
+    simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
+      emitHelperPropsTheory.eval_operand_lit] >>
+    simp[run_inst_seq_def, step_inst_base_def, place_store_operand_update])
+  >> (
+    simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
+      eval_operands_def, place_store_operand_update, place_store_update_static] >>
+    qmatch_goalsub_abbrev_tac `run_inst_seq _ post` >>
+    `eval_operand (Var cv) post = SOME k` by
+      (simp[Abbr `post`, place_store_operand_update,
+        SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `T`] place_store_slot_operand_frame),
+        SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `F`] place_store_slot_operand_frame)]) >>
+    simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
+      emitHelperPropsTheory.eval_operand_lit] >>
+    simp[run_inst_seq_def, step_inst_base_def, place_store_operand_update])
 QED
 
 (* Forward-copy layout shares names, initialization and test with slot copying.
@@ -3736,7 +3750,7 @@ Theorem place_store_copy_shape:
   (slot_copy_body cs, place_store_copy_final cs src dst n tr)
 Proof
   Cases_on `tr` >>
-  simp[contextTheory.compile_word_copy_loop_def, word_scale_def,
+  simp[contextTheory.compile_word_copy_loop_def, contextTheory.compile_word_copy_loop_op_def, contextTheory.compile_word_copy_loop_base_def, word_scale_def,
        contextTheory.compile_ptr_load_def, contextTheory.compile_ptr_store_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_label_def, fresh_var_def, fresh_id_def,
@@ -3891,7 +3905,10 @@ Proof
         `mk_inst (cs.cs_next_id + 3) JNZ
            [Var (slot_copy_var cs 1); Label (slot_copy_exit cs);
             Label (slot_copy_body cs)] []`] >>
-     Cases_on `k = n` >>
+     Cases_on `k = n`
+     >- simp[Abbr `u`, update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+             get_instruction_def, slot_copy_cond_insts_def, step_inst_base_def,
+             mk_inst_def, eval_operand_def, bool_to_word_def, jump_to_def] >>
      simp[Abbr `u`, update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
           get_instruction_def, slot_copy_cond_insts_def, step_inst_base_def,
           mk_inst_def, eval_operand_def, bool_to_word_def, jump_to_def]) >>
@@ -4252,7 +4269,7 @@ Proof
        venomMemDefsTheory.alloca_inv_def,
        venomMemDefsTheory.allocas_non_overlapping_def,
        venomMemDefsTheory.alloca_next_valid_def, alloca_room_def,
-       pending_alloca_size_def, immutable_alloca_sep_def,
+       pending_alloca_size_def, immutable_alloca_sep_def, immutable_decl_sep_def,
        exprLoweringPropsTheory.immutable_base_zero_alt,
        accounts_rel_def, accounts_agree_def]
 QED
@@ -4299,7 +4316,9 @@ Proof
   reverse conj_tac >- simp[] >>
   irule place_store_emitted_seq_path >> conj_tac >- simp[] >>
   qexists_tac `sa` >>
-  Cases_on `tr` >>
+  Cases_on `tr`
+  >- simp[mk_inst_def, is_terminator_def, run_inst_seq_def,
+          step_inst_base_def, exec_write2_def, eval_operands_def] >>
   simp[mk_inst_def, is_terminator_def, run_inst_seq_def,
        step_inst_base_def, exec_write2_def, eval_operands_def]
 QED
@@ -4427,7 +4446,7 @@ Proof
   gvs[type_widens_to_def, arg_type_fits_def, evaluate_type_def, AllCaseEqs()] >>
   Cases_on `v` >>
   gvs[vyperTypingTheory.value_has_type_def, valueEncodingTheory.type_memory_size_def,
-      valueEncodingTheory.val_in_memory_def, is_bytestring_type_def]
+      valueEncodingDefsTheory.val_in_memory_def, is_bytestring_type_def]
 QED
 
 Theorem place_store_load_emit_path:

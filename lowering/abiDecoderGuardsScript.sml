@@ -1,7 +1,7 @@
 (* Shared successful count clamps for bytestring and dynamic-array decoding. *)
 Theory abiDecoderGuards
 Ancestors
-  abiDecoderContract emitHelperProps exprLoweringProps abiEncoder emitHelper
+  abiDecoderRange abiDecoderContract emitHelperProps exprLoweringProps abiEncoder emitHelper
   compileEnv valueEncoding venomExecSemantics venomExecProofs venomInst venomState
   words arithmetic list rich_list
 
@@ -15,30 +15,6 @@ Definition abi_decode_count_guard_def:
     od
 End
 
-Theorem abi_decode_pure_emit_frame:
-  emit_op opc ops st = (v,st') /\
-  (opc = ADD \/ opc = MUL \/ opc = GT \/ opc = LT \/ opc = ISZERO) /\
-  run_inst_seq (emitted_insts st st') s = OK t ==>
-  t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
-  t.vs_data_section = s.vs_data_section
-Proof
-  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
-  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
-  qpat_x_assum `emit_op _ _ _ = _` kall_tac >>
-  qpat_x_assum `st'.cs_current_insts = _` kall_tac >>
-  rpt (qpat_x_assum `emitted_insts _ _ = _` SUBST1_TAC) >>
-  simp[run_inst_seq_def, mk_inst_def]
-  >- (simp[Once step_inst_base_def] >>
-      simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
-  >- (simp[Once step_inst_base_def] >>
-      simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
-  >- (simp[Once step_inst_base_def] >>
-      simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
-  >- (simp[Once step_inst_base_def] >>
-      simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
-  >> simp[Once step_inst_base_def] >>
-  simp[exec_pure1_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[]
-QED
 
 Theorem abi_decode_count_guard_shape:
   abi_decode_count_guard opc src limit st = (count_op,st') ==>
@@ -50,16 +26,6 @@ Proof
   metis_tac[inst_extends_trans]
 QED
 
-Theorem abi_decode_sequence_chain:
-  inst_extends st st1 /\ inst_extends st1 st2 /\
-  run_inst_seq (emitted_insts st st1) s = OK s1 /\
-  run_inst_seq (emitted_insts st1 st2) s1 = OK s2 ==>
-  run_inst_seq (emitted_insts st st2) s = OK s2 /\ inst_extends st st2
-Proof
-  strip_tac >> conj_tac
-  >- (irule run_inst_seq_compose_ok >> qexistsl_tac [`s1`, `st1`] >> simp[]) >>
-  metis_tac[inst_extends_trans]
-QED
 
 Theorem abi_decode_count_guard_sequence:
   abi_decode_count_guard opc src limit st = (count_op,st') /\
@@ -101,4 +67,21 @@ Proof
   drule_all abi_decode_sequence_chain >> strip_tac >>
   drule_all abi_decode_sequence_chain >> strip_tac >>
   qexists_tac `s3` >> simp[] >> metis_tac[]
+QED
+
+
+Theorem abi_decode_count_guard_fragment_shape:
+  abi_decode_count_guard opc src limit st = (count_op,st') /\
+  abi_decode_source_opcode opc ==>
+  st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st') /\ inst_extends st st'
+Proof
+  strip_tac >> drule abi_decode_count_guard_shape >> strip_tac >>
+  gvs[abi_decode_source_opcode_def] >>
+  gvs[abi_decode_count_guard_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+      fresh_id_def, emit_def, emitted_insts_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  gvs[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
 QED

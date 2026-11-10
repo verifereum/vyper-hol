@@ -3,9 +3,10 @@ Theory singleUseExpansionSupplySim
 Ancestors
   singleUseExpansionSupplyProofs singleUseExpansionDefs irSupply
   stateFrame stateEquiv venomExecProps venomExecProofs
-  venomExecSemantics venomWf venomInst venomState sccpCorrectnessProofs
+  venomExecSemantics venomWf venomInst venomState
   analysisSimDefs instIdxIndep execEquivParamProofs passSharedSubst
   venomFnScheduleRunner ctxLookupAgreeHelpers cfgWf contextCodegenRelProps
+  venomWfProps
 
 (* Control indices are related separately by segment alignment. *)
 Definition sue_state_rel_def:

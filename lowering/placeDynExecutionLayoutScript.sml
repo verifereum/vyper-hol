@@ -1,6 +1,6 @@
 Theory placeDynExecutionLayout
 Ancestors
-  placeDynCompile fragExec loweringSlice compileEnv emitHelper exprLoweringProps
+  placeDynCompile fragExec loweringSlice compileEnv loweringStateRelDefs emitHelper exprLoweringProps
   list rich_list arithmetic emitHelperProps
 
 Theorem place_dyn_closed_slice[local]:
@@ -129,7 +129,13 @@ Resume place_dyn_execution_layout[package]:
   `sb.cs_current_bb = exit /\
    sb.cs_current_insts = [mk_inst s14.cs_next_id
      (if transient then TSTORE else SSTORE) [dst;Var lv] []]` by
-    (fs[same_blocks_def, Excl "isPREFIX"]) >>
+    (qpat_assum `same_blocks s14 sb` mp_tac >>
+     qpat_assum `s14.cs_current_bb = exit` mp_tac >>
+     qpat_assum `s14.cs_current_insts = []` mp_tac >>
+     qpat_assum `sb.cs_current_insts = _` mp_tac >>
+     qpat_assum `len = Var lv` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     rw[same_blocks_def]) >>
   `?bbx. lookup_block exit func.fn_blocks = SOME bbx /\
     isPREFIX [mk_inst s14.cs_next_id (if transient then TSTORE else SSTORE)
       [dst;Var lv] []] bbx.bb_instructions` by

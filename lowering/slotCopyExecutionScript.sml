@@ -2,7 +2,7 @@ Theory slotCopyExecution
 Ancestors
   copyExecution createMemoryInterface createSourceCallback createFrameInterface emitHelperProps fragExec
   exprLoweringProps venomExecSemantics venomMemProps
-  compileEnv emitHelper venomInst venomState list rich_list words
+  compileEnv loweringStateRelDefs emitHelper venomInst venomState list rich_list words
 Libs
   wordsLib
 
@@ -33,13 +33,7 @@ Definition slot_copy_body_result_def:
     in jump_to (slot_copy_cond cs) s7
 End
 
-Theorem slot_copy_operand_update[simp]:
-  eval_operand op (update_var name value s) =
-    if op = Var name then SOME value else eval_operand op s
-Proof
-  Cases_on `op` >> simp[eval_operand_def, lookup_var_def, update_var_def,
-    finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
-QED
+val _ = export_rewrites ["emitHelperProps.slot_copy_operand_update"];
 
 Theorem slot_copy_load_update[simp]:
   slot_copy_word load (update_var name value s) key = slot_copy_word load s key
@@ -429,9 +423,11 @@ Proof
   strip_tac >>
   `((n2w i : bytes32) = n2w n) <=> (i=n)` by
     (pure_rewrite_tac[n2w_11] >> fs[dimword_def]) >>
+  (* Unfold the step and the EQ case in separate steps: together they are
+     too slow for one step. *)
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
-       mk_inst_def, Once step_inst_def, step_inst_base_opcode_eqs, exec_pure2_def,
-       eval_operand_def] >>
+       mk_inst_def, Once step_inst_def] >>
+  simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def] >>
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
        mk_inst_def, Once step_inst_def, step_inst_base_opcode_eqs,
        eval_operand_def, lookup_var_def, update_var_def,
@@ -626,7 +622,7 @@ Proof
      Cases_on `h.inst_opcode = PHI` >> simp[] >>
      qpat_x_assum `run_from _ _ _ _ = _` mp_tac >>
      simp[run_from_def, Once exec_block_def, get_instruction_def,
-          Once step_inst_def, step_inst_base_def] >> metis_tac[]) >>
+          Once step_inst_def, step_inst_base_opcode_eqs] >> metis_tac[]) >>
   drule_all run_blocks_run_from_no_phi >>
   `s with vs_inst_idx := 0 = s` by simp[venom_state_component_equality] >>
   simp[]

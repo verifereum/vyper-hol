@@ -4,7 +4,7 @@ Ancestors
   gasExemptCert gasSummary gasSummaryCompose gasOutcome gasContext fragGasPath gasCount
   stmtSimDefs stmtSimProps exprSimDefs loweringPosts list rich_list finite_map pred_set
   fragExec localPtrsProps loweringSlice stmtLoweringMono
-  stmtLowering exprLowering compileEnv emitHelper emitHelperProps exprLoweringProps
+  stmtLowering exprLowering compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   vyperInterpreter vyperState vyperValue vyperEvalPreservesScopes
   vyperExprNoControl vyperValueOperation vyperStatePreservation
   venomExecSemantics venomExecProofs venomInst venomState integer_word

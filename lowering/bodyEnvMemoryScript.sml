@@ -7,7 +7,7 @@ Ancestors
   fragExecMem instMemFrontier allocaHistoryFragment emitHelperProps
   exprLoweringProps emitHelper venomInst venomState words list rich_list
   vyperInterpreter vyperValueOperation vyperContext
-  compileEnv fragExec valueEncoding valueEncodingProofs vyperValue vyperAST venomExecSemantics
+  compileEnv loweringStateRelDefs fragExec valueEncoding valueEncodingProofs vyperValue vyperAST venomExecSemantics
   loweringSlice exprLowering vyperState vyperTyping vyperTypeSystem
 
 Theorem body_env_read_frag_mem:
@@ -93,10 +93,9 @@ Proof
   simp[is_terminator_def] >>
   rpt strip_tac >>
   simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
-  FIRST_PROVE [
-    gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
-        val_to_w256_address, val_to_w256_def, integer_wordTheory.i2w_def] >>
-    irule below_frontier_no_ranges >> simp[]]
+  gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
+      val_to_w256_address, val_to_w256_def, integer_wordTheory.i2w_def] >>
+  irule below_frontier_no_ranges >> simp[]
 QED
 
 Theorem body_env_read_counted[local]:

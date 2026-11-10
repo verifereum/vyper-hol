@@ -4,7 +4,7 @@ Ancestors
   bodyMemAssignTopCopyPaths bodyMemAssignTopCopySem bodyMemAssignTopCopyCompiler
   allocaHistory allocaHistoryFragment bodyDeclMemoryCore bodyDeclMemoryCounted
   bodyMemAssignTopCopyLoop gasOutcome fragGasMode fragExec instMemFrontier emitHelper emitHelperProps context venomInst
-  stmtSimStoreCopy stmtSimProps stmtSimDefs exprSimDefs exprSimMemDefs loweringPosts exprLoweringProps compileEnv
+  stmtSimStoreCopy stmtSimProps stmtSimDefs exprSimDefs exprSimMemDefs loweringPosts exprLoweringProps compileEnv loweringStateRelDefs
   exprSimProps exprOperandVar freshWrites vyperStorageBackend vyperStorage valueEncodingProps
   bodyMemAssignTopCopyFacts stmtLowering emitHelperProps
   venomState words arithmetic list rich_list

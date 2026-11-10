@@ -824,6 +824,11 @@ Definition well_typed_expr_def:
         assignable, as params_ok requires of InterfaceDecl. *)
      (ret_ty <> NoneT ==> assignable_type env.type_defs ret_ty) /\
      EVERY (assignable_type env.type_defs) arg_types /\
+     (* Vyper has only bytes1 through bytes32 (RANGE_1_32 in
+        semantics/types/primitives.py), so no ABI type of the call,
+        nested or not, contains bytes0. *)
+     abi_decode_bytes_widths env.type_defs ret_ty /\
+     EVERY (abi_decode_bytes_widths env.type_defs) arg_types /\
      LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
      expr_type (HD args) = BaseT AddressT /\
      (* positional arguments may be narrower than the declared types *)

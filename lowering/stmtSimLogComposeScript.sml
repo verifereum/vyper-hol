@@ -4,7 +4,7 @@ Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
   stmtSimLogArgsRun stmtSimLogArgsGrowth stmtSimLogSuffix stmtSimLogSource   exprSimWordArgs
   stmtSimLogSuffixActual stmtSimLogSuffixFrame stmtSimLogSuffixCode stmtSimLogArgs freshWrites
-  compileEnv stmtLowering fragExec loweringSlice exprLoweringProps emitHelperProps
+  compileEnv loweringStateRelDefs stmtLowering fragExec loweringSlice exprLoweringProps emitHelperProps
   vyperInterpreter vyperState vyperTyping list stmtSimLogTrace emitHelper context venomInst
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasSeq rich_list vyperEvalExprPreservesScopesDom

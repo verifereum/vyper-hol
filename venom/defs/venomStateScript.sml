@@ -35,7 +35,8 @@ Datatype:
     cc_callvalue : bytes32;        (* Value sent with call (CALLVALUE) *)
     cc_calldata : byte list;       (* Call data (CALLDATALOAD, etc.) *)
     cc_gas : num;                  (* Remaining gas (GAS) *)
-    cc_static : bool               (* Static mode (STATICCALL sets T, inherits) *)
+    cc_static : bool;              (* Static mode (STATICCALL sets T, inherits) *)
+    cc_created_in_tx : bool        (* EIP-6780: original executing account is empty *)
   |>
 End
 
@@ -123,7 +124,8 @@ Definition empty_call_context_def:
     cc_callvalue := 0w;
     cc_calldata := [];
     cc_gas := 0;
-    cc_static := F
+    cc_static := F;
+    cc_created_in_tx := F
   |>
 End
 
