@@ -20,7 +20,7 @@ Theorem abi_encode_word_observation_vv_post:
   origin.cs_next_id <= staged.cs_next_id /\
   abi_encode_staged_observation ctx func ce cx es' staged out mid
     (32+32*word_size (32+(case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual /\
-  wb_frame ce es origin s0 actual ==>
+  wb_frame ce es es' origin s0 actual ==>
   vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode F mid0) target [e])
     es origin final s0 es' (Value (BytesV (abi_encode_method_id_bytes mid0 ++ enc ct rv)))
     (LocatedValue (expr_type (TypeBuiltin ann (AbiEncode F mid0) target [e]))
@@ -81,6 +81,19 @@ Theorem abi_encode_word_counted_success:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_encode_word_staged_counted >> strip_tac >>
+  qpat_assum `expr_body_pre ce cx env e es`
+    (mp_then Any strip_assume_tac exprSimHypsTheory.expr_body_pre_physical_type) >>
+  `lowered_value_type ce e = expr_type e` by
+    (Cases_on `expr_type e` >> Cases_on `lowered_value_type ce e` >>
+     gvs[is_word_type_def, arg_type_fits_def] >>
+     Cases_on `b` >> Cases_on `b'` >>
+     gvs[is_word_type_def, arg_type_fits_def] >>
+     Cases_on `b` >> Cases_on `b''` >>
+     gvs[is_word_type_def, arg_type_fits_def]) >>
+  qpat_assum `evaluate_type _ (expr_type e) = SOME tv` mp_tac >>
+  qpat_assum `lowered_value_type ce e = expr_type e`
+    (fn th => once_rewrite_tac[GSYM th]) >>
+  disch_tac >>
   drule_all abi_encode_nonword_result_bound >> strip_tac >>
   `result = BytesV (abi_encode_method_id_bytes mid0 ++ enc ct rv)` by
     (qpat_assum `evaluate_type_builtin _ _ _ _ _ = _` mp_tac >>
