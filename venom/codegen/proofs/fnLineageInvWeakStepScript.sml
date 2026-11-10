@@ -224,7 +224,7 @@ Proof
   `LENGTH targets <= LENGTH qs.ps_stack` by
     (qpat_x_assum `stack_pop _ _ ++ _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
      simp[stackModelTheory.stack_pop_def, LENGTH_TAKE] >> decide_tac) >>
-  simp[fnPlanLineagePhiTemporalTheory.stack_pop_bottom_extension, APPEND_ASSOC] >>
+  simp[fnPlanLineageInventoryTheory.stack_pop_bottom_extension, APPEND_ASSOC] >>
   asm_rewrite_tac[]
 QED
 

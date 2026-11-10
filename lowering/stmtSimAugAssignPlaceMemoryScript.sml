@@ -1268,12 +1268,6 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
     (irule stmtSimDeclMemTheory.emit_void_nonterminator_open >>
      goal_assum (drule_at Any) >> simp[venomInstTheory.is_terminator_def]) >>
   drule aug_place_store_post >> disch_then assume_tac >>
-  `(bop = Eq \/ bop = NotEq) ==> !bs. v <> BytesV bs` by
-    (qpat_assum `word_value_type ty` mp_tac >>
-     qpat_assum `evaluate_type (get_tenv cx) ty = SOME ptv` mp_tac >>
-     qpat_assum `value_has_type ptv v` mp_tac >>
-     rpt (pop_assum kall_tac) >>
-     metis_tac[word_value_type_typed, word_value_not_bytes]) >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
@@ -1288,7 +1282,12 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
      conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
      asm_simp_tac std_ss [] >>
      conj_tac >- (qexistsl_tac [`entry'`, `old`] >> simp[]) >>
-     conj_tac >- (first_assum ACCEPT_TAC) >>
+     conj_tac >-
+       (qpat_assum `word_value_type ty` mp_tac >>
+        qpat_assum `evaluate_type (get_tenv cx) ty = SOME ptv` mp_tac >>
+        qpat_assum `value_has_type ptv v` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        metis_tac[word_value_type_typed, word_value_not_bytes]) >>
      conj_tac >- simp[gasContextTheory.gas_admissible_gas_obs] >>
      conj_tac >- (qexists_tac `env` >> simp[]) >>
      conj_tac >- simp[] >>
