@@ -374,10 +374,9 @@ QED
 
 Theorem ifexp_vv_post_of_expr_post_read[local]:
   expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s /\
-  read_result cx tv es' = (INL v, es') ==>
+  read_result cx tv es' = (INL v, es') /\ is_word_type (expr_type e) ==>
   vv_post ctx func cenv cx e es sa sb s0 es' tv
-    (if is_word_type (expr_type e) then StackValue (expr_type e) (Var rv)
-     else LocatedValue (expr_type e) (mk_ptr (Var rv) LocMemory)) s
+    (StackValue (expr_type e) (Var rv)) s
 Proof
   rw[expr_post_def, vv_post_def] >>
   gvs[vv_holds_def, vv_at_def, contextTheory.mk_ptr_def] >>
@@ -394,15 +393,17 @@ Theorem ifexp_finish_post[local]:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
-  sd.cs_next_id <= sb.cs_next_id ==>
+  sd.cs_next_id <= sb.cs_next_id /\ is_word_type t ==>
   vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
     (if is_word_type t then StackValue t (Var rv)
      else LocatedValue t (mk_ptr (Var rv) LocMemory))
     (jump_to xl (update_var rv w u with vs_inst_idx := k))
 Proof
   strip_tac >>
+  qpat_assum `is_word_type _` (fn th => rewrite_tac[th]) >>
   irule (SRULE [vyperASTTheory.expr_type_def]
     (Q.INST [`e` |-> `IfExp t c a b`] ifexp_vv_post_of_expr_post_read)) >>
+  goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >>
   irule expr_post_ifexp >>
   `~not_fresh_at sa rv` by metis_tac[] >>
@@ -984,7 +985,8 @@ Resume compile_ifexp_word_vv_sim_mem[route_after_unwrap]:
         (mp_then Any mp_tac ifexp_finish_post) >>
       disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
-      simp[] >> disch_then irule >> gvs[]) >>
+      qpat_assum `is_word_type _` (fn th => simp[th]) >>
+      disch_then irule >> gvs[]) >>
   `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
   `alloca_history func (update_var rv w u with
       vs_inst_idx := LENGTH sy.cs_current_insts)` by
