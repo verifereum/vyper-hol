@@ -248,6 +248,43 @@ Proof
   drule_all asm_sym_rel_pc >> simp[]
 QED
 
+Theorem sym_spill_free_prefix_frame_sim:
+  !ops initial_fmp p env cp fn ret srest ps ss ctx labs0 cs.
+  prefix_wf (SND (compute_label_offsets p)) (LENGTH ps.ps_stack) ops /\
+  prefix_spill_wf initial_fmp (SND (compute_label_offsets p)) ops ps /\
+  EVERY is_prefix_op ops /\
+  EVERY (\op. !l d. op <> SOPushOfst l d) ops /\
+  (!off. ~MEM (SOSpill off) ops) /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp ops) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp ops)) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cp fn ret srest labs0
+      (apply_prefix_ops initial_fmp (SND (compute_label_offsets p)) ops ps)
+      cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `asm_sym_rel p env cs ss` by fs[sym_frame_inv_def] >>
+  rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss` >>
+  `sym_kinds_ok cplan fn ret srest ps ss` by fs[sym_frame_inv_def] >>
+  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
+  `asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops)` by simp[] >>
+  `!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    F /\ context_spill_byte cplan b` by simp[] >>
+  drule_all (BETA_RULE (Q.INST [`R` |-> `\b:num. F`]
+    (SPEC_ALL sym_prefix_ops_sim))) >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  qexistsl_tac [`cs'`, `ss'`] >> simp[] >>
+  conj_tac >- (fs[sym_frame_inv_def] >> metis_tac[]) >>
+  drule_all asm_sym_rel_pc >> simp[]
+QED
+
 Theorem do_restore_symbolic_prefix_facts:
   !op ps ops ps' initial_fmp lo.
   do_restore op ps = (ops,ps') /\
