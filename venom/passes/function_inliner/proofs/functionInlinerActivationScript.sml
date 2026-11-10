@@ -689,3 +689,84 @@ Proof
     (simp[FUN_EQ_THM] >> gen_tac >> Cases >> simp[]) >>
   simp[]
 QED
+
+(* Value labels are absent at source and physical cuts.  Their syntactic
+   renaming is therefore independent of the control-label transport. *)
+Theorem inline_snapshot_eval_operand:
+  inline_snapshot_data a route snap frame /\
+  snap.ils_state.vs_labels = FEMPTY /\
+  frame.ipf_state.vs_labels = FEMPTY /\
+  (!v. op = Var v ==> v IN snap.ils_defined /\ v NOTIN snap.ils_opaque) ==>
+  eval_operand (inline_rename_operand route.ir_rename lab op) frame.ipf_state =
+  eval_operand op snap.ils_state
+Proof
+  Cases_on `op` >>
+  simp[inline_rename_operand_def, eval_operand_def,
+       inline_snapshot_data_def] >> metis_tac[]
+QED
+
+Theorem inline_snapshot_eval_operands:
+  !ops.
+  inline_snapshot_data a route snap frame /\
+  snap.ils_state.vs_labels = FEMPTY /\
+  frame.ipf_state.vs_labels = FEMPTY /\
+  EVERY (\op. !v. op = Var v ==>
+    v IN snap.ils_defined /\ v NOTIN snap.ils_opaque) ops ==>
+  eval_operands (MAP (inline_rename_operand route.ir_rename lab) ops)
+    frame.ipf_state = eval_operands ops snap.ils_state
+Proof
+  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
+  `eval_operand (inline_rename_operand route.ir_rename lab h) frame.ipf_state =
+   eval_operand h snap.ils_state` by
+    (irule inline_snapshot_eval_operand >> metis_tac[]) >>
+  simp[] >> first_x_assum irule >> simp[]
+QED
+
+Theorem inline_snapshot_eval_two_clones:
+  inline_snapshot_data a route snap frame /\
+  route.ir_rename = (\x. STRCAT outer (STRCAT inner x)) /\
+  snap.ils_state.vs_labels = FEMPTY /\
+  frame.ipf_state.vs_labels = FEMPTY /\
+  EVERY (\op. !v. op = Var v ==>
+    v IN snap.ils_defined /\ v NOTIN snap.ils_opaque) ops ==>
+  eval_operands
+    (MAP (clone_operand outer outer_labels)
+      (MAP (clone_operand inner inner_labels) ops)) frame.ipf_state =
+  eval_operands ops snap.ils_state
+Proof
+  strip_tac >>
+  `MAP (clone_operand outer outer_labels)
+     (MAP (clone_operand inner inner_labels) ops) =
+   MAP (inline_rename_operand route.ir_rename
+     ((\l. if MEM l outer_labels then STRCAT outer l else l) o
+      (\l. if MEM l inner_labels then STRCAT inner l else l))) ops` by
+    (simp[MAP_MAP_o] >> irule MAP_CONG >> simp[] >>
+     gen_tac >> Cases_on `x` >>
+     simp[clone_operand_inline_rename, inline_rename_operand_def,
+          combinTheory.o_DEF]) >>
+  qpat_x_assum `MAP _ (MAP _ _) = _` (fn th => pure_rewrite_tac[th]) >>
+  irule inline_snapshot_eval_operands >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_setup_callee_empty_labels:
+  setup_callee fn args s = SOME t /\ s.vs_labels = FEMPTY ==>
+  t.vs_labels = FEMPTY
+Proof
+  simp[setup_callee_def] >> IF_CASES_TAC >> simp[] >>
+  strip_tac >> gvs[]
+QED
+
+(* Reuse bookkeeping preservation for OK step/block/PHI and adapter cuts:
+   inline_caller_bookkeeping_step, _exec_block, _run_block, _phis, _bind,
+   and _updates already preserve the label projection.  In particular the
+   physical environment is empty whenever its immutable anchor is empty.
+   For original OK run_blocks results, the general boundary is
+   venomExecPropsTheory.run_blocks_preserves_labels; no new evaluator
+   preservation induction is needed here. *)
+Theorem inline_snapshot_anchor_empty_labels:
+  inline_snapshot_data a route snap frame /\
+  frame.ipf_anchor.vs_labels = FEMPTY ==>
+  frame.ipf_state.vs_labels = FEMPTY
+Proof
+  simp[inline_snapshot_data_def, inline_caller_bookkeeping_def]
+QED
