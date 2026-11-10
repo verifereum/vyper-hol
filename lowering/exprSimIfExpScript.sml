@@ -1263,11 +1263,9 @@ Proof
      irule locals_kept_mem_tail >> qexists_tac `tt` >>
      simp[jump_to_def] >> first_assum ACCEPT_TAC) >>
   (* the pure frame: kept by c, then by the arm *)
-  `~expr_has_effect (IfExp t c ea eb) ==> pure_frame cenv func es sa s0 ss` by
+  `~expr_has_effect c /\ ~expr_has_effect ea /\ ~expr_has_effect eb ==>
+   pure_frame cenv func es sa s0 ss` by
     (strip_tac >>
-     qpat_assum `~expr_has_effect (IfExp _ _ _ _)`
-       (strip_assume_tac o
-        REWRITE_RULE [loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM]) >>
      `~expr_has_effect e` by
        (qpat_x_assum `_ ==> ~expr_has_effect e` irule >> simp[]) >>
      `pure_frame cenv func es sa s0 tt` by
