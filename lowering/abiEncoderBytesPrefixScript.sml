@@ -86,21 +86,27 @@ QED
 
 Theorem abi_encode_bytes_suffix_sequence:
   abi_encode_bytes_suffix len st = (out,st') /\ eval_operand len s = SOME (n2w cnt) /\
+  abi_decoder_operand_live st.cs_next_var len /\
   cnt+31 < dimword (:256) /\ st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
   ?actual. eval_operand out actual = SOME (n2w (32+contractABI$ceil32 cnt)) /\
     abi_builtin_prefix st st' limit_st s actual
 Proof
   simp_tac bool_ss [abi_encode_bytes_suffix_def, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
-  rename1 `abi_encode_round len st = (rounded,c1)` >>
-  rename1 `emit_op ADD [Lit 32w;rounded] c1 = (out,ready)` >>
-  drule abi_encode_round_shape >> strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
-  `c1.cs_next_var <= limit_st.cs_next_var /\ st.cs_next_var <= c1.cs_next_var` by decide_tac >>
-  drule_all abi_encode_round_sequence >> strip_tac >>
+  rename1 `abi_encode_ceil32 len st = (rounded,c1)` >>
+  rename1 `emit_op ADD [rounded;Lit 32w] c1 = (out,ready)` >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `c1.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  `st.cs_next_var <= c1.cs_next_var` by
+    (qpat_x_assum `abi_encode_ceil32 _ _ = _` mp_tac >>
+     simp[abi_encode_ceil32_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
+     strip_tac >> gvs[]) >>
+  drule_all abi_encode_ceil32_sequence >> strip_tac >>
   rename1 `abi_builtin_prefix st c1 limit_st s prepared` >>
   `fresh_vars_wrt limit_st prepared` by fs[abi_builtin_prefix_def] >>
-  mp_tac (Q.INST [`lhs` |-> `Lit 32w`, `rhs` |-> `rounded`, `a` |-> `32w:bytes32`,
-    `b` |-> `n2w (contractABI$ceil32 cnt):bytes32`, `st` |-> `c1`, `st'` |-> `ready`,
+  mp_tac (Q.INST [`lhs` |-> `rounded`, `rhs` |-> `Lit 32w`, `b` |-> `32w:bytes32`,
+    `a` |-> `n2w (contractABI$ceil32 cnt):bytes32`, `st` |-> `c1`, `st'` |-> `ready`,
     `s` |-> `prepared:venom_state`] abi_builtin_emit_add) >>
   impl_tac >- asm_simp_tac (srw_ss()) [eval_operand_def] >> strip_tac >>
   rename1 `abi_builtin_prefix c1 ready limit_st prepared actual` >>

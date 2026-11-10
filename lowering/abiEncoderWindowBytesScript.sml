@@ -29,16 +29,80 @@ Proof
   metis_tac[window_pure_seq_chain]
 QED
 
+Theorem window_emit_not_pure[local]:
+  emit_op NOT [arg] st = (out,st') /\ eval_operand arg s = SOME a ==>
+  ?t. window_pure_seq st st' s t /\ eval_operand out t = SOME (word_1comp a) /\
+    (!x. out = Var x ==> not_fresh_at st' x)
+Proof
+  strip_tac >>
+  `run_inst_seq (emitted_insts st st') s =
+    OK (update_var (STRING #"%" (toString st.cs_next_var)) (word_1comp a) s)` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     drule step_NOT >> simp[run_inst_seq_def]) >>
+  qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) (word_1comp a) s` >>
+  irule window_emit_register_pure >> (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`[arg]`, `NOT`] >> simp[is_terminator_def]
+QED
+
+(* The NOT writes the next fresh name before the ADD reads len, so len must
+   already be allocated. *)
+Theorem window_ceil32_sequence:
+  abi_encode_ceil32 len st = (out,st') /\
+  eval_operand len s = SOME (n2w cnt) /\
+  (!x. len = Var x ==> not_fresh_at st x) /\ cnt + 31 < dimword (:256) ==>
+  ?t. window_pure_seq st st' s t /\
+    eval_operand out t = SOME (n2w (contractABI$ceil32 cnt)) /\
+    (!x. out = Var x ==> not_fresh_at st' x)
+Proof
+  simp_tac bool_ss [abi_encode_ceil32_def, comp_bind_def, LET_THM] >>
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  rename1 `emit_op NOT [Lit 31w] st = (mask,c1)` >>
+  rename1 `emit_op ADD [len;Lit 31w] c1 = (arg,c2)` >>
+  mp_tac (Q.INST [`arg` |-> `Lit 31w`, `out` |-> `mask`, `st'` |-> `c1`,
+    `a` |-> `31w:bytes32`] window_emit_not_pure) >>
+  impl_tac >- asm_simp_tac (srw_ss()) [eval_operand_def] >> strip_tac >>
+  rename1 `window_pure_seq st c1 s s1` >>
+  `eval_operand len s1 = SOME (n2w cnt)` by
+    metis_tac[window_seq_eval, window_pure_seq_def] >>
+  mp_tac (Q.INST [`lhs` |-> `len`, `rhs` |-> `Lit 31w`, `out` |-> `arg`, `st` |-> `c1`,
+    `st'` |-> `c2`, `s` |-> `s1:venom_state`, `a` |-> `n2w cnt:bytes32`,
+    `b` |-> `31w:bytes32`] window_emit_add_pure) >>
+  impl_tac >- asm_simp_tac (srw_ss()) [eval_operand_def] >> strip_tac >>
+  rename1 `window_pure_seq c1 c2 s1 s2` >>
+  `eval_operand mask s2 = SOME (word_1comp 31w)` by
+    metis_tac[window_seq_eval, window_pure_seq_def] >>
+  mp_tac (Q.INST [`lhs` |-> `arg`, `rhs` |-> `mask`, `st` |-> `c2`,
+    `s` |-> `s2:venom_state`, `a` |-> `n2w cnt + 31w:bytes32`,
+    `b` |-> `word_1comp (31w:bytes32)`] window_emit_and_pure) >>
+  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
+  rename1 `window_pure_seq c2 st' s2 actual` >>
+  `(n2w cnt + 31w:bytes32) && word_1comp 31w = n2w (contractABI$ceil32 cnt)` by
+    (`word_1comp (31w:bytes32) =
+      0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w` by
+       simp_tac std_ss [word_1comp_n2w, dimword_def, venomMemPropsTheory.dimindex_256] >>
+     asm_rewrite_tac [] >> ONCE_REWRITE_TAC [WORD_AND_COMM] >>
+     ONCE_REWRITE_TAC [WORD_ADD_COMM] >> irule abi_encoder_round_ceil32 >>
+     asm_simp_tac (srw_ss()) []) >>
+  qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
+  qpat_x_assum `window_pure_seq st c1 s s1` (fn a =>
+    qpat_x_assum `window_pure_seq c1 c2 s1 s2` (fn b =>
+      assume_tac (MATCH_MP window_pure_seq_chain (CONJ a b)))) >>
+  qpat_x_assum `window_pure_seq st c2 s s2` (fn a =>
+    qpat_x_assum `window_pure_seq c2 st' s2 actual` (fn b =>
+      ACCEPT_TAC (MATCH_MP window_pure_seq_chain (CONJ a b))))
+QED
+
 Theorem window_bytes_suffix_sequence:
   abi_encode_bytes_suffix len st = (out,st') /\
-  eval_operand len s = SOME (n2w cnt) /\ cnt + 31 < dimword (:256) ==>
+  eval_operand len s = SOME (n2w cnt) /\
+  (!x. len = Var x ==> not_fresh_at st x) /\ cnt + 31 < dimword (:256) ==>
   ?t. window_pure_seq st st' s t /\
     eval_operand out t = SOME (n2w (32 + contractABI$ceil32 cnt)) /\
     (!x. out = Var x ==> not_fresh_at st' x)
 Proof
   simp_tac bool_ss [abi_encode_bytes_suffix_def, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
-  drule_all window_round_sequence >> strip_tac >>
+  drule_all window_ceil32_sequence >> strip_tac >>
   drule window_emit_add_pure >>
   disch_then (qspec_then `t` mp_tac) >>
   simp[eval_operand_def, word_add_n2w] >> strip_tac >>

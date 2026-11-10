@@ -2,5 +2,6 @@
 Theory evalCompilerExternalCalls
 Ancestors
   evalCompilerExternalCallSelectors
+  evalCompilerExternalCallReturns
   evalCompilerExternalCallDefaults
   evalCompilerExternalCallKwargs

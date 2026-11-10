@@ -158,11 +158,12 @@ Definition compile_revert_with_reason_def:
           let tuple_buf = tuple_alloc.buf_operand in
           do msg_op <- unwrap_value cenv msg_vv;
              msg_copy_len <- emit_op MLOAD [msg_op];
+             (* ceil32: and(add(len, 31), not 31) *)
+             msg_copy_mask <- emit_op NOT [Lit 31w];
              msg_copy_rounded0 <- emit_op ADD [msg_copy_len; Lit 31w];
              msg_copy_rounded <- emit_op AND
-               [msg_copy_rounded0;
-                Lit (0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w : bytes32)];
-             msg_copy_size <- emit_op ADD [Lit 32w; msg_copy_rounded];
+               [msg_copy_rounded0; msg_copy_mask];
+             msg_copy_size <- emit_op ADD [msg_copy_rounded; Lit 32w];
              emit_void MCOPY [tuple_buf; msg_op; msg_copy_size];
              size_alloc <- compile_alloc_buffer 32;
              let size_ref = size_alloc.buf_operand in
@@ -180,11 +181,10 @@ Definition compile_revert_with_reason_def:
                 emit_void MSTORE [tail_end; Lit 0w];
                 copy_len <- emit_op ADD [Lit 32w; msg_len];
                 emit_void MCOPY [tail_ptr; src_ptr; copy_len];
+                mask <- emit_op NOT [Lit 31w];
                 rounded1 <- emit_op ADD [msg_len; Lit 31w];
-                rounded2 <- emit_op AND
-                  [rounded1;
-                   Lit (0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w : bytes32)];
-                encoded_item_len <- emit_op ADD [Lit 32w; rounded2];
+                rounded2 <- emit_op AND [rounded1; mask];
+                encoded_item_len <- emit_op ADD [rounded2; Lit 32w];
                 emit_void MSTORE [head_ptr; dynamic_offset];
                 new_size <- emit_op ADD [dynamic_offset; encoded_item_len];
                 emit_void MSTORE [size_ref; new_size];
