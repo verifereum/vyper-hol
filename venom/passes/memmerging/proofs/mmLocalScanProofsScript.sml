@@ -10449,6 +10449,153 @@ Proof
   metis_tac[]
 QED
 
+Theorem mm_local_ancestor_hazard_geometry[local]:
+  mm_local_copy_ancestor c A /\ ~copy_overwrites A (copy_src_interval h) /\
+  (~copy_overwrites A (copy_dst_interval h) \/ copy_can_merge A h \/ copy_can_merge h A) ==>
+  ~copy_overwrites c (copy_src_interval h) /\
+  (~copy_overwrites c (copy_dst_interval h) \/
+   c.cg_src + h.cg_dst = c.cg_dst + h.cg_src)
+Proof
+  simp[mm_local_copy_ancestor_def, copy_can_merge_def,
+    copy_overwrites_def, copy_src_interval_def, copy_dst_interval_def,
+    mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
+    mmIntervalTheory.interval_end_def, arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
+  rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+Theorem mm_local_overlap_chronology[local]:
+  p = read_memory c.cg_src c.cg_length s /\
+  q = read_memory h.cg_src h.cg_length v /\
+  u.vs_memory = (write_memory_with_expansion c.cg_dst p s).vs_memory /\
+  read_memory c.cg_src c.cg_length u = read_memory c.cg_src c.cg_length v /\
+  ~copy_overwrites c (copy_src_interval h) /\
+  (~copy_overwrites c (copy_dst_interval h) \/
+    c.cg_src + h.cg_dst = c.cg_dst + h.cg_src) ==>
+  mm_local_write_compatible c.cg_dst p h.cg_dst q
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `read_memory h.cg_src h.cg_length u = read_memory h.cg_src h.cg_length s` by
+    (irule mm_local_read_write_log_memory >> qexists `[(c.cg_dst,p)]` >>
+     simp[] >>
+     gvs[copy_overwrites_def, copy_src_interval_def, copy_dst_interval_def,
+       mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
+       mmIntervalTheory.interval_end_def, mm_local_read_memory_bytes,
+       mm_local_bytes_def, arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
+     decide_tac) >>
+  qpat_x_assum `_ \/ _` strip_assume_tac
+  >- (gvs[copy_overwrites_def, copy_dst_interval_def,
+       mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
+       mmIntervalTheory.interval_end_def, mm_local_read_memory_bytes,
+       mm_local_bytes_def, arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF,
+       mm_local_write_compatible_def] >> rpt strip_tac >> gvs[] >> decide_tac) >>
+  qpat_x_assum `u.vs_memory = _` kall_tac >>
+  gvs[mm_local_read_memory_bytes, mm_local_bytes_def, GENLIST_FUN_EQ] >>
+  pure_rewrite_tac[mm_local_write_compatible_def, LENGTH_GENLIST] >> rpt strip_tac >>
+  `x-c.cg_dst < c.cg_length /\ x-h.cg_dst < h.cg_length /\
+   (x-c.cg_dst)+c.cg_src = (x-h.cg_dst)+h.cg_src` by decide_tac >>
+  qpat_x_assum `!i. i < c.cg_length ==> _` (qspec_then `x-c.cg_dst` mp_tac) >>
+  qpat_x_assum `!i. i < h.cg_length ==> _` (qspec_then `x-h.cg_dst` mp_tac) >>
+  asm_simp_tac bool_ss [EL_GENLIST] >> metis_tac[]
+QED
+
+Theorem mm_local_indexed_bulk_hazard_geometry[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < l /\ l <= r /\ r < LENGTH is /\
+  (EL j is).inst_opcode = MCOPY /\
+  (EL j is).inst_operands = [Lit dj; Lit sj; Lit lj] /\
+  (EL l is).inst_opcode = MCOPY /\
+  (EL l is).inst_operands = [Lit dl; Lit sl; Lit ll] /\
+  c = <|cg_dst := w2n dj; cg_src := w2n sj; cg_length := w2n lj;
+         cg_inst_ids := [(EL j is).inst_id]|> /\
+  h = <|cg_dst := w2n dl; cg_src := w2n sl; cg_length := w2n ll;
+         cg_inst_ids := [(EL l is).inst_id]|> /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  ~copy_overwrites c (copy_src_interval h) /\
+  (~copy_overwrites c (copy_dst_interval h) \/ c.cg_src + h.cg_dst = c.cg_dst + h.cg_src)
+Proof
+  strip_tac >>
+  qabbrev_tac `ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+                    empty_scan_state (TAKE l is)` >>
+  `?A. MEM A ss.ss_copies /\ MEM (EL j is).inst_id A.cg_inst_ids /\
+      mm_local_copy_ancestor c A /\ mm_local_copy_ancestor A g` by
+    (irule mm_local_indexed_bulk_ancestry >> simp[Abbr `ss`] >> metis_tac[]) >>
+  qabbrev_tac `hs = flush_hazards Mem2Mem
+     (invalidate_loads ss (mk_interval h.cg_dst h.cg_length)) h` >>
+  `(scan_inst (dfg_build_function fn0) Mem2Mem ss (EL l is)).ss_flushed = hs.ss_flushed` by
+    gvs[Abbr `hs`, scan_inst_def, scan_bulk_copy_def, mode_load_opcode_def,
+        mode_copy_opcode_def, operand_lit_val_def, mode_allows_overlap_def] >>
+  `MEM A hs.ss_copies /\ ~copy_overwrites A (copy_src_interval h)` by
+    (`l < LENGTH is` by decide_tac >>
+     `(EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by simp[] >>
+     `ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE l is)` by
+       simp[Abbr `ss`] >>
+     `hs = flush_hazards Mem2Mem (invalidate_loads ss (mk_interval h.cg_dst h.cg_length)) h` by
+       simp[Abbr `hs`] >>
+     metis_tac[mm_local_indexed_future_hazard]) >>
+  `~copy_overwrites A (copy_dst_interval h) \/ copy_can_merge A h \/ copy_can_merge h A` by
+    (fs[Abbr `hs`] >> drule mm_local_hazards_destination_alternative >>
+     simp[copy_overwrites_def, copy_dst_interval_def,
+       mmIntervalTheory.interval_overlaps_def, arithmeticTheory.MAX_COMM,
+       arithmeticTheory.MIN_COMM] >> metis_tac[]) >>
+  metis_tac[mm_local_ancestor_hazard_geometry]
+QED
+
+Theorem mm_local_indexed_bulk_capture_compatible[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < l /\ l <= r /\ r < LENGTH is /\
+  l < N /\ mm_local_history is H N /\
+  (EL j is).inst_opcode = MCOPY /\
+  (EL j is).inst_operands = [Lit dj; Lit sj; Lit lj] /\
+  (EL l is).inst_opcode = MCOPY /\
+  (EL l is).inst_operands = [Lit dl; Lit sl; Lit ll] /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  mm_local_write_compatible (w2n dj) (read_memory (w2n sj) (w2n lj) (H j))
+    (w2n dl) (read_memory (w2n sl) (w2n ll) (H l))
+Proof
+  strip_tac >>
+  qabbrev_tac `c = <|cg_dst := w2n dj; cg_src := w2n sj; cg_length := w2n lj;
+                    cg_inst_ids := [(EL j is).inst_id]|>` >>
+  qabbrev_tac `h = <|cg_dst := w2n dl; cg_src := w2n sl; cg_length := w2n ll;
+                    cg_inst_ids := [(EL l is).inst_id]|>` >>
+  `~copy_overwrites c (copy_src_interval h) /\
+   (~copy_overwrites c (copy_dst_interval h) \/ c.cg_src + h.cg_dst = c.cg_dst + h.cg_src)` by
+    (irule mm_local_indexed_bulk_hazard_geometry >>
+     simp[Abbr `c`, Abbr `h`] >> metis_tac[]) >>
+  qabbrev_tac `cuts = \q. FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+                    empty_scan_state (TAKE q is)` >>
+  `!q. SUC j <= q /\ q < l ==>
+    ?A. MEM A (cuts q).ss_copies /\ mm_local_copy_ancestor c A /\
+        ~MEM A (scan_inst (dfg_build_function fn0) Mem2Mem (cuts q) (EL q is)).ss_flushed` by
+    (rpt strip_tac >> `q < r` by decide_tac >>
+     `cuts q = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+                  empty_scan_state (TAKE q is)` by simp[Abbr `cuts`] >>
+     `c = <|cg_dst := w2n dj; cg_src := w2n sj; cg_length := w2n lj;
+            cg_inst_ids := [(EL j is).inst_id]|>` by simp[Abbr `c`] >>
+     drule_all mm_local_indexed_bulk_trajectory >> simp[]) >>
+  `SUC j <= l /\ l <= N /\ j < N` by decide_tac >>
+  `read_memory c.cg_src c.cg_length (H l) =
+    read_memory c.cg_src c.cg_length (H (SUC j))` by
+    (drule_all mm_local_ancestral_interval_read >> simp[]) >>
+  `mm_local_write_capture is H N j =
+    SOME (w2n dj,read_memory (w2n sj) (w2n lj) (H j))` by
+    (irule (cj 1 mm_local_write_capture_copy) >> simp[]) >>
+  drule_all mm_local_write_capture_sound >> strip_tac >>
+  `mm_local_write_compatible c.cg_dst (read_memory c.cg_src c.cg_length (H j))
+     h.cg_dst (read_memory h.cg_src h.cg_length (H l))` by
+    (irule mm_local_overlap_chronology >>
+     simp[] >> qexistsl [`H j`, `H (SUC j)`, `H l`] >>
+     simp[Abbr `c`] >> metis_tac[]) >>
+  gvs[Abbr `c`, Abbr `h`]
+QED
+
 Theorem mm_local_collection_discharge[local]:
   mm_local_pending cap js s t /\
   (!pre j mid k post d bs a cs.
