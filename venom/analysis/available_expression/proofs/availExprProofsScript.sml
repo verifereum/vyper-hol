@@ -226,7 +226,9 @@ Theorem expr_leq_trans[local]:
   (∀x y z. expr_leq x y ∧ expr_leq y z ⇒ expr_leq x z) ∧
   (∀l1 l2 l3. expr_list_leq l1 l2 ∧ expr_list_leq l2 l3 ⇒ expr_list_leq l1 l3)
 Proof
-  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops avail_expr_induction) >>
+  ho_match_mp_tac
+    (legacyInduction.mutual_ind_from_ops
+       (TypeBase.set_induction_of ``:avail_expr``)) >>
   rpt conj_tac >| [
     (* ExprVar *)
     Cases_on `y` >> Cases_on `z` >> simp[expr_leq_def] >>
