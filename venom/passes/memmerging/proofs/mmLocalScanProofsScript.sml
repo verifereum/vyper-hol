@@ -9629,6 +9629,88 @@ Proof
   simp[] >> drule_all mm_local_ancestral_interval_read >> simp[]
 QED
 
+Theorem mm_local_indexed_pending_ancestor[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ n <= r /\ r < LENGTH is /\ j < LENGTH is /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  MEM h (ss.ss_copies ++ ss.ss_flushed) /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  MEM h ss.ss_copies /\ mm_local_copy_ancestor h g
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    (qpat_assum `is = _` SUBST1_TAC >>
+     drule_all mm_local_prefix_wf_id_distinct >> simp[]) >>
+  `~MEM (EL r is).inst_id (MAP (\i. i.inst_id) (TAKE n is))` by
+    (irule mm_local_future_id_not_prefix >> simp[]) >>
+  `bb.bb_instructions = TAKE n is ++ DROP n is` by simp[] >>
+  `MEM (EL j is) bb.bb_instructions` by metis_tac[EL_MEM] >>
+  `rep_of_group bb.bb_instructions g = SOME ((EL r is).inst_id,g)` by metis_tac[] >>
+  drule_all mm_local_prefix_write_pending_ancestor >> simp[]
+QED
+
+Theorem mm_local_indexed_bulk_ancestry[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < q /\ q <= r /\ r < LENGTH is /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE q is) /\
+  (EL j is).inst_opcode = MCOPY /\
+  (EL j is).inst_operands = [Lit dst; Lit src; Lit len] /\
+  c = <|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+         cg_inst_ids := [(EL j is).inst_id]|> /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  ?h. MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+      mm_local_copy_ancestor c h /\ mm_local_copy_ancestor h g
+Proof
+  strip_tac >> drule_all mm_local_indexed_bulk_owner >> strip_tac >>
+  `MEM h ss.ss_copies /\ mm_local_copy_ancestor h g` by
+    (`MEM h (ss.ss_copies ++ ss.ss_flushed)` by simp[MEM_APPEND] >>
+     `j < LENGTH is` by decide_tac >>
+     `(EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by simp[] >>
+     drule_all mm_local_indexed_pending_ancestor >> simp[]) >>
+  qexists `h` >> gvs[]
+QED
+
+Theorem mm_local_indexed_store_ancestry[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < q /\ q <= r /\ r < LENGTH is /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE q is) /\
+  (EL j is).inst_opcode = MSTORE /\
+  (EL j is).inst_operands = [Lit dst; Var v] /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  FLOOKUP s0.ss_loads v = SOME src /\
+  c = <|cg_dst := w2n dst; cg_src := src; cg_length := 32;
+         cg_inst_ids := [(EL j is).inst_id] ++
+           (case dfg_get_def (dfg_build_function fn0) v of NONE => [] | SOME li => [li.inst_id])|> /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  ?h. MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+      mm_local_copy_ancestor c h /\ mm_local_copy_ancestor h g
+Proof
+  strip_tac >>
+  `?h. MEM h (ss.ss_copies ++ ss.ss_flushed) /\ mm_local_copy_ancestor c h` by
+    (irule mm_local_store_cut_fragment >>
+     goal_assum (drule_at Any) >> simp[] >> qexists `q` >> gvs[] >> decide_tac) >>
+  `MEM (EL j is).inst_id h.cg_inst_ids` by
+    (gvs[mm_local_copy_ancestor_def] >> metis_tac[MEM_APPEND, MEM]) >>
+  `MEM h ss.ss_copies /\ mm_local_copy_ancestor h g` by
+    (`j < LENGTH is` by decide_tac >>
+     `(EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by simp[] >>
+     drule_all mm_local_indexed_pending_ancestor >> simp[]) >>
+  qexists `h` >> gvs[]
+QED
+
 Theorem mm_local_collection_discharge[local]:
   mm_local_pending cap js s t /\
   (!pre j mid k post d bs a cs.
