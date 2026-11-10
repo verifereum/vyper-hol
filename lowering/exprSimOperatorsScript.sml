@@ -867,8 +867,9 @@ Theorem compile_ifexp_aggregate_case:
     ~is_word_type t /\
     (~nocalls ==>
      !e. (e = a \/ e = b) ==>
-         int_calls_expr e = [] \/
-         same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+         (int_calls_expr e = [] \/
+          same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+         post_value_type cenv e = expr_type e) /\
     expr_sim_case nocalls ctx func cenv cx c /\
     expr_vv_case nocalls ctx func cenv cx c /\
     ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
@@ -884,13 +885,20 @@ Proof
   drule int_calls_ifexp_operands >> strip_tac >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `t`, `c`, `a`, `b`, `es`]
     mp_tac compile_ifexp_vv_sim >>
+  `!e. (e = a \/ e = b) ==> post_value_type cenv e = expr_type e` by
+    (rpt strip_tac >> Cases_on `nocalls` >> gvs[] >>
+     metis_tac[post_value_type_no_calls]) >>
+  pop_assum (fn th => disch_then (mp_tac o REWRITE_RULE [EQT_INTRO th])) >>
   impl_tac
   >- (simp[] >> rpt conj_tac
-      >- (rpt gen_tac >> disch_tac >> irule ifexp_body_pre_lowered_type_compatible >>
-          conj_tac >- (Cases_on `nocalls` >> metis_tac[]) >>
-          qexistsl_tac [`cx`, `env`, `es`] >>
-          `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
-          metis_tac[])
+      >- (rpt gen_tac >> disch_tac >>
+          `expr_body_pre cenv cx env e es` by
+            (`expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
+             metis_tac[]) >>
+          qpat_assum `expr_body_pre _ _ _ e _`
+            (mp_then Any mp_tac ifexp_body_pre_lowered_type_compatible) >>
+          impl_tac >- (Cases_on `nocalls` >> metis_tac[]) >>
+          rpt strip_tac >> simp[])
       >- (rpt gen_tac >> disch_tac >>
           qspecl_then [`cenv`, `cx`, `env`, `IfExp t c a b`]
             mp_tac expr_body_pre_copy_ok >>
@@ -928,8 +936,9 @@ Theorem compile_ifexp_case:
   !nocalls ctx func cenv cx t c a b.
     (~nocalls ==>
      !e. (e = a \/ e = b) ==>
-         int_calls_expr e = [] \/
-         same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+         (int_calls_expr e = [] \/
+          same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+         post_value_type cenv e = expr_type e) /\
     expr_sim_case nocalls ctx func cenv cx c /\
     expr_vv_case nocalls ctx func cenv cx c /\
     ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>

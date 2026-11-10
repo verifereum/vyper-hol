@@ -246,6 +246,8 @@ Proof
   strip_tac >> gvs[] >>
   qpat_assum `lineage_entry _ _ _ _ _ _ _ _`
     (strip_assume_tac o PURE_REWRITE_RULE [lineage_entry_def]) >>
+  rpt (qpat_x_assum `_.ps_stack = _ ++ core` kall_tac) >>
+  qpat_x_assum `!v. _ ==> ~MEM (Var v) prefixL /\ _` kall_tac >>
   rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
   `wf_function fn` by gvs[codegen_ready_fn_def] >>
   `pb.bb_label = pred` by metis_tac[venomExecProofsTheory.lookup_block_label] >>
@@ -700,6 +702,8 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   qpat_assum `lineage_entry _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [lineage_entry_def]) >>
+  rpt (qpat_x_assum `_.ps_stack = _ ++ core` kall_tac) >>
+  qpat_x_assum `!v. _ ==> ~MEM (Var v) prefixL /\ _` kall_tac >>
   rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
   drule_all (SRULE [] fnLineageInvTheory.lineage_entry_inventory) >>
   strip_tac >>
