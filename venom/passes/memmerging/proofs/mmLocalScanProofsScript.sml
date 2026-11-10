@@ -11234,6 +11234,158 @@ Proof
   gvs[] >> decide_tac
 QED
 
+Theorem mm_local_selective_segment_replay[local]:
+  b <= j /\ j <= r /\
+  (!q. b <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case cap q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory) /\
+  (!q d bs. b <= q /\ q < j /\ P q /\ cap q = SOME (d,bs) ==>
+    a+n <= d \/ d+LENGTH bs <= a \/ n = 0 \/ bs = []) /\
+  (!q d bs. j <= q /\ q < r /\ ~P q /\ cap q = SOME (d,bs) ==>
+    a+n <= d \/ d+LENGTH bs <= a \/ n = 0 \/ bs = []) /\
+  t = FOLDL (\st q. if P q then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H b) (MAP (\q. b+q) (COUNT_LIST (r-b))) ==>
+  read_memory a n t = read_memory a n (H j)
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`H` |-> `\q. H (b+q)`, `cap` |-> `\q. cap (b+q)`,
+    `P` |-> `\q. P (b+q)`, `j` |-> `j-b`, `r` |-> `r-b`, `t0` |-> `H b`]
+    (SPEC_ALL mm_local_selective_replay)) >>
+  simp[GSYM rich_listTheory.FOLDL_MAP] >>
+  impl_tac
+  >- (conj_tac
+      >- (rpt strip_tac >> simp[arithmeticTheory.ADD_CLAUSES] >>
+          first_x_assum irule >> decide_tac) >>
+      conj_tac
+      >- (rpt strip_tac >>
+          qpat_x_assum `!q d bs. b <= q /\ _ ==> _` (qspec_then `b+q` mp_tac) >>
+          `b+q < j` by decide_tac >> simp[]) >>
+      conj_tac
+      >- (rpt strip_tac >>
+          qpat_x_assum `!q d bs. j <= q /\ _ ==> _` (qspec_then `b+q` mp_tac) >>
+          `b+q < r` by decide_tac >> simp[]) >>
+      simp[rich_listTheory.FOLDL_MAP]) >> simp[rich_listTheory.FOLDL_MAP]
+QED
+
+Theorem mm_local_live_segment_capture_recurrence[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ r < LENGTH is /\ r < N /\
+  mm_local_history is H N /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM b (mm_local_pending_indices is gs r) /\ b <= q /\ q < r ==>
+  (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H N q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory
+Proof
+  strip_tac >> Cases_on `mm_local_write_capture is H N q`
+  >- (simp[] >>
+      `r <= LENGTH is /\ r <= N` by decide_tac >>
+      Cases_on `b = q`
+      >- (mp_tac (Q.INST [`n` |-> `r`, `j` |-> `b`, `ss` |->
+             `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE r is)`]
+             (SPEC_ALL mm_local_canonical_pending_owner)) >>
+          simp[] >> gvs[]) >>
+      `MEM b (mm_local_pending_indices is gs q)` by
+        (pure_rewrite_tac[mm_local_pending_indices_mem] >>
+         qpat_assum `MEM b (mm_local_pending_indices _ _ r)`
+           (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+         conj_tac >- decide_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+         goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
+      qabbrev_tac `ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+        empty_scan_state (TAKE q is)` >>
+      `q <= LENGTH is /\ q <= N` by decide_tac >>
+      `?h d bs. MEM h ss.ss_copies /\ MEM (EL b is).inst_id h.cg_inst_ids /\
+        mm_local_write_capture is H N b = SOME (d,bs) /\
+        h.cg_dst <= d /\ d+LENGTH bs <= h.cg_dst+h.cg_length` by
+        (metis_tac[mm_local_canonical_pending_owner]) >>
+      `~MEM h (scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is)).ss_flushed` by
+        (qpat_x_assum `MEM b (mm_local_pending_indices _ _ r)`
+           (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+         `b < LENGTH is` by decide_tac >>
+         `scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is) =
+          FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+            empty_scan_state (TAKE (SUC q) is)` by
+           (`q < LENGTH is` by decide_tac >>
+            gvs[Abbr `ss`, rich_listTheory.TAKE_SUC,
+              rich_listTheory.DROP_EL_CONS, FOLDL_APPEND]) >>
+         rename1 `rep_of_group is g = SOME ((EL owner_r is).inst_id,g)` >>
+         `SUC q <= owner_r` by decide_tac >>
+         metis_tac[mm_local_indexed_future_not_flushed]) >>
+      irule mm_local_surviving_history_frame >>
+      goal_assum (drule_at Any) >> qexists `N` >> simp[]) >>
+  PairCases_on `x` >> simp[] >> metis_tac[mm_local_write_capture_sound]
+QED
+
+Theorem mm_local_pending_replay_start[local]:
+  b = MIN_LIST (mm_local_pending_indices is gs r ++ [r]) ==>
+  b <= r /\ (!j. MEM j (mm_local_pending_indices is gs r) ==> b <= j) /\
+  (b = r \/ MEM b (mm_local_pending_indices is gs r))
+Proof
+  strip_tac >>
+  `mm_local_pending_indices is gs r ++ [r] <> []` by simp[] >>
+  drule rich_listTheory.MIN_LIST_MEM >>
+  drule rich_listTheory.MIN_LIST_PROPERTY >>
+  simp[MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem mm_local_pending_source_replay[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ b <= j /\ j <= r /\ r < LENGTH is /\ r < N /\
+  mm_local_history is H N /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  (b = r \/ MEM b (mm_local_pending_indices is gs r)) /\
+  ((?dj sj lj. (EL j is).inst_opcode = MCOPY /\
+      (EL j is).inst_operands = [Lit dj; Lit sj; Lit lj] /\
+      c = <|cg_dst := w2n dj; cg_src := w2n sj; cg_length := w2n lj;
+             cg_inst_ids := [(EL j is).inst_id]|>) \/
+   (?dj vj srcj. (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dj; Var vj] /\
+      FLOOKUP s0.ss_loads vj = SOME srcj /\
+      c = <|cg_dst := w2n dj; cg_src := srcj; cg_length := 32;
+             cg_inst_ids := [(EL j is).inst_id] ++
+               (case dfg_get_def (dfg_build_function fn0) vj of
+                  NONE => [] | SOME li => [li.inst_id])|>)) /\
+  (j = r \/ (?g. MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g))) /\
+  t = FOLDL (\st q. if MEM q (mm_local_pending_indices is gs r) then st else
+    case mm_local_write_capture is H N q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H b) (MAP (\q. b+q) (COUNT_LIST (r-b))) ==>
+  read_memory c.cg_src c.cg_length t = read_memory c.cg_src c.cg_length (H j)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  irule mm_local_selective_segment_replay >>
+  qexistsl [`\q. MEM q (mm_local_pending_indices is gs r)`, `b`,
+    `mm_local_write_capture is H N`, `r`] >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `c.cg_src+c.cg_length <= d \/ d+LENGTH bs <= c.cg_src \/ c.cg_length = 0 \/ bs = []`
+        suffices_by simp[arithmeticTheory.ADD_COMM] >>
+      mp_tac (Q.INST [`j` |-> `j`, `r` |-> `r`, `ss` |-> `s0`]
+        (SPEC_ALL mm_local_pending_prefix_source_exclusion)) >>
+      simp[] >> gvs[]) >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      `MEM b (mm_local_pending_indices is gs r)` by gvs[] >>
+      metis_tac[mm_local_live_segment_capture_recurrence]) >>
+  rpt strip_tac >>
+  `j < r` by decide_tac >>
+  `?g. MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g)` by (gvs[] >> metis_tac[]) >>
+  `c.cg_src+c.cg_length <= d \/ d+LENGTH bs <= c.cg_src \/ c.cg_length = 0 \/ bs = []`
+    suffices_by simp[arithmeticTheory.ADD_COMM] >>
+  mp_tac (Q.INST [`j` |-> `j`, `r` |-> `r`, `s0` |-> `s0`,
+    `ss` |-> `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE q is)`]
+    (SPEC_ALL mm_local_pending_suffix_source_exclusion)) >>
+  simp[] >> gvs[]
+QED
+
 Theorem mm_local_collection_discharge[local]:
   mm_local_pending cap js s t /\
   (!pre j mid k post d bs a cs.
