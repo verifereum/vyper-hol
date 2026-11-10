@@ -2,7 +2,7 @@
    alignment point; it does not assert agreement on dead historical names. *)
 Theory makeSsaCurrentSimDefs
 Ancestors
-  makeSsaCurrentDefs stateFrame venomState venomInst finite_map
+  makeSsaDefs stateFrame venomState venomInst finite_map
 
 Datatype:
   current_sim_phase = BeforePhis | AfterPhis | CleanupCopies | OrdinaryCode

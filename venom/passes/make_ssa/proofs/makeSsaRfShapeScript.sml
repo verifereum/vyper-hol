@@ -1,5 +1,5 @@
 Theory makeSsaRfShape
-Ancestors makeSsaRfWitness makeSsaCurrentDefs makeSsaCurrentProps makeSsaDefs
+Ancestors makeSsaRfWitness makeSsaDefs makeSsaCurrentProps
   cfgTransformProps contextCodegenRel venomInst list rich_list pair
 
 

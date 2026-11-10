@@ -38,7 +38,7 @@ Ancestors
   exprSimOperators exprSimLeaves loweringSlice  stmtSimDecl
   stmtSimDeclStore stmtSimAssignStore stmtSimDeclPath stmtSimDeclCompose exprOpenPrimitives
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps
-  exprLoweringProps compileEnv valueEncoding
+  exprLoweringProps compileEnv loweringStateRelDefs valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   vyperExprNoControl vyperTypeSystem vyperTyping vyperTypeEnv
   vyperTypeInvariants vyperTypeBuiltins vyperTypeStatePreservation vyperTypeCallGraph vyperLookup vyperAST
@@ -97,11 +97,10 @@ Proof
   simp[lift_sum_def, return_def, raise_def]
 QED
 
-(* The operator's type argument matters only for in and not in on an
-   array. *)
+(* Membership and bytes equality inspect the type argument. *)
 Theorem evaluate_binop_tv:
   !u tv tv' bop v1 v2.
-    bop <> In /\ bop <> NotIn ==>
+    bop <> In /\ bop <> NotIn /\ bop <> Eq /\ bop <> NotEq ==>
     evaluate_binop u tv bop v1 v2 = evaluate_binop u tv' bop v1 v2
 Proof
   rpt strip_tac >> Cases_on `bop` >> gvs[] >>
@@ -298,13 +297,20 @@ Proof
   Cases_on `bop` >> rw[well_typed_binop_def, word_value_type_def] >> gvs[]
 QED
 
+Theorem word_value_not_bytes:
+  !v. word_value v ==> !bs. v <> BytesV bs
+Proof
+  simp[word_value_def] >> rpt strip_tac >> gvs[]
+QED
+
 (* The source's operator on x's value and e's is the operator of the
    expression x op e annotated with x's type: the builtin reads its type
    argument from e's type, x op= e from x's place, and neither matters
-   but for in and not in. *)
+   for non-membership operators on word values. *)
 Theorem bop_result_augassign:
   !cx ty bop t2 v1 v2 es tv.
-    bop <> In /\ bop <> NotIn ==>
+    bop <> In /\ bop <> NotIn /\
+    ((bop = Eq \/ bop = NotEq) ==> !bs. v1 <> BytesV bs) ==>
     bop_result cx ty bop [ty; t2] v1 v2 es =
     case evaluate_binop
            (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
@@ -313,7 +319,81 @@ Theorem bop_result_augassign:
     | INR err => INR (Error err)
 Proof
   rpt strip_tac >> simp[bop_result_def, evaluate_builtin_def] >>
+  Cases_on `bop = Eq \/ bop = NotEq`
+  >- (gvs[] >> Cases_on `v1` >> gvs[] >>
+      simp[evaluate_binop_def]) >>
   metis_tac[evaluate_binop_tv]
+QED
+
+Theorem bop_result_augassign_res_ok:
+  bop <> In /\ bop <> NotIn ==>
+  (expr_res_ok (bop_result cx ty bop [ty; t2] v1 v2 es) <=>
+   expr_res_ok
+     (case evaluate_binop
+       (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+       tv bop v1 v2 of
+       INL v => INL v | INR err => INR (Error err)))
+Proof
+  strip_tac >>
+  Cases_on `bop = Eq \/ bop = NotEq`
+  >- (gvs[bop_result_def, evaluate_builtin_def] >>
+      Cases_on `v1` >> Cases_on `v2` >>
+      FIRST_PROVE [simp[evaluate_binop_def, binop_negate_def, expr_res_ok_def]]) >>
+  `bop_result cx ty bop [ty; t2] v1 v2 es =
+   case evaluate_binop
+     (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+     tv bop v1 v2 of
+     INL v => INL v | INR err => INR (Error err)` by
+    (irule bop_result_augassign >> simp[]) >>
+  simp[]
+QED
+
+Theorem bop_result_augassign_success:
+  bop <> In /\ bop <> NotIn /\
+  bop_result cx ty bop [ty; t2] v1 v2 es = INL w ==>
+  ?v. evaluate_binop
+    (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+    tv bop v1 v2 = INL v
+Proof
+  strip_tac >>
+  Cases_on `bop = Eq \/ bop = NotEq`
+  >- (gvs[bop_result_def, evaluate_builtin_def] >>
+      Cases_on `v1` >> Cases_on `v2` >>
+      gvs[evaluate_binop_def, binop_negate_def]) >>
+  `bop_result cx ty bop [ty; t2] v1 v2 es =
+   case evaluate_binop
+     (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+     tv bop v1 v2 of
+     INL v => INL v | INR err => INR (Error err)` by
+    (irule bop_result_augassign >> simp[]) >>
+  gvs[AllCaseEqs()]
+QED
+
+Theorem write_place_short_memory_result:
+  !path cx id v st w.
+  path = [] \/ (?fld. path = [AttrSubscript fld]) ==>
+  FST (write_place cx (MemoryPlace id path) v st) =
+  FST (write_place cx (MemoryPlace id path) w st)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[write_place_def, bind_def, ignore_bind_def, get_scopes_def,
+       lift_option_type_def, type_check_def, assert_def, lift_sum_def,
+       set_scopes_def, return_def, raise_def] >>
+  Cases_on `find_containing_scope id st.scopes` >>
+  simp[return_def, raise_def] >>
+  rename1 `SOME q` >> PairCases_on `q` >> Cases_on `q2.assignable` >>
+  simp[assert_def, ignore_bind_def, bind_def, return_def, raise_def,
+       set_scopes_def] >>
+  Cases_on `path = []`
+  >- gvs[replace_memory_entry_def, evaluate_subscripts_def,
+         assign_subscripts_def, return_def, raise_def] >>
+  `?fld. path = [AttrSubscript fld]` by metis_tac[] >> gvs[] >>
+  Cases_on `q2.value` >>
+  simp[replace_memory_entry_def, evaluate_subscripts_def,
+       assign_subscripts_def, return_def, raise_def] >>
+  rename1 `q2.value = StructV fields` >> Cases_on `ALOOKUP fields fld` >>
+  simp[replace_memory_entry_def, evaluate_subscripts_def,
+       assign_subscripts_def, return_def, raise_def]
 QED
 
 (* ===== x op= e is x = x op e ===== *)
@@ -323,7 +403,8 @@ QED
 Theorem eval_augassign_local_bop:
   !cx ty id bop e es res es' entry.
     eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') /\
-    lookup_scopes id es.scopes = SOME entry /\ bop <> In /\ bop <> NotIn ==>
+    lookup_scopes id es.scopes = SOME entry /\ bop <> In /\ bop <> NotIn /\
+    ((bop = Eq \/ bop = NotEq) ==> !bs. entry.value <> BytesV bs) ==>
     ?r es1.
       (do tv <- eval_expr cx (Builtin ty (Bop bop) [Name ty id; e]);
           read_result cx tv od) es = (r, es1) /\
@@ -345,7 +426,7 @@ Proof
                  entry.type bop entry.value w of
             INL v => INL v
           | INR err => INR (Error err)` by
-    (rpt gen_tac >> irule bop_result_augassign >> simp[]) >>
+    (rpt gen_tac >> irule bop_result_augassign >> metis_tac[]) >>
   gvs[vyperASTTheory.expr_type_def] >>
   Cases_on `evaluate_binop
               (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
@@ -416,12 +497,12 @@ Theorem augassign_binop_admissible:
   expr_res_ok (bop_result cx ty bop [ty; expr_type e] entry.value v ee)
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty; expr_type e] entry.value v ee =
-   case evaluate_binop
+  `expr_res_ok (bop_result cx ty bop [ty; expr_type e] entry.value v ee) <=>
+   expr_res_ok (case evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      entry.type bop entry.value v of
-       INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+       INL w => INL w | INR err => INR (Error err))` by
+    (irule bop_result_augassign_res_ok >> simp[]) >>
   pop_assum SUBST1_TAC >>
   Cases_on `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
@@ -463,24 +544,23 @@ Theorem augassign_write_admissible:
   !m. res <> INR (Error (TypeError m))
 Proof
   strip_tac >>
-  `evaluate_binop
+  `?actual. evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-     entry.type bop entry.value v = INL w` by
-    (`bop_result cx ty bop [ty; expr_type e] entry.value v ee =
-       case evaluate_binop
-         (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-         entry.type bop entry.value v of
-         INL x => INL x | INR err => INR (Error err)` by
-       (irule bop_result_augassign >> simp[]) >>
-     gvs[AllCaseEqs()]) >>
+     entry.type bop entry.value v = INL actual` by
+    metis_tac[bop_result_augassign_success] >>
+  Cases_on `write_place cx (MemoryPlace id []) actual ee` >>
+  rename1 `_ = (actual_res, actual_fin)` >>
   `eval_stmt cx (AugAssign ty (NameTarget id) bop e)
-     (es with gas_obs := gs) = (res, fin)` by
+     (es with gas_obs := gs) = (actual_res, actual_fin)` by
     (`lookup_scopes id (es with gas_obs := gs).scopes = SOME entry` by simp[] >>
      drule_all augassign_rhs_normal >>
      disch_then (qspecl_then [`ty`, `bop`] mp_tac) >>
      simp[lift_sum_def, bind_def, return_def]) >>
-  `stmt_res_ok lctx res` by metis_tac[gas_admissible_result] >>
-  fs[stmt_res_ok_def, expr_res_ok_def]
+  `stmt_res_ok lctx actual_res` by metis_tac[gas_admissible_result] >>
+  `res = actual_res` by
+    (qspecl_then [`[]`, `cx`, `id`, `w`, `ee`, `actual`]
+       mp_tac write_place_short_memory_result >> simp[]) >>
+  gvs[stmt_res_ok_def, expr_res_ok_def]
 QED
 
 Theorem augassign_binop_ready:
@@ -523,7 +603,8 @@ Proof
          (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
          entry.type bop entry.value v of
            INL w => INL w | INR err => INR (Error err)` by
-        (irule bop_result_augassign >> simp[]) >>
+        (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
       pop_assum SUBST1_TAC >>
       simp[AllCaseEqs()] >> strip_tac >>
       irule well_typed_binop_success_type >>
@@ -943,7 +1024,8 @@ Resume compile_augassign_local_case[operator_normal]:
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      entry.type bop entry.value v = INL result` by gvs[AllCaseEqs()] >>
@@ -1012,7 +1094,8 @@ Resume compile_augassign_local_case[operator_exit]:
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   Cases_on `evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v`

@@ -40,7 +40,7 @@ Ancestors
   fragExec localPtrsProps venomMemDefs immutableMemoryFrame immutableRelation
   immutableEncoding
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding valueEncodingProps
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperValueOperation
   vyperEvalExprPreservesScopesDom
   vyperEvalPreservesScopes vyperStatePreservation arithmeticProps
@@ -369,7 +369,7 @@ Proof
   first_x_assum drule_all >> strip_tac >>
   `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
   irule mstore_mem_bytes_at_disjoint >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem immutables_rel_mstore_outside_prefix:
@@ -566,20 +566,17 @@ Theorem immutable_alloca_sep_declare_local[local]:
     immutable_alloca_sep func cenv cx es' t
 Proof
   rpt gen_tac >> strip_tac >>
-  fs[immutable_alloca_sep_def] >>
-  disch_tac >> rpt gen_tac >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >> simp[] >>
-  conj_tac >- metis_tac[] >>
+  drule immutable_alloca_sep_frame >> disch_then irule >>
+  rpt conj_tac >> TRY (fs[] >> NO_TAC) >>
   rpt strip_tac >>
   rename1 `local_region cenv es'.scopes t n b z` >>
   Cases_on `n = id`
   >- (gvs[local_region_def] >> metis_tac[]) >>
-  `local_region cenv es.scopes s n b z` by
-    (fs[local_region_def] >>
-     rename1 `FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) z)` >>
-     `~not_local_ptr cenv es.scopes q` by
-       (simp[not_local_ptr_def] >> metis_tac[]) >>
-     metis_tac[]) >>
+  disj1_tac >> qexists_tac `n` >>
+  fs[local_region_def] >>
+  rename1 `FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) z)` >>
+  `~not_local_ptr cenv es.scopes q` by
+    (simp[not_local_ptr_def] >> metis_tac[]) >>
   metis_tac[]
 QED
 

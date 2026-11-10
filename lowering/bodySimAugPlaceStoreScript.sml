@@ -1,9 +1,9 @@
 Theory bodySimAugPlaceStore
 Ancestors
   bodySimAugPlaceLoad stmtSimAssignAttr valueEncodingProps valueEncodingProofs
-  valueEncoding targetPlaceSim vyperValue vyperTyping vyperState vyperValueOperation alist arithmetic list sorting relation
+  valueEncoding valueEncodingDefs targetPlaceSim vyperValue vyperTyping vyperState vyperValueOperation alist arithmetic list sorting relation
   stmtSimDeclStore vyperPlaceStatePreservation vyperLookup stmtSimAssignStore
-  exprSimHyps vyperTypeInvariants exprLoweringProps compileEnv exprSimBuffer
+  exprSimHyps vyperTypeInvariants exprLoweringProps compileEnv loweringStateRelDefs exprSimBuffer
   venomState loweringPosts exprSimProps exprSimSource exprSimDefs exprSimHypsDefs
 Libs
   wordsLib

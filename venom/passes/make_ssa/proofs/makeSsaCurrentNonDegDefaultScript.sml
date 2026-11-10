@@ -1,5 +1,6 @@
 Theory makeSsaCurrentNonDegDefault
 Ancestors
+  livenessTransferProofs
   makeSsaCurrentNonDegTokenSources makeSsaCurrentTraceCertificate
   makeSsaCurrentTreePaths
   makeSsaCurrentDemandedCut makeSsaCurrentAvailability makeSsaCurrentPathBridge

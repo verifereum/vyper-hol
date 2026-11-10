@@ -1,9 +1,10 @@
 (* Storage assignment compiler and semantic boundaries for the memory proof. *)
 Theory bodyMemAssignTopCopySem
 Ancestors
+  exprSimHashBoundary
   bodyMemAssignTopCopyFacts stmtSimAssignStorageCopy stmtSimStoreCopy
   stmtSimDeclMem stmtSimAssignMem stmtSimAssignStorage stmtSimAssign exprLoweringProps
-  stmtLowering exprLowering emitHelper emitHelperProps context compileEnv
+  stmtLowering exprLowering emitHelper emitHelperProps context compileEnv loweringStateRelDefs
   vyperStorage vyperStorageBackend vyperValue vyperTyping
   accountsRelProps exprSimHash exprSimProps stmtSimProps loweringPosts storageCopyLive
   words arithmetic
@@ -100,7 +101,7 @@ Theorem topcopy_loop_open:
     ~block_is_terminated sb
 Proof
   rpt gen_tac >>
-  simp[compile_word_copy_loop_def, comp_ignore_bind_def, comp_bind_def] >>
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_loop_base_def, comp_ignore_bind_def, comp_bind_def] >>
   ntac 4 (pairarg_tac >> simp[]) >>
   ntac 4 (pairarg_tac >> simp[]) >>
   ntac 4 (pairarg_tac >> simp[]) >>
