@@ -3,6 +3,7 @@ Theory bodyIntCallFunctionCharge
 Ancestors
   bodyIntCallPackageResource intCallCallee externalEntryShape compileEnv
   moduleLowering emitHelper context list rich_list finite_map words
+  exprLoweringProps loweringShapeDefs venomInst
 
 Theorem internal_param_capture_projection:
   !ps idx sa caps next sb.
@@ -24,4 +25,24 @@ Proof
   simp[compile_internal_entry_prefix_def, comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
   Cases_on `pr` >> drule internal_param_capture_projection >> simp[]
+QED
+
+(* TEMPORARY OWNER-SPLIT STATEMENT: parse-checked only, not proved.
+   Historical obligation C1.5.3.1.1. The additive formulation counts
+   only the new charge even when sa already contains other functions. *)
+Theorem compile_internal_function_stack_charge:
+  !ce params has_rb is_nr key trans view ctor imm body rt sa sb.
+    compile_internal_function ce params has_rb is_nr key trans view
+      ctor imm body rt sa = ((),sb) /\
+    ALL_DISTINCT (MAP FST params) /\
+    (!nm off sz. MEM nm (MAP FST params) /\
+       FLOOKUP ce.ce_vars nm = SOME (MemLoc off sz) ==>
+       sz < dimword (:256)) ==>
+    SUM (MAP alloca_lit_size
+      (FILTER (\i. i.inst_opcode = ALLOCA) (state_insts sa))) +
+    internal_stack_size ce params <=
+    SUM (MAP alloca_lit_size
+      (FILTER (\i. i.inst_opcode = ALLOCA) (state_insts sb)))
+Proof
+  cheat
 QED
