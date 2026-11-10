@@ -237,3 +237,84 @@ Resume dyn_storage_multi_header[iterate]:
   qexists_tac `u` >> simp[]
 QED
 Finalise dyn_storage_multi_header
+
+Theorem dyn_storage_multi_path:
+  compile_dynarray_to_storage src dst ew em tr sa = ((),sb) /\
+  ew <> 1 /\ ew < dimword(:256) /\ fn_has_code sa sb fn /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  ~s.vs_call_ctx.cc_static /\ w2n p + 32 <= s.vs_alloca_next /\
+  mload (w2n p) s = n2w n /\ n < dimword(:256) /\
+  (!j. j < n ==> w2n (p + n2w (32+j*em)) + 32*ew <= s.vs_alloca_next) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_path_mem ctx fn s 0 (OK t) /\
+      store_copy_normalize s t =
+        (if tr then tstore d (n2w n) else sstore d (n2w n))
+          (FOLDL (\a j. store_copy_prefix (if tr then LocTransient else LocStorage)
+             (p+n2w (32+j*em)) (d+n2w (1+j*ew)) a ew) s (COUNT_LIST n)) /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> drule_all dyn_storage_multi_header >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all dyn_storage_multi_split >> strip_tac >>
+  `cs_extends sa sc` by
+    (simp[compileEnvTheory.cs_extends_def] >> qexists_tac `TAKE 2 sc.cs_blocks` >>
+     simp[IS_PREFIX_APPEND]) >>
+  `cs_extends sc sd` by
+    (drule_at (Pat `compile_word_copy_loop _ _ _ _ _ _ _ = _`)
+       bodyMemAssignTopCopyCompilerTheory.topcopy_compile_certificate >>
+     (impl_tac >- (Cases_on `tr` >> simp[])) >> strip_tac >>
+     metis_tac[compileEnvTheory.cs_extends_trans]) >>
+  `cs_extends sa sd` by metis_tac[compileEnvTheory.cs_extends_trans] >>
+  `cs_extends sd sb` by metis_tac[dyn_storage_suffix_extends] >>
+  `cs_extends sc sb` by metis_tac[compileEnvTheory.cs_extends_trans] >>
+  drule_all dyn_storage_suffix_code >> strip_tac >>
+  drule dyn_storage_suffix_layout >> strip_tac >>
+  `!bb. MEM bb (TAKE 2 sc.cs_blocks) ==>
+      lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (`fn_has_code sa sc fn` by metis_tac[fragExecTheory.fn_has_code_split] >>
+     fs[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def] >>
+     gvs[] >> metis_tac[]) >>
+  gvs[TAKE, MEM, DISJ_IMP_THM, FORALL_AND_THM] >>
+  suspend "exit"
+QED
+
+Resume dyn_storage_multi_path[exit]:
+  `t.vs_call_ctx = s.vs_call_ctx /\ t.vs_labels = s.vs_labels` by
+    (conj_tac
+     >- (irule (cj 4 storage_traversal_fold_fields) >>
+         qexistsl_tac [`\i. FOLDL (\a j. store_copy_prefix
+           (if tr then LocTransient else LocStorage)
+           (p+n2w (32+j*em)) (d+n2w (1+j*ew)) a ew) s (COUNT_LIST i)`,
+           `d`, `ew`, `n`, `if tr then LocTransient else LocStorage`, `p`, `em`] >> simp[]) >>
+     irule (cj 5 storage_traversal_fold_fields) >>
+     qexistsl_tac [`\i. FOLDL (\a j. store_copy_prefix
+       (if tr then LocTransient else LocStorage)
+       (p+n2w (32+j*em)) (d+n2w (1+j*ew)) a ew) s (COUNT_LIST i)`,
+       `d`, `ew`, `n`, `if tr then LocTransient else LocStorage`, `p`, `em`] >> simp[]) >>
+  `eval_operand dst t = SOME d` by
+    (Cases_on `dst` >> gvs[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
+  qmatch_asmsub_abbrev_tac `store_copy_normalize s t = h` >>
+  `?v. gas_path_mem ctx fn t 0 (OK v) /\
+       store_copy_normalize s v = (if tr then tstore d (n2w n) h else sstore d (n2w n) h) /\
+       (!x. not_fresh_at sa x ==> lookup_var x v = lookup_var x s) /\
+       ~v.vs_halted /\ v.vs_current_bb = fresh_label_output "dyn_exit" (sa.cs_next_label+2) /\
+       v.vs_inst_idx = 1` by
+    (irule (REWRITE_RULE [GSYM arithmeticTheory.ADD_ASSOC]
+       (Q.INST [`hid` |-> `sa.cs_next_id+3`] storage_traversal_exit)) >>
+     qpat_assum `lookup_block (fresh_label_output "dyn_cond" _) _ = SOME _` (irule_at Any) >>
+     simp[venomInstTheory.mk_inst_def] >>
+     qexistsl_tac [`sd.cs_next_id+3`, `dst`] >> fs[venomInstTheory.mk_inst_def] >>
+     conj_tac
+     >- (rpt strip_tac >> `not_fresh_at sa x` by metis_tac[] >>
+         gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_ADD, arithmeticTheory.LESS_EQ_REFL]) >>
+     rpt strip_tac >> gvs[not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_ADD, arithmeticTheory.LESS_EQ_REFL]) >>
+  qexists_tac `v` >> simp[] >>
+  metis_tac[SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
+    fragGasPathMemTheory.gas_path_mem_then)]
+QED
+Finalise dyn_storage_multi_path
