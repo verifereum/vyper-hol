@@ -66,3 +66,63 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
+Theorem internal_package_charge_premises:
+  !target tops trans keys ctor imm mut nr rr name args dflts ret bd
+   lbl ce params has_rb is_nr key use_tr view is_ctor imm_len ss rt.
+  set_internal_package_target target
+    (package_internal_fn tops trans keys ctor imm
+      (mut,nr,rr,name,args,dflts,ret,bd)) =
+      (lbl,ce,params,has_rb,is_nr,key,use_tr,view,is_ctor,imm_len,ss,rt) /\
+  ALL_DISTINCT (MAP FST args) /\
+  fn_allocs_ok tops (mut,nr,rr,name,args,dflts,ret,bd) ==>
+  ALL_DISTINCT (MAP FST params) /\
+  (!nm off sz. MEM nm (MAP FST params) /\
+    FLOOKUP ce.ce_vars nm = SOME (MemLoc off sz) ==> sz < dimword (:256))
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (drule internal_package_stack_layout >> strip_tac >>
+      gvs[MAP_ZIP, LENGTH_compute_pass_via_stack]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `MEM nm (MAP FST params)` mp_tac >>
+  simp[MEM_EL, PULL_EXISTS] >> qx_gen_tac `i` >> strip_tac >>
+  `FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc off sz)` by
+    metis_tac[EL_MAP] >>
+  drule_all internal_package_parameter_layout >> strip_tac >>
+  qpat_x_assum `fn_allocs_ok _ _` mp_tac >>
+  simp[fn_allocs_ok_def] >> strip_tac >>
+  `i < LENGTH args` by metis_tac[] >>
+  qpat_x_assum `EVERY _ args` mp_tac >>
+  simp[EVERY_EL] >> disch_then (qspec_then `i` mp_tac) >> simp[] >>
+  Cases_on `EL i args` >> rename1 `EL i args = (argname,argty)` >>
+  simp[] >> strip_tac >>
+  `type_memory_bytes ce argty =
+   type_memory_bytes (build_compile_env tops Internal mut name args ret bd F) argty` by
+    (irule type_memory_bytes_struct_fields >>
+     simp[build_compile_env_ce_struct_fields]) >>
+  gvs[] >> irule vyperArithTheory.lt_dimword_256 >>
+  qexists_tac `64` >> simp[]
+QED
+
+Theorem internal_package_stack_size_options:
+  !tops mut nr rr name args dflts ret bd
+   target trans keys ctor imm lbl ce params has_rb is_nr key use_tr view
+   is_ctor imm_len ss rt
+   target' trans' keys' ctor' imm' lbl' ce' params' has_rb' is_nr' key'
+   use_tr' view' is_ctor' imm_len' ss' rt'.
+  set_internal_package_target target
+    (package_internal_fn tops trans keys ctor imm
+      (mut,nr,rr,name,args,dflts,ret,bd)) =
+      (lbl,ce,params,has_rb,is_nr,key,use_tr,view,is_ctor,imm_len,ss,rt) /\
+  set_internal_package_target target'
+    (package_internal_fn tops trans' keys' ctor' imm'
+      (mut,nr,rr,name,args,dflts,ret,bd)) =
+      (lbl',ce',params',has_rb',is_nr',key',use_tr',view',is_ctor',imm_len',ss',rt') ==>
+  internal_stack_size ce params = internal_stack_size ce' params'
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `set_internal_package_target target _ = _`
+    (strip_assume_tac o MATCH_MP internal_package_stack_layout) >>
+  qpat_x_assum `set_internal_package_target target' _ = _`
+    (strip_assume_tac o MATCH_MP internal_package_stack_layout) >>
+  gvs[] >> irule internal_stack_size_vars >> simp[]
+QED

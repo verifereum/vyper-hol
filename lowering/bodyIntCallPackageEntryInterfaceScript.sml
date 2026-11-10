@@ -7,7 +7,7 @@
    No resource conclusion is assumed: the unit-charge leaves must supply it. *)
 Theory bodyIntCallPackageEntryInterface
 Ancestors
-  bodyIntCallPkgEntryResources bodyIntCallUnitCharge bodyIntCallStageEntryMemory bodyIntCallStagePackage
+  bodyIntCallPkgEntryMetadata bodyIntCallPkgEntryResources bodyIntCallUnitCharge bodyIntCallStageEntryMemory bodyIntCallStagePackage
   bodyIntCallPackageGlobals bodyIntCallPackageLayout bodyIntCallMetadata
   bodySim exprSimHypsDefs exprSimHyps exprLoweringProps intCallCallee
   compileVyper compileEnv context vyperInterpreter vyperState vyperAST
