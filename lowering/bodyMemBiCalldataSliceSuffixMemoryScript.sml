@@ -92,12 +92,15 @@ Proof
   irule run_inst_seq_mem_ok_append >> simp[] >> rpt strip_tac >>
   drule calldata_slice_bounds_fresh >> strip_tac >>
   drule_all run_inst_seq_writes_fresh >> strip_tac >>
+  `!op w. (!x. op = Var x ==> not_fresh_at sa x) /\
+          eval_operand op s = SOME w ==> eval_operand op s' = SOME w` by
+    (fs[venom_state_component_equality] >>
+     Cases >> gvs[eval_operand_def, lookup_var_def]) >>
   `s'.vs_alloca_next = s.vs_alloca_next /\
    eval_operand dst s' = SOME wd /\ eval_operand src s' = SOME wa /\
    eval_operand len s' = SOME wn /\ eval_operand pop s' = SOME wp` by
-    (fs[venom_state_component_equality] >>
-     Cases_on `dst` >> Cases_on `src` >> Cases_on `len` >> Cases_on `pop` >>
-     gvs[eval_operand_def, lookup_var_def]) >>
+    (rpt conj_tac >- fs[venom_state_component_equality] >>
+     first_assum irule >> simp[]) >>
   irule (cj 1 calldata_slice_copy_store_emitted_mem) >> metis_tac[]
 QED
 

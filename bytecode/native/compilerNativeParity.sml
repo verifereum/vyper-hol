@@ -65,6 +65,25 @@ structure compilerNativeParity = struct
   (* Out of parity on purpose; see ../pending-uint2str-buffer.md. *)
   val pending = ["builtin-forms/oracle/uint2str_local.hex"]
 
+  (* Fixtures that must compile but differ from the pinned oracle, so that a
+     list entry that starts to match fails and gets removed.
+     decoder_divergent: bounded memory decoding checks relative positions and
+     head words before forming pointers, which the pinned Python does not (see
+     ../pending-bounded-decode-guards.md).
+     stale_oracle: the pinned oracle lacks upstream fixes the HOL compiler
+     already follows (same file). *)
+  val decoder_divergent = [
+      "external-calls/oracle/e19_gas_kw.hex",
+      "external-calls/oracle/e21_default_ret.hex",
+      "external-calls/oracle/e22_static_default.hex",
+      "external-calls/oracle/e29_default_ret_skip.hex",
+      "external-calls/oracle/e30_default_ret_tuple.hex",
+      "external-calls/oracle/e38_default_ret_local_array.hex",
+      "external-calls/oracle/e45_default_ret_ifexp.hex",
+      "memory-stores/oracle/t04_tuple_assign_extcall.hex"]
+  val stale_oracle = [] : string list
+  val expected_diff = decoder_divergent @ stale_oracle
+
   fun hex_files root dir = let
     val d = OS.FileSys.openDir (OS.Path.concat (root, dir))
     fun loop acc = case OS.FileSys.readDir d of
@@ -101,9 +120,14 @@ structure compilerNativeParity = struct
          NONE => SOME "compiler returned NONE"
        | SOME (deploy, runtime) => let
            val (d, r) = oracle (OS.Path.concat (dir, name))
-         in case compare "deploy" d (hex_bytes deploy) of
-              SOME e => SOME e
-            | NONE => compare "runtime" r (hex_bytes runtime)
+           val d_diff = compare "deploy" d (hex_bytes deploy)
+           val r_diff = compare "runtime" r (hex_bytes runtime)
+         in
+           if List.exists (fn k => k = name) expected_diff
+           then (case (d_diff, r_diff) of
+                   (NONE, NONE) => SOME "matches the oracle: remove it from the expected-difference lists"
+                 | _ => NONE)
+           else (case d_diff of NONE => r_diff | e => e)
          end)
       handle Stuck s => SOME ("stuck: " ^ s)
            | e => SOME ("exception: " ^ General.exnMessage e)
