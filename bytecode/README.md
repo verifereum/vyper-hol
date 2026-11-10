@@ -59,8 +59,6 @@ removed when a new pin includes them. The current series contains:
   guarded memoization, so shared multi-origin PHIs cannot disappear from a
   sibling operand. The pass is used by O2/O3/Os; the O1 fixture schedule does
   not run it.
-- `local-dft-create-abort.patch` (not upstream): DFT treats `create` and
-  `create2` as aborts, as HOL's `dft_abort_kind` does, since they can fault.
 
 The provenance's `vyper_commit` names the unpatched base revision.
 

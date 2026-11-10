@@ -5028,14 +5028,6 @@ Proof
   gvs[value_runtime_typed_def, evaluate_type_def, value_has_type_def]
 QED
 
-Theorem guarded_cases[local]:
-  (!s x t. type_check ok msg s = (INL x,t) /\ d /\ ~b ==> p) ==>
-  (!s x t. type_check ok msg s = (INL x,t) /\ d /\ b ==> p) ==>
-  ok /\ d ==> p
-Proof
-  simp[type_check_def, assert_def, return_def] >> metis_tac[]
-QED
-
 Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
   rpt gen_tac >> strip_tac >>
   `call_evaluation_safe cx (int_calls_exprs es)` by (
