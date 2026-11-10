@@ -230,3 +230,103 @@ Resume assign_place_wrapped_memory_suffix_run[load]:
   simp[wordsTheory.WORD_MULT_CLAUSES, wordsTheory.WORD_ADD_0]
 QED
 Finalise assign_place_wrapped_memory_suffix_run
+
+Theorem assign_place_bytes_storage_run:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  is_bytestring_type sty /\ is_bytestring_type dty /\
+  compile_assign_value cenv dst loc src (is_word_type dty) src_loc dty sty
+    NONE (type_memory_bytes cenv dty) sa = ((),sb) /\
+  eval_operand dst s = SOME k /\ eval_operand src s = SOME sw /\
+  place_ptr_rel cenv cx s (PlaceR p) k (SOME loc) (Type dty) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  type_widens_to (get_tenv cx) sty dty /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\ value_has_type stv v /\
+  val_in_memory stv v (w2n sw) s.vs_memory /\
+  w2n sw + val_footprint stv v < dimword (:256) /\
+  expr_sim_inv cenv cx env ee /\ local_ptrs_reserved cenv sa /\
+  storage_place_region cx p /\ stmt_state_rel ctx func cenv cx ee s /\
+  write_place cx p v ee = (INL (),ff) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    stmt_state_rel ctx func cenv cx ff t /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_allocas = s.vs_allocas /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~is_word_type dty /\ (!et n. dty <> ArrayT et (Dynamic n))` by
+    (Cases_on `dty` >> gvs[compileEnvTheory.is_bytestring_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> gvs[compileEnvTheory.is_bytestring_type_def, compileEnvTheory.is_word_type_def] >>
+     rename1 `BaseT (BytesT bd)` >> Cases_on `bd` >>
+     gvs[compileEnvTheory.is_bytestring_type_def, compileEnvTheory.is_word_type_def]) >>
+  drule_all place_store_storage_destination >> strip_tac >>
+  qpat_x_assum `loc = LocStorage \/ loc = LocTransient` kall_tac >> gvs[] >>
+  drule_all place_store_storage_write_inv >> strip_tac >> gvs[] >>
+  drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >> strip_tac >> gvs[] >>
+  drule_all place_store_bytestring_representation >>
+  disch_then (qx_choose_then `src_cap` (qx_choose_then `dst_cap`
+    (map_every assume_tac o CONJUNCTS))) >>
+  `0 < type_slot_size dtv` by
+    (gvs[vyperValueTheory.type_slot_size_def]) >>
+  drule_all place_store_storage_leaf_bounds >> strip_tac >>
+  `well_formed_type_value dtv` by
+    metis_tac[cj 1 vyperTypingTheory.evaluate_type_well_formed] >>
+  `type_memory_bytes cenv sty = 32 * (1 + word_size src_cap)` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  `case v of BytesV bs => LENGTH bs <= src_cap /\
+                              w2n sw+32+LENGTH bs < dimword (:256)
+           | StringV str => LENGTH str <= src_cap /\
+                              w2n sw+32+LENGTH str < dimword (:256) | _ => F` by
+    (gvs[] >> Cases_on `v` >>
+     gvs[loweringPostsTheory.val_footprint_def, vyperTypingTheory.value_has_type_def]) >>
+  `1 + word_size src_cap <= type_slot_size dtv` by
+    (gvs[vyperValueTheory.type_slot_size_def] >>
+     metis_tac[exprSimHypsTheory.word_size_monotone]) >>
+  `1 + word_size src_cap < dimword (:256)` by suspend "count" >>
+  `n2w (w2n root+delta) = root+n2w delta` by
+    simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
+  `(case dty of ArrayT et (Dynamic _) =>
+       SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
+     | _ => NONE) = NONE` by
+    (Cases_on `dty` >> gvs[compileEnvTheory.is_bytestring_type_def]) >>
+  qpat_assum `(case dty of ArrayT _ _ => _ | _ => _) = NONE`
+    (fn meta => qpat_assum `~is_word_type dty`
+      (fn word => drule_all (SRULE [meta,word] place_store_storage_compile))) >>
+  simp[] >> strip_tac >>
+  suspend "suffix"
+QED
+Resume assign_place_bytes_storage_run[count]:
+  `dst_cap < dimword (:256)` by
+    gvs[vyperTypingTheory.well_formed_type_value_def] >>
+  `src_cap < dimword (:256)` by decide_tac >>
+  `word_size src_cap < dimword (:256) - 1` by
+    (simp[vfmConstantsTheory.word_size_def, arithmeticTheory.DIV_LT_X] >>
+     simp[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >>
+     qpat_x_assum `src_cap < dimword (:256)` mp_tac >>
+     simp[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac) >>
+  decide_tac
+QED
+Resume assign_place_bytes_storage_run[suffix]:
+  qpat_x_assum `n2w (w2n root+delta) = root+n2w delta`
+    (fn th => rewrite_tac[GSYM th] >> assume_tac th) >>
+  irule assign_place_wrapped_memory_suffix_run >>
+  simp[] >> (conj_tac >- metis_tac[]) >>
+  goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `eval_operand _ _ = SOME sw`)) >>
+  qexistsl_tac [`dst`, `word_size src_cap + 1`, `v`] >>
+  simp[ADD_COMM] >> (reverse conj_tac >- metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `w2n (root+n2w delta) = _`
+    (fn addr => irule (SIMP_RULE (srw_ss()) [addr, AC ADD_ASSOC ADD_COMM]
+      (Q.INST [`k` |-> `root+n2w delta`]
+        (SPEC_ALL assign_place_bytestring_wrapped_live_copy)))) >>
+  simp[] >> qexistsl_tac [`dst_cap`, `dtv`, `v`] >>
+  simp[AC ADD_ASSOC ADD_COMM] >>
+  (conj_tac >- metis_tac[]) >>
+  qpat_x_assum `case v of BytesV _ => _ /\ _ | StringV _ => _ | _ => _` mp_tac >>
+  Cases_on `v` >> simp_tac (srw_ss()) [AC ADD_ASSOC ADD_COMM]
+QED
+Finalise assign_place_bytes_storage_run
