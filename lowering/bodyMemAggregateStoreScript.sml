@@ -183,7 +183,7 @@ Theorem aggregate_store_rebased_slice_mem_cursor:
       off <= a /\ a + k <= off + sz /\
       (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ q.vs_alloca_next = s.vs_alloca_next
@@ -218,9 +218,9 @@ Proof
      simp[venom_state_component_equality] >> strip_tac >>
      fs[same_blocks_def]) >>
   qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  fs[stmt_state_rel_inst_idx, lookup_var_def, locals_kept_def,
+  fs[stmt_state_rel_inst_idx, lookup_var_def,
      arithmeticTheory.ADD_COMM] >>
-  conj_tac >> first_assum ACCEPT_TAC)
+  first_assum ACCEPT_TAC)
 QED
 
 (* Compatibility interface: callers not needing the block may forget it. *)
@@ -269,7 +269,7 @@ Theorem aggregate_store_rebased_slice_mem:
       off <= a /\ a + k <= off + sz /\
       (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ q.vs_alloca_next = s.vs_alloca_next
 Proof

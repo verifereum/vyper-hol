@@ -571,8 +571,8 @@ Proof
      metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
   fs[expr_post_def, expr_val_rel_def, expr_val_at_def, expr_val_own_def,
      stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
-     local_region_def, locals_kept_def] >>
-  conj_tac >> first_x_assum MATCH_ACCEPT_TAC
+     local_region_def] >>
+  rpt conj_tac >> first_x_assum MATCH_ACCEPT_TAC
 QED
 
 Theorem body_attribute_name_capacity:

@@ -326,7 +326,7 @@ Proof
       rename1 `evaluate_subscripts ptv h1 (DROP _ path)` >>
       Cases_on `evaluate_subscripts ptv h1 (DROP (LENGTH h0) path)` >> gvs[]
       >- (drule_all evaluate_subscripts_snoc_tuple >> simp[]) >>
-      drule evaluate_subscripts_append_err >> simp[]) >>
+      drule exprSimPopNestedLocalPathTheory.evaluate_subscripts_append_err >> simp[]) >>
   `~IS_PREFIX (path ++ [ValueSubscript (IntV (&k))]) h0` by
     (strip_tac >> gvs[GSYM SNOC_APPEND, isPREFIX_SNOC_EQ] >> metis_tac[]) >>
   simp[]
@@ -346,7 +346,7 @@ Proof
   strip_tac >> gvs[]
   >- (drule_all evaluate_subscripts_snoc_tuple >> simp[]) >>
   gvs[AllCaseEqs()] >>
-  drule evaluate_subscripts_append_err >> simp[] >> strip_tac >>
+  drule exprSimPopNestedLocalPathTheory.evaluate_subscripts_append_err >> simp[] >> strip_tac >>
   drule_all read_popped_snoc_tuple >> simp[]
 QED
 
