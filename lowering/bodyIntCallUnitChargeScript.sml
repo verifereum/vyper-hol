@@ -7,6 +7,7 @@ Theory bodyIntCallUnitCharge
 Ancestors
   bodyIntCallFunctionCharge compileVyper vyperCompiler moduleLowering
   exprLoweringProps loweringShapeDefs compileEnv venomInst list
+  bodyIntCallDeployChargePackaging
 
 Theorem runtime_unit_alloca_charge:
   !tops policy unit exts ints fb ctor st.
