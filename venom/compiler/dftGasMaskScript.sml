@@ -1756,6 +1756,47 @@ Resume identity_suffix_mask[terminator_head]:
 QED
 Finalise identity_suffix_mask
 
+Theorem remaining_prefix_ok_cut[local]:
+  !xs s u.
+    wf_function fn /\ EVERY inst_wf bb.bb_instructions /\
+    dft_remaining_inv fn bb (xs ++ post) s /\
+    EVERY (\i. ~is_terminator i.inst_opcode) xs /\
+    FOLDR (dft_exec_cons fuel C) OK xs s = OK u ==>
+    u.vs_halted = s.vs_halted /\ dft_remaining_inv fn bb post u
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  fs[dftIndexedExecTheory.dft_exec_cons_def] >>
+  Cases_on `step_inst fuel C h s` >> gvs[] >>
+  `dft_remaining_inv fn bb (xs ++ post)
+     (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule (SRULE [] (Q.INST [`pre` |-> `[]`] dft_remaining_inv_step)) >>
+     simp[] >> qexistsl_tac [`C`, `fuel`, `h`] >> simp[]) >>
+  first_x_assum drule_all >> simp[] >>
+  drule venomStepPropsTheory.step_inst_ok_halted >> simp[]
+QED
+
+Theorem extract_prefix_ok_cut[local]:
+  wf_function fn /\ EVERY inst_wf bb.bb_instructions /\
+  dft_remaining_inv fn bb (pre ++ y::post) s /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (y::pre) /\
+  FOLDR (dft_exec_cons fuel C) OK (y::pre) s = OK u ==>
+  u.vs_current_bb = s.vs_current_bb /\
+  u.vs_inst_idx = s.vs_inst_idx + LENGTH (y::pre) /\
+  u.vs_halted = s.vs_halted /\ dft_remaining_inv fn bb post u
+Proof
+  strip_tac >>
+  drule_all dftAvailabilityTheory.dft_prefix_frame >> strip_tac >>
+  drule_all prefix_ok_cursor >> strip_tac >> simp[] >>
+  fs[dftIndexedExecTheory.dft_exec_cons_def] >>
+  Cases_on `step_inst fuel C y s` >> gvs[] >>
+  `dft_remaining_inv fn bb (pre ++ post)
+    (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule dft_remaining_inv_step >> simp[] >>
+     qexistsl_tac [`C`, `fuel`, `y`] >> simp[]) >>
+  drule_all remaining_prefix_ok_cut >> simp[] >>
+  drule venomStepPropsTheory.step_inst_ok_halted >> simp[]
+QED
+
 Theorem prefix_extract_mask[local]:
   !fuel C C'.
   let CalleeIH = (!fn fn' t.
