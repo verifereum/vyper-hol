@@ -19,7 +19,7 @@ Ancestors
   ctorDeployMemoryRunPtrPrefix ctorDeployMemoryRunPtrEntry
   ctorDeployMemoryRunPtrBody ctorDeployMemoryRunPtrFrameRet
   ctorDeployMemoryRunPtrFallthrough
-  loweringPtrCorrect fragExec stmtSimDefs bodySim compileEnv
+  fragExec stmtSimDefs bodySim compileEnv
 
 val _ = Parse.hide "body";
 

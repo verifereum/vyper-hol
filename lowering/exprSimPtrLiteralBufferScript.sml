@@ -323,7 +323,7 @@ Theorem literal_bytelike_ptr_run:
     (!name a len. local_region cenv es.scopes u name a len ==>
       regions_disjoint b (32+32*word_size (LENGTH bs)) a len) /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
-    u.vs_labels = s.vs_labels /\ wb_frame cenv es sa s u /\
+    u.vs_labels = s.vs_labels /\ wb_frame cenv es es sa s u /\
     (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
     LENGTH u.vs_memory <= LENGTH t.vs_memory /\
     (!x. not_fresh_at sh x ==> lookup_var x t = lookup_var x u) /\
@@ -462,7 +462,7 @@ QED
 (* Public counterpart of S1's local post constructor. *)
 Theorem literal_ptr_memory_vv_post:
   !func cenv cx e es sa sb s0 t v tvt buf w sz ctx.
-    ~is_word_type (expr_type e) /\
+    ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
     stmt_state_rel ctx func cenv cx es t /\
@@ -484,13 +484,14 @@ Theorem literal_ptr_memory_vv_post:
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)
 Proof
   rpt gen_tac >> strip_tac >>
-  `locals_kept cenv es s0 t` by
+  `locals_kept cenv es es s0 t` by
     (irule locals_kept_regions >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `!name b len. local_region _ _ s0 _ _ _ ==> _` kall_tac >>
   simp[loweringPostsTheory.vv_post_def, stmt_state_rel_inst_idx,
        loweringPostsTheory.vv_holds_def, loweringPostsTheory.vv_at_def, base_ptr_def,
        vyperStateTheory.read_result_def, vyperStateTheory.return_def,
        eval_operand_def, lookup_var_def] >>
+  qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >>
   `eval_operand buf.buf_operand (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w` by
     (Cases_on `buf.buf_operand` >> gvs[eval_operand_def, lookup_var_def]) >>
   conj_tac
@@ -617,7 +618,7 @@ Proof
 QED
 
 Theorem literal_ptr_memory_vv_frame_post:
-  ~is_word_type (expr_type e) /\
+  ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v (w2n w) t.vs_memory /\
   val_footprint tv v <= n /\
