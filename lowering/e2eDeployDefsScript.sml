@@ -93,6 +93,7 @@ Definition deploy_state_rel_def:
     ?ctxt rb args_bytes.
       es.contexts = [(ctxt, rb)] /\
       wf_state es /\ (?d. es.msdomain = Collect d) /\
+      account_empty (lookup_account tx.target es.originalAccounts) /\
       ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\
       ctxt.msgParams.outputTo = Code tx.target /\
       ctxt.msgParams.code = deploy_bc ++ args_bytes /\

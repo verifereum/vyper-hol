@@ -71,15 +71,17 @@ Definition request_of_def:
           cr_tStorage := s.rollback.tStorage |>
 End
 
-(* The caller's post-step top stack word is the success flag. Only logs
- * after the saved pre-call count n, and deletions consed on top of the saved
- * pre-call count m, belong to this outcome. *)
+(* Message calls return a success flag. Creation returns an address, which
+ * can be zero even on success: retain its observed effects independently
+ * of that word. Failed creation has no added logs or deletions.
+ * Only effects after the saved counts belong to this outcome. *)
 Definition outcome_of_def:
   outcome_of kind s n m =
     let c = FST (HD s.contexts)
     in <| co_created := if kind = MessageCall \/ kind = DelegateMessageCall
                         then 0w else w2w (HD c.stack);
-          co_success := (HD c.stack <> 0w);
+          co_success := ((kind <> MessageCall /\ kind <> DelegateMessageCall) \/
+                         HD c.stack <> 0w);
           co_returnData := c.returnData;
           co_accounts := s.rollback.accounts;
           co_tStorage := s.rollback.tStorage;
@@ -223,7 +225,8 @@ QED
 
 (* The request kind is retained across entry/return: the post-step pc no
    longer identifies the creating opcode. Failed outcomes keep live accounts
-   (including the nonce increment); adoption filters logs/deletions separately. *)
+   (including the nonce increment). Creation always retains the actual
+   effect delta, including when its returned address is zero. *)
 Theorem outcome_of_fields:
   (outcome_of kind s n m).co_accounts = s.rollback.accounts /\
   (outcome_of kind s n m).co_tStorage = s.rollback.tStorage /\
@@ -231,7 +234,9 @@ Theorem outcome_of_fields:
     TAKE (LENGTH s.rollback.toDelete - m) s.rollback.toDelete /\
   (outcome_of kind s n m).co_logs = DROP n (FST (HD s.contexts)).logs /\
   (outcome_of kind s n m).co_returnData = (FST (HD s.contexts)).returnData /\
-  ((outcome_of kind s n m).co_success <=> HD (FST (HD s.contexts)).stack <> 0w) /\
+  ((outcome_of kind s n m).co_success <=>
+    (kind <> MessageCall /\ kind <> DelegateMessageCall) \/
+    HD (FST (HD s.contexts)).stack <> 0w) /\
   (outcome_of kind s n m).co_created =
     (if kind = MessageCall \/ kind = DelegateMessageCall then 0w
      else w2w (HD (FST (HD s.contexts)).stack))
@@ -337,7 +342,7 @@ QED
 
 Theorem create_outcome_zero_probe:
   HD (FST (HD s.contexts)).stack = 0w ==>
-  ~(outcome_of CreateCall s n m).co_success /\
+  (outcome_of CreateCall s n m).co_success /\
   (outcome_of CreateCall s n m).co_created = 0w /\
   (outcome_of CreateCall s n m).co_accounts = s.rollback.accounts
 Proof
