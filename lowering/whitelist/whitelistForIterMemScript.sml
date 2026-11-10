@@ -4003,11 +4003,17 @@ Resume typed_attribute_frames_mutual[annassign]:
 QED
 
 Resume typed_attribute_frames_mutual[append]:
+  rename1 `Append bt rhs` >>
   gvs[supported_stmt_def,
       supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >>
+  `?nsid. bt = TopLevelNameTarget nsid` by
+    (Cases_on `bt` >> gvs[supported_append_target_def]) >>
   drule_at (Pat `eval_stmt _ _ _ = _`) append_projection_frame >>
-  disch_then (qspecl_then [`tops`,`root`] mp_tac) >>
-  (impl_tac >- metis_tac[cj 1 supported_pure_scopes_mutual]) >> strip_tac >> simp[] >>
+  disch_then (qspec_then `root` mp_tac) >>
+  impl_tac
+  >- (gvs[place_access_def, target_writes_ok_def] >>
+      metis_tac[cj 1 supported_pure_scopes_mutual]) >>
+  strip_tac >> simp[] >>
   irule scope_projection_observe >> simp[]
 QED
 
