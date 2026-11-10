@@ -490,3 +490,180 @@ Theorem call_emission_memory_writes_empty:
 Proof
   strip_tac >> gvs[asm_op_mem_writes_def]
 QED
+
+Theorem mload_source_read_coverage:
+  inst.inst_opcode = MLOAD /\ inst.inst_operands = [off] /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  asm_op_mem_reads "MLOAD" args b ==>
+  source_memory_read_byte inst vs b
+Proof
+  rpt strip_tac >>
+  gvs[venomStateTheory.eval_operands_def, AllCaseEqs()] >>
+  gvs[asm_op_mem_reads_def, source_memory_read_byte_def,
+      source_memory_read_ranges_def, byte_in_memory_range_def, in_mem_range_def]
+QED
+
+Theorem sha3_source_read_coverage:
+  inst.inst_opcode = SHA3 /\ inst.inst_operands = [off; len] /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  asm_op_mem_reads "SHA3" args b ==>
+  source_memory_read_byte inst vs b
+Proof
+  rpt strip_tac >>
+  gvs[venomStateTheory.eval_operands_def, AllCaseEqs()] >>
+  gvs[asm_op_mem_reads_def, source_memory_read_byte_def,
+      source_memory_read_ranges_def, memory_range_of_operands_def,
+      byte_in_memory_range_def, in_mem_range_def]
+QED
+
+Theorem copy_create_source_read_coverage:
+  MEM inst.inst_opcode [MCOPY; CREATE] /\
+  venom_to_evm_name inst.inst_opcode = SOME name /\
+  inst.inst_operands = [x; off; len] /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  asm_op_mem_reads name args b ==>
+  source_memory_read_byte inst vs b
+Proof
+  rpt strip_tac >>
+  gvs[venomStateTheory.eval_operands_def, AllCaseEqs()] >>
+  gvs[asmIRTheory.venom_to_evm_name_def, asm_op_mem_reads_def,
+      source_memory_read_byte_def, source_memory_read_ranges_def,
+      memory_range_of_operands_def, byte_in_memory_range_def,
+      in_mem_range_def, log_table_def]
+QED
+
+Theorem create2_source_read_coverage:
+  inst.inst_opcode = CREATE2 /\
+  inst.inst_operands = [value; off; len; salt] /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  asm_op_mem_reads "CREATE2" args b ==>
+  source_memory_read_byte inst vs b
+Proof
+  rpt strip_tac >>
+  gvs[venomStateTheory.eval_operands_def, AllCaseEqs()] >>
+  gvs[asm_op_mem_reads_def, source_memory_read_byte_def,
+      source_memory_read_ranges_def, memory_range_of_operands_def,
+      byte_in_memory_range_def, in_mem_range_def, log_table_def]
+QED
+
+Theorem copy_source_write_coverage:
+  MEM inst.inst_opcode [MCOPY; CALLDATACOPY; RETURNDATACOPY; CODECOPY] /\
+  venom_to_evm_name inst.inst_opcode = SOME name /\
+  inst.inst_operands = [dst; src; len] /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  asm_op_mem_writes name args b ==>
+  ?range. MEM range (source_memory_write_ranges inst vs) /\
+          byte_in_memory_range range b
+Proof
+  rpt strip_tac >>
+  gvs[venomStateTheory.eval_operands_def, AllCaseEqs()] >>
+  gvs[asmIRTheory.venom_to_evm_name_def, asm_op_mem_writes_def,
+      source_memory_write_ranges_def, sized_source_write_range_def,
+      byte_in_memory_range_def, in_mem_range_def]
+QED
+
+Theorem extcodecopy_source_write_coverage:
+  inst.inst_opcode = EXTCODECOPY /\
+  inst.inst_operands = [addr; dst; src; len] /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  asm_op_mem_writes "EXTCODECOPY" args b ==>
+  ?range. MEM range (source_memory_write_ranges inst vs) /\
+          byte_in_memory_range range b
+Proof
+  rpt strip_tac >>
+  gvs[venomStateTheory.eval_operands_def, AllCaseEqs()] >>
+  gvs[asm_op_mem_writes_def, source_memory_write_ranges_def,
+      sized_source_write_range_def, byte_in_memory_range_def, in_mem_range_def]
+QED
+
+Theorem mstore_source_write_coverage:
+  MEM inst.inst_opcode [MSTORE; MSTORE8] /\
+  venom_to_evm_name inst.inst_opcode = SOME name /\
+  inst.inst_operands = [dst; value] /\
+  eval_operands inst.inst_operands vs = SOME args /\
+  asm_op_mem_writes name args b ==>
+  ?range. MEM range (source_memory_write_ranges inst vs) /\
+          byte_in_memory_range range b
+Proof
+  rpt strip_tac >>
+  gvs[venomStateTheory.eval_operands_def, AllCaseEqs()] >>
+  gvs[asmIRTheory.venom_to_evm_name_def, asm_op_mem_writes_def,
+      source_memory_write_ranges_def, fixed_source_write_range_def,
+      byte_in_memory_range_def, in_mem_range_def]
+QED
+
+Theorem log_source_read_coverage:
+  inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc :: rest /\
+  LENGTH rest = w2n tc + 2 /\ REVERSE rest = off :: len :: topics /\
+  MEM name ["LOG0"; "LOG1"; "LOG2"; "LOG3"; "LOG4"] /\
+  eval_operands (REVERSE rest) vs = SOME args /\
+  asm_op_mem_reads name args b ==>
+  source_memory_read_byte inst vs b
+Proof
+  rpt strip_tac >>
+  gvs[venomStateTheory.eval_operands_def, AllCaseEqs()] >>
+  gvs[asm_op_mem_reads_def, source_memory_read_byte_def,
+      source_memory_read_ranges_def, memory_range_of_operands_def,
+      byte_in_memory_range_def, in_mem_range_def, log_table_def]
+QED
+
+Theorem nonmemory_emission_reads_empty:
+  ~MEM name ["MLOAD"; "SHA3"; "RETURN"; "REVERT";
+    "LOG0"; "LOG1"; "LOG2"; "LOG3"; "LOG4";
+    "MCOPY"; "CREATE"; "CREATE2"; "CALL"; "STATICCALL"; "DELEGATECALL"] ==>
+  ~asm_op_mem_reads name args b
+Proof
+  simp[asm_op_mem_reads_def, log_table_def] >> metis_tac[]
+QED
+
+Theorem nonmemory_emission_writes_empty:
+  ~MEM name ["MSTORE"; "MSTORE8"; "MCOPY"; "CALLDATACOPY";
+             "RETURNDATACOPY"; "CODECOPY"; "EXTCODECOPY"] ==>
+  ~asm_op_mem_writes name args b
+Proof
+  simp[asm_op_mem_writes_def] >> metis_tac[]
+QED
+
+Theorem source_read_byte_no_labels:
+  source_memory_reads_disjoint cplan inst vs /\
+  (!b. b IN FDOM labs ==> context_spill_byte cplan b) /\
+  source_memory_read_byte inst vs b ==>
+  b NOTIN FDOM labs
+Proof
+  simp[source_memory_read_byte_def] >> rpt strip_tac >>
+  rename1 `MEM rng (source_memory_read_ranges inst vs)` >>
+  PairCases_on `rng` >>
+  gvs[source_memory_reads_disjoint_def, byte_in_memory_range_def,
+      GSYM in_mem_range_def] >>
+  drule_all (SRULE [arithmeticTheory.ADD_COMM] spill_disjoint_ranges_no_labels) >> simp[]
+QED
+
+Theorem source_write_byte_no_labels:
+  context_source_memory_writes_disjoint cplan inst vs /\
+  (!b. b IN FDOM labs ==> context_spill_byte cplan b) /\
+  MEM rng (source_memory_write_ranges inst vs) /\
+  byte_in_memory_range rng b ==>
+  b NOTIN FDOM labs
+Proof
+  PairCases_on `rng` >> rpt strip_tac >>
+  gvs[context_source_memory_writes_disjoint_def, byte_in_memory_range_def,
+      GSYM in_mem_range_def] >>
+  drule_all (SRULE [arithmeticTheory.ADD_COMM] spill_disjoint_ranges_no_labels) >> simp[]
+QED
+
+Theorem source_footprint_symbolic_memory_safe:
+  source_memory_reads_disjoint cplan inst vs /\
+  context_source_memory_writes_disjoint cplan inst vs /\
+  (!b. b IN FDOM labs ==> context_spill_byte cplan b) /\
+  (!b. asm_op_mem_reads name args b ==>
+    source_memory_read_byte inst vs b \/
+    (?rng. MEM rng (source_memory_write_ranges inst vs) /\
+           byte_in_memory_range rng b)) /\
+  (!b. asm_op_mem_writes name args b ==>
+    ?rng. MEM rng (source_memory_write_ranges inst vs) /\
+          byte_in_memory_range rng b) ==>
+  !b. b IN FDOM labs ==>
+    ~asm_op_mem_reads name args b /\ ~asm_op_mem_writes name args b
+Proof
+  metis_tac[source_read_byte_no_labels, source_write_byte_no_labels]
+QED
