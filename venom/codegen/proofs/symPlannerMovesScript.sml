@@ -2034,3 +2034,42 @@ Proof
   >- (drule_all_then MATCH_ACCEPT_TAC sym_do_dup_small) >>
   `15 < dist` by decide_tac >> drule_all_then MATCH_ACCEPT_TAC sym_do_dup_big
 QED
+
+Theorem sym_steps_same_mem_frame_compose:
+  sym_steps p env m ss = SymOK mid /\
+  sym_steps p env n mid = SymOK last /\
+  sym_kinds_ok cplan fn ret srest out last /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + m /\
+  last.sym_base.as_pc = mid.sym_base.as_pc + n /\
+  mid.sym_mem_labels = ss.sym_mem_labels /\
+  (!b. ~P b ==> FLOOKUP last.sym_mem_labels b = FLOOKUP mid.sym_mem_labels b) ==>
+  ?last. sym_steps p env (m+n) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + (m+n) /\
+    (!b. ~P b ==> FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all_then assume_tac sym_steps_compose_ok >>
+  metis_tac[arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem sym_spill_tos_continue:
+  sym_steps p env m ss = SymOK mid /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + m /\
+  mid.sym_mem_labels = ss.sym_mem_labels /\
+  do_spill_tos qs = (ops,out) /\ qs.ps_stack <> [] /\
+  spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) ops /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest qs mid /\
+  asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (m + LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + (m + LENGTH (execute_plan initial_fmp ops)) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all_then (qspec_then `env` strip_assume_tac) sym_do_spill_tos >>
+  simp[sym_steps_same_mem_frame_compose]
+QED
+
