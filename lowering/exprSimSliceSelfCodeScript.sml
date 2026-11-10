@@ -254,7 +254,7 @@ Proof
      n2w (LENGTH s.vs_code) <+ b + n) <=>
     LENGTH s.vs_code < w2n b + w2n n)` by
     (mp_tac (Q.SPECL [`dimword (:256)`, `w2n (b:bytes32)`, `w2n (n:bytes32)`,
-       `LENGTH s.vs_code`] slice_bounds_mod) >>
+       `LENGTH s.vs_code`] exprSimSliceBoundsTheory.slice_bounds_mod) >>
      simp[WORD_LO, word_add_def, w2n_n2w, w2n_lt] >> decide_tac) >>
   drule_all slice_bounds_run_frame >>
   qpat_x_assum `(_ \/ _) <=> _` (fn th => pure_rewrite_tac[th]) >>
