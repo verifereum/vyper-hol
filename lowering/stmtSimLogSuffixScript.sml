@@ -81,14 +81,6 @@ Proof
   gvs[w2n_n2w]
 QED
 
-Theorem log_operands_values[local]:
-  !ops ws. LIST_REL (\op w. eval_operand op s = SOME w) ops ws ==>
-    eval_operands ops s = SOME ws
-Proof
-  Induct >> Cases_on `ws` >> simp[eval_operands_def] >> rpt strip_tac >>
-  first_x_assum drule >> simp[]
-QED
-
 Theorem log_empty_suffix_finish[local]:
   compile_log_topic_ops raw sm = (ops,st) /\
   run_inst_seq (emitted_insts sm st) s = OK u /\

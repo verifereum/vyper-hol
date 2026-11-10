@@ -351,6 +351,14 @@ Definition eval_operands_def:
         | SOME vs => SOME (v::vs)
 End
 
+Theorem log_operands_values:
+  !ops ws. LIST_REL (\op w. eval_operand op s = SOME w) ops ws ==>
+    eval_operands ops s = SOME ws
+Proof
+  Induct >> Cases_on `ws` >> simp[eval_operands_def] >> rpt strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
 (* Record update identity: s with vs_inst_idx := 0 = s when already 0 *)
 Theorem inst_idx_update_id[simp]:
   s.vs_inst_idx = 0 ==> s with vs_inst_idx := 0 = s
