@@ -12,12 +12,18 @@ val typed_id_rules =
    compiler_id_flow_copy_memory, compiler_id_flow_copy_memory_dynamic,
    compiler_id_flow_with_byte_offset, compiler_id_flow_store_bytestring];
 
-fun typed_id_step goal = FIRST
-  [CHANGED_TAC (asm_simp_tac (srw_ss()) typed_id_rules), gen_tac,
-   irule compiler_id_flow_bind >> conj_tac,
-   irule compiler_id_flow_ignore_bind >> conj_tac,
-   IF_CASES_TAC, BasicProvers.TOP_CASE_TAC,
-   first_assum (fn ih => irule (SRULE [ADD_COMM] ih) >> fs[ADD_COMM] >> NO_TAC)] goal;
+(* A goal on a type case is split before simplification: simplifying the
+   whole case under the induction hypotheses is slow. *)
+fun typed_id_step (goal as (_, concl)) = let
+  val split_first = can (TypeBase.dest_case o rand) concl
+in FIRST
+  ((if split_first then [BasicProvers.TOP_CASE_TAC] else []) @
+   [CHANGED_TAC (asm_simp_tac (srw_ss()) typed_id_rules), gen_tac,
+    irule compiler_id_flow_bind >> conj_tac,
+    irule compiler_id_flow_ignore_bind >> conj_tac,
+    IF_CASES_TAC, BasicProvers.TOP_CASE_TAC,
+    first_assum (fn ih => irule (SRULE [ADD_COMM] ih) >> fs[ADD_COMM] >> NO_TAC)]) goal
+end;
 
 Theorem compiler_id_flow_typed_copy:
   (!cenv dst dst_ty src src_ty.
