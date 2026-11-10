@@ -6,6 +6,7 @@
 Theory bodyIntCallFamCallIntEntry
 Ancestors
   bodyIntCallJointContract bodyIntCallSeamDefs
+  bodyIntCallFamCallIntCertificateIntro
 Libs
   monadsyntax
 

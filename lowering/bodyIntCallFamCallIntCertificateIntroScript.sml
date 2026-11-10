@@ -40,7 +40,8 @@ Theorem intcall_joint_res_gas_obs:
   intcall_joint_res fp ce env (es with gas_obs := gs) b s <=>
   intcall_joint_res fp ce env es b s
 Proof
-  simp[intcall_joint_res_def]
+  simp[intcall_joint_res_def, intcall_expr_res_def,
+       loweringPostsTheory.local_region_def]
 QED
 
 Theorem intcall_deferred_intro:
