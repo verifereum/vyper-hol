@@ -2,7 +2,7 @@ Theory simplifyCfgRetpc
 Ancestors
   unitShapeDefs simplifyCfgDefs simplifyCfgShape simplifyCfgLabelProps rich_list
   simplifyCfgStruct cfgTransform venomWf venomInst list
-  cfgNormBase simplifyCfgBypassPhi simplifyCfgPhiSemantics
+  cfgNormBase simplifyCfgBypassPhi simplifyCfgPhiSemantics venomWfProps
   venomExecSemantics alist option
   simplifyCfgRepairDataflow simplifyCfgCollapseShape simplifyCfgPhiShape
   simplifyCfgChainDataflow simplifyCfgBypassShape venomInstIdsProps simplifyCfgWfssa
@@ -221,7 +221,7 @@ Proof
   `resolve_phi p i.inst_operands = SOME (Var y)` by
     (irule retpc_phi_pair_selected >> simp[]) >>
   drule_all scfg_update_phi_bypass_selected >> strip_tac >>
-  drule scfg_resolve_phi_pair >> strip_tac >>
+  drule resolve_phi_pair >> strip_tac >>
   metis_tac[phi_pairs_mem_var]
 QED
 
