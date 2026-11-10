@@ -532,6 +532,39 @@ Proof
   qpat_x_assum `!x. not_fresh_at sa x ==> _` drule >> simp[]
 QED
 
+(* Canonical dynamic offset word, at the selected tuple head in calldata. *)
+Theorem registration_calldata_offset:
+  calldata_encodes env fname tys vs s.vs_call_ctx.cc_calldata /\
+  LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
+  LIST_REL value_has_type tvs vs /\
+  vyper_to_abi_list env tys vs = SOME avs /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  i < LENGTH tys /\ is_dynamic (vyper_to_abi_type env (EL i tys)) ==>
+  abi_decode_load CALLDATALOAD
+    (n2w (4 + SUM (MAP abi_member_head_size
+      (TAKE i (MAP (vyper_to_abi_type env) tys)))) : bytes32) s =
+    n2w (abi_tuple_child_offset (MAP (vyper_to_abi_type env) tys) avs i)
+Proof
+  strip_tac >>
+  `LENGTH tys = LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
+  fs[calldata_encodes_def, GSYM abiDecoderMembersTheory.vyper_to_abi_types_MAP,
+     Excl "enc_def"] >>
+  `TAKE (LENGTH vs) tys = tys` by metis_tac[TAKE_LENGTH_ID] >>
+  fs[abiDecoderMembersTheory.vyper_to_abi_types_MAP, Excl "enc_def",
+     Excl "TAKE_LENGTH_ID_rwt2"] >>
+  drule_all coherent_source_list_head_lengths >> strip_tac >>
+  `mem_bytes_at 4
+    (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)))
+    (abi_decode_source CALLDATALOAD s) =
+    enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)` by
+    simp[abiDecoderContractTheory.abi_decode_source_def, mem_bytes_at_def,
+         DROP_APPEND2, function_selector_length, TAKE_LENGTH_APPEND] >>
+  gvs[Excl "enc_def"] >> once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule canonicalMemberTraversalPtrTheory.structural_tuple_indexed_offset_load >>
+  simp[EL_MAP, function_selector_length, Excl "enc_def"] >>
+  gvs[function_selector_length, Excl "enc_def"]
+QED
+
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
    Hints (not binding):
