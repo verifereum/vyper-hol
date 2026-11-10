@@ -9525,6 +9525,110 @@ Proof
   metis_tac[mm_local_read_write_disjoint, venomStateTheory.read_memory_def]
 QED
 
+Theorem mm_local_merge_partition[local]:
+  !cs. SORTED (\a b. a.cg_dst <= b.cg_dst) cs ==>
+  ?chunks. FLAT chunks = cs /\
+    LIST_REL (\parts g.
+      parts <> [] /\ g = FOLDL copy_merge (HD parts) (TL parts) /\
+      g.cg_inst_ids = FLAT (MAP (\h. h.cg_inst_ids) parts) /\
+      EVERY (\h. mm_local_copy_ancestor h g) parts)
+      chunks (merge_adjacent cs)
+Proof
+  recInduct merge_adjacent_ind >> rpt conj_tac
+  >- (strip_tac >> qexists `[]` >> simp[merge_adjacent_def])
+  >- (gen_tac >> strip_tac >> qexists `[[c]]` >>
+      simp[merge_adjacent_def, mm_local_copy_ancestor_refl]) >>
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  Cases_on `copy_can_merge c1 c2` >> gvs[]
+  >- (`SORTED (\a b. a.cg_dst <= b.cg_dst) (copy_merge c1 c2::rest)` by
+        (gvs[sortingTheory.SORTED_EQ, relationTheory.transitive_def,
+             copy_merge_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+      first_x_assum (drule_then strip_assume_tac) >>
+      rename1 `FLAT qs = copy_merge c1 c2::rest` >>
+      namedCases_on `qs` ["", "ps qss"] >> gvs[] >>
+      namedCases_on `ps` ["", "p ps'"] >> gvs[] >>
+      qexists `(c1::c2::ps')::qss` >>
+      simp[Once merge_adjacent_def] >>
+      simp[GSYM APPEND_ASSOC] >>
+      drule_all mm_local_copy_merge_ancestors >> strip_tac >>
+      conj_tac >- gvs[copy_merge_def] >>
+      metis_tac[mm_local_copy_ancestor_trans]) >>
+  `SORTED (\a b. a.cg_dst <= b.cg_dst) (c2::rest)` by
+    gvs[sortingTheory.SORTED_DEF] >>
+  rename1 `FLAT qs = c2::rest` >>
+  qexists `[c1]::qs` >>
+  simp[merge_adjacent_def, mm_local_copy_ancestor_refl]
+QED
+
+Theorem mm_local_add_partition[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) cs ==>
+  ?chunks. FLAT chunks = insert_sorted cs c /\
+    LIST_REL (\parts g.
+      parts <> [] /\ g = FOLDL copy_merge (HD parts) (TL parts) /\
+      g.cg_inst_ids = FLAT (MAP (\h. h.cg_inst_ids) parts) /\
+      EVERY (\h. mm_local_copy_ancestor h g) parts)
+      chunks (add_copy cs c)
+Proof
+  strip_tac >> simp[add_copy_def] >> irule mm_local_merge_partition >>
+  simp[mm_local_insert_sorted_order]
+QED
+
+Theorem mm_local_add_constituents[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) cs /\ MEM g (add_copy cs c) ==>
+  ?parts. parts <> [] /\
+    g = FOLDL copy_merge (HD parts) (TL parts) /\
+    g.cg_inst_ids = FLAT (MAP (\h. h.cg_inst_ids) parts) /\
+    EVERY (\h. mm_local_copy_ancestor h g) parts /\
+    EVERY (\h. h = c \/ MEM h cs) parts
+Proof
+  strip_tac >> drule mm_local_add_partition >>
+  disch_then (qspec_then `c` strip_assume_tac) >>
+  drule_all LIST_REL_MEM_IMP_R >> strip_tac >>
+  qexists `x` >> simp[] >>
+  gvs[EVERY_MEM] >> rpt strip_tac >>
+  `MEM h (insert_sorted cs c)` by metis_tac[MEM_FLAT] >>
+  metis_tac[mm_local_insert_sorted_mem]
+QED
+
+Theorem mm_local_ancestral_interval_read[local]:
+  !b a. mm_local_history is H n /\ a <= b /\ b <= n /\
+  (!q. a <= q /\ q < b ==>
+    ?h. MEM h (cuts q).ss_copies /\ mm_local_copy_ancestor c h /\
+        ~MEM h (scan_inst dfg Mem2Mem (cuts q) (EL q is)).ss_flushed) ==>
+  read_memory c.cg_src c.cg_length (H b) =
+  read_memory c.cg_src c.cg_length (H a)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[] >>
+  Cases_on `a = SUC b` >- simp[] >>
+  `a <= b /\ b < n` by decide_tac >>
+  `read_memory c.cg_src c.cg_length (H b) =
+   read_memory c.cg_src c.cg_length (H a)` by
+    (first_x_assum irule >> simp[] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  `?h. MEM h (cuts b).ss_copies /\ mm_local_copy_ancestor c h /\
+       ~MEM h (scan_inst dfg Mem2Mem (cuts b) (EL b is)).ss_flushed` by
+    (first_x_assum irule >> simp[]) >>
+  `h.cg_src <= c.cg_src /\
+   c.cg_src + c.cg_length <= h.cg_src + h.cg_length` by
+    (gvs[mm_local_copy_ancestor_def] >> decide_tac) >>
+  drule_all mm_local_surviving_source_read >> simp[]
+QED
+
+Theorem mm_local_ancestral_interval_captures[local]:
+  mm_local_history is H n /\ a <= b /\ b <= n /\
+  (!q. a <= q /\ q < b ==>
+    ?h. MEM h (cuts q).ss_copies /\ mm_local_copy_ancestor c h /\
+        ~MEM h (scan_inst dfg Mem2Mem (cuts q) (EL q is)).ss_flushed) /\
+  mm_local_group_captures is cap B c /\
+  (!x l. mm_local_bytes B x l = read_memory x l (H a)) /\
+  (!x l. mm_local_bytes C x l = read_memory x l (H b)) ==>
+  mm_local_group_captures is cap C c
+Proof
+  strip_tac >> irule mm_local_group_captures_rebase >> qexists `B` >>
+  simp[] >> drule_all mm_local_ancestral_interval_read >> simp[]
+QED
+
 Theorem mm_local_collection_discharge[local]:
   mm_local_pending cap js s t /\
   (!pre j mid k post d bs a cs.
