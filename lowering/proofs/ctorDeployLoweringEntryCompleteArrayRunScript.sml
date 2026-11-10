@@ -408,3 +408,73 @@ Proof
     (qpat_x_assum `abi_decode_load _ _ _ = _` mp_tac >> asm_rewrite_tac[]) >>
   drule_all deploy_ctor_array_header_complete_gas_run >> simp[]
 QED
+
+val CcompleteGas = ``\ty tv.
+ !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
+ compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ abi_decoder_coherent ce env sf ty tv /\
+ abi_decoder_metadata ce env ty tv root_di av v /\
+ eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
+ sb + LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
+ mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env ty) av)) initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
+ (hi = Lit 0w \/ ?h. eval_operand hi initial = SOME (n2w h) /\ sb + LENGTH (enc (vyper_to_abi_type env ty) av) <= h /\ h < dimword (:256)) /\
+ (!x. src = Var x \/ dst = Var x \/ hi = Var x ==> not_fresh_at st x) /\
+ st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+ fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+ (st.cs_blocks = st'.cs_blocks \/ !bb. lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==> phi_prefix_length bb.bb_instructions = 0) /\
+ alloca_inv initial /\ alloca_frontier_inv_from k ctx func site initial /\ k + unit_alloca_budget ctx < dimword (:256) /\
+ D <= d /\ d + type_memory_bytes ce ty <= D+N /\ D+N <= initial.vs_alloca_next /\
+ frag_ids st st' SUBSET ids /\ ctor_actual_scratch func ids D N initial /\
+ ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+ ?actual. gas_path ctx func initial 0 (OK actual) /\ val_in_memory tv v d actual.vs_memory /\
+ abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st')) [(d,type_memory_bytes ce ty)] initial actual /\
+ alloca_inv actual /\ alloca_frontier_inv_from k ctx func site actual /\
+ ctor_actual_scratch func ids D N actual /\ D+N <= actual.vs_alloca_next /\
+ actual.vs_data_section = initial.vs_data_section /\ actual.vs_call_ctx = initial.vs_call_ctx /\
+ (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==> lookup_var x actual = SOME w) /\
+ ~actual.vs_halted /\ actual.vs_current_bb = st'.cs_current_bb /\ actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
+ abi_decode_sim ctx func initial actual /\ fresh_vars_wrt limit_st actual /\
+ actual.vs_labels = initial.vs_labels /\ actual.vs_gas_readings = initial.vs_gas_readings /\ actual.vs_code = initial.vs_code /\
+ actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
+ actual.vs_block_ctx = initial.vs_block_ctx``;
+
+Theorem deploy_ctor_array_loop_complete_gas_step:
+  (^CcompleteGas) ty tv /\ ^Pk /\
+  (^Ok) k ctx func site ids D N d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
+    tv vs slot_id slot initial j j s /\ j < LENGTH vs /\
+  ~s.vs_halted /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 ==>
+  ?t. gas_path ctx func s 0 (OK t) /\
+    (^Ok) k ctx func site ids D N d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
+      tv vs slot_id slot initial (SUC j) (SUC j) t /\
+    ~t.vs_halted /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+    abi_decode_sim ctx func s t /\
+    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx
+Proof
+  disch_then (CONJUNCTS_THEN2 (mk_asm "child") (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  drule_all deploy_ctor_array_header_complete_gas_reach >>
+  disch_then (qx_choose_then `h` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  `h.vs_current_bb = st.cs_current_bb` by gvs[] >>
+  drule abi_decoder_recursive_data_facts >> strip_tac >>
+  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_recursive_compiled_facts >> strip_tac >>
+  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
+  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
+  `32 + LENGTH vs * type_memory_size tv <= type_memory_bytes ce (ArrayT ty (Dynamic maxn))` by
+    (asm_simp_tac bool_ss [] >> simp[]) >>
+  qpat_x_assum `?bb. lookup_block end_st.cs_current_bb _ = _ /\ _` strip_assume_tac >>
+  `~h.vs_halted /\ h.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>
+  asm "child" assume_tac >>
+  drule_all deploy_ctor_array_iteration_complete_gas >>
+  disch_then (qx_choose_then `t` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  qexists `t` >> conj_tac
+  >- (qpat_x_assum `gas_path _ _ s _ _` mp_tac >>
+      qpat_x_assum `gas_path _ _ h _ _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_path_then, ADD_0]) >>
+  asm_simp_tac bool_ss [] >> metis_tac[abi_decode_sim_trans]
+QED
+

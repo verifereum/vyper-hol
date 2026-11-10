@@ -694,3 +694,71 @@ Proof
       POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_path_then, ADD_0]) >>
   asm_simp_tac bool_ss []
 QED
+
+Theorem deploy_ctor_array_iteration_complete_gas:
+  (^CcompleteGas) ty tv /\
+  abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
+    (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi
+    (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
+  fn_has_code st end_st func /\ fn_inst_ids_distinct func /\
+  (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
+  abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    parent_di (ListV avs) (ArrayV (DynArrayV vs)) /\
+  (^Ok) k ctx func site ids D N d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
+    tv vs slot_id slot initial j j s /\ j < LENGTH vs /\
+  abi_decoder_ranges DLOAD hi src dst sb
+    (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
+  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
+  eval_operand ip initial = SOME (n2w slot) /\
+  abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
+  abi_decoder_operand_live next hi /\ abi_decoder_operand_live next ip /\
+  next <= st.cs_next_var /\ end_st.cs_next_var < limit_st.cs_next_var /\
+  next <= end_st.cs_next_var /\
+  k + unit_alloca_budget ctx < dimword (:256) /\
+  D <= d /\ d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= D+N /\
+  frag_ids st end_st SUBSET ids /\ slot_id NOTIN frag_ids middle end_st /\
+  slot_id IN ctor_actual_sites func ids /\
+  venomMemDefs$regions_disjoint (slot,32) (d,type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
+  32 + LENGTH vs * type_memory_size tv <= type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\
+  slot < dimword (:256) /\ LENGTH vs < dimword (:256) /\
+  FST ops = Var iv /\
+  lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb /\
+  bb.bb_instructions = end_st.cs_current_insts ++ abi_decode_backedge_insts id iv
+    (STRING #"%" (toString end_st.cs_next_var)) ip hdr /\
+  lookup_block hdr func.fn_blocks = SOME hdr_bb /\
+  phi_prefix_length hdr_bb.bb_instructions = 0 /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. gas_path ctx func s 0 (OK t) /\
+    (^Ok) k ctx func site ids D N d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
+      tv vs slot_id slot initial (SUC j) (SUC j) t /\
+    ~t.vs_halted /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+    abi_decode_sim ctx func s t /\
+    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx
+Proof
+  disch_then (CONJUNCTS_THEN2 (mk_asm "child") (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  `end_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  asm "child" assume_tac >>
+  drule_all deploy_ctor_array_body_complete_gas_at_index >>
+  disch_then (qx_choose_then `body_state` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  asm_x "child" kall_tac >>
+  `all_have_type tv vs` by metis_tac[abi_decoder_dynarray_values] >>
+  `lookup_block body_state.vs_current_bb func.fn_blocks = SOME bb /\
+   eval_operand (Var iv) body_state = SOME (n2w j)` by
+    (asm_simp_tac bool_ss [] >> metis_tac[]) >>
+  drule_all deploy_ctor_array_backedge_complete_gas_run >>
+  disch_then (qx_choose_then `t` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  qexists `t` >> conj_tac
+  >- (qpat_x_assum `gas_path _ _ s _ _` mp_tac >>
+      qpat_x_assum `gas_path _ _ body_state _ _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_path_then, ADD_0]) >>
+  asm_simp_tac bool_ss [] >> metis_tac[abi_decode_sim_trans]
+QED
