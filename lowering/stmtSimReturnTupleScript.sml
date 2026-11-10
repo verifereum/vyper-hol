@@ -1,6 +1,7 @@
 (* Tuple-return simulation, retained for counted migration. *)
 Theory stmtSimReturnTuple
 Ancestors
+  stmtLoweringProps
   stmtSimReturn stmtSimProps stmtSimDefs exprSimProps exprSimDefs loweringPosts exprSimTypedAlloc
   gasOutcome gasSummary gasSummaryCompose gasContext gasCount fragGasPath fragGasSeq gasExemptCert
   list rich_list arithmetic finite_map fragExec freshWrites vyperTypeABI
@@ -30,33 +31,6 @@ Proof
 QED
 
 
-Theorem tuple_load_no_gas:
-  !tys cenv bop off sa elems sb.
-    compile_load_tuple_elements cenv bop tys off sa = (elems,sb) ==>
-    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-    FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []
-Proof
-  Induct
-  >- (rw[compile_load_tuple_elements_def, comp_return_def] >>
-      simp[emitted_insts_def]) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `compile_load_tuple_elements _ _ _ _ _ = _` mp_tac >>
-  simp[compile_load_tuple_elements_def, comp_bind_def, LET_THM] >>
-  rpt (pairarg_tac >> simp[]) >> simp[comp_return_def] >> strip_tac >> gvs[] >>
-  rename1 `emit_op ADD _ sa = (pv, sm)` >>
-  rename1 `emit_op MLOAD _ sm = (v, sh)` >>
-  rename1 `compile_load_tuple_elements _ _ _ _ sh = (rest, sf)` >>
-  first_x_assum drule >> strip_tac >>
-  imp_res_tac emitted_insts_emit_op >>
-  `emitted_insts sa sf = emitted_insts sa sm ++ emitted_insts sm sh ++
-     emitted_insts sh sf` by
-    (pure_rewrite_tac[emitted_insts_def] >>
-     qpat_x_assum `sf.cs_current_insts = _` SUBST1_TAC >>
-     qpat_x_assum `sh.cs_current_insts = _` SUBST1_TAC >>
-     qpat_x_assum `sm.cs_current_insts = _` SUBST1_TAC >>
-     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> REFL_TAC) >>
-  simp[FILTER_APPEND, venomInstTheory.mk_inst_def, APPEND_ASSOC]
-QED
 
 Theorem tuple_ret_gas_path[local]:
   ~s.vs_halted /\
@@ -86,7 +60,9 @@ Theorem tuple_load_gas_path[local]:
          SOME (tuple_words cenv w tys off s.vs_memory)
 Proof
   strip_tac >> drule_all compile_load_tuple_elements_run >> strip_tac >> gvs[] >>
-  drule tuple_load_no_gas >> strip_tac >>
+  drule compile_load_tuple_elements_no_gas >> strip_tac >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (simp[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM] >> metis_tac[]) >>
   `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
   drule_all tuple_run_inst_seq_gas_path >>
   simp[] >> strip_tac >> qexists_tac `vs` >> simp[]

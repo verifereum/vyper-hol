@@ -1,6 +1,7 @@
 (* Consecutive stack-return word loads below the allocation frontier. *)
 Theory internalReturnTupleMem
 Ancestors
+  stmtLoweringProps
   bodyMemAssignTupleTargetsLoad bodyLiteralBufferMemory stmtSimReturn stmtSimReturnTuple
   fragExec fragExecMem fragGasSeqMem context stmtLowering emitHelperProps
   exprLoweringProps freshWrites compileEnv venomState list rich_list arithmetic
@@ -69,7 +70,9 @@ Theorem internal_return_tuple_load_path_mem:
 Proof
   strip_tac >> drule_all internal_return_tuple_load_mem_ok >> strip_tac >>
   drule_all compile_load_tuple_elements_run >> strip_tac >> gvs[] >>
-  drule tuple_load_no_gas >> strip_tac >>
+  drule compile_load_tuple_elements_no_gas >> strip_tac >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (simp[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM] >> metis_tac[]) >>
   `?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest` by
     (gvs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>

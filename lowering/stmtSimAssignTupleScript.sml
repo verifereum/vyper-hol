@@ -25,6 +25,7 @@
 
 Theory stmtSimAssignTuple
 Ancestors
+  stmtLoweringProps
   stmtSimProps exprSimProps stmtSimDefs exprSimDefs loweringPosts exprSimTypedAlloc tupleAssignCode
   list rich_list finite_map pred_set tupleLocalStoreProps tupleLocalStoreRun
   tupleLoadProps fragGasSeq fragGasMode stmtSimDeclPath gasContext stmtSimForced
@@ -186,41 +187,6 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem compile_load_tuple_elements_no_gas[local]:
-  !tys cenv bop off sa elems sb.
-    compile_load_tuple_elements cenv bop tys off sa = (elems, sb) ==>
-    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-    EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb) /\
-    sb.cs_current_bb = sa.cs_current_bb
-Proof
-  Induct
-  >- simp[compile_load_tuple_elements_def, comp_return_def, emitted_insts_def] >>
-  rpt gen_tac >>
-  simp[compile_load_tuple_elements_def, comp_bind_def, LET_THM] >>
-  rpt (pairarg_tac >> simp[]) >> simp[comp_return_def] >> strip_tac >>
-  first_x_assum drule >> strip_tac >> gvs[] >>
-  rename1 `emit_op ADD _ sa = (pv, sm)` >>
-  rename1 `emit_op MLOAD _ sm = (v, sh)` >>
-  rename1 `compile_load_tuple_elements _ _ _ _ sh = (rest, sf)` >>
-  `sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm` by
-    metis_tac[emit_op_extends] >>
-  `sh.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sh` by
-    metis_tac[emit_op_extends] >>
-  `emitted_insts sa sh = emitted_insts sa sm ++ emitted_insts sm sh` by
-    metis_tac[emitted_insts_append] >>
-  `sh.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sh` by
-    metis_tac[APPEND_ASSOC] >>
-  `emitted_insts sa sf = emitted_insts sa sh ++ emitted_insts sh sf` by
-    metis_tac[emitted_insts_append] >>
-  conj_tac >- metis_tac[APPEND_ASSOC] >>
-  conj_tac
-  >- (simp[] >>
-      qpat_x_assum `emit_op ADD _ _ = _` (strip_assume_tac o MATCH_MP emitted_insts_emit_op_local) >>
-      qpat_x_assum `emit_op MLOAD _ _ = _` (strip_assume_tac o MATCH_MP emitted_insts_emit_op_local) >>
-      simp[venomInstTheory.mk_inst_def]) >>
-  imp_res_tac exprLoweringPropsTheory.emit_op_same_blocks >>
-  gvs[same_blocks_def]
-QED
 
 
 Theorem compile_load_tuple_elements_path[local]:
