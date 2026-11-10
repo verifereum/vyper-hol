@@ -126,3 +126,64 @@ Proof
   simp[inline_namespace_envelope_def, pred_setTheory.SUBSET_DEF,
     pred_setTheory.IN_IMAGE, PULL_EXISTS] >> metis_tac[]
 QED
+
+(* Addresses run from root to node: F chooses caller/left, T callee/right.
+   The outer embedding composes on the left of every inner prefix. *)
+Inductive inline_namespace_node_at:
+  (!cert. inline_namespace_node_at cert [] I cert) /\
+  (!ist caller callee a b p rho sub.
+    inline_namespace_node_at a p rho sub ==>
+    inline_namespace_node_at (InlineNamespaceEdit ist caller callee a b)
+      (F::p) rho sub) /\
+  (!ist caller callee a b p rho sub.
+    inline_namespace_node_at b p rho sub ==>
+    inline_namespace_node_at (InlineNamespaceEdit ist caller callee a b)
+      (T::p) (STRCAT (inline_prefix ist.is_inline_count) o rho) sub)
+End
+
+Definition inline_namespace_leaf_at_def:
+  inline_namespace_leaf_at cert p rho fn <=>
+    inline_namespace_node_at cert p rho (InlineNamespaceLeaf fn)
+End
+
+Theorem inline_namespace_node_injective:
+  !cert p rho sub. inline_namespace_node_at cert p rho sub ==>
+    INJ rho UNIV UNIV
+Proof
+  ho_match_mp_tac inline_namespace_node_at_ind >> rpt conj_tac >>
+  simp[pred_setTheory.INJ_DEF] >> metis_tac[stringTheory.STRCAT_11]
+QED
+
+Theorem inline_namespace_node_support:
+  !cert p rho sub. inline_namespace_node_at cert p rho sub ==>
+    IMAGE rho (inline_namespace_envelope sub) SUBSET
+      inline_namespace_envelope cert
+Proof
+  ho_match_mp_tac inline_namespace_node_at_ind >> rpt conj_tac >>
+  simp[inline_namespace_envelope_def, pred_setTheory.SUBSET_DEF,
+    pred_setTheory.IN_IMAGE, PULL_EXISTS] >> metis_tac[]
+QED
+
+Theorem inline_namespace_node_leaf[simp]:
+  !fn p (rho:string -> string) sub. inline_namespace_node_at (InlineNamespaceLeaf fn) p rho sub <=>
+    p = [] /\ rho = I /\ sub = InlineNamespaceLeaf fn
+Proof
+  simp[Once inline_namespace_node_at_cases] >> metis_tac[]
+QED
+
+Theorem inline_namespace_node_edit:
+  !ist caller callee a b p (rho:string -> string) sub.
+  inline_namespace_node_at (InlineNamespaceEdit ist caller callee a b) p rho sub <=>
+    (p = [] /\ rho = I /\ sub = InlineNamespaceEdit ist caller callee a b) \/
+    (?q. p = F::q /\ inline_namespace_node_at a q rho sub) \/
+    (?q sigma. p = T::q /\
+      rho = STRCAT (inline_prefix ist.is_inline_count) o sigma /\
+      inline_namespace_node_at b q sigma sub)
+Proof
+  simp[Once inline_namespace_node_at_cases] >> metis_tac[]
+QED
+
+Definition inline_namespace_incomparable_def:
+  inline_namespace_incomparable (p:bool list) q <=>
+    ~IS_PREFIX p q /\ ~IS_PREFIX q p
+End
