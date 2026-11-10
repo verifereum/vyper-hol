@@ -97,7 +97,9 @@ Proof
    eval_operand len s' = SOME wn /\ eval_operand pop s' = SOME wp` by
     (`!op w. (!x. op = Var x ==> not_fresh_at sa x) /\
              eval_operand op s = SOME w ==> eval_operand op s' = SOME w` by
-       (Cases >> gvs[eval_operand_def, lookup_var_def]) >>
+       (`s'.vs_labels = s.vs_labels` by
+          (qpat_x_assum `s' = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+        Cases >> gvs[eval_operand_def, lookup_var_def]) >>
      conj_tac >- first_assum ACCEPT_TAC >>
      rpt conj_tac >> first_x_assum irule >> asm_rewrite_tac[]) >>
   irule (cj 1 calldata_slice_copy_store_emitted_mem) >> metis_tac[]
