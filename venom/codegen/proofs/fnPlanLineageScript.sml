@@ -5691,3 +5691,82 @@ Proof
     (qspec_then `PRE (LENGTH bb.bb_instructions)` mp_tac) >>
   simp[listTheory.EVERY_MEM] >> metis_tac[]
 QED
+
+Theorem lineage_dfs_entry_block_universal_endpoints:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_state lv dfg (cfg_analyze fn) fn ps0 lbl psL /\
+  dfs_block_state lv dfg (cfg_analyze fn) fn ps0 lbl psD /\
+  generate_block_plan lv dfg (cfg_analyze fn) fn bb psD = SOME (ops,afterD)
+  ==> !h b afterL.
+    generate_block_plan lv dfg (cfg_analyze fn) fn bb
+      (psL with <|ps_cleanup_height := h; ps_cleanup_promised := b|>) =
+      SOME (ops,afterL) ==>
+    ?prefixL prefixD core.
+      afterL.ps_stack = prefixL ++ core /\
+      afterD.ps_stack = prefixD ++ core /\
+      (!v. MEM v (live_vars_at lv lbl (LENGTH bb.bb_instructions)) ==>
+        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule dfs_block_state_lineage_state >> strip_tac >>
+  `psL = ps0 /\ psD = ps0` by metis_tac[lineage_state_entry_initial] >>
+  `fn.fn_blocks <> [] /\ lbl = (HD fn.fn_blocks).bb_label` by
+    (gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def,
+         listTheory.NULL_EQ, AllCaseEqs()]) >>
+  `bb = HD fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >> gvs[venomInstTheory.lookup_block_def, listTheory.FIND_thm]) >>
+  `cfg_preds_of (cfg_analyze fn) bb.bb_label = []` by
+    metis_tac[fnPlanLineageCallersTheory.ready_entry_no_clean] >>
+  gvs[] >>
+  qpat_assum `generate_block_plan _ _ _ _ _ ps0 = _`
+    (mp_then Any mp_tac
+      fnPlanLineageEntryProductionTheory.generate_block_plan_inactive_cleanup_update) >>
+  simp[] >> disch_then (qspecl_then [`h`,`ps0.ps_cleanup_growth`,`b`] mp_tac) >>
+  `ps0 with <|ps_cleanup_height := h; ps_cleanup_growth := ps0.ps_cleanup_growth;
+      ps_cleanup_promised := b|> =
+    ps0 with <|ps_cleanup_height := h; ps_cleanup_promised := b|>` by
+    simp[stackPlanTypesTheory.plan_state_component_equality] >>
+  simp[] >> strip_tac >> gvs[] >>
+  qexistsl_tac [`[]`,`[]`,`afterD.ps_stack`] >> simp[]
+QED
+
+Theorem lineage_dfs_join_block_universal_endpoints:
+  !fn entry succ sb dfg ch growth spill_base lbl_ctr fn_ops ps_end psL psD bops afterD.
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ succ <> entry /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_analyze fn).cfg_dfs_pre /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psL /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psD /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn sb psD =
+    SOME (bops,afterD) ==>
+  !h b afterL.
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn sb
+      (psL with <|ps_cleanup_height := h; ps_cleanup_promised := b|>) =
+      SOME (bops,afterL) ==>
+    ?prefixL prefixD core.
+      afterL.ps_stack = prefixL ++ core /\
+      afterD.ps_stack = prefixD ++ core /\
+      (!v. MEM v (live_vars_at (liveness_analyze fn) succ (LENGTH sb.bb_instructions)) ==>
+        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all lineage_dfs_join_block_outgoing_core_actual >> strip_tac >>
+  `sb.bb_label = succ` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  `LENGTH (cfg_preds_of (cfg_analyze fn) sb.bb_label) <> 1` by simp[] >>
+  qpat_assum `generate_block_plan _ _ _ _ _ psL = _`
+    (mp_then Any mp_tac
+      fnPlanLineageEntryProductionTheory.generate_block_plan_inactive_cleanup_update) >>
+  simp[] >> disch_then (qspecl_then [`h`,`psL.ps_cleanup_growth`,`b`] mp_tac) >>
+  `psL with <|ps_cleanup_height := h; ps_cleanup_growth := psL.ps_cleanup_growth;
+      ps_cleanup_promised := b|> =
+    psL with <|ps_cleanup_height := h; ps_cleanup_promised := b|>` by
+    simp[stackPlanTypesTheory.plan_state_component_equality] >>
+  simp[] >> strip_tac >> gvs[] >>
+  qexistsl_tac [`prefixL`,`prefixD`,`out.ps_stack`] >> simp[]
+QED

@@ -3060,3 +3060,46 @@ Proof
   qexists_tac `after with <|ps_cleanup_height := NONE; ps_cleanup_promised := b|>` >>
   gvs[]
 QED
+
+Theorem prepare_params_plan_cleanup_update:
+  !lv fn ps h g b.
+    prepare_params_plan lv fn (ps with <|ps_cleanup_height := h;
+      ps_cleanup_growth := g; ps_cleanup_promised := b|>) =
+    (FST (prepare_params_plan lv fn ps), SND (prepare_params_plan lv fn ps) with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>)
+Proof
+  rpt gen_tac >>
+  `!xs p. FOLDL (\s inst. s with ps_stack :=
+      stack_push (Var (HD inst.inst_outputs)) s.ps_stack)
+      (p with <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>) xs =
+    FOLDL (\s inst. s with ps_stack :=
+      stack_push (Var (HD inst.inst_outputs)) s.ps_stack) p xs with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>` by
+    (Induct >> simp[] >> rpt gen_tac >>
+     first_x_assum (qspec_then `p with ps_stack :=
+       stack_push (Var (HD h'.inst_outputs)) p.ps_stack` mp_tac) >> simp[]) >>
+  simp[prepare_params_plan_def, Excl "LET_THM"] >>
+  IF_CASES_TAC >> simp[Excl "LET_THM"] >>
+  simp[fnPlanLineageReplayTheory.popmany_plan_cleanup_update,
+       fnPlanLineageReplayTheory.optimistic_swap_plan_cleanup_update,
+       pairTheory.UNCURRY_VAR, Excl "LET_THM"]
+QED
+
+Theorem generate_block_plan_inactive_cleanup_update:
+  !lv dfg cfg fn bb ps ops after.
+    LENGTH (cfg_preds_of cfg bb.bb_label) <> 1 /\
+    generate_block_plan lv dfg cfg fn bb ps = SOME (ops,after) ==>
+    !h g b. generate_block_plan lv dfg cfg fn bb
+      (ps with <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>) =
+      SOME (ops,after with <|ps_cleanup_height := h;
+        ps_cleanup_growth := g; ps_cleanup_promised := b|>)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def] >>
+  Cases_on `bb = HD fn.fn_blocks` >> simp[] >>
+  simp[prepare_params_plan_cleanup_update,
+       fnPlanLineageReplayTheory.generate_block_insts_plan_cleanup_update] >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  Cases_on `prepare_params_plan lv fn ps` >> gvs[AllCaseEqs()]
+QED
