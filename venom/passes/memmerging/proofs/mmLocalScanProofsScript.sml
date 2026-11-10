@@ -11982,6 +11982,133 @@ Proof
   gvs[FOLDL_APPEND, FOLDL_MAP, pairTheory.UNCURRY, combinTheory.o_DEF]
 QED
 
+Theorem mm_local_final_captures_compatible[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < l /\ l <= R /\ R < LENGTH is /\
+  l < N /\ mm_local_history is H N /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL R is).inst_id,g) /\
+  MEM h (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL l is).inst_id h.cg_inst_ids /\
+  (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  (EL l is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  (!v src. FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))) /\
+  (!v src. FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE l is)).ss_loads v = SOME src ==>
+    lookup_var v (H l) = SOME (mload src (H l))) /\
+  mm_local_write_capture is H N j = SOME (a,p) /\
+  mm_local_write_capture is H N l = SOME (b,qbytes) ==>
+  mm_local_write_compatible a p b qbytes
+Proof
+  strip_tac >>
+  `j < LENGTH is /\ l < LENGTH is` by decide_tac >>
+  `((?dst src len. (EL j is).inst_opcode = MCOPY /\
+      (EL j is).inst_operands = [Lit dst; Lit src; Lit len]) \/
+    (?dst v src. (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dst; Var v] /\
+      FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+        empty_scan_state (TAKE j is)).ss_loads v = SOME src))` by
+    metis_tac[mm_local_final_write_birth] >>
+  `((?dst src len. (EL l is).inst_opcode = MCOPY /\
+      (EL l is).inst_operands = [Lit dst; Lit src; Lit len]) \/
+    (?dst v src. (EL l is).inst_opcode = MSTORE /\
+      (EL l is).inst_operands = [Lit dst; Var v] /\
+      FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+        empty_scan_state (TAKE l is)).ss_loads v = SOME src))` by
+    metis_tac[mm_local_final_write_birth] >>
+  drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_indexed_selected_captures_compatible >>
+  disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
+  simp[] >> disch_then irule >>
+  metis_tac[]
+QED
+
+Theorem mm_local_canonical_pending_captures_compatible[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  j < l /\ MEM j (mm_local_pending_indices is gs r) /\
+  MEM l (mm_local_pending_indices is gs r ++ [r]) /\
+  (l = r ==> ?h. MEM h gs /\ rep_of_group is h = SOME ((EL r is).inst_id,h)) /\
+  (!x v src. MEM x [j;l] /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE x is)).ss_loads v = SOME src ==>
+    lookup_var v (H x) = SOME (mload src (H x))) /\
+  cap j = SOME (a,p) /\ cap l = SOME (b,qbytes) ==>
+  mm_local_write_compatible a p b qbytes
+Proof
+  strip_tac >>
+  `l <= r` by (gvs[mm_local_pending_indices_mem] >> decide_tac) >>
+  `?h. MEM h gs /\ MEM (EL l is).inst_id h.cg_inst_ids /\
+     (EL l is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+    (Cases_on `l = r`
+     >- (fs[] >>
+         `MEM (EL r is).inst_id h.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+         drule_all mm_local_canonical_rep_write >> strip_tac >>
+         qexists `h` >> gvs[]) >>
+     gvs[mm_local_pending_indices_mem] >> metis_tac[]) >>
+  qpat_x_assum `MEM j (mm_local_pending_indices is gs r)` mp_tac >>
+  rewrite_tac[mm_local_pending_indices_mem] >> strip_tac >>
+  rename1 `rep_of_group is g = SOME ((EL R is).inst_id,g)` >>
+  `l < SUC r /\ l <= R` by decide_tac >>
+  drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_final_captures_compatible >>
+  disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
+  simp[] >> disch_then irule >>
+  (conj_tac >- gvs[]) >>
+  qexistsl [`H`, `SUC r`, `h`, `j`, `l`] >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem mm_local_canonical_pending_crossings[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  js = mm_local_pending_indices is gs r /\
+  MEM g gs /\ rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  (!x v src. MEM x (js ++ [r]) /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE x is)).ss_loads v = SOME src ==>
+    lookup_var v (H x) = SOME (mload src (H x))) ==>
+  (!pre j mid l post a p b bs.
+    js = pre ++ [j] ++ mid ++ [l] ++ post /\
+    cap j = SOME (a,p) /\ cap l = SOME (b,bs) ==>
+    mm_local_write_compatible a p b bs) /\
+  (!j a p b bs. MEM j js /\ cap j = SOME (a,p) /\ cap r = SOME (b,bs) ==>
+    mm_local_write_compatible a p b bs)
+Proof
+  strip_tac >>
+  `!j l a p b bs. j < l /\ MEM j js /\ MEM l (js ++ [r]) /\
+    cap j = SOME (a,p) /\ cap l = SOME (b,bs) ==>
+    mm_local_write_compatible a p b bs` by
+    (rpt strip_tac >>
+     drule_at (Pat `mm_local_prefix _ _ _ _ = _`)
+       mm_local_canonical_pending_captures_compatible >>
+     simp[] >> disch_then irule >>
+     qexistsl [`H`, `j`, `l`, `r`] >> gvs[] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `SORTED $< js` by metis_tac[mm_local_pending_indices_order] >>
+      `j < l` by
+        (qpat_x_assum `SORTED $< js` mp_tac >>
+         simp[sortingTheory.SORTED_APPEND, relationTheory.transitive_def] >>
+         metis_tac[MEM_APPEND, MEM]) >>
+      first_x_assum irule >> simp[] >> metis_tac[MEM_APPEND, MEM]) >>
+  rpt strip_tac >> `j < r` by metis_tac[mm_local_pending_indices_mem] >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
