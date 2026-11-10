@@ -2,6 +2,7 @@
 Theory bodyIntCallFamCallIntAllocatedStage
 Ancestors
   bodyIntCallFamCallIntWordStage bodyIntCallFamCallIntAllocationCertificates
+  bodyIntCallFamCallIntEntryAllocationBoundary
   bodyIntCallFamCallIntGuardedEffect bodyIntCallFamCallIntStageStore
   valueEncodingProps
 
@@ -58,7 +59,7 @@ QED
 (* A target-only continuation with allocation byte frames.  Forcing supplies
    the stronger old-allocation frame, without a local-disjointness premise. *)
 Theorem intcall_target_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es u /\
   sa.cs_next_var <= sb.cs_next_var /\
   s.vs_alloca_next <= u.vs_alloca_next /\ allocas_above fp.jc_lo u /\
@@ -78,10 +79,10 @@ Theorem intcall_target_cont:
   intcall_expr_cont fp ce env es sa s es sb u
 Proof
   strip_tac >>
-  `intcall_joint_res fp ce env es sb u` by
+  `intcall_expr_res fp ce env es sb u` by
     (irule bodyIntCallJointCallCoreTheory.intcall_joint_res_frame >> simp[] >>
      conj_tac
-     >- fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+     >- fs[bodyIntCallJointContractTheory.intcall_expr_res_def] >>
      qexistsl_tac [`es`, `s`, `sa`] >> simp[]) >>
   simp[bodyIntCallJointContractTheory.intcall_expr_cont_def] >> metis_tac[]
 QED
@@ -119,7 +120,7 @@ Theorem intcall_stage_forcing_endpoint:
   evaluate_type (get_tenv fp.jc_cx) (expr_type e) = SOME tv /\
   type_memory_bytes ce (expr_type e) = type_memory_size tv /\
   type_memory_size tv < 2**64 /\
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   ^completed_prefix fp.jc_cx start sa tys flags values ops s /\
   (!i tv. i < LENGTH tys /\ ~EL i flags /\
@@ -143,13 +144,13 @@ Proof
      simp[exprLoweringPropsTheory.ci_mono_def]) >>
   `!q x. (fp.jc_reserved q \/ MEM q ops) /\ q = Var x ==> not_fresh_at sa x` by
     (rpt strip_tac
-     >- fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+     >- fs[bodyIntCallJointContractTheory.intcall_expr_res_def] >>
      gvs[listTheory.MEM_EL] >>
      qpat_x_assum `!i. i < LENGTH tys ==> _` (qspec_then `n` mp_tac) >>
      simp[] >> metis_tac[]) >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
    local_ptrs_reserved ce sa /\ allocas_above fp.jc_lo s` by
-    fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+    fs[bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   `!p k. fp.jc_prot p k ==> p+k <= fp.jc_lo` by
     (qpat_assum `intcall_frame_ok fp`
       (ACCEPT_TAC o CONJUNCT1 o
@@ -189,7 +190,7 @@ QED
 
 (* Allocation leaves every old byte intact, including the caller windows. *)
 Theorem intcall_allocation_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es u /\
   sa.cs_next_var <= sb.cs_next_var /\
   s.vs_alloca_next <= u.vs_alloca_next /\ allocas_above fp.jc_lo u /\
@@ -212,7 +213,7 @@ Proof
       simp[venomStateTheory.eval_operand_def]) >>
   conj_tac
   >- (rpt strip_tac >> first_x_assum irule >>
-      fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+      fs[bodyIntCallJointContractTheory.intcall_expr_res_def] >>
       rpt strip_tac >> gvs[]) >>
   irule exprSimPropsTheory.locals_kept_mem >> simp[]
 QED
@@ -220,7 +221,7 @@ QED
 Theorem intcall_stage_allocation_endpoint:
   compile_alloc_buffer sz sa = (buf,sb) /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   sz < dimword (:256) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -244,7 +245,7 @@ Proof
   BETA_TAC >> strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
    local_ptrs_reserved ce sa /\ allocas_above fp.jc_lo s` by
-    fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+    fs[bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   drule_all (BETA_RULE intcall_stage_allocation_certificates) >> strip_tac >>
   `intcall_expr_cont fp ce env es sa s es sb u` by
     (irule intcall_allocation_cont >> simp[]) >>
@@ -274,7 +275,7 @@ val immutable_disjoint = ``\ce cx (es:evaluation_state) dst len.
 
 (* Initialization frames the origin before allocation, not its fresh slot. *)
 Theorem intcall_allocation_store_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es a t /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es a t /\
   intcall_expr_cont fp ce env es a t es b s /\
   s.vs_memory = t.vs_memory /\ a.cs_next_var <= b.cs_next_var /\
   b.cs_next_var <= c.cs_next_var /\
@@ -290,10 +291,10 @@ Theorem intcall_allocation_store_cont:
   intcall_expr_cont fp ce env es a t es c u
 Proof
   strip_tac >>
-  `intcall_joint_res fp ce env es b s` by
+  `intcall_expr_res fp ce env es b s` by
     fs[bodyIntCallJointContractTheory.intcall_expr_cont_def] >>
   `local_ptrs_reserved ce b /\ allocas_above fp.jc_lo s` by
-    fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+    fs[bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   `u.vs_allocas = s.vs_allocas` by
     metis_tac[placeMemoryCopyEffectTheory.typed_copy_effect_allocas] >>
   `u.vs_alloca_next = s.vs_alloca_next` by
@@ -316,10 +317,10 @@ Proof
      `eval_operand op u = eval_operand op s` by
        (irule bodyIntCallCopySharpDynamicTheory.typed_copy_effect_operand_preserved >>
         goal_assum (drule_at Any) >>
-        fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+        fs[bodyIntCallJointContractTheory.intcall_expr_res_def] >>
         rpt strip_tac >> gvs[]) >>
      fs[bodyIntCallJointContractTheory.intcall_expr_cont_def,
-        bodyIntCallJointContractTheory.intcall_joint_res_def]) >>
+        bodyIntCallJointContractTheory.intcall_expr_res_def]) >>
   drule placeMemoryCopyEffectTheory.typed_copy_effect_endpoint >> strip_tac >>
   irule intcall_target_cont >> simp[] >>
   fs[bodyIntCallJointContractTheory.intcall_expr_cont_def,
@@ -383,7 +384,7 @@ Theorem intcall_equal_store_endpoint:
    else val_in_memory tv v (w2n sw) s.vs_memory) /\
   type_memory_size tv + 64 < dimword (:256) /\
   fn_has_code b c fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es a t /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es a t /\
   intcall_expr_cont fp ce env es a t es b s /\
   a.cs_next_id <= b.cs_next_id /\ b.cs_next_id <= c.cs_next_id /\
   a.cs_next_var <= b.cs_next_var /\ b.cs_next_var <= c.cs_next_var /\
@@ -417,11 +418,11 @@ Theorem intcall_equal_store_endpoint:
       (values ++ [v]) (ops ++ [dst]) u
 Proof
   BETA_TAC >> strip_tac >>
-  `intcall_joint_res fp ce env es b s /\ ~s.vs_halted /\
+  `intcall_expr_res fp ce env es b s /\ ~s.vs_halted /\
    s.vs_current_bb = b.cs_current_bb /\ s.vs_inst_idx = LENGTH b.cs_current_insts` by
     fs[bodyIntCallJointContractTheory.intcall_expr_cont_def] >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\ local_ptrs_reserved ce b` by
-    fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+    fs[bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   `?u. val_in_memory tv v (w2n dw) u.vs_memory /\
     typed_copy_effect fp.jc_ctx fp.jc_func b c s u (w2n dw) (type_memory_size tv) /\
     stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es u` by
@@ -498,7 +499,7 @@ Theorem intcall_allocated_store_endpoint:
   expr_val_rel fp.jc_cx ty v src t /\
   fn_has_code a b fp.jc_func /\ fn_has_code b c fp.jc_func /\
   fn_inst_ids_distinct fp.jc_func /\ intcall_frame_ok fp /\
-  intcall_joint_res fp ce env es a t /\ start.cs_next_id <= a.cs_next_id /\
+  intcall_expr_res fp ce env es a t /\ start.cs_next_id <= a.cs_next_id /\
   ^deferred_list fp ce ds vs rs a es t /\
   ^completed_prefix fp.jc_cx start a tys flags values ops t /\
   (!i tv. i < LENGTH tys /\ ~EL i flags /\
@@ -526,6 +527,8 @@ Proof
        exprLoweringPropsTheory.ci_mono_compile_store_memory) >>
      fs[exprLoweringPropsTheory.ci_mono_def,
         bodyIntCallJointContractTheory.intcall_expr_cont_def]) >>
+  `local_ptrs_reserved ce a` by
+    fs[bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
    allocas_above fp.jc_lo s /\
    (!aid entry. FLOOKUP t.vs_allocas aid = SOME entry ==>
@@ -534,10 +537,10 @@ Proof
       local_region ce es.scopes t name off sz)` by
     (conj_tac
      >- fs[bodyIntCallJointContractTheory.intcall_expr_cont_def,
-           bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+           bodyIntCallJointContractTheory.intcall_expr_res_def] >>
      conj_tac
      >- fs[bodyIntCallJointContractTheory.intcall_expr_cont_def,
-           bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+           bodyIntCallJointContractTheory.intcall_expr_res_def] >>
      conj_tac
      >- (rpt strip_tac >>
          qpat_assum `intcall_expr_cont _ _ _ _ _ _ _ _ _`
@@ -560,15 +563,60 @@ Proof
     regions_disjoint off sz (w2n w) (type_memory_size tv)` by
     (rpt strip_tac >>
      qpat_x_assum `!name lb len. _ ==> regions_disjoint _ _ _ _` drule >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[compileEnvTheory.regions_disjoint_def, arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  `!aid off sz. aid < a.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (off,sz) ==>
+    regions_disjoint off sz (w2n w) (MAX 32 (type_memory_size tv))` by
+    (rpt strip_tac >> irule intcall_allocation_old_regions >>
+     metis_tac[]) >>
+  `expr_val_rel fp.jc_cx ty v src s` by
+    (irule intcall_expr_val_rel_same_memory >> simp[] >> metis_tac[]) >>
+  `?sw. eval_operand src s = SOME sw /\
+    (if is_word_type ty then sw = typed_val_to_w256 tv v
+     else val_in_memory tv v (w2n sw) s.vs_memory)` by
+    (qpat_assum `expr_val_rel _ _ _ _ s` mp_tac >>
+     pure_rewrite_tac[loweringPostsTheory.expr_val_rel_def] >>
+     disch_then (qx_choose_then `sw` strip_assume_tac) >>
+     qexists_tac `sw` >> simp[]) >>
+  `^immutable_disjoint ce fp.jc_cx es (w2n w) (MAX 32 (type_memory_size tv))` by
+    (BETA_TAC >> rpt strip_tac >>
+     irule bodyIntCallFamCallIntStageAllocationTheory.intcall_stage_allocation_immutable_window >>
+     goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+     simp[] >> metis_tac[]) >>
+  `!i. i < LENGTH ds ==>
+    ^guarded_disjoint fp.jc_cx (post_value_type ce (EL i ds))
+      (EL i rs) (EL i vs) es s (w2n w) (MAX 32 (type_memory_size tv))` by
+    (BETA_TAC >> rpt strip_tac >> irule (BETA_RULE intcall_deferred_allocation_guarded) >>
+     conj_tac >- (qexistsl_tac [`a`, `t`] >> simp[] >> metis_tac[]) >> metis_tac[]) >>
   `!aid off sz. aid < a.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (off,sz) ==>
     regions_disjoint off sz (w2n w) (type_memory_size tv)` by
-    (rpt strip_tac >>
-     `regions_disjoint off sz (w2n w) (MAX 32 (type_memory_size tv))` by
-       (irule intcall_stage_allocation_old_window >>
-        qexistsl_tac [`fp.jc_cx`, `ce`, `fp.jc_ctx`, `es`, `fp.jc_func`,
-          `aid`, `off`, `sz`, `s`, `t`, `a.cs_next_id`] >> simp[]) >>
-     fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
-  (* open: the remaining store geometry is unproved *)
-  cheat
+    (rpt strip_tac >> irule intcall_regions_disjoint_subwindow >>
+     qexistsl_tac [`MAX 32 (type_memory_size tv)`, `w2n w`] >> simp[] >> metis_tac[]) >>
+  `^immutable_disjoint ce fp.jc_cx es (w2n w) (type_memory_size tv)` by
+    (BETA_TAC >> rpt strip_tac >> irule intcall_regions_disjoint_subwindow >>
+     qexistsl_tac [`MAX 32 (type_memory_size tv)`, `w2n w`] >> simp[] >>
+     rule_assum_tac BETA_RULE >> metis_tac[]) >>
+  `!i. i < LENGTH ds ==>
+    ^guarded_disjoint fp.jc_cx (post_value_type ce (EL i ds))
+      (EL i rs) (EL i vs) es s (w2n w) (type_memory_size tv)` by
+    (BETA_TAC >> rpt strip_tac >> rule_assum_tac BETA_RULE >>
+     qpat_x_assum `!i. i < LENGTH ds ==> (case EL i vs of StackValue ax ox => _ | LocatedValue ay px => _)` drule >>
+     Cases_on `EL i vs` >> simp[] >> rpt strip_tac >>
+     irule intcall_regions_disjoint_subwindow >>
+     qexistsl_tac [`MAX 32 (type_memory_size tv)`, `w2n w`] >> simp[] >> metis_tac[]) >>
+  `!x. src = Var x ==> not_fresh_at b x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  rule_assum_tac BETA_RULE >>
+  `?u. gas_marked_path F fp.jc_ctx fp.jc_func s 0 (OK u) /\
+    intcall_expr_cont fp ce env es a t es c u /\
+    ^deferred_list fp ce ds vs rs c es u /\
+    ^completed_prefix fp.jc_cx start c (tys ++ [ty]) (flags ++ [F])
+      (values ++ [v]) (ops ++ [buf.buf_operand]) u` by
+    (BETA_TAC >> irule (BETA_RULE intcall_equal_store_endpoint) >> simp[] >>
+     qexistsl_tac [`a.cs_next_id`, `b`, `src`, `sw`] >>
+     gvs[arithmeticTheory.ADD_COMM] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rule_assum_tac BETA_RULE >> qexists_tac `u` >> reverse conj_tac
+  >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
+    fragGasModeTheory.gas_marked_path_then)) >>
+  qexists_tac `s` >> simp[]
 QED
