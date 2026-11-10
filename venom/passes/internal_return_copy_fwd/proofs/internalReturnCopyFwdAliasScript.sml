@@ -6,7 +6,7 @@ Ancestors
   venomMemProps basePtrProofs o1FrameLockstep ssaAvailablePred venomExecProofs venomWf rangeAnalysisProofs contextCodegenRel
   tailMergeStep venomInstProofs1 ptrDisciplineControl venomInstProps relation
   singleUseExpansionSupplySim occurrenceOrigin unitShapeDefs o1LowerDloadOccurrence occurrenceGeometry
-  allocaRemapProofs
+  allocaRemapProofs frameAllocationHistory
 
 Definition ircf_alias_value_def:
   ircf_alias_value fn s G v <=>
