@@ -52,13 +52,20 @@ Proof
   irule dse_local_agrees_update_var >> simp[]
 QED
 
-Theorem dse_create_memory_retained:
+Theorem dse_create_not_effects_in_space:
   inst.inst_opcode IN {CREATE; CREATE2} ==>
+  ~effects_in_space sp inst
+Proof
+  simp[] >> strip_tac >> Cases_on `sp` >>
+  gvs[effects_in_space_def, write_effects_def, read_effects_def,
+      all_effects_def, empty_effects_def, pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem dse_create_memory_retained:
+  inst.inst_opcode IN {CREATE; CREATE2} /\ inst.inst_id NOTIN ids ==>
   dse_inst ids AddrSp_Memory inst = inst
 Proof
-  simp[] >> strip_tac >>
-  simp[dse_inst_def, is_memory_def_opcode_def, write_effects_def,
-       empty_effects_def, effects_in_space_def]
+  simp[dse_inst_def]
 QED
 
 Theorem dse_create_memory_step:
@@ -119,12 +126,13 @@ QED
 
 Theorem dse_create_memory_abort:
   inst.inst_opcode IN {CREATE; CREATE2} /\
+  inst.inst_id NOTIN ids /\
   dse_local_agrees AddrSp_Memory P s t /\
   step_inst fuel ctx inst s = Abort reason s1 ==>
   ?t1. step_inst fuel ctx (dse_inst ids AddrSp_Memory inst) t = Abort reason t1 /\
     dse_equiv AddrSp_Memory s1 t1
 Proof
-  strip_tac >>
+  strip_tac >> simp[dse_inst_def] >>
   `!op. eval_operand op s = eval_operand op t` by
     (fs[dse_local_agrees_def] >> metis_tac[dse_safety_agrees_eval_operand]) >>
   `!ops. eval_operands ops s = eval_operands ops t` by
@@ -133,8 +141,6 @@ Proof
     (drule dse_local_agrees_frame >> simp[]) >>
   `dse_equiv AddrSp_Memory s t` by
     fs[dse_local_agrees_def, dse_pending_space_def] >>
-  drule dse_create_memory_retained >>
-  disch_then (qspec_then `ids` SUBST1_TAC) >>
   qpat_x_assum `step_inst _ _ _ s = _` mp_tac >>
   fs[] >> simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
   IF_CASES_TAC
