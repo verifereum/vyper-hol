@@ -144,6 +144,8 @@ Theorem framed_array_element_summary:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all framed_array_select_read >> strip_tac >>
+  qpat_assum `select_result _ _ _ _ _ = (INL _, _)`
+    (assume_tac o MATCH_MP exprSimPropsTheory.select_result_memory_place) >>
   drule_all vv_post_array_element >> strip_tac >>
   irule select_result_counted_summary >> simp[] >>
   qexists_tac `OK q` >> simp[] >>

@@ -383,7 +383,7 @@ Theorem ifexp_finish_post[local]:
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
   (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
-  sd.cs_next_id <= sb.cs_next_id ==>
+  sd.cs_next_id <= sb.cs_next_id /\ is_word_type t ==>
   vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
     (if is_word_type t then StackValue t (Var rv)
      else LocatedValue t (mk_ptr (Var rv) LocMemory))
@@ -391,8 +391,10 @@ Theorem ifexp_finish_post[local]:
 Proof
   strip_tac >>
   qpat_x_assum `_ ==> ~expr_has_effect e` (assume_tac o SIMP_RULE (srw_ss()) []) >>
-  irule (SRULE [vyperASTTheory.expr_type_def]
-    (Q.INST [`e` |-> `IfExp t c a b`] exprSimIfExpTheory.ifexp_root_vv_post_of_expr_post_read)) >>
+  qpat_assum `is_word_type _` (fn th => rewrite_tac[th] >>
+    irule (SRULE [vyperASTTheory.expr_type_def, th]
+      (Q.INST [`e` |-> `IfExp t c a b`]
+        exprSimIfExpTheory.ifexp_root_vv_post_of_expr_post_read))) >>
   goal_assum (drule_at Any) >>
   irule expr_post_ifexp >>
   `~not_fresh_at sa rv` by metis_tac[] >>
@@ -988,7 +990,8 @@ Resume compile_ifexp_word_vv_sim_mem[route_after_unwrap]:
         (mp_then Any mp_tac ifexp_finish_post) >>
       disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
-      simp[] >> disch_then irule >> gvs[post_value_type_word]) >>
+      qpat_assum `is_word_type _` (fn th => simp[th]) >>
+      disch_then irule >> gvs[post_value_type_word]) >>
   `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
   `alloca_history func (update_var rv w u with
       vs_inst_idx := LENGTH sy.cs_current_insts)` by

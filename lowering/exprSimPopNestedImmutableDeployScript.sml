@@ -418,6 +418,7 @@ Theorem immutable_ctor_pointer_post[local]:
   j + type_memory_size etv <= type_memory_size tv /\
   val_in_memory etv v (off+j) u.vs_memory /\ value_has_type etv v /\
   read_result cx result es' = (INL v,es') /\
+  (!id path. result <> PlaceR (MemoryPlace id path)) /\
   eval_operand op u = SOME (n2w (off+j)) ==>
   vv_post ctx func cenv cx e initial sa sb s0 es' result
     (LocatedValue (expr_type e) (mk_ptr op LocCode)) u
@@ -752,7 +753,8 @@ Proof
   `vv_post ctx func cenv cx (Pop ann bt) es0 sa r s0 fin
       (Value (LAST vs)) (LocatedValue ann (mk_ptr q LocCode)) u` by
     (drule_all (SRULE [expr_type_def]
-       (Q.INST [`e` |-> `Pop ann bt`] immutable_ctor_pointer_post)) >> simp[]) >>
+       (Q.INST [`e` |-> `Pop ann bt`, `result` |-> `Value (LAST vs)`]
+          immutable_ctor_pointer_post)) >> simp[]) >>
   `!tail. pop_place cx (ImmutablePlace cenv.ce_module id path)
       (es with gas_obs := tail) =
       (INL (Value (LAST vs)),fin with gas_obs := tail)` by

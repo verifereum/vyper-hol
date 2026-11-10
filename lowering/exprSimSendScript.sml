@@ -158,7 +158,7 @@ Proof
        assert_def, return_def, raise_def, lift_option_type_def, check_def,
        get_accounts_def, update_accounts_def, get_transient_storage_def,
        lift_option_def, update_transient_def, append_logs_def,
-       vyperCallOutcomeTheory.take_call_outcome_def,
+       vyperCallOutcomeTheory.take_call_outcome_def, vyperCallOutcomeTheory.take_request_outcome_def,
        vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   rpt strip_tac >> gvs[AllCaseEqs()]
@@ -205,7 +205,7 @@ Theorem take_call_outcome_typed:
       INR (Error (RuntimeError "call outcome accounts"))
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[take_call_outcome_def] >> Cases_on `st.outcomes` >> simp[] >>
+  simp[take_call_outcome_def, take_request_outcome_def] >> Cases_on `st.outcomes` >> simp[] >>
   pairarg_tac >> simp[] >> rw[] >>
   gvs[outcomes_accounts_typed_def, take_outcome_def] >>
   Cases_on `x` >> gvs[failed_outcome_def] >>
@@ -486,7 +486,7 @@ Proof
   `call_outcome_request target calldata value_opt (st with gas_obs := tail) =
    call_outcome_request target calldata value_opt st` by
     simp[call_outcome_request_def] >>
-  Cases_on `st.outcomes` >> simp[take_call_outcome_def] >>
+  Cases_on `st.outcomes` >> simp[take_call_outcome_def, take_request_outcome_def] >>
   rename1 `st.outcomes = SOME os` >>
   Cases_on `take_outcome (call_outcome_request target calldata value_opt st) os` >>
   rw[]

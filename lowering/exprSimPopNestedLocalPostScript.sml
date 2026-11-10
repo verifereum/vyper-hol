@@ -57,7 +57,8 @@ Theorem local_memory_vv_post:
   eval_operand op u = SOME w /\
   local_region cenv es'.scopes u id locbase sz /\
   locbase <= w2n w /\ w2n w + val_footprint tv v <= locbase + sz /\
-  local_val_at cenv cx id (w2n w - locbase) tv v ==>
+  local_val_at cenv cx id (w2n w - locbase) tv v /\
+  local_place_at cenv cx id (w2n w - locbase) tv result ==>
   vv_post ctx func cenv cx e es sa sb s0 es' result
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) u
 Proof
@@ -220,7 +221,9 @@ Theorem pop_path_vv_post:
   local_region cenv es'.scopes u id locbase sz /\
   u.vs_memory = (mstore (locbase + k) (n2w (LENGTH vs - 1)) s).vs_memory /\
   eval_operand op u = SOME w /\
-  w2n w = locbase + k + 32 + (LENGTH vs - 1) * type_memory_size etv ==>
+  w2n w = locbase + k + 32 + (LENGTH vs - 1) * type_memory_size etv /\
+  local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv)
+    etv result ==>
   vv_post ctx func cenv cx e es sa sb s0 es' result
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) u
 Proof
@@ -240,6 +243,10 @@ Proof
     (simp[local_val_at_def] >> disj1_tac >>
      drule_all local_path_at_dynamic_element >>
      pure_rewrite_tac[ADD_ASSOC] >> simp[]) >>
+  `local_place_at cenv cx id (w2n w - locbase) etv result` by
+    (`w2n w - locbase = k + 32 + (LENGTH vs - 1) * type_memory_size etv` by
+       decide_tac >>
+     pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   irule local_memory_vv_post >> simp[] >>
   qexistsl_tac [`id`, `locbase`, `sz`] >> gvs[] >> decide_tac
 QED

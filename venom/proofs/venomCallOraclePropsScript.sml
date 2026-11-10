@@ -134,3 +134,31 @@ Theorem consume_call_outcome_bind_frame:
 Proof
   simp_tac bool_ss [frame_update_var]
 QED
+
+(* Two states that agree on everything the oracle reads and adopts take the
+ * same outcome for the same request, and differ afterwards only where they
+ * did before and in the returndata write's base memory. *)
+Theorem consume_call_outcome_state_transport:
+  s.vs_outcomes = t.vs_outcomes /\ s.vs_accounts = t.vs_accounts /\
+  s.vs_transient = t.vs_transient /\ s.vs_logs = t.vs_logs /\
+  s.vs_pending_deletions = t.vs_pending_deletions /\
+  consume_call_outcome rq ro rs s = (w,r) ==>
+  r = s with <|vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
+    vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
+    vs_pending_deletions := r.vs_pending_deletions;
+    vs_returndata := r.vs_returndata;
+    vs_requests := record_request rq s.vs_requests;
+    vs_memory := (write_memory_with_expansion ro
+      (TAKE rs r.vs_returndata) s).vs_memory|> /\
+  consume_call_outcome rq ro' rs t = (w,t with <|
+    vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
+    vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
+    vs_pending_deletions := r.vs_pending_deletions;
+    vs_returndata := r.vs_returndata;
+    vs_requests := record_request rq t.vs_requests;
+    vs_memory := (write_memory_with_expansion ro'
+      (TAKE rs r.vs_returndata) t).vs_memory|>)
+Proof
+  simp[consume_call_outcome_eq] >> strip_tac >>
+  gvs[venom_state_component_equality]
+QED

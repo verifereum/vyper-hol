@@ -81,7 +81,9 @@ Theorem pop_memory_live_suffix_post:
   evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
   post_value_type cenv e = expr_type e /\
   eval_operand op u = SOME w /\
-  w2n w = w2n b + k + 32 + (LENGTH vs - 1) * type_memory_size etv ==>
+  w2n w = w2n b + k + 32 + (LENGTH vs - 1) * type_memory_size etv /\
+  local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv)
+    etv result ==>
   vv_post ctx func cenv cx e es sa sb s0 (mid with scopes := scopes') result
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) (u with vs_inst_idx := idx)
 Proof
@@ -121,6 +123,14 @@ Proof
     (drule_all wb_frame_trans >> simp[]) >>
   `local_region cenv scopes' u id (w2n b) sz` by
     (simp[local_region_def] >> metis_tac[]) >>
-  irule pop_path_vv_post >> goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[]
+  irule pop_path_vv_post >>
+  qpat_assum `mem_path_offset _ _ = _` (irule_at Any) >>
+  qpat_assum `evaluate_subscripts _ _ _ = _` (irule_at Any) >>
+  qpat_assum `val_in_memory entry.type _ _ s.vs_memory` (irule_at Any) >>
+  simp[] >>
+  qpat_assum `local_region _ scopes' u _ _ _` (irule_at Any) >>
+  simp[] >>
+  `k + (type_memory_size etv * (LENGTH vs - 1) + 32) =
+   k + 32 + (LENGTH vs - 1) * type_memory_size etv` by simp[] >>
+  pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC
 QED

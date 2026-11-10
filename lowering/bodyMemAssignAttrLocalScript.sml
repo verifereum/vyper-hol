@@ -238,13 +238,14 @@ Proof
   `ignore_bind
     (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
     (return ()) =
-   vyperState$bind (eval_expr cx e)
-     (\pv. ignore_bind
+   vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx))
+     (\v. ignore_bind
        (vyperState$bind (eval_target_place cx (AttributeTarget (NameTarget id) fld))
-         (\p. vyperState$bind (read_result cx pv) (write_place cx p)))
+         (\p. write_place cx p v))
        (return ()))` by
     simp[Once evaluate_def, ignore_bind_def, bind_assoc] >>
   pop_assum SUBST1_TAC >>
+  irule gas_exempt_cert_error_value >> simp[ignore_bind_def, bind_assoc] >>
   irule gas_exempt_cert_error_result >> simp[]
 QED
 
@@ -688,7 +689,7 @@ Resume assign_attr_local_frag_mem[normal]:
     (qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
      rw[vv_store_bound_def] >> gvs[read_result_def, return_def] >>
      first_x_assum irule >> metis_tac[]) >>
-  drule vv_post_read_result >> strip_tac >> gvs[] >>
+  drule_all vv_post_read_result >> strip_tac >>
   `!tail. vyperState$bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
     (INL v, es_end with gas_obs := tail)` by
@@ -699,7 +700,6 @@ Resume assign_attr_local_frag_mem[normal]:
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (StructT _)`)) >>
   disch_then (drule_at (Pat `ALOOKUP _ _ = _`)) >>
   simp[] >> disch_then drule >> strip_tac >>
-  qpat_x_assum `!func cenv e es sa sb s0 vv s'' ctx. _` kall_tac >>
   qpat_x_assum `vv_store_bound _ _ _ _ tv _ _` kall_tac >>
   `~t.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
@@ -789,7 +789,7 @@ Proof
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def, body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>
