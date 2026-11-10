@@ -94,6 +94,82 @@ Proof
   simp[execute_plan_def, exec_stack_op_def]
 QED
 
+Theorem sym_phi_dead_cleanup_sim:
+  ssa_form fn /\ retpc_shape_ok fn /\ label_flow_ok ctx /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  MEM x inst.inst_outputs /\ inst.inst_opcode = PHI /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+  popmany_plan [Var x] (ps with ps_stack := stack_poke d (Var x) ps.ps_stack) = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (SOPoke d (Var x) :: ops)) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp (SOPoke d (Var x) :: ops))) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest qs ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (SOPoke d (Var x) :: ops)) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  simp[execute_plan_poke_cons] >> strip_tac >>
+  `sym_kinds_ok cplan fn ret srest
+    (ps with ps_stack := stack_poke d (Var x) ps.ps_stack) ss` by
+    metis_tac[sym_phi_rename] >>
+  `spill_alloc_layout_wf
+    (ps with ps_stack := stack_poke d (Var x) ps.ps_stack).ps_alloc
+    (ps with ps_stack := stack_poke d (Var x) ps.ps_stack).ps_spilled` by simp[] >>
+  drule_all sym_singleton_cleanup_sim >> simp[]
+QED
+
+Theorem sym_phi_live_cleanup_sim:
+  ssa_form fn /\ retpc_shape_ok fn /\ label_flow_ok ctx /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  MEM x inst.inst_outputs /\ inst.inst_opcode = PHI /\
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+  do_dup d ps = (dup_ops,dup_ps) /\
+  popmany_plan [Var x]
+    (dup_ps with ps_stack := stack_poke 0 (Var x) dup_ps.ps_stack) = (pop_ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  (!off. MEM (SOSpill off) (dup_ops ++ [SOPoke 0 (Var x)] ++ pop_ops) ==> off < dimword (:256)) /\
+  (!off b. MEM (SOSpill off) (dup_ops ++ [SOPoke 0 (Var x)] ++ pop_ops) /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan initial_fmp ((dup_ops ++ [SOPoke 0 (Var x)]) ++ pop_ops)) ==>
+  ?ss'. sym_steps p env
+      (LENGTH (execute_plan initial_fmp ((dup_ops ++ [SOPoke 0 (Var x)]) ++ pop_ops))) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest qs ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc +
+      LENGTH (execute_plan initial_fmp ((dup_ops ++ [SOPoke 0 (Var x)]) ++ pop_ops)) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  `d < LENGTH ps.ps_stack` by metis_tac[stack_get_phi_depth_var_not_marker] >>
+  `spill_alloc_layout_wf dup_ps.ps_alloc dup_ps.ps_spilled` by
+    metis_tac[do_dup_layout_wf, pairTheory.SND] >>
+  `spill_alloc_layout_wf
+    (dup_ps with ps_stack := stack_poke 0 (Var x) dup_ps.ps_stack).ps_alloc
+    (dup_ps with ps_stack := stack_poke 0 (Var x) dup_ps.ps_stack).ps_spilled` by simp[] >>
+  `(!off. MEM (SOSpill off) dup_ops ==> off < dimword (:256)) /\
+   (!off b. MEM (SOSpill off) dup_ops /\ in_mem_range off 32 b ==>
+     R b /\ context_spill_byte cplan b) /\
+   (!off. MEM (SOSpill off) pop_ops ==> off < dimword (:256)) /\
+   (!off b. MEM (SOSpill off) pop_ops /\ in_mem_range off 32 b ==>
+     R b /\ context_spill_byte cplan b)` by metis_tac[listTheory.MEM_APPEND] >>
+  qpat_x_assum `asm_block_at _ _ _` mp_tac >>
+  pure_rewrite_tac[Once stackOpSimTheory.execute_plan_append] >>
+  rewrite_tac[stackOpSimTheory.asm_block_at_append] >> strip_tac >>
+  drule_all sym_phi_live_prefix_sim >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  `asm_block_at p ss'.sym_base.as_pc (execute_plan initial_fmp pop_ops)` by metis_tac[] >>
+  drule_all sym_singleton_cleanup_sim >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists `ss''` >>
+  pure_rewrite_tac[Once stackOpSimTheory.execute_plan_append, listTheory.LENGTH_APPEND] >>
+  simp[Once sym_steps_add] >>
+  simp[stackOpSimTheory.execute_plan_append] >> metis_tac[]
+QED
+
 Theorem sym_phi_plan_sim:
   ssa_form fn /\ retpc_shape_ok fn /\ label_flow_ok ctx /\
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
@@ -173,7 +249,7 @@ Resume sym_phi_plan_sim[live_pop_compose]:
      R b /\ context_spill_byte cplan b) /\
    (!off. MEM (SOSpill off) pop_ops ==> off < dimword (:256)) /\
    (!off b. MEM (SOSpill off) pop_ops /\ in_mem_range off 32 b ==>
-     R b /\ context_spill_byte cplan b)` by metis_tac[] >>
+     R b /\ context_spill_byte cplan b)` by metis_tac[listTheory.MEM_APPEND] >>
   qpat_x_assum `asm_block_at _ _ _` mp_tac >>
   pure_rewrite_tac[Once stackOpSimTheory.execute_plan_append] >>
   rewrite_tac[stackOpSimTheory.asm_block_at_append] >> strip_tac >>
