@@ -1997,3 +1997,39 @@ Proof
   simp[Abbr `final`] >>
   gvs[unitShapeDefsTheory.fn_shape_ok_def, LENGTH]
 QED
+
+(* Exhaustive source split for ordinary prepared emission. *)
+Theorem sym_prepared_emission_families:
+  ~is_pre_codegen_opcode inst.inst_opcode /\
+  ~is_terminator inst.inst_opcode /\
+  ~is_param_opcode inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  step_inst fuel ctx inst vs = OK vs' ==>
+  IS_SOME (venom_to_evm_name inst.inst_opcode) \/
+  MEM inst.inst_opcode
+    [ASSIGN; PHI; OFFSET; NOP; INITIAL_FMP; BUMP; ISTORE;
+     ASSERT; ASSERT_UNREACHABLE; LOG]
+Proof
+  Cases_on `inst.inst_opcode` >>
+  simp[asmIRTheory.venom_to_evm_name_def, MEM,
+       stackPlanGenTheory.is_pre_codegen_opcode_def,
+       stackPlanGenTheory.is_unlowered_fmp_opcode_def,
+       stackPlanGenTheory.is_unlowered_internal_call_opcode_def,
+       venomInstTheory.is_terminator_def, venomInstTheory.is_param_opcode_def,
+       venomInstTheory.is_raw_fmp_opcode_def]
+QED
+
+Theorem sym_shaped_prepared_emission_families:
+  ~is_pre_codegen_opcode inst.inst_opcode /\
+  ~is_terminator inst.inst_opcode /\
+  ~is_param_opcode inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  fn_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  step_inst fuel ctx inst vs = OK vs' ==>
+  IS_SOME (venom_to_evm_name inst.inst_opcode) \/
+  MEM inst.inst_opcode
+    [ASSIGN; PHI; NOP; INITIAL_FMP; BUMP; ISTORE;
+     ASSERT; ASSERT_UNREACHABLE; LOG]
+Proof
+  strip_tac >> drule_all sym_prepared_emission_families >>
+  gvs[unitShapeDefsTheory.fn_shape_ok_def, EVERY_MEM, MEM] >>
+  metis_tac[unitShapeDefsTheory.inst_shape_ok_def, MEM]
+QED
