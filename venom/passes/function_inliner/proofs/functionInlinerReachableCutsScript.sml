@@ -2,7 +2,7 @@
 Theory functionInlinerReachableCuts
 Ancestors
   functionInlinerLocation functionInlinerStackSupports functionInlinerActivation
-  functionInlinerSiteLayout functionInlinerDefs venomInst list rich_list
+  functionInlinerSiteLayout functionInlinerDefs functionInlinerFrame venomInst list rich_list
 
 Datatype:
   inline_cell = <| ic_function : ir_function; ic_block : string;
@@ -380,4 +380,86 @@ Proof
   Induct >> simp[inline_path_location_def] >> rpt strip_tac >> gvs[] >>
   gvs[inline_location_step_def, inline_before_phi_keep,
       GSYM inline_path_location_def]
+QED
+
+(* Actions follow the execution order of the zipper, including conditional
+   cloning of labels at each enclosing callee. *)
+Definition inline_cell_var_action_def:
+  (inline_cell_var_action [] v = v) /\
+  (inline_cell_var_action ((tag,next)::frames) v =
+    inline_cell_var_action frames
+      (case tag of EnterCell e k => STRCAT e.ise_prefix v | _ => v))
+End
+
+Definition inline_cell_label_action_def:
+  (inline_cell_label_action [] l = l) /\
+  (inline_cell_label_action ((tag,next)::frames) l =
+    inline_cell_label_action frames
+      (case tag of EnterCell e k =>
+        if MEM l (fn_labels e.ise_callee) then STRCAT e.ise_prefix l else l
+       | _ => l))
+End
+
+Theorem inline_cell_fold_mapped_fields:
+  !frames src.
+  inline_inst_fields
+    (FOLDL (\inst (tag,next). case tag of
+       EnterCell e k => clone_instruction e.ise_prefix (fn_labels e.ise_callee) inst
+     | _ => inst) src frames) =
+  (src.inst_opcode,
+   MAP (inline_rename_operand (inline_cell_var_action frames)
+     (inline_cell_label_action frames)) src.inst_operands,
+   MAP (inline_cell_var_action frames) src.inst_outputs)
+Proof
+  Induct
+  >- (gen_tac >>
+      `inline_cell_var_action [] = I` by simp[FUN_EQ_THM, inline_cell_var_action_def] >>
+      `inline_cell_label_action [] = I` by simp[FUN_EQ_THM, inline_cell_label_action_def] >>
+      `inline_rename_operand I I = I` by
+        (simp[FUN_EQ_THM] >> Cases >> simp[inline_rename_operand_def]) >>
+      simp[inline_inst_fields_def, MAP_ID]) >>
+  qx_gen_tac `h` >> PairCases_on `h` >> gen_tac >>
+  simp[FOLDL] >> Cases_on `h0` >>
+  simp[clone_instruction_def, inline_cell_var_action_def,
+    inline_cell_label_action_def, inline_inst_fields_def, MAP_MAP_o, combinTheory.o_DEF] >>
+  (conj_tac
+   >- (irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
+       Cases_on `x` >> simp[clone_operand_def, inline_rename_operand_def,
+         inline_cell_var_action_def, inline_cell_label_action_def] >>
+       rw[inline_rename_operand_def]) >>
+   irule listTheory.MAP_CONG >> simp[inline_cell_var_action_def])
+QED
+
+Theorem inline_cell_zipper_mapped_fields:
+  inline_cell_zipper c frames d /\ c.ic_fields = inline_inst_fields src /\
+  ~MEM src.inst_opcode [PHI; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames ==>
+  d.ic_fields =
+    (src.inst_opcode,
+     MAP (inline_rename_operand (inline_cell_var_action frames)
+       (inline_cell_label_action frames)) src.inst_operands,
+     MAP (inline_cell_var_action frames) src.inst_outputs)
+Proof
+  strip_tac >> drule_all inline_cell_zipper_ordinary_fields >>
+  simp[inline_cell_fold_mapped_fields]
+QED
+
+Theorem inline_cell_zipper_route_fetch:
+  inline_cell_at c /\ inline_cell_zipper c frames d /\
+  c.ic_fields = inline_inst_fields src /\
+  ~MEM src.inst_opcode [PHI; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames /\
+  inline_cell_var_action frames = route.ir_rename /\
+  inline_cell_label_action frames = lab ==>
+  ?bb dst.
+    lookup_block d.ic_block d.ic_function.fn_blocks = SOME bb /\
+    get_instruction bb d.ic_index = SOME dst /\
+    dst.inst_opcode = src.inst_opcode /\
+    dst.inst_operands = MAP (inline_rename_operand route.ir_rename lab) src.inst_operands /\
+    dst.inst_outputs = MAP route.ir_rename src.inst_outputs
+Proof
+  strip_tac >> drule_all inline_cell_zipper_mapped_fields >>
+  drule_all inline_cell_zipper_sound >>
+  simp[inline_cell_at_def, inline_fetched_fields_def, inline_inst_fields_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
 QED
