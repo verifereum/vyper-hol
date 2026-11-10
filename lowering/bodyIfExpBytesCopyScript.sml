@@ -109,7 +109,11 @@ Resume ifexp_copy_post_transport[post]:
      `expr_val_own cenv cx (post_value_type cenv e) origin sb ee v op m` by
        (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ m` mp_tac >>
         simp[loweringPostsTheory.expr_post_def]) >>
-     pop_assum mp_tac >> simp[loweringPostsTheory.expr_val_own_def]) >>
+     pop_assum mp_tac >>
+     qpat_assum `eval_operand op q = _` (fn th1 =>
+       qpat_assum `q.vs_allocas = _` (fn th2 =>
+         qpat_assum `!n b sz. local_region _ _ q _ _ _ <=> _` (fn th3 =>
+           rewrite_tac[loweringPostsTheory.expr_val_own_def, th1, th2, th3])))) >>
   reverse conj_tac
   >- (fs[exprSimMemDefsTheory.vv_store_bound_def, contextTheory.mk_ptr_def]) >>
   fs[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
