@@ -64,9 +64,10 @@ Proof
       simp[mstore_memory_nondecreasing])
   >- (gvs[step_inst_base_def, AllCaseEqs(), mcopy_def] >>
       simp[write_memory_with_expansion_nondecreasing])
-  >- gvs[step_inst_base_def, exec_read0_def, AllCaseEqs(), update_var_def] >>
-  gvs[step_inst_base_def, AllCaseEqs()] >>
-  simp[write_memory_with_expansion_nondecreasing]
+  >- gvs[step_inst_base_def, exec_read0_def, AllCaseEqs(), update_var_def]
+  >- (gvs[step_inst_base_def, AllCaseEqs()] >>
+      simp[write_memory_with_expansion_nondecreasing]) >>
+  gvs[step_inst_base_def, exec_pure1_def, AllCaseEqs(), update_var_def]
 QED
 
 Theorem log_encode_run_memory_mono:
