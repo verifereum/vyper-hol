@@ -12,10 +12,10 @@ Ancestors
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics
   venomState compileEnv e2eDefs supportedProgram compileVyper fragExec
   venomInst contextCodegenRel ptrDiscipline ptrSafeRun vyperLoweringCorrect
-  loweringRuntimeCorrect bodyPtrDefs stmtSimDefs stmtSimProps loweringPosts bodySim moduleLowering
+  bodyPtrDefs stmtSimDefs stmtSimProps loweringPosts bodySim moduleLowering
   stmtLowering vyperTypeSystem vyperState emitHelper vyperTypeSelectedEntrySoundness
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
-  unitShapeDefs o1PassContract
+  unitShapeDefs o1PassContract fnBlockBodySteps
 
 val _ = Parse.hide "body";
 

@@ -226,18 +226,47 @@ End
 (* ===== The predicates of the induction ===== *)
 
 (* An expression of a frame of the lowered program, internal calls
-   allowed, simulates as a value and as compile_expr's value_vv, and, if
-   it names a mapping, as the mapping's slot (expr_map_sim), which the
-   subscript of a mapping takes of its base. *)
+   allowed, simulates as a value and value_vv, and as a mapping slot
+   when appropriate. Literal arrays also carry their element simulations. *)
 Definition body_expr_ok_def:
-  body_expr_ok cx e <=>
+  (body_expr_ok cx e <=>
     (!tops ctx func cenv env ty es.
-       body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
-       expr_sim ctx func cenv cx ty e es /\ expr_vv_sim ctx func cenv cx ty e es) /\
+      body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
+      expr_sim ctx func cenv cx ty e es /\ expr_vv_sim ctx func cenv cx ty e es) /\
     (!tops ctx func cenv env ty es.
        body_inv tops ctx cenv cx /\ expr_map_pre cenv cx env e es ==>
-       expr_map_sim ctx func cenv cx ty e es)
+       expr_map_sim ctx func cenv cx ty e es) /\
+    (!a t n elems.
+      e = Builtin a (MakeArray t n) elems /\
+      builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+      body_exprs_ok cx elems)) /\
+  body_exprs_ok cx [] = T /\
+  body_exprs_ok cx (e::es) =
+    (body_expr_ok cx e /\
+     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
+                        read_result cx tv s1 = (INL v, t1)) ==>
+      body_exprs_ok cx es))
+Termination
+  WF_REL_TAC `measure (\x. case x of
+      INL (_, e) => expr_size e
+    | INR (_, es) => list_size expr_size es)` >>
+  simp[expr_size_def]
 End
+
+Theorem body_exprs_ok_def = CONJUNCT2 body_expr_ok_def;
+
+(* The elements of an array literal simulate, by the literal's clause. *)
+Theorem body_make_array_children_ok:
+  !cx a t n elems.
+    body_expr_ok cx (Builtin a (MakeArray t n) elems) /\
+    builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+    body_exprs_ok cx elems
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `body_expr_ok _ _`
+    (mp_tac o CONJUNCT2 o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+  simp[]
+QED
 
 (* Only a top-level name and a subscript name a mapping. *)
 Theorem expr_map_pre_shape:
@@ -292,17 +321,6 @@ Definition body_stmts_ok_def:
       frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
       stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ret_ty ss)
         (eval_stmts cx ss) es
-End
-
-(* The operands of an expression, evaluated and read in order: each
-   simulates if the ones before it can evaluate. *)
-Definition body_exprs_ok_def:
-  body_exprs_ok cx [] = T /\
-  body_exprs_ok cx (e::es) =
-    (body_expr_ok cx e /\
-     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
-                        read_result cx tv s1 = (INL v, t1)) ==>
-      body_exprs_ok cx es))
 End
 
 (* The same, evaluated without reading (eval_expr_results). *)
