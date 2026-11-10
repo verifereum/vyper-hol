@@ -1,7 +1,7 @@
 (* Sparse storage semantics with explicit declared-root layout facts. *)
 Theory storeSlotsStorageRegion
 Ancestors
-  storeSlotsMemoryTransfer placeStoreSlots placeStoreStorage stmtSimAssignStorageCopy
+  placeStoreSlots placeStoreStorage stmtSimAssignStorageCopy
   exprSimDefs stmtSimDefs exprLoweringProps compileEnv venomState vyperStorage vyperTyping words list
 
 Theorem store_slots_fold_state_layout[local]:

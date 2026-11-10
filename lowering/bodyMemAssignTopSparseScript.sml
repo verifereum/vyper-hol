@@ -3,7 +3,7 @@
    stores only its live slots (compile_store_slots). *)
 Theory bodyMemAssignTopSparse
 Ancestors
-  bodyMemAssignSparseSuccess storeSlotsCountedEntries storeSlotsCountedBase storeSlotsMemoryTransfer bodyMemAssignTopCopyOutcome stmtSimAssignStorageSparse placeStoreSlots
+  bodyMemAssignSparseSuccess storeSlotsCountedBase bodyMemAssignTopCopyOutcome stmtSimAssignStorageSparse placeStoreSlots
   bodyMemAssignTopCopySuffix bodyMemAssignTopCopySem bodyMemAssignTopCopyFacts
   bodyMemAssignTopWord exprSimSource exprSimProps exprLoweringProps
   stmtSimProps stmtSimAssignStorage stmtSimAssignStorageCopy stmtSimForced
