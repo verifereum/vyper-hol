@@ -7,7 +7,7 @@ Ancestors
   o1LowerDloadJointRelation o1LowerDloadOccurrence ptrDiscipline
   o1PassContract memLocDefs codegenRel venomExecSemantics words finite_map list
   unitShapeDefs venomState irSupply lowerDloadDefs o1LowerDloadShared
-  o1LowerDloadEnvironment dftCommutation pred_set
+  o1LowerDloadEnvironment pred_set
 
 Theorem ld_joint_dloadbytes_destination:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
