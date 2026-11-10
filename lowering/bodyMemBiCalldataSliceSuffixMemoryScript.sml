@@ -95,9 +95,11 @@ Proof
   `s'.vs_alloca_next = s.vs_alloca_next /\
    eval_operand dst s' = SOME wd /\ eval_operand src s' = SOME wa /\
    eval_operand len s' = SOME wn /\ eval_operand pop s' = SOME wp` by
-    (fs[venom_state_component_equality] >>
-     Cases_on `dst` >> Cases_on `src` >> Cases_on `len` >> Cases_on `pop` >>
-     gvs[eval_operand_def, lookup_var_def]) >>
+    (`!op w. (!x. op = Var x ==> not_fresh_at sa x) /\
+             eval_operand op s = SOME w ==> eval_operand op s' = SOME w` by
+       (Cases >> gvs[eval_operand_def, lookup_var_def]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     rpt conj_tac >> first_x_assum irule >> asm_rewrite_tac[]) >>
   irule (cj 1 calldata_slice_copy_store_emitted_mem) >> metis_tac[]
 QED
 

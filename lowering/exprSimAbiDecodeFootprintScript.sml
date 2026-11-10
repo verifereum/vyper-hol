@@ -1,6 +1,6 @@
 Theory exprSimAbiDecodeFootprint
 Ancestors
-  exprSimHash exprSimAlloc exprSimProps actualDecoderSites
+  exprSimHash exprSimHashBoundary exprSimAlloc exprSimProps actualDecoderSites
   loweringPosts exprLoweringProps valueEncoding vyperValue words
 
 Theorem abi_decode_bytes_footprint:
