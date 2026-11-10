@@ -501,3 +501,140 @@ and is **not** derived or authorized here. Preserve the selected replay and
 all earlier checked helpers. Return this finite negative algebraic decision
 for strategy review rather than implement accounting helpers whose strongest
 possible identity still cancels the retained-slot variable.
+
+## First retained-region action: physical decision (2026-11-10)
+
+**Bounded outcome: no complete first-action supplier obtained.** The precise
+remaining branch is comparison of an in-progress deep scratch access in full
+cleanup with the other run's access/ASSIGN worker prefix. The operation-level
+shielding results below resolve some tempting objections, but they do not
+supply a paired physical assertion at that asymmetric phase. This is not a
+claim that unequal branches can emit equal complete code.
+
+### Same-input branch reduction
+
+For the SAME incoming stack, `physical`, `retained` and `to_cleanup` are
+identical before the override-dependent Boolean `ok` is evaluated. Inactive
+cleanup is identical. Two nonempty-input runs with the same `ok` have the
+same actual popmany action and marking, differing only in bookkeeping. Two
+empty-input runs with `ok` both map every position to marker. These cases
+can use the existing cleanup-update/deterministic-worker interface.
+
+Only opposite `ok` choices remain. In full cleanup the requests are
+`MAP Var to_pop`; in elision they are `to_cleanup` (or no pops for empty
+inputs). Sorting is by initial depths for each entire request list. The
+contiguous fast-path test is also over the entire list. Removing retained
+requests can change that test; one cannot factor full cleanup as the elided
+cleanup plus a tail. Within an individual-pop execution, a retained request
+is handled at its *current* depth: swap that cell with TOS, then pop. This
+moves the old top cell into the retained cell's position. Thus full removal
+can move a live original cell downward, and it is incorrect to model it as
+list filtering of dead original identities.
+
+### Bulk boundary exchange: what is actually settled
+
+The exact schematic fast path is
+
+`base ++ removed ++ [top]`, with request depths `1,...,n` and
+`LENGTH removed=n`.
+
+It emits the depth-n swap and SOPop n; the result is `base ++ [top]`.
+The deepest removed original cell is exchanged with top before removal;
+it is a *requested* cell, not an arbitrary unrequested sentinel. This
+explains both the downward relocation and the boundary hazard for an
+unjustified proposed protected core.
+
+For a legitimately framed stack `prefix ++ core`, the case
+`n=LENGTH core` cannot satisfy this contiguous test together with request
+exclusion from prefix: depth n lies outside core and the test includes n.
+The existing `popmany_plan_shared_core_replay` uses precisely that valid-hit
+bound; `Setup.popmany_plan_bottom_frame` (:1575) requires request/prefix
+DISJOINT. Thus the boundary does **not** defeat that checked theorem and
+must not be advertised as a counterexample to it. A proposed inertness
+argument that has not established request exclusion at its actual cut
+cannot invoke the bound. This is the exact missing premise when a chosen
+original-cell region is casually called a protected core.
+
+For a well-formed ASSIGN, one input and one output are fixed by inst_wf.
+After regular output insertion its output is at TOS. If dead-output removal
+runs, `popmany_plan_appended_singleton` (:1849) gives exactly SOPop 1 and
+removes the appended occurrence, including in the presence of older copies.
+There is no contiguous depth-one boundary exchange in this ASSIGN output
+pop. ASSIGN is nevertheless not a state no-op: its input may restore/dup,
+its reorder may move cells, its silent consumption/push renames a slot, and
+its first optimistic swap may move a different next-live cell. Literal or
+label ASSIGN input also emits its own push anchor. None of this can be
+replaced by an assumption that every original cell keeps its name.
+
+A multi-output instruction's dead outputs can use the contiguous fast path
+when a retained live output is on top. With a valid common suffix containing
+all requested outputs, the n=LENGTH(core) contradiction above still applies.
+One must first show that suffix contains the actual requested output cells;
+no argument here transfers such a suffix from the selected run to an arbitrary
+worker phase. The producer's actual emission also cannot be erased merely
+because its later dead outputs are popped.
+
+### Optimistic swap and empty-input limits
+
+The first optimistic swap is a do_swap at the lookup depth of
+`Var (LAST next_liveness)` unless a guard makes it inactive. The checked
+`optimistic_swap_plan_shielded_bottom_frame` (:1505) accepts exactly empty
+live, exclusion of that name from prefix, or an actual suffix hit. These
+are real local sufficient conditions, including deep swaps. The common-core
+selected worker supplies such facts via its indexed exclusion/availability
+seed; the actual asymmetric comparison has not supplied a suffix or its
+hit at the matching worker phase. Global stack-or-map availability is not
+a suffix hit, and does not identify original-cell locations.
+
+For empty inputs, elision turns every position into marker with empty code.
+Full cleanup removes whatever predecessor-layout requests actually hit,
+possibly leaving old non-layout debris. It is unsound to conclude that its
+entire resulting stack is marker-only. Input demand is empty, but later
+fresh definitions and their uses may still create a nonempty live-out. The
+empty-input case therefore still needs an initialized difference argument
+through the actual worker, or a proof that full cleanup cannot match that
+worker's emitted prefix. It is not settled just by taking an empty common
+core at block end.
+
+### Exact unresolved operation/phase
+
+Take the actual first retained request handled in a full-cleanup
+`popmany_individual` execution. If its current distance d exceeds 16,
+its do_swap starts a scratch window of d+1 original/current cells. The
+first code is SOSpill off, followed by more spills before the restores.
+The opposite cleanup may already have finished and its worker may be inside
+a deep do_dup (input preservation) or do_swap (input/reorder/optimistic
+access). These also start with SOSpill off from the same starting allocator
+or from an allocator reached after earlier accesses. The **first emitted
+SOSpill alone** does not specify which source operand was accessed or how
+many scratch cells will follow. Marked identities and silent ASSIGN rename
+steps are not emitted cell-identity observations.
+
+To conclude separation at the first spill touching the retained region, one
+needs a paired assertion at that code position: the worker's current scratch
+window ends strictly above that original retained region, and any earlier
+common spills/restores have corresponding physical cells despite silent
+renames. Alternatively one needs both executions certified at matching
+primitive starts with their valid depths, so the existing primitive cut
+inverses can compare the complete scratch templates. Neither premise follows
+from equality of the remaining flattened code prefix or from the full run's
+valid lookup alone. A bound on the worker's *initial selected core* does not
+supply it at a position inside an arbitrary worker scratch sequence.
+
+This is a localized missing native premise, not a proposal to parse source
+cuts: actual input/reorder/optimistic equations must provide the protected
+region and its evolution through ASSIGN, spills and partial scratch accesses.
+The full cleanup equations supply its own request depth, but not that paired
+phase fact. The bulk request-exclusion lemma and the ASSIGN top-singleton
+lemma settle their local cases only once those actual contexts are supplied.
+Equal spill maps do not label scratch cells, since scratch accesses preserve
+ps_spilled. Accepted primitive inverses similarly start from simultaneous
+valid access boundaries, not this unmatched interior position.
+
+Decision: stop this bounded first-action pass at this explicit deep scratch
+phase premise. No initialized physical separation invariant or arbitrary
+endpoint theorem has been proved. The analysis does not authorize another
+parser, interpreter, fixture, or speculative primitive helper queue. Any
+next strategy must justify that actual paired region/phase assertion or
+avoid it with a different complete argument; naming it as an invariant is
+not its initialization proof.
