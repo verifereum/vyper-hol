@@ -3324,6 +3324,154 @@ Proof
   gvs[]
 QED
 
+Theorem sym_revert_prepared_stack:
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ inst.inst_opcode = REVERT /\
+  inst.inst_operands = [dop;zop] /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  asm_sym_rel prog env cs ss /\ cs.as_stack = dst :: sz :: rest /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (tail ++ [zop;dop])) top ==>
+  ?suffix. ss.sym_stack = MAP Val [dst;sz] ++ suffix
+Proof
+  strip_tac >>
+  gvs[listTheory.REVERSE_APPEND, listTheory.LIST_REL_CONS1] >>
+  rename1 `op_kind_ok fn ret dop sd` >>
+  rename1 `op_kind_ok fn ret zop szv` >>
+  `(?w. sd = Val w) /\ (?w. szv = Val w)` by
+    (conj_tac >> irule sym_revert_operand_kind >> metis_tac[listTheory.MEM]) >>
+  gvs[asm_sym_rel_def, sval_conc_def]
+QED
+
+Theorem sym_revert_prepared_terminal:
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ inst.inst_opcode = REVERT /\
+  inst.inst_operands = [dop;zop] /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  plan_stack_rel (SND (compute_label_offsets prog)) current (tail ++ [zop;dop]) stk /\
+  operand_val current (SND (compute_label_offsets prog)) dop = SOME dst /\
+  operand_val current (SND (compute_label_offsets prog)) zop = SOME sz /\
+  cs.as_stack = stk ++ rest /\ asm_sym_rel prog env cs ss /\ asm_static_wf prog /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (tail ++ [zop;dop])) top /\
+  ~mem_labels_hit ss.sym_mem_labels (in_mem_range (w2n dst) (w2n sz)) /\
+  asm_block_at prog cs.as_pc [AsmOp "REVERT"] /\
+  asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (AsmOp "REVERT") cs = AsmRevert out ==>
+  sym_terminal (sym_steps prog env 1 ss)
+Proof
+  strip_tac >>
+  `dop <> dead_stack_marker /\ zop <> dead_stack_marker` by
+    (rpt strip_tac >> gvs[dead_stack_marker_def, is_label_operand_def]) >>
+  `?d z residual. stk = d :: z :: residual /\
+    operand_val current (SND (compute_label_offsets prog)) dop = SOME d /\
+    operand_val current (SND (compute_label_offsets prog)) zop = SOME z` by
+    (irule emitSimTheory.asm_stack_top2_from_plan >> simp[] >>
+     qexists `tail` >> simp[]) >>
+  gvs[] >> rename1 `cs.as_stack = dst :: sz :: remaining` >>
+  `EVERY (\op. ~is_label_operand op) inst.inst_operands` by simp[] >>
+  drule_all sym_revert_prepared_stack >> strip_tac >>
+  irule sym_terminal_opcode_transfer >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`[dst;sz]`, `AsmRevert out`, `cs`, `"REVERT"`, `suffix`] >>
+  simp[asm_op_arity_def, asm_op_arity_table_def, asm_op_mem_reads_def,
+       asmSemTheory.log_table_def]
+QED
+
+Theorem sym_rf_suffix_revert_abort:
+  !cp.
+  lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
+  codegen_ready_fn fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  rf_spills_separated ps /\
+  inst.inst_opcode = REVERT /\ inst.inst_outputs = [] /\
+  inst.inst_operands = [dop;zop] /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  rf_inventory_inv fn ra lo entry ps vs /\
+  (!op. MEM op (compute_operands inst) ==>
+    operand_val (frame_view fn ra vs) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)) /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  operand_val (frame_view fn ra vs) lo dop = SOME dst /\
+  operand_val (frame_view fn ra vs) lo zop = SOME sz /\
+  plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\ venom_asm_terminal_rel vs st /\
+  TAKE (w2n sz) (DROP (w2n dst) vs.vs_memory) =
+    TAKE (w2n sz) (DROP (w2n dst) st.as_memory) /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) /\
+  step_inst fuel ctx inst vs = Abort a vs' /\
+  MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\ label_flow_ok ctx /\
+  asm_static_wf prog /\ asm_sym_rel prog env st ss /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\
+  ~mem_labels_hit ss.sym_mem_labels (in_mem_range (w2n dst) (w2n sz)) ==>
+  a = Revert_abort /\
+  ?out. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
+    AsmRevert out /\ venom_asm_terminal_rel vs' out /\
+    sym_terminal (sym_steps prog env (LENGTH (execute_plan initial_fmp ops)) ss)
+Proof
+  gen_tac >> strip_tac >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_suffix_revert_abort >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  simp[] >>
+  Cases_on `emit_input_plan REVERT (compute_operands inst) nl ps` >>
+  rename1 `_ = (ins,ps1)` >>
+  Cases_on `reorder_plan (dfg_build_function fn) (compute_operands inst) ps1` >>
+  rename1 `_ = (ros,ps2)` >>
+  `compute_operands inst = [zop;dop]` by
+    simp[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def] >>
+  `ops = ins ++ ros ++ [SOEmit "REVERT"]` by
+    gvs[generate_regular_inst_plan_def, venomEffectsTheory.is_commutative_def,
+        generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def] >>
+  `asm_block_at prog st.as_pc (execute_plan initial_fmp (ins ++ ros)) /\
+   asm_block_at prog (st.as_pc + LENGTH (execute_plan initial_fmp (ins ++ ros)))
+     [AsmOp "REVERT"]` by
+    gvs[stackOpSimTheory.execute_plan_append, execute_plan_def, exec_stack_op_def,
+        stackOpSimTheory.asm_block_at_append, listTheory.APPEND_ASSOC] >>
+  `!off. ~MEM (SOSpill off) (ins ++ ros) /\
+         ~MEM (SORestore off) (ins ++ ros)` by fs[listTheory.MEM_APPEND] >>
+  `REVERT <> INVOKE /\ LENGTH (compute_operands inst) <= 16 /\
+   EVERY (\op. ~is_label_operand op) (compute_operands inst)` by gvs[] >>
+  `EVERY is_simple_stack_op (ins ++ ros)` by
+    metis_tac[fnFrameStepsRevertForwardTheory.spill_free_preparation_simple] >>
+  `prefix_wf lo (LENGTH ps.ps_stack) (ins ++ ros)` by
+    (irule fnFrameStepsRevertForwardTheory.available_preparation_prefix_wf >>
+     qexistsl [`dfg_build_function fn`, `compute_operands inst`, `nl`, `REVERT`,
+               `ps1`, `ps2`] >>
+     simp[] >> gvs[] >> metis_tac[is_label_operand_def]) >>
+  drule_all sym_rf_suffix_preparation_execution >> strip_tac >>
+  `asm_steps lo (build_offset_to_pc prog) prog 1 mid = AsmRevert out` by
+    (qpat_assum `asm_steps _ _ _ _ st = AsmOK mid`
+       (mp_then Any (qspec_then `1` mp_tac) stackOpSimTheory.asm_steps_add_ok) >>
+     gvs[stackOpSimTheory.execute_plan_append, execute_plan_def, exec_stack_op_def,
+         listTheory.APPEND_ASSOC]) >>
+  `asm_block_at prog mid.as_pc [AsmOp "REVERT"]` by metis_tac[] >>
+  `asm_step lo (build_offset_to_pc prog) (AsmOp "REVERT") mid = AsmRevert out` by
+    (qpat_x_assum `asm_steps _ _ _ 1 mid = _` mp_tac >>
+     pure_rewrite_tac[arithmeticTheory.ONE, asmSemTheory.asm_steps_def] >>
+     gvs[asm_block_at_def, AllCaseEqs()]) >>
+  `ss'.sym_mem_labels = ss.sym_mem_labels` by
+    metis_tac[finite_mapTheory.FLOOKUP_EXT] >>
+  `sym_terminal (sym_steps prog env 1 ss')` by
+    (`plan_stack_rel lo (frame_view fn ra vs)
+        (stack_pop 2 ps2.ps_stack ++ [zop;dop]) stk' /\
+      LIST_REL (op_kind_ok fn ret)
+        (REVERSE (stack_pop 2 ps2.ps_stack ++ [zop;dop])) top'` by
+       (qpat_assum `compute_operands inst = _` (fn eq =>
+          qpat_assum `ps2.ps_stack = _`
+            (fn th => pure_rewrite_tac[GSYM (SRULE [eq] th)])) >> simp[]) >>
+     metis_tac[sym_revert_prepared_terminal]) >>
+  `LENGTH (execute_plan initial_fmp ops) =
+     LENGTH (execute_plan initial_fmp (ins ++ ros)) + 1` by
+    simp[stackOpSimTheory.execute_plan_append, execute_plan_def, exec_stack_op_def,
+         listTheory.APPEND_ASSOC] >>
+  asm_simp_tac (srw_ss()) [sym_steps_add]
+QED
+
 Theorem sym_jmp_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
