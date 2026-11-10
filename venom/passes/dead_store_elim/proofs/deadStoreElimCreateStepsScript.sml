@@ -58,7 +58,8 @@ Theorem dse_create_not_effects_in_space:
 Proof
   simp[] >> strip_tac >> Cases_on `sp` >>
   gvs[effects_in_space_def, write_effects_def, read_effects_def,
-      all_effects_def, empty_effects_def, pred_setTheory.SUBSET_DEF]
+      all_effects_def, empty_effects_def, pred_setTheory.SUBSET_DEF] >>
+  metis_tac[effect_distinct]
 QED
 
 Theorem dse_create_memory_retained:
