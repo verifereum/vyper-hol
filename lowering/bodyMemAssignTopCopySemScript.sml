@@ -3,7 +3,7 @@
    Storage-copy semantics and compiler boundaries are shared with S1. *)
 Theory bodyMemAssignTopCopySem
 Ancestors
-  stmtSimAssignStorageCopy exprSimHash exprSimProps loweringPosts
+  stmtSimAssignStorageCopy exprSimHash exprSimHashBoundary exprSimProps loweringPosts
   compileEnv loweringStateRelDefs vyperValue vyperTyping valueEncodingProps
   words arithmetic
 

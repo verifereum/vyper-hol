@@ -396,12 +396,9 @@ Definition compile_assign_value_def:
   compile_assign_value cenv dst_op dst_loc val_op is_prim_word
                        (src_loc : data_location option)
                        (dst_ty : type) (src_ty : type) mem_size =
-    (* A bytestring source keeps its own, possibly narrower, buffer, so an
-       immutable target gets only the words it holds.
-       Mirrors Python: stmt.py _store_complex_type with copy_typ
-       (vyperlang/vyper#5332). *)
-    let copy_size = (if is_bytestring_type dst_ty
-                     then type_memory_bytes cenv src_ty else mem_size) in
+    (* An immutable bytestring target gets only the words its runtime length
+       covers: compile_store_immutable_bytestring.
+       Mirrors Python: stmt.py _store_complex_type (vyperlang/vyper#5332). *)
     case dst_loc of
       LocMemory =>
         if is_prim_word then emit_void MSTORE [dst_op; val_op]
@@ -461,12 +458,14 @@ Definition compile_assign_value_def:
               else return val_op);
            if is_prim_word then
              compile_imm_store_word cenv.ce_imm_alloca dst_op val_op'
-           else if copy_size ≤ 32 then
+           else if is_bytestring_type dst_ty then
+             compile_store_immutable_bytestring cenv.ce_imm_alloca val_op' dst_op
+           else if mem_size ≤ 32 then
              do loaded <- emit_op MLOAD [val_op'];
                 compile_imm_store_word cenv.ce_imm_alloca dst_op loaded
              od
            else compile_imm_store_words cenv.ce_imm_alloca val_op' dst_op
-                  ((copy_size + 31) DIV 32) 0
+                  ((mem_size + 31) DIV 32) 0
         od
     | LocCalldata =>
         (* Calldata is read-only — store is invalid *)

@@ -37,7 +37,7 @@ val _ = diminish_srw_ss ["sizes"]
 
 (* Operand reads after an update split on the operand, as in
    slotCopyExecution. *)
-val _ = augment_srw_ss [rewrites [slotCopyExecutionTheory.slot_copy_operand_update]];
+val _ = augment_srw_ss [rewrites [emitHelperPropsTheory.slot_copy_operand_update]];
 
 (* compile_store_slots run from memory holding v at src (type tv) to the
    slots from dw: it stores exactly the slots v's encoding writes, each

@@ -8,13 +8,13 @@ Theory loweringMemBodySourceGas
 Ancestors
   stmtSimProps stmtSimDefs gasContext supportedDecls
   list pair finite_map
-  e2eDefs supportedProgram loweringRuntimeCorrect
+  e2eDefs supportedProgram
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperTypeStmtSoundness vyperTypeEvalSoundness vyperTypeExprSoundness
   vyperTypeContractFunction vyperTypeContractSoundness
   vyperTypeContractContext vyperTypeContract vyperTypeExternalDefaults
   vyperTypeInitialState vyperTypeBindArguments vyperTypeInvariants
-  vyperInterpreter vyperState vyperContext
+  vyperInterpreter vyperState vyperContext vyperLoweringCorrect
 
 val _ = Parse.hide "body";
 

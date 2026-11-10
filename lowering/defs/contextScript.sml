@@ -162,8 +162,8 @@ End
    words as count_op holds at run time (a bytestring's live words).
    Mirrors Python: context.py _word_copy_loop
    Used for storage↔memory and transient↔memory bulk copies. *)
-Definition compile_word_copy_loop_op_def:
-  compile_word_copy_loop_op src_op dst_op count_op load_loc store_loc is_ctor =
+Definition compile_word_copy_loop_base_def:
+  compile_word_copy_loop_base src_op dst_op count_op load_loc store_loc is_ctor imm =
     let src_scale = word_scale load_loc in
     let dst_scale = word_scale store_loc in
     do
@@ -189,7 +189,7 @@ Definition compile_word_copy_loop_op_def:
         emit_op ADD [src_op; scaled]
       od);
       (* Load from source *)
-      val_loaded <- compile_ptr_load is_ctor NONE load_loc src_off;
+      val_loaded <- compile_ptr_load is_ctor imm load_loc src_off;
       (* Compute dest offset *)
       dst_off <- (if dst_scale = 1 then
         emit_op ADD [dst_op; Var counter_var]
@@ -198,7 +198,7 @@ Definition compile_word_copy_loop_op_def:
         emit_op ADD [dst_op; scaled]
       od);
       (* Store to dest *)
-      compile_ptr_store is_ctor NONE store_loc dst_off val_loaded;
+      compile_ptr_store is_ctor imm store_loc dst_off val_loaded;
       (* Increment counter *)
       new_ctr <- emit_op ADD [Var counter_var; Lit 1w];
       emit_inst ASSIGN [new_ctr] [counter_var];
@@ -208,12 +208,37 @@ Definition compile_word_copy_loop_op_def:
     od
 End
 
-(* The word-copy loop for a fixed word count: Python's _word_copy_loop with
-   an int count, which it emits as a literal. *)
+(* Operand-count loop without an immutable allocation base. *)
+Definition compile_word_copy_loop_op_def:
+  compile_word_copy_loop_op src dst count load_loc store_loc is_ctor =
+    compile_word_copy_loop_base src dst count load_loc store_loc is_ctor NONE
+End
+
 Definition compile_word_copy_loop_def:
   compile_word_copy_loop src_op dst_op word_count load_loc store_loc is_ctor =
     compile_word_copy_loop_op src_op dst_op (Lit (n2w word_count))
       load_loc store_loc is_ctor
+End
+
+(* The words a bytestring at memory src occupies: its length word and the
+   words holding its bytes, 1 + ceil(length / 32).
+   Mirrors Python: context.py _bytestring_word_count *)
+Definition compile_bytestring_word_count_def:
+  compile_bytestring_word_count src =
+    do len_op <- emit_op MLOAD [src];
+       sum_op <- emit_op ADD [len_op; Lit 63w];
+       emit_op SHR [Lit 5w; sum_op]
+    od
+End
+
+(* Constructor bytestring writes use their live word count.  The immutable
+   allocation base remains part of each word's address computation. *)
+Definition compile_store_immutable_bytestring_def:
+  compile_store_immutable_bytestring imm src dst =
+    do count <- compile_bytestring_word_count src;
+       compile_word_copy_loop_base src dst count LocMemory LocCode T imm;
+       return ()
+    od
 End
 
 (* ===== Load from Storage/Transient to Memory ===== *)
@@ -895,17 +920,6 @@ Definition compile_load_memory_def:
 End
 
 (* ===== Store to Storage/Transient Slots ===== *)
-(* The words a bytestring at memory src occupies: its length word and the
-   words holding its bytes, 1 + ceil(length / 32).
-   Mirrors Python: context.py _bytestring_word_count *)
-Definition compile_bytestring_word_count_def:
-  compile_bytestring_word_count src =
-    do len_op <- emit_op MLOAD [src];
-       sum_op <- emit_op ADD [len_op; Lit 63w];
-       emit_op SHR [Lit 5w; sum_op]
-    od
-End
-
 (* Copy a value of type ty at memory src to the slots from slot (transient
    storage if transient).  Only the words holding the value are written: a
    DynArray's length and its first length elements, a bytestring's length

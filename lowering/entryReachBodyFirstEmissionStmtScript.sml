@@ -536,7 +536,8 @@ Proof
   `!op v. cs_appends (compile_ptr_store ctor NONE sl op v)` by
     (rw[cs_appends_def] >> metis_tac[compile_ptr_store_labels, pairTheory.SND]) >>
   pure_rewrite_tac[contextTheory.compile_word_copy_loop_def,
-    contextTheory.compile_word_copy_loop_op_def, LET_THM] >> BETA_TAC >>
+    contextTheory.compile_word_copy_loop_op_def,
+    contextTheory.compile_word_copy_loop_base_def, LET_THM] >> BETA_TAC >>
   map_every qid_spec_tac [`b`, `x`, `a`] >>
   ntac 3 (ho_match_mp_tac first_emission_bind >> conj_tac
     >- (rpt strip_tac >> drule (cj 1 first_emission_counters) >> metis_tac[]) >> gen_tac) >>
@@ -663,6 +664,28 @@ Resume first_emission_store_slots_family[slots]:
 QED
 Finalise first_emission_store_slots_family
 
+Theorem first_emission_store_immutable_bytestring[local]:
+  !imm src dst a x b.
+  compile_store_immutable_bytestring imm src dst a = (x,b) ==>
+  cs_extends a b /\
+  (!fn. fn_has_code a b fn ==> ?bb i.
+    lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  rpt gen_tac >>
+  `!count. cs_appends (compile_word_copy_loop_base src dst count LocMemory LocCode T imm)` by
+    (rw[cs_appends_def] >> metis_tac[compile_word_copy_labels, pairTheory.SND]) >>
+  pure_rewrite_tac[contextTheory.compile_store_immutable_bytestring_def,
+    contextTheory.compile_bytestring_word_count_def, comp_bind_assoc] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+  gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
+  rpt (FIRST [irule cs_appends_bind >> conj_tac,
+              irule cs_appends_ignore_bind >> conj_tac, gen_tac] >> BETA_TAC >>
+       simp[cs_appends_emit_helpers, cs_appends_return])
+QED
+
 Theorem first_emission_assign_value[local]:
   !ce dst loc src pw sl dt st sz a x b.
   compile_assign_value ce dst loc src pw sl dt st sz a = (x,b) ==>
@@ -694,6 +717,8 @@ Proof
   >>~- ([`compile_store_memory_typed _ _ _ _ _ _ = _`], metis_tac[first_emission_typed_memory_family])
   >>~- ([`compile_imm_store_word _ _ _ _ = _`], metis_tac[first_emission_imm_store_word])
   >>~- ([`compile_imm_store_words _ _ _ _ _ _ = _`], metis_tac[first_emission_imm_store_words])
+  >>~- ([`compile_store_immutable_bytestring _ _ _ _ = _`],
+    metis_tac[first_emission_store_immutable_bytestring])
   >>~- ([`emit_op _ _ _ = _`],
     rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[] >> metis_tac[])
   >>~- ([`compile_store_slots _ _ _ _ _ _ = _`],

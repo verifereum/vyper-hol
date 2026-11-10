@@ -1040,7 +1040,7 @@ Resume concat_args_sim[head_exit]:
   qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o BETA_RULE) >> simp[] >>
   qpat_x_assum `expr_exit _ r` mp_tac >>
   Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>
-  TRY (rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
 QED
 
 Resume concat_args_sim[head_exempt]:

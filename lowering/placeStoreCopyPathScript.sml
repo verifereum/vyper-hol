@@ -41,7 +41,7 @@ Theorem place_store_runtime_copy_code[local]:
     (!x. not_fresh_at sa x ==> ~MEM x [cv;tv;mv;sv;vv;dv;nv])
 Proof
   strip_tac >> Cases_on `loc = LocStorage` >>
-  gvs[compile_word_copy_loop_op_def, word_scale_def,
+  gvs[compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_loop_base_def, word_scale_def,
       compile_ptr_load_def, compile_ptr_store_def,
       comp_bind_def, comp_ignore_bind_def, comp_return_def,
       fresh_label_def, fresh_var_def, emit_inst_def, emit_op_def,

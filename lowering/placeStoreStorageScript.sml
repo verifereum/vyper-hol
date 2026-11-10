@@ -3622,7 +3622,7 @@ Proof
   simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
     emitHelperPropsTheory.eval_operand_lit] >>
   simp[run_inst_seq_def, step_inst_base_def,
-    slotCopyExecutionTheory.slot_copy_operand_update]
+    emitHelperPropsTheory.slot_copy_operand_update]
 QED
 
 Theorem place_store_forward_body_run:
@@ -3652,24 +3652,24 @@ Proof
   `eval_operand (Var cv) s = SOME k` by simp[eval_operand_def] >>
   simp_tac (srw_ss()) [LET_THM] >>
   simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def,
-    exec_pure2_def, slotCopyExecutionTheory.slot_copy_operand_update,
+    exec_pure2_def, emitHelperPropsTheory.slot_copy_operand_update,
     emitHelperPropsTheory.eval_operand_lit] >>
   `src <> Var mv /\ src <> Var sv /\ src <> Var vv /\
    dst <> Var mv /\ dst <> Var sv /\ dst <> Var vv /\ dst <> Var dv` by metis_tac[] >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
-    slotCopyExecutionTheory.slot_copy_operand_update] >>
+    emitHelperPropsTheory.slot_copy_operand_update] >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_read1_def,
-    slotCopyExecutionTheory.slot_copy_operand_update,
+    emitHelperPropsTheory.slot_copy_operand_update,
     place_store_mload_update] >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
-    slotCopyExecutionTheory.slot_copy_operand_update] >>
+    emitHelperPropsTheory.slot_copy_operand_update] >>
   Cases_on `tr` >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
-    eval_operands_def, slotCopyExecutionTheory.slot_copy_operand_update,
+    eval_operands_def, emitHelperPropsTheory.slot_copy_operand_update,
     place_store_update_static] >>
   qmatch_goalsub_abbrev_tac `run_inst_seq _ post` >>
   `eval_operand (Var cv) post = SOME k` by
-    (simp[Abbr `post`, slotCopyExecutionTheory.slot_copy_operand_update,
+    (simp[Abbr `post`, emitHelperPropsTheory.slot_copy_operand_update,
       SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `T`] place_store_slot_operand_frame),
       SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `F`] place_store_slot_operand_frame)]) >>
   irule place_store_forward_tail_run >> simp[]

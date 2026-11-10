@@ -1,7 +1,7 @@
 Theory lowerDloadPtrStatic
 Ancestors
   o1ContractLowerDload o1PassContract ptrDiscipline lowerDloadDefs
-  venomPassSchedule list lowerDloadPtrClosure pointerConfinedDefs memLocDefs
+  venomPassSchedule list lowerDloadPtrClosure pointerConfinedDefs pointerConfinedProps memLocDefs
   pred_set venomInst mem2varBlockSimHelpers irSupply venomFnScheduleRunner
   venomExecSemantics venomFnScheduleRunnerProps
 

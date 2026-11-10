@@ -1,6 +1,7 @@
 (* Counted execution boundaries for RawLog body continuations. *)
 Theory bodySimRawLogTails
 Ancestors
+  exprSimHashBoundary
   bodySimRawLogBodySource exprSimRawLog exprSimHash gasSummary
   exprBopSimProps exprSimProps exprSimAlloc context ASCIInumbers
   bodySim exprSimSend exprSimHyps vyperTypeSystem vyperAST list

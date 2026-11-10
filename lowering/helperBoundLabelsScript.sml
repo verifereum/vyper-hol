@@ -68,13 +68,13 @@ Proof
   drule bound_labels_fresh_label >> simp[]
 QED
 
-Theorem bound_labels_word_copy_loop_op:
+Theorem bound_labels_word_copy:
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label)
-    (all_blocks (SND (compile_word_copy_loop_op src dst cnt ld st ctor s))))
+    (all_blocks (SND (compile_word_copy_loop_base src dst n ld st ctor imm s))))
 Proof
-  strip_tac >> simp[compile_word_copy_loop_op_def] >>
+  strip_tac >> simp[compile_word_copy_loop_base_def] >>
   irule bound_labels_fresh_label_bind >> simp[] >> rpt strip_tac >>
   irule bound_labels_fresh_label_bind >> simp[] >> rpt strip_tac >>
   irule bound_labels_fresh_label_bind >> simp[] >> rpt strip_tac >>
@@ -87,6 +87,15 @@ Proof
     conj_tac, IF_CASES_TAC])
 QED
 
+Theorem bound_labels_word_copy_loop_op:
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label)
+    (all_blocks (SND (compile_word_copy_loop_op src dst cnt ld st ctor s))))
+Proof
+  simp[compile_word_copy_loop_op_def, bound_labels_word_copy]
+QED
+
 Theorem bound_labels_word_copy_loop:
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
@@ -94,6 +103,18 @@ Theorem bound_labels_word_copy_loop:
     (all_blocks (SND (compile_word_copy_loop src dst n ld st ctor s))))
 Proof
   simp[compile_word_copy_loop_def, bound_labels_word_copy_loop_op]
+QED
+
+Theorem bound_labels_store_immutable_bytestring:
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_store_immutable_bytestring imm src dst s))))
+Proof
+  strip_tac >> simp[compile_store_immutable_bytestring_def, compile_bytestring_word_count_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_word_copy,
+    comp_return_def]), gen_tac, strip_tac, irule bound_labels_bind,
+    irule bound_labels_ignore_bind, conj_tac])
 QED
 
 Theorem bound_labels_location_copy:

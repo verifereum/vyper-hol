@@ -52,6 +52,10 @@ QED
    compile_expr_sim; what is left is the case with one. *)
 Theorem body_expr_ok_intro:
   !cx e.
+    (!a t n elems.
+       e = Builtin a (MakeArray t n) elems /\
+       builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+       body_exprs_ok cx elems) /\
     (!ty e1 e2. e <> Subscript ty e1 e2) /\
     (!tops ctx func cenv env ty es.
        body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
@@ -80,6 +84,10 @@ QED
 
 Theorem body_expr_ok_of_case:
   !cx e.
+    (!a t n elems.
+       e = Builtin a (MakeArray t n) elems /\
+       builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+       body_exprs_ok cx elems) /\
     (!ty e1 e2. e <> Subscript ty e1 e2) /\
     (!tops ctx func cenv.
        body_inv tops ctx cenv cx ==>
@@ -111,7 +119,7 @@ Theorem body_ifexp_case:
     body_expr_ok cx e1 ==>
     body_expr_ok cx (IfExp v5 e1 e2 e3)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
   Cases_on `!e. (e = e2 \/ e = e3) ==>
     (int_calls_expr e = [] \/
      same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
@@ -127,7 +135,7 @@ Theorem body_structlit_case:
     (!ks. ks = MAP FST kes ==> body_exprs_ok cx (MAP SND kes)) ==>
     body_expr_ok cx (StructLit v7 (src_id_opt,id) kes)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
   Cases_on `!e. MEM e (MAP SND kes) ==>
               int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
   >- (irule compile_struct_lit_case >> metis_tac[body_exprs_ok_case]) >>
@@ -154,8 +162,7 @@ Proof
          >- metis_tac[body_expr_ok_case]
          >- metis_tac[body_expr_ok_map_case] >>
          rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
-      `expr_sim_case F ctx func cenv cx (Subscript v8 e1 e2)` by
-        (irule expr_sim_case_of_vv >> simp[loweringPostsTheory.post_value_type_def]) >>
+      drule_at (Pos last) expr_sim_case_of_vv >> simp[] >> strip_tac >>
       fs[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   `expr_map_case F ctx func cenv cx (Subscript v8 e1 e2)` by
@@ -168,7 +175,7 @@ QED
 Theorem body_attribute_case:
   !cx v9 e id. body_expr_ok cx e ==> body_expr_ok cx (Attribute v9 e id)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >>
+  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >>
   strip_tac >> irule compile_attribute_case >> metis_tac[body_expr_ok_case]
 QED
 
@@ -182,7 +189,7 @@ Theorem body_bop_case:
      !a t n elems. e2 <> Builtin a (MakeArray t n) elems) /\
     body_exprs_ok cx [e1; e2] ==> body_expr_ok cx (Builtin ty (Bop bop) [e1; e2])
 Proof
-  rw[body_exprs_ok_def] >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >>
+  rw[body_exprs_ok_def] >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >>
   strip_tac >> irule compile_bop_case >> rpt conj_tac
   >- (strip_tac >> metis_tac[body_expr_ok_case]) >>
   metis_tac[body_expr_ok_case]
@@ -209,7 +216,7 @@ Theorem body_make_array_case:
      body_exprs_ok cx es) ==>
     body_expr_ok cx (Builtin ty (MakeArray t n) es)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `builtin_args_length_ok (MakeArray t n) (LENGTH es)`)
   >- (rw[expr_sim_case_def, expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
@@ -233,7 +240,7 @@ Theorem body_builtin_residual_case:
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_ok cx es) ==>
     body_expr_ok cx (Builtin ty bt es)
 Proof
-  rpt strip_tac >> (irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> (match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func cenv cx (Builtin ty bt es)`
     suffices_by
       (strip_tac >> conj_tac
@@ -270,7 +277,7 @@ Proof
   Cases_on `bt = ECAdd \/ bt = ECMul`
   >- (irule body_builtin_residual_case >> simp[] >> strip_tac >>
       first_x_assum irule >> gvs[type_check_def, assert_def]) >>
-  irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
+  match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `builtin_args_length_ok bt (LENGTH es)`)
   >- (rw[expr_sim_case_def, expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
@@ -290,8 +297,7 @@ Proof
 QED
 
 (* In and not in on an array literal: of words by bodySimBopInLiteralWord,
-   from the elements' judgments (bodySimBopHeld's
-   body_make_array_children_ok, held for the bodySim child-closure wave);
+   from the elements' judgments (bodySim's body_make_array_children_ok);
    of non-words held for #742 (bodySimBopHeld). *)
 Theorem body_bop_in_literal_case:
   !cx ty bop e1 a t n elems.
@@ -329,7 +335,7 @@ Proof
                 ?a t n elems. e2 = Builtin a (MakeArray t n) elems`
       >- (gvs[] >> irule body_bop_in_literal_case >> simp[]) >>
       irule body_bop_case >> gvs[]) >>
-  irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
+  match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
   irule compile_bop_args_case >> gvs[]
 QED
 
@@ -342,7 +348,7 @@ Theorem body_pop_nested_case:
     body_base_target_ok cx bt ==>
     body_expr_ok cx (Pop v10 bt)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func cenv cx (Pop v10 bt)` by
     (rw[expr_vv_case_def] >>
      irule pop_nested_sim >> conj_tac
@@ -367,7 +373,7 @@ Proof
   rpt strip_tac >> Cases_on `?id. bt = NameTarget id`
   >- (gvs[] >> irule body_expr_ok_of_case >> simp[compile_pop_name_case]) >>
   Cases_on `?nid. bt = TopLevelNameTarget nid`
-  >- (gvs[] >> irule body_expr_ok_intro >> conj_tac
+  >- (gvs[] >> match_mp_tac body_expr_ok_intro >> conj_tac >- simp[] >> conj_tac
       >~ [`_ <> Subscript _ _ _`] >- simp[] >>
       simp[vyperTypeCallGraphTheory.int_calls_expr_def]) >>
   irule body_pop_nested_case >> gvs[]
@@ -382,7 +388,7 @@ Theorem body_type_builtin_case:
        body_exprs_ok cx es) ==>
     body_expr_ok cx (TypeBuiltin v11 tb typ es)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `type_builtin_args_length_ok tb (LENGTH es)`)
   >- (rw[expr_sim_case_def, expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
@@ -408,7 +414,7 @@ Theorem body_send_case:
        body_exprs_ok cx es) ==>
     body_expr_ok cx (Call v12 (Send has_gas) es v13)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func cenv cx (Call v12 (Send has_gas) es v13)`
     suffices_by simp[expr_sim_case_of_vv] >>
   rw[expr_vv_case_def] >> drule send_pre_types >> strip_tac >>
