@@ -253,10 +253,10 @@ Theorem abi_encode_tuple_staging_origin_frame:
   run_inst_seq (emitted_insts st staged) s = OK actual /\
   abi_decode_frame b n s actual /\
   FLOOKUP actual.vs_allocas st.cs_next_id = SOME (b,n) /\
-  wb_frame ce es origin s0 s /\ local_ptrs_reserved ce origin /\
+  wb_frame ce es es' origin s0 s /\ local_ptrs_reserved ce origin /\
   origin.cs_next_var <= st.cs_next_var /\ origin.cs_next_id <= st.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
-  wb_frame ce es origin s0 actual
+  wb_frame ce es es' origin s0 actual
 Proof
   strip_tac >> drule_all abi_encode_tuple_staging_split >>
   disch_then (qx_choose_then `addressed` strip_assume_tac) >>
@@ -286,8 +286,8 @@ Proof
 QED
 
 Theorem abi_encode_tuple_wb_frame_cursor[local]:
-  wb_frame ce es origin s0 (s with vs_inst_idx := k) <=>
-  wb_frame ce es origin s0 s
+  wb_frame ce es es' origin s0 (s with vs_inst_idx := k) <=>
+  wb_frame ce es es' origin s0 s
 Proof
   simp[loweringPostsTheory.wb_frame_def, exprSimPropsTheory.locals_kept_inst_idx,
        lookup_var_def]
@@ -302,12 +302,12 @@ Theorem abi_encode_tuple_staging_cursor:
   run_inst_seq (emitted_insts st staged) s = OK actual /\
   abi_decode_frame b n s actual /\
   FLOOKUP actual.vs_allocas st.cs_next_id = SOME (b,n) /\
-  wb_frame ce es origin s0 s /\ local_ptrs_reserved ce origin /\
+  wb_frame ce es es' origin s0 s /\ local_ptrs_reserved ce origin /\
   origin.cs_next_var <= st.cs_next_var /\ origin.cs_next_id <= st.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
   stmt_state_rel ctx func ce cx es'
     (actual with vs_inst_idx := LENGTH staged.cs_current_insts) /\
-  wb_frame ce es origin s0
+  wb_frame ce es es' origin s0
     (actual with vs_inst_idx := LENGTH staged.cs_current_insts)
 Proof
   strip_tac >> simp[stmt_state_rel_inst_idx, abi_encode_tuple_wb_frame_cursor] >>
