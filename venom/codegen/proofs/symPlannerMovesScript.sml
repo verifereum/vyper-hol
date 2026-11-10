@@ -221,6 +221,19 @@ Proof
   >- (qexists `v :: top` >> simp[]) >> metis_tac[]
 QED
 
+Theorem sym_mload_scratch_push_kind:
+  mem_sval_at ss.sym_mem_labels off sv /\ op_kind_ok fn ret op sv /\
+  off < dimword(:256) ==>
+  ?last v. sym_mload (scratch_push_state off ss) = SymOK last /\
+    last.sym_stack = v :: ss.sym_stack /\ op_kind_ok fn ret op v /\
+    last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + 2
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`ss` |-> `scratch_push_state off ss`, `stk` |-> `ss.sym_stack`] sym_mload_kind) >>
+  simp[arithmeticTheory.ADD_ASSOC]
+QED
+
 Theorem sym_exec_restore_kind:
   mem_sval_at ss.sym_mem_labels off sv /\ op_kind_ok fn ret op sv /\
   off < dimword(:256) /\
@@ -231,8 +244,15 @@ Theorem sym_exec_restore_kind:
     last.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
   strip_tac >> drule_all sym_steps_scratch_load_eq >>
-  mp_tac (Q.INST [`ss` |-> `scratch_push_state off ss`, `stk` |-> `ss.sym_stack`] sym_mload_kind) >>
-  simp[arithmeticTheory.ADD_ASSOC]
+  metis_tac[sym_mload_scratch_push_kind]
+QED
+
+Theorem sym_kinds_ok_spilled:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  FLOOKUP ps.ps_spilled op = SOME off ==>
+  ?sv. op_kind_ok fn ret op sv /\ mem_sval_at ss.sym_mem_labels off sv
+Proof
+  simp[codegenSymRelTheory.sym_kinds_ok_def] >> metis_tac[]
 QED
 
 Theorem sym_do_restore_present:
@@ -247,10 +267,8 @@ Theorem sym_do_restore_present:
     last.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
     last.sym_mem_labels = ss.sym_mem_labels
 Proof
-  strip_tac >>
-  `?sv. op_kind_ok fn ret op sv /\ mem_sval_at ss.sym_mem_labels off sv`
-    by metis_tac[codegenSymRelTheory.sym_kinds_ok_def] >>
-  drule_all sym_exec_restore_kind >> metis_tac[sym_kinds_ok_restore_change]
+  strip_tac >> drule_all_then strip_assume_tac sym_kinds_ok_spilled >>
+  metis_tac[sym_exec_restore_kind, sym_kinds_ok_restore_change]
 QED
 
 Theorem sym_do_restore:
@@ -277,7 +295,7 @@ Theorem sym_kinds_ok_head:
     LIST_REL (op_kind_ok fn ret) (REVERSE (stack_pop 1 ps.ps_stack)) top
 Proof
   rw[codegenSymRelTheory.sym_kinds_ok_def] >>
-  Cases_on `ps.ps_stack` using SNOC_CASES >> gvs[] >>
+  Cases_on `ps.ps_stack` using SNOC_CASES >>
   gvs[stackModelTheory.stack_peek_def, stackModelTheory.stack_pop_def,
       rich_listTheory.SNOC_APPEND, EL_LENGTH_APPEND, TAKE_LENGTH_APPEND,
       REVERSE_APPEND, LIST_REL_CONS1]
@@ -374,6 +392,89 @@ Theorem sym_exec_spill_kind:
 Proof
   strip_tac >> drule_all_then strip_assume_tac sym_kinds_ok_head >>
   drule_all_then MATCH_ACCEPT_TAC sym_exec_spill_known_head
+QED
+
+Theorem spill_alloc_layout_slots_bounded:
+  spill_alloc_layout_wf al fm ==> alloc_slots_bounded al.sa_spill_base al
+Proof
+  simp[spill_alloc_layout_wf_def, alloc_slots_bounded_def, EVERY_MEM]
+QED
+
+Theorem alloc_spill_slot_layout_fresh:
+  spill_alloc_layout_wf al fm /\ alloc_spill_slot al = (off,al') ==>
+  al.sa_spill_base <= off /\ off+32 <= al'.sa_next_offset /\
+  (!op at. FLOOKUP fm op = SOME at ==> off+32 <= at \/ at+32 <= off)
+Proof
+  strip_tac >> drule_then assume_tac spill_alloc_layout_slots_bounded >>
+  metis_tac[alloc_spill_slot_bounded, alloc_spill_slot_keep_layout]
+QED
+
+Theorem alloc_spill_slot_region_fresh:
+  spill_alloc_layout_wf al fm /\ alloc_spill_slot al = (off,al') /\
+  lo <= al.sa_spill_base /\ al'.sa_next_offset <= hi ==>
+  lo <= off /\ off+32 <= hi /\
+  (!op at. FLOOKUP fm op = SOME at ==> off+32 <= at \/ at+32 <= off)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac alloc_spill_slot_layout_fresh >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem sym_exec_spill_allocated:
+  sym_kinds_ok cplan fn ret srest ps ss /\ ps.ps_stack <> [] /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  alloc_spill_slot ps.ps_alloc = (off,al) /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  al.sa_next_offset <= r.sr_spill_end /\ off < dimword(:256) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOSpill off]) ==>
+  ?last. sym_steps p env 2 ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest
+      (ps with <| ps_stack := stack_pop 1 ps.ps_stack;
+        ps_spilled := ps.ps_spilled |+ (stack_peek 0 ps.ps_stack, off);
+        ps_alloc := al |>) last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac alloc_spill_slot_region_fresh >>
+  drule_all_then MATCH_ACCEPT_TAC sym_exec_spill_kind
+QED
+
+Theorem sym_do_spill_tos_allocated[local]:
+  alloc_spill_slot ps.ps_alloc = (off,al) /\
+  do_spill_tos ps = (ops,out) /\ ps.ps_stack <> [] /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) ops /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> gvs[do_spill_tos_def, execute_plan_spill_length] >>
+  metis_tac[sym_exec_spill_allocated]
+QED
+
+Theorem sym_do_spill_tos:
+  do_spill_tos ps = (ops,out) /\ ps.ps_stack <> [] /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) ops /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  Cases_on `alloc_spill_slot ps.ps_alloc` >>
+  rename1 `alloc_spill_slot ps.ps_alloc = (off,al)` >>
+  drule_then MATCH_ACCEPT_TAC sym_do_spill_tos_allocated
 QED
 
 Theorem scratch_swap_restore_indices:

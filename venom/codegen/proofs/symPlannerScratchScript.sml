@@ -399,7 +399,7 @@ Proof
   simp[planExecTheory.execute_plan_def]
 QED
 
-Theorem execute_plan_spill_length[local]:
+Theorem execute_plan_spill_length:
   LENGTH (execute_plan initial_fmp [SOSpill off]) = 2
 Proof
   simp[planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def]
