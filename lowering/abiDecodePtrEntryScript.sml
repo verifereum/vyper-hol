@@ -29,6 +29,10 @@ Theorem abi_decode_ptr_operand_entry:
     buf.buf_operand = Var out /\ src = Var q /\ len = Var r /\
     gas_path_ptr D 0 ctx func PG G tn (abi_decoder_prune_vars sa.cs_next_var s)
       0 G2 tn2 (OK u) /\
+    run_inst_seq (emitted_insts sa ready) (abi_decoder_prune_vars sa.cs_next_var s) =
+      OK (u with vs_inst_idx := s.vs_inst_idx) /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa ready)
+      (abi_decoder_prune_vars sa.cs_next_var s) G2 tn2 /\
     u.vs_memory = s.vs_memory /\
     abi_decode_member_live d ctx func cenv cx es q (w+32w) (LENGTH bs)
       out wout outsz (Lit 0w) 0w (Var r) ready G2 tn2 u /\

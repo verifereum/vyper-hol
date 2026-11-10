@@ -24,6 +24,8 @@ Theorem abi_builtin_decode_header_frame_ptr:
   ?u G' tn' q r.
     src = Var q /\ len = Var r /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK u) /\
+    run_inst_seq (emitted_insts sa sh) s = OK (u with vs_inst_idx := s.vs_inst_idx) /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sh) s G' tn' /\
     fresh_vars_wrt limit_st u /\ stmt_state_rel ctx func cenv cx es u /\
     ghost_inv d cenv cx es G' tn' u /\
     ~u.vs_halted /\ u.vs_current_bb = sh.cs_current_bb /\
@@ -58,5 +60,6 @@ Proof
      qexists_tac `sa` >> fs[lookup_var_def]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH sh.cs_current_insts`, `G'`, `tn'`, `q`, `r`] >>
   gvs[fresh_vars_wrt_def, ptr_covers_def, eval_operand_def, lookup_var_def,
-      stmt_state_rel_inst_idx]
+      stmt_state_rel_inst_idx] >>
+  simp[venom_state_component_equality]
 QED

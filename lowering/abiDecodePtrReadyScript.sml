@@ -4,8 +4,9 @@ Ancestors
   abiDecodePtrHeaderFrame abiDecodePtrInputWindow abiBuiltinDecodeSetup abiBuiltinDecodeHeader
   bodyPtrHashBuiltinsAllocFrame bodyPtrHashBuiltinsShaAllocInput
   bodyPtrHashBuiltinsShaAllocPath venomInstProofs venomExecSemantics stmtReasonLitFragMemory
-  venomInst assignTuplePtrCopyEndpoint
-  loweringHalt fragExec fragGasPathPtr emitHelperProps exprLoweringProps
+  venomInst assignTuplePtrCopyEndpoint instIdxIndep
+  loweringHalt fragExec fragExecPtr fragGasPathPtr fragGasSeqPtr bodyPtrBopScalarSeq
+  bodyPtrBopHashFootprint emitHelperProps exprLoweringProps
   compileEnv freshWrites bodyPtrDefs ptrDiscipline venomState list rich_list
 
 Theorem abi_builtin_decode_phased_ready_ptr:
@@ -29,6 +30,8 @@ Theorem abi_builtin_decode_phased_ready_ptr:
   ?u G2 tn2 out q r wout.
     buf.buf_operand = Var out /\ src = Var q /\ len = Var r /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G2 tn2 (OK u) /\
+    run_inst_seq (emitted_insts sa ready) s = OK (u with vs_inst_idx := s.vs_inst_idx) /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa ready) s G2 tn2 /\
     stmt_state_rel ctx func cenv cx es u /\ ghost_inv d cenv cx es G2 tn2 u /\
     ptr_covers G2 tn2 out u outsz /\ lookup_var out u = SOME wout /\
     w2n wout+outsz < dimword (:256) /\
@@ -125,6 +128,8 @@ Resume abi_builtin_decode_phased_ready_ptr[path]:
       qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ h _ _ _ _` mp_tac >>
       POP_ASSUM_LIST (K ALL_TAC) >>
       rpt strip_tac >> drule_all gas_path_ptr_then >> simp[]) >>
+  conj_tac >- suspend "raw" >>
+  conj_tac >- suspend "sequence" >>
   gvs[lookup_var_def, eval_operand_def, local_region_def] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -220,6 +225,38 @@ Resume abi_builtin_decode_phased_ready_ptr[clean]:
   asm_rewrite_tac [] >>
   qexistsl_tac [`cenv`, `ctx`, `cx`, `es`, `func`] >>
   asm_rewrite_tac []
+QED
+
+Resume abi_builtin_decode_phased_ready_ptr[raw]:
+  `sh.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sh` by
+    (fs[inst_extends_def]) >>
+  `emitted_insts sa ready = emitted_insts sa sh ++ emitted_insts sh ready` by
+    (irule emitted_insts_append >> simp[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sh ready)` by
+    simp[mk_inst_def, is_terminator_def] >>
+  qpat_x_assum `emitted_insts sa ready = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `run_inst_seq (emitted_insts sa sh) s = _`
+    (mp_then Any (fn th => pure_rewrite_tac[th]) run_inst_seq_append) >>
+  simp[run_inst_seq_inst_idx, exec_result_map_def]
+QED
+
+Resume abi_builtin_decode_phased_ready_ptr[sequence]:
+  `sh.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sh` by
+    fs[inst_extends_def] >>
+  `emitted_insts sa ready = emitted_insts sa sh ++ emitted_insts sh ready` by
+    (irule emitted_insts_append >> simp[]) >>
+  `s.vs_inst_idx + LENGTH (emitted_insts sa sh) = h.vs_inst_idx` by
+    metis_tac[LENGTH_APPEND] >>
+  qpat_x_assum `emitted_insts sa ready = _` (fn th => pure_rewrite_tac[th]) >>
+  irule bop_inst_seq_ptr_append >>
+  conj_tac >- fs[EVERY_MEM] >>
+  qexistsl_tac [`H`, `h with vs_inst_idx := s.vs_inst_idx`, `tm`] >>
+  simp[] >>
+  `h with vs_inst_idx := LENGTH sh.cs_current_insts = h` by
+    simp[venom_state_component_equality] >>
+  qpat_x_assum `run_inst_seq (emitted_insts sh ready) h = OK t` mp_tac >>
+  simp[run_inst_seq_def, AllCaseEqs()] >> strip_tac >>
+  gvs[inst_seq_ptr_def, ptr_inst_ok_alloca]
 QED
 
 Finalise abi_builtin_decode_phased_ready_ptr
