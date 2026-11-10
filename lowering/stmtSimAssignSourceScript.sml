@@ -23,6 +23,10 @@ Proof
   Cases_on `eval_expr cx e (es with gas_obs := gs)` >>
   rename1 `eval_expr cx e (es with gas_obs := gs) = (rr, ee)` >>
   Cases_on `rr` >> simp[] >>
+  Cases_on `read_result cx x ee` >>
+  rename1 `read_result cx x ee = (rr2, ee')` >>
+  imp_res_tac read_result_state >> gvs[] >>
+  Cases_on `rr2` >> simp[] >>
   simp[Once evaluate_def, bind_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
        type_check_def, assert_def, return_def, raise_def] >>
@@ -31,9 +35,7 @@ Proof
   simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
        type_check_def, assert_def, return_def, raise_def] >>
   Cases_on `lookup_scopes id ee.scopes` >>
-  simp[raise_def, return_def, get_place_def, stmt_res_ok_def] >>
-  Cases_on `read_result cx x ee` >> simp[] >>
-  rename1 `read_result cx x ee = (rr2, ee')` >> Cases_on `rr2` >> simp[]
+  simp[raise_def, return_def, get_place_def, stmt_res_ok_def]
 QED
 
 Theorem assign_local_admissible_rhs:
@@ -134,11 +136,11 @@ Theorem assign_local_exempt:
 Proof
   strip_tac >>
   `ignore_bind (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (return ()) =
-   bind (eval_expr cx e)
-     (\pv. ignore_bind
+   bind (bind (eval_expr cx e) (read_result cx))
+     (\v. ignore_bind
        (bind (eval_target_place cx (NameTarget id))
-         (\p. bind (read_result cx pv) (write_place cx p))) (return ()))` by
+         (\p. write_place cx p v)) (return ()))` by
     simp[Once evaluate_def, ignore_bind_def, bind_assoc] >>
   pop_assum SUBST1_TAC >>
-  irule gas_exempt_cert_error_result >> first_x_assum irule >> simp[]
+  irule gas_exempt_cert_error_value >> simp[]
 QED

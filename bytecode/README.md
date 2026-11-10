@@ -41,6 +41,19 @@ removed when a new pin includes them. The current series contains:
   call's parameter type), whose layout differs for nested bounded types.
 - vyperlang/vyper#5254: the inliner binds the unused return-PC parameter
   to zero instead of the removed callee's label.
+- vyperlang/vyper#5280: an assignment or augmented-assignment target, or the
+  array of an `append` or `pop`, is rejected (`CompilerPanic("risky
+  overlap")`) when one of its subscripts has a base that passes through a
+  dynamic-array element and an index that can write a variable that base
+  reads, or makes a risky call.
+  Upstream gets this by lowering such targets through the subscript overlap
+  check; the pin has no such check, so the patch walks the target instead.
+- vyperlang/vyper#5282 (its `lower_Assign` hunk only): an assignment whose
+  target indices can modify memory or storage (`self.m[self.f()] = self.x`)
+  freezes the right-hand side before lowering the target, so the store sees
+  the value from before those effects, as legacy codegen does. The pin has no
+  `eval_order.py`, so `expression_can_mutate_memory_or_storage` is inlined
+  in `stmt.py`.
 - vyperlang/vyper#5322: converting a `Bytes`/`String` value to a signed
   integer or decimal masks the data word to zero when the length is zero, so
   stale data in an emptied bytestring cannot make the arithmetic shift
@@ -55,10 +68,19 @@ removed when a new pin includes them. The current series contains:
 - vyperlang/vyper#5349: an instruction with no outputs and no effects (an
   `assert`) stays a scheduling root even when a later abort depends on it,
   so nothing is hoisted above it.
+- vyperlang/vyper#5350: an array subscript whose base is a `pop()` result is
+  rejected (`CompilerPanic("risky overlap")`) when the index can write a
+  variable the base reads, or makes a risky call.
 - vyperlang/vyper#5354: PHI origin traversal uses an active recursion path and
   guarded memoization, so shared multi-origin PHIs cannot disappear from a
   sibling operand. The pass is used by O2/O3/Os; the O1 fixture schedule does
   not run it.
+
+The pin has no subscript overlap check at all, so the #5280 patch, which
+applies first, brings `_subscript_read_write_overlap` and its helpers over
+from a later upstream revision (577d2534), unchanged, and the #5350 patch
+reuses them. They are used only for these two rejections: the pin still
+copies no subscript base. The rejections change no fixture.
 
 The provenance's `vyper_commit` names the unpatched base revision.
 
