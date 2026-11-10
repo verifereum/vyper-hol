@@ -1432,7 +1432,7 @@ Proof
   gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
   simp[jump_to_def, inline_rename_operand_def,
     inline_rename_extract_labels, listTheory.EL_MAP] >>
-  gvs[] >> rw[]
+  gvs[] >> rw[] >> metis_tac[]
 QED
 
 (* Terminal constructors bypass instruction-index advancement in exec_block.
@@ -1513,4 +1513,113 @@ Proof
   drule_all inline_cell_zipper_successor_cases >> strip_tac
   >- (disj1_tac >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   disj2_tac >> gvs[]
+QED
+
+(* Only successful operand reads are observations of a tracked snapshot. *)
+Theorem inline_branch_success_step:
+  MEM src.inst_opcode [JMP; JNZ; DJMP] /\
+  dst.inst_opcode = src.inst_opcode /\
+  dst.inst_operands = MAP (inline_rename_operand ren lab) src.inst_operands /\
+  (!op w. MEM op src.inst_operands /\ eval_operand op s = SOME w ==>
+    eval_operand (inline_rename_operand ren lab op) t = SOME w) /\
+  step_inst fuel C src s = OK u ==>
+  u = jump_to u.vs_current_bb s /\
+  step_inst tfuel Tctx dst t = OK (jump_to (lab u.vs_current_bb) t)
+Proof
+  strip_tac >> gvs[listTheory.MEM] >>
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  simp[jump_to_def, inline_rename_operand_def,
+    inline_rename_extract_labels, listTheory.EL_MAP] >>
+  gvs[] >> rw[] >>
+  rename1 `eval_operand test s = SOME w` >>
+  `eval_operand (inline_rename_operand ren lab test) t = SOME w` by metis_tac[] >>
+  qexists `w` >> simp[listTheory.EL_MAP]
+QED
+
+(* A branch cut stops before the destination's parallel PHI batch. *)
+Theorem inline_owner_branch_before_phi_cut:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_shared_frame snap.ils_state = inline_shared_frame frame.ipf_state /\
+  ~snap.ils_state.vs_halted /\
+  wf_function c.ic_function /\ EVERY inst_wf sb.bb_instructions /\
+  lookup_block c.ic_block c.ic_function.fn_blocks = SOME sb /\
+  get_instruction sb snap.ils_state.vs_inst_idx = SOME src /\
+  MEM src.inst_opcode [JMP; JNZ; DJMP] /\
+  step_inst fuel C src snap.ils_state = OK u /\
+  EVERY (\op. !v. op = Var v ==>
+    MEM v (cfgTransform$fn_all_vars a.ia_function) /\ ~retpc_var a.ia_function v)
+    src.inst_operands /\
+  inline_cell_at c /\ inline_cell_zipper c frames d /\
+  c.ic_fields = inline_inst_fields src /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames /\
+  inline_cell_var_action frames = route.ir_rename /\
+  d.ic_index = frame.ipf_state.vs_inst_idx /\
+  inline_routed_leaf cert root p c.ic_function
+    (MAP (\(tag,next). inline_cell_choice tag) frames) ==>
+  ?tb dst entry.
+    lookup_block d.ic_block d.ic_function.fn_blocks = SOME tb /\
+    get_instruction tb frame.ipf_state.vs_inst_idx = SOME dst /\
+    step_inst tfuel Tctx dst frame.ipf_state =
+      OK (jump_to (inline_cell_label_action frames u.vs_current_bb) frame.ipf_state) /\
+    lookup_block (inline_cell_label_action frames u.vs_current_bb) root.fn_blocks = SOME entry /\
+    inline_path_location (MAP (\(tag,next). inline_cell_choice tag) frames)
+      (SOME (inline_before_phi_location u.vs_current_bb k)) =
+      SOME (inline_before_phi_location (inline_cell_label_action frames u.vs_current_bb) k) /\
+    inline_owner_storage cert
+      ((p,a,route,snap with ils_state := u)::rest)
+      (frame with ipf_state :=
+        jump_to (inline_cell_label_action frames u.vs_current_bb) frame.ipf_state) /\
+    inline_shared_frame u = inline_shared_frame
+      (jump_to (inline_cell_label_action frames u.vs_current_bb) frame.ipf_state)
+Proof
+  strip_tac >>
+  `~MEM src.inst_opcode [PHI; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] /\
+   is_terminator src.inst_opcode` by
+    gvs[listTheory.MEM, venomInstTheory.is_terminator_def] >>
+  qabbrev_tac `lab = inline_cell_label_action frames` >>
+  `inline_cell_label_action frames = lab` by simp[Abbr `lab`] >>
+  drule_all inline_cell_zipper_route_fetch >> strip_tac >>
+  drule inline_owner_storage_head >> strip_tac >>
+  `!op w. MEM op src.inst_operands /\ eval_operand op snap.ils_state = SOME w ==>
+    eval_operand (inline_rename_operand route.ir_rename lab op)
+      frame.ipf_state = SOME w` by
+    (rpt strip_tac >>
+     `eval_operands [op] snap.ils_state = SOME [w]` by simp[eval_operands_def] >>
+     `eval_operands (MAP (inline_rename_operand route.ir_rename lab) [op])
+        frame.ipf_state = SOME [w]` by
+       (irule inline_tracked_operands_success >>
+        qexistsl [`a`, `a.ia_function`, `snap`] >> simp[] >>
+        qpat_x_assum `EVERY _ src.inst_operands` mp_tac >>
+        simp[listTheory.EVERY_MEM] >> disch_then drule >> simp[]) >>
+     gvs[eval_operands_def, AllCaseEqs()]) >>
+  drule_all inline_branch_success_step >>
+  disch_then (qspecl_then [`tfuel`, `Tctx`] strip_assume_tac) >>
+  `~u.vs_halted` by
+    (qpat_x_assum `u = jump_to _ _` mp_tac >>
+     disch_then (mp_tac o AP_TERM ``\s:venom_state. s.vs_halted``) >> simp[jump_to_def]) >>
+  `exec_block fuel C sb snap.ils_state = OK u` by simp[Once exec_block_def] >>
+  `MEM u.vs_current_bb (fn_labels c.ic_function)` by
+    ( `MEM sb c.ic_function.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+      `bb_well_formed sb` by metis_tac[venomWfTheory.wf_function_def] >>
+      `MEM u.vs_current_bb (bb_succs sb)` by
+        (irule venomExecPropsTheory.exec_block_current_bb_in_succs >>
+         simp[GSYM CONJ_ASSOC] >>
+         conj_tac >-
+           metis_tac[passSimulationPropsTheory.wf_non_terminator_prefix] >>
+         conj_tac >- metis_tac[venomWfTheory.bb_well_formed_def] >>
+         qexistsl [`C`, `fuel`, `snap.ils_state`] >>
+         gvs[venomInstTheory.get_instruction_def, AllCaseEqs()]) >>
+      metis_tac[venomWfTheory.wf_function_def, venomWfTheory.fn_succs_closed_def]) >>
+  `?sb'. lookup_block u.vs_current_bb c.ic_function.fn_blocks = SOME sb'` by
+    (gvs[venomInstTheory.fn_labels_def, listTheory.MEM_MAP] >>
+     metis_tac[venomExecPropsTheory.MEM_lookup_block, venomWfTheory.wf_function_def,
+       venomInstTheory.fn_labels_def]) >>
+  drule_all inline_cell_routed_before_phi >> disch_then (qspec_then `k` strip_assume_tac) >>
+  qexistsl [`bb`, `dst`, `tb`] >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[inline_owner_storage_jump] >>
+  qpat_x_assum `u = jump_to _ _` mp_tac >>
+  disch_then (mp_tac o AP_TERM ``inline_shared_frame``) >>
+  fs[jump_to_def, inline_shared_frame_def, stateFrameTheory.execution_frame_def]
 QED
