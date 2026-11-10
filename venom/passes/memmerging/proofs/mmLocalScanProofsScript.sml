@@ -11560,6 +11560,53 @@ Proof
   simp[] >> gvs[]
 QED
 
+Theorem mm_local_final_birth_ancestor[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  ((?dj sj lj. (EL j is).inst_opcode = MCOPY /\
+      (EL j is).inst_operands = [Lit dj; Lit sj; Lit lj] /\
+      c = <|cg_dst := w2n dj; cg_src := w2n sj; cg_length := w2n lj;
+             cg_inst_ids := [(EL j is).inst_id]|>) \/
+   (?dj vj srcj. (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dj; Var vj] /\
+      FLOOKUP s0.ss_loads vj = SOME srcj /\
+      c = <|cg_dst := w2n dj; cg_src := srcj; cg_length := 32;
+             cg_inst_ids := [(EL j is).inst_id] ++
+               (case dfg_get_def (dfg_build_function fn0) vj of
+                  NONE => [] | SOME li => [li.inst_id])|>)) ==>
+  mm_local_copy_ancestor c g
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `?h. MEM h gs /\ mm_local_copy_ancestor c h` by
+    (`?h. MEM h ((FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+        empty_scan_state is).ss_copies ++
+        (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+        empty_scan_state is).ss_flushed) /\ mm_local_copy_ancestor c h` by
+       (qpat_x_assum `(?dj sj lj. (EL j is).inst_opcode = MCOPY /\ _) \/ _` strip_assume_tac
+        >- (drule_at (Pat `_.inst_operands = _`)
+              (Q.INST [`n` |-> `LENGTH is`, `dfg` |-> `dfg_build_function fn0`,
+                `ss` |-> `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state is`]
+                (SPEC_ALL mm_local_bulk_cut_fragment)) >> simp[]) >>
+        drule_at (Pat `_.inst_operands = _`)
+          (Q.INST [`n` |-> `LENGTH is`, `dfg` |-> `dfg_build_function fn0`,
+            `ss` |-> `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state is`]
+            (SPEC_ALL mm_local_store_cut_fragment)) >> simp[] >> gvs[]) >>
+     gvs[scan_block_def, hard_barrier_def] >> metis_tac[]) >>
+  `MEM (EL j is).inst_id c.cg_inst_ids /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+    (qpat_x_assum `(?dj sj lj. (EL j is).inst_opcode = MCOPY /\ _) \/ _` strip_assume_tac >> gvs[]) >>
+  `MEM (EL j is).inst_id h.cg_inst_ids` by gvs[mm_local_copy_ancestor_def] >>
+  `MEM (EL j is) bb.bb_instructions` by metis_tac[EL_MEM] >>
+  `h = g` by
+    (irule mm_local_prefix_write_group_owner >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  gvs[]
+QED
+
 Theorem mm_local_epoch_source_read[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
