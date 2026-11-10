@@ -352,8 +352,9 @@ Proof
   `wb_frame cenv es ee sb u t` by
     (irule expr_post_frame >> goal_assum (drule_at Any)) >>
   `wb_frame cenv es ee sa s t` by
-    (irule wb_frame_trans >> simp[] >> conj_tac
-     >- (qexistsl_tac [`es`, `sb`, `u`] >> simp[]) >> metis_tac[]) >>
+    (match_mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s`, `sa`, `es`, `ee`,
+                            `sb`, `u`, `t`, `ctx`] wb_frame_trans) >>
+     simp[]) >>
   irule exprSimCalldataSliceTheory.vv_post_prefix_frame >>
   simp[] >> qexistsl_tac [`ee`, `sa`, `t`] >> simp[]
 QED

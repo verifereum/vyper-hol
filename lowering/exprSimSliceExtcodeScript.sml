@@ -185,7 +185,7 @@ Proof
      n2w (LENGTH (lookup_account (w2w (a:bytes32)) s.vs_accounts).code) <+ b + n) <=>
     LENGTH (lookup_account (w2w a) s.vs_accounts).code < w2n b + w2n n)` by
    (mp_tac (Q.SPECL [`dimword (:256)`,`w2n (b:bytes32)`,`w2n (n:bytes32)`,
-      `LENGTH (lookup_account (w2w (a:bytes32)) s.vs_accounts).code`] slice_bounds_mod) >>
+      `LENGTH (lookup_account (w2w (a:bytes32)) s.vs_accounts).code`] exprSimSliceBoundsTheory.slice_bounds_mod) >>
     simp[WORD_LO, word_add_def, w2n_n2w, w2n_lt] >> decide_tac) >>
  drule_all slice_bounds_run_frame >>
  qpat_x_assum `(_ \/ _) <=> _` (fn th => pure_rewrite_tac[th]) >>
