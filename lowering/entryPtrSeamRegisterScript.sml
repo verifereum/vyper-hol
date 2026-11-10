@@ -27,6 +27,22 @@ Ancestors
   fragExec venomInst ptrDiscipline ptrSafeRun vyperLoweringCorrect
   loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
 
+(* Argument registration starts before any allocation or memory write. *)
+Theorem registration_start_resources:
+  initial_venom_state_rel tops am tx vs /\
+  vars_pc_only vs s ==>
+  s.vs_allocas = FEMPTY /\ s.vs_alloca_next = 0 /\
+  s.vs_memory = [] /\ alloca_inv s /\ allocas_from lower s /\
+  s.vs_call_ctx = vs.vs_call_ctx
+Proof
+  simp[initial_venom_state_rel_def, vars_pc_only_def,
+       venom_state_component_equality] >>
+  rpt strip_tac >>
+  simp[venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def, allocas_from_def]
+QED
+
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
    Hints (not binding):
