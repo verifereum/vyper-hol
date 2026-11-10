@@ -34,7 +34,20 @@ Theorem compile_abi_encode_args_sim_live:
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\rr ee r. wb_args_exit rr r)
 Proof
-  cheat
+  Induct_on `args`
+  >- (rpt strip_tac >>
+      gvs[exprLoweringTheory.compile_abi_encode_args_def,
+          compileEnvTheory.comp_return_def] >>
+      irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+      qexists_tac `\rr ee t. ?vs. rr = INL vs /\
+        wb_args_post ctx func ce cx es sa s0 ee [] vs t /\
+        t.vs_current_bb = sa.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sa.cs_current_insts` >>
+      conj_tac
+      >- (simp[wb_args_post_def, abi_args_post_nil] >> metis_tac[]) >>
+      irule lower_word_args_nil_sim >> simp[])
+  >> rpt strip_tac
+  >> cheat
 QED
 
 Theorem compile_abi_encode_args_sim:
