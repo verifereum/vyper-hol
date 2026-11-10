@@ -2569,6 +2569,26 @@ Proof
   drule_all asm_sym_step >> simp[] >> metis_tac[asm_sym_step_rel_ok]
 QED
 
+Theorem sym_returndatacopy_success_inventory:
+  ss.sym_stack = Val dst :: Val src :: Val sz :: tail /\
+  sym_step p env (AsmOp "RETURNDATACOPY") ss = SymOK ss' ==>
+  ss'.sym_stack = tail /\
+  (!b. b IN FDOM ss'.sym_mem_labels ==> b IN FDOM ss.sym_mem_labels)
+Proof
+  strip_tac >>
+  `sym_step_concrete "RETURNDATACOPY" ss = SymOK ss'` by
+    gvs[sym_step_def, sym_terminal_opcode_concrete] >>
+  gvs[sym_step_concrete_def, asm_op_arity_def, asm_op_arity_table_def,
+      sval_val_def, asm_op_mem_reads_def, asmSemTheory.log_table_def,
+      mem_labels_hit_def] >>
+  gvs[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
+      asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def,
+      asm_step_extcall_def, asm_step_copy_def, asm_returndatacopy_def] >>
+  Cases_on `LENGTH ss.sym_base.as_returndata < w2n src + w2n sz` >>
+  Cases_on `sz = 0w` >>
+  gvs[sym_lift_def, asm_next_def, mem_labels_clear_def, finite_mapTheory.FDOM_DRESTRICT]
+QED
+
 Theorem sym_returndatacopy_success_transfer:
   asm_static_wf p /\ asm_sym_rel p env cs ss /\
   asm_block_at p cs.as_pc [AsmOp "RETURNDATACOPY"] /\
@@ -3798,6 +3818,263 @@ Proof
   qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
   simp[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
        execute_plan_def, exec_stack_op_def] >> gvs[]
+QED
+
+Theorem sym_rf_copy_preparation_execution:
+  !cp.
+  lo = SND (compute_label_offsets prog) /\
+  codegen_ready_fn fn /\ fn_shape_ok fn /\ rf_spills_separated ps /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  inst.inst_operands = [dop;sop;zop] /\
+  emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps = (ins,ps1) /\
+  reorder_plan (dfg_build_function fn) (compute_operands inst) ps1 = (ros,ps2) /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  rf_inventory_inv fn ra lo entry ps vs /\
+  (!op. MEM op (compute_operands inst) ==>
+    operand_val (frame_view fn ra vs) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)) /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\
+  asm_block_at prog st.as_pc (execute_plan fmp ops) /\
+  asm_static_wf prog /\ asm_sym_rel prog env st ss /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) ==>
+  ?mid ss' stk' top'.
+    asm_steps lo (build_offset_to_pc prog) prog
+      (LENGTH (execute_plan fmp (ins ++ ros))) st = AsmOK mid /\
+    mid.as_pc = st.as_pc + LENGTH (execute_plan fmp (ins ++ ros)) /\
+    mid.as_stack = stk' ++ rest /\
+    plan_stack_rel lo (frame_view fn ra vs) ps2.ps_stack stk' /\
+    ps2.ps_stack = stack_pop 3 ps2.ps_stack ++ [zop;sop;dop] /\
+    sym_steps prog env (LENGTH (execute_plan fmp (ins ++ ros))) ss = SymOK ss' /\
+    asm_sym_rel prog env mid ss' /\ ss'.sym_stack = top' ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE ps2.ps_stack) top' /\
+    (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    asm_block_at prog mid.as_pc [AsmOp "RETURNDATACOPY"] /\
+    ops = ins ++ ros ++ [SOEmit "RETURNDATACOPY"] /\
+    ps' = release_dead_spills nl (ps2 with ps_stack := stack_pop 3 ps2.ps_stack)
+Proof
+  gen_tac >> strip_tac >>
+  `compute_operands inst = [zop;sop;dop]` by
+    simp[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def] >>
+  `ops = ins ++ ros ++ [SOEmit "RETURNDATACOPY"] /\
+   ps' = release_dead_spills nl (ps2 with ps_stack := stack_pop 3 ps2.ps_stack)` by
+    (drule_all fnFrameStepsRevertForwardTheory.rf_copy_plan_result >>
+     disch_then (fn th => fs[th])) >>
+  `asm_block_at prog st.as_pc (execute_plan fmp (ins ++ ros)) /\
+   asm_block_at prog (st.as_pc + LENGTH (execute_plan fmp (ins ++ ros)))
+     [AsmOp "RETURNDATACOPY"]` by
+    gvs[stackOpSimTheory.execute_plan_append, execute_plan_def, exec_stack_op_def,
+        stackOpSimTheory.asm_block_at_append] >>
+  `!off. ~MEM (SOSpill off) (ins ++ ros) /\
+         ~MEM (SORestore off) (ins ++ ros)` by fs[listTheory.MEM_APPEND] >>
+  `RETURNDATACOPY <> INVOKE /\ LENGTH (compute_operands inst) <= 16 /\
+   EVERY (\op. ~is_label_operand op) (compute_operands inst)` by gvs[] >>
+  `EVERY is_simple_stack_op (ins ++ ros)` by
+    metis_tac[fnFrameStepsRevertForwardTheory.spill_free_preparation_simple] >>
+  `prefix_wf lo (LENGTH ps.ps_stack) (ins ++ ros)` by
+    (irule fnFrameStepsRevertForwardTheory.available_preparation_prefix_wf >>
+     qexistsl [`dfg_build_function fn`, `compute_operands inst`, `nl`, `RETURNDATACOPY`,
+               `ps1`, `ps2`] >>
+     simp[] >> gvs[] >> metis_tac[is_label_operand_def]) >>
+  drule_all sym_rf_suffix_preparation_execution >> strip_tac >>
+  qexistsl [`mid`, `ss'`, `stk'`, `top'`] >> gvs[]
+QED
+
+Theorem sym_rf_copy_operand_kind:
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ inst.inst_opcode = RETURNDATACOPY /\
+  MEM op inst.inst_operands /\ ~is_label_operand op /\
+  op_kind_ok fn ret op sv ==> ?w. sv = Val w
+Proof
+  strip_tac >>
+  `op <> dead_stack_marker` by
+    (strip_tac >> gvs[dead_stack_marker_def, is_label_operand_def]) >>
+  drule ordinary_noncopy_operand_word_kind >>
+  disch_then drule >> simp[] >> metis_tac[]
+QED
+
+Theorem sym_rf_copy_prepared_stack:
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ inst.inst_opcode = RETURNDATACOPY /\
+  inst.inst_operands = [dop;sop;zop] /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  asm_sym_rel prog env cs ss /\ cs.as_stack = dst :: src :: sz :: rest /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (tail ++ [zop;sop;dop])) top ==>
+  ?suffix. ss.sym_stack = MAP Val [dst;src;sz] ++ suffix
+Proof
+  strip_tac >>
+  gvs[listTheory.REVERSE_APPEND, listTheory.LIST_REL_CONS1] >>
+  rename1 `op_kind_ok fn ret dop sd` >>
+  rename1 `op_kind_ok fn ret sop sr` >>
+  rename1 `op_kind_ok fn ret zop szv` >>
+  `(?w. sd = Val w) /\ (?w. sr = Val w) /\ (?w. szv = Val w)` by
+    (rpt conj_tac >> irule sym_rf_copy_operand_kind >> metis_tac[listTheory.MEM]) >>
+  gvs[asm_sym_rel_def, sval_conc_def]
+QED
+
+Theorem sym_rf_copy_success_stack:
+  !cp.
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ inst.inst_opcode = RETURNDATACOPY /\
+  inst.inst_operands = [dop;sop;zop] /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  asm_static_wf prog /\ asm_sym_rel prog env cs ss /\
+  cs.as_stack = dst :: src :: sz :: rest /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (tail ++ [zop;sop;dop])) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\
+  asm_block_at prog cs.as_pc [AsmOp "RETURNDATACOPY"] /\
+  asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (AsmOp "RETURNDATACOPY") cs = AsmOK cs' ==>
+  ?ss' top'.
+    sym_step prog env (AsmOp "RETURNDATACOPY") ss = SymOK ss' /\
+    asm_sym_rel prog env cs' ss' /\
+    ss'.sym_stack = top' ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE tail) top' /\
+    (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b) /\
+    ~mem_labels_hit ss'.sym_mem_labels (in_mem_range (w2n dst) (w2n sz))
+Proof
+  gen_tac >> strip_tac >>
+  drule_all sym_rf_copy_prepared_stack >> strip_tac >>
+  `ss.sym_stack = Val dst :: Val src :: Val sz :: suffix` by simp[] >>
+  drule_all sym_returndatacopy_success_transfer >> strip_tac >>
+  drule_all sym_returndatacopy_success_inventory >> strip_tac >>
+  gvs[listTheory.REVERSE_APPEND, listTheory.LIST_REL_CONS1] >>
+  metis_tac[listTheory.CONS_11, listTheory.APPEND]
+QED
+
+Theorem sym_rf_copy_prepared_success:
+  !cp.
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ inst.inst_opcode = RETURNDATACOPY /\
+  inst.inst_operands = [dop;sop;zop] /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  plan_stack_rel (SND (compute_label_offsets prog)) current
+    (tail ++ [zop;sop;dop]) stk /\
+  operand_val current (SND (compute_label_offsets prog)) dop = SOME dst /\
+  operand_val current (SND (compute_label_offsets prog)) sop = SOME src /\
+  operand_val current (SND (compute_label_offsets prog)) zop = SOME sz /\
+  cs.as_stack = stk ++ rest /\ asm_static_wf prog /\ asm_sym_rel prog env cs ss /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (tail ++ [zop;sop;dop])) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\
+  asm_block_at prog cs.as_pc [AsmOp "RETURNDATACOPY"] /\
+  asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (AsmOp "RETURNDATACOPY") cs = AsmOK cs' ==>
+  ?ss' top'.
+    sym_steps prog env 1 ss = SymOK ss' /\
+    asm_sym_rel prog env cs' ss' /\
+    ss'.sym_stack = top' ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE tail) top' /\
+    (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b) /\
+    ~mem_labels_hit ss'.sym_mem_labels (in_mem_range (w2n dst) (w2n sz))
+Proof
+  gen_tac >> strip_tac >>
+  `dop <> dead_stack_marker /\ sop <> dead_stack_marker /\ zop <> dead_stack_marker` by
+    (rpt strip_tac >> gvs[dead_stack_marker_def, is_label_operand_def]) >>
+  `?d s z residual. stk = d :: s :: z :: residual /\
+    operand_val current (SND (compute_label_offsets prog)) dop = SOME d /\
+    operand_val current (SND (compute_label_offsets prog)) sop = SOME s /\
+    operand_val current (SND (compute_label_offsets prog)) zop = SOME z` by
+    (irule emitSimTheory.asm_stack_top3_from_plan >> simp[] >>
+     qexists `tail` >> simp[]) >>
+  gvs[] >>
+  `EVERY (\op. ~is_label_operand op) inst.inst_operands` by simp[] >>
+  drule_all sym_rf_copy_success_stack >> strip_tac >>
+  qexistsl [`ss'`, `top'`] >> simp[] >>
+  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
+  fs[asm_block_at_def] >>
+  pure_rewrite_tac[arithmeticTheory.ONE, sym_steps_def] >> simp[]
+QED
+
+Theorem sym_rf_copy_success_execution:
+  !cp.
+  lo = SND (compute_label_offsets prog) /\
+  codegen_ready_fn fn /\ fn_shape_ok fn /\ rf_spills_separated ps /\
+  inst.inst_opcode = RETURNDATACOPY /\ inst.inst_outputs = [] /\
+  inst.inst_operands = [dop;sop;zop] /\
+  emit_input_plan RETURNDATACOPY (compute_operands inst) nl ps = (ins,ps1) /\
+  reorder_plan (dfg_build_function fn) (compute_operands inst) ps1 = (ros,ps2) /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  rf_inventory_inv fn ra lo entry ps vs /\
+  (!op. MEM op (compute_operands inst) ==>
+    operand_val (frame_view fn ra vs) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)) /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  operand_val (frame_view fn ra vs) lo dop = SOME dst /\
+  operand_val (frame_view fn ra vs) lo sop = SOME src /\
+  operand_val (frame_view fn ra vs) lo zop = SOME sz /\
+  vs' = write_memory_with_expansion (w2n dst)
+    (TAKE (w2n sz) (DROP (w2n src) vs.vs_returndata)) vs /\
+  w2n src + w2n sz <= LENGTH vs.vs_returndata /\
+  plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\ venom_asm_terminal_rel vs st /\
+  asm_block_at prog st.as_pc (execute_plan fmp ops) /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\
+  asm_static_wf prog /\ asm_sym_rel prog env st ss /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) ==>
+  ?out ss_out stk_out top_out.
+    asm_steps lo (build_offset_to_pc prog) prog
+      (LENGTH (execute_plan fmp ops)) st = AsmOK out /\
+    out.as_pc = st.as_pc + LENGTH (execute_plan fmp ops) /\
+    out.as_stack = stk_out ++ rest /\
+    plan_stack_rel lo (frame_view fn ra vs') ps'.ps_stack stk_out /\
+    venom_asm_terminal_rel vs' out /\
+    TAKE (w2n sz) (DROP (w2n dst) vs'.vs_memory) =
+      TAKE (w2n sz) (DROP (w2n dst) out.as_memory) /\
+    sym_steps prog env (LENGTH (execute_plan fmp ops)) ss = SymOK ss_out /\
+    asm_sym_rel prog env out ss_out /\ ss_out.sym_stack = top_out ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE ps'.ps_stack) top_out /\
+    (!b. b IN FDOM ss_out.sym_mem_labels ==> context_spill_byte cp b) /\
+    ~mem_labels_hit ss_out.sym_mem_labels (in_mem_range (w2n dst) (w2n sz))
+Proof
+  qx_gen_tac `cplan` >> strip_tac >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_suffix_copy_execution >>
+  disch_then (qspec_then `build_offset_to_pc prog` mp_tac) >> simp[] >> strip_tac >>
+  rename1 `asm_steps _ _ _ (LENGTH (execute_plan fmp ops)) st = AsmOK out` >>
+  rename1 `out.as_stack = stk_out ++ rest` >>
+  drule_all sym_rf_copy_preparation_execution >> strip_tac >>
+  rename1 `mid.as_stack = stk_mid ++ rest` >>
+  rename1 `ss'.sym_stack = top_mid ++ srest` >>
+  `LENGTH (execute_plan fmp ops) = LENGTH (execute_plan fmp (ins ++ ros)) + 1` by
+    simp[stackOpSimTheory.execute_plan_append, execute_plan_def, exec_stack_op_def,
+         listTheory.APPEND_ASSOC] >>
+  `asm_steps lo (build_offset_to_pc prog) prog 1 mid = AsmOK out` by
+    (qpat_assum `asm_steps _ _ _ _ st = AsmOK mid`
+       (mp_then Any (qspec_then `1` mp_tac) stackOpSimTheory.asm_steps_add_ok) >>
+     gvs[]) >>
+  `asm_step lo (build_offset_to_pc prog) (AsmOp "RETURNDATACOPY") mid = AsmOK out` by
+    (qpat_x_assum `asm_steps _ _ _ 1 mid = _` mp_tac >>
+     pure_rewrite_tac[arithmeticTheory.ONE, asmSemTheory.asm_steps_def] >>
+     gvs[asm_block_at_def, AllCaseEqs()]) >>
+  `plan_stack_rel lo (frame_view fn ra vs)
+     (stack_pop 3 ps2.ps_stack ++ [zop;sop;dop]) stk_mid /\
+   LIST_REL (op_kind_ok fn ret)
+     (REVERSE (stack_pop 3 ps2.ps_stack ++ [zop;sop;dop])) top_mid` by metis_tac[] >>
+  `ss'.sym_mem_labels = ss.sym_mem_labels` by
+    metis_tac[finite_mapTheory.FLOOKUP_EXT] >>
+  `!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cplan b` by simp[] >>
+  qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  drule_all sym_rf_copy_prepared_success >> strip_tac >>
+  rename1 `sym_steps prog env 1 ss' = SymOK ss_out` >>
+  rename1 `ss_out.sym_stack = top_out ++ srest` >>
+  qexistsl [`out`, `ss_out`, `stk_out`, `top_out`] >>
+  gvs[fnPlanPrefixTheory.release_dead_spills_stack, sym_steps_add]
 QED
 
 Theorem sym_revert_operand_kind:
