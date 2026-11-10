@@ -2437,6 +2437,29 @@ Proof
   metis_tac[dftRunRelTheory.dft_swap_nonterminator_no_intret]
 QED
 
+Theorem prefix_independent_updates_events[local]:
+  !pairs s.
+    EVERY (\p. EVERY (\i. ~is_terminator i.inst_opcode /\
+      (!v. MEM (Var v) i.inst_operands ==> FST p <> v) /\
+      ~MEM (FST p) i.inst_outputs) xs) pairs ==>
+    gas_events_block fuel C owner
+      <|bb_label := owner; bb_instructions :=
+        REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|>
+      (FOLDL (\st p. update_var (FST p) (SND p) st) s pairs) =
+    gas_events_block fuel C owner
+      <|bb_label := owner; bb_instructions :=
+        REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> s
+Proof
+  Induct >> rpt gen_tac >> strip_tac >- simp[] >>
+  fs[EVERY_DEF] >>
+  first_x_assum (qspec_then `update_var (FST h) (SND h) s` mp_tac) >>
+  simp[update_var_def] >> disch_then SUBST1_TAC >>
+  mp_tac prefix_independent_update_events >>
+  disch_then (qspecl_then
+    [`xs`, `s`, `FST h`, `SND h`, `s.vs_inst_idx`] mp_tac) >>
+  simp[update_var_def]
+QED
+
 Theorem prefix_extract_mask[local]:
   !fuel C C'.
   let CalleeIH = (!fn fn' t.
