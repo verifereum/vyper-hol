@@ -2568,6 +2568,111 @@ Proof
   metis_tac[sym_returndatacopy_clears_range]
 QED
 
+Theorem restore_swap_sequence_member:
+  MEM i idxs ==>
+  MEM (SORestore (EL i offsets))
+    (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) idxs))
+Proof
+  simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  metis_tac[listTheory.MEM]
+QED
+
+Theorem deep_dup_restore_sequence_member:
+  31 < d ==>
+  MEM (SORestore (EL (d - 16) offsets))
+    (FLAT (MAP (\i. [SORestore (EL i offsets); SOSwap 1])
+      (GENLIST (\i. d - (i + 16)) (d - 15))))
+Proof
+  strip_tac >> irule restore_swap_sequence_member >>
+  simp[listTheory.MEM_GENLIST] >> qexists_tac `0` >> simp[]
+QED
+
+Theorem do_dup_no_restore_shallow:
+  do_dup d ps = (ops, ps') /\
+  (!off. ~MEM (SORestore off) ops) ==> d <= 15
+Proof
+  Cases_on `d <= 15` >- simp[] >>
+  simp[stackPlanOpsTheory.do_dup_def] >> rpt strip_tac >>
+  pairarg_tac >> gvs[] >>
+  Cases_on `d <= 31`
+  >- (gvs[listTheory.MEM_APPEND, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+      metis_tac[listTheory.MEM]) >>
+  fs[listTheory.MEM_APPEND] >>
+  metis_tac[deep_dup_restore_sequence_member, arithmeticTheory.NOT_LESS_EQUAL]
+QED
+
+Theorem do_dup_spill_free_stack_replay:
+  do_dup d ps = (ops, ps') /\ qs.ps_stack = ps.ps_stack /\
+  (!off. ~MEM (SORestore off) ops) ==>
+  (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack
+Proof
+  strip_tac >> drule do_dup_no_restore_shallow >> simp[] >> strip_tac >>
+  gvs[stackPlanOpsTheory.do_dup_def, mixedPrefixSimTheory.apply_prefix_ops_def,
+      mixedPrefixSimTheory.apply_prefix_op_def, strongPrefixSimTheory.apply_simple_op_def,
+      stackModelTheory.stack_dup_def, stackModelTheory.stack_peek_def]
+QED
+
+Theorem emit_var_input_unspilled_stack_replay:
+  FLOOKUP ps.ps_spilled (Var v) = NONE /\
+  emit_one_input opc nl (Var v) ps = (ops, ps') /\
+  qs.ps_stack = ps.ps_stack /\ (!off. ~MEM (SORestore off) ops) ==>
+  (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack
+Proof
+  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def] >>
+  strip_tac >> Cases_on `MEM v nl` >>
+  gvs[mixedPrefixSimTheory.apply_prefix_ops_def] >>
+  Cases_on `stack_get_depth (Var v) ps.ps_stack` >>
+  gvs[mixedPrefixSimTheory.apply_prefix_ops_def] >>
+  rename1 `stack_get_depth _ _ = SOME dist` >>
+  Cases_on `do_dup dist ps` >> gvs[] >>
+  metis_tac[do_dup_spill_free_stack_replay]
+QED
+
+Theorem emit_var_input_spilled_has_restore:
+  FLOOKUP ps.ps_spilled (Var v) = SOME off /\
+  emit_one_input opc nl (Var v) ps = (ops, ps') ==>
+  MEM (SORestore off) ops
+Proof
+  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+       stackPlanOpsTheory.do_restore_def] >>
+  strip_tac >> Cases_on `MEM v nl` >> gvs[] >>
+  Cases_on `stack_get_depth (Var v) (stack_push (Var v) ps.ps_stack)` >> gvs[] >>
+  pairarg_tac >> gvs[]
+QED
+
+Theorem emit_one_input_spill_free_stack_replay:
+  emit_one_input opc nl op ps = (ops, ps') /\ opc <> INVOKE /\
+  qs.ps_stack = ps.ps_stack /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
+  (apply_prefix_ops fmp lo ops qs).ps_stack = ps'.ps_stack
+Proof
+  Cases_on `op`
+  >- (rpt strip_tac >> gvs[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+           mixedPrefixSimTheory.apply_prefix_ops_def, mixedPrefixSimTheory.apply_prefix_op_def,
+           strongPrefixSimTheory.apply_simple_op_def, stackModelTheory.stack_push_def])
+  >- (rpt strip_tac >> Cases_on `FLOOKUP ps.ps_spilled (Var s)` >>
+      metis_tac[emit_var_input_unspilled_stack_replay, emit_var_input_spilled_has_restore]) >>
+  rpt strip_tac >> gvs[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+       mixedPrefixSimTheory.apply_prefix_ops_def, mixedPrefixSimTheory.apply_prefix_op_def,
+       strongPrefixSimTheory.apply_simple_op_def, stackModelTheory.stack_push_def]
+QED
+
+Theorem emit_input_plan_spill_free_stack_replay:
+  !inputs ps qs opc nl ins ps1 fmp lo.
+  emit_input_plan opc inputs nl ps = (ins, ps1) /\ opc <> INVOKE /\
+  qs.ps_stack = ps.ps_stack /\
+  (!off. ~MEM (SOSpill off) ins /\ ~MEM (SORestore off) ins) ==>
+  (apply_prefix_ops fmp lo ins qs).ps_stack = ps1.ps_stack
+Proof
+  Induct >> simp[emit_input_plan_def, mixedPrefixSimTheory.apply_prefix_ops_def] >>
+  rpt gen_tac >>
+  Cases_on `emit_one_input opc (operand_vars inputs ++ nl) h ps` >>
+  Cases_on `emit_input_plan opc inputs nl r` >> simp[] >> strip_tac >>
+  gvs[listTheory.MEM_APPEND, planAlignTheory.apply_prefix_ops_append] >>
+  first_x_assum irule >> simp[] >>
+  metis_tac[emit_one_input_spill_free_stack_replay]
+QED
+
 (* Diagnostic: the spill-free prefix contract needs no spill kinds or budget. *)
 Theorem sym_rf_stack_only_interface_probe[local]:
   !ops lo ps ss top srest fn ret cp p fmp env.
