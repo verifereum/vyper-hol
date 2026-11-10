@@ -1032,7 +1032,7 @@ Proof
        venomStateTheory.contract_transient_def]
 QED
 
-Theorem ifexp_different_type_unwrap_pure[local]:
+Theorem ifexp_different_type_unwrap_pure:
   !ce e ty sa vv sb.
     lowered_value_type ce e <> expr_type e /\
     ~is_word_type (expr_type e) /\
@@ -1101,7 +1101,7 @@ Resume ifexp_different_type_unwrap_pure[call]:
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   simp[unwrap_value_def, base_ptr_def, comp_return_def] >> metis_tac[]
 QED
-Finalise ifexp_different_type_unwrap_pure[local]
+Finalise ifexp_different_type_unwrap_pure
 
 Theorem ifexp_post_annotated[local]:
   (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
