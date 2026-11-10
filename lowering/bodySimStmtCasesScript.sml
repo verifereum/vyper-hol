@@ -101,7 +101,7 @@ QED
    compile_expr_open_general. *)
 Theorem compile_expr_open:
   !tops ctx cenv cx env e es tv es1 sa vv sb.
-    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx env e es /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     eval_expr cx e es = (INL tv, es1) /\
