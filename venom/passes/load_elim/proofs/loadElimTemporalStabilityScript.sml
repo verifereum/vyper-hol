@@ -1,6 +1,6 @@
 Theory loadElimTemporalStability
 Ancestors
-  loadElimOccurrence loadElimOccurrenceIntervals loadElimTemporalDominance loadElimLastWriter
+  loadElimOccurrence loadElimOccurrenceIntervals loadElimTemporalDominance loadElimLastWriter venomWfProps
   loadElimNormalizeAvailability loadElimReachableNormalize loadElimReachableSSA
   simplifyCfgPhiRepair simplifyCfgStruct
   simplifyCfgWfssa venomExecProofs venomWf venomInst list rich_list

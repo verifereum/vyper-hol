@@ -1,6 +1,6 @@
 Theory loadElimDefinitionCuts
 Ancestors
-  loadElimStaticGeneration loadElimNormalizeAvailability loadElimKeyShapeInvariant
+  loadElimStaticGeneration loadElimNormalizeAvailability loadElimKeyShapeInvariant venomWfProps
   loadElimTransferProvenance loadElimDefs venomWf venomInst venomExecProofs
   simplifyCfgPhiRepair simplifyCfgStruct simplifyCfgWfssa list rich_list finite_map
   dfAnalyzeDefs cfgDefs simplifyCfgDataflow

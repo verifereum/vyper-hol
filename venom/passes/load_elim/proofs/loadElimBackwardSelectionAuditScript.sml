@@ -1,6 +1,6 @@
 Theory loadElimBackwardSelectionAudit
 Ancestors
-  loadElimDefs loadElimKeyShapeInvariant loadElimNonempty
+  loadElimDefs loadElimKeyShapeInvariant loadElimNonempty venomWfProps
   loadElimSupportHelpers loadElimGeneratedSupport loadElimConvergence
   loadElimPopulation loadElimSolverProvenance loadElimLastWriter
   venomEffects venomInst finite_map list
