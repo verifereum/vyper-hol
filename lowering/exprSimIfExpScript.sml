@@ -1103,7 +1103,7 @@ Resume ifexp_different_type_unwrap_pure[call]:
 QED
 Finalise ifexp_different_type_unwrap_pure
 
-Theorem ifexp_post_annotated[local]:
+Theorem ifexp_post_annotated:
   (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
      type_memory_bytes ce ty = type_memory_size tv) /\
   (~is_word_type (expr_type e) ==>

@@ -5,7 +5,7 @@ Ancestors
   exprSimUnwrapProps exprSimMemDefs exprSimUnwrap
   exprSimIfExp context compileEnv exprLowering loweringPosts
 
-Theorem ifexp_compiled_aggregate_source[local]:
+Theorem ifexp_compiled_aggregate_source:
   compile_expr ce ty e se = (vv,sa) /\
   sty = lowered_value_type ce e /\ dty = expr_type e /\ sty <> dty /\
   ~is_word_type sty /\ ~is_word_type dty /\
@@ -64,7 +64,7 @@ Resume ifexp_compiled_aggregate_source[located]:
   first_x_assum (qspec_then `sa with cs_next_var := 1` mp_tac) >>
   gvs[] >> EVAL_TAC
 QED
-Finalise ifexp_compiled_aggregate_source[local]
+Finalise ifexp_compiled_aggregate_source
 
 Theorem ifexp_compiled_aggregate_arm_path_mem:
   compile_expr ce ty e se = (vv,sa) /\
