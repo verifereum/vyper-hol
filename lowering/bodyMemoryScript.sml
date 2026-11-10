@@ -51,9 +51,21 @@ QED
 
 Theorem body_builtin_mem_ok:
   !cx ty bt es.
+    (!s'' x t v code_ty addr s3 tail_vs t'.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = SOME v /\ v = (code_ty,addr) /\
+       eval_exprs cx (TL es) s3 = (INL tail_vs,t') ==>
+       body_exprs_mem_ok cx [addr]) /\
+    (!s'' x t v code_ty addr.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = SOME v /\ v = (code_ty,addr) ==>
+       body_exprs_mem_ok cx (TL es)) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas ==>
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = NONE ==>
        body_exprs_mem_ok cx es) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
@@ -62,8 +74,8 @@ Theorem body_builtin_mem_ok:
     body_expr_mem_ok cx (Builtin ty bt es)
 Proof
   rpt strip_tac >>
-  `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len /\ bt <> Env MsgGas ==>
-   body_exprs_mem_ok cx es` by
+  `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len /\ bt <> Env MsgGas /\
+   code_slice_source bt es = NONE ==> body_exprs_mem_ok cx es` by
     (strip_tac >> first_x_assum irule >> simp[type_check_def, assert_def]) >>
   Cases_on `?bop. bt = Bop bop`
   >- (gvs[] >> Cases_on `?e1 e2. es = [e1; e2]`
@@ -148,9 +160,9 @@ Proof
     (* 33 *) MATCH_ACCEPT_TAC body_structlit_mem_case,
     (* 34 *) MATCH_ACCEPT_TAC body_subscript_mem_case,
     (* 35 *) MATCH_ACCEPT_TAC body_attribute_mem_ok,
-    (* 36 *) rpt strip_tac >> irule body_builtin_mem_ok >> conj_tac
-               >- (rpt strip_tac >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
-                   metis_tac[]) >> metis_tac[],
+    (* 36 *) rpt strip_tac >> irule body_builtin_mem_ok >> rpt conj_tac >> rpt strip_tac >>
+               Cases_on `bt = Bop In \/ bt = Bop NotIn`
+               >- (gvs[] >> metis_tac[]) >> metis_tac[],
     (* 37 *) MATCH_ACCEPT_TAC body_pop_mem_ok,
     (* 38 *) MATCH_ACCEPT_TAC body_type_builtin_mem_case,
     (* 39 *) MATCH_ACCEPT_TAC body_send_mem_case,
