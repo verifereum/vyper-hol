@@ -1311,9 +1311,19 @@ Resume compiler_builtin_var[sha]:
   >- (builtin_stack_var_tac >>
       metis_tac[exprSafeOperandBuiltinsTheory.compile_sha256_bytes_safe_operand,
                 exprSafeOperandTheory.safe_operand_def]) >>
-  rpt CASE_TAC >> simp[] >> builtin_stack_var_tac >>
-  metis_tac[exprSafeOperandBuiltinsTheory.compile_sha256_bytesm_safe_operand,
-            exprSafeOperandBuiltinsTheory.compile_sha256_word_safe_operand,
+  Cases_on `expr_type (HD args)` >> simp[]
+  >~ [`BaseT bt`]
+  >- (Cases_on `bt` >> simp[]
+      >~ [`BytesT bd`]
+      >- (Cases_on `bd` >> simp[] >> builtin_stack_var_tac >>
+          metis_tac[exprSafeOperandBuiltinsTheory.compile_sha256_bytesm_safe_operand,
+                    exprSafeOperandBuiltinsTheory.compile_sha256_word_safe_operand,
+                    exprSafeOperandTheory.safe_operand_def]) >>
+      builtin_stack_var_tac >>
+      metis_tac[exprSafeOperandBuiltinsTheory.compile_sha256_word_safe_operand,
+                exprSafeOperandTheory.safe_operand_def]) >>
+  builtin_stack_var_tac >>
+  metis_tac[exprSafeOperandBuiltinsTheory.compile_sha256_word_safe_operand,
             exprSafeOperandTheory.safe_operand_def]
 QED
 Resume compiler_builtin_var[calldata]:
