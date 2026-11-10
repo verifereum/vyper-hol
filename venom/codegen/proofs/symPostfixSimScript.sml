@@ -1333,3 +1333,104 @@ Proof
   (impl_tac >- simp[]) >>
   simp[]
 QED
+
+Theorem scratch_replay_do_dup_shallow:
+  dist <= 15 /\ dist < LENGTH ps.ps_stack /\ do_dup dist ps = (ops,qs) ==>
+  scratch_replay cplan R ops (REVERSE ps.ps_stack) slots
+    (REVERSE qs.ps_stack) slots
+Proof
+  strip_tac >> gvs[do_dup_def, stack_dup_def, REVERSE_APPEND] >>
+  irule (cj 2 scratch_replay_rules) >>
+  simp[scratch_replay_rules, scratch_replay_step_cases,
+       stack_peek_def, EL_REVERSE, arithmeticTheory.PRE_SUB1, REVERSE_SNOC]
+QED
+
+Theorem scratch_replay_do_swap_shallow:
+  dist <= 16 /\ dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops,qs) ==>
+  scratch_replay cplan R ops (REVERSE ps.ps_stack) slots
+    (REVERSE qs.ps_stack) slots
+Proof
+  strip_tac >> Cases_on `dist = 0`
+  >- gvs[do_swap_def, scratch_replay_rules] >>
+  gvs[do_swap_def, planWfTheory.reverse_stack_swap] >>
+  irule (cj 2 scratch_replay_rules) >>
+  simp[scratch_replay_rules, scratch_replay_step_cases, EL,
+       Once strongPrefixSimTheory.LUPDATE_commutes]
+QED
+
+Theorem scratch_allocated_offsets:
+  spill_alloc_layout_wf al sp /\
+  offsets = FST (doSwapSim$spill_alloc_n [] al items) /\
+  al2 = FOLDL (\a off. free_spill_slot off a)
+    (SND (doSwapSim$spill_alloc_n [] al items)) offsets /\
+  al2.sa_next_offset <= dimword (:256) /\
+  (!b. al2.sa_spill_base <= b /\ b < al2.sa_next_offset ==>
+    R b /\ context_spill_byte cplan b) ==>
+  LENGTH offsets = LENGTH items /\ ALL_DISTINCT offsets /\
+  EVERY (\off. off < dimword (:256) /\
+    (!b. in_mem_range off 32 b ==> R b /\ context_spill_byte cplan b)) offsets /\
+  (!off old. MEM off offsets /\ MEM old offsets /\ off <> old ==>
+    off + 32 <= old \/ old + 32 <= off)
+Proof
+  strip_tac >> drule_all spill_alloc_n_temporary_layout >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >> conj_tac >- first_assum ACCEPT_TAC >> conj_tac
+  >- (rule_assum_tac (BETA_RULE o PURE_REWRITE_RULE [EVERY_MEM]) >>
+      pure_rewrite_tac[EVERY_MEM] >> BETA_TAC >> qx_gen_tac `off` >> strip_tac >>
+      first_x_assum drule >> strip_tac >> conj_tac
+      >- decide_tac >>
+      rpt strip_tac >>
+      `al2.sa_spill_base <= b /\ b < al2.sa_next_offset` by
+        (gvs[in_mem_range_def] >> decide_tac) >> metis_tac[]) >>
+  rpt strip_tac >> gvs[MEM_EL] >> metis_tac[]
+QED
+
+Theorem scratch_replay_do_dup_allocated:
+  dist < LENGTH ps.ps_stack /\ do_dup dist ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  qs.ps_alloc.sa_next_offset <= dimword (:256) /\
+  (!b. qs.ps_alloc.sa_spill_base <= b /\ b < qs.ps_alloc.sa_next_offset ==>
+    R b /\ context_spill_byte cplan b) ==>
+  ?inventory. scratch_replay cplan R ops (REVERSE ps.ps_stack) FEMPTY
+    (REVERSE qs.ps_stack) inventory
+Proof
+  strip_tac >> Cases_on `dist <= 15`
+  >- (qexists `FEMPTY` >> metis_tac[scratch_replay_do_dup_shallow]) >>
+  qmatch_goalsub_abbrev_tac `scratch_replay cplan R ops g` >>
+  qabbrev_tac `offsets = FST (doSwapSim$spill_alloc_n [] ps.ps_alloc
+    (REVERSE (top_n (dist - 15) ps.ps_stack)))` >>
+  `qs.ps_alloc = FOLDL (\a off. free_spill_slot off a)
+    (SND (doSwapSim$spill_alloc_n [] ps.ps_alloc
+      (REVERSE (top_n (dist - 15) ps.ps_stack)))) offsets` by
+    (qspecl_then [`dist`, `ps`] mp_tac doSwapSimTheory.do_dup_big_decompose >>
+     simp[] >> strip_tac >> gvs[Abbr `offsets`]) >>
+  drule_at (Pat `al2 = FOLDL _ _ _`) scratch_allocated_offsets >>
+  disch_then (qspecl_then [`ps.ps_spilled`, `cplan`, `R`] mp_tac) >>
+  (impl_tac >- simp[Abbr `offsets`]) >> strip_tac >>
+  unabbrev_all_tac >> irule scratch_replay_do_dup_deep >>
+  qexists `dist` >> gvs[top_n_def]
+QED
+
+Theorem scratch_replay_do_swap_allocated:
+  dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  qs.ps_alloc.sa_next_offset <= dimword (:256) /\
+  (!b. qs.ps_alloc.sa_spill_base <= b /\ b < qs.ps_alloc.sa_next_offset ==>
+    R b /\ context_spill_byte cplan b) ==>
+  ?inventory. scratch_replay cplan R ops (REVERSE ps.ps_stack) FEMPTY
+    (REVERSE qs.ps_stack) inventory
+Proof
+  strip_tac >> Cases_on `dist <= 16`
+  >- (qexists `FEMPTY` >> metis_tac[scratch_replay_do_swap_shallow]) >>
+  qabbrev_tac `offsets = FST (doSwapSim$spill_alloc_n [] ps.ps_alloc
+    (top_n (dist + 1) ps.ps_stack))` >>
+  `qs.ps_alloc = FOLDL (\a off. free_spill_slot off a)
+    (SND (doSwapSim$spill_alloc_n [] ps.ps_alloc
+      (top_n (dist + 1) ps.ps_stack))) offsets` by
+    (qspecl_then [`dist`, `ps`] mp_tac doSwapSimTheory.do_swap_big_decompose >>
+     simp[arithmeticTheory.GREATER_DEF] >> strip_tac >> gvs[Abbr `offsets`]) >>
+  drule_at (Pat `al2 = FOLDL _ _ _`) scratch_allocated_offsets >>
+  disch_then (qspecl_then [`ps.ps_spilled`, `cplan`, `R`] mp_tac) >>
+  (impl_tac >- simp[Abbr `offsets`]) >> strip_tac >>
+  unabbrev_all_tac >> irule scratch_replay_do_swap_deep >>
+  qexists `dist` >> gvs[top_n_def]
+QED

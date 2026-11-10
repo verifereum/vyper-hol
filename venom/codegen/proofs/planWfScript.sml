@@ -911,7 +911,7 @@ Proof
 QED
 
 (* REVERSE of stack_swap expressed purely in REVERSE stk terms *)
-Theorem reverse_stack_swap[local]:
+Theorem reverse_stack_swap:
   !cand stk. cand < LENGTH stk /\ 0 < LENGTH stk ==>
     REVERSE (stack_swap cand stk) =
     LUPDATE (EL cand (REVERSE stk)) 0
