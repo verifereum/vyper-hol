@@ -116,6 +116,38 @@ Definition ircf_R_ret_def:
     ircf_cross tn (ircf_gam_stk fn_meta rma C stk) s t
 End
 
+(* The return certificate couples semantic agreement and reachability at
+   the same ghosts; the public return relation remains unchanged. *)
+Definition ircf_R_ret_reachable_def:
+  ircf_R_ret_reachable vs D fn_meta rma C stk PG G tn fn v s t <=>
+    ircf_R_ret D fn_meta rma C stk PG G tn fn v s t /\
+    ?ri sr j. frame_reachable vs C stk PG G tn fn ri sr /\
+              active_inst fn ri sr /\ step_inst j C ri sr = IntRet v s
+End
+
+Theorem ircf_R_ret_reachable_forget:
+  ircf_R_ret_reachable vs D fn_meta rma C stk PG G tn fn v s t ==>
+  ircf_R_ret D fn_meta rma C stk PG G tn fn v s t
+Proof
+  simp[ircf_R_ret_reachable_def]
+QED
+
+Theorem ircf_R_ret_reachable_resume:
+  ircf_R_ret_reachable vs D fn_meta rma C (f::stk) PG G tn fn ret se te /\
+  bind_outputs f.cf_inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state f.cf_state se)) = SOME s' /\
+  active_inst f.cf_fn inst'
+    (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx) ==>
+  ircf_R_ret D fn_meta rma C (f::stk) PG G tn fn ret se te /\
+  frame_reachable vs C stk f.cf_params
+    (DRESTRICT f.cf_prov (COMPL (set f.cf_inst.inst_outputs)))
+    (tn with t_var := DRESTRICT f.cf_tvar (COMPL (set f.cf_inst.inst_outputs)))
+    f.cf_fn inst' (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx)
+Proof
+  strip_tac >> gvs[ircf_R_ret_reachable_def] >>
+  irule frame_reachable_ret >> metis_tac[]
+QED
+
 (* ===== The transformed context, structurally ===== *)
 
 Theorem FOLDL_block_pass_SND:

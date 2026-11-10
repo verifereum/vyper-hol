@@ -289,7 +289,7 @@ Proof
 QED
 
 (* The block obligation gives fn_sim_below at every bound. *)
-Theorem block_sim_fn_sim_below[local]:
+Theorem block_sim_fn_sim_below:
   !D vs C C' R R_ret.
     (!k stk PG G tn fn fn' s t bb.
        fn_sim_below D vs C C' R R_ret (SUC k) /\
@@ -459,4 +459,24 @@ Proof
      gvs[get_instruction_def, arithmeticTheory.ADD_CLAUSES] >>
      metis_tac[lookup_block_MEM, lookup_block_label]) >>
   metis_tac[frame_reachable_next]
+QED
+
+Theorem fn_run_rel_mono:
+  (!stk PG G tn fn v s t.
+     Q stk PG G tn fn v s t ==> Q' stk PG G tn fn v s t) /\
+  fn_run_rel D Q stk PG fn r r' ==>
+  fn_run_rel D Q' stk PG fn r r'
+Proof
+  strip_tac >> Cases_on `r` >> Cases_on `r'` >>
+  gvs[fn_run_rel_def] >> metis_tac[]
+QED
+
+Theorem block_step_rel_return_mono:
+  (!stk PG G tn fn v s t.
+     Q stk PG G tn fn v s t ==> Q' stk PG G tn fn v s t) /\
+  block_step_rel D vs C R Q stk PG fn r r' ==>
+  block_step_rel D vs C R Q' stk PG fn r r'
+Proof
+  strip_tac >> Cases_on `r` >> Cases_on `r'` >>
+  gvs[block_step_rel_def] >> metis_tac[fn_run_rel_mono]
 QED
