@@ -203,6 +203,7 @@ Theorem nonagg_leaf_nested_struct[local]:
    case supported_struct_fields tops id of
      NONE => F
    | SOME fields =>
+       ~NULL fields /\
        EVERY (supported_nested_type leaf (fuel - 1) tops o SND) fields) /\
   (supported_nested_type leaf fuel tops (ArrayT elem bd) <=>
    (case bd of Fixed n => 0 < n | Dynamic n => T) /\
