@@ -2241,6 +2241,62 @@ Proof
   simp[dftIndexedExecTheory.dft_exec_cons_def] >> first_x_assum irule >> simp[]
 QED
 
+Theorem prefix_independent_update_events[local]:
+  !xs s out w k.
+    EVERY (\i. ~is_terminator i.inst_opcode /\
+      (!v. MEM (Var v) i.inst_operands ==> out <> v) /\
+      ~MEM out i.inst_outputs) xs ==>
+    gas_events_block fuel C owner
+      <|bb_label := owner; bb_instructions :=
+        REPLICATE k (mk_inst 0 STOP [] []) ++ xs|>
+      ((update_var out w s) with vs_inst_idx := k) =
+    gas_events_block fuel C owner
+      <|bb_label := owner; bb_instructions :=
+        REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> s
+Proof
+  `!h xs st. ~is_terminator h.inst_opcode ==>
+    gas_events_block fuel C owner
+      <|bb_label := owner; bb_instructions :=
+        REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ h::xs|> st =
+    gas_events_step fuel C owner h st ++
+      (case step_inst fuel C h st of
+         OK v => gas_events_block fuel C owner
+           <|bb_label := owner; bb_instructions :=
+             REPLICATE (SUC st.vs_inst_idx) (mk_inst 0 STOP [] []) ++ xs|>
+           (v with vs_inst_idx := SUC st.vs_inst_idx)
+       | other => [])` by
+    (rpt strip_tac >> simp[Once gas_events_block_def,
+       venomInstTheory.get_instruction_def, EL_APPEND_EQN] >>
+     Cases_on `step_inst fuel C h st` >> simp[] >>
+     irule gas_events_block_suffix_cong >> qexists_tac `xs` >>
+     simp[DROP_APPEND, DROP_DROP_T, arithmeticTheory.ADD1]) >>
+  Induct_on `xs` >> rpt gen_tac >> strip_tac
+  >- (simp[Once gas_events_block_def,
+          venomInstTheory.get_instruction_def] >>
+      simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]) >>
+  fs[EVERY_DEF] >>
+  qpat_assum `!h xs st. _` (qspecl_then
+    [`h`, `xs`, `(update_var out w s) with vs_inst_idx := k`]
+    (fn th => simp[SRULE [] th])) >>
+  Cases_on `h.inst_opcode = INVOKE`
+  >- (simp[gas_events_invoke_inst_idx, gas_events_invoke_update_var,
+           analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only,
+           dftCommutationTheory.step_inst_invoke_frame] >>
+      Cases_on `step_inst fuel C h s` >> simp[] >>
+      first_x_assum (qspecl_then
+        [`v with vs_inst_idx := SUC s.vs_inst_idx`, `out`, `w`, `SUC k`] mp_tac) >>
+      simp[update_var_def]) >>
+  simp[gas_events_step_def,
+       analysisSimProofsBaseTheory.step_inst_idx_indep,
+       dftCommutationTheory.step_inst_frame] >>
+  Cases_on `step_inst fuel C h s` >>
+  simp[dftCommutationTheory.map_result_state_def,
+       instIdxIndepTheory.exec_result_map_def] >>
+  first_x_assum (qspecl_then
+    [`v with vs_inst_idx := SUC s.vs_inst_idx`, `out`, `w`, `SUC k`] mp_tac) >>
+  simp[update_var_def]
+QED
+
 Theorem prefix_extract_mask[local]:
   !fuel C C'.
   let CalleeIH = (!fn fn' t.
