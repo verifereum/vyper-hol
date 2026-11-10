@@ -43,6 +43,8 @@ Ancestors
   extCallSeamPrecheck extCallSeamOracle extCallSeamFrame extCallSeamFinish
   extCallSeamSummary exprLowering emitHelper rawCallFragPath compileEnv
   exprLoweringProps exprSafeOperand fragGasPath gasSummary gasSummaryCompose
+  extcallReturnDefaultResources extcallReturnDefaultRouting extcallReturnDefaultStore
+  extcallReturnDefaultDecode extcallReturnInterface extcallReturnDefaultOwnership
 
 (* A storage or transient pointer an effect-free operand leaves reads live
    slots at es': no byte of the slots it reads is dead but those its own
@@ -658,8 +660,177 @@ Theorem extcall_return_default:
          t'.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
 Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule extcall_return_type_bounds >> strip_tac >>
+  `?dv. default_opt = SOME dv` by
+    (fs[extcall_returned_def, extcall_default_ready_def] >>
+     Cases_on `default_opt` >> gvs[]) >>
+  gnvs[LET_THM, comp_bind_def] >>
+  pairarg_tac >> gnvs[] >>
+  rename1 `compile_alloc_buffer _ sr = (buf,allocated)` >>
+  `cs_extends sr allocated /\ cs_extends allocated sb` by
+    (conj_tac >- metis_tac[loweringHaltTheory.compile_alloc_buffer_extends] >>
+     qpat_x_assum `compile_default_return_path _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     metis_tac[ci_mono_compile_default_return_path, ci_mono_def, pairTheory.SND]) >>
+  `fn_has_code sr allocated func /\ fn_has_code allocated sb func` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  drule return_default_path_intervals >> strip_tac >>
+  drule_all return_default_intervals_code >> strip_tac >>
+  qhdtm_assum `extcall_returned` mp_tac >>
+  pure_rewrite_tac[extcall_returned_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qhdtm_assum `extcall_default_ready` mp_tac >>
+  pure_rewrite_tac[extcall_default_ready_def] >>
+  disch_then (mp_tac o last o CONJUNCTS) >>
+  disch_then (qspec_then `dv` mp_tac) >> simp[] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?tv rtv w. _`
+    (qx_choose_then `dtv` (qx_choose_then `rtv`
+      (qx_choose_then `dw` (map_every assume_tac o CONJUNCTS)))) >>
+  Cases_on `returnData = []`
+  >- suspend "default" >>
+  suspend "decode"
+QED
+Resume extcall_return_default[default]:
+  qpat_x_assum `?ro. _` (qx_choose_then `ro` (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `?live buf_size. _`
+    (qx_choose_then `live` (qx_choose_then `buf_size` (map_every assume_tac o CONJUNCTS))) >>
+  `type_memory_bytes cenv ann = type_memory_size rtv /\
+   type_memory_size rtv + 64 < dimword (:256)` by
+    metis_tac[extcall_return_memory_size, extcall_return_store_bound] >>
+  `type_memory_bytes cenv ann < dimword (:256)` by decide_tac >>
+  `safe_operand sr buf_op` by fs[] >>
+  `eval_operand buf_op t = SOME (n2w (w2n ro))` by simp[] >>
+  `ds.cs_current_bb = dl /\ ds.cs_current_insts = [] /\
+   allocated.cs_next_var <= ds.cs_next_var` by
+    (imp_res_tac emitHelperPropsTheory.emitted_insts_emit_op >>
+     map_every (fn pat => qpat_x_assum pat mp_tac)
+       [`new_block dl a6 = _`, `emit_inst JNZ _ _ a5 = _`,
+        `fresh_label "extcall_exit" a4 = _`, `fresh_label "extcall_decode" a3 = _`,
+        `fresh_label "extcall_default" a2 = _`, `emit_op ISZERO _ a1 = _`,
+        `emit_op RETURNDATASIZE _ allocated = _`] >>
+     `allocated.cs_next_var <= a2.cs_next_var` by decide_tac >>
+     qpat_x_assum `allocated.cs_next_var <= a2.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[emit_inst_def, fresh_id_def, comp_bind_def, comp_return_def,
+          emit_def, fresh_label_def, new_block_def] >>
+     rpt strip_tac >> gvs[]) >>
+  `ds.cs_current_bb = (if t.vs_returndata = [] then dl else cl)` by simp[] >>
+  `!aid:num. aid IN {} ==> allocated.cs_next_id <= aid` by simp[] >>
+  `LENGTH t.vs_returndata < dimword (:256)` by simp[] >>
+  drule_all (Q.INST [`en` |-> `ds`, `sites` |-> `{} `] return_default_allocated_entry) >>
+  strip_tac >>
+  qhdtm_assum `abi_return_decode_ready` mp_tac >>
+  pure_rewrite_tac[abiReturnPrefixTransportTheory.abi_return_decode_ready_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `abi_decoder_operand_live sr.cs_next_var default_op` by
+    (irule extcallReturnEntryBridgeTheory.return_decoder_operand_live >>
+     fs[safe_operand_def]) >>
+  `eval_operand default_op u = SOME dw /\
+   expr_val_rel cx default_ty dv default_op u` by metis_tac[] >>
+  `sa.cs_next_var <= ds.cs_next_var` by
+    (drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >> decide_tac) >>
+  drule_all return_default_destination_separation >>
+  strip_tac >>
+  `sr.cs_next_var <= ds.cs_next_var` by
+    (drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >> decide_tac) >>
+  `!x. default_op = Var x ==> not_fresh_at ds x` by
+    (qpat_x_assum `abi_decoder_operand_live sr.cs_next_var default_op` mp_tac >>
+     qpat_x_assum `sr.cs_next_var <= ds.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[abiDecoderReentryTheory.abi_decoder_operand_live_def,
+          abiDecoderReentryTheory.abi_decoder_older_vars_def, not_fresh_at_def] >>
+     rpt strip_tac >> gvs[] >> first_x_assum irule >> decide_tac) >>
+  `!x. buf.buf_operand = Var x ==> not_fresh_at ds x` by
+    (qpat_x_assum `EVERY (abi_decoder_operand_live ds.cs_next_var) _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[abiDecoderReentryTheory.abi_decoder_operand_live_def,
+          abiDecoderReentryTheory.abi_decoder_older_vars_def, not_fresh_at_def] >>
+     rpt strip_tac >> gvs[]) >>
+  `(if is_word_type default_ty then dw = typed_val_to_w256 dtv dv
+    else val_in_memory dtv dv (w2n dw) u.vs_memory)` by
+    (qpat_x_assum `expr_val_rel cx default_ty dv default_op u` mp_tac >>
+     qpat_x_assum `eval_operand default_op u = SOME dw` mp_tac >>
+     qpat_x_assum `evaluate_type (get_tenv cx) default_ty = SOME dtv` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[expr_val_rel_def] >> rpt strip_tac >> gvs[] >>
+     first_x_assum (qspec_then `dtv` mp_tac) >> simp[]) >>
+  `w2n (n2w d : bytes32) = d` by (simp[] >> decide_tac) >>
+  drule (Q.INST [`s` |-> `u`, `tv` |-> `rtv`, `v` |-> `dv`]
+    return_default_store_counted) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `eval_operand default_op u = _`)) >>
+  disch_then (drule_at (Pat `eval_operand buf.buf_operand u = _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ ann = _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ default_ty = _`)) >>
+  disch_then (qspec_then `dv` mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  rename1 `gas_marked_path F ctx func u 0 (OK stored)` >>
+  `ds.cs_next_var <= de.cs_next_var` by
+    (qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
+     metis_tac[ci_mono_compile_store_memory, ci_mono_def, pairTheory.SND]) >>
+  `local_ptrs_reserved cenv de /\ sa.cs_next_var <= de.cs_next_var` by
+    (conj_tac >- metis_tac[local_ptrs_reserved_next_var] >> decide_tac) >>
+  `safe_operand ds addr_op` by
+    (fs[safe_operand_def, not_fresh_at_def] >> rpt strip_tac >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `abi_decoder_operand_live sr.cs_next_var addr_op` by
+    (irule extcallReturnEntryBridgeTheory.return_decoder_operand_live >> fs[safe_operand_def]) >>
+  `?aw. eval_operand addr_op stored = SOME aw /\ w2w aw = target` by
+    (qpat_x_assum `?aw. _` strip_assume_tac >>
+     qexists_tac `aw` >> metis_tac[extcallReturnEntryBridgeTheory.return_decoder_operand_live]) >>
+  drule_all return_default_optional_check_counted >>
+  disch_then (qx_choose_then `checked` mp_tac) >>
+  Cases_on `skip \/ ext_call_has_code target ee.accounts`
+  >- (simp[] >> strip_tac >>
+      drule_all return_default_join_path >>
+      disch_then (qspec_then `ctx` assume_tac) >>
+      suspend "default_success") >>
+  simp[] >> strip_tac >>
+  `gas_marked_path F ctx func t 0 (Abort Revert_abort checked)` by
+    metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD] >>
+  qexists_tac `[]` >>
+  simp[gas_summary_at_def, gas_marked_exec_def, get_accounts_def,
+       check_def, bind_def, return_def, raise_def] >>
+  qexistsl_tac [`INR (Error (RuntimeError "ExtCall target has no code"))`,
+    `ee`, `Abort Revert_abort checked`] >>
+  simp[assert_def, ignore_bind_def, bind_def, raise_def,
+       fragExecTheory.exit_result_def, expr_exit_def]
+QED
+Resume extcall_return_default[default_success]:
+  `gas_marked_path F ctx func t 0 (OK (jump_to xl checked))` by
+    metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD] >>
+  `sb.cs_current_bb = xl /\ sb.cs_current_insts = []` by
+    metis_tac[emitHelperPropsTheory.new_block_props] >>
+  qexists_tac `[]` >>
+  simp[gas_summary_at_def, gas_marked_exec_def, get_accounts_def,
+       check_def, assert_def, ignore_bind_def, bind_def, return_def] >>
+  qexistsl_tac [`INL (Value dv)`, `ee`, `OK (jump_to xl checked)`] >>
+  simp[extCallSeamFinishTheory.extcall_jump_fields] >>
+  `ee with gas_obs := [] = ee` by
+    (qpat_x_assum `ee.gas_obs = []` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[evaluation_state_component_equality]) >>
+  simp[] >>
+  simp[vv_post_def, post_value_type_def, expr_type_def,
+       exprLoweringPropsTheory.stmt_state_rel_jump_to] >>
+  conj_tac >- suspend "default_holds" >>
+  conj_tac >- suspend "default_at" >>
+  qpat_x_assum `wb_frame cenv es sa s0 checked` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[wb_frame_def, locals_kept_def, venomStateTheory.jump_to_def,
+       local_region_def, venomStateTheory.lookup_var_def] >>
+  strip_tac >> conj_tac >> first_assum ACCEPT_TAC
+QED
+Resume extcall_return_default[default_holds]:
   cheat
 QED
+Resume extcall_return_default[default_at]:
+  cheat
+QED
+Resume extcall_return_default[decode]:
+  cheat
+QED
+Finalise extcall_return_default
 
 (* (3) Return handling.  From sr after a successful call: void, the
    default on empty returndata (with the code recheck) and the bounded
