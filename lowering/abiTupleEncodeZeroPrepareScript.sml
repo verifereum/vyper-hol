@@ -1,5 +1,6 @@
 Theory abiTupleEncodeZeroPrepare
 Ancestors
+  loweringStateRelDefs
   abiTupleEncodePrepare abiTupleEncodeOpenPrepare abiTupleEncodeZeroSlot abiTupleEncodeOpenResult
   abiTupleEncodeZeroInput abiTupleEncodeOpenMemory abiTupleProps
   exprLowering context compileEnv emitHelperProps exprLoweringProps venomInst words list rich_list arithmetic

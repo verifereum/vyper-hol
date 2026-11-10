@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeConcreteComplex
 Ancestors
+  valueEncodingDefs
   exprSimAbiEncodeConcreteStructuralMembers exprSimAbiEncodeConcreteWrappers
   exprSimAbiEncodeConcreteCompose exprSimAbiEncodeConcreteComplexWrappers abiEncoderWindowComplex
   abiEncoderWindowStructuralMembers abiEncoderWindowMembers

@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeConcreteBuiltinWrappers
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeOpenSetup exprSimAbiEncodeSetupOpen exprSimAbiEncodeConcreteCompose
   exprSimAbiEncodeFinish
   abiBuiltinEncodeAllocate context abiBuiltinEncodeMethod abiBuiltinAllocation

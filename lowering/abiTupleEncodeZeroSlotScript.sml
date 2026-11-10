@@ -1,5 +1,6 @@
 Theory abiTupleEncodeZeroSlot
 Ancestors
+  valueEncodingDefs
   abiTupleEncodeOpenSlot abiTupleEncodeZeroInput abiTupleEncodeOpenResult
   abiTupleEncodeOpenMemory abiTupleEncodeSlot abiTupleEncodeInput abiEncoderOpenInput abiEncoderOpenRelocate
   abiBuiltinEncodeCorrect abiBuiltinEncodeWord abiEncoderWrites abiEncoderBytes

@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeProducerExecution
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodePrefixWindow exprSimAbiEncodeExecution
   exprSimAbiEncodeEmptySource exprSimAbiEncodeNonwordResources
   exprSimAbiEncodeCapacity exprSimAbiEncodeEmptyExecution exprSimAbiEncodeSourceRoom

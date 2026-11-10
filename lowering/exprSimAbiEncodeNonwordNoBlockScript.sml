@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeNonwordNoBlock
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   exprSimAbiEncodeConcreteBuiltinWrappers exprSimAbiEncodeConcreteBody
   exprSimAbiEncodeConcreteCompose exprSimAbiEncodeConcreteWrappers
   exprSimAbiEncodeNoBlockBoundary exprSimAbiEncodeNoBlockSafety exprSimAbiEncodeExecution

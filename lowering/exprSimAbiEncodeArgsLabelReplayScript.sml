@@ -65,6 +65,8 @@ Theorem abi_args_builtin_replay:
     (es with gas_obs := gs) = (INL v,ee with gas_obs := gs)
 Proof
   strip_tac >>
+  `bi <> Bop In /\ bi <> Bop NotIn` by
+    (rpt strip_tac >> gvs[builtin_args_length_ok_def]) >>
   qpat_x_assum `bind (eval_expr cx (Builtin _ _ _)) _ _ = _` mp_tac >>
   simp[Once evaluate_def, type_check_def, assert_def, ignore_bind_def,
        abi_args_singleton_source] >>

@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeArgsTuplePost
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeArgsTupleLayout exprSimAbiEncodeArgsTupleTarget
   abiDecodeStaticProps exprSimAlloc loweringHalt emitHelper fragExec
   loweringPosts exprLoweringProps compileEnv venomState venomInst

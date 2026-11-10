@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeTranslatedPhases
 Ancestors
+  valueEncodingDefs
   exprSimAbiEncodeNonwordNoBlock exprSimAbiEncodeEmptyComplex
   exprSimAbiEncodeConcreteBuiltinWrappers exprSimAbiEncodeConcreteCompose
   exprSimAbiEncodeConcreteWrappers exprSimAbiEncodeNoBlockFrame

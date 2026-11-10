@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeTupleExecution
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeTupleResources exprSimAbiEncodeExecution exprSimAbiEncodeProducerAssembly
   exprSimAbiEncodeProducerExecution abiTupleEncodePrepare abiEncoderSequence
   abiEncoderAdmissible abiEncoderCounters abiBuiltinEncodeCode abiDecoderContract

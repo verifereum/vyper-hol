@@ -1,5 +1,6 @@
 Theory abiEncodeArgsSim
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   abiEncodeMaterialize abiEncodeArgsScopes abiEncodeArgsWindows abiDecoderReentry
   compileEnv exprSimDefs exprSimProps loweringPosts exprSimHyps exprSimWordArgs abiArgsLabelObserver exprOperandVar
   abiArgsLabelBoundary

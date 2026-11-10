@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeCallerFrame
 Ancestors
+  loweringStateRelDefs
   compileEnv venomMemDefs venomState venomInst finite_map pred_set list arithmetic
   exprSimAbiEncodeSuffixOwnership exprSimAbiEncodeFrameTransfer abiDecodeStaticProps
   exprLoweringProps localPtrsProps exprSimAbiEncodeSiteResources

@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeTranslatedObserver
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeTranslatedRelabel exprSimAbiEncodeTranslatedNoBlock
   exprSimAbiEncodeRelabelObserver exprSimAbiEncodeRelabelResources
   exprSimAbiEncodeExecution exprSimAbiEncodeEmptyComplex

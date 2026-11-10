@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodePrefixWindow
 Ancestors
+  loweringStateRelDefs
   exprSimHash exprSimAlloc exprSimLiteralBuffer loweringPosts
   exprSimBufferStore abiValueEncoding abiBuiltinEncodeCode loweringHalt fragExec
   abiTupleValueEncoding abiEncoderStaticRepresentative abiEncoderWindow abiEncoderLeaves

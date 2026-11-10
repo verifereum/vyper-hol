@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeTupleCompletionFresh
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeTupleResult exprSimAbiEncodeTupleExecution
   exprSimAbiEncodeTupleSuccess exprSimAbiEncodeTupleSourceFresh
   abiEncoderAdmissible abiEncoderCounters abiBuiltinEncodeCode

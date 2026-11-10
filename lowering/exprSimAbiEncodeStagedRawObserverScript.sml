@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeStagedRawObserver
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeStagedObserver exprSimAbiEncodeTranslatedPhases
   exprSimAbiEncodeStateTransport exprSimAbiEncodeCallerSuffix
   exprSimAbiEncodeExecFrame abiBuiltinEncodeSetup abiEncoderWindowContract

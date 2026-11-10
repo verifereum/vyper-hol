@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeTupleResources
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeProducerAssembly exprSimAbiEncodePrefixWindow
   exprSimAbiEncodeArgsSeparation abiEncodeEndpointMetadata
   exprSimAbiEncodeNonwordResources abiTupleEncodePrepare abiEncoderCounters

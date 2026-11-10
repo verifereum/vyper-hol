@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeArgsMaterializePath
 Ancestors
+  loweringStateRelDefs
   abiEncodeMaterialize exprSimAbiGasBridge exprSimHash vyperCompiler context
   loweringPosts compileEnv finite_map exprSimAbiEncodeSeparation
   entrySinkExtraction fragGasSeq stmtReasonLitFragMemory emitHelperProps

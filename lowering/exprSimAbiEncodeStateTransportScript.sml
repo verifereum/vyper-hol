@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeStateTransport
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeCallerFrame exprSimAbiEncodeFramedSuffix abiEncoderRegisteredEffect
   exprSimAbiEncodeChargeTransfer exprSimAbiEncodeExecFrame localPtrsProps loweringSlice
   compileEnv exprLoweringProps venomState finite_map pred_set list arithmetic

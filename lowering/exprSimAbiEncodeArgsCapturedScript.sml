@@ -9,6 +9,7 @@
 
 Theory exprSimAbiEncodeArgsCaptured
 Ancestors
+  loweringStateRelDefs
   abiEncodeArgsSim exprSimHypsDefs exprSimWordArgs abiDecoderReentry
   exprSimAbiGasBridge exprSimAbiEncodeArgsMaterializePath
 

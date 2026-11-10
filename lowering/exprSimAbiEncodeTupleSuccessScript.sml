@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeTupleSuccess
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeTupleExecution exprSimAbiEncodeExecFrame
   exprSimHash abiTupleEncodePrepare abiTupleEncodeSlot
   context compileEnv abiTupleProps emitHelper emitHelperProps exprLoweringProps exprLowering

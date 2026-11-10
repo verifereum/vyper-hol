@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeTranslatedNoBlock
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeTranslatedPhases exprSimAbiEncodeTranslatedResources
   exprSimAbiEncodeNonwordNoBlock exprSimAbiEncodeObserverEntry
   exprSimAbiEncodeStateTransport exprSimAbiEncodeRelabelResources

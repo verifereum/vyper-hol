@@ -1,5 +1,6 @@
 Theory abiEncodeArgsWindows
 Ancestors
+  loweringStateRelDefs
   exprSimDefs exprSimProps loweringPosts compileEnv valueEncoding valueEncodingProofs entryDecodeStaticProps
   vyperLookup finite_map
   valueEncodingDefs

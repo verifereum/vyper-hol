@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeEmptyComplex
 Ancestors
+  valueEncodingDefs
   exprSimAbiEncodeEmptyFramed exprSimAbiEncodeTranslatedZero
   exprSimAbiEncodeEmptySource abiDecoderLoop abiEncoderProps
   abiEncoderWindowContract abiEncoderRegisteredEffect abiEncoderExtendSim

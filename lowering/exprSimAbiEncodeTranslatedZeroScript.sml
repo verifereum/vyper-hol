@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeTranslatedZero
 Ancestors
+  valueEncodingDefs
   exprSimAbiEncodeEmptySource exprSimAbiEncodeSourceSupplier
   exprSimAbiEncodePlanMetadata exprSimAbiEncodeSourceMetadata
   exprLowering compileEnv vyperTypeSystem vyperValue vyperABI

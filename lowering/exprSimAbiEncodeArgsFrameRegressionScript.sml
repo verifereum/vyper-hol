@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeArgsFrameRegression
 Ancestors
+  valueEncodingDefs
   loweringPosts valueEncodingProps vyperInterpreter venomState
 
 (* The old flat witness's root, immediately before and after its pop. *)

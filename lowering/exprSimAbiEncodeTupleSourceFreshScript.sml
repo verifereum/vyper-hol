@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeTupleSourceFresh
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeTupleFresh exprSimAbiEncodeTupleStagingProbe
   exprSimAbiEncodeProducerAssembly abiTupleEncodePrepare
   exprSimAbiEncodeObservationExtension abiDecoderVarExtend abiDecoderReentry

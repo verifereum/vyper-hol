@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeFramedMembers
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeFramedArrayBody exprSimAbiEncodeFramedPhases
   exprSimAbiEncodeExecFrame abiEncoderWindowMembers abiEncoderWindowChild
   abiEncoderWindowPhase abiEncoderWindowContract abiEncoderWindow

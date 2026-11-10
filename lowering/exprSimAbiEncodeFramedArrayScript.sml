@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeFramedArray
 Ancestors
+  valueEncodingDefs
   exprSimAbiEncodeFramedArrayControl exprSimAbiEncodeFramedArrayBody
   exprSimAbiEncodeExecFrame exprSimAbiEncodeSemantic
   abiEncoderWindowArray abiEncoderWindowArrayExit

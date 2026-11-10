@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeFreshness
 Ancestors
+  loweringStateRelDefs
   abiEncoderObserver abiEncoderWindowLookup venomExecProofs venomInstProps
   compileEnv exprLoweringProps finite_map list venomInst venomState
   venomExecSemantics unitShapeDefs exprSimAbiEncodeRegion
