@@ -10,9 +10,9 @@ Theorem internal_param_capture_projection:
   MAP (\c. (FST c,FST (SND c))) caps = ps
 Proof
   rpt gen_tac >> strip_tac >>
-  drule intCallCalleeTheory.compile_internal_param_decls_shape >> strip_tac >>
-  irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
-  first_x_assum (drule_then SUBST1_TAC) >> simp[]
+  drule intCallCalleeTheory.compile_internal_param_decls_shape >>
+  simp[] >> strip_tac >>
+  irule LIST_EQ >> simp[EL_MAP]
 QED
 
 Theorem internal_entry_prefix_layout:
@@ -23,5 +23,5 @@ Proof
   rpt gen_tac >>
   simp[compile_internal_entry_prefix_def, comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  drule internal_param_capture_projection >> simp[]
+  Cases_on `pr` >> drule internal_param_capture_projection >> simp[]
 QED
