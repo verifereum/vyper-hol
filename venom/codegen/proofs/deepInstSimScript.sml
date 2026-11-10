@@ -67,6 +67,208 @@ Proof
   irule venom_asm_rel_release_dead_spills >> simp[]
 QED
 
+Theorem regular_inst_ok_sim_marked_count:
+  !fuel ctx lo o2pc prog liveness dfg cfg fn inst next_liveness is_halting
+   next_is_term bb_label spill_base ps vs as ops ps' name initial_fmp.
+    inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> GAS /\
+    (ef_read0 inst.inst_opcode ==> inst.inst_operands = []) /\
+    venom_to_evm_name inst.inst_opcode = SOME name /\
+    EVERY (\(off,len). len = 0 \/ off + len <= ps'.ps_alloc.sa_spill_base \/
+                       ps'.ps_alloc.sa_next_offset <= off)
+      (source_memory_read_ranges inst vs) /\
+    generated_plan_state_wf_marked spill_base ps /\
+    codegen_ready_fn fn /\
+    MEM inst (fn_insts fn) /\
+    inst_wf inst /\
+    LENGTH (compute_operands inst) <= 16 /\
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_liveness ps)).ps_stack /\
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      IS_SOME (stack_get_depth op ps.ps_stack) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (!l. MEM (Label l) (compute_operands inst) ==>
+         IS_SOME (FLOOKUP lo l)) /\
+    (!op. MEM op (compute_operands inst) ==>
+          eval_operand op vs = operand_val vs lo op) /\
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
+             operand_val vs lo op = operand_val vs lo at) /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+                      inst.inst_outputs) ps.ps_stack /\
+    (!op. op IN FDOM ps.ps_spilled ==>
+          EVERY (\out. case op of Var x => x <> out | _ => T)
+                inst.inst_outputs) /\
+    EVERY (\s. case s of SOSpill k => k < dimword(:256)
+      | SORestore k => k < dimword(:256) | _ => T) ops /\
+    venom_asm_rel lo ps vs as /\
+    n2w initial_fmp = vs.vs_initial_fmp /\
+    generate_regular_inst_plan liveness dfg cfg fn inst
+      next_liveness is_halting next_is_term bb_label ps = (ops, ps') /\
+    asm_block_at prog as.as_pc (execute_plan initial_fmp ops) /\
+    step_inst fuel ctx inst vs = OK vs' /\
+    inst_memory_safe ps'.ps_alloc inst vs vs' ==>
+      ?n as'.
+        asm_steps lo o2pc prog n as = AsmOK as' /\
+        venom_asm_rel lo ps' vs' as' /\
+        (~is_terminator inst.inst_opcode ==>
+         as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops)) /\
+        (~is_terminator inst.inst_opcode ==>
+         n = LENGTH (execute_plan initial_fmp ops))
+Proof
+  rpt strip_tac >>
+  drule_all regular_plan_selected_prefix >>
+  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
+  `PERM (compute_operands inst) selected` by
+    (irule regular_plan_selected_perm >> metis_tac[]) >>
+  `LENGTH selected = LENGTH (compute_operands inst)` by metis_tac[sortingTheory.PERM_LENGTH] >>
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (rpt strip_tac >>
+     qpat_x_assum `!op. MEM op _ /\ is_var_operand op ==> _` drule >>
+     simp[] >> strip_tac
+     >- (fs[stack_get_depth_def, optionTheory.IS_SOME_EXISTS] >> drule stack_find_el >>
+         drule planWfTheory.stack_find_bound >>
+         metis_tac[MEM_EL, MEM_REVERSE]) >>
+     Cases_on `op IN FDOM ps.ps_spilled` >> fs[finite_mapTheory.FLOOKUP_DEF]) >>
+  `residual_budget_wf_marked spill_base [] ps` by
+    metis_tac[generated_plan_state_wf_marked_residual_nil] >>
+  `plan_slots_bounded spill_base ps /\
+   spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    fs[generated_plan_state_wf_marked_def] >>
+  `LENGTH (compute_operands inst) <= LENGTH prepared.ps_stack` by gvs[] >>
+  `EVERY (\s. case s of SOSpill k => k < dimword(:256)
+    | SORestore k => k < dimword(:256) | _ => T) (iops ++ rops)` by
+    gvs[EVERY_APPEND] >>
+  `asm_block_at prog as.as_pc (execute_plan initial_fmp (iops ++ rops)) /\
+   asm_block_at prog (as.as_pc + LENGTH (execute_plan initial_fmp (iops ++ rops)))
+     (execute_plan initial_fmp ([SOEmit name] ++ popops ++ optops))` by
+    (qpat_x_assum `asm_block_at _ _ _` mp_tac >>
+     qpat_x_assum `ops = _` SUBST1_TAC >>
+     POP_ASSUM_LIST (K all_tac) >>
+     pure_rewrite_tac[execute_plan_append, asm_block_at_append, LENGTH_APPEND,
+       APPEND_ASSOC, ADD_ASSOC] >> strip_tac >> asm_rewrite_tac[]) >>
+  `arranged.ps_stack = stack_pop (LENGTH selected) arranged.ps_stack ++ selected` by
+    (drule_all selected_input_arranged_marked >> simp[]) >>
+  drule_all selected_prefix_prepared_sim_marked >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  rename1 `venom_asm_rel lo arranged vs mid` >>
+  suspend "prepared"
+QED
+
+Resume regular_inst_ok_sim_marked_count[prepared]:
+  drule_all emit_input_plan_output_exclusion >> strip_tac >>
+  `LENGTH selected <= 17 /\ LENGTH selected <= LENGTH prepared.ps_stack` by decide_tac >>
+  drule_all reorder_plan_output_exclusion >> strip_tac >>
+  `emitted = arranged with ps_stack :=
+    FOLDL (\stk out. stack_push (Var out) stk)
+      (stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack) inst.inst_outputs` by
+    simp[emit_output_fold_stack] >>
+  `LENGTH inst.inst_outputs <= 1` by metis_tac[regular_named_output_bound] >>
+  drule_all materialised_emit_resources_marked >> strip_tac >>
+  `!out. inst.inst_outputs = [out] ==>
+    stack_get_depth (Var out) emitted.ps_stack = SOME 0` by
+    (rpt strip_tac >> irule materialised_emit_singleton_depth >> metis_tac[]) >>
+  `arranged.ps_alloc.sa_spill_base = ps'.ps_alloc.sa_spill_base /\
+   arranged.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset` by
+    (drule_all regular_postfix_alloc_frame >>
+     simp[emit_output_fold_alloc]) >>
+  `EVERY (\(off,len). len = 0 \/ off + len <= arranged.ps_alloc.sa_spill_base \/
+      arranged.ps_alloc.sa_next_offset <= off) (source_memory_read_ranges inst vs) /\
+   inst_memory_safe arranged.ps_alloc inst vs vs'` by
+    (irule regular_emit_memory_transport >> qexists `ps'` >> simp[]) >>
+  `~is_pre_codegen_opcode inst.inst_opcode` by
+    (`!bbs. EVERY (\bb. EVERY codegen_ready_inst bb.bb_instructions) bbs ==>
+        EVERY codegen_ready_inst (fn_insts_blocks bbs)` by
+       (Induct >> simp[fn_insts_blocks_def]) >>
+     `codegen_ready_inst inst` by
+       (qpat_x_assum `codegen_ready_fn fn` mp_tac >>
+        qpat_x_assum `MEM inst (fn_insts fn)` mp_tac >>
+        qpat_x_assum `!bbs. _ ==> EVERY codegen_ready_inst _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        simp[codegen_ready_fn_def, fn_insts_def, EVERY_MEM] >>
+        metis_tac[]) >>
+     qpat_x_assum `codegen_ready_inst inst` mp_tac >>
+     simp[codegen_ready_inst_def]) >>
+  `plan_slots_bounded spill_base arranged` by
+    fs[plan_state_residual_wf_marked_def] >>
+  `EVERY (\op. op <> dead_stack_marker) (compute_operands inst)` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  suspend "emit_ready"
+QED
+
+Resume regular_inst_ok_sim_marked_count[emit_ready]:
+  drule_all regular_emit_ok_sim >>
+  disch_then (qspec_then `o2pc` (qx_choose_then `after_emit` strip_assume_tac)) >>
+  `venom_asm_rel lo emitted vs' after_emit` by metis_tac[] >>
+  `asm_block_at prog mid.as_pc (execute_plan initial_fmp ([SOEmit name] ++ popops ++ optops))` by
+    metis_tac[] >>
+  `asm_block_at prog mid.as_pc [AsmOp name] /\
+   asm_block_at prog after_emit.as_pc (execute_plan initial_fmp (popops ++ optops))` by
+    (qpat_x_assum `asm_block_at prog mid.as_pc _` mp_tac >>
+     qpat_x_assum `after_emit.as_pc = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     pure_rewrite_tac[execute_plan_append, execute_plan_def, exec_stack_op_def,
+       MAP, FLAT, APPEND, asm_block_at_append, asm_block_at_cons] >>
+     rpt strip_tac >> asm_rewrite_tac[asm_block_at_nil] >> decide_tac) >>
+  suspend "emitted"
+QED
+
+Resume regular_inst_ok_sim_marked_count[emitted]:
+  `EVERY (\s. case s of SOSpill k => k < dimword(:256)
+     | SORestore k => k < dimword(:256) | _ => T) optops` by
+    gvs[EVERY_APPEND] >>
+  `spill_alloc_layout_wf emitted.ps_alloc emitted.ps_spilled` by
+    fs[generated_plan_state_wf_marked_def] >>
+  `(if inst.inst_outputs = [] \/ is_halting then ([],emitted)
+    else popmany_plan (MAP Var (FILTER (\out. ~MEM out next_liveness)
+      inst.inst_outputs)) emitted) = (popops,popped)` by
+    (`~(LENGTH inst.inst_outputs > 1)` by decide_tac >>
+     qpat_x_assum `if inst.inst_outputs = [] \/ _ then (popops,popped) = _ else _` mp_tac >>
+     qpat_x_assum `~(LENGTH inst.inst_outputs > 1)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >> IF_CASES_TAC >> gvs[]) >>
+  `(if FILTER (\out. MEM out next_liveness) inst.inst_outputs = [] then ([],popped)
+    else optimistic_swap_plan dfg inst next_liveness next_is_term popped) = (optops,tail)` by
+    (qpat_x_assum `if inst.inst_outputs = [] \/ FILTER _ _ = [] then _ else _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `inst.inst_outputs = []` >> simp[] >> IF_CASES_TAC >> simp[]) >>
+  drule_all regular_generated_postfix_sim_numeric >>
+  disch_then (qspec_then `o2pc` (qx_choose_then `endpoint` strip_assume_tac)) >>
+  `asm_steps lo o2pc prog 1 mid = AsmOK after_emit` by
+    (qpat_x_assum `asm_block_at prog mid.as_pc [AsmOp name]` mp_tac >>
+     qpat_x_assum `asm_step_op o2pc name mid = AsmOK after_emit` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     once_rewrite_tac[arithmeticTheory.ONE] >>
+     simp[asm_steps_def, asm_step_def, asm_block_at_def]) >>
+  suspend "postfix_done"
+QED
+
+Resume regular_inst_ok_sim_marked_count[postfix_done]:
+  qexistsl_tac [`LENGTH (execute_plan initial_fmp (iops ++ rops)) +
+    (1 + LENGTH (execute_plan initial_fmp (popops ++ optops)))`, `endpoint`] >>
+  conj_tac
+  >- (irule asm_steps_compose_ok >> qexists `mid` >> conj_tac
+      >- asm_rewrite_tac[] >>
+      irule asm_steps_compose_ok >> qexists `after_emit` >> asm_rewrite_tac[]) >>
+  conj_tac >- asm_rewrite_tac[] >>
+  rpt strip_tac >>
+  qpat_x_assum `ops = _` SUBST1_TAC >>
+  qpat_x_assum `endpoint.as_pc = _` mp_tac >>
+  qpat_x_assum `after_emit.as_pc = _` mp_tac >>
+  qpat_x_assum `mid.as_pc = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  pure_rewrite_tac[execute_plan_append, execute_plan_def, APPEND, LENGTH_APPEND, LENGTH] >>
+  simp[exec_stack_op_def] >> decide_tac
+QED
+
+Finalise regular_inst_ok_sim_marked_count
+
 Theorem regular_inst_ok_sim_marked:
   !fuel ctx lo o2pc prog liveness dfg cfg fn inst next_liveness is_halting
    next_is_term bb_label spill_base ps vs as ops ps' name initial_fmp.
@@ -120,152 +322,9 @@ Theorem regular_inst_ok_sim_marked:
         (~is_terminator inst.inst_opcode ==>
          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
 Proof
-  rpt strip_tac >>
-  drule_all regular_plan_selected_prefix >>
-  disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
-  `PERM (compute_operands inst) selected` by
-    (irule regular_plan_selected_perm >> metis_tac[]) >>
-  `LENGTH selected = LENGTH (compute_operands inst)` by metis_tac[sortingTheory.PERM_LENGTH] >>
-  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
-    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
-    (rpt strip_tac >>
-     qpat_x_assum `!op. MEM op _ /\ is_var_operand op ==> _` drule >>
-     simp[] >> strip_tac
-     >- (fs[stack_get_depth_def, optionTheory.IS_SOME_EXISTS] >> drule stack_find_el >>
-         drule planWfTheory.stack_find_bound >>
-         metis_tac[MEM_EL, MEM_REVERSE]) >>
-     Cases_on `op IN FDOM ps.ps_spilled` >> fs[finite_mapTheory.FLOOKUP_DEF]) >>
-  `residual_budget_wf_marked spill_base [] ps` by
-    metis_tac[generated_plan_state_wf_marked_residual_nil] >>
-  `plan_slots_bounded spill_base ps /\
-   spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
-    fs[generated_plan_state_wf_marked_def] >>
-  `LENGTH (compute_operands inst) <= LENGTH prepared.ps_stack` by gvs[] >>
-  `EVERY (\s. case s of SOSpill k => k < dimword(:256)
-    | SORestore k => k < dimword(:256) | _ => T) (iops ++ rops)` by
-    gvs[EVERY_APPEND] >>
-  `asm_block_at prog as.as_pc (execute_plan initial_fmp (iops ++ rops)) /\
-   asm_block_at prog (as.as_pc + LENGTH (execute_plan initial_fmp (iops ++ rops)))
-     (execute_plan initial_fmp ([SOEmit name] ++ popops ++ optops))` by
-    (qpat_x_assum `asm_block_at _ _ _` mp_tac >>
-     qpat_x_assum `ops = _` SUBST1_TAC >>
-     POP_ASSUM_LIST (K all_tac) >>
-     pure_rewrite_tac[execute_plan_append, asm_block_at_append, LENGTH_APPEND,
-       APPEND_ASSOC, ADD_ASSOC] >> strip_tac >> asm_rewrite_tac[]) >>
-  `arranged.ps_stack = stack_pop (LENGTH selected) arranged.ps_stack ++ selected` by
-    (drule_all selected_input_arranged_marked >> simp[]) >>
-  drule_all selected_prefix_prepared_sim_marked >>
-  disch_then (qspec_then `o2pc` strip_assume_tac) >>
-  rename1 `venom_asm_rel lo arranged vs mid` >>
-  suspend "prepared"
+  rpt gen_tac >> strip_tac >>
+  drule_all regular_inst_ok_sim_marked_count >> metis_tac[]
 QED
-
-Resume regular_inst_ok_sim_marked[prepared]:
-  drule_all emit_input_plan_output_exclusion >> strip_tac >>
-  `LENGTH selected <= 17 /\ LENGTH selected <= LENGTH prepared.ps_stack` by decide_tac >>
-  drule_all reorder_plan_output_exclusion >> strip_tac >>
-  `emitted = arranged with ps_stack :=
-    FOLDL (\stk out. stack_push (Var out) stk)
-      (stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack) inst.inst_outputs` by
-    simp[emit_output_fold_stack] >>
-  `LENGTH inst.inst_outputs <= 1` by metis_tac[regular_named_output_bound] >>
-  drule_all materialised_emit_resources_marked >> strip_tac >>
-  `!out. inst.inst_outputs = [out] ==>
-    stack_get_depth (Var out) emitted.ps_stack = SOME 0` by
-    (rpt strip_tac >> irule materialised_emit_singleton_depth >> metis_tac[]) >>
-  `arranged.ps_alloc.sa_spill_base = ps'.ps_alloc.sa_spill_base /\
-   arranged.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset` by
-    (drule_all regular_postfix_alloc_frame >>
-     simp[emit_output_fold_alloc]) >>
-  `EVERY (\(off,len). len = 0 \/ off + len <= arranged.ps_alloc.sa_spill_base \/
-      arranged.ps_alloc.sa_next_offset <= off) (source_memory_read_ranges inst vs) /\
-   inst_memory_safe arranged.ps_alloc inst vs vs'` by
-    (irule regular_emit_memory_transport >> qexists `ps'` >> simp[]) >>
-  `~is_pre_codegen_opcode inst.inst_opcode` by
-    (`!bbs. EVERY (\bb. EVERY codegen_ready_inst bb.bb_instructions) bbs ==>
-        EVERY codegen_ready_inst (fn_insts_blocks bbs)` by
-       (Induct >> simp[fn_insts_blocks_def]) >>
-     `codegen_ready_inst inst` by
-       (qpat_x_assum `codegen_ready_fn fn` mp_tac >>
-        qpat_x_assum `MEM inst (fn_insts fn)` mp_tac >>
-        qpat_x_assum `!bbs. _ ==> EVERY codegen_ready_inst _` mp_tac >>
-        POP_ASSUM_LIST (K all_tac) >>
-        simp[codegen_ready_fn_def, fn_insts_def, EVERY_MEM] >>
-        metis_tac[]) >>
-     qpat_x_assum `codegen_ready_inst inst` mp_tac >>
-     simp[codegen_ready_inst_def]) >>
-  `plan_slots_bounded spill_base arranged` by
-    fs[plan_state_residual_wf_marked_def] >>
-  `EVERY (\op. op <> dead_stack_marker) (compute_operands inst)` by
-    (fs[EVERY_MEM] >> metis_tac[]) >>
-  suspend "emit_ready"
-QED
-
-Resume regular_inst_ok_sim_marked[emit_ready]:
-  drule_all regular_emit_ok_sim >>
-  disch_then (qspec_then `o2pc` (qx_choose_then `after_emit` strip_assume_tac)) >>
-  `venom_asm_rel lo emitted vs' after_emit` by metis_tac[] >>
-  `asm_block_at prog mid.as_pc (execute_plan initial_fmp ([SOEmit name] ++ popops ++ optops))` by
-    metis_tac[] >>
-  `asm_block_at prog mid.as_pc [AsmOp name] /\
-   asm_block_at prog after_emit.as_pc (execute_plan initial_fmp (popops ++ optops))` by
-    (qpat_x_assum `asm_block_at prog mid.as_pc _` mp_tac >>
-     qpat_x_assum `after_emit.as_pc = _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     pure_rewrite_tac[execute_plan_append, execute_plan_def, exec_stack_op_def,
-       MAP, FLAT, APPEND, asm_block_at_append, asm_block_at_cons] >>
-     rpt strip_tac >> asm_rewrite_tac[asm_block_at_nil] >> decide_tac) >>
-  suspend "emitted"
-QED
-
-Resume regular_inst_ok_sim_marked[emitted]:
-  `EVERY (\s. case s of SOSpill k => k < dimword(:256)
-     | SORestore k => k < dimword(:256) | _ => T) optops` by
-    gvs[EVERY_APPEND] >>
-  `spill_alloc_layout_wf emitted.ps_alloc emitted.ps_spilled` by
-    fs[generated_plan_state_wf_marked_def] >>
-  `(if inst.inst_outputs = [] \/ is_halting then ([],emitted)
-    else popmany_plan (MAP Var (FILTER (\out. ~MEM out next_liveness)
-      inst.inst_outputs)) emitted) = (popops,popped)` by
-    (`~(LENGTH inst.inst_outputs > 1)` by decide_tac >>
-     qpat_x_assum `if inst.inst_outputs = [] \/ _ then (popops,popped) = _ else _` mp_tac >>
-     qpat_x_assum `~(LENGTH inst.inst_outputs > 1)` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> strip_tac >> IF_CASES_TAC >> gvs[]) >>
-  `(if FILTER (\out. MEM out next_liveness) inst.inst_outputs = [] then ([],popped)
-    else optimistic_swap_plan dfg inst next_liveness next_is_term popped) = (optops,tail)` by
-    (qpat_x_assum `if inst.inst_outputs = [] \/ FILTER _ _ = [] then _ else _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     Cases_on `inst.inst_outputs = []` >> simp[] >> IF_CASES_TAC >> simp[]) >>
-  drule_all regular_generated_postfix_sim_numeric >>
-  disch_then (qspec_then `o2pc` (qx_choose_then `endpoint` strip_assume_tac)) >>
-  `asm_steps lo o2pc prog 1 mid = AsmOK after_emit` by
-    (qpat_x_assum `asm_block_at prog mid.as_pc [AsmOp name]` mp_tac >>
-     qpat_x_assum `asm_step_op o2pc name mid = AsmOK after_emit` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     once_rewrite_tac[arithmeticTheory.ONE] >>
-     simp[asm_steps_def, asm_step_def, asm_block_at_def]) >>
-  suspend "postfix_done"
-QED
-
-Resume regular_inst_ok_sim_marked[postfix_done]:
-  qexistsl_tac [`LENGTH (execute_plan initial_fmp (iops ++ rops)) +
-    (1 + LENGTH (execute_plan initial_fmp (popops ++ optops)))`, `endpoint`] >>
-  conj_tac
-  >- (irule asm_steps_compose_ok >> qexists `mid` >> conj_tac
-      >- asm_rewrite_tac[] >>
-      irule asm_steps_compose_ok >> qexists `after_emit` >> asm_rewrite_tac[]) >>
-  conj_tac >- asm_rewrite_tac[] >>
-  strip_tac >>
-  qpat_x_assum `ops = _` SUBST1_TAC >>
-  qpat_x_assum `endpoint.as_pc = _` mp_tac >>
-  qpat_x_assum `after_emit.as_pc = _` mp_tac >>
-  qpat_x_assum `mid.as_pc = _` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >>
-  pure_rewrite_tac[execute_plan_append, execute_plan_def, APPEND, LENGTH_APPEND, LENGTH] >>
-  simp[exec_stack_op_def] >> decide_tac
-QED
-
-Finalise regular_inst_ok_sim_marked
 
 Theorem marked_operand_owned:
   !op ps.
