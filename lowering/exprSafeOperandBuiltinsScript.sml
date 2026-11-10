@@ -365,6 +365,58 @@ Proof
   strip_tac >> gvs[]
 QED
 
+Theorem membership_primitive_next_var[local]:
+  (!s. s.cs_next_var <= (SND (fresh_var s)).cs_next_var) /\
+  (!p s. s.cs_next_var <= (SND (fresh_label p s)).cs_next_var) /\
+  (!l s. s.cs_next_var <= (SND (new_block l s)).cs_next_var) /\
+  (!opc ops outs s. s.cs_next_var <= (SND (emit_inst opc ops outs s)).cs_next_var) /\
+  (!opc ops s. s.cs_next_var <= (SND (emit_op opc ops s)).cs_next_var)
+Proof
+  rpt conj_tac >> rpt gen_tac
+  >- (mp_tac (Q.SPEC `s` ci_mono_fresh_var) >> gvs[ci_mono_def])
+  >- (mp_tac (Q.SPECL [`p`, `s`] ci_mono_fresh_label) >> gvs[ci_mono_def])
+  >- (mp_tac (Q.SPECL [`l`, `s`] ci_mono_new_block) >> gvs[ci_mono_def])
+  >- (mp_tac (Q.SPECL [`opc`, `ops`, `outs`, `s`] ci_mono_emit_inst) >>
+      gvs[ci_mono_def]) >>
+  mp_tac (Q.SPECL [`opc`, `ops`, `s`] ci_mono_emit_op) >> gvs[ci_mono_def]
+QED
+
+Theorem membership_bind_preserve[local]:
+  (!s. s.cs_next_var <= (SND (f s)).cs_next_var) /\
+  (!x s. safe_operand s op ==>
+     safe_operand (SND (g x s)) (FST (g x s))) ==>
+  !s. safe_operand s op ==>
+    safe_operand (SND (comp_bind f g s)) (FST (comp_bind f g s))
+Proof
+  strip_tac >> gen_tac >> strip_tac >> simp[comp_bind_def] >>
+  Cases_on `f s` >> simp[] >>
+  first_x_assum irule >> irule safe_operand_mono >>
+  qexists_tac `s` >> gvs[] >> metis_tac[pairTheory.SND]
+QED
+
+Theorem membership_ignore_preserve[local]:
+  (!s. s.cs_next_var <= (SND (f s)).cs_next_var) /\
+  (!s. safe_operand s op ==>
+     safe_operand (SND (g s)) (FST (g s))) ==>
+  !s. safe_operand s op ==>
+    safe_operand (SND (comp_ignore_bind f g s))
+                 (FST (comp_ignore_bind f g s))
+Proof
+  strip_tac >> pure_rewrite_tac[comp_ignore_bind_def] >>
+  ho_match_mp_tac membership_bind_preserve >> simp[]
+QED
+
+Theorem membership_fresh_start[local]:
+  (!v s. safe_operand s (Var v) ==>
+    safe_operand (SND (g v s)) (FST (g v s))) ==>
+  !s. safe_operand (SND (comp_bind fresh_var g s))
+                  (FST (comp_bind fresh_var g s))
+Proof
+  strip_tac >> gen_tac >> simp[comp_bind_def] >>
+  Cases_on `fresh_var s` >> simp[] >>
+  first_x_assum irule >> metis_tac[fresh_var_safe_operand]
+QED
+
 Theorem compile_array_membership_loop_safe_operand:
   (!p s v t. loader p s = (v,t) ==> s.cs_next_var <= t.cs_next_var) /\
   compile_array_membership_loop needle arr len sz off loader bound isin sa = (r,sb) ==>
