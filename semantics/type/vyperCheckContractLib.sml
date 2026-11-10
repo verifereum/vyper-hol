@@ -89,6 +89,7 @@ val checker_defs =
    flag_member_keys_toplevel_def,
    error_sig_keys_toplevel_def,
    type_def_keys_toplevel_def,
+   self_member_keys_toplevel_def,
     external_name_keys_toplevel_def,
     vyperABIEntriesTheory.abi_external_method_ids_def,
     vyperABIEntriesTheory.abi_external_signatures_def,

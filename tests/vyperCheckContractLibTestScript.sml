@@ -1778,6 +1778,52 @@ val () = List.app (fn in_deploy =>
    [(``[Literal (BaseT (UintT 256)) (IntL 0)]``, assert_none),
     (``([] : expr list)``, assert_some)])) [false, true]
 
+(* Vyper reports NamespaceCollision for repeated self members, independently
+   of function visibility, variable visibility, declaration order or mode.
+   Renaming only the second member makes each control acceptable. *)
+fun self_member_function vis name =
+  ``FunctionDecl ^vis Nonpayable F F ^name [] [] NoneT []``
+
+fun self_member_variable vis name =
+  ``VariableDecl ^vis Storage ^name (BaseT (UintT 256)) (SOME 0)``
+
+fun self_member_hashmap vis name =
+  ``HashMapDecl ^vis F ^name (BaseT (UintT 256))
+      (Type (BaseT (UintT 256))) (SOME 0)``
+
+val self_member_layouts =
+  ``[((0w : address),
+      ([((NONE,"foo"),0); ((NONE,"bar"),0)] : storage_layout,
+       [] : storage_layout))]``
+
+val () = List.app (fn in_deploy =>
+  List.app (fn (first, second) =>
+    List.app (fn reverse_order =>
+      List.app (fn (name, expect) => let
+        val a = first ``"foo"``
+        val b = second name
+        val decls = if reverse_order then ``[^b; ^a]`` else ``[^a; ^b]``
+      in
+        expect (check_selector_decls in_deploy self_member_layouts decls)
+      end) [(``"foo"``, assert_none), (``"bar"``, assert_some)])
+      [false, true])
+    ((self_member_function ``Internal``, self_member_function ``External``) ::
+     List.concat (map (fn vis => map (fn variable =>
+       (self_member_function vis, variable))
+       [self_member_variable ``Private``, self_member_variable ``Public F``,
+        self_member_hashmap ``Private``, self_member_hashmap ``Public F``])
+       [``Internal``, ``External``, ``Deploy``]))) [false, true]
+
+val () = cv_auto_trans contract_namespaces_ok_def;
+
+Theorem cross_visibility_self_member_clash_cv:
+  ~contract_namespaces_ok F
+    [(NONE, [FunctionDecl Internal Nonpayable F F "foo" [] [] NoneT [];
+             FunctionDecl External Nonpayable F F "foo" [] [] NoneT []])]
+Proof
+  CONV_TAC cv_eval
+QED
+
 (* Like Vyper (ImmutableViolation "Cannot modify loop variable"), a loop
    body may not write the array it iterates over: the evaluator iterates
    over a copy, the compiled loop reads the array in place.

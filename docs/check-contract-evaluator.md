@@ -107,6 +107,14 @@ variable/hashmap getter. Unexported library entries do not enter the combined
 interface. `check_contract_single_module_exports_ok` proves that a successfully
 checked single module with no exports already satisfies this additional check.
 
+## Member names
+
+The checker requires a single member-name namespace per module: every function
+(internal, external or deploy), variable and hashmap contributes its name.
+Repeating a name across those declaration kinds or visibilities rejects the
+contract in both runtime and deployment mode. Different modules may reuse a
+name. The signature, getter-name and selector checks also remain in force.
+
 ## Constant initializers
 
 `check_contract` evaluates every constant initializer, through
