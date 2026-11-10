@@ -63,8 +63,9 @@ Proof
     (qpat_x_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[abi_decoder_valid_pre_def, abi_decoder_ranges_def] >>
      disch_then (map_every assume_tac o CONJUNCTS) >> asm_simp_tac (srw_ss()) []) >>
-  `abi_decoder_reservation st.cs_next_id st.cs_next_id initial.vs_alloca_next 0 initial` by
-    simp[abi_decoder_reservation_def] >>
+  `abi_decoder_reservation (abi_decoder_entry_floor st) st.cs_next_id
+     initial.vs_alloca_next 0 initial` by
+    simp[abi_decoder_reservation_def, abi_decoder_entry_floor_def] >>
   drule_all abi_decoder_valid_pre_prefix >> asm_rewrite_tac[]
 QED
 

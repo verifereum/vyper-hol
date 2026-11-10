@@ -145,7 +145,9 @@ Theorem entry_array_setup_chosen_valid[local]:
     (Lit 0w) (Lit 0w) 0 sb d b cap st.cs_next_var limit_st initial prepared /\ inst_extends st ready
 Proof
   strip_tac >> Cases_on `is_dynamic (vyper_to_abi_type env ty)`
-  >- (drule_all abi_decoder_valid_array_setup_sequence >>
+  >- (`mem_bytes_at (0 + sb) (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs`
+        by simp[] >>
+      drule_all abi_decoder_valid_array_setup_sequence >>
       strip_tac >> gvs[]) >>
   drule_all calldata_static_valid_array_setup_sequence >> strip_tac >> gvs[]
 QED

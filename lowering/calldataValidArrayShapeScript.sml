@@ -47,5 +47,6 @@ Proof
   qpat_assum `FST ops = _` (fn th => pure_rewrite_tac[th]) >>
   pure_rewrite_tac[abi_decode_loop_suffix_shape] >> strip_tac >>
   goal_assum (drule_at Any) >> asm_rewrite_tac[] >>
-  gvs[abi_decode_loop_suffix_state_def, abi_decode_loop_prefix_state_def]
+  gvs[abi_decode_loop_suffix_state_def, abi_decode_loop_prefix_state_def,
+      abi_decode_position_header_delta_def, abi_decode_position_header_zero]
 QED

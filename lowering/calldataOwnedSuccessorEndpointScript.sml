@@ -54,6 +54,7 @@ Proof
     (fs[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_array_element_setup_shape >> strip_tac >>
+  `mem_bytes_at (0 + sb) (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs` by simp[] >>
   drule_all abi_decoder_valid_array_setup_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st ready) initial = OK prepared` >>
   `eval_operand src initial = SOME (n2w sb) /\

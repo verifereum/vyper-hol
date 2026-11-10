@@ -13,6 +13,7 @@ Theorem calldata_valid_pre_observations:
   abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     0 sb d b cap t
 Proof
-  simp[abi_decoder_valid_pre_def, abi_decoder_ranges_def, abi_decode_source_def] >>
+  simp[abi_decoder_valid_pre_def, abi_decoder_ranges_def, abi_decode_source_def,
+       eval_operand_def] >>
   metis_tac[]
 QED

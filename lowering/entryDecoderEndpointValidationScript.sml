@@ -24,7 +24,8 @@ Theorem entry_valid_bytes_endpoint_frame:
     entry_decoder_obs s t /\
     alloca_history fn (t with vs_inst_idx := LENGTH st'.cs_current_insts)
 Proof
-  strip_tac >> drule_all abi_decoder_valid_bytes_sequence >> strip_tac >>
+  strip_tac >> `Lit 0w = Lit 0w \/ opc = MLOAD` by simp[] >>
+  drule_all abi_decoder_valid_bytes_sequence >> strip_tac >>
   `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st st') /\
    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st st')` by
     (gvs[EVERY_MEM] >> metis_tac[]) >>

@@ -48,7 +48,8 @@ Theorem entry_code_getelemptr_abi:
     (compile_getelemptr_abi src is_dyn abi_offset load_opc (Lit 0w) hi)
 Proof
   strip_tac >> Cases_on `is_dyn` >> Cases_on `hi = Lit 0w` >>
-  simp[compile_getelemptr_abi_def, compileEnvTheory.comp_ignore_bind_def] >>
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def,
+       compileEnvTheory.comp_ignore_bind_def] >>
   rpt (irule entry_code_bind >>
        simp[entry_code_emit_op, entry_code_emit_void, entry_code_return] >>
        rpt gen_tac)
