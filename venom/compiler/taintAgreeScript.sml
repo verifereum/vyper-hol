@@ -315,9 +315,8 @@ Theorem taint_agree_reachable_clean_read:
   (!i. off <= i /\ i < off + len ==> i NOTIN tn.t_mem) ==>
   read_memory off len s = read_memory off len t
 Proof
-  strip_tac >> irule LIST_EQ >> simp[ld_read_memory_length] >>
-  rpt strip_tac >> simp[ld_read_memory_element] >>
-  irule taint_agree_reachable_read_byte >>
+  strip_tac >> irule read_memory_eq_from_bytes >>
+  rpt strip_tac >> irule taint_agree_reachable_read_byte >>
   qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
   qpat_assum `ptr_discipline _ _ _` (irule_at Any) >>
@@ -1145,6 +1144,32 @@ Proof
   gvs[step_inst_base_opcode_eqs, exec_delegatecall_def, AllCaseEqs()]
 QED
 
+(* The offsets may differ: CREATE observes the request, not its address. *)
+Theorem taint_agree_exec_create_request:
+  taint_agree D X tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
+  venom_create_request s value off sz salt =
+    venom_create_request t value off' sz salt /\
+  exec_create inst s value off sz salt = OK s' ==>
+  ?out w r u. inst.inst_outputs = [out] /\ s' = update_var out w r /\
+    exec_create inst t value off' sz salt = OK (update_var out w u) /\
+    consume_create_outcome (venom_create_request s value off sz salt) s = (w,r) /\
+    taint_agree D X (tn with t_var := set_var_taint tn.t_var [out] {})
+      s' (update_var out w u)
+Proof
+  strip_tac >>
+  qpat_x_assum `exec_create _ _ _ _ _ _ = _` mp_tac >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >>
+  simp[exec_create_def, Excl "consume_create_outcome_eq"] >>
+  Cases_on `outs` >> simp[Excl "consume_create_outcome_eq"] >>
+  IF_CASES_TAC >> simp[Excl "consume_create_outcome_eq"] >>
+  pairarg_tac >> strip_tac >>
+  drule_all taint_agree_consume_create >> strip_tac >>
+  gvs[Excl "consume_create_outcome_eq"] >>
+  qexists_tac `u` >> simp[] >>
+  irule taint_agree_update_var >> simp[word_agree_except_def]
+QED
+
 Theorem taint_agree_exec_create:
   taint_agree D X tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
   s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
@@ -1156,19 +1181,8 @@ Theorem taint_agree_exec_create:
     taint_agree D X (tn with t_var := set_var_taint tn.t_var [out] {})
       s' (update_var out w u)
 Proof
-  strip_tac >>
-  `venom_create_request s value off sz salt =
-   venom_create_request t value off sz salt` by simp[venom_create_request_def] >>
-  qpat_x_assum `exec_create _ _ _ _ _ _ = _` mp_tac >>
-  namedCases_on `inst.inst_outputs` ["", "out outs"] >>
-  simp[exec_create_def, Excl "consume_create_outcome_eq"] >>
-  Cases_on `outs` >> simp[Excl "consume_create_outcome_eq"] >>
-  IF_CASES_TAC >> simp[Excl "consume_create_outcome_eq"] >>
-  pairarg_tac >> strip_tac >>
-  drule_all taint_agree_consume_create >> strip_tac >>
-  gvs[Excl "consume_create_outcome_eq"] >>
-  qexists_tac `u` >> simp[] >>
-  irule taint_agree_update_var >> simp[word_agree_except_def]
+  strip_tac >> irule taint_agree_exec_create_request >>
+  simp[] >> irule venom_create_request_eq_from_slice >> simp[]
 QED
 
 Theorem taint_agree_create_mask:
@@ -2584,6 +2598,21 @@ Proof
          DRESTRICT_UNIV, taint_agree_def, ld_shared_agree_def, op_taint_def])
 QED
 
+(* Return observations retain the source instruction's byte mask even
+   when the target reads a different address. *)
+Theorem taint_agree_translated_return_slice:
+  inst.inst_opcode = RETURN /\ inst.inst_operands = [addr;sz] /\
+  eval_operand addr s = SOME p /\ eval_operand sz s = SOME len /\
+  (!q. q < w2n len /\ w2n p + q NOTIN tn.t_mem ==>
+    read_byte (w2n p + q) s.vs_memory = read_byte (b+q) t.vs_memory) ==>
+  !q. q < w2n len /\ q NOTIN ret_taint tn inst s ==>
+    EL q (read_memory (w2n p) (w2n len) s) =
+    EL q (read_memory b (w2n len) t)
+Proof
+  simp[ret_taint_def] >> rpt strip_tac >>
+  simp[ld_read_memory_element]
+QED
+
 Theorem taint_agree_return_slice:
   frame_reachable vs C stk PG G tn fn inst s /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
@@ -2597,13 +2626,15 @@ Theorem taint_agree_return_slice:
     EL k (read_memory (w2n p) (w2n len) s) =
     EL k (read_memory (w2n p) (w2n len) t)
 Proof
-  rpt strip_tac >> simp[ld_read_memory_element] >>
+  rpt strip_tac >> irule taint_agree_translated_return_slice >>
+  simp[] >> qexistsl_tac [`addr`, `inst`, `sz`, `tn`] >>
+  simp[] >> rpt strip_tac >>
   irule taint_agree_reachable_read_byte >>
   qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
   qpat_assum `ptr_discipline _ _ _` (irule_at Any) >>
   qexistsl_tac [`w2n p`, `w2n len`] >>
-  gvs[ret_taint_def, source_memory_read_ranges_def, memory_range_of_operands_def] >>
+  gvs[source_memory_read_ranges_def, memory_range_of_operands_def] >>
   metis_tac[arithmeticTheory.ADD_COMM, arithmeticTheory.LESS_EQ_ADD]
 QED
 

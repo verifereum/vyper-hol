@@ -84,6 +84,15 @@ Definition venom_create_request_def:
        cr_tStorage := s.vs_transient |>
 End
 
+Theorem venom_create_request_eq_from_slice:
+  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
+  read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t ==>
+  venom_create_request s value off sz salt =
+    venom_create_request t value off' sz salt
+Proof
+  simp[venom_create_request_def]
+QED
+
 Definition consume_create_outcome_def:
   consume_create_outcome rq s =
     let (outcome, rest) = take_outcome rq s.vs_outcomes;
