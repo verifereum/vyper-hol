@@ -562,18 +562,29 @@ Proof
   Cases_on `extract_labels ops` >> fs[]
 QED
 
-(* After a well-formed terminator executes OK without halting,
+Theorem extract_labels_all_labels:
+  !ops lbls. extract_labels ops = SOME lbls ==>
+    EVERY (\op. IS_SOME (get_label op)) ops
+Proof
+  Induct >> simp[extract_labels_def] >> rpt gen_tac >>
+  Cases_on `h` >> simp[extract_labels_def, get_label_def] >>
+  Cases_on `extract_labels ops` >> simp[] >> metis_tac[]
+QED
+
+(* After a terminator executes OK without halting,
    vs_current_bb is in get_successors of that instruction. *)
 val term_succ_basic_tac =
   step_inst_base_opcode_tac >>
-  fs[inst_wf_def, get_successors_def,
+  fs[get_successors_def,
      get_label_def, jump_to_def, is_terminator_def] >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  rw[] >> gvs[];
+  rw[] >> gvs[get_label_def];
 
 val term_succ_djmp_tac =
   term_succ_basic_tac >>
+  `EVERY (\op. IS_SOME (get_label op)) label_ops` by
+    metis_tac[extract_labels_all_labels] >>
   `MAP (THE o get_label) label_ops = labels` by
     metis_tac[extract_labels_eq_map] >>
   `FILTER IS_SOME (MAP get_label label_ops) = MAP get_label label_ops` by
@@ -585,7 +596,7 @@ val term_succ_djmp_tac =
 
 Theorem step_inst_base_term_succs:
   !inst s s'.
-    inst_wf inst /\ is_terminator inst.inst_opcode /\
+    is_terminator inst.inst_opcode /\
     step_inst_base inst s = OK s' /\ ~s'.vs_halted ==>
     MEM s'.vs_current_bb (get_successors inst)
 Proof
@@ -637,7 +648,6 @@ QED
 (* After exec_block OK, vs_current_bb is in bb_succs bb *)
 Theorem exec_block_current_bb_in_succs:
   !fuel ctx bb s s1.
-    EVERY inst_wf bb.bb_instructions /\
     (!i. i < LENGTH bb.bb_instructions - 1 ==>
        ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
     bb.bb_instructions <> [] /\
@@ -676,8 +686,6 @@ Proof
       Cases_on `v.vs_halted` >> gvs[] >>
       `~(i < LENGTH bb.bb_instructions - 1)` by metis_tac[] >>
       `i = PRE (LENGTH bb.bb_instructions)` by fs[] >> gvs[] >>
-      `inst_wf (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions)` by
-        (fs[EVERY_EL]) >>
       `(EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode
          <> INVOKE` by
         (CCONTR_TAC >> gvs[is_terminator_def]) >>
@@ -2648,4 +2656,46 @@ Proof
       simp[] >> disj2_tac >> qexists_tac `s_phi` >> simp[])
   >- (first_x_assum (qx_choose_then `e'` strip_assume_tac) >>
       simp[] >> disj1_tac >> metis_tac[])
+QED
+
+(* An OK terminator must transfer control, rather than finish execution.
+   Inspect result constructors only; memory slices and packed DRET states
+   are irrelevant to this classification. *)
+val terminator_result_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
+  [AllCaseEqs(), exec_result_distinct, LET_THM, pairTheory.ELIM_UNCURRY];
+
+val terminator_ok_jump_tac =
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    PURE_ONCE_REWRITE_TAC
+      [MATCH_MP (step_inst_base_for (rhs (concl eq))) eq]) >>
+  simp_tac terminator_result_ss [];
+
+Theorem step_inst_base_ok_terminator_jump:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s' ==>
+    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
+    inst.inst_opcode = DJMP
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  qpat_x_assum `is_terminator _` mp_tac >>
+  asm_simp_tac (bool_ss ++ simpLib.type_ssfrag ``:opcode`` ++
+    rewrites [is_terminator_def]) [] >>
+  terminator_ok_jump_tac
+QED
+
+Theorem step_inst_ok_terminator_jump:
+  !fuel ctx inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst fuel ctx inst s = OK s' ==>
+    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
+    inst.inst_opcode = DJMP
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by
+    (strip_tac >> gvs[is_terminator_def]) >>
+  gvs[step_inst_non_invoke] >>
+  drule_all step_inst_base_ok_terminator_jump >> simp[]
 QED

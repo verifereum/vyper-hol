@@ -4141,6 +4141,35 @@ Proof
   rw[m2v_non32_ok_def, lookup_var_def]
 QED
 
+Theorem m2v_ao_undef_sync_update_deletions:
+  !fn s1 s2 pending. m2v_ao_undef_sync fn s1 s2 ==>
+    m2v_ao_undef_sync fn
+      (s1 with vs_pending_deletions := pending)
+      (s2 with vs_pending_deletions := pending)
+Proof
+  simp[m2v_ao_undef_sync_def, lookup_var_def]
+QED
+
+Theorem m2v_inv_noix_update_deletions:
+  !fn s1 s2 pending. m2v_inv_noix fn s1 s2 ==>
+    m2v_inv_noix fn
+      (s1 with vs_pending_deletions := pending)
+      (s2 with vs_pending_deletions := pending)
+Proof
+  rw[m2v_inv_noix_def, lookup_var_def,
+     mem_byte_def, in_promoted_region_def, mload_def,
+     allocas_non_overlapping_def] >> metis_tac[]
+QED
+
+Theorem m2v_non32_ok_update_deletions:
+  !fn s1 s2 pending. m2v_non32_ok fn s1 s2 ==>
+    m2v_non32_ok fn
+      (s1 with vs_pending_deletions := pending)
+      (s2 with vs_pending_deletions := pending)
+Proof
+  simp[m2v_non32_ok_def, lookup_var_def]
+QED
+
 (* eval_operands agreement from operand agreement *)
 Theorem eval_operands_agrees:
   !ops s1 s2.
@@ -4215,15 +4244,21 @@ Proof
                 m2v_ao_undef_sync_halt_state])
   (* SELFDESTRUCT: extract call_ctx/accounts agreement before case split. *)
   >- (SUBGOAL_THEN ``s1.vs_call_ctx = s2.vs_call_ctx /\
-        s1.vs_accounts = s2.vs_accounts`` strip_assume_tac
+        s1.vs_accounts = s2.vs_accounts /\
+        s1.vs_pending_deletions = s2.vs_pending_deletions`` strip_assume_tac
       >- gvs[m2v_inv_noix_def] >>
       with_step_inst_base_opcode ASM_REWRITE_TAC >> simp[] >>
       every_case_tac >> gvs[lift_result_def] >>
+      qpat_x_assum `s1.vs_pending_deletions = s2.vs_pending_deletions`
+        (fn th => PURE_REWRITE_TAC[GSYM th]) >> simp[] >>
       metis_tac[m2v_inv_noix_update_accounts, m2v_inv_noix_halt_state,
                 m2v_inv_noix_set_returndata,
+                m2v_inv_noix_update_deletions,
                 m2v_non32_ok_update_accounts, m2v_non32_ok_halt_state,
                 m2v_non32_ok_set_returndata,
+                m2v_non32_ok_update_deletions,
                 m2v_ao_undef_sync_update_accounts,
+                m2v_ao_undef_sync_update_deletions,
                 m2v_ao_undef_sync_set_returndata,
                 m2v_ao_undef_sync_halt_state]) >>
   with_step_inst_base_opcode ASM_REWRITE_TAC >> simp[lift_result_def] >>
