@@ -131,6 +131,27 @@ infrastructure.  For example, `step_inst_no_memory_write_preserves_memory` lives
 there rather than in `venomMemProps`, because its proof uses the shared
 `step_inst_preserves_all` frame theorem.
 
+## Mem2Var
+
+`mem2varDefs` exposes `m2v_transform_function_checked` and its supply-aware
+counterpart. They return `NONE` for an eligible allocation smaller than one
+word, matching the compiler's failure, and otherwise return the transformed
+function. The explicitly named `_raw` functions implement successful-input
+rewriting. Promotion requires address-only uses; dynamic allocations are
+skipped and allocations larger than one word remain in memory.
+
+`mem2varCorrectness.m2v_transform_function_correct` starts from an empty-variable
+entry under SSA, pointer discipline, raw memory safety, freshness, promoted-store
+dominance and bounded return sizes. It excludes internal calls. The proof
+derives source allocation and access invariants in `mem2varReach`, handles
+copy/revert forwarding in `mem2varRevertForward`, and composes block simulation
+through the function runner. Its `m2v_public_rel` preserves padded bytes outside
+the promoted allocation regions and the observable frame fields.
+
+`mem2varWitness` instantiates that contract on a successful promotion alongside
+an unrelated memory access, and checks rejected pointer uses and size handling.
+It is imported by `venomChecks`.
+
 ## Cleanup roadmap
 
 The most useful future cleanup work should reduce friction for proving new pass

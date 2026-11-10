@@ -97,6 +97,7 @@ Proof
    c.ce_module = cenv.ce_module /\
    c.ce_module_vars = cenv.ce_module_vars /\
    c.ce_is_ctor = cenv.ce_is_ctor /\
+   c.ce_func_return_type = cenv.ce_func_return_type /\
    c.ce_method_id = cenv.ce_method_id` by
     (qpat_x_assum `_ with <| ce_vars := _; ce_var_type := _;
                              ce_dynarray_capacity := _ |> = cenv`
@@ -451,7 +452,7 @@ Proof
      arg_type_fits (lowered_value_type cenv e) (expr_type e))`
       >- (`lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
            has_length_word typ /\ is_empty_value_expr e` by metis_tac[] >>
-          irule body_annassign_memory >> metis_tac[]) >>
+          irule body_annassign_memory >> simp[] >> metis_tac[]) >>
       irule body_annassign_widened_aggregate_call >> metis_tac[]) >>
   irule body_annassign_other >> metis_tac[]
 QED
@@ -540,6 +541,7 @@ Proof
     (conj_tac >- (irule placeTypingPropsTheory.place_map_tables_agree_on_defined_cong >> fs[extend_local_def]) >>
      simp[extend_local_def]) >>
   ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[] >>
+  conj_tac >- fs[extend_local_def] >>
   irule storage_conjs_scopes >> simp[]
 QED
 
