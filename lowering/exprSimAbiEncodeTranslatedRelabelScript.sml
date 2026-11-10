@@ -11,11 +11,11 @@ Theorem abi_encode_translated_relabel_resources:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
   ~is_word_type (expr_type e) /\
-  ei = type_to_abi_enc_info ce.ce_struct_fields ce (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  ei = type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
-  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (expr_type e))
+  vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
     sa = (ops,ready) /\
   compile_abi_encode_to_buf (SND ops) op ei ready = (len,body_end) /\
   abi_builtin_encode_finish (FST ops) len
@@ -31,12 +31,12 @@ Theorem abi_encode_translated_relabel_resources:
     let rst = start_relabel L ids sa in
     let rready = start_swap sa L ids ready in
     let rend = start_swap sa L ids body_end in
-    let bytes = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av in
+    let bytes = enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av in
     let m = case mid of NONE => 0 | SOME _ => 4 in
     let mw = case mid of NONE => 0 | SOME _ => 32 in
-    let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (expr_type e)+m) in
+    let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+m) in
     let a = abi_builtin_allocate_state rst.cs_next_id outsz rs in
-    abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (expr_type e))
+    abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
       rst = (ops,rready) /\
     compile_abi_encode_to_buf (SND ops) op ei rready = (len,rend) /\
     eval_operand op rs = SOME w /\ enc ct rv = bytes /\
