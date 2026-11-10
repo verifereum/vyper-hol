@@ -24,6 +24,12 @@ Theorem target_pure_vv_frame:
     target_sim ctx func cenv cx env bt es1 /\
     type_place_target env bt = SOME vt /\
     vv_post ctx func cenv cx e es sa sm s0 es1 tv vv s1 /\
+    vv_storage_live cx vv es1 s1 /\
+    (cenv.ce_is_ctor ==> vv_location vv <> SOME LocCode) /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+    (!l. vv_operand vv <> Label l) /\
+    sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     compile_get_target_ptr compile_expr cenv bt sm = (op, sb) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sm /\
