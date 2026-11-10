@@ -5541,3 +5541,50 @@ Proof
     metis_tac[lineage_state_reachable,fn_reachable_cfg_analyze,codegen_ready_fn_def] >>
   metis_tac[fnPlanLineageNativeTerminalTheory.ordinary_core_terminal_targets]
 QED
+
+Theorem lineage_singleton_paired_setup:
+  codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  cfg_preds_of (cfg_analyze fn) lbl = [pred] /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops,ps_end) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psL /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psD /\
+  psD.ps_stack = prefixD ++ core /\ psL.ps_stack = prefixL ++ core /\
+  (!v. MEM v (live_vars_at (liveness_analyze fn) pred
+                  (LENGTH pred_bb.bb_instructions)) ==>
+    ~MEM (Var v) prefixD /\ ~MEM (Var v) prefixL) ==>
+  ?choice ops p0 prefixD' prefixL' prefD prefL.
+    clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb
+      (psD with <|ps_cleanup_height := hD; ps_cleanup_promised := bD|>) =
+      (ops,p0 with <|ps_stack := prefixD' ++ p0.ps_stack;
+        ps_cleanup_height := hD; ps_cleanup_growth := psD.ps_cleanup_growth;
+        ps_cleanup_promised := prefD|>) /\
+    clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb
+      (psL with <|ps_cleanup_height := NONE; ps_cleanup_promised := choice|>) =
+      (ops,p0 with <|ps_stack := prefixL' ++ p0.ps_stack;
+        ps_cleanup_height := NONE; ps_cleanup_growth := psL.ps_cleanup_growth;
+        ps_cleanup_promised := prefL|>) /\
+    (!v. MEM (Var v) prefixD' ==> MEM (Var v) prefixD) /\
+    (!v. MEM (Var v) prefixL' ==> MEM (Var v) prefixL) /\
+    (!P. P dead_stack_marker /\ EVERY P prefixD ==> EVERY P prefixD') /\
+    (!P. P dead_stack_marker /\ EVERY P prefixL ==> EVERY P prefixL') /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) lbl 0) ==>
+      ~MEM (Var v) prefixD' /\ ~MEM (Var v) prefixL')
+Proof
+  strip_tac >>
+  drule_all lineage_state_actual_dfs_fields >> disch_tac >>
+  qmatch_goalsub_abbrev_tac `clean_stack_plan _ _ _ _ reference` >>
+  `reference.ps_stack = prefixD ++ core /\ reference.ps_alloc = psL.ps_alloc /\
+   reference.ps_spilled = psL.ps_spilled` by gvs[Abbr `reference`] >>
+  drule_all fnPlanLineageEntryProductionTheory.analyzed_single_pred_excluded_prefix_cleanup >>
+  strip_tac >>
+  qexistsl_tac [`choice`,`ops`,`psD with <|ps_stack := core'; ps_alloc := al|>`,
+    `prefixD'`,`prefixL'`,`prefD`,`prefL`] >>
+  simp[] >>
+  gvs[Abbr `reference`,stackPlanTypesTheory.plan_state_component_equality]
+QED
