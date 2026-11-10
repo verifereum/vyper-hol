@@ -6,3 +6,4 @@ p59_imm_with_runtime_internal
 i01_immut_uint
 i06_multiple_immutables
 i08_immut_read_in_ctor
+i09_immut_widen_bytes
