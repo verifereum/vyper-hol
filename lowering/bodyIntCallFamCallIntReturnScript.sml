@@ -4,6 +4,7 @@
 Theory bodyIntCallFamCallIntReturn
 Ancestors
   bodyIntCallJointContract bodyIntCallSeamDefs
+  bodyIntCallFamCallIntReturnFrame
 Libs
   monadsyntax
 
