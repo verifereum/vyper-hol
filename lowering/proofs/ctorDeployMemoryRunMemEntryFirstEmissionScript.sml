@@ -1455,18 +1455,17 @@ Theorem ctor_array_membership_loop_first_emission:
        i.inst_opcode <> PHI)
 Proof
   gen_tac >> strip_tac >> ntac 5 gen_tac >> Cases >> gen_tac >>
-  rewrite_tac[compile_array_membership_loop_def, optionTheory.option_case_def] >>
+  (rewrite_tac[compile_array_membership_loop_def, optionTheory.option_case_def] >>
   ntac 7 (ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
     >- metis_tac[first_emission_fresh, ctor_fresh_label_code] >> gen_tac) >>
   ho_match_mp_tac first_emission_strong_ignore_bind >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> Cases_on `x` >>
-      irule (cj 1 first_emission_emit_helpers) >>
-      goal_assum $ drule_at Any >> simp[]) >>
+  >- (rpt gen_tac >> strip_tac >>
+      drule_at (Pos last) (cj 1 first_emission_emit_helpers) >> simp[]) >>
   rewrite_tac[GSYM cs_appends_def] >>
   rpt (FIRST [ho_match_mp_tac cs_appends_bind,
               ho_match_mp_tac cs_appends_ignore_bind] >>
        rw[cs_appends_prims, cs_appends_emit_helpers, cs_appends_return]) >>
-  simp[cs_appends_prims, cs_appends_emit_helpers, cs_appends_return]
+  simp[cs_appends_prims, cs_appends_emit_helpers, cs_appends_return])
 QED
 
 Theorem ctor_array_subscript_appends:
@@ -2903,6 +2902,12 @@ Proof
   simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl]
 QED
 
+Theorem ctor_comp_bind_pair[local]:
+  !v k a. comp_bind ($, v) k a = k v a
+Proof
+  simp[comp_bind_def]
+QED
+
 Theorem ctor_bop_dispatch_first_emission:
   (!env ty e a x b. cfn env ty e a = (x,b) ==>
     cs_extends a b /\
@@ -2959,26 +2964,80 @@ Resume ctor_bop_dispatch_first_emission[membership]:
 QED
 
 Resume ctor_bop_dispatch_first_emission[bytes_eq]:
-  rewrite_tac[state_pair_let_bind] >>
-  ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
-  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
-  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
-  >- metis_tac[ctor_bytestring_hash_first_emission] >>
-  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
-  >- metis_tac[ctor_bytestring_hash_first_emission] >>
-  gen_tac >> Cases_on `op = Eq` >> simp[]
-  >- (ho_match_mp_tac ctor_as_stack_val_first_emission >>
+  Cases_on `bytestring_literal_hash (HD args)` >>
+  Cases_on `bytestring_literal_hash (HD (TL args))` >>
+  pop_assum (fn t2 => pop_assum (fn t1 =>
+    rewrite_tac[t1, t2, optionTheory.option_case_def, pairTheory.UNCURRY_DEF] >>
+    assume_tac t1 >> assume_tac t2)) >>
+  TRY BETA_TAC >> rewrite_tac[state_pair_let_bind, ctor_comp_bind_pair] >> TRY BETA_TAC >|
+  [(ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (ho_match_mp_tac first_emission_bind >> conj_tac
+          >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
+          gen_tac >> TRY BETA_TAC >>
+          metis_tac[ctor_bytestring_hash_first_emission]) >>
+      gen_tac >> TRY BETA_TAC >> rewrite_tac[pairTheory.UNCURRY_DEF] >>
+      TRY BETA_TAC >> rewrite_tac[state_pair_let_bind, ctor_comp_bind_pair] >> TRY BETA_TAC) >> (ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (ho_match_mp_tac first_emission_bind >> conj_tac
+          >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
+          gen_tac >> TRY BETA_TAC >>
+          metis_tac[ctor_bytestring_hash_first_emission]) >>
+      gen_tac >> TRY BETA_TAC >> rewrite_tac[pairTheory.UNCURRY_DEF] >>
+      TRY BETA_TAC >> rewrite_tac[state_pair_let_bind, ctor_comp_bind_pair] >> TRY BETA_TAC) >> (Cases_on `op = Eq` >> simp[]
+      >- (ho_match_mp_tac ctor_as_stack_val_first_emission >>
+          ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
+          irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
+      rewrite_tac[state_pair_let_bind, ctor_comp_bind_pair] >> TRY BETA_TAC >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
+          irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
+      gen_tac >> ho_match_mp_tac ctor_as_stack_val_first_emission >>
       ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
-      irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
-  rewrite_tac[state_pair_let_bind] >>
-  ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
-      irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
-  gen_tac >> ho_match_mp_tac ctor_as_stack_val_first_emission >>
-  ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
-  irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]
+      irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]),
+   (ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (ho_match_mp_tac first_emission_bind >> conj_tac
+          >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
+          gen_tac >> TRY BETA_TAC >>
+          metis_tac[ctor_bytestring_hash_first_emission]) >>
+      gen_tac >> TRY BETA_TAC >> rewrite_tac[pairTheory.UNCURRY_DEF] >>
+      TRY BETA_TAC >> rewrite_tac[state_pair_let_bind, ctor_comp_bind_pair] >> TRY BETA_TAC) >> (Cases_on `op = Eq` >> simp[]
+      >- (ho_match_mp_tac ctor_as_stack_val_first_emission >>
+          ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
+          irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
+      rewrite_tac[state_pair_let_bind, ctor_comp_bind_pair] >> TRY BETA_TAC >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
+          irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
+      gen_tac >> ho_match_mp_tac ctor_as_stack_val_first_emission >>
+      ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
+      irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]),
+   (ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (ho_match_mp_tac first_emission_bind >> conj_tac
+          >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
+          gen_tac >> TRY BETA_TAC >>
+          metis_tac[ctor_bytestring_hash_first_emission]) >>
+      gen_tac >> TRY BETA_TAC >> rewrite_tac[pairTheory.UNCURRY_DEF] >>
+      TRY BETA_TAC >> rewrite_tac[state_pair_let_bind, ctor_comp_bind_pair] >> TRY BETA_TAC) >> (Cases_on `op = Eq` >> simp[]
+      >- (ho_match_mp_tac ctor_as_stack_val_first_emission >>
+          ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
+          irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
+      rewrite_tac[state_pair_let_bind, ctor_comp_bind_pair] >> TRY BETA_TAC >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
+          irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
+      gen_tac >> ho_match_mp_tac ctor_as_stack_val_first_emission >>
+      ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
+      irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]),
+   (Cases_on `op = Eq` >> simp[]
+      >- (ho_match_mp_tac ctor_as_stack_val_first_emission >>
+          ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
+          irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
+      rewrite_tac[state_pair_let_bind, ctor_comp_bind_pair] >> TRY BETA_TAC >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
+          irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[]) >>
+      gen_tac >> ho_match_mp_tac ctor_as_stack_val_first_emission >>
+      ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
+      irule (cj 3 first_emission_emit_helpers) >> goal_assum (drule_at Any) >> simp[])]
 QED
 
 Finalise ctor_bop_dispatch_first_emission
