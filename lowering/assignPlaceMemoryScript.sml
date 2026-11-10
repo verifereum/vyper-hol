@@ -6,7 +6,7 @@ Ancestors
   stmtSimDefs compileEnv exprLowering placeDestinationBounds context
   externalEntryShape exprLoweringProps exprSimProps loweringHalt
   abiTupleProps rich_list fragExec aggregateEvaluatedLayout vyperTypeSystem
-  targetPlaceSimCasesBase stmtSimReturn venomState
+  targetPlaceSimCasesBase stmtSimReturn venomState fragGasMode
 Libs monadsyntax
 
 Theorem assign_place_memory_from_expr_post:
@@ -220,4 +220,40 @@ Resume assign_place_memory_from_expr_post[bytes_staging_finish]:
   `place_ptr_rel cenv cx u (PlaceR p) dw (SOME LocMemory) (Type dty)` by
     (irule place_ptr_rel_vars_frame >> qexistsl_tac [`s`, `su`] >> simp[]) >>
   suspend "bytes_finish_effect")
+QED
+
+Resume assign_place_memory_from_expr_post[bytes_finish_effect]:
+  markerLib.RESUME_TAC >> (rpt strip_tac >>
+  `cs_extends su sn` by metis_tac[cs_extends_trans] >>
+  `sn.cs_next_var = sm.cs_next_var /\ sm.cs_next_var = su.cs_next_var + 1` by
+    metis_tac[exprSimBufferStoreTheory.buffer_copy_memory_shape, compile_alloc_buffer_parts] >>
+  `local_ptrs_reserved cenv sn` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `su` >> simp[]) >>
+  `!x. buf.buf_operand = Var x \/ dst = Var x ==> not_fresh_at sn x` by
+    (rpt strip_tac >> gvs[not_fresh_at_def] >> metis_tac[]) >>
+  `?t. val_in_memory dtv v (w2n dw) t.vs_memory /\
+       typed_copy_effect ctx func sn sb u t (w2n dw) (type_memory_size dtv)` by
+    (irule assign_place_bytes_copy_effect >> simp[] >>
+     goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
+     simp[] >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx ff t /\
+   alloca_frame cenv ee sn u cenv ff t` by
+    (irule assign_place_copy_effect_state_frame >> simp[] >> metis_tac[]) >>
+  suspend "bytes_compose")
+QED
+
+Resume assign_place_memory_from_expr_post[bytes_compose]:
+  markerLib.RESUME_TAC >> (rpt strip_tac >>
+  `alloca_frame cenv ee su s cenv ff t` by
+    (irule alloca_frame_trans >>
+     qexistsl_tac [`cenv`, `ee`, `u`, `sn`] >> simp[] >>
+     drule exprSimBufferStoreTheory.buffer_copy_memory_shape >> strip_tac >>
+     fs[typed_copy_effect_def] >> metis_tac[]) >>
+  `gas_marked_path F ctx func s 0 (OK t)` by
+    (qpat_assum `gas_marked_path F ctx func s 0 (OK u)` mp_tac >>
+     qpat_assum `typed_copy_effect _ _ _ _ _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[typed_copy_effect_def] >>
+     metis_tac[gas_marked_path_then, arithmeticTheory.ADD]) >>
+  qexists_tac `t` >> fs[typed_copy_effect_def] >>
+  simp[not_fresh_at_def])
 QED
