@@ -2105,7 +2105,7 @@ val bound_labels_assign_case_tac =
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC,
     CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
     bound_labels_emit_inst, bound_labels_alloc_buffer, bound_labels_copy_memory,
-    bound_labels_store_memory, bound_labels_memory_typed,
+    bound_labels_store_memory, bound_labels_memory_typed, bound_labels_store_immutable_bytestring,
     bound_labels_dynarray_to_storage, bound_labels_store_storage,
     compile_memory_to_storage_def, compile_memory_to_transient_def,
     bound_labels_word_copy_loop, bound_labels_store_transient, bound_labels_imm_store_word,
