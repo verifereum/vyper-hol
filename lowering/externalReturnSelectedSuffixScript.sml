@@ -636,8 +636,11 @@ Proof
   `type_memory_size dtv < dimword (:256)` by metis_tac[] >>
   `is_bytestring_type (expr_type e)` by metis_tac[typed_copy_bytestring_source] >>
   `~is_word_type (expr_type e)` by metis_tac[is_bytestring_word_type] >>
+  `expr_type e = post_value_type ce e` by
+    simp[loweringPostsTheory.post_value_type_bytestring] >>
   drule_all (SRULE [] (Q.INST [`sty` |-> `expr_type e`]
     return_consumer_located_normalize)) >> strip_tac >>
+  qpat_x_assum `expr_type e = post_value_type ce e` kall_tac >>
   drule return_normalizing_prefix_path >>
   disch_then (qspec_then `func` mp_tac) >> simp[] >>
   disch_then ho_match_mp_tac >>
@@ -899,11 +902,17 @@ Proof
   >- (`lookup_raw_return_or_F (NONE:num option) tx.function_name External tops` by fs[] >>
       drule_all return_selected_raw_bytes >> strip_tac >>
       drule_all return_site_value_semantics >> strip_tac >>
-      `is_bytestring_type (lowered_value_type ce e)` by
+      `is_bytestring_type (expr_type e)` by
         metis_tac[typed_copy_bytestring_source] >>
+      `is_bytestring_type (lowered_value_type ce e)` by
+        metis_tac[loweringPostsTheory.post_value_type_bytestring] >>
       drule_all return_consumer_raw_split >> strip_tac >>
       `compile_store_memory_typed ce buf.buf_operand ret op (expr_type e) sm =
-         ((),sn)` by metis_tac[] >>
+         ((),sn)` by
+        (qpat_x_assum `compile_store_memory_typed _ _ _ _ (lowered_value_type ce e) _ = _`
+           mp_tac >>
+         ONCE_REWRITE_TAC[contextTheory.compile_store_memory_typed_def] >>
+         simp[is_bytestring_word_type]) >>
       `compile_external_return (SOME buf.buf_operand) F T ce.ce_ret_enc_info
          ce.ce_max_return_size F nkey ut (mut = View) sn = (u,sf)` by
         gvs[is_bytestring_word_type] >>
