@@ -32,12 +32,9 @@ revision in C-locale filename order, using `git apply` for each file. A failed
 patch stops generation; an empty series leaves the pin unchanged. Each file
 backports one upstream PR so independent fixes can be added separately and
 removed when a new pin includes them. The pin already contains
-vyperlang/vyper#5127 (external calls send `4 + encoded length` bytes),
+vyperlang/vyper#5127 (external calls send `4 + encoded length` bytes) and
 vyperlang/vyper#5322 (empty `Bytes`/`String` to signed conversions mask the
-data word), vyperlang/vyper#5332 (constructor immutable bytestring stores copy
-the length word and live data words, not the declared capacity) and
-vyperlang/vyper#5338 (widening bytestring conversions allocate enough memory for
-the result type). The current series contains:
+data word). The current series contains:
 
 - `5239-declared-variable-type.patch`, vyperlang/vyper#5239: a storage,
   transient or immutable variable is read at its own declared type, not at a
@@ -45,9 +42,14 @@ the result type). The current series contains:
   layout differs for nested bounded types.
 - `5254-inliner-retpc.patch`, vyperlang/vyper#5254: the inliner binds the
   unused return-PC parameter to zero instead of the removed callee's label.
+- `5332-immutable-runtime-length.patch`, vyperlang/vyper#5332: constructor
+  immutable bytestring stores copy the length word and live data words, rather
+  than the declared capacity.
 - `5336-dft-abort-order.patch`, vyperlang/vyper#5336: DFT keeps aborting
   instructions (an `assert`, an internal call) in their order, scheduling each
   after the previous run of aborting instructions.
+- `5338-widen-bytestring-convert.patch`, vyperlang/vyper#5338: widening
+  bytestring conversions copy the value into a buffer of the result type.
 - `5349-dft-effectless-roots.patch`, vyperlang/vyper#5349: an instruction with
   no outputs and no effects (an `assert`) stays a scheduling root even when a
   later abort depends on it, so nothing is hoisted above it.
