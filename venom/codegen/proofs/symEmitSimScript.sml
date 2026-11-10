@@ -1559,3 +1559,71 @@ Proof
   irule sym_emit_kinds_pop >>
   qexistsl [`2`, `ps`, `ss`] >> simp[Abbr `final`]
 QED
+
+Theorem sym_log_source_emit:
+  inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc :: selected /\
+  LENGTH selected = w2n tc + 2 /\ REVERSE selected = off :: len :: topics /\
+  ALOOKUP log_table name = SOME (w2n tc) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ fn_shape_ok fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  venom_asm_rel lo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  venom_asm_rel lo qs vsout cs' /\
+  ps.ps_stack = residual ++ selected /\
+  EVERY (\op. op <> dead_stack_marker) selected /\
+  (!op. MEM op selected ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) lo op) /\
+  source_memory_reads_disjoint cplan inst vs /\
+  context_source_memory_writes_disjoint cplan inst vs /\
+  qs = ps with ps_stack := stack_pop (LENGTH selected) ps.ps_stack /\
+  asm_block_at p cs.as_pc [AsmOp name] /\
+  asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
+    (AsmOp name) cs = AsmOK cs' ==>
+  ?ss'. sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  strip_tac >>
+  `MEM name ["LOG0"; "LOG1"; "LOG2"; "LOG3"; "LOG4"] /\
+   asm_op_arity name = LENGTH selected /\
+   ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE /\
+   ~MEM name ["POP"; "JUMP"; "JUMPI"; "CODECOPY"; "CODESIZE"]` by
+    (qpat_x_assum `ALOOKUP log_table name = _` mp_tac >>
+     simp[log_table_def, AllCaseEqs()] >> rpt strip_tac >>
+     gvs[asm_op_arity_def, asm_op_arity_table_def, dup_table_def, swap_table_def]) >>
+  `EVERY (\op. ~is_label_operand op) inst.inst_operands` by
+    (`label_positions_ok inst` by
+       metis_tac[unitShapeDefsTheory.fn_shape_ok_def, EVERY_MEM,
+                 unitShapeDefsTheory.inst_shape_ok_def] >>
+     irule label_positions_ok_other >> simp[]) >>
+  `eval_operands (REVERSE selected) vs =
+     SOME (TAKE (LENGTH selected) cs.as_stack)` by
+    (irule ordinary_prepared_source_evaluation >> simp[] >>
+     qexistsl [`fn`, `inst`, `lo`, `m`, `ps`, `ra`, `residual`] >> fs[MEM]) >>
+  `LENGTH selected <= LENGTH ss.sym_stack /\
+   EVERY (\sv. ?w. sv = Val w) (TAKE (LENGTH selected) ss.sym_stack)` by
+    (irule ordinary_prepared_selected_numeric >>
+     qexistsl [`cplan`, `ctx`, `fn`, `inst`, `ps`, `residual`, `ret`, `srest`] >>
+     fs[EVERY_MEM, MEM]) >>
+  `!b. b IN FDOM ss.sym_mem_labels ==>
+    ~asm_op_mem_reads name (TAKE (LENGTH selected) cs.as_stack) b /\
+    ~asm_op_mem_writes name (TAKE (LENGTH selected) cs.as_stack) b` by
+    (ho_match_mp_tac source_footprint_symbolic_memory_safe >> simp[] >>
+     conj_tac >- fs[sym_kinds_ok_def] >>
+     conj_tac >- (rpt strip_tac >> disj1_tac >>
+       irule log_source_read_coverage >> metis_tac[]) >>
+     fs[MEM] >> simp[asm_op_mem_writes_def]) >>
+  `LENGTH selected <= LENGTH ps.ps_stack` by simp[] >>
+  `qs.ps_spilled = ps.ps_spilled /\
+   REVERSE qs.ps_stack = [] ++ DROP (LENGTH selected) (REVERSE ps.ps_stack)` by
+    simp[stackModelTheory.stack_pop_def, rich_listTheory.DROP_REVERSE,
+         rich_listTheory.BUTLASTN_TAKE_UNCOND] >>
+  `LENGTH cs'.as_stack + LENGTH selected = LENGTH cs.as_stack + LENGTH ([]:operand list)` by
+    (irule sym_emit_concrete_output_count >>
+     qexistsl [`lo`, `ps`, `qs`, `frame_view fn ra vs with vs_memory := m`, `vsout`] >>
+     gvs[]) >>
+  irule sym_prepared_numeric_emit >> simp[] >>
+  qexistsl [`cs`, `name`, `[]`, `ps`] >> simp[] >> gvs[MEM]
+QED
