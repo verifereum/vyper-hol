@@ -262,3 +262,96 @@ No protected-file change is requested by this audit yet. No frozen theorem
 falsehood is established. The next decomposition must address (1) before
 investing in either recursive implementation; all other candidates remain
 conditional until that entry gate and (2) have actual producers.
+
+## 6. Checked semantic-entry progress (C1.14.1 / C1.14.2)
+
+The runtime-typing gap in row 62 is now resolved for actual aggregate Return
+reads, without expr_body_pre, supported_program, actual function lookup or
+module-code equality. New leaves:
+
+- `extRetInternalCallTypingPtr.ext_ret_internal_call_read_signature_typed`
+  proves signature-return runtime typing from expr_sim_inv, well_typed_expr,
+  call_evaluation_safe, signature lookup and successful read. Reannotation at
+  sig.ret_ty and eval_expr_read_type_sound require no additional premise.
+- `extRetSemanticEntryPtr.ext_ret_read_post_runtime_typed` gives
+  value_runtime_typed env (post_value_type ce e) v from inv + well_typed_expr
+  + call safety + successful read, for ALL expressions.
+- `ext_ret_return_post_runtime_layout` replaces expression typing/call safety
+  with exactly the Return typing and int_calls_stmt guards in the frozen
+  widened theorem; its conclusion is an evaluated post type, value_has_type
+  and numeric type_memory_bytes = type_memory_size.
+- `ext_ret_aggregate_lowered_post_type` requires only well_typed_expr and
+  non-word/non-bytes annotation. It uses the existing
+  structlit_uniform_nonword_lowered_type, not the stronger body-pre bridge.
+- `ext_ret_aggregate_return_runtime_layout` therefore gives the same evaluated
+  layout conclusion at lowered_value_type under actual Return guards and
+  non-word/non-bytes annotation. Bytes/word exceptions are deliberately
+  separate; this theorem does not claim their narrower lowered buffer has
+  the annotated capacity.
+
+These are built HOL theorems, not proposed contracts. No source typing/package
+premises are even needed for these particular boundaries. New leaves introduce
+no admissions and do not edit any protected theory.
+
+Remaining semantic work is now narrower:
+
+1. For aggregate normalization, lowered-to-declared widening is the composition
+   of existing post_value_type_widens (inv + well_typed_expr) and
+   type_stmt_return_some_iff (annotation-to-ret). No exported transitivity
+   lemma was found by type_widens/arg_type_fits searches; a joint arg_type_fits /
+   arg_types_fit transitivity induction would be a separate finite boundary.
+   It is not proved by the runtime-layout lemmas above.
+2. `check_toplevel_decl` for StructDecl DOES require every field type to be
+   assignable in type_env_all_modules, not merely distinct names
+   (vyperTypeContractScript.sml:932-934). `check_contract` checks every such
+   declaration, so this is a promising actual producer of global acyclicity.
+   The existing make_struct_fields_map_acyclic instead goes through
+   supported_declaration_headers; its wrapper cannot be applied verbatim.
+   Need a new checked-contract/rank boundary connecting evaluated field types
+   to the total metadata rank, or prove this stronger route unnecessary.
+3. Arbitrary package plan/size: existing external_frame_return_size and
+   external_frame_ret_abi_plan do NOT require actual function membership.
+   They require assignable_type (type_env tops) ret. Distinct keys and package
+   equality are available already. Thus the specific obstruction is deriving
+   the relevant encodable plan/size without assignability (empty structs must
+   remain allowed), NOT function membership itself. A type-indexed
+   evaluated-ret/encodable-shape producer can replace this overly strong
+   premise. This has not yet been proved.
+4. The failed-metadata compiler branch is precisely contextScript.sml:680-681:
+   non-word/non-bytes compile_store_memory_typed emits INVALID when global
+   acyclicity fails. stmt_exit_ptr under trivial RetQ accepts a source
+   ReturnException independently of r; this does NOT automatically prove
+   gas_outcome_ptr_lo's counted terminal cx_dead or per-step check for that
+   INVALID. No checked fallback safety path or full-premise counterexample
+   is claimed. There is no basis yet to bypass acyclicity by assumption.
+
+### Checked resolution of the metadata-failure endpoint
+
+The concern in item 4 above is now resolved at the typed-copy fragment boundary:
+`ext_ret_invalid_normalize_outcome` is proved and built in the same new leaf.
+Under the exact non-word/non-bytes dispatch guards, failed global acyclicity,
+compile_store_memory_typed equation, fn_has_code, no DALLOCA and entry PC facts,
+it proves gas_outcome_ptr for source `raise (ReturnException v)`, arbitrary
+normal postcondition Q, and terminal
+`(\res ee gt r. stmt_exit_ptr (\v es gt r. T) ee res gt r)`.
+It reuses `bodyPtrIfExpStoreContract.store_memory_typed_invalid_counted`,
+`emitHelperProps.step_invalid`, and the actual counted summary definition.
+The terminal INVALID path retains G/tn and requires no extra storage/deadness
+premise: the existing ptr_inst_ok_abort_zero already checks the instruction
+against arbitrary D. This is a pointer-safety endpoint, not source/target
+functional agreement and not a counterexample.
+
+Consequently a proof of GLOBAL acyclicity is not necessary at a Return with
+trivial RetQ: split the dispatch; failed metadata terminates acceptably, and
+only the successful-copy branch assumes the positive acyclicity guard. Full
+frame composition still needs the normal expression and buffer-allocation
+prefixes; the new theorem intentionally proves the exact typed-copy suffix,
+not the frozen widened theorem. Repeated unrelated-ancestor timeout in
+bodyPtrIfExpBytesFrame was retried once under D0001 and passed unchanged.
+
+C1.14.2 diagnostic conclusion: actual aggregate runtime layout is now a
+checked caller-produced interface; global acyclicity can be avoided via a
+checked rejection suffix. Remaining finite semantic boundaries are widening
+transitivity and evaluated/encodable arbitrary-ret package plan and size
+(including empty struct), before the simultaneous allocation-resource work.
+No generic recursive implementation or frozen statement has been proved.
