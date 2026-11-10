@@ -39,7 +39,8 @@ Theorem tuple_place_head_gas_continuation_open:
     tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
     (!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==> lookup_var x t = SOME v) /\
     (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
-      FLOOKUP t.vs_allocas id = SOME entry) ==>
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    alloca_frame cenv es sp s0 cenv ff t ==>
     gas_outcome F (cx_tops cx) (ctx,func) next (ff with gas_obs := [],t) Q
       (\res ee r. expr_exit res r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func)

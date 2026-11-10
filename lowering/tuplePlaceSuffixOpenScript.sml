@@ -33,7 +33,8 @@ Theorem tuple_place_suffix_run_open:
         tuple_place_head ctx func cenv cx ff lo sf tys ltys ltvs vs elems w (LENGTH tys) t /\
         (!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==> lookup_var x t = SOME v) /\
         (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
-          FLOOKUP t.vs_allocas id = SOME entry))
+          FLOOKUP t.vs_allocas id = SOME entry) /\
+        alloca_frame cenv es sp s0 cenv ff t)
       (\res ff r. expr_exit res r)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -53,6 +54,7 @@ Proof
       simp[DROP_LENGTH_TOO_LONG, Once evaluate_def] >>
       irule gas_outcome_return_path >>
       qexists `s0` >> simp[] >>
+      conj_tac >- (irule stmtSimDefsTheory.alloca_frame_same >> simp[]) >>
       fs[tuple_place_head_def, gas_marked_path_def] >>
       metis_tac[gas_path_rules]) >>
   `i < LENGTH tys` by decide_tac >>
@@ -95,6 +97,10 @@ Proof
   irule exprSimMemDefsTheory.gas_outcome_post_mono >>
   goal_assum (drule_at Any) >>
   rpt gen_tac >> BETA_TAC >> strip_tac >> simp[] >>
+  reverse conj_tac
+  >- (irule stmtSimDefsTheory.alloca_frame_trans >>
+      qexistsl [`cenv`, `ff`, `t`, `sb`] >>
+      simp[stmtSimDefsTheory.alloca_frame_gas_obs] >> decide_tac) >>
   rpt gen_tac >> strip_tac >>
   `not_fresh_at sb x` by
     (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>

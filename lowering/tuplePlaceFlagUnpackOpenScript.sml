@@ -35,7 +35,8 @@ Theorem tuple_place_flag_unpack_outcome_open:
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x v. not_fresh_at su x /\ lookup_var x sv = SOME v ==> lookup_var x t = SOME v) /\
       (!aid entry. FLOOKUP sv.vs_allocas aid = SOME entry ==>
-        FLOOKUP t.vs_allocas aid = SOME entry))
+        FLOOKUP t.vs_allocas aid = SOME entry) /\
+      alloca_frame cenv ee su sv cenv ff t)
     (\res ff r. expr_exit res r)
 Proof
   strip_tac >>
@@ -65,14 +66,33 @@ Proof
          tys ltys ltvs vs elems w (LENGTH tys) q /\
        (!x v. not_fresh_at ss x /\ lookup_var x t = SOME v ==> lookup_var x q = SOME v) /\
        (!aid entry. FLOOKUP t.vs_allocas aid = SOME entry ==>
-         FLOOKUP q.vs_allocas aid = SOME entry))
+         FLOOKUP q.vs_allocas aid = SOME entry) /\
+       alloca_frame cenv ee ss t cenv ff q)
      (\res ff r. expr_exit res r)` by
     (irule (SRULE [] (DISCH_ALL (Q.SPEC `0` (UNDISCH (SPEC_ALL tuple_place_suffix_run_open))))) >>
      simp[] >> metis_tac[]) >>
   simp[Once evaluate_def] >>
   irule gas_outcome_zero_prefix >> goal_assum (drule_at Any) >>
   irule gas_outcome_post_mono >> goal_assum (drule_at Any) >>
-  rpt gen_tac >> BETA_TAC >> strip_tac >> fs[tuple_place_head_def] >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  `sl.cs_next_id <= ss.cs_next_id` by
+    (mp_tac (cj 4 stmtLoweringMonoTheory.ci_mono_list_helpers) >>
+     disch_then (qspecl_then [`cenv`, `staged`, `ltys`, `0`, `sl`] mp_tac) >>
+     simp[exprLoweringPropsTheory.ci_mono_def]) >>
+  `su.cs_next_id <= sl.cs_next_id` by
+    (qpat_x_assum `(if _ then _ else _) su = (staged,sl)` mp_tac >>
+     IF_CASES_TAC >> simp[compileEnvTheory.comp_return_def] >>
+     simp[compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def] >>
+     pairarg_tac >> simp[compileEnvTheory.comp_return_def] >>
+     pairarg_tac >> simp[compileEnvTheory.comp_return_def] >> strip_tac >>
+     imp_res_tac pairTheory.SND >>
+     metis_tac[exprLoweringPropsTheory.ci_mono_compile_alloc_buffer,
+       exprLoweringPropsTheory.ci_mono_emit_void, exprLoweringPropsTheory.ci_mono_def,
+       pairTheory.SND, arithmeticTheory.LESS_EQ_TRANS]) >>
+  fs[tuple_place_head_def] >>
+  reverse conj_tac
+  >- (irule stmtSimDefsTheory.alloca_frame_trans >>
+      qexistsl [`cenv`, `ee`, `t`, `ss`] >> simp[] >> decide_tac) >>
   rpt strip_tac >>
   `not_fresh_at ss x` by
     metis_tac[freshWritesTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS] >>

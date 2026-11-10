@@ -29,6 +29,7 @@ Theorem tuple_place_suffix_code_parts:
     cs_extends sp sa /\ cs_extends sa sb /\ cs_extends sb sf /\
     sp.cs_next_var <= sa.cs_next_var /\ sa.cs_next_var <= sb.cs_next_var /\
     sb.cs_next_var <= sf.cs_next_var /\
+    sp.cs_next_id <= sa.cs_next_id /\ sa.cs_next_id <= sb.cs_next_id /\
     fn_has_code sp sa func /\ fn_has_code sa sb func /\ fn_has_code sb sf func
 Proof
   strip_tac >>
