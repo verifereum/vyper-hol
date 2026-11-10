@@ -9984,6 +9984,289 @@ Proof
   gvs[mm_local_footprint_bulk_coverage]
 QED
 
+Definition mm_local_group_endpoint_def:
+  mm_local_group_endpoint is n cap g <=>
+    (!j d bs. j < n /\ j < LENGTH is /\
+      MEM (EL j is).inst_id g.cg_inst_ids /\ cap j = SOME (d,bs) ==>
+      d + LENGTH bs <= g.cg_dst + g.cg_length) /\
+    (?j d bs. j < n /\ j < LENGTH is /\
+      MEM (EL j is).inst_id g.cg_inst_ids /\ cap j = SOME (d,bs) /\
+      d + LENGTH bs = g.cg_dst + g.cg_length)
+End
+
+Theorem mm_local_group_endpoint_birth_extra[local]:
+  j < n /\ j < LENGTH is /\ ALL_DISTINCT (MAP (\i. i.inst_id) is) /\
+  g.cg_inst_ids = (EL j is).inst_id :: extra /\
+  cap j = SOME (g.cg_dst,bs) /\ LENGTH bs = g.cg_length /\
+  (!p d cs. p < n /\ p < LENGTH is /\ MEM (EL p is).inst_id extra ==>
+     cap p <> SOME (d,cs)) ==>
+  mm_local_group_endpoint is n cap g
+Proof
+  strip_tac >> simp[mm_local_group_endpoint_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `j' = j` by
+        (gvs[] >> metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx]) >>
+      gvs[]) >>
+  qexistsl [`j`,`g.cg_dst`,`bs`] >> simp[]
+QED
+
+Theorem mm_local_group_endpoint_merge[local]:
+  mm_local_group_endpoint is n cap a /\ mm_local_group_endpoint is n cap b ==>
+  mm_local_group_endpoint is n cap (copy_merge a b)
+Proof
+  strip_tac >>
+  `(copy_merge a b).cg_dst + (copy_merge a b).cg_length =
+     MAX (a.cg_dst + a.cg_length) (b.cg_dst + b.cg_length)` by
+    (simp[copy_merge_def, arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  gvs[mm_local_group_endpoint_def] >>
+  simp[copy_merge_def, MEM_APPEND] >>
+  Cases_on `a.cg_dst + a.cg_length <= b.cg_dst + b.cg_length` >>
+  simp[arithmeticTheory.MAX_DEF] >> metis_tac[]
+QED
+
+Theorem mm_local_footprint_store_endpoint[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < LENGTH is /\
+  (EL j is).inst_opcode = MSTORE /\ (EL j is).inst_operands = [Lit dst; Var v] /\
+  cap = (\p. OPTION_MAP (\(d,l). (d,REPLICATE l (0w:word8)))
+                    (mm_local_write_footprint (EL p is))) ==>
+  mm_local_group_endpoint is (LENGTH is) cap
+    <|cg_dst := w2n dst; cg_src := src; cg_length := 32;
+      cg_inst_ids := (EL j is).inst_id ::
+        (case dfg_get_def (dfg_build_function fn0) v of NONE => [] | SOME li => [li.inst_id])|>
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    (qpat_assum `is = _` SUBST1_TAC >>
+     drule_all mm_local_prefix_wf_id_distinct >> simp[]) >>
+  irule mm_local_group_endpoint_birth_extra >> (conj_tac >- simp[]) >>
+  qexistsl [`REPLICATE 32 (0w:word8)`,
+    `case dfg_get_def (dfg_build_function fn0) v of NONE => [] | SOME li => [li.inst_id]`, `j`] >>
+  simp[] >> reverse conj_tac
+  >- gvs[mm_local_write_footprint_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `dfg_get_def (dfg_build_function fn0) v` >> gvs[] >>
+  `mm_local_write_footprint (EL p bb.bb_instructions) = NONE` by
+    metis_tac[mm_local_footprint_def_excluded] >> simp[]
+QED
+
+Theorem mm_local_footprint_bulk_endpoint[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) is) /\ j < LENGTH is /\
+  (EL j is).inst_opcode = MCOPY /\ (EL j is).inst_operands = [Lit dst; Lit src; Lit len] /\
+  cap = (\p. OPTION_MAP (\(d,l). (d,REPLICATE l (0w:word8)))
+                    (mm_local_write_footprint (EL p is))) ==>
+  mm_local_group_endpoint is (LENGTH is) cap
+    <|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+      cg_inst_ids := [(EL j is).inst_id]|>
+Proof
+  strip_tac >> irule mm_local_group_endpoint_birth_extra >> (conj_tac >- simp[]) >>
+  qexistsl [`REPLICATE (w2n len) (0w:word8)`,`[]`,`j`] >>
+  simp[mm_local_write_footprint_def]
+QED
+
+Theorem mm_local_scan_footprint_endpoint[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  cap = (\p. OPTION_MAP (\(d,l). (d,REPLICATE l (0w:word8)))
+                    (mm_local_write_footprint (EL p is))) ==>
+  !t. t <= LENGTH is ==>
+    mm_local_scan_every (mm_local_group_endpoint is (LENGTH is) cap)
+      (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE t is))
+Proof
+  strip_tac >> Induct >- simp[mm_local_scan_every_def, empty_scan_state_def] >>
+  strip_tac >> `t < LENGTH is /\ t <= LENGTH is` by decide_tac >>
+  simp[rich_listTheory.TAKE_SUC, FOLDL_APPEND] >>
+  irule mm_local_inst_birth_every >>
+  conj_tac >- metis_tac[mm_local_group_endpoint_merge] >>
+  simp[] >> reverse conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      irule (Q.INST [`j` |-> `t`, `is` |-> `bb.bb_instructions`]
+        mm_local_footprint_store_endpoint) >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    (qpat_assum `is = _` SUBST1_TAC >>
+     drule_all mm_local_prefix_wf_id_distinct >> simp[]) >>
+  gvs[mm_local_footprint_bulk_endpoint]
+QED
+
+Theorem mm_local_final_footprint_extent[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  cap = (\p. OPTION_MAP (\(d,l). (d,REPLICATE l (0w:word8)))
+                    (mm_local_write_footprint (EL p is))) /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed ==>
+  mm_local_group_coverage is (LENGTH is) cap g /\
+  mm_local_group_endpoint is (LENGTH is) cap g
+Proof
+  strip_tac >>
+  `mm_local_scan_every (mm_local_group_coverage is (LENGTH is) cap)
+    (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state is)` by
+    (qsuff_tac `!t. t <= LENGTH is ==>
+       mm_local_scan_every (mm_local_group_coverage is (LENGTH is) cap)
+         (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE t is))`
+     >- (disch_then (qspec_then `LENGTH is` mp_tac) >> simp[]) >>
+     metis_tac[mm_local_scan_footprint_coverage]) >>
+  `mm_local_scan_every (mm_local_group_endpoint is (LENGTH is) cap)
+    (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state is)` by
+    (qsuff_tac `!t. t <= LENGTH is ==>
+       mm_local_scan_every (mm_local_group_endpoint is (LENGTH is) cap)
+         (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE t is))`
+     >- (disch_then (qspec_then `LENGTH is` mp_tac) >> simp[]) >>
+     metis_tac[mm_local_scan_footprint_endpoint]) >>
+  gvs[scan_block_def, hard_barrier_def, mm_local_scan_every_def, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_canonical_due_footprint_indices[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r) (mm_local_pending_indices is gs r) ==>
+  !j. MEM j (due ++ [r]) <=>
+    j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    ?d l. mm_local_write_footprint (EL j is) = SOME (d,l)
+Proof
+  strip_tac >>
+  `due = FILTER (\j. j < r /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+    MEM (EL j is).inst_id g.cg_inst_ids) (COUNT_LIST r)` by
+    metis_tac[mm_local_canonical_due_group] >>
+  qpat_x_assum `due = FILTER (\j. mm_local_rep_index _ _ j = _) _` kall_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  drule_all mm_local_canonical_rep_write >> strip_tac >>
+  qx_gen_tac `j` >> eq_tac
+  >- (strip_tac >>
+      `j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+        (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+        (gvs[MEM_APPEND, MEM_FILTER, MEM_COUNT_LIST] >> decide_tac) >>
+      `MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
+      drule_all mm_local_final_write_birth >> strip_tac >>
+      gvs[mm_local_write_footprint_def]) >>
+  strip_tac >>
+  `j <= r` by metis_tac[mm_local_rep_position_max] >>
+  drule mm_local_write_footprint_opcode >> strip_tac >>
+  simp[MEM_APPEND, MEM_FILTER, MEM_COUNT_LIST] >> gvs[]
+QED
+
+Theorem mm_local_canonical_due_footprint_records[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r) (mm_local_pending_indices is gs r) ==>
+  !j. MEM j (due ++ [r]) ==> ?d bs.
+    cap j = SOME (d,bs) /\ mm_local_write_footprint (EL j is) = SOME (d,LENGTH bs)
+Proof
+  strip_tac >>
+  `LIST_REL (\j w. cap j = SOME w) (due ++ [r]) (MAP (THE o cap) (due ++ [r]))` by
+    metis_tac[mm_local_canonical_due_records] >>
+  `!j. MEM j (due ++ [r]) <=> j < LENGTH is /\
+    MEM (EL j is).inst_id g.cg_inst_ids /\
+    ?d l. mm_local_write_footprint (EL j is) = SOME (d,l)` by
+    metis_tac[mm_local_canonical_due_footprint_indices] >>
+  gen_tac >> strip_tac >> drule_all LIST_REL_MEM_IMP >> strip_tac >>
+  PairCases_on `y` >>
+  `?d l. mm_local_write_footprint (EL j is) = SOME (d,l)` by metis_tac[] >>
+  `y0 = d /\ LENGTH y1 = l` by metis_tac[mm_local_write_capture_footprint] >>
+  qexistsl [`y0`,`y1`] >> gvs[]
+QED
+
+Theorem mm_local_canonical_due_log_footprint[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r) (mm_local_pending_indices is gs r) /\
+  ws = MAP (THE o cap) (due ++ [r]) ==>
+  !d l. (?bs. MEM (d,bs) ws /\ LENGTH bs = l) <=>
+    ?j. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+      mm_local_write_footprint (EL j is) = SOME (d,l)
+Proof
+  strip_tac >>
+  `!j. MEM j (due ++ [r]) <=> j < LENGTH is /\
+    MEM (EL j is).inst_id g.cg_inst_ids /\
+    ?d l. mm_local_write_footprint (EL j is) = SOME (d,l)` by
+    metis_tac[mm_local_canonical_due_footprint_indices] >>
+  `!j. MEM j (due ++ [r]) ==> ?d bs. cap j = SOME (d,bs) /\
+      mm_local_write_footprint (EL j is) = SOME (d,LENGTH bs)` by
+    metis_tac[mm_local_canonical_due_footprint_records] >>
+  rpt gen_tac >> eq_tac
+  >- (strip_tac >>
+      `?j. MEM j (due ++ [r]) /\ (d,bs) = (THE o cap) j` by
+        (gvs[MEM_MAP] >> metis_tac[]) >>
+      `?a cs. cap j = SOME (a,cs) /\
+        mm_local_write_footprint (EL j is) = SOME (a,LENGTH cs)` by metis_tac[] >>
+      qexists `j` >> gvs[] >> metis_tac[pairTheory.PAIR_EQ]) >>
+  strip_tac >> `MEM j (due ++ [r])` by metis_tac[] >>
+  `?a cs. cap j = SOME (a,cs) /\
+    mm_local_write_footprint (EL j is) = SOME (a,LENGTH cs)` by metis_tac[] >>
+  qexists `cs` >> reverse conj_tac >- gvs[] >>
+  qpat_x_assum `ws = _` SUBST1_TAC >> pure_rewrite_tac[MEM_MAP] >>
+  qexists `j` >> simp[] >> gvs[]
+QED
+
+Theorem mm_local_canonical_due_log_coverage_endpoint[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r) (mm_local_pending_indices is gs r) /\
+  ws = MAP (THE o cap) (due ++ [r]) ==>
+  (!a. (g.cg_dst <= a /\ a < g.cg_dst + g.cg_length) <=>
+    ?d bs. MEM (d,bs) ws /\ d <= a /\ a < d + LENGTH bs) /\
+  (!d bs. MEM (d,bs) ws ==> d + LENGTH bs <= g.cg_dst + g.cg_length) /\
+  MAX_LIST (MAP (\(d,bs). d + LENGTH bs) ws) = g.cg_dst + g.cg_length
+Proof
+  strip_tac >>
+  `!d l. (?bs. MEM (d,bs) ws /\ LENGTH bs = l) <=>
+    ?j. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+      mm_local_write_footprint (EL j is) = SOME (d,l)` by
+    metis_tac[mm_local_canonical_due_log_footprint] >>
+  qabbrev_tac `fp = (\p. OPTION_MAP (\(d,l). (d,REPLICATE l (0w:word8)))
+                      (mm_local_write_footprint (EL p is)))` >>
+  `mm_local_group_coverage is (LENGTH is) fp g /\
+   mm_local_group_endpoint is (LENGTH is) fp g` by
+    (irule mm_local_final_footprint_extent >> simp[Abbr `fp`] >> metis_tac[]) >>
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`is = _`, `gs = _`, `cap = _`, `due = _`, `ws = _`] >>
+  fs[mm_local_group_coverage_def, mm_local_group_endpoint_def,
+     Abbr `fp`, pairTheory.EXISTS_PROD] >>
+  fs[GSYM LEFT_EXISTS_AND_THM, GSYM RIGHT_EXISTS_AND_THM] >>
+  gvs[] >>
+  conj_tac >- metis_tac[] >>
+  conj_asm1_tac
+  >- (qx_gen_tac `a` >> qx_gen_tac `cs` >> strip_tac >>
+      `?j. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+        mm_local_write_footprint (EL j is) = SOME (a,LENGTH cs)` by metis_tac[] >>
+      qpat_x_assum `!p d bs. _ ==> _` (qspecl_then
+        [`j`,`a`,`REPLICATE (LENGTH cs) (0w:word8)`] mp_tac) >> simp[] >> metis_tac[]) >>
+  irule mm_local_write_log_endpoint >> simp[] >> metis_tac[]
+QED
+
 Theorem mm_local_collection_discharge[local]:
   mm_local_pending cap js s t /\
   (!pre j mid k post d bs a cs.
