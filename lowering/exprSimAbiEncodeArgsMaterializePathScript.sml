@@ -1,5 +1,4 @@
 Theory exprSimAbiEncodeArgsMaterializePath
-Libs exprSimAbiEncodeArgsProbeLib
 Ancestors
   abiEncodeMaterialize exprSimAbiGasBridge exprSimHash vyperCompiler context
   loweringPosts compileEnv finite_map exprSimAbiEncodeSeparation
@@ -251,42 +250,6 @@ Proof
 QED
 
 
-Theorem compile_materialize_vv_owned_path:
-  compile_materialize_vv ce (lowered_value_type ce e) vv sm = (dst,sb) /\
-  expr_body_pre ce cx env e es_pre /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
-  stmt_state_rel ctx func ce cx es s0 /\
-  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-  local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
-  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
-  read_result cx tvv es' = (INL v,es') /\
-  ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
-  value_has_type tv v /\ val_wf tv v /\
-  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
-         ~is_word_type (post_value_type ce e) ==>
-         type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
-         type_memory_size tvt < 2 ** 64) /\
-  type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
-  type_memory_size tv < 2 ** 64 /\
-  type_memory_size tv + 64 < dimword (:256) /\
-  cs_extends sm sb /\ frag_gas_free sm sb /\
-  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
-  r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?t. gas_marked_path F ctx func r 0 (OK t) /\
-      materialize_owned_post ctx func ce cx e es sa sm sb s0 es' v dst tv t /\
-      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts
-Proof
-  strip_tac >> drule_all compile_materialize_vv_owned_sim >>
-  disch_then (qspec_then `\r. F` mp_tac) >>
-  rewrite_tac[GSYM materialize_owned_post_def] >> strip_tac >>
-  drule frag_exec_gas_path >>
-  disch_then (qspecl_then [`func`, `r`] mp_tac) >>
-  simp[materialize_owned_post_returndata]
-QED
 
 Theorem materialize_extends:
   compile_materialize_vv ce ty vv sa = (dst,sb) ==> cs_extends sa sb
@@ -935,25 +898,6 @@ Proof
   gvs[venomStateTheory.eval_operand_def] >> metis_tac[]
 QED
 
-(* A zero-sized destination can leave the unwrap loop's exit empty. *)
-Theorem materialize_zero_destination_alias_probe:
-  let sa = initial_compile_state "@wcopy_exit_2";
-      vv = LocatedValue (BaseT (BytesT (Dynamic 32)))
-             (mk_ptr (Lit 0w) LocStorage);
-      result = compile_materialize_vv ce (TupleT []) vv sa;
-      sb = SND result;
-      fn = venomInst$mk_raw_function "materialize-probe" sb.cs_blocks
-  in
-    (!l. vv_operand vv <> Label l) /\
-    fragExec$fn_has_code sa sb fn /\ venomWf$fn_inst_ids_distinct fn /\
-    ~frag_gas_free sa sb
-Proof
-  EVAL_TAC >> rpt conj_tac >> rpt strip_tac >> gvs[] >> EVAL_TAC >>
-  qmatch_goalsub_abbrev_tac `$= b` >>
-  CONV_TAC (RAND_CONV (REWR_CONV (GSYM boolTheory.ETA_THM))) >>
-  qexists_tac `b` >> simp[]
-QED
-
 Theorem materialize_located_physical_classify:
   expr_body_pre ce cx env e es_pre /\
   vv_post ctx func ce cx e es sa sm s0 es' tvv (LocatedValue vty p) r /\
@@ -965,533 +909,6 @@ Proof
   `vty = post_value_type ce e` by gvs[vv_post_def, vv_holds_def] >>
   metis_tac[materialize_post_lowered_classify,
             exprSimHypsTheory.expr_body_pre_lowered_fits]
-QED
-
-Theorem materialize_equal_zero_alias_probe:
-  let sa = initial_compile_state "@wcopy_exit_2";
-      vv = LocatedValue (TupleT []) (mk_ptr (Lit 0w) LocStorage);
-      result = compile_materialize_vv ce (TupleT []) vv sa;
-      sb = SND result;
-      fn = venomInst$mk_raw_function "materialize-probe" sb.cs_blocks
-  in
-    type_memory_bytes ce (TupleT []) = 0 /\
-    (!l. vv_operand vv <> Label l) /\
-    fragExec$fn_has_code sa sb fn /\ venomWf$fn_inst_ids_distinct fn /\
-    ~frag_gas_free sa sb
-Proof
-  EVAL_TAC >> rpt conj_tac >> rpt strip_tac >> gvs[] >> EVAL_TAC >>
-  qmatch_goalsub_abbrev_tac `$= b` >>
-  CONV_TAC (RAND_CONV (REWR_CONV (GSYM boolTheory.ETA_THM))) >>
-  qexists_tac `b` >> simp[]
-QED
-
-Theorem materialize_equal_zero_lookup_probe:
-  let sa = initial_compile_state "@wcopy_exit_2";
-      vv = LocatedValue (TupleT []) (mk_ptr (Lit 0w) LocStorage);
-      sb = SND (compile_materialize_vv ce (TupleT []) vv sa);
-      fn = venomInst$mk_raw_function "materialize-probe" sb.cs_blocks
-  in
-    sb.cs_current_bb = sa.cs_current_bb /\ sb.cs_current_insts = [] /\
-    (MAP (\i. i.inst_opcode)
-      (THE (lookup_block sb.cs_current_bb fn.fn_blocks)).bb_instructions =
-      [ALLOCA; ALLOCA; ASSIGN; JMP]) /\
-    (MAP (\i. i.inst_opcode)
-      (THE (lookup_block "@wcopy_cond_0" fn.fn_blocks)).bb_instructions =
-      [EQ; JNZ])
-Proof
-  EVAL_TAC
-QED
-
-Definition materialize_zero_probe_fn_def:
-  materialize_zero_probe_fn ce =
-    let sa = initial_compile_state "@wcopy_exit_2";
-        vv = LocatedValue (TupleT []) (mk_ptr (Lit 0w) LocStorage);
-        sb = SND (compile_materialize_vv ce (TupleT []) vv sa)
-    in venomInst$mk_raw_function "materialize-probe" sb.cs_blocks
-End
-
-Definition materialize_zero_probe_next_def:
-  materialize_zero_probe_next fn s =
-    let bb = THE (lookup_block s.vs_current_bb fn.fn_blocks);
-        inst = THE (get_instruction bb s.vs_inst_idx)
-    in case venomExecSemantics$step_inst_base inst s of
-         OK t => if is_terminator inst.inst_opcode then t
-                 else t with vs_inst_idx := SUC s.vs_inst_idx
-       | _ => s
-End
-
-Definition materialize_zero_probe_trace_def:
-  materialize_zero_probe_trace ce 0 = init_venom_state "@wcopy_exit_2" /\
-  materialize_zero_probe_trace ce (SUC n) =
-    materialize_zero_probe_next (materialize_zero_probe_fn ce)
-      (materialize_zero_probe_trace ce n)
-End
-
-Theorem materialize_zero_probe_edges:
-  !n. n < 6 ==>
-    fragGasPath$gas_path_edge ctx (materialize_zero_probe_fn ce)
-      (materialize_zero_probe_trace ce n) 0
-      (OK (materialize_zero_probe_trace ce (SUC n)))
-Proof
-  rpt strip_tac >>
-  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4 \/ n = 5` by decide_tac >>
-  gvs[] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV [``fragGasPath$gas_path_edge``]) >>
-  simp[fragGasPathTheory.gas_path_edge_def] >>
-  qexists_tac `0` >>
-  CONV_TAC (BINDER_CONV (BINDER_CONV (LAND_CONV (RAND_CONV EVAL)))) >>
-  simp[venomInstTheory.get_instruction_def] >> EVAL_TAC >> simp[] >>
-  disj2_tac >>
-  CONV_TAC (RAND_CONV (REWR_CONV (GSYM boolTheory.ETA_THM))) >>
-  simp[]
-QED
-
-Theorem materialize_zero_probe_path:
-  !n. n <= 6 ==>
-    fragGasPath$gas_path ctx (materialize_zero_probe_fn ce)
-      (materialize_zero_probe_trace ce 0) 0
-      (OK (materialize_zero_probe_trace ce n))
-Proof
-  Induct >> rpt strip_tac
-  >- (irule (cj 1 fragGasPathTheory.gas_path_rules) >> EVAL_TAC) >>
-  `fragGasPath$gas_path ctx (materialize_zero_probe_fn ce)
-      (materialize_zero_probe_trace ce 0) 0
-      (OK (materialize_zero_probe_trace ce n))` by
-    (first_x_assum irule >> decide_tac) >>
-  `fragGasPath$gas_path_edge ctx (materialize_zero_probe_fn ce)
-      (materialize_zero_probe_trace ce n) 0
-      (OK (materialize_zero_probe_trace ce (SUC n)))` by
-    (irule materialize_zero_probe_edges >> decide_tac) >>
-  metis_tac[fragGasPathTheory.gas_path_rules,
-            fragGasPathTheory.gas_path_edge_normal,
-            fragGasPathTheory.gas_path_then, arithmeticTheory.ADD]
-QED
-
-Theorem materialize_zero_probe_endpoint:
-  let t = materialize_zero_probe_trace ce 6 in
-    ~t.vs_halted /\ t.vs_current_bb = "@wcopy_exit_2" /\
-    t.vs_inst_idx = 0 /\
-    FLOOKUP t.vs_allocas 0 = SOME (0,0) /\
-    FLOOKUP t.vs_allocas 1 = SOME (0,0) /\
-    lookup_var "%3" t = SOME 1w
-Proof
-  EVAL_TAC >> simp[finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
-Theorem materialize_equal_zero_counted_probe:
-  let t = materialize_zero_probe_trace ce 6 in
-    gas_marked_path F ctx (materialize_zero_probe_fn ce)
-      (init_venom_state "@wcopy_exit_2") 0 (OK t) /\
-    ~t.vs_halted /\ t.vs_current_bb = "@wcopy_exit_2" /\
-    t.vs_inst_idx = 0 /\ FLOOKUP t.vs_allocas 0 = SOME (0,0)
-Proof
-  simp[fragGasModeTheory.gas_marked_path_def] >>
-  mp_tac (Q.SPEC `6` materialize_zero_probe_path) >>
-  mp_tac materialize_zero_probe_endpoint >>
-  simp[materialize_zero_probe_trace_def]
-QED
-
-(* Test whether a nonempty final copy alone prevents an aliased cut. *)
-Theorem materialize_positive_cut_alias_probe:
-  let ty = TupleT [BaseT (UintT 256); BaseT (UintT 256)];
-      vv = LocatedValue ty (mk_ptr (Lit 0w) LocStorage);
-      base = initial_compile_state "@wcopy_exit_2";
-      end0 = SND (compile_materialize_vv ce ty vv base);
-      sa = base with cs_current_insts := end0.cs_current_insts;
-      sb = SND (compile_materialize_vv ce ty vv sa);
-      fn = venomInst$mk_raw_function "positive-cut-probe" sb.cs_blocks
-  in
-    0 < type_memory_bytes ce ty /\
-    sb.cs_current_insts <> [] /\
-    fragExec$fn_has_code sa sb fn /\ venomWf$fn_inst_ids_distinct fn /\
-    ~frag_gas_free sa sb
-Proof
-  EVAL_TAC >> rpt conj_tac >> rpt strip_tac >> gvs[] >> EVAL_TAC
-QED
-
-
-Definition materialize_positive_probe_fn_def:
-  materialize_positive_probe_fn ce =
-    let ty = TupleT [BaseT (UintT 256); BaseT (UintT 256)];
-        vv = LocatedValue ty (mk_ptr (Lit 0w) LocStorage);
-        base = initial_compile_state "@wcopy_exit_2";
-        end0 = SND (compile_materialize_vv ce ty vv base);
-        sa = base with cs_current_insts := end0.cs_current_insts;
-        sb = SND (compile_materialize_vv ce ty vv sa)
-    in venomInst$mk_raw_function "positive-cut-probe" sb.cs_blocks
-End
-
-Definition materialize_positive_probe_trace_def:
-  materialize_positive_probe_trace ce 0 =
-    (init_venom_state "@wcopy_exit_2" with vs_inst_idx := 1) /\
-  materialize_positive_probe_trace ce (SUC n) =
-    materialize_zero_probe_next (materialize_positive_probe_fn ce)
-      (materialize_positive_probe_trace ce n)
-End
-
-Theorem materialize_positive_probe_endpoint:
-  let t = materialize_positive_probe_trace ce 27 in
-    ~t.vs_halted /\ t.vs_current_bb = "@wcopy_exit_2" /\
-    t.vs_inst_idx = 1
-Proof
-  CONV_TAC (computeLib.CBV_CONV
-    (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))
-QED
-
-Theorem materialize_positive_probe_edges:
-  !n. n < 27 ==>
-    fragGasPath$gas_path_edge ctx (materialize_positive_probe_fn ce)
-      (materialize_positive_probe_trace ce n) 0
-      (OK (materialize_positive_probe_trace ce (SUC n)))
-Proof
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "last" >> suspend "earlier"
-QED
-
-Resume materialize_positive_probe_edges[last]:
-  CONV_TAC (RAND_CONV (computeLib.CBV_CONV
-      (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))) >>
-  CONV_TAC (RATOR_CONV (computeLib.CBV_CONV
-      (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))) >>
-  simp[fragGasPathTheory.gas_path_edge_def] >>
-  qexists_tac `0` >>
-  CONV_TAC (BINDER_CONV (BINDER_CONV (LAND_CONV (RAND_CONV EVAL)))) >>
-  simp[venomInstTheory.get_instruction_def] >> EVAL_TAC >> simp[] >>
-  disj2_tac >>
-  CONV_TAC (RAND_CONV (REWR_CONV (GSYM boolTheory.ETA_THM))) >> simp[]
-QED
-
-Resume materialize_positive_probe_edges[earlier]:
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step25" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step24" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step23" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step22" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step21" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step20" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step19" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step18" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step17" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step16" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step15" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step14" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step13" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step12" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step11" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step10" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step9" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step8" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step7" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step6" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step5" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step4" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step3" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step2" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step1" >>
-  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
-  conj_tac >- suspend "step0" >> simp[]
-QED
-
-Resume materialize_positive_probe_edges[step25]:
-  CONV_TAC (RAND_CONV (computeLib.CBV_CONV
-    (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))) >>
-  CONV_TAC (RATOR_CONV (computeLib.CBV_CONV
-    (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))) >>
-  simp[fragGasPathTheory.gas_path_edge_def] >> qexists_tac `0` >>
-  CONV_TAC (BINDER_CONV (BINDER_CONV (LAND_CONV (RAND_CONV EVAL)))) >>
-  simp[venomInstTheory.get_instruction_def] >> EVAL_TAC >> simp[] >>
-  disj2_tac >>
-  CONV_TAC (RAND_CONV (REWR_CONV (GSYM boolTheory.ETA_THM))) >> simp[]
-QED
-
-Resume materialize_positive_probe_edges[step24]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step23]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step22]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step21]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step20]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step19]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step18]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step17]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step16]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step15]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step14]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step13]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step12]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step11]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step10]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step9]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step8]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step7]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step6]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step5]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step4]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step3]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step2]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step1]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-Resume materialize_positive_probe_edges[step0]:
-  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
-  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
-  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
-  exprSimAbiEncodeArgsProbeLib.probe_step >>
-  exprSimAbiEncodeArgsProbeLib.probe_jump
-QED
-
-Finalise materialize_positive_probe_edges
-
-Theorem materialize_positive_probe_path:
-  !n. n <= 27 ==>
-    fragGasPath$gas_path ctx (materialize_positive_probe_fn ce)
-      (materialize_positive_probe_trace ce 0) 0
-      (OK (materialize_positive_probe_trace ce n))
-Proof
-  Induct >> rpt strip_tac
-  >- (irule (cj 1 fragGasPathTheory.gas_path_rules) >> EVAL_TAC) >>
-  `fragGasPath$gas_path ctx (materialize_positive_probe_fn ce)
-      (materialize_positive_probe_trace ce 0) 0
-      (OK (materialize_positive_probe_trace ce n))` by
-    (first_x_assum irule >> decide_tac) >>
-  `fragGasPath$gas_path_edge ctx (materialize_positive_probe_fn ce)
-      (materialize_positive_probe_trace ce n) 0
-      (OK (materialize_positive_probe_trace ce (SUC n)))` by
-    (irule materialize_positive_probe_edges >> decide_tac) >>
-  metis_tac[fragGasPathTheory.gas_path_rules,
-            fragGasPathTheory.gas_path_edge_normal,
-            fragGasPathTheory.gas_path_then, arithmeticTheory.ADD]
-QED
-
-Theorem materialize_positive_alias_counted_probe:
-  let t = materialize_positive_probe_trace ce 27 in
-    gas_marked_path F ctx (materialize_positive_probe_fn ce)
-      (init_venom_state "@wcopy_exit_2" with vs_inst_idx := 1) 0 (OK t) /\
-    ~t.vs_halted /\ t.vs_current_bb = "@wcopy_exit_2" /\
-    t.vs_inst_idx = 1
-Proof
-  simp[fragGasModeTheory.gas_marked_path_def] >>
-  mp_tac (Q.SPEC `27` materialize_positive_probe_path) >>
-  mp_tac materialize_positive_probe_endpoint >>
-  simp[materialize_positive_probe_trace_def]
-QED
-
-(* A legacy fragment specifies continuation results, not the state reached
-   by an arbitrary finite path to the same cursor. *)
-Theorem materialize_same_cut_identity[local]:
-  sa.cs_current_bb = sb.cs_current_bb /\
-  LENGTH sa.cs_current_insts = LENGTH sb.cs_current_insts ==>
-  frag_exec ctx sa sb (\s. s = initial) (\s. s = initial) (\r. F)
-Proof
-  rw[fragExecTheory.frag_exec_def] >> metis_tac[]
-QED
-
-Theorem materialize_zero_endpoint_transfer_probe:
-  let sa = initial_compile_state "@wcopy_exit_2";
-      vv = LocatedValue (TupleT []) (mk_ptr (Lit 0w) LocStorage);
-      sb = SND (compile_materialize_vv ce (TupleT []) vv sa);
-      initial = init_venom_state "@wcopy_exit_2";
-      t = materialize_zero_probe_trace ce 6
-  in
-    frag_exec ctx sa sb (\s. s = initial) (\s. s = initial) (\r. F) /\
-    gas_marked_path F ctx (materialize_zero_probe_fn ce) initial 0 (OK t) /\
-    t <> initial
-Proof
-  simp_tac (srw_ss()) [LET_THM] >> conj_tac
-  >- (irule materialize_same_cut_identity >> EVAL_TAC) >>
-  conj_tac
-  >- metis_tac[materialize_equal_zero_counted_probe] >>
-  `FLOOKUP (materialize_zero_probe_trace ce 6).vs_allocas 0 = SOME (0,0)` by
-    metis_tac[materialize_zero_probe_endpoint] >>
-  strip_tac >> gvs[venomStateTheory.init_venom_state_def]
-QED
-
-Theorem materialize_positive_endpoint_transfer_probe:
-  let ty = TupleT [BaseT (UintT 256); BaseT (UintT 256)];
-      vv = LocatedValue ty (mk_ptr (Lit 0w) LocStorage);
-      base = initial_compile_state "@wcopy_exit_2";
-      end0 = SND (compile_materialize_vv ce ty vv base);
-      sa = base with cs_current_insts := end0.cs_current_insts;
-      sb = SND (compile_materialize_vv ce ty vv sa);
-      initial = init_venom_state "@wcopy_exit_2" with vs_inst_idx := 1;
-      t = materialize_positive_probe_trace ce 27
-  in
-    frag_exec ctx sa sb (\s. s = initial) (\s. s = initial) (\r. F) /\
-    gas_marked_path F ctx (materialize_positive_probe_fn ce) initial 0 (OK t) /\
-    t <> initial
-Proof
-  simp_tac (srw_ss()) [LET_THM] >> conj_tac
-  >- (irule materialize_same_cut_identity >> EVAL_TAC) >>
-  conj_tac
-  >- metis_tac[materialize_positive_alias_counted_probe] >>
-  `FLOOKUP (materialize_positive_probe_trace ce 27).vs_allocas 0 = SOME (0,64)` by
-    (CONV_TAC (computeLib.CBV_CONV
-      (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))) >>
-  strip_tac >> gvs[venomStateTheory.init_venom_state_def]
 QED
 
 Theorem materialize_straight_free_trans[local]:
@@ -1999,3 +1416,130 @@ Proof
   >- (irule materialize_unwrap_code_owned_path >> simp[] >> metis_tac[]) >>
   gvs[]
 QED
+
+Theorem compile_materialize_vv_owned_path:
+  compile_materialize_vv ce (lowered_value_type ce e) vv sm = (dst,sb) /\
+  expr_body_pre ce cx env e es_pre /\
+  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  stmt_state_rel ctx func ce cx es s0 /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  read_result cx tvv es' = (INL v,es') /\
+  ~is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+         ~is_word_type (post_value_type ce e) ==>
+         type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+         type_memory_size tvt < 2 ** 64) /\
+  type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
+  type_memory_size tv < 2 ** 64 /\
+  type_memory_size tv + 64 < dimword (:256) /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func r 0 (OK t) /\
+      materialize_owned_post ctx func ce cx e es sa sm sb s0 es' v dst tv t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> drule materialize_compile_trace >> strip_tac >>
+  `ci_mono sm mid /\ ci_mono mid su /\ ci_mono su sb` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_compile_alloc_buffer,
+      exprLoweringPropsTheory.ci_mono_unwrap_value,
+      exprLoweringPropsTheory.ci_mono_compile_store_memory, pairTheory.SND] >>
+  `cs_extends sm mid /\ cs_extends mid su /\ cs_extends su sb` by
+    gvs[exprLoweringPropsTheory.ci_mono_def] >>
+  `cs_extends mid sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sm mid func /\ fn_has_code mid sb func` by
+    (irule fragExecTheory.fn_has_code_split >> simp[]) >>
+  `fn_has_code mid su func /\ fn_has_code su sb func` by
+    (irule fragExecTheory.fn_has_code_split >> simp[]) >>
+  `sm.cs_next_id <= mid.cs_next_id` by gvs[exprLoweringPropsTheory.ci_mono_def] >>
+  `type_memory_bytes ce (lowered_value_type ce e) < dimword (:256)` by decide_tac >>
+  `stmt_state_rel ctx func ce cx es' r` by gvs[vv_post_def] >>
+  drule_all materialize_alloc_semantic_path >> strip_tac >>
+  rename1 `gas_marked_path F ctx func r 0 (OK u)` >>
+  `eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) r` by
+    (drule materialize_vv_post_operand >> strip_tac >>
+     Cases_on `vv_operand vv` >> gvs[venomStateTheory.eval_operand_def]) >>
+  `vv_post ctx func ce cx e es sa mid s0 es' tvv vv u` by
+    (irule materialize_vv_post_alloc_storage_frame >> simp[] >>
+     qexistsl [`r`, `sm`] >> simp[]) >>
+  `local_ptrs_reserved ce mid` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists_tac `sm` >> gvs[exprLoweringPropsTheory.ci_mono_def]) >>
+  `sa.cs_next_id <= mid.cs_next_id /\
+   (!x. vv_operand vv = Var x ==> not_fresh_at mid x)` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `lookup_var p u = SOME w` by gvs[venomStateTheory.eval_operand_def] >>
+  drule_all materialize_unwrap_owned_path >> strip_tac >>
+  rename1 `gas_marked_path F ctx func u 0 (OK z)` >>
+  `sa.cs_next_var <= mid.cs_next_var` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  drule_all materialize_rebase_post >> strip_tac >>
+  suspend "store_continuation"
+QED
+
+Resume compile_materialize_vv_owned_path[store_continuation]:
+  `local_ptrs_reserved ce su /\ not_fresh_at su p /\
+   sa.cs_next_var <= su.cs_next_var /\ sm.cs_next_id < sb.cs_next_id` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
+               freshWritesTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS,
+               arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `!x. src = Var x ==> not_fresh_at su x` by
+    (rpt strip_tac >> irule exprOperandVarTheory.compiler_unwrap_value_var >>
+     qexistsl [`ce`, `src`, `mid`, `vv`] >> simp[] >>
+     Cases_on `vv` >> gvs[vv_operand_def]) >>
+  `!name b len. local_region ce es'.scopes z name b len ==>
+     w2n w + type_memory_size tv <= b \/ b + len <= w2n w` by
+    (rpt strip_tac >>
+     qpat_x_assum `!name b len. local_region _ _ u _ _ _ ==> _` mp_tac >>
+     disch_then (qspecl_then [`name`, `b`, `len`] mp_tac) >>
+     `local_region ce es'.scopes u name b len` by
+       (qpat_assum `expr_post _ _ _ _ _ es' _ _ u _ _ _ _`
+          (mp_then Any strip_assume_tac exprSimWordArgsTheory.expr_post_frame) >>
+        irule exprSimPropsTheory.local_region_frame >>
+        conj_tac
+        >- (qexists_tac `func` >>
+            gvs[vv_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
+                state_rel_def]) >>
+        qexistsl [`mid`, `es'.scopes`, `z`] >>
+        gvs[wb_frame_def, not_fresh_at_def]) >>
+     simp[regions_disjoint_def]) >>
+  `!name b len. local_region ce es.scopes s0 name b len ==>
+     w2n w + type_memory_size tv <= b \/ b + len <= w2n w` by
+    (rpt strip_tac >>
+     qpat_x_assum `!name b len. local_region _ _ z _ _ _ ==> _` irule >>
+     qexists_tac `name` >> irule exprSimPropsTheory.local_region_frame_fwd >>
+     qexistsl [`s0`, `sa`, `es.scopes`] >>
+     drule exprSimWordArgsTheory.expr_post_frame >> simp[wb_frame_def]) >>
+  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+  `?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          inst.inst_id = sm.cs_next_id` by
+    (goal_assum (drule_at Any) >> simp[venomInstTheory.mk_inst_def]) >>
+  `compile_store_memory ce src (Var p) (lowered_value_type ce e)
+     (lowered_value_type ce e) su = ((),sb)` by metis_tac[] >>
+  `FLOOKUP z.vs_allocas sm.cs_next_id = SOME (w2n w,type_memory_size tv)` by gvs[] >>
+  drule_all materialize_store_owned_post_sim >>
+  disch_then (qspec_then `\r. F` assume_tac) >>
+  `~is_word_type (lowered_value_type ce e)` by
+    metis_tac[expr_body_pre_lowered_fits,
+              exprSimLayoutTransportTheory.compatible_word_type] >>
+  drule_all materialize_store_straight_free >> strip_tac >>
+  drule materialize_straight_zero_path >>
+  disch_then (qspecl_then [`z`, `func`] mp_tac) >> simp[] >> strip_tac >>
+  `gas_marked_path F ctx func r 0 (OK z)` by
+    (qpat_assum `gas_marked_path F ctx func r 0 (OK u)`
+       (mp_then Any mp_tac gas_marked_path_then) >>
+     disch_then drule >> simp[]) >>
+  `gas_marked_path F ctx func r 0 (OK u')` by
+    (qpat_assum `gas_marked_path F ctx func r 0 (OK z)`
+       (mp_then Any mp_tac gas_marked_path_then) >>
+     disch_then drule >> simp[]) >>
+  qexists_tac `u'` >> simp[materialize_owned_post_def] >> metis_tac[]
+QED
+Finalise compile_materialize_vv_owned_path
