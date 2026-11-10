@@ -74,3 +74,27 @@ Proof
        type_widens_to_def, arg_type_fits_def] >>
   gvs[lowered_value_type_def, nsid_to_string_def]
 QED
+
+(* Caller-boundary audit (C1.14.3.1).
+   ext_ret_nested_none_layouts consumes no caller hypotheses: it checks the
+   two concrete evaluated layouts. ext_ret_nested_none_widening_obstruction
+   checks that widening alone cannot produce encodable_ret_shape.
+   ext_ret_nested_none_call_typing consumes only local type_defs/fn_sigs
+   facts and the compiler return-signature lookup. Its conclusions witness
+   local well_typed_expr, valued Return typing and unequal lowered layout.
+   ext_ret_nested_none_encoder_dispatch is independent of the compiler
+   environment and checks the actual non-INVALID encoder selected.
+
+   Not witnessed: a tops/am/tx satisfying source_typing_ok; a package and
+   positional-argument compilation producing ce; same_frame ce next;
+   get_tenv cx = type_env tops; expr_sim_inv next cx env es (including its
+   source/compiler signature consistency); stmt_exprs_ok; call_evaluation_safe;
+   and both expr_sim_ptr and expr_vv_sim_ptr. In particular these theorems
+   neither construct a runtime internal-call result nor establish the
+   quantified pointer simulations in the frozen widened antecedent.
+   Thus this is an obstruction to the smaller typing/evaluation/widening
+   entry interface, NOT a counterexample to external_frame_ret_widened_ptr
+   or external_frame_ret_ok_ptr. A general encoder interface requiring
+   encodable_ret_shape still needs a stronger producer from those remaining
+   full-caller facts, or a broadened checked shape interface. Recursive
+   implementation is deliberately deferred to strategy review. *)
