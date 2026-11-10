@@ -104,10 +104,10 @@ Proof
          goal_assum (drule_at Any) >> simp[]) >>
      simp[] >> qexists_tac `ws` >> simp[] >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
-  irule owned_buffer_result_post >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  reverse conj_tac
+  irule owned_buffer_result_post >> rpt conj_tac
+  >~ [`vv_holds`]
   >- (simp[] >> irule buffer_vv_holds >> goal_assum (drule_at Any) >> simp[]) >>
+  TRY (first_assum ACCEPT_TAC) >>
   qexistsl_tac [`aid`,`w2n w`,`s`,`si`,`32 * LENGTH results`,`tv`,`w`] >>
   simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED

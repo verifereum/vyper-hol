@@ -513,8 +513,10 @@ Resume extcall_call_step[call_success]:
   `(SND (adopt_call_outcome rq oc consumed)).scopes = consumed.scopes` by
     (Cases_on `rq.cr_static` >> simp[vyperCallOutcomeTheory.adopt_call_outcome_equation]) >>
   `wb_frame cenv es (SND (adopt_call_outcome rq oc consumed)) sa s0 u'` by
-    (qpat_assum `wb_frame cenv es ee sa s0 u'` mp_tac >>
-     simp[wb_frame_def, locals_kept_def, popped_kept_def]) >>
+    (`locals_kept cenv es (SND (adopt_call_outcome rq oc consumed)) s0 u' <=>
+      locals_kept cenv es ee s0 u'` by simp[locals_kept_def, popped_kept_def] >>
+     pop_assum (fn lk => qpat_assum `wb_frame cenv es ee sa s0 u'`
+       (fn wb => mp_tac wb >> simp[NoAsms, wb_frame_def, lk]))) >>
   `extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
       has_default default_op default_ty default_opt oc.co_returnData
       (SND (adopt_call_outcome rq oc consumed)) (jump_to sr.cs_current_bb u')` by
