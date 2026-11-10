@@ -10366,6 +10366,89 @@ Proof
   rpt IF_CASES_TAC >> simp[mm_local_barrier_every]
 QED
 
+Theorem mm_local_scan_footprint_lower[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions ==>
+  !t. t <= LENGTH is ==>
+    mm_local_scan_every
+      (\g. !j d l. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+         mm_local_write_footprint (EL j is) = SOME (d,l) ==> g.cg_dst <= d)
+      (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE t is))
+Proof
+  strip_tac >> Induct >- simp[mm_local_scan_every_def, empty_scan_state_def] >>
+  strip_tac >> `t < LENGTH is /\ t <= LENGTH is` by decide_tac >>
+  simp[rich_listTheory.TAKE_SUC, FOLDL_APPEND] >>
+  `SORTED (\a b. a.cg_dst <= b.cg_dst)
+     (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+       empty_scan_state (TAKE t is)).ss_copies` by
+    (irule mm_local_fold_order >> simp[empty_scan_state_def]) >>
+  irule mm_local_inst_ordered_every >>
+  conj_tac
+  >- (simp[copy_merge_def, MEM_APPEND] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  simp[] >> reverse conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      irule (Q.INST [`j` |-> `t`, `is` |-> `bb.bb_instructions`]
+        mm_local_footprint_store_lower) >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    (qpat_assum `is = _` SUBST1_TAC >>
+     drule_all mm_local_prefix_wf_id_distinct >> simp[]) >>
+  `j = t` by
+    (gvs[] >> metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx]) >>
+  gvs[mm_local_write_footprint_def]
+QED
+
+Theorem mm_local_final_footprint_lower[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed ==>
+  !j d l. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    mm_local_write_footprint (EL j is) = SOME (d,l) ==> g.cg_dst <= d
+Proof
+  strip_tac >>
+  `mm_local_scan_every
+      (\g. !j d l. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+         mm_local_write_footprint (EL j is) = SOME (d,l) ==> g.cg_dst <= d)
+      (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state is)` by
+    (qsuff_tac `!t. t <= LENGTH is ==>
+      mm_local_scan_every
+        (\g. !j d l. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+           mm_local_write_footprint (EL j is) = SOME (d,l) ==> g.cg_dst <= d)
+        (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE t is))`
+     >- (disch_then (qspec_then `LENGTH is` mp_tac) >> simp[]) >>
+     metis_tac[mm_local_scan_footprint_lower]) >>
+  gvs[scan_block_def, hard_barrier_def, mm_local_scan_every_def, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_canonical_due_log_lower[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r) (mm_local_pending_indices is gs r) /\
+  ws = MAP (THE o cap) (due ++ [r]) ==>
+  !d bs. MEM (d,bs) ws ==> g.cg_dst <= d
+Proof
+  strip_tac >>
+  `!d l. (?bs. MEM (d,bs) ws /\ LENGTH bs = l) <=>
+    ?j. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+      mm_local_write_footprint (EL j is) = SOME (d,l)` by
+    metis_tac[mm_local_canonical_due_log_footprint] >>
+  `!j d l. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    mm_local_write_footprint (EL j is) = SOME (d,l) ==> g.cg_dst <= d` by
+    metis_tac[mm_local_final_footprint_lower] >>
+  metis_tac[]
+QED
+
 Theorem mm_local_collection_discharge[local]:
   mm_local_pending cap js s t /\
   (!pre j mid k post d bs a cs.
