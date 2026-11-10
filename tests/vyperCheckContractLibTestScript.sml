@@ -1725,3 +1725,62 @@ val () = check_rejects empty_layouts (iterated_write_function
        ^(op_lit u256 2)]``)
 val () = check_accepts "loop without iterated array write" false empty_layouts
   (iterated_write_function ``[] : stmt list``)
+
+(* Nested assignment targets reach a codegen panic in both pinned Python
+   backends, for both abi_decode and internal-call RHSs. Complex values in
+   flat targets remain valid; the restriction concerns targets, not types. *)
+val unpack_pair_ty = ``TupleT [^u256; ^u256]``
+val unpack_nested_ty = ``TupleT [^u256; ^unpack_pair_ty]``
+val unpack_deep_ty = ``TupleT [^u256; ^unpack_nested_ty]``
+val unpack_nested_target =
+  ``TupleTarget [BaseTarget (NameTarget "a");
+       TupleTarget [BaseTarget (NameTarget "b"); BaseTarget (NameTarget "c")]]``
+val unpack_deep_target =
+  ``TupleTarget [BaseTarget (NameTarget "a");
+       TupleTarget [BaseTarget (NameTarget "b");
+         TupleTarget [BaseTarget (NameTarget "c"); BaseTarget (NameTarget "d")]]]``
+val unpack_data_ty = ``BaseT (BytesT (Dynamic 128))``
+
+fun unpack_modules via_call ty target locals = let
+  val decoded = ``TypeBuiltin ^ty (AbiDecode F) ^ty
+                    [Name ^unpack_data_ty "data"]``
+  val helpers = if via_call then
+    ``[FunctionDecl Internal Pure F F "g" [("data", ^unpack_data_ty)] []
+         ^ty [Return (SOME ^decoded)]]``
+    else ``[] : toplevel list``
+  val rhs = if via_call then
+    ``Call ^ty (IntCall (NONE, "g")) [Name ^unpack_data_ty "data"] NONE``
+    else decoded
+in
+  ``[(NONE, ^helpers ++
+       [FunctionDecl External Nonpayable F F "f"
+          [("data", ^unpack_data_ty)] [] ^u256
+          (^locals ++ [Assign ^target ^rhs;
+                       Return (SOME (Name ^u256 "a"))])])]
+    : (num option # toplevel list) list``
+end
+
+val unpack_word_locals =
+  ``[AnnAssign "a" ^u256 ^(uint 0); AnnAssign "b" ^u256 ^(uint 0);
+     AnnAssign "c" ^u256 ^(uint 0); AnnAssign "d" ^u256 ^(uint 0)]``
+
+val () = List.app (fn in_deploy =>
+  List.app (fn via_call =>
+    List.app (fn (ty, target) =>
+      check_rejects_in (if in_deploy then ``T`` else ``F``) empty_layouts
+        (unpack_modules via_call ty target unpack_word_locals))
+      [(unpack_nested_ty, unpack_nested_target),
+       (unpack_deep_ty, unpack_deep_target)]) [false, true]) [false, true]
+
+val () = List.app (fn in_deploy =>
+  List.app (fn via_call =>
+    List.app (fn elem_ty =>
+      check_accepts "flat tuple target with complex value" in_deploy empty_layouts
+        (unpack_modules via_call ``TupleT [^u256; ^elem_ty]``
+          ``TupleTarget [BaseTarget (NameTarget "a"); BaseTarget (NameTarget "b")]``
+          ``[AnnAssign "a" ^u256 ^(uint 0);
+             AnnAssign "b" ^elem_ty (TypeBuiltin ^elem_ty Empty ^elem_ty [])]``))
+      [u256, ``ArrayT ^u256 (Fixed 2)``, unpack_pair_ty]) [false, true])
+    [false, true]
+
+val () = print "tuple targets: nested rejected, flat controls accepted in both modes\n"
