@@ -4644,6 +4644,142 @@ QED
 
 Finalise sym_rf_strict_suffix_abort
 
+Theorem sym_rf_entry_forward_abort:
+  !fuel ctx cp lo o2pc prog liveness dfg cfg fn bb i j ps vs ast ops
+   ps_end ra rest mem0 a vs_end env ret srest labs0 ss.
+    lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\ opaque_use_ok fn /\
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    revert_forward_pair bb i j /\ vs.vs_inst_idx = i /\
+    LENGTH (get_params bb.bb_instructions) <= i /\
+    EVERY (\inst. EVERY (\op. ~is_label_operand op) inst.inst_operands)
+      (DROP i bb.bb_instructions) /\ rf_spills_separated ps /\
+    (!k inst op. i <= k /\ get_instruction bb k = SOME inst /\
+       MEM op (compute_operands inst) /\ is_var_operand op /\
+       (!k' inst' x. i <= k' /\ k' < k /\ get_instruction bb k' = SOME inst' /\
+                     op = Var x ==> ~MEM x inst'.inst_outputs) ==>
+       MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+       operand_val (frame_view fn ra vs) lo at =
+       operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs ast /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (i - LENGTH (get_params bb.bb_instructions))
+      (DROP i bb.bb_instructions) ps = SOME (ops, ps_end) /\
+    (!off. ~MEM (SORestore off) ops /\ ~MEM (SOSpill off) ops) /\
+    (!name. MEM (AsmOp name) (execute_plan cp.cp_initial_fmp ops) ==>
+            IS_SOME (evm_opcode_byte name)) /\
+    asm_block_at prog ast.as_pc (execute_plan cp.cp_initial_fmp ops) /\
+    MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\ label_flow_ok ctx /\
+    asm_static_wf prog /\
+    sym_frame_inv prog env ctx cp fn ret srest labs0 ps ast ss /\
+    exec_block fuel ctx bb vs = Abort a vs_end ==>
+    ?n ast_end.
+      ((a = Revert_abort /\ asm_steps lo o2pc prog n ast = AsmRevert ast_end) \/
+       (a = ExHalt_abort /\ asm_steps lo o2pc prog n ast = AsmFault ast_end)) /\
+      venom_asm_terminal_rel vs_end ast_end /\
+      sym_terminal (sym_steps prog env n ss)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_entry_copy_setup >> strip_tac >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_copy_source_alignment >>
+  disch_then (qspec_then `fuel` (qspec_then `ctx` assume_tac)) >>
+  Cases_on `emit_input_plan RETURNDATACOPY (compute_operands inst)
+    (live_vars_at liveness bb.bb_label (SUC i)) ps` >>
+  rename1 `_ = (ins,prep)` >>
+  Cases_on `reorder_plan (dfg_build_function fn) (compute_operands inst) prep` >>
+  rename1 `_ = (ros,arr)` >>
+  qpat_x_assum `liveness = _` SUBST_ALL_TAC >>
+  qpat_x_assum `dfg = _` SUBST_ALL_TAC >>
+  qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+  `!off. ~MEM (SOSpill off) step_ops /\ ~MEM (SORestore off) step_ops` by metis_tac[] >>
+  `?top. asm_sym_rel prog env ast ss /\ ss.sym_stack = top ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
+    (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp' b)` by
+    fs[sym_frame_inv_def, sym_kinds_ok_def] >>
+  qabbrev_tac `copied = write_memory_with_expansion (w2n dst)
+    (TAKE (w2n sz) (DROP (w2n src) vs.vs_returndata)) vs` >>
+  `copied = write_memory_with_expansion (w2n dst)
+    (TAKE (w2n sz) (DROP (w2n src) vs.vs_returndata)) vs` by simp[Abbr `copied`] >>
+  drule_all sym_rf_entry_copy_execution >>
+  reverse (Cases_on `w2n src + w2n sz <= LENGTH vs.vs_returndata`) >>
+  pure_asm_rewrite_tac[COND_CLAUSES] >> strip_tac
+  >- suspend "fault" >> suspend "success"
+QED
+
+Resume sym_rf_entry_forward_abort[fault]:
+  `i <= vs.vs_inst_idx /\ vs.vs_inst_idx <= j /\
+   get_instruction bb vs.vs_inst_idx = SOME inst` by simp[] >>
+  qpat_x_assum `step_inst fuel ctx inst vs = _` mp_tac >>
+  pure_asm_rewrite_tac[COND_CLAUSES] >> disch_tac >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_forward_exec_abort_cases >>
+  ASM_SIMP_TAC bool_ss [] >> strip_tac >>
+  qexistsl [`LENGTH (execute_plan cp'.cp_initial_fmp step_ops)`, `out`] >>
+  ASM_SIMP_TAC bool_ss [] >> gvs[]
+QED
+
+Resume sym_rf_entry_forward_abort[success]:
+  qpat_x_assum `step_inst fuel ctx inst vs = _` mp_tac >>
+  pure_asm_rewrite_tac[COND_CLAUSES] >> disch_tac >>
+  `i <= vs.vs_inst_idx /\ vs.vs_inst_idx <= j /\
+   get_instruction bb vs.vs_inst_idx = SOME inst` by simp[] >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_forward_exec_abort_cases >>
+  qpat_assum `step_inst fuel ctx inst vs = OK _` (fn th => pure_rewrite_tac[th]) >>
+  simp[NoAsms] >> strip_tac >>
+  `LENGTH (compute_operands inst) <= 16` by
+    simp[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def] >>
+  `!r ti. SUC i <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
+     ti.inst_opcode <> PHI` by
+    (rpt strip_tac >> `i <= r` by decide_tac >>
+     drule_all fnFrameStepsRevertForwardTheory.rf_forward_instruction_opcode >>
+     simp[] >> rpt IF_CASES_TAC >> simp[]) >>
+  `i <= j` by decide_tac >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_suffix_copy_success_invariants >> strip_tac >>
+  `operand_val (frame_view fn ra vs) lo
+     (normalize_operand (dfg_build_function fn) [] dop) = SOME dst /\
+   operand_val (frame_view fn ra vs) lo
+     (normalize_operand (dfg_build_function fn) [] zop) = SOME sz` by
+    (qpat_x_assum `rf_value_inv _ _ _ _ _ _ i vs` mp_tac >>
+     simp[NoAsms, fnFrameStepsRevertForwardTheory.rf_value_inv_def] >> strip_tac >>
+     `rf_live_use bb i j dop /\ rf_live_use bb i j zop` by
+       (conj_tac >> (irule fnFrameStepsRevertForwardTheory.rf_live_use_current >>
+        (conj_tac >- decide_tac) >> qexists `inst` >>
+        simp[compute_operands_def, python_stack_operands_def,
+          ir_specific_operand_order_def])) >>
+     metis_tac[]) >>
+  `i < SUC i /\ SUC i <= j /\ LENGTH (get_params bb.bb_instructions) <= SUC i` by decide_tac >>
+  `!off. ~MEM (SOSpill off) rest_ops /\ ~MEM (SORestore off) rest_ops` by metis_tac[] >>
+  `asm_block_at prog out.as_pc (execute_plan cp'.cp_initial_fmp rest_ops)` by metis_tac[] >>
+  qpat_x_assum `copied = write_memory_with_expansion _ _ _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th])) >>
+  `plan_stack_rel lo (frame_view fn ra (copied with vs_inst_idx := SUC i)) ps1.ps_stack stk_out /\
+   venom_asm_terminal_rel (copied with vs_inst_idx := SUC i) out /\
+   TAKE (w2n sz) (DROP (w2n dst) (copied with vs_inst_idx := SUC i).vs_memory) =
+     TAKE (w2n sz) (DROP (w2n dst) out.as_memory)` by
+    simp[sym_plan_stack_rel_inst_idx, sym_terminal_rel_inst_idx] >>
+  `(copied with vs_inst_idx := SUC i).vs_inst_idx = SUC i` by simp[] >>
+  `exec_block fuel ctx bb (copied with vs_inst_idx := SUC i) = Abort a vs_end` by
+    (qpat_x_assum `exec_block fuel ctx bb (copied with vs_inst_idx := _) = _` mp_tac >>
+     qpat_assum `vs.vs_inst_idx = i` (fn th => pure_rewrite_tac[th]) >>
+     simp[NoAsms]) >>
+  qpat_assum `rf_inventory_inv _ _ _ _ ps1 _`
+    (mp_then (Pat `rf_inventory_inv _ _ _ _ _ _`) mp_tac
+      (Q.SPEC `SUC i` sym_rf_strict_suffix_abort)) >>
+  disch_then drule_all >> strip_tac >>
+  qexistsl [`LENGTH (execute_plan cp'.cp_initial_fmp step_ops) + n`, `out'`] >>
+  conj_tac >-
+    (disj1_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+     irule blockSimHelpersTheory.asm_steps_compose_revert >>
+     qexists `out` >> metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  pure_rewrite_tac[sym_steps_add] >>
+  qpat_assum `sym_steps _ _ _ ss = SymOK _` (fn th => pure_rewrite_tac[th]) >>
+  simp[NoAsms] >> first_assum ACCEPT_TAC
+QED
+
+Finalise sym_rf_entry_forward_abort
+
 Theorem sym_jmp_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
