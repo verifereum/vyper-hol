@@ -1266,6 +1266,15 @@ Proof
   fs[ircf_fwd_ok_def] >> metis_tac[EL_MEM]
 QED
 
+Theorem ircf_log_operand_order_diagnostic:
+  invokeCopyFwdCommonDefs$is_mem_addr_position LOG 1 /\
+  ~invokeCopyFwdCommonDefs$is_mem_addr_position LOG 3 /\
+  ?ops. memLocDefs$mem_read_ops (mk_inst 0 LOG [Lit 1w; Var "topic"; Lit 32w; Var "addr"] []) = SOME ops /\
+    ops.iao_ofst = Var "addr"
+Proof
+  EVAL_TAC >> simp[]
+QED
+
 Theorem ircf_redirect_non_address_operand:
   wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
   fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
