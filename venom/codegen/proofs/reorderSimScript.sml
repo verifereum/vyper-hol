@@ -6279,7 +6279,7 @@ Proof
   gvs[MAP_MAP_o, combinTheory.o_DEF, REVERSE_APPEND, MAP_APPEND, SNOC_APPEND]
 QED
 
-Theorem reduce_depth_plan_layout_wf[local]:
+Theorem reduce_depth_plan_layout_wf:
   !fuel target_ops target_op f target_len ps.
     spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
     spill_alloc_layout_wf
