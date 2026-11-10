@@ -2236,6 +2236,115 @@ Proof
   fs[sym_frame_inv_def, sym_kinds_ok_def]
 QED
 
+Theorem ret_operand_not_code_end:
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  label_flow_ok ctx /\ inst.inst_opcode = RET /\
+  MEM (Var x) inst.inst_operands ==> ~code_end_var fn x
+Proof
+  strip_tac >> fs[label_flow_ok_def] >>
+  first_x_assum (qspecl_then [`fn`, `inst`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem ret_payload_var_kind:
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\
+  inst.inst_opcode = RET /\ inst.inst_operands = front ++ [Var pc] /\
+  MEM (Var x) front /\ Var x <> dead_stack_marker /\
+  op_kind_ok fn ret (Var x) sv ==> ?w. sv = Val w
+Proof
+  strip_tac >>
+  drule_all_then assume_tac fnFrameBoundaryGenRetTheory.ret_payload_not_retpc >>
+  `~code_end_var fn x` by
+    (irule ret_operand_not_code_end >> metis_tac[listTheory.MEM_APPEND]) >>
+  gvs[op_kind_ok_def]
+QED
+
+Theorem ret_payload_op_kind:
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ label_positions_ok inst /\
+  inst.inst_opcode = RET /\ inst.inst_operands = front ++ [Var pc] /\
+  MEM op front /\ op <> dead_stack_marker /\ op_kind_ok fn ret op sv ==>
+  ?w. sv = Val w
+Proof
+  strip_tac >> Cases_on `op`
+  >- gvs[op_kind_ok_def]
+  >- metis_tac[ret_payload_var_kind] >>
+  gvs[op_kind_ok_def, label_positions_ok_def, listTheory.EVERY_APPEND,
+      listTheory.EVERY_MEM, is_label_operand_def] >>
+  metis_tac[is_label_operand_def]
+QED
+
+Theorem ret_compute_operands_last_retpc:
+  MEM inst (fn_insts (reachable_fn fn)) /\ retpc_shape_ok fn /\
+  inst.inst_opcode = RET ==>
+  ?front x. compute_operands inst = front ++ [Var x] /\ retpc_var fn x
+Proof
+  simp[compute_operands_def, python_stack_operands_def,
+       ir_specific_operand_order_def] >>
+  metis_tac[retpc_shape_ok_def, reachable_retpc_var, listTheory.MEM]
+QED
+
+Theorem ret_source_op_kinds:
+  MEM inst (fn_insts (reachable_fn fn)) /\ codegen_ready_fn fn /\
+  opaque_use_ok fn /\ retpc_shape_ok fn /\ inst_wf inst /\
+  MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\ label_flow_ok ctx /\
+  inst.inst_opcode = RET /\
+  EVERY (\op. op <> dead_stack_marker) (compute_operands inst) ==>
+  ?front x. compute_operands inst = front ++ [Var x] /\ retpc_var fn x /\
+    (!op sv. MEM op front /\ op_kind_ok fn ret op sv ==> ?w. sv = Val w)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac ret_compute_operands_last_retpc >>
+  `MEM inst (fn_insts fn)` by
+    (irule reachable_fn_insts_nonphi >> simp[]) >>
+  gvs[compute_operands_def, python_stack_operands_def,
+      ir_specific_operand_order_def, fn_shape_ok_def, listTheory.EVERY_MEM] >>
+  `label_positions_ok inst` by metis_tac[inst_shape_ok_def] >>
+  rpt strip_tac >> `op <> dead_stack_marker` by metis_tac[] >>
+  drule_all ret_payload_op_kind >> simp[]
+QED
+
+Theorem word_kind_concretization:
+  MEM op ops /\ op_kind_ok fn ret op sv /\
+  (!op sv. MEM op ops /\ op_kind_ok fn ret op sv ==> ?w. sv = Val w) /\
+  sval_conc lo sv = SOME w ==> sv = Val w
+Proof
+  strip_tac >> `?v. sv = Val v` by metis_tac[] >> gvs[sval_conc_def]
+QED
+
+Theorem word_kind_prefix_concretization:
+  !ops top values.
+  LIST_REL (op_kind_ok fn ret) ops top /\
+  (!op sv. MEM op ops /\ op_kind_ok fn ret op sv ==> ?w. sv = Val w) /\
+  LIST_REL (\sv w. sval_conc lo sv = SOME w)
+    (top ++ srest) (values ++ rest) /\ LENGTH values = LENGTH ops ==>
+  top = MAP Val values
+Proof
+  Induct >> Cases_on `top` >> Cases_on `values` >>
+  simp[] >> rpt strip_tac >>
+  metis_tac[word_kind_concretization, listTheory.MEM]
+QED
+
+Theorem ret_prepared_symbolic_stack:
+  !p env cs ss cp fn ret srest ps front x ra values rest.
+  asm_sym_rel p env cs ss /\ sym_kinds_ok cp fn ret srest ps ss /\
+  ps.ps_stack = front ++ [Var x] /\ retpc_var fn x /\
+  Var x <> dead_stack_marker /\
+  (!op sv. MEM op front /\ op_kind_ok fn ret op sv ==> ?w. sv = Val w) /\
+  cs.as_stack = ra :: values ++ rest /\ LENGTH values = LENGTH front ==>
+  ss.sym_stack = Lab ret 0 :: MAP Val values ++ srest
+Proof
+  rpt gen_tac >> strip_tac >> fs[sym_kinds_ok_def] >>
+  gvs[listTheory.REVERSE_APPEND, listTheory.LIST_REL_CONS1] >>
+  qpat_x_assum `op_kind_ok fn ret (Var x) _` mp_tac >>
+  simp[op_kind_ok_def] >> strip_tac >> gvs[] >>
+  rename1 `LIST_REL (op_kind_ok fn ret) (REVERSE front) payload` >>
+  `payload = MAP Val values` by
+    (irule word_kind_prefix_concretization >>
+     fs[asm_sym_rel_def] >> metis_tac[listTheory.MEM_REVERSE, listTheory.LENGTH_REVERSE]) >>
+  simp[]
+QED
+
 Theorem sym_jmp_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
