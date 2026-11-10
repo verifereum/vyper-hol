@@ -218,3 +218,69 @@ Proof
     sym_reorder_reduce_run >>
   compose_plan_frame_tac
 QED
+
+val prepare_finish_tac =
+  ho_match_mp_tac sym_reorder_prepare_finish >> asm_rewrite_tac[];
+
+Theorem sym_reorder_prepare_run[local]:
+  (case stack_get_unfixed_depth op f (LENGTH pending) ps.ps_stack of
+     SOME d => ([],ps)
+   | NONE => (case FLOOKUP ps.ps_spilled op of
+       SOME off => do_restore op ps | NONE => ([],ps))) = (rops,ps1) /\
+  (if dist > 16 then
+     reduce_depth_plan (LENGTH ps1.ps_stack) pending op f (LENGTH pending) ps1
+   else ([],ps1)) = (dops,ps2) /\
+  spill_alloc_layout_wf ps1.ps_alloc ps1.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) rops /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) dops /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps1.ps_alloc.sa_spill_base /\
+  ps2.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp rops) /\
+  asm_block_at p (ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp rops))
+    (execute_plan initial_fmp dops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp (rops ++ dops))) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest ps2 last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (rops ++ dops)) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  drule_all_then (qspecl_then [`r`, `env`] (qx_choose_then `mid` strip_assume_tac))
+    sym_reorder_restore_run >>
+  prepare_finish_tac
+QED
+
+val prepare_run_tac =
+  ho_match_mp_tac sym_reorder_prepare_run >>
+  drule_all_then assume_tac reorder_restore_spill_base >>
+  gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
+    EVERY_APPEND];
+
+Theorem sym_reorder_prepare:
+  residual_budget_wf_marked spillbase pending ps /\
+  LENGTH pending <= LENGTH ps.ps_stack /\
+  (case stack_get_unfixed_depth op f (LENGTH pending) ps.ps_stack of
+     SOME d => ([],ps)
+   | NONE => (case FLOOKUP ps.ps_spilled op of
+       SOME off => do_restore op ps | NONE => ([],ps))) = (rops,ps1) /\
+  (if dist > 16 then
+     reduce_depth_plan (LENGTH ps1.ps_stack) pending op f (LENGTH pending) ps1
+   else ([],ps1)) = (dops,ps2) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (rops ++ dops) /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  ps2.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (rops ++ dops)) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp (rops ++ dops))) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest ps2 last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (rops ++ dops)) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac reorder_prepare_structure >>
+  prepare_run_tac
+QED
