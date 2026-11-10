@@ -202,22 +202,13 @@ Resume sym_phi_plan_sim[dead]:
   >- suspend "dead_pop" >>
   strip_tac >> gvs[] >> qexists `ss` >>
   simp[execute_plan_def, exec_stack_op_def, sym_steps_def] >>
-  irule sym_phi_rename >> metis_tac[listTheory.MEM]
+  metis_tac[sym_phi_rename, listTheory.MEM]
 QED
 
 Resume sym_phi_plan_sim[dead_pop]:
   pairarg_tac >> strip_tac >> gvs[] >>
-  `sym_kinds_ok cplan fn ret srest
-    (ps with ps_stack := stack_poke d (Var x) ps.ps_stack) ss` by
-    (irule sym_phi_rename >> metis_tac[listTheory.MEM]) >>
-  `execute_plan initial_fmp [SOPoke d (Var x)] = []` by
-    simp[execute_plan_def, exec_stack_op_def] >>
-  gvs[execute_plan_poke_cons] >>
-  `spill_alloc_layout_wf
-    (ps with ps_stack := stack_poke d (Var x) ps.ps_stack).ps_alloc
-    (ps with ps_stack := stack_poke d (Var x) ps.ps_stack).ps_spilled` by simp[] >>
-  drule_all sym_singleton_cleanup_sim >>
-  disch_then (qspec_then `env` strip_assume_tac) >> qexists `ss'` >> simp[]
+  `MEM x inst.inst_outputs` by simp[] >>
+  drule_all sym_phi_dead_cleanup_sim >> simp[]
 QED
 
 Resume sym_phi_plan_sim[live]:
@@ -227,45 +218,14 @@ Resume sym_phi_plan_sim[live]:
   >- suspend "live_pop" >>
   strip_tac >> gvs[] >>
   `MEM x inst.inst_outputs` by simp[] >>
-  drule_all sym_phi_live_prefix_sim >>
-  disch_then (qspec_then `env` strip_assume_tac) >> qexists `ss'` >> simp[]
+  drule_all sym_phi_live_prefix_sim >> simp[]
 QED
 
 Resume sym_phi_plan_sim[live_pop]:
   pairarg_tac >> strip_tac >> gvs[] >>
-  suspend "live_pop_compose"
-QED
-
-Resume sym_phi_plan_sim[live_pop_compose]:
   `MEM x inst.inst_outputs` by simp[] >>
-  `d < LENGTH ps.ps_stack` by metis_tac[stack_get_phi_depth_var_not_marker] >>
-  `spill_alloc_layout_wf dup_ps.ps_alloc dup_ps.ps_spilled` by
-    metis_tac[do_dup_layout_wf, pairTheory.SND] >>
-  `spill_alloc_layout_wf
-    (dup_ps with ps_stack := stack_poke 0 (Var x) dup_ps.ps_stack).ps_alloc
-    (dup_ps with ps_stack := stack_poke 0 (Var x) dup_ps.ps_stack).ps_spilled` by simp[] >>
-  `(!off. MEM (SOSpill off) dup_ops ==> off < dimword (:256)) /\
-   (!off b. MEM (SOSpill off) dup_ops /\ in_mem_range off 32 b ==>
-     R b /\ context_spill_byte cplan b) /\
-   (!off. MEM (SOSpill off) pop_ops ==> off < dimword (:256)) /\
-   (!off b. MEM (SOSpill off) pop_ops /\ in_mem_range off 32 b ==>
-     R b /\ context_spill_byte cplan b)` by metis_tac[listTheory.MEM_APPEND] >>
-  qpat_x_assum `asm_block_at _ _ _` mp_tac >>
-  pure_rewrite_tac[Once stackOpSimTheory.execute_plan_append] >>
-  rewrite_tac[stackOpSimTheory.asm_block_at_append] >> strip_tac >>
-  drule_all sym_phi_live_prefix_sim >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  suspend "live_pop_finish"
-QED
-
-Resume sym_phi_plan_sim[live_pop_finish]:
-  `asm_block_at p ss'.sym_base.as_pc (execute_plan initial_fmp pop_ops)` by metis_tac[] >>
-  drule_all sym_singleton_cleanup_sim >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  qexists `ss''` >>
-  pure_rewrite_tac[Once stackOpSimTheory.execute_plan_append, listTheory.LENGTH_APPEND] >>
-  simp[Once sym_steps_add] >>
-  simp[stackOpSimTheory.execute_plan_append] >> metis_tac[]
+  drule_all (SRULE [listTheory.APPEND_ASSOC, listTheory.MEM_APPEND,
+    listTheory.MEM] sym_phi_live_cleanup_sim) >> simp[]
 QED
 Finalise sym_phi_plan_sim
 
@@ -390,4 +350,237 @@ Proof
   simp[Once sym_steps_add] >>
   pure_rewrite_tac[stackOpSimTheory.execute_plan_append, listTheory.LENGTH_APPEND] >>
   simp[] >> metis_tac[]
+QED
+
+(* Caller boundary for the singleton ASSIGN preparation. *)
+Theorem sym_assign_preparation_facts:
+  (is_var_operand op ==> MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  residual_budget_wf_marked sb [] ps /\
+  emit_input_plan ASSIGN [op] nl ps = (iops,prepared) /\
+  reorder_plan dfg [op] prepared = (rops,arranged) /\
+  1 <= LENGTH prepared.ps_stack ==>
+  spill_alloc_layout_wf arranged.ps_alloc arranged.ps_spilled /\
+  stack_peek 0 arranged.ps_stack = op /\ 0 < LENGTH arranged.ps_stack
+Proof
+  strip_tac >>
+  `(!v. MEM v [op] /\ is_var_operand v ==>
+      MEM v ps.ps_stack \/ v IN FDOM ps.ps_spilled) /\
+    PERM [op] [op] /\ LENGTH [op] <= 16 /\
+    LENGTH [op] <= LENGTH prepared.ps_stack` by simp[] >>
+  drule_all deepResidualSimTheory.selected_input_arranged_marked >>
+  simp[deepResidualBudgetTheory.plan_state_residual_wf_marked_def] >>
+  strip_tac >> first_x_assum (qspec_then `0` mp_tac) >> simp[]
+QED
+
+Theorem singleton_cleanup_ops_bounded:
+  popmany_plan [v] ps = (ops,qs) /\ plan_slots_bounded sb ps ==>
+  ops_spill_bounded sb qs.ps_alloc.sa_next_offset ops
+Proof
+  strip_tac >> Cases_on `stack_get_depth v ps.ps_stack`
+  >- (`popmany_plan [v] ps = ([],ps)` by
+        (irule fnBlockPlanStaticFactsTheory.popmany_plan_absent >> simp[]) >>
+      gvs[] >> simp[]) >>
+  metis_tac[popmany_singleton_ops_spill_bounded]
+QED
+
+Theorem phi_optional_cleanup_ops_bounded:
+  (if cleanup then popmany_plan [v] ps else ([],ps)) = (ops,qs) /\
+  plan_slots_bounded sb ps ==>
+  ops_spill_bounded sb qs.ps_alloc.sa_next_offset ops /\
+  ps.ps_alloc.sa_next_offset <= qs.ps_alloc.sa_next_offset
+Proof
+  Cases_on `cleanup` >> simp[] >> strip_tac
+  >- metis_tac[singleton_cleanup_ops_bounded, allocMonoTheory.popmany_plan_next_offset] >>
+  gvs[] >> simp[]
+QED
+
+Theorem phi_dup_cleanup_ops_bounded:
+  plan_slots_bounded sb ps /\ d < LENGTH ps.ps_stack /\
+  do_dup d ps = (dups,dup_ps) /\
+  (if cleanup then popmany_plan [v]
+     (dup_ps with ps_stack := stack_poke 0 v dup_ps.ps_stack)
+   else ([],dup_ps with ps_stack := stack_poke 0 v dup_ps.ps_stack)) = (pops,qs) ==>
+  ops_spill_bounded sb qs.ps_alloc.sa_next_offset (dups ++ [SOPoke 0 v] ++ pops)
+Proof
+  strip_tac >> drule_all planSpillBoundsTheory.do_dup_slots_bounded >> strip_tac >>
+  `plan_slots_bounded sb
+    (dup_ps with ps_stack := stack_poke 0 v dup_ps.ps_stack)` by
+    (fs[planSpillBoundsTheory.plan_slots_bounded_def] >> metis_tac[]) >>
+  drule_all phi_optional_cleanup_ops_bounded >>
+  simp[planSpillBoundsTheory.ops_spill_bounded_append,
+    planSpillBoundsTheory.ops_spill_bounded_def] >>
+  metis_tac[planSpillBoundsTheory.ops_spill_bounded_def, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem phi_poke_cleanup_ops_bounded:
+  plan_slots_bounded sb ps /\
+  (if cleanup then popmany_plan [v]
+     (ps with ps_stack := stack_poke d v ps.ps_stack)
+   else ([],ps with ps_stack := stack_poke d v ps.ps_stack)) = (pops,qs) ==>
+  ops_spill_bounded sb qs.ps_alloc.sa_next_offset (SOPoke d v :: pops)
+Proof
+  simp[planSpillBoundsTheory.ops_spill_bounded_def] >> strip_tac >>
+  `plan_slots_bounded sb (ps with ps_stack := stack_poke d v ps.ps_stack)` by
+    (fs[planSpillBoundsTheory.plan_slots_bounded_def] >> metis_tac[]) >>
+  drule_all phi_optional_cleanup_ops_bounded >>
+  simp[planSpillBoundsTheory.ops_spill_bounded_def] >> metis_tac[]
+QED
+
+Theorem generate_phi_plan_ops_bounded:
+  generate_phi_plan inst nl halt ps = (ops,qs) /\ plan_slots_bounded sb ps ==>
+  ops_spill_bounded sb qs.ps_alloc.sa_next_offset ops
+Proof
+  strip_tac >> qpat_x_assum `generate_phi_plan _ _ _ _ = _` mp_tac >>
+  simp[generate_phi_plan_def] >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- (strip_tac >> gvs[] >> simp[]) >>
+  rename1 `stack_get_phi_depth _ _ = SOME d` >>
+  `d < LENGTH ps.ps_stack` by metis_tac[stack_get_phi_depth_var_not_marker] >>
+  Cases_on `MEM (operand_to_string (stack_peek d ps.ps_stack)) nl`
+  >- suspend "dup" >> suspend "poke"
+QED
+
+Resume generate_phi_plan_ops_bounded[dup]:
+  Cases_on `do_dup d ps` >> rename1 `do_dup d ps = (dups,dup_ps)` >> simp[] >>
+  Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) nl` >> simp[]
+  >- (pairarg_tac >> strip_tac >> gvs[] >>
+      irule phi_dup_cleanup_ops_bounded >> simp[] >> metis_tac[]) >>
+  strip_tac >> gvs[] >>
+  drule_all planSpillBoundsTheory.do_dup_slots_bounded >>
+  simp[planSpillBoundsTheory.ops_spill_bounded_append,
+    planSpillBoundsTheory.ops_spill_bounded_def] >> metis_tac[]
+QED
+
+Resume generate_phi_plan_ops_bounded[poke]:
+  simp[] >> Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) nl` >> simp[]
+  >- (pairarg_tac >> strip_tac >> gvs[] >>
+      irule phi_poke_cleanup_ops_bounded >> simp[] >> metis_tac[]) >>
+  strip_tac >> gvs[planSpillBoundsTheory.ops_spill_bounded_def]
+QED
+Finalise generate_phi_plan_ops_bounded
+
+Theorem generate_phi_plan_ops_region_confined:
+  generate_phi_plan inst nl halt ps = (ops,qs) /\ plan_slots_bounded sb ps /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = name /\ r.sr_spill_base <= sb /\
+  qs.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  !off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    closure_spill_byte ctx cplan name b /\ context_spill_byte cplan b
+Proof
+  strip_tac >> drule_all generate_phi_plan_ops_bounded >>
+  metis_tac[scratch_ops_region_confined]
+QED
+
+Theorem optimistic_swap_ops_bounded:
+  optimistic_swap_plan dfg inst nl term ps = (ops,qs) /\ plan_slots_bounded sb ps ==>
+  ops_spill_bounded sb qs.ps_alloc.sa_next_offset ops
+Proof
+  strip_tac >> drule optimistic_swap_result_cases >> strip_tac
+  >- (gvs[] >> simp[]) >>
+  metis_tac[planSpillBoundsTheory.do_swap_slots_bounded]
+QED
+
+Theorem assign_postfix_ops_bounded:
+  plan_slots_bounded sb ps7 /\ spill_alloc_layout_wf ps7.ps_alloc ps7.ps_spilled /\
+  (if halt then ([],ps7) else popmany_plan (if MEM x nl then [] else [Var x]) ps7)
+    = (pops,ps8) /\
+  (if MEM x nl then optimistic_swap_plan dfg inst nl term ps8 else ([],ps8))
+    = (opts,ps9) /\ qs = release_dead_spills nl ps9 ==>
+  ops_spill_bounded sb qs.ps_alloc.sa_next_offset (pops ++ opts)
+Proof
+  strip_tac >>
+  Cases_on `MEM x nl`
+  >- (gvs[popmany_plan_def] >> drule_all optimistic_swap_ops_bounded >>
+      simp[allocMonoTheory.release_dead_spills_next_offset]) >>
+  gvs[] >> Cases_on `halt` >> gvs[] >>
+  drule_all singleton_cleanup_ops_bounded >>
+  simp[allocMonoTheory.release_dead_spills_next_offset]
+QED
+
+Theorem assign_postfix_ops_region_confined:
+  plan_slots_bounded sb ps7 /\ spill_alloc_layout_wf ps7.ps_alloc ps7.ps_spilled /\
+  (if halt then ([],ps7) else popmany_plan (if MEM x nl then [] else [Var x]) ps7)
+    = (pops,ps8) /\
+  (if MEM x nl then optimistic_swap_plan dfg inst nl term ps8 else ([],ps8))
+    = (opts,ps9) /\ qs = release_dead_spills nl ps9 /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= sb /\
+  qs.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  !off b. MEM (SOSpill off) (pops ++ opts) /\ in_mem_range off 32 b ==>
+    (r.sr_spill_base <= b /\ b < r.sr_spill_end) /\ context_spill_byte cplan b
+Proof
+  strip_tac >> drule_all assign_postfix_ops_bounded >>
+  simp[planSpillBoundsTheory.ops_spill_bounded_def, in_mem_range_def] >>
+  rpt strip_tac >>
+  `r.sr_spill_base <= b /\ b < r.sr_spill_end` by
+    (first_x_assum (qspec_then `off` mp_tac) >> simp[] >> gvs[]) >>
+  simp[contextCodegenRelTheory.context_spill_byte_def] >> metis_tac[]
+QED
+
+Theorem assign_postfix_alloc_frame:
+  (if halt then ([],ps7) else popmany_plan (if MEM x nl then [] else [Var x]) ps7)
+    = (pops,ps8) /\
+  (if MEM x nl then optimistic_swap_plan dfg inst nl term ps8 else ([],ps8))
+    = (opts,ps9) /\ qs = release_dead_spills nl ps9 ==>
+  ps7.ps_alloc.sa_spill_base = qs.ps_alloc.sa_spill_base /\
+  ps7.ps_alloc.sa_next_offset <= qs.ps_alloc.sa_next_offset
+Proof
+  strip_tac >>
+  `((if [x] = [] \/ halt then (pops,ps8) = ([],ps7)
+      else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) [x])) ps7 = (pops,ps8)) /\
+    (if [x] = [] \/ FILTER (\out. MEM out nl) [x] = [] then (opts,ps9) = ([],ps8)
+      else optimistic_swap_plan dfg inst nl term ps8 = (opts,ps9)))` by
+    (Cases_on `MEM x nl` >> Cases_on `halt` >> gvs[]) >>
+  drule_all generatedPrefixSimTheory.regular_postfix_alloc_frame >> simp[]
+QED
+
+Theorem sym_assign_plan_applicability:
+  generated_plan_state_wf_marked sb ps /\
+  (is_var_operand op ==> MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan ASSIGN [op] nl ps = (iops,prepared) /\
+  reorder_plan dfg [op] prepared = (rops,arranged) /\
+  1 <= LENGTH prepared.ps_stack /\
+  ps7 = arranged with ps_stack := stack_push (Var x) (stack_pop 1 arranged.ps_stack) /\
+  (if halt then ([],ps7) else popmany_plan (if MEM x nl then [] else [Var x]) ps7)
+    = (pops,ps8) /\
+  (if MEM x nl then optimistic_swap_plan dfg inst nl term ps8 else ([],ps8))
+    = (opts,ps9) /\ qs = release_dead_spills nl ps9 /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
+  qs.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  spill_alloc_layout_wf arranged.ps_alloc arranged.ps_spilled /\
+  stack_peek 0 arranged.ps_stack = op /\ 0 < LENGTH arranged.ps_stack /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  (!off b. MEM (SOSpill off) (pops ++ opts) /\ in_mem_range off 32 b ==>
+    (r.sr_spill_base <= b /\ b < r.sr_spill_end) /\ context_spill_byte cplan b)
+Proof
+  strip_tac >>
+  `residual_budget_wf_marked sb [] ps` by
+    metis_tac[deepResidualSimTheory.generated_plan_state_wf_marked_residual_nil] >>
+  `(!v. MEM v [op] /\ is_var_operand v ==>
+      MEM v ps.ps_stack \/ v IN FDOM ps.ps_spilled) /\
+    PERM [op] [op] /\ LENGTH [op] <= 16 /\
+    LENGTH [op] <= LENGTH prepared.ps_stack` by simp[] >>
+  drule_all deepResidualSimTheory.selected_input_arranged_marked >> strip_tac >>
+  `plan_slots_bounded sb arranged /\
+    spill_alloc_layout_wf arranged.ps_alloc arranged.ps_spilled` by
+    fs[deepResidualBudgetTheory.plan_state_residual_wf_marked_def] >>
+  `stack_peek 0 arranged.ps_stack = op /\ 0 < LENGTH arranged.ps_stack` by
+    (drule_all sym_assign_preparation_facts >> simp[]) >>
+  `plan_slots_bounded sb ps7 /\ spill_alloc_layout_wf ps7.ps_alloc ps7.ps_spilled` by
+    (fs[planSpillBoundsTheory.plan_slots_bounded_def] >> metis_tac[]) >>
+  drule_all assign_postfix_alloc_frame >> strip_tac >>
+  `r.sr_spill_base <= sb /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+    arranged.ps_alloc.sa_next_offset <= r.sr_spill_end` by
+    gvs[planSpillBoundsTheory.plan_slots_bounded_def,
+      planSpillBoundsTheory.alloc_slots_bounded_def,
+      fnPlanPrefixTheory.generated_plan_state_wf_marked_def] >>
+  qpat_x_assum `plan_slots_bounded sb arranged` kall_tac >>
+  drule_all assign_postfix_ops_bounded >> strip_tac >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `ops_spill_bounded _ _ _` mp_tac >>
+  simp[planSpillBoundsTheory.ops_spill_bounded_def] >>
+  disch_then (qspec_then `off` mp_tac) >>
+  simp[] >> strip_tac >>
+  `r.sr_spill_base <= b /\ b < r.sr_spill_end` by
+    gvs[in_mem_range_def] >>
+  simp[contextCodegenRelTheory.context_spill_byte_def] >> metis_tac[]
 QED

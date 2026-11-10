@@ -200,7 +200,7 @@ Proof
   qexists `apply_prefix_ops initial_fmp lo ops ps` >> simp[]
 QED
 
-Theorem optimistic_swap_result_cases[local]:
+Theorem optimistic_swap_result_cases:
   optimistic_swap_plan dfg inst nl next_term ps = (ops, qs) ==>
   (ops = [] /\ qs = ps) \/
   ?d. d < LENGTH ps.ps_stack /\ do_swap d ps = (ops, qs)
