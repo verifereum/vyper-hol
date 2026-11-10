@@ -1,6 +1,7 @@
 Theory assignPlaceStorage
 Ancestors
   assignPlaceStoreReady assignPlacePhysicalBytes assignPlaceNormalizeFrame
+  assignPlaceStorageSuffix
   loweringPosts stmtSimDefs stmtLowering compileEnv placeStore valueCopyBytes
 Libs monadsyntax
 
@@ -119,4 +120,47 @@ Resume assign_place_storage_from_expr_post[aggregate]:
   Cases_on `dty = post_value_type cenv e`
   >- suspend "equal_layout" >>
   suspend "normalize"
+QED
+
+Resume assign_place_storage_from_expr_post[equal_layout]:
+  fs[expr_post_def] >>
+  `?sw. eval_operand src s = SOME sw /\
+    val_in_memory stv v (w2n sw) s.vs_memory` by
+    gvs[expr_val_rel_def] >>
+  `w2n sw + type_memory_size stv < dimword (:256)` by
+    (irule assignPlaceSourceBoundsTheory.nonbytes_expr_val_at_bound >> metis_tac[]) >>
+  `well_formed_type_value stv` by
+    metis_tac[vyperTypingTheory.evaluate_type_well_formed] >>
+  gvs[] >>
+  `?t. gas_marked_path F ctx func s 0 (OK t) /\
+    stmt_state_rel ctx func cenv cx ff t /\
+    (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_frame cenv ee su s cenv ff t` by
+    (irule assign_place_typed_storage_suffix_run >> simp[] >>
+     (conj_tac >- metis_tac[]) >>
+     goal_assum (drule_at (Pat `place_ptr_rel _ _ s _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `val_in_memory _ _ _ s.vs_memory`)) >>
+     qexistsl_tac [`dst`, `src`] >> simp[] >>
+     (conj_tac >- metis_tac[]) >>
+     `type_memory_bytes cenv (expr_type e) = type_memory_size dtv` by
+       metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+     Cases_on `?et n. expr_type e = ArrayT et (Dynamic n)`
+     >- (pop_assum strip_assume_tac >> gvs[compile_assign_value_def,
+           comp_bind_def, comp_return_def]) >>
+     Cases_on `type_memory_size dtv <= 32` >>
+     qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     Cases_on `expr_type e` >>
+     simp[compile_assign_value_def, comp_bind_def, comp_return_def]
+     >>~- ([`ArrayT et bd`], Cases_on `bd` >>
+        fs[compile_assign_value_def, comp_bind_def, comp_return_def] >>
+        simp[GSYM pairTheory.pair_case_eq, pairTheory.pair_CASE_UNCURRY,
+             combinTheory.C_DEF, comp_ignore_bind_def, comp_bind_def, comp_return_def,
+             pairTheory.UNCURRY, quantHeuristicsTheory.PAIR_EQ_EXPAND]) >>
+     simp[GSYM pairTheory.pair_case_eq, pairTheory.pair_CASE_UNCURRY,
+             combinTheory.C_DEF, comp_ignore_bind_def, comp_bind_def, comp_return_def,
+             pairTheory.UNCURRY, quantHeuristicsTheory.PAIR_EQ_EXPAND]) >>
+  qexists_tac `t` >> simp[]
 QED
