@@ -11433,6 +11433,32 @@ val extbodies_args_decode_tail_tac =
   conj_tac >- simp[] >>
   ho_match_mp_tac extbodies_cenv_frame >> simp[compile_abi_decode_shape];
 
+Theorem compile_abi_arg_ptr_guard_shape:
+  !internal LP opc a p.
+    shape_step internal LP (\st. EVERY (plain_operand st) [a; p])
+      (compile_abi_arg_ptr_guard opc a p) (\u st. T)
+Proof
+  rpt gen_tac >> pure_rewrite_tac[compile_abi_arg_ptr_guard_def] >>
+  IF_CASES_TAC >- suspend "guard" >>
+  irule shape_step_return >> simp[]
+QED
+Resume compile_abi_arg_ptr_guard_shape[guard]:
+  irule shape_step_bind >>
+  qexists_tac `\x st. EVERY (plain_operand st) [x; a; p]` >>
+  conj_tac
+  >- (qx_gen_tac `below` >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\x st. EVERY (plain_operand st) [x; below; a; p]` >>
+      conj_tac
+      >- (qx_gen_tac `ok` >> BETA_TAC >> irule shape_step_conseq >>
+          qexistsl_tac [`LP`, `\st. EVERY (plain_operand st) [ok; below; a; p]`,
+            `\u st. EVERY (plain_operand st) [ok; below; a; p]`] >>
+          conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+          ho_match_mp_tac extbodies_emit_void_plain >> extbodies_opcode_tac) >>
+      ho_match_mp_tac extbodies_emit_plain >> extbodies_opcode_tac) >>
+  ho_match_mp_tac extbodies_emit_plain >> extbodies_opcode_tac
+QED
+Finalise compile_abi_arg_ptr_guard_shape
+
 Theorem compile_decode_args_shape:
   !args cenv offset base_adj.
     shape_step F compiler_label (\st. cenv_shape_ok st cenv)
@@ -11457,7 +11483,23 @@ QED
 Resume compile_decode_args_shape[dynamic]:
   extbodies_cenv_emit_bind `[]` `head`
     (extbodies_cenv_emit_bind `[head]` `offv`
-      (extbodies_cenv_emit_bind `[offv; head]` `src` extbodies_args_decode_tail_tac))
+      (extbodies_cenv_emit_bind `[offv; head]` `src` (suspend "guard")))
+QED
+Resume compile_decode_args_shape[guard]:
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. cenv_shape_ok st cenv /\ (EVERY (plain_operand st) [src] /\ T)` >>
+  conj_tac >- (gen_tac >> BETA_TAC >> extbodies_args_decode_tail_tac) >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. cenv_shape_ok st cenv /\ EVERY (plain_operand st) [src]`,
+    `\u st. cenv_shape_ok st cenv /\ (EVERY (plain_operand st) [src] /\ T)`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+  ho_match_mp_tac extbodies_cenv_frame >>
+  ho_match_mp_tac extbodies_frame >>
+  qexists_tac `\st. EVERY (plain_operand st) [src; Lit (n2w base_adj)]` >>
+  simp_tac bool_ss [shape_stable_plain_operands] >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       compile_abi_arg_ptr_guard_shape]
 QED
 Resume compile_decode_args_shape[static_decode]:
   extbodies_args_decode_tail_tac
@@ -12619,7 +12661,21 @@ Resume compile_init_kwargs_shape[head]:
   IF_CASES_TAC >> simp[]
   >- (irule shape_step_bind >> qexists_tac `\rel st. P st /\ plain_operand st rel` >>
       conj_tac
-      >- (qx_gen_tac `rel` >> BETA_TAC >> irule shape_step_frame_from >>
+      >- (qx_gen_tac `rel` >> BETA_TAC >>
+          irule shape_step_bind >>
+          qexists_tac `\a st. P st /\ EVERY (plain_operand st) [a]` >>
+          conj_tac
+          >- (qx_gen_tac `a` >> BETA_TAC >>
+              irule shape_step_ignore_bind >>
+              qexists_tac `\u st. P st /\ EVERY (plain_operand st) [a]` >>
+              conj_tac >- (gen_tac >> irule shape_step_return >> simp[]) >>
+              irule shape_step_frame_from >>
+              qexistsl_tac [`\st. EVERY (plain_operand st) [a; Lit 4w]`,
+                `\u st. T`, `\st. P st /\ EVERY (plain_operand st) [a]`] >>
+              simp[shape_stable_conj, shape_stable_plain_operands,
+                   plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+                   compile_abi_arg_ptr_guard_shape]) >>
+          irule shape_step_frame_from >>
           qexistsl_tac [`\st. plain_operand st rel`,
             `\v st. plain_operand st v`, `P`] >> simp[] >>
           irule shape_step_emit_op_pre >> extbodies_opcode_tac) >>

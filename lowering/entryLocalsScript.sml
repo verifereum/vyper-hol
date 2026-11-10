@@ -83,6 +83,18 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem compile_abi_arg_ptr_guard_next_var[local]:
+  !opc a p st x st'.
+    compile_abi_arg_ptr_guard opc a p st = (x, st') ==>
+    st.cs_next_var <= st'.cs_next_var
+Proof
+  rpt gen_tac >> Cases_on `opc = CALLDATALOAD` >>
+  simp[compile_abi_arg_ptr_guard_def, emit_op_def, emit_void_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+       fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem compile_decode_args_next_var[local]:
   !args cenv off opc hi adj st x st'.
     compile_decode_args cenv args off opc hi adj st = (x, st') ==>
@@ -101,6 +113,7 @@ Proof
   imp_res_tac emit_op_next_var >> imp_res_tac emit_void_next_var >>
   imp_res_tac compile_abi_decode_to_buf_next_var >>
   imp_res_tac compile_abi_clamp_basetype_next_var >>
+  imp_res_tac compile_abi_arg_ptr_guard_next_var >>
   res_tac >> gvs[comp_return_def] >> decide_tac
 QED
 

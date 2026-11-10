@@ -153,6 +153,7 @@ Theorem ctor_arg_dynamic_code[local]:
 Proof
   rpt strip_tac >>
   simp[build_positional_arg_def, compile_decode_args_def,
+       compile_abi_arg_ptr_guard_def,
        var_location_decode_operand_def, FUN_EQ_THM,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>

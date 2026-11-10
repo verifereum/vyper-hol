@@ -19,6 +19,15 @@ Proof
   CONV_TAC (LAND_CONV (K (#evaluation c01_ctrl_str_local_decl))) >> EVAL_TAC
 QED
 
+val c07_annassign_str_same_len = memoryStoreWitnessLib.evaluate fixture_root "c07_annassign_str_same_len"
+Theorem c07_annassign_str_same_len_matches_python_oracle:
+  ^(#term c07_annassign_str_same_len) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "c07_annassign_str_same_len")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation c07_annassign_str_same_len))) >> EVAL_TAC
+QED
+
+
 val c12_annassign_empty_bytes_ret = memoryStoreWitnessLib.evaluate fixture_root "c12_annassign_empty_bytes_ret"
 Theorem c12_annassign_empty_bytes_ret_matches_python_oracle:
   ^(#term c12_annassign_empty_bytes_ret) =

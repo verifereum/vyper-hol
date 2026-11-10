@@ -19,6 +19,15 @@ Proof
   CONV_TAC (LAND_CONV (K (#evaluation a01_str_local_reassign))) >> EVAL_TAC
 QED
 
+val a02_bytes_local_from_arg = memoryStoreWitnessLib.evaluate fixture_root "a02_bytes_local_from_arg"
+Theorem a02_bytes_local_from_arg_matches_python_oracle:
+  ^(#term a02_bytes_local_from_arg) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "a02_bytes_local_from_arg")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation a02_bytes_local_from_arg))) >> EVAL_TAC
+QED
+
+
 val c03_annassign_empty_dynarray = memoryStoreWitnessLib.evaluate fixture_root "c03_annassign_empty_dynarray"
 Theorem c03_annassign_empty_dynarray_matches_python_oracle:
   ^(#term c03_annassign_empty_dynarray) =
@@ -34,6 +43,15 @@ Theorem c04_annassign_empty_bytes_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation c04_annassign_empty_bytes))) >> EVAL_TAC
 QED
+
+val a12_local_dynarray_from_arg = memoryStoreWitnessLib.evaluate fixture_root "a12_local_dynarray_from_arg"
+Theorem a12_local_dynarray_from_arg_matches_python_oracle:
+  ^(#term a12_local_dynarray_from_arg) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "a12_local_dynarray_from_arg")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation a12_local_dynarray_from_arg))) >> EVAL_TAC
+QED
+
 
 val c06_assign_empty_storage_dynarray = memoryStoreWitnessLib.evaluate fixture_root "c06_assign_empty_storage_dynarray"
 Theorem c06_assign_empty_storage_dynarray_matches_python_oracle:

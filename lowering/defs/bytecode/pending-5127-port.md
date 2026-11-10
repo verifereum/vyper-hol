@@ -39,70 +39,16 @@ fixtures.
 
 ## P2 (calldata argument guard)
 
-- `abi-codegen/arr_dyn_of_fixed`
-- `abi-codegen/arr_string_arg`
-- `abi-codegen/arr_string_ret`
-- `abi-codegen/arr_struct_noclamp`
-- `abi-codegen/dec_bytes_unwrapT`
-- `abi-codegen/dec_uint_unwrapT`
-- `abi-codegen/flag256_array_arg`
-- `abi-codegen/st_string_field_arg`
-- `abi-codegen/tup_string_arg`
-- `builtin-forms/concat_bytes2`
-- `builtin-forms/concat_bytesn`
-- `builtin-forms/concat_one_bytes_arg`
-- `builtin-forms/concat_storage`
-- `builtin-forms/concat_string3`
-- `builtin-forms/concat_string3args`
-- `builtin-forms/extract32_addr`
-- `builtin-forms/extract32_bytes4`
-- `builtin-forms/extract32_default`
-- `builtin-forms/extract32_int128`
-- `builtin-forms/extract32_uint`
-- `builtin-forms/len_bytes_arg`
-- `builtin-forms/len_concat`
-- `builtin-forms/p103_rbuf_control_word_ret_concat_arg`
-- `builtin-forms/p97_rbuf_stack_tuple_ret_concat_arg`
-- `builtin-forms/struct_code_slice`
-- `builtin-forms/struct_data_slice`
-- `conversions/bys16_to_dec`
-- `conversions/bys1_to_u8`
-- `conversions/bys20_to_addr`
-- `conversions/bys32_to_i8`
-- `conversions/bys32_to_u8`
-- `conversions/bys4_to_b4`
-- `conversions/str_to_bys`
-- `create-builtins/cb03_blueprint_rawargs`
-- `deep-dup/arr_dyn_of_dyn`
-- `deep-dup/arr_fixed_of_dyn`
-- `external-entries/dflt_bytes`
-- `main/external_arrays`
-- `main/external_dynamic`
-- `main/scalar_convert_bytes_dynamic`
-- `memory-stores/a02_bytes_local_from_arg`
-- `memory-stores/a12_local_dynarray_from_arg`
-- `memory-stores/c07_annassign_str_same_len`
-- `memory-stores/dec_from_memory2`
-- `memory-stores/e70_noData_live_mem2`
-- `memory-stores/p15_local_append_bytes`
-- `memory-stores/t03_tuple_assign_abi_decode`
-- `memory-stores/t11_tuple_onew_decode_mem`
-- `phi-pointers/ctl_ret_string_phi`
-- `phi-pointers/ifexp_bytes`
-- `phi-pointers/ifexp_dynarray`
-- `phi-pointers/ifexp_string`
-- `raw-calls/rc19_dyn_data`
-- `raw-calls/rc25_stmt_argdata`
-- `raw-calls/rc29_delegate`
-- `raw-system/rl03_4topics`
-- `raw-system/rl_const_topics`
-- `raw-system/rr02_dynamic`
-- `raw-system/rr04_terminus_ret`
-- `raw-system/rr_arg`
-- `raw-system/rr_local`
-- `raw-system/rr_nr`
-- `slice-buffers/slice_bytes_var`
-- `slice-buffers/slice_string_lit`
+P2 is ported. These two still differ from the oracle with it:
+
+- `raw-system/rl_const_topics`: the HOL checker rejects a constant
+  `DynArray` as `raw_log` topics (only a literal list is accepted), as
+  `raw_log_rejects_constant_topics` in `tests/vyperRawSystemTypingTestScript.sml`
+  records.
+- `raw-system/rr_local`: the HOL lowering sizes the `concat` result by its
+  target's bound (40) where Python sums the argument bounds (10 + 10), which
+  moves a later buffer from `0x40` to `0x60`. This isn't from #5127: main
+  without P1 or P2 shows it too.
 
 ## P3 (escaping allocas)
 

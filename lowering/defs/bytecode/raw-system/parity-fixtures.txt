@@ -15,3 +15,8 @@ rr_bytes
 rr_default_fn
 rr_storage
 xa_bytes_lit_return
+rl03_4topics
+rr02_dynamic
+rr04_terminus_ret
+rr_arg
+rr_nr

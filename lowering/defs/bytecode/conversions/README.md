@@ -1,9 +1,9 @@
 # Conversion witnesses (#548)
 
-`parity-fixtures.txt` names the 6 required bytecode fixtures. Each source in
+`parity-fixtures.txt` names the 13 required bytecode fixtures. Each source in
 `sources/` has independently generated annotated AST/layout JSON and deployment
 and runtime bytecode in `oracle/`. `evalCompilerConversionsTheory` checks both
-checker modes and proves each retained complete bytecode pair equal to the HOL compiler's
+checker modes and proves each complete bytecode pair equal to the HOL compiler's
 output, using the same `memoryStoreWitnessLib` as the other compiler witnesses.
 
 `checker-sources/` and `checker-oracle/` retain the three codegen-rejected
