@@ -2668,6 +2668,7 @@ Proof
 QED
 
 Theorem u2s_alloc_vv_path:
+  post_value_type cenv e = expr_type e /\
   compile_uint2str op n sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_has_code sa sb fn /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -2713,6 +2714,7 @@ Proof
 QED
 
 Theorem u2s_alloc_vv_exit:
+  post_value_type cenv e = expr_type e /\
   compile_uint2str op n sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_has_code sa sb fn /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -2738,6 +2740,7 @@ Proof
 QED
 
 Theorem u2s_alloc_vv_frag:
+  post_value_type cenv e = expr_type e /\
   compile_uint2str op n sz sa = (out,sb) /\ fn_has_code sa sb func /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
@@ -2901,7 +2904,7 @@ Theorem vv_post_located_mk_ptr:
   vv_post ctx func cenv cx e es sa sb s0 es' tv
     (LocatedValue ty (mk_ptr p.ptr_operand p.ptr_location)) s
 Proof
-  simp[vv_post_def, vv_holds_def, vv_at_def, contextTheory.mk_ptr_def]
+  simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def, contextTheory.mk_ptr_def]
 QED
 
 Theorem uint2str_numeric_suffix:

@@ -315,7 +315,10 @@ Theorem expr_post_typed_stack_operand:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
   eval_operand op s = SOME (typed_val_to_w256 tv v)
 Proof
-  simp[expr_post_def, expr_val_rel_def] >> metis_tac[]
+  rpt strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[post_value_type_word] >>
+  gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]
 QED
 
 Theorem expr_post_typed_stack_intro:

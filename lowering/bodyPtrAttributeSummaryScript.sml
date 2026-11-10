@@ -11,6 +11,7 @@ Ancestors
    changing the destination variable. Code locations need no slot bound. *)
 Theorem attribute_nonmemory_endpoint_ptr:
   vv_post ctx func cenv cx obj es sa sm s0 ee btv bvv s /\
+  post_value_type cenv obj = expr_type obj /\
   expr_type obj = StructT sid /\ vv_loc bvv <> LocMemory /\
   ptr_vv_ok cx (StructT sid) btv bvv ee G tn s /\
   evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
@@ -59,6 +60,9 @@ Theorem attribute_selected_ptr:
     (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv (Attribute ann obj fld) dst H t)
 Proof
   strip_tac >> drule_all attribute_typed_selection >> strip_tac >> gvs[] >>
+  `post_value_type cenv obj = expr_type obj` by
+    (drule attr_pre_base >> strip_tac >>
+     metis_tac[exprSimAttributeTheory.attr_post_value_type]) >>
   Cases_on `vv_loc bvv = LocMemory`
   >- (`w2n (w + n2w (struct_field_offset
         (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld)) =
@@ -85,7 +89,10 @@ Proof
   strip_tac >> drule_all attribute_typed_selection >> strip_tac >> gvs[] >>
   drule attr_pre_base >> strip_tac >>
   drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
-  irule attr_vv_post >> goal_assum (drule_at Any) >> simp[] >>
+  `post_value_type cenv obj = StructT sid` by
+    metis_tac[exprSimAttributeTheory.attr_post_value_type] >>
+  irule attr_vv_post >> conj_tac >- gvs[] >>
+  goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `btv` >> simp[] >> rpt strip_tac >> gvs[]
 QED
 
@@ -115,6 +122,9 @@ Theorem attribute_normal_endpoint_ptr:
     ghost_kept cenv es sa G0 tn0 s0 G' tn'
 Proof
   strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (drule attr_pre_base >> strip_tac >>
+     metis_tac[exprSimAttributeTheory.attr_post_value_type]) >>
   `op_taint tn (vv_operand bvv) = {}` by
     (Cases_on `bvv` >> gvs[bodyPtrDefsTheory.ptr_vv_ok_def,
        bodyPtrDefsTheory.ptr_val_ok_def, vv_operand_def]) >>

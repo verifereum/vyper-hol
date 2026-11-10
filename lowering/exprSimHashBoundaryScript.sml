@@ -168,6 +168,7 @@ Proof
 QED
 
 Theorem hash_post_footprint_bound:
+  post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx e es sa sm s0 es' v op s /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   ~is_word_type (expr_type e) /\ eval_operand op s = SOME p ==>
@@ -195,6 +196,8 @@ Theorem hash_dynamic_post_view:
     b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256)
 Proof
   strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   `expr_val_rel cx (expr_type e) (BytesV bs) op s` by gvs[expr_post_def] >>
   `?p. eval_operand op s = SOME p` by gvs[expr_val_rel_def] >>
   `evaluate_type (get_tenv cx) (expr_type e) =
@@ -218,6 +221,8 @@ Theorem hash_string_post_view:
     b + 32 < dimword (:256) /\ LENGTH str < dimword (:256)
 Proof
   strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   `expr_val_rel cx (expr_type e) (StringV str) op s` by gvs[expr_post_def] >>
   `?p. eval_operand op s = SOME p` by gvs[expr_val_rel_def] >>
   `~is_word_type (expr_type e)` by simp[is_word_type_def] >>

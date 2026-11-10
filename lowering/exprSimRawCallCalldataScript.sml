@@ -4157,6 +4157,7 @@ QED
 
 Theorem raw_call_value_vv_post[local]:
   n < dimword (:256) /\ flags.rcf_max_outsize = n /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = raw_call_return_type flags /\
   v = (if flags.rcf_revert_on_failure then
     if n = 0 then NoneV else BytesV (TAKE n data)
@@ -4226,6 +4227,7 @@ Theorem raw_call_finish_vv_frag[local]:
   n < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
   (flags.rcf_revert_on_failure /\ ~outcome.co_success ==>
     !t. t.vs_returndata = outcome.co_returnData ==> R (Abort Revert_abort t)) /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = raw_call_return_type flags /\ flags.rcf_max_outsize = n /\
   fn_has_code sc sb func /\ ai < sc.cs_next_id /\
   64 + ((n+31) DIV 32)*32 < dimword (:256) /\ ai < sb.cs_next_id ==>
@@ -4312,6 +4314,7 @@ Resume raw_call_finish_vv_frag[suffix]:
      t.vs_memory = TAKE n t.vs_returndata)` by simp[] >>
   drule_all raw_call_nonrevert_suffix_frag >> strip_tac >>
   qpat_x_assum `frag_path _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `post_value_type cenv e = expr_type e` mp_tac >>
   qpat_x_assum `expr_type e = _` mp_tac >>
   qpat_x_assum `flags.rcf_max_outsize = n` mp_tac >>
   qpat_x_assum `~flags.rcf_revert_on_failure` mp_tac >>
