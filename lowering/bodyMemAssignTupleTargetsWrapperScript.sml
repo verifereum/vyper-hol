@@ -12,7 +12,7 @@ Libs
   monadsyntax
 
 (* S1 original: stmtSimAssignTuple.eval_assign_tuple_action. *)
-Theorem tuple_targets_source_action[local]:
+Theorem tuple_targets_source_action:
   eval_stmt cx (Assign (TupleTarget gs) e) =
   bind (bind (eval_expr cx e) (read_result cx))
     (assign_tuple_targets cx (TupleTarget gs))
