@@ -3,7 +3,7 @@
 Theory externalEntryShape
 Ancestors
   list rich_list loweringShapeDefs loweringShapeRules loweringShapeProps
-  moduleLoweringProps compileEnv context emitHelper emitHelperProps fragExec
+  moduleLoweringProps compileEnv loweringStateRelDefs context emitHelper emitHelperProps fragExec
   exprLowering stmtLowering moduleLowering vyperCompiler compileVyper
   abiEncoder supportedProgram supportedNames supportedStmtTraverse
   supportedExprTraverse supportedTargets unitShapeDefs venomInst vyperAST
@@ -1501,13 +1501,13 @@ Proof
   rpt gen_tac >> Cases_on `p` >> simp[as_ptr_val_def]
 QED
 
-Theorem compile_word_copy_loop_labels:
-  !src dst wc ll sl ic s.
-    cs_extends s (SND (compile_word_copy_loop src dst wc ll sl ic s)) /\
+Theorem compile_word_copy_labels:
+  !src dst wc ll sl ic imm s.
+    cs_extends s (SND (compile_word_copy_loop_base src dst wc ll sl ic imm s)) /\
     EVERY (isPREFIX "@")
-      (added_labels s (SND (compile_word_copy_loop src dst wc ll sl ic s)))
+      (added_labels s (SND (compile_word_copy_loop_base src dst wc ll sl ic imm s)))
 Proof
-  rpt gen_tac >> rewrite_tac[contextTheory.compile_word_copy_loop_def, LET_THM] >>
+  rpt gen_tac >> rewrite_tac[contextTheory.compile_word_copy_loop_base_def, LET_THM] >>
   BETA_TAC >>
   rpt (FIRST [irule fresh_label_bind_labels,
               irule new_block_action_labels >>
@@ -1519,6 +1519,28 @@ Proof
        simp[comp_return_labels, emit_void_labels, emit_op_labels,
             emit_inst_labels, fresh_var_action_labels,
             compile_ptr_load_labels, compile_ptr_store_labels])
+QED
+
+Theorem compile_word_copy_loop_labels:
+  !src dst wc ll sl ic s.
+    cs_extends s (SND (compile_word_copy_loop src dst wc ll sl ic s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s (SND (compile_word_copy_loop src dst wc ll sl ic s)))
+Proof
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_labels]
+QED
+
+Theorem compile_store_immutable_bytestring_labels:
+  !imm src dst s.
+    cs_extends s (SND (compile_store_immutable_bytestring imm src dst s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s (SND (compile_store_immutable_bytestring imm src dst s)))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[compile_store_immutable_bytestring_def, compile_bytestring_word_count_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, gen_tac] >>
+       simp[emit_op_labels, compile_word_copy_labels, comp_return_labels])
 QED
 
 Theorem compile_storage_to_memory_labels:
@@ -3738,7 +3760,7 @@ fun stmt_labels_chain rws =
 val stmt_labels_rws =
   [emit_op_labels, emit_void_labels, emit_inst_labels, fresh_var_action_labels,
    compile_alloc_buffer_labels, unwrap_value_labels, compile_store_memory_labels,
-   compile_copy_memory_labels, compile_word_copy_loop_labels,
+   compile_copy_memory_labels, compile_word_copy_loop_labels, compile_store_immutable_bytestring_labels,
    compile_store_bytestring_labels, compile_keccak256_key_labels,
    compile_mapping_subscript_labels, compile_array_subscript_labels,
    compile_bytelike_literal_labels, typed_memory_family_labels,

@@ -30,7 +30,7 @@ Ancestors
   list rich_list finite_map marker exprSimHyps
   fragExec  exprSimOps exprSimUnwrap freshWrites exprBopLowering loweringSlice
   vyperEvalExprPreservesScopesDom exprLowering emitHelperProps
-  exprLoweringProps compileEnv context vyperAST vyperInterpreter vyperState
+  exprLoweringProps compileEnv loweringStateRelDefs context vyperAST vyperInterpreter vyperState
   vyperValue valueEncoding venomExecSemantics venomExecProofs venomInst
   venomState exprSimLiteralBuffer words integer_word vfmConstants valueEncodingProps
   valueTypingMemoryProps copyFwdEquiv allocaRemapDefs valueEncodingProofs
@@ -212,7 +212,7 @@ Theorem ifexp_bytes_header[local]:
     val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) src s.vs_memory ==>
     mload src s = n2w (LENGTH bs)
 Proof
-  simp[valueEncodingTheory.val_in_memory_def, mem_word_at_eq_mload]
+  simp[valueEncodingDefsTheory.val_in_memory_def, mem_word_at_eq_mload]
 QED
 
 Theorem ifexp_string_header[local]:
@@ -220,7 +220,7 @@ Theorem ifexp_string_header[local]:
     val_in_memory (BaseTV (StringT cap)) (StringV str) src s.vs_memory ==>
     mload src s = n2w (LENGTH str)
 Proof
-  simp[valueEncodingTheory.val_in_memory_def, mem_word_at_eq_mload]
+  simp[valueEncodingDefsTheory.val_in_memory_def, mem_word_at_eq_mload]
 QED
 
 Theorem ifexp_typed_bytestring_header[local]:

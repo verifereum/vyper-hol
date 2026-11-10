@@ -3,7 +3,7 @@ Theory abiDecoderBytesEdges
 Ancestors
   abiDecoderBytes abiDecoderBytesRuntime abiDecoderBytesMemory
   abiDecoderBytesPrefix abiDecoderBytesPhases abiDecoderContract abiEncoder
-  compileEnv emitHelper venomExecSemantics venomState valueEncoding words arithmetic list
+  compileEnv emitHelper venomExecSemantics venomState valueEncoding valueEncodingDefs words arithmetic list
 
 Theorem abi_decode_bytes_round_empty:
   32*((0+31) DIV 32) = 0

@@ -5,7 +5,7 @@ Ancestors
   abiEncoderWindowStructuralMembers abiEncoderWindowMembers
   abiEncoderChildContext abiEncoderChildCode abiEncoderCounters abiEncoderAppend
   abiDecoderReentry abiEncoderExtendSim fragExec
-  freshWrites compileEnv venomState words list finite_map pred_set
+  freshWrites compileEnv loweringStateRelDefs venomState words list finite_map pred_set
 
 Theorem zero_static_child_run:
   zero_strong_contract ei /\

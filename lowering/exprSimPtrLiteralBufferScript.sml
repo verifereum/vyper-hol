@@ -4,7 +4,7 @@ Ancestors
   exprSimPtrLiteralPayload exprSimLiteralBuffer allocationPtr exprLowering
   context emitHelper freshWrites vfmConstants loweringHalt
   exprSimPtrLiteralChunks robustCopyTransportPtr exprSimProps
-  bodyPtrDefs compileEnv valueEncoding valueEncodingProofs valueEncodingProps
+  bodyPtrDefs compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProofs valueEncodingProps
   venomMemProofs venomState finite_map words list pred_set
   exprSimPtrLiteralOps venomExecSemantics venomInst fragExecPtr fragExec fragGasSeqPtr exprLoweringProps ptrDiscipline instIdxIndep
 

@@ -2,7 +2,7 @@
 Theory bodyMemAssignTopCopyCompiler
 Ancestors
   list rich_list finite_map pred_set fragExec loweringSlice
-  emitHelper emitHelperProps exprLoweringProps context compileEnv
+  emitHelper emitHelperProps exprLoweringProps context compileEnv loweringStateRelDefs
   venomExecSemantics venomInst venomState
 Libs
   monadsyntax
@@ -33,7 +33,7 @@ Theorem topcopy_compile_layout[local]:
       new_block exit
     od
 Proof
-  rpt strip_tac >> gvs[compile_word_copy_loop_def, word_scale_def,
+  rpt strip_tac >> gvs[compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_loop_base_def, word_scale_def,
                         compile_ptr_load_def, compile_ptr_store_def,
                         comp_bind_assoc]
 QED

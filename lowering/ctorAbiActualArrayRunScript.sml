@@ -9,7 +9,7 @@ Ancestors
   abiDecoderArrayLoopInit abiDecoderArraySetupCode abiDecoderLoopEmit abiDecoderRecursiveLoopEntry
   abiDecoderIndexInit abiDecoderReentry allocaFrontierBound
   ctorAbiActualSites abiEncoderRegisteredEffect
-  ctorAbiActualFrame exprLowering compileEnv venomWf venomInst venomState venomExecSemantics words list arithmetic
+  ctorAbiActualFrame exprLowering compileEnv loweringStateRelDefs venomWf venomInst venomState venomExecSemantics words list arithmetic
 
 val C = ``\ty tv.
  !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.

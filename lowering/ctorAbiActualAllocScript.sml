@@ -4,7 +4,7 @@ Ancestors
   ctorAbiActualFrame ctorAbiActualMemory actualAllocExec
   abiEncoderPrimitiveEffect abiEncoderRegisteredEffect
   abiDecoderIndexInit allocaFrontierBound allocaBudgetProps
-  context compileEnv emitHelper emitHelperProps exprLoweringProps rich_list
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps rich_list
   venomMemProps venomInstProofs1 abiDecoderReentry
   venomMemDefs venomState venomInst venomExecSemantics
   finite_map pred_set list arithmetic words
@@ -142,7 +142,7 @@ Proof
     (qpat_x_assum `step_inst_base inst s = OK allocated` mp_tac >>
      simp_tac bool_ss [Abbr `inst`] >> strip_tac >>
      asm_simp_tac bool_ss [run_inst_seq_def] >>
-     simp[step_inst_base_def, exec_write2_def, mk_inst_def,
+     simp[step_inst_base_opcode_eqs, exec_write2_def, mk_inst_def,
        eval_operand_def, w2n_n2w]) >>
   `abi_encoder_registered_effect ids outs allocated (mstore p 0w allocated)` by
     (irule abi_encoder_registered_slot_store >>

@@ -1020,3 +1020,11 @@ Proof
     mp_tac every_prefix_split >>
   simp[]
 QED
+
+Theorem phi_well_formed_uses_pairs:
+  !ops. phi_well_formed ops ==>
+    operand_vars ops = MAP SND (phi_pairs ops)
+Proof
+  Induct_on `ops` using phi_well_formed_ind >>
+  simp[phi_well_formed_def, operand_vars_def, operand_var_def, phi_pairs_def]
+QED

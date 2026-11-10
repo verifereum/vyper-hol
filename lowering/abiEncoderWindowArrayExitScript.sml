@@ -2,7 +2,7 @@
 Theory abiEncoderWindowArrayExit
 Ancestors
   abiEncoderWindowArrayBody abiEncoderWindowArrayLayout abiEncoderWindow
-  valueEncoding valueEncodingProps contractABI
+  valueEncoding valueEncodingDefs valueEncodingProps contractABI
   abiEncoderArrayCode abiEncoderWindowSequence
   abiEncoderWindowPhase emitHelper compileEnv venomState venomInst words list arithmetic
 

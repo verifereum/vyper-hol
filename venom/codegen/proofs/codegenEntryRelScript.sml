@@ -86,6 +86,8 @@ Definition initial_state_rel_def:
          es.rollback.accounts = vs.vs_accounts ∧
          es.rollback.tStorage = vs.vs_transient ∧
          es.rollback.toDelete = vs.vs_pending_deletions ∧
+         vs.vs_call_ctx.cc_created_in_tx =
+           account_empty (lookup_account ctxt.msgParams.callee es.originalAccounts) ∧
          ctxt.returnData = vs.vs_returndata ∧
          ctxt.logs = vs.vs_logs ∧
          (* Equality is required only outside every context spill region. *)

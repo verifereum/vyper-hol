@@ -13,7 +13,7 @@
  * a block keeps it through the PHIs and the cleanup's copies.
  *)
 Theory makeSsaCurrentCutInv
-Ancestors
+Ancestors livenessTransferProofs
   makeSsaCurrentCleanupTransparent makeSsaCurrentSourceEntryRuntime
   makeSsaCurrentPhiBatchRuntime venomState
   makeSsaCurrentExecRuntime makeSsaCurrentReturnRuntime
@@ -321,7 +321,7 @@ Proof
   simp[current_cut_pair_def] >>
   qexistsl [`ev`, `pre`, `current_event_exit_rs ev`,
     `current_event_exit_env ev`] >>
-  simp[makeSsaCurrentDemandDominanceTheory.current_collect_phis_length] >>
+  simp[livenessTransferProofsTheory.current_collect_phis_length] >>
   metis_tac[]
 QED
 
@@ -1621,7 +1621,7 @@ Proof
   strip_tac >>
   `h = old.bb_label` by metis_tac[lookup_block_label] >>
   `LENGTH (collect_phis old.bb_instructions) <= LENGTH old.bb_instructions` by
-    simp[makeSsaCurrentDemandDominanceTheory.current_collect_phis_length] >>
+    simp[livenessTransferProofsTheory.current_collect_phis_length] >>
   `current_event_label ev = old.bb_label /\
    A old.bb_label = current_block_annotations old pre` by metis_tac[] >>
   drule_all current_wf_source_cut_original_scan >>
@@ -1929,7 +1929,7 @@ Proof
     (if (?inst. MEM inst pre' /\ MEM x inst.inst_outputs)
      then CurrentInserted x h else current_event_entry_env ev x) = E x` by
     metis_tac[current_wf_source_cut_original_scan,
-      makeSsaCurrentDemandDominanceTheory.current_collect_phis_length] >>
+      livenessTransferProofsTheory.current_collect_phis_length] >>
   `~current_actual_inserted fn x h /\
    EVERY (\inst. ~MEM x inst.inst_outputs)
      (TAKE (LENGTH (collect_phis old.bb_instructions)) old.bb_instructions)` by
@@ -1943,7 +1943,7 @@ Proof
   disch_then (qspec_then `k` mp_tac) >>
   fs[inst_defs_def] >>
   simp[LENGTH_TAKE, EL_TAKE, inst_defs_def,
-    makeSsaCurrentDemandDominanceTheory.current_collect_phis_length]
+    livenessTransferProofsTheory.current_collect_phis_length]
 QED
 
 Theorem current_cut_phi_demand_nondefault[local]:
@@ -1966,7 +1966,7 @@ Proof
      metis_tac[LENGTH_MAP, LENGTH_APPEND, arithmeticTheory.EQ_ADD_RCANCEL]) >>
   drule_all current_wf_precleanup_structural >> strip_tac >>
   `LENGTH (collect_phis old.bb_instructions) <= LENGTH old.bb_instructions` by
-    simp[makeSsaCurrentDemandDominanceTheory.current_collect_phis_length] >>
+    simp[livenessTransferProofsTheory.current_collect_phis_length] >>
   `current_source_cut A ev
     (LENGTH pre' + LENGTH (collect_phis old.bb_instructions)) rs E` by simp[] >>
   fs[current_wf_phi_context_def] >>

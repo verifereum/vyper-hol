@@ -1,7 +1,7 @@
 (* Task-owned destination frame for footprint-sensitive return copies. *)
 Theory externalReturnCopyFrame
 Ancestors
-  externalReturnCopyBase externalReturnFootprint valueEncoding valueEncodingProps
+  externalReturnCopyBase externalReturnFootprint valueEncoding valueEncodingDefs valueEncodingProps
   valueEncodingProofs venomState compileEnv loweringPosts arithmetic
   exprSimBufferEmpty
 

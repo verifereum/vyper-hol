@@ -1,7 +1,7 @@
 (* Shared execution interface for expression buffer allocations. *)
 Theory exprSimAlloc
 Ancestors
-  list rich_list finite_map context compileEnv loweringSlice exprLoweringProps
+  list rich_list finite_map context compileEnv loweringStateRelDefs loweringSlice exprLoweringProps
   emitHelperProps fragExec localPtrsProps venomInst venomState
   venomExecSemantics
 
@@ -58,7 +58,7 @@ Proof
       `FLOOKUP t.vs_allocas aid = SOME (b,sz)` by metis_tac[] >>
       gvs[venomMemDefsTheory.alloca_inv_def,
           venomMemDefsTheory.allocas_non_overlapping_def,
-          compileEnvTheory.regions_disjoint_def] >>
+          loweringStateRelDefsTheory.regions_disjoint_def] >>
       qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _` drule >>
       disch_then (qspecl_then [`b`, `sz`, `w2n w`, `w2n n`] mp_tac) >>
       simp[arithmeticTheory.ADD_COMM]) >>
@@ -106,7 +106,7 @@ Proof
       wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
   qexistsl_tac [`t`, `w`] >>
   simp[exprLoweringPropsTheory.run_inst_seq_def,
-       venomExecSemanticsTheory.step_inst_base_def,
+       step_inst_base_opcode_eqs,
        venomInstTheory.mk_inst_def, eval_operand_def,
        wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
   conj_tac
@@ -196,7 +196,7 @@ Proof
        comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >> gvs[emitted_insts_def,
        rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+       step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
   gvs[update_var_def]
 QED
 
@@ -211,7 +211,7 @@ Proof
        comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >> gvs[emitted_insts_def,
        rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
-       venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+       step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
   gvs[update_var_def, venomStateTheory.contract_storage_def,
       venomStateTheory.contract_transient_def]
 QED

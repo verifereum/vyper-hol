@@ -1,7 +1,7 @@
 (* Layout of the concrete fixed-array widening loop. *)
 Theory typedArrayLoopLayoutMem
 Ancestors
-  typedArrayLoopControlMem typedBytesArrayMem context compileEnv emitHelper
+  typedArrayLoopControlMem typedBytesArrayMem context compileEnv loweringStateRelDefs emitHelper
   exprLoweringProps emitHelperProps fragExec words arithmetic list rich_list vfmConstants
   venomExecSemantics venomExecProofs venomInst venomState fragExecMem instMemFrontier
 

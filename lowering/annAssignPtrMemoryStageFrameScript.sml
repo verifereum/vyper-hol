@@ -4,7 +4,7 @@ Theory annAssignPtrMemoryStageFrame
 Ancestors
  annAssignPtrStage annAssignPtrMemorySource annAssignPtrBytestring
  annAssignPtrSetup annAssignPtrScratch
- stmtSimDeclMem stmtSimProps exprSimProps bodyPtrDefs compileEnv loweringPosts
+ stmtSimDeclMem stmtSimProps exprSimProps bodyPtrDefs compileEnv loweringStateRelDefs loweringPosts
  finite_map ptrDiscipline venomState venomInst venomExecSemantics fragGasPathPtr
 
 Theorem annassign_static_stage_frame_ptr:
