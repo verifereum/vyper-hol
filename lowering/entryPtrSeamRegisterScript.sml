@@ -26,6 +26,8 @@ Ancestors
   vyperContext venomExecSemantics venomState compileEnv supportedProgram
   fragExec venomInst ptrDiscipline ptrSafeRun vyperLoweringCorrect
   loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
+  list rich_list selectorDispatch byte contractABI vyperABIRoundtrip
+  valueEncoding entryDispatchProps ctorDeployInitcode abiCallerBuiltinInput compileVyper
 
 (* Argument registration starts before any allocation or memory write. *)
 Theorem registration_start_resources:
@@ -120,6 +122,100 @@ Proof
   drule calldataTypedRobustPtrTheory.clean_footprint_val_in_memory_robust >>
   disch_then drule >>
   disch_then (qspec_then `{}` mp_tac) >> simp[]
+QED
+
+Theorem registration_package_decoder_layout:
+  set_external_package_target target
+    (package_external_fn tops ut nk
+      (mut,nr,rr,name,args,dflts,ret,fbody)) =
+    (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) ==>
+  ce.ce_struct_fields =
+    (build_compile_env tops External mut name args ret fbody ut).ce_struct_fields /\
+  ce.ce_flag_n_members =
+    (build_compile_env tops External mut name args ret fbody ut).ce_flag_n_members
+Proof
+  simp[package_external_fn_def, set_external_package_target_def,
+       update_cenv_nonreentrant_def] >>
+  Cases_on `ret = NoneT` >>
+  simp[update_cenv_ret_abi_def] >> strip_tac >> gvs[]
+QED
+
+Theorem registration_package_coherent:
+  contract_namespaces_ok dep [((NONE:num option),tops)] /\
+  assignable_type (type_env tops) ty /\
+  evaluate_type (type_env tops) ty = SOME tv /\
+  set_external_package_target target
+    (package_external_fn tops ut nk
+      (mut,nr,rr,name,args,dflts,ret,fbody)) =
+    (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) ==>
+  abi_decoder_coherent ce (type_env tops) ce.ce_struct_fields ty tv
+Proof
+  strip_tac >> drule registration_package_decoder_layout >> strip_tac >>
+  irule abiDecoderCoherenceTheory.abi_decoder_coherent_layout_transport >>
+  qexists_tac `build_compile_env tops External mut name args ret fbody ut` >>
+  simp[] >> irule abi_caller_coherent >> metis_tac[]
+QED
+
+Theorem registration_bound_parameters:
+  abi_caller_metadata ce env /\
+  abi_caller_struct_map ce.ce_struct_fields env /\
+  EVERY (assignable_type env) (MAP SND params) /\
+  bind_arguments env params vs = SOME scope ==>
+  ?tvs.
+    LIST_REL (abi_decoder_coherent ce env ce.ce_struct_fields)
+      (MAP SND params) tvs /\
+    LIST_REL value_has_type tvs vs
+Proof
+  strip_tac >> drule bind_arguments_values_typed >> strip_tac >>
+  qexists_tac `tvs` >>
+  reverse conj_tac
+  >- gvs[vyperTypeDefaultsTheory.values_have_types_LIST_REL] >>
+  drule abi_caller_coherent_from_metadata >> strip_tac >>
+  first_x_assum irule >> simp[]
+QED
+
+(* A selected argument occupies its canonical tuple window, including dynamic
+   tails.  This source-only interface is independent of execution resources. *)
+Theorem registration_calldata_argument:
+  calldata_encodes env fname tys vs cd /\
+  LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
+  LIST_REL value_has_type tvs vs /\
+  LENGTH cd < dimword (:256) /\ i < LENGTH tys ==>
+  ?avs.
+    vyper_to_abi_list env tys vs = SOME avs /\
+    vyper_to_abi env (EL i tys) (EL i vs) = SOME (EL i avs) /\
+    value_has_type (EL i tvs) (EL i vs) /\
+    abi_decoder_coherent ce env sf (EL i tys) (EL i tvs) /\
+    mem_bytes_at
+      (4 + abi_tuple_child_offset (MAP (vyper_to_abi_type env) tys) avs i)
+      (LENGTH (enc (vyper_to_abi_type env (EL i tys)) (EL i avs))) cd =
+      enc (vyper_to_abi_type env (EL i tys)) (EL i avs) /\
+    4 + abi_tuple_child_offset (MAP (vyper_to_abi_type env) tys) avs i +
+      LENGTH (enc (vyper_to_abi_type env (EL i tys)) (EL i avs)) <
+      dimword (:256)
+Proof
+  strip_tac >>
+  `LENGTH tys = LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
+  fs[calldata_encodes_def, GSYM abiDecoderMembersTheory.vyper_to_abi_types_MAP,
+     Excl "enc_def"] >>
+  `TAKE (LENGTH vs) tys = tys` by
+    metis_tac[TAKE_LENGTH_ID] >>
+  fs[abiDecoderMembersTheory.vyper_to_abi_types_MAP, Excl "enc_def",
+     Excl "TAKE_LENGTH_ID_rwt2"] >>
+  drule_all coherent_source_list_head_lengths >> strip_tac >>
+  `mem_bytes_at 4
+    (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV abi_vals)))
+    (function_selector fname (MAP (vyper_to_abi_type env) tys) ++
+      enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV abi_vals)) =
+    enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV abi_vals)` by
+    simp[mem_bytes_at_def, DROP_APPEND2, function_selector_length,
+         TAKE_LENGTH_APPEND] >>
+  `i < LENGTH (MAP (vyper_to_abi_type env) tys)` by simp[] >>
+  drule_all structural_tuple_indexed_source >>
+  simp[EL_MAP, function_selector_length, Excl "enc_def"] >> strip_tac >>
+  drule vyper_to_abi_list_EL >> strip_tac >>
+  gvs[LIST_REL_EL_EQN, function_selector_length, Excl "enc_def"] >>
+  simp[] >> decide_tac
 QED
 
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
