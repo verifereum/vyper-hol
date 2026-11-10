@@ -2033,3 +2033,36 @@ Proof
   gvs[unitShapeDefsTheory.fn_shape_ok_def, EVERY_MEM, MEM] >>
   metis_tac[unitShapeDefsTheory.inst_shape_ok_def, MEM]
 QED
+
+Theorem named_codecopy_selection_shape:
+  inst_wf inst /\ inst.inst_opcode = CODECOPY /\
+  (selected = compute_operands inst \/
+   (is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) /\
+    selected = TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+      [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+       EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)])) ==>
+  ?dst src sz. inst.inst_operands = [dst;src;sz] /\
+    inst.inst_outputs = [] /\ selected = [sz;src;dst]
+Proof
+  strip_tac >>
+  gvs[venomWfTheory.inst_wf_def, stackPlanGenTheory.compute_operands_def,
+    venomEffectsTheory.is_commutative_def, venomInstTheory.python_stack_operands_def,
+    venomInstTheory.ir_specific_operand_order_def, LENGTH_EQ_NUM_compute]
+QED
+
+Theorem named_code_end_add_selection_shape:
+  inst_wf inst /\ inst.inst_opcode = ADD /\
+  inst.inst_operands = [op; Label "code_end"] /\
+  (selected = compute_operands inst \/
+   (is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) /\
+    selected = TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+      [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+       EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)])) ==>
+  (?x. inst.inst_outputs = [x]) /\
+  (selected = [op;Label "code_end"] \/ selected = [Label "code_end";op])
+Proof
+  strip_tac >>
+  gvs[venomWfTheory.inst_wf_def, stackPlanGenTheory.compute_operands_def,
+    venomInstTheory.python_stack_operands_def,
+    venomInstTheory.ir_specific_operand_order_def, LENGTH_EQ_NUM_compute]
+QED
