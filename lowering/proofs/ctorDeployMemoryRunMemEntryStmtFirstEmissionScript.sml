@@ -775,7 +775,9 @@ Theorem ctor_word_copy_first_emission:
      (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  ntac 6 gen_tac >> simp_tac bool_ss [compile_word_copy_loop_def, LET_THM] >>
+  ntac 6 gen_tac >>
+  simp_tac bool_ss [compile_word_copy_loop_def, compile_word_copy_loop_op_def,
+                    compile_word_copy_loop_base_def, LET_THM] >>
   ntac 4 (ho_match_mp_tac first_emission_bind >> conj_tac
           >- metis_tac[first_emission_fresh, ctor_fresh_label_code] >> gen_tac) >>
   ho_match_mp_tac first_emission_strong >>
