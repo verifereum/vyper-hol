@@ -58,6 +58,7 @@ Theorem intcall_fixed_array_subscript_landing:
     intcall_expr_cont fp ce env es0 sa0 s0 es sb t /\
     eval_operand op t = SOME (b + i * n2w esz) /\
     t.vs_memory = s.vs_memory /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==>
        lookup_var z t = SOME v)
 Proof
@@ -79,8 +80,11 @@ Proof
   drule_all straight_fresh_clean_success_path >>
   disch_then (qspec_then `fp.jc_ctx` strip_assume_tac) >>
   drule_all straight_fresh_run_post >> strip_tac >>
+  `writes_fresh sa (emitted_insts sa sb)` by metis_tac[straight_fresh_def] >>
+  drule_all run_inst_seq_writes_fresh >> strip_tac >>
   drule_all intcall_straight_fresh_run_landing >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[]
+  goal_assum (drule_at Any) >> simp[] >>
+  fs[venom_state_component_equality]
 QED
 
 Theorem intcall_array_check_ptr_landing:
@@ -99,6 +103,7 @@ Theorem intcall_array_check_ptr_landing:
     intcall_expr_cont fp ce env es0 sa0 s0 es sb t /\
     eval_operand op t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
     t.vs_memory = s.vs_memory /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==>
        lookup_var z t = SOME v)
 Proof
@@ -120,8 +125,11 @@ Proof
   drule_all straight_fresh_clean_success_path >>
   disch_then (qspec_then `fp.jc_ctx` strip_assume_tac) >>
   drule_all straight_fresh_run_post >> strip_tac >>
+  `writes_fresh sa (emitted_insts sa sb)` by metis_tac[straight_fresh_def] >>
+  drule_all run_inst_seq_writes_fresh >> strip_tac >>
   drule_all intcall_straight_fresh_run_landing >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[]
+  goal_assum (drule_at Any) >> simp[] >>
+  fs[venom_state_component_equality]
 QED
 
 Theorem intcall_runtime_array_subscript_landing:
@@ -139,7 +147,10 @@ Theorem intcall_runtime_array_subscript_landing:
   ?t. gas_marked_path F fp.jc_ctx fp.jc_func s 0 (OK t) /\
     intcall_expr_cont fp ce env es0 sa0 s0 es sb t /\
     eval_operand op t = SOME (b + n2w ws + i * n2w esz) /\
-    t.vs_memory = s.vs_memory
+    t.vs_memory = s.vs_memory /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==>
+       lookup_var z t = SOME v)
 Proof
   simp[compile_array_subscript_split, comp_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
@@ -175,5 +186,8 @@ Proof
   drule_all intcall_array_check_ptr_landing >> strip_tac >>
   drule_all gas_marked_path_then >> simp[] >> strip_tac >>
   goal_assum (drule_at Any) >> simp[] >>
-  fs[venom_state_component_equality]
+  fs[venom_state_component_equality] >> rpt strip_tac >>
+  `not_fresh_at sm z` by
+    (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+  first_x_assum irule >> gvs[lookup_var_def]
 QED
