@@ -11406,6 +11406,61 @@ Proof
   simp[] >> gvs[]
 QED
 
+Theorem mm_local_fixed_cut_source_replay[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ a <= j /\ j <= r /\ r < LENGTH is /\ r < N /\
+  mm_local_history is H N /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  (!q. a <= q /\ q < r ==> ?b. MEM b (mm_local_pending_indices is gs (SUC q))) /\
+  ((?dj sj lj. (EL j is).inst_opcode = MCOPY /\
+      (EL j is).inst_operands = [Lit dj; Lit sj; Lit lj] /\
+      c = <|cg_dst := w2n dj; cg_src := w2n sj; cg_length := w2n lj;
+             cg_inst_ids := [(EL j is).inst_id]|>) \/
+   (?dj vj srcj. (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dj; Var vj] /\
+      FLOOKUP s0.ss_loads vj = SOME srcj /\
+      c = <|cg_dst := w2n dj; cg_src := srcj; cg_length := 32;
+             cg_inst_ids := [(EL j is).inst_id] ++
+               (case dfg_get_def (dfg_build_function fn0) vj of
+                  NONE => [] | SOME li => [li.inst_id])|>)) /\
+  (j = r \/ (?g. MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g))) /\
+  t = FOLDL (\st q. if MEM q (mm_local_pending_indices is gs r) then st else
+    case mm_local_write_capture is H N q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) ==>
+  read_memory c.cg_src c.cg_length t = read_memory c.cg_src c.cg_length (H j)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  irule mm_local_selective_segment_replay >>
+  qexistsl [`\q. MEM q (mm_local_pending_indices is gs r)`, `a`,
+    `mm_local_write_capture is H N`, `r`] >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `c.cg_src+c.cg_length <= d \/ d+LENGTH bs <= c.cg_src \/ c.cg_length = 0 \/ bs = []`
+        suffices_by simp[arithmeticTheory.ADD_COMM] >>
+      mp_tac (Q.INST [`j` |-> `j`, `r` |-> `r`, `ss` |-> `s0`]
+        (SPEC_ALL mm_local_pending_prefix_source_exclusion)) >>
+      simp[] >> gvs[]) >>
+  reverse conj_tac
+  >- (`a <= r` by decide_tac >>
+      mp_tac (Q.INST [`a` |-> `a`, `r` |-> `r`]
+        (SPEC_ALL mm_local_fixed_cut_capture_recurrence)) >> simp[]) >>
+  rpt strip_tac >>
+  `j < r` by decide_tac >>
+  `?g. MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g)` by (gvs[] >> metis_tac[]) >>
+  `c.cg_src+c.cg_length <= d \/ d+LENGTH bs <= c.cg_src \/ c.cg_length = 0 \/ bs = []`
+    suffices_by simp[arithmeticTheory.ADD_COMM] >>
+  mp_tac (Q.INST [`j` |-> `j`, `r` |-> `r`, `s0` |-> `s0`,
+    `ss` |-> `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE q is)`]
+    (SPEC_ALL mm_local_pending_suffix_source_exclusion)) >>
+  simp[] >> gvs[]
+QED
+
 Theorem mm_local_pending_copy_capture_replay[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
