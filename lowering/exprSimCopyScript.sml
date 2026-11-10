@@ -220,7 +220,8 @@ Theorem copy_buffer_expr_post:
        (!name b k. local_region cenv es.scopes s0 name b k ==>
           off + len <= b \/ b + k <= off) ==>
        mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory) /\
-    locals_kept cenv es es' s0 s ==>
+    locals_kept cenv es es' s0 s /\
+    (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
     expr_post ctx func cenv cx e es sa sb s0 es' v op s
 Proof
   rpt gen_tac >> strip_tac >>

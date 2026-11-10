@@ -141,7 +141,11 @@ Proof
   `vv_storage_live cx vv es' s ==> vv_storage_live cx vv es' t` by
     (Cases_on `vv` >> fs[contextTheory.vv_operand_def]) >>
   pure_rewrite_tac[vv_post_def] >> asm_rewrite_tac[] >>
-  rpt strip_tac >>
+  rpt strip_tac
+  >~ [`vv_storage_live _ _ _ t`]
+  >- (qpat_x_assum `vv_storage_live _ _ _ s ==> _` irule >>
+      qpat_x_assum `~expr_has_effect e ==> vv_storage_live _ _ _ _` irule >>
+      first_assum ACCEPT_TAC) >>
   qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> _` irule >>
   qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> _`
     (irule_at Any) >>
