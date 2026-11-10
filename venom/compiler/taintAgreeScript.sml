@@ -1448,6 +1448,34 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem taint_agree_source_mcopy:
+  taint_agree D X tn s t /\
+  {i | dst <= i /\ i < dst+len} SUBSET X ==>
+  taint_agree D X
+    (tn with t_mem := (tn.t_mem DIFF {i | dst <= i /\ i < dst+len}) UNION
+                       {dst+k | k < len /\ src+k IN tn.t_mem})
+    (mcopy dst src len s) t
+Proof
+  strip_tac >>
+  `mcopy dst src len s = s with vs_memory := (mcopy dst src len s).vs_memory` by
+    simp[mcopy_def, write_memory_with_expansion_def] >>
+  pop_assum SUBST1_TAC >>
+  `taint_agree D X
+    (tn with t_mem := (tn.t_mem DIFF {i | dst <= i /\ i < dst+len}) UNION
+                       {dst+k | k < len /\ src+k IN tn.t_mem})
+    (s with vs_memory := (mcopy dst src len s).vs_memory)
+    (t with vs_memory := t.vs_memory)` suffices_by simp[] >>
+  irule taint_agree_memory_update >>
+  qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+  rpt strip_tac >>
+  `~(dst <= i /\ i < dst+len)` by
+    (fs[SUBSET_DEF] >> metis_tac[]) >>
+  `i NOTIN tn.t_mem` by gvs[] >>
+  simp[mcopy_def, regularCallEmitSimTheory.read_byte_write_memory_with_expansion,
+       GSYM read_memory_def, ld_read_memory_length] >>
+  drule_all taint_agree_memory >> simp[]
+QED
+
 Theorem taint_agree_mstore:
   taint_agree D X tn s t /\ word_agree_except m x y ==>
   taint_agree D X

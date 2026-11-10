@@ -99,6 +99,27 @@ Definition ircf_cross_def:
        read_byte (db + k) s.vs_memory = read_byte (sb + k) t.vs_memory)
 End
 
+Theorem ircf_cross_source_mcopy:
+  (db+len <= sb \/ sb+len <= db) /\
+  (!q. q < len /\ sb+q NOTIN tn.t_mem ==>
+       read_byte (sb+q) s.vs_memory = read_byte (sb+q) t.vs_memory) ==>
+  ircf_cross
+    (tn with t_mem := (tn.t_mem DIFF {i | db <= i /\ i < db+len}) UNION
+                       {db+q | q < len /\ sb+q IN tn.t_mem})
+    {(db,sb,len)} (mcopy db sb len s) t
+Proof
+  strip_tac >> rw[ircf_cross_def] >>
+  `~(db <= sb+k /\ sb+k < db+len)` by decide_tac >>
+  `db <= db+k /\ db+k < db+len` by decide_tac >>
+  `!q. q < len ==> sb+k <> db+q` by (rpt strip_tac >> decide_tac) >>
+  simp[arithmeticTheory.ADD_COMM] >>
+  simp[mcopy_def, GSYM read_memory_def,
+       regularCallEmitSimTheory.read_byte_write_memory_with_expansion,
+       o1LowerDloadRangeTransportTheory.ld_read_memory_length,
+       o1LowerDloadRangeTransportTheory.ld_read_memory_element] >>
+  metis_tac[arithmeticTheory.ADD_SYM]
+QED
+
 Definition ircf_R_def:
   ircf_R D fn_meta rma C stk (PG : (num # num) option list)
          (G : (string, num # num) fmap) tn fn s t <=>
