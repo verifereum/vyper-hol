@@ -1030,15 +1030,18 @@ Definition check_contract_def:
       then SOME art else NONE
 End
 
-(* The exports map of load_contract names only functions of allocated
-   modules.  An external function is never an internal callee, so it is live
-   exactly when its module is allocated. *)
+(* Exports name allocated modules, and the combined deployed interface has
+   distinct selectors.  An external function is never an internal callee,
+   so it is live exactly when its module is allocated. *)
 Definition exports_ok_def:
   exports_ok layouts addr mods exps <=>
     EVERY (\(fn,src).
              case ALOOKUP mods (SOME src) of
              | NONE => T
-             | SOME tls => module_allocated layouts addr (SOME src) tls) exps
+             | SOME tls => module_allocated layouts addr (SOME src) tls) exps /\
+    ALL_DISTINCT
+      (MAP (\(name,tys). abi_method_id (type_env_all_modules mods) name tys)
+        (abi_deployed_signatures mods exps))
 End
 
 (* Successful checking guarantees distinct member names for every
@@ -1087,6 +1090,17 @@ Theorem check_contract_external_names_distinct:
   ALL_DISTINCT (contract_keys external_name_keys_toplevel mods)
 Proof
   rw[check_contract_def, contract_namespaces_ok_def]
+QED
+
+Theorem check_contract_single_module_exports_ok:
+  check_contract in_deploy layouts addr [(NONE,tops)] = SOME art ==>
+  exports_ok layouts addr [(NONE,tops)] []
+Proof
+  strip_tac >>
+  drule (check_contract_external_method_ids_distinct
+    |> Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`, `tls` |-> `tops`]) >>
+  simp[exports_ok_def, abi_deployed_signatures_def,
+       abi_external_method_ids_def]
 QED
 
 Theorem function_header_nonreentrant_view:
