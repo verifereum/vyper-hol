@@ -2967,6 +2967,135 @@ Proof
   metis_tac[assign_output_op_kind]
 QED
 
+Theorem simple_do_swap_replay_wf:
+  do_swap d ps = (ops,ps') /\ d < LENGTH ps.ps_stack /\
+  EVERY is_simple_stack_op ops ==>
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  apply_prefix_ops fmp lo ops ps = ps'
+Proof
+  strip_tac >>
+  `!off. ~MEM (SORestore off) ops` by
+    (fs[listTheory.EVERY_MEM] >>
+     metis_tac[strongPrefixSimTheory.is_simple_stack_op_def]) >>
+  `d <= 16` by metis_tac[do_swap_no_restore_shallow] >>
+  metis_tac[do_swap_shallow_symbolic_prefix_facts, planAlignTheory.do_swap_align]
+QED
+
+Theorem optimistic_simple_replay_wf:
+  optimistic_swap_plan dfg inst nl term ps = (ops,ps') /\
+  EVERY is_simple_stack_op ops ==>
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  apply_prefix_ops fmp lo ops ps = ps'
+Proof
+  simp[optimistic_swap_plan_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  Cases_on `stack_get_depth (Var (LAST nl)) ps.ps_stack` >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  simp[mixedPrefixSimTheory.apply_prefix_ops_def, prefixExecTheory.prefix_wf_def] >>
+  metis_tac[simple_do_swap_replay_wf, planAlignTheory.stack_get_depth_bound]
+QED
+
+Theorem simple_prefix_equal_stack_replay:
+  !ops ps qs fmp lo.
+  EVERY is_simple_stack_op ops /\ qs.ps_stack = ps.ps_stack ==>
+  (apply_prefix_ops fmp lo ops qs).ps_stack =
+    (apply_prefix_ops fmp lo ops ps).ps_stack
+Proof
+  Induct >> simp[mixedPrefixSimTheory.apply_prefix_ops_def] >>
+  rpt gen_tac >> strip_tac >> first_x_assum irule >> simp[] >>
+  Cases_on `h` >>
+  gvs[strongPrefixSimTheory.is_simple_stack_op_def,
+      mixedPrefixSimTheory.apply_prefix_op_def,
+      strongPrefixSimTheory.apply_simple_op_def] >>
+  Cases_on `o'` >>
+  gvs[strongPrefixSimTheory.is_simple_stack_op_def,
+      mixedPrefixSimTheory.apply_prefix_op_def,
+      strongPrefixSimTheory.apply_simple_op_def]
+QED
+
+Theorem sym_simple_prefix_stack_sim:
+  !ops lo ps ps' ss top srest fn ret cp p fmp env.
+  EVERY is_simple_stack_op ops /\
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  (apply_prefix_ops fmp lo ops ps).ps_stack = ps'.ps_stack /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp ops) ==>
+  ?ss' top'.
+    sym_steps p env (LENGTH (execute_plan fmp ops)) ss = SymOK ss' /\
+    ss'.sym_stack = top' ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE ps'.ps_stack) top' /\
+    (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `(apply_prefix_ops fmp lo ops (ps with ps_spilled := FEMPTY)).ps_stack = ps'.ps_stack` by
+    metis_tac[simple_prefix_equal_stack_replay, plan_state_accfupds] >>
+  drule_all sym_spill_free_stack_only_prefix_sim >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  fs[sym_kinds_ok_def] >> metis_tac[]
+QED
+
+Theorem assign_postfix_simple_replay_wf:
+  ps.ps_stack = stack_push (Var out) tail /\
+  (if halting then ([],ps)
+   else popmany_plan (if MEM out nl then [] else [Var out]) ps) = (pops,ps8) /\
+  (if MEM out nl then optimistic_swap_plan dfg inst nl term ps8
+   else ([],ps8)) = (opts,ps9) /\
+  EVERY is_simple_stack_op (pops ++ opts) ==>
+  prefix_wf lo (LENGTH ps.ps_stack) (pops ++ opts) /\
+  (apply_prefix_ops fmp lo (pops ++ opts) ps).ps_stack =
+    (release_dead_spills nl ps9).ps_stack
+Proof
+  strip_tac >> Cases_on `MEM out nl`
+  >- (`pops = [] /\ ps8 = ps` by
+        (Cases_on `halting` >> gvs[stackPlanOpsTheory.popmany_plan_def]) >>
+      gvs[] >> drule_all optimistic_simple_replay_wf >>
+      disch_then (qspecl_then [`lo`, `fmp`] strip_assume_tac) >>
+      gvs[stackModelTheory.stack_push_def, arithmeticTheory.ADD1]) >>
+  gvs[] >> Cases_on `halting`
+  >- gvs[mixedPrefixSimTheory.apply_prefix_ops_def, prefixExecTheory.prefix_wf_def] >>
+  `stack_get_depth (Var out) ps.ps_stack = SOME 0` by
+    simp[stackModelTheory.stack_push_def, listTheory.REVERSE_SNOC,
+         stackModelTheory.stack_get_depth_def, stackModelTheory.stack_find_def] >>
+  `popmany_plan [Var out] ps =
+     ([SOPop 1],ps with ps_stack := stack_pop 1 ps.ps_stack)` by
+    metis_tac[regularPostfixSimTheory.popmany_plan_top_singleton] >>
+  gvs[mixedPrefixSimTheory.apply_prefix_ops_def,
+      mixedPrefixSimTheory.apply_prefix_op_def,
+      strongPrefixSimTheory.apply_simple_op_def,
+      prefixExecTheory.prefix_wf_def, prefixExecTheory.stack_op_wf_def,
+      stackModelTheory.stack_push_def, stackModelTheory.stack_pop_def]
+QED
+
+Theorem sym_assign_postfix_stack_sim:
+  !ps out tail halting nl pops ps8 dfg inst term opts ps9 (lo:string |-> num) ss top srest fn ret cp p fmp env.
+  ps.ps_stack = stack_push (Var out) tail /\
+  (if halting then ([],ps)
+   else popmany_plan (if MEM out nl then [] else [Var out]) ps) = (pops,ps8) /\
+  (if MEM out nl then optimistic_swap_plan dfg inst nl term ps8
+   else ([],ps8)) = (opts,ps9) /\
+  EVERY is_simple_stack_op (pops ++ opts) /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp (pops ++ opts)) ==>
+  ?ss' top'.
+    sym_steps p env (LENGTH (execute_plan fmp (pops ++ opts))) ss = SymOK ss' /\
+    ss'.sym_stack = top' ++ srest /\
+    LIST_REL (op_kind_ok fn ret)
+      (REVERSE (release_dead_spills nl ps9).ps_stack) top' /\
+    (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `context_spill_byte cp0` >>
+  drule_all assign_postfix_simple_replay_wf >>
+  disch_then (qspecl_then [`lo`, `fmp`] strip_assume_tac) >>
+  irule sym_simple_prefix_stack_sim >> simp[] >>
+  conj_tac >- (qexists_tac `cp0` >> simp[]) >>
+  qexistsl_tac [`lo`, `ps`] >> simp[]
+QED
+
 Theorem sym_jmp_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
