@@ -7,24 +7,13 @@ Ancestors
   contextRawReachable contextCodegenRel venomExecProofs calleeTransport
   venomInstProofs venomInst regularCallEmitSim codegenRel venomState spillSim
   venomExecSemantics venomCallOracleDefs venomInstProofs3 venomEffects opcodeClass
-  venomMemProps
+  venomMemProps contextCodegenRelProps
 
 Theorem raw_reachable_active:
   !vs0 ctx fn inst s.
     raw_reachable vs0 ctx fn inst s ==> active_inst fn inst s
 Proof
   ho_match_mp_tac raw_reachable_ind >> simp[]
-QED
-
-Theorem lookup_instruction_active:
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME inst ==>
-  active_inst fn inst s
-Proof
-  strip_tac >> drule lookup_block_MEM >> strip_tac >>
-  drule lookup_block_label >> strip_tac >>
-  gvs[get_instruction_def, AllCaseEqs()] >>
-  simp[active_inst_def] >> qexists_tac `bb` >> simp[]
 QED
 
 Theorem enters_block_memory:

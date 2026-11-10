@@ -1449,8 +1449,10 @@ Proof
     qexists_tac `run_block fuel ctx (bt1 bb) s2` >>
     conj_tac >> first_assum ACCEPT_TAC) >>
   Cases_on `run_block fuel ctx (bt1 bb) s1` >>
+  fs[lift_result_def] >>
   Cases_on `run_block fuel ctx (bt2 bb) s2` >>
-  gvs[lift_result_def]
+  fs[lift_result_def] >>
+  simp[lift_result_def]
   >>
   rename1 `R_ok v1 v2` >>
   Cases_on `v1.vs_halted`

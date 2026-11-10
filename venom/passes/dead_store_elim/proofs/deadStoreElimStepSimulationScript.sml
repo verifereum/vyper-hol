@@ -9,7 +9,7 @@ Ancestors
   deadStoreElimMemoryObservers deadStoreElimImmutableSteps
   deadStoreElimBarrierSteps deadStoreElimResidualSimpleSteps
   deadStoreElimCallSteps deadStoreElimDelegateCallSteps deadStoreElimCreateSteps
-  deadStoreElimMemoryTerminalSteps deadStoreElimTerminalSteps
+  deadStoreElimMemoryTerminalSteps deadStoreElimTerminalSteps deadStoreElimEquiv
   deadStoreElimDefs deadStoreElimLocal deadStoreElimPending deadStoreElimStructure
   deadStoreElimPositional passSharedDefs stateEquiv
   venomExecSemantics venomExecProofs venomExecProps venomInst venomState venomWf venomEffects venomMemDefs list
@@ -324,6 +324,16 @@ QED
 
 Finalise dse_nonbarrier_result_cases
 
+Theorem dse_current_inst_mem[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst ==> MEM inst (fn_insts fn)
+Proof
+  strip_tac >> rewrite_tac[fn_insts_def] >>
+  irule fmp_fn_insts_blocks_intro >> qexists_tac `bb` >>
+  conj_tac >- metis_tac[lookup_block_MEM] >>
+  fs[get_instruction_def, AllCaseEqs()] >> metis_tac[MEM_EL]
+QED
+
 Theorem dse_non_ok_step:
   sp IN {AddrSp_Memory; AddrSp_Storage; AddrSp_Transient} /\
   wf_function fn /\
@@ -340,16 +350,7 @@ Theorem dse_non_ok_step:
     (step_inst fuel ctx inst s) (step_inst fuel ctx (dse_inst ids sp inst) t)
 Proof
   strip_tac >>
-  `MEM inst (fn_insts fn)` by
-    (`MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-     `s.vs_inst_idx < LENGTH bb.bb_instructions /\
-      EL s.vs_inst_idx bb.bb_instructions = inst` by
-       fs[get_instruction_def, AllCaseEqs()] >>
-     `MEM inst bb.bb_instructions` by metis_tac[MEM_EL] >>
-     qpat_x_assum `MEM bb fn.fn_blocks` mp_tac >>
-     rewrite_tac[fn_insts_def] >>
-     qspec_tac (`fn.fn_blocks`, `bbs`) >>
-     Induct >> simp[fn_insts_blocks_def] >> metis_tac[]) >>
+  `MEM inst (fn_insts fn)` by metis_tac[dse_current_inst_mem] >>
   Cases_on `dse_barrier_case sp inst.inst_opcode`
   >- (`dse_inst ids sp inst = inst` by
         (irule dse_barrier_retained >> metis_tac[]) >>
@@ -453,6 +454,73 @@ QED
 
 Finalise dse_non_ok_step
 
+(* Storage and transient DSE treat every opcode that can halt or return as a
+   read barrier, so the remaining non-barrier opcodes never terminate. *)
+Theorem dse_key_nonbarrier_not_terminal[local]:
+  sp IN {AddrSp_Storage; AddrSp_Transient} /\
+  ~dse_barrier_case sp inst.inst_opcode /\ ~s.vs_call_ctx.cc_static ==>
+  (!s1. step_inst fuel ctx inst s <> Halt s1) /\
+  (!rv s1. step_inst fuel ctx inst s <> IntRet rv s1)
+Proof
+  strip_tac >>
+  `sp IN {AddrSp_Memory; AddrSp_Storage; AddrSp_Transient}` by fs[] >>
+  drule_all dse_nonbarrier_result_cases >>
+  disch_then (qspecl_then [`fuel`, `ctx`] strip_assume_tac)
+  >- simp[]
+  >- simp[] >>
+  `inst.inst_opcode IN {REVERT; INVALID; PHI; ASSERT; ASSERT_UNREACHABLE;
+                        RETURNDATACOPY}` by
+    (qpat_x_assum `inst.inst_opcode IN _` mp_tac >>
+     qpat_x_assum `~dse_barrier_case _ _` mp_tac >>
+     qpat_x_assum `sp IN {AddrSp_Storage; AddrSp_Transient}` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[dse_barrier_case_def] >>
+     rpt strip_tac >> gvs[]) >>
+  Cases_on `inst.inst_opcode = REVERT`
+  >- (drule dse_revert_result_cases >>
+      disch_then (qspecl_then [`s`, `fuel`, `ctx`] strip_assume_tac) >> simp[]) >>
+  Cases_on `inst.inst_opcode = RETURNDATACOPY`
+  >- (drule dse_returndatacopy_result_cases >>
+      disch_then (qspecl_then [`s`, `fuel`, `ctx`] strip_assume_tac) >> simp[]) >>
+  `inst.inst_opcode IN {ASSERT; ASSERT_UNREACHABLE; INVALID; PHI}` by fs[] >>
+  drule dse_assertion_result_cases >>
+  disch_then (qspecl_then [`s`, `fuel`, `ctx`] strip_assume_tac) >> simp[]
+QED
+
+(* Halt/IntRet steps: every space's terminal states agree up to memory. *)
+Theorem dse_term_step:
+  sp IN {AddrSp_Memory; AddrSp_Storage; AddrSp_Transient} /\
+  wf_function fn /\
+  all_dead_stores ids (cfg_analyze fn) FEMPTY bp sp fn /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  dse_local_agrees sp P s t /\
+  dse_pending_at (cfg_analyze fn) bp sp fn bb s.vs_inst_idx P s /\
+  ~s.vs_call_ctx.cc_static /\
+  alloca_inv s /\ bp_ptr_sound bp s /\ bp_accesses_in_own_alloca bp inst s /\
+  ((?s1. step_inst fuel ctx inst s = Halt s1) \/
+   (?rv s1. step_inst fuel ctx inst s = IntRet rv s1)) ==>
+  lift_result (dse_equiv sp) dse_term_equiv (dse_equiv sp)
+    (step_inst fuel ctx inst s) (step_inst fuel ctx (dse_inst ids sp inst) t)
+Proof
+  strip_tac >>
+  (`~(?u. step_inst fuel ctx inst s = OK u) /\
+    ~(?e. step_inst fuel ctx inst s = Error e)` by gvs[] >>
+  Cases_on `dse_barrier_case sp inst.inst_opcode`
+  >- (`MEM inst (fn_insts fn)` by metis_tac[dse_current_inst_mem] >>
+      `dse_inst ids sp inst = inst` by
+        (irule dse_barrier_retained >> metis_tac[]) >>
+      drule_all dse_barrier_inputs >> strip_tac >>
+      qpat_x_assum `s = t` SUBST_ALL_TAC >> simp[] >>
+      Cases_on `step_inst fuel ctx inst t` >>
+      simp[lift_result_def, dse_equiv_refl]) >>
+  Cases_on `sp = AddrSp_Memory`
+  >- (qpat_x_assum `sp = AddrSp_Memory` SUBST_ALL_TAC >>
+      drule_all dse_non_ok_step >> metis_tac[]) >>
+  `sp IN {AddrSp_Storage; AddrSp_Transient}` by fs[] >>
+  drule_all dse_key_nonbarrier_not_terminal >>
+  disch_then (qspecl_then [`fuel`, `ctx`] strip_assume_tac) >> gvs[])
+QED
+
 Theorem dse_halt_step:
   sp IN {AddrSp_Memory; AddrSp_Storage; AddrSp_Transient} /\
   wf_function fn /\
@@ -464,13 +532,15 @@ Theorem dse_halt_step:
   ~s.vs_call_ctx.cc_static /\
   alloca_inv s /\ bp_ptr_sound bp s /\ bp_accesses_in_own_alloca bp inst s /\
   step_inst fuel ctx inst s = Halt s1 ==>
-  ?t1. step_inst fuel ctx (dse_inst ids sp inst) t = Halt t1 /\ dse_equiv sp s1 t1
+  ?t1. step_inst fuel ctx (dse_inst ids sp inst) t = Halt t1 /\ dse_term_equiv s1 t1
 Proof
   strip_tac >>
-  `~(?u. step_inst fuel ctx inst s = OK u)` by simp[] >>
-  drule_all dse_non_ok_step >> simp[] >> strip_tac >>
+  Q.SUBGOAL_THEN `(?u. step_inst fuel ctx inst s = Halt u) \/
+                  (?vals u. step_inst fuel ctx inst s = IntRet vals u)`
+    assume_tac >- simp[] >>
+  drule_all dse_term_step >>
   Cases_on `step_inst fuel ctx (dse_inst ids sp inst) t` >>
-  gvs[lift_result_def]
+  simp[lift_result_def]
 QED
 
 Theorem dse_abort_step:
@@ -504,13 +574,16 @@ Theorem dse_intret_step:
   ~s.vs_call_ctx.cc_static /\
   alloca_inv s /\ bp_ptr_sound bp s /\ bp_accesses_in_own_alloca bp inst s /\
   step_inst fuel ctx inst s = IntRet rv s1 ==>
-  ?t1. step_inst fuel ctx (dse_inst ids sp inst) t = IntRet rv t1 /\ dse_equiv sp s1 t1
+  ?t1. step_inst fuel ctx (dse_inst ids sp inst) t = IntRet rv t1 /\
+    dse_term_equiv s1 t1
 Proof
   strip_tac >>
-  `~(?u. step_inst fuel ctx inst s = OK u)` by simp[] >>
-  drule_all dse_non_ok_step >> simp[] >> strip_tac >>
+  Q.SUBGOAL_THEN `(?u. step_inst fuel ctx inst s = Halt u) \/
+                  (?vals u. step_inst fuel ctx inst s = IntRet vals u)`
+    assume_tac >- simp[] >>
+  drule_all dse_term_step >>
   Cases_on `step_inst fuel ctx (dse_inst ids sp inst) t` >>
-  gvs[lift_result_def]
+  simp[lift_result_def]
 QED
 
 (* Route successful terminators through the shared execution classification;
