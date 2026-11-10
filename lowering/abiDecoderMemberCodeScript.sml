@@ -4,7 +4,7 @@
 Theory abiDecoderMemberCode
 Ancestors
   abiDecoderRange abiDecoderMemberSetup abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderLoop
-  abiDecoderContract fragExec instIdxIndep abiEncoder compileEnv emitHelper
+  abiDecoderContract fragExec instIdxIndep abiEncoder compileEnv loweringStateRelDefs emitHelper
   emitHelperProps exprLoweringProps venomState venomExecSemantics venomInst words list rich_list arithmetic
 
 Theorem abi_decode_member_setup_shape:

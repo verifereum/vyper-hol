@@ -3,7 +3,7 @@ Theory abiDecoderValidMemberTail
 Ancestors
   abiDecoderValidMembersCorrect abiDecoderValidMemberCursor abiDecoderMemberFrames
   abiDecoderMembers abiDecoderCoherence abiDecoderTypedContract abiDecoderEffect
-  abiDecoderReentry abiDecoderContract abiDecodeRanges abiValidMembers compileEnv valueEncoding
+  abiDecoderReentry abiDecoderContract abiDecodeRanges abiValidMembers compileEnv valueEncoding valueEncodingDefs
   vyperABI vyperValue vyperTyping venomState words list arithmetic
 
 val member_cursor_rewrites = [MAP_APPEND, MAP, SUM_APPEND, SUM,

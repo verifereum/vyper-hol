@@ -31,13 +31,13 @@ Ancestors
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   exprSimRawCallCalldata rawCallFragPath valueCopy valueTypingMemoryProps
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
-  exprLoweringProps emitHelper emitHelperProps compileEnv localPtrsProps valueEncoding
+  exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs localPtrsProps valueEncoding valueEncodingDefs
   vyperAST vyperInterpreter vyperState vyperValue vyperTyping
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperTypeExtCallSoundness vyperTypeEvalSoundness exprSimECArith exprSimUnwrap
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
   venomExecSemantics venomInst venomState exprSimSend
-  exprSimHash exprSimAlloc exprSimBuffer builtinSystem exprWordOperand exprSafeOperand exprOperandVar
+  exprSimHash exprSimHashBoundary exprSimAlloc exprSimBuffer builtinSystem exprWordOperand exprSafeOperand exprOperandVar
 Libs
   pairLib
 
@@ -229,7 +229,7 @@ Resume raw_call_tuple_build_no_restore_run[separation]:
      w2n w + (32 + sz) <= lb \/ lb + lsz <= w2n w` by
     (rpt strip_tac >>
      `regions_disjoint (w2n w) (32 + sz) lb lsz` suffices_by
-       simp[compileEnvTheory.regions_disjoint_def] >>
+       simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
      irule local_ptrs_rel_alloca_disjoint >>
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
      simp[mk_inst_def] >>
@@ -1006,7 +1006,7 @@ Proof
   pure_rewrite_tac[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
     venomMemDefsTheory.allocas_non_overlapping_def] >>
   strip_tac >> first_x_assum drule_all >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem raw_call_outbuf_steps[local]:
@@ -2208,8 +2208,9 @@ Proof
     (`(n2w b : bytes32) = n2w b'` by metis_tac[optionTheory.SOME_11] >>
      fs[wordsTheory.n2w_11] >> metis_tac[arithmeticTheory.LESS_MOD]) >>
   gvs[] >>
-  `post_value_type cenv d = expr_type d` by
-    (irule post_value_type_bytestring >> fs[is_bytestring_type_def]) >>
+  `post_value_type cenv d = BaseT (BytesT (Dynamic cap))` by
+    (`is_bytestring_type (expr_type d)` by simp[is_bytestring_type_def] >>
+     drule post_value_type_bytestring >> simp[]) >>
   `expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) s1 s2 esD (BytesV bs) data tD` by
     fs[expr_post_def] >>
   `b < dimword (:256)` by (fs[] >> decide_tac) >>
@@ -3080,6 +3081,9 @@ Proof
      qpat_x_assum `!a w. eval_operand a t = SOME w ==> _`
        (qspec_then `Var x` mp_tac) >>
      simp[eval_operand_def, lookup_var_def]) >>
+  `immutable_alloca_sep func cenv cx es u` by
+    (irule immutable_alloca_sep_frame >> qexistsl_tac [`t`, `es`] >>
+     fs[stmt_state_rel_def] >> metis_tac[]) >>
   fs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
     accounts_rel_def, logs_rel_def, immutables_rel_def, venomMemDefsTheory.alloca_inv_def,
     venomMemDefsTheory.allocas_non_overlapping_def,
@@ -3926,8 +3930,8 @@ Theorem raw_call_output_alloca_sep[local]:
   cap <= rounded /\ initial.cs_next_id <= new_id ==>
   !aid b sz. aid < initial.cs_next_id /\
     FLOOKUP t.vs_allocas aid = SOME (b,sz) ==>
-    compileEnv$regions_disjoint outbase 32 b sz /\
-    compileEnv$regions_disjoint (outbase+32) cap b sz
+    loweringStateRelDefs$regions_disjoint outbase 32 b sz /\
+    loweringStateRelDefs$regions_disjoint (outbase+32) cap b sz
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   `aid <> new_id` by decide_tac >>
@@ -3935,19 +3939,19 @@ Proof
     (fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
          venomMemDefsTheory.allocas_non_overlapping_def] >>
      metis_tac[]) >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem raw_call_output_local_sep[local]:
   (!name b sz. local_region cenv scopes t name b sz ==>
-    compileEnv$regions_disjoint outbase (rounded+32) b sz) /\ cap <= rounded ==>
+    loweringStateRelDefs$regions_disjoint outbase (rounded+32) b sz) /\ cap <= rounded ==>
   !name b sz. local_region cenv scopes t name b sz ==>
-    compileEnv$regions_disjoint outbase 32 b sz /\
-    compileEnv$regions_disjoint (outbase+32) cap b sz
+    loweringStateRelDefs$regions_disjoint outbase 32 b sz /\
+    loweringStateRelDefs$regions_disjoint (outbase+32) cap b sz
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   first_x_assum drule >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem raw_call_oracle_frame[local]:
@@ -3956,19 +3960,19 @@ Theorem raw_call_oracle_frame[local]:
   t.vs_memory = (write_memory_with_expansion dst payload s).vs_memory /\
   (!aid b sz. aid < sa.cs_next_id /\
     FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-    compileEnv$regions_disjoint dst (LENGTH payload) b sz) /\
+    loweringStateRelDefs$regions_disjoint dst (LENGTH payload) b sz) /\
   (!name b sz. local_region cenv es.scopes s0 name b sz ==>
-    compileEnv$regions_disjoint dst (LENGTH payload) b sz) /\
+    loweringStateRelDefs$regions_disjoint dst (LENGTH payload) b sz) /\
   ~not_fresh_at sa out ==>
   wb_frame cenv es sa s0 (update_var out result t)
 Proof
   strip_tac >>
-  `!b sz. compileEnv$regions_disjoint dst (LENGTH payload) b sz ==>
+  `!b sz. loweringStateRelDefs$regions_disjoint dst (LENGTH payload) b sz ==>
     mem_bytes_at b sz (update_var out result t).vs_memory =
     mem_bytes_at b sz s.vs_memory` by
     (rpt strip_tac >> simp[update_var_def] >>
      asm_rewrite_tac[] >> irule hash_write_memory_disjoint >>
-     fs[compileEnvTheory.regions_disjoint_def]) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   fs[wb_frame_def] >> conj_tac
   >- (rpt strip_tac >> simp[lookup_var_def, update_var_def] >>
       `x <> out` by metis_tac[] >>
@@ -3986,16 +3990,16 @@ Theorem raw_call_output_initial_locals[local]:
   wb_frame cenv es sa s0 t /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\ cap <= rounded /\
   (!name b sz. local_region cenv es'.scopes t name b sz ==>
-    compileEnv$regions_disjoint outbase (rounded+32) b sz) ==>
+    loweringStateRelDefs$regions_disjoint outbase (rounded+32) b sz) ==>
   !name b sz. local_region cenv es.scopes s0 name b sz ==>
-    compileEnv$regions_disjoint outbase 32 b sz /\
-    compileEnv$regions_disjoint (outbase+32) cap b sz
+    loweringStateRelDefs$regions_disjoint outbase 32 b sz /\
+    loweringStateRelDefs$regions_disjoint (outbase+32) cap b sz
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   `local_region cenv es'.scopes t name b sz` by
     (irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl_tac [`s0`, `sa`, `es.scopes`] >> fs[wb_frame_def]) >>
-  first_x_assum drule >> simp[compileEnvTheory.regions_disjoint_def] >>
+  first_x_assum drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   decide_tac
 QED
 
@@ -4036,9 +4040,9 @@ Theorem raw_call_oracle_path[local]:
     off + type_memory_size tv <= w2n ro \/ w2n ro + cap <= off) /\
   wb_frame cenv initial_es initial s0 s /\ initial.cs_next_var <= sa.cs_next_var /\
   (!aid b sz. aid < initial.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-    compileEnv$regions_disjoint (w2n ro) cap b sz) /\
+    loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz) /\
   (!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
-    compileEnv$regions_disjoint (w2n ro) cap b sz) ==>
+    loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz) ==>
   frag_path ctx sa sb (\u. u = s)
     (\u. stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
       wb_frame cenv initial_es initial s0 u /\
@@ -4076,7 +4080,7 @@ Resume raw_call_oracle_path[frame]:
      qexistsl_tac [`w2n ro`, `TAKE cap outcome.co_returnData`] >> simp[] >>
      conj_tac >> rpt gen_tac >> strip_tac >>
      first_x_assum (drule_all_then mp_tac) >>
-     simp[compileEnvTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
   suspend "post"
 QED
 
@@ -4123,9 +4127,9 @@ Theorem raw_call_allocated_tail_frag_aged[local]:
       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
     off + type_memory_size tv <= w2n ro \/ w2n ro + cap <= off) /\
   (!aid b sz. aid < initial.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-    compileEnv$regions_disjoint (w2n ro) cap b sz) /\
+    loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz) /\
   (!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
-    compileEnv$regions_disjoint (w2n ro) cap b sz) /\
+    loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz) /\
   (0 < cap ==>
     eval_operand ov s = SOME addr /\
     (!x. ov = Var x ==> not_fresh_at sa x) /\
@@ -4135,9 +4139,9 @@ Theorem raw_call_allocated_tail_frag_aged[local]:
       (!name lb lsz. local_region cenv es.scopes s name lb lsz ==>
         b + sz <= lb \/ lb + lsz <= b)) /\
     (!aid b sz. aid < initial.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-      compileEnv$regions_disjoint (w2n addr) 32 b sz) /\
+      loweringStateRelDefs$regions_disjoint (w2n addr) 32 b sz) /\
     (!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
-      compileEnv$regions_disjoint (w2n addr) 32 b sz)) ==>
+      loweringStateRelDefs$regions_disjoint (w2n addr) 32 b sz)) ==>
   frag_exec ctx sa sb (\u. u = s)
     (\u. outcome.co_success /\
       stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
@@ -4198,7 +4202,7 @@ Resume raw_call_allocated_tail_frag_aged[frame]:
      qexistsl_tac [`w2n ro`, `TAKE cap outcome.co_returnData`] >> simp[] >>
      conj_tac >> rpt gen_tac >> strip_tac >>
      first_x_assum (drule_all_then mp_tac) >>
-     simp[compileEnvTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
   suspend "finish"
 QED
 
@@ -4284,7 +4288,8 @@ QED
 Finalise raw_call_allocated_tail_frag_aged
 
 Theorem raw_call_none_post[local]:
-  post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\ stmt_state_rel ctx func cenv cx es' s /\
+  post_value_type cenv e = expr_type e /\
+  expr_type e = NoneT /\ stmt_state_rel ctx func cenv cx es' s /\
   wb_frame cenv es sa s0 s ==>
   vv_post ctx func cenv cx e es sa sb s0 es' (Value NoneV)
     (StackValue ann (Lit 0w)) s
@@ -4298,6 +4303,7 @@ Proof
 QED
 
 Theorem raw_call_bool_post[local]:
+  post_value_type cenv e = expr_type e /\
   expr_type e = BaseT BoolT /\
   stmt_state_rel ctx func cenv cx es' s /\
   expr_val_rel cx (expr_type e) (BoolV success) result s /\
@@ -4340,6 +4346,7 @@ Proof
 QED
 
 Theorem raw_call_nonrevert_vv_path[local]:
+  post_value_type cenv e = expr_type e /\
   (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
           cmp <- emit_op LT [z;Lit (n2w n)];
@@ -4389,6 +4396,7 @@ Proof
 QED
 
 Theorem raw_call_bytes_post[local]:
+  post_value_type cenv e = expr_type e /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
   cap <= rounded /\
@@ -4429,6 +4437,7 @@ Proof
 QED
 
 Theorem raw_call_outbuf_zero_tail_vv_path[local]:
+  post_value_type cenv e = expr_type e /\
   cap = 0 /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
     (if stat then StaticCall else RegularCall) cap flags.rcf_revert_on_failure ov op sm = (result,sb) /\
@@ -4529,9 +4538,9 @@ Resume raw_call_outbuf_zero_tail_vv_path[call]:
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
   disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
-  simp[compileEnvTheory.regions_disjoint_def] >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   disch_then (qspecl_then [`val_word`,`gas`,`aw`] mp_tac) >>
-  impl_tac >- (fs[compileEnvTheory.regions_disjoint_def] >>
+  impl_tac >- (fs[loweringStateRelDefsTheory.regions_disjoint_def] >>
     rpt conj_tac >> metis_tac[]) >>
   strip_tac >>
   `cs_extends sm sc` by fs[ci_mono_def] >>
@@ -4590,6 +4599,7 @@ Resume raw_call_outbuf_zero_tail_vv_path[finish]:
   qpat_x_assum `flags.rcf_max_outsize = 0` mp_tac >>
   qpat_x_assum `local_ptrs_reserved cenv sc` mp_tac >>
   qpat_x_assum `initial.cs_next_var <= sc.cs_next_var` mp_tac >>
+  qpat_x_assum `post_value_type _ _ = _` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
   Cases_on `flags.rcf_revert_on_failure`
   >- suspend "revert_zero" >>
@@ -4617,7 +4627,7 @@ Resume raw_call_outbuf_zero_tail_vv_path[revert_zero]:
   disch_then (mp_then Any irule frag_path_conseq) >> simp[] >>
   rpt strip_tac >> gvs[] >>
   match_mp_tac raw_call_none_post >>
-  conj_tac >- gvs[raw_call_return_type_def] >>
+  conj_tac >- gvs[] >>
   conj_tac >- gvs[raw_call_return_type_def] >>
   conj_tac
   >- (irule raw_call_finish_state_rel_aged >>
@@ -4651,6 +4661,7 @@ Proof
 QED
 
 Theorem raw_call_outbuf_positive_tail_vv_path[local]:
+  post_value_type cenv e = expr_type e /\
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
     (if stat then StaticCall else RegularCall) cap flags.rcf_revert_on_failure ov op sm = (result,sb) /\
@@ -4755,9 +4766,9 @@ Resume raw_call_outbuf_positive_tail_vv_path[call]:
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
   disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
-  simp[compileEnvTheory.regions_disjoint_def] >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   disch_then (qspecl_then [`val_word`,`gas`,`aw`] mp_tac) >>
-  impl_tac >- (fs[compileEnvTheory.regions_disjoint_def] >>
+  impl_tac >- (fs[loweringStateRelDefsTheory.regions_disjoint_def] >>
     conj_tac
     >- (rpt strip_tac >>
         qpat_x_assum `!name b sz. local_region cenv es.scopes t name b sz ==> _ /\ _`
@@ -4807,9 +4818,11 @@ Resume raw_call_outbuf_positive_tail_vv_path[finish]:
 QED
 
 Resume raw_call_outbuf_positive_tail_vv_path[tuple_positive]:
+  `post_value_type cenv e = expr_type e` by gvs[] >>
   qpat_assum `expr_type e = _`
     (mp_then (Pat `expr_type _ = _`) mp_tac raw_call_nonrevert_vv_path) >>
   simp[arithmeticTheory.GREATER_DEF] >>
+  disch_then (drule_at (Pat `post_value_type _ _ = _`)) >>
   disch_then (drule_at (Pos hd)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ u`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
@@ -4832,7 +4845,7 @@ Resume raw_call_outbuf_positive_tail_vv_path[revert_positive]:
     w2n w + (32*((flags.rcf_max_outsize+31) DIV 32)+32) <= lb \/ lb+lsz <= w2n w` by
     (rpt strip_tac >>
      `regions_disjoint (w2n w) (32*((flags.rcf_max_outsize+31) DIV 32)+32) lb lsz`
-       suffices_by simp[compileEnvTheory.regions_disjoint_def] >>
+       suffices_by simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
      irule local_ptrs_rel_alloca_disjoint >>
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
@@ -4884,7 +4897,7 @@ Resume raw_call_outbuf_positive_tail_vv_path[bytes_post]:
     w2n w + (32*((flags.rcf_max_outsize+31) DIV 32)+32) <= lb \/ lb+lsz <= w2n w` by
     (rpt strip_tac >>
      `regions_disjoint (w2n w) (32*((flags.rcf_max_outsize+31) DIV 32)+32) lb lsz`
-       suffices_by simp[compileEnvTheory.regions_disjoint_def] >>
+       suffices_by simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
      irule local_ptrs_rel_alloca_disjoint >>
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
@@ -4892,7 +4905,9 @@ Resume raw_call_outbuf_positive_tail_vv_path[bytes_post]:
   qpat_assum `expr_type e = raw_call_return_type flags` (fn th => rewrite_tac[GSYM th]) >>
   `evaluate_type (get_tenv cx) (expr_type e) =
     SOME (BaseTV (BytesT (Dynamic flags.rcf_max_outsize)))` by metis_tac[] >>
-  irule raw_call_bytes_post >> simp[NoAsms] >>
+  `post_value_type cenv e = expr_type e` by gvs[] >>
+  irule raw_call_bytes_post >>
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >> simp[NoAsms] >>
   simp[] >>
   qexistsl_tac [`sa.cs_next_id`,`w2n w`,
     `32*((flags.rcf_max_outsize+31) DIV 32)`,`u`] >>
@@ -4970,6 +4985,7 @@ Proof
 QED
 
 Theorem raw_call_outbuf_tail_vv_frag[local]:
+  post_value_type cenv e = expr_type e /\
   compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
     (if stat then StaticCall else RegularCall) cap T ov op sm = (result,sb) /\
@@ -5057,7 +5073,7 @@ Resume raw_call_outbuf_tail_vv_frag[zero_tail]:
      pure_rewrite_tac[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
           venomMemDefsTheory.allocas_non_overlapping_def] >>
      strip_tac >> first_x_assum drule_all >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `cenv.ce_is_ctor ==> !name tv v off.
       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
@@ -5111,7 +5127,7 @@ Resume raw_call_outbuf_tail_vv_frag[zero_finish]:
       local_region cenv es.scopes t name b sz` by simp[Abbr `entry`, local_region_def, lookup_var_def] >>
      asm_rewrite_tac[] >> strip_tac >>
      first_assum (drule_then mp_tac) >>
-     simp[compileEnvTheory.regions_disjoint_def]) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   `!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
       regions_disjoint (w2n w) 0 b sz` by metis_tac[] >>
   `!aid b sz. aid < initial.cs_next_id /\ FLOOKUP entry.vs_allocas aid = SOME (b,sz) ==>
@@ -5126,7 +5142,7 @@ Resume raw_call_outbuf_tail_vv_frag[zero_finish]:
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   simp[] >> impl_tac
-  >- (fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+  >- (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   disch_then (mp_then Any irule frag_exec_weaken) >>
   simp[] >> rpt strip_tac >> gvs[] >>
   irule raw_call_none_post >> simp[] >> gvs[]
@@ -5235,10 +5251,10 @@ Resume raw_call_outbuf_tail_vv_frag[positive_finish]:
       >- (Cases_on `value_opt` >> gvs[])
       >- (rpt strip_tac >>
           qpat_x_assum `!name b sz. local_region cenv es.scopes t name b sz ==> _ /\ _`
-            drule >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac)
+            drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
       >- (rpt strip_tac >>
           qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-          disch_then drule_all >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac)
+          disch_then drule_all >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
       >- metis_tac[]
       >- metis_tac[]
       >- suspend "positive_header_witness"
@@ -5258,7 +5274,7 @@ Resume raw_call_outbuf_tail_vv_frag[positive_header_witness]:
       fs[MEM_APPEND, mk_inst_def] >> metis_tac[]) >>
   rpt strip_tac >>
   qpat_x_assum `!name b len. local_region cenv es.scopes t name b len ==> _`
-    drule >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+    drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Resume raw_call_outbuf_tail_vv_frag[positive_post]:
@@ -5285,7 +5301,7 @@ Resume raw_call_outbuf_tail_vv_frag[positive_post]:
   rpt strip_tac >>
   `local_region cenv es.scopes t n lb lsz` by metis_tac[] >>
   qpat_x_assum `!name b len. local_region cenv es.scopes t name b len ==> _` drule >>
-  simp[compileEnvTheory.regions_disjoint_def]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 Finalise raw_call_outbuf_tail_vv_frag

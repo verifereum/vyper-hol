@@ -21,7 +21,7 @@ Theory compileVyper
 Ancestors
   allocLimits exprLowering
   vyperCompiler
-  venomPipeline
+  venomPipelineDriver
   codegen
   selectorDispatch
   jumptableUtils

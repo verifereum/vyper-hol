@@ -1,9 +1,10 @@
 Theory makeSsaRfTreeTrace
 Ancestors makeSsaCurrentAllocation makeSsaCurrentRenameTrace makeSsaCurrentTokens makeSsaCurrentTreeTrace
   makeSsaRfAnnotations makeSsaRfEdgeShape makeSsaRfAllocation
-  makeSsaRfRenameTrace makeSsaCurrentInduct makeSsaCurrentDefs
-  makeSsaCurrentProps makeSsaHelper cfgTransform cfgTransformProps
-  makeSsaDefs irSupply list pair alist
+  makeSsaRfRenameTrace makeSsaCurrentInduct makeSsaDefs
+  makeSsaCurrentProps cfgTransform cfgTransformProps
+   irSupply list pair alist
+  venomExecProofs
 
 
 Theorem rf_current_sibling_restore:

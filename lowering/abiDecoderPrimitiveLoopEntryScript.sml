@@ -6,7 +6,7 @@ Ancestors
   abiDecoderPrimitiveLoopInvariant abiDecoderPrimitiveLoopFinite
   abiDecoderArrayInvariant abiDecoderLoopRegisters abiDecoderExecution abiDecoderLoop
   abiDecoderContract abiDecoderFrame fragExec exprLoweringProps emitHelperProps
-  compileEnv venomExecSemantics venomState venomInst words list arithmetic
+  compileEnv loweringStateRelDefs venomExecSemantics venomState venomInst words list arithmetic
 
 Theorem abi_decoder_loop_entry_code:
   compile_abi_decode_dyn_loop dst src opc base_op hi (DecPrimWord clamp) 32 32 ip cnt

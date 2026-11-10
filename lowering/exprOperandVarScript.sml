@@ -24,7 +24,7 @@
 Theory exprOperandVar
 Ancestors
   list rich_list exprSafeOperand exprSafeOperandBuiltins exprLoweringProps
-  freshWrites compileEnv emitHelper emitHelperProps context exprLowering
+  freshWrites compileEnv loweringStateRelDefs emitHelper emitHelperProps context exprLowering
   exprCallBounds vyperAST
 
 (* Reservation constrains Var pointers, without excluding labels. *)
@@ -107,7 +107,7 @@ Proof
   qid_spec_tac `s` >>
   Cases_on `word_scale load_loc = 1` >>
   Cases_on `word_scale store_loc = 1` >>
-  simp[contextTheory.compile_word_copy_loop_def, comp_ignore_bind_def] >>
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_loop_base_def, comp_ignore_bind_def] >>
   rpt gen_tac >>
   rpt (irule compiler_counter_bind >> conj_tac >> rpt gen_tac >> BETA_TAC) >>
   simp[compiler_counter_primitives, compiler_counter_return,
@@ -462,7 +462,7 @@ Proof
     (qspecl_then [`cenv`, `expr_type (IfExp ann cond te ee)`,
                   `lowered_value_type cenv ee`, `else_vv`, `st11a`] mp_tac
        ci_mono_compile_ifexp_arm >> simp[ci_mono_def]) >>
-  gvs[Abbr `sthen`, Abbr `selse`, compileEnvTheory.not_fresh_at_def,
+  gvs[Abbr `sthen`, Abbr `selse`, loweringStateRelDefsTheory.not_fresh_at_def,
       ASCIInumbersTheory.toString_11]
 QED
 
@@ -485,7 +485,7 @@ Proof
        simp[comp_bind_def, comp_ignore_bind_def, comp_return_def,
             fresh_id_def, fresh_var_def, emit_def]) >>
   rpt strip_tac >> gvs[] >>
-  gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
 Theorem compiler_type_convert_var:
@@ -961,7 +961,7 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
-  gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
 Theorem compiler_method_id_runtime_var:
@@ -979,7 +979,7 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
-  gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
 Theorem compiler_slice_var:
@@ -1007,7 +1007,7 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
-  gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
 Theorem compiler_var_keep_bind[local]:
@@ -1063,7 +1063,7 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
-  gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
 Theorem compiler_concat_var:
@@ -1361,6 +1361,15 @@ Theorem compiler_ci_mono_reserved:
   local_ptrs_reserved ce sb
 Proof
   metis_tac[local_ptrs_reserved_next_var, ci_mono_def]
+QED
+
+Theorem compiler_hash_reserved[local]:
+  local_ptrs_reserved ce sa /\
+  compile_bytestring_hash p sa = (h,sb) ==>
+  local_ptrs_reserved ce sb
+Proof
+  rpt strip_tac >> irule compiler_ci_mono_reserved >>
+  qexists `sa` >> metis_tac[ci_mono_compile_bytestring_hash, pairTheory.SND]
 QED
 
 Theorem compiler_guarded_callback_ci_mono:
@@ -2178,11 +2187,19 @@ Resume compiler_builtin_reserved_cong[bop]:
       Cases_on `HD (TL args)` >> simp[] >>
       rename1 `Builtin _ rhs_b _` >> Cases_on `rhs_b` >> simp[] >>
       AP_TERM_TAC >> irule compiler_multi_exprs_reserved_cong >> simp[]) >>
-  IF_CASES_TAC >> simp[] >>
-  pairarg_tac >>
-  qpat_assum `!ty e s v sb. _ /\ lower_value _ _ _ _ _ = _ ==> _`
-    drule_all >>
-  strip_tac >> simp[]
+  IF_CASES_TAC >> simp[]
+  >- (Cases_on `bytestring_literal_hash (HD args)` >> simp[]
+      >- (Cases_on `lower_value g ce (expr_type (HD args)) (HD args) sa` >>
+          rename1 `lower_value g ce _ _ sa = (p,sb)` >>
+          `local_ptrs_reserved ce sb` by metis_tac[] >>
+          simp[] >> Cases_on `compile_bytestring_hash p sb` >>
+          rename1 `compile_bytestring_hash p sb = (h,sc)` >>
+          `local_ptrs_reserved ce sc` by
+            (irule compiler_hash_reserved >> metis_tac[]) >>
+          simp[] >>
+          Cases_on `bytestring_literal_hash (HD (TL args))` >> simp[]) >>
+      Cases_on `bytestring_literal_hash (HD (TL args))` >> simp[]) >>
+  rpt compiler_reserved_pair_tac
 QED
 
 Resume compiler_builtin_reserved_cong[concat]:

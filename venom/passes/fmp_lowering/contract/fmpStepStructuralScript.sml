@@ -10,21 +10,21 @@ Ancestors
 Theorem analyze_fmp_reclaims_not_phi:
   analyze_fmp_reclaims infos ctx fn = SOME plan /\ wf_function fn /\
   MEM bb fn.fn_blocks /\ n < LENGTH bb.bb_instructions /\
-  MEM ((bb.bb_label,n),target) (fmap_to_alist plan) ==>
+  MEM ((bb.bb_label,n),target) (fmp_plan_to_alist fn plan) ==>
   (EL n bb.bb_instructions).inst_opcode <> PHI
 Proof
   strip_tac >>
   `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
     (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
   `FLOOKUP plan (bb.bb_label,n) = SOME target` by
-    gvs[MEM_fmap_to_alist_FLOOKUP] >>
+    gvs[MEM_fmp_plan_to_alist] >>
   drule_all analyze_fmp_reclaims_position >> strip_tac >> gvs[] >>
   drule fmp_reclaim_point_not_prefix >> simp[]
 QED
 
 Theorem fmp_lower_checked_blocks_well_formed:
   analyze_fmp_reclaims infos ctx fn = SOME plan /\ wf_function fn /\
-  fmp_lower_blocks infos ctx runner s (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult out leftover s') ==>
   EVERY bb_well_formed out
 Proof
@@ -85,7 +85,7 @@ Theorem fmp_install_checked_root_structure:
   split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
   analyze_fmp_reclaims infos ctx fn = SOME plan /\
   fmp_make_root_layout ctx fn info runner s0 = SOME (FmpRootLayout n root newpc s1) /\
-  fmp_lower_blocks infos ctx runner s1 (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult blocks leftover s2) /\
   fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) /\
   wf_function fn /\ first_block_no_phi fn ==>

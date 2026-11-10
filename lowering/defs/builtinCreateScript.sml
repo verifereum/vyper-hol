@@ -207,10 +207,6 @@ Definition compile_create_copy_def:
             NONE => emit_op CREATE [value_op; buf; buf_len]
           | SOME salt_op => emit_op CREATE2
               [value_op; buf; buf_len; salt_op]);
-       (* The scratch initcode has been consumed.  Pinned Vyper restores the
-          FMP at the result branch only when failure must revert. *)
-       (if revert_on_failure then emit_void SETFMP [mem_ofst]
-        else return ());
        compile_check_create_result result revert_on_failure
     od
 End
@@ -261,8 +257,6 @@ Definition compile_create_blueprint_append_def:
             NONE => emit_op CREATE [value_op; mem_ofst; total_len]
           | SOME salt_op => emit_op CREATE2
               [value_op; mem_ofst; total_len; salt_op]);
-       (if revert_on_failure then emit_void SETFMP [mem_ofst]
-        else return ());
        compile_check_create_result result revert_on_failure
     od
 End

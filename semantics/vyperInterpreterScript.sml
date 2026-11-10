@@ -1,7 +1,6 @@
 Theory vyperInterpreter
 Ancestors
   vyperCallOutcome[ignore_grammar]
-  vyperCallOutcomeFrame[ignore_grammar]
   arithmetic alist combin option list finite_map pair
   rich_list sorting cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperGetter vyperABI
@@ -763,10 +762,13 @@ End
    Returns SOME (success, returnData, accounts', tStorage', emitted_logs),
    or NONE on a model/domain failure. Failed calls (a value the caller can't
    pay, REVERT or another exceptional halt) give success = F, the original
-   accounts and transient storage, and an empty emitted-log list. *)
+   accounts and transient storage, and an empty emitted-log list.
+   Calldata of 2 ** 256 bytes or more is a model failure: the EVM's CALL
+   takes the input size as a stack word, so no real call carries it. *)
 Definition run_ext_call_def:
   run_ext_call caller callee calldata value_opt gas
                accounts tStorage txParams =
+    if 2 ** 256 <= LENGTH calldata then NONE else
     if ext_call_value_transfer_ok caller callee value_opt accounts then
       let code = (lookup_account callee accounts).code in
       let s0 = make_ext_call_state caller callee code calldata value_opt gas
@@ -835,8 +837,11 @@ End
 
 val () = cv_auto_trans make_delegate_call_state_def;
 
+(* As in run_ext_call, calldata of 2 ** 256 bytes or more is a model
+   failure. *)
 Definition run_delegate_call_def:
   run_delegate_call cx target_addr calldata gas accounts tStorage =
+    if 2 ** 256 <= LENGTH calldata then NONE else
     let s0 = make_delegate_call_state cx target_addr calldata gas accounts tStorage in
     let outcome =
       if fIN target_addr precompile_addresses then
@@ -862,6 +867,58 @@ Definition run_raw_call_def:
 End
 
 val () = cv_auto_trans run_raw_call_def;
+
+(* Every frame the interpreter starts for an external call has calldata
+   shorter than 2 ** 256 bytes, the bound call_tx_well_typed asks of a
+   transaction: run_ext_call and run_delegate_call build their frame
+   (make_ext_call_state, make_delegate_call_state) only past the guard on
+   LENGTH calldata, and that frame's message data is the calldata. The
+   *_calldata_bound theorems give the bound from a completed call. *)
+Theorem make_ext_call_state_calldata:
+  ?ctxt rb.
+    (make_ext_call_state caller callee code calldata value_opt gas accounts
+       tStorage txParams).contexts = [(ctxt,rb)] /\
+    buffer_to_list ctxt.msgParams.data = calldata
+Proof
+  simp[make_ext_call_state_def, initial_context_def, initial_msg_params_def,
+       make_evm_tx_def]
+QED
+
+Theorem make_delegate_call_state_calldata:
+  ?ctxt rb.
+    (make_delegate_call_state cx target_addr calldata gas accounts
+       tStorage).contexts = [(ctxt,rb)] /\
+    buffer_to_list ctxt.msgParams.data = calldata
+Proof
+  simp[make_delegate_call_state_def] >> pairarg_tac >>
+  simp[initial_context_def, initial_msg_params_def, make_evm_tx_def]
+QED
+
+Theorem run_ext_call_calldata_bound:
+  run_ext_call caller callee calldata value_opt gas accounts tStorage
+    txParams = SOME result ==>
+  LENGTH calldata < 2 ** 256
+Proof
+  simp[run_ext_call_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem run_delegate_call_calldata_bound:
+  run_delegate_call cx target_addr calldata gas accounts tStorage =
+    SOME result ==>
+  LENGTH calldata < 2 ** 256
+Proof
+  simp[run_delegate_call_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem run_raw_call_calldata_bound:
+  run_raw_call cx flags target_addr calldata amount gas accounts tStorage =
+    SOME result ==>
+  LENGTH calldata < 2 ** 256
+Proof
+  Cases_on `flags.rcf_is_delegate` >> simp[run_raw_call_def] >> strip_tac
+  >- (drule run_delegate_call_calldata_bound >> simp[])
+  >- (drule run_ext_call_calldata_bound >> simp[])
+QED
 
 (* Vyper's EXTCODESIZE check (vyper/codegen/external_call.py): before the
    call only when no return data is expected; calls with a return type rely
@@ -1151,76 +1208,6 @@ val () = eval_send_def
             prod_CASE_rator, sum_CASE_rator, option_CASE_rator, UNCURRY,
             lift_option_type_def, type_check_def, check_def, assert_def]
   |> cv_auto_trans;
-
-(* Compose local-state frames without expanding the external-call oracle. *)
-Theorem append_logs_locals[local]:
-  vyperCallOutcomeFrame$state_rel_frame
-    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables) (append_logs logs)
-Proof
-  simp[state_rel_frame_def, append_logs_def, return_def]
-QED
-
-Theorem frame_call_value_locals[local]:
-  vyperCallOutcomeFrame$state_rel_frame
-    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables)
-    (frame_call_value cx value_opt)
-Proof
-  simp[state_rel_frame_result] >> rpt strip_tac >>
-  drule frame_call_value_state >> simp[]
-QED
-
-val call_locals_relation =
-  ``\s:evaluation_state t. t.scopes = s.scopes /\ t.immutables = s.immutables``;
-val call_locals_primitives =
-  state_rel_frame_locals_primitives |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
-val call_locals_take =
-  state_rel_frame_locals_take |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
-val call_locals_bind =
-  state_rel_frame_bind_guarded |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
-
-val CALL_LOCALS_STEP = FIRST [
-  FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS call_locals_primitives)),
-  MATCH_ACCEPT_TAC call_locals_take,
-  MATCH_ACCEPT_TAC append_logs_locals,
-  MATCH_ACCEPT_TAC frame_call_value_locals,
-  MATCH_MP_TAC call_locals_bind >> conj_tac,
-  gen_tac, strip_tac,
-  CHANGED_TAC (simp_tac bool_ss
-    [FORALL_PROD, LET_THM, ignore_bind_def, UNCURRY, pair_case_thm]),
-  BasicProvers.TOP_CASE_TAC];
-
-Theorem eval_ext_call_locals[local]:
-  vyperCallOutcomeFrame$state_rel_frame
-    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables)
-    (eval_ext_call cx static skip_check sig opts vs)
-Proof
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >>
-  rpt CALL_LOCALS_STEP
-QED
-
-Theorem eval_ext_call_preserves_non_accounts:
-  eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables
-Proof
-  mp_tac (REWRITE_RULE [state_rel_frame_result] eval_ext_call_locals) >> simp[]
-QED
-
-Theorem eval_send_preserves_non_accounts:
-  eval_send cx has_gas vs st = (res, st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables
-Proof
-  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
-  Cases_on `t` >- simp[eval_send_def, raise_def] >>
-  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, lift_option_type_def, check_def,
-       get_accounts_def, update_accounts_def, get_transient_storage_def,
-       lift_option_def, update_transient_def, append_logs_def,
-       vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()]
-QED
 
 (* ===== Reentrancy Lock Helpers ===== *)
 (* Vyper's @nonreentrant uses transient storage (EIP-1153 on Cancun+).
@@ -1573,6 +1560,12 @@ Definition evaluate_def:
       tv <- eval_expr cx (HD es);
       len <- result_array_length cx tv;
       return $ IntV (&len)
+    od else if bt = Bop In ∨ bt = Bop NotIn then do
+      vs <- eval_exprs cx es;
+      type_check (LENGTH vs = 2) "Membership args";
+      tv <- lift_option_type
+        (evaluate_type (get_tenv cx) (expr_type (EL 1 es))) "Membership type";
+      lift_sum $ evaluate_membership tv (bt = Bop NotIn) (EL 0 vs) (EL 1 vs)
     od else if bt = Env MsgGas then next_gas_reading
     else do
       vs <- eval_exprs cx es;

@@ -37,7 +37,7 @@ Theorem dynarray_in_memory_robust_element:
 Proof
   rpt strip_tac >>
   `elems_in_memory vs (addr + 32) tv m` by
-    (first_x_assum drule >> simp[valueEncodingTheory.val_in_memory_def]) >>
+    (first_x_assum drule >> simp[valueEncodingDefsTheory.val_in_memory_def]) >>
   drule_all elems_in_memory_EL >> simp[]
 QED
 
@@ -54,7 +54,7 @@ Proof
   rpt strip_tac >>
   `val_in_memory (ArrayTV tv (Fixed cap))
      (ArrayV (SArrayV kvs)) addr m` by metis_tac[] >>
-  gvs[valueEncodingTheory.val_in_memory_def] >>
+  gvs[valueEncodingDefsTheory.val_in_memory_def] >>
   Cases_on `ALOOKUP kvs i` >> gvs[] >>
   metis_tac[kvs_in_memory_lookup]
 QED
@@ -91,7 +91,7 @@ Theorem dynarray_in_memory_robust_length:
     !m. mem_agree_outside tn.t_mem mem m ==>
         mem_word_at addr m = n2w (LENGTH vs)
 Proof
-  simp[valueEncodingTheory.val_in_memory_def]
+  simp[valueEncodingDefsTheory.val_in_memory_def]
 QED
 
 Theorem dynarray_live_child_footprint:

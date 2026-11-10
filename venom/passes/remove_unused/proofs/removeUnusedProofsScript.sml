@@ -14,6 +14,7 @@ Ancestors
   opcodeClass execEquivProps livenessProofs passSharedDefs passSharedProps venomInst
   stateEquiv stateEquivProofs venomExecProofs venomExecProps
   venomState venomExecSemantics indexedLists cfgTransform cfgAnalysisProps pointerConfinedDefs
+  venomWfProps
 Libs
   pairLib
 
@@ -503,56 +504,6 @@ QED
 
 (* ===== Function-level ===== *)
 
-(* ALL_DISTINCT outputs in fn_insts_blocks implies same for each block *)
-Theorem all_distinct_outputs_block[local]:
-  !bbs bb. MEM bb bbs ==>
-    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs)
-                            (fn_insts_blocks bbs))) ==>
-    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs)
-                            bb.bb_instructions))
-Proof
-  Induct >> rw[fn_insts_blocks_def] >>
-  gvs[listTheory.MAP_APPEND, listTheory.FLAT_APPEND,
-      listTheory.ALL_DISTINCT_APPEND]
-QED
-
-(* Within a block with ALL_DISTINCT outputs, positions define same var ⟹ same *)
-Theorem all_distinct_outputs_unique_pos[local]:
-  !insts v i k.
-    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) insts)) /\
-    i < LENGTH insts /\ k < LENGTH insts /\
-    MEM v (EL i insts).inst_outputs /\
-    MEM v (EL k insts).inst_outputs ==>
-    i = k
-Proof
-  Induct >> rw[] >>
-  Cases_on `i` >> Cases_on `k` >> gvs[] >>
-  gvs[listTheory.ALL_DISTINCT_APPEND, listTheory.MEM_FLAT,
-      listTheory.MEM_MAP] >>
-  metis_tac[listTheory.MEM_EL]
-QED
-
-(* ssa_form implies: if v is output at position i in block bb,
-   then no other position in bb has v as output. *)
-Theorem ssa_form_no_dup_in_block:
-  !fn bb v i k.
-    ssa_form fn /\
-    MEM bb fn.fn_blocks /\
-    i < LENGTH bb.bb_instructions /\
-    k < LENGTH bb.bb_instructions /\
-    MEM v (EL i bb.bb_instructions).inst_outputs /\
-    MEM v (EL k bb.bb_instructions).inst_outputs ==>
-    i = k
-Proof
-  rpt strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by (
-    irule all_distinct_outputs_block >>
-    qexists_tac `fn.fn_blocks` >> gvs[] >>
-    gvs[ssa_form_def, fn_insts_def]) >>
-  irule all_distinct_outputs_unique_pos >>
-  qexistsl_tac [`bb.bb_instructions`, `v`] >> gvs[]
-QED
-
 (* All NOP'd outputs across all blocks in one pass *)
 Definition single_pass_nop_outputs_def:
   single_pass_nop_outputs fn =
@@ -636,16 +587,6 @@ QED
 (* ===== Path / dominance infrastructure ===== *)
 
 (* Converting RTC to is_fn_path *)
-Theorem rtc_to_is_fn_path[local]:
-  !fn a b. RTC (fn_cfg_edge fn) a b ==>
-    ?path. is_fn_path fn path /\ path <> [] /\ HD path = a /\ LAST path = b
-Proof
-  gen_tac >> ho_match_mp_tac relationTheory.RTC_INDUCT >>
-  rpt strip_tac
-  >- (qexists_tac `[a]` >> simp[is_fn_path_def])
-  >> qexists_tac `a::path` >>
-  Cases_on `path` >> fs[is_fn_path_def]
-QED
 
 (* ===== cfg_exec_path infrastructure for operand condition ===== *)
 
@@ -666,56 +607,6 @@ Proof
 QED
 
 (* If ALL_DISTINCT (FLAT (MAP f ls)) and x in f(a) and x in f(b), then a = b *)
-Theorem all_distinct_flat_map_inj[local]:
-  !f (ls:'b list) (a:'b) (b:'b) (x:'a).
-    ALL_DISTINCT (FLAT (MAP f ls)) /\
-    MEM a ls /\ MEM b ls /\
-    MEM x (f a) /\ MEM x (f b) ==> a = b
-Proof
-  Induct_on `ls` >> simp[] >> rpt strip_tac >>
-  gvs[listTheory.ALL_DISTINCT_APPEND, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
-  metis_tac[]
-QED
-
-(* fn_insts_blocks = FLAT of per-block instructions *)
-Theorem fn_insts_blocks_flat[local]:
-  !bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def]
-QED
-
-(* ALL_DISTINCT outputs → ALL_DISTINCT per-block flattened outputs *)
-Theorem ssa_form_per_block[local]:
-  !fn. ssa_form fn ==>
-    ALL_DISTINCT (FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs)
-      bb.bb_instructions)) fn.fn_blocks))
-Proof
-  rpt strip_tac >>
-  fs[ssa_form_def, fn_insts_def] >>
-  pop_assum mp_tac >>
-  ONCE_REWRITE_TAC [fn_insts_blocks_flat] >>
-  simp[listTheory.MAP_FLAT, rich_listTheory.FLAT_FLAT,
-       listTheory.MAP_MAP_o, combinTheory.o_DEF]
-QED
-
-(* Under ssa_form, v in outputs of two instructions → same instruction *)
-Theorem ssa_outputs_same_inst:
-  !fn inst1 inst2 v.
-    ssa_form fn /\
-    MEM inst1 (fn_insts_blocks fn.fn_blocks) /\
-    MEM inst2 (fn_insts_blocks fn.fn_blocks) /\
-    MEM v inst1.inst_outputs /\ MEM v inst2.inst_outputs ==>
-    inst1 = inst2
-Proof
-  rpt strip_tac >>
-  fs[ssa_form_def, fn_insts_def] >>
-  mp_tac (Q.ISPECL [
-    `\(i:instruction). i.inst_outputs`,
-    `fn_insts_blocks fn.fn_blocks`,
-    `inst1:instruction`, `inst2:instruction`, `v:string`
-  ] all_distinct_flat_map_inj) >>
-  simp[]
-QED
 
 Theorem lookup_block_label[local]:
   !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> bb.bb_label = lbl
@@ -725,7 +616,7 @@ Proof
 QED
 
 (* Under ssa_form, var_defined_at for v determines the block and index *)
-Theorem ssa_unique_var_defined_at[local]:
+Theorem ssa_unique_var_defined_at:
   !fn def_bb def_idx v lbl idx.
     wf_function fn /\ ssa_form fn /\
     MEM def_bb fn.fn_blocks /\
@@ -850,14 +741,14 @@ Proof
 QED
 
 (* From dominance + reachability: path from d to n not revisiting d (except at start) *)
-Theorem dominates_path_no_revisit[local]:
+Theorem dominates_path_no_revisit:
   !fn d n.
     wf_function fn /\ fn_dominates fn d n ==>
     ?path. is_fn_path fn (d :: path) /\ LAST (d :: path) = n /\ ~MEM d path
 Proof
   rpt strip_tac >>
   fs[fn_dominates_def, fn_reachable_def] >>
-  drule_then strip_assume_tac rtc_to_is_fn_path >>
+  drule_then strip_assume_tac rtc_to_fn_path >>
   `MEM d path` by (
     first_x_assum (qspec_then `path` mp_tac) >> simp[]) >>
   drule_then strip_assume_tac last_occurrence_split >>
@@ -1292,7 +1183,7 @@ Proof
   rpt strip_tac >>
   fs[remove_unused_single_pass_def, LET_THM,
      clear_nops_function_def,
-     passSimulationDefsTheory.function_map_transform_def,
+     passTransformTheory.function_map_transform_def,
      listTheory.MEM_FLAT, listTheory.MEM_MAP, listTheory.MAP_MAP_o,
      combinTheory.o_DEF] >>
   rename1 `MEM bbo _.fn_blocks` >>
@@ -1307,7 +1198,7 @@ QED
 (* SSA outputs uniqueness: same output variable → same (block, position).
    Combines all_distinct_flat_map_inj (cross-block) with
    all_distinct_outputs_unique_pos (within-block). *)
-Theorem ssa_form_position[local]:
+Theorem ssa_form_position:
   !fn bb1 n bb2 m v.
     ssa_form fn /\
     MEM bb1 fn.fn_blocks /\ n < LENGTH bb1.bb_instructions /\
@@ -1359,7 +1250,7 @@ Proof
   SPOSE_NOT_THEN ASSUME_TAC >>
   fs[fn_all_outputs_def, remove_unused_single_pass_def, LET_THM,
      clear_nops_function_def,
-     passSimulationDefsTheory.function_map_transform_def,
+     passTransformTheory.function_map_transform_def,
      listTheory.MAP_MAP_o, combinTheory.o_DEF,
      listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
   rename1 `MEM bb' _.fn_blocks` >>

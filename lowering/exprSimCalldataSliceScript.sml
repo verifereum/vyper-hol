@@ -23,6 +23,7 @@
 
 Theory exprSimCalldataSlice
 Ancestors
+  exprSimHashBoundary
   exprSimVVFrame
   exprSimSource
   exprSimUnwrapProps
@@ -34,8 +35,8 @@ Ancestors
   allocLimits
   list fragExec loweringSlice builtinBytes  exprSimHyps exprBopLowering
   exprSimOperators vyperEvalExprPreservesScopesDom
-  exprLowering exprLoweringProps builtinSimple emitHelper compileEnv
-  valueEncoding venomExecSemantics venomInst venomState vyperAST
+  exprLowering exprLoweringProps builtinSimple emitHelper compileEnv loweringStateRelDefs
+  valueEncoding valueEncodingDefs venomExecSemantics venomInst venomState vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeSystem
   vyperTypeInvariants vyperTyping vyperValueOperation vyperValue
   exprSimWordBuiltins exprSimWordArgs emitHelperProps freshWrites
@@ -43,7 +44,7 @@ Ancestors
   loweringHalt valueTypingMemoryProps
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext fragGasPath
 
-Theorem calldata_slice_typing[local]:
+Theorem calldata_slice_typing:
   well_typed_expr env (Builtin ann (CalldataSlice n) args) ==>
   ?e. args = [e] /\ expr_type e = BaseT (UintT 256) /\
       ann = BaseT (BytesT (Dynamic n)) /\ 0 < n /\ n < 2 ** 256
@@ -53,7 +54,7 @@ Proof
   rename1 `MAP expr_type rest = []` >> Cases_on `rest` >> gvs[]
 QED
 
-Theorem names_builtin_calldata_slice[local]:
+Theorem names_builtin_calldata_slice:
   !args. ~names_builtin (CalldataSlice n) args
 Proof
   `!bt args. names_builtin bt args ==> bt <> CalldataSlice n` suffices_by
@@ -61,7 +62,7 @@ Proof
   ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]
 QED
 
-Theorem compile_calldata_slice_parts[local]:
+Theorem compile_calldata_slice_parts:
   !cenv ty ann n e sa.
     compile_expr cenv ty (Builtin ann (CalldataSlice n) [e]) sa =
     let (start_op, sb) = lower_value compile_expr cenv (expr_type e) e sa in
@@ -77,7 +78,7 @@ Proof
   simp[lower_value_child_call, vyperASTTheory.expr_size_def, list_size_def]
 QED
 
-Theorem evaluate_calldata_slice_uint[local]:
+Theorem evaluate_calldata_slice_uint:
   evaluate_calldata_slice bs (IntV &start) n =
   if n = 0 \/ 2 ** 256 <= start + n then
     INR (RuntimeError "calldata slice overflow")
@@ -89,7 +90,7 @@ Proof
        compatible_bound_def]
 QED
 
-Theorem eval_calldata_slice_cases[local]:
+Theorem eval_calldata_slice_cases:
   eval_expr cx (Builtin ann (CalldataSlice n) [e]) es = (res, es') ==>
   (?exc. eval_exprs cx [e] es = (INR exc, es') /\ res = INR exc) \/
   ?vs. eval_exprs cx [e] es = (INL vs, es') /\
@@ -114,7 +115,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem slice_bounds_mod[local]:
+Theorem slice_bounds_mod:
   a < modulus /\ n < modulus /\ limit < modulus ==>
   ((a + n) MOD modulus < a \/ limit < (a + n) MOD modulus <=>
    modulus <= a + n \/ limit < a + n)
@@ -127,7 +128,7 @@ Proof
   simp[] >> decide_tac
 QED
 
-Theorem slice_bounds_word[local]:
+Theorem slice_bounds_word:
   a < 2 ** 256 /\ n < 2 ** 256 /\ limit < 2 ** 256 ==>
   (((n2w a + n2w n):bytes32) <+ n2w a \/
     (n2w limit:bytes32) <+ n2w a + n2w n <=>
@@ -139,7 +140,7 @@ Proof
   irule slice_bounds_mod >> simp[]
 QED
 
-Theorem slice_bounds_shape[local]:
+Theorem slice_bounds_shape:
   compile_assert_slice_bounds a n limit sa = ((), sb) ==>
   sb.cs_next_var = sa.cs_next_var + 5 /\
   sb.cs_next_id = sa.cs_next_id + 6 /\
@@ -171,7 +172,7 @@ Proof
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1, same_blocks_def]
 QED
 
-Theorem slice_bounds_run[local]:
+Theorem slice_bounds_run:
   compile_assert_slice_bounds a n limit sa = ((), sb) /\
   eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
   eval_operand limit s = SOME wl /\
@@ -207,7 +208,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem slice_bounds_run_frame[local]:
+Theorem slice_bounds_run_frame:
   compile_assert_slice_bounds a n limit sa = ((), sb) /\
   eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
   eval_operand limit s = SOME wl /\
@@ -236,7 +237,7 @@ Proof
   simp[mstore_mem_bytes_at_disjoint, hash_write_memory_read_self]
 QED
 
-Theorem calldata_slice_no_padding[local]:
+Theorem calldata_slice_no_padding:
   a + n <= LENGTH bs ==>
   TAKE n (DROP a bs ++ REPLICATE n z) = TAKE n (DROP a bs)
 Proof
@@ -312,7 +313,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem calldata_copy_step[local]:
+Theorem calldata_copy_step:
   !dst off count s wd wa wn iid.
   eval_operand dst s = SOME wd /\ eval_operand off s = SOME wa /\
   eval_operand count s = SOME wn /\
@@ -325,7 +326,7 @@ Proof
                        calldata_slice_no_padding]
 QED
 
-Theorem calldata_slice_write_encoding[local]:
+Theorem calldata_slice_write_encoding:
   !a n bs p bound s. a + n <= LENGTH bs ==>
   val_in_memory (BaseTV (BytesT (Dynamic bound)))
     (BytesV (TAKE n (DROP a bs))) p
@@ -337,7 +338,7 @@ Proof
   metis_tac[bytes_buffer_write_encoding]
 QED
 
-Theorem slice_calldata_parts[local]:
+Theorem slice_calldata_parts:
   !start_op length_op sz sa ptr sb.
   compile_slice_calldata start_op length_op sz sa = (ptr, sb) ==>
   ?buf sm data s1 len s2 s3 s4.
@@ -356,7 +357,7 @@ Proof
   rpt (goal_assum $ drule_at Any) >> simp[]
 QED
 
-Theorem slice_calldata_copy_store_run[local]:
+Theorem slice_calldata_copy_store_run:
   !dst src num_op buf_op sa sm sb s wd wa wn wp.
   emit_void CALLDATACOPY [dst; src; num_op] sa = ((),sm) /\
   emit_void MSTORE [buf_op; num_op] sm = ((),sb) /\
@@ -408,7 +409,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem slice_calldata_shape[local]:
+Theorem slice_calldata_shape:
   !op num_op sz sa buf_op sb.
   compile_slice_calldata op num_op sz sa = (buf_op,sb) ==>
   same_blocks sa sb /\
@@ -445,7 +446,7 @@ Proof
   rpt strip_tac >> simp[write_memory_with_expansion_def]
 QED
 
-Theorem slice_calldata_after_alloc_run[local]:
+Theorem slice_calldata_after_alloc_run:
   !buf_op op data_op len_op sa s1 s2 s3 s4 sb s w a n.
   emit_op ADD [buf_op; Lit 32w] sa = (data_op,s1) /\
   emit_op CALLDATASIZE [] s1 = (len_op,s2) /\
@@ -597,7 +598,7 @@ Proof
 QED
 
 
-Theorem slice_calldata_run[local]:
+Theorem slice_calldata_run:
   !op n sa ptr sb func cenv cx es s a ctx.
   compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa = (ptr,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -653,7 +654,10 @@ Proof
      simp[mk_inst_def]) >>
   `t.vs_call_ctx.cc_calldata = cx.txn.calldata /\
    LENGTH t.vs_call_ctx.cc_calldata < dimword (:256)` by
-    (gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ t` mp_tac >>
+     qpat_x_assum `context_well_typed cx` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
          context_well_typed_def, wordsTheory.dimword_def]) >>
   `t.vs_labels = s.vs_labels` by
     (drule compile_alloc_buffer_insts >> strip_tac >>
@@ -805,7 +809,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem slice_calldata_vv_post[local]:
+Theorem slice_calldata_vv_post:
   !func cenv cx e es sa sb s t p a n w ctx.
   expr_type e = BaseT (BytesT (Dynamic n)) /\ p.ptr_location = LocMemory /\
   eval_operand p.ptr_operand t = SOME w /\ a+n <= LENGTH cx.txn.calldata /\

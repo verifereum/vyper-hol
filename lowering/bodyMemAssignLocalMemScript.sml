@@ -10,7 +10,7 @@ Ancestors
   vyperTypeCallGraph vyperTypeInvariants gasOutcome exprSimMemDefs
   bodyDeclMemoryCounted bodyDeclMemoryCore stmtSimAssignStore stmtSimProps
   valueCopy valueEncoding localPtrsProps exprLoweringProps loweringPosts
-  venomState venomExecSemantics compileEnv finite_map list
+  venomState venomExecSemantics compileEnv loweringStateRelDefs finite_map list
   vyperLookup loweringSlice bodyMemoryDefs stmtSimAssignMem stmtSimAssignSource
   bodyDeclEmptyMemory emitHelper emitHelperProps venomInst rich_list
   gasSummary gasSummaryCompose fragGasMode allocaFootprint

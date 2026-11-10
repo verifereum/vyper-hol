@@ -60,13 +60,11 @@ Current [source exemption](../../lowering/e2eDefsScript.sml),
 `unspecified_behaviour_exempt` / `source_exempt`, exempts decoding only for
 **exactly** that error message and a syntactically occurring dynamic ABI decode
 target. This decoding exemption is program-wide; static-only invalid decoding
-and `"abi_decode conversion"` are not exempt. Separately, the exact runtime error
-`"convert empty bytes to signed"` is exempt because stale memory determines the
-compiled signed-conversion result for empty bytes. An exempt run lacks result/effect correspondence, although the
+and `"abi_decode conversion"` are not exempt. An exempt run lacks result/effect correspondence, although the
 top still supplies an actual EVM run. See
 [source strict decoder](../../semantics/vyperABIScript.sml),
 [lowered decoder](../../lowering/defs/abiEncoderScript.sml),
-[dynamic fixture](../../lowering/defs/bytecode/eval/evalCompilerSubsetAbiBuiltinsScript.sml)
+[dynamic fixture](../../bytecode/eval/evalCompilerSubsetAbiBuiltinsScript.sml)
 and [current audit](../compiler-proof-status-2026-10-09.md).
 Pinned reference `vyper/codegen_venom/abi/abi_decoder.py`, `clamp_bytestring`,
 checks length/end,

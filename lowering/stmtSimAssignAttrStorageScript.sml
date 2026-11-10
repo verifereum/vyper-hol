@@ -37,7 +37,7 @@ Ancestors
   fragExec exprSimHyps exprSimLeaves exprSimAttributeFields stmtSimDecl stmtSimDeclMem stmtSimAssign stmtSimAssignMem storageStoreFrame
   stmtSimAssignStorage stmtSimAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding accountsRelProps
+  compileEnv loweringStateRelDefs valueEncoding accountsRelProps
   vyperInterpreter vyperState vyperStorage vyperValue vyperTyping
   vyperTypeEnv vyperTypeInvariants vyperTypeExprSoundness vyperTypeExprResult
   vyperExprNoControl
@@ -853,7 +853,7 @@ Proof
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
   `~u.vs_call_ctx.cc_static` by
     fs[exprLoweringPropsTheory.stmt_state_rel_def,
-       compileEnvTheory.state_rel_def] >>
+       loweringStateRelDefsTheory.state_rel_def] >>
   `gas_marked_path F ctx func u 0
     (OK ((if tr then tstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u
           else sstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u)

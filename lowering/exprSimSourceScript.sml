@@ -12,7 +12,7 @@ Ancestors
   vyperStorageLayoutSafety vyperTypeStoragePreservation
   vyperTypeEvalStoragePreservation vyperCallOutcomeStorage
   supportedExprTraverse exprStoragePreservation
-  vyperLookup vyperPlaceResultTyping supportedProgram bodyStoragePreservation
+  vyperLookup vyperEvalExprPreservesScopesDom vyperPlaceResultTyping supportedProgram bodyStoragePreservation
   vyperTypeABI vyperValue vyperPlaceInvariants placeTypingProps
 Libs
   pairLib monadsyntax

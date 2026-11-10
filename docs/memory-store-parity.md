@@ -113,11 +113,11 @@ To reproduce, generate the oracle with the pinned Python environment, then run
 checker outcomes, whitelist results, closed EVAL results, bytecode and any residuals:
 
 ```sh
-python lowering/defs/bytecode/memory_store_witnesses.py prepare \
+python bytecode/memory_store_witnesses.py prepare \
   --fixtures /tmp/memory-store-oracle --check
-python3 lowering/defs/bytecode/memory_store_witnesses.py probe \
+python3 bytecode/memory_store_witnesses.py probe \
   --repo WORKTREE --fixtures /tmp/memory-store-oracle --output RESULT_DIRECTORY
-python lowering/defs/bytecode/memory_store_witnesses.py execute \
+python bytecode/memory_store_witnesses.py execute \
   --fixtures /tmp/memory-store-oracle --output RESULT_DIRECTORY
 ```
 
