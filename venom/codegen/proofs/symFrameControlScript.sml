@@ -3366,6 +3366,33 @@ Proof
   metis_tac[listTheory.TAKE_DROP, listTheory.APPEND_ASSOC]
 QED
 
+Theorem arranged_word_prepared_symbolic_stack:
+  venom_asm_rel lo ps vs mid /\
+  ps.ps_stack = tail ++ operands /\
+  EVERY (\op. op <> dead_stack_marker) operands /\
+  (!op. MEM op operands ==> eval_operand op vs = operand_val vs lo op) /\
+  eval_operands (REVERSE operands) vs = SOME values /\
+  asm_sym_rel p env (mid with as_stack := mid.as_stack ++ rest) ss /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  (!op sv. MEM op operands /\ op_kind_ok fn ret op sv ==> ?w. sv = Val w) ==>
+  mid.as_stack = values ++ DROP (LENGTH operands) mid.as_stack /\
+  ?suffix. ss.sym_stack = MAP Val values ++ suffix
+Proof
+  strip_tac >>
+  `mid.as_stack = values ++ DROP (LENGTH operands) mid.as_stack` by
+    (irule (emitSimTheory.arranged_eval_operands_stack |> Q.INST
+       [`operands` |-> `REVERSE operands`] |> SRULE []) >>
+     conj_tac >- gvs[listTheory.EVERY_MEM] >>
+     qexistsl [`lo`, `ps`, `tail`, `vs`] >> gvs[]) >>
+  simp[] >> irule word_prepared_symbolic_stack >>
+  conj_tac
+  >- (qexistsl [`mid with as_stack := mid.as_stack ++ rest`, `env`, `p`,
+        `DROP (LENGTH operands) mid.as_stack ++ rest`] >> gvs[]) >>
+  qexistsl [`cplan`, `fn`, `operands`, `ps`, `ret`, `srest`, `tail`] >>
+  gvs[] >> metis_tac[fnFrameBoundaryInvokeTheory.eval_operands_some_length,
+                     listTheory.LENGTH_REVERSE]
+QED
+
 Theorem sym_frame_entry_selected_prefix_sim_marked:
   opc <> INVOKE /\
   lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
@@ -3432,6 +3459,119 @@ Proof
   `arranged.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
   drule_all sym_selected_prefix_frame_sim_marked >> strip_tac >>
   gvs[] >> metis_tac[]
+QED
+
+Theorem sym_frame_terminal_prefix_setup_marked:
+  !cp base.
+  (inst.inst_opcode = STOP \/ inst.inst_opcode = RETURN \/
+    inst.inst_opcode = SELFDESTRUCT) /\ inst_wf inst /\
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  generated_plan_state_wf_marked base ps /\
+  LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps)).ps_stack /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    IS_SOME (stack_get_depth op ps.ps_stack) \/
+    IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) /\
+  (!op. MEM op (compute_operands inst) ==>
+    eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
+  (!op at. MEM op (compute_operands inst) /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at (compute_operands inst)) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps vs st /\
+  generate_inst_plan liveness dfg cfg fn inst nl halting term label ps = SOME (ops,final) /\
+  asm_block_at prog st.as_pc (execute_plan cp.cp_initial_fmp ops) /\
+  lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
+  dfg = dfg_build_function fn /\ codegen_ready_fn fn /\
+  MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\ label_flow_ok ctx /\
+  asm_static_wf prog /\
+  sym_frame_inv prog env ctx cp fn ret srest labs0 ps st ss ==>
+  ?n mid name ss_mid.
+    asm_steps lo o2pc prog n st = AsmOK mid /\
+    asm_block_at prog mid.as_pc [AsmOp name] /\
+    venom_to_evm_name inst.inst_opcode = SOME name /\
+    context_memory_rel cp vs.vs_memory mid.as_memory /\
+    venom_asm_terminal_rel vs mid /\ mid.as_call_ctx = vs.vs_call_ctx /\
+    (!values. eval_operands (REVERSE (compute_operands inst)) vs = SOME values ==>
+      mid.as_stack = values ++ DROP (LENGTH (compute_operands inst)) mid.as_stack /\
+      ?suffix. ss_mid.sym_stack = MAP Val values ++ suffix) /\
+    sym_steps prog env n ss = SymOK ss_mid /\
+    asm_sym_rel prog env mid ss_mid /\
+    (!b. b IN FDOM ss_mid.sym_mem_labels ==> context_spill_byte cp b)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rename1 `MEM r cplan.cp_regions` >>
+  `?name. venom_to_evm_name inst.inst_opcode = SOME name /\
+    inst.inst_outputs = [] /\ ~is_commutative inst.inst_opcode /\
+    inst.inst_opcode <> INVOKE /\
+    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term label ps =
+      (ops,final)` by
+    (gvs[generate_inst_plan_def, is_pre_codegen_opcode_def, is_param_opcode_def,
+        venomWfTheory.inst_wf_def, asmIRTheory.venom_to_evm_name_def,
+        venomEffectsTheory.is_commutative_def, compute_operands_def]) >>
+  drule_all fnFrameTerminalHaltTheory.output_free_regular_plan >> strip_tac >>
+  `ssa_form fn /\ label_positions_ok inst` by
+    metis_tac[stackPlanGenTheory.codegen_ready_fn_def,
+              unitShapeDefsTheory.fn_shape_ok_def,
+              unitShapeDefsTheory.inst_shape_ok_def, listTheory.EVERY_MEM] >>
+  `PERM (compute_operands inst) (compute_operands inst) /\
+   LENGTH (compute_operands inst) <= LENGTH prepared.ps_stack /\
+   arranged.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset` by gvs[] >>
+  drule_all sym_frame_entry_selected_prefix_sim_marked >>
+  strip_tac >>
+  qexistsl [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))`,
+    `mid with as_stack := mid.as_stack ++ rest`, `name`, `ss_mid`] >>
+  simp[] >>
+  `asm_block_at prog mid.as_pc [AsmOp name]` by
+    gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
+        execute_plan_def, exec_stack_op_def] >>
+  `asm_sym_rel prog env (mid with as_stack := mid.as_stack ++ rest) ss_mid /\
+   sym_kinds_ok cplan fn ret srest arranged ss_mid /\
+   (!b. b IN FDOM ss_mid.sym_mem_labels ==> context_spill_byte cplan b)` by
+    metis_tac[sym_frame_inv_def, sym_kinds_ok_def] >>
+  conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
+  simp[] >> conj_tac
+  >- (qpat_x_assum `venom_asm_rel _ _ _ mid` mp_tac >>
+      simp[venom_asm_rel_def, frame_view_def]) >>
+  gen_tac >> disch_tac >>
+  `!x. MEM (Var x) (compute_operands inst) ==> ~retpc_var fn x` by
+    (gen_tac >> disch_tac >> irule frameViewFactsTheory.ordinary_operand_not_retpc >>
+     conj_tac >- simp[] >> qexists `inst` >> gvs[compute_operands_def]) >>
+  `eval_operands (REVERSE (compute_operands inst))
+      (frame_view fn ra vs with vs_memory := st.as_memory) = SOME values` by
+    metis_tac[frameViewFactsTheory.eval_operands_frame_view, listTheory.MEM_REVERSE] >>
+  `EVERY (\op. op <> dead_stack_marker) (compute_operands inst)` by
+    (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `!op. MEM op (compute_operands inst) ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := st.as_memory) =
+    operand_val (frame_view fn ra vs with vs_memory := st.as_memory) lo op` by
+    simp[venomMemPropsTheory.eval_operand_with_memory,
+         genFrameSimTheory.operand_val_memory_update] >>
+  `!op sv. MEM op (compute_operands inst) /\ op_kind_ok fn ret op sv ==>
+    ?w. sv = Val w` by
+    (rpt strip_tac >> irule terminal_operand_word_kind >>
+     qexistsl [`ctx`, `fn`, `inst`, `op`, `ret`] >>
+     gvs[listTheory.EVERY_MEM]) >>
+  drule_all arranged_word_prepared_symbolic_stack >> strip_tac >>
+  `LENGTH values = LENGTH (compute_operands inst)` by
+    metis_tac[fnFrameBoundaryInvokeTheory.eval_operands_some_length,
+              listTheory.LENGTH_REVERSE] >>
+  `LENGTH (compute_operands inst) <= LENGTH mid.as_stack` by
+    metis_tac[listTheory.LENGTH_APPEND, arithmeticTheory.LE_ADD] >>
+  `LENGTH (compute_operands inst) - LENGTH mid.as_stack = 0` by decide_tac >>
+  simp[listTheory.DROP_APPEND] >>
+  qpat_x_assum `mid.as_stack = values ++ _`
+    (mp_tac o AP_TERM ``\xs:bytes32 list. xs ++ rest``) >>
+  simp[listTheory.APPEND_ASSOC]
 QED
 
 Theorem sym_revert_operand_kind:
