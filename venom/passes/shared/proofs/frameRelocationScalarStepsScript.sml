@@ -82,9 +82,29 @@ Proof
   qx_gen_tac `u` >> Cases_on `u = v` >> simp[]
 QED
 
+Theorem scalar_binary_update_taint:
+  scalar_binary_opcode inst.inst_opcode /\ inst.inst_outputs = [v] ==>
+  step_taint inst s (update_var v x s) tn =
+    tn with t_var := tn.t_var |+ (v,out_taint tn inst s)
+Proof
+  strip_tac >>
+  `{i | ?aid b sz. aid NOTIN FDOM s.vs_allocas /\
+       (aid IN FDOM s.vs_allocas /\ s.vs_allocas ' aid = (b,sz)) /\
+       b <= i /\ i < b + sz} = {}` by (simp[EXTENSION] >> metis_tac[]) >>
+  gvs[scalar_binary_opcode_def] >>
+  simp[step_taint_def, mem_taint_def, new_site_bytes_def, update_var_def,
+       step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+       written_taint_def, range_bytes_def, set_var_taint_def, adopt_reset_def,
+       store_taint_def, imm_taint_def, FLOOKUP_DEF, EXTENSION] >>
+  simp[taint_component_equality] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[] >> Cases_on `t` >> simp[]
+QED
+
 Theorem scalar_binary_taint:
   scalar_binary_opcode inst.inst_opcode /\
-  inst.inst_operands = [a;b] /\ inst.inst_outputs = [v] ==>
+  inst.inst_operands = [a;b] /\ inst.inst_outputs = [v] /\
+  (inst.inst_opcode = MUL ==> op_taint tn a = {} /\ op_taint tn b = {}) ==>
   step_taint inst s (update_var v x s) tn =
     tn with t_var := tn.t_var |+ (v,{})
 Proof
@@ -120,6 +140,9 @@ Theorem guarded_scalar_binary_step:
       SND o_f (origin_set rv [v] NONE)
 Proof
   strip_tac >> drule scalar_binary_dispatch >> strip_tac >>
+  `op_taint tn a = {} /\ op_taint tn b = {}` by
+    (Cases_on `a` >> Cases_on `b` >>
+     fs[op_taint_def, clean_scalar_def] >> metis_tac[]) >>
   `exec_pure2 f inst s = OK s'` by metis_tac[] >>
   drule_all guarded_purebinary >> strip_tac >>
   `step_prov PG (SND o_f rv) inst s' =

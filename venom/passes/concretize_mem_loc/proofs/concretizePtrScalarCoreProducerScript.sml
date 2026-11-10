@@ -14,6 +14,7 @@ Ancestors concretizePtrReturnTransport concretizePtrRequestHistory concretizePtr
   concretizePtrExecutedCoverage o1PassContract o1ScheduleDecomp venomWf cfgWf
   unitLabelMapIdentity contextCodegenRel codegenRel frameViewFacts
   ptrDiscipline pointerConfinedDefs unitShapeDefs venomExecSemantics
+  frameRelocationGuardedValues
   memLocDefs venomState venomInst finite_map list pred_set
 
 Theorem ptr_scalar_core_operand_discipline[local]:
@@ -24,7 +25,7 @@ Theorem ptr_scalar_core_operand_discipline[local]:
     [MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
      ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET] ==>
   EVERY (\op. ptr_nonopaque_operand fn op /\ op_prov TG op = NONE /\
-              op_taint tn op = {}) inst.inst_operands
+              (inst.inst_opcode <> MUL ==> op_taint tn op = {})) inst.inst_operands
 Proof
   strip_tac >>
   `!v. MEM (Var v) inst.inst_operands ==> v NOTIN fn_pv P fn` by
@@ -36,8 +37,8 @@ Proof
      simp[ptr_use_ok_def, is_pointer_preserving_op_def,
           mem_write_ops_def, mem_read_ops_def] >> metis_tac[]) >>
   simp[EVERY_MEM] >> rpt strip_tac >>
-  `op_taint tn op = {}` by
-    (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
+  `inst.inst_opcode <> MUL ==> op_taint tn op = {}` by
+    (strip_tac >> qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
      fs[MEM] >> simp[taint_ok_def] >> metis_tac[]) >>
   `op_prov TG op = NONE` by
     (Cases_on `op` >> simp[op_prov_def] >>
@@ -46,6 +47,62 @@ Proof
   strip_tac >>
   `retpc_use_ok inst s'` by metis_tac[opaque_use_ok_retpc_use] >>
   fs[retpc_use_ok_def, MEM] >> gvs[]
+QED
+
+Theorem ptr_mixed_mul_execution[local]:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  s.vs_labels = t.vs_labels /\ taint_ok f tn inst s /\
+  EVERY (\op. ptr_nonopaque_operand f op /\ op_prov TG op = NONE)
+    inst.inst_operands /\ inst.inst_opcode = MUL /\
+  inst.inst_outputs = [out] /\ ~retpc_var f out /\
+  step_inst fuel Ct inst t = OK t' ==>
+  ?v w. step_inst 0 C inst s = OK (update_var out v s) /\
+    t' = update_var out w t /\
+    ptr_mixed_vars births positions
+      (step_prov PT TG inst (update_var out v s))
+      (step_taint inst s (update_var out v s) tn)
+      f g (update_var out v s) t'
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  simp[step_inst_non_invoke, step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  `ptr_lookup_transport births positions NONE (op_taint tn op1)
+    (eval_operand op1 s) (SOME v1)` by
+    (qpat_assum `ptr_mixed_vars _ _ _ _ _ _ _ _`
+       (mp_then Any mp_tac ptr_mixed_vars_eval) >>
+     disch_then (qspec_then `op1` mp_tac) >> simp[]) >>
+  `ptr_lookup_transport births positions NONE (op_taint tn op2)
+    (eval_operand op2 s) (SOME v2)` by
+    (qpat_assum `ptr_mixed_vars _ _ _ _ _ _ _ _`
+       (mp_then Any mp_tac ptr_mixed_vars_eval) >>
+     disch_then (qspec_then `op2` mp_tac) >> simp[]) >>
+  gvs[ptr_lookup_transport_some_right, ptr_value_transport_def] >>
+  rename1 `eval_operand op1 s = SOME x1` >>
+  rename1 `eval_operand op2 s = SOME x2` >>
+  `op_taint tn op1 = {} \/
+    (op_taint tn op2 = {} /\ (x2 = 0w \/ x2 = 1w))` by
+    (Cases_on `op_taint tn op1 = {}` >- simp[] >>
+     qpat_x_assum `taint_ok _ _ _ _` mp_tac >> simp[taint_ok_def] >>
+     strip_tac >> first_x_assum (qspec_then `op1` mp_tac) >>
+     simp[] >> strip_tac >> gvs[]) >>
+  `op_taint tn op2 = {} \/
+    (op_taint tn op1 = {} /\ (x1 = 0w \/ x1 = 1w))` by
+    (Cases_on `op_taint tn op2 = {}` >- simp[] >>
+     qpat_x_assum `taint_ok _ _ _ _` mp_tac >> simp[taint_ok_def] >>
+     strip_tac >> first_x_assum (qspec_then `op2` mp_tac) >>
+     simp[] >> strip_tac >> gvs[]) >>
+  `word_agree_except (out_taint tn inst s) (x1 * x2) (v1 * v2)` by
+    (mp_tac (Q.INST [`m` |-> `op_taint tn op1`, `n` |-> `op_taint tn op2`,
+       `x` |-> `x1`, `y` |-> `x2`, `x'` |-> `v1`, `y'` |-> `v2`]
+       word_agree_except_selector_mul) >> simp[out_taint_def]) >>
+  qexistsl_tac [`x1 * x2`, `v1 * v2`] >>
+  simp[step_inst_non_invoke, step_inst_base_def, exec_pure2_def] >>
+  drule ptr_mixed_vars_update >> disch_then irule >> simp[] >>
+  simp[step_prov_def, out_prov_def, set_prov_def,
+       step_taint_def, set_var_taint_def, op_taint_def,
+       FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, ptr_value_transport_def] >>
+  rpt strip_tac >> fs[ptr_mixed_vars_def, op_taint_def] >> gvs[FLOOKUP_UPDATE]
 QED
 
 Theorem ptr_scalar_core_execution[local]:
@@ -148,7 +205,9 @@ Proof
     (irule noncopy_output_not_retpc >>
      conj_tac >- fs[EVERY_MEM] >> qexists_tac `a.po_inst` >> simp[]) >>
   `EVERY (\op. ptr_nonopaque_operand a.po_fn op /\ op_prov TG op = NONE /\
-     op_taint a.po_taint op = {}) a.po_inst.inst_operands` by suspend "operands" >>
+     (a.po_inst.inst_opcode <> MUL ==> op_taint a.po_taint op = {}))
+     a.po_inst.inst_operands /\
+   taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by suspend "operands" >>
   `at.po_inst = a.po_inst` by
     (qpat_x_assum `ptr_paired_cursor lp a at` mp_tac >>
      simp[ptr_paired_cursor_def] >> strip_tac >>
@@ -169,8 +228,8 @@ Proof
     (qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
      simp[step_inst_non_invoke] >> strip_tac >>
      drule step_inst_base_intret_opcodes >> fs[MEM]) >>
-  `?v. step_inst 0 C a.po_inst a.po_state = OK (update_var out v a.po_state) /\
-     s' = update_var out v at.po_state /\
+  `?v w. step_inst 0 C a.po_inst a.po_state = OK (update_var out v a.po_state) /\
+     s' = update_var out w at.po_state /\
      ptr_mixed_vars births positions
        (step_prov PT TG a.po_inst (update_var out v a.po_state))
        (step_taint a.po_inst a.po_state (update_var out v a.po_state) a.po_taint)
@@ -181,8 +240,15 @@ Proof
         ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET]` by simp[] >>
      `a.po_state.vs_labels = at.po_state.vs_labels` by
        (drule ptr_history_content_labels >> simp[]) >>
+     Cases_on `a.po_inst.inst_opcode = MUL`
+     >- (`EVERY (\op. ptr_nonopaque_operand a.po_fn op /\ op_prov TG op = NONE)
+           a.po_inst.inst_operands` by fs[EVERY_MEM] >>
+         drule_all ptr_mixed_mul_execution >>
+         disch_then (qspecl_then [`PT`,`C`] mp_tac) >> simp[]) >>
+     `EVERY (\op. ptr_nonopaque_operand a.po_fn op /\ op_prov TG op = NONE /\
+       op_taint a.po_taint op = {}) a.po_inst.inst_operands` by fs[EVERY_MEM] >>
      drule_all ptr_mixed_scalar_core_execution >>
-     disch_then (qspecl_then [`PT`,`C`] mp_tac) >> simp[]) >>
+     disch_then (qspecl_then [`PT`,`C`] mp_tac) >> metis_tac[]) >>
   `?i. active_inst a.po_fn i
      ((update_var out v a.po_state) with vs_inst_idx := SUC a.po_state.vs_inst_idx)` by
     (`EVERY bb_well_formed a.po_fn.fn_blocks` by
@@ -245,7 +311,7 @@ Resume ptr_paired_prefix_scalar_core[operands]:
     (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
   `fn_ptr_ok P a.po_fn /\ opaque_use_ok a.po_fn` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >> metis_tac[]) >>
-  drule_all ptr_scalar_core_operand_discipline >> simp[]
+  simp[] >> drule_all ptr_scalar_core_operand_discipline >> simp[]
 QED
 Finalise ptr_paired_prefix_scalar_core
 
