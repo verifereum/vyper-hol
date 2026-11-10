@@ -1,5 +1,5 @@
 Theory loadElimInitialEntryActions
-Ancestors
+Ancestors cfgCorrectnessProof
   loadElimAllBlockPopulation loadElimConvergence loadElimSupportHelpers
   loadElimJoinPlacement loadElimOriginHelpers loadElimPhiCapture
   loadElimReachableBoundary loadElimDefs venomInst cfgDefs cfgAnalysisProps venomWf list pred_set finite_map

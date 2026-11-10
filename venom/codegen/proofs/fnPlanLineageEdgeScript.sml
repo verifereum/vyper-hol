@@ -1,5 +1,5 @@
 Theory fnPlanLineageEdge
-Ancestors
+Ancestors cfgCorrectnessProof
   fnPlanPrefix fnPlanLineageSuffix fnPlanLineageInventory fnPlanLineageLiveness
   stackPlanGen venomInst venomWf venomExecProps cfgAnalysisProps list rich_list
 

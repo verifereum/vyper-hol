@@ -1,5 +1,5 @@
 Theory loadElimSolverHelpers
-Ancestors
+Ancestors cfgCorrectnessProof
   loadElimDefs loadElimSupportHelpers loadElimOrderHelpers
   dfAnalyzeDefs dfAnalyzeProofs latticeDefs cfgAnalysisProps
   venomInst livenessTransferProofs finite_map pred_set list rich_list arithmetic
@@ -96,7 +96,7 @@ Theorem le_solver_init:
   le_solver_inv (set labels) keys vals (init_df_state NONE labels)
 Proof
   simp[le_solver_inv_def, init_df_state_def, le_init_domain_fold] >>
-  rpt strip_tac >> drule foldl_fupdate_const >> strip_tac >> simp[]
+  rpt strip_tac >> drule foldl_fempty_val >> strip_tac >> simp[]
 QED
 
 Definition le_solver_process_def:

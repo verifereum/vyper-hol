@@ -1,5 +1,5 @@
 Theory loadElimRetainedStore
-Ancestors
+Ancestors memAliasProofs
   loadElimTransferRetention loadElimConfiguredGeneration loadElimAbsoluteKey
   loadElimKeyReadOperational loadElimKeyRead loadElimBPEmpty
   loadElimDefs basePtrDefs memLocDefs venomMemDefs venomState

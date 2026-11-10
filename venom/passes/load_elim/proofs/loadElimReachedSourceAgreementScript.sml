@@ -1,5 +1,5 @@
 Theory loadElimReachedSourceAgreement
-Ancestors
+Ancestors cfgTransformProofs
   loadElimReachedCapture loadElimReachedAvailability loadElimSingletonSuffix
   loadElimTransferProvenance cfgNormBase cfgNormProof cfgTransform
   loadElimActionFreshness loadElimOccurrence loadElimActualGeneration

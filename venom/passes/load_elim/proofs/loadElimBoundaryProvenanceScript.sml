@@ -111,7 +111,7 @@ Theorem le_init_boundary_none:
 Proof
   simp[df_boundary_def, init_df_state_def] >>
   Cases_on `FLOOKUP (FOLDL (\m l. m |+ (l,NONE)) FEMPTY labels) lbl` >>
-  simp[] >> drule foldl_fupdate_const >> simp[]
+  simp[] >> drule foldl_fempty_val >> simp[]
 QED
 
 Theorem le_boundary_update:
