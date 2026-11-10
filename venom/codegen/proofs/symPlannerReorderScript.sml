@@ -566,7 +566,136 @@ Proof
   metis_tac[reduce_depth_plan_layout_wf, reduce_depth_plan_target_len_floor, pairTheory.SND]
 QED
 
-Theorem sym_reorder_one_run[local]:
+Theorem reorder_place_region_limit[local]:
+  f < n /\ n <= LENGTH ps.ps_stack /\
+  (case stack_get_unfixed_depth op f n ps.ps_stack of
+     NONE => ([],ps)
+   | SOME d =>
+       if d = f then ([],ps)
+       else if f < LENGTH ps.ps_stack then
+         if operand_equiv dfg op (stack_peek f ps.ps_stack) then
+           ([],ps with ps_stack := stack_poke f op
+             (stack_poke d (stack_peek f ps.ps_stack) ps.ps_stack))
+         else (case do_swap d ps of (xs,mid) =>
+           case do_swap f mid of (ys,last) => (xs ++ ys,last))
+       else (case do_swap d ps of (xs,mid) =>
+         case do_swap f mid of (ys,last) => (xs ++ ys,last))) = (ops,out) /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  f < LENGTH ps.ps_stack /\ ps.ps_alloc.sa_next_offset <= r.sr_spill_end
+Proof
+  strip_tac >> conj_asm1_tac >- decide_tac >>
+  drule_all_then strip_assume_tac reorder_place_alloc >> decide_tac
+QED
+
+Theorem asm_block_at_pc_suffix[local]:
+  asm_block_at p pc (xs ++ ys) /\ pc' = pc + LENGTH xs ==>
+  asm_block_at p pc' ys
+Proof
+  simp[stackOpSimTheory.asm_block_at_append]
+QED
+
+Theorem sym_reorder_prepare_place[local]:
+  residual_budget_wf_marked spillbase pending ps /\
+  LENGTH pending <= LENGTH ps.ps_stack /\
+  (case stack_get_unfixed_depth op f (LENGTH pending) ps.ps_stack of
+     SOME d => ([],ps)
+   | NONE => (case FLOOKUP ps.ps_spilled op of
+       SOME off => do_restore op ps | NONE => ([],ps))) = (rops,ps1) /\
+  stack_get_unfixed_depth op f (LENGTH pending) ps1.ps_stack = SOME dist /\
+  (if dist > 16 then
+     reduce_depth_plan (LENGTH ps1.ps_stack) pending op f (LENGTH pending) ps1
+   else ([],ps1)) = (dops,ps2) /\
+  f < LENGTH ps2.ps_stack /\
+  spill_alloc_layout_wf ps2.ps_alloc ps2.ps_spilled /\
+  r.sr_spill_base <= ps2.ps_alloc.sa_spill_base /\
+  ps2.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  (case stack_get_unfixed_depth op f (LENGTH pending) ps2.ps_stack of
+     NONE => ([],ps2)
+   | SOME d =>
+       if d = f then ([],ps2)
+       else if f < LENGTH ps2.ps_stack then
+         if operand_equiv dfg op (stack_peek f ps2.ps_stack) then
+           ([],ps2 with ps_stack := stack_poke f op
+             (stack_poke d (stack_peek f ps2.ps_stack) ps2.ps_stack))
+         else (case do_swap d ps2 of (xs,mid) =>
+           case do_swap f mid of (ys,last) => (xs ++ ys,last))
+       else (case do_swap d ps2 of (xs,mid) =>
+         case do_swap f mid of (ys,last) => (xs ++ ys,last))) = (suffix,out) /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ((rops ++ dops) ++ suffix) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ((rops ++ dops) ++ suffix)) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ((rops ++ dops) ++ suffix))) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ((rops ++ dops) ++ suffix)) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  qpat_x_assum `EVERY _ _` (strip_assume_tac o PURE_REWRITE_RULE [EVERY_APPEND]) >>
+  qpat_x_assum `asm_block_at _ _ _` (assume_tac o PURE_REWRITE_RULE
+    [stackOpSimTheory.execute_plan_append, APPEND_ASSOC]) >>
+  pure_rewrite_tac[stackOpSimTheory.execute_plan_append, LENGTH_APPEND, arithmeticTheory.ADD_ASSOC] >>
+  ho_match_mp_tac (PURE_REWRITE_RULE [stackOpSimTheory.execute_plan_append, LENGTH_APPEND, arithmeticTheory.ADD_ASSOC]
+    (Q.INST [`Q` |-> `sym_kinds_ok cplan fn ret srest ps2`,
+      `m` |-> `LENGTH (execute_plan initial_fmp (rops ++ dops))`,
+      `n` |-> `LENGTH (execute_plan initial_fmp suffix)`] sym_steps_frame_bind)) >> conj_tac
+  >- (irule (PURE_REWRITE_RULE [ratTheory.rat_gre_def, ratTheory.RAT_OF_NUM_LES,
+        stackOpSimTheory.execute_plan_append, LENGTH_APPEND, arithmeticTheory.ADD_ASSOC]
+        (Q.INST [`dist` |-> `rat_of_num (nd:num)`] sym_reorder_prepare)) >>
+      gvs[SF SFY_ss, arithmeticTheory.GREATER_DEF, stackOpSimTheory.execute_plan_append,
+        stackOpSimTheory.asm_block_at_append, EVERY_APPEND]) >>
+  rpt strip_tac >>
+  drule_all_then assume_tac (PURE_REWRITE_RULE [stackOpSimTheory.execute_plan_append,
+    LENGTH_APPEND, arithmeticTheory.ADD_ASSOC, APPEND_ASSOC]
+    (Q.INST [`xs` |-> `execute_plan initial_fmp (rops ++ dops)`,
+      `ys` |-> `execute_plan initial_fmp suffix`]
+      (INST_TYPE [alpha |-> ``:asm_inst``] asm_block_at_pc_suffix))) >>
+  drule_all_then MATCH_ACCEPT_TAC sym_reorder_place
+QED
+
+Theorem reorder_successful_phase_bounds[local]:
+  residual_budget_wf_marked spillbase pending ps /\
+  f < LENGTH pending /\ LENGTH pending <= LENGTH ps.ps_stack /\
+  (case stack_get_unfixed_depth op f (LENGTH pending) ps.ps_stack of
+     SOME d => ([],ps)
+   | NONE => (case FLOOKUP ps.ps_spilled op of
+       SOME off => do_restore op ps | NONE => ([],ps))) = (rops,ps1) /\
+  stack_get_unfixed_depth op f (LENGTH pending) ps1.ps_stack = SOME dist /\
+  (if dist > 16 then
+     reduce_depth_plan (LENGTH ps1.ps_stack) pending op f (LENGTH pending) ps1
+   else ([],ps1)) = (dops,ps2) /\
+  (case stack_get_unfixed_depth op f (LENGTH pending) ps2.ps_stack of
+     NONE => ([],ps2)
+   | SOME d =>
+       if d = f then ([],ps2)
+       else if f < LENGTH ps2.ps_stack then
+         if operand_equiv dfg op (stack_peek f ps2.ps_stack) then
+           ([],ps2 with ps_stack := stack_poke f op
+             (stack_poke d (stack_peek f ps2.ps_stack) ps2.ps_stack))
+         else (case do_swap d ps2 of (xs,mid) =>
+           case do_swap f mid of (ys,last) => (xs ++ ys,last))
+       else (case do_swap d ps2 of (xs,mid) =>
+         case do_swap f mid of (ys,last) => (xs ++ ys,last))) = (suffix,out) /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  spill_alloc_layout_wf ps2.ps_alloc ps2.ps_spilled /\
+  f < LENGTH ps2.ps_stack /\
+  r.sr_spill_base <= ps2.ps_alloc.sa_spill_base /\
+  ps2.ps_alloc.sa_next_offset <= r.sr_spill_end
+Proof
+  strip_tac >> drule_all_then strip_assume_tac reorder_prepare_lookup_structure >>
+  drule_all_then strip_assume_tac reorder_place_region_limit >>
+  rule_assum_tac (PURE_REWRITE_RULE [arithmeticTheory.GREATER_DEF]) >>
+  drule_all_then strip_assume_tac (SRULE [ratTheory.rat_gre_def]
+    (Q.INST [`dist` |-> `rat_of_num (nd:num)`] reorder_prepare_region_bounds)) >>
+  simp[]
+QED
+
+Theorem sym_reorder_one:
   residual_budget_wf_marked spillbase pending ps /\
   idx < LENGTH pending /\ LENGTH pending <= LENGTH ps.ps_stack /\
   dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
@@ -583,31 +712,12 @@ Theorem sym_reorder_one_run[local]:
     (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  strip_tac >> qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  strip_tac >>
+  `LENGTH pending - (idx + 1) < LENGTH pending` by decide_tac >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
   map_every qid_spec_tac [`out`, `ops`] >>
   ho_match_mp_tac reorder_one_phase_cases >> conj_tac
   >- (rpt strip_tac >> irule sym_reorder_restore_run >> gvs[SF SFY_ss]) >>
-  rpt strip_tac >> drule_all_then strip_assume_tac reorder_prepare_lookup_structure >>
-  `LENGTH pending - (idx + 1) < LENGTH ps2.ps_stack` by decide_tac >>
-  drule_all_then strip_assume_tac reorder_place_alloc >>
-  `ps2.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
-  drule_all_then strip_assume_tac reorder_restore_spill_base >>
-  rule_assum_tac (PURE_REWRITE_RULE [arithmeticTheory.GREATER_DEF]) >>
-  drule_all_then assume_tac (SRULE [ratTheory.rat_gre_def]
-    (Q.INST [`dist` |-> `rat_of_num (nd:num)`] reorder_reduce_spill_base)) >>
-  `r.sr_spill_base <= ps2.ps_alloc.sa_spill_base` by metis_tac[] >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC, stackOpSimTheory.execute_plan_append, LENGTH_APPEND, arithmeticTheory.ADD_ASSOC] >>
-  ho_match_mp_tac (PURE_REWRITE_RULE [stackOpSimTheory.execute_plan_append, LENGTH_APPEND, arithmeticTheory.ADD_ASSOC]
-    (Q.INST [`Q` |-> `sym_kinds_ok cplan fn ret srest ps2`,
-      `m` |-> `LENGTH (execute_plan initial_fmp (rops ++ dops))`,
-      `n` |-> `LENGTH (execute_plan initial_fmp suffix)`] sym_steps_frame_bind)) >> conj_tac
-  >- (irule (PURE_REWRITE_RULE [ratTheory.rat_gre_def, ratTheory.RAT_OF_NUM_LES,
-        stackOpSimTheory.execute_plan_append, LENGTH_APPEND, arithmeticTheory.ADD_ASSOC]
-        (Q.INST [`dist` |-> `rat_of_num (nd:num)`] sym_reorder_prepare)) >>
-      gvs[SF SFY_ss, arithmeticTheory.GREATER_DEF, stackOpSimTheory.execute_plan_append,
-        stackOpSimTheory.asm_block_at_append, EVERY_APPEND]) >>
-  rpt strip_tac >> irule sym_reorder_place >>
-  gvs[SF SFY_ss, stackOpSimTheory.execute_plan_append,
-    stackOpSimTheory.asm_block_at_append, EVERY_APPEND] >>
-  qexistsl [`LENGTH pending - (idx + 1)`, `LENGTH pending`, `op`, `ps2`] >> simp[]
+  rpt strip_tac >> drule_all_then strip_assume_tac reorder_successful_phase_bounds >>
+  drule_all_then MATCH_ACCEPT_TAC sym_reorder_prepare_place
 QED
