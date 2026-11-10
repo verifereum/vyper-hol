@@ -149,7 +149,8 @@ Resume slice_data_bytes_outcome[success]:
        loweringPostsTheory.vv_at_def, loweringPostsTheory.expr_val_at_def,
        read_result_def, return_def] >>
   rpt strip_tac
-  >- (first_x_assum irule >> simp[]) >>
+  >- (first_x_assum irule >> conj_tac >- first_assum ACCEPT_TAC >>
+      qexists_tac `aid` >> simp[]) >>
   qpat_x_assum `locals_kept _ _ _ _ _` mp_tac >>
   simp[loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def]
 QED
@@ -242,7 +243,8 @@ Resume slice_data_string_outcome[success]:
        loweringPostsTheory.vv_at_def, loweringPostsTheory.expr_val_at_def,
        read_result_def, return_def] >>
   rpt strip_tac
-  >- (first_x_assum irule >> simp[]) >>
+  >- (first_x_assum irule >> conj_tac >- first_assum ACCEPT_TAC >>
+      qexists_tac `aid` >> simp[]) >>
   qpat_x_assum `locals_kept _ _ _ _ _` mp_tac >>
   simp[loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def]
 QED
