@@ -3,6 +3,7 @@ Ancestors
   abiEncoderSourceProducer abiEncoderSourceAggregate abiEncoderOpenInput
   abiEncoderProps exprSimDefs exprSimProps loweringPosts valueEncoding vyperValue vyperTyping vyperABI
   abiEncoderSourceWindow abiBuiltinAllocation contractABI compileEnv vyperMisc list
+  valueEncodingDefs
 
 Theorem abi_encoder_source_footprint_rep:
   abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\

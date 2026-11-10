@@ -2,6 +2,7 @@ Theory exprSimAbiEncodeProducerBoundary
 Ancestors
   exprSimHash localPtrsProps allocaSiteResource compileEnv venomMemDefs
   venomState venomInst list words
+  exprSimHashBoundary
 
 Theorem abi_encode_expr_footprint_site_disjoint:
   expr_val_at ce cx ty sa sm es v op s /\

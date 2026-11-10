@@ -9,6 +9,7 @@ Ancestors
   emitHelper compileEnv venomState venomExecSemantics venomInst words list
   abiEncoderWindowLookup abiEncoderWindowBytes abiEncoderWindowSequence
   abiEncoderBytes abiEncoderRounding
+  valueEncodingDefs
 
 Theorem abi_encode_copy_concrete:
   compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') /\

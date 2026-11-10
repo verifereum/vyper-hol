@@ -436,16 +436,38 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> metis_tac[abi_image_stack_not_label]
 QED
 
+Theorem as_stack_val_is_stack[local]:
+  as_stack_val t r = (vv,sb) ==> ?t' op. vv = StackValue t' op
+Proof
+  Cases_on `r` >> simp[as_stack_val_def] >> metis_tac[]
+QED
+
 Theorem abi_image_builtin_bop_not_label:
   compile_builtin_dispatch_body f ce vt ty (Bop bop) args sa = (vv,sb) ==>
   vv_operand vv <> Label l
 Proof
   strip_tac >>
   `word_result_ok sb vv` by metis_tac[word_builtin_bop] >>
-  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
-  metis_tac[abi_image_stack_not_label]
+  `?t op. vv = StackValue t op` suffices_by
+    (strip_tac >> gvs[word_result_ok_def, vv_operand_def, safe_operand_def]) >>
+  qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
+  simp_tac (srw_ss()) [compile_builtin_dispatch_body_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (strip_tac >> Cases_on `HD (TL args)` >> gvs[] >>
+      TRY (rename1 `Builtin _ bi _` >> Cases_on `bi` >> simp[]) >>
+      rpt (pairarg_tac >> gvs[]) >>
+      gvs[AllCaseEqs()] >>
+      drule as_stack_val_is_stack >> simp[]) >>
+  IF_CASES_TAC
+  >- (strip_tac >>
+      Cases_on `bytestring_literal_hash (HD args)` >>
+      Cases_on `bytestring_literal_hash (HD (TL args))` >> gvs[] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      Cases_on `bop = Eq` >> gvs[] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      drule as_stack_val_is_stack >> simp[]) >>
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  drule as_stack_val_is_stack >> simp[]
 QED
 
 Theorem abi_image_slice_out_not_label:

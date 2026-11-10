@@ -8,6 +8,7 @@ Ancestors
   abiBuiltinEncodeMethod abiBuiltinEncodeSetup abiBuiltinAllocation abiEncoderInput
   venomMemDefs abiEncoderOpenInput abiEncoderWindow abiBuiltinEncodeAllocate context
   abiEncoderWindowLookup abiEncoderWindowSequence
+  loweringStateRelDefs
 Theorem abi_window_finish_opcodes[local]:
   abi_builtin_encode_finish buf encoded_len mid_size st = ((),final) ==>
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st final)

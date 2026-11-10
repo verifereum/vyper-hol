@@ -2,6 +2,7 @@ Theory abiEncodeArgsWindows
 Ancestors
   exprSimDefs exprSimProps loweringPosts compileEnv valueEncoding valueEncodingProofs entryDecodeStaticProps
   vyperLookup finite_map
+  valueEncodingDefs
 
 (* A dynamic local's exempt header is fixed by the represented value at
    both endpoints.  The tail frame is over the actual requested window. *)

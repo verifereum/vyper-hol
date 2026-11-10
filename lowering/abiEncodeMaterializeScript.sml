@@ -4,6 +4,7 @@ Ancestors
   valueCopyBytes exprSimHyps exprSimLayoutTransport
   exprSimDefs exprSimProps loweringPosts context finite_map exprSimCopy freshWrites fragExec exprSimStorageCopy
   exprSimWordArgs venomMemDefs exprSimAlloc exprLowering compileEnv
+  loweringStateRelDefs
 
 Theorem materialize_post_lowered_classify:
   !ce e. ~is_word_type (expr_type e) /\

@@ -10,6 +10,7 @@ Ancestors
   emitHelperProps exprLoweringProps localPtrsProps
   emitHelper compileEnv venomState venomExecSemantics venomInst words list
   abiEncoderWindowLookup exprSimAbiEncodeSemantic stmtSimLogExecFields
+  valueEncodingDefs
 
 Theorem abi_encode_framed_copy_observed:
   compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') /\
