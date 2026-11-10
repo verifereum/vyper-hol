@@ -5514,3 +5514,30 @@ Proof
       `k < LENGTH bb.bb_instructions` by decide_tac >> metis_tac[]) >>
   simp[listTheory.EVERY_MEM] >> metis_tac[]
 QED
+
+Theorem lineage_singleton_core_terminal_targets:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ lbl <> entry /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  cfg_preds_of (cfg_analyze fn) lbl = [pred] /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn init lbl ps /\
+  (!v. MEM v (live_vars_at (liveness_analyze fn) lbl 0) ==>
+    MEM (Var v) p0.ps_stack \/ Var v IN FDOM p0.ps_spilled) /\
+  native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+    halt 0 (LENGTH bb.bb_instructions) bb.bb_instructions p0 k mid /\
+  DROP k bb.bb_instructions = [inst] /\ inst.inst_opcode = JMP /\
+  join_target_ops (liveness_analyze fn) fn lbl inst = SOME targets ==>
+  ALL_DISTINCT targets /\
+  (!x. MEM x targets ==> MEM x mid.ps_stack \/ x IN FDOM mid.ps_spilled)
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,venomExecPropsTheory.lookup_block_label] >>
+  `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
+    metis_tac[fnPlanLineagePhiScheduleTheory.ready_nonentry_block_suffix,optionTheory.SOME_11] >>
+  `collect_phis bb.bb_instructions = []` by
+    (fs[codegen_ready_fn_def,phis_at_joins_def,listTheory.EVERY_MEM] >>
+     gvs[listTheory.NULL_EQ,listTheory.LENGTH,arithmeticTheory.LESS_EQ_REFL]) >>
+  `fn_reachable fn bb.bb_label` by
+    metis_tac[lineage_state_reachable,fn_reachable_cfg_analyze,codegen_ready_fn_def] >>
+  metis_tac[fnPlanLineageNativeTerminalTheory.ordinary_core_terminal_targets]
+QED
