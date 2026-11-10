@@ -201,7 +201,8 @@ Proof
   simp[array_loop_inv_def, stmt_state_rel_jump_to, ret_pc_ok_jump_to,
        jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
        eval_operand_def] >>
-  Cases_on `saved_base` >> fs[eval_operand_def, lookup_var_def]
+  Cases_on `saved_base` >>
+  fs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem array_declared_ptr_unique[local]:
@@ -280,7 +281,8 @@ Theorem array_alloca_frame[local]:
   ainst.inst_outputs = [p] ==>
   (!x. x <> p ==> lookup_var x s1 = lookup_var x s0) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-    FLOOKUP s1.vs_allocas aid = SOME b)
+    FLOOKUP s1.vs_allocas aid = SOME b) /\
+  s1.vs_memory = s0.vs_memory
 Proof
   strip_tac >> Cases_on `FLOOKUP s0.vs_allocas ainst.inst_id`
   >- (gvs[exec_alloca_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
@@ -322,7 +324,7 @@ Proof
   conj_tac
   >- (irule array_entry_zero_inv >>
       simp[stmt_state_rel_jump_to, ret_pc_ok_jump_to, jump_to_def] >>
-      fs[lookup_var_def] >> metis_tac[]) >>
+      Cases_on `saved_base` >> fs[lookup_var_def, eval_operand_def]) >>
   `step_inst_base ainst s0 = OK s1` by
     simp[step_inst_base_def, eval_operand_def] >>
   drule array_prefix_continuation >> simp[] >> metis_tac[]
@@ -344,11 +346,13 @@ Theorem array_loop_initialize_framed:
   lookup_scopes id es.scopes = NONE /\ name <> id /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar saved_base arr_sz) /\
   eval_operand saved_base s0 = SOME array_base /\ ret_pc_ok cenv st s0 /\
-  (!x. not_fresh_at caller x ==> x <> p /\ x <> idx) ==>
+  (!x. not_fresh_at caller x ==> x <> p /\ x <> idx) /\
+  local_ptrs_reserved cenv caller ==>
   ?dst s.
     array_loop_inv ctx func cenv cx P vs id idx saved_base array_base p dst sz
       ainst cond st 0 es s /\ array_caller_frame caller s0 s /\
-    gas_marked_path F ctx func s0 0 (OK s)
+    gas_marked_path F ctx func s0 0 (OK s) /\
+    alloca_frame cenv es caller s0 cenv es s
 Proof
   strip_tac >>
   `bc.ce_imm_alloca = cenv.ce_imm_alloca` by
@@ -363,11 +367,18 @@ Proof
   conj_tac
   >- (irule array_entry_zero_inv >>
       simp[stmt_state_rel_jump_to, ret_pc_ok_jump_to, jump_to_def] >>
-      fs[lookup_var_def] >> metis_tac[]) >>
+      Cases_on `saved_base` >> fs[lookup_var_def, eval_operand_def]) >>
   conj_tac
   >- (simp[array_caller_frame_def, jump_to_def, update_var_def,
            lookup_var_def, FLOOKUP_UPDATE] >>
       rpt strip_tac >> metis_tac[lookup_var_def]) >>
+  reverse conj_tac
+  >- (irule alloca_frame_of_mem_frame >> goal_assum (drule_at Any) >>
+      simp[jump_to_def, update_var_def] >>
+      reverse conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
+      `x <> p /\ x <> idx` by metis_tac[] >>
+      simp[lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[lookup_var_def]) >>
   `step_inst_base ainst s0 = OK s1` by
     simp[step_inst_base_def, eval_operand_def] >>
   drule array_prefix_continuation >> simp[] >> metis_tac[]
@@ -429,12 +440,15 @@ Theorem compile_for_array_code_ready_framed:
     not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\
     (!x. arr_op = Var x ==> not_fresh_at sb0 x) /\
     st.cs_next_var <= sa.cs_next_var /\ sa.cs_next_var <= sb0.cs_next_var /\
-    (!x. not_fresh_at st x ==> x <> p /\ x <> idx)
+    (!x. not_fresh_at st x ==> x <> p /\ x <> idx) /\
+    st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= sb0.cs_next_id
 Proof
   strip_tac >>
   `!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==>
                 cs_extends sa sb` by metis_tac[] >>
   drule_all compile_for_array_parts >> strip_tac >>
+  `st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= sb0.cs_next_id` by
+    (conj_tac >- simp[] >> decide_tac) >>
   drule_all declare_local_ptr >> strip_tac >>
   `st.cs_next_var + 5 <= sj.cs_next_var` by
     (qpat_x_assum `!c lc sa sb. _ ==> _ /\ _` drule >> simp[]) >>
@@ -573,6 +587,10 @@ Proof
     (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
      simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def] >>
      strip_tac >> asm_rewrite_tac[]) >>
+  `stmt_post ctx func cx lctx cenv cenv' sa sb (es with gas_obs := gs) s0 =
+   stmt_post ctx func cx lctx cenv cenv' sa sb es s0` by
+    simp[FUN_EQ_THM, stmt_post_def, alloca_frame_def] >>
+  pop_assum SUBST1_TAC >>
   first_x_assum drule_all >>
   disch_then (mp_then Any mp_tac array_outcome_start_gas_obs) >> simp[]
 QED
@@ -675,11 +693,13 @@ Theorem array_code_loop_counted[local]:
         P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) /\
   array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
     ainst cond st 0 es cc /\ array_caller_frame st s0 cc /\
-  gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx) es ==>
+  gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx) es /\
+  st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= ainst.inst_id /\
+  st.cs_next_id <= sb0.cs_next_id /\ alloca_frame cenv es st s0 cenv es cc ==>
   gas_outcome F (cx_tops cx) (ctx,func) (eval_for cx tv id stmts vs) (es,cc)
     (\res ee t. res = INL () /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
       ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
-      array_caller_frame st s0 t)
+      array_caller_frame st s0 t /\ alloca_frame cenv es st s0 cenv ee t)
     (\res ee r. ?ex. res = INR ex /\
       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
 Proof
@@ -710,7 +730,7 @@ Proof
         ((r = INL () \/ r = INR ContinueException) ==>
           P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE))` by
     suspend "callback" >>
-  drule_all (SRULE [DROP_0] (Q.INST [`k` |-> `0`] array_for_loop_counted)) >> simp[]
+  drule_all (SRULE [DROP_0] (Q.INST [`k` |-> `0`, `caller` |-> `st`] array_for_loop_counted)) >> simp[]
 QED
 
 Resume array_code_loop_counted[callback]:
@@ -722,33 +742,6 @@ Resume array_code_loop_counted[callback]:
   qpat_assum `!ei k gs r es2. _` drule_all >> simp[]
 QED
 Finalise array_code_loop_counted
-
-Theorem array_outcome_stmt_post[local]:
-  st'.cs_current_bb = exit /\ st'.cs_current_insts = [] /\
-  gas_outcome F tops (ctx,func) source (es,s0)
-    (\res ee t. res = INL () /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
-      ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
-      array_caller_frame st s0 t)
-    (\res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) ==>
-  gas_outcome F tops (ctx,func) source (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv st st' s0)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
-Proof
-  strip_tac >> qhdtm_x_assum `gas_outcome` mp_tac >>
-  rewrite_tac[gas_outcome_def] >>
-  disch_then (qx_choose_then `marks` strip_assume_tac)
-  >- (qexists_tac `marks` >> disj1_tac >>
-      qhdtm_x_assum `gas_summary_at` mp_tac >>
-      rewrite_tac[gas_summary_at_def] >> strip_tac >>
-      qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
-      gvs[] >> rpt strip_tac >>
-      simp[stmt_post_def, stmt_lands_def, block_is_terminated_def,
-           cenv_top_ext_refl, array_caller_frame_def] >>
-      fs[array_caller_frame_def]) >>
-  qexists_tac `marks` >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >> simp[]
-QED
 
 Theorem array_public_entry_ready[local]:
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var arr_ptr) arr_sz) /\
@@ -787,7 +780,10 @@ Theorem array_public_entry_ready[local]:
     (!k. k < LENGTH vs ==> w2n base + k * type_memory_bytes cenv et < dimword (:256)) /\
     array_loop_inv ctx func cenv cx P vs id idx (Var arr_ptr) base p dst
       (type_memory_bytes cenv et) ainst cond st 0 es cc /\
-    array_caller_frame st s0 cc /\ gas_marked_path F ctx func s0 0 (OK cc)
+    array_caller_frame st s0 cc /\ gas_marked_path F ctx func s0 0 (OK cc) /\
+    alloca_frame cenv es st s0 cenv es cc /\
+    ainst.inst_id = st.cs_next_id /\
+    st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= sb0.cs_next_id
 Proof
   strip_tac >> drule_all compile_for_array_code_ready_framed >> strip_tac >>
   qpat_assum `!ei t. _` drule_all >> strip_tac >>
@@ -795,7 +791,8 @@ Proof
   `ainst.inst_operands = [Lit (n2w (type_memory_bytes cenv et))]` by simp[mk_inst_def] >>
   `?dst cc. array_loop_inv ctx func cenv cx P vs id idx (Var arr_ptr) addr p dst
       (type_memory_bytes cenv et) ainst cond st 0 es cc /\
-      array_caller_frame st s0 cc /\ gas_marked_path F ctx func s0 0 (OK cc)` by
+      array_caller_frame st s0 cc /\ gas_marked_path F ctx func s0 0 (OK cc) /\
+      alloca_frame cenv es st s0 cenv es cc` by
     (irule array_loop_initialize_framed >>
      qhdtm_assum `array_for_code` (irule_at Any) >>
      simp[] >>
@@ -803,7 +800,34 @@ Proof
      qexistsl_tac [`name`, `st.cs_next_id + 1`, `arr_sz`] >> simp[]) >>
   qexistsl_tac [`bc`, `p`, `idx`, `dv`, `ov`, `ep`, `nv`, `cond`, `bod`, `incr`,
     `exit`, `sa`, `sb0`, `sb1`, `sj`, `ainst`, `sd`, `addr`, `dst`, `cc`] >>
-  simp[]
+  simp[mk_inst_def]
+QED
+
+Theorem array_outcome_stmt_post[local]:
+  st'.cs_current_bb = exit /\ st'.cs_current_insts = [] /\
+  gas_outcome F tops (ctx,func) source (es,s0)
+    (\res ee t. res = INL () /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
+      ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
+      array_caller_frame st s0 t /\ alloca_frame cenv es st s0 cenv ee t)
+    (\res ee r. ?ex. res = INR ex /\
+      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) ==>
+  gas_outcome F tops (ctx,func) source (es,s0)
+    (stmt_post ctx func cx lctx cenv cenv st st' es s0)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+Proof
+  strip_tac >> qhdtm_x_assum `gas_outcome` mp_tac >>
+  rewrite_tac[gas_outcome_def] >>
+  disch_then (qx_choose_then `marks` strip_assume_tac)
+  >- (qexists_tac `marks` >> disj1_tac >>
+      qhdtm_x_assum `gas_summary_at` mp_tac >>
+      rewrite_tac[gas_summary_at_def] >> strip_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
+      gvs[] >> rpt strip_tac >>
+      simp[stmt_post_def, stmt_lands_def, block_is_terminated_def,
+           cenv_top_ext_refl, array_caller_frame_def] >>
+      fs[array_caller_frame_def]) >>
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >> simp[]
 QED
 
 Theorem compile_for_array_frag_zero[local]:
@@ -883,10 +907,13 @@ Proof
         val_in_memory tv (EL k vs) (w2n addr + k * type_memory_bytes cenv et) t.vs_memory /\
         w2n addr + k * type_memory_bytes cenv et < dimword (:256))` by
     (rpt strip_tac >> qpat_assum `!ei s. _` drule_all >> simp[]) >>
+  `st.cs_next_id <= ainst.inst_id` by simp[] >>
   drule_all array_code_loop_counted >> strip_tac >>
   drule_all stmtSimDeclComposeTheory.gas_outcome_zero_prefix >> strip_tac >>
   drule_all (SRULE [] (Q.INST [`n` |-> `LENGTH (vs : value list)`] array_for_source_prefix)) >> strip_tac >>
-  irule array_outcome_stmt_post >> simp[] >> goal_assum (drule_at Any)
+  irule array_outcome_stmt_post >> simp[] >>
+  qpat_x_assum `gas_outcome _ _ _ (eval_stmt _ _) _ _ _` mp_tac >>
+  simp[alloca_frame_def]
 QED
 
 
@@ -906,6 +933,10 @@ Theorem stmt_frag_start_gas_obs[local]:
   !gs. stmt_frag ctx func cx lctx RetQ cenv m source (es with gas_obs := gs)
 Proof
   rw[stmt_frag_def, stmt_framed_frag_def] >>
+  `stmt_post ctx func cx lctx cenv cenv' sa sb (es with gas_obs := gs) s0 =
+   stmt_post ctx func cx lctx cenv cenv' sa sb es s0` by
+    simp[FUN_EQ_THM, stmt_post_def, alloca_frame_def] >>
+  pop_assum SUBST1_TAC >>
   irule gas_outcome_start_gas_obs >> first_x_assum irule >> simp[] >>
   qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
   simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def, NoAsms] >>

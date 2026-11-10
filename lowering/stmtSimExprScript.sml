@@ -79,10 +79,13 @@ Theorem expr_stmt_post[local]:
   vv_post ctx func cenv cx e es sa sb s0 ee tv vv t /\
   ~t.vs_halted /\ ~block_is_terminated sb /\
   t.vs_current_bb = sb.cs_current_bb /\
-  t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
-  stmt_post ctx func cx lctx cenv cenv sa sb s0 (INL ()) ee t
+  t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM ee.scopes = MAP FDOM es.scopes ==>
+  stmt_post ctx func cx lctx cenv cenv sa sb es s0 (INL ()) ee t
 Proof
-  simp[vv_post_def, stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
+  strip_tac >> drule_all vv_post_alloca_frame >> strip_tac >>
+  fs[vv_post_def, stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
   metis_tac[]
 QED
 
@@ -131,6 +134,12 @@ Proof
           `~block_is_terminated sb` by
             (qpat_x_assum `!tail. eval_expr _ _ _ = _`
                (qspec_then `[]` assume_tac) >> fs[] >> metis_tac[]) >>
+          `MAP FDOM es_end.scopes = MAP FDOM es.scopes /\
+           MAP FDOM (es_end with gas_obs := []).scopes = MAP FDOM es.scopes` by
+            (qpat_x_assum `!tail. eval_expr _ _ _ = _`
+               (qspec_then `[]` assume_tac) >> fs[] >>
+             imp_res_tac vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
+             fs[]) >>
           metis_tac[expr_stmt_post]) >>
       Cases_on `res` >- fs[expr_exit_def] >>
       qexistsl_tac [`INR y`, `es_end`, `r`] >>

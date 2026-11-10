@@ -335,6 +335,9 @@ Theorem local_memory_assign_path:
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                  FLOOKUP t.vs_allocas aid = SOME b) /\
+        alloca_frame cenv es sa s cenv
+          (es with scopes :=
+             pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `loc = SOME LocMemory`
@@ -362,6 +365,15 @@ Proof
        s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
       drule_all alloc_copy_memory_framed_path >>
       disch_then (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
+      `alloca_frame cenv es sa s cenv es u` by
+        (irule alloca_frame_owned_copy >>
+         simp[] >>
+         conj_tac >- metis_tac[] >>
+         conj_tac >- fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+         conj_tac >-
+           (qexistsl_tac [`w2n uw`, `sx.cs_next_id`, `type_memory_bytes cenv ty`] >>
+            gvs[] >> first_assum ACCEPT_TAC) >>
+         metis_tac[]) >>
       `local_ptrs_reserved cenv sn` by
         (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
       `!x. Var tmp = Var x ==> not_fresh_at sn x` by simp[] >>
@@ -372,6 +384,15 @@ Proof
       disch_then (qx_choosel_then [`dw`, `t`] strip_assume_tac) >>
       `gas_marked_path F ctx func s 0 (OK t)` by
         (drule_all gas_marked_path_then >> simp[]) >>
+      `alloca_frame cenv es sa s cenv
+         (es with scopes :=
+            pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t` by
+        (irule alloca_frame_trans >>
+         goal_assum (drule_at (Pat `alloca_frame _ _ _ s _ _ u`)) >>
+         goal_assum (drule_at (Pat `alloca_frame _ _ _ u _ _ t`)) >>
+         simp[] >>
+         gvs[emit_inst_def, emit_void_def, comp_bind_def, fresh_id_def,
+             comp_return_def, emit_def]) >>
       qexists_tac `t` >> simp[] >> rpt strip_tac >>
       `not_fresh_at sn x` by
         (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
@@ -383,6 +404,108 @@ Proof
         |> GEN_ALL |> PURE_REWRITE_RULE [REFL_CLAUSE, OR_CLAUSES, AND_CLAUSES]) >> strip_tac >>
   qexists_tac `t` >> simp[]
 QED
+
+Theorem local_memory_assign_widen_path:
+  !ctx func cenv cx es s id p sz pre env entry rest v src ty sty sa sb sw tyv
+   loc bytes.
+    compile_assign_value cenv (Var p) LocMemory src F loc ty sty bytes sa = ((), sb) /\
+    (sty = ty \/ is_bytestring_type ty) /\
+    0 < type_memory_bytes cenv sty /\ type_memory_bytes cenv sty < dimword (:256) /\
+    val_footprint tyv v <= type_memory_bytes cenv sty /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\ eval_operand src s = SOME sw /\
+    ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
+    entry.type = tyv /\ value_has_type tyv v /\ val_wf tyv v /\
+    val_in_memory tyv v (w2n sw) s.vs_memory /\
+    type_memory_bytes cenv ty = type_memory_size tyv /\
+    0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. stmt_state_rel ctx func cenv cx
+          (es with scopes :=
+             pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
+        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+        alloca_frame cenv es sa s cenv
+          (es with scopes :=
+             pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
+        gas_marked_path F ctx func s 0 (OK t)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `loc = SOME LocMemory`
+  >- suspend "staged" >>
+  `compile_store_memory cenv src (Var p) ty ty sa = ((),sb)` by
+    (gvs[compile_assign_value_def] >>
+     metis_tac[compile_store_memory_bytestring_src]) >>
+  drule local_memory_store_path >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
+  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
+  simp[] >> strip_tac >> qexists_tac `t` >> simp[]
+QED
+
+Resume local_memory_assign_widen_path[staged]:
+  pop_assum SUBST_ALL_TAC >>
+  drule_all annassign_staged_memory_widen_parts >>
+  disch_then (qx_choosel_then [`sx`, `sm`, `sn`, `tmp`] strip_assume_tac) >>
+  `MEM (mk_inst sx.cs_next_id ALLOCA
+      [Lit (n2w (type_memory_bytes cenv sty))] [tmp]) (fn_insts func)` by
+    (drule emit_inst_extends >> strip_tac >>
+     `?bb. lookup_block sm.cs_current_bb func.fn_blocks = SOME bb /\
+            isPREFIX sm.cs_current_insts bb.bb_instructions` by
+       metis_tac[fn_has_code_start] >>
+     `MEM (mk_inst sx.cs_next_id ALLOCA
+       [Lit (n2w (type_memory_bytes cenv sty))] [tmp]) bb.bb_instructions` by
+       gvs[rich_listTheory.IS_PREFIX_APPEND] >>
+     metis_tac[lookup_block_fn_insts]) >>
+  `not_local_ptr cenv es.scopes tmp` by
+    (gvs[local_ptrs_reserved_def, not_local_ptr_def] >> metis_tac[]) >>
+  `src <> Var tmp` by metis_tac[] >>
+  `s.vs_current_bb = sx.cs_current_bb /\
+   s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
+  drule_all alloc_copy_memory_framed_path >>
+  disch_then (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
+  `alloca_frame cenv es sa s cenv es u` by
+    (irule alloca_frame_owned_copy >> simp[] >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >- fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+     conj_tac >-
+       (qexistsl_tac [`w2n uw`, `sx.cs_next_id`, `type_memory_bytes cenv sty`] >>
+        gvs[] >> first_assum ACCEPT_TAC) >> metis_tac[]) >>
+  `local_ptrs_reserved cenv sn` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `!x. Var tmp = Var x ==> not_fresh_at sn x` by simp[] >>
+  `eval_operand (Var tmp) u = SOME uw` by simp[eval_operand_def] >>
+  drule local_memory_store_path >>
+  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
+  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
+  simp[] >>
+  disch_then (qx_choosel_then [`dw`, `t`] strip_assume_tac) >>
+  `alloca_frame cenv es sa s cenv
+     (es with scopes :=
+        pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t` by
+    (irule alloca_frame_trans >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ s _ _ u`)) >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ u _ _ t`)) >> simp[] >>
+     gvs[emit_inst_def, emit_void_def, comp_bind_def, fresh_id_def,
+         comp_return_def, emit_def]) >>
+  qexists_tac `t` >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sn x` by
+        (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+      `x <> tmp` by metis_tac[] >> simp[]) >>
+  drule_all gas_marked_path_then >> simp[]
+QED
+
+Finalise local_memory_assign_widen_path
 
 Theorem assign_local_memory_normal_continuation:
   !ctx func cenv cx lctx id e es tyv sa sb sf s0 marks v ee s op p sz loc bytes.
@@ -400,6 +523,8 @@ Theorem assign_local_memory_normal_continuation:
       (expr_type e) (expr_type e) bytes sb = ((), sf) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sb /\ (!x. op = Var x ==> not_fresh_at sb x) /\
+    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    sa.cs_next_id <= sb.cs_next_id /\
     sa.cs_next_var <= sb.cs_next_var /\ ~block_is_terminated sf /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
@@ -408,7 +533,7 @@ Theorem assign_local_memory_normal_continuation:
     s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     ?ff u. gas_marked_exec F (ctx,func) (write_place cx (MemoryPlace id []) v)
       (ee with gas_obs := [],s) [] (INL ()) ff (OK u) /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff u
+      stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
 Proof
   rpt gen_tac >> strip_tac >>
   `!tail. bind (eval_expr cx e) (read_result cx)
@@ -425,6 +550,12 @@ Proof
     (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
      qpat_x_assum `!gs v es1 entry. _` drule >>
      disch_then (qspec_then `entry` mp_tac) >> simp[]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     disch_then (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) s` by
+    (irule expr_post_alloca_frame >> simp[] >>
+     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
   qpat_x_assum `post_value_type _ _ = _`
@@ -436,6 +567,12 @@ Proof
     (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
      simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def] >> metis_tac[]) >>
   drule_all local_memory_assign_path >> strip_tac >>
+  `alloca_frame cenv es sa s0 cenv ee s` by
+    (fs[alloca_frame_def] >> first_assum ACCEPT_TAC) >>
+  `alloca_frame cenv es sa s0 cenv
+    (ee with scopes := pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t` by
+    (irule alloca_frame_trans >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[]) >>
   qexistsl_tac [`ee with scopes :=
     pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest`, `t`] >>
   conj_tac >- simp[gas_marked_exec_def] >>
@@ -462,6 +599,8 @@ Theorem assign_local_memory_rhs_outcome:
     (expr_type e) (expr_type e) bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sb /\ (!x. op = Var x ==> not_fresh_at sb x) /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_id <= sb.cs_next_id /\
   sa.cs_next_var <= sb.cs_next_var /\ ~block_is_terminated sf /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   gas_outcome F (cx_tops cx) (ctx,func)
@@ -472,7 +611,7 @@ Theorem assign_local_memory_rhs_outcome:
     (\res ee r. expr_exit res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sf s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sf es s0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
@@ -503,58 +642,6 @@ Proof
   irule assign_local_exempt >> simp[gas_exempt_cert_unforce_result]
 QED
 
-
-(* x = e for a local x whose type T is not a word type, where e has type T,
-   is lowered at T (lowered_value_type, so not a bytestring literal of
-   another length) and is not the empty-value form the lowering stores as
-   a zero length word, and e's value has the type of x's scope entry.  The
-   size conditions are compile_annassign_memory_stmt_frag's: T's buffer is
-   type_memory_bytes of T, the size val_in_memory lays a value of T out
-   in, not 0, and 64 bytes below 2 ** 256.  expr_type e = T leaves out
-   assignments that widen e's value to T. *)
-Theorem compile_assign_local_memory_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty id e es p sz vtyp tyv.
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    cenv.ce_var_type id = SOME vtyp /\ ~is_word_type vtyp /\
-    ~(has_length_word vtyp /\ is_empty_value_expr e) /\
-    expr_type e = vtyp /\ lowered_value_type cenv e = vtyp /\
-    evaluate_type (get_tenv cx) vtyp = SOME tyv /\
-    type_memory_bytes cenv vtyp = type_memory_size tyv /\
-    0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
-    (!gs v es1 entry.
-       (do result <- eval_expr cx e; read_result cx result od)
-         (es with gas_obs := gs) = (INL v, es1) /\
-       lookup_scopes id es1.scopes = SOME entry ==>
-       entry.type = tyv /\ value_has_type tyv v) /\
-    expr_sim ctx func cenv cx (expr_type e) e es ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Assign (BaseTarget (NameTarget id)) e))
-      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `expr_type e = vtyp` (SUBST_ALL_TAC o SYM) >>
-  simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
-  drule_all assign_local_memory_code_parts >> strip_tac >> gvs[] >>
-  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
-    (drule assign_local_admissible_rhs >> simp[]) >>
-  `0 < type_memory_bytes cenv (expr_type e)` by simp[] >>
-  drule_all compile_assign_value_memory_same_open >> strip_tac >>
-  drule_then (drule_then assume_tac) compile_lower_value_var >>
-  `sa.cs_next_var <= sB.cs_next_var` by
-    metis_tac[cj 2 compile_expr_grows] >>
-  `local_ptrs_reserved cenv sB` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  `post_value_type cenv e = expr_type e` by
-    (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
-  irule assign_local_memory_rhs_outcome >>
-  qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >>
-  (conj_tac >- gvs[SF ETA_ss]) >>
-  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
-    (irule_at Any) >> simp[] >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then irule >> simp[]
-QED
 
 Theorem assign_local_memory_widen_code_parts:
   !cenv lctx ty id e sa sf c func p sz vtyp.
@@ -675,89 +762,6 @@ QED
 
 Finalise local_memory_assign_widen_run
 
-Theorem local_memory_assign_widen_path:
-  !ctx func cenv cx es s id p sz pre env entry rest v src ty sty sa sb sw tyv
-   loc bytes.
-    compile_assign_value cenv (Var p) LocMemory src F loc ty sty bytes sa = ((), sb) /\
-    (sty = ty \/ is_bytestring_type ty) /\
-    0 < type_memory_bytes cenv sty /\ type_memory_bytes cenv sty < dimword (:256) /\
-    val_footprint tyv v <= type_memory_bytes cenv sty /\
-    (!x. src = Var x ==> not_fresh_at sa x) /\ eval_operand src s = SOME sw /\
-    ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
-    entry.type = tyv /\ value_has_type tyv v /\ val_wf tyv v /\
-    val_in_memory tyv v (w2n sw) s.vs_memory /\
-    type_memory_bytes cenv ty = type_memory_size tyv /\
-    0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-    find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
-    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel ctx func cenv cx
-          (es with scopes :=
-             pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
-        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
-        gas_marked_path F ctx func s 0 (OK t)
-Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `loc = SOME LocMemory`
-  >- suspend "staged" >>
-  `compile_store_memory cenv src (Var p) ty ty sa = ((),sb)` by
-    (gvs[compile_assign_value_def] >>
-     metis_tac[compile_store_memory_bytestring_src]) >>
-  drule local_memory_store_path >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
-  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
-  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
-  simp[] >> strip_tac >> qexists_tac `t` >> simp[]
-QED
-
-Resume local_memory_assign_widen_path[staged]:
-  pop_assum SUBST_ALL_TAC >>
-  drule_all annassign_staged_memory_widen_parts >>
-  disch_then (qx_choosel_then [`sx`, `sm`, `sn`, `tmp`] strip_assume_tac) >>
-  `MEM (mk_inst sx.cs_next_id ALLOCA
-      [Lit (n2w (type_memory_bytes cenv sty))] [tmp]) (fn_insts func)` by
-    (drule emit_inst_extends >> strip_tac >>
-     `?bb. lookup_block sm.cs_current_bb func.fn_blocks = SOME bb /\
-            isPREFIX sm.cs_current_insts bb.bb_instructions` by
-       metis_tac[fn_has_code_start] >>
-     `MEM (mk_inst sx.cs_next_id ALLOCA
-       [Lit (n2w (type_memory_bytes cenv sty))] [tmp]) bb.bb_instructions` by
-       gvs[rich_listTheory.IS_PREFIX_APPEND] >>
-     metis_tac[lookup_block_fn_insts]) >>
-  `not_local_ptr cenv es.scopes tmp` by
-    (gvs[local_ptrs_reserved_def, not_local_ptr_def] >> metis_tac[]) >>
-  `src <> Var tmp` by metis_tac[] >>
-  `s.vs_current_bb = sx.cs_current_bb /\
-   s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
-  drule_all alloc_copy_memory_framed_path >>
-  disch_then (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
-  `local_ptrs_reserved cenv sn` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  `!x. Var tmp = Var x ==> not_fresh_at sn x` by simp[] >>
-  `eval_operand (Var tmp) u = SOME uw` by simp[eval_operand_def] >>
-  drule local_memory_store_path >>
-  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
-  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
-  simp[] >>
-  disch_then (qx_choosel_then [`dw`, `t`] strip_assume_tac) >>
-  qexists_tac `t` >> simp[] >> conj_tac
-  >- (rpt strip_tac >>
-      `not_fresh_at sn x` by
-        (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-      `x <> tmp` by metis_tac[] >> simp[]) >>
-  drule_all gas_marked_path_then >> simp[]
-QED
-
-Finalise local_memory_assign_widen_path
 
 Theorem assign_local_memory_widen_normal_continuation:
   gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
@@ -778,6 +782,7 @@ Theorem assign_local_memory_widen_normal_continuation:
   compile_assign_value cenv (Var p) LocMemory op F loc vtyp sty bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ ~block_is_terminated sf /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx es s0 /\ sa.cs_next_id <= sb.cs_next_id /\
   sa.cs_next_var <= sb.cs_next_var /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -787,7 +792,7 @@ Theorem assign_local_memory_widen_normal_continuation:
   s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?ff u. gas_marked_exec F (ctx,func) (write_place cx (MemoryPlace id []) v)
     (ee with gas_obs := [],s) [] (INL ()) ff (OK u) /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff u
+    stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!tail. bind (eval_expr cx e) (read_result cx)
@@ -806,6 +811,12 @@ Proof
      qpat_x_assum `!gs v es1 entry. _` irule >>
      qexistsl_tac [`ee with gas_obs := []`,
        `gas_explicit marks s0.vs_gas_readings ++ []`] >> simp[]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     disch_then (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) s` by
+    (irule expr_post_alloca_frame >> simp[] >>
+     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
   qpat_x_assum `post_value_type _ _ = _`
@@ -827,6 +838,12 @@ Proof
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   drule_all local_memory_assign_widen_path >> strip_tac >>
+  `alloca_frame cenv es sa s0 cenv ee s` by
+    (fs[alloca_frame_def] >> first_assum ACCEPT_TAC) >>
+  `alloca_frame cenv es sa s0 cenv
+    (ee with scopes := pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t` by
+    (irule alloca_frame_trans >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[]) >>
   qexistsl_tac [`ee with scopes :=
     pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest`, `t`] >>
   conj_tac >- simp[gas_marked_exec_def] >>
@@ -853,6 +870,7 @@ Theorem assign_local_memory_widen_rhs_outcome:
   compile_assign_value cenv (Var p) LocMemory op F loc vtyp sty bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ ~block_is_terminated sf /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx es s0 /\ sa.cs_next_id <= sb.cs_next_id /\
   sa.cs_next_var <= sb.cs_next_var /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -864,7 +882,7 @@ Theorem assign_local_memory_widen_rhs_outcome:
     (\res ee r. expr_exit res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sf s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sf es s0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> rewrite_tac[gas_outcome_def] >>
@@ -896,6 +914,58 @@ Proof
   qexists `marks` >> disj2_tac >>
   qexistsl [`err`, `ee`, `leaf`, `finish'`] >>
   irule assign_local_exempt >> simp[gas_exempt_cert_unforce_result]
+QED
+
+(* x = e for a local x whose type T is not a word type, where e has type T,
+   is lowered at T (lowered_value_type, so not a bytestring literal of
+   another length) and is not the empty-value form the lowering stores as
+   a zero length word, and e's value has the type of x's scope entry.  The
+   size conditions are compile_annassign_memory_stmt_frag's: T's buffer is
+   type_memory_bytes of T, the size val_in_memory lays a value of T out
+   in, not 0, and 64 bytes below 2 ** 256.  expr_type e = T leaves out
+   assignments that widen e's value to T. *)
+Theorem compile_assign_local_memory_stmt_frag:
+  !ctx func cx lctx RetQ cenv ty id e es p sz vtyp tyv.
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    cenv.ce_var_type id = SOME vtyp /\ ~is_word_type vtyp /\
+    ~(has_length_word vtyp /\ is_empty_value_expr e) /\
+    expr_type e = vtyp /\ lowered_value_type cenv e = vtyp /\
+    evaluate_type (get_tenv cx) vtyp = SOME tyv /\
+    type_memory_bytes cenv vtyp = type_memory_size tyv /\
+    0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
+    (!gs v es1 entry.
+       (do result <- eval_expr cx e; read_result cx result od)
+         (es with gas_obs := gs) = (INL v, es1) /\
+       lookup_scopes id es1.scopes = SOME entry ==>
+       entry.type = tyv /\ value_has_type tyv v) /\
+    expr_sim ctx func cenv cx (expr_type e) e es ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty (Assign (BaseTarget (NameTarget id)) e))
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `expr_type e = vtyp` (SUBST_ALL_TAC o SYM) >>
+  simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
+  drule_all assign_local_memory_code_parts >> strip_tac >> gvs[] >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    (drule assign_local_admissible_rhs >> simp[]) >>
+  `0 < type_memory_bytes cenv (expr_type e)` by simp[] >>
+  drule_all compile_assign_value_memory_same_open >> strip_tac >>
+  drule_then (drule_then assume_tac) compile_lower_value_var >>
+  `sa.cs_next_var <= sB.cs_next_var /\ sa.cs_next_id <= sB.cs_next_id` by
+    metis_tac[cj 2 compile_expr_grows] >>
+  `local_ptrs_reserved cenv sB` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
+  irule assign_local_memory_rhs_outcome >>
+  qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >>
+  (conj_tac >- gvs[SF ETA_ss]) >>
+  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
+    (irule_at Any) >> simp[] >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  disch_then irule >> simp[]
 QED
 
 Theorem compile_assign_local_memory_widen_stmt_frag:
@@ -931,7 +1001,7 @@ Proof
   `0 < type_memory_bytes cenv vtyp` by simp[] >>
   `~block_is_terminated sb` by
     (drule_all compile_assign_value_memory_widen_open >> simp[]) >>
-  `sa.cs_next_var <= sB.cs_next_var` by
+  `sa.cs_next_var <= sB.cs_next_var /\ sa.cs_next_id <= sB.cs_next_id` by
     metis_tac[cj 2 compile_expr_grows] >>
   `!x. op = Var x ==> not_fresh_at sB x` by
     (drule_then (drule_then assume_tac) compile_lower_value_var >> simp[]) >>
@@ -1007,6 +1077,10 @@ Theorem local_header_store_path:
         (!x. lookup_var x t = lookup_var x s) /\
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                  FLOOKUP t.vs_allocas aid = SOME b) /\
+        t.vs_memory = (mstore (w2n w) wd s).vs_memory /\
+        alloca_frame cenv es sa s cenv
+          (es with scopes :=
+             pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt strip_tac >>
@@ -1017,6 +1091,40 @@ Proof
    LENGTH sb.cs_current_insts = SUC (LENGTH sa.cs_current_insts)` by
     gvs[emit_void_def, comp_bind_def, fresh_id_def,
         comp_ignore_bind_def, comp_return_def, emit_def] >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `type_memory_size entry.type <= sz` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
+  `32 <= sz` by decide_tac >>
+  `local_region cenv es.scopes s id (w2n w) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `es.scopes = pre ++ env :: rest /\ id IN FDOM env` by
+    (drule vyperLookupTheory.find_containing_scope_structure >>
+     simp[finite_mapTheory.FLOOKUP_DEF]) >>
+  `MAP FDOM (es with scopes := pre ++
+    (env |+ (id, entry with <|value := v; popped := []|>)) :: rest).scopes =
+    MAP FDOM es.scopes` by simp[pred_setTheory.ABSORPTION_RWT] >>
+  `alloca_frame cenv es sa s cenv
+    (es with scopes := pre ++
+      (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
+    (mstore (w2n w) wd s)` by
+    (rewrite_tac[alloca_frame_def] >> rpt gen_tac >> strip_tac >>
+     conj_tac
+     >- (irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+         first_x_assum (drule_then mp_tac) >> decide_tac) >>
+     rpt gen_tac >> strip_tac >> first_x_assum irule >>
+     fs[local_region_def, lookup_var_def, mstore_def, LET_THM,
+        pred_setTheory.ABSORPTION_RWT] >>
+     `IS_SOME (lookup_scopes n es.scopes)` by
+       (irule vyperTypeEnvPreservationTheory.lookup_scopes_same_fdoms_some >>
+        goal_assum (drule_at Any) >>
+        simp[pred_setTheory.ABSORPTION_RWT]) >>
+     fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+  `alloca_frame cenv es sa s cenv
+    (es with scopes := pre ++
+      (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
+    (mstore (w2n w) wd s with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule alloca_frame_same_state >> goal_assum (drule_at Any) >> simp[]) >>
   qexists_tac `mstore (w2n w) wd s with vs_inst_idx := SUC s.vs_inst_idx` >>
   simp[stmt_state_rel_inst_idx, lookup_var_def, mstore_def, LET_THM]
 QED
@@ -1117,6 +1225,39 @@ Proof
      simp[valueEncodingPropsTheory.mstore_mem_word_at_same] >>
      qexistsl_tac [`get_tenv cx`, `vtyp`] >> simp[]) >>
   gvs[] >> drule_all local_header_store_path >> strip_tac >>
+  `type_memory_size entry.type <= sz` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
+  `32 <= sz` by decide_tac >>
+  `local_region cenv es.scopes s0 id (w2n w) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `alloca_frame cenv es sa s0 cenv es s0` by (irule alloca_frame_same >> simp[]) >>
+  `MAP FDOM es.scopes = MAP FDOM es.scopes` by simp[] >>
+  `!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==> lookup_var x s0 = SOME u` by
+    simp[] >>
+  `!n q z'. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) z') ==>
+     lookup_var q t = lookup_var q s0` by metis_tac[] >>
+  `!ad len. ad + len <= w2n w \/ w2n w + 32 <= ad ==>
+     mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s0.vs_memory` by
+    (rpt strip_tac >>
+     qpat_assum `t.vs_memory = _` (fn th => REWRITE_TAC [th]) >>
+     irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> decide_tac) >>
+  `es.scopes = pre ++ env :: rest /\ id IN FDOM env` by
+    (drule vyperLookupTheory.find_containing_scope_structure >>
+     simp[finite_mapTheory.FLOOKUP_DEF]) >>
+  `MAP FDOM (es with <|scopes := pre ++
+      (env |+ (id, entry with <|value := default_value entry.type; popped := []|>)) :: rest;
+      gas_obs := []|>).scopes = MAP FDOM es.scopes` by
+    simp[pred_setTheory.ABSORPTION_RWT] >>
+  `alloca_frame cenv es sa s0 cenv (es with <|scopes := pre ++
+      (env |+ (id, entry with <|value := default_value entry.type; popped := []|>)) :: rest;
+      gas_obs := []|>) t` by
+    (mp_tac (Q.INST [`c` |-> `cenv`, `es1` |-> `es`, `s` |-> `s0`,
+       `b` |-> `w2n (w:bytes32)`, `z` |-> `sz`, `n0` |-> `32`,
+       `ee` |-> `es with <|scopes := pre ++
+          (env |+ (id, entry with <|value := default_value entry.type; popped := []|>)) :: rest;
+          gas_obs := []|>`] alloca_frame_local_store) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     simp[]) >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl [`INL ()`,
@@ -1130,5 +1271,6 @@ Proof
   qpat_x_assum `stmt_state_rel _ _ _ _ (es with scopes := _) t` mp_tac >>
   disch_then (mp_tac o Q.INST
     [`gs` |-> `[]`, `readings` |-> `t.vs_gas_readings`, `k` |-> `t.vs_inst_idx`]
-    o MATCH_MP msg_gas_state_frame) >> simp[stmt_state_rel_inst_idx]
+    o MATCH_MP msg_gas_state_frame) >> simp[stmt_state_rel_inst_idx] >>
+  strip_tac >> first_assum ACCEPT_TAC
 QED

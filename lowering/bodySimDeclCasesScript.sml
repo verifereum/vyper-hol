@@ -28,6 +28,7 @@
 
 Theory bodySimDeclCases
 Ancestors
+  annassignRelayoutFrag annassignRelayoutSource
   valueEncodingDefs exprSimSource
   bodyExprPreFacts
   stmtSimProps
@@ -96,8 +97,8 @@ Proof
    c.ce_module_var_type = cenv.ce_module_var_type /\
    c.ce_module = cenv.ce_module /\
    c.ce_module_vars = cenv.ce_module_vars /\
-   c.ce_is_ctor = cenv.ce_is_ctor /\
    c.ce_func_return_type = cenv.ce_func_return_type /\
+   c.ce_is_ctor = cenv.ce_is_ctor /\
    c.ce_method_id = cenv.ce_method_id` by
     (qpat_x_assum `_ with <| ce_vars := _; ce_var_type := _;
                              ce_dynarray_capacity := _ |> = cenv`
@@ -412,6 +413,9 @@ Theorem body_annassign_widened_aggregate_call:
        body_expr_ok cx e) /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
@@ -425,7 +429,61 @@ Theorem body_annassign_widened_aggregate_call:
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `FLOOKUP cenv.ce_vars id = NONE` by
+    (irule declared_name_unbound >> metis_tac[]) >>
+  `well_typed_expr env e /\ assignable_type env.type_defs typ /\
+   type_widens_to env.type_defs (expr_type e) typ /\
+   id NOTIN FDOM env.var_types` by gvs[type_stmt_def, AllCaseEqs()] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
+    metis_tac[assignable_type_well_formed, well_formed_type_def,
+              optionTheory.IS_SOME_EXISTS] >>
+  `body_expr_ok cx e` by
+    (first_x_assum irule >>
+     qexistsl_tac [`es`, `es`, `get_tenv cx`, `tyv`] >>
+     simp[lift_option_type_def, return_def]) >>
+  `supported_expr tops e /\ supported_copy_types typ (expr_type e)` by
+    gvs[supported_stmt_def] >>
+  `expr_body_pre cenv cx env e es` by metis_tac[body_annassign_rhs_pre] >>
+  drule_all annassign_relayout_source_classify >> strip_tac >>
+  `cenv.ce_alloca_locals /\ supported_program tops /\
+   cenv.ce_func_return_type = build_func_return_type tops /\
+   get_module_code cx NONE = SOME tops /\
+   acyclic_struct_metadata cenv.ce_struct_fields /\
+   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    fs[body_inv_def, expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `lookup_scopes id es.scopes = NONE` by
+    (Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+     gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     res_tac >> gvs[FLOOKUP_DEF]) >>
+  `type_memory_bytes cenv typ < 2 ** 64` by
+    gvs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  drule_all widening_memory_layout_bound >> strip_tac >>
+  `type_memory_bytes cenv typ < dimword (:256)` by
+    (gvs[wordsTheory.dimword_def] >> decide_tac) >>
+  `~(has_length_word typ /\ is_empty_value_expr e)` by
+    (Cases_on `e` >>
+     gvs[is_empty_value_expr_def, oneline exprLoweringTheory.lowered_value_type_def, expr_type_def]) >>
+  irule compile_annassign_relayout_stmt_frag >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      conj_tac
+      >- metis_tac[body_annassign_declared_rhs] >>
+      qexists_tac `env` >>
+      `same_frame cenv c` by
+        (drule_then irule declare_local_same_frame >> simp[]) >>
+      `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
+      `stmt_exprs_ok c (AnnAssign id typ e)` by metis_tac[stmt_exprs_ok_same_frame] >>
+      `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
+      metis_tac[body_annassign_rhs_pre]) >>
+  conj_tac >- fs[expr_sim_inv_def] >>
+  conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  irule annassign_relayout_read_layout >> goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[]
 QED
 
 Theorem body_annassign_case:
@@ -452,7 +510,7 @@ Proof
      arg_type_fits (lowered_value_type cenv e) (expr_type e))`
       >- (`lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
            has_length_word typ /\ is_empty_value_expr e` by metis_tac[] >>
-          irule body_annassign_memory >> metis_tac[]) >>
+          irule body_annassign_memory >> fs[] >> metis_tac[]) >>
       irule body_annassign_widened_aggregate_call >> metis_tac[]) >>
   irule body_annassign_other >> metis_tac[]
 QED

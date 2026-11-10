@@ -619,13 +619,23 @@ QED
 
 Theorem stmt_post_expr_entry_frame:
   expr_post ctx func cenv cx e es sa sm s0 em v op t /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM em.scopes = MAP FDOM es.scopes /\
+  sa.cs_next_id <= sm.cs_next_id /\
   sa.cs_next_var <= sm.cs_next_var /\
-  stmt_post ctx func cx lctx old c sm sf t res ee last ==>
-  stmt_post ctx func cx lctx old c sa sf s0 res ee last
+  stmt_post ctx func cx lctx cenv c sm sf em t res ee last ==>
+  stmt_post ctx func cx lctx cenv c sa sf es s0 res ee last
 Proof
-  strip_tac >> irule stmt_post_entry_frame >>
-  qexistsl_tac [`t`, `sm`] >> fs[expr_post_def] >>
-  metis_tac[freshWritesTheory.not_fresh_at_mono]
+  strip_tac >>
+  `alloca_frame cenv es sa s0 cenv em t` by
+    (irule alloca_frame_of_mem_frame >> fs[expr_post_def] >> metis_tac[]) >>
+  `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+         not_fresh_at sm x /\ lookup_var x t = SOME w` by
+    (fs[expr_post_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP t.vs_allocas aid = SOME b` by fs[expr_post_def] >>
+  irule stmt_post_entry_frame >> qexistsl_tac [`em`, `t`, `sm`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem gas_marked_exec_observation:
@@ -745,7 +755,7 @@ QED
 (* A live-local store: the counted instruction and the complete statement post.
    Prefix frames are relative to the original statement entry. *)
 Theorem local_word_store_post_path:
-  !ctx func cenv cx lctx es s id p sz w v etv res es' op st sf sa s0.
+  !ctx func cenv cx lctx es s id p sz w v etv res es' op st sf sa s0 es0.
     emit_void MSTORE [Var p; op] st = ((), sf) /\
     fn_has_code st sf func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
@@ -761,10 +771,14 @@ Theorem local_word_store_post_path:
     (!x wd. not_fresh_at sa x /\ lookup_var x s0 = SOME wd ==>
             lookup_var x s = SOME wd) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-             FLOOKUP s.vs_allocas aid = SOME b) ==>
+             FLOOKUP s.vs_allocas aid = SOME b) /\
+    alloca_frame cenv es0 sa s0 cenv es s /\
+    stmt_state_rel ctx func cenv cx es0 s0 /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es0.scopes ==>
     ?t. res = INL () /\
         gas_marked_path F ctx func s 0 (OK t) /\
-        stmt_post ctx func cx lctx cenv cenv sa sf s0 res es' t
+        stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 res es' t
 Proof
   rpt strip_tac >>
   drule_all write_place_local >> strip_tac >> gvs[] >>
@@ -779,12 +793,43 @@ Proof
         comp_ignore_bind_def, comp_return_def, emit_def] >>
   `~block_is_terminated sf` by
     (drule emit_void_terminated >> simp[is_terminator_def]) >>
+  `local_ptrs_rel func cenv es.scopes s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `32 <= sz` by
+    (qpat_x_assum `local_ptrs_rel _ _ _ _` mp_tac >>
+     rewrite_tac[local_ptrs_rel_def] >> strip_tac >>
+     qpat_x_assum `!name entry p sz. lookup_scopes _ _ = _ /\ _ ==> _`
+       (qspecl_then [`id`, `entry`, `p`, `sz`] mp_tac) >>
+     simp[] >> strip_tac >> fs[store_lays_out_def]) >>
+  `local_region cenv es.scopes s id (w2n w) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `alloca_frame cenv es0 sa s0 cenv
+     (es with scopes := pre ++
+       (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
+     (mstore (w2n w) (typed_val_to_w256 etv v) s with
+       vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule alloca_frame_local_store >>
+     simp[] >>
+     conj_tac >- metis_tac[] >>
+     qexistsl [`w2n w`, `es`, `id`, `32`, `s`, `sz`] >>
+     `!q ix. lookup_var q (mstore (w2n w) (typed_val_to_w256 etv v) s with
+          vs_inst_idx := ix) = lookup_var q s` by
+       simp[lookup_var_def, mstore_def, LET_THM] >>
+     fs[] >>
+     conj_tac
+     >- (rpt strip_tac >>
+         irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> decide_tac) >>
+     drule vyperLookupTheory.find_containing_scope_structure >>
+     simp[finite_mapTheory.FLOOKUP_DEF] >> strip_tac >>
+     gvs[pred_setTheory.ABSORPTION_RWT]) >>
   qexists_tac `mstore (w2n w) (typed_val_to_w256 etv v) s with
                 vs_inst_idx := SUC s.vs_inst_idx` >>
   simp[stmt_post_def, stmt_lands_def] >>
   simp[cenv_top_ext_refl, stmt_state_rel_inst_idx, mstore_def, LET_THM,
        lookup_var_def] >>
-  gvs[lookup_var_def]
+  gvs[lookup_var_def] >>
+  qpat_x_assum `alloca_frame _ _ _ _ _ _ (_ with vs_inst_idx := _)` mp_tac >>
+  simp[mstore_def, LET_THM]
 QED
 
 (* x op= e on a word local x, for every outcome, given e's expr_sim_case
@@ -1052,27 +1097,42 @@ Resume compile_augassign_local_case[write_safe]:
     (drule_all augassign_current_store_layout >> simp[]) >>
   `eval_operand res_op s = SOME (typed_val_to_w256 entry.type result)` by
     simp[exprSimPropsTheory.typed_val_to_w256_word_value] >>
+  `local_ptrs_reserved cenv s3` by
+    metis_tac[local_ptrs_reserved_next_var] >>
   `?last. (INL () : unit + exception) = INL () /\
      gas_marked_path F ctx func s 0 (OK last) /\
-     stmt_post ctx func cx lctx cenv cenv s3 sb s (INL ()) fin last` by
+     stmt_post ctx func cx lctx cenv cenv s3 sb (ee with gas_obs := []) s (INL ()) fin last` by
     (match_mp_tac local_word_store_post_path >> simp[] >>
-     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+     rpt (goal_assum (drule_at Any)) >> simp[alloca_frame_same] >>
+     fs[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def]) >>
   suspend "store_post"
 QED
 
 Resume compile_augassign_local_case[store_post]:
-  `stmt_post ctx func cx lctx cenv cenv s2 sb u (INL ()) fin last` by
-    (irule stmt_post_entry_frame >> qexistsl_tac [`s`, `s3`] >> simp[] >>
+  `alloca_frame cenv (ee with gas_obs := []) s2 u cenv
+      (ee with gas_obs := []) s` by
+    (irule alloca_frame_of_mem_frame >> simp[] >>
+     metis_tac[]) >>
+  `stmt_post ctx func cx lctx cenv cenv s2 sb (ee with gas_obs := []) u (INL ()) fin last` by
+    (irule stmt_post_entry_frame >> qexistsl_tac [`ee with gas_obs := []`, `s`, `s3`] >> simp[] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  `stmt_post ctx func cx lctx cenv cenv s1 sb t (INL ()) fin last` by
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) t` by
+    (fs[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def] >>
+     metis_tac[]) >>
+  `stmt_post ctx func cx lctx cenv cenv s1 sb (es with gas_obs := []) t (INL ()) fin last` by
     (irule stmt_post_expr_entry_frame >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  `stmt_post ctx func cx lctx cenv cenv sa sb s0 (INL ()) fin last` by
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`e`, `ee with gas_obs := []`, `rhs_op`, `s2`, `u`, `v`] >>
+     simp[]) >>
+  `stmt_post ctx func cx lctx cenv cenv sa sb es s0 (INL ()) fin last` by
     (irule stmt_post_expr_entry_frame >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >>
-     drule emitted_insts_emit_op >> simp[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`Name ty id`, `es with gas_obs := []`, `Var out`, `s1`, `t`, `entry.value`] >>
+     simp[] >> drule emitted_insts_emit_op >> simp[]) >>
   `gas_marked_path F ctx func u 0 (OK last)` by
     (drule_all gas_marked_path_then >> simp[]) >>
   qexistsl_tac [`INL ()`, `fin`, `OK last`] >> simp[] >>

@@ -7,7 +7,7 @@ Ancestors
   compileEnv loweringStateRelDefs stmtLowering fragExec loweringSlice exprLoweringProps emitHelperProps
   vyperInterpreter vyperState vyperTyping list stmtSimLogTrace emitHelper context venomInst
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
-  fragGasMode fragGasPath fragGasSeq rich_list
+  fragGasMode fragGasPath fragGasSeq rich_list vyperEvalExprPreservesScopesDom
 Libs
   monadsyntax
 
@@ -117,6 +117,46 @@ Proof
   `eval_stmt cx (Log id args) (es with gas_obs := gs) = (INR exc, ee)` by
     simp[log_eval_outcome] >>
   first_x_assum drule >> strip_tac >> metis_tac[log_argument_error_ok]
+QED
+
+Theorem log_args_scopes_dom:
+  gas_marked_exec memory (ctx,func) (eval_exprs cx args)
+    (es,s0) marks res ee r ==>
+  MAP FDOM ee.scopes = MAP FDOM es.scopes
+Proof
+  simp[gas_marked_exec_def] >> strip_tac >>
+  first_x_assum (qspec_then `[]` mp_tac) >> strip_tac >>
+  drule eval_exprs_preserves_scopes_dom >> simp[]
+QED
+
+Theorem log_wb_alloca_frame:
+  stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\
+  MAP FDOM ee.scopes = MAP FDOM es.scopes /\
+  wb_frame cenv es es1 sa s0 t ==>
+  alloca_frame cenv es sa s0 cenv ee t
+Proof
+  strip_tac >> irule alloca_frame_of_mem_frame >>
+  goal_assum (drule_at Any) >> gvs[wb_frame_def] >> metis_tac[]
+QED
+
+Theorem log_suffix_alloca_frame:
+  stmt_state_rel ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sm /\
+  MAP FDOM ee.scopes = MAP FDOM es.scopes /\
+  (!op w. (!z. op = Var z ==> not_fresh_at sm z) /\
+    (!l. op <> Label l) /\ eval_operand op s = SOME w ==>
+    eval_operand op t = SOME w) /\
+  (!aid a k. aid < sm.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,k) ==>
+    mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory) ==>
+  alloca_frame cenv es sm s cenv ee t
+Proof
+  strip_tac >> irule alloca_frame_of_mem_frame >>
+  goal_assum (drule_at Any) >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!op w. _` (qspecl_then [`Var x`, `w`] mp_tac) >>
+      simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]) >>
+  metis_tac[]
 QED
 
 Theorem compile_log_ready_stmt_frag:
@@ -259,6 +299,16 @@ Resume compile_log_ready_stmt_frag[suffix]:
 QED
 
 Resume compile_log_ready_stmt_frag[post]:
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (drule log_args_scopes_dom >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv (es_end with gas_obs := []) t` by
+    (irule log_wb_alloca_frame >> simp[] >> metis_tac[log_args_post_frame]) >>
+  `alloca_frame cenv (es_end with gas_obs := []) sm t cenv
+     (es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|>) u` by
+    (irule log_suffix_alloca_frame >> simp[Excl "enc_def"] >>
+     metis_tac[stmt_state_rel_gas_obs]) >>
+  `sa.cs_next_id <= sm.cs_next_id` by
+    (drule compile_log_eval_all_grows >> simp[]) >>
   drule log_args_post_frame >> simp[wb_frame_def, Excl "enc_def"] >> strip_tac >>
   `sa.cs_next_var <= sm.cs_next_var` by
     (drule compile_log_eval_all_grows >> simp[]) >>
@@ -277,7 +327,10 @@ Resume compile_log_ready_stmt_frag[post]:
       `not_fresh_at sm x` by metis_tac[not_fresh_at_mono] >>
       qpat_x_assum `!op w. _` (qspecl_then [`Var x`, `w`] mp_tac) >>
       simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def])
-  >> metis_tac[]
+  >> irule alloca_frame_same_state >> qexists_tac `u` >> simp[] >>
+  irule alloca_frame_trans >>
+  qexistsl_tac [`cenv`, `es_end with gas_obs := []`, `t`, `sm`] >>
+  fs[Excl "enc_def"]
 QED
 
 Finalise compile_log_ready_stmt_frag

@@ -16,7 +16,7 @@
 
 Theory bodySimStructLitWidened
 Ancestors
-  exprSimSource
+  exprSimSource exprSimStructLitBodyCounted
   exprSimHypsDefs
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
   exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
@@ -38,6 +38,15 @@ Theorem body_struct_lit_widened_call_elem:
       expr_sim ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es /\
       expr_vv_sim ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es
 Proof
-  cheat
+  rpt strip_tac >>
+  `!xs. body_exprs_ok cx xs ==> exprs_case F ctx func cenv cx xs` by
+    (Induct >> rw[body_exprs_ok_def, exprs_case_def] >>
+     gvs[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >>
+     metis_tac[]) >>
+  `exprs_case F ctx func cenv cx (MAP SND kes)` by metis_tac[] >>
+  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+  drule_all compile_struct_lit_body_case >>
+  disch_then (qspecl_then [`v7`, `(src_id_opt,id)`] mp_tac) >>
+  simp[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
 QED
 

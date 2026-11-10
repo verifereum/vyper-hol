@@ -589,6 +589,9 @@ Theorem expr_add_unwrap_marked_read:
            lookup_var x u = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
              FLOOKUP u.vs_allocas aid = SOME b) /\
+    (stmt_state_rel ctx func cenv cx es s0 /\
+     MAP FDOM ee.scopes = MAP FDOM es.scopes ==>
+     alloca_frame cenv es sa s0 cenv ee u) /\
     u.vs_current_bb = su.cs_current_bb /\
     u.vs_inst_idx = LENGTH su.cs_current_insts
 Proof
@@ -613,6 +616,25 @@ Proof
   impl_tac >- simp[] >> strip_tac >>
   `post_value_type cenv e = expr_type e` by simp[post_value_type_word] >>
   drule_all add_unwrap_post >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es s0 /\
+   MAP FDOM ee.scopes = MAP FDOM es.scopes ==>
+   alloca_frame cenv es sa s0 cenv ee u` by
+    (strip_tac >>
+     `alloca_frame cenv es sa s0 cenv ee q` by
+       (qpat_x_assum `vv_post _ _ _ _ _ es sa sn s0 ee tv vv q`
+          (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] vv_post_alloca_frame)) >>
+        rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     `alloca_frame cenv ee (sa with cs_next_var := sn.cs_next_var) q cenv ee u` by
+       (qpat_x_assum `expr_post _ _ _ _ _ ee (sa with cs_next_var := sn.cs_next_var) _ q ee _ _ u`
+          (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] expr_post_alloca_frame)) >>
+        simp[] >> qpat_x_assum `vv_post _ _ _ _ _ es sa sn s0 ee tv vv q` mp_tac >>
+        simp[vv_post_def]) >>
+     qpat_assum `alloca_frame cenv es sa s0 cenv ee q` (fn th1 =>
+       qpat_assum `alloca_frame cenv ee _ q cenv ee u` (fn th2 =>
+         irule (MATCH_MP (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+           alloca_frame_trans) th1) th2))) >>
+     simp[] >> qpat_x_assum `vv_post _ _ _ _ _ es sa sn s0 ee tv vv q` mp_tac >>
+     simp[vv_post_def]) >>
   qexistsl_tac [`v`, `u`] >> simp[] >>
   qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
   simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
@@ -705,6 +727,8 @@ Theorem assign_attr_local_store_marked_path:
         (es1 with scopes :=
           pre ++ (env1 |+ (id, entry with
             <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) t' /\
+      (!ad len. ad + len <= w2n w0 \/ w2n w0 + sz <= ad ==>
+         mem_bytes_at ad len t'.vs_memory = mem_bytes_at ad len t.vs_memory) /\
       (!x. lookup_var x t' = lookup_var x t) /\
       (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
                FLOOKUP t'.vs_allocas aid = SOME b) /\
@@ -733,6 +757,12 @@ Proof
     with vs_inst_idx := SUC t.vs_inst_idx` >> simp[stmt_state_rel_inst_idx] >>
   conj_tac
   >- (irule stmt_state_rel_write_field >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `w2n w0 + off + 32 <= w2n w0 + sz` by
+        (qpat_x_assum `entry.type = _` (fn th => fs[th, type_memory_size_def])) >>
+      qpat_x_assum `w2n (w0 + n2w off) = _` (fn th => REWRITE_TAC [th]) >>
+      irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> decide_tac) >>
   gvs[emit_void_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
       fresh_id_def, emit_def, comp_return_def, compile_state_component_equality,
       mstore_def, lookup_var_def] >>
@@ -825,6 +855,7 @@ Theorem assign_attr_local_store_post[local]:
   t.vs_inst_idx = LENGTH su.cs_current_insts /\ ~block_is_terminated sf /\
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+  alloca_frame cenv es0 sa s0 cenv ee t /\
   (!tail. write_place cx (MemoryPlace id [AttrSubscript fld]) v
     (ee with gas_obs := tail) =
     (INL (),ee with <|scopes := pre ++
@@ -833,7 +864,7 @@ Theorem assign_attr_local_store_post[local]:
   ?ff t'. gas_marked_exec F (ctx,func)
     (write_place cx (MemoryPlace id [AttrSubscript fld]) v)
     (ee with gas_obs := [],t) [] (INL ()) ff (OK t') /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff t'
+    stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 (INL ()) ff t'
 Proof
   strip_tac >>
   `eval_operand op t = SOME (typed_val_to_w256 ftv v)` by
@@ -855,6 +886,25 @@ Proof
   disch_then (drule_at (Pat `lookup_var _ _ = SOME (_ + n2w _)`)) >>
   disch_then (qspecl_then [`vals`, `fld`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
+  `lookup_scopes id ee.scopes = SOME entry` by
+    metis_tac[vyperLookupTheory.find_containing_scope_lookup] >>
+  `ee.scopes = pre ++ env1 :: rest /\ id IN FDOM env1` by
+    (drule vyperLookupTheory.find_containing_scope_structure >>
+     simp[finite_mapTheory.FLOOKUP_DEF]) >>
+  `alloca_frame cenv es0 sa s0 cenv (ee with scopes := pre ++
+    (env1 |+ (id,entry with <|value := StructV (AFUPDKEY fld (K v) vals);
+      popped := []|>)) :: rest) t'` by
+    (`local_region cenv ee.scopes t id (w2n w0) sz` by
+       (rewrite_tac[local_region_def] >> metis_tac[]) >>
+     `MAP FDOM (ee with scopes := pre ++
+        (env1 |+ (id,entry with <|value := StructV (AFUPDKEY fld (K v) vals);
+          popped := []|>)) :: rest).scopes = MAP FDOM ee.scopes` by
+       simp[pred_setTheory.ABSORPTION_RWT] >>
+     qpat_assum `alloca_frame cenv es0 sa s0 cenv ee t` (fn th1 =>
+       qpat_assum `local_region cenv ee.scopes t id (w2n w0) sz` (fn th2 =>
+         irule (MATCH_MP (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+           alloca_frame_region_write) th1) th2))) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`ee with scopes := pre ++
     (env1 |+ (id,entry with <|value := StructV (AFUPDKEY fld (K v) vals);
       popped := []|>)) :: rest`, `t'`] >>
@@ -890,7 +940,7 @@ Theorem assign_attr_local_normal_continuation[local]:
   ?ff u. gas_marked_exec F (ctx,func)
     (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
     (es,s0) marks (INL ()) ff (OK u) /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff u
+    stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
 Proof
   strip_tac >> drule_all assign_attr_local_initial_pointer >> strip_tac >>
   `eval_operand (Var p) s = SOME bw` by
@@ -912,6 +962,12 @@ Proof
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
       (INL v, ee with gas_obs := tail)` by fs[gas_marked_exec_def] >>
   drule_all assign_attr_local_normal_source >> strip_tac >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. vyperState$bind _ _ (es with gas_obs := _) = _`
+       (mp_tac o MATCH_MP eval_read_preserves_scopes_dom o Q.SPEC `[]`) >>
+     simp[]) >>
+  `alloca_frame cenv es sa s0 cenv ee u` by
+    (qpat_x_assum `_ /\ _ ==> alloca_frame _ _ _ _ _ _ u` mp_tac >> simp[]) >>
   `~u.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def] >> strip_tac >>
@@ -919,7 +975,7 @@ Proof
   `?ff t'. gas_marked_exec F (ctx,func)
       (write_place cx (MemoryPlace id [AttrSubscript fld]) v)
       (ee with gas_obs := [],u) [] (INL ()) ff (OK t') /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff t'` by
+      stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff t'` by
     (irule assign_attr_local_store_post >>
      rpt (goal_assum (drule_at Any)) >>
      simp[] >> metis_tac[]) >>
@@ -957,7 +1013,7 @@ Theorem assign_attr_local_rhs_outcome:
     (\res ee r. expr_exit res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-    (es,s0) (stmt_post ctx func cx lctx cenv cenv sa sf s0)
+    (es,s0) (stmt_post ctx func cx lctx cenv cenv sa sf es s0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
@@ -970,7 +1026,7 @@ Proof
           `?ff u. gas_marked_exec F (ctx,func)
             (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
             (es,s0) marks (INL ()) ff (OK u) /\
-            stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff u` by
+            stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u` by
             (irule assign_attr_local_normal_continuation >> simp[] >>
              goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
              goal_assum (drule_at (Pat `unwrap_value _ _ _ = _`)) >>

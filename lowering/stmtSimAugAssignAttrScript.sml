@@ -909,6 +909,7 @@ Theorem augassign_attr_store_post_path:
   eval_operand dst t = SOME (w0 + n2w off) /\ lookup_var p t = SOME w0 /\
   eval_operand op t = SOME (typed_val_to_w256 ftv v) /\
   stmt_state_rel ctx func cenv cx ee t /\
+  alloca_frame cenv es0 sa s0 cenv ee t /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   find_containing_scope id ee.scopes = SOME (pre,env1,entry,rest) /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -927,7 +928,7 @@ Theorem augassign_attr_store_post_path:
   ?ff t'. gas_marked_exec F (ctx,func)
     (write_place cx (MemoryPlace id [AttrSubscript fld]) v)
     (ee with gas_obs := [],t) [] (INL ()) ff (OK t') /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff t'
+    stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 (INL ()) ff t'
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   `lookup_var (STRING #"%" (toString sm.cs_next_var)) t = SOME (w0 + n2w off)` by
@@ -942,6 +943,21 @@ Proof
   disch_then (drule_at (Pat `lookup_var _ _ = SOME (_ + n2w _)`)) >>
   disch_then (qspecl_then [`vals`, `fld`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
+  `lookup_scopes id ee.scopes = SOME entry` by
+    metis_tac[vyperLookupTheory.find_containing_scope_lookup] >>
+  `ee.scopes = pre ++ env1 :: rest /\ id IN FDOM env1` by
+    (drule vyperLookupTheory.find_containing_scope_structure >>
+     simp[finite_mapTheory.FLOOKUP_DEF]) >>
+  `alloca_frame cenv es0 sa s0 cenv (ee with scopes := pre ++
+    (env1 |+ (id,entry with <|value := StructV (AFUPDKEY fld (K v) vals);
+      popped := []|>)) :: rest) t'` by
+    (`local_region cenv ee.scopes t id (w2n w0) sz` by
+       (rewrite_tac[local_region_def] >> metis_tac[]) >>
+     irule alloca_frame_region_write >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+     simp[pred_setTheory.ABSORPTION_RWT] >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexistsl_tac [`ee with scopes := pre ++
     (env1 |+ (id,entry with <|value := StructV (AFUPDKEY fld (K v) vals);
       popped := []|>)) :: rest`, `t'`] >>
@@ -971,6 +987,40 @@ Proof
   strip_tac >> gvs[gas_marked_exec_def, bind_def, lift_sum_def, raise_def]
 QED
 
+Theorem augassign_attr_pre_store_frame:
+  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel ctx func cenv cx es t /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\
+  local_ptrs_reserved cenv s2 /\
+  sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= s2.cs_next_id /\
+  t.vs_memory = s0.vs_memory /\ t.vs_allocas = s0.vs_allocas /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
+  expr_post ctx func cenv cx e (es with gas_obs := []) s1 s2 t
+    (ee with gas_obs := []) v rhs t' /\
+  MAP FDOM ee.scopes = MAP FDOM es.scopes /\
+  (!x w. not_fresh_at s2 x /\ lookup_var x t' = SOME w ==> lookup_var x u = SOME w) /\
+  u.vs_memory = t'.vs_memory ==>
+  alloca_frame cenv es sa s0 cenv ee u
+Proof
+  strip_tac >>
+  `alloca_frame cenv es sa s0 cenv (es with gas_obs := []) t` by
+    (irule alloca_frame_of_mem_frame >> simp[] >> metis_tac[]) >>
+  `alloca_frame cenv (es with gas_obs := []) s1 t cenv
+      (ee with gas_obs := []) t'` by
+    (irule expr_post_alloca_frame >> simp[] >> metis_tac[]) >>
+  `alloca_frame cenv (ee with gas_obs := []) s2 t' cenv ee u` by
+    (irule alloca_frame_of_mem_frame >> simp[] >>
+     fs[expr_post_def] >> metis_tac[]) >>
+  `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) t'` by
+    (irule alloca_frame_trans >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ s0 _ _ _`)) >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ s1 _ _ _ _`)) >> simp[]) >>
+  irule alloca_frame_trans >>
+  goal_assum (drule_at (Pat `alloca_frame _ _ sa _ _ _ t'`)) >>
+  goal_assum (drule_at (Pat `alloca_frame _ _ s2 _ _ _ _`)) >>
+  fs[expr_post_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
 Theorem augassign_attr_normal_summary[local]:
   expr_body_pre cenv cx env e es /\
   FLOOKUP env.var_types id = SOME (StructT sid) /\
@@ -992,6 +1042,8 @@ Theorem augassign_attr_normal_summary[local]:
     s2 = (out,s3) /\ emit_void MSTORE [dst;out] s3 = ((),sb) /\
   fn_has_code s2 s3 func /\ fn_has_code s3 sb func /\ fn_inst_ids_distinct func /\
   ~block_is_terminated sb /\ local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel ctx func cenv cx es t /\ t.vs_memory = s0.vs_memory /\
   gas_marked_path F ctx func s0 0 (OK t) /\ t.vs_allocas = s0.vs_allocas /\
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
   eval_operand dst t = SOME (w0 + n2w (struct_field_offset
@@ -1004,7 +1056,7 @@ Theorem augassign_attr_normal_summary[local]:
   t'.vs_current_bb = s2.cs_current_bb /\ t'.vs_inst_idx = LENGTH s2.cs_current_insts ==>
   gas_summary_at F (ctx,func) marks
     (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >>
@@ -1068,6 +1120,17 @@ Resume augassign_attr_normal_summary[store]:
      fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   `eval_operand out u = SOME (typed_val_to_w256 ftv result)` by
     simp[typed_val_to_w256_word_value] >>
+  `sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= s2.cs_next_id` by
+    metis_tac[ci_mono_emit_op, ci_mono_lower_value_cfn, compile_expr_ci_mono,
+      ci_mono_def, pairTheory.SND, arithmeticTheory.LESS_EQ_TRANS] >>
+  `local_ptrs_reserved cenv s2` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `s1` >> simp[]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv ee u` by
+    (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+       augassign_attr_pre_store_frame >>
+     disch_then irule >> simp[]) >>
   drule_at (Pat `emit_void _ _ _ = _`) augassign_attr_store_post_path >>
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
   disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
@@ -1078,7 +1141,8 @@ Resume augassign_attr_normal_summary[store]:
   disch_then (drule_at (Pat `ALOOKUP fs' fld = _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `entry'.value = _`)) >>
-  disch_then (qspecl_then [`sa`, `s0`, `lctx`] mp_tac) >>
+  disch_then (drule_at (Pat `alloca_frame _ _ _ _ _ _ _`)) >>
+  disch_then (qspec_then `lctx` mp_tac) >>
   impl_tac >- simp[] >>
   strip_tac >>
   `bop_result cx ty bop [ty;expr_type e] fv v ee =

@@ -124,7 +124,7 @@ Resume compile_if_stmt_frag[selected_branch]:
   `gas_outcome F (cx_tops cx) (ctx,func)
      (ignore_bind push_scope (finally (eval_stmts cx (if b then ss1 else ss2)) pop_scope))
      (es_end with gas_obs := [], jump_to (if b then tl else el) t)
-     (stmt_post ctx func cx lctx cenv cenv entry sb (jump_to (if b then tl else el) t))
+     (stmt_post ctx func cx lctx cenv cenv entry sb (es_end with gas_obs := []) (jump_to (if b then tl else el) t))
      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
     (irule if_branch_outcome >> simp[jump_to_def] >>
      qexistsl_tac [`after`, `FST (stmts_env cenv lctx ty (if b then ss1 else ss2) entry)`,
@@ -132,6 +132,9 @@ Resume compile_if_stmt_frag[selected_branch]:
      conj_tac >- (Cases_on `block_is_terminated last` >> fs[]) >>
      qpat_x_assum `gas_outcome _ _ _ (eval_stmts _ _) _ _ _` mp_tac >>
      simp[jump_to_def]) >>
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     strip_tac >> drule eval_read_preserves_scopes_dom >> simp[]) >>
   drule_all if_selected_outcome_prefix >>
   simp[gas_outcome_def, gas_summary_at_def]
 QED

@@ -53,10 +53,12 @@ Theorem log_success_suffix_actual_run:
     inst_extends sm sb /\
     (!op w. (!z. op = Var z ==> not_fresh_at sm z) /\ (!l. op <> Label l) /\
       eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
-    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+    (!aid a k. aid < sm.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory)
 Proof
   strip_tac >> qspecl_then [`s`, `sb`] strip_assume_tac log_fresh_limit_exists >>
   drule_all log_success_suffix_framed_run >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
-  qexists_tac `t` >> asm_simp_tac bool_ss []
+  qexists_tac `t` >> asm_simp_tac bool_ss [] >> first_assum ACCEPT_TAC
 QED

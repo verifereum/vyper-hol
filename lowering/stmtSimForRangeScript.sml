@@ -797,6 +797,7 @@ Theorem for_range_checked_parts:
       sb0.cs_current_insts =
         [mk_inst (st.cs_next_id + 14) MSTORE [Var p; Var cv] []] /\
       sb0.cs_next_var = st.cs_next_var + 9 /\ cs_extends st sb0 /\
+      st.cs_next_id <= sb0.cs_next_id /\
       compile_stmts bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = ((), sb1) /\
       fn_has_code sb0 sb1 func /\
       lookup_block st.cs_current_bb func.fn_blocks =
@@ -909,6 +910,7 @@ Proof
   >- simp[Abbr `sb0`]
   >- simp[Abbr `sb0`]
   >- first_assum ACCEPT_TAC
+  >- simp[Abbr `sb0`]
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
   >- (qpat_assum `!l b. MEM b _ /\ _ ==> _` irule >>
@@ -1174,7 +1176,7 @@ Theorem for_range_checked_tail_outcome[local]:
         eval_for cx tyv id stmts
           (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od)
     (es,t0)
-    (stmt_post ctx func cx lctx cenv cenv st sf t0)
+    (stmt_post ctx func cx lctx cenv cenv st sf es t0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >>
@@ -1414,12 +1416,27 @@ QED
 
 Resume for_range_checked_tail_outcome[loop_frames]:
   conj_tac >- simp[block_is_terminated_def] >>
-  rpt strip_tac >>
-  qpat_x_assum `!a b. FLOOKUP t0.vs_allocas a = SOME b ==> _`
-    (drule_then assume_tac) >>
-  qpat_x_assum `!a b. FLOOKUP _ a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b`
-    irule >>
-  simp[jump_to_def]
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a b. FLOOKUP t0.vs_allocas a = SOME b ==> _`
+        (drule_then assume_tac) >>
+      qpat_x_assum `!a b. FLOOKUP _ a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b`
+        irule >>
+      simp[Abbr `cc`, jump_to_def]) >>
+  `alloca_frame cenv es st t0 cenv es cc` by
+    (irule alloca_frame_of_mem_frame >>
+     simp[] >>
+     reverse conj_tac >- metis_tac[] >>
+     `sA.vs_memory = t0.vs_memory` by
+       metis_tac[stmtSimDeclPathTheory.exec_alloca_memory] >>
+     simp[Abbr `cc`, jump_to_def]) >>
+  irule alloca_frame_trans >>
+  qexistsl_tac [`cenv`, `es`, `cc`, `st`] >>
+  simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> simp[Abbr `cc`, jump_to_def] >> metis_tac[]) >>
+  qpat_x_assum `!frame_start. _` (qspec_then `st` mp_tac) >>
+  simp[alloca_frame_def]
 QED
 
 Resume for_range_checked_tail_outcome[bad_bound]:
@@ -1674,7 +1691,7 @@ Resume compile_for_range_checked_frag_active[tail_apply]:
   qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ source _ _ _` >>
   `gas_outcome F (cx_tops cx) (ctx,func) source
     (mid' with gas_obs := [],t')
-    (stmt_post ctx func cx lctx cenv cenv s2 sb t')
+    (stmt_post ctx func cx lctx cenv cenv s2 sb (mid' with gas_obs := []) t')
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
     (simp[Abbr `source`] >> irule for_range_checked_tail_outcome >>
      simp[] >> qexistsl_tac [`P`, `fty`, `op1`, `op2`, `ty`] >>
@@ -1707,7 +1724,26 @@ Resume compile_for_range_checked_frag_active[tail_transport]:
   fs[gas_summary_at_def]
   >- (qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
       disj1_tac >>
-      irule stmt_post_entry_frame >> qexistsl_tac [`t'`, `s2`] >>
+      `alloca_frame cenv es sa s0 cenv mid t` by
+        (mp_tac (Q.INST [`e` |-> `e1`, `ee` |-> `mid`, `sb` |-> `s1`,
+                         `v` |-> `IntV n1`, `op` |-> `op1`] expr_post_alloca_frame) >>
+         impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
+      `alloca_frame cenv mid s1 t cenv (mid' with gas_obs := []) t'` by
+        (mp_tac (Q.INST [`e` |-> `e2`, `es` |-> `mid with gas_obs := []`,
+                         `sa` |-> `s1`, `sb` |-> `s2`, `s0` |-> `t`, `ee` |-> `mid'`,
+                         `t` |-> `t'`, `v` |-> `IntV n2`, `op` |-> `op2`]
+                   expr_post_alloca_frame) >>
+         impl_tac >- (simp[] >> metis_tac[]) >> simp[alloca_frame_def]) >>
+      `alloca_frame cenv es sa s0 cenv (mid' with gas_obs := []) t'` by
+        (qpat_assum `alloca_frame cenv es sa s0 cenv mid t` (fn th1 =>
+           qpat_assum `alloca_frame cenv mid s1 t _ _ _` (fn th2 =>
+             mp_tac (MATCH_MP (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+               alloca_frame_trans) th1) th2))) >>
+         impl_tac >- decide_tac >>
+         impl_tac >- fs[expr_post_def] >> simp[]) >>
+      `sa.cs_next_id <= s2.cs_next_id` by decide_tac >>
+      irule stmt_post_entry_frame >>
+      qexistsl_tac [`mid' with gas_obs := []`, `t'`, `s2`] >>
       fs[expr_post_def] >> rpt strip_tac >>
       `not_fresh_at s1 x` by
         (fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>

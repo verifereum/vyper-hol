@@ -120,11 +120,17 @@ QED
 
 Theorem assert_success_post:
   expr_post ctx func cenv cx e es sa s1 s0 ee (BoolV T) op t /\
-  ~t.vs_halted /\ sb.cs_current_insts = [] ==>
-  stmt_post ctx func cx lctx cenv cenv sa sb s0 (INL ()) ee
+  ~t.vs_halted /\ sb.cs_current_insts = [] /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM ee.scopes = MAP FDOM es.scopes ==>
+  stmt_post ctx func cx lctx cenv cenv sa sb es s0 (INL ()) ee
     (jump_to sb.cs_current_bb t)
 Proof
-  strip_tac >> gvs[expr_post_def, stmt_post_def] >>
+  strip_tac >>
+  `alloca_frame cenv es sa s0 cenv ee (jump_to sb.cs_current_bb t)` by
+    (irule alloca_frame_same_state >> qexists_tac `t` >>
+     simp[jump_to_def] >> drule_all expr_post_alloca_frame >> simp[]) >>
+  gvs[expr_post_def, stmt_post_def] >>
   simp[stmt_lands_def, stmt_state_rel_jump_to, block_is_terminated_def,
        cenv_top_ext_refl] >>
   gvs[jump_to_def, lookup_var_def]
@@ -150,12 +156,13 @@ Theorem assert_success_post_mem:
     alloca_history func (jump_to sb.cs_current_bb t) /\
     s0.vs_alloca_next <= (jump_to sb.cs_current_bb t).vs_alloca_next
 Proof
-  strip_tac >>
-  drule_all assert_success_post >>
-  simp[stmt_post_def] >> strip_tac >>
-  conj_tac
-  >- (simp[return_buf_frame_jump_to] >> irule return_buf_frame_frame >>
-      qexistsl_tac [`cenv`, `s0`, `sa`] >>
-      gvs[expr_post_def]) >>
-  gvs[alloca_history_def, jump_to_def]
+  strip_tac >> qexists_tac `cenv` >>
+  `return_buf_frame d cenv sb (jump_to sb.cs_current_bb t)` by
+    (simp[return_buf_frame_jump_to] >> irule return_buf_frame_frame >>
+     qexistsl_tac [`cenv`, `s0`, `sa`] >>
+     gvs[expr_post_def]) >>
+  simp[] >> gvs[expr_post_def] >>
+  simp[stmt_lands_def, stmt_state_rel_jump_to, block_is_terminated_def,
+       cenv_top_ext_refl] >>
+  gvs[jump_to_def, lookup_var_def, alloca_history_def]
 QED

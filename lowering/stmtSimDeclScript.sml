@@ -465,13 +465,18 @@ Proof
     (`sA.cs_next_var = st.cs_next_var` by
        (drule emit_inst_extends >> simp[]) >>
      drule declare_local_old_fresh >> simp[] >> simp[not_fresh_at_def]) >>
+  `sa.cs_next_id <= ai.inst_id /\ sa.cs_next_id <= sA.cs_next_id /\
+   sa.cs_next_var <= sA.cs_next_var` by
+    (drule_all declare_local_ptr >> strip_tac >>
+     qpat_x_assum `emit_inst ALLOCA _ _ _ = _` assume_tac >>
+     drule emit_inst_extends >>
+     simp[Abbr `ai`, venomInstTheory.mk_inst_def]) >>
   irule annassign_outcome_entry_prefix >>
-  qexistsl_tac [`sA`, `salloc`] >> simp[] >>
+  simp[] >> qexists_tac `salloc` >> simp[] >>
   irule annassign_concrete_rhs_outcome >>
   goal_assum (drule_at Any) >> simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- (goal_assum (drule_at Any) >> simp[]) >>
-  qexistsl_tac [`ai`, `op`, `sB`] >> simp[]
+  qexistsl_tac [`ai`, `op`, `sA`, `sB`] >> simp[]
 QED
 
 Theorem compile_annassign_word_stmt_frag:

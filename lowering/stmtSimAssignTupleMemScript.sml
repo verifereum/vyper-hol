@@ -150,6 +150,10 @@ Resume compile_assign_tuple_locals_memory_stmt_frag[success]:
     metis_tac[compile_lower_value_var] >>
   qpat_assum `assign_tuple_targets _ _ _ _ = _`
     (mp_tac o SIMP_RULE (srw_ss()) [Once evaluate_def]) >> strip_tac >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv ee t` by
+    (drule_all expr_post_alloca_frame >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   suspend "suffix"
@@ -173,7 +177,13 @@ Resume compile_assign_tuple_locals_memory_stmt_frag[suffix]:
   `expr_val_rel cx (TupleT tys) (ArrayV (TupleV vs)) op t /\
    expr_val_at cenv cx (TupleT tys) sa su ee (ArrayV (TupleV vs)) op t` by gvs[] >>
   drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) assign_tuple_locals_memory_suffix_path) >> strip_tac >>
-  suspend "post" 
+  `sa.cs_next_id <= su.cs_next_id` by
+    (qspecl_then [`cenv`, `TupleT tys`, `e`, `sa`] mp_tac
+       (cj 2 stmtLoweringMonoTheory.ci_mono_compile_expr_sa) >>
+     simp[ci_mono_def]) >>
+  `alloca_frame cenv es sa s0 cenv ee' t'` by
+    (first_x_assum irule >> asm_rewrite_tac[]) >>
+  suspend "post"
 QED
 
 Resume compile_assign_tuple_locals_memory_stmt_frag[post]:
