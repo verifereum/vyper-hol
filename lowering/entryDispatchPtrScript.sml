@@ -2,7 +2,7 @@
 Theory entryDispatchPtr
 Ancestors ptrSafeRun ptrDiscipline moduleLoweringProps moduleLowering
   fragExec venomExecSemantics venomInst venomState list finite_map words
-  contextCodegenRel codegenRel compileEnv emitHelperProps exprLoweringProps typedCopyArrayPtr
+  contextCodegenRel codegenRel compileEnv loweringStateRelDefs emitHelperProps exprLoweringProps typedCopyArrayPtr
 
 Theorem ptr_safe_jump_continuation:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\

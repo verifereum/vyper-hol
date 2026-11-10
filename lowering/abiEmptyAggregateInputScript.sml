@@ -1,7 +1,7 @@
 Theory abiEmptyAggregateInput
 Ancestors
   valueEncodingTyping abiStaticLayoutProps abiStaticAggregateProps abiEncoderMemory
-  abiEmptySequence abiEncoderInput exprLowering compileEnv valueEncoding vyperABI contractABI
+  abiEmptySequence abiEncoderInput exprLowering compileEnv valueEncoding valueEncodingDefs vyperABI contractABI
   integer_word words list rich_list arithmetic abiEncoderInputFrame valueEncodingProofs
   abiDecoderLayout abiDecoderCoherence abiEmptyAllocate abiEmptySize abiEmptyEffect
   abiBuiltinAllocation abiDecoderReentry abiCallerBuiltinInput exprLoweringProps builtinSimple

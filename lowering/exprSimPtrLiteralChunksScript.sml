@@ -3,7 +3,7 @@ Theory exprSimPtrLiteralChunks
 Ancestors
   exprSimPtrLiteralOps fragGasSeqPtr exprLowering exprLoweringProps
   exprSimLiteralBuffer fragExecPtr bodyPtrDefs ptrDiscipline venomState
-  venomExecSemantics venomInst words finite_map compileEnv fragExec instIdxIndep
+  venomExecSemantics venomInst words finite_map compileEnv loweringStateRelDefs fragExec instIdxIndep
   emitHelper context rich_list freshWrites ASCIInumbers vfmConstants integer
 
 Theorem literal_chunk_pair_ptr:

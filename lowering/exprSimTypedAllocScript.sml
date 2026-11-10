@@ -2,7 +2,7 @@
 Theory exprSimTypedAlloc
 Ancestors
   exprSimAlloc exprSimCopy typedMemoryCopy exprLoweringProps loweringPosts venomMemDefs
-  loweringHalt localPtrsProps freshWrites valueEncoding vyperTypeSystem
+  loweringHalt localPtrsProps freshWrites valueEncoding vyperTypeSystem loweringStateRelDefs
   list finite_map venomInst venomState fragExec exprSimProps loweringSlice compileEnv exprSimStorageCopy
 
 Theorem typed_return_store_mono:

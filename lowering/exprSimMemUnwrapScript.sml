@@ -3,7 +3,7 @@
 Theory exprSimMemUnwrap
 Ancestors
   exprSimMemDefs exprSimUnwrap exprSimDefs loweringPosts gasOutcome
-  exprLowering compileEnv vyperInterpreter vyperState
+  exprLowering compileEnv loweringStateRelDefs vyperInterpreter vyperState
   exprSimUnwrapProps exprSimProps exprSimMemorySource bodyFieldMemoryProps
   gasSummary gasSummaryCompose gasExemptCert fragGasMode fragGasPath
   fragGasPathMem fragGasSeqMem fragExecMem instMemFrontier allocaHistoryFragment
@@ -567,7 +567,7 @@ Theorem word_copy_loop_exit_empty[local]:
   compile_word_copy_loop src dst n l1 l2 c sa = (u,sb) ==>
   sb.cs_current_insts = []
 Proof
-  simp[compile_word_copy_loop_def, comp_bind_def, comp_ignore_bind_def] >>
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_loop_base_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[new_block_def]
 QED
 
@@ -1155,7 +1155,7 @@ Proof
       (mem_bytes_at (w2n a) (type_memory_size tv) u.vs_data_section) u` by
     (qspecl_then [`type_slot_size tv`, `w2n a`, `w2n w`, `0`, `u`] mp_tac
       immutable_runtime_transfers_snapshot >>
-     simp[valueEncodingTheory.mem_bytes_at_def, valueEncodingPropsTheory.type_memory_size_slots] >>
+     simp[valueEncodingDefsTheory.mem_bytes_at_def, valueEncodingPropsTheory.type_memory_size_slots] >>
      gvs[valueEncodingPropsTheory.type_memory_size_slots]) >>
   gvs[] >> conj_tac
   >- simp[immutableMemoryFrameTheory.immutable_write_memory_capacity] >>

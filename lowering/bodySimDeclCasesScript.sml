@@ -28,7 +28,7 @@
 
 Theory bodySimDeclCases
 Ancestors
-  exprSimSource
+  valueEncodingDefs exprSimSource
   bodyExprPreFacts
   stmtSimProps
   exprSimHypsDefs
@@ -97,6 +97,7 @@ Proof
    c.ce_module = cenv.ce_module /\
    c.ce_module_vars = cenv.ce_module_vars /\
    c.ce_func_return_type = cenv.ce_func_return_type /\
+   c.ce_is_ctor = cenv.ce_is_ctor /\
    c.ce_method_id = cenv.ce_method_id` by
     (qpat_x_assum `_ with <| ce_vars := _; ce_var_type := _;
                              ce_dynarray_capacity := _ |> = cenv`

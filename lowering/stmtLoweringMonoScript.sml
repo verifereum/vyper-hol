@@ -108,7 +108,7 @@ QED
 
 val ci_mono_stmt_rws =
   ci_mono_grows_rws @
-  [ci_mono_compile_expr_sa, ci_mono_context_helpers,
+  [ci_mono_store_immutable_bytestring, ci_mono_compile_expr_sa, ci_mono_context_helpers,
    ci_mono_compile_dynarray_append, ci_mono_comp_get,
    ci_mono_compile_ptr_load, ci_mono_compile_imm_store_word,
    ci_mono_compile_imm_store_words, ci_mono_compile_imm_copy_to_memory];
@@ -137,10 +137,20 @@ Theorem ci_mono_stmt_helpers:
   (!l sa. ci_mono sa (SND (emit_jmp_if_not_terminated l sa)))
 Proof
   rpt conj_tac >> rpt gen_tac
-  >- (simp[compile_assign_value_def] >> Cases_on `l` >> simp[] >|
-      [ci_mono_chain_tac ci_mono_stmt_rws, ci_mono_chain_tac ci_mono_stmt_rws,
-       ci_mono_chain_tac ci_mono_stmt_rws, ci_mono_chain_tac ci_mono_stmt_rws,
-       ci_mono_chain_tac ci_mono_stmt_rws])
+  >- (simp[compile_assign_value_def] >> Cases_on `l` >> simp[]
+      >- ci_mono_chain_tac ci_mono_stmt_rws
+      >- (irule ci_mono_bind >> reverse conj_tac
+          >- (rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >> simp[ci_mono_comp_return] >>
+              ci_mono_chain_tac ci_mono_grows_rws) >>
+          rpt gen_tac >> Cases_on `p` >> simp[ci_mono_emit_void] >>
+          Cases_on `da` >> simp[]
+          >- (IF_CASES_TAC >>
+              ci_mono_chain_tac [ci_mono_emit_op, ci_mono_emit_void,
+                ci_mono_context_helpers]) >>
+          BasicProvers.TOP_CASE_TAC >> simp[ci_mono_context_helpers])
+      >- ci_mono_chain_tac ci_mono_stmt_rws
+      >- ci_mono_chain_tac ci_mono_stmt_rws >>
+      ci_mono_chain_tac ci_mono_stmt_rws)
   >- (Cases_on `l` >> TRY (rename1 `SOME loc` >> Cases_on `loc`) >>
       simp[compile_store_at_loc_def, ci_mono_emit_void,
            ci_mono_compile_imm_store_word])
@@ -281,8 +291,12 @@ val range_ci_step =
   let val rws = ci_mono_return_helpers :: ci_mono_list_helpers ::
                 ci_mono_stmt_helpers :: ci_mono_compile_get_target_ptr ::
                 ci_mono_stmt_rws
-      val close = FIRST (map MATCH_ACCEPT_TAC
-        (List.concat (map BODY_CONJUNCTS (ci_mono_comp_return :: rws))))
+      (* index the closing facts by conclusion, so each goal tries only the
+         facts whose conclusion can match it *)
+      val net = List.foldl (fn (th, n) => Net.insert (concl (SPEC_ALL th), th) n)
+        Net.empty (List.concat (map BODY_CONJUNCTS (ci_mono_comp_return :: rws)))
+      fun close (asl, w) =
+        FIRST (map MATCH_ACCEPT_TAC (Net.match w net)) (asl, w)
   in
     FIRST [close, FIRST_ASSUM MATCH_ACCEPT_TAC,
            MATCH_MP_TAC ci_mono_bind, MATCH_MP_TAC ci_mono_ignore_bind,

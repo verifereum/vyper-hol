@@ -4,7 +4,7 @@ Ancestors
   typedCopyFieldsPtr typedCopyBytesRobustPtr typedCopyOffsetPtr
   typedCopyAgreement exprLoweringProps contextCodegenRelProps
   bodyPtrDefs fragExecPtr words finite_map list arithmetic
-  contextCodegenRel compileEnv abiEncoderInput
+  contextCodegenRel compileEnv loweringStateRelDefs abiEncoderInput
 
 Theorem byte_offset_next_var:
   !root off sa op sb.

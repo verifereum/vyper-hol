@@ -4,7 +4,7 @@ Ancestors
   exprSimPtrTopLevelImmutablePost exprSimPtrTopLevelImmutableCopy exprSimTopLevelImmutable exprSimPtrTopLevelStorageAlloc
   exprSimSource exprSimUnwrapProps vyperInterpreter vyperState vyperValueOperation
   exprSimHyps exprSimHypsDefs exprSimCopy exprSimStorageCopy exprLowering exprLoweringProps
-  exprSimProps context compileEnv fragExec emitHelperProps immutableCopyExecution
+  exprSimProps context compileEnv loweringStateRelDefs fragExec emitHelperProps immutableCopyExecution
   loweringPosts vyperAST venomState words list venomInst venomExecSemantics instIdxIndep rich_list
 
 Theorem toplevel_immutable_branch_compile:

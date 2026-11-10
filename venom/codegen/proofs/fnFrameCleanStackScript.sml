@@ -13,87 +13,10 @@
 
 Theory fnFrameCleanStack
 Ancestors
-  fnPlanPrefix cleanOpsSim genFrameSim frameRel contextCodegenRel codegenRel
+  planWfMarked fnPlanPrefix cleanOpsSim genFrameSim frameRel contextCodegenRel codegenRel
   planSpillBounds stackPlanGen stackPlanTypes planExec asmSem
   sorting list rich_list pair finite_map pred_set stackModel stackPlanOps reorderSim fnAliasStep
   fnFrameStepsPhi doSwapSim fnFrameDeepInvoke
-
-Theorem mark_dead_stack_filter:
-  !retained stk.
-    FILTER (\op. op <> dead_stack_marker) (mark_dead_stack retained stk) =
-    FILTER (\op. ~MEM op retained)
-      (FILTER (\op. op <> dead_stack_marker) stk)
-Proof
-  gen_tac >> Induct >> gvs[mark_dead_stack_def] >>
-  gen_tac >> Cases_on `MEM h retained` >>
-  Cases_on `h = dead_stack_marker` >> gvs[]
-QED
-
-Theorem mark_dead_stack_mem:
-  !retained stk op.
-    MEM op (mark_dead_stack retained stk) ==>
-    op = dead_stack_marker \/ MEM op stk
-Proof
-  simp[mark_dead_stack_def, MEM_MAP] >> metis_tac[]
-QED
-
-Theorem mark_dead_stack_wf_marked:
-  !base ps retained.
-    generated_plan_state_wf_marked base ps ==>
-    generated_plan_state_wf_marked base
-      (ps with ps_stack := mark_dead_stack retained ps.ps_stack)
-Proof
-  simp[generated_plan_state_wf_marked_def, mark_dead_stack_filter] >>
-  rpt strip_tac
-  >- metis_tac[FILTER_ALL_DISTINCT] >>
-  fs[IN_DISJOINT] >> metis_tac[mark_dead_stack_mem]
-QED
-
-Theorem forget_stack_wf_marked:
-  !base ps.
-    generated_plan_state_wf_marked base ps ==>
-    generated_plan_state_wf_marked base
-      (ps with ps_stack := MAP (K dead_stack_marker) ps.ps_stack)
-Proof
-  rpt gen_tac >>
-  `FILTER (K F) ps.ps_stack = []` by simp[FILTER_EQ_NIL] >>
-  simp[generated_plan_state_wf_marked_def, FILTER_MAP,
-       IN_DISJOINT, MEM_MAP, combinTheory.K_THM] >>
-  metis_tac[]
-QED
-
-Theorem clean_stack_plan_wf_marked:
-  !base ps liveness cfg fn bb ops ps'.
-    generated_plan_state_wf_marked base ps /\
-    clean_stack_plan liveness cfg fn bb ps = (ops, ps') ==>
-    generated_plan_state_wf_marked base ps'
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac >>
-  simp[clean_stack_plan_def] >>
-  Cases_on `cfg_preds_of cfg bb.bb_label`
-  >- (simp[] >> rpt strip_tac >> gvs[]) >> simp[] >>
-  Cases_on `t` >> simp[]
-  >- (IF_CASES_TAC
-      >- (simp[] >> rpt strip_tac >> gvs[]) >>
-      Cases_on `lookup_block h fn.fn_blocks`
-      >- (simp[] >> rpt strip_tac >> gvs[]) >> simp[] >>
-      qmatch_goalsub_abbrev_tac `if guard then _ else _` >>
-      IF_CASES_TAC
-      >- (strip_tac >> gvs[] >>
-          drule forget_stack_wf_marked >>
-          simp[generated_plan_state_wf_marked_def, plan_slots_bounded_def] >>
-          metis_tac[]) >>
-      IF_CASES_TAC
-      >- (pairarg_tac >> strip_tac >> gvs[] >>
-          `generated_plan_state_wf_marked base' ps''` by
-            metis_tac[popmany_plan_wf_marked] >>
-          drule mark_dead_stack_wf_marked >>
-          simp[generated_plan_state_wf_marked_def, plan_slots_bounded_def] >>
-          metis_tac[]) >>
-      metis_tac[popmany_plan_wf_marked]) >>
-  strip_tac >> gvs[]
-QED
 
 Theorem clean_stack_plan_inventory:
   !ps liveness cfg fn bb ops ps'.
@@ -116,29 +39,6 @@ Proof
       >- (pairarg_tac >> strip_tac >> gvs[] >>
           metis_tac[mark_dead_stack_mem, popmany_plan_inventory_subset]) >>
       metis_tac[popmany_plan_inventory_subset]) >>
-  strip_tac >> gvs[]
-QED
-
-Theorem clean_stack_plan_spilled:
-  !ps liveness cfg fn bb ops ps'.
-    clean_stack_plan liveness cfg fn bb ps = (ops, ps') ==>
-    ps'.ps_spilled = ps.ps_spilled
-Proof
-  rpt gen_tac >> simp[clean_stack_plan_def] >>
-  Cases_on `cfg_preds_of cfg bb.bb_label`
-  >- (simp[] >> rpt strip_tac >> gvs[]) >> simp[] >>
-  Cases_on `t` >> simp[]
-  >- (IF_CASES_TAC
-      >- (simp[] >> rpt strip_tac >> gvs[]) >>
-      Cases_on `lookup_block h fn.fn_blocks`
-      >- (simp[] >> rpt strip_tac >> gvs[]) >> simp[] >>
-      qmatch_goalsub_abbrev_tac `if guard then _ else _` >>
-      IF_CASES_TAC
-      >- (strip_tac >> gvs[]) >>
-      IF_CASES_TAC
-      >- (pairarg_tac >> strip_tac >> gvs[] >>
-          metis_tac[phi_popmany_spilled]) >>
-      metis_tac[phi_popmany_spilled]) >>
   strip_tac >> gvs[]
 QED
 

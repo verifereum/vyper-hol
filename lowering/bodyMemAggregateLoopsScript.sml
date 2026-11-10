@@ -3,9 +3,9 @@ Theory bodyMemAggregateLoops
 Ancestors
   bodyMemAggregateLoopBoundary bodyMemAggregateCons bodyMemoryPreds
   exprSimAggregateChildren exprSimAggregateLayout exprSimHyps
-  exprLowering exprLoweringProps exprOperandVar compileEnv loweringPosts
+  exprLowering exprLoweringProps exprOperandVar compileEnv loweringStateRelDefs loweringPosts
   gasOutcome gasSummary exprSimWordArgs vyperState vyperInterpreter
-  freshWrites valueEncoding fragExec exprSimDefs exprSimMemDefs
+  freshWrites valueEncoding valueEncodingDefs fragExec exprSimDefs exprSimMemDefs
   fragGasMode fragGasPath exprSimAggregateLoops valueEncodingProofs
 
 Theorem aggregate_make_tuple_sim_mem:

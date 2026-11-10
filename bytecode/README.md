@@ -39,9 +39,28 @@ removed when a new pin includes them. The current series contains:
 - vyperlang/vyper#5239: a storage, transient or immutable variable is read at
   its own declared type, not at a wider expected type (such as an external
   call's parameter type), whose layout differs for nested bounded types.
+- vyperlang/vyper#5254: the inliner binds the unused return-PC parameter
+  to zero instead of the removed callee's label.
+- vyperlang/vyper#5322: converting a `Bytes`/`String` value to a signed
+  integer or decimal masks the data word to zero when the length is zero, so
+  stale data in an emptied bytestring cannot make the arithmetic shift
+  return -1.
+- vyperlang/vyper#5332: constructor immutable bytestring stores copy the
+  length word and live data words, rather than the declared capacity.
+- vyperlang/vyper#5336: DFT keeps aborting instructions (an `assert`, an
+  internal call) in their order, scheduling each after the previous run of
+  aborting instructions.
+- vyperlang/vyper#5338: widening bytestring conversions allocate enough
+  memory for the result type.
+- vyperlang/vyper#5349: an instruction with no outputs and no effects (an
+  `assert`) stays a scheduling root even when a later abort depends on it,
+  so nothing is hoisted above it.
+- vyperlang/vyper#5354: PHI origin traversal uses an active recursion path and
+  guarded memoization, so shared multi-origin PHIs cannot disappear from a
+  sibling operand. The pass is used by O2/O3/Os; the O1 fixture schedule does
+  not run it.
 
-Only fixtures with external calls that take arguments change. The
-provenance's `vyper_commit` names the unpatched base revision.
+The provenance's `vyper_commit` names the unpatched base revision.
 
 Name a new patch `<upstream-pr>-<slug>.patch`, and start it with the upstream
 PR URL and its merge status (including the merge commit when merged). Keep

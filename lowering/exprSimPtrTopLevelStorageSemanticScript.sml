@@ -2,7 +2,7 @@
 Theory exprSimPtrTopLevelStorageSemantic
 Ancestors
   exprSimPtrTopLevelStorageEnsure exprSimCopy exprSimStorageCopy
-  exprLoweringProps compileEnv valueEncoding loweringPosts
+  exprLoweringProps compileEnv loweringStateRelDefs valueEncoding loweringPosts
 
 Theorem toplevel_copy_prefix_state_rel:
   stmt_state_rel ctx fn cenv cx es u /\
@@ -24,6 +24,7 @@ QED
 
 (* The semantic transport consumes the very endpoint chosen by Ensure. *)
 Theorem toplevel_storage_ensure_ptr_post_effects:
+  post_value_type cenv e = expr_type e /\
   vv_post ctx fn cenv cx e es sa sm s0 es' (Value v) vv s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
@@ -99,6 +100,7 @@ Proof
 QED
 
 Theorem toplevel_storage_ensure_ptr_post:
+  post_value_type cenv e = expr_type e /\
   vv_post ctx fn cenv cx e es sa sm s0 es' (Value v) vv s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\

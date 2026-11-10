@@ -3,9 +3,9 @@ Theory externalReturnCopyRecursive
 Ancestors
   externalReturnCopyAdapter externalReturnCopyFields externalReturnCopyLayout
   externalReturnCopyArrays externalReturnCopyBulk externalReturnCopyFrame
-  context compileEnv emitHelper emitHelperProps fragExec exprLoweringProps
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps fragExec exprLoweringProps
   venomExecSemantics venomState venomInst words arithmetic
-  immutableMemoryFrame valueEncoding valueEncodingProps valueEncodingProofs valueCopy
+  immutableMemoryFrame valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs valueCopy
   vyperTypeSystem vyperTyping vyperValue entryDecodeProps finite_map list pair
   structFieldsProps vyperTypeABI vyperTypeExprSoundness typedCopyDomain
 

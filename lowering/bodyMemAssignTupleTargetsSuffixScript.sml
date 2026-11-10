@@ -6,7 +6,7 @@ Ancestors
   tupleAssignPrefix stmtSimAssignTupleTargets tupleStageProps tupleMemoryLayout
   exprSimDefs exprSimProps exprLoweringProps stmtSimProps stmtSimDefs
   valueEncoding valueEncodingProps vyperTyping vyperInterpreter vyperState
-  compileEnv loweringSlice fragExec freshWrites list rich_list finite_map
+  compileEnv loweringStateRelDefs loweringSlice fragExec freshWrites list rich_list finite_map
   fragGasPathMem bodyMemoryDefs tupleTargetStoreProps stmtSimReturn
   tupleAssignParts stmtLowering exprLowering vyperTypeABI vyperValue
   loweringPosts stmtSimAssignTuple tupleTypedLoad vyperTypeDefaults exprOperandVar
@@ -99,6 +99,7 @@ QED
 
 Theorem assign_tuple_targets_suffix_mem:
   !ctx func cx lctx cenv gs e es ee v tys tvs sa su sl ss sf op staged elems sv s0 flag d.
+    post_value_type cenv e = expr_type e /\
     expr_post ctx func cenv cx e es sa su s0 ee v op sv /\
     sv.vs_current_bb = su.cs_current_bb /\
     sv.vs_inst_idx = LENGTH su.cs_current_insts /\ ~sv.vs_halted /\
@@ -176,8 +177,10 @@ Resume assign_tuple_targets_suffix_mem[prefix]:
     metis_tac[compile_lower_value_var] >>
   `local_ptrs_reserved cenv su` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[cs_extends_def]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `post_value_type _ _ = _`
+    (fn th => rewrite_tac[expr_post_def, th]) >>
+  strip_tac >>
   `expr_val_rel cx (TupleT tys) (ArrayV (TupleV vs)) op sv` by metis_tac[] >>
   `expr_val_at cenv cx (TupleT tys) sa su ee (ArrayV (TupleV vs)) op sv` by metis_tac[] >>
   drule_all tuple_assignment_prefix_path_mem >>
@@ -208,8 +211,6 @@ Resume assign_tuple_targets_suffix_mem[stores]:
   qpat_x_assum `lower_value _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `(if flag then _ else _) su = _` kall_tac >>
   qpat_x_assum `compile_tuple_load_all _ _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `expr_val_rel _ (expr_type e) _ _ _` kall_tac >>
-  qpat_x_assum `expr_val_at _ _ (expr_type e) _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `expr_val_rel _ (TupleT tys) _ _ _` kall_tac >>
   qpat_x_assum `expr_val_at _ _ (TupleT tys) _ _ _ _ _ _` kall_tac >>
   drule_all (SIMP_RULE (srw_ss()) []

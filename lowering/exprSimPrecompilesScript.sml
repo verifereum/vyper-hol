@@ -51,6 +51,7 @@
 
 Theory exprSimPrecompiles
 Ancestors
+  exprSimHashBoundary
   exprBopSimProps
   exprSimSource
   exprSimProps
@@ -61,8 +62,8 @@ Ancestors
   list fragExec loweringSlice  exprSimHyps exprSimWordBuiltins
   exprSimLiteralBuffer abiDecodeStaticProps dftCommutation loweringHalt
   exprSimWordArgs exprSimOperators exprSimHash exprBopLowering exprLowering
-  exprLoweringProps builtinMisc compileEnv
-  valueEncoding valueEncodingProps valueEncodingProofs valueCopy extCallOracle
+  exprLoweringProps builtinMisc compileEnv loweringStateRelDefs
+  valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs valueCopy extCallOracle
   venomMemDefs venomExecSemantics venomInst venomState
   venomCallOracleDefs exprSimOps vyperEvalExprPreservesScopesDom
   byte words rich_list vyperTyping integer_word vfmTypes vfmBuffer numposrep cv_std[ignore_grammar]
@@ -255,7 +256,7 @@ Proof
   first_x_assum (drule_then mp_tac) >>
   qmatch_goalsub_abbrev_tac `LENGTH bs` >>
   `LENGTH bs <= w2n rs` by simp[Abbr `bs`, listTheory.LENGTH_TAKE_EQ] >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem computed_static_empty_probe[local]:
@@ -739,7 +740,7 @@ Proof
   (* the locals: the word lands outside their regions *)
   irule locals_kept_regions >> rpt strip_tac >>
   irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
-  first_x_assum drule >> simp[compileEnvTheory.regions_disjoint_def]
+  first_x_assum drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 (* Appending a word by MSTORE does not disturb the serialized prefix. *)
@@ -906,13 +907,13 @@ Theorem scratch_memory_frame:
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
   local_ptrs_reserved cenv sa /\
   sc.cs_next_var <= sa.cs_next_var /\ sc.cs_next_id <= sa.cs_next_id /\
-  (!b sz. compileEnv$regions_disjoint scratch_base scratch_len b sz ==>
+  (!b sz. loweringStateRelDefs$regions_disjoint scratch_base scratch_len b sz ==>
     mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
-    compileEnv$regions_disjoint scratch_base scratch_len b sz) /\
+    loweringStateRelDefs$regions_disjoint scratch_base scratch_len b sz) /\
   (!aid b sz. aid < sc.cs_next_id /\
     FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-    compileEnv$regions_disjoint scratch_base scratch_len b sz) /\
+    loweringStateRelDefs$regions_disjoint scratch_base scratch_len b sz) /\
   LENGTH s.vs_memory <= LENGTH t.vs_memory /\
   (cenv.ce_is_ctor ==> !name tv iv off.
     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
@@ -995,7 +996,7 @@ Proof
      mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory` by
     (rpt strip_tac >>
      `b + len <= w2n p \/ w2n p + 128 <= b` by
-       gvs[compileEnvTheory.regions_disjoint_def] >>
+       gvs[loweringStateRelDefsTheory.regions_disjoint_def] >>
      simp[mstore_mem_bytes_at_disjoint]) >>
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (simp[immutableMemoryFrameTheory.immutable_mstore_capacity] >> decide_tac) >>
@@ -1255,7 +1256,7 @@ Theorem state_allocations_disjoint:
   regions_disjoint p n q m
 Proof
   simp[stmt_state_rel_def, alloca_inv_def, allocas_non_overlapping_def,
-       compileEnvTheory.regions_disjoint_def] >>
+       loweringStateRelDefsTheory.regions_disjoint_def] >>
   strip_tac >> first_x_assum drule >>
   disch_then drule >> simp[arithmeticTheory.ADD_COMM]
 QED
@@ -1449,7 +1450,7 @@ Proof
   qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
   disch_then drule_all >> strip_tac >>
   qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem ecrecover_buffers_run:
@@ -1547,11 +1548,11 @@ Proof
      qexistsl_tac [`w2n wo`,
        `mk_inst sb.cs_next_id ALLOCA [Lit 32w]
          [STRING #"%" (toString sb.cs_next_var)]`, `32`] >> simp[mk_inst_def] >>
-     gvs[compileEnvTheory.regions_disjoint_def]) >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   `!aid b sz. aid < sf.cs_next_id /\
      FLOOKUP s3.vs_allocas aid = SOME (b,sz) ==>
      w2n wo + 32 <= b \/ b + sz <= w2n wo` by
-    (gvs[compileEnvTheory.regions_disjoint_def]) >>
+    (gvs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   `wb_frame cenv es sf s3 (mstore (w2n wo) 0w s3)` by
     (irule scratch_mstore_frame >> conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es sf s (mstore (w2n wo) 0w s3)` by
@@ -1578,7 +1579,7 @@ Proof
   >- (`mem_bytes_at (w2n wi) 128 (mstore (w2n wo) 0w s3).vs_memory =
          mem_bytes_at (w2n wi) 128 s3.vs_memory` by
         (irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
-         gvs[compileEnvTheory.regions_disjoint_def]) >> simp[]) >>
+         gvs[loweringStateRelDefsTheory.regions_disjoint_def]) >> simp[]) >>
   simp[valueEncodingPropsTheory.mstore_mem_word_at_same] >>
   conj_tac
   >- (rpt strip_tac >>
@@ -2046,7 +2047,7 @@ Proof
   rpt strip_tac >> irule hash_write_memory_disjoint >>
   qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
   disch_then drule_all >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem computed_suffix_preserves:
@@ -2123,7 +2124,7 @@ Proof
      simp[Abbr `ci`, mk_inst_def] >> conj_tac
      >- (rpt strip_tac >>
          `regions_disjoint (w2n wo) (w2n outsz) b sz` by metis_tac[] >>
-         gvs[compileEnvTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
+         gvs[loweringStateRelDefsTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
          decide_tac) >>
      irule precompile_write_immutables >>
      reverse conj_tac >- (qexistsl_tac [`ctx`,`func`] >> simp[]) >>
@@ -2139,7 +2140,7 @@ Proof
      `FLOOKUP s.vs_allocas aid = SOME (b,sz)` by
        gvs[Abbr `sg`, Abbr `s0`, update_var_def] >>
      `regions_disjoint (w2n wo) (w2n outsz) b sz` by metis_tac[] >>
-     gvs[compileEnvTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
      decide_tac) >>
   `wb_frame cenv es sf sg t` by gvs[] >>
   irule wb_frame_readonly_input >> qexists_tac `sg` >>

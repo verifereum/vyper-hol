@@ -1,7 +1,7 @@
 (* Fixed-size SHA input preparation and compiler shape boundaries. *)
 Theory bodyPtrHashBuiltinsShaFixed
 Ancestors bodyPtrHashBuiltinsAllocFrame bodyPtrHashBuiltinsShaBytes
-  builtinHashing emitHelper emitHelperProps compileEnv exprLoweringProps
+  builtinHashing emitHelper emitHelperProps compileEnv loweringStateRelDefs exprLoweringProps
   list rich_list arithmetic context fragGasSeqPtr ptrDiscipline venomState
   venomExecSemantics venomInst fragExec instIdxIndep words fragExecPtr ghostPcTransportPtr
   bodyPtrDefs finite_map pred_set freshWrites bodyPtrHashBuiltinsGhostFrame exprSimHash

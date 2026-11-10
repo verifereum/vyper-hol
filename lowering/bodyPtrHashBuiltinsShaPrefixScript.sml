@@ -2,8 +2,8 @@
 Theory bodyPtrHashBuiltinsShaPrefix
 Ancestors wordLoadStorePtr bodyPtrHashBuiltinsKeccakBytesRun fragGasSeqPtr ptrDiscipline
   venomState venomInst venomExecSemantics words finite_map pred_set
-  typedCopyPtr typedCopyLoopHeaderPtr exprSimHash list bodyPtrDefs valueEncodingProps
-  emitHelper emitHelperProps compileEnv exprLoweringProps ASCIInumbers rich_list arithmetic
+  typedCopyPtr typedCopyLoopHeaderPtr exprSimHash exprSimHashBoundary list bodyPtrDefs valueEncodingProps
+  emitHelper emitHelperProps compileEnv loweringStateRelDefs exprLoweringProps ASCIInumbers rich_list arithmetic
   bodyPtrHashBuiltinsGhostFrame exprSimProps
 
 Theorem hash_bytes_prepare_inst_seq:

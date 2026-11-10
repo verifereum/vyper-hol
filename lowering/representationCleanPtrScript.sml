@@ -1,7 +1,7 @@
 (* Robust memory representations constrain only the bytes they read. *)
 Theory representationCleanPtr
 Ancestors
-  bodyPtrDefs valueEncoding valueEncodingProps valueEncodingProofs allocationPtr
+  bodyPtrDefs valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs allocationPtr
   venomState venomMemProofs words list arithmetic vyperTypeABI loweringPosts exprSimProps
 
 Theorem mem_agree_outside_write_byte:

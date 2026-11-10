@@ -3,11 +3,11 @@ Theory abiEncoderWindowLeaves
 Ancestors
   abiEncoderWindowContract abiEncoderLeaves abiEncoderWrites
   abiEncoderReentryLeaves moduleLoweringProps abiEncoderMemory
-  abiEncoder abiEncoderOpenInput abiEncoderInput contractABI valueEncoding
+  abiEncoder abiEncoderOpenInput abiEncoderInput contractABI valueEncoding valueEncodingDefs
   abiEncoderPrimitiveEffect abiEncoderExtendSim abiEncoderWindow
   abiEncoderRegisteredEffect valueEncodingProofs valueEncodingProps
   emitHelperProps exprLoweringProps localPtrsProps
-  emitHelper compileEnv venomState venomExecSemantics venomInst words list
+  emitHelper compileEnv loweringStateRelDefs venomState venomExecSemantics venomInst words list
   abiEncoderWindowLookup
 
 Theorem window_emit_copy_run:

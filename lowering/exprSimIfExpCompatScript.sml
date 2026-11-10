@@ -3,7 +3,7 @@ Ancestors
   loweringPosts
   list rich_list finite_map marker exprSimHyps exprSimHypsDefs exprSimSource
   exprSafeOperand
-  exprLowering compileEnv context vyperAST vyperValue
+  exprLowering compileEnv loweringStateRelDefs context vyperAST vyperValue
 Libs
   pairLib
 

@@ -83,7 +83,10 @@ Proof
     is_terminator_def, AllCaseEqs()] >> rpt strip_tac >>
   simp[Once mem_safe_block_def, get_instruction_def, abi_decode_backedge_insts_def,
     rich_listTheory.EL_APPEND2, mem_safe_step_def, below_frontier_no_ranges,
-    mk_inst_def, is_terminator_def] >> rpt CASE_TAC >> gvs[update_var_def]
+    mk_inst_def, is_terminator_def] >>
+  Cases_on `eval_operand (Var iv) s` >>
+  simp[eval_operand_def, GSYM update_var_def, lookup_var_update_var] >>
+  simp[update_var_def] >> CASE_TAC >> simp[]
 QED
 
 Theorem array_backedge_mem_cont:

@@ -26,8 +26,8 @@ Ancestors
   loweringPosts
   exprSimAlloc exprSimOps
   list finite_map
-   exprLowering compileEnv context vyperAST vyperInterpreter
-  vyperState valueEncoding
+   exprLowering compileEnv loweringStateRelDefs context vyperAST vyperInterpreter
+  vyperState valueEncoding valueEncodingDefs
   fragExec localPtrsProps loweringSlice exprLoweringProps emitHelperProps
   exprSimStorageCopy immutableCopyExecution storageDecodeMemory
   vyperTypeStatePreservation vyperTypeValues valueEncodingTyping vyperStorageBackend

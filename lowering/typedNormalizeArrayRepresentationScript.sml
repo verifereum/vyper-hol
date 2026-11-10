@@ -67,6 +67,6 @@ Theorem normalize_dynamic_destination_memory:
     val_in_memory tv (EL j vs) (b + 32 + j * type_memory_size tv) m) ==>
   val_in_memory (ArrayTV tv bd) (ArrayV (DynArrayV vs)) b m
 Proof
-  strip_tac >> simp[valueEncodingTheory.val_in_memory_def] >>
+  strip_tac >> simp[valueEncodingDefsTheory.val_in_memory_def] >>
   irule elems_in_memory_intro >> simp[]
 QED

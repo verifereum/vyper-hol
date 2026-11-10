@@ -35,7 +35,8 @@ Datatype:
     cc_callvalue : bytes32;        (* Value sent with call (CALLVALUE) *)
     cc_calldata : byte list;       (* Call data (CALLDATALOAD, etc.) *)
     cc_gas : num;                  (* Remaining gas (GAS) *)
-    cc_static : bool               (* Static mode (STATICCALL sets T, inherits) *)
+    cc_static : bool;              (* Static mode (STATICCALL sets T, inherits) *)
+    cc_created_in_tx : bool        (* EIP-6780: original executing account is empty *)
   |>
 End
 
@@ -123,7 +124,8 @@ Definition empty_call_context_def:
     cc_callvalue := 0w;
     cc_calldata := [];
     cc_gas := 0;
-    cc_static := F
+    cc_static := F;
+    cc_created_in_tx := F
   |>
 End
 
@@ -352,6 +354,16 @@ Definition eval_operands_def:
 End
 
 (* Record update identity: s with vs_inst_idx := 0 = s when already 0 *)
+(* An operand list evaluates exactly when each operand does. *)
+Theorem eval_operands_IS_SOME_EVERY:
+  !ops s. IS_SOME (eval_operands ops s) <=>
+          EVERY (\op. IS_SOME (eval_operand op s)) ops
+Proof
+  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
+  first_x_assum (qspec_then `s` mp_tac) >>
+  Cases_on `eval_operand h s` >> Cases_on `eval_operands ops s` >> simp[]
+QED
+
 Theorem inst_idx_update_id[simp]:
   s.vs_inst_idx = 0 ==> s with vs_inst_idx := 0 = s
 Proof

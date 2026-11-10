@@ -1,6 +1,6 @@
 Theory storageSubregionFrame
 Ancestors
-  compileEnv accountsRelProps vyperStoragePlaceRegion vyperState vyperMisc list option pair vyperValue
+  compileEnv loweringStateRelDefs accountsRelProps vyperStoragePlaceRegion vyperState vyperMisc list option pair vyperValue
 
 Theorem dead_bytes_list_selected:
   !types i elem st base j b.

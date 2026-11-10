@@ -5,7 +5,7 @@ Ancestors exprSimPtrTopLevelImmutableRun exprSimPtrTopLevelImmutableCopy
   fragGasPathPtr ghostPcTransportPtr fragExec rich_list
   exprSimPtrTopLevelStorageFrame exprSimPtrLiteralBuffer exprSimCopy
   bodyPtrDefs exprSimProps exprLoweringProps valueEncoding valueEncodingProps
-  pred_set finite_map venomState words vyperAST vyperState exprLowering compileEnv
+  pred_set finite_map venomState words vyperAST vyperState exprLowering compileEnv loweringStateRelDefs
 
 Theorem toplevel_immutable_full_copy_clean:
   immutable_copy_ghost_frame sa s G tn sb t H tm 0 nb w ==>

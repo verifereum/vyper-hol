@@ -2,7 +2,8 @@ Theory dftGasToListVisitReplay
 Ancestors
   dftGasToListVisitReplayBoundary dftGasToListReplay dftGasToListAgreement
   dftGasToListTrace dftGasToListVisitEdge dftGasOracleDefs gasOracleReplay contextRawReachable
-  contextCodegenRel venomExecSemantics venomExecProofs stepWriteFootprintBase list rich_list arithmetic
+  contextCodegenRel contextCodegenRelProps venomExecSemantics venomExecProofs
+  stepWriteFootprintBase list rich_list arithmetic
 
 Theorem trace_visit_replay:
   (!orc p d fuel ctx inst s vs0 caller ws.

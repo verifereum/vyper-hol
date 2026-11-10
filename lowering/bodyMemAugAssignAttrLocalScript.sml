@@ -14,13 +14,13 @@ Ancestors
   exprBopSimDefs exprBopSimProps exprSimSource exprSimDefs stmtSimDefs
   exprSimFieldLayout exprSimAttributeFields exprSimHypsDefs
   vyperTypeInvariants vyperTypeSystem vyperTyping vyperTypeEnv
-  finite_map alist compileEnv
+  finite_map alist compileEnv loweringStateRelDefs
   bodyFieldMemoryProps bodyDeclMemoryCounted bodyDeclMemoryCore
   vyperTypeBuiltins stmtSimDeclStore exprSimWordArgs
   allocaFootprint fragGasSeqMem stmtSimProps localPtrsProps
   exprLoweringProps emitHelper emitHelperProps loweringSlice exprSimOps
   venomExecSemantics venomInst venomState
-  fragExec fragExecMem allocLimits valueEncoding freshWrites
+  fragExec fragExecMem allocLimits valueEncoding valueEncodingDefs freshWrites
   vyperLookup vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   vyperExprNoControl vyperAST
 Libs
@@ -256,20 +256,6 @@ Proof
   drule_all eval_expr_int_literal_agrees_mem_src >> strip_tac >> simp[]
 QED
 
-Theorem bop_result_augassign_mem_src[local]:
-  !cx ty bop t2 v1 v2 es tv.
-    bop <> In /\ bop <> NotIn ==>
-    bop_result cx ty bop [ty; t2] v1 v2 es =
-    case evaluate_binop
-      (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-      tv bop v1 v2 of INL v => INL v | INR err => INR (Error err)
-Proof
-  rpt gen_tac >>
-  SIMP_TAC std_ss [bop_result_def, evaluate_builtin_def,
-    vyperASTTheory.builtin_case_def, listTheory.list_case_def, LET_THM] >>
-  Cases_on `bop` >>
-  SIMP_TAC std_ss [evaluate_binop_def, vyperASTTheory.binop_case_def]
-QED
 
 Theorem stmt_state_rel_gas_obs_mem_src[local]:
   stmt_state_rel ctx func cenv cx (es with gas_obs := gs) s =
@@ -295,11 +281,11 @@ Theorem augassign_attr_binop_admissible_mem_src[local]:
   expr_res_ok (bop_result cx ty bop [ty; expr_type e] fv v ee)
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty; expr_type e] fv v ee =
-    case evaluate_binop
+  `expr_res_ok (bop_result cx ty bop [ty; expr_type e] fv v ee) <=>
+   expr_res_ok (case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-      ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign_mem_src >> simp[]) >>
+      ftv bop fv v of INL w => INL w | INR err => INR (Error err))` by
+    (irule bop_result_augassign_res_ok >> simp[]) >>
   drule_all eval_augassign_attr_fields_obs_mem_src >>
   disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`, `gs`] mp_tac) >>
   simp[GSYM bind_assoc, bind_def] >>
@@ -324,19 +310,22 @@ Theorem augassign_attr_write_admissible_mem_src[local]:
   !m. res <> INR (Error (TypeError m))
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty; expr_type e] fv v ee =
-    case evaluate_binop
-      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-      ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign_mem_src >> simp[]) >>
-  drule_all eval_augassign_attr_fields_obs_mem_src >>
-  disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`, `gs`] mp_tac) >>
-  Cases_on `evaluate_binop
-    (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-    ftv bop fv v` >> gvs[] >>
-  simp[GSYM bind_assoc, bind_def, lift_sum_def, return_def] >> strip_tac >>
-  drule_all gas_admissible_result >>
-  Cases_on `res` >> simp[stmt_res_ok_def] >> strip_tac >> gvs[]
+  `?actual. evaluate_binop
+     (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+     ftv bop fv v = INL actual` by
+    metis_tac[bop_result_augassign_success] >>
+  Cases_on `write_place cx (MemoryPlace id [AttrSubscript fld]) actual ee` >>
+  rename1 `_ = (actual_res, actual_fin)` >>
+  `eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
+     (es with gas_obs := gs) = (actual_res, actual_fin)` by
+    (drule_all eval_augassign_attr_fields_obs_mem_src >>
+     disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`, `gs`] mp_tac) >>
+     simp[GSYM bind_assoc, bind_def, lift_sum_def, return_def]) >>
+  `stmt_res_ok lctx actual_res` by metis_tac[gas_admissible_result] >>
+  `res = actual_res` by
+    (qspecl_then [`[AttrSubscript fld]`, `cx`, `id`, `w`, `ee`, `actual`]
+       mp_tac write_place_short_memory_result >> simp[]) >>
+  gvs[stmt_res_ok_def, expr_res_ok_def]
 QED
 
 Theorem augassign_attr_rhs_exempt_mem_src[local]:
@@ -1267,7 +1256,8 @@ Resume compile_augassign_attr_local_mem[operator_normal]:
      case evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        ftv bop fv v of INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign_mem_src >> simp[]) >>
+    (irule bop_result_augassign >> simp[] >>
+     metis_tac[word_value_not_bytes]) >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      ftv bop fv v = INL result` by gvs[AllCaseEqs()] >>
@@ -1367,7 +1357,8 @@ Resume compile_augassign_attr_local_mem[operator_exit]:
     case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign_mem_src >> simp[]) >>
+    (irule bop_result_augassign >> simp[] >>
+     metis_tac[word_value_not_bytes]) >>
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
     ftv bop fv v`

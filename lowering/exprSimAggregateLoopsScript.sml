@@ -18,6 +18,7 @@
  *)
 Theory exprSimAggregateLoops
 Ancestors
+  exprSimHashBoundary
   exprBopSimProps
   exprSimSource
   exprSimProps
@@ -25,7 +26,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   exprSimAggregateSource exprSimAggregateEncoding exprSimAggregateLayout exprLoweringProps
-  localPtrsProps compileEnv valueEncoding valueEncodingProofs
+  localPtrsProps compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProofs
   valueEncodingProps exprLowering vyperInterpreter vyperState
   exprSimHyps  fragExec exprSimAggregateChildren exprSimOps
   vyperImmutableMetadataFrame vyperEvalExprPreservesScopesDom
@@ -249,7 +250,7 @@ Proof
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
   drule exprLoweringPropsTheory.emit_op_same_blocks >>
   simp[exprLoweringPropsTheory.same_blocks_def] >> strip_tac >>
-  drule_at (Pat `run_inst_seq _ _ = OK _`) exprSimHashTheory.hash_run_path >>
+  drule_at (Pat `run_inst_seq _ _ = OK _`) exprSimHashBoundaryTheory.hash_run_path >>
   disch_then (qspecl_then [`sn`, `sm`, `func`, `ctx`] mp_tac) >>
   (impl_tac >- simp[venomInstTheory.mk_inst_def,
                       venomInstTheory.is_terminator_def]) >>
@@ -310,7 +311,7 @@ Proof
   simp[same_blocks_def] >> strip_tac >>
   drule aggregate_store_memory_straight >> strip_tac >>
   drule aggregate_tuple_store_no_gas >> strip_tac >>
-  drule_at (Pat `run_inst_seq _ _ = OK _`) exprSimHashTheory.hash_run_path >>
+  drule_at (Pat `run_inst_seq _ _ = OK _`) exprSimHashBoundaryTheory.hash_run_path >>
   disch_then (qspecl_then [`sb`, `su`, `func`, `ctx`] mp_tac) >>
   (impl_tac >- simp[]) >> simp[] >> strip_tac >>
   qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
@@ -892,7 +893,7 @@ Theorem struct_tuple_memory_post:
   fields_in_memory (ZIP (names,vs)) (ZIP (names,tvs)) ptr mem
 Proof
   Induct_on `names` >> Cases_on `tvs` >> Cases_on `vs` >>
-  simp[listTheory.ZIP_def, valueEncodingTheory.val_in_memory_def] >>
+  simp[listTheory.ZIP_def, valueEncodingDefsTheory.val_in_memory_def] >>
   rpt strip_tac >> first_x_assum irule >> simp[]
 QED
 

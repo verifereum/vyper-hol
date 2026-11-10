@@ -2,7 +2,7 @@
 Theory abiDecodeAliasTest
 Ancestors
   abiBuiltinValidBytes
-  compileEnv abiDecoderContract abiDecoderBytesTyped builtinAbi abiBuiltinDecodeSetup venomExecSemantics venomState context words finite_map
+  compileEnv loweringStateRelDefs abiDecoderContract abiDecoderBytesTyped builtinAbi abiBuiltinDecodeSetup venomExecSemantics venomState context words finite_map
   contractABI valueEncoding valueEncodingProps vyperABI
 Libs
   wordsLib

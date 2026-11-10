@@ -7,8 +7,8 @@ Ancestors
   exprSimHypsDefs exprLoweringProps freshWrites option vyperPlaceResultTyping
   exprSimAggregateEncoding tupleMemoryLayout exprSimAttributeFields
   vyperTypeExprSoundness vyperTypeInvariants vyperPlaceTyping
-  vyperTypeStatePreservation vyperPlaceStatePreservation vyperTyping valueEncoding valueEncodingProofs
-  valueEncodingProps loweringPosts exprLowering compileEnv vyperState vyperInterpreter
+  vyperTypeStatePreservation vyperPlaceStatePreservation vyperTyping valueEncoding valueEncodingDefs valueEncodingProofs
+  valueEncodingProps loweringPosts exprLowering compileEnv loweringStateRelDefs vyperState vyperInterpreter
   vyperTypeSystem vyperValue vyperValueOperation list rich_list pair
   words arithmetic finite_map venomState venomMemDefs exprSimSubscriptArrayFramed
 Libs

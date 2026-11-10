@@ -2,7 +2,7 @@
    need not have a canonical encoding. *)
 Theory valueMemoryTransport
 Ancestors
-  valueEncoding valueEncodingProofs list rich_list arithmetic
+  valueEncoding valueEncodingDefs valueEncodingProofs list rich_list arithmetic
 
 Theorem mem_word_at_drop:
   mem_word_at off (DROP base_off mem) = mem_word_at (base_off + off) mem

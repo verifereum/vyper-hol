@@ -2,7 +2,7 @@
 Theory bodyPtrHashBuiltinsShaStringCase
 Ancestors bodyPtrHashBuiltinsShaCase bodyPtrHashBuiltinsShaStringInput
   bodyPtrHashBuiltinsShaBytes
-  bodyPtrHashBuiltinsKeccakCase exprSimHash exprOperandVar exprSimVVFrame
+  bodyPtrHashBuiltinsKeccakCase exprSimHash exprSimHashBoundary exprOperandVar exprSimVVFrame
   bodyPtrDefs compileEnv venomState list words exprSimWordArgs
   bodyPtrHashBuiltinsCases arithmetic
 
@@ -20,7 +20,10 @@ fun hash_string_sha256_input_tac semantic_run_tac g = (
   semantic_run_tac >>
   drule_all hash_sha256_memory_alloca_code >> strip_tac >>
   `expr_val_at cenv cx (expr_type e) sa sm ee (StringV str) x s` by
-    fs[loweringPostsTheory.expr_post_def] >>
+    (`post_value_type cenv e = expr_type e` by
+       (irule loweringPostsTheory.post_value_type_bytestring >>
+        fs[is_bytestring_type_def]) >>
+     fs[loweringPostsTheory.expr_post_def]) >>
   gvs[ptr_covers_def, eval_operand_def] >>
   `lower_value compile_expr cenv (expr_type e) e sa = (Var p,sm)` by
     asm_rewrite_tac[] >>

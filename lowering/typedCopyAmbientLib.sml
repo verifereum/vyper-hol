@@ -3,7 +3,7 @@
 structure typedCopyAmbientLib =
 struct
 open HolKernel boolLib bossLib
-open venomExecSemanticsTheory emitHelperTheory contextTheory compileEnvTheory fragExecTheory venomStateTheory
+open venomExecSemanticsTheory emitHelperTheory contextTheory compileEnvTheory loweringStateRelDefsTheory fragExecTheory venomStateTheory
      venomInstTheory ptrDisciplineTheory ptrSafeRunTheory bodyPtrDefsTheory
      finite_mapTheory
 

@@ -3,7 +3,7 @@ Ancestors
   abiDecoderRange abiDecoderBytesBound abiDecoderDynarrayBound abiDecoderArrayLoopInit
   abiDecoderDynarrayBound abiDecoderBytesBound abiDecoderCopy abiDecoderComposition
   abiDecoderContract abiDecoderGuards emitHelperProps exprLoweringProps compileEnv emitHelper
-  valueEncoding venomExecSemantics venomState words abiDecoderArrayHeader abiDecoderFrameCompose
+  valueEncoding valueEncodingDefs venomExecSemantics venomState words abiDecoderArrayHeader abiDecoderFrameCompose
   arithmetic abiDecoderDynarrayPrefix abiDecoderGuard abiEncoder venomMemProps
   abiStaticDynarrayLayout abiCanonicalHeadSize abiStaticAggregateProps abiStaticLayoutProps
   abiStaticAggregateProps vyperABI vyperTyping contractABI byte list rich_list

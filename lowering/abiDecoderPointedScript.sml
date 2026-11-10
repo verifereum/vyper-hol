@@ -2,7 +2,7 @@
 Theory abiDecoderPointed
 Ancestors
   fragExec abiDecoderBytesTyped abiDecoderWordTyped abiDecoderBulk abiDecoderTypedContract
-  abiDecoderCoherence abiDecoderContract abiDecoderBytes abiEncoder compileEnv exprLoweringProps
+  abiDecoderCoherence abiDecoderContract abiDecoderBytes abiEncoder compileEnv loweringStateRelDefs exprLoweringProps
   valueEncoding venomExecSemantics venomState words instIdxIndep combin
 
 Theorem frag_exec_initial_family:

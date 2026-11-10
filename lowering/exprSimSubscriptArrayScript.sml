@@ -161,7 +161,7 @@ Resume compile_subscript_array_framed_base_case[base_normal]:
   >- (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
         (mp_tac o CONJUNCT1 o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
       simp[exprLoweringPropsTheory.stmt_state_rel_def,
-           compileEnvTheory.state_rel_gas_obs,
+           loweringStateRelDefsTheory.state_rel_gas_obs,
            exprLoweringPropsTheory.immutable_alloca_sep_def] >>
       metis_tac[]) >>
   qpat_x_assum `expr_sim_case _ _ _ _ _ idx` mp_tac >>

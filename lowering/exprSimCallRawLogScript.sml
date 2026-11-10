@@ -5,10 +5,11 @@
 
 Theory exprSimCallRawLog
 Ancestors
+  exprSimHashBoundary
   list exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimSource exprSimHyps exprSimSend vyperAST vyperTypeSystem
   vyperTypeCallGraph allocLimits supportedExprTraverse exprLowering
   vyperInterpreter vyperContext vyperValue vyperState exprCallbackContracts exprCallBounds
-  vyperTypeExprSoundness exprSimWordArgs exprSimPrecompiles compileEnv
+  vyperTypeExprSoundness exprSimWordArgs exprSimPrecompiles compileEnv loweringStateRelDefs
   vyperEvent venomExecSemantics venomInst venomState exprLoweringProps
   extCallOracleStep venomMemDefs exprSimHash builtinSystem emitHelper fragExec
   emitHelperProps venomExecProofs exprSimOperators exprSimRawLog exprSimRawLogSimCompose
@@ -561,10 +562,10 @@ Proof
       regions_disjoint b 32 b' sz` by
     (rpt strip_tac >> `aid <> inst.inst_id` by decide_tac >>
      drule_all exprSimPrecompilesTheory.state_allocations_disjoint >>
-     simp[compileEnvTheory.regions_disjoint_def]) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   `!name lb len. local_region cenv es2.scopes s name lb len ==>
      regions_disjoint b 32 lb len` by
-    (simp[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+    (simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   `w2n (n2w b : bytes32) = b` by
     (`b < dimword (:256)` by decide_tac >> simp[wordsTheory.w2n_n2w]) >>
   `run_inst_seq (emitted_insts sd sm) s = OK (mstore (w2n (n2w b : bytes32)) w s) /\
@@ -925,7 +926,7 @@ Resume raw_log_fixed_sim[tail]:
      w2n w + 32 <= lb \/ lb + len <= w2n w)` by
     (irule raw_log_scratch_transport >>
      qpat_assum `expr_post _ _ _ _ _ (mid with gas_obs := []) _ _ _ _ _ _ _` (irule_at Any) >>
-     gvs[eval_operand_def, compileEnvTheory.regions_disjoint_def] >>
+     gvs[eval_operand_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
      first_assum MATCH_ACCEPT_TAC) >>
   `eval_operands topic_ops t = SOME (MAP event_value_to_word vs)` by
     metis_tac[raw_log_topics_post_words] >>

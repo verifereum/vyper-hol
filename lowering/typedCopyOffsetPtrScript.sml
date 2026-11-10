@@ -1,6 +1,6 @@
 (* Executed pointer offsets, preserving the exterior semantic state. *)
 Theory typedCopyOffsetPtr
-Ancestors typedCopyOffsetEffectsPtr typedCopyPtr exprLoweringProps context compileEnv emitHelper
+Ancestors typedCopyOffsetEffectsPtr typedCopyPtr exprLoweringProps context compileEnv loweringStateRelDefs emitHelper
   contextCodegenRelProps bodyPtrDefs fragExecPtr words venomState finite_map
   ptrDiscipline venomInst
 
