@@ -977,7 +977,7 @@ Proof
   decide_tac
 QED
 
-Theorem place_store_dead_list_split[local]:
+Theorem place_store_dead_list_split:
   !pre post st base j b.
     dead_bytes_list st base (pre ++ post) j b <=>
     dead_bytes_list st base pre j b \/
@@ -987,7 +987,7 @@ Proof
                                 arithmeticTheory.ADD_ASSOC, DISJ_ASSOC]
 QED
 
-Theorem place_store_dead_fields_list[local]:
+Theorem place_store_dead_fields_list:
   !fs st base j b.
     dead_bytes_fields st base fs j b <=>
     dead_bytes_list st base (MAP SND fs) j b
