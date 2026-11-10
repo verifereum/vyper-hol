@@ -2538,6 +2538,101 @@ Proof
   qexists `a'` >> simp[] >> metis_tac[sym_frame_inv_same_count]
 QED
 
+Theorem block_phi_plan_split:
+  !liveness dfg cfg fn lbl halt np bl phis body ps ops last prog pc fmp r.
+  generate_block_insts_plan liveness dfg cfg fn lbl halt np bl 0
+    (phis ++ body) ps = SOME (ops,last) /\
+  r.sr_spill_base <= last.ps_alloc.sa_spill_base /\
+  last.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==>
+    off < dimword(:256)) /\
+  asm_block_at prog pc (execute_plan fmp ops) ==>
+  ?pre mid post.
+    ops = pre ++ post /\
+    generate_block_insts_prefix liveness dfg cfg fn lbl halt np bl 0
+      (LENGTH phis) (phis ++ body) ps = SOME (pre,mid) /\
+    generate_block_insts_plan liveness dfg cfg fn lbl halt np bl
+      (LENGTH phis) body mid = SOME (post,last) /\
+    r.sr_spill_base <= mid.ps_alloc.sa_spill_base /\
+    mid.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) pre /\
+    asm_block_at prog pc (execute_plan fmp pre)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `generate_block_insts_plan _ _ _ _ _ _ _ _ _ (phis ++ suffix) _ = _` >>
+  qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qspecl_then [`LENGTH phis`, `phis ++ suffix`] mp_tac
+    fnPlanPrefixTheory.generate_block_insts_plan_split >>
+  (impl_tac >- simp[]) >>
+  disch_then (fn th => CONV_TAC (LAND_CONV (REWR_CONV (SPEC_ALL th)))) >>
+  simp_tac (srw_ss()) [listTheory.DROP_APPEND] >> strip_tac >>
+  drule allocMonoTheory.generate_block_insts_plan_spill_base >> strip_tac >>
+  drule allocMonoTheory.generate_block_insts_plan_next_offset >> strip_tac >>
+  goal_assum (drule_at Any) >>
+  gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  simp[listTheory.EVERY_MEM] >> Cases >> simp[] >> metis_tac[listTheory.MEM_APPEND]
+QED
+
+Theorem phi_hits_run_context:
+  !fn bb pred ps vs final dfg.
+  codegen_ready_fn fn /\ retpc_shape_ok fn /\
+  lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb <> HD fn.fn_blocks /\ vs.vs_prev_bb = SOME pred /\
+  eval_phis vs bb.bb_instructions = OK final /\
+  (!inst op. MEM inst (collect_phis bb.bb_instructions) /\
+     is_var_operand op /\ MEM op inst.inst_operands /\ MEM op ps.ps_stack ==>
+     resolve_phi pred inst.inst_operands = SOME op) /\
+  (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+     ~(MEM op ps.ps_stack /\ ?inst.
+       MEM inst (collect_phis bb.bb_instructions) /\
+       resolve_phi pred inst.inst_operands = SOME op) /\
+     (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+     ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) ==>
+  phi_run_context fn bb pred ps vs final
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  rewrite_tac[fnFrameStepsPhiTheory.phi_run_context_def] >>
+  simp[fnFrameStepsPhiTheory.phi_eval_collect] >>
+  rpt gen_tac >> disch_tac >>
+  irule fnFrameStepsPhiTheory.phi_entry_outputs_absent >>
+  goal_assum (drule_at Any) >>
+  metis_tac[]
+QED
+
+Theorem phi_run_final_frame:
+  !ctx cp lo fn ra rest mem0 ps vs st last final endpoint bb base pred k r.
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps vs st /\
+  phi_run_context fn bb pred ps vs final /\
+  phi_run_config fn ra lo base pred ps vs st.as_memory
+    (collect_phis bb.bb_instructions) [] last endpoint /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= last.ps_alloc.sa_spill_base /\
+  last.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  fn_frame_inv ctx cp lo fn ra rest mem0 last (final with vs_inst_idx := k)
+    (endpoint with as_stack := endpoint.as_stack ++ rest)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all fnFrameStepsPhiTheory.phi_run_final >> strip_tac >>
+  irule fnFrameStepsPhiTheory.phi_local_frame_transport >>
+  gvs[fnFrameStepsPhiTheory.phi_run_context_def] >> metis_tac[]
+QED
+
+Theorem phi_frame_run_init:
+  !ctx cp lo fn ra rest mem0 ps vs st base pred phis.
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps vs st /\
+  generated_plan_state_wf_marked base ps ==>
+  ?top. st.as_stack = top ++ rest /\
+    phi_run_config fn ra lo base pred ps vs st.as_memory [] phis ps
+      (st with as_stack := top)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule fnFrameTerminalPrepTheory.fn_frame_inv_local_state >> strip_tac >>
+  qexists_tac `top` >> simp[] >> irule fnFrameStepsPhiTheory.phi_run_init >>
+  gvs[fnPlanPrefixTheory.generated_plan_state_wf_marked_def]
+QED
+
 Theorem sym_phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0
