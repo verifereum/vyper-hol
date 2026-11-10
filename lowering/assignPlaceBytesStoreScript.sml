@@ -193,7 +193,7 @@ Theorem assign_place_wrapped_memory_suffix_run:
     stmt_state_rel ctx func cenv cx
       (set_storage cx ee tr (apply_writes (n2w start) writes (get_storage cx ee tr))) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-    t.vs_allocas = s.vs_allocas /\ ~t.vs_halted /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >> Cases_on `n <= 1`
@@ -222,6 +222,11 @@ Resume assign_place_wrapped_memory_suffix_run[load]:
        (SPEC_ALL place_store_encoded_leaf_state))) >>
      metis_tac[]) >>
   qexists_tac `t` >> simp[] >>
+  (reverse conj_tac >-
+    (qpat_x_assum `store_copy_normalize s t = _` mp_tac >>
+     Cases_on `tr` >>
+     simp[store_copy_normalize_def, venomStateTheory.tstore_def,
+          venomStateTheory.sstore_def, venomStateTheory.venom_state_component_equality])) >>
   irule place_store_normalized_stmt_state >>
   goal_assum (drule_at (Pat `local_ptrs_reserved _ _`)) >>
   qexists_tac `s` >> simp[] >>
@@ -252,7 +257,7 @@ Theorem assign_place_bytes_storage_run:
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     stmt_state_rel ctx func cenv cx ff t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-    t.vs_allocas = s.vs_allocas /\ ~t.vs_halted /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
