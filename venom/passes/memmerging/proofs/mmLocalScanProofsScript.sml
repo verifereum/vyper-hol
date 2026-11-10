@@ -4073,6 +4073,24 @@ Proof
   metis_tac[mm_local_prefix_write_not_def]
 QED
 
+Theorem mm_local_cut_selected_ancestor[local]:
+  bb.bb_instructions = pre ++ post /\
+  ss = FOLDL (scan_inst dfg mode) empty_scan_state pre /\
+  (!a b. MEM a (scan_block dfg mode bb).ss_flushed /\
+         MEM b (scan_block dfg mode bb).ss_flushed /\
+         MEM id a.cg_inst_ids /\ MEM id b.cg_inst_ids ==> a = b) /\
+  MEM h (ss.ss_copies ++ ss.ss_flushed) /\ MEM id h.cg_inst_ids /\
+  MEM g (scan_block dfg mode bb).ss_flushed /\ MEM id g.cg_inst_ids ==>
+  mm_local_copy_ancestor h g
+Proof
+  strip_tac >>
+  `?a. MEM a (scan_block dfg mode bb).ss_flushed /\
+       mm_local_copy_ancestor h a` by
+    (irule mm_local_prefix_final_fragment >> metis_tac[]) >>
+  `MEM id a.cg_inst_ids` by gvs[mm_local_copy_ancestor_def] >>
+  metis_tac[]
+QED
+
 Theorem mm_local_cut_pending_ancestor[local]:
   bb.bb_instructions = pre ++ post /\
   ss = FOLDL (scan_inst dfg mode) empty_scan_state pre /\
@@ -4088,11 +4106,8 @@ Theorem mm_local_cut_pending_ancestor[local]:
   MEM h ss.ss_copies /\ mm_local_copy_ancestor h g
 Proof
   strip_tac >>
-  `?a. MEM a (scan_block dfg mode bb).ss_flushed /\
-       mm_local_copy_ancestor h a` by
-    (irule mm_local_prefix_final_fragment >> metis_tac[]) >>
-  `MEM id a.cg_inst_ids` by gvs[mm_local_copy_ancestor_def] >>
-  `a = g` by metis_tac[] >>
+  `mm_local_copy_ancestor h g` by
+    (irule mm_local_cut_selected_ancestor >> goal_assum (drule_at Any) >> metis_tac[]) >>
   `?tail. (FOLDL (scan_inst dfg mode) ss post).ss_flushed = ss.ss_flushed ++ tail`
     by metis_tac[mm_local_fold_flushed_extension] >>
   `MEM h ss.ss_flushed ==> MEM h (scan_block dfg mode bb).ss_flushed` by
@@ -9005,6 +9020,34 @@ Proof
   simp[MEM_APPEND] >>
   Cases_on `a.cg_dst + a.cg_length <= b.cg_dst + b.cg_length` >>
   simp[arithmeticTheory.MAX_DEF] >> metis_tac[MEM_APPEND]
+QED
+
+Theorem mm_local_canonical_selected_fragment[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  n <= LENGTH is /\ n <= N /\ mm_local_history is H N /\
+  MEM j (mm_local_pending_indices is gs n) /\
+  MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids ==>
+  ?h d bs. MEM h ss.ss_copies /\ mm_local_copy_ancestor h g /\
+    MEM (EL j is).inst_id h.cg_inst_ids /\
+    mm_local_write_capture is H N j = SOME (d,bs) /\
+    h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length
+Proof
+  strip_tac >> drule_all mm_local_canonical_pending_owner >> strip_tac >>
+  qexistsl [`h`,`d`,`bs`] >> simp[] >>
+  irule mm_local_cut_selected_ancestor >>
+  qexistsl [`bb`,`dfg_build_function fn0`,`(EL j is).inst_id`,`Mem2Mem`,
+    `DROP n is`,`TAKE n is`,`ss`] >> simp[] >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt strip_tac >> irule mm_local_prefix_write_group_owner >>
+  goal_assum (drule_at Any) >>
+  qpat_assum `MEM j (mm_local_pending_indices _ _ _)`
+    (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+  `j < LENGTH is` by decide_tac >> metis_tac[EL_MEM]
 QED
 
 Theorem mm_local_stage_correct:
