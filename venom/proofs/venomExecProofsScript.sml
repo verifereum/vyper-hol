@@ -36,10 +36,38 @@ Proof
   Cases_on `b` >> simp[bool_to_word_def]
 QED
 
-Theorem bool_to_word_neq_0w[local]:
+Theorem bool_to_word_neq_0w:
   (bool_to_word b <> 0w) <=> b
 Proof
   Cases_on `b` >> simp[bool_to_word_def]
+QED
+
+(* ==========================================================================
+   Variable lookup across state updates
+   ========================================================================== *)
+
+Theorem lookup_var_set_inst_idx:
+  !x u i. lookup_var x (u with vs_inst_idx := i) = lookup_var x u
+Proof
+  simp[lookup_var_def]
+QED
+
+Theorem lookup_var_update_var_same:
+  !x w u. lookup_var x (update_var x w u) = SOME w
+Proof
+  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem lookup_var_update_var_other:
+  !x y w u. x <> y ==> lookup_var x (update_var y w u) = lookup_var x u
+Proof
+  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem jump_to_set_inst_idx:
+  !l u i. jump_to l (u with vs_inst_idx := i) = jump_to l u
+Proof
+  simp[jump_to_def]
 QED
 
 (* ==========================================================================
