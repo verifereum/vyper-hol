@@ -3,6 +3,7 @@ Theory symEmitSim
 Ancestors
   symInstKinds symPostfixSim codegenSymRel asmSymSem asmSem
   strongPrefixSim asmSplice contextCodegenRel codegenRel finite_map list
+  fnBlockBodyHelpers
 
 Theorem sval_val_map:
   !ws. OPT_MMAP sval_val (MAP Val ws) = SOME ws
@@ -923,4 +924,80 @@ Proof
   simp[venomInstTheory.python_stack_operands_def] >>
   simp[venomInstTheory.ir_specific_operand_order_def] >>
   EVAL_TAC
+QED
+
+Theorem regular_numeric_selection_shape:
+  (selected = operands \/
+   (is_commutative opc /\ 2 <= LENGTH operands /\
+    selected = TAKE (LENGTH operands - 2) operands ++
+      [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands])) ==>
+  LENGTH selected = LENGTH operands /\
+  (!op. MEM op selected <=> MEM op operands)
+Proof
+  disch_then (mp_tac o MATCH_MP generatedPrefixSimTheory.regular_plan_selected_perm) >>
+  metis_tac[sortingTheory.PERM_LENGTH, sortingTheory.PERM_MEM_EQ]
+QED
+
+Theorem numeric_add_label_free:
+  label_positions_ok inst /\ inst.inst_opcode = ADD /\
+  ~(?op. inst.inst_operands = [op; Label "code_end"]) ==>
+  EVERY (\op. ~is_label_operand op) inst.inst_operands
+Proof
+  strip_tac >> gvs[unitShapeDefsTheory.label_positions_ok_def] >>
+  last_x_assum mp_tac >>
+  rpt BasicProvers.TOP_CASE_TAC >> gvs[stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem named_opcode_operand_cases:
+  venom_to_evm_name opc = SOME name ==>
+  ~MEM opc [JMP; DJMP; JNZ; PHI; INVOKE; LOG]
+Proof
+  Cases_on `opc` >> simp[asmIRTheory.venom_to_evm_name_def]
+QED
+
+Theorem named_numeric_source_no_labels:
+  fn_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  venom_to_evm_name inst.inst_opcode = SOME name /\
+  inst.inst_opcode <> CODECOPY /\
+  ~(?op. inst.inst_opcode = ADD /\ inst.inst_operands = [op; Label "code_end"]) ==>
+  EVERY (\op. ~is_label_operand op) inst.inst_operands
+Proof
+  strip_tac >>
+  `label_positions_ok inst` by
+    metis_tac[unitShapeDefsTheory.fn_shape_ok_def, EVERY_MEM,
+              unitShapeDefsTheory.inst_shape_ok_def] >>
+  Cases_on `inst.inst_opcode = ADD`
+  >- (irule numeric_add_label_free >> gvs[]) >>
+  irule fnBlockBodyHelpersTheory.label_positions_ok_other >>
+  drule named_opcode_operand_cases >> simp[]
+QED
+
+Theorem named_compute_operands_membership:
+  venom_to_evm_name inst.inst_opcode = SOME name ==>
+  !op. MEM op (compute_operands inst) <=> MEM op inst.inst_operands
+Proof
+  strip_tac >> drule named_opcode_operand_cases >>
+  simp[stackPlanGenTheory.compute_operands_def]
+QED
+
+Theorem named_numeric_selected_operands:
+  fn_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  venom_to_evm_name inst.inst_opcode = SOME name /\
+  inst.inst_opcode <> CODECOPY /\
+  ~(?op. inst.inst_opcode = ADD /\ inst.inst_operands = [op; Label "code_end"]) /\
+  (selected = compute_operands inst \/
+   (is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) /\
+    selected = TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+      [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+       EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)])) ==>
+  LENGTH selected = LENGTH (compute_operands inst) /\
+  (!op. MEM op selected ==> MEM op inst.inst_operands /\ ~is_label_operand op)
+Proof
+  strip_tac >>
+  `LENGTH selected = LENGTH (compute_operands inst) /\
+   (!op. MEM op selected <=> MEM op (compute_operands inst))` by
+    metis_tac[regular_numeric_selection_shape] >>
+  drule_all named_numeric_source_no_labels >>
+  drule named_compute_operands_membership >>
+  simp[EVERY_MEM] >> metis_tac[]
 QED
