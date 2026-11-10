@@ -1668,3 +1668,75 @@ Proof
   drule materialize_straight_zero_path >>
   disch_then (qspecl_then [`r`, `func`] mp_tac) >> simp[] >> metis_tac[]
 QED
+
+(* Physical capacity and storage slot count agree for every evaluated type.
+   No restriction of the copy's outside-capacity frame is involved. *)
+Theorem materialize_storage_capacity_contents:
+  stmt_state_rel ctx func ce cx es u /\
+  storage_holds cx tr ty (Value v) a es u /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  copy_prefix (if tr then LocTransient else LocStorage) a b
+    ((type_memory_size tv + 31) DIV 32) u
+    ((type_memory_size tv + 31) DIV 32) z ==>
+  val_wf tv v /\ val_in_memory tv v b z.vs_memory /\
+  val_footprint tv v <= type_memory_size tv
+Proof
+  simp[exprSimFieldLayoutTheory.slot_count_of_memory_size] >>
+  metis_tac[exprSimCopyTheory.copy_buffer_storage_contents]
+QED
+
+(* Reconstruct at the supplied endpoint, never at a legacy existential
+   fragment witness.  sa may have its variable watermark rebased by callers. *)
+Theorem materialize_copy_endpoint_owned_post:
+  stmt_state_rel ctx func ce cx es u /\ local_ptrs_reserved ce mid /\
+  wb_frame ce es es sa r u /\ sa.cs_next_var <= mid.cs_next_var /\
+  copy_static z = copy_static u /\
+  (!x. not_fresh_at mid x ==> lookup_var x z = lookup_var x u) /\
+  LENGTH u.vs_memory <= LENGTH z.vs_memory /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP u.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
+  sa.cs_next_id <= inst.inst_id /\ inst.inst_id < sb.cs_next_id /\
+  allocas_non_overlapping u /\
+  (!name b len. local_region ce es.scopes u name b len ==>
+     w2n w + sz <= b \/ b + len <= w2n w) /\
+  (!name b len. local_region ce es.scopes r name b len ==>
+     w2n w + sz <= b \/ b + len <= w2n w) /\
+  (!off len. off + len <= w2n w \/ w2n w + sz <= off ==>
+     mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory) /\
+  ~is_word_type (post_value_type ce e) /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
+  val_wf tv v /\ val_in_memory tv v (w2n w) z.vs_memory /\
+  val_footprint tv v <= sz /\ eval_operand op z = SOME w ==>
+  expr_post ctx func ce cx e es sa sb r es v op z /\
+  (!x a. not_fresh_at sa x /\ lookup_var x r = SOME a ==>
+     lookup_var x z = SOME a) /\
+  (!aid entry. FLOOKUP r.vs_allocas aid = SOME entry ==>
+     FLOOKUP z.vs_allocas aid = SOME entry)
+Proof
+  strip_tac >>
+  `z.vs_allocas = u.vs_allocas` by
+    metis_tac[exprSimStorageCopyTheory.copy_static_fields] >>
+  `!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x u` by
+    (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `wb_frame ce es es sa r z` by
+    (irule materialize_fresh_store_frame >>
+     qexistsl_tac [`inst.inst_id`, `w2n w`, `u`, `sz`] >>
+     simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `stmt_state_rel ctx func ce cx es z` by
+    (irule exprSimCopyTheory.copy_buffer_state_rel_frame >>
+     qexistsl_tac [`w2n w`, `inst`, `u`, `mid`, `sz`] >>
+     simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `!name b len. local_region ce es.scopes z name b len ==>
+     w2n w + sz <= b \/ b + len <= w2n w` by
+    (drule_all exprSimCopyTheory.copy_buffer_local_region_frame >>
+     metis_tac[]) >>
+  `expr_val_rel cx (post_value_type ce e) v op z` by
+    (simp[expr_val_rel_def] >> metis_tac[]) >>
+  `expr_val_own ce cx (post_value_type ce e) sa sb es v op z` by
+    (simp[expr_val_own_def] >> disj1_tac >>
+     qexistsl_tac [`inst.inst_id`, `w2n w`, `sz`] >>
+     simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `expr_val_at ce cx (post_value_type ce e) sa sb es v op z` by
+    (gvs[expr_val_own_def, expr_val_at_def] >> metis_tac[]) >>
+  gvs[expr_post_def, wb_frame_def] >> metis_tac[]
+QED
