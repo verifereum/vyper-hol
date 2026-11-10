@@ -172,7 +172,7 @@ Resume ecadd_vv_sim_mem[typed]:
         vyperTypeInvariantsTheory.value_result_typed_def,
         vyperValueTheory.evaluate_type_def] >>
   `post_value_type cenv b = expr_type b` by
-    (irule exprSimHypsTheory.post_value_type_ec_point >>
+    (irule exprSimHypsTheory.post_value_type_ec_point >> conj_tac >- simp[] >>
      qexistsl_tac [`cx`,`env`,`es`] >>
      qpat_assum `expr_type b = _` (fn th => simp[th]) >>
      qpat_x_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` mp_tac >>
