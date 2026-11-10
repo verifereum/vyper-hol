@@ -1269,7 +1269,7 @@ Proof
        (strip_assume_tac o
         REWRITE_RULE [loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM]) >>
      `~expr_has_effect e` by
-       (qpat_x_assum `_ ==> ~expr_has_effect e` irule >> first_assum ACCEPT_TAC) >>
+       (qpat_x_assum `_ ==> ~expr_has_effect e` irule >> simp[]) >>
      `pure_frame cenv func es sa s0 tt` by
        (qpat_x_assum `~expr_has_effect c ==> _` irule >> first_assum ACCEPT_TAC) >>
      `pure_frame cenv func es1 sc (jump_to lbl tt) u` by
