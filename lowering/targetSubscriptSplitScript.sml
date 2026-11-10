@@ -429,6 +429,9 @@ Resume target_subscript_nopop_scopes_mutual[IntCall]:
   simp[Once evaluate_def] >> strip_tac >>
   gvs[bind_def, ignore_bind_def, type_check_def,
       assert_def, lift_option_type_def, option_CASE_rator,
+      return_def, raise_def] >>
+  gvs[bind_def, ignore_bind_def, type_check_def,
+      assert_def, lift_option_type_def, option_CASE_rator,
       return_def, raise_def, AllCaseEqs()] >>
   imp_res_tac finally_set_scopes >>
   imp_res_tac (target_subscript_call_cleanup_scopes |>

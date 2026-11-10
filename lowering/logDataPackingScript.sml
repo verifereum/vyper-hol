@@ -162,9 +162,16 @@ Proof
            (qspecl_then [`id`,`b`,`n`] mp_tac) >> simp[]) >>
      fs[enc_frame_def] >> qpat_x_assum `!i. i NOTIN frag_ids st st' ==> _`
        (qspec_then `id` mp_tac) >> simp[]) >>
-  fs[log_packing_public_frame_def, enc_frame_def, enc_scratch_def,
-     lookup_var_def, alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
-  rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
+  fs[enc_frame_def, enc_scratch_def] >>
+  rewrite_tac[log_packing_public_frame_def] >>
+  rpt conj_tac
+  >- (qpat_x_assum `!x w. _ ==> lookup_var _ _ = _` mp_tac >>
+      simp_tac (srw_ss()) [lookup_var_def])
+  >- first_assum MATCH_ACCEPT_TAC
+  >- (qpat_x_assum `alloca_inv _` mp_tac >>
+      simp_tac (srw_ss()) [alloca_inv_def, allocas_non_overlapping_def,
+                           alloca_next_valid_def]) >>
+  first_assum MATCH_ACCEPT_TAC
 QED
 
 (* Source owning pointers retain both their binding and their allocation
