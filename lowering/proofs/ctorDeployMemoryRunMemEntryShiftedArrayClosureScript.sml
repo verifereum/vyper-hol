@@ -380,6 +380,7 @@ Proof
     (irule ctor_actual_array_observation_self_from >> goal_assum (drule_at Any)) >>
   qpat_x_assum `(^O) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ initial _ _ prepared`
     (MAP_EVERY assume_tac o CONJUNCTS o BETA_RULE) >>
-  fs[abi_decoder_recursive_loop_data_def, Excl "enc_def"]
+  fs[abi_decoder_recursive_loop_data_def, Excl "enc_def"] >>
+  gvs[abi_decoder_operand_live_def]
 QED
 
