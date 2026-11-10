@@ -3,6 +3,7 @@ Theory functionInlinerOperational
 Ancestors
   functionInlinerFrame functionInlinerOpacity functionInlinerNamespace
   functionInlinerDefs venomExecSemantics venomState venomInst venomWf list rich_list
+  venomInstProofs1
 
 Theorem inline_parameter_step:
   MEM inst.inst_opcode [PARAM; FMP_PARAM] /\
@@ -485,6 +486,44 @@ Definition inline_ordinary_opcode_def:
     ~MEM opc [INVOKE; PHI; ASSIGN; PARAM; FMP_PARAM; RETPC_PARAM;
       RET; RETFMP; JMP; JNZ; DJMP; ALLOCA; DALLOCA; DRET; SETFMP]
 End
+
+(* Only declared outputs may change in an ordinary successful step. *)
+Definition inline_success_footprint_def:
+  inline_success_footprint outs s t <=>
+    t.vs_params = s.vs_params /\
+    t.vs_call_entry_fmp = s.vs_call_entry_fmp /\
+    t.vs_return_pc_token = s.vs_return_pc_token /\
+    t.vs_labels = s.vs_labels /\
+    t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = s.vs_inst_idx /\
+    (!x. ~MEM x outs ==> lookup_var x t = lookup_var x s)
+End
+
+Theorem inline_ordinary_OK_nonterminator:
+  inline_ordinary_opcode inst.inst_opcode /\
+  step_inst fuel ctx inst s = OK t ==>
+  ~is_terminator inst.inst_opcode
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[inline_ordinary_opcode_def, is_terminator_def] >>
+  fs[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  fs[AllCaseEqs()]
+QED
+
+Theorem inline_ordinary_success_footprint:
+  inline_ordinary_opcode inst.inst_opcode /\
+  step_inst fuel ctx inst s = OK t ==>
+  inline_success_footprint inst.inst_outputs s t
+Proof
+  rpt strip_tac >>
+  drule_all inline_ordinary_OK_nonterminator >> strip_tac >>
+  `inst.inst_opcode <> INVOKE` by gvs[inline_ordinary_opcode_def] >>
+  `step_inst_base inst s = OK t` by gvs[step_inst_non_invoke] >>
+  drule_all step_inst_base_preserves_all >> strip_tac >>
+  drule_all step_inst_preserves_inst_idx >>
+  simp[inline_success_footprint_def]
+QED
 
 Theorem inline_ordinary_opcode_coverage:
   inline_ordinary_opcode opc <=>

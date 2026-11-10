@@ -4,7 +4,7 @@ Ancestors
   functionInlinerReachableCuts functionInlinerStackSupports functionInlinerCuts
   functionInlinerOccurrences
   functionInlinerActivation functionInlinerEnvelopes venomState cfgTransform list pred_set
-  venomExecSemantics
+  venomExecSemantics functionInlinerOperational functionInlinerFrame
 
 Definition inline_owner_storage_def:
   inline_owner_storage cert entries frame <=>
@@ -520,6 +520,92 @@ Proof
   simp[inline_tracked_snapshot_projections, inline_tracked_physical_projections,
        GSYM inline_suspended_observations_def, inline_suspended_projections] >>
   simp[inline_suspended_observations_def]
+QED
+
+(* Locality plus bookkeeping is enough to preserve any suspended view whose
+   observed names avoid the declared writes. *)
+Theorem inline_suspended_success_footprint:
+  inline_suspended_observations obs frame /\
+  inline_success_footprint outs frame.ipf_state t /\
+  EVERY (inline_suspended_avoids obs) outs ==>
+  inline_suspended_observations obs (frame with ipf_state := t)
+Proof
+  simp[inline_suspended_observations_def, inline_suspended_avoids_def,
+       EVERY_MEM, pairTheory.FORALL_PROD,
+       inline_success_footprint_def, inline_tracked_snapshot_def,
+       inline_snapshot_data_def,
+       functionInlinerSimulationTheory.inline_caller_bookkeeping_def] >>
+  rpt strip_tac >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_tracked_success_footprint:
+  inline_tracked_snapshot fn a route snap frame /\
+  inline_success_footprint outs snap.ils_state s /\
+  inline_success_footprint (MAP route.ir_rename outs) frame.ipf_state t /\
+  set outs SUBSET set (cfgTransform$fn_all_vars fn) /\
+  (!x. x IN snap.ils_protected ==>
+    ~MEM (snap.ils_parent_rename x) (MAP route.ir_rename outs)) /\
+  inline_opaque_frame_rel route.ir_rename
+    (set outs UNION snap.ils_defined) snap.ils_opaque FEMPTY {} s t ==>
+  inline_tracked_snapshot fn a route
+    (snap with <|ils_state := s;
+      ils_defined := set outs UNION snap.ils_defined|>)
+    (frame with ipf_state := t)
+Proof
+  simp[inline_tracked_snapshot_def, inline_snapshot_data_def,
+       inline_success_footprint_def,
+       functionInlinerSimulationTheory.inline_caller_bookkeeping_def,
+       inline_opaque_frame_rel_def, inline_frame_rel_def,
+       SUBSET_DEF] >>
+  rpt strip_tac >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_owner_storage_success_footprint:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  EVERY (\x. MEM x (cfgTransform$fn_all_vars a.ia_function) /\
+    ~retpc_var a.ia_function x) outs /\
+  inline_success_footprint outs snap.ils_state s /\
+  inline_success_footprint (MAP route.ir_rename outs) frame.ipf_state t /\
+  inline_opaque_frame_rel route.ir_rename
+    (set outs UNION snap.ils_defined) snap.ils_opaque FEMPTY {} s t ==>
+  inline_owner_storage cert
+    ((p,a,route,snap with <|ils_state := s;
+      ils_defined := set outs UNION snap.ils_defined|>)::rest)
+    (frame with ipf_state := t) /\
+  inline_shared_frame s = inline_shared_frame t
+Proof
+  strip_tac >>
+  drule inline_owner_storage_static >> strip_tac >>
+  drule inline_owner_storage_head >> strip_tac >>
+  `!x. x IN snap.ils_protected ==>
+    ~MEM (snap.ils_parent_rename x) (MAP route.ir_rename outs)` by
+    (simp[MEM_MAP] >> rpt strip_tac >>
+     gvs[EVERY_MEM] >> metis_tac[inline_address_stack_body_protected]) >>
+  `EVERY (inline_suspended_avoids (inline_erase_addresses rest))
+    (MAP route.ir_rename outs)` by
+    (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
+     drule inline_address_stack_body_avoids >> disch_then drule >>
+     disch_then irule >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  `inline_suspended_observations (inline_erase_addresses rest)
+    (frame with ipf_state := t)` by
+    (irule inline_suspended_success_footprint >> metis_tac[]) >>
+  `inline_tracked_snapshot a.ia_function a route
+    (snap with <|ils_state := s;
+      ils_defined := set outs UNION snap.ils_defined|>)
+    (frame with ipf_state := t)` by
+    (irule inline_tracked_success_footprint >> simp[] >>
+     gvs[EVERY_MEM, SUBSET_DEF]) >>
+  reverse conj_tac
+  >- gvs[inline_opaque_frame_rel_def, inline_frame_rel_def] >>
+  gvs[inline_owner_storage_def, inline_erase_addresses_def,
+      inline_suspended_observations_def] >>
+  Cases_on `rest`
+  >- (gvs[inline_address_stack_def, inline_address_entry_def,
+          inline_address_links_def, EVERY_MEM, SUBSET_DEF] >> metis_tac[]) >>
+  PairCases_on `h` >>
+  gvs[inline_address_stack_def, inline_address_entry_def,
+      inline_address_links_def, EVERY_MEM, SUBSET_DEF] >> metis_tac[]
 QED
 
 (* Logical and physical control locations need not be equal. Storage ignores
