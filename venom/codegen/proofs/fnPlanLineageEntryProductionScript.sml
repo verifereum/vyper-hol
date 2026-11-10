@@ -2663,7 +2663,7 @@ Proof
   >- (qpat_x_assum `native_inst_ops_prefix _ _ _ _ _ _ _ _ _
         (p0 with ps_stack := prefixP ++ _) _ _ _`
         (mp_tac o MATCH_MP native_inst_ops_prefix_cleanup_update) >>
-      disch_then (qspecl_then [`hP`,`gP`,`bP`] mp_tac) >> simp[]) >>
+        disch_then (qspecl_then [`hP`,`gP`,`bP`] mp_tac) >> simp[]) >>
   qpat_x_assum `native_inst_ops_prefix _ _ _ _ _ _ _ _ _
     (p0 with ps_stack := prefixQ ++ _) _ _ _`
     (mp_tac o MATCH_MP native_inst_ops_prefix_cleanup_update) >>
@@ -2789,4 +2789,167 @@ Proof
   drule native_inst_ops_prefix_cleanup_update >>
   disch_then (qspecl_then [`hP`,`gP`,`bP`] mp_tac) >>
   simp[native_inst_ops_prefix_complete]
+QED
+
+(* Finite composition at the final JMP; materialisation is required at the
+   shared core, not inferred from successful padded planning. *)
+Theorem native_terminal_paired_cleanup_complete:
+  !lv dfg cfg fn lbl halt np bl xs p0 k pre mid inst dest prefixP prefixQ
+    hP gP bP hQ gQ bQ ops after.
+    LENGTH xs = SUC k /\ DROP k xs = [inst] /\
+    inst.inst_opcode = JMP /\ inst.inst_operands = [Label dest] /\
+    inst.inst_outputs = [] /\
+    (!targets. join_target_ops lv fn lbl inst = SOME targets ==>
+      ALL_DISTINCT targets /\
+      (!x. MEM x targets ==> MEM x mid.ps_stack \/ x IN FDOM mid.ps_spilled)) /\
+    native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 k pre mid /\
+    native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs
+      (p0 with <|ps_stack := prefixP ++ p0.ps_stack;
+        ps_cleanup_height := hP; ps_cleanup_growth := gP; ps_cleanup_promised := bP|>)
+      k pre (mid with <|ps_stack := prefixP ++ mid.ps_stack;
+        ps_cleanup_height := hP; ps_cleanup_growth := gP; ps_cleanup_promised := bP|>) /\
+    native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs
+      (p0 with <|ps_stack := prefixQ ++ p0.ps_stack;
+        ps_cleanup_height := hQ; ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>)
+      k pre (mid with <|ps_stack := prefixQ ++ mid.ps_stack;
+        ps_cleanup_height := hQ; ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>) /\
+    generate_block_insts_plan lv dfg cfg fn lbl halt np bl 0 xs
+      (p0 with <|ps_stack := prefixQ ++ p0.ps_stack;
+        ps_cleanup_height := hQ; ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>) =
+      SOME (ops,after) ==>
+    ?q.
+      generate_block_insts_plan lv dfg cfg fn lbl halt np bl 0 xs p0 = SOME (ops,q) /\
+      generate_block_insts_plan lv dfg cfg fn lbl halt np bl 0 xs
+        (p0 with <|ps_stack := prefixP ++ p0.ps_stack;
+          ps_cleanup_height := hP; ps_cleanup_growth := gP; ps_cleanup_promised := bP|>) =
+        SOME (ops,q with <|ps_stack := prefixP ++ q.ps_stack;
+          ps_cleanup_height := hP; ps_cleanup_growth := gP; ps_cleanup_promised := bP|>) /\
+      after = q with <|ps_stack := prefixQ ++ q.ps_stack;
+        ps_cleanup_height := hQ; ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>
+Proof
+  rpt gen_tac >> strip_tac >>
+  `native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs
+    (p0 with <|ps_stack := prefixQ ++ p0.ps_stack;
+      ps_cleanup_height := hQ; ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>)
+    (SUC k) ops after` by metis_tac[native_inst_ops_prefix_complete] >>
+  pop_assum (mp_tac o REWRITE_RULE [native_inst_ops_prefix_suc]) >>
+  simp[] >> strip_tac >>
+  `pre = pre' /\
+   (mid with <|ps_stack := prefixQ ++ mid.ps_stack;
+     ps_cleanup_height := hQ; ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>) = p` by
+    metis_tac[native_inst_ops_prefix_deterministic] >>
+  gvs[] >>
+  drule_all terminal_jmp_paired_cleanup_replay >>
+  disch_then (qspecl_then [`prefixP`,`hP`,`gP`,`bP`] strip_assume_tac) >>
+  qexists_tac `out` >> simp[] >> conj_tac >>
+  rewrite_tac[GSYM native_inst_ops_prefix_complete] >>
+  simp[native_inst_ops_prefix_suc] >> metis_tac[]
+QED
+
+Theorem analyzed_worker_cleanup_replay:
+  !fn bb dfg cfg halt p0 prefixP prefixQ hP gP bP hQ gQ bQ ops after.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    get_params bb.bb_instructions = [] /\ collect_phis bb.bb_instructions = [] /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label 0) ==>
+      MEM (Var v) p0.ps_stack \/ Var v IN FDOM p0.ps_spilled) /\
+    (!j. j < LENGTH bb.bb_instructions ==>
+      EVERY (\v. ~MEM (Var v) prefixP)
+        (live_vars_at (liveness_analyze fn) bb.bb_label (SUC j) ++
+         (EL j bb.bb_instructions).inst_outputs) /\
+      EVERY (\v. ~MEM (Var v) prefixQ)
+        (live_vars_at (liveness_analyze fn) bb.bb_label (SUC j) ++
+         (EL j bb.bb_instructions).inst_outputs)) /\
+    (!k mid inst targets.
+      native_inst_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+        (LENGTH bb.bb_instructions) bb.bb_instructions p0 k mid /\
+      DROP k bb.bb_instructions = [inst] /\ inst.inst_opcode = JMP /\
+      join_target_ops (liveness_analyze fn) fn bb.bb_label inst = SOME targets ==>
+      ALL_DISTINCT targets /\
+      (!x. MEM x targets ==> MEM x mid.ps_stack \/ x IN FDOM mid.ps_spilled)) /\
+    generate_block_insts_plan (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+      (LENGTH bb.bb_instructions) 0 bb.bb_instructions
+      (p0 with <|ps_stack := prefixQ ++ p0.ps_stack;
+        ps_cleanup_height := hQ; ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>) =
+      SOME (ops,after) ==>
+    ?q.
+      generate_block_insts_plan (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+        (LENGTH bb.bb_instructions) 0 bb.bb_instructions p0 = SOME (ops,q) /\
+      generate_block_insts_plan (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+        (LENGTH bb.bb_instructions) 0 bb.bb_instructions
+        (p0 with <|ps_stack := prefixP ++ p0.ps_stack;
+          ps_cleanup_height := hP; ps_cleanup_growth := gP; ps_cleanup_promised := bP|>) =
+        SOME (ops,q with <|ps_stack := prefixP ++ q.ps_stack;
+          ps_cleanup_height := hP; ps_cleanup_growth := gP; ps_cleanup_promised := bP|>) /\
+      after = q with <|ps_stack := prefixQ ++ q.ps_stack;
+        ps_cleanup_height := hQ; ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `!j. j < LENGTH bb.bb_instructions ==>
+    (EL j bb.bb_instructions).inst_opcode <> JMP`
+  >- (irule analyzed_ordinary_worker_cleanup_replay >> simp[]) >>
+  `non_param_insts bb = bb.bb_instructions` by
+    (drule_all ready_block_parameter_suffix >> simp[]) >>
+  `!j. j < LENGTH bb.bb_instructions ==>
+     (EL j bb.bb_instructions).inst_opcode <> PHI /\
+     ((EL j bb.bb_instructions).inst_opcode = JMP ==>
+       SUC j = LENGTH bb.bb_instructions)` by
+    (drule ready_block_ordinary_suffix_layout >>
+     disch_then (qspecl_then [`bb`,`0`] mp_tac) >> simp[]) >>
+  gvs[NOT_FORALL_THM] >> rename1 `(EL k bb.bb_instructions).inst_opcode = JMP` >>
+  `LENGTH bb.bb_instructions = SUC k` by metis_tac[] >>
+  `DROP k bb.bb_instructions = [EL k bb.bb_instructions]` by
+    (qspecl_then [`k`,`bb.bb_instructions`] mp_tac listTheory.TAKE1_DROP >>
+     `LENGTH (DROP k bb.bb_instructions) = 1` by
+       (simp[NoAsms,listTheory.LENGTH_DROP] >>
+        qpat_x_assum `LENGTH bb.bb_instructions = SUC k` SUBST1_TAC >> simp[]) >>
+     metis_tac[listTheory.TAKE_LENGTH_TOO_LONG,arithmeticTheory.LESS_EQ_REFL]) >>
+  `inst_wf (EL k bb.bb_instructions)` by
+    (drule fnPlanLineageQuarantineTheory.ready_member_instruction_shape >>
+     disch_then (qspecl_then [`EL k bb.bb_instructions`,`bb`] mp_tac) >>
+     simp[listTheory.EL_MEM]) >>
+  `?dest. (EL k bb.bb_instructions).inst_operands = [Label dest] /\
+    (EL k bb.bb_instructions).inst_outputs = []` by
+    (qpat_x_assum `inst_wf _` mp_tac >>
+     qpat_x_assum `_.inst_opcode = JMP` mp_tac >>
+     simp[NoAsms,venomWfTheory.inst_wf_def]) >>
+  `?pre mid.
+     native_inst_ops_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+       (LENGTH bb.bb_instructions) bb.bb_instructions p0 k pre mid /\
+     native_inst_ops_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+       (LENGTH bb.bb_instructions) bb.bb_instructions
+       (p0 with ps_stack := prefixP ++ p0.ps_stack)
+       k pre (mid with ps_stack := prefixP ++ mid.ps_stack) /\
+     native_inst_ops_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+       (LENGTH bb.bb_instructions) bb.bb_instructions
+       (p0 with ps_stack := prefixQ ++ p0.ps_stack)
+       k pre (mid with ps_stack := prefixQ ++ mid.ps_stack)` by
+    (qpat_x_assum `LENGTH bb.bb_instructions = SUC k` kall_tac >>
+     irule analyzed_ordinary_paired_interval_replay >> simp[] >>
+     rpt strip_tac >>
+     `j < LENGTH bb.bb_instructions` by decide_tac >>
+     qpat_x_assum `!j. j < LENGTH _ ==> _.inst_opcode <> PHI /\ _`
+       (qspec_then `j` strip_assume_tac) >> gvs[] >> decide_tac) >>
+  `native_inst_ops_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+     (LENGTH bb.bb_instructions) bb.bb_instructions
+     (p0 with <|ps_stack := prefixP ++ p0.ps_stack; ps_cleanup_height := hP;
+       ps_cleanup_growth := gP; ps_cleanup_promised := bP|>) k pre
+     (mid with <|ps_stack := prefixP ++ mid.ps_stack; ps_cleanup_height := hP;
+       ps_cleanup_growth := gP; ps_cleanup_promised := bP|>)` by
+    (qpat_x_assum `native_inst_ops_prefix _ _ _ _ _ _ _ _ _
+       (p0 with ps_stack := prefixP ++ _) _ _ _`
+       (mp_tac o MATCH_MP native_inst_ops_prefix_cleanup_update) >>
+     disch_then (qspecl_then [`hP`,`gP`,`bP`] mp_tac) >> simp[NoAsms]) >>
+  `native_inst_ops_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt 0
+     (LENGTH bb.bb_instructions) bb.bb_instructions
+     (p0 with <|ps_stack := prefixQ ++ p0.ps_stack; ps_cleanup_height := hQ;
+       ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>) k pre
+     (mid with <|ps_stack := prefixQ ++ mid.ps_stack; ps_cleanup_height := hQ;
+       ps_cleanup_growth := gQ; ps_cleanup_promised := bQ|>)` by
+    (qpat_x_assum `native_inst_ops_prefix _ _ _ _ _ _ _ _ _
+       (p0 with ps_stack := prefixQ ++ _) _ _ _`
+       (mp_tac o MATCH_MP native_inst_ops_prefix_cleanup_update) >>
+     disch_then (qspecl_then [`hQ`,`gQ`,`bQ`] mp_tac) >> simp[NoAsms]) >>
+  irule native_terminal_paired_cleanup_complete >>
+  rpt (first_assum $ irule_at Any) >>
+  metis_tac[native_inst_ops_prefix_erase]
 QED
