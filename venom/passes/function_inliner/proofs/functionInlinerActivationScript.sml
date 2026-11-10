@@ -597,3 +597,95 @@ Proof
   qpat_x_assum `!e. MEM e writes ==> _` drule >> simp[] >>
   strip_tac >> metis_tac[]
 QED
+
+Theorem inline_snapshot_resume_write:
+  inline_snapshot_data a route snap frame /\
+  x NOTIN snap.ils_opaque /\
+  INJ route.ir_rename (x INSERT snap.ils_defined) UNIV /\
+  (!v. v IN snap.ils_protected ==>
+    snap.ils_parent_rename v <> route.ir_rename x) ==>
+  inline_snapshot_data a route
+    (snap with <|ils_state := update_var x w snap.ils_state;
+                 ils_defined := x INSERT snap.ils_defined|>)
+    (frame with ipf_state := update_var (route.ir_rename x) w frame.ipf_state)
+Proof
+  strip_tac >>
+  `!v. v IN snap.ils_defined /\ v <> x ==>
+       route.ir_rename v <> route.ir_rename x` by
+    (qpat_x_assum `INJ _ _ _` mp_tac >>
+     pure_rewrite_tac[pred_setTheory.INJ_DEF] >>
+     metis_tac[pred_setTheory.IN_INSERT]) >>
+  qpat_x_assum `INJ _ _ _` kall_tac >>
+  fs[inline_snapshot_data_def] >>
+  simp[inline_snapshot_data_def, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[] >> Cases_on `x = x'` >>
+  gvs[lookup_var_def] >> metis_tac[]
+QED
+
+Theorem inline_snapshot_resume_writes:
+  !writes snap frame.
+  inline_snapshot_data a route snap frame /\
+  INJ route.ir_rename (set (MAP FST writes) UNION snap.ils_defined) UNIV /\
+  EVERY (\(x,w). x NOTIN snap.ils_opaque /\
+    (!v. v IN snap.ils_protected ==>
+      snap.ils_parent_rename v <> route.ir_rename x)) writes ==>
+  inline_snapshot_data a route
+    (snap with <|ils_state :=
+       FOLDL (\s (x,w). update_var x w s) snap.ils_state writes;
+       ils_defined := set (MAP FST writes) UNION snap.ils_defined|>)
+    (frame with ipf_state :=
+       FOLDL (\s (x,w). update_var (route.ir_rename x) w s)
+         frame.ipf_state writes)
+Proof
+  Induct >> simp[] >> gen_tac >> PairCases_on `h` >>
+  rpt gen_tac >> simp[] >> strip_tac >>
+  `INJ route.ir_rename (h0 INSERT snap.ils_defined) UNIV` by
+    (qpat_x_assum `INJ _ _ _` mp_tac >>
+     pure_rewrite_tac[pred_setTheory.INJ_DEF] >>
+     metis_tac[pred_setTheory.IN_INSERT, pred_setTheory.IN_UNION]) >>
+  drule_all inline_snapshot_resume_write >>
+  disch_then (qspec_then `h1` assume_tac) >>
+  first_x_assum drule >>
+  simp[] >> impl_tac
+  >- (qpat_x_assum `INJ _ (_ UNION _) _` mp_tac >>
+      pure_rewrite_tac[pred_setTheory.INJ_DEF] >>
+      metis_tac[pred_setTheory.IN_INSERT, pred_setTheory.IN_UNION]) >>
+  `set (MAP FST writes) UNION (h0 INSERT snap.ils_defined) =
+     (h0 INSERT set (MAP FST writes)) UNION snap.ils_defined` by
+    (simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  simp[]
+QED
+
+Theorem inline_snapshot_resume_return:
+  inline_snapshot_data a route snap frame /\
+  LENGTH call.inst_outputs = LENGTH vals /\
+  INJ route.ir_rename (set call.inst_outputs UNION snap.ils_defined) UNIV /\
+  EVERY (\x. x NOTIN snap.ils_opaque /\
+    (!v. v IN snap.ils_protected ==>
+      snap.ils_parent_rename v <> route.ir_rename x)) call.inst_outputs ==>
+  inline_snapshot_data a route
+    (snap with <|ils_state :=
+       FOLDL (\s (x,w). update_var x w s) snap.ils_state
+         (ZIP (call.inst_outputs, vals));
+       ils_defined := set call.inst_outputs UNION snap.ils_defined|>)
+    (frame with ipf_state :=
+       FOLDL (\s (x,w). update_var x w s) frame.ipf_state
+         (ZIP (MAP route.ir_rename call.inst_outputs, vals)))
+Proof
+  strip_tac >>
+  drule (inline_snapshot_resume_writes |> Q.SPEC `ZIP (call.inst_outputs, vals)`) >>
+  disch_then (qspecl_then [`vals`, `call`] mp_tac) >>
+  simp[MAP_ZIP] >> impl_tac
+  >- (gvs[EVERY_MEM] >> gen_tac >> PairCases_on `e` >>
+      strip_tac >> simp[] >>
+      `MEM e0 call.inst_outputs` by
+        (drule MEM_ZIP >> disch_then (qspec_then `(e0,e1)` mp_tac) >>
+         simp[] >> metis_tac[MEM_EL]) >>
+      metis_tac[]) >>
+  simp[ZIP_MAP, FOLDL_MAP, combinTheory.o_DEF, pairTheory.UNCURRY_DEF] >>
+  `(\s p. update_var (route.ir_rename (FST p)) (SND p) s) =
+   (\s (x,w). update_var (route.ir_rename x) w s)` by
+    (simp[FUN_EQ_THM] >> gen_tac >> Cases >> simp[]) >>
+  simp[]
+QED
