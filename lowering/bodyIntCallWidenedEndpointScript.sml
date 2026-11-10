@@ -6,12 +6,6 @@ Ancestors
   fragGasPath fragGasFocus emitHelperProps emitHelper list valueTypingMemoryProps vyperValue
   bodyIntCallEmitBoundary valueEncodingProofs bodyIntCallCompletedPath exprSimProps loweringPosts
 
-Theorem owned_endpoint_index_frame[local]:
-  wb_frame ce es sa s0 (z with vs_inst_idx := k) = wb_frame ce es sa s0 z
-Proof
-  simp[wb_frame_def, local_region_def, lookup_var_def, locals_kept_def]
-QED
-
 Theorem owned_endpoint_index_region[local]:
   local_region ce scopes (z with vs_inst_idx := k) id lb lsz =
   local_region ce scopes z id lb lsz
@@ -42,7 +36,7 @@ Theorem stack_completed_owned:
   value_has_type tv v /\ intret_vals_match tv v ir.iret_values /\
   LENGTH ir.iret_values = nret /\ 0 < nret /\
   MAP (\op. eval_operand op s) results = MAP SOME ir.iret_values /\
-  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 sa s0 s /\
+  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 es' sa s0 s /\
   eval_operand buf.buf_operand s = SOME (n2w off) /\
   FLOOKUP s.vs_allocas aid = SOME (off,buf.buf_size) /\
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
@@ -57,7 +51,7 @@ Theorem stack_completed_owned:
       (OK out) /\
     out.vs_current_bb = sb.cs_current_bb /\
     out.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    stmt_state_rel ctx func ce cx es' out /\ wb_frame ce es0 sa s0 out /\
+    stmt_state_rel ctx func ce cx es' out /\ wb_frame ce es0 es' sa s0 out /\
     eval_operand buf.buf_operand out = SOME (n2w off) /\
     val_in_memory tv v off out.vs_memory /\
     FLOOKUP out.vs_allocas aid = SOME (off,buf.buf_size) /\
@@ -76,7 +70,7 @@ Proof
   drule owned_alloca_immutable_separation >> strip_tac >>
   `?z. run_inst_seq (emitted_insts sj sb) s = OK z /\
     (z with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-    stmt_state_rel ctx func ce cx es' z /\ wb_frame ce es0 sa s0 z /\
+    stmt_state_rel ctx func ce cx es' z /\ wb_frame ce es0 es' sa s0 z /\
     eval_operand buf.buf_operand z = SOME (n2w off) /\
     val_in_memory tv v (w2n (n2w off : bytes32)) z.vs_memory /\
     FLOOKUP z.vs_allocas aid = SOME (w2n (n2w off : bytes32),32 * LENGTH results) /\
@@ -94,7 +88,7 @@ Proof
   qexists_tac `z with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[] >> conj_tac
   >- (irule gas_path_then >> goal_assum (drule_at Any) >> simp[]) >>
-  simp[owned_endpoint_index_frame, owned_endpoint_index_region,
+  simp[exprSimRawCallCalldataTheory.raw_call_wb_frame_inst_idx, owned_endpoint_index_region,
        stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def] >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
@@ -135,7 +129,7 @@ Theorem physical_source_return_dispatch:
   stmt_state_rel ctx func ce cx (es1 with scopes := prev) t /\
   state_rel other ce cx (ee with <|scopes := []; gas_obs := []|>) cs /\
   immutable_alloca_sep func ce cx (ee with scopes := prev) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 (es1 with scopes := prev) sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce prev t id b sz) /\
   (!id b sz aid off asz.
@@ -149,7 +143,7 @@ Theorem physical_source_return_dispatch:
     out.vs_current_bb = sb.cs_current_bb /\
     out.vs_inst_idx = LENGTH sb.cs_current_insts /\
     stmt_state_rel ctx func ce cx (ee with <|scopes := prev; gas_obs := []|>) out /\
-    wb_frame ce es0 sa s0 out /\
+    wb_frame ce es0 (ee with <|scopes := prev; gas_obs := []|>) sa s0 out /\
     ((cty = NoneT /\ nret = 0 /\ vv = StackValue NoneT (Lit 0w) /\ v = NoneV) \/
      (?buf aid off. vv = LocatedValue cty (base_ptr buf) /\
        eval_operand buf.buf_operand out = SOME (n2w off) /\
@@ -296,7 +290,7 @@ Resume physical_source_return_dispatch[stack]:
       out.vs_current_bb = sb.cs_current_bb /\
       out.vs_inst_idx = LENGTH sb.cs_current_insts /\
       stmt_state_rel ctx func ce cx (ee with <|scopes := prev; gas_obs := []|>) out /\
-      wb_frame ce es0 sa s0 out /\
+      wb_frame ce es0 (ee with <|scopes := prev; gas_obs := []|>) sa s0 out /\
       eval_operand buf.buf_operand out = SOME (n2w off) /\
       val_in_memory tv v off out.vs_memory /\
       FLOOKUP out.vs_allocas ai.inst_id = SOME (off,buf.buf_size) /\

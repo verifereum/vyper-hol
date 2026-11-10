@@ -20,7 +20,7 @@ Theorem compiled_void_return:
   stmt_state_rel ctx func ce cx (es1 with scopes := prev) t /\
   state_rel other ce cx (ee with <|scopes := []; gas_obs := []|>) cs /\
   immutable_alloca_sep func ce cx (ee with scopes := prev) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 (es1 with scopes := prev) sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce prev t id b sz) /\
   (!id b sz aid off asz.
@@ -76,7 +76,7 @@ Theorem compiled_memory_return:
   stmt_state_rel ctx func ce cx (es1 with scopes := prev) t /\
   state_rel other ce cx (ee with <|scopes := []; gas_obs := []|>) cs /\
   immutable_alloca_sep func ce cx (ee with scopes := prev) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 (es1 with scopes := prev) sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce prev t id b sz) /\
   (!id b sz aid off asz.
@@ -133,7 +133,7 @@ Theorem compiled_stack_return:
   stmt_state_rel ctx func ce cx (es1 with scopes := prev) t /\
   state_rel other ce cx (ee with <|scopes := []; gas_obs := []|>) cs /\
   immutable_alloca_sep func ce cx (ee with scopes := prev) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 (es1 with scopes := prev) sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce prev t id b sz) /\
   (!id b sz aid off asz.
@@ -203,7 +203,7 @@ Theorem compiled_return_dispatch:
   stmt_state_rel ctx func ce cx (es1 with scopes := prev) t /\
   state_rel other ce cx (ee with <|scopes := []; gas_obs := []|>) cs /\
   immutable_alloca_sep func ce cx (ee with scopes := prev) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 (es1 with scopes := prev) sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce prev t id b sz) /\
   (!id b sz aid off asz.

@@ -16,7 +16,7 @@ Theorem stack_buffer_run_owned:
   0 < returns_stack_count
     (\name. MAP (FST o SND) (get_struct_fields ce.ce_struct_fields name)) cty /\
   intret_vals_match tv v ws /\ ws <> [] /\
-  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 sa s0 s /\
+  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 es' sa s0 s /\
   sa.cs_next_var <= si.cs_next_var /\
   eval_operand buf.buf_operand s = SOME w /\
   MAP (\op. eval_operand op s) results = MAP SOME ws /\
@@ -37,7 +37,7 @@ Theorem stack_buffer_run_owned:
       (type_memory_size itv)) ==>
   ?u. run_inst_seq (emitted_insts si sb) s = OK u /\
     (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-    stmt_state_rel ctx func ce cx es' u /\ wb_frame ce es0 sa s0 u /\
+    stmt_state_rel ctx func ce cx es' u /\ wb_frame ce es0 es' sa s0 u /\
     eval_operand buf.buf_operand u = SOME w /\
     val_in_memory tv v (w2n w) u.vs_memory /\
     FLOOKUP u.vs_allocas aid = SOME (w2n w,32 * LENGTH results) /\
@@ -64,7 +64,7 @@ Proof
          goal_assum (drule_at Any) >> simp[]) >>
      simp[] >> qexists_tac `ws` >> simp[] >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
-  `wb_frame ce es0 sa s0 u` by
+  `wb_frame ce es0 es' sa s0 u` by
     (irule wb_frame_owned_memory_tail >>
      goal_assum (drule_at Any) >>
      qexistsl_tac [`aid`,`w2n w`,`si`,`32 * LENGTH results`] >>

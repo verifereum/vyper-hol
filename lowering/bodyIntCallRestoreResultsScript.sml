@@ -25,7 +25,7 @@ Theorem allocated_buffer_vv_post:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\
   stmt_state_rel ctx func ce cx es' s /\
-  wb_frame ce es sa s0 s /\
+  wb_frame ce es es' sa s0 s /\
   eval_operand buf.buf_operand s = SOME w /\
   val_in_memory tv v (w2n w) s.vs_memory /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
@@ -53,7 +53,7 @@ Theorem void_invoke_return_post:
   emit_void INVOKE ops si = ((),sb) /\
   post_value_type ce e = expr_type e /\
   expr_type e = NoneT /\ value_has_type NoneTV v /\
-  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es sa s0 s /\
+  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es es' sa s0 s /\
   s.vs_current_bb = si.cs_current_bb /\
   s.vs_inst_idx = SUC (LENGTH si.cs_current_insts) ==>
   vv_post ctx func ce cx e es sa sb s0 es' (Value v)
@@ -91,7 +91,7 @@ Theorem memory_invoke_return_post:
   val_in_memory tv v (w2n w) cs.vs_memory /\
   (!n lb lsz. local_region ce es'.scopes t n lb lsz ==>
      w2n w + buf.buf_size <= lb \/ lb + lsz <= w2n w) /\
-  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es sa s0 s ==>
+  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es es' sa s0 s ==>
   vv_post ctx func ce cx e es sa sb s0 es' (Value v)
     (LocatedValue (expr_type e) (base_ptr buf)) s /\
   s.vs_current_bb = sb.cs_current_bb /\

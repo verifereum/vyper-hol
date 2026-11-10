@@ -378,7 +378,7 @@ Proof
     fs[expr_body_pre_def, expr_sim_inv_def] >>
   `evaluate_type (get_tenv cx) ann = SOME rtv` by
     fs[intcall_entry_def] >>
-  `wb_frame cenv es0 sa s0 t` by
+  `wb_frame cenv es0 (es1 with scopes := prev) sa s0 t` by
     (fs[intcall_entry_def, wb_frame_def] >> metis_tac[]) >>
   `!n b sz. local_region cenv es0.scopes s0 n b sz ==>
             local_region cenv prev t n b sz` by
@@ -527,7 +527,7 @@ Proof
   `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
     fs[expr_body_pre_def, expr_sim_inv_def] >>
   `evaluate_type (get_tenv cx) ret = SOME rtv` by fs[intcall_entry_def] >>
-  `wb_frame cenv es0 sa s0 t` by
+  `wb_frame cenv es0 (es1 with scopes := prev) sa s0 t` by
     (fs[intcall_entry_def, wb_frame_def] >> metis_tac[]) >>
   `!n b sz. local_region cenv es0.scopes s0 n b sz ==>
             local_region cenv prev t n b sz` by
@@ -582,7 +582,7 @@ Proof
     out.vs_current_bb = sb.cs_current_bb /\
     out.vs_inst_idx = LENGTH sb.cs_current_insts /\
     stmt_state_rel ctx func cenv cx (ee with <|scopes := prev; gas_obs := []|>) out /\
-    wb_frame cenv es0 sa s0 out /\
+    wb_frame cenv es0 (ee with <|scopes := prev; gas_obs := []|>) sa s0 out /\
     (?buf aid off. vv = LocatedValue ret (base_ptr buf) /\
       eval_operand buf.buf_operand out = SOME (n2w off) /\
       val_in_memory rtv v off out.vs_memory /\
@@ -626,7 +626,7 @@ Proof
   qpat_assum `vv = LocatedValue ret _` (fn th => pure_rewrite_tac[th]) >>
   irule widened_allocated_buffer_post >>
   goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >- (drule_all body_internal_decl_return_type >> simp[NoAsms]) >>
   goal_assum (drule_at (Pat `eval_operand _ out = _`)) >>

@@ -102,9 +102,10 @@ Proof
 QED
 
 Theorem extcall_jump_wb_frame:
-  wb_frame cenv es st s0 (jump_to l s) = wb_frame cenv es st s0 s
+  wb_frame cenv es es' st s0 (jump_to l s) = wb_frame cenv es es' st s0 s
 Proof
   simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
+       loweringPostsTheory.popped_kept_def,
        local_region_def, lookup_var_def, jump_to_def]
 QED
 

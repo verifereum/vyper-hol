@@ -8,7 +8,7 @@ Ancestors
 (* A write inside a fresh owned allocation preserves the original frame.
    Source scopes need not be identical: transport the original regions. *)
 Theorem wb_frame_owned_memory_tail:
-  wb_frame ce es0 sa s0 s /\ alloca_inv s /\
+  wb_frame ce es0 es' sa s0 s /\ alloca_inv s /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ sa.cs_next_id <= aid /\
   sa.cs_next_var <= si.cs_next_var /\
   (!x. not_fresh_at si x ==> lookup_var x u = lookup_var x s) /\
@@ -17,7 +17,7 @@ Theorem wb_frame_owned_memory_tail:
     mem_bytes_at a len u.vs_memory = mem_bytes_at a len s.vs_memory) /\
   (!n lb lsz. local_region ce es0.scopes s0 n lb lsz ==>
     lb + lsz <= b \/ b + sz <= lb) ==>
-  wb_frame ce es0 sa s0 u
+  wb_frame ce es0 es' sa s0 u
 Proof
   strip_tac >> fs[wb_frame_def] >> rpt conj_tac
   >- (rpt strip_tac >>
@@ -43,7 +43,7 @@ Theorem owned_buffer_result_post:
   stmt_state_rel ctx func ce cx es' u /\
   vv_holds ce cx (expr_type e) (Value v)
     (LocatedValue (expr_type e) (base_ptr buf)) es' u /\
-  wb_frame ce es0 sa s0 s /\
+  wb_frame ce es0 es' sa s0 s /\
   local_ptrs_reserved ce si /\ sa.cs_next_var <= si.cs_next_var /\
   (!x. not_fresh_at si x ==> lookup_var x u = lookup_var x s) /\
   u.vs_allocas = s.vs_allocas /\
@@ -91,7 +91,7 @@ Theorem stack_buffer_suffix_post:
     (\name. MAP (FST o SND) (get_struct_fields ce.ce_struct_fields name))
     (expr_type e) /\
   intret_vals_match tv v ws /\ ws <> [] /\
-  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 sa s0 s /\
+  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 es' sa s0 s /\
   sa.cs_next_var <= si.cs_next_var /\
   eval_operand buf.buf_operand s = SOME w /\
   MAP (\op. eval_operand op s) results = MAP SOME ws /\

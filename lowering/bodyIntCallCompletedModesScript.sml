@@ -50,7 +50,7 @@ Theorem void_completed_endpoint:
   expr_type e = NoneT /\ value_has_type NoneTV v /\
   stmt_state_rel ctx func ce cx es'
     (merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx) /\
-  wb_frame ce es0 sa s0
+  wb_frame ce es0 es' sa s0
     (merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx) ==>
   ?out. gas_path ctx func t n (OK out) /\
     vv_post ctx func ce cx e es0 sa sb s0 es' (Value v)
@@ -84,7 +84,7 @@ Theorem memory_completed_endpoint:
     w2n w + buf.buf_size <= lb \/ lb + lsz <= w2n w) /\
   stmt_state_rel ctx func ce cx es'
     (merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx) /\
-  wb_frame ce es0 sa s0
+  wb_frame ce es0 es' sa s0
     (merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx) ==>
   ?out. gas_path ctx func t n (OK out) /\
     vv_post ctx func ce cx e es0 sa sb s0 es' (Value v)
@@ -276,7 +276,7 @@ Theorem stack_completed_endpoint:
   value_has_type tv v /\ intret_vals_match tv v ir.iret_values /\
   LENGTH ir.iret_values = nret /\ 0 < nret /\
   MAP (\op. eval_operand op s) results = MAP SOME ir.iret_values /\
-  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 sa s0 s /\
+  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 es' sa s0 s /\
   eval_operand buf.buf_operand s = SOME (n2w off) /\
   FLOOKUP s.vs_allocas aid = SOME (off,buf.buf_size) /\
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\

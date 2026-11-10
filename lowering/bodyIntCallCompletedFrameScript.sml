@@ -29,7 +29,7 @@ Proof
 QED
 
 Theorem return_wb_frame_successor:
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 es' sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce es.scopes t id b sz) /\
   stmt_state_rel ctx func ce cx es t /\
@@ -46,7 +46,7 @@ Theorem return_wb_frame_successor:
   (!x. not_fresh_at sa x ==> ~MEM x outs) /\
   bind_outputs outs ir.iret_values
     (adopt_return_fmp ir (merge_callee_state t cs)) = SOME u ==>
-  wb_frame ce es0 sa s0 (u with vs_inst_idx := k)
+  wb_frame ce es0 es' sa s0 (u with vs_inst_idx := k)
 Proof
   strip_tac >> simp[raw_call_wb_frame_inst_idx] >>
   irule wb_frame_window_bind_outputs >>

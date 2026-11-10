@@ -54,7 +54,7 @@ Theorem stack_buffer_run_post:
     (\name. MAP (FST o SND) (get_struct_fields ce.ce_struct_fields name))
     (expr_type e) /\
   intret_vals_match tv v ws /\ ws <> [] /\
-  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 sa s0 s /\
+  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 es' sa s0 s /\
   sa.cs_next_var <= si.cs_next_var /\
   eval_operand buf.buf_operand s = SOME w /\
   MAP (\op. eval_operand op s) results = MAP SOME ws /\

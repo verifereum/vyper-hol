@@ -408,9 +408,9 @@ Proof
   qmatch_asmsub_abbrev_tac `frag_path ctx sp cs' _ (\t'. _ /\ t' = pre) _` >>
   `stmt_state_rel ctx func cenv cx ee pre` by
     (simp[Abbr `pre`] >> irule (SRULE [] extcall_optional_precheck_stmt) >> simp[]) >>
-  `wb_frame cenv es sa s0 pre` by
+  `wb_frame cenv es ee sa s0 pre` by
     (simp[Abbr `pre`] >> irule (SRULE [] extcall_optional_precheck_wb) >>
-     goal_assum (drule_at (Pat `wb_frame _ _ _ _ _`)) >> simp[]) >>
+     goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >> simp[]) >>
   `!p. safe_operand sp p ==> eval_operand p pre = eval_operand p t` by
     (rpt strip_tac >> simp[Abbr `pre`] >>
      irule (SRULE [] extcall_optional_precheck_operands) >> simp[]) >>
@@ -431,7 +431,7 @@ Proof
   `?gw. eval_operand gas_op pre = SOME gw` by (Cases_on `eval_operand gas_op t` >> gvs[]) >>
   drule_at (Pat `emit_op _ _ _ = _`) oracle_call_path >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ pre`)) >>
-  disch_then (drule_at (Pat `wb_frame _ _ _ _ pre`)) >>
+  disch_then (drule_at (Pat `wb_frame _ _ _ _ _ pre`)) >>
   disch_then (qspec_then `value_opt` mp_tac) >>
   `eval_operand addr_op pre = SOME aw /\
    eval_operand call_offset pre = SOME ao /\ eval_operand call_len pre = SOME az /\
@@ -512,6 +512,9 @@ Resume extcall_call_step[call_success]:
     (drule vyperCallOutcomeTheory.take_call_outcome_frame >> disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
   `(SND (adopt_call_outcome rq oc consumed)).scopes = consumed.scopes` by
     (Cases_on `rq.cr_static` >> simp[vyperCallOutcomeTheory.adopt_call_outcome_equation]) >>
+  `wb_frame cenv es (SND (adopt_call_outcome rq oc consumed)) sa s0 u'` by
+    (qpat_assum `wb_frame cenv es ee sa s0 u'` mp_tac >>
+     simp[wb_frame_def, locals_kept_def, popped_kept_def]) >>
   `extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
       has_default default_op default_ty default_opt oc.co_returnData
       (SND (adopt_call_outcome rq oc consumed)) (jump_to sr.cs_current_bb u')` by

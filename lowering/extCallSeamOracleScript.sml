@@ -165,7 +165,7 @@ Proof
 QED
 
 Theorem oracle_call_wb_frame:
-  wb_frame cenv es sa s0 s /\
+  wb_frame cenv es es' sa s0 s /\
   t.vs_vars = s.vs_vars /\ t.vs_allocas = s.vs_allocas /\
   t.vs_memory = (write_memory_with_expansion dst payload s).vs_memory /\
   (!aid b sz. aid < sa.cs_next_id /\
@@ -174,7 +174,7 @@ Theorem oracle_call_wb_frame:
   (!name b sz. local_region cenv es.scopes s0 name b sz ==>
     compileEnv$regions_disjoint dst (LENGTH payload) b sz) /\
   ~not_fresh_at sa out ==>
-  wb_frame cenv es sa s0 (update_var out result t)
+  wb_frame cenv es es' sa s0 (update_var out result t)
 Proof
   strip_tac >>
   `!b sz. compileEnv$regions_disjoint dst (LENGTH payload) b sz ==>
@@ -310,14 +310,14 @@ Theorem oracle_call_path:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
     off + type_memory_size tv <= w2n ro \/ w2n ro + cap <= off) /\
-  wb_frame cenv initial_es initial s0 s /\ initial.cs_next_var <= sa.cs_next_var /\
+  wb_frame cenv initial_es es' initial s0 s /\ initial.cs_next_var <= sa.cs_next_var /\
   (!aid b sz. aid < initial.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
     compileEnv$regions_disjoint (w2n ro) cap b sz) /\
   (!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
     compileEnv$regions_disjoint (w2n ro) cap b sz) ==>
   frag_path ctx sa sb (\u. u = s)
     (\u. stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
-      wb_frame cenv initial_es initial s0 u /\
+      wb_frame cenv initial_es es' initial s0 u /\
       eval_operand ok u = SOME (bool_to_word outcome.co_success) /\
       u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
       u.vs_alloca_next = s.vs_alloca_next /\
@@ -348,10 +348,10 @@ Resume oracle_call_path[frame]:
        (fn th => once_rewrite_tac[th]) >> simp[]) >>
   `~not_fresh_at initial (STRING #"%" (toString sa.cs_next_var))` by
     simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
-  `wb_frame cenv initial_es initial s0 u` by
+  `wb_frame cenv initial_es es' initial s0 u` by
     (qpat_assum `u = update_var _ _ oracle` (fn th => once_rewrite_tac[th]) >>
      irule oracle_call_wb_frame >> simp[] >>
-     goal_assum (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
      qexistsl_tac [`w2n ro`, `TAKE cap outcome.co_returnData`] >> simp[] >>
      conj_tac >> rpt gen_tac >> strip_tac >>
      first_x_assum (drule_all_then mp_tac) >>

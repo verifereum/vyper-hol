@@ -9,7 +9,7 @@ Theorem widened_allocated_buffer_post:
   type_widens_to (get_tenv cx) cty ann /\ ~is_word_type ann /\
   (is_bytestring_type ann ==> is_bytestring_type cty) /\
   evaluate_type (get_tenv cx) cty = SOME tv /\ value_has_type tv v /\
-  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es sa s0 s /\
+  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es es' sa s0 s /\
   eval_operand buf.buf_operand s = SOME w /\
   val_in_memory tv v (w2n w) s.vs_memory /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\

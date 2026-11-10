@@ -10,7 +10,7 @@ Theorem return_successor_frame:
   stmt_state_rel ctx func ce cx es t /\
   state_rel other ce cx (ee with scopes := []) cs /\
   immutable_alloca_sep func ce cx (ee with scopes := es.scopes) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 es sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce es.scopes t id b sz) /\
   (!id b sz aid off asz.
@@ -28,7 +28,7 @@ Theorem return_successor_frame:
     (adopt_return_fmp ir (merge_callee_state t cs)) = SOME u ==>
   stmt_state_rel ctx func ce cx (ee with scopes := es.scopes)
     (u with vs_inst_idx := k) /\
-  wb_frame ce es0 sa s0 (u with vs_inst_idx := k) /\
+  wb_frame ce es0 (ee with scopes := es.scopes) sa s0 (u with vs_inst_idx := k) /\
   (!id b sz. local_region ce es.scopes (u with vs_inst_idx := k) id b sz <=>
     local_region ce es.scopes t id b sz)
 Proof
@@ -42,7 +42,8 @@ Proof
     goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >> simp[] >>
     goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >>
     metis_tac[]) >>
-  conj_tac >- (irule return_wb_frame_successor >>
+  conj_tac >- (irule wb_frame_scopes_cong >> qexists_tac `es` >> simp[] >>
+    irule return_wb_frame_successor >>
     goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >> simp[] >>
     goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >> simp[]) >>
   rpt gen_tac >> irule return_local_region_successor >>

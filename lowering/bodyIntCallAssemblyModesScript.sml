@@ -17,7 +17,7 @@ Theorem void_return_endpoint:
   stmt_state_rel ctx func ce cx es t /\
   state_rel other ce cx (ee with scopes := []) cs /\
   immutable_alloca_sep func ce cx (ee with scopes := es.scopes) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 es sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce es.scopes t id b sz) /\
   (!id b sz aid off asz.
@@ -63,7 +63,7 @@ Theorem memory_return_endpoint:
   stmt_state_rel ctx func ce cx es t /\
   state_rel other ce cx (ee with scopes := []) cs /\
   immutable_alloca_sep func ce cx (ee with scopes := es.scopes) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 es sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce es.scopes t id b sz) /\
   (!id b sz aid off asz.
@@ -142,7 +142,7 @@ Theorem stack_return_endpoint:
   stmt_state_rel ctx func ce cx es t /\
   state_rel other ce cx (ee with scopes := []) cs /\
   immutable_alloca_sep func ce cx (ee with scopes := es.scopes) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 es sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce es.scopes t id b sz) /\
   (!id b sz aid off asz.
