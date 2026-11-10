@@ -5470,16 +5470,17 @@ Proof
   gvs[is_volatile_memory_def]
 QED
 
-Theorem mm_local_nonflushing_history_frame[local]:
-  mm_local_history is H n /\ q < n /\ ss.ss_copies <> [] /\
-  (scan_inst dfg Mem2Mem ss (EL q is)).ss_flushed = ss.ss_flushed /\
+Theorem mm_local_history_noncapture_frame[local]:
+  mm_local_history is H n /\ q < n /\
+  ((EL q is).inst_opcode = MSTORE \/ (EL q is).inst_opcode = MCOPY \/
+   ~(Eff_MEMORY IN write_effects (EL q is).inst_opcode)) /\
   mm_local_write_capture is H n q = NONE ==>
   (H (SUC q)).vs_memory = (H q).vs_memory
 Proof
   strip_tac >>
   `q < LENGTH is /\ step_inst_base (EL q is) (H q) = OK (H (SUC q))` by
     gvs[mm_local_history_def] >>
-  drule_all mm_local_nonflushing_write_opcode >> strip_tac
+  all_tac
   >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
       simp[venomExecSemanticsTheory.step_inst_base_def,
            venomExecSemanticsTheory.exec_write2_def] >>
@@ -5509,6 +5510,17 @@ Proof
                 venomStateTheory.revert_state_def, venomStateTheory.set_returndata_def]) >>
       disch_then (SUBST1_TAC o SYM) >> simp[]) >>
   irule venomInstProofs3Theory.step_inst_base_preserves_memory >> metis_tac[]
+QED
+
+Theorem mm_local_nonflushing_history_frame[local]:
+  mm_local_history is H n /\ q < n /\ ss.ss_copies <> [] /\
+  (scan_inst dfg Mem2Mem ss (EL q is)).ss_flushed = ss.ss_flushed /\
+  mm_local_write_capture is H n q = NONE ==>
+  (H (SUC q)).vs_memory = (H q).vs_memory
+Proof
+  strip_tac >> irule mm_local_history_noncapture_frame >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[mm_local_nonflushing_write_opcode]
 QED
 
 Definition mm_local_owned_def:
@@ -6570,6 +6582,61 @@ Proof
   rpt strip_tac >> gvs[] >> decide_tac
 QED
 
+Theorem mm_local_self_overlap_partner_contained[local]:
+  copy_overwrites_src c /\ c.cg_src <> c.cg_dst /\
+  c.cg_src + d.cg_dst = c.cg_dst + d.cg_src /\
+  c.cg_dst <= d.cg_dst + d.cg_length /\
+  d.cg_dst <= c.cg_dst + c.cg_length /\
+  ~copy_overwrites c (copy_src_interval d) /\
+  ~copy_overwrites d (copy_src_interval c) /\ 0 < d.cg_length ==>
+  c.cg_dst <= d.cg_dst /\
+  d.cg_dst + d.cg_length <= c.cg_dst + c.cg_length
+Proof
+  strip_tac >>
+  fs[copy_overwrites_src_def, copy_overwrites_def,
+       copy_dst_interval_def, copy_src_interval_def,
+       mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
+       mmIntervalTheory.interval_end_def,
+       arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
+  decide_tac
+QED
+
+Theorem mm_local_self_overlap_merge_geometry[local]:
+  copy_overwrites_src c /\ c.cg_src <> c.cg_dst /\
+  c.cg_dst <= d.cg_dst /\ copy_can_merge c d /\
+  ~copy_overwrites c (copy_src_interval d) /\
+  ~copy_overwrites d (copy_src_interval c) /\ 0 < d.cg_length ==>
+  (copy_merge c d).cg_dst = c.cg_dst /\
+  (copy_merge c d).cg_src = c.cg_src /\
+  (copy_merge c d).cg_length = c.cg_length
+Proof
+  strip_tac >>
+  `c.cg_dst <= d.cg_dst /\
+   d.cg_dst + d.cg_length <= c.cg_dst + c.cg_length` by
+    (irule mm_local_self_overlap_partner_contained >>
+     gvs[copy_can_merge_def] >> decide_tac) >>
+  simp[copy_merge_def, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem mm_local_self_overlap_merge_left_geometry[local]:
+  copy_overwrites_src c /\ c.cg_src <> c.cg_dst /\
+  d.cg_dst <= c.cg_dst /\ copy_can_merge d c /\
+  ~copy_overwrites c (copy_src_interval d) /\
+  ~copy_overwrites d (copy_src_interval c) /\ 0 < d.cg_length ==>
+  (copy_merge d c).cg_dst = c.cg_dst /\
+  (copy_merge d c).cg_src = c.cg_src /\
+  (copy_merge d c).cg_length = c.cg_length
+Proof
+  strip_tac >>
+  `c.cg_dst <= d.cg_dst /\
+   d.cg_dst + d.cg_length <= c.cg_dst + c.cg_length` by
+    (irule mm_local_self_overlap_partner_contained >>
+     gvs[copy_can_merge_def] >> decide_tac) >>
+  `d.cg_dst = c.cg_dst /\ d.cg_src = c.cg_src` by
+    (fs[copy_can_merge_def] >> decide_tac) >>
+  simp[copy_merge_def, arithmeticTheory.MAX_DEF]
+QED
+
 Theorem mm_local_scan_step_war_exclusion[local]:
   mm_local_history is H n /\ q < n /\ q < LENGTH is /\ i = EL q is /\
   MEM h ss.ss_copies /\ ~MEM h (scan_inst dfg Mem2Mem ss i).ss_flushed /\
@@ -6621,6 +6688,44 @@ Proof
        mmIntervalTheory.interval_end_def,
        arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
   rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+Theorem mm_local_surviving_history_frame[local]:
+  mm_local_history is H n /\ q < n /\ MEM h ss.ss_copies /\
+  ~MEM h (scan_inst dfg Mem2Mem ss (EL q is)).ss_flushed /\
+  mm_local_write_capture is H n q = NONE ==>
+  (H (SUC q)).vs_memory = (H q).vs_memory
+Proof
+  strip_tac >> irule mm_local_history_noncapture_frame >>
+  goal_assum (drule_at Any) >> simp[] >>
+  Cases_on `(EL q is).inst_opcode = MSTORE` >- simp[] >>
+  Cases_on `(EL q is).inst_opcode = MCOPY` >- simp[] >>
+  Cases_on `(EL q is).inst_opcode = MLOAD`
+  >- simp[venomEffectsTheory.write_effects_def, venomEffectsTheory.empty_effects_def] >>
+  gvs[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  Cases_on `is_volatile_memory (EL q is)` >>
+  gvs[hard_barrier_def, MEM_APPEND, is_volatile_memory_def]
+QED
+
+Theorem mm_local_surviving_source_read[local]:
+  mm_local_history is H n /\ q < n /\ MEM h ss.ss_copies /\
+  ~MEM h (scan_inst dfg Mem2Mem ss (EL q is)).ss_flushed /\
+  h.cg_src <= a /\ a + len <= h.cg_src + h.cg_length ==>
+  read_memory a len (H (SUC q)) = read_memory a len (H q)
+Proof
+  strip_tac >> Cases_on `mm_local_write_capture is H n q`
+  >- (drule_all mm_local_surviving_history_frame >>
+      simp[venomStateTheory.read_memory_def]) >>
+  PairCases_on `x` >>
+  `q < LENGTH is` by gvs[mm_local_history_def] >>
+  drule_all mm_local_write_capture_sound >> disch_then assume_tac >>
+  `h.cg_length = 0 \/ LENGTH x1 = 0 \/
+   h.cg_src + h.cg_length <= x0 \/ x0 + LENGTH x1 <= h.cg_src` by
+    (drule mm_local_scan_step_war_exclusion >> simp[] >>
+     disch_then irule >> metis_tac[]) >>
+  simp[venomStateTheory.read_memory_def] >>
+  irule frameViewMemoryTheory.padded_memory_read_cong >> rpt strip_tac >>
+  irule frameViewMemoryTheory.write_memory_byte_outside >> decide_tac
 QED
 
 Theorem mm_local_scan_interval_read[local]:
@@ -6747,7 +6852,10 @@ Theorem mm_local_indexed_bulk_owner[local]:
   MEM (EL j is).inst_id g.cg_inst_ids /\
   rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
   ?h. MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
-    h.cg_dst <= w2n dst /\ w2n dst + w2n len <= h.cg_dst + h.cg_length
+    h.cg_dst <= w2n dst /\ w2n dst + w2n len <= h.cg_dst + h.cg_length /\
+    mm_local_copy_ancestor
+      <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+         cg_inst_ids := [(EL j is).inst_id] |> h
 Proof
   strip_tac >>
   `?h. MEM h (ss.ss_copies ++ ss.ss_flushed) /\
@@ -6774,6 +6882,91 @@ Proof
        (SPEC_ALL mm_local_prefix_write_pending_ancestor))) >>
      disch_then (assume_tac o CONJUNCT1) >> first_assum ACCEPT_TAC) >>
   metis_tac[]
+QED
+
+Theorem mm_local_indexed_future_not_flushed[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ n <= r /\ r < LENGTH is /\ j < LENGTH is /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  MEM (EL j is).inst_id h.cg_inst_ids /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  ~MEM h ss.ss_flushed
+Proof
+  strip_tac >> strip_tac >>
+  `bb.bb_instructions = TAKE n is ++ DROP n is` by simp[] >>
+  `MEM h (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by
+    (qspecl_then [`DROP n is`, `ss`] strip_assume_tac
+       (Q.INST [`dfg` |-> `dfg_build_function fn0`, `mode` |-> `Mem2Mem`]
+          mm_local_fold_flushed_extension) >>
+     gvs[scan_block_def, GSYM FOLDL_APPEND, hard_barrier_def, MEM_APPEND]) >>
+  `h = g` by
+    (irule mm_local_prefix_write_group_owner >>
+     goal_assum (drule_at Any) >> metis_tac[MEM_EL]) >>
+  `MEM (EL r is).inst_id h.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  `MEM (EL r is).inst_id (MAP (\i. i.inst_id) (TAKE n is))` by
+    (irule mm_local_prefix_fragment_ids_before_cut >>
+     goal_assum (drule_at Any) >> metis_tac[MEM_APPEND]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    (qpat_assum `is = _` SUBST1_TAC >> drule_all mm_local_prefix_wf_id_distinct >> simp[]) >>
+  metis_tac[mm_local_future_id_not_prefix]
+QED
+
+Theorem mm_local_indexed_bulk_source_survival[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < r /\ r < LENGTH is /\ r <= N /\
+  mm_local_history is H N /\
+  (EL j is).inst_opcode = MCOPY /\
+  (EL j is).inst_operands = [Lit dst; Lit src; Lit len] /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  read_memory (w2n src) (w2n len) (H r) =
+    read_memory (w2n src) (w2n len) (H (SUC j))
+Proof
+  strip_tac >>
+  `!q. SUC j <= q /\ q < r ==>
+    read_memory (w2n src) (w2n len) (H (SUC q)) =
+      read_memory (w2n src) (w2n len) (H q)` by
+    (rpt strip_tac >>
+     qabbrev_tac `ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+       empty_scan_state (TAKE q is)` >>
+     `?h. MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+       h.cg_dst <= w2n dst /\ w2n dst + w2n len <= h.cg_dst + h.cg_length /\
+       mm_local_copy_ancestor
+         <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+            cg_inst_ids := [(EL j is).inst_id] |> h` by
+       (`j < q /\ q <= r` by decide_tac >>
+        irule mm_local_indexed_bulk_owner >>
+        qpat_assum `mm_local_prefix _ _ _ _ = _` mp_tac >>
+        simp[Abbr `ss`] >> metis_tac[]) >>
+     `scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is) =
+        FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+          empty_scan_state (TAKE (SUC q) is)` by
+       (`q < LENGTH is` by decide_tac >>
+        simp[Abbr `ss`, rich_listTheory.TAKE_SUC, rich_listTheory.DROP_EL_CONS,
+             FOLDL_APPEND]) >>
+     `~MEM h (scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is)).ss_flushed` by
+       (`SUC q <= r /\ j < LENGTH is` by decide_tac >>
+        `(EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by simp[] >>
+        irule mm_local_indexed_future_not_flushed >>
+        goal_assum (drule_at Any) >> metis_tac[]) >>
+     `q < N` by decide_tac >>
+     `h.cg_src <= w2n src /\ w2n src + w2n len <= h.cg_src + h.cg_length` by
+       (gvs[mm_local_copy_ancestor_def] >> decide_tac) >>
+     drule mm_local_surviving_source_read >> disch_then irule >> metis_tac[]) >>
+  `!q. SUC j <= q /\ q <= r ==>
+    read_memory (w2n src) (w2n len) (H q) =
+      read_memory (w2n src) (w2n len) (H (SUC j))` suffices_by simp[] >>
+  Induct >> simp[] >> rpt strip_tac >>
+  Cases_on `SUC j = SUC q` >- gvs[] >>
+  `SUC j <= q /\ q < r` by decide_tac >> simp[]
 QED
 
 Theorem mm_local_indexed_store_owner[local]:
