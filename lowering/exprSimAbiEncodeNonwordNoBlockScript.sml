@@ -441,11 +441,11 @@ Theorem abi_encode_nonword_no_block_phases:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
   ~is_word_type (expr_type e) /\
-  abi_enc_plan (get_tenv cx) (expr_type e) ei /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  abi_enc_plan (get_tenv cx) (lowered_value_type ce e) ei /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
-  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (expr_type e))
+  vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
     sa = (ops,ready) /\
   compile_abi_encode_to_buf (SND ops) op ei ready = (len,body_end) /\
   abi_builtin_encode_finish (FST ops) len
@@ -460,7 +460,7 @@ Theorem abi_encode_nonword_no_block_phases:
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?raw. run_inst_seq (emitted_insts sa final) s = OK raw /\
       let actual = raw with vs_inst_idx := LENGTH final.cs_current_insts in
-      let bytes = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av in
+      let bytes = enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av in
       let m = case mid of NONE => 0 | SOME _ => 4 in
       eval_operand (FST ops) actual = SOME (n2w p) /\
       mload p actual = n2w (LENGTH bytes+m) /\
@@ -480,8 +480,8 @@ Theorem abi_encode_nonword_no_block_phases:
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
-      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
-    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
     actual.vs_alloca_next < dimword (:256)
 Proof
   strip_tac >>
@@ -520,8 +520,26 @@ Resume abi_encode_nonword_no_block_phases[apply]:
 QED
 
 Resume abi_encode_nonword_no_block_phases[caller]:
-  drule_all abi_encode_nonword_observer_geometry >>
-  simp_tac bool_ss [LET_THM] >> disch_then (qspec_then `p` strip_assume_tac) >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[exprSimHypsTheory.expr_body_pre_lowered_fits] >>
+  `?stv. evaluate_type (get_tenv cx) (expr_type e) = SOME stv` by
+    metis_tac[optionTheory.IS_SOME_EXISTS,
+      exprSimHypsTheory.expr_body_pre_type_evaluates] >>
+  `vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av` by
+    metis_tac[exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_conversion] >>
+  `vyper_to_abi_type (get_tenv cx) (expr_type e) =
+    vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)` by
+    metis_tac[exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_abi_type] >>
+  `32 + (case mid of NONE => 0 | SOME _ => 32) <=
+     32+32*word_size (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+
+       (case mid of NONE => 0 | SOME _ => 4)) /\
+   p <= p+32+(case mid of NONE => 0 | SOME _ => 4) /\
+   p+32+(case mid of NONE => 0 | SOME _ => 4)+
+     LENGTH (enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av) <=
+     p+(32+32*word_size (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+
+       (case mid of NONE => 0 | SOME _ => 4)))` by
+    (drule_all abi_encode_nonword_observer_geometry >>
+     simp_tac bool_ss [LET_THM] >> metis_tac[]) >>
   `stmt_state_rel ctx func ce cx es' s` by
     (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp_tac bool_ss [loweringPostsTheory.expr_post_def] >> metis_tac[]) >>
@@ -533,8 +551,8 @@ Resume abi_encode_nonword_no_block_phases[caller]:
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
-      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
-    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
     actual.vs_alloca_next < dimword (:256)` by
     (drule_all (SIMP_RULE bool_ss [] (Q.INST
        [`outsz` |-> `32+32*word_size (maxlen+(case mid of NONE => 0 | SOME x => 4))`]
@@ -574,11 +592,11 @@ Theorem abi_encode_nonword_no_block_run:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
   ~is_word_type (expr_type e) /\
-  abi_enc_plan (get_tenv cx) (expr_type e) ei /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  abi_enc_plan (get_tenv cx) (lowered_value_type ce e) ei /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
-  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (expr_type e))
+  vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
+  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
     sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sa.cs_blocks = sb.cs_blocks /\ local_ptrs_reserved ce sa /\
@@ -588,7 +606,7 @@ Theorem abi_encode_nonword_no_block_run:
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?p raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
     let actual = raw with vs_inst_idx := LENGTH sb.cs_current_insts in
-    let bytes = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av in
+    let bytes = enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av in
     let m = case mid of NONE => 0 | SOME _ => 4 in
     eval_operand out actual = SOME (n2w p) /\
     mload p actual = n2w (LENGTH bytes+m) /\
@@ -608,8 +626,8 @@ Theorem abi_encode_nonword_no_block_run:
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
-      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
-    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
     actual.vs_alloca_next < dimword (:256)
 Proof
   strip_tac >> drule lower_abi_encode_trace >> strip_tac >>
@@ -639,11 +657,11 @@ Theorem abi_encode_nonword_no_block_observer:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
   ~is_word_type (expr_type e) /\
-  abi_enc_plan (get_tenv cx) (expr_type e) ei /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  abi_enc_plan (get_tenv cx) (lowered_value_type ce e) ei /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
-  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (expr_type e))
+  vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
+  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
     sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sa.cs_blocks = sb.cs_blocks /\ local_ptrs_reserved ce sa /\
@@ -652,7 +670,7 @@ Theorem abi_encode_nonword_no_block_observer:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ fn_has_code sa sb observer ==>
   ?p actual. abi_decode_sim ctx observer s actual /\
-    let bytes = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av in
+    let bytes = enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av in
     let m = case mid of NONE => 0 | SOME _ => 4 in
     eval_operand out actual = SOME (n2w p) /\
     mload p actual = n2w (LENGTH bytes+m) /\
@@ -672,8 +690,8 @@ Theorem abi_encode_nonword_no_block_observer:
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
-      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) /\
-    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (expr_type e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+      SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
     actual.vs_alloca_next < dimword (:256)
 Proof
   strip_tac >> drule_all abi_encode_nonword_no_block_run >>
