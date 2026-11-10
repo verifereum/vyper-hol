@@ -1179,7 +1179,7 @@ Proof
   Cases_on `expr_int_literal e2` >> gvs[]
 QED
 
-Theorem ifexp_arg_type_fits_refl[local]:
+Theorem ifexp_arg_type_fits_refl:
   !t. arg_type_fits t t
 Proof
   Induct >> simp[arg_type_fits_def]
