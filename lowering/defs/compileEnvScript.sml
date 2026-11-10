@@ -776,6 +776,25 @@ Definition is_word_type_def:
   is_word_type _ = F
 End
 
+Theorem membership_element_word_boundary:
+  !ty. is_prim_word_type ty = is_word_type ty
+Proof
+  Cases >> simp[is_prim_word_type_def, is_word_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[is_prim_word_type_def, is_word_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[is_prim_word_type_def, is_word_type_def]
+QED
+
+Theorem membership_checker_lowering_boundary:
+  (bop = In \/ bop = NotIn) /\
+  well_typed_binop ty bop needle_ty (ArrayT elem_ty bd) ==>
+  needle_ty = elem_ty /\ is_word_type elem_ty
+Proof
+  metis_tac[well_typed_membership_array_element,
+            membership_element_word_boundary]
+QED
+
 Theorem type_widens_to_word:
   !tenv t u. type_widens_to tenv t u /\ is_word_type u ==> t = u
 Proof

@@ -1,7 +1,8 @@
 Theory bytestringHashProps
 Ancestors
-  exprLowering exprLoweringProps emitHelperProps compileEnv venomExecSemantics
-  venomState venomInst byte keccak
+  exprLowering exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs venomExecSemantics
+  venomState venomInst byte keccak valueEncoding valueEncodingDefs venomMemProps
+  ASCIInumbers rich_list fragExec emitHelper words
 
 Theorem emit_op_SHA3_correct:
   emit_op SHA3 [ptr_op; len_op] st = (op, st') /\
@@ -205,3 +206,72 @@ val _ = List.app (fn (name, th) =>
        (#1 (Tag.dest_tag (Thm.tag th))) then ()
   else raise Fail ("Oracle dependency in bytestring hash boundary: " ^ name))
   (DB.thms "bytestringHashProps");
+
+(* Pure compiler boundary: inputs may name old variables, without a global
+   fresh_vars_wrt assumption on the machine state. *)
+Theorem compile_bytestring_hash_run_nofresh:
+  compile_bytestring_hash x sa = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  eval_operand x s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b + 32) (LENGTH bs) s.vs_memory = bs /\
+  b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (word_of_bytes_be (Keccak_256_w64 bs):bytes32) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s)
+Proof
+  simp[compile_bytestring_hash_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+       word_of_bytes_be_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >>
+  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+  simp[DROP_LENGTH_APPEND] >>
+  simp[Once run_inst_seq_def] >> simp[mk_inst_def] >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  simp_tac std_ss [instruction_accfupds, instruction_accessors] >>
+  ASM_SIMP_TAC std_ss [exec_pure2_def, eval_operand_def, bind_outputs_def] >>
+  `eval_operand x
+     (update_var (STRING #"%" (toString sa.cs_next_var)) (n2w b + 32w) s) =
+     SOME (n2w b)` by
+    (Cases_on `x` >> gvs[eval_operand_def, lookup_var_update_var] >>
+     gvs[not_fresh_at_def]) >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, exec_read1_def] >>
+  `mload b s = n2w (LENGTH bs)` by gvs[mload_def, mem_word_at_def] >>
+  simp[mload_def, update_var_def] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, eval_operand_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE, toString_inj] >>
+  gvs[mload_def, word_add_n2w, GSYM mem_bytes_at_def,
+      run_inst_seq_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+      toString_inj] >>
+  rpt strip_tac >> gvs[not_fresh_at_def] >>
+  first_assum (qspec_then `sa.cs_next_var + 2` assume_tac) >>
+  first_assum (qspec_then `sa.cs_next_var + 1` assume_tac) >>
+  first_assum (qspec_then `sa.cs_next_var` assume_tac) >> gvs[]
+QED
+
+Theorem compile_bytestring_hash_shape:
+  compile_bytestring_hash p sa = (op,sb) ==>
+  same_blocks sa sb /\
+  sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
+  ci_mono sa sb /\ (!x. op = Var x ==> not_fresh_at sb x)
+Proof
+  strip_tac >>
+  `ci_mono sa sb` by
+    metis_tac[ci_mono_compile_bytestring_hash, pairTheory.SND] >>
+  simp[] >>
+  gvs[compile_bytestring_hash_def, emit_op_def, comp_bind_def,
+      comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+      emitted_insts_def] >>
+  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+  simp[DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def, same_blocks_def,
+       not_fresh_at_def, toString_inj] >>
+  rpt strip_tac >> gvs[toString_inj]
+QED

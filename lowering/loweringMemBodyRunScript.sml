@@ -20,7 +20,7 @@ Ancestors
   compileVyper unitTransformDefs fragExec loweringHalt venomInst venomWf
   contextCodegenRel memSafeRun allocaFrontierBound o1PassContract ptrDiscipline
   vyperLoweringCorrect loweringRuntimeCorrect fragExecMem fragGasMode fragGasPathMem bodyMemoryDefs
-  entryHaltMem loweringPtrCorrect bodySim bodySimMain moduleLowering
+  entryHaltMem bodySim bodySimMain moduleLowering
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
   bodyAbiDecodeTarget loweringMemEntryReach loweringMemFrameRet gasSummary
   bodyMemory loweringMemBodySourceGas

@@ -1,6 +1,7 @@
 (* Mapping-key representation and pure hashing boundaries. *)
 Theory exprSimMapKey
 Ancestors
+  exprSimHashBoundary
   exprSimHash exprSimLeaves valueEncodingProofs exprLoweringProps
   vyperTypeSystem vyperValue vyperTyping vyperStorage valueEncoding valueEncodingDefs
   vyperInterpreter vyperState list rich_list compileEnv loweringStateRelDefs loweringPosts context venomState

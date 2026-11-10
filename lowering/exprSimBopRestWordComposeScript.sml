@@ -485,8 +485,8 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
   `!ee. bop_result cx ann bop [expr_type e1; ArrayT (expr_type e1) bd]
           v1 (ArrayV av) ee = INL (BoolV answer)` by
     (Cases_on `bop = In` >>
-     fs[exprBopSimDefsTheory.bop_result_def, Abbr `answer`,
-        vyperValueOperationTheory.evaluate_membership_array]) >>
+     gvs[exprBopSimDefsTheory.bop_result_def, Abbr `answer`,
+         vyperValueOperationTheory.evaluate_membership_array]) >>
   qexistsl [`[]`, `fin`, `q`, `BoolV answer`] >>
   simp[gasSummaryTheory.gas_marked_exec_def] >>
   conj_tac

@@ -370,24 +370,24 @@ Theorem compile_array_membership_loop_safe_operand:
   compile_array_membership_loop needle arr len sz off loader bound isin sa = (r,sb) ==>
   safe_operand sb r
 Proof
-  Cases_on `bound` >> Cases_on `isin` >> Cases_on `off > 0` >>
-  simp[compile_array_membership_loop_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >>
   strip_tac >>
-  ntac 8 (pairarg_tac >> gvs[]) >>
-  ntac 8 (pairarg_tac >> gvs[]) >>
-  ntac 8 (pairarg_tac >> gvs[]) >>
-  rpt (pairarg_tac >> gvs[]) >>
-  qpat_x_assum `!p s v t. _` drule_all >> strip_tac >>
-  imp_res_tac emit_op_safe_operand >>
-  imp_res_tac fresh_var_safe_operand >>
-  imp_res_tac fresh_var_counter_mono >>
-  imp_res_tac fresh_label_counter_mono >>
-  imp_res_tac new_block_counter_mono >>
-  imp_res_tac emit_inst_counter_mono >>
-  imp_res_tac emit_op_counter_mono >>
-  irule safe_operand_mono >>
-  goal_assum (drule_at (Pat `safe_operand _ _`)) >> decide_tac
+  `!p s. s.cs_next_var <= (SND (loader p s)).cs_next_var` by
+    (rpt gen_tac >> Cases_on `loader p s` >> gvs[] >> metis_tac[]) >>
+  `!s. safe_operand
+      (SND (compile_array_membership_loop needle arr len sz off loader bound isin s))
+      (FST (compile_array_membership_loop needle arr len sz off loader bound isin s))` suffices_by
+    (disch_then (qspec_then `sa` mp_tac) >> simp[]) >>
+  Cases_on `bound` >> Cases_on `isin` >> Cases_on `off > 0` >>
+  pure_rewrite_tac[compile_array_membership_loop_def] >>
+  ho_match_mp_tac membership_fresh_start >>
+  rpt (FIRST [ho_match_mp_tac membership_bind_preserve,
+              ho_match_mp_tac membership_ignore_preserve,
+              gen_tac] >>
+       rpt conj_tac >> BETA_TAC) >>
+  simp[membership_primitive_next_var, comp_return_def, comp_bind_def,
+       comp_ignore_bind_def, emit_op_def, emit_inst_def, fresh_var_def,
+       fresh_id_def, emit_def, safe_operand_def, not_fresh_at_def,
+       ASCIInumbersTheory.toString_11]
 QED
 
 Theorem compile_var_array_membership_safe_operand:

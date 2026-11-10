@@ -20,6 +20,7 @@ Ancestors
   vyperCreateStorageTest
   vyperCustomErrorTest
   vyperDecimalConvertTest
+  vyperEqualitySemanticsTest
   vyperDecimalMulTest
   vyperDelegateRawCallTest
   vyperECPrecompileTest

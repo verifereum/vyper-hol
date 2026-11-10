@@ -32,12 +32,12 @@ Definition rest_word_loop_prefix_def:
        emit_inst ASSIGN [Lit 0w] [idx_var];
        emit_inst ASSIGN [Lit 0w] [result_var];
        (case bound_opt of
-          NONE => return ()
-        | SOME cap =>
-            do too_long <- emit_op GT [len; Lit (n2w cap)];
-               valid <- emit_op ISZERO [too_long];
+          SOME cap =>
+            do inv <- emit_op GT [len; Lit (n2w cap)];
+               valid <- emit_op ISZERO [inv];
                emit_inst ASSERT [valid] []
-            od);
+            od
+        | NONE => return ());
        emit_inst JMP [Label cond_lbl] [];
        new_block cond_lbl;
        done_op <- emit_op EQ [Var idx_var; len];
@@ -118,12 +118,10 @@ QED
 
 Definition rest_word_loop_prefix_shape_def:
   rest_word_loop_prefix_shape cs cl h arr len stride off bound_opt <=>
-  ?j0 j1 j2 j3 j4 j5 j6 j7 j8 done mul total addr jc0 jc1 jc2 inv valid.
-    (case bound_opt of NONE => T | SOME cap =>
-      !x. (not_fresh_at cs x \/ x = h.rw_idx \/ x = h.rw_result) ==>
-          x <> inv /\ x <> valid) /\
+  ?j0 j1 j2 j3 j4 j5 j6 j7 j8 c0 c1 c2 inv valid done mul total addr.
     (!x. (not_fresh_at cs x \/ x = h.rw_idx \/ x = h.rw_result) ==>
-         x <> done /\ x <> mul /\ x <> total /\ x <> addr) /\
+         x <> done /\ x <> mul /\ x <> total /\ x <> addr /\
+         x <> inv /\ x <> valid) /\
     h.rw_addr = Var addr /\ cl.cs_current_bb = h.rw_body /\
     cl.cs_blocks =
       <|bb_label := h.rw_cond;
@@ -133,9 +131,9 @@ Definition rest_word_loop_prefix_shape_def:
         bb_instructions := [mk_inst j1 ASSIGN [Lit 0w] [h.rw_idx];
                             mk_inst j2 ASSIGN [Lit 0w] [h.rw_result]] ++
           (case bound_opt of NONE => [] | SOME cap =>
-            [mk_inst jc0 GT [len; Lit (n2w cap)] [inv];
-             mk_inst jc1 ISZERO [Var inv] [valid];
-             mk_inst jc2 ASSERT [Var valid] []]) ++
+            [mk_inst c0 GT [len; Lit (n2w cap)] [inv];
+             mk_inst c1 ISZERO [Var inv] [valid];
+             mk_inst c2 ASSERT [Var valid] []]) ++
           [mk_inst j3 JMP [Label h.rw_cond] []]|> ::
       <|bb_label := cs.cs_current_bb;
         bb_instructions := cs.cs_current_insts ++ [mk_inst j0 JMP [Label h.rw_entry] []]|> ::
@@ -155,16 +153,9 @@ Proof
        comp_return_def, fresh_var_def, fresh_label_def, fresh_id_def,
        emit_inst_def, emit_op_def, emit_def, new_block_def] >>
   strip_tac >> gvs[] >>
-  simp[rest_word_loop_prefix_shape_def, APPEND_ASSOC, mk_inst_def]
-  >- (gen_tac >> disch_tac >> rpt conj_tac >>
-      irule rest_word_prefix_temporary >> simp[] >> metis_tac[])
-  >- (qexists `STRING #"%" (toString (cs.cs_next_var + 2))` >>
-      gen_tac >> disch_tac >> rpt conj_tac >>
-      irule rest_word_prefix_temporary >> simp[] >> metis_tac[])
-  >- (conj_tac >> gen_tac >> disch_tac >> rpt conj_tac >>
-      irule rest_word_prefix_temporary >> simp[] >> metis_tac[]) >>
-  qexists `STRING #"%" (toString (cs.cs_next_var + 4))` >>
-  conj_tac >> gen_tac >> disch_tac >> rpt conj_tac >>
+  simp[rest_word_loop_prefix_shape_def, APPEND_ASSOC, mk_inst_def] >>
+  rpt (qexists `STRING #"%" (toString (cs.cs_next_var + 2))`) >>
+  gen_tac >> disch_tac >> rpt conj_tac >>
   irule rest_word_prefix_temporary >> simp[] >> metis_tac[]
 QED
 
@@ -224,10 +215,10 @@ Theorem rest_word_loop_prefix_allocation:
   h.rw_incr = fresh_label_output "in_incr" (cs.cs_next_label + 4) /\
   h.rw_exit = fresh_label_output "in_exit" (cs.cs_next_label + 5) /\
   cl.cs_next_var = cs.cs_next_var + (if 0 < off then 6 else 5) +
-    (case bound_opt of NONE => 0 | SOME _ => 2) /\
+    (case bound_opt of NONE => 0 | SOME cap => 2) /\
   cl.cs_next_label = cs.cs_next_label + 6 /\
   cl.cs_next_id = cs.cs_next_id + (if 0 < off then 9 else 8) +
-    (case bound_opt of NONE => 0 | SOME _ => 3)
+    (case bound_opt of NONE => 0 | SOME cap => 3)
 Proof
   Cases_on `bound_opt` >> Cases_on `0 < off` >>
   simp[rest_word_loop_prefix_def, comp_bind_def, comp_ignore_bind_def,
@@ -257,7 +248,7 @@ QED
 Definition rest_word_loop_layout_def:
   rest_word_loop_layout cs ct fn needle arr len stride off bound_opt is_in out h loadcode <=>
   ?a0 a1 a2 a3 a4 a5 a6 a7 a8 b0 b1 b2 b3 b4 b5 b6 b7
-   done mul total addr match next outvar v caller exitbb jc0 jc1 jc2 inv valid.
+   c0 c1 c2 inv valid done mul total addr match next outvar v caller exitbb.
     h.rw_addr = Var addr /\ ct.cs_current_bb = h.rw_exit /\
     lookup_block cs.cs_current_bb fn.fn_blocks = SOME caller /\
     get_instruction caller (LENGTH cs.cs_current_insts) =
@@ -267,9 +258,9 @@ Definition rest_word_loop_layout_def:
         bb_instructions := [mk_inst a1 ASSIGN [Lit 0w] [h.rw_idx];
                             mk_inst a2 ASSIGN [Lit 0w] [h.rw_result]] ++
           (case bound_opt of NONE => [] | SOME cap =>
-            [mk_inst jc0 GT [len; Lit (n2w cap)] [inv];
-             mk_inst jc1 ISZERO [Var inv] [valid];
-             mk_inst jc2 ASSERT [Var valid] []]) ++
+            [mk_inst c0 GT [len; Lit (n2w cap)] [inv];
+             mk_inst c1 ISZERO [Var inv] [valid];
+             mk_inst c2 ASSERT [Var valid] []]) ++
           [mk_inst a3 JMP [Label h.rw_cond] []]|> /\
     lookup_block h.rw_cond fn.fn_blocks = SOME
       <|bb_label := h.rw_cond;
@@ -302,12 +293,10 @@ End
 Definition rest_word_loop_layout_safe_def:
   rest_word_loop_layout_safe cs ct fn needle arr len stride off bound_opt is_in out h loadcode (cl:compile_state) cm v <=>
   ?a0 a1 a2 a3 a4 a5 a6 a7 a8 b0 b1 b2 b3 b4 b5 b6 b7
-   done mul total addr match next outvar caller exitbb jc0 jc1 jc2 inv valid.
-    (case bound_opt of NONE => T | SOME cap =>
-      !x. (not_fresh_at cs x \/ x = h.rw_idx \/ x = h.rw_result) ==>
-          x <> inv /\ x <> valid) /\
+   c0 c1 c2 inv valid done mul total addr match next outvar caller exitbb.
     (!x. (not_fresh_at cs x \/ x = h.rw_idx \/ x = h.rw_result) ==>
-         x <> done /\ x <> mul /\ x <> total /\ x <> addr) /\
+         x <> done /\ x <> mul /\ x <> total /\ x <> addr /\
+         x <> inv /\ x <> valid) /\
     (!x. not_fresh_at cm x ==> x <> match /\ x <> next /\ x <> outvar) /\
     h.rw_addr = Var addr /\ ct.cs_current_bb = h.rw_exit /\
     lookup_block cs.cs_current_bb fn.fn_blocks = SOME caller /\
@@ -318,9 +307,9 @@ Definition rest_word_loop_layout_safe_def:
         bb_instructions := [mk_inst a1 ASSIGN [Lit 0w] [h.rw_idx];
                             mk_inst a2 ASSIGN [Lit 0w] [h.rw_result]] ++
           (case bound_opt of NONE => [] | SOME cap =>
-            [mk_inst jc0 GT [len; Lit (n2w cap)] [inv];
-             mk_inst jc1 ISZERO [Var inv] [valid];
-             mk_inst jc2 ASSERT [Var valid] []]) ++
+            [mk_inst c0 GT [len; Lit (n2w cap)] [inv];
+             mk_inst c1 ISZERO [Var inv] [valid];
+             mk_inst c2 ASSERT [Var valid] []]) ++
           [mk_inst a3 JMP [Label h.rw_cond] []]|> /\
     lookup_block h.rw_cond fn.fn_blocks = SOME
       <|bb_label := h.rw_cond;
@@ -372,11 +361,12 @@ Proof
   qpat_x_assum `ct.cs_blocks = _` kall_tac >>
   qpat_x_assum `cl.cs_blocks = _` kall_tac >>
   qpat_x_assum `cl.cs_current_insts = _` kall_tac >>
+  rename1 `mk_inst c0 GT _ [capacity_inv]` >>
   simp[rest_word_loop_layout_safe_def, APPEND_ASSOC] >>
   qexistsl [`j0'`, `j1'`, `j2'`, `j3'`, `j4'`, `j5'`, `j6'`, `j7'`, `j8`,
             `j0`, `j1`, `j2`, `j3`, `j4`, `j5`, `j6`, `j7`,
-            `done`, `mul'`, `total'`, `match`, `next`, `outvar`,
-            `jc0`, `jc1`, `jc2`, `inv'`, `valid`] >>
+            `c0`, `c1`, `c2`, `capacity_inv`, `valid`,
+            `done`, `mul'`, `total'`, `match`, `next`, `outvar`] >>
   simp[get_instruction_def, EL_APPEND_EQN, DISJ_IMP_THM, FORALL_AND_THM]
 QED
 
@@ -386,10 +376,12 @@ Theorem rest_word_loop_layout_safe_forget:
 Proof
   simp[rest_word_loop_layout_safe_def, rest_word_loop_layout_def] >>
   rpt strip_tac >>
+  rename1 `mk_inst c0 GT _ [capacity_inv]` >>
   qexistsl [`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a7`, `a8`,
             `b0`, `b1`, `b2`, `b3`, `b4`, `b5`, `b6`, `b7`,
+            `c0`, `c1`, `c2`, `capacity_inv`, `valid`,
             `done`, `mul'`, `total'`, `addr`, `match`, `next`, `outvar`,
-            `v`, `caller`, `exitbb`, `jc0`, `jc1`, `jc2`, `inv'`, `valid`] >> simp[]
+            `v`, `caller`, `exitbb`] >> simp[]
 QED
 
 Theorem rest_word_loop_layout_extract:
@@ -461,7 +453,7 @@ Proof
   strip_tac >> drule rest_word_loop_prefix_allocation >> strip_tac >>
   simp[not_fresh_at_def] >> gvs[] >>
   conj_tac >> rpt strip_tac >> gvs[ASCIInumbersTheory.toString_inj] >>
-  Cases_on `0 < off` >> gvs[]
+  Cases_on `bound_opt` >> Cases_on `0 < off` >> gvs[]
 QED
 
 Theorem rest_word_loop_suffix_allocation:
@@ -503,43 +495,24 @@ Proof
     ci_mono_compile_ptr_load >>
   gvs[ci_mono_def] >> strip_tac >>
   `cs.cs_next_var <= cm.cs_next_var` by
-    (Cases_on `0 < off` >> gvs[]) >>
+    (Cases_on `bound_opt` >> Cases_on `0 < off` >> gvs[]) >>
   metis_tac[not_fresh_at_mono]
 QED
 
 Theorem rest_word_loop_layout_entry:
   rest_word_loop_layout cs ct fn needle arr len stride off bound_opt is_in out h code ==>
-  ?a b c jc0 jc1 jc2 inv valid.
+  ?a b c c0 c1 c2 inv valid.
     lookup_block h.rw_entry fn.fn_blocks = SOME
     <|bb_label := h.rw_entry;
       bb_instructions := [mk_inst a ASSIGN [Lit 0w] [h.rw_idx];
                           mk_inst b ASSIGN [Lit 0w] [h.rw_result]] ++
         (case bound_opt of NONE => [] | SOME cap =>
-          [mk_inst jc0 GT [len; Lit (n2w cap)] [inv];
-           mk_inst jc1 ISZERO [Var inv] [valid];
-           mk_inst jc2 ASSERT [Var valid] []]) ++
+          [mk_inst c0 GT [len; Lit (n2w cap)] [inv];
+           mk_inst c1 ISZERO [Var inv] [valid];
+           mk_inst c2 ASSERT [Var valid] []]) ++
         [mk_inst c JMP [Label h.rw_cond] []]|>
 Proof
   simp[rest_word_loop_layout_def] >> metis_tac[]
-QED
-
-Theorem rest_word_loop_layout_safe_entry:
-  rest_word_loop_layout_safe cs ct fn needle arr len stride off bound_opt is_in out h code cl cm v ==>
-  ?a b c jc0 jc1 jc2 inv valid.
-    (case bound_opt of NONE => T | SOME cap =>
-      !x. (not_fresh_at cs x \/ x = h.rw_idx \/ x = h.rw_result) ==>
-          x <> inv /\ x <> valid) /\
-    lookup_block h.rw_entry fn.fn_blocks = SOME
-    <|bb_label := h.rw_entry;
-      bb_instructions := [mk_inst a ASSIGN [Lit 0w] [h.rw_idx];
-                          mk_inst b ASSIGN [Lit 0w] [h.rw_result]] ++
-        (case bound_opt of NONE => [] | SOME cap =>
-          [mk_inst jc0 GT [len; Lit (n2w cap)] [inv];
-           mk_inst jc1 ISZERO [Var inv] [valid];
-           mk_inst jc2 ASSERT [Var valid] []]) ++
-        [mk_inst c JMP [Label h.rw_cond] []]|>
-Proof
-  simp[rest_word_loop_layout_safe_def] >> metis_tac[]
 QED
 
 Theorem rest_word_loop_layout_cond:
@@ -682,4 +655,26 @@ Proof
   simp[rest_word_loop_layout_safe_def] >> rpt strip_tac >> simp[] >>
   Cases_on `is_in` >> gvs[] >>
   qexists `b7` >> simp[] >> metis_tac[]
+QED
+
+Theorem rest_word_loop_layout_safe_entry:
+  rest_word_loop_layout_safe cs ct fn needle arr lenop stride off bound_opt is_in out h code cl cm v ==>
+  ?a b c c0 c1 c2 inv valid.
+    lookup_block h.rw_entry fn.fn_blocks = SOME
+      <|bb_label := h.rw_entry;
+        bb_instructions := [mk_inst a ASSIGN [Lit 0w] [h.rw_idx];
+                            mk_inst b ASSIGN [Lit 0w] [h.rw_result]] ++
+          (case bound_opt of NONE => [] | SOME cap =>
+            [mk_inst c0 GT [lenop; Lit (n2w cap)] [inv];
+             mk_inst c1 ISZERO [Var inv] [valid];
+             mk_inst c2 ASSERT [Var valid] []]) ++
+          [mk_inst c JMP [Label h.rw_cond] []]|> /\
+    ~not_fresh_at cs inv /\ ~not_fresh_at cs valid /\
+    inv <> h.rw_idx /\ inv <> h.rw_result /\
+    valid <> h.rw_idx /\ valid <> h.rw_result
+Proof
+  simp[rest_word_loop_layout_safe_def] >> rpt strip_tac >>
+  rename1 `mk_inst c0 GT _ [capacity_inv]` >>
+  qexistsl [`a1`, `a2`, `a3`, `c0`, `c1`, `c2`, `capacity_inv`, `valid`] >>
+  simp[] >> metis_tac[]
 QED

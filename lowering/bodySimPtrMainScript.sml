@@ -28,7 +28,7 @@ Theorem body_expr_ptr_ok_leaf:
     body_expr_ptr_ok cx e
 Proof
   rpt gen_tac >> disch_tac >> simp[body_expr_ptr_ok_def] >>
-  rpt gen_tac >> strip_tac >>
+  reverse conj_tac >- (rpt strip_tac >> gvs[]) >> rpt gen_tac >> strip_tac >>
   `expr_sim_pre cenv cx env e es` by
     (simp[expr_sim_pre_body] >>
      qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[int_calls_expr_def]) >>

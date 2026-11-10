@@ -170,7 +170,8 @@ QED
 Theorem rest_word_located_search:
   compile_array_membership_loop needleop (vv_operand vv) lenop
     (word_scale loc) (case bd of Fixed _ => 0 | Dynamic _ => word_scale loc)
-    (context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc) bound_opt is_in cs = (out,ct) /\
+    (context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc)
+    (case bd of Fixed _ => NONE | Dynamic cap => SOME cap) is_in cs = (out,ct) /\
   fn_has_code cs ct fn /\
   vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv s /\
   loc = (case vv_location vv of SOME l => l | NONE => LocMemory) /\ loc <> LocCalldata /\
@@ -186,7 +187,7 @@ Theorem rest_word_located_search:
   (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
   (!z. needleop = Var z \/ vv_operand vv = Var z \/ lenop = Var z ==> not_fresh_at cs z) /\
   len < dimword (:256) /\
-  (case bound_opt of NONE => T | SOME cap => len <= cap /\ cap < dimword (:256)) /\
+  (case bd of Fixed _ => T | Dynamic cap => len <= cap /\ cap < dimword (:256)) /\
   s.vs_current_bb = cs.cs_current_bb /\
   s.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~s.vs_halted ==>
   ?t. gas_marked_path memory execctx fn s 0 (OK t) /\
@@ -215,7 +216,8 @@ Proof
      simp[Abbr `elem`] >> metis_tac[optionTheory.THE_DEF]) >>
   `!h cl cm v i p.
     rest_word_loop_prefix needleop (vv_operand vv) lenop (word_scale loc)
-      (case bd of Fixed _ => 0 | Dynamic _ => word_scale loc) bound_opt cs = (h,cl) /\
+      (case bd of Fixed _ => 0 | Dynamic _ => word_scale loc)
+      (case bd of Fixed _ => NONE | Dynamic cap => SOME cap) cs = (h,cl) /\
     context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc h.rw_addr cl = (v,cm) /\
     i < len /\
     rest_word_search_rep ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv
@@ -233,6 +235,9 @@ Proof
   `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv
       needleop (typed_val_to_w256 et needle) lenop len s` by
     simp[rest_word_search_rep_def] >>
+  `case (case bd of Fixed _ => NONE | Dynamic cap => SOME cap) of
+     NONE => T | SOME cap => len <= cap /\ cap < dimword (:256)` by
+    (Cases_on `bd` >> gvs[]) >>
   drule_all rest_word_compiled_search >>
   simp[rest_word_search_rep_def] >> metis_tac[]
 QED
@@ -509,7 +514,7 @@ QED
 Theorem rest_word_dynamic_code:
   compile_ptr_load ctor imm loc arr sm = (lenop,ch) /\
   compile_array_membership_loop needle arr lenop stride off
-    (compile_ptr_load ctor imm loc) bound_opt is_in ch = (out,ct) /\
+    (compile_ptr_load ctor imm loc) (SOME cap) is_in ch = (out,ct) /\
   fn_has_code sm ct fn ==>
   fn_has_code sm ch fn /\ fn_has_code ch ct fn
 Proof
@@ -518,9 +523,6 @@ Proof
   `fn_has_code ch ct fn` by
     fs[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def] >>
   drule_all rest_word_loop_caller_prefix >> strip_tac >>
-  `isPREFIX sm.cs_current_insts bb.bb_instructions` by
-    (irule rich_listTheory.IS_PREFIX_TRANS >>
-     qexists `ch.cs_current_insts` >> simp[rich_listTheory.IS_PREFIX_APPEND]) >>
   simp[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def] >>
   metis_tac[]
 QED
@@ -635,7 +637,6 @@ Proof
      simp[] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `word_scale loc` >>
   rename1 `compile_ptr_load _ _ loc _ sm = (lenop,ch)` >>
-
   drule_all rest_word_dynamic_code >> strip_tac >>
   `ci_mono sm ch` by
     (mp_tac (Q.SPECL [`cenv.ce_is_ctor`, `cenv.ce_imm_alloca`, `loc`,
@@ -668,7 +669,6 @@ Proof
   `loc = (case vv_location vv of SOME l => l | NONE => LocMemory)` by simp[Abbr `loc`] >>
   `evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et (Dynamic cap))` by simp[] >>
   drule_all (SRULE [] (Q.INST [`bd` |-> `Dynamic cap`,
-    `bound_opt` |-> `SOME cap`,
     `len` |-> `array_length (ArrayTV et (Dynamic cap)) av`] rest_word_located_search)) >>
   disch_then (qspecl_then [`memory`, `execctx`] strip_assume_tac) >>
   qexists `t` >> simp[] >>

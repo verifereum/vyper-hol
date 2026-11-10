@@ -1,12 +1,12 @@
 (* Compiler-only certificates for the actual selected registration slot. *)
 Theory entryReachBodyRegistrationSlotCertificate
 Ancestors
-  entryReachBodyRegistrationIndexedShell entryReachBodyDecoderWindowCertificate
+  entryReachBodyDecoderWindowCertificate
   entryReachBodyPackageAlignment abiDecoderCounters abiDecoderCode abiDecoderContract
   entryReachBodyDecoderIdCoverageCompile
   actualDecoderPackaging actualAllocExec loweringHalt calldataRegistrationExec
   abiDecoderPrimitiveCaller abiEncoderWindowContract loweringShapeDefs
-  compileEnv compileVyper list pred_set words arithmetic
+  compileEnv compileVyper list pred_set words arithmetic entryReachBodyCallerResources
 
 Theorem entry_selected_prefix_descriptor:
   set_external_package_target target

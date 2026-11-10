@@ -1,7 +1,7 @@
 (* Actual registration compiler-shell projections; no execution hypotheses. *)
 Theory entryReachBodyCallerResources
 Ancestors
-  loweringStateRelDefs entryReachBodyPackageAlignment calldataRegistration calldataRegistrationExec actualRegistrationCode
+  loweringStateRelDefs calldataRegistration calldataRegistrationExec actualRegistrationCode
   abiDecoderContract
   abiDecoderCode abiDecoderAppend actualDecoderSites entryReachBodyInitialResources
   entryReachBodyRegistrationSingleton loweringHalt exprSimAccounts

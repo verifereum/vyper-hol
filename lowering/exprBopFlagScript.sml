@@ -74,7 +74,8 @@ Proof
 QED
 
 (* In and NotIn on two flags of a type with at most 256 members test the
-   words' common bits. *)
+   words' common bits.  A failed haystack-type lookup is a type error,
+   which expr_res_ok excludes. *)
 Theorem bop_result_flag_in:
   !cx ann bop m v1 v2 es.
     (bop = In \/ bop = NotIn) /\
@@ -89,9 +90,8 @@ Proof
   Cases_on `v1` >> gvs[value_has_type_def] >>
   Cases_on `v2` >> gvs[value_has_type_def] >>
   rename1 `bop_result _ _ _ tys (FlagV k1) (FlagV k2) _` >>
-  Cases_on `evaluate_type (get_tenv cx) (EL 1 tys)` >>
   gvs[bop_result_def, evaluate_membership_def, evaluate_binop_def,
-      expr_res_ok_def, binop_negate_def, val_to_w256_def] >>
+      binop_negate_def, val_to_w256_def, AllCaseEqs(), expr_res_ok_def] >>
   `k1 < 2 ** 256 /\ k2 < 2 ** 256` by
     (`2 ** m <= 2 ** 256` by simp[] >> conj_tac >>
      irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `2 ** m` >>

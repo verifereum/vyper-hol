@@ -1376,23 +1376,13 @@ Proof
   metis_tac[local_ptrs_reserved_next_var, ci_mono_def]
 QED
 
-Theorem compiler_hash_ci_mono[local]:
-  !p sa. ci_mono sa (SND (compile_bytestring_hash p sa))
-Proof
-  rpt gen_tac >> simp[compile_bytestring_hash_def, comp_bind_def] >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  mp_tac ci_mono_emit_op >>
-  simp[ci_mono_def] >>
-  metis_tac[cs_extends_trans, pairTheory.SND, arithmeticTheory.LESS_EQ_TRANS]
-QED
-
 Theorem compiler_hash_reserved[local]:
   local_ptrs_reserved ce sa /\
   compile_bytestring_hash p sa = (h,sb) ==>
   local_ptrs_reserved ce sb
 Proof
   rpt strip_tac >> irule compiler_ci_mono_reserved >>
-  qexists `sa` >> metis_tac[compiler_hash_ci_mono, pairTheory.SND]
+  qexists `sa` >> metis_tac[ci_mono_compile_bytestring_hash, pairTheory.SND]
 QED
 
 Theorem compiler_guarded_callback_ci_mono:
