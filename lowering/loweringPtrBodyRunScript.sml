@@ -23,12 +23,12 @@ Ancestors
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics
   venomState compileEnv e2eDefs supportedProgram compileVyper fragExec
   venomInst contextCodegenRel ptrDiscipline ptrSafeRun vyperLoweringCorrect
-  loweringRuntimeCorrect bodyPtrDefs stmtSimDefs stmtSimProps loweringPosts bodySim moduleLowering
+  bodyPtrDefs stmtSimDefs stmtSimProps loweringPosts bodySim moduleLowering
   stmtLowering vyperTypeSystem vyperState emitHelper vyperTypeSelectedEntrySoundness
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
   unitShapeDefs o1PassContract
   bodyStmtsSimPtr extEntryReachesBodyPtr extFrameRetOkPtr bodyAbiDecodeTarget
-  fragGasPathPtr gasPathPtrExec gasSummary gasExemptCert loweringPtrBodySource
+  fragGasPathPtr gasPathPtrExec gasSummary gasExemptCert externalCallSelected
   externalBodySourceOk externalBodyFrame
 
 val _ = Parse.hide "body";
