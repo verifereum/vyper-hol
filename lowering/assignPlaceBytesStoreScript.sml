@@ -164,3 +164,69 @@ Proof
   simp[valueEncodingPropsTheory.mem_word_at_eq_mload]
 QED
 
+Theorem assign_place_wrapped_memory_suffix_run:
+  (if n <= 1 then
+     ?loaded sm. emit_op MLOAD [src] sa = (loaded,sm) /\
+       emit_void (if tr then TSTORE else SSTORE) [dst;loaded] sm = ((),sb)
+   else ?r. (if tr then compile_memory_to_transient else compile_memory_to_storage)
+       src dst n sa = (r,sb)) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_call_ctx.cc_static /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME (n2w start) /\
+  0 < n /\ n < dimword (:256) /\ n <= type_slot_size tv /\
+  local_ptrs_reserved cenv sa /\
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel ctx func cenv cx ee s /\
+  declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
+  storage_subregion root path delta tv /\ start = w2n rootk + delta /\
+  0 < type_slot_size tv /\ encode_value tv v = SOME writes /\ value_has_type tv v /\
+  start + type_slot_size tv <= dimword (:256) /\
+  (!i b. i < type_slot_size tv /\ b < 32 /\
+    ~dead_bytes (apply_writes (n2w start) writes (get_storage cx ee tr))
+       start tv (start+i) b ==>
+    i < n /\
+    EL b (word_to_bytes (lookup_storage (n2w (start+i))
+      (apply_writes (n2w start) writes (get_storage cx ee tr))) T) =
+    EL b (word_to_bytes (mload (w2n (sw + n2w i * 32w)) s) T)) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    stmt_state_rel ctx func cenv cx
+      (set_storage cx ee tr (apply_writes (n2w start) writes (get_storage cx ee tr))) t /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_allocas = s.vs_allocas /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> Cases_on `n <= 1`
+  >- suspend "load"
+  >> qpat_x_assum `if _ then _ else _` mp_tac >>
+  asm_simp_tac bool_ss [] >> strip_tac >>
+  drule_all assign_place_wrapped_memory_leaf_run >> metis_tac[]
+QED
+Resume assign_place_wrapped_memory_suffix_run[load]:
+  `n = 1` by decide_tac >>
+  qpat_x_assum `if _ then _ else _` mp_tac >>
+  asm_simp_tac bool_ss [] >> strip_tac >>
+  `!x. dst = Var x ==> not_fresh_at sa x` by metis_tac[] >>
+  `cs_extends sa sm /\ cs_extends sm sb` by
+    metis_tac[fragExecTheory.cs_appends_emit_helpers, fragExecTheory.cs_appends_def] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  drule_all place_store_load_emit_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `stmt_state_rel ctx func cenv cx
+    (set_storage cx ee tr (apply_writes (n2w start) writes (get_storage cx ee tr)))
+    (FOLDL (\u i. (if tr then tstore else sstore)
+      (n2w (start+i)) (mload (w2n (sw + n2w i * 32w)) s) u) s (COUNT_LIST 1))` by
+    (irule (BETA_RULE (Q.INST
+       [`rd` |-> `\i. mload (w2n ((sw:bytes32) + n2w i * 32w)) s`]
+       (SPEC_ALL place_store_encoded_leaf_state))) >>
+     metis_tac[]) >>
+  qexists_tac `t` >> simp[] >>
+  irule place_store_normalized_stmt_state >>
+  goal_assum (drule_at (Pat `local_ptrs_reserved _ _`)) >>
+  qexists_tac `s` >> simp[] >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ (FOLDL _ _ _)` mp_tac >>
+  `COUNT_LIST 1 = [0]` by EVAL_TAC >>
+  simp[wordsTheory.WORD_MULT_CLAUSES, wordsTheory.WORD_ADD_0]
+QED
+Finalise assign_place_wrapped_memory_suffix_run
