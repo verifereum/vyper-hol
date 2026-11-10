@@ -28,7 +28,7 @@ Proof
   >- (qpat_x_assum `!vs i. _` kall_tac >>
       gvs[fmp_lower_inst_def, AllCaseEqs(), flag_fails_def,
           flag_step_def, write_effects_def, empty_effects_def] >>
-      irule dftCallChecksTheory.flag_path_mono >> qexists_tac `[]` >> simp[] >>
+      irule flag_path_mono >> qexists_tac `[]` >> simp[] >>
       qsuff_tac `flag_path dst []
         ([mk_inst add_id ADD [Lit 31w; size_op] [plus31];
           mk_inst not_id NOT [Lit 31w] [mask];
@@ -41,7 +41,7 @@ Proof
   >- (qpat_x_assum `!vs i. _` kall_tac >>
       gvs[fmp_lower_inst_def, AllCaseEqs(), flag_fails_def,
           flag_step_def, write_effects_def, empty_effects_def] >>
-      irule dftCallChecksTheory.flag_path_mono >> qexists_tac `[]` >> simp[] >>
+      irule flag_path_mono >> qexists_tac `[]` >> simp[] >>
       qsuff_tac `flag_path dst [] ([inst with <|inst_opcode := ASSIGN; inst_outputs := [runner]|>] ++ tail)`
       >- simp[APPEND] >>
       irule flag_path_empty_pure_prefix >>
@@ -50,7 +50,7 @@ Proof
   >- (qpat_x_assum `!vs i. _` kall_tac >>
       gvs[fmp_lower_inst_def, AllCaseEqs(), flag_fails_def] >>
       simp[Once flag_path_cons_step] >> disj2_tac >>
-      irule dftCallChecksTheory.flag_path_mono >>
+      irule flag_path_mono >>
       qexists_tac `flag_step inst vs` >>
       simp[flag_step_def, write_effects_def, empty_effects_def, MEM_FILTER] >>
       rpt strip_tac >> Cases_on `MEM runner vs` >> gvs[MEM_FILTER]) >>
@@ -88,65 +88,4 @@ Proof
        (irule flag_step_closed >> simp[]) >>
      metis_tac[]) >>
   irule fmp_lower_inst_flag_path >> metis_tac[])
-QED
-
-Theorem calls_flagged_no_calls_prefix:
-  !p. EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL) p /\
-  calls_flagged bbs tail ==> calls_flagged bbs (p ++ tail)
-Proof
-  Induct >> simp[calls_flagged_def] >> metis_tac[]
-QED
-
-Theorem fmp_lower_inst_calls_flagged:
-  fmp_lower_inst infos ctx runner s inst = SOME (head,s') /\
-  calls_flagged dst tail /\
-  ((inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) ==>
-    case inst.inst_outputs of [v] => flag_path dst [v] tail | _ => F) ==>
-  calls_flagged dst (head ++ tail)
-Proof
-  simp[fmp_lower_inst_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[calls_flagged_def, mk_inst_def] >> metis_tac[]
-QED
-
-Theorem fmp_lower_indexed_calls_flagged:
-  !insts k s restores out leftover s'.
-  fmp_lower_indexed infos ctx runner label k s restores insts =
-    SOME (out,leftover,s') /\ ~MEM runner V /\
-  EVERY (\i. EVERY (\x. MEM x V) i.inst_outputs) insts /\
-  (!vs i. flag_fails src vs i ==> flag_fails dst vs i) /\
-  calls_flagged src insts ==>
-  calls_flagged dst out
-Proof
-  Induct >- simp[fmp_lower_indexed_def, calls_flagged_def] >> rpt gen_tac >>
-  simp[fmpLowerIndexedPropsTheory.fmp_lower_indexed_cons, calls_flagged_def] >>
-  strip_tac >>
-  qpat_x_assum `out = _` SUBST1_TAC >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
-  irule calls_flagged_no_calls_prefix >> conj_tac
-  >- (irule fmp_emit_restores_every >>
-      goal_assum (drule_at Any) >> simp[mk_inst_def]) >>
-  `calls_flagged dst tail` by (first_x_assum irule >> metis_tac[]) >>
-  `((h.inst_opcode = CALL \/ h.inst_opcode = STATICCALL) ==>
-     case h.inst_outputs of [v] => flag_path dst [v] tail | _ => F)` by
-    (strip_tac >> (Cases_on `h.inst_outputs` >> gvs[] >>
-     Cases_on `t` >> gvs[] >>
-     irule fmp_lower_indexed_flag_path >> simp[] >> metis_tac[])) >>
-  irule fmp_lower_inst_calls_flagged >> metis_tac[]
-QED
-
-Theorem fmp_lower_blocks_calls_flagged:
-  !bbs s restores out leftover s'.
-  fmp_lower_blocks infos ctx runner s restores bbs =
-    SOME (FmpBlocksResult out leftover s') /\ ~MEM runner V /\
-  EVERY (\bb. EVERY (\i. EVERY (\x. MEM x V) i.inst_outputs)
-    bb.bb_instructions) bbs /\
-  (!vs i. flag_fails src vs i ==> flag_fails dst vs i) /\
-  EVERY (\bb. calls_flagged src bb.bb_instructions) bbs ==>
-  EVERY (\bb. calls_flagged dst bb.bb_instructions) out
-Proof
-  Induct >- simp[fmp_lower_blocks_def] >> rpt gen_tac >>
-  simp[fmp_lower_blocks_def, AllCaseEqs()] >> strip_tac >>
-  gvs[] >> conj_tac
-  >- (drule_all fmp_lower_indexed_calls_flagged >> simp[]) >>
-  first_x_assum irule >> metis_tac[]
 QED

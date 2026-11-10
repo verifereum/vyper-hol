@@ -1,6 +1,6 @@
 Theory concretizePtrForwardingBoundary
 Ancestors
-  concretizeStepStructure concretizeStepShape concretizeStepCallChecks
+  concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape contextCodegenRel
   concretizeMemLocDefs passSharedDefs venomInst list rich_list finite_map arithmetic
 

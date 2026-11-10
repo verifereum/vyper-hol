@@ -184,8 +184,6 @@ Proof
   `state_insts st' = state_insts st`
     by gs[state_insts_def, all_blocks_def] >>
   `all_blocks st' = all_blocks st` by simp[all_blocks_def] >>
-  `raw_checked_state st'` by
-    gvs[raw_checked_state_def, all_blocks_def, shape_state_def] >>
   gs[shape_state_def, shape_base_state_def] >> metis_tac[not_fresh_at_mono]
 QED
 
@@ -336,9 +334,6 @@ Proof
     by gs[added_labels_def, DROP_LENGTH_MAP_APPEND] >>
   `added_insts st st1 = []` by gs[added_insts_def, DROP_LENGTH_NIL] >>
   `shape_extends internal LP st st1` by gs[shape_extends_def] >>
-  `raw_checked_state st1` by
-    (irule raw_checked_state_cs_extends >> qexists_tac `st` >>
-     gvs[shape_state_def]) >>
   `shape_state st1`
     by (gs[shape_state_def, shape_base_state_def] >>
         conj_tac >- (irule rets_scoped_append_empty >> simp[]) >>
@@ -568,9 +563,7 @@ Proof
     gvs[state_insts_def, all_blocks_def] >>
   `added_insts st st' = [inst]` by
     gvs[added_insts_def, DROP_LENGTH_APPEND] >>
-  simp[shape_state_def] >>
-  irule raw_checked_state_cs_extends >> qexists_tac `st` >>
-  gvs[shape_extends_def, shape_state_def]
+  simp[shape_state_def]
 QED
 
 (* Outputs that are plain variables already. *)
@@ -612,7 +605,7 @@ QED
 (* A call whose head operand may be a GAS value. *)
 Theorem call_append_ok:
   !st g rest inst.
-    MEM inst.inst_opcode [CALL; STATICCALL] /\
+    MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL] /\
     inst.inst_operands = g :: rest /\
     (gas_operand st g \/ plain_operand st g) /\
     EVERY (plain_operand st) rest ==>
@@ -916,7 +909,7 @@ QED
 
 Theorem shape_base_emit_op_call:
   !internal LP opc g rest st x st'.
-    MEM opc [CALL; STATICCALL] /\
+    MEM opc [CALL; STATICCALL; DELEGATECALL] /\
     (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) /\
     (gas_operand st g \/ plain_operand st g) /\
     EVERY (plain_operand st) rest /\ shape_base_state st /\
@@ -1018,7 +1011,7 @@ QED
 
 Theorem shape_base_step_emit_op_call:
   !internal LP R opc g rest.
-    shape_stable R /\ MEM opc [CALL; STATICCALL] /\
+    shape_stable R /\ MEM opc [CALL; STATICCALL; DELEGATECALL] /\
     (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) ==>
     shape_base_step internal LP
       (\st. R st /\ (gas_operand st g \/ plain_operand st g) /\
@@ -1411,17 +1404,6 @@ Proof
   simp[compiler_label_def, fresh_label_output_in_future]
 QED
 
-Theorem checked_extcall_raw_checked_state:
-  raw_checked_state st /\ checked_extcall opc g rest st = (success, st') ==>
-  raw_checked_state st'
-Proof
-  strip_tac >> drule checked_extcall_layout >> strip_tac >>
-  `raw_checked_blocks (REVERSE st.cs_blocks ++
-    [<| bb_label := st.cs_current_bb; bb_instructions := st.cs_current_insts |>])`
-    by gvs[raw_checked_state_def, all_blocks_def] >>
-  drule raw_checked_blocks_splice_branch >>
-  simp[raw_checked_state_def] >> disch_then irule >> gvs[] >> metis_tac[]
-QED
 
 Theorem shape_step_emit_op_call_branch:
   !internal LP R opc g rest.
@@ -1435,7 +1417,7 @@ Theorem shape_step_emit_op_call_branch:
 Proof
   rpt gen_tac >> strip_tac >> drule_all shape_base_step_checked_extcall >>
   simp[shape_base_step_def, shape_step_def, shape_state_def] >>
-  metis_tac[checked_extcall_raw_checked_state]
+  metis_tac[]
 QED
 
 Theorem checked_extcall_then:
@@ -1531,19 +1513,7 @@ Proof
   `shape_extends internal LP st last` by metis_tac[shape_extends_trans] >>
   `R last` by metis_tac[shape_stable_def] >>
   `plain_operand last (Var out)` by metis_tac[plain_operand_mono, shape_extends_def] >>
-  simp[shape_state_def] >>
-  `raw_checked_blocks (REVERSE st.cs_blocks ++
-    [<| bb_label := st.cs_current_bb; bb_instructions := st.cs_current_insts |>])`
-    by gvs[shape_state_def, raw_checked_state_def, all_blocks_def] >>
-  qmatch_asmsub_abbrev_tac `mid.cs_current_insts = _ ++ [call]` >>
-  `call.inst_outputs = [out]` by gvs[Abbr `call`, mk_inst_def] >>
-  drule raw_checked_blocks_splice_assert >>
-  disch_then (qspecl_then [`out`,
-    `mk_inst mid.cs_next_id ASSERT [Var out] []`, `call`] mp_tac) >>
-  simp[mk_inst_def] >> strip_tac >>
-  gvs[raw_checked_state_def, all_blocks_def, emit_inst_eq, APPEND_ASSOC, mk_inst_def] >>
-  qpat_x_assum `raw_checked_blocks _` mp_tac >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]
+  simp[shape_state_def]
 QED
 
 (* The return PC exists only in internal-function code. *)

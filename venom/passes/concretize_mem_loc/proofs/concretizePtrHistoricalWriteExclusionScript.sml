@@ -6,7 +6,7 @@ Ancestors
   concretizePtrStructuralTranscript concretizePtrStructuralTrace
   concretizePtrEventEmbedding concretizePtrLedgerAlignment concretizePtrPairedFields
   concretizePtrOperationalOpcodes concretizePtrHistoricalSupport concretizePtrValueTransport
-  concretizeStepStructure concretizeStepShape concretizeStepCallChecks
+  concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape
   venomExecSemantics venomWf unitShapeDefs ptrDiscipline finite_map list
   stackPlanGen unitMemInv o1PassContract concretizePtrOwnerPath
