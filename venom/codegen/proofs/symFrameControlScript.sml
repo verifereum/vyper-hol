@@ -1034,6 +1034,51 @@ Proof
   irule list_rel_index_schedule >> gvs[]
 QED
 
+Theorem do_swap_deep_symbolic_resources:
+  do_swap d ps = (ops,ps') /\ 16 < d /\ d < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  offsets = FST (spill_alloc_n [] ps.ps_alloc (top_n (d + 1) ps.ps_stack)) /\
+  ids = [d] ++ GENLIST (\i. i + 1) (d - 1) ++ [0] ==>
+  ops = MAP SOSpill offsets ++
+    MAP SORestore (MAP (\i. EL i offsets) (REVERSE ids)) /\
+  LENGTH offsets = d + 1 /\ ALL_DISTINCT offsets /\
+  EVERY (\i. i < LENGTH offsets) ids /\
+  EVERY (\off. off < dimword(:256) /\ ps'.ps_alloc.sa_spill_base <= off /\
+    off + 32 <= ps'.ps_alloc.sa_next_offset) offsets /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets) /\
+  (!i op old. i < LENGTH offsets /\ FLOOKUP ps.ps_spilled op = SOME old ==>
+    old + 32 <= EL i offsets \/ EL i offsets + 32 <= old) /\
+  ps'.ps_spilled = ps.ps_spilled /\
+  ps'.ps_stack = TAKE (LENGTH ps.ps_stack - (d + 1)) ps.ps_stack ++
+    MAP (\i. EL i (top_n (d + 1) ps.ps_stack)) ids
+Proof
+  strip_tac >>
+  `LENGTH (top_n (d + 1) ps.ps_stack) = d + 1` by
+    simp[stackPlanOpsTheory.top_n_def, listTheory.LENGTH_TAKE] >>
+  `ops = MAP SOSpill offsets ++
+     MAP SORestore (MAP (\i. EL i offsets) (REVERSE ids)) /\
+   ps' = ps with <|
+     ps_stack := TAKE (LENGTH ps.ps_stack - (d + 1)) ps.ps_stack ++
+       MAP (\i. EL i (top_n (d + 1) ps.ps_stack)) ids;
+     ps_alloc := FOLDL (\a off. free_spill_slot off a)
+       (SND (spill_alloc_n [] ps.ps_alloc (top_n (d + 1) ps.ps_stack))) offsets |>` by
+    (mp_tac (Q.SPECL [`d`, `ps`] doSwapSimTheory.do_swap_big_decompose) >>
+     simp[LET_THM] >> metis_tac[]) >>
+  `ps'.ps_alloc = FOLDL (\a off. free_spill_slot off a)
+    (SND (spill_alloc_n [] ps.ps_alloc (top_n (d + 1) ps.ps_stack))) offsets` by simp[] >>
+  drule_all doSwapSimTheory.spill_alloc_n_temporary_layout >> strip_tac >>
+  `EVERY (\off. off < dimword(:256)) offsets` by
+    (qpat_x_assum `EVERY _ ops` mp_tac >> simp[listTheory.EVERY_MAP]) >>
+  `EVERY (\i. i < LENGTH offsets) ids` by
+    simp[listTheory.EVERY_GENLIST] >>
+  simp[] >>
+  conj_tac >- gvs[listTheory.EVERY_MEM] >>
+  metis_tac[]
+QED
+
 (* A branch condition cannot carry either class of symbolic label. *)
 Theorem sym_jnz_condition_kind:
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
