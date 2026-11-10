@@ -1,7 +1,7 @@
 (* Layout adapters for the checked allocated traversal. *)
 Theory bodyMemAggregateAdapters
 Ancestors
-  bodyMemAggregateLoops exprSimAggregateLayout exprSimAggregateLoops
+  bodyMemArrayAdapters bodyMemAggregateLoops exprSimAggregateLayout exprSimAggregateLoops
   gasOutcome gasSummary valueEncoding vyperTypeABI bodyDeclWordMemory
   exprLowering compileEnv exprLoweringProps emitHelperProps loweringSlice
   localPtrsProps venomState venomMemDefs stmtSimProps stmtSimDefs
@@ -136,35 +136,11 @@ Theorem aggregate_make_array_elems_sim_mem:
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule compile_make_array_elems_as_tuple >>
-  disch_then (qspecl_then [`header`, `compile_expr`, `ce`, `Var x`, `idx`] mp_tac) >>
-  strip_tac >>
-  `OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) =
-     SOME (REPLICATE (LENGTH args) tv)` by
-    (irule exprSimAggregateEncodingTheory.OPT_MMAP_uniform_map >> metis_tac[]) >>
-  `compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb)` by
-    (gvs[] >> metis_tac[]) >>
-  drule aggregate_make_tuple_sim_mem >> disch_then drule >>
-  disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
-  disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
-  disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME (_,_)`)) >>
-  disch_then (qspecl_then [`es`, `func`] mp_tac) >>
-  pure_rewrite_tac[exprSimAggregateEncodingTheory.type_memory_size_list_replicate] >>
-  (impl_tac >- (gvs[] >> simp[] >> first_assum ACCEPT_TAC)) >>
-  strip_tac >> gvs[] >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  rpt (pop_assum kall_tac) >>
-  pure_rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
-  >- (qexists_tac `marks` >> disj1_tac >>
-      qexistsl_tac [`res`, `es_end`, `r`] >> gvs[] >>
-      qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-      pure_rewrite_tac[gas_marked_exec_def] >> strip_tac >>
-      first_x_assum (qspec_then `[]` mp_tac) >> strip_tac >>
-      drule vyperInterpreterTheory.eval_exprs_length >> strip_tac >>
-      conj_tac
-      >- (irule (iffLR exprSimAggregateEncodingTheory.tuple_in_memory_replicate_elems) >>
-          metis_tac[]) >>
-      conj_tac >> first_assum ACCEPT_TAC) >>
+  irule aggregate_make_array_elems_body_sim_mem >>
+  fs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  asm_rewrite_tac[] >> conj_tac >- gvs[] >>
+  conj_tac
+  >- (qexistsl_tac [`elem_ty`, `header`, `idx`] >> simp[]) >>
   metis_tac[]
 QED
 
