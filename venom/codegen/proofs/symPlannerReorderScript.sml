@@ -489,3 +489,58 @@ Proof
   simp[] >> MATCH_ACCEPT_TAC (SRULE [APPEND_ASSOC]
     (Q.INST [`prefix` |-> `restore_ops ++ reduce_ops`] append_two_pairs_cont))
 QED
+
+Theorem reorder_place_alloc[local]:
+  f < LENGTH ps.ps_stack ==>
+  !ops out.
+  (case stack_get_unfixed_depth op f n ps.ps_stack of
+     NONE => ([],ps)
+   | SOME d =>
+       if d = f then ([],ps)
+       else if f < LENGTH ps.ps_stack then
+         if operand_equiv dfg op (stack_peek f ps.ps_stack) then
+           ([],ps with ps_stack := stack_poke f op
+             (stack_poke d (stack_peek f ps.ps_stack) ps.ps_stack))
+         else (case do_swap d ps of (xs,mid) =>
+           case do_swap f mid of (ys,last) => (xs ++ ys,last))
+       else (case do_swap d ps of (xs,mid) =>
+         case do_swap f mid of (ys,last) => (xs ++ ys,last))) = (ops,out) ==>
+  ps.ps_alloc.sa_next_offset <= out.ps_alloc.sa_next_offset /\
+  out.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base
+Proof
+  strip_tac >> ho_match_mp_tac reorder_place_cases >> simp[] >>
+  metis_tac[allocMonoTheory.do_swap_next_offset,
+    allocMonoTheory.do_swap_spill_base, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem reorder_reduce_spill_base[local]:
+  (if dist > 16 then
+     reduce_depth_plan (LENGTH ps.ps_stack) pending op f (LENGTH pending) ps
+   else ([],ps)) = (ops,out) ==>
+  out.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base
+Proof
+  Cases_on `dist > 16` >> simp[] >>
+  metis_tac[allocMonoTheory.reduce_depth_plan_spill_base]
+QED
+
+Theorem reorder_prepare_region_bounds[local]:
+  residual_budget_wf_marked spillbase pending ps /\
+  LENGTH pending <= LENGTH ps.ps_stack /\ f < LENGTH pending /\
+  (case stack_get_unfixed_depth op f (LENGTH pending) ps.ps_stack of
+     SOME d => ([],ps)
+   | NONE => (case FLOOKUP ps.ps_spilled op of
+       SOME off => do_restore op ps | NONE => ([],ps))) = (rops,ps1) /\
+  (if dist > 16 then
+     reduce_depth_plan (LENGTH ps1.ps_stack) pending op f (LENGTH pending) ps1
+   else ([],ps1)) = (dops,ps2) /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  ps2.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  spill_alloc_layout_wf ps2.ps_alloc ps2.ps_spilled /\
+  f < LENGTH ps2.ps_stack /\
+  r.sr_spill_base <= ps2.ps_alloc.sa_spill_base
+Proof
+  strip_tac >> drule_all_then strip_assume_tac reorder_prepare_structure >>
+  metis_tac[reorder_restore_spill_base, reorder_reduce_spill_base,
+    arithmeticTheory.LESS_LESS_EQ_TRANS]
+QED
+
