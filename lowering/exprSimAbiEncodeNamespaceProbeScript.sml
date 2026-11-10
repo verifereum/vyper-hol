@@ -1,7 +1,8 @@
 (* Diagnostic sufficient condition, not an expression precondition. *)
 Theory exprSimAbiEncodeNamespaceProbe
 Ancestors
-  compileEnv finite_map words
+  loweringStateRelDefs
+    compileEnv finite_map words
 
 Theorem abi_encode_namespace_collision:
   nsid_to_string (NONE,"0.S") = nsid_to_string (SOME 0,"S") /\

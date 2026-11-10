@@ -220,7 +220,7 @@ Proof
       drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
       simp[])
   >- (sym_tac >> irule abi_args_local_window_kept >> metis_tac[])
-  >> simp[valueEncodingTheory.mem_bytes_at_def]
+  >> simp[valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem abi_args_value_kept:

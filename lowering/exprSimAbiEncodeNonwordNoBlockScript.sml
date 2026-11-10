@@ -140,8 +140,8 @@ Proof
        (strip_assume_tac o PURE_REWRITE_RULE [abi_builtin_encode_setup_frame_def]) >>
      metis_tac[]) >>
   `abi_encoder_window_input (AbiCopy 0) at av (w2n a) 0 actual.vs_memory` by
-    (fs[abi_encoder_window_copy_iff, valueEncodingTheory.mem_bytes_at_def] >>
-     simp[abi_encoder_window_copy_iff, valueEncodingTheory.mem_bytes_at_def]) >>
+    (fs[abi_encoder_window_copy_iff, valueEncodingDefsTheory.mem_bytes_at_def] >>
+     simp[abi_encoder_window_copy_iff, valueEncodingDefsTheory.mem_bytes_at_def]) >>
   pure_rewrite_tac[abi_encode_empty_window_pre_def] >>
   pure_asm_rewrite_tac[] >> metis_tac[]
 QED
@@ -229,7 +229,7 @@ Proof
          qpat_x_assum `abi_encoder_window_input _ _ _ sb _ _` mp_tac >>
          qpat_assum `cap = 0` (fn th => pure_rewrite_tac[th]) >>
          qpat_assum `ei = AbiCopy 0` (fn th => pure_rewrite_tac[th]) >>
-         simp_tac std_ss [abi_encoder_window_copy_iff, valueEncodingTheory.mem_bytes_at_def, listTheory.TAKE_0]) >>
+         simp_tac std_ss [abi_encoder_window_copy_iff, valueEncodingDefsTheory.mem_bytes_at_def, listTheory.TAKE_0]) >>
      `0 < cap` by decide_tac >>
      qpat_x_assum `0 < cap ==> _` mp_tac >> asm_rewrite_tac[] >> metis_tac[]) >>
   qpat_assum `abi_encoder_window_input _ _ _ (if _ then _ else _) _ _`
@@ -300,7 +300,7 @@ Resume abi_encode_window_concrete_phases[empty_body]:
   `abi_encoder_window_input (AbiCopy 0) at av (w2n (n2w sb :256 word)) 0 initial.vs_memory` by
     (qpat_x_assum `abi_encoder_window_input _ _ _ sb _ _` mp_tac >>
      qpat_assum `cap = 0` (fn th => pure_rewrite_tac[th]) >>
-     simp_tac std_ss [abi_encoder_window_copy_iff, valueEncodingTheory.mem_bytes_at_def, listTheory.TAKE_0]) >>
+     simp_tac std_ss [abi_encoder_window_copy_iff, valueEncodingDefsTheory.mem_bytes_at_def, listTheory.TAKE_0]) >>
   `abi_encode_empty_window_pre ctx func ready body_end (SND ops) src at av (n2w sb) d prepared` by
     (qpat_x_assum `d = _` SUBST_ALL_TAC >>
      qpat_x_assum `outsz = _` SUBST_ALL_TAC >>

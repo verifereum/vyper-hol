@@ -106,7 +106,7 @@ Proof
       mload dslot s = n2w (LENGTH avs * abi_member_head_size ty +
         SUM (MAP (abi_member_tail_size ty) avs)))` by
     (strip_tac >> fs[window_array_inv_def, window_array_cursor_def,
-        mload_def, valueEncodingTheory.mem_word_at_def] >> metis_tac[not_fresh_at_mono]) >>
+        mload_def, valueEncodingDefsTheory.mem_word_at_def] >> metis_tac[not_fresh_at_mono]) >>
   drule_all abi_encode_framed_array_scalar_exit_run >> strip_tac >>
   qexists_tac `t` >> asm_rewrite_tac[] >> conj_tac
   >- (irule window_array_transition_owner_weaken >> goal_assum (drule_at Any) >>
@@ -254,7 +254,7 @@ Proof
    (!x. pp = Var x \/ size_op = Var x ==> not_fresh_at mid x) /\
    alloca_inv u /\ alloca_room ctx func u /\ ~u.vs_halted` by
     (fs[window_array_cursor_def, window_array_transition_def,
-        mload_def, valueEncodingTheory.mem_word_at_def] >> metis_tac[]) >>
+        mload_def, valueEncodingDefsTheory.mem_word_at_def] >> metis_tac[]) >>
   drule_all abi_encode_framed_array_parent_finish >> strip_tac >>
   `abi_encode_exec_frame func s t` by
     (irule abi_encode_exec_frame_trans >> qexists_tac `u` >> asm_rewrite_tac[]) >>
@@ -392,7 +392,7 @@ Theorem abi_encode_framed_array_length_copy_phase:
     mem_word_at d t.vs_memory = n2w n /\ abi_encode_exec_frame func s t
 Proof
   strip_tac >> drule_all abi_encode_framed_cursor_load_phase_observed >> strip_tac >>
-  `eval_operand count_op t = SOME (n2w n)` by fs[mload_def, valueEncodingTheory.mem_word_at_def] >>
+  `eval_operand count_op t = SOME (n2w n)` by fs[mload_def, valueEncodingDefsTheory.mem_word_at_def] >>
   `eval_operand dst t = SOME (n2w d)` by metis_tac[window_phase_operand] >>
   `alloca_inv t /\ alloca_room ctx func t /\ ~t.vs_halted /\
    t.vs_current_bb = mid.cs_current_bb /\
@@ -587,7 +587,7 @@ Proof
     (qpat_x_assum `mem_word_at sb s.vs_memory = _` mp_tac >>
      qpat_x_assum `mem_bytes_at sb 32 _ = _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
-     simp[valueEncodingTheory.mem_word_at_def, GSYM valueEncodingTheory.mem_bytes_at_def]) >>
+     simp[valueEncodingDefsTheory.mem_word_at_def, GSYM valueEncodingDefsTheory.mem_bytes_at_def]) >>
   `st.cs_next_var <= c1.cs_next_var` by
     (drule abi_decode_index_init_shape >> strip_tac >> decide_tac) >>
   `!x. dst = Var x ==> not_fresh_at c1 x` by metis_tac[not_fresh_at_mono] >>

@@ -155,7 +155,7 @@ QED
 Resume abi_encode_translated_concrete_phases[result]:
   `mem_bytes_at d (LENGTH (enc at av)) actual.vs_memory = enc at av` by
     (qpat_assum `enc at av = []` (fn th => rewrite_tac[th]) >>
-     simp_tac (srw_ss()) [valueEncodingTheory.mem_bytes_at_def]) >>
+     simp_tac (srw_ss()) [valueEncodingDefsTheory.mem_bytes_at_def]) >>
   `(case method_id of NONE => T | SOME mid =>
       mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes mid)` by
     (qpat_assum `abi_decode_frame p 32 prepared actual`

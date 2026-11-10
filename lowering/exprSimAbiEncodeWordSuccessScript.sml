@@ -1,6 +1,7 @@
 Theory exprSimAbiEncodeWordSuccess
 Ancestors
-  loweringStateRelDefs
+  exprSimHashBoundary
+    loweringStateRelDefs
   exprSimAbiEncodeStagedObserver exprSimAbiEncodePrefixWindow exprSimAbiEncodeStagedFrame
   abiBuiltinEncodeWord abiBuiltinAllocation exprSimHash abiDecoderGuards context emitHelper emitHelperProps
   exprLoweringProps compileEnv venomState venomInst list rich_list

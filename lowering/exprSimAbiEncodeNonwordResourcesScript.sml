@@ -1,6 +1,7 @@
 Theory exprSimAbiEncodeNonwordResources
 Ancestors
-  exprSimAbiEncodeSiteResources exprSimAbiEncodeProducerBoundary
+  loweringStateRelDefs
+    exprSimAbiEncodeSiteResources exprSimAbiEncodeProducerBoundary
   loweringPosts exprLoweringProps abiBuiltinAllocation abiBuiltinEncodeCode
   abiEncoderProps exprSimAbiEncodePrefixWindow compileEnv venomMemDefs venomState venomInst finite_map words arithmetic
 

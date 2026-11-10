@@ -1,6 +1,7 @@
 Theory exprSimAbiEncodeBytesOwnership
 Ancestors
-  loweringPosts valueEncoding vyperValue vyperContext compileEnv
+  loweringStateRelDefs valueEncodingDefs
+    loweringPosts valueEncoding vyperValue vyperContext compileEnv
   venomState words finite_map arithmetic abiBuiltinAllocation
   exprSimAbiEncodePrefixWindow localPtrsProps exprLoweringProps
   abiBuiltinEncodeCode abiBuiltinEncodeContext abiEncoderCounters venomInst

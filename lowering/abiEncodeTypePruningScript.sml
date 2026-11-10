@@ -1,6 +1,7 @@
 Theory abiEncodeTypePruning
 Ancestors
-  retAbiPlanProps vyperTyping compileEnv vyperValue finite_map list
+  loweringStateRelDefs
+    retAbiPlanProps vyperTyping compileEnv vyperValue finite_map list
 
 Theorem abi_encode_struct_alias_value:
   sfields_tenv_consistent sf tenv /\ nsid_to_string a = nsid_to_string b /\

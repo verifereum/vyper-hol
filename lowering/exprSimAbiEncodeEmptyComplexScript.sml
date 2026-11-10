@@ -25,7 +25,7 @@ Proof
   gvs[window_strong_result_def, abi_encoder_window_result_def,
       abi_encoder_registered_effect_refl, window_alloca_growth_refl,
       abi_encoder_extend_sim_refl, abi_decode_sim_refl,
-      eval_operand_def, valueEncodingTheory.mem_bytes_at_def,
+      eval_operand_def, valueEncodingDefsTheory.mem_bytes_at_def,
       frag_ids_def, window_alloca_sites_def]
 QED
 
@@ -132,7 +132,7 @@ QED
 Resume abi_encode_empty_phases_open[endpoint]:
   `mem_bytes_at d (LENGTH (enc at av)) actual.vs_memory = enc at av` by
     (qpat_assum `enc at av = []` (fn th => rewrite_tac [th]) >>
-     simp_tac (srw_ss()) [valueEncodingTheory.mem_bytes_at_def]) >>
+     simp_tac (srw_ss()) [valueEncodingDefsTheory.mem_bytes_at_def]) >>
   `(case method_id of NONE => T | SOME mid =>
       mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes mid)` by
     (qpat_assum `abi_decode_frame p 32 prepared actual`

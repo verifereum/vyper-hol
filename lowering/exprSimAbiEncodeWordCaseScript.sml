@@ -1,6 +1,7 @@
 Theory exprSimAbiEncodeWordCase
 Ancestors
-  exprSimAbiEncodeWordResult exprSimAbiEncodeNonwordCase exprSimAbiEncodeNonwordResult
+  exprSimHashBoundary
+    exprSimAbiEncodeWordResult exprSimAbiEncodeNonwordCase exprSimAbiEncodeNonwordResult
   exprSimAbiEncodeRuntimeInputs exprSimAbiEncodePrefixWindow
   exprSimHash exprSimHypsDefs exprSimDefs exprLowering exprBopLowering
   fragExec exprSimSource vyperTypeABI

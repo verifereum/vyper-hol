@@ -33,5 +33,5 @@ Theorem abi_encode_translated_zero_open_bytes:
 Proof
   strip_tac >> gvs[Once abi_encoder_open_input_cases,
     abi_encoder_tuple_type_def, abi_encoder_member_span_def,
-    enc_def, valueEncodingTheory.mem_bytes_at_def, listTheory.REV_DEF]
+    enc_def, valueEncodingDefsTheory.mem_bytes_at_def, listTheory.REV_DEF]
 QED

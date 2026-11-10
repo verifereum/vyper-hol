@@ -1,5 +1,7 @@
 Theory abiArgsLabelBoundary
-Ancestors compileEnv exprSimDefs exprSimProps loweringPosts exprSimHyps exprSimWordArgs abiArgsLabelObserver
+Ancestors
+  loweringStateRelDefs
+  compileEnv exprSimDefs exprSimProps loweringPosts exprSimHyps exprSimWordArgs abiArgsLabelObserver
   fragExec venomExecProofs venomExecSemantics exprSimAbiEncodeArgsCountedLabels
 
 (* Operational steps include returning INVOKE: the caller label map survives. *)
@@ -155,7 +157,7 @@ Theorem abi_args_runtime_empty_tuple_location:
 Proof
   simp[expr_val_rel_def, expr_val_at_def, venomStateTheory.eval_operand_def,
        vyperValueTheory.evaluate_type_def, is_word_type_def,
-       abi_args_empty_tuple_footprint, valueEncodingTheory.val_in_memory_def]
+       abi_args_empty_tuple_footprint, valueEncodingDefsTheory.val_in_memory_def]
 QED
 
 Theorem abi_args_update_runtime_label:
@@ -243,7 +245,7 @@ Proof
   `type_memory_size tv = 0` by metis_tac[abi_args_zero_footprint_size] >>
   irule valueEncodingPropsTheory.val_in_memory_relocate >>
   simp[] >> qexistsl_tac [`mem`, `0`, `src`] >>
-  simp[valueEncodingTheory.mem_bytes_at_def]
+  simp[valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem abi_args_runtime_zero_transport:

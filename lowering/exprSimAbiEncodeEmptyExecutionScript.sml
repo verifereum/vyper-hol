@@ -35,8 +35,8 @@ Proof
   `eval_operand src actual = SOME a` by
     (fs[abi_builtin_encode_setup_frame_def] >> metis_tac[]) >>
   `abi_encoder_window_input (AbiCopy 0) at av (w2n a) 0 actual.vs_memory` by
-    (fs[abi_encoder_window_copy_iff, valueEncodingTheory.mem_bytes_at_def] >>
-     simp[abi_encoder_window_copy_iff, valueEncodingTheory.mem_bytes_at_def]) >>
+    (fs[abi_encoder_window_copy_iff, valueEncodingDefsTheory.mem_bytes_at_def] >>
+     simp[abi_encoder_window_copy_iff, valueEncodingDefsTheory.mem_bytes_at_def]) >>
   pure_rewrite_tac[abi_encode_empty_window_pre_def] >>
   pure_asm_rewrite_tac[] >> metis_tac[]
 QED
@@ -93,7 +93,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_encoder_window_input (AbiCopy 0) at av 0 0 initial.vs_memory` by
     (qpat_assum `abi_encoder_window_input _ _ _ _ _ _` mp_tac >>
-     simp_tac std_ss [abi_encoder_window_copy_iff, valueEncodingTheory.mem_bytes_at_def,
+     simp_tac std_ss [abi_encoder_window_copy_iff, valueEncodingDefsTheory.mem_bytes_at_def,
        listTheory.TAKE_0]) >>
   drule_all (SIMP_RULE std_ss [] (Q.INST [`sb` |-> `0:num`, `cap` |-> `0:num`]
     (SPEC_ALL abi_encode_window_setup_observed))) >>

@@ -25,8 +25,8 @@ Theorem abi_flat_snapshot_overwrite:
     (mstore (b+96) 1w s).vs_memory
 Proof
   simp[snapshot_in_def, abi_flat_root_tv_def, abi_flat_snapshot_def,
-       compileEnvTheory.mem_path_offset_def, compileEnvTheory.mem_step_offset_def,
-       valueEncodingTheory.type_memory_size_def, valueEncodingTheory.val_in_memory_def,
+       loweringPostsTheory.mem_path_offset_def, loweringPostsTheory.mem_step_offset_def,
+       valueEncodingTheory.type_memory_size_def, valueEncodingDefsTheory.val_in_memory_def,
        valueEncodingPropsTheory.mstore_mem_word_at_same]
 QED
 
@@ -66,6 +66,6 @@ Theorem abi_flat_snapshot_before_call:
     (REPLICATE 31 0w ++ [1w] ++ REPLICATE 128 0w)
 Proof
   simp[snapshot_in_def, abi_flat_root_tv_def, abi_flat_snapshot_def,
-       compileEnvTheory.mem_path_offset_def, compileEnvTheory.mem_step_offset_def,
+       loweringPostsTheory.mem_path_offset_def, loweringPostsTheory.mem_step_offset_def,
        valueEncodingTheory.type_memory_size_def] >> EVAL_TAC >> simp[]
 QED
