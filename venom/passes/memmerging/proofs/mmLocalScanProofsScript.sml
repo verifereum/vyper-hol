@@ -11607,6 +11607,64 @@ Proof
   gvs[]
 QED
 
+Theorem mm_local_canonical_due_birth_geometry[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r) (mm_local_pending_indices is gs r) /\
+  MEM j (due ++ [r]) /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) ==>
+  j <= r /\ mm_local_epoch_start is gs r <= j /\
+  ?c. g.cg_dst <= c.cg_dst /\
+    c.cg_dst + c.cg_length <= g.cg_dst + g.cg_length /\
+    c.cg_src = g.cg_src + (c.cg_dst - g.cg_dst) /\
+    ((?dj sj lj. (EL j is).inst_opcode = MCOPY /\
+        (EL j is).inst_operands = [Lit dj; Lit sj; Lit lj] /\
+        c = <|cg_dst := w2n dj; cg_src := w2n sj; cg_length := w2n lj;
+               cg_inst_ids := [(EL j is).inst_id]|>) \/
+     (?dj vj srcj. (EL j is).inst_opcode = MSTORE /\
+        (EL j is).inst_operands = [Lit dj; Var vj] /\
+        FLOOKUP s0.ss_loads vj = SOME srcj /\
+        c = <|cg_dst := w2n dj; cg_src := srcj; cg_length := 32;
+               cg_inst_ids := [(EL j is).inst_id] ++
+                 (case dfg_get_def (dfg_build_function fn0) vj of
+                    NONE => [] | SOME li => [li.inst_id])|>))
+Proof
+  strip_tac >>
+  `j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    ?d l. mm_local_write_footprint (EL j is) = SOME (d,l)` by
+    metis_tac[mm_local_canonical_due_footprint_indices] >>
+  `j <= r` by
+    (gvs[MEM_FILTER, mm_local_pending_indices_mem] >> decide_tac) >>
+  `mm_local_epoch_start is gs r <= j` by
+    (Cases_on `j = r` >- metis_tac[mm_local_epoch_start_bound] >>
+     `MEM j (mm_local_pending_indices is gs r)` by gvs[MEM_FILTER] >>
+     metis_tac[mm_local_epoch_start_pending_bound]) >>
+  simp[] >>
+  ` (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+    metis_tac[mm_local_write_footprint_opcode] >>
+  `MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
+  `?c. ((?dj sj lj. (EL j is).inst_opcode = MCOPY /\
+      (EL j is).inst_operands = [Lit dj; Lit sj; Lit lj] /\
+      c = <|cg_dst := w2n dj; cg_src := w2n sj; cg_length := w2n lj;
+             cg_inst_ids := [(EL j is).inst_id]|>) \/
+    (?dj vj srcj. (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dj; Var vj] /\
+      FLOOKUP s0.ss_loads vj = SOME srcj /\
+      c = <|cg_dst := w2n dj; cg_src := srcj; cg_length := 32;
+             cg_inst_ids := [(EL j is).inst_id] ++
+               (case dfg_get_def (dfg_build_function fn0) vj of
+                  NONE => [] | SOME li => [li.inst_id])|>))` by
+    (drule_all mm_local_final_write_birth >> gvs[] >> metis_tac[]) >>
+  `mm_local_copy_ancestor c g` by
+    (irule mm_local_final_birth_ancestor >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  qexists `c` >> gvs[mm_local_copy_ancestor_def] >> decide_tac
+QED
+
 Theorem mm_local_epoch_source_read[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
