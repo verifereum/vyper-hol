@@ -56,7 +56,8 @@ Theorem aug_place_loaded_memory_suffix:
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all aug_place_memory_rhs_suffix_admissible >> strip_tac >>
+  drule_all aug_place_memory_reads_replay >> strip_tac >>
+  drule_all aug_place_rhs_suffix_admissible >> strip_tac >>
   `word_value old` by metis_tac[word_value_type_typed] >>
   `is_word_type ty /\ is_word_type (expr_type e)` by
     metis_tac[word_value_type_word] >>
