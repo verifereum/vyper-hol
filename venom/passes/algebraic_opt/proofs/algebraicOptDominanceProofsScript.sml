@@ -1,6 +1,6 @@
 Theory algebraicOptDominanceProofs
 Ancestors
-  venomWf venomExecProofs simplifyCfgWfssa list rich_list
+  venomWf venomWfProps venomExecProofs simplifyCfgWfssa list rich_list
 
 (* One shared boundary vertex, including repeated occurrences elsewhere. *)
 Theorem ao_fn_path_split:
