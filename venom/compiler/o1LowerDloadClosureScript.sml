@@ -1,7 +1,7 @@
 (* Finite fixed-point interface for the computed pointer closure. *)
 Theory o1LowerDloadClosure
 Ancestors
-  pointerConfinedDefs pointerConfinedProps ptrDiscipline o1PassContract
+  pointerConfinedDefs pointerConfinedProps ptrDiscipline o1PassContract dftCommutation mem2varBlockSimHelpers
   venomInst pred_set list rich_list While
 
 Theorem pointer_use_step_mem:

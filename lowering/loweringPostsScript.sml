@@ -7,7 +7,8 @@ Ancestors
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   vyperInterpreter vyperState vyperValueOperation vyperContext vyperValue vyperAST
   valueEncoding valueEncodingProofs vyperTypeSystem
-  venomExecSemantics venomInst venomState vyperLookupStorage vyperStorageBackend accountsRelProps
+  venomExecSemantics venomInst venomState vyperLookupStorage vyperStorageBackend accountsRelProps supportedExprTraverse
+  vyperEvalScopesProgress
 Libs
   monadsyntax
 
@@ -165,21 +166,61 @@ End
 
 (* ===== The posts ===== *)
 
-(* Code run from s0 to s leaves the live locals' memory alone, but for the
-   length words of their dynamic arrays: the bytes of every live local's
-   region at es apart from each dynamic array length word inside it
-   (dynarray_len_at, the root's and the nested ones') are kept.  The only
-   memory of a local an expression writes is the length word of the array
-   a pop pops (exprSimPop for a local x.pop(); a pop on a nested place,
-   x.f.pop() or x[i].pop(), writes the length word at its offset in x's
-   declared type). *)
+(* The snapshot h = (path, pv) of a local of type tv held in the region
+   [b, b + sz) sits in memory mem: pv laid out at the offset of path in tv,
+   inside the region. *)
+Definition snapshot_in_def:
+  snapshot_in tv b sz (path,pv) mem <=>
+    ?k ptv. mem_path_offset tv path = SOME (k,ptv) /\
+            k + type_memory_size ptv <= sz /\
+            val_wf ptv pv /\ val_in_memory ptv pv (b + k) mem
+End
+
+(* Code run from s0 to s, taking the source from es to es', keeps the
+   popped history of the locals in memory: a snapshot a pop recorded on the
+   way sits in memory at s, and one the history had at es, and which sat in
+   memory at s0, still does.  Snapshots from before es need not sit in
+   memory (a write through a stale pointer, x[0][x.pop()[0]] = 5, writes
+   the bytes of one and leaves the history alone), so only the ones that
+   did are kept.  An expression writes a local only by popping a live
+   array, at its length word, which no dead snapshot's bytes contain, and
+   every live write clears the history. *)
+Definition popped_kept_def:
+  popped_kept cenv es es' s0 (s:venom_state) <=>
+    !n b sz entry' h.
+      local_region cenv es.scopes s0 n b sz /\
+      lookup_scopes n es'.scopes = SOME entry' /\ MEM h entry'.popped /\
+      (!entry. lookup_scopes n es.scopes = SOME entry /\ MEM h entry.popped ==>
+               snapshot_in entry.type b sz h s0.vs_memory) ==>
+      snapshot_in entry'.type b sz h s.vs_memory
+End
+
+(* Code run from s0 to s, taking the source from es to es', leaves the
+   live locals' memory alone, but for the length words of their dynamic
+   arrays: the bytes of every live local's region at es apart from each
+   dynamic array length word inside it (dynarray_len_at, the root's and the
+   nested ones') are kept.  The only memory of a local an expression writes
+   is the length word of the array a pop pops (exprSimPop for a local
+   x.pop(); a pop on a nested place, x.f.pop() or x[i].pop(), writes the
+   length word at its offset in x's declared type).  A pop records the
+   popped element in the local's history, so the history only grows
+   (scopes_progress), and a local whose entry is the same at es and es'
+   was not popped: it keeps its whole region, length words included.  The
+   history the pops recorded is in memory (popped_kept). *)
 Definition locals_kept_def:
-  locals_kept cenv es s0 s <=>
-    !n b sz off len.
-      local_region cenv es.scopes s0 n b sz /\ b <= off /\
-      off + len <= b + sz /\
-      (!k. dynarray_len_at cenv n k ==> off + len <= b + k \/ b + k + 32 <= off) ==>
-      mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory
+  locals_kept cenv es es' s0 s <=>
+    (!n b sz off len.
+       local_region cenv es.scopes s0 n b sz /\ b <= off /\
+       off + len <= b + sz /\
+       (!k. dynarray_len_at cenv n k ==> off + len <= b + k \/ b + k + 32 <= off) ==>
+       mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory) /\
+    MAP FDOM es'.scopes = MAP FDOM es.scopes /\
+    scopes_progress es.scopes es'.scopes /\
+    (!n b sz.
+       local_region cenv es.scopes s0 n b sz /\
+       lookup_scopes n es'.scopes = lookup_scopes n es.scopes ==>
+       mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory) /\
+    popped_kept cenv es es' s0 s
 End
 
 (* Where the value v of an expression of type t, lowered from compile state
@@ -203,7 +244,7 @@ End
    (locals_kept), which the path keeps apart from a value with no dynamic
    array in it. *)
 Definition wb_frame_def:
-  wb_frame cenv es sa s0 s <=>
+  wb_frame cenv es es' sa s0 s <=>
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -213,7 +254,7 @@ Definition wb_frame_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
+    locals_kept cenv es es' s0 s
 End
 
 Definition expr_val_at_def:
@@ -231,6 +272,77 @@ Definition expr_val_at_def:
                      local_val_at cenv cx n (w2n w - b) tv v) \/
            val_footprint tv v = 0)
 End
+
+(* expr_val_at without its local-region case: the value of type t held by
+   op sits in one of the expression's own allocations (clear of every live
+   local) or occupies no bytes.  An internal call whose value is laid out
+   at the callee's declared return type, not its annotation
+   (post_value_type), hands out its own return buffer, never a pointer
+   into a local. *)
+Definition expr_val_own_def:
+  expr_val_own cenv cx t sa sb es v op s <=>
+    !tv. evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t ==>
+      ?w. eval_operand op s = SOME w /\
+          ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
+                       sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+                       b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
+                       (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+                                   b + sz <= lb \/ lb + lsz <= b)) \/
+           val_footprint tv v = 0)
+End
+
+(* The type at which expr_post and vv_post describe e's value: the type its
+   lowered memory is laid out at.  An internal call's value is its callee's
+   return buffer, laid out at the callee's declared return type
+   (lowered_value_type), which a widening call site (a DynArray[Bytes[32], 2]
+   result used as DynArray[Bytes[64], 2]) annotates with a wider type of
+   another stride.  A word or bytestring value reads the same at either type,
+   so those stay at the annotation; every other expression's value is laid
+   out at its annotation. *)
+Definition post_value_type_def[simp]:
+  post_value_type cenv (Call ty (IntCall fid) args drv) =
+    (if is_word_type ty \/ is_bytestring_type ty then ty
+     else lowered_value_type cenv (Call ty (IntCall fid) args drv)) /\
+  post_value_type cenv e = expr_type e
+End
+
+Theorem post_value_type_word[simp]:
+  !cenv e. is_word_type (expr_type e) ==> post_value_type cenv e = expr_type e
+Proof
+  rpt gen_tac >> Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- gvs[post_value_type_def, vyperASTTheory.expr_type_def] >>
+  Cases_on `e` >> gvs[post_value_type_def] >>
+  rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> gvs[post_value_type_def]
+QED
+
+Theorem post_value_type_bytestring[simp]:
+  !cenv e. is_bytestring_type (expr_type e) ==>
+           post_value_type cenv e = expr_type e
+Proof
+  rpt gen_tac >> Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- gvs[post_value_type_def, vyperASTTheory.expr_type_def] >>
+  Cases_on `e` >> gvs[post_value_type_def] >>
+  rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> gvs[post_value_type_def]
+QED
+
+Theorem post_value_type_not_int_call[simp]:
+  !cenv e. (!ty fid args drv. e <> Call ty (IntCall fid) args drv) ==>
+           post_value_type cenv e = expr_type e
+Proof
+  rpt gen_tac >> Cases_on `e` >> simp[post_value_type_def] >>
+  rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> simp[post_value_type_def]
+QED
+
+Theorem post_value_type_lowered:
+  !cenv e. lowered_value_type cenv e = expr_type e ==>
+           post_value_type cenv e = expr_type e
+Proof
+  rpt strip_tac >>
+  Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- gvs[post_value_type_def, vyperASTTheory.expr_type_def] >>
+  irule post_value_type_not_int_call >> metis_tac[]
+QED
+
 
 (* Where the fragment of e that started in s0, related at es, lowered from
    compile state sa to sb, ends when the source gives v and es': related at
@@ -251,8 +363,10 @@ End
 Definition expr_post_def:
   expr_post ctx func cenv cx e es sa sb s0 es' v op s <=>
     stmt_state_rel ctx func cenv cx es' s /\
-    expr_val_rel cx (expr_type e) v op s /\
-    expr_val_at cenv cx (expr_type e) sa sb es' v op s /\
+    expr_val_rel cx (post_value_type cenv e) v op s /\
+    expr_val_at cenv cx (post_value_type cenv e) sa sb es' v op s /\
+    (post_value_type cenv e <> expr_type e ==>
+     expr_val_own cenv cx (post_value_type cenv e) sa sb es' v op s) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -262,7 +376,7 @@ Definition expr_post_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
+    locals_kept cenv es es' s0 s
 End
 
 (* The slot w holds the value obtained by reading the captured source
@@ -326,14 +440,19 @@ Definition immutable_holds_def:
 End
 
 (* A compiled value holds the value read from the captured source result
-   at es.  Located values retain their expression type and location;
-   memory words also retain their typed encoding.  No current compiler
+   at es.  Located values retain their type and location: the type t the
+   value is described at, but for a bytestring in memory, whose layout does
+   not depend on its bound, which may carry another bytestring type (an
+   internal call's narrower declared return type); memory words also
+   retain their typed encoding.  No current compiler
    case returns a calldata pointer. *)
 Definition vv_holds_def:
   (vv_holds cenv cx t tv (StackValue t' op) es s <=>
      ?v. read_result cx tv es = (INL v, es) /\ expr_val_rel cx t v op s) /\
   (vv_holds cenv cx t tv (LocatedValue t' p) es s <=>
-     t' = t /\
+     (t' = t \/
+      p.ptr_location = LocMemory /\ is_bytestring_type t /\
+      is_bytestring_type t') /\
      ?w. eval_operand p.ptr_operand s = SOME w /\
          case p.ptr_location of
            LocMemory =>
@@ -373,12 +492,78 @@ Definition vv_at_def:
             val_footprint tvt v = 0))
 End
 
+(* vv_at without its local-region case (expr_val_own). *)
+Definition vv_own_def:
+  (vv_own cenv cx t sa sb es tv (StackValue t' op) s <=>
+     !v. read_result cx tv es = (INL v, es) ==> expr_val_own cenv cx t sa sb es v op s) /\
+  (vv_own cenv cx t sa sb es tv (LocatedValue t' p) s <=>
+     p.ptr_location = LocMemory ==>
+     !v tvt. read_result cx tv es = (INL v, es) /\
+             evaluate_type (get_tenv cx) t = SOME tvt ==>
+       ?w. eval_operand p.ptr_operand s = SOME w /\
+           ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
+                        sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+                        b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
+                        (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+                                    b + sz <= lb \/ lb + lsz <= b)) \/
+            val_footprint tvt v = 0))
+End
+
+(* expr_has_effect by constructor, for the expressions whose posts the
+   simulation cases build. *)
+Theorem expr_has_effect_thm[simp]:
+  (expr_has_effect (Pop ty tgt) <=> T) /\
+  (expr_has_effect (Call ty ct es d) <=> T) /\
+  (expr_has_effect (Literal ty l) <=> F) /\
+  (expr_has_effect (Name ty n) <=> F) /\
+  (expr_has_effect (TopLevelName ty id) <=> F) /\
+  (expr_has_effect (FlagMember ty id f) <=> F) /\
+  (expr_has_effect (Attribute ty e1 f) <=> expr_has_effect e1) /\
+  (expr_has_effect (Subscript ty e1 e2) <=>
+     expr_has_effect e1 \/ expr_has_effect e2)
+Proof
+  simp[expr_has_effect_def, supported_expr_exists_def, expr_effect_root_def]
+QED
+
+(* A storage or transient pointer reads live slots at es: no byte of the
+   slots it reads is dead but those its own type leaves dead
+   (storage_read_live). *)
+Definition vv_storage_live_def[simp]:
+  (vv_storage_live cx (StackValue _ _) es s <=> T) /\
+  (vv_storage_live cx (LocatedValue t p) es s <=>
+     (p.ptr_location = LocStorage ==>
+      !w tvt. eval_operand p.ptr_operand s = SOME w /\
+        evaluate_type (get_tenv cx) t = SOME tvt ==>
+        storage_read_live cx F (get_storage cx es F) w tvt) /\
+     (p.ptr_location = LocTransient ==>
+      !w tvt. eval_operand p.ptr_operand s = SOME w /\
+        evaluate_type (get_tenv cx) t = SOME tvt ==>
+        storage_read_live cx T (get_storage cx es T) w tvt))
+End
+
+Theorem vv_storage_live_gas_obs[simp]:
+  vv_storage_live cx vv (es with gas_obs := gs) s <=> vv_storage_live cx vv es s
+Proof
+  Cases_on `vv` >> simp[get_storage_def]
+QED
+
+Theorem vv_storage_live_inst_idx[simp]:
+  vv_storage_live cx vv es (s with vs_inst_idx := n) <=> vv_storage_live cx vv es s
+Proof
+  `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
+    (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  Cases_on `vv` >> simp[]
+QED
+
 (* expr_post with a value_vv in place of an operand. *)
 Definition vv_post_def:
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
     stmt_state_rel ctx func cenv cx es' s /\
-    vv_holds cenv cx (expr_type e) tv vv es' s /\
-    vv_at cenv cx (expr_type e) sa sb es' tv vv s /\
+    vv_holds cenv cx (post_value_type cenv e) tv vv es' s /\
+    vv_at cenv cx (post_value_type cenv e) sa sb es' tv vv s /\
+    (post_value_type cenv e <> expr_type e ==>
+     vv_own cenv cx (post_value_type cenv e) sa sb es' tv vv s) /\
+    (~expr_has_effect e ==> vv_storage_live cx vv es' s) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -388,7 +573,7 @@ Definition vv_post_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
+    locals_kept cenv es es' s0 s
 End
 
 (* The location of a storage or transient place. *)
@@ -454,7 +639,7 @@ Definition target_post_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
+    locals_kept cenv es es' s0 s
 End
 
 (* compile_stmts, returning the compile environment after the list's

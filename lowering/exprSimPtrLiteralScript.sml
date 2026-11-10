@@ -135,14 +135,16 @@ Proof
 QED
 
 Theorem literal_memory_vv_expr_post[local]:
-  ~is_word_type (expr_type e) /\
+  ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e es sa sb s0 ee (Value v)
     (LocatedValue (expr_type e) (base_ptr buf)) t ==>
   expr_post ctx func cenv cx e es sa sb s0 ee v buf.buf_operand t
 Proof
-  simp[vv_post_def, expr_post_def, vv_holds_def, vv_at_def,
-       expr_val_rel_def, expr_val_at_def, contextTheory.base_ptr_def,
-       vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+  strip_tac >> pop_assum mp_tac >>
+  qpat_x_assum `post_value_type _ _ = _` (fn th =>
+    simp[th, vv_post_def, expr_post_def, vv_holds_def, vv_at_def,
+         expr_val_rel_def, expr_val_at_def, contextTheory.base_ptr_def,
+         vyperStateTheory.read_result_def, vyperStateTheory.return_def]) >>
   metis_tac[]
 QED
 

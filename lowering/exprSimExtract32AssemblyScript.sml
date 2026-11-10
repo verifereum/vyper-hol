@@ -1,6 +1,7 @@
 (* Counted preparation and final read, composed without losing exemptions. *)
 Theory exprSimExtract32Assembly
 Ancestors
+  exprSimHashBoundary
   exprSimExtract32Post exprSimExtract32Run exprSimExtract32Counted
   gasSummary gasOutcome exprSimHash fragGasMode exprSimExtract32Read
   builtinBytes fragExec list rich_list exprLoweringProps vyperState
