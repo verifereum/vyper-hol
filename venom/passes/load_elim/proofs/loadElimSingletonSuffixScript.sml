@@ -1,6 +1,6 @@
 Theory loadElimSingletonSuffix
 Ancestors
-  loadElimReachableSSA loadElimDefinitionCuts loadElimActualGeneration loadElimOccurrenceCoverage
+  loadElimReachableSSA loadElimDefinitionCuts loadElimActualGeneration loadElimOccurrenceCoverage venomWfProps
   loadElimSingletonAvailability loadElimOperationalHistory analysisSimProofsBase
   loadElimTransferProvenance loadElimOccurrence loadElimDefs
   dfAnalyzeDefs cfgDefs cfgAnalysisProps venomWf venomExecProofs venomInstProps
