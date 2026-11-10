@@ -276,7 +276,11 @@ Proof
   drule_all emit_mstore_clean_ambient_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf`, `tnf''`, `sf''`] >>
-  conj_tac >- suspend "path" >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`G`, `sf`, `tnf`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf'`, `tnf'`] >> simp[]) >>
   simp[w2n_n2w, LESS_MOD] >>
   `sf'.vs_memory = (mstore b 32w s).vs_memory` by simp[w2n_n2w, LESS_MOD] >>
   qpat_x_assum `sf'.vs_memory = sf.vs_memory` kall_tac >>
@@ -286,15 +290,6 @@ Proof
   BETA_TAC >> pure_rewrite_tac[venom_state_accfupds] >>
   qpat_x_assum `sf'.vs_memory = _` (fn th => pure_rewrite_tac[th]) >> REFL_TAC
 QED
-
-Resume abi_singleton_child_suffix_ambient_counted_ptr[path]:
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`G`, `sf`, `tnf`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf`, `sf'`, `tnf'`] >> simp[]
-QED
-
-Finalise abi_singleton_child_suffix_ambient_counted_ptr
 
 Theorem abi_singleton_bytes_child_context[local]:
   compile_abi_encode_child dst src (AbiBytestring maxlen) T 0 ip sa = (out,sb) /\
@@ -429,33 +424,23 @@ Proof
    lookup_var off sf' = SOME 32w /\ op_taint tnf' (Var off) = {} /\
    not_fresh_at sd head /\ not_fresh_at sd ip /\
    lookup_var len sf' = SOME (n2w (32+ceil32 (LENGTH bs)))` by
-    suspend "suffix_resources" >>
+    (fs[eval_operand_def] >>
+     `not_fresh_at sc ip` by metis_tac[] >>
+     `lookup_var head sf' = SOME (n2w b) /\
+      lookup_var ip sf' = SOME (n2w cursor) /\
+      lookup_var off sf' = SOME 32w /\ op_taint tnf' (Var off) = {}` by
+       metis_tac[] >>
+     simp[] >> gvs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS]) >>
   `b < dimword(:256)` by decide_tac >>
   drule (cj 1 abi_encode_child_suffix_shape) >> disch_then SUBST_ALL_TAC >>
   drule_all abi_singleton_child_suffix_ambient_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf''`, `tnf''`, `sf''`] >>
-  conj_tac >- suspend "path" >>
-  suspend "endpoint"
-QED
-
-Resume abi_singleton_bytes_child_ambient_counted_ptr[suffix_resources]:
-  fs[eval_operand_def] >>
-  `not_fresh_at sc ip` by metis_tac[] >>
-  `lookup_var head sf' = SOME (n2w b) /\
-   lookup_var ip sf' = SOME (n2w cursor) /\
-   lookup_var off sf' = SOME 32w /\ op_taint tnf' (Var off) = {}` by
-    metis_tac[] >>
-  simp[] >>
-  gvs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS]
-QED
-Resume abi_singleton_bytes_child_ambient_counted_ptr[path]:
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]
-QED
-Resume abi_singleton_bytes_child_ambient_counted_ptr[endpoint]:
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]) >>
   `eval_operand (Var len) sf'' = SOME (n2w (32+ceil32 (LENGTH bs))) /\
    op_taint tnf'' (Var len) = {}` by
     (fs[eval_operand_def] >> metis_tac[]) >>
@@ -465,7 +450,6 @@ Resume abi_singleton_bytes_child_ambient_counted_ptr[endpoint]:
      simp[Abbr `ss`, mload_mstore_same, ADD_ASSOC]) >>
   simp[] >> rpt strip_tac >> decide_tac
 QED
-Finalise abi_singleton_bytes_child_ambient_counted_ptr
 
 (* Compatibility boundaries: ambient execution is proved only once above. *)
 Theorem abi_singleton_head_cursor_counted_ptr:

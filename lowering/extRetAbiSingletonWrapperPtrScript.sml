@@ -97,7 +97,14 @@ Proof
      fs[ptr_covers_def] >> gvs[]) >>
   `mem_bytes_at a cap sf.vs_memory = mem_bytes_at a cap s.vs_memory /\
    (!i. i < cap ==> (a+i IN tnf.t_mem <=> a+i IN tn.t_mem))` by
-    suspend "source_window" >>
+    (conj_tac
+     >- (irule LIST_EQ >> simp[] >> rpt strip_tac >>
+         rename1 `j < cap` >>
+         `mem_bytes_at (a+j) 1 sf.vs_memory = mem_bytes_at (a+j) 1 s.vs_memory` by
+           (qpat_x_assum `mem_agree_outside _ sf.vs_memory _` mp_tac >>
+            simp[mem_agree_outside_def] >> disch_then irule >> simp[] >> decide_tac) >>
+         pop_assum mp_tac >> simp[LIST_EQ_REWRITE, EL_mem_bytes_at]) >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   `!mem'. mem_agree_outside tnf.t_mem sf.vs_memory mem' ==>
     abi_encoder_input (AbiBytestring maxlen) at (BytesV bs) a cap mem'` by
     (rpt strip_tac >> drule_all copied_window_agree_witness >> strip_tac >>
@@ -116,13 +123,29 @@ Proof
    (!i. cursor <= i /\ i < cursor+32 ==> i NOTIN tnf'.t_mem) /\
    (!mem'. mem_agree_outside tnf'.t_mem sf'.vs_memory mem' ==>
       abi_encoder_input (AbiBytestring maxlen) at (BytesV bs) a cap mem')` by
-    suspend "child_resources" >>
+    (`lookup_var dst sf' = lookup_var dst sf /\ FLOOKUP Gf' dst = FLOOKUP Gf dst /\
+      op_taint tnf' (Var dst) = op_taint tnf (Var dst) /\
+      lookup_var ip sf' = lookup_var ip sf /\ FLOOKUP Gf' ip = FLOOKUP Gf ip /\
+      op_taint tnf' (Var ip) = op_taint tnf (Var ip)` by metis_tac[] >>
+     ntac 2 (conj_tac >- metis_tac[]) >>
+     conj_tac >-
+       (qpat_x_assum `ptr_covers Gf tnf dst sf _` mp_tac >> simp[ptr_covers_def]) >>
+     conj_tac >-
+       (qpat_x_assum `ptr_covers Gf tnf ip sf 32` mp_tac >> simp[ptr_covers_def]) >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >-
+       (qpat_x_assum `mload cursor sf = _` mp_tac >> simp[mload_def]) >>
+     conj_tac >- metis_tac[] >> metis_tac[]) >>
   Q.SUBGOAL_THEN `(a+cap <= b+32 \/ b+64+ceil32 (LENGTH bs) <= a)` assume_tac
   >- decide_tac >>
   drule_all abi_singleton_bytes_child_ambient_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `lookup_var ip sf'' = SOME (n2w cursor) /\ ptr_covers Gf'' tnf'' ip sf'' 32` by
-    suspend "load_resources" >>
+    (`lookup_var ip sf'' = lookup_var ip sf' /\ FLOOKUP Gf'' ip = FLOOKUP Gf' ip /\
+      op_taint tnf'' (Var ip) = op_taint tnf' (Var ip)` by metis_tac[] >>
+     simp[ptr_covers_def] >>
+     qpat_x_assum `ptr_covers Gf' tnf' ip sf' 32` mp_tac >>
+     simp[ptr_covers_def]) >>
   `cursor < dimword(:256)` by decide_tac >>
   `!i. w2n (n2w cursor : 256 word) <= i /\
        i < w2n (n2w cursor : 256 word)+32 ==> i NOTIN tnf''.t_mem` by
@@ -132,56 +155,13 @@ Proof
   drule_all emit_mload_clean_ambient_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf'''`, `tnf'''`, `sf'''`] >>
-  conj_tac >- suspend "path" >>
-  suspend "endpoint"
-QED
-
-Resume compile_abi_encode_singleton_bytes_ambient_counted_ptr[source_window]:
-  conj_tac
-  >- (irule LIST_EQ >> simp[] >> rpt strip_tac >>
-      rename1 `j < cap` >>
-      `mem_bytes_at (a+j) 1 sf.vs_memory = mem_bytes_at (a+j) 1 s.vs_memory` by
-        (qpat_x_assum `mem_agree_outside _ sf.vs_memory _` mp_tac >>
-         simp[mem_agree_outside_def] >> disch_then irule >> simp[] >> decide_tac) >>
-      pop_assum mp_tac >> simp[LIST_EQ_REWRITE, EL_mem_bytes_at]) >>
-  rpt strip_tac >> first_x_assum irule >> decide_tac
-QED
-
-Resume compile_abi_encode_singleton_bytes_ambient_counted_ptr[child_resources]:
-  `lookup_var dst sf' = lookup_var dst sf /\ FLOOKUP Gf' dst = FLOOKUP Gf dst /\
-   op_taint tnf' (Var dst) = op_taint tnf (Var dst) /\
-   lookup_var ip sf' = lookup_var ip sf /\ FLOOKUP Gf' ip = FLOOKUP Gf ip /\
-   op_taint tnf' (Var ip) = op_taint tnf (Var ip)` by metis_tac[] >>
-  ntac 2 (conj_tac >- metis_tac[]) >>
   conj_tac >-
-    (qpat_x_assum `ptr_covers Gf tnf dst sf _` mp_tac >> simp[ptr_covers_def]) >>
-  conj_tac >-
-    (qpat_x_assum `ptr_covers Gf tnf ip sf 32` mp_tac >> simp[ptr_covers_def]) >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >-
-    (qpat_x_assum `mload cursor sf = _` mp_tac >> simp[mload_def]) >>
-  conj_tac >- metis_tac[] >>
-  metis_tac[]
-QED
-
-Resume compile_abi_encode_singleton_bytes_ambient_counted_ptr[load_resources]:
-  `lookup_var ip sf'' = lookup_var ip sf' /\ FLOOKUP Gf'' ip = FLOOKUP Gf' ip /\
-   op_taint tnf'' (Var ip) = op_taint tnf' (Var ip)` by metis_tac[] >>
-  simp[ptr_covers_def] >>
-  qpat_x_assum `ptr_covers Gf' tnf' ip sf' 32` mp_tac >>
-  simp[ptr_covers_def]
-QED
-
-Resume compile_abi_encode_singleton_bytes_ambient_counted_ptr[path]:
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf''`, `sf''`, `tnf''`] >> simp[]
-QED
-
-Resume compile_abi_encode_singleton_bytes_ambient_counted_ptr[endpoint]:
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf''`, `sf''`, `tnf''`] >> simp[]) >>
   `not_fresh_at se dst` by metis_tac[] >>
   `lookup_var dst sf''' = lookup_var dst sf' /\ FLOOKUP Gf''' dst = FLOOKUP Gf' dst /\
    op_taint tnf''' (Var dst) = op_taint tnf' (Var dst)` by metis_tac[] >>
@@ -190,8 +170,6 @@ Resume compile_abi_encode_singleton_bytes_ambient_counted_ptr[endpoint]:
      qpat_x_assum `ptr_covers Gf' tnf' dst sf' _` mp_tac >> simp[ptr_covers_def]) >>
   simp[eval_operand_def] >> rpt strip_tac >> metis_tac[]
 QED
-
-Finalise compile_abi_encode_singleton_bytes_ambient_counted_ptr
 
 Theorem compile_abi_encode_singleton_bytes_counted_ptr:
   compile_abi_encode_to_buf (Var dst) (Var src)

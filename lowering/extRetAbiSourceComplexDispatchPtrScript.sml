@@ -108,7 +108,7 @@ Proof
   >- (qsuff_tac `mload cursor sf' = mload cursor (mstore cursor (n2w k) sf)`
       >- simp[venomMemPropsTheory.mload_mstore_same] >> simp[mload_def]) >>
   conj_tac
-  >- metis_tac[typedCopyPtrTheory.mstore_memory_frame] >>
+  >- metis_tac[wordLoadStorePtrTheory.mstore_memory_frame] >>
   metis_tac[]
 QED
 
