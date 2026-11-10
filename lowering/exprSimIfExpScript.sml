@@ -1032,10 +1032,20 @@ Theorem ifexp_post_annotated[local]:
       arg_type_fits (lowered_value_type ce e) (expr_type e) /\
       ?tvp. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tvp) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
+  (~expr_has_effect c /\ ~expr_has_effect a /\ ~expr_has_effect b ==>
+   ~expr_has_effect e) /\
   expr_post ctx func ce cx e es sa sb s0 es' v op s ==>
   expr_post ctx func ce cx (IfExp (expr_type e) c a b) es sa sb s0 es' v op s
 Proof
-  strip_tac >> Cases_on `post_value_type ce e = expr_type e`
+  strip_tac >>
+  `~expr_has_effect c /\ ~expr_has_effect a /\ ~expr_has_effect b ==>
+   pure_frame ce func es sa s0 s` by
+    (strip_tac >>
+     `~expr_has_effect e` by
+       (qpat_x_assum `_ ==> ~expr_has_effect e` irule >> simp[]) >>
+     qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [expr_post_def]) >> simp[]) >>
+  Cases_on `post_value_type ce e = expr_type e`
   >- (gvs[expr_post_def, vyperASTTheory.expr_type_def] >> metis_tac[]) >>
   `~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e)` by
     metis_tac[post_value_type_word, post_value_type_bytestring] >>

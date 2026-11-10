@@ -242,7 +242,8 @@ Proof
   rpt strip_tac >> simp[]
   >- (qpat_x_assum `!aid off sz. _ ==> mem_bytes_at off sz u.vs_memory = _`
         irule >>
-      qexists_tac `aid` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexists_tac `aid` >> conj_tac >> first_assum ACCEPT_TAC) >>
   irule exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `u` >> simp[]
 QED
 
