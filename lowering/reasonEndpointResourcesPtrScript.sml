@@ -4,7 +4,7 @@ Theory reasonEndpointResourcesPtr
 Ancestors
   reasonRepresentationPtr reasonCopySourcePtr stringUnwrapLayout
   loweringPosts exprOperandVar exprSimCopy exprSimHyps exprLoweringProps
-  compileEnv valueEncoding exprSimProps vyperInterpreter vyperValue
+  compileEnv valueEncoding valueEncodingDefs exprSimProps vyperInterpreter vyperValue
   venomState words arithmetic finite_map list context contractABI allocLimits vyperState
   vfmConstants
 

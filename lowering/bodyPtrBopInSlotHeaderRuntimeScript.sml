@@ -1,7 +1,7 @@
 Theory bodyPtrBopInSlotHeaderRuntime
 Ancestors bodyPtrBopInRuntimeEntry bodyPtrBopInLoopSearch
   bodyPtrBopInRuntimeContracts bodyPtrBopInSlotFrame bodyPtrBopInSlotLoad
-  venomState ptrDiscipline compileEnv vyperValue vyperTyping context
+  venomState ptrDiscipline compileEnv loweringStateRelDefs vyperValue vyperTyping context
   bodyPtrBopInHeaderCode bodyPtrBopInLoopContract fragGasPathPtr vyperValueOperation
 
 Theorem membership_dynamic_slot_header_runtime:

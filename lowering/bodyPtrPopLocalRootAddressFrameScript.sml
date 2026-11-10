@@ -1,7 +1,7 @@
 Theory bodyPtrPopLocalRootAddressFrame
 Ancestors
   bodyPtrPopLocalRootFrame bodyPtrDefs
-  emitHelperProps emitHelper compileEnv venomState ptrDiscipline
+  emitHelperProps emitHelper compileEnv loweringStateRelDefs venomState ptrDiscipline
   finite_map words list fragGasPathPtr
 
 Theorem pop_local_mul_add_exact:

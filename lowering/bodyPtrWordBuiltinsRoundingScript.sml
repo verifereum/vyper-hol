@@ -3,7 +3,7 @@ Theory bodyPtrWordBuiltinsRounding
 Ancestors bodyPtrWordBuiltinsRoundingSteps bodyPtrWordBuiltinsAbsPost
   bodyPtrWordBuiltinsAbsSequence bodyPtrWordBuiltinsAbsSuffix
   bodyPtrWordBuiltinsScalarSequence bodyPtrWordBuiltinsIntervalGhost
-  builtinMisc builtinSimple exprSimWordBuiltins exprLoweringProps compileEnv
+  builtinMisc builtinSimple exprSimWordBuiltins exprLoweringProps compileEnv loweringStateRelDefs
   emitHelper venomInst list rich_list pred_set bodyPtrDefs ptrDiscipline ptrSafeRun
   finite_map codegenRel fragGasSeqPtr venomState fragExec fragGasPathPtr
 

@@ -2,7 +2,7 @@ Theory bodyPtrPopReturned
 Ancestors
   bodyPtrPopRootChild bodyPtrPopLiveElement bodyPtrPopRegionInvariant
   bodyPtrPopDeclaredEntry bodyPtrDefs accountsRelProps context
-  exprSimPopStorage compileEnv vyperValue vyperStorage words pred_set
+  exprSimPopStorage compileEnv loweringStateRelDefs vyperValue vyperStorage words pred_set
 
 (* Extent is demanded only when an actual selected tainted byte exists. *)
 Theorem pop_last_child_taint_header:
@@ -80,8 +80,8 @@ Proof
   `storage_read_live cx tr raw hdr (ArrayTV tv (Dynamic n))` by
     metis_tac[declared_storage_region_read_live] >>
   `s.vs_call_ctx.cc_address = cx.txn.target` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def,
-       compileEnvTheory.call_ctx_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
+       loweringStateRelDefsTheory.call_ctx_rel_def] >>
   `(if tr then tn.t_trans else tn.t_stor) SUBSET
      {(k,b) | storage_dead cx tr raw (w2n k) b}` by
     (Cases_on `tr` >>

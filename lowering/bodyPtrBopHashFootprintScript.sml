@@ -71,7 +71,7 @@ Proof
   strip_tac >>
   `val_in_memory tv (StringV str) (w2n w) s.vs_memory` by
     metis_tac[ptr_mem_ok_representation] >>
-  gvs[valueEncodingTheory.val_in_memory_def]
+  gvs[valueEncodingDefsTheory.val_in_memory_def]
 QED
 
 Theorem ptr_mem_ok_string_clean:

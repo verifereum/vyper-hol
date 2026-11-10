@@ -1,6 +1,6 @@
 (* Memory-source boundaries shared by reason-bearing raise and assert. *)
 Theory reasonMemoryPtr
-Ancestors bodyPtrDefs ptrDiscipline venomState exprLowering compileEnv
+Ancestors bodyPtrDefs ptrDiscipline venomState exprLowering compileEnv loweringStateRelDefs
   reasonNormalizedSuffixPtr reasonResourcesPtr reasonPrefixPtr
   exprLoweringProps emitHelperProps context emitHelper
 

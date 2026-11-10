@@ -78,7 +78,7 @@ Proof
         bodyPtrDefsTheory.ghost_kept_def] >> metis_tac[]) >>
   irule ghost_kept_trans >>
   drule exprSimWordArgsTheory.expr_post_frame >> strip_tac >>
-  fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+  fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   metis_tac[]
 QED
 
@@ -109,7 +109,7 @@ Proof
        fragGasPathPtrTheory.gas_path_ptr_rules,
        typed_args_post_def, loweringPostsTheory.wb_frame_def,
        bodyPtrDefsTheory.ghost_kept_def, stmtFragPtrTheory.ghost_inv_gas_obs] >>
-  fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_gas_obs]
+  fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_gas_obs]
 QED
 
 Theorem typed_args_ready_ptr_admissible:

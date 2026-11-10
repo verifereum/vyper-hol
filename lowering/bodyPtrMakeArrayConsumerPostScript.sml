@@ -4,7 +4,7 @@
 Theory bodyPtrMakeArrayConsumerPost
 Ancestors
   bodyPtrMakeArrayDispatch bodyPtrMakeArrayAddFrame exprOperandVar bodyPtrDefs emitHelper
-  compileEnv context exprLowering vyperStorageBackend vyperTypeValues ptrDiscipline loweringPosts venomState
+  compileEnv loweringStateRelDefs context exprLowering vyperStorageBackend vyperTypeValues ptrDiscipline loweringPosts venomState
 
 Theorem make_array_located_consumer_post:
   compile_expr cenv (expr_type e) e sa = (LocatedValue ty p,sm) /\

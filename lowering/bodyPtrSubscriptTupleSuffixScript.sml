@@ -4,7 +4,7 @@ Ancestors
   bodyPtrSubscriptAddress bodyPtrSubscriptNamedIndex typedCopyPtr
   bodyPtrSubscriptNamedTuplePostBoundary
   fragGasSeqPtr emitHelperProps exprSimMemoryPath fragGasPathPtr fragExec
-  emitHelper compileEnv ptrDiscipline ptrSafeRun bodyPtrDefs finite_map
+  emitHelper compileEnv loweringStateRelDefs ptrDiscipline ptrSafeRun bodyPtrDefs finite_map
   venomInstProofs venomExecSemantics venomState venomInst exprLowering
 
 Theorem add_offset_counted_edge:

@@ -2,7 +2,7 @@
 Theory reasonEncoderPrefixResourcesPtr
 Ancestors
   normalizationAllocationPathPtr reasonSelectorResourcesPtr reasonCodeOffsetPtr
-  reasonPrefixPtr exprLoweringProps context compileEnv emitHelper emitHelperProps
+  reasonPrefixPtr exprLoweringProps context compileEnv loweringStateRelDefs emitHelper emitHelperProps
   bodyPtrDefs loweringPosts fragGasPathPtr venomState venomInst finite_map words
   ptrDiscipline
 

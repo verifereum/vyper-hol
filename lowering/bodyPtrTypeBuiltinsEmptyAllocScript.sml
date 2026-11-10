@@ -1,7 +1,7 @@
 Theory bodyPtrTypeBuiltinsEmptyAlloc
 Ancestors
   allocationPtr fragGasSeqPtr fragExecPtr fragExec loweringHalt exprSimAlloc
-  context emitHelper compileEnv exprLoweringProps exprSimProps robustCopyTransportPtr
+  context emitHelper compileEnv loweringStateRelDefs exprLoweringProps exprSimProps robustCopyTransportPtr
   venomExecSemantics
   venomInst venomState rich_list finite_map ptrDiscipline bodyPtrDefs venomMemDefs
 

@@ -2,7 +2,7 @@ Theory bodyPtrTypeBuiltinsWidenFrame
 Ancestors
   bodyPtrTypeBuiltinsWidenCopyShape exprSimConvertBytes exprSimAlloc
   exprSimBufferStore exprSimHash exprLoweringProps emitHelperProps
-  loweringPosts exprLowering compileEnv venomState venomExecSemantics
+  loweringPosts exprLowering compileEnv loweringStateRelDefs venomState venomExecSemantics
   context fragExec
 
 (* Normalize a supplied run to its concrete allocation/copy endpoint while

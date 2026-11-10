@@ -1,8 +1,8 @@
 Theory bodyPtrPrecompileBuiltinsArithmeticValue
 Ancestors bodyPtrPrecompileBuiltinsArithmeticSource exprSimPrecompiles
           extCallOracle vfmExecution bn254 vfmBuffer vfmTypes byte list rich_list
-          valueEncoding valueEncodingProps valueEncodingProofs loweringPosts
-          exprLowering exprSimDefs compileEnv vyperValue vyperValueOperation vyperTypeBuiltins vyperContext
+          valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs loweringPosts
+          exprLowering exprSimDefs compileEnv loweringStateRelDefs vyperValue vyperValueOperation vyperTypeBuiltins vyperContext
           bodyPtrDefs ptrCoverage representationCleanPtr exprSimProps venomState entryDecodeStaticProps vyperAST
 
 Theorem ec_precompile_words:

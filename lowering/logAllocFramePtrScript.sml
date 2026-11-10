@@ -2,7 +2,7 @@
 Theory logAllocFramePtr
 Ancestors logDataAllocPtr loweringHalt logValueFramePtr logGhostFramePtr
   bodyPtrDefs allocationPtr ptrDiscipline ptrSafeRun venomState venomInst
-  venomExecSemantics finite_map words list arithmetic compileEnv exprSimDefs
+  venomExecSemantics finite_map words list arithmetic compileEnv loweringStateRelDefs exprSimDefs
   exprLoweringProps venomMemDefs abiBuiltinAllocation emitHelperProps stmtSimLogTrace
   ASCIInumbers string context stmtLowering fragGasSeqPtr ghostPcTransportPtr
   logTopicsRunPtr abiDecoderReentry

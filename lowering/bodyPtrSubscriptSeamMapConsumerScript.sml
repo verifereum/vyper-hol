@@ -151,7 +151,7 @@ Proof
   `local_ptrs_rel fn cenv es.scopes s0 /\
    local_ptrs_rel fn cenv (mid with gas_obs := []).scopes t` by
     gvs[exprLoweringPropsTheory.stmt_state_rel_def,
-        compileEnvTheory.state_rel_def, loweringPostsTheory.expr_post_def] >>
+        loweringStateRelDefsTheory.state_rel_def, loweringPostsTheory.expr_post_def] >>
   `eval_operand slot it = SOME base_slot /\ op_taint tni slot = {}` by
     (qpat_assum `ghost_kept _ _ sm _ _ _ _ _`
        (mp_then Any mp_tac bodyPtrSubscriptSeamMapInterfaceTheory.mapping_slot_index_frame) >>

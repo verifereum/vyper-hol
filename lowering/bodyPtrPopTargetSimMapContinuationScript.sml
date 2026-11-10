@@ -3,7 +3,7 @@ Ancestors
   bodyPtrPopTargetSimMapTail bodyPtrPopTargetSimPost bodyPtrPopTargetFactor
   bodyPtrHashBuiltinsGhostCompose exprSimWordArgs targetPlaceSimCasesBase
   bodyPtrPopTargetDefs loweringPosts exprLowering exprLoweringProps
-  compileEnv vyperState vyperTypeSystem venomState exprSimMapKey freshWrites
+  compileEnv loweringStateRelDefs vyperState vyperTypeSystem venomState exprSimMapKey freshWrites
   bodyPtrEnvBuiltinsGhostCompose bodyPtrPopTargetSimArrayGas
   gasSummaryComposePtr
 

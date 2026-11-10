@@ -1,7 +1,7 @@
 Theory bodyPtrPopRootGhost
 Ancestors
   bodyPtrDefs exprSimPopStorage appendStorageGhostPtr ptrDiscipline
-  venomState vyperStorage words pred_set compileEnv
+  venomState vyperStorage words pred_set compileEnv loweringStateRelDefs
 
 Theorem pop_header_taint_dead_subset:
   declared_storage_region cx mid name subs =

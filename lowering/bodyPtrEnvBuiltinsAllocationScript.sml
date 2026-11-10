@@ -1,7 +1,7 @@
 (* Allocation changes only fresh bytes; reused sites add no memory taint. *)
 Theory bodyPtrEnvBuiltinsAllocation
 Ancestors allocationPtr robustCopyTransportPtr localPtrsProps bodyPtrDefs
-  loweringHalt exprLoweringProps exprSimDefs exprSimProps compileEnv venomState venomInst
+  loweringHalt exprLoweringProps exprSimDefs exprSimProps compileEnv loweringStateRelDefs venomState venomInst
   venomExecSemantics venomMemDefs ptrDiscipline finite_map pred_set
 
 Theorem alloca_step_frame_effects:
@@ -162,7 +162,7 @@ Proof
       `regions_disjoint b sz s.vs_alloca_next n` by
         (irule local_ptrs_rel_above_frontier >>
          goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-      fs[compileEnvTheory.regions_disjoint_def]) >>
+      fs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   rename1 `FLOOKUP s.vs_allocas id = SOME site` >> PairCases_on `site` >>
   drule_all stmt_state_rel_alloca_site_bound >> strip_tac >> gvs[] >>
   drule reused_alloca_step >> disch_then (qspec_then `out` assume_tac) >>
@@ -172,5 +172,5 @@ Proof
     (irule local_ptrs_rel_alloca_disjoint >>
      qexistsl_tac [`cenv`, `fn`, `mk_inst id ALLOCA [Lit (n2w n)] [out]`,
        `name`, `out`, `es.scopes`, `s`] >> simp[mk_inst_def]) >>
-  fs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED

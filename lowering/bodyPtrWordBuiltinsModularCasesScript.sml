@@ -3,7 +3,7 @@ Theory bodyPtrWordBuiltinsModularCases
 Ancestors bodyPtrWordBuiltinsModular bodyPtrWordBuiltinsModularPost
   bodyPtrWordBuiltinsModularSource bodyPtrWordBuiltinsIntervalGhost
   exprSimWordBuiltins exprSimWordArgs fragGasFresh exprLoweringProps
-  bodyPtrDefs ptrDiscipline compileEnv fragExec freshWrites
+  bodyPtrDefs ptrDiscipline compileEnv loweringStateRelDefs fragExec freshWrites
   venomState venomExecSemantics list finite_map valueEncoding integer_word
 
 Theorem word_pow_typed_outcome:

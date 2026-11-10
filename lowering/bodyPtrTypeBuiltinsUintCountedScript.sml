@@ -6,7 +6,7 @@ Ancestors bodyPtrSignedConvertUnsignedValue bodyPtrSignedConvertUnsignedLoad
   fragGasPathPtr fragGasSeqPtr fragGasSeqAbort fragExec emitHelperProps exprLoweringProps exprLowering
   builtinConvertPrefix venomState venomInst venomExecSemantics opcodeClass
   rich_list list arithmetic finite_map ptrDiscipline instIdxIndep
-  compileEnv loweringShapeDefs venomInstProps
+  compileEnv loweringStateRelDefs loweringShapeDefs venomInstProps
 
 Theorem appended_prefix_drop:
   isPREFIX (xs ++ ys) zs ==>

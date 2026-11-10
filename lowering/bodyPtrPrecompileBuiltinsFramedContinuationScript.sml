@@ -2,7 +2,7 @@ Theory bodyPtrPrecompileBuiltinsFramedContinuation
 Ancestors bodyPtrPrecompileBuiltinsRecoveryContinuation
           bodyPtrPrecompileBuiltinsContinuationFrame bodyPtrPrecompileBuiltinsSuffixFrame
           bodyPtrPrecompileBuiltinsSuffixGhost exprSimPrecompiles exprLoweringProps
-          exprSimProps bodyPtrDefs compileEnv emitHelper venomInst venomState list
+          exprSimProps bodyPtrDefs compileEnv loweringStateRelDefs emitHelper venomInst venomState list
 
 Theorem computed_load_suffix_framed_path:
   comp_bind

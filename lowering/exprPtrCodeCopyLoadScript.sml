@@ -1,7 +1,7 @@
 (* Compiled DLOAD stage, at the ordinary deterministic endpoint. *)
 Theory exprPtrCodeCopyLoad
 Ancestors
-  exprPtrCodeCopySegments exprSimCopy context compileEnv emitHelper emitHelperProps
+  exprPtrCodeCopySegments exprSimCopy context compileEnv loweringStateRelDefs emitHelper emitHelperProps
   exprLoweringProps fragGasSeqPtr ptrDiscipline venomState finite_map bodyPtrDefs
 
 Theorem code_copy_runtime_load:

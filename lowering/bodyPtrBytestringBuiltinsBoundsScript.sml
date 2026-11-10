@@ -4,7 +4,7 @@ Ancestors
   builtinBytes fragGasSeqPtr stmtAppendStorageRunPtr stmtAppendStoragePathPtr
   ptrSafeRun ptrDiscipline codegenRel contextCodegenRel
   venomExecSemantics venomInst venomState emitHelperProps
-  finite_map list words arithmetic context emitHelper compileEnv exprLoweringProps
+  finite_map list words arithmetic context emitHelper compileEnv loweringStateRelDefs exprLoweringProps
   exprSimWordBuiltins instIdxIndep fragExec rich_list
 
 Theorem slice_scalar_inst_check:

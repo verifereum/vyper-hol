@@ -3,7 +3,7 @@ Theory exprPtrUnwrapLoopEntry
 Ancestors
   exprPtrUnwrapAllocEntry exprPtrUnwrapCompiledLoop exprPtrUnwrapAllocationFrame
   exprPtrUnwrapAllocSeparation exprSimAlloc exprPtrUnwrapAllocation
-  slotCopyExecution copyExecution bodyPtrDefs context compileEnv
+  slotCopyExecution copyExecution bodyPtrDefs context compileEnv loweringStateRelDefs
   exprLoweringProps emitHelper ASCIInumbers words arithmetic
   venomState bufferAllocationExecution finite_map
 

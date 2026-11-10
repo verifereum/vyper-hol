@@ -60,9 +60,9 @@ Proof
   rpt strip_tac >> irule val_in_memory_mem_agree >> simp[] >>
   qexistsl_tac [`sz`, `s.vs_memory`] >> simp[] >>
   `local_region cenv scopes s name (w2n w) sz` by
-    (simp[compileEnvTheory.local_region_def] >> metis_tac[]) >>
+    (simp[loweringStateRelDefsTheory.local_region_def] >> metis_tac[]) >>
   qpat_x_assum `!name a len. local_region _ _ _ _ _ _ ==> _` drule >>
-  simp[compileEnvTheory.regions_disjoint_def] >> strip_tac >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >>
   sym_tac >> irule write_memory_mem_bytes_at_disjoint >> simp[]
 QED
 
@@ -114,7 +114,7 @@ Proof
       qexistsl_tac [`bytes`, `dst`, `s`] >>
       simp[venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
         finite_mapTheory.FLOOKUP_UPDATE] >>
-      rpt strip_tac >> fs[compileEnvTheory.not_scope_ptr_def] >> metis_tac[]) >>
+      rpt strip_tac >> fs[loweringStateRelDefsTheory.not_scope_ptr_def] >> metis_tac[]) >>
   irule immutables_rel_runtime_write_frame >>
   qexistsl_tac [`bytes`, `dst`, `s`] >> simp[venomStateTheory.update_var_def]
 QED
@@ -145,16 +145,16 @@ Theorem local_robust_clean_write_frame:
 Proof
   rpt strip_tac >>
   `val_wf entry.type entry.value /\ type_memory_size entry.type <= sz` by
-    (fs[compileEnvTheory.local_ptrs_rel_def] >>
+    (fs[loweringStateRelDefsTheory.local_ptrs_rel_def] >>
      first_x_assum drule_all >> strip_tac >> simp[]) >>
   irule robust_val_clean_write_frame >> simp[] >>
   qexistsl_tac [`bytes`, `dirty`, `dirty'`, `dst`, `s`] >> simp[] >>
   `val_footprint entry.type entry.value <= sz` by
     (drule exprSimPropsTheory.val_footprint_le >> decide_tac) >>
   `local_region cenv scopes s name (w2n w) sz` by
-    (simp[compileEnvTheory.local_region_def] >> metis_tac[]) >>
+    (simp[loweringStateRelDefsTheory.local_region_def] >> metis_tac[]) >>
   qpat_x_assum `!name a len. local_region _ _ _ _ _ _ ==> _` drule >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem ghost_inv_clean_write_frame:
@@ -173,7 +173,7 @@ Theorem ghost_inv_clean_write_frame:
 Proof
   strip_tac >> fs[bodyPtrDefsTheory.ghost_inv_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      `not_fresh_at sa p` by metis_tac[compileEnvTheory.local_ptrs_reserved_def] >>
+      `not_fresh_at sa p` by metis_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
       qpat_x_assum `!name entry p sz. _` drule >> strip_tac >> conj_tac
       >- (irule ptr_covers_old_transport >> goal_assum (drule_at Any) >>
           goal_assum (drule_at Any) >> simp[]) >>
@@ -201,11 +201,11 @@ Proof
   strip_tac >> simp[loweringPostsTheory.wb_frame_def] >> conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!aid a len. _ /\ FLOOKUP _ _ = SOME _ ==> _` drule_all >>
-      simp[compileEnvTheory.regions_disjoint_def] >> strip_tac >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >>
       irule write_memory_mem_bytes_at_disjoint >> simp[]) >>
   simp[loweringPostsTheory.locals_kept_def] >> rpt strip_tac >>
   qpat_x_assum `!name a len. local_region _ _ _ _ _ _ ==> _` drule >>
-  simp[compileEnvTheory.regions_disjoint_def] >> strip_tac >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >>
   irule write_memory_mem_bytes_at_disjoint >> decide_tac
 QED
 
@@ -266,7 +266,7 @@ Proof
     (`LENGTH (TAKE cap t.vs_returndata) <= cap` by
        (simp[listTheory.LENGTH_TAKE_EQ] >> rw[] >> decide_tac) >>
      conj_tac >> rpt strip_tac >>
-     first_x_assum drule_all >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     first_x_assum drule_all >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   conj_tac
   >- (irule ghost_inv_clean_write_frame >>
       first_assum (irule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>

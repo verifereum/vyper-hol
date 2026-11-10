@@ -3,7 +3,7 @@ Theory bodyPtrBytestringBuiltinsConcatResult
 Ancestors
   bodyPtrBytestringBuiltinsConcatSuffix bodyPtrEnvBuiltinsBoundary
   exprSimConcatResult exprSimHyps exprSimProps exprLowering
-  compileEnv loweringPosts bodyPtrDefs words list arithmetic vfmConstants
+  compileEnv loweringStateRelDefs loweringPosts bodyPtrDefs words list arithmetic vfmConstants
   vyperTypeConversions valueEncoding bodyPtrBytestringBuiltinsCalldataOutcome
   exprSimHash exprSimSource exprSimHypsDefs exprSimDefs vyperTyping
   vyperTypeSystem allocLimits vyperTypeInvariants gasSummaryComposePtr gasExemptCert
@@ -290,7 +290,7 @@ Resume concat_result_vv_sim_ptr[package]:
   `mem_bytes_at (w2n a+32) (LENGTH bs) tf.vs_memory = bs` by
     (qpat_x_assum `mem_bytes_at (w2n a+32) _ t'.vs_memory = _` mp_tac >>
      qpat_x_assum `mem_bytes_at (w2n a+32) _ tf.vs_memory = _` mp_tac >>
-     rpt (pop_assum kall_tac) >> simp[valueEncodingTheory.mem_bytes_at_def]) >>
+     rpt (pop_assum kall_tac) >> simp[valueEncodingDefsTheory.mem_bytes_at_def]) >>
   `!name b k. local_region ce ee.scopes tf name b k ==>
      w2n a+concat_alloc_size (MAP expr_type args) <= b \/ b+k <= w2n a` by
     (rpt strip_tac >>

@@ -4,7 +4,7 @@ Ancestors wordLoadStorePtr assignBasePtrFieldAddress assignBasePtrFieldRobust
   assignBasePtrScopePost assignBasePtrScalarPost assignBasePtrWordStore
   typedCopyPtr assignTuplePtrStoreHead bodyPtrDefs stmtSimAssignAttr
   venomState venomExecSemantics venomMemProofs ptrDiscipline venomInst
-  valueEncoding valueEncodingProps compileEnv localPtrsProps words finite_map pred_set
+  valueEncoding valueEncodingDefs valueEncodingProps compileEnv loweringStateRelDefs localPtrsProps words finite_map pred_set
   assignTuplePtrStoreWord assignTuplePtrCopyEndpoint stmtSimDeclStore exprSimProps exprLoweringProps
   emitHelper emitHelperProps context vyperLookup exprSimFieldLayout gasContext
   loweringPosts stmtSimDefs stmtSimProps gasSummaryComposePtr

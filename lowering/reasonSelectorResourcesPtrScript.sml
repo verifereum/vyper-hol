@@ -3,7 +3,7 @@ Theory reasonSelectorResourcesPtr
 Ancestors
   wordLoadStorePtr reasonStoragePrefixPtr reasonPrefixPtr reasonPrefixResourcesPtr
   typedCopyPtr allocationPtr loweringPosts exprLoweringProps emitHelperProps
-  emitHelper context compileEnv venomInst venomState venomExecSemantics
+  emitHelper context compileEnv loweringStateRelDefs venomInst venomState venomExecSemantics
   venomInstProofs ptrDiscipline ptrSafeRun bodyPtrDefs loweringHalt
   fragExec fragExecPtr fragGasPathPtr instIdxIndep finite_map words arithmetic
 

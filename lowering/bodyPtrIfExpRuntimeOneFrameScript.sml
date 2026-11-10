@@ -2,7 +2,7 @@ Theory bodyPtrIfExpRuntimeOneFrame
 Ancestors bodyPtrIfExpRuntimeOne bodyPtrIfExpMaterializeWord
   bodyPtrAttributeAdd exprSimPtrProps exprSimCopy exprSimStorageCopy
   bodyPtrDefs venomState ptrDiscipline finite_map pred_set words arithmetic
-  ghostPcTransportPtr compileEnv venomInst valueEncoding bodyPtrIfExpBytesEndpoint
+  ghostPcTransportPtr compileEnv loweringStateRelDefs venomInst valueEncoding bodyPtrIfExpBytesEndpoint
 
 (* The producer's restored-cursor runtime frame hides all instruction details. *)
 Theorem ifexp_runtime_fresh_inv:

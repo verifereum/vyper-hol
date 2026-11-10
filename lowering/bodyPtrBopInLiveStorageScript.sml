@@ -1,6 +1,6 @@
 Theory bodyPtrBopInLiveStorage
 Ancestors
-  bodyPtrDefs bodyPtrBopInStorageContents ptrDiscipline compileEnv
+  bodyPtrDefs bodyPtrBopInStorageContents ptrDiscipline compileEnv loweringStateRelDefs
   venomState vyperValue pred_set
 
 (* A projection of the located-value post, for either key-addressed backend.

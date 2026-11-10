@@ -8,7 +8,7 @@ Ancestors bodyPtrEnvBuiltinsEntryFrame bodyPtrEnvBuiltinsAccounts bodyPtrEnvBuil
   bodyPtrDefs bodyPtrPreds gasSummaryComposePtr fragGasPathPtr gasSummary gasExemptCert
   vyperTypeBuiltins vyperTypeSystem vyperInterpreter vyperValue vyperState
   builtinSimple vyperTypeInvariants vyperContext vyperTyping vyperAST
-  compileEnv context loweringPosts venomState venomInst finite_map list fragExec exprSimHyps
+  compileEnv loweringStateRelDefs context loweringPosts venomState venomInst finite_map list fragExec exprSimHyps
 
 Theorem account_suffix_extends:
   (case item of

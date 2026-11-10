@@ -5,7 +5,7 @@ Ancestors
   bodyPtrMakeArrayConsInvariant bodyPtrMakeArrayChildren
   exprLowering exprLoweringProps emitHelperProps compileEnv context
   gasSummaryComposePtr fragGasPathPtr gasSummary vyperState exprSimHyps
-  exprSimWordArgs valueEncoding argsTailPtr assignTuplePtrBodyReady freshWrites
+  exprSimWordArgs valueEncoding valueEncodingDefs argsTailPtr assignTuplePtrBodyReady freshWrites
   list option fragExec exprSimAggregateLoops exprSimAggregateEncoding
 
 (* Reassemble one robust cell and the tail without exposing compiler details. *)

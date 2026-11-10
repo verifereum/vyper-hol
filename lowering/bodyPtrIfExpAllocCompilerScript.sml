@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpAllocCompiler
 Ancestors
   bodyPtrIfExpAllocStep bodyPtrIfExpAllocGhost bodyPtrIfExpAllocKept
-  compileEnv loweringHalt stmtFragPtr fragExec allocationPtr emitHelperProps exprSimProps loweringPosts exprLoweringProps venomMemDefs bodyPtrDefs ptrDiscipline venomState
+  compileEnv loweringStateRelDefs loweringHalt stmtFragPtr fragExec allocationPtr emitHelperProps exprSimProps loweringPosts exprLoweringProps venomMemDefs bodyPtrDefs ptrDiscipline venomState
 
 (* These are exactly the reserved-variable premises of expr_vv_sim_ptr,
    transported from its starting cutoff to the allocation after the arm. *)

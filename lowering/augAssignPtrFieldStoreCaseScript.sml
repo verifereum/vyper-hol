@@ -2,7 +2,7 @@
 Theory augAssignPtrFieldStoreCase
 Ancestors
   augAssignPtrFieldStorePost augAssignPtrStore stmtSimAssignAttr
-  exprLoweringProps exprSimProps bodyPtrDefs compileEnv valueEncoding
+  exprLoweringProps exprSimProps bodyPtrDefs compileEnv loweringStateRelDefs valueEncoding
   valueEncodingProps stmtFragPtr venomState
 
 Theorem augassign_field_store_case_ptr:

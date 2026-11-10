@@ -1,7 +1,7 @@
 Theory assignBasePtrLiteralOutcome
 Ancestors assignBasePtrLiteralSource assignBasePtrLiteralPost
   assignBasePtrLiteralGhost fragGasSeqPtr ghostPcTransportPtr
-  context emitHelper compileEnv exprSimAlloc ptrDiscipline ptrSafeRun
+  context emitHelper compileEnv loweringStateRelDefs exprSimAlloc ptrDiscipline ptrSafeRun
   venomExecSemantics venomInst instIdxIndep list words emitHelperProps fragExec exprLoweringProps venomState
 
 Theorem assign_base_ptr_one_byte_sequence:

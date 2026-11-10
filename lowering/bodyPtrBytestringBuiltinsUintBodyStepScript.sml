@@ -99,7 +99,7 @@ Theorem u2s_safe_store_frame:
   local_ptrs_rel fn cenv es.scopes s /\ alloca_inv s /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz)
 Proof
-  simp[u2s_safe_def, stmt_state_rel_def, compileEnvTheory.state_rel_def]
+  simp[u2s_safe_def, stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]
 QED
 
 Theorem u2s_body_invariant_ptr:

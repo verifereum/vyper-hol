@@ -1,7 +1,7 @@
 Theory bodyPtrMakeArrayExternalCaller
 Ancestors
   bodyPtrMakeArrayExternalSize exprReasonOperand exprLoweringProps exprLowering
-  context compileEnv vyperAST list bodyPtrMakeArrayConsumerPost exprCallBounds
+  context compileEnv loweringStateRelDefs vyperAST list bodyPtrMakeArrayConsumerPost exprCallBounds
   vyperTypeStatePreservation valueEncodingTyping exprSimProps
 
 Theorem external_located_lowered_type:

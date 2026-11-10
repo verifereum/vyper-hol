@@ -123,6 +123,6 @@ Proof
   simp[] >> conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at st x` by metis_tac[] >>
-      fs[compileEnvTheory.not_fresh_at_def] >> metis_tac[]) >>
+      fs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[]) >>
   fs[stmtSimForLoopTheory.for_code_def] >> metis_tac[]
 QED

@@ -2,7 +2,7 @@ Theory bodyPtrPopStoragePureEndpoint
 Ancestors
   bodyPtrPopStoragePureCounted bodyPtrPopStoragePurePost bodyPtrPopStoragePureOutcome
   bodyPtrPopRootEndpoint bodyPtrHashBuiltinsGhostFrame exprSimPopNestedBase
-  exprSimVVFrame bodyPtrDefs compileEnv exprLoweringProps loweringPosts
+  exprSimVVFrame bodyPtrDefs compileEnv loweringStateRelDefs exprLoweringProps loweringPosts
   venomState ptrDiscipline context vyperStorageBackend vyperStorage
   vyperValue list finite_map pred_set
 

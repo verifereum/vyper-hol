@@ -4,7 +4,7 @@ Ancestors
   bodyPtrEnvBuiltinsScalar bodyPtrEnvBuiltinsEdges bodyPtrDefs bodyPtrPreds
   msgGasSim msgGasPost fragGasPathPtr fragGasSeqPtr gasSummary
   ptrDiscipline ptrSafeRun emitHelper emitHelperProps exprLoweringProps
-  compileEnv exprLowering exprPtrUnwrap exprSimProps stmtFragPtr
+  compileEnv loweringStateRelDefs exprLowering exprPtrUnwrap exprSimProps stmtFragPtr
   venomInst venomState venomExecSemantics finite_map pred_set list rich_list
   vyperAST vyperTypeSystem vyperValue valueEncoding codegenRel exprSimHypsDefs
 

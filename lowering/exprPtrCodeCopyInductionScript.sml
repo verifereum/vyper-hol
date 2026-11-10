@@ -2,7 +2,7 @@
 Theory exprPtrCodeCopyInduction
 Ancestors
   exprPtrCodeCopyIteration emittedSeqComposePtr exprSimCopy immutableCopyExecution
-  context compileEnv exprLoweringProps ptrDiscipline venomState venomInst
+  context compileEnv loweringStateRelDefs exprLoweringProps ptrDiscipline venomState venomInst
   ptrSafeRun bodyPtrDefs words pred_set arithmetic list fragGasSeqPtr finite_map fragExec emitHelperProps entrySinkExtraction rich_list fragGasPathPtr
 
 Theorem code_copy_taint_intervals[local]:

@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpStorageFrame
 Ancestors
-  slotCopyExecution copyExecution compileEnv valueEncoding vyperValue venomState words finite_map
+  slotCopyExecution copyExecution compileEnv loweringStateRelDefs valueEncoding vyperValue venomState words finite_map
   bodyPtrDefs ptrDiscipline appendStorageGhostPtr
 
 Theorem ifexp_copy_scratch_not_fresh:

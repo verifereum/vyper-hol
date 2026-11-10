@@ -3,7 +3,7 @@ Ancestors
   bodyPtrTypeBuiltinsScalarContinuation bodyPtrTypeBuiltinsConvertOperandBoundary
   bodyPtrTypeBuiltinsScalarSemantic exprSimSource exprSimOperators exprOperandVar
   exprSimHyps exprSimHypsDefs freshWrites fragGasFresh externalEntryShape
-  loweringPosts exprLoweringProps bodyPtrDefs compileEnv exprSimDefs vyperInterpreter vyperState
+  loweringPosts exprLoweringProps bodyPtrDefs compileEnv loweringStateRelDefs exprSimDefs vyperInterpreter vyperState
   bodyPtrPreds gasOutcomeMarkedPtr gasPathPtrExec gasSummary gasExemptCert
   exprSimConvert fragGasMode fragGasPath fragExec gasSummaryComposePtr
 

@@ -4,7 +4,7 @@ Ancestors wordLoadStorePtr ptrSafetyTransport decoderSetupStepPtr typedCopyPtr b
   ptrDiscipline venomInst arithmetic abiEncoder abiDecoderContract
   decoderGhostFramePtr calldataDecodePtr entryDispatchPtr emitHelperProps
   exprLoweringProps venomExecSemantics pred_set ptrSafeRun codegenRel
-  compileEnv emitHelper abiDecoderReentry calldataDynOwned instIdxIndep fragExec list
+  compileEnv loweringStateRelDefs emitHelper abiDecoderReentry calldataDynOwned instIdxIndep fragExec list
   abiDecoderMemberSetup decoderMemberValidEndpoint memLocDefs venomInstProofs contextCodegenRel
 
 (* The calldata address step: base Lit 0w adds no instruction. *)

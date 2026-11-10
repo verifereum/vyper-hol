@@ -84,6 +84,6 @@ Proof
     `if res = INL () then jump_to incr_lbl s else s`] >> simp[] >>
   Cases_on `res = INL ()` >> gvs[] >>
   rewrite_tac[stmt_state_rel_jump_to] >>
-  fs[compileEnvTheory.local_region_def, ptr_covers_def,
+  fs[loweringStateRelDefsTheory.local_region_def, ptr_covers_def,
      jump_to_def, lookup_var_def, ghost_inv_jump_to] >> first_assum ACCEPT_TAC
 QED

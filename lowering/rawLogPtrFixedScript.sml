@@ -4,7 +4,7 @@ Ancestors
   wordLoadStorePtr rawLogPtrInst rawLogPtrTopics bodyPtrHashBuiltinsAllocFrame wordArgsPtr
   bodyPtrHashBuiltinsKeccakFixed assignTuplePtrCopyLen exprSimRawLog
   instSeqComposePtr ghostPcTransportPtr instIdxIndep fragExecPtr bodyPtrDefs loweringPosts
-  fragGasSeqPtr exprLoweringProps emitHelper context compileEnv rich_list typedCopyPtr ptrDiscipline venomState venomInst
+  fragGasSeqPtr exprLoweringProps emitHelper context compileEnv loweringStateRelDefs rich_list typedCopyPtr ptrDiscipline venomState venomInst
   venomExecSemantics words finite_map pred_set list
 
 (* Applies to any older covered pointer, including a just-allocated buffer. *)

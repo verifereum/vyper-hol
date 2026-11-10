@@ -1,6 +1,6 @@
 (* Compiler boundary for the counted memory-to-storage loop. *)
 Theory assignBasePtrStorageLayout
-Ancestors assignBasePtrStorageLoop assignBasePtrStoragePath context compileEnv emitHelper emitHelperProps
+Ancestors assignBasePtrStorageLoop assignBasePtrStoragePath context compileEnv loweringStateRelDefs emitHelper emitHelperProps
   stateFrame fragExec venomInst venomState venomExecSemantics ptrSafeRun ptrDiscipline
   fragGasSeqPtr fragGasPathPtr bodyPtrDefs finite_map pred_set list rich_list arithmetic combin
 

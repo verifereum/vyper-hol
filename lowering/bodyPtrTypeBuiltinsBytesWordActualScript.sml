@@ -1,7 +1,7 @@
 Theory bodyPtrTypeBuiltinsBytesWordActual
 Ancestors bodyPtrTypeBuiltinsUintActual bodyPtrTypeBuiltinsBytesWordTypes
   exprSimConvertFromBytes freshWrites varsExt exprSimProps
-  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
+  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs
   venomExecSemantics venomInst venomState finite_map rich_list list
 
 Theorem bytes_word_code_frame:

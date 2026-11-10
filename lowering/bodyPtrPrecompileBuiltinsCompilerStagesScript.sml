@@ -1,5 +1,5 @@
 Theory bodyPtrPrecompileBuiltinsCompilerStages
-Ancestors builtinMisc context compileEnv emitHelper exprSimPrecompiles
+Ancestors builtinMisc context compileEnv loweringStateRelDefs emitHelper exprSimPrecompiles
           exprLoweringProps loweringHalt rich_list
 
 Theorem compiler_append_trans:

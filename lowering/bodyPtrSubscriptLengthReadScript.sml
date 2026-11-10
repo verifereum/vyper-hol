@@ -6,7 +6,7 @@ Ancestors
   representationCleanPtr fragGasSeqPtr emitHelperProps exprSimMemoryPath
   fragExec ptrCoverage venomInstProofs venomExecSemantics
   valueEncodingProps venomState venomInst fragGasPathPtr
-  emitHelper compileEnv ptrDiscipline ptrSafeRun finite_map bodyPtrDefs
+  emitHelper compileEnv loweringStateRelDefs ptrDiscipline ptrSafeRun finite_map bodyPtrDefs
   gasSummaryComposePtr loweringPosts bodyPtrSubscriptBounds
   bodyPtrSubscriptNamedTuplePostBoundary exprLoweringProps
 

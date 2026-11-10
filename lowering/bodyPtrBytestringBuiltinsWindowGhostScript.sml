@@ -2,7 +2,7 @@
 Theory bodyPtrBytestringBuiltinsWindowGhost
 Ancestors
   robustCopyTransportPtr exprSimProps bodyPtrDefs
-  compileEnv venomMemProofs venomState valueEncodingProofs list pred_set
+  compileEnv loweringStateRelDefs venomMemProofs venomState valueEncodingProofs list pred_set
   finite_map words exprSimMemoryTransport
 
 Theorem same_window_agree_witness:

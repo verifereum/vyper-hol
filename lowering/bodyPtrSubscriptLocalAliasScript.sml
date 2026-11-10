@@ -1,7 +1,7 @@
 (* Retained local pointers describe the later value, not a snapshot. *)
 Theory bodyPtrSubscriptLocalAlias
 Ancestors
-  compileEnv exprLowering finite_map
+  compileEnv loweringStateRelDefs exprLowering finite_map
 
 Theorem local_ptrs_rel_retained_root:
   local_ptrs_rel func cenv scopes' ss' /\

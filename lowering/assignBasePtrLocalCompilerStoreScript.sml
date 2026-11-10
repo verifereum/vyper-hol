@@ -2,7 +2,7 @@
    from robust representation; no header-cleanliness premise is needed. *)
 Theory assignBasePtrLocalCompilerStore
 Ancestors assignBasePtrLocalContinuation assignTuplePtrLocalCompat
-  tupleLocalStoreRun bodyPtrDefs context compileEnv localPtrsProps
+  tupleLocalStoreRun bodyPtrDefs context compileEnv loweringStateRelDefs localPtrsProps
   vyperLookup valueEncoding valueEncodingProps valueTypingMemoryProps
   venomState venomExecSemantics exprSimProps exprLoweringProps exprSimBufferStore vfmConstants words finite_map
 

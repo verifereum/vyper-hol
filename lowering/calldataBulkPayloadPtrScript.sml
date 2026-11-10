@@ -3,7 +3,7 @@ Theory calldataBulkPayloadPtr
 Ancestors calldataDecodePtr decoderRawEndpointPtr
   bodyPtrDefs ptrDiscipline venomInst venomState finite_map pred_set
   decoderGhostFramePtr emitHelperProps fragExec venomExecSemantics
-  codegenRel contextCodegenRel ptrSafeRun compileEnv emitHelper list arithmetic
+  codegenRel contextCodegenRel ptrSafeRun compileEnv loweringStateRelDefs emitHelper list arithmetic
   exprLoweringProps abiDecoderBulk words abiDecoderComposition decoderArraySetupPtr
   instIdxIndep
 

@@ -6,7 +6,7 @@ Ancestors
   bodyPtrMakeArrayConsInvariant bodyPtrMakeArrayChildUnwrap bodyPtrMakeArrayZeroWidth
   bodyPtrMakeArrayPositiveFrame bodyPtrMakeArrayPositiveBytes bodyPtrMakeArrayPositiveWord
   bodyPtrMakeArrayChildScalar
-  exprLoweringProps exprOperandVar fragExec emitHelperProps compileEnv loweringPosts fragGasPathPtr
+  exprLoweringProps exprOperandVar fragExec emitHelperProps compileEnv loweringStateRelDefs loweringPosts fragGasPathPtr
 
 Theorem literal_cons_compiler_stages:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\

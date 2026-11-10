@@ -2,7 +2,7 @@
 Theory bodyPtrEnvBuiltinsAccountReads
 Ancestors
   exprSimAccounts accountsRelProps codegenRel contextCodegenRel
-  compileEnv exprLoweringProps
+  compileEnv loweringStateRelDefs exprLoweringProps
   venomExecSemantics venomInst venomState vfmState valueEncoding
   vyperValue vyperInterpreter vyperTypeInvariants vyperTypeBytesCrypto
   list rich_list words integer_word byte vyperContext vyperTypeSystem

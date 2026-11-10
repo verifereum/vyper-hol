@@ -4,7 +4,7 @@ Ancestors
   immutableRegionLoadPtr storageCopyBodyRaisePtr assignBasePtrBytesPrefix
   instSeqComposePtr ghostPcTransportPtr bodyPtrDefs ptrDiscipline
   venomInst venomState venomExecSemantics instIdxIndep fragExec fragGasSeqPtr
-  compileEnv words list finite_map pred_set exprLoweringProps emitHelperProps
+  compileEnv loweringStateRelDefs words list finite_map pred_set exprLoweringProps emitHelperProps
   decoderGhostFramePtr bodyPtrTypeBuiltinsBounds builtinBytes emitHelper rich_list
   augAssignPtrScalarCertificate augAssignPtrScalarRun
 

@@ -1,7 +1,7 @@
 (* Isolate compiler layout from the unavailable semantic Convert ancestor. *)
 Theory assignBasePtrWidenLayout
 Ancestors exprSimAlloc exprLoweringProps emitHelperProps exprLowering context
-  compileEnv fragExec words list
+  compileEnv loweringStateRelDefs fragExec words list
 
 Theorem assign_base_widen_parts[local]:
   !d x k sm op sb.

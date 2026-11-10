@@ -556,7 +556,7 @@ Proof
     (simp[Abbr `i1`, Abbr `t1`, step_inst_non_invoke] >>
      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
      gvs[mk_inst_def, eval_operand_def, exec_read1_def, mload_def,
-          valueEncodingTheory.mem_word_at_def]) >>
+          valueEncodingDefsTheory.mem_word_at_def]) >>
   qabbrev_tac `i2 = mk_inst (id+1) ADD [Var src; Lit 32w] [data]` >>
   qabbrev_tac `t2 = update_var data (w+32w) s1` >>
   qabbrev_tac `s2 = t2 with vs_inst_idx := s.vs_inst_idx + 2` >>

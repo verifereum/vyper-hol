@@ -1,7 +1,7 @@
 (* Judgment transport across the fresh destination offset instruction. *)
 Theory bodyPtrMakeArrayAddFrame
 Ancestors
-  bodyPtrMakeArrayAdd exprSimVVFrame context compileEnv exprLoweringProps
+  bodyPtrMakeArrayAdd exprSimVVFrame context compileEnv loweringStateRelDefs exprLoweringProps
   bodyPtrDefs freshWrites loweringPosts emitHelper ptrDiscipline venomState
   finite_map venomExecSemantics
 

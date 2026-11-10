@@ -1,7 +1,7 @@
 (* Literal-folding offsets checked on the same endpoint as the ordinary run. *)
 Theory immutableOffsetPtr
 Ancestors
-  exprSimCopy context compileEnv emitHelper emitHelperProps exprLoweringProps
+  exprSimCopy context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   stmtAppendStorageRunPtr fragGasSeqPtr ptrDiscipline venomExecSemantics
   venomInst venomState finite_map words list bodyPtrDefs ghostPcTransportPtr
 

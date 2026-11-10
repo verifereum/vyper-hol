@@ -9,7 +9,7 @@ Ancestors
   augAssignPtrTypedContinuation augAssignPtrStorePost augAssignPtrSource
   bodyPtrPreds bodyPtrDefs stmtSimAugAssign exprSimHyps exprSimProps
   exprSimHypsDefs exprSimSource vyperTypeStatePreservation exprLoweringProps
-  loweringPosts compileEnv gasSummaryComposePtr fragGasPathPtr
+  loweringPosts compileEnv loweringStateRelDefs gasSummaryComposePtr fragGasPathPtr
   exprBopSimProps vyperAST augAssignPtrRhsFrame ptrDiscipline
 
 Theorem compile_augassign_local_case_ptr:

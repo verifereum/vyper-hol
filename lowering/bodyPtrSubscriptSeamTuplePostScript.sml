@@ -4,8 +4,8 @@ Ancestors
   bodyPtrSubscriptSeamTupleMemory bodyPtrSubscriptSeamTupleStorage
   bodyPtrAttributeSource exprSimAttribute exprSimAttributeFields exprSimAttributeProps
   exprSimDefs exprSimHyps exprSimProps exprSimFieldLayout exprSimTuple
-  loweringPosts accountsRelProps tupleMemoryLayout compileEnv exprLowering context vyperValue vyperStorage
-  vyperInterpreter vyperState valueEncoding valueEncodingProofs
+  loweringPosts accountsRelProps tupleMemoryLayout compileEnv loweringStateRelDefs exprLowering context vyperValue vyperStorage
+  vyperInterpreter vyperState valueEncoding valueEncodingDefs valueEncodingProofs
   vyperValueOperation vyperTyping vyperTypeDefaults vyperLookupStorage vyperStorageBackend vyperStorageRegionWrite list rich_list words
 
 Theorem tuple_location_sizes:

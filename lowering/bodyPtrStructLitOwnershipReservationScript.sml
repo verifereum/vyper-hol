@@ -1,6 +1,6 @@
 Theory bodyPtrStructLitOwnershipReservation
 Ancestors bodyPtrStructLitCompilerOwnership bodyPtrStructLitOwnershipSteps
-  loweringShapeRules loweringShapeDefs compileEnv venomInst list stmtLowering
+  loweringShapeRules loweringShapeDefs compileEnv loweringStateRelDefs venomInst list stmtLowering
   finite_map arithmetic
 
 Theorem alloc_writers_unique_alloca_commit:

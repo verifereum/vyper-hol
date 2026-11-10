@@ -6,7 +6,7 @@ Ancestors
   fragGasPathPtr fragGasSeqPtr fragExec pair freshWrites
   exprLoweringProps exprSimHypsDefs exprSimHyps vyperTyping vyperTypeSystem
   gasContext gasExemptCert gasSummaryComposePtr targetPlaceSimCasesBase
-  exprLowering emitHelperProps stmtLoweringMono compileEnv loweringPosts
+  exprLowering emitHelperProps stmtLoweringMono compileEnv loweringStateRelDefs loweringPosts
   bodyPtrPopTargetDefs targetPlaceSimDefs targetPlaceSim exprSimSource exprSimDefs
   vyperInterpreter vyperState bodySimStmtCases exprSimProps wordOperandsPtr
   exprSimMapKey vyperValue exprOperandVar stmtSimAugAssignPlace

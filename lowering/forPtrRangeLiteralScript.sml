@@ -5,7 +5,7 @@ Ancestors forPtrRangeEntry forPtrAllocationGhost forPtrRangeLoop
   stmtSimForParts stmtSimFor stmtSimDeclCompose stmtSimProps
   stmtSimDefs loweringPosts stmtLowering exprLoweringProps
   vyperInterpreter vyperState vyperValue vyperValueOperation
-  gasSummaryComposePtr stmtFragPtr integer_word bodyPtrDefs compileEnv exprSimWordArgs
+  gasSummaryComposePtr stmtFragPtr integer_word bodyPtrDefs compileEnv loweringStateRelDefs exprSimWordArgs
   forPtrRangeSource gasContext gasOutcomeInitialObsPtr
   stmtSimForLoop localPtrsProps loweringSlice emitHelperProps venomInst exprSimProps
   venomExecSemantics venomState fragExec fragGasPathPtr ptrSafeRun ptrDiscipline list rich_list finite_map

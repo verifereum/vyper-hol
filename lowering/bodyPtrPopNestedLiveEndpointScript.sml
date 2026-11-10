@@ -2,7 +2,7 @@ Theory bodyPtrPopNestedLiveEndpoint
 Ancestors
   bodyPtrPopNestedLiveGhost bodyPtrPopNestedLiveUpdate bodyPtrPopNestedLiveResult
   bodyPtrPopNestedLivePost exprSimPopNestedLocalMemory exprSimPop
-  valueEncoding list rich_list
+  valueEncoding valueEncodingDefs list rich_list
   bodyPtrPopNestedLiveSuffixFrame exprSimPopNestedLocalSuffix bodyPtrDefs
   localPtrsProps compileEnv venomState finite_map pred_set
 

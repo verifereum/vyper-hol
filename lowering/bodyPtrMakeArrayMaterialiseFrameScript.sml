@@ -3,7 +3,7 @@
 Theory bodyPtrMakeArrayMaterialiseFrame
 Ancestors
   bodyPtrMakeArrayAllocationFrame exprSimPtrLiteralBuffer
-  bodyPtrDefs allocationPtr compileEnv pred_set arithmetic finite_map
+  bodyPtrDefs allocationPtr compileEnv loweringStateRelDefs pred_set arithmetic finite_map
 
 Theorem literal_copy_window_ghost_inv:
   ghost_inv d cenv cx es G tn s /\

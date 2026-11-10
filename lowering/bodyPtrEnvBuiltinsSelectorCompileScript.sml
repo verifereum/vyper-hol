@@ -2,7 +2,7 @@
 Theory bodyPtrEnvBuiltinsSelectorCompile
 Ancestors bodyPtrEnvBuiltinsSelectorCounted bodyPtrEnvBuiltinsSelectorSuffix
   fragGasSeqPtr context emitHelper freshWrites
-  exprLoweringProps compileEnv fragExec venomInst venomState
+  exprLoweringProps compileEnv loweringStateRelDefs fragExec venomInst venomState
   bodyPtrDefs words list rich_list finite_map
 
 Theorem selector_compile_code:

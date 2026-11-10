@@ -3,7 +3,7 @@ Theory exprPtrCodeLoad
 Ancestors
   exprPtrUnwrapCodeEdges stmtAppendStorageRunPtr bodyPtrDefs ptrDiscipline
   fragGasPathPtr exprSimPtrProps venomExecSemantics venomInstProofs
-  venomInst venomState compileEnv emitHelper emitHelperProps codegenRel fragExec
+  venomInst venomState compileEnv loweringStateRelDefs emitHelper emitHelperProps codegenRel fragExec
   finite_map arithmetic
 
 Theorem code_load_step_ptr:

@@ -3,7 +3,7 @@ Ancestors
   bodyPtrIfExpWordFinish bodyPtrIfExpAssignFrame bodyPtrDefs
   ptrDiscipline venomState venomInst finite_map
   loweringPosts vyperState stmtFragPtr exprSimPtrLiteralBuffer
-  ghostPcTransportPtr exprSimIfExp exprSimDefs exprLowering vyperAST compileEnv
+  ghostPcTransportPtr exprSimIfExp exprSimDefs exprLowering vyperAST compileEnv loweringStateRelDefs
 
 Theorem ifexp_assign_ptr_buf_ok:
   eval_operand src s = SOME w /\ ptr_buf_ok ce e src G s ==>

@@ -1,5 +1,5 @@
 Theory bodyPtrPrecompileBuiltinsRecoveryValue
-Ancestors exprSimPrecompiles exprSimHash valueEncodingProofs valueEncoding valueCopy
+Ancestors exprSimPrecompiles exprSimHash valueEncodingProofs valueEncoding valueEncodingDefs valueCopy
           venomCallOracleDefs extCallOracle venomMemDefs venomState
           list rich_list words vfmExecution byte vfmTypes vfmBuffer
 

@@ -26,7 +26,7 @@ Ancestors
   entrySinkExtraction fragExec
   instSeqComposePtr emittedSeqComposePtr exprSimCopy immutableWordExecution
   decoderGhostFramePtr fragGasSeqPtr ptrSafeRun ptrDiscipline bodyPtrDefs
-  context compileEnv emitHelper emitHelperProps exprLoweringProps
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   codegenRel contextCodegenRel memLocDefs
   venomExecSemantics venomInst venomState instIdxIndep
   finite_map pred_set list rich_list arithmetic words

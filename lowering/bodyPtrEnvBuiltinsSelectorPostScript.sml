@@ -1,7 +1,7 @@
 (* Ordinary dynamic-four-byte selector post, shared by folded and runtime paths. *)
 Theory bodyPtrEnvBuiltinsSelectorPost
 Ancestors exprSimBuffer bodyPtrEnvBuiltinsSelectorRun exprLoweringProps
-  loweringPosts context vyperValue vyperAST venomState words compileEnv valueEncoding
+  loweringPosts context vyperValue vyperAST venomState words compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs
 
 Theorem selector_buffer_vv_post:
   LENGTH bs = 4 /\

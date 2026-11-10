@@ -1,6 +1,6 @@
 Theory bodyPtrSignedConvertSourceCompile
 Ancestors
-  bodyPtrSignedConvertSourceFrame builtinBytes emitHelperProps compileEnv exprLoweringProps
+  bodyPtrSignedConvertSourceFrame builtinBytes emitHelperProps compileEnv loweringStateRelDefs exprLoweringProps
   ASCIInumbers rich_list
 
 Theorem compile_bytestring_src_shape_fresh:

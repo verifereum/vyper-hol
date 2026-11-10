@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpWordMemory
 Ancestors
   bodyPtrDefs representationCleanPtr exprSimProps loweringPosts
-  valueEncoding vyperAST vyperTyping vyperValue compileEnv
+  valueEncoding valueEncodingDefs vyperAST vyperTyping vyperValue compileEnv loweringStateRelDefs
   exprSimPtrProps exprSimUnwrapProps exprLoweringProps context emitHelper
   appendStorageGhostPtr fragGasPathPtr venomState finite_map freshWrites
 

@@ -7,7 +7,7 @@ Ancestors
   abiDecoderContract abiDecoderAllocation abiDecoderReentry abiDecoderExecution
   abiDecoderLoop abiDecoderProtectedScratch abiDecoderValidArrayMemory
   abiDecoderFrame abiScratchEffect abiScratchFootprint
-  compileEnv ptrDiscipline venomState words list arithmetic
+  compileEnv loweringStateRelDefs ptrDiscipline venomState words list arithmetic
 
 (* The calldata instance of trunk's position-form decoder lemmas: the source
    base operand is Lit 0w and the numeric base is 0. *)

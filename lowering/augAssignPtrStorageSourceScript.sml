@@ -5,7 +5,7 @@ Ancestors
   augAssignPtrStoragePlaceCertificates
   exprSimTopLevelProps accountsRelProps vyperStorageLayoutSafety
   vyperLookupStorage exprSimDefs stmtSimDefs loweringPosts codegenRel
-  vyperState vyperInterpreter vfmState compileEnv exprLoweringProps
+  vyperState vyperInterpreter vfmState compileEnv loweringStateRelDefs exprLoweringProps
   vyperStorageBackend stmtSimAssignStorage stmtSimAugAssignStorage gasSummaryComposePtr gasCount gasSummary
   gasExemptCert fragGasPath fragGasMode fragGasSeqPtr fragGasPathPtr vyperExprNoControl
 Libs

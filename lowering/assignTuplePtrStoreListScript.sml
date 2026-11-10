@@ -6,9 +6,9 @@ Ancestors
   vyperTypeDefaults valueEncodingProofs tupleTargetStoreRun tupleTargetStoreProps
   tupleMemoryFrame tupleMemoryLayout bodyPtrDefs fragGasPathPtr
   exprLoweringProps stmtLoweringMono exprSimProps stmtSimDefs tupleAssignParts fragExec
-  stmtLowering vyperInterpreter vyperState context compileEnv
+  stmtLowering vyperInterpreter vyperState context compileEnv loweringStateRelDefs
   venomState venomExecSemantics ptrDiscipline list rich_list finite_map
-  valueEncoding valueEncodingProps valueTypingMemoryProps freshWrites vyperTyping arithmetic
+  valueEncoding valueEncodingDefs valueEncodingProps valueTypingMemoryProps freshWrites vyperTyping arithmetic
 
 Theorem tuple_store_targets_path_ptr:
   !gs m tys tvs vs ops addr b sz ctx func cenv cx es es' s st st' G tn d D PG.

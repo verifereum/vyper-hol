@@ -2,7 +2,7 @@
    Unlike whole-tuple preservation this allows repeated local destinations. *)
 Theory assignTuplePtrUnread
 Ancestors
-  assignTuplePtrBoundary tupleMemoryFrame compileEnv arithmetic
+  assignTuplePtrBoundary tupleMemoryFrame compileEnv loweringStateRelDefs arithmetic
   bodyPtrDefs venomExecSemantics ptrDiscipline list venomState
 
 Theorem tuple_unread_point_outside_write_ptr:

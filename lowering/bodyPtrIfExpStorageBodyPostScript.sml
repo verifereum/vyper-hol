@@ -4,7 +4,7 @@ Ancestors
   bodyPtrIfExpMaterializeFrame slotCopyExecution copyExecution
   venomState ptrDiscipline finite_map words
   robustCopyTransportPtr typedCopyPtr valueEncodingProps exprSimProps
-  bodyPtrIfExpBytesFrame bodyPtrDefs compileEnv
+  bodyPtrIfExpBytesFrame bodyPtrDefs compileEnv loweringStateRelDefs
   fragGasPathPtr gasCount ptrSafeRun venomExecProofs venomExecSemantics fragExec
   venomInst emitHelper contextCodegenRel codegenRel
 

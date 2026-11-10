@@ -2,7 +2,7 @@
 Theory exprPtrUnwrapEndpointFrames
 Ancestors
   exprPtrUnwrapAllocationFrame exprPtrUnwrapRuntimeFrame
-  decoderGhostFramePtr exprLoweringProps compileEnv bodyPtrDefs
+  decoderGhostFramePtr exprLoweringProps compileEnv loweringStateRelDefs bodyPtrDefs
   exprPtrUnwrapAllocation freshWrites allocationPtr exprSimAlloc
   exprPtrUnwrapGhostPost exprPtrUnwrapRetained loweringPosts
   ptrDiscipline venomState venomInst finite_map arithmetic

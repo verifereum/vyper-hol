@@ -2,7 +2,7 @@
    frame. Memory taint may change arbitrarily during the source body. *)
 Theory forPtrArrayFinish
 Ancestors forPtrArrayInvariant forPtrRangeCallback stmtSimForArrayLoop
-  stmtFragPtr compileEnv bodyPtrDefs loweringPosts finite_map
+  stmtFragPtr compileEnv loweringStateRelDefs bodyPtrDefs loweringPosts finite_map
   forPtrAllocationFrame gasSummaryComposePtr stmtSimProps stmtLowering vyperState forPtrScope forPtrSourceScopes
   exprLoweringProps localPtrsProps vyperEvalPreservesScopes
   forPtrRangeLanding forPtrRangeBackedge forPtrControl venomState fragGasPathPtr

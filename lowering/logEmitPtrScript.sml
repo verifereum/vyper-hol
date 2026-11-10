@@ -1,7 +1,7 @@
 (* Pointer-check boundary for LOG, including literal-zero empty data. *)
 Theory logEmitPtr
 Ancestors
-  stmtSimLogEmit stmtSimLogSuffix emitHelperProps emitHelper compileEnv
+  stmtSimLogEmit stmtSimLogSuffix emitHelperProps emitHelper compileEnv loweringStateRelDefs
   ghostPcTransportPtr stmtFragPtr exprSimPtrLiteralBuffer
   ptrSafeRun ptrDiscipline bodyPtrDefs contextCodegenRel
   logInstSeqPtr fragGasSeqPtr exprLoweringProps codegenRel memLocDefs venomExecSemantics venomState venomInst finite_map words list

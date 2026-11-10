@@ -2,7 +2,7 @@
 Theory exprPtrUnwrapCodeCopyShape
 Ancestors
   exprPtrUnwrapCodeEdges exprPtrCodeCopyInduction exprLoweringProps
-  loweringHalt fragExec compileEnv exprLowering pair arithmetic emitHelper
+  loweringHalt fragExec compileEnv loweringStateRelDefs exprLowering pair arithmetic emitHelper
   exprSimCopy ASCIInumbers context
 
 Theorem ensure_runtime_code_layout:

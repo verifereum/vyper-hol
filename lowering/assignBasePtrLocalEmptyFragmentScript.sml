@@ -3,7 +3,7 @@ Theory assignBasePtrLocalEmptyFragment
 Ancestors assignBasePtrEmptyStore assignTuplePtrStoreHead stmtSimAssignMem
   stmtSimAssignSource stmtSimDeclMem bodyPtrDefs stmtFragPtr stmtSimProps
   tupleLocalStoreRun loweringPosts
-  stmtLowering compileEnv exprSimDefs exprSimWordArgs exprLoweringProps
+  stmtLowering compileEnv loweringStateRelDefs exprSimDefs exprSimWordArgs exprLoweringProps
   gasSummaryComposePtr fragGasPathPtr gasSummary fragGasMode
   valueEncoding valueEncodingProps venomState venomExecSemantics venomInst
   emitHelper emitHelperProps context finite_map vyperLookup vyperState list rich_list

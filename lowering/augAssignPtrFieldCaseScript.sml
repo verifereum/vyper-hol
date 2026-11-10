@@ -8,7 +8,7 @@ Ancestors
   bodyPtrPreds bodyPtrDefs stmtFragPtr stmtSimAugAssignAttr stmtSimAugAssign
   exprSimHyps exprSimProps exprSimHypsDefs exprSimSource exprLoweringProps
   gasSummaryComposePtr fragGasPathPtr fragGasPath gasSummary gasCount gasContext
-  vyperInterpreter vyperState vyperTypeSystem vyperAST loweringPosts compileEnv
+  vyperInterpreter vyperState vyperTypeSystem vyperAST loweringPosts compileEnv loweringStateRelDefs
   emitHelper list rich_list stmtSimProps exprReasonOperand exprOperandVar
   exprBopSimProps ptrDiscipline venomState venomExecSemantics vyperTypeBuiltins stmtSimDeclMem
 
@@ -294,7 +294,7 @@ Resume compile_augassign_attr_local_case_ptr[field_store_inputs]:
      qpat_x_assum `!name ent q sq. _` drule_all >> simp[]) >>
   `fields_val_wf vals' fs'` by
     (qpat_x_assum `val_wf entry'.type entry'.value` mp_tac >>
-     simp[valueEncodingTheory.val_wf_def]) >>
+     simp[valueEncodingDefsTheory.val_wf_def]) >>
   `w2n (a + n2w (struct_field_offset
       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld)) =
      w2n a + struct_field_offset

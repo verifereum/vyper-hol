@@ -7,7 +7,7 @@ Ancestors
   typedCopyPtr typedCopyLoopHeaderPtr ptrDiscipline venomExecSemantics
   venomState venomInst finite_map words pred_set list arithmetic
   bodyPtrDefs valueEncodingProps bodyPtrHashBuiltinsKeccak exprSimHash
-  exprLowering emitHelper emitHelperProps compileEnv exprLoweringProps
+  exprLowering emitHelper emitHelperProps compileEnv loweringStateRelDefs exprLoweringProps
   ASCIInumbers rich_list bodyPtrHashBuiltinsGhostFrame exprSimVVFrame
   bodyPtrHashBuiltinsCases vyperValue vyperTyping vyperStorage byte
   bodyPtrSubscriptSeamMapInterface

@@ -4,7 +4,7 @@ Theory logStagedEntryPtr
 Ancestors
   logDataStorePtr logEncoderEntryPtr stmtSimLogStoreContinue stmtSimLogDataRun
   stmtSimLogStoreFresh stmtSimLogDataInput bodyPtrDefs stmtFragPtr
-  exprSimDefs compileEnv localPtrsProps exprLoweringProps stmtSimLogTrace
+  exprSimDefs compileEnv loweringStateRelDefs localPtrsProps exprLoweringProps stmtSimLogTrace
   abiBuiltinAllocation emitHelperProps venomInst words list arithmetic
 
 Theorem log_staged_entry_state_ptr:
@@ -53,7 +53,7 @@ Proof
   disch_then (qspecl_then [`name`,`tv`,`v`,`off`] mp_tac) >>
   asm_simp_tac bool_ss [] >> strip_tac >>
   qpat_x_assum `!inst b sz. _` drule >>
-  simp[mk_inst_def, compileEnvTheory.regions_disjoint_def]
+  simp[mk_inst_def, loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 Theorem compile_log_store_data_ready_path_ptr:

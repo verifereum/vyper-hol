@@ -1,9 +1,9 @@
 (* Typed read-only tuple member execution; no tuple index arithmetic here. *)
 Theory assignTuplePtrMemberLoad
 Ancestors
-  assignTuplePtrLoadStep context compileEnv emitHelper exprLoweringProps
+  assignTuplePtrLoadStep context compileEnv loweringStateRelDefs emitHelper exprLoweringProps
   exprSimProps bodyPtrDefs fragGasPathPtr words stateFrame
-  venomState valueEncoding valueTypingMemoryProps fragExec
+  venomState valueEncoding valueEncodingDefs valueTypingMemoryProps fragExec
 
 Theorem compile_tuple_member_typed_path_ptr:
   emit_op ADD [Var src; Lit off] sa = (pv,sm) /\

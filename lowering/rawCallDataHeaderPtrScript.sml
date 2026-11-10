@@ -225,7 +225,7 @@ Proof
        compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.fresh_var_def,
        compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
        compileEnvTheory.comp_return_def] >> rpt strip_tac >> gvs[] >>
-     fs[compileEnvTheory.not_fresh_at_def]) >>
+     fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   `x <> lx` by metis_tac[] >>
   `stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u` by
     (qunabbrev_tac `u` >> irule raw_call_fresh_update_state_frame >>
@@ -283,7 +283,7 @@ Proof
        compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.fresh_var_def,
        compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
        compileEnvTheory.comp_return_def] >> rpt strip_tac >> gvs[] >>
-     fs[compileEnvTheory.not_fresh_at_def]) >>
+     fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   `op_prov H (Var dx) = op_prov G (Var x)` by
     (Cases_on `FLOOKUP G x` >>
      simp[Abbr `H`, Abbr `u`, ptrDisciplineTheory.step_prov_def,
@@ -341,7 +341,7 @@ Proof
   `not_fresh_at sl lx` by
     (qpat_x_assum `emit_op ADD _ _ = _` kall_tac >>
      drule emitHelperPropsTheory.emitted_insts_emit_op >>
-     simp[compileEnvTheory.not_fresh_at_def] >> rpt strip_tac >> gvs[] >>
+     simp[loweringStateRelDefsTheory.not_fresh_at_def] >> rpt strip_tac >> gvs[] >>
      qexists_tac `sa.cs_next_var` >> simp[]) >>
   `local_ptrs_reserved cenv sl /\ not_fresh_at sl x /\ not_fresh_at sl lx /\
 
@@ -369,7 +369,7 @@ Resume raw_call_header_two_steps[compose]:
   `ghost_kept cenv es sa G tn s H' un'` by
     (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
      >- (qexists_tac `func` >>
-         fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+         fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
      qexistsl_tac [`H`, `es`, `u`, `sl`, `un`] >>
 
      fs[exprLoweringPropsTheory.ci_mono_def]) >>
@@ -394,7 +394,7 @@ Resume raw_call_header_two_steps[compose]:
   >- metis_tac[stmtFragPtrTheory.not_fresh_at_mono,
        exprLoweringPropsTheory.ci_mono_def] >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >>
-  simp[compileEnvTheory.not_fresh_at_def] >> rpt strip_tac >> gvs[] >>
+  simp[loweringStateRelDefsTheory.not_fresh_at_def] >> rpt strip_tac >> gvs[] >>
   qexists_tac `sl.cs_next_var` >> simp[]
 QED
 

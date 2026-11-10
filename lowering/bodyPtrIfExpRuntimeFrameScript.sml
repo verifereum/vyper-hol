@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpRuntimeFrame
 Ancestors immutableCopyExecution abiDecodeStaticProps venomMemProps
   exprSimCopy exprSimStorageCopy valueEncodingProps venomState words arithmetic
-  compileEnv finite_map bodyPtrIfExpAllocSource exprLoweringProps loweringHalt
+  compileEnv loweringStateRelDefs finite_map bodyPtrIfExpAllocSource exprLoweringProps loweringHalt
 
 Theorem ifexp_runtime_transfers_exterior:
   !n off s.

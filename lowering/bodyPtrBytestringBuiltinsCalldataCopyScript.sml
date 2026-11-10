@@ -2,7 +2,7 @@ Theory bodyPtrBytestringBuiltinsCalldataCopy
 Ancestors
   fragExecPtr bodyPtrDefs ptrSafeRun ptrDiscipline venomExecSemantics
   venomInst venomState finite_map codegenRel memLocDefs contextCodegenRel
-  robustCopyTransportPtr valueEncodingProps exprSimProps localPtrsProps compileEnv
+  robustCopyTransportPtr valueEncodingProps exprSimProps localPtrsProps compileEnv loweringStateRelDefs
 
 Theorem ptr_inst_ok_calldatacopy_operand:
   !D ctx fn G tn s id dst src count n fuel.

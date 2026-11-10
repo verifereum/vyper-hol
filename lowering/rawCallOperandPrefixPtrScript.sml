@@ -285,7 +285,7 @@ Resume raw_call_addr_data_sim_ptr[posts]:
   `ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
     (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
      >- (qexists_tac `func` >>
-         fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+         fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      fs[exprLoweringPropsTheory.ci_mono_def] >>
      irule exprSimWordArgsTheory.expr_post_frame >> goal_assum (drule_at Any)) >>
@@ -544,7 +544,7 @@ Resume raw_call_addr_data_header_sim_ptr[header_steps]:
    mem_bytes_at (w2n w+32) (LENGTH bs) t'.vs_memory = bs` by
     (qpat_x_assum `expr_post _ _ _ _ d _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
-       compileEnvTheory.is_word_type_def, valueEncodingTheory.val_in_memory_def]) >>
+       compileEnvTheory.is_word_type_def, valueEncodingDefsTheory.val_in_memory_def]) >>
   `?lx. len_op = Var lx` by
     (qpat_x_assum `emit_op MLOAD _ _ = _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> strip_tac >>
@@ -593,14 +593,14 @@ Resume raw_call_addr_data_header_sim_ptr[header_frame_posts]:
   `ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
     (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
      >- (qexists_tac `func` >>
-         fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+         fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
      qexistsl_tac [`G`, `ee`, `t`, `s1`, `tn`] >> simp[] >>
      fs[exprLoweringPropsTheory.ci_mono_def] >>
      irule exprSimWordArgsTheory.expr_post_frame >> goal_assum (drule_at Any)) >>
   `ghost_kept cenv es sa G0 tn0 s0 H un` by
     (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
      >- (qexists_tac `func` >>
-         fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+         fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
      qexistsl_tac [`G'`, `ee'`, `t'`, `s2`, `tn'`] >>
      fs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[]) >>
   suspend "header_return"
@@ -616,7 +616,7 @@ Resume raw_call_addr_data_header_sim_ptr[header_return]:
   qexistsl_tac [`ee`, `t`, `t'`, `w2n w`] >>
   simp[wordsTheory.n2w_w2n, wordsTheory.word_add_n2w,
        venomStateTheory.mload_def] >>
-  fs[valueEncodingTheory.mem_word_at_def] >>
+  fs[valueEncodingDefsTheory.mem_word_at_def] >>
   `w + 32w = n2w (w2n w + 32)` by
     metis_tac[wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
   simp[wordsTheory.w2n_lt, ptrDisciplineTheory.op_prov_def] >> rpt strip_tac >> gvs[] >>

@@ -2,9 +2,9 @@ Theory bodyPtrBytestringBuiltinsCalldataCase
 Ancestors
   bodyPtrBytestringBuiltinsEval bodyPtrBytestringBuiltinsExternalSlice
   bodyPtrPreds exprPtrUnwrap vyperTypeSystem exprSimHypsDefs
-  emitHelperProps compileEnv fragExec bodyPtrBytestringBuiltinsCalldataOutcome
+  emitHelperProps compileEnv loweringStateRelDefs fragExec bodyPtrBytestringBuiltinsCalldataOutcome
   exprSimWordArgs loweringPosts bodyPtrDefs exprOperandVar
-  exprLoweringProps stmtLoweringMono allocLimits valueEncoding
+  exprLoweringProps stmtLoweringMono allocLimits valueEncoding valueEncodingDefs
   valueEncodingProps vfmConstants words vyperAST vyperTyping vyperValue
   immutableEncodingProofs vyperTypeInvariants vyperLoweringCorrect vyperTypeContractSoundness
   vyperInterpreter bodyPtrBytestringBuiltinsPrefix gasSummaryComposePtr

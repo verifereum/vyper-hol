@@ -97,7 +97,7 @@ Proof
   `ghost_kept cenv es ca G0 tn0 s0 H th` by
     (irule ghost_kept_readonly_frame >>
      qexistsl_tac [`G`,`not_fresh_at sa`,`tn`] >> simp[] >>
-     fs[ghost_kept_def, compileEnvTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+     fs[ghost_kept_def, loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   `t.vs_current_bb = s.vs_current_bb` by
     (qpat_x_assum `(t with vs_vars := _) = s` (fn eq => once_rewrite_tac[GSYM eq]) >> simp[]) >>
   simp[] >>

@@ -2,7 +2,7 @@ Theory bodyPtrBopInLoopControl
 Ancestors bodyPtrBopInLoopExit bodyPtrBopInLoopFrame fragGasSeqPtr fragGasPathPtr
   emitHelper ptrSafeRun ptrDiscipline venomInstProofs venomInst
   codegenRel contextCodegenRel venomExecSemantics venomState
-  instIdxIndep finite_map pred_set gasCount emitHelperProps compileEnv
+  instIdxIndep finite_map pred_set gasCount emitHelperProps compileEnv loweringStateRelDefs
 
 (* One scalar literal write.  The destination need not have been clean:
    ASSIGN overwrites both its value and its ghost binding. *)

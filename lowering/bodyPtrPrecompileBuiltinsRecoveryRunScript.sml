@@ -2,7 +2,7 @@ Theory bodyPtrPrecompileBuiltinsRecoveryRun
 Ancestors bodyPtrPrecompileBuiltinsCompletePrefixes
           bodyPtrPrecompileBuiltinsPayloadCallbacks
           bodyPtrPrecompileBuiltinsRunWitnesses exprSimLiteralBuffer
-          exprSimPrecompiles venomState venomInst compileEnv words arithmetic list
+          exprSimPrecompiles venomState venomInst compileEnv loweringStateRelDefs words arithmetic list
           bodyPtrPrecompileBuiltinsRecoveryPostFrame allocaFootprint
           emitHelper context
 

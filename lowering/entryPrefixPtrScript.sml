@@ -2,7 +2,7 @@
 Theory entryPrefixPtr
 Ancestors entryDispatchCounters entryDispatchPtr ptrSafeRun ptrDiscipline moduleLoweringProps
   moduleLowering fragExec venomExecSemantics venomInst venomState list
-  finite_map words contextCodegenRel codegenRel compileEnv emitHelperProps
+  finite_map words contextCodegenRel codegenRel compileEnv loweringStateRelDefs emitHelperProps
   exprLoweringProps typedCopyArrayPtr
 
 Theorem ptr_safe_jump_exact_continuation:

@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpRuntimeAllocated
 Ancestors bodyPtrIfExpStorageAllocation bodyPtrIfExpRuntimeCopy
   bodyPtrIfExpAllocSource loweringHalt exprLoweringProps ptrDiscipline
-  compileEnv venomState venomInst finite_map words arithmetic fragGasPathPtr
+  compileEnv loweringStateRelDefs venomState venomInst finite_map words arithmetic fragGasPathPtr
   slotCopyExecution exprSimCopy loweringPosts bodyPtrIfExpRuntimeFrame
 
 Theorem ifexp_runtime_allocated_execution:

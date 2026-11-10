@@ -1,7 +1,7 @@
 (* Compiler-facing shape of the memory hashing prefix. *)
 Theory bodyPtrEnvBuiltinsMemoryHashCompile
 Ancestors bodyPtrEnvBuiltinsMemoryHash builtinHashing context emitHelper
-  compileEnv exprLoweringProps freshWrites words list rich_list finite_map fragExec
+  compileEnv loweringStateRelDefs exprLoweringProps freshWrites words list rich_list finite_map fragExec
   bodyPtrDefs fragGasSeqPtr fragGasPathPtr
 
 Theorem memory_hash_compile_code:

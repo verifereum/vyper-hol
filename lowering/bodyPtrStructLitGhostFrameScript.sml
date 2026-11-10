@@ -1,7 +1,7 @@
 (* Frame constructors and cursor-only transport, not fresh-register transport. *)
 Theory bodyPtrStructLitGhostFrame
 Ancestors
-  bodyPtrDefs compileEnv venomState
+  bodyPtrDefs compileEnv loweringStateRelDefs venomState
 
 Theorem ghost_inv_from_parts:
   (!name entry p sz.

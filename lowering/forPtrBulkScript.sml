@@ -3,7 +3,7 @@ Theory forPtrBulk
 Ancestors forPtrCopyInterface forPtrWord typedCopyPtr fragGasSeqPtr
   robustCopyTransportPtr bodyPtrDefs valueEncodingProps venomExecSemantics venomInst
   venomState arithmetic exprLoweringProps fragExecPtr ptrSafeRun ptrDiscipline finite_map pred_set
-  context compileEnv emitHelperProps loweringSlice words valueEncoding
+  context compileEnv emitHelperProps loweringSlice words valueEncoding valueEncodingDefs
 
 Theorem for_bulk_copy_checked_seq:
   ptr_covers G tn src s (w2n n) /\ ptr_covers G tn dst s (w2n n) /\

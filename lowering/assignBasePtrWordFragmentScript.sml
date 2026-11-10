@@ -5,7 +5,7 @@ Ancestors assignTuplePtrLocalWordRuntime assignBasePtrScalarPost
   stmtSimProps exprSimProps exprSimDefs bodyPtrDefs stmtFragPtr
   gasSummaryComposePtr gasExemptCert fragGasPathPtr fragGasPath fragGasMode
   gasSummary gasSummaryCompose exprLoweringProps emitHelperProps emitHelper exprLowering
-  stmtLowering compileEnv loweringPosts venomState venomInst
+  stmtLowering compileEnv loweringStateRelDefs loweringPosts venomState venomInst
   vyperState vyperLookup finite_map list rich_list
 Libs monadsyntax
 

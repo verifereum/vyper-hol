@@ -2,7 +2,7 @@
 Theory bodyPtrWordBuiltinsAbsPost
 Ancestors bodyPtrWordBuiltinsAbsSequence bodyPtrWordBuiltinsAbsSuffix
   bodyPtrWordBuiltinsScalarSequence bodyPtrWordBuiltinsIntervalGhost
-  exprLoweringProps builtinSimple compileEnv venomInst list pred_set
+  exprLoweringProps builtinSimple compileEnv loweringStateRelDefs venomInst list pred_set
   bodyPtrDefs ptrDiscipline ptrSafeRun finite_map codegenRel fragGasSeqPtr
 
 Theorem word_abs_emitted_shape:

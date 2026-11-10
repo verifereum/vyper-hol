@@ -3,7 +3,7 @@ Ancestors
   bodyPtrTypeBuiltinsEmptyExec bodyPtrTypeBuiltinsEmptyFrame
   bodyPtrTypeBuiltinsEmptyAlloc exprLoweringProps venomState
   exprSimAlloc exprSimProps valueEncodingProps
-  compileEnv context finite_map pred_set loweringHalt bodyPtrDefs valueEncoding
+  compileEnv loweringStateRelDefs context finite_map pred_set loweringHalt bodyPtrDefs valueEncoding
   exprSimDefs fragGasPathPtr
 
 Theorem empty_buffer_framed_certificate:

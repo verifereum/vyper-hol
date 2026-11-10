@@ -7,7 +7,7 @@ Ancestors
   exprSimDefs exprReasonOperand exprOperandVar exprSimHyps exprSimUnwrap
   vyperTypeBuiltins vyperTypeValues vyperTypeSystem vyperTypeStatePreservation
   vyperTyping vyperState vyperInterpreter exprBopSimProps
-  loweringPosts compileEnv emitHelperProps exprLoweringProps
+  loweringPosts compileEnv loweringStateRelDefs emitHelperProps exprLoweringProps
   codegenRel stmtSimProps stmtSimDefs stmtSimAugAssign
   fragExec loweringSlice gasSummary gasContext stmtFragPtr
   fragGasPathPtr gasSummaryComposePtr ptrDiscipline

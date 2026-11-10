@@ -1,7 +1,7 @@
 (* Separated scratch allocation resources, independent of expression posts. *)
 Theory reasonSlotResourcesPtr
 Ancestors allocationPtr reasonEncoderTailPtr reasonPrefixPtr exprSimAlloc normalizationAllocPtr
-  robustCopyTransportPtr compileEnv venomState venomExecSemantics venomInst
+  robustCopyTransportPtr compileEnv loweringStateRelDefs venomState venomExecSemantics venomInst
   finite_map ptrDiscipline exprLoweringProps emitHelperProps exprSimProps loweringHalt bodyPtrDefs ghostPcTransportPtr
 
 Theorem reason_alloca_exterior_effects:

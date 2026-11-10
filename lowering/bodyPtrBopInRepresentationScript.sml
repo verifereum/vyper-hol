@@ -1,6 +1,6 @@
 Theory bodyPtrBopInRepresentation
 Ancestors bodyPtrDefs loweringPosts exprLoweringProps accountsRelProps
-  ptrCoverage compileEnv words typedCopyPtr
+  ptrCoverage compileEnv loweringStateRelDefs words typedCopyPtr
 
 (* A located post rules out calldata without restricting the compiler. *)
 Theorem membership_located_not_calldata:

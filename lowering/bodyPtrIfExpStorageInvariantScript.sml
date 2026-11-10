@@ -2,7 +2,7 @@ Theory bodyPtrIfExpStorageInvariant
 Ancestors
   bodyPtrIfExpStorageFrame bodyPtrIfExpStorageInit bodyPtrIfExpStorageControl
   slotCopyExecution copyExecution createSourceCallback bodyPtrDefs appendStorageGhostPtr
-  ptrDiscipline compileEnv venomState finite_map pred_set words
+  ptrDiscipline compileEnv loweringStateRelDefs venomState finite_map pred_set words
   bodyPtrIfExpStorageOrdinary exprSimStorageCopy
 
 (* Packages the recurrent pointer induction hypothesis alongside the existing

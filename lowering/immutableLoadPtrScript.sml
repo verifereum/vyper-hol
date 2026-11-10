@@ -3,7 +3,7 @@ Theory immutableLoadPtr
 Ancestors
   immutableOffsetPtr payloadLoadStorePtr exprSimCopy exprSimStorageCopy
   immutableCopyExecution
-  context compileEnv emitHelper emitHelperProps exprLoweringProps
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   stmtAppendStorageRunPtr fragGasSeqPtr ptrDiscipline venomExecSemantics
   venomInst venomState finite_map words list memLocDefs bodyPtrDefs
   codegenRel contextCodegenRel

@@ -8,7 +8,7 @@ Ancestors
   exprSimProps exprSimSource exprSimHypsDefs bodyPtrDefs
   vyperPlaceTyping vyperStorageLayoutSafety vyperTypeValues
   vyperTypeInvariants vyperValue vyperTypeStatePreservation vyperTypeBuiltins vyperTypeSystem vyperState vyperInterpreter vyperStorageBackend
-  loweringPosts codegenRel compileEnv emitHelperProps exprLoweringProps
+  loweringPosts codegenRel compileEnv loweringStateRelDefs emitHelperProps exprLoweringProps
   accountsRelProps exprSimUnwrap fragExec loweringSlice stmtFragPtr bodyPtrPreds stmtSimDefs stmtSimAugAssign gasSummary gasContext
 
 Theorem compile_augassign_attr_storage_case_ptr:

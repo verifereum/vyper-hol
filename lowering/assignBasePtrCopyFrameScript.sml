@@ -1,7 +1,7 @@
 (* Counted MCOPY and its frame share the explicit execution endpoint. *)
 Theory assignBasePtrCopyFrame
 Ancestors assignBasePtrCopyPath typedMemoryCopy valueCopy
-  fragGasPathPtr bodyPtrDefs context words compileEnv valueEncoding
+  fragGasPathPtr bodyPtrDefs context words compileEnv valueEncoding valueEncodingDefs
 
 Theorem assign_base_copy_memory_framed_robust_path_ptr:
   !dst src n sa sb fn s d a G tn D ctx PG tv v.

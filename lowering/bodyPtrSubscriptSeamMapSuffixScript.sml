@@ -3,7 +3,7 @@ Theory bodyPtrSubscriptSeamMapSuffix
 Ancestors
   bodyPtrSubscriptSeamMapKey bodyPtrSubscriptScratchTransfer
   bodyPtrHashBuiltinsAllocFrame bodyPtrHashBuiltinsKeccak
-  exprLowering exprLoweringProps context compileEnv emitHelper emitHelperProps
+  exprLowering exprLoweringProps context compileEnv loweringStateRelDefs emitHelper emitHelperProps
   venomInst ASCIInumbers rich_list arithmetic list
   exprSimPtrTopLevelImmutableCopy typedCopyPtr ptrDiscipline
   bodyPtrDefs bodyPtrSubscriptScratchStore bodyPtrHashBuiltinsKeccakBytesRun

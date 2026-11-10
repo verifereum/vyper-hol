@@ -2,7 +2,7 @@ Theory bodyPtrPopLocalRootCompileFrame
 Ancestors
   bodyPtrPopLocalRootCompile bodyPtrPopLocalRootAddressFrame
   bodyPtrPopLocalRootGuardFrame bodyPtrPopLocalRootFrame
-  fragExec fragGasPathPtr emitHelperProps emitHelper compileEnv list words venomState ptrDiscipline
+  fragExec fragGasPathPtr emitHelperProps emitHelper compileEnv loweringStateRelDefs list words venomState ptrDiscipline
 
 Theorem pop_local_compile_nonempty_exact:
   compile_dynarray_pop (Var root) 32 esz ctor imm LocMemory sa = (res,sj) /\

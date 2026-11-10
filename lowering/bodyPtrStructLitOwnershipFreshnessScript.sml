@@ -1,6 +1,6 @@
 Theory bodyPtrStructLitOwnershipFreshness
 Ancestors bodyPtrStructLitOwnershipSteps bodyPtrStructLitCompilerOwnership
-  loweringShapeDefs loweringShapeRules compileEnv emitHelper emitHelperProps
+  loweringShapeDefs loweringShapeRules compileEnv loweringStateRelDefs emitHelper emitHelperProps
   venomInst list
 
 (* Ownership composition needs output freshness, not the operand restrictions

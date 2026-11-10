@@ -6,7 +6,7 @@ Ancestors
   exprSimStorageCopy venomState ptrDiscipline words arithmetic
   reasonStoragePrefixPtr reasonPrefixPtr ghostPcTransportPtr allocationPtr
   exprSimAlloc exprLoweringProps loweringHalt venomExecSemantics venomInstProofs
-  context emitHelper compileEnv venomInst loweringPosts fragGasPathPtr exprSimCopy
+  context emitHelper compileEnv loweringStateRelDefs venomInst loweringPosts fragGasPathPtr exprSimCopy
 
 Theorem storage_normalization_endpoint_resources:
   stmt_state_rel ctx func cenv cx es u /\

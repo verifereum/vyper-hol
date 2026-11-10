@@ -3,7 +3,7 @@
 Theory assignTuplePtrLocalWordRuntime
 Ancestors
   wordLoadStorePtr assignTuplePtrStoreHead assignTuplePtrStoreWord stmtSimAssignStore
-  typedCopyPtr bodyPtrDefs compileEnv context emitHelper emitHelperProps
+  typedCopyPtr bodyPtrDefs compileEnv loweringStateRelDefs context emitHelper emitHelperProps
   venomState venomExecSemantics vyperState vyperLookup exprSimProps
   exprLoweringProps stmtSimDeclStore assignTuplePtrCopyEndpoint ptrDiscipline
   valueEncodingProps

@@ -160,7 +160,7 @@ Proof
     (rewrite_tac[mstore_mem_bytes_at_disjoint
        |> Q.SPECL [`b+32`, `LENGTH bs`, `b`]
        |> SIMP_RULE (srw_ss()) []] >> simp[]) >>
-  simp[valueEncodingTheory.val_in_memory_def, mstore_mem_word_at_same]
+  simp[valueEncodingDefsTheory.val_in_memory_def, mstore_mem_word_at_same]
 QED
 
 Theorem bytes_length_store_robust:
@@ -173,12 +173,12 @@ Theorem bytes_length_store_robust:
 Proof
   rpt strip_tac >> irule clean_footprint_robust_val_in_memory >>
   conj_tac >-
-    (simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
+    (simp[valueEncodingDefsTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
      mp_tac (Q.SPEC `cap` valueTypingMemoryPropsTheory.word_size_capacity) >>
      decide_tac) >>
   qexistsl_tac [`dirty DIFF {i | b <= i /\ i < b+32}`,
     `(mstore b (n2w (LENGTH bs)) s).vs_memory`] >>
-  simp[bytes_length_store_representation, valueEncodingTheory.val_wf_def,
+  simp[bytes_length_store_representation, valueEncodingDefsTheory.val_wf_def,
     loweringPostsTheory.val_footprint_def] >>
   rpt strip_tac >> Cases_on `i < b+32` >> simp[] >>
   metis_tac[arithmeticTheory.NOT_LESS]
@@ -310,7 +310,7 @@ Proof
      qexistsl_tac [`mem`, `dirty`, `{i | b+type_memory_size ht <= i /\
        i < b+type_memory_size ht+n}`] >>
      simp[]) >>
-  rpt strip_tac >> simp[valueEncodingTheory.val_in_memory_def]
+  rpt strip_tac >> simp[valueEncodingDefsTheory.val_in_memory_def]
 QED
 
 Theorem robust_pair_mcopy:
@@ -373,10 +373,10 @@ Theorem bool_mstore_robust:
 Proof
   rpt strip_tac >> irule clean_footprint_robust_val_in_memory >>
   conj_tac >-
-    simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
+    simp[valueEncodingDefsTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
   qexistsl_tac [`dirty DIFF {i | b <= i /\ i < b+32}`,
     `(mstore b (val_to_w256 (BoolV flag)) s).vs_memory`] >>
-  simp[valueEncodingTheory.val_in_memory_def, mstore_mem_word_at_same,
+  simp[valueEncodingDefsTheory.val_in_memory_def, mstore_mem_word_at_same,
     loweringPostsTheory.val_footprint_def, valueEncodingTheory.type_memory_size_def]
 QED
 
@@ -452,7 +452,7 @@ Proof
      simp[loweringPostsTheory.val_footprint_def, valueEncodingTheory.type_memory_size_def] >>
    conj_tac >- simp[] >>
    conj_tac >-
-     simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
+     simp[valueEncodingDefsTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
    qexistsl_tac [`a`, `dirty DIFF {i | b <= i /\ i < b+32}`, `n`,
      `mstore b (val_to_w256 (BoolV flag)) s`] >>
    simp[] >> conj_tac

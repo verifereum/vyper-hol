@@ -2,7 +2,7 @@
 Theory reasonStorageNormalizationPtr
 Ancestors
   storageNormalizationPtr reasonStoragePrefixPtr reasonNormalizedSuffixPtr
-  loweringHalt emitHelperProps exprLoweringProps context compileEnv
+  loweringHalt emitHelperProps exprLoweringProps context compileEnv loweringStateRelDefs
   venomState ptrDiscipline bodyPtrDefs words arithmetic finite_map
   fragGasPathPtr
 

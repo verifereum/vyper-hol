@@ -2,7 +2,7 @@
 Theory assignBasePtrAllocSeparate
 Ancestors assignBasePtrAllocCounted exprSimAlloc exprLoweringProps
   assignBasePtrLiteralGhost assignBasePtrLiteralSource context emitHelper
-  emitHelperProps compileEnv venomExecSemantics venomState venomInst
+  emitHelperProps compileEnv loweringStateRelDefs venomExecSemantics venomState venomInst
   finite_map words fragExecPtr allocationPtr rich_list fragGasSeqPtr
   assignBasePtrLiteralOutcome ghostPcTransportPtr instIdxIndep fragExec
 

@@ -1,7 +1,7 @@
 Theory bodyPtrPopDeclaredEntry
 Ancestors
   bodyPtrPopRegionInvariant bodyPtrDefs exprLoweringProps accountsRelProps
-  vyperStorageBackend venomState compileEnv vyperState vfmState
+  vyperStorageBackend venomState compileEnv loweringStateRelDefs vyperState vfmState
 
 (* Unlike declared_storage_head_agree in appendStorageComposeFactsPtr,
    this boundary allows arbitrary declaration subscripts and exposes the

@@ -3,7 +3,7 @@ Ancestors
   bodyPtrIfExpAssign bodyPtrIfExpAssignFrame ifJumpPtr
   fragGasPathPtr emitHelperProps venomState venomInst ptrSafeRun
   bodyPtrDefs stmtFragPtr ghostPcTransportPtr exprSimIfExp exprSimDefs
-  loweringPosts exprLowering context vyperAST vyperState compileEnv
+  loweringPosts exprLowering context vyperAST vyperState compileEnv loweringStateRelDefs
   wordArgsPtr exprSimWordArgs exprSimPtrLiteralBuffer gasSummaryComposePtr fragGasSeqPtr
 
 Theorem ifexp_word_suffix_path_ptr:

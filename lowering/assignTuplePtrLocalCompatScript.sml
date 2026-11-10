@@ -3,7 +3,7 @@
 Theory assignTuplePtrLocalCompat
 Ancestors
   assignTuplePtrBytesResources exprSimBufferStore exprSimProps
-  valueEncoding valueEncodingProps vyperTyping vyperValue context compileEnv
+  valueEncoding valueEncodingDefs valueEncodingProps vyperTyping vyperValue context compileEnv
   valueTypingMemoryProps valueCopyBytes bodyPtrDefs venomState venomExecSemantics words arithmetic vfmConstants
 
 Theorem bytestring_evaluated_shape_ptr:

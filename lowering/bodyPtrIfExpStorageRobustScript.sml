@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpStorageRobust
 Ancestors
   storageDecodeMemory bodyPtrDefs venomMemProofs valueEncodingProps valueEncodingProofs
-  pred_set list arithmetic accountsRelProps compileEnv words vyperStorage
+  pred_set list arithmetic accountsRelProps compileEnv loweringStateRelDefs words vyperStorage
 
 Theorem ifexp_storage_live_memory_taint_frame:
   storage_live_memory st bs tv dst mem /\

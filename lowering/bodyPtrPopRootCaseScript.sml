@@ -1,7 +1,7 @@
 Theory bodyPtrPopRootCase
 Ancestors
   bodyPtrPopRootOutcome bodyPtrPopRootEntry bodyPtrPreds bodyPtrDefs
-  exprPtrUnwrap exprLoweringProps compileEnv
+  exprPtrUnwrap exprLoweringProps compileEnv loweringStateRelDefs
 
 Theorem pop_root_vv_ptr:
   expr_body_pre cenv cx env (Pop ann (TopLevelNameTarget (src,id))) es ==>

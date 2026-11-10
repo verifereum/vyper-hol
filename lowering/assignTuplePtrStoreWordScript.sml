@@ -4,7 +4,7 @@ Ancestors
   assignTuplePtrStoreFrame stmtSimDeclStore robustCopyTransportPtr exprSimProps
   typedCopyPtr bodyPtrDefs list venomMemProofs valueEncodingProofs
   assignTuplePtrPrefix fragExecPtr venomInst venomExecSemantics venomState
-  compileEnv
+  compileEnv loweringStateRelDefs
 
 Theorem val_in_memory_clean_footprint_ptr:
   val_in_memory tv v off mem /\ val_wf tv v /\

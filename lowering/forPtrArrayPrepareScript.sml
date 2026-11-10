@@ -4,7 +4,7 @@ Theory forPtrArrayPrepare
 Ancestors forPtrRangePrepare forPtrAddress forPtrWriteScope forPtrArraySnapshot
   forPtrWord forPtrBulk forPtrBytes forPtrCopyInterface stmtSimForArrayLoop
   fragExec emitHelperProps finite_map list forPtrControl venomState ptrDiscipline
-  exprSimProps typedCopyAgreement context compileEnv valueEncoding stmtLowering
+  exprSimProps typedCopyAgreement context compileEnv loweringStateRelDefs valueEncoding stmtLowering
   exprLoweringProps rich_list forPtrElementFrame bodyPtrDefs forPtrScope
   exprSimPtrLiteralBuffer venomInst venomExecSemantics vyperState loweringPosts emitHelper fragGasSeqPtr fragGasPathPtr
 

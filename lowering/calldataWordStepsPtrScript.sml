@@ -1,7 +1,7 @@
 (* Pointer ghost boundaries for primitive calldata word instructions. *)
 Theory calldataWordStepsPtr
 Ancestors calldataOverwritePtr ptrSafetyTransport valueEncodingProps calldataClampPtr calldataDecodePtr abiDecoderContract
-  abiEncoder compileEnv emitHelper emitHelperProps exprLoweringProps fragExec
+  abiEncoder compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps fragExec
   venomInst list arithmetic words bodyPtrDefs decoderGhostFramePtr
   ptrDiscipline ptrSafeRun venomState venomExecSemantics entryDispatchPtr
   fragExecPtr ghostPcTransportPtr finite_map pred_set codegenRel instIdxIndep

@@ -1,7 +1,7 @@
 (* Compiler offset boundary for counted normalization. *)
 Theory assignBasePtrByteOffset
 Ancestors assignBasePtrOffset assignBasePtrStoragePath typedCopyPtr context
-  compileEnv emitHelper emitHelperProps exprLoweringProps contextCodegenRelProps
+  compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps contextCodegenRelProps
   fragExec fragGasPathPtr bodyPtrDefs ptrDiscipline venomState venomExecSemantics
   venomInst words finite_map list rich_list ghostPcTransportPtr decoderGhostFramePtr
 

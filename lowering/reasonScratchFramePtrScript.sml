@@ -84,7 +84,7 @@ Theorem reason_scratch_nonlocal_vars_state_rel:
 Proof
   strip_tac >> irule reason_scratch_vars_state_rel >> simp[] >>
   conj_tac >> rpt strip_tac >>
-  `~MEM p outputs` by (fs[compileEnvTheory.not_local_ptr_def] >> metis_tac[]) >>
+  `~MEM p outputs` by (fs[loweringStateRelDefsTheory.not_local_ptr_def] >> metis_tac[]) >>
   simp[]
 QED
 

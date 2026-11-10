@@ -2,7 +2,7 @@
    This local transition does not frame enclosing or historical owners. *)
 Theory bodyPtrSubscriptHistoryHeader
 Ancestors
-  abiDecoderArrayPrefix valueEncodingProps valueEncoding venomState list rich_list
+  abiDecoderArrayPrefix valueEncodingProps valueEncoding valueEncodingDefs venomState list rich_list
   arithmetic
 
 Theorem elems_in_memory_front_last:

@@ -3,7 +3,7 @@ Theory assignTuplePtrLocalSuffix
 Ancestors
   assignTuplePtrLocalOpen assignTuplePtrLocalSequence assignTuplePtrLoadedCoverage assignTuplePtrStageLoads
   assignTuplePtrSourceGas tupleAssignPrefix tupleStageProps tupleTargetStoreProps
-  exprOperandVar exprSimProps exprLoweringProps compileEnv bodyPtrDefs stmtFragPtr
+  exprOperandVar exprSimProps exprLoweringProps compileEnv loweringStateRelDefs bodyPtrDefs stmtFragPtr
   fragGasPathPtr loweringPosts stmtSimDefs stmtSimProps tupleAssignParts
   vyperInterpreter vyperState vyperValue vyperTyping vyperTypeDefaults valueEncoding
   stmtLowering stmtSimReturn vyperTypeABI list rich_list finite_map words arithmetic

@@ -1,6 +1,6 @@
 Theory bodyPtrStructLitOwnershipPrimitives
 Ancestors bodyPtrStructLitOwnershipShape bodyPtrStructLitOwnershipSlots
-  loweringShapeProps context bodyPtrStructLitOwnershipSteps compileEnv
+  loweringShapeProps context bodyPtrStructLitOwnershipSteps compileEnv loweringStateRelDefs
   emitHelper loweringShapeDefs bodyPtrStructLitCompilerOwnership list
   bodyPtrStructLitOwnershipFreshness
 

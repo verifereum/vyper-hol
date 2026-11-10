@@ -1,7 +1,7 @@
 Theory bodyPtrTypeBuiltinsEmptyPost
 Ancestors
   wordLoadStorePtr
-  bodyPtrDefs exprSimAggregateLayout venomMemProofs valueEncoding
+  bodyPtrDefs exprSimAggregateLayout venomMemProofs valueEncoding valueEncodingDefs
   valueEncodingProofs list
 
 (* A clean window is stable even when bytes outside it are arbitrary. *)

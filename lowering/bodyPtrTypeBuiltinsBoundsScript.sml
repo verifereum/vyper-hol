@@ -1,6 +1,6 @@
 Theory bodyPtrTypeBuiltinsBounds
 Ancestors
-  builtinBytes exprLoweringProps emitHelperProps emitHelper compileEnv context
+  builtinBytes exprLoweringProps emitHelperProps emitHelper compileEnv loweringStateRelDefs context
   venomInst venomState venomExecSemantics finite_map list words arithmetic
   fragGasSeqPtr ptrDiscipline ptrSafeRun codegenRel contextCodegenRel
 

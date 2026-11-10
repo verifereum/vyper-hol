@@ -1,7 +1,7 @@
 Theory bodyPtrPopInteriorPointer
 Ancestors
   bodyPtrAttributeAdd typedCopyLoopHeaderPtr bodyPtrDefs emitHelperProps
-  emitHelper compileEnv ptrDiscipline venomInst venomState words finite_map
+  emitHelper compileEnv loweringStateRelDefs ptrDiscipline venomInst venomState words finite_map
 
 Theorem pop_emit_interior_pointer_path:
   !sa sb dst root offset fn ctx s a off tn G total n D PG.

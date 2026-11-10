@@ -3,14 +3,14 @@ Ancestors
   bodyPtrPopNestedLiveEntry bodyPtrPopNestedLiveSuffixFrame bodyPtrPopNestedLiveSuffix
   bodyPtrPopNestedLivePositivePost exprSimPopNestedLocalProps
   gasSummaryComposePtr fragGasPathPtr bodyPtrDefs
-  vyperState venomState compileEnv finite_map exprSimDefs venomExecSemantics fragExec
+  vyperState venomState compileEnv loweringStateRelDefs finite_map exprSimDefs venomExecSemantics fragExec
   vyperLookup vyperScopePreservation exprSimPopNestedLocalMemory exprSimProps
   appendStorageGhostPtr bodyPtrPopNestedLiveSource bodyPtrPopTargetDefs
   bodyPtrPopNestedLiveHandoff reasonCopySourcePtr
   exprSimPopNestedBase exprSimPopNestedLocalHandoff exprSimPopNestedLocalSuffix
   exprSimPopNestedLocalSource exprLowering exprLoweringProps stmtLoweringMono
   exprSimHypsDefs emitHelperProps vyperEvalExprPreservesScopesDom
-  vyperInterpreter vyperAST vyperTypeSystem loweringPosts valueEncoding
+  vyperInterpreter vyperAST vyperTypeSystem loweringPosts valueEncoding valueEncodingDefs
 
 Theorem pop_empty_memory_marked_ptr:
   find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\

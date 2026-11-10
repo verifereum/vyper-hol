@@ -4,7 +4,7 @@ Ancestors
   exprPtrUnwrapAllocation exprPtrUnwrapAllocationFrame exprPtrUnwrapAllocSeparation
   bufferAllocationExecution exprSimAlloc loweringPosts exprLoweringProps
   ptrDiscipline ptrSafeRun bodyPtrDefs venomState venomInst finite_map words
-  compileEnv fragGasPathPtr stmtAppendStorageRunPtr exprPtrUnwrapStorageSource
+  compileEnv loweringStateRelDefs fragGasPathPtr stmtAppendStorageRunPtr exprPtrUnwrapStorageSource
 
 Theorem unwrap_alloc_entry:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\

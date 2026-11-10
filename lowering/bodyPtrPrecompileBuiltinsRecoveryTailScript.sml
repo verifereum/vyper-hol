@@ -2,7 +2,7 @@ Theory bodyPtrPrecompileBuiltinsRecoveryTail
 Ancestors bodyPtrPrecompileBuiltinsRecoveryResidual
           bodyPtrPrecompileBuiltinsRecoveryValue bodyPtrPrecompileBuiltinsArithmeticTail
           vyperContext vyperValue vyperTyping valueEncoding exprSimWordArgs
-          exprSimDefs exprSimProps exprLoweringProps compileEnv rich_list words list
+          exprSimDefs exprSimProps exprLoweringProps compileEnv loweringStateRelDefs rich_list words list
 
 Theorem recovery_arg_typed_encoding:
   ((?k. tv = BaseTV (UintT k) /\ k <= 256) \/

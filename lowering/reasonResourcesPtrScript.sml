@@ -1,7 +1,7 @@
 (* Resource boundaries for the shared raise/assert reason encoder. *)
 Theory reasonResourcesPtr
 Ancestors
-  representationCleanPtr bodyPtrDefs exprSimProps valueEncoding vfmConstants
+  representationCleanPtr bodyPtrDefs exprSimProps valueEncoding valueEncodingDefs vfmConstants
   words list loweringPosts venomState compileEnv allocLimits arithmetic venomMemProps
 
 Theorem reason_string_head_clean:

@@ -1,7 +1,7 @@
 (* Clean storage writes transport the permitted dead-byte taint set. *)
 Theory assignTuplePtrStorage
 Ancestors
-  bodyPtrDefs ptrDiscipline venomState venomInst compileEnv
+  bodyPtrDefs ptrDiscipline venomState venomInst compileEnv loweringStateRelDefs
   finite_map pred_set combin codegenRel vfmState assignTuplePtrStoreFrame
   ptrSafeRun venomExecSemantics venomInstProofs contextCodegenRel
   assignTuplePtrPrefix stmtLowering emitHelper assignTuplePtrCopyEndpoint

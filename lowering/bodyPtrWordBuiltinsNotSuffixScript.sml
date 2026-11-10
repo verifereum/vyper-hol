@@ -4,7 +4,7 @@ Theory bodyPtrWordBuiltinsNotSuffix
 Ancestors bodyPtrWordBuiltinsNegSuffix bodyPtrWordBuiltinsArithmeticSteps
   bodyPtrWordBuiltinsIntervalGhost bodyPtrDefs ptrSafeRun ptrDiscipline
   venomExecSemantics venomInst venomState venomExecProofs finite_map list
-  exprLowering emitHelper compileEnv contextCodegenRel codegenRel
+  exprLowering emitHelper compileEnv loweringStateRelDefs contextCodegenRel codegenRel
   fragGasSeqPtr fragGasPathPtr gasSummary vyperState emitHelperProps
   fragGasFresh fragGasSeqAbort freshWrites exprLoweringProps fragExec
 

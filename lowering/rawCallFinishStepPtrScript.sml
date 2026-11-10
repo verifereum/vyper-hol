@@ -232,5 +232,5 @@ Proof
      conj_tac >- metis_tac[compileEnvTheory.cs_extends_trans] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   gvs[wordsTheory.w2n_n2w] >> rpt strip_tac >>
-  fs[compileEnvTheory.regions_disjoint_def] >> res_tac >> decide_tac
+  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> res_tac >> decide_tac
 QED

@@ -5,7 +5,7 @@ Ancestors
   list venomInst abiDecoderRecursiveLoopLayout abiDecoderLoopEmit
   abiScratchDecoderLoopContext abiScratchDecoderLoopInvariant bodyPtrDefs
   abiScratchEncoderContract abiScratchFootprint abiDecoderAllocation abiDecoderFrame
-  compileEnv abiScratchDecoderContract abiScratchEffect abiDecoderReentry
+  compileEnv loweringStateRelDefs abiScratchDecoderContract abiScratchEffect abiDecoderReentry
   abiScratchDecoderLoopControl abiDecoderValidArrayMemory
 
 (* The calldata instance of trunk's position-form decoder lemmas: the source

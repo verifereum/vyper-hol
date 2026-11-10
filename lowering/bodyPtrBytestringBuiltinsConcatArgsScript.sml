@@ -4,7 +4,7 @@ Ancestors
   bodyPtrBytestringBuiltinsConcatHead bodyPtrBytestringBuiltinsEval
   bodyPtrPreds bodyPtrDefs bodySim exprSimConcatArgs exprSimHypsDefs
   bodyPtrEnvBuiltinsGhostCompose
-  exprSimSource exprSimProps exprSimDefs exprLowering exprLoweringProps compileEnv
+  exprSimSource exprSimProps exprSimDefs exprLowering exprLoweringProps compileEnv loweringStateRelDefs
   loweringPosts fragExec fragGasPathPtr gasSummaryComposePtr gasOutcomeMapPtr
   assignTuplePtrBodyReady stmtFragPtr logGhostFramePtr wordArgsPtr exprSimWordArgs vyperInterpreter vyperState vyperValue
   vyperTypeInvariants vyperTypeExprSoundness venomState words arithmetic finite_map list rich_list

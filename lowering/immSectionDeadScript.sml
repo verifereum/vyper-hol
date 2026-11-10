@@ -6,7 +6,7 @@
  *)
 Theory immSectionDead
 Ancestors
-  compileVyper compileEnv valueEncoding vyperValue vyperContext vyperAST
+  compileVyper compileEnv valueEncoding valueEncodingDefs vyperValue vyperContext vyperAST
   words list
 
 (* Bytes of the constructor's immutables fixed region, at memory offset 0. *)

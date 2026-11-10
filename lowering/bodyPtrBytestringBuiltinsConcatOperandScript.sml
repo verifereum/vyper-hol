@@ -4,7 +4,7 @@ Theory bodyPtrBytestringBuiltinsConcatOperand
 Ancestors
   bodyPtrDefs loweringPosts representationCleanPtr
   vyperAST vyperValue vyperContext compileEnv vyperTypeSystem vyperTyping
-  exprLowering valueEncoding compileEnv words list venomState
+  exprLowering valueEncoding valueEncodingDefs compileEnv words list venomState
 
 Theorem concat_operand_bytes_read:
   expr_post ctx fn ce cx e es sa sb s0 ee v op s /\

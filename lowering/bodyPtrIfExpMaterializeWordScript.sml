@@ -2,7 +2,7 @@ Theory bodyPtrIfExpMaterializeWord
 Ancestors
   bodyPtrIfExpScalarLoad fragExecPtr ptrSafeRun ptrDiscipline
   venomExecSemantics venomInst venomState finite_map pred_set
-  contextCodegenRel codegenRel emitHelper compileEnv bodyPtrDefs memLocDefs
+  contextCodegenRel codegenRel emitHelper compileEnv loweringStateRelDefs bodyPtrDefs memLocDefs
   exprSimPtrProps fragGasPathPtr bodyPtrIfExpBytesFrame
   robustCopyTransportPtr typedCopyPtr valueEncodingProps exprSimProps
 

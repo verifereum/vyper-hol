@@ -3,7 +3,7 @@ Ancestors bodyPtrPrecompileBuiltinsArithmeticPrefix bodyPtrPrecompileBuiltinsAri
           bodyPtrPrecompileBuiltinsCompilerStages bodyPtrPrecompileBuiltinsBoundary
           bodyPtrPrecompileBuiltinsRecoveryResidual
           exprSimProps exprSimDefs exprSimWordArgs bodyPtrDefs
-          compileEnv emitHelper exprLoweringProps freshWrites list
+          compileEnv loweringStateRelDefs emitHelper exprLoweringProps freshWrites list
 
 (* Regroup compiler operations without expanding compiler records. *)
 Theorem point_transfer_group:

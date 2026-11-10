@@ -1,7 +1,7 @@
 (* Live bytes of a copied storage string exclude the exact copied tainted. *)
 Theory storageCopyRepresentationPtr
 Ancestors
-  storageCopyCompiledPtr exprSimCopy exprSimProps bodyPtrDefs compileEnv
+  storageCopyCompiledPtr exprSimCopy exprSimProps bodyPtrDefs compileEnv loweringStateRelDefs
   valueEncoding valueEncodingProps valueEncodingProofs loweringPosts
   venomMemProofs pred_set arithmetic list vyperValue
 

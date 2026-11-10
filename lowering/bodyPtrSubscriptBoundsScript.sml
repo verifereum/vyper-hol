@@ -3,7 +3,7 @@
 Theory bodyPtrSubscriptBounds
 Ancestors
   ptrSafeRun ptrDiscipline venomInst finite_map bodyPtrDefs
-  exprLowering emitHelper compileEnv emitHelperProps
+  exprLowering emitHelper compileEnv loweringStateRelDefs emitHelperProps
 
 Theorem bounds_lt_requires_provenance_compatibility:
   x <> y ==>

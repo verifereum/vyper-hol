@@ -6,7 +6,7 @@ Ancestors bodyPtrBopHashSuffix
   exprLoweringProps fragExec ghostPcTransportPtr bodyPtrSignedConvertSourceFrame
   emitHelperProps venomState venomInst
   venomExecSemantics ptrDiscipline bodyPtrDefs finite_map words arithmetic
-  list rich_list compileEnv pred_set exprLowering bodyPtrSignedConvertClamp
+  list rich_list compileEnv loweringStateRelDefs pred_set exprLowering bodyPtrSignedConvertClamp
   exprSimConvertFromBytes exprSimHyps exprSimHypsDefs loweringPosts
   memoryLocalRhsProps vyperAST bodyPtrSignedConvertConvertEntry
   bodyPtrSignedConvertUnsignedValue exprSimHash valueEncoding

@@ -2,7 +2,7 @@
 Theory bodyPtrEnvBuiltinsEdges
 Ancestors
   bodyPtrDefs fragGasSeqPtr gasSummaryComposePtr ptrDiscipline ptrSafeRun
-  venomState venomInst venomExecSemantics compileEnv finite_map pred_set
+  venomState venomInst venomExecSemantics compileEnv loweringStateRelDefs finite_map pred_set
   list memLocDefs codegenRel contextCodegenRel decoderGhostFramePtr
   fragGasPathPtr ghostPcTransportPtr venomInstProofs emitHelperProps
   exprLoweringProps emitHelper fragExec rich_list

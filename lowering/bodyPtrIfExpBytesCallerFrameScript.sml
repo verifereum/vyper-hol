@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpBytesCallerFrame
 Ancestors
   bodyPtrIfExpAllocSeparation bodyPtrIfExpAllocCompiler
-  compileEnv loweringPosts venomState venomInst finite_map loweringHalt words
+  compileEnv loweringStateRelDefs loweringPosts venomState venomInst finite_map loweringHalt words
   exprLoweringProps exprSimProps exprSimDefs bodyPtrIfExpBytesFrame
   stmtFragPtr
 

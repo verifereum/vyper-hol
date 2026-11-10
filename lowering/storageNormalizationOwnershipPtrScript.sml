@@ -139,7 +139,7 @@ Proof
   `stmt_state_rel ctx func cenv cx es t` by
     (irule copy_buffer_state_rel_frame >>
      qexistsl_tac [`b`, `inst`, `s`, `st`, `sz`] >>
-     fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   asm_rewrite_tac[] >> conj_tac
   >- (rpt strip_tac >>
       gvs[loweringPostsTheory.storage_holds_def, contract_storage_def,

@@ -2,7 +2,7 @@ Theory bodyPtrPopTargetSimPost
 Ancestors
   bodyPtrPopTargetDefs bodyPtrPopTargetSimAttributeAdd exprSimWordArgs assignTuplePtrLoadStep
   appendStorageGhostPtr bodyPtrEnvBuiltinsGhostCompose wordArgsPtr
-  targetPlaceSimCasesBase stateFrame exprSimProps compileEnv venomState
+  targetPlaceSimCasesBase stateFrame exprSimProps compileEnv loweringStateRelDefs venomState
   loweringPosts finite_map list
 
 (* The operational and semantic parts of a target post are independent.

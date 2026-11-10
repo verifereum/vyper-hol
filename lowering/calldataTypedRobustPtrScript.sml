@@ -1,9 +1,9 @@
 (* Typed representations at clean decoder endpoints. *)
 Theory calldataTypedRobustPtr
 Ancestors calldataDecodePtr calldataWordPtr robustCopyTransportPtr exprSimMemoryTransport
-  bodyPtrDefs venomMemProofs list valueEncoding valueEncodingProofs valueEncodingProps
+  bodyPtrDefs venomMemProofs list valueEncoding valueEncodingDefs valueEncodingProofs valueEncodingProps
   abiEncoder abiDecoderContract venomInst venomState venomExecSemantics words
-  codegenRel contextCodegenRel compileEnv ptrDiscipline ptrSafeRun fragExec finite_map
+  codegenRel contextCodegenRel compileEnv loweringStateRelDefs ptrDiscipline ptrSafeRun fragExec finite_map
   abiDecoderBytes abiDecoderBytesTyped abiCanonicalBytes abiDecoderGuards loweringPosts exprSimDefs exprSimProps
   contractABI vyperValue vyperTyping arithmetic abiDecoderClampedTyped
   abiDecoderCoherence abiDecoderTypedContract abiDecoderWordTyped abiDecoderClamp

@@ -4,7 +4,7 @@ Ancestors
   bodyPtrTypeBuiltinsEmptyWord bodyPtrTypeBuiltinsWordCases
   exprSimAggregates exprSimBuffer exprSimBufferEmptyExec exprSimAggregateLayout
   exprSimHypsDefs exprSimHyps exprSimProps exprSimDefs bodyPtrDefs
-  exprLowering exprLoweringProps loweringPosts compileEnv context
+  exprLowering exprLoweringProps loweringPosts compileEnv loweringStateRelDefs context
   vyperTypeSystem vyperInterpreter vyperState vyperValue vyperAST vyperContext
   gasContext fragGasPathPtr valueEncoding valueEncodingProofs words allocLimits
   venomState gasSummary exprSimVVFrame list venomInstProofs venomExecSemantics stmtFragPtr

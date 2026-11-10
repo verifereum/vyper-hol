@@ -1,7 +1,7 @@
 Theory bodyPtrSignedConvertSourceFrame
 Ancestors
   bodyPtrSignedConvertSourcePrefix bodyPtrDefs finite_map
-  exprSimProps exprLoweringProps compileEnv venomState venomExecSemantics
+  exprSimProps exprLoweringProps compileEnv loweringStateRelDefs venomState venomExecSemantics
 
 Theorem ghost_inv_readonly_frame:
   !P d cenv cx es G tn s G' tn' s'.

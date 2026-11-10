@@ -1,7 +1,7 @@
 Theory bodyPtrPopNestedLiveEntry
 Ancestors
   bodyPtrPopNestedLiveHandoff bodyPtrPopMemoryHeader
-  exprSimPopNestedLocalMemory bodyPtrDefs valueEncoding venomState
+  exprSimPopNestedLocalMemory bodyPtrDefs valueEncoding valueEncodingDefs venomState
 
 (* The natural root address makes this usable directly with robust encoding,
    without recovering any ghost_inv parameters. *)

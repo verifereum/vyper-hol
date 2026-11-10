@@ -7,7 +7,7 @@ Ancestors bodyPtrPrecompileBuiltinsArithmeticInput bodyPtrPrecompileBuiltinsStag
           exprSimPtrLiteralBuffer ghostPcTransportPtr fragGasPathPtr fragGasSeqPtr
           exprSimECArith exprSimDefs exprSimProps compileEnv venomState venomInst venomExecSemantics
           rich_list list byte bodyPtrDefs wordArgsPtr stmtSimDeclPath exprSimWordArgs
-          venomCallOracleDefs extCallOracle bodyPtrPrecompileBuiltinsBounds exprLoweringProps valueEncoding valueEncodingProps exprSimPrecompiles
+          venomCallOracleDefs extCallOracle bodyPtrPrecompileBuiltinsBounds exprLoweringProps valueEncoding valueEncodingDefs valueEncodingProps exprSimPrecompiles
 
 
 Theorem precompile_pointer_cursor:

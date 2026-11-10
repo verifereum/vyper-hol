@@ -2,7 +2,7 @@
 Theory bodyPtrBytestringBuiltinsSlice
 Ancestors
   bodyPtrBytestringBuiltinsBounds bodyPtrBytestringBuiltinsSource
-  bodyPtrBytestringBuiltinsBuffer builtinBytes emitHelper compileEnv fragExec
+  bodyPtrBytestringBuiltinsBuffer builtinBytes emitHelper compileEnv loweringStateRelDefs fragExec
   exprLoweringProps list rich_list exprSimPtrProps typedCopyPtr fragExecPtr
   ptrDiscipline venomInst venomState emitHelperProps fragGasPathPtr finite_map
   venomExecSemantics bodyPtrDefs freshWrites exprSimProps emittedSeqComposePtr

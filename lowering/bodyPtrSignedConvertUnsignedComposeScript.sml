@@ -5,7 +5,7 @@ Ancestors
   bodyPtrSignedConvertUnsignedLoad bodyPtrSignedConvertSourceFrame
   instSeqComposePtr fragGasSeqPtr exprLoweringProps fragExec ghostPcTransportPtr
   emitHelperProps venomState venomInst venomExecSemantics ptrDiscipline
-  bodyPtrDefs finite_map words arithmetic list compileEnv
+  bodyPtrDefs finite_map words arithmetic list compileEnv loweringStateRelDefs
 
 Theorem bytestring_source_run:
   src <> len /\ lookup_var src s = SOME a ==>

@@ -4,7 +4,7 @@ Ancestors wordLoadStorePtr instIdxIndep forPtrSeqCompose forPtrBulk typedCopyPtr
   exprSimBufferStore valueEncoding valueEncodingProps bodyPtrDefs
   loweringPosts venomState venomExecSemantics venomInst ptrSafeRun
   ptrDiscipline fragGasSeqPtr ghostPcTransportPtr finite_map exprLoweringProps
-  context compileEnv emitHelper loweringSlice list rich_list words integer_word arithmetic
+  context compileEnv loweringStateRelDefs emitHelper loweringSlice list rich_list words integer_word arithmetic
 
 Theorem for_bytes_copy_header:
   ((?cap bs. tv = BaseTV (BytesT (Dynamic cap)) /\ v = BytesV bs /\

@@ -4,7 +4,7 @@ Ancestors forPtrRangeEntry forPtrAdmin forPtrAllocationGhost forPtrArrayInvarian
   allocationPtr forPtrAllocation
   fragGasPathPtr venomState venomInst ptrDiscipline finite_map
   stmtSimForArrayFrag stmtSimForArrayLoop stmtSimProps bodyPtrDefs
-  exprLoweringProps forPtrRangePrepare loweringPosts compileEnv stmtFragPtr
+  exprLoweringProps forPtrRangePrepare loweringPosts compileEnv loweringStateRelDefs stmtFragPtr
 
 Theorem for_array_counter_entry_ptr:
   lookup_block entry func.fn_blocks = SOME

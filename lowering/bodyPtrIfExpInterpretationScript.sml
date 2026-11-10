@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpInterpretation
 Ancestors
-  bodyPtrIfExpRuntimeLayout bodyPtrIfExpDefaults valueEncoding
+  bodyPtrIfExpRuntimeLayout bodyPtrIfExpDefaults valueEncoding valueEncodingDefs
   vyperTypeSystem vyperTypeValues context
 
 Theorem ifexp_elems_in_memory_transport:

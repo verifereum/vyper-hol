@@ -1,7 +1,7 @@
 (* Ghost frames compose when allocations and local regions survive. *)
 Theory logGhostFramePtr
 Ancestors
-  bodyPtrDefs stmtSimLogArgs loweringPosts compileEnv
+  bodyPtrDefs stmtSimLogArgs loweringPosts compileEnv loweringStateRelDefs
   venomState finite_map list arithmetic
 
 Theorem ghost_kept_refl:

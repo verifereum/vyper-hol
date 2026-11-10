@@ -1,7 +1,7 @@
 (* Actual emitted code for the allocation-free calldata word decoder. *)
 Theory calldataWordPtr
 Ancestors calldataOverwritePtr calldataWordStepsPtr calldataClampPtr calldataDecodePtr abiDecoderClampedWord abiDecoderContract abiDecoderClamp
-  abiEncoder compileEnv emitHelper emitHelperProps exprLoweringProps fragExec
+  abiEncoder compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps fragExec
   venomInst list arithmetic words bodyPtrDefs decoderGhostFramePtr
   ptrDiscipline ptrSafeRun venomState venomExecSemantics entryDispatchPtr
   fragExecPtr ghostPcTransportPtr finite_map pred_set codegenRel instIdxIndep ptrSafetyTransport

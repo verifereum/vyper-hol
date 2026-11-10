@@ -3,7 +3,7 @@ Theory revertReasonPrefixPtr
 Ancestors
   wordLoadStorePtr revertReasonLayout allocationPtr typedCopyPtr fragExec fragGasSeqPtr ghostPcTransportPtr
   loweringSlice exprLoweringProps bodyPtrDefs fragExecPtr venomExecSemantics venomInst venomState
-  ptrDiscipline finite_map words arithmetic exprSimAlloc localPtrsProps compileEnv instIdxIndep
+  ptrDiscipline finite_map words arithmetic exprSimAlloc localPtrsProps compileEnv loweringStateRelDefs instIdxIndep
   normalizationAllocPtr decoderGhostFramePtr loweringPosts
   robustCopyTransportPtr emitHelperProps valueEncodingProps
 

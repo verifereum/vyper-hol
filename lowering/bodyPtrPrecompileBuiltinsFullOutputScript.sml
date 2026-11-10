@@ -2,7 +2,7 @@ Theory bodyPtrPrecompileBuiltinsFullOutput
 Ancestors bodyPtrPrecompileBuiltinsSuffixFrame bodyPtrPrecompileBuiltinsSuffixReady
           bodyPtrPrecompileBuiltinsSuffixGhost bodyPtrPrecompileBuiltinsSuffixPaths
           bodyPtrPrecompileBuiltinsFreshFrame bodyPtrPrecompileBuiltinsRuntime
-          exprSimPrecompiles exprSimHash exprLoweringProps compileEnv freshWrites
+          exprSimPrecompiles exprSimHash exprLoweringProps compileEnv loweringStateRelDefs freshWrites
           venomExecSemantics venomInst venomState ptrDiscipline bodyPtrDefs
           finite_map pred_set list rich_list valueCopy
 

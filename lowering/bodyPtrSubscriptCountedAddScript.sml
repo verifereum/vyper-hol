@@ -3,7 +3,7 @@ Theory bodyPtrSubscriptCountedAdd
 Ancestors
   bodyPtrSubscriptReadOnly bodyPtrSubscriptTupleSuffix bodyPtrAttributeAdd
   typedCopyPtr emitHelperProps exprLoweringProps words finite_map
-  bodyPtrDefs ptrDiscipline venomState venomInst emitHelper compileEnv
+  bodyPtrDefs ptrDiscipline venomState venomInst emitHelper compileEnv loweringStateRelDefs
   bodyPtrSubscriptBounds bodyPtrSubscriptNamedTuplePostBoundary loweringPosts
 
 Theorem add_displacement_coverage:

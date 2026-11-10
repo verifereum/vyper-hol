@@ -92,7 +92,7 @@ Proof
   `wb_frame cenv es protected s (jump_to good s)` by
     simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
       venomStateTheory.jump_to_def, venomStateTheory.lookup_var_def,
-      compileEnvTheory.local_region_def] >>
+      loweringStateRelDefsTheory.local_region_def] >>
   `?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn (jump_to good s) 0 H un (OK t) /\
     ptr_val_ok cx ty (BytesV bs) (Var dst) H un t /\ ptr_buf_ok cenv e (Var dst) H t /\
     ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es protected G tn (jump_to good s) H un /\
@@ -102,7 +102,7 @@ Proof
     lookup_var dst t = SOME a /\ t.vs_allocas = s.vs_allocas` by
     (mp_tac (raw_call_bytes_suffix_stage |> Q.INST [`s` |-> `jump_to good s`, `sa` |-> `sn`]) >>
      impl_tac >- (gvs[venomStateTheory.jump_to_def, venomStateTheory.lookup_var_def,
-       bodyPtrDefsTheory.ptr_covers_def, compileEnvTheory.local_region_def] >> metis_tac[]) >>
+       bodyPtrDefsTheory.ptr_covers_def, loweringStateRelDefsTheory.local_region_def] >> metis_tac[]) >>
      strip_tac >>
      qexistsl_tac [`H`, `un`, `t`] >> gvs[venomStateTheory.jump_to_def]) >>
   `ci_mono protected protected` by simp[exprLoweringPropsTheory.ci_mono_refl] >>
@@ -138,7 +138,7 @@ Proof
     callStepPtrTheory.ptr_buf_ok_zero_type, wordArgsPtrTheory.ghost_kept_refl] >>
   simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
     venomStateTheory.jump_to_def, venomStateTheory.lookup_var_def,
-    compileEnvTheory.local_region_def]
+    loweringStateRelDefsTheory.local_region_def]
 QED
 
 (* The two nonreverting source values share a post-CALL entry and frame. *)

@@ -2,7 +2,7 @@ Theory bodyPtrTypeBuiltinsCastExecution
 Ancestors bodyPtrTypeBuiltinsCast exprLowering exprLoweringProps
   emitHelperProps compileEnv venomExecSemantics venomState venomInst
   words list finite_map arithmetic exprSimConvert vyperValueOperation
-  vyperValue vyperTyping valueEncoding compileEnv
+  vyperValue vyperTyping valueEncoding valueEncodingDefs compileEnv
 
 Theorem cast_sequence_actual:
   eval_operand x s = SOME w /\ mload (w2n w) s = n2w len /\

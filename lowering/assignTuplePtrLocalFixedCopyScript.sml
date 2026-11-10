@@ -5,7 +5,7 @@ Ancestors
   typedCopyPtr fragExecPtr fragGasSeqPtr bodyPtrDefs ptrSafeRun ptrDiscipline
   exprLoweringProps exprSimBufferStore context compileEnv emitHelper emitHelperProps fragExec
   venomExecSemantics venomInstProofs venomInst venomState finite_map
-  list rich_list arithmetic pred_set words valueEncoding
+  list rich_list arithmetic pred_set words valueEncoding valueEncodingDefs
 
 Theorem mcopy_operand_seq_ptr:
   !D ctx fn PG G tn s id dst src count_op a b n.

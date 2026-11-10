@@ -5,7 +5,7 @@ Ancestors
   exprSimAttributeFields stmtSimAugAssignAttr exprSimHyps exprSimHypsDefs
   exprSimDefs exprSimProps bodyPtrDefs vyperTypeSystem vyperValue
   stmtSimAssignStore stmtSimAugAssign exprSimSource valueEncoding
-  vyperTypeStatePreservation vyperTyping exprLoweringProps compileEnv
+  vyperTypeStatePreservation vyperTyping exprLoweringProps compileEnv loweringStateRelDefs
 
 Theorem augassign_attr_field_inputs_ptr:
   expr_sim_inv cenv cx env es /\

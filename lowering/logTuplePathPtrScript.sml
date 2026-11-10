@@ -3,7 +3,7 @@ Theory logTuplePathPtr
 Ancestors
   logTupleCallerPtr fragGasSeqPtr ghostPcTransportPtr exprLoweringProps
   exprSimPtrLiteralBuffer
-  bodyPtrDefs stmtFragPtr localPtrsProps ptrDiscipline venomState compileEnv
+  bodyPtrDefs stmtFragPtr localPtrsProps ptrDiscipline venomState compileEnv loweringStateRelDefs
   venomInst finite_map words list arithmetic
 
 Theorem log_allocated_tuple_raw_path_ptr[local]:

@@ -3,7 +3,7 @@ Theory reasonCodeLoadPtr
 Ancestors
   reasonCodePtr reasonCodeOffsetPtr reasonTupleCopyPtr emitHelper
   venomExecSemantics venomInst venomInstProofs venomState finite_map words ptrSafeRun
-  ptrDiscipline context compileEnv fragExec codegenRel
+  ptrDiscipline context compileEnv loweringStateRelDefs fragExec codegenRel
 
 Theorem reason_code_dload_resources_ptr:
   emit_inst DLOAD [src] [out] sa = ((),sb) /\

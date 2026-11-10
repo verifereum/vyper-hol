@@ -139,11 +139,11 @@ Resume subscript_array_framed_code_ptr[base_normal]:
     (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_tac o CONJUNCT1 o REWRITE_RULE [vv_post_def]) >>
      simp[exprLoweringPropsTheory.stmt_state_rel_def,
-       compileEnvTheory.state_rel_gas_obs, exprLoweringPropsTheory.immutable_alloca_sep_def] >>
+       loweringStateRelDefsTheory.state_rel_gas_obs, exprLoweringPropsTheory.immutable_alloca_sep_def] >>
      metis_tac[]) >>
   simp[] >> rpt conj_tac
-  >- gvs[compileEnvTheory.not_fresh_at_def]
-  >- gvs[compileEnvTheory.not_fresh_at_def] >>
+  >- gvs[loweringStateRelDefsTheory.not_fresh_at_def]
+  >- gvs[loweringStateRelDefsTheory.not_fresh_at_def] >>
   simp[gasContextTheory.gas_admissible_def] >> rpt strip_tac >>
   `expr_body_pre cenv cx env e2 (es_end with gas_obs := gs)` by fs[] >>
   drule_all (REWRITE_RULE [ETA_THM] expr_body_pre_res_ok) >> simp[]
@@ -272,7 +272,7 @@ Resume subscript_array_framed_code_ptr[suffix_ghost]:
     (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >>
      conj_tac
      >- (qexists `func` >>
-         fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+         fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
      qexistsl [`G`,`es_end with gas_obs := []`,`t`,`sm`,`tn`] >> simp[] >>
      fs[vv_post_def, loweringPostsTheory.wb_frame_def] >> metis_tac[]) >>
   suspend "suffix_finish"
@@ -308,9 +308,9 @@ Resume subscript_array_framed_code_ptr[suffix_finish]:
   simp[compileEnvTheory.word_scale_def, compileEnvTheory.elem_size_in_location_def,
     compileEnvTheory.is_slot_addressed_def] >>
   rpt conj_tac
-  >- gvs[compileEnvTheory.not_fresh_at_def]
-  >- gvs[compileEnvTheory.not_fresh_at_def]
-  >- (rpt strip_tac >> gvs[compileEnvTheory.not_fresh_at_def] >> metis_tac[]) 
+  >- gvs[loweringStateRelDefsTheory.not_fresh_at_def]
+  >- gvs[loweringStateRelDefsTheory.not_fresh_at_def]
+  >- (rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[]) 
   >- (qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = _` mp_tac >>
       simp[compileEnvTheory.word_scale_def, compileEnvTheory.elem_size_in_location_def,
         compileEnvTheory.is_slot_addressed_def]) >>

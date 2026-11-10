@@ -27,7 +27,7 @@ Ancestors
   immutableWordExecution typedCopyPtr decoderGhostFramePtr
   exprPtrUnwrapCopyEdges exprPtrUnwrapScalarEdges fragGasSeqPtr ptrSafeRun
   ptrDiscipline bodyPtrDefs
-  context compileEnv emitHelper emitHelperProps exprLoweringProps
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   codegenRel contextCodegenRel memLocDefs
   venomExecSemantics venomInst venomState instIdxIndep fragExec
   entrySinkExtraction fragGasPathPtr

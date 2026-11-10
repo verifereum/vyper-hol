@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpStorageSingle
 Ancestors bodyPtrIfExpMaterializeSingle bodyPtrIfExpStorageSupplier
   bodyPtrIfExpStorageAllocation bodyPtrIfExpStorageSource pred_set
-  context compileEnv emitHelper fragExec loweringHalt bodyPtrIfExpStorageAllocationFrame
+  context compileEnv loweringStateRelDefs emitHelper fragExec loweringHalt bodyPtrIfExpStorageAllocationFrame
   bodyPtrIfExpSingleCopyPost bodyPtrIfExpActiveCopyPost bodyPtrIfExpAllocSource exprSimStorageCopy valueEncodingTyping
   bodyPtrIfExpBytesInputs loweringPosts venomState finite_map valueEncodingProps
 

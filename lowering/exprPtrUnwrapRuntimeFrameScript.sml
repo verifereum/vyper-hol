@@ -3,7 +3,7 @@ Ancestors
   exprPtrUnwrapCopyFrames exprPtrUnwrapFullFrames exprPtrUnwrapLoopInvariant
   exprPtrUnwrapFrames slotCopyExecution fragGasPathPtr fragGasSeqPtr
   bodyPtrDefs ptrDiscipline finite_map venomExecSemantics venomState
-  compileEnv copyExecution arithmetic
+  compileEnv loweringStateRelDefs copyExecution arithmetic
 
 (* Runtime companion to slot_copy_inv: projections at the same counted witness
    make downstream loop composition independent of semantic witness choices. *)

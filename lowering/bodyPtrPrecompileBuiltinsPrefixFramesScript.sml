@@ -160,7 +160,7 @@ Proof
      gvs[DISJOINT_ALT, arithmeticTheory.ADD_COMM] >>
      `i < sz + w2n w` by decide_tac >> metis_tac[]) >>
   simp[] >> rpt strip_tac >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem local_region_allocation_growth_disjoint:
@@ -173,7 +173,7 @@ Proof
   `s.vs_alloca_next <= x` by metis_tac[staging_alloca_footprint_above_frontier] >>
   `regions_disjoint b sz x 1` by
     metis_tac[localPtrsPropsTheory.local_ptrs_rel_above_frontier] >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem emitted_allocation_spatial_frame:
@@ -253,5 +253,5 @@ Proof
   qpat_assum `compile_alloc_buffer insz sf = (ib,sa)`
     (mp_then Any (drule_all_then strip_assume_tac) emitted_allocation_spatial_frame) >>
   conj_tac >- metis_tac[DISJOINT_UNION, DISJOINT_SYM] >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED

@@ -1,6 +1,6 @@
 Theory bodyPtrBopInMemoryHeaderRuntime
 Ancestors bodyPtrBopInRuntimeEntry bodyPtrBopInLoopSearch
-  bodyPtrBopInRuntimeContracts venomState ptrDiscipline compileEnv
+  bodyPtrBopInRuntimeContracts venomState ptrDiscipline compileEnv loweringStateRelDefs
   vyperValue vyperTyping context bodyPtrBopInHeaderCode bodyPtrBopInLoopContract
   fragGasPathPtr
 

@@ -88,7 +88,7 @@ Theorem membership_condition_frame:
 Proof
   strip_tac >> drule_all membership_compiled_condition_lookup >> strip_tac >>
   `(!x. not_fresh_at sa x ==> x <> "%" ++ toString (sa.cs_next_var+2))` by
-    (simp[compileEnvTheory.not_fresh_at_def] >> rpt strip_tac >>
+    (simp[loweringStateRelDefsTheory.not_fresh_at_def] >> rpt strip_tac >>
      first_x_assum (qspec_then `2` mp_tac) >> simp[]) >>
   irule membership_eq_branch_frame >>
   simp[venomInstTheory.get_instruction_def] >>
@@ -117,7 +117,7 @@ Proof
   >- (drule membership_frame_scalar_jump >>
       disch_then irule >>
       simp[FLOOKUP_DRESTRICT, op_taint_def, set_var_taint_def,
-        FLOOKUP_UPDATE, compileEnvTheory.not_fresh_at_def] >>
+        FLOOKUP_UPDATE, loweringStateRelDefsTheory.not_fresh_at_def] >>
       metis_tac[arithmeticTheory.ADD_0]) >>
   fs[membership_loop_registers_def, op_prov_def] >>
   simp[membership_loop_registers_def, jump_to_def, update_var_def,
@@ -296,7 +296,7 @@ Resume membership_increment_frame[frame]:
   fs[membership_loop_frame_def] >> conj_tac
   >- (rpt strip_tac >>
       `x <> tmp /\ x <> "%" ++ toString (sa.cs_next_var+1)` by
-        (fs[compileEnvTheory.not_fresh_at_def] >> metis_tac[]) >>
+        (fs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[]) >>
       simp[jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
         FLOOKUP_DRESTRICT, op_taint_def] >>
       fs[lookup_var_def, op_taint_def]) >>
@@ -369,7 +369,7 @@ Proof
   drule membership_drop_pair_lookup >> strip_tac >>
   `(!x. not_fresh_at sa x ==>
     x <> "%" ++ toString (sa.cs_next_var+5+delta+width))` by
-    (simp[compileEnvTheory.not_fresh_at_def] >> rpt strip_tac >>
+    (simp[loweringStateRelDefsTheory.not_fresh_at_def] >> rpt strip_tac >>
      first_x_assum (qspec_then `5+delta+width` mp_tac) >> simp[]) >>
   irule membership_eq_branch_control >> simp[] >>
   qexistsl_tac [`Var ("%" ++ toString (sa.cs_next_var+4+delta+width))`,
@@ -455,7 +455,7 @@ Proof
   strip_tac >> drule_all membership_compiled_increment_lookup >> strip_tac >>
   `(!x. not_fresh_at sa x ==>
     x <> "%" ++ toString (sa.cs_next_var+6+delta+width))` by
-    (simp[compileEnvTheory.not_fresh_at_def] >> rpt strip_tac >>
+    (simp[loweringStateRelDefsTheory.not_fresh_at_def] >> rpt strip_tac >>
      first_x_assum (qspec_then `6+delta+width` mp_tac) >> simp[]) >>
   `?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     membership_loop_frame sa G0 tn0 s0 G' tn' t /\
@@ -553,7 +553,7 @@ Proof
   drule membership_compiled_loop_exit >> simp[] >> strip_tac >>
   `(!x. not_fresh_at sa x ==>
     x <> "%" ++ toString (sa.cs_next_var+7+delta+width))` by
-    (simp[compileEnvTheory.not_fresh_at_def] >> rpt strip_tac >>
+    (simp[loweringStateRelDefsTheory.not_fresh_at_def] >> rpt strip_tac >>
      first_x_assum (qspec_then `7+delta+width` mp_tac) >> simp[]) >>
   `?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     membership_loop_frame sa G0 tn0 s0 G' tn' t /\

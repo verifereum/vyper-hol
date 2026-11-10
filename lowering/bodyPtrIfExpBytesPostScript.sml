@@ -45,8 +45,8 @@ Proof
   qpat_x_assum `!m. mem_agree_outside tn.t_mem _ m ==> _` kall_tac >>
   qpat_x_assum `val_in_memory stv v _ _` kall_tac >>
   drule_all bytestring_type_value >> strip_tac >>
-  gvs[valueEncodingTheory.val_in_memory_def,
-      valueEncodingTheory.mem_word_at_def, GSYM valueEncodingTheory.mem_bytes_at_def]
+  gvs[valueEncodingDefsTheory.val_in_memory_def,
+      valueEncodingDefsTheory.mem_word_at_def, GSYM valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem bytestring_copy_effects:

@@ -2,7 +2,7 @@
 Theory storageWordCompilePtr
 Ancestors
   storageCopyWordPtr reasonNormalizePtr literalAllocPathPtr loweringHalt exprSimCopy
-  emitHelper emitHelperProps context compileEnv exprLoweringProps fragExec
+  emitHelper emitHelperProps context compileEnv loweringStateRelDefs exprLoweringProps fragExec
   moduleLoweringProps localPtrsProps venomInst venomState words arithmetic list rich_list
   ptrDiscipline fragGasPathPtr vfmConstants
 

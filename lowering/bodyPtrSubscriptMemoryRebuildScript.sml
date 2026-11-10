@@ -3,7 +3,7 @@
 Theory bodyPtrSubscriptMemoryRebuild
 Ancestors
   bodyPtrSubscriptCurrentMemory valueEncodingProps valueEncodingProofs
-  valueTypingMemoryProps valueEncoding exprSimAggregateEncoding vyperTyping
+  valueTypingMemoryProps valueEncoding valueEncodingDefs exprSimAggregateEncoding vyperTyping
   list arithmetic tupleMemoryLayout typedCopyTuplePtr vyperTypeDefaults
   loweringPosts alist vyperArray vyperAssignPreservesType vyperValueOperation pair vyperState
 

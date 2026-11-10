@@ -2,7 +2,7 @@
    Only this head, not its payload or padding, is framed through the prefix. *)
 Theory revertReasonMemoryFramePtr
 Ancestors
-  revertReasonPrefixFramePtr abiEncoderZeroFrame valueEncoding valueEncodingProps
+  revertReasonPrefixFramePtr abiEncoderZeroFrame valueEncoding valueEncodingDefs valueEncodingProps
   exprLoweringProps compileEnv venomState venomMemDefs venomMemProps
   words arithmetic finite_map list pred_set allocaSiteResource
 

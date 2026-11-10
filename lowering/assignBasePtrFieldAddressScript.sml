@@ -4,7 +4,7 @@ Ancestors assignBasePtrFieldForce bodyPtrAttributeAdd bodyPtrAttributeCase
   wordArgsPtr exprLoweringProps loweringPosts exprSimWordArgs assignBasePtrOffset
   exprSimAggregateChildren exprSimVVFrame exprOperandVar freshWrites
   bodyPtrDefs ptrDiscipline venomState venomExecSemantics finite_map
-  compileEnv context ASCIInumbers emitHelper emitHelperProps pred_set arithmetic
+  compileEnv loweringStateRelDefs context ASCIInumbers emitHelper emitHelperProps pred_set arithmetic
 
 Theorem assign_base_field_vv_update:
   ptr_vv_ok cx ty tv vv es G tn s /\

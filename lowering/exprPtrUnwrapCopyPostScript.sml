@@ -1,7 +1,7 @@
 Theory exprPtrUnwrapCopyPost
 Ancestors
   exprPtrUnwrapLoopInvariant slotCopyExecution fragGasPathPtr fragGasSeqPtr
-  ptrDiscipline bodyPtrDefs valueEncoding byte list rich_list
+  ptrDiscipline bodyPtrDefs valueEncoding valueEncodingDefs byte list rich_list
 
 (* Runtime and ghost prefix projections are kept independent of execution. *)
 Theorem copy_prefix_words:

@@ -9,7 +9,7 @@ Ancestors bodyPtrEnvBuiltinsEntryFrame bodyPtrEnvBuiltinsBlockHashSource
   bodyPtrDefs bodyPtrPreds gasSummaryComposePtr fragGasPathPtr gasSummary gasExemptCert
   vyperTypeBuiltins vyperTypeSystem vyperInterpreter vyperValue vyperState
   builtinSimple vyperTypeInvariants vyperContext vyperTyping vyperAST
-  builtinProps compileEnv context loweringPosts venomState venomInst finite_map list fragExec exprSimHyps
+  builtinProps compileEnv loweringStateRelDefs context loweringPosts venomState venomInst finite_map list fragExec exprSimHyps
 
 Theorem blockhash_body_pre_args:
   expr_body_pre cenv cx env (Builtin ann BlockHash args) es ==>

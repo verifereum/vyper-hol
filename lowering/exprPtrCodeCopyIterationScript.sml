@@ -2,7 +2,7 @@
 Theory exprPtrCodeCopyIteration
 Ancestors
   exprPtrCodeCopyOffset exprPtrCodeCopyLoad exprPtrCodeCopyStore
-  emittedSeqComposePtr exprSimCopy context compileEnv exprLoweringProps
+  emittedSeqComposePtr exprSimCopy context compileEnv loweringStateRelDefs exprLoweringProps
   emitHelper emitHelperProps fragGasSeqPtr ptrDiscipline venomState venomInst
   finite_map list arithmetic bodyPtrDefs immutableCopyExecution
 

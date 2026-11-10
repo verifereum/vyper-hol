@@ -2,8 +2,8 @@
 Theory augAssignPtrFieldStorePost
 Ancestors
   augAssignPtrFieldStore augAssignPtrStore augAssignPtrFieldLoad
-  bodyPtrDefs exprSimProps localPtrsProps valueEncoding valueEncodingProps
-  stmtSimAssignAttr stmtSimAssignStore vyperLookup finite_map list compileEnv
+  bodyPtrDefs exprSimProps localPtrsProps valueEncoding valueEncodingDefs valueEncodingProps
+  stmtSimAssignAttr stmtSimAssignStore vyperLookup finite_map list compileEnv loweringStateRelDefs
 
 Theorem local_contained_word_store_exterior:
   local_ptrs_rel fn cenv scopes s /\ name <> other /\

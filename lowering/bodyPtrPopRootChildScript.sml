@@ -1,6 +1,6 @@
 Theory bodyPtrPopRootChild
 Ancestors
-  bodyPtrPopBoundary accountsRelProps compileEnv ptrDiscipline vyperStorage
+  bodyPtrPopBoundary accountsRelProps compileEnv loweringStateRelDefs ptrDiscipline vyperStorage
   words pred_set
 
 (* This uses the child's ORIGINAL runtime liveness. Global deadness after

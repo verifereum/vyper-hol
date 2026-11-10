@@ -2,7 +2,7 @@
 Theory bodyPtrSubscriptIndexRefresh
 Ancestors
   bodyPtrSubscriptLocalAlias bodyPtrSubscriptBoundary loweringPosts
-  exprLoweringProps bodyPtrDefs compileEnv
+  exprLoweringProps bodyPtrDefs compileEnv loweringStateRelDefs
 
 Theorem expr_post_local_pointer:
   expr_post ctx func cenv cx idx es sa sb s0 es' iv iop s /\

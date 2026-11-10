@@ -3,7 +3,7 @@ Ancestors bodyPtrPrecompileBuiltinsArithmeticRun
           bodyPtrPrecompileBuiltinsCompletePrefixes
           bodyPtrPrecompileBuiltinsRunAllocation
           bodyPtrPrecompileBuiltinsPrefixFrames
-          bodyPtrDefs compileEnv exprLoweringProps venomState finite_map pred_set list
+          bodyPtrDefs compileEnv loweringStateRelDefs exprLoweringProps venomState finite_map pred_set list
 
 (* Arithmetic leaves the output allocation uninitialized. Only the input
    range is cleared from memory taint before the precompile call. *)

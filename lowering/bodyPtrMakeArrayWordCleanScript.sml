@@ -1,7 +1,7 @@
 (* Typed cleanliness boundary probes; raw instruction execution lives in CopyStep. *)
 Theory bodyPtrMakeArrayWordClean
 Ancestors
-  bodyPtrDefs representationCleanPtr exprSimUnwrap compileEnv vyperValue
+  bodyPtrDefs representationCleanPtr exprSimUnwrap compileEnv loweringStateRelDefs vyperValue
   ptrDiscipline venomState exprSimProps
 
 Theorem word_type_no_dead_bytes:

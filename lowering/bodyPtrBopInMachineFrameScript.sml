@@ -1,7 +1,7 @@
 Theory bodyPtrBopInMachineFrame
 Ancestors
   bodyPtrBopInMachineMemory bodyPtrBopInJointSource bodyPtrBopInActualSuffix
-  bodyPtrDefs compileEnv compileVyper venomState ptrDiscipline finite_map
+  bodyPtrDefs compileEnv loweringStateRelDefs compileVyper venomState ptrDiscipline finite_map
   bodyPtrBopInSourceFrame bodyPtrBopInLiveSourceFrame vyperState vyperContext
 
 (* The machine witness starts at the contained interior suffix, not at entry.

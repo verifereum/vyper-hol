@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpStorageStart
 Ancestors
   bodyPtrIfExpAllocCompiler bodyPtrIfExpAllocSource allocationPtr
-  slotCopyExecution emitHelperProps loweringHalt compileEnv exprLowering
+  slotCopyExecution emitHelperProps loweringHalt compileEnv loweringStateRelDefs exprLowering
   context emitHelper
   venomExecSemantics venomInst venomState finite_map
 

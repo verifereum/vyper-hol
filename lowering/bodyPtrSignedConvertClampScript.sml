@@ -3,7 +3,7 @@ Ancestors
   bodyPtrSignedConvertScalarOps bodyPtrSignedConvertBool bodyPtrSignedConvertIszero
   venomExecSemantics exprSendPtr fragGasSeqPtr bodyPtrSignedConvertScalarTransfer list
   instSeqComposePtr fragExec instIdxIndep exprLowering exprLoweringProps emitHelperProps
-  compileEnv ASCIInumbers rich_list ptrDiscipline finite_map venomState venomInst
+  compileEnv loweringStateRelDefs ASCIInumbers rich_list ptrDiscipline finite_map venomState venomInst
 
 Theorem int_clamp_unsigned_code:
   compile_int_clamp F bits x sa = (out,sb) ==>

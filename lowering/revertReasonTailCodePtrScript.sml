@@ -2,7 +2,7 @@
 Theory revertReasonTailCodePtr
 Ancestors
   revertReasonTailPtr revertReasonLayout fragExec exprLoweringProps
-  context compileEnv bodyPtrDefs reasonCopySourcePtr venomInst venomState
+  context compileEnv loweringStateRelDefs bodyPtrDefs reasonCopySourcePtr venomInst venomState
   words arithmetic list rich_list finite_map
 
 Theorem revert_reason_tail_code:

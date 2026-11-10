@@ -3,7 +3,7 @@ Theory bodyPtrEnvBuiltinsSelectorSuffix
 Ancestors wordLoadStorePtr bodyPtrEnvBuiltinsSelectorBuffer bodyPtrEnvBuiltinsAllocation
   bodyPtrEnvBuiltinsEdges allocationPtr typedCopyPtr loweringSlice
   ghostPcTransportPtr decoderGhostFramePtr loweringHalt fragExecPtr fragExec fragGasSeqPtr ptrDiscipline venomState
-  venomExecSemantics venomInst compileEnv exprLoweringProps exprSimProps
+  venomExecSemantics venomInst compileEnv loweringStateRelDefs exprLoweringProps exprSimProps
   bodyPtrDefs localPtrsProps instIdxIndep finite_map pred_set list words
 
 (* Allocation is size-parametric: selector buffers and fixed hash scratch use

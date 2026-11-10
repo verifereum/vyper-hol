@@ -2,7 +2,7 @@
 Theory bodyPtrMakeArrayAllocBuffer
 Ancestors
   bodyPtrMakeArrayAllocationPost exprSimAlloc fragGasPathPtr exprLoweringProps
-  context compileEnv emitHelperProps venomInst venomState list rich_list
+  context compileEnv loweringStateRelDefs emitHelperProps venomInst venomState list rich_list
   fragGasSeqAbort venomExecProps venomInstProps arithmetic venomExecSemantics
   allocationPtr finite_map ptrDiscipline fragExecPtr bodyPtrDefs loweringHalt
 

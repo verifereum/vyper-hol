@@ -2,7 +2,7 @@
 Theory augAssignPtrStorageFieldInputs
 Ancestors
   stmtSimAssignStorage stmtSimAugAssignAttrStorage stmtLowering
-  exprLowering emitHelper compileEnv stmtSimDefs loweringPosts
+  exprLowering emitHelper compileEnv loweringStateRelDefs stmtSimDefs loweringPosts
   vyperInterpreter stmtSimAssignAttrStorage exprSimTopLevelProps
   accountsRelProps vyperStorageLayoutSafety vyperLookupStorage
   vyperStorageBackend vfmState codegenRel vyperState

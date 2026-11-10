@@ -2,7 +2,7 @@ Theory bodyPtrPopNestedLivePost
 Ancestors
   bodyPtrPopNestedLiveHandoff exprSimPopNestedLocalPost
   augAssignPtrFieldStore valueEncodingProps venomState pred_set
-  exprSimPopNestedLocalMemory valueEncoding exprSimPop
+  exprSimPopNestedLocalMemory valueEncoding valueEncodingDefs exprSimPop
 
 (* Restore the overwritten header before applying the ordinary path-update
    lemma. This keeps robustness independent of the particular tainted bytes. *)

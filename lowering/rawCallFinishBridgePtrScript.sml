@@ -101,7 +101,7 @@ Theorem oracle_suffix_frames_compose:
 Proof
   strip_tac >>
   `local_ptrs_rel func cenv es.scopes s` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `protected.cs_next_var <= sa.cs_next_var /\
    protected.cs_next_id <= sa.cs_next_id` by
     fs[exprLoweringPropsTheory.ci_mono_def] >>

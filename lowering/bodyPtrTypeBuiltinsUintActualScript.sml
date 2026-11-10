@@ -2,7 +2,7 @@
 Theory bodyPtrTypeBuiltinsUintActual
 Ancestors bodyPtrTypeBuiltinsBytesUintSemantics bodyPtrSignedConvertUnsignedLoad
   bodyPtrSignedConvertClamp freshWrites varsExt exprSimProps
-  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
+  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs
   venomExecSemantics venomInst venomState finite_map rich_list list
 
 Theorem readonly_step_frame[local]:

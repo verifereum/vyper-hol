@@ -2,7 +2,7 @@
 Theory bodyPtrMakeArrayLayoutTransport
 Ancestors
   bodyPtrDefs exprSimProps compileEnv vyperTypeSystem vyperTyping
-  valueEncoding loweringPosts vyperValue exprLowering vyperAST vyperTypeCallGraph
+  valueEncoding valueEncodingDefs loweringPosts vyperValue exprLowering vyperAST vyperTypeCallGraph
   exprSimIfExp exprSimHypsDefs vyperTypeInvariants
 
 Theorem bytestring_ptr_mem_ok_transport:

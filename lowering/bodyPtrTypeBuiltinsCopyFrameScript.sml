@@ -3,7 +3,7 @@ Ancestors
   bodyPtrTypeBuiltinsCopyCounted bodyPtrTypeBuiltinsEmptyFrame
   bodyPtrTypeBuiltinsEmptyAlloc exprSimAlloc robustCopyTransportPtr
   exprLoweringProps localPtrsProps venomMemProofs pred_set
-  venomState venomExecSemantics bodyPtrDefs ptrDiscipline compileEnv exprSimProps arithmetic
+  venomState venomExecSemantics bodyPtrDefs ptrDiscipline compileEnv loweringStateRelDefs exprSimProps arithmetic
 
 Theorem copy_memory_destination_robust:
   compile_copy_memory (Var dst) (Var src) n sa = ((),sb) /\

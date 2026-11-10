@@ -21,8 +21,8 @@ Proof
     (first_x_assum irule >> simp[mem_agree_outside_def]) >>
   drule_all bytestring_type_value >> strip_tac >> gvs[] >>
   (conj_tac
-   >- (gvs[valueEncodingTheory.val_in_memory_def, mload_def,
-            valueEncodingTheory.mem_word_at_def] >> metis_tac[]) >>
+   >- (gvs[valueEncodingDefsTheory.val_in_memory_def, mload_def,
+            valueEncodingDefsTheory.mem_word_at_def] >> metis_tac[]) >>
    FIRST [drule robust_val_in_memory_bytes_clean,
           drule robust_val_in_memory_string_clean] >> simp[])
 QED
@@ -63,6 +63,6 @@ Proof
   qpat_x_assum `val_in_memory stv v _ _` kall_tac >>
   qspecl_then [`tenv`, `dty`, `dtv`] mp_tac bytestring_type_value >>
   simp[] >> strip_tac >>
-  gvs[valueEncodingTheory.val_in_memory_def,
-      valueEncodingTheory.mem_word_at_def, GSYM valueEncodingTheory.mem_bytes_at_def]
+  gvs[valueEncodingDefsTheory.val_in_memory_def,
+      valueEncodingDefsTheory.mem_word_at_def, GSYM valueEncodingDefsTheory.mem_bytes_at_def]
 QED

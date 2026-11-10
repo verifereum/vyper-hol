@@ -4,7 +4,7 @@ Ancestors
   stmtSimForRange stmtSimForParts stmtSimForLoop stmtSimProps
   forPtrRangeEntry forPtrRangeSource stmtSimFor localPtrsProps
   exprSimWordArgs exprSimProps stmtSimDefs loweringPosts stmtLowering
-  exprLoweringProps compileEnv emitHelperProps loweringSlice venomInst
+  exprLoweringProps compileEnv loweringStateRelDefs emitHelperProps loweringSlice venomInst
   ptrDiscipline ptrSafeRun list rich_list stmtSimDeclCompose valueEncoding
   exprBopSimProps gasContext
   bodyPtrDefs stmtFragPtr gasSummaryComposePtr gasOutcomeInitialObsPtr

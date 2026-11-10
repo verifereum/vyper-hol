@@ -2,7 +2,7 @@
 Theory bodyPtrBytestringBuiltinsConcatCompile
 Ancestors
   bodyPtrBytestringBuiltinsConcatPrefix bodyPtrBytestringBuiltinsConcatArgs
-  exprSimConcatResult exprLoweringProps exprLowering compileEnv
+  exprSimConcatResult exprLoweringProps exprLowering compileEnv loweringStateRelDefs
   fragExec context emitHelper emitHelperProps loweringPosts words list pair arithmetic
   venomInst bodyPtrDefs
 

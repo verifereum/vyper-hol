@@ -1,7 +1,7 @@
 Theory bodyPtrPopNestedLiveCompiler
 Ancestors
   exprSimPopNestedLocalRun exprLowering exprLoweringProps context emitHelperProps emitHelper
-  fragExec compileEnv list rich_list
+  fragExec compileEnv loweringStateRelDefs list rich_list
 
 Theorem pop_memory_compile_stages:
   compile_dynarray_pop hdr 32 scale ctor imm LocMemory sa = (dst,sz) ==>

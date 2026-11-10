@@ -5,7 +5,7 @@ Ancestors
   logScalarChildPtr logAbiPrefixPtr logTopicScalarPtr abiBuiltinPrefix
   abiEncoderCounters appendStorageGhostPtr abiDecoderDynamicLoopSetup ASCIInumbers
   logScalarChildShape logInstSeqPtr stmtSimLogEncodeLayout
-  emitHelperProps exprLoweringProps emitHelper compileEnv bodyPtrDefs
+  emitHelperProps exprLoweringProps emitHelper compileEnv loweringStateRelDefs bodyPtrDefs
   ptrDiscipline venomState venomInst words arithmetic list
 
 Theorem log_member_source_add_seq_ptr:

@@ -3,7 +3,7 @@ Theory logTupleCallerPtr
 Ancestors
   logTupleDispatchPtr logTupleGhostPtr logAllocFramePtr stmtSimLogStoreEncode
   stmtSimLogEncodeFields stmtSimLogExecFields exprSimPtrLiteralBuffer
-  localPtrsProps abiBuiltinAllocation abiDecoderFrame bodyPtrDefs compileEnv
+  localPtrsProps abiBuiltinAllocation abiDecoderFrame bodyPtrDefs compileEnv loweringStateRelDefs
   allocationPtr emitHelperProps fragGasSeqPtr context ASCIInumbers string
   logDataAllocPtr abiEncoderCounters stmtFragPtr abiDecoderReentry
   ghostPcTransportPtr instIdxIndep logInstSeqPtr logTupleOwnershipPtr

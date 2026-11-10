@@ -3,7 +3,7 @@ Theory bodyPtrPopStoragePureEntry
 Ancestors
   bodyPtrPopTargetDefs exprSimPopNestedBase targetPlaceLive
   appendStorageGhostPtr exprPtrUnwrapStorageFacts
-  accountsRelProps vyperStorageBackend vyperValue pred_set compileEnv
+  accountsRelProps vyperStorageBackend vyperValue pred_set compileEnv loweringStateRelDefs
   loweringPosts venomState ptrDiscipline exprLoweringProps bodyPtrDefs
 
 Theorem pop_storage_live_agree:

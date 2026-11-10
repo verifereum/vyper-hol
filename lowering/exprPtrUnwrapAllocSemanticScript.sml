@@ -2,7 +2,7 @@
 Theory exprPtrUnwrapAllocSemantic
 Ancestors
   exprPtrUnwrapAllocEntry exprPtrUnwrapAllocation exprSimAlloc loweringSlice exprLoweringProps arithmetic
-  bufferAllocationExecution loweringPosts compileEnv context venomState venomInst
+  bufferAllocationExecution loweringPosts compileEnv loweringStateRelDefs context venomState venomInst
   venomExecSemantics words finite_map
 
 Theorem unwrap_alloc_semantic_state:

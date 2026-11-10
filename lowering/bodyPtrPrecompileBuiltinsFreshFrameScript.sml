@@ -1,5 +1,5 @@
 Theory bodyPtrPrecompileBuiltinsFreshFrame
-Ancestors bodyPtrPrecompileBuiltinsSuffixGhost compileEnv exprSimProps
+Ancestors bodyPtrPrecompileBuiltinsSuffixGhost compileEnv loweringStateRelDefs exprSimProps
           localPtrsProps bodyPtrDefs valueEncoding loweringPosts finite_map
           pred_set
 

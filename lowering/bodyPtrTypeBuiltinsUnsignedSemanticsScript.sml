@@ -2,7 +2,7 @@
 Theory bodyPtrTypeBuiltinsUnsignedSemantics
 Ancestors bodyPtrSignedConvertUnsignedValue bodyPtrSignedConvertUnsignedLoad
   bodyPtrSignedConvertUnsignedFixed valueEncodingProofs byte words
-  valueEncoding rich_list list emitHelperProps venomInstProofs
+  valueEncoding valueEncodingDefs rich_list list emitHelperProps venomInstProofs
   fragExec venomState exprLoweringProps venomExecSemantics
 
 val () = augment_srw_ss [rewrites

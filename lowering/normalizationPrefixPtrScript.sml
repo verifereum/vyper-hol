@@ -1,7 +1,7 @@
 (* Completed semantic prefixes survive a recursive child's exterior frame. *)
 Theory normalizationPrefixPtr
 Ancestors robustCopyTransportPtr exprSimAggregateEncoding arithmetic list
-  bodyPtrDefs valueEncoding valueEncodingProofs venomState venomMemProofs
+  bodyPtrDefs valueEncoding valueEncodingDefs valueEncodingProofs venomState venomMemProofs
 
 Theorem robust_array_prefix_extend:
   !tv vs d i tn tn' mem mem'.

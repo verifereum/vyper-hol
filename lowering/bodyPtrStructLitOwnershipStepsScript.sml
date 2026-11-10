@@ -1,5 +1,5 @@
 Theory bodyPtrStructLitOwnershipSteps
-Ancestors bodyPtrStructLitCompilerOwnership compileEnv pair
+Ancestors bodyPtrStructLitCompilerOwnership compileEnv loweringStateRelDefs pair
   loweringShapeDefs loweringShapeRules list exprCallBounds venomInst
 
 (* These two interfaces keep reserved old registers distinct from readable

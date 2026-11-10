@@ -80,7 +80,7 @@ Proof
   >- (irule membership_registers_scalar_update >> simp[] >>
       qexistsl_tac [`G`, `tn`] >> simp[op_taint_def, FLOOKUP_UPDATE]) >>
   irule membership_frame_scalar_update >>
-  conj_tac >- simp[compileEnvTheory.not_fresh_at_def] >>
+  conj_tac >- simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
   qexistsl_tac [`G`, `tn`] >> simp[op_taint_def, FLOOKUP_UPDATE]
 QED
 

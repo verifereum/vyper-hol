@@ -2,7 +2,7 @@
 Theory assignTuplePtrAllocEndpoint
 Ancestors
   assignTuplePtrAlloc allocationPtr localPtrsProps exprLoweringProps
-  exprSimProps compileEnv venomState venomInst venomExecSemantics
+  exprSimProps compileEnv loweringStateRelDefs venomState venomInst venomExecSemantics
   loweringHalt finite_map valueEncoding emitHelperProps loweringSlice
   bodyPtrDefs fragGasPathPtr ghostPcTransportPtr stmtFragPtr emitHelper
   normalizationAllocPtr

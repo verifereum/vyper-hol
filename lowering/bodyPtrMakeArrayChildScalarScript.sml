@@ -2,7 +2,7 @@
 Theory bodyPtrMakeArrayChildScalar
 Ancestors
   bodyPtrMakeArrayChildAdd bodyPtrMakeArrayScalarEndpoint
-  emitHelperProps fragGasPathPtr fragGasPath loweringPosts compileEnv
+  emitHelperProps fragGasPathPtr fragGasPath loweringPosts compileEnv loweringStateRelDefs
   wordArgsPtr vyperEvalExprPreservesScopesDom exprLoweringProps
 
 Theorem literal_child_scalar_materialize:

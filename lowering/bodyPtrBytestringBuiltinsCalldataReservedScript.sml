@@ -1,7 +1,7 @@
 Theory bodyPtrBytestringBuiltinsCalldataReserved
 Ancestors
   bodyPtrBytestringBuiltinsExternalSlice exprSimWordBuiltins exprLoweringProps
-  venomState venomExecSemantics emitHelper compileEnv context fragExec
+  venomState venomExecSemantics emitHelper compileEnv loweringStateRelDefs context fragExec
   words list rich_list venomInst emitHelperProps
   stmtSimAppendStorageCompose stateFrame
 

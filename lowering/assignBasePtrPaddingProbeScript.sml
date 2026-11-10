@@ -1,7 +1,7 @@
 (* State-level obstruction only: this does not realize a source expression. *)
 Theory assignBasePtrPaddingProbe
 Ancestors assignBasePtrLiteralGhost assignBasePtrMcopyTransport bodyPtrDefs
-  valueEncoding valueEncodingProps venomState venomExecSemantics venomInst
+  valueEncoding valueEncodingDefs valueEncodingProps venomState venomExecSemantics venomInst
   ptrDiscipline words list pred_set loweringPosts venomMemProps
 
 Theorem assign_base_ptr_short_bytes_padding_robust:

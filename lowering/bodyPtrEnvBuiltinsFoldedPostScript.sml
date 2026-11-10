@@ -2,7 +2,7 @@
 Theory bodyPtrEnvBuiltinsFoldedPost
 Ancestors bodyPtrEnvBuiltinsMethodFolded bodyPtrEnvBuiltinsSelectorBytes
   bodyPtrEnvBuiltinsSelectorRun bodyPtrEnvBuiltinsSelectorPost
-  exprLoweringProps exprSimAlloc exprSimLiteralBuffer compileEnv emitHelper
+  exprLoweringProps exprSimAlloc exprSimLiteralBuffer compileEnv loweringStateRelDefs emitHelper
   context fragExec loweringPosts venomState venomInst words list
 
 Theorem folded_selector_run_post:

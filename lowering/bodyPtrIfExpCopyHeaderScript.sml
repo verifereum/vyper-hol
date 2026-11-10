@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpCopyHeader
 Ancestors
-  bodyPtrDefs representationCleanPtr valueCopyBytes valueEncoding venomState
+  bodyPtrDefs representationCleanPtr valueCopyBytes valueEncoding valueEncodingDefs venomState
 
 Theorem robust_bytestring_header:
   !tenv sty stv v len tn s a.

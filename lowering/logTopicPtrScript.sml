@@ -4,7 +4,7 @@ Ancestors
   logInstSeqPtr logValueFramePtr bodyPtrDefs codegenRel ptrCoverage ptrSafeRun ptrDiscipline
   venomExecSemantics venomInstProofs venomInst venomState
   contextCodegenRelProps contextCodegenRel memLocDefs finite_map words
-  exprSimHash emitHelperProps emitHelper compileEnv context fragExec arithmetic exprLoweringProps logAbiPrefixPtr list rich_list fragGasSeqPtr fragGasPathPtr
+  exprSimHash emitHelperProps emitHelper compileEnv loweringStateRelDefs context fragExec arithmetic exprLoweringProps logAbiPrefixPtr list rich_list fragGasSeqPtr fragGasPathPtr
 
 Theorem ptr_inst_ok_sha3_clean:
   ptr_covers G tn src s (w2n n) /\

@@ -2,7 +2,7 @@
 Theory assignBasePtrTypedBytesField
 Ancestors assignBasePtrBytesField typedCopyAgreement valueCopyBytes
   valueTypingMemoryProps representationCleanPtr typedCopyRobustTransportPtr
-  valueEncoding valueEncodingProps loweringPosts vyperTyping vfmConstants
+  valueEncoding valueEncodingDefs valueEncodingProps loweringPosts vyperTyping vfmConstants
   venomState bodyPtrDefs ptrDiscipline words list arithmetic
 
 Theorem assign_base_typed_bytes_source[local]:

@@ -4,7 +4,7 @@ Ancestors assignBasePtrCopyPath assignBasePtrMcopyTransport
   assignBasePtrLiteralGhost assignBasePtrLiteralOutcome bodyPtrDefs
   typedCopyPtr robustCopyTransportPtr localPtrsProps exprLoweringProps
   venomState venomExecSemantics venomInst ptrDiscipline words pred_set
-  valueEncodingProps valueEncodingProofs finite_map ghostPcTransportPtr allocationPtr compileEnv venomMemProofs
+  valueEncodingProps valueEncodingProofs finite_map ghostPcTransportPtr allocationPtr compileEnv loweringStateRelDefs venomMemProofs
 
 Theorem assign_base_mcopy_imm_taint[local]:
   !tn s id dst src count_op b a n.

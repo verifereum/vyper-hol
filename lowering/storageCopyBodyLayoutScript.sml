@@ -2,7 +2,7 @@
 Theory storageCopyBodyLayout
 Ancestors
   list rich_list finite_map pred_set exprLowering emitHelper emitHelperProps
-  exprLoweringProps context compileEnv localPtrsProps moduleLoweringProps
+  exprLoweringProps context compileEnv loweringStateRelDefs localPtrsProps moduleLoweringProps
 
 Theorem storage_copy_body_layout:
   !loc src dst cv so value scaled dest next stb s1 s2 s3 s4 s5 s6 ste.

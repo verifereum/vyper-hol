@@ -3,7 +3,7 @@ Theory augAssignPtrFieldLoadClean
 Ancestors
   augAssignPtrFieldInputs augAssignPtrFieldLoad stmtSimAugAssignAttr
   exprSimSource exprLoweringProps valueEncodingProps valueEncoding
-  bodyPtrDefs emitHelperProps emitHelper compileEnv loweringSlice
+  bodyPtrDefs emitHelperProps emitHelper compileEnv loweringStateRelDefs loweringSlice
   stmtFragPtr exprSimProps
 
 Theorem augassign_field_load_clean_ptr:

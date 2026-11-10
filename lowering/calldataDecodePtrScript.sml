@@ -1,7 +1,7 @@
 (* Pointer and taint boundaries for calldata decoding writes. *)
 Theory calldataDecodePtr
 Ancestors bodyPtrDefs ptrDiscipline venomInst venomState venomExecSemantics
-  codegenRel contextCodegenRel memLocDefs pred_set abiEncoder compileEnv emitHelper
+  codegenRel contextCodegenRel memLocDefs pred_set abiEncoder compileEnv loweringStateRelDefs emitHelper
   entryDispatchPtr ptrSafeRun list finite_map abiDecoderGuards exprLoweringProps
   fragExec words abiDecoderContract ghostPcTransportPtr decoderGhostFramePtr
 

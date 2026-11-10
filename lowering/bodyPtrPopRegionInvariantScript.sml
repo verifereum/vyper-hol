@@ -1,6 +1,6 @@
 Theory bodyPtrPopRegionInvariant
 Ancestors
-  bodyPtrDefs compileEnv pred_set ptrDiscipline accountsRelProps
+  bodyPtrDefs compileEnv loweringStateRelDefs pred_set ptrDiscipline accountsRelProps
 
 (* A fixed captured child needs an observer separate from global liveness:
    after ancestor shortening stor_taint_ok no longer constrains that child.

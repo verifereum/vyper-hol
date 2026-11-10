@@ -3,7 +3,7 @@ Theory bodyPtrSignedConvertUnsignedValue
 Ancestors
   bodyPtrSignedConvertUnsignedCompose bodyPtrSignedConvertBytesRead
   bodyPtrSignedConvertHeaderLoad valueEncodingProps bodyPtrDefs
-  venomState valueEncoding exprLoweringProps exprLowering compileEnv
+  venomState valueEncoding valueEncodingDefs exprLoweringProps exprLowering compileEnv
   arithmetic finite_map representationCleanPtr
 
 Theorem unsigned_bytes_value_source_facts:

@@ -2,7 +2,7 @@
 Theory rawCallResultProofPtr
 Ancestors
   wordLoadStorePtr rawCallOracleProofPtr rawCallBufferPtr builtinSystem context emitHelper
-  compileEnv exprLoweringProps bodyPtrDefs builtinSimple builtinProps typedCopyPtr ifJumpPtr
+  compileEnv loweringStateRelDefs exprLoweringProps bodyPtrDefs builtinSimple builtinProps typedCopyPtr ifJumpPtr
 Libs
   monadsyntax
 
@@ -919,7 +919,7 @@ Resume raw_call_length_compare_stage[compose]:
   `ghost_kept cenv es sa G tn s H' un'` by
     (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
      >- (qexists_tac `func` >>
-         fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+         fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
      qexistsl_tac [`H`, `es`, `t`, `s1`, `un`] >>
      fs[exprLoweringPropsTheory.ci_mono_def]) >>
   `!x. not_fresh_at sa x ==> not_fresh_at s1 x` by
@@ -1001,7 +1001,7 @@ Resume raw_call_capped_length_stage[compose]:
   `ghost_kept cenv es sa G tn s H' un'` by
     (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
      >- (qexists_tac `func` >>
-         fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+         fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
      qexistsl_tac [`H`, `es`, `t`, `s2`, `un`] >>
      fs[exprLoweringPropsTheory.ci_mono_def]) >>
   qexistsl_tac [`H'`, `un'`, `t'`] >> simp[arithmeticTheory.MIN_DEF] >>
@@ -1178,7 +1178,7 @@ Proof
   >- (simp[bodyPtrDefsTheory.ghost_kept_def, ptrDisciplineTheory.op_taint_def] >>
       conj_tac >> rpt strip_tac >>
       `~(b <= i /\ i < b+LENGTH bytes)` by
-        (fs[compileEnvTheory.regions_disjoint_def] >>
+        (fs[loweringStateRelDefsTheory.regions_disjoint_def] >>
          first_x_assum drule_all >> strip_tac >> decide_tac) >> metis_tac[]) >>
   irule rawCallMemoryFramePtrTheory.wb_frame_clean_write >>
   conj_tac >- simp[venomStateTheory.lookup_var_def,
@@ -1208,14 +1208,14 @@ Proof
   `local_ptrs_rel func cenv es.scopes (write_memory_with_expansion b bytes s)` by
     (irule rawCallMemoryFramePtrTheory.local_ptrs_rel_clean_write_frame >>
      qexistsl_tac [`bytes`, `b`, `s`] >>
-     fs[compileEnvTheory.state_rel_def, venomStateTheory.lookup_var_def,
+     fs[loweringStateRelDefsTheory.state_rel_def, venomStateTheory.lookup_var_def,
        venomStateTheory.write_memory_with_expansion_def, venomStateTheory.write_memory_def] >>
      metis_tac[]) >>
   `immutables_rel cenv cx.txn.target cenv.ce_module F es
     (write_memory_with_expansion b bytes s)` by
     (irule rawCallMemoryFramePtrTheory.immutables_rel_runtime_write_frame >>
      qexistsl_tac [`bytes`, `b`, `s`] >>
-     gvs[compileEnvTheory.state_rel_def, venomStateTheory.write_memory_with_expansion_def,
+     gvs[loweringStateRelDefsTheory.state_rel_def, venomStateTheory.write_memory_with_expansion_def,
        venomStateTheory.write_memory_def]) >>
   rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
   conj_tac
@@ -1237,7 +1237,7 @@ Proof
       qexistsl_tac [`s`, `es`] >>
       simp[venomStateTheory.write_memory_with_expansion_def, venomStateTheory.write_memory_def] >>
       rpt strip_tac >> qexists_tac `id` >>
-      fs[compileEnvTheory.local_region_def, venomStateTheory.lookup_var_def]) >>
+      fs[loweringStateRelDefsTheory.local_region_def, venomStateTheory.lookup_var_def]) >>
   conj_tac
   >- (irule exprLoweringPropsTheory.immutable_base_zero_frame >> qexists_tac `s` >>
       simp[venomStateTheory.lookup_var_def, venomStateTheory.write_memory_with_expansion_def,
@@ -1340,7 +1340,7 @@ Resume raw_call_bytes_suffix_stage[finish]:
        (fs[local_region_def, local_ptrs_reserved_def] >> metis_tac[]) >>
      metis_tac[]) >>
   `local_ptrs_rel func cenv es.scopes t` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `ghost_inv dep cenv cx es H un' t' /\
    ghost_kept cenv es protected H un t H un' /\
    wb_frame cenv es protected t t'` by
@@ -1371,7 +1371,7 @@ Resume raw_call_bytes_suffix_stage[compose]:
      fs[bodyPtrDefsTheory.ghost_kept_def, exprLoweringPropsTheory.ci_mono_def] >>
      metis_tac[stmtFragPtrTheory.not_fresh_at_mono, arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
   `local_ptrs_rel func cenv es.scopes s` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `ghost_kept cenv es protected G tn s H un'` by
     metis_tac[wordOperandsPtrTheory.ghost_kept_trans, arithmeticTheory.LESS_EQ_REFL] >>
   qexistsl_tac [`H`, `un'`, `t'`] >>
@@ -1440,7 +1440,7 @@ Resume raw_call_forward_suffix_stage[revert]:
       (u with vs_inst_idx := SUC s.vs_inst_idx) = Abort Revert_abort t` by
     (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, wordsTheory.w2n_n2w,
        arithmeticTheory.LESS_MOD, Abbr `t`] >>
-     fs[valueEncodingTheory.mem_bytes_at_def]) >>
+     fs[valueEncodingDefsTheory.mem_bytes_at_def]) >>
   `gas_path_ptr D 0 ctx func PG G tn s 0
     (step_prov PG G (mk_inst sa.cs_next_id RETURNDATACOPY [p;Lit 0w;rds] []) u)
     (step_taint (mk_inst sa.cs_next_id RETURNDATACOPY [p;Lit 0w;rds] []) s u tn)
@@ -1814,7 +1814,7 @@ Resume raw_call_tuple_head_stage[frames]:
      `regions_disjoint b capacity off len` by metis_tac[] >>
      fs[regions_disjoint_def] >> decide_tac) >>
   `local_ptrs_rel func cenv es.scopes u` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `ghost_inv dep cenv cx es H vn v /\
    ghost_kept cenv es sa H un u H vn /\ wb_frame cenv es sa u v` by
     (qunabbrev_tac `v` >> qunabbrev_tac `vn` >>
@@ -1837,7 +1837,7 @@ Resume raw_call_tuple_head_stage[compose]:
      first_assum (irule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
      qexistsl_tac [`u`, `sa`, `es`] >> simp[]) >>
   `local_ptrs_rel func cenv es.scopes s` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `ghost_kept cenv es sa G tn s H vn` by
     metis_tac[wordOperandsPtrTheory.ghost_kept_trans, arithmeticTheory.LESS_EQ_REFL] >>
   `not_fresh_at sb x /\ sb.cs_current_bb = sm.cs_current_bb` by
@@ -1956,7 +1956,7 @@ Resume raw_call_tuple_construct_stage[tail]:
      conj_tac
      >- (rpt strip_tac >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
          decide_tac) >>
-     fs[compileEnvTheory.regions_disjoint_def] >> rpt strip_tac >> decide_tac) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> rpt strip_tac >> decide_tac) >>
   suspend "add"
 QED
 
@@ -1997,7 +1997,7 @@ Resume raw_call_tuple_construct_stage[copy]:
   `val_wf (BaseTV BoolT) (BoolV flag) /\
    val_footprint (BaseTV BoolT) (BoolV flag) <= type_memory_size (BaseTV BoolT) /\
    type_memory_size (BaseTV BoolT) = 32` by
-    simp[valueEncodingTheory.val_wf_def, loweringPostsTheory.val_footprint_def,
+    simp[valueEncodingDefsTheory.val_wf_def, loweringPostsTheory.val_footprint_def,
       valueEncodingTheory.type_memory_size_def] >>
   `(!m. mem_agree_outside un'.t_mem u.vs_memory m ==>
       val_in_memory (BaseTV BoolT) (BoolV flag) (w2n (n2w b : bytes32)) m) /\
@@ -2042,16 +2042,16 @@ Resume raw_call_tuple_construct_stage[frames]:
       regions_disjoint (b+32) ncopy off len` by
     (map_every qx_gen_tac [`name`, `a`, `k`] >> strip_tac >>
      `local_region cenv es.scopes s name a k` by
-       (fs[compileEnvTheory.local_region_def, compileEnvTheory.local_ptrs_reserved_def] >>
+       (fs[loweringStateRelDefsTheory.local_region_def, loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
         metis_tac[]) >>
      `regions_disjoint b (32+ncopy) a k` by metis_tac[] >>
-     fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `!aid off len. aid < sa.cs_next_id /\ FLOOKUP u.vs_allocas aid = SOME (off,len) ==>
       regions_disjoint (b+32) ncopy off len` by
     (map_every qx_gen_tac [`ai`, `a`, `k`] >> strip_tac >>
      `FLOOKUP s.vs_allocas ai = SOME (a,k)` by metis_tac[] >>
      `regions_disjoint b (32+ncopy) a k` by metis_tac[] >>
-     fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `un'' = un' with t_mem :=
     (un'.t_mem DIFF {i | b+32 <= i /\ i < b+32+ncopy}) UNION
     {b+32+i | i < ncopy /\ w2n aw+i IN un'.t_mem}` by
@@ -2065,10 +2065,10 @@ QED
 
 Resume raw_call_tuple_construct_stage[write_frame]:
   `local_ptrs_rel func cenv es.scopes u` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `t' = write_memory_with_expansion (b+32) (mem_bytes_at (w2n aw) ncopy u.vs_memory) u
       with vs_inst_idx := LENGTH sb.cs_current_insts` by
-    fs[venomExecSemanticsTheory.mcopy_def, valueEncodingTheory.mem_bytes_at_def,
+    fs[venomExecSemanticsTheory.mcopy_def, valueEncodingDefsTheory.mem_bytes_at_def,
       arithmeticTheory.LESS_MOD, wordsTheory.w2n_n2w] >>
   qmatch_asmsub_abbrev_tac `un'' = un' with t_mem := dirty` >>
   `!i. ~(b+32 <= i /\ i < b+32+ncopy) ==> (i IN dirty <=> i IN un'.t_mem)` by
@@ -2086,7 +2086,7 @@ QED
 
 Resume raw_call_tuple_construct_stage[frame_compose]:
   `local_ptrs_rel func cenv es.scopes s` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `ghost_kept cenv es sa G tn s H' un'` by
     (irule wordOperandsPtrTheory.ghost_kept_trans >>
      first_assum (irule_at (Pat `ghost_kept _ _ _ G tn s _ _`)) >>
@@ -2114,7 +2114,7 @@ Resume raw_call_tuple_construct_stage[metadata]:
   qexists_tac `b` >> simp[] >>
   rpt strip_tac >>
   `local_region cenv es.scopes s name off' len'` by
-    (fs[compileEnvTheory.local_region_def, compileEnvTheory.local_ptrs_reserved_def,
+    (fs[loweringStateRelDefsTheory.local_region_def, loweringStateRelDefsTheory.local_ptrs_reserved_def,
       loweringPostsTheory.wb_frame_def] >> metis_tac[]) >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
@@ -2241,7 +2241,7 @@ Resume raw_call_tuple_suffix_stage[tuple]:
   `val_wf (BaseTV (BytesT (Dynamic n))) (BytesV bs) /\
    val_footprint (BaseTV (BytesT (Dynamic n))) (BytesV bs) <= ncopy` by
     (conj_tac
-     >- (simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
+     >- (simp[valueEncodingDefsTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
          mp_tac (Q.SPEC `n` valueTypingMemoryPropsTheory.word_size_capacity) >>
          simp[listTheory.LENGTH_TAKE_EQ] >> decide_tac) >>
      irule arithmeticTheory.LESS_EQ_TRANS >>
@@ -2281,7 +2281,7 @@ Resume raw_call_tuple_suffix_stage[compose]:
      `!aid. aid < protected.cs_next_id ==> aid < s4.cs_next_id` by decide_tac >>
      metis_tac[]) >>
   `local_ptrs_rel func cenv es.scopes s` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `ghost_kept cenv es protected G tn s H' un'` by
     metis_tac[wordOperandsPtrTheory.ghost_kept_trans, arithmeticTheory.LESS_EQ_REFL] >>
   `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H' un' (OK t')` by

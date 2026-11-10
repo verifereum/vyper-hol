@@ -104,12 +104,12 @@ Proof
   >- (gvs[compile_copy_memory_def, comp_return_def] >>
       qexistsl_tac [`tn`, `s`] >> simp[] >>
       conj_tac >- (irule (cj 1 gas_path_ptr_rules) >> simp[]) >>
-      simp[valueEncodingTheory.mem_bytes_at_def] >>
+      simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
       rpt strip_tac >> irule robust_val_in_memory_copy_transport >>
       conj_tac >- simp[] >>
       qexistsl_tac [`s.vs_memory`, `s.vs_memory`, `0`, `w2n a`,
                     `tn.t_mem`, `tn.t_mem`] >>
-      simp[valueEncodingTheory.mem_bytes_at_def]) >>
+      simp[valueEncodingDefsTheory.mem_bytes_at_def]) >>
   suspend "positive"
 QED
 

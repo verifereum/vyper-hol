@@ -2,7 +2,7 @@ Theory bodyPtrPrecompileBuiltinsRunAllocation
 Ancestors bodyPtrPrecompileBuiltinsAllocationFrame allocationPtr
           bodyPtrPrecompileBuiltinsPrefixFrames exprLoweringProps
           venomMemDefs loweringPosts vyperValue vyperTyping valueEncoding
-          ptrDiscipline compileEnv venomState venomInst venomExecSemantics
+          ptrDiscipline compileEnv loweringStateRelDefs venomState venomInst venomExecSemantics
           finite_map pred_set fragExec context
 
 Theorem new_site_bytes_range_exterior:

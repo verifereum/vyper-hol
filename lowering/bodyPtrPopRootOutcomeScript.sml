@@ -4,7 +4,7 @@ Ancestors
   bodyPtrPopCountedTransfer bodyPtrPopSliceTransfer bodyPtrPopReturned bodyPtrPopEmittedTransfer
   appendStorageGhostPtr appendStorageSourcePtr fragExec vyperStorage vyperValue venomExecSemantics
   exprSimPopStorage storageCopyGasPath bodyPtrDefs fragGasPathPtr
-  exprSimDefs exprSimHypsDefs exprSimSource exprSimTopLevelProps exprLoweringProps compileEnv context venomState venomInst
+  exprSimDefs exprSimHypsDefs exprSimSource exprSimTopLevelProps exprLoweringProps compileEnv loweringStateRelDefs context venomState venomInst
   list rich_list vyperStorageLayoutSafety vyperStorageBackend
 
 Theorem compile_pop_storage_normalized_ptr:

@@ -4,7 +4,7 @@ Ancestors
   augAssignPtrLoad typedCopyLoopHeaderPtr ptrCoverage structChildPtr
   fragGasSeqPtr fragGasPathPtr bodyPtrDefs venomInst venomState
   venomExecSemantics ptrSafeRun ptrDiscipline typedCopyPtr
-  emitHelperProps emitHelper compileEnv fragExec loweringPosts
+  emitHelperProps emitHelper compileEnv loweringStateRelDefs fragExec loweringPosts
   exprLoweringProps codegenRel contextCodegenRel finite_map words
   exprSimFieldLayout representationCleanPtr valueEncodingProps stmtSimAugAssignAttr
   loweringSlice stmtFragPtr exprSimProps accountsRelProps valueEncoding

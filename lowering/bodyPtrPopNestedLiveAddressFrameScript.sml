@@ -1,7 +1,7 @@
 Theory bodyPtrPopNestedLiveAddressFrame
 Ancestors
   bodyPtrPopNestedLiveAddress bodyPtrPopNestedLiveArithmeticFrame bodyPtrAttributeAdd
-  typedCopyLoopHeaderPtr bodyPtrDefs emitHelperProps emitHelper compileEnv
+  typedCopyLoopHeaderPtr bodyPtrDefs emitHelperProps emitHelper compileEnv loweringStateRelDefs
   ptrDiscipline venomState venomInst words finite_map pred_set stmtFragPtr fragGasPathPtr
 
 Theorem pop_emit_offset_endpoint_framed_path:

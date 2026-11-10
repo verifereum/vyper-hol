@@ -4,9 +4,9 @@ Theory assignTuplePtrSequential
 Ancestors
   assignTuplePtrLocalContract assignTuplePtrUnread assignTuplePtrUnreadBounds
   assignTuplePtrBoundary tupleTargetStoreProps tupleTargetStoreRun tupleLocalStoreRun
-  tupleMemoryFrame bodyPtrDefs exprLoweringProps exprSimProps compileEnv
+  tupleMemoryFrame bodyPtrDefs exprLoweringProps exprSimProps compileEnv loweringStateRelDefs
   venomState venomExecSemantics ptrDiscipline valueEncodingProps arithmetic
-  stmtLowering vyperInterpreter fragGasPathPtr valueEncoding vyperTyping
+  stmtLowering vyperInterpreter fragGasPathPtr valueEncoding valueEncodingDefs vyperTyping
   tupleAssignParts tupleMemoryLayout stmtLoweringMono fragExec stmtSimDefs
   freshWrites vyperState list rich_list finite_map
 

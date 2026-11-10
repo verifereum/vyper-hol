@@ -3,7 +3,7 @@ Ancestors
   bodyPtrBytestringBuiltinsUintArithmetic bodyPtrBytestringBuiltinsCalldataCopy
   typedCopyPtr immutableMemoryFrame bodyPtrDefs ptrDiscipline wordLoadStorePtr
   venomState venomInst finite_map byte words codegenRel
-  exprSimPtrLiteralBuffer exprSimUint2Str loweringPosts valueEncoding
+  exprSimPtrLiteralBuffer exprSimUint2Str loweringPosts valueEncoding valueEncodingDefs
 
 (* The concrete store endpoint is retained so the existing fresh-allocation
    write-memory boundary can be used without an arbitrary-state frame axiom. *)

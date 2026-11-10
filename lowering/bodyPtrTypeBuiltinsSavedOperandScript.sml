@@ -2,7 +2,7 @@
 Theory bodyPtrTypeBuiltinsSavedOperand
 Ancestors
   bodyPtrTypeBuiltinsRepresentation exprSimAttributeFields exprSimOperands
-  loweringPosts bodyPtrDefs valueEncodingProofs valueEncoding arithmetic
+  loweringPosts bodyPtrDefs valueEncodingProofs valueEncoding valueEncodingDefs arithmetic
   exprBopSimProps
 
 Theorem saved_operand_footprint_window:

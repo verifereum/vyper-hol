@@ -3,7 +3,7 @@ Theory bodyPtrPopLocalRootPath
 Ancestors
   bodyPtrPopLocalRootEntry bodyPtrPopLengthGuard bodyPtrPopMemoryHeader
   bodyPtrPopMemoryStore bodyPtrPopInteriorPointer
-  emitHelperProps emitHelper compileEnv venomState ptrDiscipline
+  emitHelperProps emitHelper compileEnv loweringStateRelDefs venomState ptrDiscipline
   finite_map words list fragGasPathPtr bodyPtrBopCompareCompile storageCopyBodyPtr
 
 Theorem pop_local_header_path_frame:

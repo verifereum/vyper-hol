@@ -3,7 +3,7 @@ Theory logAbiCopyPtr
 Ancestors
   logAbiBytesPtr logInstSeqPtr abiEncoderBytesCode abiEncoderRounding
   typedCopyPtr fragExecPtr fragExec bodyPtrDefs ptrDiscipline ptrSafeRun
-  emitHelperProps emitHelper compileEnv context exprLoweringProps
+  emitHelperProps emitHelper compileEnv loweringStateRelDefs context exprLoweringProps
   venomExecSemantics venomState venomInst finite_map words list arithmetic pred_set
 
 Theorem abi_bytes_copy_taint:

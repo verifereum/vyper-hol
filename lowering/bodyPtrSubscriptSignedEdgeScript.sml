@@ -3,7 +3,7 @@ Theory bodyPtrSubscriptSignedEdge
 Ancestors
   bodyPtrSubscriptNumeric bodyPtrAttributeAdd bodyPtrDefs ptrSafeRun
   ptrDiscipline venomInst venomExecSemantics venomState finite_map
-  emitHelperProps emitHelper compileEnv exprLoweringProps fragExec
+  emitHelperProps emitHelper compileEnv loweringStateRelDefs exprLoweringProps fragExec
   decoderGhostFramePtr words integer_word codegenRel contextCodegenRel
   bodyPtrSubscriptNamedTuplePostBoundary loweringPosts
 

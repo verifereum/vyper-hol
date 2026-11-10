@@ -3,7 +3,7 @@ Theory storageCopyCompilePtr
 Ancestors
   storageCopyLoopPtr storageCopyBodyLayout exprSimCopy exprSimStorageCopy
   fragExec exprLowering exprLoweringProps emitHelper emitHelperProps context
-  compileEnv localPtrsProps moduleLoweringProps venomInst venomState
+  compileEnv loweringStateRelDefs localPtrsProps moduleLoweringProps venomInst venomState
   list rich_list finite_map words arithmetic
 
 Theorem storage_copy_registered_layout:

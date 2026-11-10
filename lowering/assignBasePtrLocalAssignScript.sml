@@ -4,7 +4,7 @@ Theory assignBasePtrLocalAssign
 Ancestors assignBasePtrLocalCompilerStore assignBasePtrStaging bodyDeclMemoryCore
   stmtLowering context valueCopyBytes exprLoweringProps stmtFragPtr
   abiBuiltinAllocation abiBuiltinEncodeAllocate bodyPtrDefs
-  emitHelper emitHelperProps compileEnv localPtrsProps
+  emitHelper emitHelperProps compileEnv loweringStateRelDefs localPtrsProps
   venomState venomExecSemantics valueEncoding valueEncodingProps
   exprSimProps exprSimBufferStore valueTypingMemoryProps fragExec finite_map words fragGasPathPtr gasSummaryComposePtr
 

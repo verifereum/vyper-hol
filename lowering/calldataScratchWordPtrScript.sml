@@ -4,7 +4,7 @@ Ancestors calldataTypedRobustPtr abiScratchDecoderTuple abiScratchLeafEffect
   representationCleanPtr abiScratchEffect decoderGhostFramePtr ptrDiscipline
   abiDecoderPrimitiveCaller abiDecoderReentry abiDecoderLayout abiDecoderContract
   abiScratchDecoderContract abiScratchEncoderContract venomExecSemantics
-  compileEnv valueEncoding venomState words pred_set arithmetic
+  compileEnv loweringStateRelDefs valueEncoding venomState words pred_set arithmetic
   ctorAbiActualAlloc abiDecoderClampedWord exprLowering emitHelper rich_list
   abiEncoder fragExec venomInst exprLoweringProps valueEncodingTyping
   valueEncodingProps abiDecoderTypedContract abiDecoderReentry bodyPtrDefs loweringPosts exprSimDefs exprSimProps

@@ -1,7 +1,7 @@
 (* Representation boundaries shared by string revert encoders. *)
 Theory reasonRepresentationPtr
 Ancestors
-  bodyPtrDefs representationCleanPtr exprSimProps compileEnv valueEncoding loweringPosts
+  bodyPtrDefs representationCleanPtr exprSimProps compileEnv loweringStateRelDefs valueEncoding loweringPosts
   venomState venomExecSemantics ptrDiscipline words vyperValue
 
 Theorem ptr_mem_ok_string_region:

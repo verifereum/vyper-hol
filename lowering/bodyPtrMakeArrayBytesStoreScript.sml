@@ -3,7 +3,7 @@ Theory bodyPtrMakeArrayBytesStore
 Ancestors
   annAssignPtrExterior annAssignPtrBytestring bodyPtrMakeArrayBytesTransport
   bodyPtrMakeArrayStoreFrame placeMemoryTypedPrimitive
-  bodyPtrDefs context compileEnv exprSimProps venomState pred_set
+  bodyPtrDefs context compileEnv loweringStateRelDefs exprSimProps venomState pred_set
 
 Theorem literal_bytes_store_counted:
   compile_store_memory ce (Var src) (Var dst) ty sty sa = ((),sb) /\

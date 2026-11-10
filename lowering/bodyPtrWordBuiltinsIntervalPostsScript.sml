@@ -2,7 +2,7 @@
 Theory bodyPtrWordBuiltinsIntervalPosts
 Ancestors bodyPtrWordBuiltinsIntervalGhost bodyPtrWordBuiltinsIntervalWitness
   bodyPtrWordBuiltinsIntervalSource bodyPtrWordBuiltinsIntervalProjections
-  finite_map compileEnv venomState
+  finite_map compileEnv loweringStateRelDefs venomState
 Libs finite_mapLib intReduce
 
 val () = computeLib.upd_compset add_finite_map_compset

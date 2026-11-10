@@ -3,7 +3,7 @@ Theory logStmtComposePtr
 Ancestors
   logReadyRunPtr logArgsRunPtr logSuccessSuffixPtr logComposeFacts bodyPtrDefs stmtFragPtr
   stmtSimLogArgs stmtSimLogSource stmtSimLogArgsGrowth stmtSimProps
-  exprSimDefs exprSimProps exprSimHypsDefs loweringPosts compileEnv
+  exprSimDefs exprSimProps exprSimHypsDefs loweringPosts compileEnv loweringStateRelDefs
   stmtLowering gasSummaryComposePtr gasExemptCert gasOutcome gasContext
   fragGasPathPtr fragGasPath gasSummary gasSummaryCompose
   valueTypingMemoryProps vyperInterpreter vyperState venomState

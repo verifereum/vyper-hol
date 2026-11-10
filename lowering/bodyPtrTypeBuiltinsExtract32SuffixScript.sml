@@ -2,7 +2,7 @@ Theory bodyPtrTypeBuiltinsExtract32Suffix
 Ancestors
   bodyPtrTypeBuiltinsExtract32Read bodyPtrTypeBuiltinsExtract32Clamp
   exprSimExtract32Read exprSimExtract32Post exprLoweringProps emitHelperProps
-  builtinBytes compileEnv freshWrites instSeqComposePtr fragGasSeqPtr ptrDiscipline
+  builtinBytes compileEnv loweringStateRelDefs freshWrites instSeqComposePtr fragGasSeqPtr ptrDiscipline
   venomInst venomState venomExecSemantics list pred_set finite_map words
   augAssignPtrScalarCertificate
 

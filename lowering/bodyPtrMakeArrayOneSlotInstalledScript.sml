@@ -2,7 +2,7 @@
 Theory bodyPtrMakeArrayOneSlotInstalled
 Ancestors
   bodyPtrMakeArrayOneSlot bodyPtrMakeArrayPrimitiveInstall exprSimStorageCopy
-  exprLoweringProps emitHelperProps context fragExec compileEnv emitHelper
+  exprLoweringProps emitHelperProps context fragExec compileEnv loweringStateRelDefs emitHelper
   venomState venomInst ptrDiscipline finite_map pred_set list rich_list words
 
 Theorem external_one_slot_shape:

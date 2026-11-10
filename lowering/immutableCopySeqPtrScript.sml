@@ -3,7 +3,7 @@ Theory immutableCopySeqPtr
 Ancestors
   immutableRegionLoadPtr immutableOffsetPtr immutableSeqCursorPtr
   emittedSeqComposePtr instSeqComposePtr exprSimCopy exprSimStorageCopy
-  immutableCopyExecution context compileEnv emitHelper emitHelperProps
+  immutableCopyExecution context compileEnv loweringStateRelDefs emitHelper emitHelperProps
   exprLoweringProps fragGasSeqPtr ptrDiscipline venomInst venomState
   finite_map words list bodyPtrDefs contextCodegenRel appendStorageGhostPtr
 

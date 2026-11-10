@@ -3,7 +3,7 @@ Theory bodyPtrEnvBuiltinsLen
 Ancestors
   wordLoadStorePtr bodyPtrEnvBuiltinsBoundary bodyPtrEnvBuiltinsEdges typedCopyPtr
   exprSimLen vyperTyping vyperValue valueEncoding loweringPosts
-  representationCleanPtr compileEnv bodyPtrDefs accountsRelProps
+  representationCleanPtr compileEnv loweringStateRelDefs bodyPtrDefs accountsRelProps
   vyperAST vyperTypeSystem builtinSimple ptrSafeRun ptrDiscipline
   venomExecSemantics venomInstProofs venomInst venomState emitHelper fragGasSeqPtr fragGasPathPtr
   list memLocDefs codegenRel contextCodegenRel context

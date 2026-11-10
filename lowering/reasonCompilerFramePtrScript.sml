@@ -1,6 +1,6 @@
 (* Compiler-only adapters for the shared reason encoder. *)
 Theory reasonCompilerFramePtr
-Ancestors reasonTupleFramePtr emitHelperProps exprLoweringProps emitHelper compileEnv fragExec venomState arithmetic
+Ancestors reasonTupleFramePtr emitHelperProps exprLoweringProps emitHelper compileEnv loweringStateRelDefs fragExec venomState arithmetic
 
 Theorem reason_emit_op_explicit:
   emit_op opc ops sa = (Var out,sb) ==>

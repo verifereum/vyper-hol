@@ -3,7 +3,7 @@ Ancestors bodyPtrPrecompileBuiltinsTransfer bodyPtrPrecompileBuiltinsFreshFrame
           bodyPtrPrecompileBuiltinsObservations
           freshWrites builtinMisc context emitHelper exprLoweringProps
           fragExec venomExecSemantics venomState venomInst ptrDiscipline bodyPtrDefs
-          finite_map list rich_list compileEnv
+          finite_map list rich_list compileEnv loweringStateRelDefs
 
 (* Scalar staging uses the same offset/store trace as point staging. *)
 Theorem offset_store_code[local]:

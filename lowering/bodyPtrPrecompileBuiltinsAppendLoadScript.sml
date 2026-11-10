@@ -1,7 +1,7 @@
 Theory bodyPtrPrecompileBuiltinsAppendLoad
 Ancestors bodyPtrPrecompileBuiltinsLoad fragGasPathPtr ghostPcTransportPtr
           exprLoweringProps venomExecSemantics venomInstProofs venomState
-          ptrDiscipline bodyPtrDefs venomInst list rich_list finite_map valueEncoding
+          ptrDiscipline bodyPtrDefs venomInst list rich_list finite_map valueEncoding valueEncodingDefs
 
 Theorem appended_clean_mload_path:
   run_inst_seq xs s = OK q /\ LENGTH xs = k /\

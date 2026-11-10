@@ -2,7 +2,7 @@
 Theory bodyPtrMakeArrayChildUnwrap
 Ancestors
   bodyPtrMakeArrayChildAdd bodyPtrMakeArrayNonwordUnwrap
-  emitHelperProps fragGasPathPtr fragGasPath loweringPosts compileEnv
+  emitHelperProps fragGasPathPtr fragGasPath loweringPosts compileEnv loweringStateRelDefs
   wordArgsPtr vyperEvalExprPreservesScopesDom exprLoweringProps
 
 Theorem literal_child_add_unwrap:

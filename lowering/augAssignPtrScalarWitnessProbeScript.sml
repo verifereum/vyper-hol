@@ -8,7 +8,7 @@ Theory augAssignPtrScalarWitnessProbe
 Ancestors
   wordLoadStorePtr augAssignPtrLoad augAssignPtrProvenanceProbe gasSummaryComposePtr bodyPtrDefs
   exprSimNameWord exprSimNameValue exprSimValues stmtFragPtr
-  exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
+  exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   ptrDiscipline venomInst venomState finite_map loweringSlice venomExecSemantics fragExec
 (* This instruction-level helper exposes the actual clearing ghost, in
    contrast to emit_mload_path_ptr's existentially hidden provenance. *)

@@ -1,6 +1,6 @@
 Theory bodyPtrSubscriptSeamArrayMemoryEndpoint
 Ancestors
-  bodyPtrDefs bodyPtrSubscriptCurrentMemory exprSimProps valueEncoding
+  bodyPtrDefs bodyPtrSubscriptCurrentMemory exprSimProps valueEncoding valueEncodingDefs
   loweringPosts venomState ptrDiscipline finite_map
   exprSimSubscriptArraySuffix exprSimSubscriptArrayFramed words
   bodyPtrEnvBuiltinsBoundary context

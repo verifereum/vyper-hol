@@ -1,6 +1,6 @@
 Theory bodyPtrPrecompileBuiltinsRecoveryPostFrame
 Ancestors exprSimPrecompiles exprLoweringProps localPtrsProps
-          venomMemDefs compileEnv venomInst exprSimAlloc exprSimHash
+          venomMemDefs compileEnv loweringStateRelDefs venomInst exprSimAlloc exprSimHash
           valueEncodingProps allocaFootprint exprSimProps loweringPosts
 
 Theorem registered_allocation_local_regions:

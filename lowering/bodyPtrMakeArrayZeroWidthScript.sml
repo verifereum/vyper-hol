@@ -151,7 +151,7 @@ Theorem literal_zero_cell:
 Proof
   simp[literal_prefix_cell] >> rpt strip_tac >>
   irule val_in_memory_relocate_footprint >> simp[] >>
-  qexistsl [`mem`, `a`] >> simp[valueEncodingTheory.mem_bytes_at_def]
+  qexistsl [`mem`, `a`] >> simp[valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 (* The actual expr_post and ghost_kept returned above are precisely the

@@ -4,7 +4,7 @@ Ancestors
   bodyPtrTypeBuiltinsExtract32Prepare exprSimExtract32Post
   exprSimExtract32Source exprSimSource gasSummaryComposePtr gasExemptCert
   wordOperandsPtr exprBopSimProps exprLoweringProps bodyPtrDefs bodyPtrPreds
-  vyperState loweringPosts compileEnv vyperValue rawCallBufferPtr exprOperandVar
+  vyperState loweringPosts compileEnv loweringStateRelDefs vyperValue rawCallBufferPtr exprOperandVar
   gasSummary fragGasMode fragGasPath freshWrites exprSimHyps exprSimHypsDefs vyperAST
 
 Theorem extract32_operands_ptr_prefix:

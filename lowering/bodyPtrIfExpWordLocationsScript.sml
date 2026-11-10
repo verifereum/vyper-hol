@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpWordLocations
 Ancestors
-  bodyPtrDefs compileEnv context vyperAST vyperValue
+  bodyPtrDefs compileEnv loweringStateRelDefs context vyperAST vyperValue
   ptrDiscipline venomInst exprSimUnwrap
 
 Theorem ifexp_runtime_code_word_compile:

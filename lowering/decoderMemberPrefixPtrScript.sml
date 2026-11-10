@@ -2,7 +2,7 @@
 Theory decoderMemberPrefixPtr
 Ancestors decoderNavigationPtr calldataOverwritePtr calldataClampPtr entryDispatchPtr
   decoderGhostFramePtr fragExecPtr ptrSafeRun ptrDiscipline bodyPtrDefs
-  venomExecSemantics venomInst venomState compileEnv emitHelper fragExec
+  venomExecSemantics venomInst venomState compileEnv loweringStateRelDefs emitHelper fragExec
   words finite_map pred_set list arithmetic codegenRel instIdxIndep contextCodegenRel
   emitHelperProps exprLoweringProps abiDecoderLoop ghostPcTransportPtr exprLowering abiEncoder decoderArraySetupPtr
   abiDecoderMemberSetup abiDecoderReentryPointer abiDecoderReentry

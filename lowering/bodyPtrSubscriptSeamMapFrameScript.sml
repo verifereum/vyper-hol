@@ -3,7 +3,7 @@
 Theory bodyPtrSubscriptSeamMapFrame
 Ancestors
   bodyPtrDefs bodyPtrHashBuiltinsGhostFrame logValueFramePtr
-  exprSimProps exprLoweringProps compileEnv valueEncodingProps
+  exprSimProps exprLoweringProps compileEnv loweringStateRelDefs valueEncodingProps
   venomState finite_map pred_set
 
 Theorem hash_local_robust_region_frame:

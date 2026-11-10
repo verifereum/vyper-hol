@@ -5,7 +5,7 @@ Ancestors
   assignTuplePtrLocalFixedHead assignTuplePtrLocalBytesHead assignTuplePtrBytesResources
   assignTuplePtrCopyEndpoint tupleTargetStoreRun tupleTargetStoreProps
   tupleLocalStoreRun bodyPtrDefs exprSimProps valueCopy exprLoweringProps
-  venomState venomExecSemantics compileEnv context vyperState vyperLookup
+  venomState venomExecSemantics compileEnv loweringStateRelDefs context vyperState vyperLookup
 
 Theorem tuple_target_local_aggregate_head_path_ptr:
   compile_tuple_store_all cenv [ty] [BaseTarget (NameTarget id)] [Var src] sa = ((),sb) /\

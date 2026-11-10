@@ -5,7 +5,7 @@ Ancestors
   bodyPtrPopMemoryHeader stmtReasonLitFragMemory bodyPtrPopTargetSimArrayEndpoint
   bodyPtrBopScalarCompile bodyPtrBopScalarSeq bodyPtrBopInLiteralSuffix
   exprSimWordBuiltins bodyPtrHashBuiltinsShaAlloc entrySinkExtraction
-  emitHelperProps exprLoweringProps compileEnv emitHelper venomState venomInst
+  emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs emitHelper venomState venomInst
   fragGasPathPtr fragGasSeqPtr fragExec exprSimCopy ptrDiscipline finite_map list arithmetic
 
 Theorem target_array_guard_layout:

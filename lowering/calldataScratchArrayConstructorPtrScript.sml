@@ -3,7 +3,7 @@ Ancestors
   calldataScratchArrayEntryPtr calldataScratchArrayCompletePtr calldataScratchLoopEntryPtr arithmetic abiScratchEffect
   abiDecoderArrayInitReentry abiDecoderArrayLoopInit abiDecoderIndexInit
   abiScratchDecoderLoopInvariant abiDecoderLoopEmit abiDecoderRecursiveLoopContext
-  abiDecoderContract abiDecoderLoop abiDecoderExecution abiDecoderReentry abiDecoderFrame compileEnv venomState bodyPtrDefs ptrDiscipline pred_set finite_map list
+  abiDecoderContract abiDecoderLoop abiDecoderExecution abiDecoderReentry abiDecoderFrame compileEnv loweringStateRelDefs venomState bodyPtrDefs ptrDiscipline pred_set finite_map list
 
 (* The calldata instance of trunk's position-form decoder lemmas: the source
    base operand is Lit 0w and the numeric base is 0. *)

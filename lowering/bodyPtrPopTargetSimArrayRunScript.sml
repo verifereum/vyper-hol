@@ -3,7 +3,7 @@ Ancestors
   bodyPtrPopTargetSimArrayGuard immutableCopySeqPtr immutableRegionLoadPtr
   bodyPtrBopScalarSeq bodyPtrBopScalarCompile stmtAppendStorageRunPtr exprSimArrayIndex
   exprSimCopy instIdxIndep emitHelperProps finite_map pred_set list words
-  venomInst venomState compileEnv immutableCopyExecution exprSimStorageCopy
+  venomInst venomState compileEnv loweringStateRelDefs immutableCopyExecution exprSimStorageCopy
   venomExecSemantics fragExec fragGasSeqPtr ptrDiscipline exprLoweringProps
 
 (* A scalar certificate can be run at every instruction cursor with the

@@ -2,7 +2,7 @@
 Theory assignBasePtrStorageFragment
 Ancestors bodyMemAssignTopCopyFacts assignBasePtrStorageTypes assignBasePtrStorageContinuation assignBasePtrStorageSemantic
   assignBasePtrStorageGhost stmtSimAssignStorage bodyPtrDefs stmtFragPtr
-  stmtLowering exprLowering context compileEnv loweringPosts finite_map
+  stmtLowering exprLowering context compileEnv loweringStateRelDefs loweringPosts finite_map
   exprSimProps stmtSimProps stmtLoweringMono stmtSimForced gasSummaryComposePtr
   gasExemptCert fragGasPathPtr fragGasPath fragGasMode gasSummary exprSimHypsDefs
   exprSimDefs fragExec exprLoweringProps vyperState assignBasePtrStorageDirect

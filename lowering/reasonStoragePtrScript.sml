@@ -1,7 +1,7 @@
 (* Storage and transient reason normalization boundaries. *)
 Theory reasonStoragePtr
 Ancestors
-  bodyPtrDefs compileEnv ptrDiscipline vyperValue pred_set
+  bodyPtrDefs compileEnv loweringStateRelDefs ptrDiscipline vyperValue pred_set
 
 (* The length slot is live even when the string is empty.  Unlike payload
    slots it cannot inherit any of the type-relative dead-byte taint. *)

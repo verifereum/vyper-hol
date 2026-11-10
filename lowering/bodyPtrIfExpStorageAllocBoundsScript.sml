@@ -2,7 +2,7 @@ Theory bodyPtrIfExpStorageAllocBounds
 Ancestors
   bodyPtrIfExpAllocCompiler bodyPtrIfExpMaterializeFrame
   bodyPtrIfExpStorageFrame bodyPtrIfExpAllocGhost bodyPtrIfExpAllocSeparation
-  exprSimDefs loweringPosts compileEnv venomState words finite_map
+  exprSimDefs loweringPosts compileEnv loweringStateRelDefs venomState words finite_map
 
 Theorem ifexp_copy_allocation_bounds:
   stmt_state_rel ctx fn ce cx es s0 /\

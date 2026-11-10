@@ -1,6 +1,6 @@
 Theory assignBasePtrStorageFrame
 Ancestors
-  compileEnv accountsRelProps vyperEncodeDecode vyperStorageFrame vyperStorage
+  compileEnv loweringStateRelDefs accountsRelProps vyperEncodeDecode vyperStorageFrame vyperStorage
   vyperValue vyperTyping vyperState vfmState words list combin arithmetic
 
 Theorem apply_writes_lookup_untouched:

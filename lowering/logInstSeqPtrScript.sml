@@ -2,7 +2,7 @@
 Theory logInstSeqPtr
 Ancestors
   wordLoadStorePtr fragGasSeqPtr fragExec instIdxIndep ghostPcTransportPtr exprLoweringProps
-  typedCopyPtr fragExecPtr emitHelperProps emitHelper compileEnv context finite_map words
+  typedCopyPtr fragExecPtr emitHelperProps emitHelper compileEnv loweringStateRelDefs context finite_map words
   ptrSafeRun ptrDiscipline venomExecSemantics venomInst venomState list arithmetic
 
 Theorem inst_seq_ptr_singleton:

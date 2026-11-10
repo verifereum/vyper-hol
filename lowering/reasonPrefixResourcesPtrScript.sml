@@ -3,7 +3,7 @@ Theory reasonPrefixResourcesPtr
 Ancestors
   wordLoadStorePtr reasonAllocationFramePtr reasonBufferPtr allocationPtr normalizationAllocPtr robustCopyTransportPtr typedCopyPtr
   bodyPtrDefs ptrDiscipline venomState venomInst pred_set arithmetic
-  loweringPosts compileEnv exprLoweringProps exprSimProps exprSimAlloc emitHelperProps exprSimHash loweringHalt venomExecSemantics
+  loweringPosts compileEnv loweringStateRelDefs exprLoweringProps exprSimProps exprSimAlloc emitHelperProps exprSimHash loweringHalt venomExecSemantics
 
 Theorem reason_encoder_store_robust_preserved:
   !tn s id dst value a w tv v p.

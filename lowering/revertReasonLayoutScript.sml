@@ -3,7 +3,7 @@
    pointer-path consumers; unwrap_value remains an opaque compiler call. *)
 Theory revertReasonLayout
 Ancestors
-  stmtLowering exprLoweringProps emitHelper emitHelperProps context compileEnv fragExec
+  stmtLowering exprLoweringProps emitHelper emitHelperProps context compileEnv loweringStateRelDefs fragExec
   arithmetic list rich_list words
 
 Definition revert_reason_prefix_def:

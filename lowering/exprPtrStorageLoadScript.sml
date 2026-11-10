@@ -3,7 +3,7 @@ Theory exprPtrStorageLoad
 Ancestors
   bodyPtrDefs accountsRelProps ptrDiscipline exprSimUnwrap
   stmtAppendStorageRunPtr exprSimPtrProps venomExecSemantics venomInstProofs
-  venomInst venomState compileEnv emitHelper emitHelperProps codegenRel fragExec
+  venomInst venomState compileEnv loweringStateRelDefs emitHelper emitHelperProps codegenRel fragExec
 
 Theorem ptr_vv_base_key_clean:
   ptr_vv_ok cx t tv (LocatedValue t' p) es G tn s /\

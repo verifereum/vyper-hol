@@ -7,7 +7,7 @@ Ancestors
   vyperStorageBackend vyperTypeBuiltins vyperTypeSystem vyperTypeValues
   vyperInterpreter vyperState vyperValueOperation vyperScopePreservation
   bodyPtrDefs loweringPosts exprLoweringProps accountsRelProps
-  codegenRel compileEnv fragExec loweringSlice emitHelperProps emitHelper
+  codegenRel compileEnv loweringStateRelDefs fragExec loweringSlice emitHelperProps emitHelper
   venomInst venomState venomExecSemantics ptrDiscipline
   fragGasPathPtr gasSummaryComposePtr wordArgsPtr
 

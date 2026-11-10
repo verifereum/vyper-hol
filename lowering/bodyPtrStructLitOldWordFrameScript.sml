@@ -1,6 +1,6 @@
 Theory bodyPtrStructLitOldWordFrame
 Ancestors exprSimAggregateChildren bodyPtrDefs loweringPosts
-  valueEncodingProofs valueEncoding venomState compileEnv finite_map
+  valueEncodingProofs valueEncoding valueEncodingDefs venomState compileEnv finite_map
 
 Theorem vv_post_old_buffer_mload:
   vv_post ctx fn ce cx e es sa sb s0 ee tv vv s1 /\

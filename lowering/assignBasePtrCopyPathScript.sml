@@ -4,7 +4,7 @@ Ancestors assignBasePtrMcopy assignBasePtrMcopyTransport fragGasPathPtr
   fragGasSeqPtr context emitHelper emitHelperProps exprLoweringProps
   fragExec fragExecPtr venomExecSemantics venomState venomInst ptrDiscipline
   words list rich_list compileEnv exprSimMemoryTransport typedCopyPtr
-  valueEncoding bodyPtrDefs finite_map
+  valueEncoding valueEncodingDefs bodyPtrDefs finite_map
 
 Theorem assign_base_copy_memory_code:
   !dst src n sa sb fn s.

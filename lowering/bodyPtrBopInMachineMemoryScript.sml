@@ -1,6 +1,6 @@
 Theory bodyPtrBopInMachineMemory
 Ancestors
-  bodyPtrDefs valueEncoding valueEncodingProofs venomMemDefs finite_map list
+  bodyPtrDefs valueEncoding valueEncodingDefs valueEncodingProofs venomMemDefs finite_map list
 
 (* A finite joint witness: two separate length-prefixed string buffers.
    This abbreviation keeps the concrete byte computation out of frame proofs. *)

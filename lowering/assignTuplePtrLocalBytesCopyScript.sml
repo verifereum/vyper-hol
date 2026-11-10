@@ -2,7 +2,7 @@
 Theory assignTuplePtrLocalBytesCopy
 Ancestors
   wordLoadStorePtr typedCopyPtr fragGasSeqPtr ghostPcTransportPtr instIdxIndep
-  context compileEnv emitHelper emitHelperProps fragExec exprLoweringProps
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps fragExec exprLoweringProps
   venomExecSemantics venomInstProofs venomInst venomState
   bodyPtrDefs ptrSafeRun ptrDiscipline finite_map arithmetic list
 

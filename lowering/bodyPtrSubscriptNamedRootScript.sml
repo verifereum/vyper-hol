@@ -4,7 +4,7 @@ Ancestors
   exprSimHypsDefs bodyPtrDefs exprSimDefs loweringPosts
   vyperTypeEnv vyperTypeInvariants vyperTypeSystem vyperValue
   valueEncoding valueEncodingProps codegenRel contextCodegenRel
-  compileEnv ptrDiscipline finite_map exprSimProps venomState
+  compileEnv loweringStateRelDefs ptrDiscipline finite_map exprSimProps venomState
   vyperAST localPtrsProps varsExt exprLoweringProps exprSimNameValue
   vyperInterpreter vyperState fragGasPathPtr context exprLowering
 

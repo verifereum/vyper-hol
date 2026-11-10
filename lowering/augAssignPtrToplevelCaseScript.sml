@@ -8,7 +8,7 @@ Ancestors augAssignPtrStorageCommon
   vyperState vyperInterpreter gasSummary augAssignPtrSource augAssignPtrCompiler augAssignPtrTypedContinuation
   stmtSimAugAssignStorage augAssignPtrLoadClean augAssignPtrLoad
   bodyPtrPreds bodyPtrDefs exprSimHypsDefs exprSimSource
-  loweringPosts compileEnv emitHelperProps exprLoweringProps
+  loweringPosts compileEnv loweringStateRelDefs emitHelperProps exprLoweringProps
   accountsRelProps vyperStorageLayoutSafety vyperLookupStorage
   stmtSimDefs codegenRel stmtSimAugAssign exprSimTopLevelProps
   augAssignPtrStorageSource exprSimUnwrap fragExec loweringSlice gasContext stmtFragPtr fragGasPathPtr gasSummaryComposePtr exprSimDefs

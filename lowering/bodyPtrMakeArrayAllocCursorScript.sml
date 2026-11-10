@@ -1,6 +1,6 @@
 Theory bodyPtrMakeArrayAllocCursor
 Ancestors
-  bodyPtrMakeArrayAllocBuffer exprSimAlloc exprLoweringProps compileEnv
+  bodyPtrMakeArrayAllocBuffer exprSimAlloc exprLoweringProps compileEnv loweringStateRelDefs
   venomState venomInst venomExecSemantics ptrDiscipline fragExec
   emitHelperProps finite_map words
 

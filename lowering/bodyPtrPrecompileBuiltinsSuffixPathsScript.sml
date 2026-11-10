@@ -1,7 +1,7 @@
 Theory bodyPtrPrecompileBuiltinsSuffixPaths
 Ancestors bodyPtrPrecompileBuiltinsSuffixGhost fragGasSeqPtr fragGasPathPtr
           exprSimPrecompiles venomInst venomState venomExecSemantics
-          compileEnv exprLoweringProps list
+          compileEnv loweringStateRelDefs exprLoweringProps list
 
 Theorem suffix_normal_path:
   gi = mk_inst id GAS [] [gv] /\

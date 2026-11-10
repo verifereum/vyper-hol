@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpStorageExit
 Ancestors bodyPtrIfExpStorageInvariant bodyPtrIfExpStorageSupplier
-  slotCopyExecution valueEncoding valueEncodingProps venomState
+  slotCopyExecution valueEncoding valueEncodingDefs valueEncodingProps venomState
   words pred_set
 
 Theorem ifexp_copy_prefix_words:

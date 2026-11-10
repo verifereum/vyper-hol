@@ -2,7 +2,7 @@ Theory bodyPtrPopStoragePureSummary
 Ancestors
   bodyPtrPopStoragePureEndpoint bodyPtrPopStoragePureCounted bodyPtrPopStoragePureOutcome
   bodyPtrPopStoragePureEntry bodyPtrDefs exprSimPopNestedBase targetPlaceSimDefs
-  exprSimDefs loweringPosts compileEnv exprLoweringProps venomState context
+  exprSimDefs loweringPosts compileEnv loweringStateRelDefs exprLoweringProps venomState context
   vyperStorageBackend vyperStorage vyperValue ptrDiscipline fragGasPathPtr
   gasSummaryComposePtr appendStorageSourcePtr exprSimPopStorage words list
 

@@ -4,8 +4,8 @@ Theory assignBasePtrLiteralPost
 Ancestors assignBasePtrLiteralSource exprSimAlloc exprSimLiteralBuffer
   exprLoweringProps emitHelperProps venomState venomInst venomExecSemantics
   valueEncodingProps venomMemProps immutableMemoryFrame finite_map words list
-  stmtSimDeclPath loweringSlice localPtrsProps venomMemDefs compileEnv
-  valueEncodingProofs valueEncoding byte
+  stmtSimDeclPath loweringSlice localPtrsProps venomMemDefs compileEnv loweringStateRelDefs
+  valueEncodingProofs valueEncoding valueEncodingDefs byte
 
 Theorem assign_base_ptr_one_byte_init_endpoint:
   !s t p q a i j k.
@@ -373,7 +373,7 @@ Proof
            vyperValueTheory.evaluate_type_def, is_word_type_def] >>
       qexists_tac `a` >> simp[]) >>
   simp[loweringPostsTheory.expr_val_at_def, vyperValueTheory.evaluate_type_def,
-       is_word_type_def, valueEncodingTheory.val_wf_def,
+       is_word_type_def, valueEncodingDefsTheory.val_wf_def,
        valueEncodingTheory.type_memory_size_def, vyperValueTheory.type_slot_size_def,
        vfmConstantsTheory.word_size_def] >>
   disj1_tac >>

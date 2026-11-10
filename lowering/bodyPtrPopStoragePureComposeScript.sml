@@ -3,7 +3,7 @@ Ancestors
   bodyPtrPopStoragePureSummary bodyPtrPopTargetDefs bodyPtrPreds bodySim
   exprSimHypsDefs exprSimPopNestedBase targetPlaceLive vyperPureExpr
   vyperInterpreter vyperState vyperAST gasSummaryComposePtr gasExemptCert
-  stmtLoweringMono exprLoweringProps compileEnv loweringPosts
+  stmtLoweringMono exprLoweringProps compileEnv loweringStateRelDefs loweringPosts
   bodyPtrDefs vyperTypeSystem fragExec fragGasPathPtr exprSimDefs stmtSimProps exprSimPopStorage
   vyperStoragePlaceProvenance fragGasPath gasSummary fragGasMode
   vyperStorageLayoutSafety vyperLookupStorage vyperStorageBackend appendStorageSourcePtr

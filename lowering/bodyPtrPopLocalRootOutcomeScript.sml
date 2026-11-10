@@ -5,7 +5,7 @@ Ancestors
   bodyPtrPopLocalRootSemanticPost bodyPtrPopLocalRootSource
   bodyPtrPopLocalRootEntry bodyPtrPopLocalRootBounds
   bodyPtrDefs exprSimPop exprSimProps exprSimHypsDefs
-  exprLowering exprLoweringProps emitHelperProps compileEnv context venomState
+  exprLowering exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs context venomState
   gasOutcome gasSummary fragGasPathPtr fragExec stmtFragPtr
   finite_map words list rich_list arithmetic loweringPosts vyperLookup
 

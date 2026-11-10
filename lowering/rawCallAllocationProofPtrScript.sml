@@ -1,7 +1,7 @@
 (* Output-allocation boundaries for the counted raw_call pointer proof. *)
 Theory rawCallAllocationProofPtr
 Ancestors
-  rawCallPrefixPtr rawCallBufferPtr builtinSystem context emitHelper compileEnv
+  rawCallPrefixPtr rawCallBufferPtr builtinSystem context emitHelper compileEnv loweringStateRelDefs
   fragGasSeqPtr fragExecPtr typedCopyPtr exprSimAlloc exprSimPtrLiteralBuffer
   exprLoweringProps venomInst bodyPtrDefs pred_set
 

@@ -6,7 +6,7 @@ Ancestors
   bodyPtrTypeBuiltinsUintCounted bodyPtrSignedConvertUnsignedLoad
   bodyPtrTypeBuiltinsScalarCompose
   fragGasPathPtr instIdxIndep fragExec exprLoweringProps emitHelperProps
-  exprLowering compileEnv venomState venomExecSemantics builtinConvertPrefix
+  exprLowering compileEnv loweringStateRelDefs venomState venomExecSemantics builtinConvertPrefix
   arithmetic finite_map list rich_list
 
 (* Common source footprint, obtained for BytesV or StringV by the existing

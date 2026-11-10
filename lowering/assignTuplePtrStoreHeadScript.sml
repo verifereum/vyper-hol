@@ -2,7 +2,7 @@
 Theory assignTuplePtrStoreHead
 Ancestors
   wordLoadStorePtr assignTuplePtrWordLocals assignTuplePtrCopyEndpoint typedCopyPtr bodyPtrDefs ptrDiscipline
-  venomInst venomState vyperLookup compileEnv finite_map pred_set list
+  venomInst venomState vyperLookup compileEnv loweringStateRelDefs finite_map pred_set list
   assignTuplePtrStoreWord tupleTargetStoreRun tupleTargetStoreProps
   stmtSimAssignStore exprSimProps context emitHelperProps emitHelper fragExec
   vyperState valueEncodingProps localPtrsProps exprLoweringProps stmtSimDeclStore

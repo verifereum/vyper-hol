@@ -3,7 +3,7 @@ Ancestors
   bodyPtrTypeBuiltinsScalarChecks bodyPtrSignedConvertClamp
   bodyPtrSignedConvertScalarOps exprLowering exprLoweringProps fragGasSeqPtr
   convertScalarBytesRun arithmeticProps instSeqComposePtr instIdxIndep fragExec
-  compileEnv ptrDiscipline finite_map venomState venomInst list
+  compileEnv loweringStateRelDefs ptrDiscipline finite_map venomState venomInst list
   venomExecSemantics emitHelperProps ASCIInumbers rich_list
 
 Theorem scalar_emit_fixed_certificate:

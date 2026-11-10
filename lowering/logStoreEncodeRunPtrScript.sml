@@ -3,7 +3,7 @@ Theory logStoreEncodeRunPtr
 Ancestors
   logSourceStoreRunPtr logTuplePathPtr logEncoderEntryPtr logGhostFramePtr
   stmtSimLogDataRun abiBuiltinAllocation emitHelperProps exprLoweringProps
-  stmtFragPtr fragGasPathPtr compileEnv venomState list arithmetic words
+  stmtFragPtr fragGasPathPtr compileEnv loweringStateRelDefs venomState list arithmetic words
 
 Theorem log_source_encoder_types:
   !(xs:(operand # type) list) vs. LIST_REL (\arg v. log_arg_rel ce cx sa st es s arg v /\

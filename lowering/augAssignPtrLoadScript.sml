@@ -4,7 +4,7 @@ Ancestors
   wordLoadStorePtr augAssignPtrInterfaces typedCopyPtr fragGasSeqPtr fragGasPathPtr bodyPtrDefs
   venomInst venomState venomExecSemantics ptrSafeRun representationCleanPtr
   finite_map vyperValue emitHelperProps exprSimMemoryPath
-  emitHelper compileEnv fragExec loweringPosts ptrDiscipline codegenRel
+  emitHelper compileEnv loweringStateRelDefs fragExec loweringPosts ptrDiscipline codegenRel
   loweringSlice exprLoweringProps valueEncodingProps exprSimNameWord stmtFragPtr
   accountsRelProps contextCodegenRel exprSimUnwrap
 
@@ -179,7 +179,7 @@ Proof
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
   `32 <= sz` by
-    (gvs[word_value_def, valueEncodingTheory.val_wf_def] >> decide_tac) >>
+    (gvs[word_value_def, valueEncodingDefsTheory.val_wf_def] >> decide_tac) >>
   qexists_tac `a` >> simp[] >> conj_tac
   >- (`ptr_covers G tn p s sz` by (gvs[ghost_inv_def] >> metis_tac[]) >>
       gvs[ptr_covers_def] >> qexistsl_tac [`a`, `b`, `sz'`] >> simp[] >>

@@ -8,7 +8,7 @@ Ancestors
   exprLoweringProps exprLowering emitHelperProps stmtLoweringMono
   targetPlaceSim targetPlaceSimDefs loweringPosts bodyPtrDefs
   bodyPtrPopTargetDefs vyperInterpreter vyperState vyperTypeSystem
-  compileEnv ptrDiscipline freshWrites fragExec pair list
+  compileEnv loweringStateRelDefs ptrDiscipline freshWrites fragExec pair list
   vyperEvalExprPreservesScopesDom wordOperandsPtr stmtFragPtr
   bodySimStmtCases vyperTypeExprSoundness vyperTypeInvariants vyperValue
   exprSimHyps vyperTyping assignTuplePtrBodyReady valueEncoding

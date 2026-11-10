@@ -2,7 +2,7 @@ Theory bodyPtrBopCompareSuffix
 Ancestors
   bodyPtrBopCompareCompile bodyPtrBopHashSuffix bodyPtrBopHashFrame exprLoweringProps
   emitHelperProps venomState venomInst instIdxIndep fragExec
-  fragGasPathPtr codegenRel compileEnv arithmetic rich_list exprLowering emitHelper exprSimHash
+  fragGasPathPtr codegenRel compileEnv loweringStateRelDefs arithmetic rich_list exprLowering emitHelper exprSimHash
 
 Theorem bop_compare_pair_run_split:
   emit_op opc1 ops1 sc = (a,sd) /\ emit_op opc2 ops2 sd = (b,se) /\

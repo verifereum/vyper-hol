@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpBytesEndpoint
 Ancestors
   bodyPtrIfExpBytesSemantic bodyPtrIfExpBytesCallerFrame bodyPtrIfExpBytesPost
-  bodyPtrIfExpBytesResources bodyPtrDefs exprSimProps loweringPosts compileEnv
+  bodyPtrIfExpBytesResources bodyPtrDefs exprSimProps loweringPosts compileEnv loweringStateRelDefs
   venomState finite_map words exprSimBufferStore exprSimDefs exprLoweringProps
   ghostPcTransportPtr bodyPtrIfExpAllocSource stmtFragPtr
 

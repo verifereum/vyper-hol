@@ -1,7 +1,7 @@
 (* The local clause after a scalar write, independently of the counted edge. *)
 Theory assignTuplePtrWordLocals
 Ancestors
-  assignTuplePtrStoreWord assignTuplePtrStoreFrame bodyPtrDefs robustCopyTransportPtr compileEnv
+  assignTuplePtrStoreWord assignTuplePtrStoreFrame bodyPtrDefs robustCopyTransportPtr compileEnv loweringStateRelDefs
   valueEncodingProps venomState finite_map pred_set
 
 Theorem local_word_robust_update_ptr:

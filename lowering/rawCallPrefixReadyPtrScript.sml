@@ -129,7 +129,7 @@ Proof
         compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.fresh_var_def,
         compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
         compileEnvTheory.comp_return_def] >> rpt strip_tac >> gvs[] >>
-      simp[compileEnvTheory.not_fresh_at_def]) >>
+      simp[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   drule ext_call_kwarg_member >> fs[listTheory.EVERY_MEM] >> metis_tac[]
 QED
 

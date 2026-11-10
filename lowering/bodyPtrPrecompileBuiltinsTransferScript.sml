@@ -1,7 +1,7 @@
 Theory bodyPtrPrecompileBuiltinsTransfer
 Ancestors bodyPtrPrecompileBuiltinsStaging bodyPtrPrecompileBuiltinsSeq
           venomExecSemantics venomState venomInst ptrDiscipline bodyPtrDefs
-          exprLoweringProps fragExec finite_map list emitHelper compileEnv
+          exprLoweringProps fragExec finite_map list emitHelper compileEnv loweringStateRelDefs
           context contextCodegenRelProps rich_list
 
 Theorem point_word_read_trace:

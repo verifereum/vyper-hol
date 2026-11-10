@@ -4,7 +4,7 @@ Ancestors
   bodyPtrSignedConvertClamp bodyPtrSignedConvertBool
   bodyPtrSignedConvertSourceFrame fragGasPathPtr venomState venomInst
   venomExecSemantics emitHelperProps builtinConvertPrefix
-  exprLoweringProps exprLowering compileEnv finite_map arithmetic
+  exprLoweringProps exprLowering compileEnv loweringStateRelDefs finite_map arithmetic
 
 (* One boundary for the three suffix implementations; no source memory facts
    are needed once both loaded operands are clean. *)

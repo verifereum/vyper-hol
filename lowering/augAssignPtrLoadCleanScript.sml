@@ -2,7 +2,7 @@
 Theory augAssignPtrLoadClean
 Ancestors
   wordLoadStorePtr augAssignPtrScalarWitnessProbe augAssignPtrLoad augAssignPtrProvenanceProbe
-  emitHelper emitHelperProps exprLoweringProps compileEnv stmtFragPtr
+  emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs stmtFragPtr
   exprSimNameWord bodyPtrDefs ptrDiscipline venomInst venomState finite_map
   loweringSlice venomExecSemantics fragExec typedCopyPtr codegenRel
   augAssignPtrInterfaces loweringPosts exprSimUnwrap

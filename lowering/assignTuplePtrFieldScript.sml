@@ -3,7 +3,7 @@ Theory assignTuplePtrField
 Ancestors
   assignTuplePtrLoadStep assignTuplePtrStorage typedCopyPtr ptrDiscipline
   ptrSafeRun venomExecSemantics venomInst venomState emitHelper emitHelperProps
-  context compileEnv exprLoweringProps fragExec finite_map ASCIInumbers arithmetic
+  context compileEnv loweringStateRelDefs exprLoweringProps fragExec finite_map ASCIInumbers arithmetic
   localPtrsProps exprSimProps assignTuplePtrCopyEndpoint bodyPtrDefs stateFrame
   stmtLoweringMono stmtLowering exprLowering tupleTargetStoreRun fragGasPathPtr
 

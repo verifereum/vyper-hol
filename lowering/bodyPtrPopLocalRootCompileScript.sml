@@ -1,7 +1,7 @@
 Theory bodyPtrPopLocalRootCompile
 Ancestors
   bodyPtrPopLocalRootPath bodyPtrPopLocalRootAddress bodyPtrPopLocalRootBounds
-  fragExec fragGasPathPtr emitHelperProps emitHelper compileEnv list words venomState ptrDiscipline
+  fragExec fragGasPathPtr emitHelperProps emitHelper compileEnv loweringStateRelDefs list words venomState ptrDiscipline
 
 Theorem pop_local_compile_code:
   compile_dynarray_pop root_op 32 esz ctor imm LocMemory sa = (res,sj) /\

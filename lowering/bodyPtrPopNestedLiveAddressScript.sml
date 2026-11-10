@@ -1,7 +1,7 @@
 Theory bodyPtrPopNestedLiveAddress
 Ancestors
   bodyPtrPopInteriorPointer bodyPtrPopNestedLiveArithmetic bodyPtrAttributeAdd
-  typedCopyLoopHeaderPtr bodyPtrDefs emitHelperProps emitHelper compileEnv
+  typedCopyLoopHeaderPtr bodyPtrDefs emitHelperProps emitHelper compileEnv loweringStateRelDefs
   ptrDiscipline venomState venomInst words finite_map pred_set stmtFragPtr fragGasPathPtr
 
 (* Unlike the strict-interior toolkit lemma this permits zero-byte values

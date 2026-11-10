@@ -1,7 +1,7 @@
 (* Destination ADD precedes uniform forcing, as in compile_struct_lit. *)
 Theory bodyPtrStructLitUniformChildUnwrap
 Ancestors bodyPtrStructLitUniformUnwrap bodyPtrMakeArrayChildAdd
-  emitHelperProps fragGasPathPtr fragGasPath loweringPosts compileEnv
+  emitHelperProps fragGasPathPtr fragGasPath loweringPosts compileEnv loweringStateRelDefs
   wordArgsPtr vyperEvalExprPreservesScopesDom exprLoweringProps
 
 Theorem structlit_uniform_child_add_unwrap:

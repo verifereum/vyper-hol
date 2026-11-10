@@ -3,7 +3,7 @@ Ancestors
   bodyPtrIfExpAllocOrdered bodyPtrIfExpBytesConsumer bodyPtrIfExpNoopPost
   bodyPtrIfExpBytesResources bodyPtrIfExpAllocCaller bodyPtrIfExpBytesEndpoint
   bodyPtrDefs exprSimBufferStore exprSimProps exprSimDefs exprLoweringProps
-  loweringPosts compileEnv fragExec fragGasPathPtr gasSummaryComposePtr
+  loweringPosts compileEnv loweringStateRelDefs fragExec fragGasPathPtr gasSummaryComposePtr
   venomState venomInst finite_map words rich_list loweringHalt
 
 Theorem ifexp_allocate_unwrap_bytes:

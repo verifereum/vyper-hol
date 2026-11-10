@@ -3,7 +3,7 @@
 Theory bodyPtrBytestringBuiltinsSource
 Ancestors
   bodyPtrBytestringBuiltinsBuffer exprSimPtrProps builtinBytes
-  emitHelper compileEnv exprLoweringProps bodyPtrDefs venomState venomInstProofs
+  emitHelper compileEnv loweringStateRelDefs exprLoweringProps bodyPtrDefs venomState venomInstProofs
   finite_map fragExec freshWrites fragGasPathPtr typedCopyPtr bodyPtrAttributeAdd
   ptrDiscipline venomInst emitHelperProps fragExecPtr valueEncodingProps wordLoadStorePtr
 

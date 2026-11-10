@@ -4,7 +4,7 @@ Ancestors
   wordLoadStorePtr logAbiEncodePtr logAbiPrefixPtr logInstSeqPtr logTopicScalarPtr logAbiChildPostPtr
   abiEncoder abiEncoderChildCode abiEncoderChildPrefix abiDecoderReentry
   abiEncoderBytesCode bodyPtrDefs fragGasSeqPtr
-  emitHelperProps emitHelper exprLoweringProps compileEnv
+  emitHelperProps emitHelper exprLoweringProps compileEnv loweringStateRelDefs
   venomExecSemantics venomState venomInst ptrDiscipline ptrSafeRun
   finite_map words arithmetic list rich_list typedCopyPtr venomMemProps
 

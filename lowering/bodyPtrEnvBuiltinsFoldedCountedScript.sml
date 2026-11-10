@@ -2,7 +2,7 @@
 Theory bodyPtrEnvBuiltinsFoldedCounted
 Ancestors bodyPtrEnvBuiltinsMethodFolded bodyPtrEnvBuiltinsSelectorBytes
   bodyPtrEnvBuiltinsSelectorCounted bodyPtrDefs exprLoweringProps exprSimHash
-  fragExec compileEnv venomState venomInst ptrDiscipline words list
+  fragExec compileEnv loweringStateRelDefs venomState venomInst ptrDiscipline words list
 
 Theorem folded_selector_counted:
   LENGTH (bs:word8 list) = 4 /\

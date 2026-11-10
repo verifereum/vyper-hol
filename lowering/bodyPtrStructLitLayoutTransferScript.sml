@@ -1,6 +1,6 @@
 (* Widening with no extra aggregate capacity cannot shift live layout. *)
 Theory bodyPtrStructLitLayoutTransfer
-Ancestors vyperTypeArgFits vyperTypeSystem vyperTypeValues valueEncoding
+Ancestors vyperTypeArgFits vyperTypeSystem vyperTypeValues valueEncoding valueEncodingDefs
   exprSimHyps list arithmetic vyperValue valueEncodingProofs
 
 Theorem arg_type_fits_memory_size:

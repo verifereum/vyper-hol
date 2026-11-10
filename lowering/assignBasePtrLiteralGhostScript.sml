@@ -2,7 +2,7 @@
 Theory assignBasePtrLiteralGhost
 Ancestors wordLoadStorePtr assignBasePtrLiteralPost typedCopyPtr robustCopyTransportPtr
   allocationPtr loweringHalt exprLoweringProps localPtrsProps bodyPtrDefs ptrDiscipline venomInst venomExecSemantics
-  venomState valueEncodingProps exprSimProps compileEnv finite_map pred_set
+  venomState valueEncodingProps exprSimProps compileEnv loweringStateRelDefs finite_map pred_set
   fragGasSeqPtr ghostPcTransportPtr instIdxIndep representationCleanPtr
   emitHelperProps words exprSimMemoryTransport venomMemProofs list valueEncodingProofs
 
@@ -409,10 +409,10 @@ Proof
      (w2n a) t.vs_memory` by
     (irule assign_base_ptr_one_byte_value >> simp[]) >>
   rpt strip_tac >> irule assign_base_ptr_clean_footprint_robust >>
-  conj_tac >- simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def,
+  conj_tac >- simp[valueEncodingDefsTheory.val_wf_def, valueEncodingTheory.type_memory_size_def,
     vyperValueTheory.type_slot_size_def, vfmConstantsTheory.word_size_def] >>
   qexistsl_tac [`t.vs_memory`, `64`, `tn'.t_mem`] >>
-  simp[valueEncodingTheory.val_wf_def, loweringPostsTheory.val_footprint_def]
+  simp[valueEncodingDefsTheory.val_wf_def, loweringPostsTheory.val_footprint_def]
 QED
 
 Theorem assign_base_ptr_one_byte_init_kept:

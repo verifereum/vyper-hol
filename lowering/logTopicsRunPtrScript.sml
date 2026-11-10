@@ -2,7 +2,7 @@
 Theory logTopicsRunPtr
 Ancestors
   logTopicScalarPtr logTopicFramePtr logInstSeqPtr logValueFramePtr stmtSimLogTopics
-  bodyPtrDefs stmtLowering context compileEnv contextCodegenRel contextCodegenRelProps
+  bodyPtrDefs stmtLowering context compileEnv loweringStateRelDefs contextCodegenRel contextCodegenRelProps
   emitHelper emitHelperProps exprLoweringProps venomInst venomState venomExecSemantics
   ptrDiscipline finite_map words list rich_list arithmetic valueEncoding stmtSimLogTopicFresh
   stmtSimLogArgs loweringPosts ghostPcTransportPtr codegenRel fragGasSeqPtr vyperEvent exprSimHash stmtFragPtr

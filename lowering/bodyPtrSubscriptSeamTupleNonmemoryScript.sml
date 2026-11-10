@@ -3,7 +3,7 @@ Theory bodyPtrSubscriptSeamTupleNonmemory
 Ancestors
   bodyPtrSubscriptSeamTuplePost bodyPtrAttributeFields bodyPtrAttributeStorage
   bodyPtrDefs ptrDiscipline targetPlaceLive accountsRelProps
-  vyperStoragePlaceRegion vyperState loweringPosts compileEnv words arithmetic
+  vyperStoragePlaceRegion vyperState loweringPosts compileEnv loweringStateRelDefs words arithmetic
   exprSimProps exprSimTuple exprLowering exprSimAttributeProps context list rich_list
 
 Theorem tuple_storage_child_address:

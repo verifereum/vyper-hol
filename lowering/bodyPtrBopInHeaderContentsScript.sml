@@ -4,7 +4,7 @@ Theory bodyPtrBopInHeaderContents
 Ancestors bodyPtrBopInCodeContents bodyPtrBopInSlotContents
   bodyPtrBopInLiveMemory bodyPtrBopInLiveStorage bodyPtrBopInRepresentation
   bodyPtrBopInSlotLoad exprSimCopy bodyPtrDefs exprSimProps valueEncodingProps
-  valueEncoding vyperValue vyperValueOperation vyperTyping loweringPosts arithmetic
+  valueEncoding valueEncodingDefs vyperValue vyperValueOperation vyperTyping loweringPosts arithmetic
   venomExecSemantics venomState ptrDiscipline
 
 Theorem membership_dynamic_memory_header:

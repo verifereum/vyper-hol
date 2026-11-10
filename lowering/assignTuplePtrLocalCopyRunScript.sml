@@ -3,7 +3,7 @@ Theory assignTuplePtrLocalCopyRun
 Ancestors
   fragGasSeqPtr fragGasPathPtr tupleTargetStoreRun tupleTargetStoreProps
   valueCopy valueEncodingProps stmtSimProps stmtSimDefs loweringPosts
-  stmtLowering exprLowering exprLoweringProps context compileEnv
+  stmtLowering exprLowering exprLoweringProps context compileEnv loweringStateRelDefs
   venomState venomExecSemantics venomInst fragExec emitHelper emitHelperProps
   finite_map rich_list list arithmetic localPtrsProps vyperState
   loweringSlice exprSimProps stmtSimAssignStore tupleLocalStoreRun vyperLookup

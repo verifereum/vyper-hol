@@ -2,7 +2,7 @@
 Theory bodyPtrEnvBuiltinsLenSuffix
 Ancestors
   bodyPtrEnvBuiltinsLen bodyPtrEnvBuiltinsLenSource bodyPtrEnvBuiltinsOperandFrame
-  bodyPtrDefs context loweringPosts exprSimDefs exprSimProps exprLoweringProps compileEnv
+  bodyPtrDefs context loweringPosts exprSimDefs exprSimProps exprLoweringProps compileEnv loweringStateRelDefs
   exprSimLen vyperState vyperAST vyperTyping vyperValue valueEncoding integer_word freshWrites
 
 Theorem len_builtin_post_frame:

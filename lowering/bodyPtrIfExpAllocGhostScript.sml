@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpAllocGhost
 Ancestors
   bodyPtrIfExpAllocLocals allocationPtr bodyPtrDefs ptrDiscipline decoderGhostFramePtr
-  venomState venomInst finite_map compileEnv exprSimDefs exprLoweringProps
+  venomState venomInst finite_map compileEnv loweringStateRelDefs exprSimDefs exprLoweringProps
 
 Theorem alloca_step_lookup_preserved:
   !s id n out u p.

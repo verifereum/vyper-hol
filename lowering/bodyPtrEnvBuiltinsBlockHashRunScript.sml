@@ -1,7 +1,7 @@
 (* Checked executed prefixes of the guarded BLOCKHASH lowering. *)
 Theory bodyPtrEnvBuiltinsBlockHashRun
 Ancestors bodyPtrEnvBuiltinsGuards bodyPtrEnvBuiltinsEdges exprSendPtr
-  builtinMisc builtinProps compileEnv emitHelper exprLoweringProps fragExec fragGasSeqPtr
+  builtinMisc builtinProps compileEnv loweringStateRelDefs emitHelper exprLoweringProps fragExec fragGasSeqPtr
   ptrDiscipline ptrSafeRun venomExecSemantics venomInst venomState
   context rich_list finite_map pred_set list codegenRel contextCodegenRel
   decoderGhostFramePtr stmtAppendStoragePathPtr emitHelperProps

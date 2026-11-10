@@ -3,7 +3,7 @@ Ancestors bodyPtrPrecompileBuiltinsFullOutputFrame
           bodyPtrPrecompileBuiltinsRecoveryResidual bodyPtrPrecompileBuiltinsPrefixFrames
           bodyPtrPrecompileBuiltinsContinuationFrame
           exprSimPtrLiteralBuffer ghostPcTransportPtr fragGasPathPtr fragGasSeqPtr
-          exprSimDefs exprSimProps compileEnv venomState venomInst venomExecSemantics
+          exprSimDefs exprSimProps compileEnv loweringStateRelDefs venomState venomInst venomExecSemantics
           rich_list list bodyPtrDefs wordArgsPtr stmtSimDeclPath exprSimWordArgs
           venomCallOracleDefs extCallOracle exprLoweringProps entrySinkExtraction exprSimPrecompiles
 

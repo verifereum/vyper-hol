@@ -2,7 +2,7 @@ Theory bodyPtrPopTargetSimAttributeAdd
 Ancestors
   bodyPtrPopTargetSimAttributeSource bodyPtrPopTargetDefs bodyPtrDefs
   bodyPtrAttributeAdd targetPlaceSimCasesBase emitHelperProps emitHelper
-  compileEnv ptrDiscipline venomState venomInst words finite_map exprLowering
+  compileEnv loweringStateRelDefs ptrDiscipline venomState venomInst words finite_map exprLowering
   fragGasPathPtr
 
 (* Spatial extent is deliberately not asserted: a target pointer may denote

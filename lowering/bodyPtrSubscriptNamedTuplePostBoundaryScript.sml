@@ -1,7 +1,7 @@
 (* Ordinary posts for a selected local child; implementation-only boundaries. *)
 Theory bodyPtrSubscriptNamedTuplePostBoundary
 Ancestors
-  loweringPosts exprSimProps exprSimDefs exprLoweringProps compileEnv context
+  loweringPosts exprSimProps exprSimDefs exprLoweringProps compileEnv loweringStateRelDefs context
   venomState valueEncodingTyping vyperAST bodyPtrDefs
 
 Theorem local_child_vv_holds:

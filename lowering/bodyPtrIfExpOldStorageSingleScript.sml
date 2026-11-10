@@ -4,7 +4,7 @@ Ancestors bodyPtrIfExpStorageSingle bodyPtrIfExpOldOperandAllocation
   bodyPtrIfExpSingleCopyPost bodyPtrIfExpStorageAllocationFrame
   bodyPtrIfExpStorageSource bodyPtrIfExpMaterializeSingle
   bodyPtrIfExpAllocSource bodyPtrIfExpBytesInputs
-  context compileEnv emitHelper fragExec loweringHalt loweringPosts
+  context compileEnv loweringStateRelDefs emitHelper fragExec loweringHalt loweringPosts
   venomState finite_map valueEncodingProps valueEncodingTyping pred_set
 
 (* The source operand is compiler-old; unrelated future registers may exist. *)

@@ -34,7 +34,7 @@ Proof
   >- (fs[bodyPtrDefsTheory.ghost_inv_def,
          bodyPtrDefsTheory.return_buf_ptr_def,
          bodyPtrDefsTheory.stor_taint_ok_def,
-         compileEnvTheory.local_ptrs_reserved_def] >>
+         loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
       rpt conj_tac >> rpt strip_tac
       >- (fs[bodyPtrDefsTheory.ptr_covers_def] >> metis_tac[])
       >- metis_tac[]
@@ -100,7 +100,7 @@ Proof
        compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.fresh_var_def,
        compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
        compileEnvTheory.comp_return_def] >> rpt strip_tac >> gvs[] >>
-     fs[compileEnvTheory.not_fresh_at_def]) >>
+     fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   simp[ghost_inv_inst_idx] >> irule raw_call_header_fresh_step_frame >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl_tac [`PG`, `sa.cs_next_id`, `MLOAD`, `[Var src]`] >> simp[]
@@ -126,7 +126,7 @@ Proof
        compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.fresh_var_def,
        compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
        compileEnvTheory.comp_return_def] >> rpt strip_tac >> gvs[] >>
-     fs[compileEnvTheory.not_fresh_at_def]) >>
+     fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   simp[ghost_inv_inst_idx] >> irule raw_call_header_fresh_step_frame >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl_tac [`PG`, `sa.cs_next_id`, `ADD`, `[left;right]`] >> simp[]

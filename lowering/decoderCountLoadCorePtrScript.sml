@@ -1,7 +1,7 @@
 (* Count loads expose a common fragment/continuation ghost. *)
 Theory decoderCountLoadCorePtr
 Ancestors wordLoadStorePtr decoderSetupStepPtr decoderNavigationPtr calldataClampPtr typedCopyPtr
-  bodyPtrDefs compileEnv emitHelper venomInst venomExecSemantics venomState
+  bodyPtrDefs compileEnv loweringStateRelDefs emitHelper venomInst venomExecSemantics venomState
   words list rich_list arithmetic finite_map ptrDiscipline ptrSafeRun
   venomInstProofs codegenRel contextCodegenRel emitHelperProps exprLoweringProps
   fragExec decoderGhostFramePtr abiDecoderContract entryDispatchPtr instIdxIndep fragExecPtr

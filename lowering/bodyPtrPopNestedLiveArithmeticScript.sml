@@ -1,6 +1,6 @@
 Theory bodyPtrPopNestedLiveArithmetic
 Ancestors
-  bodyPtrPopScalarTransfer bodyPtrAttributeAdd bodyPtrDefs emitHelperProps emitHelper compileEnv
+  bodyPtrPopScalarTransfer bodyPtrAttributeAdd bodyPtrDefs emitHelperProps emitHelper compileEnv loweringStateRelDefs
   ptrDiscipline venomState venomInst finite_map pred_set words
 
 (* Expose the old-variable frame of the existing scalar instruction runner. *)

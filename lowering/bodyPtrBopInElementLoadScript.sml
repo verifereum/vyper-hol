@@ -255,7 +255,7 @@ Proof
       [Var ("%" ++ toString (sa.cs_next_var+1));Lit (n2w stride)]
       ["%" ++ toString (sa.cs_next_var+3)])` by simp[] >>
   `~not_fresh_at sa ("%" ++ toString (sa.cs_next_var+3))` by
-    simp[compileEnvTheory.not_fresh_at_def] >>
+    simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
   `eval_operand (Var ("%" ++ toString (sa.cs_next_var+1))) s = SOME (n2w i) /\
    op_taint tn (Var ("%" ++ toString (sa.cs_next_var+1))) = {}` by
     fs[membership_loop_registers_def, eval_operand_def] >>
@@ -325,7 +325,7 @@ Proof
           [Lit (n2w skip);Var ("%" ++ toString (sa.cs_next_var+3))]
           ["%" ++ toString (sa.cs_next_var+4)])` by simp[] >>
       `~not_fresh_at sa ("%" ++ toString (sa.cs_next_var+4))` by
-        simp[compileEnvTheory.not_fresh_at_def] >>
+        simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
       drule_at (Pat `get_instruction _ _ = _`) membership_address_binop_framed_path >>
       disch_then (drule_at (Pat `membership_loop_frame _ _ _ _ _ _ _`)) >>
       simp[eval_operand_def, op_taint_def] >> disch_then drule_all >>
@@ -366,7 +366,7 @@ Proof
       [arr;Var ("%" ++ toString (sa.cs_next_var+3+delta))]
       ["%" ++ toString (sa.cs_next_var+4+delta)])` by gvs[] >>
   `~not_fresh_at sa ("%" ++ toString (sa.cs_next_var+4+delta))` by
-    simp[compileEnvTheory.not_fresh_at_def] >>
+    simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
   drule_at (Pat `get_instruction _ _ = _`) membership_address_binop_framed_path >>
   disch_then (drule_at (Pat `membership_loop_frame _ _ _ _ _ _ _`)) >>
   gvs[eval_operand_def] >> disch_then drule_all >>
@@ -527,7 +527,7 @@ Proof
       simp[] >> qexistsl_tac [`G`, `tn`] >>
       simp[op_taint_def, FLOOKUP_UPDATE]) >>
   irule membership_frame_scalar_update >>
-  conj_tac >- simp[compileEnvTheory.not_fresh_at_def] >>
+  conj_tac >- simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
   qexistsl_tac [`G`, `tn`] >> simp[op_taint_def, FLOOKUP_UPDATE]
 QED
 

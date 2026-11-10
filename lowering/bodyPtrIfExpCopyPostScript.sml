@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpCopyPost
 Ancestors exprSimCopy loweringPosts exprLoweringProps freshWrites
   exprSimStorageCopy immutableCopyExecution localPtrsProps
-  compileEnv venomState venomInst finite_map words arithmetic
+  compileEnv loweringStateRelDefs venomState venomInst finite_map words arithmetic
 
 (* Only the frame clauses of vv_post are transported here. The raw result
    remains arbitrary: reading a place does not make it a Value constructor. *)

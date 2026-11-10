@@ -2,7 +2,7 @@
    the overwritten bytes. Scalar stores and aggregate copies share this post. *)
 Theory assignBasePtrScopePost
 Ancestors assignTuplePtrLocalCopyGhost assignTuplePtrStoreWord assignTuplePtrCopyLen
-  bodyPtrDefs robustCopyTransportPtr localPtrsProps compileEnv
+  bodyPtrDefs robustCopyTransportPtr localPtrsProps compileEnv loweringStateRelDefs
   vyperState vyperLookup finite_map pred_set
 
 Theorem assign_base_local_scope_ghost_post:

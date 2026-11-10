@@ -2,7 +2,7 @@
 Theory exprPtrUnwrapCopySemantic
 Ancestors
   exprPtrUnwrapAllocSemantic exprPtrUnwrapRuntimeFrame exprSimCopy
-  exprPtrUnwrapAllocEntry exprPtrUnwrapAllocation exprSimAlloc loweringPosts exprLoweringProps compileEnv context
+  exprPtrUnwrapAllocEntry exprPtrUnwrapAllocation exprSimAlloc loweringPosts exprLoweringProps compileEnv loweringStateRelDefs context
   venomState venomInst finite_map words arithmetic
 
 Theorem unwrap_copy_semantic_post:

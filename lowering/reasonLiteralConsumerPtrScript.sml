@@ -4,8 +4,8 @@ Ancestors
   literalCapacityPtr reasonMemoryConsumerPtr revertReasonEntryPtr fragGasPathPtr
   exprSimLiteralBuffer fragGasSeqPtr fragExec context exprLoweringProps
   entrySinkExtraction loweringPosts bodyPtrDefs venomState words arithmetic
-  list rich_list ptrDiscipline valueEncoding valueEncodingProps contractABI
-  finite_map pred_set vfmConstants exprSimPtrLiteralBuffer emitHelper compileEnv exprSimCopy
+  list rich_list ptrDiscipline valueEncoding valueEncodingDefs valueEncodingProps contractABI
+  finite_map pred_set vfmConstants exprSimPtrLiteralBuffer emitHelper compileEnv loweringStateRelDefs exprSimCopy
 
 Theorem literal_capacity_checked_endpoint:
   compile_bytelike_literal bs mx sa = (buf,sb) /\ fn_has_code sa sb fn /\

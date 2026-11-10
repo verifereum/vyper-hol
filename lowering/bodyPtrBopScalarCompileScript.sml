@@ -1,6 +1,6 @@
 Theory bodyPtrBopScalarCompile
 Ancestors
-  bodyPtrBopScalarSeq emitHelperProps compileEnv exprLoweringProps exprLowering
+  bodyPtrBopScalarSeq emitHelperProps compileEnv loweringStateRelDefs exprLoweringProps exprLowering
   freshWrites builtinSimple list pred_set
 
 Theorem bop_scalar_seq_append:

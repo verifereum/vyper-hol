@@ -55,7 +55,7 @@ Theorem oracle_call_checked_step:
       (Var out) = NONE
 Proof
   VALID (strip_tac >> (
-  `~s.vs_call_ctx.cc_static` by fs[compileEnvTheory.state_rel_def] >>
+  `~s.vs_call_ctx.cc_static` by fs[loweringStateRelDefsTheory.state_rel_def] >>
   mp_tac (exec_ext_call_oracle_step |>
     INST_TYPE [``:'a`` |-> ``:256 word``, ``:'b`` |-> ``:256``,
                ``:'c`` |-> ``:256``] |> SPEC_ALL |>
@@ -91,7 +91,7 @@ Proof
       qexists_tac `s` >> simp[lookup_var_def]) >>
   conj_tac
   >- (fs[stmt_state_rel_def] >> irule immutable_alloca_sep_fields >>
-      simp[compileEnvTheory.local_region_def, lookup_var_def] >> metis_tac[]) >>
+      simp[loweringStateRelDefsTheory.local_region_def, lookup_var_def] >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -157,14 +157,14 @@ Proof
    immutables_rel cenv cx.txn.target cenv.ce_module F es s /\
    not_scope_ptr cenv es.scopes out` by
     (qpat_x_assum `state_rel _ _ _ _ _` mp_tac >>
-     pure_rewrite_tac[compileEnvTheory.state_rel_def] >> strip_tac >>
-     gvs[compileEnvTheory.not_local_ptr_def, compileEnvTheory.not_scope_ptr_def]) >>
+     pure_rewrite_tac[loweringStateRelDefsTheory.state_rel_def] >> strip_tac >>
+     gvs[loweringStateRelDefsTheory.not_local_ptr_def, loweringStateRelDefsTheory.not_scope_ptr_def]) >>
   `!name a len. local_region cenv es.scopes s name a len ==>
     regions_disjoint (w2n ro) (LENGTH (TAKE (w2n rz) outcome.co_returnData)) a len` by
     (`LENGTH (TAKE (w2n rz) outcome.co_returnData) <= w2n rz` by
        (simp[listTheory.LENGTH_TAKE_EQ] >> rw[] >> decide_tac) >>
      rpt strip_tac >> first_x_assum drule_all >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   drule_all oracle_write_semantic_frame >> disch_then (qspecl_then [`if outcome.co_success then 1w else 0w`,
     `SUC s.vs_inst_idx`] strip_assume_tac) >>
   `state_rel func cenv cx (SND (adopt_call_outcome rq outcome es1)) s'` by

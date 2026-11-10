@@ -2,7 +2,7 @@ Theory bodyPtrPrecompileBuiltinsSuffixReady
 Ancestors bodyPtrPrecompileBuiltinsSuffixGhost bodyPtrPrecompileBuiltinsRuntime
           exprSimHash venomInstProofs venomExecSemantics venomState
           ptrCoverage bodyPtrDefs finite_map pred_set venomInst
-          exprSimPrecompiles exprLoweringProps ptrDiscipline venomCallOracleDefs context compileEnv
+          exprSimPrecompiles exprLoweringProps ptrDiscipline venomCallOracleDefs context compileEnv loweringStateRelDefs
 
 Theorem computed_call_step_frame:
   ci = mk_inst id STATICCALL

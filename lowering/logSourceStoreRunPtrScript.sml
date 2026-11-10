@@ -4,7 +4,7 @@ Ancestors
   logSourceStagePtr logDataAllocPtr fragGasSeqPtr entrySinkExtraction
   logSourceEntryPtr logDataStorePtr emitHelper stmtFragPtr ghostPcTransportPtr exprSimPtrLiteralBuffer
   exprLoweringProps abiBuiltinAllocation emitHelperProps bodyPtrDefs
-  compileEnv stmtSimLogDataFrame abiDecoderReentry abiDecoderFrame fragGasPathPtr
+  compileEnv loweringStateRelDefs stmtSimLogDataFrame abiDecoderReentry abiDecoderFrame fragGasPathPtr
   stmtSimLogSuffixFrame
   venomState venomInst finite_map words list arithmetic
 

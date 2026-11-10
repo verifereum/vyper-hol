@@ -1,7 +1,7 @@
 (* Primitive pointer steps permit stale generated-register entries. *)
 Theory calldataOverwritePtr
 Ancestors ptrSafetyTransport valueEncodingProps calldataClampPtr calldataDecodePtr abiDecoderContract
-  abiEncoder compileEnv emitHelper emitHelperProps exprLoweringProps fragExec
+  abiEncoder compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps fragExec
   venomInst list arithmetic words bodyPtrDefs decoderGhostFramePtr
   ptrDiscipline ptrSafeRun venomState venomExecSemantics entryDispatchPtr
   fragExecPtr ghostPcTransportPtr finite_map pred_set codegenRel instIdxIndep

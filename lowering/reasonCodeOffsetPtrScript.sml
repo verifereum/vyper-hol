@@ -1,7 +1,7 @@
 (* Checked byte offsets shared by runtime immutable-copy clients. *)
 Theory reasonCodeOffsetPtr
 Ancestors
-  reasonTupleCopyPtr reasonEncoderTailPtr context compileEnv emitHelper
+  reasonTupleCopyPtr reasonEncoderTailPtr context compileEnv loweringStateRelDefs emitHelper
   contextCodegenRelProps exprLoweringProps bodyPtrDefs fragGasSeqPtr
   venomState venomInst finite_map words fragExec ptrDiscipline
 

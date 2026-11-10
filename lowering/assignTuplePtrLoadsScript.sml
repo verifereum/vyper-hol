@@ -2,8 +2,8 @@
 Theory assignTuplePtrLoads
 Ancestors
   assignTuplePtrMemberLoad assignTuplePtrBoundary stmtSimReturn stmtLowering
-  context compileEnv exprLoweringProps exprSimProps fragExec fragGasPathPtr
-  valueEncoding valueTypingMemoryProps bodyPtrDefs venomState list words arithmetic
+  context compileEnv loweringStateRelDefs exprLoweringProps exprSimProps fragExec fragGasPathPtr
+  valueEncoding valueEncodingDefs valueTypingMemoryProps bodyPtrDefs venomState list words arithmetic
 
 Theorem compile_tuple_load_all_offset_path_ptr:
   !tys cenv p off sa elems sb cx tvs vals s w G tn b cap ctx func d es PG D.

@@ -5,7 +5,7 @@ Ancestors
   exprPtrUnwrapCodeCopyRetained exprPtrUnwrapCodeCopySemantic exprPtrCleanBufferPost
   exprPtrCodeCopyEndpoint exprPtrUnwrapAllocationFrame exprPtrUnwrapAllocSeparation
   exprPtrUnwrapAllocation exprPtrUnwrapCode exprPtrUnwrapCodeEdges exprSimCopy exprSimUnwrapProps exprSimUnwrap
-  exprLoweringProps exprSimAlloc bodyPtrDefs loweringPosts compileEnv context words arithmetic finite_map
+  exprLoweringProps exprSimAlloc bodyPtrDefs loweringPosts compileEnv loweringStateRelDefs context words arithmetic finite_map
   gasSummaryComposePtr gasSummary vyperState venomState exprSimMemorySource
 
 Theorem unwrap_code_ensure_marked_read_ptr:

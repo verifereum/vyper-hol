@@ -2,7 +2,7 @@
 Theory decoderBudgetAllocaCorePtr
 Ancestors wordLoadStorePtr ptrSafetyTransport decoderSetupStepPtr
   abiDecoderIndexInit abiDecoderAllocation allocationPtr typedCopyPtr fragExecPtr
-  bodyPtrDefs ptrDiscipline ptrSafeRun compileEnv context emitHelper emitHelperProps
+  bodyPtrDefs ptrDiscipline ptrSafeRun compileEnv loweringStateRelDefs context emitHelper emitHelperProps
   loweringHalt localPtrsProps exprLoweringProps venomExecSemantics venomMemProps venomState venomInst finite_map
   words list rich_list arithmetic pred_set instIdxIndep
 

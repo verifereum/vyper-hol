@@ -2,7 +2,7 @@
 Theory rawCallFinishCodePtr
 Ancestors
   rawCallResultProofPtr loweringShapeRules exprLoweringProps emitHelperProps
-  fragExec compileEnv
+  fragExec compileEnv loweringStateRelDefs
 Libs monadsyntax
 
 Theorem raw_call_emit_code:

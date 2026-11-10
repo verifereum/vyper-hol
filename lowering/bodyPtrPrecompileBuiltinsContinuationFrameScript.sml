@@ -1,7 +1,7 @@
 Theory bodyPtrPrecompileBuiltinsContinuationFrame
 Ancestors bodyPtrPrecompileBuiltinsRecoveryContinuation
           bodyPtrPrecompileBuiltinsFreshFrame bodyPtrPrecompileBuiltinsSuffixGhost exprSimWordArgs
-          exprSimPrecompiles exprLoweringProps compileEnv venomState finite_map
+          exprSimPrecompiles exprLoweringProps compileEnv loweringStateRelDefs venomState finite_map
           ptrDiscipline decoderGhostFramePtr bodyPtrDefs pred_set stmtFragPtr venomInst
           ptrSafeRun codegenRel
 

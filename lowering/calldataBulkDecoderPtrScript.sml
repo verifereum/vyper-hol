@@ -2,7 +2,7 @@
 Theory calldataBulkDecoderPtr
 Ancestors decoderHeaderRawPtr calldataBulkPayloadPtr decoderArrayInitPtr
   abiDecoderBulk abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderArrayHeader
-  abiDecoderContract abiDecoderGuards abiDecoderReentry calldataDynOwned abiEncoder compileEnv emitHelper
+  abiDecoderContract abiDecoderGuards abiDecoderReentry calldataDynOwned abiEncoder compileEnv loweringStateRelDefs emitHelper
   emitHelperProps exprLoweringProps decoderGhostFramePtr decoderArraySetupPtr
   bodyPtrDefs ptrDiscipline ptrSafeRun fragExec fragExecPtr words list arithmetic
   venomInst venomState venomExecSemantics instIdxIndep finite_map pred_set

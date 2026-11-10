@@ -2,7 +2,7 @@ Theory bodyPtrTypeBuiltinsWidenSemantic
 Ancestors
   bodyPtrTypeBuiltinsWidenCounted exprSimConvert bodyPtrDefs
   exprLoweringProps venomState compileEnv vyperTyping vyperValueOperation
-  vyperTypeSystem abiDecoderString valueEncoding words vyperValue
+  vyperTypeSystem abiDecoderString valueEncoding valueEncodingDefs words vyperValue
 
 Theorem convert_bytestring_robust_memory:
   is_bytestring_type tsrc /\ is_bytestring_type tdst /\

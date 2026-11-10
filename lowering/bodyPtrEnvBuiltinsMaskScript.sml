@@ -2,7 +2,7 @@
 Theory bodyPtrEnvBuiltinsMask
 Ancestors bodyPtrEnvBuiltinsEdges bodyPtrEnvBuiltinsHashStep
   fragExec fragExecPtr fragGasSeqPtr fragGasPathPtr bodyPtrDefs ptrDiscipline
-  venomInst venomState venomExecSemantics instIdxIndep compileEnv
+  venomInst venomState venomExecSemantics instIdxIndep compileEnv loweringStateRelDefs
   exprLoweringProps context emitHelper freshWrites rich_list
   words finite_map pred_set list
 

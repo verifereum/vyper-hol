@@ -5,7 +5,7 @@ Ancestors
   assignTuplePtrLoadedCoverage assignTuplePtrStageLoads assignTuplePtrStoreList tupleAssignPrefix
   exprOperandVar assignTuplePtrSourceGas arithmetic
   tupleTargetStoreProps tupleStageProps stmtSimAssignTupleTargets
-  exprSimProps exprLoweringProps compileEnv bodyPtrDefs stmtFragPtr
+  exprSimProps exprLoweringProps compileEnv loweringStateRelDefs bodyPtrDefs stmtFragPtr
   fragGasPathPtr loweringPosts stmtSimDefs stmtSimProps tupleAssignParts
   vyperInterpreter vyperState vyperValue vyperTyping vyperTypeDefaults valueEncoding
   stmtLowering stmtSimReturn vyperTypeABI list rich_list finite_map words

@@ -3,7 +3,7 @@ Theory bodyPtrEnvBuiltinsPrevHash
 Ancestors
   bodyPtrEnvBuiltinsScalar bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsScalarCompose
   bodyPtrEnvBuiltinsEdges bodyPtrDefs exprLoweringProps exprSimAccounts
-  fragGasPathPtr fragExec ptrDiscipline compileEnv exprLowering
+  fragGasPathPtr fragExec ptrDiscipline compileEnv loweringStateRelDefs exprLowering
   vyperInterpreter vyperContext vyperState vyperValue vyperTypeSystem
   exprSimProps emitHelper emitHelperProps builtinProps gasSummary
   venomState venomInst venomExecSemantics finite_map list rich_list

@@ -2,7 +2,7 @@ Theory bodyPtrTypeBuiltinsEmptyWords
 Ancestors
   wordLoadStorePtr
   bodyPtrTypeBuiltinsEmptyZero bodyPtrTypeBuiltinsEmptyUniform bodyPtrTypeBuiltinsSeq abiEmptySequence
-  builtinSimple emitHelper emitHelperProps compileEnv context exprLoweringProps
+  builtinSimple emitHelper emitHelperProps compileEnv loweringStateRelDefs context exprLoweringProps
   venomInst venomState venomExecSemantics list rich_list words typedCopyPtr
   ptrDiscipline finite_map fragGasSeqPtr
 

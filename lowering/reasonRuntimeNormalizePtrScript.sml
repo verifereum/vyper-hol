@@ -3,7 +3,7 @@ Theory reasonRuntimeNormalizePtr
 Ancestors
   reasonNormalizeHead reasonNormalizePtr stringUnwrapLayout appendStorageGhostPtr
   reasonCopySourcePtr loweringPosts bodyPtrDefs venomState venomMemDefs
-  compileEnv context exprLowering words arithmetic vyperValue valueEncoding
+  compileEnv context exprLowering words arithmetic vyperValue valueEncoding valueEncodingDefs
   exprSimCopy vyperInterpreter vyperTypeSystem vyperState storageWordCompilePtr
   venomInst vfmConstants
 

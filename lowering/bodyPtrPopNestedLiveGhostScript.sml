@@ -1,7 +1,7 @@
 Theory bodyPtrPopNestedLiveGhost
 Ancestors
   bodyPtrPopNestedLivePost bodyPtrDefs assignTuplePtrStoreWord
-  augAssignPtrStore localPtrsProps compileEnv venomState finite_map pred_set
+  augAssignPtrStore localPtrsProps compileEnv loweringStateRelDefs venomState finite_map pred_set
   robustCopyTransportPtr appendStorageGhostPtr
 
 (* A header inside one local cannot affect any other local's representation. *)

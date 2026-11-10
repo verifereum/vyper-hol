@@ -179,7 +179,7 @@ Proof
        compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.fresh_var_def,
        compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
        compileEnvTheory.comp_return_def] >> rpt strip_tac >> gvs[] >>
-     fs[compileEnvTheory.not_fresh_at_def]) >>
+     fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   `ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es sa G tn s H un` by
     (qunabbrev_tac `t` >> irule raw_call_gas_ghost_frame >>
      goal_assum (drule_at Any) >> simp[Abbr `H`, Abbr `un`] >>
@@ -469,7 +469,7 @@ Resume raw_call_operands_sim_ptr[keyword_map]:
       `ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
         (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
          >- (qexists_tac `func` >>
-             fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+             fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
          qexistsl_tac [`G`, `ee`, `t`, `sm`, `tn`] >>
          fs[exprLoweringPropsTheory.ci_mono_def]) >>
       `expr_val_rel cx (BaseT AddressT) av addr t' /\ op_taint tn' addr = {}` by
@@ -490,7 +490,7 @@ Resume raw_call_operands_sim_ptr[keyword_map]:
       qpat_x_assum `!v. _ ==> not_fresh_at sm v` mp_tac >>
       qpat_x_assum `sm.cs_next_var <= s5.cs_next_var` mp_tac >>
       POP_ASSUM_LIST (K all_tac) >>
-      simp[compileEnvTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS])
+      simp[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS])
   >> rpt gen_tac >> Cases_on `res` >>
      simp[exprSimWordArgsTheory.wb_args_exit_def]
 QED
@@ -674,7 +674,7 @@ Resume raw_call_prefix_sim_ptr[transport]:
   conj_tac
   >- (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
       >- (qexists_tac `func` >>
-          fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+          fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
       qexistsl_tac [`G`, `es_end`, `t`, `s5`, `tn`] >>
       fs[exprLoweringPropsTheory.ci_mono_def]) >>
   conj_tac

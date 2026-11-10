@@ -3,8 +3,8 @@
 Theory assignTuplePtrStageLoads
 Ancestors
   assignTuplePtrStage assignTuplePtrLoads tupleTypedLoad tupleStageProps stmtSimAssignTuple
-  exprSimProps exprLoweringProps compileEnv bodyPtrDefs venomState stmtFragPtr fragGasPathPtr
-  valueEncoding vyperTyping vyperTypeABI vyperValue loweringPosts list words arithmetic
+  exprSimProps exprLoweringProps compileEnv loweringStateRelDefs bodyPtrDefs venomState stmtFragPtr fragGasPathPtr
+  valueEncoding valueEncodingDefs vyperTyping vyperTypeABI vyperValue loweringPosts list words arithmetic
 Libs
   monadsyntax
 

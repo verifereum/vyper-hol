@@ -1,6 +1,6 @@
 Theory bodyPtrStructLitEndpointAllocation
 Ancestors bodyPtrStructLitAllocationBridge exprSimAlloc localPtrsProps
-  loweringPosts exprLoweringProps compileEnv emitHelper finite_map words
+  loweringPosts exprLoweringProps compileEnv loweringStateRelDefs emitHelper finite_map words
   venomInst venomState fragExec
 
 Theorem structlit_alloc_buffer_nonlocal:

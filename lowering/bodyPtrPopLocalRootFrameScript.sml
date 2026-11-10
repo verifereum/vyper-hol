@@ -1,7 +1,7 @@
 Theory bodyPtrPopLocalRootFrame
 Ancestors
   bodyPtrPopLocalRootPath bodyPtrPopInteriorPointer bodyPtrAttributeAdd
-  typedCopyLoopHeaderPtr emitHelperProps emitHelper compileEnv venomState
+  typedCopyLoopHeaderPtr emitHelperProps emitHelper compileEnv loweringStateRelDefs venomState
   ptrDiscipline finite_map words list fragGasPathPtr storageCopyBodyPtr
   bodyPtrBopCompareCompile
 

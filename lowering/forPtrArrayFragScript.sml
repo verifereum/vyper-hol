@@ -4,7 +4,7 @@ Theory forPtrArrayFrag
 Ancestors forPtrArrayLoop forPtrArrayEntry forPtrArraySource forPtrArraySemantic
   forPtrElement forPtrArrayInvariant stmtSimForArrayFrag stmtSimForArrayLoop
   stmtSimForArray bodyPtrPreds bodyPtrDefs bodySim bodyExprPreFacts
-  exprSimWordArgs exprSimHypsDefs stmtLowering stmtLoweringMono compileEnv
+  exprSimWordArgs exprSimHypsDefs stmtLowering stmtLoweringMono compileEnv loweringStateRelDefs
   exprLoweringProps loweringPosts stmtSimProps stmtSimDefs stmtFragPtr
   gasSummaryComposePtr gasOutcomeInitialObsPtr fragExec finite_map list valueEncoding
   vyperState vyperInterpreter

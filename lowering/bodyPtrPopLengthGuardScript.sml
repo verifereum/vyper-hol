@@ -1,7 +1,7 @@
 Theory bodyPtrPopLengthGuard
 Ancestors
   bodyPtrAttributeAdd bodyPtrPopScalarTransfer typedCopyLoopHeaderPtr
-  exprSendPtr exprSimPtrProps emitHelperProps emitHelper compileEnv fragExec
+  exprSendPtr exprSimPtrProps emitHelperProps emitHelper compileEnv loweringStateRelDefs fragExec
   ptrDiscipline ptrSafeRun venomExecSemantics venomInst venomState
   codegenRel contextCodegenRel finite_map pred_set words list fragGasPathPtr stmtFragPtr
 

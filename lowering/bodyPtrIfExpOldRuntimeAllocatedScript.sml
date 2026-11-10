@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpOldRuntimeAllocated
 Ancestors bodyPtrIfExpOldOperandAllocation bodyPtrIfExpStorageAllocation
   bodyPtrIfExpRuntimeCopy bodyPtrIfExpRuntimeFrame bodyPtrIfExpAllocSource
-  loweringHalt exprLoweringProps ptrDiscipline compileEnv venomState venomInst
+  loweringHalt exprLoweringProps ptrDiscipline compileEnv loweringStateRelDefs venomState venomInst
   finite_map words arithmetic fragGasPathPtr slotCopyExecution exprSimCopy loweringPosts
 
 (* The allocation output may overwrite a future register. Only source age,

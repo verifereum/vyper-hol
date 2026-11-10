@@ -5,7 +5,7 @@ Ancestors
   bodyPtrDefs bodyPtrPreds exprSimDefs exprSimHypsDefs vyperTyping vyperTypeBuiltins
   vyperTypeSystem vyperTypeInvariants vyperInterpreter builtinSimple
   vyperValue vyperState vyperContext vyperAST venomExecSemantics
-  venomState venomInst contextCodegenRel codegenRel compileEnv
+  venomState venomInst contextCodegenRel codegenRel compileEnv loweringStateRelDefs
   integer_word words list loweringPosts context exprLoweringProps valueEncoding
 
 Theorem blobhash_body_pre_args:

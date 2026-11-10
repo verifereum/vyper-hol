@@ -1,7 +1,7 @@
 (* Natural-slot deadness boundaries, independent of storage backend.
    Conversion from word keys requires separate no-wrap reasoning. *)
 Theory bodyPtrBopInStorageContents
-Ancestors accountsRelProps compileEnv
+Ancestors accountsRelProps compileEnv loweringStateRelDefs
 
 Theorem fixed_array_deadless_children:
   !st tv bs cap j b.

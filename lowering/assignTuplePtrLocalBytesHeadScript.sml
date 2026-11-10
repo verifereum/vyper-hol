@@ -3,7 +3,7 @@ Theory assignTuplePtrLocalBytesHead
 Ancestors
   assignTuplePtrLocalCopyGhost assignTuplePtrLocalCopyPath
   assignTuplePtrLocalCopyRun tupleLocalStoreRun exprLoweringProps
-  bodyPtrDefs compileEnv context venomState venomExecSemantics vyperState
+  bodyPtrDefs compileEnv loweringStateRelDefs context venomState venomExecSemantics vyperState
   vyperLookup exprSimBufferStore exprSimProps valueEncodingProps
 
 Theorem tuple_local_bytes_head_ptr:

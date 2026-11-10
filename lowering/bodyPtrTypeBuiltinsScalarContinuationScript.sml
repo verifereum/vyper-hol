@@ -2,7 +2,7 @@ Theory bodyPtrTypeBuiltinsScalarContinuation
 Ancestors
   bodyPtrTypeBuiltinsScalarRawOutcome bodyPtrTypeBuiltinsScalarCountedDispatch
   bodyPtrSignedConvertSourceFrame bodyPtrDefs fragGasPathPtr
-  exprLowering compileEnv venomState venomExecSemantics loweringPosts
+  exprLowering compileEnv loweringStateRelDefs venomState venomExecSemantics loweringPosts
   gasSummary exprSimDefs fragExec exprSimConvert exprSimHash exprLoweringProps
   stmtFragPtr exprSimExtract32Post
 

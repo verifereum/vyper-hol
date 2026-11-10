@@ -3,7 +3,7 @@ Theory augAssignPtrStorageFieldLoad
 Ancestors
   augAssignPtrStorageAddress augAssignPtrLoadClean augAssignPtrLoad
   augAssignPtrProvenanceProbe augAssignPtrScalarWitnessProbe
-  emitHelper emitHelperProps exprLoweringProps compileEnv stmtFragPtr
+  emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs stmtFragPtr
   bodyPtrDefs ptrDiscipline venomInst venomState finite_map
   loweringSlice venomExecSemantics fragExec codegenRel
   accountsRelProps loweringPosts exprSimUnwrap typedCopyPtr stmtSimProps freshWrites

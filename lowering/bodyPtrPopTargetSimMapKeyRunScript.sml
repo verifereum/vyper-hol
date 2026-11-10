@@ -1,7 +1,7 @@
 (* Checked mapping-key hashing in the compiler's ADD/MLOAD/SHA3 order. *)
 Theory bodyPtrPopTargetSimMapKeyRun
 Ancestors bodyPtrHashBuiltinsKeccakBytesRun exprSimMapKey exprLowering
-  emitHelper emitHelperProps compileEnv ASCIInumbers rich_list codegenRel exprLoweringProps
+  emitHelper emitHelperProps compileEnv loweringStateRelDefs ASCIInumbers rich_list codegenRel exprLoweringProps
   typedCopyPtr typedCopyLoopHeaderPtr bodyPtrDefs fragGasSeqPtr wordLoadStorePtr
   ghostPcTransportPtr instIdxIndep ptrDiscipline venomState venomInst
   venomExecSemantics words finite_map pred_set contextCodegenRel valueEncodingProps

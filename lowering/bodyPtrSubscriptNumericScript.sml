@@ -4,7 +4,7 @@ Ancestors
   bodyPtrAttributeAdd bodyPtrSubscriptWordProvenance stmtAppendStorageRunPtr
   decoderGhostFramePtr fragGasSeqPtr fragGasPathPtr bodyPtrDefs ptrSafeRun
   ptrDiscipline venomInst venomExecSemantics venomState finite_map
-  emitHelperProps emitHelper compileEnv list codegenRel contextCodegenRel exprSendPtr
+  emitHelperProps emitHelper compileEnv loweringStateRelDefs list codegenRel contextCodegenRel exprSendPtr
   exprLoweringProps fragExec rich_list
 
 Theorem numeric_inst_check:

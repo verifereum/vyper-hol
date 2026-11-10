@@ -1,7 +1,7 @@
 (* Compiler-facing checked suffix for the shared reason encoder. *)
 Theory reasonFinishPtr
 Ancestors reasonFinishCode reasonEncoderTailPtr reasonRevertPtr fragExec
-  emitHelper emitHelperProps compileEnv venomInst compilerChainCode exprLoweringProps bodyPtrDefs
+  emitHelper emitHelperProps compileEnv loweringStateRelDefs venomInst compilerChainCode exprLoweringProps bodyPtrDefs
 Libs intLib wordsLib
 
 (* Erasing only the fresh-name counter lets emit_op's allocated names feed

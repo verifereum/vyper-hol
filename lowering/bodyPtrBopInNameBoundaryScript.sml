@@ -4,7 +4,7 @@ Theory bodyPtrBopInNameBoundary
 Ancestors
   bodyPtrDefs stmtFragPtr exprSimHyps exprSimHypsDefs exprSimNameValue
   exprSimProps exprSimDefs exprLoweringProps loweringPosts loweringSlice
-  exprLowering compileEnv context venomState venomInst ptrDiscipline
+  exprLowering compileEnv loweringStateRelDefs context venomState venomInst ptrDiscipline
   vyperInterpreter vyperState vyperAST vyperTypeEnv vyperTypeSystem
   vyperTypeInvariants
   valueEncoding valueEncodingProofs finite_map words arithmetic

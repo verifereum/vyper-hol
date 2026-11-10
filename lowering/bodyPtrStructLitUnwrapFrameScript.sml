@@ -1,6 +1,6 @@
 (* Opcode-independent freshness at the post-ADD child boundary. *)
 Theory bodyPtrStructLitUnwrapFrame
-Ancestors exprLoweringProps emitHelperProps freshWrites context compileEnv
+Ancestors exprLoweringProps emitHelperProps freshWrites context compileEnv loweringStateRelDefs
 
 Theorem raw_child_unwrap_compiler_frame:
   compile_expr ce (expr_type e) e sb = (vv,sc) /\

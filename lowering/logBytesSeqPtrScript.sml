@@ -1,7 +1,7 @@
 (* Concrete checked bytestring-copy sequences; input padding may be tainted. *)
 Theory logBytesSeqPtr
 Ancestors logBytesCodePtr logInstSeqPtr logTopicScalarPtr typedCopyPtr fragGasSeqPtr ghostPcTransportPtr
-  context compileEnv exprSimBufferStore emitHelperProps emitHelper fragExec fragExecPtr exprLoweringProps
+  context compileEnv loweringStateRelDefs exprSimBufferStore emitHelperProps emitHelper fragExec fragExecPtr exprLoweringProps
   bodyPtrDefs ptrSafeRun ptrDiscipline
   venomInst venomState venomExecSemantics codegenRel finite_map words list arithmetic
 

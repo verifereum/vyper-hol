@@ -1,7 +1,7 @@
 (* Compiler-to-fetch boundary; independent of instruction semantics and ghosts. *)
 Theory bodyPtrMakeArrayEmission
 Ancestors
-  emitHelperProps exprLoweringProps fragExec emitHelper compileEnv
+  emitHelperProps exprLoweringProps fragExec emitHelper compileEnv loweringStateRelDefs
   venomInst venomState rich_list list
 
 Theorem emit_op_old_var_separate:

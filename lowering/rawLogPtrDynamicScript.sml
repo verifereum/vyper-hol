@@ -4,7 +4,7 @@ Ancestors
   wordLoadStorePtr rawLogPtrInst bodyPtrHashBuiltinsKeccakBytesRun
   typedCopyPtr bodyPtrDefs fragGasSeqPtr ptrDiscipline venomState venomInst
   venomExecSemantics words finite_map pred_set contextCodegenRel codegenRel
-  valueEncodingProps exprSimHash list context compileEnv emitHelper
+  valueEncodingProps exprSimHash list context compileEnv loweringStateRelDefs emitHelper
   exprLoweringProps rich_list ASCIInumbers emitHelperProps
   exprSimRawLog instSeqComposePtr ghostPcTransportPtr instIdxIndep
 

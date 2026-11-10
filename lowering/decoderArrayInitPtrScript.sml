@@ -2,7 +2,7 @@
 Theory decoderArrayInitPtr
 Ancestors wordLoadStorePtr decoderIndexInitCorePtr decoderSetupStepPtr ptrSafetyTransport decoderGuardClampCorePtr decoderCountComparisonCorePtr decoderCountLoadCorePtr abiDecoderGuards abiDecoderArrayInitExec decoderArraySetupPtr decoderIndexInitPtr
   decoderNavigationPtr calldataClampPtr typedCopyPtr bodyPtrDefs
-  compileEnv emitHelper venomInst venomExecSemantics venomState words list
+  compileEnv loweringStateRelDefs emitHelper venomInst venomExecSemantics venomState words list
   rich_list arithmetic finite_map ptrDiscipline ptrSafeRun venomInstProofs codegenRel contextCodegenRel
   emitHelperProps exprLoweringProps fragExec decoderGhostFramePtr
   abiDecoderContract entryDispatchPtr instIdxIndep fragExecPtr

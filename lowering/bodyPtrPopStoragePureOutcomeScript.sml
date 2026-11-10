@@ -4,7 +4,7 @@ Ancestors
   exprSimPopNestedBase fragGasSeqPtr fragGasPathPtr stmtAppendStoragePathPtr
   exprLoweringProps venomInst venomState list rich_list fragExec
   bodyPtrPopTargetDefs bodyPtrDefs bodyPtrPopRootEndpoint
-  compileEnv targetPlaceSimDefs exprSimDefs loweringPosts
+  compileEnv loweringStateRelDefs targetPlaceSimDefs exprSimDefs loweringPosts
   vyperStorageBackend vyperStorage vyperValue vyperState vyperInterpreter
   ptrDiscipline context exprSimVVFrame gasSummaryComposePtr
   exprSimPopStorage words pred_set finite_map appendStorageSourcePtr

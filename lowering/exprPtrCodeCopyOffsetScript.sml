@@ -1,7 +1,7 @@
 (* Source offsets preserve old roots; code offsets need no provenance. *)
 Theory exprPtrCodeCopyOffset
 Ancestors
-  exprPtrCodeCopySegments exprSimCopy context compileEnv emitHelper emitHelperProps
+  exprPtrCodeCopySegments exprSimCopy context compileEnv loweringStateRelDefs emitHelper emitHelperProps
   exprLoweringProps fragGasSeqPtr ptrDiscipline venomState finite_map
   typedCopyLoopHeaderPtr bodyPtrDefs venomExecSemantics venomInst
 

@@ -3,7 +3,7 @@ Ancestors bodyPtrPrecompileBuiltinsSuffixGhost bodyPtrPrecompileBuiltinsSuffixRe
           bodyPtrPrecompileBuiltinsRuntime bodyPtrPrecompileBuiltinsContinuationFrame
           exprSimPrecompiles exprLoweringProps exprSimHash ptrDiscipline
           decoderGhostFramePtr venomExecSemantics venomInstProofs venomState
-          venomInst venomCallOracleDefs compileEnv finite_map pred_set valueCopy
+          venomInst venomCallOracleDefs compileEnv loweringStateRelDefs finite_map pred_set valueCopy
           bodyPtrPrecompileBuiltinsFreshFrame localPtrsProps loweringPosts list rich_list
           bodyPtrDefs stmtFragPtr
 

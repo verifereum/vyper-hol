@@ -4,7 +4,7 @@ Ancestors bodyPtrStructLitUniformChildUnwrap bodyPtrStructLitBytesCoverage
   bodyPtrMakeArrayConsOutcome bodyPtrMakeArrayConsLayout
   bodyPtrMakeArrayConsInvariant bodyPtrMakeArrayPositiveBytes
   exprLoweringProps exprOperandVar freshWrites fragExec emitHelperProps
-  compileEnv loweringPosts fragGasPathPtr
+  compileEnv loweringStateRelDefs loweringPosts fragGasPathPtr
 
 Theorem structlit_uniform_cons_bytes_endpoint:
   literal_loop_frame ctx func ce cx d root aid addr capacity

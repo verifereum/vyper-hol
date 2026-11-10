@@ -4,7 +4,7 @@ Ancestors bodyPtrPrecompileBuiltinsRecoveryRun bodyPtrPrecompileBuiltinsRecovery
           bodyPtrPrecompileBuiltinsRecoveryContinuation
           bodyPtrPrecompileBuiltinsCompilerStages bodyPtrPrecompileBuiltinsRunAllocation
           stmtSimDeclPath valueEncodingProps venomExecSemantics venomInst venomState
-          compileEnv emitHelper exprLoweringProps rich_list emitHelperProps fragGasSeqPtr fragGasPathPtr entrySinkExtraction
+          compileEnv loweringStateRelDefs emitHelper exprLoweringProps rich_list emitHelperProps fragGasSeqPtr fragGasPathPtr entrySinkExtraction
           bodyPtrPrecompileBuiltinsPrefixFrames bodyPtrPrecompileBuiltinsBounds
           exprSimPtrLiteralBuffer ghostPcTransportPtr venomCallOracleDefs extCallOracle
           exprSimWordArgs wordArgsPtr loweringPosts exprSimProps bodyPtrDefs

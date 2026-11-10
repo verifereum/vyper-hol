@@ -1,7 +1,7 @@
 Theory bodyPtrBytestringBuiltinsBuffer
 Ancestors
   bodyPtrBytestringBuiltinsAllocation loweringHalt emitHelperProps
-  context emitHelper compileEnv fragExec venomInst list
+  context emitHelper compileEnv loweringStateRelDefs fragExec venomInst list
   normalizationAllocPtr loweringPosts builtinBytes bodyPtrDefs
   exprSimLiteralBuffer exprLoweringProps venomState
   fragGasPathPtr fragGasSeqPtr typedCopyPtr bodyPtrAttributeAdd

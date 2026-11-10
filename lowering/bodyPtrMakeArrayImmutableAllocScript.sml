@@ -3,7 +3,7 @@ Theory bodyPtrMakeArrayImmutableAlloc
 Ancestors
   bodyPtrMakeArrayAllocBuffer bodyPtrMakeArrayImmutableResult exprSimCopy
   exprSimProps exprLoweringProps ptrDiscipline bodyPtrDefs venomState venomInst
-  context compileEnv finite_map arithmetic list rich_list freshWrites
+  context compileEnv loweringStateRelDefs finite_map arithmetic list rich_list freshWrites
   instIdxIndep fragGasSeqAbort fragGasPathPtr
 
 Theorem alloc_buffer_copy_start:

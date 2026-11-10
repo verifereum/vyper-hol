@@ -6,7 +6,7 @@ Ancestors
   bodyPtrWordBuiltinsWitnessCompose typedWordArgsFactsPtr exprPtrUnwrap
   exprSimConvert exprSimConvertFromBytes exprLoweringProps exprSimHyps
   gasExemptCert gasSummaryComposePtr fragGasFresh freshWrites
-  externalEntryShape bodyPtrDefs compileEnv fragExec gasOutcomeMarkedPtr
+  externalEntryShape bodyPtrDefs compileEnv loweringStateRelDefs fragExec gasOutcomeMarkedPtr
 
 Theorem signed_bytestring_convert_residual:
   !cx v11 tb typ es.

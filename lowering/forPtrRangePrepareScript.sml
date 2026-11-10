@@ -3,7 +3,7 @@
 Theory forPtrRangePrepare
 Ancestors forPtrControl forPtrScalarStore forPtrRangeCallback fragExec
   emitHelperProps venomState venomInst finite_map list ptrDiscipline
-  fragGasPathPtr bodyPtrDefs compileEnv stmtSimDeclStore stmtSimProps
+  fragGasPathPtr bodyPtrDefs compileEnv loweringStateRelDefs stmtSimDeclStore stmtSimProps
   stmtSimDefs loweringPosts localPtrsProps valueEncodingProps valueEncoding
   venomMemProofs loweringSlice exprLoweringProps vyperState
 

@@ -5,7 +5,7 @@ Ancestors
   assignTuplePtrLocalCopyGhost assignTuplePtrLocalCopyPath
   assignTuplePtrLocalCopyRun assignTuplePtrBoundary
   tupleTargetStoreProps tupleLocalStoreRun stmtSimDefs exprLoweringProps
-  bodyPtrDefs compileEnv context venomState venomExecSemantics vyperState
+  bodyPtrDefs compileEnv loweringStateRelDefs context venomState venomExecSemantics vyperState
   vyperLookup valueEncodingProps loweringPosts localPtrsProps exprSimProps
 
 Theorem tuple_local_fixed_head_ptr:

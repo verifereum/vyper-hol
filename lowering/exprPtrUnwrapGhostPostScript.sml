@@ -1,6 +1,6 @@
 Theory exprPtrUnwrapGhostPost
 Ancestors
-  exprPtrUnwrapRetained bodyPtrDefs compileEnv exprLoweringProps
+  exprPtrUnwrapRetained bodyPtrDefs compileEnv loweringStateRelDefs exprLoweringProps
   ptrDiscipline loweringPosts finite_map exprSimProps
 
 (* Reconstruct the invariant at a shared runtime/ghost endpoint. *)

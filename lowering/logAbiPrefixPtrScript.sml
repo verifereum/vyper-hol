@@ -3,7 +3,7 @@ Theory logAbiPrefixPtr
 Ancestors
   logInstSeqPtr abiEncoderBytesCode abiEncoderRounding bodyPtrDefs
   typedCopyPtr fragExecPtr fragExec ptrDiscipline ptrSafeRun
-  emitHelperProps emitHelper compileEnv context exprLoweringProps
+  emitHelperProps emitHelper compileEnv loweringStateRelDefs context exprLoweringProps
   venomExecSemantics venomState venomInst finite_map words list arithmetic
 
 Theorem abi_encode_round_seq_ptr:

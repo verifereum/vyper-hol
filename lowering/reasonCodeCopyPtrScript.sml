@@ -3,7 +3,7 @@ Theory reasonCodeCopyPtr
 Ancestors
   reasonCodeTransferPtr reasonCodeLoadPtr reasonCodeOffsetPtr
   immutableCopyExecution compilerChainCode exprLoweringProps
-  context compileEnv emitHelper fragExec bodyPtrDefs ptrDiscipline
+  context compileEnv loweringStateRelDefs emitHelper fragExec bodyPtrDefs ptrDiscipline
   venomState venomInst finite_map words fragGasPathPtr
 
 Theorem code_copy_suc_parts:

@@ -5,7 +5,7 @@ Ancestors
   loweringPosts vyperState vyperStorage vyperValue vyperInterpreter
   vyperTypeStatePreservation venomMemProps venomMemDefs list words arithmetic
   appendStorageGhostPtr exprSimLen vyperTypeSystem vyperStorageBackend venomState
-  immutableCopyExecution immutableConstructorRelation valueEncoding
+  immutableCopyExecution immutableConstructorRelation valueEncoding valueEncodingDefs
 
 Theorem copy_prefix_head:
   copy_prefix loc a b n sm n t /\ 0 < n ==>

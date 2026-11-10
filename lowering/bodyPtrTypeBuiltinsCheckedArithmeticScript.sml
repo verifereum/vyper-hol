@@ -3,7 +3,7 @@ Ancestors
   bodyPtrTypeBuiltinsScalarCompose bodyPtrTypeBuiltinsScalarChecks
   bodyPtrTypeBuiltinsScalarArithmetic
   bodyPtrSignedConvertClamp bodyPtrSignedConvertScalarOps exprLowering exprLoweringProps
-  compileEnv emitHelperProps ASCIInumbers rich_list
+  compileEnv loweringStateRelDefs emitHelperProps ASCIInumbers rich_list
   fragGasSeqPtr instSeqComposePtr fragExec instIdxIndep exprSendPtr
   venomExecSemantics venomState venomInst ptrDiscipline finite_map list arithmetic
 

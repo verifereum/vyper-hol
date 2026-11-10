@@ -1,7 +1,7 @@
 Theory bodyPtrPopLocalRootGuardFrame
 Ancestors
   bodyPtrPopLocalRootFrame bodyPtrPopLengthGuard
-  emitHelperProps emitHelper compileEnv venomState ptrDiscipline
+  emitHelperProps emitHelper compileEnv loweringStateRelDefs venomState ptrDiscipline
   finite_map words list fragGasPathPtr stmtFragPtr venomExecSemantics codegenRel contextCodegenRel
 
 Theorem pop_local_double_iszero_exact:

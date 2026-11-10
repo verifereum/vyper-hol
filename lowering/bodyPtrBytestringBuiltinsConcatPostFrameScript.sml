@@ -2,7 +2,7 @@
 Theory bodyPtrBytestringBuiltinsConcatPostFrame
 Ancestors
   bodyPtrBytestringBuiltinsConcatSuffix exprSimProps
-  loweringPosts compileEnv finite_map arithmetic exprBopSimProps exprSimCopy wordArgsPtr
+  loweringPosts compileEnv loweringStateRelDefs finite_map arithmetic exprBopSimProps exprSimCopy wordArgsPtr
 
 Theorem concat_original_site_memory:
   FLOOKUP s0.vs_allocas aid = SOME (b,k) /\ aid < sa.cs_next_id /\

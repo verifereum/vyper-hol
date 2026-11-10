@@ -1,6 +1,6 @@
 Theory bodyPtrBopHashCoverage
 Ancestors
-  typedCopyPtr loweringPosts valueEncoding allocationPtr exprLoweringProps
+  typedCopyPtr loweringPosts valueEncoding valueEncodingDefs allocationPtr exprLoweringProps
 
 Theorem bop_bytes_payload_footprint:
   val_wf tv (BytesV bs) /\ tv <> BaseTV AddressT /\

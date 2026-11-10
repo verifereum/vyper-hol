@@ -2,7 +2,7 @@ Theory bodyPtrPopTargetSimArraySlot
 Ancestors
   bodyPtrPopTargetSimArrayCase bodyPtrPopTargetSimStorageHeader
   augAssignPtrStorageFieldLoad emitHelperProps exprLoweringProps
-  emitHelper compileEnv venomState ptrDiscipline finite_map arithmetic
+  emitHelper compileEnv loweringStateRelDefs venomState ptrDiscipline finite_map arithmetic
   exprSimWordBuiltins fragGasPathPtr exprSimCopy list fragExec stmtReasonLitFragMemory
   bodyPtrPopTargetSimArrayGuard bodyPtrPopTargetSimRegisters
 

@@ -4,7 +4,7 @@ Ancestors
   logTupleShapePtr logTupleEntryPtr logTupleFinishPtr logCursorAllocPtr logInstSeqPtr logDataAllocPtr
   abiBuiltinAllocation abiDecoderFrame abiEncoderComplexCode abiEncoderComplexPrefix
   abiDecoderArrayHeader valueEncodingProps abiDecoderContract
-  emitHelperProps exprLoweringProps compileEnv context fragExec fragGasSeqPtr
+  emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs context fragExec fragGasSeqPtr
   venomExecSemantics venomState venomInst words list arithmetic finite_map pred_set
   stmtFragPtr instIdxIndep
 

@@ -1,6 +1,6 @@
 Theory bodyPtrBopHashCompile
 Ancestors
-  bodyPtrBopHashSemantic exprLowering exprLoweringProps emitHelper compileEnv
+  bodyPtrBopHashSemantic exprLowering exprLoweringProps emitHelper compileEnv loweringStateRelDefs
   arithmetic rich_list fragExec
 
 Theorem bop_hash_compile_emission:

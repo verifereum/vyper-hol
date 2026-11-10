@@ -1,5 +1,5 @@
 Theory bodyPtrPrecompileBuiltinsArithmeticSource
-Ancestors exprSimHash exprSimProps loweringPosts valueEncoding compileEnv
+Ancestors exprSimHash exprSimProps loweringPosts valueEncoding valueEncodingDefs compileEnv
           vyperValue vyperTyping exprSimDefs valueEncodingProofs
           vyperValueOperation vyperContext extCallOracle vfmExecution list
 

@@ -1,7 +1,7 @@
 Theory bodyPtrPopTargetSimCoverage
 Ancestors
   bodyPtrPopTargetSimCurrentLocal assignBasePtrOffset assignBasePtrLocalSource
-  bodyPtrDefs bodyPtrPopTargetDefs ptrDiscipline compileEnv
+  bodyPtrDefs bodyPtrPopTargetDefs ptrDiscipline compileEnv loweringStateRelDefs
   loweringPosts exprSimProps exprSimHypsDefs vyperTypeInvariants
   venomState words finite_map vyperState stmtSimAugAssign
   stmtSimAugAssignPlaceMemory augAssignPtrRhsFrame
@@ -143,7 +143,7 @@ Proof
   `stmt_state_rel ctx func cenv cx ef u` by (gvs[expr_post_def] >> metis_tac[]) >>
   `local_ptrs_rel func cenv ef.scopes u /\ u.vs_alloca_next < dimword(:256)` by
     (gvs[exprLoweringPropsTheory.stmt_state_rel_def,
-         compileEnvTheory.state_rel_def, venomMemDefsTheory.alloca_inv_def,
+         loweringStateRelDefsTheory.state_rel_def, venomMemDefsTheory.alloca_inv_def,
          venomMemDefsTheory.alloca_next_valid_def,
          exprLoweringPropsTheory.alloca_room_def] >>
      metis_tac[]) >>

@@ -7,7 +7,7 @@ Ancestors
   bodyPtrEnvBuiltinsScalar bodyPtrIfExpAllocSource exprSimAlloc ghostPcTransportPtr
   bodyPtrAttributeAdd typedCopyPtr fragExec exprLoweringProps exprSimLiteralBuffer
   fragGasPathPtr fragGasSeqPtr loweringPosts bodyPtrDefs context emitHelper
-  emitHelperProps compileEnv venomState venomInst venomExecSemantics
+  emitHelperProps compileEnv loweringStateRelDefs venomState venomInst venomExecSemantics
   ptrDiscipline words finite_map pred_set list valueEncodingProps
 
 Theorem concat_alloc_raw_frame:

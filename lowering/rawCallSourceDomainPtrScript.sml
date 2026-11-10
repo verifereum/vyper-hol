@@ -3,7 +3,7 @@
 Theory rawCallSourceDomainPtr
 Ancestors
   rawCallSourceActionPtr rawCallShapePtr exprSimDefs gasContext
-  exprLoweringProps compileEnv vyperInterpreter vyperState vyperCallOutcome
+  exprLoweringProps compileEnv loweringStateRelDefs vyperInterpreter vyperState vyperCallOutcome
   vyperCallOutcomeProps exprSimSend vyperTypeExtCallCore
 
 Theorem raw_call_prepared_source_domain:

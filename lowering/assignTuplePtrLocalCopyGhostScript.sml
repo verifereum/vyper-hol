@@ -3,7 +3,7 @@
 Theory assignTuplePtrLocalCopyGhost
 Ancestors
   assignTuplePtrScopeUpdate assignTuplePtrCopyLen vyperLookup vyperState
-  finite_map bodyPtrDefs assignTuplePtrStoreWord localPtrsProps compileEnv
+  finite_map bodyPtrDefs assignTuplePtrStoreWord localPtrsProps compileEnv loweringStateRelDefs
 
 Theorem local_copy_scope_lookup_ptr:
   find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\

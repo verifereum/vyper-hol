@@ -1,6 +1,6 @@
 Theory bodyPtrBopInLoopFrame
 Ancestors emitHelperProps exprSimWordBuiltins intCallFrame
-  ptrDiscipline compileEnv venomState finite_map list pred_set
+  ptrDiscipline compileEnv loweringStateRelDefs venomState finite_map list pred_set
 
 (* Lookup/update and restriction algebra are already FLOOKUP_UPDATE and
    FLOOKUP_DRESTRICT. This is their variable-taint constructor boundary. *)

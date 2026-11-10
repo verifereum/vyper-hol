@@ -1,6 +1,6 @@
 Theory bodyPtrMakeArrayCopyStateFrame
 Ancestors
-  exprSimPtrLiteralBuffer exprSimStorageCopy exprLoweringProps compileEnv
+  exprSimPtrLiteralBuffer exprSimStorageCopy exprLoweringProps compileEnv loweringStateRelDefs
   venomState venomExecSemantics venomMemDefs localPtrsProps loweringSlice
 
 (* The cursor erased by copy_static is irrelevant to the source relation. *)

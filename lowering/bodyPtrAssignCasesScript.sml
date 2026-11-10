@@ -18,7 +18,7 @@ Ancestors
   annAssignPtrDispatch annAssignPtrWord annAssignPtrFacts
   assignTuplePtrBodyLocals assignTuplePtrBodyTargets
   bodyPtrAssignResidual bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
-  supportedStmts exprLoweringProps compileEnv vyperTypeEnv
+  supportedStmts exprLoweringProps compileEnv loweringStateRelDefs vyperTypeEnv
   stmtSimDefs
   vyperState vyperContext vyperTypeCallGraph list
   augAssignPtrLocalBody augAssignPtrToplevelBody augAssignPtrFieldBody

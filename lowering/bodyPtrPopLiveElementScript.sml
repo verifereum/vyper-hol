@@ -1,6 +1,6 @@
 Theory bodyPtrPopLiveElement
 Ancestors
-  accountsRelProps compileEnv vyperStorage vyperLookupStorage vyperValue words arithmetic
+  accountsRelProps compileEnv loweringStateRelDefs vyperStorage vyperLookupStorage vyperValue words arithmetic
 
 Theorem pop_live_dynamic_element:
   !cx tr st w elem n k.

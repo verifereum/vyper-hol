@@ -1,7 +1,7 @@
 (* The direct singleton branch is exactly one memory load and one store. *)
 Theory assignBasePtrStorageSingle
 Ancestors stmtSimStoreCopy assignBasePtrStorageLayout assignBasePtrStoragePath
-  assignBasePtrStorageLoop stateFrame context compileEnv emitHelper
+  assignBasePtrStorageLoop stateFrame context compileEnv loweringStateRelDefs emitHelper
   emitHelperProps fragExec bodyPtrDefs venomState ptrDiscipline
   fragGasPathPtr finite_map pred_set list rich_list arithmetic words venomInst
 

@@ -4,7 +4,7 @@ Ancestors
   logScalarMembersCompletePtr logInstSeqPtr logTopicScalarPtr ghostPcTransportPtr
   logMembersInvariantPtr stmtSimLogEncodeLayout stmtSimLogScalarMembers stmtFragPtr
   appendStorageGhostPtr bodyPtrDefs abiCanonicalWindows abiDecoderEffect abiDecoderFrame
-  emitHelperProps exprLoweringProps compileEnv fragExec fragGasSeqPtr
+  emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs fragExec fragGasSeqPtr
   venomState venomInst venomExecSemantics instIdxIndep words list arithmetic
   valueEncoding finite_map abiEncoderMemberCode
 

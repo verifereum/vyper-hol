@@ -5,7 +5,7 @@ Ancestors
   logAllocFramePtr logStagedEntryPtr logTupleOwnershipPtr
   stmtSimLogSourceAllocate stmtSimLogArgs stmtSimLogDataRun
   abiBuiltinAllocation emitHelperProps exprLoweringProps bodyPtrDefs
-  venomInst words list arithmetic fragGasSeqPtr compileEnv logDataAllocPtr
+  venomInst words list arithmetic fragGasSeqPtr compileEnv loweringStateRelDefs logDataAllocPtr
   venomState venomInstProps abiDecoderReentry
 
 Theorem log_buffer_data_values_seq_ptr:

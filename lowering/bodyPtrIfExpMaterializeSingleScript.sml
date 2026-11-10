@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpMaterializeSingle
 Ancestors
   bodyPtrIfExpMaterializeWord bodyPtrIfExpMaterializeFrame
-  context compileEnv emitHelper fragExec contextCodegenRel codegenRel
+  context compileEnv loweringStateRelDefs emitHelper fragExec contextCodegenRel codegenRel
   venomExecSemantics venomInst venomState finite_map rich_list
   ptrDiscipline ptrSafeRun bodyPtrDefs bodyPtrIfExpBytesEndpoint
 

@@ -3,7 +3,7 @@ Ancestors
   exprPtrUnwrapPostFrames exprPtrUnwrapFramedLoop exprPtrUnwrapAllocationFrame
   exprPtrUnwrapAllocSeparation exprSimAlloc exprSimProps localPtrsProps
   robustCopyTransportPtr bodyPtrDefs ptrDiscipline exprLoweringProps loweringPosts
-  finite_map compileEnv arithmetic bufferAllocationExecution allocationPtr venomInst
+  finite_map compileEnv loweringStateRelDefs arithmetic bufferAllocationExecution allocationPtr venomInst
   exprPtrUnwrapLoopInvariant exprPtrUnwrapRuntimeFrame
 
 Theorem copy_retained_no_new_taint:

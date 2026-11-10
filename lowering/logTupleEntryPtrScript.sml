@@ -6,7 +6,7 @@ Ancestors
   abiDecoderReentry appendStorageGhostPtr
   stmtSimLogEncodeLayout abiEncoderComplexDynamic abiEncoderInput
   allocationPtr loweringHalt bodyPtrDefs abiBuiltinAllocation emitHelperProps exprLoweringProps
-  context compileEnv venomExecSemantics venomState venomInst ptrDiscipline ptrSafeRun
+  context compileEnv loweringStateRelDefs venomExecSemantics venomState venomInst ptrDiscipline ptrSafeRun
   finite_map words list arithmetic pred_set
 
 (* ALLOCA can taint its own newly registered bytes, never exterior bytes. *)

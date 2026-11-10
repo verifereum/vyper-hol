@@ -3,7 +3,7 @@
 Theory bodyPtrEnvBuiltinsRuntime
 Ancestors bodyPtrEnvBuiltinsRuntimeCompose bodyPtrEnvBuiltinsRuntimePost
   bodyPtrEnvBuiltinsRuntimeSemantics exprSimHash exprLoweringProps
-  compileEnv bodyPtrDefs freshWrites wordArgsPtr finite_map venomState
+  compileEnv loweringStateRelDefs bodyPtrDefs freshWrites wordArgsPtr finite_map venomState
   vyperTypeSystem emitHelper context bodyPtrEnvBuiltinsMask
   bodyPtrEnvBuiltinsSelectorCompile list loweringPosts
 

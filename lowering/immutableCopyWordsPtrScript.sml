@@ -2,7 +2,7 @@
 Theory immutableCopyWordsPtr
 Ancestors
   immutableCopySeqPtr immutableCopyTaint immutableCopyExecution exprSimCopy
-  exprSimStorageCopy context compileEnv emitHelper exprLoweringProps
+  exprSimStorageCopy context compileEnv loweringStateRelDefs emitHelper exprLoweringProps
   fragGasSeqPtr ptrDiscipline venomState venomInst words list finite_map
   emittedSeqComposePtr contextCodegenRel bodyPtrDefs
 

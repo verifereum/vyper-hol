@@ -1,6 +1,6 @@
 (* Restoring an overwritten field recovers the old robust struct witness. *)
 Theory assignBasePtrFieldRobust
-Ancestors stmtSimAssignAttr stmtSimDeclStore exprSimFieldLayout annAssignPtrStore bodyPtrDefs valueEncoding
+Ancestors stmtSimAssignAttr stmtSimDeclStore exprSimFieldLayout annAssignPtrStore bodyPtrDefs valueEncoding valueEncodingDefs
   valueEncodingProps valueEncodingProofs venomMemProofs venomState
   venomExecSemantics exprSimMemoryTransport representationCleanPtr pred_set list arithmetic
 

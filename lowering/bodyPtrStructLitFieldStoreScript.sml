@@ -7,7 +7,7 @@ Ancestors
   ptrSafeRun ptrDiscipline bodyPtrDefs venomExecSemantics venomInstProofs
   venomInst venomState contextCodegenRel finite_map robustCopyTransportPtr
   valueEncodingProps pred_set typedCopyLoopHeaderPtr emitHelperProps
-  exprLoweringProps context compileEnv emitHelper fragExec
+  exprLoweringProps context compileEnv loweringStateRelDefs emitHelper fragExec
 
 Theorem covered_word_store_counted:
   !D ctx fn PG G tn s bb id dst value a w.

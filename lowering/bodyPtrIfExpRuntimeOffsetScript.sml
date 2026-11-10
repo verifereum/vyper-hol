@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpRuntimeOffset
 Ancestors bodyPtrAttributeAdd exprSimCopy context emitHelperProps
-  fragGasPathPtr ptrDiscipline venomState finite_map words compileEnv
+  fragGasPathPtr ptrDiscipline venomState finite_map words compileEnv loweringStateRelDefs
   exprLoweringProps venomInst arithmetic bodyPtrDefs
 
 (* Literal and zero offsets emit no edge; variable offsets use the existing

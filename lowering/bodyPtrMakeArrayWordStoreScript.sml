@@ -2,7 +2,7 @@
 Theory bodyPtrMakeArrayWordStore
 Ancestors
   wordLoadStorePtr bodyPtrMakeArrayCopyStep representationCleanPtr robustCopyTransportPtr
-  valueEncodingProps valueEncodingProofs valueEncoding bodyPtrDefs venomMemProofs pred_set list
+  valueEncodingProps valueEncodingProofs valueEncoding valueEncodingDefs bodyPtrDefs venomMemProofs pred_set list
 
 Theorem mstore_raw_robust_word:
   lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\

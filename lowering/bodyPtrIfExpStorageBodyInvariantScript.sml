@@ -2,7 +2,7 @@ Theory bodyPtrIfExpStorageBodyInvariant
 Ancestors
   bodyPtrIfExpStorageInvariant bodyPtrIfExpStorageBodyPost
   bodyPtrIfExpMaterializeFrame bodyPtrIfExpStorageFrame slotCopyExecution copyExecution
-  bodyPtrDefs compileEnv venomState ptrDiscipline finite_map words
+  bodyPtrDefs compileEnv loweringStateRelDefs venomState ptrDiscipline finite_map words
   valueEncoding vyperValue venomInst emitHelper bodyPtrIfExpStorageOrdinary
 
 Theorem ifexp_copy_interior_live_bounds:

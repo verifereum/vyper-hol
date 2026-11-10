@@ -1,7 +1,7 @@
 (* Exterior-write transport for statement ghosts; writes may contain tainted padding. *)
 Theory logFieldGhostPtr
 Ancestors logDataFieldRunPtr logTopicFramePtr robustCopyTransportPtr
-  bodyPtrDefs stmtFragPtr compileEnv exprSimProps stmtSimDefs stmtSimLogDataFrame
+  bodyPtrDefs stmtFragPtr compileEnv loweringStateRelDefs exprSimProps stmtSimDefs stmtSimLogDataFrame
   ptrDiscipline venomState finite_map words pred_set arithmetic
 
 Theorem ghost_kept_exterior_transport:

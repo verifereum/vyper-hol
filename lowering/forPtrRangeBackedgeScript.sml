@@ -2,7 +2,7 @@
 Theory forPtrRangeBackedge
 Ancestors forPtrRangeControl forPtrRangePrepare forPtrRangeLanding
   stmtSimForLoop fragExec venomState venomInst finite_map ptrDiscipline
-  exprLoweringProps loweringPosts compileEnv localPtrsProps stmtFragPtr bodyPtrDefs
+  exprLoweringProps loweringPosts compileEnv loweringStateRelDefs localPtrsProps stmtFragPtr bodyPtrDefs
 
 Theorem for_increment_block_path_ptr:
   lookup_block incr_lbl func.fn_blocks =

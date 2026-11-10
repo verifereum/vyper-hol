@@ -1,7 +1,7 @@
 Theory bodyPtrBopInLiveSourceFrame
 Ancestors
   bodyPtrBopInSourceFrame bodyPtrBopInEvidenceTyping bodySim vyperTypeInitialState
-  venomCompilerTypes words vyperState vyperContext compileVyper supportedProgram compileEnv
+  venomCompilerTypes words vyperState vyperContext compileVyper supportedProgram compileEnv loweringStateRelDefs
 
 (* This finite witness differs only in transaction block fields.  Keeping a
    separate transparent constant preserves the zero-block diagnostic. *)

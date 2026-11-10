@@ -2,7 +2,7 @@
 Theory bodyPtrBytestringBuiltinsConcatArmSemantics
 Ancestors
   exprSimConcatStore exprSimAlloc exprSimProps exprLoweringProps
-  compileEnv venomState venomExecSemantics valueEncodingProps valueEncodingProofs
+  compileEnv loweringStateRelDefs venomState venomExecSemantics valueEncodingProps valueEncodingProofs
   allocaFootprint abiDecodeStaticProps venomMemProps words arithmetic list finite_map
 
 Theorem concat_fixed_endpoint_state:

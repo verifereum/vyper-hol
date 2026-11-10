@@ -1,6 +1,6 @@
 (* Actual raw runs, independent of the pointer certificates. *)
 Theory bodyPtrEnvBuiltinsBlockHashSource
-Ancestors builtinProps varsExt freshWrites exprLoweringProps compileEnv
+Ancestors builtinProps varsExt freshWrites exprLoweringProps compileEnv loweringStateRelDefs
   venomState venomExecSemantics words list arithmeticProps exprSimUnopProps
   exprSimDefs loweringPosts valueEncoding vyperValue vyperValueOperation
   vyperContext vyperState vyperAST vyperInterpreter integer integer_word

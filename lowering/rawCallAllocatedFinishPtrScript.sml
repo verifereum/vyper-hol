@@ -219,8 +219,8 @@ Proof
   simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `H`, `un`] >> gvs[] >>
   simp[loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
     vyperValueTheory.evaluate_type_def, compileEnvTheory.is_word_type_def,
-    venomStateTheory.eval_operand_def, valueEncodingTheory.val_wf_def,
-    valueEncodingTheory.val_in_memory_def, loweringPostsTheory.val_footprint_def,
+    venomStateTheory.eval_operand_def, valueEncodingDefsTheory.val_wf_def,
+    valueEncodingDefsTheory.val_in_memory_def, loweringPostsTheory.val_footprint_def,
     valueEncodingTheory.type_memory_size_def]
 QED
 
@@ -329,7 +329,7 @@ Resume raw_call_allocated_positive_reverting_outcome[semantic]:
   simp[loweringPostsTheory.expr_val_at_def, vyperValueTheory.evaluate_type_def,
     compileEnvTheory.is_word_type_def] >>
   conj_tac
-  >- (simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
+  >- (simp[valueEncodingDefsTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
       mp_tac (Q.SPEC `flags.rcf_max_outsize` valueTypingMemoryPropsTheory.word_size_capacity) >>
       simp[listTheory.LENGTH_TAKE_EQ] >> decide_tac) >>
   simp[venomStateTheory.eval_operand_def, wordsTheory.w2n_n2w] >>
@@ -343,7 +343,7 @@ Resume raw_call_allocated_positive_reverting_outcome[semantic]:
   conj_tac
   >- (mp_tac (Q.SPEC `flags.rcf_max_outsize` valueTypingMemoryPropsTheory.word_size_capacity) >>
       simp[listTheory.LENGTH_TAKE_EQ, vfmConstantsTheory.word_size_def] >> decide_tac) >>
-  fs[compileEnvTheory.regions_disjoint_def]
+  fs[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 Finalise raw_call_allocated_positive_reverting_outcome
@@ -455,7 +455,7 @@ Resume raw_call_allocated_positive_nonreverting_outcome[semantic]:
       simp[bodyPtrDefsTheory.mem_agree_outside_def]) >>
   simp[loweringPostsTheory.expr_val_at_def, vyperValueTheory.evaluate_type_def,
     compileEnvTheory.is_word_type_def] >> conj_tac
-  >- (simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
+  >- (simp[valueEncodingDefsTheory.val_wf_def, valueEncodingTheory.type_memory_size_def] >>
       mp_tac (Q.SPEC `flags.rcf_max_outsize` valueTypingMemoryPropsTheory.word_size_capacity) >>
       simp[listTheory.LENGTH_TAKE_EQ] >> decide_tac) >>
   `b' < dimword(:256)` by
@@ -468,7 +468,7 @@ Resume raw_call_allocated_positive_nonreverting_outcome[semantic]:
   simp[wordsTheory.w2n_n2w] >> disj1_tac >>
   qexistsl_tac [`ai`, `b'`, `32 * ((flags.rcf_max_outsize+31) DIV 32)+64`] >>
   simp[loweringPostsTheory.val_footprint_def, valueEncodingTheory.type_memory_size_def] >>
-  fs[vfmConstantsTheory.word_size_def, compileEnvTheory.regions_disjoint_def] >>
+  fs[vfmConstantsTheory.word_size_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
   first_assum MATCH_ACCEPT_TAC
 QED
 

@@ -322,11 +322,11 @@ Theorem revert_reason_prefix_local_region_frame:
   local_region cenv scopes s name b sz ==>
   local_region cenv scopes t name b sz
 Proof
-  simp[compileEnvTheory.local_region_def] >> strip_tac >>
+  simp[loweringStateRelDefsTheory.local_region_def] >> strip_tac >>
   `lookup_var p t = lookup_var p s` by
     (irule revert_reason_prefix_lookup_frame >>
      goal_assum (drule_at Any) >> rpt strip_tac >>
-     fs[compileEnvTheory.not_local_ptr_def] >> metis_tac[]) >>
+     fs[loweringStateRelDefsTheory.not_local_ptr_def] >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -355,7 +355,7 @@ Proof
      disch_then (fn th => map_every (fn k => qspec_then k assume_tac th)
        [`0`, `2`]) >> gvs[arithmeticTheory.ADD_COMM]) >>
   `alloca_inv t /\ local_ptrs_rel func cenv es.scopes t` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `regions_disjoint b (64+ms) a sz` by
     (irule local_ptrs_rel_alloca_disjoint >>
      qexistsl_tac [`cenv`, `func`,
@@ -366,7 +366,7 @@ Proof
      qexistsl_tac [`cenv`, `func`,
        `mk_inst (id+3) ALLOCA [Lit (n2w ms)] [STRING #"%" (toString (v+2))]`] >>
      simp[mk_inst_def] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
-  fs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem revert_reason_prefix_old_allocation_exterior:
@@ -491,21 +491,21 @@ Proof
   qexistsl_tac [`G`, `{i | b <= i /\ i < b+(64+ms)} UNION {i | c <= i /\ i < c+ms}`,
     `s`, `tn`] >> simp[] >> rpt gen_tac >> strip_tac >>
   `!k. k < 3 ==> p <> STRING #"%" (toString (v+k))` by
-    (fs[compileEnvTheory.not_local_ptr_def] >> metis_tac[]) >>
+    (fs[loweringStateRelDefsTheory.not_local_ptr_def] >> metis_tac[]) >>
   `lookup_var p t = lookup_var p s` by
     (irule revert_reason_prefix_lookup_frame >> metis_tac[]) >>
   `local_ptrs_rel func cenv es.scopes s` by
-    fs[stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `?w. lookup_var p s = SOME w /\ type_memory_size entry.type <= sz /\
        val_wf entry.type entry.value` by
-    (fs[compileEnvTheory.local_ptrs_rel_def] >> metis_tac[]) >>
+    (fs[loweringStateRelDefsTheory.local_ptrs_rel_def] >> metis_tac[]) >>
   simp[] >> conj_tac >-
     (irule revert_reason_prefix_old_ptr_covers >> fs[ghost_inv_def] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   `val_footprint entry.type entry.value <= sz` by
     metis_tac[val_footprint_le, arithmeticTheory.LESS_EQ_TRANS] >>
   `local_region cenv es.scopes s name (w2n w) sz` by
-    (simp[compileEnvTheory.local_region_def] >> metis_tac[]) >>
+    (simp[loweringStateRelDefsTheory.local_region_def] >> metis_tac[]) >>
   `i NOTIN ({i | b <= i /\ i < b+(64+ms)} UNION {i | c <= i /\ i < c+ms})` by
     (irule revert_reason_prefix_local_exterior >> simp[] >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
@@ -536,13 +536,13 @@ Proof
   drule_all revert_reason_prefix_memory_effects >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es t` by
     (irule revert_reason_prefix_state_rel >> metis_tac[]) >>
-  `alloca_inv t` by fs[stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+  `alloca_inv t` by fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   irule ghost_kept_exterior_frame >>
   qexistsl_tac [`G`, `{i | b <= i /\ i < b+(64+ms)} UNION {i | c <= i /\ i < c+ms}`, `tn`] >>
   simp[] >> conj_tac >-
     (drule revert_reason_prefix_ghost_observations >> strip_tac >>
      gen_tac >> disch_tac >> first_x_assum irule >>
-     fs[compileEnvTheory.not_fresh_at_def] >> rpt strip_tac >>
+     fs[loweringStateRelDefsTheory.not_fresh_at_def] >> rpt strip_tac >>
      first_x_assum irule >> decide_tac) >>
   conj_tac >- suspend "initial_locals" >> suspend "old_allocations"
 QED

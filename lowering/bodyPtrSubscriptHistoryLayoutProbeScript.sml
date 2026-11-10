@@ -4,7 +4,7 @@
 Theory bodyPtrSubscriptHistoryLayoutProbe
 Ancestors
   bodyPtrSubscriptHistoryBoundary bodyPtrSubscriptPopAppendProbe
-  valueEncoding valueEncodingProps vyperValue loweringPosts arithmetic
+  valueEncoding valueEncodingDefs valueEncodingProps vyperValue loweringPosts arithmetic
 
 Theorem shortened_history_layout:
   !b mem.

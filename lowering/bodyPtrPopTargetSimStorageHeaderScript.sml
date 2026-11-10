@@ -1,7 +1,7 @@
 Theory bodyPtrPopTargetSimStorageHeader
 Ancestors
   bodyPtrDefs targetPlaceLive accountsRelProps exprLoweringProps
-  compileEnv ptrDiscipline vyperStorageBackend venomState finite_map pred_set
+  compileEnv loweringStateRelDefs ptrDiscipline vyperStorageBackend venomState finite_map pred_set
   bodyPtrBopInSlotLoad
 
 Theorem target_storage_header_clean_ptr:

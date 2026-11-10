@@ -1,7 +1,7 @@
 Theory bodyPtrPopNestedLiveArithmeticFrame
 Ancestors
   bodyPtrPopNestedLiveArithmetic bodyPtrPopScalarTransfer bodyPtrAttributeAdd
-  bodyPtrDefs emitHelperProps emitHelper compileEnv ptrDiscipline
+  bodyPtrDefs emitHelperProps emitHelper compileEnv loweringStateRelDefs ptrDiscipline
   venomState venomInst finite_map pred_set words
 
 Theorem pop_scalar_mul_framed_path:

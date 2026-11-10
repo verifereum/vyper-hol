@@ -3,7 +3,7 @@ Theory bodyPtrSubscriptHistoryPathStore
 Ancestors
   bodyPtrSubscriptHistoryHeader bodyPtrSubscriptHistoryBoundary
   bodyPtrSubscriptCurrentMemory
-  valueTypingMemoryProps valueEncoding vyperPlaceStatePreservation
+  valueTypingMemoryProps valueEncoding valueEncodingDefs vyperPlaceStatePreservation
   exprSimProps arithmetic
 
 Theorem current_path_pop_header:

@@ -3,7 +3,7 @@ Theory bodyPtrEnvBuiltinsRuntimeCompose
 Ancestors bodyPtrEnvBuiltinsHashTyped bodyPtrEnvBuiltinsMask
   bodyPtrEnvBuiltinsSelectorCompile bodyPtrEnvBuiltinsScalar
   fragGasPathPtr fragExec instIdxIndep exprSimHash exprLoweringProps
-  compileEnv venomState venomInst words list bodyPtrDefs vyperTypeSystem
+  compileEnv loweringStateRelDefs venomState venomInst words list bodyPtrDefs vyperTypeSystem
   wordArgsPtr loweringPosts finite_map bodyPtrEnvBuiltinsRuntimeSemantics freshWrites
 
 Theorem ghost_kept_inst_idx[simp]:

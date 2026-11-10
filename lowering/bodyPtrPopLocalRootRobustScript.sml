@@ -3,7 +3,7 @@
 Theory bodyPtrPopLocalRootRobust
 Ancestors
   bodyPtrPopLocalRootEntry augAssignPtrFieldStore exprSimPop exprSimAggregateEncoding
-  valueEncoding valueEncodingProps valueEncodingProofs
+  valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs
   bodyPtrDefs venomState venomMemProofs words list rich_list pred_set arithmetic
 
 Theorem pop_local_robust_shortened:

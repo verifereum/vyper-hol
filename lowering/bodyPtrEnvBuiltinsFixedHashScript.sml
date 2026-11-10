@@ -5,7 +5,7 @@ Ancestors wordLoadStorePtr bodyPtrEnvBuiltinsSelectorSuffix bodyPtrEnvBuiltinsMe
   bodyPtrEnvBuiltinsGhostCompose bodyPtrEnvBuiltinsAllocation loweringHalt
   typedCopyPtr allocationPtr
   fragExecPtr fragGasSeqPtr fragGasPathPtr bodyPtrDefs ptrDiscipline venomInst venomState
-  venomExecSemantics instIdxIndep compileEnv exprSimProps exprLoweringProps
+  venomExecSemantics instIdxIndep compileEnv loweringStateRelDefs exprSimProps exprLoweringProps
   finite_map pred_set words list
 
 Theorem fixed_hash_store_certificate:

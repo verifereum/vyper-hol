@@ -5,7 +5,7 @@ Ancestors
   assignTuplePtrLocalCoerce assignTuplePtrLocalWordRuntime
   assignTuplePtrLocalFixedHead assignTuplePtrLocalCopyRun
   tupleLocalStoreRun bodyPtrDefs exprSimProps valueCopy exprLoweringProps
-  venomState venomExecSemantics compileEnv context vyperState vyperLookup
+  venomState venomExecSemantics compileEnv loweringStateRelDefs context vyperState vyperLookup
   valueEncodingProps localPtrsProps stmtSimDeclStore
   assignTuplePtrLocalCompat assignTuplePtrCopyEndpoint
 

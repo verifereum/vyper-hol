@@ -3,7 +3,7 @@ Theory bodyPtrEnvBuiltinsScalar
 Ancestors
   bodyPtrEnvBuiltinsBoundary bodyPtrEnvBuiltinsEdges ghostPcTransportPtr
   bodyPtrDefs ptrDiscipline fragGasPathPtr emitHelperProps exprLoweringProps
-  emitHelper fragExec compileEnv codegenRel contextCodegenRel loweringPosts
+  emitHelper fragExec compileEnv loweringStateRelDefs codegenRel contextCodegenRel loweringPosts
   venomState venomInst venomExecSemantics finite_map pred_set list rich_list
   exprLowering vyperContext vyperValue valueEncoding valueEncodingProofs
   integer_word words exprSimWordArgs exprSimProps exprSimEnv stmtFragPtr

@@ -4,7 +4,7 @@ Theory assignBasePtrLocalLanding
 Ancestors assignBasePtrBytesPost assignBasePtrScopePost
   assignBasePtrCopyPath assignBasePtrMcopyTransport typedMemoryCopy
   bodyPtrDefs compileEnv localPtrsProps venomState venomExecSemantics
-  ptrDiscipline words finite_map pred_set valueEncoding
+  ptrDiscipline words finite_map pred_set valueEncoding valueEncodingDefs
   exprLoweringProps fragExec context exprSimBufferStore fragGasPathPtr
 
 Theorem assign_base_bytes_local_landing_ptr:

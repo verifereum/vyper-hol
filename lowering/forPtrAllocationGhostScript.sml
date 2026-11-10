@@ -1,7 +1,7 @@
 (* Allocation can taint a new site, but no live local overlaps that site. *)
 Theory forPtrAllocationGhost
 Ancestors forPtrAllocation allocationPtr exprSimPtrLiteralBuffer
-  robustCopyTransportPtr bodyPtrDefs exprSimProps compileEnv localPtrsProps
+  robustCopyTransportPtr bodyPtrDefs exprSimProps compileEnv loweringStateRelDefs localPtrsProps
   venomState venomInst venomExecSemantics finite_map stmtSimDeclPath
   loweringPosts ptrDiscipline exprLoweringProps
 

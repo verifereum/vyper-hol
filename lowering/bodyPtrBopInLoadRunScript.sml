@@ -5,7 +5,7 @@ Ancestors
   wordLoadStorePtr bodyPtrBopInLoadOutput stmtAppendStorageRunPtr fragGasSeqPtr
   emitHelperProps exprLoweringProps ptrDiscipline venomInst venomState
   venomExecSemantics finite_map list typedCopyPtr pred_set ptrSafeRun codegenRel instIdxIndep
-  ghostPcTransportPtr compileEnv contextCodegenRel
+  ghostPcTransportPtr compileEnv loweringStateRelDefs contextCodegenRel
 
 Theorem emitted_load_output_prov:
   emit_op opc [a] st = (out,st') /\

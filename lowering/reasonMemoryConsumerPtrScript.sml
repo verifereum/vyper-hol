@@ -3,7 +3,7 @@ Theory reasonMemoryConsumerPtr
 Ancestors
   reasonEndpointResourcesPtr revertReasonEntryPtr reasonRepresentationPtr
   loweringPosts bodyPtrDefs compileEnv context exprSimProps exprLoweringProps
-  valueEncoding valueEncodingProps vyperValue vyperState venomState
+  valueEncoding valueEncodingDefs valueEncodingProps vyperValue vyperState venomState
   ptrDiscipline words arithmetic finite_map list contractABI vfmConstants
 
 Theorem memory_string_endpoint:

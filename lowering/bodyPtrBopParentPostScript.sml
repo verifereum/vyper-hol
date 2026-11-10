@@ -1,7 +1,7 @@
 Theory bodyPtrBopParentPost
 Ancestors
   bodyPtrBopScalarOutcome bodyPtrBopEntry bodyPtrBopSource
-  bodyPtrBopScalarSeq exprSimProps exprLoweringProps compileEnv
+  bodyPtrBopScalarSeq exprSimProps exprLoweringProps compileEnv loweringStateRelDefs
   exprBopSimProps exprSimWordArgs bodyPtrDefs ptrDiscipline
   venomState finite_map wordArgsPtr bodyPtrBopOperandContract
 

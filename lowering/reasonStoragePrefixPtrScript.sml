@@ -3,7 +3,7 @@ Theory reasonStoragePrefixPtr
 Ancestors
   wordLoadStorePtr storageNormalizationOwnershipPtr reasonPrefixPtr reasonPrefixResourcesPtr
   bodyPtrDefs loweringPosts allocationPtr reasonAllocationFramePtr
-  exprSimAlloc exprSimProps exprLoweringProps loweringHalt compileEnv
+  exprSimAlloc exprSimProps exprLoweringProps loweringHalt compileEnv loweringStateRelDefs
   context venomState venomInst venomExecSemantics ptrDiscipline ptrSafeRun
   finite_map words typedCopyPtr emitHelperProps exprSimHash venomInstProofs
   ghostPcTransportPtr instIdxIndep fragGasPathPtr emitHelper fragExecPtr codegenRel fragExec

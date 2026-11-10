@@ -7,7 +7,7 @@ Ancestors calldataScratchWordPtr calldataDecodePtr abiValidBytesReentry abiDecod
   abiDecoderReentry abiDecoderContract abiDecoderTypedContract
   abiScratchDecoderContract abiScratchEffect valueEncodingTyping valueEncodingProps
   ctorAbiActualAlloc exprLowering exprLoweringProps emitHelper rich_list venomInst fragExec
-  bodyPtrDefs ptrDiscipline valueEncoding compileEnv venomExecSemantics
+  bodyPtrDefs ptrDiscipline valueEncoding compileEnv loweringStateRelDefs venomExecSemantics
   venomState words pred_set arithmetic list
 
 (* The calldata instance of trunk's position-form decoder lemmas: the source

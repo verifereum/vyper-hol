@@ -7,7 +7,7 @@ Theorem mem_bytes_at_read_memory:
   mem_bytes_at off len s.vs_memory = bs ==>
   read_memory off len s = bs
 Proof
-  simp[venomStateTheory.read_memory_def, valueEncodingTheory.mem_bytes_at_def]
+  simp[venomStateTheory.read_memory_def, valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem mem_bytes_at_read_memory_words:

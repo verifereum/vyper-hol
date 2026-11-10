@@ -1,7 +1,7 @@
 Theory bodyPtrStructLitEmpty
 Ancestors
   vyperState vyperInterpreter vyperAST exprSimHypsDefs vyperTypeSystem vyperValue exprLowering context
-  vyperTypeInvariants compileEnv bodyPtrDefs loweringPosts valueEncoding finite_map list
+  vyperTypeInvariants compileEnv loweringStateRelDefs bodyPtrDefs loweringPosts valueEncoding valueEncodingDefs finite_map list
   exprSimAlloc bodyPtrStructLitAlloc exprPtrUnwrap emitHelper emitHelperProps exprLoweringProps fragExec fragGasPathPtr venomInst venomState
 
 Theorem structlit_empty_typing:

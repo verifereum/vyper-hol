@@ -3,7 +3,7 @@ Ancestors
   bodyPtrSubscriptNumeric bodyPtrAttributeAdd ptrDiscipline ptrSafeRun
   bodyPtrDefs venomInst venomState venomExecSemantics finite_map
   decoderGhostFramePtr list codegenRel contextCodegenRel
-  emitHelperProps emitHelper compileEnv exprLoweringProps fragGasPathPtr
+  emitHelperProps emitHelper compileEnv loweringStateRelDefs exprLoweringProps fragGasPathPtr
   bodyPtrSubscriptNamedTuplePostBoundary
 
 (* Literal comparisons and multiplication do not consume pointer provenance. *)

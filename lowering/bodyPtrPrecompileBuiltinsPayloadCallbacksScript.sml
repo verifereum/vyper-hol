@@ -1,7 +1,7 @@
 Theory bodyPtrPrecompileBuiltinsPayloadCallbacks
 Ancestors bodyPtrPrecompileBuiltinsPayloadRuns bodyPtrPrecompileBuiltinsPayloadCompose
           bodyPtrPrecompileBuiltinsPayloadNormalize dftCommutation
-          emitHelper context compileEnv venomState exprLoweringProps
+          emitHelper context compileEnv loweringStateRelDefs venomState exprLoweringProps
           exprSimWordBuiltins exprSimPrecompiles emitHelperProps
           immutableMemoryFrame valueEncodingProps moduleLoweringProps
           venomMemProps immutableCopyExecution exprSimHash
@@ -89,7 +89,7 @@ Proof
      mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory` by
     (rpt strip_tac >>
      `b + len <= w2n p \/ w2n p + 128 <= b` by
-       gvs[compileEnvTheory.regions_disjoint_def] >>
+       gvs[loweringStateRelDefsTheory.regions_disjoint_def] >>
      simp[mstore_mem_bytes_at_disjoint]) >>
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (simp[immutable_mstore_capacity] >> decide_tac) >>
@@ -149,7 +149,7 @@ Proof
        mload (w2n p+32) s` by
     (gen_tac >> irule venomMemPropsTheory.mload_mstore_disjoint >>
      gvs[venomMemDefsTheory.regions_disjoint_def,
-         compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+         loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   simp[GSYM mem_word_at_eq_mload, update_var_def,
        mstore_vars_memory_overwrite] >>
   conj_tac >- simp[mem_word_at_eq_mload, wordsTheory.WORD_ADD_0] >>
@@ -244,7 +244,7 @@ Proof
        wordsTheory.dimword_def] >>
   strip_tac >>
   `regions_disjoint b n b' sz` by metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS] >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem mul_payload_callback:
@@ -283,14 +283,14 @@ Proof
     (irule allocated_scratch_point_disjoint >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
   `regions_disjoint (w2n b) 64 (w2n p) 64` by
-    (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+    (gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   drule_all mul_payload_stages_run >> strip_tac >>
   drule precompile_alloca_immutable_disjoint >> disch_tac >>
   `!a len. regions_disjoint (w2n b) 96 a len ==>
      mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory` by
     (rpt strip_tac >>
      `a + len <= w2n b \/ w2n b + 96 <= a` by
-       gvs[compileEnvTheory.regions_disjoint_def] >>
+       gvs[loweringStateRelDefsTheory.regions_disjoint_def] >>
      simp[mstore_mem_bytes_at_disjoint]) >>
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (simp[immutable_mstore_capacity] >> decide_tac) >>
@@ -337,7 +337,7 @@ Theorem add_payload_stages_run:
 Proof
   strip_tac >>
   `regions_disjoint (w2n b) 64 (w2n p) 64` by
-    (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+    (gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `?u. run_inst_seq (emitted_insts sa sm) s = OK u /\
     u.vs_memory = (mstore (w2n b+32) (mload (w2n p+32) s)
       (mstore (w2n b) (mload (w2n p) s) s)).vs_memory /\
@@ -359,7 +359,7 @@ Proof
       mload a (mstore r v z) = mload a z` by
     (rpt strip_tac >> irule mload_mstore_disjoint >>
      gvs[venomMemDefsTheory.regions_disjoint_def,
-         compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+         loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `mload (w2n q) u = mload (w2n q) s /\
    mload (w2n q+32) u = mload (w2n q+32) s` by
     (simp[GSYM mem_word_at_eq_mload] >> simp[mem_word_at_eq_mload]) >>
@@ -368,7 +368,7 @@ Proof
   drule (point_pair_payload_run |> SPEC_ALL |> Q.INST [`off` |-> `64w`] |>
     SRULE [wordsTheory.word_add_n2w]) >>
   simp[] >> disch_then (qspecl_then [`u`,`q`,`b`] mp_tac) >>
-  (impl_tac >- (simp[] >> gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac)) >>
+  (impl_tac >- (simp[] >> gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >>
   strip_tac >>
   `run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK t /\
    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
@@ -439,7 +439,7 @@ Proof
      mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory` by
     (rpt strip_tac >>
      `a + len <= w2n b \/ w2n b + 128 <= a` by
-       gvs[compileEnvTheory.regions_disjoint_def] >>
+       gvs[loweringStateRelDefsTheory.regions_disjoint_def] >>
      simp[mstore_mem_bytes_at_disjoint]) >>
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (simp[immutable_mstore_capacity] >> decide_tac) >>

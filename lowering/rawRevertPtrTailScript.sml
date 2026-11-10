@@ -6,7 +6,7 @@ Ancestors
   ptrDiscipline ptrSafeRun venomState venomInst venomExecSemantics
   words finite_map pred_set contextCodegenRel codegenRel valueEncodingProps
   exprSimHash list arithmetic exprSimRawRevertCore exprLoweringProps
-  emitHelperProps emitHelper compileEnv ASCIInumbers fragExec exprOperandVar
+  emitHelperProps emitHelper compileEnv loweringStateRelDefs ASCIInumbers fragExec exprOperandVar
   bodyPtrHashBuiltinsCases vyperTypeSystem loweringPosts
 
 Theorem raw_revert_bytes_path_ptr:

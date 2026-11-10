@@ -2,7 +2,7 @@
 Theory bodyPtrMakeArrayAdd
 Ancestors
   typedCopyPtr fragGasSeqPtr fragGasPathPtr emitHelper exprLoweringProps
-  venomInst venomExecSemantics venomState context compileEnv
+  venomInst venomExecSemantics venomState context compileEnv loweringStateRelDefs
 
 Theorem clean_binop_ptr_path:
   (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\

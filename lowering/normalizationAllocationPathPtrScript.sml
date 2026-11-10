@@ -3,7 +3,7 @@ Theory normalizationAllocationPathPtr
 Ancestors
   storageNormalizationOwnershipPtr reasonAllocationFramePtr reasonPrefixPtr
   exprSimAlloc exprLoweringProps loweringHalt loweringPosts bodyPtrDefs
-  context compileEnv emitHelper emitHelperProps venomState venomInst
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps venomState venomInst
   venomInstProofs venomExecSemantics ptrDiscipline allocationPtr fragGasPathPtr
   finite_map words arithmetic
 

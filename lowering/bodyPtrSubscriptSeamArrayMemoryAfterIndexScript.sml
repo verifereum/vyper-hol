@@ -69,11 +69,11 @@ Proof
   goal_assum (drule_at Any) >>
   conj_tac
   >- (qexists_tac `func` >>
-      gvs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+      gvs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
   qexistsl_tac [`Gb`,`mid`,`u`,`sb`,`tnb`] >>
   gvs[loweringPostsTheory.vv_post_def, exprLoweringPropsTheory.ci_mono_def,
       loweringPostsTheory.wb_frame_def,
-      exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+      exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
 

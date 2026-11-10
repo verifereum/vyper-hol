@@ -4,7 +4,7 @@ Ancestors
   bodyPtrBytestringBuiltinsBounds exprLoweringProps fragExec
   venomState venomExecSemantics words list rich_list
   exprSimAlloc loweringHalt context finite_map emitHelper emitHelperProps
-  bodyPtrBytestringBuiltinsExternalSlice freshWrites compileEnv
+  bodyPtrBytestringBuiltinsExternalSlice freshWrites compileEnv loweringStateRelDefs
   exprSimWordBuiltins venomInst bodyPtrBytestringBuiltinsBuffer
   bodyPtrBytestringBuiltinsCalldataReserved
 

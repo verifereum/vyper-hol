@@ -2,7 +2,7 @@
    therefore not a suitable frame premise: only old regions need protection. *)
 Theory bodyPtrMakeArrayAllocationFrame
 Ancestors
-  bodyPtrDefs allocationPtr compileEnv pred_set arithmetic
+  bodyPtrDefs allocationPtr compileEnv loweringStateRelDefs pred_set arithmetic
   exprSimPtrLiteralBuffer bodyPtrMakeArrayAllocBuffer ptrDiscipline finite_map
 
 Theorem ghost_kept_disjoint_taint_frame:

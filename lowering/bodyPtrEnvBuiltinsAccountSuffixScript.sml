@@ -3,7 +3,7 @@ Theory bodyPtrEnvBuiltinsAccountSuffix
 Ancestors
   bodyPtrEnvBuiltinsEdges bodyPtrEnvBuiltinsScalarCompose
   ptrDiscipline ptrSafeRun venomInst venomExecSemantics venomState
-  compileEnv list memLocDefs venomInstProofs codegenRel contextCodegenRel
+  compileEnv loweringStateRelDefs list memLocDefs venomInstProofs codegenRel contextCodegenRel
   fragGasPathPtr fragGasSeqPtr finite_map bodyPtrDefs emitHelper emitHelperProps
   exprLoweringProps fragExec stmtFragPtr
   bodyPtrEnvBuiltinsAccountReads bodyPtrEnvBuiltinsScalar

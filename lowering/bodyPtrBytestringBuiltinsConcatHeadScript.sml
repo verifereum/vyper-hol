@@ -4,7 +4,7 @@ Ancestors
   bodyPtrBytestringBuiltinsConcatScratch bodyPtrBytestringBuiltinsConcatArms
   bodyPtrBytestringBuiltinsConcatOperand exprSimConcatArgs exprSimProps
   loweringPosts valueEncoding valueEncodingProps valueEncodingProofs
-  bodyPtrDefs vyperValue vyperTypeSystem vyperTyping compileEnv venomState words arithmetic list
+  bodyPtrDefs vyperValue vyperTypeSystem vyperTyping compileEnv loweringStateRelDefs venomState words arithmetic list
   exprLowering exprLoweringProps exprSimConcatPath fragExec freshWrites exprOperandVar finite_map
 Libs
   monadsyntax

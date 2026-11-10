@@ -4,7 +4,7 @@ Ancestors
   bodyPtrMakeArrayConsInvariant bodyPtrMakeArrayStoreFrame exprSimHash
   bodyPtrMakeArrayFlatStore wordArgsPtr freshWrites venomState
   bodyPtrMakeArrayMemoryFrame list pair valueEncodingProofs abiDecodeStaticProps loweringPosts
-  compileEnv tupleMemoryFrame
+  compileEnv loweringStateRelDefs tupleMemoryFrame
 
 Theorem literal_prefix_store_frame:
   literal_prefix_ok cells tn s /\
@@ -77,7 +77,7 @@ Proof
   drule_all literal_store_outer_wb >> strip_tac >>
   `!name p k. local_region ce es.scopes z name p k <=>
               local_region ce es.scopes s name p k` by
-    (simp[compileEnvTheory.local_region_def] >>
+    (simp[loweringStateRelDefsTheory.local_region_def] >>
      metis_tac[local_ptrs_reserved_def]) >>
   `ghost_kept ce ees fr Gf tnf sf H tm` by
     (gvs[literal_loop_frame_def, bodyPtrDefsTheory.ghost_kept_def] >>

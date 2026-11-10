@@ -1,7 +1,7 @@
 (* Compiler boundary for the signed bytestring loader. *)
 Theory bodyPtrSignedConvertSignedLoad
 Ancestors
-  bodyPtrSignedConvertScalarOps exprLowering exprLoweringProps compileEnv
+  bodyPtrSignedConvertScalarOps exprLowering exprLoweringProps compileEnv loweringStateRelDefs
   emitHelperProps rich_list venomInst
 
 Theorem signed_loader_decompose:

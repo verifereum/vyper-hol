@@ -3,7 +3,7 @@ Theory bodyPtrMakeArrayScalarSemantics
 Ancestors
   bodyPtrMakeArrayScalarDispatch bodyPtrMakeArrayEmission exprSimUnwrap
   exprSimUnwrapProps exprSimProps loweringPosts venomExecSemantics venomInst
-  venomState valueEncodingProps vyperState vyperInterpreter context compileEnv valueCopyBytes
+  venomState valueEncodingProps vyperState vyperInterpreter context compileEnv loweringStateRelDefs valueCopyBytes
 
 Theorem scalar_located_load_step:
   vv_post ctx fn ce cx e es sa sm s0 es' tv (LocatedValue t p) s /\

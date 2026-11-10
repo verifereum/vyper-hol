@@ -3,7 +3,7 @@
 Theory forPtrArrayAssemble
 Ancestors forPtrArrayTerminal forPtrArrayInvariant forPtrArrayPrepare forPtrArrayFinish
   forPtrRangePrepare stmtSimForArrayLoop bodyPtrDefs venomState
-  ptrDiscipline finite_map exprLoweringProps ghostPcTransportPtr stmtFragPtr compileEnv stmtSimProps loweringPosts
+  ptrDiscipline finite_map exprLoweringProps ghostPcTransportPtr stmtFragPtr compileEnv loweringStateRelDefs stmtSimProps loweringPosts
   forPtrRangeSource forPtrRangeRound forPtrRoundCleanup gasExemptCert
   gasSummaryComposePtr vyperState fragGasPathPtr exprSimWordArgs vyperInterpreter
 Libs monadsyntax

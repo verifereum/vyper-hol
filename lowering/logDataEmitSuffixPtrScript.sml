@@ -3,9 +3,9 @@ Theory logDataEmitSuffixPtr
 Ancestors
   logStoreEncodeRunPtr logEmitPtr logGhostFramePtr stmtSimLogTrace logEventCodePtr
   stmtSimLogSuffixActual stmtSimLogArgs stmtSimLogDataRun stmtSimLogStoreFresh
-  bodyPtrDefs stmtFragPtr fragGasPathPtr compileEnv context stmtLowering
+  bodyPtrDefs stmtFragPtr fragGasPathPtr compileEnv loweringStateRelDefs context stmtLowering
   emitHelperProps exprLoweringProps venomState venomInst ptrDiscipline
-  list arithmetic words rich_list vyperABI valueEncoding contractABI abiDecoderReentry
+  list arithmetic words rich_list vyperABI valueEncoding valueEncodingDefs contractABI abiDecoderReentry
 
 Theorem eval_operands_list_rel:
   !ops ws. LIST_REL (\op w. eval_operand op s = SOME w) ops ws <=>

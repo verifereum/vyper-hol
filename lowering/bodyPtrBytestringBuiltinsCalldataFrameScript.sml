@@ -3,7 +3,7 @@ Theory bodyPtrBytestringBuiltinsCalldataFrame
 Ancestors
   bodyPtrBytestringBuiltinsCalldataRuntime exprSimCalldataSlice
   exprSimLiteralBuffer exprLoweringProps loweringSlice immutableMemoryFrame
-  compileEnv venomState list finite_map loweringPosts emitHelperProps words
+  compileEnv loweringStateRelDefs venomState list finite_map loweringPosts emitHelperProps words
   bodyPtrBytestringBuiltinsExternalSlice venomExecSemantics venomInst
   exprSimProps varsExt exprSimAlloc fragExec loweringHalt
   bodyPtrBytestringBuiltinsCalldataReserved freshWrites emitHelper

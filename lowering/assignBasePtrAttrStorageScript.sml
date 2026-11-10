@@ -5,7 +5,7 @@ Ancestors assignBasePtrAttrLocal assignBasePtrFieldAddress assignTuplePtrStorage
   bodyPtrDefs bodyPtrPreds stmtFragPtr gasSummaryComposePtr gasExemptCert
   fragGasPathPtr fragGasPath fragGasMode gasSummary gasSummaryCompose gasContext
   exprLoweringProps emitHelperProps emitHelper exprLowering stmtLowering
-  compileEnv loweringPosts venomState venomInst vyperState vyperStorageBackend
+  compileEnv loweringStateRelDefs loweringPosts venomState venomInst vyperState vyperStorageBackend
   ptrDiscipline stmtSimDeclMem vyperStorageLayoutSafety accountsRelProps
   exprSimTopLevelProps finite_map list vyperEvalExprPreservesScopesDom
   vyperInterpreter exprSimFieldLayout exprSimHypsDefs exprSimUnwrap

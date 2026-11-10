@@ -1,7 +1,7 @@
 Theory calldataScratchArrayEntryPtr
 Ancestors
   decoderScratchInitPtr calldataScratchLoopEntryPtr abiScratchDecoderLoopInput
-  venomState compileEnv abiDecoderExecution abiDecoderLoop
+  venomState compileEnv loweringStateRelDefs abiDecoderExecution abiDecoderLoop
   abiScratchEffect abiDecoderFrame abiDecoderReentry bodyPtrDefs ptrDiscipline
   abiScratchFootprint abiScratchEncoderContract abiDecoderContract abiDecoderAllocation pred_set finite_map
 

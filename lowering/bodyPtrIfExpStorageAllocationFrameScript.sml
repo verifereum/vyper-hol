@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpStorageAllocationFrame
 Ancestors bodyPtrIfExpStorageInvariant bodyPtrIfExpAllocSource bodyPtrIfExpAllocFrame decoderGhostFramePtr
-  slotCopyExecution loweringHalt exprLoweringProps venomMemProps valueEncodingProps compileEnv venomState finite_map words arithmetic
+  slotCopyExecution loweringHalt exprLoweringProps venomMemProps valueEncodingProps compileEnv loweringStateRelDefs venomState finite_map words arithmetic
 
 Theorem ifexp_alloca_data_frame:
   n < dimword (:256) /\

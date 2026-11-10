@@ -5,7 +5,7 @@ Ancestors
   exprSimUnwrap immutableCopyWordsPtr immutableCopySeqPtr normalizerAllocationFrame
   entrySinkExtraction fragGasPathPtr
   exprSimCopy fragExec loweringHalt exprLowering exprLoweringProps
-  emitHelper emitHelperProps context compileEnv localPtrsProps
+  emitHelper emitHelperProps context compileEnv loweringStateRelDefs localPtrsProps
   moduleLoweringProps venomInst venomState ptrDiscipline ptrSafeRun
   finite_map words arithmetic rich_list list
 

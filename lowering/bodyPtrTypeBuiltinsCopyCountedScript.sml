@@ -3,7 +3,7 @@ Ancestors
   context compileEnv emitHelper emitHelperProps exprLoweringProps
   typedCopyPtr fragExecPtr fragGasSeqPtr fragGasPathPtr
   venomExecSemantics venomState venomInst ptrDiscipline
-  valueEncoding valueEncodingProps valueCopy finite_map list rich_list arithmetic words
+  valueEncoding valueEncodingDefs valueEncodingProps valueCopy finite_map list rich_list arithmetic words
 
 Theorem copy_memory_emitted_shape:
   compile_copy_memory dst src n sa = ((),sb) ==>

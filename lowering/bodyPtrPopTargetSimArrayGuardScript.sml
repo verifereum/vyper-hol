@@ -1,7 +1,7 @@
 Theory bodyPtrPopTargetSimArrayGuard
 Ancestors
   exprSimArrayIndex exprSimSubscriptArraySuffix bodyPtrBopScalarDynamic
-  bodyPtrBopScalarCompile bodyPtrBopScalarSeq emitHelperProps compileEnv exprLoweringProps
+  bodyPtrBopScalarCompile bodyPtrBopScalarSeq emitHelperProps compileEnv loweringStateRelDefs exprLoweringProps
   exprLowering list pred_set finite_map ptrDiscipline
 
 Theorem target_scalar_certificate_cons[local]:

@@ -46,8 +46,8 @@ Theorem membership_frame_local_region:
   local_ptrs_reserved cenv sa ==>
   (local_region cenv scopes s n b sz <=> local_region cenv scopes s0 n b sz)
 Proof
-  simp[membership_loop_frame_def, compileEnvTheory.local_ptrs_reserved_def,
-       compileEnvTheory.local_region_def] >> rpt strip_tac >>
+  simp[membership_loop_frame_def, loweringStateRelDefsTheory.local_ptrs_reserved_def,
+       loweringStateRelDefsTheory.local_region_def] >> rpt strip_tac >>
   eq_tac >> strip_tac >> goal_assum (drule_at Any) >>
   metis_tac[]
 QED
@@ -83,7 +83,7 @@ Proof
   strip_tac >> simp[membership_loop_frame_def] >> conj_tac
   >- (rpt strip_tac >>
       `x <> hdr /\ x <> flag /\ x <> valid` by
-        gvs[compileEnvTheory.not_fresh_at_def] >>
+        gvs[loweringStateRelDefsTheory.not_fresh_at_def] >>
       gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE,
            op_taint_def] >> metis_tac[]) >>
   simp[update_var_def, venom_state_component_equality]
@@ -99,7 +99,7 @@ Theorem membership_header_frontier:
 Proof
   strip_tac >>
   drule (SRULE [] (GEN_ALL bodyPtrBopInHeaderCodeTheory.membership_runtime_header_layout)) >>
-  strip_tac >> simp[compileEnvTheory.not_fresh_at_def] >> rpt strip_tac >>
+  strip_tac >> simp[loweringStateRelDefsTheory.not_fresh_at_def] >> rpt strip_tac >>
   gvs[]
 QED
 

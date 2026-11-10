@@ -2,9 +2,9 @@
 Theory assignBasePtrStaging
 Ancestors assignBasePtrAllocSeparate assignBasePtrCopyFrame
   assignBasePtrMcopyGhost wordArgsPtr typedMemoryCopy bodyPtrDefs
-  venomState venomExecSemantics venomInst context compileEnv
+  venomState venomExecSemantics venomInst context compileEnv loweringStateRelDefs
   ghostPcTransportPtr assignBasePtrLiteralOutcome fragGasPathPtr
-  exprSimAlloc words finite_map allocationPtr valueEncoding emitHelper emitHelperProps
+  exprSimAlloc words finite_map allocationPtr valueEncoding valueEncodingDefs emitHelper emitHelperProps
   exprLoweringProps fragExecPtr fragExec exprSimBufferStore typedCopyPtr ptrDiscipline
 
 Theorem assign_base_scratch_copy_framed_ptr:

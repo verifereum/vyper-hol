@@ -4,7 +4,7 @@
    tuple head before its initializing MSTORE can preserve that head. *)
 Theory reasonNormalizedSuffixPtr
 Ancestors reasonFinishPtr reasonTupleCopyPtr reasonResourcesPtr
-  representationCleanPtr valueEncoding venomMemProps bodyPtrDefs
+  representationCleanPtr valueEncoding valueEncodingDefs venomMemProps bodyPtrDefs
   exprSimProps words list pred_set reasonTupleCompilerPtr reasonSlotResourcesPtr
   emitHelperProps exprLoweringProps compileEnv finite_map reasonCompilerFramePtr
   loweringHalt contextProps freshWrites reasonFinishBoundsPtr reasonFinishCode

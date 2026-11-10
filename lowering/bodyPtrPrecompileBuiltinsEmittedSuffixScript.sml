@@ -1,6 +1,6 @@
 Theory bodyPtrPrecompileBuiltinsEmittedSuffix
 Ancestors bodyPtrPrecompileBuiltinsRuntime bodyPtrPrecompileBuiltinsSuffix
-          exprSimPrecompiles compileEnv ptrDiscipline
+          exprSimPrecompiles compileEnv loweringStateRelDefs ptrDiscipline
 
 Theorem computed_emitted_suffix_checked:
   (do gas <- emit_op GAS [];

@@ -3,7 +3,7 @@ Ancestors
   bodyPtrBopInMachineFrame bodyPtrBopInCodeInventory
   bodyPtrBopInJointSource bodyPtrBopInActualSuffix bodyPtrBopInSourceFrame
   bodyPtrBopInLiveSourceFrame bodyPtrDefs gasContext exprSimDefs
-  exprSimHypsDefs exprLoweringProps compileEnv compileVyper context venomState
+  exprSimHypsDefs exprLoweringProps compileEnv loweringStateRelDefs compileVyper context venomState
   vyperInterpreter vyperState vyperContext finite_map bodyPtrBopInLocalSuffix
 
 Theorem joint_membership_gas_admissible:

@@ -2,7 +2,7 @@ Theory bodyPtrPrecompileBuiltinsPayloadRuns
 Ancestors bodyPtrPrecompileBuiltinsCompilerStages
           bodyPtrPrecompileBuiltinsPayloadFrames emitHelperProps
           exprSimWordBuiltins moduleLoweringProps valueEncodingProps
-          emitHelper context compileEnv venomState exprLoweringProps
+          emitHelper context compileEnv loweringStateRelDefs venomState exprLoweringProps
           exprSimPrecompiles venomMemProps
 
 Theorem direct_store_run:
@@ -78,7 +78,7 @@ Proof
       conj_tac >- metis_tac[] >>
       conj_tac
       >- (rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >>
-          gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+          gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
       metis_tac[]) >>
   qexists `sa` >> simp[]
 QED

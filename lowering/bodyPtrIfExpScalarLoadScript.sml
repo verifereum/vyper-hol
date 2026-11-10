@@ -3,7 +3,7 @@ Ancestors
   bodyPtrIfExpWordLocations exprSimPtrProps stmtAppendStorageRunPtr
   ptrSafeRun ptrDiscipline ghostPcTransportPtr venomInst venomState
   venomExecSemantics emitHelper exprLoweringProps contextCodegenRel
-  compileEnv finite_map pred_set codegenRel fragExec bodyPtrDefs
+  compileEnv loweringStateRelDefs finite_map pred_set codegenRel fragExec bodyPtrDefs
 
 Theorem ifexp_scalar_load_check:
   MEM opc [SLOAD;TLOAD;DLOAD] /\ op_taint tn arg = {} /\

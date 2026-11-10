@@ -1,7 +1,7 @@
 (* Robust represented values cannot taint live encoded storage bytes. *)
 Theory assignBasePtrStorageTaint
 Ancestors representationCleanPtr storageCopyLive valueEncodingProofs
-  bodyPtrDefs compileEnv valueEncoding vyperValue vyperTyping
+  bodyPtrDefs compileEnv loweringStateRelDefs valueEncoding vyperValue vyperTyping
   venomState list words arithmetic accountsRelProps
   assignBasePtrStorageFrame pred_set
 

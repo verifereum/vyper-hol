@@ -1,6 +1,6 @@
 (* An emitted operand cannot alias a subsequently fresh unwrap output. *)
 Theory bodyPtrStructLitUnwrapSeparation
-Ancestors emitHelperProps compileEnv
+Ancestors emitHelperProps compileEnv loweringStateRelDefs
 
 Theorem emitted_operand_fresh_separation:
   emit_op opc ops sc = (dst,sm) /\ ~not_fresh_at sm out ==>

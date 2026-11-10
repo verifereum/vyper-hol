@@ -4,7 +4,7 @@ Ancestors wordLoadStorePtr forPtrAdmin typedCopyPtr fragGasSeqPtr ghostPcTranspo
   representationCleanPtr wordCopyRobustPtr robustCopyTransportPtr
   venomExecSemantics venomInst venomState finite_map instIdxIndep
   fragExecPtr bodyPtrDefs fragExec exprLoweringProps ptrSafeRun ptrDiscipline
-  valueEncodingProps valueEncoding valueEncodingProofs list venomMemProofs
+  valueEncodingProps valueEncoding valueEncodingDefs valueEncodingProofs list venomMemProofs
   vyperTyping vyperValue context compileEnv
 
 Theorem for_word_copy_steps:

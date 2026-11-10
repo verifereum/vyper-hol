@@ -1,7 +1,7 @@
 (* Pointer ghosts for the complete array-element address setup. *)
 Theory decoderArraySetupPtr
 Ancestors decoderNavigationPtr abiDecoderLoopSetup abiDecoderIndexedAddress
-  abiDecoderDynamic abiEncoder compileEnv emitHelper emitHelperProps fragExecPtr
+  abiDecoderDynamic abiEncoder compileEnv loweringStateRelDefs emitHelper emitHelperProps fragExecPtr
   fragExec words venomState venomExecSemantics ptrDiscipline bodyPtrDefs
   finite_map pred_set arithmetic list instIdxIndep calldataDynOwned venomInst
   exprLoweringProps codegenRel abiDecoderReentry

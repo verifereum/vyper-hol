@@ -4,7 +4,7 @@ Theory revertReasonEntryPtr
 Ancestors
   revertReasonAllocatedPtr revertReasonIdentityPtr revertReasonPrefixCodePtr
   revertReasonPrefixFramePtr revertReasonLayout exprLoweringProps exprSimCopy
-  context compileEnv bodyPtrDefs loweringPosts venomInst venomState
+  context compileEnv loweringStateRelDefs bodyPtrDefs loweringPosts venomInst venomState
   words arithmetic finite_map list ptrDiscipline fragGasPathPtr
   revertReasonMemoryFramePtr valueEncoding venomMemDefs instIdxIndep
   exprLowering revertReasonTailCodePtr

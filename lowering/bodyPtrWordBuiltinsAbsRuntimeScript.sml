@@ -365,7 +365,7 @@ Theorem word_abs_runtime_state_rel:
   state_rel word_abs_runtime_func word_abs_runtime_frame_cenv
     word_abs_runtime_cx word_abs_runtime_es word_abs_runtime_s0
 Proof
-  rewrite_tac[compileEnvTheory.state_rel_def, word_abs_runtime_call_ctx] >>
+  rewrite_tac[loweringStateRelDefsTheory.state_rel_def, word_abs_runtime_call_ctx] >>
   strip_tac >> simp[] >>
   CONV_TAC (computeLib.RESTR_EVAL_CONV
     [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``]) >>
@@ -378,7 +378,7 @@ Theorem word_abs_runtime_locals:
     word_abs_runtime_es.scopes word_abs_runtime_s0
 Proof
   strip_tac >>
-  rewrite_tac[compileEnvTheory.local_ptrs_rel_def] >>
+  rewrite_tac[loweringStateRelDefsTheory.local_ptrs_rel_def] >>
   CONV_TAC (computeLib.RESTR_EVAL_CONV
     [``word_abs_runtime_func``, ``local_backed``, ``function_selector``,
      ``calldata_method_id``, ``vyper_to_abi_types``]) >>
@@ -394,7 +394,7 @@ QED
 Theorem word_abs_runtime_local_backed:
   local_backed word_abs_runtime_func "%11" word_abs_runtime_s0 0 32
 Proof
-  rewrite_tac[compileEnvTheory.local_backed_def] >> disj1_tac >>
+  rewrite_tac[loweringStateRelDefsTheory.local_backed_def] >> disj1_tac >>
   qexists_tac `<|inst_id := 17; inst_opcode := ALLOCA;
     inst_operands := [Lit 32w]; inst_outputs := ["%11"]|>` >>
   simp[word_abs_runtime_s0_def, venomStateTheory.init_venom_state_def] >>
@@ -466,7 +466,7 @@ Proof
   rw[AllCaseEqs()] >> gvs[] >>
   `"11" = toString (11:num)` by EVAL_TAC >>
   pop_assum SUBST1_TAC >>
-  simp[compileEnvTheory.not_fresh_at_def] >> rpt strip_tac >>
+  simp[loweringStateRelDefsTheory.not_fresh_at_def] >> rpt strip_tac >>
   qpat_x_assum `toString n = toString 11` mp_tac >>
   pure_rewrite_tac[ASCIInumbersTheory.toString_inj] >>
   strip_tac >> gvs[]

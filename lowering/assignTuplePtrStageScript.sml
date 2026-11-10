@@ -3,8 +3,8 @@ Theory assignTuplePtrStage
 Ancestors
   assignTuplePtrAllocEndpoint assignTuplePtrCopyEndpoint assignTuplePtrStageFrame allocationPtr localPtrsProps
   typedCopyPtr robustCopyTransportPtr venomMemProofs valueEncodingProps valueEncodingTyping
-  exprLoweringProps exprSimProps compileEnv venomState venomInst
-  venomExecSemantics loweringHalt finite_map valueEncoding tupleStageProps
+  exprLoweringProps exprSimProps compileEnv loweringStateRelDefs venomState venomInst
+  venomExecSemantics loweringHalt finite_map valueEncoding valueEncodingDefs tupleStageProps
   bodyPtrDefs fragGasPathPtr vyperTyping emitHelperProps emitHelper ptrDiscipline localPtrsProps
 Libs
   monadsyntax

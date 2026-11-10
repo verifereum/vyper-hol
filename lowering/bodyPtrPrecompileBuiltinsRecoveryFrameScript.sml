@@ -4,7 +4,7 @@ Ancestors bodyPtrPrecompileBuiltinsCompletePrefixes
           bodyPtrPrecompileBuiltinsCompilerStages
           bodyPtrPrecompileBuiltinsRunAllocation
           bodyPtrPrecompileBuiltinsPrefixFrames
-          bodyPtrDefs compileEnv exprLoweringProps venomState finite_map pred_set list
+          bodyPtrDefs compileEnv loweringStateRelDefs exprLoweringProps venomState finite_map pred_set list
 
 Theorem recovery_payload_ranges:
   emit_void MSTORE [buf; h] sa = ((),sb) /\

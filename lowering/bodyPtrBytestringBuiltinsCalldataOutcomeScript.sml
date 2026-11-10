@@ -2,7 +2,7 @@ Theory bodyPtrBytestringBuiltinsCalldataOutcome
 Ancestors
   bodyPtrBytestringBuiltinsEval bodyPtrBytestringBuiltinsSliceEndpoint
   exprSimSource exprSimWordArgs exprSimDefs exprSimHypsDefs
-  vyperTyping valueEncoding words integer compileEnv vyperValue loweringSlice
+  vyperTyping valueEncoding words integer compileEnv loweringStateRelDefs vyperValue loweringSlice
   allocationPtr bodyMemoryDefs exprSimBuffer venomExecSemantics venomInst
   ptrDiscipline venomState finite_map exprLoweringProps venomMemDefs
   bodyPtrBytestringBuiltinsCalldataFrame bodyPtrBytestringBuiltinsBounds
@@ -406,7 +406,7 @@ Proof
       qexistsl_tac [`sa.cs_next_id`,`w2n w`,`N`] >>
       simp[] >> rpt gen_tac >> disch_tac >>
       qpat_x_assum `!name b len. _ ==> regions_disjoint _ _ _ _` drule >>
-      simp[compileEnvTheory.regions_disjoint_def]) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   simp[]
 QED
 

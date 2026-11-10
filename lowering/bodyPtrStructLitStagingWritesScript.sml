@@ -2,7 +2,7 @@
    but the fresh output of an emitted operation cannot overwrite it. *)
 Theory bodyPtrStructLitStagingWrites
 Ancestors
-  emitHelperProps compileEnv
+  emitHelperProps compileEnv loweringStateRelDefs
 
 Theorem emit_op_older_output_excluded:
   emit_op opc ops sa = (v,sb) /\ not_fresh_at sa x ==>

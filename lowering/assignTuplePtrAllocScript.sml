@@ -4,7 +4,7 @@ Ancestors
   assignTuplePtrPrefix allocationPtr loweringHalt fragExecPtr
   bodyPtrDefs robustCopyTransportPtr exprLoweringProps
   venomInst venomState venomExecSemantics ptrDiscipline finite_map
-  valueEncoding compileEnv
+  valueEncoding compileEnv loweringStateRelDefs
 
 Theorem alloca_step_exterior_ghost_ptr:
   stmt_state_rel ctx func cenv cx es s /\

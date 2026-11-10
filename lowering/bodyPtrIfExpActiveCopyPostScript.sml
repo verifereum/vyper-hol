@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpActiveCopyPost
 Ancestors bodyPtrIfExpCopyPost bodyPtrIfExpAllocSource exprSimPrecompiles exprSimOperands
   exprSimAlloc localPtrsProps loweringHalt exprLoweringProps exprSimStorageCopy
-  compileEnv venomState venomInst finite_map words arithmetic loweringPosts
+  compileEnv loweringStateRelDefs venomState venomInst finite_map words arithmetic loweringPosts
 
 (* The allocation endpoint is the actual step result, not an independently
    chosen semantic run.  The copy supplies its ordinary frame at that endpoint. *)

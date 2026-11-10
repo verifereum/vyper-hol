@@ -1,7 +1,7 @@
 (* Counted local-write consumers: simulation and ghost share one endpoint. *)
 Theory assignBasePtrLocalContinuation
 Ancestors assignBasePtrLocalLanding assignBasePtrLocalSemantic
-  bodyPtrDefs vyperLookup compileEnv localPtrsProps typedMemoryCopy
+  bodyPtrDefs vyperLookup compileEnv loweringStateRelDefs localPtrsProps typedMemoryCopy
   exprLoweringProps exprSimBufferStore valueEncoding venomState finite_map fragGasPathPtr
 
 Theorem assign_base_local_ghost_value[local]:

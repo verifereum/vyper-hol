@@ -6,7 +6,7 @@ Ancestors
   fragGasSeqPtr instIdxIndep ptrSafeRun fragExecPtr words
   normalizationAllocPtr loweringPosts loweringHalt allocationPtr exprSimAlloc
   context emitHelper emitHelperProps exprLoweringProps exprSimProps rich_list
-  compileEnv venomExecSemantics
+  compileEnv loweringStateRelDefs venomExecSemantics
   venomInst venomState ptrDiscipline robustCopyTransportPtr
 
 (* Placement, not source-register reservedness alone, excludes overlap with

@@ -1,7 +1,7 @@
 (* Consumer premises for a supported local array iterator. *)
 Theory forPtrElement
 Ancestors bodyPtrDefs stmtSimForArray stmtSimForArrayParts ptrCoverage
-  exprLoweringProps compileEnv
+  exprLoweringProps compileEnv loweringStateRelDefs
 
 (* The statement-boundary invariant's live-local interface, independent of
    For syntax. Consumers need not unfold ghost_inv themselves. *)

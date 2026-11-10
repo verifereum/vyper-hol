@@ -2,7 +2,7 @@ Theory bodyPtrPopTargetSimRoots
 Ancestors
   bodyPtrPopTargetSimBoundary stmtSimAugAssign
   bodyPtrBopInNameBoundary fragGasPathPtr targetPlaceSim
-  exprLoweringProps compileEnv loweringPosts vyperInterpreter vyperState
+  exprLoweringProps compileEnv loweringStateRelDefs loweringPosts vyperInterpreter vyperState
   ptrDiscipline bodyPtrPopTargetDefs bodyPtrDefs vyperTypeSystem
   exprLowering venomState fragExec stmtFragPtr exprSimSubscriptMap
   exprSimTopLevelProps vyperTypeEnv vyperTyping exprSimHypsDefs

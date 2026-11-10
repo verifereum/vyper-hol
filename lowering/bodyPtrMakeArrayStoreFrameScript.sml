@@ -1,7 +1,7 @@
 (* Runtime semantic continuation at the very same copy endpoint. *)
 Theory bodyPtrMakeArrayStoreFrame
 Ancestors
-  exprSimLiteralBuffer bodyPtrMakeArrayCopyStateFrame compileEnv venomState
+  exprSimLiteralBuffer bodyPtrMakeArrayCopyStateFrame compileEnv loweringStateRelDefs venomState
   valueEncodingProofs list
 
 Theorem literal_store_local_bytes:

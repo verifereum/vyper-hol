@@ -2,7 +2,7 @@ Theory bodyPtrBytestringBuiltinsUintAlloc
 Ancestors
   bodyPtrBytestringBuiltinsAllocation exprSimPtrLiteralBuffer
   bodyPtrDefs ptrDiscipline venomState venomInst finite_map
-  codegenRel contextCodegenRel pred_set compileEnv
+  codegenRel contextCodegenRel pred_set compileEnv loweringStateRelDefs
 
 Theorem alloca_union_ghost_inv:
   ghost_inv d cenv cx es G tn s /\

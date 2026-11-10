@@ -1,5 +1,5 @@
 Theory bodyPtrPrecompileBuiltinsRunWitnesses
-Ancestors exprSimPrecompiles exprSimLiteralBuffer exprSimWordArgs compileEnv
+Ancestors exprSimPrecompiles exprSimLiteralBuffer exprSimWordArgs compileEnv loweringStateRelDefs
           bodyPtrPrecompileBuiltinsRunAllocation
 
 Theorem allocated_payload_run_witnesses:

@@ -1,7 +1,7 @@
 Theory bodyPtrBopHashFrame
 Ancestors
   bodyPtrBopHashCompile bodyPtrBopHashSequence bodyPtrDefs
-  loweringPosts compileEnv venomState venomExecSemantics
+  loweringPosts compileEnv loweringStateRelDefs venomState venomExecSemantics
   finite_map exprLoweringProps ptrDiscipline
 
 Theorem bop_hash_compile_run_frame:

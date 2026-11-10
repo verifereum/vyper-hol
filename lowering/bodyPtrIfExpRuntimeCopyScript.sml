@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpRuntimeCopy
 Ancestors bodyPtrIfExpRuntimeOneFrame bodyPtrIfExpRuntimeOne
-  immutableCopyExecution exprSimCopy exprLoweringProps context compileEnv
+  immutableCopyExecution exprSimCopy exprLoweringProps context compileEnv loweringStateRelDefs
   fragExec emitHelperProps fragGasPathPtr words arithmetic pred_set
   bodyPtrDefs ptrDiscipline venomState finite_map rich_list venomInst
 

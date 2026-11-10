@@ -2,7 +2,7 @@
 Theory assignBasePtrStorageSemantic
 Ancestors assignBasePtrStorageLoop storageCopyLive assignBasePtrStorageFrame
   exprLoweringProps
-  exprSimDefs exprSimProps loweringPosts compileEnv stmtSimStoreCopy valueEncodingProps stateFrame
+  exprSimDefs exprSimProps loweringPosts compileEnv loweringStateRelDefs stmtSimStoreCopy valueEncodingProps stateFrame
   accountsRelProps vyperStorageFrame vyperStorageBackend vyperStorage venomState vfmState
   words arithmetic list rich_list combin
 

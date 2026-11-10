@@ -5,7 +5,7 @@ Ancestors
   exprSimAggregateEncoding tupleMemoryLayout exprSimAttributeFields
   exprSimProps vyperPlaceStatePreservation
   vyperPlaceResultTyping vyperTypeInvariants vyperPlaceTyping
-  valueEncoding valueEncodingProofs valueEncodingProps loweringPosts
+  valueEncoding valueEncodingDefs valueEncodingProofs valueEncodingProps loweringPosts
   vyperState vyperTyping vyperTypeSystem vyperValue vyperValueOperation list rich_list pair arithmetic
 Libs
   pairLib

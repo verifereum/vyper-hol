@@ -17,7 +17,7 @@ Ancestors
   abiScratchDecoderContract abiDecoderCoherence abiDecoderTypedContract
   abiScratchDecoderRanges abiDecoderCorrectPrimitiveArray abiEncoder contractABI
   abiDecoderContract abiScratchLeafEffect abiScratchEffect abiDecoderReentry abiDecoderLoop
-  valueEncoding valueEncodingTyping valueEncodingProps compileEnv exprLoweringProps
+  valueEncoding valueEncodingTyping valueEncodingProps compileEnv loweringStateRelDefs exprLoweringProps
   exprLowering vyperABI arithmetic normalizationPrefixPtr exprSimAggregateEncoding
   calldataTypedRobustPtr exprSimProps vyperValue vyperTyping dynarrayLiveRobustPtr
   bodyPtrDefs ptrDiscipline ptrSafeRun venomState venomExecSemantics fragExec words list pred_set

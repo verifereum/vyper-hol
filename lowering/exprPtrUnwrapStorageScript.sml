@@ -69,7 +69,7 @@ Proof
   >- (rpt strip_tac >> drule_all storage_holds_load >> simp[]) >>
   qexistsl [`p`, `s`, `sm`, `post_value_type cenv e`] >> simp[update_var_def] >>
   rpt strip_tac >> `x <> STRING #"%" (toString sm.cs_next_var)` by
-    (gvs[compileEnvTheory.not_fresh_at_def]) >>
+    (gvs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 

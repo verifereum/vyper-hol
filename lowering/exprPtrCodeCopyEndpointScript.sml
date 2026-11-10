@@ -4,7 +4,7 @@ Ancestors
   exprPtrCodeCopyFrame exprPtrUnwrapEndpointFrames exprPtrUnwrapPostFrames
   exprPtrCodeCopyInduction exprSimCopy exprPtrUnwrapAllocationFrame
   freshWrites allocationPtr exprSimAlloc ptrDiscipline venomState venomInst
-  finite_map arithmetic words pred_set exprPtrUnwrapAllocation compileEnv
+  finite_map arithmetic words pred_set exprPtrUnwrapAllocation compileEnv loweringStateRelDefs
   decoderGhostFramePtr bodyPtrDefs loweringPosts exprPtrUnwrapRetained
   exprSimStorageCopy exprLoweringProps
 

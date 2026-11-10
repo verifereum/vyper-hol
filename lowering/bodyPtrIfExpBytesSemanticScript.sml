@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpBytesSemantic
 Ancestors
-  exprSimBufferStore exprSimProps exprSimDefs loweringPosts compileEnv
+  exprSimBufferStore exprSimProps exprSimDefs loweringPosts compileEnv loweringStateRelDefs
   venomState venomInst venomExecSemantics finite_map words exprSimCopy
 
 Theorem ifexp_bytes_mcopy_semantic_state:

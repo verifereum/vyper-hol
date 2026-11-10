@@ -1,7 +1,7 @@
 Theory bodyPtrBopCompareCompile
 Ancestors
   bodyPtrBopCompare emitHelper emitHelperProps exprLoweringProps fragExec
-  compileEnv arithmetic rich_list instIdxIndep venomInst venomState
+  compileEnv loweringStateRelDefs arithmetic rich_list instIdxIndep venomInst venomState
 
 Theorem bop_compare_emit_placement:
   emit_op opc ops sc = (op,sd) /\ fn_has_code sc sd fn /\

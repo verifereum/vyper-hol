@@ -2,8 +2,8 @@
 Theory logTopicFramePtr
 Ancestors
   logTopicPtr logValueFramePtr logGhostFramePtr bodyPtrDefs stmtFragPtr
-  compileEnv exprLoweringProps context venomState ptrDiscipline finite_map words
-  stmtSimLogTopics stmtLowering valueEncoding valueEncodingProofs loweringPosts
+  compileEnv loweringStateRelDefs exprLoweringProps context venomState ptrDiscipline finite_map words
+  stmtSimLogTopics stmtLowering valueEncoding valueEncodingDefs valueEncodingProofs loweringPosts
   vyperTyping vyperValue vyperTypeSystem representationCleanPtr arithmetic list supportedTypes
 
 Theorem ghost_kept_readonly_transport:

@@ -4,7 +4,7 @@ Theory logSourceStagePtr
 Ancestors
   logSourceEntryPtr logStagedEntryPtr logTupleOwnershipPtr logGhostFramePtr
   logDataStorePtr stmtSimLogDataFrame abiBuiltinAllocation abiDecoderFrame
-  exprLoweringProps bodyPtrDefs localPtrsProps compileEnv venomMemDefs
+  exprLoweringProps bodyPtrDefs localPtrsProps compileEnv loweringStateRelDefs venomMemDefs
   venomState finite_map words list arithmetic appendStorageGhostPtr
   fragExec stmtFragPtr logDataStorePtr ghostPcTransportPtr exprSimPtrLiteralBuffer
   stmtSimLogDataRun instIdxIndep

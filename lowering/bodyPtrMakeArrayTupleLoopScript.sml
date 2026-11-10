@@ -5,7 +5,7 @@ Ancestors
   bodyPtrMakeArrayConsOutcome exprLowering exprLoweringProps emitHelperProps
   compileEnv context bodyPtrMakeArrayConsBind gasSummaryComposePtr
   fragGasPathPtr gasExemptCert gasSummary vyperState exprSimHyps
-  exprSimWordArgs bodyPtrMakeArrayConsInvariant valueEncoding argsTailPtr
+  exprSimWordArgs bodyPtrMakeArrayConsInvariant valueEncoding valueEncodingDefs argsTailPtr
   assignTuplePtrBodyReady freshWrites list option fragExec
   bodyPtrMakeArrayChildren
   exprSimAggregateLoops exprSimAggregateEncoding

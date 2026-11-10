@@ -2,7 +2,7 @@ Theory bodyPtrPopLocalRootPost
 Ancestors
   bodyPtrPopLocalRootRobust bodyPtrPopLocalRootEntry
   assignTuplePtrWordLocals assignTuplePtrLoadStep
-  bodyPtrDefs exprSimPop exprSimProps compileEnv context venomState ptrDiscipline
+  bodyPtrDefs exprSimPop exprSimProps compileEnv loweringStateRelDefs context venomState ptrDiscipline
   finite_map pred_set words list
 
 Theorem pop_local_header_ghost:

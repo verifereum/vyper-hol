@@ -1,7 +1,7 @@
 (* Suffix restriction for the recursive tuple slot layout. *)
 Theory bodyPtrSubscriptSeamTupleStorage
 Ancestors
-  accountsRelProps compileEnv vyperValue vyperLookupStorage vyperStorage
+  accountsRelProps compileEnv loweringStateRelDefs vyperValue vyperLookupStorage vyperStorage
   targetPlaceLive exprSimPopNestedBase vyperStorageRegionWrite list words
 
 Theorem tuple_dead_suffix:

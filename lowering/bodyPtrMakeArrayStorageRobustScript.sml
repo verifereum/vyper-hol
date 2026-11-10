@@ -2,7 +2,7 @@
 Theory bodyPtrMakeArrayStorageRobust
 Ancestors
   storageDecodeMemory bodyPtrDefs valueEncodingProps valueEncodingProofs list
-  accountsRelProps exprSimStorageCopy compileEnv words ptrDiscipline venomState
+  accountsRelProps exprSimStorageCopy compileEnv loweringStateRelDefs words ptrDiscipline venomState
 
 Theorem copy_bytes_taint_agree_outside:
   copy_bytes st bs n D dst mem /\

@@ -2,7 +2,7 @@
 Theory bodyPtrTypeBuiltinsBytesUintSemantics
 Ancestors bodyPtrTypeBuiltinsUnsignedSemantics bodyPtrTypeBuiltinsUintClampSemantics
   exprSimConvert exprLowering exprLoweringProps emitHelperProps compileEnv
-  fragExec venomState words valueEncoding vyperValue vyperTypeSystem
+  fragExec venomState words valueEncoding valueEncodingDefs vyperValue vyperTypeSystem
   vyperTyping vyperValueOperation valueEncodingProofs builtinConvertPrefix
 
 Theorem bytes_uint_conversion_result:

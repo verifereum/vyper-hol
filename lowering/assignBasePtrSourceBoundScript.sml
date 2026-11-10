@@ -1,7 +1,7 @@
 (* A bounded test of the exported expression-post interface, not of execution. *)
 Theory assignBasePtrSourceBound
-Ancestors bodyPtrDefs loweringPosts exprLoweringProps compileEnv exprLowering
-  valueEncoding venomState ptrDiscipline words finite_map vyperTyping vyperValue valueEncodingProofs exprSimProps vyperAST vyperState vyperContext accountsRelProps
+Ancestors bodyPtrDefs loweringPosts exprLoweringProps compileEnv loweringStateRelDefs exprLowering
+  valueEncoding valueEncodingDefs venomState ptrDiscipline words finite_map vyperTyping vyperValue valueEncodingProofs exprSimProps vyperAST vyperState vyperContext accountsRelProps
   fcgDefs relation venomMemDefs pred_set venomInst list
 
 (* Identity framing isolates the substantive placement and state relation

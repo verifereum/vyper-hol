@@ -10,7 +10,7 @@ Ancestors
   exprSimPrecompiles exprSimWordArgs exprSimDefs exprSimHash loweringPosts
   exprOperandVar exprSimSource gasSummaryComposePtr gasExemptCert fragGasPathPtr
   fragExec vyperAST vyperState vyperInterpreter vyperValue vyperTypeSystem
-  vyperContext vyperEvent compileEnv context emitHelper emitHelperProps
+  vyperContext vyperEvent compileEnv loweringStateRelDefs context emitHelper emitHelperProps
   venomState venomInst venomExecSemantics list finite_map words
 Libs pairLib
 
@@ -450,7 +450,7 @@ Resume raw_log_fixed32_body_frag_ptr[summary]:
     evaluate_type_def, ptr_buf_ok_def, lowered_value_type_def, Abbr `call`,
     expr_type_def] >>
   simp[type_memory_bytes_def, ptrDisciplineTheory.op_taint_def,
-       valueEncodingTheory.val_in_memory_def, val_footprint_def,
+       valueEncodingDefsTheory.val_in_memory_def, val_footprint_def,
        valueEncodingTheory.type_memory_size_def] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts sn sb)` by simp[mk_inst_def, is_terminator_def] >>

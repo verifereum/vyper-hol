@@ -4,7 +4,7 @@ Ancestors
   reasonCodeNormalizationPtr reasonEncoderPrefixResourcesPtr reasonEncoderLayoutPtr
   reasonNormalizedSuffixPtr reasonMemorySuccessPtr reasonRaiseContinuationPtr
   bodyPtrDefs loweringPosts exprSimProps stmtLowering exprLowering context
-  compileEnv venomState venomInst ptrDiscipline fragGasPathPtr arithmetic words
+  compileEnv loweringStateRelDefs venomState venomInst ptrDiscipline fragGasPathPtr arithmetic words
   finite_map exprLoweringProps reasonResourcesPtr valueEncodingProps emitHelper
   reasonCodeResourcesPtr exprOperandVar freshWrites emitHelperProps reasonFinishBoundsPtr
 

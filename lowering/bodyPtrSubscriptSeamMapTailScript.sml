@@ -37,7 +37,7 @@ Proof
   qexistsl [`t with vs_inst_idx := LENGTH sb.cs_current_insts`, `G'`, `tn'`] >>
   gvs[listTheory.LENGTH_APPEND, eval_op_inst_idx] >>
   gvs[stmt_state_rel_inst_idx, loweringPostsTheory.wb_frame_def,
-      compileEnvTheory.local_region_def, venomStateTheory.lookup_var_def] >> gvs[]
+      loweringStateRelDefsTheory.local_region_def, venomStateTheory.lookup_var_def] >> gvs[]
 QED
 
 Theorem mapping_key_encoding_layout:

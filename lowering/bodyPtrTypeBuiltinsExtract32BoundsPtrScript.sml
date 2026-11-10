@@ -4,7 +4,7 @@ Ancestors
   augAssignPtrScalarRun augAssignPtrScalarCertificate augAssignPtrScalarSafety
   ghostPcTransportPtr instIdxIndep venomExecSemantics
   bodyPtrBopScalarSeq fragGasSeqPtr builtinBytes exprLoweringProps
-  compileEnv codegenRel contextCodegenRel ptrDiscipline venomInst venomState finite_map list pred_set
+  compileEnv loweringStateRelDefs codegenRel contextCodegenRel ptrDiscipline venomInst venomState finite_map list pred_set
 
 Theorem slice_bounds_scalar_certificate:
   compile_assert_slice_bounds a n limit sa = ((),sb) /\

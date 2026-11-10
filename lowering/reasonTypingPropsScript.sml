@@ -5,7 +5,7 @@ Ancestors
   valueEncodingTyping vyperTypeExprResult vyperTypeExprSoundness
   vyperTypeInvariants vyperTyping vyperValue vyperState allocLimits
   reasonEndpointResourcesPtr reasonRepresentationPtr vyperInterpreter
-  vyperValueOperation valueEncoding exprLoweringProps stringUnwrapLayout
+  vyperValueOperation valueEncoding valueEncodingDefs exprLoweringProps stringUnwrapLayout
   words vfmConstants exprLowering compileEnv
 Libs
   monadsyntax

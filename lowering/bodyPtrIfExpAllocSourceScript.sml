@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpAllocSource
 Ancestors
   exprSimVVFrame exprSimProps exprSimDefs loweringPosts exprLoweringProps
-  compileEnv venomState finite_map exprLowering context
+  compileEnv loweringStateRelDefs venomState finite_map exprLowering context
   bodyPtrIfExpAllocFrame allocationPtr exprSimAlloc loweringHalt fragExec
   bodyPtrDefs decoderGhostFramePtr ptrDiscipline venomInst venomMemDefs
 

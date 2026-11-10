@@ -3,7 +3,7 @@ Ancestors
   bodyPtrSubscriptNamedRoot bodyPtrSubscriptIndexRefresh
   bodyPtrSubscriptPendingInit vyperTypeValues vyperValue
   loweringPosts bodyPtrDefs vyperState exprSimDefs vyperTyping
-  exprSimSource exprSimHypsDefs vyperInterpreter exprLoweringProps compileEnv words
+  exprSimSource exprSimHypsDefs vyperInterpreter exprLoweringProps compileEnv loweringStateRelDefs words
   vyperValueOperation valueEncoding list arithmetic vyperTypeSystem vyperAST
   exprBopSimProps integer_word loweringSlice exprSimHyps exprWordOperand
   vyperTypeCallGraph

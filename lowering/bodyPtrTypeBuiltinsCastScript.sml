@@ -3,7 +3,7 @@ Ancestors wordArgsPtr
   bodyPtrSignedConvertHeaderLoad bodyPtrTypeBuiltinsCheckedArithmetic
   bodyPtrTypeBuiltinsScalarChecks bodyPtrDefs typedCopyPtr
   exprSimPtrProps exprLowering exprLoweringProps
-  compileEnv emitHelper emitHelperProps ASCIInumbers rich_list
+  compileEnv loweringStateRelDefs emitHelper emitHelperProps ASCIInumbers rich_list
   exprSimPtrLiteralBuffer ghostPcTransportPtr
   fragGasSeqPtr fragGasSeqAbort fragGasPathPtr instIdxIndep fragExec wordArgsPtr
   venomExecSemantics venomState venomInst ptrDiscipline arithmetic stmtAppendStoragePathPtr

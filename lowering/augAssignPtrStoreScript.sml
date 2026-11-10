@@ -3,8 +3,8 @@ Theory augAssignPtrStore
 Ancestors
   wordLoadStorePtr augAssignPtrLoad typedCopyPtr fragExecPtr fragGasSeqPtr fragGasPathPtr
   bodyPtrDefs venomInst venomState venomExecSemantics ptrSafeRun
-  ptrDiscipline emitHelperProps emitHelper compileEnv fragExec
-  finite_map words loweringSlice robustCopyTransportPtr valueEncoding valueEncodingProps
+  ptrDiscipline emitHelperProps emitHelper compileEnv loweringStateRelDefs fragExec
+  finite_map words loweringSlice robustCopyTransportPtr valueEncoding valueEncodingDefs valueEncodingProps
   valueEncodingProofs list venomMemProofs exprSimProps localPtrsProps
   stmtSimAssignStore vyperLookup
 

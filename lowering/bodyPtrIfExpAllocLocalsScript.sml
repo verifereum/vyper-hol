@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpAllocLocals
 Ancestors
-  bodyPtrIfExpAllocFrame bodyPtrDefs compileEnv exprSimProps
+  bodyPtrIfExpAllocFrame bodyPtrDefs compileEnv loweringStateRelDefs exprSimProps
   venomState venomInst ptrDiscipline finite_map
 
 Theorem local_ptr_footprint_below_frontier:

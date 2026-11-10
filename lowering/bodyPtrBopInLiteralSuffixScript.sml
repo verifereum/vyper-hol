@@ -2,7 +2,7 @@ Theory bodyPtrBopInLiteralSuffix
 Ancestors exprSimBopInLiteralWord
   bodyPtrBopInLiteralBoundary bodyPtrAttributeAdd stmtAppendStorageRunPtr
   decoderGhostFramePtr fragGasSeqPtr emitHelperProps ptrSafeRun ptrDiscipline
-  venomExecSemantics venomInst venomState compileEnv codegenRel contextCodegenRel
+  venomExecSemantics venomInst venomState compileEnv loweringStateRelDefs codegenRel contextCodegenRel
   list finite_map words ghostPcTransportPtr instIdxIndep instSeqComposePtr
   bodyPtrBopInLiteralRun fragExec exprLoweringProps exprLowering
   exprSimWordBuiltins freshWrites arithmetic rich_list

@@ -1,7 +1,7 @@
 Theory bodyPtrTypeBuiltinsScalarChecks
 Ancestors
   bodyPtrSignedConvertClamp exprLowering exprLoweringProps fragGasSeqPtr
-  compileEnv ptrDiscipline finite_map venomState venomInst list
+  compileEnv loweringStateRelDefs ptrDiscipline finite_map venomState venomInst list
   venomExecSemantics emitHelperProps ASCIInumbers rich_list
   bodyPtrSignedConvertScalarOps bodyPtrSignedConvertIszero
 

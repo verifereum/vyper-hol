@@ -4,7 +4,7 @@
 Theory forPtrRangeCallback
 Ancestors forPtrScope forPtrBytes forPtrAllocationFrame forPtrSourceScopes
   stmtSimForLoop bodyPtrDefs loweringPosts gasSummaryComposePtr
-  compileEnv vyperEvalPreservesScopes localPtrsProps exprLoweringProps
+  compileEnv loweringStateRelDefs vyperEvalPreservesScopes localPtrsProps exprLoweringProps
   stmtSimForArrayLoop vyperState
 
 Theorem for_code_callback_reserved:

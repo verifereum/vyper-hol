@@ -1,7 +1,7 @@
 Theory bodyPtrBopHashCompare
 Ancestors
   bodyPtrBopCompareSuffix bodyPtrBopHashSuffix bodyPtrBopCompareCompile
-  fragGasPathPtr compileEnv codegenRel exprLoweringProps venomState
+  fragGasPathPtr compileEnv loweringStateRelDefs codegenRel exprLoweringProps venomState
   arithmetic exprSimDefs bodyPtrDefs emitHelperProps
 
 Theorem bop_hash_compare_ptr:

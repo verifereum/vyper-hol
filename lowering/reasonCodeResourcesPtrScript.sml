@@ -3,7 +3,7 @@
 Theory reasonCodeResourcesPtr
 Ancestors
   exprSimCopy reasonResourcesPtr reasonCodeCopyPtr representationCleanPtr
-  exprSimProps valueEncoding valueEncodingProps loweringPosts bodyPtrDefs
+  exprSimProps valueEncoding valueEncodingDefs valueEncodingProps loweringPosts bodyPtrDefs
   immutableConstructorRelation immutableCopyExecution
   compileEnv venomState venomMemProofs valueEncodingProofs words list arithmetic
   vyperInterpreter vyperState vyperValue

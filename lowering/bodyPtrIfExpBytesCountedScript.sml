@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpBytesCounted
 Ancestors
   wordLoadStorePtr bodyPtrIfExpBytesFrame bodyPtrIfExpCopyHeader bodyPtrIfExpCopyInputs typedCopyPtr fragGasSeqPtr
-  context compileEnv emitHelper exprLoweringProps rich_list venomInst
+  context compileEnv loweringStateRelDefs emitHelper exprLoweringProps rich_list venomInst
   venomState venomExecSemantics ptrSafeRun ptrDiscipline fragExec
   finite_map instIdxIndep ghostPcTransportPtr
 

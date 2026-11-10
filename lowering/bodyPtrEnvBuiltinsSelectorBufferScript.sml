@@ -2,9 +2,9 @@
 Theory bodyPtrEnvBuiltinsSelectorBuffer
 Ancestors wordLoadStorePtr bodyPtrEnvBuiltinsAllocation bodyPtrEnvBuiltinsEdges
   bodyPtrEnvBuiltinsBoundary typedCopyPtr
-  robustCopyTransportPtr bodyPtrDefs exprSimProps exprLoweringProps compileEnv
+  robustCopyTransportPtr bodyPtrDefs exprSimProps exprLoweringProps compileEnv loweringStateRelDefs
   ptrDiscipline venomState venomExecSemantics finite_map pred_set
-  valueEncoding valueEncodingProps valueEncodingProofs list rich_list
+  valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs list rich_list
   fragExecPtr fragGasSeqPtr fragGasPathPtr venomInst vyperValue vfmConstants
 
 Theorem mstore_local_robust:

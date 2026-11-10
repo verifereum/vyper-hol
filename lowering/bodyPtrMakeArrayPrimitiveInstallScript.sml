@@ -3,7 +3,7 @@
 Theory bodyPtrMakeArrayPrimitiveInstall
 Ancestors
   bodyPtrMakeArrayEmission context fragExec emitHelperProps exprLoweringProps
-  compileEnv emitHelper venomInst venomState list rich_list
+  compileEnv loweringStateRelDefs emitHelper venomInst venomState list rich_list
 
 Theorem typed_word_copy_install_shape:
   is_word_type dt /\

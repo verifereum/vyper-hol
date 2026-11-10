@@ -3,7 +3,7 @@ Ancestors
   bodyPtrMakeArrayAllocCursor bodyPtrMakeArrayCopyStateFrame bodyPtrMakeArrayExternalPost bodyPtrMakeArrayBufferPost
   bodyPtrMakeArrayOneSlotRuntime bodyPtrMakeArrayMaterialiseFrame
   bodyPtrDefs valueEncodingProofs exprSimCopy exprSimStorageCopy ptrDiscipline fragGasPathPtr
-  emitHelperProps emitHelper context compileEnv venomState finite_map pred_set words list
+  emitHelperProps emitHelper context compileEnv loweringStateRelDefs venomState finite_map pred_set words list
 
 Theorem literal_copy_exterior_bytes:
   mem_agree_outside {i | b <= i /\ i < b+n} m1 m2 /\

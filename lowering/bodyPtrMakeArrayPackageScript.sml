@@ -2,11 +2,11 @@
    pointer value/buffer posts.  Capacity is distinct from value footprint. *)
 Theory bodyPtrMakeArrayPackage
 Ancestors
-  bodyPtrMakeArrayTupleLoop bodyPtrDefs exprSimProps valueEncoding
+  bodyPtrMakeArrayTupleLoop bodyPtrDefs exprSimProps valueEncoding valueEncodingDefs
   venomState words ptrDiscipline bodyPtrMakeArrayAllocCursor
   bodyPtrMakeArrayAllocatedOne bodyPtrMakeArrayMaterialiseFrame
   bodyPtrMakeArrayExternalInstall loweringPosts exprSimAlloc emitHelperProps
-  finite_map bodyPtrMakeArrayConsInvariant allocationPtr compileEnv
+  finite_map bodyPtrMakeArrayConsInvariant allocationPtr compileEnv loweringStateRelDefs
   gasSummaryComposePtr exprLowering exprLoweringProps
   exprSimAggregateEncoding exprSimAggregateSource vyperState argsTailPtr
   calldataReconstruction exprSimAggregateLayout exprSimHyps vyperTypeSystem

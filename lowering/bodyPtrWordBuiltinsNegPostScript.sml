@@ -128,7 +128,7 @@ Proof
   gvs[] >> drule word_neg_sequence_normal_post >>
   simp[] >> disch_then irule >>
   `sc.cs_next_var <= sa.cs_next_var + 1` by decide_tac >>
-  fs[compileEnvTheory.local_ptrs_reserved_def, compileEnvTheory.not_fresh_at_def] >>
+  fs[loweringStateRelDefsTheory.local_ptrs_reserved_def, loweringStateRelDefsTheory.not_fresh_at_def] >>
   metis_tac[]
 QED
 

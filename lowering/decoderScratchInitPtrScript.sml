@@ -2,7 +2,7 @@ Theory decoderScratchInitPtr
 Ancestors
   decoderArrayInitPtr abiScratchDecoderInitReentry
   abiDecoderArrayLoopInit abiDecoderArrayInit abiDecoderReentry
-  compileEnv bodyPtrDefs ptrSafeRun ptrDiscipline abiDecoderContract
+  compileEnv loweringStateRelDefs bodyPtrDefs ptrSafeRun ptrDiscipline abiDecoderContract
   abiDecoderArrayInitReentry venomState abiDecoderIndexInit words arithmetic
   abiScratchDecoderArray abiScratchDecoderContract abiDecoderLoop valueEncoding
   abiDecoderValidArrayMemory abiScratchDecoderTransport abiScratchEffect

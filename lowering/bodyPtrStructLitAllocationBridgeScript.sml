@@ -1,7 +1,7 @@
 Theory bodyPtrStructLitAllocationBridge
 Ancestors bodyPtrStructLitFreshAlloc bodyPtrStructLitAllocEntry allocationPtr
   exprSimAlloc exprSimProps abiBuiltinAllocation emitHelperProps exprLoweringProps
-  context emitHelper compileEnv finite_map words fragExec loweringHalt
+  context emitHelper compileEnv loweringStateRelDefs finite_map words fragExec loweringHalt
   bodyPtrStructLitAlloc ptrDiscipline venomState bodyPtrDefs
 
 Theorem structlit_alloc_buffer_cursor:

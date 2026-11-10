@@ -2,7 +2,7 @@
 Theory bodyPtrSubscriptSeamTupleMemory
 Ancestors
   bodyPtrSubscriptTupleLayout exprSimTuple exprSimFieldLayout
-  loweringPosts exprSimHyps valueEncoding valueEncodingProofs
+  loweringPosts exprSimHyps valueEncoding valueEncodingDefs valueEncodingProofs
   tupleMemoryLayout vyperInterpreter vyperValueOperation context
   exprSimDefs exprLowering compileEnv venomState vyperAST exprSimAttributeProps exprSimProps exprSimAttributeFields
   list rich_list bodyPtrAttributeFields typedCopyLayoutPtr bodyPtrDefs
@@ -172,6 +172,6 @@ Proof
   qpat_x_assum `ptr_mem_ok _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[ptr_mem_ok_def] >>
   disch_then (qspecl_then [`TupleTV tvs`, `w`] mp_tac) >>
-  simp[valueEncodingTheory.val_in_memory_def] >> strip_tac >>
+  simp[valueEncodingDefsTheory.val_in_memory_def] >> strip_tac >>
   drule_all tuple_in_memory_robust_element >> simp[]
 QED

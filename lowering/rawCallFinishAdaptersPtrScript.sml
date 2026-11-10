@@ -31,7 +31,7 @@ Proof
        compileEnvTheory.comp_return_def, compileEnvTheory.comp_ignore_bind_def,
        compileEnvTheory.fresh_var_def, compileEnvTheory.fresh_id_def,
        compileEnvTheory.emit_def] >>
-  strip_tac >> gvs[] >> simp[compileEnvTheory.not_fresh_at_def] >>
+  strip_tac >> gvs[] >> simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
   qexists_tac `sm.cs_next_var` >> simp[]
 QED
 

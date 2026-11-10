@@ -1,7 +1,7 @@
 (* Destination framing across a word-load unwrap. This is conditional on
    coverage BEFORE unwrap; it does not derive the first field's layout bound. *)
 Theory bodyPtrStructLitWordStoreHandoff
-Ancestors emitHelperProps compileEnv freshWrites decoderGhostFramePtr ghostPcTransportPtr
+Ancestors emitHelperProps compileEnv loweringStateRelDefs freshWrites decoderGhostFramePtr ghostPcTransportPtr
   bodyPtrStructLitFieldStore bodyPtrDefs venomInst venomState finite_map
 
 Theorem emitted_destination_word_load_frame:

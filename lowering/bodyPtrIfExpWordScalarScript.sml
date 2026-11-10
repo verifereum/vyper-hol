@@ -3,7 +3,7 @@ Ancestors
   bodyPtrIfExpScalarLoad bodyPtrIfExpWordMemory exprSimUnwrap
   exprSimUnwrapProps exprSimPtrProps appendStorageGhostPtr
   loweringPosts freshWrites finite_map venomExecSemantics
-  bodyPtrDefs venomState compileEnv emitHelper exprLoweringProps context
+  bodyPtrDefs venomState compileEnv loweringStateRelDefs emitHelper exprLoweringProps context
   valueEncoding vyperAST vyperTyping vyperValue exprSimProps
   bodyPtrIfExpWordLocations
 

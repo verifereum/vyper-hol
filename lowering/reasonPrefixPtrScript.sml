@@ -5,7 +5,7 @@ Ancestors
   loweringPosts loweringHalt exprSimProps exprSimAlloc typedCopyPtr codegenRel instIdxIndep
   fragGasSeqPtr fragGasPathPtr fragExec emitHelperProps exprLoweringProps
   ptrSafeRun ptrDiscipline venomInst venomInstProofs venomState
-  venomExecSemantics context emitHelper compileEnv allocationPtr fragExecPtr
+  venomExecSemantics context emitHelper compileEnv loweringStateRelDefs allocationPtr fragExecPtr
 
 (* The compiler equation supplies the instruction lookup; callers supply only
    the semantic step and check, never a hand-built control-flow edge. *)

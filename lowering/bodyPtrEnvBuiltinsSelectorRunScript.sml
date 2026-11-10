@@ -2,7 +2,7 @@
 Theory bodyPtrEnvBuiltinsSelectorRun
 Ancestors exprSimLiteralBuffer bodyPtrEnvBuiltinsSelectorBuffer
   exprLoweringProps venomExecSemantics venomState venomInst
-  compileEnv context emitHelper fragExec exprSimAlloc localPtrsProps
+  compileEnv loweringStateRelDefs context emitHelper fragExec exprSimAlloc localPtrsProps
   loweringSlice exprSimHash exprSimProps list words finite_map
 
 Theorem selector_store_tail_run:

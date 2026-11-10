@@ -2,7 +2,7 @@ Theory forPtrCheckedFrame
 Ancestors
   forPtrRangeChecked forPtrRangePrepare exprSimProps bodyPtrDefs
   forPtrControl venomState venomExecSemantics ptrDiscipline ptrSafeRun
-  compileEnv exprLoweringProps finite_map list pred_set
+  compileEnv loweringStateRelDefs exprLoweringProps finite_map list pred_set
 
 (* The entry path exposes an arbitrary final variable map with an untouched
    variable frame.  Preserve invariants directly at that abstraction boundary. *)

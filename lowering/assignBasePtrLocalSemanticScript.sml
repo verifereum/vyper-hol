@@ -2,7 +2,7 @@
    pointer path. No independent execution is selected. *)
 Theory assignBasePtrLocalSemantic
 Ancestors typedMemoryCopy stmtSimAssignStore localMemoryStorePath
-  exprLoweringProps stmtSimDefs compileEnv localPtrsProps venomState
+  exprLoweringProps stmtSimDefs compileEnv loweringStateRelDefs localPtrsProps venomState
   valueEncoding finite_map vyperState
 
 Theorem assign_base_local_write_state_post:

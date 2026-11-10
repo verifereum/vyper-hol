@@ -4,7 +4,7 @@ Ancestors
   logAbiBytesPtr logAbiPrefixPtr logAbiCopyPtr logTopicScalarPtr abiEncoderBytesPrefix
   abiEncoderBytesCode abiEncoderRounding bodyPtrDefs logInstSeqPtr
   abiEncoderMemory abiDecoderContract fragGasSeqPtr valueEncodingProps
-  emitHelper emitHelperProps exprLoweringProps compileEnv venomExecSemantics
+  emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs venomExecSemantics
   venomState venomInst abiEncoder ptrDiscipline words arithmetic list pred_set
 
 Theorem abi_bytes_prefix_live:

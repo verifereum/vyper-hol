@@ -1,7 +1,7 @@
 (* Actual allocation-site ownership, including allocations reused in loops. *)
 Theory logTupleOwnershipPtr
 Ancestors
-  localPtrsProps abiDecoderFrame bodyPtrDefs compileEnv exprLoweringProps abiBuiltinAllocation
+  localPtrsProps abiDecoderFrame bodyPtrDefs compileEnv loweringStateRelDefs exprLoweringProps abiBuiltinAllocation
   logTupleShapePtr abiEncoderComplexCode abiEncoderComplexPrefix abiEncoderArrayFrame
   stmtSimLogTrace emitHelperProps exprSimProps abiDecoderReentry context ASCIInumbers string
   venomMemDefs venomState venomInst finite_map list words arithmetic
@@ -39,10 +39,10 @@ Proof
   qpat_x_assum `(_ /\ _) \/ _` (DISJ_CASES_THEN strip_assume_tac)
   >- (`regions_disjoint lo sz p cap` by
         (irule local_ptrs_rel_above_frontier >> metis_tac[LESS_EQ_REFL]) >>
-      fs[compileEnvTheory.regions_disjoint_def, abi_footprint_disjoint_def]) >>
+      fs[loweringStateRelDefsTheory.regions_disjoint_def, abi_footprint_disjoint_def]) >>
   `regions_disjoint p cap lo sz` by
     (irule local_ptrs_rel_alloca_disjoint >> metis_tac[]) >>
-  fs[compileEnvTheory.regions_disjoint_def, abi_footprint_disjoint_def] >>
+  fs[loweringStateRelDefsTheory.regions_disjoint_def, abi_footprint_disjoint_def] >>
   metis_tac[]
 QED
 

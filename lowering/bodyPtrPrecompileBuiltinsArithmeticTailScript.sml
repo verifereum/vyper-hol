@@ -1,7 +1,7 @@
 Theory bodyPtrPrecompileBuiltinsArithmeticTail
 Ancestors bodyPtrPrecompileBuiltinsArithmeticResidual
           bodyPtrPrecompileBuiltinsCompilerStages builtinMisc context emitHelper
-          exprLoweringProps rich_list compileEnv exprSimPrecompiles
+          exprLoweringProps rich_list compileEnv loweringStateRelDefs exprSimPrecompiles
           bodyPtrPrecompileBuiltinsArithmeticSource valueEncodingProps bodyPtrDefs ptrDiscipline exprSimDefs exprSimProps valueEncoding
           vyperValue vyperTyping exprSimWordArgs venomState venomExecSemantics
 

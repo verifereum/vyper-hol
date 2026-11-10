@@ -9,7 +9,7 @@ Ancestors
   exprSimWordArgs exprSimDefs exprSimHash loweringPosts exprOperandVar exprSimSource
   gasSummaryComposePtr gasExemptCert fragGasPathPtr fragExec vyperAST vyperState
   vyperInterpreter vyperValue vyperTypeSystem vyperContext vyperEvent
-  compileEnv context emitHelper emitHelperProps venomState venomInst
+  compileEnv loweringStateRelDefs context emitHelper emitHelperProps venomState venomInst
   venomExecSemantics list finite_map words
 Libs pairLib
 
@@ -272,7 +272,7 @@ Resume raw_log_dynamic_frag_ptr[summary]:
     expr_type_def] >>
   reverse conj_tac
   >- simp[type_memory_bytes_def, ptrDisciplineTheory.op_taint_def,
-          valueEncodingTheory.val_in_memory_def, val_footprint_def,
+          valueEncodingDefsTheory.val_in_memory_def, val_footprint_def,
           valueEncodingTheory.type_memory_size_def] >>
   `sb.cs_current_bb = sn.cs_current_bb /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)

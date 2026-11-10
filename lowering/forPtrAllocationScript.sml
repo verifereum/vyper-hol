@@ -1,7 +1,7 @@
 (* Allocation-site separation includes re-execution of an existing site. *)
 Theory forPtrAllocation
 Ancestors forPtrAdmin allocationPtr localPtrsProps loweringHalt
-  exprLoweringProps compileEnv venomInst venomState finite_map
+  exprLoweringProps compileEnv loweringStateRelDefs venomInst venomState finite_map
 
 Theorem for_alloca_outer_local_disjoint:
   stmt_state_rel ctx fn cenv cx es s /\

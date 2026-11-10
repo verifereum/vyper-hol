@@ -1,7 +1,7 @@
 (* Compiler-facing fixed-byte hash prefix. *)
 Theory bodyPtrEnvBuiltinsFixedHashCompile
 Ancestors bodyPtrEnvBuiltinsFixedHash builtinHashing context emitHelper
-  compileEnv exprLoweringProps freshWrites words list rich_list finite_map fragExec
+  compileEnv loweringStateRelDefs exprLoweringProps freshWrites words list rich_list finite_map fragExec
   bodyPtrDefs fragGasSeqPtr fragGasPathPtr venomInst venomState
 
 Theorem fixed_hash_compile_code:

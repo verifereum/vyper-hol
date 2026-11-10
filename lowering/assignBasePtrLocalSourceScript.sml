@@ -1,5 +1,5 @@
 Theory assignBasePtrLocalSource
-Ancestors compileEnv venomState valueEncoding words finite_map
+Ancestors compileEnv loweringStateRelDefs venomState valueEncoding words finite_map
   exprSimNameValue exprLowering context vyperAST exprSimHyps exprSimHypsDefs
 
 (* Real local allocations supply capacity independently of ghost site sizes. *)

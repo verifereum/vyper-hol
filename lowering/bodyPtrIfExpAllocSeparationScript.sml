@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpAllocSeparation
 Ancestors bodyPtrIfExpAllocCompiler bodyPtrIfExpAllocGhost allocationPtr
-  bufferAllocationExecution localPtrsProps loweringPosts compileEnv
+  bufferAllocationExecution localPtrsProps loweringPosts compileEnv loweringStateRelDefs
   venomState venomInst finite_map words loweringHalt exprLoweringProps
 
 Theorem ifexp_alloca_old_site_separate:

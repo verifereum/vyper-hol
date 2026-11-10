@@ -1,6 +1,6 @@
 Theory bodyPtrPrecompileBuiltinsPayloadFrames
 Ancestors abiEncoderZeroFrame exprSimLiteralBuffer exprSimProps
-          loweringPosts compileEnv exprLoweringProps valueEncoding venomState
+          loweringPosts compileEnv loweringStateRelDefs exprLoweringProps valueEncoding venomState
           venomExecSemantics finite_map
 
 Theorem scratch_exterior_region:

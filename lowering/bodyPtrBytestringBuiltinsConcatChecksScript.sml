@@ -4,7 +4,7 @@ Ancestors
   bodyPtrBytestringBuiltinsConcatPrefix assignTuplePtrLocalBytesCopy
   exprSimConcatStep concatMemory wordLoadStorePtr exprPtrUnwrapOffsetSegment
   bodyPtrIfExpBytesFrame bodyPtrIfExpBytesCounted bodyPtrIfExpStoragePhases
-  context compileEnv emitHelper emitHelperProps exprLoweringProps venomInst venomState
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps venomInst venomState
   venomExecSemantics ptrDiscipline fragGasSeqPtr finite_map words pred_set list
 
 Theorem concat_fixed_seq_ptr:

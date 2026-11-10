@@ -2,8 +2,8 @@ Theory bodyPtrTypeBuiltinsExtract32Prepare
 Ancestors
   bodyPtrTypeBuiltinsExtract32Operands bodyPtrTypeBuiltinsExtract32HeaderFrame
   exprSimExtract32Post gasSummaryComposePtr gasSummary exprLoweringProps
-  compileEnv venomState venomMemDefs words vyperState
-  bodyPtrSignedConvertSourceCompile valueEncoding
+  compileEnv loweringStateRelDefs venomState venomMemDefs words vyperState
+  bodyPtrSignedConvertSourceCompile valueEncoding valueEncodingDefs
 
 Theorem extract32_prepare_ptr_counted:
   expr_post ctx func cenv cx src es sa sm s0 ee (BytesV bs) (Var sv) s /\

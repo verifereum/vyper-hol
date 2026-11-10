@@ -3,7 +3,7 @@ Theory bodyPtrSignedConvertUnsignedLoad
 Ancestors
   bodyPtrSignedConvertSourceCompile
   bodyPtrSignedConvertConvertEntry
-  exprLowering exprLoweringProps compileEnv emitHelperProps rich_list builtinBytes
+  exprLowering exprLoweringProps compileEnv loweringStateRelDefs emitHelperProps rich_list builtinBytes
   bodyPtrSignedConvertLoad venomState finite_map ptrDiscipline venomInst
   venomExecSemantics codegenRel bodyPtrSignedConvertScalarOps
   fragGasSeqPtr fragGasPathPtr ptrSafeRun venomInstProofs contextCodegenRel

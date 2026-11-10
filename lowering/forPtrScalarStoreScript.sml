@@ -2,7 +2,7 @@
 Theory forPtrScalarStore
 Ancestors wordLoadStorePtr forPtrBoundary forPtrWriteScope forPtrScope forPtrBytes fragExecPtr
   typedCopyPtr valueEncodingProps
-  valueEncoding valueEncodingProofs bodyPtrDefs venomMemProofs ptrDiscipline
+  valueEncoding valueEncodingDefs valueEncodingProofs bodyPtrDefs venomMemProofs ptrDiscipline
   venomState venomInst words list pred_set decoderGhostFramePtr
 
 Theorem scalar_mstore_robust:

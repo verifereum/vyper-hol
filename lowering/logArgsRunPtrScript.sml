@@ -6,7 +6,7 @@ Ancestors
   arithmetic gasOutcomeMapPtr gasSummaryComposePtr gasContext gasExemptCert
   gasSummary fragGasPath fragGasMode
   loweringSlice exprLoweringProps freshWrites fragExec emitHelperProps varsExt
-  compileEnv vyperInterpreter vyperState vyperTyping vyperTypeSystem
+  compileEnv loweringStateRelDefs vyperInterpreter vyperState vyperTyping vyperTypeSystem
   vyperExprNoControl vyperEvalExprPreservesScopesDom list
 Libs
   monadsyntax

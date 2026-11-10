@@ -3,7 +3,7 @@ Theory logTopicScalarPtr
 Ancestors
   logTopicFramePtr logTopicPtr stmtSimLogTopics fragGasSeqPtr ptrDiscipline
   context compileEnv venomState words finite_map list rich_list
-  emitHelper contextCodegenRel venomInst exprLoweringProps bodyPtrDefs valueEncoding arithmetic
+  emitHelper contextCodegenRel venomInst exprLoweringProps bodyPtrDefs valueEncoding valueEncodingDefs arithmetic
 
 Theorem inst_seq_ptr_immutable_taint_frame:
   !code G tn s Gf tnf.

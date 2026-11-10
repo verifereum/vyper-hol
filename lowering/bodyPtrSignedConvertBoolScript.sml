@@ -1,7 +1,7 @@
 Theory bodyPtrSignedConvertBool
 Ancestors
   bodyPtrSignedConvertIszero exprLowering exprLoweringProps emitHelperProps
-  fragGasSeqPtr compileEnv ASCIInumbers rich_list ptrDiscipline finite_map venomState venomInst
+  fragGasSeqPtr compileEnv loweringStateRelDefs ASCIInumbers rich_list ptrDiscipline finite_map venomState venomInst
 
 Theorem convert_bool_code:
   compile_type_convert x ConvToBool sa = (out,sb) ==>

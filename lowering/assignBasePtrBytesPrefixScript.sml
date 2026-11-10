@@ -1,6 +1,6 @@
 (* The actual straight-line bytestring length prefix, for counted execution. *)
 Theory assignBasePtrBytesPrefix
-Ancestors wordLoadStorePtr context compileEnv emitHelper emitHelperProps exprLoweringProps
+Ancestors wordLoadStorePtr context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   venomInst words list rich_list typedCopyPtr fragGasSeqPtr instSeqComposePtr
   venomExecSemantics venomInstProofs venomState ptrDiscipline ptrSafeRun
   finite_map fragExec ghostPcTransportPtr instIdxIndep exprSimBufferStore

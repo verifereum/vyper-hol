@@ -195,7 +195,7 @@ Proof
   `local_ptrs_reserved cenv sj /\
    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sj x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sj x)` by
-    (fs[compileEnvTheory.local_ptrs_reserved_def, exprLoweringPropsTheory.ci_mono_def] >>
+    (fs[loweringStateRelDefsTheory.local_ptrs_reserved_def, exprLoweringPropsTheory.ci_mono_def] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS]) >>
   mp_tac (raw_call_reverting_suffix |> Q.INST
     [`n` |-> `0`, `ty` |-> `NoneT`, `s` |-> `u`, `sa` |-> `sj`, `sj` |-> `se`,
@@ -270,7 +270,7 @@ Proof
   mp_tac (raw_call_extracted_checked_full |> Q.INST
     [`d` |-> `dep`, `rz_op` |-> `Lit (n2w n)`, `rz` |-> `n2w n`, `ro` |-> `n2w (ob+32)`]) >>
   (impl_tac >- (simp[venomStateTheory.eval_operand_def] >>
-    fs[exprLoweringPropsTheory.ci_mono_def, compileEnvTheory.regions_disjoint_def,
+    fs[exprLoweringPropsTheory.ci_mono_def, loweringStateRelDefsTheory.regions_disjoint_def,
       wordsTheory.w2n_n2w] >>
     conj_tac >- metis_tac[fresh_not_local_ptr] >>
     conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
@@ -291,7 +291,7 @@ Proof
    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sj x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sj x) /\
    ci_mono protected sn /\ not_fresh_at sn src` by
-    (fs[compileEnvTheory.local_ptrs_reserved_def, exprLoweringPropsTheory.ci_mono_def] >>
+    (fs[loweringStateRelDefsTheory.local_ptrs_reserved_def, exprLoweringPropsTheory.ci_mono_def] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS,
        compileEnvTheory.cs_extends_trans]) >>
   mp_tac (raw_call_reverting_suffix |> Q.INST
@@ -377,7 +377,7 @@ Proof
   mp_tac (raw_call_extracted_checked_full |> Q.INST
     [`d` |-> `dep`, `rz_op` |-> `Lit (n2w n)`, `rz` |-> `n2w n`, `ro` |-> `n2w (ob+32)`]) >>
   (impl_tac >- (simp[venomStateTheory.eval_operand_def] >>
-    fs[exprLoweringPropsTheory.ci_mono_def, compileEnvTheory.regions_disjoint_def,
+    fs[exprLoweringPropsTheory.ci_mono_def, loweringStateRelDefsTheory.regions_disjoint_def,
       wordsTheory.w2n_n2w] >>
     conj_tac >- metis_tac[fresh_not_local_ptr] >>
     conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>

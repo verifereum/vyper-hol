@@ -26,7 +26,7 @@ Ancestors
   entryLocals actualEntryAllocationFrame
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics
-  venomState compileEnv e2eDefs supportedProgram compileVyper fragExec
+  venomState compileEnv loweringStateRelDefs e2eDefs supportedProgram compileVyper fragExec
   venomInst contextCodegenRel ptrDiscipline ptrSafeRun vyperLoweringCorrect
   loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
 

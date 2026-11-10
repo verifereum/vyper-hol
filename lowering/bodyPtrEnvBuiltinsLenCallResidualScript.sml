@@ -3,9 +3,9 @@
 Theory bodyPtrEnvBuiltinsLenCallResidual
 Ancestors
   bodyPtrDefs exprSimDefs exprSimHyps exprSimHypsDefs loweringPosts
-  compileEnv context vyperAST bodyPtrEnvBuiltinsLenSuffix
+  compileEnv loweringStateRelDefs context vyperAST bodyPtrEnvBuiltinsLenSuffix
   bodyPtrEnvBuiltinsBoundary exprSimLen vyperTypeSystem vyperTyping
-  vyperValue valueEncoding vyperState vyperInterpreter exprPtrUnwrapStorageShape
+  vyperValue valueEncoding valueEncodingDefs vyperState vyperInterpreter exprPtrUnwrapStorageShape
   bodyPtrEnvBuiltinsLen exprLowering venomExecSemantics venomState builtinProps
   bodyPtrEnvBuiltinsLenSource gasSummaryComposePtr fragGasPathPtr
   exprLoweringProps gasSummary fragGasPath fragGasMode
