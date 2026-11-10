@@ -2237,6 +2237,60 @@ Proof
   metis_tac[popmany_individual_restore_was_spilled]
 QED
 
+Theorem pop_steps_layout:
+  !items ps ops qs.
+    plan_steps cleanOpsSim$pop_one_step items ps = (ops,qs) /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+    spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
+Proof
+  Induct >- simp[foldlSimTheory.plan_steps_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule reorderSimTheory.plan_steps_cons_result >> strip_tac >> gvs[] >>
+  metis_tac[pop_one_step_layout]
+QED
+
+Theorem popmany_individual_layout:
+  !items ps ops qs.
+    popmany_individual items ps = (ops,qs) /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+    spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
+Proof
+  pure_rewrite_tac[cleanOpsSimTheory.popmany_individual_eq_foldl,
+    cleanOpsSimTheory.pop_foldl_body_eq_foldl_body, GSYM foldlSimTheory.plan_steps_eq_foldl] >>
+  metis_tac[pop_steps_layout]
+QED
+
+Theorem popmany_contiguous_layout:
+  !items ps ops qs.
+    items <> [] /\
+    EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) items) /\
+    is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) items)) /\
+    popmany_plan items ps = (ops,qs) /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+    spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH items < LENGTH ps.ps_stack` by
+    (irule cleanOpsSimTheory.contiguous_top_stack_bound >> simp[]) >>
+  drule_all popmany_contiguous_result >> strip_tac >> gvs[] >>
+  metis_tac[doSwapSimTheory.do_swap_layout_wf]
+QED
+
+Theorem popmany_layout:
+  !items ps ops qs.
+    popmany_plan items ps = (ops,qs) /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+    spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `items = []`
+  >- gvs[stackPlanOpsTheory.popmany_plan_def] >>
+  Cases_on `EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) items) /\
+    is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) items))`
+  >- (irule popmany_contiguous_layout >> metis_tac[]) >>
+  drule_all_then assume_tac cleanOpsSimTheory.popmany_plan_noncontig_new >>
+  metis_tac[popmany_individual_layout]
+QED
+
 Theorem sym_depth_swap_numeric:
   !item d ps ops ps' p env cp fn ret srest initial_fmp R ss.
     stack_get_depth item ps.ps_stack = SOME d /\ do_swap d ps = (ops,ps') /\
@@ -2290,6 +2344,90 @@ Proof
   >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, sym_steps_def])
   >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, sym_steps_def]) >>
   drule_all sym_depth_swap_numeric >> simp[]
+QED
+
+Theorem sym_popmany_optimistic_numeric:
+  !items ps pop_ops mid dfg inst live term swap_ops qs p env cp fn ret srest initial_fmp R ss.
+    popmany_plan items ps = (pop_ops,mid) /\
+    optimistic_swap_plan dfg inst live term mid = (swap_ops,qs) /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) (pop_ops ++ swap_ops) ==> off < dimword(:256)) /\
+    (!b. qs.ps_alloc.sa_spill_base <= b /\ b < qs.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (pop_ops ++ swap_ops)) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp (pop_ops ++ swap_ops))) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest qs out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (pop_ops ++ swap_ops)) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all_then assume_tac popmany_layout >>
+  drule allocMonoTheory.optimistic_swap_plan_spill_base >> disch_tac >>
+  drule allocMonoTheory.optimistic_swap_plan_next_offset >> disch_tac >>
+  irule sym_numeric_seq >> (conj_tac >- asm_rewrite_tac[]) >>
+  qexistsl [`ps`, `mid`] >> asm_rewrite_tac[] >> conj_tac
+  >- (rpt strip_tac >> irule sym_popmany_numeric >>
+      metis_tac[popmany_restore_was_spilled, listTheory.MEM_APPEND,
+        arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  rpt strip_tac >> irule sym_optimistic_swap_numeric >>
+  metis_tac[optimistic_swap_restore_was_spilled, listTheory.MEM_APPEND]
+QED
+
+Theorem prepare_params_nonempty_decompose:
+  !liveness fn ps params installed ops qs.
+    params = get_params (HD fn.fn_blocks).bb_instructions /\ params <> [] /\
+    FOLDL (\s inst. s with ps_stack := stack_push (Var (HD inst.inst_outputs)) s.ps_stack)
+      ps params = installed /\
+    prepare_params_plan liveness fn ps = (ops,qs) ==>
+    ?pop_ops mid swap_ops.
+      ops = pop_ops ++ swap_ops /\
+      popmany_plan
+        (FILTER is_var_operand
+          (FILTER (\v. ~MEM (operand_to_string v)
+            (live_vars_at liveness (HD fn.fn_blocks).bb_label (LENGTH params)))
+            installed.ps_stack)) installed = (pop_ops,mid) /\
+      optimistic_swap_plan dfg_empty (LAST params)
+        (live_vars_at liveness (HD fn.fn_blocks).bb_label (LENGTH params))
+        (case FIND (\inst. ~is_param_opcode inst.inst_opcode)
+          (HD fn.fn_blocks).bb_instructions of
+          SOME inst => is_terminator inst.inst_opcode | NONE => F)
+        mid = (swap_ops,qs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[stackPlanGenTheory.prepare_params_plan_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem sym_prepare_params_numeric:
+  !ch growth spill_base lbl_ctr ps0 params installed liveness fn ops ps1
+    p env cp ret srest initial_fmp R ss.
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+    params = get_params (HD fn.fn_blocks).bb_instructions /\
+    installed = ps0 with ps_stack := MAP (\i. Var (HD i.inst_outputs)) params /\
+    codegen_ready_fn fn /\
+    prepare_params_plan liveness fn ps0 = (ops,ps1) /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword(:256)) /\
+    (!b. ps1.ps_alloc.sa_spill_base <= b /\ b < ps1.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest installed ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps1 out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all fnFrameBoundaryEntryParamsTheory.entry_installed_structural >> strip_tac >>
+  Cases_on `params = []`
+  >- (gvs[stackPlanGenTheory.prepare_params_plan_def] >> qexists `ss` >>
+      gvs[planExecTheory.execute_plan_def, sym_steps_def,
+        stackPlanGenTheory.init_cleanup_plan_state_def, stackPlanTypesTheory.init_plan_state_def]) >>
+  drule_all prepare_params_nonempty_decompose >> strip_tac >> gvs[] >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule sym_popmany_optimistic_numeric >> simp[] >>
+  (conj_tac >- gvs[]) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem sym_phi_prefix_frame_sim:
