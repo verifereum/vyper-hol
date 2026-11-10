@@ -45,6 +45,7 @@ Ancestors
   exprLoweringProps exprSafeOperand fragGasPath gasSummary gasSummaryCompose
   extcallReturnDefaultResources extcallReturnDefaultRouting extcallReturnDefaultStore
   extcallReturnDefaultDecode extcallReturnInterface extcallReturnDefaultOwnership
+  extcallReturnDefaultTypes extcallReturnDefaultIntervals
 
 (* A storage or transient pointer an effect-free operand leaves reads live
    slots at es': no byte of the slots it reads is dead but those its own
@@ -863,7 +864,144 @@ Resume extcall_return_default[default_at]:
        extCallSeamFinishTheory.extcall_jump_fields]
 QED
 Resume extcall_return_default[decode]:
-  cheat
+  drule_all return_default_decode_intervals >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all (Q.INST [`ty` |-> `ann`, `actual_tv` |-> `rtv`,
+    `rt` |-> `if needs_external_call_wrap ann then TupleT [ann] else ann`,
+    `tv` |-> `if needs_external_call_wrap ann then TupleTV [rtv] else rtv`]
+    return_default_wrapped_types |> SIMP_RULE (srw_ss()) []) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all (Q.INST [`ty` |-> `ann`, `actual_tv` |-> `rtv`,
+    `rt` |-> `if needs_external_call_wrap ann then TupleT [ann] else ann`,
+    `tv` |-> `if needs_external_call_wrap ann then TupleTV [rtv] else rtv`]
+    return_default_decode_bounds |> SIMP_RULE (srw_ss()) []) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?ro. _` (qx_choose_then `ro` (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `?live buf_size. _`
+    (qx_choose_then `live` (qx_choose_then `buf_size` (map_every assume_tac o CONJUNCTS))) >>
+  `type_memory_bytes cenv ann = type_memory_size rtv /\
+   type_memory_size rtv + 64 < dimword (:256)` by
+    metis_tac[extcall_return_memory_size, extcall_return_store_bound] >>
+  `type_memory_bytes cenv ann < dimword (:256)` by decide_tac >>
+  `safe_operand sr buf_op` by fs[] >>
+  `eval_operand buf_op t = SOME (n2w (w2n ro))` by simp[] >>
+  `cs.cs_current_bb = (if t.vs_returndata = [] then dl else cl) /\
+   allocated.cs_next_var <= cs.cs_next_var` by fs[ci_mono_def] >>
+  `!aid. aid IN abi_malformed_scratch_sites hs he func ==>
+     allocated.cs_next_id <= aid` by
+    (simp[abiMalformedRecursiveInterfaceTheory.abi_malformed_scratch_sites_def] >>
+     fs[ci_mono_def] >> decide_tac) >>
+  `LENGTH t.vs_returndata < dimword (:256)` by simp[] >>
+  drule_all (Q.INST [`en` |-> `cs`,
+    `sites` |-> `abi_malformed_scratch_sites hs he func`] return_default_allocated_entry) >>
+  strip_tac >>
+  `cs_extends hs he` by fs[ci_mono_def] >>
+  `sa.cs_next_var <= cs.cs_next_var /\ sa.cs_next_id <= hs.cs_next_id` by
+    (drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >>
+     fs[ci_mono_def] >> decide_tac) >>
+  `!l. buf.buf_operand <> Label l /\ buf_op <> Label l` by
+    (drule exprSafeOperandTheory.alloc_buffer_not_label >>
+     fs[safe_operand_def] >> Cases_on `buf_op` >> gvs[]) >>
+  `abi_return_decode_ready ctx func cenv cx ee cs
+     (abi_malformed_scratch_sites hs he func) sr.cs_next_id live buf_op
+     buf.buf_operand (w2n ro)
+     (abi_size_bound cenv.ce_struct_fields
+       (if needs_external_call_wrap ann then TupleT [ann] else ann))
+     returnData d
+     (type_memory_bytes cenv (if needs_external_call_wrap ann then TupleT [ann] else ann)) u` by
+    metis_tac[] >>
+  `u.vs_returndata = returnData /\ LENGTH returnData < dimword (:256)` by simp[] >>
+  Cases_on `evaluate_abi_decode_return (get_tenv cx) ann returnData` >-
+    suspend "decode_success" >>
+  suspend "decode_reject"
+QED
+Resume extcall_return_default[decode_success]:
+  drule_all return_default_source_success >> strip_tac >>
+  `?z. gas_marked_path F ctx func u 0 (OK z) /\
+    stmt_state_rel ctx func cenv cx ee z /\ wb_frame cenv es sa s0 z /\
+    eval_operand buf.buf_operand z = SOME (n2w d) /\
+    val_in_memory rtv x d z.vs_memory /\
+    abi_malformed_destination func cenv ee.scopes sr.cs_next_id d
+      (type_memory_bytes cenv (if needs_external_call_wrap ann then TupleT [ann] else ann)) z /\
+    ~z.vs_halted /\ z.vs_current_bb = he.cs_current_bb /\
+    z.vs_inst_idx = LENGTH he.cs_current_insts` by
+    (irule return_prepared_counted_success >>
+     first_assum (irule_at (Pat `abi_return_decode_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     first_assum (irule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
+     first_assum (irule_at (Pat `wb_frame _ _ _ _ _`)) >>
+     first_assum (irule_at (Pat `compile_return_value_decode _ _ _ = _`)) >>
+     simp[] >> qexists_tac `ann` >> simp[]) >>
+  `gas_marked_path F ctx func t 0 (OK z)` by
+    metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD] >>
+  drule_all (Q.INST [`a` |-> `he`, `j` |-> `cj`, `b` |-> `sb`,
+    `s` |-> `z`] return_default_payload_join) >> strip_tac >>
+  qexists_tac `[]` >>
+  simp[gas_summary_at_def, gas_marked_exec_def, lift_sum_runtime_def,
+       bind_def, return_def] >>
+  qexistsl_tac [`INL (Value x)`, `ee`, `OK (jump_to xl z)`] >> simp[] >>
+  `ee with gas_obs := [] = ee` by
+    (qpat_x_assum `ee.gas_obs = []` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[evaluation_state_component_equality]) >>
+  simp[vv_post_def, post_value_type_def, expr_type_def] >>
+  conj_tac >- suspend "decode_holds" >>
+  conj_tac >- suspend "decode_at" >>
+  qpat_x_assum `wb_frame cenv es sa s0 (jump_to xl z)` mp_tac >>
+  simp[wb_frame_def] >> metis_tac[]
+QED
+Resume extcall_return_default[decode_holds]:
+  `d < dimword (:256)` by
+    (fs[abiReturnPrefixTransportTheory.abi_return_decode_ready_def] >> decide_tac) >>
+  simp[vv_holds_def, contextTheory.mk_ptr_def, vyperStateTheory.read_result_def,
+       return_def, extCallSeamFinishTheory.extcall_jump_fields] >>
+  metis_tac[exprSimPropsTheory.val_in_memory_word_type]
+QED
+Resume extcall_return_default[decode_at]:
+  `d < dimword (:256)` by
+    (fs[abiReturnPrefixTransportTheory.abi_return_decode_ready_def] >> decide_tac) >>
+  simp[vv_at_def, contextTheory.mk_ptr_def, vyperStateTheory.read_result_def,
+       return_def, extCallSeamFinishTheory.extcall_jump_fields] >>
+  rpt strip_tac >> disj1_tac >>
+  qpat_x_assum `abi_malformed_destination func cenv ee.scopes _ _ _ z` mp_tac >>
+  simp[abiMalformedRecursiveInterfaceTheory.abi_malformed_destination_def] >>
+  strip_tac >>
+  qexistsl_tac [`sr.cs_next_id`, `b`, `sz`] >> simp[] >>
+  `val_footprint rtv x <= type_memory_size rtv` by
+    metis_tac[exprSimPropsTheory.val_footprint_le] >>
+  conj_tac >-
+    (drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >>
+     `allocated.cs_next_id <= sb.cs_next_id` by
+       (qpat_x_assum `compile_default_return_path _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        metis_tac[ci_mono_compile_default_return_path, ci_mono_def, pairTheory.SND]) >>
+     decide_tac) >>
+  conj_tac >- (gvs[] >> decide_tac) >>
+  rpt strip_tac >>
+  irule exprSimOperandsTheory.alloca_clear_of_locals >>
+  qexistsl_tac [`cenv`, `ctx`, `cx`, `ee`, `func`, `inst`, `n`, `q`,
+                `jump_to xl z`] >>
+  simp[exprLoweringPropsTheory.stmt_state_rel_jump_to,
+       extCallSeamFinishTheory.extcall_jump_fields]
+QED
+Resume extcall_return_default[decode_reject]:
+  `case type_to_abi_dec_info cenv.ce_struct_fields cenv
+     (if needs_external_call_wrap ann then TupleT [ann] else ann) of
+     DecPrimWord clamp => 32 <= abi_static_size cenv.ce_struct_fields
+       (if needs_external_call_wrap ann then TupleT [ann] else ann) | _ => T` by
+    (irule return_default_primitive_minimum >> qexists_tac `ann` >> simp[]) >>
+  `?z. gas_marked_path F ctx func u 0 (Abort Revert_abort z)` by
+    (irule return_prepared_counted_reject >>
+     first_assum (irule_at (Pat `abi_return_decode_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     first_assum (irule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
+     first_assum (irule_at (Pat `wb_frame _ _ _ _ _`)) >>
+     first_assum (irule_at (Pat `compile_return_value_decode _ _ _ = _`)) >>
+     simp[] >> qexistsl_tac [`ann`, `y`] >> simp[]) >>
+  `gas_marked_path F ctx func t 0 (Abort Revert_abort z)` by
+    metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD] >>
+  qexists_tac `[]` >>
+  simp[gas_summary_at_def, gas_marked_exec_def, lift_sum_runtime_def,
+       bind_def, return_def, raise_def] >>
+  qexistsl_tac [`INR (Error (RuntimeError y))`, `ee`, `Abort Revert_abort z`] >>
+  simp[fragExecTheory.exit_result_def, expr_exit_def]
 QED
 Finalise extcall_return_default
 
