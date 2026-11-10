@@ -5147,6 +5147,75 @@ Proof
   irule read_nonoverlap_expand >> simp[]
 QED
 
+Theorem mm_local_read_same_write[local]:
+  read_memory a n s = read_memory a n t ==>
+  read_memory a n (write_memory_with_expansion d bs s) =
+  read_memory a n (write_memory_with_expansion d bs t)
+Proof
+  simp[venomStateTheory.read_memory_def,
+       regularMemorySimTheory.venom_returndata_read_byte, GENLIST_FUN_EQ] >>
+  strip_tac >> rpt strip_tac >>
+  irule frameViewMemoryTheory.write_memory_byte_agreement >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem mm_local_selective_replay[local]:
+  j <= r /\
+  (!q. q < r ==> (H (SUC q)).vs_memory =
+    (case cap q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory) /\
+  t0.vs_memory = (H 0).vs_memory /\
+  (!q d bs. q < j /\ P q /\ cap q = SOME (d,bs) ==>
+    a+n <= d \/ d+LENGTH bs <= a \/ n = 0 \/ bs = []) /\
+  (!q d bs. j <= q /\ q < r /\ ~P q /\ cap q = SOME (d,bs) ==>
+    a+n <= d \/ d+LENGTH bs <= a \/ n = 0 \/ bs = []) /\
+  t = FOLDL (\st q. if P q then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    t0 (COUNT_LIST r) ==>
+  read_memory a n t = read_memory a n (H j)
+Proof
+  strip_tac >>
+  qabbrev_tac `R = \q. FOLDL (\st q. if P q then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    t0 (COUNT_LIST q)` >>
+  `R 0 = t0 /\ (!q. R (SUC q) = if P q then R q else
+     case cap q of NONE => R q | SOME (d,bs) => write_memory_with_expansion d bs (R q))` by
+    simp[Abbr `R`, COUNT_LIST_SNOC, FOLDL_SNOC] >>
+  `!q. q <= r ==> read_memory a n (R q) = read_memory a n (H (MIN q j))` by
+    (Induct >- simp[venomStateTheory.read_memory_def] >>
+     strip_tac >> `q <= r /\ q < r` by decide_tac >>
+     first_x_assum (drule_then assume_tac) >>
+     Cases_on `q < j`
+     >- (`MIN q j = q /\ MIN (SUC q) j = SUC q` by
+           (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+         gvs[] >>
+         qpat_x_assum `!q. q < r ==> _` (qspec_then `q` mp_tac) >> simp[] >>
+         Cases_on `cap q` >- gvs[venomStateTheory.read_memory_def] >>
+         PairCases_on `x` >> simp[] >> strip_tac >>
+         Cases_on `P q`
+         >- (gvs[] >>
+             `read_memory a n (write_memory_with_expansion x0 x1 (H q)) =
+              read_memory a n (H q)` by
+               (irule mm_local_read_write_disjoint >> metis_tac[]) >>
+             gvs[venomStateTheory.read_memory_def]) >>
+         gvs[] >>
+         `read_memory a n (write_memory_with_expansion x0 x1 (R q)) =
+          read_memory a n (write_memory_with_expansion x0 x1 (H q))` by
+           (irule mm_local_read_same_write >> simp[]) >>
+         gvs[venomStateTheory.read_memory_def]) >>
+     `MIN q j = j /\ MIN (SUC q) j = j` by
+       (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+     gvs[] >> Cases_on `P q` >- simp[] >>
+     Cases_on `cap q` >- simp[] >>
+     PairCases_on `x` >> simp[] >>
+     `read_memory a n (write_memory_with_expansion x0 x1 (R q)) =
+      read_memory a n (R q)` by
+       (irule mm_local_read_write_disjoint >> metis_tac[arithmeticTheory.NOT_LESS]) >>
+     simp[]) >>
+  first_x_assum (qspec_then `r` mp_tac) >>
+  simp[arithmeticTheory.MIN_DEF, Abbr `R`] >> metis_tac[]
+QED
+
 Theorem mm_local_read_write_log[local]:
   !ws s. EVERY (\(d,bs). n = 0 \/ bs = [] \/ a+n <= d \/ d+LENGTH bs <= a) ws ==>
   read_memory a n
