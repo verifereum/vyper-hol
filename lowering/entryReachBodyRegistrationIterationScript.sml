@@ -1,7 +1,7 @@
 (* Indexed iteration over the original canonical positional argument list. *)
 Theory entryReachBodyRegistrationIteration
 Ancestors
-  loweringStateRelDefs entryReachBodyRegistrationSlotAssembly entryReachBodyRegistrationInitialization
+  loweringStateRelDefs entryReachBodyRegistrationSlotAssembly
   entryReachBodyRegistrationIndexedShell entryReachBodyPackageAlignment
   actualRegistrationCode moduleLowering compileVyper compileEnv rich_list list arithmetic
 

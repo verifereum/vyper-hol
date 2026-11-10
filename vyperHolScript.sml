@@ -28,6 +28,8 @@ Ancestors
   batchCopyRobustPtr entryHaltPtr liveArrayTransportPtr normalizationAllocPtr
   ptrSafetyTransport returnMetadataPtr staticTypeFitsPtr structChildPtr
   typedCopyArrayExecutionPtr wordCopyRobustPtr
+  (* end-to-end runtime correctness *)
+  e2eCorrectness
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness
   (* Venom execution: jump independence *)

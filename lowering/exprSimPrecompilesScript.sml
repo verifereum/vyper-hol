@@ -51,6 +51,7 @@
 
 Theory exprSimPrecompiles
 Ancestors
+  exprSimHashBoundary
   exprBopSimProps
   exprSimSource
   exprSimProps

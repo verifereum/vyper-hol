@@ -23,6 +23,7 @@
 
 Theory exprSimCalldataSlice
 Ancestors
+  exprSimHashBoundary
   exprSimVVFrame
   exprSimSource
   exprSimUnwrapProps

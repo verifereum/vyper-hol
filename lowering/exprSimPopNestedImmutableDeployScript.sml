@@ -6,7 +6,7 @@
 Theory exprSimPopNestedImmutableDeploy
 Ancestors
   exprSimPopNestedBase exprSimPopImmutableTarget
-  exprSimHash fragGasSeqAbort gasSummaryCompose gasExemptCert gasSummary gasOutcome
+  exprSimHash exprSimHashBoundary fragGasSeqAbort gasSummaryCompose gasExemptCert gasSummary gasOutcome
   popTargetPre allocLimits supportedExprTraverse exprSimHypsDefs supportedProgram
   loweringPosts bodySim stmtSimProps fragGasMode fragGasPath
   exprSimPopNestedLocalSource exprSimPopNestedLocalPath
