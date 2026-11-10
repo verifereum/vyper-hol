@@ -2421,7 +2421,9 @@ Proof
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _` kall_tac >>
   rpt (qpat_x_assum `lookup_block _ _ = _` kall_tac) >>
-  fs[not_fresh_at_def]
+  fs[not_fresh_at_def] >>
+  qpat_x_assum `!n. st.cs_next_var <= n ==> p <> _`
+    (qspec_then `st.cs_next_var` mp_tac) >> simp[]
 QED
 
 Theorem dynarray_loop_initialize_keep[local]:
