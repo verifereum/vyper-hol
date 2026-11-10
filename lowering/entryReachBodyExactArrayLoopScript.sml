@@ -4,6 +4,7 @@ Ancestors
   valueEncodingDefs calldataDynOwned abiDecoderExecution abiDecoderFrameCompose
   valueEncoding valueEncodingProps venomState venomExecSemantics words list
   arithmetic abiDecoderContract emitHelperProps venomMemProofs abiDecoderLoop venomInst
+  abiDecoderArrayLoopInit abiDecoderIndexInit exprLoweringProps venomInstProofs1
 
 Definition entry_loop_fields_def:
   entry_loop_fields s t <=>
@@ -16,6 +17,33 @@ Definition entry_loop_fields_def:
      s.vs_gas_readings, s.vs_fmp, s.vs_call_ctx, s.vs_data_section,
      s.vs_code)
 End
+
+(* The array initializer emits no terminator, so its run keeps vs_code. *)
+Theorem entry_initializer_code:
+  abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st = ((),guard_st) /\
+  abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
+  abi_decode_index_init header_st = (ip,loop_st) /\
+  run_inst_seq (emitted_insts st loop_st) s = OK t ==>
+  t.vs_code = s.vs_code
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_array_header_shape >> strip_tac >>
+  drule abi_decode_index_init_shape >> strip_tac >>
+  `inst_extends st header_st` by metis_tac[inst_extends_trans] >>
+  `emitted_insts st loop_st = emitted_insts st header_st ++
+      emitted_insts header_st loop_st` by
+    metis_tac[emitted_insts_append, inst_extends_def] >>
+  `emitted_insts st header_st = emitted_insts st guard_st ++
+      emitted_insts guard_st header_st` by
+    metis_tac[emitted_insts_append, inst_extends_def] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts st loop_st)` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  irule run_inst_seq_preserves_field >> goal_assum (drule_at Any) >>
+  rpt strip_tac >> fs[EVERY_MEM] >>
+  metis_tac[step_inst_base_preserves_all]
+QED
 
 Theorem entry_loop_fields_refl[local]:
   entry_loop_fields s s
