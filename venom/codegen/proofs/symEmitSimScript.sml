@@ -667,3 +667,184 @@ Theorem source_footprint_symbolic_memory_safe:
 Proof
   metis_tac[source_read_byte_no_labels, source_write_byte_no_labels]
 QED
+
+Theorem sym_numeric_emit_replay:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  asm_block_at p cs.as_pc [AsmOp name] /\
+  asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
+    (AsmOp name) cs = AsmOK cs' /\
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE (asm_op_arity name) ss.sym_stack) /\
+  (!b. b IN FDOM ss.sym_mem_labels ==>
+    ~asm_op_mem_reads name (TAKE (asm_op_arity name) cs.as_stack) b /\
+    ~asm_op_mem_writes name (TAKE (asm_op_arity name) cs.as_stack) b) /\
+  sym_step_op p env name ss = sym_step_concrete name ss ==>
+  ?ss'. sym_steps p env 1 ss = SymOK ss' /\
+    asm_sym_rel p env cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    ?ws. ss'.sym_stack = MAP Val ws ++ DROP (asm_op_arity name) ss.sym_stack
+Proof
+  strip_tac >>
+  `!msg. sym_step_concrete name ss <> SymBad msg` by
+    (irule sym_step_concrete_numeric_safe >>
+     simp[mem_labels_hit_def] >> metis_tac[]) >>
+  `?ss'. sym_step p env (AsmOp name) ss = SymOK ss' /\
+    asm_sym_rel p env cs' ss'` by
+    (`cs.as_pc < LENGTH p /\ EL cs.as_pc p = AsmOp name` by
+       (fs[asm_block_at_def] >>
+        first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+     drule asm_sym_step_success_from_safe >>
+     disch_then (qspecl_then [`ss`, `env`, `cs'`, `cs`] mp_tac) >>
+     simp[sym_step_def]) >>
+  qexists `ss'` >>
+  `sym_steps p env 1 ss = SymOK ss'` by
+    (irule sym_steps_single_emit >>
+     fs[asmSymBridgeTheory.asm_sym_rel_def] >> metis_tac[]) >>
+  simp[] >> irule sym_step_concrete_numeric_shape >>
+  fs[sym_step_def] >> metis_tac[]
+QED
+
+Theorem sym_emit_kinds_numeric_result:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  k <= LENGTH ps.ps_stack /\
+  ss'.sym_mem_labels = ss.sym_mem_labels /\
+  ss'.sym_stack = MAP Val ws ++ DROP k ss.sym_stack /\
+  qs.ps_spilled = ps.ps_spilled /\
+  REVERSE qs.ps_stack = outputs ++ DROP k (REVERSE ps.ps_stack) /\
+  LIST_REL (op_kind_ok fn ret) outputs (MAP Val ws) ==>
+  sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  simp[sym_kinds_ok_def] >> rpt strip_tac
+  >- (qexists `MAP Val ws ++ DROP k top` >>
+      `LENGTH top = LENGTH ps.ps_stack` by
+        metis_tac[LIST_REL_LENGTH, LENGTH_REVERSE] >>
+      simp[DROP_APPEND1] >> irule LIST_REL_APPEND_suff >> simp[] >>
+      irule rich_listTheory.LIST_REL_DROP >> simp[])
+QED
+
+Theorem numeric_prefix_two:
+  2 <= LENGTH svs /\ EVERY (\sv. ?w. sv = Val w) (TAKE 2 svs) ==>
+  ?a b tail. svs = Val a :: Val b :: tail
+Proof
+  Cases_on `svs` >> simp[] >> rename1 `TAKE 1 tail` >>
+  Cases_on `tail` >> simp[] >> metis_tac[]
+QED
+
+Theorem sym_step_add_numeric_dispatch:
+  2 <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE 2 ss.sym_stack) ==>
+  sym_step_op p env "ADD" ss = sym_step_concrete "ADD" ss
+Proof
+  strip_tac >> drule_all numeric_prefix_two >>
+  metis_tac[sym_step_add_words]
+QED
+
+Theorem sym_step_mstore_numeric_dispatch:
+  2 <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE 2 ss.sym_stack) ==>
+  sym_step_op p env "MSTORE" ss = sym_step_concrete "MSTORE" ss
+Proof
+  strip_tac >> drule_all numeric_prefix_two >>
+  metis_tac[sym_step_mstore_words]
+QED
+
+Theorem sym_step_mload_numeric_dispatch:
+  asm_sym_rel p env cs ss /\
+  1 <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE 1 ss.sym_stack) /\
+  (!b. b IN FDOM ss.sym_mem_labels ==>
+    ~asm_op_mem_reads "MLOAD" (TAKE 1 cs.as_stack) b) ==>
+  sym_step_op p env "MLOAD" ss = sym_step_concrete "MLOAD" ss
+Proof
+  strip_tac >>
+  `TAKE 1 ss.sym_stack = MAP Val (TAKE 1 cs.as_stack)` by
+    metis_tac[asm_sym_numeric_take] >>
+  Cases_on `ss.sym_stack` >> gvs[] >>
+  Cases_on `cs.as_stack` >> gvs[] >>
+  rename1 `ss.sym_stack = Val off :: tail` >>
+  `w2n off NOTIN FDOM ss.sym_mem_labels` by
+    (qpat_x_assum `!b. _` (qspec_then `w2n off` mp_tac) >>
+     simp[asm_op_mem_reads_def, in_mem_range_def]) >>
+  irule sym_step_mload_word >> metis_tac[]
+QED
+
+Theorem sym_step_numeric_dispatch:
+  ~MEM name ["POP"; "JUMP"; "JUMPI"; "CODECOPY"; "CODESIZE"] /\
+  ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE /\
+  asm_sym_rel p env cs ss /\
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE (asm_op_arity name) ss.sym_stack) /\
+  (!b. b IN FDOM ss.sym_mem_labels ==>
+    ~asm_op_mem_reads name (TAKE (asm_op_arity name) cs.as_stack) b) ==>
+  sym_step_op p env name ss = sym_step_concrete name ss
+Proof
+  strip_tac >> Cases_on `name = "ADD"`
+  >- (gvs[] >> irule sym_step_add_numeric_dispatch >>
+      fs[asm_op_arity_def, asm_op_arity_table_def]) >>
+  Cases_on `name = "MSTORE"`
+  >- (gvs[] >> irule sym_step_mstore_numeric_dispatch >>
+      fs[asm_op_arity_def, asm_op_arity_table_def]) >>
+  Cases_on `name = "MLOAD"`
+  >- (gvs[] >> irule sym_step_mload_numeric_dispatch >>
+      fs[asm_op_arity_def, asm_op_arity_table_def] >> metis_tac[]) >>
+  irule sym_step_op_plain >> fs[]
+QED
+
+Theorem sym_prepared_numeric_emit:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p cs.as_pc [AsmOp name] /\
+  asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
+    (AsmOp name) cs = AsmOK cs' /\
+  ~MEM name ["POP"; "JUMP"; "JUMPI"; "CODECOPY"; "CODESIZE"] /\
+  ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE /\
+  asm_op_arity name <= LENGTH ps.ps_stack /\
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE (asm_op_arity name) ss.sym_stack) /\
+  (!b. b IN FDOM ss.sym_mem_labels ==>
+    ~asm_op_mem_reads name (TAKE (asm_op_arity name) cs.as_stack) b /\
+    ~asm_op_mem_writes name (TAKE (asm_op_arity name) cs.as_stack) b) /\
+  qs.ps_spilled = ps.ps_spilled /\
+  REVERSE qs.ps_stack = outputs ++ DROP (asm_op_arity name) (REVERSE ps.ps_stack) /\
+  (!op w. MEM op outputs ==> op_kind_ok fn ret op (Val w)) /\
+  LENGTH cs'.as_stack + asm_op_arity name = LENGTH cs.as_stack + LENGTH outputs ==>
+  ?ss'. sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  strip_tac >>
+  `sym_step_op p env name ss = sym_step_concrete name ss` by
+    (irule sym_step_numeric_dispatch >> metis_tac[]) >>
+  drule_all sym_numeric_emit_replay >> strip_tac >>
+  `LENGTH ss.sym_stack = LENGTH cs.as_stack /\
+   LENGTH ss'.sym_stack = LENGTH cs'.as_stack` by
+    metis_tac[asmSymBridgeTheory.asm_sym_rel_def, LIST_REL_LENGTH] >>
+  `LENGTH ws = LENGTH outputs` by
+    (qpat_x_assum `ss'.sym_stack = _` (mp_tac o AP_TERM ``LENGTH:sval list -> num``) >>
+     simp[] >> decide_tac) >>
+  `LIST_REL (op_kind_ok fn ret) outputs (MAP Val ws)` by
+    (rw[LIST_REL_EL_EQN] >> simp[EL_MAP] >>
+     first_x_assum irule >> metis_tac[MEM_EL]) >>
+  qexists `ss'` >> simp[] >>
+  drule_all sym_emit_kinds_numeric_result >> simp[]
+QED
+
+Theorem sym_prepared_selected_numeric:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  ps.ps_stack = residual ++ selected /\
+  EVERY (\op. !sv. op_kind_ok fn ret op sv ==> ?w. sv = Val w) selected ==>
+  LENGTH selected <= LENGTH ss.sym_stack /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE (LENGTH selected) ss.sym_stack)
+Proof
+  simp[sym_kinds_ok_def] >> rpt strip_tac >>
+  `LENGTH top = LENGTH residual + LENGTH selected` by
+    metis_tac[LIST_REL_LENGTH, LENGTH_REVERSE, LENGTH_APPEND]
+  >- simp[] >>
+  `LIST_REL (op_kind_ok fn ret) (REVERSE selected)
+    (TAKE (LENGTH selected) top)` by
+    (drule rich_listTheory.EVERY2_TAKE >>
+     disch_then (qspec_then `LENGTH selected` mp_tac) >>
+     simp[REVERSE_APPEND, TAKE_APPEND1, TAKE_LENGTH_TOO_LONG]) >>
+  simp[TAKE_APPEND1] >> irule numeric_operand_kinds_list >>
+  qexistsl [`fn`, `REVERSE selected`, `ret`] >> simp[]
+QED
