@@ -6,26 +6,33 @@ Ancestors
   bodyAugAssignOther bodyMemoryDefs exprSimHyps vyperInterpreter exprSimMemDefs
   stmtSimAugAssignPlace bodySim
 
-Theorem aug_place_memory_reads_suffix[local]:
-  read_place cx (MemoryPlace id path) mid = (INL old,mid) /\
-  place_type_value cx (MemoryPlace id path) mid = (INL tv,mid) /\
+Theorem aug_place_reads_suffix:
+  ((?id path. p = MemoryPlace id path) \/ (?tr slot tv. p = StoragePlace tr slot tv)) /\
+  read_place cx p mid = (INL old,mid) /\
+  place_type_value cx p mid = (INL tv,mid) /\
   ~t.vs_halted /\ gas_marked_path T ctx func t 0 (OK u) /\
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (bind (eval_expr cx e) (read_result cx))
       (\rhs. bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-        tv bop old rhs)) (write_place cx (MemoryPlace id path)))) (mid,u) P R /\
+        tv bop old rhs)) (write_place cx p))) (mid,u) P R /\
   (!res ee v. P res ee v ==> Q res ee v) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
-    (bind (read_place cx (MemoryPlace id path)) (\old.
-      bind (place_type_value cx (MemoryPlace id path)) (\tv.
+    (bind (read_place cx p) (\old.
+      bind (place_type_value cx p) (\tv.
       bind (bind (eval_expr cx e) (read_result cx)) (\rhs.
       bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-        tv bop old rhs)) (write_place cx (MemoryPlace id path)))))) (mid,t) Q R
+        tv bop old rhs)) (write_place cx p))))) (mid,t) Q R
 Proof
-  strip_tac >>
-  drule_all augAssignPlaceSourcePrefixTheory.aug_place_memory_reads_replay >> strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `(!gs. read_place cx p (mid with gas_obs := gs) =
+      (INL old,mid with gas_obs := gs)) /\
+   (!gs. place_type_value cx p (mid with gas_obs := gs) =
+      (INL tv,mid with gas_obs := gs))` by
+    (qpat_x_assum `(?id path. _) \/ _` strip_assume_tac >> gvs[]
+     >- (drule_all augAssignPlaceSourcePrefixTheory.aug_place_memory_reads_replay >> simp[]) >>
+     gvs[exprSimLenTheory.len_rp_obs, vyperStateTheory.place_type_value_def, vyperStateTheory.return_def]) >>
   ho_match_mp_tac (Q.INST [`cur` |-> `old`, `ptv` |-> `tv`]
     aug_place_read_type_load_mem) >>
   goal_assum (drule_at (Pat `gas_marked_path`)) >> simp[] >>
@@ -104,7 +111,7 @@ Proof
      strip_tac >> gvs[]) >>
   `!z. not_fresh_at sa z ==> not_fresh_at sl z` by metis_tac[] >>
   `s0.vs_alloca_next <= u.vs_alloca_next` by simp[] >>
-  irule aug_place_memory_reads_suffix >> simp[] >>
+  irule aug_place_reads_suffix >> simp[] >>
   qexists_tac `\res ee v. res = INL () /\
     stmt_post ctx func cx lctx cenv cenv sa sf s0 res ee v /\
     alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next` >> simp[] >>
