@@ -1358,7 +1358,7 @@ Theorem cps_builtin_membership[local]:
   cont (eval_expr_cps cx (Builtin ty bt es) st k) =
   cont (liftk cx ApplyTv (eval_expr cx (Builtin ty bt es) st) k)
 Proof
-  strip_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
   `bt <> Len` by (strip_tac >> fs[]) >>
   pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def] >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>

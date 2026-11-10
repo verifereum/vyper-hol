@@ -1,6 +1,7 @@
 (* Finite setup facts for the arbitrary-input builtin decoder. *)
 Theory exprSimAbiDecodeBuiltinSetup
 Ancestors
+  loweringStateRelDefs
   abiBuiltinSetupReach abiBuiltinAllocation abiBuiltinDecodeSetup
   abiBuiltinLengthGuard abiBuiltinBoundTests abiBuiltinDecodeHeader
   abiDecoderBytestringOutcome abiDecoderWordOutcome exprSimAbiDecodeSetupExec

@@ -1,5 +1,6 @@
 Theory exprSimAbiDecodeLiveFrame
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeConsumerProbe abiDecoderSiteEffect abiDecoderReentry
   compileEnv venomState finite_map pred_set
 

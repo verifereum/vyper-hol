@@ -1,6 +1,7 @@
 (* Reentry-safe guard and owned heterogeneous constructor integration. *)
 Theory exprSimAbiDecodeComplexOutcome
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeAbortReentry exprSimAbiDecodeCompositePrefix
   exprSimAbiDecodeTupleTraversal exprSimAbiDecodeOwnedMember
   exprSimAbiDecodeTupleAssembly exprSimAbiDecodeTupleOutcome abiValidMembers

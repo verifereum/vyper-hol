@@ -1,6 +1,7 @@
 (* Reusable actual-site index allocation, independent of executing function. *)
 Theory exprSimAbiDecodeArraySetup
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   exprSimAbiDecodeArrayPrefix exprSimAbiDecodeSiteOwnership
   abiDecoderArrayLoopInit exprSimAbiDecodeArraySource fragExec
   abiDecoderSiteEffect abiDecoderBytestringOutcome abiDecoderWordOutcome

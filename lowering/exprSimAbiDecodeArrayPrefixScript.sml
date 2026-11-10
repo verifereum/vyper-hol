@@ -1,6 +1,7 @@
 (* Arbitrary-input array prefix rejection boundaries. *)
 Theory exprSimAbiDecodeArrayPrefix
 Ancestors
+  valueEncodingDefs
   abiDecoderArrayInitExec abiDecoderArrayHeader abiDecoderArrayLoopInit abiDecoderFrame valueEncoding
   exprSimAbiDecodeArraySource abiEncoder abiDecoderDynarrayPrefix abiDecoderBytestringOutcome abiDecoderDynarrayBound
   abiDecoderBytesBound abiDecoderGuards abiDecoderRange abiDecoderGuard abiDecoderContract

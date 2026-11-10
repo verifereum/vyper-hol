@@ -3,6 +3,7 @@
    evaluate_abi_decode rejects them. *)
 Theory exprSimAbiDecodeBuiltin
 Ancestors
+  valueEncodingDefs
   abiBuiltinDecodeCorrect abiBuiltinSource abiBuiltinDecodeEffect
   exprSimAbiDecodeTupleSource exprSimAbiDecodeMemberOutcome
   exprSimAbiDecodeCompositePrefix exprSimAbiDecodeMemberReject

@@ -1,6 +1,7 @@
 (* Allocation ownership boundaries for external slice address evaluation. *)
 Theory exprSimSliceExtcodeEntry
 Ancestors
+  loweringStateRelDefs
   exprSimSliceExtcodeContext exprSimSliceMemory exprSimSliceExtcode
   exprSimHash loweringHalt exprSimProps exprSimPrecompiles loweringPosts
   compileEnv exprLoweringProps fragExec finite_map words pair list venomState

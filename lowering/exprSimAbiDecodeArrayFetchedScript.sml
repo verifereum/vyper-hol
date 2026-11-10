@@ -1,6 +1,7 @@
 (* Fetched execution keeps the registered resource function separate from code. *)
 Theory exprSimAbiDecodeArrayFetched
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   exprSimAbiDecodeArraySetup exprSimAbiDecodeArrayBulk
   abiDecoderArrayInit abiDecoderArrayLoopInit abiDecoderSequenceReach
   abiDecoderSiteEffect abiDecoderContract instIdxIndep

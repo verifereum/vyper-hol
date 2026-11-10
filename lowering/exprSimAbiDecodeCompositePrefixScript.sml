@@ -1,6 +1,7 @@
 (* Arbitrary-position execution of the composite decoder head guard. *)
 Theory exprSimAbiDecodeCompositePrefix
 Ancestors
+  loweringStateRelDefs
   abiDecoderComplexGuard abiDecoderSequenceReach abiDecoderReservation
   abiDecoderDynamicLoopSetup abiDecoderMemberBound abiDecoderContract
   abiEncoder emitHelper venomInst

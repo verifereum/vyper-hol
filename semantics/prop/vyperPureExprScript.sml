@@ -214,6 +214,9 @@ Proof
   Cases_on `bt = Bop In \/ bt = Bop NotIn`
   >- (
       rpt strip_tac >>
+      (* the code-slice and ordinary IHs don't apply to membership *)
+      rpt (qpat_x_assum `!s'' x t v. _` kall_tac) >>
+      qpat_x_assum `!s'' x t. _ /\ _ /\ ~(_ \/ _) /\ _ ==> _` kall_tac >>
       gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
           type_check_def, assert_def, return_def, raise_def,
           get_accounts_def, lift_sum_def, precompile_call_success_def,

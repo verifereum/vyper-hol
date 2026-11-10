@@ -1,6 +1,7 @@
 (* Arbitrary bounded-memory bytestring outcomes. *)
 Theory abiDecoderBytestringOutcome
 Ancestors
+  valueEncodingDefs
   abiDecoderBytes abiDecoderBytesRuntime abiDecoderGuard abiDecoderBytesPhases abiDecoderRange
   abiDecoderGuards abiDecoderContract
   abiDecoderSiteEffect abiDecoderWordOutcome

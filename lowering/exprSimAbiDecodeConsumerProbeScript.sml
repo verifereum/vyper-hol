@@ -1,5 +1,6 @@
 Theory exprSimAbiDecodeConsumerProbe
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeEndpointFrame exprLoweringProps compileEnv venomState
   finite_map vyperTypeABI vyperTyping abiBoundaryChecks
   valueTypingMemoryProps exprSimProps

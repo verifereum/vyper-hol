@@ -1,6 +1,7 @@
 (* Guard-first preparation tolerates stale temporaries on array reentry. *)
 Theory exprSimAbiDecodeArrayPrepareReentry
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   exprSimAbiDecodeAbortReentry exprSimAbiDecodeArraySetup
   exprSimAbiDecodeArrayPrefix exprSimAbiDecodeArrayFetched
   abiDecoderBytestringOutcome abiDecoderWordOutcome abiDecoderFiniteControl

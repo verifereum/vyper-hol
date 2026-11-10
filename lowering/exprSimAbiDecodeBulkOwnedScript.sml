@@ -1,6 +1,7 @@
 (* Reentrant bulk execution, with copy ownership used only after guards pass. *)
 Theory exprSimAbiDecodeBulkOwned
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   exprSimAbiDecodeArrayFetched exprSimAbiDecodeArrayPrepareReentry
   exprSimAbiDecodePrimitiveOwned exprSimAbiDecodeArrayClosure exprSimAbiDecodeMemberExecute
   abiDecoderReentry abiDecoderReentryPointer abiDecoderVarExtend

@@ -1,6 +1,7 @@
 (* Typed posts for the ordinary slice memory tail. *)
 Theory exprSimSliceDataPost
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   exprSimSliceData exprSimHash exprSimVVFrame
   vyperTypeSystem valueEncoding loweringPosts compileEnv context list rich_list
 

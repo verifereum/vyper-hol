@@ -2,6 +2,7 @@
    Head bounds and actual output extents remain explicit caller obligations. *)
 Theory abiDecoderPrimitiveFetched
 Ancestors
+  loweringStateRelDefs
   abiDecoderScalarOutcome abiDecoderBytestringSource abiDecoderSequenceReach
   abiDecoderClampedWord abiDecoderWordOutcome abiDecoderBytesTyped
   abiDecoderBytesPhases abiDecoderSiteEffect abiDecoderContract

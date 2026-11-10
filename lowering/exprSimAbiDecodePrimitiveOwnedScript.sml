@@ -1,6 +1,7 @@
 (* Primitive reentry transport, shared by scalar and bytestring outcomes. *)
 Theory exprSimAbiDecodePrimitiveOwned
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeOwnedContext exprSimAbiDecodeMemberExecute exprSimAbiDecodeAbortReentry
   abiDecoderPrimitiveFetched abiDecoderBytestringOutcome abiDecoderWordOutcome
   abiDecoderReentry abiDecoderReentryPointer abiDecoderVarSequence abiDecoderVarExtend

@@ -1,6 +1,7 @@
 (* Interpretation of arbitrary available bytestring suffixes. *)
 Theory abiDecoderBytestringSource
 Ancestors
+  valueEncodingDefs
   abiDecoderSourceFacts abiDecoderBytestringOutcome abiCanonicalHeadSize
   abiDecoderString vyperABI contractABI vyperValue valueEncoding words
   list rich_list arithmetic abiDecoderContract venomState

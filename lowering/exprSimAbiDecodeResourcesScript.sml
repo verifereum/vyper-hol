@@ -1,5 +1,6 @@
 Theory exprSimAbiDecodeResources
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeBoundary exprSimAbiDecodeFootprint
   exprSimAbiDecodeLocalSeparation exprSimAbiDecodeOblivious
   exprSimAbiDecodeCoverageBoundary exprSimAbiDecodeCoverageMutual

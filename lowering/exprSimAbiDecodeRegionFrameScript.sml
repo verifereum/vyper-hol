@@ -1,5 +1,6 @@
 Theory exprSimAbiDecodeRegionFrame
 Ancestors
+  loweringStateRelDefs
   exprSimAbiDecodeProtection exprSimAbiDecodeLiveFrame
   exprSimAbiDecodeLocalSeparation exprSimAbiDecodeQuantifiedLift
   exprSimAbiDecodeSetupExec exprSimAbiDecodeEndpointFrame compileEnv finite_map

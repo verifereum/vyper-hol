@@ -10,6 +10,7 @@
 
 Theory exprSimSliceSelfCode
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   exprSimHypsDefs exprLowering vyperAST
   exprSimSliceExtcodeTyped exprSimSliceExtcodeContinue exprSimSliceExtcodeEntry
   exprSimSliceExtcodeContext exprSimSliceExtcode
