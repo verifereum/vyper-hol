@@ -24,6 +24,16 @@ Proof
   simp[entry_abi_leaf_def]
 QED
 
+(* So narrowing a supported_scalar_type premise to entry_abi_leaf minus
+   bytes0 is a weakening. *)
+Theorem supported_scalar_type_not_bytes0:
+  supported_scalar_type ty ==> ty <> BaseT (BytesT (Fixed 0))
+Proof
+  rpt strip_tac >>
+  gvs[supported_scalar_type_def, supported_word_type_def,
+      supported_string_type_def]
+QED
+
 Inductive entry_abi_support:
   (!env ty. entry_abi_leaf ty ==> entry_abi_support env ty) /\
   (!env t bd. entry_abi_support env t ==>

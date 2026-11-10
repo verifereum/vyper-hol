@@ -1092,7 +1092,7 @@ Proof
   simp[] >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem external_source_no_flags:
+Theorem external_source_flag_member_id:
   ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
   cenv_module_pins tops cenv /\ source_deployment_rel tops am tx /\
   get_module_code
@@ -1417,7 +1417,7 @@ Proof
       gvs[env_context_consistent_def, body_inv_def,
           source_deployment_rel_def, get_module_code_def,
           initial_evaluation_context_def])
-  >- (rpt strip_tac >> irule external_source_no_flags >>
+  >- (rpt strip_tac >> irule external_source_flag_member_id >>
       gvs[body_inv_def] >> metis_tac[source_typing_ok_type_def_keys_distinct])
   >- gvs[dec_cenv_agrees_def]
   >- (drule_all external_package_method_id >> simp[])
