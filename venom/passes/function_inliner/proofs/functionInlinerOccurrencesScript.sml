@@ -3,7 +3,7 @@ Theory functionInlinerOccurrences
 Ancestors
   functionInlinerRoutedProvenance functionInlinerLocation
   functionInlinerEnvelopes functionInlinerOrigin functionInlinerActivation
-  functionInlinerDefs venomInst list combin dfAnalyzeProofs
+  functionInlinerDefs venomInst list rich_list combin dfAnalyzeProofs
 
 Definition inline_entry_address_def:
   (inline_entry_address (InlineNamespaceLeaf fn) = []) /\
@@ -944,4 +944,112 @@ Proof
   asm "callee_ih" irule >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
   metis_tac[]
+QED
+
+(* The selected physical cell has an original occurrence, not merely a name. *)
+Theorem inline_selected_site_preimage:
+  inline_annotated_origin ctx e.ise_state.is_inline_count e.ise_caller a /\
+  inline_site_edit_valid e ==>
+  ?p fn l j orig loc inst args.
+    inline_call_incidence a e.ise_caller p fn l j orig (InlineResidual loc inst) /\
+    loc.il_block = e.ise_block /\ loc.il_phase = InlineAtInstruction e.ise_index /\
+    inst.inst_opcode = INVOKE /\ inst.inst_operands = Label e.ise_callee.fn_name::args
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (fn_labels e.ise_caller)` by
+    metis_tac[inline_annotated_origin_labels] >>
+  `find_invoke_site e.ise_callee.fn_name e.ise_caller.fn_blocks =
+    SOME (e.ise_block,e.ise_index)` by gvs[inline_site_edit_valid_def] >>
+  drule_all functionInlinerNamespaceTheory.find_invoke_site_lookup_signature >>
+  strip_tac >>
+  `inline_fetched_fields e.ise_caller e.ise_block e.ise_index
+     (inline_inst_fields (EL e.ise_index bb.bb_instructions))` by
+    (simp[functionInlinerSiteLayoutTheory.inline_fetched_fields_def] >>
+     metis_tac[get_instruction_def]) >>
+  drule_all inline_call_incidence_residual_preimage >> strip_tac >>
+  gvs[functionInlinerSiteLayoutTheory.inline_inst_fields_def] >> metis_tac[]
+QED
+
+Theorem inline_call_incidence_residual_routing:
+  !cert root p fn l j orig outcome.
+    inline_call_incidence cert root p fn l j orig outcome ==>
+    !loc inst. outcome = InlineResidual loc inst ==>
+    ?path. inline_routed_leaf cert root p fn path /\
+      inst.inst_outputs = MAP (inline_path_rename path) orig.inst_outputs /\
+      inst.inst_operands = FOLDL (\ops c. case c of
+        InlineKeep e => ops
+      | InlineEnter e => MAP (clone_operand e.ise_prefix (fn_labels e.ise_callee)) ops)
+        orig.inst_operands path
+Proof
+  ho_match_mp_tac inline_call_incidence_ind >> rpt conj_tac >> simp[]
+  >- (rpt strip_tac >> qexists `[]` >>
+      simp[inline_path_rename_def, inline_routed_leaf_rules])
+  >- (rpt strip_tac >> qexists `path ++ [InlineKeep e]` >>
+      simp[inline_path_rename_append, inline_path_rename_def,
+        inline_choice_rename_def, FOLDL_APPEND, o_DEF, SF ETA_ss] >>
+      metis_tac[inline_routed_leaf_rules]) >>
+  rpt strip_tac >> qexists `path ++ [InlineEnter e]` >>
+  simp[inline_path_rename_append, inline_path_rename_def,
+    inline_choice_rename_def, FOLDL_APPEND, clone_instruction_def, MAP_MAP_o, o_DEF] >>
+  metis_tac[inline_routed_leaf_rules]
+QED
+
+Theorem inline_call_incidence_residual_target:
+  !cert root p fn l j orig outcome.
+    inline_call_incidence cert root p fn l j orig outcome ==>
+    !ctx n loc inst.
+      inline_annotated_origin ctx n root cert /\ outcome = InlineResidual loc inst ==>
+      ?target args actual.
+        orig.inst_operands = Label target::args /\
+        inst.inst_operands = Label target::actual
+Proof
+  ho_match_mp_tac inline_call_incidence_strongind >> rpt conj_tac >> simp[]
+  >- (rpt strip_tac >>
+      drule inline_annotated_origin_erasure >> strip_tac >>
+      `MEM orig (fn_insts root)` by
+        (gvs[get_instruction_def, AllCaseEqs(), fn_insts_def,
+             unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+         metis_tac[venomExecPropsTheory.lookup_block_MEM, MEM_EL]) >>
+      drule_all qualified_origin_calls_aux >> metis_tac[])
+  >- (rpt strip_tac >>
+      drule inline_annotated_origin_edit_elim >> simp[] >> strip_tac >>
+      metis_tac[]) >>
+  rpt strip_tac >>
+  drule inline_annotated_origin_edit_elim >> simp[] >> strip_tac >>
+  `?target args actual. orig.inst_operands = Label target::args /\
+     inst.inst_operands = Label target::actual` by metis_tac[] >>
+  `qualified_origin ctx e.ise_state.is_inline_count e.ise_callee` by
+    metis_tac[inline_annotated_origin_erasure] >>
+  `?k. loc.il_phase = InlineAtInstruction k /\
+     inline_fetched_fields e.ise_callee loc.il_block k (inline_inst_fields inst)` by
+    metis_tac[inline_call_incidence_residual_fetch] >>
+  `inst.inst_opcode = INVOKE` by metis_tac[inline_call_incidence_residual_phase] >>
+  `~MEM target (fn_labels e.ise_callee)` by
+    (gvs[functionInlinerSiteLayoutTheory.inline_fetched_fields_def,
+         functionInlinerSiteLayoutTheory.inline_inst_fields_def] >>
+     `MEM inst' (fn_insts e.ise_callee)` by
+       (gvs[get_instruction_def, AllCaseEqs(), fn_insts_def,
+         unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+        metis_tac[venomExecPropsTheory.lookup_block_MEM, MEM_EL]) >>
+     metis_tac[qualified_origin_call_target_external]) >>
+  metis_tac[clone_instruction_call_signature]
+QED
+
+Theorem inline_selected_site_original_callee:
+  inline_annotated_origin ctx e.ise_state.is_inline_count e.ise_caller a /\
+  inline_annotated_origin ctx e.ise_state.is_inline_count e.ise_callee b /\
+  inline_site_edit_valid e ==>
+  ?p fn l j orig loc inst args actual.
+    inline_call_incidence a e.ise_caller p fn l j orig (InlineResidual loc inst) /\
+    loc.il_block = e.ise_block /\ loc.il_phase = InlineAtInstruction e.ise_index /\
+    orig.inst_operands = Label (inline_entry_function b).fn_name::args /\
+    inst.inst_operands = Label (inline_entry_function b).fn_name::actual /\
+    MEM (inline_entry_function b) ctx.ctx_functions
+Proof
+  strip_tac >> drule_all inline_selected_site_preimage >> strip_tac >>
+  `?target args actual. orig.inst_operands = Label target::args /\
+      inst.inst_operands = Label target::actual` by
+    metis_tac[inline_call_incidence_residual_target] >>
+  drule inline_annotated_entry_identity >> strip_tac >>
+  gvs[] >> metis_tac[]
 QED

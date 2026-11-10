@@ -699,7 +699,7 @@ Proof
   metis_tac[inliner_fn_origin_separation]
 QED
 
-Theorem qualified_origin_calls_aux[local]:
+Theorem qualified_origin_calls_aux:
   !ctx n fn. qualified_origin ctx n fn ==>
     !inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE ==>
     ?target args root orig orig_args.
