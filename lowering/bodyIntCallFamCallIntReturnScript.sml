@@ -46,14 +46,14 @@ Proof
   simp[] >> rpt conj_tac
   >- (rpt strip_tac >> irule not_fresh_at_mono >>
       qexists `sa` >> simp[])
-  >- (rpt strip_tac >> metis_tac[])
-  >- metis_tac[] >>
+  >- (rpt strip_tac >> metis_tac[]) >>
   rpt strip_tac >>
   drule immutable_metadata_frame_value_lookup >>
   disch_then (qspecl_then [`fp.jc_cx.txn.target`,`ce.ce_module`,`nm`,`tv`,`iv`]
     mp_tac) >>
-  simp[AllCaseEqs(), vyperStateTheory.get_source_immutables_def] >>
-  metis_tac[]
+  Cases_on `ALOOKUP ee.immutables fp.jc_cx.txn.target` >>
+  Cases_on `ALOOKUP es.immutables fp.jc_cx.txn.target` >>
+  gvs[vyperStateTheory.get_source_immutables_def] >> metis_tac[]
 QED
 
 Theorem intcall_nested_return:
