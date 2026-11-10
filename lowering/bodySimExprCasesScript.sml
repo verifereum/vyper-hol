@@ -162,12 +162,14 @@ Proof
          >- metis_tac[body_expr_ok_case]
          >- metis_tac[body_expr_ok_map_case] >>
          rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
-      drule_at (Pos last) expr_sim_case_of_vv >> simp[] >> strip_tac >>
+      `expr_sim_case F ctx func cenv cx (Subscript v8 e1 e2)` by
+        (irule expr_sim_case_of_vv >> simp[]) >>
       fs[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   `expr_map_case F ctx func cenv cx (Subscript v8 e1 e2)` by
-    (irule compile_subscript_map_map_case >> rpt conj_tac >> rpt strip_tac >>
-     metis_tac[body_expr_ok_case, body_expr_ok_map_case]) >>
+    (irule compile_subscript_map_map_case >> conj_tac
+     >~ [`expr_sim_case`] >- (rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
+     metis_tac[body_expr_ok_map_case]) >>
   fs[expr_map_case_def] >> metis_tac[]
 QED
 
@@ -242,10 +244,7 @@ Theorem body_builtin_residual_case:
 Proof
   rpt strip_tac >> (match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func cenv cx (Builtin ty bt es)`
-    suffices_by
-      (strip_tac >> conj_tac
-       >- (irule expr_sim_case_of_vv >> simp[loweringPostsTheory.post_value_type_def]) >>
-       simp[]) >>
+    suffices_by (strip_tac >> conj_tac >- (irule expr_sim_case_of_vv >> simp[]) >> simp[]) >>
   reverse (Cases_on `builtin_args_length_ok bt (LENGTH es)`)
   >- (rw[expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>

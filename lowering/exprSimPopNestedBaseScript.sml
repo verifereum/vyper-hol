@@ -809,6 +809,7 @@ QED
 Theorem nested_pop_suffix_vv_post:
   target_post ctx func cenv cx es sa sm s0 mid pv vt op t /\
   ci_mono sa sm /\ stmt_state_rel ctx func cenv cx es' u /\
+  es'.scopes = mid.scopes /\
   storage_holds cx tr ann v slot es' u /\ lookup_var x u = SOME slot /\
   u.vs_memory = t.vs_memory /\ u.vs_allocas = t.vs_allocas /\
   (!q. not_fresh_at sm q ==> lookup_var q u = lookup_var q t) ==>
@@ -818,10 +819,17 @@ Proof
   strip_tac >>
   `!q. not_fresh_at sa q ==> not_fresh_at sm q` by
     (fs[ci_mono_def, not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `locals_kept cenv es es' s0 u` by
+    (`locals_kept cenv es mid s0 t` by fs[target_post_def, wb_frame_def] >>
+     `locals_kept cenv es mid s0 u` by metis_tac[locals_kept_mem_tail] >>
+     qpat_x_assum `locals_kept cenv es mid s0 u` mp_tac >>
+     pure_rewrite_tac[locals_kept_def, popped_kept_def] >>
+     qpat_x_assum `es'.scopes = mid.scopes` (fn th => pure_rewrite_tac[th]) >>
+     disch_then ACCEPT_TAC) >>
   Cases_on `tr` >>
   (fs[target_post_def, vv_post_def, vv_holds_def, vv_at_def,
-      contextTheory.mk_ptr_def, eval_operand_def, expr_type_def,
-      locals_kept_def] >> rpt strip_tac >> gvs[]
+      contextTheory.mk_ptr_def, eval_operand_def, expr_type_def] >>
+   rpt strip_tac >> gvs[]
    >- (qpat_assum `!aid off sz. FLOOKUP _ _ = _ /\ _ ==> _` irule >>
        simp[] >> metis_tac[]) >>
    metis_tac[])
@@ -986,6 +994,9 @@ Resume nested_pop_storage_live_suffix_sim[positive]:
   qexistsl_tac [`res`, `es'`,
     `OK (u with vs_inst_idx := LENGTH r.cs_current_insts)`] >>
   simp[exprSimVVFrameTheory.vv_post_inst_idx] >>
+  `fin.scopes = es.scopes` by
+    (qunabbrev_tac `fin` >> Cases_on `tr` >>
+     simp[vyperStorageBackendTheory.set_storage_def]) >>
   irule nested_pop_suffix_vv_post >>
   qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >>

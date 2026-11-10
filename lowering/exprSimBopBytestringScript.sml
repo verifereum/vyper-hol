@@ -205,7 +205,7 @@ Theorem comparison_finish_post[local]:
   stmt_state_rel ctx func cenv cx ee u /\ local_ptrs_reserved cenv sh /\
   ~u.vs_halted /\ u.vs_current_bb = sh.cs_current_bb /\
   u.vs_inst_idx = LENGTH sh.cs_current_insts /\
-  wb_frame cenv es sa s0 u /\ sa.cs_next_var <= sh.cs_next_var ==>
+  wb_frame cenv es ee sa s0 u /\ sa.cs_next_var <= sh.cs_next_var ==>
   ?z. gas_marked_path F ctx func u 0 (OK z) /\
     expr_post ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
       es sa sb s0 ee (BoolV (if bop = Eq then d1 = d2 else d1 <> d2)) op z /\
@@ -215,12 +215,12 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all comparison_digest_counted >> strip_tac >>
   rename1 `eval_operand op z = SOME _` >>
-  `wb_frame cenv es sa s0 z` by
+  `wb_frame cenv es ee sa s0 z` by
     (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
      qexistsl_tac [`sh`, `u`] >> simp[]) >>
   qexists_tac `z` >> simp[] >>
   simp[loweringPostsTheory.expr_post_def, expr_type_def] >>
-  qpat_x_assum `wb_frame cenv es sa s0 z` mp_tac >>
+  qpat_x_assum `wb_frame cenv es ee sa s0 z` mp_tac >>
   simp[loweringPostsTheory.wb_frame_def,
        loweringPostsTheory.expr_val_at_def,
        loweringPostsTheory.expr_val_rel_def, is_word_type_def,
@@ -465,7 +465,7 @@ Proof
       (impl_tac >- (simp[] >> metis_tac[])) >>
       disch_then (qx_choose_then `d1` (qx_choose_then `t'`
         (map_every assume_tac o CONJUNCTS))) >>
-      `wb_frame cenv es sa s0 t'` by
+      `wb_frame cenv es ee sa s0 t'` by
         (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
          qexistsl_tac [`sm`, `t`] >>
          imp_res_tac (cj 2 compile_expr_grows) >>
@@ -523,16 +523,15 @@ Proof
              qpat_x_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
              simp[loweringPostsTheory.expr_post_def] >> strip_tac >>
              first_x_assum irule >> simp[]) >>
-          `wb_frame cenv es sa s0 t2` by
-            (irule exprSimWordArgsTheory.wb_frame_trans >>
-             goal_assum (drule_at Any) >>
-             reverse conj_tac >- (goal_assum (drule_at Any)) >>
-             qexistsl_tac [`ee`, `sh1`, `t'`] >>
+          `wb_frame cenv es ee2 sa s0 t2` by
+            (qspecl_then [`func`, `cenv`, `cx`, `es`, `s0`, `sa`,
+               `ee`, `ee2`, `sh1`, `t'`, `t2`, `ctx`]
+               irule exprSimWordArgsTheory.wb_frame_trans >>
              simp[] >> imp_res_tac (cj 2 compile_expr_grows) >>
              imp_res_tac (SIMP_RULE std_ss [ci_mono_def] compile_bytestring_hash_shape) >>
              metis_tac[exprSimWordArgsTheory.expr_post_frame,
                        arithmeticTheory.LESS_EQ_TRANS]) >>
-          `wb_frame cenv es sa s0 u` by
+          `wb_frame cenv es ee2 sa s0 u` by
             (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
              qexistsl_tac [`sm'`, `t2`] >>
              imp_res_tac (cj 2 compile_expr_grows) >>
@@ -652,7 +651,7 @@ Proof
       disch_then (qx_choose_then `d2` (qx_choose_then `u`
         (map_every assume_tac o CONJUNCTS))) >>
       `eval_operand (Lit x) u = SOME x` by simp[eval_operand_def] >>
-      `wb_frame cenv es sa s0 u` by
+      `wb_frame cenv es ee2 sa s0 u` by
         (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
          qexistsl_tac [`sm`, `t2`] >>
          imp_res_tac (cj 2 compile_expr_grows) >> simp[] >>
@@ -686,7 +685,7 @@ Proof
   `eval_operand (Lit x) s0 = SOME x /\ eval_operand (Lit x') s0 = SOME x'` by
     simp[eval_operand_def] >>
   `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by simp[] >>
-  `wb_frame cenv es sa s0 s0` by simp[exprSimWordArgsTheory.wb_frame_refl] >>
+  `wb_frame cenv es (es with gas_obs := []) sa s0 s0` by simp[exprSimWordArgsTheory.wb_frame_refl] >>
   `?z. gas_marked_path F ctx func s0 0 (OK z) /\
     expr_post ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
       es sa sb s0 (es with gas_obs := [])
