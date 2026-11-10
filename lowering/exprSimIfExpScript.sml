@@ -411,22 +411,6 @@ Proof
   simp[expr_val_at_def] >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem ifexp_typed_adapter_parts[local]:
-  ~is_word_type t /\ ~same_memory_layout cenv arm_ty t /\
-  ~is_bytestring_type t /\ arm_ty <> t /\
-  compile_ifexp_arm cenv t arm_ty vv sa = (op,sb) ==>
-  ?buf sm src sn.
-    compile_alloc_buffer (type_memory_bytes cenv t) sa = (buf,sm) /\
-    unwrap_value cenv vv sm = (src,sn) /\
-    compile_store_memory_typed cenv buf.buf_operand t src arm_ty sn = ((),sb) /\
-    op = buf.buf_operand
-Proof
-  strip_tac >>
-  gvs[compile_ifexp_arm_def, compile_store_memory_def,
-      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[])
-QED
-
 Theorem ifexp_typed_alloc_source[local]:
   compile_alloc_buffer (type_memory_bytes cenv dty) sa = (buf,sm) /\
   compile_store_memory_typed cenv buf.buf_operand dty src sty sm = ((),sb) /\
