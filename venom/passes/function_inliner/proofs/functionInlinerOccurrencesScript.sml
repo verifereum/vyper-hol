@@ -549,3 +549,66 @@ Proof
   qexists_tac `i` >> simp[] >>
   qexistsl_tac [`bb''`,`inst''`] >> simp[]
 QED
+
+Theorem inline_call_incidence_total:
+  !ctx n root cert. inline_annotated_origin ctx n root cert ==>
+    !p rho fn l j bb inst.
+      inline_namespace_leaf_at cert p rho fn /\
+      lookup_block l fn.fn_blocks = SOME bb /\
+      get_instruction bb j = SOME inst /\ inst.inst_opcode = INVOKE ==>
+      ?outcome. inline_call_incidence cert root p fn l j inst outcome
+Proof
+  ho_match_mp_tac inline_annotated_origin_strongind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[inline_namespace_leaf_at_def] >>
+      metis_tac[inline_call_incidence_rules])
+  >- (rpt strip_tac >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule inline_one_site_edit_exists >> strip_tac >>
+  gvs[] >>
+  drule_all inline_annotated_edit_fetch_facts >> strip_tac >>
+  gvs[inline_namespace_leaf_at_def, inline_namespace_node_edit] >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `outcome`
+  >- (rename1 `InlineResidual loc call` >>
+      drule inline_call_incidence_residual_fetch >> simp[] >>
+      disch_then drule >> strip_tac >>
+      drule inline_call_incidence_residual_phase >> simp[] >> strip_tac >>
+      gvs[functionInlinerSiteLayoutTheory.inline_fetched_fields_def] >>
+      Cases_on `loc.il_block = e.ise_block /\ loc.il_phase = InlineAtInstruction e.ise_index`
+      >- metis_tac[cj 4 inline_call_incidence_rules] >>
+      `inst'.inst_opcode = INVOKE` by
+        gvs[functionInlinerSiteLayoutTheory.inline_inst_fields_def] >>
+      drule inline_edit_keep_invoke >> disch_then drule >> simp[] >>
+      disch_then (drule_at (Pat `get_instruction _ _ = _`)) >>
+      disch_then (qspecl_then [`loc.il_block`,`loc.il_counter`] mp_tac) >>
+      simp[] >> strip_tac >>
+      Cases_on `loc` >> gvs[] >>
+      `<|il_block := s; il_phase := InlineAtInstruction k; il_counter := n|> =
+       inline_location s (InlineAtInstruction k) n` by
+        simp[inline_location_component_equality] >>
+      gvs[] >> metis_tac[cj 2 inline_call_incidence_rules])
+  >- metis_tac[cj 5 inline_call_incidence_rules]
+  >- (rename1 `InlineResidual loc call` >>
+      drule inline_call_incidence_residual_fetch >> simp[] >>
+      disch_then drule >> strip_tac >>
+      drule inline_call_incidence_residual_phase >> simp[] >> strip_tac >>
+      gvs[functionInlinerSiteLayoutTheory.inline_fetched_fields_def] >>
+      `inst'.inst_opcode = INVOKE` by
+        gvs[functionInlinerSiteLayoutTheory.inline_inst_fields_def] >>
+      `MEM loc.il_block (fn_labels e.ise_callee)` by
+        (simp[fn_labels_def, MEM_MAP] >>
+         metis_tac[venomExecPropsTheory.lookup_block_MEM,
+                   venomExecPropsTheory.lookup_block_label]) >>
+      first_x_assum drule >> strip_tac >>
+      drule inline_edit_enter_invoke >> disch_then drule >> simp[] >>
+      disch_then (drule_at (Pat `get_instruction _ _ = _`)) >>
+      disch_then (qspecl_then [`loc.il_block`,`loc.il_counter`] mp_tac) >>
+      simp[] >> strip_tac >>
+      Cases_on `loc` >> gvs[] >>
+      `<|il_block := s; il_phase := InlineAtInstruction k; il_counter := n|> =
+       inline_location s (InlineAtInstruction k) n` by
+        simp[inline_location_component_equality] >>
+      gvs[] >> metis_tac[cj 3 inline_call_incidence_rules]) >>
+  metis_tac[cj 6 inline_call_incidence_rules]
+QED
+
