@@ -158,7 +158,8 @@ val suite_fixtures = [
     "flag256_arg", "flag256_array_arg", "st_string_field_arg", "tup_string_arg"]),
   ("builtin-forms", [
     "ceil_dec", "concat_bytes2", "concat_bytesn", "concat_one_bytes_arg",
-    "concat_storage", "concat_string3", "concat_string3args", "ext_code_slice",
+    "concat_storage", "concat_string3", "concat_string3args", "concat_wide_local",
+    "ext_code_slice",
     "extract32_addr", "extract32_bytes4", "extract32_default",
     "extract32_int128", "extract32_uint", "floor_dec", "len_bytes_arg",
     "len_concat", "p102_rbuf_bytes_ret_word_arg",
@@ -193,6 +194,7 @@ val suite_fixtures = [
     "g8_a_iter_struct_elem", "g8_a_iter_transient"]),
   ("immutables", [
     "i01_immut_uint", "i06_multiple_immutables", "i08_immut_read_in_ctor",
+    "i09_immut_widen_bytes",
     "p23_imm_uint256", "p24_imm_uint8", "p25_imm_address",
     "p29b_imm_multi_nostr", "p59_imm_with_runtime_internal"]),
   ("internal-frames", [

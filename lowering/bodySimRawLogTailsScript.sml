@@ -1,6 +1,7 @@
 (* Counted execution boundaries for RawLog body continuations. *)
 Theory bodySimRawLogTails
 Ancestors
+  exprSimHashBoundary
   bodySimRawLogBodySource exprSimRawLog exprSimHash gasSummary
   exprBopSimProps exprSimProps exprSimAlloc context ASCIInumbers
   bodySim exprSimSend exprSimHyps vyperTypeSystem vyperAST list
@@ -27,7 +28,7 @@ Theorem raw_log_dynamic_tail_counted:
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   wb_frame cenv es0 sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
-  expr_type e = NoneT /\ fn_has_code sm sb func /\
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\ fn_has_code sm sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
@@ -90,7 +91,7 @@ Theorem raw_log_fixed_tail_counted:
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint (w2n p) 32 b sz) /\
   (!n b sz. local_region cenv es.scopes s n b sz ==>
-     regions_disjoint (w2n p) 32 b sz) /\ expr_type e = NoneT /\
+     regions_disjoint (w2n p) 32 b sz) /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   fn_has_code sm sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
@@ -297,7 +298,7 @@ Theorem raw_log_post_gas_obs:
   expr_post ctx func cenv cx e es0 sa sb s0 ee v op t ==>
   expr_post ctx func cenv cx e es0 sa sb s0 (ee with gas_obs := gs) v op t
 Proof
-  simp[expr_post_def, expr_val_at_def] >> strip_tac >> simp[] >>
+  simp[expr_post_def, expr_val_at_def, expr_val_own_def] >> strip_tac >> simp[] >>
   `stmt_state_rel ctx func cenv cx (ee with gas_obs := gs) t` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`t.vs_gas_readings`, `t.vs_inst_idx`, `gs`] mp_tac) >>

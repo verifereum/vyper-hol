@@ -2,7 +2,7 @@
 Theory entryReachBodyRuntimeResources
 Ancestors
   compileVyper vyperCompiler ctorDeployMemoryFrontier allocaFrontierBound
-  entryReachBodyRootChecks venomWf venomInst list
+  venomWf venomInst list
 
 Theorem caller_runtime_context_ok:
   lower_vyper_runtime_unit tops policy = SOME unit ==>

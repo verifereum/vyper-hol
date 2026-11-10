@@ -259,22 +259,99 @@ Proof
   strip_tac >> rpt (pairarg_tac >> gvs[]) >> metis_tac[emit_op_safe_operand]
 QED
 
+(* Equality results stay safe while the remaining comparisons are emitted.
+   Both folds preserve a safe accumulator, including their empty case. *)
+Theorem emit_membership_eqs_safe_operand:
+  !xs needle sa cs sb.
+    emit_membership_eqs needle xs sa = (cs,sb) ==>
+    EVERY (safe_operand sb) cs
+Proof
+  Induct >> simp[emit_membership_eqs_def, comp_bind_def, comp_return_def] >>
+  rpt gen_tac >> strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  qmatch_asmsub_rename_tac `emit_membership_eqs needle xs st = (cs,sb)` >>
+  qspecl_then [`xs`, `needle`, `st`] mp_tac ci_mono_emit_membership_eqs >>
+  simp[ci_mono_def] >> strip_tac >>
+  qpat_x_assum `!needle sa cs sb. _` drule_all >> strip_tac >> simp[] >>
+  drule emit_op_safe_operand >> strip_tac >>
+  irule safe_operand_mono >> qexists_tac `st` >> simp[]
+QED
+
+Theorem fold_membership_or_safe_operand:
+  !xs acc sa r sb.
+    safe_operand sa acc /\ fold_membership_or acc xs sa = (r,sb) ==>
+    safe_operand sb r
+Proof
+  Induct >> simp[fold_membership_or_def, comp_bind_def, comp_return_def] >>
+  rpt gen_tac >> strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[emit_op_safe_operand]
+QED
+
+Theorem fold_membership_and_safe_operand:
+  !xs acc sa r sb.
+    safe_operand sa acc /\ fold_membership_and acc xs sa = (r,sb) ==>
+    safe_operand sb r
+Proof
+  Induct >> simp[fold_membership_and_def, comp_bind_def, comp_return_def] >>
+  rpt gen_tac >> strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[emit_op_safe_operand]
+QED
+
 Theorem compile_list_membership_in_safe_operand:
   compile_list_membership_in needle xs sa = (r,sb) ==> safe_operand sb r
 Proof
-  Cases_on `xs` >- simp[compile_list_membership_in_def, comp_return_def] >>
-  rename1 `_ :: rest` >> Cases_on `rest` >>
   simp[compile_list_membership_in_def, comp_bind_def] >>
-  strip_tac >> rpt (pairarg_tac >> gvs[]) >> metis_tac[emit_op_safe_operand]
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  drule emit_membership_eqs_safe_operand >> strip_tac >>
+  qmatch_assum_rename_tac `EVERY (safe_operand st) cs` >>
+  Cases_on `cs` >> gvs[comp_return_def] >>
+  drule_all fold_membership_or_safe_operand >> simp[]
 QED
 
 Theorem compile_list_membership_notin_safe_operand:
   compile_list_membership_notin needle xs sa = (r,sb) ==> safe_operand sb r
 Proof
-  Cases_on `xs` >- simp[compile_list_membership_notin_def, comp_return_def] >>
-  rename1 `_ :: rest` >> Cases_on `rest` >>
   simp[compile_list_membership_notin_def, comp_bind_def] >>
-  strip_tac >> rpt (pairarg_tac >> gvs[]) >> metis_tac[emit_op_safe_operand]
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  qmatch_asmsub_rename_tac `emit_membership_eqs needle xs sa = (cs,st)` >>
+  Cases_on `cs` >> gvs[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  drule emit_op_safe_operand >> strip_tac >>
+  drule_all fold_membership_and_safe_operand >> simp[]
+QED
+
+Theorem fresh_var_counter_mono[local]:
+  fresh_var sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >> qspec_then `sa` mp_tac ci_mono_fresh_var >>
+  simp[ci_mono_def]
+QED
+
+Theorem fresh_label_counter_mono[local]:
+  fresh_label prefix sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >> qspecl_then [`prefix`, `sa`] mp_tac ci_mono_fresh_label >>
+  simp[ci_mono_def]
+QED
+
+Theorem new_block_counter_mono[local]:
+  new_block label sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >> qspecl_then [`label`, `sa`] mp_tac ci_mono_new_block >>
+  simp[ci_mono_def]
+QED
+
+Theorem emit_inst_counter_mono[local]:
+  emit_inst opc args outs sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >> qspecl_then [`opc`, `args`, `outs`, `sa`] mp_tac ci_mono_emit_inst >>
+  simp[ci_mono_def]
+QED
+
+Theorem emit_op_counter_mono[local]:
+  emit_op opc args sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >> qspecl_then [`opc`, `args`, `sa`] mp_tac ci_mono_emit_op >>
+  simp[ci_mono_def]
 QED
 
 Theorem compile_ptr_load_next_var:
@@ -342,25 +419,27 @@ QED
 
 Theorem compile_array_membership_loop_safe_operand:
   (!p s v t. loader p s = (v,t) ==> s.cs_next_var <= t.cs_next_var) /\
-  compile_array_membership_loop needle arr len sz off loader isin sa = (r,sb) ==>
+  compile_array_membership_loop needle arr len sz off loader bound isin sa = (r,sb) ==>
   safe_operand sb r
 Proof
   strip_tac >>
   `!p s. s.cs_next_var <= (SND (loader p s)).cs_next_var` by
     (rpt gen_tac >> Cases_on `loader p s` >> gvs[] >> metis_tac[]) >>
   `!s. safe_operand
-      (SND (compile_array_membership_loop needle arr len sz off loader isin s))
-      (FST (compile_array_membership_loop needle arr len sz off loader isin s))` suffices_by
+      (SND (compile_array_membership_loop needle arr len sz off loader bound isin s))
+      (FST (compile_array_membership_loop needle arr len sz off loader bound isin s))` suffices_by
     (disch_then (qspec_then `sa` mp_tac) >> simp[]) >>
-  Cases_on `isin` >> Cases_on `off > 0` >>
+  Cases_on `bound` >> Cases_on `isin` >> Cases_on `off > 0` >>
   pure_rewrite_tac[compile_array_membership_loop_def] >>
   ho_match_mp_tac membership_fresh_start >>
   rpt (FIRST [ho_match_mp_tac membership_bind_preserve,
               ho_match_mp_tac membership_ignore_preserve,
               gen_tac] >>
        rpt conj_tac >> BETA_TAC) >>
-  simp[membership_primitive_next_var, comp_return_def] >>
-  metis_tac[emit_op_safe_operand, pairTheory.PAIR]
+  simp[membership_primitive_next_var, comp_return_def, comp_bind_def,
+       comp_ignore_bind_def, emit_op_def, emit_inst_def, fresh_var_def,
+       fresh_id_def, emit_def, safe_operand_def, not_fresh_at_def,
+       ASCIInumbersTheory.toString_11]
 QED
 
 Theorem compile_var_array_membership_safe_operand:
@@ -372,6 +451,19 @@ Proof
   strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   metis_tac[compile_array_membership_loop_safe_operand, compile_ptr_load_next_var]
 QED
+
+(* Keep the membership safety interface closed under the HOL kernel. *)
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then ()
+     else raise Fail "admitted membership operand-safety theorem"
+  end)
+  [emit_membership_eqs_safe_operand, fold_membership_or_safe_operand,
+   fold_membership_and_safe_operand, compile_list_membership_in_safe_operand,
+   compile_list_membership_notin_safe_operand,
+   compile_array_membership_loop_safe_operand,
+   compile_var_array_membership_safe_operand];
 
 (* ===== Calls, names, subscripts and literals ===== *)
 
@@ -505,6 +597,41 @@ val word_raw_call_tac =
   Cases_on `r.rcf_max_outsize = 0` >> gvs[word_result_ok_def] >>
   metis_tac[compile_raw_call_finish_zero_safe_operand,
             safe_operand_mono, ci_mono_emit_void, ci_mono_def, pairTheory.SND]
+
+Theorem compile_call_steps_next_var[local]:
+  (compile_stage_intcall_args cenv vals flags tys sa = (r1,sb) ==>
+   sa.cs_next_var <= sb.cs_next_var) /\
+  (emit_multi_op opc ops n sa = (r2,sb) ==>
+   sa.cs_next_var <= sb.cs_next_var) /\
+  (store_multi_results buf_op results offset sa = (r3,sb) ==>
+   sa.cs_next_var <= sb.cs_next_var) /\
+  (emit_void opc ops sa = (r4,sb) ==> sa.cs_next_var <= sb.cs_next_var)
+Proof
+  rpt conj_tac >> strip_tac
+  >- (qspecl_then [`cenv`, `vals`, `flags`, `tys`, `sa`] mp_tac
+        ci_mono_compile_stage_intcall_args >> simp[ci_mono_def])
+  >- (qspecl_then [`opc`, `ops`, `n`, `sa`] mp_tac ci_mono_emit_multi_op >>
+      simp[ci_mono_def])
+  >- (qspecl_then [`buf_op`, `results`, `offset`, `sa`] mp_tac
+        ci_mono_store_multi_results >> simp[ci_mono_def]) >>
+  qspecl_then [`opc`, `ops`, `sa`] mp_tac ci_mono_emit_void >>
+  simp[ci_mono_def]
+QED
+
+(* Closes safe_operand sb op from an assumption safe_operand st op and the
+   cs_next_var chain from st to sb among the assumptions. *)
+val safe_buf_mono_tac : tactic = fn (g as (asl, w)) =>
+  let
+    val opnd = rand w
+    fun is_safe_of a =
+      (case strip_comb a of
+         (f, [_, x]) => same_const f ``safe_operand`` andalso aconv x opnd
+       | _ => false)
+    val st = hd (snd (strip_comb (valOf (List.find is_safe_of asl))))
+  in
+    (irule safe_operand_mono >> exists_tac st >>
+     conj_tac >- decide_tac >> first_assum ACCEPT_TAC) g
+  end
 
 Theorem compile_call_steps_next_var[local]:
   (compile_stage_intcall_args cenv vals flags tys sa = (r1,sb) ==>

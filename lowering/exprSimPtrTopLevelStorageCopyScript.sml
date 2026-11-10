@@ -1672,7 +1672,7 @@ Proof
   strip_tac >>
   qpat_x_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _` mp_tac >>
   Cases_on `loc = LocStorage` >> gvs[] >>
-  simp[contextTheory.compile_word_copy_loop_def, compileEnvTheory.word_scale_def,
+  simp[contextTheory.compile_word_copy_loop_def, contextTheory.compile_word_copy_loop_op_def, contextTheory.compile_word_copy_loop_base_def, compileEnvTheory.word_scale_def,
        contextTheory.compile_ptr_load_def, contextTheory.compile_ptr_store_def,
        emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
        emitHelperTheory.emit_inst_def, compileEnvTheory.comp_bind_def,
@@ -1712,7 +1712,7 @@ Proof
   strip_tac >>
   qpat_x_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _` mp_tac >>
   Cases_on `loc = LocStorage` >> gvs[] >>
-  simp[contextTheory.compile_word_copy_loop_def, compileEnvTheory.word_scale_def,
+  simp[contextTheory.compile_word_copy_loop_def, contextTheory.compile_word_copy_loop_op_def, contextTheory.compile_word_copy_loop_base_def, compileEnvTheory.word_scale_def,
        contextTheory.compile_ptr_load_def, contextTheory.compile_ptr_store_def,
        emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
        emitHelperTheory.emit_inst_def, compileEnvTheory.comp_bind_def,

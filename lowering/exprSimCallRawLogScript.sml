@@ -5,6 +5,7 @@
 
 Theory exprSimCallRawLog
 Ancestors
+  exprSimHashBoundary
   list exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimSource exprSimHyps exprSimSend vyperAST vyperTypeSystem
   vyperTypeCallGraph allocLimits supportedExprTraverse exprLowering
   vyperInterpreter vyperContext vyperValue vyperState exprCallbackContracts exprCallBounds
@@ -315,7 +316,7 @@ Theorem raw_log_post_vv[local]:
     (StackValue NoneT (Lit 0w)) s
 Proof
   simp[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-       read_result_def, return_def] >> metis_tac[]
+       vv_own_def, read_result_def, return_def] >> metis_tac[]
 QED
 
 Theorem compile_multi_exprs_lower_word_args[local]:
@@ -402,7 +403,12 @@ Proof
     (irule wb_frame_trans >> goal_assum (drule_at Any) >>
      metis_tac[expr_post_frame]) >>
   gvs[expr_post_def, wb_frame_def] >>
-  metis_tac[exprSimPropsTheory.expr_val_at_start_mono]
+  conj_tac
+  >- (irule exprSimPropsTheory.expr_val_at_start_mono >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  reverse conj_tac >- metis_tac[] >>
+  strip_tac >> irule exprSimPropsTheory.expr_val_own_start_mono >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem raw_log_post_operands[local]:
@@ -455,7 +461,7 @@ Theorem raw_log_dynamic_tail_summary[local]:
               (!l. op <> Label l)) ops /\
   eval_operands ops s = SOME (MAP event_value_to_word vs) /\
   LENGTH ops < dimword (:256) /\ local_ptrs_reserved cenv sd /\
-  sa.cs_next_var <= sd.cs_next_var /\ expr_type e = NoneT /\
+  sa.cs_next_var <= sd.cs_next_var /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   fn_has_code sd sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sd.cs_current_bb /\
   s.vs_inst_idx = LENGTH sd.cs_current_insts /\ LENGTH vs <= 4 ==>
@@ -530,7 +536,7 @@ Theorem raw_log_fixed_tail_summary[local]:
     b + 32 <= lb \/ lb + len <= b) /\
   MAP FDOM es.scopes = MAP FDOM es2.scopes /\ local_ptrs_reserved cenv sa /\
   eval_operands ops s = SOME (MAP event_value_to_word vs) /\
-  LENGTH ops < dimword (:256) /\ expr_type e = NoneT /\
+  LENGTH ops < dimword (:256) /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   fn_has_code sd sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sd.cs_current_bb /\
   s.vs_inst_idx = LENGTH sd.cs_current_insts /\ LENGTH vs <= 4 ==>

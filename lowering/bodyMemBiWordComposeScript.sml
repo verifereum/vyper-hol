@@ -92,6 +92,7 @@ Theorem compile_typed_word_builtin_sim_mem:
     EVERY (\e. word_value_type (expr_type e)) args /\
     typed_args_ready_mem ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args /\
     bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+    bt <> Bop In /\ bt <> Bop NotIn /\
     builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
     (!sa sb op. lower_value compile_expr cenv ty (Builtin ann bt args) sa = (op,sb) ==>
       ?xs sm. lower_word_args cenv arg_ty args sa = (xs,sm) /\ code xs sm = (op,sb)) /\

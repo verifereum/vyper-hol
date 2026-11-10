@@ -6,7 +6,7 @@
 Theory exprSimPopNestedImmutableDeploy
 Ancestors
   exprSimPopNestedBase exprSimPopImmutableTarget
-  exprSimHash fragGasSeqAbort gasSummaryCompose gasExemptCert gasSummary gasOutcome
+  exprSimHash exprSimHashBoundary fragGasSeqAbort gasSummaryCompose gasExemptCert gasSummary gasOutcome
   popTargetPre allocLimits supportedExprTraverse exprSimHypsDefs supportedProgram
   loweringPosts bodySim stmtSimProps fragGasMode fragGasPath
   exprSimPopNestedLocalSource exprSimPopNestedLocalPath
@@ -407,6 +407,7 @@ Proof
 QED
 
 Theorem immutable_ctor_pointer_post[local]:
+  post_value_type cenv e = expr_type e /\
   stmt_state_rel ctx func cenv cx es' u /\
   wb_frame cenv initial sa s0 u /\ cenv.ce_is_ctor /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\

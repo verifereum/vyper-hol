@@ -15,18 +15,6 @@ Ancestors
 Libs
   pairLib
 
-(* HELD for the post-16 bodySim child-closure wave: the elements of a
-   MakeArray operand (raw_log's topic list) are body_expr_ok in order.
-   s1-ops-widened-expr holds the same fact as body_make_array_children_ok. *)
-Theorem raw_log_make_array_children_ok:
-  !cx a t n elems.
-    body_expr_ok cx (Builtin a (MakeArray t n) elems) /\
-    builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
-    body_exprs_ok cx elems
-Proof
-  cheat
-QED
-
 Theorem raw_log_outcome_bind_core[local]:
   gas_outcome memory tops (ctx,func) a (es,s0) P E /\
   (!marks rr mid t.
@@ -176,7 +164,7 @@ Proof
   `body_exprs_ok cx topics` by
     (qpat_assum `body_exprs_ok cx [_;_]`
        (strip_assume_tac o REWRITE_RULE [body_exprs_ok_def]) >>
-     drule_all raw_log_make_array_children_ok >> simp[]) >>
+     drule_all body_make_array_children_ok >> simp[]) >>
   `!arg s. MEM arg topics /\ expr_sim_inv cenv cx env s ==>
      expr_body_pre cenv cx env arg s /\ expr_type arg = BaseT (BytesT (Fixed 32))` by
     (rpt gen_tac >> strip_tac >> conj_tac
@@ -298,6 +286,7 @@ Proof
     (fs[EVERY_MEM] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   `LENGTH ops <= 4 /\ LENGTH vs <= 4 /\ sa.cs_next_var <= sn.cs_next_var` by decide_tac >>
   `expr_type call = NoneT` by simp[Abbr `call`, expr_type_def] >>
+  `post_value_type cenv call = expr_type call` by simp[Abbr `call`] >>
   `fn_has_code sn sb func` by metis_tac[fn_has_code_mid, cs_extends_refl, cs_extends_trans] >>
   qpat_assum `LENGTH ops = LENGTH topics`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [GSYM th])) >>
@@ -356,7 +345,7 @@ Proof
   `body_exprs_ok cx topics` by
     (qpat_assum `body_exprs_ok cx [_;_]`
        (strip_assume_tac o REWRITE_RULE [body_exprs_ok_def]) >>
-     drule_all raw_log_make_array_children_ok >> simp[]) >>
+     drule_all body_make_array_children_ok >> simp[]) >>
   `!arg s. MEM arg topics /\ expr_sim_inv cenv cx env s ==>
      expr_body_pre cenv cx env arg s /\ expr_type arg = BaseT (BytesT (Fixed 32))` by
     (rpt gen_tac >> strip_tac >> conj_tac
@@ -501,16 +490,20 @@ Proof
      rpt strip_tac >> first_x_assum drule >> simp[]) >>
   `LENGTH ops <= 4 /\ LENGTH vs <= 4` by decide_tac >>
   `expr_type call = NoneT` by simp[Abbr `call`, expr_type_def] >>
+  `post_value_type cenv call = expr_type call` by simp[Abbr `call`] >>
   `fn_has_code sn sb func` by metis_tac[fn_has_code_mid, cs_extends_refl, cs_extends_trans] >>
   `LENGTH bs = 32` by fs[vyperTypingTheory.value_has_type_def] >>
   `evaluate_type (get_tenv cx) (expr_type data) =
      SOME (BaseTV (BytesT (Fixed 32)))` by simp[vyperValueTheory.evaluate_type_def] >>
   `eval_operand data_op t'' = SOME
      (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) (BytesV bs))` by
-    (qpat_assum `expr_post _ _ _ _ data _ _ _ _ _ _ _ _` mp_tac >>
-     pure_rewrite_tac[expr_post_def, expr_val_at_def] >> strip_tac >>
+    (`post_value_type cenv data = expr_type data` by
+       (irule post_value_type_word >> simp[is_word_type_def]) >>
+     qpat_assum `expr_post _ _ _ _ data _ _ _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[expr_post_def, expr_val_at_def] >>
+     asm_simp_tac std_ss [post_value_type_word, is_word_type_def] >> strip_tac >>
      drule exprBopSimPropsTheory.expr_val_rel_typed >>
-     simp[is_word_type_def]) >>
+     simp[is_word_type_def] >> disch_then irule >> gvs[]) >>
   `TAKE 32 (word_to_bytes_be
      (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) (BytesV bs))) = bs` by
     (qpat_assum `LENGTH bs = 32` mp_tac >>
@@ -541,7 +534,7 @@ Theorem raw_log_body_expr_ok:
   !cx v20 es v21.
     body_exprs_ok cx es ==> body_expr_ok cx (Call v20 RawLog es v21)
 Proof
-  rpt gen_tac >> strip_tac >> irule body_expr_ok_intro >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >>
+  rpt gen_tac >> strip_tac >> match_mp_tac body_expr_ok_intro >> conj_tac >- gvs[] >> simp[] >>
   rpt gen_tac >> strip_tac >>
   `expr_sim ctx func cenv cx ty (Call v20 RawLog es v21) es'` by
     (simp[expr_sim_def] >> rpt strip_tac >>

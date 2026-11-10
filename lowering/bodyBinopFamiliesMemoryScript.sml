@@ -374,6 +374,7 @@ Theorem compile_compare_bytes_sim_mem:
   !ctx func cenv cx bop ty ann bl el tys tv b1 b2 es0.
     (bop = Eq \/ bop = NotEq) /\
     (tv = BaseTV AddressT \/ ?m. tv = BaseTV (BytesT (Fixed m)) /\ m <= 32) /\
+    (!t. oEL 1 tys = SOME t ==> evaluate_type (get_tenv cx) t = SOME tv) /\
     value_has_type tv (BytesV b1) /\ value_has_type tv (BytesV b2) ==>
     binop_frag_mem ctx func cenv cx bop ty ann bl el tys
       (BytesV b1) (BytesV b2)
@@ -386,7 +387,12 @@ Proof
     (unabbrev_all_tac >> irule typed_val_to_w256_bytes_11 >> simp[]) >>
   irule compile_compare_words_sim_mem >>
   gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-      binop_negate_def, eval_compare_def]
+      binop_negate_def, eval_compare_def] >>
+  Cases_on `tys` >> gvs[] >>
+  rename1 `oEL 1 (head::tail)` >>
+  Cases_on `tail` >> gvs[] >>
+  rename1 `oEL 1 (head::rhs::rest)` >>
+  Cases_on `rest` >> gvs[oEL_def]
 QED
 
 (* From exprBopBitwise. *)
@@ -423,12 +429,13 @@ Theorem compile_flag_in_sim_mem:
     binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  match_mp_tac binop_frag_val_mem_straight >> conj_tac
+  >- (rpt gen_tac >> metis_tac[straight_fresh_flag_in]) >>
+  strip_tac >>
   qspecl_then [`cx`, `ann`, `bop`, `m`, `v1`, `v2`, `es0`] mp_tac
     bop_result_flag_in >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  match_mp_tac binop_frag_val_mem_straight >> conj_tac
-  >- (rpt gen_tac >> metis_tac[straight_fresh_flag_in]) >>
-  strip_tac >> disj1_tac >> simp[word_value_def] >> rpt strip_tac >>
+  disj1_tac >> simp[word_value_def] >> rpt strip_tac >>
   qspecl_then [`bop`, `x`, `y`, `ty`, `bl`, `el`, `sa`, `op`, `sb`,
                `val_to_w256 v1`, `val_to_w256 v2`, `ss`] mp_tac
     compile_flag_in_correct >>
