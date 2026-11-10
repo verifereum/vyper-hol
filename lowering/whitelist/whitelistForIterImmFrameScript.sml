@@ -224,9 +224,11 @@ Resume supported_pure_immutable_mutual[builtin]:
   `blt <> Len` by
     (Cases_on `blt = Len` >> gvs[supported_builtin_form_def, AllCaseEqs()]) >>
   Cases_on `blt = Env MsgGas` >>
+  Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
       ignore_bind_def, return_def, raise_def, AllCaseEqs(), get_accounts_def] >>
   imp_res_tac next_gas_reading_state >>
+  imp_res_tac lift_option_type_state >>
   imp_res_tac lift_sum_state >>
   imp_res_tac precompile_call_success_state >> gvs[]
   >>~- ([`lookup_immutable cx (es with gas_obs := gobs) src name = _`],
