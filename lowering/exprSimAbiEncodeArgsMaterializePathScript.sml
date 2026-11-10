@@ -1740,3 +1740,90 @@ Proof
     (gvs[expr_val_own_def, expr_val_at_def] >> metis_tac[]) >>
   gvs[expr_post_def, wb_frame_def] >> metis_tac[]
 QED
+
+Theorem materialize_storage_suffix_straight[local]:
+  do v <- emit_op opc [src]; emit_void MSTORE [dst; v] od sa = (u,sb) /\
+  (opc = SLOAD \/ opc = TLOAD) ==>
+  dec_straight sa sb /\
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
+Proof
+  simp[emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+       comp_bind_def, comp_return_def, comp_ignore_bind_def,
+       fresh_var_def, fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
+  simp[dec_straight_def, inst_extends_def,
+       exprLoweringPropsTheory.emitted_insts_def, fragExecTheory.emitted_blocks_def,
+       rich_listTheory.DROP_APPEND, arithmeticTheory.SUB_EQ_0,
+       arithmeticTheory.SUB_PLUS,
+       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
+QED
+
+Theorem materialize_storage_suffix_owned_path:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  (if (type_memory_bytes ce ty + 31) DIV 32 = 1 then
+     do value <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
+        emit_void MSTORE [dst; value] od
+   else do compile_word_copy_loop src dst
+        ((type_memory_bytes ce ty + 31) DIV 32) loc LocMemory F;
+        return () od) mid = (result,sb) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at mid x) /\
+  stmt_state_rel ctx func ce cx es u /\
+  storage_holds cx (loc = LocTransient) ty (Value v) a es u /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  type_memory_bytes ce ty = type_memory_size tv /\
+  eval_operand src u = SOME a /\ eval_operand dst u = SOME w /\
+  w2n w + type_memory_bytes ce ty < dimword (:256) /\
+  fn_has_code mid sb func /\ ~u.vs_halted /\
+  u.vs_current_bb = mid.cs_current_bb /\
+  u.vs_inst_idx = LENGTH mid.cs_current_insts ==>
+  ?z. gas_marked_path F ctx func u 0 (OK z) /\
+    z.vs_current_bb = sb.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~z.vs_halted /\
+    copy_static z = copy_static u /\
+    (!x. not_fresh_at mid x ==> lookup_var x z = lookup_var x u) /\
+    LENGTH u.vs_memory <= LENGTH z.vs_memory /\
+    (!off len. off + len <= w2n w \/ w2n w + type_memory_size tv <= off ==>
+       mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory) /\
+    val_wf tv v /\ val_in_memory tv v (w2n w) z.vs_memory /\
+    val_footprint tv v <= type_memory_size tv /\ eval_operand dst z = SOME w
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  drule_all materialize_physical_copy_capacity >> strip_tac >>
+  Cases_on `(type_memory_bytes ce ty + 31) DIV 32 = 1`
+  >- (gnvs[] >>
+      `type_slot_size tv = 1` by
+        (qspec_then `tv` mp_tac exprSimFieldLayoutTheory.slot_count_of_memory_size >>
+         simp[]) >>
+      drule_all (exprSimCopyTheory.storage_copy_suffix_value_frag |> SPEC_ALL |>
+        Q.INST [`n` |-> `1`, `R` |-> `\r. F`] |>
+        SRULE [wordsTheory.dimword_def]) >> strip_tac >>
+      `dec_straight mid sb /\
+       EVERY (\i. i.inst_opcode <> GAS) (emitted_insts mid sb)` by
+        (drule materialize_storage_suffix_straight >>
+         Cases_on `loc = LocStorage` >> simp[]) >>
+      drule materialize_straight_zero_path >>
+      disch_then (qspec_then `u` mp_tac) >> simp[] >> metis_tac[]) >>
+  gnvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> gnvs[] >>
+  rename1 `fn_has_code mid sb func` >>
+  `?t. gas_marked_path F ctx func u 0 (OK t) /\
+       copy_prefix loc a (w2n w) ((type_memory_size tv + 31) DIV 32)
+         u ((type_memory_size tv + 31) DIV 32) t /\
+       LENGTH u.vs_memory <= LENGTH t.vs_memory /\
+       (!x. not_fresh_at mid x ==> lookup_var x t = lookup_var x u) /\
+       t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts` by
+    (irule (PairRules.PSPEC_ALL compile_storage_copy_content_capacity_path) >>
+     simp[] >> metis_tac[wordsTheory.dimword_def, arithmeticTheory.ADD_COMM]) >>
+  `copy_prefix (if loc = LocTransient then LocTransient else LocStorage)
+     a (w2n w) ((type_memory_size tv + 31) DIV 32) u
+       ((type_memory_size tv + 31) DIV 32) t` by
+    (Cases_on `loc = LocTransient` >> gvs[]) >>
+  drule_all materialize_storage_capacity_contents >> strip_tac >>
+  `copy_static t = copy_static u` by gvs[exprSimStorageCopyTheory.copy_prefix_def] >>
+  `eval_operand dst t = SOME w` by
+    (drule exprSimStorageCopyTheory.copy_static_fields >> strip_tac >>
+     Cases_on `dst` >> gvs[venomStateTheory.eval_operand_def]) >>
+  qexists_tac `t` >>
+  gvs[exprSimStorageCopyTheory.copy_prefix_def] >>
+  metis_tac[exprSimStorageCopyTheory.copy_static_fields]
+QED
