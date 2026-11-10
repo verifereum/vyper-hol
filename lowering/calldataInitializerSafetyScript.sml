@@ -22,7 +22,7 @@ Proof
   `!fuel. step_inst fuel ctx (mk_inst id JMP [Label hdr] []) s =
      OK (jump_to hdr s)` by
     (simp[step_inst_non_invoke, mk_inst_def] >>
-     simp[Once step_inst_base_def, mk_inst_def, jump_to_def]) >>
+     simp[step_inst_base_opcode_eqs, jump_to_def]) >>
   ho_match_mp_tac (GEN_ALL decoder_edge_all_fuel_pullback) >>
   goal_assum (drule_at (Pos hd)) >>
   qexists_tac `hb` >> simp[jump_to_def] >> conj_tac

@@ -11,7 +11,7 @@ Theorem member_add_fresh[local]:
   step_inst_base (mk_inst id ADD ops [STRING #"%" (toString n)]) s = OK t ==>
   fresh_vars_wrt limit t
 Proof
-  simp[step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  simp[mk_inst_def, step_inst_base_opcode_eqs, exec_pure2_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   irule abi_decoder_generated_update_fresh >> simp[]
 QED
@@ -21,7 +21,7 @@ Theorem member_load_fresh[local]:
   step_inst_base (mk_inst id CALLDATALOAD ops [STRING #"%" (toString n)]) s = OK t ==>
   fresh_vars_wrt limit t
 Proof
-  simp[step_inst_base_def, mk_inst_def, exec_read1_def] >>
+  simp[mk_inst_def, step_inst_base_opcode_eqs, exec_read1_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   irule abi_decoder_generated_update_fresh >> simp[]
 QED
