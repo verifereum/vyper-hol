@@ -58,3 +58,73 @@ Proof
   simp[sym_step_push_bytes, sym_kinds_ok_base_change,
     sym_kinds_ok_push, op_kind_ok_def, asm_next_def]
 QED
+
+Theorem sym_input_dup[local]:
+  stack_get_depth op ps.ps_stack = SOME dist /\ do_dup dist ps = (ops,out) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> irule sym_do_dup >> metis_tac[planWfTheory.stack_get_depth_bound]
+QED
+
+Theorem sym_input_var[local]:
+  (if MEM v nl then
+     case stack_get_depth (Var v) ps.ps_stack of
+       NONE => ([],ps) | SOME dist => do_dup dist ps
+   else ([],ps)) = (ops,out) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> Cases_on `MEM v nl`
+  >- (Cases_on `stack_get_depth (Var v) ps.ps_stack`
+      >- gvs[execute_plan_def, sym_steps_def] >>
+      irule sym_input_dup >> gvs[SF SFY_ss]) >>
+  gvs[execute_plan_def, sym_steps_def]
+QED
+
+Theorem sym_emit_one_input_unspilled:
+  opc <> INVOKE /\
+  ~(is_var_operand op /\ IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  emit_one_input opc nl op ps = (ops,out) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> Cases_on `op`
+  >- (gvs[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def] >>
+      drule_all sym_exec_push_literal >> metis_tac[arithmeticTheory.ADD_SYM]) 
+  >- (irule sym_input_var >>
+      gvs[SF SFY_ss, emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+        GSYM pairTheory.LAMBDA_PROD]) >>
+  gvs[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def] >>
+  drule_all sym_exec_push_label >> metis_tac[arithmeticTheory.ADD_SYM]
+QED
