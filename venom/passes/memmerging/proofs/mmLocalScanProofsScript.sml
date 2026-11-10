@@ -5791,6 +5791,47 @@ Proof
   metis_tac[mm_local_read_memory_bytes]
 QED
 
+Theorem mm_local_history_copy_compatible[local]:
+  j < k /\ k < n /\ mm_local_history is H n /\
+  (EL j is).inst_opcode = MCOPY /\
+  (EL j is).inst_operands = [Lit dst1; Lit src1; Lit len1] /\
+  (EL k is).inst_opcode = MCOPY /\
+  (EL k is).inst_operands = [Lit dst2; Lit src2; Lit len2] /\
+  c1 = <| cg_dst := w2n dst1; cg_src := w2n src1; cg_length := w2n len1;
+           cg_inst_ids := [(EL j is).inst_id] |> /\
+  c2 = <| cg_dst := w2n dst2; cg_src := w2n src2; cg_length := w2n len2;
+           cg_inst_ids := [(EL k is).inst_id] |> /\
+  c1.cg_src + c2.cg_dst = c2.cg_src + c1.cg_dst /\
+  mm_local_write_capture is H n j = SOME (d,bs) /\
+  mm_local_write_capture is H n k = SOME (a,cs) /\
+  LIST_REL (\q w. mm_local_write_capture is H n q = SOME w) (j::between) ws /\
+  EVERY (\q. j < q /\ q < k) between /\
+  (H k).vs_memory =
+    (FOLDL (\st (a,bs). write_memory_with_expansion a bs st) (H j) ws).vs_memory /\
+  EVERY (\(a,bs). c2.cg_length = 0 \/ bs = [] \/
+    c2.cg_src + c2.cg_length <= a \/ a + LENGTH bs <= c2.cg_src) ws ==>
+  mm_local_write_compatible d bs a cs
+Proof
+  strip_tac >>
+  `j < n` by decide_tac >>
+  `mm_local_write_capture is H n j =
+    SOME (w2n dst1,read_memory (w2n src1) (w2n len1) (H j))` by
+    (irule (cj 1 mm_local_write_capture_copy) >> simp[]) >>
+  `mm_local_write_capture is H n k =
+    SOME (w2n dst2,read_memory (w2n src2) (w2n len2) (H k))` by
+    (irule (cj 1 mm_local_write_capture_copy) >> simp[]) >>
+  `read_memory c2.cg_src c2.cg_length (H k) =
+   read_memory c2.cg_src c2.cg_length (H j)` by
+    (irule mm_local_read_write_log_memory >> qexists_tac `ws` >> simp[]) >>
+  Cases_on `bs = []` >- simp[mm_local_write_compatible_def] >>
+  gvs[] >>
+  pure_rewrite_tac[mm_local_write_compatible_def, mm_local_read_memory_bytes,
+       mm_local_bytes_def, LENGTH_GENLIST] >> rpt strip_tac >>
+  `x - w2n dst1 < w2n len1 /\ x - w2n dst2 < w2n len2 /\
+   w2n src1 + (x - w2n dst1) = w2n src2 + (x - w2n dst2)` by decide_tac >>
+  asm_simp_tac bool_ss [EL_GENLIST] >> simp[]
+QED
+
 Theorem mm_local_capture_write_merge[local]:
   c1.cg_dst <= c2.cg_dst /\ copy_can_merge c1 c2 /\
   p1 = read_memory c1.cg_src c1.cg_length (H j1) /\
@@ -5841,6 +5882,41 @@ Proof
        (qspecl_then [`[]`, `h`, `pre`, `k`, `post`] mp_tac) >>
      gvs[quantHeuristicsTheory.PAIR_EQ_EXPAND]) >>
   drule mm_local_write_log_commute >> disch_then (qspec_then `s` mp_tac) >>
+  simp[FOLDL_MAP, pairTheory.UNCURRY, combinTheory.o_DEF] >>
+  strip_tac >> simp[]
+QED
+
+Theorem mm_local_write_log_compatible_partition[local]:
+  !js s.
+  (!pre j mid k post. js = pre ++ [j] ++ mid ++ [k] ++ post /\ ~P j /\ P k ==>
+    mm_local_write_compatible (FST (wr j)) (SND (wr j))
+      (FST (wr k)) (SND (wr k))) ==>
+  FOLDL (\st j. write_memory_with_expansion (FST (wr j)) (SND (wr j)) st) s js =
+  FOLDL (\st j. write_memory_with_expansion (FST (wr j)) (SND (wr j)) st)
+    (FOLDL (\st j. write_memory_with_expansion (FST (wr j)) (SND (wr j)) st)
+      s (FILTER P js)) (FILTER (\j. ~P j) js)
+Proof
+  Induct_on `js` >- simp[] >> rpt gen_tac >> strip_tac >>
+  `!pre j mid k post. js = pre ++ [j] ++ mid ++ [k] ++ post /\ ~P j /\ P k ==>
+    mm_local_write_compatible (FST (wr j)) (SND (wr j))
+      (FST (wr k)) (SND (wr k))` by
+      (rpt strip_tac >>
+       first_x_assum (qspecl_then [`h::pre`, `j`, `mid`, `k`, `post`] mp_tac) >> simp[]) >>
+  first_x_assum (qspec_then `write_memory_with_expansion (FST (wr h)) (SND (wr h)) s` mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >> Cases_on `P h`
+  >- simp[] >>
+  `EVERY (\(d,bs). mm_local_write_compatible d bs (FST (wr h)) (SND (wr h)))
+    (MAP wr (FILTER P js))` by
+    (simp[EVERY_MEM, MEM_MAP, MEM_FILTER, pairTheory.FORALL_PROD] >>
+     rpt strip_tac >> gvs[] >>
+     rename1 `MEM k js` >>
+     qpat_x_assum `MEM k js`
+       (qx_choose_then `pre` (qx_choose_then `post` assume_tac) o REWRITE_RULE [MEM_SPLIT]) >>
+     qpat_x_assum `!pre j mid k post. h::js = _ /\ _ ==> _`
+       (qspecl_then [`[]`, `h`, `pre`, `k`, `post`] mp_tac) >>
+     gvs[quantHeuristicsTheory.PAIR_EQ_EXPAND] >>
+     metis_tac[mm_local_write_compatible_sym]) >>
+  drule mm_local_write_log_compatible_commute >> disch_then (qspec_then `s` mp_tac) >>
   simp[FOLDL_MAP, pairTheory.UNCURRY, combinTheory.o_DEF] >>
   strip_tac >> simp[]
 QED
@@ -5905,6 +5981,89 @@ Proof
   `mm_local_pending cap (FILTER P js ++ FILTER (\j. ~P j) js) s t` by
     (irule mm_local_pending_partition >> simp[] >> metis_tac[]) >>
   drule_all mm_local_pending_discharge_prefix >> simp[]
+QED
+
+Theorem mm_local_pending_compatible_partition[local]:
+  mm_local_pending cap js s t /\
+  (!pre j mid k post d bs a cs.
+    js = pre ++ [j] ++ mid ++ [k] ++ post /\ ~P j /\ P k /\
+    cap j = SOME (d,bs) /\ cap k = SOME (a,cs) ==>
+    mm_local_write_compatible d bs a cs) ==>
+  mm_local_pending cap (FILTER P js ++ FILTER (\j. ~P j) js) s t
+Proof
+  simp[mm_local_pending_def] >> rpt strip_tac >>
+  drule mm_local_capture_log_canonical >> strip_tac >> gvs[] >>
+  qexists `MAP (THE o cap) (FILTER P js ++ FILTER (\j. ~P j) js)` >>
+  conj_tac
+  >- (simp[LIST_REL_MAP2] >> irule EVERY2_refl >>
+      gvs[EVERY_MEM, MEM_FILTER] >> rpt strip_tac >>
+      `IS_SOME (cap x)` by metis_tac[] >>
+      Cases_on `cap x` >> gvs[]) >>
+  `FOLDL (\st j. write_memory_with_expansion
+      (FST (THE (cap j))) (SND (THE (cap j))) st) t js =
+    FOLDL (\st j. write_memory_with_expansion
+      (FST (THE (cap j))) (SND (THE (cap j))) st)
+      (FOLDL (\st j. write_memory_with_expansion
+        (FST (THE (cap j))) (SND (THE (cap j))) st) t (FILTER P js))
+      (FILTER (\j. ~P j) js)` by
+    (irule (SRULE [combinTheory.o_DEF]
+      (Q.INST [`wr` |-> `THE o cap`] mm_local_write_log_compatible_partition)) >>
+      rpt strip_tac >>
+      `IS_SOME (cap j) /\ IS_SOME (cap k)` by gvs[EVERY_MEM, MEM_APPEND] >>
+      Cases_on `cap j` >> Cases_on `cap k` >> gvs[] >>
+      PairCases_on `x` >> PairCases_on `x'` >> gvs[] >> metis_tac[]) >>
+  gvs[FOLDL_MAP, FOLDL_APPEND, pairTheory.UNCURRY, combinTheory.o_DEF]
+QED
+
+Theorem mm_local_pending_compatible_discharge_prefix[local]:
+  mm_local_pending cap (done ++ keep) s t /\
+  LIST_REL (\j w. cap j = SOME w) done old /\
+  LIST_REL (\j w. cap j = SOME w) keep rest /\
+  (!v. write_memory_with_expansion d payload
+    (FOLDL (\st (a,bs). write_memory_with_expansion a bs st) v old) =
+    write_memory_with_expansion dst merged v) /\
+  EVERY (\(a,bs). mm_local_write_compatible a bs d payload) rest /\
+  s'.vs_memory = (write_memory_with_expansion d payload s).vs_memory /\
+  t'.vs_memory = (write_memory_with_expansion dst merged t).vs_memory ==>
+  mm_local_pending cap keep s' t'
+Proof
+  strip_tac >>
+  `LIST_REL (\j w. cap j = SOME w) (done ++ keep) (old ++ rest)` by
+    (irule rich_listTheory.EVERY2_APPEND_suff >> simp[]) >>
+  drule_all mm_local_pending_log >> simp[FOLDL_APPEND] >> strip_tac >>
+  drule mm_local_write_log_compatible_commute >>
+  disch_then (qspec_then
+    `FOLDL (\st (a,bs). write_memory_with_expansion a bs st) t old` mp_tac) >>
+  simp[] >> strip_tac >>
+  `s'.vs_memory =
+    (FOLDL (\st (a,bs). write_memory_with_expansion a bs st)
+      (write_memory_with_expansion dst merged t) rest).vs_memory` by
+    (qpat_x_assum `write_memory_with_expansion _ _ _ = _`
+       (fn th => once_rewrite_tac[GSYM th]) >> simp[write_as_replace]) >>
+  simp[mm_local_pending_def] >> qexists `rest` >> simp[] >>
+  metis_tac[mm_local_write_log_memory_cong]
+QED
+
+Theorem mm_local_pending_compatible_discharge_filter[local]:
+  mm_local_pending cap js s t /\
+  (!pre j mid k post d bs a cs.
+    js = pre ++ [j] ++ mid ++ [k] ++ post /\ ~P j /\ P k /\
+    cap j = SOME (d,bs) /\ cap k = SOME (a,cs) ==>
+    mm_local_write_compatible d bs a cs) /\
+  LIST_REL (\j w. cap j = SOME w) (FILTER P js) old /\
+  LIST_REL (\j w. cap j = SOME w) (FILTER (\j. ~P j) js) rest /\
+  (!v. write_memory_with_expansion d payload
+    (FOLDL (\st (a,bs). write_memory_with_expansion a bs st) v old) =
+    write_memory_with_expansion dst merged v) /\
+  EVERY (\(a,bs). mm_local_write_compatible a bs d payload) rest /\
+  s'.vs_memory = (write_memory_with_expansion d payload s).vs_memory /\
+  t'.vs_memory = (write_memory_with_expansion dst merged t).vs_memory ==>
+  mm_local_pending cap (FILTER (\j. ~P j) js) s' t'
+Proof
+  strip_tac >>
+  `mm_local_pending cap (FILTER P js ++ FILTER (\j. ~P j) js) s t` by
+    (irule mm_local_pending_compatible_partition >> simp[] >> metis_tac[]) >>
+  drule_all mm_local_pending_compatible_discharge_prefix >> simp[]
 QED
 
 Theorem mm_local_pending_copy_birth[local]:
@@ -6115,6 +6274,23 @@ Proof
   rpt IF_CASES_TAC >>
   gvs[flush_copies_def, raw_hazards_def, copies_that_overwrite_def, MEM_FILTER] >>
   rpt strip_tac >> gvs[FILTER_EQ_NIL, EVERY_MEM, MEM_FILTER]
+QED
+
+Theorem mm_local_hazards_capture_source_exclusion[local]:
+  MEM c1 (flush_hazards Mem2Mem ss c2).ss_copies /\
+  LENGTH bs = c1.cg_length ==>
+  c2.cg_length = 0 \/ bs = [] \/
+  c2.cg_src + c2.cg_length <= c1.cg_dst \/
+  c1.cg_dst + LENGTH bs <= c2.cg_src
+Proof
+  strip_tac >> drule mm_local_hazards_source_exclusion >>
+  simp[copy_overwrites_def, copy_dst_interval_def, copy_src_interval_def,
+       mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
+       mmIntervalTheory.interval_end_def,
+       arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `bs = []` >> gvs[] >>
+  `0 < LENGTH bs` by (Cases_on `bs` >> gvs[]) >> decide_tac
 QED
 
 Theorem mm_local_prefix_future_hazard[local]:
