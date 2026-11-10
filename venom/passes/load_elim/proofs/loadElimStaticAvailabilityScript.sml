@@ -1,6 +1,6 @@
 Theory loadElimStaticAvailability
 Ancestors
-  loadElimStaticGeneration loadElimDefinitionCuts loadElimConvergence
+  loadElimStaticGeneration loadElimDefinitionCuts loadElimConvergence venomWfProps
   loadElimNormalizeAvailability loadElimDefs loadElimSolverHelpers
   simplifyCfgWfssa simplifyCfgPhiRepair simplifyCfgStruct simplifyCfgDataflow
   loadElimReachableSSA
