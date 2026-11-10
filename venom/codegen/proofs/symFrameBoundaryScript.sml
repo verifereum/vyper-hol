@@ -1835,6 +1835,82 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
+Theorem entry_param_kind:
+  codegen_ready_fn fn /\ retpc_shape_ok fn /\
+  MEM inst (get_params (HD fn.fn_blocks).bb_instructions) ==>
+  (op_kind_ok fn ret (Var (HD inst.inst_outputs)) sv <=>
+   if inst.inst_opcode = RETPC_PARAM then sv = Lab ret 0 else ?w. sv = Val w)
+Proof
+  strip_tac >>
+  drule (cj 1 fnFrameBoundaryEntryParamsTheory.canonical_get_params_layout) >>
+  disch_then (qspec_then `get_params (HD fn.fn_blocks).bb_instructions` mp_tac) >>
+  simp[] >> strip_tac >>
+  `?j. j < LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
+       inst = EL j (get_params (HD fn.fn_blocks).bb_instructions)` by
+    metis_tac[listTheory.MEM_EL] >>
+  drule_all fnFrameBoundaryEntryParamsTheory.param_insts_from_el >> simp[] >> strip_tac >>
+  irule param_output_kind >>
+  qspec_then `(HD fn.fn_blocks).bb_instructions` strip_assume_tac
+    fnFrameBoundaryEntryParamsTheory.get_params_suffix >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[codegen_ready_fn_def, callLayoutDefsTheory.canonical_param_prefix_def,
+    callLayoutDefsTheory.param_inst_at_def,
+    listTheory.LENGTH_EQ_NUM_compute, venomInstTheory.is_param_opcode_iff,
+    venomInstTheory.fn_insts_def, venomInstTheory.fn_insts_blocks_def] >>
+  metis_tac[listTheory.MEM_APPEND]
+QED
+
+Theorem entry_param_list_kinds:
+  !fn params ret ws.
+  codegen_ready_fn fn /\ retpc_shape_ok fn /\
+  params = get_params (HD fn.fn_blocks).bb_instructions /\
+  LENGTH ws + (if fn_has_retpc fn then 1 else 0) = LENGTH params ==>
+  LIST_REL (op_kind_ok fn ret) (MAP (\i. Var (HD i.inst_outputs)) params)
+    (MAP Val ws ++ if fn_has_retpc fn then [Lab ret 0] else [])
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[listTheory.LIST_REL_EL_EQN] >>
+  conj_tac >- (Cases_on `fn_has_retpc fn` >> gvs[]) >>
+  rpt strip_tac >> simp[listTheory.EL_MAP] >>
+  `MEM (EL n params) (get_params (HD fn.fn_blocks).bb_instructions)` by
+    metis_tac[listTheory.EL_MEM, listTheory.LENGTH_MAP] >>
+  drule_all entry_param_kind >> strip_tac >>
+  drule_all fnFrameBoundaryEntryParamsTheory.canonical_get_params_layout >> strip_tac >>
+  `fn_has_retpc fn <=> EXISTS (\i. i.inst_opcode = RETPC_PARAM) params` by
+    gvs[frameRelTheory.fn_has_retpc_def] >>
+  `~EXISTS (\i. i.inst_opcode = RETPC_PARAM) ordinary` by
+    (gvs[listTheory.EXISTS_MEM, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  qpat_x_assum `params = get_params _`
+    (fn th => full_simp_tac pure_ss [GSYM th]) >>
+  gvs[listTheory.EXISTS_APPEND] >>
+  Cases_on `n < LENGTH ordinary` >>
+  gvs[listTheory.EL_APPEND_EQN, listTheory.EVERY_EL,
+      listTheory.EL_MAP] >>
+  `n = LENGTH ordinary` by decide_tac >> gvs[]
+QED
+
+Theorem entry_installed_sym_kinds:
+  !fn params ws pi ch growth spill_base lbl_ctr ss ret srest cp.
+  codegen_ready_fn fn /\ retpc_shape_ok fn /\
+  params = get_params (HD fn.fn_blocks).bb_instructions /\
+  LENGTH ws + (if fn_has_retpc fn then 1 else 0) = LENGTH params /\
+  pi = (init_cleanup_plan_state ch growth spill_base lbl_ctr) with
+    ps_stack := MAP (\i. Var (HD i.inst_outputs)) params /\
+  ss.sym_stack = (if fn_has_retpc fn then [Lab ret 0] else []) ++
+    MAP Val (REVERSE ws) ++ srest /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) ==>
+  sym_kinds_ok cp fn ret srest pi ss
+Proof
+  rpt gen_tac >> strip_tac >> drule_all entry_param_list_kinds >>
+  disch_then (qspec_then `ret` mp_tac) >>
+  strip_tac >> Cases_on `fn_has_retpc fn` >> gvs[] >>
+  drule listTheory.EVERY2_REVERSE >>
+  pure_rewrite_tac [listTheory.REVERSE_APPEND, listTheory.REVERSE_DEF] >>
+  strip_tac >>
+  gvs[sym_kinds_ok_def, init_cleanup_plan_state_def, init_plan_state_def,
+      listTheory.MAP_REVERSE]
+QED
+
 Theorem sym_phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0
