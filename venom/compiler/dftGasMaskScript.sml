@@ -1817,6 +1817,41 @@ Proof
   gvs[venomStateTheory.update_var_def]
 QED
 
+Theorem invoke_reached_prefix_observations[local]:
+  y.inst_opcode = INVOKE /\
+  EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x) pre /\
+  LENGTH pg = LENGTH (FILTER (\x. x.inst_opcode = GAS) pre) /\
+  FOLDR (dft_exec_cons n C) OK pre
+    (s with vs_gas_readings := pg ++ rest) = OK u ==>
+  !k owner.
+    (terminates (step_inst k C y u) <=>
+     terminates (step_inst k C y
+       (s with <|vs_gas_readings := rest;
+                 vs_inst_idx := s.vs_inst_idx + LENGTH pre|>))) /\
+    gas_events_step k C owner y u =
+    gas_events_step k C owner y
+      (s with <|vs_gas_readings := rest;
+                vs_inst_idx := s.vs_inst_idx + LENGTH pre|>)
+Proof
+  strip_tac >> drule_all invoke_partner_prefix_concrete >> strip_tac >>
+  `EVERY (\q. ~MEM (Var (FST q)) y.inst_operands /\
+                ~MEM (FST q) y.inst_outputs) us` by
+    (fs[EVERY_MEM, MEM_FLAT, MEM_MAP] >> rpt strip_tac >>
+     metis_tac[dft_swap_output_frame]) >>
+  rpt gen_tac >> conj_tac
+  >- (drule_all invoke_updates_concrete_frame >>
+      disch_then (qspecl_then [`k`, `C`,
+        `s with <|vs_gas_readings := rest;
+                  vs_inst_idx := s.vs_inst_idx + LENGTH pre|>`] mp_tac) >>
+      strip_tac >> gvs[] >>
+      Cases_on `step_inst k C y
+        (s with <|vs_gas_readings := rest;
+                  vs_inst_idx := s.vs_inst_idx + LENGTH pre|>)` >>
+      gvs[passSimulationDefsTheory.terminates_def]) >>
+  gvs[] >> irule gas_events_invoke_updates >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
+
 Theorem prefix_extract_mask[local]:
   !fuel C C'.
   let CalleeIH = (!fn fn' t.
