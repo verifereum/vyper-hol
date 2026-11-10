@@ -10,7 +10,8 @@ Ancestors
   bodyIntCallFamAggSubscriptCuts bodyIntCallFamAggSubscriptResources
   bodyIntCallFamAggSubscriptScratch bodyIntCallFamAggSubscriptTailRun
   bodyIntCallFamAggSubscriptHashTail bodyIntCallFamAggSubscriptAllocRun
-  bodyIntCallFamAggSubscriptWordRun
+  bodyIntCallFamAggSubscriptWordRun bodyIntCallFamAggSubscriptArrayWindow
+  bodyIntCallFamAggSubscriptArrayRun
   bodyIntCallFamAggSubscriptBaseOutcome bodyIntCallFamAggSubscriptPosts
 
 Theorem intcall_subscript_step:
