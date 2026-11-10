@@ -21,6 +21,7 @@ Proof
   drule_all abi_decoder_valid_array_init_inputs >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `LENGTH vs < dimword (:256)` by metis_tac[LESS_EQ_LESS_TRANS] >>
+  `abi_decode_load CALLDATALOAD (n2w sb : bytes32) initial = n2w (LENGTH vs)` by fs[] >>
   asm_rewrite_tac[] >>
   qpat_x_assum `all_have_type tv vs` mp_tac >>
   simp_tac bool_ss [all_have_type_EVERY, EVERY_MEM] >>

@@ -156,7 +156,7 @@ Resume calldata_valid_header_prepare[source_fields]:
   qpat_assum `eval_operand ip u = SOME (n2w p)` mp_tac >>
   qpat_assum `mload p u = n2w j` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
-  fs[abi_decoder_ranges_def, abi_decode_source_def, mload_def]
+  fs[abi_decoder_ranges_def, abi_decode_source_def, mload_def, eval_operand_def]
 QED
 
 Finalise calldata_valid_header_prepare

@@ -43,7 +43,8 @@ Proof
   qpat_x_assum `abi_decode_loop_suffix _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [] >> strip_tac >>
   drule abi_decoder_loop_suffix_facts >> strip_tac >>
-  gvs[fn_has_code_def] >> metis_tac[]
+  gvs[fn_has_code_def, abiDecoderExecutionTheory.abi_decode_position_header_delta_def,
+      abiDecoderExecutionTheory.abi_decode_position_header_zero] >> metis_tac[]
 QED
 
 Theorem calldata_array_loop_function_code:

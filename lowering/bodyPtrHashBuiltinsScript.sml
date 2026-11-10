@@ -21,9 +21,8 @@ Theorem hash_builtin_expr_ptr_ok:
     body_expr_ptr_ok cx (Builtin ty bt es)
 Proof
   rpt gen_tac >> strip_tac >>
-  rewrite_tac[body_expr_ptr_ok_def] >> reverse conj_tac
-  >- (rpt strip_tac >> gvs[]) >>
-  rpt gen_tac >> strip_tac >>
+  rewrite_tac[body_expr_ptr_ok_def] >> conj_tac >> rpt gen_tac >> strip_tac
+  >>~- ([`Builtin _ _ _ = Builtin _ (MakeArray _ _) _`], gvs[]) >>
   `LENGTH es = 1` by metis_tac[hash_body_pre_arity] >>
   `?e. es = [e]` by (Cases_on `es` >> gvs[LENGTH_EQ_NUM]) >>
   gvs[] >> (

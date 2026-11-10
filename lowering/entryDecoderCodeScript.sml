@@ -61,7 +61,8 @@ Theorem entry_code_decode_dyn_elem_ptr:
     (compile_abi_decode_dyn_elem_ptr load_opc (Lit 0w) elem_src src_data hi elem_abi_sz)
 Proof
   strip_tac >> Cases_on `hi = Lit 0w` >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, compileEnvTheory.comp_ignore_bind_def] >>
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
+       compileEnvTheory.comp_ignore_bind_def] >>
   rpt (irule entry_code_bind >>
        simp[entry_code_emit_op, entry_code_emit_void, entry_code_return] >>
        rpt gen_tac)

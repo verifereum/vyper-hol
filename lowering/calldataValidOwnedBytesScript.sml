@@ -38,7 +38,8 @@ Theorem valid_bytes_owned_sequence[local]:
       eval_operand op actual = eval_operand op initial)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all abi_decoder_valid_bytes_input >> strip_tac >>
+  drule_all (SRULE [] (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_valid_bytes_input)) >>
+  strip_tac >>
   qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
   qpat_assum `abi_decoder_metadata _ _ _ _ _ _ _`

@@ -45,8 +45,9 @@ Theorem member_address_limit_fresh[local]:
   fresh_vars_wrt limit_st t
 Proof
   Cases_on `dyn` >>
-  simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, emit_op_def, fresh_var_def,
+       fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
   simp_tac (srw_ss()) [emitted_insts_def] >>
