@@ -5,7 +5,7 @@ Ancestors
   stmtSimDeclSource gasSummary fragGasMode vyperState finite_map
   exprLoweringProps compileEnv venomState widenedInternalCallLayout
   exprSimSource externalNormalizePremises exprSimHyps exprSimDefs
-  exprSimMemDefs vyperAST loweringPosts
+  exprSimMemDefs vyperAST loweringPosts localCopyDestinationMem bodyMemoryDefs
 Libs monadsyntax
 
 Theorem typed_copy_declare_marked_mem[local]:
@@ -185,4 +185,35 @@ Proof
   qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[vv_post_def, vv_holds_def] >> strip_tac >>
   gvs[vv_store_bound_def] >> metis_tac[]
+QED
+
+Theorem retained_declaration_destination[local]:
+  vv_post ctx fn ce cx e es sa sb s0 ee raw vv t /\
+  compile_expr ce (expr_type e) e sa = (vv,sb) /\
+  local_ptrs_reserved ce sa /\ not_fresh_at sa p /\
+  FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  lookup_scopes id ee.scopes = NONE /\
+  lookup_var p s0 = SOME w /\ FLOOKUP s0.vs_allocas aid = SOME (w2n w,sz) /\
+  n <= sz /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+  return_buf_frame d ce sa s0 ==>
+  lookup_var p t = SOME w /\ FLOOKUP t.vs_allocas aid = SOME (w2n w,sz) /\
+  w2n w + n <= t.vs_alloca_next /\ w2n w + n < dimword(:256) /\
+  local_ptrs_reserved ce sb /\ not_fresh_at sb p /\
+  not_local_ptr ce ee.scopes p /\ return_buf_frame d ce sb t
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx fn ce cx ee t /\
+   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
+   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)` by
+    fs[vv_post_def] >>
+  `lookup_var p t = SOME w /\ FLOOKUP t.vs_allocas aid = SOME (w2n w,sz)` by metis_tac[] >>
+  `w2n w + n <= t.vs_alloca_next /\ w2n w + n < dimword(:256)` by
+    (drule_all allocated_copy_destination_extent >> simp[]) >>
+  `sa.cs_next_var <= sb.cs_next_var` by metis_tac[cj 1 compile_expr_grows] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  conj_tac >- metis_tac[local_ptrs_reserved_next_var] >>
+  conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  conj_tac >- metis_tac[local_ptrs_reserved_not_live] >>
+  irule return_buf_frame_frame >> metis_tac[]
 QED
