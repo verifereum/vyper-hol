@@ -330,3 +330,133 @@ Proof
   metis_tac[inline_annotated_origin_labels,
     functionInlinerWfTheory.inline_return_clone_distinct]
 QED
+
+(* An emitted call occupies the unique cell of an unchanged expansion. *)
+Theorem inline_rewrite_invoke_cell:
+  !args outs ret inst pi k ri.
+    k < LENGTH (FST (rewrite_inline_inst args outs ret inst pi)) /\
+    EL k (FST (rewrite_inline_inst args outs ret inst pi)) = ri /\
+    ri.inst_opcode = INVOKE ==>
+    k = 0 /\ ri = inst /\
+    rewrite_inline_inst args outs ret inst pi = ([inst],pi)
+Proof
+  rpt strip_tac >>
+  `ri = inst` by
+    (irule rewrite_inline_inst_survivor >> simp[] >>
+     metis_tac[MEM_EL]) >>
+  gvs[rewrite_inline_inst_def, is_param_opcode_def] >>
+  `k = 0` by decide_tac >> gvs[]
+QED
+
+Theorem inline_rewrite_invoke_index:
+  !insts args outs ret pi k ri.
+    k < LENGTH (FST (rewrite_inline_insts args outs ret insts pi)) /\
+    EL k (FST (rewrite_inline_insts args outs ret insts pi)) = ri /\
+    ri.inst_opcode = INVOKE ==>
+    ?j. j < LENGTH insts /\ EL j insts = ri /\
+        k = LENGTH (FST (rewrite_inline_insts args outs ret (TAKE j insts) pi))
+Proof
+  Induct >- simp[rewrite_inline_insts_def] >>
+  map_every qx_gen_tac [`h`,`args`,`outs`,`ret`,`idx`,`k`,`ri`] >>
+  simp[rewrite_inline_insts_def, LET_THM, pairTheory.UNCURRY] >>
+  strip_tac >>
+  Cases_on `k < LENGTH (FST (rewrite_inline_inst args outs ret h idx))`
+  >- (gvs[rich_listTheory.EL_APPEND1, rich_listTheory.EL_APPEND2] >>
+      drule inline_rewrite_invoke_cell >> simp[] >> strip_tac >>
+      qexists `0` >> simp[rewrite_inline_insts_def]) >>
+  gvs[rich_listTheory.EL_APPEND1, rich_listTheory.EL_APPEND2] >>
+  first_x_assum (drule_at Any) >>
+  (impl_tac >- decide_tac) >> strip_tac >>
+  qexists `SUC j` >>
+  simp[rewrite_inline_insts_def, LET_THM, pairTheory.UNCURRY] >>
+  decide_tac
+QED
+
+Theorem inline_rewrite_expansion_nonempty:
+  0 < LENGTH (FST (rewrite_inline_inst args outs ret inst idx))
+Proof
+  Cases_on `rewrite_inline_inst args outs ret inst idx` >>
+  drule functionInlinerWfTheory.rewrite_inline_inst_shape >>
+  simp[] >> Cases_on `q` >> simp[]
+QED
+
+Theorem inline_rewrite_prefix_strict:
+  !insts args outs ret idx j k.
+    j < k /\ k <= LENGTH insts ==>
+    LENGTH (FST (rewrite_inline_insts args outs ret (TAKE j insts) idx)) <
+    LENGTH (FST (rewrite_inline_insts args outs ret (TAKE k insts) idx))
+Proof
+  Induct >- simp[] >>
+  map_every qx_gen_tac [`h`,`args`,`outs`,`ret`,`idx`,`j`,`k`] >>
+  Cases_on `k` >- simp[] >>
+  Cases_on `j` >>
+  simp[rewrite_inline_insts_def, LET_THM, pairTheory.UNCURRY] >>
+  rpt strip_tac
+  >- (mp_tac (Q.INST [`inst` |-> `h`] inline_rewrite_expansion_nonempty) >> simp[]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem inline_rewrite_prefix_injective:
+  j <= LENGTH insts /\ k <= LENGTH insts /\
+  LENGTH (FST (rewrite_inline_insts args outs ret (TAKE j insts) idx)) =
+  LENGTH (FST (rewrite_inline_insts args outs ret (TAKE k insts) idx)) ==>
+  j = k
+Proof
+  rpt strip_tac >>
+  Cases_on `j < k`
+  >- (drule_all inline_rewrite_prefix_strict >>
+      disch_then (qspecl_then [`args`,`outs`,`ret`,`idx`] mp_tac) >> simp[]) >>
+  Cases_on `k < j`
+  >- (drule_all inline_rewrite_prefix_strict >>
+      disch_then (qspecl_then [`args`,`outs`,`ret`,`idx`] mp_tac) >> simp[]) >>
+  decide_tac
+QED
+
+Theorem inline_rewrite_invoke_unique_index:
+  k < LENGTH (FST (rewrite_inline_insts args outs ret insts idx)) /\
+  EL k (FST (rewrite_inline_insts args outs ret insts idx)) = ri /\
+  ri.inst_opcode = INVOKE ==>
+  ?!j. j < LENGTH insts /\ EL j insts = ri /\
+       k = LENGTH (FST (rewrite_inline_insts args outs ret (TAKE j insts) idx))
+Proof
+  strip_tac >> drule_all inline_rewrite_invoke_index >> strip_tac >>
+  simp[EXISTS_UNIQUE_THM] >>
+  conj_tac >- (qexists `j` >> simp[]) >>
+  rpt strip_tac >> irule inline_rewrite_prefix_injective >>
+  metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]
+QED
+
+(* Recover a source occurrence from a call in a rewritten cloned block. *)
+Theorem inline_rewrite_clone_invoke_inverse:
+  get_instruction
+    (FST (rewrite_inline_block args outs ret (clone_basic_block p labs bb) idx))
+    k = SOME ri /\ ri.inst_opcode = INVOKE ==>
+  ?j inst. get_instruction bb j = SOME inst /\ inst.inst_opcode = INVOKE /\
+    ri = clone_instruction p labs inst /\
+    k = LENGTH (FST (rewrite_inline_insts args outs ret
+          (MAP (clone_instruction p labs) (TAKE j bb.bb_instructions)) idx))
+Proof
+  simp[rewrite_inline_block_def, clone_basic_block_def,
+       LET_THM, pairTheory.UNCURRY, get_instruction_def] >>
+  strip_tac >> drule_all inline_rewrite_invoke_index >> strip_tac >>
+  gvs[EL_MAP, GSYM MAP_TAKE] >>
+  qexists `j` >> simp[clone_instruction_def] >>
+  qpat_x_assum `clone_instruction _ _ _ = _` (mp_tac o GSYM) >>
+  disch_then SUBST_ALL_TAC >> gvs[clone_instruction_def]
+QED
+
+Theorem inline_edit_final_labels:
+  inline_site_edit_valid e ==>
+  fn_labels e.ise_final =
+  fn_labels (inline_call_site e.ise_prefix e.ise_return e.ise_caller
+    e.ise_callee e.ise_block e.ise_index)
+Proof
+  simp[inline_site_edit_valid_def] >> strip_tac >>
+  gvs[inline_one_site_def, functionInlinerWfTheory.renumber_fn_labels,
+      AllCaseEqs()] >>
+  qpat_x_assum `renumber_fn_inst_ids _ = _` (mp_tac o GSYM) >>
+  disch_then SUBST_ALL_TAC >>
+  simp[functionInlinerWfTheory.renumber_fn_labels] >>
+  CASE_TAC >> simp[functionInlinerWfTheory.fix_inline_phis_structure]
+QED
+
