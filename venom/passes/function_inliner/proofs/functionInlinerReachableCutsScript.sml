@@ -2,6 +2,7 @@
 Theory functionInlinerReachableCuts
 Ancestors
   functionInlinerLocation functionInlinerStackSupports functionInlinerActivation
+  functionInlinerOccurrences functionInlinerRoutedProvenance
   functionInlinerSiteLayout functionInlinerDefs functionInlinerFrame venomInst list rich_list
 
 Datatype:
@@ -462,4 +463,173 @@ Proof
   drule_all inline_cell_zipper_sound >>
   simp[inline_cell_at_def, inline_fetched_fields_def, inline_inst_fields_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+(* Existence of a block entry only depends on labels, not on its repaired
+   instruction contents.  No collision-freshness premise is needed here. *)
+Theorem inline_valid_edit_label_set:
+  inline_site_edit_valid e ==>
+  fn_labels e.ise_final = fn_labels e.ise_caller ++ [e.ise_return] ++
+    MAP (STRCAT e.ise_prefix) (fn_labels e.ise_callee)
+Proof
+  strip_tac >> drule inline_edit_final_labels >> disch_then SUBST1_TAC >>
+  irule functionInlinerWfTheory.inline_call_site_labels >>
+  gvs[inline_site_edit_valid_def] >>
+  drule functionInlinerWfTheory.find_invoke_site_member >> strip_tac >>
+  `MEM e.ise_block (MAP (\b. b.bb_label) e.ise_caller.fn_blocks)` by
+    (simp[listTheory.MEM_MAP] >> metis_tac[]) >>
+  drule dfAnalyzeProofsTheory.lookup_block_exists >> metis_tac[]
+QED
+
+Theorem inline_routed_before_phi_labels:
+  !cert root p fn path. inline_routed_leaf cert root p fn path ==>
+    !l k. MEM l (fn_labels fn) ==>
+      MEM (inline_path_rename path l) (fn_labels root) /\
+      inline_path_location path (SOME (inline_before_phi_location l k)) =
+        SOME (inline_before_phi_location (inline_path_rename path l) k)
+Proof
+  ho_match_mp_tac inline_routed_leaf_ind >> rpt conj_tac >>
+  rpt strip_tac >>
+  gvs[inline_path_rename_def, inline_path_rename_append,
+    inline_choice_rename_def, inline_path_location_append,
+    inline_path_location_def, inline_location_step_def,
+    inline_before_phi_keep, inline_before_phi_enter, combinTheory.o_DEF] >>
+  drule inline_valid_edit_label_set >> simp[] >> metis_tac[listTheory.MEM_MAP]
+QED
+
+Theorem inline_routed_before_phi_lookup:
+  inline_routed_leaf cert root p fn path /\
+  lookup_block l fn.fn_blocks = SOME bb ==>
+  ?tb. lookup_block (inline_path_rename path l) root.fn_blocks = SOME tb /\
+    inline_path_location path (SOME (inline_before_phi_location l k)) =
+      SOME (inline_before_phi_location (inline_path_rename path l) k)
+Proof
+  strip_tac >>
+  `MEM l (fn_labels fn)` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,
+      venomExecPropsTheory.lookup_block_label, fn_labels_def, listTheory.MEM_MAP] >>
+  drule_all inline_routed_before_phi_labels >>
+  disch_then (qspec_then `k` strip_assume_tac) >>
+  gvs[fn_labels_def] >> metis_tac[dfAnalyzeProofsTheory.lookup_block_exists]
+QED
+
+Definition inline_cell_choice_def:
+  (inline_cell_choice (KeepCell e) = InlineKeep e) /\
+  (inline_cell_choice (SelectedJump e) = InlineKeep e) /\
+  (inline_cell_choice (EnterCell e k) = InlineEnter e)
+End
+
+Theorem inline_cell_frame_entry_label:
+  inline_cell_frame tag c d /\ MEM l (fn_labels c.ic_function) ==>
+  MEM (inline_choice_rename (inline_cell_choice tag) l) (fn_labels d.ic_function) /\
+  inline_cell_label_action [(tag,d)] l =
+    inline_choice_rename (inline_cell_choice tag) l
+Proof
+  Cases_on `tag` >>
+  simp[inline_cell_frame_def, inline_cell_choice_def,
+    inline_choice_rename_def, inline_cell_label_action_def] >>
+  rpt strip_tac >> gvs[inline_make_cell_def] >>
+  drule inline_valid_edit_label_set >> simp[] >>
+  metis_tac[listTheory.MEM_MAP]
+QED
+
+Theorem inline_cell_zipper_entry_label:
+  !frames c d l. inline_cell_zipper c frames d /\
+    MEM l (fn_labels c.ic_function) ==>
+    MEM (inline_cell_label_action frames l) (fn_labels d.ic_function) /\
+    inline_cell_label_action frames l =
+      inline_path_rename (MAP (\(tag,next). inline_cell_choice tag) frames) l
+Proof
+  Induct >> simp[inline_cell_zipper_def, inline_cell_label_action_def,
+    inline_path_rename_def] >>
+  qx_gen_tac `h` >> PairCases_on `h` >> rpt gen_tac >>
+  simp[inline_cell_zipper_def] >> strip_tac >>
+  drule_all inline_cell_frame_entry_label >> strip_tac >>
+  first_x_assum drule >> disch_then drule >> strip_tac >>
+  Cases_on `h0` >>
+  gvs[inline_cell_label_action_def, inline_path_rename_def,
+    inline_cell_choice_def, inline_choice_rename_def, combinTheory.o_DEF]
+QED
+
+Theorem inline_cell_routed_before_phi:
+  inline_routed_leaf cert root p c.ic_function
+    (MAP (\(tag,next). inline_cell_choice tag) frames) /\
+  inline_cell_zipper c frames d /\
+  lookup_block l c.ic_function.fn_blocks = SOME bb ==>
+  ?tb. lookup_block (inline_cell_label_action frames l) root.fn_blocks = SOME tb /\
+    inline_path_location (MAP (\(tag,next). inline_cell_choice tag) frames)
+      (SOME (inline_before_phi_location l k)) =
+      SOME (inline_before_phi_location (inline_cell_label_action frames l) k)
+Proof
+  strip_tac >>
+  `MEM l (fn_labels c.ic_function)` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,
+      venomExecPropsTheory.lookup_block_label, fn_labels_def, listTheory.MEM_MAP] >>
+  drule_all inline_cell_zipper_entry_label >> strip_tac >>
+  drule_all inline_routed_before_phi_lookup >> simp[]
+QED
+
+Theorem inline_cell_focus_singleton:
+  get_instruction cb j = SOME src /\
+  ~MEM src.inst_opcode [PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] ==>
+  inline_cell_focus e bb cb j =
+    ([clone_instruction e.ise_prefix (fn_labels e.ise_callee) src],
+     SND (inline_cell_prefix e bb cb j))
+Proof
+  simp[get_instruction_def, inline_cell_focus_def] >> strip_tac >>
+  gvs[] >>
+  `~is_param_opcode (EL j cb.bb_instructions).inst_opcode` by
+    (Cases_on `(EL j cb.bb_instructions).inst_opcode` >> gvs[is_param_opcode_def]) >>
+  simp[rewrite_inline_inst_def, clone_instruction_def]
+QED
+
+Theorem inline_cell_prefix_singleton_suc:
+  get_instruction cb j = SOME src /\
+  ~MEM src.inst_opcode [PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] ==>
+  LENGTH (FST (inline_cell_prefix e bb cb (SUC j))) =
+    SUC (LENGTH (FST (inline_cell_prefix e bb cb j))) /\
+  SND (inline_cell_prefix e bb cb (SUC j)) = SND (inline_cell_prefix e bb cb j)
+Proof
+  strip_tac >> drule_all inline_cell_focus_singleton >> strip_tac >>
+  `j < LENGTH cb.bb_instructions` by gvs[get_instruction_def] >>
+  drule inline_cell_prefix_suc >> simp[]
+QED
+
+Theorem inline_enter_singleton_successor_location:
+  lookup_block c.ic_block e.ise_callee.fn_blocks = SOME cb /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+  e.ise_index < LENGTH bb.bb_instructions /\
+  get_instruction cb c.ic_index = SOME src /\
+  ~MEM src.inst_opcode [PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] ==>
+  inline_choice_location (InlineEnter e)
+    (inline_cell_location (c with ic_index := SUC c.ic_index) counter) =
+  SOME <|il_block := STRCAT e.ise_prefix c.ic_block;
+    il_phase := InlineAtInstruction
+      (SUC (LENGTH (FST (inline_cell_prefix e bb cb c.ic_index))));
+    il_counter := SND (inline_cell_prefix e bb cb c.ic_index)|>
+Proof
+  strip_tac >> drule_all inline_cell_prefix_singleton_suc >> strip_tac >>
+  `SUC c.ic_index <= LENGTH cb.bb_instructions` by gvs[get_instruction_def] >>
+  simp[inline_cell_location_def, inline_choice_location_def,
+    GSYM inline_cell_prefix_def]
+QED
+
+Theorem inline_keep_successor_location:
+  (c.ic_block <> e.ise_block \/ c.ic_index <> e.ise_index) ==>
+  inline_choice_location (InlineKeep e)
+    (inline_cell_location (c with ic_index := SUC c.ic_index) counter) =
+  if c.ic_block = e.ise_block /\ SUC c.ic_index = e.ise_index then NONE
+  else SOME <|
+    il_block := if c.ic_block = e.ise_block /\ e.ise_index < c.ic_index
+                then e.ise_return else c.ic_block;
+    il_phase := InlineAtInstruction
+      (SUC (if c.ic_block = e.ise_block /\ e.ise_index < c.ic_index
+            then c.ic_index - (e.ise_index + 1) else c.ic_index));
+    il_counter := counter|>
+Proof
+  simp[inline_choice_location_def, inline_cell_location_def] >>
+  rpt strip_tac >> Cases_on `c.ic_block = e.ise_block` >> simp[] >>
+  Cases_on `c.ic_index < e.ise_index` >> simp[] >>
+  Cases_on `SUC c.ic_index = e.ise_index` >> simp[] >>
+  gvs[] >> decide_tac
 QED
