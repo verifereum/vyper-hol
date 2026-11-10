@@ -218,6 +218,39 @@ Proof
   simp[] >> decide_tac
 QED
 
+(* Exact preparation instructions: dynamic offsets are tuple-relative. *)
+Theorem registration_aggregate_prepare_phases:
+  compile_register_positional_args ce [(name,F,dyn,sz,di)] off st = (ce',last) /\
+  FLOOKUP ce.ce_vars name = SOME loc /\
+  var_location_memory_size loc = SOME n ==>
+  ?buf a src first.
+    compile_alloc_buffer n st = (buf,a) /\
+    ce' = ce with ce_vars updated_by
+      (\m. m |+ (name,PtrVar buf.buf_operand n)) /\
+    (if dyn then
+       ?head b delta c.
+         emit_op ADD [Lit 4w; Lit (n2w (off-4))] a = (head,b) /\
+         emit_op CALLDATALOAD [head] b = (delta,c) /\
+         emit_op ADD [Lit 4w; delta] c = (src,first)
+     else emit_op ADD [Lit 4w; Lit (n2w (off-4))] a = (src,first)) /\
+    compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD
+      (Lit 0w) (Lit 0w) di first = ((),last)
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_register_positional_args _ _ _ _ = _` mp_tac >>
+  simp[compile_register_positional_args_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> fs[]) >> strip_tac >> gvs[] >>
+  qpat_x_assum `compile_decode_args _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_decode_args_def, finite_mapTheory.FLOOKUP_UPDATE,
+       var_location_decode_operand_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  Cases_on `dyn` >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> fs[]) >> strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
    Hints (not binding):
