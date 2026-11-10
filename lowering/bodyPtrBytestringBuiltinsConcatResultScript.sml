@@ -7,7 +7,9 @@ Ancestors
   vyperTypeConversions valueEncoding bodyPtrBytestringBuiltinsCalldataOutcome
   exprSimHash exprSimSource exprSimHypsDefs exprSimDefs vyperTyping
   vyperTypeSystem allocLimits vyperTypeInvariants gasSummaryComposePtr gasExemptCert
-  vyperState
+  vyperState vyperContext bodyPtrBytestringBuiltinsConcatCompile
+  bodyPtrBytestringBuiltinsConcatArgs annAssignPtrSetup freshWrites exprLoweringProps
+  bodyPtrBytestringBuiltinsConcatPostFrame wordArgsPtr valueEncodingProps venomState
 
 Theorem concat_buffer_capacity:
   ann = BaseT (BytesT (Dynamic n)) \/ ann = BaseT (StringT n) ==>
@@ -163,3 +165,185 @@ Proof
   >- (rpt strip_tac >> irule gas_exempt_cert_error_values >> simp[]) >>
   irule gas_outcome_ptr_conseq >> qexistsl_tac [`P`,`E`] >> simp[]
 QED
+
+Theorem concat_result_vv_sim_ptr:
+  (builtin_args_length_ok (Concat n) (LENGTH args) ==> body_exprs_ptr_ok cx args) /\
+  body_inv tops ctx ce cx /\
+  expr_body_pre ce cx env (Builtin ann (Concat n) args) es ==>
+  expr_vv_sim_ptr d ctx PG fn ce cx ty (Builtin ann (Concat n) args) es
+Proof
+  strip_tac >> drule concat_body_pre_facts >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `body_exprs_ptr_ok cx args` by fs[builtin_args_length_ok_def] >>
+  simp[expr_vv_sim_ptr_def] >> rpt gen_tac >> strip_tac >>
+  drule_all concat_ptr_compile_cuts >> strip_tac >>
+  `32 <= concat_alloc_size (MAP expr_type args)` by
+    (assume_tac (Q.SPEC `MAP expr_type args` concat_alloc_size_bounds) >> decide_tac) >>
+  drule_all concat_prefix_args_ready >>
+  disch_then (qspecl_then [`PG`,`cx_dead cx`]
+    (qx_choosel_then [`r`,`p`,`off`,`a`,`ow`,`Gf`,`tnf`,`t`,`binst`,`oinst`]
+      (map_every assume_tac o CONJUNCTS))) >>
+  suspend "traversal"
+QED
+
+Resume concat_result_vv_sim_ptr[traversal]:
+  qpat_x_assum `data = Var p` SUBST_ALL_TAC >>
+  qpat_x_assum `buf.buf_operand = Var r`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
+  qpat_assum `ob.buf_operand = Var off` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  `32 + 0 + SUM (MAP concat_payload_capacity (MAP expr_type args)) <=
+     concat_alloc_size (MAP expr_type args) /\
+   32 + concat_data_bound 0 (MAP expr_type args) <=
+     concat_alloc_size (MAP expr_type args)` by
+    (mp_tac (Q.SPEC `MAP expr_type args` concat_alloc_size_bounds) >> simp[]) >>
+  `mload (w2n ow) t = n2w 0 /\ (0:num) <= 0 /\
+   (!i. w2n a+32 <= i /\ i < w2n a+32+0 ==> i NOTIN tnf.t_mem)` by simp[] >>
+  drule_all (concat_args_sim_ptr |> Q.SPEC `args` |> Q.SPEC `0` |> Q.SPEC `0`) >>
+  disch_then (qspec_then `PG` assume_tac) >>
+  irule gas_outcome_ptr_prefix >>
+  first_assum (irule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  `builtin_args_length_ok (Concat n) (LENGTH args)` by simp[builtin_args_length_ok_def] >>
+  qspecl_then [`cx`,`ann`,`n`,`args`] mp_tac eval_expr_concat_bind >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> disch_then SUBST1_TAC >>
+  irule gas_outcome_ptr_values_bind >>
+  first_assum (irule_at (Pat `gas_outcome_ptr _ _ _ _ _ _ _ _`)) >>
+  reverse conj_tac >- (rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> disch_then (qx_choose_then `vs` (map_every assume_tac o CONJUNCTS) o BETA_RULE) >>
+  suspend "continuation"
+QED
+
+Resume concat_result_vv_sim_ptr[continuation]:
+  qexists_tac `vs` >> conj_tac >- first_assum ACCEPT_TAC >>
+  `lookup_var r t' = SOME a /\ lookup_var off t' = SOME ow` by metis_tac[] >>
+  `lookup_var r t' = lookup_var r t` by simp[] >>
+  `ptr_covers G tn r t' (concat_alloc_size (MAP expr_type args))` by
+    (irule annassign_declared_pointer_after_rhs_ptr >>
+     qexistsl_tac [`Gf`,`ce`,`es`,`t`,`s4`,`tnf`] >> simp[]) >>
+  `not_fresh_at s5 r` by
+    (irule not_fresh_at_mono >> qexists_tac `s4` >> fs[ci_mono_def]) >>
+  drule_all concat_suffix_path_ptr >>
+  disch_then (qspecl_then [`PG`,`cx_dead cx`]
+    (qx_choosel_then [`out`,`H`,`tm`,`u`,`tf`,`un`]
+      (map_every assume_tac o CONJUNCTS))) >>
+  `FLOOKUP t'.vs_allocas binst.inst_id =
+     SOME (w2n a,concat_alloc_size (MAP expr_type args))` by metis_tac[] >>
+  `!name b k. local_region ce ee.scopes t' name b k ==>
+     w2n a + concat_alloc_size (MAP expr_type args) <= b \/ b+k <= w2n a` by
+    (rpt strip_tac >>
+     `local_region ce es.scopes t name b k` by
+       (irule local_region_frame >> conj_tac >-
+          (qexists_tac `fn` >>
+           qpat_x_assum `stmt_state_rel ctx fn ce cx es t` mp_tac >>
+           simp[stmt_state_rel_def, state_rel_def]) >>
+        qexistsl_tac [`s4`,`ee.scopes`,`t'`] >> simp[]) >> metis_tac[]) >>
+  `!x. not_fresh_at s4 x ==> lookup_var x tf = lookup_var x t' /\
+     FLOOKUP H x = FLOOKUP G x /\ op_taint un (Var x) = op_taint tn (Var x)` by
+    (gen_tac >> disch_tac >>
+     `not_fresh_at s5 x` by
+       (irule not_fresh_at_mono >> qexists_tac `s4` >> fs[ci_mono_def]) >>
+     first_assum (qspec_then `x` mp_tac) >> simp[]) >>
+  `un.t_mem SUBSET tn.t_mem` by simp[] >>
+  drule_all (concat_suffix_frame |> Q.INST [`sa` |-> `s4`]) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  suspend "endpoint"
+QED
+
+Resume concat_result_vv_sim_ptr[endpoint]:
+  qmatch_asmsub_abbrev_tac `mload (w2n ow) t' = n2w (0 + LENGTH bs)` >>
+  `tf = (mstore (w2n a) (n2w (LENGTH bs)) u)
+     with vs_inst_idx := SUC u.vs_inst_idx` by simp[] >>
+  `!i. w2n a+32 <= i /\ i < w2n a+32+LENGTH bs ==> i NOTIN tn.t_mem` by
+    (qpat_x_assum `!i. w2n a+32 <= i /\ i < w2n a+32+0+_ ==> _` mp_tac >> simp[]) >>
+  drule_all concat_suffix_memory_post >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!b k. b+k <= w2n a \/ w2n a+32 <= b ==>
+     mem_bytes_at b k tf.vs_memory = mem_bytes_at b k t'.vs_memory` by
+    (rpt strip_tac >> simp[mstore_mem_bytes_at_disjoint]) >>
+  `sa.cs_next_id <= s4.cs_next_id /\ sa.cs_next_var <= s4.cs_next_var` by
+    fs[ci_mono_def] >>
+  `!name b k. local_region ce es.scopes t name b k <=>
+     local_region ce es.scopes s0 name b k` by metis_tac[] >>
+  `!aid b k. FLOOKUP s0.vs_allocas aid = SOME (b,k) /\ aid < sa.cs_next_id /\
+     (!name lo sz. local_region ce es.scopes s0 name lo sz ==> b+k <= lo \/ lo+sz <= b) ==>
+     mem_bytes_at b k tf.vs_memory = mem_bytes_at b k s0.vs_memory` by
+    (rpt gen_tac >> strip_tac >> drule_all concat_original_site_memory >> simp[]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0` by metis_tac[] >>
+  `!x. not_fresh_at s4 x ==> lookup_var x tf = lookup_var x t'` by metis_tac[] >>
+  `!name b k. local_region ce es.scopes s0 name b k <=>
+     local_region ce es.scopes t name b k` by metis_tac[] >>
+  `wb_frame ce es sa s0 tf` by (drule_all concat_original_wb_frame >> simp[]) >>
+  `ghost_kept ce es sa G0 tn0 s0 G tn` by
+    (drule_all wordArgsPtrTheory.ghost_kept_trans >> simp[]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at s4 x` by
+    (simp[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  `ghost_kept ce es sa G0 tn0 s0 H un` by
+    (irule bodyPtrHashBuiltinsAllocFrameTheory.hash_ghost_kept_clean_tail >>
+     qexistsl_tac [`G`,`tn`] >> simp[] >> metis_tac[]) >>
+  suspend "package"
+QED
+
+Resume concat_result_vv_sim_ptr[package]:
+  `lookup_var r tf = SOME a` by metis_tac[] >>
+  `eval_operand (Var r) tf = SOME a` by simp[eval_operand_def] >>
+  `mem_word_at (w2n a) tf.vs_memory = n2w (LENGTH bs)` by
+    simp[mem_word_at_eq_mload] >>
+  `mem_bytes_at (w2n a+32) (LENGTH bs) tf.vs_memory = bs` by
+    (qpat_x_assum `mem_bytes_at (w2n a+32) _ t'.vs_memory = _` mp_tac >>
+     qpat_x_assum `mem_bytes_at (w2n a+32) _ tf.vs_memory = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[valueEncodingTheory.mem_bytes_at_def]) >>
+  `!name b k. local_region ce ee.scopes tf name b k ==>
+     w2n a+concat_alloc_size (MAP expr_type args) <= b \/ b+k <= w2n a` by
+    (rpt strip_tac >>
+     `local_region ce ee.scopes t' name b k` by
+       (drule_all exprSimCopyTheory.copy_buffer_local_region_frame >> metis_tac[]) >>
+     metis_tac[]) >>
+  `FLOOKUP tf.vs_allocas binst.inst_id = SOME
+     (w2n a,concat_alloc_size (MAP expr_type args))` by metis_tac[] >>
+  `sa.cs_next_id <= binst.inst_id /\ binst.inst_id < sb.cs_next_id` by
+    (fs[ci_mono_def] >> decide_tac) >>
+  `LIST_REL (\t v. ?tv. evaluate_type (get_tenv cx) t = SOME tv /\ value_has_type tv v)
+     (MAP expr_type args) vs` by
+    (qpat_x_assum `LIST_REL _ args vs` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[LIST_REL_MAP1, combinTheory.o_DEF]) >>
+  `bs = FLAT (MAP (\v. case v of BytesV bs => bs
+     | StringV str => MAP ((n2w : num -> word8) o ORD) str | _ => []) vs)` by
+    simp[Abbr `bs`] >>
+  qpat_x_assum `?tv. evaluate_type (get_tenv cx) ann = SOME tv` strip_assume_tac >>
+  `w2n a <= w2n a /\
+   w2n a + concat_alloc_size (MAP expr_type args) <=
+     w2n a + concat_alloc_size (MAP expr_type args)` by simp[] >>
+  drule_all concat_result_endpoint_ptr >>
+  strip_tac >> suspend "outcome"
+QED
+
+Resume concat_result_vv_sim_ptr[outcome]:
+  simp[fragGasPathPtrTheory.gas_outcome_ptr_def,
+    fragGasPathPtrTheory.gas_summary_ptr_at_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  qexistsl_tac [`INL (Value v)`,`ee`,`H`,`un`,`OK tf`] >>
+  simp[NoAsms, gasSummaryTheory.gas_explicit_nil] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ tf` mp_tac >>
+     qpat_x_assum `buf.buf_operand = Var r` mp_tac >>
+     rpt (pop_assum kall_tac) >> strip_tac >>
+     simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
+       contextTheory.base_ptr_def, read_result_def, vyperStateTheory.return_def] >>
+     metis_tac[]) >>
+  simp[NoAsms, stmtFragPtrTheory.ghost_inv_gas_obs] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >-
+    (qpat_x_assum `buf.buf_operand = Var r` mp_tac >>
+     qpat_x_assum `ptr_buf_ok _ _ _ H tf` mp_tac >>
+     qpat_x_assum `ghost_kept _ _ _ G0 tn0 s0 H un` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[contextTheory.base_ptr_def]) >>
+  (qpat_x_assum `ptr_vv_ok _ _ _ _ _ H un tf` mp_tac >>
+     qpat_x_assum `buf.buf_operand = Var r` mp_tac >>
+     rpt (pop_assum kall_tac) >> strip_tac >>
+     simp[ptr_vv_ok_def, post_value_type_not_int_call, contextTheory.base_ptr_def,
+       read_result_def, vyperStateTheory.return_def])
+QED
+
+Finalise concat_result_vv_sim_ptr
