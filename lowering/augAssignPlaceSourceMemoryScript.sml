@@ -89,29 +89,6 @@ Proof
   drule aug_place_storage_write_gas_obs >> simp[]
 QED
 
-Theorem aug_place_rhs_reached_mem:
-  (!s p s1 s2 cur s3 s4 ptv s5.
-    eval_target_place cx bt s = (INL p,s1) /\
-    read_place cx p s2 = (INL cur,s3) /\
-    place_type_value cx p s4 = (INL ptv,s5) ==> body_expr_mem_ok cx e) /\
-  body_inv tops ctx cenv cx /\
-  expr_body_pre cenv cx env e es /\ target_indices_pre cenv cx env bt /\
-  eval_target_place cx bt (es with gas_obs := gs) = (INL p,st) /\
-  read_place cx p st = (INL cur,stc) /\
-  place_type_value cx p stc = (INL ptv,stt) ==>
-  expr_body_pre cenv cx env e stt /\
-  expr_sim_mem ctx func cenv cx ty e stt /\
-  expr_vv_sim_mem ctx func cenv cx ty e stt
-Proof
-  strip_tac >>
-  `stc = st /\ stt = stc` by
-    metis_tac[read_place_state, place_type_value_state] >> gvs[] >>
-  `expr_body_pre cenv cx env e st` by
-    (irule aug_place_rhs_pre_target_gas_obs >> goal_assum (drule_at Any) >> simp[]) >>
-  `body_expr_mem_ok cx e` by metis_tac[] >>
-  gvs[body_expr_mem_ok_def] >> metis_tac[]
-QED
-
 Theorem aug_place_memory_rhs_callback:
   expr_body_pre cenv cx env e st /\
   type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
