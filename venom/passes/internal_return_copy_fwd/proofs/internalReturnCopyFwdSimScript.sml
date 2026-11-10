@@ -635,6 +635,28 @@ Proof
   simp[ircf_dead_def] >> ASM_SET_TAC[]
 QED
 
+Theorem ircf_R_ret_reachable_caller_memory:
+  ircf_R_ret_reachable vs D fn_meta rma C (f::stk) PG G tn fn ret se te /\
+  vs.vs_allocas = FEMPTY /\ lo <= vs.vs_alloca_next /\ ~ctx_has_dalloca C /\
+  i < f.cf_state.vs_alloca_next /\
+  i NOTIN ircf_dead (ircf_dst_ids fn_meta rma C) f.cf_state stk /\
+  i NOTIN tn.t_mem ==>
+  read_byte i se.vs_memory = read_byte i te.vs_memory
+Proof
+  strip_tac >> gvs[ircf_R_ret_reachable_def] >>
+  drule_all frame_reachable_intret_saved_frontier >> strip_tac >>
+  `i NOTIN site_bytes (ircf_dst_ids fn_meta rma C) se.vs_allocas` by
+    (simp[site_bytes_def] >> rpt strip_tac >>
+     `f.cf_state.vs_alloca_next <= b` by metis_tac[] >>
+     decide_tac) >>
+  `i NOTIN ircf_dead (ircf_dst_ids fn_meta rma C) se (f::stk)` by
+    (fs[ircf_dead_def] >> ASM_SET_TAC[]) >>
+  qpat_x_assum `ircf_R_ret _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[ircf_R_ret_def] >> strip_tac >>
+  `i < se.vs_alloca_next` by decide_tac >>
+  drule_all taint_agree_memory >> simp[]
+QED
+
 Theorem ircf_R_boundary:
   s.vs_prev_bb <> NONE /\
   taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\

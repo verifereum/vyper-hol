@@ -3,6 +3,7 @@
 Theory occurrenceGeometry
 Ancestors
   o1LowerDloadOccurrence venomExecSemantics finite_map list pred_set arithmetic
+  ptrSafeRun opcodeClass venomMemProofs
 
 Definition occurrence_natural_geometry_def:
   occurrence_natural_geometry lo a U B stk s <=>
@@ -381,4 +382,22 @@ Proof
   simp[] >> rpt strip_tac >>
   `FLOOKUP B (a,aid) = SOME (b,z)` by gvs[occurrence_allocas_ok_def] >>
   metis_tac[pairTheory.FST]
+QED
+
+Theorem frame_reachable_intret_saved_frontier:
+  frame_reachable vs C (f::stk) PG G tn fn ri sr /\
+  vs.vs_allocas = FEMPTY /\ lo <= vs.vs_alloca_next /\ ~ctx_has_dalloca C /\
+  active_inst fn ri sr /\ step_inst j C ri sr = IntRet ret se ==>
+  f.cf_state.vs_alloca_next <= se.vs_alloca_next /\
+  (!aid b z. FLOOKUP se.vs_allocas aid = SOME (b,z) ==>
+             f.cf_state.vs_alloca_next <= b)
+Proof
+  strip_tac >>
+  `ri.inst_opcode <> INVOKE` by metis_tac[step_inst_intret_not_invoke] >>
+  `step_inst_base ri sr = IntRet ret se` by metis_tac[step_inst_non_invoke] >>
+  drule step_inst_base_intret_opcodes >> strip_tac >>
+  `se.vs_allocas = sr.vs_allocas /\ se.vs_alloca_next = sr.vs_alloca_next` by
+    (irule step_inst_base_preserves_alloca_fields >> qexists_tac `ri` >> simp[] >>
+     metis_tac[]) >>
+  drule_all frame_reachable_saved_frontier >> strip_tac >> simp[] >> metis_tac[]
 QED
