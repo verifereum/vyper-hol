@@ -2,7 +2,7 @@ Theory aggregateCountedTypedStore
 Ancestors
   aggregateTypedCopyRawShape aggregateCodeTrace aggregateCountedRenamedStore
   aggregateCountedRawRelabel aggregateCountedCutBridge exprSimAggregateChildren
-  exprSimAbiGasBridge context compileEnv vyperAST venomExecSemantics
+  exprSimAbiGasBridge context compileEnv loweringStateRelDefs vyperAST venomExecSemantics
   emitHelper emitHelperProps list rich_list fragExec exprLoweringProps
   loweringPosts venomState venomInst venomMemDefs exprSimHash
   aggregateCountedStraightExec aggregateCountedStraightStore

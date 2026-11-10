@@ -4,7 +4,7 @@ Ancestors
   exprSimAggregateChildren exprSimAggregateLoops exprSimSource
   gasSummary fragGasMode fragGasPath vyperInterpreter vyperState exprSimHypsDefs
   exprSimHyps exprSimUnwrap exprSimUnwrapProps exprSimMemoryRead
-  exprLoweringProps loweringPosts compileEnv placeTypedCopyRecursivePath
+  exprLoweringProps loweringPosts compileEnv loweringStateRelDefs placeTypedCopyRecursivePath
   placeMemoryPrimitiveForward localMemoryStorePath freshWrites exprSimProps
   vyperAST vyperTypeCallGraph aggregateStoreSizePath
 Libs

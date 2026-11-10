@@ -2,7 +2,7 @@
 Theory stmtSimDefs
 Ancestors
   exprSimDefs loweringPosts gasOutcome gasContext allocaHistory
-  stmtLowering compileEnv loweringSlice vyperInterpreter vyperState
+  stmtLowering compileEnv loweringStateRelDefs loweringSlice vyperInterpreter vyperState
   venomState venomExecSemantics vyperTypeEnvPreservation finite_map
   vyperEvalExprPreservesScopesDom
 

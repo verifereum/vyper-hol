@@ -5,7 +5,7 @@ Ancestors
   vyperTypeArgFits vyperTypeSystem venomMemDefs
   placeRelayoutNormalizeFrame placeStoreSlots
   placeStoreStorage freshWrites stmtLoweringMono vyperScopePreservation
-  loweringHalt fragExec typedMemoryCopy exprSimTypedAlloc compileEnv venomState
+  loweringHalt fragExec typedMemoryCopy exprSimTypedAlloc compileEnv loweringStateRelDefs venomState
   vyperValue
 Libs monadsyntax
 

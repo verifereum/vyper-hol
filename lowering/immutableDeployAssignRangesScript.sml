@@ -23,7 +23,7 @@ Proof
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_val_at_def] >> strip_tac >> gvs[] >>
   first_x_assum drule >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem immutable_assign_copy_metadata:
@@ -72,7 +72,7 @@ Proof
   strip_tac >> drule_all place_store_bytestring_representation >>
   strip_tac >> Cases_on `v` >>
   gvs[vyperTypingTheory.value_has_type_def,
-      valueEncodingTheory.val_in_memory_def, val_footprint_def,
+      valueEncodingDefsTheory.val_in_memory_def, val_footprint_def,
       valueEncodingTheory.type_memory_size_def] >>
   qmatch_goalsub_abbrev_tac `word_size len` >>
   `len <= dst_cap` by (simp[Abbr `len`] >> decide_tac) >>

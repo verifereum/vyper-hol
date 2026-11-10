@@ -8,7 +8,7 @@ Ancestors
   venomState finite_map exprSimSource vyperInterpreter vyperState
   bodyImmutableAugAssignStore bodyImmutableAugAssignExec immutableDeployAssignSourceFrame
   alist immutableDeployOperandTransfer immutableCopyExecution venomMemProps
-  placeTypedCopyPath exprLoweringProps compileEnv stmtSimProps valueEncoding
+  placeTypedCopyPath exprLoweringProps compileEnv loweringStateRelDefs stmtSimProps valueEncoding
   stmtLoweringMono stmtLowering context emitHelper venomInst
   immutableDeployAssignFacts stmtSimDefs gasOutcome gasSummary loweringPosts
 

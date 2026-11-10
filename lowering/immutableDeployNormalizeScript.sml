@@ -1,7 +1,7 @@
 Theory immutableDeployNormalize
 Ancestors
   immutableDeployOperandTransfer placeStoreDynPrepare placeStoreAllocPath
-  placeTypedCopyRecursivePath exprSimBufferStore exprLoweringProps compileEnv
+  placeTypedCopyRecursivePath exprSimBufferStore exprLoweringProps compileEnv loweringStateRelDefs
   typedMemoryCopy venomState stmtLowering exprLowering finite_map loweringHalt
   freshWrites fragGasMode fragExec venomInst exprSimAlloc valueEncodingProps
   exprSimFieldLayout vyperTypeSystem

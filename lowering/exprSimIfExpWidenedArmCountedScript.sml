@@ -7,7 +7,7 @@ Ancestors
   placeMemoryProtectedFrame typedMemoryCopy valueEncodingProps valueEncodingTyping freshWrites
   venomInst venomState fragExec emitHelperProps exprSimDefs exprSimLayoutTransport exprSimHyps
   exprSimHypsDefs exprSimProps exprOperandVar exprLowering context
-  compileEnv loweringPosts vyperState vyperAST vyperTypeSystem exprLoweringProps fragGasPath fragGasMode
+  compileEnv loweringStateRelDefs loweringPosts vyperState vyperAST vyperTypeSystem exprLoweringProps fragGasPath fragGasMode
 
 Theorem compile_nocopy_ifexp_post_path:
   expr_body_pre ce cx env e es /\

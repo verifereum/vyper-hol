@@ -4,7 +4,7 @@ Ancestors
   exprSimAggregateLayout exprSimAggregateSource exprSimAggregateChildren
   exprSimHyps exprSimHypsDefs exprSimDefs loweringPosts
   aggregateCountedOutcome aggregateCountedOutcomeFacts stmtReasonVvMemory
-  exprLoweringProps exprLowering compileEnv valueEncoding valueEncodingProps
+  exprLoweringProps exprLowering compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps
   gasOutcome gasSummary gasContext fragGasMode fragGasPath fragGasSeq fragExec
   vyperInterpreter vyperState vyperAST
 

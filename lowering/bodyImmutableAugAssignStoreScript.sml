@@ -1,6 +1,6 @@
 Theory bodyImmutableAugAssignStore
 Ancestors
-  bodyImmutableAugAssignFacts bodySim exprSimHypsDefs compileEnv
+  bodyImmutableAugAssignFacts bodySim exprSimHypsDefs compileEnv loweringStateRelDefs
   exprLoweringProps immutableConstructorRelation immutableMemoryFrame
   immutableEncoding immutableEncodingProofs immutableValue valueEncodingProps
   localPtrsProps vyperState vyperInterpreter vyperValueOperation

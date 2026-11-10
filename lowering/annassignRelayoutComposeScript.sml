@@ -5,7 +5,7 @@ Ancestors
   stmtSimDefs gasOutcome fragGasMode fragGasPath exprSimWordArgs
   gasSummary gasSummaryCompose vyperInterpreter vyperState venomState
   valueEncoding finite_map list exprLoweringProps
-  context compileEnv stmtLowering loweringPosts
+  context compileEnv loweringStateRelDefs stmtLowering loweringPosts
 Libs monadsyntax
 
 Theorem annassign_relayout_normal_continuation:

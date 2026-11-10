@@ -1,6 +1,6 @@
 Theory aggregateCountedStoreShapeGeneral
 Ancestors
-  exprSimAbiGasBridge context compileEnv vyperAST venomExecSemantics
+  exprSimAbiGasBridge context compileEnv loweringStateRelDefs vyperAST venomExecSemantics
   emitHelper emitHelperProps pred_set list rich_list fragExec venomInst exprLoweringProps
 
 Theorem aggregate_typed_sarray_counted_shape:

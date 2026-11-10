@@ -36,5 +36,5 @@ Theorem owned_target_relayout_store_static_exit:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `stmt_state_rel ctx func cenv cx ee s` by fs[target_post_def] >>
-  fs[stmt_state_rel_def, compileEnvTheory.state_rel_def]
+  fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]
 QED

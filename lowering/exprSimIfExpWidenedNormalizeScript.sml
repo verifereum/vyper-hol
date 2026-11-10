@@ -5,7 +5,7 @@ Ancestors
   exprSimHyps exprSimHypsDefs exprOperandVar freshWrites
   valueEncodingTyping valueEncodingProps placeMemoryProtectedFrame
   exprLoweringProps emitHelperProps fragExec vyperState exprSimIfExp
-  exprSimAlloc loweringHalt exprSimUnwrap exprSimBufferStore context emitHelper compileEnv loweringPosts stmtSimDefs exprSimDefs venomState
+  exprSimAlloc loweringHalt exprSimUnwrap exprSimBufferStore context emitHelper compileEnv loweringStateRelDefs loweringPosts stmtSimDefs exprSimDefs venomState
 
 Theorem compile_bytes_ifexp_post_frag:
   expr_body_pre ce cx env e es /\

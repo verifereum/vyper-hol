@@ -5,7 +5,7 @@ Ancestors
   annassignRelayoutContinue annassignRelayoutPost annassignRelayoutStage loweringPosts vyperLookup
   annassignRelayoutCode exprSimOperands exprSimAggregateChildren
   fragGasMode fragGasPath placeMemoryCopyEffect
-  stmtLowering context compileEnv exprLoweringProps emitHelperProps
+  stmtLowering context compileEnv loweringStateRelDefs exprLoweringProps emitHelperProps
   loweringSlice loweringHalt fragExec venomState venomInst
   allocaSiteResource stmtFragPtr localMemoryStorePath stmtSimDefs
 Libs monadsyntax

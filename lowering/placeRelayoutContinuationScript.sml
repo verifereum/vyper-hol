@@ -2,7 +2,7 @@ Theory placeRelayoutContinuation
 Ancestors
   placeRelayoutSource placeRelayoutPhysicalSource placeRelayoutMemoryRun
   placeRelayoutStorageRun placeRelayoutCode exprSimProps loweringPosts
-  stmtSimDefs compileEnv exprLoweringProps exprSimHypsDefs
+  stmtSimDefs compileEnv loweringStateRelDefs exprLoweringProps exprSimHypsDefs
   placeMemoryLiveRegion bodySimAugPlaceLoad annassignRelayoutSource
 
 (* Ownership is separated from the target's input locals.  The target frame

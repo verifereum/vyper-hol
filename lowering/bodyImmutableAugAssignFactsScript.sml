@@ -3,7 +3,7 @@ Ancestors
   bodySim bodyStorageMetadata exprSimHypsDefs stmtSimAugAssignPlace supportedDecls
   vyperTypeEnv vyperTypeInvariants vyperTypeSystem vyperInterpreter
   vyperState exprOpenMain exprSimSource exprSimTopLevelImmutable
-  finite_map list compileEnv exprSimUnwrap loweringPosts exprLoweringProps
+  finite_map list compileEnv loweringStateRelDefs exprSimUnwrap loweringPosts exprLoweringProps
 
 Theorem immutable_augassign_metadata:
   !tops ctx cenv cx env es src id ity ret_ty ty bop e env'.

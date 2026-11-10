@@ -3,7 +3,7 @@ Theory immutableDeployAssignRestore
 Ancestors
   immutableDeployAssignStateFrame immutableDeployAssignMemoryFrame
   immutableDeployAssignSourceFrame immutableDeployAssignFacts
-  exprLoweringProps exprSimHypsDefs compileEnv vyperPlaceFrames vyperState
+  exprLoweringProps exprSimHypsDefs compileEnv loweringStateRelDefs vyperPlaceFrames vyperState
   venomState finite_map
 
 Theorem immutable_store_stmt_state_rel:

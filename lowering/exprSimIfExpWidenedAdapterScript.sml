@@ -7,7 +7,7 @@ Ancestors
   exprSimVVFrame exprSimAggregateChildren exprSimUnwrap context venomState
   vyperState exprSimDefs exprSimMemorySource gasContext gasSummary
   exprSimProps exprSimAlloc loweringHalt freshWrites fragExec stmtSimDefs
-  compileEnv exprLoweringProps
+  compileEnv loweringStateRelDefs exprLoweringProps
 
 Theorem normalize_owned_value_framed_frag:
   compile_alloc_buffer (type_memory_bytes ce dty) sa = (buf, sm) /\

@@ -4,7 +4,7 @@ Theory immutableDeployOperandTransfer
 Ancestors
   immutableDeployAssignExecution immutableDeployAssignTransfer
   immutableWordExecution immutableCopyExecution moduleLoweringProps
-  exprSimWordBuiltins context compileEnv venomState venomInst
+  exprSimWordBuiltins context compileEnv loweringStateRelDefs venomState venomInst
   emitHelperProps exprLoweringProps fragExec venomExecSemantics
   placeMemoryFieldsForward exprSimMapKey typedMemoryCopy ctorAbiActualObservations
 

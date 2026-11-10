@@ -2,7 +2,7 @@ Theory exprSimIfExpWidenedAggregate
 Ancestors
   exprSimIfExpWidenedPosts exprSimIfExpWidenedEndpoints
   exprSimIfExpWidenedAdapter exprSimProps exprBopSimProps freshWrites
-  exprSimHypsDefs exprLoweringProps compileEnv valueEncodingTyping
+  exprSimHypsDefs exprLoweringProps compileEnv loweringStateRelDefs valueEncodingTyping
   valueEncodingProps fragExec context emitHelper emitHelperProps
   loweringPosts exprSimDefs exprOperandVar exprSimHyps
 

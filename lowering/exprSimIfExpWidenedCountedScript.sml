@@ -3,7 +3,7 @@ Ancestors
   placeTypedCopyRecursivePath exprSimCopy exprSimStorageCopy typedMemoryCopy
   valueEncoding valueEncodingTyping vyperTypeSystem venomState
   exprSimAlloc fragGasSeq fragGasMode context emitHelperProps venomExecSemantics
-  compileEnv emitHelper fragExec exprLoweringProps venomInst gasCount fragGasPath
+  compileEnv loweringStateRelDefs emitHelper fragExec exprLoweringProps venomInst gasCount fragGasPath
   exprSimUnwrap exprSimAggregateChildren exprLowering loweringPosts vyperState
   valueCopyBytes vyperAST
 

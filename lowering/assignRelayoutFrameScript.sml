@@ -3,7 +3,7 @@ Theory assignRelayoutFrame
 Ancestors
   assignRelayoutSource annassignRelayoutBounds localMemoryStorePath
   stmtSimAssignStore placeMemoryCopyEffect exprLoweringProps
-  localPtrsProps compileEnv venomState venomMemDefs vyperLookup
+  localPtrsProps compileEnv loweringStateRelDefs venomState venomMemDefs vyperLookup
 
 Theorem stmt_state_rel_control[local]:
   stmt_state_rel ctx func cenv cx es

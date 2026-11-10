@@ -1,7 +1,7 @@
 (* Meaningful-prefix transfer boundaries for constructor immutables. *)
 Theory immutableDeployAssignTransfer
 Ancestors
-  immutableCopyExecution regularCallEmitSim valueEncoding valueEncodingProofs list rich_list
+  immutableCopyExecution regularCallEmitSim valueEncoding valueEncodingDefs valueEncodingProofs list rich_list
   venomMemProps venomState words byte codegenRel
 
 Theorem immutable_transfer_read_byte:

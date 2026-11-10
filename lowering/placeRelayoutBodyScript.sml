@@ -205,7 +205,7 @@ Proof
      goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
      simp[] >>
      qexistsl_tac [`ctx`, `env`, `tops`] >>
-     fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+     fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
   `~block_is_terminated st` by
     metis_tac[compile_get_target_ptr_endpoint_open] >>
   `(loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient)` by

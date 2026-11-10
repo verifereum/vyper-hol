@@ -5,7 +5,7 @@ Ancestors
   exprSimTypedAlloc exprSimAlloc exprSimCopy typedMemoryCopy exprLoweringProps
   loweringPosts venomMemDefs loweringHalt localPtrsProps freshWrites valueEncoding
   vyperTypeSystem list finite_map venomInst venomState fragExec exprSimProps
-  loweringSlice compileEnv exprSimStorageCopy aggregateCodeTrace aggregateCountedRenamedStore
+  loweringSlice compileEnv loweringStateRelDefs exprSimStorageCopy aggregateCodeTrace aggregateCountedRenamedStore
   placeRelayoutNormalizeCode aggregateCountedRawRelabel aggregateCountedStraightStore
   exprSimHash aggregateCountedStraightExec exprSimAbiGasBridge
 

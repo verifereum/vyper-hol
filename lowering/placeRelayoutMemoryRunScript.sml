@@ -3,7 +3,7 @@ Ancestors
   placeRelayoutState placeDestinationBounds annassignRelayoutBounds
   annassignRelayoutCode annassignRelayoutStage bodySimAugPlaceLoad
   placeMemoryCopyEffect exprSimHypsDefs loweringPosts exprLoweringProps
-  stmtLowering compileEnv context words fragGasPath fragGasSeq
+  stmtLowering compileEnv loweringStateRelDefs context words fragGasPath fragGasSeq
   emitHelperProps allocaSiteResource stmtFragPtr loweringHalt fragExec
   placeMemoryLiveRegion exprSimOperands venomInst targetPlaceSimCasesBase
   venomExecSemantics venomState fragGasMode stmtSimAugAssignPlaceMemory

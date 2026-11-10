@@ -4,7 +4,7 @@ Ancestors
   stmtSimAugAssignStorage stmtSimAugAssign exprOpenPrimitives stmtSimProps
   venomInst vyperState vyperInterpreter stmtSimDeclPath
   stmtLowering exprLowering exprLoweringProps emitHelper emitHelperProps
-  stmtSimDefs compileEnv loweringPosts exprSimMemoryPath fragGasMode
+  stmtSimDefs compileEnv loweringStateRelDefs loweringPosts exprSimMemoryPath fragGasMode
   venomState freshWrites finite_map localPtrsProps
 
 Theorem immutable_augassign_code_parts:

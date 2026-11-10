@@ -72,7 +72,7 @@ Theorem owned_target_relayout_store_outcome:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `~cx.txn.is_static` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `res = INL ()` by
     (Cases_on `p`
      >- (gvs[vyperPlaceFramesTheory.write_storage_place_eq, AllCaseEqs(),

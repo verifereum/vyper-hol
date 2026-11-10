@@ -3,7 +3,7 @@ Theory exprSimAggregateBodyCountedChildren
 Ancestors
   exprSimAggregateChildren exprSimSource exprSimMemorySource gasSummary vyperState exprSimHypsDefs
   exprSimUnwrap exprSimHyps exprSimProps aggregateCountedStraightExec exprSimAbiGasBridge
-  context compileEnv emitHelper emitHelperProps exprLoweringProps
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   loweringPosts venomInst list rich_list exprSimHash exprLowering fragExec venomState fragGasPath fragGasMode
   aggregateCountedTypedStore typedMemoryCopy vyperAST vyperTypeCallGraph
 Libs
