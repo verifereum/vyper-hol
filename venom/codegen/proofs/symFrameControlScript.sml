@@ -2345,6 +2345,56 @@ Proof
   simp[]
 QED
 
+Theorem source_memory_range_label_free:
+  !cp labs inst vs off sz.
+  (!b. b IN FDOM labs ==> context_spill_byte cp b) /\
+  source_memory_reads_disjoint cp inst vs /\
+  MEM (off,sz) (source_memory_read_ranges inst vs) ==>
+  ~mem_labels_hit labs (in_mem_range off sz)
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  gvs[mem_labels_hit_def, in_mem_range_def] >>
+  rename1 `source_memory_reads_disjoint cplan inst vs` >>
+  rename1 `byte IN FDOM labs` >>
+  `context_spill_byte cplan byte` by metis_tac[] >>
+  fs[context_spill_byte_def, source_memory_reads_disjoint_def,
+     listTheory.EVERY_MEM] >>
+  first_x_assum (qspec_then `(off,sz)` mp_tac) >> simp[] >>
+  goal_assum (drule_at Any) >> decide_tac
+QED
+
+Theorem mem_labels_clear_read_safe:
+  ~mem_labels_hit (mem_labels_clear labs P) P
+Proof
+  simp[mem_labels_hit_def, mem_labels_clear_def, finite_mapTheory.FDOM_DRESTRICT] >>
+  metis_tac[]
+QED
+
+Theorem sym_steps_terminal_extend:
+  sym_terminal (sym_steps p env n ss) ==>
+  sym_steps p env (n + k) ss = sym_steps p env n ss
+Proof
+  simp[sym_steps_add] >> Cases_on `sym_steps p env n ss` >>
+  simp[sym_terminal_def]
+QED
+
+Theorem sym_step_concrete_word_prefix:
+  ss.sym_stack = MAP Val args ++ tail /\ LENGTH args = asm_op_arity name /\
+  ~mem_labels_hit ss.sym_mem_labels (asm_op_mem_reads name args) ==>
+  sym_step_concrete name ss =
+    sym_lift (LENGTH args)
+      (mem_labels_clear ss.sym_mem_labels (asm_op_mem_writes name args)) ss
+      (asm_step_op FEMPTY name (ss.sym_base with as_stack := args))
+Proof
+  strip_tac >>
+  `OPT_MMAP sval_val (MAP Val args) = SOME args` by
+    (POP_ASSUM_LIST (K all_tac) >> Induct_on `args` >> simp[sval_val_def]) >>
+  `TAKE (asm_op_arity name) ss.sym_stack = MAP Val args` by
+    (qpat_x_assum `LENGTH args = _` (fn th => rewrite_tac[GSYM th]) >>
+     simp[rich_listTheory.TAKE_APPEND]) >>
+  simp[sym_step_concrete_def]
+QED
+
 Theorem sym_jmp_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
