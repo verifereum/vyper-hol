@@ -94,25 +94,37 @@ Theorem intcall_array_round_at_body:
         s2.vs_alloca_next <= t.vs_alloca_next);
       H = (\res ee u. ?broke. res = INL broke /\
         u.vs_inst_idx = 0 /\ ~u.vs_halted /\
-        intcall_joint_res fp ce env ee sa u /\
+        intcall_joint_res fp ce env ee sc u /\
         lookup_scopes name ee.scopes = SOME snapshot /\
-        (!x z. not_fresh_at sa x /\ lookup_var x cc = SOME z ==>
+        lookup_scopes id ee.scopes = NONE /\
+        (!x z. not_fresh_at sb0 x /\ x <> idx /\ x <> nv /\
+               lookup_var x s2 = SOME z ==> lookup_var x u = SOME z) /\
+        (!x z. not_fresh_at sc x /\ lookup_var x cc = SOME z ==>
                lookup_var x u = SOME z) /\
         (!aid b. FLOOKUP cc.vs_allocas aid = SOME b ==>
                  FLOOKUP u.vs_allocas aid = SOME b) /\
         cc.vs_alloca_next <= u.vs_alloca_next /\
         (broke ==> u.vs_current_bb = exit) /\
-        (~broke ==> u.vs_current_bb = cond /\ lookup_var idx u = SOME (c + 1w)))
+        (~broke ==> u.vs_current_bb = cond /\ lookup_var idx u = SOME (c + 1w) /\
+          array_loop_inv fp.jc_ctx fp.jc_func ce fp.jc_cx
+            (\ee. lookup_scopes name ee.scopes = SOME snapshot)
+            vs id idx saved arrbase p dst sz aa cond sc (k + 1) ee u))
   in
   array_for_code fp.jc_func ce bc ty stmts id et tv n stride saved
     p sz aa idx dv ov ep nv cond exit bod incr j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa cc /\
+  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sc cc /\
   cenv_top_ext ce bc entry.scopes /\
   local_ptrs_reserved ce sb1 /\
   (!op. fp.jc_reserved op ==> op <> Var idx /\ op <> Var nv) /\
-  (!x. not_fresh_at sa x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
+  (!x. not_fresh_at sc x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
+  array_loop_inv fp.jc_ctx fp.jc_func ce fp.jc_cx
+    (\ee. lookup_scopes name ee.scopes = SOME snapshot)
+    vs id idx saved arrbase p dst sz aa cond sc k es cc /\
+  k < LENGTH vs /\ c = n2w k /\ saved = Var ip /\
+  not_fresh_at sb0 p /\ not_fresh_at sb0 ip /\
+  lookup_var p s2 = SOME dst /\ lookup_var ip s2 = SOME arrbase /\
   not_fresh_at sb0 idx /\ ~s2.vs_halted /\ lookup_var idx s2 = SOME c /\
-  (!x z. not_fresh_at sa x /\ lookup_var x cc = SOME z ==>
+  (!x z. not_fresh_at sc x /\ lookup_var x cc = SOME z ==>
          lookup_var x s2 = SOME z) /\
   (!aid b. FLOOKUP cc.vs_allocas aid = SOME b ==>
            FLOOKUP s2.vs_allocas aid = SOME b) /\
@@ -162,7 +174,7 @@ Resume intcall_array_round_at_body[normal]:
     (irule cenv_top_ext_trans >> qexists_tac `bc` >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      fs[preserves_scopes_dom_def]) >>
-  `intcall_joint_res fp ce env (es with gas_obs := gs) sa cc` by
+  `intcall_joint_res fp ce env (es with gas_obs := gs) sc cc` by
     (fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_gas_obs] >>
      metis_tac[]) >>
   `intcall_joint_res fp ce env (ee with scopes := TL ee.scopes) sb1 t` by
@@ -178,15 +190,22 @@ Resume intcall_array_round_at_body[normal]:
      goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >>
      metis_tac[]) >>
+  `lookup_scopes id (TL ee.scopes) = NONE` by
+    (irule lookup_scopes_none_map_fdom >>
+     qexists_tac `es.scopes` >> fs[preserves_scopes_dom_def]) >>
   `lookup_var idx t = SOME c` by metis_tac[] >>
   `(res = INL () ==> ~block_is_terminated sb1)` by metis_tac[] >>
   drule_all intcall_array_body_finish_resources >> strip_tac >>
-  `intcall_joint_res fp ce env (ee with scopes := TL ee.scopes) sa u` by
-    (`local_ptrs_reserved ce sa /\
-      (!op x. fp.jc_reserved op /\ op = Var x ==> not_fresh_at sa x)` by
+  `intcall_joint_res fp ce env (ee with scopes := TL ee.scopes) sc u` by
+    (`local_ptrs_reserved ce sc /\
+      (!op x. fp.jc_reserved op /\ op = Var x ==> not_fresh_at sc x)` by
        fs[intcall_joint_res_def, intcall_expr_res_def] >>
      irule intcall_joint_res_reentry >> simp[] >>
      qexists_tac `sb1` >> simp[]) >>
-  simp[] >> qexists_tac `u` >> simp[] >> metis_tac[]
+  simp[] >> qexists_tac `u` >> simp[] >>
+  strip_tac >>
+  fs[array_loop_inv_def, intcall_joint_res_def, intcall_expr_res_def,
+     array_for_code_def, listTheory.ALL_DISTINCT, eval_operand_def] >>
+  simp[wordsTheory.word_add_n2w] >> metis_tac[]
 QED
 Finalise intcall_array_round_at_body
