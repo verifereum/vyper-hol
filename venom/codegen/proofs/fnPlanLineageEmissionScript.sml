@@ -679,3 +679,28 @@ Proof
   simp[generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def,
     stackPlanTypesTheory.fresh_label_def, emission_projection_def, emission_anchor_def]
 QED
+
+(* A retained ordinal fixes its physical position in a common complete list.
+   This does not identify cuts whose next operation is erased. *)
+Theorem filter_retained_position_unique:
+  !P a b c d x y.
+    a ++ x::b = c ++ y::d /\
+    LENGTH (FILTER P a) = LENGTH (FILTER P c) /\ P x /\ P y ==>
+    a = c /\ x = y /\ b = d
+Proof
+  gen_tac >> Induct_on `a`
+  >- (rpt gen_tac >> Cases_on `c` >> strip_tac >>
+      gvs[listTheory.FILTER]) >>
+  rpt gen_tac >> Cases_on `c` >> strip_tac >> gvs[] >>
+  Cases_on `P h` >> gvs[listTheory.FILTER] >> metis_tac[]
+QED
+
+Theorem emission_anchor_position_unique:
+  !a b c d x y.
+    a ++ x::b = c ++ y::d /\
+    LENGTH (emission_projection a) = LENGTH (emission_projection c) /\
+    emission_anchor x /\ emission_anchor y ==>
+    a = c /\ x = y /\ b = d
+Proof
+  metis_tac[emission_projection_def, filter_retained_position_unique]
+QED
