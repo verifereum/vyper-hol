@@ -27,7 +27,7 @@ Proof
   Cases_on `pr` >> drule internal_param_capture_projection >> simp[]
 QED
 
-(* TEMPORARY OWNER-SPLIT STATEMENT: parse-checked only, not proved.
+(* FROZEN OWNER LEAF: proved by its own run, cheat until then.
    Historical obligation C1.5.3.1.1. The additive formulation counts
    only the new charge even when sa already contains other functions. *)
 Theorem compile_internal_function_stack_charge:

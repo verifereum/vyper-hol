@@ -1,7 +1,7 @@
-(* TEMPORARY OWNER-SPLIT STATEMENTS: parse-checked only, not proved.
+(* FROZEN OWNER LEAF: proved by its own run, cheat until then.
    Historical obligation C1.5.3.1.3. Packaging preserves multiplicity of
    all instructions. Together with the additive function-charge bound and
-   cs_extends on either side of an internal compilation, these equalities
+   cs_extends on either side of an internal compilation, these bounds
    bound that package's internal_stack_size by unit_alloca_frame. *)
 Theory bodyIntCallUnitCharge
 Ancestors
@@ -26,7 +26,7 @@ Theorem runtime_unit_alloca_charge:
           package_external_fn tops F (assign_nkeys tops 0)) exts))
       (initial_compile_state "__entry") = ((),st) ==>
     SUM (MAP alloca_lit_size
-      (FILTER (\i. i.inst_opcode = ALLOCA) (state_insts st))) =
+      (FILTER (\i. i.inst_opcode = ALLOCA) (state_insts st))) <=
     unit_alloca_frame unit.cu_context
 Proof
   cheat
@@ -53,7 +53,7 @@ Theorem deploy_unit_alloca_charge:
        else [])
       ce body pay nr key trans (initial_compile_state "__deploy") = ((),st) ==>
     SUM (MAP alloca_lit_size
-      (FILTER (\i. i.inst_opcode = ALLOCA) (state_insts st))) =
+      (FILTER (\i. i.inst_opcode = ALLOCA) (state_insts st))) <=
     unit_alloca_frame unit.cu_context
 Proof
   cheat

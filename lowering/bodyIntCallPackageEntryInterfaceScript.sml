@@ -1,4 +1,4 @@
-(* TEMPORARY OWNER-SPLIT STATEMENT: parse-checked only, not proved.
+(* FROZEN OWNER LEAF: proved by its own run, cheat until then.
    Historical obligation C1.5.3.2. This is the complete universal package
    conjunct of intcall_entry (not an alternate definition of that relation).
    Inputs are single-endpoint staging descriptors, their separation, the
@@ -15,14 +15,14 @@ Ancestors
 
 Theorem intcall_package_entry:
   !tops ctx func caller cx tenv name args ret ss mut rr es1 prev penv rtv
-   sa sb st2 st3 D vals ws argv rbw rc rbs pvs lbl t.
+   sa sb st2 st3 D vals ws argv rbw rcn rbs pvs lbl t.
     body_inv tops ctx caller cx /\
     MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
     caller.ce_module = NONE /\
     caller.ce_module_vars =
       add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
         tops 0 (add_module_var_locations tops FEMPTY) /\
-    caller.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
+    caller.ce_func_info (nsid_to_string (NONE,name)) = (rcn,rbs,pvs) /\
     lbl = internal_fn_label (caller.ce_func_ids (nsid_to_string (NONE,name)))
       (nsid_to_string (NONE,name))
       (caller.ce_func_param_types (nsid_to_string (NONE,name))) caller.ce_is_ctor /\
@@ -45,10 +45,10 @@ Theorem intcall_package_entry:
         !w w'. eval_operand op t = SOME w /\ eval_operand op' t = SOME w' ==>
         regions_disjoint (w2n w) (type_memory_size tv)
           (w2n w') (type_memory_size tv')) (EL i D) (EL j D)) /\
-    argv = (if rc = 0 /\ ret <> NoneT then [rbw] else []) ++ ws /\
+    argv = (if rcn = 0 /\ ret <> NoneT then [rbw] else []) ++ ws /\
     LENGTH argv < dimword (:256) /\
     sa.cs_next_id <= st2.cs_next_id /\ st3.cs_next_id <= sb.cs_next_id /\
-    (rc = 0 /\ ret <> NoneT ==>
+    (rcn = 0 /\ ret <> NoneT ==>
       ?rid off cap inst.
         FLOOKUP t.vs_allocas rid = SOME (off,cap) /\
         rid < st2.cs_next_id /\ rbw = n2w off /\ off < dimword (:256) /\
@@ -66,7 +66,7 @@ Theorem intcall_package_entry:
         (lbl',ce,params,has_rb,is_nr,key,trans,view,ctor,imm_len',ss',rt) ==>
       lbl' = lbl /\
       (has_rb <=>
-        rc = 0 /\ caller.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT) /\
+        rcn = 0 /\ caller.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT) /\
       (ce.ce_is_ctor ==> IS_SOME (FLOOKUP t.vs_labels "runtime_begin")) /\
       state_rel func ce cx (es1 with scopes := []) t /\
       internal_immutable_regions ce cx es1 t.vs_alloca_next /\
