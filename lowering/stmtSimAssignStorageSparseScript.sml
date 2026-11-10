@@ -6,7 +6,7 @@
 
 Theory stmtSimAssignStorageSparse
 Ancestors
-  stmtSimAssignStorageCopy vyperStorageBackend placeStoreSlots exprSimHash exprOpenPrimitives
+  stmtSimAssignStorageCopy vyperStorageBackend placeStoreSlots exprSimHash exprSimHashBoundary exprOpenPrimitives
   exprSimTopLevelProps stmtSimAssignStorage
   stmtSimDeclMem
   gasOutcome stmtSimProps stmtSimForced exprSimProps stmtSimDefs exprSimDefs
