@@ -187,3 +187,75 @@ Definition inline_namespace_incomparable_def:
   inline_namespace_incomparable (p:bool list) q <=>
     ~IS_PREFIX p q /\ ~IS_PREFIX q p
 End
+
+Theorem inline_namespace_nodes_separate:
+  !ctx n fn cert. inline_annotated_origin ctx n fn cert ==>
+    !p q (rho:string -> string) sigma a b.
+      inline_namespace_node_at cert p rho a /\
+      inline_namespace_node_at cert q sigma b /\
+      inline_namespace_incomparable p q ==>
+      DISJOINT (IMAGE rho (inline_namespace_envelope a))
+        (IMAGE sigma (inline_namespace_envelope b))
+Proof
+  ho_match_mp_tac inline_annotated_origin_strongind >> rpt conj_tac
+  >- simp[inline_namespace_incomparable_def]
+  >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[inline_namespace_node_edit, inline_namespace_incomparable_def,
+    rich_listTheory.IS_PREFIX, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[]
+  >- metis_tac[inline_namespace_incomparable_def]
+  >- (qpat_x_assum `inline_namespace_node_at cert _ _ _`
+        (strip_assume_tac o MATCH_MP inline_namespace_node_support) >>
+      qpat_x_assum `inline_namespace_node_at cert' _ _ _`
+        (strip_assume_tac o MATCH_MP inline_namespace_node_support) >>
+      `DISJOINT (inline_namespace_envelope cert)
+         (IMAGE (STRCAT (inline_prefix ist.is_inline_count))
+           (inline_namespace_envelope cert'))` by
+        metis_tac[inline_namespace_envelope_split] >>
+      rewrite_tac[pred_setTheory.IMAGE_COMPOSE] >>
+      metis_tac[pred_setTheory.IMAGE_SUBSET, pred_setTheory.DISJOINT_SUBSET,
+        pred_setTheory.DISJOINT_SUBSET'])
+  >- (qpat_x_assum `inline_namespace_node_at cert _ _ _`
+        (strip_assume_tac o MATCH_MP inline_namespace_node_support) >>
+      qpat_x_assum `inline_namespace_node_at cert' _ _ _`
+        (strip_assume_tac o MATCH_MP inline_namespace_node_support) >>
+      `DISJOINT (inline_namespace_envelope cert)
+         (IMAGE (STRCAT (inline_prefix ist.is_inline_count))
+           (inline_namespace_envelope cert'))` by
+        metis_tac[inline_namespace_envelope_split] >>
+      rewrite_tac[pred_setTheory.IMAGE_COMPOSE] >>
+      metis_tac[pred_setTheory.IMAGE_SUBSET, pred_setTheory.DISJOINT_SUBSET,
+        pred_setTheory.DISJOINT_SUBSET', pred_setTheory.DISJOINT_SYM]) >>
+  rewrite_tac[pred_setTheory.IMAGE_COMPOSE] >>
+  irule inline_namespace_disjoint_embedding >>
+  metis_tac[inline_namespace_incomparable_def]
+QED
+
+Theorem inline_namespace_leaf_addresses:
+  !cert p q (rho:string -> string) sigma fn gn.
+    inline_namespace_leaf_at cert p rho fn /\
+    inline_namespace_leaf_at cert q sigma gn /\ p <> q ==>
+    inline_namespace_incomparable p q
+Proof
+  Induct >>
+  simp[inline_namespace_leaf_at_def, inline_namespace_node_edit,
+    inline_namespace_incomparable_def, rich_listTheory.IS_PREFIX,
+    PULL_EXISTS] >> rpt strip_tac >> gvs[] >>
+  metis_tac[inline_namespace_leaf_at_def, inline_namespace_incomparable_def]
+QED
+
+Theorem inline_namespace_leaves_separate:
+  !ctx n root cert p q (rho:string -> string) sigma fn gn.
+    inline_annotated_origin ctx n root cert ==>
+    inline_namespace_leaf_at cert p rho fn ==>
+    inline_namespace_leaf_at cert q sigma gn ==> p <> q ==>
+    DISJOINT (IMAGE rho (set (cfgTransform$fn_all_vars fn)))
+      (IMAGE sigma (set (cfgTransform$fn_all_vars gn)))
+Proof
+  rpt strip_tac >>
+  drule_all inline_namespace_leaf_addresses >> strip_tac >>
+  gvs[inline_namespace_leaf_at_def] >>
+  drule_all inline_namespace_nodes_separate >>
+  simp[inline_namespace_envelope_def]
+QED
