@@ -99,6 +99,28 @@ Definition ptr_use_ok_def:
               ops.iao_ofst = Var v
 End
 
+(* LOG stores scalar topics and size before its final address operand.
+   Uniqueness of pointer occurrences excludes pointers in all scalars. *)
+Theorem ptr_use_ok_log_scalar:
+  inst.inst_opcode = LOG /\
+  inst.inst_operands = Lit tc :: REVERSE (off :: len :: topics) /\
+  ptr_use_ok P pv inst /\ MEM (Var v) (len :: topics) ==>
+  v NOTIN pv
+Proof
+  rpt strip_tac >> CCONTR_TAC >> gvs[] >>
+  qpat_x_assum `ptr_use_ok _ _ _` mp_tac >>
+  simp[ptr_use_ok_def, is_pointer_preserving_op_def,
+       mem_write_ops_def, mem_read_ops_def, REVERSE_APPEND] >>
+  qexists_tac `v` >> simp[MEM_REVERSE] >>
+  Cases_on `topics` >> gvs[] >>
+  strip_tac >> gvs[FILTER_APPEND_DISTRIB, FILTER_REVERSE,
+                    REVERSE_EQ_SING] >>
+  Cases_on `off = Var v` >>
+  gvs[FILTER_APPEND_DISTRIB, FILTER_REVERSE, FILTER_EQ_NIL, EVERY_MEM] >>
+  Cases_on `h = Var v` >> Cases_on `len = Var v` >>
+  gvs[FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[]
+QED
+
 (* MEMTOP observes the memory size, which the static layout changes, and
    GETFMP/SETFMP/RETFMP the free memory pointer, which FmpLowering changes.
    FMP_PARAM reads a parameter like PARAM but is no pointer root, so a

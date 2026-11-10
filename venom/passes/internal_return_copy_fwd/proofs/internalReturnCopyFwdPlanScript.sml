@@ -157,6 +157,27 @@ Definition ircf_alloca_of_def:
          ai.inst_outputs = [x] /\ ai.inst_operands = [Lit sz]
 End
 
+Theorem ircf_alias_fn_pv:
+  !fn root v. ircf_alias fn root v ==>
+    !P. root IN fn_pv P fn ==> v IN fn_pv P fn
+Proof
+  ho_match_mp_tac ircf_alias_ind >> rpt strip_tac >>
+  metis_tac[fn_pv_forward, pointerConfinedDefsTheory.is_pointer_preserving_op_def, MEM]
+QED
+
+Theorem ircf_alloca_alias_fn_pv:
+  ircf_alloca_of fn root sz /\ ircf_alias fn root v ==>
+  v IN fn_pv P fn
+Proof
+  strip_tac >> irule ircf_alias_fn_pv >>
+  qexists_tac `root` >> simp[] >>
+  `root IN ptr_roots P fn` by
+    (gvs[ircf_alloca_of_def, ptrDisciplineTheory.ptr_roots_def,
+         pointerConfinedDefsTheory.alloca_roots_def] >>
+     disj1_tac >> disj1_tac >> qexists_tac `ai` >> simp[inst_output_def]) >>
+  metis_tac[ptr_roots_subset_fn_pv, SUBSET_DEF]
+QED
+
 Theorem ircf_alloca_alias_root:
   !fn a b sz. ssa_form fn /\ ircf_alloca_of fn b sz /\
     ircf_alias fn a b ==> a = b
@@ -1243,6 +1264,37 @@ Proof
   metis_tac[ircf_block_plan_fwd_ok]
 QED
 
+Theorem ircf_redirect_changed_fn_pv:
+  wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+  ircf_no_dst_write_alias fn /\ MEM bb fn.fn_blocks /\
+  ircf_block_plan fn bb bb2 /\ ircf_redirect fn bb bb2 v <> v ==>
+  v IN fn_pv P fn
+Proof
+  strip_tac >> drule_all ircf_redirect_changed_forward >> strip_tac >>
+  irule ircf_alloca_alias_fn_pv >>
+  gvs[ircf_fwd_ok_def] >> metis_tac[]
+QED
+
+Theorem ircf_redirect_log_scalars:
+  wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+  ircf_no_dst_write_alias fn /\ MEM bb fn.fn_blocks /\
+  ircf_block_plan fn bb bb2 /\ fn_ptr_ok P fn /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = LOG /\
+  inst.inst_operands = Lit tc :: REVERSE (off :: len :: topics) ==>
+  ircf_redirect_op fn bb bb2 len = len /\
+  MAP (ircf_redirect_op fn bb bb2) topics = topics
+Proof
+  strip_tac >>
+  `ptr_use_ok P (fn_pv P fn) inst` by metis_tac[ptrDisciplineTheory.fn_ptr_ok_def] >>
+  `!op. MEM op (len :: topics) ==> ircf_redirect_op fn bb bb2 op = op` by
+    (rpt strip_tac >> Cases_on `op` >> simp[ircf_redirect_op_def] >>
+     rename1 `ircf_redirect fn bb bb2 v` >>
+     `v NOTIN fn_pv P fn` by metis_tac[ptrDisciplineTheory.ptr_use_ok_log_scalar] >>
+     metis_tac[ircf_redirect_changed_fn_pv]) >>
+  conj_tac >- metis_tac[MEM] >>
+  irule LIST_EQ >> simp[EL_MAP] >> metis_tac[EL_MEM, MEM]
+QED
+
 Theorem ircf_redirect_changed_position:
   wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
   fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
@@ -1341,7 +1393,8 @@ Proof
     metis_tac[ircf_block_plan_writer] >>
   `inst_wf (EL i bb.bb_instructions)` by
     metis_tac[venomWfTheory.fn_inst_wf_def, EL_MEM] >>
-  gvs[invokeCopyFwdCommonDefsTheory.is_mem_addr_position_def,
-      venomWfTheory.inst_wf_def, memLocDefsTheory.mem_write_ops_def,
+  Cases_on `(EL i bb.bb_instructions).inst_opcode` >>
+  gvs[invokeCopyFwdCommonDefsTheory.is_mem_addr_position_def] >>
+  gvs[venomWfTheory.inst_wf_def, memLocDefsTheory.mem_write_ops_def,
       LENGTH_EQ_NUM_compute]
 QED
