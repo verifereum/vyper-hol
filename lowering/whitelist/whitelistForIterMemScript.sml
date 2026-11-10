@@ -2416,7 +2416,12 @@ Proof
       qpat_x_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _` mp_tac >>
       qpat_x_assum `MEM _ (fn_insts func)` mp_tac >>
       simp[venomInstTheory.mk_inst_def])
-  >> rpt strip_tac >> gvs[] >> fs[not_fresh_at_def]
+  >> rpt strip_tac >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_stmt _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  rpt (qpat_x_assum `lookup_block _ _ = _` kall_tac) >>
+  fs[not_fresh_at_def]
 QED
 
 Theorem dynarray_loop_initialize_keep[local]:
