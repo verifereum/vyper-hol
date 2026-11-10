@@ -138,3 +138,70 @@ Proof
   rename1 `SOME p` >> Cases_on `p` >> simp[wordsTheory.dimword_def] >>
   CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> EVAL_TAC
 QED
+
+Theorem ircf_log_probe_block_transform:
+  ircf_transform_block ircf_log_probe_analysis ircf_log_probe_bb =
+    (T, ircf_log_probe_raw_bb)
+Proof
+  mp_tac ircf_log_probe_try_forward >>
+  simp[ircf_log_probe_bb_def, ircf_log_probe_raw_bb_def, mk_inst_def,
+       passSharedDefsTheory.mk_nop_inst_def] >> strip_tac >>
+  simp[ircf_transform_block_def, ircf_log_probe_bb_def,
+       rich_listTheory.COUNT_LIST_GENLIST, listTheory.GENLIST, listTheory.FOLDL, mk_inst_def,
+       ircf_log_probe_raw_bb_def, passSharedDefsTheory.mk_nop_inst_def]
+QED
+
+Definition ircf_log_probe_target_bb_def:
+  ircf_log_probe_target_bb = ircf_log_probe_bb with bb_instructions := [
+    mk_inst 1 ALLOCA [Lit 32w] ["%src"];
+    mk_inst 2 ALLOCA [Lit 32w] ["%dst"];
+    mk_inst 3 INVOKE [Label "callee"; Var "%src"] [];
+    mk_inst 5 LOG [Lit 1w; Var "%src"; Lit 0w; Lit 0w] [];
+    mk_inst 6 STOP [] []]
+End
+
+Theorem ircf_log_probe_main_transform:
+  ircf_transform_function ircf_log_probe_meta
+    ircf_log_probe_ctx.ctx_functions FEMPTY ircf_log_probe_main =
+    ircf_log_probe_main with fn_blocks := [ircf_log_probe_target_bb]
+Proof
+  simp[ircf_transform_function_def, GSYM ircf_log_probe_analysis_def] >>
+  simp[ircf_log_probe_main_def, mk_raw_function_def,
+       ircf_log_probe_block_transform] >>
+  simp[passSharedDefsTheory.clear_nops_function_def,
+       passSharedDefsTheory.clear_nops_block_def,
+       ircf_log_probe_raw_bb_def, ircf_log_probe_target_bb_def,
+       ircf_log_probe_bb_def, passSharedDefsTheory.mk_nop_inst_def,
+       mk_inst_def]
+QED
+
+Theorem ircf_log_probe_callee_transform:
+  !a. ircf_transform_block a (HD ircf_log_probe_callee.fn_blocks) =
+    (F, HD ircf_log_probe_callee.fn_blocks)
+Proof
+  gen_tac >> simp[ircf_transform_block_def, ircf_log_probe_callee_def,
+    mk_raw_function_def, rich_listTheory.COUNT_LIST_GENLIST,
+    listTheory.GENLIST, listTheory.FOLDL, mk_inst_def]
+QED
+
+Theorem ircf_log_probe_callee_function_transform:
+  !meta fns rma.
+    ircf_transform_function meta fns rma ircf_log_probe_callee =
+    ircf_log_probe_callee
+Proof
+  rpt gen_tac >>
+  mp_tac (Q.SPEC `icf_build_ctx meta fns rma ircf_log_probe_callee`
+    ircf_log_probe_callee_transform) >>
+  simp[ircf_transform_function_def, ircf_log_probe_callee_def,
+       mk_raw_function_def] >> strip_tac >> simp[]
+QED
+
+Theorem ircf_log_probe_context_transform:
+  ircf_transform_ctx ircf_log_probe_meta FEMPTY ircf_log_probe_ctx =
+    ircf_log_probe_ctx with ctx_functions := [ircf_log_probe_callee;
+      ircf_log_probe_main with fn_blocks := [ircf_log_probe_target_bb]]
+Proof
+  mp_tac ircf_log_probe_main_transform >>
+  simp[ircf_transform_ctx_def, ircf_log_probe_ctx_def,
+       ircf_log_probe_callee_function_transform]
+QED
