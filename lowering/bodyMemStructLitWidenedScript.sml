@@ -7,7 +7,7 @@ Theory bodyMemStructLitWidened
 Ancestors
   bodyMemoryPreds bodyMemWidenedStore bodyMemWidenedResources
   typedCopyBodyFrame emptyValueMemory typedCopyRankPathMem
-  bodyMemAggregateBodyLoops
+  bodyMemAggregateBodyLoops bodyMemStructFieldsBody
 
 Theorem body_struct_lit_widened_call_elem_mem:
   !cx v7 src_id_opt id kes.
