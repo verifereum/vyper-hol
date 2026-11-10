@@ -339,7 +339,7 @@ QED
 Finalise slice_extcode_tail_outcome
 
 Theorem slice_extcode_entry_post_rebase:
-  wb_frame cenv es sa s u /\ stmt_state_rel ctx func cenv cx es s /\
+  wb_frame cenv es es sa s u /\ stmt_state_rel ctx func cenv cx es s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sb /\
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
@@ -348,9 +348,9 @@ Theorem slice_extcode_entry_post_rebase:
   vv_post ctx func cenv cx result es sa sd s ef tv vv z
 Proof
   strip_tac >>
-  `wb_frame cenv es sb u t` by
+  `wb_frame cenv es ee sb u t` by
     (irule expr_post_frame >> goal_assum (drule_at Any)) >>
-  `wb_frame cenv es sa s t` by
+  `wb_frame cenv es ee sa s t` by
     (irule wb_frame_trans >> simp[] >> conj_tac
      >- (qexistsl_tac [`es`, `sb`, `u`] >> simp[]) >> metis_tac[]) >>
   irule exprSimCalldataSliceTheory.vv_post_prefix_frame >>

@@ -226,7 +226,7 @@ Theorem slice_allocated_bytes_write_frame:
      regions_disjoint p sz b len) ==>
   let t = mstore p (n2w (LENGTH bytes))
             (write_memory_with_expansion (p+32) bytes s)
-  in stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t
+  in stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t
 Proof
   strip_tac >> simp[] >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s /\
@@ -282,7 +282,7 @@ Theorem slice_data_success_run:
  32+n <= sz /\ sz < dimword (:256) ==>
  ?t p aid.
  run_inst_seq (emitted_insts sa sb) s = OK t /\
- stmt_state_rel ctx func cenv cx es t /\ loweringPosts$wb_frame cenv es sa s t /\
+ stmt_state_rel ctx func cenv cx es t /\ loweringPosts$wb_frame cenv es es sa s t /\
  eval_operand out t = SOME p /\
  FLOOKUP t.vs_allocas aid = SOME (w2n p,sz) /\
  sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
@@ -431,18 +431,18 @@ Resume slice_data_success_run[finish]:
      goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
-  `wb_frame cenv es sa s u` by
+  `wb_frame cenv es es sa s u` by
     (rewrite_tac[loweringPostsTheory.wb_frame_def] >>
      conj_tac >- (simp[lookup_var_def] >> metis_tac[]) >>
      qpat_assum `u = s with vs_vars := _` SUBST1_TAC >>
      simp[NoAsms, exprSimPropsTheory.locals_kept_mem]) >>
-  `wb_frame cenv es sa s t` by
+  `wb_frame cenv es es sa s t` by
     (irule exprSimWordArgsTheory.wb_frame_trans >>
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac
      >- (qexistsl_tac [`es`, `sc`, `u`] >> simp[] >> decide_tac) >>
      goal_assum (drule_at Any)) >>
-  `wb_frame cenv es sa s v` by
+  `wb_frame cenv es es sa s v` by
     (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
      goal_assum (drule_at Any) >> qexists_tac `sd` >> simp[] >>
      conj_tac >- (rpt strip_tac >> fs[lookup_var_def]) >>
@@ -469,7 +469,7 @@ Resume slice_data_success_run[finish]:
        POP_ASSUM_LIST (K all_tac) >> metis_tac[th, ADD_COMM])) >>
   `final = mstore (w2n p) (n2w (LENGTH (TAKE n (DROP a bs))))
      (write_memory_with_expansion (w2n p+32) (TAKE n (DROP a bs)) v)` by simp[] >>
-  `stmt_state_rel ctx func cenv cx es final /\ wb_frame cenv es sa v final` by
+  `stmt_state_rel ctx func cenv cx es final /\ wb_frame cenv es es sa v final` by
     (qpat_assum `final = mstore _ (n2w (LENGTH _)) _` SUBST1_TAC >>
      irule (SIMP_RULE std_ss [LET_THM] slice_allocated_bytes_write_frame) >>
      reverse conj_tac >- first_assum ACCEPT_TAC >>
@@ -478,7 +478,7 @@ Resume slice_data_success_run[finish]:
      simp[mk_inst_def] >>
      qpat_assum `sc.cs_next_id = _` (fn th => once_rewrite_tac[GSYM th]) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `wb_frame cenv es sa s final` by
+  `wb_frame cenv es es sa s final` by
     (irule exprSimWordArgsTheory.wb_frame_trans >>
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac

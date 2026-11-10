@@ -39,7 +39,7 @@ Theorem slice_extcode_output_entry:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!j b len. j < sa.cs_next_id /\ FLOOKUP t.vs_allocas j = SOME (b,len) ==>
       regions_disjoint (w2n p) sz b len) /\
-    wb_frame cenv es sa s t
+    wb_frame cenv es es sa s t
 Proof
   strip_tac >> drule_all slice_extcode_out_owner_inst >> strip_tac >>
   drule_all slice_out_buf_run >> strip_tac >>

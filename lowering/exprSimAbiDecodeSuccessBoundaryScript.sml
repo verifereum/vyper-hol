@@ -42,7 +42,7 @@ Proof
     (drule_all abi_decode_success_stmt_state_rel >> simp[]) >>
   `vv_at ce cx ty sa final es1 (Value v) (LocatedValue ty (mk_ptr out LocMemory)) t` by
     (drule_all abi_decode_success_vv_at >> simp[]) >>
-  `locals_kept ce es1 s t` by
+  `locals_kept ce es1 es1 s t` by
     (drule_all abi_decode_success_locals_kept >> simp[]) >>
   simp[vv_post_def, expr_type_def] >> rpt conj_tac
   >- simp[contextTheory.mk_ptr_def]
