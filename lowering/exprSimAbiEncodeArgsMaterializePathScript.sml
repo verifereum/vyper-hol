@@ -5,6 +5,7 @@ Ancestors
   loweringPosts compileEnv finite_map exprSimAbiEncodeSeparation
   entrySinkExtraction fragGasSeq stmtReasonLitFragMemory emitHelperProps
   abiDecodeStaticProps fragGasMode list exprSimHyps
+  exprSimAggregateLayout storageCopyGasPath
 
 Definition materialize_owned_post_def:
   materialize_owned_post ctx func ce cx e es sa sm sb s0 es' v dst tv s <=>
@@ -187,6 +188,66 @@ Proof
      simp[post_value_type_def, vyperASTTheory.expr_type_def] >>
      IF_CASES_TAC >> simp[]) >>
   rpt strip_tac >> gvs[] >> drule_all expr_body_pre_copy_ok >> simp[]
+QED
+
+Theorem materialize_physical_copy_capacity:
+  type_memory_bytes ce ty = type_memory_size tv /\
+  b + type_memory_bytes ce ty < dimword (:256) ==>
+  32 * ((type_memory_bytes ce ty + 31) DIV 32) = type_memory_bytes ce ty /\
+  (type_memory_bytes ce ty + 31) DIV 32 < 2 ** 256 /\
+  b + 32 * ((type_memory_bytes ce ty + 31) DIV 32) < 2 ** 256
+Proof
+  strip_tac >>
+  `type_memory_bytes ce ty MOD 32 = 0` by
+    metis_tac[type_memory_size_aligned] >>
+  `32 * ((type_memory_bytes ce ty + 31) DIV 32) = type_memory_bytes ce ty` by
+    intLib.COOPER_TAC >>
+  gvs[wordsTheory.dimword_def] >> intLib.COOPER_TAC
+QED
+
+Theorem materialize_physical_storage_copy_path:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  compile_word_copy_loop src dst ((type_memory_bytes ce ty + 31) DIV 32)
+    loc LocMemory F sa = (u,sb) /\
+  type_memory_bytes ce ty = type_memory_size tv /\
+  b + type_memory_bytes ce ty < dimword (:256) /\
+  fn_has_code sa sb func /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ eval_operand dst s = SOME (n2w b) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      copy_prefix loc a b ((type_memory_bytes ce ty + 31) DIV 32)
+        s ((type_memory_bytes ce ty + 31) DIV 32) t /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> drule_all materialize_physical_copy_capacity >> strip_tac >>
+  irule (PairRules.PSPEC_ALL compile_storage_copy_content_capacity_path) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem materialize_captured_located_nonword:
+  expr_body_pre ce cx env e es_pre /\
+  vv_post ctx func ce cx e es sa sm s0 es' tvv (LocatedValue vty src) r /\
+  ~is_word_type (expr_type e) ==>
+  ~is_word_type vty /\ src.ptr_location <> LocCalldata
+Proof
+  strip_tac >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[expr_body_pre_lowered_fits] >>
+  `~is_word_type (lowered_value_type ce e)` by
+    metis_tac[exprSimLayoutTransportTheory.compatible_word_type] >>
+  `~is_word_type (post_value_type ce e)` by
+    metis_tac[materialize_post_lowered_classify,
+              valueCopyBytesTheory.is_bytestring_word_type] >>
+  `~is_word_type vty` by
+    (gvs[vv_post_def, vv_holds_def] >>
+     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
+  simp[] >> Cases_on `src.ptr_location` >>
+  gvs[vv_post_def, vv_holds_def]
 QED
 
 Theorem materialize_unwrap_owned_path:
