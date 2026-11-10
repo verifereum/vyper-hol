@@ -7,7 +7,7 @@ Ancestors
   loweringPosts valueEncoding words finite_map list exprLoweringProps exprSimSource
   allocLimits localPtrsProps vyperValue exprSimHypsDefs
   vyperEvalExprPreservesScopesDom vyperCallOutcome vyperTypeSystem venomState
-  vyperAST vyperTypeExtCallSoundness bodyMemBopRestWordPath
+  vyperAST vyperTypeExtCallSoundness bodyMemBopRestWordPath loweringStateRelDefs
 Libs
   monadsyntax
 

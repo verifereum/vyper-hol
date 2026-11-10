@@ -4,7 +4,7 @@ Ancestors
   entryRejectCode entryRuntimePrefix entryCompileIntervals entryCodeOwnership
   entryRawFunction entryLinearAppend fragExec compileEnv moduleLowering loweringShapeDefs
   vyperCompiler venomInst venomExecProofs allocaFrontierBound venomWf
-  removeUnusedSsaProofs list pair
+  removeUnusedSsaProofs list pair venomWfProps
 
 Theorem runtime_selected_registration_intervals[local]:
   compile_generate_runtime sels exts [] fb Linear bc mb db ei

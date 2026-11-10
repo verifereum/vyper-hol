@@ -5,7 +5,7 @@ Ancestors
   bodyMemBiMethodIdSuffix bodyMemBiSha256Compose exprSimVVFrame
   bodyMemEcArithContinuation exprLowering exprSimWordArgs vyperContext
   fragGasSeqAbort fragGasSeqMem exprLoweringProps compileEnv
-  venomInstProps venomExecSemantics exprSimDefs loweringPosts fragExec
+  venomInstProps venomExecSemantics exprSimDefs loweringPosts fragExec loweringStateRelDefs
 
 Theorem ec_counted_success_mem:
   (compile_ecadd_points p q sa = (op,sb) \/

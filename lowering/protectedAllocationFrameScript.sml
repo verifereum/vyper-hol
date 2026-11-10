@@ -2,7 +2,7 @@
 Theory protectedAllocationFrame
 Ancestors
   exprSimWordArgs exprBopSimProps exprSimProps loweringPosts exprLoweringProps
-  localPtrsProps compileEnv venomState finite_map list arithmetic
+  localPtrsProps compileEnv venomState finite_map list arithmetic loweringStateRelDefs
 
 Theorem protected_allocation_frame_tail:
   wb_frame cenv es sa s0 t /\

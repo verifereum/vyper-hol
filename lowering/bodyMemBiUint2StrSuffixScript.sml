@@ -3,7 +3,7 @@ Theory bodyMemBiUint2StrSuffix
 Ancestors
   bodyMemBiUint2StrLoop bodyMemAggregateAlloc exprSimUint2Str bodyMemBopRestWordPath
   exprSimAlloc exprSimHash loweringPosts compileEnv fragGasPathMem fragGasMode finite_map
-  venomInst venomState venomExecSemantics arithmetic
+  venomInst venomState venomExecSemantics arithmetic loweringStateRelDefs
 
 Theorem u2s_alloc_mem_ready[local]:
   compile_alloc_buffer sz sa = (ba,a) /\ fn_has_code sa a fn /\

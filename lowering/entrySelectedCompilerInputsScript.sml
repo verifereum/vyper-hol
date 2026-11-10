@@ -5,7 +5,7 @@ Ancestors
   entryAcceptedCheckFacts entrySourcePackages entryRejectCode entryValueRejectFacts entryRuntimeSlice
   entryDispatchMem entryDispatchProps moduleLoweringProps compileVyper compileEnv
   supportedProgram supportedDecls e2eDefs vyperLoweringCorrect venomWf
-  removeUnusedSsaProofs venomInst venomState fragExec finite_map list words
+  removeUnusedSsaProofs venomInst venomState fragExec finite_map list words venomWfProps
 
 Theorem source_selected_compiler_inputs:
   lower_vyper_runtime_unit tops rp = SOME u /\ supported_program tops /\

@@ -6,7 +6,7 @@ Ancestors
   bodyMemRawLogStages exprSimMemDefs loweringPosts exprSimHyps exprSimAggregateLoops
   exprSimPrecompiles exprSimWordArgs exprSimSource fragGasPath gasSummary fragGasMode gasOutcome
   exprLowering exprLoweringProps freshWrites compileEnv bodyMemoryPreds
-  venomState venomInst vyperState vyperValue vyperAST list
+  venomState venomInst vyperState vyperValue vyperAST list loweringStateRelDefs
 
 Theorem raw_log_dynamic_data_endpoint_mem[local]:
   expr_body_pre cenv cx env data (mid with gas_obs := []) /\

@@ -5,7 +5,7 @@ Ancestors
   rawCallFinishPostMemory exprSimRawCall exprSimRawCallCalldata exprSafeOperand localPtrsProps
   exprSimProps exprLoweringProps exprSimMemDefs fragGasPathMem builtinSystem
   emitHelperProps fragExec compileEnv loweringPosts venomState venomExecSemantics
-  vyperTypeSystem valueEncoding words finite_map list
+  vyperTypeSystem valueEncoding words finite_map list loweringStateRelDefs
 Libs
   monadsyntax
 

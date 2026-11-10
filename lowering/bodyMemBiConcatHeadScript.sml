@@ -3,7 +3,7 @@ Theory bodyMemBiConcatHead
 Ancestors
   bodyMemBiConcatArms bodyMemBiConcatBounds exprSimMemDefs exprLoweringProps
   exprSimDefs exprSimProps exprSimConcatArgs exprOperandVar freshWrites
-  loweringPosts exprLowering exprSimConcatStep exprSimConcatPath fragExec venomExecSemantics venomState compileEnv words arithmetic
+  loweringPosts exprLowering exprSimConcatStep exprSimConcatPath fragExec venomExecSemantics venomState compileEnv words arithmetic loweringStateRelDefs
 Libs
   monadsyntax
 
