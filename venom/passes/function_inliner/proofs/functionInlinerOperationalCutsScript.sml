@@ -446,3 +446,124 @@ Proof
   simp[inline_before_phi_keep_path] >>
   Cases_on `root.fn_blocks` >> gvs[venomInstTheory.lookup_block_def, FIND_thm]
 QED
+
+(* Storage observes only these local and activation-bookkeeping projections.
+   Shared effects and execution control may change independently. *)
+Theorem inline_tracked_snapshot_projections:
+  s.vs_vars = snap.ils_state.vs_vars /\
+  s.vs_params = snap.ils_state.vs_params /\
+  s.vs_return_pc_token = snap.ils_state.vs_return_pc_token /\
+  s.vs_labels = snap.ils_state.vs_labels /\
+  t.vs_vars = frame.ipf_state.vs_vars /\
+  t.vs_params = frame.ipf_state.vs_params /\
+  t.vs_call_entry_fmp = frame.ipf_state.vs_call_entry_fmp /\
+  t.vs_return_pc_token = frame.ipf_state.vs_return_pc_token /\
+  t.vs_labels = frame.ipf_state.vs_labels ==>
+  (inline_tracked_snapshot fn a route (snap with ils_state := s)
+    (frame with ipf_state := t) <=> inline_tracked_snapshot fn a route snap frame)
+Proof
+  simp[inline_tracked_snapshot_def, inline_snapshot_data_def,
+       functionInlinerSimulationTheory.inline_caller_bookkeeping_def, lookup_var_def]
+QED
+
+Theorem inline_tracked_physical_projections:
+  t.vs_vars = frame.ipf_state.vs_vars /\
+  t.vs_params = frame.ipf_state.vs_params /\
+  t.vs_call_entry_fmp = frame.ipf_state.vs_call_entry_fmp /\
+  t.vs_return_pc_token = frame.ipf_state.vs_return_pc_token /\
+  t.vs_labels = frame.ipf_state.vs_labels ==>
+  (inline_tracked_snapshot fn a route snap (frame with ipf_state := t) <=>
+   inline_tracked_snapshot fn a route snap frame)
+Proof
+  simp[inline_tracked_snapshot_def, inline_snapshot_data_def,
+       functionInlinerSimulationTheory.inline_caller_bookkeeping_def, lookup_var_def]
+QED
+
+Theorem inline_suspended_projections:
+  t.vs_vars = frame.ipf_state.vs_vars /\
+  t.vs_params = frame.ipf_state.vs_params /\
+  t.vs_call_entry_fmp = frame.ipf_state.vs_call_entry_fmp /\
+  t.vs_return_pc_token = frame.ipf_state.vs_return_pc_token /\
+  t.vs_labels = frame.ipf_state.vs_labels ==>
+  (inline_suspended_observations obs (frame with ipf_state := t) <=>
+   inline_suspended_observations obs frame)
+Proof
+  simp[inline_suspended_observations_def, EVERY_MEM, pairTheory.FORALL_PROD,
+       inline_tracked_snapshot_def, inline_snapshot_data_def,
+       functionInlinerSimulationTheory.inline_caller_bookkeeping_def, lookup_var_def]
+QED
+
+Theorem inline_owner_storage_projections:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  s.vs_vars = snap.ils_state.vs_vars /\
+  s.vs_params = snap.ils_state.vs_params /\
+  s.vs_return_pc_token = snap.ils_state.vs_return_pc_token /\
+  s.vs_labels = snap.ils_state.vs_labels /\
+  t.vs_vars = frame.ipf_state.vs_vars /\
+  t.vs_params = frame.ipf_state.vs_params /\
+  t.vs_call_entry_fmp = frame.ipf_state.vs_call_entry_fmp /\
+  t.vs_return_pc_token = frame.ipf_state.vs_return_pc_token /\
+  t.vs_labels = frame.ipf_state.vs_labels ==>
+  inline_owner_storage cert ((p,a,route,snap with ils_state := s)::rest)
+    (frame with ipf_state := t)
+Proof
+  Cases_on `rest`
+  >- simp[inline_owner_storage_def, inline_address_stack_def,
+          inline_address_entry_def, inline_address_links_def,
+          inline_erase_addresses_def, inline_suspended_observations_def,
+          inline_tracked_snapshot_projections] >>
+  PairCases_on `h` >>
+  simp[inline_owner_storage_def, inline_address_stack_def,
+       inline_address_entry_def, inline_address_links_def,
+       inline_erase_addresses_def, inline_suspended_observations_def] >>
+  rpt strip_tac >>
+  simp[inline_tracked_snapshot_projections, inline_tracked_physical_projections,
+       GSYM inline_suspended_observations_def, inline_suspended_projections] >>
+  simp[inline_suspended_observations_def]
+QED
+
+(* Logical and physical control locations need not be equal. Storage ignores
+   both, and shared-frame agreement is maintained separately. *)
+Theorem inline_owner_storage_control:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame ==>
+  inline_owner_storage cert
+    ((p,a,route,snap with ils_state := snap.ils_state with <|
+      vs_current_bb := sb; vs_prev_bb := sp; vs_inst_idx := si |> )::rest)
+    (frame with ipf_state := frame.ipf_state with <|
+      vs_current_bb := tb; vs_prev_bb := tp; vs_inst_idx := ti |>)
+Proof
+  strip_tac >> irule inline_owner_storage_projections >> simp[]
+QED
+
+Theorem inline_owner_storage_index:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame ==>
+  inline_owner_storage cert
+    ((p,a,route,snap with ils_state := snap.ils_state with vs_inst_idx := si)::rest)
+    (frame with ipf_state := frame.ipf_state with vs_inst_idx := ti)
+Proof
+  strip_tac >> irule inline_owner_storage_projections >> simp[]
+QED
+
+Theorem inline_owner_storage_jump:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame ==>
+  inline_owner_storage cert
+    ((p,a,route,snap with ils_state := jump_to sb snap.ils_state)::rest)
+    (frame with ipf_state := jump_to tb frame.ipf_state)
+Proof
+  strip_tac >> irule inline_owner_storage_projections >> simp[jump_to_def]
+QED
+
+Theorem inline_owner_storage_shared_memory:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_shared_frame snap.ils_state = inline_shared_frame frame.ipf_state ==>
+  inline_owner_storage cert
+    ((p,a,route,snap with ils_state := snap.ils_state with vs_memory := m)::rest)
+    (frame with ipf_state := frame.ipf_state with vs_memory := m) /\
+  inline_shared_frame (snap.ils_state with vs_memory := m) =
+    inline_shared_frame (frame.ipf_state with vs_memory := m)
+Proof
+  strip_tac >> conj_tac
+  >- (irule inline_owner_storage_projections >> simp[]) >>
+  gvs[functionInlinerFrameTheory.inline_shared_frame_def,
+      stateFrameTheory.execution_frame_def]
+QED
