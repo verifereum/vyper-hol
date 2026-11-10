@@ -3103,3 +3103,44 @@ Proof
   simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
   Cases_on `prepare_params_plan lv fn ps` >> gvs[AllCaseEqs()]
 QED
+
+(* Exact copy from fnBlockStepHelpersTheory: importing that frame-level
+   theory here would violate the planner-leaf dependency boundary. *)
+Theorem generate_block_plan_nonentry:
+  !liveness dfg cfg fn bb ps ops ps'.
+    bb <> HD fn.fn_blocks /\
+    generate_block_plan liveness dfg cfg fn bb ps = SOME (ops, ps') ==>
+    ?clean_ops ps2 inst_ops.
+      (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+       then clean_stack_plan liveness cfg fn bb ps
+       else ([], ps)) = (clean_ops, ps2) /\
+      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) 0 (non_param_insts bb) ps2 =
+        SOME (inst_ops, ps') /\
+      ops = SOLabel bb.bb_label :: clean_ops ++ inst_ops
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def] >> pairarg_tac >> simp[] >>
+  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem singleton_block_equal_cleanup_endpoints:
+  !lv dfg cfg fn bb p q c m h g b ops a aq.
+    bb <> HD fn.fn_blocks /\ LENGTH (cfg_preds_of cfg bb.bb_label) = 1 /\
+    clean_stack_plan lv cfg fn bb p = (c,m) /\
+    clean_stack_plan lv cfg fn bb q =
+      (c,m with <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>) /\
+    generate_block_plan lv dfg cfg fn bb p = SOME (ops,a) /\
+    generate_block_plan lv dfg cfg fn bb q = SOME (ops,aq) ==>
+    aq = a with <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `generate_block_plan _ _ _ _ _ p = _`
+    (mp_then Any mp_tac generate_block_plan_nonentry) >> simp[] >> strip_tac >>
+  qpat_assum `generate_block_plan _ _ _ _ _ q = _`
+    (mp_then Any mp_tac generate_block_plan_nonentry) >> simp[] >> strip_tac >>
+  gvs[] >>
+  gvs[fnPlanLineageReplayTheory.generate_block_insts_plan_cleanup_update]
+QED
