@@ -105,7 +105,14 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   fs[expr_post_def] >>
   Cases_on `loc = LocMemory`
-  >- suspend "memory" >>
+  >- (Cases_on `~is_word_type (post_value_type cenv e) /\
+        ~is_bytestring_type (post_value_type cenv e) /\
+        ~is_word_type dty /\ ~is_bytestring_type dty /\
+        post_value_type cenv e <> dty /\
+        (src_loc = NONE \/ src_loc = SOME LocMemory) /\
+        0 < type_memory_size stv`
+      >- suspend "relayout_memory" >>
+      suspend "remaining_memory") >>
   `loc = LocStorage \/ loc = LocTransient` by
     (Cases_on `loc` >> gvs[]) >>
   Cases_on `is_bytestring_type (post_value_type cenv e) /\ is_bytestring_type dty`
@@ -173,4 +180,12 @@ Resume assign_place_store_from_expr_post[word_storage]:
     metis_tac[vyperScopePreservationTheory.write_place_scopes_dom] >>
   irule alloca_frame_of_mem_frame >> simp[] >>
   goal_assum (drule_at Any)
+QED
+
+Resume assign_place_store_from_expr_post[relayout_memory]:
+  gvs[] >>
+  irule assign_place_relayout_from_provenance >> simp[] >>
+  (conj_tac >- metis_tac[]) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[] >> metis_tac[]
 QED
