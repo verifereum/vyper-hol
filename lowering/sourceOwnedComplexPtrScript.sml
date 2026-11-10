@@ -722,3 +722,81 @@ Resume source_owned_complex_suffix_ptr[interval]:
      qexists_tac `ins` >> asm_rewrite_tac[]) >>
   suspend "chain"
 QED
+
+Resume source_owned_complex_suffix_ptr[chain]:
+  markerLib.RESUME_TAC >>
+  `!p sz. MEM (p,sz) fp ==> ?id. sa.cs_next_id <= id /\
+    id < en.cs_next_id /\ FLOOKUP t.vs_allocas id = SOME (p,sz)` by
+    (rpt strip_tac >>
+     qpat_assum `!p sz. MEM (p,sz) fp ==> _` drule >> strip_tac >>
+     qexists_tac `id` >> asm_rewrite_tac[] >> decide_tac) >>
+  `(!id p sz. FLOOKUP s.vs_allocas id = SOME (p,sz) ==>
+      FLOOKUP t'.vs_allocas id = SOME (p,sz)) /\
+   (!id. id < sa.cs_next_id \/ sb.cs_next_id <= id ==>
+      FLOOKUP t'.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+   (!id p sz. sa.cs_next_id <= id /\ id < sb.cs_next_id /\
+      FLOOKUP t'.vs_allocas id = SOME (p,sz) ==>
+      (sz = 32 /\ p < dimword (:256) /\
+       ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+         ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
+      p+sz <= t'.vs_alloca_next) /\
+   (!p sz. MEM (p,sz) (fp ++ fp') ==> ?id. sa.cs_next_id <= id /\
+      id < sb.cs_next_id /\ FLOOKUP t'.vs_allocas id = SOME (p,sz))` by
+    (ho_match_mp_tac (Q.INST
+       [`m` |-> `en.cs_next_id`, `b` |-> `t.vs_allocas`,
+        `bnext` |-> `t.vs_alloca_next`] scratch_interval_chain) >>
+     asm_rewrite_tac[] >> conj_tac >- decide_tac >>
+     conj_tac
+     >- (rpt gen_tac >> strip_tac >>
+         qpat_assum `!id p sz. sa.cs_next_id <= id /\ _ ==> _` drule_all >>
+         strip_tac >> asm_rewrite_tac[] >> qexists_tac `ins` >> asm_rewrite_tac[]) >>
+     rpt gen_tac >> strip_tac >>
+     qpat_assum `!id p sz. en.cs_next_id <= id /\ _ ==> _` drule_all >>
+     strip_tac >> asm_rewrite_tac[] >> qexists_tac `ins` >> asm_rewrite_tac[]) >>
+  suspend "endpoint"
+QED
+
+Resume source_owned_complex_suffix_ptr[endpoint]:
+  rpt (CHANGED_TAC markerLib.RESUME_TAC) >> (
+  qexistsl_tac [`t'`, `H'`, `u'`, `fp ++ fp'`] >>
+  conj_tac
+  >- (irule abi_decode_sim_trans >> qexists_tac `t` >>
+      reverse conj_tac >- first_assum ACCEPT_TAC >>
+      irule abi_decode_sim_trans >> qexists_tac `r` >>
+      asm_rewrite_tac[]) >>
+  asm_rewrite_tac[] >>
+  conj_tac
+  >- (irule abi_decode_footprint_frame_trans >> qexists_tac `t` >>
+      conj_tac >> first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (map_every (fn pat => qpat_assum pat mp_tac)
+        [`abi_footprint_disjoint base_addr owner_cap fp`,
+         `abi_footprint_disjoint base_addr owner_cap fp'`] >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      simp[abi_footprint_disjoint_def, MEM_APPEND] >> metis_tac[]) >>
+  conj_tac >- decide_tac >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_assum `!id p sz. sa.cs_next_id <= id /\ _ ==> (_ /\ _) /\ _`
+        drule_all >> strip_tac >> asm_rewrite_tac[] >>
+      conj_tac >- decide_tac >> qexists_tac `ins` >> asm_rewrite_tac[]) >>
+  suspend "frames")
+QED
+
+Resume source_owned_complex_suffix_ptr[frames]:
+  rpt (CHANGED_TAC markerLib.RESUME_TAC) >> (
+  conj_tac
+  >- (rpt strip_tac >>
+      `abi_decoder_operand_live mid.cs_next_var op /\
+       abi_decoder_operand_live en.cs_next_var op` by
+        metis_tac[abi_decoder_operand_live_mono] >>
+      qpat_assum `!op. abi_decoder_operand_live en.cs_next_var op ==> _`
+        (qspec_then `op` mp_tac) >>
+      qpat_assum `!op. abi_decoder_operand_live mid.cs_next_var op ==> _`
+        (qspec_then `op` mp_tac) >>
+      qpat_assum `!op. abi_decoder_operand_live sa.cs_next_var op ==> _`
+        (qspec_then `op` mp_tac) >>
+      asm_rewrite_tac[] >> metis_tac[]) >>
+  suspend "ghost_frames")
+QED
+
