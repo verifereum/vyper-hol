@@ -8793,6 +8793,26 @@ Proof
   Cases_on `fn_entry_label fn` >> simp[trace_function_def]
 QED
 
+(* Co-pending geometry is symmetric, but permits destination overlap. *)
+Definition mm_local_copy_geometry_def:
+  mm_local_copy_geometry a b <=>
+    ~copy_overwrites a (copy_src_interval b) /\
+    ~copy_overwrites b (copy_src_interval a) /\
+    (~copy_overwrites a (copy_dst_interval b) \/
+     a.cg_src + b.cg_dst = a.cg_dst + b.cg_src)
+End
+
+Theorem mm_local_copy_geometry_sym[local]:
+  mm_local_copy_geometry a b <=> mm_local_copy_geometry b a
+Proof
+  simp[mm_local_copy_geometry_def, copy_overwrites_def,
+    copy_dst_interval_def, copy_src_interval_def,
+    mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
+    mmIntervalTheory.interval_end_def,
+    arithmeticTheory.MAX_COMM, arithmeticTheory.MIN_COMM] >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
