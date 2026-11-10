@@ -81,7 +81,7 @@ Theorem abi_encode_initial_alloca_region_separation:
     FLOOKUP initial.vs_allocas i = NONE ==> initial.vs_alloca_next <= q) /\
   (!inst q k. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     FLOOKUP initial.vs_allocas inst.inst_id = SOME(q,k) ==>
-    compileEnv$regions_disjoint b n q k) /\
+    loweringStateRelDefs$regions_disjoint b n q k) /\
   (!i. i IN ids ==> ?inst. MEM inst (fn_insts func) /\
     inst.inst_opcode = ALLOCA /\ inst.inst_id = i) ==>
   !i q k. i IN ids /\ FLOOKUP actual.vs_allocas i = SOME(q,k) ==>

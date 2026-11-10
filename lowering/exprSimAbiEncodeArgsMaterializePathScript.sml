@@ -466,7 +466,9 @@ Theorem materialize_zero_loop_layout:
   sb.cs_current_insts = []
 Proof
   strip_tac >> gvs[] >>
-  gvs[contextTheory.compile_word_copy_loop_def, word_scale_def,
+  gvs[contextTheory.compile_word_copy_loop_def,
+       contextTheory.compile_word_copy_loop_op_def,
+       contextTheory.compile_word_copy_loop_base_def, word_scale_def,
        contextTheory.compile_ptr_load_def, contextTheory.compile_ptr_store_def,
        emitHelperTheory.emit_op_def, emitHelperTheory.emit_inst_def,
        emitHelperTheory.emit_void_def, fresh_var_def, fresh_id_def,
