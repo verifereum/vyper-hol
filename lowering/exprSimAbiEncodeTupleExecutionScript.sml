@@ -14,10 +14,10 @@ Theorem abi_encode_args_producer_phases:
   evaluate_type_builtin cx (AbiEncode ensure mid0) target (MAP expr_type args) vs = INL result /\
   abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
   EVERY (abi_decoder_operand_live st.cs_next_var) values /\
-  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) st = (buf,allocated) /\
-  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP expr_type args)) allocated = ((),staged) /\
-  ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)) /\
-  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)))
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
+  ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)) /\
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)))
     staged = (ops,ready) /\
   compile_abi_encode_to_buf (SND ops) buf.buf_operand ei ready = (len,body_end) /\
   abi_builtin_encode_finish (FST ops) len (case mid of NONE => 0 | SOME _ => 4) body_end = ((),final) /\
@@ -65,8 +65,8 @@ Proof
      qpat_assum `fresh_vars_wrt limit_st raw` mp_tac >>
      simp_tac (srw_ss()) [fresh_vars_wrt_def]) >>
   `FLOOKUP t.vs_allocas st.cs_next_id =
-    SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args)))` by metis_tac[] >>
-  `abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP expr_type args)))
+    SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))` by metis_tac[] >>
+  `abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))
      t.vs_memory` by metis_tac[] >>
   `enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs)` by
     (asm_rewrite_tac [vyper_to_abi_types_MAP, MAP_MAP_o]) >>
