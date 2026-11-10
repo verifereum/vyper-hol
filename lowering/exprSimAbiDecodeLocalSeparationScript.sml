@@ -24,9 +24,9 @@ Proof
       `i <> inst` by
         (strip_tac >> gvs[not_local_ptr_def] >> metis_tac[MEM]) >>
       `i.inst_id <> inst.inst_id` by metis_tac[fn_inst_ids_distinct_inj] >>
-      fs[alloca_inv_def, allocas_non_overlapping_def, compileEnvTheory.regions_disjoint_def] >>
+      fs[alloca_inv_def, allocas_non_overlapping_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
       metis_tac[ADD_COMM]) >>
-  first_x_assum drule >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  first_x_assum drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem abi_decode_lower_interval_local_disjoint:

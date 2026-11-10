@@ -9,7 +9,8 @@ Ancestors
   dftScheduleOrder dftStructural dftPermSim dftDefs passSharedDefs venomExecSemantics venomWf
   venomInst venomState venomEffects venomExecProps list finite_map sorting rich_list dftCorrectness
   dftAvailability dftWf dftIndexedExec
-  unitLabelMapIdentity sccpCorrectnessProofs gasOracleReplay stateEquiv opcodeClass
+  unitLabelMapIdentity gasOracleReplay stateEquiv opcodeClass
+  venomWfProps
 Libs
   stepInstBaseLib
 
@@ -568,6 +569,7 @@ Proof
   fs[dft_remaining_inv_def] >>
   `strict_dom_vars_defined fn (t with vs_inst_idx := SUC s.vs_inst_idx)` by
     (irule dft_prefix_dominators >> qexistsl_tac [`C`, `fuel`, `[y]`, `s`] >> simp[]) >>
+  fs[strict_dom_vars_defined_inst_idx] >>
   simp[dft_remaining_inv_def] >> rpt conj_tac
   >- (gvs[ALL_DISTINCT_APPEND] >> metis_tac[])
   >- (rpt strip_tac >> first_x_assum irule >>
@@ -933,7 +935,7 @@ Proof
      Cases_on `i.inst_opcode` >> gvs[is_pseudo_def, is_terminator_def]) >>
   drule_all dft_pseudo_initialization >> strip_tac >>
   irule dft_remaining_inv_initial >> simp[] >>
-  fs[sccpCorrectnessProofsTheory.strict_dom_vars_defined_def,
+  fs[venomWfPropsTheory.strict_dom_vars_defined_def,
      pred_setTheory.SUBSET_DEF, MEM_FILTER] >> metis_tac[]
 QED
 
@@ -2758,7 +2760,7 @@ Theorem dft_remaining_inv_gas_variant:
 Proof
   strip_tac >> qpat_x_assum `s' = _` SUBST_ALL_TAC >>
   gvs[dft_remaining_inv_def,
-    sccpCorrectnessProofsTheory.strict_dom_vars_defined_def] >> metis_tac[]
+    venomWfPropsTheory.strict_dom_vars_defined_def] >> metis_tac[]
 QED
 
 Theorem dft_remaining_inv_terminal:

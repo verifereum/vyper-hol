@@ -65,7 +65,7 @@ Proof
   >- (fs[local_ptrs_rel_def, local_region_def] >>
       first_x_assum drule_all >> strip_tac >> gvs[] >> decide_tac) >>
   rpt strip_tac >> drule_all abi_decode_lower_interval_local_disjoint >>
-  simp[compileEnvTheory.regions_disjoint_def, abi_footprint_disjoint_def] >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def, abi_footprint_disjoint_def] >>
   decide_tac
 QED
 

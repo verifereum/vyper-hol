@@ -148,7 +148,7 @@ Theorem fmp_install_checked_root_upper_bound:
   split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
   analyze_fmp_reclaims infos ctx fn = SOME plan /\
   fmp_make_root_layout ctx fn info runner s0 = SOME (FmpRootLayout n root newpc s1) /\
-  fmp_lower_blocks infos ctx runner s1 (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult blocks leftover s2) /\
   fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) /\
   MEM origin [GAS; RETPC_PARAM] /\
@@ -218,10 +218,10 @@ Proof
    `!i y. MEM i (fn_insts fn) /\ i.inst_opcode = SETFMP /\
       MEM (Var y) i.inst_operands ==>
       ~retpc_var fn y` by metis_tac[input_setfmp_not_opaque] >>
-   `!point base. MEM (point,base) (fmap_to_alist plan) ==>
+   `!point base. MEM (point,base) (fmp_plan_to_alist fn plan) ==>
       ~retpc_var fn base` by
-     (rpt strip_tac >> rename1 `MEM (point,target) (fmap_to_alist plan)` >>
-      `FLOOKUP plan point = SOME target` by fs[alistTheory.MEM_fmap_to_alist_FLOOKUP] >>
+     (rpt strip_tac >> rename1 `MEM (point,target) (fmp_plan_to_alist fn plan)` >>
+      `FLOOKUP plan point = SOME target` by fs[fmpLowerPropsTheory.MEM_fmp_plan_to_alist] >>
       drule_all analyze_fmp_reclaims_output >> strip_tac >>
       fs[o1_fn_shape_def] >> metis_tac[]) >>
    `!origin. origin = RETPC_PARAM ==>
@@ -261,10 +261,10 @@ Proof
       qpat_x_assum `!i x. MEM i (fn_insts fn) /\ gas_var fn x /\ _ ==> _`
         (qspecl_then [`inst`, `y`] mp_tac) >>
       simp[gas_use_ok_def]) >>
-   `!point base. MEM (point,base) (fmap_to_alist plan) ==>
+   `!point base. MEM (point,base) (fmp_plan_to_alist fn plan) ==>
       ~gas_var fn base` by
-     (rpt strip_tac >> rename1 `MEM (point,target) (fmap_to_alist plan)` >>
-      `FLOOKUP plan point = SOME target` by fs[alistTheory.MEM_fmap_to_alist_FLOOKUP] >>
+     (rpt strip_tac >> rename1 `MEM (point,target) (fmp_plan_to_alist fn plan)` >>
+      `FLOOKUP plan point = SOME target` by fs[fmpLowerPropsTheory.MEM_fmp_plan_to_alist] >>
       drule_all analyze_fmp_reclaims_output >> strip_tac >>
       fs[o1_fn_shape_def] >> metis_tac[]) >>
    `!origin. origin = GAS ==>
@@ -435,7 +435,7 @@ Theorem fmp_install_checked_root_opaque_use:
   split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
   analyze_fmp_reclaims infos ctx fn = SOME plan /\
   fmp_make_root_layout ctx fn info runner s0 = SOME (FmpRootLayout n root newpc s1) /\
-  fmp_lower_blocks infos ctx runner s1 (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult blocks leftover s2) /\
   fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) ==>
   !x use_ok.

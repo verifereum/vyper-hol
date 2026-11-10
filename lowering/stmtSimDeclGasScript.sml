@@ -10,7 +10,7 @@ Theorem stmt_state_rel_start_gas_obs[local]:
   stmt_state_rel ctx func cenv cx (es with gas_obs := gs) s =
   stmt_state_rel ctx func cenv cx es s
 Proof
-  simp[stmt_state_rel_def, compileEnvTheory.state_rel_gas_obs,
+  simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_gas_obs,
        immutable_alloca_sep_def]
 QED
 

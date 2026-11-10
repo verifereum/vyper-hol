@@ -128,7 +128,7 @@ Proof
       `sa.cs_next_id < sd.cs_next_id` by decide_tac >>
       `!name off sz. local_region cenv es.scopes t name off sz ==>
         w2n p + 32 <= off \/ off + sz <= w2n p` by
-        metis_tac[compileEnvTheory.regions_disjoint_def,
+        metis_tac[loweringStateRelDefsTheory.regions_disjoint_def,
                   arithmeticTheory.ADD_COMM] >>
       drule_all slice_fixed_payload_two_operands >> simp[]) >>
   rpt strip_tac >> irule exprSimSliceComposeTheory.slice_capture_outcome_prefix >>

@@ -19,11 +19,21 @@
 
 Theory bodySimEntry
 Ancestors
-  list finite_map bodySim compileEnv compileVyper moduleLowering
+  loweringStateRelDefs list finite_map bodySim compileEnv compileVyper moduleLowering
   intCallCallee supportedDecls supportedProgram vyperTypeInvariants
   immutableLocationProps immutableSectionRel immutableRelation option pair
+  bodyStorageMetadata structFieldsProps
 Libs
   monadsyntax
+
+Theorem build_compile_env_module_pins:
+  !tops vis mut fname args ret fbody use_trans.
+    cenv_module_pins tops
+      (build_compile_env tops vis mut fname args ret fbody use_trans)
+Proof
+  rpt gen_tac >> simp[cenv_module_pins_def, build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
 
 (* Rebuilding an internal callee's environment uses the same checked
    module metadata as its caller. *)
@@ -34,7 +44,7 @@ Theorem body_inv_build_internal_env:
        with <| ce_target := caller.ce_target;
                ce_is_ctor := caller.ce_is_ctor |>) cx
 Proof
-  rw[body_inv_def, build_compile_env_def] >>
+  rw[body_inv_def, cenv_module_pins_def, build_compile_env_def] >>
   rpt (pairarg_tac >> gvs[])
 QED
 
@@ -51,7 +61,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   first_x_assum irule >>
   goal_assum (drule_at Any) >> simp[] >>
-  gvs[body_inv_def] >> metis_tac[]
+  gvs[body_inv_def, cenv_module_pins_def] >> metis_tac[]
 QED
 
 Theorem materialize_internal_params_body_inv[local]:
@@ -68,7 +78,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   first_x_assum irule >>
   goal_assum (drule_at Any) >> simp[] >>
-  gvs[body_inv_def] >> metis_tac[]
+  gvs[body_inv_def, cenv_module_pins_def] >> metis_tac[]
 QED
 
 Theorem compile_internal_prologue_body_inv:
@@ -86,7 +96,7 @@ Proof
   drule_at (Pat `materialize_internal_params _ _ _ = _`)
     materialize_internal_params_body_inv >>
   disch_then (qspecl_then [`tops`, `cx`, `ctx`] mp_tac) >>
-  (impl_tac >- (gvs[body_inv_def] >> metis_tac[])) >> simp[]
+  (impl_tac >- (gvs[body_inv_def, cenv_module_pins_def] >> metis_tac[])) >> simp[]
 QED
 
 (* A compile env that binds only parameters, with a type environment that
@@ -302,4 +312,72 @@ Proof
   `tv = itv` by (res_tac >> gvs[]) >>
   qpat_x_assum `tops = _` kall_tac >>
   gvs[] >> decide_tac
+QED
+
+(* A bare global of a body's typing is an immutable of the main module,
+   at its declared type in ce_module_var_type. *)
+Theorem body_inv_bare_global_type:
+  !tops ctx cenv cx env es src id ty.
+    body_inv tops ctx cenv cx /\ env_consistent env cx es /\
+    FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+    src = NONE /\ cenv.ce_module_var_type (src,id) = SOME ty
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all env_consistent_bare_global_find_NONE >> strip_tac >>
+  `src = NONE` by metis_tac[body_inv_def] >> gvs[] >>
+  `ts = tops` by gvs[body_inv_def] >> gvs[] >>
+  `?dvis dty dslot. MEM (VariableDecl dvis Immutable id dty dslot) tops` by
+    metis_tac[supported_bare_global_immutable, supported_program_def,
+              body_inv_def] >>
+  `bare_globals_complete env.bare_globals cx` by
+    fs[env_consistent_def, env_context_consistent_def] >>
+  `dty = ty` by
+    (fs[bare_globals_complete_def] >> res_tac >> gvs[]) >>
+  gvs[body_inv_def] >> metis_tac[build_maps_variable]
+QED
+
+(* Distinct immutables placed as build_compile_env places them occupy
+   disjoint regions at their declared types. *)
+Theorem cenv_module_pins_immutables_disjoint:
+  !tops cenv cx id1 id2 ty1 ty2 off1 off2 tv1 tv2.
+    cenv_module_pins tops cenv /\
+    ALL_DISTINCT
+      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
+    ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
+    get_tenv cx = type_env tops /\ id1 <> id2 /\
+    FLOOKUP cenv.ce_module_vars (NONE,id1) = SOME (ImmutableLoc off1) /\
+    FLOOKUP cenv.ce_module_vars (NONE,id2) = SOME (ImmutableLoc off2) /\
+    cenv.ce_module_var_type (NONE,id1) = SOME ty1 /\
+    cenv.ce_module_var_type (NONE,id2) = SOME ty2 /\
+    evaluate_type (get_tenv cx) ty1 = SOME tv1 /\
+    evaluate_type (get_tenv cx) ty2 = SOME tv2 ==>
+    regions_disjoint off1 (type_memory_size tv1) off2 (type_memory_size tv2)
+Proof
+  rpt strip_tac >>
+  `immutable_section_layout cenv tops` by
+    metis_tac[cenv_module_pins_immutable_section_layout] >>
+  `cenv.ce_module_var_type = build_var_type_map tops` by
+    fs[cenv_module_pins_def] >>
+  fs[immutable_section_layout_def] >>
+  qpat_assum `!name off. _` (qspecl_then [`id1`,`off1`] mp_tac) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`pre1`,`post1`,`v1`,`d1`,`s1`]
+                strip_assume_tac) >>
+  qpat_x_assum `!name off. _` (qspecl_then [`id2`,`off2`] mp_tac) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`pre2`,`post2`,`v2`,`d2`,`s2`]
+                strip_assume_tac) >>
+  `MEM (VariableDecl v1 Immutable id1 d1 s1) tops` by
+    metis_tac[MEM_APPEND, MEM] >>
+  `MEM (VariableDecl v2 Immutable id2 d2 s2) tops` by
+    metis_tac[MEM_APPEND, MEM] >>
+  `d1 = ty1 /\ d2 = ty2` by metis_tac[build_maps_variable, SOME_11] >>
+  `type_memory_size tv1 =
+     type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty1 /\
+   type_memory_size tv2 =
+     type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty2` by
+    metis_tac[evaluated_type_mem_bytes] >>
+  ntac 2 (pop_assum SUBST1_TAC) >> rpt BasicProvers.VAR_EQ_TAC >>
+  irule immutable_layout_disjoint >>
+  qexistsl_tac [`id1`,`id2`,`post1`,`post2`,`s1`,`s2`,`v1`,`v2`] >> fs[]
 QED

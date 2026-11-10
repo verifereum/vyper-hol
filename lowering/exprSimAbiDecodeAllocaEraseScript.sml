@@ -120,5 +120,5 @@ Proof
   conj_tac >- simp[] >> rpt strip_tac >>
   irule abi_decode_clean_protected_rows >>
   goal_assum (drule_at Any) >> rpt strip_tac >>
-  fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]
+  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]
 QED

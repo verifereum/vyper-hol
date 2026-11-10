@@ -45,11 +45,11 @@ Ancestors
   loweringPosts
   list  exprSimHyps exprSimOps loweringSlice exprLowering
   exprLoweringProps vyperEvalExprPreservesScopesDom vyperInterpreter
-  vyperState vyperContext vyperTyping compileEnv freshWrites fragExec varsExt
+  vyperState vyperContext vyperTyping compileEnv loweringStateRelDefs freshWrites fragExec varsExt
   venomExecSemantics venomState emitHelper emitHelperProps venomInst
 
-(* Keep the account parameter: this boundary is valid for every non-Len
-   builtin, not only the account-independent arithmetic cases. *)
+(* Keep the account parameter for account-dependent builtins.  Len and
+   membership have dedicated interpreter paths rather than this boundary. *)
 Definition builtin_result_def:
   builtin_result cx acc ty bt ts vs =
     case evaluate_builtin cx acc ty bt ts vs of
@@ -60,6 +60,7 @@ End
 Theorem eval_expr_builtin_cases:
   !cx ann bt args es res es'.
     bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
+    bt <> Bop In /\ bt <> Bop NotIn /\
     builtin_args_length_ok bt (LENGTH args) /\
     (do r <- eval_expr cx (Builtin ann bt args); read_result cx r od) es = (res, es') ==>
     (?exc. eval_exprs cx args es = (INR exc, es') /\ res = INR exc) \/
@@ -113,6 +114,7 @@ QED
 
 Theorem eval_expr_builtin_action:
   bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
+  bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) ==>
   bind (eval_expr cx (Builtin ann bt args)) (read_result cx) =
   bind (eval_exprs cx args)
@@ -824,6 +826,7 @@ QED
 
 Theorem word_builtin_marked_admissible:
   bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
+  bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) /\
   gas_admissible (bind (eval_expr cx (Builtin ann bt args)) (read_result cx))
     expr_res_ok es /\
@@ -843,6 +846,7 @@ QED
 
 Theorem word_builtin_exempt_cert:
   bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
+  bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) /\
   gas_exempt_cert memory tops (ctx,func)
     (ignore_bind (eval_exprs cx args) (return ()))
@@ -871,6 +875,7 @@ QED
 Theorem compile_word_builtin_sim:
   !ctx func cenv cx ty ann bt args arg_ty Inv es code.
     bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
+    bt <> Bop In /\ bt <> Bop NotIn /\
     builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
     wb_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
     (!es gs. Inv es ==> Inv (es with gas_obs := gs)) /\

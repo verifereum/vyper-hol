@@ -4,7 +4,7 @@ Ancestors
   gasOutcome
   loweringPosts
   msgGasSim gasSummary exprSimDefs exprSimProps exprSimHypsDefs exprLoweringProps
-  exprLowering emitHelperProps compileEnv loweringSlice
+  exprLowering emitHelperProps compileEnv loweringStateRelDefs loweringSlice
   vyperInterpreter vyperState venomState
 
 Theorem msg_gas_typed:

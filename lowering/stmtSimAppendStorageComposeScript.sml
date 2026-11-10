@@ -9,7 +9,7 @@ Ancestors
   accountsRelProps vyperStorage vyperStorageBackend vyperValue vfmState
   exprOperandVar
   vyperInterpreter vyperState vyperExprNoControl stmtLowering exprLowering
-  exprLoweringProps compileEnv emitHelper emitHelperProps venomInst venomExecSemantics
+  exprLoweringProps compileEnv loweringStateRelDefs emitHelper emitHelperProps venomInst venomExecSemantics
 Libs
   monadsyntax
 
@@ -191,14 +191,28 @@ Proof
     (gen_tac >> simp[Once evaluate_def] >>
      simp[Once evaluate_def, bind_def]) >>
   pop_assum (fn th => rewrite_tac[th]) >>
-  simp[bind_def, lookup_global_def, lift_option_type_def, LET_THM] >>
-  Cases_on `get_module_code cx nid0` >> simp[raise_def, return_def] >>
-  Cases_on `find_var_decl_by_name nid1 x` >> simp[]
-  >- (simp[get_immutables_def, get_address_immutables_def, bind_def,
-           lift_option_type_def, return_def] >>
-      rpt (CASE_TAC >> gvs[raise_def, return_def, get_place_def, bind_def])) >>
-  PairCases_on `x'` >> Cases_on `x'0` >> simp[] >>
-  rpt (CASE_TAC >> gvs[raise_def, return_def, get_place_def, bind_def])
+  simp[bind_def, lookup_global_def, lift_option_type_def, return_def,
+       raise_def, get_immutables_def, get_address_immutables_def] >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+      get_immutables_def, get_address_immutables_def,
+      lift_option_type_def] >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+      get_immutables_def, get_address_immutables_def,
+      lift_option_type_def] >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+      get_immutables_def, get_address_immutables_def,
+      lift_option_type_def] >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+      get_immutables_def, get_address_immutables_def,
+      lift_option_type_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+   gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+       get_immutables_def, get_address_immutables_def,
+       lift_option_type_def])
 QED
 
 Theorem eval_append_storage_bind:

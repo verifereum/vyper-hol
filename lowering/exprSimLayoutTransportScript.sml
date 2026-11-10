@@ -1,7 +1,7 @@
 Theory exprSimLayoutTransport
 Ancestors
   loweringPosts
-  exprSimProps vyperTypeSystem vyperValue valueEncoding vyperTypeArgFits
+  exprSimProps vyperTypeSystem vyperValue valueEncoding valueEncodingDefs vyperTypeArgFits
   vyperTypeValues context compileEnv valueTypingMemoryProps
 
 Theorem expr_val_rel_nonword_transport[local]:

@@ -1,7 +1,7 @@
 (* Normal suffix and counted statement composition for tuple locals. *)
 Theory bodyMemAssignTupleLocalsOutcome
 Ancestors
-  bodyMemAssignTupleLocalsPrefix bodyMemAssignTupleLocalsStores
+  bodyMemAssignTupleLocalsPrefix bodyMemAssignTupleLocalsStores stmtSimForced
   tupleAssignMemory tupleAssignPrefix tupleTypedLoad tupleStageProps
   tupleLocalStoreProps tupleMemoryFrame tupleMemoryLayout
   stmtSimAssignTuple stmtSimDeclMem stmtSimDeclStore stmtSimDefs exprSimDefs
@@ -236,16 +236,6 @@ Proof
   Cases_on `v` >> simp[evaluate_def, raise_def] >>
   Cases_on `a` >> simp[raise_def] >>
   metis_tac[assign_tuple_target_list_locals_gas]
-QED
-
-(* S1 stmtSimForced's local associativity boundary. *)
-Theorem ignore_bind_bind_value[local]:
-  !(a : evaluation_state -> value evaluation_result) k.
-    ignore_bind (bind a k) (return ()) =
-    bind a (\v. ignore_bind (k v) (return ()))
-Proof
-  simp[ignore_bind_def, FUN_EQ_THM, bind_def] >> rpt gen_tac >>
-  Cases_on `a x` >> Cases_on `q` >> simp[]
 QED
 
 (* S1 compile_assign_tuple_locals_memory_stmt_frag, using the memory

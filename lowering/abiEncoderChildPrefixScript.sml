@@ -1,7 +1,7 @@
 Theory abiEncoderChildPrefix
 Ancestors
   abiEncoderChildCode abiEncoderBytesPrefix abiBuiltinPrefix abiDecoderDynamicLoopSetup
-  abiDecoderReentry abiDecoderContract emitHelperProps exprLoweringProps compileEnv emitHelper
+  abiDecoderReentry abiDecoderContract emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs emitHelper
   venomState venomExecSemantics venomInst words list arithmetic abiDecoderLoop fragExec
   instIdxIndep rich_list
 

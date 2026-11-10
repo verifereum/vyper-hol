@@ -105,9 +105,19 @@ Definition eval_pure_expr_def:
                  | NONE => NONE)
               | NONE => eval_pure_exprs cx st es) of
         | SOME vs =>
-          (case evaluate_builtin cx st.accounts ty bt (MAP expr_type es) vs of
-           | INL v => SOME (Value v)
-           | INR _ => NONE)
+          (if bt = Bop In ∨ bt = Bop NotIn then
+             if LENGTH vs = 2 then
+               (case evaluate_type (get_tenv cx) (expr_type (EL 1 es)) of
+                | NONE => NONE
+                | SOME tv =>
+                    (case evaluate_membership tv (bt = Bop NotIn) (HD vs) (EL 1 vs) of
+                     | INL v => SOME (Value v)
+                     | INR _ => NONE))
+             else NONE
+           else
+             case evaluate_builtin cx st.accounts ty bt (MAP expr_type es) vs of
+             | INL v => SOME (Value v)
+             | INR _ => NONE)
         | NONE => NONE)
      else NONE) ∧
 
@@ -249,7 +259,8 @@ Proof
            vyperStateTheory.get_accounts_def,
            vyperInterpreterTheory.precompile_call_success_def,
            vyperInterpreterTheory.precompile_builtin_def] >>
-      gvs monadic_defs)
+      gvs monadic_defs >>
+      simp[vyperStateTheory.assert_def, vyperStateTheory.return_def])
   (* TypeBuiltin *)
   >- (rpt gen_tac >>
       simp[Once eval_pure_expr_def] >> strip_tac >>
@@ -405,6 +416,27 @@ Proof
           strip_tac >> gvs[vyperStateTheory.return_def] >> metis_tac[])
       >- (* non-Len case *)
          (`EVERY pure_expr es` by gvs[listTheory.EVERY_EL] >>
+          Cases_on `bt = Bop In ∨ bt = Bop NotIn`
+          >- (`code_slice_source bt es = NONE` by
+                (Cases_on `code_slice_source bt es` >> gvs[] >>
+                 rename1 `_ = SOME p` >> PairCases_on `p` >>
+                 gvs[vyperInterpreterTheory.code_slice_source_SOME]) >>
+              gvs[] >>
+              fs[vyperStateTheory.bind_def] >>
+              gvs[AllCaseEqs()] >>
+              rename1 `eval_exprs cx es st = (INL vs, s1)` >>
+              `eval_pure_exprs cx st es = SOME vs` by metis_tac[] >>
+              simp[] >>
+              `s1 = st` by metis_tac[eval_exprs_preserves_state] >>
+              pop_assum SUBST_ALL_TAC >>
+              gvs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
+                  vyperStateTheory.raise_def, vyperStateTheory.bind_def,
+                  vyperStateTheory.ignore_bind_def, vyperStateTheory.assert_def,
+                  vyperStateTheory.lift_sum_def, vyperStateTheory.lift_option_type_def,
+                  vyperInterpreterTheory.precompile_call_success_def,
+                  vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
+                  AllCaseEqs()])
+          >> gvs[] >>
           fs[vyperStateTheory.bind_def] >>
           gvs[AllCaseEqs()] >>
           Cases_on `code_slice_source bt es`

@@ -16,11 +16,11 @@ Ancestors
   list pair vyperMisc fragExec loweringSlice exprSimHyps
   exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
-  exprLoweringProps emitHelper compileEnv localPtrsProps valueEncoding
-  vyperAST vyperInterpreter vyperState vyperValue vyperTyping
+  exprLoweringProps emitHelper compileEnv loweringStateRelDefs localPtrsProps valueEncoding
+  vyperAST vyperInterpreter vyperCallOutcomeFrame vyperState vyperValue vyperTyping
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
-  venomExecSemantics venomInst venomState rich_list
+  venomExecSemantics venomInst venomState rich_list bodyUnopFragMemory
 Libs
   pairLib
 
@@ -154,101 +154,8 @@ QED
 
 (* ===== The CALL and the ASSERT ===== *)
 
-Theorem send_assert_ok[local]:
-  !id x w s.
-    w <> 0w ==>
-    step_inst_base (mk_inst id ASSERT [Var x] []) (update_var x w s) =
-      OK (update_var x w s)
-Proof
-  rpt strip_tac >> irule assert_true_correct >>
-  simp[eval_operand_def, lookup_var_def, update_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
-Theorem send_assert_fail[local]:
-  !id x s.
-    step_inst_base (mk_inst id ASSERT [Var x] []) (update_var x 0w s) =
-      Abort Revert_abort (revert_state (set_returndata [] (update_var x 0w s)))
-Proof
-  rpt strip_tac >> irule assert_false_correct >>
-  simp[eval_operand_def, lookup_var_def, update_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
-Theorem send_call_read_step[local]:
-  stmt_state_rel ctx func cenv cx es1 t /\
-  outcomes_accounts_typed es1.outcomes /\
-  accounts_runtime_well_typed es1.accounts /\
-  IS_SOME (eval_operand gas_op t) /\
-  eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
-  eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
-  LENGTH gas_vs = (if has_gas then 1 else 0) /\
-  (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
-      read_result cx tv od) es1 = (res, es') ==>
-  ?t'. t' = t with <| vs_outcomes := t'.vs_outcomes;
-                       vs_requests := t'.vs_requests;
-                       vs_accounts := t'.vs_accounts;
-                       vs_transient := t'.vs_transient;
-                       vs_logs := t'.vs_logs;
-                       vs_pending_deletions := t'.vs_pending_deletions;
-                       vs_returndata := t'.vs_returndata |> /\
-    ((res = INL NoneV /\
-      step_inst_base (mk_inst id CALL
-        [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]) t =
-        OK (update_var out 1w t') /\ state_rel func cenv cx es' t') \/
-     (res = INR (Error (RuntimeError "send failed")) /\
-      step_inst_base (mk_inst id CALL
-        [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]) t =
-        OK (update_var out 0w t')))
-Proof
-  strip_tac >> drule eval_send_read >> strip_tac >>
-  `state_rel func cenv cx es1 t` by fs[stmt_state_rel_def] >>
-  `es1.outcomes = SOME t.vs_outcomes` by fs[state_rel_def] >>
-  `r <> INR (Error (RuntimeError "call outcome accounts"))` by
-    (drule_all eval_send_outcome_typed >> simp[]) >>
-  drule_all (send_call_oracle_step |> SPEC_ALL |>
-    Q.INST [`inst` |-> `mk_inst id CALL
-      [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]`] |>
-    SRULE [mk_inst_def]) >>
-  disch_then (qspecl_then [`out`, `id`] strip_assume_tac) >>
-  gvs[mk_inst_def] >> metis_tac[]
-QED
-
 (* fragGasSeqAbort's run_inst_seq_abort_zero_path on the memory-checked
    path. *)
-Theorem run_inst_seq_abort_zero_path_mem[local]:
-  !code s t a ctx func bb.
-    ~s.vs_halted /\
-    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
-    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-               ~is_terminator i.inst_opcode) code /\
-    run_inst_seq_mem_ok code s /\
-    run_inst_seq code s = Abort a t ==>
-    ?j. gas_marked_path T ctx func s 0
-      (Abort a (t with vs_inst_idx := j))
-Proof
-  Induct_on `code` >- simp[run_inst_seq_def] >>
-  rpt gen_tac >> strip_tac >>
-  drule instruction_prefix_cursor >> strip_tac >>
-  Cases_on `step_inst_base h s` >>
-  gvs[run_inst_seq_def, run_inst_seq_mem_ok_def]
-  >- (rename1 `step_inst_base h s = OK u` >>
-      `step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
-      `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
-        metis_tac[step_preserves_halted, step_preserves_control_flow] >>
-      `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
-      first_x_assum (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
-      disch_then (qspec_then `t with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
-      simp[run_inst_seq_inst_idx, exec_result_map_def] >>
-      disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
-      simp[] >> strip_tac >> qexists_tac `j` >>
-      drule_at (Pat `step_inst_base _ _ = OK _`) gas_marked_path_step >>
-      simp[] >> disch_then irule >> metis_tac[]) >>
-  qexists_tac `t.vs_inst_idx` >> simp[] >>
-  drule gas_marked_path_abort >> simp[] >> metis_tac[]
-QED
-
 (* The CALL's argument and return ranges are empty and ASSERT has none. *)
 Theorem send_tail_mem_ok[local]:
   !id1 id2 gas_op addr_op val_op out s.
@@ -506,19 +413,6 @@ Resume send_args_summary_mem[normal]:
 QED
 
 Finalise send_args_summary_mem
-
-Theorem lower_value_send[local]:
-  lower_value compile_expr cenv ty (Call ann (Send has_gas) args dflt) sa =
-    (op, sb) ==>
-  op = Lit 0w /\
-  compile_expr cenv ty (Call ann (Send has_gas) args dflt) sa =
-    (StackValue ann (Lit 0w), sb)
-Proof
-  simp[lower_value_def, comp_bind_def] >>
-  Cases_on `compile_expr cenv ty (Call ann (Send has_gas) args dflt) sa` >>
-  drule compile_expr_send_stack >>
-  simp[unwrap_value_def, comp_return_def] >> rw[] >> gvs[]
-QED
 
 Theorem send_expr_sim_mem:
   expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\

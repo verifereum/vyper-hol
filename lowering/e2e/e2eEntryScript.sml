@@ -7,7 +7,7 @@ Theory e2eEntry
 Ancestors
   e2eDefs vyperLoweringCorrect codegenCorrectness
   venomState unitTransformDefs unitShapeDefs contextPlanLayoutProps
-  contextCodegenRel compileEnv symbolResolve finite_map words vyperArith
+  contextCodegenRel compileEnv loweringStateRelDefs symbolResolve finite_map words vyperArith
   immutableSectionRel
 
 Definition entry_venom_state_def:
@@ -19,7 +19,9 @@ Definition entry_venom_state_def:
         vs_transient := es.rollback.tStorage;
         vs_call_ctx := <| cc_caller := mp.caller; cc_address := mp.callee;
                           cc_callvalue := n2w mp.value; cc_calldata := buffer_to_list mp.data;
-                          cc_gas := 0; cc_static := mp.static |>;
+                          cc_gas := 0; cc_static := mp.static;
+                          cc_created_in_tx :=
+                            account_empty (lookup_account mp.callee es.originalAccounts) |>;
         vs_tx_ctx := <| tc_origin := tp.origin; tc_gasprice := n2w tp.gasPrice;
                        tc_chainid := n2w tp.chainId;
                        tc_blobhashes := tp.blobHashes |>;
@@ -132,6 +134,16 @@ Proof
   simp[venom_env_rel_def, call_ctx_rel_def, entry_venom_state_def]
 QED
 
+(* Creation status is read from transaction-original accounts, not a saved
+   caller rollback or the current live balance. *)
+Theorem entry_venom_state_created_in_tx:
+  !prog cp es. (entry_venom_state prog cp es).vs_call_ctx.cc_created_in_tx =
+    account_empty
+      (lookup_account (FST (HD es.contexts)).msgParams.callee es.originalAccounts)
+Proof
+  simp[entry_venom_state_def]
+QED
+
 (* Exact initial_state_rel sub-contract. No memory obligation is inferred:
    both fresh memories are empty and the byte relation is reflexive. *)
 Theorem entry_venom_state_first_frame:
@@ -147,5 +159,6 @@ Proof
   drule_all entry_venom_state_evm_environment >> strip_tac >>
   gvs[initial_state_rel_def, stack_params_rel_def,
       entry_venom_state_fresh, entry_venom_state_frame_fields,
+      entry_venom_state_created_in_tx,
       asm_pc_to_offset_zero, context_memory_rel_def]
 QED

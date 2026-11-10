@@ -1,6 +1,6 @@
 Theory bodySimAugPlaceScopes
 Ancestors
-  supportedExprs vyperInterpreter vyperScopePreservation
+  supportedExprs vyperInterpreter vyperCallOutcomeFrame vyperScopePreservation
   vyperState vyperContext vyperMisc pair sum
   vyperStatePreservation vyperPlaceFrames vyperCallFrame
 
@@ -71,14 +71,16 @@ Resume aug_place_pure_scopes_mutual[builtin]:
      rename1 `SOME p` >> PairCases_on `p` >>
      gvs[code_slice_source_SOME, supportedExprFormsTheory.supported_builtin_form_def]) >>
   Cases_on `blt = Len` >> Cases_on `blt = Env MsgGas` >>
+  Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
       assert_def, return_def, raise_def, AllCaseEqs()] >>
   imp_res_tac result_array_length_state >>
+  imp_res_tac lift_option_type_state >>
   imp_res_tac next_gas_reading_state >>
   imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
   imp_res_tac precompile_call_success_state >> gvs[] >>
   gvs[builtin_args_length_ok_def] >>
-  Cases_on `es` >> gvs[] >> first_x_assum drule_all >> simp[]
+  Cases_on `es` >> gvs[] >> metis_tac[]
 QED
 Resume aug_place_pure_scopes_mutual[typebuiltin]:
   rpt strip_tac >>

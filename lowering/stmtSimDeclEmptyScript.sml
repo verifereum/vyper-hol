@@ -23,7 +23,7 @@ Ancestors
   stmtSimDecl stmtSimDeclMem valueCopyBytes stmtSimDeclCompose
   stmtSimDeclSource stmtSimDeclPath gasOutcome gasContext gasSummary
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding valueEncodingProps vyperInterpreter vyperState
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingProps vyperInterpreter vyperState
   vyperValue vyperTyping venomExecSemantics venomInst venomState
   stmtSimDeclGas gasSummaryCompose gasExemptCert fragGasMode fragGasPath
   exprSimMemorySource

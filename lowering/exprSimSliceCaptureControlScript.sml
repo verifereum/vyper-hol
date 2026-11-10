@@ -35,7 +35,7 @@ Theorem slice_capture_post_initial_index:
   expr_post ctx func ce cx e es sa sb s0 ee v op s
 Proof
   simp[loweringPostsTheory.expr_post_def,
-       compileEnvTheory.local_region_def, venomStateTheory.lookup_var_def,
+       loweringStateRelDefsTheory.local_region_def, venomStateTheory.lookup_var_def,
        loweringPostsTheory.locals_kept_def]
 QED
 
@@ -44,7 +44,7 @@ Theorem slice_capture_value_index:
   expr_val_at ce cx ty sa sb ee v op u
 Proof
   simp[loweringPostsTheory.expr_val_at_def, instIdxIndepTheory.eval_op_inst_idx,
-       compileEnvTheory.local_region_def, venomStateTheory.lookup_var_def]
+       loweringStateRelDefsTheory.local_region_def, venomStateTheory.lookup_var_def]
 QED
 
 Theorem slice_bytestring_src_control:

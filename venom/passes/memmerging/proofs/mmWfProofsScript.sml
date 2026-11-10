@@ -7,10 +7,11 @@
 Theory mmWfProofs
 Ancestors
   mmCorrectnessProofs mmTransform
-  venomExecSemantics venomInst venomState venomWf venomInstProofs
+  venomExecSemantics venomInst venomInstIdsProps venomState venomWf venomInstProofs
   pred_set finite_map list rich_list arithmetic words alist
   mmCopyEquiv mmCopy mmScan passSharedField
   dfgAnalysisProps dfgDefs passSimulationDefs passSimulationProps
+  passTransform
 
 (* ===== Structural helpers for wf preservation ===== *)
 
@@ -372,30 +373,6 @@ Proof
   `EL n (MAP f l) = EL n' (MAP f l)` by gvs[EL_MAP] >>
   `n = n'` by metis_tac[ALL_DISTINCT_EL_IMP] >>
   gvs[]
-QED
-
-(* fn_insts_blocks ID map = FLAT of per-block ID maps *)
-Theorem fn_insts_blocks_map_id[local]:
-  !bbs. MAP (\i. i.inst_id) (fn_insts_blocks bbs) =
-        FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def]
-QED
-
-(* fn_inst_ids_distinct: same inst_id implies same instruction *)
-Theorem fn_inst_ids_distinct_inj:
-  !fn x y. fn_inst_ids_distinct fn /\ MEM x (fn_insts fn) /\
-            MEM y (fn_insts fn) /\ x.inst_id = y.inst_id ==> x = y
-Proof
-  rpt strip_tac >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks))`
-    by fs[fn_inst_ids_distinct_def, GSYM fn_insts_blocks_map_id] >>
-  fs[fn_insts_def] >> gvs[MEM_EL] >>
-  `n < LENGTH (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks)) /\
-   n' < LENGTH (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks))` by simp[] >>
-  `EL n (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks)) =
-   EL n' (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks))` by gvs[EL_MAP] >>
-  `n = n'` by metis_tac[ALL_DISTINCT_EL_IMP] >> gvs[]
 QED
 
 (* ===== Scan invariant: all IDs in scan results trace to fn_insts ===== *)

@@ -1,6 +1,6 @@
 Theory placeMemoryTypedBase
 Ancestors
-  placeMemoryPrimitiveForward context exprLoweringProps compileEnv
+  placeMemoryPrimitiveForward context exprLoweringProps compileEnv loweringStateRelDefs
   venomState venomInst venomExecSemantics emitHelper valueEncodingProps
   entryDecodeProps exprSimProps immutableMemoryFrame list rich_list pair finite_map
   ASCIInumbers emitHelperProps exprSimAggregateEncoding vyperTypeArgFits
@@ -249,8 +249,8 @@ Theorem typed_memory_sparse_lookup_wf:
   !kvs tv n i. kvs_val_wf kvs tv n ==>
     val_wf tv (case ALOOKUP kvs i of NONE => default_value tv | SOME v => v)
 Proof
-  Induct >> simp[valueEncodingTheory.val_wf_def, cj 1 val_wf_default_value_proof] >>
-  Cases >> simp[valueEncodingTheory.val_wf_def] >> rpt strip_tac >>
+  Induct >> simp[valueEncodingDefsTheory.val_wf_def, cj 1 val_wf_default_value_proof] >>
+  Cases >> simp[valueEncodingDefsTheory.val_wf_def] >> rpt strip_tac >>
   Cases_on `q = i` >> gvs[] >> metis_tac[]
 QED
 
@@ -341,12 +341,12 @@ Theorem typed_memory_struct_values:
          values_have_types tvs vs /\ tuple_val_wf vs tvs
 Proof
   Induct >> Cases_on `tvs` >> Cases_on `fields` >>
-  simp[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def] >>
+  simp[vyperTypingTheory.value_has_type_def, valueEncodingDefsTheory.val_wf_def] >>
   PairCases_on `h'` >>
-  simp[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def] >>
+  simp[vyperTypingTheory.value_has_type_def, valueEncodingDefsTheory.val_wf_def] >>
   rpt strip_tac >> first_x_assum drule >> disch_then drule_all >> strip_tac >>
   qexists_tac `h'1::vs` >>
-  simp[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def]
+  simp[vyperTypingTheory.value_has_type_def, valueEncodingDefsTheory.val_wf_def]
 QED
 
 Theorem typed_memory_fields_tuple_zip:
@@ -356,7 +356,7 @@ Theorem typed_memory_fields_tuple_zip:
      tuple_in_memory vs tvs off mem)
 Proof
   Induct >> Cases_on `vs` >> Cases_on `tvs` >>
-  simp[valueEncodingTheory.val_in_memory_def]
+  simp[valueEncodingDefsTheory.val_in_memory_def]
 QED
 
 (* Appended suffixes start after precisely the represented prefix's size. *)
@@ -368,7 +368,7 @@ Theorem typed_memory_tuple_append:
      tuple_in_memory vs tvs (off + type_memory_size_list pts) mem)
 Proof
   Induct >> Cases_on `pts` >>
-  simp[valueEncodingTheory.val_in_memory_def, valueEncodingTheory.type_memory_size_def] >>
+  simp[valueEncodingDefsTheory.val_in_memory_def, valueEncodingTheory.type_memory_size_def] >>
   rpt strip_tac >>
   pure_rewrite_tac[arithmeticTheory.ADD_ASSOC, GSYM CONJ_ASSOC] >> REFL_TAC
 QED
@@ -417,8 +417,8 @@ Theorem typed_memory_tuple_head:
   values_have_types tvs vs /\ tuple_val_wf vs tvs /\
   tuple_in_memory vs tvs (off + type_memory_size tv) mem
 Proof
-  simp[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def,
-       valueEncodingTheory.val_in_memory_def] >> metis_tac[]
+  simp[vyperTypingTheory.value_has_type_def, valueEncodingDefsTheory.val_wf_def,
+       valueEncodingDefsTheory.val_in_memory_def] >> metis_tac[]
 QED
 
 (* C1.4.9.7.4 execution-contract checkpoint (NOT execution theorems).

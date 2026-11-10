@@ -32,7 +32,7 @@ Proof
   mp_tac (Q.SPECL [`src`, `start`, `len`, `LENGTH (bs:word8 list)`, `s.vs_memory`]
     mem_bytes_at_window) >>
   simp[ADD_COMM] >> strip_tac >>
-  simp[mcopy_def, GSYM valueEncodingTheory.mem_bytes_at_def]
+  simp[mcopy_def, GSYM valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem slice_copy_store_run:
@@ -211,7 +211,7 @@ Proof
   `mem_bytes_at src (LENGTH (MAP (n2w o ORD) text : word8 list)) s.vs_memory =
     MAP (n2w o ORD) text` by simp[] >>
   drule_at (Pos hd) slice_copy_store_encoding >>
-  simp[GSYM MAP_TAKE, GSYM MAP_DROP, valueEncodingTheory.val_in_memory_def]
+  simp[GSYM MAP_TAKE, GSYM MAP_DROP, valueEncodingDefsTheory.val_in_memory_def]
 QED
 
 Theorem slice_allocated_bytes_write_frame:

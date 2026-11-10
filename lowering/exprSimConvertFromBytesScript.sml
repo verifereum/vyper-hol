@@ -3,8 +3,8 @@ Theory exprSimConvertFromBytes
 Ancestors
   exprSimHypsDefs exprSimSource
   exprSimDefs exprSimProps exprSimStack loweringPosts
-  exprSimConvert exprSimHyps  exprLowering compileEnv
-  exprSimBuffer valueEncoding valueEncodingProofs
+  exprSimConvert exprSimHyps  exprLowering compileEnv loweringStateRelDefs
+  exprSimBuffer valueEncoding valueEncodingDefs valueEncodingProofs
   vyperTypeSystem vyperValueOperation vyperValue vyperInterpreter
   fragExec freshWrites loweringSlice venomExecSemantics venomState
   words list integer_word emitHelperProps builtinConvertPrefix exprLoweringProps

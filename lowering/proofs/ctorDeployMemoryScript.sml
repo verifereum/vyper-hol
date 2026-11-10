@@ -29,8 +29,8 @@ Proof
   drule_all deploy_unit_run_ptr_safe >> strip_tac >>
   drule deploy_imm_alloca_budget_ok >> strip_tac >>
   `~ctx_has_dalloca dunit.cu_context` by
-    (drule_all deploy_unit_shape_ok >> strip_tac >>
-     drule o1_source_unit_ok_no_dalloca >> simp[]) >>
+    metis_tac[ctorDeployShapeTheory.deploy_unit_shape_ok,
+              o1PipelineCorrectTheory.o1_source_unit_ok_no_dalloca] >>
   conj_tac
   >- (qspecl_then [`imm_len tops`, `dunit.cu_context`, `"__deploy"`, `fn`,
                    `lbl`, `vs`] mp_tac lowered_unit_raw_memory_ok_from >>

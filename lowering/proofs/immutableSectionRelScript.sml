@@ -5,7 +5,7 @@
 Theory immutableSectionRel
 Ancestors
   immutableRelation immutableSection immutableEncodingProofs immutableEncoding
-  compileVyper compileEnv immutableValue valueEncoding vyperState list
+  compileVyper compileEnv loweringStateRelDefs immutableValue valueEncoding vyperState list
 
 Definition immutables_section_rel_def:
   immutables_section_rel tops imms (section:word8 list) <=>

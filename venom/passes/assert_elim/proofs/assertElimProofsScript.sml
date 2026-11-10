@@ -37,6 +37,7 @@ Ancestors
   venomState
   venomWf
   worklistDefs
+  passTransform
 Libs
   pairLib
 
@@ -49,7 +50,7 @@ Proof
   Cases_on `r` >> simp[in_range_def, range_excludes_zero_def] >>
   rpt strip_tac >> gvs[] >>
   CCONTR_TAC >> gvs[integer_wordTheory.word_0_w2i] >>
-  intLib.ARITH_TAC
+  Omega.OMEGA_TAC
 QED
 
 (* ASSERT with one operand: reverts if operand = 0w, continues unchanged otherwise *)

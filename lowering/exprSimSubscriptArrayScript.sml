@@ -21,7 +21,7 @@ Ancestors
    as they were, and whose base the index's fragment keeps as it is: an
    immutable at runtime (LocCode outside the constructor), or a static array
    with no dynamic array inside it in memory (a local or a temporary).
-   Cheated, for the alan run.  compile_subscript lowers the index after the
+   compile_subscript lowers the index after the
    base, and the base's value_vv must still hold its value when the index's
    fragment ends.  At runtime an immutable sits in the data section, which
    immutables_rel relates to the unchanged source immutables, and
@@ -161,7 +161,7 @@ Resume compile_subscript_array_framed_base_case[base_normal]:
   >- (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
         (mp_tac o CONJUNCT1 o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
       simp[exprLoweringPropsTheory.stmt_state_rel_def,
-           compileEnvTheory.state_rel_gas_obs,
+           loweringStateRelDefsTheory.state_rel_gas_obs,
            exprLoweringPropsTheory.immutable_alloca_sep_def] >>
       metis_tac[]) >>
   qpat_x_assum `expr_sim_case _ _ _ _ _ idx` mp_tac >>

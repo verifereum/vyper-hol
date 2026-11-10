@@ -114,7 +114,7 @@ Resume abi_decode_counted_outcome[run]:
       ?fuel u. run_from fuel ctx fn' (s with vs_current_bb := L) = Abort Revert_abort u)` by
     (irule abi_decode_original_entry_immutable_outcome >> simp[] >>
      `immutable_alloca_sep func ce cx es (s with vs_current_bb := L)` by
-       (fs[exprLoweringPropsTheory.immutable_alloca_sep_def, compileEnvTheory.local_region_def,
+       (fs[exprLoweringPropsTheory.immutable_alloca_sep_def, loweringStateRelDefsTheory.local_region_def,
            lookup_var_def] >> metis_tac[]) >>
      simp[start_relabel_extends] >>
      conj_tac >- (qexists_tac `limit_st` >> simp[start_swap_def, start_relabel_def] >>

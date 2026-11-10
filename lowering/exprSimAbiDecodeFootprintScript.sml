@@ -95,11 +95,11 @@ Proof
   (conj_tac >- metis_tac[stmt_state_rel_decode_site_resources])
   >- (`aid < sc.cs_next_id` by decide_tac >>
       `regions_disjoint (w2n w) sz b sz'` by metis_tac[] >>
-      gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `local_region ce es.scopes t name b sz'` by
     (irule local_region_frame_fwd >>
      goal_assum (drule_at Any) >>
      qexists_tac `sc` >> simp[]) >>
   `regions_disjoint (w2n w) sz b sz'` by metis_tac[] >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED

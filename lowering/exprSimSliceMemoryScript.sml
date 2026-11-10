@@ -150,7 +150,7 @@ Proof
       qexistsl_tac [`w2n w'`, `mk_inst sa.cs_next_id ALLOCA [Lit 32w]
         [STRING #"%" (toString sa.cs_next_var)]`, `32`] >>
       simp[mk_inst_def] >> rpt strip_tac >>
-      first_x_assum drule >> simp[compileEnvTheory.regions_disjoint_def]) >>
+      first_x_assum drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   conj_tac
   >- (rpt strip_tac >> first_x_assum irule >> qexists_tac `name` >>
       fs[local_region_def, lookup_var_def]) >>
@@ -330,10 +330,10 @@ Proof
     (irule expr_val_at_bound >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[]) >>
   gs[vyperValueTheory.evaluate_type_def, is_word_type_def,
-     valueEncodingTheory.val_in_memory_def, val_footprint_def] >>
+     valueEncodingDefsTheory.val_in_memory_def, val_footprint_def] >>
   `w2n w + 32 < dimword (:256)` by decide_tac >>
   `mload (w2n w) s = n2w (LENGTH bs)` by
-    gvs[mload_def, valueEncodingTheory.mem_word_at_def] >>
+    gvs[mload_def, valueEncodingDefsTheory.mem_word_at_def] >>
   drule slice_bytestring_capture >>
   disch_then (qspecl_then [`s`, `w`, `bs`] mp_tac) >>
   simp[]

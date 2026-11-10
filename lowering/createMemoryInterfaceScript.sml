@@ -1,7 +1,7 @@
 Theory createMemoryInterface
 Ancestors
   createSourceCallback context contextProps emitHelperProps venomMemProps vyperABIValid
-  valueEncoding vyperTyping vyperABI contractABI vyperValueOperation
+  valueEncoding valueEncodingDefs vyperTyping vyperABI contractABI vyperValueOperation
   list rich_list words venomExecSemantics venomState
 Libs
   wordsLib

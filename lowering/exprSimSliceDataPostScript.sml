@@ -105,5 +105,5 @@ Proof
  rewrite_tac[GSYM MAP_TAKE, GSYM MAP_DROP] >> strip_tac >>
  mp_tac (Q.SPECL [`w2n (p:bytes32)`, `MAP (n2w o ORD) (TAKE n (DROP a text)) : word8 list`,
                   `bound`, `s`] exprSimCalldataSliceTheory.bytes_buffer_write_encoding) >>
- simp[valueEncodingTheory.val_in_memory_def]
+ simp[valueEncodingDefsTheory.val_in_memory_def]
 QED

@@ -344,9 +344,13 @@ Resume body_oracle_storage_mutual[builtin_args]:
   reverse conj_tac
   >- (conj_tac
       >- (rpt strip_tac >>
-          qpat_x_assum `!s'' t. _ /\ bt <> Len /\ _ ==> _`
+          Cases_on `bt = Bop In \/ bt = Bop NotIn`
+          >- (qpat_x_assum `!s'' t. _ /\ bt <> Len /\ (bt = Bop In \/ bt = Bop NotIn) ==> _`
+                (qspecl_then [`st`,`st`] mp_tac) >>
+              simp[type_check_def, assert_def, return_def] >> metis_tac[]) >>
+          qpat_x_assum `!s'' t. _ /\ bt <> Len /\ _ /\ bt <> Env MsgGas ==> _`
             (qspecl_then [`st`,`st`] mp_tac) >>
-          simp[type_check_def, assert_def, return_def] >> metis_tac[]) >>
+          gvs[type_check_def, assert_def, return_def] >> metis_tac[]) >>
       conj_tac
       >- suspend "builtin_slice_addr" >>
       conj_tac
