@@ -6570,6 +6570,59 @@ Proof
   rpt strip_tac >> gvs[] >> decide_tac
 QED
 
+Theorem mm_local_scan_step_war_exclusion[local]:
+  mm_local_history is H n /\ q < n /\ q < LENGTH is /\ i = EL q is /\
+  MEM h ss.ss_copies /\ ~MEM h (scan_inst dfg Mem2Mem ss i).ss_flushed /\
+  mm_local_write_capture is H n q = SOME (d,bs) ==>
+  h.cg_length = 0 \/ LENGTH bs = 0 \/
+  h.cg_src + h.cg_length <= d \/ d + LENGTH bs <= h.cg_src
+Proof
+  strip_tac >>
+  qpat_x_assum `mm_local_write_capture _ _ _ _ = _` mp_tac >>
+  simp[mm_local_write_capture_def] >>
+  Cases_on `i.inst_opcode = MSTORE`
+  >- (gvs[] >> simp[AllCaseEqs()] >> strip_tac >>
+      qpat_x_assum `~MEM h _` mp_tac >>
+      simp[scan_inst_def, mode_load_opcode_def, scan_store_def] >>
+      rpt BasicProvers.TOP_CASE_TAC >>
+      gvs[hard_barrier_def, MEM_APPEND, mode_allows_overlap_def] >>
+      strip_tac >> Cases_on `a` >>
+      gvs[operand_lit_val_def, venomStateTheory.eval_operand_def] >>
+      qmatch_asmsub_abbrev_tac `~MEM h hs.ss_flushed` >>
+      `MEM h hs.ss_copies` by
+        (simp[Abbr `hs`] >>
+         metis_tac[mm_local_hazards_partition, invalidate_loads_def,
+                   scan_state_accfupds]) >>
+      pop_assum mp_tac >> simp[Abbr `hs`] >>
+      disch_then (mp_tac o MATCH_MP mm_local_flush_hazards_survivor) >>
+      simp[copy_overwrites_def, copy_dst_interval_def, copy_src_interval_def,
+           mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
+           mmIntervalTheory.interval_end_def,
+           arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
+      rpt strip_tac >> gvs[] >> decide_tac) >>
+  Cases_on `i.inst_opcode = MCOPY` >> gvs[] >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `~MEM h _` mp_tac >>
+  simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def, scan_bulk_copy_def] >>
+  rpt BasicProvers.TOP_CASE_TAC >>
+  gvs[hard_barrier_def, MEM_APPEND, mode_allows_overlap_def] >>
+  strip_tac >> map_every Cases_on [`a`, `b`, `c`] >>
+  gvs[operand_lit_val_def, venomStateTheory.eval_operand_def,
+      venomStateTheory.read_memory_def] >>
+  qmatch_asmsub_abbrev_tac `~MEM h hs.ss_flushed` >>
+  `MEM h hs.ss_copies` by
+    (simp[Abbr `hs`] >>
+     metis_tac[mm_local_hazards_partition, invalidate_loads_def,
+               scan_state_accfupds]) >>
+  pop_assum mp_tac >> simp[Abbr `hs`] >>
+  disch_then (mp_tac o MATCH_MP mm_local_flush_hazards_survivor) >>
+  simp[copy_overwrites_def, copy_dst_interval_def, copy_src_interval_def,
+       mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
+       mmIntervalTheory.interval_end_def,
+       arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
+  rpt strip_tac >> gvs[] >> decide_tac
+QED
+
 Theorem mm_local_scan_interval_read[local]:
   mm_local_history is H n /\ a <= b /\ b <= n /\
   cap = mm_local_write_capture is H n /\
