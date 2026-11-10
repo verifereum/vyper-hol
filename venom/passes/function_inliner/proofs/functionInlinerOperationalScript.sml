@@ -1253,7 +1253,7 @@ QED
 
 Theorem inline_special_read0_success:
   MEM src.inst_opcode [GETFMP; INITIAL_FMP; GAS] /\
-  src.inst_operands = [] /\ dst.inst_operands = [] /\
+  (src.inst_opcode <> GAS ==> src.inst_operands = [] /\ dst.inst_operands = []) /\
   src.inst_outputs = [x] /\ dst.inst_outputs = [ren x] /\
   dst.inst_opcode = src.inst_opcode /\
   inline_opaque_frame_rel ren V opaque saved P s t /\
@@ -2545,7 +2545,7 @@ Proof
   irule inline_create_opcode_clone_result >> simp[] >> metis_tac[]
 QED
 
-Theorem inline_inst_wf_value_output[local]:
+Theorem inline_inst_wf_value_output:
   inst_wf inst /\
   (inline_pure1_opcode inst.inst_opcode \/ inline_pure2_opcode inst.inst_opcode \/
    inline_pure3_opcode inst.inst_opcode \/ inline_read0_opcode inst.inst_opcode \/
@@ -2760,4 +2760,83 @@ Theorem inline_ordinary_step_result_not_intret:
   !ret s. r <> IntRet ret s
 Proof
   simp[inline_ordinary_step_result_def]
+QED
+
+Theorem inline_effect_special_success:
+  inst_wf src /\ inline_ordinary_opcode src.inst_opcode /\
+  (inline_effect_opcode src.inst_opcode \/ inline_special_opcode src.inst_opcode) /\
+  dst.inst_opcode = src.inst_opcode /\
+  dst.inst_outputs = MAP ren src.inst_outputs /\
+  LENGTH dst.inst_operands = LENGTH src.inst_operands /\
+  (!vs. eval_operands src.inst_operands s = SOME vs ==>
+    eval_operands dst.inst_operands t = SOME vs) /\
+  (src.inst_opcode = LOG ==>
+    ?tc ops tops. src.inst_operands = Lit tc :: ops /\
+      dst.inst_operands = Lit tc :: tops /\ LENGTH ops = w2n tc + 2 /\
+      LENGTH tops = LENGTH ops /\
+      (!vs. eval_operands (REVERSE ops) s = SOME vs ==>
+        eval_operands (REVERSE tops) t = SOME vs)) /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!u v. u IN V UNION set src.inst_outputs /\ v IN V UNION set src.inst_outputs ==>
+    (ren u = ren v <=> u = v)) /\
+  (!x. MEM x src.inst_outputs ==> ren x NOTIN P) /\
+  step_inst fuel ctx src s = OK s' ==>
+  ?t'. step_inst tfuel tctx dst t = OK t' /\
+    inline_opaque_frame_rel ren (V UNION set src.inst_outputs) opaque saved P s' t'
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all inline_ordinary_OK_nonterminator >> strip_tac >>
+  Cases_on `MEM src.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]`
+  >- ( `?x. src.inst_outputs = [x]` by
+        gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+       pop_assum strip_assume_tac >>
+       `V UNION set src.inst_outputs = x INSERT V` by (simp[] >> SET_TAC[]) >>
+       pop_assum SUBST1_TAC >>
+       irule inline_external_opcode_success >> simp[] >>
+       qexistsl [`ctx`, `fuel`, `s`, `src`] >> gvs[] >> metis_tac[]) >>
+  Cases_on `MEM src.inst_opcode [MSTORE; MSTORE8]`
+  >- ( `src.inst_outputs = []` by gvs[inst_wf_def] >>
+       simp[] >> irule inline_write2_opcode_success >> simp[] >>
+       qexistsl [`ctx`, `fuel`, `s`, `src`] >> gvs[]) >>
+  Cases_on `MEM src.inst_opcode [SSTORE; TSTORE]`
+  >- ( `src.inst_outputs = []` by gvs[inst_wf_def] >>
+       simp[] >> irule inline_storage_opcode_success >> simp[] >>
+       qexistsl [`ctx`, `fuel`, `s`, `src`] >> gvs[]) >>
+  Cases_on `MEM src.inst_opcode
+    [MCOPY; RETURNDATACOPY; CALLDATACOPY; DLOADBYTES; CODECOPY; EXTCODECOPY; ISTORE]`
+  >- ( `src.inst_outputs = []` by gvs[inst_wf_def] >>
+       simp[] >> irule inline_bulk_memory_opcode_success >> simp[] >>
+       qexistsl [`ctx`, `fuel`, `s`, `src`] >> gvs[]) >>
+  Cases_on `MEM src.inst_opcode [NOP; SINK; ASSERT; ASSERT_UNREACHABLE]`
+  >- ( `src.inst_outputs = []` by gvs[inst_wf_def] >>
+       simp[] >> irule inline_simple_opcode_success >> simp[] >>
+       qexistsl [`ctx`, `fuel`, `s`, `src`] >> gvs[]) >>
+  Cases_on `MEM src.inst_opcode [GETFMP; INITIAL_FMP; GAS]`
+  >- ( `(src.inst_opcode <> GAS ==> src.inst_operands = []) /\
+        ?x. src.inst_outputs = [x]` by
+         gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+       pop_assum strip_assume_tac >>
+       `V UNION set src.inst_outputs = x INSERT V` by (simp[] >> SET_TAC[]) >>
+       pop_assum SUBST1_TAC >>
+       irule inline_special_read0_success >> simp[] >>
+       qexistsl [`ctx`, `fuel`, `s`, `src`] >> gvs[] >> metis_tac[]) >>
+  `src.inst_opcode = LOG \/ src.inst_opcode = SHA3 \/ src.inst_opcode = BUMP` by
+    (Cases_on `src.inst_opcode` >>
+     gvs[inline_effect_opcode_def, inline_special_opcode_def, is_terminator_def])
+  >- ( `src.inst_outputs = []` by gvs[inst_wf_def] >>
+       gvs[] >> irule inline_log_success >> metis_tac[]) 
+  >- ( `LENGTH src.inst_operands = 2 /\ ?x. src.inst_outputs = [x]` by
+         gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+       pop_assum strip_assume_tac >>
+       `V UNION set src.inst_outputs = x INSERT V` by (simp[] >> SET_TAC[]) >>
+       pop_assum SUBST1_TAC >>
+       irule inline_sha3_success >> simp[] >>
+       qexistsl [`ctx`, `fuel`, `s`, `src`] >> gvs[] >> metis_tac[]) >>
+  `LENGTH src.inst_operands = 2 /\ ?x y. src.inst_outputs = [x;y]` by
+    gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+  pop_assum strip_assume_tac >>
+  `V UNION set src.inst_outputs = V UNION {x;y}` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  irule inline_bump_success >> simp[] >>
+  qexistsl [`ctx`, `fuel`, `s`, `src`] >> gvs[]
 QED

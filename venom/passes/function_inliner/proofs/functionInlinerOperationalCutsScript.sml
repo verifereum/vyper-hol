@@ -1111,3 +1111,119 @@ Proof
       functionInlinerSiteLayoutTheory.inline_inst_fields_def] >>
   irule inline_owner_storage_value_step >> simp[] >> metis_tac[]
 QED
+
+Theorem inline_owner_storage_effect_special_step:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  inline_shared_frame snap.ils_state = inline_shared_frame frame.ipf_state /\
+  inst_wf src /\ inline_ordinary_opcode src.inst_opcode /\
+  (inline_effect_opcode src.inst_opcode \/ inline_special_opcode src.inst_opcode) /\
+  step_inst fuel C src snap.ils_state = OK s' /\
+  EVERY (\x. MEM x (cfgTransform$fn_all_vars a.ia_function) /\
+    ~retpc_var a.ia_function x) src.inst_outputs /\
+  INJ route.ir_rename (set src.inst_outputs UNION snap.ils_defined) UNIV /\
+  EVERY (\op. !v. op = Var v ==>
+    MEM v (cfgTransform$fn_all_vars a.ia_function) /\ ~retpc_var a.ia_function v)
+    src.inst_operands /\
+  dst.inst_opcode = src.inst_opcode /\
+  dst.inst_operands = MAP (inline_rename_operand route.ir_rename lab) src.inst_operands /\
+  dst.inst_outputs = MAP route.ir_rename src.inst_outputs ==>
+  ?t. step_inst tfuel Tctx dst frame.ipf_state = OK t /\
+      inline_owner_storage cert
+        ((p,a,route,snap with <|ils_state := s';
+          ils_defined := set src.inst_outputs UNION snap.ils_defined|>)::rest)
+        (frame with ipf_state := t) /\
+      inline_shared_frame s' = inline_shared_frame t /\
+      s'.vs_current_bb = snap.ils_state.vs_current_bb /\
+      s'.vs_inst_idx = snap.ils_state.vs_inst_idx /\
+      t.vs_current_bb = frame.ipf_state.vs_current_bb /\
+      t.vs_inst_idx = frame.ipf_state.vs_inst_idx
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule inline_owner_storage_head >> strip_tac >>
+  `inline_opaque_frame_rel route.ir_rename snap.ils_defined snap.ils_opaque
+    FEMPTY {} snap.ils_state frame.ipf_state` by
+    gvs[inline_tracked_snapshot_def, inline_snapshot_data_def,
+        inline_opaque_frame_rel_def, inline_frame_rel_def] >>
+  `!vs. eval_operands src.inst_operands snap.ils_state = SOME vs ==>
+    eval_operands dst.inst_operands frame.ipf_state = SOME vs` by
+    (rpt strip_tac >> gvs[] >> irule inline_tracked_operands_success >> metis_tac[]) >>
+  `src.inst_opcode = LOG ==>
+    ?tc ops tops. src.inst_operands = Lit tc :: ops /\
+      dst.inst_operands = Lit tc :: tops /\ LENGTH ops = w2n tc + 2 /\
+      LENGTH tops = LENGTH ops /\
+      (!vs. eval_operands (REVERSE ops) snap.ils_state = SOME vs ==>
+        eval_operands (REVERSE tops) frame.ipf_state = SOME vs)` by
+    (strip_tac >>
+     `?tc ops. src.inst_operands = Lit tc :: ops /\ LENGTH ops = w2n tc + 2` by
+       gvs[venomWfTheory.inst_wf_def] >>
+     pop_assum strip_assume_tac >>
+     qexistsl [`tc`, `ops`, `MAP (inline_rename_operand route.ir_rename lab) ops`] >>
+     simp[inline_rename_operand_def] >> rpt strip_tac >>
+     rewrite_tac[GSYM MAP_REVERSE] >>
+     irule inline_tracked_operands_success >>
+     simp[] >> qexistsl [`a`, `a.ia_function`, `snap`] >> simp[] >>
+     qpat_x_assum `EVERY _ src.inst_operands` mp_tac >> simp[]) >>
+  `!u v. u IN snap.ils_defined UNION set src.inst_outputs /\
+    v IN snap.ils_defined UNION set src.inst_outputs ==>
+    (route.ir_rename u = route.ir_rename v <=> u = v)` by
+    (qpat_x_assum `INJ _ _ _` mp_tac >>
+     pure_rewrite_tac [INJ_DEF, IN_UNIV, IN_UNION] >> metis_tac[]) >>
+  `LENGTH dst.inst_operands = LENGTH src.inst_operands` by simp[] >>
+  `?t'. step_inst tfuel Tctx dst frame.ipf_state = OK t' /\
+    inline_opaque_frame_rel route.ir_rename
+      (snap.ils_defined UNION set src.inst_outputs) snap.ils_opaque FEMPTY {}
+      s' t'` by
+    (irule inline_effect_special_success >> simp[] >>
+     qexistsl [`C`, `fuel`, `snap.ils_state`] >> gvs[]) >>
+  pop_assum strip_assume_tac >>
+  `inline_success_footprint src.inst_outputs snap.ils_state s'` by
+    (irule inline_ordinary_success_footprint >> metis_tac[]) >>
+  `inline_success_footprint (MAP route.ir_rename src.inst_outputs)
+    frame.ipf_state t'` by
+    (drule_at (Pat `step_inst _ _ dst _ = _`) inline_ordinary_success_footprint >>
+     simp[]) >>
+  qexists `t'` >> simp[] >>
+  conj_tac
+  >- (irule (cj 1 inline_owner_storage_success_footprint) >>
+      simp[] >> metis_tac[UNION_COMM]) >>
+  gvs[inline_success_footprint_def, inline_opaque_frame_rel_def, inline_frame_rel_def]
+QED
+
+Theorem inline_owner_storage_ordinary_step:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  inline_shared_frame snap.ils_state = inline_shared_frame frame.ipf_state /\
+  inst_wf src /\ inline_ordinary_opcode src.inst_opcode /\
+  step_inst fuel C src snap.ils_state = OK s' /\
+  EVERY (\x. MEM x (cfgTransform$fn_all_vars a.ia_function) /\
+    ~retpc_var a.ia_function x) src.inst_outputs /\
+  INJ route.ir_rename (set src.inst_outputs UNION snap.ils_defined) UNIV /\
+  EVERY (\op. !v. op = Var v ==>
+    MEM v (cfgTransform$fn_all_vars a.ia_function) /\ ~retpc_var a.ia_function v)
+    src.inst_operands /\
+  dst.inst_opcode = src.inst_opcode /\
+  dst.inst_operands = MAP (inline_rename_operand route.ir_rename lab) src.inst_operands /\
+  dst.inst_outputs = MAP route.ir_rename src.inst_outputs ==>
+  ?t. step_inst tfuel Tctx dst frame.ipf_state = OK t /\
+      inline_owner_storage cert
+        ((p,a,route,snap with <|ils_state := s';
+          ils_defined := set src.inst_outputs UNION snap.ils_defined|>)::rest)
+        (frame with ipf_state := t) /\
+      inline_shared_frame s' = inline_shared_frame t /\
+      s'.vs_current_bb = snap.ils_state.vs_current_bb /\
+      s'.vs_inst_idx = snap.ils_state.vs_inst_idx /\
+      t.vs_current_bb = frame.ipf_state.vs_current_bb /\
+      t.vs_inst_idx = frame.ipf_state.vs_inst_idx
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `inline_effect_opcode src.inst_opcode \/ inline_special_opcode src.inst_opcode`
+  >- (irule inline_owner_storage_effect_special_step >> metis_tac[]) >>
+  `inline_pure1_opcode src.inst_opcode \/ inline_pure2_opcode src.inst_opcode \/
+   inline_pure3_opcode src.inst_opcode \/ inline_read0_opcode src.inst_opcode \/
+   inline_read1_opcode src.inst_opcode` by metis_tac[inline_ordinary_opcode_coverage] >>
+  `LENGTH src.inst_outputs = 1` by metis_tac[inline_inst_wf_value_output] >>
+  `?x. src.inst_outputs = [x]` by metis_tac[listTheory.LENGTH_EQ_1] >>
+  gvs[INSERT_UNION_EQ] >>
+  irule inline_owner_storage_value_step >> simp[] >> metis_tac[]
+QED
