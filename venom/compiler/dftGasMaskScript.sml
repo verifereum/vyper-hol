@@ -1531,7 +1531,7 @@ Theorem identity_suffix_mask[local]:
         <|bb_label := st.vs_current_bb; bb_instructions :=
           REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> st)
   in
-  !fn bb xs s.
+  !fn bb xs post s.
     CalleeIH /\
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
     LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
@@ -1539,7 +1539,7 @@ Theorem identity_suffix_mask[local]:
     wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
     EVERY inst_wf bb.bb_instructions /\
     EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
-    EVERY (\i. MEM i bb.bb_instructions) xs /\ dft_remaining_inv fn bb xs s /\
+    EVERY (\i. MEM i bb.bb_instructions) xs /\ dft_remaining_inv fn bb (xs ++ post) s /\
     ctx_labels_bound C s.vs_labels /\ ctx_labels_bound C' s.vs_labels /\
     ~s.vs_call_ctx.cc_static /\ terminates (R fuel C' xs s) /\
     LENGTH (E C' xs s) <= LENGTH s.vs_gas_readings ==>
@@ -1666,9 +1666,9 @@ Resume identity_suffix_mask[returning_head]:
   qpat_x_assum `?u. step_inst fuel C' h s = OK u` strip_assume_tac >>
   Cases_on `is_terminator h.inst_opcode`
   >- suspend "terminator_head" >>
-  `dft_remaining_inv fn bb xs (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+  `dft_remaining_inv fn bb (xs ++ post) (u with vs_inst_idx := SUC s.vs_inst_idx)` by
     (irule (SRULE [] (Q.INST [`pre` |-> `[]`] dftRunRelTheory.dft_remaining_inv_step)) >>
-     simp[] >> metis_tac[]) >>
+     simp[] >> metis_tac[APPEND]) >>
   `ctx_labels_bound C u.vs_labels /\ ctx_labels_bound C' u.vs_labels` by
     metis_tac[dftRunRelTheory.ctx_labels_bound_step] >>
   `~u.vs_call_ctx.cc_static` by
