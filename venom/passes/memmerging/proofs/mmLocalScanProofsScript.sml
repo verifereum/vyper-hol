@@ -10267,6 +10267,105 @@ Proof
   irule mm_local_write_log_endpoint >> simp[] >> metis_tac[]
 QED
 
+
+Theorem mm_local_footprint_store_lower[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < LENGTH is /\
+  (EL j is).inst_opcode = MSTORE /\ (EL j is).inst_operands = [Lit dst; Var v] ==>
+  !p d l. p < LENGTH is /\
+    MEM (EL p is).inst_id ((EL j is).inst_id ::
+      (case dfg_get_def (dfg_build_function fn0) v of NONE => [] | SOME li => [li.inst_id])) /\
+    mm_local_write_footprint (EL p is) = SOME (d,l) ==> w2n dst <= d
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    (qpat_assum `is = _` SUBST1_TAC >> drule_all mm_local_prefix_wf_id_distinct >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `(EL p is).inst_id = (EL j is).inst_id`
+  >- (`p = j` by metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx] >>
+      gvs[mm_local_write_footprint_def]) >>
+  Cases_on `dfg_get_def (dfg_build_function fn0) v` >> gvs[] >>
+  `mm_local_write_footprint (EL p bb.bb_instructions) = NONE` by
+    metis_tac[mm_local_footprint_def_excluded] >> gvs[]
+QED
+
+Theorem mm_local_merge_adjacent_ordered_every[local]:
+  (!a b. a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) ==>
+  !cs. SORTED (\a b. a.cg_dst <= b.cg_dst) cs /\ EVERY P cs ==>
+    EVERY P (merge_adjacent cs)
+Proof
+  strip_tac >> recInduct merge_adjacent_ind >> simp[merge_adjacent_def] >>
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  Cases_on `copy_can_merge c1 c2`
+  >- (gvs[] >> first_x_assum irule >>
+      gvs[sortingTheory.SORTED_EQ, relationTheory.transitive_def, copy_merge_def] >>
+      metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  gvs[] >> first_x_assum irule >> gvs[sortingTheory.SORTED_DEF]
+QED
+
+Theorem mm_local_hazards_add_ordered_every[local]:
+  (!a b. a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) /\
+  mm_local_scan_every P ss /\ SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\ P c ==>
+  mm_local_scan_every P ((flush_hazards mode ss c) with ss_copies :=
+    add_copy (flush_hazards mode ss c).ss_copies c)
+Proof
+  strip_tac >> drule mm_local_hazards_every >>
+  disch_then (qspecl_then [`mode`,`c`] assume_tac) >>
+  gvs[mm_local_scan_every_def] >> simp[add_copy_def] >>
+  irule mm_local_merge_adjacent_ordered_every >>
+  metis_tac[mm_local_insert_sorted_order, mm_local_insert_every, mm_local_hazards_order]
+QED
+
+Theorem mm_local_store_ordered_every[local]:
+  (!a b. a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) /\
+  mm_local_scan_every P ss /\ SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
+  (!dst v src. inst.inst_operands = [Lit dst; Var v] /\ FLOOKUP ss.ss_loads v = SOME src ==>
+    P <|cg_dst := w2n dst; cg_src := src; cg_length := 32; cg_inst_ids := inst.inst_id ::
+      (case dfg_get_def dfg v of NONE => [] | SOME li => [li.inst_id])|>) ==>
+  mm_local_scan_every P (scan_store dfg Mem2Mem ss inst)
+Proof
+  strip_tac >> simp[scan_store_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  simp[mm_local_barrier_every] >> irule mm_local_hazards_add_ordered_every >>
+  simp[invalidate_loads_def, mm_local_invalidate_every] >>
+  gvs[oneline operand_lit_val_def, oneline operand_var_name_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem mm_local_bulk_ordered_every[local]:
+  (!a b. a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) /\
+  mm_local_scan_every P ss /\ SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
+  (!dst src len. inst.inst_operands = [Lit dst; Lit src; Lit len] ==>
+    P <|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+      cg_inst_ids := [inst.inst_id]|>) ==>
+  mm_local_scan_every P (scan_bulk_copy Mem2Mem ss inst)
+Proof
+  strip_tac >> simp[scan_bulk_copy_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  simp[mm_local_barrier_every] >> irule mm_local_hazards_add_ordered_every >>
+  simp[invalidate_loads_def, mm_local_invalidate_every] >>
+  gvs[oneline operand_lit_val_def, oneline operand_var_name_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem mm_local_inst_ordered_every[local]:
+  (!a b. a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) /\
+  mm_local_scan_every P ss /\ SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
+  (inst.inst_opcode = MSTORE ==>
+    !dst v src. inst.inst_operands = [Lit dst; Var v] /\ FLOOKUP ss.ss_loads v = SOME src ==>
+      P <|cg_dst := w2n dst; cg_src := src; cg_length := 32; cg_inst_ids := inst.inst_id ::
+        (case dfg_get_def dfg v of NONE => [] | SOME li => [li.inst_id])|>) /\
+  (inst.inst_opcode = MCOPY ==>
+    !dst src len. inst.inst_operands = [Lit dst; Lit src; Lit len] ==>
+      P <|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+        cg_inst_ids := [inst.inst_id]|>) ==>
+  mm_local_scan_every P (scan_inst dfg Mem2Mem ss inst)
+Proof
+  strip_tac >> simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  IF_CASES_TAC >- (irule mm_local_load_every >> simp[]) >>
+  IF_CASES_TAC >- (irule mm_local_store_ordered_every >> metis_tac[]) >>
+  IF_CASES_TAC >- (irule mm_local_bulk_ordered_every >> metis_tac[]) >>
+  rpt IF_CASES_TAC >> simp[mm_local_barrier_every]
+QED
+
 Theorem mm_local_collection_discharge[local]:
   mm_local_pending cap js s t /\
   (!pre j mid k post d bs a cs.
