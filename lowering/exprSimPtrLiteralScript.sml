@@ -217,19 +217,17 @@ fun literal_buffer_prepare_tac is_expr =
       alloc_limits_expr_def, literal_alloc_ok_def];
 
 fun literal_buffer_consumer_tac is_expr norm bound_tac rep e size tv value vvpost =
-  literal_buffer_prepare_tac is_expr >>
-  literal_buffer_run_tac norm (size @ ` < dimword (:256)`) >>
-  bound_tac >>
-  drule_all rep >> strip_tac >>
-  Q.SUBGOAL_THEN vvpost ASSUME_TAC
-    >- literal_buffer_vv_post_tac norm e size tv >>
-  literal_buffer_ghost_tac size >>
-  (if is_expr then
+  (literal_buffer_prepare_tac is_expr,
+   literal_buffer_run_tac norm (size @ ` < dimword (:256)`) >> bound_tac >>
+   drule_all rep >> strip_tac,
+   Q.SUBGOAL_THEN vvpost ASSUME_TAC >- literal_buffer_vv_post_tac norm e size tv,
+   literal_buffer_ghost_tac size,
+   (if is_expr then
      (drule (GEN_ALL (SRULE [vyperASTTheory.expr_type_def, is_word_type_def]
         (Q.INST [`e` |-> e] (SPEC_ALL literal_memory_vv_expr_post)))) >>
       simp[vyperASTTheory.expr_type_def, is_word_type_def] >> strip_tac)
-   else all_tac) >>
-  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+   else all_tac),
+  (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_ptr_at_def] >>
   Q.EXISTS_TAC (if is_expr then `INL (` @ value @ `)`
                else `INL (Value (` @ value @ `))`) >>
@@ -240,7 +238,7 @@ fun literal_buffer_consumer_tac is_expr norm bound_tac rep e size tv value vvpos
   simp[literal_ptr_ghost_inv_normalize, vv_post_initial_gas] >>
   literal_buffer_value_tac e size tv value >>
   gvs[vyperASTTheory.expr_type_def, contextTheory.base_ptr_def,
-      ptr_vv_ok_def, ptr_val_ok_def, vyperStateTheory.read_result_def];
+      ptr_vv_ok_def, ptr_val_ok_def, vyperStateTheory.read_result_def]));
 
 fun literal_bytes_consumer_tac is_expr =
   literal_buffer_consumer_tac is_expr I
@@ -268,6 +266,11 @@ fun literal_string_consumer_tac is_expr =
       (Value (StringV str)) (LocatedValue (BaseT (StringT n)) (base_ptr buf))
       (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`;
 
+val (bytes_vv_1, bytes_vv_2, bytes_vv_3, bytes_vv_4, bytes_vv_5, bytes_vv_6) = literal_bytes_consumer_tac false;
+val (bytes_expr_1, bytes_expr_2, bytes_expr_3, bytes_expr_4, bytes_expr_5, bytes_expr_6) = literal_bytes_consumer_tac true;
+val (string_vv_1, string_vv_2, string_vv_3, string_vv_4, string_vv_5, string_vv_6) = literal_string_consumer_tac false;
+val (string_expr_1, string_expr_2, string_expr_3, string_expr_4, string_expr_5, string_expr_6) = literal_string_consumer_tac true;
+
 (* Both judgments use the same allocation, stores and ghost witnesses. *)
 Theorem literal_buffer_sim_ptr:
   !d PG ctx func cenv cx env ty ann l es.
@@ -282,16 +285,36 @@ Proof
 QED
 
 Resume literal_buffer_sim_ptr[bytes_vv]:
-  literal_bytes_consumer_tac false
+  bytes_vv_1 >>
+  bytes_vv_2 >>
+  bytes_vv_3 >>
+  bytes_vv_4 >>
+  bytes_vv_5 >>
+  bytes_vv_6
 QED
 Resume literal_buffer_sim_ptr[bytes_expr]:
-  literal_bytes_consumer_tac true
+  bytes_expr_1 >>
+  bytes_expr_2 >>
+  bytes_expr_3 >>
+  bytes_expr_4 >>
+  bytes_expr_5 >>
+  bytes_expr_6
 QED
 Resume literal_buffer_sim_ptr[string_vv]:
-  literal_string_consumer_tac false
+  string_vv_1 >>
+  string_vv_2 >>
+  string_vv_3 >>
+  string_vv_4 >>
+  string_vv_5 >>
+  string_vv_6
 QED
 Resume literal_buffer_sim_ptr[string_expr]:
-  literal_string_consumer_tac true
+  string_expr_1 >>
+  string_expr_2 >>
+  string_expr_3 >>
+  string_expr_4 >>
+  string_expr_5 >>
+  string_expr_6
 QED
 Finalise literal_buffer_sim_ptr
 
