@@ -7,7 +7,7 @@ Ancestors externalReturnSelectedResources externalReturnSiteSemantics
   externalReturnConsumerProbe externalReturnCopyAlloc externalReturnSuffixResult
   externalReturnBufferlessAlloc externalReturnIntcallMetadata vyperTypeSystem
   externalReturnBufferlessNormalize vyperTypeContract supportedDecls supportedProgram
-  vyperInterpreter
+  vyperInterpreter exprSimHyps
 
 Theorem selected_arg_fits_trans_mutual[local]:
   (!a b. !c. arg_type_fits a b /\ arg_type_fits b c ==> arg_type_fits a c) /\

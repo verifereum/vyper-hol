@@ -1246,8 +1246,9 @@ Proof
   metis_tac[]
 QED
 
-Theorem ifexp_intcall_read_physical_typed:
-  expr_body_pre ce cx env (Call ty (IntCall fid) args drv) es /\
+Theorem return_intcall_physical_typed:
+  expr_sim_inv ce cx env es /\
+  well_typed_expr env (Call ty (IntCall fid) args drv) /\
   (do r <- eval_expr cx (Call ty (IntCall fid) args drv);
       read_result cx r od) es = (INL v,es') ==>
   ?stv. evaluate_type (get_tenv cx)
@@ -1256,9 +1257,9 @@ Theorem ifexp_intcall_read_physical_typed:
 Proof
   strip_tac >> PairCases_on `fid` >>
   `env_context_consistent env cx` by
-    gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def] >>
-  fs[expr_body_pre_def, expr_sim_inv_def, well_typed_expr_def,
-     lowered_value_type_def, vyperASTTheory.expr_type_def] >>
+    gvs[expr_sim_inv_def, env_consistent_def] >>
+  fs[expr_sim_inv_def, well_typed_expr_def,
+     exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def] >>
   qpat_x_assum `!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> _` drule >>
   disch_then SUBST1_TAC >>
   `fn_sigs_consistent env.fn_sigs cx` by
@@ -1269,6 +1270,17 @@ Proof
   drule_all ifexp_intcall_read_cast >> strip_tac >>
   goal_assum (drule_at Any) >>
   metis_tac[vyperTypingTheory.safe_cast_result_well_typed]
+QED
+
+Theorem ifexp_intcall_read_physical_typed:
+  expr_body_pre ce cx env (Call ty (IntCall fid) args drv) es /\
+  (do r <- eval_expr cx (Call ty (IntCall fid) args drv);
+      read_result cx r od) es = (INL v,es') ==>
+  ?stv. evaluate_type (get_tenv cx)
+    (lowered_value_type ce (Call ty (IntCall fid) args drv)) = SOME stv /\
+    value_has_type stv v
+Proof
+  fs[expr_body_pre_def] >> metis_tac[return_intcall_physical_typed]
 QED
 
 Theorem word_size_monotone:
