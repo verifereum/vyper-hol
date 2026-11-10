@@ -1473,3 +1473,198 @@ Proof
   mp_tac materialize_positive_probe_endpoint >>
   simp[materialize_positive_probe_trace_def]
 QED
+
+(* A legacy fragment specifies continuation results, not the state reached
+   by an arbitrary finite path to the same cursor. *)
+Theorem materialize_same_cut_identity[local]:
+  sa.cs_current_bb = sb.cs_current_bb /\
+  LENGTH sa.cs_current_insts = LENGTH sb.cs_current_insts ==>
+  frag_exec ctx sa sb (\s. s = initial) (\s. s = initial) (\r. F)
+Proof
+  rw[fragExecTheory.frag_exec_def] >> metis_tac[]
+QED
+
+Theorem materialize_zero_endpoint_transfer_probe:
+  let sa = initial_compile_state "@wcopy_exit_2";
+      vv = LocatedValue (TupleT []) (mk_ptr (Lit 0w) LocStorage);
+      sb = SND (compile_materialize_vv ce (TupleT []) vv sa);
+      initial = init_venom_state "@wcopy_exit_2";
+      t = materialize_zero_probe_trace ce 6
+  in
+    frag_exec ctx sa sb (\s. s = initial) (\s. s = initial) (\r. F) /\
+    gas_marked_path F ctx (materialize_zero_probe_fn ce) initial 0 (OK t) /\
+    t <> initial
+Proof
+  simp_tac (srw_ss()) [LET_THM] >> conj_tac
+  >- (irule materialize_same_cut_identity >> EVAL_TAC) >>
+  conj_tac
+  >- metis_tac[materialize_equal_zero_counted_probe] >>
+  `FLOOKUP (materialize_zero_probe_trace ce 6).vs_allocas 0 = SOME (0,0)` by
+    metis_tac[materialize_zero_probe_endpoint] >>
+  strip_tac >> gvs[venomStateTheory.init_venom_state_def]
+QED
+
+Theorem materialize_positive_endpoint_transfer_probe:
+  let ty = TupleT [BaseT (UintT 256); BaseT (UintT 256)];
+      vv = LocatedValue ty (mk_ptr (Lit 0w) LocStorage);
+      base = initial_compile_state "@wcopy_exit_2";
+      end0 = SND (compile_materialize_vv ce ty vv base);
+      sa = base with cs_current_insts := end0.cs_current_insts;
+      sb = SND (compile_materialize_vv ce ty vv sa);
+      initial = init_venom_state "@wcopy_exit_2" with vs_inst_idx := 1;
+      t = materialize_positive_probe_trace ce 27
+  in
+    frag_exec ctx sa sb (\s. s = initial) (\s. s = initial) (\r. F) /\
+    gas_marked_path F ctx (materialize_positive_probe_fn ce) initial 0 (OK t) /\
+    t <> initial
+Proof
+  simp_tac (srw_ss()) [LET_THM] >> conj_tac
+  >- (irule materialize_same_cut_identity >> EVAL_TAC) >>
+  conj_tac
+  >- metis_tac[materialize_positive_alias_counted_probe] >>
+  `FLOOKUP (materialize_positive_probe_trace ce 27).vs_allocas 0 = SOME (0,64)` by
+    (CONV_TAC (computeLib.CBV_CONV
+      (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))) >>
+  strip_tac >> gvs[venomStateTheory.init_venom_state_def]
+QED
+
+Theorem materialize_straight_free_trans[local]:
+  dec_straight sa sm /\ dec_straight sm sb /\
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sm) /\
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sm sb) ==>
+  dec_straight sa sb /\
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
+Proof
+  strip_tac >> conj_tac >- metis_tac[dec_straight_trans] >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule exprLoweringPropsTheory.emitted_insts_append >>
+     gvs[dec_straight_def, inst_extends_def]) >> simp[]
+QED
+
+Theorem materialize_offset_straight_free[local]:
+  compile_lit_byte_offset op off sa = (r,sb) ==>
+  dec_straight sa sb /\
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
+Proof
+  Cases_on `off = 0` >> Cases_on `op` >>
+  simp[contextTheory.compile_lit_byte_offset_def,
+       emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def,
+       comp_bind_def, comp_return_def] >> rpt strip_tac >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_def] >>
+  simp[dec_straight_def, inst_extends_def,
+       exprLoweringPropsTheory.emitted_insts_def, rich_listTheory.DROP_APPEND,
+       arithmeticTheory.SUB_EQ_0, arithmeticTheory.SUB_PLUS,
+       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
+QED
+
+Theorem materialize_imm_load_straight_free[local]:
+  compile_imm_load_word ctor imm src sa = (r,sb) ==>
+  dec_straight sa sb /\
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
+Proof
+  Cases_on `ctor` >> Cases_on `imm` >>
+  simp[contextTheory.compile_imm_load_word_def,
+       emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def,
+       comp_bind_def, comp_return_def] >> rpt strip_tac >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_def] >>
+  simp[dec_straight_def, inst_extends_def,
+       exprLoweringPropsTheory.emitted_insts_def, rich_listTheory.DROP_APPEND,
+       arithmeticTheory.SUB_EQ_0, arithmeticTheory.SUB_PLUS,
+       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
+QED
+
+Theorem materialize_mstore_straight_free[local]:
+  emit_void MSTORE ops sa = ((),sb) ==>
+  dec_straight sa sb /\
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
+Proof
+  strip_tac >> conj_tac
+  >- (drule dec_straight_emit_void >>
+      simp[venomInstTheory.is_terminator_def]) >>
+  drule emitted_insts_emit_void >> simp[venomInstTheory.mk_inst_def]
+QED
+
+Theorem materialize_imm_copy_straight_free:
+  !n off sa sb.
+    compile_imm_copy_to_memory ctor imm src dst n off sa = ((),sb) ==>
+    dec_straight sa sb /\
+    EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
+Proof
+  Induct
+  >- simp[contextTheory.compile_imm_copy_to_memory_def, comp_return_def,
+          dec_straight_def, inst_extends_def,
+          exprLoweringPropsTheory.emitted_insts_def] >>
+  rpt gen_tac >>
+  simp[Once contextTheory.compile_imm_copy_to_memory_def,
+       comp_bind_def, comp_ignore_bind_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >>
+  drule materialize_offset_straight_free >> strip_tac >>
+  drule materialize_imm_load_straight_free >> strip_tac >>
+  drule_all materialize_mstore_straight_free >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  metis_tac[materialize_offset_straight_free, materialize_straight_free_trans]
+QED
+
+Theorem materialize_alloc_straight_free[local]:
+  compile_alloc_buffer sz sa = (buf,sb) ==>
+  dec_straight sa sb /\
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
+Proof
+  simp[contextTheory.compile_alloc_buffer_def,
+       emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def,
+       comp_bind_def, comp_return_def] >> rpt strip_tac >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_def] >>
+  simp[dec_straight_def, inst_extends_def,
+       exprLoweringPropsTheory.emitted_insts_def, rich_listTheory.DROP_APPEND,
+       arithmeticTheory.SUB_EQ_0, venomInstTheory.mk_inst_def,
+       venomInstTheory.is_terminator_def]
+QED
+
+Theorem materialize_unwrap_code_straight_free:
+  unwrap_value ce (LocatedValue ty src) sm = (op,su) /\
+  ~is_word_type ty /\ src.ptr_location = LocCode ==>
+  dec_straight sm su /\
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sm su)
+Proof
+  strip_tac >> qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
+  simp[exprLoweringTheory.unwrap_value_def,
+       contextTheory.compile_ensure_in_memory_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >>
+  drule materialize_alloc_straight_free >> strip_tac >>
+  drule materialize_imm_copy_straight_free >> strip_tac >>
+  metis_tac[materialize_straight_free_trans]
+QED
+
+Theorem materialize_unwrap_code_owned_path:
+  unwrap_value ce (LocatedValue ty src) sm = (op,su) /\
+  ~is_word_type ty /\ src.ptr_location = LocCode /\
+  local_ptrs_reserved ce sm /\ sa.cs_next_id <= sm.cs_next_id /\
+  read_result cx tvv es' = (INL v,es') /\
+  vv_post ctx func ce cx e es sa sm s0 es' tvv (LocatedValue ty src) r /\
+  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand (LocatedValue ty src) = Var x ==> not_fresh_at sm x) /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+         ~is_word_type (post_value_type ce e) ==>
+         type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+         type_memory_size tvt < 2 ** 64) /\
+  not_fresh_at sm p /\ lookup_var p r = SOME w /\
+  FLOOKUP r.vs_allocas aid = SOME (w2n w,sz) /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func r 0 (OK u) /\
+      expr_post ctx func ce cx e es'
+        (sa with cs_next_var := sm.cs_next_var) su r es' v op u /\
+      lookup_var p u = SOME w /\
+      FLOOKUP u.vs_allocas aid = SOME (w2n w,sz) /\
+      ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
+      u.vs_inst_idx = LENGTH su.cs_current_insts
+Proof
+  strip_tac >>
+  drule_all materialize_unwrap_code_straight_free >> strip_tac >>
+  drule_all materialize_unwrap_owned_sim >>
+  disch_then (qspec_then `\r. F` mp_tac) >> strip_tac >>
+  drule materialize_straight_zero_path >>
+  disch_then (qspecl_then [`r`, `func`] mp_tac) >> simp[] >> metis_tac[]
+QED
