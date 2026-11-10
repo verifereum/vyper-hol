@@ -1911,6 +1911,150 @@ Proof
       listTheory.MAP_REVERSE]
 QED
 
+Theorem sym_kinds_relevant_fields:
+  !ps' ps cp fn ret srest ss.
+  ps'.ps_stack = ps.ps_stack /\ ps'.ps_spilled = ps.ps_spilled /\
+  sym_kinds_ok cp fn ret srest ps ss ==>
+  sym_kinds_ok cp fn ret srest ps' ss
+Proof
+  simp[sym_kinds_ok_def]
+QED
+
+Theorem op_kinds_forget_map:
+  !xs ys f fn ret.
+    LIST_REL (op_kind_ok fn ret) xs ys /\
+    (!op. MEM op xs ==> f op = dead_stack_marker \/ f op = op) ==>
+    LIST_REL (op_kind_ok fn ret) (MAP f xs) ys
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  simp[listTheory.LIST_REL_CONS1] >> rpt strip_tac >> gvs[] >>
+  metis_tac[op_kind_ok_def]
+QED
+
+Theorem sym_kinds_forget_map:
+  !cp fn ret srest ps ss f.
+  sym_kinds_ok cp fn ret srest ps ss /\
+  (!op. MEM op ps.ps_stack ==> f op = dead_stack_marker \/ f op = op) ==>
+  sym_kinds_ok cp fn ret srest (ps with ps_stack := MAP f ps.ps_stack) ss
+Proof
+  simp[sym_kinds_ok_def, listTheory.MAP_REVERSE] >> rpt strip_tac >>
+  qexists `top` >> simp[] >>
+  pure_rewrite_tac[GSYM listTheory.MAP_REVERSE] >>
+  irule op_kinds_forget_map >> simp[]
+QED
+
+Theorem sym_kinds_forget_promised:
+  !cp fn ret srest ps ss f promised.
+  sym_kinds_ok cp fn ret srest ps ss /\
+  (!op. MEM op ps.ps_stack ==> f op = dead_stack_marker \/ f op = op) ==>
+  sym_kinds_ok cp fn ret srest
+    (ps with <|ps_stack := MAP f ps.ps_stack; ps_cleanup_promised := promised|>) ss
+Proof
+  rpt gen_tac >> strip_tac >> drule_all sym_kinds_forget_map >>
+  simp[sym_kinds_ok_def]
+QED
+
+Theorem sym_empty_forget_numeric:
+  !ps ps' p env cp fn ret srest initial_fmp R ss f promised.
+  ps' = ps with <|ps_stack := MAP f ps.ps_stack; ps_cleanup_promised := promised|> /\
+  sym_kinds_ok cp fn ret srest ps ss /\
+  (!op. MEM op ps.ps_stack ==> f op = dead_stack_marker \/ f op = op) ==>
+  ?out. sym_steps p env (LENGTH (execute_plan initial_fmp [])) ss = SymOK out /\
+    sym_kinds_ok cp fn ret srest ps' out /\
+    out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp []) /\
+    (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >> qexists `ss` >>
+  simp[execute_plan_def, sym_steps_def] >>
+  gvs[] >> irule sym_kinds_forget_promised >> simp[]
+QED
+
+Theorem sym_popmany_forget_numeric:
+  !items ps ops mid ps' p env cp fn ret srest initial_fmp R ss f promised.
+    popmany_plan items ps = (ops,mid) /\
+    ps' = mid with <|ps_stack := MAP f mid.ps_stack; ps_cleanup_promised := promised|> /\
+    (!op. MEM op mid.ps_stack ==> f op = dead_stack_marker \/ f op = op) /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. ps'.ps_alloc.sa_spill_base <= b /\ b < ps'.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps' out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `sym_kinds_ok cplan fn ret srest ps ss` >>
+  `!b. mid.ps_alloc.sa_spill_base <= b /\ b < mid.ps_alloc.sa_next_offset ==>
+    context_spill_byte cplan b /\ R b` by gvs[] >>
+  drule_all sym_popmany_numeric >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists `out` >> simp[] >> gvs[] >>
+  irule sym_kinds_forget_promised >> simp[]
+QED
+
+Theorem sym_popmany_mark_numeric:
+  !items retained promised ps ops ps' p env cp fn ret srest initial_fmp R ss.
+    (\(code,mid). (code, mid with
+      <|ps_stack := mark_dead_stack retained mid.ps_stack;
+        ps_cleanup_promised := promised|>)) (popmany_plan items ps) = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. ps'.ps_alloc.sa_spill_base <= b /\ b < ps'.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps' out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >> pairarg_tac >> gvs[mark_dead_stack_def] >>
+  drule_all sym_popmany_numeric >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists `out` >> simp[] >>
+  irule sym_kinds_forget_promised >> simp[] >> metis_tac[]
+QED
+
+Theorem sym_clean_stack_plan_numeric:
+  !liveness cfg fn bb ps ops ps' p env cp ret srest initial_fmp R ss.
+    clean_stack_plan liveness cfg fn bb ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. ps'.ps_alloc.sa_spill_base <= b /\ b < ps'.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps' out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac >>
+  simp[clean_stack_plan_def] >>
+  Cases_on `cfg_preds_of cfg bb.bb_label`
+  >- (simp[execute_plan_def, sym_steps_def] >> metis_tac[]) >>
+  rename1 `cfg_preds_of _ _ = pred_label::other_preds` >>
+  Cases_on `other_preds`
+  >- (simp[] >> IF_CASES_TAC
+      >- (simp[execute_plan_def, sym_steps_def] >> metis_tac[]) >>
+      Cases_on `lookup_block pred_label fn.fn_blocks`
+      >- (simp[execute_plan_def, sym_steps_def] >> metis_tac[]) >>
+      simp[] >> qmatch_goalsub_abbrev_tac `if guard then _ else _` >>
+      IF_CASES_TAC
+      >- (disch_then (strip_assume_tac o GSYM) >> gvs[execute_plan_def, sym_steps_def] >>
+          metis_tac[sym_kinds_forget_promised, combinTheory.K_THM]) >>
+      IF_CASES_TAC
+      >- (strip_tac >> drule_all sym_popmany_mark_numeric >>
+          disch_then (qspec_then `env` (fn th => metis_tac[th, arithmeticTheory.ADD_COMM]))) >>
+      strip_tac >> drule_all sym_popmany_numeric >>
+      disch_then (qspec_then `env` (fn th => metis_tac[th, arithmeticTheory.ADD_COMM]))) >>
+  simp[execute_plan_def, sym_steps_def] >> metis_tac[]
+QED
+
 Theorem sym_phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0
