@@ -11,7 +11,7 @@ Ancestors
  contextCodegenRel fcgPostorder arithmetic abiDecoderLoop
  actualEntryAllocationFrame immutableWordExecution emitHelperProps rich_list
  emitHelper exprLoweringProps ctorRegisterArgs ctorDeployLoweringCodeShape
- exprSimConcatResult instIdxIndep fragGasPath entryDispatchProps
+ exprSimConcatResult instIdxIndep fragGasPath fragGasStraight entryDispatchProps
 
 Theorem deploy_ctor_enter_context[local]:
  ctx.ctx_entry = SOME name /\
@@ -42,7 +42,7 @@ Proof
  simp[fresh_vars_wrt_def, initial_compile_state_def, lookup_var_def]
 QED
 
-Theorem deploy_ctor_original_entry_shape[local]:
+Theorem deploy_ctor_original_entry_shape:
  !tops rp runtime unit body ce nr key ut imm lbl sa sb sj se sp sf func.
  supported_program tops /\
  deploy_ctor_code tops rp runtime unit
