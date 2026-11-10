@@ -616,3 +616,96 @@ Proof
   simp[] >> rpt gen_tac >> strip_tac >>
   drule_all generate_phi_plan_ops_region_confined >> simp[]
 QED
+
+Theorem regular_postfix_ops_spill_bounded:
+  LENGTH inst.inst_outputs <= 1 /\
+  plan_slots_bounded sb ps7 /\ spill_alloc_layout_wf ps7.ps_alloc ps7.ps_spilled /\
+  (if inst.inst_outputs = [] \/ halt then ([],ps7)
+   else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) ps7)
+    = (pops,ps8) /\
+  (if FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([],ps8)
+   else optimistic_swap_plan dfg inst nl term ps8) = (opts,ps9) /\
+  qs = release_dead_spills nl ps9 ==>
+  ops_spill_bounded sb qs.ps_alloc.sa_next_offset (pops ++ opts)
+Proof
+  strip_tac >> Cases_on `inst.inst_outputs`
+  >- gvs[planSpillBoundsTheory.ops_spill_bounded_def] >>
+  rename1 `inst.inst_outputs = x::xs` >> Cases_on `xs` >> gvs[] >>
+  irule assign_postfix_ops_bounded >> qexistsl [`dfg`, `halt`, `inst`, `nl`, `ps7`, `ps8`, `ps9`, `term`, `x`] >>
+  Cases_on `MEM x nl` >> gvs[]
+QED
+
+Theorem sym_regular_postfix_applicability:
+  LENGTH inst.inst_outputs <= 1 /\ generated_plan_state_wf_marked sb ps7 /\
+  (if inst.inst_outputs = [] \/ halt then ([],ps7)
+   else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) ps7)
+    = (pops,ps8) /\
+  (if FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([],ps8)
+   else optimistic_swap_plan dfg inst nl term ps8) = (opts,ps9) /\
+  qs = release_dead_spills nl ps9 /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
+  r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
+  qs.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  spill_alloc_layout_wf ps7.ps_alloc ps7.ps_spilled /\
+  ps7.ps_alloc.sa_spill_base = qs.ps_alloc.sa_spill_base /\
+  ps7.ps_alloc.sa_next_offset <= qs.ps_alloc.sa_next_offset /\
+  (!off b. MEM (SOSpill off) (pops ++ opts) /\ in_mem_range off 32 b ==>
+    closure_spill_byte ctx cplan name b /\ context_spill_byte cplan b)
+Proof
+  strip_tac >>
+  `plan_slots_bounded sb ps7 /\ spill_alloc_layout_wf ps7.ps_alloc ps7.ps_spilled` by
+    fs[fnPlanPrefixTheory.generated_plan_state_wf_marked_def] >>
+  `((if inst.inst_outputs = [] \/ halt then (pops,ps8) = ([],ps7)
+    else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) ps7 = (pops,ps8)) /\
+    (if inst.inst_outputs = [] \/ FILTER (\out. MEM out nl) inst.inst_outputs = []
+     then (opts,ps9) = ([],ps8)
+     else optimistic_swap_plan dfg inst nl term ps8 = (opts,ps9)))` by
+    (Cases_on `inst.inst_outputs = []` >>
+     gvs[COND_EXPAND, AllCaseEqs()]) >>
+  drule_all generatedPrefixSimTheory.regular_postfix_alloc_frame >> strip_tac >>
+  `r.sr_spill_base <= sb` by
+    gvs[planSpillBoundsTheory.plan_slots_bounded_def,
+      planSpillBoundsTheory.alloc_slots_bounded_def] >>
+  drule_all regular_postfix_ops_spill_bounded >> strip_tac >>
+  metis_tac[symPostfixSimTheory.scratch_ops_region_confined]
+QED
+
+Theorem sym_regular_prefix_applicability:
+  generated_plan_state_wf_marked sb ps /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan opc operands nl ps = (iops,prepared) /\
+  reorder_plan dfg selected prepared = (rops,arranged) /\
+  PERM operands selected /\ LENGTH operands <= 16 /\
+  LENGTH operands <= LENGTH prepared.ps_stack /\
+  emitted = arranged with ps_stack := FOLDL (\stk out. stack_push (Var out) stk)
+    (stack_pop (LENGTH selected) arranged.ps_stack) inst.inst_outputs /\
+  (if inst.inst_outputs = [] \/ halt then ([],emitted)
+   else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) emitted)
+    = (pops,popped) /\
+  (if FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst nl term popped) = (opts,tail) /\
+  qs = release_dead_spills nl tail /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
+  qs.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  plan_slots_bounded sb ps /\ residual_budget_wf_marked sb [] ps /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end
+Proof
+  strip_tac >>
+  `residual_budget_wf_marked sb [] ps` by
+    metis_tac[deepResidualSimTheory.generated_plan_state_wf_marked_residual_nil] >>
+  drule_all deepResidualSimTheory.selected_input_arranged_marked >> strip_tac >>
+  `((if inst.inst_outputs = [] \/ halt then (pops,popped) = ([],emitted)
+    else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) emitted = (pops,popped)) /\
+    (if inst.inst_outputs = [] \/ FILTER (\out. MEM out nl) inst.inst_outputs = []
+     then (opts,tail) = ([],popped)
+     else optimistic_swap_plan dfg inst nl term popped = (opts,tail)))` by
+    (Cases_on `inst.inst_outputs = []` >> gvs[COND_EXPAND, AllCaseEqs()]) >>
+  drule_all generatedPrefixSimTheory.regular_postfix_alloc_frame >> strip_tac >>
+  gvs[fnPlanPrefixTheory.generated_plan_state_wf_marked_def,
+    deepResidualBudgetTheory.plan_state_residual_wf_marked_def,
+    planSpillBoundsTheory.plan_slots_bounded_def,
+    planSpillBoundsTheory.alloc_slots_bounded_def] >> gvs[]
+QED
