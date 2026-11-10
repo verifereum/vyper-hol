@@ -54,6 +54,7 @@ Datatype:
   | SubscriptK1 type eval_result eval_continuation
   | AttributeK type identifier eval_continuation
   | BuiltinK type builtin (type list) eval_continuation
+  | MembershipK type bool eval_continuation
   | LenK eval_continuation
   | TypeBuiltinK type_builtin type (type list) eval_continuation
   | CallSendK bool eval_continuation
@@ -166,6 +167,9 @@ Definition eval_expr_cps_def:
     (case type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
        (INR ex, st) => AK cx8 (ApplyExc ex) st k
      | (INL (), st) => if bt = Len then eval_expr_cps cx8 (HD es) st (LenK k)
+                       else if bt = Bop In ∨ bt = Bop NotIn then
+                         eval_exprs_cps cx8 es st
+                           (MembershipK (expr_type (EL 1 es)) (bt = Bop NotIn) k)
                        else if bt = Env MsgGas then
                          liftk cx8 ApplyTv
                            (do v <- next_gas_reading; return $ Value v od st) k
@@ -442,6 +446,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (AttributeK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (BuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (MembershipK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK _ k) = AK cx (ApplyExc ex) st k ∧
@@ -671,6 +676,13 @@ Definition apply_vals_def:
       | (INL vs, st) => eval_for_cps cx tyv id body vs st k) ∧
   apply_vals cx vs st (StructLitK ks k) =
     apply_tv cx (Value $ StructV (ZIP (ks, vs))) st k ∧
+  apply_vals cx vs st (MembershipK ty neg k) =
+    liftk cx ApplyTv (do
+      type_check (LENGTH vs = 2) "Membership args";
+      tv <- lift_option_type (evaluate_type (get_tenv cx) ty) "Membership type";
+      v <- lift_sum $ evaluate_membership tv neg (EL 0 vs) (EL 1 vs);
+      return $ Value v
+    od st) k ∧
   apply_vals cx vs st (BuiltinK ty bt tys k) =
     liftk cx ApplyTv (do
       acc <- get_accounts;
@@ -839,7 +851,7 @@ Proof
   TRY APPLY_VALS_PRE_CASE_TAC >>
   gvs[check_create_blueprint_state, CaseEq"prod", CaseEq"sum"] >>
   TRY (Cases_on `vs` >> simp[]) >>
-  rpt strip_tac >> gvs[optionTheory.IS_SOME_DEF]
+  rpt strip_tac >> gvs[optionTheory.IS_SOME_DEF, CaseEq "option", return_def, raise_def]
 QED
 
 Definition nextk_def[simp]:
@@ -1410,16 +1422,32 @@ Proof
     \\ BasicProvers.TOP_CASE_TAC
     \\ gvs[cont_def]
     \\ BasicProvers.TOP_CASE_TAC
-    \\ gvs[] \\ first_x_assum drule
+    \\ gvs[]
+    \\ Cases_on `bt = Len` \\ gvs[]
+    \\ Cases_on `bt = Bop In ∨ bt = Bop NotIn` \\ gvs[]
     \\ first_x_assum drule
+    \\ gvs[]
+    \\ rpt strip_tac
     \\ rw[bind_def]
     \\ (CASE_TAC \\ reverse CASE_TAC
         >- rw[Once OWHILE_THM, stepk_def, apply_exc_def])
     >> rw[Once OWHILE_THM, stepk_def, apply_vals_def,
           apply_tv_def, bind_def, ignore_bind_def, liftk1]
     >> simp[get_accounts_def, return_def]
-    >> CASE_TAC \\ CASE_TAC \\ simp[return_def]
-    \\ CASE_TAC \\ CASE_TAC \\ simp[return_def] )
+    >> CASE_TAC \\ CASE_TAC
+    \\ gvs[bind_def, ignore_bind_def, return_def, CaseEq "prod", CaseEq "sum"]
+    >~ [`type_check _ "Membership args" _ = (args_res,_)`]
+    >- (Cases_on `args_res` >> simp[] >>
+        rename1 `lift_option_type _ _ _ = (ty_res,_)` >>
+        Cases_on `ty_res` >> simp[])
+    >~ [`type_check _ "Membership args" _ = (args_res,_)`]
+    >- (Cases_on `args_res` >> simp[] >>
+        rename1 `lift_option_type _ _ _ = (ty_res,_)` >>
+        Cases_on `ty_res` >> simp[])
+    \\ rename1 `lift_sum (evaluate_builtin _ _ _ _ _ _) _ = (builtin_res,_)`
+    \\ Cases_on `builtin_res` \\ simp[]
+    \\ rename1 `precompile_call_success _ _ = (pc_res,_)`
+    \\ Cases_on `pc_res` \\ simp[] )
   \\ conj_tac >- ( (* eval_expr (Pop bt) *)
     rpt gen_tac >> strip_tac
     >> pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def]
@@ -1442,6 +1470,9 @@ Proof
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1]
     >> gvs[apply_exc_def] )
+  (* Both evaluators delegate to eval_ext_call after evaluating all operands,
+     including keyword defaults.  No recursive default-expression IH remains;
+     this shared-helper proof covers oracle and direct execution alike. *)
   \\ conj_tac >- ( (* eval_expr (Call (ExtCall ...) es _) *)
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]

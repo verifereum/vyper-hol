@@ -173,15 +173,46 @@ Proof
     gen_tac, strip_tac, irule bound_labels_bind, conj_tac])
 QED
 
+Theorem bound_labels_emit_membership_eqs[local]:
+  !xs needle s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (emit_membership_eqs needle xs s))))
+Proof
+  Induct >> simp[emit_membership_eqs_def, comp_return_def] >> rpt strip_tac >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, comp_return_def]),
+    gen_tac, strip_tac, irule bound_labels_bind, conj_tac])
+QED
+
+Theorem bound_labels_fold_membership_or[local]:
+  !xs acc s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (fold_membership_or acc xs s))))
+Proof
+  Induct >> simp[fold_membership_or_def, comp_return_def] >> rpt strip_tac >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, comp_return_def]),
+    gen_tac, strip_tac, irule bound_labels_bind, conj_tac])
+QED
+
+Theorem bound_labels_fold_membership_and[local]:
+  !xs acc s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (fold_membership_and acc xs s))))
+Proof
+  Induct >> simp[fold_membership_and_def, comp_return_def] >> rpt strip_tac >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, comp_return_def]),
+    gen_tac, strip_tac, irule bound_labels_bind, conj_tac])
+QED
+
 Theorem bound_labels_list_membership_in:
   !xs s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
     (SND (compile_list_membership_in needle xs s))))
 Proof
-  Induct >> simp[compile_list_membership_in_def, comp_return_def] >>
-  Cases_on `xs` >> simp[compile_list_membership_in_def, bound_labels_emit_op] >>
-  rpt strip_tac >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op]),
+  rpt strip_tac >> simp[compile_list_membership_in_def] >>
+  irule bound_labels_bind >> simp[bound_labels_emit_membership_eqs] >>
+  Cases >> simp[comp_return_def, bound_labels_fold_membership_or] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op,
+    bound_labels_fold_membership_or, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind, conj_tac])
 QED
 
@@ -190,10 +221,11 @@ Theorem bound_labels_list_membership_notin:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
     (SND (compile_list_membership_notin needle xs s))))
 Proof
-  Induct >> simp[compile_list_membership_notin_def, comp_return_def] >>
-  Cases_on `xs` >> simp[compile_list_membership_notin_def] >>
-  rpt strip_tac >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op]),
+  rpt strip_tac >> simp[compile_list_membership_notin_def] >>
+  irule bound_labels_bind >> simp[bound_labels_emit_membership_eqs] >>
+  Cases >> simp[comp_return_def, bound_labels_fold_membership_and] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op,
+    bound_labels_fold_membership_and, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind, conj_tac])
 QED
 
@@ -203,9 +235,9 @@ Theorem bound_labels_array_membership_loop:
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (loader op t))))) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_array_membership_loop needle arr len sz off loader is_in s))))
+    (SND (compile_array_membership_loop needle arr len sz off loader bound_opt is_in s))))
 Proof
-  strip_tac >> simp[compile_array_membership_loop_def] >>
+  strip_tac >> Cases_on `bound_opt` >> simp[compile_array_membership_loop_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_inst,
     bound_labels_new_block, cj 4 bound_labels_primitives, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_fresh_label_bind,
@@ -1894,6 +1926,23 @@ Proof
         bound_labels_list_membership_notin, bound_labels_var_array_membership]))
 QED
 
+Theorem bound_labels_bytestring_literal_or_hash[local]:
+  (!ce ty e t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (f ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND
+    (case bytestring_literal_hash e of
+       SOME h => (Lit h,s)
+     | NONE => (\(ptr,t). compile_bytestring_hash ptr t)
+                 (lower_value f ce ty e s)))))
+Proof
+  strip_tac >> Cases_on `bytestring_literal_hash e` >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_lower_value >> simp[]) >>
+  simp[bound_labels_bytestring_hash]
+QED
+
 Theorem bound_labels_builtin_bop[local]:
   (!ce ty e t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (f ce ty e t))))) /\
@@ -1905,14 +1954,9 @@ Proof
   strip_tac >> Cases_on `(op = In \/ op = NotIn) /\ is_ArrayT (expr_type (HD (TL args)))`
   >- (irule bound_labels_builtin_membership >> simp[]) >>
   simp[compile_builtin_dispatch_body_def] >> IF_CASES_TAC
-  >- (irule pair_let_snd_preserves >> reverse conj_tac
-      >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[] >>
-      irule pair_let_snd_preserves >> reverse conj_tac
-      >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[] >>
-      irule pair_let_snd_preserves >> reverse conj_tac
-      >- simp[bound_labels_bytestring_hash] >> rpt strip_tac >> simp[] >>
-      irule pair_let_snd_preserves >> reverse conj_tac
-      >- simp[bound_labels_bytestring_hash] >> rpt strip_tac >> simp[] >>
+  >- (ntac 2 (irule pair_let_snd_preserves >> reverse conj_tac
+      >- (irule bound_labels_bytestring_literal_or_hash >> simp[]) >>
+      rpt strip_tac >> simp[]) >>
       IF_CASES_TAC >> simp[bound_labels_as_stack_val, bound_labels_emit_op] >>
       irule pair_let_snd_preserves >> simp[bound_labels_emit_op, bound_labels_as_stack_val]) >>
   rpt (irule pair_let_snd_preserves >> reverse conj_tac

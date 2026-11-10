@@ -97,7 +97,7 @@ Definition intcall_entry_def:
        (!n b sz'. local_region cenv es0.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es0 s0 t /\
+    locals_kept cenv es0 (es1 with scopes := prev) s0 t /\
     ?arg_vals st1 st2 invoke_args st3 rc rbs pvs lbl arg_ops bb inst argv.
       cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
       compile_multi_vvs compile_expr cenv es sa = (arg_vals,st1) /\

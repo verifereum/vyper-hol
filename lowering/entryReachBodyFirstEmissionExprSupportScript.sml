@@ -2650,6 +2650,65 @@ QED
 
 Finalise first_emission_type_builtin_abi_encode
 
+Theorem first_emission_membership_eqs[local]:
+  !ops needle a x b. emit_membership_eqs needle ops a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  Induct_on `ops`
+  >- simp[emit_membership_eqs_def, comp_return_def, cs_extends_refl] >>
+  ntac 2 gen_tac >> rewrite_tac[emit_membership_eqs_def] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (ho_match_mp_tac first_emission_strong >> rpt strip_tac >>
+      drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+  gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- metis_tac[] >>
+  metis_tac[first_emission_return]
+QED
+
+Theorem first_emission_membership_or[local]:
+  !ops acc a x b. fold_membership_or acc ops a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  Induct_on `ops`
+  >- simp[fold_membership_or_def, comp_return_def, cs_extends_refl] >>
+  ntac 2 gen_tac >> rewrite_tac[fold_membership_or_def] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (ho_match_mp_tac first_emission_strong >> rpt strip_tac >>
+      drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem first_emission_membership_and[local]:
+  !ops acc a x b. fold_membership_and acc ops a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  Induct_on `ops`
+  >- simp[fold_membership_and_def, comp_return_def, cs_extends_refl] >>
+  ntac 2 gen_tac >> rewrite_tac[fold_membership_and_def] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (ho_match_mp_tac first_emission_strong >> rpt strip_tac >>
+      drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+  gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (ho_match_mp_tac first_emission_strong >> rpt strip_tac >>
+      drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+  metis_tac[]
+QED
+
 Theorem first_emission_list_membership[local]:
   (!needle ops a x b. compile_list_membership_in needle ops a = (x,b) ==>
     cs_extends a b /\
@@ -2667,32 +2726,20 @@ Theorem first_emission_list_membership[local]:
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)))
 Proof
   conj_tac
-  >- (gen_tac >> gen_tac >> Cases_on `ops`
-      >- simp[compile_list_membership_in_def, comp_return_def, cs_extends_refl] >>
-      Cases_on `t` >> rewrite_tac[compile_list_membership_in_def]
-      >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >>
-          simp[] >> metis_tac[]) >>
-      ho_match_mp_tac first_emission_strong >>
-      ho_match_mp_tac first_emission_strong_bind >> conj_tac
-      >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
-      gen_tac >> BETA_TAC >> simp[GSYM cs_appends_def] >>
-      CONV_TAC (DEPTH_CONV ETA_CONV) >> irule cs_appends_bind >> conj_tac
-      >- simp[cs_appends_emit_helpers] >> rw[cs_appends_def] >>
-      metis_tac[cj 1 compile_list_membership_in_labels, pairTheory.SND]) >>
-  gen_tac >> gen_tac >> Cases_on `ops`
-  >- simp[compile_list_membership_notin_def, comp_return_def, cs_extends_refl] >>
-  Cases_on `t` >> rewrite_tac[compile_list_membership_notin_def] >>
-  (ho_match_mp_tac first_emission_strong >>
-   ho_match_mp_tac first_emission_strong_bind >> conj_tac
-   >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
-   gen_tac >> BETA_TAC >> simp[GSYM cs_appends_def] >>
-   CONV_TAC (DEPTH_CONV ETA_CONV))
-  >- simp[cs_appends_emit_helpers] >>
-  irule cs_appends_bind >> reverse conj_tac
-  >- simp[cs_appends_emit_helpers] >> gen_tac >> BETA_TAC >>
-  irule cs_appends_bind >> conj_tac
-  >- simp[cs_appends_emit_helpers] >> rw[cs_appends_def] >>
-  metis_tac[cj 1 compile_list_membership_notin_labels, pairTheory.SND]
+  >- (ntac 2 gen_tac >> rewrite_tac[compile_list_membership_in_def] >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
+      >- metis_tac[first_emission_membership_eqs] >>
+      qx_gen_tac `cs` >> Cases_on `cs` >> simp[] >>
+      metis_tac[first_emission_return, first_emission_membership_or]) >>
+  ntac 2 gen_tac >> rewrite_tac[compile_list_membership_notin_def] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- metis_tac[first_emission_membership_eqs] >>
+  qx_gen_tac `cs` >> Cases_on `cs` >> simp[]
+  >- metis_tac[first_emission_return] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (ho_match_mp_tac first_emission_strong >> rpt strip_tac >>
+      drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+  metis_tac[first_emission_membership_and]
 QED
 
 Theorem first_emission_fresh_label[local]:
@@ -2721,8 +2768,8 @@ QED
 
 Theorem first_emission_array_membership_loop[local]:
   (!op. cs_appends (loader op)) ==>
-  !needle arr len size offset is_in a x b.
-  compile_array_membership_loop needle arr len size offset loader is_in a = (x,b) ==>
+  !needle arr len size offset bound_opt is_in a x b.
+  compile_array_membership_loop needle arr len size offset loader bound_opt is_in a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
       a.cs_current_insts = b.cs_current_insts) \/
@@ -2730,7 +2777,7 @@ Theorem first_emission_array_membership_loop[local]:
        lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  strip_tac >> ntac 6 gen_tac >>
+  strip_tac >> ntac 7 gen_tac >>
   rewrite_tac[compile_array_membership_loop_def] >>
   ntac 7 (ho_match_mp_tac first_emission_bind >> conj_tac
     >- metis_tac[first_emission_fresh, first_emission_fresh_label] >>
@@ -2739,6 +2786,7 @@ Proof
   ho_match_mp_tac first_emission_strong_ignore_bind >> conj_tac
   >- (rpt strip_tac >> drule_at Any (cj 1 first_emission_emit_helpers) >> simp[]) >>
   simp[GSYM cs_appends_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  Cases_on `bound_opt` >> simp[] >>
   rpt (FIRST [irule cs_appends_bind >> conj_tac,
               irule cs_appends_ignore_bind >> conj_tac,
               IF_CASES_TAC, gen_tac] >> BETA_TAC >>
@@ -2758,11 +2806,7 @@ Proof
   let
     val finish = ho_match_mp_tac first_emission_bind >> conj_tac
       >- metis_tac[first_emission_return, first_emission_ptr_load] >>
-      gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_ignore_bind >> conj_tac
-      >- (rpt (FIRST [ho_match_mp_tac first_emission_bind >> conj_tac,
-                      gen_tac] >> BETA_TAC) >>
-          rpt strip_tac >> imp_res_tac first_emission_emit_helpers >>
-          imp_res_tac first_emission_return >> gvs[]) >>
+      gen_tac >> BETA_TAC >>
       rpt gen_tac >> strip_tac >> irule first_emission_array_membership_loop >>
       goal_assum (drule_at Any) >> rw[cs_appends_def] >>
       metis_tac[first_emission_ptr_load]
@@ -2949,10 +2993,13 @@ QED
 Resume first_emission_builtin_bop[bytes_compare]:
   ntac 2
     (ho_match_mp_tac first_emission_pair_let >>
-     (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac)) >>
-  ntac 2
-    (ho_match_mp_tac first_emission_pair_let >>
-     (conj_tac >- metis_tac[first_emission_bytestring_hash] >> gen_tac)) >>
+     (conj_tac
+      >- (qmatch_goalsub_abbrev_tac `bytestring_literal_hash e` >>
+          Cases_on `bytestring_literal_hash e` >> simp[]
+          >- (ho_match_mp_tac first_emission_pair_let >>
+              (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[])) >>
+              metis_tac[first_emission_bytestring_hash]) >>
+          simp[cs_extends_refl]) >> gen_tac)) >>
   Cases_on `op = Eq` >> asm_rewrite_tac []
   >- (ho_match_mp_tac first_emission_as_stack_val >> rpt strip_tac >>
       imp_res_tac first_emission_emit_helpers >> gvs[]) >>

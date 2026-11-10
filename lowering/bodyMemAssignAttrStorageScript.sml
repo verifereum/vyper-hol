@@ -129,13 +129,15 @@ Proof
      qexistsl_tac [`sa`, `ee.scopes`, `s`] >> simp[] >>
      qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[vv_post_def]) >>
-  `locals_kept ce es s0 u` by
+  `locals_kept ce es ee s0 u` by
     (irule locals_kept_trans >> goal_assum (drule_at Any) >>
-     qexistsl_tac [`sa`, `s`] >>
+     qexistsl_tac [`ee`, `s`] >>
      qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[vv_post_def, expr_post_def] >> metis_tac[]) >>
   gvs[vv_post_def, expr_post_def] >> rpt conj_tac
+  >- (strip_tac >> irule expr_val_own_start_mono >>
+      qexists_tac `sa with cs_next_var := sm.cs_next_var` >> simp[])
   >- (rpt strip_tac >>
       `not_fresh_at (sa with cs_next_var := sm.cs_next_var) x` by
         (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>

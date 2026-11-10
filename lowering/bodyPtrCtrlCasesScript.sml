@@ -227,7 +227,8 @@ Proof
   `!ty. expr_sim_ptr d ctx PG func cenv cx ty e es /\
         expr_vv_sim_ptr d ctx PG func cenv cx ty e es` by
     (gen_tac >>
-     qpat_x_assum `body_expr_ptr_ok _ _` (mp_tac o REWRITE_RULE [body_expr_ptr_ok_def]) >>
+     qpat_x_assum `body_expr_ptr_ok _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_ptr_ok_def]) >>
      disch_then irule >> metis_tac[]) >>
   irule compile_if_stmt_frag_ptr >> simp[stmts_env_cs_mono] >>
   conj_tac >- metis_tac[compile_expr_grows] >>
@@ -287,7 +288,7 @@ Proof
      qexists_tac `[]` >> simp[]) >>
   `expr_vv_sim_ptr d ctx PG func cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_expr_ptr_ok _ _`
-       (mp_tac o REWRITE_RULE [body_expr_ptr_ok_def]) >>
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_ptr_ok_def]) >>
      disch_then (qspecl_then [`d`, `PG`, `tops`, `ctx`, `func`, `cenv`,
                               `env`, `expr_type e`, `es`] mp_tac) >>
      simp[]) >>

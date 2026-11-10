@@ -20,6 +20,7 @@
  *)
 Theory exprSimBufferStore
 Ancestors
+  exprSimProps
   exprSimVVFrame
   exprSimProps
   loweringPosts

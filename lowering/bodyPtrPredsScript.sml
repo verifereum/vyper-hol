@@ -17,13 +17,44 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+(* As bodySim's body_expr_ok, a literal array's elements are ok too. *)
 Definition body_expr_ptr_ok_def:
-  body_expr_ptr_ok cx e <=>
-    !d PG tops ctx func cenv env ty es.
+  (body_expr_ptr_ok cx e <=>
+    (!d PG tops ctx func cenv env ty es.
       body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
       expr_sim_ptr d ctx PG func cenv cx ty e es /\
-      expr_vv_sim_ptr d ctx PG func cenv cx ty e es
+      expr_vv_sim_ptr d ctx PG func cenv cx ty e es) /\
+    (!a t n elems.
+      e = Builtin a (MakeArray t n) elems /\
+      builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+      body_exprs_ptr_ok cx elems)) /\
+  body_exprs_ptr_ok cx [] = T /\
+  body_exprs_ptr_ok cx (e::es) =
+    (body_expr_ptr_ok cx e /\
+     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
+                        read_result cx tv s1 = (INL v, t1)) ==>
+      body_exprs_ptr_ok cx es))
+Termination
+  WF_REL_TAC `measure (\x. case x of
+      INL (_, e) => expr_size e
+    | INR (_, es) => list_size expr_size es)` >>
+  simp[expr_size_def]
 End
+
+Theorem body_exprs_ptr_ok_def = CONJUNCT2 body_expr_ptr_ok_def;
+
+(* The elements of an array literal are ok, by the literal's clause. *)
+Theorem body_make_array_children_ptr_ok:
+  !cx a t n elems.
+    body_expr_ptr_ok cx (Builtin a (MakeArray t n) elems) /\
+    builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+    body_exprs_ptr_ok cx elems
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `body_expr_ptr_ok _ _`
+    (mp_tac o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ptr_ok_def]) >>
+  simp[]
+QED
 
 Definition body_stmt_ptr_ok_def:
   body_stmt_ptr_ok cx s <=>
@@ -56,15 +87,6 @@ Definition body_stmts_ptr_ok_def:
       frame_ret_ok_ptr d ctx PG func cx RetQ cenv ret_ty ==>
       stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
         (stmts_env cenv lctx ret_ty ss) (eval_stmts cx ss) es
-End
-
-Definition body_exprs_ptr_ok_def:
-  body_exprs_ptr_ok cx [] = T /\
-  body_exprs_ptr_ok cx (e::es) =
-    (body_expr_ptr_ok cx e /\
-     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
-                        read_result cx tv s1 = (INL v, t1)) ==>
-      body_exprs_ptr_ok cx es))
 End
 
 Definition body_results_ptr_ok_def:
