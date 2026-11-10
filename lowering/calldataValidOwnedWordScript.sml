@@ -54,7 +54,9 @@ Theorem valid_word_clean_sequence[local]:
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w)
 Proof
   strip_tac >> drule_all abi_decoder_primitive_clamp >> strip_tac >>
-  drule_all abi_decoder_clamped_word_copied_window >> strip_tac >>
+  drule_all (SRULE [eval_operand_def]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0`]
+      abi_decoder_clamped_word_copied_window)) >> strip_tac >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
   irule abi_decoder_primitive_canonical_layout >>
   goal_assum (drule_at Any) >> asm_rewrite_tac[] >>
