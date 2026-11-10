@@ -204,3 +204,48 @@ Resume assign_place_storage_from_expr_post[normalize]:
     gvs[arithmeticTheory.ADD_COMM] >> metis_tac[])) >>
   suspend "normalized_suffix"
 QED
+
+Resume assign_place_storage_from_expr_post[normalized_suffix]:
+  markerLib.RESUME_TAC >> strip_tac >>
+  `su.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
+   su.cs_next_id <= sn.cs_next_id` by
+    (qspec_then `type_memory_bytes cenv dty` (qspec_then `su` mp_tac)
+       exprLoweringPropsTheory.ci_mono_compile_alloc_buffer >>
+     drule exprSimTypedAllocTheory.typed_return_store_mono >>
+     gvs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  `local_ptrs_reserved cenv sn` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >> qexists_tac `su` >> simp[]) >>
+  `!x. buf.buf_operand = Var x ==> not_fresh_at sm x` by
+    (drule loweringHaltTheory.compile_alloc_buffer_emission >> strip_tac >> gvs[]) >>
+  `!x. buf.buf_operand = Var x \/ dst = Var x ==> not_fresh_at sn x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `u.vs_labels = s.vs_labels` by
+    metis_tac[stmtSimAugAssignPlaceMemoryTheory.aug_place_marked_path_labels] >>
+  `eval_operand dst u = SOME dw` by
+    (qspecl_then [`su`, `s`, `u`, `dst`] mp_tac
+      stmtSimReturnTheory.eval_operand_old_vars >> simp[]) >>
+  `place_ptr_rel cenv cx u (PlaceR p) dw (SOME loc) (Type dty)` by
+    (irule targetPlaceSimCasesBaseTheory.place_ptr_rel_vars_frame >> metis_tac[]) >>
+  `well_formed_type_value dtv` by
+    metis_tac[vyperTypingTheory.evaluate_type_well_formed] >>
+  `?t. gas_marked_path F ctx func u 0 (OK t) /\
+    stmt_state_rel ctx func cenv cx ff t /\
+    (!x. not_fresh_at sn x ==> lookup_var x t = lookup_var x u) /\
+    t.vs_memory = u.vs_memory /\ t.vs_allocas = u.vs_allocas /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_frame cenv ee sn u cenv ff t` by
+    (irule assign_place_typed_storage_suffix_run >> simp[] >>
+     (conj_tac >- metis_tac[]) >>
+     goal_assum (drule_at (Pat `place_ptr_rel _ _ u _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `val_in_memory _ _ _ u.vs_memory`)) >>
+     qexistsl_tac [`dst`, `buf.buf_operand`] >> simp[] >>
+     first_assum ACCEPT_TAC) >>
+  `gas_marked_path F ctx func s 0 (OK t)` by
+    metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD_0] >>
+  qexists_tac `t` >> simp[] >>
+  (conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  irule alloca_frame_trans >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+Finalise assign_place_storage_from_expr_post
