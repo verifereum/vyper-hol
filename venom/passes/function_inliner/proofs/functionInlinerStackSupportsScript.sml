@@ -1,7 +1,7 @@
 (* Static owner-local supports. No execution or write-avoidance premise. *)
 Theory functionInlinerStackSupports
 Ancestors
-  functionInlinerEnvelopes functionInlinerCuts list pred_set
+  functionInlinerEnvelopes functionInlinerCuts functionInlinerOccurrences list pred_set
 
 Definition inline_address_entry_def:
   inline_address_entry cert (p,a,route,snap) <=>
@@ -197,4 +197,64 @@ Proof
   rpt strip_tac >> drule inline_address_stack_subtree_avoids >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   gvs[EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]
+QED
+
+(* Addresses are active-first: every suspended address precedes the active one. *)
+Definition inline_addresses_ordered_def:
+  (inline_addresses_ordered [] = T) /\
+  (inline_addresses_ordered (p::older) <=>
+    EVERY (\q. inline_leaf_before q p) older /\ inline_addresses_ordered older)
+End
+
+Theorem inline_addresses_ordered_singleton[simp]:
+  inline_addresses_ordered [p]
+Proof
+  simp[inline_addresses_ordered_def]
+QED
+
+Theorem inline_addresses_ordered_pop:
+  inline_addresses_ordered (p::older) ==> inline_addresses_ordered older
+Proof
+  simp[inline_addresses_ordered_def]
+QED
+
+Theorem inline_addresses_ordered_distinct:
+  !ps. inline_addresses_ordered ps ==> ALL_DISTINCT ps
+Proof
+  Induct >> simp[inline_addresses_ordered_def, EVERY_MEM] >>
+  metis_tac[inline_leaf_before_irreflexive]
+QED
+
+Theorem inline_addresses_ordered_push:
+  inline_addresses_ordered (p::older) /\ inline_leaf_before p q ==>
+  ~MEM q (p::older) /\ inline_addresses_ordered (q::p::older)
+Proof
+  simp[inline_addresses_ordered_def, EVERY_MEM] >> rpt strip_tac >>
+  metis_tac[inline_leaf_before_transitive, inline_leaf_before_irreflexive]
+QED
+
+Theorem inline_selected_addresses_push:
+  inline_call_incidence cert root p fn l j orig (InlineSelected u q e zipper) /\
+  inline_addresses_ordered (p::older) ==>
+  ~MEM q (p::older) /\ inline_addresses_ordered (q::p::older)
+Proof
+  metis_tac[inline_call_incidence_selected_order, inline_addresses_ordered_push]
+QED
+
+Theorem inline_address_stack_selected_push:
+  inline_address_stack cert ((p,b,outer,saved)::rest) /\
+  inline_addresses_ordered (MAP FST ((p,b,outer,saved)::rest)) /\
+  inline_call_incidence cert root p b.ia_function l j orig (InlineSelected u q e zipper) /\
+  inline_namespace_leaf_at cert q route.ir_rename a.ia_function /\
+  snap.ils_defined SUBSET set (cfgTransform$fn_all_vars a.ia_function) /\
+  snap.ils_protected SUBSET set (cfgTransform$fn_all_vars b.ia_function) /\
+  snap.ils_parent_rename = outer.ir_rename ==>
+  inline_address_stack cert ((q,a,route,snap)::(p,b,outer,saved)::rest) /\
+  inline_addresses_ordered (MAP FST ((q,a,route,snap)::(p,b,outer,saved)::rest))
+Proof
+  strip_tac >>
+  `~MEM q (p::MAP FST rest) /\
+   inline_addresses_ordered (q::p::MAP FST rest)` by
+    metis_tac[inline_selected_addresses_push, MAP, pairTheory.FST] >>
+  simp[] >> irule inline_address_stack_push >> gvs[]
 QED
