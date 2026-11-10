@@ -2,6 +2,7 @@
 Theory bodyIntCallFamCallIntEntrySource
 Ancestors
   bodyIntCallSeamDefs stmtSimForRounds vyperInterpreter vyperState vyperCall
+  exprExtRequestGasBind gasExemptCert
 Libs
   monadsyntax
 
@@ -54,4 +55,85 @@ Proof
        bind_def, return_def, get_scopes_def, lift_option_type_def,
        push_function_def] >>
   metis_tac[]
+QED
+
+(* The argument-list stage uses the results constructor of the exempt
+   certificate, so both normal and exempt witnesses survive sequencing. *)
+Theorem intcall_outcome_bind_results:
+  gas_outcome memory tops (ctx,func)
+    (a : evaluation_state -> eval_result list evaluation_result) (es,s0) P E /\
+  (!marks rr mid t.
+    gas_marked_exec memory (ctx,func) a (es,s0) marks rr mid (OK t) /\
+    P rr (mid with gas_obs := []) t ==>
+    ?v. rr = INL v /\ gas_outcome memory tops (ctx,func) (k v)
+      (mid with gas_obs := [],t) Q R) /\
+  (!rr mid r. E rr mid r ==> ?exc. rr = INR exc /\ R (INR exc) mid r) ==>
+  gas_outcome memory tops (ctx,func) (bind a k) (es,s0) Q R
+Proof
+  strip_tac >> irule extrequest_outcome_bind_core >>
+  conj_tac
+  >- (simp[ignore_bind_def, bind_assoc] >> rpt strip_tac >>
+      irule gas_exempt_cert_bind_results >> goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac
+  >- (simp[ignore_bind_def, bind_assoc] >> rpt strip_tac >>
+      irule gas_exempt_cert_error_results >> simp[ignore_bind_def]) >>
+  qexistsl_tac [`E`, `P`] >> simp[] >> first_assum ACCEPT_TAC
+QED
+
+Theorem intcall_source_bind_types:
+  ~MEM (NONE,name) cx.stk /\ get_module_code cx NONE = SOME tops /\
+  lookup_callable_function cx.in_deploy name tops =
+    SOME (mut,F,args,[],ret,ss) /\ LENGTH es = LENGTH args /\
+  gas_admissible (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt))
+    expr_vv_res_ok start /\
+  eval_expr_results cx es (start with gas_obs := gs) = (INL results,mid) /\
+  read_results cx results mid = (INL vs,mid) ==>
+  ?penv rtv. bind_arguments (get_tenv cx) args vs = SOME penv /\
+    evaluate_type (get_tenv cx) ret = SOME rtv
+Proof
+  strip_tac >> drule_all intcall_source_prefix >>
+  disch_then (qspecl_then [`dflt`, `ann`] assume_tac) >>
+  qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+  simp[gasContextTheory.gas_admissible_def] >>
+  disch_then (qspec_then `gs` mp_tac) >>
+  Cases_on `bind_arguments (get_tenv cx) args vs`
+  >- (simp[type_check_def, vyperStateTheory.assert_def, ignore_bind_def,
+           bind_def, return_def, get_scopes_def, lift_option_type_def,
+           raise_def, exprSimDefsTheory.expr_vv_res_ok_def]) >>
+  Cases_on `evaluate_type (get_tenv cx) ret`
+  >- (simp[type_check_def, vyperStateTheory.assert_def, ignore_bind_def,
+           bind_def, return_def, get_scopes_def, lift_option_type_def,
+           raise_def, exprSimDefsTheory.expr_vv_res_ok_def]) >>
+  simp[]
+QED
+
+Theorem intcall_source_nonrecursive:
+  gas_admissible (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt))
+    expr_vv_res_ok start ==> ~MEM (NONE,name) cx.stk
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+  simp[gasContextTheory.gas_admissible_def] >>
+  qexists_tac `[]` >>
+  simp[Once evaluate_def, type_check_def, vyperStateTheory.assert_def,
+       ignore_bind_def, bind_def, raise_def, exprSimDefsTheory.expr_vv_res_ok_def]
+QED
+
+Theorem intcall_source_read_error:
+  ~MEM (NONE,name) cx.stk /\ get_module_code cx NONE = SOME tops /\
+  lookup_callable_function cx.in_deploy name tops =
+    SOME (mut,F,args,[],ret,ss) /\ LENGTH es = LENGTH args /\
+  gas_admissible (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt))
+    expr_vv_res_ok start /\
+  eval_expr_results cx es (start with gas_obs := gs) = (INL results,mid) /\
+  read_results cx results mid = (INR ex,mid) ==>
+  expr_vv_res_ok (INR ex)
+Proof
+  strip_tac >> drule_all intcall_source_prefix >>
+  disch_then (qspecl_then [`dflt`, `ann`] assume_tac) >>
+  qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+  simp[gasContextTheory.gas_admissible_def] >>
+  disch_then (qspec_then `gs` mp_tac) >>
+  simp[type_check_def, vyperStateTheory.assert_def, ignore_bind_def,
+       bind_def, return_def, get_scopes_def]
 QED
