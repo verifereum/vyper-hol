@@ -1235,6 +1235,43 @@ Proof
   simp[] >> metis_tac[ircf_dead_noninvoke_mono]
 QED
 
+Theorem ircf_unchanged_nonassign_ok:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  active_inst fn inst s /\ o1_ctx_shape C /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\ ctx_inst_ids_distinct C /\
+  EVERY wf_function C.ctx_functions /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ EVERY fn_inst_ids_distinct C.ctx_functions /\
+  EVERY ircf_no_dst_write_alias C.ctx_functions /\ MEM fn C.ctx_functions /\
+  EVERY (\f. MEM f.cf_fn C.ctx_functions) stk /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> INVOKE /\
+  EL s.vs_inst_idx (ircf_tbb fn_meta rma C fn bb).bb_instructions = inst /\
+  ptr_discipline lo C vs /\ taint_within D C vs /\ dead_wf D /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base inst t = OK t' /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s' stk)
+      (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[occ_frame_reachable_projection] >>
+  `!off len p. MEM (off,len) (source_memory_read_ranges inst s) /\
+      off <= p /\ p < off+len ==>
+      p NOTIN ircf_dead (ircf_dst_ids fn_meta rma C) s stk` by
+    (rpt strip_tac >> drule_all ircf_unchanged_dead_read_disjoint >> simp[]) >>
+  `terminates (OK s')` by simp[passSimulationDefsTheory.terminates_def] >>
+  drule_all taint_agree_step_base >> strip_tac >>
+  `?t'. step_inst_base inst t = OK t' /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk)
+      (step_taint inst s s' tn) s' t'` by metis_tac[] >>
+  qexists_tac `t'` >> simp[] >> irule ircf_dead_step_agree >>
+  metis_tac[step_inst_non_invoke]
+QED
+
 Theorem ircf_R_ret_reachable_caller_memory:
   ircf_R_ret_reachable vs D fn_meta rma C (f::stk) PG G tn fn ret se te /\
   vs.vs_allocas = FEMPTY /\ lo <= vs.vs_alloca_next /\ ~ctx_has_dalloca C /\

@@ -1242,3 +1242,81 @@ Proof
   irule ircf_redirect_source >> simp[] >>
   metis_tac[ircf_block_plan_fwd_ok]
 QED
+
+Theorem ircf_redirect_changed_position:
+  wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  MEM bb fn.fn_blocks /\ ircf_block_plan fn bb bb2 /\
+  i < LENGTH bb.bb_instructions /\ i NOTIN ircf_fwds bb bb2 /\
+  inst = EL i bb.bb_instructions /\ inst.inst_opcode <> ASSIGN /\
+  pos < LENGTH inst.inst_operands /\ EL pos inst.inst_operands = Var v /\
+  ircf_redirect fn bb bb2 v <> v ==>
+  is_mem_addr_position inst.inst_opcode pos
+Proof
+  strip_tac >> drule_all ircf_redirect_changed_forward >> strip_tac >>
+  `k < LENGTH bb.bb_instructions` by fs[ircf_fwd_ok_def] >>
+  `MEM inst (fn_insts fn) /\ MEM (EL k bb.bb_instructions) (fn_insts fn)` by
+    (gvs[venomInstTheory.fn_insts_def] >>
+     metis_tac[unitShapeDefsTheory.MEM_fn_insts_blocks, EL_MEM]) >>
+  `inst.inst_id <> (EL k bb.bb_instructions).inst_id` by
+    (strip_tac >>
+     `inst = EL k bb.bb_instructions` by
+       metis_tac[venomWfPropsTheory.fn_inst_ids_distinct_inj] >>
+     `i = k` by metis_tac[venomExecProofsTheory.inst_ids_el_eq] >> gvs[]) >>
+  fs[ircf_fwd_ok_def] >> metis_tac[EL_MEM]
+QED
+
+Theorem ircf_block_plan_assign:
+  ircf_block_plan fn bb bb2 /\ i < LENGTH bb.bb_instructions /\
+  i NOTIN ircf_fwds bb bb2 /\
+  (EL i bb.bb_instructions).inst_opcode = ASSIGN ==>
+  EL i bb2.bb_instructions = EL i bb.bb_instructions
+Proof
+  simp[ircf_block_plan_def]
+QED
+
+Theorem ircf_block_plan_changed_operand:
+  ircf_block_plan fn bb bb2 /\ i < LENGTH bb.bb_instructions /\
+  i NOTIN ircf_fwds bb bb2 /\
+  EL i bb2.bb_instructions <> EL i bb.bb_instructions ==>
+  (EL i bb.bb_instructions).inst_opcode <> ASSIGN /\
+  ?pos v. pos < LENGTH (EL i bb.bb_instructions).inst_operands /\
+    EL pos (EL i bb.bb_instructions).inst_operands = Var v /\
+    ircf_redirect fn bb bb2 v <> v
+Proof
+  strip_tac >>
+  `(EL i bb.bb_instructions).inst_opcode <> ASSIGN` by
+    metis_tac[ircf_block_plan_assign] >> simp[] >>
+  `MAP (ircf_redirect_op fn bb bb2) (EL i bb.bb_instructions).inst_operands <>
+   (EL i bb.bb_instructions).inst_operands` by
+    (strip_tac >> gvs[ircf_block_plan_def]) >>
+  `?pos. pos < LENGTH (EL i bb.bb_instructions).inst_operands /\
+    ircf_redirect_op fn bb bb2 (EL pos (EL i bb.bb_instructions).inst_operands) <>
+      EL pos (EL i bb.bb_instructions).inst_operands` by
+    (spose_not_then assume_tac >>
+     qpat_x_assum `MAP _ _ <> _` mp_tac >> simp[] >>
+     irule LIST_EQ >> simp[EL_MAP]) >>
+  Cases_on `EL pos (EL i bb.bb_instructions).inst_operands` >>
+  fs[ircf_redirect_op_def] >> metis_tac[]
+QED
+
+Theorem ircf_block_plan_changed_opcode:
+  wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  MEM bb fn.fn_blocks /\ ircf_block_plan fn bb bb2 /\
+  i < LENGTH bb.bb_instructions /\ i NOTIN ircf_fwds bb bb2 /\
+  EL i bb2.bb_instructions <> EL i bb.bb_instructions ==>
+  MEM (EL i bb.bb_instructions).inst_opcode
+    [MLOAD; SHA3; LOG; CREATE; CREATE2; RETURN; REVERT]
+Proof
+  strip_tac >> drule_all ircf_block_plan_changed_operand >> strip_tac >>
+  `is_mem_addr_position (EL i bb.bb_instructions).inst_opcode pos` by
+    (irule ircf_redirect_changed_position >> metis_tac[]) >>
+  `mem_write_ops (EL i bb.bb_instructions) = NONE` by
+    metis_tac[ircf_block_plan_writer] >>
+  `inst_wf (EL i bb.bb_instructions)` by
+    metis_tac[venomWfTheory.fn_inst_wf_def, EL_MEM] >>
+  gvs[invokeCopyFwdCommonDefsTheory.is_mem_addr_position_def,
+      venomWfTheory.inst_wf_def, memLocDefsTheory.mem_write_ops_def,
+      LENGTH_EQ_NUM_compute]
+QED
