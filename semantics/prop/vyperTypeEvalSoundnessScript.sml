@@ -5174,7 +5174,8 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
     >- (simp_tac(srw_ss())[] >> strip_tac >>
         qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ ~(_ \/ _) /\ bt <> Env MsgGas /\ NONE = NONE ==> _`
           (qspecl_then [`st`,`()`,`st`] mp_tac) >>
-        (impl_tac >- gvs[type_check_def, assert_def]) >> strip_tac >>
+        (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
+                   simp[type_check_def, assert_def])) >> strip_tac >>
         qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env es vs | INR _ => T`
           (qspecl_then [`env`,`st`,`args_res`,`args_st`] mp_tac) >>
         (impl_tac >- simp[]) >>
@@ -5188,7 +5189,8 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
     rename1 `eval_exprs cx (TL es) st = (tail_res,tail_st)` >>
     qpat_x_assum `!s'' x t v c a. _ /\ _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _`
       (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`] mp_tac) >>
-    (impl_tac >- gvs[type_check_def, assert_def]) >> strip_tac >>
+    (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
+                   simp[type_check_def, assert_def])) >> strip_tac >>
     qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env (TL es) vs | INR _ => T`
       (qspecl_then [`env`,`st`,`tail_res`,`tail_st`] mp_tac) >>
     (impl_tac >- simp[]) >> strip_tac >>
@@ -5201,7 +5203,8 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
     rename1 `eval_exprs cx [addr] tail_st = (addr_res,addr_st)` >>
     qpat_x_assum `!s'' x t v c a s3 tv t'. _ ==> _`
       (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`,`st`,`tail_vs`,`tail_st`] mp_tac) >>
-    (impl_tac >- gvs[type_check_def, assert_def]) >> strip_tac >>
+    (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
+                   simp[type_check_def, assert_def])) >> strip_tac >>
     qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env [addr] vs | INR _ => T`
       (qspecl_then [`env`,`tail_st`,`addr_res`,`addr_st`] mp_tac) >>
     (impl_tac >- simp[]) >> strip_tac >>
@@ -8211,7 +8214,8 @@ Resume eval_scc_type_sound_results_mutual[Trace_Builtin_Body]:
     >- (simp_tac(srw_ss())[] >> strip_tac >>
         qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ ~(_ \/ _) /\ bt <> Env MsgGas /\ NONE = NONE ==> _`
           (qspecl_then [`st`,`()`,`st`] mp_tac) >>
-        (impl_tac >- gvs[type_check_def, assert_def]) >> strip_tac >>
+        (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
+                   simp[type_check_def, assert_def])) >> strip_tac >>
         qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
           (qspecl_then [`env`,`st`,`args_res`,`args_st`] mp_tac) >>
         (impl_tac >- simp[]) >> simp[]) >>
@@ -8224,7 +8228,8 @@ Resume eval_scc_type_sound_results_mutual[Trace_Builtin_Body]:
     rename1 `eval_exprs cx (TL es) st = (tail_res,tail_st)` >>
     qpat_x_assum `!s'' x t v c a. _ /\ _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _`
       (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`] mp_tac) >>
-    (impl_tac >- gvs[type_check_def, assert_def]) >> strip_tac >>
+    (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
+                   simp[type_check_def, assert_def])) >> strip_tac >>
     qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env (TL es) vs | INR _ => T`
       (qspecl_then [`env`,`st`,`tail_res`,`tail_st`] mp_tac) >>
     (impl_tac >- simp[]) >> strip_tac >>
@@ -8240,7 +8245,8 @@ Resume eval_scc_type_sound_results_mutual[Trace_Builtin_Body]:
     rename1 `eval_exprs cx [addr] tail_st = (addr_res,addr_st)` >>
     qpat_x_assum `!s'' x t v c a s3 tv t'. _ ==> _`
       (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`,`st`,`tail_vs`,`tail_st`] mp_tac) >>
-    (impl_tac >- gvs[type_check_def, assert_def]) >> strip_tac >>
+    (impl_tac >- (qpat_x_assum `~(bt = Bop In \/ bt = Bop NotIn)` mp_tac >>
+                   simp[type_check_def, assert_def])) >> strip_tac >>
     qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
       (qspecl_then [`env`,`tail_st`,`addr_res`,`addr_st`] mp_tac) >>
     (impl_tac >- simp[]) >> strip_tac >>

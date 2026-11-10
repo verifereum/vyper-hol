@@ -28,7 +28,7 @@ Proof
   drule_all abi_decode_local_region_upper >> strip_tac >>
   `!id b sz. start.cs_next_id <= id /\ id < final.cs_next_id /\
       FLOOKUP s.vs_allocas id = SOME (b,sz) ==>
-      compileEnv$regions_disjoint b sz q n` by
+      loweringStateRelDefs$regions_disjoint b sz q n` by
     (rpt gen_tac >> strip_tac >>
      drule abi_decode_lower_interval_local_disjoint >>
      asm_rewrite_tac [] >>
@@ -61,13 +61,13 @@ Theorem abi_decode_success_output_local_disjoint:
   alloca_inv s /\ fn_inst_ids_distinct func /\
   local_ptrs_rel func ce scopes s /\ local_region ce scopes s name q n /\
   abi_decode_success_closed ce env ty tv bs out d start final ctx func s t ==>
-  compileEnv$regions_disjoint d (type_memory_bytes ce ty) q n
+  loweringStateRelDefs$regions_disjoint d (type_memory_bytes ce ty) q n
 Proof
   strip_tac >>
   drule_all abi_decode_local_region_upper >> strip_tac >>
   `!id b sz. start.cs_next_id <= id /\ id < final.cs_next_id /\
       FLOOKUP s.vs_allocas id = SOME (b,sz) ==>
-      compileEnv$regions_disjoint b sz q n` by
+      loweringStateRelDefs$regions_disjoint b sz q n` by
     (rpt gen_tac >> strip_tac >>
      drule abi_decode_lower_interval_local_disjoint >>
      asm_rewrite_tac [] >> disch_then drule_all >> simp[]) >>

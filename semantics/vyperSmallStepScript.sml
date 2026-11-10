@@ -1371,7 +1371,18 @@ Proof
   simp[liftk1, bind_def] >>
   simp[cont_def, Once OWHILE_THM, stepk_def, apply_vals_def,
        apply_exc_def, bind_def, ignore_bind_def, liftk1, return_def] >>
-  rpt (CASE_TAC >> simp[return_def, raise_def])
+  rename1 `eval_exprs cx es _ = (INL vs,r2)` >>
+  Cases_on `type_check (LENGTH vs = 2) "Membership args" r2` >>
+  rename1 `type_check _ _ _ = (tc_res,r3)` >>
+  Cases_on `tc_res` >> simp[] >>
+  Cases_on `lift_option_type (evaluate_type (get_tenv cx) (expr_type (EL 1 es)))
+              "Membership type" r3` >>
+  rename1 `lift_option_type _ _ _ = (ty_res,r4)` >>
+  Cases_on `ty_res` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `lift_sum mres r4` >>
+  Cases_on `lift_sum mres r4` >>
+  rename1 `lift_sum _ _ = (m_res,r5)` >>
+  Cases_on `m_res` >> simp[]
 QED
 
 Theorem eval_cps_aux:

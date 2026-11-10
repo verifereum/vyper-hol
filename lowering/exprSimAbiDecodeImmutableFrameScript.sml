@@ -14,7 +14,7 @@ Theorem abi_decode_closed_region_frame[local]:
   q + n <= s.vs_alloca_next /\
   (!id b sz. start.cs_next_id <= id /\ id < final.cs_next_id /\
     FLOOKUP s.vs_allocas id = SOME (b,sz) ==>
-    compileEnv$regions_disjoint b sz q n) /\
+    loweringStateRelDefs$regions_disjoint b sz q n) /\
   abi_decode_success_closed ce env ty tv bs out d start final ctx func s t ==>
   mem_bytes_at q n t.vs_memory = mem_bytes_at q n s.vs_memory
 Proof
@@ -63,7 +63,7 @@ Theorem abi_decode_prefix_region_frame:
   q + n <= s.vs_alloca_next /\
   (!i b sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
     FLOOKUP s.vs_allocas i.inst_id = SOME (b,sz) ==>
-    compileEnv$regions_disjoint b sz q n) ==>
+    loweringStateRelDefs$regions_disjoint b sz q n) ==>
   mem_bytes_at q n t.vs_memory = mem_bytes_at q n s.vs_memory
 Proof
   strip_tac >>
@@ -134,7 +134,7 @@ Proof
   `off + type_memory_size itv <= s.vs_alloca_next /\
    (!i b sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
     FLOOKUP s.vs_allocas i.inst_id = SOME (b,sz) ==>
-    compileEnv$regions_disjoint b sz off (type_memory_size itv))` by
+    loweringStateRelDefs$regions_disjoint b sz off (type_memory_size itv))` by
     (qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
      simp_tac bool_ss [immutable_alloca_sep_def] >>
      disch_then drule_all >> strip_tac >>

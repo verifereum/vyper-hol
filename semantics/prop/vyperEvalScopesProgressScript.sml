@@ -219,7 +219,9 @@ Resume eval_mutual_scopes_progress[Builtin]:
             strip_tac >> gvs[] >>
             imp_res_tac precompile_call_success_state >>
             imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
-            gvs[] >> metis_tac[scopes_progress_trans]) >>
+            gvs[] >> res_tac >> res_tac >>
+            rpt (qpat_x_assum `!x. _` kall_tac) >>
+            metis_tac[scopes_progress_trans]) >>
       (* the code-slice IHs are vacuous from here on *)
       rpt (qpat_x_assum `!s'' x t v. _` kall_tac) >>
       gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,

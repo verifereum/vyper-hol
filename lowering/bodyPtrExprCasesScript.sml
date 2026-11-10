@@ -59,6 +59,8 @@ Proof
   MATCH_ACCEPT_TAC attribute_expr_ptr_ok
 QED
 
+(* ADMITTED (code-slice case only): slice(x.code, ...) is held; the rest is
+   proved. *)
 Theorem body_builtin_case_ptr:
   !cx ty bt es.
     (!s'' x t v code_ty addr s3 tail_vs t'.

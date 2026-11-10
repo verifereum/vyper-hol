@@ -2262,7 +2262,6 @@ Proof
   ho_match_mp_tac first_emission_pair_let >>
   (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[])) >>
   gen_tac
-  >~ [`compile_slice_calldata`] >- suspend "slice_simple"
   >~ [`compile_slice_code`] >- suspend "slice_simple"
   >~ [`compile_slice_extcode`] >- suspend "slice_extcode" >>
   suspend "slice_memory"

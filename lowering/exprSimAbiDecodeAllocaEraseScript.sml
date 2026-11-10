@@ -87,9 +87,9 @@ QED
 Theorem abi_decode_clean_protected_rows:
   (!i b sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
     FLOOKUP s.vs_allocas i.inst_id = SOME (b,sz) ==>
-    compileEnv$regions_disjoint b sz q n) /\
+    loweringStateRelDefs$regions_disjoint b sz q n) /\
   FLOOKUP (abi_decode_clean_allocas func s).vs_allocas id = SOME (b,sz) ==>
-  compileEnv$regions_disjoint b sz q n
+  loweringStateRelDefs$regions_disjoint b sz q n
 Proof
   rw[abi_decode_clean_lookup] >>
   fs[AllCaseEqs(), abi_decode_alloca_ids_def] >> metis_tac[]
@@ -111,7 +111,7 @@ Theorem abi_decode_clean_immutable_region:
     | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
   off + type_memory_size tv <= s.vs_alloca_next /\
   (!id b sz. FLOOKUP (abi_decode_clean_allocas func s).vs_allocas id = SOME (b,sz) ==>
-    compileEnv$regions_disjoint b sz off (type_memory_size tv))
+    loweringStateRelDefs$regions_disjoint b sz off (type_memory_size tv))
 Proof
   strip_tac >>
   qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
