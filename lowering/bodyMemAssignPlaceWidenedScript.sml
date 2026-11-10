@@ -8,7 +8,7 @@ Ancestors
   bodyMemoryPreds supportedTargets targetPlaceSim targetPlaceSimMem
   placeMemoryStagingMem typedCopyAggregateCounted typedArrayTraversalCounted
   typedCopyFieldsSemanticCounted placeStorageLayoutCounted placeStorageElementPaths
-  placeStorageFixedCounted placeStorageCompiledTraversal placeStorageBufferBounds
+  placeStorageFixedCounted placeStorageDynamicExecution placeStorageBufferBounds
 
 Theorem body_assign_place_widened_aggregate_call_mem:
   !cx t e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
