@@ -284,3 +284,83 @@ Proof
     (simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
   simp[]
 QED
+
+Theorem inline_call_output_namespace:
+  inliner_input_ok C /\ MEM fn C.ctx_functions /\
+  MEM call (fn_insts fn) /\ call.inst_opcode = INVOKE ==>
+  EVERY (\x. MEM x (cfgTransform$fn_all_vars fn) /\ ~retpc_var fn x)
+    call.inst_outputs
+Proof
+  strip_tac >>
+  `retpc_shape_ok fn` by
+    (fs[inliner_input_ok_def, EVERY_MEM] >> metis_tac[]) >>
+  simp[EVERY_MEM] >> rpt strip_tac
+  >- (simp[cfgTransformTheory.fn_all_vars_def, MEM_FLAT, MEM_MAP,
+           PULL_EXISTS] >>
+      `?bb. MEM bb fn.fn_blocks /\ MEM call bb.bb_instructions` by
+        metis_tac[unitLabelMapIdentityTheory.fn_insts_MEM] >>
+      qexistsl [`bb`, `call`] >> simp[]) >>
+  fs[retpc_shape_ok_def] >>
+  qpat_x_assum `!inst x. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\ _ ==> _`
+    (qspecl_then [`call`, `x`] mp_tac) >> simp[]
+QED
+
+Theorem inline_tracked_resume_return:
+  inline_tracked_snapshot fn a route snap frame /\
+  LENGTH call.inst_outputs = LENGTH vals /\
+  INJ route.ir_rename (set call.inst_outputs UNION snap.ils_defined) UNIV /\
+  EVERY (\x. MEM x (cfgTransform$fn_all_vars fn) /\ ~retpc_var fn x /\
+    (!v. v IN snap.ils_protected ==>
+      snap.ils_parent_rename v <> route.ir_rename x)) call.inst_outputs ==>
+  inline_tracked_snapshot fn a route
+    (snap with <|ils_state :=
+       FOLDL (\s (x,w). update_var x w s) snap.ils_state
+         (ZIP (call.inst_outputs, vals));
+       ils_defined := set call.inst_outputs UNION snap.ils_defined|>)
+    (frame with ipf_state :=
+       FOLDL (\s (x,w). update_var x w s) frame.ipf_state
+         (ZIP (MAP route.ir_rename call.inst_outputs, vals)))
+Proof
+  strip_tac >>
+  drule (inline_tracked_resume_writes |> Q.SPEC `ZIP (call.inst_outputs, vals)`) >>
+  disch_then (qspecl_then [`vals`, `call`] mp_tac) >>
+  simp[MAP_ZIP] >> impl_tac
+  >- (gvs[EVERY_MEM] >> gen_tac >> PairCases_on `e` >>
+      strip_tac >> simp[] >>
+      `MEM e0 call.inst_outputs` by
+        (drule MEM_ZIP >> disch_then (qspec_then `(e0,e1)` mp_tac) >>
+         simp[] >> metis_tac[MEM_EL]) >>
+      metis_tac[]) >>
+  simp[ZIP_MAP, rich_listTheory.FOLDL_MAP, combinTheory.o_DEF, pairTheory.UNCURRY_DEF] >>
+  `(\s p. update_var (route.ir_rename (FST p)) (SND p) s) =
+   (\s (x,w). update_var (route.ir_rename x) w s)` by
+    (simp[FUN_EQ_THM] >> gen_tac >> Cases >> simp[]) >>
+  simp[]
+QED
+
+(* Return bindings are ordinary (nonopaque) caller writes, by the frozen
+   retpc output-shape clause; SSA is not an input-contract assumption. *)
+Theorem inline_tracked_call_return:
+  inliner_input_ok C /\ MEM fn C.ctx_functions /\
+  MEM call (fn_insts fn) /\ call.inst_opcode = INVOKE /\
+  inline_tracked_snapshot fn a route snap frame /\
+  LENGTH call.inst_outputs = LENGTH vals /\
+  INJ route.ir_rename (set call.inst_outputs UNION snap.ils_defined) UNIV /\
+  (!x v. MEM x call.inst_outputs /\ v IN snap.ils_protected ==>
+    snap.ils_parent_rename v <> route.ir_rename x) ==>
+  inline_tracked_snapshot fn a route
+    (snap with <|ils_state :=
+       FOLDL (\s (x,w). update_var x w s) snap.ils_state
+         (ZIP (call.inst_outputs, vals));
+       ils_defined := set call.inst_outputs UNION snap.ils_defined|>)
+    (frame with ipf_state :=
+       FOLDL (\s (x,w). update_var x w s) frame.ipf_state
+         (ZIP (MAP route.ir_rename call.inst_outputs, vals)))
+Proof
+  strip_tac >>
+  `EVERY (\x. MEM x (cfgTransform$fn_all_vars fn) /\ ~retpc_var fn x)
+    call.inst_outputs` by
+    (irule inline_call_output_namespace >> metis_tac[]) >>
+  irule inline_tracked_resume_return >> simp[] >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED

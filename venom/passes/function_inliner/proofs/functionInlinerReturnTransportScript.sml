@@ -5,7 +5,7 @@ Ancestors
   functionInlinerReturnBoundary functionInlinerDefs venomExecProofs
   venomExecSemantics venomState venomInst stateFrame
   indexedLists rich_list list pred_set string functionInlinerFrame
-  analysisSimDefs venomWfProps
+  analysisSimDefs venomWfProps dftCommutation
 
 Theorem inline_return_assignments:
   !inst rvs pc p outs args ret pi.
@@ -352,4 +352,28 @@ Theorem inline_clone_exit_control:
   ?t. q = OK t /\ t.vs_current_bb = ret /\ t.vs_inst_idx = 0
 Proof
   rw[inline_clone_exit_def] >> simp[]
+QED
+
+(* Routed outputs need not share the child's clone prefix.  Execute the
+   already-renamed operands without a saved-caller frame coercion. *)
+Theorem inline_return_routed_zip_execute:
+  !outs ops vals t.
+    LENGTH outs = LENGTH ops /\ eval_operands ops t = SOME vals /\
+    (!x v. MEM x outs /\ MEM (Var v) ops ==> x <> v) ==>
+    run_insts fuel ctx
+      (MAP (\(x,op). <| inst_id := 0; inst_opcode := ASSIGN;
+        inst_operands := [op]; inst_outputs := [x] |>)
+        (ZIP (outs,ops))) t =
+    OK (FOLDL (\u (x,w). update_var x w u) t (ZIP (outs,vals)))
+Proof
+  Induct >> Cases_on `ops` >> simp[] >> rpt gen_tac >> strip_tac
+  >- gvs[eval_operands_def, run_insts_def] >>
+  gvs[eval_operands_def, AllCaseEqs()] >>
+  rename1 `eval_operand op phys = SOME w` >>
+  rename1 `eval_operands rest phys = SOME ws` >>
+  rename1 `update_var dest w phys` >>
+  `eval_operands rest (update_var dest w phys) = eval_operands rest phys` by
+    (irule dftCommutationTheory.eval_operands_update_var >> metis_tac[]) >>
+  simp[run_insts_def, step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  first_x_assum irule >> simp[] >> metis_tac[]
 QED
