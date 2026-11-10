@@ -2162,15 +2162,12 @@ Proof
   metis_tac[sym_frame_inv_same_count]
 QED
 
-Theorem do_swap_restore_was_spilled:
-  !d ps off. d < LENGTH ps.ps_stack /\
+Theorem do_swap_deep_restore_was_spilled:
+  !d ps off. d > 16 /\ d < LENGTH ps.ps_stack /\
     MEM (SORestore off) (FST (do_swap d ps)) ==>
     MEM (SOSpill off) (FST (do_swap d ps))
 Proof
-  rpt gen_tac >> Cases_on `d <= 16`
-  >- (Cases_on `d = 0` >> simp[stackPlanOpsTheory.do_swap_def]) >>
-  strip_tac >>
-  `d > 16` by decide_tac >>
+  rpt gen_tac >> strip_tac >>
   drule_all doSwapSimTheory.do_swap_big_decompose >>
   simp[LET_THM] >> disch_then SUBST_ALL_TAC >>
   gvs[listTheory.MEM_MAP] >>
@@ -2178,6 +2175,16 @@ Proof
   match_mp_tac listTheory.EL_MEM >>
   simp[doSwapSimTheory.spill_alloc_n_offsets_length, stackPlanOpsTheory.top_n_def] >>
   gvs[listTheory.MEM_GENLIST] >> decide_tac
+QED
+
+Theorem do_swap_restore_was_spilled:
+  !d ps off. d < LENGTH ps.ps_stack /\
+    MEM (SORestore off) (FST (do_swap d ps)) ==>
+    MEM (SOSpill off) (FST (do_swap d ps))
+Proof
+  rpt gen_tac >> Cases_on `d <= 16`
+  >- (Cases_on `d = 0` >> simp[stackPlanOpsTheory.do_swap_def]) >>
+  simp[do_swap_deep_restore_was_spilled, arithmeticTheory.NOT_LESS_EQUAL]
 QED
 
 Theorem pop_one_restore_was_spilled:
@@ -2199,7 +2206,8 @@ Proof
   Induct >- simp[foldlSimTheory.plan_steps_def] >>
   rpt gen_tac >>
   Cases_on `cleanOpsSim$pop_one_step h ps` >>
-  Cases_on `plan_steps cleanOpsSim$pop_one_step items r` >>
+  rename1 `cleanOpsSim$pop_one_step h ps = (head_ops,mid)` >>
+  Cases_on `plan_steps cleanOpsSim$pop_one_step items mid` >>
   simp[foldlSimTheory.plan_steps_def] >>
   metis_tac[pop_one_restore_was_spilled, listTheory.MEM_APPEND]
 QED
@@ -2229,6 +2237,37 @@ Proof
   metis_tac[popmany_individual_restore_was_spilled]
 QED
 
+Theorem sym_depth_swap_numeric:
+  !item d ps ops ps' p env cp fn ret srest initial_fmp R ss.
+    stack_get_depth item ps.ps_stack = SOME d /\ do_swap d ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. ps'.ps_alloc.sa_spill_base <= b /\ b < ps'.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps' out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `d < LENGTH ps.ps_stack` by metis_tac[planAlignTheory.stack_get_depth_bound] >>
+  mp_tac (Q.SPECL [`d`, `ps`] sym_do_swap_numeric) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem optimistic_swap_restore_was_spilled:
+  !dfg inst live term ps ops qs off.
+    optimistic_swap_plan dfg inst live term ps = (ops,qs) /\
+    MEM (SORestore off) ops ==> MEM (SOSpill off) ops
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[stackPlanGenTheory.optimistic_swap_plan_def, AllCaseEqs()] >>
+  metis_tac[do_swap_restore_was_spilled, planAlignTheory.stack_get_depth_bound,
+    pairTheory.FST]
+QED
+
 Theorem sym_optimistic_swap_numeric:
   !dfg inst live term ps ops ps' p env cp fn ret srest initial_fmp R ss.
     optimistic_swap_plan dfg inst live term ps = (ops,ps') /\
@@ -2250,10 +2289,7 @@ Proof
   >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, sym_steps_def])
   >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, sym_steps_def])
   >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, sym_steps_def]) >>
-  rename1 `stack_get_depth _ ps.ps_stack = SOME d` >>
-  `d < LENGTH ps.ps_stack` by metis_tac[planAlignTheory.stack_get_depth_bound] >>
-  mp_tac (Q.SPECL [`d`, `ps`] sym_do_swap_numeric) >>
-  simp[] >> disch_then drule_all >> simp[]
+  drule_all sym_depth_swap_numeric >> simp[]
 QED
 
 Theorem sym_phi_prefix_frame_sim:
