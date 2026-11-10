@@ -1449,3 +1449,68 @@ Proof
   Cases_on `step_inst fuel C src s` >>
   gvs[inline_ordinary_result_cases]
 QED
+
+(* A full ordinary cut: fetched target execution, independently advanced
+   evaluator positions, owner storage, and a produced successor or source end. *)
+Theorem inline_owner_ordinary_advance_cut:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  inline_shared_frame snap.ils_state = inline_shared_frame frame.ipf_state /\
+  inst_wf src /\ inline_ordinary_opcode src.inst_opcode /\
+  step_inst fuel C src snap.ils_state = OK s' /\
+  EVERY (\x. MEM x (cfgTransform$fn_all_vars a.ia_function) /\
+    ~retpc_var a.ia_function x) src.inst_outputs /\
+  INJ route.ir_rename (set src.inst_outputs UNION snap.ils_defined) UNIV /\
+  EVERY (\op. !v. op = Var v ==>
+    MEM v (cfgTransform$fn_all_vars a.ia_function) /\ ~retpc_var a.ia_function v)
+    src.inst_operands /\
+  lookup_block c.ic_block c.ic_function.fn_blocks = SOME sb /\
+  get_instruction sb snap.ils_state.vs_inst_idx = SOME src /\
+  c.ic_index = snap.ils_state.vs_inst_idx /\
+  d.ic_index = frame.ipf_state.vs_inst_idx /\
+  inline_cell_at c /\ inline_cell_zipper c frames d /\
+  c.ic_fields = inline_inst_fields src /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames /\
+  inline_cell_var_action frames = route.ir_rename /\
+  inline_cell_label_action frames = lab ==>
+  ?tb dst t.
+    lookup_block d.ic_block d.ic_function.fn_blocks = SOME tb /\
+    get_instruction tb frame.ipf_state.vs_inst_idx = SOME dst /\
+    step_inst tfuel Tctx dst frame.ipf_state = OK t /\
+    exec_block fuel C sb snap.ils_state =
+      exec_block fuel C sb (s' with vs_inst_idx := SUC c.ic_index) /\
+    exec_block tfuel Tctx tb frame.ipf_state =
+      exec_block tfuel Tctx tb (t with vs_inst_idx := SUC d.ic_index) /\
+    inline_owner_storage cert
+      ((p,a,route,snap with <|
+        ils_state := s' with vs_inst_idx := SUC c.ic_index;
+        ils_defined := set src.inst_outputs UNION snap.ils_defined|>)::rest)
+      (frame with ipf_state := t with vs_inst_idx := SUC d.ic_index) /\
+    inline_shared_frame (s' with vs_inst_idx := SUC c.ic_index) =
+      inline_shared_frame (t with vs_inst_idx := SUC d.ic_index) /\
+    ((?next next_frames out.
+      inline_cell_at next /\ next.ic_function = c.ic_function /\
+      next.ic_block = c.ic_block /\ next.ic_index = SUC c.ic_index /\
+      inline_cell_zipper next next_frames out /\ inline_cell_at out /\
+      MAP (\(tag,next). inline_cell_choice tag) next_frames =
+        MAP (\(tag,next). inline_cell_choice tag) frames /\
+      out.ic_function = d.ic_function /\ out.ic_block = d.ic_block /\
+      out.ic_index = SUC d.ic_index) \/
+     SUC c.ic_index = LENGTH sb.bb_instructions)
+Proof
+  strip_tac >>
+  `~MEM src.inst_opcode [PHI; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP]` by
+    gvs[inline_ordinary_opcode_def] >>
+  drule_all inline_cell_zipper_route_fetch >> strip_tac >>
+  drule_all inline_owner_storage_ordinary_step >>
+  disch_then (qspecl_then [`tfuel`, `Tctx`] strip_assume_tac) >>
+  `~is_terminator src.inst_opcode` by
+    metis_tac[inline_ordinary_OK_nonterminator] >>
+  `~is_terminator dst.inst_opcode` by simp[] >>
+  `get_instruction bb frame.ipf_state.vs_inst_idx = SOME dst` by metis_tac[] >>
+  drule_all inline_owner_storage_advance >> strip_tac >>
+  qexistsl_tac [`bb`, `dst`, `t`] >> simp[] >>
+  drule_all inline_cell_zipper_successor_cases >> strip_tac
+  >- (disj1_tac >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  disj2_tac >> gvs[]
+QED
