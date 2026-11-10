@@ -250,47 +250,6 @@ Proof
   gvs[vv_post_def, vv_holds_def]
 QED
 
-Theorem materialize_unwrap_owned_path:
-  unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
-  sa.cs_next_id <= sm.cs_next_id /\
-  read_result cx tvv es' = (INL v,es') /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
-  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
-  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
-  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
-         ~is_word_type (post_value_type ce e) ==>
-         type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
-         type_memory_size tvt < 2 ** 64) /\
-  not_fresh_at sm p /\ lookup_var p r = SOME w /\
-  FLOOKUP r.vs_allocas aid = SOME (w2n w,sz) /\
-  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
-  r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?u. gas_marked_path F ctx func r 0 (OK u) /\
-      expr_post ctx func ce cx e es'
-        (sa with cs_next_var := sm.cs_next_var) su r es' v op u /\
-      lookup_var p u = SOME w /\
-      FLOOKUP u.vs_allocas aid = SOME (w2n w,sz) /\
-      ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
-      u.vs_inst_idx = LENGTH su.cs_current_insts
-Proof
-  strip_tac >> Cases_on `vv`
-  >- (irule materialize_unwrap_identity_path >> simp[] >> metis_tac[]) >>
-  rename1 `LocatedValue vty src` >>
-  Cases_on `is_word_type vty`
-  >- (Cases_on `src.ptr_location = LocCode`
-      >- cheat >>
-      drule_all materialize_unwrap_word_straight >> strip_tac >>
-      drule_all materialize_unwrap_owned_sim >>
-      disch_then (qspec_then `\r. F` mp_tac) >> strip_tac >>
-      drule materialize_straight_zero_path >>
-      disch_then (qspec_then `r` mp_tac) >> simp[] >> metis_tac[]) >>
-  Cases_on `src.ptr_location`
-  >- (irule materialize_unwrap_identity_path >> simp[] >> metis_tac[])
-  >- cheat
-  >- cheat
-  >- cheat >>
-  gvs[vv_post_def, vv_holds_def]
-QED
 
 Theorem compile_materialize_vv_owned_path:
   compile_materialize_vv ce (lowered_value_type ce e) vv sm = (dst,sb) /\
@@ -1956,5 +1915,87 @@ Proof
   `mid.cs_next_id <= su.cs_next_id` by
     (drule_at (Pos last) exprSimCopyTheory.storage_copy_suffix_ci_mono >>
      simp[exprLoweringPropsTheory.ci_mono_def]) >>
-  cheat
+  `expr_post ctx func ce cx e es'
+     (sa with cs_next_var := sm.cs_next_var) su r es' v op z /\
+   (!x a. not_fresh_at (sa with cs_next_var := sm.cs_next_var) x /\
+      lookup_var x r = SOME a ==> lookup_var x z = SOME a) /\
+   (!aid entry. FLOOKUP r.vs_allocas aid = SOME entry ==>
+      FLOOKUP z.vs_allocas aid = SOME entry)` by
+    (irule materialize_copy_endpoint_owned_post >>
+     (conj_tac >- metis_tac[]) >>
+     qexistsl_tac [`mk_inst sm.cs_next_id ALLOCA
+       [Lit (n2w (type_memory_bytes ce ty))]
+       [STRING #"%" (toString sm.cs_next_var)]`,
+       `mid`, `type_memory_bytes ce ty`, `tv`, `t`, `w'`] >>
+     gvs[venomInstTheory.mk_inst_def, regions_disjoint_def,
+         arithmeticTheory.ADD_COMM] >>
+     metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `gas_marked_path F ctx func r 0 (OK z)` by
+    (drule_all gas_marked_path_then >> simp[]) >>
+  qexists_tac `z` >> gvs[not_fresh_at_def] >> metis_tac[]
+QED
+
+Theorem materialize_store_straight_free[local]:
+  compile_store_memory ce src dst ty ty su = ((),sb) /\
+  ~is_word_type ty ==>
+  dec_straight su sb /\
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts su sb)
+Proof
+  simp[contextTheory.compile_store_memory_def] >> strip_tac >>
+  Cases_on `is_bytestring_type ty`
+  >- (gvs[contextTheory.compile_store_bytestring_def,
+          contextTheory.compile_bytestring_copy_len_def,
+          emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def,
+          fresh_id_def, fresh_var_def, emit_def] >>
+      simp[dec_straight_def, inst_extends_def,
+           exprLoweringPropsTheory.emitted_insts_def,
+           rich_listTheory.DROP_APPEND, arithmeticTheory.SUB_EQ_0,
+           arithmeticTheory.SUB_PLUS, venomInstTheory.mk_inst_def,
+           venomInstTheory.is_terminator_def]) >>
+  Cases_on `type_memory_bytes ce ty` >>
+  gvs[contextTheory.compile_copy_memory_def, comp_return_def,
+      emitHelperTheory.emit_void_def, fresh_id_def, emit_def,
+      comp_bind_def, comp_ignore_bind_def] >>
+  simp[dec_straight_def, inst_extends_def,
+       exprLoweringPropsTheory.emitted_insts_def,
+       rich_listTheory.DROP_APPEND, arithmeticTheory.SUB_EQ_0,
+       arithmeticTheory.SUB_PLUS, venomInstTheory.mk_inst_def,
+       venomInstTheory.is_terminator_def]
+QED
+
+Theorem materialize_unwrap_owned_path:
+  unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
+  expr_body_pre ce cx env e es_pre /\ ~is_word_type (expr_type e) /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  read_result cx tvv es' = (INL v,es') /\
+  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+         ~is_word_type (post_value_type ce e) ==>
+         type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+         type_memory_size tvt < 2 ** 64) /\
+  not_fresh_at sm p /\ lookup_var p r = SOME w /\
+  FLOOKUP r.vs_allocas aid = SOME (w2n w,sz) /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func r 0 (OK u) /\
+      expr_post ctx func ce cx e es'
+        (sa with cs_next_var := sm.cs_next_var) su r es' v op u /\
+      lookup_var p u = SOME w /\
+      FLOOKUP u.vs_allocas aid = SOME (w2n w,sz) /\
+      ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
+      u.vs_inst_idx = LENGTH su.cs_current_insts
+Proof
+  strip_tac >> Cases_on `vv`
+  >- (irule materialize_unwrap_identity_path >> simp[] >> metis_tac[]) >>
+  rename1 `LocatedValue vty src` >>
+  drule_all materialize_captured_located_nonword >> strip_tac >>
+  Cases_on `src.ptr_location`
+  >- (irule materialize_unwrap_identity_path >> simp[] >> metis_tac[])
+  >- (irule materialize_unwrap_storage_owned_path >> simp[] >> metis_tac[])
+  >- (irule materialize_unwrap_storage_owned_path >> simp[] >> metis_tac[])
+  >- (irule materialize_unwrap_code_owned_path >> simp[] >> metis_tac[]) >>
+  gvs[]
 QED
