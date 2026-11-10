@@ -80,18 +80,6 @@ Proof
   metis_tac[selected_widens_trans]
 QED
 
-Theorem selected_bytestring_target[local]:
-  is_bytestring_type sty /\ type_widens_to tenv sty dty ==>
-  is_bytestring_type dty
-Proof
-  simp[type_widens_to_def] >> strip_tac >> Cases_on `sty` >>
-  gvs[is_bytestring_type_def] >>
-  rename1 `BaseT sb` >> Cases_on `sb` >> gvs[is_bytestring_type_def] >>
-  Cases_on `dty` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
-  rename1 `BaseT db` >> Cases_on `db` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
-  Cases_on `b` >> Cases_on `b'` >> gvs[arg_type_fits_def, is_bytestring_type_def]
-QED
-
 (* An internal call's post type is its callee's declared return type, or a
    bytestring (which the call site may widen) whose layout reads the same. *)
 Theorem return_intcall_post_lowered:
@@ -894,7 +882,7 @@ Proof
   drule_all return_site_post_semantics >> strip_tac >>
   `~is_word_type (post_value_type ce e)` by metis_tac[selected_source_word_eq] >>
   `post_value_type ce e = lowered_value_type ce e` by
-    metis_tac[selected_bytestring_target] >>
+    metis_tac[type_widens_from_bytestring] >>
   `~(is_bytestring_type ret /\ is_bytestring_type (lowered_value_type ce e)) /\
     lowered_value_type ce e <> ret` by metis_tac[] >>
   drule_all return_consumer_normalize_split >> strip_tac >>
