@@ -13,7 +13,7 @@ Theorem intcall_forced_post_outcome:
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   gas_admissible (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx))
     expr_res_ok es /\
-  intcall_joint_res fp ce env es sa s /\ ~s.vs_halted /\
+  intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
@@ -29,6 +29,6 @@ Proof
   disch_then drule_all >> strip_tac >>
   irule gas_outcome_conseq >> goal_assum (drule_at Any) >>
   simp[] >> rpt strip_tac >> qexists_tac `v` >>
-  fs[expr_post_def, intcall_expr_cont_def, intcall_joint_res_def] >>
+  fs[expr_post_def, intcall_expr_cont_def, intcall_expr_res_def] >>
   metis_tac[]
 QED

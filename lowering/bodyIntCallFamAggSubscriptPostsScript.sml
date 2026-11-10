@@ -29,7 +29,7 @@ Proof
   `contract_storage_well_formed fp.jc_cx ee /\
    storage_layout_safe fp.jc_cx /\
    stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee u` by
-    fs[intcall_expr_cont_def, intcall_joint_res_def, expr_sim_inv_def] >>
+    fs[intcall_expr_cont_def, intcall_expr_res_def, expr_sim_inv_def] >>
   drule_all mapping_leaf_storage_valid >> strip_tac >>
   drule_all mapping_leaf_vv_holds >> strip_tac >>
   simp[vv_post_def, expr_type_def, vv_at_def] >>

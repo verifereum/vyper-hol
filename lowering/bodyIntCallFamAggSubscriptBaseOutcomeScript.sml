@@ -12,7 +12,8 @@ Theorem intcall_mapping_base_outcome:
   (expr_body_pre ce fp.jc_cx env (Subscript ann obj idx) es \/
    expr_map_pre ce fp.jc_cx env (Subscript ann obj idx) es) /\
   place_type ce obj = MapPT kt vt /\
-  supported_place_expr fp.jc_tops obj /\
+  (supported_place_expr fp.jc_tops obj \/
+   supported_effect_place_expr fp.jc_tops obj) /\
   supportedExprs$supported_expr fp.jc_tops idx /\
   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr obj) /\
   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr idx) /\
@@ -24,7 +25,7 @@ Theorem intcall_mapping_base_outcome:
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   gas_admissible (eval_expr fp.jc_cx (Subscript ann obj idx)) A es /\
   (!ex. A (INR ex) ==> expr_map_res_ok (INR ex)) /\
-  intcall_joint_res fp ce env es sa s0 /\ ~s0.vs_halted /\
+  intcall_expr_res fp ce env es sa s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)

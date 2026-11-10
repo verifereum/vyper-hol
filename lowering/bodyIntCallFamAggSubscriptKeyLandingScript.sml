@@ -8,7 +8,7 @@ Ancestors
   compileEnv context venomState finite_map
 
 Theorem intcall_mapping_key_landing:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s0 /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s0 /\
   (expr_body_pre ce fp.jc_cx env (Subscript ann obj idx) es \/
    expr_map_pre ce fp.jc_cx env (Subscript ann obj idx) es) /\
   place_type ce obj = MapPT kt vt /\
@@ -55,7 +55,7 @@ Proof
   `!x. base_op = Var x ==> not_fresh_at sn x` by
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `sm` >> simp[]) >>
-  `intcall_joint_res fp ce env en sn s /\ ~s.vs_halted /\
+  `intcall_expr_res fp ce env en sn s /\ ~s.vs_halted /\
    s.vs_current_bb = sn.cs_current_bb /\
    s.vs_inst_idx = LENGTH sn.cs_current_insts` by fs[intcall_expr_cont_def] >>
   drule_all intcall_hashmap_tail_cont >> strip_tac >>

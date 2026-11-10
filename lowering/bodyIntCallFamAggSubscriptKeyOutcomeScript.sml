@@ -6,7 +6,7 @@ Ancestors
   loweringPosts vyperState vyperInterpreter compileEnv venomState
 
 Theorem intcall_mapping_key_outcome:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s0 /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s0 /\
   (expr_body_pre ce fp.jc_cx env (Subscript ann obj idx) es \/
    expr_map_pre ce fp.jc_cx env (Subscript ann obj idx) es) /\
   place_type ce obj = MapPT kt vt /\

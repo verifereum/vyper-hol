@@ -8,7 +8,7 @@ Ancestors
 Theorem intcall_mapping_key_producer:
   intcall_forced_producer fp idx /\
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
-  intcall_joint_res fp ce env es sa s0 /\
+  intcall_expr_res fp ce env es sa s0 /\
   (expr_body_pre ce fp.jc_cx env (Subscript ann obj idx) es \/
    expr_map_pre ce fp.jc_cx env (Subscript ann obj idx) es) /\
   place_type ce obj = MapPT kt vt /\
@@ -50,13 +50,13 @@ Proof
      expr_res_ok (mid with gas_obs := [])` by
     (irule subscript_result_index_admissible >>
      goal_assum (drule_at Any) >> qexistsl_tac [`A`, `ann`] >> simp[]) >>
-  `intcall_joint_res fp ce env (mid with gas_obs := []) sm t /\
+  `intcall_expr_res fp ce env (mid with gas_obs := []) sm t /\
    ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
    t.vs_inst_idx = LENGTH sm.cs_current_insts` by
     fs[intcall_expr_cont_def] >>
   `!x. key = Var x ==> not_fresh_at sn x` by
     (drule compile_lower_value_var >>
-     fs[intcall_joint_res_def]) >>
+     fs[intcall_expr_res_def]) >>
   drule_all intcall_forced_post_outcome >> strip_tac >>
   irule intcall_mapping_key_outcome >>
   goal_assum (drule_at Any) >> simp[] >>
