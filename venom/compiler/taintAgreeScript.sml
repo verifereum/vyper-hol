@@ -3320,3 +3320,14 @@ Proof
   simp[taint_agree_def, ld_shared_agree_def] >>
   rpt strip_tac >> gvs[venom_state_component_equality]
 QED
+
+Theorem taint_agree_operands_clean:
+  !ops. taint_agree D X tn s t /\
+    EVERY (\op. op_taint tn op = {}) ops ==>
+    eval_operands ops s = eval_operands ops t
+Proof
+  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
+  `eval_operand h s = eval_operand h t` by
+    (irule taint_agree_operand_clean >> simp[] >> metis_tac[]) >>
+  simp[] >> first_x_assum drule >> simp[]
+QED

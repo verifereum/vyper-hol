@@ -1123,3 +1123,49 @@ Proof
      qexists_tac `i` >> simp[EL_MEM]) >>
   fs[ircf_block_plan_def] >> simp[]
 QED
+
+Theorem ircf_invoke_redirect_op:
+  ircf_block_plan fn bb bb2 /\ MEM bb fn.fn_blocks /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = INVOKE /\
+  MEM op (EL i bb.bb_instructions).inst_operands ==>
+  ircf_redirect_op fn bb bb2 op = op
+Proof
+  strip_tac >> Cases_on `op` >> simp[ircf_redirect_op_def] >>
+  rename1 `ircf_redirect fn bb bb2 v = v` >>
+  irule ircf_redirect_unaffected >> rpt gen_tac >> strip_tac >> strip_tac >>
+  `ircf_fwd_ok fn bb k d s sz` by
+    (drule_all ircf_block_plan_fwd_ok >> simp[]) >>
+  `k < LENGTH bb.bb_instructions /\
+   (EL k bb.bb_instructions).inst_opcode = MCOPY` by fs[ircf_fwd_ok_def] >>
+  `MEM (EL i bb.bb_instructions) (fn_insts fn) /\
+   MEM (EL k bb.bb_instructions) (fn_insts fn)` by
+    (simp[venomInstTheory.fn_insts_def] >>
+     metis_tac[unitShapeDefsTheory.MEM_fn_insts_blocks, EL_MEM]) >>
+  `(EL i bb.bb_instructions).inst_id <> (EL k bb.bb_instructions).inst_id` by
+    (strip_tac >>
+     `EL i bb.bb_instructions = EL k bb.bb_instructions` by
+       metis_tac[venomWfPropsTheory.fn_inst_ids_distinct_inj] >> gvs[]) >>
+  `MEM (EL i bb.bb_instructions) bb.bb_instructions /\
+   MEM (EL k bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+  drule_all ircf_copy_roots_no_write_use >> simp[]
+QED
+
+Theorem ircf_block_plan_invoke:
+  ircf_block_plan fn bb bb2 /\ MEM bb fn.fn_blocks /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = INVOKE ==>
+  EL i bb2.bb_instructions = EL i bb.bb_instructions
+Proof
+  strip_tac >>
+  `i NOTIN ircf_fwds bb bb2` by
+    (strip_tac >> gvs[ircf_fwds_def]) >>
+  `MAP (ircf_redirect_op fn bb bb2) (EL i bb.bb_instructions).inst_operands =
+   (EL i bb.bb_instructions).inst_operands` by
+    (irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
+     irule ircf_invoke_redirect_op >> simp[] >>
+     qexists_tac `i` >> simp[EL_MEM]) >>
+  fs[ircf_block_plan_def] >> simp[]
+QED

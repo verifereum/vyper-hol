@@ -953,3 +953,12 @@ Proof
      simp[]) >>
   metis_tac[wordsTheory.word_n2w_le2, arithmeticTheory.LESS_EQUAL_ANTISYM]
 QED
+
+Theorem taint_ok_invoke_operand:
+  taint_ok fn tn inst s /\ inst.inst_opcode = INVOKE /\
+  MEM op inst.inst_operands ==> op_taint tn op = {}
+Proof
+  simp[taint_ok_def] >> rpt strip_tac >>
+  spose_not_then assume_tac >>
+  first_x_assum drule >> simp[]
+QED

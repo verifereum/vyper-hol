@@ -25,7 +25,7 @@ Ancestors
   taintAgree o1LowerDloadShared o1PassContract ptrDiscipline passSharedDefs
   venomExecSemantics venomInst venomWf venomState finite_map pred_set list
   rangeAnalysisProofs stepWriteFootprintBase o1LowerDloadOccurrence occurrenceGeometry
-  venomExecProps
+  venomExecProps fnRunFields
 
 (* The transformed block, before NOPs are cleared *)
 Definition ircf_tbb_def:
@@ -766,6 +766,127 @@ Proof
 QED
 
 (* ===== One block, and the pass ===== *)
+
+Theorem ircf_invoke_arguments:
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) ==>
+  eval_operands ops s = eval_operands ops t
+Proof
+  strip_tac >> irule taint_agree_operands_clean >>
+  qexistsl_tac [`D`, `X`, `tn`] >> simp[] >>
+  gvs[decode_invoke_def, AllCaseEqs()] >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  irule taint_ok_invoke_operand >> metis_tac[MEM]
+QED
+
+Theorem ircf_setup_entry:
+  frame_reachable vs C stk PG G tn caller inst s /\
+  active_inst caller inst s /\ inst.inst_opcode = INVOKE /\
+  decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  taint_ok caller tn inst s /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+  ircf_cross tn (ircf_gam_cur fn_meta rma C caller s UNION
+                ircf_gam_stk fn_meta rma C stk) s t ==>
+  let f = <| cf_fn := caller; cf_inst := inst; cf_state := s;
+             cf_params := PG; cf_prov := G; cf_tvar := tn.t_var |>;
+      callee' = ircf_transform_function fn_meta C.ctx_functions rma callee
+  in ?ct. eval_operands ops t = SOME args /\
+    setup_callee callee' args t = SOME ct /\
+    ircf_R D fn_meta rma C (f::stk) (MAP (op_prov G) ops) FEMPTY
+      (tn with t_var := FEMPTY) callee cs ct /\
+    block_reach vs C (f::stk) (MAP (op_prov G) ops) FEMPTY
+      (tn with t_var := FEMPTY) callee cs
+Proof
+  simp[] >> strip_tac >>
+  `eval_operands ops s = eval_operands ops t` by
+    (irule ircf_invoke_arguments >> metis_tac[]) >>
+  drule_all frame_reachable_call_block_reach >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `setup_callee callee'` >>
+  `callee'.fn_blocks <> [] /\
+   (HD callee'.fn_blocks).bb_label = (HD callee.fn_blocks).bb_label` by
+    (qspec_then `callee` mp_tac
+      (Q.SPECL [`fn_meta`, `C.ctx_functions`, `rma`]
+        ircf_transform_function_entry_label) >>
+     gvs[Abbr `callee'`, setup_callee_def, fn_entry_label_def,
+         entry_block_def, NULL_EQ] >>
+     Cases_on `(ircf_transform_function fn_meta C.ctx_functions rma callee).fn_blocks` >>
+     gvs[]) >>
+  drule_all taint_agree_setup_callee >> strip_tac >>
+  qexists_tac `ct` >> gvs[] >>
+  simp[ircf_R_def] >>
+  conj_tac
+  >- (qexists_tac `tn with t_var := FEMPTY` >>
+      gvs[setup_callee_def, NULL_EQ, ircf_dead_def, site_bytes_def]) >>
+  gvs[setup_callee_def, NULL_EQ, ircf_cross_def] >> gvs[]
+QED
+
+Theorem ircf_invoke_restore_gam:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = INVOKE /\
+  bind_outputs inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state s se)) = SOME s' ==>
+  ircf_gam_cur fn_meta rma C fn (s' with vs_inst_idx := SUC s.vs_inst_idx) =
+    ircf_gam_cur fn_meta rma C fn s /\
+  ircf_dead ids (s' with vs_inst_idx := SUC s.vs_inst_idx) stk =
+    ircf_dead ids s stk
+Proof
+  strip_tac >>
+  `s'.vs_allocas = s.vs_allocas /\ s'.vs_current_bb = s.vs_current_bb` by
+    (drule o1LowerDloadJointRestoreTheory.ld_bind_outputs_vars_only >>
+     Cases_on `ret.iret_adopt_fmp` >>
+     gvs[adopt_return_fmp_def, merge_callee_state_def,
+         venom_state_component_equality]) >>
+  `s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb)` by
+    gvs[get_instruction_def, ircf_fwds_def] >>
+  drule ircf_gam_suc_no_forward >> strip_tac >>
+  simp[ircf_gam_cur_def, ircf_dead_def] >>
+  irule ircf_gam_suc_no_forward >> simp[]
+QED
+
+Theorem ircf_invoke_return_restore:
+  f = <| cf_fn := caller; cf_inst := inst; cf_state := s;
+         cf_params := params; cf_prov := prov; cf_tvar := saved.t_var |> /\
+  ircf_R_ret_reachable vs D fn_meta rma C (f::stk) PG G tn fn ret se te /\
+  vs.vs_allocas = FEMPTY /\ lo <= vs.vs_alloca_next /\ ~ctx_has_dalloca C /\
+  taint_agree D X0 saved s t /\
+  setup_callee fn args s = SOME cs /\ run_blocks k C fn cs = IntRet ret se /\
+  lookup_block s.vs_current_bb caller.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\ inst.inst_opcode = INVOKE /\
+  bind_outputs inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state s se)) = SOME s' /\
+  active_inst caller inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  ?t'. bind_outputs inst.inst_outputs ret.iret_values
+         (adopt_return_fmp ret (merge_callee_state t te)) = SOME t' /\
+    frame_reachable vs C stk params
+      (DRESTRICT prov (COMPL (set inst.inst_outputs)))
+      (tn with t_var := DRESTRICT saved.t_var (COMPL (set inst.inst_outputs)))
+      caller inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) /\
+    taint_agree D
+      (ircf_dead (ircf_dst_ids fn_meta rma C)
+         (s' with vs_inst_idx := SUC s.vs_inst_idx) stk)
+      (tn with t_var := DRESTRICT saved.t_var (COMPL (set inst.inst_outputs)))
+      (s' with vs_inst_idx := SUC s.vs_inst_idx)
+      (t' with vs_inst_idx := SUC s.vs_inst_idx) /\
+    ircf_cross
+      (tn with t_var := DRESTRICT saved.t_var (COMPL (set inst.inst_outputs)))
+      (ircf_gam_cur fn_meta rma C caller
+         (s' with vs_inst_idx := SUC s.vs_inst_idx) UNION
+       ircf_gam_stk fn_meta rma C stk)
+      (s' with vs_inst_idx := SUC s.vs_inst_idx)
+      (t' with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  strip_tac >>
+  `s.vs_call_ctx.cc_address = se.vs_call_ctx.cc_address` by
+    (drule run_blocks_intret_fields >>
+     gvs[setup_callee_def, NULL_EQ]) >>
+  drule_all ircf_invoke_restore_gam >> strip_tac >>
+  gvs[] >>
+  drule ircf_R_ret_reachable_restore >> simp[] >>
+  metis_tac[]
+QED
 
 Theorem ircf_block_sim:
   !D lo vs C fn_meta rma k stk PG G tn fn fn' s t bb.
