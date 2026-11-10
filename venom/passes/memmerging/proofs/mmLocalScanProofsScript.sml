@@ -12109,6 +12109,83 @@ Proof
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
+Theorem mm_local_canonical_pending_discharge[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  js = mm_local_pending_indices is gs r /\
+  (!j v src. MEM j (js ++ [r]) /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))) /\
+  a = mm_local_epoch_start is gs r /\
+  u = FOLDL (\st q. if MEM q js then st else
+    case cap q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) /\
+  t.vs_memory = u.vs_memory /\ mm_local_pending cap js s t /\
+  cap r = SOME (d,payload) /\
+  s'.vs_memory = (write_memory_with_expansion d payload s).vs_memory /\
+  t'.vs_memory = (write_memory_with_expansion g.cg_dst
+    (read_memory g.cg_src g.cg_length t) t).vs_memory ==>
+  mm_local_pending cap (FILTER (\j. mm_local_rep_index is gs j <> r) js) s' t'
+Proof
+  strip_tac >>
+  `(!pre j mid l post a p b bs.
+    js = pre ++ [j] ++ mid ++ [l] ++ post /\
+    cap j = SOME (a,p) /\ cap l = SOME (b,bs) ==>
+    mm_local_write_compatible a p b bs) /\
+   (!j a p b bs. MEM j js /\ cap j = SOME (a,p) /\ cap r = SOME (b,bs) ==>
+    mm_local_write_compatible a p b bs)` by
+    (irule mm_local_canonical_pending_crossings >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `!j. MEM j js ==> cap j = SOME (THE (cap j))` by
+    (qpat_x_assum `mm_local_pending cap js s t` mp_tac >>
+     pure_rewrite_tac[mm_local_pending_def] >> strip_tac >> rpt strip_tac >>
+     drule_all listTheory.LIST_REL_MEM_IMP >> strip_tac >> gvs[]) >>
+  `!v. FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v
+    (MAP (THE o cap) ((FILTER (\j. mm_local_rep_index is gs j = r) js) ++ [r])) =
+    write_memory_with_expansion g.cg_dst (read_memory g.cg_src g.cg_length t) v` by
+    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)
+       (cj 2 mm_local_canonical_due_log_payload) >>
+     disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
+     disch_then irule >>
+     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexistsl [`H`, `a`, `cap`,
+       `FILTER (\j. mm_local_rep_index is gs j = r) js`, `gs`, `u`] >>
+     gvs[MEM_FILTER] >> metis_tac[]) >>
+  irule (BETA_RULE (Q.INST [`P` |-> `(\j. mm_local_rep_index is gs j = r)`]
+    (SPEC_ALL (INST_TYPE [alpha |-> ``:num``] mm_local_pending_compatible_discharge_filter)))) >>
+  conj_tac >- metis_tac[] >>
+  qexistsl [`d`, `g.cg_dst`, `read_memory g.cg_src g.cg_length t`,
+    `MAP (THE o cap) (FILTER (\j. mm_local_rep_index is gs j = r) js)`,
+    `payload`, `MAP (THE o cap) (FILTER (\j. mm_local_rep_index is gs j <> r) js)`,
+    `s`, `t`] >>
+  conj_tac
+  >- (qpat_x_assum `!v. FOLDL _ v _ = _` mp_tac >>
+      simp[MAP_APPEND, FOLDL_APPEND]) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (pure_rewrite_tac[EVERY_MAP, EVERY_MEM, MEM_FILTER] >>
+      qx_gen_tac `j` >> strip_tac >>
+      `cap j = SOME (THE (cap j))` by metis_tac[] >>
+      Cases_on `THE (cap j)` >> gvs[] >> metis_tac[]) >>
+  conj_tac
+  >- (pure_rewrite_tac[LIST_REL_MAP2] >>
+      irule EVERY2_refl >> pure_rewrite_tac[MEM_FILTER] >>
+      rpt strip_tac >> gvs[]) >>
+  conj_tac
+  >- (pure_rewrite_tac[LIST_REL_MAP2] >>
+      irule EVERY2_refl >> pure_rewrite_tac[MEM_FILTER] >>
+      rpt strip_tac >> gvs[]) >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
