@@ -61,24 +61,35 @@ Proof
   first_x_assum (qspec_then `v` mp_tac) >> simp[]
 QED
 
-Theorem lift_result_dse_equiv_trans:
+(* Result relations of a DSE run: the per-space or combined relation on OK
+   and Abort, dse_term_equiv on Halt/IntRet. *)
+Theorem lift_result_dse_term_trans:
   !space r1 r2 r3.
-    lift_result (dse_equiv space) (dse_equiv space) (dse_equiv space) r1 r2 /\
-    lift_result (dse_equiv space) (dse_equiv space) (dse_equiv space) r2 r3 ==>
-    lift_result (dse_equiv space) (dse_equiv space) (dse_equiv space) r1 r3
+    lift_result (dse_equiv space) dse_term_equiv (dse_equiv space) r1 r2 /\
+    lift_result (dse_equiv space) dse_term_equiv (dse_equiv space) r2 r3 ==>
+    lift_result (dse_equiv space) dse_term_equiv (dse_equiv space) r1 r3
 Proof
   Cases_on `r1` >> Cases_on `r2` >> Cases_on `r3` >>
   simp[lift_result_def] >> metis_tac[dse_equiv_trans]
 QED
 
-Theorem lift_result_dse_all_equiv_trans:
+Theorem lift_result_dse_all_term_trans:
   !r1 r2 r3.
-    lift_result dse_all_equiv dse_all_equiv dse_all_equiv r1 r2 /\
-    lift_result dse_all_equiv dse_all_equiv dse_all_equiv r2 r3 ==>
-    lift_result dse_all_equiv dse_all_equiv dse_all_equiv r1 r3
+    lift_result dse_all_equiv dse_term_equiv dse_all_equiv r1 r2 /\
+    lift_result dse_all_equiv dse_term_equiv dse_all_equiv r2 r3 ==>
+    lift_result dse_all_equiv dse_term_equiv dse_all_equiv r1 r3
 Proof
   Cases_on `r1` >> Cases_on `r2` >> Cases_on `r3` >>
-  simp[lift_result_def] >> metis_tac[dse_all_equiv_trans]
+  simp[lift_result_def] >> metis_tac[dse_all_equiv_trans, dse_equiv_trans]
+QED
+
+Theorem lift_result_dse_term_to_all:
+  !space r1 r2.
+    lift_result (dse_equiv space) dse_term_equiv (dse_equiv space) r1 r2 ==>
+    lift_result dse_all_equiv dse_term_equiv dse_all_equiv r1 r2
+Proof
+  Cases_on `r1` >> Cases_on `r2` >>
+  simp[lift_result_def] >> metis_tac[dse_equiv_implies_all]
 QED
 
 Theorem lift_result_dse_equiv_to_all:
@@ -88,6 +99,14 @@ Theorem lift_result_dse_equiv_to_all:
 Proof
   Cases_on `r1` >> Cases_on `r2` >>
   simp[lift_result_def] >> metis_tac[dse_equiv_implies_all]
+QED
+
+Theorem lift_result_dse_equiv_term:
+  !space r1 r2.
+    (!sp. lift_result (dse_equiv sp) (dse_equiv sp) (dse_equiv sp) r1 r2) ==>
+    lift_result (dse_equiv space) dse_term_equiv (dse_equiv space) r1 r2
+Proof
+  Cases_on `r1` >> Cases_on `r2` >> simp[lift_result_def]
 QED
 
 Theorem lift_result_or_error_trans:

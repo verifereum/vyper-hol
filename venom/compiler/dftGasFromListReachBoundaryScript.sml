@@ -1,19 +1,8 @@
 Theory dftGasFromListReachBoundary
 Ancestors
   dftGasFromListReplay dftGasFromListRestore dftGasOracleDefs
-  contextCodegenRel venomExecProofs venomInstProofs venomInstProofs1 gasOracleReplay
+  contextCodegenRel contextCodegenRelProps venomExecProofs venomInstProofs venomInstProofs1 gasOracleReplay
   venomExecSemantics venomInst venomState list arithmetic
-
-Theorem lookup_instruction_active:
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME inst ==>
-  active_inst fn inst s
-Proof
-  simp[get_instruction_def] >> rpt strip_tac >>
-  drule lookup_block_MEM >> strip_tac >>
-  drule lookup_block_label >> strip_tac >>
-  simp[active_inst_def] >> qexists_tac `bb` >> simp[]
-QED
 
 Theorem ev_step_preserves_current_bb:
   ev_step orc p d fuel ctx inst s = OK t /\
