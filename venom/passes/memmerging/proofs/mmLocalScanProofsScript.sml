@@ -11125,6 +11125,115 @@ Proof
   drule_all mm_local_indexed_store_store_captures_compatible >> simp[]
 QED
 
+Theorem mm_local_pending_prefix_source_exclusion[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ q < j /\ j <= r /\ r < LENGTH is /\ r < N /\
+  mm_local_history is H N /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  ((?dj sj lj. (EL j is).inst_opcode = MCOPY /\
+      (EL j is).inst_operands = [Lit dj; Lit sj; Lit lj] /\
+      c = <|cg_dst := w2n dj; cg_src := w2n sj; cg_length := w2n lj;
+             cg_inst_ids := [(EL j is).inst_id]|>) \/
+   (?dj vj srcj. (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dj; Var vj] /\
+      FLOOKUP ss.ss_loads vj = SOME srcj /\
+      c = <|cg_dst := w2n dj; cg_src := srcj; cg_length := 32;
+             cg_inst_ids := [(EL j is).inst_id] ++
+               (case dfg_get_def (dfg_build_function fn0) vj of
+                  NONE => [] | SOME li => [li.inst_id])|>)) /\
+  MEM q (mm_local_pending_indices is
+    (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed r) /\
+  mm_local_write_capture is H N q = SOME (d,bs) ==>
+  c.cg_src+c.cg_length <= d \/ d+LENGTH bs <= c.cg_src \/ c.cg_length = 0 \/ bs = []
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `MEM q (mm_local_pending_indices is
+    (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed j)` by
+    (gvs[mm_local_pending_indices_mem] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `j <= LENGTH is /\ j <= N` by decide_tac >>
+  `?h. MEM h ss.ss_copies /\ MEM (EL q is).inst_id h.cg_inst_ids /\
+    h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length` by
+    (mp_tac (Q.INST [`gs` |->
+       `(scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed`,
+       `n` |-> `j`, `j` |-> `q`] (SPEC_ALL mm_local_canonical_pending_owner)) >>
+     simp[] >> metis_tac[]) >>
+  qpat_x_assum `MEM q (mm_local_pending_indices _ _ r)`
+    (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+  qabbrev_tac `hs = flush_hazards Mem2Mem
+    (invalidate_loads ss (mk_interval c.cg_dst c.cg_length)) c` >>
+  `(scan_inst (dfg_build_function fn0) Mem2Mem ss (EL j is)).ss_flushed = hs.ss_flushed` by
+    (qpat_x_assum `(?dj sj lj. (EL j is).inst_opcode = MCOPY /\ _) \/ _` strip_assume_tac >>
+     gvs[Abbr `hs`, scan_inst_def, scan_bulk_copy_def, scan_store_def,
+       mode_load_opcode_def, mode_copy_opcode_def, operand_lit_val_def,
+       operand_var_name_def, mode_allows_overlap_def]) >>
+  `~copy_overwrites h (copy_src_interval c)` by
+    (rename1 `rep_of_group is g = SOME ((EL owner_r is).inst_id,g)` >>
+     `j < LENGTH is /\ j <= owner_r` by decide_tac >>
+     `hs = flush_hazards Mem2Mem
+       (invalidate_loads ss (mk_interval c.cg_dst c.cg_length)) c` by simp[Abbr `hs`] >>
+     metis_tac[mm_local_indexed_future_hazard]) >>
+  metis_tac[mm_local_capture_source_exclusion, LENGTH_NIL]
+QED
+
+Theorem mm_local_pending_suffix_source_exclusion[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j <= q /\ q < r /\ r < LENGTH is /\ r < N /\
+  mm_local_history is H N /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE q is) /\
+  ((?dj sj lj. (EL j is).inst_opcode = MCOPY /\
+      (EL j is).inst_operands = [Lit dj; Lit sj; Lit lj] /\
+      c = <|cg_dst := w2n dj; cg_src := w2n sj; cg_length := w2n lj;
+             cg_inst_ids := [(EL j is).inst_id]|>) \/
+   (?dj vj srcj. (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dj; Var vj] /\
+      FLOOKUP s0.ss_loads vj = SOME srcj /\
+      c = <|cg_dst := w2n dj; cg_src := srcj; cg_length := 32;
+             cg_inst_ids := [(EL j is).inst_id] ++
+               (case dfg_get_def (dfg_build_function fn0) vj of
+                  NONE => [] | SOME li => [li.inst_id])|>)) /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  ~MEM q (mm_local_pending_indices is
+    (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed r) /\
+  mm_local_write_capture is H N q = SOME (d,bs) ==>
+  c.cg_src+c.cg_length <= d \/ d+LENGTH bs <= c.cg_src \/ c.cg_length = 0 \/ bs = []
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `j < q` by
+    (Cases_on `j = q` >> simp[] >>
+     `MEM j (mm_local_pending_indices is
+       (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed r)` by
+       (pure_rewrite_tac[mm_local_pending_indices_mem] >>
+        conj_tac >- decide_tac >> conj_tac
+        >- (qpat_x_assum `(?dj sj lj. (EL j is).inst_opcode = MCOPY /\ _) \/ _`
+              strip_assume_tac >> simp[]) >>
+        qexistsl [`g`,`r`] >> simp[]) >> metis_tac[]) >>
+  `SUC j <= q` by decide_tac >>
+  `?h. MEM h ss.ss_copies /\ mm_local_copy_ancestor c h /\
+    ~MEM h (scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is)).ss_flushed` by
+    (qpat_x_assum `(?dj sj lj. (EL j is).inst_opcode = MCOPY /\ _) \/ _` strip_assume_tac
+     >- (drule_all mm_local_indexed_bulk_trajectory >> simp[]) >>
+     drule_all mm_local_indexed_store_trajectory >> simp[]) >>
+  `q < N /\ q < LENGTH is` by decide_tac >>
+  `h.cg_length = 0 \/ LENGTH bs = 0 \/
+    h.cg_src+h.cg_length <= d \/ d+LENGTH bs <= h.cg_src` by
+    metis_tac[mm_local_scan_step_war_exclusion] >>
+  `h.cg_src <= c.cg_src /\
+   c.cg_src+c.cg_length <= h.cg_src+h.cg_length` by
+    (qpat_assum `mm_local_copy_ancestor c h` mp_tac >>
+     pure_rewrite_tac[mm_local_copy_ancestor_def] >> strip_tac >> decide_tac) >>
+  Cases_on `LENGTH bs = 0` >- gvs[] >>
+  Cases_on `h.cg_length = 0`
+  >- (`c.cg_length = 0` by simp[] >> simp[]) >>
+  gvs[] >> decide_tac
+QED
+
 Theorem mm_local_collection_discharge[local]:
   mm_local_pending cap js s t /\
   (!pre j mid k post d bs a cs.
