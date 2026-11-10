@@ -1620,7 +1620,7 @@ Finalise spill_alloc_n_offset_props;
    --------------------------------------------------------------- *)
 
 (* The desired permutation indices are all < chunk *)
-Theorem desired_indices_bound[local]:
+Theorem desired_indices_bound:
   !(n:num) k.
     n >= 2 /\
     k < n ==>
@@ -1753,7 +1753,7 @@ Proof
 QED
 
 (* The two DUP restoration schedules visit every temporary slot once. *)
-Theorem dup_restore_indices_reverse[local]:
+Theorem dup_restore_indices_reverse:
   !k. 0 < k ==>
     GENLIST (\i. k - 2 - i) (k - 1) ++ [k - 1] =
     REVERSE (GENLIST I (k - 1)) ++ [k - 1] /\
@@ -1787,7 +1787,7 @@ Proof
        LUPDATE_APPEND1, APPEND_ASSOC, LUPDATE_def]
 QED
 
-Theorem map_el_reverse_indices[local]:
+Theorem map_el_reverse_indices:
   !xs:'a list.
     MAP (\i. EL i xs) (REVERSE (GENLIST I (LENGTH xs))) = REVERSE xs
 Proof
@@ -2632,7 +2632,7 @@ Proof
   CONV_TAC (LHS_CONV fcpLib.INDEX_CONV) >> REFL_TAC
 QED
 
-Theorem raw_spill_push_encode_num_roundtrip[local]:
+Theorem raw_spill_push_encode_num_roundtrip:
   n < dimword(:256) ==>
   word_of_bytes F (0w:bytes32)
     (REVERSE (encode_num_bytes n)) = n2w n
@@ -4677,7 +4677,7 @@ Proof
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem flat_map_singleton[local]:
+Theorem flat_map_singleton:
   !xs (f:'a -> 'b). FLAT (MAP (\x. [f x]) xs) = MAP f xs
 Proof
   Induct >> simp[]
