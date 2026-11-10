@@ -125,36 +125,6 @@ Proof
       imm_taint_def]
 QED
 
-Theorem dload_delegate_extract_shape[local]:
-  extract_venom_result s value ro rz rr = SOME (output,s1) ==>
-  s1 = s with <|vs_returndata := s1.vs_returndata;
-    vs_accounts := s1.vs_accounts; vs_logs := s1.vs_logs;
-    vs_memory := (write_memory_with_expansion ro (TAKE rz s1.vs_returndata) s).vs_memory;
-    vs_transient := s1.vs_transient;
-    vs_pending_deletions := s1.vs_pending_deletions|>
-Proof
-  Cases_on `rr` >> simp[extract_venom_result_def] >>
-  PairCases_on `x` >> simp[] >>
-  Cases_on `x1.contexts` >> simp[] >>
-  Cases_on `h` >> Cases_on `t` >> simp[] >>
-  Cases_on `x0` >> simp[]
-  >- (rpt strip_tac >> gvs[]) >>
-  Cases_on `y` >> simp[] >> rpt strip_tac >> gvs[]
-QED
-
-Theorem dload_delegate_extract_footprint[local]:
-  extract_venom_result s value ro rz rr = SOME (output,s1) ==>
-  s1.vs_allocas = s.vs_allocas /\ s1.vs_alloca_next = s.vs_alloca_next /\
-  s1.vs_fmp = s.vs_fmp /\ s1.vs_params = s.vs_params /\
-  s1.vs_current_bb = s.vs_current_bb /\ s1.vs_prev_bb = s.vs_prev_bb /\
-  s1.vs_inst_idx = s.vs_inst_idx /\ s1.vs_call_ctx = s.vs_call_ctx /\
-  s1.vs_vars = s.vs_vars /\
-  s1.vs_memory = (write_memory_with_expansion ro (TAKE rz s1.vs_returndata) s).vs_memory
-Proof
-  strip_tac >> drule dload_delegate_extract_shape >>
-  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
-QED
-
 Theorem dload_delegate_frame_fields[local]:
   exec_delegatecall i s gas addr ao az ro rz = OK s1 ==>
   s1.vs_allocas = s.vs_allocas /\ s1.vs_alloca_next = s.vs_alloca_next /\
@@ -165,21 +135,13 @@ Theorem dload_delegate_frame_fields[local]:
   s1.vs_memory = (write_memory_with_expansion (w2n ro)
     (TAKE (w2n rz) s1.vs_returndata) s).vs_memory
 Proof
-  simp[exec_delegatecall_def] >>
-  qmatch_goalsub_abbrev_tac `extract_venom_result s 1w _ _ rr` >>
-  Cases_on `extract_venom_result s 1w (w2n ro) (w2n rz) rr` >> simp[] >>
-  PairCases_on `x` >> simp[] >>
-  namedCases_on `i.inst_outputs` ["", "out outs"] >- simp[] >>
-  Cases_on `outs` >> simp[] >> strip_tac >>
-  drule dload_delegate_extract_footprint >> strip_tac >>
-  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> gvs[]
+  simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >>
+  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
 val _ = List.app (fn th => if null (hyp th) then ()
   else raise Fail "delegate footprints: nonempty hypotheses")
-  [dload_delegate_ghosts, dload_delegate_extract_shape,
-   dload_delegate_extract_footprint, dload_delegate_frame_fields];
+  [dload_delegate_ghosts, dload_delegate_frame_fields];
 
 Theorem dload_delegate_memory[local]:
   i.inst_opcode = DELEGATECALL /\
@@ -252,18 +214,11 @@ Theorem dload_delegate_exec_shape[local]:
     vs_memory := (write_memory_with_expansion (w2n ro)
        (TAKE (w2n rz) s1.vs_returndata) s).vs_memory;
     vs_transient := s1.vs_transient;
-    vs_pending_deletions := s1.vs_pending_deletions|>
+    vs_pending_deletions := s1.vs_pending_deletions;
+    vs_outcomes := s1.vs_outcomes; vs_requests := s1.vs_requests|>
 Proof
-  simp[exec_delegatecall_def] >>
-  qmatch_goalsub_abbrev_tac `extract_venom_result s 1w _ _ rr` >>
-  Cases_on `extract_venom_result s 1w (w2n ro) (w2n rz) rr` >> simp[] >>
-  PairCases_on `x` >> simp[] >>
-  namedCases_on `i.inst_outputs` ["", "out outs"] >- simp[] >>
-  Cases_on `outs` >> simp[] >> strip_tac >>
-  qpat_x_assum `update_var out x0 x1 = s1` (SUBST_ALL_TAC o SYM) >>
-  drule dload_delegate_extract_shape >>
-  disch_then (fn th => once_rewrite_tac[th]) >>
-  simp[update_var_def]
+  simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >>
+  gvs[update_var_def, venom_state_component_equality]
 QED
 
 Theorem dload_delegate_exec_backward[local]:

@@ -104,7 +104,7 @@ Theorem send_zero_initial_state_not_inert:
     eval_expr empty_evaluation_context (send_call 0w 0) st <> (INL (Value NoneV),st)
 Proof
   simp (send_monad_simps @ [send_zero_bigstep_after_arguments, eval_send_def, frame_call_value_def, check_def, COND_RATOR, initial_state_def,
-       take_call_outcome_def, call_outcome_request_def, take_outcome_def,
+       take_call_outcome_def, take_request_outcome_def, call_outcome_request_def, take_outcome_def,
        record_request_def, computed_precompile_addresses, failed_outcome_def,
        empty_state_def, UNCURRY])
 QED
@@ -117,7 +117,7 @@ Theorem send_bigstep_failure_whole_state:
        requests := send_state.requests ++
          [call_outcome_request 9w [] (SOME 7) send_state]|>)
 Proof
-  simp (send_monad_simps @ [send_bigstep_after_arguments, eval_send_def, frame_call_value_def, check_def, COND_RATOR, take_call_outcome_def,
+  simp (send_monad_simps @ [send_bigstep_after_arguments, eval_send_def, frame_call_value_def, check_def, COND_RATOR, take_call_outcome_def, take_request_outcome_def,
        call_outcome_request_def, take_outcome_def, record_request_def,
        computed_precompile_addresses, send_outcome_def, cpscv_outcome_def,
        send_state_def, cpscv_state_def, empty_state_def, UNCURRY])
@@ -141,7 +141,7 @@ Theorem send_bigstep_success_whole_state:
         requests := send_state.requests ++
           [call_outcome_request 9w [] (SOME 7) send_state]|>)
 Proof
-  simp (send_monad_simps @ [send_bigstep_after_arguments, eval_send_def, frame_call_value_def, check_def, COND_RATOR, take_call_outcome_def,
+  simp (send_monad_simps @ [send_bigstep_after_arguments, eval_send_def, frame_call_value_def, check_def, COND_RATOR, take_call_outcome_def, take_request_outcome_def,
        call_outcome_request_def, take_outcome_def, record_request_def,
        computed_precompile_addresses, send_outcome_def, cpscv_outcome_def,
        send_state_def, cpscv_state_def, empty_state_def, UNCURRY,

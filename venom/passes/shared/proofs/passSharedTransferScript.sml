@@ -210,8 +210,7 @@ val ok_transfer_finish_tac =
 val transfer_determined_finish_tac =
   qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
   qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
        exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def] >>
   ntac 2 strip_tac >>

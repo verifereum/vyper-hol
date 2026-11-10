@@ -159,7 +159,7 @@ Proof
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, lift_option_type_def,
        check_def, update_accounts_def, update_transient_def, append_logs_def,
-       vyperCallOutcomeTheory.take_call_outcome_def,
+       vyperCallOutcomeTheory.take_call_outcome_def, vyperCallOutcomeTheory.take_request_outcome_def,
        vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()] >> imp_res_tac frame_call_value_state >>
@@ -207,13 +207,30 @@ Proof
       rich_listTheory.IS_PREFIX_REFL]
 QED
 
+Theorem log_monad_take_request[local]:
+  (!st. g st = take_request_outcome (f st) st) ==> log_monad g
+Proof
+  strip_tac >> simp[log_monad_def] >> rpt strip_tac >>
+  `take_request_outcome (f s) s = (r,t)` by metis_tac[] >>
+  drule take_request_outcome_frame >>
+  simp[evaluation_state_component_equality, log_extends_def,
+       rich_listTheory.IS_PREFIX_REFL]
+QED
+
 Theorem log_monad_take[local]:
   log_monad (take_call_outcome target calldata value_opt)
 Proof
-  simp[log_monad_def] >> rpt strip_tac >>
-  drule take_call_outcome_frame >>
-  simp[evaluation_state_component_equality, log_extends_def,
-       rich_listTheory.IS_PREFIX_REFL]
+  irule log_monad_take_request >>
+  qexists_tac `call_outcome_request target calldata value_opt` >>
+  simp[take_call_outcome_def]
+QED
+
+Theorem log_monad_take_delegate[local]:
+  log_monad (take_delegate_outcome target calldata value_opt)
+Proof
+  irule log_monad_take_request >>
+  qexists_tac `delegate_outcome_request target calldata value_opt` >>
+  simp[take_delegate_outcome_def]
 QED
 
 Theorem log_monad_frame_call_value[local]:
@@ -232,7 +249,7 @@ val EXTCALL_LOG_MONAD_LEAF_TAC =
        MATCH_MP_TAC log_monad_bind_guarded >> conj_tac) Net.empty
     val leaves = List.foldl (fn (th,net) =>
       Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
-      (log_monad_take :: log_monad_frame_call_value ::
+      (log_monad_take :: log_monad_take_delegate :: log_monad_frame_call_value ::
        CONJUNCTS log_monad_primitives)
   in
     fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
@@ -297,19 +314,18 @@ Proof
   mp_tac (REWRITE_RULE [log_monad_def] eval_ext_call_log_monad) >> simp[]
 QED
 
+Theorem eval_raw_call_log_monad[local]:
+  log_monad (eval_raw_call cx flags target_addr calldata amount gas)
+Proof
+  simp_tac bool_ss [eval_raw_call_def, LET_THM] >>
+  EXTCALL_LOG_MONAD_TAC
+QED
+
 Theorem eval_raw_call_log_extends:
   eval_raw_call cx flags target_addr calldata amount gas st = (res,st') ==>
   log_extends st st'
 Proof
-  simp[eval_raw_call_def, check_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, lift_option_def, update_accounts_def,
-       update_transient_def, append_logs_def,
-       vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()] >> imp_res_tac frame_call_value_state >>
-  gvs[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+  mp_tac (REWRITE_RULE [log_monad_def] eval_raw_call_log_monad) >> simp[]
 QED
 
 Theorem acquire_nonreentrant_lock_logs[local]:
