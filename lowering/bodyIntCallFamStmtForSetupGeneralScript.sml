@@ -40,7 +40,7 @@ Proof
      qexistsl_tac [`aa`, `n2w sz`, `p`, `s0`] >>
      simp[mk_inst_def] >> metis_tac[]) >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s0` by
-    fs[intcall_joint_res_def] >>
+    fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   drule stmt_state_rel_exec_alloca >>
   disch_then (qspecl_then [`aa`, `p`, `n2w sz`, `s1`] mp_tac) >>
   (impl_tac >- simp[mk_inst_def]) >> simp[mk_inst_def] >> strip_tac >>
@@ -105,7 +105,7 @@ Proof
   `!x. not_fresh_at sa x ==> x <> p` by metis_tac[] >>
   drule_all intcall_for_alloca_start_no_history >> strip_tac >>
   `!op. fp.jc_reserved op ==> op <> Var cv /\ op <> Var ev` by
-    (fs[intcall_joint_res_def] >> metis_tac[]) >>
+    (fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >> metis_tac[]) >>
   `cv <> ev` by fs[ALL_DISTINCT] >>
   drule_all intcall_for_literal_entry >> simp[LET_THM] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_marked_path F _ _ ee 0 (OK cc)` >>

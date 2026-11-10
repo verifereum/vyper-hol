@@ -13,7 +13,7 @@ Theorem intcall_joint_res_update_var:
 Proof
   strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es (update_var x w s)` by
-    (irule stmt_state_rel_update_var >> fs[intcall_joint_res_def]) >>
+    (irule stmt_state_rel_update_var >> fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def]) >>
   `!op. fp.jc_reserved op ==>
      eval_operand op (update_var x w s) = eval_operand op s` by
     (rpt strip_tac >> Cases_on `op` >>
@@ -21,8 +21,8 @@ Proof
      metis_tac[]) >>
   `ce.ce_return_pc = fp.jc_root_ce.ce_return_pc /\
    ce.ce_return_buf = fp.jc_root_ce.ce_return_buf` by
-    fs[intcall_joint_res_def, same_frame_def, compile_env_component_equality] >>
-  fs[intcall_joint_res_def] >>
+    fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def, same_frame_def, compile_env_component_equality] >>
+  fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   fs[allocas_above_def, update_var_def] >>
   rpt conj_tac
   >- metis_tac[]

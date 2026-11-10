@@ -17,32 +17,32 @@ Proof
   strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es t` by
     (irule (cj 1 stmt_state_rel_exec_alloca) >>
-     fs[intcall_joint_res_def] >> metis_tac[]) >>
+     fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >> metis_tac[]) >>
   `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s` by
     (drule_all exec_alloca_frames >> strip_tac >> metis_tac[]) >>
   `t.vs_memory = s.vs_memory /\ s.vs_alloca_next <= t.vs_alloca_next` by
     metis_tac[exec_alloca_memory, exec_alloca_alloca_next_mono] >>
   `allocas_above fp.jc_lo t` by
-    (fs[intcall_joint_res_def] >>
+    (fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
      drule (INST_TYPE [``:'a`` |-> ``:256``] exec_alloca_allocas_above) >>
      disch_then (qspecl_then [`inst`, `n:bytes32`] mp_tac) >>
      simp[result_allocas_above_def]) >>
   `!name b sz. local_region ce es.scopes t name b sz <=>
                local_region ce es.scopes s name b sz` by
     (irule copy_buffer_local_region_frame >>
-     fs[intcall_joint_res_def] >> metis_tac[]) >>
+     fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >> metis_tac[]) >>
   `!op. fp.jc_reserved op ==> eval_operand op t = eval_operand op s` by
     (rpt strip_tac >> irule (INST_TYPE [``:'a`` |-> ``:256``]
        exec_alloca_operand_frame) >>
      goal_assum (drule_at Any) >> simp[] >>
-     fs[intcall_joint_res_def] >> metis_tac[]) >>
+     fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >> metis_tac[]) >>
   `ret_pc_ok ce sa t` by
     (irule ret_pc_ok_frame >> qexistsl_tac [`ce`, `s`, `sa`] >>
-     fs[intcall_joint_res_def]) >>
+     fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def]) >>
   `return_buf_frame fp.jc_rb ce sa t` by
     (irule return_buf_frame_frame >> qexistsl_tac [`ce`, `s`, `sa`] >>
-     fs[intcall_joint_res_def]) >>
-  fs[intcall_joint_res_def] >>
+     fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def]) >>
+  fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   `fp.jc_reserved fp.jc_rpc` by fs[intcall_frame_ok_def] >>
   simp[] >> conj_tac >> first_assum ACCEPT_TAC
 QED
@@ -81,7 +81,7 @@ Proof
      qexistsl_tac [`aa`, `n2w sz`, `p`, `s0`] >>
      simp[mk_inst_def] >> metis_tac[]) >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s0` by
-    fs[intcall_joint_res_def] >>
+    fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   drule stmt_state_rel_exec_alloca >>
   disch_then (qspecl_then [`aa`, `p`, `n2w sz`, `s1`] mp_tac) >>
   (impl_tac >- simp[mk_inst_def]) >> simp[mk_inst_def] >> strip_tac >>

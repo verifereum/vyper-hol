@@ -38,7 +38,7 @@ Proof
    bc.ce_module_vars = ce.ce_module_vars /\
    bc.ce_module = ce.ce_module /\ bc.ce_is_ctor = ce.ce_is_ctor` by
     fs[same_frame_def, compile_env_component_equality] >>
-  fs[intcall_joint_res_def] >>
+  fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   `expr_sim_inv bc fp.jc_cx (extend_local env id fty F)
     (es with scopes :=
       (FEMPTY |+ (id, <|assignable := F; type := tyv;

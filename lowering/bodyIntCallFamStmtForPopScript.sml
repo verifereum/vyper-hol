@@ -18,7 +18,7 @@ Proof
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx
     (es with scopes := rest) s` by
     (irule stmt_state_rel_pop_top_ext >>
-     fs[intcall_joint_res_def] >> goal_assum (drule_at Any) >> simp[]) >>
+     fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >> goal_assum (drule_at Any) >> simp[]) >>
   `!n. lookup_scopes n rest <> NONE ==>
        FLOOKUP ce'.ce_vars n = FLOOKUP ce.ce_vars n` by
     (fs[cenv_top_ext_def] >> metis_tac[]) >>
@@ -27,7 +27,7 @@ Proof
    ce'.ce_module_vars = ce.ce_module_vars /\
    ce'.ce_module = ce.ce_module /\ ce'.ce_is_ctor = ce.ce_is_ctor` by
     fs[cenv_top_ext_def, compile_env_component_equality] >>
-  fs[intcall_joint_res_def] >> simp[] >> rpt conj_tac
+  fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >> simp[] >> rpt conj_tac
   >- (rpt gen_tac >> strip_tac >>
       qpat_x_assum `!n p k. local_region ce' _ _ _ _ _ ==> _` irule >>
       qexists_tac `n` >>

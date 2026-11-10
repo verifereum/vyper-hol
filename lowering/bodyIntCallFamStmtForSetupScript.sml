@@ -76,7 +76,7 @@ Proof
   `!x. not_fresh_at sa x ==> x <> p` by metis_tac[] >>
   drule_all intcall_for_alloca_start >> strip_tac >>
   `!op. fp.jc_reserved op ==> op <> Var cv /\ op <> Var ev` by
-    (fs[intcall_joint_res_def] >> metis_tac[]) >>
+    (fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >> metis_tac[]) >>
   `cv <> ev` by fs[ALL_DISTINCT] >>
   drule_all intcall_for_literal_entry >> simp[LET_THM] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_marked_path F _ _ ee 0 (OK cc)` >>
@@ -96,21 +96,21 @@ Proof
   strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es (s with vs_vars := vs)` by
     (irule stmt_state_rel_vars_frame >>
-     fs[intcall_joint_res_def, local_ptrs_reserved_def] >> metis_tac[]) >>
+     fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def, local_ptrs_reserved_def] >> metis_tac[]) >>
   `!op. fp.jc_reserved op ==>
         eval_operand op (s with vs_vars := vs) = eval_operand op s` by
     (rpt strip_tac >> Cases_on `op` >> simp[eval_operand_def] >>
-     fs[intcall_joint_res_def] >> metis_tac[]) >>
+     fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >> metis_tac[]) >>
   `!name b sz. local_region ce es.scopes (s with vs_vars := vs) name b sz <=>
               local_region ce es.scopes s name b sz` by
-    (irule copy_buffer_local_region_frame >> fs[intcall_joint_res_def] >> metis_tac[]) >>
+    (irule copy_buffer_local_region_frame >> fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >> metis_tac[]) >>
   `ret_pc_ok ce sa (s with vs_vars := vs)` by
     (irule ret_pc_ok_frame >> qexistsl_tac [`ce`, `s`, `sa`] >>
-     fs[intcall_joint_res_def]) >>
+     fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def]) >>
   `return_buf_frame fp.jc_rb ce sa (s with vs_vars := vs)` by
     (irule return_buf_frame_frame >> qexistsl_tac [`ce`, `s`, `sa`] >>
-     fs[intcall_joint_res_def]) >>
-  fs[intcall_joint_res_def, allocas_above_def, intcall_frame_ok_def] >> metis_tac[]
+     fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def]) >>
+  fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def, allocas_above_def, intcall_frame_ok_def] >> metis_tac[]
 QED
 
 Theorem intcall_for_checked_entry:
