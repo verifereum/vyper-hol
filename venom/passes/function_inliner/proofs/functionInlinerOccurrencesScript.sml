@@ -746,3 +746,202 @@ Proof
     metis_tac[dfAnalyzeProofsTheory.lookup_block_exists, fn_labels_def] >>
   metis_tac[inline_edit_raw_clone_invoke_inverse]
 QED
+
+(* Layout positions do not depend on the incoming bookkeeping counter. *)
+Theorem inline_choice_location_counter:
+  inline_choice_location choice loc = SOME dst ==>
+  ?dst'. inline_choice_location choice (loc with il_counter := c) = SOME dst' /\
+    dst'.il_block = dst.il_block /\ dst'.il_phase = dst.il_phase
+Proof
+  Cases_on `choice` >> Cases_on `loc` >>
+  simp[inline_choice_location_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem inline_call_incidence_residual_preimage:
+  !ctx n root cert. inline_annotated_origin ctx n root cert ==>
+  !l k call. inline_fetched_fields root l k (inline_inst_fields call) /\
+    call.inst_opcode = INVOKE ==>
+    ?p fn sl sj orig loc inst.
+      inline_call_incidence cert root p fn sl sj orig (InlineResidual loc inst) /\
+      loc.il_block = l /\ loc.il_phase = InlineAtInstruction k /\
+      inline_inst_fields inst = inline_inst_fields call
+Proof
+  ho_match_mp_tac inline_annotated_origin_strongind >> rpt conj_tac
+  >- (rpt strip_tac >>
+      gvs[functionInlinerSiteLayoutTheory.inline_fetched_fields_def] >>
+      `inst.inst_opcode = INVOKE` by
+        gvs[functionInlinerSiteLayoutTheory.inline_inst_fields_def] >>
+      qexistsl_tac [`[]`,`root`,`l`,`k`,`inst`,
+        `<|il_block := l; il_phase := InlineAtInstruction k; il_counter := 0|>`,
+        `inst`] >> simp[] >> metis_tac[cj 1 inline_call_incidence_rules])
+  >- (rpt strip_tac >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule inline_one_site_edit_exists >> strip_tac >> gvs[] >>
+  drule_all inline_annotated_edit_fetch_facts >> strip_tac >>
+  drule_all inline_edit_invoke_preimage >> strip_tac
+  >- (`?i. loc.il_phase = InlineAtInstruction i` by
+        (Cases_on `loc.il_phase` >>
+         gvs[inline_choice_location_def, AllCaseEqs()]) >>
+      gvs[] >>
+      qpat_x_assum `!l k call. inline_fetched_fields e.ise_caller _ _ _ /\ _ ==> _`
+        drule_all >> strip_tac >>
+      rename1 `inline_call_incidence cert e.ise_caller p fn sl sj orig
+        (InlineResidual src inst)` >>
+      `src = loc with il_counter := src.il_counter` by
+        simp[inline_location_component_equality] >>
+      drule inline_choice_location_counter >>
+      disch_then (qspec_then `src.il_counter` strip_assume_tac) >>
+      gvs[] >> metis_tac[cj 2 inline_call_incidence_rules]) >>
+  `inline_fetched_fields e.ise_callee cl j (inline_inst_fields inst)` by
+    (simp[functionInlinerSiteLayoutTheory.inline_fetched_fields_def] >>
+     metis_tac[]) >>
+  qpat_x_assum `!l k call. inline_fetched_fields e.ise_callee _ _ _ /\ _ ==> _`
+    drule_all >> strip_tac >>
+  rename1 `inline_call_incidence cert' e.ise_callee p fn sl sj orig
+    (InlineResidual src residual)` >>
+  `src = <|il_block := cl; il_phase := InlineAtInstruction j;
+           il_counter := 0|> with il_counter := src.il_counter` by
+    simp[inline_location_component_equality] >>
+  drule inline_choice_location_counter >>
+  disch_then (qspec_then `src.il_counter` strip_assume_tac) >>
+  `inline_inst_fields (clone_instruction e.ise_prefix (fn_labels e.ise_callee) residual) =
+   inline_inst_fields (clone_instruction e.ise_prefix (fn_labels e.ise_callee) inst)` by
+    (irule functionInlinerSiteLayoutTheory.inline_clone_fields_cong >> simp[]) >>
+  gvs[] >> metis_tac[cj 3 inline_call_incidence_rules]
+QED
+
+Theorem inline_keep_cell_injective:
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  MEM a.il_block (fn_labels e.ise_caller) /\
+  MEM b.il_block (fn_labels e.ise_caller) /\
+  a.il_phase = InlineAtInstruction i /\ b.il_phase = InlineAtInstruction j /\
+  inline_choice_location (InlineKeep e) a = SOME x /\
+  inline_choice_location (InlineKeep e) b = SOME y /\
+  x.il_block = y.il_block /\ x.il_phase = y.il_phase ==>
+  a.il_block = b.il_block /\ i = j
+Proof
+  strip_tac >>
+  gvs[inline_choice_location_def, AllCaseEqs()] >> decide_tac
+QED
+
+Theorem inline_enter_cell_injective:
+  a.il_phase = InlineAtInstruction i /\ b.il_phase = InlineAtInstruction j /\
+  inline_choice_location (InlineEnter e) a = SOME x /\
+  inline_choice_location (InlineEnter e) b = SOME y /\
+  x.il_block = y.il_block /\ x.il_phase = y.il_phase ==>
+  a.il_block = b.il_block /\ i = j
+Proof
+  strip_tac >> gvs[inline_choice_location_def, AllCaseEqs()] >>
+  qpat_x_assum `LENGTH _ = LENGTH _` mp_tac >>
+  pure_rewrite_tac[MAP_TAKE] >> strip_tac >>
+  irule inline_rewrite_prefix_injective >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem inline_edit_cell_images_disjoint:
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  (!cl. MEM cl (fn_labels e.ise_callee) ==>
+    ~MEM (STRCAT e.ise_prefix cl) (fn_labels e.ise_caller) /\
+    STRCAT e.ise_prefix cl <> e.ise_return) /\
+  MEM a.il_block (fn_labels e.ise_caller) /\
+  MEM b.il_block (fn_labels e.ise_callee) /\
+  a.il_phase = InlineAtInstruction i /\ b.il_phase = InlineAtInstruction j /\
+  inline_choice_location (InlineKeep e) a = SOME x /\
+  inline_choice_location (InlineEnter e) b = SOME y ==>
+  x.il_block <> y.il_block
+Proof
+  strip_tac >> gvs[inline_choice_location_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+(* Context bookkeeping fields before/after are intentionally unconstrained. *)
+Theorem inline_site_edit_layout_unique:
+  inline_site_edit_valid e /\ inline_site_edit_valid f /\
+  e.ise_state = f.ise_state /\ e.ise_caller = f.ise_caller /\
+  e.ise_callee = f.ise_callee ==>
+  e.ise_prefix = f.ise_prefix /\ e.ise_return = f.ise_return /\
+  e.ise_block = f.ise_block /\ e.ise_index = f.ise_index /\
+  inline_choice_location (InlineKeep e) = inline_choice_location (InlineKeep f) /\
+  inline_choice_location (InlineEnter e) = inline_choice_location (InlineEnter f)
+Proof
+  strip_tac >> gvs[inline_site_edit_valid_def] >>
+  simp[FUN_EQ_THM, inline_choice_location_def]
+QED
+
+Theorem inline_call_incidence_edit_residual:
+  inline_site_edit_valid e /\
+  inline_call_incidence
+    (InlineNamespaceEdit e.ise_state e.ise_caller e.ise_callee a b)
+    e.ise_final p fn l j orig (InlineResidual loc inst) ==>
+  (?q src. p = F::q /\
+    inline_call_incidence a e.ise_caller q fn l j orig (InlineResidual src inst) /\
+    inline_choice_location (InlineKeep e) src = SOME loc) \/
+  (?q src ri. p = T::q /\
+    inline_call_incidence b e.ise_callee q fn l j orig (InlineResidual src ri) /\
+    inst = clone_instruction e.ise_prefix (fn_labels e.ise_callee) ri /\
+    inline_choice_location (InlineEnter e) src = SOME loc)
+Proof
+  strip_tac >>
+  qpat_x_assum `inline_call_incidence _ _ _ _ _ _ _ _` mp_tac >>
+  simp[Once inline_call_incidence_cases] >> rpt strip_tac >>
+  drule_all inline_site_edit_layout_unique >> strip_tac >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem inline_call_incidence_residual_label:
+  inline_call_incidence cert root p fn l j orig (InlineResidual loc inst) /\
+  inline_annotated_origin ctx n root cert ==>
+  MEM loc.il_block (fn_labels root)
+Proof
+  strip_tac >> drule inline_call_incidence_residual_fetch >>
+  disch_then drule >> simp[] >> strip_tac >>
+  gvs[functionInlinerSiteLayoutTheory.inline_fetched_fields_def, fn_labels_def, MEM_MAP] >>
+  metis_tac[venomExecPropsTheory.lookup_block_MEM,
+            venomExecPropsTheory.lookup_block_label]
+QED
+
+Theorem inline_call_incidence_residual_unique:
+  !ctx n root cert. inline_annotated_origin ctx n root cert ==>
+  !p fn l j orig loc inst q gn m k other dst ri.
+    inline_call_incidence cert root p fn l j orig (InlineResidual loc inst) /\
+    inline_call_incidence cert root q gn m k other (InlineResidual dst ri) /\
+    loc.il_block = dst.il_block /\ loc.il_phase = dst.il_phase ==>
+    p = q /\ fn = gn /\ l = m /\ j = k /\ orig = other
+Proof
+  ho_match_mp_tac inline_annotated_origin_strongind >> rpt conj_tac
+  >- (rpt strip_tac >>
+      gvs[Once inline_call_incidence_cases] >>
+      gvs[Once inline_call_incidence_cases] >> metis_tac[optionTheory.SOME_11])
+  >- (rpt strip_tac >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!p fn l j orig loc inst q gn m k other dst ri.
+    inline_call_incidence cert root _ _ _ _ _ _ /\ _ ==> _` (mk_asm "caller_ih") >>
+  qpat_x_assum `!p fn l j orig loc inst q gn m k other dst ri.
+    inline_call_incidence cert' root' _ _ _ _ _ _ /\ _ ==> _` (mk_asm "callee_ih") >>
+  drule inline_one_site_edit_exists >> strip_tac >>
+  qpat_x_assum `e.ise_caller = root` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `e.ise_callee = root'` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `e.ise_state = ist` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `e.ise_final = root''` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `e.ise_state.is_inline_count = n` (SUBST_ALL_TAC o SYM) >>
+  drule_all inline_annotated_edit_fetch_facts >> strip_tac >>
+  qpat_x_assum `inline_call_incidence _ _ p _ _ _ _ _`
+    (mp_then Any mp_tac inline_call_incidence_edit_residual) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `inline_call_incidence _ _ q _ _ _ _ _`
+    (mp_then Any mp_tac inline_call_incidence_edit_residual) >>
+  simp[] >> strip_tac >>
+  imp_res_tac inline_call_incidence_residual_phase >>
+  imp_res_tac inline_call_incidence_residual_label >>
+  gvs[]
+  >- (drule_all inline_keep_cell_injective >> strip_tac >>
+      asm "caller_ih" irule >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[])
+  >- metis_tac[inline_edit_cell_images_disjoint]
+  >- metis_tac[inline_edit_cell_images_disjoint] >>
+  drule_all inline_enter_cell_injective >> strip_tac >>
+  asm "callee_ih" irule >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[]
+QED
