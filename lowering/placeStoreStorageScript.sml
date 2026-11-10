@@ -3750,7 +3750,7 @@ Theorem place_store_copy_shape:
   (slot_copy_body cs, place_store_copy_final cs src dst n tr)
 Proof
   Cases_on `tr` >>
-  simp[contextTheory.compile_word_copy_loop_def, word_scale_def,
+  simp[contextTheory.compile_word_copy_loop_def, contextTheory.compile_word_copy_loop_op_def, contextTheory.compile_word_copy_loop_base_def, word_scale_def,
        contextTheory.compile_ptr_load_def, contextTheory.compile_ptr_store_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_label_def, fresh_var_def, fresh_id_def,
