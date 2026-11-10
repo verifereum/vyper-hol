@@ -10,7 +10,9 @@
 Theory exprSimAbiEncodeArgsUncaptured
 Ancestors
   abiEncodeArgsSim exprSimHypsDefs exprSimWordArgs abiDecoderReentry
-  exprSimAbiGasBridge
+  exprSimAbiGasBridge exprSimExtract32Post stmtSimAugAssignAttr
+  gasOutcome gasSummary gasSummaryCompose gasContext fragGasMode fragGasPath
+  exprSimDefs exprSimSource exprLoweringProps vyperState loweringPosts compileEnv
 
 Theorem abi_args_uncaptured_cons_sim_live:
   expr_sim ctx func ce cx (expr_type e) e es /\
@@ -58,8 +60,120 @@ Theorem abi_args_uncaptured_cons_sim_live:
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\rr ee r. wb_args_exit rr r)
 Proof
-  cheat
+  strip_tac >> drule_all expr_sim_apply >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def])
+      >- suspend "head_normal"
+      >> suspend "head_exit") >>
+  suspend "head_exempt"
 QED
+
+Resume abi_args_uncaptured_cons_sim_live[head_normal]:
+  qpat_x_assum `(\rr ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
+  gnvs[] >>
+  `bind (eval_expr cx e) (read_result cx)
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL v, es_end with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `stmt_state_rel ctx func ce cx (es_end with gas_obs := []) t` by
+    metis_tac[expr_post_state] >>
+  `~t.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  qpat_x_assum `!gs v es1 t. _` (drule_all_then mp_tac) >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def])
+      >- suspend "tail_normal"
+      >> suspend "tail_exit") >>
+  suspend "tail_exempt"
+QED
+Resume abi_args_uncaptured_cons_sim_live[head_exit]:
+  Cases_on `res` >- gvs[expr_exit_def] >>
+  qexists_tac `marks` >> disj1_tac >>
+  simp[gas_summary_at_def] >>
+  qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
+  >- (rewrite_tac[eval_exprs_cons_action] >>
+      irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
+  disj2_tac >> gvs[wb_args_exit_def]
+QED
+Resume abi_args_uncaptured_cons_sim_live[head_exempt]:
+  qexists_tac `marks` >> disj2_tac >>
+  irule_at Any wb_args_head_exempt_cert >> goal_assum (drule_at Any)
+QED
+Resume abi_args_uncaptured_cons_sim_live[tail_normal]:
+  qpat_x_assum `(\rr ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
+  gnvs[] >>
+  qexists_tac `marks ++ marks'` >> disj1_tac >>
+  simp[gas_summary_at_def] >>
+  qexistsl_tac [`INL (v::vs)`, `es_end'`, `OK t'`] >> conj_tac
+  >- (rewrite_tac[eval_exprs_cons_action] >>
+      irule gas_marked_exec_bind_normal >>
+      qpat_assum `gas_marked_exec _ _ _ _ _ (INL v) _ _` (irule_at Any) >>
+      BETA_TAC >>
+      qpat_assum `gas_marked_exec _ _ _ _ _ (INL vs) _ _`
+        (mp_tac o MATCH_MP gas_marked_exec_cons_values) >> simp[]) >>
+  disj1_tac >> simp[] >>
+  conj_tac >- suspend "post" >>
+  metis_tac[abi_args_operand_live]
+QED
+Resume abi_args_uncaptured_cons_sim_live[tail_exit]:
+  Cases_on `res` >- gvs[wb_args_exit_def] >>
+  rename1 `gas_marked_exec _ _ _ _ _ (INR exc) _ _` >>
+  qexists_tac `marks ++ marks'` >> disj1_tac >>
+  simp[gas_summary_at_def] >>
+  qexistsl_tac [`INR exc`, `es_end'`, `r`] >> conj_tac
+  >- (rewrite_tac[eval_exprs_cons_action] >>
+      irule gas_marked_exec_bind_normal >>
+      qpat_assum `gas_marked_exec _ _ _ _ _ (INL v) _ _` (irule_at Any) >>
+      BETA_TAC >> irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
+  disj2_tac >> gvs[wb_args_exit_def]
+QED
+Resume abi_args_uncaptured_cons_sim_live[tail_exempt]:
+  qexists_tac `marks ++ marks'` >> disj2_tac >>
+  irule_at Any wb_args_tail_exempt_cert >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any)
+QED
+Resume abi_args_uncaptured_cons_sim_live[post]:
+  qpat_assum `!gs v es1. _ ==> expr_sim_inv _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  `(~is_word_type (expr_type e) ==>
+    ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+         value_has_type tv v /\ val_wf tv v)` by metis_tac[] >>
+  `expr_val_rel cx (lowered_value_type ce e) v op t` by
+    (irule abi_args_expr_post_lowered_rel >> metis_tac[]) >>
+  `expr_val_at ce cx (lowered_value_type ce e) sa sm
+     (es_end with gas_obs := []) v op t` by
+    (irule abi_args_expr_post_lowered_at >> metis_tac[]) >>
+  `eval_exprs cx args
+     ((es_end with gas_obs := []) with gas_obs :=
+       gas_explicit marks' t.vs_gas_readings) =
+     (INL vs, es_end' with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ (eval_exprs _ _) _ _ _ _ _` mp_tac >>
+     rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  qpat_x_assum `!gs v es1 gs' rr ee. _` (drule_all_then strip_assume_tac) >>
+  `MAP FDOM es.scopes = MAP FDOM (es_end with gas_obs := []).scopes` by
+    (drule (CONV_RULE (DEPTH_CONV ETA_CONV)
+       forced_eval_expr_preserves_scopes_dom) >> simp[]) >>
+  `expr_sim ctx func ce cx (expr_type e) e
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
+    metis_tac[expr_sim_start_gas_obs] >>
+  qsuff_tac `abi_args_post ctx func ce cx
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)
+     sa sb s0 (es_end' with gas_obs := []) (e::args) (op::ops) (v::vs) t'`
+  >- (simp[NoAsms, abi_args_post_def, wb_frame_def, locals_kept_def, popped_kept_def] >>
+      metis_tac[]) >>
+  irule (CONV_RULE (DEPTH_CONV ETA_CONV)
+    abi_args_post_cons_uncaptured_labels) >>
+  simp[ETA_THM, extract32_expr_post_start_gas_obs] >>
+  qexistsl_tac [`env`, `t`] >>
+  simp[extract32_expr_post_start_gas_obs, ci_mono_def] >>
+  gvs[ci_mono_def]
+QED
+Finalise abi_args_uncaptured_cons_sim_live
 
 Theorem abi_args_uncaptured_cons_sim:
   expr_sim ctx func ce cx (expr_type e) e es /\
