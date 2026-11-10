@@ -1073,7 +1073,7 @@ Proof
   metis_tac[aug_place_base_memory_origin]
 QED
 
-Theorem aug_place_supported_storage_kind[local]:
+Theorem aug_place_supported_storage_kind:
   body_inv tops ctx cenv cx /\
   supported_target_info tops bindings t = SOME pt /\
   (!id. target_root t <> NameTarget id) /\
