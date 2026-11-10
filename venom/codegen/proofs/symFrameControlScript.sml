@@ -2940,6 +2940,33 @@ Proof
   metis_tac[listTheory.LIST_REL_REVERSE]
 QED
 
+Theorem assign_output_op_kind:
+  codegen_ready_fn fn /\ fn_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ ~is_label_operand rhs ==>
+  (op_kind_ok fn ret rhs sv <=> op_kind_ok fn ret (Var out) sv)
+Proof
+  strip_tac >>
+  `ssa_form fn` by fs[codegen_ready_fn_def] >>
+  `dfg_get_def (dfg_build_function fn) out = SOME inst` by
+    metis_tac[fnFrameStepsRevertForwardTheory.dfg_build_function_ssa_def,
+              listTheory.MEM] >>
+  drule_all fnFrameStepsRevertForwardTheory.normalize_operand_codegen_assign >>
+  metis_tac[op_kind_ok_normalize_operand]
+QED
+
+Theorem assign_prepared_stack_op_kind:
+  codegen_ready_fn fn /\ fn_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ ~is_label_operand rhs /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (tail ++ [rhs])) top ==>
+  LIST_REL (op_kind_ok fn ret) (REVERSE (stack_push (Var out) tail)) top
+Proof
+  Cases_on `top` >>
+  simp[stackModelTheory.stack_push_def] >>
+  metis_tac[assign_output_op_kind]
+QED
+
 Theorem sym_jmp_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
