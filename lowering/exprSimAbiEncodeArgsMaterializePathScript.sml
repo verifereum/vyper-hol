@@ -784,6 +784,9 @@ Theorem materialize_alloc_semantic_path:
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     w2n w + sz < dimword (:256) /\
     t.vs_memory = s.vs_memory /\ sa.cs_next_id < sb.cs_next_id /\
+    contract_storage t = contract_storage s /\
+    contract_transient t = contract_transient s /\
+    t.vs_labels = s.vs_labels /\ 
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -795,13 +798,17 @@ Theorem materialize_alloc_semantic_path:
 Proof
   strip_tac >> drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   drule_all exprSimAllocTheory.literal_alloc_buffer_run >> strip_tac >>
+  drule_all exprSimAllocTheory.alloc_buffer_storage >> strip_tac >>
+  drule_all exprSimAllocTheory.hash_alloc_buffer_labels >> strip_tac >>
   drule_all materialize_alloc_run_path >> strip_tac >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH sb.cs_current_insts`, `w`] >>
   simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx,
        venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
-       local_region_def] >>
+       local_region_def, venomStateTheory.contract_storage_def,
+       venomStateTheory.contract_transient_def] >>
   gvs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
-      local_region_def] >> metis_tac[]
+      local_region_def, venomStateTheory.contract_storage_def,
+      venomStateTheory.contract_transient_def] >> metis_tac[]
 QED
 
 Theorem materialize_zero_slot_prefixes:
@@ -1826,4 +1833,128 @@ Proof
   qexists_tac `t` >>
   gvs[exprSimStorageCopyTheory.copy_prefix_def] >>
   metis_tac[exprSimStorageCopyTheory.copy_static_fields]
+QED
+
+Theorem materialize_unwrap_storage_owned_path:
+  unwrap_value ce (LocatedValue ty src) sm = (op,su) /\
+  ~is_word_type ty /\
+  (src.ptr_location = LocStorage \/ src.ptr_location = LocTransient) /\
+  local_ptrs_reserved ce sm /\ sa.cs_next_id <= sm.cs_next_id /\
+  read_result cx tvv es' = (INL v,es') /\
+  vv_post ctx func ce cx e es sa sm s0 es' tvv (LocatedValue ty src) r /\
+  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand (LocatedValue ty src) = Var x ==> not_fresh_at sm x) /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+         ~is_word_type (post_value_type ce e) ==>
+         type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+         type_memory_size tvt < 2 ** 64) /\
+  not_fresh_at sm p /\ lookup_var p r = SOME w /\
+  FLOOKUP r.vs_allocas aid = SOME (w2n w,sz) /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func r 0 (OK u) /\
+      expr_post ctx func ce cx e es'
+        (sa with cs_next_var := sm.cs_next_var) su r es' v op u /\
+      lookup_var p u = SOME w /\
+      FLOOKUP u.vs_allocas aid = SOME (w2n w,sz) /\
+      ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
+      u.vs_inst_idx = LENGTH su.cs_current_insts
+Proof
+  strip_tac >>
+  `ty = post_value_type ce e /\
+   ?a tv. eval_operand src.ptr_operand r = SOME a /\
+     storage_holds cx (src.ptr_location = LocTransient) ty (Value v) a es' r /\
+     evaluate_type (get_tenv cx) ty = SOME tv /\
+     type_memory_bytes ce ty = type_memory_size tv /\
+     type_memory_size tv < 2 ** 64` by
+    (gvs[vv_post_def, vv_holds_def] >>
+     Cases_on `src.ptr_location` >>
+     gvs[storage_holds_def, vyperStateTheory.read_result_def, vyperStateTheory.return_def] >> metis_tac[]) >>
+  `?buf mid result.
+    compile_alloc_buffer (type_memory_bytes ce ty) sm = (buf,mid) /\
+    (if (type_memory_bytes ce ty + 31) DIV 32 = 1 then
+       do value <- emit_op (if src.ptr_location = LocStorage then SLOAD else TLOAD)
+                     [src.ptr_operand];
+          emit_void MSTORE [buf.buf_operand; value] od
+     else do compile_word_copy_loop src.ptr_operand buf.buf_operand
+          ((type_memory_bytes ce ty + 31) DIV 32) src.ptr_location LocMemory F;
+          return () od) mid = (result,su) /\
+    op = buf.buf_operand` by
+    (qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
+     Cases_on `src.ptr_location = LocStorage` >>
+     gvs[exprLoweringTheory.unwrap_value_def, contextTheory.compile_ensure_in_memory_def,
+         contextTheory.compile_storage_to_memory_def,
+         contextTheory.compile_transient_to_memory_def,
+         comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+     metis_tac[]) >>
+  `cs_extends sm mid /\ sm.cs_next_var <= mid.cs_next_var` by
+    (drule loweringHaltTheory.compile_alloc_buffer_emission >> strip_tac >>
+     simp[] >> metis_tac[compileEnvTheory.cs_extends_trans]) >>
+  `cs_extends mid su` by
+    (Cases_on `(type_memory_bytes ce ty + 31) DIV 32 = 1`
+     >- (gnvs[] >> drule materialize_storage_suffix_straight >>
+         (impl_tac >- (Cases_on `src.ptr_location = LocStorage` >> gvs[])) >>
+         gvs[dec_straight_def] >>
+         metis_tac[abiEncoderChildContextTheory.abi_encoder_straight_extends]) >>
+     qpat_x_assum `(if _ then _ else _) mid = _` mp_tac >>
+     simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     pairarg_tac >> strip_tac >> gvs[] >>
+     mp_tac (Q.SPECL [`src.ptr_operand`, `buf.buf_operand`,
+       `(type_memory_size tv + 31) DIV 32`, `src.ptr_location`,
+       `LocMemory`, `F`, `mid`]
+       exprLoweringPropsTheory.ci_mono_compile_word_copy_loop) >>
+     gvs[exprLoweringPropsTheory.ci_mono_def]) >>
+  `fn_has_code sm mid func /\ fn_has_code mid su func` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  `stmt_state_rel ctx func ce cx es' r` by gvs[vv_post_def] >>
+  `type_memory_bytes ce ty < dimword (:256)` by
+    (gvs[wordsTheory.dimword_def]) >>
+  drule_all materialize_alloc_semantic_path >> strip_tac >>
+  `storage_holds cx (src.ptr_location = LocTransient) ty (Value v) a es' t` by
+    gvs[storage_holds_def] >>
+  `eval_operand src.ptr_operand t = SOME a` by
+    (Cases_on `src.ptr_operand` >>
+     gvs[vv_operand_def, venomStateTheory.eval_operand_def]) >>
+  `!x. src.ptr_operand = Var x \/ buf.buf_operand = Var x ==>
+       not_fresh_at mid x` by
+    (simp[vv_operand_def] >> rpt strip_tac >> gvs[] >>
+     qpat_x_assum `!x. vv_operand _ = Var x ==> _` mp_tac >>
+     simp[vv_operand_def, not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `?z. gas_marked_path F ctx func t 0 (OK z) /\
+    z.vs_current_bb = su.cs_current_bb /\
+    z.vs_inst_idx = LENGTH su.cs_current_insts /\ ~z.vs_halted /\
+    copy_static z = copy_static t /\
+    (!x. not_fresh_at mid x ==> lookup_var x z = lookup_var x t) /\
+    LENGTH t.vs_memory <= LENGTH z.vs_memory /\
+    (!off len. off + len <= w2n w' \/ w2n w' + type_memory_size tv <= off ==>
+       mem_bytes_at off len z.vs_memory = mem_bytes_at off len t.vs_memory) /\
+    val_wf tv v /\ val_in_memory tv v (w2n w') z.vs_memory /\
+    val_footprint tv v <= type_memory_size tv /\
+    eval_operand buf.buf_operand z = SOME w'` by
+    (irule materialize_storage_suffix_owned_path >> simp[] >>
+     qexistsl_tac [`a`, `ce`, `cx`, `es'`, `src.ptr_location`,
+                   `src.ptr_operand`, `ty`] >> simp[] >>
+     qpat_x_assum `(if _ then _ else _) mid = _` mp_tac >>
+     Cases_on `result` >> gvs[wordsTheory.dimword_def] >> metis_tac[]) >>
+  `wb_frame ce es' es' (sa with cs_next_var := sm.cs_next_var) r t` by
+    (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
+     qexistsl_tac [`sm`, `r`] >>
+     simp[exprSimWordArgsTheory.wb_frame_refl] >> metis_tac[]) >>
+  `!name b len. local_region ce es'.scopes r name b len ==>
+     regions_disjoint (w2n w') (type_memory_bytes ce ty) b len` by
+    (drule_all exprSimCopyTheory.copy_buffer_local_region_frame >>
+     metis_tac[]) >>
+  `local_ptrs_reserved ce mid` by
+    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  `MEM (mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes ce ty))]
+       [STRING #"%" (toString sm.cs_next_var)]) (fn_insts func)` by
+    metis_tac[exprSimAllocTheory.buffer_alloc_code] >>
+  `allocas_non_overlapping t` by
+    gvs[exprLoweringPropsTheory.stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+  `mid.cs_next_id <= su.cs_next_id` by
+    (drule_at (Pos last) exprSimCopyTheory.storage_copy_suffix_ci_mono >>
+     simp[exprLoweringPropsTheory.ci_mono_def]) >>
+  cheat
 QED
