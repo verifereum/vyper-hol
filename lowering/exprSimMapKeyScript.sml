@@ -1,6 +1,7 @@
 (* Mapping-key representation and pure hashing boundaries. *)
 Theory exprSimMapKey
 Ancestors
+  exprSimHashBoundary
   exprSimHash exprSimLeaves valueEncodingProofs exprLoweringProps
   vyperTypeSystem vyperValue vyperTyping vyperStorage valueEncoding valueEncodingDefs
   vyperInterpreter vyperState list rich_list compileEnv loweringStateRelDefs loweringPosts context venomState
@@ -754,7 +755,7 @@ Theorem compile_mapping_subscript_frame:
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (hashmap_slot w0 w1) /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t
 Proof
   strip_tac >> drule_all mapping_alloca_code >> strip_tac >>
   drule_all compile_mapping_subscript_run >> strip_tac >>
@@ -778,7 +779,7 @@ Theorem compile_hashmap_tail_run:
   fn_has_code sp sb func ==>
   ?u. run_inst_seq (emitted_insts sn sb) s = OK u /\
     eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-    stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv en sn s u
+    stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv en en sn s u
 Proof
   strip_tac >>
   `stmt_state_rel ctx func cenv cx en s` by
@@ -794,8 +795,18 @@ Proof
          simp[]) >>
      gvs[] >> qexists_tac `s` >>
      simp[emitted_insts_def, run_inst_seq_def] >>
+     `post_value_type cenv e = expr_type e` by
+       (irule loweringPostsTheory.post_value_type_word >>
+        Cases_on `expr_type e` >> gvs[hashmap_key_type_def, is_word_type_def] >>
+        rename1 `BaseT bt` >> Cases_on `bt` >>
+        gvs[hashmap_key_type_def, is_word_type_def, is_bytestring_type_def] >>
+        rename1 `BytesT bd` >> Cases_on `bd` >>
+        gvs[is_bytestring_type_def, is_word_type_def, evaluate_type_def,
+            AllCaseEqs()]) >>
      irule expr_val_rel_hashmap_scalar >> simp[] >>
-     qexistsl_tac [`cx`, `tv`] >> gvs[loweringPostsTheory.expr_post_def]) >>
+     qexistsl_tac [`cx`, `tv`] >>
+     qpat_x_assum `post_value_type _ _ = _`
+       (fn th => fs[loweringPostsTheory.expr_post_def, th])) >>
   `sn.cs_next_var <= sp.cs_next_var /\ sn.cs_next_id <= sp.cs_next_id /\
    sp.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sp /\
    (!x. hashed = Var x ==> not_fresh_at sp x)` by
@@ -820,7 +831,7 @@ Proof
     (qpat_assum `run_inst_seq (emitted_insts sn sp) s = OK t`
        (mp_then (Pat `run_inst_seq _ _ = OK _`) mp_tac run_inst_seq_chain) >>
      disch_then (qspec_then `sb` mp_tac) >> simp[]) >>
-  `wb_frame cenv en sn s t` by
+  `wb_frame cenv en en sn s t` by
     (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
      qexistsl_tac [`sn`, `s`] >>
      gvs[exprSimWordArgsTheory.wb_frame_refl] >>
@@ -830,7 +841,7 @@ Proof
   qexists_tac `u` >> simp[] >>
   irule exprSimWordArgsTheory.wb_frame_trans >>
   goal_assum (drule_at Any) >> simp[] >>
-  conj_tac >- (qexistsl_tac [`en`, `sp`, `t`] >> simp[]) >>
+  reverse conj_tac >- (qexistsl_tac [`en`, `sp`, `t`] >> simp[]) >>
   goal_assum (drule_at Any)
 QED
 
@@ -874,7 +885,7 @@ Theorem compile_hashmap_tail_frag:
     (\s. expr_post ctx func cenv cx e es sa sn s0 en kv key s /\
          eval_operand base_op s = SOME base_slot)
     (\u. eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-         stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv es sa s0 u) R
+         stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv es en sa s0 u) R
 Proof
   strip_tac >> drule_all compile_hashmap_tail_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -882,13 +893,13 @@ Proof
   irule hash_run_frag >> simp[] >> rpt strip_tac >>
   drule_all compile_hashmap_tail_run >> strip_tac >>
   qexists_tac `u` >> simp[stmt_state_rel_inst_idx] >>
-  `wb_frame cenv es sa s0 s` by
+  `wb_frame cenv es en sa s0 s` by
     (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es en sa s0 u` by
     (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl_tac [`en`, `sn`, `s`] >> simp[]) >>
+     reverse conj_tac >- (qexistsl_tac [`en`, `sn`, `s`] >> simp[]) >>
      goal_assum (drule_at Any)) >>
-  qpat_x_assum `wb_frame cenv es sa s0 u` mp_tac >>
+  qpat_x_assum `wb_frame cenv es en sa s0 u` mp_tac >>
   simp[loweringPostsTheory.wb_frame_def, lookup_var_def] >>
   strip_tac >> first_assum ACCEPT_TAC
 QED
@@ -939,7 +950,7 @@ Theorem compile_mapping_index_success_tail:
   t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
   ?u. gas_marked_path F ctx func t 0 (OK u) /\
       eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-      stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv em sm s1 u /\
+      stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv em en sm s1 u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -956,16 +967,16 @@ Proof
   `gas_marked_path F ctx func t 0
      (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (drule_all compile_hashmap_tail_zero_path >> simp[]) >>
-  `wb_frame cenv em sm s1 t` by
+  `wb_frame cenv em en sm s1 t` by
     (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
-  `wb_frame cenv em sm s1 u` by
+  `wb_frame cenv em en sm s1 u` by
     (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl_tac [`en`, `sn`, `t`] >> simp[]) >>
+     reverse conj_tac >- (qexistsl_tac [`en`, `sn`, `t`] >> simp[]) >>
      goal_assum (drule_at Any)) >>
   qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[stmt_state_rel_inst_idx] >>
   conj_tac
-  >- (qpat_x_assum `wb_frame cenv em sm s1 u` mp_tac >>
+  >- (qpat_x_assum `wb_frame cenv em en sm s1 u` mp_tac >>
       simp[loweringPostsTheory.wb_frame_def, lookup_var_def] >>
       strip_tac >> first_assum ACCEPT_TAC) >>
   drule_all compile_hashmap_tail_shape >> strip_tac >>

@@ -278,7 +278,8 @@ Proof
   rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
   qpat_x_assum `storage_subregion _ _ _ _` mp_tac >>
   simp_tac (srw_ss()) [Once vyperStoragePlaceRegionTheory.storage_subregion_def] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >> gvs[] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  full_simp_tac bool_ss [arithmeticTheory.ADD_CLAUSES] >>
   drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac
   >- (`Num i * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
         (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
@@ -460,13 +461,15 @@ Proof
               assert_def, return_def, raise_def, AllCaseEqs()] >>
           imp_res_tac vyperStatePreservationTheory.next_gas_reading_state >>
           Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def])
+      >> Cases_on `blt = Bop In \/ blt = Bop NotIn`
       >> gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
              assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
+             lift_option_type_def, vyperMiscTheory.option_CASE_rator,
              AllCaseEqs()] >>
       gvs[vyperMiscTheory.sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
       imp_res_tac aug_place_precompile_storage >>
       gvs[return_def, raise_def] >>
-      first_x_assum (drule_then assume_tac) >> simp[])
+      metis_tac[])
   >~ [`eval_expr cx (TypeBuiltin ty blt target es) s = (r,s')`]
   >- (gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
           assert_def, return_def, raise_def, lift_sum_def, AllCaseEqs()] >>
@@ -1509,11 +1512,11 @@ Theorem aug_place_storage_binop_admissible[local]:
   expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur v ee)
 Proof
   rewrite_tac[aug_place_storage_suffix_assoc] >> strip_tac >>
-  `bop_result cx ty bop [ty;expr_type e] cur v ee =
-     case evaluate_binop
+  `expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur v ee) <=>
+   expr_res_ok (case evaluate_binop
        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-       tv bop cur v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+       tv bop cur v of INL w => INL w | INR err => INR (Error err))` by
+    (irule bop_result_augassign_res_ok >> simp[]) >>
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
     tv bop cur v` >- simp[expr_res_ok_def] >>
@@ -1584,7 +1587,8 @@ Proof
    case evaluate_binop
      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
      tv bop cur v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   qpat_x_assum `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[exprBopSimDefsTheory.binop_frag_def,
               exprBopSimDefsTheory.binop_frag_words_def] >>
@@ -1814,9 +1818,11 @@ Resume aug_place_storage_suffix_outcome_nofresh[normal]:
     metis_tac[local_ptrs_reserved_next_var] >>
   `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
     fs[expr_post_def] >>
+  `is_word_type (expr_type e)` by metis_tac[word_value_type_word] >>
+  `post_value_type cenv e = expr_type e` by simp[] >>
   `eval_operand rhs_op t = SOME (val_to_w256 v)` by
     (fs[expr_post_def, expr_val_rel_def, typed_val_to_w256_word_value] >>
-     metis_tac[word_value_type_word]) >>
+     metis_tac[]) >>
   `is_word_type (expr_type e)` by metis_tac[word_value_type_word] >>
   drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
   `expr_sim_inv cenv cx env (es_end with gas_obs := [])` by
@@ -2254,7 +2260,7 @@ Proof
     metis_tac[aug_place_supported_stmt_target_info] >>
   `target_post ctx func cenv cx start sa sp s0 mid pv (Type ty) ptrout t` by
     (qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[Abbr `start`, target_post_def, locals_kept_def] >>
+     simp[Abbr `start`, target_post_def, locals_kept_def, popped_kept_def] >>
      strip_tac >> metis_tac[]) >>
   drule_all aug_place_storage_target_ready >> strip_tac >>
   qpat_x_assum `pv = _` SUBST_ALL_TAC >>

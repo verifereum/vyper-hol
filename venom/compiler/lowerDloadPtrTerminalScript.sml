@@ -4,7 +4,7 @@ Ancestors
   lowerDloadPtrRel o1ContractLowerDload lowerDloadPtrCopy lowerDloadPtrRawReachable
   lowerDloadDefs venomInst list rich_list unitShapeDefs lowerDloadPtrStatic
   lowerDloadPtrAggregate lowerDloadPtrPhi lowerDloadPtrCall venomState ptrDiscipline
-  venomExecSemantics o1PassContract venomWf contextCodegenRel lowerDloadPtrOrdinary
+  venomExecSemantics o1PassContract venomWf contextCodegenRel contextCodegenRelProps lowerDloadPtrOrdinary
   lowerDloadPtrBlockEntry finite_map pred_set memLocDefs codegenRel pointerConfinedDefs venomFnScheduleRunner
   lowerDloadPtrSupport stepWriteFootprintBase
 
