@@ -4898,6 +4898,106 @@ QED
 
 Finalise sym_rf_entry_forward_abort
 
+Theorem sym_jmp_suffix_frame_sim:
+  !p env ctx cp fn ret srest labs0 ps cs ss l pc.
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc [AsmPushLabel l; AsmOp "JUMP"] /\
+  sym_jump_dest p (Lab l 0) = SOME pc ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p 2 cs = AsmOK cs' /\
+    sym_steps p env 2 ss = SymOK ss' /\
+    sym_frame_inv p env ctx cp fn ret srest labs0 ps cs' ss' /\
+    cs'.as_pc = pc
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ss.sym_base.as_pc = cs.as_pc` by
+    metis_tac[sym_frame_inv_def, asm_sym_rel_pc] >>
+  `sym_steps p env 2 ss = SymOK (ss with sym_base := ss.sym_base with as_pc := pc)` by
+    (irule sym_jmp_suffix >> metis_tac[]) >>
+  drule_all_then strip_assume_tac (cj 1 (iffLR sym_frame_inv_def)) >>
+  drule_all_then strip_assume_tac asm_sym_steps_lockstep >>
+  qexistsl [`cs'`, `ss with sym_base := ss.sym_base with as_pc := pc`] >>
+  gvs[sym_frame_inv_def, sym_kinds_ok_def] >>
+  drule_then mp_tac asm_sym_rel_pc >> simp[]
+QED
+
+Theorem sym_jmp_plan_decompose:
+  inst.inst_opcode = JMP /\ inst.inst_operands = [Label target] /\
+  inst.inst_outputs = [] /\
+  lookup_block target fn.fn_blocks = SOME target_bb /\
+  targets = MAP Var (input_vars_from lbl target_bb.bb_instructions
+                       (live_vars_at lv target 0)) /\
+  generate_inst_plan lv dfg cfg fn inst nl ih nit lbl ps = SOME (ops, qs) ==>
+  ?rops prepared sops arranged.
+    restore_spilled_plan targets ps = (rops, prepared) /\
+    reorder_plan dfg targets prepared = (sops, arranged) /\
+    ops = rops ++ sops ++ [SOPushLabel target; SOEmit "JUMP"] /\
+    qs = release_dead_spills nl arranged
+Proof
+  strip_tac >>
+  gvs[genFrameSimTheory.generate_inst_plan_jmp,
+      generate_regular_inst_plan_def, compute_operands_def,
+      asmIRTheory.get_non_label_operands_def, venomEffectsTheory.is_commutative_def,
+      asmIRTheory.venom_to_evm_name_def, generate_emit_ops_def, stackModelTheory.stack_pop_def,
+      join_target_ops_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED
+
+Theorem sym_jmp_plan_frame_sim:
+  !base.
+  generated_plan_state_wf_marked base ps /\
+  pending_inventory_wf pending ps /\
+  restore_spilled_plan pending ps = (rops, prepared) /\
+  reorder_plan dfg pending prepared = (sops, arranged) /\
+  ops = rops ++ sops ++ [SOPushLabel target; SOEmit "JUMP"] /\
+  qs = release_dead_spills nl arranged /\
+  (!off. MEM (SORestore off) rops ==> off < dimword(:256)) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) pending /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
+  qs.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\ MEM (AsmLabel target) p /\
+  FLOOKUP (SND (compute_label_offsets p)) target = SOME off /\
+  FLOOKUP (build_offset_to_pc p) off = SOME pc /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp ops) ==>
+  ?ac sy.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp ops)) cs = AsmOK ac /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK sy /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 qs ac sy /\
+    ac.as_pc = pc
+Proof
+  gen_tac >> strip_tac >>
+  `sym_jump_dest p (Lab target 0) = SOME pc` by
+    (irule sym_code_label_dest >> metis_tac[]) >>
+  `execute_plan initial_fmp [SOPushLabel target; SOEmit "JUMP"] =
+   [AsmPushLabel target; AsmOp "JUMP"]` by
+    simp[execute_plan_def, exec_stack_op_def] >>
+  gvs[allocMonoTheory.release_dead_spills_spill_base,
+      allocMonoTheory.release_dead_spills_next_offset,
+      stackOpSimTheory.execute_plan_append,
+      stackOpSimTheory.asm_block_at_append, listTheory.EVERY_APPEND] >>
+  `asm_block_at p cs.as_pc (execute_plan initial_fmp (rops ++ sops))` by
+    simp[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  drule_all_then strip_assume_tac (SRULE []
+    (Q.INST [`dfg` |-> `dfg_build_function fn`] sym_jmp_prepare_frame_sim)) >>
+  `asm_block_at p cs'.as_pc [AsmPushLabel target; AsmOp "JUMP"]` by
+    (simp[stackOpSimTheory.execute_plan_append] >>
+     metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
+  drule_all_then strip_assume_tac sym_jmp_suffix_frame_sim >>
+  drule_then assume_tac sym_frame_inv_release_dead_spills >>
+  qexistsl [`cs''`, `ss''`] >>
+  gvs[stackOpSimTheory.execute_plan_append] >>
+  pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
+  pure_once_rewrite_tac[stackOpSimTheory.asm_steps_add, sym_steps_add] >> simp[]
+QED
+
 Theorem sym_jmp_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
@@ -4955,7 +5055,16 @@ Theorem sym_jmp_frame_sim_deep:
         sym_steps prog env n ss = SymOK ss' /\
         sym_frame_inv prog env ctx cp fn ret srest labs0 ps' as' ss'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  drule_all_then strip_assume_tac gen_jmp_frame_sim_deep_exact >>
+  drule_all_then strip_assume_tac sym_jmp_plan_decompose >>
+  `ssa_form fn` by fs[codegen_ready_fn_def] >>
+  gvs[] >>
+  drule_all_then strip_assume_tac (SRULE []
+    (Q.INST [`dfg` |-> `dfg_build_function fn`,
+             `ops` |-> `rops ++ sops ++ [SOPushLabel target; SOEmit "JUMP"]`,
+             `qs` |-> `release_dead_spills nl arranged`] sym_jmp_plan_frame_sim)) >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem sym_jnz_frame_sim_deep:
