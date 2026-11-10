@@ -2502,6 +2502,106 @@ Proof
        asm_revert_op_def, sym_lift_def, sym_terminal_def]
 QED
 
+Theorem sym_step_concrete_clears_written_labels:
+  ss.sym_stack = MAP Val args ++ tail /\ LENGTH args = asm_op_arity name /\
+  ~mem_labels_hit ss.sym_mem_labels (asm_op_mem_reads name args) /\
+  sym_step_concrete name ss = SymOK ss' ==>
+  ss'.sym_mem_labels =
+    mem_labels_clear ss.sym_mem_labels (asm_op_mem_writes name args)
+Proof
+  strip_tac >> drule_all sym_step_concrete_word_prefix >>
+  Cases_on `asm_step_op FEMPTY name (ss.sym_base with as_stack := args)` >>
+  simp[sym_lift_def] >> strip_tac >> gvs[]
+QED
+
+Theorem sym_returndatacopy_clears_range:
+  ss.sym_stack = Val dst :: Val src :: Val sz :: tail /\
+  sym_step p env (AsmOp "RETURNDATACOPY") ss = SymOK ss' ==>
+  ~mem_labels_hit ss'.sym_mem_labels (in_mem_range (w2n dst) (w2n sz))
+Proof
+  strip_tac >>
+  `ss'.sym_mem_labels = mem_labels_clear ss.sym_mem_labels
+      (asm_op_mem_writes "RETURNDATACOPY" [dst;src;sz])` by
+    (irule sym_step_concrete_clears_written_labels >>
+     gvs[sym_step_def, sym_terminal_opcode_concrete, asm_op_arity_def,
+         asm_op_arity_table_def, asm_op_mem_reads_def, asmSemTheory.log_table_def,
+         asm_op_mem_writes_def, mem_labels_hit_def]) >>
+  simp[asm_op_mem_writes_def, mem_labels_clear_read_safe]
+QED
+
+Theorem asm_sym_step_rel_ok:
+  asm_sym_step_rel p env sr (AsmOK cs') /\ (!e. sr <> SymBad e) ==>
+  ?ss'. sr = SymOK ss' /\ asm_sym_rel p env cs' ss'
+Proof
+  Cases_on `sr` >> simp[asm_sym_step_rel_def]
+QED
+
+Theorem sym_ok_step_transfer:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  asm_block_at p cs.as_pc [inst] /\
+  asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p) inst cs = AsmOK cs' /\
+  (!e. sym_step p env inst ss <> SymBad e) ==>
+  ?ss'. sym_step p env inst ss = SymOK ss' /\ asm_sym_rel p env cs' ss'
+Proof
+  strip_tac >>
+  `cs.as_pc < LENGTH p /\ EL cs.as_pc p = inst` by fs[asm_block_at_def] >>
+  drule_all asm_sym_step >> simp[] >> metis_tac[asm_sym_step_rel_ok]
+QED
+
+Theorem sym_returndatacopy_success_transfer:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  asm_block_at p cs.as_pc [AsmOp "RETURNDATACOPY"] /\
+  ss.sym_stack = Val dst :: Val src :: Val sz :: tail /\
+  asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
+    (AsmOp "RETURNDATACOPY") cs = AsmOK cs' ==>
+  ?ss'. sym_step p env (AsmOp "RETURNDATACOPY") ss = SymOK ss' /\
+        asm_sym_rel p env cs' ss' /\
+        ~mem_labels_hit ss'.sym_mem_labels (in_mem_range (w2n dst) (w2n sz))
+Proof
+  strip_tac >>
+  `!e. sym_step p env (AsmOp "RETURNDATACOPY") ss <> SymBad e` by
+    (irule sym_terminal_opcode_safe >> simp[] >>
+     qexistsl [`[dst;src;sz]`, `tail`] >>
+     simp[asm_op_arity_def, asm_op_arity_table_def, asm_op_mem_reads_def,
+          asmSemTheory.log_table_def, mem_labels_hit_def]) >>
+  drule_all sym_ok_step_transfer >> strip_tac >>
+  metis_tac[sym_returndatacopy_clears_range]
+QED
+
+(* Diagnostic: the spill-free prefix contract needs no spill kinds or budget. *)
+Theorem sym_rf_stack_only_interface_probe[local]:
+  !ops lo ps ss top srest fn ret cp p fmp env.
+  EVERY is_simple_stack_op ops /\
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cp fn ret srest
+      (apply_prefix_ops fmp lo ops (ps with ps_spilled := FEMPTY)) ss' /\
+    (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cplan b` >>
+  `sym_kinds_ok cplan fn ret srest (ps with ps_spilled := FEMPTY) ss` by
+    (simp[sym_kinds_ok_def] >> metis_tac[]) >>
+  `prefix_spill_wf fmp lo ops (ps with ps_spilled := FEMPTY)` by
+    metis_tac[genBlockSimTheory.simple_prefix_spill_wf] >>
+  `!op. is_simple_stack_op op ==> is_prefix_op op /\
+     (!l d. op <> SOPushOfst l d) /\ (!off. op <> SOSpill off)` by
+    (Cases >> simp[strongPrefixSimTheory.is_simple_stack_op_def,
+                  prefixSimTheory.is_prefix_op_def] >>
+     Cases_on `o'` >> simp[strongPrefixSimTheory.is_simple_stack_op_def]) >>
+  `EVERY is_prefix_op ops /\ EVERY (\op. !l d. op <> SOPushOfst l d) ops /\
+   (!off. ~MEM (SOSpill off) ops)` by
+    (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `prefix_wf lo (LENGTH (ps with ps_spilled := FEMPTY).ps_stack) ops` by simp[] >>
+  `!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+     (\b:num. F) b /\ context_spill_byte cplan b` by simp[] >>
+  drule_all (Q.INST [`R` |-> `\b:num. F`] (SPEC_ALL sym_prefix_ops_sim)) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem sym_jmp_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
