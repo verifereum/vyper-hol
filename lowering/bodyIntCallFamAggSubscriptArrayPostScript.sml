@@ -102,13 +102,30 @@ Theorem intcall_array_element_summary:
   gas_marked_path F fp.jc_ctx fp.jc_func s 0 (OK q) ==>
   gas_summary_at F (fp.jc_ctx,fp.jc_func) []
     (select_result fp.jc_cx (ArrayT et bd) r (ValueSubscript (IntV i))) (ee,s)
-    (\res ee' u. ?child. res = INL child /\
-      vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript et obj idx)
-        es sa sd s0 ee' child (LocatedValue et (mk_ptr dst p.ptr_location)) u /\
-      (!x. dst = Var x ==> not_fresh_at sd x) /\
-      eval_operand dst u = SOME
-        (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) +
-                   Num i * type_memory_size etv)) /\
+    (\res ee' u. ?tv. res = INL tv /\
+      vv_holds ce fp.jc_cx (post_value_type ce (Subscript et obj idx)) tv
+        (LocatedValue et (mk_ptr dst p.ptr_location)) ee' u /\
+      vv_at ce fp.jc_cx (post_value_type ce (Subscript et obj idx)) sa sd ee' tv
+        (LocatedValue et (mk_ptr dst p.ptr_location)) u /\
+      (post_value_type ce (Subscript et obj idx) <> expr_type (Subscript et obj idx) ==>
+        vv_own ce fp.jc_cx (post_value_type ce (Subscript et obj idx)) sa sd ee' tv
+          (LocatedValue et (mk_ptr dst p.ptr_location)) u) /\
+      (~expr_has_effect (Subscript et obj idx) ==>
+        vv_storage_live fp.jc_cx (LocatedValue et (mk_ptr dst p.ptr_location)) ee' u) /\
+      (!x. vv_operand (LocatedValue et (mk_ptr dst p.ptr_location)) = Var x ==>
+        not_fresh_at sd x) /\
+      (post_value_type ce (Subscript et obj idx) <> NoneT /\
+       ~is_word_type (post_value_type ce (Subscript et obj idx)) /\
+       ~is_bytestring_type (post_value_type ce (Subscript et obj idx)) /\
+       (case LocatedValue et (mk_ptr dst p.ptr_location) of StackValue _ _ => T
+         | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+       !tv'. evaluate_type (get_tenv fp.jc_cx)
+         (post_value_type ce (Subscript et obj idx)) = SOME tv' ==>
+         ?w a k. eval_operand (vv_operand (LocatedValue et (mk_ptr dst p.ptr_location))) u = SOME w /\
+           a <= w2n w /\ w2n w + type_memory_size tv' <= a + k /\
+           a + k < dimword (:256) /\
+           (fp.jc_lo <= a \/
+            ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) /\
       intcall_expr_cont fp ce env es sa s0 ee' sd u)
     (\res ee' outcome. expr_exit res outcome)
 Proof
@@ -119,9 +136,10 @@ Proof
     (irule vv_post_array_element >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  drule_all intcall_array_selected_post >> strip_tac >> gvs[] >>
   irule select_result_counted_summary >> simp[] >>
   qexists_tac `OK q` >> simp[] >>
   `ee with gas_obs := [] = ee` by
     (Cases_on `ee` >> gvs[vyperStateTheory.evaluation_state_component_equality]) >>
-  simp[] >> goal_assum (drule_at Any) >> simp[]
+  simp[]
 QED
