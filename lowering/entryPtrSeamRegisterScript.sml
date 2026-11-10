@@ -251,6 +251,127 @@ Proof
   metis_tac[]
 QED
 
+(* Supplied physical success for an owner buffer of arbitrary size. *)
+Theorem registration_owner_alloca_ptr:
+  emit_op ALLOCA [Lit (n2w n)] sa = (ip,sb) /\
+  step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
+    [STRING #"%" (toString sa.cs_next_var)]) s = OK t /\
+  ((FLOOKUP s.vs_allocas sa.cs_next_id = NONE /\
+      s.vs_alloca_next + n < dimword (:256)) \/
+   (?b. FLOOKUP s.vs_allocas sa.cs_next_id = SOME (b,n) /\
+      b+n < dimword (:256))) /\
+  t.vs_current_bb = s.vs_current_bb ==>
+  ?H u q.
+    ip = Var q /\
+    H = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [q]) t /\
+    u = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [q]) s t tn /\
+    ptr_covers H u q t n /\
+    (!p sz. p <> q /\ ptr_covers G tn p s sz ==>
+      ptr_covers H u p t sz) /\
+    (!D lower ctx func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+      s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx func PG H u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx func PG G tn s)
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac
+      (CONJUNCTS_THEN2 assume_tac assume_tac))) >>
+  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `step_inst_base ins s = OK t` >>
+  qexistsl_tac [`step_prov PG G ins t`, `step_taint ins s t tn`] >>
+  simp[] >> conj_tac
+  >- (simp[Abbr `ins`] >>
+      Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id = NONE`
+      >- (gvs[] >> simp[allocationPtrTheory.fresh_alloca_ptr_covers]) >>
+      gvs[] >>
+      drule allocationPtrTheory.reused_alloca_step >>
+      disch_then (qspec_then `STRING #"%" (toString sa.cs_next_var)` mp_tac) >>
+      strip_tac >> gvs[] >>
+      metis_tac[allocationPtrTheory.reused_alloca_ptr_covers]) >>
+  conj_tac
+  >- (simp[Abbr `ins`] >> rpt strip_tac >>
+      Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id = NONE`
+      >- (gvs[] >> simp[allocationPtrTheory.fresh_alloca_ptr_covers]) >>
+      gvs[] >> drule allocationPtrTheory.reused_alloca_step >>
+      disch_then (qspec_then `STRING #"%" (toString sa.cs_next_var)` mp_tac) >>
+      strip_tac >> gvs[] >>
+      metis_tac[allocationPtrTheory.reused_alloca_ptr_covers]) >>
+  rpt gen_tac >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+     simp[emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     strip_tac >> gvs[]) >>
+  irule decoderSetupStepPtrTheory.setup_instruction_continuation >>
+  qexistsl_tac [`step_prov PG G ins t`, `ins`, `sa`, `sb`, `t`,
+                 `step_taint ins s t tn`] >>
+  gvs[Abbr `ins`, mk_inst_def, is_terminator_def] >>
+  gen_tac >> irule ptrSafetyTransportTheory.ptr_inst_ok_lower_bound_transport >>
+  simp[] >> qexists_tac `0` >>
+  rewrite_tac[GSYM mk_inst_def] >> simp[fragExecPtrTheory.ptr_inst_ok_alloca]
+QED
+
+Theorem registration_alloc_buffer_ptr:
+  compile_alloc_buffer n st = (buf,last) /\ fn_has_code st last fn /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  n < dimword (:256) /\ unit_alloca_budget ctx < dimword (:256) /\
+  (!entry. FLOOKUP s.vs_allocas st.cs_next_id = SOME entry ==>
+    ?p. entry = (p,n) /\ p+n < dimword (:256)) ==>
+  ?t H u q p.
+    buf.buf_operand = Var q /\
+    H = step_prov PG G (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [q]) t /\
+    u = step_taint (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [q]) s t tn /\
+    run_inst_seq (emitted_insts st last) s = OK t /\
+    lookup_var q t = SOME (n2w p) /\ ptr_covers H u q t n /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,n) /\
+    p+n < dimword (:256) /\ alloca_inv t /\
+    alloca_frontier_inv ctx fn site t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_data_section = s.vs_data_section /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
+    (!p sz. p <> q /\ ptr_covers G tn p s sz ==> ptr_covers H u p t sz) /\
+    (!D lower ctx' func.
+      fn_has_code st last func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = st.cs_current_bb /\
+      s.vs_inst_idx = LENGTH st.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+        (t with vs_inst_idx := LENGTH last.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
+Proof
+  strip_tac >>
+  drule_all actualAllocExecTheory.actual_alloc_buffer_site >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `MEM ins (fn_insts fn)` >>
+  `ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit (n2w n)] /\
+   ins.inst_outputs = [STRING #"%" (toString st.cs_next_var)] /\
+   ins.inst_id = st.cs_next_id` by simp[Abbr `ins`, mk_inst_def] >>
+  `!entry. FLOOKUP s.vs_allocas ins.inst_id = SOME entry ==>
+     ?p. entry = (p,n) /\ p+n < dimword (:256)` by simp[] >>
+  drule_all actualAllocExecTheory.actual_literal_alloca_owned_step >> strip_tac >>
+  `((FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
+       s.vs_alloca_next + n < dimword (:256)) \/
+    (?b. FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,n) /\
+       b+n < dimword (:256)))` by
+    (Cases_on `FLOOKUP s.vs_allocas st.cs_next_id` >> simp[]
+     >- (`FLOOKUP s.vs_allocas ins.inst_id = NONE` by simp[] >>
+         drule_all actualAllocExecTheory.actual_literal_alloca_fresh_run >>
+         strip_tac >> gvs[]) >> metis_tac[]) >>
+  `emit_op ALLOCA [Lit (n2w n)] st = (buf.buf_operand,last)` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+     pairarg_tac >> simp[] >> strip_tac >> gvs[]) >>
+  fs[Abbr `ins`] >>
+  drule_at (Pos (el 2)) registration_owner_alloca_ptr >> simp[] >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
+  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  qexistsl_tac [`t`, `q`, `p`] >>
+  gvs[run_inst_seq_def, mk_inst_def]
+QED
+
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
    Hints (not binding):
