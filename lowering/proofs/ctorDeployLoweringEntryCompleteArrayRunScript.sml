@@ -541,3 +541,50 @@ Proof
   gvs[Abbr `Post`] >> goal_assum (drule_at Any) >> simp[]
 QED
 
+Theorem deploy_ctor_array_prepared_complete_gas_run:
+ (^CcompleteGas) ty tv /\ ^(subst [``initial:venom_state`` |-> ``prepared:venom_state``] Pk) /\
+ (^Ok) k ctx func site ids D N d
+   (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) earlier limit_st
+   tv vs slot_id slot initial 0 0 prepared /\ earlier <= next /\
+ lookup_block prepared.vs_current_bb func.fn_blocks = SOME bb /\
+ bb.bb_instructions = prefix ++ [mk_inst id JMP [Label hdr] []] /\
+ lookup_block hdr func.fn_blocks = SOME hdr_bb /\
+ phi_prefix_length hdr_bb.bb_instructions = 0 /\
+ ~prepared.vs_halted /\ prepared.vs_inst_idx = LENGTH prefix /\
+ abi_decode_sim ctx func initial prepared /\
+ prepared.vs_outcomes = initial.vs_outcomes /\ prepared.vs_tx_ctx = initial.vs_tx_ctx /\
+ prepared.vs_block_ctx = initial.vs_block_ctx ==>
+ ?actual. gas_path ctx func prepared 0 (OK actual) /\
+   val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
+   (^Ok) k ctx func site ids D N d
+     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) earlier limit_st
+     tv vs slot_id slot initial (LENGTH vs) (LENGTH vs) actual /\
+   ~actual.vs_halted /\ actual.vs_current_bb = exit_lbl /\ actual.vs_inst_idx = 0 /\
+   abi_decode_sim ctx func initial actual /\
+   actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
+   actual.vs_block_ctx = initial.vs_block_ctx
+Proof
+ disch_then (CONJUNCTS_THEN2 (mk_asm "child") (MAP_EVERY assume_tac o CONJUNCTS)) >>
+ `(^Ok) k ctx func site ids D N d
+   (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
+   tv vs slot_id slot prepared 0 0 prepared` by
+   (irule deploy_ctor_array_observation_self >> goal_assum (drule_at Any)) >>
+ drule_all deploy_ctor_array_entry_complete_gas_path >>
+ disch_then (qx_choose_then `h` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+ asm "child" assume_tac >>
+ drule_all deploy_ctor_array_loop_complete_gas_finite >>
+ disch_then (qx_choose_then `actual` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+ `(^Ok) k ctx func site ids D N d
+   (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) earlier limit_st
+   tv vs slot_id slot initial (LENGTH vs) (LENGTH vs) actual` by
+   (irule deploy_ctor_array_observation_compose >> goal_assum (drule_at Any) >> simp[]) >>
+ `gas_path ctx func prepared 0 (OK actual)` by
+   (qpat_x_assum `gas_path _ _ prepared _ _` mp_tac >>
+    qpat_x_assum `gas_path _ _ h _ _` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_path_then, ADD_0]) >>
+ qexists `actual` >> asm_simp_tac bool_ss [] >> conj_tac
+ >- (irule deploy_ctor_array_observation_exit >> goal_assum (drule_at Any)) >>
+ irule abi_decode_sim_trans >> qexists `prepared` >> asm_simp_tac bool_ss [] >>
+ irule abi_decode_sim_trans >> qexists `h` >> simp[]
+QED
+
