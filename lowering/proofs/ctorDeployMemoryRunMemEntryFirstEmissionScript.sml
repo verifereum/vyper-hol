@@ -1285,22 +1285,62 @@ Proof
      end)]
 QED
 
+Theorem ctor_emit_membership_eqs_appends:
+  !needle elems. cs_appends (emit_membership_eqs needle elems)
+Proof
+  gen_tac >> Induct >> simp[emit_membership_eqs_def, cs_appends_return] >>
+  gen_tac >> ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers] >>
+  gen_tac >> ho_match_mp_tac cs_appends_bind >> simp[cs_appends_return]
+QED
+
+Theorem ctor_fold_membership_or_appends:
+  !cs acc. cs_appends (fold_membership_or acc cs)
+Proof
+  Induct >> simp[fold_membership_or_def, cs_appends_return] >>
+  rpt gen_tac >> ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers]
+QED
+
+Theorem ctor_fold_membership_and_appends:
+  !cs acc. cs_appends (fold_membership_and acc cs)
+Proof
+  Induct >> simp[fold_membership_and_def, cs_appends_return] >>
+  rpt gen_tac >> ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers] >>
+  gen_tac >> ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers]
+QED
+
 Theorem ctor_list_membership_in_appends:
   !needle elems. cs_appends (compile_list_membership_in needle elems)
 Proof
-  gen_tac >> Induct >> simp[compile_list_membership_in_def, cs_appends_return] >>
-  gen_tac >> Cases_on `elems` >> simp[compile_list_membership_in_def, cs_appends_emit_helpers] >>
-  ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers] >>
-  gen_tac >> ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers]
+  rpt gen_tac >> rewrite_tac[compile_list_membership_in_def] >>
+  ho_match_mp_tac cs_appends_bind >> simp[ctor_emit_membership_eqs_appends] >>
+  Cases >> simp[cs_appends_return, ctor_fold_membership_or_appends]
 QED
 
 Theorem ctor_list_membership_notin_appends:
   !needle elems. cs_appends (compile_list_membership_notin needle elems)
 Proof
-  gen_tac >> Induct >> simp[compile_list_membership_notin_def, cs_appends_return] >>
-  gen_tac >> Cases_on `elems` >> simp[compile_list_membership_notin_def] >>
-  rpt (ho_match_mp_tac cs_appends_bind >> rw[cs_appends_emit_helpers]) >>
-  simp[cs_appends_emit_helpers]
+  rpt gen_tac >> rewrite_tac[compile_list_membership_notin_def] >>
+  ho_match_mp_tac cs_appends_bind >> simp[ctor_emit_membership_eqs_appends] >>
+  Cases >> simp[cs_appends_return] >>
+  ho_match_mp_tac cs_appends_bind >>
+  simp[cs_appends_emit_helpers, ctor_fold_membership_and_appends]
+QED
+
+Theorem ctor_emit_membership_eqs_cons_first_emission[local]:
+  !needle h t a x b. emit_membership_eqs needle (h::t) a = (x,b) ==>
+    cs_extends a b /\
+    (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\
+       i.inst_opcode <> PHI)
+Proof
+  ntac 3 gen_tac >> rewrite_tac[emit_membership_eqs_def] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
+      goal_assum $ drule_at Any >> simp[]) >>
+  gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
+  ho_match_mp_tac cs_appends_bind >>
+  simp[ctor_emit_membership_eqs_appends, cs_appends_return]
 QED
 
 Theorem ctor_list_membership_in_first_emission:
@@ -1314,19 +1354,15 @@ Theorem ctor_list_membership_in_first_emission:
        i.inst_opcode <> PHI))
 Proof
   gen_tac >> Cases
-  >- (simp[compile_list_membership_in_def, comp_return_def] >>
+  >- (simp[compile_list_membership_in_def, emit_membership_eqs_def,
+           comp_bind_def, comp_return_def] >>
       rpt strip_tac >> gvs[cs_extends_refl]) >>
-  Cases_on `t` >> simp[compile_list_membership_in_def] >>
+  rewrite_tac[compile_list_membership_in_def] >>
   ho_match_mp_tac first_emission_strong >>
-  FIRST [
-    (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
-     goal_assum $ drule_at Any >> simp[] >> NO_TAC),
-    (ho_match_mp_tac first_emission_strong_bind >> conj_tac
-     >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
-         goal_assum $ drule_at Any >> simp[]) >>
-     gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
-     ho_match_mp_tac cs_appends_bind >>
-     simp[ctor_list_membership_in_appends, cs_appends_emit_helpers])]
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- MATCH_ACCEPT_TAC ctor_emit_membership_eqs_cons_first_emission >>
+  Cases >> rewrite_tac[GSYM cs_appends_def] >>
+  simp[cs_appends_return, ctor_fold_membership_or_appends]
 QED
 
 Theorem ctor_list_membership_notin_first_emission:
@@ -1340,20 +1376,16 @@ Theorem ctor_list_membership_notin_first_emission:
        i.inst_opcode <> PHI))
 Proof
   gen_tac >> Cases
-  >- (simp[compile_list_membership_notin_def, comp_return_def] >>
+  >- (simp[compile_list_membership_notin_def, emit_membership_eqs_def,
+           comp_bind_def, comp_return_def] >>
       rpt strip_tac >> gvs[cs_extends_refl]) >>
-  Cases_on `t` >> simp[compile_list_membership_notin_def] >>
+  rewrite_tac[compile_list_membership_notin_def] >>
   ho_match_mp_tac first_emission_strong >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
-      goal_assum $ drule_at Any >> simp[])
-  >- (gen_tac >> rewrite_tac[GSYM cs_appends_def] >> simp[cs_appends_emit_helpers])
-  >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
-      goal_assum $ drule_at Any >> simp[]) >>
-  gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
-  rpt (ho_match_mp_tac cs_appends_bind >>
-       rw[cs_appends_emit_helpers, ctor_list_membership_notin_appends]) >>
-  simp[cs_appends_emit_helpers]
+  >- MATCH_ACCEPT_TAC ctor_emit_membership_eqs_cons_first_emission >>
+  Cases >> rewrite_tac[GSYM cs_appends_def] >> simp[cs_appends_return] >>
+  ho_match_mp_tac cs_appends_bind >>
+  simp[cs_appends_emit_helpers, ctor_fold_membership_and_appends]
 QED
 
 Theorem ctor_first_emission_weak_strong_bind[local]:
@@ -1401,10 +1433,11 @@ QED
 
 Theorem ctor_array_membership_loop_appends:
   !loader. (!op. cs_appends (loader op)) ==>
-  !needle arr len size off is_in.
-    cs_appends (compile_array_membership_loop needle arr len size off loader is_in)
+  !needle arr len size off bnd is_in.
+    cs_appends (compile_array_membership_loop needle arr len size off loader bnd is_in)
 Proof
-  rpt strip_tac >> rewrite_tac[compile_array_membership_loop_def] >>
+  rpt strip_tac >> Cases_on `bnd` >>
+  rewrite_tac[compile_array_membership_loop_def, optionTheory.option_case_def] >>
   rpt (FIRST [ho_match_mp_tac cs_appends_bind,
               ho_match_mp_tac cs_appends_ignore_bind] >>
        rw[cs_appends_prims, cs_appends_emit_helpers, cs_appends_return]) >>
@@ -1413,16 +1446,16 @@ QED
 
 Theorem ctor_array_membership_loop_first_emission:
   !loader. (!op. cs_appends (loader op)) ==>
-  !needle arr len size off is_in a x b.
-    compile_array_membership_loop needle arr len size off loader is_in a = (x,b) ==>
+  !needle arr len size off bnd is_in a x b.
+    compile_array_membership_loop needle arr len size off loader bnd is_in a = (x,b) ==>
     cs_extends a b /\
     (!fn. fn_has_code a b fn ==> ?bb i.
        lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\
        i.inst_opcode <> PHI)
 Proof
-  gen_tac >> strip_tac >> ntac 6 gen_tac >>
-  rewrite_tac[compile_array_membership_loop_def] >>
+  gen_tac >> strip_tac >> ntac 5 gen_tac >> Cases >> gen_tac >>
+  rewrite_tac[compile_array_membership_loop_def, optionTheory.option_case_def] >>
   ntac 7 (ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
     >- metis_tac[first_emission_fresh, ctor_fresh_label_code] >> gen_tac) >>
   ho_match_mp_tac first_emission_strong_ignore_bind >> conj_tac
@@ -1495,12 +1528,6 @@ Proof
   >- (IF_CASES_TAC >> simp[ctor_ptr_load_appends] >>
       Cases_on `ty` >> simp[cs_appends_return] >>
       rename1 `ArrayT _ bound` >> Cases_on `bound` >> simp[cs_appends_return]) >>
-  gen_tac >> ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[cs_appends_return] >>
-      Cases_on `ty` >> simp[cs_appends_return] >>
-      rename1 `ArrayT _ bound` >> Cases_on `bound` >> simp[cs_appends_return] >>
-      rpt (ho_match_mp_tac cs_appends_bind >> rw[cs_appends_emit_helpers]) >>
-      simp[cs_appends_emit_helpers]) >>
   simp[ctor_array_membership_loop_appends, ctor_ptr_load_appends]
 QED
 
@@ -1523,31 +1550,6 @@ Proof
       FIRST [metis_tac[first_emission_return],
         (rename1 `ArrayT _ bound` >> Cases_on `bound` >> simp[] >>
          metis_tac[first_emission_return])]) >>
-  gen_tac >> rewrite_tac[comp_ignore_bind_def] >>
-  ho_match_mp_tac ctor_first_emission_weak_strong_bind >> conj_tac
-  >- (IF_CASES_TAC
-      >- (Cases_on `ty` >> simp[] >>
-          FIRST [metis_tac[first_emission_return],
-            (rename1 `ArrayT _ bound` >> Cases_on `bound` >> simp[] >>
-             FIRST [metis_tac[first_emission_return],
-               (qsuff_tac `!a x b.
-                   (do inv <- emit_op GT [len_op; Lit (n2w n)];
-                       valid <- emit_op ISZERO [inv];
-                       emit_inst ASSERT [valid] [] od) a = (x,b) ==>
-                   cs_extends a b /\
-                   (!fn. fn_has_code a b fn ==> ?bb i.
-                     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-                     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\
-                     i.inst_opcode <> PHI)`
-                >- metis_tac[] >>
-                ho_match_mp_tac first_emission_strong_bind >> conj_tac
-                >- (rpt gen_tac >> strip_tac >>
-                    irule (cj 3 first_emission_emit_helpers) >>
-                    goal_assum $ drule_at Any >> simp[]) >>
-                rewrite_tac[GSYM cs_appends_def] >> gen_tac >>
-                ho_match_mp_tac cs_appends_bind >>
-                simp[cs_appends_emit_helpers])])]) >>
-      metis_tac[first_emission_return]) >>
   metis_tac[ctor_array_membership_loop_first_emission, ctor_ptr_load_appends]
 QED
 
