@@ -43,3 +43,18 @@ Proof
   strip_tac >> irule sym_exec_push_kind >>
   dsimp[execute_plan_def, exec_stack_op_def, sym_step_def, op_kind_ok_def]
 QED
+
+Theorem sym_exec_push_literal:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOPush (Lit v)]) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp [SOPush (Lit v)])) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest
+      (ps with ps_stack := stack_push (Lit v) ps.ps_stack) last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp [SOPush (Lit v)]) /\
+    last.sym_mem_labels = ss.sym_mem_labels
+Proof
+  rw[execute_plan_def, exec_stack_op_def] >>
+  drule_then (qspec_then `env` SUBST1_TAC) sym_steps_singleton >>
+  simp[sym_step_push_bytes, sym_kinds_ok_base_change,
+    sym_kinds_ok_push, op_kind_ok_def, asm_next_def]
+QED
