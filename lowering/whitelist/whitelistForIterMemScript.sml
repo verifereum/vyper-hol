@@ -4021,7 +4021,7 @@ Resume typed_attribute_frames_mutual[append]:
   drule_at (Pat `eval_stmt _ _ _ = _`) append_projection_frame >>
   disch_then (qspec_then `root` mp_tac) >>
   impl_tac
-  >- (gvs[place_access_def, target_writes_ok_def] >>
+  >- (gvs[place_access_def, expr_writes_ok_def] >>
       metis_tac[cj 1 supported_pure_scopes_mutual]) >>
   strip_tac >> simp[] >>
   irule scope_projection_observe >> simp[]
