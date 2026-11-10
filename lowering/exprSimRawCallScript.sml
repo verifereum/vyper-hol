@@ -4375,8 +4375,7 @@ Theorem raw_call_nonrevert_vv_path[local]:
   ~flags.rcf_revert_on_failure /\ flags.rcf_max_outsize = n /\
   expr_type e = raw_call_return_type flags /\
   (0 < n ==> evaluate_type (get_tenv cx) (expr_type e) =
-    SOME (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])) /\
-  post_value_type cenv e = expr_type e ==>
+    SOME (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])) ==>
   frag_path ctx sa sb (\u. u = s)
     (\t. vv_post ctx func cenv cx e es0 sf sb s0 es
       (Value (if n = 0 then BoolV success else
@@ -4460,8 +4459,7 @@ Theorem raw_call_outbuf_zero_tail_vv_path[local]:
   flags.rcf_max_outsize = cap /\ expr_type e = raw_call_return_type flags /\
   (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) =
     SOME (if flags.rcf_revert_on_failure then BaseTV (BytesT (Dynamic cap))
-      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) /\
-  post_value_type cenv e = expr_type e ==>
+      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) ==>
   frag_path ctx sa sb (\u. u = s)
     (\u. (flags.rcf_revert_on_failure ==> outcome.co_success) /\
       vv_post ctx func cenv cx e initial_es initial sb s0
@@ -4594,7 +4592,6 @@ Resume raw_call_outbuf_zero_tail_vv_path[finish]:
   qpat_x_assum `eval_operand ok u = _` mp_tac >>
   qpat_x_assum `LENGTH u.vs_returndata < _` mp_tac >>
   qpat_x_assum `u.vs_returndata = _` mp_tac >>
-  qpat_x_assum `post_value_type _ _ = _` mp_tac >>
   qpat_x_assum `expr_type e = _` mp_tac >>
   qpat_x_assum `flags.rcf_max_outsize = 0` mp_tac >>
   qpat_x_assum `local_ptrs_reserved cenv sc` mp_tac >>
@@ -4684,8 +4681,7 @@ Theorem raw_call_outbuf_positive_tail_vv_path[local]:
   flags.rcf_max_outsize = cap /\ expr_type e = raw_call_return_type flags /\
   (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) =
     SOME (if flags.rcf_revert_on_failure then BaseTV (BytesT (Dynamic cap))
-      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) /\
-  post_value_type cenv e = expr_type e ==>
+      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) ==>
   frag_path ctx sa sb (\u. u = s)
     (\u. (flags.rcf_revert_on_failure ==> outcome.co_success) /\
       vv_post ctx func cenv cx e initial_es initial sb s0
@@ -5007,8 +5003,7 @@ Theorem raw_call_outbuf_tail_vv_frag[local]:
   cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
   (0 < cap ==> ((cap + 31) DIV 32) * 32 + 32 < dimword (:256)) /\
   expr_type e = (if cap = 0 then NoneT else BaseT (BytesT (Dynamic cap))) /\
-  (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap)))) /\
-  post_value_type cenv e = expr_type e ==>
+  (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap)))) ==>
   frag_exec ctx sa sb (\u. u = s)
     (\u. outcome.co_success /\
       vv_post ctx func cenv cx e initial_es initial sb s0
