@@ -12,14 +12,14 @@ Theorem abi_encode_translated_nonword_source_split:
   expr_post ctx func ce cx e es origin sa s0 es' v op s /\
   expr_body_pre ce cx env e es /\
   ~is_word_type (expr_type e) /\
-  ei = type_to_abi_enc_info ce.ce_struct_fields ce (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  ei = type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av ==>
+  vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av ==>
   ?w ct rv. eval_operand op s = SOME w /\
-    source_rep (get_tenv cx) (expr_type e) ei ct /\
+    source_rep (get_tenv cx) (lowered_value_type ce e) ei ct /\
     abi_encoder_admissible ei /\
-    enc ct rv = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av /\
+    enc ct rv = enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av /\
     abi_encoder_window_input ei ct rv (w2n w) (val_footprint tv v) s.vs_memory /\
     ((val_footprint tv v = 0 /\ (ei = AbiCopy 0 \/ ei = AbiComplex []) /\ enc ct rv = []) \/
      (0 < val_footprint tv v /\ w2n w + val_footprint tv v <= s.vs_alloca_next))
@@ -32,9 +32,9 @@ Proof
     metis_tac[abi_encode_body_evaluated_metadata] >>
   `?w. eval_operand op s = SOME w /\
        val_in_memory tv v (w2n w) s.vs_memory` by
-    (fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
-  `?ct rv. source_rep (get_tenv cx) (expr_type e) ei ct /\
-     enc ct rv = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av /\
+    metis_tac[abiEncodeMaterializeTheory.materialize_expr_post_lowered_source] >>
+  `?ct rv. source_rep (get_tenv cx) (lowered_value_type ce e) ei ct /\
+     enc ct rv = enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av /\
      abi_encoder_open_input ei ct rv (w2n w) (val_footprint tv v) s.vs_memory` by
     (qpat_assum `ei = _` SUBST1_TAC >>
      irule abi_encode_translated_source_footprint >> simp[] >>
@@ -42,7 +42,10 @@ Proof
   `abi_encoder_window_input ei ct rv (w2n w) (val_footprint tv v) s.vs_memory` by
     metis_tac[abi_encoder_open_input_window] >>
   `abi_encoder_admissible ei` by metis_tac[abi_encoder_translation_admissible] >>
-  drule_all abi_encode_nonword_expr_bound >> strip_tac
+  drule_all abi_encode_post_lowered_footprint >>
+  disch_then (qx_choose_then `ptv` strip_assume_tac) >>
+  drule_all abi_encode_nonword_expr_bound >>
+  qpat_assum `val_footprint ptv v = _` (fn th => rewrite_tac[th]) >> strip_tac
   >- (`ei = AbiCopy 0 \/ ei = AbiComplex []` by
         (qpat_assum `ei = _` SUBST1_TAC >>
          irule abi_encode_translated_zero_descriptor >>
@@ -64,11 +67,11 @@ Theorem abi_encode_translated_nonword_phase_resources:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
   ~is_word_type (expr_type e) /\
-  ei = type_to_abi_enc_info ce.ce_struct_fields ce (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  ei = type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
-  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (expr_type e))
+  vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e))
     sa = (ops,ready) /\
   compile_abi_encode_to_buf (SND ops) op ei ready = (len,body_end) /\
   fn_has_code sa ready func /\ fn_has_code ready body_end obs /\
@@ -77,13 +80,13 @@ Theorem abi_encode_translated_nonword_phase_resources:
        j.inst_opcode <> NOP ==> MEM j (fn_insts func)) /\
   local_ptrs_reserved ce sa ==>
   ?w ct rv p.
-    let bytes = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av in
+    let bytes = enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av in
     let m = case mid of NONE => 0 | SOME _ => 4 in
     let mw = case mid of NONE => 0 | SOME _ => 32 in
-    let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (expr_type e)+m) in
+    let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+m) in
     let a = abi_builtin_allocate_state sa.cs_next_id outsz s in
     eval_operand op s = SOME w /\ enc ct rv = bytes /\
-    source_rep (get_tenv cx) (expr_type e) ei ct /\ abi_encoder_admissible ei /\
+    source_rep (get_tenv cx) (lowered_value_type ce e) ei ct /\ abi_encoder_admissible ei /\
     abi_encoder_window_input ei ct rv (w2n w) (val_footprint tv v) s.vs_memory /\
     ((val_footprint tv v = 0 /\ (ei = AbiCopy 0 \/ ei = AbiComplex []) /\ enc ct rv = []) \/
      (0 < val_footprint tv v /\ w2n w+val_footprint tv v <= s.vs_alloca_next)) /\
@@ -109,6 +112,18 @@ Proof
   strip_tac >> drule_all abi_encode_translated_nonword_source_split >>
   disch_then (qx_choose_then `w` (qx_choose_then `ct`
     (qx_choose_then `rv` (MAP_EVERY assume_tac o CONJUNCTS)))) >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[exprSimHypsTheory.expr_body_pre_lowered_fits] >>
+  `?stv. evaluate_type (get_tenv cx) (expr_type e) = SOME stv` by
+    metis_tac[optionTheory.IS_SOME_EXISTS,
+      exprSimHypsTheory.expr_body_pre_type_evaluates] >>
+  `vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av` by
+    metis_tac[exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_conversion] >>
+  `vyper_to_abi_type (get_tenv cx) (expr_type e) =
+    vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)` by
+    metis_tac[exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_abi_type] >>
+  drule_all abi_encode_post_lowered_footprint >>
+  disch_then (qx_choose_then `ptv` strip_assume_tac) >>
   drule_all abi_encode_nonword_numerical_capacity >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   `(case mid0 of NONE => 0 | SOME _ => 4) =
@@ -126,7 +141,10 @@ Proof
   qpat_x_assum `(case mid of NONE => 0 | SOME _ => 32) = _` kall_tac >>
   `0 < val_footprint tv v ==> w2n w+val_footprint tv v <= s.vs_alloca_next` by
     (qpat_x_assum `(_ = 0 /\ _) \/ _` mp_tac >> rw[] >> fs[]) >>
+  `0 < val_footprint ptv v ==> w2n w+val_footprint ptv v <= s.vs_alloca_next` by
+    metis_tac[] >>
   drule_all abi_encode_nonword_setup_output >>
+  qpat_assum `val_footprint ptv v = _` (fn th => rewrite_tac[th]) >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `alloca_inv (abi_builtin_allocate_state _ outsz _)` >>
   qmatch_asmsub_abbrev_tac `alloca_inv a` >>
@@ -140,17 +158,17 @@ Proof
      Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >> simp[]) >>
   `p < dimword (:256) /\ (mid <> NONE ==> p+32 < dimword (:256)) /\
    p+32+(case mid of NONE => 0 | SOME _ => 4)+
-     LENGTH (enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av) <= a.vs_alloca_next` by
-    (fs[Abbr `outsz`] >> decide_tac) >>
+     LENGTH (enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av) <= a.vs_alloca_next` by
+    (fs[Abbr `outsz`] >> gvs[]) >>
   `0 < val_footprint tv v ==>
     w2n w+val_footprint tv v <= a.vs_alloca_next /\
     venomMemDefs$regions_disjoint (w2n w,val_footprint tv v)
       (p+32+(case mid of NONE => 0 | SOME _ => 4),
-       LENGTH (enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av)) /\
+       LENGTH (enc (vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e)) av)) /\
     (w2n w+val_footprint tv v <= p+32 \/
      p+32+(case mid of NONE => 0 | SOME _ => 32) <= w2n w)` by
     (strip_tac >> Cases_on `mid` >>
-     fs[Abbr `outsz`, venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+     fs[Abbr `outsz`, venomMemDefsTheory.regions_disjoint_def] >> gvs[]) >>
   qexistsl [`w`, `ct`, `rv`, `p`] >> simp_tac bool_ss [LET_THM] >>
   unabbrev_all_tac >>
   qpat_assum `enc ct rv = _` (fn th =>
@@ -163,8 +181,9 @@ Proof
   disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `abi_builtin_encode_setup _ _ _ = _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (b,sz)`)) >>
-  disch_then (qspecl_then [`w`, `tv`, `obs`] mp_tac) >>
-  (impl_tac >- asm_rewrite_tac []) >> strip_tac >>
+  disch_then (qspecl_then [`w`, `ptv`, `obs`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac []) >>
+  qpat_assum `val_footprint ptv v = _` (fn th => rewrite_tac[th]) >> strip_tac >>
   drule_all abi_encode_setup_scratch_slices >>
   strip_tac >> asm_rewrite_tac [] >>
   qpat_x_assum `venomMemDefs$regions_disjoint (p+32,_) (b,sz)` mp_tac >>
