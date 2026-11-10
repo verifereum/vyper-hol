@@ -1345,6 +1345,17 @@ Proof
        stack_peek_def, EL_REVERSE, arithmeticTheory.PRE_SUB1, REVERSE_SNOC]
 QED
 
+Theorem scratch_replay_do_swap_positive[local]:
+  0 < dist /\ dist <= 16 /\ dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops,qs) ==>
+  scratch_replay cplan R ops (REVERSE ps.ps_stack) slots
+    (REVERSE qs.ps_stack) slots
+Proof
+  strip_tac >> gvs[do_swap_def, planWfTheory.reverse_stack_swap] >>
+  irule (cj 2 scratch_replay_rules) >>
+  simp[scratch_replay_rules, scratch_replay_step_cases, EL,
+       Once strongPrefixSimTheory.LUPDATE_commutes]
+QED
+
 Theorem scratch_replay_do_swap_shallow:
   dist <= 16 /\ dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops,qs) ==>
   scratch_replay cplan R ops (REVERSE ps.ps_stack) slots
@@ -1352,10 +1363,32 @@ Theorem scratch_replay_do_swap_shallow:
 Proof
   strip_tac >> Cases_on `dist = 0`
   >- gvs[do_swap_def, scratch_replay_rules] >>
-  gvs[do_swap_def, planWfTheory.reverse_stack_swap] >>
-  irule (cj 2 scratch_replay_rules) >>
-  simp[scratch_replay_rules, scratch_replay_step_cases, EL,
-       Once strongPrefixSimTheory.LUPDATE_commutes]
+  metis_tac[scratch_replay_do_swap_positive, arithmeticTheory.NOT_ZERO_LT_ZERO]
+QED
+
+Theorem scratch_offset_byte_envelope[local]:
+  (lower:num) <= off /\ off + 32 <= upper /\
+  upper <= dimword (:256) /\
+  (!b. lower <= b /\ b < upper ==> R b /\ context_spill_byte cplan b) ==>
+  off < dimword (:256) /\
+  (!b. in_mem_range off 32 b ==> R b /\ context_spill_byte cplan b)
+Proof
+  strip_tac >> conj_tac >- decide_tac >>
+  simp[in_mem_range_def] >> rpt strip_tac >>
+  first_x_assum irule >> decide_tac
+QED
+
+Theorem scratch_offsets_byte_envelope[local]:
+  EVERY (\off. lower <= off /\ off + 32 <= upper) offsets /\
+  upper <= dimword (:256) /\
+  (!b. lower <= b /\ b < upper ==> R b /\ context_spill_byte cplan b) ==>
+  EVERY (\off. off < dimword (:256) /\
+    (!b. in_mem_range off 32 b ==> R b /\ context_spill_byte cplan b)) offsets
+Proof
+  pure_rewrite_tac[EVERY_MEM] >> BETA_TAC >> strip_tac >>
+  qx_gen_tac `off` >> strip_tac >>
+  irule scratch_offset_byte_envelope >> qexistsl [`lower`, `upper`] >>
+  metis_tac[]
 QED
 
 Theorem scratch_allocated_offsets:
@@ -1374,18 +1407,13 @@ Theorem scratch_allocated_offsets:
 Proof
   strip_tac >> drule_all spill_alloc_n_temporary_layout >> strip_tac >>
   conj_tac >- first_assum ACCEPT_TAC >> conj_tac >- first_assum ACCEPT_TAC >> conj_tac
-  >- (rule_assum_tac (BETA_RULE o PURE_REWRITE_RULE [EVERY_MEM]) >>
-      pure_rewrite_tac[EVERY_MEM] >> BETA_TAC >> qx_gen_tac `off` >> strip_tac >>
-      first_x_assum drule >> strip_tac >> conj_tac
-      >- decide_tac >>
-      rpt strip_tac >>
-      `al2.sa_spill_base <= b /\ b < al2.sa_next_offset` by
-        (gvs[in_mem_range_def] >> decide_tac) >> metis_tac[]) >>
+  >- (irule scratch_offsets_byte_envelope >>
+      qexistsl [`al2.sa_spill_base`, `al2.sa_next_offset`] >> simp[]) >>
   rpt strip_tac >> gvs[MEM_EL] >> metis_tac[]
 QED
 
-Theorem scratch_replay_do_dup_allocated:
-  dist < LENGTH ps.ps_stack /\ do_dup dist ps = (ops,qs) /\
+Theorem scratch_replay_do_dup_allocated_deep[local]:
+  15 < dist /\ dist < LENGTH ps.ps_stack /\ do_dup dist ps = (ops,qs) /\
   spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
   qs.ps_alloc.sa_next_offset <= dimword (:256) /\
   (!b. qs.ps_alloc.sa_spill_base <= b /\ b < qs.ps_alloc.sa_next_offset ==>
@@ -1393,9 +1421,7 @@ Theorem scratch_replay_do_dup_allocated:
   ?inventory. scratch_replay cplan R ops (REVERSE ps.ps_stack) FEMPTY
     (REVERSE qs.ps_stack) inventory
 Proof
-  strip_tac >> Cases_on `dist <= 15`
-  >- (qexists `FEMPTY` >> metis_tac[scratch_replay_do_dup_shallow]) >>
-  qmatch_goalsub_abbrev_tac `scratch_replay cplan R ops g` >>
+  strip_tac >> qmatch_goalsub_abbrev_tac `scratch_replay cplan R ops g` >>
   qabbrev_tac `offsets = FST (doSwapSim$spill_alloc_n [] ps.ps_alloc
     (REVERSE (top_n (dist - 15) ps.ps_stack)))` >>
   `qs.ps_alloc = FOLDL (\a off. free_spill_slot off a)
@@ -1410,8 +1436,8 @@ Proof
   qexists `dist` >> gvs[top_n_def]
 QED
 
-Theorem scratch_replay_do_swap_allocated:
-  dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops,qs) /\
+Theorem scratch_replay_do_swap_allocated_deep[local]:
+  16 < dist /\ dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops,qs) /\
   spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
   qs.ps_alloc.sa_next_offset <= dimword (:256) /\
   (!b. qs.ps_alloc.sa_spill_base <= b /\ b < qs.ps_alloc.sa_next_offset ==>
@@ -1419,9 +1445,7 @@ Theorem scratch_replay_do_swap_allocated:
   ?inventory. scratch_replay cplan R ops (REVERSE ps.ps_stack) FEMPTY
     (REVERSE qs.ps_stack) inventory
 Proof
-  strip_tac >> Cases_on `dist <= 16`
-  >- (qexists `FEMPTY` >> metis_tac[scratch_replay_do_swap_shallow]) >>
-  qabbrev_tac `offsets = FST (doSwapSim$spill_alloc_n [] ps.ps_alloc
+  strip_tac >> qabbrev_tac `offsets = FST (doSwapSim$spill_alloc_n [] ps.ps_alloc
     (top_n (dist + 1) ps.ps_stack))` >>
   `qs.ps_alloc = FOLDL (\a off. free_spill_slot off a)
     (SND (doSwapSim$spill_alloc_n [] ps.ps_alloc
@@ -1433,4 +1457,34 @@ Proof
   (impl_tac >- simp[Abbr `offsets`]) >> strip_tac >>
   unabbrev_all_tac >> irule scratch_replay_do_swap_deep >>
   qexists `dist` >> gvs[top_n_def]
+QED
+
+Theorem scratch_replay_do_dup_allocated:
+  dist < LENGTH ps.ps_stack /\ do_dup dist ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  qs.ps_alloc.sa_next_offset <= dimword (:256) /\
+  (!b. qs.ps_alloc.sa_spill_base <= b /\ b < qs.ps_alloc.sa_next_offset ==>
+    R b /\ context_spill_byte cplan b) ==>
+  ?inventory. scratch_replay cplan R ops (REVERSE ps.ps_stack) FEMPTY
+    (REVERSE qs.ps_stack) inventory
+Proof
+  strip_tac >> Cases_on `dist <= 15`
+  >- (qexists `FEMPTY` >> metis_tac[scratch_replay_do_dup_shallow]) >>
+  irule scratch_replay_do_dup_allocated_deep >> simp[] >>
+  metis_tac[arithmeticTheory.NOT_LESS]
+QED
+
+Theorem scratch_replay_do_swap_allocated:
+  dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops,qs) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  qs.ps_alloc.sa_next_offset <= dimword (:256) /\
+  (!b. qs.ps_alloc.sa_spill_base <= b /\ b < qs.ps_alloc.sa_next_offset ==>
+    R b /\ context_spill_byte cplan b) ==>
+  ?inventory. scratch_replay cplan R ops (REVERSE ps.ps_stack) FEMPTY
+    (REVERSE qs.ps_stack) inventory
+Proof
+  strip_tac >> Cases_on `dist <= 16`
+  >- (qexists `FEMPTY` >> metis_tac[scratch_replay_do_swap_shallow]) >>
+  irule scratch_replay_do_swap_allocated_deep >> simp[] >>
+  metis_tac[arithmeticTheory.NOT_LESS]
 QED
