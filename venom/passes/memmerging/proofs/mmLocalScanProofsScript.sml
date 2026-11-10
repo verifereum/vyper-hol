@@ -11319,6 +11319,26 @@ Proof
   PairCases_on `x` >> simp[] >> metis_tac[mm_local_write_capture_sound]
 QED
 
+Theorem mm_local_fixed_cut_capture_recurrence[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ a <= r /\ r < LENGTH is /\ r < N /\
+  mm_local_history is H N /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  (!q. a <= q /\ q < r ==> ?b. MEM b (mm_local_pending_indices is gs (SUC q))) ==>
+  !q. a <= q /\ q < r ==>
+  (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H N q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `?b. MEM b (mm_local_pending_indices is gs (SUC q))` by metis_tac[] >>
+  `b < SUC q` by metis_tac[mm_local_pending_indices_mem] >>
+  `b <= q /\ q < SUC q /\ SUC q < LENGTH is /\ SUC q < N` by decide_tac >>
+  drule_all mm_local_live_segment_capture_recurrence >> simp[]
+QED
+
 Theorem mm_local_pending_replay_start[local]:
   b = MIN_LIST (mm_local_pending_indices is gs r ++ [r]) ==>
   b <= r /\ (!j. MEM j (mm_local_pending_indices is gs r) ==> b <= j) /\
@@ -11452,6 +11472,51 @@ Proof
   gvs[mm_local_mload_bytes, mm_local_read_memory_bytes]
 QED
 
+Theorem mm_local_pending_store_capture_replay_post_phis[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ b <= j /\ j <= r /\ r < LENGTH is /\ r < N /\
+  mm_local_history is H N /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  (b = r \/ MEM b (mm_local_pending_indices is gs r)) /\
+  (EL j is).inst_opcode = MSTORE /\
+  (EL j is).inst_operands = [Lit dj; Var v] /\
+  FLOOKUP s0.ss_loads v = SOME srcj /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  h = phi_prefix_length bb.bb_instructions /\ h <= j /\
+  LENGTH states = SUC (j-h) /\
+  eval_phis s bb.bb_instructions = OK s_phi /\
+  EL 0 states = s_phi with vs_inst_idx := h /\
+  H j = EL (j-h) states /\
+  (!z. z < j-h ==>
+    ~is_terminator (EL (h+z) bb.bb_instructions).inst_opcode /\
+    ?u. step_inst fuel ctx (EL (h+z) bb.bb_instructions) (EL z states) = OK u /\
+        EL (SUC z) states = u with vs_inst_idx := SUC (EL z states).vs_inst_idx) /\
+  c = <|cg_dst := w2n dj; cg_src := srcj; cg_length := 32;
+         cg_inst_ids := [(EL j is).inst_id] ++
+           (case dfg_get_def (dfg_build_function fn0) v of
+              NONE => [] | SOME li => [li.inst_id])|> /\
+  (j = r \/ (?g. MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g))) /\
+  t = FOLDL (\st q. if MEM q (mm_local_pending_indices is gs r) then st else
+    case mm_local_write_capture is H N q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H b) (MAP (\q. b+q) (COUNT_LIST (r-b))) /\
+  B = (\i. if i < LENGTH t.vs_memory then EL i t.vs_memory else 0w) ==>
+  mm_local_write_capture is H N j =
+    SOME (c.cg_dst, mm_local_bytes B c.cg_src c.cg_length)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `j <= LENGTH bb.bb_instructions` by (gvs[] >> decide_tac) >>
+  `!u a. FLOOKUP s0.ss_loads u = SOME a ==>
+    lookup_var u (EL (j-h) states) = SOME (mload a (EL (j-h) states))` by
+    (match_mp_tac mm_local_live_load_post_phis >> simp[]) >>
+  `lookup_var v (H j) = SOME (mload srcj (H j))` by metis_tac[] >>
+  drule_all mm_local_pending_store_capture_replay >> simp[]
+QED
+
 Theorem mm_local_collection_discharge[local]:
   mm_local_pending cap js s t /\
   (!pre j mid k post d bs a cs.
@@ -11479,6 +11544,39 @@ Proof
     drule_all mm_local_write_log_realize >>
     disch_then (qspec_then `v` mp_tac) >> simp[FOLDL_APPEND]) >>
   drule_all mm_local_pending_compatible_discharge_filter >> simp[]
+QED
+
+(* Positive retained-history update; realization is an explicit premise. *)
+Theorem mm_local_retained_log_emit[local]:
+  (!pre j mid k post. js = pre ++ [j] ++ mid ++ [k] ++ post /\ P j /\ ~P k ==>
+    mm_local_write_compatible (FST (wr j)) (SND (wr j))
+      (FST (wr k)) (SND (wr k))) /\
+  u.vs_memory =
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) mem0
+      (MAP wr (FILTER (\j. ~P j) js))).vs_memory /\
+  (!v. (write_memory_with_expansion dst payload v).vs_memory =
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v
+      (MAP wr (FILTER P js) ++ [last])).vs_memory) /\
+  u'.vs_memory = (write_memory_with_expansion dst payload u).vs_memory ==>
+  u'.vs_memory =
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) mem0
+      (MAP wr js ++ [last])).vs_memory
+Proof
+  strip_tac >>
+  `FOLDL (\st j. write_memory_with_expansion (FST (wr j)) (SND (wr j)) st) mem0 js =
+   FOLDL (\st j. write_memory_with_expansion (FST (wr j)) (SND (wr j)) st)
+    (FOLDL (\st j. write_memory_with_expansion (FST (wr j)) (SND (wr j)) st)
+      mem0 (FILTER (\j. ~P j) js)) (FILTER P js)` by
+    (qspecl_then [`js`,`mem0`] mp_tac
+       (Q.INST [`P` |-> `\j. ~P j`] mm_local_write_log_compatible_partition) >>
+     simp[ETA_THM] >> metis_tac[]) >>
+  `!ws. (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) u ws).vs_memory =
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st)
+      (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) mem0
+        (MAP wr (FILTER (\j. ~P j) js))) ws).vs_memory` by
+    (gen_tac >> irule mm_local_write_log_memory_cong >> simp[]) >>
+  first_x_assum (qspec_then `MAP wr (FILTER P js) ++ [last]` mp_tac) >>
+  gvs[FOLDL_APPEND, FOLDL_MAP, pairTheory.UNCURRY, combinTheory.o_DEF]
 QED
 
 Theorem mm_local_stage_correct:
