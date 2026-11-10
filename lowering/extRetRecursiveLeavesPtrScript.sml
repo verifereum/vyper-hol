@@ -6,7 +6,7 @@ Ancestors
   fragGasPathPtr bodyPtrDefs ptrDiscipline venomState valueEncodingProps
   immutableCopyExecution words finite_map pred_set arithmetic
   extRetLeafAllocationFramePtr extRetAbiBytesLivePtr abiEncoderLeafGlobals
-  abiEncoderBytesCode abiEncoderInput extRetAbiBytesArithPtr
+  abiEncoderBytesCode abiEncoderInput extRetAbiBytesArithPtr forPtrWord
 
 Overload ceil32[local] = ``contractABI$ceil32``
 
@@ -80,6 +80,47 @@ Proof
      simp[encoder_write_envelope_def, SUBSET_DEF, mem_agree_outside_def] >>
      rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> decide_tac) >>
   simp[encoder_write_envelope_def]
+QED
+
+(* Evaluated, fixed-value robust source interface for the primitive leaf. *)
+Theorem encoder_typed_word_resource_ptr:
+  compile_abi_encode_to_buf (Var dst) (Var src) AbiPrimWord sa = (out,sb) /\
+  fn_has_code sa sb fn /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  ptr_covers G tn src s 32 /\ ptr_covers G tn dst s 32 /\
+  is_word_type ty /\ evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory tv v (w2n a) mem) /\
+  encoder_resource ctx fn sites q len protected s ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
+    eval_operand out sf = SOME 32w /\ op_taint tnf out = {} /\
+    sf.vs_memory = (mstore (w2n b) (mload (w2n a) s) s).vs_memory /\
+    tnf.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+32} /\
+    (!i. w2n b <= i /\ i < w2n b+32 ==> i NOTIN tnf.t_mem) /\
+    tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    encoder_resource ctx fn sites q len protected sf /\
+    mem_agree_outside (encoder_write_envelope sites sf (w2n b) 32)
+      sf.vs_memory s.vs_memory /\
+    (!i. i NOTIN encoder_write_envelope sites sf (w2n b) 32 ==>
+      (i IN tnf.t_mem <=> i IN tn.t_mem))
+Proof
+  strip_tac >>
+  `!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem` by
+    metis_tac[for_typed_word_robust_clean] >>
+  irule encoder_word_resource_ptr >> simp[] >>
+  qexistsl_tac [`dst`, `src`] >> simp[]
 QED
 
 Theorem encoder_bytes_resource_ptr:
