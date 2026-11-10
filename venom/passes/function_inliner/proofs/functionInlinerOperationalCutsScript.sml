@@ -267,3 +267,118 @@ Proof
   strip_tac >> drule_all inline_cell_zipper_sound >> strip_tac >>
   irule inline_owner_storage_assign_cell >> metis_tac[]
 QED
+
+(* Memory effects do not alter addressed local observations or bookkeeping. *)
+Theorem inline_tracked_snapshot_memory[simp]:
+  inline_tracked_snapshot fn a route
+    (snap with ils_state := snap.ils_state with vs_memory := m)
+    (frame with ipf_state := frame.ipf_state with vs_memory := n) <=>
+  inline_tracked_snapshot fn a route snap frame
+Proof
+  simp[inline_tracked_snapshot_def, inline_snapshot_data_def,
+       functionInlinerSimulationTheory.inline_caller_bookkeeping_def,
+       lookup_var_def]
+QED
+
+Theorem inline_suspended_memory[simp]:
+  inline_suspended_observations obs
+    (frame with ipf_state := frame.ipf_state with vs_memory := m) <=>
+  inline_suspended_observations obs frame
+Proof
+  simp[inline_suspended_observations_def, EVERY_MEM, pairTheory.FORALL_PROD,
+       inline_tracked_snapshot_def, inline_snapshot_data_def,
+       functionInlinerSimulationTheory.inline_caller_bookkeeping_def,
+       lookup_var_def]
+QED
+
+Theorem inline_owner_storage_memory:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame ==>
+  inline_owner_storage cert
+    ((p,a,route,snap with ils_state := snap.ils_state with vs_memory := m)::rest)
+    (frame with ipf_state := frame.ipf_state with vs_memory := n)
+Proof
+  Cases_on `rest`
+  >- simp[inline_owner_storage_def, inline_address_stack_def,
+          inline_address_entry_def, inline_address_links_def,
+          inline_erase_addresses_def, inline_suspended_observations_def,
+          inline_tracked_snapshot_def, inline_snapshot_data_def,
+          functionInlinerSimulationTheory.inline_caller_bookkeeping_def, lookup_var_def] >>
+  PairCases_on `h` >>
+  simp[inline_owner_storage_def, inline_address_stack_def,
+       inline_address_entry_def, inline_address_links_def,
+       inline_erase_addresses_def, inline_suspended_observations_def] >>
+  strip_tac >>
+  gvs[inline_tracked_snapshot_def, inline_snapshot_data_def,
+       functionInlinerSimulationTheory.inline_caller_bookkeeping_def, lookup_var_def]
+QED
+
+Theorem inline_tracked_operands_success:
+  inline_tracked_snapshot fn a route snap frame /\
+  eval_operands ops snap.ils_state = SOME args /\
+  EVERY (\op. !v. op = Var v ==>
+    MEM v (cfgTransform$fn_all_vars fn) /\ ~retpc_var fn v) ops ==>
+  eval_operands (MAP (inline_rename_operand route.ir_rename lab) ops)
+    frame.ipf_state = SOME args
+Proof
+  strip_tac >>
+  `EVERY (\op. IS_SOME (eval_operand op snap.ils_state)) ops` by
+    (simp[GSYM venomExecProofsTheory.eval_operands_IS_SOME_EVERY] >> simp[]) >>
+  irule EQ_TRANS >> qexists `eval_operands ops snap.ils_state` >>
+  reverse conj_tac >- simp[] >>
+  irule inline_snapshot_eval_operands >>
+  gvs[inline_tracked_snapshot_def] >>
+  `frame.ipf_state.vs_labels = FEMPTY` by
+    metis_tac[inline_snapshot_anchor_empty_labels] >>
+  simp[] >> reverse conj_tac >- metis_tac[] >>
+  gvs[EVERY_MEM] >> rpt strip_tac >>
+  `IS_SOME (lookup_var v snap.ils_state)` by
+    (qpat_x_assum `!op. MEM op ops ==> IS_SOME (eval_operand op snap.ils_state)`
+       (qspec_then `Var v` mp_tac) >> gvs[eval_operand_def]) >>
+  gvs[pred_setTheory.IN_APP] >> metis_tac[]
+QED
+
+Theorem inline_owner_storage_mstore_step:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_shared_frame snap.ils_state = inline_shared_frame frame.ipf_state /\
+  src.inst_opcode = MSTORE /\ src.inst_operands = [op1;op2] /\
+  step_inst fuel C src snap.ils_state = OK s' /\
+  EVERY (\op. !v. op = Var v ==>
+    MEM v (cfgTransform$fn_all_vars a.ia_function) /\
+    ~retpc_var a.ia_function v) [op1;op2] /\
+  dst.inst_opcode = MSTORE /\
+  dst.inst_operands = MAP (inline_rename_operand route.ir_rename lab) [op1;op2] ==>
+  ?t. step_inst tfuel Tctx dst frame.ipf_state = OK t /\
+      inline_owner_storage cert
+        ((p,a,route,snap with ils_state := s')::rest)
+        (frame with ipf_state := t) /\
+      inline_shared_frame s' = inline_shared_frame t /\
+      s'.vs_memory = t.vs_memory /\
+      s'.vs_current_bb = snap.ils_state.vs_current_bb /\
+      s'.vs_inst_idx = snap.ils_state.vs_inst_idx /\
+      t.vs_current_bb = frame.ipf_state.vs_current_bb /\
+      t.vs_inst_idx = frame.ipf_state.vs_inst_idx
+Proof
+  strip_tac >>
+  `?addr w. eval_operand op1 snap.ils_state = SOME addr /\
+      eval_operand op2 snap.ils_state = SOME w /\
+      s' = mstore (w2n addr) w snap.ils_state` by
+    gvs[Once step_inst_def, step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+  drule inline_owner_storage_head >> strip_tac >>
+  `eval_operands [op1;op2] snap.ils_state = SOME [addr;w]` by
+    simp[eval_operands_def] >>
+  drule_all inline_tracked_operands_success >>
+  disch_then (qspec_then `lab` assume_tac) >>
+  qexists `mstore (w2n addr) w frame.ipf_state` >>
+  conj_tac
+  >- gvs[step_inst_non_invoke, step_inst_base_def, exec_write2_def,
+         eval_operands_def, AllCaseEqs()] >>
+  conj_tac
+  >- (gvs[mstore_def] >> irule inline_owner_storage_memory >> simp[]) >>
+  simp[functionInlinerOperationalTheory.inline_shared_frame_mstore] >>
+  `snap.ils_state.vs_memory = frame.ipf_state.vs_memory` by
+    (qpat_x_assum `inline_shared_frame _ = inline_shared_frame _`
+       (mp_tac o Q.AP_TERM `\s. s.vs_memory`) >>
+     simp[functionInlinerFrameTheory.inline_shared_frame_def,
+          stateFrameTheory.execution_frame_def]) >>
+  gvs[mstore_def]
+QED
