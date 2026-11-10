@@ -4,7 +4,7 @@ Status: open
 Store nested dynamic values by length: storage/transient stores of aggregates with nested DynArray or bytestring parts write only the live slots.
 
 diff --git a/vyper/codegen_venom/context.py b/vyper/codegen_venom/context.py
-index f36c4998..eca8b901 100644
+index f36c4998..2b36c95a 100644
 --- a/vyper/codegen_venom/context.py
 +++ b/vyper/codegen_venom/context.py
 @@ -700,13 +700,9 @@ class VenomCodegenContext:
@@ -23,7 +23,7 @@ index f36c4998..eca8b901 100644
  
      def slot_to_memory(
          self, slot: IROperand, buf: IROperand, word_count: int, location: DataLocation
-@@ -825,12 +821,138 @@ class VenomCodegenContext:
+@@ -825,12 +821,131 @@ class VenomCodegenContext:
              slot, buf, word_count, self.builder.sload, self.builder.mstore, 1, 32, "s2m"
          )
  
@@ -31,13 +31,6 @@ index f36c4998..eca8b901 100644
 -        """Store memory buffer to multi-word storage."""
 -        self._word_copy_loop(
 -            buf, slot, word_count, self.builder.mload, self.builder.sstore, 32, 1, "m2s"
-+    def _bytestring_word_count(self, src: IROperand) -> IROperand:
-+        """The words a bytestring at memory `src` occupies: its length word
-+        and the words holding its bytes, 1 + ceil(length / 32)."""
-+        assert isinstance(src, IRVariable)
-+        b = self.builder
-+        return b.shr(IRLiteral(5), b.add(b.mload(src), IRLiteral(63)))
-+
 +    def _store_memory_to_slots(
 +        self, src: IROperand, slot: IROperand, typ: VyperType, transient: bool
 +    ) -> None:
@@ -166,7 +159,7 @@ index f36c4998..eca8b901 100644
      # === Transient Storage (EIP-1153, Cancun+) ===
  
      def load_transient_to_memory(self, slot: IROperand, typ: VyperType) -> IROperand:
-@@ -865,13 +987,9 @@ class VenomCodegenContext:
+@@ -865,13 +980,9 @@ class VenomCodegenContext:
          if typ._is_prim_word:
              # Primitive types: store value directly
              self.builder.tstore(slot, val)
@@ -182,7 +175,7 @@ index f36c4998..eca8b901 100644
  
      def _load_transient_to_memory(self, slot: IROperand, buf: IROperand, word_count: int) -> None:
          """Load multi-word transient storage value to memory buffer."""
-@@ -879,12 +997,6 @@ class VenomCodegenContext:
+@@ -879,12 +990,6 @@ class VenomCodegenContext:
              slot, buf, word_count, self.builder.tload, self.builder.mstore, 1, 32, "t2m"
          )
  
