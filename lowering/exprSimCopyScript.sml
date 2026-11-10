@@ -35,10 +35,10 @@ Ancestors
 
 Theorem copy_buffer_mstore_locals_kept:
   !cenv es s0 s a (w:bytes32) b sz.
-    locals_kept cenv es s0 s /\ b <= a /\ a + 32 <= b + sz /\
+    locals_kept cenv es es s0 s /\ b <= a /\ a + 32 <= b + sz /\
     (!name lb len. local_region cenv es.scopes s0 name lb len ==>
        b + sz <= lb \/ lb + len <= b) ==>
-    locals_kept cenv es s0 (mstore a w s)
+    locals_kept cenv es es s0 (mstore a w s)
 Proof
   rpt strip_tac >> irule locals_kept_regions_tail >>
   qexists_tac `s` >> simp[] >> rpt strip_tac >>
@@ -82,13 +82,13 @@ Proof
 QED
 
 Theorem copy_buffer_locals_kept_frame:
-  !cenv es0 s0 s t b sz.
-    locals_kept cenv es0 s0 s /\
+  !cenv es0 es' s0 s t b sz.
+    locals_kept cenv es0 es' s0 s /\
     (!name lb len. local_region cenv es0.scopes s0 name lb len ==>
        b + sz <= lb \/ lb + len <= b) /\
     (!off len. off + len <= b \/ b + sz <= off ==>
        mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) ==>
-    locals_kept cenv es0 s0 t
+    locals_kept cenv es0 es' s0 t
 Proof
   rpt strip_tac >> irule locals_kept_regions_tail >>
   qexists_tac `s` >> simp[] >> rpt strip_tac >>
@@ -178,7 +178,7 @@ Theorem copy_buffer_expr_post_physical[local]:
        (!name b k. local_region cenv es.scopes s0 name b k ==>
           off + len <= b \/ b + k <= off) ==>
        mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory) /\
-    locals_kept cenv es s0 s /\
+    locals_kept cenv es es' s0 s /\
     (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
     expr_post ctx func cenv cx e es sa sb s0 es' v op s
 Proof
@@ -220,7 +220,7 @@ Theorem copy_buffer_expr_post:
        (!name b k. local_region cenv es.scopes s0 name b k ==>
           off + len <= b \/ b + k <= off) ==>
        mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory) /\
-    locals_kept cenv es s0 s ==>
+    locals_kept cenv es es' s0 s ==>
     expr_post ctx func cenv cx e es sa sb s0 es' v op s
 Proof
   rpt gen_tac >> strip_tac >>
@@ -281,11 +281,13 @@ Proof
     (irule copy_buffer_state_rel_frame >>
      qexistsl_tac [`w2n w`, `inst`, `u`, `mid`, `sz`] >>
      simp[] >> gvs[regions_disjoint_def] >> metis_tac[]) >>
-  `locals_kept cenv es s0 z` by
+  `locals_kept cenv es es' s0 z` by
     (irule copy_buffer_locals_kept_frame >>
-     qexistsl_tac [`w2n w`, `u`, `sz`] >>
-     gvs[vv_post_def, locals_kept_def, regions_disjoint_def] >>
-     metis_tac[]) >>
+     qexistsl_tac [`w2n w`, `u`, `sz`] >> rpt conj_tac
+     >~ [`locals_kept _ _ _ _ u`]
+     >- (irule locals_kept_mem_tail >> qexists_tac `s` >>
+         gvs[vv_post_def]) >>
+     gvs[regions_disjoint_def] >> metis_tac[]) >>
   `~expr_has_effect e ==> pure_frame cenv func es sa s0 z` by
     (strip_tac >>
      `pure_frame cenv func es sa s0 u` by

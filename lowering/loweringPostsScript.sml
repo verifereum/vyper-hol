@@ -9,6 +9,7 @@ Ancestors
   supportedExprTraverse
   valueEncoding valueEncodingProofs vyperTypeSystem
   venomExecSemantics venomInst venomState vyperLookupStorage vyperStorageBackend accountsRelProps supportedExprTraverse
+  vyperEvalScopesProgress
 Libs
   monadsyntax
 
@@ -166,21 +167,61 @@ End
 
 (* ===== The posts ===== *)
 
-(* Code run from s0 to s leaves the live locals' memory alone, but for the
-   length words of their dynamic arrays: the bytes of every live local's
-   region at es apart from each dynamic array length word inside it
-   (dynarray_len_at, the root's and the nested ones') are kept.  The only
-   memory of a local an expression writes is the length word of the array
-   a pop pops (exprSimPop for a local x.pop(); a pop on a nested place,
-   x.f.pop() or x[i].pop(), writes the length word at its offset in x's
-   declared type). *)
+(* The snapshot h = (path, pv) of a local of type tv held in the region
+   [b, b + sz) sits in memory mem: pv laid out at the offset of path in tv,
+   inside the region. *)
+Definition snapshot_in_def:
+  snapshot_in tv b sz (path,pv) mem <=>
+    ?k ptv. mem_path_offset tv path = SOME (k,ptv) /\
+            k + type_memory_size ptv <= sz /\
+            val_wf ptv pv /\ val_in_memory ptv pv (b + k) mem
+End
+
+(* Code run from s0 to s, taking the source from es to es', keeps the
+   popped history of the locals in memory: a snapshot a pop recorded on the
+   way sits in memory at s, and one the history had at es, and which sat in
+   memory at s0, still does.  Snapshots from before es need not sit in
+   memory (a write through a stale pointer, x[0][x.pop()[0]] = 5, writes
+   the bytes of one and leaves the history alone), so only the ones that
+   did are kept.  An expression writes a local only by popping a live
+   array, at its length word, which no dead snapshot's bytes contain, and
+   every live write clears the history. *)
+Definition popped_kept_def:
+  popped_kept cenv es es' s0 (s:venom_state) <=>
+    !n b sz entry' h.
+      local_region cenv es.scopes s0 n b sz /\
+      lookup_scopes n es'.scopes = SOME entry' /\ MEM h entry'.popped /\
+      (!entry. lookup_scopes n es.scopes = SOME entry /\ MEM h entry.popped ==>
+               snapshot_in entry.type b sz h s0.vs_memory) ==>
+      snapshot_in entry'.type b sz h s.vs_memory
+End
+
+(* Code run from s0 to s, taking the source from es to es', leaves the
+   live locals' memory alone, but for the length words of their dynamic
+   arrays: the bytes of every live local's region at es apart from each
+   dynamic array length word inside it (dynarray_len_at, the root's and the
+   nested ones') are kept.  The only memory of a local an expression writes
+   is the length word of the array a pop pops (exprSimPop for a local
+   x.pop(); a pop on a nested place, x.f.pop() or x[i].pop(), writes the
+   length word at its offset in x's declared type).  A pop records the
+   popped element in the local's history, so the history only grows
+   (scopes_progress), and a local whose entry is the same at es and es'
+   was not popped: it keeps its whole region, length words included.  The
+   history the pops recorded is in memory (popped_kept). *)
 Definition locals_kept_def:
-  locals_kept cenv es s0 s <=>
-    !n b sz off len.
-      local_region cenv es.scopes s0 n b sz /\ b <= off /\
-      off + len <= b + sz /\
-      (!k. dynarray_len_at cenv n k ==> off + len <= b + k \/ b + k + 32 <= off) ==>
-      mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory
+  locals_kept cenv es es' s0 s <=>
+    (!n b sz off len.
+       local_region cenv es.scopes s0 n b sz /\ b <= off /\
+       off + len <= b + sz /\
+       (!k. dynarray_len_at cenv n k ==> off + len <= b + k \/ b + k + 32 <= off) ==>
+       mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory) /\
+    MAP FDOM es'.scopes = MAP FDOM es.scopes /\
+    scopes_progress es.scopes es'.scopes /\
+    (!n b sz.
+       local_region cenv es.scopes s0 n b sz /\
+       lookup_scopes n es'.scopes = lookup_scopes n es.scopes ==>
+       mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory) /\
+    popped_kept cenv es es' s0 s
 End
 
 (* Where the value v of an expression of type t, lowered from compile state
@@ -204,7 +245,7 @@ End
    (locals_kept), which the path keeps apart from a value with no dynamic
    array in it. *)
 Definition wb_frame_def:
-  wb_frame cenv es sa s0 s <=>
+  wb_frame cenv es es' sa s0 s <=>
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -214,7 +255,7 @@ Definition wb_frame_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
+    locals_kept cenv es es' s0 s
 End
 
 (* The memory frame of an effect-free expression's fragment, run from s0 to
@@ -423,7 +464,7 @@ Definition expr_post_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s /\
+    locals_kept cenv es es' s0 s /\
     (~expr_has_effect e ==> pure_frame cenv func es sa s0 s)
 End
 
@@ -605,7 +646,7 @@ Definition vv_post_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s /\
+    locals_kept cenv es es' s0 s /\
     (~expr_has_effect e ==> pure_frame cenv func es sa s0 s)
 End
 
@@ -672,7 +713,7 @@ Definition target_post_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
+    locals_kept cenv es es' s0 s
 End
 
 (* compile_stmts, returning the compile environment after the list's

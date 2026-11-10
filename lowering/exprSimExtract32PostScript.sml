@@ -60,11 +60,11 @@ Theorem extract32_posts_to_vv_post_frame:
     es sa final s0 es2 (Value v) (StackValue ty op) u
 Proof
   strip_tac >>
-  `wb_frame cenv es sa s0 s1` by metis_tac[expr_post_frame] >>
-  `wb_frame cenv es1 sm s1 s2` by metis_tac[expr_post_frame] >>
-  `wb_frame cenv es sa s0 s2` by metis_tac[wb_frame_trans] >>
+  `wb_frame cenv es es1 sa s0 s1` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es1 es2 sm s1 s2` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es es2 sa s0 s2` by metis_tac[wb_frame_trans] >>
   `sa.cs_next_var <= st3.cs_next_var` by decide_tac >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es es2 sa s0 u` by
     (irule wb_frame_readonly_tail >> qexistsl [`st3`,`s2`] >> simp[]) >>
   `~expr_has_effect src /\ ~expr_has_effect off ==>
    pure_frame cenv func es sa s0 u` by
@@ -124,7 +124,7 @@ Proof
      >- (disj2_tac >> disj1_tac >> qexistsl [`n`,`b`,`sz`] >>
          asm_rewrite_tac[]) >> simp[]) >>
   qexistsl [`u`,`p`] >> simp[] >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es es' sa s0 u` by
     (irule wb_frame_readonly_tail >> qexistsl [`sm`,`s`] >>
      simp[] >> metis_tac[expr_post_frame]) >>
   gvs[expr_post_def, wb_frame_def] >>
@@ -168,7 +168,7 @@ Proof
   `expr_val_rel cx (expr_type src) (BytesV bs) src_op s2` by
     (irule log_argument_value_kept >>
      conj_tac >- simp[] >>
-     qexistsl [`cenv`,`es1`,`s1`,`sa`,`sm`] >> simp[] >>
+     qexistsl [`cenv`,`es2`,`es1`,`s1`,`sa`,`sm`] >> simp[] >>
      conj_tac >- (simp[] >> irule log_arg_clear_base >> metis_tac[]) >>
      conj_tac >- gvs[expr_post_def] >>
      conj_tac >- metis_tac[expr_post_frame] >>
@@ -346,7 +346,7 @@ Theorem extract32_expr_post_start_gas_obs:
   expr_post ctx func cenv cx e (es with gas_obs := gs) sa sb s0 ee v op s =
   expr_post ctx func cenv cx e es sa sb s0 ee v op s
 Proof
-  simp[expr_post_def, locals_kept_def]
+  simp[expr_post_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem extract32_expr_post_end_gas_obs:
@@ -354,5 +354,5 @@ Theorem extract32_expr_post_end_gas_obs:
   expr_post ctx func cenv cx e es sa sb s0 ee v op s
 Proof
   simp[expr_post_def, expr_val_at_def, expr_val_own_def, stmt_state_rel_def,
-       state_rel_gas_obs]
+       state_rel_gas_obs, locals_kept_def, popped_kept_def]
 QED

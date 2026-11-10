@@ -60,7 +60,7 @@ Theorem aggregate_tuple_cons_continuation_mem_cursor:
       lo <= a /\ a + k <= lo + sz /\
       (a + k <= b+off \/ b+off + type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next /\
@@ -179,8 +179,10 @@ Resume aggregate_tuple_cons_continuation_mem_cursor[join]:
      local_region ce es'.scopes tadd n lo k` by
     (rpt strip_tac >> irule local_region_frame_fwd >>
      qexistsl_tac [`r`, `sm`, `es'.scopes`] >> simp[]) >>
-  qpat_x_assum `locals_kept ce es' tadd q` mp_tac >>
-  simp[locals_kept_def] >> metis_tac[]
+  `locals_kept ce es' es' r q` by
+    (irule exprBopSimPropsTheory.locals_kept_trans >>
+     qexistsl_tac [`es'`, `sm`, `tadd`] >> simp[locals_kept_mem]) >>
+  simp[] >> metis_tac[]
 QED
 
 Finalise aggregate_tuple_cons_continuation_mem_cursor
@@ -227,7 +229,7 @@ Theorem aggregate_tuple_cons_continuation_mem:
       lo <= a /\ a + k <= lo + sz /\
       (a + k <= b+off \/ b+off + type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next /\
     lookup_var x q = SOME (n2w b) /\ FLOOKUP q.vs_allocas aid = SOME (b,asz)

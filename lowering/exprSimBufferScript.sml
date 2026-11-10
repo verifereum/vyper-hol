@@ -50,7 +50,7 @@ Theorem buffer_memory_vv_post_general:
       (!n b k. local_region cenv es.scopes s0 n b k ==>
         off+len <= b \/ b+k <= off) ==>
       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s0.vs_memory) /\
-    locals_kept cenv es s0 t /\
+    locals_kept cenv es es' s0 t /\
     (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) ==>
     vv_post ctx func cenv cx e es sa sb s0 es' (Value v)
       (LocatedValue (expr_type e) p) t
@@ -91,7 +91,7 @@ Theorem buffer_memory_vv_post:
       (LocatedValue (expr_type e) p) t
 Proof
   rpt gen_tac >> strip_tac >>
-  `locals_kept cenv es s0 t` by
+  `locals_kept cenv es es s0 t` by
     (irule locals_kept_regions >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `!name b len. local_region _ _ s0 _ _ _ ==> _` kall_tac >>
   irule buffer_memory_vv_post_general >>

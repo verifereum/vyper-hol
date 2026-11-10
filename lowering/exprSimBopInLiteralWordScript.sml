@@ -56,7 +56,7 @@ Theorem literal_word_post_cons:
   expr_post ctx func cenv cx e es sa s1 s0 es1 v x t /\
   stmt_state_rel ctx func cenv cx es' u /\
   LIST_REL (\x v. eval_operand x u = SOME (typed_val_to_w256 tv v)) xs vs /\
-  wb_frame cenv es1 s1 t u /\
+  wb_frame cenv es1 es' s1 t u /\
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
@@ -65,16 +65,16 @@ Theorem literal_word_post_cons:
   (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l) ==>
   stmt_state_rel ctx func cenv cx es' u /\
   LIST_REL (\x v. eval_operand x u = SOME (typed_val_to_w256 tv v)) (x::xs) (v::vs) /\
-  wb_frame cenv es sa s0 u
+  wb_frame cenv es es' sa s0 u
 Proof
   strip_tac >>
   `eval_operand x t = SOME (typed_val_to_w256 tv v)` by
     metis_tac[literal_word_post_operand] >>
-  `wb_frame cenv es sa s0 t` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es es1 sa s0 t` by metis_tac[expr_post_frame] >>
   simp[] >> conj_tac
   >- (irule eval_operand_frame >> goal_assum (drule_at Any) >>
       simp[] >> metis_tac[wb_frame_vars]) >>
-  irule wb_frame_trans >> simp[] >> conj_tac
+  irule wb_frame_trans >> simp[] >> reverse conj_tac
   >- (qexistsl_tac [`es1`, `s1`, `t`] >> simp[]) >>
   qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
 QED
@@ -124,7 +124,7 @@ Theorem literal_word_post_singleton:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
   stmt_state_rel ctx func cenv cx es' s /\
   LIST_REL (\x v. eval_operand x s = SOME (typed_val_to_w256 tv v)) [op] [v] /\
-  wb_frame cenv es sa s0 s
+  wb_frame cenv es es' sa s0 s
 Proof
   strip_tac >> simp[] >>
   metis_tac[literal_word_post_operand, expr_post_state, expr_post_frame]
@@ -882,7 +882,7 @@ Theorem literal_word_args_nil_sim:
       (\rr ee t. ?vs. rr = INL vs /\
          stmt_state_rel ctx func cenv cx ee t /\
          LIST_REL (\x v. eval_operand x t = SOME (typed_val_to_w256 tv v)) [] vs /\
-         wb_frame cenv es sa s0 t /\
+         wb_frame cenv es ee sa s0 t /\
          (~EXISTS expr_has_effect [] ==> pure_frame cenv func es sa s0 t) /\
          t.vs_current_bb = sa.cs_current_bb /\
          t.vs_inst_idx = LENGTH sa.cs_current_insts)
@@ -911,7 +911,7 @@ Theorem literal_word_args_sim:
       (\rr ee t. ?vs. rr = INL vs /\
          stmt_state_rel ctx func cenv cx ee t /\
          LIST_REL (\x v. eval_operand x t = SOME (typed_val_to_w256 tv v)) xs vs /\
-         wb_frame cenv es sa s0 t /\
+         wb_frame cenv es ee sa s0 t /\
          (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
@@ -988,9 +988,11 @@ Resume literal_word_args_sim[tail_normal]:
       BETA_TAC >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL vs) _ _`
         (mp_tac o MATCH_MP gas_marked_exec_cons_values) >> simp[]) >>
+  qpat_x_assum `wb_frame _ _ (_ with gas_obs := _) _ _ _`
+    (assume_tac o REWRITE_RULE [wb_frame_gas_obs]) >>
   `stmt_state_rel ctx func cenv cx es_end' t' /\
    LIST_REL (\x v. eval_operand x t' = SOME (typed_val_to_w256 tv v)) (x::ys) (v::vs) /\
-   wb_frame cenv es sa s0 t'` by
+   wb_frame cenv es es_end' sa s0 t'` by
     (irule literal_word_post_cons >>
      qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
      goal_assum (drule_at Any) >> simp[]) >>
@@ -1006,21 +1008,19 @@ Resume literal_word_args_sim[tail_normal]:
           (ACCEPT_TAC o REWRITE_RULE [listTheory.NOT_EXISTS])) >>
      `!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
               FLOOKUP t'.vs_allocas aid = SOME b` by
-       (qpat_assum `wb_frame cenv (es_end with gas_obs := []) s1 t t'` mp_tac >>
+       (qpat_assum `wb_frame cenv _ _ s1 t t'` mp_tac >>
         pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
         strip_tac >> first_assum ACCEPT_TAC) >>
-     `wb_frame cenv es sa s0 t` by
-       (qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _`
-          (mp_then Any mp_tac exprSimWordArgsTheory.expr_post_frame) >>
-        simp[]) >>
+     qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _`
+       (strip_assume_tac o MATCH_MP exprSimWordArgsTheory.expr_post_frame) >>
      `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
             lookup_var x t = SOME w` by
-       (qpat_assum `wb_frame cenv es sa s0 t` mp_tac >>
+       (qpat_assum `wb_frame cenv es _ sa s0 t` mp_tac >>
         pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
         strip_tac >> first_assum ACCEPT_TAC) >>
      match_mp_tac exprSimPropsTheory.pure_frame_trans >>
      qexistsl_tac [`es_end`, `s1`, `t`] >> simp[]) >>
-  disj1_tac >> gvs[]
+  disj1_tac >> gvs[wb_frame_gas_obs]
 QED
 Resume literal_word_args_sim[tail_exit]:
   Cases_on `res` >- gvs[wb_args_exit_def] >>
@@ -1119,7 +1119,7 @@ Theorem literal_typed_continuation_summary:
   stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
   LIST_REL (\x v. eval_operand x t0 = SOME (typed_val_to_w256 tv v)) xs vs /\
   eval_operand needle t0 = SOME (typed_val_to_w256 tv v) /\
-  wb_frame cenv es sa s0 t0 /\ sa.cs_next_var <= sm.cs_next_var /\
+  wb_frame cenv es (ee with gas_obs := []) sa s0 t0 /\ sa.cs_next_var <= sm.cs_next_var /\
   (~expr_has_effect
      (Builtin (BaseT BoolT) (Bop bop) [e1; Builtin a (MakeArray t n) elems]) ==>
    pure_frame cenv func es sa s0 t0) /\

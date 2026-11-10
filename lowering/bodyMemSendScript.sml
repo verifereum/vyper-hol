@@ -177,7 +177,7 @@ Theorem send_tail_path_mem:
   fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   stmt_state_rel ctx func cenv cx es1 t /\ alloca_history func t /\
-  wb_frame cenv es sa s0 t /\
+  wb_frame cenv es es1 sa s0 t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   outcomes_accounts_typed es1.outcomes /\
@@ -256,7 +256,7 @@ Proof
       simp[] >>
       conj_tac
       >- (irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-          reverse conj_tac
+          conj_tac
           >- (irule stmt_state_rel_update_var >> conj_tac
               >- (irule fresh_not_local_ptr >> qexists_tac `sm` >>
                   metis_tac[]) >>
@@ -276,9 +276,18 @@ Proof
               qexistsl_tac [`es1`, `t`] >> simp[] >>
               qpat_x_assum `s' = _`
                 (fn th => once_rewrite_tac[th]) >> simp[]) >>
+          `wb_frame cenv es es' sa s0 t` by
+            (`es'.scopes = es1.scopes` by
+               (drule eval_send_read >> strip_tac >>
+                drule eval_send_preserves_non_accounts >> simp[]) >>
+             qpat_x_assum `wb_frame cenv es es1 sa s0 t` mp_tac >>
+             pure_rewrite_tac[wb_frame_def, locals_kept_def, popped_kept_def] >>
+             qpat_x_assum `es'.scopes = es1.scopes`
+               (fn th => pure_rewrite_tac[th]) >>
+             disch_then ACCEPT_TAC) >>
           irule wb_frame_readonly_tail >>
           qexists_tac `sm` >>
-          qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
+          qpat_assum `wb_frame cenv es es' sa s0 t` (irule_at Any) >>
           simp[update_var_def, lookup_var_def,
                finite_mapTheory.FLOOKUP_UPDATE] >>
           rw[] >> gvs[not_fresh_at_def] >> metis_tac[]) >>

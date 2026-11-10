@@ -55,7 +55,7 @@ Theorem aggregate_make_tuple_sim_mem:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r /\
+      locals_kept ce es es' s0 r /\
       alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next /\
       (~EXISTS expr_has_effect args ==>
         (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
@@ -327,10 +327,9 @@ Resume aggregate_make_tuple_sim_mem[exterior_join]:
 QED
 Resume aggregate_make_tuple_sim_mem[locals_join]:
   `local_ptrs_reserved ce sm` by metis_tac[compiler_ci_mono_reserved] >>
-  `locals_kept ce es1 t1 r` by
-    (irule exprBopSimPropsTheory.locals_kept_trans >> qexistsl_tac [`es1`, `sm`, `q`] >> simp[]) >>
   irule exprBopSimPropsTheory.locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t1`] >>
-  fs[vv_post_def]
+  fs[vv_post_def] >>
+  irule exprBopSimPropsTheory.locals_kept_trans >> qexistsl_tac [`es1`, `sm`, `q`] >> simp[]
 QED
 Resume aggregate_make_tuple_sim_mem[pure_join]:
   rpt (disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>

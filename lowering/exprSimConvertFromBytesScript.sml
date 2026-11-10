@@ -2459,7 +2459,7 @@ Proof
     (simp[loweringPostsTheory.expr_has_effect_thm] >> strip_tac >>
      match_mp_tac exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `t0` >>
      simp[]) >>
-  `locals_kept cenv es s0 ss` by
+  `locals_kept cenv es es' s0 ss` by
     (irule locals_kept_mem_tail >> qexists_tac `t0` >> asm_rewrite_tac[]) >>
   simp[expr_val_rel_def, expr_val_at_def, vyperASTTheory.expr_type_def] >>
   conj_tac

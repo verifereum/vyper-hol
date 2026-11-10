@@ -179,6 +179,7 @@ Proof
   >- simp[gas_marked_exec_def, vyperStateTheory.return_def] >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ u` mp_tac >>
   simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
-       expr_val_at_def, lookup_var_def, local_region_def, locals_kept_def] >>
-  strip_tac >> simp[] >> conj_tac >> first_assum MATCH_ACCEPT_TAC
+       expr_val_at_def, lookup_var_def, local_region_def, locals_kept_def,
+       popped_kept_def] >>
+  strip_tac >> simp[] >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED

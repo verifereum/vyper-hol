@@ -15,8 +15,8 @@ Theorem word_expr_post_readonly_tail:
   expr_post ctx func cenv cx e es sa sc s0 es' v op t
 Proof
   strip_tac >>
-  `wb_frame cenv es sa s0 s` by metis_tac[expr_post_frame] >>
-  `wb_frame cenv es sa s0 t` by
+  `wb_frame cenv es es' sa s0 s` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es es' sa s0 t` by
     (irule wb_frame_readonly_tail >> goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[]) >>
   `~expr_has_effect e ==> pure_frame cenv func es sa s0 t` by
@@ -60,13 +60,13 @@ Proof
     (irule word_expr_post_readonly_tail >> simp[] >>
      qexistsl_tac [`v`,`sc`] >> simp[]) >>
   drule_all_then strip_assume_tac framed_array_base_transport >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es t sa s0 u` by
     (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_tac o REWRITE_RULE [vv_post_def]) >>
      disch_then (map_every assume_tac o CONJUNCTS) >>
      simp[wb_frame_def] >> first_assum ACCEPT_TAC) >>
-  `wb_frame cenv t sb u q` by metis_tac[expr_post_frame] >>
-  `wb_frame cenv es sa s0 q` by
+  `wb_frame cenv t t' sb u q` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es t' sa s0 q` by
     (drule_all wb_frame_trans >> simp[]) >>
   `~expr_has_effect obj /\ ~expr_has_effect idx ==> pure_frame cenv func es sa s0 q` by
     (strip_tac >>

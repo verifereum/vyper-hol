@@ -134,7 +134,7 @@ Proof
      simp[] >> rpt strip_tac >> irule local_region_frame >> conj_tac
      >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
      qexistsl_tac [`sa`, `es'.scopes`, `t`] >> asm_rewrite_tac[]) >>
-  `locals_kept cenv es s0 t` by
+  `locals_kept cenv es es' s0 t` by
     (irule locals_kept_mem_tail >> qexists_tac `s` >> asm_rewrite_tac[]) >>
   `pure_frame cenv func es sa s0 t <=> pure_frame cenv func es sa s0 s` by
     (irule pure_frame_state_cong >> conj_tac >> first_assum ACCEPT_TAC) >>

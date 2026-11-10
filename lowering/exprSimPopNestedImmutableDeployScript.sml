@@ -247,7 +247,7 @@ Theorem immutable_store_wb_frame[local]:
     FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
     FLOOKUP (get_source_immutables cenv.ce_module imms) id = SOME (tv,a) /\
     k + 32 <= type_memory_size tv ==>
-    wb_frame cenv es sm s (mstore (off+k) word s)
+    wb_frame cenv es es sm s (mstore (off+k) word s)
 Proof
   rpt gen_tac >> strip_tac >>
   `!b sz. ((?aid. FLOOKUP s.vs_allocas aid = SOME (b,sz)) \/
@@ -409,7 +409,7 @@ QED
 Theorem immutable_ctor_pointer_post[local]:
   post_value_type cenv e = expr_type e /\
   stmt_state_rel ctx func cenv cx es' u /\
-  wb_frame cenv initial sa s0 u /\ cenv.ce_is_ctor /\
+  wb_frame cenv initial es' sa s0 u /\ cenv.ce_is_ctor /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
   ALOOKUP es'.immutables cx.txn.target = SOME imms /\
   FLOOKUP (get_source_immutables cenv.ce_module imms) id = SOME (tv,updated) /\
@@ -425,7 +425,7 @@ Proof
   strip_tac >>
   simp[vv_post_def, vv_holds_def, vv_at_def, contextTheory.mk_ptr_def] >>
   conj_tac
-  >- (rewrite_tac[immutable_holds_def] >>
+  >- (rewrite_tac[immutable_holds_def] >> asm_rewrite_tac[] >>
       qexistsl [`id`, `off`, `tv`, `updated`, `j`, `etv`, `v`] >> simp[]) >>
   gvs[wb_frame_def] >> first_assum ACCEPT_TAC
 QED
@@ -694,25 +694,30 @@ Proof
      qpat_x_assum `u = _` mp_tac >>
      simp[venom_state_component_equality, mstore_def,
           write_memory_with_expansion_def]) >>
-  `wb_frame cenv es sm t stored` by
+  `wb_frame cenv es es sm t stored` by
     (drule_all immutable_store_wb_frame >>
      disch_then (qspecl_then [`n2w (LENGTH vs-1)`, `sm`] mp_tac) >>
      simp[Abbr `stored`]) >>
   `u.vs_allocas = t.vs_allocas` by
     (qpat_x_assum `u = _` mp_tac >> simp[venom_state_component_equality]) >>
-  `wb_frame cenv es sm t u` by
+  `wb_frame cenv es es sm t u` by
     (irule exprSimWordArgsTheory.wb_frame_readonly_tail >> qexistsl [`sm`, `stored`] >>
      simp[Abbr `stored`, mstore_def, write_memory_with_expansion_def,
           lookup_var_def]) >>
-  `wb_frame cenv es0 sa s0 t` by
+  `wb_frame cenv es0 es sa s0 t` by
     (qpat_x_assum `imm_target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp_tac std_ss [imm_target_post_def, wb_frame_def] >>
      metis_tac[]) >>
-  `wb_frame cenv es0 sa s0 u` by
+  `wb_frame cenv es0 es sa s0 u` by
     (`sa.cs_next_var <= sm.cs_next_var /\
       sa.cs_next_id <= sm.cs_next_id` by
        (qpat_x_assum `ci_mono sa sm` mp_tac >> simp[ci_mono_def]) >>
      drule_all exprSimWordArgsTheory.wb_frame_trans >> simp[]) >>
+  (* fin only updates the immutables; a frame reads its end state's scopes *)
+  `wb_frame cenv es0 fin sa s0 u` by
+    (`wb_frame cenv es0 fin sa s0 u <=> wb_frame cenv es0 es sa s0 u` by
+       simp[NoAsms, Abbr `fin`, wb_frame_def, locals_kept_def, popped_kept_def] >>
+     pop_assum (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
   `val_in_memory etv (LAST vs)
       (off + (k+32+(LENGTH vs-1)*type_memory_size etv)) u.vs_memory` by
     (`(mstore (k+off) (n2w (LENGTH vs-1)) t).vs_memory = stored.vs_memory` by

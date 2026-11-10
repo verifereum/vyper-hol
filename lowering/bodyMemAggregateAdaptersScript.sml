@@ -57,7 +57,7 @@ Theorem aggregate_struct_fields_sim_mem:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r /\ alloca_history func r /\
+      locals_kept ce es es' s0 r /\ alloca_history func r /\
       s0.vs_alloca_next <= r.vs_alloca_next /\
       (~EXISTS expr_has_effect (MAP SND fields) ==>
         (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
@@ -139,7 +139,7 @@ Theorem aggregate_make_array_elems_sim_mem:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r /\ alloca_history func r /\
+      locals_kept ce es es' s0 r /\ alloca_history func r /\
       s0.vs_alloca_next <= r.vs_alloca_next /\
       (~EXISTS expr_has_effect args ==>
         (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
@@ -236,7 +236,7 @@ Theorem aggregate_make_array_sim_mem:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r /\ alloca_history func r /\
+      locals_kept ce es es' s0 r /\ alloca_history func r /\
       s0.vs_alloca_next <= r.vs_alloca_next /\
       (~EXISTS expr_has_effect args ==>
         (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
@@ -280,7 +280,7 @@ Proof
   `gas_marked_path T ctx func s0 0 (OK sh) /\ alloca_history func sh` by
     suspend "header_path" >>
   `stmt_state_rel ctx func ce cx es (mstore b (n2w (LENGTH args)) s0) /\
-   locals_kept ce es s0 (mstore b (n2w (LENGTH args)) s0) /\
+   locals_kept ce es es s0 (mstore b (n2w (LENGTH args)) s0) /\
    mem_word_at b (mstore b (n2w (LENGTH args)) s0).vs_memory = n2w (LENGTH args) /\
    (!p n. p+n <= b \/ b+32 <= p ==>
      mem_bytes_at p n (mstore b (n2w (LENGTH args)) s0).vs_memory =
@@ -403,7 +403,7 @@ QED
 
 Resume aggregate_make_array_sim_mem[locals]:
   irule locals_kept_trans >> qexistsl_tac [`es`, `sa`, `sh`] >>
-  simp[Abbr `sh`, locals_kept_def, mstore_def, lookup_var_def]
+  simp[Abbr `sh`, mstore_def, lookup_var_def]
 QED
 
 Resume aggregate_make_array_sim_mem[header_boundary]:
