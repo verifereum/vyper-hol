@@ -1,7 +1,7 @@
 (* Typed default payload execution into a caller-owned return allocation. *)
 Theory extcallReturnDefaultStore
 Ancestors
-  valueCopySource extcallReturnDefaultPath bodyIntCallStoreRun
+  valueCopySource extcallReturnDefaultPath extCallSeamPrecheck bodyIntCallStoreRun
   placeMemoryPrimitiveForward storageCopyGasPath exprSimProps
   loweringPosts context compileEnv venomState venomInst exprLoweringProps
   emitHelper emitHelperProps list rich_list finite_map arithmetic
@@ -40,6 +40,9 @@ Theorem return_default_store_counted:
     val_in_memory tv v (w2n dw) u.vs_memory /\
     eval_operand dst u = SOME dw /\
     u.vs_allocas = s.vs_allocas /\
+    (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+              vs_inst_idx := s.vs_inst_idx|>) = s /\
+    (!p. safe_operand a p ==> eval_operand p u = eval_operand p s) /\
     (!x. not_fresh_at a x ==> lookup_var x u = lookup_var x s) /\
     ~u.vs_halted /\ u.vs_current_bb = b.cs_current_bb /\
     u.vs_inst_idx = LENGTH b.cs_current_insts
@@ -65,6 +68,10 @@ Proof
   qexists_tac `t with vs_inst_idx := LENGTH b.cs_current_insts` >>
   simp[stmt_state_rel_inst_idx] >>
   conj_tac >- suspend "operand" >>
+  conj_tac
+  >- (qpat_x_assum `(t with <|vs_vars := _; vs_memory := _|>) = s` mp_tac >>
+      simp[venom_state_component_equality]) >>
+  conj_tac >- suspend "safe_operands" >>
   fs[lookup_var_def, same_blocks_def]
 QED
 Resume return_default_store_counted[no_gas]:
@@ -116,4 +123,60 @@ Resume return_default_store_counted[operand]:
      simp[venom_state_component_equality]) >>
   Cases_on `dst` >> gvs[eval_operand_def]
 QED
+Resume return_default_store_counted[safe_operands]:
+  `t.vs_labels = s.vs_labels` by
+    (qpat_x_assum `(t with <|vs_vars := _; vs_memory := _|>) = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  Cases >> simp[exprSafeOperandTheory.safe_operand_def, eval_operand_def]
+QED
 Finalise return_default_store_counted
+
+(* Optional check, at the store endpoint; no memory or allocation changes. *)
+Theorem return_default_optional_check_counted:
+  (if skip then comp_return () else compile_extcodesize_check addr) a = ((),b) /\
+  fn_has_code a b func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  eval_operand addr s = SOME aw /\ w2w aw = target /\
+  stmt_state_rel ctx func ce cx ee s /\
+  accounts_runtime_well_typed ee.accounts /\ local_ptrs_reserved ce a /\
+  wb_frame ce es sa s0 s /\ sa.cs_next_var <= a.cs_next_var ==>
+  ?u. if skip \/ ext_call_has_code target ee.accounts then
+    gas_marked_path F ctx func s 0 (OK u) /\
+    stmt_state_rel ctx func ce cx ee u /\ wb_frame ce es sa s0 u /\
+    u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
+    (!p. safe_operand a p ==> eval_operand p u = eval_operand p s) /\
+    ~u.vs_halted /\ u.vs_current_bb = b.cs_current_bb /\
+    u.vs_inst_idx = LENGTH b.cs_current_insts
+  else gas_marked_path F ctx func s 0 (Abort Revert_abort u)
+Proof
+  strip_tac >> Cases_on `skip`
+  >- (gvs[comp_return_def] >> qexists_tac `s` >>
+      simp[fragGasModeTheory.gas_marked_path_def, fragGasPathTheory.gas_path_rules]) >>
+  gvs[] >>
+  drule_all return_default_check_counted >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all extcall_precheck_code_word >>
+  disch_then (qspec_then `w2w aw` assume_tac) >>
+  Cases_on `ext_call_has_code (w2w aw) ee.accounts`
+  >- (gvs[] >>
+      qmatch_asmsub_abbrev_tac `gas_marked_path F ctx func s 0 (OK checked)` >>
+      qexists_tac `checked` >> simp[] >>
+      unabbrev_all_tac >> suspend "check_frame") >>
+  gvs[] >> metis_tac[]
+QED
+Resume return_default_optional_check_counted[check_frame]:
+  conj_tac
+  >- (simp[stmt_state_rel_inst_idx] >> irule stmt_state_rel_update_var >> simp[] >>
+      irule local_ptrs_reserved_fresh >> qexists_tac `a` >> simp[]) >>
+  conj_tac
+  >- (irule extcall_optional_precheck_wb >>
+      metis_tac[]) >>
+  drule extcall_codesize_check_shape >> strip_tac >>
+  simp[update_var_def] >>
+  reverse conj_tac >- fs[same_blocks_def] >>
+  Cases >> simp[exprSafeOperandTheory.safe_operand_def, eval_operand_def,
+    lookup_var_def, update_var_def, FLOOKUP_UPDATE, not_fresh_at_def,
+    ASCIInumbersTheory.toString_inj]
+QED
+Finalise return_default_optional_check_counted
