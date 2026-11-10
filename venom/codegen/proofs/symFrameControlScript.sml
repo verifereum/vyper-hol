@@ -802,6 +802,21 @@ Proof
   mp_tac (Q.SPECL [`2`, `2`, `ss`] sym_steps_add) >> simp[]
 QED
 
+Theorem scratch_disjoint_bulk_cell:
+  EVERY (\off. h + 32 <= off \/ off + 32 <= h) offsets /\
+  (!b. EVERY (\off. ~in_mem_range off 32 b) offsets ==>
+    FLOOKUP labs' b = FLOOKUP labs b) /\
+  mem_sval_at labs h sv ==>
+  mem_sval_at labs' h sv
+Proof
+  strip_tac >>
+  `!b. in_mem_range h 32 b ==> FLOOKUP labs' b = FLOOKUP labs b`
+    suffices_by metis_tac[mem_sval_at_local_cong] >> rpt strip_tac >>
+  first_x_assum irule >>
+  fs[listTheory.EVERY_MEM, in_mem_range_def] >> rpt strip_tac >>
+  first_x_assum drule >> decide_tac
+QED
+
 Theorem sym_scratch_spill_bulk_steps:
   !offsets ss.
     LENGTH offsets <= LENGTH ss.sym_stack /\
@@ -839,16 +854,10 @@ Proof
   strip_tac >> qexists_tac `ss''` >> simp[] >>
   conj_tac
   >- (gvs[execute_plan_def, exec_stack_op_def] >>
-      `2 * SUC (LENGTH offsets) = 2 + 2 * LENGTH offsets` by decide_tac >>
-      mp_tac (Q.SPECL [`2`, `2 * LENGTH (offsets:num list)`, `ss`] sym_steps_add) >> simp[]) >>
+      mp_tac (Q.SPECL [`2`, `2 * LENGTH (offsets:num list)`, `ss`] sym_steps_add) >>
+      simp[arithmeticTheory.MULT_SUC]) >>
   conj_tac
-  >- (Cases >> simp[] >>
-      `!b. in_mem_range h 32 b ==>
-         FLOOKUP ss''.sym_mem_labels b = FLOOKUP ss'.sym_mem_labels b` by
-        (rpt strip_tac >> first_x_assum irule >>
-         fs[listTheory.EVERY_MEM, in_mem_range_def] >> rpt strip_tac >>
-         first_x_assum drule >> decide_tac) >>
-      metis_tac[mem_sval_at_local_cong]) >>
+  >- (Cases >> simp[] >> metis_tac[scratch_disjoint_bulk_cell]) >>
   metis_tac[]
 QED
 
@@ -998,6 +1007,32 @@ Proof
   gvs[listTheory.MAP_REVERSE]
 QED
 
+
+Theorem list_rel_index_schedule:
+  !R xs ys ids. LIST_REL R xs ys /\ EVERY (\i. i < LENGTH xs) ids ==>
+    LIST_REL R (MAP (\i. EL i xs) ids) (MAP (\i. EL i ys) ids)
+Proof
+  rpt strip_tac >>
+  fs[listTheory.LIST_REL_EL_EQN, listTheory.EVERY_EL] >>
+  simp[listTheory.LIST_REL_EL_EQN, listTheory.EL_MAP]
+QED
+
+Theorem list_rel_reversed_index_schedule:
+  LIST_REL R (REVERSE items) vals /\ LENGTH items = d + 1 /\ 0 < d /\
+  ids = [d] ++ GENLIST (\i. i + 1) (d - 1) ++ [0] /\
+  EVERY (\i. i < LENGTH items) ids ==>
+  LIST_REL R (REVERSE (MAP (\i. EL i items) ids))
+    (MAP (\i. EL i vals) ids)
+Proof
+  strip_tac >>
+  `REVERSE (MAP (\i. EL i items) ids) =
+     MAP (\i. EL i (REVERSE items)) ids` by
+    (qpat_x_assum `ids = _` SUBST1_TAC >>
+     irule doSwapSimTheory.reverse_desired_values >> simp[]) >>
+  qpat_x_assum `REVERSE (MAP _ _) = _`
+    (fn th => pure_rewrite_tac[th]) >>
+  irule list_rel_index_schedule >> gvs[]
+QED
 
 (* A branch condition cannot carry either class of symbolic label. *)
 Theorem sym_jnz_condition_kind:
