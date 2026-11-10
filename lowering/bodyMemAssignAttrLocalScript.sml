@@ -6,7 +6,7 @@ Ancestors
   vyperTypeCallGraph vyperTypeSystem vyperTypeInvariants
   bodyMemoryPreds bodyFieldMemoryProps bodyDeclMemoryCounted
   exprSimVVFrame exprOperandVar emitHelperProps gasSummary fragGasMode
-  venomState venomInst venomExecSemantics compileEnv emitHelper fragExec
+  venomState venomInst venomExecSemantics compileEnv loweringStateRelDefs emitHelper fragExec
   words ASCIInumbers exprLoweringProps stmtSimAssignAttr
   gasExemptCert stmtSimForced vyperInterpreter vyperState vyperExprNoControl
   stmtSimDefs exprSimDefs gasOutcome loweringPosts gasContext exprSimMemorySource

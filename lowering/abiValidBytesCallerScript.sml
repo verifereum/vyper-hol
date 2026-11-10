@@ -2,7 +2,7 @@ Theory abiValidBytesCaller
 Ancestors
   abiValidBytesUnwrap abiBuiltinDispatchCorrect abiBuiltinValidBytes abiDecoderContract
   abiDecoderLoop abiDecoderReentry exprLowering builtinAbi fragExec compileEnv context
-  valueEncoding vyperABI vyperContext venomState words list abiBuiltinDecodeSetup
+  valueEncoding valueEncodingDefs vyperABI vyperContext venomState words list abiBuiltinDecodeSetup
   abiDecoderBytes abiDecoderBytesTyped vyperABIValid contractABI finite_map arithmetic
 
 (* Actual source dispatcher composition for noncanonical Bytes/String decoding. *)

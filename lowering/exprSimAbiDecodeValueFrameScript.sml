@@ -53,7 +53,7 @@ Proof
     (rpt strip_tac >> fs[alloca_inv_def, allocas_non_overlapping_def] >>
      `id <> aid` by decide_tac >>
      qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _` drule_all >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   drule abi_decode_output_site_interval >> strip_tac >>
   qpat_x_assum `abi_decode_success_closed _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp_tac bool_ss [abi_decode_success_closed_def] >> strip_tac >> gvs[] >>
@@ -151,6 +151,6 @@ Proof
       `local_region ce es.scopes s n lb lsz` by
         metis_tac[abi_decode_success_local_region] >>
       drule_all abi_decode_success_output_local_disjoint >>
-      simp[compileEnvTheory.regions_disjoint_def]) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   fs[abi_decode_success_closed_def] >> decide_tac
 QED

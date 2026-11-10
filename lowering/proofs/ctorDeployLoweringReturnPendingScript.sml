@@ -377,6 +377,12 @@ Proof
           simp[pending_frame_bind, pending_frame_expression_reads, pending_frame_primitives]) >>
       Cases_on `bt = Env MsgGas`
       >- gvs[pending_frame_scope_handlers] >>
+      Cases_on `bt = Bop In \/ bt = Bop NotIn`
+      >- (gvs[] >>
+          match_mp_tac pending_frame_bind >> conj_tac
+          >- (rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>
+          simp[pending_frame_bind, pending_frame_expression_reads, pending_frame_control,
+               pending_frame_scope_handlers, pending_frame_primitives]) >>
       gvs[] >> match_mp_tac pending_frame_bind >> conj_tac
       >- (Cases_on `code_slice_source bt es`
           >- (gvs[] >> rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>

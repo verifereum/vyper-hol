@@ -27,8 +27,8 @@ Ancestors
   list rich_list finite_map pair vyperMisc
   fragExec  exprSimHyps exprSimBuffer exprSimAttributeFields
   freshWrites stmtLoweringMono targetPlaceSim supportedExprTraverse
-  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
-  valueEncoding vyperAST vyperInterpreter vyperState vyperValue
+  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs
+  valueEncoding vyperAST vyperInterpreter vyperCallOutcomeFrame vyperState vyperValue
   vyperTypeSystem vyperTypeCallGraph vyperTypeEnv vyperTypeInvariants
   vyperTypeExprSoundness vyperPlaceFrames vyperEvalMisc vyperPureExpr
   vyperScopePreservation vyperStatePreservation vyperCreateFrame
@@ -278,11 +278,13 @@ Proof
       Cases_on `builtin_args_length_ok bt (LENGTH es)`
       >- (Cases_on `bt = Len` >> rpt gen_tac >> strip_tac >>
           Cases_on `bt = Env MsgGas` >>
+          Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
           gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
               assert_def, return_def, raise_def, AllCaseEqs()] >>
           imp_res_tac result_array_length_state >>
           imp_res_tac next_gas_reading_state >>
           imp_res_tac precompile_call_success_state >>
+          imp_res_tac lift_option_type_state >>
           imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >> gvs[] >>
           Cases_on `es` >>
           gvs[vyperContextTheory.builtin_args_length_ok_def,
@@ -408,10 +410,12 @@ Resume target_subscript_nopop_scopes_mutual[IntCall]:
                         option_CASE_rator, return_def, raise_def, AllCaseEqs()]) >>
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def] >> strip_tac >>
-  gvs[bind_def, ignore_bind_def, type_check_def,
-      assert_def, lift_option_type_def, option_CASE_rator,
-      return_def, raise_def, AllCaseEqs()] >>
+  (* the case split on the one hypothesis, not gvs over every assumption
+     with AllCaseEqs(), which runs over the step budget *)
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, lift_option_type_def, option_CASE_rator,
+       return_def, raise_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
   imp_res_tac finally_set_scopes >>
   imp_res_tac (target_subscript_call_cleanup_scopes |>
     Q.INST [`is_view` |-> `mut = View \/ mut = Pure`] |>

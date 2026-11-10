@@ -16,6 +16,7 @@ Ancestors
   o1ContractSueStep o1PassContract venomRetProps o1ComposeSupport
   o1PassLift singleUseExpansionDefs singleUseExpansionSupplyProofs
   venomFnScheduleRunner venomWf venomInst irSupply singleUseExpansionSupplySim
+  venomWfProps
 
 Theorem sue_run_blocks_supply_entry:
   wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\
@@ -29,7 +30,7 @@ Proof
   strip_tac >> irule sue_run_blocks_supply_sim >> simp[] >>
   fs[fn_entry_state_def] >>
   `strict_dom_vars_defined fn st` by
-    metis_tac[sccpCorrectnessProofsTheory.strict_dom_vars_defined_entry] >>
+    metis_tac[venomWfPropsTheory.strict_dom_vars_defined_entry] >>
   simp[fn_reachable_def] >> metis_tac[]
 QED
 
@@ -116,7 +117,7 @@ Proof
       irule sue_frame_defined_enter >> simp[] >> qexists_tac `s0` >>
       fs[fn_entry_state_def] >>
       `strict_dom_vars_defined fn s0` by
-        metis_tac[sccpCorrectnessProofsTheory.strict_dom_vars_defined_entry] >>
+        metis_tac[venomWfPropsTheory.strict_dom_vars_defined_entry] >>
       simp[fn_reachable_def])
   >- (conj_tac >- simp[] >> strip_tac >>
       irule sue_frame_defined_next >> metis_tac[])

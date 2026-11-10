@@ -240,7 +240,7 @@ Ancestors
   gasContext
   loweringPosts
   list finite_map abiTypeBoundProps exprSimAbiEncodeArgsPhysicalCapacity
-   exprCallBounds exprBopLowering exprLowering compileEnv
+   exprCallBounds exprBopLowering exprLowering compileEnv loweringStateRelDefs
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeInitialState

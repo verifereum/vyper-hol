@@ -2,7 +2,7 @@
 Theory abiEncoderSourceWindow
 Ancestors
   abiEncoderStaticRepresentative abiEncoderOpenInput abiCallerTupleLayout
-  valueEncodingProps valueEncoding valueEncodingTyping vyperTyping vyperTypeValues
+  valueEncodingProps valueEncoding valueEncodingDefs valueEncodingTyping vyperTyping vyperTypeValues
   vyperABI vyperMisc vyperValue contractABI words list arithmetic
 
 Theorem abi_encoder_uniform_block_representative:

@@ -1,7 +1,7 @@
 (* Shared fresh allocation and typed-copy boundary for expressions and returns. *)
 Theory exprSimTypedAlloc
 Ancestors
-  exprSimAlloc exprSimCopy typedMemoryCopy exprLoweringProps loweringPosts venomMemDefs
+  exprSimAlloc exprSimCopy typedMemoryCopy exprLoweringProps loweringPosts venomMemDefs loweringStateRelDefs
   loweringHalt localPtrsProps freshWrites valueEncoding vyperTypeSystem
   list finite_map venomInst venomState fragExec exprSimProps loweringSlice compileEnv exprSimStorageCopy
 

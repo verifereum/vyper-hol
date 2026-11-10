@@ -293,7 +293,7 @@ Theorem slice_extcode_tail_frame:
   (!j off sz. FLOOKUP s.vs_allocas j = SOME (off,sz) /\ j < sbase.cs_next_id ==>
     regions_disjoint (w2n p) cap off sz) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sbase s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sbase s t /\
     eval_operand out t = SOME p /\
     FLOOKUP t.vs_allocas aid = SOME (w2n p,cap) /\
     t.vs_memory = (mstore (w2n p) n (write_memory_with_expansion (w2n p+32)
@@ -308,7 +308,7 @@ Proof
  `LENGTH (TAKE (w2n n) (DROP (w2n b)
     (lookup_account (w2w a) s.vs_accounts).code)) = w2n n` by
    (simp[LENGTH_TAKE, LENGTH_DROP] >> decide_tac) >>
- `stmt_state_rel ctx func cenv cx es w /\ wb_frame cenv es sbase s w` by
+ `stmt_state_rel ctx func cenv cx es w /\ wb_frame cenv es es sbase s w` by
    (simp[Abbr `w`] >>
     qmatch_goalsub_abbrev_tac `write_memory_with_expansion _ bytes s` >>
     `n = n2w (LENGTH bytes)` by simp[Abbr `bytes`] >>
@@ -329,7 +329,7 @@ Proof
    (qpat_assum `t = w with vs_vars := _` SUBST1_TAC >>
     irule exprSimPropsTheory.stmt_state_rel_vars_frame >> simp[] >>
     rpt strip_tac >> fs[local_ptrs_reserved_def, lookup_var_def] >> metis_tac[]) >>
- `wb_frame cenv es sbase s t` by
+ `wb_frame cenv es es sbase s t` by
    (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
     goal_assum (drule_at Any) >> qexists_tac `sa` >> simp[] >>
     conj_tac >- (rpt strip_tac >> fs[lookup_var_def] >> metis_tac[]) >>
@@ -385,7 +385,7 @@ Proof
     (qpat_x_assum `t.vs_memory = _` (fn th => pure_rewrite_tac[th]) >>
      metis_tac[exprSimCalldataSliceTheory.bytes_buffer_write_encoding, n2w_w2n]) >>
   qpat_x_assum `t.vs_memory = _` kall_tac >>
-  qpat_x_assum `wb_frame _ _ _ _ _` (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+  qpat_x_assum `wb_frame _ _ _ _ _ _` (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
   `post_value_type cenv e = expr_type e` by
     (irule loweringPostsTheory.post_value_type_bytestring >>
      simp[compileEnvTheory.is_bytestring_type_def]) >>

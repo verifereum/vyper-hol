@@ -4,7 +4,7 @@ Ancestors
   exprSimSubscriptArrayFrame exprSimSubscriptArrayOrigin exprSimArrayIndex exprSimLen exprSimCopy
   exprSimSubscriptArraySource vyperState vyperMisc
   exprSimAggregateEncoding exprSimProps loweringPosts vyperTypeSystem arithmetic
-  emitHelperProps exprLoweringProps venomExecSemantics exprLowering compileEnv
+  emitHelperProps exprLoweringProps venomExecSemantics exprLowering compileEnv loweringStateRelDefs
   exprSimHypsDefs supportedExprTraverse vyperTypeCallStackSoundness
   freshWrites fragGasFresh moduleLoweringProps venomState exprSimUnopProps
   fragExec fragGasSeq fragGasMode venomInst list rich_list finite_map
@@ -49,7 +49,7 @@ Proof
      qexistsl_tac [`cx`, `env`, `es`, `r`, `ArrayT et (Dynamic bound)`] >>
      simp[]) >>
   drule array_len_ok_DLOAD >>
-  gvs[valueEncodingTheory.mem_word_at_def]
+  gvs[valueEncodingDefsTheory.mem_word_at_def]
 QED
 
 Theorem sub_layout_array_element:
@@ -61,7 +61,7 @@ Theorem sub_layout_array_element:
      Num i * type_memory_size et) et v
 Proof
   strip_tac >> Cases_on `av` >> Cases_on `bd` >>
-  gvs[valueEncodingTheory.val_wf_def, vyperValueOperationTheory.array_index_def,
+  gvs[valueEncodingDefsTheory.val_wf_def, vyperValueOperationTheory.array_index_def,
       AllCaseEqs(), listTheory.oEL_THM] >>
   gvs[sub_layout_def, valueEncodingTheory.type_memory_size_def]
   >~ [`ArrayV (DynArrayV vs)`]
@@ -675,7 +675,7 @@ Proof
             SOME (Num i * type_memory_size etv,etv)` by
            (Cases_on `av` >>
             gvs[mem_step_offset_def, vyperValueOperationTheory.array_index_def,
-                valueEncodingTheory.val_wf_def, listTheory.oEL_THM,
+                valueEncodingDefsTheory.val_wf_def, listTheory.oEL_THM,
                 AllCaseEqs()]) >>
          drule_all vv_at_fixed_array_element >> simp[]) >>
      simp[vv_at_def, contextTheory.mk_ptr_def]) >>

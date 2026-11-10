@@ -4,8 +4,8 @@ Ancestors
   abiEncoderWindow abiEncoderInput abiEncoderMembersDefs contractABI
   abiEncoderWindowStructuralMembers abiEncoderWindowMembers abiEncoderWindowContract
   abiEncoderWindowPhase abiEncoderWindowChild abiEncoderRegisteredEffect allocaSiteResource
-  exprLoweringProps venomMemDefs venomState finite_map pred_set compileEnv emitHelper
-  valueEncoding valueEncodingProps abiCanonicalWindows abiDecodeRanges list rich_list arithmetic words
+  exprLoweringProps venomMemDefs venomState finite_map pred_set compileEnv loweringStateRelDefs emitHelper
+  valueEncoding valueEncodingDefs valueEncodingProps abiCanonicalWindows abiDecodeRanges list rich_list arithmetic words
 
 Theorem window_complex_empty_zero:
   abi_encoder_window_input (AbiComplex []) (Tuple []) (ListV []) sb 0 mem

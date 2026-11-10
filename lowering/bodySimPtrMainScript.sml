@@ -28,7 +28,7 @@ Theorem body_expr_ptr_ok_leaf:
     body_expr_ptr_ok cx e
 Proof
   rpt gen_tac >> disch_tac >> simp[body_expr_ptr_ok_def] >>
-  rpt gen_tac >> strip_tac >>
+  reverse conj_tac >- (rpt strip_tac >> gvs[]) >> rpt gen_tac >> strip_tac >>
   `expr_sim_pre cenv cx env e es` by
     (simp[expr_sim_pre_body] >>
      qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[int_calls_expr_def]) >>
@@ -90,7 +90,9 @@ Proof
     (* 33 *) MATCH_ACCEPT_TAC body_structlit_case_ptr,
     (* 34 *) MATCH_ACCEPT_TAC body_subscript_case_ptr,
     (* 35 *) MATCH_ACCEPT_TAC body_attribute_case_ptr,
-    (* 36 *) MATCH_ACCEPT_TAC body_builtin_case_ptr,
+    (* 36 *) rpt strip_tac >> irule body_builtin_case_ptr >> rpt conj_tac >> rpt strip_tac >>
+               Cases_on `bt = Bop In \/ bt = Bop NotIn`
+               >- (gvs[] >> metis_tac[]) >> metis_tac[],
     (* 37 *) MATCH_ACCEPT_TAC body_pop_case_ptr,
     (* 38 *) MATCH_ACCEPT_TAC body_type_builtin_case_ptr,
     (* 39 *) MATCH_ACCEPT_TAC body_send_case_ptr,

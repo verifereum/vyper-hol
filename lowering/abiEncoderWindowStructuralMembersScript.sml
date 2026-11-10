@@ -231,7 +231,7 @@ Proof
   `k <= LENGTH ats` by fs[window_member_prefix_def] >>
   drule_all window_structural_member_prefix_layout >> strip_tac >>
   irule window_member_prefix_step >> asm_rewrite_tac[] >>
-  simp[valueEncodingTheory.mem_bytes_at_def]
+  simp[valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem window_structural_member_prefix_dynamic_step:

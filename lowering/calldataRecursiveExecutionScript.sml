@@ -1,7 +1,7 @@
 (* Universal owned execution, assembled over coherence rather than source types. *)
 Theory calldataRecursiveExecution
 Ancestors
-  calldataRecursiveProducers calldataFiniteTyped calldataAggregateTyped
+  valueEncodingDefs calldataRecursiveProducers calldataFiniteTyped calldataAggregateTyped
   abiDecoderCoherence compileEnv abiDecoderAppend fragExec
   abiDecoderMemberInfos valueEncodingProofs list rich_list
 
@@ -125,7 +125,7 @@ Proof
      POP_ASSUM_LIST (K all_tac) >>
      simp[abi_decoder_coherent_array_iff] >> strip_tac >>
      drule abi_decoder_coherent_header >> simp[abi_decoder_header_def]) >>
-  qpat_x_assum `compile_abi_decode_to_buf dst src _ _ _ _ st = _`
+  qpat_x_assum `compile_abi_decode_to_buf dst src _ (Lit 0w) _ _ st = _`
     (assume_tac o PURE_REWRITE_RULE [exprLoweringTheory.type_to_abi_dec_info_def]) >>
   qpat_assum `type_memory_bytes ce ty = _`
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
@@ -288,7 +288,7 @@ Resume calldata_coherent_owned_run[array]:
   `abi_decoder_coherent ce env sf (ArrayT ty bound) (ArrayTV tv bound)` by
     (irule (cj 3 abi_decoder_coherent_rules) >> asm_rewrite_tac[]) >>
   Cases_on `bound`
-  >- (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
+  >- (drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)
         calldata_coherent_fixed_array_owned_run_tail >>
       disch_then (drule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
@@ -323,7 +323,7 @@ Resume calldata_coherent_owned_run[fixed_callback]:
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   qpat_x_assum `ei = _` SUBST_ALL_TAC >>
   qpat_x_assum `!dst src st final fn initial p d ctx site oid base_addr cap. _`
-    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
+    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME (n2w _)`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
@@ -356,7 +356,7 @@ QED
 Resume calldata_coherent_owned_run[nonbulk]:
   `abi_decoder_coherent ce env sf (ArrayT ty (Dynamic n)) (ArrayTV tv (Dynamic n))` by
     (irule (cj 3 abi_decoder_coherent_rules) >> asm_rewrite_tac[]) >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)
     calldata_recursive_nonbulk_owned >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
   disch_then irule >>
@@ -369,7 +369,7 @@ Resume calldata_coherent_owned_run[nonbulk_callback]:
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `!dst src st final fn initial p d ctx site oid base_addr cap. _`
-    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
+    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME (n2w _)`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
@@ -393,9 +393,9 @@ Resume calldata_coherent_owned_run[tuple]:
     (assume_tac o SIMP_RULE (srw_ss()) []) >>
   qpat_x_assum `tvs = _` SUBST_ALL_TAC >>
   drule calldata_member_indexed_metadata >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`
     (assume_tac o REWRITE_RULE [abi_decoder_tuple_infos]) >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)
     calldata_complex_tuple_owned_run_tail >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
   disch_then irule >>
@@ -451,7 +451,7 @@ Resume calldata_coherent_owned_run[tuple_callback]:
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   qpat_x_assum `ei = _` SUBST_ALL_TAC >>
   qpat_x_assum `!dst src st final fn initial p d ctx site oid base_addr cap. _`
-    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
+    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME (n2w _)`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
@@ -487,10 +487,10 @@ Resume calldata_coherent_owned_run[struct]:
   drule calldata_member_indexed_metadata >> strip_tac >>
   `MAP SND (ZIP (MAP FST args,tvs)) = tvs` by
     (drule LIST_REL_LENGTH >> simp[LENGTH_MAP] >> strip_tac >> simp[MAP_ZIP]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`
     (fn th => qpat_assum `type_to_abi_dec_info sf ce (StructT nsid) = _`
       (fn eq => assume_tac (PURE_REWRITE_RULE [eq] th))) >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)
     calldata_complex_struct_owned_run_tail >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
   disch_then irule >>
@@ -555,7 +555,7 @@ Resume calldata_coherent_owned_run[struct_callback]:
     (fn th => pure_rewrite_tac[th] >>
       rule_assum_tac (PURE_REWRITE_RULE [th])) >>
   qpat_x_assum `!dst src st final fn initial p d ctx site oid base_addr cap. _`
-    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
+    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME (n2w _)`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>

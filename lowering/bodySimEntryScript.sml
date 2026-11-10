@@ -19,7 +19,7 @@
 
 Theory bodySimEntry
 Ancestors
-  list finite_map bodySim compileEnv compileVyper moduleLowering
+  loweringStateRelDefs list finite_map bodySim compileEnv compileVyper moduleLowering
   intCallCallee supportedDecls supportedProgram vyperTypeInvariants
   immutableLocationProps immutableSectionRel immutableRelation option pair
   bodyStorageMetadata structFieldsProps

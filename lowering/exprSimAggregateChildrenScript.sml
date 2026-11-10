@@ -24,13 +24,13 @@
  *)
 Theory exprSimAggregateChildren
 Ancestors
-  exprSimVVFrame
+  exprSimVVFrame valueEncodingDefs
   exprSimProps
-  loweringPosts vyperTypeSystem vyperValue valueEncoding valueEncodingProofs vyperTyping
+  loweringPosts vyperTypeSystem vyperValue valueEncoding valueEncodingDefs valueEncodingProofs vyperTyping
   exprSimAlloc typedMemoryCopy
    exprSimHyps exprSimHypsDefs exprSimUnwrap exprSimUnwrapProps exprSimBufferStore exprSimBuffer
   vyperInterpreter vyperValueOperation vyperState fragExec
-  compileEnv context exprSimLiteralBuffer exprSimOps venomState
+  compileEnv loweringStateRelDefs context exprSimLiteralBuffer exprSimOps venomState
   exprSimHash exprOperandVar emitHelperProps ASCIInumbers exprLoweringProps venomInst
   vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes oracleExecProps
 

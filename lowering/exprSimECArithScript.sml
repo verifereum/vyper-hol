@@ -39,6 +39,7 @@
  *)
 Theory exprSimECArith
 Ancestors
+  exprSimHashBoundary
   exprSimSource
   exprSimProps
   exprSimHypsDefs
@@ -51,9 +52,9 @@ Ancestors
   exprSimLiteralBuffer
   exprSimCalldataSlice entryDecodeStaticProps
   builtinMisc venomInst exprLoweringProps venomExecSemantics
-  venomState vyperTypeSystem vyperContext valueEncoding
+  venomState vyperTypeSystem vyperContext valueEncoding valueEncodingDefs
   vyperTyping valueEncodingProofs vyperTypeBuiltins vyperValueOperation
-  vyperValue vyperAssignPreservesType compileEnv extCallOracle byte
+  vyperValue vyperAssignPreservesType compileEnv loweringStateRelDefs extCallOracle byte
   vfmBuffer venomMemDefs vfmTypes vfmExecution bn254 list rich_list
   numposrep gasOutcome gasSummary gasSummaryCompose gasExemptCert
   fragGasPath fragGasMode cv_std[ignore_grammar]
@@ -569,7 +570,7 @@ Theorem ec_point_words_scratch_store[local]:
   mem_word_at (point + 32) (mstore (base + off) w s).vs_memory =
     mem_word_at (point + 32) s.vs_memory
 Proof
-  rpt gen_tac >> simp[compileEnvTheory.regions_disjoint_def] >>
+  rpt gen_tac >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   strip_tac >> conj_tac >>
   irule valueEncodingPropsTheory.mstore_mem_word_at_disjoint >> decide_tac
 QED
@@ -682,7 +683,7 @@ Proof
   `mem_word_at (w2n point+32) s1.vs_memory =
    mem_word_at (w2n point+32) s.vs_memory` by
     (simp[] >> irule valueEncodingPropsTheory.mstore_mem_word_at_disjoint >>
-     gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   qexists_tac `t` >> conj_tac >- metis_tac[run_inst_seq_append] >>
   conj_tac
   >- (qpat_x_assum `t.vs_memory = _` mp_tac >>
@@ -717,9 +718,9 @@ Proof
        type_slot_size_def, wordsTheory.dimword_def, ec_point_footprint] >>
   strip_tac >> gvs[]
   >- (first_x_assum drule >> simp[] >>
-      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   first_x_assum drule >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem ec_result_val_wf[local]:
@@ -761,7 +762,7 @@ Proof
        type_slot_size_def, wordsTheory.dimword_def, ec_point_footprint] >>
   conj_tac
   >- (disj1_tac >> qexistsl_tac [`aid`, `w2n w`, `64`] >>
-      simp[] >> gvs[compileEnvTheory.regions_disjoint_def]) >>
+      simp[] >> gvs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   gvs[loweringPostsTheory.wb_frame_def] >> metis_tac[]
 QED
 
@@ -929,7 +930,7 @@ Proof
     (gvs[] >> metis_tac[]) >>
   `w2n bw + 64 < dimword (:256) /\
    regions_disjoint (w2n bw) 64 (w2n point) 64` by
-    (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+    (gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   drule (Q.INST [`boff` |-> `0w`] (SPEC_ALL ec_point_pair_transfer_run)
     |> SRULE [wordsTheory.WORD_ADD_0]) >>
   disch_then (qspecl_then [`s`, `point`, `bw`] mp_tac) >>
@@ -1070,7 +1071,7 @@ Proof
     (irule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >> decide_tac) >>
   `w2n (bw+64w) + 64 < dimword (:256) /\
    regions_disjoint (w2n (bw+64w)) 64 (w2n point2) 64` by
-    (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+    (gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   drule (Q.INST [`boff` |-> `64w`] (SPEC_ALL ec_point_pair_transfer_run)
     |> SRULE [wordsTheory.word_add_n2w]) >>
   disch_then (qspecl_then [`s1`, `point2`, `bw`] mp_tac) >>
@@ -1129,7 +1130,7 @@ Proof
    mem_bytes_at b sz (mstore (a+h0) h1 s).vs_memory` by
     (first_x_assum irule >> simp[] >> metis_tac[]) >>
   simp[] >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
-  gvs[compileEnvTheory.regions_disjoint_def] >>
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >>
   qpat_x_assum `!off w. _` (qspecl_then [`h0`, `h1`] mp_tac) >>
   simp[] >> decide_tac
 QED

@@ -49,7 +49,8 @@ QED
 (* Later operands preserve windows inside earlier non-local allocations.
    The frame is independent of nocalls, so internal calls are covered too. *)
 Theorem slice_allocated_window_preserved:
-  wb_frame cenv es sa s t /\
+  !cenv es es' sa s t aid b sz i n.
+  wb_frame cenv es es' sa s t /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ aid < sa.cs_next_id /\
   (!name off len. local_region cenv es.scopes s name off len ==>
                   b + sz <= off \/ off + len <= b) /\
@@ -150,7 +151,7 @@ Proof
       qexistsl_tac [`w2n w'`, `mk_inst sa.cs_next_id ALLOCA [Lit 32w]
         [STRING #"%" (toString sa.cs_next_var)]`, `32`] >>
       simp[mk_inst_def] >> rpt strip_tac >>
-      first_x_assum drule >> simp[compileEnvTheory.regions_disjoint_def]) >>
+      first_x_assum drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   conj_tac
   >- (rpt strip_tac >> first_x_assum irule >> qexists_tac `name` >>
       fs[local_region_def, lookup_var_def]) >>
@@ -218,7 +219,7 @@ Theorem slice_out_buf_run:
     (!aid b len. aid < sa.cs_next_id /\
        FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
        regions_disjoint (w2n p) sz b len) /\
-    wb_frame cenv es sa s t
+    wb_frame cenv es es sa s t
 Proof
   strip_tac >> drule slice_out_buf_decompose >> strip_tac >> gvs[] >>
   drule_all alloc_buffer_frame_run >> strip_tac >>
@@ -271,7 +272,7 @@ Proof
        (qpat_x_assum `not_fresh_at sa x` mp_tac >>
         simp[not_fresh_at_def] >> rpt strip_tac >>
         first_x_assum irule >> decide_tac) >> metis_tac[]) >>
-  `wb_frame cenv es sa s t` by
+  `wb_frame cenv es es sa s t` by
     (simp[wb_frame_def] >>
      irule exprSimPropsTheory.locals_kept_mem >>
      simp[] >> rpt strip_tac >> metis_tac[]) >>
@@ -294,7 +295,7 @@ Theorem slice_payload_after_operand:
   mem_bytes_at (w2n p + 32) (LENGTH bs) t.vs_memory = bs
 Proof
   strip_tac >>
-  `wb_frame cenv es sm s t` by (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
+  `wb_frame cenv es es' sm s t` by (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
   `log_arg_clear cenv cx (BaseT bt) v` by
     (irule log_arg_clear_base >> goal_assum (drule_at Any)) >>
   drule_all log_argument_footprint_kept >> strip_tac >>
@@ -330,10 +331,10 @@ Proof
     (irule expr_val_at_bound >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[]) >>
   gs[vyperValueTheory.evaluate_type_def, is_word_type_def,
-     valueEncodingTheory.val_in_memory_def, val_footprint_def] >>
+     valueEncodingDefsTheory.val_in_memory_def, val_footprint_def] >>
   `w2n w + 32 < dimword (:256)` by decide_tac >>
   `mload (w2n w) s = n2w (LENGTH bs)` by
-    gvs[mload_def, valueEncodingTheory.mem_word_at_def] >>
+    gvs[mload_def, valueEncodingDefsTheory.mem_word_at_def] >>
   drule slice_bytestring_capture >>
   disch_then (qspecl_then [`s`, `w`, `bs`] mp_tac) >>
   simp[]
@@ -366,7 +367,7 @@ Theorem slice_dynamic_capture_continue:
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all slice_dynamic_value_capture >> strip_tac >>
-  `wb_frame cenv es sm s t` by
+  `wb_frame cenv es es sm s t` by
     (simp[wb_frame_def] >>
      qpat_assum `t = s with vs_vars := _` SUBST1_TAC >>
      simp[exprSimPropsTheory.locals_kept_mem, lookup_var_def] >> metis_tac[]) >>

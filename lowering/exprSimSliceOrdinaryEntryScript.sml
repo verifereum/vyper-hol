@@ -127,7 +127,7 @@ Theorem slice_bytestring_capture_frame:
   eval_operand src t = SOME p /\
   (!x. src = Var x ==> not_fresh_at sb x) /\
   run_inst_seq (emitted_insts sb sc) t = OK u ==>
-  wb_frame cenv ec sb t (u with vs_inst_idx := k)
+  wb_frame cenv ec ec sb t (u with vs_inst_idx := k)
 Proof
   strip_tac >> drule_all slice_bytestring_src_run >> strip_tac >>
   gvs[] >>
@@ -146,7 +146,7 @@ Theorem slice_fixed_capture_frame:
   MEM (mk_inst sb.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sb.cs_next_var)]) (fn_insts func) /\
   run_inst_seq (emitted_insts sb sc) t = OK u ==>
-  wb_frame cenv ec sb t (u with vs_inst_idx := k)
+  wb_frame cenv ec ec sb t (u with vs_inst_idx := k)
 Proof
   strip_tac >> drule_all hash_alloc_mstore_frame >> strip_tac >> gvs[] >>
   simp[wb_frame_def, lookup_var_def] >> rpt conj_tac
@@ -166,14 +166,14 @@ Theorem slice_source_capture_post_rebase:
   sa.cs_next_var <= sb.cs_next_var /\ sb.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= sb.cs_next_id /\ sb.cs_next_id <= sc.cs_next_id /\
   expr_post ctx func cenv cx src es sa sb s0 ec v op t /\
-  wb_frame cenv ec sb t u /\
+  wb_frame cenv ec ec sb t u /\
   vv_post ctx func cenv cx result ec sc sf u ef tv vv z ==>
   vv_post ctx func cenv cx result es sa sf s0 ef tv vv z
 Proof
   strip_tac >>
-  `wb_frame cenv es sa s0 t` by
+  `wb_frame cenv es ec sa s0 t` by
     (irule expr_post_frame >> goal_assum (drule_at Any)) >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es ec sa s0 u` by
     (drule_all wb_frame_trans >> simp[]) >>
   irule vv_post_prefix_frame >>
   simp[] >> qexistsl_tac [`ec`, `sc`, `u`] >> simp[]

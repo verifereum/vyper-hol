@@ -1,0 +1,170 @@
+(*
+ * Bytecode parity runner for the generated compiler (compilerNativeML).
+ * For each fixture it runs compile_vyper natively and compares the deploy
+ * and runtime bytes against the pinned Python oracle file (deploy=/runtime=
+ * lines, as read by evalCompilerBytecodeLib.read_hex_bytes).
+ *
+ * Usage: bytecode_parity_native.exe BYTECODE_DIR [PATH ...]
+ * A fixture is named by its .hex file's path under BYTECODE_DIR, such as
+ * python-o1-no-asm-opt/add_arg.hex or builtin-forms/oracle/ceil_dec.hex.  A
+ * PATH selects that fixture, or every fixture under that directory; without
+ * one, every fixture runs.  Every .hex file in a directory a selected fixture
+ * sits in must have a fixture, except the pending ones below.  Exits non-zero
+ * unless every selected fixture matches.
+ *)
+structure compilerNativeParity = struct
+  open compilerNativeRuntime
+
+  fun read_all path = let
+    val ins = TextIO.openIn path
+  in TextIO.inputAll ins before TextIO.closeIn ins end
+
+  fun fixture_value entries key =
+    case List.find (fn (k, _) => k = key) entries of
+      SOME (_, v) => v
+    | NONE => raise Fail ("missing " ^ key)
+
+  fun compact_hex s = let
+    val s = if String.isPrefix "0x" s orelse String.isPrefix "0X" s
+            then String.extract (s, 2, NONE) else s
+  in String.map Char.toLower (String.implode (List.filter (not o Char.isSpace)
+       (String.explode s))) end
+
+  (* As evalCompilerBytecodeLib.fixture_line: # starts a comment. *)
+  fun trim s = Substring.string (Substring.dropl Char.isSpace
+    (Substring.dropr Char.isSpace (Substring.full s)))
+  fun entry line =
+    case trim (hd (String.fields (fn c => c = #"#") line)) of
+      "" => NONE
+    | line => (case String.fields (fn c => c = #"=") line of
+                 [k, v] => SOME (trim k, compact_hex v)
+               | _ => raise Fail ("bad bytecode fixture line: " ^ line))
+
+  fun oracle path = let
+    val entries = List.mapPartial entry
+      (String.tokens (fn c => c = #"\n" orelse c = #"\r") (read_all path))
+  in (fixture_value entries "deploy", fixture_value entries "runtime") end
+
+  fun hex_byte (W (_, v)) = let
+    val s = IntInf.fmt StringCvt.HEX v
+  in String.map Char.toLower (if size s = 1 then "0" ^ s else s) end
+  fun hex_bytes bs = String.concat (map hex_byte bs)
+
+  fun first_diff a b = let
+    fun go i = if i >= size a orelse i >= size b orelse
+                  String.sub (a, i) <> String.sub (b, i) then i else go (i + 1)
+  in go 0 div 2 end
+
+  fun compare what expected got =
+    if expected = got then NONE
+    else SOME (what ^ " differs at byte " ^ Int.toString (first_diff expected got) ^
+               " (expected " ^ Int.toString (size expected div 2) ^ " bytes, got " ^
+               Int.toString (size got div 2) ^ ")")
+
+  (* Out of parity on purpose; see ../pending-uint2str-buffer.md. *)
+  val pending = ["builtin-forms/oracle/uint2str_local.hex"]
+
+  (* Fixtures that must compile but differ from the pinned oracle, so that a
+     list entry that starts to match fails and gets removed: bounded memory
+     decoding checks relative positions and head words before forming
+     pointers, which the pinned Python does not (see
+     ../pending-bounded-decode-guards.md). *)
+  val decoder_divergent = [
+      "python-o1-no-asm-opt/abi_dynamic.hex",
+      "python-o1-no-asm-opt/abi_static.hex",
+      "python-o1-no-asm-opt/interface_calls.hex",
+      "abi-codegen/oracle/dec_bytes_unwrapT.hex",
+      "abi-codegen/oracle/dec_uint_unwrapT.hex",
+      "external-calls/oracle/e04_ret_string.hex",
+      "external-calls/oracle/e05_ret_bytes.hex",
+      "external-calls/oracle/e19_gas_kw.hex",
+      "external-calls/oracle/e21_default_ret.hex",
+      "external-calls/oracle/e22_static_default.hex",
+      "external-calls/oracle/e29_default_ret_skip.hex",
+      "external-calls/oracle/e30_default_ret_tuple.hex",
+      "external-calls/oracle/e37_default_ret_string.hex",
+      "external-calls/oracle/e38_default_ret_local_array.hex",
+      "external-calls/oracle/e40_extcall_gas.hex",
+      "external-calls/oracle/e41_staticcall_gas.hex",
+      "external-calls/oracle/e42_extcall_gas_value_order.hex",
+      "external-calls/oracle/e43_extcall_all_kwargs.hex",
+      "external-calls/oracle/e45_default_ret_ifexp.hex",
+      "external-calls/oracle/i02_iface_default_param.hex",
+      "external-calls/oracle/i03_two_ifaces_same_name.hex",
+      "external-calls/oracle/i09_iface_ret_iface.hex",
+      "external-calls/oracle/i13_ext_fn_before_iface.hex",
+      "external-calls/oracle/i15_iface_ret_iface_direct.hex",
+      "external-calls/oracle/m10c_iface_storage_main.hex",
+      "internal-frames/oracle/p74_int_ext_call.hex",
+      "memory-stores/oracle/dec_from_memory2.hex",
+      "memory-stores/oracle/t03_tuple_assign_abi_decode.hex",
+      "memory-stores/oracle/t04_tuple_assign_extcall.hex",
+      "memory-stores/oracle/t11_tuple_onew_decode_mem.hex"]
+
+  fun hex_files root dir = let
+    val d = OS.FileSys.openDir (OS.Path.concat (root, dir))
+    fun loop acc = case OS.FileSys.readDir d of
+        NONE => acc
+      | SOME f => loop (if String.isSuffix ".hex" f
+                        then OS.Path.concat (dir, f) :: acc else acc)
+  in loop [] before OS.FileSys.closeDir d end
+
+  fun under path name = name = path orelse String.isPrefix (path ^ "/") name
+
+  fun run_one dir (name, thunk) = let
+    val t0 = Time.now ()
+    val outcome =
+      (case thunk () of
+         NONE => SOME "compiler returned NONE"
+       | SOME (deploy, runtime) => let
+           val (d, r) = oracle (OS.Path.concat (dir, name))
+           val d_diff = compare "deploy" d (hex_bytes deploy)
+           val r_diff = compare "runtime" r (hex_bytes runtime)
+         in
+           if List.exists (fn k => k = name) decoder_divergent
+           then (case (d_diff, r_diff) of
+                   (NONE, NONE) => SOME "matches the oracle: remove it from decoder_divergent"
+                 | _ => NONE)
+           else (case d_diff of NONE => r_diff | e => e)
+         end)
+      handle Stuck s => SOME ("stuck: " ^ s)
+           | e => SOME ("exception: " ^ General.exnMessage e)
+    val dt = Time.toReal (Time.- (Time.now (), t0))
+    val tag = case outcome of NONE => "PASS" | SOME _ => "FAIL"
+  in
+    print (tag ^ " " ^ name ^ " " ^ Real.fmt (StringCvt.FIX (SOME 3)) dt ^ "s" ^
+           (case outcome of NONE => "" | SOME e => ": " ^ e) ^ "\n");
+    (outcome = NONE, dt)
+  end
+
+  fun main () = let
+    val (root, paths) =
+      case CommandLine.arguments () of
+        root :: paths => (root, map (fn p => OS.Path.mkCanonical p) paths)
+      | [] => (print "usage: bytecode_parity_native.exe BYTECODE_DIR [PATH ...]\n";
+               OS.Process.exit OS.Process.failure)
+    val selected = List.filter (fn (n, _) => null paths orelse
+                     List.exists (fn p => under p n) paths) compilerNativeML.fixtures
+    (* A requested path, or an oracle file, with no compiled-in fixture
+       would otherwise be skipped without a failure. *)
+    val known = map #1 compilerNativeML.fixtures
+    val dirs = List.foldr (fn (d, ds) => if List.exists (fn e => e = d) ds then ds
+                                         else d :: ds) [] (map (OS.Path.dir o #1) selected)
+    val files = List.concat (map (hex_files root) dirs)
+    val unmatched =
+      List.filter (fn n => not (List.exists (fn k => k = n) (known @ pending))) files @
+      List.filter (fn p => not (List.exists (under p) known)) paths
+    val () = List.app (fn n => print ("FAIL " ^ n ^ ": no native fixture\n")) unmatched
+    val results = map (run_one root) selected
+    val passed = length (List.filter #1 results)
+    val count = length results + length unmatched
+    val total = List.foldl (fn ((_, t), s) => s + t) 0.0 results
+  in
+    print (Int.toString passed ^ "/" ^ Int.toString count ^
+           " fixtures match, " ^ Real.fmt (StringCvt.FIX (SOME 2)) total ^ "s\n");
+    OS.Process.exit (if passed = count then OS.Process.success
+                     else OS.Process.failure)
+  end
+end
+
+fun main () = compilerNativeParity.main ()

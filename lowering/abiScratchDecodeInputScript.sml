@@ -4,7 +4,7 @@ Ancestors
   abiScratchDecoderContract abiScratchFootprint abiDecoderFootprint abiBuiltinValidInput abiBuiltinSource
   abiBuiltinDecodeSetup abiBuiltinAllocation abiBuiltinSetupReach abiDecoderReentry abiDecoderReadableTypes abiDecoderCoherence
   abiDecoderTypedContract abiDecoderContract abiDecoderAllocation abiDecodeRanges vyperABIValid
-  vyperABI contractABI compileEnv valueEncoding valueEncodingProps venomState words list
+  vyperABI contractABI compileEnv valueEncoding valueEncodingDefs valueEncodingProps venomState words list
 
 Definition abi_scratch_decode_resources_def:
   abi_scratch_decode_resources st first last min_size max_size outsz cnt p d b cap s <=>

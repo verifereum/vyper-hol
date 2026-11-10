@@ -43,7 +43,7 @@ Theorem abi_decode_success_locals_kept:
   alloca_inv s /\ fn_inst_ids_distinct func /\
   local_ptrs_rel func ce es.scopes s /\
   abi_decode_success_closed ce env ty tv bs out d start final ctx func s t ==>
-  locals_kept ce es s t
+  locals_kept ce es es s t
 Proof
   strip_tac >> irule locals_kept_regions >> rpt strip_tac >>
   drule_all abi_decode_success_local_memory >> simp[]

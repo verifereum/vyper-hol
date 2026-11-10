@@ -16,7 +16,7 @@ Proof
   qpat_x_assum `!aid b sz. FLOOKUP t.vs_allocas aid = SOME (b,sz) ==> _`
     drule >> strip_tac
   >- metis_tac[] >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Definition abi_decode_write_set_def:
@@ -41,14 +41,14 @@ Proof
     (irule abi_decode_interval_row_separation >> metis_tac[]) >>
   simp[decode_protects_def, abi_decode_write_set_def] >>
   rpt gen_tac >> strip_tac >> conj_tac
-  >- (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  >- (gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   rpt gen_tac >> strip_tac >>
   CCONTR_TAC >> gvs[] >>
   `compileEnv$regions_disjoint b sz q n` by
     (irule abi_decode_interval_row_separation >>
      qexistsl_tac [`first`, `id`, `last`, `s`, `t`] >>
      asm_rewrite_tac [] >> decide_tac) >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem abi_decode_write_set_memory_frame:

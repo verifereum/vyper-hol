@@ -15,7 +15,7 @@ Theory exprSimBopInLiteralWord
 Ancestors
   gasContext gasSummary gasOutcome gasSummaryCompose gasExemptCert
   fragGasMode fragGasPath fragGasFresh varsExt exprSimUnopCompose exprSimWordArgs loweringPosts valueEncoding
-  exprSimBopTyped exprBopSimProps
+  exprSimBopTyped exprBopSimDefs exprBopSimProps
   exprSimUnopProps freshWrites emitHelperProps exprLoweringProps
   venomExecSemantics venomState words valueEncodingProofs vyperStorage
   exprSimSource
@@ -217,6 +217,7 @@ Proof
   strip_tac >>
   `MakeArray (SOME et) n <> Len /\ MakeArray (SOME et) n <> Env MsgGas /\
    ~precompile_builtin (MakeArray (SOME et) n) /\ code_slice_source (MakeArray (SOME et) n) elems = NONE /\
+   MakeArray (SOME et) n <> Bop In /\ MakeArray (SOME et) n <> Bop NotIn /\
    builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH elems)` by
     simp[precompile_builtin_def, builtin_args_length_ok_def] >>
   drule_all eval_expr_builtin_action >>
@@ -259,24 +260,19 @@ Theorem literal_membership_action_prefix:
     [e1; Builtin a (MakeArray (SOME et) n) elems])) (read_result cx) =
   bind (bind (eval_expr cx e1) (read_result cx))
     (\v. bind (eval_exprs cx elems)
-      (\vs ee. (builtin_result cx ee.accounts ann (Bop bop)
-        [expr_type e1; a] [v; ArrayV (make_array_value tv n vs)], ee)))
+      (\vs ee. (bop_result cx ann bop
+        [expr_type e1; a] v (ArrayV (make_array_value tv n vs)) ee, ee)))
 Proof
   strip_tac >>
-  `Bop bop <> Len /\ Bop bop <> Env MsgGas /\
-   ~precompile_builtin (Bop bop) /\ (!as. code_slice_source (Bop bop) as = NONE) /\
-   builtin_args_length_ok (Bop bop) 2` by
-    simp[precompile_builtin_def, builtin_args_length_ok_def] >>
-  `eval_exprs cx [] = vyperState$return []` by
-    simp[FUN_EQ_THM, eval_exprs_nil, vyperStateTheory.return_def] >>
-  simp[Once eval_expr_builtin_action] >>
-  simp[expr_type_def, eval_exprs_cons_action,
-       vyperStateTheory.bind_assoc, vyperStateTheory.bind_return] >>
+  CONV_TAC (LHS_CONV (REWR_CONV
+    (CONV_RULE (DEPTH_CONV ETA_CONV) eval_expr_bop_bind))) >>
+  simp[expr_type_def, vyperStateTheory.bind_assoc] >>
   AP_TERM_TAC >> ABS_TAC >> AP_TERM_TAC >> ABS_TAC >>
+  rename1 `bop_result cx ann bop _ v1 _ _` >>
   drule_all literal_make_array_value_continuation >>
   disch_then (qspecl_then [
-    `\v' ee. (builtin_result cx ee.accounts ann (Bop bop)
-      [expr_type e1; a] [v; v'], ee)`, `a`] mp_tac) >> simp[]
+    `\v' ee. (bop_result cx ann bop
+      [expr_type e1; a] v1 v' ee, ee)`, `a`] mp_tac) >> simp[]
 QED
 
 Theorem literal_membership_action:
@@ -304,7 +300,7 @@ Proof
   rename1 `eval_exprs cx elems st = (INL vs, st')` >>
   drule eval_exprs_length >> disch_tac >>
   `compatible_bound n (LENGTH vs)` by metis_tac[] >>
-  simp[builtin_result_def, evaluate_builtin_def, literal_membership_result]
+  simp[bop_result_def, evaluate_membership_array, literal_array_membership]
 QED
 Theorem literal_body_evaluate_types:
   expr_body_pre cenv cx env
@@ -509,21 +505,155 @@ Proof
   Cases_on `result` >> gvs[as_stack_val_def, unwrap_value_def, comp_return_def]
 QED
 
+Theorem literal_eqs_straight[local]:
+  !xs needle. straight_fresh (emit_membership_eqs needle xs)
+Proof
+  Induct >> simp[emit_membership_eqs_def, straight_fresh_return] >>
+  rpt gen_tac >> simp[] >> match_mp_tac straight_fresh_bind >> conj_tac
+  >- (irule straight_fresh_emit_op >> simp[fresh_write_op_def]) >>
+  rpt gen_tac >> simp[] >> match_mp_tac straight_fresh_bind >> simp[straight_fresh_return]
+QED
+
+Theorem literal_or_straight[local]:
+  !cs acc. straight_fresh (fold_membership_or acc cs)
+Proof
+  Induct >> simp[fold_membership_or_def, straight_fresh_return] >>
+  rpt gen_tac >> simp[] >> match_mp_tac straight_fresh_bind >> simp[] >>
+  irule straight_fresh_emit_op >> simp[fresh_write_op_def]
+QED
+
+Theorem literal_and_straight[local]:
+  !cs acc. straight_fresh (fold_membership_and acc cs)
+Proof
+  Induct >> simp[fold_membership_and_def, straight_fresh_return] >>
+  rpt gen_tac >> simp[] >> match_mp_tac straight_fresh_bind >> conj_tac
+  >- (irule straight_fresh_emit_op >> simp[fresh_write_op_def]) >>
+  rpt gen_tac >> simp[] >> match_mp_tac straight_fresh_bind >> simp[] >>
+  irule straight_fresh_emit_op >> simp[fresh_write_op_def]
+QED
+
 Theorem literal_membership_straight:
   !xs needle.
     straight_fresh (compile_list_membership_in needle xs) /\
     straight_fresh (compile_list_membership_notin needle xs)
 Proof
-  Induct >> rpt gen_tac
-  >- simp[compile_list_membership_in_def, compile_list_membership_notin_def,
-          straight_fresh_return] >>
-  Cases_on `xs` >>
+  rpt gen_tac >>
   simp[compile_list_membership_in_def, compile_list_membership_notin_def] >>
-  rpt conj_tac >>
-  rpt (FIRST [CHANGED_TAC (simp[]),
-              irule straight_fresh_bind >> conj_tac,
-              irule straight_fresh_emit_op >> simp[fresh_write_op_def] >> NO_TAC,
-              gen_tac])
+  conj_tac >> match_mp_tac straight_fresh_bind >>
+  simp[literal_eqs_straight] >> Cases >>
+  simp[straight_fresh_return, literal_or_straight] >>
+  match_mp_tac straight_fresh_bind >> simp[literal_and_straight] >>
+  irule straight_fresh_emit_op >> simp[fresh_write_op_def]
+QED
+
+Theorem literal_eqs_run:
+  !xs ws needle w sa cs sb ss.
+    emit_membership_eqs needle xs sa = (cs,sb) /\
+    LIST_REL (\x u. eval_operand x ss = SOME u) xs ws /\
+    eval_operand needle ss = SOME w /\ fresh_vars_wrt sa ss ==>
+    ?tt. run_inst_seq (emitted_insts sa sb) ss = OK tt /\
+      LIST_REL (\c b. eval_operand c tt = SOME (bool_to_word b))
+        cs (MAP (\u. w = u) ws) /\
+      fresh_vars_wrt sb tt /\
+      sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+      (!x v. eval_operand x ss = SOME v ==> eval_operand x tt = SOME v)
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[emit_membership_eqs_def, comp_return_def, emitted_insts_refl,
+           run_inst_seq_def] >> metis_tac[]) >>
+  Cases_on `ws` >>
+  simp[emit_membership_eqs_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `LIST_REL _ xs t` >>
+  drule_all emit_op_EQ_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa _) ss = OK ss'` >>
+  `LIST_REL (\x u. eval_operand x ss' = SOME u) xs t` by
+    (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  `eval_operand needle ss' = SOME w` by metis_tac[] >>
+  first_x_assum (qspec_then `t` mp_tac) >>
+  disch_then drule >> disch_then drule >> simp[] >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  rename1 `fresh_vars_wrt sb tt` >>
+  qexists_tac `tt` >> simp[] >> metis_tac[]
+QED
+
+Theorem literal_or_run:
+  !cs bs acc a sa op sb ss.
+    fold_membership_or acc cs sa = (op,sb) /\
+    LIST_REL (\c b. eval_operand c ss = SOME (bool_to_word b)) cs bs /\
+    eval_operand acc ss = SOME (bool_to_word a) /\ fresh_vars_wrt sa ss ==>
+    ?tt. run_inst_seq (emitted_insts sa sb) ss = OK tt /\
+      eval_operand op tt = SOME (bool_to_word (a \/ EXISTS (\b. b) bs)) /\
+      fresh_vars_wrt sb tt /\
+      sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+      (!x v. eval_operand x ss = SOME v ==> eval_operand x tt = SOME v)
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[fold_membership_or_def, comp_return_def, emitted_insts_refl,
+           run_inst_seq_def] >> metis_tac[]) >>
+  Cases_on `bs` >> simp[fold_membership_or_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `eval_operand _ ss = SOME (bool_to_word h')` >>
+  rename1 `LIST_REL _ cs t` >>
+  drule_all emit_op_OR_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa _) ss = OK ss'` >>
+  `bool_to_word a || bool_to_word h' = bool_to_word (a \/ h')` by
+    (Cases_on `a` >> Cases_on `h'` >>
+     simp[bool_to_word_def, WORD_OR_IDEM, WORD_OR_CLAUSES]) >>
+  gvs[] >>
+  `LIST_REL (\c b. eval_operand c ss' = SOME (bool_to_word b)) cs t` by
+    (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  first_x_assum (qspec_then `t` mp_tac) >>
+  disch_then drule >> disch_then drule >> simp[] >>
+  disch_then (qspec_then `a \/ h'` mp_tac) >> simp[] >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  rename1 `fresh_vars_wrt sb tt` >>
+  qexists_tac `tt` >> simp[DISJ_ASSOC] >> metis_tac[]
+QED
+
+Theorem literal_and_run:
+  !cs bs acc a sa op sb ss.
+    fold_membership_and acc cs sa = (op,sb) /\
+    LIST_REL (\c b. eval_operand c ss = SOME (bool_to_word b)) cs bs /\
+    eval_operand acc ss = SOME (bool_to_word a) /\ fresh_vars_wrt sa ss ==>
+    ?tt. run_inst_seq (emitted_insts sa sb) ss = OK tt /\
+      eval_operand op tt = SOME (bool_to_word (a /\ EVERY (\b. ~b) bs)) /\
+      fresh_vars_wrt sb tt /\
+      sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+      (!x v. eval_operand x ss = SOME v ==> eval_operand x tt = SOME v)
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[fold_membership_and_def, comp_return_def, emitted_insts_refl,
+           run_inst_seq_def] >> metis_tac[]) >>
+  Cases_on `bs` >> simp[fold_membership_and_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `eval_operand _ ss = SOME (bool_to_word h')` >>
+  rename1 `LIST_REL _ cs t` >>
+  rename1 `emit_op ISZERO _ sa = (_, cs')` >>
+  rename1 `emit_op AND _ cs' = (_, cs'')` >>
+  drule_all emit_op_ISZERO_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa cs') ss = OK ss'` >>
+  `bool_to_word (bool_to_word h' = 0w) = bool_to_word (~h')` by
+    (Cases_on `h'` >> simp[bool_to_word_def]) >> gvs[] >>
+  `eval_operand acc ss' = SOME (bool_to_word a)` by metis_tac[] >>
+  drule_all emit_op_AND_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts cs' cs'') ss' = OK ss''` >>
+  `bool_to_word a && bool_to_word (~h') = bool_to_word (a /\ ~h')` by
+    (Cases_on `a` >> Cases_on `h'` >>
+     simp[bool_to_word_def, WORD_AND_IDEM, WORD_AND_CLAUSES]) >> gvs[] >>
+  `LIST_REL (\c b. eval_operand c ss'' = SOME (bool_to_word b)) cs t` by
+    (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  first_x_assum (qspec_then `t` mp_tac) >>
+  disch_then drule >> disch_then drule >> simp[] >>
+  disch_then (qspec_then `a /\ ~h'` mp_tac) >> simp[] >> strip_tac >>
+  imp_res_tac emit_op_extends >>
+  drule_all (Q.SPECL [`sa`, `cs'`, `cs''`] run_inst_seq_chain) >> strip_tac >>
+  `run_inst_seq (emitted_insts sa cs'') ss = OK ss''` by simp[] >>
+  drule_all (Q.SPECL [`sa`, `cs''`, `sb`] run_inst_seq_chain) >> strip_tac >>
+  rename1 `fresh_vars_wrt sb tt` >>
+  qexists_tac `tt` >> simp[CONJ_ASSOC] >> metis_tac[]
 QED
 
 Theorem literal_in_run:
@@ -537,38 +667,18 @@ Theorem literal_in_run:
       sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
       (!x v. eval_operand x ss = SOME v ==> eval_operand x tt = SOME v)
 Proof
-  Induct >> rpt gen_tac
-  >- (simp[compile_list_membership_in_def, comp_return_def, emitted_insts_refl,
-           run_inst_seq_def, eval_operand_def, bool_to_word_def] >> metis_tac[]) >>
-  Cases_on `xs` >> Cases_on `ws` >>
+  rpt gen_tac >>
   simp[compile_list_membership_in_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[]
-  >~ [`emit_op EQ _ sa = (op,sb)`]
-  >- (drule_all emit_op_EQ_correct >> strip_tac >>
-     drule emit_op_extends >> strip_tac >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  drule_all emit_op_EQ_correct >> strip_tac >>
-  `LIST_REL (\x v. eval_operand x ss' = SOME v) t ys` by
-    (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
-  qpat_x_assum `!ws needle' w sa' op sb ss. _`
-    (qspec_then `v::ys` mp_tac) >> simp[] >>
-  disch_then drule >>
-  disch_then (qspecl_then [`w`, `ss'`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
-  `eval_operand eq_res tt = SOME (bool_to_word (w = h''))` by metis_tac[] >>
-  drule_all emit_op_OR_correct >> strip_tac >>
-  `cs'.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa cs'` by
-    (drule (Q.SPEC `EQ` emit_op_extends) >> simp[]) >>
-  `sb.cs_current_insts = cs''.cs_current_insts ++ emitted_insts cs'' sb` by
-    (drule (Q.SPEC `OR` emit_op_extends) >> simp[]) >>
-  drule_all (Q.SPECL [`sa`, `cs'`, `cs''`] run_inst_seq_chain) >> strip_tac >>
-  `run_inst_seq (emitted_insts sa cs'') ss = OK tt` by simp[] >>
-  drule_all (Q.SPECL [`sa`, `cs''`, `sb`] run_inst_seq_chain) >> strip_tac >>
-  `bool_to_word (w = h'') || bool_to_word (w = v \/ MEM w ys) =
-   bool_to_word (w = h'' \/ w = v \/ MEM w ys)` by
-    (Cases_on `w = h''` >> Cases_on `w = v \/ MEM w ys` >>
-     simp[bool_to_word_def, WORD_OR_IDEM, WORD_OR_CLAUSES]) >>
-  qexists_tac `ss''` >> simp[] >> metis_tac[]
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_membership_eqs needle xs sa = (cs, _)` >>
+  drule_all literal_eqs_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa _) ss = OK tt` >>
+  Cases_on `cs` >> gvs[comp_return_def]
+  >- simp[eval_operand_def] >>
+  Cases_on `ws` >> gvs[] >>
+  drule_all literal_or_run >> strip_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[EXISTS_MAP, EXISTS_MEM] >> metis_tac[]
 QED
 
 Theorem literal_notin_run:
@@ -582,54 +692,33 @@ Theorem literal_notin_run:
       sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
       (!x v. eval_operand x ss = SOME v ==> eval_operand x tt = SOME v)
 Proof
-  Induct >> rpt gen_tac
-  >- (simp[compile_list_membership_notin_def, comp_return_def, emitted_insts_refl,
-           run_inst_seq_def, eval_operand_def, bool_to_word_def] >> metis_tac[]) >>
-  Cases_on `xs` >> Cases_on `ws` >>
+  rpt gen_tac >>
   simp[compile_list_membership_notin_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[]
-  >~ [`emit_op ISZERO _ _ = (op,sb)`]
-  >- suspend "single" >>
-  suspend "cons"
-QED
-
-Resume literal_notin_run[single]:
-  drule_all emit_op_EQ_correct >> strip_tac >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_membership_eqs needle xs sa = (cs, _)` >>
+  drule_all literal_eqs_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa _) ss = OK tt` >>
+  Cases_on `cs` >> gvs[comp_return_def]
+  >- simp[eval_operand_def] >>
+  Cases_on `ws` >> gvs[] >>
+  gvs[comp_bind_def] >> pairarg_tac >> gvs[] >>
+  rename1 `LIST_REL _ t (MAP (\u. w = u) t')` >>
+  rename1 `emit_op ISZERO _ cs' = (_, cs'')` >>
+  rename1 `eval_operand _ _ = SOME (bool_to_word (w = h'))` >>
   drule_all emit_op_ISZERO_correct >> strip_tac >>
-  imp_res_tac emit_op_extends >>
-  drule_all run_inst_seq_chain >> strip_tac >>
-  qexists_tac `ss''` >> simp[bool_to_word_def] >> metis_tac[]
-QED
-
-Resume literal_notin_run[cons]:
-  drule_all emit_op_EQ_correct >> strip_tac >>
-  drule_all emit_op_ISZERO_correct >> strip_tac >>
-  `LIST_REL (\x v. eval_operand x ss'' = SOME v) t ys` by
-    (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  qpat_x_assum `!ws needle' w sa' op sb ss. _`
-    (qspec_then `v::ys` mp_tac) >> simp[] >> disch_then drule >>
-  disch_then (qspecl_then [`w`, `ss''`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
-  `eval_operand neq_res tt = SOME (bool_to_word (bool_to_word (w = h'') = 0w))`
-    by metis_tac[] >>
-  drule_all emit_op_AND_correct >> strip_tac >>
-  rename1 `emit_op AND _ sm = (op,sb)` >>
-  rename1 `run_inst_seq (emitted_insts sm sb) tt = OK sf` >>
-  imp_res_tac emit_op_extends >>
+  rename1 `run_inst_seq (emitted_insts cs' cs'') _ = OK ss'` >>
+  `bool_to_word (bool_to_word (w = h') = 0w) = bool_to_word (w <> h')` by
+    (Cases_on `w = h'` >> simp[bool_to_word_def]) >> gvs[] >>
+  `LIST_REL (\c b. eval_operand c ss' = SOME (bool_to_word b))
+      t (MAP (\u. w = u) t')` by
+    (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  drule_all literal_and_run >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
   drule_all (Q.SPECL [`sa`, `cs'`, `cs''`] run_inst_seq_chain) >> strip_tac >>
-  `run_inst_seq (emitted_insts sa cs'') ss = OK ss''` by simp[] >>
-  drule_all (Q.SPECL [`sa`, `cs''`, `sm`] run_inst_seq_chain) >> strip_tac >>
-  `run_inst_seq (emitted_insts sa sm) ss = OK tt` by simp[] >>
-  drule_all (Q.SPECL [`sa`, `sm`, `sb`] run_inst_seq_chain) >> strip_tac >>
-  `bool_to_word (bool_to_word (w = h'') = 0w) &&
-   bool_to_word (w <> v /\ ~MEM w ys) =
-   bool_to_word (w <> h'' /\ w <> v /\ ~MEM w ys)` by
-    (Cases_on `w = h''` >> Cases_on `w <> v /\ ~MEM w ys` >>
-     simp[bool_to_word_def, WORD_AND_IDEM, WORD_AND_CLAUSES]) >>
-  qexists_tac `sf` >> simp[] >> metis_tac[]
+  mp_tac (Q.SPECL [`sa`, `cs'`, `sb`, `ss`, `tt`] run_inst_seq_chain) >>
+  simp[] >> strip_tac >>
+  simp[EVERY_MAP, EVERY_MEM] >> metis_tac[]
 QED
-
-Finalise literal_notin_run
 
 Theorem literal_typed_roundtrip:
   is_word_type ty /\ evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>

@@ -3,7 +3,7 @@ Theory abiEncoderWindowSequence
 Ancestors
   abiEncoderWindowLeaves abiEncoderSequence abiEncoderExtendSim
   emitHelperProps moduleLoweringProps freshWrites exprLoweringProps
-  compileEnv emitHelper fragExec venomInstProps
+  compileEnv loweringStateRelDefs emitHelper fragExec venomInstProps
   venomState venomExecSemantics venomInst words list arithmetic
   abiEncoderWindowLookup
 

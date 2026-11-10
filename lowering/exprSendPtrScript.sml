@@ -4,7 +4,7 @@ Ancestors
   ptrSafeRun ptrDiscipline venomExecSemantics venomExecProofs
   venomInst venomInstProofs venomState opcodeClass memLocDefs codegenRel contextCodegenRel list
   venomCallOracleDefs venomMemProps ghostPcTransportPtr
-  exprLoweringProps exprSimOperands exprSimWordArgs compileEnv localPtrsProps
+  exprLoweringProps exprSimOperands exprSimWordArgs compileEnv loweringStateRelDefs localPtrsProps
   sendSourceFrame typedWordArgsSimPtr exprSimHypsDefs exprSimPrecompiles bodyPtrDefs fragExec
   gasSummaryComposePtr gasExemptCert gasSummaryCompose vyperState typedWordArgsFactsPtr
   typedWordArgsPostPtr exprStackPtr
@@ -295,7 +295,7 @@ Theorem send_read_call_step:
 Proof
   strip_tac >> drule eval_send_read >> strip_tac >>
   `state_rel fn cenv cx es s` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
-  `?os. es.outcomes = SOME os` by fs[compileEnvTheory.state_rel_def] >>
+  `?os. es.outcomes = SOME os` by fs[loweringStateRelDefsTheory.state_rel_def] >>
   drule_all eval_send_outcome_typed >> strip_tac >>
   drule_all extCallOracleStepTheory.send_call_oracle_step >>
   strip_tac >> gvs[] >> metis_tac[]
@@ -433,7 +433,7 @@ Proof
   `stor_taint_ok cx tn s` by fs[bodyPtrDefsTheory.ghost_inv_def] >>
   `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
     (drule eval_send_read >> strip_tac >>
-     drule vyperInterpreterTheory.eval_send_preserves_non_accounts >> simp[]) >>
+     drule vyperCallOutcomeFrameTheory.eval_send_preserves_non_accounts >> simp[]) >>
   drule_all send_read_checked_tail >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
   qpat_x_assum `emit_op _ _ _ = _` kall_tac >>

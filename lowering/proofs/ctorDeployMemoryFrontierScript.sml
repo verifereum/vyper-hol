@@ -280,7 +280,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all lowered_unit_entry_facts >> strip_tac >> gvs[] >>
   `ptr_ok_check ctx` by fs[lowering_context_ok_def] >>
-  drule ptr_ok_check_sound >> strip_tac >>
+  drule_all ptr_ok_check_sound >> strip_tac >>
   qspecl_then [`D`, `lo`, `\nm. set (ctx_ptr_param_list ctx nm)`, `ctx`,
                `vs`, `name`, `fn`, `lbl`] mp_tac ptr_safe_ptr_discipline >>
   disch_then irule >> fs[EVERY_MEM]

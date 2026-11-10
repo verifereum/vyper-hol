@@ -44,7 +44,7 @@ Ancestors
   exprSimProps
   loweringPosts
   finite_map
-   exprSimOps localPtrsProps compileEnv exprLoweringProps
+   exprSimOps localPtrsProps compileEnv loweringStateRelDefs exprLoweringProps
   valueEncodingProofs venomState venomInst
 
 (* ===== Values in an expression's own allocations ===== *)
@@ -102,7 +102,7 @@ Proof
   `alloca_inv s /\ local_ptrs_rel func cenv es.scopes s` by
     gvs[stmt_state_rel_def, state_rel_def] >>
   drule_all local_ptrs_rel_alloca_disjoint >>
-  simp[compileEnvTheory.regions_disjoint_def]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 (* expr_val_in_alloca from the ALLOCA behind the value's allocation: an

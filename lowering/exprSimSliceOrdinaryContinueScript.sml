@@ -18,11 +18,11 @@ Theorem slice_two_operand_post_rebase:
   vv_post ctx func cenv cx result ec sc sf u ef tv vv z
 Proof
   strip_tac >>
-  `wb_frame cenv ec sc u t` by
+  `wb_frame cenv ec e1 sc u t` by
     (irule expr_post_frame >> goal_assum (drule_at Any)) >>
-  `wb_frame cenv e1 sd t r` by
+  `wb_frame cenv e1 e2 sd t r` by
     (irule expr_post_frame >> goal_assum (drule_at Any)) >>
-  `wb_frame cenv ec sc u r` by
+  `wb_frame cenv ec e2 sc u r` by
     (drule_all wb_frame_trans >> simp[]) >>
   irule vv_post_prefix_frame >>
   simp[] >> qexistsl_tac [`e2`, `se`, `r`] >> simp[]

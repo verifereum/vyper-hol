@@ -21,7 +21,7 @@ Theorem slice_dynamic_payload_two_operands:
   mem_bytes_at (w2n p + 32) (LENGTH bs) u.vs_memory = bs
 Proof
   strip_tac >>
-  `wb_frame cenv es sb s t` by
+  `wb_frame cenv es es1 sb s t` by
     (irule expr_post_frame >> goal_assum (drule_at Any)) >>
   `expr_val_at cenv cx (BaseT bt) sa sc es1 v src t` by
     (drule_all log_frame_placement >> simp[]) >>
@@ -40,11 +40,11 @@ Theorem slice_captured_operand_two_posts:
   eval_operand op u = SOME w
 Proof
   strip_tac >>
-  `wb_frame cenv es sb s t /\ wb_frame cenv es1 sc t u` by
+  `wb_frame cenv es es1 sb s t /\ wb_frame cenv es1 es2 sc t u` by
     metis_tac[expr_post_frame] >>
   `eval_operand op t = SOME w` by
-    (irule log_frame_operand >> simp[] >> qexistsl_tac [`cenv`, `es`, `s`, `sb`] >> simp[]) >>
-  irule log_frame_operand >> simp[] >> qexistsl_tac [`cenv`, `es1`, `t`, `sc`] >> simp[]
+    (irule log_frame_operand >> simp[] >> metis_tac[]) >>
+  irule log_frame_operand >> simp[] >> metis_tac[]
 QED
 
 Theorem slice_fixed_payload_two_operands:
@@ -61,7 +61,7 @@ Theorem slice_fixed_payload_two_operands:
   mem_bytes_at b (LENGTH bs) u.vs_memory = bs
 Proof
   strip_tac >>
-  `wb_frame cenv es sb s t /\ wb_frame cenv es1 sc t u` by
+  `wb_frame cenv es es1 sb s t /\ wb_frame cenv es1 es2 sc t u` by
     metis_tac[expr_post_frame] >>
   `FLOOKUP t.vs_allocas aid = SOME (b,32)` by fs[expr_post_def] >>
   `!name off sz. local_region cenv es1.scopes t name off sz ==>
@@ -71,12 +71,14 @@ Proof
        (drule_all log_frame_local_region >> metis_tac[]) >> metis_tac[]) >>
   `mem_bytes_at (b+0) (LENGTH bs) t.vs_memory =
    mem_bytes_at (b+0) (LENGTH bs) s.vs_memory` by
-    (irule slice_allocated_window_preserved >>
-     qexistsl_tac [`aid`, `cenv`, `es`, `sb`, `32`] >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+    (qspecl_then [`cenv`, `es`, `es1`, `sb`, `s`, `t`, `aid`, `b`, `32`,
+                  `0`, `LENGTH bs`] mp_tac slice_allocated_window_preserved >>
+     impl_tac >- (simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >> simp[]) >>
   `mem_bytes_at (b+0) (LENGTH bs) u.vs_memory =
    mem_bytes_at (b+0) (LENGTH bs) t.vs_memory` by
-    (irule slice_allocated_window_preserved >>
-     qexistsl_tac [`aid`, `cenv`, `es1`, `sc`, `32`] >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+    (qspecl_then [`cenv`, `es1`, `es2`, `sc`, `t`, `u`, `aid`, `b`, `32`,
+                  `0`, `LENGTH bs`] mp_tac slice_allocated_window_preserved >>
+     impl_tac >- (simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >> simp[]) >>
   gvs[]
 QED
 
@@ -98,6 +100,5 @@ Theorem slice_post_operands:
     eval_operand op t = SOME w
 Proof
   strip_tac >> drule expr_post_frame >> strip_tac >>
-  rpt strip_tac >> irule log_frame_operand >> simp[] >>
-  qexistsl_tac [`cenv`, `es`, `s`, `sb`] >> simp[]
+  rpt strip_tac >> irule log_frame_operand >> simp[] >> metis_tac[]
 QED

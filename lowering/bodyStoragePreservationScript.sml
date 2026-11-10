@@ -344,9 +344,13 @@ Resume body_oracle_storage_mutual[builtin_args]:
   reverse conj_tac
   >- (conj_tac
       >- (rpt strip_tac >>
-          qpat_x_assum `!s'' t. _ /\ bt <> Len /\ _ ==> _`
+          Cases_on `bt = Bop In \/ bt = Bop NotIn`
+          >- (qpat_x_assum `!s'' t. _ /\ bt <> Len /\ (bt = Bop In \/ bt = Bop NotIn) ==> _`
+                (qspecl_then [`st`,`st`] mp_tac) >>
+              simp[type_check_def, assert_def, return_def] >> metis_tac[]) >>
+          qpat_x_assum `!s'' t. _ /\ bt <> Len /\ _ /\ bt <> Env MsgGas /\ _ ==> _`
             (qspecl_then [`st`,`st`] mp_tac) >>
-          simp[type_check_def, assert_def, return_def] >> metis_tac[]) >>
+          gvs[type_check_def, assert_def, return_def] >> metis_tac[]) >>
       conj_tac
       >- suspend "builtin_slice_addr" >>
       conj_tac
@@ -385,7 +389,7 @@ Resume body_oracle_storage_mutual[builtin_slice_tail]:
         expr_evm_run_root_def]) >>
   `contract_storage_well_formed cx st` by
     metis_tac[runtime_storage_consistent_storage] >>
-  qpat_assum `!s'' t c a. _ /\ _ /\ _ /\ code_slice_source bt es = SOME _ ==> _`
+  qpat_assum `!s'' t c a. _ /\ _ /\ _ /\ _ /\ code_slice_source bt es = SOME _ ==> _`
     (qspecl_then [`st`,`st`,`ct`,`ca`] mp_tac) >>
   (impl_tac >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
                 gvs[code_slice_source_SOME, type_check_def, assert_def,
@@ -413,7 +417,7 @@ Resume body_oracle_storage_mutual[builtin_slice_addr]:
   `contract_storage_well_formed cx st` by
     metis_tac[runtime_storage_consistent_storage] >>
   `contract_storage_well_formed cx s1` by (
-    qpat_assum `!s'' t c a. _ /\ _ /\ _ /\ code_slice_source bt es = SOME _ ==> _`
+    qpat_assum `!s'' t c a. _ /\ _ /\ _ /\ _ /\ code_slice_source bt es = SOME _ ==> _`
       (qspecl_then [`st`,`st`,`ct`,`ca`] mp_tac) >>
     (impl_tac >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
                   gvs[code_slice_source_SOME, type_check_def, assert_def,

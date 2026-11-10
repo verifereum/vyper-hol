@@ -220,8 +220,10 @@ Proof
   simp[eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def] >>
   simp[Once exec_block_def, get_instruction_def, mk_inst_def] >>
-  simp[step_inst_def, step_inst_base_def] >>
-  simp[eval_operand_def, lookup_var_def, update_var_def,
+  simp[step_inst_def] >>
+  qmatch_goalsub_abbrev_tac `step_inst_base _ st` >>
+  simp[step_inst_base_def] >>
+  simp[Abbr `st`, eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
   simp[create_revert_read_written, revert_state_def, set_returndata_def,
        finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def]

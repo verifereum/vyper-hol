@@ -1,7 +1,7 @@
 (* Typed aggregate packaging for the reentrant owned decoder. *)
 Theory calldataAggregateTyped
 Ancestors
-  abiDecoderMemberInfos abiDecoderCoherence calldataDynOwned calldataMembers calldataReconstruction exprLowering valueEncoding vyperTyping vyperValue list rich_list arithmetic abiEncoder
+  valueEncodingDefs abiDecoderMemberInfos abiDecoderCoherence calldataDynOwned calldataMembers calldataReconstruction exprLowering valueEncoding vyperTyping vyperValue list rich_list arithmetic abiEncoder
 
 Theorem calldata_tuple_indexed_pack[local]:
   !tvs vs d mem.
@@ -157,8 +157,8 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all calldata_tuple_layout >> disch_then (assume_tac o GSYM) >>
   drule_all calldata_tuple_prefix_layout >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
-  simp_tac std_ss [Once compile_abi_decode_to_buf_def, LET_THM] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, LET_THM] >>
   strip_tac >>
   `!i. i < LENGTH xs ==> type_memory_size (EL i tvs) <= (\(ei,az,mz). mz) (EL i xs)` by
     (rpt strip_tac >>
@@ -495,12 +495,12 @@ Proof
      simp[abi_decoder_coherent_array_iff]) >>
   drule abi_decoder_coherent_header >> strip_tac >>
   drule_all calldata_fixed_infos_layout >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
   `d+SUM (MAP (\(ei,az,mz). mz) xs) <= base_addr+cap /\
    d+SUM (MAP (\(ei,az,mz). mz) xs) < dimword (:256)` by
     asm_rewrite_tac[GSYM calldata_tuple_size, calldata_fixed_tuple_size] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   qpat_x_assum `xs = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   disch_tac >>
   mp_tac (Q.INST [`tvs` |-> `REPLICATE n tv`,
@@ -512,7 +512,7 @@ Proof
        `EL i (REPLICATE n tv) = tv` by simp[EL_REPLICATE] >>
        asm_rewrite_tac[] >>
        qpat_x_assum `!i a mid b ep dp ei az mz. _`
-         (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
+         (drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)) >>
        disch_then (qspecl_then [`i`, `a`, `az`, `mz`] mp_tac) >>
        asm_rewrite_tac[])])) >>
   POP_ASSUM_LIST (K all_tac) >>
@@ -550,8 +550,8 @@ Theorem calldata_coherent_nonbulk_array_owned_run:
     ((hdr,body_lbl,exit_lbl),st0) /\
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
-    (Lit 0w) (Lit 0w) di middle = ((),st1) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+    (Lit 0w) di middle = ((),st1) /\
   abi_decode_loop_suffix ip (FST ops) hdr exit_lbl st1 = ((),end_st) /\
   st.cs_next_id <= header_st.cs_next_id /\
   header_st.cs_next_id < middle.cs_next_id /\
@@ -801,8 +801,8 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all calldata_tuple_layout >> disch_then (assume_tac o GSYM) >>
   drule_all calldata_tuple_prefix_layout >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
-  simp_tac std_ss [Once compile_abi_decode_to_buf_def, LET_THM] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, LET_THM] >>
   strip_tac >>
   `!i. i < LENGTH xs ==> type_memory_size (EL i tvs) <= (\(ei,az,mz). mz) (EL i xs)` by
     (rpt strip_tac >>
@@ -1063,12 +1063,12 @@ Proof
      simp[abi_decoder_coherent_array_iff]) >>
   drule abi_decoder_coherent_header >> strip_tac >>
   drule_all calldata_fixed_infos_layout >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
   `d+SUM (MAP (\(ei,az,mz). mz) xs) <= base_addr+cap /\
    d+SUM (MAP (\(ei,az,mz). mz) xs) < dimword (:256)` by
     asm_rewrite_tac[GSYM calldata_tuple_size, calldata_fixed_tuple_size] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   qpat_x_assum `xs = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   disch_tac >>
   mp_tac (Q.INST [`tvs` |-> `REPLICATE n tv`,
@@ -1080,7 +1080,7 @@ Proof
        `EL i (REPLICATE n tv) = tv` by simp[EL_REPLICATE] >>
        asm_rewrite_tac[] >>
        qpat_x_assum `!i a mid b ep dp ei az mz. _`
-         (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
+         (drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)) >>
        disch_then (qspecl_then [`i`, `a`, `az`, `mz`] mp_tac) >>
        asm_rewrite_tac[])])) >>
   POP_ASSUM_LIST (K all_tac) >>

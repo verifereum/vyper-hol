@@ -48,7 +48,7 @@ Proof
   `name <> s` by (strip_tac >> gvs[]) >> rw[]
 QED
 
-Theorem supported_internal_function_lookup[local]:
+Theorem supported_internal_function_lookup:
   !tops id mut nr rr args dflts ret body.
     supported_function_decl tops id Internal =
       SOME (mut, nr, rr, args, dflts, ret, body) ==>

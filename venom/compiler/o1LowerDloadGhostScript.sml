@@ -3,16 +3,6 @@ Theory o1LowerDloadGhost
 Ancestors
   contextCodegenRel execEquivParamBase venomExecProps o1LowerDloadClosure ptrDiscipline finite_map pointerConfinedDefs venomInst memLocDefs pred_set list
 
-Theorem first_prov_origin:
-  !ops G site. first_prov G ops = SOME site ==>
-    ?v. MEM (Var v) ops /\ FLOOKUP G v = SOME site
-Proof
-  Induct >> simp[first_prov_def] >> rpt gen_tac >>
-  Cases_on `op_prov G h` >> simp[]
-  >- metis_tac[] >>
-  Cases_on `h` >> gvs[op_prov_def] >> metis_tac[]
-QED
-
 Theorem step_prov_origin:
   MEM inst (fn_insts fn) /\
   (!k site. k < LENGTH PG /\ EL k PG = SOME site ==> k IN P fn.fn_name) /\

@@ -2,7 +2,7 @@
    counted loop execution preserve allocation history and return-buffer frames. *)
 Theory stmtForRangeMemory
 Ancestors
-  stmtSimDefs exprSimMemDefs stmtLowering compileEnv vyperInterpreter
+  stmtSimDefs exprSimMemDefs stmtLowering compileEnv loweringStateRelDefs vyperInterpreter
   vyperState vyperTypeSystem stmtSimForRange stmtForRangeEndpointsMemory
   stmtForRangeChecksMemory stmtForRangeMemoryLoop stmtForRangeMemoryStart
   stmtLoweringMono exprLoweringProps stmtSimProps stmtSimForParts
@@ -485,9 +485,12 @@ Resume compile_for_range_checked_frag_active_mem[finish_loop]:
   rename1 `SOME desc` >> PairCases_on `desc` >>
   `sa.cs_next_var <= r.cs_next_var` by
     (drule (SIMP_RULE std_ss [cs_mono_def] (cj 1 compile_stmt_cs_mono)) >> simp[]) >>
-  qpat_x_assum `return_buf_frame (SOME _) _ _ t` mp_tac >>
-  simp[return_buf_frame_def] >> strip_tac >>
-  qexistsl_tac [`x`, `slot_size`] >> simp[] >>
+  (* Only the frame at sa and the counter bound matter; gvs over the whole
+     context took over 7 s. *)
+  qpat_x_assum `return_buf_frame _ cenv sa t` mp_tac >>
+  qpat_x_assum `sa.cs_next_var <= r.cs_next_var` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  rw[return_buf_frame_def] >> qexistsl_tac [`x`,`slot_size`] >> simp[] >>
   irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]
 QED
 
