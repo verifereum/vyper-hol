@@ -3,7 +3,8 @@ Theory bodyMemArrayAdapters
 Ancestors
   bodyMemArrayHeader bodyMemAggregateTraversal exprSimAggregateLayout exprSimAggregateLoops
   gasOutcome gasSummary valueEncoding vyperTypeABI exprLowering compileEnv
-  exprSimDefs exprSimMemDefs loweringPosts
+  exprSimDefs exprSimMemDefs loweringPosts venomState venomMemDefs
+  stmtSimProps stmtSimDeclCompose exprBopSimProps
 
 Theorem aggregate_make_array_elems_body_sim_mem:
   !args ce cx env elem_ty tv header idx off sa out sb es func inst x b asz s0 ctx tops.
@@ -88,4 +89,115 @@ Proof
           metis_tac[]) >>
       conj_tac >> first_assum ACCEPT_TAC) >>
   metis_tac[]
+QED
+
+Theorem array_header_frames[local]:
+  32 + extent <= asz /\ sa.cs_next_id <= sm.cs_next_id /\
+  sh = (mstore b w s0 with vs_inst_idx := SUC s0.vs_inst_idx) /\
+  (!p n. p+n <= b \/ b+32 <= p ==>
+    mem_bytes_at p n sh.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+  (!p n. b <= p /\ p+n <= b+asz /\
+    (p+n <= b+32 \/ b+32+extent <= p) ==>
+    mem_bytes_at p n r.vs_memory = mem_bytes_at p n sh.vs_memory) /\
+  (!aid p n. FLOOKUP sh.vs_allocas aid = SOME (p,n) /\
+    aid < sm.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
+    (!name lo sz. local_region ce es.scopes sh name lo sz ==>
+      p+n <= lo \/ lo+sz <= p) ==>
+    mem_bytes_at p n r.vs_memory = mem_bytes_at p n sh.vs_memory) ==>
+  (!p n. b <= p /\ p+n <= b+asz /\
+    (p+n <= b \/ b+32+extent <= p) ==>
+    mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+  (!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+    aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
+    (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+      p+n <= lo \/ lo+sz <= p) ==>
+    mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)
+Proof
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >>
+      `mem_bytes_at p n r.vs_memory = mem_bytes_at p n sh.vs_memory` by
+        (qpat_x_assum `!p n. b <= p /\ _ ==> _` irule >> simp[] >> decide_tac) >>
+      `mem_bytes_at p n sh.vs_memory = mem_bytes_at p n s0.vs_memory` by
+        (qpat_x_assum `!p n. _ \/ _ ==> _` irule >> decide_tac) >> simp[]) >>
+  rpt strip_tac >>
+  `mem_bytes_at p n r.vs_memory = mem_bytes_at p n sh.vs_memory` by
+    (qpat_x_assum `!aid p n. _ ==> _` irule >>
+     conj_tac
+     >- (simp[mstore_def, local_region_def, lookup_var_def] >>
+         gvs[local_region_def, lookup_var_def]) >>
+     conj_tac >- (qexists_tac `aid` >> simp[mstore_def] >> decide_tac) >>
+     simp[]) >>
+  `mem_bytes_at p n sh.vs_memory = mem_bytes_at p n s0.vs_memory` by
+    (qpat_x_assum `!p n. _ \/ _ ==> _` irule >> decide_tac) >> simp[]
+QED
+
+Theorem array_header_success_post:
+  sm.cs_next_var = sa.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  32 + LENGTH args * type_memory_size tv <= asz /\
+  sh = (mstore b (n2w (LENGTH args)) s0 with vs_inst_idx := SUC s0.vs_inst_idx) /\
+  locals_kept ce es s0 sh /\ mem_word_at b sh.vs_memory = n2w (LENGTH args) /\
+  (!p n. p+n <= b \/ b+32 <= p ==>
+    mem_bytes_at p n sh.vs_memory = mem_bytes_at p n s0.vs_memory) ==>
+  !res es' r.
+  (?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+    r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
+    stmt_state_rel ctx func ce cx es' r /\
+    elems_in_memory vs (b+32) tv r.vs_memory /\
+    (!z w. not_fresh_at sm z /\ lookup_var z sh = SOME w ==>
+      lookup_var z r = SOME w) /\
+    (!aid a. FLOOKUP sh.vs_allocas aid = SOME a ==>
+      FLOOKUP r.vs_allocas aid = SOME a) /\
+    (!p n. b <= p /\ p+n <= b+asz /\
+      (p+n <= b+32 \/ b+32+LENGTH args * type_memory_size tv <= p) ==>
+      mem_bytes_at p n r.vs_memory = mem_bytes_at p n sh.vs_memory) /\
+    (!aid p n. FLOOKUP sh.vs_allocas aid = SOME (p,n) /\
+      aid < sm.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
+      (!name lo sz. local_region ce es.scopes sh name lo sz ==>
+        p+n <= lo \/ lo+sz <= p) ==>
+      mem_bytes_at p n r.vs_memory = mem_bytes_at p n sh.vs_memory) /\
+    locals_kept ce es sh r /\ alloca_history func r /\
+    sh.vs_alloca_next <= r.vs_alloca_next) ==>
+  (?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+    r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
+    stmt_state_rel ctx func ce cx es' r /\
+    elems_in_memory vs (b+32) tv r.vs_memory /\
+    mem_word_at b r.vs_memory = n2w (LENGTH args) /\
+    (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
+      lookup_var z r = SOME w) /\
+    (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
+      FLOOKUP r.vs_allocas aid = SOME a) /\
+    (!p n. b <= p /\ p+n <= b+asz /\
+      (p+n <= b \/ b+32+LENGTH args * type_memory_size tv <= p) ==>
+      mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+    (!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+      aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
+      (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+        p+n <= lo \/ lo+sz <= p) ==>
+      mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+    locals_kept ce es s0 r /\ alloca_history func r /\
+    s0.vs_alloca_next <= r.vs_alloca_next)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all array_header_frames >> strip_tac >>
+  `mem_bytes_at b 32 r.vs_memory = mem_bytes_at b 32 sh.vs_memory` by
+    (qpat_x_assum `!p n. b <= p /\ _ ==> _` irule >> simp[] >> decide_tac) >>
+  `mem_word_at b r.vs_memory = n2w (LENGTH args)` by
+    metis_tac[abiStaticAggregatePropsTheory.mem_word_at_bytes] >>
+  `!name lo sz. local_region ce es.scopes sh name lo sz <=>
+                local_region ce es.scopes s0 name lo sz` by
+    (rpt gen_tac >> irule local_region_lookup_cong >>
+     simp[lookup_var_def, mstore_def]) >>
+  `locals_kept ce es s0 r` by
+    (fs[locals_kept_def] >> rpt gen_tac >> strip_tac >>
+     irule EQ_TRANS >> qexists_tac `mem_bytes_at off len sh.vs_memory` >>
+     conj_tac
+     >- (qpat_x_assum `!n b sz off len. _ ==> mem_bytes_at _ _ r.vs_memory = _`
+           irule >> simp[] >> metis_tac[]) >>
+     qpat_x_assum `!n b sz off len. _ ==> mem_bytes_at _ _ sh.vs_memory = _`
+       irule >> simp[] >> metis_tac[]) >>
+  qexists_tac `vs` >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> qpat_x_assum `!z w. _ ==> _` irule >>
+      gvs[not_fresh_at_def, mstore_def, lookup_var_def]) >>
+  gvs[mstore_def] >> metis_tac[]
 QED
