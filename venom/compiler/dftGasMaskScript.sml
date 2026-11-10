@@ -3020,8 +3020,52 @@ Proof
           pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
           irule CONS_PERM >> simp[]) >>
         gvs[]) >>
-    conj_tac >- (FAIL_TAC "GAS target returning slots") >>
-    FAIL_TAC "GAS filling assembly"
+    `EVERY (\i. ~is_terminator i.inst_opcode) pre` by
+      (fs[EVERY_MEM] >> metis_tac[]) >>
+    conj_tac
+    >- (simp[dftIndexedExecTheory.dft_exec_cons_def,
+          venomInstTheory.is_terminator_def] >>
+        rpt gen_tac >> strip_tac
+        >- (qpat_x_assum `FOLDR _ _ pre _ = OK u` mp_tac >>
+            `update_var out v s with
+               <|vs_inst_idx := SUC s.vs_inst_idx; vs_gas_readings := rs|> =
+             (update_var out v a) with vs_inst_idx := SUC s.vs_inst_idx` by
+              simp[Abbr `a`, update_var_def] >>
+            simp[prefix_independent_update_cursor_ok] >>
+            strip_tac >>
+            simp[]) >>
+        metis_tac[prefix_nonterminator_no_intret]) >>
+    simp[LIST_REL_SPLIT1] >> rpt gen_tac >> strip_tac >> gvs[] >>
+    rename1 `LIST_REL _ pm pg` >>
+    qpat_x_assum `!gs tail. LIST_REL _ pm gs ==> _`
+      (qspecl_then [`pg`, `v::tail`] mp_tac) >> simp[] >> strip_tac >>
+    qabbrev_tac `st = s with vs_gas_readings := pg ++ v::tail` >>
+    `a with vs_gas_readings := pg ++ v::tail = st` by
+      simp[Abbr `a`, Abbr `st`] >>
+    `a with vs_gas_readings := pg ++ [v] ++ tail = st` by
+      (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> first_assum ACCEPT_TAC) >>
+    `s with vs_gas_readings := pg ++ [v] ++ tail = st` by
+      (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[NoAsms, Abbr `st`]) >>
+    fs[] >>
+    Cases_on `?t. FOLDR (dft_exec_cons fuel C') OK pre a = OK t`
+    >- (pop_assum (qx_choose_then `t` assume_tac) >>
+        Cases_on `?u. FOLDR (dft_exec_cons fuel C) OK pre st = OK u`
+        >- (pop_assum (qx_choose_then `u` assume_tac) >>
+            qpat_x_assum `( ?j. _ ) ==> _` mp_tac >>
+            (impl_tac >- (qexists_tac `fuel` >>
+              simp[passSimulationDefsTheory.terminates_def])) >> strip_tac >>
+            qpat_x_assum `(_ \/ _) ==> _` mp_tac >>
+            simp[] >> strip_tac >>
+            `u = t with vs_gas_readings := v::tail` by
+              simp[] >>
+            `u.vs_inst_idx = s.vs_inst_idx + LENGTH pre` by
+              (qpat_assum `FOLDR _ _ pre st = OK u` mp_tac >>
+               disch_then (mp_tac o MATCH_MP prefix_ok_cursor o
+                 CONJ (ASSUME ``EVERY (\i. ~is_terminator i.inst_opcode) pre``)) >>
+               simp[Abbr `st`]) >>
+            FAIL_TAC "GAS exact prefix cut") >>
+        FAIL_TAC "GAS target OK source stopped") >>
+    FAIL_TAC "GAS target stopped"
   ) >>
   FAIL_TAC "noninvoke extraction pending"
 QED
