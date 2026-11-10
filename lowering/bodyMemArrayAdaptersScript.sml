@@ -1,7 +1,7 @@
 (* Uniform array element traversal with body-aware child stores. *)
 Theory bodyMemArrayAdapters
 Ancestors
-  bodyMemAggregateTraversal exprSimAggregateLayout exprSimAggregateLoops
+  bodyMemArrayHeader bodyMemAggregateTraversal exprSimAggregateLayout exprSimAggregateLoops
   gasOutcome gasSummary valueEncoding vyperTypeABI exprLowering compileEnv
   exprSimDefs exprSimMemDefs loweringPosts
 
