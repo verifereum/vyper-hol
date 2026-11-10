@@ -337,9 +337,8 @@ Theorem expr_body_pre_augassign_toplevel:
     expr_body_pre cenv cx env e es /\
     FLOOKUP env.toplevel_vtypes nsid = SOME (Type ty) /\
     well_formed_type env.type_defs ty /\
-    (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
-    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+    well_typed_binop ty bop ty (expr_type e) /\ augassign_operand_ok ty bop e /\
+    bop <> In /\ bop <> NotIn ==>
     expr_body_pre cenv cx env (Builtin ty (Bop bop) [TopLevelName ty nsid; e])
       es
 Proof
@@ -348,6 +347,7 @@ Proof
   `ty <> NoneT` by
     (strip_tac >> drule_all well_typed_binop_augassign_word >>
      simp[word_value_type_def]) >>
+  drule augassign_builtin_operands >> strip_tac >>
   `type_alloc_ok cenv ty` by
     (drule_all well_typed_binop_augassign_word >> strip_tac >>
      imp_res_tac exprSimOperatorsTheory.word_value_type_word >>
@@ -409,9 +409,8 @@ Theorem compile_augassign_toplevel_case:
     well_formed_type env.type_defs ty /\
     cenv.ce_hashmap_info (src, id) = NONE /\
     cenv.ce_module_var_type (src, id) = SOME vtyp /\ is_word_type vtyp /\
-    (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
-    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+    well_typed_binop ty bop ty (expr_type e) /\ augassign_operand_ok ty bop e /\
+    bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
          (AugAssign ty (TopLevelNameTarget (src, id)) bop e))

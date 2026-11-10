@@ -1562,6 +1562,7 @@ fun neg_function ty =
 val () = List.app assert_none
   [binop_function u256 u256 ``vyperAST$Exp`` (op_name u256 "y"),
    binop_function u8 u8 ``vyperAST$Exp`` (op_name u8 "y"),
+   binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 300),
    binop_function i256 i256 ``vyperAST$Exp`` (op_lit i256 ~2),
    aug_function u256 u256 ``vyperAST$Exp`` (op_name u256 "y"),
    aug_function i256 i256 ``vyperAST$Exp`` (op_lit i256 ~2),
@@ -1583,12 +1584,11 @@ val pow_literal_base_function =
     ``[Return (SOME (Builtin ^u256 (Bop vyperAST$Exp)
                        [^(op_lit u256 2); ^(op_name u256 "y")]))]``
 
-(* An over-large literal exponent stays accepted: compile_safe_pow checks the
-   base against it. >> of a narrow unsigned value and the bitwise augmented
-   assignments on bool compute what the semantics does. *)
+(* A dynamic base requires a literal exponent within its value-bit bound.
+   >> of a narrow unsigned value and bitwise augmented assignments on bool
+   compute what the semantics does. *)
 val () = List.app assert_some
-  [binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 300),
-   binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 0),
+  [binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 0),
    pow_literal_base_function,
    aug_function u256 u256 ``vyperAST$Exp`` (op_lit u256 2),
    neg_function i256,

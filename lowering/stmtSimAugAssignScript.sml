@@ -246,6 +246,31 @@ Proof
   rw[type_bits_def, well_formed_type_def, vyperValueTheory.evaluate_type_def]
 QED
 
+(* The checked augmented operand satisfies the ordinary builtin gate too. *)
+Theorem augassign_builtin_operands:
+  augassign_operand_ok ty bop e ==>
+  builtin_operands_ok ty (Bop bop) [lhs; e]
+Proof
+  Cases_on `bop` >>
+  simp[augassign_operand_ok_def, builtin_operands_ok_def,
+       power_operands_ok_def, int_literal_value_def] >>
+  Cases_on `e` >> simp[power_exponent_ok_def] >>
+  rename1 `Literal ann lit` >> Cases_on `lit` >> simp[power_exponent_ok_def]
+QED
+
+(* The checked augmented operand gives the exponent and shift-amount facts
+   the field-target statement lemmas take. *)
+Theorem augassign_operand_ok_operands:
+  augassign_operand_ok ty bop e ==>
+  (bop = Exp ==> nonneg_int_literal e) /\
+  (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
+Proof
+  Cases_on `bop` >> simp[augassign_operand_ok_def] >>
+  Cases_on `e` >> simp[power_exponent_ok_def] >>
+  rename1 `Literal _ lit` >> Cases_on `lit` >>
+  simp[power_exponent_ok_def, nonneg_int_literal_def, int_literal_value_def]
+QED
+
 (* The target of an augmented assignment has a word type, so nothing of
    its size is asked for alloc_limits_expr. *)
 Theorem well_typed_binop_augassign_alloc_ok[local]:
@@ -266,15 +291,14 @@ QED
 Theorem expr_sim_pre_augassign:
   !cenv cx env ty id bop e es.
     expr_sim_pre cenv cx env e es /\ FLOOKUP env.var_types id = SOME ty /\
-    well_typed_binop ty bop ty (expr_type e) /\
-    (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) ==>
+    well_typed_binop ty bop ty (expr_type e) /\ augassign_operand_ok ty bop e ==>
     expr_sim_pre cenv cx env (Builtin ty (Bop bop) [Name ty id; e]) es
 Proof
   rpt strip_tac >>
   drule expr_sim_pre_var_types_well_formed >>
   disch_then drule >> strip_tac >>
   drule well_formed_type_bits >> strip_tac >>
+  drule augassign_builtin_operands >> strip_tac >>
   drule well_typed_binop_augassign_alloc_ok >> strip_tac >>
   gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
@@ -288,15 +312,14 @@ QED
 Theorem expr_body_pre_augassign:
   !cenv cx env ty id bop e es.
     expr_body_pre cenv cx env e es /\ FLOOKUP env.var_types id = SOME ty /\
-    well_typed_binop ty bop ty (expr_type e) /\
-    (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) ==>
+    well_typed_binop ty bop ty (expr_type e) /\ augassign_operand_ok ty bop e ==>
     expr_body_pre cenv cx env (Builtin ty (Bop bop) [Name ty id; e]) es
 Proof
   rpt strip_tac >>
   drule expr_body_pre_var_types_well_formed >>
   disch_then drule >> strip_tac >>
   drule well_formed_type_bits >> strip_tac >>
+  drule augassign_builtin_operands >> strip_tac >>
   drule well_typed_binop_augassign_alloc_ok >> strip_tac >>
   gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
@@ -332,9 +355,7 @@ QED
 Theorem augassign_bop_sim:
   !ctx func cenv cx env ty id bop e es.
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
-    FLOOKUP env.var_types id = SOME ty /\
-    (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    FLOOKUP env.var_types id = SOME ty /\ augassign_operand_ok ty bop e /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     expr_sim ctx func cenv cx ty (Builtin ty (Bop bop) [Name ty id; e]) es
 Proof
@@ -383,9 +404,7 @@ Theorem compile_augassign_local_case:
     eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') /\
     expr_sim_case nocalls ctx func cenv cx e /\
     expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
-    FLOOKUP env.var_types id = SOME ty /\
-    (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    FLOOKUP env.var_types id = SOME ty /\ augassign_operand_ok ty bop e /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e)) es res es'
@@ -476,9 +495,7 @@ Theorem compile_augassign_local_stmt_frag:
   !ctx func cx lctx RetQ cenv ty0 env ty id bop e es res es'.
     eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') /\
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
-    FLOOKUP env.var_types id = SOME ty /\
-    (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    FLOOKUP env.var_types id = SOME ty /\ augassign_operand_ok ty bop e /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e)) es res es'

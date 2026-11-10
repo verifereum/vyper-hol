@@ -1487,8 +1487,8 @@ Theorem expr_body_pre_bop_operands:
     (bop = ShL \/ bop = ShR ==> shift_amount_ok e2)
 Proof
   simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
-       builtin_operands_ok_def, nonneg_int_literal_def,
-       GSYM expr_int_literal_value] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  Cases_on `expr_int_literal e2` >> gvs[]
+       expr_int_literal_value] >>
+  rpt strip_tac >> gvs[builtin_operands_ok_def] >>
+  drule power_operands_ok_literal >> simp[nonneg_int_literal_def] >>
+  Cases_on `int_literal_value e2` >> simp[]
 QED
