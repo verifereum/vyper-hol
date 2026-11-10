@@ -523,3 +523,29 @@ Proof
   disch_then (qspec_then `h1` assume_tac) >>
   first_x_assum drule_all >> simp[]
 QED
+
+Theorem inline_inactive_storage_writes:
+  inline_activation_storage active acts routes logical physical /\
+  physical owner = SOME frame /\
+  (!id a route snap.
+    id <> active /\ acts id = SOME a /\ routes id = SOME route /\
+    logical id = SOME snap /\ route.ir_owner = owner ==>
+    EVERY (\(x,w).
+      (!v. v IN snap.ils_defined ==> route.ir_rename v <> x) /\
+      (!v. v IN snap.ils_protected ==> snap.ils_parent_rename v <> x)) writes) ==>
+  !id a. id <> active /\ acts id = SOME a ==>
+    ?route snap frame'.
+      routes id = SOME route /\ logical id = SOME snap /\
+      ((owner =+ SOME (frame with ipf_state :=
+        FOLDL (\t (x,w). update_var x w t) frame.ipf_state writes)) physical)
+        route.ir_owner = SOME frame' /\
+      inline_snapshot_data a route snap frame'
+Proof
+  pure_rewrite_tac[inline_activation_storage_def] >> rpt strip_tac >>
+  qpat_x_assum `!id a. acts id = SOME a ==> _` drule >> strip_tac >>
+  qexistsl [`route`, `snap`] >>
+  Cases_on `route.ir_owner = owner`
+  >- (gvs[] >> simp[combinTheory.APPLY_UPDATE_THM] >>
+      irule inline_snapshot_writes >> metis_tac[]) >>
+  simp[combinTheory.APPLY_UPDATE_THM] >> metis_tac[]
+QED
