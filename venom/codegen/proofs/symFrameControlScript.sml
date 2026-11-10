@@ -2900,6 +2900,46 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Theorem sym_rf_preparation_stack_sim:
+  !opc inputs nl ps ins ps1 fn ros ps2 (lo:string |-> num) ss top srest ret cp p fmp env.
+  emit_input_plan opc inputs nl ps = (ins,ps1) /\
+  reorder_plan (dfg_build_function fn) inputs ps1 = (ros,ps2) /\
+  opc <> INVOKE /\ ssa_form fn /\ fn_shape_ok fn /\
+  EVERY is_simple_stack_op (ins ++ ros) /\
+  prefix_wf lo (LENGTH ps.ps_stack) (ins ++ ros) /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp (ins ++ ros)) ==>
+  ?ss' top'.
+    sym_steps p env (LENGTH (execute_plan fmp (ins ++ ros))) ss = SymOK ss' /\
+    ss'.sym_stack = top' ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE ps2.ps_stack) top' /\
+    (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!off. ~MEM (SOSpill off) (ins ++ ros) /\
+         ~MEM (SORestore off) (ins ++ ros)` by
+    (fs[listTheory.EVERY_MEM] >>
+     metis_tac[strongPrefixSimTheory.is_simple_stack_op_def]) >>
+  `(apply_prefix_ops fmp lo ins (ps with ps_spilled := FEMPTY)).ps_stack = ps1.ps_stack` by
+    (irule emit_input_plan_spill_free_stack_replay >>
+     simp[] >> fs[listTheory.MEM_APPEND] >> metis_tac[]) >>
+  `LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+     (apply_prefix_ops fmp lo (ins ++ ros) (ps with ps_spilled := FEMPTY)).ps_stack
+     ps2.ps_stack` by
+    (rewrite_tac[planAlignTheory.apply_prefix_ops_append] >>
+     irule reorder_plan_spill_free_kind_replay >>
+     simp[] >> fs[listTheory.MEM_APPEND] >>
+     qexistsl [`inputs`, `ps1`] >> simp[] >>
+     irule listTheory.EVERY2_refl >> simp[]) >>
+  drule_all sym_spill_free_stack_only_prefix_sim >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  fs[sym_kinds_ok_def] >>
+  irule list_rel_op_kind_transport >>
+  metis_tac[listTheory.LIST_REL_REVERSE]
+QED
+
 Theorem sym_jmp_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
