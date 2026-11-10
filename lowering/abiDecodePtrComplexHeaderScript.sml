@@ -76,6 +76,7 @@ Theorem abi_decode_complex_header_success:
   compile_abi_decode_range_check pos e hi sm = ((),sb) /\
   fn_has_code sa sb func /\ run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?H tf.
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
     gas_path_ptr D 0 ctx func PG G tn s 0 H tf
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi
@@ -98,6 +99,7 @@ Proof
     strip_assume_tac) >>
   fs[IN_GSPEC_IFF] >>
   qexistsl_tac [`H`, `tm`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- suspend "path" >>
   reverse conj_tac
   >- (qpat_x_assum `t = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
