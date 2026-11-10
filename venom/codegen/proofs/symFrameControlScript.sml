@@ -3202,6 +3202,14 @@ Proof
   Cases_on `halting` >> Cases_on `MEM out nl` >> gvs[]
 QED
 
+Theorem sym_plan_runs_compose:
+  sym_steps p env (LENGTH (execute_plan fmp ops1)) ss = SymOK mid /\
+  sym_steps p env (LENGTH (execute_plan fmp ops2)) mid = SymOK final ==>
+  sym_steps p env (LENGTH (execute_plan fmp (ops1 ++ ops2))) ss = SymOK final
+Proof
+  simp[stackOpSimTheory.execute_plan_append, sym_steps_add]
+QED
+
 Theorem sym_rf_assign_plan_execution:
   !fn inst ps rhs out ra lo entry s fuel ctx s' lv cfg nl halting term lbl ops ps'
    stk st rest prog fmp env ss top srest ret cp.
@@ -3262,9 +3270,10 @@ Proof
      operand_val entry lo (normalize_operand (dfg_build_function fn) [] op))` by gvs[] >>
   drule_all sym_rf_suffix_preparation_execution >> strip_tac >>
   rename1 `sym_steps prog env _ ss = SymOK ss1` >>
+  rename1 `ss1.sym_stack = prepared_top ++ srest` >>
   qabbrev_tac `pushed = ps2 with ps_stack :=
     stack_push (Var out) (stack_pop 1 ps2.ps_stack)` >>
-  `LIST_REL (op_kind_ok fn ret) (REVERSE pushed.ps_stack) top'` by
+  `LIST_REL (op_kind_ok fn ret) (REVERSE pushed.ps_stack) prepared_top` by
     (simp[Abbr `pushed`] >> irule assign_prepared_stack_op_kind >> metis_tac[]) >>
   `EVERY is_simple_stack_op (pops ++ opts)` by metis_tac[rf_assign_postfix_simple] >>
   `!b. b IN FDOM ss1.sym_mem_labels ==> context_spill_byte cplan b` by
@@ -3275,18 +3284,44 @@ Proof
   drule_all sym_assign_postfix_stack_sim >>
   disch_then (qspecl_then [`lo`, `env`] strip_assume_tac) >>
   `sym_steps prog env (LENGTH (execute_plan fmp ops)) ss = SymOK ss'` by
-    (`LENGTH (execute_plan fmp ops) =
-       LENGTH (execute_plan fmp (ins ++ ros)) +
-       LENGTH (execute_plan fmp (pops ++ opts))` by
-       simp[stackOpSimTheory.execute_plan_append] >>
-     qpat_x_assum `LENGTH (execute_plan fmp ops) = _` SUBST1_TAC >>
-     once_rewrite_tac[sym_steps_add] >> simp[]) >>
+    (qpat_assum `sym_steps prog env _ ss = SymOK ss1`
+       (mp_then Any mp_tac sym_plan_runs_compose) >>
+     disch_then (qspecl_then [`pops ++ opts`, `ss'`] mp_tac) >>
+     simp[listTheory.APPEND_ASSOC]) >>
   drule_all fnFrameStepsRevertForwardTheory.rf_assign_plan_execution >>
   disch_then (qspec_then `build_offset_to_pc prog` strip_assume_tac) >>
   qspecl_then [`LENGTH (execute_plan fmp ops)`, `st`, `ss`, `ss'`]
     mp_tac (Q.INST [`p` |-> `prog`] asm_sym_steps_lockstep) >>
   simp[] >> strip_tac >> gvs[] >>
   metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]
+QED
+
+Theorem label_flow_noncopy_operand_not_code_end:
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\ label_flow_ok ctx /\
+  inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> CODECOPY /\
+  MEM (Var x) inst.inst_operands ==> ~code_end_var fn x
+Proof
+  strip_tac >> fs[label_flow_ok_def] >>
+  first_x_assum (qspecl_then [`fn`, `inst`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem sym_revert_operand_kind:
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ inst.inst_opcode = REVERT /\
+  MEM op inst.inst_operands /\ ~is_label_operand op /\
+  op_kind_ok fn ret op sv ==>
+  ?w. sv = Val w
+Proof
+  strip_tac >> Cases_on `op` >>
+  gvs[op_kind_ok_def, is_label_operand_def, dead_stack_marker_def] >>
+  rename1 `MEM (Var x) inst.inst_operands` >>
+  `~retpc_var fn x` by
+    (strip_tac >> drule_all opaque_use_ok_retpc_use >> simp[retpc_use_ok_def]) >>
+  `~code_end_var fn x` by
+    (irule label_flow_noncopy_operand_not_code_end >>
+     conj_tac >- (qexists `ctx` >> simp[]) >> qexists `inst` >> simp[]) >>
+  gvs[]
 QED
 
 Theorem sym_jmp_frame_sim_deep:
