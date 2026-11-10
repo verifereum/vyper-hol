@@ -23,8 +23,8 @@ Proof
   `immutables_rel ce cx.txn.target ce.ce_module ce.ce_is_ctor es
      (mstore b w s)` by
     (irule immutables_rel_mem_agree >> qexists_tac `s` >>
+     `(mstore b w s).vs_data_section = s.vs_data_section` by simp[mstore_def] >>
      simp[immutable_mstore_capacity] >>
-     conj_tac >- simp[mstore_def] >>
      reverse conj_tac >- gvs[state_rel_def] >>
      rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >>
      first_x_assum drule_all >> simp[regions_disjoint_def]) >>

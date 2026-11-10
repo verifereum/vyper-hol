@@ -2,7 +2,7 @@
 Theory immutableDeployAssignRanges
 Ancestors
   immutableDeployAssignFacts exprSimTypedAlloc annassignRelayoutSource
-  compileEnv loweringPosts placeStoreStorage exprSimHyps valueTypingMemoryProps
+  compileEnv loweringStateRelDefs loweringPosts placeStoreStorage exprSimHyps valueTypingMemoryProps
 
 Theorem immutable_assign_source_range:
   stmt_state_rel ctx func cenv cx es s /\
@@ -14,7 +14,7 @@ Theorem immutable_assign_source_range:
   evaluate_type (get_tenv cx) dty = SOME dtv ==>
   w2n w + val_footprint stv v < dimword (:256) /\
   (val_footprint stv v = 0 \/
-   compileEnv$regions_disjoint off (type_memory_size dtv)
+   loweringStateRelDefs$regions_disjoint off (type_memory_size dtv)
      (w2n w) (val_footprint stv v))
 Proof
   strip_tac >> conj_tac

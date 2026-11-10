@@ -8,11 +8,7 @@ Theorem compile_word_copy_loop_endpoint_open:
     compile_word_copy_loop src dst n LocMemory loc ctor sa = (u,sb) ==>
     ~block_is_terminated sb
 Proof
-  rpt gen_tac >>
-  simp[compile_word_copy_loop_def, comp_ignore_bind_def, comp_bind_def] >>
-  ntac 17 (pairarg_tac >> simp[]) >>
-  strip_tac >> pop_assum mp_tac >>
-  simp[new_block_def, block_is_terminated_def] >> strip_tac >> gvs[]
+  metis_tac[exprOpenTerminalsTheory.compile_word_copy_loop_open]
 QED
 
 Theorem compile_dynarray_to_storage_endpoint_open:
