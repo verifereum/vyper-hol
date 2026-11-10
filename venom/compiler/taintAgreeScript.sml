@@ -1594,6 +1594,54 @@ Proof
   pred_setLib.SET_TAC[]
 QED
 
+Theorem taint_agree_translated_load_word_update:
+  taint_agree D X tn s t /\
+  MEM inst.inst_opcode [MLOAD; ILOAD] /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = [addr] /\ eval_operand addr s = SOME p /\
+  (!q. q < 32 /\ w2n p + q NOTIN tn.t_mem ==>
+    read_byte (w2n p+q) s.vs_memory = read_byte (b+q) t.vs_memory) ==>
+  taint_agree D X
+    (step_taint inst s (update_var out (mload (w2n p) s) s) tn)
+    (update_var out (mload (w2n p) s) s) (update_var out (mload b t) t)
+Proof
+  strip_tac >>
+  `word_agree_except (mem_word_taint tn.t_mem (w2n p))
+     (mload (w2n p) s) (mload b t)` by
+    (irule ld_mload_masked_bytes >> simp[mem_word_taint_def] >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `step_taint inst s (update_var out (mload (w2n p) s) s) tn =
+     tn with t_var := set_var_taint tn.t_var [out]
+       (mem_word_taint tn.t_mem (w2n p))` by
+    (fs[MEM] >>
+     simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+          imm_taint_def, adopt_reset_def, new_site_bytes_def, update_var_def,
+          step_writes_def, source_memory_write_ranges_def, written_taint_def,
+          range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, taint_component_equality]) >>
+  simp[] >> irule taint_agree_update_var >> simp[]
+QED
+
+Theorem taint_agree_translated_mload_step:
+  taint_agree D X tn s t /\
+  inst.inst_opcode = MLOAD /\ inst.inst_operands = [addr] /\
+  inst.inst_outputs = [out] /\
+  ti.inst_opcode = MLOAD /\ ti.inst_operands = [taddr] /\
+  ti.inst_outputs = [out] /\
+  eval_operand addr s = SOME p /\ eval_operand taddr t = SOME r /\
+  (!q. q < 32 /\ w2n p+q NOTIN tn.t_mem ==>
+    read_byte (w2n p+q) s.vs_memory = read_byte (w2n r+q) t.vs_memory) /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base ti t = OK t' /\
+       taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `s' = update_var out (mload (w2n p) s) s` by
+    gvs[step_inst_base_opcode_eqs, exec_read1_def] >>
+  qexists_tac `update_var out (mload (w2n r) t) t` >>
+  conj_tac >- simp[step_inst_base_opcode_eqs, exec_read1_def] >>
+  gvs[] >> irule taint_agree_translated_load_word_update >>
+  qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >> simp[]
+QED
+
 Theorem taint_agree_load_word:
   frame_reachable vs C stk PG G tn fn inst s /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
@@ -1616,23 +1664,15 @@ Proof
      irule taint_agree_operand_clean >>
      qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >> simp[]) >>
   simp[] >>
-  `word_agree_except (mem_word_taint tn.t_mem (w2n v))
-     (mload (w2n v) s) (mload (w2n v) t)` by
-    (irule ld_mload_masked_bytes >> simp[mem_word_taint_def] >>
-     rpt strip_tac >> irule taint_agree_reachable_read_byte >>
-     qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-     qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
-     qpat_assum `ptr_discipline _ _ _` (irule_at Any) >>
-     qexistsl_tac [`w2n v`, `32`] >>
-     simp[source_memory_read_ranges_def]) >>
-  `step_taint inst s (update_var out (mload (w2n v) s) s) tn =
-     tn with t_var := set_var_taint tn.t_var [out]
-       (mem_word_taint tn.t_mem (w2n v))` by
-    simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
-         imm_taint_def, adopt_reset_def, new_site_bytes_def, update_var_def,
-         step_writes_def, source_memory_write_ranges_def, written_taint_def,
-         range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, taint_component_equality] >>
-  simp[] >> irule taint_agree_update_var >> simp[]
+  irule taint_agree_translated_load_word_update >>
+  qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+  simp[] >>
+  rpt strip_tac >> irule taint_agree_reachable_read_byte >>
+  qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `ptr_discipline _ _ _` (irule_at Any) >>
+  qexistsl_tac [`w2n v`, `32`] >>
+  simp[source_memory_read_ranges_def]
 QED
 
 Theorem step_taint_mcopy:

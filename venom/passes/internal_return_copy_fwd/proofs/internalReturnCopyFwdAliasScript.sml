@@ -1793,3 +1793,34 @@ Proof
   drule_all ircf_fwd_source_root_later >> strip_tac >>
   metis_tac[]
 QED
+
+Theorem ircf_fwd_not_revert_forward:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx = k /\ ircf_fwd_ok fn bb k d r sz ==>
+  ~in_revert_forward fn s
+Proof
+  strip_tac >>
+  gvs[in_revert_forward_def, revert_forward_at_def,
+      revert_forward_pair_def, ircf_fwd_ok_def, get_instruction_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem ircf_fwd_allocated_bases_roundtrip:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx = k /\ ircf_fwd_ok fn bb k d r sz /\
+  MEM dai (fn_insts fn) /\ dai.inst_opcode = ALLOCA /\ dai.inst_outputs = [d] /\
+  FLOOKUP s.vs_allocas dai.inst_id = SOME (db,w2n sz) /\
+  MEM rai (fn_insts fn) /\ rai.inst_opcode = ALLOCA /\ rai.inst_outputs = [r] /\
+  FLOOKUP s.vs_allocas rai.inst_id = SOME (rb,w2n sz) /\
+  access_ok lo G fn (EL k bb.bb_instructions) s /\ w2n sz <> 0 ==>
+  w2n (n2w db : bytes32) = db /\ w2n (n2w rb : bytes32) = rb
+Proof
+  strip_tac >>
+  `~in_revert_forward fn s` by metis_tac[ircf_fwd_not_revert_forward] >>
+  drule_all ircf_fwd_operand_sites_at >> strip_tac >>
+  irule access_ok_mcopy_site_bases >>
+  qpat_assum `access_ok _ _ _ _ _` (irule_at Any) >>
+  gvs[ircf_fwd_ok_def, eval_operand_def] >> metis_tac[]
+QED
