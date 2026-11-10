@@ -1177,7 +1177,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> rw[] >> gvs[vyperASTTheory.expr_type_def]
 QED
 
-Theorem conditional_read_cases[local]:
+Theorem conditional_read_cases:
   !cx raw st res st'.
     (do r <- conditional_result cx raw; read_result cx r od) st = (res,st') ==>
     read_result cx raw st = (res,st') \/
