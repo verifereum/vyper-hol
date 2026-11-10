@@ -8,6 +8,7 @@ Ancestors
   bodyIntCallRuntimeChargePackaging
   bodyIntCallFunctionCharge compileVyper vyperCompiler moduleLowering
   exprLoweringProps loweringShapeDefs compileEnv venomInst list
+  bodyIntCallDeployChargePackaging
 
 Theorem runtime_unit_alloca_charge:
   !tops policy unit exts ints fb ctor st.
@@ -65,5 +66,13 @@ Theorem deploy_unit_alloca_charge:
       (FILTER (\i. i.inst_opcode = ALLOCA) (state_insts st))) <=
     unit_alloca_frame unit.cu_context
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `lower_vyper_deploy_unit _ _ _ = _` mp_tac >>
+  simp[lower_vyper_deploy_unit_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  qpat_x_assum `run_deploy_lowering _ _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[run_deploy_lowering_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  drule extract_context_with_internals_insts >>
+  simp[unit_alloca_frame_def, install_immutable_reservation_def]
 QED
