@@ -115,5 +115,8 @@ Proof
   `st0.cs_current_bb = body_lbl` by
     gvs[abi_decode_loop_prefix_state_def, abi_decode_loop_prefix_shape] >>
   qexistsl_tac [`hdr`, `body_lbl`, `exit_lbl`, `st0`, `ops`, `ready`, `st1`, `exit_bb`] >>
-  asm_simp_tac bool_ss [] >> metis_tac[]
+  asm_simp_tac bool_ss [] >>
+  gvs[abiDecoderExecutionTheory.abi_decode_position_loop_cfg_def,
+      abiDecoderExecutionTheory.abi_decode_loop_cfg_def,
+      abiDecoderExecutionTheory.abi_decode_position_header_zero] >> metis_tac[]
 QED
