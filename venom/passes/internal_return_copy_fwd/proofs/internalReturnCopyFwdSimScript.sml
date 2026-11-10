@@ -25,7 +25,7 @@ Ancestors
   taintAgree o1LowerDloadShared o1PassContract ptrDiscipline passSharedDefs
   venomExecSemantics venomInst venomWf venomState finite_map pred_set list
   rangeAnalysisProofs stepWriteFootprintBase o1LowerDloadOccurrence occurrenceGeometry
-  venomExecProps fnRunFields
+  venomExecProps fnRunFields ptrTaintClean
 
 (* The transformed block, before NOPs are cleared *)
 Definition ircf_tbb_def:
@@ -683,6 +683,42 @@ Proof
   simp[ircf_cross_def] >>
   disch_then (qspecl_then [`w2n w`, `sb`, `w2n sz`, `q`] mp_tac) >>
   simp[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem ircf_redirect_read_observation:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  inst.inst_opcode <> ASSIGN /\ mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  ircf_redirect fn bb (ircf_tbb fn_meta rma C fn bb) v <> v /\
+  lookup_var v s = SOME w /\ access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  MEM (w2n w,len) (source_memory_read_ranges inst s) /\ len <> 0 /\
+  ircf_cross tn (ircf_gam_cur fn_meta rma C fn s) s t /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY ssa_form C.ctx_functions /\ taint_agree D X tn s t ==>
+  ?sr sb sz.
+    ircf_redirect fn bb (ircf_tbb fn_meta rma C fn bb) v = sr /\
+    lookup_var sr s = SOME (n2w sb) /\ len <= sz /\
+    (w2n w,sb,sz) IN ircf_gam_cur fn_meta rma C fn s /\
+    eval_operand (Var sr) t = SOME (n2w sb) /\
+    (!q. q < len ==>
+      (w2n w+q IN tn.t_mem <=> sb+q IN tn.t_mem) /\
+      (w2n w+q NOTIN tn.t_mem ==>
+       read_byte (w2n w+q) s.vs_memory = read_byte (sb+q) t.vs_memory))
+Proof
+  strip_tac >>
+  `ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+    metis_tac[ircf_tbb_def, ircf_transform_block_plan, venomExecPropsTheory.lookup_block_MEM] >>
+  drule_all ircf_redirect_read_sites >> strip_tac >>
+  `op_taint tn (Var sr) = {}` by
+    (irule frame_reachable_alloca_root_clean >> metis_tac[]) >>
+  `eval_operand (Var sr) t = SOME (n2w sb)` by
+    (drule_all taint_agree_operand_clean >> simp[eval_operand_def]) >>
+  drule_all ircf_redirect_read_cross >> strip_tac >>
+  metis_tac[]
 QED
 
 Theorem ircf_gam_allocations:
