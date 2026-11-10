@@ -1079,6 +1079,130 @@ Proof
   metis_tac[]
 QED
 
+Theorem list_rel_deep_swap_schedule:
+  LIST_REL R (REVERSE xs) vals /\ d < LENGTH xs /\ 0 < d /\
+  ids = [d] ++ GENLIST (\i. i + 1) (d - 1) ++ [0] /\
+  EVERY (\i. i < d + 1) ids ==>
+  LIST_REL R
+    (REVERSE (TAKE (LENGTH xs - (d + 1)) xs ++
+      MAP (\i. EL i (top_n (d + 1) xs)) ids))
+    (MAP (\i. EL i (TAKE (d + 1) vals)) ids ++ DROP (d + 1) vals)
+Proof
+  strip_tac >> pure_rewrite_tac[listTheory.REVERSE_APPEND] >>
+  irule rich_listTheory.EVERY2_APPEND_suff >> conj_tac
+  >- (irule list_rel_reversed_index_schedule >>
+      simp[stackPlanOpsTheory.top_n_def, listTheory.LENGTH_TAKE] >>
+      gvs[rich_listTheory.EVERY2_TAKE]) >>
+  `REVERSE (TAKE (LENGTH xs - (d + 1)) xs) = DROP (d + 1) (REVERSE xs)` by
+    simp[rich_listTheory.DROP_REVERSE, rich_listTheory.BUTLASTN_TAKE_UNCOND] >>
+  simp[] >> metis_tac[rich_listTheory.EVERY2_DROP]
+QED
+
+Theorem sym_scratch_frame_transfer:
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_sym_rel p env cs' ss' /\ ps'.ps_spilled = ps.ps_spilled /\
+  ss'.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps'.ps_stack) top /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  EVERY (\off. r.sr_spill_base <= off /\ off + 32 <= r.sr_spill_end) offsets /\
+  (!off op old. MEM off offsets /\ FLOOKUP ps.ps_spilled op = SOME old ==>
+    old + 32 <= off \/ off + 32 <= old) /\
+  (!b. EVERY (\off. ~in_mem_range off 32 b) offsets ==>
+    FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+  (!b. b IN FDOM ss'.sym_mem_labels ==>
+    b IN FDOM ss.sym_mem_labels \/ EXISTS (\off. in_mem_range off 32 b) offsets) ==>
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps' cs' ss'
+Proof
+  strip_tac >>
+  `!b off. MEM off offsets /\ in_mem_range off 32 b ==>
+    r.sr_spill_base <= b /\ b < r.sr_spill_end` by
+    (fs[listTheory.EVERY_MEM, in_mem_range_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  irule sym_frame_inv_region_transfer >> goal_assum (drule_at Any) >>
+  conj_tac
+  >- (simp[sym_kinds_ok_def] >> conj_tac
+      >- (rpt strip_tac >>
+          `?sv. op_kind_ok fn ret op sv /\ mem_sval_at ss.sym_mem_labels off sv` by
+            metis_tac[sym_frame_inv_def, sym_kinds_ok_def] >>
+          qexists_tac `sv` >> simp[] >> irule scratch_disjoint_bulk_cell >>
+          goal_assum (drule_at Any) >> qexists_tac `offsets` >>
+          simp[] >> simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+      fs[sym_frame_inv_def, sym_kinds_ok_def, listTheory.EXISTS_MEM] >>
+      metis_tac[contextCodegenRelPropsTheory.context_spill_byte_of_region]) >>
+  qexistsl [`cs`, `ps`, `r`, `ss`] >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >>
+  simp[listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem sym_do_swap_deep_frame_sim:
+  do_swap d ps = (ops, ps') /\ 16 < d /\ d < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+  ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp ops) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp ops)) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 ps' cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  strip_tac >>
+  qabbrev_tac `offsets = FST (spill_alloc_n [] ps.ps_alloc (top_n (d + 1) ps.ps_stack))` >>
+  qabbrev_tac `ids = [d] ++ GENLIST (\i. i + 1) (d - 1) ++ [0]` >>
+  `offsets = FST (spill_alloc_n [] ps.ps_alloc (top_n (d + 1) ps.ps_stack)) /\
+   ids = [d] ++ GENLIST (\i. i + 1) (d - 1) ++ [0]` by
+    simp[Abbr `offsets`, Abbr `ids`] >>
+  drule_all do_swap_deep_symbolic_resources >> strip_tac >>
+  qpat_x_assum `offsets = FST _` kall_tac >>
+  `asm_sym_rel p env cs ss /\
+   ?top. ss.sym_stack = top ++ srest /\
+     LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top` by
+    metis_tac[sym_frame_inv_def, sym_kinds_ok_def] >>
+  `LENGTH top = LENGTH ps.ps_stack` by metis_tac[listTheory.LIST_REL_LENGTH, listTheory.LENGTH_REVERSE] >>
+  `LENGTH offsets <= LENGTH ss.sym_stack /\
+   EVERY (\off. off < dimword(:256)) offsets /\
+   asm_block_at p cs.as_pc (execute_plan initial_fmp
+     (MAP SOSpill offsets ++ MAP SORestore (MAP (\i. EL i offsets) (REVERSE ids))))` by
+    (conj_tac >- (qpat_x_assum `ss.sym_stack = _` (fn th => pure_rewrite_tac[th]) >>
+       simp[NoAsms, listTheory.LENGTH_APPEND] >> decide_tac) >>
+     conj_tac >- (qpat_x_assum `EVERY (\off. off < dimword(:256) /\ _) offsets` mp_tac >>
+       simp[NoAsms, listTheory.EVERY_MEM] >> metis_tac[]) >> metis_tac[]) >>
+  drule_all sym_raw_spill_restore_schedule_steps >> strip_tac >>
+  `LIST_REL (op_kind_ok fn ret) (REVERSE ps'.ps_stack)
+    (MAP (\i. EL i (TAKE (d + 1) top)) ids ++ DROP (d + 1) top)` by
+    (qpat_x_assum `ps'.ps_stack = _` (fn th => pure_rewrite_tac[th]) >>
+     irule list_rel_deep_swap_schedule >>
+     `0 < d` by decide_tac >> metis_tac[]) >>
+  `LENGTH (execute_plan initial_fmp ops) = 2 * LENGTH offsets + 2 * LENGTH ids` by
+    (qpat_x_assum `ops = _` (fn th => pure_rewrite_tac[th]) >>
+     simp[NoAsms, stackOpSimTheory.execute_plan_append,
+       doSwapSimTheory.execute_plan_map_spill_length,
+       doSwapSimTheory.execute_plan_map_restore_length]) >>
+  qexistsl [`cs'`, `ss'`] >>
+  conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+  reverse conj_tac >- decide_tac >>
+  irule sym_scratch_frame_transfer >> conj_tac
+  >- (goal_assum (drule_at Any) >>
+      `d + 1 <= LENGTH top` by decide_tac >>
+      `TAKE (d + 1) ss.sym_stack = TAKE (d + 1) top /\
+       DROP (d + 1) ss.sym_stack = DROP (d + 1) top ++ srest` by
+        metis_tac[listTheory.TAKE_APPEND1, listTheory.DROP_APPEND1] >>
+      metis_tac[listTheory.APPEND_ASSOC]) >>
+  conj_tac >- metis_tac[] >>
+  qexistsl [`cs`, `offsets`, `ps`, `r`, `ss`] >>
+  conj_tac >- metis_tac[listTheory.MEM_EL] >>
+  conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+  conj_tac >- (qpat_x_assum `EVERY (\off. off < dimword(:256) /\ _) offsets` mp_tac >>
+    simp[NoAsms, listTheory.EVERY_MEM] >>
+    metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >> metis_tac[]
+QED
+
 (* A branch condition cannot carry either class of symbolic label. *)
 Theorem sym_jnz_condition_kind:
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
