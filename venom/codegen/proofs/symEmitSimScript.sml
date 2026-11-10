@@ -2066,3 +2066,216 @@ Proof
     venomInstTheory.python_stack_operands_def,
     venomInstTheory.ir_specific_operand_order_def, LENGTH_EQ_NUM_compute]
 QED
+
+Theorem sym_named_source_emit:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p cs.as_pc [AsmOp name] /\
+  asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
+    (AsmOp name) cs = AsmOK cs' /\
+  asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p)
+    p 1 cs = AsmOK cs' /\
+  venom_to_evm_name inst.inst_opcode = SOME name /\ inst_wf inst /\
+  step_inst fuel ctx inst vs = OK vs' /\
+  ~is_pre_codegen_opcode inst.inst_opcode /\ inst.inst_opcode <> GAS /\
+  (ef_read0 inst.inst_opcode ==> inst.inst_operands = []) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
+  fn_shape_ok fn /\ ssa_form fn /\ MEM inst (fn_insts fn) /\
+  (selected = compute_operands inst \/
+   (is_commutative inst.inst_opcode /\ 2 <= LENGTH (compute_operands inst) /\
+    selected = TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+      [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+       EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)])) /\
+  ps.ps_stack = residual ++ selected /\
+  EVERY (\op. op <> dead_stack_marker) selected /\
+  (!op. MEM op selected ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) lo op) /\
+  venom_asm_rel lo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  venom_asm_rel lo qs vsout cs' /\
+  qs = ps with ps_stack := FOLDL (\stk out. stack_push (Var out) stk)
+    (stack_pop (LENGTH selected) ps.ps_stack) inst.inst_outputs /\
+  source_memory_reads_disjoint cplan inst vs /\
+  context_source_memory_writes_disjoint cplan inst vs /\
+  sym_data_label p env "code_end" /\
+  (MEM (Label "runtime_begin") inst.inst_operands ==>
+    sym_data_label p env "runtime_begin") /\
+  (!op w. inst.inst_opcode = ADD /\
+    inst.inst_operands = [op; Label "code_end"] /\
+    eval_operand op vs = SOME w ==> w2n w < dimword (:256) DIV 2) ==>
+  ?ss'. sym_steps p env 1 ss = SymOK ss' /\ asm_sym_rel p env cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest qs ss'
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `inst.inst_opcode = CODECOPY`
+  >- suspend "codecopy" >>
+  Cases_on `?op. inst.inst_opcode = ADD /\
+    inst.inst_operands = [op; Label "code_end"]`
+  >- suspend "code_end_add" >>
+  irule sym_named_numeric_source_emit >> metis_tac[]
+QED
+
+Resume sym_named_source_emit[codecopy]:
+  drule_all named_codecopy_selection_shape >> strip_tac >>
+  gvs[asmIRTheory.venom_to_evm_name_def,
+    stackPlanGenTheory.compute_operands_def, venomInstTheory.python_stack_operands_def,
+    venomInstTheory.ir_specific_operand_order_def] >>
+  drule_at (Pat `asm_step _ _ _ _ = _`) sym_codecopy_source_emit >>
+  disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `_.inst_opcode = CODECOPY`)) >>
+  simp[EVERY_MEM, MEM] >> metis_tac[]
+QED
+
+Resume sym_named_source_emit[code_end_add]:
+  pop_assum strip_assume_tac >>
+  drule_all named_code_end_add_selection_shape >> strip_tac >>
+  `ss.sym_base.as_pc = cs.as_pc` by
+    gvs[asmSymBridgeTheory.asm_sym_rel_def] >>
+  gvs[asmIRTheory.venom_to_evm_name_def,
+    stackPlanGenTheory.compute_operands_def, venomInstTheory.python_stack_operands_def,
+    venomInstTheory.ir_specific_operand_order_def] >>
+  drule_at (Pat `asm_steps _ _ _ _ _ = _`) sym_code_end_add_source_emit >>
+  disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `_.inst_opcode = ADD`)) >>
+  disch_then (drule_at (Pat `_.ps_stack = _`)) >>
+  simp[] >> metis_tac[]
+QED
+
+Finalise sym_named_source_emit
+
+Theorem asm_sym_rel_localize_stack:
+  asm_sym_rel p env cs ss /\ ss.sym_stack = top ++ stail /\
+  cs.as_stack = ws ++ wtail /\ LENGTH top = LENGTH ws ==>
+  asm_sym_rel p env (cs with as_stack := ws) (ss with sym_stack := top) /\
+  LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
+    stail wtail
+Proof
+  simp[asmSymBridgeTheory.asm_sym_rel_def] >>
+  rpt strip_tac >> gvs[LIST_REL_APPEND_EQ] >> metis_tac[]
+QED
+
+Theorem asm_sym_rel_restore_stack:
+  asm_sym_rel p env cs ss /\
+  LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
+    stail wtail ==>
+  asm_sym_rel p env (cs with as_stack := cs.as_stack ++ wtail)
+    (ss with sym_stack := ss.sym_stack ++ stail)
+Proof
+  simp[asmSymBridgeTheory.asm_sym_rel_def, LIST_REL_APPEND_EQ] >>
+  metis_tac[LIST_REL_APPEND_suff]
+QED
+
+Theorem sym_kinds_ok_localize_stack:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  ss.sym_stack = top ++ srest ==>
+  sym_kinds_ok cplan fn ret [] ps (ss with sym_stack := top)
+Proof
+  simp[sym_kinds_ok_def] >> metis_tac[APPEND_11]
+QED
+
+Theorem sym_kinds_ok_restore_stack:
+  sym_kinds_ok cplan fn ret [] ps ss ==>
+  sym_kinds_ok cplan fn ret srest ps
+    (ss with sym_stack := ss.sym_stack ++ srest)
+Proof
+  simp[sym_kinds_ok_def]
+QED
+
+Theorem sym_lift_ok_stack_suffix:
+  sym_lift k labs ss r = SymOK ss' /\ k <= LENGTH ss.sym_stack ==>
+  sym_lift k labs (ss with sym_stack := ss.sym_stack ++ tail) r =
+    SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
+Proof
+  Cases_on `r` >> simp[sym_lift_def] >>
+  rpt strip_tac >> gvs[DROP_APPEND, APPEND_ASSOC] >>
+  `k - LENGTH ss.sym_stack = 0` by decide_tac >> simp[]
+QED
+
+Theorem sym_step_concrete_ok_stack_suffix:
+  sym_step_concrete name ss = SymOK ss' ==>
+  sym_step_concrete name (ss with sym_stack := ss.sym_stack ++ tail) =
+    SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
+Proof
+  simp[sym_step_concrete_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  simp[TAKE_APPEND1] >>
+  irule sym_lift_ok_stack_suffix >> simp[]
+QED
+
+Theorem sym_add_ok_stack_suffix:
+  2 <= LENGTH ss.sym_stack /\ sym_add p env ss = SymOK ss' ==>
+  sym_add p env (ss with sym_stack := ss.sym_stack ++ tail) =
+    SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
+Proof
+  Cases_on `ss.sym_stack` >- simp[] >> rename1 `a :: stk` >>
+  Cases_on `stk` >- simp[] >> rename1 `a :: b :: stk'` >>
+  Cases_on `a` >> Cases_on `b` >>
+  simp[sym_add_def, sym_push_lab_def, sym_set_stack_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  drule sym_step_concrete_ok_stack_suffix >> simp[]
+QED
+
+Theorem sym_codecopy_ok_stack_suffix:
+  3 <= LENGTH ss.sym_stack /\ sym_codecopy p env ss = SymOK ss' ==>
+  sym_codecopy p env (ss with sym_stack := ss.sym_stack ++ tail) =
+    SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
+Proof
+  Cases_on `ss.sym_stack` >- simp[] >> rename1 `a :: stk` >>
+  Cases_on `stk` >- simp[] >> rename1 `a :: b :: stk'` >>
+  Cases_on `stk'` >- simp[] >> rename1 `a :: b :: c :: stk''` >>
+  Cases_on `a` >> Cases_on `b` >> Cases_on `c` >>
+  simp[sym_codecopy_def] >> rpt strip_tac >> gvs[AllCaseEqs()] >>
+  drule sym_lift_ok_stack_suffix >> simp[]
+QED
+
+Theorem sym_mstore_ok_stack_suffix:
+  2 <= LENGTH ss.sym_stack /\ sym_mstore ss = SymOK ss' ==>
+  sym_mstore (ss with sym_stack := ss.sym_stack ++ tail) =
+    SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
+Proof
+  Cases_on `ss.sym_stack` >- simp[] >> rename1 `a :: stk` >>
+  Cases_on `stk` >- simp[] >> rename1 `a :: b :: stk'` >>
+  Cases_on `a` >> Cases_on `b` >>
+  simp[sym_mstore_def, sym_lift_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  drule sym_step_concrete_ok_stack_suffix >> simp[]
+QED
+
+Theorem sym_mload_ok_stack_suffix:
+  1 <= LENGTH ss.sym_stack /\ sym_mload ss = SymOK ss' ==>
+  sym_mload (ss with sym_stack := ss.sym_stack ++ tail) =
+    SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
+Proof
+  Cases_on `ss.sym_stack` >- simp[] >> rename1 `a :: stk` >>
+  Cases_on `a` >> simp[sym_mload_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  drule sym_step_concrete_ok_stack_suffix >> simp[]
+QED
+
+Theorem sym_named_op_ok_stack_suffix:
+  ~MEM name ["POP"; "JUMP"; "JUMPI"; "CODESIZE"] /\
+  ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE /\
+  asm_op_arity name <= LENGTH ss.sym_stack /\
+  sym_step_op p env name ss = SymOK ss' ==>
+  sym_step_op p env name (ss with sym_stack := ss.sym_stack ++ tail) =
+    SymOK (ss' with sym_stack := ss'.sym_stack ++ tail)
+Proof
+  strip_tac >>
+  Cases_on `name = "ADD"`
+  >- (gvs[sym_step_op_def, asm_op_arity_def, asm_op_arity_table_def] >>
+      irule sym_add_ok_stack_suffix >> simp[]) >>
+  Cases_on `name = "MSTORE"`
+  >- (gvs[sym_step_op_def, asm_op_arity_def, asm_op_arity_table_def] >>
+      irule sym_mstore_ok_stack_suffix >> simp[]) >>
+  Cases_on `name = "MLOAD"`
+  >- (gvs[sym_step_op_def, asm_op_arity_def, asm_op_arity_table_def] >>
+      irule sym_mload_ok_stack_suffix >> simp[]) >>
+  Cases_on `name = "CODECOPY"`
+  >- (gvs[sym_step_op_def, asm_op_arity_def, asm_op_arity_table_def] >>
+      irule sym_codecopy_ok_stack_suffix >> simp[]) >>
+  gvs[sym_step_op_def, MEM] >>
+  irule sym_step_concrete_ok_stack_suffix >> simp[]
+QED
