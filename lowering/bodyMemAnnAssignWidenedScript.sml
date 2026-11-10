@@ -13,6 +13,7 @@ Ancestors
   bodyDeclMemoryCounted bodyDeclCopyMemory stmtSimDeclCompose stmtSimDecl
   stmtSimDeclMem exprLoweringProps exprSimProps stmtSimProps stmtSimDefs
   bodySimDeclCases exprSimIfExpCompat exprSimSource compileEnv fragExec
+  stmtSimDeclSource exprSimMemorySource exprSimMemDefs widenedValueReadOutcomeMem
 Libs
   monadsyntax
 
@@ -129,6 +130,23 @@ Resume body_annassign_widened_aggregate_call_mem[parts]:
    STRING #"%" (toString sa.cs_next_var)` by simp[] >>
   drule_all annassign_setup_body_gas_path_mem >>
   disch_then (qx_choose_then `salloc` strip_assume_tac) >>
+  `gas_admissible
+     (bind (eval_expr cx (Call ty (IntCall fid) args drv)) (read_result cx))
+     expr_res_ok es` by
+    (irule annassign_admissible_rhs >> metis_tac[]) >>
+  `gas_admissible (eval_expr cx (Call ty (IntCall fid) args drv))
+     expr_vv_res_ok es` by metis_tac[forced_expr_admissible_raw] >>
+  `cs_extends sA sV` by
+    (qpat_assum `compile_expr _ _ _ _ = _`
+       (mp_tac o MATCH_MP (cj 1 compile_expr_grows)) >> simp[]) >>
+  `cs_extends sV sB` by
+    (drule exprSimUnwrapTheory.unwrap_value_extends >> simp[]) >>
+  `fn_has_code sA sV func` by
+    (drule_all fn_has_code_split >> simp[]) >>
+  qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_vv_sim_mem_def]) >>
+  disch_then (qspecl_then [`sA`, `sV`, `vv`, `salloc`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
   cheat
 QED
 
