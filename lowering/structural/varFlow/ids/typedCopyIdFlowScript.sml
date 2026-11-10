@@ -33,7 +33,9 @@ Theorem compiler_id_flow_typed_copy:
 Proof
   ho_match_mp_tac compile_store_memory_typed_ind >> rpt conj_tac >> rpt strip_tac >>
   simp_tac bool_ss [Once compile_store_memory_typed_def, LET_THM] >>
-  NTAC 4 (TRY typed_id_step) >> NTAC 4 (TRY typed_id_step) >> rpt typed_id_step
+  TRY typed_id_step >> TRY typed_id_step >> TRY typed_id_step >>
+  TRY typed_id_step >> TRY typed_id_step >> TRY typed_id_step >>
+  TRY typed_id_step >> TRY typed_id_step >> rpt typed_id_step
 QED
 
 Theorem compile_store_memory_typed_next_id:
