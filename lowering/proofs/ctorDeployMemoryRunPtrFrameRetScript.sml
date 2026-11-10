@@ -16,7 +16,9 @@ Ancestors
   exprLoweringProps fragExec compileEnv emitHelper e2eDeployDefs
   venomExecSemantics venomState venomInst codegenRel contextCodegenRel memLocDefs
   valueEncoding bodyPtrDefs ctorDeployMemoryRunMemFrameRet fragGasPathMem
-  fragGasSeqPtr fragGasOriginPtrExec
+  fragGasSeqPtr fragGasOriginPtrExec bodySimFull ctorDeployLoweringFrameRet
+  gasOutcomeFull fragGasOriginPtr fragGasOrigin fragGasPath stmtLowering
+  loweringPosts emitHelperProps stmtSimReturn
   vyperStorageLayoutSafety vyperContext vyperState
 
 (* One opcode's dispatch equation, keeping the simplification local. *)
@@ -965,6 +967,262 @@ Proof
      qexists_tac `fuel` >> simp[]) >>
   qexistsl_tac [`final`, `G'`, `tn'`] >>
   irule gas_zero_paths_joint >> simp[exit_result_def]
+QED
+
+Theorem constructor_return_none_frag_full:
+  cx = deploy_evaluation_context tops am tx /\
+  cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
+  cenv.ce_ctor_exit_label = SOME exit_lbl /\
+  same_frame cenv body_cenv /\
+  st_exit.cs_current_bb = exit_lbl /\
+  st_exit.cs_current_insts = [] /\
+  (if nr then compile_nonreentrant_unlock nkey ut F
+   else comp_return ()) st_exit = ((), st_epilogue) /\
+  compile_constructor_epilogue
+    (LENGTH runtime_bc) (imm_len tops) imm st_epilogue =
+      ((), st_final) /\
+  fn_has_code st_exit st_final func /\
+  LENGTH runtime_bc + imm_len tops < dimword(:256) /\
+  (nr ==> ut /\ storage_layout_safe cx /\
+          cx.nonreentrant_slot = SOME nkey) /\
+  (imm_len tops <> 0 ==>
+     cenv.ce_imm_alloca = SOME imm /\
+     (!x. imm = Var x ==> not_fresh_at st_epilogue x)) ==>
+  stmt_frag_full
+    (deploy_dead tops runtime_bc am tx, imm_len tops, NONE,
+     ctx, shadow_ctx, [], func, shadow_func)
+    cx lctx
+    (\v ee gt r.
+       constructor_return_q func cenv cx
+         (LENGTH runtime_bc) (imm_len tops) nr nkey v ee r)
+    body_cenv
+    (stmt_env body_cenv lctx NoneT (Return NONE))
+    (stmt_env body_cenv lctx NoneT (Return NONE))
+    (eval_stmt cx (Return NONE)) es
+Proof
+  strip_tac >>
+  pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
+  `body_cenv.ce_return_pc = NONE /\
+   body_cenv.ce_ctor_exit_label = SOME exit_lbl` by
+    gvs[same_frame_def, compile_env_component_equality] >>
+  qpat_x_assum `stmt_env _ _ _ _ sa = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, Once compile_stmt_def,
+       comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  rename1 `emit_inst _ _ _ sa = (_, sj)` >>
+  drule emit_inst_extends >> strip_tac >>
+  qabbrev_tac `sx = jump_to st_exit.cs_current_bb s0` >>
+  `allocas_from (imm_len tops) s0` by fs[ghost_inv_at_def] >>
+  `gas_origin_ptr_edge
+     (deploy_dead tops runtime_bc am tx, imm_len tops,
+      gas_explicit_sites ctx shadow_ctx, ctx, func, [])
+     (s0,G0,tn0) [] (OK sx,G0,tn0)` by
+    (drule_all fn_has_code_same_block >> strip_tac >>
+     `get_instruction bb (LENGTH sa.cs_current_insts) =
+        SOME (mk_inst sa.cs_next_id JMP [Label st_exit.cs_current_bb] [])` by
+       (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+     simp[gas_origin_ptr_edge_def, gas_origin_edge_def,
+          fragGasPathPtrTheory.gas_path_ptr_edge_def] >> conj_tac >>
+     qexists_tac `0` >>
+     simp[step_inst_non_invoke, mk_inst_def,
+          venomExecProofsTheory.step_jmp_behavior,
+          gasEventsTheory.gas_events_step_def, gasCountTheory.gas_count_step_def,
+          memSafeRunTheory.mem_safe_step_non_invoke,
+          unitTransformDefsTheory.inst_mem_below_frontier_def,
+          memSafeRunTheory.inst_dload_in_section_def,
+          ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          source_memory_write_ranges_def, source_memory_read_ranges_def,
+          op_taint_def, is_terminator_def, Abbr `sx`, jump_to_def] >>
+     metis_tac[]) >>
+  `nr ==> ut` by simp[] >>
+  drule constructor_exit_code_ptr >> simp[] >> strip_tac >>
+  drule optional_unlock_code >> simp[] >> strip_tac >>
+  qabbrev_tac `se = (if nr then tstore (n2w nkey) 0w sx else sx) with
+    vs_inst_idx := LENGTH st_epilogue.cs_current_insts` >>
+  qabbrev_tac `ee = if nr then es with tStorage :=
+    ((deploy_evaluation_context tops am tx).txn.target =+
+      update_storage (n2w nkey) 0w
+        (es.tStorage (deploy_evaluation_context tops am tx).txn.target))
+      es.tStorage else es` >>
+  qabbrev_tac `tne = if nr then tn0 with t_trans :=
+    key_update tn0.t_trans (n2w nkey) {} else tn0` >>
+  `stmt_state_rel ctx func body_cenv (deploy_evaluation_context tops am tx) es sx` by
+    simp[Abbr `sx`, stmt_state_rel_jump_to] >>
+  `stmt_state_rel ctx func body_cenv (deploy_evaluation_context tops am tx) ee se` by
+    (simp[Abbr `se`, stmt_state_rel_inst_idx] >>
+     Cases_on `nr` >> gvs[Abbr `ee`] >>
+     irule constructor_unlock_stmt_state_rel >> simp[]) >>
+  `~sx.vs_halted /\ sx.vs_current_bb = st_exit.cs_current_bb /\
+   sx.vs_inst_idx = 0 /\ ~sx.vs_call_ctx.cc_static` by
+    (simp[Abbr `sx`, jump_to_def] >> fs[stmt_state_rel_def, state_rel_def]) >>
+  `ghost_inv_at (deploy_dead tops runtime_bc am tx) (imm_len tops) NONE
+     body_cenv (deploy_evaluation_context tops am tx) ee G0 tne se` by
+    (Cases_on `nr` >>
+     gvs[Abbr `tne`, Abbr `ee`, Abbr `se`, Abbr `sx`,
+         ghost_inv_at_def, stor_taint_ok_at_def, tstore_def, jump_to_def,
+         ptr_covers_def, return_buf_ptr_def, op_taint_def,
+         lookup_var_def, allocas_from_def] >>
+     metis_tac[deploy_dead_trans_unlock]) >>
+  `fn_has_code st_exit st_epilogue func /\
+   fn_has_code st_epilogue st_final func /\ ~block_is_terminated st_epilogue` by
+    metis_tac[] >>
+  `gas_origin_ptr_path
+     (deploy_dead tops runtime_bc am tx, imm_len tops,
+      gas_explicit_sites ctx shadow_ctx, ctx, func, [])
+     (sx,G0,tn0) [] (OK se,G0,tne)` by
+    (Cases_on `nr`
+     >- (gvs[] >>
+         qpat_x_assum `fn_has_code sa sj func` kall_tac >>
+         qpat_x_assum `fn_has_code shadow_sa shadow_sb shadow_func` kall_tac >>
+         qpat_x_assum `fn_has_code st_exit st_final func` kall_tac >>
+         qpat_x_assum `fn_has_code _ st_final func` kall_tac >>
+         drule fn_has_code_same_block >>
+         disch_then (qspec_then
+           `[mk_inst st_exit.cs_next_id TSTORE [Lit (n2w nkey); Lit 0w] []]` mp_tac) >>
+         simp[] >> strip_tac >>
+         qabbrev_tac `i = mk_inst st_exit.cs_next_id TSTORE
+           [Lit (n2w nkey); Lit 0w] []` >>
+         `lookup_block sx.vs_current_bb func.fn_blocks = SOME bb /\
+          get_instruction bb sx.vs_inst_idx = SOME i` by
+           (simp[Abbr `i`] >>
+            first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+         `step_inst_base i sx = OK (tstore (n2w nkey) 0w sx)` by
+           simp[Abbr `i`, Once step_inst_base_def,
+                mk_inst_def, exec_write2_def, eval_operand_def, eval_operands_def] >>
+         `step_inst 0 ctx i sx = OK (tstore (n2w nkey) 0w sx)` by
+           simp[step_inst_non_invoke, Abbr `i`, mk_inst_def] >>
+         `gas_origin_ptr_edge
+           (deploy_dead tops runtime_bc am tx, imm_len tops,
+            gas_explicit_sites ctx shadow_ctx, ctx, func, []) (sx,G0,tn0)
+           (if i.inst_opcode = GAS then
+              [(func.fn_name, i.inst_id) IN gas_explicit_sites ctx shadow_ctx]
+            else [])
+           (OK ((tstore (n2w nkey) 0w sx) with vs_inst_idx := SUC sx.vs_inst_idx),
+            step_prov [] G0 i (tstore (n2w nkey) 0w sx),
+            step_taint i sx (tstore (n2w nkey) 0w sx) tn0)` by
+           (irule (SIMP_RULE (srw_ss()) [] straight_line_origin_ptr_edge) >>
+            simp[Abbr `i`, mk_inst_def, is_terminator_def,
+                 unitTransformDefsTheory.inst_mem_below_frontier_def,
+                 memSafeRunTheory.inst_dload_in_section_def,
+                 source_memory_read_ranges_def, source_memory_write_ranges_def,
+                 ptr_inst_ok_def, access_ok_def, taint_ok_def,
+                 op_taint_def, tstore_def, allocas_from_def, Abbr `sx`, jump_to_def] >>
+            gvs[allocas_from_def, step_inst_non_invoke, Once step_inst_base_def,
+                mk_inst_def, exec_write2_def, eval_operand_def, eval_operands_def,
+                tstore_def, jump_to_def] >>
+            rpt strip_tac >> gvs[] >> metis_tac[]) >>
+         `step_prov [] G0 i (tstore (n2w nkey) 0w sx) = G0` by
+           simp[Abbr `i`, step_prov_def, set_prov_def, mk_inst_def, finite_mapTheory.DRESTRICT_UNIV] >>
+         `step_taint i sx (tstore (n2w nkey) 0w sx) tn0 = tne` by
+           (simp[Abbr `i`, Abbr `tne`, step_taint_def, mk_inst_def,
+                mem_taint_def, step_writes_def, source_memory_write_ranges_def,
+                fixed_source_write_range_def, new_site_bytes_def, set_var_taint_def,
+                imm_taint_def, adopt_reset_def, store_taint_def, written_taint_def,
+                range_bytes_def, finite_mapTheory.DRESTRICT_UNIV, eval_operand_def, op_taint_def,
+                tstore_def] >>
+           simp[finite_mapTheory.FLOOKUP_DEF, SF CONJ_ss] >>
+           simp[taint_component_equality]) >>
+         gvs[Abbr `i`, mk_inst_def, Abbr `se`] >>
+         `~(tstore (n2w nkey) 0w sx with vs_inst_idx := 1).vs_halted` by
+           simp[tstore_def] >>
+         metis_tac[gas_origin_ptr_path_rules, listTheory.APPEND]) >>
+     `se = sx /\ tne = tn0` by
+       (simp[Abbr `se`, Abbr `tne`] >>
+        gvs[venom_state_component_equality]) >>
+     simp[] >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
+  `~se.vs_halted /\ se.vs_current_bb = st_epilogue.cs_current_bb /\
+   se.vs_inst_idx = LENGTH st_epilogue.cs_current_insts` by
+    (Cases_on `nr` >> gvs[Abbr `se`, tstore_def]) >>
+  `body_cenv.ce_is_ctor /\
+   (imm_len tops <> 0 ==> body_cenv.ce_imm_alloca = SOME imm /\
+    (!x. imm = Var x ==> not_fresh_at st_epilogue x))` by
+    gvs[same_frame_def, compile_env_component_equality] >>
+  `?final G' tn'. gas_origin_ptr_path
+     (deploy_dead tops runtime_bc am tx, imm_len tops,
+      gas_explicit_sites ctx shadow_ctx, ctx, func, [])
+     (se,G0,tne) [] (Halt final,G',tn')` by
+    (irule constructor_epilogue_origin_ptr_path >> simp[] >>
+     qexistsl_tac [`body_cenv`, `deploy_evaluation_context tops am tx`,
+       `NONE`, `ee`, `imm`, `st_epilogue`, `st_final`] >>
+     simp[deploy_evaluation_context_def, gasContextTheory.cx_tops_def,
+          vyperContextTheory.get_module_code_def,
+          vyperInterpreterTheory.initial_evaluation_context_def]) >>
+  `gas_origin_ptr_path
+     (deploy_dead tops runtime_bc am tx, imm_len tops,
+      gas_explicit_sites ctx shadow_ctx, ctx, func, [])
+     (sx,G0,tn0) [] (Halt final,G',tn')` by
+    (qpat_assum `gas_origin_ptr_path _ (sx,_,_) _ (OK se,_,_)`
+       (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
+     simp[] >> disch_then drule >> simp[]) >>
+  `gas_origin_ptr_path
+     (deploy_dead tops runtime_bc am tx, imm_len tops,
+      gas_explicit_sites ctx shadow_ctx, ctx, func, [])
+     (s0,G0,tn0) [] (Halt final,G',tn')` by
+    metis_tac[gas_origin_ptr_path_rules, listTheory.APPEND] >>
+  `?sf. gas_path ctx func sx 0 (Halt sf) /\
+    constructor_return_q func cenv (deploy_evaluation_context tops am tx)
+      (LENGTH runtime_bc) (imm_len tops) nr nkey NoneV
+      (es with scopes := []) (Halt sf)` by
+    (irule constructor_exit_gas_path >> simp[] >> conj_tac
+     >- (qexistsl_tac [`imm`, `st_epilogue`, `st_exit`, `st_final`, `T`] >> simp[]) >>
+     qexists_tac `body_cenv` >> simp[]) >>
+  `?f. run_from f ctx func sx = Halt final` by
+    (qpat_assum `gas_origin_ptr_path _ (sx,_,_) _ (Halt final,_,_)`
+       (strip_assume_tac o MATCH_MP gas_origin_ptr_path_exec) >>
+     gvs[exit_result_def] >> metis_tac[]) >>
+  `?g. run_from g ctx func sx = Halt sf` by
+    (irule gas_path_exit >> simp[exit_result_def] >> metis_tac[]) >>
+  `run_from (f + g) ctx func sx = Halt final /\
+   run_from (f + g) ctx func sx = Halt sf` by
+    (conj_tac >> irule gas_run_from_fuel_mono >> simp[] >> metis_tac[arithmeticTheory.LE_ADD, arithmeticTheory.ADD_COMM]) >>
+  `sf = final` by gvs[] >>
+  gvs[] >>
+  pure_rewrite_tac[gas_outcome_full_def] >> qexists_tac `[]` >> disj1_tac >>
+  qexistsl_tac [`INR (ReturnException NoneV)`, `es`, `Halt final`, `G'`, `tn'`] >>
+  conj_tac
+  >- simp[Once vyperInterpreterTheory.evaluate_def, raise_def, gasSummaryTheory.gas_explicit_def] >>
+  simp[exit_result_def, stmt_exit_ptr_def, constructor_return_q_gas_obs] >>
+  gen_tac >> disj2_tac >>
+  `constructor_return_q func cenv (deploy_evaluation_context tops am tx)
+     (LENGTH runtime_bc) (imm_len tops) nr nkey NoneV
+     ((es with scopes := []) with gas_obs := tail) (Halt final)` by
+    pure_asm_rewrite_tac[constructor_return_q_gas_obs] >>
+  gvs[]
+QED
+
+Theorem constructor_frame_ret_ok_full:
+  !ctx shadow_ctx func shadow_func cenv cx tops am tx runtime_bc imm nr nkey ut
+   exit_lbl st_exit st_epilogue st_final.
+    cx = deploy_evaluation_context tops am tx /\
+    cenv.ce_is_ctor /\ cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = SOME exit_lbl /\
+    st_exit.cs_current_bb = exit_lbl /\ st_exit.cs_current_insts = [] /\
+    (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
+      st_exit = ((), st_epilogue) /\
+    compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops) imm
+      st_epilogue = ((), st_final) /\
+    fn_has_code st_exit st_final func /\
+    LENGTH runtime_bc + imm_len tops < dimword(:256) /\
+    (nr ==> ut /\ storage_layout_safe cx /\
+            cx.nonreentrant_slot = SOME nkey) /\
+    (imm_len tops <> 0 ==>
+      cenv.ce_imm_alloca = SOME imm /\
+      (!x. imm = Var x ==> not_fresh_at st_epilogue x)) ==>
+    frame_ret_ok_full
+      (deploy_dead tops runtime_bc am tx, imm_len tops, NONE,
+       ctx, shadow_ctx, [], func, shadow_func)
+      cx
+      (\v ee gt r. constructor_return_q func cenv cx
+        (LENGTH runtime_bc) (imm_len tops) nr nkey v ee r)
+      cenv NoneT
+Proof
+  rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac[frame_ret_ok_full_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `eo`
+  >- (simp[optionTheory.OPTION_MAP_DEF] >>
+      irule constructor_return_none_frag_full >> simp[] >>
+      qexistsl [`imm`, `st_epilogue`, `st_exit`, `st_final`, `ut`] >> gvs[]) >>
+  gvs[vyperTypeSystemTheory.type_stmt_def]
 QED
 
 Theorem constructor_exit_run_ptr:
