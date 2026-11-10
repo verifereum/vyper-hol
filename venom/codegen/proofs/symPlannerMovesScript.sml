@@ -2073,3 +2073,213 @@ Proof
   simp[sym_steps_same_mem_frame_compose]
 QED
 
+
+Theorem sym_swap_state_ready[local]:
+  qs = ps with ps_stack := stack_swap d ps.ps_stack /\
+  d < LENGTH ps.ps_stack ==>
+  qs.ps_stack <> [] /\ qs.ps_alloc = ps.ps_alloc /\
+  qs.ps_spilled = ps.ps_spilled
+Proof
+  strip_tac >> simp[] >>
+  metis_tac[planWfTheory.stack_swap_length, LENGTH_NIL, prim_recTheory.NOT_LESS_0]
+QED
+
+Theorem sym_swap_spill_ready[local]:
+  qs = ps with ps_stack := stack_swap d ps.ps_stack /\
+  d < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base ==>
+  qs.ps_stack <> [] /\ spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled /\
+  r.sr_spill_base <= qs.ps_alloc.sa_spill_base
+Proof
+  strip_tac >> drule_all_then strip_assume_tac sym_swap_state_ready >> simp[]
+QED
+
+Theorem sym_swapped_spill_continue[local]:
+  qs = ps with ps_stack := stack_swap d ps.ps_stack /\
+  sym_steps p env m ss = SymOK mid /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + m /\
+  mid.sym_mem_labels = ss.sym_mem_labels /\
+  do_spill_tos qs = (ops,out) /\ d < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) ops /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest qs mid /\
+  asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (m + LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + (m + LENGTH (execute_plan initial_fmp ops)) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac sym_swap_spill_ready >>
+  drule_all_then MATCH_ACCEPT_TAC sym_spill_tos_continue
+QED
+
+
+Theorem sym_swap_prefix_ready[local]:
+  qs = ps with ps_stack := stack_swap d ps.ps_stack /\
+  0 < d /\ d <= 16 /\ d < LENGTH ps.ps_stack /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOSwap d]) /\
+  asm_block_at p (LENGTH (execute_plan initial_fmp [SOSwap d]) + ss.sym_base.as_pc)
+    code ==>
+  ?mid. sym_steps p env (LENGTH (execute_plan initial_fmp [SOSwap d])) ss = SymOK mid /\
+    sym_kinds_ok cplan fn ret srest qs mid /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp [SOSwap d]) /\
+    mid.sym_mem_labels = ss.sym_mem_labels /\ asm_block_at p mid.sym_base.as_pc code
+Proof
+  strip_tac >> drule_all_then (qspec_then `env` strip_assume_tac) sym_exec_swap >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem sym_swap_spill_split_sim[local]:
+  qs = ps with ps_stack := stack_swap d ps.ps_stack /\
+  do_spill_tos qs = (sops,out) /\ 0 < d /\ d <= 16 /\
+  d < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) sops /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOSwap d]) /\
+  asm_block_at p (LENGTH (execute_plan initial_fmp [SOSwap d]) + ss.sym_base.as_pc)
+    (execute_plan initial_fmp sops) ==>
+  ?last. sym_steps p env
+      (LENGTH (execute_plan initial_fmp [SOSwap d]) + LENGTH (execute_plan initial_fmp sops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc +
+      (LENGTH (execute_plan initial_fmp [SOSwap d]) + LENGTH (execute_plan initial_fmp sops)) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all_then (qspec_then `env` strip_assume_tac) sym_swap_prefix_ready >>
+  drule_all_then MATCH_ACCEPT_TAC sym_swapped_spill_continue
+QED
+
+Theorem sym_swap_spill_sim[local]:
+  qs = ps with ps_stack := stack_swap d ps.ps_stack /\
+  do_spill_tos qs = (sops,out) /\ 0 < d /\ d <= 16 /\
+  d < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) sops /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan initial_fmp ([SOSwap d] ++ sops)) ==>
+  ?last. sym_steps p env
+      (LENGTH (execute_plan initial_fmp ([SOSwap d] ++ sops))) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc +
+      LENGTH (execute_plan initial_fmp ([SOSwap d] ++ sops)) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  pure_rewrite_tac[execute_plan_append, LENGTH_APPEND, stackOpSimTheory.asm_block_at_append] >>
+  pure_rewrite_tac[Q.SPECL [`ss.sym_base.as_pc`,
+    `LENGTH (execute_plan initial_fmp [SOSwap d])`] arithmeticTheory.ADD_COMM] >>
+  MATCH_ACCEPT_TAC sym_swap_spill_split_sim
+QED
+
+Theorem sym_swap_spill_record_sim[local]:
+  do_spill_tos (ps with ps_stack := stack_swap d ps.ps_stack) = (sops,out) /\
+  0 < d /\ d <= 16 /\ d < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) sops /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan initial_fmp ([SOSwap d] ++ sops)) ==>
+  ?last. sym_steps p env
+      (LENGTH (execute_plan initial_fmp ([SOSwap d] ++ sops))) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc +
+      LENGTH (execute_plan initial_fmp ([SOSwap d] ++ sops)) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> irule sym_swap_spill_sim >> metis_tac[]
+QED
+
+Theorem sym_swap_spill_cons_sim[local]:
+  do_spill_tos (ps with ps_stack := stack_swap d ps.ps_stack) = (sops,out) /\
+  d <> 0 /\ d <= 16 /\ d < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) (SOSwap d::sops) /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (SOSwap d::sops)) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp (SOSwap d::sops))) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = LENGTH (execute_plan initial_fmp (SOSwap d::sops)) + ss.sym_base.as_pc /\
+    (!b. ~(r.sr_spill_base <= b) \/ ~(b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> fs[] >>
+  drule_all_then (fn th => metis_tac[th, arithmeticTheory.ADD_COMM])
+    (SRULE [GSYM arithmeticTheory.NOT_ZERO_LT_ZERO] sym_swap_spill_record_sim)
+QED
+
+Theorem sym_do_spill_at_nonzero[local]:
+  do_spill_at d ps = (ops,out) /\ 0 < d /\ d <= 16 /\
+  d < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) ops /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  Cases_on `do_spill_tos (ps with ps_stack := stack_swap d ps.ps_stack)` >>
+  rw[do_spill_at_def] >>
+  drule_all_then MATCH_ACCEPT_TAC sym_swap_spill_cons_sim
+QED
+
+Theorem sym_do_spill_at_zero[local]:
+  do_spill_at 0 ps = (ops,out) /\ 0 < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) ops /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rw[do_spill_at_def, LENGTH_NON_NIL] >>
+  drule_all_then (qspec_then `env` (fn th => metis_tac[th, arithmeticTheory.ADD_COMM])) sym_do_spill_tos
+QED
+
+Theorem sym_do_spill_at:
+  do_spill_at d ps = (ops,out) /\ d <= 16 /\ d < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256) | _ => T) ops /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  Cases_on `d = 0`
+  >- (rw[] >> drule_all_then MATCH_ACCEPT_TAC
+    (SRULE [Once arithmeticTheory.ADD_COMM, DE_MORGAN_THM] sym_do_spill_at_zero)) >>
+  rw[] >> drule_all_then MATCH_ACCEPT_TAC
+    (SRULE [GSYM arithmeticTheory.NOT_ZERO_LT_ZERO,
+      Once arithmeticTheory.ADD_COMM, DE_MORGAN_THM] sym_do_spill_at_nonzero)
+QED
