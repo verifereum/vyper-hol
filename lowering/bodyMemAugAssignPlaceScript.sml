@@ -10,6 +10,10 @@
 Theory bodyMemAugAssignPlace
 Ancestors
   bodyMemoryPreds supportedTargets targetPlaceSim targetPlaceSimMem
+  augAssignPlaceMemoryTarget augAssignPlaceMemoryContinuation
+  augAssignPlaceSuffixMemory augAssignPlaceRhsContinuation augAssignPlaceTopMemory
+  augAssignPlaceCompileMemory augAssignPlaceLoadContinuation
+  augAssignPlaceSourceMemory augAssignPlaceCompositeMemory
 
 Theorem body_augassign_place_mem_case:
   !cx ty t bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
@@ -43,5 +47,34 @@ Theorem body_augassign_place_mem_case:
       (eval_stmt cx (AugAssign ty t bop e)) es
 
 Proof
-  cheat
+  rpt strip_tac >>
+  `supported_expr tops e` by fs[supportedStmtsTheory.supported_stmt_def] >>
+  drule_all bodyAugAssignOtherTheory.augassign_rhs_pre >> strip_tac >>
+  Cases_on `t`
+  >- gvs[]
+  >- (rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+      Cases_on `supported_aug_target tops bindings (TopLevelNameTarget (nsid0,nsid1))`
+      >- (irule aug_place_toplevel_mem >> metis_tac[]) >>
+      `?ity. supported_immutable_type tops (nsid0,nsid1) = SOME ity` by
+        gvs[supportedStmtsTheory.supported_stmt_def,
+            supportedStmtsTheory.supported_target_def, optionTheory.IS_SOME_EXISTS] >>
+      gvs[supportedDeclsTheory.supported_immutable_type_def, AllCaseEqs()] >>
+      drule bodyStorageMetadataTheory.supported_variable_decl_mem >> strip_tac >> gvs[] >>
+      `get_module_code cx NONE = SOME tops /\
+       ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+        fs[bodySimTheory.body_inv_def] >>
+      drule_all vyperTypeContractStaticMapsTheory.find_var_decl_by_name_NONE_Immutable >>
+      strip_tac >> fs[targetPlaceSimTheory.immutable_root_def,
+                      targetPlaceSimTheory.target_root_def]) >>
+  (qmatch_goalsub_abbrev_tac `AugAssign ty bt bop e` >>
+   `((?b fld. bt = AttributeTarget b fld) \/ (?b k. bt = SubscriptTarget b k))` by
+     simp[Abbr `bt`] >>
+   `target_indices_pre cenv cx env bt` by
+     metis_tac[bodyAugAssignOtherTheory.augassign_target_pre] >>
+   `target_sim_mem ctx func cenv cx env bt es` by
+     (irule body_target_sim_mem >>
+      simp[targetPlaceSimTheory.target_pre_def] >> metis_tac[]) >>
+   (Cases_on `?id. target_root bt = NameTarget id`
+    >- (irule compile_augassign_place_memory_mem_case >> metis_tac[]) >>
+    irule compile_augassign_place_storage_mem_case >> gvs[] >> metis_tac[]))
 QED

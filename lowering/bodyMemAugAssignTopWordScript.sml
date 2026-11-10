@@ -471,7 +471,7 @@ QED
 
 (* ===== The statement ===== *)
 
-Theorem compile_augassign_toplevel_mem[local]:
+Theorem compile_augassign_toplevel_mem:
   !d ctx func cx lctx RetQ cenv ty0 env ty src id bop e es
    ts tr id_str slot tvt vtyp.
     (!gs. expr_sim_mem ctx func cenv cx ty e (es with gas_obs := gs)) /\
