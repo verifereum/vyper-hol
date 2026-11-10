@@ -7,7 +7,7 @@
    No resource conclusion is assumed: the unit-charge leaves must supply it. *)
 Theory bodyIntCallPackageEntryInterface
 Ancestors
-  bodyIntCallUnitCharge bodyIntCallStageEntryMemory bodyIntCallStagePackage
+  bodyIntCallPkgEntryArgs bodyIntCallPkgEntryMetadata bodyIntCallPkgEntryResources bodyIntCallUnitCharge bodyIntCallStageEntryMemory bodyIntCallStagePackage
   bodyIntCallPackageGlobals bodyIntCallPackageLayout bodyIntCallMetadata
   bodySim exprSimHypsDefs exprSimHyps exprLoweringProps intCallCallee
   compileVyper compileEnv context vyperInterpreter vyperState vyperAST
@@ -106,5 +106,37 @@ Theorem intcall_package_entry:
       t.vs_alloca_next + internal_stack_size ce params < dimword (:256) /\
       alloca_room ctx callee setup /\ fmp_room ctx callee setup
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all body_internal_package_metadata >> strip_tac >>
+  drule internal_package_global_fields >> strip_tac >>
+  `ce.ce_module = caller.ce_module /\
+   ce.ce_module_vars = caller.ce_module_vars` by metis_tac[] >>
+  `MAP (\(ty,tv,v,flag,op). flag) D = MAP SND params` by metis_tac[] >>
+  drule_all internal_package_descriptor_alignment >> strip_tac >>
+  drule_all internal_package_entry_globals >> strip_tac >>
+  `alloca_inv t` by fs[stmt_state_rel_def] >>
+  `argv = (if has_rb then [rbw] else []) ++ ws` by metis_tac[] >>
+  `LENGTH ((if has_rb then [rbw] else []) ++ ws) < dimword (:256)` by
+    metis_tac[] >>
+  drule_all staged_entry_args_rel >> strip_tac >>
+  `lbl' = lbl` by metis_tac[] >>
+  `fn_directly_calls ctx func.fn_name lbl' /\
+   lookup_function lbl' ctx.ctx_functions = SOME callee` by metis_tac[] >>
+  drule_all body_internal_package_room >> strip_tac >>
+  `!i. i < LENGTH D ==>
+    (\(ty,tv,v,flag,op). flag = SND (EL i params) /\
+      ?off. FLOOKUP ce.ce_vars (FST (EL i params)) =
+        SOME (MemLoc off (type_memory_size tv))) (EL i D)` by
+    (rpt strip_tac >> first_x_assum drule >>
+     Cases_on `EL i D` >> PairCases_on `r` >> simp[] >> metis_tac[]) >>
+  `(has_rb ==> ?rid off cap.
+    FLOOKUP t.vs_allocas rid = SOME (off,cap) /\ rid < st2.cs_next_id /\
+    rbw = n2w off /\ off < dimword (:256) /\ type_memory_size rtv <= cap)` by
+    metis_tac[] >>
+  drule_all staged_entry_memory >> strip_tac >>
+  Cases_on `has_rb`
+  >- (gvs[] >> conj_tac >- metis_tac[] >> rpt strip_tac >>
+      drule entry_return_immutable_disjoint >> simp[] >>
+      disch_then drule >> simp[] >> metis_tac[]) >>
+  gvs[] >> metis_tac[]
 QED
