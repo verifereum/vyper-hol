@@ -307,7 +307,7 @@ Proof
   simp[store_copy_prefix_def, COUNT_LIST_SNOC, FOLDL_SNOC]
 QED
 
-Theorem store_copy_prefix_memory[local,simp]:
+Theorem store_copy_prefix_memory[simp]:
   (store_copy_prefix loc b k sbase i).vs_memory = sbase.vs_memory /\
   (store_copy_prefix loc b k sbase i).vs_labels = sbase.vs_labels /\
   (store_copy_prefix loc b k sbase i).vs_call_ctx = sbase.vs_call_ctx
