@@ -1057,7 +1057,7 @@ Proof
   fs[store_slots_prefix_def]
 QED
 
-Theorem store_slots_dyn_element_encoded[local]:
+Theorem store_slots_dyn_element_encoded:
   !vs tv off ws i.
     encode_dyn_array tv off vs = SOME ws /\ i < LENGTH vs ==>
     IS_SOME (encode_value tv (EL i vs))
@@ -1094,7 +1094,7 @@ Proof
   simp[ADD_ASSOC, ADD_COMM] >> metis_tac[]
 QED
 
-Theorem store_slots_dynarray_encoding_support[local]:
+Theorem store_slots_dynarray_encoding_support:
   encode_value (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) = SOME ws ==>
   !k. MEM k (MAP FST ws) <=> k = 0 \/
     ?i ew j. i < LENGTH vs /\ encode_value tv (EL i vs) = SOME ew /\
@@ -1104,7 +1104,7 @@ Proof
   drule store_slots_dyn_encoding_support >> gvs[]
 QED
 
-Theorem store_slots_dyn_prefix_fresh[local]:
+Theorem store_slots_dyn_prefix_fresh:
   emit_op MLOAD [src] sa = (cnt,s1) /\
   emit_op ADD [src; Lit 32w] s1 = (data,s2) /\
   emit_op ADD [slot; Lit 1w] s2 = (dst,sc) /\
@@ -1217,7 +1217,7 @@ Proof
   Cases_on `tr` >> simp[store_copy_normalize_def, tstore_def, sstore_def]
 QED
 
-Theorem store_slots_dyn_fold_header[local]:
+Theorem store_slots_dyn_fold_header:
   store_copy_normalize s p = s /\ p.vs_memory = s.vs_memory /\
   w2n (sw:bytes32) + 32 < dimword (:256) /\
   store_copy_normalize p u =
