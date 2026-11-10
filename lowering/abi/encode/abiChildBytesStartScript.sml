@@ -8,7 +8,7 @@ Ancestors
 Theorem abi_child_bytes_start_ready:
   !dst src dyn_ptr head_offset cs ss dst_addr dyn_addr src_addr bs.
     eval_operand src ss = SOME src_addr /\ eval_operand dyn_ptr ss = SOME dyn_addr /\
-    EVERY (\name. src <> Var name /\ dyn_ptr <> Var name) (compiler_var_names cs.cs_next_var 12) /\
+    EVERY (\name. src <> Var name /\ dyn_ptr <> Var name) (compiler_var_names cs.cs_next_var 13) /\
     bytestring_abi_pre (dst_addr + mload (w2n dyn_addr) ss) src_addr bs ss ==>
     let addressed = (abi_child_prefix_state cs.cs_next_var head_offset dst_addr dyn_addr ss) with
       vs_inst_idx := LENGTH (abi_child_prefix_cut dst dyn_ptr head_offset cs).cs_current_insts in
@@ -18,15 +18,15 @@ Theorem abi_child_bytes_start_ready:
     eval_operand (Var (compiler_var_name cs.cs_next_var 1)) addressed = SOME (mload (w2n dyn_addr) ss) /\
     eval_operand dyn_ptr addressed = SOME dyn_addr /\
     EVERY (\name. src <> Var name /\ Var (compiler_var_name cs.cs_next_var 2) <> Var name)
-      (compiler_var_names (abi_child_prefix_cut dst dyn_ptr head_offset cs).cs_next_var 8) /\
+      (compiler_var_names (abi_child_prefix_cut dst dyn_ptr head_offset cs).cs_next_var 9) /\
     EVERY (\name. Var (compiler_var_name cs.cs_next_var 0) <> Var name /\
       Var (compiler_var_name cs.cs_next_var 1) <> Var name /\ dyn_ptr <> Var name)
-      (compiler_var_names (abi_child_prefix_cut dst dyn_ptr head_offset cs).cs_next_var 8) /\
+      (compiler_var_names (abi_child_prefix_cut dst dyn_ptr head_offset cs).cs_next_var 9) /\
     bytestring_abi_pre (dst_addr + mload (w2n dyn_addr) ss) src_addr bs addressed /\
-    dyn_ptr <> Var (compiler_var_name (cs.cs_next_var + 11) 0)
+    dyn_ptr <> Var (compiler_var_name (cs.cs_next_var + 12) 0)
 Proof
   rpt gen_tac >> simp_tac bool_ss [LET_THM] >> strip_tac >>
-  qpat_assum `EVERY _ (compiler_var_names _ 12)`
+  qpat_assum `EVERY _ (compiler_var_names _ 13)`
     (strip_assume_tac o SIMP_RULE bool_ss [EVERY_CONJ]) >>
   mp_tac (Q.SPECL [`src`, `cs.cs_next_var`] abi_child_bytes_input_names) >>
   impl_tac >- first_assum MATCH_ACCEPT_TAC >> strip_tac >>

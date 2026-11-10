@@ -1,6 +1,7 @@
 (* Independent checked-frontend bytecode witnesses for memory stores.
    Half 2 of evalCompilerMemoryStoreTuples: t03_tuple_assign_abi_decode,
-   t06_tuple_assign_mixed_targets, t11_tuple_onew_decode_mem. *)
+   t06_tuple_assign_mixed_targets, t07_tuple_assign_string_elems,
+   t11_tuple_onew_decode_mem. *)
 Theory evalCompilerMemoryStoreTuples2
 Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
@@ -28,3 +29,10 @@ QED
 val t11_tuple_onew_decode_mem = memoryStoreWitnessLib.evaluate fixture_root "t11_tuple_onew_decode_mem"
 val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
   "t11_tuple_onew_decode_mem" t11_tuple_onew_decode_mem
+val t07_tuple_assign_string_elems = memoryStoreWitnessLib.evaluate fixture_root "t07_tuple_assign_string_elems"
+Theorem t07_tuple_assign_string_elems_matches_python_oracle:
+  ^(#term t07_tuple_assign_string_elems) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "t07_tuple_assign_string_elems")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation t07_tuple_assign_string_elems))) >> EVAL_TAC
+QED

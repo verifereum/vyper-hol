@@ -364,11 +364,10 @@ Definition abi_bytes_append_def:
      [mk_inst (id + 4) MSTORE [Var (v 3); Lit 0w] []] ++
      [mk_inst (id + 5) ADD [Lit 32w; Var (v 0)] [v 4]] ++
      [mk_inst (id + 6) MCOPY [dst; src; Var (v 4)] []] ++
-     [mk_inst (id + 7) ADD [Lit 31w; Var (v 0)] [v 5]] ++
-     [mk_inst (id + 8) AND
-       [Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w;
-        Var (v 5)] [v 6]] ++
-     [mk_inst (id + 9) ADD [Lit 32w; Var (v 6)] [v 7]]
+     [mk_inst (id + 7) NOT [Lit 31w] [v 5]] ++
+     [mk_inst (id + 8) ADD [Var (v 0); Lit 31w] [v 6]] ++
+     [mk_inst (id + 9) AND [Var (v 6); Var (v 5)] [v 7]] ++
+     [mk_inst (id + 10) ADD [Var (v 7); Lit 32w] [v 8]]
 End
 
 Theorem abi_bytes_append_prefix:
@@ -379,7 +378,7 @@ Proof
 QED
 
 Theorem abi_bytes_append_length:
-  LENGTH (abi_bytes_append cs dst src prefix) = LENGTH prefix + 10
+  LENGTH (abi_bytes_append cs dst src prefix) = LENGTH prefix + 11
 Proof
   simp[abi_bytes_append_def]
 QED
@@ -493,9 +492,9 @@ QED
 
 Theorem compile_abi_bytes_shape:
   compile_abi_encode_to_buf dst src (AbiBytestring bound) cs =
-    (Var (abi_bytes_var cs 7),
-     cs with <|cs_next_id := cs.cs_next_id + 10;
-               cs_next_var := cs.cs_next_var + 8;
+    (Var (abi_bytes_var cs 8),
+     cs with <|cs_next_id := cs.cs_next_id + 11;
+               cs_next_var := cs.cs_next_var + 9;
                cs_current_insts :=
                  abi_bytes_append cs dst src cs.cs_current_insts|>)
 Proof
@@ -507,7 +506,7 @@ QED
 
 Theorem compile_abi_bytes_fragment:
   compile_abi_encode_to_buf dst src (AbiBytestring bound) cs = (result,cs') ⇒
-  result = Var (abi_bytes_var cs 7) ∧
+  result = Var (abi_bytes_var cs 8) ∧
   same_blocks cs cs' ∧ cs_extends cs cs' ∧
   emitted_insts cs cs' = abi_bytes_append cs dst src []
 Proof

@@ -552,9 +552,8 @@ Theorem compile_augassign_toplevel_case:
     well_formed_type env.type_defs ty /\
     cenv.ce_hashmap_info (src, id) = NONE /\
     cenv.ce_module_var_type (src, id) = SOME vtyp /\ is_word_type vtyp /\
-    (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
-    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+    well_typed_binop ty bop ty (expr_type e) /\ augassign_operand_ok ty bop e /\
+    bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
          (AugAssign ty (TopLevelNameTarget (src, id)) bop e))

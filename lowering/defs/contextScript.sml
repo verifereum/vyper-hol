@@ -640,11 +640,11 @@ QED
 Definition compile_bytestring_copy_len_def:
   compile_bytestring_copy_len val_op =
     do src_len <- emit_op MLOAD [val_op];
+       (* Python's ceil32: and(add(x, 31), not 31) *)
+       mask <- emit_op NOT [Lit 31w];
        padded_len <- emit_op ADD [src_len; Lit 31w];
-       let mask = i2w (- &32) : bytes32 in
-       do rounded <- emit_op AND [padded_len; Lit mask];
-          emit_op ADD [rounded; Lit 32w]
-       od
+       rounded <- emit_op AND [padded_len; mask];
+       emit_op ADD [rounded; Lit 32w]
     od
 End
 

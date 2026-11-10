@@ -37,7 +37,7 @@ QED
 Theorem materialized_state_fresh:
   !ty id cs cs' capacity src_addr ss.
     fresh_vars_wrt cs ss /\
-    cs.cs_next_var + (if is_bytestring_type ty then 5 else 1) <= cs'.cs_next_var ==>
+    cs.cs_next_var + (if is_bytestring_type ty then 6 else 1) <= cs'.cs_next_var ==>
     fresh_vars_wrt cs' (materialized_state ty id cs.cs_next_var capacity src_addr ss)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -50,7 +50,7 @@ QED
 Theorem compile_materialize_value_vars:
   !cenv ty src cs op cs'.
     ~is_word_type ty /\ compile_materialize_vv cenv ty (StackValue ty src) cs = (op,cs') ==>
-    cs'.cs_next_var = cs.cs_next_var + (if is_bytestring_type ty then 5 else 1) /\
+    cs'.cs_next_var = cs.cs_next_var + (if is_bytestring_type ty then 6 else 1) /\
     abi_operand_before cs'.cs_next_var op
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `is_bytestring_type ty`
@@ -93,7 +93,7 @@ Theorem compile_materialize_value_path:
     type_memory_size tv < dimword(:256) /\
     lowered_value_rel ty tv v src ss /\ eval_operand src ss = SOME src_addr /\
     EVERY (\name. src <> Var name)
-      (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 5 else 1)) /\
+      (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 6 else 1)) /\
     fn_has_code cs cs' func /\ ss.vs_current_bb = cs.cs_current_bb /\
     ss.vs_inst_idx = LENGTH cs.cs_current_insts ==>
     ?out. fragment_path ctx func ss out /\
@@ -107,7 +107,7 @@ Theorem compile_materialize_value_path:
       out.vs_allocas = (memory_snapshot_alloc_frame cs.cs_next_id (type_memory_size tv) ss).vs_allocas /\
       out.vs_alloca_next = (memory_snapshot_alloc_frame cs.cs_next_id (type_memory_size tv) ss).vs_alloca_next /\
       (!arg_op. EVERY (\name. arg_op <> Var name)
-        (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 5 else 1)) ==>
+        (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 6 else 1)) ==>
         eval_operand arg_op out = eval_operand arg_op ss)
 Proof
   rpt gen_tac >> strip_tac >>

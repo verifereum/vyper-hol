@@ -1,4 +1,4 @@
-(* TOP-LEVEL: exact five-instruction program emitted by the compiler's
+(* TOP-LEVEL: exact six-instruction program emitted by the compiler's
    runtime-length bytes/string memory copy. *)
 Theory bytesCopyCode
 Ancestors
@@ -8,16 +8,18 @@ Ancestors
 Definition bytes_copy_insts_def:
   bytes_copy_insts id names dst src =
     [mk_inst id MLOAD [src] [EL 0 names];
-     mk_inst (id + 1) ADD [Var (EL 0 names); Lit 31w] [EL 1 names];
-     mk_inst (id + 2) AND [Var (EL 1 names); Lit (i2w (- &32))] [EL 2 names];
-     mk_inst (id + 3) ADD [Var (EL 2 names); Lit 32w] [EL 3 names];
-     mk_inst (id + 4) MCOPY [dst; src; Var (EL 3 names)] []]
+     mk_inst (id + 1) NOT [Lit 31w] [EL 1 names];
+     mk_inst (id + 2) ADD [Var (EL 0 names); Lit 31w] [EL 2 names];
+     mk_inst (id + 3) AND [Var (EL 2 names); Var (EL 1 names)] [EL 3 names];
+     mk_inst (id + 4) ADD [Var (EL 3 names); Lit 32w] [EL 4 names];
+     mk_inst (id + 5) MCOPY [dst; src; Var (EL 4 names)] []]
 End
 
-Theorem compiler_var_names_four:
-  !var_base. compiler_var_names var_base 4 =
+Theorem compiler_var_names_five:
+  !var_base. compiler_var_names var_base 5 =
     [STRING #"%" (toString var_base); STRING #"%" (toString (var_base + 1));
-     STRING #"%" (toString (var_base + 2)); STRING #"%" (toString (var_base + 3))]
+     STRING #"%" (toString (var_base + 2)); STRING #"%" (toString (var_base + 3));
+     STRING #"%" (toString (var_base + 4))]
 Proof
   simp[compiler_var_names_def, GENLIST_CONS]
 QED
@@ -27,10 +29,10 @@ Theorem compile_store_bytestring_code:
     compile_store_bytestring src dst cs = (ret,cs') ==>
     ret = () /\
     emitted_insts cs cs' = bytes_copy_insts cs.cs_next_id
-      (compiler_var_names cs.cs_next_var 4) dst src /\
+      (compiler_var_names cs.cs_next_var 5) dst src /\
     same_blocks cs cs' /\
     cs'.cs_current_insts = cs.cs_current_insts ++ emitted_insts cs cs' /\
-    cs'.cs_next_var = cs.cs_next_var + 4
+    cs'.cs_next_var = cs.cs_next_var + 5
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[compile_store_bytestring_def, compile_bytestring_copy_len_def,

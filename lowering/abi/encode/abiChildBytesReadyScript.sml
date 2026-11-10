@@ -9,15 +9,15 @@ Ancestors
 
 Theorem abi_child_bytes_input_names:
   !arg_op var_base.
-    EVERY (\name. arg_op <> Var name) (compiler_var_names var_base 12) ==>
+    EVERY (\name. arg_op <> Var name) (compiler_var_names var_base 13) ==>
     EVERY (\name. arg_op <> Var name) (compiler_var_names var_base 3) /\
-    EVERY (\name. arg_op <> Var name) (compiler_var_names (var_base + 3) 8) /\
-    arg_op <> Var (compiler_var_name (var_base + 11) 0)
+    EVERY (\name. arg_op <> Var name) (compiler_var_names (var_base + 3) 9) /\
+    arg_op <> Var (compiler_var_name (var_base + 12) 0)
 Proof
   rpt gen_tac >> DISCH_TAC >> rpt conj_tac
-  >- (mp_tac (Q.SPECL [`arg_op`, `var_base`, `12`, `3`] compiler_var_names_avoid_prefix) >> simp[])
-  >- (mp_tac (Q.SPECL [`arg_op`, `var_base`, `12`, `3`, `8`] compiler_var_names_avoid_segment) >> simp[]) >>
-  mp_tac (Q.SPECL [`arg_op`, `var_base`, `12`, `11`] compiler_var_names_avoid_index) >>
+  >- (mp_tac (Q.SPECL [`arg_op`, `var_base`, `13`, `3`] compiler_var_names_avoid_prefix) >> simp[])
+  >- (mp_tac (Q.SPECL [`arg_op`, `var_base`, `13`, `3`, `9`] compiler_var_names_avoid_segment) >> simp[]) >>
+  mp_tac (Q.SPECL [`arg_op`, `var_base`, `13`, `12`] compiler_var_names_avoid_index) >>
   simp[compiler_var_name_def]
 QED
 
@@ -27,7 +27,7 @@ Theorem abi_child_bytes_saved_names:
       Var (compiler_var_name var_base 0) <> Var name /\
       Var (compiler_var_name var_base 1) <> Var name /\
       Var (compiler_var_name var_base 2) <> Var name)
-      (compiler_var_names (var_base + 3) 8)
+      (compiler_var_names (var_base + 3) 9)
 Proof
   gen_tac >> simp_tac bool_ss [EVERY_CONJ] >> rpt conj_tac >>
   irule compiler_var_names_before >> simp[]

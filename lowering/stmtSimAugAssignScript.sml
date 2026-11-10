@@ -387,6 +387,31 @@ Proof
   rw[type_bits_def, well_formed_type_def, vyperValueTheory.evaluate_type_def]
 QED
 
+(* The checked augmented operand satisfies the ordinary builtin gate too. *)
+Theorem augassign_builtin_operands:
+  augassign_operand_ok ty bop e ==>
+  builtin_operands_ok ty (Bop bop) [lhs; e]
+Proof
+  Cases_on `bop` >>
+  simp[augassign_operand_ok_def, builtin_operands_ok_def,
+       power_operands_ok_def, int_literal_value_def] >>
+  Cases_on `e` >> simp[power_exponent_ok_def] >>
+  rename1 `Literal ann lit` >> Cases_on `lit` >> simp[power_exponent_ok_def]
+QED
+
+(* The checked augmented operand gives the exponent and shift-amount facts
+   the field-target statement lemmas take. *)
+Theorem augassign_operand_ok_operands:
+  augassign_operand_ok ty bop e ==>
+  (bop = Exp ==> nonneg_int_literal e) /\
+  (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
+Proof
+  Cases_on `bop` >> simp[augassign_operand_ok_def] >>
+  Cases_on `e` >> simp[power_exponent_ok_def] >>
+  rename1 `Literal _ lit` >> Cases_on `lit` >>
+  simp[power_exponent_ok_def, nonneg_int_literal_def, int_literal_value_def]
+QED
+
 
 (* ===== The statement ===== *)
 
@@ -1034,9 +1059,7 @@ Finalise compile_augassign_local_case
 Theorem compile_augassign_local_stmt_frag:
   !ctx func cx lctx RetQ cenv ty0 env ty id bop e es.
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
-    FLOOKUP env.var_types id = SOME ty /\
-    (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    FLOOKUP env.var_types id = SOME ty /\ augassign_operand_ok ty bop e /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e))

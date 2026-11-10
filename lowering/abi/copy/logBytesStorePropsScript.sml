@@ -63,7 +63,7 @@ Theorem compile_log_bytes_field_path:
     lowered_value_rel aty atv v src ss /\
     eval_operand buf ss = SOME buf_addr /\ eval_operand src ss = SOME src_addr /\
     type_memory_size atv < dimword(:256) /\ w2n buf_addr + offset < dimword(:256) /\
-    EVERY (\name. src <> Var name) (compiler_var_names cs.cs_next_var 5) /\
+    EVERY (\name. src <> Var name) (compiler_var_names cs.cs_next_var 6) /\
     fn_has_code cs cs' func /\ ss.vs_current_bb = cs.cs_current_bb /\
     ss.vs_inst_idx = LENGTH cs.cs_current_insts ==>
     ?out. fragment_path ctx func ss out /\
@@ -77,7 +77,7 @@ Theorem compile_log_bytes_field_path:
         (other_offset + type_memory_size other_tv <= w2n buf_addr + offset \/
           w2n buf_addr + offset + type_memory_size ftv <= other_offset) ==>
         memory_value_rel other_tv other_v other_offset out.vs_memory) /\
-      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 5) ==>
+      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 6) ==>
         eval_operand arg_op out = eval_operand arg_op ss)
 Proof
   rpt strip_tac >> drule_all compile_log_bytes_field_code >> strip_tac >>
