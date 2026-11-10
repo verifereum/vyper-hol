@@ -9,7 +9,7 @@
  *)
 Theory symPlannerSim
 Ancestors
-  symShuffleSim codegenSymRel deepResidualSim deepResidualBudget fnPlanPrefix
+  symShuffleSim symPlannerReorder codegenSymRel deepResidualSim deepResidualBudget fnPlanPrefix
   doSwapSim planSpillBounds contextCodegenRel unitShapeDefs venomWf
   stackPlanGen stackPlanOps stackPlanTypes planExec asmSymSem asmSem
   dfgDefs

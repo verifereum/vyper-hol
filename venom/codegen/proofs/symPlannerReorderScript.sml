@@ -722,17 +722,56 @@ Proof
   drule_all_then MATCH_ACCEPT_TAC sym_reorder_prepare_place
 QED
 
+Theorem reorder_step_next_offset_trans[local]:
+  (\(idx,op) ps. reorder_one dfg pending idx op ps) item ps = (xs,mid) /\
+  mid.ps_alloc.sa_next_offset <= out.ps_alloc.sa_next_offset ==>
+  ps.ps_alloc.sa_next_offset <= out.ps_alloc.sa_next_offset
+Proof
+  Cases_on `item` >> simp[] >>
+  metis_tac[allocMonoTheory.reorder_one_next_offset, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem plan_steps_reorder_next_offset_cons[local]:
+  (!ps ops out.
+    plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items ps = (ops,out) ==>
+    ps.ps_alloc.sa_next_offset <= out.ps_alloc.sa_next_offset) /\
+  plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) (item::items) ps = (ops,out) ==>
+  ps.ps_alloc.sa_next_offset <= out.ps_alloc.sa_next_offset
+Proof
+  strip_tac >> drule_then strip_assume_tac reorderSimTheory.plan_steps_cons_result >>
+  metis_tac[reorder_step_next_offset_trans]
+QED
+
 Theorem plan_steps_reorder_next_offset[local]:
   !items ps ops out.
   plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items ps = (ops,out) ==>
   ps.ps_alloc.sa_next_offset <= out.ps_alloc.sa_next_offset
 Proof
   Induct >- simp[foldlSimTheory.plan_steps_def] >>
-  rpt strip_tac >>
-  drule_then strip_assume_tac reorderSimTheory.plan_steps_cons_result >>
-  Cases_on `h` >> gvs[] >>
-  drule_then assume_tac allocMonoTheory.reorder_one_next_offset >>
-  first_x_assum drule >> decide_tac
+  metis_tac[plan_steps_reorder_next_offset_cons]
+QED
+
+Theorem reorder_fold_head_structure[local]:
+  residual_budget_wf_marked spillbase pending ps /\
+  pending_inventory_wf pending ps /\ idx < LENGTH pending /\
+  LENGTH pending <= LENGTH ps.ps_stack /\
+  reorder_one dfg pending idx op ps = (ops,midps) /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base ==>
+  residual_budget_wf_marked spillbase pending midps /\
+  pending_inventory_wf pending midps /\
+  LENGTH pending <= LENGTH midps.ps_stack /\
+  r.sr_spill_base <= midps.ps_alloc.sa_spill_base
+Proof
+  strip_tac >> drule_all_then strip_assume_tac reorder_one_residual_budget_wf_marked >>
+  metis_tac[reorder_one_pending_inventory_wf_marked, allocMonoTheory.reorder_one_spill_base]
+QED
+
+Theorem reorder_fold_tail_limit[local]:
+  plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items midps = (ops,out) /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  midps.ps_alloc.sa_next_offset <= r.sr_spill_end
+Proof
+  metis_tac[plan_steps_reorder_next_offset, arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem sym_plan_steps_reorder[local]:
@@ -761,11 +800,8 @@ Proof
   drule_then strip_assume_tac reorderSimTheory.plan_steps_cons_result >>
   Cases_on `h` >> fs[] >>
   rename1 `reorder_one dfg pending idx op ps = (step_ops,midps)` >>
-  drule_all_then strip_assume_tac reorder_one_residual_budget_wf_marked >>
-  drule_all_then assume_tac reorder_one_pending_inventory_wf_marked >>
-  drule_then assume_tac allocMonoTheory.reorder_one_spill_base >>
-  drule_then assume_tac plan_steps_reorder_next_offset >>
-  `midps.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
+  drule_all_then strip_assume_tac reorder_fold_head_structure >>
+  drule_all_then assume_tac reorder_fold_tail_limit >>
   qpat_x_assum `asm_block_at _ _ _` (strip_assume_tac o
     SRULE [stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append]) >>
   drule_all sym_reorder_one >>
@@ -784,4 +820,32 @@ Proof
     codegenSymRelTheory.sym_steps_add] >>
   asm_rewrite_tac[asmSymSemTheory.sym_result_case_def] >>
   conj_tac >- simp[] >> conj_tac >- decide_tac >> metis_tac[]
+QED
+
+Theorem reorder_indexed_items_valid[local]:
+  EVERY (\(idx,op). idx < LENGTH pending /\ MEM op pending)
+    (MAPi (\i op. (i,op)) pending)
+Proof
+  simp[EVERY_MEM, indexedListsTheory.MEM_MAPi, PULL_EXISTS, MEM_EL] >> metis_tac[]
+QED
+
+Theorem sym_reorder_plan:
+  residual_budget_wf_marked spillbase pending ps /\
+  pending_inventory_wf pending ps /\ LENGTH pending <= LENGTH ps.ps_stack /\
+  reorder_plan dfg pending ps = (ops,out) /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> irule sym_plan_steps_reorder >>
+  metis_tac[reorderSimTheory.reorder_plan_eq_plan_steps, reorder_indexed_items_valid]
 QED
