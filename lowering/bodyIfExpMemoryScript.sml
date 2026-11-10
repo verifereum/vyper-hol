@@ -254,7 +254,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem ifexp_arm_finish_mem[local]:
+Theorem ifexp_arm_finish_mem:
   post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_type e = t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
