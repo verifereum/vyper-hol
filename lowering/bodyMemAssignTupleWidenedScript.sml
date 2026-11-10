@@ -7,7 +7,13 @@
    body_assign_tuple_widened_call (bodySimStmtCases), still admitted there. *)
 Theory bodyMemAssignTupleWidened
 Ancestors
-  tupleWidenedReadiness bodyMemAssignTupleWidenedSuffix
+  tupleWidenedReadiness bodyMemAssignTupleWidenedWrapper exprSimIfExp
+  bodyMemAssignTupleTargetsFacts bodyExprPreFacts tupleTargetStoreProps
+  bodyMemAssignTupleLocalsPrep exprLoweringProps
+  bodySimStmtCases bodyMemoryDefs exprSimDefs exprSimHypsDefs
+  vyperTypeSystem vyperTypeEnv vyperTypeInvariants supportedStmts supportedExprs
+  stmtSimDefs loweringPosts list rich_list compileEnv vyperTypeValues
+  vyperTyping vyperTypeDefaults vyperTypeExprSoundness exprSimSource
   bodyMemoryPreds tupleWidenedTargetStore tupleWidenedLayout tupleUnstagedParts typedCopyPrimitivePathMem typedCopyArrayPathMem typedCopyDynarrayPathMem typedCopyFieldsPathMem typedCopyRankPathMem
 
 Theorem body_assign_tuple_widened_call_mem:
@@ -43,5 +49,38 @@ Theorem body_assign_tuple_widened_call_mem:
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  reverse (Cases_on `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx`)
+  >- (simp[stmt_frag_mem_def] >> rpt strip_tac >>
+      fs[stmt_state_rel_def, state_rel_def]) >>
+  drule tuple_targets_typing >> strip_tac >> gvs[] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?tup_tv. evaluate_type (get_tenv cx) (TupleT tys) = SOME tup_tv` by
+    fs[assignable_type_def, well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
+  drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
+  `expr_body_pre cenv cx env e es` by
+    (irule body_assign_tuple_rhs_pre >> metis_tac[]) >>
+  `supported_expr tops e` by gvs[supported_stmt_def, supported_assignment_def] >>
+  `LENGTH gs = LENGTH tys /\ LENGTH tys = LENGTH tvs` by
+    metis_tac[LIST_REL_LENGTH] >>
+  drule tuple_widened_source_ready >> simp[] >> strip_tac >>
+  `!i. i < LENGTH gs ==>
+     tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs) /\
+     (~is_word_type (EL i tys) ==>
+       type_memory_size (EL i tvs) + 64 < dimword (:256)) /\
+     !ee v. expr_sim_inv cenv cx env ee /\ value_has_type (EL i tvs) v ==>
+       tuple_target_layout ee.scopes (EL i gs) (EL i tys) (EL i tvs) v` by
+    metis_tac[tuple_targets_destination_ready] >>
+  irule compile_assign_tuple_widened_stmt_frag_mem >>
+  simp[] >> rpt conj_tac
+  >~ [`expr_sim_mem _ _ _ _ _ _ _`]
+  >- metis_tac[body_expr_mem_ok_def]
+  >~ [`0 < type_memory_size_list _`]
+  >- (qexistsl_tac [`tvs`, `tys`, `env`] >> simp[] >>
+      reverse conj_tac >- metis_tac[] >>
+      `0 < type_memory_size (TupleTV tvs')` suffices_by
+        simp[valueEncodingTheory.type_memory_size_def] >>
+      irule ifexp_physical_source_positive >> metis_tac[])
+  >> metis_tac[]
 QED
