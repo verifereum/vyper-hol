@@ -1797,6 +1797,26 @@ Proof
   drule venomStepPropsTheory.step_inst_ok_halted >> simp[]
 QED
 
+Theorem invoke_gas_returning_family[local]:
+  y.inst_opcode = INVOKE /\ x.inst_opcode = GAS /\ inst_wf x /\
+  dft_gas_swap_pair x y /\
+  (!rest. step_inst fuel C y (s with vs_gas_readings := fg ++ rest) =
+    OK (v with vs_gas_readings := rest)) ==>
+  !w tail. ?a.
+    step_inst fuel C x (s with vs_gas_readings := w::(fg ++ tail)) = OK a /\
+    step_inst fuel C y a =
+      OK (update_var (HD x.inst_outputs) w v with vs_gas_readings := tail)
+Proof
+  strip_tac >> drule_all dftRunRelTheory.dft_gas_ok_shape >> strip_tac >>
+  rpt gen_tac >> simp[] >>
+  drule dftRunRelTheory.dft_swap_output_frame >>
+  disch_then (qspec_then `out` mp_tac) >> simp[] >> strip_tac >>
+  `step_inst fuel C y (update_var out w (s with vs_gas_readings := fg ++ tail)) =
+    OK (update_var out w (v with vs_gas_readings := tail))` by
+    (mp_tac dftCommutationTheory.step_inst_invoke_frame >> simp[]) >>
+  gvs[venomStateTheory.update_var_def]
+QED
+
 Theorem prefix_extract_mask[local]:
   !fuel C C'.
   let CalleeIH = (!fn fn' t.
