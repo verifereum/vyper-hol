@@ -1,7 +1,7 @@
 Theory assignPlaceStorage
 Ancestors
   assignPlaceStoreReady assignPlacePhysicalBytes assignPlaceNormalizeFrame
-  assignPlaceStorageSuffix
+  assignPlaceStorageSuffix assignPlaceStorageCompile assignPlaceLayout
   loweringPosts stmtSimDefs stmtLowering compileEnv placeStore valueCopyBytes
 Libs monadsyntax
 
@@ -163,4 +163,44 @@ Resume assign_place_storage_from_expr_post[equal_layout]:
              combinTheory.C_DEF, comp_ignore_bind_def, comp_bind_def, comp_return_def,
              pairTheory.UNCURRY, quantHeuristicsTheory.PAIR_EQ_EXPAND]) >>
   qexists_tac `t` >> simp[]
+QED
+
+Resume assign_place_storage_from_expr_post[normalize]:
+  `type_memory_bytes cenv dty = type_memory_size dtv` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)
+    assign_place_storage_normalize_compile >>
+  disch_then (qspecl_then [`func`, `dtv`] mp_tac) >>
+  (impl_tac >- gvs[]) >>
+  disch_then (qx_choosel_then [`buf`, `sm`, `sn`] (map_every assume_tac o CONJUNCTS)) >>
+  fs[expr_post_def] >>
+  `?sw. eval_operand src s = SOME sw /\
+    val_in_memory stv v (w2n sw) s.vs_memory` by gvs[expr_val_rel_def] >>
+  `w2n sw + type_memory_size stv < dimword (:256)` by
+    (irule assignPlaceSourceBoundsTheory.nonbytes_expr_val_at_bound >> metis_tac[]) >>
+  `type_alloc_ok cenv dty` by metis_tac[] >>
+  drule_all placeStoreStorageTheory.place_store_destination_alloc_bound >> strip_tac >>
+  `value_has_type dtv v` by
+    (drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >>
+     simp[] >> metis_tac[]) >>
+  `val_wf stv v /\ val_wf dtv v` by
+    simp[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  drule_at (Pat `compile_alloc_buffer _ _ = _`) assign_place_normalize_framed_path >>
+  disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ s`)) >>
+  disch_then (drule_at (Pat `eval_operand src s = _`)) >>
+  disch_then (qspecl_then [`stv`, `dtv`, `v`] mp_tac) >>
+  (impl_tac >- (simp[arithmeticTheory.ADD_COMM] >>
+    (conj_tac >- (fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[])) >>
+    (conj_tac >- (fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[])) >>
+    drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)
+      exprSimHashTheory.expr_val_at_footprint >>
+    disch_then (drule_at (Pat `evaluate_type _ _ = SOME stv`)) >>
+    disch_then (drule_at (Pat `eval_operand src s = _`)) >>
+    `0 < type_memory_size stv` by
+      (irule widening_source_memory_size_pos >> metis_tac[]) >>
+    `val_footprint stv v = type_memory_size stv` by
+      (irule annassignRelayoutSourceTheory.nonbytes_evaluated_val_footprint >> metis_tac[]) >>
+    gvs[arithmeticTheory.ADD_COMM] >> metis_tac[])) >>
+  suspend "normalized_suffix"
 QED
