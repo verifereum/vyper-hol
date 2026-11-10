@@ -2936,7 +2936,40 @@ Proof
        mp_tac (Q.SPECL [`pre`, `a`, `out`, `v`, `SUC s.vs_inst_idx`]
          (Q.INST [`C` |-> `C'`] prefix_independent_update_terminates)) >>
        simp[Abbr `a`, update_var_def]) >>
-    FAIL_TAC "GAS relocation inspection"
+    `gas_events_block fuel C' s.vs_current_bb
+       <|bb_label := s.vs_current_bb; bb_instructions :=
+         REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ y::pre|>
+       ((update_var out v a) with vs_inst_idx := SUC s.vs_inst_idx) =
+     gas_events_block fuel C' s.vs_current_bb
+       <|bb_label := s.vs_current_bb; bb_instructions :=
+         REPLICATE a.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre|> a` by
+      (irule EQ_TRANS >>
+       qexists_tac `gas_events_block fuel C' s.vs_current_bb
+         <|bb_label := s.vs_current_bb; bb_instructions :=
+           REPLICATE (SUC s.vs_inst_idx) (mk_inst 0 STOP [] []) ++ pre|>
+         ((update_var out v a) with vs_inst_idx := SUC s.vs_inst_idx)` >>
+       conj_tac
+       >- (irule gas_events_block_suffix_cong >> qexists_tac `pre` >>
+           simp[update_var_def, Abbr `a`, DROP_APPEND, DROP_DROP_T,
+             arithmeticTheory.ADD1]) >>
+       irule prefix_independent_update_events >> simp[]) >>
+    `LENGTH (gas_events_block fuel C' a.vs_current_bb
+       <|bb_label := a.vs_current_bb; bb_instructions :=
+         REPLICATE a.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre|> a)
+       <= LENGTH a.vs_gas_readings` by
+      (qpat_x_assum `gas_events_block _ _ _ _ _ = _`
+         (mp_tac o SRULE [Abbr `a`, update_var_def, APPEND]) >>
+       qpat_x_assum `SUC (LENGTH _) <= _` mp_tac >>
+       simp[Abbr `a`, update_var_def] >>
+       pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+       strip_tac >> disch_then (SUBST1_TAC o SYM) >> simp[]) >>
+    mp_tac (Q.SPECL [`fn`, `bb`, `pre`, `y::post`, `a`]
+      (SRULE [LET_THM] (Q.SPECL [`fuel`, `C`, `C'`] identity_suffix_mask))) >>
+    impl_tac
+    >- (gvs[Abbr `a`, EVERY_APPEND, EVERY_DEF]) >>
+    disch_then (qx_choose_then `pm` (qx_choose_then `pe`
+      (qx_choose_then `pu` strip_assume_tac))) >>
+    FAIL_TAC "GAS identity certificate obtained"
   ) >>
   FAIL_TAC "noninvoke extraction pending"
 QED
