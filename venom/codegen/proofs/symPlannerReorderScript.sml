@@ -284,3 +284,21 @@ Proof
   strip_tac >> drule_all_then strip_assume_tac reorder_prepare_structure >>
   prepare_run_tac
 QED
+
+Theorem reorder_two_swaps_structure[local]:
+  do_swap a ps = (ops1,ps1) /\ do_swap b ps1 = (ops2,out) /\
+  a < LENGTH ps.ps_stack /\ b < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  b < LENGTH ps1.ps_stack /\
+  spill_alloc_layout_wf ps1.ps_alloc ps1.ps_spilled /\
+  r.sr_spill_base <= ps1.ps_alloc.sa_spill_base /\
+  ps1.ps_alloc.sa_next_offset <= r.sr_spill_end
+Proof
+  strip_tac >>
+  drule_all_then strip_assume_tac doSwapSimTheory.do_swap_multiplicity_layout >>
+  metis_tac[planWfTheory.do_swap_length, pairTheory.SND,
+    allocMonoTheory.do_swap_spill_base, allocMonoTheory.do_swap_next_offset,
+    arithmeticTheory.LESS_EQ_TRANS]
+QED
