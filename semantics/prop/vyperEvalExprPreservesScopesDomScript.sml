@@ -582,8 +582,7 @@ Proof
   >- (irule scope_pop_effect_frame >> irule state_rel_frame_locals_take >> simp[]) >>
   irule scope_pop_effect_identity >>
   simp[vyperCallOutcomeTheory.adopt_call_outcome_equation, return_def] >>
-  gen_tac >> IF_CASES_TAC >>
-  Cases_on `co.co_success` >> Cases_on `rq.cr_kind = MessageCall` >> simp[]
+  gen_tac >> rw[]
 QED
 
 Theorem scope_pop_effect_call_helpers[simp]:
