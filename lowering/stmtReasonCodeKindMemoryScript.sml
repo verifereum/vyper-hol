@@ -97,6 +97,8 @@ Theorem reason_code_revert_path_mem:
     ?u. gas_path_mem ctx func t 0 (Abort Revert_abort u)
 Proof
   rpt gen_tac >> strip_tac >>
+  `post_value_type cenv se = expr_type se` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   qpat_x_assum `expr_type se = _` (fn th =>
     RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
   `?ty p. vv = LocatedValue ty p /\ ~is_word_type ty /\

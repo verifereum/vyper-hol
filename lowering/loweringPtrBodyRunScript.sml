@@ -15,7 +15,7 @@
  * TOP-LEVEL:
  *   lower_vyper_runtime_unit_body_ptr -- the piece
  *   compile_guarded_body_end_ptr_safe -- falling off the end of the body
- *   ptr_safe_run_all_fuel, nonexempt_body_result -- helpers
+ *   ptr_safe_run_all_fuel -- helper
  *)
 Theory loweringPtrBodyRun
 Ancestors
@@ -23,12 +23,12 @@ Ancestors
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics
   venomState compileEnv e2eDefs supportedProgram compileVyper fragExec
   venomInst contextCodegenRel ptrDiscipline ptrSafeRun vyperLoweringCorrect
-  loweringRuntimeCorrect bodyPtrDefs stmtSimDefs stmtSimProps loweringPosts bodySim moduleLowering
+  bodyPtrDefs stmtSimDefs stmtSimProps loweringPosts bodySim moduleLowering
   stmtLowering vyperTypeSystem vyperState emitHelper vyperTypeSelectedEntrySoundness
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
   unitShapeDefs o1PassContract
   bodyStmtsSimPtr extEntryReachesBodyPtr extFrameRetOkPtr bodyAbiDecodeTarget
-  fragGasPathPtr gasPathPtrExec gasSummary gasExemptCert loweringPtrBodySource
+  fragGasPathPtr gasPathPtrExec gasSummary gasExemptCert externalCallSelected
   externalBodySourceOk externalBodyFrame
 
 val _ = Parse.hide "body";
@@ -106,34 +106,6 @@ Proof
   Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> gvs[] >>
   irule (cj 2 ptr_safe_fuel_mono_up) >> qexists_tac `fuel` >>
   gvs[block_run_def]
-QED
-
-Theorem nonexempt_body_result:
-  !tops am tx ret mut args fbody env orc es0 res es'.
-    source_deployment_rel tops am tx /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
-    LENGTH tx.args = LENGTH args /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with <| outcomes := orc; requests := [] |>) =
-      (INL (), es0) /\
-    eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
-      fbody es0 = (res, es') /\
-    ~source_exempt tops (call_external orc [] am tx) ==>
-    res <> INR (Error (RuntimeError "convert empty bytes to signed"))
-Proof
-  rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-  drule_all call_external_selected_body >> strip_tac >>
-  `es0.scopes = [env]` by
-    (drule send_call_value_with_scopes >> simp[initial_state_def]) >>
-  `es0 with scopes := [env] = es0` by
-    (qpat_assum `es0.scopes = [env]` (SUBST1_TAC o SYM) >> simp[]) >>
-  gvs[vyperTypeSelectedEntrySoundnessTheory.call_external_body_def,
-      vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-      vyperStateTheory.return_def, vyperStateTheory.set_scopes_def,
-      source_exempt_def, unspecified_behaviour_exempt_def]
 QED
 
 (* The source exemption at gas observations gobs rules out an exempt

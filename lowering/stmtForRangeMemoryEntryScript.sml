@@ -1,7 +1,7 @@
 (* Allocation-based entry to a memory-safe range body. *)
 Theory stmtForRangeMemoryEntry
 Ancestors
-  stmtForRangeMemoryParts stmtSimForLoop stmtSimDeclStore
+  valueEncodingDefs stmtForRangeMemoryParts stmtSimForLoop stmtSimDeclStore
   loweringSlice localPtrsProps valueEncodingProps stmtSimProps stmtSimForParts
   venomState venomExecSemantics finite_map vyperState valueEncoding
   stmtSimDefs compileEnv loweringStateRelDefs vyperValue exprLoweringProps allocaHistory

@@ -86,7 +86,7 @@ Proof
   gvs[vyperPlaceStatePreservationTheory.subscripts_type_append] >>
   Cases_on `evaluate_subscripts htv saved l`
   >- (drule_all evaluate_subscripts_append >> simp[]) >>
-  drule_all evaluate_subscripts_append_err >> simp[]
+  drule_all exprSimPopNestedLocalPathTheory.evaluate_subscripts_append_err >> simp[]
 QED
 
 Theorem read_popped_snoc:
@@ -129,7 +129,7 @@ Proof
       disch_then (qspec_then `[sb]` assume_tac) >> simp[read_memory_path_def]) >>
   gvs[read_memory_path_def, AllCaseEqs()] >>
   drule_all read_popped_snoc >> strip_tac >>
-  drule_all evaluate_subscripts_append_err >>
+  drule_all exprSimPopNestedLocalPathTheory.evaluate_subscripts_append_err >>
   disch_then (qspec_then `[sb]` assume_tac) >> simp[read_memory_path_def]
 QED
 

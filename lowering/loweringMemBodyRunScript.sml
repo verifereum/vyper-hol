@@ -19,8 +19,8 @@ Ancestors
   venomExecSemantics venomState compileEnv e2eDefs supportedProgram
   compileVyper unitTransformDefs fragExec loweringHalt venomInst venomWf
   contextCodegenRel memSafeRun allocaFrontierBound o1PassContract ptrDiscipline
-  vyperLoweringCorrect loweringRuntimeCorrect fragExecMem fragGasMode fragGasPathMem bodyMemoryDefs
-  entryHaltMem loweringPtrCorrect bodySim bodySimMain moduleLowering
+  vyperLoweringCorrect externalCallSelected fragExecMem fragGasMode fragGasPathMem bodyMemoryDefs
+  entryHaltMem bodySim bodySimMain moduleLowering
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
   bodyAbiDecodeTarget loweringMemEntryReach loweringMemFrameRet gasSummary
   bodyMemory loweringMemBodySourceGas
@@ -61,35 +61,6 @@ Proof
     simp[Abbr `inst`, step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def] >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
   drule_all run_from_step_exit >> simp[]
-QED
-
-(* The source exemption rules out the body judgment's exceptional error. *)
-Theorem external_body_not_empty_bytes_error:
-  !tops am tx ret mut args fbody env orc es0 res es'.
-    source_deployment_rel tops am tx /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
-    LENGTH tx.args = LENGTH args /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with <| outcomes := orc; requests := [] |>) =
-      (INL (), es0) /\
-    eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
-      fbody es0 = (res, es') /\
-    ~source_exempt tops (call_external orc [] am tx) ==>
-    res <> INR (Error (RuntimeError "convert empty bytes to signed"))
-Proof
-  rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-  drule_all call_external_selected_body >> strip_tac >>
-  `es0.scopes = [env]` by
-    (drule send_call_value_with_scopes >> simp[initial_state_def]) >>
-  `es0 with scopes := [env] = es0` by
-    (qpat_assum `es0.scopes = [env]` (SUBST1_TAC o SYM) >> simp[]) >>
-  gvs[vyperTypeSelectedEntrySoundnessTheory.call_external_body_def,
-      vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-      vyperStateTheory.return_def, vyperStateTheory.set_scopes_def, source_exempt_def,
-      unspecified_behaviour_exempt_def]
 QED
 
 (* ===== The counted body judgment, completed ===== *)
@@ -178,31 +149,6 @@ Theorem call_external_body_scopes_gas[local]:
 Proof
   simp[vyperTypeSelectedEntrySoundnessTheory.call_external_body_def,
        bind_def, ignore_bind_def, set_scopes_def, return_def]
-QED
-
-(* loweringRuntimeCorrect's call_external_selected_body at any gas
-   observations: the selected call runs the body from es0 with them. *)
-Theorem call_external_selected_body_gas:
-  !tops am tx ret mut args fbody env orc es0 gobs.
-    source_deployment_rel tops am tx /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
-    LENGTH tx.args = LENGTH args /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with <| outcomes := orc; requests := [] |>) =
-      (INL (), es0) ==>
-    call_external orc gobs am tx =
-      case vyperTypeSelectedEntrySoundness$call_external_body am
-             (initial_evaluation_context am.sources am.layouts tx NONE)
-             F mut (type_env tops) (es0 with gas_obs := gobs) env fbody ret
-      of
-        (INL v, am', rqs) => (INL v, finalize_pending_deletions am', rqs)
-      | failure => failure
-Proof
-  rpt gen_tac >>
-  ACCEPT_TAC (SPEC_ALL loweringRuntimeCorrectTheory.call_external_selected_body_gas)
 QED
 
 (* ===== The body run ===== *)

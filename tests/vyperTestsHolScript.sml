@@ -18,6 +18,7 @@ Ancestors
   vyperCreateStorageTest
   vyperCustomErrorTest
   vyperDecimalConvertTest
+  vyperEqualitySemanticsTest
   vyperDecimalMulTest
   vyperDelegateRawCallTest
   vyperECPrecompileTest
@@ -32,6 +33,7 @@ Ancestors
   vyperInStaticArrayTest
   vyperInvertTest
   vyperLoadTimingTest
+  vyperMembershipSemanticsTest
   vyperOracleEntryTest
   vyperOracleIntegrationTest
   vyperOracleStateTest

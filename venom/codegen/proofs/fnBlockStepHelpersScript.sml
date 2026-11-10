@@ -40,15 +40,6 @@ Proof
   simp[fn_frame_inv_def, context_venom_asm_rel_def]
 QED
 
-Theorem wf_marked_cleanup_fields:
-  !base ps h promised.
-    generated_plan_state_wf_marked base
-      (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) <=>
-    generated_plan_state_wf_marked base ps
-Proof
-  simp[generated_plan_state_wf_marked_def, plan_slots_bounded_def]
-QED
-
 Theorem operand_val_frame_view_inst_idx:
   !fn ra s k lo at.
     operand_val (frame_view fn ra (s with vs_inst_idx := k)) lo at =
@@ -226,16 +217,6 @@ QED
 
 (* ===== The function's static shape ===== *)
 
-Theorem codegen_ready_fn_no_marker:
-  !fn. codegen_ready_fn fn ==>
-    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
-      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks
-Proof
-  simp[codegen_ready_fn_def, EVERY_MEM] >> rpt strip_tac >>
-  `codegen_ready_inst inst` by metis_tac[] >>
-  gvs[codegen_ready_inst_def]
-QED
-
 Theorem step_fn_shape:
   !ctx unit Inv cp i fn.
     ctx = unit.cu_context /\ unit_shape_ok unit /\
@@ -248,44 +229,8 @@ Proof
   metis_tac[]
 QED
 
-(* A block other than the entry has no parameter instructions. *)
-Theorem nonentry_block_no_params:
-  !fn lbl bb.
-    canonical_param_prefix fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
-    bb <> HD fn.fn_blocks ==>
-    get_params bb.bb_instructions = [] /\
-    non_param_insts bb = bb.bb_instructions
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule venomExecPropsTheory.lookup_block_MEM >> strip_tac >>
-  `no_param_insts bb.bb_instructions` by
-    (Cases_on `fn.fn_blocks` >> gvs[canonical_param_prefix_def, EVERY_MEM]) >>
-  gvs[no_param_insts_def] >>
-  conj_tac >- (Cases_on `bb.bb_instructions` >> gvs[get_params_def]) >>
-  irule non_param_insts_all_neq >> simp[]
-QED
 
 (* ===== The block's code ===== *)
-
-Theorem generate_block_plan_nonentry:
-  !liveness dfg cfg fn bb ps ops ps'.
-    bb <> HD fn.fn_blocks /\
-    generate_block_plan liveness dfg cfg fn bb ps = SOME (ops, ps') ==>
-    ?clean_ops ps2 inst_ops.
-      (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
-       then clean_stack_plan liveness cfg fn bb ps
-       else ([], ps)) = (clean_ops, ps2) /\
-      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
-        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
-        (LENGTH bb.bb_instructions) 0 (non_param_insts bb) ps2 =
-        SOME (inst_ops, ps') /\
-      ops = SOLabel bb.bb_label :: clean_ops ++ inst_ops
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
-  simp[generate_block_plan_def] >> pairarg_tac >> simp[] >>
-  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]
-QED
 
 Theorem label_block_steps:
   !lo o2pc prog as fmp lbl ops.
@@ -540,6 +485,12 @@ Theorem block_step_prefix:
         (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
         SOME (block_ops, ps_after) /\
       ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+      ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
+      (?prefixL prefixD core.
+         ps_after.ps_stack = prefixL ++ core /\
+         ps_dfs_after.ps_stack = prefixD ++ core /\
+         (!v. MEM v (live_vars_at liveness bb.bb_label (LENGTH bb.bb_instructions)) ==>
+            ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
       block_plan_state liveness dfg cfg fn bb
         (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
         (phi_prefix_length bb.bb_instructions) ps1 /\
@@ -587,7 +538,7 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   mp_tac (Q.SPECL [`liveness`, `dfg`, `cfg`, `fn`, `bb`,
     `ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>`,
-    `block_ops`, `ps_after`] generate_block_plan_nonentry) >>
+    `block_ops`, `ps_after`] fnPlanLineageEntryProductionTheory.generate_block_plan_nonentry) >>
   impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   mp_tac (Q.SPECL [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `fn`,
     `spill_base`, `lbl_ctr`, `fn_ops`, `ps_end`, `bb.bb_label`, `ps_dfs`,
@@ -626,6 +577,12 @@ Proof
     (qpat_x_assum `asm_steps _ _ _ 1 as = _`
        (fn th => REWRITE_TAC [MATCH_MP asm_steps_add_ok th]) >>
      first_assum ACCEPT_TAC) >>
+  Q.SUBGOAL_THEN `?prefixL prefixD core.
+     ps_after.ps_stack = prefixL ++ core /\
+     ps_dfs_after.ps_stack = prefixD ++ core /\
+     (!v. MEM v (live_vars_at liveness bb.bb_label (LENGTH bb.bb_instructions)) ==>
+        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` ASSUME_TAC
+  >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> simp[]) >>
   qexistsl_tac [`h`, `promised`, `ps_after`, `clean_ops ++ phi_ops`,
                 `body_ops`, `ps1`, `1 + n`, `as'`] >>
   rpt conj_tac >> REWRITE_TAC [operand_val_frame_view_inst_idx] >>
