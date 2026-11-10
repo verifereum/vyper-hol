@@ -65,12 +65,45 @@ Proof
    step_inst_base b (u with vs_inst_idx := SUC s.vs_inst_idx) =
      OK (v with vs_inst_idx := SUC s.vs_inst_idx) /\
    step_inst_base c (v with vs_inst_idx := SUC (SUC s.vs_inst_idx)) =
-     OK (w with vs_inst_idx := SUC (SUC s.vs_inst_idx))` by suspend "steps" >>
+     OK (w with vs_inst_idx := SUC (SUC s.vs_inst_idx))` by
+    (simp[Abbr `a`, Abbr `b`, Abbr `c`, Abbr `u`, Abbr `v`, Abbr `w`] >>
+     simp[Once step_inst_base_def, mk_inst_def, exec_read1_def, eval_operand_def] >>
+     simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+          eval_operand_def, lookup_var_update_var, w2n_n2w] >>
+     simp[Once step_inst_base_def, mk_inst_def, exec_pure1_def,
+          eval_operand_def, lookup_var_update_var] >>
+     Cases_on `j<n` >> simp[bool_to_word_def, update_var_def]) >>
   `op_taint t1 (Var iv) = {} /\ t1.t_mem = tn.t_mem /\
-   t1.t_stor = tn.t_stor /\ t1.t_trans = tn.t_trans` by suspend "load_clean" >>
+   t1.t_stor = tn.t_stor /\ t1.t_trans = tn.t_trans` by
+    (simp[Abbr `t1`, Abbr `a`, Abbr `u`] >>
+     `eval_operand (Var ip) s = SOME p` by simp[eval_operand_def] >>
+     drule_all mload_ghost_clean >> simp[] >> metis_tac[]) >>
   `op_taint t1 count_op = {} /\ op_prov g1 count_op = NONE /\
-   op_prov g1 (Var iv) = NONE` by suspend "load_count" >>
-  qexistsl_tac [`g3`, `t3`] >> conj_tac >- suspend "sequence" >>
+   op_prov g1 (Var iv) = NONE` by
+    (Cases_on `count_op` >>
+     gvs[Abbr `t1`, Abbr `g1`, Abbr `a`, step_taint_def, set_var_taint_def,
+         op_taint_def, step_prov_def, set_prov_def, out_prov_def, op_prov_def,
+         mk_inst_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]) >>
+  qexistsl_tac [`g3`, `t3`] >> conj_tac >-
+    (`ptr_inst_ok D 0 0 ctx fn G tn a s` by
+       (simp[Abbr `a`] >> irule ptr_inst_ok_mload >> simp[]) >>
+     `ptr_inst_ok D 0 0 ctx fn g1 t1 b (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+       (simp[Abbr `b`] >> irule ptr_inst_ok_lt_scalar >> simp[] >>
+        simp[Abbr `v`, Abbr `u`, update_var_def]) >>
+     `ptr_inst_ok D 0 0 ctx fn g2 t2 c (v with vs_inst_idx := SUC (SUC s.vs_inst_idx))` by
+       (simp[Abbr `c`] >> irule typed_copy_loop_test_check >> simp[] >>
+        simp[Abbr `w`, Abbr `t2`, op_taint_def, FLOOKUP_UPDATE, update_var_def]) >>
+     gvs[Abbr `a`, Abbr `b`, Abbr `c`] >>
+     simp[abi_encode_array_header_insts_def, inst_seq_ptr_def] >>
+     `v.vs_allocas = u.vs_allocas /\ v.vs_fmp = u.vs_fmp /\
+      w.vs_allocas = v.vs_allocas /\ w.vs_fmp = v.vs_fmp` by
+       simp[Abbr `v`, Abbr `w`, update_var_def] >>
+     simp[typed_copy_loop_arith_ghost, Abbr `g2`, Abbr `t2`, Abbr `g3`, Abbr `t3`,
+          step_prov_def, set_prov_def, out_prov_def, mk_inst_def] >>
+     asm_rewrite_tac[GSYM mk_inst_def] >>
+     simp[out_taint_def, mk_inst_def, op_taint_def, FLOOKUP_UPDATE,
+          Abbr `u`, Abbr `v`, eval_operand_def, lookup_var_update_var] >>
+     asm_rewrite_tac[GSYM mk_inst_def]) >>
   simp[Abbr `t3`, Abbr `t2`, op_taint_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
   simp[Abbr `g3`, Abbr `g2`, Abbr `g1`, Abbr `a`,
        step_prov_def, set_prov_def, out_prov_def, mk_inst_def, FLOOKUP_DRESTRICT] >>
@@ -78,49 +111,6 @@ Proof
        mk_inst_def, FLOOKUP_UPDATE]
 QED
 
-Resume abi_encode_header_prefix_ptr[steps]:
-  simp[Abbr `a`, Abbr `b`, Abbr `c`, Abbr `u`, Abbr `v`, Abbr `w`] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_read1_def, eval_operand_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
-       eval_operand_def, lookup_var_update_var, w2n_n2w] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure1_def,
-       eval_operand_def, lookup_var_update_var] >>
-  Cases_on `j<n` >> simp[bool_to_word_def, update_var_def]
-QED
-
-Resume abi_encode_header_prefix_ptr[load_clean]:
-  simp[Abbr `t1`, Abbr `a`, Abbr `u`] >>
-  `eval_operand (Var ip) s = SOME p` by simp[eval_operand_def] >>
-  drule_all mload_ghost_clean >> simp[] >> metis_tac[]
-QED
-
-Resume abi_encode_header_prefix_ptr[load_count]:
-  Cases_on `count_op` >>
-  gvs[Abbr `t1`, Abbr `g1`, Abbr `a`, step_taint_def, set_var_taint_def,
-      op_taint_def, step_prov_def, set_prov_def, out_prov_def, op_prov_def,
-      mk_inst_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
-QED
-
-Resume abi_encode_header_prefix_ptr[sequence]:
-  `ptr_inst_ok D 0 0 ctx fn G tn a s` by
-    (simp[Abbr `a`] >> irule ptr_inst_ok_mload >> simp[]) >>
-  `ptr_inst_ok D 0 0 ctx fn g1 t1 b (u with vs_inst_idx := SUC s.vs_inst_idx)` by
-    (simp[Abbr `b`] >> irule ptr_inst_ok_lt_scalar >> simp[] >>
-     simp[Abbr `v`, Abbr `u`, update_var_def]) >>
-  `ptr_inst_ok D 0 0 ctx fn g2 t2 c (v with vs_inst_idx := SUC (SUC s.vs_inst_idx))` by
-    (simp[Abbr `c`] >> irule typed_copy_loop_test_check >> simp[] >>
-     simp[Abbr `w`, Abbr `t2`, op_taint_def, FLOOKUP_UPDATE, update_var_def]) >>
-  gvs[Abbr `a`, Abbr `b`, Abbr `c`] >>
-  simp[abi_encode_array_header_insts_def, inst_seq_ptr_def] >>
-  `v.vs_allocas = u.vs_allocas /\ v.vs_fmp = u.vs_fmp /\
-   w.vs_allocas = v.vs_allocas /\ w.vs_fmp = v.vs_fmp` by
-    simp[Abbr `v`, Abbr `w`, update_var_def] >>
-  simp[typed_copy_loop_arith_ghost, Abbr `g2`, Abbr `t2`, Abbr `g3`, Abbr `t3`,
-       step_prov_def, set_prov_def, out_prov_def, mk_inst_def] >>
-  asm_rewrite_tac[GSYM mk_inst_def]
-QED
-
-Finalise abi_encode_header_prefix_ptr
 
 Theorem abi_encode_array_header_prefix_counted_ptr:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\

@@ -254,10 +254,7 @@ Proof
   `32 <= dcap` by decide_tac >>
   drule_all abi_array_static_index_init_counted_ptr >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  suspend "run"
-QED
 
-Resume compile_abi_encode_dyn_static_loop_counted_ptr[run]:
   `addr < dimword(:256)` by decide_tac >>
   `w2n (n2w addr : bytes32) = addr` by simp[w2n_n2w] >>
   `not_fresh_at owner_st ip /\
@@ -298,10 +295,7 @@ Resume compile_abi_encode_dyn_static_loop_counted_ptr[run]:
       op_taint tn2 (Var v) = op_taint tnf (Var v))` by
     (irule (abi_array_static_loop_counted_ptr |> Q.SPECL [`LENGTH (avs : value list)`, `0`]) >>
      simp[jump_to_def] >> qexists_tac `REPLICATE (LENGTH avs) ARB` >> simp[]) >>
-  suspend "exit"
-QED
 
-Resume compile_abi_encode_dyn_static_loop_counted_ptr[exit]:
   qpat_x_assum `abi_array_static_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp_tac (srw_ss()) [abi_array_static_loop_inv_def] >> strip_tac >>
   drule abi_array_robust_header >> strip_tac >>
@@ -378,4 +372,4 @@ Resume compile_abi_encode_dyn_static_loop_counted_ptr[exit]:
   metis_tac[lookup_var_def]
 QED
 
-Finalise compile_abi_encode_dyn_static_loop_counted_ptr
+

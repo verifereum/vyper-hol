@@ -94,18 +94,15 @@ Proof
   drule_all abi_bytes_lastptr_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf''`, `tnf''`, `sf''`] >>
-  conj_tac >- suspend "path" >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]) >>
   simp[w2n_n2w, LESS_MOD] >> metis_tac[]
 QED
 
-Resume abi_array_coordinates_counted_ptr[path]:
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]
-QED
 
-Finalise abi_array_coordinates_counted_ptr
 
 Theorem abi_array_static_selected_bounds[local]:
   ((ei = AbiPrimWord /\ asz = 32) \/ ei = AbiCopy asz) /\
@@ -216,18 +213,15 @@ Proof
   drule_all abi_array_coordinates_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf''`, `tnf''`, `sf''`] >>
-  conj_tac >- suspend "path" >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]) >>
   simp[] >> gvs[ptr_covers_def] >> metis_tac[]
 QED
 
-Resume abi_array_addresses_counted_ptr[path]:
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]
-QED
 
-Finalise abi_array_addresses_counted_ptr
 
 Theorem abi_array_addresses_vars[local]:
   abi_encode_array_addresses ip src dst asz msz sa = (coords,sb) ==>
@@ -325,10 +319,7 @@ Proof
   conj_tac >- (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
     qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[]) >>
   gnvs[w2n_n2w, LESS_MOD, eval_operand_def] >>
-  suspend "endpoint"
-QED
 
-Resume compile_abi_array_static_body_counted_ptr[endpoint]:
   `w2n b+(asz*(j+1)+32) = asz+(w2n b+(asz*j+32))` by
     simp[LEFT_ADD_DISTRIB] >>
   asm_rewrite_tac[] >>
@@ -338,11 +329,7 @@ Resume compile_abi_array_static_body_counted_ptr[endpoint]:
     simp[ptr_covers_def] >> metis_tac[]) >>
   conj_tac >- (qpat_x_assum `ptr_covers G tn dst s dcap` mp_tac >>
     simp[ptr_covers_def] >> metis_tac[]) >>
-  conj_tac >- suspend "index" >>
-  suspend "parent"
-QED
-
-Resume compile_abi_array_static_body_counted_ptr[index]:
+  conj_tac >- (
   `mem_bytes_at (w2n p) 32 sf'.vs_memory = mem_bytes_at (w2n p) 32 s.vs_memory` by
     (irule listTheory.LIST_EQ >> simp[EL_mem_bytes_at] >> rpt strip_tac >>
      `mem_bytes_at (w2n p+x) 1 sf'.vs_memory = mem_bytes_at (w2n p+x) 1 s.vs_memory` by
@@ -350,10 +337,7 @@ Resume compile_abi_array_static_body_counted_ptr[index]:
         simp[mem_agree_outside_def] >> strip_tac >> first_x_assum irule >>
         simp[] >> decide_tac) >>
      pop_assum (mp_tac o Q.AP_TERM `EL 0`) >> simp[EL_mem_bytes_at]) >>
-  fs[mem_bytes_at_def, mload_def]
-QED
-
-Resume compile_abi_array_static_body_counted_ptr[parent]:
+  fs[mem_bytes_at_def, mload_def]) >>
   `mem_bytes_at (w2n a) scap sf'.vs_memory = mem_bytes_at (w2n a) scap s.vs_memory` by
     (irule listTheory.LIST_EQ >> simp[EL_mem_bytes_at] >> rpt strip_tac >>
      `mem_bytes_at (w2n a+x) 1 sf'.vs_memory = mem_bytes_at (w2n a+x) 1 s.vs_memory` by
@@ -370,7 +354,7 @@ Resume compile_abi_array_static_body_counted_ptr[parent]:
   drule_all abi_encoder_input_mem_agree >> simp[]
 QED
 
-Finalise compile_abi_array_static_body_counted_ptr
+
 
 (* Semantic endpoint corollary: the old prefix is framed, including when
    the selected element has zero size. Instantiate prefix with the already

@@ -212,29 +212,20 @@ Proof
    op_taint th (Var cv) = {} /\ op_prov Gh (Var cv) = NONE` by
     (simp[op_prov_def] >> gvs[op_prov_def] >> metis_tac[]) >>
   asm_simp_tac bool_ss [] >>
-  conj_tac >- suspend "exterior_memory" >>
-  conj_tac >- suspend "exterior_taint" >>
+  conj_tac >-
+    (simp[mem_agree_outside_def] >> rpt strip_tac >>
+     `~(w2n p <= i /\ i < w2n p+32) /\
+      ~(w2n b+32+j*asz <= i /\ i < w2n b+32+(j+1)*asz)` by decide_tac >>
+     fs[mem_agree_outside_def] >> metis_tac[]) >>
+  conj_tac >-
+    (simp[] >> rpt strip_tac >>
+     `~(w2n p <= i /\ i < w2n p+32) /\
+      ~(w2n b+32+j*asz <= i /\ i < w2n b+32+(j+1)*asz)` by decide_tac >>
+     metis_tac[IN_DIFF, GSPECIFICATION]) >>
   asm_simp_tac bool_ss [abi_array_static_loop_inv_def, ADD_ASSOC] >>
   metis_tac[]
 QED
 
-Resume abi_array_static_loop_step[exterior_memory]:
-  simp[mem_agree_outside_def] >> rpt strip_tac >>
-  `~(w2n p <= i /\ i < w2n p+32) /\
-   ~(w2n b+32+j*asz <= i /\ i < w2n b+32+(j+1)*asz)` by
-    decide_tac >>
-  fs[mem_agree_outside_def] >> metis_tac[]
-QED
-
-Resume abi_array_static_loop_step[exterior_taint]:
-  simp[] >> rpt strip_tac >>
-  `~(w2n p <= i /\ i < w2n p+32) /\
-   ~(w2n b+32+j*asz <= i /\ i < w2n b+32+(j+1)*asz)` by
-    decide_tac >>
-  metis_tac[IN_DIFF, GSPECIFICATION]
-QED
-
-Finalise abi_array_static_loop_step
 
 Theorem abi_array_static_loop_counted_ptr:
   !r j G tn s.
@@ -277,11 +268,7 @@ Theorem abi_array_static_loop_counted_ptr:
 Proof
   Induct >> rpt gen_tac >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac)
-  >- suspend "exit"
-  >> suspend "more"
-QED
-
-Resume abi_array_static_loop_counted_ptr[exit]:
+  >- (
   `j = LENGTH avs` by decide_tac >>
   drule_all abi_array_static_loop_phase_code >> strip_tac >>
   qpat_assum `abi_array_static_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -296,10 +283,7 @@ Resume abi_array_static_loop_counted_ptr[exit]:
   qexistsl_tac [`Gf`,`tnf`,`sf`] >>
   qpat_x_assum `LENGTH avs = 0+j` kall_tac >>
   asm_simp_tac bool_ss [mem_agree_outside_def] >>
-  gvs[abi_array_static_loop_inv_def]
-QED
-
-Resume abi_array_static_loop_counted_ptr[more]:
+  gvs[abi_array_static_loop_inv_def]) >>
   drule_all abi_array_static_loop_phase_code >> strip_tac >>
   qpat_assum `abi_array_static_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[abi_array_static_loop_inv_def] >>
@@ -338,4 +322,4 @@ Resume abi_array_static_loop_counted_ptr[more]:
   metis_tac[]
 QED
 
-Finalise abi_array_static_loop_counted_ptr
+
