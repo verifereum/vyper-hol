@@ -36,7 +36,7 @@ Theorem intcall_deferred_pure_child:
   supported_pure_expr fp.jc_tops child /\
   eval_expr fp.jc_cx child es = (INL child_r,ee) /\
   vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx child es c d s ee child_r child_vv u /\
-  intcall_joint_res fp ce env es c s /\
+  intcall_expr_res fp ce env es c s /\
   intcall_expr_cont fp ce env es c s ee d u /\
   gas_marked_path F fp.jc_ctx fp.jc_func s n (OK u) ==>
   ^deferred fp ce e vv r d ee u
@@ -53,7 +53,7 @@ Theorem intcall_deferred_list_pure_child:
   supported_pure_expr fp.jc_tops child /\
   eval_expr fp.jc_cx child es = (INL child_r,ee) /\
   vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx child es c d s ee child_r child_vv u /\
-  intcall_joint_res fp ce env es c s /\
+  intcall_expr_res fp ce env es c s /\
   intcall_expr_cont fp ce env es c s ee d u /\
   gas_marked_path F fp.jc_ctx fp.jc_func s n (OK u) ==>
   ^deferred_list fp ce ds vs rs d ee u
