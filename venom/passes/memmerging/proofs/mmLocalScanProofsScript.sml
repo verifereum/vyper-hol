@@ -7650,6 +7650,69 @@ Proof
   POP_ASSUM_LIST (K all_tac) >> metis_tac[]
 QED
 
+Theorem mm_local_canonical_bulk_runtime_read[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ mm_local_history is H (SUC n) /\ n < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  (EL n is).inst_opcode = MCOPY /\
+  (EL n is).inst_operands = [Lit dst; Lit src; Lit len] /\
+  mm_local_pending (mm_local_write_capture is H (SUC n))
+    (mm_local_pending_indices is gs n) (H n) t ==>
+  read_memory (w2n src) (w2n len) (H n) = read_memory (w2n src) (w2n len) t
+Proof
+  strip_tac >>
+  qabbrev_tac `ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+    empty_scan_state (TAKE n is)` >>
+  qabbrev_tac `c = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+    cg_inst_ids := [(EL n is).inst_id] |>` >>
+  qabbrev_tac `hs = flush_hazards Mem2Mem
+    (invalidate_loads ss (mk_interval (w2n dst) (w2n len))) c` >>
+  `n <= LENGTH is /\ n <= SUC n` by decide_tac >>
+  `!j. MEM j (mm_local_pending_indices is gs n) ==> j < n /\ ?h g r d bs.
+    mm_local_write_capture is H (SUC n) j = SOME (d,bs) /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+    MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+    MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+    MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g) /\ n <= r /\ r < LENGTH is /\
+    h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length` by
+    (rpt strip_tac >>
+     `ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+       empty_scan_state (TAKE n is)` by simp[Abbr `ss`] >>
+     drule_all mm_local_canonical_pending_owner >> strip_tac >>
+     qpat_x_assum `MEM j (mm_local_pending_indices _ _ _)`
+       (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+     qexistsl [`h`, `g`, `r`, `d`, `bs`] >> metis_tac[]) >>
+  `ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+     empty_scan_state (TAKE n is)` by simp[Abbr `ss`] >>
+  `c = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+     cg_inst_ids := [(EL n is).inst_id] |>` by simp[Abbr `c`] >>
+  `hs = flush_hazards Mem2Mem
+     (invalidate_loads ss (mk_interval (w2n dst) (w2n len))) c` by simp[Abbr `hs`] >>
+  drule_all mm_local_indexed_bulk_pending_birth >> simp[]
+QED
+
+Theorem mm_local_canonical_bulk_runtime_capture[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ mm_local_history is H (SUC n) /\ n < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  (EL n is).inst_opcode = MCOPY /\
+  (EL n is).inst_operands = [Lit dst; Lit src; Lit len] /\
+  mm_local_pending (mm_local_write_capture is H (SUC n))
+    (mm_local_pending_indices is gs n) (H n) t ==>
+  mm_local_write_capture is H (SUC n) n =
+    SOME (w2n dst,read_memory (w2n src) (w2n len) t)
+Proof
+  strip_tac >>
+  drule_all mm_local_canonical_bulk_runtime_read >> strip_tac >>
+  `n < SUC n` by decide_tac >>
+  drule_all mm_local_write_capture_copy >> simp[]
+QED
+
 Theorem mm_local_canonical_bulk_defer[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
