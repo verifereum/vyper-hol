@@ -519,7 +519,7 @@ Resume extcall_call_step[call_success]:
           qpat_assum `consumed.scopes = ee.scopes` (fn b =>
             simp[NoAsms, locals_kept_def, popped_kept_def, a, b]))) >>
      pop_assum (fn lk => qpat_assum `wb_frame cenv es ee sa s0 u'`
-       (fn wb => mp_tac wb >> simp[NoAsms, wb_frame_def, lk]))) >>
+       (fn wb => mp_tac wb >> rewrite_tac[wb_frame_def, lk]))) >>
   `extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
       has_default default_op default_ty default_opt oc.co_returnData
       (SND (adopt_call_outcome rq oc consumed)) (jump_to sr.cs_current_bb u')` by

@@ -11,7 +11,8 @@ Proof
   strip_tac >>
   `locals_kept ce es0 es2 s0 s <=> locals_kept ce es0 es1 s0 s` by
     simp[locals_kept_def, popped_kept_def] >>
-  qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >> simp[wb_frame_def]
+  qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >>
+  pop_assum (fn lk => rewrite_tac[wb_frame_def, lk])
 QED
 
 (* Restore the caller's entire expression frame, not just its locals.
