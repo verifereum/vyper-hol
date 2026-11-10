@@ -67,7 +67,7 @@ QED
 Theorem abi_decode_selected_prefix_run:
   EVERY supported_scalar_type pre /\
   LIST_REL (abi_decoder_coherent ce env ce.ce_struct_fields) pre tvs /\
-  vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) (pre ++ ty::post)) bs bs /\
+  vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) pre) bs bs /\
   abi_to_vyper_list env pre
     (abi_decode_members (MAP (vyper_to_abi_type env) pre) bs bs) = SOME vs /\
   compile_abi_decode_complex_elems (Var dst) pos MLOAD (Var src) hi
@@ -111,9 +111,6 @@ Proof
      rpt strip_tac >> drule_all LIST_REL_MEM_IMP >> strip_tac >>
      drule abi_decoder_coherent_header >> simp[abi_decoder_header_def]) >>
   drule abi_decode_selected_compile >> simp_tac bool_ss [ADD_CLAUSES] >> strip_tac >>
-  `vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) pre) bs bs` by
-    (irule abi_decode_valid_members_prefix >>
-     qexists_tac `MAP (vyper_to_abi_type env) (ty::post)` >> fs[MAP_APPEND]) >>
   mp_tac (Q.SPECL [`pre`, `tvs`, `vs`, `[]`, `0`, `st`, `sm`, `s`]
     abi_decode_physical_flat_sequence) >>
   simp_tac bool_ss [APPEND, MAP, SUM, DROP_0, ADD_CLAUSES] >>

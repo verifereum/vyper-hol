@@ -158,3 +158,27 @@ Proof
   first_x_assum (irule o REWRITE_RULE [abi_decoder_member_infos_def]) >>
   simp[] >> decide_tac
 QED
+
+Theorem abi_decode_flat_layout_suffix:
+  !xs ys off q z h cap.
+    abi_decode_flat_layout (xs ++ ys) off q z h cap ==>
+    abi_decode_flat_layout ys (off + SUM (MAP (FST o SND) xs))
+      (q + SUM (MAP (SND o SND) xs)) z h cap
+Proof
+  Induct >> simp[] >>
+  qx_gen_tac `entry` >> PairCases_on `entry` >>
+  simp_tac bool_ss [APPEND, MAP, SUM, combinTheory.o_THM, FST, SND,
+    Once abi_decode_flat_layout_def] >>
+  rpt strip_tac >> first_x_assum drule >> simp_tac bool_ss [ADD_ASSOC]
+QED
+
+Theorem abi_decode_flat_layout_selected:
+  abi_decode_flat_layout (xs ++ (ei,asz,msz)::ys) off q z h cap ==>
+  abi_decode_member_layout ei (off + SUM (MAP (FST o SND) xs))
+    (q + SUM (MAP (SND o SND) xs)) msz z h cap /\
+  abi_decode_flat_layout ys (off + SUM (MAP (FST o SND) xs) + asz)
+    (q + SUM (MAP (SND o SND) xs) + msz) z h cap
+Proof
+  strip_tac >> drule abi_decode_flat_layout_suffix >>
+  simp[Once abi_decode_flat_layout_def]
+QED
