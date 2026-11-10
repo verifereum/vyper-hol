@@ -3489,6 +3489,101 @@ Proof
   simp[venom_asm_terminal_rel_def]
 QED
 
+Theorem sym_assign_success_state:
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ step_inst fuel ctx inst s = OK s' ==>
+  ?w. s' = s with vs_vars := s.vs_vars |+ (out,w)
+Proof
+  strip_tac >>
+  `step_inst fuel ctx inst s = step_inst_base inst s` by
+    gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  gvs[] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  once_rewrite_tac[step_inst_base_def] >>
+  simp[] >> Cases_on `eval_operand rhs s` >>
+  simp[venomStateTheory.update_var_def] >> metis_tac[]
+QED
+
+Theorem sym_assign_block_abort_continuation:
+  s.vs_inst_idx = k /\ get_instruction bb k = SOME inst /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ exec_block fuel ctx bb s = Abort a s_end ==>
+  ?s'. step_inst fuel ctx inst s = OK s' /\
+    exec_block fuel ctx bb (s' with vs_inst_idx := SUC k) = Abort a s_end
+Proof
+  strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  simp[Once exec_block_def, is_terminator_def] >>
+  Cases_on `eval_operand rhs s` >>
+  `step_inst fuel ctx inst s = step_inst_base inst s` by
+    gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  pop_assum SUBST1_TAC >> once_rewrite_tac[step_inst_base_def] >>
+  qpat_assum `inst.inst_opcode = ASSIGN` SUBST1_TAC >>
+  qpat_assum `inst.inst_operands = [rhs]` SUBST1_TAC >>
+  qpat_assum `inst.inst_outputs = [out]` SUBST1_TAC >> simp[]
+QED
+
+Theorem sym_rf_future_non_phi:
+  revert_forward_pair bb i j /\ i < k ==>
+  !r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
+    ti.inst_opcode <> PHI
+Proof
+  rpt strip_tac >>
+  `ti.inst_opcode =
+    (if r = i then RETURNDATACOPY else if r = j then REVERT else ASSIGN)` by
+    (irule fnFrameStepsRevertForwardTheory.rf_forward_instruction_opcode >>
+     conj_tac >- decide_tac >> simp[] >> qexists `bb` >> simp[]) >>
+  Cases_on `r = i` >> fs[] >> Cases_on `r = j` >> fs[]
+QED
+
+Theorem sym_rf_assign_continuation_execution:
+  !cp. lo = SND (compute_label_offsets prog) /\
+  codegen_ready_fn fn /\ fn_shape_ok fn /\ MEM inst (fn_insts fn) /\
+  rf_spills_separated ps /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ ~is_label_operand rhs /\
+  (is_var_operand rhs ==> MEM rhs ps.ps_stack \/ rhs IN FDOM ps.ps_spilled) /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  operand_val (frame_view fn ra s) lo rhs =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] rhs) /\
+  step_inst fuel ctx inst s = OK s' /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  plan_stack_rel lo (frame_view fn ra s) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\ venom_asm_terminal_rel s st /\
+  asm_block_at prog st.as_pc (execute_plan fmp ops) /\
+  asm_static_wf prog /\ asm_sym_rel prog env st ss /\
+  ss.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top /\
+  (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) ==>
+  ?st' ss' stk' top'.
+    asm_steps lo (build_offset_to_pc prog) prog
+      (LENGTH (execute_plan fmp ops)) st = AsmOK st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan fmp ops) /\
+    st'.as_stack = stk' ++ rest /\
+    plan_stack_rel lo (frame_view fn ra (s' with vs_inst_idx := k)) ps'.ps_stack stk' /\
+    st'.as_memory = st.as_memory /\ s'.vs_memory = s.vs_memory /\
+    venom_asm_terminal_rel (s' with vs_inst_idx := k) st' /\
+    sym_steps prog env (LENGTH (execute_plan fmp ops)) ss = SymOK ss' /\
+    asm_sym_rel prog env st' ss' /\
+    ss'.sym_stack = top' ++ srest /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE ps'.ps_stack) top' /\
+    (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b)
+Proof
+  gen_tac >> strip_tac >>
+  drule_all sym_rf_assign_plan_execution >> strip_tac >>
+  drule_all fnFrameStepsRevertForwardTheory.rf_assign_plan_execution >>
+  disch_then (qspec_then `build_offset_to_pc prog` strip_assume_tac) >>
+  `st'.as_memory = st.as_memory /\ venom_asm_terminal_rel s st'` by
+    gvs[venom_asm_terminal_rel_def] >>
+  drule_all sym_assign_success_state >> strip_tac >>
+  qexistsl [`st'`,`ss'`,`stk'`,`top'`] >>
+  gvs[sym_plan_stack_rel_inst_idx, sym_terminal_rel_inst_idx,
+      venom_asm_terminal_rel_def]
+QED
+
 Theorem sym_rf_strict_suffix_abort:
   !k s st ps stk ops ps_end ss top.
   lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
@@ -3592,7 +3687,7 @@ Resume sym_rf_strict_suffix_abort[assign]:
      simp[Once exec_block_def, is_terminator_def] >>
      Cases_on `eval_operand rhs s` >>
      `step_inst fuel ctx inst s = step_inst_base inst s` by
-       simp[step_inst_non_invoke] >>
+       gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
      pop_assum SUBST1_TAC >> once_rewrite_tac[step_inst_base_def] >>
      qpat_assum `inst.inst_opcode = ASSIGN` SUBST1_TAC >>
      qpat_assum `inst.inst_operands = [rhs]` SUBST1_TAC >>
