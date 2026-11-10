@@ -1381,24 +1381,19 @@ Proof
   `!off. MEM (SORestore off) restore_ops ==> off < dimword(:256)` by
     metis_tac[control_plan_address_bounds] >>
   drule_all sym_reorder_restore_frame_sim >> strip_tac >>
+  qpat_x_assum `residual_budget_wf_marked spill_base pending ps` kall_tac >>
   Cases_on `dist > 16` >> gvs[]
-  >- suspend "reduce" >>
+  >- (`asm_block_at p (cs.as_pc + LENGTH (execute_plan initial_fmp restore_ops))
+        (execute_plan initial_fmp reduce_ops) /\
+       cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp restore_ops)` by
+        metis_tac[arithmeticTheory.ADD_COMM] >> suspend "reduce") >>
   qexistsl [`cs'`, `ss'`] >> fs[execute_plan_def]
 QED
 
 Resume sym_reorder_prepare_frame_sim[reduce]:
-  `residual_budget_wf_marked spill_base pending ps2` by
-    metis_tac[deepResidualBudgetTheory.reduce_depth_plan_residual_budget_wf_marked] >>
-  `LENGTH pending <= LENGTH ps2.ps_stack` by
-    metis_tac[deepResidualBudgetTheory.reduce_depth_plan_target_len_floor] >>
-  `!off. MEM (SOSpill off) reduce_ops ==> off < dimword(:256)` by
-    metis_tac[control_plan_address_bounds] >>
-  `asm_block_at p cs'.as_pc (execute_plan initial_fmp reduce_ops)` by
-    metis_tac[arithmeticTheory.ADD_COMM] >>
-  drule_all sym_reduce_depth_plan_frame_sim >> strip_tac >>
-  simp[] >> qexistsl [`cs''`, `ss''`] >>
-  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
-  simp[stackOpSimTheory.asm_steps_add, sym_steps_add] >> decide_tac
+  drule_all sym_reorder_prepare_reduce_frame_sim >>
+  pure_rewrite_tac[stackOpSimTheory.execute_plan_append, listTheory.LENGTH_APPEND] >>
+  gvs[]
 QED
 
 Finalise sym_reorder_prepare_frame_sim
@@ -1604,6 +1599,61 @@ Proof
   MATCH_ACCEPT_TAC sym_reorder_one_decompose
 QED
 
+Theorem sym_reorder_after_reduce_frame_sim:
+  residual_budget_wf_marked spill_base pending ps /\
+  LENGTH pending <= LENGTH ps.ps_stack /\ idx < LENGTH pending /\
+  (case stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
+      (LENGTH pending) ps.ps_stack of
+     NONE => (case FLOOKUP ps.ps_spilled op of NONE => ([],ps)
+                | SOME off => do_restore op ps)
+   | SOME d => ([],ps)) = (restore_ops,ps1) /\
+  stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
+    (LENGTH pending) ps1.ps_stack = SOME dist /\
+  (if dist > 16 then reduce_depth_plan (LENGTH ps1.ps_stack) pending op
+     (LENGTH pending - (idx + 1)) (LENGTH pending) ps1
+   else ([],ps1)) = (reduce_ops,ps2) /\
+  control_reorder_place dfg pending op (LENGTH pending - (idx + 1)) ps2 = (suffix,ps') /\
+  ps2.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T)
+      ((restore_ops ++ reduce_ops) ++ suffix) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= spill_base /\
+  r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+  ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc
+    (execute_plan initial_fmp ((restore_ops ++ reduce_ops) ++ suffix)) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp ((restore_ops ++ reduce_ops) ++ suffix))) cs = AsmOK cs' /\
+    sym_steps p env
+      (LENGTH (execute_plan initial_fmp ((restore_ops ++ reduce_ops) ++ suffix))) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 ps' cs' ss' /\
+    cs'.as_pc = cs.as_pc +
+      LENGTH (execute_plan initial_fmp ((restore_ops ++ reduce_ops) ++ suffix))
+Proof
+  strip_tac >>
+  `ps2.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
+  gvs[listTheory.EVERY_APPEND, stackOpSimTheory.execute_plan_append,
+    stackOpSimTheory.asm_block_at_append] >>
+  `asm_block_at p cs.as_pc (execute_plan initial_fmp (restore_ops ++ reduce_ops))` by
+    simp[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  `ps2.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
+  drule_all (REWRITE_RULE[listTheory.EVERY_APPEND] sym_reorder_prepare_frame_sim) >> strip_tac >>
+  `asm_block_at p cs'.as_pc (execute_plan initial_fmp suffix)` by
+    (fs[stackOpSimTheory.execute_plan_append] >>
+     metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
+  `LENGTH pending - (idx + 1) < LENGTH ps2.ps_stack` by decide_tac >>
+  `spill_alloc_layout_wf ps2.ps_alloc ps2.ps_spilled` by
+    fs[deepResidualBudgetTheory.residual_budget_wf_marked_def] >>
+  drule_all (SRULE [] (Q.INST [`dfg` |-> `dfg_build_function fn`] control_reorder_place_frame_sim)) >>
+  strip_tac >> qexistsl [`cs''`, `ss''`] >>
+  drule_all sym_asm_plan_runs_compose >> simp[stackOpSimTheory.execute_plan_append]
+QED
+
 Theorem sym_reorder_one_frame_sim_marked:
   !base.
   residual_budget_wf_marked base pending ps /\ pending_inventory_wf pending ps /\
@@ -1642,7 +1692,7 @@ Proof
      metis_tac[allocMonoTheory.reorder_one_spill_base]) >>
   simp[] >>
   drule control_reorder_one_decompose >> strip_tac
-  >- suspend "restore_only" >>
+  >- (gvs[] >> suspend "restore_only") >>
   suspend "after_reduce"
 QED
 
@@ -1653,28 +1703,9 @@ Resume sym_reorder_one_frame_sim_marked[restore_only]:
 QED
 
 Resume sym_reorder_one_frame_sim_marked[after_reduce]:
-
-  `ps2.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
-  gvs[listTheory.EVERY_APPEND, stackOpSimTheory.execute_plan_append,
-    stackOpSimTheory.asm_block_at_append] >>
-  `asm_block_at p cs.as_pc (execute_plan initial_fmp (restore_ops ++ reduce_ops))` by
-    simp[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
-  `ps2.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
-  drule_all (REWRITE_RULE[listTheory.EVERY_APPEND] sym_reorder_prepare_frame_sim) >> strip_tac >>
-  `asm_block_at p cs'.as_pc (execute_plan initial_fmp suffix)` by
-    (fs[stackOpSimTheory.execute_plan_append] >> metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
-  `LENGTH pending - (idx + 1) < LENGTH ps2.ps_stack` by decide_tac >>
-  `spill_alloc_layout_wf ps2.ps_alloc ps2.ps_spilled` by
-    fs[deepResidualBudgetTheory.residual_budget_wf_marked_def] >>
-  suspend "place"
-QED
-
-Resume sym_reorder_one_frame_sim_marked[place]:
-  drule_all (SRULE [] (Q.INST [`dfg` |-> `dfg_build_function fn`] control_reorder_place_frame_sim)) >>
-  strip_tac >>
-  qexistsl [`cs''`, `ss''`] >>
-  drule_all sym_asm_plan_runs_compose >>
-  simp[stackOpSimTheory.execute_plan_append]
+  gvs[] >>
+  drule_all (SRULE [listTheory.APPEND_ASSOC, listTheory.EVERY_APPEND]
+    (Q.INST [`dfg` |-> `dfg_build_function fn`] sym_reorder_after_reduce_frame_sim)) >> simp[]
 QED
 
 Finalise sym_reorder_one_frame_sim_marked
