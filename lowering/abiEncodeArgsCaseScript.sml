@@ -103,17 +103,3 @@ Proof
   gvs[vyperTypeCallGraphTheory.int_calls_expr_def] >>
   metis_tac[int_calls_exprs_mem]
 QED
-
-Theorem compile_abi_encode_args_case_sim:
-  exprs_case nocalls ctx func ce cx args /\
-  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) ty args) es /\
-  (nocalls ==> int_calls_expr (TypeBuiltin ann (AbiEncode ensure mid) ty args) = []) /\
-  compile_abi_encode_args compile_expr ce args sa = (ops,sb) /\
-  eval_exprs cx args es = (rr,es') /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa ==>
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s)
-    (\s. ?vs. rr = INL vs /\ abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s)
-    (wb_args_exit rr)
-Proof
-  cheat
-QED
