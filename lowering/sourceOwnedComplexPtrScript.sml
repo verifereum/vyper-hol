@@ -45,7 +45,7 @@ Proof
   gvs[DROP_LENGTH_APPEND, mk_inst_def]
 QED
 
-Theorem owned_member_navigation_ptr:
+Theorem owned_member_navigation_record_ptr:
   abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     dyn ao vo sa = (ops,mid) /\
   lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\ not_fresh_at sa root /\
@@ -62,6 +62,7 @@ Theorem owned_member_navigation_ptr:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?r H u q.
+    r = s with <| vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx |> /\
     abi_decode_sim ctx fn s r /\
     r.vs_current_bb = mid.cs_current_bb /\ r.vs_inst_idx = LENGTH mid.cs_current_insts /\
     abi_decoder_address_frame sa.cs_next_var s r /\ fresh_vars_wrt limit r /\
@@ -105,6 +106,10 @@ Proof
      gvs[eval_operand_def, calldata_operand_live_not_fresh, venom_state_component_equality] >>
      metis_tac[]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH mid.cs_current_insts`, `H`, `u`, `q`] >>
+  conj_tac
+  >- (qpat_assum `t = s with vs_vars := _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      simp[venom_state_component_equality]) >>
   gvs[abi_decoder_address_frame_def, fresh_vars_wrt_def, lookup_var_def,
     ptr_covers_def, eval_operand_def] >>
   `s with vs_inst_idx := LENGTH sa.cs_current_insts = s` by
@@ -112,6 +117,43 @@ Proof
   qpat_x_assum `!D. (!fuel. ptr_safe_run D _ _ _ _ _ _ _ _) ==> _` mp_tac >>
   qpat_x_assum `s with vs_inst_idx := _ = s` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[ADD1, ADD_ASSOC, ADD_COMM]
+QED
+
+Theorem owned_member_navigation_ptr:
+  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    dyn ao vo sa = (ops,mid) /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\ not_fresh_at sa root /\
+  abi_decoder_operand_live sa.cs_next_var src /\
+  abi_decoder_operand_live sa.cs_next_var (Var root) /\
+  (!q. src = Var q ==> not_fresh_at sa q) /\
+  eval_operand src s = SOME (n2w srcpos) /\
+  (dyn ==> abi_decode_load CALLDATALOAD (n2w (srcpos + ao) : bytes32) s = n2w off /\
+    srcpos + off < dimword (:256)) /\
+  ptr_covers G tn root s cap /\ op_taint tn src = {} /\ op_prov G src = NONE /\
+  vo + C <= cap /\ d + vo < dimword (:256) /\
+  mid.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s /\
+  fn_has_code sa mid fn /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?r H u q.
+    abi_decode_sim ctx fn s r /\
+    r.vs_current_bb = mid.cs_current_bb /\ r.vs_inst_idx = LENGTH mid.cs_current_insts /\
+    abi_decoder_address_frame sa.cs_next_var s r /\ fresh_vars_wrt limit r /\
+    (!op. abi_decoder_operand_live sa.cs_next_var op ==> eval_operand op r = eval_operand op s) /\
+    abi_decoder_operand_live mid.cs_next_var (FST ops) /\
+    abi_decoder_operand_live mid.cs_next_var (SND ops) /\
+    SND ops = Var q /\ eval_operand (SND ops) r = SOME (n2w (d + vo)) /\
+    eval_operand (FST ops) r = SOME (n2w (srcpos + if dyn then off else ao)) /\
+    ptr_covers H u q r C /\ op_taint u (FST ops) = {} /\ op_prov H (FST ops) = NONE /\
+    (!x. not_fresh_at sa x ==> lookup_var x r = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u r) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all owned_member_navigation_record_ptr >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`r`, `H`, `u`, `q`] >> asm_rewrite_tac[]
 QED
 
 (* Interval composition is independent of decoder syntax.  P records the
@@ -434,8 +476,10 @@ Resume source_owned_complex_suffix_ptr[step]:
        metis_tac[abi_decode_source_def]) >> simp[]) >>
   qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `dec_info_needs_offset _ = _` (fn th => pure_rewrite_tac[th]) >> strip_tac >>
-  drule_all owned_member_navigation_ptr >>
+  drule_all owned_member_navigation_record_ptr >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
+  qpat_x_assum `r = s with <| vs_vars := _; vs_inst_idx := _ |>`
+    (mk_asm "navigation_record") >>
   (qpat_assum `abi_decoder_address_frame _ s r`
     (strip_assume_tac o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
   `eval_operand (FST ops) r = SOME (n2w (cdsbase + abi_tuple_child_offset ats avs k))` by
@@ -774,7 +818,29 @@ Resume source_owned_complex_suffix_ptr[step]:
       qpat_assum `!op. abi_decoder_operand_live sa.cs_next_var op ==> _`
         (qspec_then `op` mp_tac) >>
       asm_rewrite_tac[] >> metis_tac[]) >>
-  (cheat))))))))))))))))
+  (conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at en x` by
+        (irule freshWritesTheory.not_fresh_at_mono >>
+         qexists_tac `sa` >> asm_rewrite_tac[]) >>
+      qpat_assum `!x. not_fresh_at en x ==> _` (qspec_then `x` mp_tac) >>
+      qpat_assum `!x. not_fresh_at sa x ==> FLOOKUP J x = _ /\ _`
+        (qspec_then `x` mp_tac) >>
+      qpat_assum `not_fresh_at en x` mp_tac >>
+      qpat_assum `not_fresh_at sa x` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  conj_tac
+  >- (qpat_assum `u'.t_mem SUBSET v.t_mem` mp_tac >>
+      qpat_assum `v.t_mem SUBSET tn.t_mem` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[pred_setTheory.SUBSET_TRANS]) >>
+  conj_tac
+  >- (gen_tac >> disch_tac >>
+      qpat_assum `!D. _ ==> !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s` irule >>
+      qpat_assum `!D. _ ==> !fuel. ptr_safe_run D lo fuel ctx fn PG H u r` irule >>
+      qpat_assum `!D. _ ==> !fuel. ptr_safe_run D lo fuel ctx fn PG J v t` irule >>
+      first_assum ACCEPT_TAC) >>
+  asm_x "navigation_record" mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> simp[venom_state_component_equality]))))))))))))))))
 QED
 
 Finalise source_owned_complex_suffix_ptr
