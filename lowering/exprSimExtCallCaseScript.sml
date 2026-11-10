@@ -65,7 +65,7 @@ Theorem vv_post_pure_memory_frame:
           MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
           sa.cs_next_id <= inst.inst_id /\
           FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
-          compileEnv$regions_disjoint off len b sz) ==>
+          loweringStateRelDefs$regions_disjoint off len b sz) ==>
        mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>

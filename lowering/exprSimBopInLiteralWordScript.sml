@@ -1151,7 +1151,7 @@ Proof
   >- (strip_tac >> match_mp_tac exprSimPropsTheory.pure_frame_mem_tail >>
       qexists_tac `t0` >> rpt conj_tac
       >- (qpat_x_assum `_ ==> pure_frame _ _ _ _ _ t0` irule >>
-          first_assum ACCEPT_TAC) >>
+          simp[]) >>
       first_assum ACCEPT_TAC) >>
   irule wb_frame_readonly_tail >> goal_assum (drule_at Any) >>
   qexists_tac `sm` >> simp[]

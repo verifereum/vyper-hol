@@ -1125,7 +1125,8 @@ Resume concat_args_sim[post]:
   qpat_x_assum `_ ==> (!n lb lsz. local_region _ _ t2 _ _ _ ==>
                   mem_bytes_at _ _ tu.vs_memory = _) /\ _` mp_tac >>
   impl_tac >- fs[] >> strip_tac >>
-  `wb_frame cenv es es1 sa s0 t` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es (es_end with gas_obs := []) sa s0 t` by
+    (drule expr_post_frame >> disch_then ACCEPT_TAC) >>
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
          lookup_var x t2 = SOME w` by
     (rpt strip_tac >>
