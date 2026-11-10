@@ -927,6 +927,66 @@ Proof
   first_x_assum drule_all >> simp[]
 QED
 
+Theorem ircf_invoke_step_transport:
+  ctx_wf C /\ vs.vs_allocas = FEMPTY /\ lo <= vs.vs_alloca_next /\
+  ~ctx_has_dalloca C /\
+  fn_sim_below D vs C (ircf_transform_ctx fn_meta rma C)
+    (ircf_R D fn_meta rma C) (ircf_R_ret_reachable vs D fn_meta rma C) (SUC k) /\
+  frame_reachable vs C stk PG G tn caller inst s /\
+  active_inst caller inst s /\ inst.inst_opcode = INVOKE /\
+  lookup_block s.vs_current_bb caller.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  taint_ok caller tn inst s /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+  ircf_cross tn (ircf_gam_cur fn_meta rma C caller s UNION
+                ircf_gam_stk fn_meta rma C stk) s t /\
+  terminates (step_inst k C inst s) ==>
+  ?m. case step_inst k C inst s of
+    OK s' => ?t'. step_inst m (ircf_transform_ctx fn_meta rma C) inst t = OK t' /\
+      !inst'. active_inst caller inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
+        ?tn'. frame_reachable vs C stk PG
+          (DRESTRICT G (COMPL (set inst.inst_outputs))) tn'
+          caller inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) /\
+        taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C)
+          (s' with vs_inst_idx := SUC s.vs_inst_idx) stk) tn'
+          (s' with vs_inst_idx := SUC s.vs_inst_idx)
+          (t' with vs_inst_idx := SUC s.vs_inst_idx) /\
+        ircf_cross tn'
+          (ircf_gam_cur fn_meta rma C caller
+             (s' with vs_inst_idx := SUC s.vs_inst_idx) UNION
+           ircf_gam_stk fn_meta rma C stk)
+          (s' with vs_inst_idx := SUC s.vs_inst_idx)
+          (t' with vs_inst_idx := SUC s.vs_inst_idx)
+  | _ => dead_result_rel D (step_inst k C inst s)
+           (step_inst m (ircf_transform_ctx fn_meta rma C) inst t)
+Proof
+  strip_tac >>
+  drule_at (Pat `terminates _`) ld_terminating_invoke_inversion >>
+  disch_then (qspecl_then [`s`, `k`, `inst`, `C`] mp_tac) >>
+  simp[] >> strip_tac >>
+  drule_all ircf_invoke_recursive_result >> simp[] >> strip_tac >>
+  rename1 `lookup_function nm C.ctx_functions = SOME callee` >>
+  drule ctxLookupAgreeHelpersTheory.lookup_function_selected_name >> strip_tac >>
+  `lookup_function callee.fn_name
+     (ircf_transform_ctx fn_meta rma C).ctx_functions =
+     SOME (ircf_transform_function fn_meta C.ctx_functions rma callee)` by
+    (irule ircf_transform_ctx_lookup >> metis_tac[venomInstTheory.lookup_function_MEM]) >>
+  Cases_on `run_blocks m (ircf_transform_ctx fn_meta rma C)
+    (ircf_transform_function fn_meta C.ctx_functions rma callee) ct` >>
+  gvs[fn_run_rel_def] >>
+  qexists_tac `m` >>
+  simp[Once step_inst_def] >>
+  rename1 `ircf_R_ret_reachable _ _ _ _ _ _ _ _ _ _ ret se te` >>
+  Cases_on `bind_outputs inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state t te))`
+  >- (gvs[bind_outputs_def, AllCaseEqs()]) >>
+  simp[] >> rpt strip_tac >>
+  drule_at (Pat `ircf_R_ret_reachable _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    ircf_invoke_return_restore >> simp[] >>
+  disch_then (qspecl_then [`t`, `tn`] mp_tac) >> simp[] >>
+  disch_then drule_all >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem ircf_block_sim:
   !D lo vs C fn_meta rma k stk PG G tn fn fn' s t bb.
     o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
