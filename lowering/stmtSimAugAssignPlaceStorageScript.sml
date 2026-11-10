@@ -460,13 +460,15 @@ Proof
               assert_def, return_def, raise_def, AllCaseEqs()] >>
           imp_res_tac vyperStatePreservationTheory.next_gas_reading_state >>
           Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def])
+      >> Cases_on `blt = Bop In \/ blt = Bop NotIn`
       >> gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
              assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
+             lift_option_type_def, vyperMiscTheory.option_CASE_rator,
              AllCaseEqs()] >>
       gvs[vyperMiscTheory.sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
       imp_res_tac aug_place_precompile_storage >>
       gvs[return_def, raise_def] >>
-      first_x_assum (drule_then assume_tac) >> simp[])
+      metis_tac[])
   >~ [`eval_expr cx (TypeBuiltin ty blt target es) s = (r,s')`]
   >- (gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
           assert_def, return_def, raise_def, lift_sum_def, AllCaseEqs()] >>
@@ -1509,11 +1511,11 @@ Theorem aug_place_storage_binop_admissible[local]:
   expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur v ee)
 Proof
   rewrite_tac[aug_place_storage_suffix_assoc] >> strip_tac >>
-  `bop_result cx ty bop [ty;expr_type e] cur v ee =
-     case evaluate_binop
+  `expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur v ee) <=>
+   expr_res_ok (case evaluate_binop
        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-       tv bop cur v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+       tv bop cur v of INL w => INL w | INR err => INR (Error err))` by
+    (irule bop_result_augassign_res_ok >> simp[]) >>
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
     tv bop cur v` >- simp[expr_res_ok_def] >>
@@ -1584,7 +1586,8 @@ Proof
    case evaluate_binop
      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
      tv bop cur v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   qpat_x_assum `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[exprBopSimDefsTheory.binop_frag_def,
               exprBopSimDefsTheory.binop_frag_words_def] >>

@@ -2,7 +2,7 @@
  * The body simulation of S1: in and not in on an array literal of words
  * (#636 operands with internal calls).  Its lowering compiles each element
  * (exprSimBopInLiteralWord), so this takes the elements' judgments.  The
- * induction hypotheses give the array's only; bodySimBopHeld's
+ * induction hypotheses give the array's only; bodySim's
  * body_make_array_children_ok extracts the elements' from it.
  *
  * TOP-LEVEL:
