@@ -9320,6 +9320,96 @@ Proof
       simp[EL_GENLIST] >> AP_TERM_TAC >> decide_tac
 QED
 
+Theorem mm_local_hazards_new_geometry[local]:
+  MEM g (flush_hazards Mem2Mem ss c).ss_copies ==>
+  mm_local_copy_geometry g c
+Proof
+  strip_tac >>
+  drule mm_local_flush_hazards_survivor >> strip_tac >>
+  drule mm_local_hazards_source_exclusion >> strip_tac >>
+  drule mm_local_hazards_destination_alternative >>
+  simp[mm_local_copy_geometry_def, copy_can_merge_def,
+    copy_overwrites_def, copy_dst_interval_def,
+    mmIntervalTheory.interval_overlaps_def,
+    arithmeticTheory.MAX_COMM, arithmeticTheory.MIN_COMM] >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Definition mm_local_copies_geometry_def:
+  (mm_local_copies_geometry [] = T) /\
+  (mm_local_copies_geometry (g::gs) <=>
+    EVERY (mm_local_copy_geometry g) gs /\ mm_local_copies_geometry gs)
+End
+
+Theorem mm_local_copies_geometry_filter[local]:
+  !gs. mm_local_copies_geometry gs ==> mm_local_copies_geometry (FILTER P gs)
+Proof
+  Induct >> simp[mm_local_copies_geometry_def] >> rpt strip_tac >>
+  IF_CASES_TAC >> gvs[mm_local_copies_geometry_def, EVERY_MEM, MEM_FILTER]
+QED
+
+Theorem mm_local_copies_geometry_split[local]:
+  !pre a mid b post.
+  mm_local_copies_geometry (pre ++ (a::(mid ++ (b::post)))) ==>
+  mm_local_copy_geometry a b
+Proof
+  Induct >> simp[mm_local_copies_geometry_def, EVERY_APPEND] >> rpt strip_tac >>
+  gvs[EVERY_MEM] >> metis_tac[MEM_APPEND, MEM]
+QED
+
+Theorem mm_local_geometry_merge_every[local]:
+  !cs. SORTED (\a b. a.cg_dst <= b.cg_dst) cs /\
+  EVERY (mm_local_copy_geometry c) cs ==>
+  EVERY (mm_local_copy_geometry c) (merge_adjacent cs)
+Proof
+  recInduct merge_adjacent_ind >> simp[merge_adjacent_def] >>
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  Cases_on `copy_can_merge c1 c2`
+  >- (gvs[] >> first_x_assum irule >> conj_tac
+      >- (gvs[sortingTheory.SORTED_EQ, relationTheory.transitive_def,
+              copy_merge_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+      simp[] >> once_rewrite_tac[mm_local_copy_geometry_sym] >>
+      irule mm_local_copy_geometry_merge >>
+      gvs[sortingTheory.SORTED_DEF] >> metis_tac[mm_local_copy_geometry_sym]) >>
+  gvs[] >> first_x_assum irule >> gvs[sortingTheory.SORTED_DEF]
+QED
+
+Theorem mm_local_copies_geometry_merge[local]:
+  !cs. SORTED (\a b. a.cg_dst <= b.cg_dst) cs /\ mm_local_copies_geometry cs ==>
+  mm_local_copies_geometry (merge_adjacent cs)
+Proof
+  recInduct merge_adjacent_ind >> simp[merge_adjacent_def, mm_local_copies_geometry_def] >>
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  Cases_on `copy_can_merge c1 c2`
+  >- (gvs[] >> first_x_assum irule >> conj_tac
+      >- (simp[mm_local_copies_geometry_def] >>
+          gvs[EVERY_MEM, sortingTheory.SORTED_DEF] >> rpt strip_tac >>
+          irule mm_local_copy_geometry_merge >> metis_tac[]) >>
+      gvs[sortingTheory.SORTED_EQ, relationTheory.transitive_def,
+          copy_merge_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  gvs[mm_local_copies_geometry_def] >>
+  irule mm_local_geometry_merge_every >> simp[]
+QED
+
+Theorem mm_local_copies_geometry_insert[local]:
+  !gs c. mm_local_copies_geometry gs /\ EVERY (mm_local_copy_geometry c) gs ==>
+  mm_local_copies_geometry (insert_sorted gs c)
+Proof
+  Induct >> simp[insert_sorted_def, mm_local_copies_geometry_def] >>
+  rpt gen_tac >> strip_tac >> IF_CASES_TAC >>
+  gvs[mm_local_copies_geometry_def] >>
+  simp[mm_local_insert_every, mm_local_copy_geometry_sym]
+QED
+
+Theorem mm_local_copies_geometry_add[local]:
+  mm_local_copies_geometry gs /\ EVERY (mm_local_copy_geometry c) gs /\
+  SORTED (\a b. a.cg_dst <= b.cg_dst) gs ==>
+  mm_local_copies_geometry (add_copy gs c)
+Proof
+  strip_tac >> simp[add_copy_def] >> irule mm_local_copies_geometry_merge >>
+  metis_tac[mm_local_insert_sorted_order, mm_local_copies_geometry_insert]
+QED
+
 Theorem mm_local_collection_discharge[local]:
   mm_local_pending cap js s t /\
   (!pre j mid k post d bs a cs.
