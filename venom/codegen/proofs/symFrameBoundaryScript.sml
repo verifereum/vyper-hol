@@ -2726,5 +2726,28 @@ Theorem sym_entry_prefix_frame_sim:
       sym_steps prog env n ss = SymOK ss' /\
       sym_frame_inv prog env ctx cp fn ret srest ss.sym_mem_labels ps1 as' ss'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `vp = entry_bind_pairs
+    (entry_param_pairs vs (get_params (HD fn.fn_blocks).bb_instructions)) vs
+    with vs_inst_idx := LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` >>
+  `vp = entry_bind_pairs
+    (entry_param_pairs vs (get_params (HD fn.fn_blocks).bb_instructions)) vs
+    with vs_inst_idx := LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by simp[Abbr `vp`] >>
+  drule_all sym_entry_prefix_asm >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule entry_prefix_inv >>
+  disch_then drule >> simp[] >>
+  disch_then drule >> disch_then drule >> simp[] >>
+  disch_then (qspec_then `LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` mp_tac) >>
+  disch_then (assume_tac o SIMP_RULE bool_ss [listTheory.TAKE_LENGTH_ID, arithmeticTheory.LESS_EQ_REFL]) >>
+  `exec_block fuel ctx (HD fn.fn_blocks) (vs with vs_inst_idx := 0) =
+   exec_block fuel ctx (HD fn.fn_blocks) vp` by
+    (simp[Abbr `vp`] >> metis_tac[fnFrameBoundaryEntryParamsTheory.bounded_entry_param_skip]) >>
+  `!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+    normalize_operand dfg [] at = at` by
+    metis_tac[entry_plan_normalize] >>
+  qexistsl [`LENGTH (execute_plan cp'.cp_initial_fmp
+    (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))`, `a'`, `vp`, `ss'`] >>
+  gvs[Abbr `vp`, fnFrameBoundaryEntryParamsTheory.entry_bind_pairs_normal] >>
+  rpt strip_tac >> simp[]
 QED
