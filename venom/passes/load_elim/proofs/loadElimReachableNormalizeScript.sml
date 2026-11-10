@@ -1,6 +1,6 @@
 Theory loadElimReachableNormalize
 Ancestors
-  loadElimReachableSSA loadElimNormalizeAvailability simplifyCfgPhiRepair
+  loadElimReachableSSA loadElimNormalizeAvailability simplifyCfgPhiRepair venomWfProps
   venomExecProofs dfgAnalysisProps dfgDefs venomWf venomInst
   simplifyCfgLabelProps
 
