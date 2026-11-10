@@ -373,7 +373,7 @@ Proof
 QED
 
 (* Equal-layout initialization, preserving certificates at their proper origins. *)
-Theorem intcall_equal_store_endpoint:
+Theorem intcall_equal_store_effect_endpoint:
   compile_store_memory ce src dst ty ty b = ((),c) /\
   (!x. src = Var x ==> not_fresh_at b x) /\
   (!x. dst = Var x ==> not_fresh_at b x) /\
@@ -415,7 +415,8 @@ Theorem intcall_equal_store_endpoint:
     intcall_expr_cont fp ce env es a t es c u /\
     ^deferred_list fp ce ds vs rs c es u /\
     ^completed_prefix fp.jc_cx start c (tys ++ [ty]) (flags ++ [F])
-      (values ++ [v]) (ops ++ [dst]) u
+      (values ++ [v]) (ops ++ [dst]) u /\
+    typed_copy_effect fp.jc_ctx fp.jc_func b c s u (w2n dw) (type_memory_size tv)
 Proof
   BETA_TAC >> strip_tac >>
   `intcall_expr_res fp ce env es b s /\ ~s.vs_halted /\
@@ -464,6 +465,54 @@ Proof
   qexists_tac `u` >> rule_assum_tac BETA_RULE >> gvs[]
 QED
 
+Theorem intcall_equal_store_endpoint:
+  compile_store_memory ce src dst ty ty b = ((),c) /\
+  (!x. src = Var x ==> not_fresh_at b x) /\
+  (!x. dst = Var x ==> not_fresh_at b x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  evaluate_type (get_tenv fp.jc_cx) ty = SOME tv /\ value_has_type tv v /\
+  type_memory_bytes ce ty = type_memory_size tv /\
+  (if is_word_type ty then sw = typed_val_to_w256 tv v
+   else val_in_memory tv v (w2n sw) s.vs_memory) /\
+  type_memory_size tv + 64 < dimword (:256) /\
+  fn_has_code b c fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es a t /\
+  intcall_expr_cont fp ce env es a t es b s /\
+  a.cs_next_id <= b.cs_next_id /\ b.cs_next_id <= c.cs_next_id /\
+  a.cs_next_var <= b.cs_next_var /\ b.cs_next_var <= c.cs_next_var /\
+  s.vs_memory = t.vs_memory /\
+  (!op. (!x. op = Var x ==> not_fresh_at a x) ==>
+    eval_operand op s = eval_operand op t) /\
+  (!name off sz. local_region ce es.scopes s name off sz <=>
+    local_region ce es.scopes t name off sz) /\
+  (!off sz. fp.jc_prot off sz ==>
+    regions_disjoint off sz (w2n dw) (type_memory_size tv)) /\
+  (!name off sz. local_region ce es.scopes t name off sz ==>
+    regions_disjoint off sz (w2n dw) (type_memory_size tv)) /\
+  (!aid off sz. aid < a.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (off,sz) ==>
+    regions_disjoint off sz (w2n dw) (type_memory_size tv)) /\
+  ^immutable_disjoint ce fp.jc_cx es (w2n dw) (type_memory_size tv) /\
+  ^deferred_list fp ce ds vs rs b es s /\
+  (!i. i < LENGTH ds ==>
+    ^guarded_disjoint fp.jc_cx (post_value_type ce (EL i ds))
+      (EL i rs) (EL i vs) es s (w2n dw) (type_memory_size tv)) /\
+  ^completed_prefix fp.jc_cx start a tys flags values ops t /\
+  (!i tv. i < LENGTH tys /\ ~EL i flags /\
+    evaluate_type (get_tenv fp.jc_cx) (EL i tys) = SOME tv ==>
+    val_wf tv (EL i values)) /\
+  FLOOKUP s.vs_allocas aid = SOME (w2n dw,MAX 32 (type_memory_size tv)) /\
+  start.cs_next_id <= aid /\ aid < b.cs_next_id /\
+  w2n dw + MAX 32 (type_memory_size tv) < dimword (:256) ==>
+  ?u. gas_marked_path F fp.jc_ctx fp.jc_func s 0 (OK u) /\
+    intcall_expr_cont fp ce env es a t es c u /\
+    ^deferred_list fp ce ds vs rs c es u /\
+    ^completed_prefix fp.jc_cx start c (tys ++ [ty]) (flags ++ [F])
+      (values ++ [v]) (ops ++ [dst]) u
+Proof
+  strip_tac >> drule_all intcall_equal_store_effect_endpoint >>
+  strip_tac >> qexists_tac `u` >> simp[]
+QED
+
 (* Pending footprints are separated at their pre-allocation origin. *)
 Theorem intcall_deferred_allocation_guarded:
   ^deferred fp ce e vv r a es t /\
@@ -489,7 +538,7 @@ Proof
   simp[contextTheory.vv_operand_def] >> gvs[]
 QED
 
-Theorem intcall_allocated_store_endpoint:
+Theorem intcall_allocated_store_origin_endpoint:
   compile_alloc_buffer (MAX 32 (type_memory_size tv)) a = (buf,b) /\
   compile_store_memory ce src buf.buf_operand ty ty b = ((),c) /\
   evaluate_type (get_tenv fp.jc_cx) ty = SOME tv /\ value_has_type tv v /\
@@ -511,7 +560,12 @@ Theorem intcall_allocated_store_endpoint:
     intcall_expr_cont fp ce env es a t es c u /\
     ^deferred_list fp ce ds vs rs c es u /\
     ^completed_prefix fp.jc_cx start c (tys ++ [ty]) (flags ++ [F])
-      (values ++ [v]) (ops ++ [buf.buf_operand]) u
+      (values ++ [v]) (ops ++ [buf.buf_operand]) u /\
+    ?w. eval_operand buf.buf_operand u = SOME w /\
+      FLOOKUP u.vs_allocas a.cs_next_id = SOME (w2n w,MAX 32 (type_memory_size tv)) /\
+      (?inst. MEM inst (fn_insts fp.jc_func) /\ inst.inst_opcode = ALLOCA /\
+              inst.inst_id = a.cs_next_id) /\
+      a.cs_next_id < c.cs_next_id
 Proof
   BETA_TAC >> strip_tac >>
   `MAX 32 (type_memory_size tv) < dimword (:256)` by
@@ -521,7 +575,7 @@ Proof
   suspend "allocation_frame"
 QED
 
-Resume intcall_allocated_store_endpoint[allocation_frame]:
+Resume intcall_allocated_store_origin_endpoint[allocation_frame]:
   `a.cs_next_id <= b.cs_next_id /\ a.cs_next_var <= b.cs_next_var` by
     (mp_tac (Q.SPECL [`MAX 32 (type_memory_size tv)`,`a`]
        exprLoweringPropsTheory.ci_mono_compile_alloc_buffer) >>
@@ -560,7 +614,7 @@ Resume intcall_allocated_store_endpoint[allocation_frame]:
   suspend "allocation_separation"
 QED
 
-Resume intcall_allocated_store_endpoint[allocation_separation]:
+Resume intcall_allocated_store_origin_endpoint[allocation_separation]:
   `!off sz. fp.jc_prot off sz ==>
     regions_disjoint off sz (w2n w) (type_memory_size tv)` by
     (rpt strip_tac >>
@@ -598,7 +652,7 @@ Resume intcall_allocated_store_endpoint[allocation_separation]:
   suspend "store_finish"
 QED
 
-Resume intcall_allocated_store_endpoint[store_finish]:
+Resume intcall_allocated_store_origin_endpoint[store_finish]:
   `!aid off sz. aid < a.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (off,sz) ==>
     regions_disjoint off sz (w2n w) (type_memory_size tv)` by
     (rpt strip_tac >> irule intcall_regions_disjoint_subwindow >>
@@ -622,15 +676,52 @@ Resume intcall_allocated_store_endpoint[store_finish]:
     intcall_expr_cont fp ce env es a t es c u /\
     ^deferred_list fp ce ds vs rs c es u /\
     ^completed_prefix fp.jc_cx start c (tys ++ [ty]) (flags ++ [F])
-      (values ++ [v]) (ops ++ [buf.buf_operand]) u` by
-    (BETA_TAC >> irule (BETA_RULE intcall_equal_store_endpoint) >> simp[] >>
-     qexistsl_tac [`a.cs_next_id`, `b`, `src`, `sw`] >>
-     gvs[arithmeticTheory.ADD_COMM] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      (values ++ [v]) (ops ++ [buf.buf_operand]) u /\
+    typed_copy_effect fp.jc_ctx fp.jc_func b c s u (w2n w) (type_memory_size tv)` by
+    (BETA_TAC >> irule (BETA_RULE intcall_equal_store_effect_endpoint) >> simp[] >>
+     metis_tac[]) >>
+  `u.vs_allocas = s.vs_allocas` by
+    metis_tac[placeMemoryCopyEffectTheory.typed_copy_effect_allocas] >>
+  `eval_operand buf.buf_operand u = SOME w` by
+    (drule bodyIntCallCopySharpDynamicTheory.typed_copy_effect_operand_preserved >>
+     disch_then (qspec_then `buf.buf_operand` mp_tac) >> simp[]) >>
+  `?inst. MEM inst (fn_insts fp.jc_func) /\ inst.inst_opcode = ALLOCA /\
+          inst.inst_id = a.cs_next_id` by
+    (drule_all actualAllocExecTheory.actual_alloc_buffer_site >> strip_tac >>
+     goal_assum (drule_at Any) >> simp[venomInstTheory.mk_inst_def]) >>
   rule_assum_tac BETA_RULE >> qexists_tac `u` >> reverse conj_tac
-  >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  >- (simp[] >> rpt conj_tac >> metis_tac[]) >>
   irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
     fragGasModeTheory.gas_marked_path_then)) >>
   qexists_tac `s` >> simp[]
 QED
 
-Finalise intcall_allocated_store_endpoint
+Finalise intcall_allocated_store_origin_endpoint
+
+Theorem intcall_allocated_store_endpoint:
+  compile_alloc_buffer (MAX 32 (type_memory_size tv)) a = (buf,b) /\
+  compile_store_memory ce src buf.buf_operand ty ty b = ((),c) /\
+  evaluate_type (get_tenv fp.jc_cx) ty = SOME tv /\ value_has_type tv v /\
+  type_memory_bytes ce ty = type_memory_size tv /\
+  type_memory_size tv + 64 < dimword (:256) /\
+  (!x. src = Var x ==> not_fresh_at a x) /\
+  expr_val_rel fp.jc_cx ty v src t /\
+  fn_has_code a b fp.jc_func /\ fn_has_code b c fp.jc_func /\
+  fn_inst_ids_distinct fp.jc_func /\ intcall_frame_ok fp /\
+  intcall_expr_res fp ce env es a t /\ start.cs_next_id <= a.cs_next_id /\
+  ^deferred_list fp ce ds vs rs a es t /\
+  ^completed_prefix fp.jc_cx start a tys flags values ops t /\
+  (!i tv. i < LENGTH tys /\ ~EL i flags /\
+    evaluate_type (get_tenv fp.jc_cx) (EL i tys) = SOME tv ==>
+    val_wf tv (EL i values)) /\
+  ~t.vs_halted /\ t.vs_current_bb = a.cs_current_bb /\
+  t.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?u. gas_marked_path F fp.jc_ctx fp.jc_func t 0 (OK u) /\
+    intcall_expr_cont fp ce env es a t es c u /\
+    ^deferred_list fp ce ds vs rs c es u /\
+    ^completed_prefix fp.jc_cx start c (tys ++ [ty]) (flags ++ [F])
+      (values ++ [v]) (ops ++ [buf.buf_operand]) u
+Proof
+  strip_tac >> drule_all intcall_allocated_store_origin_endpoint >>
+  strip_tac >> qexists_tac `u` >> simp[]
+QED
