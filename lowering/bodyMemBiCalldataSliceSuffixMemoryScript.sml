@@ -97,7 +97,7 @@ Proof
    eval_operand len s' = SOME wn /\ eval_operand pop s' = SOME wp` by
     (fs[venom_state_component_equality] >>
      Cases_on `dst` >> Cases_on `src` >> Cases_on `len` >> Cases_on `pop` >>
-     gvs[eval_operand_def, lookup_var_def]) >>
+     FIRST [gvs[eval_operand_def, lookup_var_def]]) >>
   irule (cj 1 calldata_slice_copy_store_emitted_mem) >> metis_tac[]
 QED
 

@@ -430,9 +430,12 @@ Resume target_subscript_nopop_scopes_mutual[IntCall]:
   gvs[bind_def, ignore_bind_def, type_check_def,
       assert_def, lift_option_type_def, option_CASE_rator,
       return_def, raise_def] >>
-  gvs[bind_def, ignore_bind_def, type_check_def,
+  (* Split the IntCall case chain on its own, then simplify each branch. *)
+  qpat_x_assum `(case _ of _ => _ | _ => _) = _`
+    (strip_assume_tac o SRULE [AllCaseEqs()]) >>
+  FIRST [gvs[bind_def, ignore_bind_def, type_check_def,
       assert_def, lift_option_type_def, option_CASE_rator,
-      return_def, raise_def, AllCaseEqs()] >>
+      return_def, raise_def, AllCaseEqs()]] >>
   imp_res_tac finally_set_scopes >>
   imp_res_tac (target_subscript_call_cleanup_scopes |>
     Q.INST [`is_view` |-> `mut = View \/ mut = Pure`] |>
