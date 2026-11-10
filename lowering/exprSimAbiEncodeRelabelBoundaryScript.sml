@@ -26,7 +26,7 @@ Proof
   Cases_on `op` >>
   simp[expr_post_def, start_relabel_def, abi_encode_stmt_rel_current_bb,
     expr_val_rel_def, expr_val_at_def, local_region_def, lookup_var_def,
-    eval_operand_def, locals_kept_def] >>
+    eval_operand_def, locals_kept_def, expr_val_own_def, popped_kept_def] >>
   strip_tac >> asm_rewrite_tac []
 QED
 
