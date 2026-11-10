@@ -31,6 +31,12 @@ conversion produces assumptions or an unexpected theorem shape, or the
 artifact is open. `check_contract_conv` can be used directly when a caller
 needs to inspect a computed rejection theorem ending in `NONE`.
 
+Literal integer ranges require a strictly increasing pair of endpoints and
+an iteration bound equal to their difference, as recorded by the frontend.
+The bound may exceed the loop variable type's maximum: `range(-128, 127)`
+with an `int8` loop variable has bound 255. Constructor headers reject
+`@nonreentrant` in both runtime and deployment checking modes.
+
 `in_deploy` is an ML `bool`; the library constructs the corresponding HOL
 Boolean internally. Use `true` when checking the deployment context and
 `false` for the runtime context.

@@ -1672,6 +1672,39 @@ fun check_selector_decls in_deploy layouts decls =
     ``check_contract ^(if in_deploy then T else F) ^layouts ^zero_address
         [(NONE, ^decls)]``
 
+(* Literal ranges carry the exact positive span, even when that span does not
+   fit the loop variable's signed type. *)
+fun literal_range_check in_deploy ty start finish count =
+  check_selector_decls in_deploy empty_layouts
+    ``[FunctionDecl ^(if in_deploy then ``Deploy`` else ``External``)
+         Nonpayable F F ^(if in_deploy then ``"__init__"`` else ``"f"``)
+         [] [] NoneT
+         [For "i" ^ty
+            (Range (Literal ^ty (IntL ^(intSyntax.term_of_int (Arbint.fromInt start))))
+                   (Literal ^ty (IntL ^(intSyntax.term_of_int (Arbint.fromInt finish)))))
+            ^(numSyntax.term_of_int count) [Pass]]]``
+
+val () = List.app (fn deploy =>
+  (List.app (fn (start, finish, count) =>
+     assert_none (literal_range_check deploy u256 start finish count))
+     [(2,1,0), (2,2,0), (2,3,0), (2,3,2)];
+   assert_some (literal_range_check deploy u256 2 3 1);
+   assert_some (literal_range_check deploy ``BaseT (IntT 8)`` (~128) 127 255)))
+  [false,true]
+
+(* A valid lock layout must not make a guarded constructor legal. Headers
+   are checked in runtime mode too, when the constructor body is inactive. *)
+val () = List.app (fn deploy => List.app (fn layouts =>
+  (assert_none (check_selector_decls deploy layouts
+     ``[FunctionDecl Deploy Nonpayable T F "__init__" [] [] NoneT [Pass]]``);
+   assert_some (check_selector_decls deploy layouts
+     ``[FunctionDecl Deploy Nonpayable F F "__init__" [] [] NoneT [Pass]]``)))
+  [empty_layouts,
+   ``[(0w : address,
+       ([] : storage_layout,
+        [((NONE,"$.nonreentrant_key"),0)] : storage_layout))]``])
+  [false,true]
+
 val () = List.app (fn in_deploy =>
   (List.app (fn (name, expect) => let
      val layouts =
