@@ -323,7 +323,7 @@ Proof
         gvs[eval_operand_def, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
      asm_rewrite_tac[] >> simp[eval_operand_mstore] >>
      simp[jump_to_def, mstore_def, update_var_def]) >>
-  fs[abi_decoder_ranges_def, abi_decode_source_def]
+  fs[abi_decoder_ranges_def, abi_decode_source_def, eval_operand_def]
 QED
 
 (* Transport allocation evidence through a nested interval and its backedge. *)
