@@ -438,11 +438,9 @@ Resume slice_data_success_run[finish]:
      qpat_assum `u = s with vs_vars := _` SUBST1_TAC >>
      simp[NoAsms, exprSimPropsTheory.locals_kept_mem]) >>
   `wb_frame cenv es es sa s t` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac
-     >- (qexistsl_tac [`es`, `sc`, `u`] >> simp[] >> decide_tac) >>
-     goal_assum (drule_at Any)) >>
+    (match_mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s`, `sa`, `es`, `es`,
+                            `sc`, `u`, `t`, `ctx`] exprSimWordArgsTheory.wb_frame_trans) >>
+     simp[] >> decide_tac) >>
   `wb_frame cenv es es sa s v` by
     (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
      goal_assum (drule_at Any) >> qexists_tac `sd` >> simp[] >>
@@ -480,11 +478,9 @@ Resume slice_data_success_run[finish]:
      qpat_assum `sc.cs_next_id = _` (fn th => once_rewrite_tac[GSYM th]) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es es sa s final` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac
-     >- (qexistsl_tac [`es`, `sa`, `v`] >> simp[]) >>
-     goal_assum (drule_at Any)) >>
+    (match_mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s`, `sa`, `es`, `es`,
+                            `sa`, `v`, `final`, `ctx`] exprSimWordArgsTheory.wb_frame_trans) >>
+     simp[]) >>
   `eval_operand out v = SOME p` by
     (qpat_assum `out = Var x` SUBST1_TAC >>
      fs[eval_operand_def, lookup_var_def]) >>
