@@ -390,6 +390,7 @@ Theorem ifexp_finish_post[local]:
     (jump_to xl (update_var rv w u with vs_inst_idx := k))
 Proof
   strip_tac >>
+  qpat_x_assum `_ ==> ~expr_has_effect e` (assume_tac o SIMP_RULE (srw_ss()) []) >>
   irule (SRULE [vyperASTTheory.expr_type_def]
     (Q.INST [`e` |-> `IfExp t c a b`] exprSimIfExpTheory.ifexp_root_vv_post_of_expr_post_read)) >>
   goal_assum (drule_at Any) >>
@@ -425,7 +426,9 @@ Theorem ifexp_word_arm_finish_mem[local]:
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next) R
 Proof
-  strip_tac >> irule ifexp_outcome_suffix_mem >>
+  strip_tac >>
+  qpat_x_assum `_ ==> ~expr_has_effect e` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  irule ifexp_outcome_suffix_mem >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
   `post_value_type cenv e = expr_type e` by
     metis_tac[loweringPostsTheory.post_value_type_word] >>
@@ -467,7 +470,9 @@ Theorem ifexp_forced_arm_finish_mem[local]:
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next) R
 Proof
-  strip_tac >> irule ifexp_outcome_suffix_mem >>
+  strip_tac >>
+  qpat_x_assum `_ ==> ~expr_has_effect e` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  irule ifexp_outcome_suffix_mem >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
   `post_value_type cenv e = expr_type e` by
     metis_tac[loweringPostsTheory.post_value_type_word] >>
