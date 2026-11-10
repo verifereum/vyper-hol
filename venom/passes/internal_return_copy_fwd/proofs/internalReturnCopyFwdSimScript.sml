@@ -257,6 +257,74 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem ircf_forward_source_not_dst_id:
+  ctx_inst_ids_distinct C /\ MEM fn C.ctx_functions /\
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  MEM bb fn.fn_blocks /\
+  k IN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [sr] ==>
+  ai.inst_id NOTIN ircf_dst_ids fn_meta rma C
+Proof
+  strip_tac >> strip_tac >>
+  drule_all ircf_dst_ids_owned >> strip_tac >>
+  `ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb) /\
+   ircf_block_plan fn bb' (ircf_tbb fn_meta rma C fn bb')` by
+    simp[wf_ssa_def, ircf_tbb_def, ircf_transform_block_plan] >>
+  `ircf_fwd_ok fn bb k d sr sz /\ ircf_fwd_ok fn bb' k' sr sr' sz'` by
+    (gvs[] >> metis_tac[ircf_block_plan_fwd_ok]) >>
+  Cases_on `(EL k bb.bb_instructions).inst_id =
+            (EL k' bb'.bb_instructions).inst_id`
+  >- (`EL k bb.bb_instructions = EL k' bb'.bb_instructions` by
+        (irule venomWfPropsTheory.fn_inst_ids_distinct_inj >> simp[] >>
+         qexists_tac `fn` >> gvs[wf_function_def, ircf_fwd_ok_def] >>
+         simp[fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+         metis_tac[EL_MEM]) >>
+      gvs[ircf_fwd_ok_def]) >>
+  `MEM (EL k' bb'.bb_instructions) bb'.bb_instructions /\
+   (EL k' bb'.bb_instructions).inst_opcode = MCOPY` by
+    (gvs[ircf_fwd_ok_def] >> metis_tac[EL_MEM]) >>
+  drule_all ircf_forward_roots_separate >> gvs[]
+QED
+
+(* A current allocation whose id is not hidden cannot overlap a hidden
+   current allocation or any saved-frame allocation. *)
+Theorem ircf_dead_current_site_exclusion:
+  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_natural_geometry lo a U B stk s /\
+  ALL_DISTINCT (a::MAP (\u. u.of_owner) U) /\
+  FLOOKUP s.vs_allocas aid = SOME (b,z) /\ aid NOTIN ids /\
+  b <= p /\ p < b+z ==>
+  p NOTIN ircf_dead ids s stk
+Proof
+  strip_tac >> strip_tac >>
+  `FLOOKUP B (a,aid) = SOME (b,z)` by
+    fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>
+  `0 < z` by decide_tac >>
+  qpat_x_assum `_ IN ircf_dead _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss())
+      [ircf_dead_def, site_bytes_def, pred_setTheory.IN_BIGUNION, MEM_MAP])
+  >- (`FLOOKUP B (a,id) = SOME (b',sz)` by
+        fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>
+      `aid <> id` by metis_tac[] >>
+      `0 < sz` by decide_tac >>
+      `b+z <= b' \/ b'+sz <= b` by
+        metis_tac[occurrence_geometry_sites_disjoint, pairTheory.PAIR_EQ] >>
+      decide_tac) >>
+  gvs[] >> rename1 `FLOOKUP f.cf_state.vs_allocas did = SOME (c,w)` >>
+  `?j. j < LENGTH stk /\ EL j stk = f` by metis_tac[MEM_EL] >>
+  `FLOOKUP B ((EL j U).of_owner,did) = SOME (c,w)` by
+    (fs[occurrence_annotation_ok_def] >>
+     metis_tac[occurrence_saved_ok_allocas]) >>
+  `LENGTH U = LENGTH stk` by fs[occurrence_natural_geometry_def] >>
+  `a <> (EL j U).of_owner` by
+    (fs[ALL_DISTINCT, MEM_MAP] >> metis_tac[EL_MEM]) >>
+  `0 < z /\ 0 < w` by decide_tac >>
+  `b+z <= c \/ c+w <= b` by
+    metis_tac[occurrence_geometry_sites_disjoint, pairTheory.PAIR_EQ] >>
+  decide_tac
+QED
+
 Theorem ircf_saved_dead_read_disjoint:
   occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
