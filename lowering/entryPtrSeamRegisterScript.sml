@@ -43,6 +43,85 @@ Proof
        venomMemDefsTheory.alloca_next_valid_def, allocas_from_def]
 QED
 
+(* The logical entry relations do not constrain the code-generator's
+   initial free-memory-pointer field. *)
+Theorem registration_stmt_initial_fmp:
+  stmt_state_rel ctx func cenv cx es (s with vs_initial_fmp := w) <=>
+  stmt_state_rel ctx func cenv cx es s
+Proof
+  simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
+       immutable_alloca_sep_def, local_ptrs_rel_def, local_region_def,
+       local_backed_def, lookup_var_def, storage_rel_def, transient_rel_def,
+       immutables_rel_def, logs_rel_def, call_ctx_rel_def, accounts_rel_def,
+       contract_storage_def, contract_transient_def,
+       venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def,
+       alloca_room_def, pending_alloca_size_def, fmp_room_def]
+QED
+
+Theorem registration_ghost_initial_fmp:
+  ghost_inv d cenv cx es G tn (s with vs_initial_fmp := w) <=>
+  ghost_inv d cenv cx es G tn s
+Proof
+  Cases_on `d` >- simp[ghost_inv_def, return_buf_ptr_def,
+    ptr_covers_def, lookup_var_def, stor_taint_ok_def] >>
+  PairCases_on `x` >>
+  simp[ghost_inv_def, ptr_covers_def, return_buf_ptr_def,
+       lookup_var_def, stor_taint_ok_def]
+QED
+
+Theorem registration_active_dalloca_obstruction:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  ctx_has_dalloca ctx /\ ~allocas_below_fmp s ==>
+  ~ptr_safe_run D lo fuel ctx fn PG G tn s
+Proof
+  strip_tac >>
+  simp[ptr_safe_run_def, Once ptr_safe_block_def, ptr_safe_step_def,
+       ptr_inst_ok_def]
+QED
+
+Theorem registration_dalloca_vacuous_continuation:
+  ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  w2n s.vs_fmp + 1 < dimword (:256) ==>
+  !D. ~(!fuel. ptr_safe_run D lo fuel ctx fn PG G tn
+    (s with vs_initial_fmp := n2w (w2n s.vs_fmp + 1)))
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  `~allocas_below_fmp
+     (s with vs_initial_fmp := n2w (w2n s.vs_fmp + 1))` by
+    simp[allocas_below_fmp_def] >>
+  qpat_x_assum `!fuel. _` (qspec_then `0` mp_tac) >>
+  simp[ptr_safe_run_def, Once ptr_safe_block_def, ptr_safe_step_def,
+       ptr_inst_ok_def]
+QED
+
+(* Existence of an entry ghost is separate from transporting an actual
+   ghost along execution.  Empty taint makes ordinary local values robust. *)
+Theorem local_ptrs_entry_ghost:
+  local_ptrs_rel fn ce es.scopes s ==>
+  ghost_inv NONE ce cx es
+    (FUN_FMAP (\p. (0,s.vs_alloca_next)) (FDOM s.vs_vars)) entry_taint s
+Proof
+  strip_tac >>
+  simp[ghost_inv_def, return_buf_ptr_def, stor_taint_ok_def,
+       entry_taint_def, op_taint_def] >>
+  rpt gen_tac >> strip_tac >>
+  fs[local_ptrs_rel_def] >>
+  first_x_assum drule_all >> strip_tac >>
+  conj_tac
+  >- (simp[ptr_covers_def, op_taint_def, entry_taint_def,
+           finite_mapTheory.FLOOKUP_FUN_FMAP, lookup_var_def] >>
+      gvs[lookup_var_def, finite_mapTheory.FLOOKUP_DEF]) >>
+  gvs[lookup_var_def] >>
+  drule calldataTypedRobustPtrTheory.clean_footprint_val_in_memory_robust >>
+  disch_then drule >>
+  disch_then (qspec_then `{}` mp_tac) >> simp[]
+QED
+
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
    Hints (not binding):
