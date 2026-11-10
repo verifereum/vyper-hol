@@ -4,7 +4,7 @@ Ancestors
   abiTupleEncodeOpenMemory abiTupleEncodeLayout abiEncoderOpenInput
   abiEncoderInput abiEncoderAdmissible abiEncoderMemory abiEncoderSourceWindow
   abiStaticAggregateProps abiTupleProps abiDecodeRanges exprLowering compileEnv
-  valueEncoding contractABI words list rich_list arithmetic
+  valueEncoding valueEncodingDefs contractABI words list rich_list arithmetic
 
 Theorem abi_encoder_open_static_leaf_window:
   abi_encoder_static_leaf ei /\ abi_encoder_open_input ei at av sb cap mem /\

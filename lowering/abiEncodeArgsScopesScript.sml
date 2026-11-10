@@ -177,6 +177,19 @@ Resume eval_no_mutation_scopes[IntCall]:
   gvs[]
 QED
 
+(* Drop the Builtin induction hypotheses (they mention Bop or Len) once the
+   needed instances are derived, so the case splits below stay cheap. *)
+val drop_builtin_ihs_tac =
+  rpt (first_x_assum (fn th =>
+    let
+      val c = concl th
+      fun has n = can (find_term (fn t => is_const t andalso
+                                          fst (dest_const t) = n)) c
+    in
+      if (is_forall c orelse is_imp_only c) andalso (has "Bop" orelse has "Len")
+      then kall_tac th else NO_TAC
+    end));
+
 Resume eval_no_mutation_scopes[Builtin]:
   rpt gen_tac >> strip_tac >>
   Cases_on `builtin_args_length_ok bt (LENGTH es)`
@@ -199,13 +212,20 @@ Resume eval_no_mutation_scopes[Builtin]:
           imp_res_tac precompile_call_success_state >> gvs[]) >>
       Cases_on `bt = Bop In \/ bt = Bop NotIn`
       >- (`bt <> Len /\ bt <> Env MsgGas` by (strip_tac >> gvs[]) >>
+          `!st res st'. eval_exprs cx es st = (res,st') ==> st'.scopes = st.scopes` by
+            (rpt strip_tac >>
+             qpat_x_assum `!s'' t. _ /\ bt <> Len /\ (bt = Bop In \/ bt = Bop NotIn) ==> _`
+               (qspecl_then [`st`,`st`] mp_tac) >>
+             simp[type_check_def, assert_def] >> metis_tac[]) >>
+          drop_builtin_ihs_tac >>
           qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
           simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-               assert_def, return_def, raise_def, lift_option_type_def,
-               vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >>
+               assert_def, return_def, raise_def, AllCaseEqs()] >>
           rpt strip_tac >>
-          imp_res_tac lift_sum_state >> gvs[expr_can_mutate_def] >>
-          metis_tac[]) >>
+          gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def,
+              AllCaseEqs()] >>
+          imp_res_tac lift_option_type_state >> imp_res_tac lift_sum_state >>
+          gvs[] >> metis_tac[]) >>
       Cases_on `code_slice_source bt es`
       >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
           qpat_assum `code_slice_source _ _ = _` (fn th1 =>

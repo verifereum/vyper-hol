@@ -3,7 +3,7 @@ Ancestors
   abiEncoderOpenRelocate abiEncoderOpenInput abiEncoderWrites abiEncoderBytes
   abiDecoderContract abiDecoderReentry abiTupleEncodeSlot
   context exprLowering emitHelper emitHelperProps exprLoweringProps
-  valueEncoding valueEncodingProps compileEnv venomState venomInst venomMemDefs
+  valueEncoding valueEncodingDefs valueEncodingProps compileEnv venomState venomInst venomMemDefs
   contractABI words list abiEncoderOpenInputFrame abiDecoderFrameCompose
   abiTupleEncodeInput abiTupleEncodeMemory abiTupleProps arithmetic
   abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderGuards abiDecoderRange abiTupleEncodePrepare

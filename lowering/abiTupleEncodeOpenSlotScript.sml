@@ -4,7 +4,7 @@ Ancestors
   abiBuiltinEncodeCorrect abiBuiltinEncodeWord abiEncoderWrites abiEncoderBytes
   abiEncoderInputFrame abiDecoderReentry abiDecoderContract abiDecoderGuards abiDecoderRange
   abiDecoderFrameCompose compileEnv context emitHelper emitHelperProps exprLoweringProps
-  valueEncoding valueEncodingProps venomState venomExecSemantics words list arithmetic
+  valueEncoding valueEncodingDefs valueEncodingProps venomState venomExecSemantics words list arithmetic
   abiTupleProps abiBuiltinPrefix abiDecoderReentryAddress abiDecoderDynamicLoopSetup venomInst rich_list
 
 Theorem abi_tuple_encode_open_word_write:
