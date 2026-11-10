@@ -11386,6 +11386,72 @@ Proof
   simp[] >> gvs[]
 QED
 
+Theorem mm_local_pending_copy_capture_replay[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ b <= j /\ j <= r /\ r < LENGTH is /\ r < N /\
+  mm_local_history is H N /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  (b = r \/ MEM b (mm_local_pending_indices is gs r)) /\
+  (EL j is).inst_opcode = MCOPY /\
+  (EL j is).inst_operands = [Lit dj; Lit sj; Lit lj] /\
+  c = <|cg_dst := w2n dj; cg_src := w2n sj; cg_length := w2n lj;
+         cg_inst_ids := [(EL j is).inst_id]|> /\
+  (j = r \/ (?g. MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g))) /\
+  t = FOLDL (\st q. if MEM q (mm_local_pending_indices is gs r) then st else
+    case mm_local_write_capture is H N q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H b) (MAP (\q. b+q) (COUNT_LIST (r-b))) /\
+  B = (\i. if i < LENGTH t.vs_memory then EL i t.vs_memory else 0w) ==>
+  mm_local_write_capture is H N j =
+    SOME (c.cg_dst, mm_local_bytes B c.cg_src c.cg_length)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `read_memory c.cg_src c.cg_length t = read_memory c.cg_src c.cg_length (H j)` by
+    metis_tac[mm_local_pending_source_replay] >>
+  `j < N` by decide_tac >>
+  drule_all mm_local_write_capture_copy >>
+  gvs[mm_local_read_memory_bytes]
+QED
+
+Theorem mm_local_pending_store_capture_replay[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ b <= j /\ j <= r /\ r < LENGTH is /\ r < N /\
+  mm_local_history is H N /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  (b = r \/ MEM b (mm_local_pending_indices is gs r)) /\
+  (EL j is).inst_opcode = MSTORE /\
+  (EL j is).inst_operands = [Lit dj; Var v] /\
+  FLOOKUP s0.ss_loads v = SOME srcj /\
+  lookup_var v (H j) = SOME (mload srcj (H j)) /\
+  c = <|cg_dst := w2n dj; cg_src := srcj; cg_length := 32;
+         cg_inst_ids := [(EL j is).inst_id] ++
+           (case dfg_get_def (dfg_build_function fn0) v of
+              NONE => [] | SOME li => [li.inst_id])|> /\
+  (j = r \/ (?g. MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g))) /\
+  t = FOLDL (\st q. if MEM q (mm_local_pending_indices is gs r) then st else
+    case mm_local_write_capture is H N q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H b) (MAP (\q. b+q) (COUNT_LIST (r-b))) /\
+  B = (\i. if i < LENGTH t.vs_memory then EL i t.vs_memory else 0w) ==>
+  mm_local_write_capture is H N j =
+    SOME (c.cg_dst, mm_local_bytes B c.cg_src c.cg_length)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `read_memory c.cg_src c.cg_length t = read_memory c.cg_src c.cg_length (H j)` by
+    metis_tac[mm_local_pending_source_replay] >>
+  `j < N` by decide_tac >>
+  drule_all mm_local_write_capture_store >>
+  gvs[mm_local_mload_bytes, mm_local_read_memory_bytes]
+QED
+
 Theorem mm_local_collection_discharge[local]:
   mm_local_pending cap js s t /\
   (!pre j mid k post d bs a cs.
