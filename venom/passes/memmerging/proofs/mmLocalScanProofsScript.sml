@@ -6570,6 +6570,52 @@ Proof
   rpt strip_tac >> gvs[] >> decide_tac
 QED
 
+Theorem mm_local_scan_interval_read[local]:
+  mm_local_history is H n /\ a <= b /\ b <= n /\
+  cap = mm_local_write_capture is H n /\
+  (!q. cuts q = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE q is)) /\
+  (!q. a <= q /\ q < b ==>
+    (cuts q).ss_copies <> [] /\ (cuts (SUC q)).ss_flushed = (cuts q).ss_flushed) /\
+  (!q d bs. a <= q /\ q < b /\ cap q = SOME (d,bs) ==>
+    ?h. ~copy_overwrites h (copy_src_interval c) /\
+      h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length) ==>
+  read_memory c.cg_src c.cg_length (H b) = read_memory c.cg_src c.cg_length (H a)
+Proof
+  strip_tac >>
+  qabbrev_tac `js = FILTER (\q. IS_SOME (cap q)) (GENLIST (\r. a+r) (b-a))` >>
+  `?ws. LIST_REL (\q w. cap q = SOME w) js ws /\
+    (H b).vs_memory =
+      (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) (H a) ws).vs_memory` by
+    (irule mm_local_scan_interval_log >> metis_tac[]) >>
+  irule mm_local_read_write_log_memory >> qexists `ws` >> simp[] >>
+  simp[EVERY_MEM, pairTheory.FORALL_PROD] >> rpt strip_tac >>
+  drule_all LIST_REL_MEM_IMP_R >> strip_tac >>
+  `a <= x /\ x < b` by
+    (gvs[Abbr `js`, MEM_FILTER, MEM_GENLIST] >> decide_tac) >>
+  fs[] >> qpat_x_assum `!q d bs. _` drule_all >> strip_tac >>
+  drule_all (INST_TYPE [alpha |-> ``:word8``] mm_local_capture_source_exclusion) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem mm_local_hazard_interval_read[local]:
+  mm_local_history is H n /\ a <= b /\ b <= n /\
+  cap = mm_local_write_capture is H n /\
+  (!q. cuts q = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE q is)) /\
+  (!q. a <= q /\ q < b ==>
+    (cuts q).ss_copies <> [] /\ (cuts (SUC q)).ss_flushed = (cuts q).ss_flushed) /\
+  (!q d bs. a <= q /\ q < b /\ cap q = SOME (d,bs) ==>
+    ?h. MEM h (flush_hazards Mem2Mem (invalidate_loads ss iv) c).ss_copies /\
+      h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length) ==>
+  read_memory c.cg_src c.cg_length (H b) = read_memory c.cg_src c.cg_length (H a)
+Proof
+  strip_tac >> irule mm_local_scan_interval_read >> simp[] >>
+  qexistsl [`cuts`, `dfg`, `is`, `n`] >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  qpat_x_assum `!q d bs. _` drule_all >> strip_tac >>
+  qexists `h` >> simp[] >> irule mm_local_hazards_source_exclusion >>
+  metis_tac[]
+QED
+
 Theorem mm_local_bulk_cut_fragment[local]:
   j < n /\ n <= LENGTH is /\
   (EL j is).inst_opcode = MCOPY /\
