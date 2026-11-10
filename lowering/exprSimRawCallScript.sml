@@ -2208,6 +2208,8 @@ Proof
     (`(n2w b : bytes32) = n2w b'` by metis_tac[optionTheory.SOME_11] >>
      fs[wordsTheory.n2w_11] >> metis_tac[arithmeticTheory.LESS_MOD]) >>
   gvs[] >>
+  `post_value_type cenv d = expr_type d` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   `expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) s1 s2 esD (BytesV bs) data tD` by
     fs[expr_post_def] >>
   `b < dimword (:256)` by (fs[] >> decide_tac) >>
@@ -2320,6 +2322,8 @@ Resume raw_call_prefix_sim[data]:
   `(!x. addr = Var x ==> not_fresh_at s1 x) /\ (!l. addr <> Label l)` by
     fs[safe_operand_def] >>
   drule_all expr_post_operand_word >> strip_tac >>
+  `post_value_type cenv a = BaseT AddressT` by
+    fs[compileEnvTheory.is_word_type_def] >>
   `expr_val_rel cx (BaseT AddressT) av addr tD` by
     (fs[expr_post_def, expr_val_rel_def] >>
      gvs[is_word_type_def, vyperValueTheory.evaluate_type_def]) >>
@@ -4282,6 +4286,7 @@ QED
 Finalise raw_call_allocated_tail_frag_aged
 
 Theorem raw_call_none_post[local]:
+  post_value_type cenv e = expr_type e /\
   expr_type e = NoneT /\ stmt_state_rel ctx func cenv cx es' s /\
   wb_frame cenv es sa s0 s ==>
   vv_post ctx func cenv cx e es sa sb s0 es' (Value NoneV)
@@ -4307,6 +4312,7 @@ Proof
 QED
 
 Theorem raw_call_tuple_post[local]:
+  post_value_type cenv e = expr_type e /\
   expr_type e = TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))] /\
   evaluate_type (get_tenv cx) (expr_type e) =
     SOME (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))]) /\
@@ -4363,7 +4369,8 @@ Theorem raw_call_nonrevert_vv_path[local]:
   ~flags.rcf_revert_on_failure /\ flags.rcf_max_outsize = n /\
   expr_type e = raw_call_return_type flags /\
   (0 < n ==> evaluate_type (get_tenv cx) (expr_type e) =
-    SOME (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])) ==>
+    SOME (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])) /\
+  post_value_type cenv e = expr_type e ==>
   frag_path ctx sa sb (\u. u = s)
     (\t. vv_post ctx func cenv cx e es0 sf sb s0 es
       (Value (if n = 0 then BoolV success else
@@ -4405,6 +4412,9 @@ Proof
    u.vs_allocas = t.vs_allocas` by
     (qpat_x_assum `raw_call_finish_view _ = _` mp_tac >>
      simp[raw_call_finish_view_def, venom_state_component_equality, mstore_def]) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     simp[compileEnvTheory.is_bytestring_type_def]) >>
   irule vv_post_allocated_memory_intro >>
   simp[is_word_type_def, contextTheory.mk_ptr_def] >>
   qexistsl_tac [`aid`, `b`, `rounded+32`] >>
@@ -4442,7 +4452,8 @@ Theorem raw_call_outbuf_zero_tail_vv_path[local]:
   flags.rcf_max_outsize = cap /\ expr_type e = raw_call_return_type flags /\
   (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) =
     SOME (if flags.rcf_revert_on_failure then BaseTV (BytesT (Dynamic cap))
-      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) ==>
+      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) /\
+  post_value_type cenv e = expr_type e ==>
   frag_path ctx sa sb (\u. u = s)
     (\u. (flags.rcf_revert_on_failure ==> outcome.co_success) /\
       vv_post ctx func cenv cx e initial_es initial sb s0
@@ -4576,6 +4587,7 @@ Resume raw_call_outbuf_zero_tail_vv_path[finish]:
   qpat_x_assum `LENGTH u.vs_returndata < _` mp_tac >>
   qpat_x_assum `u.vs_returndata = _` mp_tac >>
   qpat_x_assum `expr_type e = _` mp_tac >>
+  qpat_x_assum `post_value_type cenv e = _` mp_tac >>
   qpat_x_assum `flags.rcf_max_outsize = 0` mp_tac >>
   qpat_x_assum `local_ptrs_reserved cenv sc` mp_tac >>
   qpat_x_assum `initial.cs_next_var <= sc.cs_next_var` mp_tac >>
@@ -4606,6 +4618,7 @@ Resume raw_call_outbuf_zero_tail_vv_path[revert_zero]:
   disch_then (mp_then Any irule frag_path_conseq) >> simp[] >>
   rpt strip_tac >> gvs[] >>
   match_mp_tac raw_call_none_post >>
+  conj_tac >- fs[] >>
   conj_tac >- gvs[raw_call_return_type_def] >>
   conj_tac
   >- (irule raw_call_finish_state_rel_aged >>
@@ -4661,7 +4674,8 @@ Theorem raw_call_outbuf_positive_tail_vv_path[local]:
   flags.rcf_max_outsize = cap /\ expr_type e = raw_call_return_type flags /\
   (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) =
     SOME (if flags.rcf_revert_on_failure then BaseTV (BytesT (Dynamic cap))
-      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) ==>
+      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) /\
+  post_value_type cenv e = expr_type e ==>
   frag_path ctx sa sb (\u. u = s)
     (\u. (flags.rcf_revert_on_failure ==> outcome.co_success) /\
       vv_post ctx func cenv cx e initial_es initial sb s0
@@ -4935,7 +4949,8 @@ Theorem raw_call_outbuf_tail_vv_path[local]:
   flags.rcf_max_outsize = cap /\ expr_type e = raw_call_return_type flags /\
   (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) =
     SOME (if flags.rcf_revert_on_failure then BaseTV (BytesT (Dynamic cap))
-      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) ==>
+      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) /\
+  post_value_type cenv e = expr_type e ==>
   frag_path ctx sa sb (\u. u = s)
     (\u. (flags.rcf_revert_on_failure ==> outcome.co_success) /\
       vv_post ctx func cenv cx e initial_es initial sb s0
@@ -4977,7 +4992,8 @@ Theorem raw_call_outbuf_tail_vv_frag[local]:
   cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
   (0 < cap ==> ((cap + 31) DIV 32) * 32 + 32 < dimword (:256)) /\
   expr_type e = (if cap = 0 then NoneT else BaseT (BytesT (Dynamic cap))) /\
-  (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap)))) ==>
+  (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap)))) /\
+  post_value_type cenv e = expr_type e ==>
   frag_exec ctx sa sb (\u. u = s)
     (\u. outcome.co_success /\
       vv_post ctx func cenv cx e initial_es initial sb s0
