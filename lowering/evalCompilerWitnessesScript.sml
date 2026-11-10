@@ -18,3 +18,5 @@ Ancestors
   evalCompilerConversions
   evalCompilerConvertWiden
   evalCompilerRawCalls
+  evalCompilerRawSystem
+  evalCompilerCreateBuiltins

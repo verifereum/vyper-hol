@@ -84,6 +84,22 @@ oracle. It is a fast regression check, not a kernel-checked proof; its README
 says what a `PASS` trusts. This is finite fixture evidence, not a universal
 compiler-equivalence theorem.
 
+The `raw-system/parity-fixtures.txt` and `create-builtins/parity-fixtures.txt`
+manifests are checked in the kernel by `evalCompilerRawSystemTheory` and
+`evalCompilerCreateBuiltinsTheory`. Each listed fixture has an exact deployment
+and runtime equality against its independent Python oracle. The rollups also
+require the manifest names to equal the fixtures with parity theorems, so adding
+a name without its checked theorem fails the build. CI reaches these rollups
+through `evalCompilerWitnesses`; their small leaf theories build independently.
+Fixtures awaiting compiler ports are described in
+[`pending-5127-port.md`](pending-5127-port.md).
+
+Run these checks from the repository root:
+
+```sh
+holbuild -j4 build evalCompilerRawSystemTheory evalCompilerCreateBuiltinsTheory
+```
+
 `abi_static`, `abi_dynamic` and `interface_calls` decode ABI data with the
 bounded decoder (vyperlang/vyper#5333), which deliberately differs from the
 pinned compiler, so their HOL bytes differ from this oracle.

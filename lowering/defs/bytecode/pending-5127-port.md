@@ -239,3 +239,11 @@ own, and no revert of the other changes restores those fixtures.
 ## Not yet attributed
 
 - `memory-stores/w01_return_intcall_dynarray_bytes_widen`
+
+## Constant folding
+
+- `raw-system/rl05_3topics_concat`: HOL emits a runtime `KECCAK256` for
+  `keccak256(b"x")`, while pinned Python embeds the constant hash. This is the
+  frontend folding gap tracked by
+  [#543](https://github.com/verifereum/vyper-hol/issues/543), independent of
+  the #5127 allocation and ABI ports.

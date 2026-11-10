@@ -34,12 +34,14 @@ bytecode; it does not reproduce the historical environment receipt.
 Run the checked frontend and HOL compiler comparison from the repository root:
 
 ```sh
-holbuild build compileVyperTheory supportedProgramTheory vyperCheckContractFrontendLib
-python3 lowering/defs/bytecode/memory_store_witnesses.py probe \
-  --corpus create-builtins \
-  --fixtures lowering/defs/bytecode/create-builtins/oracle \
-  --output /tmp/create-hol
+holbuild -j4 build evalCompilerCreateBuiltinsTheory
 ```
+
+CI reaches this theory through `evalCompilerWitnesses`. It proves exact
+deployment/runtime parity for every name in `parity-fixtures.txt` and checks
+that the manifest and proved fixture names agree. Small leaf theories evaluate
+the fixtures independently. The proxy, copy and blueprint execution tests'
+existing compiler certificates are reused for their three oracle comparisons.
 
 The task identifies separate prerequisites for dynamic scratch allocation
 (#552), salted raw-create checker evaluation (#542), nested raw calls (#554),
