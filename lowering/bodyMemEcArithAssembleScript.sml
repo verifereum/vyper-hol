@@ -22,9 +22,9 @@ Proof
        type_slot_size_def, wordsTheory.dimword_def, ec_point_footprint] >>
   strip_tac >> gvs[]
   >- (first_x_assum drule >> simp[] >>
-      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   first_x_assum drule >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 (* Restatement of private exprSimECArith.ec_point_fresh_scratch_disjoint;

@@ -30,7 +30,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
       first_x_assum drule >>
-      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   conj_tac
   >- simp[venomStateTheory.lookup_var_def,
           venomExecSemanticsTheory.mcopy_def,
@@ -40,7 +40,7 @@ Proof
     (irule state_allocations_disjoint >> goal_assum (drule_at Any) >>
      qexists_tac `aid` >> simp[] >> goal_assum (drule_at Any)) >>
   irule mem_bytes_at_mcopy_disjoint >>
-  fs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem ifexp_bytestring_adapter_path_mem:

@@ -216,7 +216,7 @@ Resume raw_call_outbuf_tail_mem[revert_bytes]:
     w2n w + (32*((flags.rcf_max_outsize+31) DIV 32)+32) <= lb \/ lb+lsz <= w2n w` by
     (rpt strip_tac >>
      `regions_disjoint (w2n w) (32*((flags.rcf_max_outsize+31) DIV 32)+32) lb lsz`
-       suffices_by simp[compileEnvTheory.regions_disjoint_def] >>
+       suffices_by simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
      irule local_ptrs_rel_alloca_disjoint >>
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>

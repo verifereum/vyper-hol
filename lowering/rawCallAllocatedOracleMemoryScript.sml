@@ -88,7 +88,7 @@ Resume raw_call_allocated_oracle_mem[separation]:
      fs[stmt_state_rel_def, alloca_inv_def, allocas_non_overlapping_def] >>
      first_x_assum (qspecl_then [`sa.cs_next_id`,`aid`,`w2n w`,
        `if cap=0 then 0 else ((cap+31) DIV 32)*32+32`,`b`,`sz`] mp_tac) >>
-     simp[compileEnvTheory.regions_disjoint_def]) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   `!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
     regions_disjoint (w2n w) (if cap=0 then 0 else ((cap+31) DIV 32)*32+32) b sz` by
     (rpt strip_tac >>
@@ -145,7 +145,7 @@ Resume raw_call_allocated_oracle_mem[oracle_sep]:
      qpat_x_assum `!name b sz. local_region cenv es.scopes t name b sz ==> _`
        (qspecl_then [`name`,`b`,`sz`] mp_tac) >>
      Cases_on `cap=0` >> fs[local_region_def, lookup_var_def,
-       compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+       loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `(cenv.ce_is_ctor ==> !name tv v off.
     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
@@ -154,19 +154,19 @@ Resume raw_call_allocated_oracle_mem[oracle_sep]:
     w2n (if cap=0 then w else w+32w) + cap <= off)` by
     (rpt strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then (drule_all_then mp_tac) >>
-     Cases_on `cap=0` >> fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     Cases_on `cap=0` >> fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `!aid b sz. aid < initial.cs_next_id /\ FLOOKUP a.vs_allocas aid = SOME (b,sz) ==>
     regions_disjoint (w2n (if cap=0 then w else w+32w)) cap b sz` by
     (simp[Abbr `a`] >> rpt strip_tac >>
      qpat_x_assum `!aid b sz. _ /\ FLOOKUP t.vs_allocas aid = _ ==> _`
        (drule_all_then mp_tac) >>
-     Cases_on `cap=0` >> fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     Cases_on `cap=0` >> fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
     regions_disjoint (w2n (if cap=0 then w else w+32w)) cap b sz` by
     (rpt strip_tac >>
      qpat_x_assum `!name b sz. local_region cenv initial_es.scopes s0 name b sz ==> _`
        (drule_all_then mp_tac) >>
-     Cases_on `cap=0` >> fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     Cases_on `cap=0` >> fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   suspend "call"
 QED
 

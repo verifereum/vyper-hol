@@ -276,7 +276,7 @@ Resume concat_result_vv_sim_mem[suffix_value]:
         (irule exprSimPropsTheory.local_region_frame >> conj_tac
          >- (qexists_tac `func` >>
              qpat_assum `stmt_state_rel _ _ _ _ es t` mp_tac >>
-             pure_rewrite_tac[stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+             pure_rewrite_tac[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
              strip_tac >> first_assum ACCEPT_TAC) >>
          qexistsl_tac [`s4`, `ee.scopes`, `t'`] >>
          asm_rewrite_tac[]) >>
