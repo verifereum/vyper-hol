@@ -3,7 +3,7 @@ Theory functionInlinerOperational
 Ancestors
   functionInlinerFrame functionInlinerOpacity functionInlinerNamespace
   functionInlinerDefs venomExecSemantics venomState venomInst venomWf list rich_list
-  venomInstProofs1
+  venomInstProofs1 opcodeClass
 
 Theorem inline_parameter_step:
   MEM inst.inst_opcode [PARAM; FMP_PARAM] /\
@@ -543,6 +543,70 @@ Proof
   drule_all step_inst_base_preserves_all >> strip_tac >>
   drule_all step_inst_preserves_inst_idx >>
   simp[inline_success_footprint_def]
+QED
+
+Theorem inline_ordinary_halt_footprint:
+  inline_ordinary_opcode inst.inst_opcode /\
+  step_inst fuel ctx inst s = Halt u ==>
+  inline_success_footprint [] s u
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by gvs[inline_ordinary_opcode_def] >>
+  `step_inst_base inst s = Halt u` by gvs[step_inst_non_invoke] >>
+  drule step_inst_base_halt_opcodes >> strip_tac
+  >- (gvs[step_inst_base_opcode_eqs, halt_state_def,
+          inline_success_footprint_def, lookup_var_def])
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      simp[inline_success_footprint_def, halt_state_def,
+           set_returndata_def, lookup_var_def])
+  >- (gvs[step_inst_base_opcode_eqs, halt_state_def,
+          inline_success_footprint_def, lookup_var_def])
+  >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      simp[inline_success_footprint_def, halt_state_def,
+           set_returndata_def, lookup_var_def]
+QED
+
+Theorem inline_ordinary_abort_footprint:
+  inline_ordinary_opcode inst.inst_opcode /\
+  step_inst fuel ctx inst s = Abort a u ==>
+  inline_success_footprint [] s u
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by gvs[inline_ordinary_opcode_def] >>
+  `step_inst_base inst s = Abort a u` by gvs[step_inst_non_invoke] >>
+  drule step_inst_base_abort_opcodes >> strip_tac
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      gvs[exec_write2_def, exec_create_def, exec_ext_call_def, extract_venom_result_def,
+          AllCaseEqs(), inline_success_footprint_def, halt_state_def,
+          revert_state_def, set_returndata_def, lookup_var_def])
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      gvs[exec_write2_def, exec_create_def, exec_ext_call_def, extract_venom_result_def,
+          AllCaseEqs(), inline_success_footprint_def, halt_state_def,
+          revert_state_def, set_returndata_def, lookup_var_def])
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      gvs[exec_write2_def, exec_create_def, exec_ext_call_def, extract_venom_result_def,
+          AllCaseEqs(), inline_success_footprint_def, halt_state_def,
+          revert_state_def, set_returndata_def, lookup_var_def])
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      gvs[exec_write2_def, exec_create_def, exec_ext_call_def, extract_venom_result_def,
+          AllCaseEqs(), inline_success_footprint_def, halt_state_def,
+          revert_state_def, set_returndata_def, lookup_var_def])
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      gvs[exec_write2_def, exec_create_def, exec_ext_call_def, extract_venom_result_def,
+          AllCaseEqs(), inline_success_footprint_def, halt_state_def,
+          revert_state_def, set_returndata_def, lookup_var_def])
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      gvs[exec_write2_def, exec_create_def, exec_ext_call_def, extract_venom_result_def,
+          AllCaseEqs(), inline_success_footprint_def, halt_state_def,
+          revert_state_def, set_returndata_def, lookup_var_def])
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      gvs[exec_write2_def, exec_create_def, exec_ext_call_def, extract_venom_result_def,
+          AllCaseEqs(), inline_success_footprint_def, halt_state_def,
+          revert_state_def, set_returndata_def, lookup_var_def])
+  >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      gvs[exec_write2_def, exec_create_def, exec_ext_call_def, extract_venom_result_def,
+          AllCaseEqs(), inline_success_footprint_def, halt_state_def,
+          revert_state_def, set_returndata_def, lookup_var_def]
 QED
 
 Theorem inline_ordinary_opcode_coverage:
@@ -2840,3 +2904,4 @@ Proof
   irule inline_bump_success >> simp[] >>
   qexistsl [`ctx`, `fuel`, `s`, `src`] >> gvs[]
 QED
+
