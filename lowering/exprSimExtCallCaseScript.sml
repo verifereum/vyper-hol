@@ -514,7 +514,10 @@ Resume extcall_call_step[call_success]:
     (Cases_on `rq.cr_static` >> simp[vyperCallOutcomeTheory.adopt_call_outcome_equation]) >>
   `wb_frame cenv es (SND (adopt_call_outcome rq oc consumed)) sa s0 u'` by
     (`locals_kept cenv es (SND (adopt_call_outcome rq oc consumed)) s0 u' <=>
-      locals_kept cenv es ee s0 u'` by simp[locals_kept_def, popped_kept_def] >>
+      locals_kept cenv es ee s0 u'` by
+       (qpat_assum `(SND _).scopes = consumed.scopes` (fn a =>
+          qpat_assum `consumed.scopes = ee.scopes` (fn b =>
+            simp[NoAsms, locals_kept_def, popped_kept_def, a, b]))) >>
      pop_assum (fn lk => qpat_assum `wb_frame cenv es ee sa s0 u'`
        (fn wb => mp_tac wb >> simp[NoAsms, wb_frame_def, lk]))) >>
   `extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
