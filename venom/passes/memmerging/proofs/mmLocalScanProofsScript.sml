@@ -7,7 +7,7 @@ Ancestors
   simplifyCfgPhiSemantics basePtrProofs mmTraceProofs frameViewMemory dftCommutation
   regularMemorySim
 Libs
-  wordsLib finite_mapLib
+  wordsLib finite_mapLib stepInstBaseLib
 
 Definition mm_local_phase_def:
   mm_local_phase dfg phase (b,t) =
@@ -5470,6 +5470,47 @@ Proof
   gvs[is_volatile_memory_def]
 QED
 
+Theorem mm_local_nonflushing_history_frame[local]:
+  mm_local_history is H n /\ q < n /\ ss.ss_copies <> [] /\
+  (scan_inst dfg Mem2Mem ss (EL q is)).ss_flushed = ss.ss_flushed /\
+  mm_local_write_capture is H n q = NONE ==>
+  (H (SUC q)).vs_memory = (H q).vs_memory
+Proof
+  strip_tac >>
+  `q < LENGTH is /\ step_inst_base (EL q is) (H q) = OK (H (SUC q))` by
+    gvs[mm_local_history_def] >>
+  drule_all mm_local_nonflushing_write_opcode >> strip_tac
+  >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      simp[venomExecSemanticsTheory.step_inst_base_def,
+           venomExecSemanticsTheory.exec_write2_def] >>
+      rpt (BasicProvers.PURE_CASE_TAC >> simp[]) >>
+      gvs[mm_local_write_capture_def])
+  >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      simp[venomExecSemanticsTheory.step_inst_base_def,
+           venomExecSemanticsTheory.mcopy_def] >>
+      rpt (BasicProvers.PURE_CASE_TAC >> simp[]) >>
+      gvs[mm_local_write_capture_def]) >>
+  Cases_on `is_alloca_op (EL q is).inst_opcode`
+  >- (irule venomMemPropsTheory.step_inst_alloca_preserves_memory >>
+      qexistsl [`ARB`, `0`, `EL q is`] >>
+      Cases_on `(EL q is).inst_opcode` >>
+      gvs[venomInstTheory.is_alloca_op_def,
+          venomExecSemanticsTheory.step_inst_def]) >>
+  Cases_on `is_terminator (EL q is).inst_opcode`
+  >- (Cases_on `(EL q is).inst_opcode` >>
+      gvs[venomInstTheory.is_terminator_def,
+          venomEffectsTheory.write_effects_def, venomEffectsTheory.empty_effects_def] >>
+      qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      with_opcode_clause (fn ths =>
+        simp (ths @ [venomStateTheory.jump_to_def, venomStateTheory.halt_state_def,
+           venomStateTheory.revert_state_def, venomStateTheory.set_returndata_def])) >>
+      rpt (BasicProvers.PURE_CASE_TAC >>
+           simp[venomStateTheory.jump_to_def, venomStateTheory.halt_state_def,
+                venomStateTheory.revert_state_def, venomStateTheory.set_returndata_def]) >>
+      disch_then (SUBST1_TAC o SYM) >> simp[]) >>
+  irule venomInstProofs3Theory.step_inst_base_preserves_memory >> metis_tac[]
+QED
+
 Definition mm_local_owned_def:
   mm_local_owned (cap:num -> (num # word8 list) option) rep n js <=>
     ALL_DISTINCT js /\ SORTED ($<) js /\
@@ -5521,6 +5562,66 @@ Proof
   Induct_on `ws` >- simp[] >>
   Cases_on `h` >> simp[] >> rpt strip_tac >>
   first_x_assum irule >> simp[write_as_replace]
+QED
+
+Theorem mm_local_history_interval_log[local]:
+  !b a js.
+  mm_local_history is H n /\ a <= b /\ b <= n /\
+  cap = mm_local_write_capture is H n /\
+  js = FILTER (\q. IS_SOME (cap q)) (GENLIST (\r. a+r) (b-a)) /\
+  (!q. a <= q /\ q < b /\ cap q = NONE ==>
+       (H (SUC q)).vs_memory = (H q).vs_memory) ==>
+  ?ws. LIST_REL (\q w. cap q = SOME w) js ws /\
+    (H b).vs_memory =
+      (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) (H a) ws).vs_memory
+Proof
+  Induct_on `b`
+  >- (rpt strip_tac >> gvs[] >> qexists `[]` >> simp[]) >>
+  rpt strip_tac >>
+  Cases_on `a = SUC b`
+  >- (gvs[] >> qexists `[]` >> simp[]) >>
+  `a <= b` by simp[] >>
+  first_x_assum (qspecl_then [`a`, `FILTER (\q. IS_SOME (cap q))
+    (GENLIST (\r. a+r) (b-a))`] mp_tac) >>
+  impl_tac >- (simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  strip_tac >>
+  `SUC b - a = SUC (b-a) /\ a + (b-a) = b` by simp[] >>
+  gvs[GENLIST, FILTER_SNOC] >>
+  Cases_on `mm_local_write_capture is H n b`
+  >- (gvs[] >> qexists `ws` >> simp[] >>
+      ` (H (SUC b)).vs_memory = (H b).vs_memory` by
+        (first_x_assum irule >> simp[]) >> simp[]) >>
+  PairCases_on `x` >> gvs[] >>
+  qexists `ws ++ [(x0,x1)]` >>
+  simp[LIST_REL_APPEND, FOLDL_APPEND, rich_listTheory.SNOC_APPEND] >>
+  ` (H (SUC b)).vs_memory =
+    (write_memory_with_expansion x0 x1 (H b)).vs_memory` by
+    (irule mm_local_write_capture_sound >> qexistsl [`is`, `n`] >> gvs[]) >>
+  simp[write_as_replace]
+QED
+
+Theorem mm_local_scan_interval_log[local]:
+  mm_local_history is H n /\ a <= b /\ b <= n /\
+  cap = mm_local_write_capture is H n /\
+  js = FILTER (\q. IS_SOME (cap q)) (GENLIST (\r. a+r) (b-a)) /\
+  (!q. cuts q = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE q is)) /\
+  (!q. a <= q /\ q < b ==>
+    (cuts q).ss_copies <> [] /\ (cuts (SUC q)).ss_flushed = (cuts q).ss_flushed) ==>
+  ?ws. LIST_REL (\q w. cap q = SOME w) js ws /\
+    (H b).vs_memory =
+      (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) (H a) ws).vs_memory
+Proof
+  strip_tac >> irule mm_local_history_interval_log >>
+  simp[] >> reverse conj_tac
+  >- (qexistsl [`is`, `n`] >> simp[]) >>
+  rpt strip_tac >>
+  `q < n /\ q < LENGTH is` by gvs[mm_local_history_def] >>
+  ` (scan_inst dfg Mem2Mem (cuts q) (EL q is)).ss_flushed = (cuts q).ss_flushed /\
+    (cuts q).ss_copies <> []` by
+    (first_x_assum (qspec_then `q` mp_tac) >>
+     simp[rich_listTheory.TAKE_SUC_BY_TAKE, FOLDL_SNOC]) >>
+  irule mm_local_nonflushing_history_frame >>
+  qexistsl [`dfg`, `is`, `n`, `cuts q`] >> gvs[]
 QED
 
 Theorem mm_local_pending_create[local]:
