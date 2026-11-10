@@ -14,30 +14,30 @@ Theorem abi_encode_args_staged_source_fresh_free:
   abi_args_post ctx func ce cx es sa st s0 es' args ops vs initial /\
   EVERY (abi_decoder_operand_live st.cs_next_var) ops /\
   (!k tv w. k < LENGTH args /\
-    evaluate_type (get_tenv cx) (expr_type (EL k args)) = SOME tv /\
-    ~is_word_type (expr_type (EL k args)) /\ eval_operand (EL k ops) initial = SOME w ==>
+    evaluate_type (get_tenv cx) (lowered_value_type ce (EL k args)) = SOME tv /\
+    ~is_word_type (lowered_value_type ce (EL k args)) /\ eval_operand (EL k ops) initial = SOME w ==>
     venomMemDefs$regions_disjoint (w2n w,val_footprint tv (EL k vs))
-      (sb,abi_tuple_bytes ce (ZIP (ops,MAP expr_type args)))) /\
-  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (ops,MAP expr_type args))) st = (source_buf,allocated) /\
-  compile_store_abi_tuple ce source_buf.buf_operand 0 (ZIP (ops,MAP expr_type args)) allocated = ((),staged) /\
+      (sb,abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)))) /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) st = (source_buf,allocated) /\
+  compile_store_abi_tuple ce source_buf.buf_operand 0 (ZIP (ops,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
   ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ sb = initial.vs_alloca_next) \/
     FLOOKUP initial.vs_allocas st.cs_next_id =
-      SOME (sb,abi_tuple_bytes ce (ZIP (ops,MAP expr_type args)))) /\
-  sb+abi_tuple_bytes ce (ZIP (ops,MAP expr_type args)) < dimword (:256) /\
+      SOME (sb,abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)))) /\
+  sb+abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)) < dimword (:256) /\
   local_ptrs_reserved ce st /\ sa.cs_next_var <= st.cs_next_var /\ fn_has_code st staged func ==>
   ?actual avs ct rv.
     vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
     run_inst_seq (emitted_insts st staged) initial = OK actual /\ inst_extends st staged /\
     eval_operand source_buf.buf_operand actual = SOME (n2w sb) /\
     abi_encoder_open_input
-      (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args))) ct rv sb
-      (abi_tuple_bytes ce (ZIP (ops,MAP expr_type args))) actual.vs_memory /\
+      (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args))) ct rv sb
+      (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) actual.vs_memory /\
     enc ct rv = enc (Tuple (MAP (vyper_to_abi_type (get_tenv cx) o expr_type) args)) (ListV avs) /\
-    abi_decode_frame sb (abi_tuple_bytes ce (ZIP (ops,MAP expr_type args))) initial actual /\
+    abi_decode_frame sb (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial actual /\
     actual.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
-      (abi_tuple_bytes ce (ZIP (ops,MAP expr_type args))) initial).vs_allocas /\
+      (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial).vs_allocas /\
     actual.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
-      (abi_tuple_bytes ce (ZIP (ops,MAP expr_type args))) initial).vs_alloca_next /\
+      (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial).vs_alloca_next /\
     actual.vs_halted = initial.vs_halted /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op initial = SOME w ==>
       eval_operand op actual = SOME w)
@@ -58,15 +58,15 @@ Proof
     run_inst_seq (emitted_insts st staged) (drop_fresh st initial) = OK clean /\ inst_extends st staged /\
     eval_operand source_buf.buf_operand clean = SOME (n2w sb) /\
     abi_encoder_open_input
-      (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args))) ct rv sb
-      (abi_tuple_bytes ce (ZIP (ops,MAP expr_type args))) clean.vs_memory /\
+      (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args))) ct rv sb
+      (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) clean.vs_memory /\
     enc ct rv = enc (Tuple (MAP (vyper_to_abi_type (get_tenv cx) o expr_type) args)) (ListV avs) /\
     fresh_vars_wrt staged clean /\
-    abi_decode_frame sb (abi_tuple_bytes ce (ZIP (ops,MAP expr_type args))) (drop_fresh st initial) clean /\
+    abi_decode_frame sb (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) (drop_fresh st initial) clean /\
     clean.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
-      (abi_tuple_bytes ce (ZIP (ops,MAP expr_type args))) initial).vs_allocas /\
+      (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial).vs_allocas /\
     clean.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
-      (abi_tuple_bytes ce (ZIP (ops,MAP expr_type args))) initial).vs_alloca_next /\
+      (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) initial).vs_alloca_next /\
     clean.vs_halted = initial.vs_halted /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op initial = SOME w ==>
       eval_operand op clean = SOME w)` by
