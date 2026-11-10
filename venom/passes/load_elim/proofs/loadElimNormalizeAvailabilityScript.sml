@@ -1,6 +1,6 @@
 Theory loadElimNormalizeAvailability
 Ancestors
-  venomWf venomInst venomExecProofs dfgDefs dfgAnalysisProps
+  venomWf venomInst venomExecProofs dfgDefs dfgAnalysisProps venomWfProps
   simplifyCfgPhiRepair simplifyCfgStruct simplifyCfgWfssa simplifyCfgLabelProps
   list rich_list
 

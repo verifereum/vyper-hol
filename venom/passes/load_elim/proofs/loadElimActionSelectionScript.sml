@@ -1,6 +1,6 @@
 Theory loadElimActionSelection
 Ancestors
-  loadElimOriginHelpers simplifyCfgPhiRepair cfgNormBase venomWf list rich_list finite_map
+  loadElimOriginHelpers simplifyCfgPhiRepair cfgNormBase venomWf list rich_list finite_map venomWfProps
 
 Theorem le_collected_action_at_position:
   wf_function fn /\ MEM bb fn.fn_blocks /\

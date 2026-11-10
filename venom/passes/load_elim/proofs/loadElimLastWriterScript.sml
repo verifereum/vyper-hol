@@ -1,6 +1,6 @@
 Theory loadElimLastWriter
 Ancestors
-  loadElimOccurrenceCoverage loadElimOccurrence loadElimOperationalHistory
+  loadElimOccurrenceCoverage loadElimOccurrence loadElimOperationalHistory venomWfProps
   loadElimReachableSSA simplifyCfgDataflow
   simplifyCfgAvailability o1ContractSimplifyCfg
   simplifyCfgPhiRepair venomWf venomState venomExecProofs finite_map list rich_list
