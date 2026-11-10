@@ -26,7 +26,7 @@ QED
 Theorem abi_encode_nonword_result_bound:
   expr_body_pre ce cx env e es /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid) ty [e]) es /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
   vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av ==>
   ?N. expr_type (TypeBuiltin ann (AbiEncode F mid) ty [e]) =
@@ -37,7 +37,18 @@ Theorem abi_encode_nonword_result_bound:
 Proof
   strip_tac >> drule_all abi_encode_nonword_length_bound >> strip_tac >>
   drule abi_encode_nonword_result_type >> strip_tac >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[exprSimHypsTheory.expr_body_pre_lowered_fits] >>
+  `abi_size_bound ce.ce_struct_fields (lowered_value_type ce e) <=
+   abi_size_bound ce.ce_struct_fields (expr_type e)` by
+    metis_tac[exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_size_bound] >>
+  `?stv. evaluate_type (get_tenv cx) (expr_type e) = SOME stv` by
+    metis_tac[optionTheory.IS_SOME_EXISTS,
+      exprSimHypsTheory.expr_body_pre_type_evaluates] >>
   drule_all abi_encode_body_evaluated_metadata >> strip_tac >>
+  `abi_size_bound ce.ce_struct_fields (expr_type e) =
+   vyper_abi_size_bound (get_tenv cx) (expr_type e)` by
+    metis_tac[abi_encode_body_evaluated_metadata] >>
   qexists_tac `N` >> simp[abi_encode_method_id_size_def] >>
   gvs[abi_encode_method_id_size_def] >> decide_tac
 QED
@@ -85,11 +96,14 @@ Theorem abi_encode_bytes_vv_post:
   origin.cs_next_id <= aid /\ aid < sb.cs_next_id /\
   32+LENGTH payload <= sz /\
   (!name b n. local_region ce es'.scopes actual name b n ==> p+sz <= b \/ b+n <= p) /\
-  wb_frame ce es origin s0 actual ==>
+  wb_frame ce es es' origin s0 actual ==>
   vv_post ctx func ce cx e es origin sb s0 es' result
     (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) actual
 Proof
-  strip_tac >> simp_tac bool_ss [vv_post_def] >>
+  strip_tac >>
+  `post_value_type ce e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[compileEnvTheory.is_bytestring_type_def]) >>
+  simp_tac bool_ss [vv_post_def] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (simp[] >> irule abi_encode_bytes_vv_holds >>
     goal_assum (drule_at Any) >> simp[]) >>
@@ -104,10 +118,10 @@ Theorem abi_encode_nonword_success_suffix:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
   ~is_word_type (expr_type e) /\
-  abi_enc_plan (get_tenv cx) (expr_type e) ei /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
-  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
-  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (expr_type e)) sa = (out,sb) /\
+  abi_enc_plan (get_tenv cx) (lowered_value_type ce e) ei /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi (get_tenv cx) (lowered_value_type ce e) v = SOME av /\
+  lower_abi_encode F mid op ei (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)) sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
   (!l. op <> Label l) /\ (!x. op = Var x ==> not_fresh_at sa x) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -132,13 +146,29 @@ Proof
   drule_all abi_encode_nonword_counted_suffix >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   drule_all abi_encode_nonword_origin_frame >> strip_tac >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[exprSimHypsTheory.expr_body_pre_lowered_fits] >>
+  `?stv. evaluate_type (get_tenv cx) (expr_type e) = SOME stv` by
+    metis_tac[optionTheory.IS_SOME_EXISTS,
+      exprSimHypsTheory.expr_body_pre_type_evaluates] >>
+  `vyper_to_abi_type (get_tenv cx) (lowered_value_type ce e) =
+   vyper_to_abi_type (get_tenv cx) (expr_type e)` by
+    metis_tac[exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_abi_type] >>
+  `vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av` by
+    metis_tac[exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_conversion] >>
+  fs[] >>
   drule_all abi_encode_nonword_result_bound >> strip_tac >>
   drule_all abi_encode_nonword_numerical_capacity >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   `well_typed_type_builtin_args (AbiEncode F mid0) ty [expr_type e]` by
     fs[expr_body_pre_def, well_typed_expr_def] >>
-  drule_all abi_encode_nonword_result_memory >>
-  disch_then (qspec_then `N` assume_tac) >>
+  `val_in_memory (BaseTV (BytesT (Dynamic N)))
+    (BytesV (abi_encode_method_id_bytes mid0 ++
+      enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av)) p actual.vs_memory` by
+    (irule abi_encode_nonword_result_memory >>
+     conj_tac >- (qexists_tac `mid` >>
+       gvs[]) >>
+     metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `FLOOKUP actual.vs_allocas sa.cs_next_id = SOME(p,outsz)` >>
   `!name b n. local_region ce es'.scopes actual name b n ==> p+outsz <= b \/ b+n <= p` by
     (rpt strip_tac >> drule_all abi_encode_row_local_exclusion >> simp[]) >>
