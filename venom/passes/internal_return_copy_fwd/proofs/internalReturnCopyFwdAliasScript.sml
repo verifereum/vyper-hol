@@ -882,6 +882,27 @@ Proof
   metis_tac[ircf_alias_site_value_elim]
 QED
 
+Theorem ircf_fwd_operand_sites_at:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx = k /\ ircf_fwd_ok fn bb k d r sz /\
+  MEM dai (fn_insts fn) /\ dai.inst_opcode = ALLOCA /\ dai.inst_outputs = [d] /\
+  FLOOKUP s.vs_allocas dai.inst_id = SOME (db,w2n sz) /\
+  MEM rai (fn_insts fn) /\ rai.inst_opcode = ALLOCA /\ rai.inst_outputs = [r] /\
+  FLOOKUP s.vs_allocas rai.inst_id = SOME (rb,w2n sz) ==>
+  ?dv rv.
+    (EL k bb.bb_instructions).inst_operands = [Var dv;Var rv;Lit sz] /\
+    lookup_var dv s = SOME (n2w db) /\ lookup_var rv s = SOME (n2w rb) /\
+    FLOOKUP G dv = SOME (db,w2n sz) /\ FLOOKUP G rv = SOME (rb,w2n sz)
+Proof
+  strip_tac >> drule_all ircf_fwd_operand_sites >> strip_tac >>
+  `dai = dai' /\ rai = rai'` by
+    (conj_tac >> irule ssa_outputs_same_inst >>
+     gvs[wf_ssa_def, fn_insts_def] >> metis_tac[MEM]) >>
+  gvs[] >> metis_tac[]
+QED
+
 Theorem ircf_fwd_mcopy_exec:
   wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
   ircf_alias_boundary fn s G /\

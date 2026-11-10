@@ -526,6 +526,65 @@ Proof
    >- (drule_all taint_agree_source_mcopy >> simp[arithmeticTheory.ADD_COMM]) >>
    gvs[SRULE [arithmeticTheory.ADD_COMM] ircf_cross_source_mcopy])
 QED
+Theorem ircf_forward_copy_step:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\ ctx_inst_ids_distinct C /\
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\ s.vs_inst_idx = k /\
+  k IN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  access_ok lo G fn (EL k bb.bb_instructions) s /\ ~in_revert_forward fn s /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t ==>
+  ?s1 db rb.
+    step_inst_base (EL k bb.bb_instructions) s = OK s1 /\
+    step_inst_base (mk_nop_inst (EL k bb.bb_instructions)) t = OK t /\
+    lookup_var d s = SOME (n2w db) /\ lookup_var sr s = SOME (n2w rb) /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk)
+      (step_taint (EL k bb.bb_instructions) s s1 tn) s1 t /\
+    ircf_cross (step_taint (EL k bb.bb_instructions) s s1 tn)
+      {(db,rb,w2n sz)} s1 t
+Proof
+  strip_tac >> drule_all ircf_forward_copy_sites >> strip_tac >>
+  `MEM fn C.ctx_functions` by
+    (drule occ_frame_reachable_annotation >> simp[]) >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+    simp[wf_ssa_def, ircf_tbb_def, ircf_transform_block_plan] >>
+  `ircf_fwd_ok fn bb k d sr sz` by metis_tac[ircf_block_plan_fwd_ok] >>
+  drule_all ircf_fwd_operand_sites_at >> strip_tac >>
+  `(EL k bb.bb_instructions).inst_opcode = MCOPY` by fs[ircf_fwd_ok_def] >>
+  `(EL k bb.bb_instructions).inst_outputs = []` by
+    (`inst_wf (EL k bb.bb_instructions)` by
+      (fs[fn_inst_wf_def, EVERY_MEM, fn_insts_def] >>
+       metis_tac[MEM_FLAT, MEM_MAP, EL_MEM, ircf_fwd_ok_def]) >>
+     gvs[inst_wf_def]) >>
+  `eval_operand (Var dv) s = SOME (n2w db) /\
+   eval_operand (Var rv) s = SOME (n2w rb) /\ eval_operand (Lit sz) s = SOME sz` by
+    simp[eval_operand_def] >>
+  drule_all step_taint_mcopy >> disch_then (qspec_then `tn` assume_tac) >>
+  qexistsl_tac [`mcopy (w2n (n2w db : bytes32)) (w2n (n2w rb : bytes32)) (w2n sz) s`,
+                `db`, `rb`] >>
+  simp[step_inst_base_opcode_eqs, eval_operand_def, mk_nop_inst_def] >>
+  (Cases_on `w2n sz = 0`
+   >- (simp[ircf_cross_def] >>
+       irule (SRULE [GSYM arithmeticTheory.NOT_LESS_EQUAL, taint_component_equality]
+         (Q.INST [`len` |-> `0`] (SPEC_ALL taint_agree_source_mcopy))) >>
+       simp[]) >>
+   `w2n (n2w db : bytes32) = db /\ w2n (n2w rb : bytes32) = rb` by
+     (drule_all access_ok_mcopy_site_bases >> simp[]) >>
+   `{i | db <= i /\ i < db+w2n sz} SUBSET
+     ircf_dead (ircf_dst_ids fn_meta rma C) s stk` by
+     (drule_all ircf_forward_destination_hidden >> simp[]) >>
+   `!q. q < w2n sz /\ rb+q NOTIN tn.t_mem ==>
+     read_byte (rb+q) s.vs_memory = read_byte (rb+q) t.vs_memory` by
+     (rpt strip_tac >> drule_all ircf_forward_source_agreement >> simp[]) >>
+   gvs[] >> conj_tac
+   >- (drule_all taint_agree_source_mcopy >> simp[arithmeticTheory.ADD_COMM]) >>
+   gvs[SRULE [arithmeticTheory.ADD_COMM] ircf_cross_source_mcopy])
+QED
+
 
 Theorem ircf_current_dead_read_disjoint:
   occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\

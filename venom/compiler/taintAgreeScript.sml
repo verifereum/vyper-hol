@@ -1629,6 +1629,36 @@ Proof
   simp[] >> irule taint_agree_update_var >> simp[]
 QED
 
+Theorem step_taint_mcopy:
+  inst.inst_opcode = MCOPY /\ inst.inst_outputs = [] /\
+  inst.inst_operands = [dop;rop;lop] /\
+  eval_operand dop s = SOME d /\ eval_operand rop s = SOME r /\
+  eval_operand lop s = SOME z ==>
+  step_taint inst s (mcopy (w2n d) (w2n r) (w2n z) s) tn =
+    tn with t_mem := (tn.t_mem DIFF {i | w2n d <= i /\ i < w2n d+w2n z}) UNION
+                        {w2n d+q | q < w2n z /\ w2n r+q IN tn.t_mem}
+Proof
+  strip_tac >> drule_all o1LowerDloadJointRangeCopyTheory.ld_mem_taint_mcopy >>
+  simp[step_taint_def, set_var_taint_def, out_taint_def, store_taint_def,
+       imm_taint_def, adopt_reset_def, taint_component_equality,
+       DRESTRICT_UNIV]
+QED
+
+Theorem taint_agree_source_mcopy_step:
+  taint_agree D X tn s t /\ inst.inst_opcode = MCOPY /\
+  inst.inst_outputs = [] /\ inst.inst_operands = [dop;rop;lop] /\
+  eval_operand dop s = SOME d /\ eval_operand rop s = SOME r /\
+  eval_operand lop s = SOME z /\
+  {i | w2n d <= i /\ i < w2n d+w2n z} SUBSET X ==>
+  taint_agree D X
+    (step_taint inst s (mcopy (w2n d) (w2n r) (w2n z) s) tn)
+    (mcopy (w2n d) (w2n r) (w2n z) s) t
+Proof
+  strip_tac >> drule_all step_taint_mcopy >>
+  disch_then (qspec_then `tn` SUBST1_TAC) >>
+  irule taint_agree_source_mcopy >> simp[]
+QED
+
 Theorem taint_agree_mcopy_step:
   frame_reachable vs C stk PG G tn fn inst s /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
