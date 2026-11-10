@@ -9756,6 +9756,234 @@ Proof
   drule_all mm_local_ancestral_interval_read >> simp[Abbr `c`]
 QED
 
+Definition mm_local_write_footprint_def:
+  mm_local_write_footprint inst =
+    if inst.inst_opcode = MCOPY then
+      (case inst.inst_operands of
+         [Lit dst; Lit src; Lit len] => SOME (w2n dst,w2n len)
+       | _ => NONE)
+    else if inst.inst_opcode = MSTORE then
+      (case inst.inst_operands of
+         [Lit dst; value] => SOME (w2n dst,32)
+       | _ => NONE)
+    else NONE
+End
+
+Theorem mm_local_write_footprint_copy[local]:
+  inst.inst_opcode = MCOPY /\ inst.inst_operands = [Lit dst; Lit src; Lit len] ==>
+  mm_local_write_footprint inst = SOME (w2n dst,w2n len)
+Proof
+  simp[mm_local_write_footprint_def]
+QED
+
+Theorem mm_local_write_footprint_store[local]:
+  inst.inst_opcode = MSTORE /\ inst.inst_operands = [Lit dst; value] ==>
+  mm_local_write_footprint inst = SOME (w2n dst,32)
+Proof
+  simp[mm_local_write_footprint_def]
+QED
+
+Theorem mm_local_write_footprint_nonwrite[local]:
+  inst.inst_opcode <> MCOPY /\ inst.inst_opcode <> MSTORE ==>
+  mm_local_write_footprint inst = NONE
+Proof
+  simp[mm_local_write_footprint_def]
+QED
+
+Theorem mm_local_write_capture_footprint[local]:
+  mm_local_write_capture is H n j = SOME (d,bs) /\
+  mm_local_write_footprint (EL j is) = SOME (a,l) ==>
+  d = a /\ LENGTH bs = l
+Proof
+  simp[mm_local_write_capture_def, mm_local_write_footprint_def] >>
+  rpt IF_CASES_TAC >> gvs[AllCaseEqs(), venomStateTheory.eval_operand_def,
+    venomStateTheory.read_memory_def] >>
+  strip_tac >> gvs[venomStateTheory.eval_operand_def, venomStateTheory.read_memory_def]
+QED
+
+Theorem mm_local_group_coverage_birth_extra[local]:
+  j < n /\ j < LENGTH is /\ ALL_DISTINCT (MAP (\i. i.inst_id) is) /\
+  g.cg_inst_ids = (EL j is).inst_id :: extra /\
+  cap j = SOME (g.cg_dst,bs) /\ LENGTH bs = g.cg_length /\
+  (!p d cs. p < n /\ p < LENGTH is /\ MEM (EL p is).inst_id extra ==>
+     cap p <> SOME (d,cs)) ==>
+  mm_local_group_coverage is n cap g
+Proof
+  simp[mm_local_group_coverage_def] >> strip_tac >> gen_tac >> eq_tac
+  >- (strip_tac >> qexistsl [`j`,`g.cg_dst`,`bs`] >> simp[]) >>
+  strip_tac >>
+  `j' = j` by
+    (gvs[] >> metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx]) >>
+  gvs[]
+QED
+
+Theorem mm_local_hazards_add_coverage[local]:
+  mm_local_scan_every (mm_local_group_coverage is n cap) ss /\
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
+  mm_local_group_coverage is n cap c ==>
+  mm_local_scan_every (mm_local_group_coverage is n cap)
+    ((flush_hazards mode ss c) with ss_copies :=
+      add_copy (flush_hazards mode ss c).ss_copies c)
+Proof
+  strip_tac >> drule mm_local_hazards_every >>
+  disch_then (qspecl_then [`mode`,`c`] assume_tac) >>
+  gvs[mm_local_scan_every_def] >> irule mm_local_add_copy_coverage >>
+  simp[mm_local_hazards_order]
+QED
+
+Theorem mm_local_store_coverage[local]:
+  mm_local_scan_every (mm_local_group_coverage is n cap) ss /\
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
+  (!dst v src. inst.inst_operands = [Lit dst; Var v] /\
+    FLOOKUP ss.ss_loads v = SOME src ==>
+    mm_local_group_coverage is n cap
+      <|cg_dst := w2n dst; cg_src := src; cg_length := 32;
+        cg_inst_ids := inst.inst_id ::
+          (case dfg_get_def dfg v of NONE => [] | SOME li => [li.inst_id])|>) ==>
+  mm_local_scan_every (mm_local_group_coverage is n cap) (scan_store dfg Mem2Mem ss inst)
+Proof
+  strip_tac >> simp[scan_store_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  simp[mm_local_barrier_every] >>
+  irule mm_local_hazards_add_coverage >>
+  simp[invalidate_loads_def, mm_local_invalidate_every] >>
+  gvs[oneline operand_lit_val_def, oneline operand_var_name_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem mm_local_bulk_coverage[local]:
+  mm_local_scan_every (mm_local_group_coverage is n cap) ss /\
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
+  (!dst src len. inst.inst_operands = [Lit dst; Lit src; Lit len] ==>
+    mm_local_group_coverage is n cap
+      <|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+        cg_inst_ids := [inst.inst_id]|>) ==>
+  mm_local_scan_every (mm_local_group_coverage is n cap) (scan_bulk_copy Mem2Mem ss inst)
+Proof
+  strip_tac >> simp[scan_bulk_copy_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  simp[mm_local_barrier_every] >>
+  irule mm_local_hazards_add_coverage >>
+  simp[invalidate_loads_def, mm_local_invalidate_every] >>
+  gvs[oneline operand_lit_val_def, oneline operand_var_name_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem mm_local_inst_coverage[local]:
+  mm_local_scan_every (mm_local_group_coverage is n cap) ss /\
+  SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
+  ((EL j is).inst_opcode = MSTORE ==>
+    !dst v src. (EL j is).inst_operands = [Lit dst; Var v] /\
+      FLOOKUP ss.ss_loads v = SOME src ==>
+      mm_local_group_coverage is n cap
+        <|cg_dst := w2n dst; cg_src := src; cg_length := 32;
+          cg_inst_ids := (EL j is).inst_id ::
+            (case dfg_get_def dfg v of NONE => [] | SOME li => [li.inst_id])|>) /\
+  ((EL j is).inst_opcode = MCOPY ==>
+    !dst src len. (EL j is).inst_operands = [Lit dst; Lit src; Lit len] ==>
+      mm_local_group_coverage is n cap
+        <|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+          cg_inst_ids := [(EL j is).inst_id]|>) ==>
+  mm_local_scan_every (mm_local_group_coverage is n cap)
+    (scan_inst dfg Mem2Mem ss (EL j is))
+Proof
+  strip_tac >> simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  IF_CASES_TAC >- (irule mm_local_load_every >> simp[]) >>
+  IF_CASES_TAC >- (irule mm_local_store_coverage >> metis_tac[]) >>
+  IF_CASES_TAC >- (irule mm_local_bulk_coverage >> metis_tac[]) >>
+  rpt IF_CASES_TAC >> simp[mm_local_barrier_every]
+QED
+
+Theorem mm_local_write_footprint_opcode[local]:
+  mm_local_write_footprint inst = SOME (d,l) ==>
+  inst.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}
+Proof
+  simp[mm_local_write_footprint_def] >> rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem mm_local_footprint_def_excluded[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ p < LENGTH is /\
+  dfg_get_def (dfg_build_function fn0) v = SOME li /\
+  (EL p is).inst_id = li.inst_id ==>
+  mm_local_write_footprint (EL p is) = NONE
+Proof
+  strip_tac >> Cases_on `mm_local_write_footprint (EL p is)` >> simp[] >>
+  PairCases_on `x` >>
+  drule mm_local_write_footprint_opcode >> strip_tac >>
+  `MEM (EL p is) bb.bb_instructions` by metis_tac[EL_MEM] >>
+  drule_all mm_local_prefix_write_not_def >> simp[]
+QED
+
+Theorem mm_local_footprint_store_coverage[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < LENGTH is /\
+  (EL j is).inst_opcode = MSTORE /\ (EL j is).inst_operands = [Lit dst; Var v] /\
+  cap = (\p. OPTION_MAP (\(d,l). (d,REPLICATE l (0w:word8)))
+                    (mm_local_write_footprint (EL p is))) ==>
+  mm_local_group_coverage is (LENGTH is) cap
+    <|cg_dst := w2n dst; cg_src := src; cg_length := 32;
+      cg_inst_ids := (EL j is).inst_id ::
+        (case dfg_get_def (dfg_build_function fn0) v of NONE => [] | SOME li => [li.inst_id])|>
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    (qpat_assum `is = _` SUBST1_TAC >>
+     drule_all mm_local_prefix_wf_id_distinct >> simp[]) >>
+  irule mm_local_group_coverage_birth_extra >> (conj_tac >- simp[]) >>
+  qexistsl [`REPLICATE 32 (0w:word8)`,
+    `case dfg_get_def (dfg_build_function fn0) v of NONE => [] | SOME li => [li.inst_id]`, `j`] >>
+  simp[] >> reverse conj_tac
+  >- gvs[mm_local_write_footprint_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `dfg_get_def (dfg_build_function fn0) v` >> gvs[] >>
+  `mm_local_write_footprint (EL p bb.bb_instructions) = NONE` by
+    metis_tac[mm_local_footprint_def_excluded] >> simp[]
+QED
+
+Theorem mm_local_footprint_bulk_coverage[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) is) /\ j < LENGTH is /\
+  (EL j is).inst_opcode = MCOPY /\ (EL j is).inst_operands = [Lit dst; Lit src; Lit len] /\
+  cap = (\p. OPTION_MAP (\(d,l). (d,REPLICATE l (0w:word8)))
+                    (mm_local_write_footprint (EL p is))) ==>
+  mm_local_group_coverage is (LENGTH is) cap
+    <|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+      cg_inst_ids := [(EL j is).inst_id]|>
+Proof
+  strip_tac >> irule mm_local_group_coverage_birth >> (conj_tac >- simp[]) >>
+  qexistsl [`REPLICATE (w2n len) (0w:word8)`,`j`] >>
+  simp[mm_local_write_footprint_def]
+QED
+
+Theorem mm_local_scan_footprint_coverage[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  cap = (\p. OPTION_MAP (\(d,l). (d,REPLICATE l (0w:word8)))
+                    (mm_local_write_footprint (EL p is))) ==>
+  !t. t <= LENGTH is ==>
+    mm_local_scan_every (mm_local_group_coverage is (LENGTH is) cap)
+      (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE t is))
+Proof
+  strip_tac >> Induct >- simp[mm_local_scan_every_def, empty_scan_state_def] >>
+  strip_tac >> `t < LENGTH is /\ t <= LENGTH is` by decide_tac >>
+  simp[rich_listTheory.TAKE_SUC, FOLDL_APPEND] >>
+  `SORTED (\a b. a.cg_dst <= b.cg_dst)
+     (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+       empty_scan_state (TAKE t is)).ss_copies` by
+    (irule mm_local_fold_order >> simp[empty_scan_state_def]) >>
+  irule mm_local_inst_coverage >> simp[] >> reverse conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      irule (Q.INST [`j` |-> `t`, `is` |-> `bb.bb_instructions`]
+        mm_local_footprint_store_coverage) >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    (qpat_assum `is = _` SUBST1_TAC >>
+     drule_all mm_local_prefix_wf_id_distinct >> simp[]) >>
+  gvs[mm_local_footprint_bulk_coverage]
+QED
+
 Theorem mm_local_collection_discharge[local]:
   mm_local_pending cap js s t /\
   (!pre j mid k post d bs a cs.
