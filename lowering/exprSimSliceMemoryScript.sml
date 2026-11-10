@@ -60,9 +60,11 @@ Theorem slice_allocated_window_preserved:
 Proof
   strip_tac >>
   `mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
-    (fs[wb_frame_def] >> first_x_assum irule >>
-     conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[ADD_COMM]) >>
-     qexists_tac `aid` >> simp[]) >>
+    (qpat_x_assum `wb_frame _ _ _ _ _ _`
+       (mp_tac o el 3 o CONJUNCTS o REWRITE_RULE [wb_frame_def]) >>
+     disch_then (qspecl_then [`aid`, `b`, `sz`] mp_tac) >>
+     impl_tac >- (simp[] >> rpt strip_tac >> first_x_assum drule >> simp[]) >>
+     simp[]) >>
   irule mem_bytes_at_translated_window >>
   qexists_tac `sz` >> simp[]
 QED

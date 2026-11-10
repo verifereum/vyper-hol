@@ -3778,7 +3778,11 @@ Resume calldata_array_loop_init_repeat_safe[live]:
   rpt strip_tac >>
   `abi_decoder_operand_live guard_st.cs_next_var op /\
    abi_decoder_operand_live header_st.cs_next_var op` by
-    (Cases_on `op` >>
+    (qpat_x_assum `abi_decoder_operand_live st.cs_next_var op` mp_tac >>
+     qpat_x_assum `st.cs_next_var <= guard_st.cs_next_var` mp_tac >>
+     qpat_x_assum `header_st.cs_next_var = guard_st.cs_next_var + 1` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     Cases_on `op` >>
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   `eval_operand op h = eval_operand op initial` by metis_tac[] >>
