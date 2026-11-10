@@ -592,7 +592,12 @@ Resume prefix_members_complete_code_cons[tail_inputs]:
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [MAP_APPEND, MAP, SUM_APPEND, SUM, ADD_0, ADD_ASSOC]) >>
   asm_simp_tac bool_ss [MAP_APPEND, MAP, SUM_APPEND, SUM, ADD_0, ADD_ASSOC,
     GSYM APPEND_ASSOC, APPEND] >>
-  conj_tac >- (rpt strip_tac >> fs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  conj_tac >-
+    (rpt strip_tac >>
+     qpat_x_assum `!x. _ ==> not_fresh_at st x`
+       (mp_tac o PURE_REWRITE_RULE [not_fresh_at_def]) >>
+     simp_tac bool_ss [not_fresh_at_def] >>
+     metis_tac[LESS_EQ_TRANS]) >>
   conj_tac >-
     (qpat_x_assum `frag_ids st final SUBSET ids` mp_tac >>
      simp_tac (srw_ss()) [frag_ids_def, SUBSET_DEF, IN_DIFF, IN_COUNT] >>
