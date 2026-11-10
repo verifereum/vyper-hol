@@ -2416,7 +2416,14 @@ Proof
       qpat_x_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _` mp_tac >>
       qpat_x_assum `MEM _ (fn_insts func)` mp_tac >>
       simp[venomInstTheory.mk_inst_def])
-  >> rpt strip_tac >> gvs[] >> fs[not_fresh_at_def]
+  >> rpt strip_tac >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_stmt _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  rpt (qpat_x_assum `lookup_block _ _ = _` kall_tac) >>
+  fs[not_fresh_at_def] >>
+  qpat_x_assum `!n. st.cs_next_var <= n ==> p <> _`
+    (qspec_then `st.cs_next_var` mp_tac) >> simp[]
 QED
 
 Theorem dynarray_loop_initialize_keep[local]:
@@ -2700,6 +2707,7 @@ QED
 (* The snapshot is well formed only in the successful array-type branch. *)
 Theorem mem_iter_snapshot_wf[local]:
   expr_type e = ArrayT et bd /\
+  post_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV tv bd) /\
   vv_post ctx func cenv cx e es sa sb s0 es1 rv vv s1 /\
   vv_location vv = SOME LocMemory /\
@@ -2857,7 +2865,9 @@ QED
    invariant, as in compile_for_dynarray_frag. *)
 Theorem compile_for_mem_frag:
   !ctx func cx cenv lctx RetQ ty id et bd c n arr_e stmts tv es Qe.
-  expr_type arr_e = ArrayT et bd /\ (bd = Fixed c \/ bd = Dynamic c) /\
+  expr_type arr_e = ArrayT et bd /\
+  post_value_type cenv arr_e = expr_type arr_e /\
+  (bd = Fixed c \/ bd = Dynamic c) /\
   c <= n /\ c < dimword (:256) /\
   evaluate_type (get_tenv cx) et = SOME tv /\
   type_memory_bytes cenv et = type_memory_size tv /\
