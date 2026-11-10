@@ -162,7 +162,10 @@ Theorem compile_abi_encode_args_sim:
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\rr ee r. wb_args_exit rr r)
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all compile_abi_encode_args_sim_live >>
+  strip_tac >> irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem compile_abi_encode_args_case_gas_sim:
@@ -185,5 +188,14 @@ Theorem compile_abi_encode_args_case_gas_sim:
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\rr ee r. wb_args_exit rr r)
 Proof
-  cheat
+  rpt strip_tac >>
+  irule compile_abi_encode_args_sim_live >> simp[] >>
+  qexistsl_tac [`expr_sim_inv ce cx env`, `env`] >>
+  simp[expr_sim_inv_gas_obs] >>
+  conj_tac
+  >- gvs[expr_body_pre_def] >>
+  reverse conj_tac
+  >- (irule abi_args_ready_case >> metis_tac[]) >>
+  simp[listTheory.EVERY_MEM] >>
+  metis_tac[abi_args_body_pre_arg]
 QED
