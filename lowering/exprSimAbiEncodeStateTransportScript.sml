@@ -235,7 +235,7 @@ Proof
       rpt gen_tac >> strip_tac >>
       Cases_on `FLOOKUP initial.vs_allocas aid`
       >- (qpat_x_assum `!i q k. _` drule_all >>
-          simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+          simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
       PairCases_on `x` >>
       `FLOOKUP actual.vs_allocas aid = SOME(x0,x1)` by metis_tac[] >>
       gvs[] >> metis_tac[]) >>
@@ -247,7 +247,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `FLOOKUP initial.vs_allocas inst.inst_id`
   >- (qpat_x_assum `!i q k. _` drule_all >>
-      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   PairCases_on `x` >>
   `FLOOKUP actual.vs_allocas inst.inst_id = SOME(x0,x1)` by metis_tac[] >>
   gvs[] >> metis_tac[]

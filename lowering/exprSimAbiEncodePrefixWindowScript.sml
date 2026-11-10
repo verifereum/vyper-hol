@@ -51,7 +51,7 @@ Proof
        `mk_inst sa.cs_next_id ALLOCA [Lit 32w]
           [STRING #"%" (toString sa.cs_next_var)]`, `32`] >>
      simp[mk_inst_def] >> rpt strip_tac >>
-     first_x_assum drule >> simp[compileEnvTheory.regions_disjoint_def]) >>
+     first_x_assum drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   qexistsl_tac [`allocated`, `addr`] >>
   simp[mem_bytes_at_mstore_same, byteTheory.word_to_bytes_be_def]
 QED

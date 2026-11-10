@@ -40,7 +40,7 @@ Theorem tuple_target_writes_region_frame:
 Proof
   strip_tac >> irule mem_bytes_at_bytewise >> rpt strip_tac >>
   irule tuple_target_writes_frame >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem tuple_target_unwrap_buffer:

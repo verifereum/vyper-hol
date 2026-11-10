@@ -368,7 +368,7 @@ Resume abi_args_captured_cons_sim_live[tail_normal]:
   conj_tac >- gvs[exprLoweringPropsTheory.ci_mono_def] >>
   Cases_on `op` >>
   gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
-      compileEnvTheory.not_fresh_at_def]
+      loweringStateRelDefsTheory.not_fresh_at_def]
 QED
 Resume abi_args_captured_cons_sim_live[tail_exit]:
   Cases_on `res` >- gvs[wb_args_exit_def] >>
