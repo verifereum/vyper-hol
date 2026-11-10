@@ -31,7 +31,8 @@ Theorem flag_optional_stage_path[local]:
       (!x. staged = Var x ==> not_fresh_at sl x) /\
       ~t.vs_halted /\ t.vs_current_bb = sl.cs_current_bb /\
       t.vs_inst_idx = LENGTH sl.cs_current_insts /\
-      gas_marked_path F ctx func s 0 (OK t)
+      gas_marked_path F ctx func s 0 (OK t) /\
+      alloca_frame cenv es su s cenv es t
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `flag`
   >- (gvs[] >>
@@ -50,7 +51,8 @@ Proof
          disj1_tac >> qexists `su.cs_next_id` >> simp[]) >>
       qexistsl [`t`, `w`] >> gvs[valueEncodingTheory.val_in_memory_def]) >>
   gvs[compileEnvTheory.comp_return_def] >> qexistsl [`s`, `sw`] >> simp[] >>
-  simp[fragGasModeTheory.gas_marked_path_def, cj 1 fragGasPathTheory.gas_path_rules]
+  simp[fragGasModeTheory.gas_marked_path_def, cj 1 fragGasPathTheory.gas_path_rules,
+    stmtSimDefsTheory.alloca_frame_def] >> metis_tac[]
 QED
 
 Theorem flag_assignment_prefix_head[local]:
@@ -78,7 +80,8 @@ Theorem flag_assignment_prefix_head[local]:
       (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x sv) /\
       (!aid entry. FLOOKUP sv.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
-      gas_marked_path F ctx func sv 0 (OK t)
+      gas_marked_path F ctx func sv 0 (OK t) /\
+      alloca_frame cenv es1 su sv cenv es1 t
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all tuplePlaceRhsCertTheory.tuple_place_rhs_certificate >> strip_tac >>
@@ -118,6 +121,11 @@ Proof
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   simp[] >> disch_then (qspecl_then [`vs`, `get_tenv cx`] mp_tac) >>
   simp[] >> strip_tac >>
+  `alloca_frame cenv es1 su sv cenv es1 t` by
+    (fs[stmtSimDefsTheory.alloca_frame_def] >>
+     rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!aid off sz. _` (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+     simp[] >> metis_tac[]) >>
   qexistsl [`t`, `sw`] >> simp[] >>
   conj_tac
   >- (irule tuple_place_head_intro >> simp[] >>
@@ -158,7 +166,8 @@ Theorem tuple_place_compiler_flag_prefix_head:
     (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x sv) /\
     (!aid entry. FLOOKUP sv.vs_allocas aid = SOME entry ==>
       FLOOKUP t.vs_allocas aid = SOME entry) /\
-    gas_marked_path F ctx func sv 0 (OK t)
+    gas_marked_path F ctx func sv 0 (OK t) /\
+    alloca_frame cenv es1 su sv cenv es1 t
 Proof
   strip_tac >>
   `SUM (MAP (type_memory_bytes cenv) ltys) = type_memory_size_list ltvs` by

@@ -28,7 +28,9 @@ Theorem tuple_place_mcopy_path[local]:
       (!q. lookup_var q t = lookup_var q s) /\ t.vs_allocas = s.vs_allocas /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      gas_marked_path F ctx func s 0 (OK t)
+      gas_marked_path F ctx func s 0 (OK t) /\
+      (!a len. a + len <= w2n dw \/ w2n dw + sz <= a ==>
+        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
 Proof
   rpt strip_tac >>
   `stmt_state_rel ctx func cenv cx es (mcopy (w2n dw) (w2n sw) sz s)` by
@@ -49,7 +51,10 @@ Proof
         comp_ignore_bind_def, comp_return_def, emit_def] >>
   qexists `mcopy (w2n dw) (w2n sw) sz s with vs_inst_idx := SUC s.vs_inst_idx` >>
   simp[stmt_state_rel_inst_idx] >>
-  simp[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def]
+  rpt conj_tac
+  >- simp[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def]
+  >- simp[mcopy_def, write_memory_with_expansion_def, LET_THM] >>
+  rpt strip_tac >> irule valueCopyTheory.mem_bytes_at_mcopy_disjoint >> decide_tac
 QED
 
 Theorem tuple_place_stage_path:
@@ -77,7 +82,8 @@ Theorem tuple_place_stage_path:
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       gas_marked_path F ctx func s 0 (OK t) /\
       (!n lb lsz. local_region cenv es.scopes t n lb lsz ==>
-        w2n w + sz <= lb \/ lb + lsz <= w2n w)
+        w2n w + sz <= lb \/ lb + lsz <= w2n w) /\
+      alloca_frame cenv es sa s cenv es t
 Proof
   rpt strip_tac >> drule_all tuple_stage_copy_parts >>
   disch_then (qx_choosel_then [`sx`, `sm`, `p`] strip_assume_tac) >>
@@ -97,7 +103,9 @@ Proof
       (!q. lookup_var q t = lookup_var q s1) /\ t.vs_allocas = s1.vs_allocas /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      gas_marked_path F ctx func s1 0 (OK t)` by
+      gas_marked_path F ctx func s1 0 (OK t) /\
+      (!a len. a + len <= w2n w \/ w2n w + sz <= a ==>
+        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s1.vs_memory)` by
     (irule tuple_place_mcopy_path >> simp[] >>
      qexists `mk_inst sx.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
      goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >> gvs[mk_inst_def]) >>
@@ -113,6 +121,14 @@ Proof
      simp[mk_inst_def] >>
      disch_then (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
      gvs[] >> simp[compileEnvTheory.regions_disjoint_def, arithmeticTheory.ADD_COMM] ) >>
+  `alloca_frame cenv es sa s cenv es t` by
+    (irule localMemoryStorePathTheory.alloca_frame_owned_copy >>
+     `allocas_non_overlapping t` by gvs[stmt_state_rel_def, state_rel_def, alloca_inv_def] >>
+     simp[] >> conj_tac
+     >- (rpt strip_tac >> `x <> p` by metis_tac[] >> simp[]) >>
+     reverse conj_tac >- metis_tac[] >>
+     qexistsl [`w2n w`, `sx.cs_next_id`, `sz`] >>
+     gvs[arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
   qexistsl [`t`, `w`] >> simp[eval_operand_def] >>
   conj_tac >- gvs[] >>
   conj_tac >- (rpt strip_tac >> `x <> p` by metis_tac[] >> simp[]) >>
@@ -145,7 +161,8 @@ Theorem tuple_place_stage_snapshot_path:
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       gas_marked_path F ctx func s 0 (OK t) /\
-      tuple_place_snapshot cenv cx es lo sb.cs_next_id tys ltys ltvs w t
+      tuple_place_snapshot cenv cx es lo sb.cs_next_id tys ltys ltvs w t /\
+      alloca_frame cenv es sa s cenv es t
 Proof
   rpt strip_tac >>
   `sa.cs_next_id < sb.cs_next_id` by
