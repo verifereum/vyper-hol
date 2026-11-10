@@ -113,6 +113,14 @@ Proof
   rpt gen_tac >> BETA_TAC >> strip_tac >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
   fs[expr_post_def] >>
+  reverse conj_tac
+  >- (`MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+        (drule eval_read_preserves_scopes_dom >> simp[]) >>
+      irule alloca_frame_expr_prefix >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- (qexistsl [`ctx`, `cx`, `func`] >> simp[]) >>
+      qexistsl [`mid`, `su`, `t`] >> gvs[] >>
+      first_assum ACCEPT_TAC) >>
   rpt strip_tac >>
   `not_fresh_at su x` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >> metis_tac[]
