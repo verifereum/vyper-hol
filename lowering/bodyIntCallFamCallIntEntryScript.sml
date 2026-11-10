@@ -8,7 +8,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallSeamDefs
   bodyIntCallFamCallIntCertificateIntro bodyIntCallFamCallIntTraverse
   bodyIntCallFamCallIntWordStage bodyIntCallFamCallIntAllocatedStage
-  bodyIntCallFamCallIntEntryHeadStage
+  bodyIntCallFamCallIntEntryHeadStage bodyIntCallFamCallIntEntryRoom
 Libs
   monadsyntax
 
