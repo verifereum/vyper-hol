@@ -3306,6 +3306,66 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Theorem ordinary_noncopy_operand_word_kind:
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\
+  inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> PHI /\
+  inst.inst_opcode <> RET /\ inst.inst_opcode <> RETFMP /\
+  inst.inst_opcode <> DRET /\ inst.inst_opcode <> CODECOPY /\
+  MEM op inst.inst_operands /\ ~is_label_operand op /\
+  op <> dead_stack_marker /\ op_kind_ok fn ret op sv ==>
+  ?w. sv = Val w
+Proof
+  strip_tac >> Cases_on `op` >>
+  gvs[op_kind_ok_def, is_label_operand_def] >>
+  drule_all frameViewFactsTheory.ordinary_operand_not_retpc >>
+  drule_all label_flow_noncopy_operand_not_code_end >> metis_tac[]
+QED
+
+Theorem terminal_operand_word_kind:
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ label_positions_ok inst /\
+  MEM inst.inst_opcode
+    [STOP; RETURN; SELFDESTRUCT; REVERT; ASSERT; ASSERT_UNREACHABLE;
+     INVALID; CREATE; CREATE2; RETURNDATACOPY] /\
+  MEM op (compute_operands inst) /\ op <> dead_stack_marker /\
+  op_kind_ok fn ret op sv ==> ?w. sv = Val w
+Proof
+  strip_tac >>
+  `MEM op inst.inst_operands /\ ~is_label_operand op /\
+   inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> PHI /\
+   inst.inst_opcode <> RET /\ inst.inst_opcode <> RETFMP /\
+   inst.inst_opcode <> DRET /\ inst.inst_opcode <> CODECOPY` by
+    (gvs[listTheory.MEM, compute_operands_def] >>
+     gvs[label_positions_ok_def, listTheory.EVERY_MEM]) >>
+  drule_all ordinary_noncopy_operand_word_kind >> simp[]
+QED
+
+Theorem word_prepared_symbolic_stack:
+  asm_sym_rel p env cs ss /\ sym_kinds_ok cplan fn ret srest ps ss /\
+  ps.ps_stack = tail ++ operands /\
+  (!op sv. MEM op operands /\ op_kind_ok fn ret op sv ==> ?w. sv = Val w) /\
+  cs.as_stack = values ++ rest /\ LENGTH values = LENGTH operands ==>
+  ?suffix. ss.sym_stack = MAP Val values ++ suffix
+Proof
+  strip_tac >> fs[sym_kinds_ok_def, listTheory.REVERSE_APPEND] >>
+  qpat_assum `LIST_REL _ _ top`
+    (mp_then Any (qspec_then `LENGTH operands` mp_tac)
+       rich_listTheory.EVERY2_TAKE) >>
+  simp[] >> strip_tac >>
+  `TAKE (LENGTH operands) (REVERSE operands) = REVERSE operands` by
+    metis_tac[listTheory.TAKE_LENGTH_ID, listTheory.LENGTH_REVERSE] >>
+  `TAKE (LENGTH operands) top = MAP Val values` by
+    (irule word_kind_prefix_concretization >>
+     conj_tac
+     >- (qexistsl [`fn`, `REVERSE operands`, `ret`] >>
+         gvs[listTheory.MEM_REVERSE, listTheory.TAKE_APPEND1] >> gvs[]) >>
+     qexistsl [`SND (compute_label_offsets p)`, `rest`,
+               `DROP (LENGTH operands) top ++ srest`] >>
+     gvs[asm_sym_rel_def]) >>
+  metis_tac[listTheory.TAKE_DROP, listTheory.APPEND_ASSOC]
+QED
+
 Theorem sym_revert_operand_kind:
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
   opaque_use_ok fn /\ label_flow_ok ctx /\ inst.inst_opcode = REVERT /\
@@ -3313,15 +3373,11 @@ Theorem sym_revert_operand_kind:
   op_kind_ok fn ret op sv ==>
   ?w. sv = Val w
 Proof
-  strip_tac >> Cases_on `op` >>
-  gvs[op_kind_ok_def, is_label_operand_def, dead_stack_marker_def] >>
-  rename1 `MEM (Var x) inst.inst_operands` >>
-  `~retpc_var fn x` by
-    (strip_tac >> drule_all opaque_use_ok_retpc_use >> simp[retpc_use_ok_def]) >>
-  `~code_end_var fn x` by
-    (irule label_flow_noncopy_operand_not_code_end >>
-     conj_tac >- (qexists `ctx` >> simp[]) >> qexists `inst` >> simp[]) >>
-  gvs[]
+  strip_tac >>
+  `op <> dead_stack_marker` by
+    (strip_tac >> gvs[dead_stack_marker_def, is_label_operand_def]) >>
+  drule ordinary_noncopy_operand_word_kind >>
+  disch_then drule >> simp[] >> metis_tac[]
 QED
 
 Theorem sym_revert_prepared_stack:
