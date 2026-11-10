@@ -2406,7 +2406,7 @@ Proof
 QED
 
 (* The ISTORE case of gen_inst_ok_sim_marked. *)
-Theorem istore_inst_ok_sim_marked:
+Theorem istore_inst_ok_sim_marked_count:
   !fuel ctx lo o2pc prog
    liveness dfg cfg fn inst next_liveness is_halting
    next_is_term bb_label base ps vs as ops ps' initial_fmp.
@@ -2514,9 +2514,13 @@ Theorem istore_inst_ok_sim_marked:
         asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
-         as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
+         as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops)) /\
+        n = LENGTH (execute_plan initial_fmp ops)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  CONV_TAC (BINDER_CONV (BINDER_CONV
+    (RAND_CONV (RAND_CONV (RAND_CONV
+      (REWR_CONV arithmeticTheory.EQ_LESS_EQ)))))) >>
   qpat_x_assum `lo = _` kall_tac >> qpat_x_assum `o2pc = _` kall_tac >>
   qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once generate_inst_plan_def, is_param_opcode_def] >> strip_tac >>
@@ -2683,6 +2687,61 @@ Proof
   gvs[asm_steps_add, execute_plan_append, LENGTH_APPEND,
       execute_plan_def, exec_stack_op_def] >>
   simp[Abbr `as2`]
+QED
+
+Theorem istore_inst_ok_sim_marked:
+  !fuel ctx lo o2pc prog liveness dfg cfg fn inst next_liveness is_halting
+   next_is_term bb_label base ps vs as ops ps' initial_fmp.
+    lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
+    inst.inst_opcode = ISTORE /\ inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> GAS /\
+    (ef_read0 inst.inst_opcode ==> inst.inst_operands = []) /\
+    EVERY (\(off,len). len = 0 \/ off + len <= ps'.ps_alloc.sa_spill_base \/
+      ps'.ps_alloc.sa_next_offset <= off) (source_memory_read_ranges inst vs) /\
+    generated_plan_state_wf_marked base ps /\ codegen_ready_fn fn /\
+    MEM inst (fn_insts fn) /\ ~MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
+    inst_wf inst /\
+    (inst.inst_opcode = LOG ==>
+      ?tc rest. inst.inst_operands = Lit tc :: rest /\ w2n tc <= 4) /\
+    (inst.inst_opcode = ASSERT ==> IS_SOME (FLOOKUP lo "revert")) /\
+    LENGTH (compute_operands inst) <= 16 /\
+    LENGTH (compute_operands inst) <= LENGTH (SND (emit_input_plan inst.inst_opcode
+      (compute_operands inst) next_liveness ps)).ps_stack /\
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      IS_SOME (stack_get_depth op ps.ps_stack) \/ IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) /\
+    (!lbl i. i < LENGTH (execute_plan initial_fmp ops) /\
+      EL i (execute_plan initial_fmp ops) = AsmLabel lbl ==>
+      ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
+        FLOOKUP o2pc off = SOME (as.as_pc + i)) /\
+    (!op. MEM op (compute_operands inst) ==> eval_operand op vs = operand_val vs lo op) /\
+    (!op at. MEM op (compute_operands inst) /\
+      (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at (compute_operands inst)) /\
+      operand_equiv dfg op at ==> operand_val vs lo op = operand_val vs lo at) /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+    EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+      inst.inst_outputs) ps.ps_stack /\
+    (!op. op IN FDOM ps.ps_spilled ==> EVERY
+      (\out. case op of Var x => x <> out | _ => T) inst.inst_outputs) /\
+    (!dist prev val_op. inst.inst_opcode = PHI /\
+      stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME dist /\
+      vs.vs_prev_bb = SOME prev /\ resolve_phi prev inst.inst_operands = SOME val_op ==>
+      operand_val vs lo (stack_peek dist ps.ps_stack) = eval_operand val_op vs) /\
+    EVERY (\s. case s of SOSpill k => k < dimword(:256)
+      | SORestore k => k < dimword(:256) | _ => T) ops /\
+    venom_asm_rel lo ps vs as /\ n2w initial_fmp = vs.vs_initial_fmp /\
+    generate_inst_plan liveness dfg cfg fn inst next_liveness is_halting next_is_term
+      bb_label ps = SOME (ops, ps') /\
+    asm_block_at prog as.as_pc (execute_plan initial_fmp ops) ==>
+    !vs'. step_inst fuel ctx inst vs = OK vs' /\
+      inst_memory_safe ps'.ps_alloc inst vs vs' ==>
+      ?n as'. asm_steps lo o2pc prog n as = AsmOK as' /\
+        venom_asm_rel lo ps' vs' as' /\
+        (~is_terminator inst.inst_opcode ==>
+          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  drule_all istore_inst_ok_sim_marked_count >> metis_tac[]
 QED
 
 fun ok_case_lemma_tac th =
