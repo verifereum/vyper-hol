@@ -928,11 +928,11 @@ Proof
   qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   rewrite_tac[vv_post_def] >> gvs[vyperASTTheory.expr_type_def] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
-  >- (irule tuple_vv_holds_elem >> simp[] >> metis_tac[])
-  >~ [`_ ==> pure_frame _ _ _ _ _ _`]
-  >- (rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
-      strip_tac >> res_tac) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY (strip_tac >>
+       qpat_x_assum `~expr_has_effect obj ==> pure_frame _ _ _ _ _ _` irule >>
+       first_assum ACCEPT_TAC >> NO_TAC)
+  >- (irule tuple_vv_holds_elem >> simp[] >> metis_tac[]) >>
   `vv_at cenv cx (EL k tys) sa sn es1 tv'
      (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q` by
     (qspecl_then [`func`, `cenv`, `cx`, `env`, `es`, `sa`, `sn`, `es1`, `tv`,
