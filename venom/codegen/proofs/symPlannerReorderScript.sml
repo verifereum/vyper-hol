@@ -302,3 +302,47 @@ Proof
     allocMonoTheory.do_swap_spill_base, allocMonoTheory.do_swap_next_offset,
     arithmeticTheory.LESS_EQ_TRANS]
 QED
+
+Theorem sym_steps_frame_bind:
+  (?mid. sym_steps p env m ss = SymOK mid /\ Q mid /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + m /\
+    (!b. ~P b ==> FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)) /\
+  (!mid. Q mid /\ mid.sym_base.as_pc = ss.sym_base.as_pc + m ==>
+    ?last. sym_steps p env n mid = SymOK last /\ R last /\
+      last.sym_base.as_pc = mid.sym_base.as_pc + n /\
+      (!b. ~P b ==> FLOOKUP last.sym_mem_labels b = FLOOKUP mid.sym_mem_labels b)) ==>
+  ?last. sym_steps p env (m+n) ss = SymOK last /\ R last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + (m+n) /\
+    (!b. ~P b ==> FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> first_x_assum (drule_all_then strip_assume_tac) >>
+  gvs[codegenSymRelTheory.sym_steps_add] >> metis_tac[]
+QED
+
+Theorem sym_two_swaps:
+  do_swap a ps = (ops1,ps1) /\ do_swap b ps1 = (ops2,out) /\
+  a < LENGTH ps.ps_stack /\ b < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (ops1 ++ ops2) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (ops1 ++ ops2)) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp (ops1 ++ ops2))) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (ops1 ++ ops2)) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac reorder_two_swaps_structure >>
+  pure_rewrite_tac[stackOpSimTheory.execute_plan_append, LENGTH_APPEND] >>
+  ho_match_mp_tac (Q.INST [`Q` |-> `sym_kinds_ok cplan fn ret srest ps1`]
+    sym_steps_frame_bind) >> conj_tac
+  >- (gvs[stackOpSimTheory.execute_plan_append,
+        stackOpSimTheory.asm_block_at_append, EVERY_APPEND] >>
+      drule_all_then mp_tac sym_do_swap >> simp[]) >>
+  rpt strip_tac >> irule sym_do_swap >>
+  gvs[SF SFY_ss, stackOpSimTheory.execute_plan_append,
+    stackOpSimTheory.asm_block_at_append, EVERY_APPEND]
+QED
