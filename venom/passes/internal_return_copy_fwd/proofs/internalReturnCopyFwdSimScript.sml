@@ -1060,6 +1060,27 @@ Proof
   simp[EXTENSION, ircf_gam_def, arithmeticTheory.LT] >> metis_tac[]
 QED
 
+Theorem ircf_gam_suc_forward:
+  ssa_form fn /\
+  n IN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  ircf_copy_roots fn (EL n bb.bb_instructions) = SOME (d,root,szw) /\
+  MEM dai (fn_insts fn) /\ dai.inst_opcode = ALLOCA /\ dai.inst_outputs = [d] /\
+  MEM sai (fn_insts fn) /\ sai.inst_opcode = ALLOCA /\ sai.inst_outputs = [root] /\
+  FLOOKUP a dai.inst_id = SOME (db,dsz) /\
+  FLOOKUP a sai.inst_id = SOME (sb,ssz) ==>
+  ircf_gam fn_meta rma C fn bb a (SUC n) =
+  ircf_gam fn_meta rma C fn bb a n UNION {(db,sb,w2n szw)}
+Proof
+  strip_tac >> rewrite_tac[ircf_gam_suc] >> AP_TERM_TAC >>
+  simp[EXTENSION] >> gen_tac >> eq_tac
+  >- (strip_tac >> gvs[] >>
+      `dai' = dai /\ sai' = sai` by
+        (fs[venomInstTheory.fn_insts_def] >>
+         metis_tac[venomWfPropsTheory.ssa_outputs_same_inst, MEM]) >>
+      gvs[]) >>
+  strip_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem ircf_gam_suc_no_forward:
   n NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) ==>
   ircf_gam fn_meta rma C fn bb a (SUC n) =
@@ -1158,6 +1179,24 @@ Proof
   `site_bytes ids s.vs_allocas SUBSET site_bytes ids s'.vs_allocas` by
     (irule site_bytes_mono >> simp[]) >>
   simp[ircf_dead_def] >> ASM_SET_TAC[]
+QED
+
+Theorem ircf_dead_noninvoke_mono:
+  inst.inst_opcode <> INVOKE /\ step_inst fuel C inst s = OK s' ==>
+  ircf_dead ids s stk SUBSET ircf_dead ids s' stk
+Proof
+  strip_tac >> irule ircf_dead_allocas_mono >>
+  metis_tac[step_inst_noninvoke_allocas_submap]
+QED
+
+Theorem ircf_dead_step_agree:
+  inst.inst_opcode <> INVOKE /\ step_inst fuel C inst s = OK s' /\
+  taint_agree D (ircf_dead ids s stk) tn' s' t' ==>
+  taint_agree D (ircf_dead ids s' stk) tn' s' t'
+Proof
+  strip_tac >> irule taint_agree_hidden_mono >>
+  qexists_tac `ircf_dead ids s stk` >>
+  simp[] >> metis_tac[ircf_dead_noninvoke_mono]
 QED
 
 Theorem ircf_R_ret_reachable_caller_memory:
