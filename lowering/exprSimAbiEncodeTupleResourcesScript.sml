@@ -15,9 +15,9 @@ Theorem abi_encode_args_tuple_allocation_resources:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
   ~(LENGTH args = 1 /\ ~ensure) /\
   abi_args_post ctx func ce cx es sa st s0 es' args ops vs initial /\
-  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (ops,MAP expr_type args))) st = (buf,allocated) /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
   fn_has_code st allocated func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce st ==>
-  let n = abi_tuple_bytes ce (ZIP (ops,MAP expr_type args)) in
+  let n = abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)) in
   let a = abi_builtin_allocate_state st.cs_next_id n initial in
   ?sb. ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ sb = initial.vs_alloca_next) \/
          FLOOKUP initial.vs_allocas st.cs_next_id = SOME (sb,n)) /\
@@ -25,16 +25,16 @@ Theorem abi_encode_args_tuple_allocation_resources:
     FLOOKUP a.vs_allocas st.cs_next_id = SOME (sb,n) /\ sb+n <= a.vs_alloca_next /\
     a.vs_alloca_next < dimword (:256) /\
     (!k tv w. k < LENGTH args /\
-      evaluate_type (get_tenv cx) (expr_type (EL k args)) = SOME tv /\
-      ~is_word_type (expr_type (EL k args)) /\ eval_operand (EL k ops) initial = SOME w ==>
+      evaluate_type (get_tenv cx) (lowered_value_type ce (EL k args)) = SOME tv /\
+      ~is_word_type (lowered_value_type ce (EL k args)) /\ eval_operand (EL k ops) initial = SOME w ==>
       venomMemDefs$regions_disjoint (w2n w,val_footprint tv (EL k vs)) (sb,n))
 Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   drule abi_args_post_lengths >> strip_tac >>
-  `abi_tuple_bytes ce (ZIP (ops,MAP expr_type args)) =
-    type_memory_bytes ce (TupleT (MAP expr_type args))` by
+  `abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)) =
+    type_memory_bytes ce (TupleT (MAP (lowered_value_type ce) args))` by
     simp[abi_tuple_bytes_def, type_memory_bytes_def, MAP_MAP_o, combinTheory.o_DEF, MAP_ZIP] >>
-  `abi_tuple_bytes ce (ZIP (ops,MAP expr_type args)) < dimword (:256)` by
+  `abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args)) < dimword (:256)` by
     (drule abi_encode_endpoint_staging_size >>
      impl_tac >- simp[] >> simp[dimword_def]) >>
   drule_all buffer_alloc_code >> strip_tac >>
@@ -42,7 +42,7 @@ Proof
   drule_at (Pat `MEM _ (fn_insts _)`) abi_encode_allocate_resources >>
   simp_tac (srw_ss()) [mk_inst_def] >>
   disch_then drule >> simp_tac bool_ss [LET_THM] >> strip_tac >>
-  first_x_assum (qspec_then `abi_tuple_bytes ce (ZIP (ops,MAP expr_type args))` mp_tac) >>
+  first_x_assum (qspec_then `abi_tuple_bytes ce (ZIP (ops,MAP (lowered_value_type ce) args))` mp_tac) >>
   asm_simp_tac bool_ss [] >> strip_tac >>
   qexists `p` >> asm_simp_tac bool_ss [] >>
   conj_tac
@@ -64,7 +64,7 @@ Proof
           simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
       simp[venomMemDefsTheory.regions_disjoint_def]) >>
   `FLOOKUP initial.vs_allocas st.cs_next_id =
-    SOME (p,type_memory_bytes ce (TupleT (MAP expr_type args)))` by
+    SOME (p,type_memory_bytes ce (TupleT (MAP (lowered_value_type ce) args)))` by
     gvs[abi_builtin_allocate_state_def] >>
   `not_local_ptr ce es'.scopes (STRING #"%" (toString st.cs_next_var))` by
     metis_tac[local_ptrs_reserved_fresh, arithmeticTheory.LESS_EQ_REFL] >>
@@ -111,21 +111,21 @@ Theorem abi_encode_args_registered_phase_rows:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid0) target args) es /\
   ~(LENGTH args = 1 /\ ~ensure) /\ mid = OPTION_MAP bytes_method_id_word mid0 /\
   abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
-  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) st = (buf,allocated) /\
-  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP expr_type args)) allocated = ((),staged) /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
   s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_allocas /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_allocas /\
   s.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_alloca_next /\
-  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)))
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_alloca_next /\
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)))
     staged = (ops,ready) /\
   compile_abi_encode_to_buf (SND ops) buf.buf_operand ei ready = (len,body_end) /\
   fn_has_code st allocated func /\ fn_has_code staged ready func /\
   fn_has_code ready body_end obs /\ fn_inst_ids_distinct obs /\ fn_inst_ids_distinct func /\
   (!j. MEM j (fn_insts obs) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
     MEM j (fn_insts func)) /\ local_ptrs_reserved ce st ==>
-  let n = abi_tuple_bytes ce (ZIP (values,MAP expr_type args)) in
-  let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)) +
+  let n = abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)) in
+  let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
     (case mid of NONE => 0 | SOME _ => 4)) in
   let a = abi_builtin_allocate_state staged.cs_next_id outsz s in
   ?sb p. alloca_inv a /\ alloca_room ctx func a /\ outsz < dimword (:256) /\
@@ -154,7 +154,7 @@ Proof
     (fs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
       alloca_room_def, pending_alloca_size_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)) +
+  `32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
       (case mid of NONE => 0 | SOME _ => 4)) < dimword (:256)` by
     (drule abi_encode_endpoint_output_size >>
      Cases_on `LENGTH args = 1` >> Cases_on `mid0` >>
@@ -163,7 +163,7 @@ Proof
   drule_at (Pat `alloca_room _ _ s`) abi_encode_args_allocate_row >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   disch_then (qspec_then `32+32*word_size
-    (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)) +
+    (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
       (case mid of NONE => 0 | SOME _ => 4))` mp_tac) >>
   simp_tac (srw_ss()) [mk_inst_def] >> impl_tac
   >- (asm_rewrite_tac [] >> rpt gen_tac >> strip_tac >>
@@ -178,16 +178,16 @@ Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   qpat_assum `mid = OPTION_MAP _ _` (fn th => pure_rewrite_tac [GSYM th]) >>
   qabbrev_tac `outsz = 32+32*word_size
-    (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)) +
+    (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
       (case mid of NONE => 0 | SOME _ => 4))` >>
   qabbrev_tac `a = abi_builtin_allocate_state staged.cs_next_id outsz s` >>
   `st.cs_next_id <> staged.cs_next_id` by decide_tac >>
   `FLOOKUP a.vs_allocas st.cs_next_id =
-    SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args)))` by
+    SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))` by
     simp[Abbr `a`, abi_encode_allocate_other_row] >>
-  `sb+abi_tuple_bytes ce (ZIP (values,MAP expr_type args)) <= a.vs_alloca_next` by
+  `sb+abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)) <= a.vs_alloca_next` by
     (fs[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
-  `venomMemDefs$regions_disjoint (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) (p,outsz)` by
+  `venomMemDefs$regions_disjoint (sb,abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) (p,outsz)` by
     (fs[alloca_inv_def, allocas_non_overlapping_def, venomMemDefsTheory.regions_disjoint_def] >>
      qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _`
        (qspecl_then [`st.cs_next_id`, `staged.cs_next_id`] mp_tac) >> simp[] >> metis_tac[]) >>
@@ -228,27 +228,20 @@ Theorem abi_encode_args_length_bound:
   eval_exprs cx args es = (INL vs,es') /\
   vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs ==>
   LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs)) <=
-    abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))
+    abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))
 Proof
-  strip_tac >> drule_all abi_encode_body_args_runtime_typed >>
-  simp_tac (srw_ss()) [exprs_runtime_typed_def] >> strip_tac >>
-  `LIST_REL (\ty tv. evaluate_type (get_tenv cx) ty = SOME tv)
-    (MAP expr_type args) tvs` by gvs[LIST_REL_MAP1, combinTheory.o_DEF] >>
+  strip_tac >>
+  `EVERY (\e. expr_body_pre ce cx env e es) args` by
+    (simp[EVERY_MEM] >> metis_tac[abi_encode_body_arg_pre]) >>
+  `LIST_REL (\e v. value_runtime_typed env (lowered_value_type ce e) v) args vs` by
+    (irule exprSimHypsTheory.eval_exprs_physical_runtime_typed >>
+     goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[exprSimHypsTheory.memory_rhs_read_lowered_typed_unwidened]) >>
+  drule_all abi_encode_body_args_runtime_typed >> strip_tac >>
+  drule_all exprSimHypsTheory.physical_runtime_typed_list_layouts >> strip_tac >>
   `sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx)` by
     fs[expr_body_pre_def, expr_sim_inv_def] >>
-  `!ty. MEM ty (MAP expr_type args) ==>
-    is_abi_dynamic ce.ce_struct_fields ty = vyper_is_dynamic (get_tenv cx) ty /\
-    abi_size_bound ce.ce_struct_fields ty = vyper_abi_size_bound (get_tenv cx) ty /\
-    (~vyper_is_dynamic (get_tenv cx) ty ==>
-      abi_static_size ce.ce_struct_fields ty = vyper_abi_size_bound (get_tenv cx) ty)` by
-    (rpt strip_tac >>
-     `?tv. evaluate_type (get_tenv cx) ty = SOME tv` by
-       (gvs[LIST_REL_EL_EQN, MEM_EL] >> metis_tac[]) >>
-     drule_all abi_encode_evaluated_metadata >> simp[]) >>
-  drule abi_props_vyper_list >> strip_tac >>
-  `values_have_types tvs vs` by simp[values_have_types_LIST_REL] >>
-  drule_all (cj 2 vyper_to_abi_enc_le_size_bound) >>
-  simp[abi_size_bound_def, vyper_abi_size_bound_def]
+  drule_all exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_physical_tuple_encoding_bound >> simp[]
 QED
 
 Theorem abi_encode_args_numerical_capacity:
@@ -257,7 +250,7 @@ Theorem abi_encode_args_numerical_capacity:
   eval_exprs cx args es = (INL vs,es') /\
   vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs ==>
   let bytes = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) in
-  let maxlen = abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)) in
+  let maxlen = abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) in
   let m = case mid of NONE => 0 | SOME _ => 4 in
   let outsz = 32+32*word_size (maxlen+m) in
   LENGTH bytes <= maxlen /\ 32+m+LENGTH bytes <= outsz /\
@@ -266,7 +259,7 @@ Theorem abi_encode_args_numerical_capacity:
 Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   drule_all abi_encode_args_length_bound >> strip_tac >>
-  `32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)) +
+  `32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)) +
     (case mid of NONE => 0 | SOME _ => 4)) < dimword (:256)` by
     (drule abi_encode_endpoint_output_size >>
      Cases_on `LENGTH args = 1` >> Cases_on `mid0` >>
@@ -275,7 +268,7 @@ Proof
   disch_then (qspec_then `(case mid of NONE => 0 | SOME _ => 4)` assume_tac) >>
   qpat_x_assum `mid = OPTION_MAP _ _` (fn th => pure_rewrite_tac [GSYM th]) >>
   Cases_on `mid` >> gvs[] >>
-  qspec_then `abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))` mp_tac
+  qspec_then `abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))` mp_tac
     (GEN_ALL abi_builtin_rounded_selector_store) >> simp[]
 QED
 
@@ -285,17 +278,17 @@ Theorem abi_encode_args_phase_resources:
   eval_exprs cx args es = (INL vs,es') /\
   vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
   abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
-  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) st = (buf,allocated) /\
-  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP expr_type args)) allocated = ((),staged) /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
   s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_allocas /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_allocas /\
   s.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_alloca_next /\
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_alloca_next /\
   eval_operand buf.buf_operand s = SOME (n2w sb) /\
-  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) /\
-  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) s.vs_memory /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) /\
+  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) s.vs_memory /\
   enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) /\
-  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)))
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args)))
     staged = (ops,ready) /\
   compile_abi_encode_to_buf (SND ops) buf.buf_operand ei ready = (len,body_end) /\
   fn_has_code st allocated func /\ fn_has_code staged ready func /\
@@ -303,11 +296,11 @@ Theorem abi_encode_args_phase_resources:
   obs.fn_name = func.fn_name /\
   (!j. MEM j (fn_insts obs) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
     MEM j (fn_insts func)) /\ local_ptrs_reserved ce st ==>
-  let n = abi_tuple_bytes ce (ZIP (values,MAP expr_type args)) in
+  let n = abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)) in
   let bytes = enc ct rv in
   let m = case mid of NONE => 0 | SOME _ => 4 in
   let mw = case mid of NONE => 0 | SOME _ => 32 in
-  let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+m) in
+  let outsz = 32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+m) in
   let a = abi_builtin_allocate_state staged.cs_next_id outsz s in
   ?p. abi_encoder_window_input ei ct rv sb n s.vs_memory /\
     alloca_inv a /\ alloca_room ctx func a /\
@@ -356,7 +349,7 @@ Proof
     (drule_all abi_tuple_encode_stage_shape >> simp[]) >>
   qexists `p` >>
   `abi_encoder_window_input ei ct rv sb
-    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) s.vs_memory` by
+    (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) s.vs_memory` by
     metis_tac[abi_encoder_open_input_window] >>
   qpat_x_assum `s.vs_allocas = _` (fn th => pure_rewrite_tac [GSYM th]) >>
   qpat_x_assum `s.vs_alloca_next = _` (fn th => pure_rewrite_tac [GSYM th]) >>
