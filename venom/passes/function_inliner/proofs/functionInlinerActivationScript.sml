@@ -3,6 +3,7 @@
 Theory functionInlinerActivation
 Ancestors
   functionInlinerSimulation functionInlinerSiteSimulation
+  functionInlinerNamespace functionInlinerOrigin
   functionInlinerSiteLayout functionInlinerDefs functionInlinerFrame venomExecSemantics
   venomState venomInst passSimulationProofs passSimulationDefs list rich_list pred_set
 
@@ -548,4 +549,51 @@ Proof
   >- (gvs[] >> simp[combinTheory.APPLY_UPDATE_THM] >>
       irule inline_snapshot_writes >> metis_tac[]) >>
   simp[combinTheory.APPLY_UPDATE_THM] >> metis_tac[]
+QED
+
+Theorem inline_qualified_rewrite_outputs_disjoint:
+  qualified_origin ctx n caller /\ qualified_origin ctx n callee /\
+  MEM call (fn_insts caller) /\ call.inst_opcode = INVOKE /\
+  call.inst_operands = Label callee.fn_name::args /\
+  rewrite_inline_blocks (rotate_invoke_ops call.inst_operands)
+    call.inst_outputs ret (clone_function (inline_prefix n) callee).fn_blocks param_idx =
+    (bbs,param_idx') ==>
+  EVERY (\bb. EVERY (\inst. EVERY (\x.
+    x NOTIN (set (cfgTransform$fn_all_vars caller) DIFF set call.inst_outputs))
+    inst.inst_outputs) bb.bb_instructions) bbs
+Proof
+  strip_tac >> irule inline_clone_rewrite_outputs_disjoint >>
+  goal_assum (drule_at Any) >>
+  simp[EVERY_MEM] >>
+  metis_tac[qualified_origin_clone_disjoint, qualified_origin_call_return_arity]
+QED
+
+Theorem inline_qualified_snapshot_writes:
+  qualified_origin ctx n caller /\ qualified_origin ctx n callee /\
+  MEM call (fn_insts caller) /\ call.inst_opcode = INVOKE /\
+  call.inst_operands = Label callee.fn_name::args /\
+  rewrite_inline_blocks (rotate_invoke_ops call.inst_operands)
+    call.inst_outputs ret (clone_function (inline_prefix n) callee).fn_blocks param_idx =
+    (bbs,param_idx') /\
+  inline_snapshot_data a route snap frame /\
+  (!v. v IN snap.ils_defined ==>
+    route.ir_rename v IN
+      (set (cfgTransform$fn_all_vars caller) DIFF set call.inst_outputs)) /\
+  (!v. v IN snap.ils_protected ==>
+    snap.ils_parent_rename v IN
+      (set (cfgTransform$fn_all_vars caller) DIFF set call.inst_outputs)) /\
+  EVERY (\(x,w). ?bb inst.
+    MEM bb bbs /\ MEM inst bb.bb_instructions /\ MEM x inst.inst_outputs) writes ==>
+  inline_snapshot_data a route snap
+    (frame with ipf_state :=
+      FOLDL (\t (x,w). update_var x w t) frame.ipf_state writes)
+Proof
+  strip_tac >>
+  drule_all inline_qualified_rewrite_outputs_disjoint >>
+  simp[EVERY_MEM] >> strip_tac >>
+  irule inline_snapshot_writes >> simp[] >>
+  simp[EVERY_MEM] >> gen_tac >> PairCases_on `e` >>
+  strip_tac >> gvs[EVERY_MEM] >>
+  qpat_x_assum `!e. MEM e writes ==> _` drule >> simp[] >>
+  strip_tac >> metis_tac[]
 QED
