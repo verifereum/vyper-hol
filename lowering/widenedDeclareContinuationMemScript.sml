@@ -239,6 +239,32 @@ Proof
      exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]
 QED
 
+Theorem retained_declaration_source_ready[local]:
+  gas_admissible (eval_stmt cx (AnnAssign id ann e)) (stmt_res_ok lctx) es /\
+  evaluate_type (get_tenv cx) ann = SOME dtv /\
+  gas_marked_exec T (ctx,fn) (bind (eval_expr cx e) (read_result cx))
+    (es,s0) marks (INL v) ee (OK t) ==>
+  ?sc rest. ee.scopes = sc::rest /\ lookup_scopes id ee.scopes = NONE /\
+    (ee with gas_obs := []).scopes = sc::rest /\
+    lookup_scopes id (ee with gas_obs := []).scopes = NONE /\
+    !tail. new_variable id dtv v ((ee with gas_obs := []) with gas_obs := tail) =
+      (INL (), ((ee with gas_obs := []) with scopes :=
+        (sc |+ (id,<|assignable := T; type := dtv; value := v; popped := []|>))::rest)
+        with gas_obs := tail)
+Proof
+  strip_tac >>
+  `?sc rest. ee.scopes = sc::rest /\ lookup_scopes id ee.scopes = NONE /\
+    !tail. new_variable id dtv v (ee with gas_obs := tail) =
+      (INL (), (ee with scopes :=
+        (sc |+ (id,<|assignable := T; type := dtv; value := v; popped := []|>))::rest)
+        with gas_obs := tail)` by
+    (irule annassign_continuation_all_tails >>
+     goal_assum (drule_at (Pat `gas_admissible _ _ _`)) >>
+     qexists_tac `gas_explicit marks s0.vs_gas_readings` >>
+     fs[gas_marked_exec_def]) >>
+  qexistsl_tac [`sc`, `rest`] >> gvs[]
+QED
+
 Theorem widened_declare_retained_continuation_mem:
   body_inv tops ctx ce cx /\
   supported_expr tops (Call ann (IntCall fid) args drv) /\
@@ -289,15 +315,7 @@ Proof
   `~is_word_type (lowered_value_type ce (Call ann (IntCall fid) args drv))` by
     metis_tac[vyperTypeSystemTheory.type_widens_to_def, compatible_word_type] >>
   gvs[unwrap_memory_compile, comp_return_def] >>
-  `?sc rest. ee.scopes = sc::rest /\ lookup_scopes id ee.scopes = NONE /\
-    !tail. new_variable id dtv v (ee with gas_obs := tail) =
-      (INL (), (ee with scopes :=
-        (sc |+ (id,<|assignable := T; type := dtv; value := v; popped := []|>))::rest)
-        with gas_obs := tail)` by
-    (irule annassign_continuation_all_tails >>
-     goal_assum (drule_at (Pat `gas_admissible _ _ _`)) >>
-     qexists_tac `gas_explicit marks s0.vs_gas_readings` >>
-     fs[gas_marked_exec_def]) >>
+  drule_all retained_declaration_source_ready >> strip_tac >>
   `lookup_var p t = SOME dw /\
    FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n dw,sz) /\
    w2n dw + type_memory_size dtv <= t.vs_alloca_next /\
@@ -322,12 +340,6 @@ Proof
   `compile_assign_value ce (Var p) LocMemory p'.ptr_operand F (SOME LocMemory) ann
      (lowered_value_type ce (Call ann (IntCall fid) args drv)) info bytes sb = ((),sf)` by
     fs[contextTheory.vv_location_def] >>
-  `!tail. new_variable id dtv v ((ee with gas_obs := []) with gas_obs := tail) =
-    (INL (), ((ee with gas_obs := []) with scopes :=
-      (sc |+ (id,<|assignable := T; type := dtv; value := v; popped := []|>))::rest)
-      with gas_obs := tail)` by simp[] >>
-  `((ee with gas_obs := []).scopes = sc::rest) /\
-    lookup_scopes id (ee with gas_obs := []).scopes = NONE` by gvs[] >>
   `ann <> lowered_value_type ce (Call ann (IntCall fid) args drv) /\
    w2n w + type_memory_size stv <= t.vs_alloca_next` by simp[] >>
   drule_all widened_declare_copy_continuation_mem >> strip_tac >>
