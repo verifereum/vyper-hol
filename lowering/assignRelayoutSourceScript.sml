@@ -2,7 +2,7 @@
 Theory assignRelayoutSource
 Ancestors
   annassignRelayoutSource allocaSiteResource exprLoweringProps loweringPosts
-  compileEnv
+  compileEnv loweringStateRelDefs
 
 Theorem expr_post_live_destination_source:
   !ctx func cenv cx e es sa sb s0 es' v op s sty stv

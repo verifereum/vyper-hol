@@ -3,7 +3,7 @@ Theory immutableDeployAssignBytes
 Ancestors
   immutableValue immutableEncoding immutableEncodingProofs valueEncodingProofs
   abiEncoderMemory abiCanonicalHeadSize valueTypingMemoryProps
-  valueEncoding immutableDeployAssignAdmissible vyperTyping
+  valueEncoding valueEncodingDefs immutableDeployAssignAdmissible vyperTyping
   exprSimAggregateEncoding list rich_list
 
 Theorem immutable_mask_prefix_agreement:

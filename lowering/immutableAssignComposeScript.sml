@@ -6,7 +6,7 @@ Ancestors
   bodyImmutableAugAssignStore bodyImmutableAugAssignExec
   exprSimSource exprSimHypsDefs exprSimMemorySource vyperInterpreter vyperState
   vyperTypeInvariants vyperTypeEnv stmtSimProps venomState vyperPlaceFrames
-  loweringPosts stmtSimDefs compileEnv immutableDeployAssignFacts exprLoweringProps
+  loweringPosts stmtSimDefs compileEnv loweringStateRelDefs immutableDeployAssignFacts exprLoweringProps
   immutableDeployAssignAdmissible venomMemProps exprSimProps context stmtLowering
   emitHelper venomInst valueEncodingProps immutableDeployStoreLength immutableAssignStoreLength
   immutableDeployOperandTransfer immutableAssignNormalizeFrame stmtSimDeclCompose

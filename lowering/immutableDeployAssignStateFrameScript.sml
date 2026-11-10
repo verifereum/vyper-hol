@@ -2,7 +2,7 @@
 Theory immutableDeployAssignStateFrame
 Ancestors
   immutableDeployAssignSourceFrame immutableDeployAssignFacts localPtrsProps
-  valueEncodingProps exprLoweringProps compileEnv finite_map vyperPlaceFrames
+  valueEncodingProps exprLoweringProps compileEnv loweringStateRelDefs finite_map vyperPlaceFrames
   venomState
 
 Theorem immutable_store_local_ptrs_frame:

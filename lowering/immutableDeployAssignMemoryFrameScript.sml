@@ -2,7 +2,7 @@
 Theory immutableDeployAssignMemoryFrame
 Ancestors
   immutableDeployAssignSourceFrame immutableDeployAssignFacts exprSimHypsDefs
-  compileEnv valueEncodingProps valueTypingMemoryProps vyperTypeEnv
+  compileEnv loweringStateRelDefs valueEncodingProps valueTypingMemoryProps vyperTypeEnv
   vyperTypeInvariants vyperState finite_map
 
 Theorem immutable_store_immutables_frame:

@@ -3,7 +3,7 @@
 Theory placeRelayoutState
 Ancestors
   placeMemoryStateRebuild placeMemoryCopyEffect loweringPosts
-  stmtSimDefs compileEnv venomState placeMemoryLiveRegion exprLoweringProps
+  stmtSimDefs compileEnv loweringStateRelDefs venomState placeMemoryLiveRegion exprLoweringProps
 
 Theorem memory_place_write_copy_effect:
   stmt_state_rel ctx func cenv cx ee s /\

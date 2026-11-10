@@ -1,7 +1,7 @@
 Theory exprSimAggregateBodyHeader
 Ancestors
   exprSimProps exprLoweringProps localPtrsProps loweringSlice
-  valueEncodingProps immutableMemoryFrame compileEnv venomState
+  valueEncodingProps immutableMemoryFrame compileEnv loweringStateRelDefs venomState
   exprSimCopy
 
 Theorem aggregate_body_header_state_rel[local]:

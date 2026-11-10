@@ -3,7 +3,7 @@ Ancestors
   placeStaticStoreExit placeStaticCopyExit placeDynStoragePath placeDynExecutionLayout
   placeDynCompile placeCopyControlPath placeStoreCopyPath stmtSimStoreCopy
   fragExec fragGasSeq fragGasSeqAbort fragGasMode slotCopyExecution emitHelperProps
-  exprLoweringProps exprLowering context compileEnv venomInst venomState
+  exprLoweringProps exprLowering context compileEnv loweringStateRelDefs venomInst venomState
   venomExecSemantics list rich_list words arithmetic
 Libs
   stepInstBaseLib

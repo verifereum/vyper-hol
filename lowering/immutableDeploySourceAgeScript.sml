@@ -3,7 +3,7 @@ Ancestors
   supportedTypes placeMemoryTypeInterfaces vyperTypeValues valueEncodingProps
   vyperValue valueEncoding vyperTypeSystem immutableDeployAssignRanges
   bodyMemoryDefs stmtSimLogTrace exprSimOperands localPtrsProps stmtSimDefs
-  compileEnv venomMemDefs emitHelperProps ASCIInumbers exprLoweringProps venomInst
+  compileEnv loweringStateRelDefs venomMemDefs emitHelperProps ASCIInumbers exprLoweringProps venomInst
 
 Theorem immutable_supported_normalization_positive:
   supported_value_type tops dty /\ type_widens_to tenv sty dty /\

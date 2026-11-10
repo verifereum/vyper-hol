@@ -1,12 +1,12 @@
 Theory exprSimAggregateBodyCountedLoops
 Ancestors
   exprSimAggregateBodyCountedChildren exprSimAggregateLoops exprLowering
-  compileEnv exprLoweringProps emitHelper list exprSimSource exprSimHypsDefs exprSimDefs
+  compileEnv loweringStateRelDefs exprLoweringProps emitHelper list exprSimSource exprSimHypsDefs exprSimDefs
   vyperImmutableMetadataFrame vyperEvalExprPreservesScopesDom gasSummary gasContext
   exprSimAggregateChildren emitHelperProps exprSimVVFrame fragGasMode
   exprSimProps loweringPosts stmtSimDefs valueEncodingProofs
   aggregateCountedOutcome aggregateEvaluatedLayout exprSimAggregateLayout
-  vyperInterpreter vyperState valueEncoding exprSimUnwrap fragExec
+  vyperInterpreter vyperState valueEncoding valueEncodingDefs exprSimUnwrap fragExec
   venomExecSemantics venomInstProofs venomInst venomState gasExemptCert
   stmtReasonVvMemory exprSimWordArgs fragGasPath exprOperandVar
   valueEncodingTyping exprSimHyps exprSimMemorySource valueEncodingProps exprBopSimProps

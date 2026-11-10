@@ -2,7 +2,7 @@
    separation premise is deliberately relative to the target's input scopes. *)
 Theory placeRelayoutSource
 Ancestors
-  loweringPosts exprSimProps exprBopSimProps valueEncodingProofs valueEncoding
+  loweringPosts exprSimProps exprBopSimProps valueEncodingProofs valueEncoding valueEncodingDefs
 
 Theorem target_post_owned_source:
   target_post ctx func cenv cx es sa sb s0 es' pv vt r s /\

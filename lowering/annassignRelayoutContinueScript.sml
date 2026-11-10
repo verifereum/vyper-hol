@@ -4,7 +4,7 @@ Ancestors
   annassignRelayoutPost annassignRelayoutStage annassignRelayoutFrame
   annassignRelayoutBounds annassignRelayoutCode exprSimAggregateChildren fragGasMode
   stmtSimDeclMem exprOpenCopies loweringHalt context stmtLowering
-  compileEnv exprLoweringProps emitHelperProps loweringSlice
+  compileEnv loweringStateRelDefs exprLoweringProps emitHelperProps loweringSlice
   placeMemoryCopyEffect venomState words loweringPosts stmtFragPtr fragExec
   exprOpenPrimitives venomInst
 Libs monadsyntax

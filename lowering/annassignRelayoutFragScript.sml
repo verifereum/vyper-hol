@@ -5,7 +5,7 @@ Ancestors
   loweringSlice stmtSimDeclMem stmtSimDecl stmtSimDeclCompose
   stmtSimDeclPath stmtSimDeclSource stmtSimProps exprSimProps exprOperandVar
   exprLoweringProps stmtLoweringMono emitHelperProps fragExec
-  stmtSimDefs exprSimDefs loweringPosts exprLowering stmtLowering compileEnv
+  stmtSimDefs exprSimDefs loweringPosts exprLowering stmtLowering compileEnv loweringStateRelDefs
   context venomInst venomState localPtrsProps
   exprSimHyps exprSimHypsDefs exprSimIfExpCompat exprSimSource vyperTypeSystem vyperTypeInvariants
   exprOpenTerminals exprOpenPrimitives

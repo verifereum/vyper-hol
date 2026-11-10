@@ -1,6 +1,6 @@
 Theory exprSimIfExpWidenedEntry
 Ancestors
-  exprSimProps exprSimDefs stmtSimDefs loweringPosts exprLoweringProps compileEnv
+  exprSimProps exprSimDefs stmtSimDefs loweringPosts exprLoweringProps compileEnv loweringStateRelDefs
 
 (* Interface probe: the runtime simulation entry supplies the pointer
    existence invariant needed for reverse region transport. *)

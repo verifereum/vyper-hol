@@ -120,14 +120,14 @@ Proof
   strip_tac >>
   `mload (w2n pw) q = n2w (LENGTH vs)` by
     (drule place_dyn_memory_header >>
-     simp[venomStateTheory.mload_def, valueEncodingTheory.mem_word_at_def]) >>
+     simp[venomStateTheory.mload_def, valueEncodingDefsTheory.mem_word_at_def]) >>
   `LENGTH vs < dimword (:256)` by
     gvs[well_formed_type_value_def, value_has_type_def] >>
   `type_slot_size etv = 1 ==> 32 * type_slot_size etv = 32` by simp[] >>
   `~q.vs_call_ctx.cc_static` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ q` mp_tac >>
      pure_rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def,
-                      compileEnvTheory.state_rel_def] >>
+                      loweringStateRelDefsTheory.state_rel_def] >>
      strip_tac >> asm_rewrite_tac[]) >>
   `?t. gas_marked_path F ctx func q 0 (OK t) /\
        (!x. not_fresh_at mid x ==> lookup_var x t = lookup_var x q) /\

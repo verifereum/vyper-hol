@@ -7,7 +7,7 @@ Ancestors
   exprSimHyps exprSimHypsDefs exprSimDefs exprSimSource exprSimProps
   loweringPosts exprLoweringProps exprLowering compileEnv
   gasOutcome gasSummary gasContext fragGasMode fragGasPath fragGasSeq fragExec
-  vyperInterpreter vyperState vyperTypeSystem valueEncoding
+  vyperInterpreter vyperState vyperTypeSystem valueEncoding valueEncodingDefs
 
 Theorem compile_make_array_body_vv_case:
   !ctx func cenv cx ann topt bnd args.
@@ -83,7 +83,7 @@ Resume compile_make_array_body_vv_case[tuple_post]:
   simp[Abbr `e`, vyperASTTheory.expr_type_def, post_value_type_def, is_word_type_def,
        contextTheory.mk_ptr_def] >>
   qexistsl_tac [`b`, `sm`, `type_memory_size_list tvs`, `t`] >>
-  simp[venomStateTheory.eval_operand_def, valueEncodingTheory.val_in_memory_def] >>
+  simp[venomStateTheory.eval_operand_def, valueEncodingDefsTheory.val_in_memory_def] >>
   conj_tac >- (rpt strip_tac >>
     `FLOOKUP t'.vs_allocas inst.inst_id = SOME (b,type_memory_size_list tvs)` by metis_tac[] >>
     drule_at (Pat `local_region _ _ _ _ _ _`) aggregate_alloca_slice_excludes_local >>

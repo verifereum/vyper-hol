@@ -86,7 +86,7 @@ Proof
        `mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_size dtv))]
          [STRING #"%" (toString sa.cs_next_var)]`] >>
      simp[mk_inst_def] >> rpt conj_tac >> rpt strip_tac >>
-     gvs[compileEnvTheory.regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def] >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def] >>
      qpat_x_assum `!name b len. _` (qspecl_then [`name`,`b`,`sz`] mp_tac) >>
      simp[]) >>
   `gas_marked_path F ctx func s 0 (OK t)` by
@@ -115,7 +115,7 @@ Proof
      qpat_x_assum `typed_copy_state_frame _ _ _ _ _` mp_tac >>
      simp[typed_copy_state_frame_def, typed_copy_frame_def] >>
      rpt strip_tac >> first_x_assum irule >>
-     fs[compileEnvTheory.regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def] >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def] >>
      metis_tac[]) >>
   qexistsl_tac [`t`,`w`] >> simp[] >> metis_tac[]
 QED

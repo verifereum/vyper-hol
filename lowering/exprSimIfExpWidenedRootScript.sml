@@ -3,7 +3,7 @@ Ancestors
   exprSimIfExpWidenedSelectedCounted exprSimIfExpWidenedSource
   exprSimIfExpWidenedPost exprSimIfExpWidenedCode
   exprSimDefs exprLoweringProps exprSimIfExp exprSimIfExpCompat
-  exprSimUnwrap compileEnv gasContext fragExec stmtReasonVvMemory
+  exprSimUnwrap compileEnv loweringStateRelDefs gasContext fragExec stmtReasonVvMemory
   gasOutcome gasSummary fragGasMode fragGasPath fragGasSeqAbort
   vyperValue valueEncoding exprSimWordArgs stmtSimDefs localPtrsProps vyperState exprBopSimProps
   placeTypedCopyPath stmtSimProps emitHelperProps venomExecSemantics venomInst venomState exprSimUint2Str loweringPosts

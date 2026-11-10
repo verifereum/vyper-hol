@@ -3,7 +3,7 @@ Theory exprSimAggregateBodyHead
 Ancestors
   exprSimAggregateBodyCounted exprSimAggregateBodySource stmtSimAssignAttr
   exprSimAggregateChildren exprSimSource exprSimHyps exprSimHypsDefs
-  exprSimAggregateSource exprLoweringProps loweringPosts compileEnv
+  exprSimAggregateSource exprLoweringProps loweringPosts compileEnv loweringStateRelDefs
   gasSummary gasSummaryCompose gasOutcome fragGasPath fragGasMode fragExec
   vyperInterpreter vyperState venomState emitHelper exprOperandVar freshWrites
   vyperImmutableMetadataFrame vyperEvalExprPreservesScopesDom

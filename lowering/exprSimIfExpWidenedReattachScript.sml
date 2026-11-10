@@ -2,7 +2,7 @@ Theory exprSimIfExpWidenedReattach
 Ancestors
   exprSimProps exprBopSimProps exprSimAggregateChildren
   exprSimIfExpWidenedEntry exprSimIfExpWidenedCounted
-  loweringPosts compileEnv exprLoweringProps
+  loweringPosts compileEnv loweringStateRelDefs exprLoweringProps
 
 Theorem vv_post_reattach_expr_post:
   vv_post ctx func ce cx e es origin sm s0 ee tv vv u /\

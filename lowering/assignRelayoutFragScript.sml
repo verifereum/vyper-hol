@@ -5,7 +5,7 @@ Ancestors
   stmtSimAssignMem stmtSimAssignCompose stmtSimAssignSource stmtSimAssignPath
   stmtSimDeclCompose gasOutcome gasSummary gasSummaryCompose gasExemptCert
   stmtSimDefs exprSimDefs loweringPosts stmtSimProps exprSimProps
-  stmtLowering exprLowering exprLoweringProps emitHelperProps compileEnv
+  stmtLowering exprLowering exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs
   context venomState venomInst vyperInterpreter vyperState vyperLookup
   localPtrsProps fragGasMode fragGasPath loweringSlice loweringHalt
   stmtFragPtr exprSimWordArgs list finite_map

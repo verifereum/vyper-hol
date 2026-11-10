@@ -1,7 +1,7 @@
 (* Separation interface for a generated aggregate buffer and its used prefix. *)
 Theory exprSimAggregateBodyAlloc
 Ancestors
-  exprSimAlloc exprLoweringProps compileEnv fragExec venomInst
+  exprSimAlloc exprLoweringProps compileEnv loweringStateRelDefs fragExec venomInst
   vyperState valueEncoding
 
 Theorem aggregate_body_alloc_immutable_prefix:

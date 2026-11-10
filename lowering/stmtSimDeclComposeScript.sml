@@ -90,7 +90,7 @@ Proof
   `!n q z'. FLOOKUP c.ce_vars n = SOME (PtrVar (Var q) z') ==>
             lookup_var q t = lookup_var q s` by
     (rpt strip_tac >> first_x_assum irule >>
-     fs[compileEnvTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
+     fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
   Cases_on `n = id`
   >- (gvs[local_region_def] >> metis_tac[optionTheory.SOME_11]) >>
   qpat_x_assum `!n b sz'. local_region c es1.scopes s _ _ _ ==> _` irule >>

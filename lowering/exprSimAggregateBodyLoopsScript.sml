@@ -6,7 +6,7 @@ Ancestors
   exprSimAggregateBodyCounted exprSimAggregateLoops exprSimAggregateSource
   exprSimAggregateEncoding exprSimAggregateLayout exprLoweringProps
   exprSimDefs exprSimHypsDefs exprSimHyps exprSimProps exprSimSource loweringPosts
-  compileEnv exprLowering valueEncoding valueEncodingProps valueEncodingProofs
+  compileEnv loweringStateRelDefs exprLowering valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs
   gasOutcome gasSummary gasSummaryCompose fragGasMode fragGasPath fragExec
   vyperInterpreter vyperState vyperImmutableMetadataFrame
   vyperEvalExprPreservesScopesDom exprBopSimProps exprSimMemDefs

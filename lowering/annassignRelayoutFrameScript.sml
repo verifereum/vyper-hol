@@ -2,7 +2,7 @@
 Theory annassignRelayoutFrame
 Ancestors
   stmtSimDeclStore placeMemoryCopyEffect localPtrsProps loweringSlice
-  exprLoweringProps venomState valueEncoding compileEnv
+  exprLoweringProps venomState valueEncoding compileEnv loweringStateRelDefs
 
 Theorem stmt_state_rel_declare_copy_effect:
   !func cenv cx es s t id p sz w inst v tyv sc rest a ctx sa sb.
