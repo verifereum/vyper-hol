@@ -518,6 +518,10 @@ Proof
     (simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
   drule_all (BETA_RULE intcall_stage_allocation_endpoint) >> strip_tac >>
   rename1 `intcall_expr_cont fp ce env es a t es b s` >>
+  suspend "allocation_frame"
+QED
+
+Resume intcall_allocated_store_endpoint[allocation_frame]:
   `a.cs_next_id <= b.cs_next_id /\ a.cs_next_var <= b.cs_next_var` by
     (mp_tac (Q.SPECL [`MAX 32 (type_memory_size tv)`,`a`]
        exprLoweringPropsTheory.ci_mono_compile_alloc_buffer) >>
@@ -553,6 +557,10 @@ Proof
      rpt strip_tac >>
      qpat_x_assum `!op. _ ==> eval_operand op s = _`
        (qspec_then `Var x` mp_tac) >> simp[venomStateTheory.eval_operand_def]) >>
+  suspend "allocation_separation"
+QED
+
+Resume intcall_allocated_store_endpoint[allocation_separation]:
   `!off sz. fp.jc_prot off sz ==>
     regions_disjoint off sz (w2n w) (type_memory_size tv)` by
     (rpt strip_tac >>
@@ -587,6 +595,10 @@ Proof
       (EL i rs) (EL i vs) es s (w2n w) (MAX 32 (type_memory_size tv))` by
     (BETA_TAC >> rpt strip_tac >> irule (BETA_RULE intcall_deferred_allocation_guarded) >>
      conj_tac >- (qexistsl_tac [`a`, `t`] >> simp[] >> metis_tac[]) >> metis_tac[]) >>
+  suspend "store_finish"
+QED
+
+Resume intcall_allocated_store_endpoint[store_finish]:
   `!aid off sz. aid < a.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (off,sz) ==>
     regions_disjoint off sz (w2n w) (type_memory_size tv)` by
     (rpt strip_tac >> irule intcall_regions_disjoint_subwindow >>
@@ -620,3 +632,5 @@ Proof
     fragGasModeTheory.gas_marked_path_then)) >>
   qexists_tac `s` >> simp[]
 QED
+
+Finalise intcall_allocated_store_endpoint
