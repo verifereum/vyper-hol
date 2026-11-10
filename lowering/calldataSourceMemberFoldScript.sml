@@ -400,7 +400,8 @@ Proof
   strip_tac >> drule calldata_member_resource_observations >> strip_tac >>
   `eval_operand src t = eval_operand src s /\ eval_operand dst t = eval_operand dst s` by
     metis_tac[] >>
-  fs[abi_decoder_ranges_def, abi_decode_source_def]
+  fs[abi_decoder_ranges_def, abi_decode_source_def, eval_operand_def] >>
+  first_x_assum irule >> simp[]
 QED
 
 (* Deterministic cursor reconstruction after a successful member.  The actual
@@ -993,7 +994,7 @@ Resume calldata_source_member_cursor_step[advance]:
   `ready.cs_next_var <= next.cs_next_var` by
     (mp_tac (cj 1 abi_decoder_vars_mono_mutual) >>
      rewrite_tac[abi_decoder_vars_mono_def] >>
-     disch_then (qspecl_then [`SND ops`,`FST ops`,`CALLDATALOAD`,`Lit 0w`,`ei`,`ready`] mp_tac) >>
+     disch_then (qspecl_then [`SND ops`,`FST ops`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`ei`,`ready`] mp_tac) >>
      simp[]) >>
   `ci_mono a next /\ ci_mono next final` by
     (gns[ci_mono_def] >> decide_tac) >>
@@ -1068,12 +1069,12 @@ Proof
   `first.cs_next_var <= final.cs_next_var` by
     (mp_tac (cj 2 abi_decoder_vars_mono_mutual) >>
      rewrite_tac[abi_decoder_vars_mono_def] >>
-     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`xs`,`0`,`0`,`first`] mp_tac) >>
+     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`xs`,`0`,`0`,`first`] mp_tac) >>
      simp[]) >>
   `ci_mono first final` by
     (`first.cs_next_id <= final.cs_next_id` by
        (mp_tac (cj 2 abi_decoder_code_mutual) >>
-        disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`xs`,`0`,`0`] mp_tac) >>
+        disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`xs`,`0`,`0`] mp_tac) >>
         simp[] >> disch_then (qspec_then `first` mp_tac) >>
         simp[abi_decoder_code_def]) >>
      simp[ci_mono_def]) >>
