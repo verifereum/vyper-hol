@@ -17,7 +17,7 @@ Ancestors
   fragExecMem fragGasPathMem fragGasMode gasSummary gasOutcome
   exprSimVVFrame exprSimAlloc exprSimProps exprSimDefs exprSimHypsDefs
   loweringPosts allocLimits exprLoweringProps exprLowering emitHelperProps
-  emitHelper context compileEnv valueEncoding vyperAST vyperInterpreter
+  emitHelper context compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs vyperAST vyperInterpreter
   vyperState vyperValue vyperValueOperation vyperTypeSystem
   venomState venomInst venomExecSemantics venomMemDefs venomMemProps
   list rich_list finite_map words arithmetic
@@ -294,6 +294,7 @@ QED
    and its store bound. *)
 Theorem literal_buffer_mem_run:
   !ctx func cenv cx e es sa sb s0 bs buf tvt v.
+    post_value_type cenv e = expr_type e /\
     compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
@@ -345,6 +346,7 @@ QED
 (* A non-word expression compiled to a fresh literal buffer holding v. *)
 Theorem literal_buffer_vv_sim_mem:
   !ctx func cenv cx ty e es bs tvt v.
+    post_value_type cenv e = expr_type e /\
     (!sa vv sb. compile_expr cenv ty e sa = (vv,sb) ==>
        ?buf. vv = LocatedValue (expr_type e) (base_ptr buf) /\
              compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb)) /\
@@ -383,6 +385,7 @@ QED
 
 Theorem literal_buffer_sim_mem:
   !ctx func cenv cx ty e es bs tvt v.
+    post_value_type cenv e = expr_type e /\
     (!sa vv sb. compile_expr cenv ty e sa = (vv,sb) ==>
        ?buf. vv = LocatedValue (expr_type e) (base_ptr buf) /\
              compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb)) /\
@@ -467,12 +470,14 @@ Resume literal_other_body_mem[bytes]:
   conj_tac
   >- (irule literal_buffer_sim_mem >>
       conj_tac >- simp[expr_type_def, is_word_type_def] >>
+      conj_tac >- simp[expr_type_def, is_word_type_def] >>
   qexistsl_tac [`bs`, `BaseTV (BytesT (Dynamic n))`, `BytesV bs`] >>
       fs[expr_type_def, is_word_type_def, vyperValueTheory.evaluate_type_def,
          val_footprint_def, val_store_size_def, val_wf_def, val_in_memory_def,
          type_memory_size_def, lowered_value_type_def] >>
       rpt conj_tac >> decide_tac) >>
   irule literal_buffer_vv_sim_mem >>
+  conj_tac >- simp[expr_type_def, is_word_type_def] >>
   conj_tac >- simp[expr_type_def, is_word_type_def] >>
   qexistsl_tac [`bs`, `BaseTV (BytesT (Dynamic n))`, `BytesV bs`] >>
   fs[expr_type_def, is_word_type_def, vyperValueTheory.evaluate_type_def,
@@ -505,12 +510,14 @@ Resume literal_other_body_mem[string]:
   conj_tac
   >- (irule literal_buffer_sim_mem >>
       conj_tac >- simp[expr_type_def, is_word_type_def] >>
+      conj_tac >- simp[expr_type_def, is_word_type_def] >>
   qexistsl_tac [`MAP (n2w o ORD) str`, `BaseTV (StringT n)`, `StringV str`] >>
       fs[expr_type_def, is_word_type_def, vyperValueTheory.evaluate_type_def,
          val_footprint_def, val_store_size_def, val_wf_def, val_in_memory_def,
          type_memory_size_def, LET_THM, lowered_value_type_def] >>
       rpt conj_tac >> decide_tac) >>
   irule literal_buffer_vv_sim_mem >>
+  conj_tac >- simp[expr_type_def, is_word_type_def] >>
   conj_tac >- simp[expr_type_def, is_word_type_def] >>
   qexistsl_tac [`MAP (n2w o ORD) str`, `BaseTV (StringT n)`, `StringV str`] >>
   fs[expr_type_def, is_word_type_def, vyperValueTheory.evaluate_type_def,

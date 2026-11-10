@@ -690,6 +690,11 @@ Proof
   `ps_tdfs.ps_alloc.sa_spill_base = r.sr_spill_base` by
     (qpat_x_assum `ps_tdfs.ps_alloc.sa_spill_base = spill_base` SUBST1_TAC >>
      first_assum ACCEPT_TAC) >>
+  `ps_after.ps_spilled = ps_tdfs.ps_spilled` by
+    (qpat_x_assum `ps_after.ps_spilled = ps_dfs_after.ps_spilled`
+       SUBST1_TAC >>
+     irule fnBlockPlanStaticRegionTheory.dfs_edge_spilled >> simp[] >>
+     metis_tac[]) >>
   `lineage_entry liveness dfg cfg fn
      (init_cleanup_plan_state ch growth spill_base lbl_ctr) bb.bb_label t
      (ps_tdfs with <| ps_stack := ps_after.ps_stack;

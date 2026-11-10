@@ -3,7 +3,7 @@ Theory bodyMemAggregateCons
 Ancestors
   bodyMemAggregateAdd bodyMemAggregateSide exprSimProps freshWrites
   exprOperandVar exprLoweringProps emitHelperProps ASCIInumbers words
-  compileEnv venomState context fragExec exprSimAggregateChildren
+  compileEnv loweringStateRelDefs venomState context fragExec exprSimAggregateChildren
   exprSimHypsDefs loweringPosts bodyMemAggregatePath gasSummary
   bodyMemAggregateContinuation fragGasMode
 

@@ -251,7 +251,7 @@ Proof
     (strip_tac >>
      fs[abiEncoderWindowArrayInvariantTheory.window_array_inv_def,
         abiEncoderWindowArrayInvariantTheory.window_array_cursor_def,
-        venomStateTheory.mload_def, valueEncodingTheory.mem_word_at_def] >>
+        venomStateTheory.mload_def, valueEncodingDefsTheory.mem_word_at_def] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   drule_all abiEncoderWindowArrayExitTheory.window_array_scalar_exit_run >> strip_tac >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
@@ -328,7 +328,7 @@ Proof
    alloca_inv u /\ alloca_room ctx func u /\ ~u.vs_halted` by
     (fs[abiEncoderWindowArrayInvariantTheory.window_array_cursor_def,
         abiEncoderWindowArrayInvariantTheory.window_array_transition_def,
-        venomStateTheory.mload_def, valueEncodingTheory.mem_word_at_def] >> metis_tac[]) >>
+        venomStateTheory.mload_def, valueEncodingDefsTheory.mem_word_at_def] >> metis_tac[]) >>
   drule_all window_array_parent_finish >> strip_tac >>
   suspend "finish"
 QED

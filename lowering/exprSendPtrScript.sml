@@ -4,7 +4,7 @@ Ancestors
   ptrSafeRun ptrDiscipline venomExecSemantics venomExecProofs
   venomInst venomInstProofs venomState opcodeClass memLocDefs codegenRel contextCodegenRel list
   venomCallOracleDefs venomMemProps ghostPcTransportPtr
-  exprLoweringProps exprSimOperands exprSimWordArgs compileEnv localPtrsProps
+  exprLoweringProps exprSimOperands exprSimWordArgs compileEnv loweringStateRelDefs localPtrsProps
   sendSourceFrame typedWordArgsSimPtr exprSimHypsDefs exprSimPrecompiles bodyPtrDefs fragExec
   gasSummaryComposePtr gasExemptCert gasSummaryCompose vyperState typedWordArgsFactsPtr
   typedWordArgsPostPtr exprStackPtr
@@ -295,7 +295,7 @@ Theorem send_read_call_step:
 Proof
   strip_tac >> drule eval_send_read >> strip_tac >>
   `state_rel fn cenv cx es s` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
-  `?os. es.outcomes = SOME os` by fs[compileEnvTheory.state_rel_def] >>
+  `?os. es.outcomes = SOME os` by fs[loweringStateRelDefsTheory.state_rel_def] >>
   drule_all eval_send_outcome_typed >> strip_tac >>
   drule_all extCallOracleStepTheory.send_call_oracle_step >>
   strip_tac >> gvs[] >> metis_tac[]
@@ -351,7 +351,7 @@ Theorem send_tail_none_post:
   expr_has_effect e /\
   stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es sa s0 s /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  ~not_fresh_at sm out /\ expr_type e = NoneT /\
+  ~not_fresh_at sm out /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   es'.scopes = es1.scopes /\ es'.immutables = es1.immutables /\
   state_rel fn cenv cx es' t /\
   t = s with <| vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
@@ -403,7 +403,7 @@ Theorem send_tail_path_ptr:
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
-      read_result cx tv od) es1 = (res, es') /\ expr_type e = NoneT ==>
+      read_result cx tv od) es1 = (res, es') /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   ?G' tn' r. gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0 G' tn' r /\
     ((?z. r = OK z /\ res = INL NoneV /\
           expr_post ctx fn cenv cx e es sa sb s0 es' NoneV (Lit 0w) z /\
@@ -429,7 +429,7 @@ Proof
   `stor_taint_ok cx tn s` by fs[bodyPtrDefsTheory.ghost_inv_def] >>
   `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
     (drule eval_send_read >> strip_tac >>
-     drule vyperInterpreterTheory.eval_send_preserves_non_accounts >> simp[]) >>
+     drule vyperCallOutcomeFrameTheory.eval_send_preserves_non_accounts >> simp[]) >>
   drule_all send_read_checked_tail >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
   qpat_x_assum `emit_op _ _ _ = _` kall_tac >>
@@ -506,7 +506,7 @@ Theorem send_tail_summary_ptr:
   eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
-  expr_type e = NoneT /\ es1.gas_obs = [] ==>
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\ es1.gas_obs = [] ==>
   gas_summary_ptr_at (cx_dead cx) (ctx,fn) PG []
     (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs); read_result cx tv od)
     (es1,s,G,tn)
@@ -639,6 +639,8 @@ Resume send_expr_sim_ptr[tail_summary]:
     metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `expr_type (Call NoneT (Send has_gas) (a::v::gs) dflt) = NoneT` by simp[vyperASTTheory.expr_type_def] >>
   `expr_has_effect (Call NoneT (Send has_gas) (a::v::gs) dflt)` by simp[loweringPostsTheory.expr_has_effect_thm] >>
+  `post_value_type cenv (Call NoneT (Send has_gas) (a::v::gs) dflt) =
+   expr_type (Call NoneT (Send has_gas) (a::v::gs) dflt)` by simp[] >>
   drule_all (Q.INST [`e` |-> `Call NoneT (Send has_gas) (a::v::gs) dflt`]
     send_tail_summary_ptr) >>
   disch_then (qspec_then `PG` mp_tac) >>

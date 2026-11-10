@@ -1,7 +1,7 @@
 Theory makeSsaCurrentPrefixCopyOwner
 Ancestors
   makeSsaCurrentCarrierOwner makeSsaCurrentHistoryOwner makeSsaCurrentWfSsa
-  makeSsaCurrentDefs venomWf venomInst venomExecProps list rich_list
+  makeSsaDefs venomWf venomInst venomExecProps list rich_list
 
 Theorem current_prefix_inserted_copy_owner:
   current_wf_phi_context s fn renamed s' A H events /\

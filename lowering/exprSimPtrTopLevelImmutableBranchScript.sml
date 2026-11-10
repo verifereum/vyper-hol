@@ -4,7 +4,7 @@ Ancestors
   exprSimPtrTopLevelImmutablePost exprSimPtrTopLevelImmutableCopy exprSimTopLevelImmutable exprSimPtrTopLevelStorageAlloc
   exprSimSource exprSimUnwrapProps vyperInterpreter vyperState vyperValueOperation
   exprSimHyps exprSimHypsDefs exprSimCopy exprSimStorageCopy exprLowering exprLoweringProps
-  exprSimProps context compileEnv fragExec emitHelperProps immutableCopyExecution
+  exprSimProps context compileEnv loweringStateRelDefs fragExec emitHelperProps immutableCopyExecution
   loweringPosts vyperAST venomState words list venomInst venomExecSemantics instIdxIndep rich_list
 
 Theorem toplevel_immutable_branch_compile:
@@ -83,11 +83,12 @@ Theorem toplevel_immutable_expr_post_inst_idx[local,simp]:
   expr_post ctx fn ce cx e es sa sb s0 es' v op (s with vs_inst_idx := k) <=>
   expr_post ctx fn ce cx e es sa sb s0 es' v op s
 Proof
-  simp[expr_post_def, expr_val_rel_def, expr_val_at_def, lookup_var_def,
+  simp[expr_post_def, expr_val_own_def, expr_val_rel_def, expr_val_at_def, lookup_var_def,
        stmt_state_rel_inst_idx, local_region_def]
 QED
 
 Theorem toplevel_immutable_run_expr_post:
+  post_value_type cenv e = expr_type e /\
   unwrap_value cenv (LocatedValue ann p) sm = (op,sb) /\
   p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type ann /\
   local_ptrs_reserved cenv sa /\
@@ -178,6 +179,7 @@ Proof
   `expr_post ctx fn cenv cx (TopLevelName ann nsid) es sa sb s0
      (es with gas_obs := []) v (Var p) t` by
     (irule toplevel_immutable_run_expr_post >>
+     conj_tac >- simp[] >>
      rpt (goal_assum (drule_at Any)) >> simp[] >>
      qexistsl [`ann`,`k`,`mk_ptr (Lit a) LocCode`,`s0`,`sa`] >>
      simp[mk_ptr_def] >> gvs[]) >>

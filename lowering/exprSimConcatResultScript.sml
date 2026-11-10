@@ -16,7 +16,7 @@ Ancestors
   exprCallBounds stmtSimDeclCompose gasOutcome gasSummary gasSummaryCompose
   gasExemptCert fragGasSeq fragGasMode fragGasPath freshWrites fragExec
   abiDecoderReentryPointer loweringPosts exprLowering exprLoweringProps
-  emitHelperProps emitHelper context compileEnv allocLimits valueEncoding
+  emitHelperProps emitHelper context compileEnv loweringStateRelDefs allocLimits valueEncoding valueEncodingDefs
   valueEncodingProps venomState venomExecSemantics vyperValue
   vyperValueOperation vyperTyping vyperTypeConversions vyperTypeSystem
   vyperContext vyperEvalExprPreservesScopesDom vyperInterpreter vyperState
@@ -833,7 +833,8 @@ Proof
     (Q.INST [`e` |-> `Builtin ann (Concat n) args`]
        vv_post_allocated_memory_intro)) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (simp[base_ptr_def] >> NO_TAC)
+  TRY (simp[base_ptr_def] >> NO_TAC) >>
+  TRY (simp[vyperASTTheory.expr_type_def] >> NO_TAC)
   >~ [`_ ==> pure_frame _ _ _ _ _ _`]
   >- (strip_tac >>
       qpat_x_assum `_ ==> (!n lb lsz. local_region _ _ t _ _ _ ==>

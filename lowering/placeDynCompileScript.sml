@@ -1,7 +1,7 @@
 Theory placeDynCompile
 Ancestors
   list rich_list
-  context compileEnv emitHelper emitHelperProps exprLoweringProps
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   placeStoreDynPrepare stmtLoweringMono loweringSlice fragExec
 Libs
   monadsyntax

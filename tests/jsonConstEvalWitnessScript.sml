@@ -1,6 +1,6 @@
 Theory jsonConstEvalWitness
 Ancestors
-  jsonConstEval jsonConstAST jsonAST vyperConstEval vyperAST
+  jsonConstEval jsonConstAST jsonAST vyperAST
   vyperInterpreter vyperState vyperValue
 Libs
   jsonConstASTLib vyperCheckContractFrontendLib

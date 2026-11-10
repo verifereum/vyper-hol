@@ -4,7 +4,7 @@ Ancestors bodyPtrHashBuiltinsShaStringCase bodyPtrHashBuiltinsShaSource
   bodyPtrHashBuiltinsWordSummary bodyPtrHashBuiltinsGhostCompose
   bodyPtrHashBuiltinsCursor exprSimVVFrame exprSimHash exprLoweringProps
   exprLowering emitHelperProps exprSimDefs exprSimWordArgs exprSimSource
-  bodyPtrDefs gasSummaryComposePtr vyperInterpreter vyperContext compileEnv
+  bodyPtrDefs gasSummaryComposePtr vyperInterpreter vyperContext compileEnv loweringStateRelDefs
   vyperTypeSystem vyperState list arithmetic
 
 Theorem hash_string_sha256_summary:

@@ -35,12 +35,12 @@
  *)
 Theory entryDecodeStaticProps
 Ancestors
-  arithmetic list rich_list words sorting alist
+  exprSimProps arithmetic list rich_list words sorting alist
   abiDecodeStaticProps entryDecodeProps entryDispatchProps moduleLoweringProps
-  valueEncodingProofs valueEncodingProps valueEncoding
+  valueEncodingProofs valueEncodingProps valueEncoding valueEncodingDefs
   vyperABI vyperABIRoundtrip vyperTyping vyperTypeDefaults vyperTypeABI
   vyperValue vfmTypes
-  compileEnv exprLowering moduleLowering selectorDispatch
+  compileEnv loweringStateRelDefs exprLowering moduleLowering selectorDispatch
   emitHelperProps fragExec venomState
 Libs
   wordsLib

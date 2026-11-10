@@ -16,7 +16,7 @@ Ancestors
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
-  stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
+  stmtSimIf stmtLoweringMono stmtLowering compileEnv loweringStateRelDefs fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
@@ -1814,9 +1814,11 @@ Resume aug_place_storage_suffix_outcome_nofresh[normal]:
     metis_tac[local_ptrs_reserved_next_var] >>
   `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
     fs[expr_post_def] >>
+  `is_word_type (expr_type e)` by metis_tac[word_value_type_word] >>
+  `post_value_type cenv e = expr_type e` by simp[] >>
   `eval_operand rhs_op t = SOME (val_to_w256 v)` by
     (fs[expr_post_def, expr_val_rel_def, typed_val_to_w256_word_value] >>
-     metis_tac[word_value_type_word]) >>
+     metis_tac[]) >>
   `is_word_type (expr_type e)` by metis_tac[word_value_type_word] >>
   drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
   `expr_sim_inv cenv cx env (es_end with gas_obs := [])` by

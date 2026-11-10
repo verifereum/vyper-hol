@@ -3,7 +3,7 @@ Theory typedBytesArrayMem
 Ancestors
   externalReturnNormalizeMem memContinuation fragExecMem fragExec exprSimAggregateChildren
   exprSimBufferStore valueCopyBytes exprSimDefs exprSimProps loweringPosts exprLoweringProps context compileEnv
-  valueEncoding valueEncodingProps vyperValue vyperTyping words arithmetic vfmConstants
+  valueEncoding valueEncodingDefs valueEncodingProps vyperValue vyperTyping words arithmetic vfmConstants
 
 Theorem typed_bytes_array_dispatch[local]:
   compile_store_memory_typed ce dst (BaseT (BytesT (Dynamic 33)))

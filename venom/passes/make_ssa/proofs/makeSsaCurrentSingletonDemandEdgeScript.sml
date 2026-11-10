@@ -3,7 +3,7 @@ Ancestors
   makeSsaCurrentEdgeTransport makeSsaCurrentSingletonCut
   makeSsaCurrentDemandedCut makeSsaCurrentDemandDominance
   makeSsaCurrentPlacementCut makeSsaCurrentWfSsa makeSsaCurrentAvailability
-  makeSsaCurrentLastSite makeSsaCurrentAnalysis makeSsaHelper
+  makeSsaCurrentLastSite makeSsaCurrentAnalysis
   makeSsaCurrentDominanceBridge makeSsaCurrentPathBridge cfgWf
   dominatorDefs venomInst venomWf venomExecProps list
 

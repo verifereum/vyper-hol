@@ -5,9 +5,9 @@ Ancestors
   loweringPosts
   words list rich_list finite_map pred_set pair
   fragExec varsExt loweringSlice localPtrsProps venomMemDefs
-  exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
+  exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
-  valueEncoding valueEncodingProofs vyperTypeSystem
+  valueEncoding valueEncodingDefs valueEncodingProofs vyperTypeSystem vyperTyping
   venomExecSemantics venomInst venomState
   vyperLookupStorage vyperStorageBackend vyperEvalPreservesScopes
 Libs
@@ -364,6 +364,17 @@ Proof
   disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[]
 QED
 
+Theorem expr_val_own_start_mono:
+  sa.cs_next_id <= s1.cs_next_id /\
+  expr_val_own cenv cx ty s1 sm es v p s ==>
+  expr_val_own cenv cx ty sa sm es v p s
+Proof
+  simp[expr_val_own_def] >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >> qexists_tac `w` >> simp[] >>
+  disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem expr_val_rel_mem_agree:
   !cx t v op s s' w tv.
     expr_val_rel cx t v op s /\ ~is_word_type t /\
@@ -435,10 +446,10 @@ Proof
    (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
    val_footprint tv v = type_memory_size tv` by
     metis_tac[val_size_cases]
-  >- (gvs[val_footprint_def, valueEncodingTheory.val_wf_def,
+  >- (gvs[val_footprint_def, valueEncodingDefsTheory.val_wf_def,
           valueEncodingTheory.type_memory_size_def] >>
       qspec_then `n` mp_tac le_word_size_mul >> decide_tac)
-  >- (gvs[val_footprint_def, valueEncodingTheory.val_wf_def,
+  >- (gvs[val_footprint_def, valueEncodingDefsTheory.val_wf_def,
           valueEncodingTheory.type_memory_size_def] >>
       qspec_then `n` mp_tac le_word_size_mul >> decide_tac) >>
   simp[]
@@ -510,10 +521,10 @@ Proof
    (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
    val_store_size tv v = type_memory_size tv` by
     metis_tac[val_size_cases]
-  >- (gvs[val_store_size_def, valueEncodingTheory.val_wf_def,
+  >- (gvs[val_store_size_def, valueEncodingDefsTheory.val_wf_def,
           valueEncodingTheory.type_memory_size_def] >>
       irule word_size_le_of_le_mul >> simp[])
-  >- (gvs[val_store_size_def, valueEncodingTheory.val_wf_def,
+  >- (gvs[val_store_size_def, valueEncodingDefsTheory.val_wf_def,
           valueEncodingTheory.type_memory_size_def] >>
       irule word_size_le_of_le_mul >> simp[]) >>
   simp[]
@@ -646,6 +657,23 @@ Theorem typed_val_to_w256_word_value:
 Proof
   rw[word_value_def] >> Cases_on `tv` >> simp[typed_val_to_w256_def] >>
   rename1 `BaseTV bt` >> Cases_on `bt` >> simp[typed_val_to_w256_def]
+QED
+
+(* Word memory representation is independent of entry decoding. *)
+Theorem val_in_memory_word:
+  !tenv ty tv v off mem.
+    is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
+    value_has_type tv v ==>
+    (val_in_memory tv v off mem <=>
+     mem_word_at off mem = typed_val_to_w256 tv v)
+Proof
+  rpt gen_tac >> Cases_on `ty` >> simp[is_word_type_def]
+  >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def] >>
+      TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_word_type_def]) >>
+      simp[evaluate_type_def] >> rw[] >> Cases_on `v` >>
+      gvs[value_has_type_def, val_in_memory_def, typed_val_to_w256_def]) >>
+  simp[evaluate_type_def, AllCaseEqs()] >> rw[] >> Cases_on `v` >>
+  gvs[value_has_type_def, val_in_memory_def, typed_val_to_w256_def]
 QED
 
 Theorem val_in_memory_word_type:

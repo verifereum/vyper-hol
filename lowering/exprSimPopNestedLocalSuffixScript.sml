@@ -2,7 +2,7 @@ Theory exprSimPopNestedLocalSuffix
 Ancestors
   exprSimPopNestedLocalPost exprSimPopNestedLocalRun exprSimProps
   venomState words arithmetic list exprSimHyps exprSimHypsDefs vyperTypeEnv
-  exprSimPopNestedLocalPtrs exprSimWordArgs exprLoweringProps compileEnv
+  exprSimPopNestedLocalPtrs exprSimWordArgs exprLoweringProps compileEnv loweringStateRelDefs
   loweringPosts localPtrsProps exprSimAttributeFields finite_map valueEncoding
   exprSimVVFrame
 
@@ -75,6 +75,7 @@ Theorem pop_memory_live_suffix_post:
   read_result cx result (mid with scopes := scopes') =
     (INL (LAST vs),mid with scopes := scopes') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
+  post_value_type cenv e = expr_type e /\
   eval_operand op u = SOME w /\
   w2n w = w2n b + k + 32 + (LENGTH vs - 1) * type_memory_size etv ==>
   vv_post ctx func cenv cx e es sa sb s0 (mid with scopes := scopes') result

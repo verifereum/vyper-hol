@@ -1,7 +1,7 @@
 (* Common RawLog source/compiler and LOG execution interfaces. *)
 Theory exprSimRawLog
 Ancestors
-  list exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimHyps exprSimPrecompiles exprSimWordArgs exprSimSend exprSimAggregateSource compileEnv extCallOracleStep allocLimits
+  list exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimHyps exprSimPrecompiles exprSimWordArgs exprSimSend exprSimAggregateSource compileEnv loweringStateRelDefs extCallOracleStep allocLimits
   vyperAST vyperTypeSystem vyperInterpreter vyperContext vyperValue vyperState
   vyperEvent venomExecSemantics venomInst venomState venomMemDefs exprLowering exprLoweringProps
   exprSimHash builtinSystem emitHelper fragExec emitHelperProps venomExecProofs
@@ -263,8 +263,8 @@ Proof
   strip_tac >> drule hash_dynamic_post_view >>
   simp[vyperValueTheory.evaluate_type_def] >> strip_tac >>
   qexists_tac `b` >>
-  fs[venomStateTheory.mload_def, valueEncodingTheory.mem_word_at_def,
-     valueEncodingTheory.mem_bytes_at_def]
+  fs[venomStateTheory.mload_def, valueEncodingDefsTheory.mem_word_at_def,
+     valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem raw_log_dynamic_prepare_run:
@@ -282,7 +282,7 @@ Theorem raw_log_dynamic_prepare_run:
 Proof
   strip_tac >>
   `mem_word_at b s.vs_memory = n2w (LENGTH bs)` by
-    gvs[venomStateTheory.mload_def, valueEncodingTheory.mem_word_at_def] >>
+    gvs[venomStateTheory.mload_def, valueEncodingDefsTheory.mem_word_at_def] >>
   `b < dimword (:256)` by decide_tac >>
   drule_all hash_data_prefix_run >> metis_tac[]
 QED
@@ -398,7 +398,7 @@ Theorem raw_log_dynamic_tail_core:
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   wb_frame cenv es0 sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
-  expr_type e = NoneT ==>
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   frag_exec ctx sm sb ($= s)
     (expr_post ctx func cenv cx e es0 sa sb s0
       (es with logs := es.logs ++
@@ -471,7 +471,7 @@ Proof
            exec_write2_def]) >>
   `mem_bytes_at (w2n p) (LENGTH bs) (mstore (w2n p) w s).vs_memory = bs` by
     (irule hash_mstore_prefix >> simp[]) >>
-  gvs[valueEncodingTheory.mem_bytes_at_def]
+  gvs[valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem raw_log_fixed_store_frame:
@@ -500,7 +500,7 @@ Proof
       simp[] >> qexistsl_tac [`w2n p`, `inst`, `32`] >>
       simp[] >> rpt strip_tac >>
       qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` drule >>
-      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   irule raw_log_mstore_frame >> simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `es` >> simp[] >> first_assum ACCEPT_TAC
@@ -524,7 +524,7 @@ Theorem raw_log_fixed_tail_core:
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint (w2n p) 32 b sz) /\
   (!n b sz. local_region cenv es.scopes s n b sz ==>
-     regions_disjoint (w2n p) 32 b sz) /\ expr_type e = NoneT ==>
+     regions_disjoint (w2n p) 32 b sz) /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   frag_exec ctx sm sb ($= s)
     (expr_post ctx func cenv cx e es0 sa sb s0
       (es with logs := es.logs ++

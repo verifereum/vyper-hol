@@ -2,8 +2,8 @@
 Theory exprSimSubscriptArrayFrame
 Ancestors
   exprSimSubscriptArraySource exprSimProps exprSimAttributeFields
-  loweringPosts valueEncodingProofs valueEncoding exprBopSimProps
-  list rich_list finite_map pair vyperState compileEnv exprLoweringProps vyperValue
+  loweringPosts valueEncodingProofs valueEncoding valueEncodingDefs exprBopSimProps
+  list rich_list finite_map pair vyperState compileEnv loweringStateRelDefs exprLoweringProps vyperValue
 
 Theorem immutable_holds_runtime_frame:
   ~cenv.ce_is_ctor /\ immutable_holds cenv cx ty r w es s /\
@@ -156,7 +156,12 @@ Proof
   `local_ptrs_rel func cenv t.scopes u` by
     gvs[vv_post_def, stmt_state_rel_def, state_rel_def] >>
   qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[vv_post_def] >> disch_then (map_every assume_tac o CONJUNCTS) >> conj_tac
+  simp[vv_post_def] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type cenv obj = ArrayT et bd` by
+    (qpat_x_assum `vv_holds _ _ _ _ _ _ _` mp_tac >>
+     simp[Once vv_holds_def] >> strip_tac >> gvs[is_bytestring_type_def]) >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  conj_tac
   >- (irule vv_holds_located_nonword_frame >>
       goal_assum (drule_at Any) >> simp[is_word_type_def] >>
       gvs[evaluate_type_def, AllCaseEqs()] >> metis_tac[dynarray_free_fixed]) >>

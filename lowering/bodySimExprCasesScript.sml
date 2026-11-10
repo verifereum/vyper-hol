@@ -25,18 +25,34 @@
 Theory bodySimExprCases
 Ancestors
   bodySimIfExpWidened bodySimStructLitWidened bodySimMakeArrayWidened
+  bodySimSubscriptWidened
   bodySimBopInLiteralWord bodySimBopHeld
   bodySimConvertWidened
   exprSimSource
   exprSimHypsDefs
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
-  exprSimPlaces bodySubscriptMapResidual exprSimPopNested bodyPopNestedTargetFrag exprSimPopImmutableTarget targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
+  exprSimPlaces exprSimMapDefs exprSimSubscriptMap exprSimPopNested bodyPopNestedTargetFrag exprSimPopImmutableTarget targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph
+
+(* An expression naming a mapping is a top-level name or a subscript
+   (expr_map_case_other); a top-level one has no internal call
+   (compile_toplevel_map_case).  So only a subscript's mapping half needs
+   its own proof (body_subscript_case). *)
+Theorem body_expr_ok_map_other:
+  !cx e tops ctx func cenv.
+    (!ty e1 e2. e <> Subscript ty e1 e2) ==>
+    expr_map_case F ctx func cenv cx e
+Proof
+  rpt strip_tac >> Cases_on `?ty id. e = TopLevelName ty id`
+  >- gvs[compile_toplevel_map_case] >>
+  irule expr_map_case_other >> gvs[]
+QED
 
 (* With no internal call in it, an expression simulates by
    compile_expr_sim; what is left is the case with one. *)
 Theorem body_expr_ok_intro:
   !cx e.
+    (!ty e1 e2. e <> Subscript ty e1 e2) /\
     (!tops ctx func cenv env ty es.
        body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
        int_calls_expr e <> [] ==>
@@ -44,7 +60,13 @@ Theorem body_expr_ok_intro:
        expr_vv_sim ctx func cenv cx ty e es) ==>
     body_expr_ok cx e
 Proof
-  rw[body_expr_ok_def] >> Cases_on `int_calls_expr e = []` >> gvs[] >>
+  (* rw splits the simulation clause into its expr_sim and expr_vv_sim
+     goals, so the mapping goal is picked by its conclusion *)
+  rw[body_expr_ok_def]
+  >~ [`expr_map_sim _ _ _ _ _ _ _`]
+  >- (drule body_expr_ok_map_other >>
+      simp[expr_map_case_def] >> metis_tac[]) >>
+  Cases_on `int_calls_expr e = []` >> gvs[] >>
   metis_tac[compile_expr_sim, compile_expr_vv_sim, expr_sim_pre_body]
 QED
 
@@ -58,13 +80,18 @@ QED
 
 Theorem body_expr_ok_of_case:
   !cx e.
+    (!ty e1 e2. e <> Subscript ty e1 e2) /\
     (!tops ctx func cenv.
        body_inv tops ctx cenv cx ==>
        expr_sim_case F ctx func cenv cx e /\
        expr_vv_case F ctx func cenv cx e) ==>
     body_expr_ok cx e
 Proof
-  rw[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
+  rw[body_expr_ok_def]
+  >~ [`expr_map_sim _ _ _ _ _ _ _`]
+  >- (drule body_expr_ok_map_other >>
+      simp[expr_map_case_def] >> metis_tac[]) >>
+  fs[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
 QED
 
 Theorem body_exprs_ok_case:
@@ -84,9 +111,11 @@ Theorem body_ifexp_case:
     body_expr_ok cx e1 ==>
     body_expr_ok cx (IfExp v5 e1 e2 e3)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
   Cases_on `!e. (e = e2 \/ e = e3) ==>
-    int_calls_expr e = [] \/ same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)`
+    (int_calls_expr e = [] \/
+     same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+    post_value_type cenv e = expr_type e`
   >- (irule compile_ifexp_case >> simp[] >> metis_tac[body_expr_ok_case]) >>
   rw[expr_sim_case_def, expr_vv_case_def] >>
   metis_tac[body_ifexp_widened_call_arm]
@@ -98,7 +127,7 @@ Theorem body_structlit_case:
     (!ks. ks = MAP FST kes ==> body_exprs_ok cx (MAP SND kes)) ==>
     body_expr_ok cx (StructLit v7 (src_id_opt,id) kes)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
   Cases_on `!e. MEM e (MAP SND kes) ==>
               int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
   >- (irule compile_struct_lit_case >> metis_tac[body_exprs_ok_case]) >>
@@ -107,27 +136,38 @@ Proof
 QED
 
 (* exprSimPlaces' compile_subscript_case, whose array and mapping cases are
-   cheated there for compile_expr_sim too. *)
+   cheated there for compile_expr_sim too; a widened internal-call base is
+   body_subscript_widened_call_base. *)
 Theorem body_subscript_case:
   !cx v8 e1 e2.
     (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_ok cx e2) /\
     body_expr_ok cx e1 ==>
     body_expr_ok cx (Subscript v8 e1 e2)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
-  `expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
-    (irule exprSimPlacesTheory.compile_subscript_case >> rpt conj_tac
-     >- metis_tac[body_expr_ok_case]
-     >- metis_tac[body_subscript_map_residual] >>
-     rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
-  simp[expr_sim_case_of_vv]
+  rpt strip_tac >> simp[Once body_expr_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      reverse (Cases_on `post_value_type cenv e1 = expr_type e1`)
+      >- (rw[expr_sim_case_def, expr_vv_case_def] >>
+          metis_tac[body_subscript_widened_call_base]) >>
+      `expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
+        (irule exprSimPlacesTheory.compile_subscript_case >> rpt conj_tac
+         >- metis_tac[body_expr_ok_case]
+         >- metis_tac[body_expr_ok_map_case] >>
+         rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
+      drule_at (Pos last) expr_sim_case_of_vv >> simp[] >> strip_tac >>
+      fs[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `expr_map_case F ctx func cenv cx (Subscript v8 e1 e2)` by
+    (irule compile_subscript_map_map_case >> rpt conj_tac >> rpt strip_tac >>
+     metis_tac[body_expr_ok_case, body_expr_ok_map_case]) >>
+  fs[expr_map_case_def] >> metis_tac[]
 QED
 
 (* exprSimAttribute's compile_attribute_case. *)
 Theorem body_attribute_case:
   !cx v9 e id. body_expr_ok cx e ==> body_expr_ok cx (Attribute v9 e id)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >>
+  rpt strip_tac >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >>
   strip_tac >> irule compile_attribute_case >> metis_tac[body_expr_ok_case]
 QED
 
@@ -141,7 +181,7 @@ Theorem body_bop_case:
      !a t n elems. e2 <> Builtin a (MakeArray t n) elems) /\
     body_exprs_ok cx [e1; e2] ==> body_expr_ok cx (Builtin ty (Bop bop) [e1; e2])
 Proof
-  rw[body_exprs_ok_def] >> irule body_expr_ok_of_case >> rpt gen_tac >>
+  rw[body_exprs_ok_def] >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >>
   strip_tac >> irule compile_bop_case >> rpt conj_tac
   >- (strip_tac >> metis_tac[body_expr_ok_case]) >>
   metis_tac[body_expr_ok_case]
@@ -168,7 +208,7 @@ Theorem body_make_array_case:
      body_exprs_ok cx es) ==>
     body_expr_ok cx (Builtin ty (MakeArray t n) es)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `builtin_args_length_ok (MakeArray t n) (LENGTH es)`)
   >- (rw[expr_sim_case_def, expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
@@ -192,9 +232,9 @@ Theorem body_builtin_residual_case:
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_ok cx es) ==>
     body_expr_ok cx (Builtin ty bt es)
 Proof
-  rpt strip_tac >> (irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> (irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func cenv cx (Builtin ty bt es)`
-    suffices_by metis_tac[expr_sim_case_of_vv] >>
+    suffices_by (strip_tac >> conj_tac >- (irule expr_sim_case_of_vv >> simp[]) >> simp[]) >>
   reverse (Cases_on `builtin_args_length_ok bt (LENGTH es)`)
   >- (rw[expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
@@ -226,7 +266,7 @@ Proof
   Cases_on `bt = ECAdd \/ bt = ECMul`
   >- (irule body_builtin_residual_case >> simp[] >> strip_tac >>
       first_x_assum irule >> gvs[type_check_def, assert_def]) >>
-  irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `builtin_args_length_ok bt (LENGTH es)`)
   >- (rw[expr_sim_case_def, expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
@@ -285,7 +325,7 @@ Proof
                 ?a t n elems. e2 = Builtin a (MakeArray t n) elems`
       >- (gvs[] >> irule body_bop_in_literal_case >> simp[]) >>
       irule body_bop_case >> gvs[]) >>
-  irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
   irule compile_bop_args_case >> gvs[]
 QED
 
@@ -298,17 +338,16 @@ Theorem body_pop_nested_case:
     body_base_target_ok cx bt ==>
     body_expr_ok cx (Pop v10 bt)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func cenv cx (Pop v10 bt)` by
     (rw[expr_vv_case_def] >>
-     Cases_on `immutable_root cx bt /\ cx.in_deploy /\ cenv.ce_module <> NONE`
-     >- (irule body_pop_nested_immutable_module_case >> gvs[] >> metis_tac[]) >>
      irule pop_nested_sim >> conj_tac
      >- (strip_tac >> qexists_tac `F` >> simp[] >>
          irule body_target_idx_case >> metis_tac[]) >>
      qexists_tac `env` >> simp[] >> rpt conj_tac
      >~ [`cenv.ce_is_ctor`]
      >- (strip_tac >> gvs[] >> conj_tac >- gvs[body_inv_def] >>
+         `cenv.ce_module = NONE` by gvs[body_inv_def, cenv_module_pins_def] >>
          rpt strip_tac >> irule body_imm_var_type >>
          gvs[expr_body_pre_def] >> metis_tac[]) >>
      strip_tac >> irule body_pop_nested_target_frag >> metis_tac[]) >>
@@ -324,7 +363,8 @@ Proof
   rpt strip_tac >> Cases_on `?id. bt = NameTarget id`
   >- (gvs[] >> irule body_expr_ok_of_case >> simp[compile_pop_name_case]) >>
   Cases_on `?nid. bt = TopLevelNameTarget nid`
-  >- (gvs[] >> irule body_expr_ok_intro >>
+  >- (gvs[] >> irule body_expr_ok_intro >> conj_tac
+      >~ [`_ <> Subscript _ _ _`] >- simp[] >>
       simp[vyperTypeCallGraphTheory.int_calls_expr_def]) >>
   irule body_pop_nested_case >> gvs[]
 QED
@@ -338,7 +378,7 @@ Theorem body_type_builtin_case:
        body_exprs_ok cx es) ==>
     body_expr_ok cx (TypeBuiltin v11 tb typ es)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `type_builtin_args_length_ok tb (LENGTH es)`)
   >- (rw[expr_sim_case_def, expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
@@ -364,7 +404,7 @@ Theorem body_send_case:
        body_exprs_ok cx es) ==>
     body_expr_ok cx (Call v12 (Send has_gas) es v13)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> irule body_expr_ok_of_case >> conj_tac >~ [`_ <> Subscript _ _ _`] >- simp[] >> rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func cenv cx (Call v12 (Send has_gas) es v13)`
     suffices_by simp[expr_sim_case_of_vv] >>
   rw[expr_vv_case_def] >> drule send_pre_types >> strip_tac >>

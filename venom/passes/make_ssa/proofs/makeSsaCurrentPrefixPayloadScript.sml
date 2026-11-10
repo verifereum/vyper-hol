@@ -1,6 +1,6 @@
 Theory makeSsaCurrentPrefixPayload
 Ancestors
-  makeSsaCurrentLockstepShape makeSsaCurrentCleanupShape makeSsaCurrentDefs venomExecSemantics makeSsaCurrentCleanupBoundary
+  makeSsaCurrentLockstepShape makeSsaCurrentCleanupShape makeSsaDefs venomExecSemantics makeSsaCurrentCleanupBoundary
 
 Theorem current_prefix_simplified_payload:
   inst.inst_opcode = PHI /\ (simplify_current_phi inst).inst_opcode <> PHI ==>

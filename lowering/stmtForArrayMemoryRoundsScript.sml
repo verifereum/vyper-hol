@@ -1,7 +1,7 @@
 Theory stmtForArrayMemoryRounds
 Ancestors
   stmtForArrayControlMemory stmtForArrayMemoryRoundSupport
-  stmtSimForArrayLoop stmtSimProps exprLoweringProps bodyMemoryDefs loweringPosts compileEnv
+  stmtSimForArrayLoop stmtSimProps exprLoweringProps bodyMemoryDefs loweringPosts compileEnv loweringStateRelDefs
   venomState allocaHistory fragGasMode fragGasPathMem finite_map list arithmetic
   stmtForArrayMemoryCopy stmtForArrayMemoryBodyEntry rich_list emitHelper venomInst
   bodyDeclMemoryCounted stmtLowering venomMemDefs stmtSimDefs gasContext vyperState
@@ -71,12 +71,13 @@ Proof
   drule array_condition_boundary_mem >>
   simp[Excl "typed_copy_lookup_var_jump"] >>
   disch_then drule >> simp[Excl "typed_copy_lookup_var_jump"] >> strip_tac >>
-  rename1 `gas_path_mem ctx func s 0 (OK t)` >>
+  qmatch_asmsub_abbrev_tac `gas_path_mem ctx func s 0 (OK t)` >>
   qexists_tac `t` >> conj_tac
   >- simp[gas_marked_path_def] >>
   `array_round_frame d func cenv caller orig t` by
     (irule array_round_frame_transport >> simp[] >> qexists_tac `s` >> simp[] >>
-     rpt strip_tac >> metis_tac[]) >>
+     rpt strip_tac >> fs[Abbr `t`, lookup_var_def, jump_to_def, update_var_def,
+                           FLOOKUP_UPDATE] >> metis_tac[]) >>
   fs[array_round_done_def, array_loop_inv_def, state_rel_gas_obs]
 QED
 
@@ -104,10 +105,11 @@ Proof
   drule array_increment_boundary_mem >>
   simp[Excl "typed_copy_lookup_var_jump"] >>
   disch_then drule >> simp[Excl "typed_copy_lookup_var_jump"] >> strip_tac >>
-  rename1 `gas_path_mem ctx func s 0 (OK t)` >>
+  qmatch_asmsub_abbrev_tac `gas_path_mem ctx func s 0 (OK t)` >>
   qexists_tac `t` >> simp[gas_marked_path_def, ADD1] >>
   irule array_round_frame_transport >> simp[] >> qexists_tac `s` >> simp[] >>
-  rpt strip_tac >> metis_tac[]
+  rpt strip_tac >> fs[Abbr `t`, lookup_var_def, jump_to_def, update_var_def,
+                           FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
 Theorem array_round_break:
@@ -175,10 +177,11 @@ Proof
   drule array_condition_boundary_mem >>
   simp[Excl "typed_copy_lookup_var_jump"] >>
   disch_then drule >> simp[Excl "typed_copy_lookup_var_jump"] >> strip_tac >>
-  rename1 `gas_path_mem ctx func s 0 (OK t)` >>
+  qmatch_asmsub_abbrev_tac `gas_path_mem ctx func s 0 (OK t)` >>
   qexists_tac `t` >> simp[gas_marked_path_def] >>
   irule array_round_frame_transport >> simp[] >> qexists_tac `s` >> simp[] >>
-  rpt strip_tac >> metis_tac[]
+  rpt strip_tac >> fs[Abbr `t`, lookup_var_def, jump_to_def, update_var_def,
+                           FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
 Theorem array_iter_copy_no_gas[local]:

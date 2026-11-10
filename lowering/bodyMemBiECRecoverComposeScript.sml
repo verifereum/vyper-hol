@@ -4,7 +4,7 @@ Ancestors
   exprSimMemDefs gasOutcome gasSummary gasSummaryCompose gasExemptCert
   fragGasMode fragGasPath exprSimDefs vyperInterpreter vyperState list
   exprSimProps exprLowering exprLoweringProps exprSimHypsDefs vyperTyping
-  vyperAST vyperTypeSystem compileEnv rich_list builtinMisc loweringPosts
+  vyperAST vyperTypeSystem compileEnv loweringStateRelDefs rich_list builtinMisc loweringPosts
   exprBopLowering vyperContext vyperValue vyperTypeInvariants valueEncoding
   integer_word words byte context emitHelper emitHelperProps venomExecSemantics
   venomInst venomState venomMemDefs venomCallOracleDefs extCallOracle

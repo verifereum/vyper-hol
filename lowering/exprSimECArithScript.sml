@@ -51,9 +51,9 @@ Ancestors
   exprSimLiteralBuffer
   exprSimCalldataSlice entryDecodeStaticProps
   builtinMisc venomInst exprLoweringProps venomExecSemantics
-  venomState vyperTypeSystem vyperContext valueEncoding
+  venomState vyperTypeSystem vyperContext valueEncoding valueEncodingDefs
   vyperTyping valueEncodingProofs vyperTypeBuiltins vyperValueOperation
-  vyperValue vyperAssignPreservesType compileEnv extCallOracle byte
+  vyperValue vyperAssignPreservesType compileEnv loweringStateRelDefs extCallOracle byte
   vfmBuffer venomMemDefs vfmTypes vfmExecution bn254 list rich_list
   numposrep gasOutcome gasSummary gasSummaryCompose gasExemptCert
   fragGasPath fragGasMode cv_std[ignore_grammar]
@@ -397,6 +397,7 @@ Proof
 QED
 
 Theorem ec_point_operand_kept[local]:
+  post_value_type cenv e1 = expr_type e1 /\
   expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
   expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
@@ -568,7 +569,7 @@ Theorem ec_point_words_scratch_store[local]:
   mem_word_at (point + 32) (mstore (base + off) w s).vs_memory =
     mem_word_at (point + 32) s.vs_memory
 Proof
-  rpt gen_tac >> simp[compileEnvTheory.regions_disjoint_def] >>
+  rpt gen_tac >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   strip_tac >> conj_tac >>
   irule valueEncodingPropsTheory.mstore_mem_word_at_disjoint >> decide_tac
 QED
@@ -681,7 +682,7 @@ Proof
   `mem_word_at (w2n point+32) s1.vs_memory =
    mem_word_at (w2n point+32) s.vs_memory` by
     (simp[] >> irule valueEncodingPropsTheory.mstore_mem_word_at_disjoint >>
-     gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   qexists_tac `t` >> conj_tac >- metis_tac[run_inst_seq_append] >>
   conj_tac
   >- (qpat_x_assum `t.vs_memory = _` mp_tac >>
@@ -716,9 +717,9 @@ Proof
        type_slot_size_def, wordsTheory.dimword_def, ec_point_footprint] >>
   strip_tac >> gvs[]
   >- (first_x_assum drule >> simp[] >>
-      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   first_x_assum drule >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem ec_result_val_wf[local]:
@@ -731,6 +732,7 @@ Proof
 QED
 
 Theorem ec_result_pointer_post[local]:
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   stmt_state_rel ctx func cenv cx es' t /\ wb_frame cenv es sa s0 t /\
   eval_operand pop t = SOME w /\
@@ -760,7 +762,7 @@ Proof
        type_slot_size_def, wordsTheory.dimword_def, ec_point_footprint] >>
   conj_tac
   >- (disj1_tac >> qexistsl_tac [`aid`, `w2n w`, `64`] >>
-      simp[] >> gvs[compileEnvTheory.regions_disjoint_def]) >>
+      simp[] >> gvs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   gvs[loweringPostsTheory.wb_frame_def] >> metis_tac[]
 QED
 
@@ -928,7 +930,7 @@ Proof
     (gvs[] >> metis_tac[]) >>
   `w2n bw + 64 < dimword (:256) /\
    regions_disjoint (w2n bw) 64 (w2n point) 64` by
-    (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+    (gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   drule (Q.INST [`boff` |-> `0w`] (SPEC_ALL ec_point_pair_transfer_run)
     |> SRULE [wordsTheory.WORD_ADD_0]) >>
   disch_then (qspecl_then [`s`, `point`, `bw`] mp_tac) >>
@@ -1069,7 +1071,7 @@ Proof
     (irule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >> decide_tac) >>
   `w2n (bw+64w) + 64 < dimword (:256) /\
    regions_disjoint (w2n (bw+64w)) 64 (w2n point2) 64` by
-    (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+    (gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   drule (Q.INST [`boff` |-> `64w`] (SPEC_ALL ec_point_pair_transfer_run)
     |> SRULE [wordsTheory.word_add_n2w]) >>
   disch_then (qspecl_then [`s1`, `point2`, `bw`] mp_tac) >>
@@ -1128,7 +1130,7 @@ Proof
    mem_bytes_at b sz (mstore (a+h0) h1 s).vs_memory` by
     (first_x_assum irule >> simp[] >> metis_tac[]) >>
   simp[] >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
-  gvs[compileEnvTheory.regions_disjoint_def] >>
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >>
   qpat_x_assum `!off w. _` (qspecl_then [`h0`, `h1`] mp_tac) >>
   simp[] >> decide_tac
 QED
@@ -1602,6 +1604,7 @@ Theorem ec_suffix_pointer_post[local]:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
     regions_disjoint (w2n wo) 64 off (type_memory_size tv)) /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   pure_frame cenv func es sf s0 st /\
   (?ops outs. MEM (mk_inst aid ALLOCA ops outs) (fn_insts func)) ==>
@@ -1685,6 +1688,7 @@ Theorem ec_points_run[local]:
   (!z. MEM (Var z) [p;scalar] ==> not_fresh_at sf z) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
   w2n point + 64 < dimword (:256) /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) ==>
   case vfmExecution$ecmul
     (w2n (mem_word_at (w2n point) s.vs_memory),
@@ -1708,6 +1712,7 @@ Theorem ec_points_run[local]:
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v1 p1 s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v2 p2 s /\
   w2n point + 64 < dimword (:256) /\ w2n point2 + 64 < dimword (:256) /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) ==>
   case vfmExecution$ecadd
     (w2n (mem_word_at (w2n point) s.vs_memory),
@@ -2023,6 +2028,7 @@ Theorem ec_points_path[local]:
   expr_val_rel cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v p s /\
   expr_val_rel cx (BaseT (UintT 256)) k scalar s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   ec_source_tail cx ann ECMul tys [v;k] es = (r,es') /\
   fn_has_code sf sb func /\ ~s.vs_halted /\
@@ -2048,6 +2054,7 @@ Theorem ec_points_path[local]:
   expr_val_rel cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v2 p2 s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v1 p1 s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v2 p2 s /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   ec_source_tail cx ann ECAdd tys [v1;v2] es = (r,es') /\
   fn_has_code sf sb func /\ ~s.vs_halted /\
@@ -2286,6 +2293,9 @@ Proof
     metis_tac[int_calls_builtin_arg, listTheory.MEM] >>
   `nocalls ==> int_calls_expr b = []` by
     metis_tac[int_calls_builtin_arg, listTheory.MEM] >>
+  `post_value_type cenv a = expr_type a` by
+    (irule post_value_type_ec_point >> simp[] >>
+     qexistsl_tac [`cx`,`env`,`es`] >> fs[expr_body_pre_def]) >>
   `expr_sim ctx func cenv cx (expr_type a) a es` by
     (gvs[exprs_case_def, expr_sim_case_def] >> metis_tac[]) >>
   qpat_assum `lower_value _ _ _ a _ = _`
@@ -2454,7 +2464,9 @@ QED
 
 Resume compile_ec_call_case[point_payload]:
   markerLib.RESUME_TAC >~ [`compile_ecmul_point _ _ _ = _`]
-  >- (`expr_val_rel cx (BaseT (UintT 256)) v2 scalar u` by gvs[expr_post_def] >>
+  >- (`post_value_type cenv b = expr_type b` by
+        simp[post_value_type_word, is_word_type_def] >>
+      `expr_val_rel cx (BaseT (UintT 256)) v2 scalar u` by gvs[expr_post_def] >>
       irule (SRULE []
         (Q.INST [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul [a;b]`]
           (SPEC_ALL (CONJUNCT1 ec_points_path)))) >>
@@ -2462,6 +2474,11 @@ Resume compile_ec_call_case[point_payload]:
       conj_tac >- metis_tac[exprSimHashTheory.hash_emitted_inst_mem] >>
       goal_assum (drule_at (Pat `ec_source_tail _ _ _ _ _ _ = _`)) >>
       qexistsl_tac [`sa`, `p`, `scalar`] >> simp[] >> metis_tac[]) >>
+  `post_value_type cenv b = expr_type b` by
+    (irule post_value_type_ec_point >> simp[] >>
+     qexistsl_tac [`cx`,`env`,`es`] >>
+     qpat_x_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` mp_tac >>
+     simp[expr_body_pre_def, well_typed_expr_def]) >>
   `expr_val_rel cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v2 q u /\
    expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) s1 sm es2 v2 q u` by
     gvs[expr_post_def] >>

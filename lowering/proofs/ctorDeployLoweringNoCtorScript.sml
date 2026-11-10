@@ -2,14 +2,15 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringNoCtor
 Ancestors
-  ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
+  structFieldsProps ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
   compileVyper vyperInterpreter e2eDeployDefs moduleLowering
   immutableDeployExecution ctorDeployDefs e2eEntry venomState vyperCompiler
   immutableEncoding immutableEncodingProofs immutableSectionRel immutableValue
-  valueEncoding vyperValue vyperTypeInitialState vyperTypeContractStaticMaps
+  valueEncoding valueEncodingDefs vyperValue vyperTypeInitialState vyperTypeContractStaticMaps
   vyperTypeConstantCells abiCallerBuiltinInput entryStateRel
   venomPipelineData venomPipelineDriver venomPipelineRunner venomFnScheduleRunner
   unitLabelMap fcgPruning
+  fcgDefs
 
 Theorem no_ctor_lookup:
   !tops exts ints fb.
@@ -389,7 +390,7 @@ Proof
 QED
 
 Theorem no_ctor_make_ssa:
-  makeSsaCurrentDefs$make_ssa_current_fn s
+  makeSsaDefs$make_ssa_current_fn s
     (mk_raw_function "__deploy"
       [<| bb_label := "__deploy"; bb_instructions :=
         [mk_inst 0 ALLOCA [Lit n] ["%0"];
@@ -669,7 +670,7 @@ Theorem no_ctor_late_make_ssa:
     <| fn_eom := SOME e; fn_mems_used := mems;
        fn_fmp_signature := SOME
          <| fms_has_fmp_param := F; fms_publishes := F |> |> ==>
-  makeSsaCurrentDefs$make_ssa_current_fn s fn = (fn,s)
+  makeSsaDefs$make_ssa_current_fn s fn = (fn,s)
 Proof
   strip_tac >> gvs[] >> EVAL_TAC
 QED
@@ -1669,7 +1670,7 @@ Proof
 QED
 
 Theorem no_ctor_late_fold:
-  makeSsaCurrentDefs$make_ssa_current_fn s fn = (fn,s) /\
+  makeSsaDefs$make_ssa_current_fn s fn = (fn,s) /\
   simplifyCfgDefs$simplify_cfg_fn_with_labels fn = (fn,[]) /\
   singleUseExpansionDefs$sue_expand_function_supply s fn = (expanded,t) /\
   dftDefs$dft_fn expanded = ordered /\
@@ -2122,67 +2123,6 @@ Proof
           rich_listTheory.REPLICATE_GENLIST, listTheory.TAKE_GENLIST,
           arithmeticTheory.MIN_DEF])) >>
   metis_tac[]
-QED
-
-Theorem no_ctor_zero_word_bytes:
-  word_to_bytes (0w:bytes32) T = REPLICATE 32 (0w:word8)
-Proof
-  simp[byteTheory.word_to_bytes_def,
-       fcpLib.INDEX_CONV ``dimindex(:256)``] >> EVAL_TAC >>
-  simp[wordsTheory.ZERO_SHIFT, wordsTheory.w2w_0]
-QED
-
-Theorem no_ctor_zero_address_bytes:
-  word_to_bytes (0w:160 word) T = REPLICATE 20 (0w:word8)
-Proof
-  simp[byteTheory.word_to_bytes_def,
-       fcpLib.INDEX_CONV ``dimindex(:160)``] >> EVAL_TAC >>
-  simp[wordsTheory.ZERO_SHIFT, wordsTheory.w2w_0]
-QED
-
-Theorem no_ctor_fit_zero:
-  immutable_fit n (REPLICATE m (0w:word8)) = REPLICATE n 0w
-Proof
-  simp[immutable_fit_def, rich_listTheory.REPLICATE_APPEND,
-       rich_listTheory.REPLICATE_GENLIST, listTheory.TAKE_GENLIST,
-       arithmeticTheory.MIN_DEF]
-QED
-
-Theorem no_ctor_flat_zero_slots:
-  !n sz. FLAT (GENLIST (\i. REPLICATE sz (0w:word8)) n) =
-    REPLICATE (n * sz) 0w
-Proof
-  Induct >> simp[listTheory.GENLIST_CONS, combinTheory.o_DEF,
-    rich_listTheory.REPLICATE_APPEND, arithmeticTheory.MULT]
-QED
-
-Theorem no_ctor_padded_zero_word:
-  (word_of_bytes_be (PAD_RIGHT 0w 32 (REPLICATE n 0w)):bytes32) = 0w /\
-  (word_of_bytes_be (PAD_LEFT 0w 32 (REPLICATE n 0w)):bytes32) = 0w
-Proof
-  simp[listTheory.PAD_RIGHT, listTheory.PAD_LEFT,
-       GSYM rich_listTheory.REPLICATE_GENLIST,
-       rich_listTheory.REPLICATE_APPEND, byteTheory.word_of_bytes_be_def,
-       immutable_word_of_zero_bytes]
-QED
-
-Theorem no_ctor_default_encoding:
-  (!tv. encode_immutable_value tv (default_value tv) =
-    REPLICATE (type_memory_size tv) 0w) /\
-  (!tvs. encode_immutable_tuple tvs (MAP default_value tvs) =
-    REPLICATE (type_memory_size_list tvs) 0w) /\
-  (!fts. encode_immutable_fields fts
-    (MAP (\(id,t). (id, default_value t)) fts) =
-    REPLICATE (type_memory_size_fields fts) 0w)
-Proof
-  ho_match_mp_tac type_memory_size_ind >>
-  rw[default_value_def, default_value_tuple_MAP, default_value_struct_MAP,
-     encode_immutable_value_def, type_memory_size_def,
-     immutable_word_bytes_def, typed_val_to_w256_def, val_to_w256_def,
-     integer_wordTheory.i2w_0, no_ctor_padded_zero_word,
-     no_ctor_zero_word_bytes, no_ctor_zero_address_bytes,
-     no_ctor_flat_zero_slots, no_ctor_fit_zero,
-     rich_listTheory.REPLICATE_APPEND]
 QED
 
 Theorem no_ctor_zero_section:
@@ -2652,7 +2592,7 @@ Proof
   disch_then (qspecl_then [`tx`, `[]`, `am`] mp_tac) >> simp[] >> strip_tac >>
   qexists `[]` >>
   simp[no_ctor_gas_marks, deploy_venom_result_rel_def] >>
-  gvs[compileEnvTheory.storage_agree_def, compileEnvTheory.transient_agree_def,
+  gvs[loweringStateRelDefsTheory.storage_agree_def, loweringStateRelDefsTheory.transient_agree_def,
       e2eDefsTheory.logs_correspond_def,
       vfmStateTheory.account_state_component_equality]
 QED

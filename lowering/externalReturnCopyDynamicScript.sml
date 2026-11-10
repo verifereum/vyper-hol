@@ -1,10 +1,10 @@
 (* Task-owned dynamic-array operational boundaries. *)
 Theory externalReturnCopyDynamic
 Ancestors
-  externalReturnCopyArrayLoop externalReturnCopyFrame venomState compileEnv
+  externalReturnCopyArrayLoop externalReturnCopyFrame venomState compileEnv loweringStateRelDefs
   arithmetic fragExec emitHelper emitHelperProps context venomExecSemantics
   venomInst words finite_map externalReturnCopyTransport exprLoweringProps
-  valueEncoding valueEncodingProps list pair
+  valueEncoding valueEncodingDefs valueEncodingProps list pair
 
 Theorem return_copy_dynamic_header_frag:
   !ctx counter length N k a lt b done c s off len.

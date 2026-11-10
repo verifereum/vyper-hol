@@ -3,7 +3,7 @@
    The recursive encoder's dynamic cases require separate execution proofs. *)
 Theory abiTupleValueEncoding
 Ancestors
-  abiValueEncoding valueEncoding valueEncodingProps compileEnv
+  abiValueEncoding valueEncoding valueEncodingDefs valueEncodingProps compileEnv
   vyperABI vyperABIRoundtrip vyperValue vyperTyping vyperTypeABI exprLowering contractABI
   list rich_list option
 

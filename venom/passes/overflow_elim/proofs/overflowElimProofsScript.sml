@@ -41,6 +41,7 @@ Ancestors
   list
   finite_map
   indexedLists
+  passTransform
 
 val _ = temp_delsimps ["dfg_block_local_def", "dfg_tracked_opcode_def"];
 

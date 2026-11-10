@@ -2,7 +2,7 @@
 Theory ctorAbiActualArrayIteration
 Ancestors
   ctorAbiActualChildFrame ctorAbiActualMemory ctorAbiActualSites
-  abiDecoderArrayPrefix valueEncodingProofs valueEncodingTyping valueEncoding
+  abiDecoderArrayPrefix valueEncodingProofs valueEncodingTyping valueEncoding valueEncodingDefs
   abiEncoderRegisteredEffect venomMemDefs venomState list arithmetic pred_set
   ctorAbiActualObservations ctorAbiActualWorld ctorAbiActualNarrow abiDecoderContract
   abiDecoderLoopSetup abiDecoderIndexedAddress abiDecoderDynamic abiDecoderReentry

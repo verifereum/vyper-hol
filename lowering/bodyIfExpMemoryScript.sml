@@ -373,13 +373,18 @@ Proof
 QED
 
 Theorem ifexp_vv_post_of_expr_post_read[local]:
+  post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s /\
   read_result cx tv es' = (INL v, es') ==>
   vv_post ctx func cenv cx e es sa sb s0 es' tv
     (if is_word_type (expr_type e) then StackValue (expr_type e) (Var rv)
      else LocatedValue (expr_type e) (mk_ptr (Var rv) LocMemory)) s
 Proof
-  rw[expr_post_def, vv_post_def] >>
+  strip_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `post_value_type _ _ = _`
+    (fn th => rewrite_tac[expr_post_def, vv_post_def, th]) >>
+  strip_tac >> reverse (Cases_on `is_word_type (expr_type e)`) >>
   gvs[vv_holds_def, vv_at_def, contextTheory.mk_ptr_def] >>
   fs[expr_val_rel_def, expr_val_at_def] >>
   rpt strip_tac >> res_tac >> gvs[] >> metis_tac[]
@@ -389,6 +394,7 @@ Theorem ifexp_finish_post[local]:
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
   read_result cx tv ee = (INL v,ee) /\ expr_type e = t /\
+  post_value_type cenv e = expr_type e /\
   eval_operand op u = SOME w /\ (!x. not_fresh_at sa x ==> x <> rv) /\
   local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
@@ -439,6 +445,8 @@ Theorem ifexp_word_arm_finish_mem[local]:
 Proof
   strip_tac >> irule ifexp_outcome_suffix_mem >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[loweringPostsTheory.post_value_type_word] >>
   `?w. eval_operand op u = SOME w` by fs[expr_post_def, expr_val_rel_def] >>
   qexists_tac `jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)` >>
   conj_tac >- (irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>
@@ -479,6 +487,8 @@ Theorem ifexp_forced_arm_finish_mem[local]:
 Proof
   strip_tac >> irule ifexp_outcome_suffix_mem >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[loweringPostsTheory.post_value_type_word] >>
   `?w. eval_operand op u = SOME w` by fs[expr_post_def, expr_val_rel_def] >>
   qexists_tac `jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)` >>
   conj_tac >- (irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>

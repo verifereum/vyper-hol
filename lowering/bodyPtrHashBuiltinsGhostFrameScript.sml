@@ -1,7 +1,7 @@
 (* Exterior memory/taint transport for hash suffix frames. *)
 Theory bodyPtrHashBuiltinsGhostFrame
 Ancestors bodyPtrDefs robustCopyTransportPtr exprSimProps exprLoweringProps
-  compileEnv venomState finite_map pred_set
+  compileEnv loweringStateRelDefs venomState finite_map pred_set
 
 Theorem hash_ghost_kept_frame:
   !cenv es sa G tn s G' tn'.

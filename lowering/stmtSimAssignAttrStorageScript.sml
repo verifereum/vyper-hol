@@ -37,7 +37,7 @@ Ancestors
   fragExec exprSimHyps exprSimLeaves exprSimAttributeFields stmtSimDecl stmtSimDeclMem stmtSimAssign stmtSimAssignMem storageStoreFrame
   stmtSimAssignStorage stmtSimAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding accountsRelProps
+  compileEnv loweringStateRelDefs valueEncoding accountsRelProps
   vyperInterpreter vyperState vyperStorage vyperValue vyperTyping
   vyperTypeEnv vyperTypeInvariants vyperTypeExprSoundness vyperTypeExprResult
   vyperExprNoControl
@@ -412,7 +412,7 @@ Proof
      qpat_x_assum `!n b sz. local_region _ _ (s0 with vs_vars := _) _ _ _ <=> _`
        mp_tac >>
      rpt (pop_assum kall_tac) >> simp[pure_frame_def]) >>
-  gvs[expr_post_def, expr_val_at_def, lookup_var_def, locals_kept_def,
+  gvs[expr_post_def, expr_val_at_def, expr_val_own_def, lookup_var_def, locals_kept_def,
       not_fresh_at_def] >>
   TRY (qpat_x_assum `~expr_has_effect e ==> pure_frame _ _ _ (sa with cs_next_var := _) _ _`
          kall_tac) >>
@@ -862,7 +862,7 @@ Proof
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
   `~u.vs_call_ctx.cc_static` by
     fs[exprLoweringPropsTheory.stmt_state_rel_def,
-       compileEnvTheory.state_rel_def] >>
+       loweringStateRelDefsTheory.state_rel_def] >>
   `gas_marked_path F ctx func u 0
     (OK ((if tr then tstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u
           else sstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u)

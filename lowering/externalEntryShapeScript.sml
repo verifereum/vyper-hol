@@ -3,7 +3,7 @@
 Theory externalEntryShape
 Ancestors
   list rich_list loweringShapeDefs loweringShapeRules loweringShapeProps
-  moduleLoweringProps compileEnv context emitHelper emitHelperProps fragExec
+  moduleLoweringProps compileEnv loweringStateRelDefs context emitHelper emitHelperProps fragExec
   exprLowering stmtLowering moduleLowering vyperCompiler compileVyper
   abiEncoder supportedProgram supportedNames supportedStmtTraverse
   supportedExprTraverse supportedTargets unitShapeDefs venomInst vyperAST

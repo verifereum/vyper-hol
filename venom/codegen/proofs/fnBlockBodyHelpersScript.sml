@@ -242,15 +242,6 @@ QED
 
 (* ===== The function's static shape ===== *)
 
-Theorem body_ready_fn_no_marker:
-  !fn. codegen_ready_fn fn ==>
-    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
-      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks
-Proof
-  simp[codegen_ready_fn_def, codegen_ready_inst_def, EVERY_MEM] >>
-  metis_tac[]
-QED
-
 Theorem body_fn_shape:
   !ctx unit Inv cpl i fn.
     ctx = unit.cu_context /\ unit_shape_ok unit /\

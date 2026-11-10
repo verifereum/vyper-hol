@@ -9,7 +9,7 @@ Ancestors
   accountsRelProps vyperStorage vyperStorageBackend vyperValue vfmState
   exprOperandVar
   vyperInterpreter vyperState vyperExprNoControl stmtLowering exprLowering
-  exprLoweringProps compileEnv emitHelper emitHelperProps venomInst venomExecSemantics
+  exprLoweringProps compileEnv loweringStateRelDefs emitHelper emitHelperProps venomInst venomExecSemantics
 Libs
   monadsyntax
 
@@ -193,10 +193,26 @@ Proof
   pop_assum (fn th => rewrite_tac[th]) >>
   simp[bind_def, lookup_global_def, lift_option_type_def, return_def,
        raise_def, get_immutables_def, get_address_immutables_def] >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+      get_immutables_def, get_address_immutables_def,
+      lift_option_type_def] >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+      get_immutables_def, get_address_immutables_def,
+      lift_option_type_def] >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+      get_immutables_def, get_address_immutables_def,
+      lift_option_type_def] >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+      get_immutables_def, get_address_immutables_def,
+      lift_option_type_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
-           get_immutables_def, get_address_immutables_def,
-           lift_option_type_def])
+   gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+       get_immutables_def, get_address_immutables_def,
+       lift_option_type_def])
 QED
 
 Theorem eval_append_storage_bind:

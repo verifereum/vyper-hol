@@ -3,7 +3,7 @@ Ancestors
   abiDecoderValidContract abiDecoderValidBytesInput abiValidBytesReentry abiDecoderValidBytes
   abiDecoderBytesTyped abiDecoderBytes abiDecoderCorrectLeaves abiDecoderEffect
   abiDecoderContract abiDecoderTypedContract abiDecoderReentry abiDecoderTypedCompose
-  abiDecoderLoop abiDecoderFrame abiDecoderSequenceReach abiEncoder fragExec instIdxIndep compileEnv
+  abiDecoderLoop abiDecoderFrame abiDecoderSequenceReach abiEncoder fragExec instIdxIndep compileEnv loweringStateRelDefs
   emitHelperProps valueEncoding vyperABI vyperValue venomState venomExecSemantics words list
   abiDecoderValidPrefix contractABI abiDecoderMemberInfos abiDecoderMembers abiValidMembers
   abiDecodeRanges arithmetic abiDecoderComplexExecute abiDecoderComplexGuard

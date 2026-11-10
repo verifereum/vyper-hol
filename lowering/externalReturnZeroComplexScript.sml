@@ -6,7 +6,7 @@ Ancestors
   abiEncoderAddressReach abiEncoderAdmissible abiEncoderInput abiEncoderProps
   abiEncoderAppend abiEncoder abiEncoderWindow contractABI freshWrites compileEnv fragExec
   words list rich_list finite_map pred_set arithmetic venomState venomMemDefs
-  abiEncoderOpenInput abiEncoderCounters exprLoweringProps emitHelperProps valueEncoding
+  abiEncoderOpenInput abiEncoderCounters exprLoweringProps emitHelperProps valueEncoding valueEncodingDefs
   abiDecodeRanges
 
 Theorem zero_member_drop_cons[local]:

@@ -301,7 +301,8 @@ Theorem body_inv_same_frame:
     body_inv tops ctx c cx
 Proof
   rpt strip_tac >>
-  fs[body_inv_def, same_frame_def, compile_env_component_equality] >>
+  fs[body_inv_def, cenv_module_pins_def, same_frame_def,
+     compile_env_component_equality] >>
   metis_tac[]
 QED
 
@@ -511,12 +512,13 @@ Proof
          SIMP_RULE (srw_ss()) [compile_env_component_equality]) >>
       `(place_map_tables_agree_on_defined c (extend_local env id typ T) <=>
         place_map_tables_agree_on_defined cenv env) /\
-       (extend_local env id typ T).bare_globals = env.bare_globals` by
+       (extend_local env id typ T).bare_globals = env.bare_globals /\
+       (extend_local env id typ T).fn_sigs = env.fn_sigs` by
         (conj_tac >- (irule placeTypingPropsTheory.place_map_tables_agree_on_defined_cong >> fs[extend_local_def]) >>
          simp[extend_local_def]) >>
       qpat_x_assum `expr_sim_inv _ _ _ es`
         (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
-      ASM_REWRITE_TAC [expr_sim_inv_def]) >>
+      ASM_REWRITE_TAC [expr_sim_inv_def, extend_local_bare_globals]) >>
   drule_all declare_stmt_local_other >> strip_tac >>
   drule_all type_stmt_other >> strip_tac >> gvs[] >>
   qpat_x_assum `expr_sim_inv _ _ _ es`

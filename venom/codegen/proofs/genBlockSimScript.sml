@@ -87,7 +87,7 @@ Proof
 QED
 
 
-Theorem all_distinct_flat_map_member[local]:
+Theorem all_distinct_flat_map_member:
   !f xs x.
     ALL_DISTINCT (FLAT (MAP f xs)) /\ MEM x xs ==>
     ALL_DISTINCT (f x)
@@ -825,17 +825,18 @@ Theorem step_inst_selfdestruct_halt[local]:
     ?addr_op addr_val.
       inst.inst_operands = [addr_op] /\
       eval_operand addr_op vs = SOME addr_val /\
-      vs' = halt_state (set_returndata [] (vs with vs_accounts :=
-        (\a. if a = vs.vs_call_ctx.cc_address then
-               lookup_account vs.vs_call_ctx.cc_address vs.vs_accounts
-                 with balance := 0
-             else if a = (w2w addr_val : address) then
-               lookup_account (w2w addr_val) vs.vs_accounts with
-                 balance :=
-                   (lookup_account vs.vs_call_ctx.cc_address
-                      vs.vs_accounts).balance +
-                   (lookup_account (w2w addr_val) vs.vs_accounts).balance
-             else vs.vs_accounts a)))
+      vs' = halt_state (set_returndata [] (vs with <|
+        vs_accounts :=
+          (if vs.vs_call_ctx.cc_created_in_tx then
+             update_account vs.vs_call_ctx.cc_address
+               (lookup_account vs.vs_call_ctx.cc_address vs.vs_accounts with balance := 0)
+           else I)
+          (transfer_value vs.vs_call_ctx.cc_address (w2w addr_val)
+            (lookup_account vs.vs_call_ctx.cc_address vs.vs_accounts).balance
+            vs.vs_accounts);
+        vs_pending_deletions := if vs.vs_call_ctx.cc_created_in_tx then
+          vs.vs_call_ctx.cc_address :: vs.vs_pending_deletions
+          else vs.vs_pending_deletions |>))
 Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst _ _ _ _ = Halt _` mp_tac >>
@@ -1083,17 +1084,18 @@ Theorem terminal_selfdestruct_step[local]:
     ?st'.
       asm_steps lo o2pc prog 1 st = AsmHalt st' /\
       venom_asm_terminal_rel
-        (halt_state (set_returndata [] (vs with vs_accounts :=
-          (\a. if a = vs.vs_call_ctx.cc_address then
-                 lookup_account vs.vs_call_ctx.cc_address vs.vs_accounts
-                   with balance := 0
-               else if a = (w2w addr_val : address) then
-                 lookup_account (w2w addr_val) vs.vs_accounts with
-                   balance :=
-                     (lookup_account vs.vs_call_ctx.cc_address
-                        vs.vs_accounts).balance +
-                     (lookup_account (w2w addr_val) vs.vs_accounts).balance
-               else vs.vs_accounts a))))
+        (halt_state (set_returndata [] (vs with <|
+          vs_accounts :=
+            (if vs.vs_call_ctx.cc_created_in_tx then
+               update_account vs.vs_call_ctx.cc_address
+                 (lookup_account vs.vs_call_ctx.cc_address vs.vs_accounts with balance := 0)
+             else I)
+            (transfer_value vs.vs_call_ctx.cc_address (w2w addr_val)
+              (lookup_account vs.vs_call_ctx.cc_address vs.vs_accounts).balance
+              vs.vs_accounts);
+          vs_pending_deletions := if vs.vs_call_ctx.cc_created_in_tx then
+            vs.vs_call_ctx.cc_address :: vs.vs_pending_deletions
+            else vs.vs_pending_deletions |>)))
         st'
 Proof
   rpt strip_tac >>
@@ -1103,7 +1105,8 @@ Proof
   REWRITE_TAC[stackOpAsmSimTheory.asm_step_selfdestruct,
               asm_selfdestruct_def] >>
   ASM_REWRITE_TAC[] >>
-  fs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def, LET_THM]
+  fs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def, LET_THM,
+     COND_RATOR]
 QED
 
 (* ===== Simple prefix_spill_wf initial_fmp ===== *)
@@ -4571,7 +4574,7 @@ Proof
   disch_then (qspec_then `o2pc` mp_tac) >> simp[]
 QED
 
-Theorem phi_poke_fresh_distinct[local]:
+Theorem phi_poke_fresh_distinct:
   !stk d op. ALL_DISTINCT stk /\ ~MEM op stk ==>
     ALL_DISTINCT (stack_poke d op stk)
 Proof
@@ -4581,7 +4584,7 @@ Proof
   metis_tac[ALL_DISTINCT_EL_IMP, MEM_EL]
 QED
 
-Theorem phi_poke_fresh_disjoint[local]:
+Theorem phi_poke_fresh_disjoint:
   !stk d op s. DISJOINT (set stk) s /\ ~(op IN s) ==>
     DISJOINT (set (stack_poke d op stk)) s
 Proof
@@ -6888,7 +6891,7 @@ Proof
   simp[do_dup_def, LET_THM] >> rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem bump_emit_one_input_spilled_shape[local]:
+Theorem bump_emit_one_input_spilled_shape:
   !opc nl op ps ops ps'.
     emit_one_input opc nl op ps = (ops,ps') ==>
     ps'.ps_spilled = ps.ps_spilled \/

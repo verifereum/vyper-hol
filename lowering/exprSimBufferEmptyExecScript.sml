@@ -23,7 +23,7 @@ Ancestors
   exprSimAlloc
   exprSimBuffer exprSimBufferEmpty builtinSimple exprSimBufferStore
   exprSimLiteralBuffer exprSimOps freshWrites valueEncodingProps
-  exprSimWordArgs emitHelperProps exprLoweringProps compileEnv context
+  exprSimWordArgs emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs context
   venomInst venomState words fragExec rich_list list
 
 Theorem buffer_zero_words_shape[local]:
@@ -67,7 +67,7 @@ Proof
   Induct_on `n`
   >- (simp[compile_zero_words_def, comp_return_def] >> rpt strip_tac >>
       qexists_tac `s` >> simp[emitted_insts_refl, run_inst_seq_def,
-                              valueEncodingTheory.mem_bytes_at_def]) >>
+                              valueEncodingDefsTheory.mem_bytes_at_def]) >>
   rpt gen_tac >>
   simp[Once compile_zero_words_def, comp_bind_def, comp_ignore_bind_def] >>
   pairarg_tac >> rename1 `compile_zero_words pop n sa = (u,sm)` >>
@@ -243,7 +243,7 @@ Resume empty_tail_run[header]:
       disch_then (qspecl_then [`name`, `tv`, `v`, `off`] mp_tac) >>
       asm_rewrite_tac[] >> simp[regions_disjoint_def] >> decide_tac) >>
   `mem_bytes_at (w2n w) 0 s.vs_memory = REPLICATE 0 0w` by
-    simp[valueEncodingTheory.mem_bytes_at_def] >>
+    simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
   drule mem_bytes_at_zero_extend >> simp[] >> strip_tac >>
   conj_tac >- (Cases_on `pop` >> gvs[eval_operand_def, mstore_def]) >>
   simp[] >>

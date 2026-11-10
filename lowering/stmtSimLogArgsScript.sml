@@ -89,7 +89,7 @@ Proof
         (mp_tac o REWRITE_RULE [log_arg_clear_def]) >>
       disch_then (qspecl_then [`tv`, `n`, `w2n w - b`, `k`] mp_tac) >>
       simp[]) >>
-  gvs[valueEncodingTheory.mem_bytes_at_def]
+  gvs[valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem log_argument_value_kept:
@@ -201,7 +201,7 @@ Proof
       conj_tac
       >- (qexists_tac `func` >>
           gvs[exprLoweringPropsTheory.stmt_state_rel_def,
-              compileEnvTheory.state_rel_def]) >>
+              loweringStateRelDefsTheory.state_rel_def]) >>
       qexistsl_tac [`sb`, `es'.scopes`, `t`] >> gvs[wb_frame_def]) >>
   strip_tac >> irule local_region_frame_fwd >>
   qexistsl_tac [`s`, `sb`, `es.scopes`] >> gvs[wb_frame_def]
@@ -320,6 +320,7 @@ Theorem log_args_post_cons:
   sm.cs_next_id <= sb.cs_next_id /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ (!l. x <> Label l) /\
   expr_sim_inv cenv cx env0 es0 /\ expr_type e = BaseT bt /\
+  post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx e es sa sm s0 es1 v x t /\
   log_args_post ctx func cenv cx es1 sm sb t es' ys vs u ==>
   log_args_post ctx func cenv cx es sa sb s0 es'

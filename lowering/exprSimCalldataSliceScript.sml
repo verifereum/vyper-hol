@@ -34,8 +34,8 @@ Ancestors
   allocLimits
   list fragExec loweringSlice builtinBytes  exprSimHyps exprBopLowering
   exprSimOperators vyperEvalExprPreservesScopesDom
-  exprLowering exprLoweringProps builtinSimple emitHelper compileEnv
-  valueEncoding venomExecSemantics venomInst venomState vyperAST
+  exprLowering exprLoweringProps builtinSimple emitHelper compileEnv loweringStateRelDefs
+  valueEncoding valueEncodingDefs venomExecSemantics venomInst venomState vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeSystem
   vyperTypeInvariants vyperTyping vyperValueOperation vyperValue
   exprSimWordBuiltins exprSimWordArgs emitHelperProps freshWrites
@@ -654,7 +654,10 @@ Proof
      simp[mk_inst_def]) >>
   `t.vs_call_ctx.cc_calldata = cx.txn.calldata /\
    LENGTH t.vs_call_ctx.cc_calldata < dimword (:256)` by
-    (gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ t` mp_tac >>
+     qpat_x_assum `context_well_typed cx` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
          context_well_typed_def, wordsTheory.dimword_def]) >>
   `t.vs_labels = s.vs_labels` by
     (drule compile_alloc_buffer_insts >> strip_tac >>
@@ -855,6 +858,8 @@ Theorem slice_calldata_vv_post:
     (LocatedValue (expr_type e) p) (t with vs_inst_idx := k)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   `LENGTH (TAKE n (DROP a cx.txn.calldata)) = n` by simp[LENGTH_TAKE_EQ] >>
   `n <= 32 * word_size n` by simp[word_size_capacity] >>
   `eval_operand p.ptr_operand (t with vs_inst_idx := k) = SOME w` by
@@ -986,6 +991,19 @@ Proof
   >> metis_tac[]
 QED
 
+Theorem vv_own_start_mono:
+  sa.cs_next_id <= sm.cs_next_id /\
+  vv_own cenv cx ty sm sb es tv vv u ==>
+  vv_own cenv cx ty sa sb es tv vv u
+Proof
+  Cases_on `vv` >> simp[vv_own_def, expr_val_own_def] >>
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP u.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
+        first_assum ACCEPT_TAC)
+  >> metis_tac[]
+QED
+
 Theorem vv_post_prefix_frame:
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
@@ -1009,7 +1027,11 @@ Proof
   rewrite_tac[vv_post_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >~ [`vv_at _ _ _ sa _ _ _ _ _`]
   >- (irule vv_at_start_mono >> qexists_tac `sm` >>
-      conj_tac >> first_assum ACCEPT_TAC) >>
+      conj_tac >> first_assum ACCEPT_TAC)
+  >~ [`_ ==> vv_own _ _ _ sa _ _ _ _ _`]
+  >- (strip_tac >> irule vv_own_start_mono >> qexists_tac `sm` >>
+      conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qpat_x_assum `_ ==> vv_own _ _ _ sm _ _ _ _ _` irule >> first_assum ACCEPT_TAC) >>
   strip_tac >> match_mp_tac pure_frame_trans >>
   qexistsl_tac [`es1`, `sm`, `t`] >> fs[wb_frame_def]
 QED

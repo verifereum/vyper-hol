@@ -10,7 +10,7 @@ Ancestors
   abiEncoderComplexDynamic abiEncoderTuple abiEncoderOpenInput abiDecoderFrameCompose abiDecoderFrame
   valueEncodingProofs abiCanonicalWindows abiEncoderBytes abiDecoderDynamicLoopSetup
   abiEncoderWindowBytesMem fragExecMem contractABI words arithmetic
-  abiEncoderChildCode emitHelper emitHelperProps exprLoweringProps compileEnv list rich_list
+  abiEncoderChildCode emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs list rich_list
   instMemFrontier venomExecSemantics venomInst venomState stmtReasonMemory moduleLoweringProps
 
 (* The child reads an unrounded payload; its destination zeroing is rounded. *)

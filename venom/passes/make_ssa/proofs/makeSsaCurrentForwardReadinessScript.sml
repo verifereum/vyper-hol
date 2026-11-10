@@ -1,7 +1,7 @@
 Theory makeSsaCurrentForwardReadiness
 Ancestors
   makeSsaCurrentWfSsa makeSsaCurrentLockstepShape
-  makeSsaCurrentPhiBatchRuntime makeSsaCurrentDefs
+  makeSsaCurrentPhiBatchRuntime makeSsaDefs
   venomExecProofs venomExecSemantics venomState venomInst list finite_map
 
 Theorem current_phi_batch_output_defined:

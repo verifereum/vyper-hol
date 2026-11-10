@@ -12,7 +12,7 @@ Ancestors
   exprSimWordArgs exprSimSource exprSimHypsDefs exprSimProps exprSimDefs
   exprBopSimProps exprOperandVar loweringPosts gasOutcome gasSummary gasSummaryCompose
   gasExemptCert fragGasMode fragGasPath freshWrites fragExec exprLowering
-  exprLoweringProps compileEnv valueEncoding valueEncodingProps valueEncodingProofs venomState
+  exprLoweringProps compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs venomState
   vyperValue vyperTyping vyperTypeInvariants vyperTypeExprSoundness vyperTypeExprResult
   vyperInterpreter vyperState venomMemProps venomExecSemantics words arithmetic list rich_list
 Libs
@@ -670,8 +670,15 @@ Proof
   `32 + k <= bsz` by decide_tac >>
   `expr_post ctx func cenv cx e es sa s1 s0 es1 v op t` by first_assum ACCEPT_TAC >>
   drule_all concat_args_pre >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (qpat_x_assum `is_bytestring_type (expr_type e) \/ _` mp_tac >>
+     qpat_x_assum `evaluate_type _ (expr_type e) = SOME _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     gvs[evaluate_type_def, is_word_type_def]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  qpat_x_assum `post_value_type cenv e = expr_type e`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   `mload (w2n ow) t = n2w k` by metis_tac[] >>
   `eval_operand (Var dv) t = SOME (n2w (B + 32)) /\
    eval_operand (Var ov) t = SOME ow` by

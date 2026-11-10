@@ -18,7 +18,7 @@
 Theory exprSafeOperandBuiltins
 Ancestors
   exprSafeOperand
-  exprLoweringProps freshWrites compileEnv emitHelper context
+  exprLoweringProps freshWrites compileEnv loweringStateRelDefs emitHelper context
   exprLowering exprCallBounds vyperTypeSystem vyperValue vyperAST vyperTypeBuiltins
   builtinSimple builtinMath builtinHashing builtinMisc builtinBytes builtinSystem
   builtinCreate
@@ -505,6 +505,41 @@ val word_raw_call_tac =
   Cases_on `r.rcf_max_outsize = 0` >> gvs[word_result_ok_def] >>
   metis_tac[compile_raw_call_finish_zero_safe_operand,
             safe_operand_mono, ci_mono_emit_void, ci_mono_def, pairTheory.SND]
+
+Theorem compile_call_steps_next_var[local]:
+  (compile_stage_intcall_args cenv vals flags tys sa = (r1,sb) ==>
+   sa.cs_next_var <= sb.cs_next_var) /\
+  (emit_multi_op opc ops n sa = (r2,sb) ==>
+   sa.cs_next_var <= sb.cs_next_var) /\
+  (store_multi_results buf_op results offset sa = (r3,sb) ==>
+   sa.cs_next_var <= sb.cs_next_var) /\
+  (emit_void opc ops sa = (r4,sb) ==> sa.cs_next_var <= sb.cs_next_var)
+Proof
+  rpt conj_tac >> strip_tac
+  >- (qspecl_then [`cenv`, `vals`, `flags`, `tys`, `sa`] mp_tac
+        ci_mono_compile_stage_intcall_args >> simp[ci_mono_def])
+  >- (qspecl_then [`opc`, `ops`, `n`, `sa`] mp_tac ci_mono_emit_multi_op >>
+      simp[ci_mono_def])
+  >- (qspecl_then [`buf_op`, `results`, `offset`, `sa`] mp_tac
+        ci_mono_store_multi_results >> simp[ci_mono_def]) >>
+  qspecl_then [`opc`, `ops`, `sa`] mp_tac ci_mono_emit_void >>
+  simp[ci_mono_def]
+QED
+
+(* Closes safe_operand sb op from an assumption safe_operand st op and the
+   cs_next_var chain from st to sb among the assumptions. *)
+val safe_buf_mono_tac : tactic = fn (g as (asl, w)) =>
+  let
+    val opnd = rand w
+    fun is_safe_of a =
+      (case strip_comb a of
+         (f, [_, x]) => same_const f ``safe_operand`` andalso aconv x opnd
+       | _ => false)
+    val st = hd (snd (strip_comb (valOf (List.find is_safe_of asl))))
+  in
+    (irule safe_operand_mono >> exists_tac st >>
+     conj_tac >- decide_tac >> first_assum ACCEPT_TAC) g
+  end
 
 Theorem compile_call_steps_next_var[local]:
   (compile_stage_intcall_args cenv vals flags tys sa = (r1,sb) ==>

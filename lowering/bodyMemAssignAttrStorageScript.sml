@@ -3,7 +3,7 @@
 Theory bodyMemAssignAttrStorage
 Ancestors
   bodyMemoryPreds bodyMemAugAssignAttrStorage vyperInterpreter vyperState
-  vyperStorageBackend loweringPosts exprSimProps compileEnv venomExecSemantics venomState
+  vyperStorageBackend loweringPosts exprSimProps compileEnv loweringStateRelDefs venomExecSemantics venomState
   exprSimMemUnwrap exprSimVVFrame bodyMemEmitOpFrame context emitHelperProps
   exprLoweringProps exprSimMemDefs exprBopSimProps freshWrites
   gasOutcome gasSummary gasSummaryCompose fragGasMode fragGasPath
@@ -140,6 +140,8 @@ Proof
      qexistsl_tac [`ee`, `sa with cs_next_var := sm.cs_next_var`, `s`] >>
      gvs[vv_post_def, expr_post_def]) >>
   gvs[vv_post_def, expr_post_def] >> rpt conj_tac
+  >- (strip_tac >> irule expr_val_own_start_mono >>
+      qexists_tac `sa with cs_next_var := sm.cs_next_var` >> simp[])
   >- (rpt strip_tac >>
       `not_fresh_at (sa with cs_next_var := sm.cs_next_var) x` by
         (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>

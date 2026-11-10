@@ -13,7 +13,7 @@ Ancestors
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
-  stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
+  stmtSimIf stmtLoweringMono stmtLowering compileEnv loweringStateRelDefs fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
@@ -125,7 +125,8 @@ Proof
   rpt gen_tac >> Cases_on `h`
   >- (rename1 `ValueSubscript key` >> Cases_on `key` >>
       Cases_on `a` >>
-      simp[Once evaluate_subscripts_def, Once assign_subscripts_def] >>
+      PURE_ONCE_REWRITE_TAC[evaluate_subscripts_def] >>
+      PURE_ONCE_REWRITE_TAC[assign_subscripts_def] >>
       simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]
       >~ [`array_set_index _ _ _ _ = INR _`]
       >- (gvs[vyperValueOperationTheory.array_set_index_def,
@@ -133,7 +134,8 @@ Proof
               listTheory.oEL_THM] >> metis_tac[]) >>
       first_x_assum drule_all >> simp[]) >>
   Cases_on `a` >>
-  simp[Once evaluate_subscripts_def, Once assign_subscripts_def] >>
+  PURE_ONCE_REWRITE_TAC[evaluate_subscripts_def] >>
+      PURE_ONCE_REWRITE_TAC[assign_subscripts_def] >>
   simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   first_x_assum drule_all >> simp[]
 QED
@@ -1257,6 +1259,8 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      metis_tac[expr_body_pre_word_result, ETA_THM]) >>
   `is_word_type (expr_type e)` by metis_tac[word_value_type_word] >>
+  `post_value_type cenv e = expr_type e` by simp[] >>
+  gvs[] >>
   `eval_operand rhs t' = SOME (val_to_w256 v'')` by
     (irule exprBopSimPropsTheory.expr_val_rel_word >> simp[] >>
      qexistsl_tac [`cx`, `expr_type e`] >> simp[]) >>
@@ -1276,15 +1280,19 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)` by
     (irule aug_place_binop_store_outcome >>
      conj_tac >- (first_assum ACCEPT_TAC) >>
-     conj_tac >- (first_assum ACCEPT_TAC) >>
+     conj_tac >- (metis_tac[]) >>
      conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
      asm_simp_tac std_ss [] >>
+     conj_tac >- (qexistsl_tac [`entry'`, `old`] >> simp[]) >>
+     conj_tac >- simp[gasContextTheory.gas_admissible_gas_obs] >>
      conj_tac >- (qexists_tac `env` >> simp[]) >>
+     conj_tac >- simp[] >>
      goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
-     asm_simp_tac std_ss []) >>
+     asm_simp_tac std_ss [exprBopSimPropsTheory.bop_result_gas_obs] >>
+     metis_tac[]) >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
     (stmt_post ctx func cx lctx cenv cenv sa sb s0)

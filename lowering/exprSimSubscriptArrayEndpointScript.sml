@@ -32,7 +32,8 @@ QED
 Theorem framed_array_base_endpoint:
   vv_post ctx func cenv cx obj es sa sb s0 t r (LocatedValue (ArrayT et bd) p) u /\
   expr_post ctx func cenv cx idx t sb sc u t' iv iop v /\
-  expr_type obj = ArrayT et bd /\ is_word_type (expr_type idx) /\
+  expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
+  is_word_type (expr_type idx) /\
   ((~cenv.ce_is_ctor /\ p.ptr_location = LocCode) \/
    ((?n. bd = Fixed n) /\
     (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
@@ -77,5 +78,6 @@ Proof
         qexistsl_tac [`cx`, `idx`, `sd`, `t'`, `iv`, `iop`, `ctx`] >> simp[]) >>
      match_mp_tac exprSimPropsTheory.pure_frame_trans >>
      qexistsl_tac [`t`, `sb`, `u`] >> fs[wb_frame_def]) >>
-  irule vv_post_frame_intro >> simp[vyperASTTheory.expr_type_def, expr_has_effect_thm]
+  irule vv_post_frame_intro >> simp[vyperASTTheory.expr_type_def, expr_has_effect_thm] >>
+  qpat_x_assum `_ \/ _` strip_assume_tac >> simp[]
 QED

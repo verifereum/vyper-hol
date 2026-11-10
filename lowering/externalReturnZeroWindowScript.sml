@@ -1,6 +1,6 @@
 Theory externalReturnZeroWindow
 Ancestors
-  abiEncoderWindow abiEncoderInput abiDecodeRanges contractABI valueEncoding list rich_list arithmetic
+  abiEncoderWindow abiEncoderInput abiDecodeRanges contractABI valueEncoding valueEncodingDefs list rich_list arithmetic
 
 
 Theorem zero_window_dynamic_array_probe:
