@@ -191,6 +191,28 @@ Proof
     (qspecl_then [`func`,`cenv`,`cx`,`es`,`s0`,`sa`,`ee`,`ee`,
        `sa with cs_next_var := sm.cs_next_var`,`q`,`z`,`ctx`] mp_tac wb_frame_trans >>
      simp[]) >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 z` by
+    (strip_tac >>
+     `pure_frame cenv func es sa s0 q` by
+       (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+        qpat_x_assum `~expr_has_effect e ==> pure_frame _ _ _ _ _ _` irule >>
+        first_assum ACCEPT_TAC) >>
+     `pure_frame cenv func ee (sa with cs_next_var := sm.cs_next_var) q z` by
+       (qpat_assum `expr_post _ _ _ _ _ ee _ _ _ _ _ _ _`
+          (mp_then Any mp_tac exprSimWordArgsTheory.expr_post_pure_frame) >>
+        disch_then irule >> first_assum ACCEPT_TAC) >>
+     qpat_x_assum `wb_frame cenv ee ee _ q z`
+       (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
+     qpat_x_assum `wb_frame cenv es ee sa s0 q`
+       (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
+     match_mp_tac (exprSimPropsTheory.pure_frame_trans |> Q.SPECL
+       [`cenv`, `func`, `es`, `ee`, `sa`, `sa with cs_next_var := sm.cs_next_var`,
+        `s0`, `q`, `z`]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- simp[] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac
   >- (gvs[expr_post_def, expr_val_at_def, wb_frame_def] >> metis_tac[]) >>
   irule ghost_kept_wb_trans >> simp[] >> conj_tac
