@@ -1,7 +1,7 @@
 (* Memory safety of internal stack-return suffixes. *)
 Theory internalReturnStackMem
 Ancestors
-  internalReturnSequenceMem stmtSimReturn fragGasSeqMem instMemFrontier memSafeRun fragExecMem
+  internalReturnVoidMem internalReturnTupleMem internalReturnSequenceMem stmtSimReturn fragGasSeqMem instMemFrontier memSafeRun fragExecMem
   gasCount fragExec runFromGasPathMem loweringStateRelDefs
   valueEncoding stmtSimDefs venomExecSemantics venomInstProofs venomState venomInst
   emitHelperProps exprLoweringProps list rich_list arithmetic
