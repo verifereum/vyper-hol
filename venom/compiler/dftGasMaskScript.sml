@@ -6567,11 +6567,43 @@ Proof
           >- (qx_gen_tac `v` >> disch_tac >>
               qpat_assum `!v. _ ==> EVERY IS_SOME _ /\ unused = _`
                 (qspec_then `v` mp_tac) >>
-              (impl_tac >- simp[]) >> strip_tac >> simp[] >>
-              qpat_assum `PERM (FLAT (TAKE (LENGTH pre) rm) ++ _) _`
+              (impl_tac >- simp[]) >> strip_tac >>
+              qpat_assum `PERM _ (mh ++ FLAT _)`
                 (mp_tac o MATCH_MP PERM_EVERY) >>
-              simp[]) >>
-          FAIL_TAC "whole padded fillings") >>
+              disch_then (mp_tac o Q.INST [`P` |-> `IS_SOME`]) >>
+              simp[EVERY_APPEND] >> metis_tac[]) >>
+          qx_gen_tac `gss` >> qx_gen_tac `tail` >>
+          pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+          pure_once_rewrite_tac[LIST_REL_SPLIT1] >>
+          disch_then (qx_choose_then `gp` (qx_choose_then `gr` strip_assume_tac)) >>
+          Cases_on `gr` >> fs[] >> rename1 `LIST_REL _ mh gh` >>
+          rename1 `LIST_REL _ (DROP (LENGTH pre) rm) gt` >>
+          `LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) rm (gp ++ gt)` by
+            (qpat_assum `LIST_REL _ (TAKE (LENGTH pre) rm) gp` mp_tac >>
+             qpat_assum `LIST_REL _ (DROP (LENGTH pre) rm) gt` mp_tac >>
+             metis_tac[LIST_REL_APPEND_suff, TAKE_DROP]) >>
+          `LENGTH gp = LENGTH pre` by
+            (qpat_assum `LIST_REL _ (TAKE (LENGTH pre) rm) gp`
+               (mp_tac o MATCH_MP LIST_REL_LENGTH) >> simp[]) >>
+          `LENGTH (FLAT gp) = LENGTH (FILTER (\i. i.inst_opcode = GAS) pre)` by
+            (qpat_assum `!gss'. LIST_REL _ rm gss' ==> LENGTH _ = _`
+               (qspec_then `gp ++ gt` mp_tac) >>
+             (impl_tac >- asm_rewrite_tac[]) >>
+             qpat_assum `LENGTH gp = LENGTH pre`
+               (fn th => rewrite_tac[GSYM th]) >>
+             simp[TAKE_APPEND]) >>
+          qpat_assum `!rs. ?a. R fuel C pre (s with vs_gas_readings := rs) = OK a`
+            (qspec_then `FLAT gp ++ gh ++ (FLAT gt ++ tail)`
+              (qx_choose_then `a` assume_tac)) >>
+          `EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x) pre` by
+            (fs[EVERY_MEM] >> metis_tac[]) >>
+          qpat_assum `Abbrev (R = _)` (fn def =>
+            qpat_assum `R fuel C pre (s with vs_gas_readings := _) = OK a`
+              (assume_tac o PURE_REWRITE_RULE
+                [REWRITE_RULE [markerTheory.Abbrev_def] def, GSYM APPEND_ASSOC])) >>
+          drule_all invoke_partner_prefix_concrete >>
+          disch_then (qx_choose_then `us` strip_assume_tac) >>
+          FAIL_TAC "actual original prefix updates") >>
       FAIL_TAC "returning cuts and barrier") >>
   FAIL_TAC "stopped head transport"
 QED
