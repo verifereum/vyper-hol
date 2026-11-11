@@ -2400,7 +2400,7 @@ Theorem eval_cps_mutual:
  (∀cx ss st k. cont (eval_stmts_cps cx ss st k) =
    cont (liftk cx (K Apply) (eval_stmts cx ss st) k)) /\
  (∀cx it st k. cont (eval_iterator_cps cx it st k) =
-   cont (liftk cx ApplyVals (eval_iterator cx it st) k)) /\
+   cont (liftk cx ApplyResults (eval_iterator cx it st) k)) /\
  (∀cx tyv nm body vs st k. cont (eval_for_cps cx tyv nm body vs st k) =
    cont (liftk cx (K Apply) (eval_for cx tyv nm body vs st) k)) /\
  (∀cx e st k. cont (eval_expr_cps cx e st k) =

@@ -40,18 +40,17 @@ QED
 
 Theorem intcall_finally_scopes[local]:
   !f nr mut cx prev st res st'.
-    finally f
-      (bind (set_scopes prev) (\x.
-        if nr /\ mut <> View /\ mut <> Pure then
-          case cx.nonreentrant_slot of
-          | NONE => return ()
-          | SOME slot => release_nonreentrant_lock cx.txn.target slot
-        else return ())) st = (res,st') ==> st'.scopes = prev
+    finally_unless_halt (finally f (set_scopes prev))
+      (if nr /\ mut <> View /\ mut <> Pure then
+         case cx.nonreentrant_slot of
+         | NONE => return ()
+         | SOME slot => release_nonreentrant_lock cx.txn.target slot
+       else return ()) st = (res,st') ==> st'.scopes = prev
 Proof
   rpt strip_tac >>
-  gvs[finally_def, bind_def, ignore_bind_def, set_scopes_def,
+  gvs[finally_unless_halt_def, ignore_bind_def, bind_def,
       return_def, raise_def, AllCaseEqs()] >>
-  imp_res_tac intcall_unlock_scopes >> gvs[]
+  imp_res_tac finally_set_scopes >> imp_res_tac intcall_unlock_scopes >> gvs[]
 QED
 
 Theorem intcall_acquire_scopes[local]:
@@ -70,7 +69,7 @@ Theorem eval_no_mutation_scopes[local]:
   (!cx:evaluation_context. !s:stmt. T) /\
   (!cx:evaluation_context. !ss:stmt list. T) /\
   (!cx:evaluation_context. !it:iterator. T) /\
-  (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:value list. T) /\
+  (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:eval_result list. T) /\
   (!cx e. !ce st res st'. ~expr_can_mutate ce e /\
     eval_expr cx e st = (res,st') ==> st'.scopes = st.scopes) /\
   (!cx es. !ce st res st'. ~exprs_can_mutate ce es /\
@@ -288,7 +287,8 @@ QED
 Resume eval_no_mutation_scopes[RawRevert]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
-      raise_def, check_def, type_check_def, assert_def] >> metis_tac[]
+      raise_def, check_def, type_check_def, assert_def] >>
+  imp_res_tac lift_option_type_scopes >> metis_tac[]
 QED
 
 Finalise eval_no_mutation_scopes
