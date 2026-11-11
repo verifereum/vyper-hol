@@ -36,7 +36,15 @@ Proof
       vv_post_def, vv_holds_def, vv_at_def, vv_own_def] >>
   simp[cj 1 gas_path_ptr_rules, expr_post_def, ptr_val_ok_def,
        expr_val_rel_def, expr_val_at_def, expr_val_own_def] >>
-  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (reverse conj_tac >- first_assum ACCEPT_TAC >>
+      rpt strip_tac >>
+      qpat_x_assum `!tvt. _ ==> val_wf _ _ /\ _`
+        (drule_then strip_assume_tac) >> metis_tac[]) >>
   strip_tac >> gvs[post_value_type_word] >>
-  imp_res_tac valueCopyBytesTheory.is_bytestring_word_type >> gvs[]
+  imp_res_tac valueCopyBytesTheory.is_bytestring_word_type >> gvs[] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >>
+  qpat_x_assum `!tvt. _ ==> val_wf _ _ /\ _` (drule_then strip_assume_tac) >>
+  metis_tac[]
 QED
