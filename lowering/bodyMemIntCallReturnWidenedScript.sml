@@ -4,7 +4,8 @@
    widening into the caller's return buffer. *)
 Theory bodyMemIntCallReturnWidened
 Ancestors
-  bodyMemoryDefs intCallReturnMem stmtSimReturn compileEnv valueEncoding
+  bodyMemoryDefs intCallReturnMem intCallReturnWidenMem
+  intCallReturnDirectBranchesMem stmtSimReturn compileEnv valueEncoding
   compileVyper
 
 (* RESIDUAL (held): as loweringMemFrameRet's held
