@@ -526,7 +526,7 @@ Theorem self_code_tail_success_ptr:
   v = u with vs_vars := v.vs_vars /\
   (!x. not_fresh_at sb x ==> lookup_var x v = lookup_var x u) /\
   ghost_inv d cenv cx es G tn v /\
-  ptr_covers G tn dst v (w2n n) /\ ptr_covers G tn out v sz /\
+  ptr_covers G tn dst v (sz-32) /\ ptr_covers G tn out v sz /\
   val_store_size (BaseTV (BytesT (Dynamic bound)))
     (BytesV (TAKE (w2n n) (DROP (w2n a) u.vs_code))) <= sz /\
   type_memory_bytes cenv (lowered_value_type cenv e) <= sz /\
@@ -570,8 +570,9 @@ Proof
   `!nm off cap. local_region cenv es.scopes v nm off cap ==>
     off+cap <= w2n p \/ w2n p+32+w2n n <= off` by suspend "separation" >>
   `w2n p+32 < dimword (:256) /\ w2n a+w2n n <= LENGTH v.vs_code` by simp[] >>
-  `ptr_covers G tn out v 32` by
-    (fs[ptr_covers_def] >> goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
+  `ptr_covers G tn out v 32 /\ ptr_covers G tn dst v (w2n n)` by
+    (fs[ptr_covers_def] >> conj_tac >>
+     goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
   `!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sd sf)
     (v with vs_inst_idx := k) G
     (tn with t_mem := (tn.t_mem DIFF
@@ -668,3 +669,164 @@ Resume self_code_tail_success_ptr[result]:
 QED
 
 Finalise self_code_tail_success_ptr
+
+(* Consume the checked allocation/bounds entry and tail once each. *)
+Theorem self_code_full_success_ptr:
+  compile_slice_out_buf sz sa = ((Var out,Var dst),sb) /\
+  emit_op CODESIZE [] sb = (limit,sc) /\
+  compile_assert_slice_bounds src len limit sc = ((),sd) /\
+  emit_void CODECOPY [Var dst;src;len] sd = ((),se) /\
+  emit_void MSTORE [Var out;len] se = ((),sf) /\
+  fn_has_code sa sf fn /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  ~ctx_has_dalloca ctx /\ 32+w2n n <= sz /\ sz < dimword (:256) /\
+  ghost_inv d cenv cx es G tn s /\
+  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ eval_operand len s = SOME n /\
+  op_taint tn src = {} /\ op_taint tn len = {} /\
+  op_prov G src = NONE /\ op_prov G len = NONE /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. len = Var x ==> not_fresh_at sa x) /\
+  LENGTH s.vs_code < dimword (:256) /\ w2n a+w2n n <= LENGTH s.vs_code /\
+  expr_type e = BaseT (BytesT (Dynamic bound)) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic bound))) /\
+  w2n n <= bound /\
+  val_store_size (BaseTV (BytesT (Dynamic bound)))
+    (BytesV (TAKE (w2n n) (DROP (w2n a) s.vs_code))) <= sz /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= sz ==>
+  ?z H tm. run_inst_seq (emitted_insts sa sf) s = OK z /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sf) s H tm /\
+    vv_post ctx fn cenv cx e es sa sf s es
+      (Value (BytesV (TAKE (w2n n) (DROP (w2n a) s.vs_code))))
+      (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory)) z /\
+    ghost_inv d cenv cx es H tm z /\
+    ghost_kept cenv es sa G tn s H tm /\
+    ptr_vv_ok cx (expr_type e)
+      (Value (BytesV (TAKE (w2n n) (DROP (w2n a) s.vs_code))))
+      (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory)) es H tm z /\
+    ptr_buf_ok cenv e (Var out) H z
+Proof
+  strip_tac >>
+  `cs_extends sa sb /\ cs_extends sb sd /\ cs_extends sd sf /\
+   ci_mono sa sb /\ ci_mono sb sf /\ ci_mono sa sd /\
+   ci_mono sd sf /\
+   sd.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sd /\
+   sf.cs_current_insts = sd.cs_current_insts ++ emitted_insts sd sf /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sd)` by suspend "layout" >>
+  `fn_has_code sa sd fn /\ fn_has_code sa sb fn` by
+    (conj_tac
+     >- (qspecl_then [`sa`,`sd`,`sf`,`fn`] mp_tac fn_has_code_split >>
+         fs[ci_mono_def] >> simp[]) >>
+     qspecl_then [`sa`,`sb`,`sf`,`fn`] mp_tac fn_has_code_split >>
+     fs[ci_mono_def]) >>
+  `32 <= sz` by decide_tac >>
+  drule_all self_code_prefix_success_entry >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >> gvs[] >>
+  drule_all slice_extcode_out_owner_inst >> strip_tac >>
+  `eval_operand src u = SOME a /\ eval_operand len u = SOME n /\
+   LENGTH u.vs_code = LENGTH s.vs_code /\ u.vs_code = s.vs_code /\
+   (!op x. MEM op [src;len;Var dst;Var out] /\ op = Var x ==> not_fresh_at sb x) /\
+   local_ptrs_reserved cenv sb /\ local_ptrs_reserved cenv sd /\
+   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sd x) /\
+   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sd x)` by
+    suspend "readiness" >>
+  mp_tac (Q.INST [`u` |-> `u`, `v` |-> `v`, `G` |-> `Gf`, `tn` |-> `tnf`,
+    `inst` |-> `mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+      [STRING #"%" (toString sa.cs_next_var)]`]
+    self_code_tail_success_ptr) >>
+  impl_tac >- suspend "tail_premises" >> strip_tac >>
+  qexistsl_tac [`z`,`Gf`,`tn'`] >>
+  `emitted_insts sa sf = emitted_insts sa sd ++ emitted_insts sd sf` by
+    (irule emitted_insts_append >> fs[ci_mono_def]) >>
+  `run_inst_seq (emitted_insts sa sf) s = OK z` by
+    (qpat_assum `run_inst_seq (emitted_insts sa sd) s = OK v`
+       (mp_then Any mp_tac run_inst_seq_append) >>
+     disch_then (qspec_then `emitted_insts sd sf` mp_tac) >> simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- suspend "checked" >>
+  conj_tac >- suspend "post" >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- suspend "ghost_frame" >> gvs[]
+QED
+
+Resume self_code_full_success_ptr[tail_premises]:
+  simp[mk_inst_def] >>
+  fs[ci_mono_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  decide_tac
+QED
+
+Resume self_code_full_success_ptr[post]:
+  irule vv_post_prefix_frame >> simp[] >>
+  qexistsl_tac [`es`,`sa`,`u`] >> gvs[]
+QED
+
+Resume self_code_full_success_ptr[checked]:
+  qpat_x_assum `emitted_insts sa sf = _` (fn th => rewrite_tac[th]) >>
+  irule exprSimPtrLiteralChunksTheory.literal_inst_seq_ptr_append >>
+  metis_tac[]
+QED
+
+Resume self_code_full_success_ptr[ghost_frame]:
+  irule bodyPtrHashBuiltinsAllocFrameTheory.hash_ghost_kept_clean_tail >>
+  qexistsl_tac [`Gf`,`tnf`] >>
+  simp[ptrDisciplineTheory.op_taint_def] >>
+  pred_setLib.SET_TAC[]
+QED
+
+Resume self_code_full_success_ptr[readiness]:
+  `!x. not_fresh_at sa x ==> not_fresh_at sb x /\ not_fresh_at sd x` by
+    (fs[ci_mono_def] >> metis_tac[not_fresh_at_mono]) >>
+  `u.vs_code = s.vs_code` by
+    (fs[stmt_state_rel_def, state_rel_def, accounts_rel_def] >> metis_tac[]) >>
+  `(!x. src = Var x ==> not_fresh_at sb x) /\
+   (!x. len = Var x ==> not_fresh_at sb x)` by metis_tac[] >>
+  `v.vs_labels = u.vs_labels` by
+    (qpat_assum `v = u with vs_vars := _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  simp[] >> rpt conj_tac
+  >- (Cases_on `src` >> fs[eval_operand_def] >> metis_tac[])
+  >- (Cases_on `len` >> fs[eval_operand_def] >> metis_tac[])
+  >- (rpt strip_tac >> gvs[] >> metis_tac[])
+  >- (irule local_ptrs_reserved_next_var >> fs[ci_mono_def] >> metis_tac[])
+  >- (irule local_ptrs_reserved_next_var >> fs[ci_mono_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Resume self_code_full_success_ptr[layout]:
+  drule slice_extcode_out_control >> strip_tac >>
+  mp_tac (Q.SPECL [`sz`,`sa`,`\i. T`] externalEntryShapeTheory.compile_slice_out_buf_labels) >>
+  simp[] >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  drule exprSimSliceBoundsTheory.slice_bounds_shape >> strip_tac >>
+  drule_all self_code_tail_layout >> strip_tac >>
+  drule_all (emit_void_extends |> Q.SPECL [`CODECOPY`,`[Var dst;src;len]`,`sd`,`se`]) >> strip_tac >>
+  drule_all (emit_void_extends |> Q.SPECL [`MSTORE`,`[Var out;len]`,`se`,`sf`]) >> strip_tac >>
+  drule exprSimAccountsTheory.emit_op_extends_next_var >> strip_tac >>
+  mp_tac (Q.SPECL [`src`,`len`,`limit`,`sc`,`\i. T`]
+    externalEntryShapeTheory.compile_assert_slice_bounds_labels) >> simp[] >> strip_tac >>
+  mp_tac (Q.SPECL [`CODECOPY`,`[Var dst;src;len]`,`sd`,`\i. T`]
+    externalEntryShapeTheory.emit_void_labels) >> simp[] >> strip_tac >>
+  mp_tac (Q.SPECL [`MSTORE`,`[Var out;len]`,`se`,`\i. T`]
+    externalEntryShapeTheory.emit_void_labels) >> simp[] >> strip_tac >>
+  `cs_extends sb sd /\ cs_extends sd sf /\ cs_extends sa sd /\ cs_extends sb sf` by
+    metis_tac[cs_extends_trans] >>
+  `emitted_insts sb sd = emitted_insts sb sc ++ emitted_insts sc sd` by
+    (irule emitted_insts_append >> simp[]) >>
+  `sd.cs_current_insts = sb.cs_current_insts ++ emitted_insts sb sd` by
+    simp[listTheory.APPEND_ASSOC] >>
+  `emitted_insts sa sd = emitted_insts sa sb ++ emitted_insts sb sd` by
+    (irule emitted_insts_append >> simp[]) >>
+  mp_tac (Q.SPECL [`sz`,`sa`] ci_mono_compile_slice_out_buf) >> simp[] >> strip_tac >>
+  mp_tac (Q.SPECL [`CODESIZE`,`[]`,`sb`] ci_mono_emit_op) >> simp[] >> strip_tac >>
+  `ci_mono sc sd` by (simp[ci_mono_def] >> decide_tac) >>
+  mp_tac (Q.SPECL [`CODECOPY`,`[Var dst;src;len]`,`sd`] ci_mono_emit_void) >> simp[] >> strip_tac >>
+  mp_tac (Q.SPECL [`MSTORE`,`[Var out;len]`,`se`] ci_mono_emit_void) >> simp[] >> strip_tac >>
+  simp[is_terminator_def] >> rpt conj_tac
+  >- (fs[ci_mono_def] >> decide_tac)
+  >- (fs[ci_mono_def] >> decide_tac)
+  >- (fs[ci_mono_def] >> decide_tac)
+  >- (sym_tac >> irule emitted_insts_append >> simp[]) >>
+  fs[listTheory.EVERY_APPEND, listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Finalise self_code_full_success_ptr
