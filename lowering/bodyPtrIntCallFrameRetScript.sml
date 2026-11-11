@@ -38,7 +38,9 @@ End
    returned expression is lowered at its own type and that type is the
    return type, or the return type is a word or a bytestring (no compound
    widening into the caller's return buffer).  The compile env returns
-   internally (RET to the return PC), with the stack-return count of the
+   internally (RET to the return PC, and the return buffer, if any, is a
+   pointer parameter rather than a fixed memory slot, as
+   compile_internal_function makes it), with the stack-return count of the
    declared return type, and has a return buffer exactly when that count
    is 0 and the type isn't void; the buffer's capacity is the return
    value's size, it fits below 2 ** 256, and so does that size plus a
@@ -62,6 +64,7 @@ Theorem internal_return_direct_ptr:
       add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
         tops 0 (add_module_var_locations tops FEMPTY) /\
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
+    (!off sz. cenv.ce_return_buf <> SOME (MemLoc off sz)) /\
     cenv.ce_imm_alloca = NONE /\
     cenv.ce_returns_count =
       returns_stack_count
@@ -108,6 +111,7 @@ Theorem internal_return_widened_ptr:
       add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
         tops 0 (add_module_var_locations tops FEMPTY) /\
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
+    (!off sz. cenv.ce_return_buf <> SOME (MemLoc off sz)) /\
     cenv.ce_imm_alloca = NONE /\
     cenv.ce_returns_count =
       returns_stack_count
@@ -147,6 +151,7 @@ Theorem internal_frame_ret_ok_ptr:
       add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
         tops 0 (add_module_var_locations tops FEMPTY) /\
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
+    (!off sz. cenv.ce_return_buf <> SOME (MemLoc off sz)) /\
     cenv.ce_imm_alloca = NONE /\
     cenv.ce_returns_count =
       returns_stack_count
