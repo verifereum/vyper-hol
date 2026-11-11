@@ -157,6 +157,19 @@ Definition local_val_at_def:
              val_footprint tv v <= type_memory_size (BaseTV bt0)
 End
 
+(* Where a source result of type ptv sits when its pointer is k bytes into
+   the local n's region: a memory place there is n's own, along a path that
+   reaches ptv at offset k in n's declared type.  A value is unconstrained. *)
+Definition local_place_at_def:
+  local_place_at cenv cx n k ptv tv <=>
+    (!id path. tv = PlaceR (MemoryPlace id path) ==>
+       id = n /\
+       ?t0 tv0.
+         cenv.ce_var_type n = SOME t0 /\
+         evaluate_type (get_tenv cx) t0 = SOME tv0 /\
+         mem_path_offset tv0 path = SOME (k, ptv))
+End
+
 (* No path through tv reaches a dynamic array: no part of a value of type
    tv is a length word that a pop writes. *)
 Definition dynarray_free_def:
@@ -471,12 +484,18 @@ End
 (* Where a value in memory sits, as expr_val_at says for expr_post: for a
    StackValue, expr_val_at itself; for a pointer into memory, the value's
    bytes inside one of the expression's own allocations or a live local's
-   region, word types included, unless it occupies none. *)
+   region, word types included, unless it occupies none.  In a local's
+   region, a source result that is a place of a local is that place
+   (local_place_at).  A result of a non-word type is a memory place only
+   behind a pointer into memory. *)
 Definition vv_at_def:
   (vv_at cenv cx t sa sb es tv (StackValue t' op) s <=>
+     (~is_word_type t ==> !id path. tv <> PlaceR (MemoryPlace id path)) /\
      !v. read_result cx tv es = (INL v, es) ==> expr_val_at cenv cx t sa sb es v op s) /\
   (vv_at cenv cx t sa sb es tv (LocatedValue t' p) s <=>
-     p.ptr_location = LocMemory ==>
+     (p.ptr_location <> LocMemory /\ ~is_word_type t ==>
+      !id path. tv <> PlaceR (MemoryPlace id path)) /\
+     (p.ptr_location = LocMemory ==>
      !v tvt. read_result cx tv es = (INL v, es) /\
              evaluate_type (get_tenv cx) t = SOME tvt ==>
        val_wf tvt v /\
@@ -488,8 +507,9 @@ Definition vv_at_def:
                                     b + sz <= lb \/ lb + lsz <= b)) \/
             (?n b sz. local_region cenv es.scopes s n b sz /\
                       b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
-                      local_val_at cenv cx n (w2n w - b) tvt v) \/
-            val_footprint tvt v = 0))
+                      local_val_at cenv cx n (w2n w - b) tvt v /\
+                      local_place_at cenv cx n (w2n w - b) tvt tv) \/
+            val_footprint tvt v = 0)))
 End
 
 (* vv_at without its local-region case (expr_val_own). *)
