@@ -162,9 +162,10 @@ Definition abi_decode_window_frame_def:
 End
 
 Theorem abi_decode_window_frame_updates[simp]:
-  abi_decode_window_frame func start s
-    (t with <|vs_returndata := rd; vs_prev_bb := prev|>) =
-  abi_decode_window_frame func start s t
+  (abi_decode_window_frame func start s (t with vs_returndata := rd) =
+   abi_decode_window_frame func start s t) /\
+  (abi_decode_window_frame func start s (t with vs_prev_bb := prev) =
+   abi_decode_window_frame func start s t)
 Proof
   simp[abi_decode_window_frame_def]
 QED

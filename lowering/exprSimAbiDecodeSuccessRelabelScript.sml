@@ -1,6 +1,6 @@
 Theory exprSimAbiDecodeSuccessRelabel
 Ancestors
-  exprSimAbiDecodeImmutableOutcome exprSimAbiDecodeBoundary exprSimAbiDecodeQuantifiedLift
+  exprSimAbiDecodeImmutableOutcome exprSimAbiDecodeImmutableFrame exprSimAbiDecodeBoundary exprSimAbiDecodeQuantifiedLift
   abiDecoderSiteEffect exprSimAbiGasBridge abiBuiltinDecodeSetup venomState
 
 Theorem abi_decode_eval_operand_entry_current_bb[local]:

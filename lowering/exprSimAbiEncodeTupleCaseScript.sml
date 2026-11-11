@@ -138,6 +138,7 @@ Resume compile_abi_encode_tuple_vv_case[compose]:
   `!gs vs ee initial.
     eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee) /\ ee.gas_obs = [] /\
     abi_args_post ctx func ce cx es sa st s0 ee args ops vs initial /\
+    (~EXISTS expr_has_effect args ==> pure_frame ce func es sa s0 initial) /\
     EVERY (abi_decoder_operand_live st.cs_next_var) ops /\ ~initial.vs_halted /\
     initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
     ?marks. gas_summary_at F (ctx,func) marks

@@ -20,6 +20,7 @@ Theorem abi_encode_tuple_counted_success:
   eval_exprs cx args es = (INL vs,es') /\
   evaluate_type_builtin cx (AbiEncode ensure mid0) target (MAP expr_type args) vs = INL result /\
   abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
+  (~EXISTS expr_has_effect args ==> pure_frame ce func es origin s0 initial) /\
   EVERY (abi_decoder_operand_live st.cs_next_var) values /\
   compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
   compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
@@ -60,6 +61,7 @@ Proof
   `FLOOKUP raw.vs_allocas st.cs_next_id =
     SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))` by metis_tac[] >>
   drule_all abi_encode_tuple_staging_cursor >> strip_tac >>
+  drule_all abi_encode_tuple_staging_pure_frame >> strip_tac >>
   qabbrev_tac `s = raw with vs_inst_idx := LENGTH staged.cs_current_insts` >>
   `local_ptrs_reserved ce staged` by
     (irule local_ptrs_reserved_next_var >> qexists `st` >> simp[]) >>
@@ -133,6 +135,27 @@ Resume abi_encode_tuple_counted_success[result]:
      Cases_on `args` >- (Cases_on `ensure` >> simp[]) >>
      simp[] >> Cases_on `t` >> simp[]) >>
   `origin.cs_next_var <= staged.cs_next_var /\ origin.cs_next_id <= staged.cs_next_id` by decide_tac >>
+  `!aid b. FLOOKUP initial.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b` by
+    (rpt strip_tac >>
+     qpat_assum `s.vs_allocas = (abi_builtin_allocate_state _ _ _).vs_allocas`
+       (fn th => rewrite_tac[th]) >>
+     qpat_x_assum `FLOOKUP initial.vs_allocas aid = SOME b` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     rw[abiBuiltinAllocationTheory.abi_builtin_allocate_state_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+     Cases_on `st.cs_next_id = aid` >> gvs[]) >>
+  `~expr_has_effect (TypeBuiltin ann (AbiEncode ensure mid0) target args) ==>
+   pure_frame ce func es origin s0 s` by
+    (rewrite_tac [loweringPostsTheory.expr_has_effect_thm] >> strip_tac >>
+     `pure_frame ce func es origin s0 initial` by
+       (qpat_x_assum `~EXISTS expr_has_effect args ==> _` irule >> first_assum ACCEPT_TAC) >>
+     `pure_frame ce func es' st initial s` by
+       (simp_tac bool_ss [Abbr `s`, loweringPostsTheory.pure_frame_inst_idx] >>
+        first_assum ACCEPT_TAC) >>
+     qpat_assum `wb_frame ce es es' origin s0 initial`
+       (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
+     match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `es'`, `origin`, `st`, `s0`, `initial`, `s`]
+                     exprSimPropsTheory.pure_frame_trans) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all abi_encode_tuple_observation_vv_post >> disch_tac >>
   qexists `actual` >>
   reverse conj_tac >- metis_tac[] >>
