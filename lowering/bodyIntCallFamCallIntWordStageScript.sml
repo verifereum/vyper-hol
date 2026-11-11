@@ -103,6 +103,7 @@ Proof
     (irule intcall_joint_res_frame >> simp[] >>
      conj_tac
      >- (gvs[bodyIntCallJointContractTheory.intcall_joint_res_def,
+            bodyIntCallJointContractTheory.intcall_expr_res_def,
             intCallFrameTheory.allocas_above_def] >> metis_tac[]) >>
      conj_tac >- fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
      qexistsl_tac [`es`, `s`, `sa`] >> simp[] >>
