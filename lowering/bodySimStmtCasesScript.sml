@@ -1309,7 +1309,9 @@ Proof
       disch_then (qspec_then `func` strip_assume_tac) >>
       gvs[] >> irule stmtSimAssignPlaceTheory.immutable_deploy_assign_case >>
       metis_tac[]) >>
-  irule body_assign_nonimmutable_widened_place >> metis_tac[]
+  Cases_on `supported_target_pure tops t`
+  >- (irule body_assign_nonimmutable_widened_place >> metis_tac[]) >>
+  irule bodyAssignPlaceTheory.body_assign_place_effectful_case >> metis_tac[]
 QED
 
 (* The other base targets, by bodyAssignPlace's general place root (the

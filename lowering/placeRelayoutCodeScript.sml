@@ -6,6 +6,7 @@ Ancestors
 
 Theorem assign_place_relayout_code_parts:
   stmt_env cenv lctx ty (Assign (BaseTarget bt) e) sa = (c,sf) /\
+  ~expr_can_mutate cenv (target_to_expr bt) /\
   post_value_type cenv e <> expr_type e /\
   ~is_word_type (post_value_type cenv e) /\
   ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
