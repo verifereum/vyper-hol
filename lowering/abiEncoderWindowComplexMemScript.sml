@@ -6,6 +6,7 @@ Ancestors
   abiEncoderWindow abiEncoderInput abiEncoderRegisteredEffect windowPhaseMem memContinuation
   allocaSiteResource exprLoweringProps venomMemDefs venomState finite_map pred_set
   compileEnv emitHelper valueEncoding valueEncodingProps contractABI abiEncoderMembersDefs
+  abiEncoderWindowPhaseFrameMem abiEncoderWindowMemFrame
   abiCanonicalWindows abiDecodeRanges list rich_list arithmetic words
 
 Theorem window_complex_allocate_cursor_mem:
@@ -20,7 +21,8 @@ Theorem window_complex_allocate_cursor_mem:
     abi_encoder_window_pre ctx func mid en dst src (AbiComplex infos) at
       (ListV avs) sb cap d t /\
     window_member_cursor infos dp st.cs_next_id slot sb cap d
-      (LENGTH (enc at (ListV avs))) mid t /\ mem_cont_sim ctx func s t
+      (LENGTH (enc at (ListV avs))) mid t /\ mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t)
 Proof
   strip_tac >>
   `alloca_inv s /\ alloca_room ctx func s /\ ~s.vs_halted /\
@@ -28,7 +30,7 @@ Proof
     fs[abi_encoder_window_pre_def] >>
   `!b sz. FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,sz) ==> sz = 32` by
     metis_tac[window_pre_sites] >>
-  drule_all window_emit_alloca32_phase_mem >> strip_tac >>
+  drule_all window_emit_alloca32_phase_mem_conditional_frame >> strip_tac >>
   `st.cs_next_var <= mid.cs_next_var /\ mid.cs_next_id = SUC st.cs_next_id /\
     ?x. dp = Var x /\ not_fresh_at mid x` by
     (drule emitHelperPropsTheory.emitted_insts_emit_op >>
@@ -66,7 +68,8 @@ Theorem window_complex_initialize_store_mem:
     window_member_cursor infos dp site slot sb cap d
       (LENGTH (enc at (ListV avs))) ready u /\
     mem_word_at slot u.vs_memory = n2w (window_member_head_size infos) /\
-    mem_cont_sim ctx func s u
+    mem_cont_sim ctx func s u /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s u)
 Proof
   strip_tac >>
   `eval_operand dp s = SOME (n2w slot) /\
@@ -81,6 +84,9 @@ Proof
      SOME (n2w (window_member_head_size infos))` by simp[eval_operand_def] >>
   drule_all window_cursor_store_phase_mem >> strip_tac >>
   qmatch_asmsub_abbrev_tac `mem_cont_sim ctx func s u` >>
+  `fn_inst_ids_distinct func ==> window_mem_frame ctx func s u` by
+    (strip_tac >> simp[Abbr `u`] >>
+     drule_all window_cursor_store_phase_mem_frame >> simp[]) >>
   `st.cs_next_var <= ready.cs_next_var /\ st.cs_next_id <= ready.cs_next_id` by
     (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
      simp[emit_void_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
@@ -121,7 +127,8 @@ Theorem window_complex_initialize_phase_mem:
       (LENGTH (enc at (ListV avs))) ready u /\
     mem_word_at slot u.vs_memory = n2w (window_member_head_size infos) /\
     st.cs_next_id IN window_alloca_sites func (frag_ids st en) /\
-    mem_cont_sim ctx func s u
+    mem_cont_sim ctx func s u /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s u)
 Proof
   strip_tac >>
   `cs_extends ready en` by fs[ci_mono_def] >>
@@ -164,7 +171,7 @@ Proof
   >- (irule window_phase_chain >>
       qexistsl_tac [`{st.cs_next_id}`, `[]`, `mid`, `{st.cs_next_id}`, `[]`, `t`] >>
       simp[] >> metis_tac[ci_mono_def]) >>
-  metis_tac[mem_cont_sim_trans]
+  metis_tac[mem_cont_sim_trans, window_mem_frame_trans]
 QED
 
 Theorem window_complex_initialize_phase_sizes_mem:
@@ -183,7 +190,8 @@ Theorem window_complex_initialize_phase_sizes_mem:
     st.cs_next_id IN window_alloca_sites func (frag_ids st en) /\
     (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
          !i b sz. i IN R /\ FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-    mem_cont_sim ctx func s u
+    mem_cont_sim ctx func s u /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s u)
 Proof
   strip_tac >> drule_all window_complex_initialize_phase_mem >> strip_tac >>
   qexistsl_tac [`u`, `slot`] >> asm_rewrite_tac[] >>
@@ -209,12 +217,14 @@ Theorem window_complex_finish_load_mem:
   emit_op MLOAD [dp] load = (out,en) /\ fn_has_code load en func /\
   (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
     FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
-  ?t. window_strong_result ctx func st en out at av d s t /\ mem_cont_sim ctx func s t
+  ?t. window_strong_result ctx func st en out at av d s t /\ mem_cont_sim ctx func s t /\
+    (window_mem_frame ctx func s u /\ fn_inst_ids_distinct func ==>
+      window_mem_frame ctx func s t)
 Proof
   strip_tac >>
   drule window_phase_resources >> strip_tac >>
   drule window_phase_control >> strip_tac >>
-  drule_all window_cursor_load_phase_mem >> strip_tac >>
+  drule_all window_cursor_load_phase_mem_conditional_frame >> strip_tac >>
   `abi_encoder_registered_effect {} [] u t` by metis_tac[window_phase_effect] >>
   `mem_bytes_at d (LENGTH (enc at av)) t.vs_memory = enc at av` by
     (irule EQ_TRANS >> qexists_tac `mem_bytes_at d (LENGTH (enc at av)) u.vs_memory` >>
@@ -236,7 +246,7 @@ Proof
   >- (irule window_complex_phase_result >> asm_rewrite_tac[] >>
       qpat_x_assum `mem_word_at slot _ = _` mp_tac >>
       asm_rewrite_tac[mem_word_at_eq_mload] >> disch_then SUBST1_TAC >> REFL_TAC) >>
-  metis_tac[mem_cont_sim_trans]
+  metis_tac[mem_cont_sim_trans, window_mem_frame_trans]
 QED
 
 Theorem window_complex_pre_prefix[local]:
@@ -272,7 +282,9 @@ Theorem window_complex_dynamic_finish_mem[local]:
   (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
     FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
   ?v. window_strong_result ctx func st en out at (ListV avs) d s v /\
-      mem_cont_sim ctx func s v
+      mem_cont_sim ctx func s v /\
+      (window_mem_frame ctx func s u /\ window_mem_frame ctx func u t /\
+       fn_inst_ids_distinct func ==> window_mem_frame ctx func s v)
 Proof
   strip_tac >>
   `ready.cs_next_var <= load.cs_next_var /\ ready.cs_next_id <= load.cs_next_id /\
@@ -298,6 +310,12 @@ Proof
        `[(d,LENGTH (enc at (ListV avs)))]`, `u`] >>
      asm_rewrite_tac[] >> simp[EVERY_DEF, UNION_SUBSET, INSERT_SUBSET]) >>
   `mem_cont_sim ctx func s t` by metis_tac[mem_cont_sim_trans] >>
+  `(?v. window_strong_result ctx func st en out at (ListV avs) d s v /\
+      mem_cont_sim ctx func s v /\
+      (window_mem_frame ctx func s t /\ fn_inst_ids_distinct func ==>
+       window_mem_frame ctx func s v))` suffices_by
+    (strip_tac >> qexists_tac `v` >> asm_rewrite_tac[] >>
+     metis_tac[window_mem_frame_trans]) >>
   irule window_complex_finish_load_mem >> goal_assum (drule_at Any) >>
   asm_rewrite_tac[SUBSET_REFL] >>
   qexistsl_tac [`dp`, `window_alloca_sites func (frag_ids st en)`, `load`, `slot`] >>
@@ -313,7 +331,14 @@ Theorem window_complex_strong_contract_mem:
   !dst src st out st' ctx func s at av sb cap d.
     compile_abi_encode_to_buf dst src (AbiComplex infos) st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src (AbiComplex infos) at av sb cap d s ==>
-    ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t
+    ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t /\
+      ((!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==>
+        !dst src st out st' ctx func s at av sb cap d.
+        compile_abi_encode_to_buf dst src ei st = (out,st') /\
+        abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
+        ?t. window_strong_result ctx func st st' out at av d s t /\
+          mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t) ==>
+        window_mem_frame ctx func s t)
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   `abi_encoder_window_input (AbiComplex infos) at av sb cap s.vs_memory` by
@@ -337,7 +362,7 @@ Resume window_complex_strong_contract_mem[empty]:
     (qpat_assum `abi_encoder_window_input _ _ _ _ _ _` mp_tac >>
      simp_tac bool_ss [abi_encoder_window_complex_iff] >> strip_tac >>
      gvs[abi_encoder_tuple_type_def, enc_def, LET_THM, REV_DEF]) >>
-  qexists_tac `s` >> simp_tac bool_ss [mem_cont_sim_refl, AND_CLAUSES] >>
+  qexists_tac `s` >> simp_tac bool_ss [mem_cont_sim_refl, window_mem_frame_refl, AND_CLAUSES] >>
   irule window_complex_phase_result >>
   asm_rewrite_tac[] >> simp_tac (srw_ss()) [NoAsms, LENGTH, mem_bytes_at_def, eval_operand_def] >>
   metis_tac[window_pre_sites, window_phase_refl, abi_encoder_window_pre_def]
@@ -418,6 +443,10 @@ Resume window_complex_strong_contract_mem[dynamic]:
      qpat_x_assum `!R. _` (qspec_then `window_alloca_sites func (frag_ids st st')` mp_tac) >>
      asm_rewrite_tac[]) >>
   rpt (qpat_x_assum `!R. (!i b sz. _) ==> _` kall_tac) >>
+  suspend "dynamic_finish"
+QED
+
+Resume window_complex_strong_contract_mem[dynamic_finish]:
   `ci_mono st allocated /\ ci_mono allocated ready` by
     metis_tac[ci_mono_compile_alloc_buffer, ci_mono_emit_void, pairTheory.SND] >>
   `ci_mono st ready` by
@@ -432,6 +461,13 @@ Resume window_complex_strong_contract_mem[dynamic]:
   asm_rewrite_tac[] >> disch_tac >>
   `mem_word_at slot t.vs_memory = n2w (LENGTH (enc at (ListV avs)))` by
     metis_tac[] >>
-  drule_all window_complex_dynamic_finish_mem >> simp[]
+  `fn_inst_ids_distinct func` by
+    (qpat_assum `abi_encoder_window_pre _ _ st st' _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [abi_encoder_window_pre_def] >> metis_tac[]) >>
+  drule_all window_complex_dynamic_finish_mem >>
+  disch_then (qx_choose_then `v` strip_assume_tac) >>
+  qexists_tac `v` >> asm_rewrite_tac[] >> strip_tac >>
+  qpat_x_assum `_ /\ _ /\ fn_inst_ids_distinct func ==> _` irule >>
+  asm_rewrite_tac[] >> metis_tac[]
 QED
 Finalise window_complex_strong_contract_mem

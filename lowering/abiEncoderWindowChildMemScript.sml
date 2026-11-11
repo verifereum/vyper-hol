@@ -23,7 +23,13 @@ Theorem window_static_child_run_mem:
       mem_bytes_at (d+ho) (LENGTH (enc at av)) t.vs_memory = enc at av /\
       eval_operand out t = SOME (n2w (LENGTH (enc at av))) /\
       (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
-        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\ mem_cont_sim ctx func s t
+        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\ mem_cont_sim ctx func s t /\
+      ((!dst src st out st' ctx func s at av sb cap d.
+        compile_abi_encode_to_buf dst src ei st = (out,st') /\
+        abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
+        ?t. window_strong_result ctx func st st' out at av d s t /\
+          mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t) ==>
+        window_mem_frame ctx func s t)
 Proof
   strip_tac >>
   `fn_has_code st en func` by fs[abi_encoder_window_pre_def] >>
@@ -31,19 +37,35 @@ Proof
   `?t. window_phase ctx func st ready {} [] s t /\
     eval_operand head t = SOME (n2w (d+ho)) /\
     (!x. head = Var x ==> not_fresh_at ready x) /\ t.vs_labels = s.vs_labels /\
-    mem_cont_sim ctx func s t` by
+    mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t)` by
     (`alloca_inv s /\ alloca_room ctx func s /\ ~s.vs_halted /\
        s.vs_current_bb = st.cs_current_bb /\
        s.vs_inst_idx = LENGTH st.cs_current_insts` by fs[abi_encoder_window_pre_def] >>
      `eval_operand (Lit (n2w ho)) s = SOME (n2w ho)` by simp[eval_operand_def] >>
-     drule_all window_emit_add_phase_mem >> simp[word_add_n2w]) >>
+     drule_all window_emit_add_phase_mem_conditional_frame >> simp[word_add_n2w]) >>
   `abi_encoder_window_pre ctx func ready en head src ei at av sb cap (d+ho) t` by
     (irule window_static_child_pre >>
      asm_rewrite_tac[] >> qexistsl_tac [`Lit (n2w (d+ho))`, `s`, `st`] >>
      asm_rewrite_tac[]) >>
-  first_x_assum drule_all >> strip_tac >>
-  rename1 `window_strong_result _ _ _ _ _ _ _ _ t u` >>
+  qabbrev_tac `framed =
+    (!dst src st out st' ctx func s at av sb cap d.
+      compile_abi_encode_to_buf dst src ei st = (out,st') /\
+      abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
+      ?t. window_strong_result ctx func st st' out at av d s t /\
+        mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t)` >>
+  `?u. window_strong_result ctx func ready en out at av (d+ho) t u /\
+    mem_cont_sim ctx func t u /\ (framed ==> window_mem_frame ctx func t u)` by
+    (Cases_on `framed`
+     >- metis_tac[markerTheory.Abbrev_def] >>
+     qpat_x_assum `!dst src st out st' ctx func s at av sb cap d. _`
+       drule_all >> metis_tac[]) >>
   `mem_cont_sim ctx func s u` by metis_tac[mem_cont_sim_trans] >>
+  `framed ==> window_mem_frame ctx func s u` by
+    (`fn_inst_ids_distinct func` by
+       (qpat_assum `abi_encoder_window_pre _ _ st en _ _ _ _ _ _ _ _ _` mp_tac >>
+        simp_tac bool_ss [abi_encoder_window_pre_def] >> metis_tac[]) >>
+     metis_tac[window_mem_frame_trans]) >>
   suspend "package"
 QED
 
@@ -213,7 +235,13 @@ Theorem window_dynamic_child_call_mem:
     eval_operand (FST (SND ops)) actual = SOME (n2w off) /\
     window_phase ctx func st child_end
       (window_alloca_sites func (frag_ids ready child_end))
-      [(d+off,LENGTH (enc at av))] s actual /\ mem_cont_sim ctx func s actual
+      [(d+off,LENGTH (enc at av))] s actual /\ mem_cont_sim ctx func s actual /\
+    ((!dst src st out st' ctx func s at av sb cap d.
+      compile_abi_encode_to_buf dst src ei st = (out,st') /\
+      abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
+      ?t. window_strong_result ctx func st st' out at av d s t /\
+        mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t) ==>
+      window_mem_frame ctx func s actual)
 Proof
   strip_tac >>
   `fn_has_code st en func` by fs[abi_encoder_window_pre_def] >>
@@ -250,8 +278,27 @@ Resume window_dynamic_child_call_mem[restrict]:
      `inst.inst_id IN frag_ids prepared en` by
        (qpat_x_assum `_ IN frag_ids prepared child_end` mp_tac >>
         simp_tac (srw_ss()) [frag_ids_def] >> decide_tac) >> metis_tac[]) >>
-  first_x_assum drule_all >> strip_tac >>
-  rename1 `window_strong_result _ _ _ _ _ _ _ _ prep actual` >>
+  qabbrev_tac `framed =
+    (!dst src st out st' ctx func s at av sb cap d.
+      compile_abi_encode_to_buf dst src ei st = (out,st') /\
+      abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
+      ?t. window_strong_result ctx func st st' out at av d s t /\
+        mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t)` >>
+  `?actual. window_strong_result ctx func prepared child_end child_len at av (d+off) prep actual /\
+    mem_cont_sim ctx func prep actual /\ (framed ==> window_mem_frame ctx func prep actual)` by
+    (Cases_on `framed`
+     >- metis_tac[markerTheory.Abbrev_def] >>
+     qpat_x_assum `!dst src st out st' ctx func s at av sb cap d. _`
+       drule_all >> metis_tac[]) >>
+  `framed ==> window_mem_frame ctx func s actual` by
+    (`fn_inst_ids_distinct func` by
+       (qpat_assum `abi_encoder_window_pre _ _ st en _ _ _ _ _ _ _ _ _` mp_tac >>
+        simp_tac bool_ss [abi_encoder_window_pre_def] >> metis_tac[]) >>
+     metis_tac[window_mem_frame_trans]) >>
+  suspend "package"
+QED
+
+Resume window_dynamic_child_call_mem[package]:
   `window_phase ctx func prepared child_end
     (window_alloca_sites func (frag_ids prepared child_end))
     [(d+off,LENGTH (enc at av))] prep actual` by
@@ -307,7 +354,13 @@ Theorem window_dynamic_child_run_mem:
       FLOOKUP t.vs_allocas site = SOME (slot,32) /\
       eval_operand out t = SOME (n2w (LENGTH (enc at av))) /\
       (!i b sz. i IN (window_alloca_sites func (frag_ids st en) UNION {site}) /\
-        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\ mem_cont_sim ctx func s t
+        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\ mem_cont_sim ctx func s t /\
+      ((!dst src st out st' ctx func s at av sb cap d.
+        compile_abi_encode_to_buf dst src ei st = (out,st') /\
+        abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
+        ?t. window_strong_result ctx func st st' out at av d s t /\
+          mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t) ==>
+        window_mem_frame ctx func s t)
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `!x. dst = Var x \/ Var cursor = Var x ==> not_fresh_at st x` by
@@ -347,7 +400,8 @@ Resume window_dynamic_child_run_mem[suffix]:
     mem_word_at (d+ho) t.vs_memory = n2w off /\
     mem_word_at slot t.vs_memory = n2w (off+LENGTH (enc at av)) /\
     FLOOKUP t.vs_allocas site = SOME (slot,32) /\
-    eval_operand out t = SOME (n2w (LENGTH (enc at av))) /\ mem_cont_sim ctx func actual t` by
+    eval_operand out t = SOME (n2w (LENGTH (enc at av))) /\ mem_cont_sim ctx func actual t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func actual t)` by
     (drule_all window_array_suffix_run_mem >> strip_tac >>
      drule_all window_array_transition_phase_mem >> strip_tac >>
      goal_assum (drule_at Any) >> asm_rewrite_tac[]) >>
@@ -368,7 +422,13 @@ Resume window_dynamic_child_run_mem[suffix]:
      qexistsl_tac [`{site}`, `[(d+ho,32)]`] >> simp[] >>
      metis_tac[window_phase_effect, optionTheory.SOME_11, pairTheory.PAIR_EQ]) >>
   `mem_cont_sim ctx func s t` by metis_tac[mem_cont_sim_trans] >>
-  qexists_tac `t` >> asm_rewrite_tac[] >>
+  qexists_tac `t` >> asm_rewrite_tac[] >> reverse conj_tac
+  >- (strip_tac >>
+      `fn_inst_ids_distinct func` by
+        (qpat_assum `abi_encoder_window_pre _ _ st en _ _ _ _ _ _ _ _ _` mp_tac >>
+         simp_tac bool_ss [abi_encoder_window_pre_def] >> metis_tac[]) >>
+      metis_tac[window_mem_frame_trans]) >>
+  asm_rewrite_tac[] >>
   simp_tac bool_ss [IN_UNION, IN_SING] >> rpt gen_tac >>
   Cases_on `i = site` >- (gvs[] >> metis_tac[]) >> strip_tac >>
   `i IN window_alloca_sites func (frag_ids st en)` by metis_tac[] >>
