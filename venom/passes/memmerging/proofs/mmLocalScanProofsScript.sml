@@ -12605,6 +12605,59 @@ Proof
   metis_tac[]
 QED
 
+Theorem mm_local_mem2mem_word_emission[local]:
+  ~MEM inst.inst_id nop_set /\ ALOOKUP rep_map inst.inst_id = SOME g /\
+  g.cg_length = 32 /\ inst.inst_opcode <> MSTORE /\
+  fresh_inst_id sk = (lid,sk1) /\ fresh_ir_var sk1 = (v,sk2) ==>
+  apply_groups_inst_supply Mem2Mem nop_set rep_map sk inst =
+    ([mk_load_inst Mem2Mem (inst with inst_id := lid) g.cg_src v;
+      mk_mstore_from_load inst g.cg_dst v],sk2)
+Proof
+  simp[apply_groups_inst_supply_def]
+QED
+
+Theorem mm_local_mem2mem_word_steps[local]:
+  g.cg_dst < dimword (:256) /\ g.cg_src < dimword (:256) ==>
+  ?mid fin.
+    step_inst fuel ctx
+      (mk_load_inst Mem2Mem (inst with inst_id := lid) g.cg_src v) t = OK mid /\
+    step_inst fuel ctx (mk_mstore_from_load inst g.cg_dst v) mid = OK fin /\
+    mid = update_var v (mload g.cg_src t) t /\
+    fin = update_var v (mload g.cg_src t)
+      (write_memory_with_expansion g.cg_dst (read_memory g.cg_src 32 t) t) /\
+    fin.vs_memory =
+      (write_memory_with_expansion g.cg_dst (read_memory g.cg_src 32 t) t).vs_memory /\
+    (!x. x <> v ==> lookup_var x fin = lookup_var x t)
+Proof
+  strip_tac >>
+  `mstore g.cg_dst (mload g.cg_src t) (update_var v (mload g.cg_src t) t) =
+    update_var v (mload g.cg_src t)
+      (write_memory_with_expansion g.cg_dst (read_memory g.cg_src 32 t) t)` by
+    (rewrite_tac[GSYM dftCommutationTheory.update_var_mstore_commute,
+       mmCopyEquivTheory.mload_mstore_eq_mcopy_state] >>
+     simp[venomExecSemanticsTheory.mcopy_def, venomStateTheory.read_memory_def]) >>
+  qexistsl [`update_var v (mload g.cg_src t) t`,
+    `mstore g.cg_dst (mload g.cg_src t) (update_var v (mload g.cg_src t) t)`] >>
+  conj_tac
+  >- simp[mk_load_inst_def, mode_load_opcode_def,
+       venomExecSemanticsTheory.step_inst_non_invoke,
+       venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_read1_def,
+       venomStateTheory.eval_operand_def, wordsTheory.w2n_n2w] >>
+  conj_tac
+  >- (simp[mk_mstore_from_load_def,
+       venomExecSemanticsTheory.step_inst_non_invoke,
+       venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_write2_def,
+       venomStateTheory.eval_operand_def, wordsTheory.w2n_n2w,
+       venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+       gvs[venomStateTheory.update_var_def]) >>
+  asm_rewrite_tac[] >>
+  simp[venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
+    venomStateTheory.write_memory_with_expansion_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
