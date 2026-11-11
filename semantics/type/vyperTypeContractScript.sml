@@ -186,6 +186,15 @@ Definition external_name_keys_toplevel_def:
   external_name_keys_toplevel _ _ = []
 End
 
+(* Every function visibility and variable kind shares Vyper's self namespace. *)
+Definition self_member_keys_toplevel_def:
+  self_member_keys_toplevel src (FunctionDecl _ _ _ _ name _ _ _ _) =
+    [(src,name)] /\
+  self_member_keys_toplevel src (VariableDecl _ _ name _ _) = [(src,name)] /\
+  self_member_keys_toplevel src (HashMapDecl _ _ name _ _ _) = [(src,name)] /\
+  self_member_keys_toplevel _ _ = []
+End
+
 Definition contract_namespaces_ok_def:
   contract_namespaces_ok in_deploy mods <=>
     ALL_DISTINCT (MAP FST mods) /\
@@ -196,6 +205,7 @@ Definition contract_namespaces_ok_def:
     ALL_DISTINCT (contract_keys type_def_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys event_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys external_name_keys_toplevel mods) /\
+    ALL_DISTINCT (contract_keys self_member_keys_toplevel mods) /\
     EVERY (\(src,tls).
       ALL_DISTINCT (abi_external_method_ids (type_env_all_modules mods) tls)) mods
 End
@@ -913,7 +923,7 @@ Definition function_header_ok_def:
       (dflts : expr list) ret <=>
     (rr ==> vis = External /\ (?n. ret = BaseT (BytesT (Dynamic n)))) /\
     (* Constructor code returns the deployed runtime, not an ABI value. *)
-    (vis = Deploy ==> NULL dflts /\ ret = NoneT) /\
+    (vis = Deploy ==> NULL dflts /\ ret = NoneT /\ ~nr) /\
     (* The source treats Pure as a read-only guard, while the compiler's
        guard packaging uses mut = View. Reject the explicit invalid header;
        the pragma frontend already leaves pure functions unguarded. *)
@@ -952,6 +962,8 @@ Definition check_toplevel_decl_def:
         EVERY (\(fn,args,ret,mut).
           params_ok tenv args /\ well_formed_type tenv ret) funcs
     | EventDecl id fields =>
+        LENGTH (FILTER SND fields) <= 3 /\
+        ALL_DISTINCT (MAP (FST o FST) fields) /\
         EVERY (\((_,ty),indexed). assignable_type tenv ty /\
                                   (indexed ==> event_indexable_type ty)) fields
     | ErrorDecl id args => params_ok tenv args
@@ -1034,15 +1046,18 @@ Definition check_contract_def:
       then SOME art else NONE
 End
 
-(* The exports map of load_contract names only functions of allocated
-   modules.  An external function is never an internal callee, so it is live
-   exactly when its module is allocated. *)
+(* Exports name allocated modules, and the combined deployed interface has
+   distinct selectors.  An external function is never an internal callee,
+   so it is live exactly when its module is allocated. *)
 Definition exports_ok_def:
   exports_ok layouts addr mods exps <=>
     EVERY (\(fn,src).
              case ALOOKUP mods (SOME src) of
              | NONE => T
-             | SOME tls => module_allocated layouts addr (SOME src) tls) exps
+             | SOME tls => module_allocated layouts addr (SOME src) tls) exps /\
+    ALL_DISTINCT
+      (MAP (\(name,tys). abi_method_id (type_env_all_modules mods) name tys)
+        (abi_deployed_signatures mods exps))
 End
 
 (* Successful checking guarantees distinct member names for every
@@ -1077,6 +1092,16 @@ Proof
   simp[check_toplevel_decl_def]
 QED
 
+Theorem check_contract_deploy_nonreentrant:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods /\
+  MEM (FunctionDecl Deploy mut nr rr name args dflts ret body) tls ==>
+  nr = F
+Proof
+  strip_tac >> drule_all check_contract_function_header >>
+  simp[function_header_ok_def]
+QED
+
 Theorem check_contract_external_method_ids_distinct:
   check_contract in_deploy layouts addr mods = SOME art /\
   MEM (src,tls) mods ==>
@@ -1091,6 +1116,17 @@ Theorem check_contract_external_names_distinct:
   ALL_DISTINCT (contract_keys external_name_keys_toplevel mods)
 Proof
   rw[check_contract_def, contract_namespaces_ok_def]
+QED
+
+Theorem check_contract_single_module_exports_ok:
+  check_contract in_deploy layouts addr [(NONE,tops)] = SOME art ==>
+  exports_ok layouts addr [(NONE,tops)] []
+Proof
+  strip_tac >>
+  drule (check_contract_external_method_ids_distinct
+    |> Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`, `tls` |-> `tops`]) >>
+  simp[exports_ok_def, abi_deployed_signatures_def,
+       abi_external_method_ids_def]
 QED
 
 Theorem function_header_nonreentrant_view:

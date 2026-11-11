@@ -1,0 +1,40 @@
+Upstream PR: https://github.com/vyperlang/vyper/pull/5350
+Status: open (draft)
+
+Reject a subscript of a pop() result whose index can write a variable the
+base reads, or makes a risky call (CompilerPanic "risky overlap"). Applies
+after 5280-target-subscript-overlap.patch, which brings the overlap helpers.
+
+diff --git a/vyper/codegen_venom/expr.py b/vyper/codegen_venom/expr.py
+--- a/vyper/codegen_venom/expr.py
++++ b/vyper/codegen_venom/expr.py
+@@ -166,6 +166,16 @@ def check_target_overlap(target: vy_ast.VyperNode) -> None:
+         node = node.value
+ 
+ 
++def _is_derived_from_pop(node: vy_ast.VyperNode) -> bool:
++    """Return True if `node` is a `pop()` result, or a member or element of one."""
++    while isinstance(node, (vy_ast.Subscript, vy_ast.Attribute)):
++        node = node.value
++    if not isinstance(node, vy_ast.Call):
++        return False
++    func_t = node.func._metadata.get("type")
++    return isinstance(func_t, MemberFunctionT) and func_t.name == "pop"
++
++
+ @dataclass
+ class _CallKwargs:
+     """Keyword arguments for external calls."""
+@@ -950,6 +960,12 @@ class Expr:
+         """
+         node = self.node
+         assert isinstance(node, vy_ast.Subscript)
++        if _is_derived_from_pop(node.value) and _subscript_read_write_overlap(
++            node.value, node.slice
++        ):
++            # The popped element is past the array's new length, so the
++            # index can overwrite it before the base is read.
++            raise CompilerPanic("risky overlap")
+         base_vv = Expr(node.value, self.ctx).lower()
+         base = base_vv.operand  # Extract pointer for address math
+         index = Expr(node.slice, self.ctx).lower_value()  # Need the value

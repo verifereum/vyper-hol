@@ -810,7 +810,8 @@ Theorem nested_pop_suffix_vv_post:
   es'.scopes = mid.scopes /\
   storage_holds cx tr ann v slot es' u /\ lookup_var x u = SOME slot /\
   u.vs_memory = t.vs_memory /\ u.vs_allocas = t.vs_allocas /\
-  (!q. not_fresh_at sm q ==> lookup_var q u = lookup_var q t) ==>
+  (!q. not_fresh_at sm q ==> lookup_var q u = lookup_var q t) /\
+  (!id path. v <> PlaceR (MemoryPlace id path)) ==>
   vv_post ctx func cenv cx (Pop ann bt) es sa r s0 es' v
     (LocatedValue ann (mk_ptr (Var x) (if tr then LocTransient else LocStorage))) u
 Proof

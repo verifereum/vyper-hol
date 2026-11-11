@@ -138,6 +138,8 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   qpat_assum `lineage_entry _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [lineage_entry_def]) >>
+  rpt (qpat_x_assum `_.ps_stack = _ ++ core` kall_tac) >>
+  qpat_x_assum `!v. _ ==> ~MEM (Var v) prefixL /\ _` kall_tac >>
   rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
   drule_all (SRULE [] lineage_entry_inventory) >> strip_tac >>
   drule_all join_predecessor_jmp_shape >> strip_tac >>
