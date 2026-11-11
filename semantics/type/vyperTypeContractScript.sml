@@ -972,9 +972,8 @@ Definition stmt_loop_calls_ok_def:
   stmt_loop_calls_ok mods (For _ _ it _ body) =
     ((case it of
       | Array e =>
-          (case expr_place e of
-           | SOME p => EVERY (callee_writes_ok mods p) (int_calls_stmts body)
-           | NONE => T)
+          EVERY (\p. EVERY (callee_writes_ok mods p) (int_calls_stmts body))
+            (expr_places e)
       | Range _ _ => T) /\
      stmts_loop_calls_ok mods body) /\
   stmt_loop_calls_ok mods (If _ yes no) =
