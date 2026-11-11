@@ -19,7 +19,7 @@ Theorem source_selected_owned_endpoint:
   fn_entry_label efn = SOME elbl ==>
   ?lbl ce pa mc pay key tr view rt sc sk cer registered completed values t out outputs.
     set_external_package_target rp.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE : num option)
           tx.function_name External tops,tx.function_name,args,([] : expr list),ret,fbody)) =
       (lbl,ce,pa,mc,pay,F,key,tr,view,fbody,rt) /\

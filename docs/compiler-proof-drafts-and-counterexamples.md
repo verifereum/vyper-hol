@@ -163,12 +163,11 @@ A second counterexample kept ALLOCA sizes consistent but assigned the alloca out
 
 Lesson: matching allocation sizes is not enough; runtime pointer values stored in variables must also be constrained to point to the corresponding allocation region.
 
-### Relevant active theories
+### Relevant definitions
 
-The current memory-safety proof work should be checked in:
+The memory-safety definitions are in:
 
 - `lowering/defs/loweringMemSafetyDefsScript.sml`
-- `lowering/proofs/loweringMemSafetyProofsScript.sml`
 
 The counterexamples motivate hypotheses such as:
 

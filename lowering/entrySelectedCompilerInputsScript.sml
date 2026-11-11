@@ -20,7 +20,7 @@ Theorem source_selected_compiler_inputs:
   fn_entry_label efn = SOME elbl ==>
   ?lbl ce pa mc pay key tr view rt sels fl sf sd sc sk cer registered completed.
     set_external_package_target rp.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE : num option)
           tx.function_name External tops,tx.function_name,args,([] : expr list),ret,fbody)) =
       (lbl,ce,pa,mc,pay,F,key,tr,view,fbody,rt) /\

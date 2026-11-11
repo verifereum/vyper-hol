@@ -25,21 +25,11 @@ Theorem abi_decoder_clamp_emit_frame:
   t.vs_data_section = s.vs_data_section
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
-  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
-  qpat_x_assum `emit_op _ _ _ = _` kall_tac >>
-  qpat_x_assum `st'.cs_current_insts = _` kall_tac >>
-  rpt (qpat_x_assum `emitted_insts _ _ = _` SUBST1_TAC) >>
-  simp[run_inst_seq_def, mk_inst_def]
-  >- (simp[Once step_inst_base_def] >>
-      simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
-  >- (simp[Once step_inst_base_def] >>
-      simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
-  >- (simp[Once step_inst_base_def] >>
-      simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
-  >- (simp[Once step_inst_base_def] >>
-      simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
-  >> simp[Once step_inst_base_def] >>
-  simp[exec_pure1_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[]
+  gvs[run_inst_seq_def] >>
+  qpat_x_assum `_ = OK t` mp_tac >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >>
+  gvs[exec_pure2_def, exec_pure1_def, AllCaseEqs(), update_var_def] >>
+  strip_tac >> gvs[]
 QED
 
 Theorem abi_decoder_unsigned_clamp_sequence:

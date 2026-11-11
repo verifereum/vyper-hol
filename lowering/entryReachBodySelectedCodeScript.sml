@@ -87,7 +87,7 @@ Theorem entry_selected_source_phase[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   MEM (mut,nr,rr,name,args,dflts,ret,fbody) (FST (classify_functions tops)) /\
   set_external_package_target rpolicy.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,nr,rr,name,args,dflts,ret,fbody)) =
     (lbl,ce,pos_args,mincd,pay,nr',key,ut,iv,fbody,rt) ==>
   ?func se checks start cenv registered body_end.
@@ -108,6 +108,10 @@ Proof
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts,ints,fallback,ctor)` >>
   simp[] >> strip_tac >>
+  `~EXISTS external_has_defaults exts` by
+    (drule loweringShapePropsTheory.supported_program_no_external_defaults >>
+     simp[]) >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
   `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)
      (build_selectors (type_env tops) exts)` by
     simp[loweringShapePropsTheory.build_selectors_fn_labels] >>
@@ -167,7 +171,7 @@ Theorem entry_selected_source_code:
   ?lbl ce pos_args mincd pay key ut iv rt
    func se checks start cenv registered body_end.
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
          tx.function_name,args,([] : expr list),ret,fbody)) =
       (lbl,ce,pos_args,mincd,pay,F,key,ut,iv,fbody,rt) /\
