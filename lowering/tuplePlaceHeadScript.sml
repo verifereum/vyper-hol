@@ -161,7 +161,7 @@ QED
      actual destination containment, NOT arbitrary place_ptr_rel separation.
      Borrowed snapshot has ltys=tys, hence EL i ltys=EL i tys; the widening
      side condition disappears in tuple_place_equal_value_run_frame.
-   - borrowed destination separation: tuple_place_borrow_destination_apart
+   - borrowed destination separation: tuple_place_writable_borrow_destination_apart
      using ACTUAL evaluated typed target, call safety and full local extent.
      tuple_place_head_borrow_frame checks consumption of the resulting local
      slice frame and region reconstruction at the runner's endpoint.
@@ -343,8 +343,11 @@ QED
        expects eval_base_place cx bt ee=(INL(PlaceR p),ee), not E as written,
        and takes pure target indices, so it does not cover the chain's
        targets, whose supported indices may have effects (ee<>es).  The chain
-       uses only scope equality instead (tuple_place_supported_target_scopes,
-       tuple_place_supported_target_borrow_bytes). Do not instantiate ee=es.
+       instead uses tuple_place_writable_borrow_destination_apart, which takes
+       writable_place_result cx ee (PlaceR p) (from
+       tuple_place_target_endpoint_writable), with local_region moved to ee by
+       tuple_place_supported_target_scopes; see
+       tuple_place_pointer_snapshot_apart. Do not instantiate ee=es.
    B5: The antecedent of B1 plus branch certificate and the frozen indexed
        size bounds ==> the selected runner's exact arithmetic/containment
        antecedents (enumerated above), including CapMcopy and type_alloc_ok
