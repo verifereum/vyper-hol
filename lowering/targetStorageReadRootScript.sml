@@ -2,7 +2,7 @@ Theory targetStorageReadRoot
 Ancestors
   stmtLowering targetPlaceSim targetPlaceSimCasesBase allocLimits vyperSubscriptOverlap list
   vyperStoragePlaceProvenance vyperInterpreter vyperState
-  vyperStorageLayoutSafety vyperStoragePlaceRegion words
+  vyperStorageLayoutSafety vyperStoragePlaceRegion words bodySim vyperTypeContract
 
 Theorem target_root_state_read:
   !bt ns. target_root bt = TopLevelNameTarget ns ==>
@@ -119,4 +119,64 @@ Proof
   simp[] >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   drule_all extend_place_named_region >> simp[]
+QED
+
+Triviality constant_decl_key_member:
+  !code name src. constant_decl name code ==>
+    MEM (src,name) (FLAT (MAP (toplevel_vtype_keys_toplevel src) code))
+Proof
+  Induct >> simp[constant_decl_def] >> Cases_on `h` >>
+  simp[constant_decl_def, toplevel_vtype_keys_toplevel_def] >>
+  rename1 `VariableDecl vis mut id ty init` >>
+  Cases_on `mut` >> simp[constant_decl_def] >> metis_tac[]
+QED
+
+Triviality find_var_decl_key_member:
+  !code name src d. find_var_decl_by_name name code = SOME d ==>
+    MEM (src,name) (FLAT (MAP (toplevel_vtype_keys_toplevel src) code))
+Proof
+  Induct >> simp[find_var_decl_by_name_def] >> Cases_on `h` >>
+  simp[find_var_decl_by_name_def, toplevel_vtype_keys_toplevel_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Triviality distinct_find_var_not_constant:
+  !code src name d.
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) code)) /\
+  find_var_decl_by_name name code = SOME d ==> ~constant_decl name code
+Proof
+  Induct >> simp[find_var_decl_by_name_def] >> Cases_on `h` >>
+  simp[find_var_decl_by_name_def, toplevel_vtype_keys_toplevel_def,
+       constant_decl_def] >>
+  rpt gen_tac >> strip_tac >> gvs[]
+  >~ [`constant_decl name (VariableDecl vis mut id ty init::code)`]
+  >- (Cases_on `mut` >> gvs[constant_decl_def] >>
+      metis_tac[constant_decl_key_member, find_var_decl_key_member]) >>
+  metis_tac[constant_decl_key_member]
+QED
+
+Theorem target_storage_named_nonconstant_read:
+  !tops ctx cenv cx mods bt mid name st st' tr slot leaf.
+  body_inv tops ctx cenv cx /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  target_root bt = TopLevelNameTarget (mid,name) /\
+  eval_base_place cx bt st = (INL (PlaceR (StoragePlace tr slot leaf)),st') ==>
+  MEM (StateRef (mid,name))
+    (nonconstant_reads mods (expr_accesses mods (target_to_expr bt))) /\
+  (?keys root tv path delta.
+     declared_storage_region cx mid name keys = SOME (tr,root,tv) /\
+     storage_subregion tv path delta leaf /\ slot = root + n2w delta)
+Proof
+  rpt strip_tac
+  >- (drule_all eval_base_place_named_region >> simp[] >> strip_tac >>
+      irule nonconstant_state_read_member >> reverse conj_tac
+      >- (simp[expr_accesses_def] >>
+          metis_tac[target_root_state_read]) >>
+      gvs[declared_storage_region_def, AllCaseEqs()] >>
+      qpat_x_assum `body_inv _ _ _ _` mp_tac >>
+      simp[body_inv_def] >> rpt strip_tac >>
+      `mid = NONE` by metis_tac[] >> gvs[] >>
+      gvs[vyperContextTheory.get_module_code_def, AllCaseEqs()] >>
+      metis_tac[distinct_find_var_not_constant]) >>
+  drule_all eval_base_place_named_region >> simp[]
 QED
