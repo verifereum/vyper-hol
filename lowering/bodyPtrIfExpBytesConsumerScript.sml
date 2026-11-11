@@ -8,6 +8,7 @@ Ancestors
 Theorem ifexp_allocated_bytes_writer:
   post_value_type ce result = expr_type result /\
   vv_post ctx fn ce cx arm es sa sc s0 ee raw vv t /\
+  (~expr_has_effect result ==> ~expr_has_effect arm) /\
   stmt_state_rel ctx fn ce cx es s0 /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sc.cs_next_var /\
@@ -45,6 +46,8 @@ Theorem ifexp_allocated_bytes_writer:
       (OK (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd))) /\
     expr_post ctx fn ce cx result es sa sd s0 ee v (Var out)
       (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd)) /\
+    (~expr_has_effect arm ==> pure_frame ce fn es sa s0
+      (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd))) /\
     ghost_inv d ce cx ee Gf tnf
       (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd)) /\
     ghost_kept ce es sa G0 tn0 s0 Gf tnf /\
@@ -66,12 +69,21 @@ Proof
   `val_wf dtv v` by metis_tac[value_has_type_val_wf] >>
   qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[] >>
   conj_tac >- suspend "semantic" >>
+  conj_tac >- suspend "armpure" >>
   conj_tac >- suspend "ghost" >>
   conj_tac >- suspend "kept" >>
   suspend "pointer"
 QED
 
 Resume ifexp_allocated_bytes_writer[semantic]:
+  `eval_operand (Var out) sf = SOME b` by simp[eval_operand_def] >>
+  `val_in_memory dtv v (w2n b) sf.vs_memory` by
+    metis_tac[mem_agree_outside_def] >>
+  `!x. not_fresh_at sc x ==> lookup_var x sf = lookup_var x t` by metis_tac[] >>
+  drule_all ifexp_bytes_destination_expr_post >> simp[]
+QED
+
+Resume ifexp_allocated_bytes_writer[armpure]:
   `eval_operand (Var out) sf = SOME b` by simp[eval_operand_def] >>
   `val_in_memory dtv v (w2n b) sf.vs_memory` by
     metis_tac[mem_agree_outside_def] >>

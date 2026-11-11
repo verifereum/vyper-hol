@@ -84,7 +84,7 @@ Proof
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_raise_exists_def, int_calls_stmt_def, int_calls_raise_reason_def,
          body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -163,13 +163,13 @@ Proof
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assert_exists_def, int_calls_stmt_def,
          int_calls_assert_reason_def, body_inv_def] >>
      qexists `int_calls_expr se` >> simp[]) >>
   `expr_body_pre cenv cx env se es` by
     (irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assert_exists_def, int_calls_stmt_def,
          int_calls_assert_reason_def, body_inv_def] >>
      qexists `[]` >> simp[] >> metis_tac[call_evaluation_safe_append_right]) >>
