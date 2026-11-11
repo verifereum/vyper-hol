@@ -3,7 +3,8 @@ Theory abiDecodePtrExpr
 Ancestors
   abiDecodePtrOutcome abiDecodePtrTarget bodyPtrHashBuiltinsUnary
   exprSimExtract32Source exprSimHyps exprSimHypsDefs vyperTypeBuiltins vyperTypeSystem
-  vyperInterpreter vyperContext vyperState list
+  exprLowering exprCallBounds context builtinAbi compileEnv
+  vyperInterpreter vyperContext vyperState vyperAST list
 
 Theorem type_builtin_body_pre_arity:
   expr_body_pre cenv cx env (TypeBuiltin ann tb typ args) es ==>
@@ -41,4 +42,21 @@ Proof
      goal_assum (drule_at Any)) >>
   gvs[expr_body_pre_def, well_typed_expr_def,
       well_typed_type_builtin_args_def, type_builtin_result_ok_def]
+QED
+
+Theorem compile_abi_decode_stages:
+  compile_expr cenv ty (TypeBuiltin ann (AbiDecode b) typ [e]) sa =
+    (let (op,sm) = lower_value compile_expr cenv (expr_type e) e sa in
+     let target = if b /\ needs_external_call_wrap typ then TupleT [typ] else typ in
+     as_ptr_val ann LocMemory
+       (lower_abi_decode op (type_to_abi_dec_info cenv.ce_struct_fields cenv target)
+         (abi_static_size cenv.ce_struct_fields target)
+         (abi_size_bound cenv.ce_struct_fields target)
+         (type_memory_bytes cenv target) sm))
+Proof
+  rewrite_tac[compile_expr_type_builtin_dispatch] >>
+  simp[Once compile_type_builtin_dispatch_component_eq,
+       lower_value_def, comp_bind_def, expr_child_callback_def,
+       list_size_def, expr_size_def] >>
+  pairarg_tac >> simp[]
 QED
