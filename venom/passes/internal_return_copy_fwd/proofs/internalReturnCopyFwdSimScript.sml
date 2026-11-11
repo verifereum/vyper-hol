@@ -1990,6 +1990,44 @@ Proof
   strip_tac >> simp[ircf_gam_cur_def, ircf_gam_phi_prefix, EXTENSION]
 QED
 
+Theorem ircf_runner_entry:
+  ircf_R D fn_meta rma C stk PG G tn fn s t /\
+  block_reach vs C stk PG G tn fn s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  eval_phis s bb.bb_instructions = OK sp ==>
+  ?s1 t1.
+    s1 = sp with vs_inst_idx := phi_prefix_length bb.bb_instructions /\
+    (?tp. eval_phis t (ircf_tbb fn_meta rma C fn bb).bb_instructions = OK tp /\
+      t1 = tp with vs_inst_idx := phi_prefix_length
+        (ircf_tbb fn_meta rma C fn bb).bb_instructions) /\
+    (!inst. active_inst fn inst s1 ==>
+      frame_reachable vs C stk PG G tn fn inst s1) /\
+    s1.vs_current_bb = t1.vs_current_bb /\ s1.vs_inst_idx = t1.vs_inst_idx /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s1 stk) tn s1 t1 /\
+    ircf_cross tn (ircf_gam_cur fn_meta rma C fn s1 UNION
+      ircf_gam_stk fn_meta rma C stk) s1 t1
+Proof
+  strip_tac >> drule_all ircf_R_eval_phis >> strip_tac >>
+  qexistsl_tac [`sp with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
+    `t1 with vs_inst_idx := phi_prefix_length bb.bb_instructions`] >>
+  simp[ircf_tbb_def, ircf_transform_block_phis] >>
+  conj_tac
+  >- (rpt strip_tac >> fs[block_reach_def] >> first_x_assum irule >>
+      simp[contextCodegenRelTheory.enters_block_def] >> metis_tac[]) >>
+  `sp.vs_current_bb = s.vs_current_bb` by
+    (qpat_assum `eval_phis s _ = _`
+       (mp_tac o MATCH_MP venomExecProofsTheory.eval_phis_only_updates_vs_vars) >>
+     disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `ircf_gam_cur fn_meta rma C fn
+    (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions) = {}` by
+    (irule ircf_gam_cur_phi_prefix >> simp[]) >>
+  conj_tac >- (fs[taint_agree_def, venom_state_component_equality] >> gvs[]) >>
+  conj_tac
+  >- (simp[ircf_dead_def] >> irule taint_agree_inst_idx >>
+      fs[ircf_dead_def]) >>
+  fs[ircf_cross_def] >> gvs[]
+QED
+
 (* ===== One block, and the pass ===== *)
 
 Theorem ircf_redirect_ordinary_ok:
