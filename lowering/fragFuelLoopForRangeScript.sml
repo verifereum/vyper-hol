@@ -191,6 +191,199 @@ Proof
   gvs[fuel_outcome_def] >> metis_tac[]
 QED
 
+(* The body contract retains the private loop words as well as the
+   caller's (smaller-frontier) frame. *)
+Theorem range_body_fragment[local]:
+  !G ctx fn bs be K Wb E N p W s root counter endpoint c e.
+    frag_fuel Wb {} E bs be K /\
+    no_phi_fn fn /\ fn_has_code bs be fn /\ callees_stable G ctx fn /\
+    at_point bs s /\ N <= bs.cs_next_var /\ N <= p /\
+    Wb SUBSET (STRING #"%" (toString p) INSERT
+                 {x | x IN W /\ var_below N x}) /\
+    var_below bs.cs_next_var counter /\ counter NOTIN Wb /\
+    var_below bs.cs_next_var endpoint /\ endpoint NOTIN Wb /\
+    lookup_var counter s = SOME c /\ lookup_var endpoint s = SOME e /\
+    vars_kept N W root s ==>
+    ?j. j <= K /\ fuel_outcome G ctx fn s j
+      (\t. vars_kept N W root t /\
+           lookup_var counter t = SOME c /\ lookup_var endpoint t = SOME e /\
+           (at_point be t \/ (t.vs_current_bb IN E /\ t.vs_inst_idx = 0)))
+Proof
+  map_every qx_gen_tac [`G`, `ctx`, `fn`, `bs`, `be`, `Kb`, `Wb`, `E`,
+                         `N`, `p`, `Wv`, `s`, `root`, `counter`, `endpoint`, `c`, `e`] >>
+  strip_tac >>
+  qpat_x_assum `frag_fuel _ _ _ _ _ _` mp_tac >>
+  simp[frag_fuel_def] >>
+  disch_then (qspecl_then [`G`, `bs.cs_next_var`, `ctx`, `fn`, `s`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `j` >> simp[] >>
+  drule fuel_outcome_weaken >> disch_then irule >>
+  rpt strip_tac >> simp[] >>
+  `vars_kept N Wv s t` by
+    (irule range_body_frame >> qexistsl_tac [`bs.cs_next_var`, `Wb`, `p`] >>
+     gvs[]) >>
+  drule_all vars_kept_trans >> strip_tac >> simp[] >>
+  gvs[vars_kept_def]
+QED
+
+(* At the optional jump's endpoint either a JMP was appended, or the
+   terminated block ends here. The latter is a fuel-independent error. *)
+Theorem range_body_tail[local]:
+  !G ctx fn be incr N Wv root s counter endpoint c e bb.
+    no_phi_fn fn /\ at_point be s /\
+    lookup_block be.cs_current_bb fn.fn_blocks = SOME bb /\
+    (get_instruction bb (LENGTH be.cs_current_insts) = NONE \/
+     ?ji. get_instruction bb (LENGTH be.cs_current_insts) = SOME ji /\
+          ji.inst_opcode = JMP /\ ji.inst_operands = [Label incr]) /\
+    vars_kept N Wv root s /\
+    lookup_var counter s = SOME c /\ lookup_var endpoint s = SOME e ==>
+    ?j. j <= 1 /\ fuel_outcome G ctx fn s j
+      (\t. vars_kept N Wv root t /\
+           lookup_var counter t = SOME c /\ lookup_var endpoint t = SOME e /\
+           t.vs_current_bb = incr /\ t.vs_inst_idx = 0)
+Proof
+  rpt strip_tac
+  >- (`!f. run_from f ctx fn s = Error "block not terminated"` by
+        (gen_tac >> gvs[at_point_def] >>
+         simp[fragExecTheory.run_from_def, Once exec_block_def]) >>
+      qexists_tac `0` >> simp[fuel_outcome_def]) >>
+  qexists_tac `1` >> simp[] >> irule fuel_outcome_jump >> simp[] >>
+  qexistsl_tac [`bb`, `ji`, `incr`] >>
+  gvs[at_point_def, is_terminator_def, step_inst_base_opcode_eqs,
+      eval_operand_def, jump_to_def, vars_kept_def, lookup_var_def]
+QED
+
+(* A zero-output nonterminator covers MSTORE, including all its error
+   branches, without imposing any memory or operand-definedness premise. *)
+Theorem range_body_store[local]:
+  !G ctx fn s bb inst bs N Wv root counter endpoint c e.
+    callees_stable G ctx fn /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    ~is_terminator inst.inst_opcode /\ inst.inst_outputs = [] /\
+    bs.cs_current_bb = s.vs_current_bb /\
+    LENGTH bs.cs_current_insts = SUC s.vs_inst_idx /\
+    vars_kept N Wv root s /\
+    lookup_var counter s = SOME c /\ lookup_var endpoint s = SOME e ==>
+    fuel_outcome G ctx fn s 0
+      (\t. vars_kept N Wv root t /\
+           lookup_var counter t = SOME c /\ lookup_var endpoint t = SOME e /\
+           at_point bs t)
+Proof
+  rpt strip_tac >> drule_all run_from_nonterm_stable >> strip_tac
+  >- (simp[fuel_outcome_def] >> disj1_tac >>
+      qexists_tac `s1 with vs_inst_idx := SUC s.vs_inst_idx` >>
+      gvs[at_point_def, vars_kept_def, lookup_var_def]) >>
+  simp[fuel_outcome_def]
+QED
+
+Theorem range_body_invalid[local]:
+  !G ctx fn s bb inst P.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    inst.inst_opcode = INVALID ==>
+    fuel_outcome G ctx fn s 0 P
+Proof
+  rpt strip_tac >>
+  `!f. run_from f ctx fn s = Abort ExHalt_abort (halt_state (set_returndata [] s))` by
+    (gen_tac >> simp[fragExecTheory.run_from_def, Once exec_block_def,
+                    step_inst_non_invoke, step_inst_base_opcode_eqs]) >>
+  simp[fuel_outcome_def]
+QED
+
+Theorem range_body_finish[local]:
+  !G ctx fn bs be Kb Wb E exit incr N p Wv s root counter endpoint c e bb.
+    frag_fuel Wb {} (E UNION {exit;incr}) bs be Kb /\
+    no_phi_fn fn /\ fn_has_code bs be fn /\ callees_stable G ctx fn /\
+    at_point bs s /\ N <= bs.cs_next_var /\ N <= p /\
+    Wb SUBSET (STRING #"%" (toString p) INSERT
+                 {x | x IN Wv /\ var_below N x}) /\
+    var_below bs.cs_next_var counter /\ counter NOTIN Wb /\
+    var_below bs.cs_next_var endpoint /\ endpoint NOTIN Wb /\
+    lookup_var counter s = SOME c /\ lookup_var endpoint s = SOME e /\
+    vars_kept N Wv root s /\
+    lookup_block be.cs_current_bb fn.fn_blocks = SOME bb /\
+    (get_instruction bb (LENGTH be.cs_current_insts) = NONE \/
+     ?ji. get_instruction bb (LENGTH be.cs_current_insts) = SOME ji /\
+          ji.inst_opcode = JMP /\ ji.inst_operands = [Label incr]) ==>
+    ?j. j <= Kb + 1 /\ fuel_outcome G ctx fn s j
+      (\t. vars_kept N Wv root t /\
+           lookup_var counter t = SOME c /\ lookup_var endpoint t = SOME e /\
+           t.vs_current_bb IN (E UNION {exit;incr}) /\ t.vs_inst_idx = 0)
+Proof
+  rpt gen_tac >> disch_tac >>
+  `?j. j <= Kb /\ fuel_outcome G ctx fn s j
+      (\t. vars_kept N Wv root t /\
+           lookup_var counter t = SOME c /\ lookup_var endpoint t = SOME e /\
+           (at_point be t \/
+            (t.vs_current_bb IN (E UNION {exit;incr}) /\ t.vs_inst_idx = 0)))` by
+    (irule range_body_fragment >> metis_tac[]) >>
+  rename1 `j <= Kb` >>
+  drule fuel_outcome_compose >>
+  disch_then (qspec_then
+    `\t. vars_kept N Wv root t /\
+         lookup_var counter t = SOME c /\ lookup_var endpoint t = SOME e /\
+         t.vs_current_bb IN (E UNION {exit;incr}) /\ t.vs_inst_idx = 0` mp_tac) >>
+  disch_then (qspec_then `1` mp_tac) >>
+  impl_tac
+  >- (gen_tac >> BETA_TAC >> disch_tac >>
+      Cases_on `t.vs_current_bb IN (E UNION {exit;incr}) /\ t.vs_inst_idx = 0`
+      >- (qexists_tac `0` >> simp[] >> irule fuel_outcome_refl >> gvs[]) >>
+      `?jt. jt <= 1 /\ fuel_outcome G ctx fn t jt
+         (\u. vars_kept N Wv root u /\
+              lookup_var counter u = SOME c /\ lookup_var endpoint u = SOME e /\
+              u.vs_current_bb = incr /\ u.vs_inst_idx = 0)` by
+        (irule range_body_tail >> metis_tac[]) >>
+      qexists_tac `jt` >> simp[] >>
+      drule fuel_outcome_weaken >> disch_then irule >> simp[]) >>
+  strip_tac >> qexists_tac `j'` >> simp[] >> decide_tac
+QED
+
+(* Complete body-label bridge. Its bound is independent of runtime
+   memory and of the values of either private loop word. *)
+Theorem range_body_bridge[local]:
+  !G ctx fn bs be Kb Wb E exit incr N p Wv s root counter endpoint c e bb inst tail.
+    frag_fuel Wb {} (E UNION {exit;incr}) bs be Kb /\
+    no_phi_fn fn /\ fn_has_code bs be fn /\ callees_stable G ctx fn /\
+    N <= bs.cs_next_var /\ N <= p /\
+    Wb SUBSET (STRING #"%" (toString p) INSERT
+                 {x | x IN Wv /\ var_below N x}) /\
+    var_below bs.cs_next_var counter /\ counter NOTIN Wb /\
+    var_below bs.cs_next_var endpoint /\ endpoint NOTIN Wb /\
+    lookup_var counter s = SOME c /\ lookup_var endpoint s = SOME e /\
+    vars_kept N Wv root s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    s.vs_inst_idx = 0 /\ get_instruction bb 0 = SOME inst /\
+    bs.cs_current_bb = s.vs_current_bb /\ LENGTH bs.cs_current_insts = 1 /\
+    (inst.inst_opcode = INVALID \/
+     (inst.inst_opcode = MSTORE /\ inst.inst_outputs = [])) /\
+    lookup_block be.cs_current_bb fn.fn_blocks = SOME tail /\
+    (get_instruction tail (LENGTH be.cs_current_insts) = NONE \/
+     ?ji. get_instruction tail (LENGTH be.cs_current_insts) = SOME ji /\
+          ji.inst_opcode = JMP /\ ji.inst_operands = [Label incr]) ==>
+    ?j. j <= Kb + 1 /\ fuel_outcome G ctx fn s j
+      (\t. vars_kept N Wv root t /\
+           lookup_var counter t = SOME c /\ lookup_var endpoint t = SOME e /\
+           t.vs_current_bb IN (E UNION {exit;incr}) /\ t.vs_inst_idx = 0)
+Proof
+  rpt gen_tac >> disch_tac >>
+  Cases_on `inst.inst_opcode = INVALID`
+  >- (qexists_tac `0` >> simp[] >> irule range_body_invalid >> metis_tac[]) >>
+  `fuel_outcome G ctx fn s 0
+     (\t. vars_kept N Wv root t /\
+          lookup_var counter t = SOME c /\ lookup_var endpoint t = SOME e /\
+          at_point bs t)` by
+    (irule range_body_store >> gvs[is_terminator_def]) >>
+  drule fuel_outcome_compose >>
+  disch_then (qspec_then
+    `\t. vars_kept N Wv root t /\
+         lookup_var counter t = SOME c /\ lookup_var endpoint t = SOME e /\
+         t.vs_current_bb IN (E UNION {exit;incr}) /\ t.vs_inst_idx = 0` mp_tac) >>
+  disch_then (qspec_then `Kb + 1` mp_tac) >>
+  simp_tac pure_ss [arithmeticTheory.ADD_CLAUSES] >>
+  disch_then irule >> gen_tac >> BETA_TAC >> disch_tac >>
+  irule range_body_finish >> metis_tac[]
+QED
+
 Theorem fuel_okS_compile_for_range:
   !cenv lctx ty id fty start_e end_e bound body Wv E.
     (!c t e Wv' E'. fuel_ok Wv' {} E' (lower_value compile_expr c t e)) /\
