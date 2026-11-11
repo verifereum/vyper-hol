@@ -199,7 +199,9 @@ Theorem fmp_point_restore_ledger:
   lookup_var runner s = SOME (n2w lo) /\ fmp0 <= lo /\
   fmp_ledger_inv insts lenv fmp0 s lo st.frs_stack /\
   ~MEM runner st.frs_stack ==>
-  ?kept lo'.
+  ?popped kept lo'.
+    fmp_pop_at infos fn (liveness_analyze fn) env (bb.bb_label,k)
+      (EL k bb.bb_instructions) st = (popped,kept) /\
     run_insts fuel ctx prefix s =
       OK (if bases = [] then s else update_var runner (n2w lo') s) /\
     fmp0 <= lo' /\ lo' <= lo /\
@@ -236,7 +238,7 @@ Proof
       qpat_x_assum `bases = []` SUBST_ALL_TAC >>
       qpat_x_assum `fmp_emit_restores _ _ _ = _` mp_tac >>
       simp[fmpLowerDefsTheory.fmp_emit_restores_def] >> strip_tac >>
-      qexistsl [`st.frs_stack`, `lo`] >> simp[run_insts_def] >>
+      qexists `lo` >> simp[run_insts_def] >>
       qexists `[]` >> simp[]) >>
   rename1 `fmp_pop_target popped = SOME target` >>
   drule_all fmp_pop_restore_ledger >> strip_tac >>
@@ -244,7 +246,8 @@ Proof
     metis_tac[fmp_select_point_plan] >>
   `target <> runner` by (strip_tac >> gvs[]) >>
   drule_all fmp_emit_restores_same_exec >> strip_tac >>
-  qexistsl [`kept`, `newtop`] >> simp[] >>
+  qexistsl [`popped`, `kept`, `newtop`] >>
+  conj_tac >- simp[] >> simp[] >>
   simp[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
   irule fmp_ledger_inv_frame >> qexists `s` >>
@@ -376,26 +379,76 @@ QED
  * steps; for any other instruction, the lowered head's run, R, the frontier
  * relation afterwards, and (unless it clears the marks) an unchanged runner
  * and marks. *)
+Theorem EL_segment[local]:
+  LENGTH pre <= j /\ j < LENGTH pre + LENGTH seg ==>
+  EL j (pre ++ seg ++ post) = EL (j - LENGTH pre) seg
+Proof
+  rw[EL_APPEND_EQN]
+QED
+
+(* Splitting a lowered instruction list, so a block can be taken a segment at
+ * a time (e.g. the body before a terminator). *)
+Theorem fmp_lower_indexed_append:
+  !xs k sp restores ys code leftover sp'.
+    fmp_lower_indexed infos ctx runner label k sp restores (xs ++ ys) =
+      SOME (code,leftover,sp') ==>
+    ?c1 l1 sp1 c2.
+      fmp_lower_indexed infos ctx runner label k sp restores xs =
+        SOME (c1,l1,sp1) /\
+      fmp_lower_indexed infos ctx runner label (k + LENGTH xs) sp1 l1 ys =
+        SOME (c2,leftover,sp') /\
+      code = c1 ++ c2
+Proof
+  Induct >- simp[fmpLowerDefsTheory.fmp_lower_indexed_def] >>
+  rpt gen_tac >> simp[fmp_lower_indexed_cons, PULL_EXISTS] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `SUC k + LENGTH xs = k + SUC (LENGTH xs)` by decide_tac >>
+  gvs[] >> metis_tac[APPEND_ASSOC]
+QED
+
 Theorem fmp_lower_block_ledger:
   fmp_reclaim_states infos fn = SOME states /\
   fmp_base_analyze (fn_insts fn) = SOME env /\
   ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\ MEM bb fn.fn_blocks /\
-  fmp_lower_indexed infos ctx runner bb.bb_label 0 supply restores
-    bb.bb_instructions = SOME (code,leftover,supply') /\
-  (!j b. j < LENGTH bb.bb_instructions ==>
+  bb.bb_instructions = pre ++ seg ++ post /\
+  fmp_lower_indexed infos ctx runner bb.bb_label (LENGTH pre) supply restores
+    seg = SOME (code,leftover,supply') /\
+  (!j b. LENGTH pre <= j /\ j < LENGTH pre + LENGTH seg ==>
      (MEM ((bb.bb_label,j),b) restores <=>
       FLOOKUP (fmp_candidate_plan infos ctx fn states) (bb.bb_label,j) =
         SOME b)) /\
   (!j st. j < LENGTH bb.bb_instructions /\
      df_at NONE states bb.bb_label j = SOME st ==> ~MEM runner st.frs_stack) /\
-  df_at NONE states bb.bb_label 0 = SOME st0 /\
+  df_at NONE states bb.bb_label (LENGTH pre) = SOME st0 /\
   lookup_var runner s = SOME (n2w lo0) /\
   fmp_frontier_rel fmp0 raw0 lo0 raw.vs_fmp /\
-  fmp_ledger_inv insts lenv fmp0 s lo0 st0.frs_stack /\ R 0 supply raw s /\
+  fmp_ledger_inv insts lenv fmp0 s lo0 st0.frs_stack /\
+  R (LENGTH pre) supply raw s /\
   (* DALLOCA *)
-  (!j sp sp0 sp1 st kept lo rawj s0 s1 size_op out plus31 mask aligned
-      ai ni mi bi.
-     j < LENGTH bb.bb_instructions /\
+  (!j sp sp0 sp1 st popped kept lop lo rawj s0 s1 bases prefix
+      size_op out plus31 mask aligned ai ni mi bi.
+     LENGTH pre <= j /\ j < LENGTH pre + LENGTH seg /\
+     df_at NONE states bb.bb_label j = SOME st /\
+     fmp_pop_at infos fn (liveness_analyze fn) env (bb.bb_label,j)
+       (EL j bb.bb_instructions) st = (popped,kept) /\
+     (?ps. st.frs_stack = ps ++ kept) /\
+     df_at NONE states bb.bb_label (SUC j) =
+       SOME (fmp_apply_effect infos (EL j bb.bb_instructions)
+         (st with frs_stack := kept)) /\
+     R j sp rawj s0 /\
+     lookup_var runner s0 = SOME (n2w lop) /\
+     fmp_frontier_rel fmp0 raw0 lop rawj.vs_fmp /\
+     fmp_ledger_inv insts lenv fmp0 s0 lop st.frs_stack /\
+     (FLOOKUP (fmp_candidate_plan infos ctx fn states) (bb.bb_label,j) =
+        NONE ==> bases = []) /\
+     (!t. FLOOKUP (fmp_candidate_plan infos ctx fn states) (bb.bb_label,j) =
+        SOME t ==> bases <> [] /\ EVERY (\b. b = t) bases) /\
+     fmp_emit_restores runner sp bases = (prefix,sp0) /\
+     run_insts fuel ctx prefix s0 = OK s1 /\
+     (s1 = s0 \/ s1 = update_var runner (n2w lo) s0) /\ lo <= lop /\
+     fmp_frontier_rel fmp0 raw0 lo rawj.vs_fmp /\
+     lookup_var runner s1 = SOME (n2w lo) /\
+     fmp_ledger_inv insts lenv fmp0 s1 lo kept /\
      (EL j bb.bb_instructions).inst_opcode = DALLOCA /\
      (EL j bb.bb_instructions).inst_operands = [size_op] /\
      (EL j bb.bb_instructions).inst_outputs = [out] /\
@@ -403,21 +456,10 @@ Theorem fmp_lower_block_ledger:
        SOME ([mk_inst ai ADD [Lit 31w;size_op] [plus31];
               mk_inst ni NOT [Lit 31w] [mask];
               mk_inst mi AND [Var plus31;Var mask] [aligned];
-              mk_inst bi BUMP [Var runner;Var aligned] [out;runner]],sp1) /\
-     df_at NONE states bb.bb_label j = SOME st /\
-     (?ps. st.frs_stack = ps ++ kept) /\
-     R j sp rawj s0 /\ fmp_frontier_rel fmp0 raw0 lo rawj.vs_fmp /\
-     (s1 = s0 \/ s1 = update_var runner (n2w lo) s0) /\
-     lookup_var runner
-       s1 =
-       SOME (n2w lo) /\
-     fmp_ledger_inv insts lenv fmp0
-       s1 lo kept ==>
+              mk_inst bi BUMP [Var runner;Var aligned] [out;runner]],sp1) ==>
      ?sz site.
        eval_operand size_op rawj = SOME sz /\
-       eval_operand size_op
-         s1 =
-         SOME sz /\
+       eval_operand size_op s1 = SOME sz /\
        w2n rawj.vs_fmp + ceil32 (w2n sz) < dimword (:256) /\
        ALL_DISTINCT [plus31;mask;aligned;runner;out] /\
        ~MEM out kept /\ ~MEM plus31 kept /\ ~MEM mask kept /\
@@ -430,47 +472,53 @@ Theorem fmp_lower_block_ledger:
            (update_var out (n2w lo)
              (update_var aligned (n2w (ceil32 (w2n sz)))
                (update_var mask (~31w)
-                 (update_var plus31 (sz + 31w)
-                   s1)))))) /\
+                 (update_var plus31 (sz + 31w) s1)))))) /\
   (* everything else *)
-  (!j sp sp0 head sp1 st kept lo rawj s0 s1.
-     j < LENGTH bb.bb_instructions /\
+  (!j sp sp0 head sp1 st popped kept lop lo rawj s0 s1 bases prefix.
+     LENGTH pre <= j /\ j < LENGTH pre + LENGTH seg /\
+     df_at NONE states bb.bb_label j = SOME st /\
+     fmp_pop_at infos fn (liveness_analyze fn) env (bb.bb_label,j)
+       (EL j bb.bb_instructions) st = (popped,kept) /\
+     (?ps. st.frs_stack = ps ++ kept) /\
+     df_at NONE states bb.bb_label (SUC j) =
+       SOME (fmp_apply_effect infos (EL j bb.bb_instructions)
+         (st with frs_stack := kept)) /\
+     R j sp rawj s0 /\
+     lookup_var runner s0 = SOME (n2w lop) /\
+     fmp_frontier_rel fmp0 raw0 lop rawj.vs_fmp /\
+     fmp_ledger_inv insts lenv fmp0 s0 lop st.frs_stack /\
+     (FLOOKUP (fmp_candidate_plan infos ctx fn states) (bb.bb_label,j) =
+        NONE ==> bases = []) /\
+     (!t. FLOOKUP (fmp_candidate_plan infos ctx fn states) (bb.bb_label,j) =
+        SOME t ==> bases <> [] /\ EVERY (\b. b = t) bases) /\
+     fmp_emit_restores runner sp bases = (prefix,sp0) /\
+     run_insts fuel ctx prefix s0 = OK s1 /\
+     (s1 = s0 \/ s1 = update_var runner (n2w lo) s0) /\ lo <= lop /\
+     fmp_frontier_rel fmp0 raw0 lo rawj.vs_fmp /\
+     lookup_var runner s1 = SOME (n2w lo) /\
+     fmp_ledger_inv insts lenv fmp0 s1 lo kept /\
      (EL j bb.bb_instructions).inst_opcode <> DALLOCA /\
      fmp_lower_inst infos ctx runner sp0 (EL j bb.bb_instructions) =
-       SOME (head,sp1) /\
-     df_at NONE states bb.bb_label j = SOME st /\
-     (?ps. st.frs_stack = ps ++ kept) /\
-     R j sp rawj s0 /\ fmp_frontier_rel fmp0 raw0 lo rawj.vs_fmp /\
-     (s1 = s0 \/ s1 = update_var runner (n2w lo) s0) /\
-     lookup_var runner
-       s1 =
-       SOME (n2w lo) /\
-     fmp_ledger_inv insts lenv fmp0
-       s1 lo kept ==>
+       SOME (head,sp1) ==>
      ?next raw' lo'.
-       run_insts fuel ctx head
-         s1 =
-         OK next /\
+       run_insts fuel ctx head s1 = OK next /\
        R (SUC j) sp1 raw' next /\
        lookup_var runner next = SOME (n2w lo') /\
        fmp_frontier_rel fmp0 raw0 lo' raw'.vs_fmp /\
        (~fmp_clears_marks infos (EL j bb.bb_instructions) ==>
         lo' = lo /\
-        !v. MEM v kept ==>
-          lookup_var v next =
-          lookup_var v
-            s1)) ==>
+        !v. MEM v kept ==> lookup_var v next = lookup_var v s1)) ==>
   ?final rawn st lo.
     run_insts fuel ctx code s = OK final /\
-    R (LENGTH bb.bb_instructions) supply' rawn final /\
-    df_at NONE states bb.bb_label (LENGTH bb.bb_instructions) = SOME st /\
+    R (LENGTH pre + LENGTH seg) supply' rawn final /\
+    df_at NONE states bb.bb_label (LENGTH pre + LENGTH seg) = SOME st /\
     lookup_var runner final = SOME (n2w lo) /\
     fmp_frontier_rel fmp0 raw0 lo rawn.vs_fmp /\
     fmp_ledger_inv insts lenv fmp0 final lo st.frs_stack
 Proof
   strip_tac >>
   qabbrev_tac `binv = \j sp plan st.
-    (!j' b. j <= j' /\ j' < LENGTH bb.bb_instructions ==>
+    (!j' b. j <= j' /\ j' < LENGTH pre + LENGTH seg ==>
        (MEM ((bb.bb_label,j'),b) plan <=>
         FLOOKUP (fmp_candidate_plan infos ctx fn states) (bb.bb_label,j') =
           SOME b)) /\
@@ -480,19 +528,27 @@ Proof
       fmp_frontier_rel fmp0 raw0 lo rawj.vs_fmp /\
       fmp_ledger_inv insts lenv fmp0 st lo ast.frs_stack` >>
   `?final. run_insts fuel ctx code s = OK final /\
-     binv (0 + LENGTH bb.bb_instructions) supply' leftover final`
+     binv (LENGTH pre + LENGTH seg) supply' leftover final`
     suffices_by
     (strip_tac >> qexists `final` >> gvs[Abbr `binv`] >> metis_tac[]) >>
-  `binv 0 supply restores s` by (simp[Abbr `binv`] >> metis_tac[]) >>
+  `binv (LENGTH pre) supply restores s` by
+    (simp[Abbr `binv`] >> metis_tac[]) >>
   irule fmp_lower_indexed_exec_el >>
   qexistsl [`infos`, `bb.bb_label`, `restores`, `runner`, `supply`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   simp[Abbr `binv`] >>
   rpt gen_tac >> strip_tac >>
   rename1 `df_at NONE states bb.bb_label j = SOME ast` >>
+  `EL (j - LENGTH pre) seg = EL j bb.bb_instructions` by
+    (`EL j (pre ++ seg ++ post) = EL (j - LENGTH pre) seg` by
+       (irule EL_segment >> fs[]) >>
+     metis_tac[]) >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  `j < LENGTH bb.bb_instructions` by fs[] >>
   `!b. MEM ((bb.bb_label,j),b) plan <=>
      FLOOKUP (fmp_candidate_plan infos ctx fn states) (bb.bb_label,j) =
        SOME b` by simp[] >>
+  drule_all fmp_select_point_plan >> strip_tac >>
   `~MEM runner ast.frs_stack` by metis_tac[] >>
   `fmp0 <= lo` by fs[fmp_frontier_rel_def] >>
   drule_all fmp_point_restore_ledger >>
@@ -500,8 +556,7 @@ Proof
   rename1 `fmp_ledger_inv _ _ _ _ lr kept` >>
   `fmp_frontier_rel fmp0 raw0 lr rawj.vs_fmp` by
     metis_tac[fmp_restore_frontier] >>
-  qpat_x_assum `fmp_frontier_rel fmp0 raw0 lo rawj.vs_fmp` kall_tac >>
-  `!j'' b. SUC j <= j'' /\ j'' < LENGTH bb.bb_instructions ==>
+  `!j'' b. SUC j <= j'' /\ j'' < LENGTH pre + LENGTH seg ==>
      (MEM ((bb.bb_label,j''),b) later <=>
       FLOOKUP (fmp_candidate_plan infos ctx fn states) (bb.bb_label,j'') =
         SOME b)` by
@@ -514,10 +569,12 @@ Proof
   >- rw[Abbr `restored`] >>
   Cases_on `(EL j bb.bb_instructions).inst_opcode = DALLOCA`
   >- (drule_all fmp_lower_inst_dalloca_shape >> strip_tac >>
-      first_x_assum (qspecl_then [`j`, `sp`, `sp0`, `sp1`, `ast`, `kept`,
-          `lr`, `rawj`, `st`, `restored`, `size_op`, `out`, `plus31`, `mask`,
-          `aligned`, `ai`, `ni`, `mi`, `bi`] mp_tac) >>
-      impl_tac >- (simp[] >> metis_tac[]) >>
+      first_x_assum (qspecl_then [`j`, `sp`, `sp0`, `sp1`, `ast`, `popped`,
+          `kept`, `lo`, `lr`, `rawj`, `st`, `restored`, `bases`, `prefix`,
+          `size_op`, `out`, `plus31`, `mask`, `aligned`, `ai`, `ni`, `mi`,
+          `bi`] mp_tac) >>
+      impl_tac
+      >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
       strip_tac >>
       drule_all fmp_frontier_rel_dalloca >> strip_tac >>
       qspecl_then [`fuel`, `ctx`, `restored`, `size_op`, `sz`, `n2w lr`,
@@ -539,8 +596,10 @@ Proof
          venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
          finite_mapTheory.FLOOKUP_UPDATE])
   >> first_x_assum (qspecl_then [`j`, `sp`, `sp0`, `head`, `sp1`, `ast`,
-       `kept`, `lr`, `rawj`, `st`, `restored`] mp_tac) >>
-  impl_tac >- (simp[] >> metis_tac[]) >>
+       `popped`, `kept`, `lo`, `lr`, `rawj`, `st`, `restored`, `bases`,
+       `prefix`] mp_tac) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
   strip_tac >>
   qexists `next` >> conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl [`raw'`, `lo'`] >>

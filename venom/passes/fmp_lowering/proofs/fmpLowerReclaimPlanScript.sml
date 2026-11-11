@@ -7,7 +7,7 @@
 Theory fmpLowerReclaimPlan
 Ancestors
   fmpLowerProps fmpLowerIndexedProps fmpLedgerProps fmpReclaimProps
-  fmpReclaimDefs dfAnalyzeDefs venomInst alist rich_list list finite_map
+  fmpReclaimDefs dfAnalyzeDefs venomExecProps venomInst alist rich_list list finite_map
   pair arithmetic
 
 (* ===== Ledger invariant with a floor ===== *)
@@ -151,14 +151,6 @@ QED
 
 (* ===== Populated states along a block ===== *)
 
-Theorem lookup_block_distinct:
-  !bbs. ALL_DISTINCT (MAP (\b. b.bb_label) bbs) /\ MEM bb bbs ==>
-    lookup_block bb.bb_label bbs = SOME bb
-Proof
-  Induct >> rw[lookup_block_def, FIND_thm] >>
-  gvs[lookup_block_def, MEM_MAP] >> metis_tac[]
-QED
-
 Theorem fmp_fold_forward_other_label:
   !insts idx acc m. l <> lbl ==>
     FLOOKUP (SND (fmp_fold_forward transfer lbl insts idx acc m)) (l,k) =
@@ -224,7 +216,9 @@ Theorem fmp_populate_df_at:
     fmp_run_prefix transfer bb.bb_label (TAKE k bb.bb_instructions) 0
       (fmp_joined entry cfg states bb.bb_label)
 Proof
-  strip_tac >> drule_all lookup_block_distinct >> strip_tac >>
+  strip_tac >>
+  `lookup_block bb.bb_label bbs = SOME bb` by
+    metis_tac[venomExecPropsTheory.MEM_lookup_block] >>
   qmatch_goalsub_abbrev_tac `_ = v` >>
   `FLOOKUP (fmp_populate transfer entry cfg bbs states).ds_inst
      (bb.bb_label,k) = SOME v` suffices_by simp[df_at_def] >>
@@ -299,7 +293,8 @@ Theorem fmp_reclaim_states_df_at_exit:
       fn.fn_blocks states bb.bb_label)
 Proof
   strip_tac >> drule fmp_reclaim_states_populate >> strip_tac >> gvs[] >>
-  drule_all lookup_block_distinct >> strip_tac >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    metis_tac[venomExecPropsTheory.MEM_lookup_block] >>
   simp[fmp_populate_df_at, fmp_fold_at_def, fmp_fold_forward_final,
        fmp_populate_joined]
 QED
@@ -341,7 +336,7 @@ Proof
         rw[EQ_IMP_THM]
         >- (`lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
              lookup_block bb'.bb_label fn.fn_blocks = SOME bb'` by
-              metis_tac[lookup_block_distinct] >>
+              metis_tac[venomExecPropsTheory.MEM_lookup_block] >>
             `bb' = bb` by gvs[] >> gvs[])
         >> qexists `bb` >> simp[]) >>
   Cases_on `ALOOKUP cands pt`
