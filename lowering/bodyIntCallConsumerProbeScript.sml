@@ -35,7 +35,10 @@ Proof
   >- (gvs[] >> simp[Once type_memory_bytes_def]) >>
   simp[Once compile_store_memory_typed_def,
        is_word_type_def, is_bytestring_type_def] >>
-  simp[Once compile_store_memory_typed_def] >> gvs[]
+  simp[Once compile_store_memory_typed_def] >> gvs[] >> rw[] >>
+  `type_memory_bytes ce (ArrayT de (Fixed n)) = n * type_memory_bytes ce de` by
+    simp[Once type_memory_bytes_def] >>
+  gvs[]
 QED
 
 (* Actual storage unwrap followed by the compiler's memory staging branch. *)
