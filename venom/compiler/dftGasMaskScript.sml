@@ -5299,6 +5299,31 @@ Proof
        venomInstTheory.is_terminator_def, update_var_def]
 QED
 
+(* The successful invocation successor uses the actual source entry a.
+   The residual clause, not equality of cursors, supplies its endpoint. *)
+Theorem source_cut_invoke_successor[local]:
+  !fuel C C' x out w a t u tail.
+    x.inst_opcode = INVOKE /\
+    ~MEM (Var out) x.inst_operands /\ ~MEM out x.inst_outputs /\
+    step_inst fuel C' x t = OK u /\
+    residual_result tail (step_inst fuel C' x t)
+      (step_inst fuel C x
+        ((update_var out w a) with vs_inst_idx := SUC a.vs_inst_idx)) ==>
+    ?v. step_inst fuel C x a = OK v /\
+      (u with vs_gas_readings := tail) =
+        (update_var out w v with vs_inst_idx := SUC a.vs_inst_idx)
+Proof
+  rpt strip_tac >>
+  `step_inst fuel C x (update_var out w a) =
+    (case step_inst fuel C x a of
+       OK v => OK (update_var out w v)
+     | Halt v => Halt v | Abort b v => Abort b v
+     | IntRet ir v => IntRet ir v | Error e => Error e)` by
+    (irule dftCommutationTheory.step_inst_invoke_frame >> simp[]) >>
+  Cases_on `step_inst fuel C x a` >>
+  gvs[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
