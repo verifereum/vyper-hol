@@ -149,3 +149,27 @@ Proof
   gvs[comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[comp_return_def, vv_type_def])
 QED
+
+Theorem call_result_tag:
+  compile_call cfn ce ann ty target args dflt sa = (vv,sb) ==>
+  vv_type vv = (case target of IntCall fid =>
+    ce.ce_func_return_type (nsid_to_string fid) | _ => ann)
+Proof
+  Cases_on `target` >>
+  gvs[AllCaseEqs()] >>
+  rpt (pairarg_tac >> fs[]) >> simp[compile_call_def] >>
+  rpt (pairarg_tac >> fs[]) >>
+  rpt IF_CASES_TAC >>
+  rpt (pairarg_tac >> fs[]) >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs(), as_stack_val_pair, vv_type_def] >>
+  rpt (pairarg_tac >> gvs[as_stack_val_pair, vv_type_def]) >>
+  gvs[AllCaseEqs(), vv_type_def]
+  >~ [`ExtCall _ _ info _`] >-
+    (PairCases_on `info` >> gvs[compile_call_def] >>
+     rpt (pairarg_tac >> fs[]) >> rpt IF_CASES_TAC >>
+     rpt (pairarg_tac >> fs[]) >>
+     gvs[AllCaseEqs(), vv_type_def] >>
+     rpt (pairarg_tac >> gvs[vv_type_def]) >>
+     gvs[AllCaseEqs(), vv_type_def])
+QED
