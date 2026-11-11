@@ -1789,3 +1789,141 @@ Proof
   qexists `full` >> gvs[stackOpSimTheory.execute_plan_append,
     planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def]
 QED
+
+Theorem istore_plan_decompose:
+  inst.inst_opcode = ISTORE /\ inst_wf inst /\
+  inst.inst_operands = [dst; value] /\
+  generate_inst_plan liveness dfg cfg fn inst nl halt term bb ps = SOME (ops,qs) ==>
+  inst.inst_outputs = [] /\ compute_operands inst = [dst; value] /\
+  ?iops prepared rops arranged.
+    emit_input_plan ISTORE [dst; value] nl ps = (iops,prepared) /\
+    reorder_plan dfg [dst; value] prepared = (rops,arranged) /\
+    ops = iops ++ rops ++ [SOEmit "SWAP1"; SOEmit "MSTORE"] /\
+    qs = release_dead_spills nl (arranged with ps_stack := stack_pop 2 arranged.ps_stack)
+Proof
+  strip_tac >>
+  `inst.inst_outputs = []` by gvs[venomWfTheory.inst_wf_def] >>
+  `compute_operands inst = [dst; value]` by
+    simp[compute_operands_def, venomInstTheory.python_stack_operands_def, venomInstTheory.ir_specific_operand_order_def] >>
+  simp[] >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, generate_regular_inst_plan_def,
+    is_pre_codegen_opcode_def, venomEffectsTheory.is_commutative_def, venomInstTheory.is_param_opcode_def,
+    is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  simp[generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def] >>
+  strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem sym_istore_prepared_run:
+  inst.inst_opcode = ISTORE /\ inst.inst_operands = [dst; value] /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ fn_shape_ok fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  asm_sym_rel p env cs (ss with sym_stack := localtop) /\
+  sym_kinds_ok cplan fn ret [] ps (ss with sym_stack := localtop) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\ ss.sym_stack = localtop ++ srest /\
+  venom_asm_rel lo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  ps.ps_stack = residual ++ inst.inst_operands /\
+  EVERY (\op. op <> dead_stack_marker) inst.inst_operands /\
+  (!op. MEM op inst.inst_operands ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) lo op) /\
+  context_source_memory_writes_disjoint cplan inst vs /\
+  asm_block_at p ss.sym_base.as_pc [AsmOp "SWAP1"; AsmOp "MSTORE"] ==>
+  ?full. sym_steps p env 2 ss = SymOK full /\
+    full.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest
+      (release_dead_spills nl (ps with ps_stack := stack_pop 2 ps.ps_stack)) full
+Proof
+  strip_tac >>
+  `?w off tail. localtop = Val w :: Val off :: tail /\
+    (!b. b IN FDOM ss.sym_mem_labels ==> ~in_mem_range (w2n off) 32 b)` by
+    (drule_at (Pat `venom_asm_rel _ _ _ _`) sym_istore_prepared_safe >>
+     disch_then (drule_at (Pat `asm_sym_rel _ _ _ _`)) >>
+     disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >> simp[] >> metis_tac[]) >>
+  `ss.sym_stack = Val w :: Val off :: (tail ++ srest)` by simp[] >>
+  drule_all sym_istore_success_run >> disch_then (qspec_then `env` assume_tac) >>
+  goal_assum (drule_at Any) >> simp[] >> irule sym_kinds_ok_release_dead_spills >>
+  irule sym_emit_kinds_pop >> qexistsl [`2`, `ps`, `ss`] >> simp[]
+QED
+
+Theorem sym_istore_inst_symbolic_run:
+  lo = SND (compute_label_offsets prog) /\
+  inst.inst_opcode = ISTORE /\ inst_wf inst /\ inst.inst_operands = [dst; value] /\
+  source_memory_reads_disjoint cplan inst vs /\
+  context_source_memory_writes_disjoint cplan inst vs /\
+  opaque_use_ok fn /\ ~is_param_opcode inst.inst_opcode /\
+  ~is_terminator inst.inst_opcode /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
+  qs.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  generated_plan_state_wf_marked sb ps /\ codegen_ready_fn fn /\
+  MEM inst (fn_insts fn) /\
+  LENGTH [dst; value] <= LENGTH (SND (emit_input_plan ISTORE [dst; value] nl ps)).ps_stack /\
+  (!op. MEM op [dst; value] /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  (!l. MEM (Label l) [dst; value] ==> IS_SOME (FLOOKUP lo l)) /\
+  (!op. MEM op [dst; value] ==> eval_operand op (frame_view fn ra vs) =
+    operand_val (frame_view fn ra vs) lo op) /\
+  (!op at. MEM op [dst; value] /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at [dst; value]) /\
+    operand_equiv dfg op at ==> operand_val (frame_view fn ra vs) lo op =
+      operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) [dst; value] /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs cs /\
+  generate_inst_plan liveness dfg cfg fn inst nl halt term bb ps = SOME (ops,qs) /\
+  asm_block_at prog cs.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
+  dfg = dfg_build_function fn /\ MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\
+  label_flow_ok ctx /\ asm_static_wf prog /\
+  sym_frame_inv prog env ctx cplan fn ret srest labs0 ps cs ss /\
+  step_inst fuel ctx inst vs = OK vsout ==>
+  ?final. sym_steps prog env (LENGTH (execute_plan cplan.cp_initial_fmp ops)) ss = SymOK final /\
+    sym_kinds_ok cplan fn ret srest qs final /\
+    (!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan fn.fn_name b ==>
+      FLOOKUP final.sym_mem_labels b = FLOOKUP labs0 b)
+Proof
+  strip_tac >> drule_all istore_plan_decompose >> strip_tac >>
+  rename1 `emit_input_plan ISTORE [dst; value] nl ps = (iops,prepared)` >>
+  rename1 `reorder_plan _ [dst; value] prepared = (rops,arranged)` >>
+  `r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+   arranged.ps_alloc.sa_next_offset <= r.sr_spill_end` by
+    (gvs[allocMonoTheory.release_dead_spills_spill_base,
+      allocMonoTheory.release_dead_spills_next_offset] >>
+     metis_tac[allocMonoTheory.emit_input_plan_spill_base,
+       allocMonoTheory.reorder_plan_spill_base]) >>
+  `EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
+   asm_block_at prog cs.as_pc (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
+    gvs[listTheory.EVERY_APPEND, stackOpSimTheory.execute_plan_append,
+      stackOpSimTheory.asm_block_at_append] >>
+  `emit_input_plan inst.inst_opcode [dst; value] nl ps = (iops,prepared)` by simp[] >>
+  drule_at (Pat `step_inst _ _ _ _ = _`) sym_frame_selected_prefix_paired >>
+  disch_then (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> disch_then (qspecl_then [`sb`, `r`, `cplan.cp_initial_fmp`, `qs`] mp_tac) >>
+  (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >>
+  rename1 `sym_steps prog env _ ss = SymOK ready` >>
+  rename1 `asm_sym_rel prog env mid (ready with sym_stack := localtop)` >>
+  `asm_block_at prog ready.sym_base.as_pc [AsmOp "SWAP1"; AsmOp "MSTORE"]` by
+    gvs[stackOpSimTheory.execute_plan_append, planExecTheory.execute_plan_def,
+      planExecTheory.exec_stack_op_def, stackOpSimTheory.asm_block_at_append] >>
+  drule_at (Pat `venom_asm_rel _ arranged _ mid`) sym_istore_prepared_run >>
+  disch_then (drule_at (Pat `asm_sym_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ [] _ _`)) >>
+  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ ready`)) >>
+  disch_then (drule_at (Pat `inst.inst_opcode = ISTORE`)) >>
+  simp[] >> disch_then (qspecl_then [`stack_pop 2 arranged.ps_stack`, `nl`, `ctx`] mp_tac) >>
+  (impl_tac >- (gvs[venomMemPropsTheory.eval_operand_with_memory,
+    genFrameSimTheory.operand_val_memory_update] >> metis_tac[])) >> strip_tac >>
+  rename1 `sym_steps prog env 2 ready = SymOK full` >>
+  `!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
+    FLOOKUP full.sym_mem_labels b = FLOOKUP ready.sym_mem_labels b` by simp[] >>
+  drule_all sym_frame_suffix_compose >> strip_tac >>
+  qexists `full` >> gvs[stackOpSimTheory.execute_plan_append,
+    planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def] >> metis_tac[]
+QED
