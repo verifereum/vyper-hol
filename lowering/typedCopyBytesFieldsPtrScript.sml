@@ -220,7 +220,7 @@ Resume compile_bytestring_fields_frag_ptr[fields_elements]:
          (impl_tac >- first_assum ACCEPT_TAC) >> (impl_tac >- decide_tac) >>
          (impl_tac >-
            (`doff + w2n b = w2n b + doff` by decide_tac >> asm_rewrite_tac[])) >>
-         simp[]) >>
+         simp_tac (srw_ss()) [MAP, SUM, ADD_CLAUSES]) >>
      rename1 `SUC j < SUC (LENGTH dts)` >>
      simp_tac (srw_ss()) [EL, TAKE_def, MAP, SUM, TL] >>
      qpat_x_assum `!i. i < LENGTH dts ==> !m.

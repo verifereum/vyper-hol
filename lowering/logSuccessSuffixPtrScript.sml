@@ -20,8 +20,8 @@ Proof
 QED
 
 Theorem log_success_suffix_path_ptr:
-  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
-  compile_log_eval_all ce args sa = (xs,sm) /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
+  log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
   stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
@@ -62,6 +62,8 @@ Theorem log_success_suffix_path_ptr:
     (!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==> lookup_var x t = SOME w)
 Proof
   strip_tac >>
+  `EVERY (supported_scalar_type o SND) xs` by
+    (fs[LIST_REL_EL_EQN, EVERY_EL] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `SUM (MAP (type_memory_bytes ce) data_tys) < dimword(:256)` >>
   `MAP SND (SND (split_log_ops xs flags)) = data_tys` by
     (simp[Abbr `data_tys`] >> metis_tac[split_log_ops_data_types]) >>

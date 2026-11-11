@@ -8,7 +8,7 @@ Ancestors
   abiBuiltinAllocation emitHelperProps venomInst words list arithmetic
 
 Theorem log_staged_entry_state_ptr:
-  compile_log_store_data ce xs (Var buf) off sa = ((),sb) /\
+  compile_log_store_data ce xs (MAP SND xs) (Var buf) off sa = ((),sb) /\
   EVERY (supported_scalar_type o SND) xs /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   log_write_frame sa (b+off)
@@ -57,7 +57,7 @@ Proof
 QED
 
 Theorem compile_log_store_data_ready_path_ptr:
-  compile_log_store_data ce xs (Var buf) 0 sa = ((),sb) /\
+  compile_log_store_data ce xs (MAP SND xs) (Var buf) 0 sa = ((),sb) /\
   LIST_REL (log_data_source cx b cap s) xs vs /\
   LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op G tn s) xs vs /\
   EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\

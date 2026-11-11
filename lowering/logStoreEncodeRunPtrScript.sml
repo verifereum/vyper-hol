@@ -20,7 +20,7 @@ QED
 
 Theorem log_source_store_encode_path_ptr:
   compile_alloc_buffer cap st = (buf,start) /\ fn_has_code st start func /\
-  compile_log_store_data ce xs buf.buf_operand 0 start = ((),mid) /\
+  compile_log_store_data ce xs (MAP SND xs) buf.buf_operand 0 start = ((),mid) /\
   compile_alloc_buffer outcap mid =
     (dst,prepared) /\ fn_has_code mid prepared func /\
   compile_abi_encode_to_buf dst.buf_operand buf.buf_operand

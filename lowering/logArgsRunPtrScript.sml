@@ -7,7 +7,7 @@ Ancestors
   gasSummary fragGasPath fragGasMode
   loweringSlice exprLoweringProps freshWrites fragExec emitHelperProps varsExt
   compileEnv loweringStateRelDefs vyperInterpreter vyperState vyperTyping vyperTypeSystem
-  vyperExprNoControl vyperEvalExprPreservesScopesDom list
+  vyperExprNoControl vyperEvalExprPreservesScopesDom list exprLowering
 Libs
   monadsyntax
 
@@ -125,9 +125,10 @@ Theorem compile_log_eval_all_ptr_ind[local]:
     expr_sim_inv cenv cx env0 es0 /\
     (!id t. FLOOKUP env.var_types id = SOME t ==>
        ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) ==>
-    !args es sa xs sb s0 G0 tn0.
+    !args es sa xs sb s0 G0 tn0 ops.
     R args es /\ EVERY supported_scalar_type (MAP expr_type args) /\
-    compile_log_eval_all cenv args sa = (xs,sb) /\
+    ~exprs_can_mutate cenv args /\ compile_log_eval_all cenv args sa = (ops,sb) /\
+    xs = ZIP (MAP FST ops, MAP expr_type args) /\
     gas_admissible (eval_exprs cx args)
       (\r. !exc. r = INR exc ==> expr_res_ok (INR exc : value + exception)) es /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
@@ -144,14 +145,16 @@ Theorem compile_log_eval_all_ptr_ind[local]:
       (\res ee gt r. expr_exit res r)
 Proof
   rpt gen_tac >> strip_tac >> Induct
-  >- (rpt gen_tac >> strip_tac >> gvs[compile_log_eval_all_nil] >>
+  >- (rpt gen_tac >> strip_tac >> gvs[compile_log_eval_all_nil, ZIP_def] >>
       simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
       simp[gas_summary_ptr_at_def] >>
       qexistsl_tac [`INL []`, `es`, `G0`, `tn0`, `OK s0`] >>
       simp[Once evaluate_def, return_def, log_eval_ptr_post_def,
            log_args_post_def, wb_frame_refl, ghost_kept_refl, ghost_inv_gas_obs] >>
       irule (cj 1 gas_path_ptr_rules) >> simp[]) >>
-  rpt gen_tac >> strip_tac >> gvs[compile_log_eval_all_cons] >>
+  rpt gen_tac >> strip_tac >> gvs[expr_can_mutate_def] >>
+  qpat_x_assum `compile_log_eval_all _ (_::_) _ = _` mp_tac >>
+  simp[compile_log_eval_all_unsaved_cons] >> strip_tac >> gvs[ZIP_def] >>
   suspend "cons"
 QED
 
@@ -164,7 +167,7 @@ Resume compile_log_eval_all_ptr_ind[cons]:
      simp[] >> metis_tac[compile_lower_value_var]) >>
   `cs_extends sm sb /\ sm.cs_next_var <= sb.cs_next_var /\
    sm.cs_next_id <= sb.cs_next_id` by
-    (drule compile_log_eval_all_grows >> simp[]) >>
+    (drule_all compile_log_eval_all_grows >> simp[]) >>
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
   `expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es` by metis_tac[] >>
@@ -182,7 +185,7 @@ Resume compile_log_eval_all_ptr_ind[cons]:
   (impl_tac >- simp[]) >> rewrite_tac[eval_exprs_cons_bind] >>
   disch_then (strip_assume_tac o REWRITE_RULE [gas_outcome_ptr_def])
   >- suspend "head_summary" >>
-  qpat_x_assum `!es' sa' xs' sb' s0' G0' tn0'. _` kall_tac >>
+  qpat_x_assum `!es' sa' sb' s0' G0' tn0' ops'. _` kall_tac >>
   simp[gas_outcome_ptr_def] >> qexists_tac `marks` >> disj2_tac >>
   rename1 `gas_exempt_cert _ _ _ _ _ marks (err,ee) (leaf,fin)` >>
   qexistsl_tac [`err`, `ee`, `leaf`, `fin`] >>
@@ -194,7 +197,7 @@ Resume compile_log_eval_all_ptr_ind[head_summary]:
   qpat_x_assum `gas_summary_ptr_at _ _ _ _ _ _ _ _` mp_tac >>
   simp[gas_summary_ptr_at_marked] >> strip_tac
   >- suspend "head_value" >>
-  qpat_x_assum `!es' sa' xs' sb' s0' G0' tn0'. _` kall_tac >>
+  qpat_x_assum `!es' sa' sb' s0' G0' tn0' ops'. _` kall_tac >>
   `?ex. res = INR ex` by (Cases_on `res` >> gvs[]) >> gvs[] >>
   simp[gas_outcome_ptr_def] >>
   qexists_tac `marks` >> disj1_tac >> simp[gas_summary_ptr_at_marked] >>
@@ -231,8 +234,8 @@ Resume compile_log_eval_all_ptr_ind[head_value]:
       (INL v, es_end with gas_obs := [])` by
        (CONV_TAC (DEPTH_CONV ETA_CONV) >> first_assum ACCEPT_TAC) >>
      drule forced_eval_expr_preserves_scopes_dom >> simp[]) >>
-  qpat_x_assum `!es' sa' xs' sb' s0' G0' tn0'. _`
-    (qspecl_then [`es_end with gas_obs := []`, `sm`, `ys`, `sb`, `t`, `G`, `tn`] mp_tac) >>
+  qpat_x_assum `!es' sa' sb' s0' G0' tn0' ops'. _`
+    (qspecl_then [`es_end with gas_obs := []`, `sm`, `sb`, `t`, `G`, `tn`, `ys`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[not_fresh_at_mono])) >>
   strip_tac >>
   qpat_x_assum `!e tail es. _` kall_tac >>
@@ -270,7 +273,7 @@ QED
 Finalise compile_log_eval_all_ptr_ind
 
 Theorem compile_log_eval_all_ptr:
-  !args d ctx PG func cenv cx R es sa xs sb s0 G0 tn0 env env0 es0.
+  !args d ctx PG func cenv cx R es sa xs sb s0 G0 tn0 env env0 es0 ops.
     (!e tail es. R (e::tail) es ==>
        expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es /\
        !v es1. bind (eval_expr cx e) (read_result cx) es = (INL v, es1) ==>
@@ -279,7 +282,8 @@ Theorem compile_log_eval_all_ptr:
               value_has_type tv v) /\
     (!tail es gs. R tail es ==> R tail (es with gas_obs := gs)) /\
     R args es /\ EVERY supported_scalar_type (MAP expr_type args) /\
-    compile_log_eval_all cenv args sa = (xs,sb) /\
+    ~exprs_can_mutate cenv args /\ compile_log_eval_all cenv args sa = (ops,sb) /\
+    xs = ZIP (MAP FST ops, MAP expr_type args) /\
     gas_admissible (eval_exprs cx args)
       (\r. !exc. r = INR exc ==> expr_res_ok (INR exc : value + exception)) es /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
@@ -326,7 +330,7 @@ QED
 (* The semantic frame for the statement entry needs scope domains as well
    as the pointer post.  Both are already proved by the same evaluation induction. *)
 Theorem compile_log_eval_all_scopes_ptr:
-  !args d ctx PG func cenv cx R es sa xs sb s0 G0 tn0 env env0 es0.
+  !args d ctx PG func cenv cx R es sa xs sb s0 G0 tn0 env env0 es0 ops.
     (!e tail es. R (e::tail) es ==>
        expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es /\
        !v es1. bind (eval_expr cx e) (read_result cx) es = (INL v, es1) ==>
@@ -335,7 +339,8 @@ Theorem compile_log_eval_all_scopes_ptr:
               value_has_type tv v) /\
     (!tail es gs. R tail es ==> R tail (es with gas_obs := gs)) /\
     R args es /\ EVERY supported_scalar_type (MAP expr_type args) /\
-    compile_log_eval_all cenv args sa = (xs,sb) /\
+    ~exprs_can_mutate cenv args /\ compile_log_eval_all cenv args sa = (ops,sb) /\
+    xs = ZIP (MAP FST ops, MAP expr_type args) /\
     gas_admissible (eval_exprs cx args)
       (\r. !exc. r = INR exc ==> expr_res_ok (INR exc : value + exception)) es /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
