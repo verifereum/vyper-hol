@@ -57,14 +57,14 @@ Proof
   metis_tac[ao_ssa_producer_operand_not_output]
 QED
 
-Theorem ac_cursor_old_equations_step:
-  wf_function fn /\ wf_ssa fn /\ ac_cursor_inv fn bb idx s /\
+Theorem ac_old_equations_step_frame:
+  wf_function fn /\ wf_ssa fn /\ MEM bb fn.fn_blocks /\
+  ac_dfg_inv_local (dfg_build_function fn) (ac_def_before fn bb idx) s /\
   idx < LENGTH bb.bb_instructions /\
   step_inst fuel ctx (EL idx bb.bb_instructions) s = OK t ==>
   ac_dfg_inv_local (dfg_build_function fn) (ac_def_before fn bb idx) t
 Proof
   rpt strip_tac >>
-  `MEM bb fn.fn_blocks` by fs[ac_cursor_inv_def] >>
   `!di v. ac_def_before fn bb idx di /\ MEM v di.inst_outputs ==>
      lookup_var v t = lookup_var v s` by
     (rpt strip_tac >> irule step_inst_preserves_lookup >>
@@ -85,6 +85,15 @@ Proof
   `!op. MEM op inst.inst_operands ==> eval_operand op t = eval_operand op s`
     by metis_tac[] >>
   fs[] >> metis_tac[]
+QED
+
+Theorem ac_cursor_old_equations_step:
+  wf_function fn /\ wf_ssa fn /\ ac_cursor_inv fn bb idx s /\
+  idx < LENGTH bb.bb_instructions /\
+  step_inst fuel ctx (EL idx bb.bb_instructions) s = OK t ==>
+  ac_dfg_inv_local (dfg_build_function fn) (ac_def_before fn bb idx) t
+Proof
+  simp[ac_cursor_inv_def] >> metis_tac[ac_old_equations_step_frame]
 QED
 
 Theorem ac_cursor_current_equations_step:
