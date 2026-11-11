@@ -6282,5 +6282,7 @@ Theorem sym_revert_forward_frame_sim_deep:
         venom_asm_terminal_rel vs' as' /\
         sym_terminal (sym_steps prog env n ss)
 Proof
-  cheat
+  rpt strip_tac >>
+  drule rf_spills_separated_entry_marked >> disch_tac >>
+  drule_all sym_rf_entry_forward_abort >> simp[]
 QED
