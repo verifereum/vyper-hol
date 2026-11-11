@@ -274,8 +274,8 @@ Proof
       window_array_inv ctx func owner ids ei asz msz active ty avs src dst
         ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) v` by
     (rpt gen_tac >> strip_tac >> Cases_on `active` >> full_simp_tac bool_ss []
-     >- (irule window_array_dynamic_round_mem >> goal_assum (drule_at Any) >> metis_tac[]) >>
-     irule window_array_static_round_mem >> goal_assum (drule_at Any) >> metis_tac[]) >>
+     >- metis_tac[window_array_dynamic_round_mem] >>
+     metis_tac[window_array_static_round_mem]) >>
   irule window_array_control_loop_mem >>
   full_simp_tac bool_ss [abi_encoder_array_loop_code_def] >> conj_tac
   >- metis_tac[] >>

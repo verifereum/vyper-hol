@@ -2,6 +2,7 @@
 Theory abiEncoderWindowControlMem
 Ancestors
   abiEncoderWindowArrayLoop abiEncoderArrayHeader abiDecoderExecution
+  abiEncoderWindowMemFrame allocaHistory allocaFootprint exprLoweringProps intCallCallee
   memControlFlow memSafeRun instMemFrontier emitHelperProps venomExecProofs venomExecSemantics
   venomState venomInst words arithmetic list rich_list
 
@@ -126,11 +127,17 @@ Theorem window_array_header_run_mem:
       (abi_encode_array_header_state iv cmp done i n s)) /\
   mem_cont_sim ctx func s
     (jump_to (if i<n then body_lbl else exit_lbl)
+      (abi_encode_array_header_state iv cmp done i n s)) /\
+  window_mem_frame ctx func s
+    (jump_to (if i<n then body_lbl else exit_lbl)
       (abi_encode_array_header_state iv cmp done i n s))
 Proof
   strip_tac >> conj_tac
   >- (irule window_array_header_run >> metis_tac[]) >>
-  irule array_header_mem_cont >> metis_tac[]
+  conj_tac >- (irule array_header_mem_cont >> metis_tac[]) >>
+  simp[window_mem_frame_def, jump_to_def, abi_encode_array_header_state_def,
+    update_var_def, fmp_room_def, pending_alloca_size_def] >>
+  strip_tac >> irule alloca_history_jump >> simp[] >> qexists `s` >> simp[]
 QED
 
 Theorem window_array_backedge_run_mem:
@@ -148,9 +155,15 @@ Theorem window_array_backedge_run_mem:
   window_array_transition ctx func owner ids outs s
     (jump_to hdr (mstore (w2n p) (n2w (SUC i)) (update_var nv (n2w (SUC i)) s))) /\
   mem_cont_sim ctx func s
+    (jump_to hdr (mstore (w2n p) (n2w (SUC i)) (update_var nv (n2w (SUC i)) s))) /\
+  window_mem_frame ctx func s
     (jump_to hdr (mstore (w2n p) (n2w (SUC i)) (update_var nv (n2w (SUC i)) s)))
 Proof
   strip_tac >> conj_tac
   >- (irule window_array_backedge_run >> metis_tac[]) >>
-  irule array_backedge_mem_cont >> metis_tac[]
+  conj_tac >- (irule array_backedge_mem_cont >> metis_tac[]) >>
+  simp[window_mem_frame_def, jump_to_def, mstore_def,
+    write_memory_with_expansion_def, update_var_def, fmp_room_def,
+    pending_alloca_size_def] >>
+  strip_tac >> irule alloca_history_jump >> simp[] >> qexists `s` >> simp[]
 QED

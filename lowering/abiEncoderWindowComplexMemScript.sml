@@ -31,10 +31,8 @@ Proof
   drule_all window_emit_alloca32_phase_mem >> strip_tac >>
   `st.cs_next_var <= mid.cs_next_var /\ mid.cs_next_id = SUC st.cs_next_id /\
     ?x. dp = Var x /\ not_fresh_at mid x` by
-    (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
-     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_var_def, fresh_id_def, emit_def] >>
-     rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >> simp[not_fresh_at_def]) >>
+    (drule emitHelperPropsTheory.emitted_insts_emit_op >>
+     simp[not_fresh_at_def] >> strip_tac >> asm_rewrite_tac[] >> simp[]) >>
   `b < dimword (:256) /\ regions_disjoint (sb,cap) (b,32) /\
    regions_disjoint (d,LENGTH (enc at (ListV avs))) (b,32)` by
     metis_tac[window_complex_cursor_protected] >>
