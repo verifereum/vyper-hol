@@ -76,6 +76,9 @@ Proof
     (qx_choose_then `G1` (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `eval_operand count_op s1 = SOME (n2w n)` by
     (fs[] >> qspec_then `len` mp_tac buffer_round_size >>
+     `(~31w:bytes32) = i2w (-32)` by
+       (simp[integer_wordTheory.i2w_def] >> blastLib.BBLAST_TAC) >>
+     pop_assum (fn th => PURE_REWRITE_TAC [th]) >>
      simp[vfmConstantsTheory.word_size_def]) >>
   qabbrev_tac `u = s1 with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sc)` >>
   `lookup_var src u = SOME a /\ lookup_var dst u = SOME b /\
