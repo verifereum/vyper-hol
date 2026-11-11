@@ -92,27 +92,29 @@ Proof
   qexistsl_tac [`res`, `ee`, `OK t`, `G'`, `tn'`] >> simp[]
 QED
 
-(* gas_outcome_full_post_mono, with the source run that reached the post
-   and the end state's running flag. *)
+(* gas_outcome_full_post_mono, with the source run that reached the
+   normal post, its emptied observations and the end state's running
+   flag. *)
 Theorem gas_outcome_full_post_source:
   gas_outcome_full (D, lo, explicit, ctx, func, PG) tops source
     (es, s, G, tn) Q R /\
   (!res ee G' tn' t.
      (?xs. !tail. source (es with gas_obs := xs ++ tail) =
                   (res, ee with gas_obs := tail)) /\
-     ~t.vs_halted /\ Q res ee G' tn' t ==> Q' res ee G' tn' t) ==>
+     ee.gas_obs = [] /\ ~t.vs_halted /\ Q res ee G' tn' t ==>
+     Q' res ee G' tn' t) /\
+  (!res ee gt r. R res ee gt r ==> R' res ee gt r) ==>
   gas_outcome_full (D, lo, explicit, ctx, func, PG) tops source
-    (es, s, G, tn) Q' R
+    (es, s, G, tn) Q' R'
 Proof
   rw[gas_outcome_full_def] >> qexists_tac `marks`
   >- (disj1_tac >> qexistsl_tac [`res`, `ee`, `OK t`, `G'`, `tn'`] >>
-      simp[] >> disj1_tac >> first_x_assum irule >>
-      conj_tac
-      >- (qexists_tac `gas_explicit marks s.vs_gas_readings` >> simp[]) >>
-      conj_tac >- metis_tac[gas_origin_ptr_path_projections,
-                            gas_origin_path_erase, gas_marked_path_exec,
-                            gas_path_normal] >>
-      first_assum ACCEPT_TAC)
+      simp[] >> disj1_tac >> first_x_assum irule >> simp[] >>
+      rpt conj_tac
+      >~ [`~t.vs_halted`]
+      >- metis_tac[gas_origin_ptr_path_projections, gas_origin_path_erase,
+                   gas_marked_path_exec, gas_path_normal] >>
+      qexists_tac `gas_explicit marks s.vs_gas_readings` >> simp[])
   >- (disj1_tac >> metis_tac[]) >>
   disj2_tac >> metis_tac[]
 QED
