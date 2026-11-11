@@ -1585,6 +1585,54 @@ Proof
   qexistsl_tac [`A`,`R`] >> gvs[] >> metis_tac[]
 QED
 
+Theorem evaluate_immutable_frame_untyped[local]:
+  (!cx s. ^im_stmt cx s) /\
+  (!cx ss. ^im_stmts cx ss) /\
+  (!cx it. ^im_iterator cx it) /\
+  (!cx tyv nm body vs. ^im_for cx tyv nm body vs) /\
+  (!cx e. ^im_expr cx e) /\
+  (!cx es. ^im_exprs cx es) /\
+  (!cx t. ^im_base cx t) /\
+  (!cx t. ^im_target cx t) /\
+  (!cx g v. ^im_atarget cx g v) /\
+  (!cx gs vs. ^im_atargets cx gs vs) /\
+  (!cx es. ^im_results cx es)
+Proof
+  BETA_TAC >> ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
+  BETA_TAC >> FIRST (map (ACCEPT_TAC o BETA_RULE) [
+    evaluate_immutable_name_case, evaluate_immutable_global_case,
+    evaluate_immutable_flag_case, evaluate_immutable_literal_case,
+    evaluate_immutable_basename_case, evaluate_immutable_baseglobal_case,
+    evaluate_immutable_attribute_case, evaluate_immutable_subscript_case,
+    evaluate_immutable_baseattribute_case, evaluate_immutable_basesubscript_case,
+    evaluate_immutable_target_case, evaluate_immutable_exprs_nil_case,
+    evaluate_immutable_exprs_cons_case, evaluate_immutable_results_nil_case,
+    evaluate_immutable_results_cons_case, evaluate_immutable_struct_case,
+    evaluate_immutable_typebuiltin_case, evaluate_immutable_ifexp_case,
+    evaluate_immutable_pop_case, evaluate_immutable_rawrevert_case,
+    evaluate_immutable_rawlog_case, evaluate_immutable_selfdestruct_case,
+    evaluate_immutable_builtin_case, evaluate_immutable_return_none_case,
+    evaluate_immutable_return_some_case, evaluate_immutable_raise_bare_case,
+    evaluate_immutable_raise_unreachable_case, evaluate_immutable_raise_reason_case,
+    evaluate_immutable_pass_case, evaluate_immutable_break_case,
+    evaluate_immutable_continue_case, evaluate_immutable_exprstmt_case,
+    evaluate_immutable_log_case, evaluate_immutable_annassign_case,
+    evaluate_immutable_array_iterator_case, evaluate_immutable_range_iterator_case,
+    evaluate_immutable_append_case, evaluate_immutable_assign_base_case,
+    evaluate_immutable_augassign_case, evaluate_immutable_stmts_nil_case,
+    evaluate_immutable_stmts_cons_case, evaluate_immutable_assign_tuple_case,
+    evaluate_immutable_if_case, evaluate_immutable_assert_bare_case,
+    evaluate_immutable_assert_unreachable_case, evaluate_immutable_assert_reason_case,
+    evaluate_immutable_raise_custom_case, evaluate_immutable_assert_custom_case,
+    evaluate_immutable_for_nil_case, evaluate_immutable_for_stmt_case,
+    evaluate_immutable_for_cons_case, evaluate_immutable_atarget_base_case,
+    evaluate_immutable_atarget_tuple_case, evaluate_immutable_atargets_nil_case,
+    evaluate_immutable_atargets_cons_case, evaluate_immutable_atargets_length_case,
+    evaluate_immutable_atargets_length_other_case,
+    evaluate_immutable_intcall_ind_bridge] @
+    map (ACCEPT_TAC o BETA_RULE) (CONJUNCTS evaluate_immutable_risky_cases))
+QED
+
 Theorem eval_expr_unwritten_immutable:
   !cx e st res st' env mods src id.
     eval_expr cx e st = (res,st') /\
