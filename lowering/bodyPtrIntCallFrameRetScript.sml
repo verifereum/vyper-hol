@@ -15,8 +15,8 @@
  *)
 Theory bodyPtrIntCallFrameRet
 Ancestors
-  bodyPtrDefs intCallReturnMem stmtSimReturn bodySim compileEnv
-  valueEncoding compileVyper
+  bodyPtrDefs intCallReturnMem bodyIntCallReturnCopy stmtSimReturn bodySim
+  compileEnv valueEncoding compileVyper
 
 (* The return an internal frame hands back: d is the caller's return
    buffer (its address and capacity) when the value comes back in memory. *)
@@ -41,11 +41,15 @@ End
    internally (RET to the return PC), with the stack-return count of the
    declared return type, and has a return buffer exactly when that count
    is 0 and the type isn't void; the buffer's capacity is the return
-   value's size, and a store's 64 bytes of rounding fit below 2 ** 256.
+   value's size, it fits below 2 ** 256, and so does that size plus a
+   copy's 64 bytes of length rounding (size headroom, not address
+   headroom: the store never offsets the buffer address).
    Constructor frames are excluded by stmt_frag_ptr itself.  S1's pieces:
    stmtSimReturn (step_ret_values, compile_load_tuple_elements_run,
-   intret_vals_match_word/_tuple), intCallReturnMem's
-   compile_internal_return_memory_frag, and the bytestring branch of
+   intret_vals_match_word/_tuple), bodyIntCallReturnCopy's
+   compile_internal_return_memory_size_bound_frag (the size-headroom form
+   of intCallReturnMem's compile_internal_return_memory_frag), and the
+   bytestring branch of
    stmtSimReturnWiden's compile_internal_return_memory_widen_frag; the
    returned expression's expr_sim_ptr/expr_vv_sim_ptr for the ghost side
    (ptr_mem_ok makes the source robust under t_mem, and MCOPY carries its
@@ -67,7 +71,7 @@ Theorem internal_return_direct_ptr:
     (IS_SOME d <=> cenv.ce_returns_count = 0 /\ ret_ty <> NoneT) /\
     (!bw cap. d = SOME (bw,cap) ==>
        cap = type_memory_size ret_tv /\
-       w2n bw + cap + 64 < dimword (:256)) /\
+       w2n bw + cap < dimword (:256) /\ cap + 64 < dimword (:256)) /\
     same_frame cenv cenv' /\ expr_sim_inv cenv' cx env es /\
     stmt_exprs_ok cenv' (Return eo) /\
     IS_SOME (type_stmt env ret_ty (Return eo)) /\
@@ -113,7 +117,7 @@ Theorem internal_return_widened_ptr:
     (IS_SOME d <=> cenv.ce_returns_count = 0 /\ ret_ty <> NoneT) /\
     (!bw cap. d = SOME (bw,cap) ==>
        cap = type_memory_size ret_tv /\
-       w2n bw + cap + 64 < dimword (:256)) /\
+       w2n bw + cap < dimword (:256) /\ cap + 64 < dimword (:256)) /\
     same_frame cenv cenv' /\ expr_sim_inv cenv' cx env es /\
     stmt_exprs_ok cenv' (Return eo) /\
     IS_SOME (type_stmt env ret_ty (Return eo)) /\
@@ -152,7 +156,7 @@ Theorem internal_frame_ret_ok_ptr:
     (IS_SOME d <=> cenv.ce_returns_count = 0 /\ ret_ty <> NoneT) /\
     (!bw cap. d = SOME (bw,cap) ==>
        cap = type_memory_size ret_tv /\
-       w2n bw + cap + 64 < dimword (:256)) ==>
+       w2n bw + cap < dimword (:256) /\ cap + 64 < dimword (:256)) ==>
     frame_ret_ok_ptr d ctx PG func cx (intret_ptr_q func cenv cx ret_tv d)
       cenv ret_ty
 Proof
