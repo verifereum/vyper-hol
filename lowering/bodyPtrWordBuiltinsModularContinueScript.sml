@@ -10,6 +10,7 @@ Theorem word_pow_expr_outcome:
   ann = BaseT (UintT 256) /\ compile_pow_mod256 a b sm = (op,sb) /\
   value_has_type (BaseTV (UintT 256)) v1 /\ value_has_type (BaseTV (UintT 256)) v2 /\
   wb_args_post ctx func cenv cx es sa s0 ee [a;b] [v1;v2] t0 /\
+  (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t0) /\
   (!z. a = Var z ==> not_fresh_at sm z) /\ (!z. b = Var z ==> not_fresh_at sm z) /\
   op_taint tn a = {} /\ op_taint tn b = {} /\ fn_has_code sm sb func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
@@ -51,6 +52,7 @@ Theorem word_modular_expr_outcome:
   value_has_type (BaseTV (UintT 256)) v1 /\ value_has_type (BaseTV (UintT 256)) v2 /\
   value_has_type (BaseTV (UintT 256)) v3 /\
   wb_args_post ctx func cenv cx es sa s0 ee [a;b;c] [v1;v2;v3] t0 /\
+  (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t0) /\
   (!z. a = Var z ==> not_fresh_at sm z) /\ (!z. b = Var z ==> not_fresh_at sm z) /\
   (!z. c = Var z ==> not_fresh_at sm z) /\
   op_taint tn a = {} /\ op_taint tn b = {} /\ op_taint tn c = {} /\
