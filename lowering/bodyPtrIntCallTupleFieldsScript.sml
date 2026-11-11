@@ -70,3 +70,93 @@ Proof
   >- fs[venom_state_component_equality] >>
   rpt strip_tac >> metis_tac[not_fresh_at_mono]
 QED
+
+(* One concrete head: prepare the two addresses, then consume the recursive
+   store contract.  The recursive premise is at the emitted child cursor;
+   numeric resources are independent of provenance coverage. *)
+Theorem intcall_field_store_counted:
+  !D ctx fn PG dst src doff soff sa sm sc dop sop G tn s b a
+    dtotal stotal stv dtv v sd.
+    compile_with_byte_offset (Var dst) doff sa = (dop,sm) /\
+    compile_with_byte_offset (Var src) soff sm = (sop,sc) /\
+    not_fresh_at sa dst /\ not_fresh_at sa src /\
+    lookup_var dst s = SOME b /\ lookup_var src s = SOME a /\
+    ptr_covers G tn dst s dtotal /\ ptr_covers G tn src s stotal /\
+    doff + type_memory_size dtv <= dtotal /\
+    soff + type_memory_size stv <= stotal /\
+    w2n b + doff + type_memory_size dtv < dimword (:256) /\
+    w2n a + soff + val_footprint stv v < dimword (:256) /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      val_in_memory stv v (w2n a + soff) m) /\
+    fn_has_code sa sc fn /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+    ~ctx_has_dalloca ctx /\
+    (!dp sp H t u.
+      dop = Var dp /\ sop = Var sp /\
+      not_fresh_at sc dp /\ not_fresh_at sc sp /\
+      lookup_var dp u = SOME (n2w (w2n b + doff)) /\
+      lookup_var sp u = SOME (n2w (w2n a + soff)) /\
+      ptr_covers H t dp u (type_memory_size dtv) /\
+      ptr_covers H t sp u (type_memory_size stv) /\
+      w2n (n2w (w2n b + doff):256 word) + type_memory_size dtv < dimword (:256) /\
+      w2n (n2w (w2n a + soff):256 word) + val_footprint stv v < dimword (:256) /\
+      (!m. mem_agree_outside t.t_mem u.vs_memory m ==>
+        val_in_memory stv v (w2n (n2w (w2n a + soff):256 word)) m) /\
+      u.vs_current_bb = sc.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~u.vs_halted ==>
+      ?K tf z.
+        gas_path_ptr D 0 ctx fn PG H t u 0 K tf (OK z) /\
+        z.vs_current_bb = sd.cs_current_bb /\
+        z.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~z.vs_halted /\
+        (!m. mem_agree_outside tf.t_mem z.vs_memory m ==>
+          val_in_memory dtv v (w2n b + doff) m) /\
+        tf.t_stor = t.t_stor /\ tf.t_trans = t.t_trans /\ tf.t_imm = t.t_imm /\
+        z.vs_allocas = u.vs_allocas /\ z.vs_alloca_next = u.vs_alloca_next /\
+        z.vs_fmp = u.vs_fmp /\ z.vs_accounts = u.vs_accounts /\
+        z.vs_transient = u.vs_transient /\ z.vs_call_ctx = u.vs_call_ctx /\
+        (!x. not_fresh_at sc x ==>
+          lookup_var x z = lookup_var x u /\ FLOOKUP K x = FLOOKUP H x /\
+          op_taint tf (Var x) = op_taint t (Var x)) /\
+        (!i. ~(w2n b + doff <= i /\ i < w2n b + doff + type_memory_size dtv) ==>
+          mem_bytes_at i 1 z.vs_memory = mem_bytes_at i 1 u.vs_memory /\
+          (i IN tf.t_mem <=> i IN t.t_mem))) ==>
+    ?K tf z.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 K tf (OK z) /\
+      z.vs_current_bb = sd.cs_current_bb /\
+      z.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~z.vs_halted /\
+      (!m. mem_agree_outside tf.t_mem z.vs_memory m ==>
+        val_in_memory dtv v (w2n b + doff) m) /\
+      tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+      z.vs_allocas = s.vs_allocas /\ z.vs_alloca_next = s.vs_alloca_next /\
+      z.vs_fmp = s.vs_fmp /\ z.vs_accounts = s.vs_accounts /\
+      z.vs_transient = s.vs_transient /\ z.vs_call_ctx = s.vs_call_ctx /\
+      (!x. not_fresh_at sa x ==>
+        lookup_var x z = lookup_var x s /\ FLOOKUP K x = FLOOKUP G x /\
+        op_taint tf (Var x) = op_taint tn (Var x)) /\
+      (!i. ~(w2n b + doff <= i /\ i < w2n b + doff + type_memory_size dtv) ==>
+        mem_bytes_at i 1 z.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+        (i IN tf.t_mem <=> i IN tn.t_mem))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `w2n b + doff < dimword (:256) /\ w2n a + soff < dimword (:256)`
+    by decide_tac >>
+  drule_all intcall_field_offsets_counted >>
+  disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
+  rename1 `gas_path_ptr D 0 ctx fn PG G tn s 0 H t (OK u)` >>
+  `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
+   u.vs_alloca_next = s.vs_alloca_next /\ u.vs_fmp = s.vs_fmp /\
+   u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+   u.vs_call_ctx = s.vs_call_ctx` by
+    fs[venom_state_component_equality] >>
+  `w2n (n2w (w2n b + doff):256 word) = w2n b + doff /\
+   w2n (n2w (w2n a + soff):256 word) = w2n a + soff` by simp[] >>
+  fs[] >>
+  qpat_x_assum `!H t u. _` (qspecl_then [`H`, `t`, `u`] mp_tac) >>
+  simp[] >> strip_tac >>
+  rename1 `gas_path_ptr D 0 ctx fn PG H t u 0 Hf tf (OK z)` >>
+  qexistsl_tac [`Hf`, `tf`, `z`] >> simp[] >>
+  conj_tac
+  >- (drule_all gas_path_ptr_then >> simp[]) >>
+  conj_tac >- metis_tac[not_fresh_at_mono] >>
+  metis_tac[]
+QED
