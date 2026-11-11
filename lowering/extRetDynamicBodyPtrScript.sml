@@ -1,0 +1,166 @@
+Theory extRetDynamicBodyPtr
+Ancestors
+  extRetDynamicPreparePtr extRetFramedChildPtr extRetRecursiveChildPtr
+  extRetRecursiveResourcePtr extRetRecursiveFramePtr extRetScratchResourcePtr
+  extRetAbiChildComposePtr extRetAbiChildBoundaryPtr extRetLoopTailAmbientPtr
+  extRetNumericLedgerPtr abiEncoderArrayDynamicMemory abiEncoderArrayBodyCode
+  abiEncoderArrayTail abiEncoderChildCode abiDecoderLoopEmit fragGasPathPtr
+  fragExec compileEnv bodyPtrDefs ptrDiscipline venomState venomExecSemantics
+  venomMemDefs venomMemProps valueEncoding valueEncodingProps valueEncodingProofs
+  robustCopyTransportPtr valueTypingMemoryProps words finite_map pred_set
+  arithmetic list rich_list
+
+(* The initialized invariant does not include a compiler program counter.
+   Thus header branching and the body transition share the same invariant. *)
+Definition encoder_dynamic_loop_inv_def:
+  encoder_dynamic_loop_inv ctx fn sites protected
+    ip cursor src dst cv p c a b scap dcap tv v N ns j G tn s <=>
+    ~s.vs_halted /\
+    lookup_var ip s = SOME (n2w p) /\
+    lookup_var cursor s = SOME (n2w c) /\
+    lookup_var src s = SOME (n2w a) /\
+    lookup_var dst s = SOME (n2w b) /\
+    lookup_var cv s = SOME (n2w N) /\
+    ptr_covers G tn ip s 32 /\ ptr_covers G tn cursor s 32 /\
+    ptr_covers G tn src s scap /\ ptr_covers G tn dst s dcap /\
+    mload p s = n2w j /\ mload c s = n2w (32*N+SUM (TAKE j ns)) /\
+    (!i. p <= i /\ i < p+32 ==> i NOTIN tn.t_mem) /\
+    (!i. c <= i /\ i < c+32 ==> i NOTIN tn.t_mem) /\
+    op_taint tn (Var cv) = {} /\ op_prov G (Var cv) = NONE /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      val_in_memory tv v a mem) /\
+    (!i. b+32 <= i /\ i < b+32+32*j ==> i NOTIN tn.t_mem) /\
+    (!i. b+32+32*N <= i /\ i < b+32+(32*N+SUM (TAKE j ns)) ==>
+      i NOTIN tn.t_mem) /\
+    encoder_resource ctx fn sites a scap protected s
+End
+
+Definition encoder_dynamic_effect_def:
+  encoder_dynamic_effect sa sites b cap G tn s Gf tnf sf <=>
+    mem_agree_outside (encoder_write_envelope sites sf b cap)
+      sf.vs_memory s.vs_memory /\
+    (!i. i NOTIN encoder_write_envelope sites sf b cap ==>
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    s.vs_alloca_next <= sf.vs_alloca_next /\
+    (!aid p sz. FLOOKUP s.vs_allocas aid = SOME (p,sz) ==>
+      FLOOKUP sf.vs_allocas aid = SOME (p,sz)) /\
+    (!aid. aid NOTIN sites ==> FLOOKUP sf.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x sf = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tnf (Var x) = op_taint tn (Var x)) /\
+    encoder_ambient_frame tn s tnf sf
+End
+
+Theorem encoder_dynamic_effect_refl:
+  encoder_dynamic_effect sa sites b cap G tn s G tn s
+Proof
+  simp[encoder_dynamic_effect_def, mem_agree_outside_def,
+       encoder_ambient_frame_def]
+QED
+
+Theorem encoder_dynamic_effect_then:
+  encoder_dynamic_effect sa sites b cap G tn s Gm tnm sm /\
+  encoder_dynamic_effect sa sites b cap Gm tnm sm Gf tnf sf ==>
+  encoder_dynamic_effect sa sites b cap G tn s Gf tnf sf
+Proof
+  simp[encoder_dynamic_effect_def] >> strip_tac >>
+  `encoder_write_envelope sites sm b cap SUBSET
+    encoder_write_envelope sites sf b cap` by
+    (irule encoder_envelope_registered_mono >> simp[]) >>
+  conj_tac >-
+    (fs[mem_agree_outside_def, SUBSET_DEF] >> metis_tac[]) >>
+  conj_tac >- (fs[SUBSET_DEF] >> metis_tac[]) >>
+  gvs[encoder_ambient_frame_def] >> metis_tac[]
+QED
+
+Theorem encoder_dynamic_loop_empty_prefixes:
+  (!i:num. b+32 <= i /\ i < b+32+32*0 ==> i NOTIN t) /\
+  (!i. b+32+32*N <= i /\ i < b+32+(32*N+SUM (TAKE 0 ns)) ==> i NOTIN t)
+Proof
+  simp[]
+QED
+
+Theorem encoder_dynamic_loop_completed_prefixes:
+  encoder_dynamic_loop_inv ctx fn sites protected
+    ip cursor src dst cv p c a b scap dcap tv v N ns N G tn s /\
+  LENGTH ns = N ==>
+  mload p s = n2w N /\ mload c s = n2w (32*N+SUM ns) /\
+  (!i. b+32 <= i /\ i < b+32+32*N ==> i NOTIN tn.t_mem) /\
+  (!i. b+32+32*N <= i /\ i < b+32+(32*N+SUM ns) ==> i NOTIN tn.t_mem)
+Proof
+  simp[encoder_dynamic_loop_inv_def] >> metis_tac[TAKE_LENGTH_ID]
+QED
+
+Theorem encoder_dynamic_loop_inv_memory_frame:
+  encoder_dynamic_loop_inv ctx fn sites protected
+    ip cursor src dst cv p c a b scap dcap tv v N ns j G tn s /\
+  not_fresh_at sh ip /\ not_fresh_at sh cursor /\ not_fresh_at sh src /\
+  not_fresh_at sh dst /\ not_fresh_at sh cv /\
+  ~sf.vs_halted /\ sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+  sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+  sf.vs_fmp = s.vs_fmp /\
+  (!x. not_fresh_at sh x ==>
+    lookup_var x sf = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+    op_taint tnf (Var x) = op_taint tn (Var x)) ==>
+  encoder_dynamic_loop_inv ctx fn sites protected
+    ip cursor src dst cv p c a b scap dcap tv v N ns j Gf tnf sf
+Proof
+  strip_tac >>
+  `encoder_resource ctx fn sites a scap protected sf` by
+    (irule encoder_resource_fields >> metis_tac[encoder_dynamic_loop_inv_def]) >>
+  gvs[encoder_dynamic_loop_inv_def, mload_def, ptr_covers_def, op_prov_def] >>
+  metis_tac[]
+QED
+
+(* A single execution witness supplies the exact three stores, all allocation
+   fields and all six ambient fields. The recursive length is an operand. *)
+Theorem encoder_dynamic_finish_counted_ptr:
+  abi_encode_child_suffix (Var head) (Var cursor) (Var off) len sa = (len,sb) /\
+  abi_decode_loop_suffix (Var ip) (Var idx) hdr exit_lbl sb = ((),sc) /\
+  fn_has_code sa sb fn /\ fn_has_code sb sc fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\
+  not_fresh_at sa head /\ not_fresh_at sa cursor /\
+  not_fresh_at sa ip /\ not_fresh_at sa idx /\
+  (!x. not_fresh_at sa x ==> not_fresh_at sb x) /\
+  lookup_var head s = SOME (n2w h) /\ h < dimword(:256) /\
+  ptr_covers G tn head s 32 /\
+  lookup_var cursor s = SOME (n2w c) /\ c < dimword(:256) /\
+  ptr_covers G tn cursor s 32 /\
+  lookup_var off s = SOME (n2w k) /\ op_taint tn (Var off) = {} /\
+  eval_operand len s = SOME (n2w n) /\ op_taint tn len = {} /\
+  lookup_var idx s = SOME (n2w j) /\ op_taint tn (Var idx) = {} /\
+  lookup_var ip s = SOME (n2w p) /\ ptr_covers G tn ip s 32 /\
+  p+32 < dimword(:256) /\ j+1 < dimword(:256) /\ k+n < dimword(:256) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = hdr /\ sf.vs_inst_idx = 0 /\ ~sf.vs_halted /\
+    sf.vs_memory = (mstore p (n2w (j+1))
+      (mstore c (n2w (k+n)) (mstore h (n2w k) s))).vs_memory /\
+    tnf.t_mem = ((tn.t_mem DIFF {i | h <= i /\ i < h+32}) DIFF
+      {i | c <= i /\ i < c+32}) DIFF {i | p <= i /\ i < p+32} /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x sf = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tnf (Var x) = op_taint tn (Var x)) /\
+    encoder_ambient_frame tn s tnf sf
+Proof
+  strip_tac >> drule_all abi_child_suffix_operand_counted_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `lookup_var ip sf = SOME (n2w p) /\ ptr_covers Gf tnf ip sf 32 /\
+   eval_operand (Var idx) sf = SOME (n2w j) /\ op_taint tnf (Var idx) = {} /\
+   not_fresh_at sb ip /\ w2n (n2w p : bytes32)+32 < dimword(:256)` by
+    (gvs[ptr_covers_def, eval_operand_def, w2n_n2w, LESS_MOD] >> metis_tac[]) >>
+  drule_all abi_decode_loop_suffix_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf'`,`tnf'`,`sf'`] >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`,`m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`,`sf`,`tnf`] >> simp[]) >>
+  simp[w2n_n2w, LESS_MOD, encoder_ambient_frame_def] >>
+  qpat_x_assum `sf.vs_memory = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  MATCH_ACCEPT_TAC immutableCopyExecutionTheory.immutable_mstore_memory_cong
+QED
