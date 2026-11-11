@@ -36,7 +36,8 @@ Theorem membership_memory_value_at:
   read_result cx tv es = (INL v,es) ==>
   expr_val_at cenv cx ty sa sb es v p.ptr_operand s
 Proof
-  simp[vv_at_def, expr_val_at_def] >> metis_tac[]
+  rw[vv_at_def, expr_val_at_def] >> first_x_assum drule_all >> strip_tac >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem membership_memory_offset_covers:
