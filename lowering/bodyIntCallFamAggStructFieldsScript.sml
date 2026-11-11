@@ -36,7 +36,8 @@ Theorem intcall_expr_cont_end_gas_obs[simp]:
   intcall_expr_cont fp ce env es sa s (ee with gas_obs := gs) sb u <=>
   intcall_expr_cont fp ce env es sa s ee sb u
 Proof
-  simp[bodyIntCallJointContractTheory.intcall_expr_cont_def]
+  simp[bodyIntCallJointContractTheory.intcall_expr_cont_def,
+       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def]
 QED
 
 Theorem intcall_struct_fields_nil:

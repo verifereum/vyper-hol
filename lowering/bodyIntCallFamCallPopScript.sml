@@ -9,7 +9,7 @@ Ancestors
   vyperStorageLayoutSafety vyperStorage vyperState venomExecSemantics
   venomInst accountsRelProps gasOutcome gasSummary fragGasMode fragGasPathMem
   list words finite_map fragExec bodySimStmtCases exprOpenCases
-  supportedExprForms supportedDecls appendStorageSourcePtr fragGasSeq
+  supportedExprForms supportedDecls stmtSimAppendStorageCompose fragGasSeq
   fragGasSeqAbort rich_list loweringPosts exprOperandVar supportedExprs
 
 (* A storage operation that keeps memory, allocations, and old variables
