@@ -91,6 +91,18 @@ Proof
   simp[dimword_def]
 QED
 
+(* Width zero is source-typed but not literally ABI-typed.  Its encoder
+   representative must preserve the encoding, not the literal ABI type. *)
+Triviality abi_encoder_fixed_bytes_zero_boundary:
+  value_has_type (BaseTV (BytesT (Fixed 0))) (vyperValue$BytesV []) /\
+  vyper_to_abi_base (BytesT (Fixed 0)) (vyperValue$BytesV []) =
+    SOME (contractABI$BytesV []) /\
+  ~has_type (Bytes (SOME 0)) (contractABI$BytesV []) /\
+  enc (Bytes (SOME 0)) (contractABI$BytesV []) = REPLICATE 32 (0w:word8)
+Proof
+  CONV_TAC EVAL
+QED
+
 Theorem abi_encode_fixed_bytes_zero_supplier:
   expr_val_rel cx (BaseT (BytesT (Fixed 0))) (vyperValue$BytesV []) op s /\
   type_memory_bytes ce (BaseT (BytesT (Fixed 0))) = 32 /\

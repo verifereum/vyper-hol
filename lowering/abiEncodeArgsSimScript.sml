@@ -825,6 +825,24 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
+Triviality compiler_materialize_vv_var:
+  compile_materialize_vv ce ty vv sa = (op,sb) ==>
+  !x. op = Var x ==> not_fresh_at sb x
+Proof
+  Cases_on `compile_alloc_buffer (type_memory_bytes ce ty) sa` >>
+  rename1 `compile_alloc_buffer _ sa = (buf,sm)` >>
+  Cases_on `unwrap_value ce vv sm` >>
+  rename1 `unwrap_value ce vv sm = (src,su)` >>
+  Cases_on `compile_store_memory ce src buf.buf_operand ty ty su` >>
+  simp[compile_materialize_vv_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> rpt strip_tac >> gvs[] >>
+  drule compiler_alloc_buffer_var >>
+  disch_then (qspec_then `x` mp_tac) >> simp[] >> strip_tac >>
+  irule not_fresh_at_mono >> qexists `sm` >> simp[] >>
+  metis_tac[ci_mono_unwrap_value, ci_mono_compile_store_memory,
+            ci_mono_def, pairTheory.SND, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
 Theorem compile_abi_encode_args_sim_live:
   !args ctx func ce cx Inv env es sa ops sb rr es' s0.
     abi_args_ready ctx func ce cx Inv args /\ Inv es /\
