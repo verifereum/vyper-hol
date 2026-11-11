@@ -65,7 +65,7 @@ QED
 Theorem gas_shadow_compiles_return_unlock:
   gas_shadow_compiles (compile_return_unlock cenv) (compile_return_unlock cenv)
 Proof
-  simp[compile_return_unlock_def] >> pairarg_tac >>
+  simp[compile_return_unlock_def] >> pairarg_tac >> gvs[] >>
   IF_CASES_TAC >>
   simp[gas_shadow_compiles_nonreentrant_unlock, gas_shadow_compiles_return]
 QED
@@ -187,7 +187,7 @@ Resume gas_shadow_compiles_assign_value[code]:
   gen_tac >> Cases_on `prim` >>
   Cases_on `is_bytestring_type ty` >> Cases_on `n <= 32` >>
   simp[compile_store_immutable_bytestring_def, compile_bytestring_word_count_def,
-       comp_ignore_bind_def] >>
+       comp_ignore_bind_def, comp_bind_assoc] >>
   rpt (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_return, gas_shadow_compiles_word_copy_loop_base,
                gas_shadow_compiles_imm_store_word, gas_shadow_compiles_imm_store_words]
@@ -202,7 +202,7 @@ Theorem gas_shadow_compiles_internal_return_from_env:
   gas_shadow_compiles (compile_internal_return_from_env cenv ty sty v rpc)
     (compile_internal_return_from_env cenv ty sty v rpc)
 Proof
-  simp[compile_internal_return_from_env_def] >>
+  simp[compile_internal_return_from_env_def, comp_ignore_bind_def] >>
   ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
   >- simp[gas_shadow_compiles_return_unlock] >> gen_tac >>
   ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac

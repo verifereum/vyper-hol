@@ -21,7 +21,7 @@ Proof
   simp[compile_return_value_decode_def, comp_ignore_bind_def] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_select]
-       >> gen_tac >> BETA_TAC) >> simp[]
+       >> gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_select]
 QED
 
 Theorem gas_shadow_compiles_default_return_path:

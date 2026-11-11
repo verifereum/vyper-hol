@@ -958,7 +958,7 @@ Proof
       Cases_on `rest` >> Cases_on `sh` >> gvs[] >>
       CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
       simp[compile_call_def, GSYM comp_bind_def, GSYM comp_return_def,
-           comp_bind_uncurry] >>
+           gasShadowCompileBaseTheory.comp_bind_uncurry] >>
       CONV_TAC (DEPTH_CONV ETA_CONV) >>
       rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
            >- (irule gas_shadow_compiles_lower_value >> simp[]) >>
