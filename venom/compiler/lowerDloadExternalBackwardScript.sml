@@ -257,7 +257,8 @@ Theorem ld_delegatecall_step_backward_extract:
 Proof
   strip_tac >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >> strip_tac >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+       Excl "consume_call_outcome_eq"] >> strip_tac >>
   drule_all ld_exec_delegatecall_backward_extract >>
   disch_then (qspec_then `roS` strip_assume_tac) >>
   qexistsl [`out`, `w`, `rS`, `rT`] >> simp[Excl "consume_call_outcome_eq"]
