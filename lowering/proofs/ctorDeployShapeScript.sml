@@ -130,7 +130,6 @@ Proof
   rename1 `_ = (u, st1)` >> Cases_on `u` >>
   drule compile_generate_deploy_shape >> simp[] >> strip_tac >>
   drule_all shape_state_source_certificates >> strip_tac >>
-  drule_all raw_checked_internal_segments >> strip_tac >>
   `package_internal_blocks (internal_fn_descriptors ctor_internal_fns)
      (entry_blocks ++ FLAT segs) =
    SOME (entry_blocks,

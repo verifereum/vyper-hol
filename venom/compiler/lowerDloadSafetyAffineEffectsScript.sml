@@ -188,5 +188,5 @@ Proof
    >- (irule ld_memory_update_var >> simp[]) >>
    conj_tac
    >- (irule ld_nonghost_update_var >> simp[]) >>
-   simp[ld_erase_set_prov, step_prov_def, out_prov_def, ld_erase_first_prov])
+   simp[ld_erase_set_prov, step_prov_def, out_prov_def, ld_erase_first_prov, update_var_def])
 QED

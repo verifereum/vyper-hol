@@ -3,23 +3,6 @@ Ancestors
   list loweringShapeRules loweringShapeDefs builtinSystem context
   compileEnv emitHelper unitShapeDefs venomInst
 
-Theorem shape_base_step_emit_op_call_widen:
-  !internal LP R opc g rest.
-    shape_stable R /\ MEM opc [CALL; STATICCALL; DELEGATECALL] /\
-    (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) ==>
-    shape_base_step internal LP
-      (\st. R st /\ (gas_operand st g \/ plain_operand st g) /\
-            EVERY (plain_operand st) rest)
-      (emit_op opc (g :: rest)) (\x st'. R st' /\ plain_operand st' x)
-Proof
-  rpt gen_tac >> strip_tac >>
-  irule shape_base_step_conseq >>
-  irule_at Any shape_base_step_emit_op >>
-  qexistsl [`R`, `LP`] >> simp[] >>
-  rpt strip_tac >> simp[] >>
-  gvs[label_or_plain_def, gas_operand_def, plain_operand_def,
-      EVERY_MEM] >> metis_tac[]
-QED
 Theorem shape_base_step_alloc_buffer_widen:
   !internal LP R size.
     shape_stable R ==>
