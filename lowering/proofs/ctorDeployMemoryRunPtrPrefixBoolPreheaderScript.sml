@@ -11,12 +11,6 @@ Ancestors
   codegenRel contextCodegenRel emitHelper exprLoweringProps
 
 
-Theorem prefix_preheader_update_index[local]:
-  update_var x w (s with vs_inst_idx := k) =
-  (update_var x w s) with vs_inst_idx := k
-Proof
-  simp[update_var_def]
-QED
 
 Theorem prefix_preheader_mstore_index[local]:
   mstore a w (s with vs_inst_idx := k) =
