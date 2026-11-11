@@ -325,7 +325,8 @@ Theorem codegen_gas_surplus:
     unit_shape_ok unit
     ==>
     ?g. !g' Inv vs es s op r s'.
-      g <= g' /\ wf_state es /\
+      g <= g' /\ wf_state (add_frame_gas g' es) /\
+      g' <= frame_gas_left (add_frame_gas g' es) /\
       codegen_context_obligations Inv unit.cu_context cp /\
       codegen_reachability_package Inv unit.cu_context vs /\
       initial_ctx_rel cp prog unit.cu_context vs (add_frame_gas g' es) /\
@@ -345,13 +346,14 @@ QED
    past the code's end), so code without an assembly RETURNDATACOPY has no
    frame state that runs one. *)
 Theorem codegen_no_returndatacopy:
-  !rpolicy unit cp prog Inv vs es t.
+  !rpolicy unit cp prog fuel M Inv vs es t.
     generate_context_plan unit.cu_context = SOME cp /\
     codegen_assembly rpolicy unit = SOME prog /\
     unit_shape_ok unit /\ wf_state es /\
     codegen_context_obligations Inv unit.cu_context cp /\
     codegen_reachability_package Inv unit.cu_context vs /\
     initial_ctx_rel cp prog unit.cu_context vs es /\
+    venom_run_bounded fuel M unit.cu_context vs /\
     ~MEM (AsmOp "RETURNDATACOPY") prog
     ==>
     ~frame_inst_at es t ReturnDataCopy
@@ -388,6 +390,9 @@ Proof
   qexistsl_tac [`r`, `es'`] >> simp[] >>
   rpt strip_tac >> gvs[frame_inst_raises_def] >>
   CCONTR_TAC >>
+  `wf_state (add_frame_gas g' es) /\
+   g' <= frame_gas_left (add_frame_gas g' es)` by
+    metis_tac[add_frame_gas_wf_state, wf_state_frame_gas_left] >>
   `LENGTH s.contexts = LENGTH (add_frame_gas g' es).contexts` by
     fs[frame_inst_at_def] >>
   first_x_assum (qspecl_then [`g'`, `Inv`, `vs`, `es`, `s`, `op`, `s'`]

@@ -13,7 +13,7 @@
  *)
 Theory frameStep
 Ancestors
-  frameObsStep vfmDecreasesGas vfmExecution vfmExecutionProp vfmContext list
+  frameGas frameObsStep vfmDecreasesGas vfmExecution vfmExecutionProp vfmContext list
   relation
 
 (* es1 is the next state of es's frame: its step, or a call's step and
@@ -105,4 +105,13 @@ Proof
   gvs[frame_last_def] >>
   qpat_x_assum `RTC _ _ _` mp_tac >> simp[Once RTC_CASES1] >>
   strip_tac >> gvs[]
+QED
+
+(* add_frame_gas g gives a well-formed frame at least g gas left. *)
+Theorem wf_state_frame_gas_left:
+  !g es. wf_state es ==> g <= frame_gas_left (add_frame_gas g es)
+Proof
+  rw[wf_state_def, add_frame_gas_def] >>
+  Cases_on `es.contexts` >> gvs[] >>
+  PairCases_on `h` >> gvs[frame_gas_left_def, wf_context_def]
 QED
