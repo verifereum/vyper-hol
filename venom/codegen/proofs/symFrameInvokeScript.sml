@@ -465,7 +465,9 @@ Theorem sym_mstore_slot:
 Proof
   strip_tac >> Cases_on `sv` >>
   simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
-       sval_val_def, sym_lift_def, asmOpSimTheory.asm_step_op_mstore, asm_mstore_def,
+       sval_val_def, sym_lift_def, asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
+       asmSemTheory.asm_step_memory_def, asm_mstore_def,
        asm_op_arity_table_def, log_table_def,
        asm_next_def, asm_op_mem_reads_def, asm_op_mem_writes_def,
        mem_labels_hit_def, Excl "GENLIST_NUMERALS", mem_sval_at_store_label,
@@ -503,7 +505,9 @@ Proof
   strip_tac >> drule mem_sval_at_word_no_label >> strip_tac >>
   simp[sym_mload_def, sym_step_concrete_def, asm_op_arity_def,
        asm_op_arity_table_def, sval_val_def, sym_lift_def,
-       asmOpSimTheory.asm_step_op_mload, asm_mload_def, asm_next_def,
+       asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
+       asmSemTheory.asm_step_memory_def, asm_mload_def, asm_next_def,
        asm_op_mem_reads_def, asm_op_mem_writes_def, mem_labels_hit_def,
        mem_labels_clear_def, finite_mapTheory.DRESTRICT_UNIV] >>
   gvs[mem_sval_at_def] >>

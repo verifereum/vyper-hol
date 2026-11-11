@@ -181,9 +181,19 @@ Theorem sym_initial_fmp_run:
     (ss with <| sym_base := asm_next (ss.sym_base with as_stack := []);
                 sym_stack := Val (n2w initial_fmp) :: ss.sym_stack |>)
 Proof
-  strip_tac >> irule sym_steps_single_emit >>
+  strip_tac >>
+  `word_of_bytes F (0w:bytes32) (REVERSE (encode_num_bytes initial_fmp)) = n2w initial_fmp` by
+    (rewrite_tac[GSYM byteTheory.word_of_bytes_le_def] >>
+     mp_tac (INST [``bs:word8 list`` |-> ``REVERSE (encode_num_bytes initial_fmp)``]
+       (INST_TYPE [alpha |-> ``:256``]
+         cv_stdTheory.word_of_bytes_le_eq_num_of_bytes)) >>
+     simp[fcpLib.INDEX_CONV ``dimindex(:256)``,
+          asmToBytecodeProofsTheory.num_of_bytes_encode_roundtrip,
+          dividesTheory.divides_def] >>
+     qexists_tac `32` >> simp[]) >>
+  irule sym_steps_single_emit >>
   qexists `AsmPush (encode_num_bytes initial_fmp)` >>
-  simp[sym_step_push_word, push_encode_num_roundtrip]
+  simp[sym_step_push_word]
 QED
 
 Theorem sym_add_word_step:
@@ -419,7 +429,12 @@ Theorem prepared_selected_evaluation:
   eval_operands (REVERSE selected) vs =
     SOME (TAKE (LENGTH selected) astk)
 Proof
-  strip_tac >> irule venomStateTheory.log_operands_values >>
+  strip_tac >>
+  `!ops ws. LIST_REL (\op w. eval_operand op vs = SOME w) ops ws ==>
+     eval_operands ops vs = SOME ws` by
+    (Induct >> Cases_on `ws` >> simp[eval_operands_def] >> rpt strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  pop_assum irule >>
   gvs[plan_stack_rel_def, LIST_REL_EL_EQN, EVERY_MEM] >>
   rpt strip_tac >> simp[EL_TAKE] >>
   first_x_assum (qspec_then `n` mp_tac) >>

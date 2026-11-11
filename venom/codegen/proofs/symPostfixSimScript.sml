@@ -680,9 +680,17 @@ Theorem sym_scratch_push_then_run:
   sym_steps p env 2 ss = SymOK ss'
 Proof
   simp[stackOpSimTheory.asm_block_at_cons] >> strip_tac >>
+  `word_of_bytes F (0w:bytes32) (REVERSE (encode_num_bytes off)) = n2w off` by
+    (rewrite_tac[GSYM byteTheory.word_of_bytes_le_def] >>
+     mp_tac (INST [``bs:word8 list`` |-> ``REVERSE (encode_num_bytes off)``]
+       (INST_TYPE [alpha |-> ``:256``]
+         cv_stdTheory.word_of_bytes_le_eq_num_of_bytes)) >>
+     simp[fcpLib.INDEX_CONV ``dimindex(:256)``,
+          asmToBytecodeProofsTheory.num_of_bytes_encode_roundtrip,
+          dividesTheory.divides_def] >>
+     qexists_tac `32` >> simp[]) >>
   gvs[asm_next_def] >>
-  simp[codegenSymRelTheory.sym_steps_compute, sym_step_push_word,
-       strongPrefixSimTheory.push_encode_num_roundtrip, asm_next_def]
+  simp[codegenSymRelTheory.sym_steps_compute, sym_step_push_word, asm_next_def]
 QED
 
 Theorem sym_scratch_store_run:
@@ -1373,10 +1381,25 @@ Theorem scratch_replay_do_swap_positive[local]:
   scratch_replay cplan R ops (REVERSE ps.ps_stack) slots
     (REVERSE qs.ps_stack) slots
 Proof
-  strip_tac >> gvs[do_swap_def, planWfTheory.reverse_stack_swap] >>
+  strip_tac >>
+  `!k stk. 0 < k /\ k < LENGTH stk ==>
+     REVERSE (stack_swap k stk) =
+     LUPDATE (HD (REVERSE stk)) k
+       (LUPDATE (EL k (REVERSE stk)) 0 (REVERSE stk))` by
+    (rpt strip_tac >>
+     `stack_swap k stk =
+      stack_poke k (stack_peek 0 stk) (stack_poke 0 (stack_peek k stk) stk)` by
+       simp[stack_swap_def, stack_poke_def, stack_peek_def, LET_THM] >>
+     `LENGTH (stack_poke 0 (stack_peek k stk) stk) = LENGTH stk` by
+       simp[stack_poke_def] >>
+     simp[reorderSimTheory.reverse_stack_poke] >>
+     `!j. j < LENGTH stk ==> stack_peek j stk = EL j (REVERSE stk)` by
+       (rpt strip_tac >> simp[stack_peek_def, EL_REVERSE] >>
+        `PRE (LENGTH stk - j) = LENGTH stk - 1 - j` by decide_tac >> simp[]) >>
+     simp[EL]) >>
+  gvs[do_swap_def] >>
   irule (cj 2 scratch_replay_rules) >>
-  simp[scratch_replay_rules, scratch_replay_step_cases, EL,
-       Once strongPrefixSimTheory.LUPDATE_commutes]
+  simp[scratch_replay_rules, scratch_replay_step_cases]
 QED
 
 Theorem scratch_replay_do_swap_shallow:

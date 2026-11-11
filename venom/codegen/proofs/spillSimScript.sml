@@ -14,7 +14,7 @@ Theory spillSim
 Ancestors
   codegenRel stackOpSim stackOpAsmSim
   asmSem stackPlanTypes planExec stackModel
-  strongPrefixSim instSimHelpers blockSimHelpers asmOpSim
+  strongPrefixSim instSimHelpers blockSimHelpers
   asmToBytecodeProofs venomState
   list rich_list byte
 Libs BasicProvers
@@ -174,7 +174,7 @@ Proof
 QED
 
 (* Helper: EL through asm_expand_memory equals read_byte *)
-Theorem el_expand_read_byte:
+Theorem el_expand_read_byte[local]:
   !i n mem. i < LENGTH (asm_expand_memory n mem) ==>
     EL i (asm_expand_memory n mem) =
     (if i < LENGTH mem then EL i mem else 0w)
@@ -465,7 +465,7 @@ val push_encode_256 =
       val leq_thm = numLib.REDUCE_CONV ``(8:num) <= 256``
   in REWRITE_RULE [div_thm, leq_thm] r1 end;
 
-Theorem push_encode_num_roundtrip:
+Theorem push_encode_num_roundtrip[local]:
   !n. n < dimword(:256) ==>
       word_of_bytes F (0w:bytes32)
         (REVERSE (encode_num_bytes n)) = n2w n
@@ -473,6 +473,24 @@ Proof
   rpt strip_tac >>
   qspec_then `n2w n : bytes32` mp_tac push_encode_256 >>
   simp[wordsTheory.w2n_n2w]
+QED
+
+(* =========================================================================
+   MSTORE dispatch chain: asm_step (AsmOp "MSTORE") evaluates to asm_mstore
+   ========================================================================= *)
+
+Theorem asm_step_op_mstore[local]:
+  !o2pc st. asm_step_op o2pc "MSTORE" st = asm_mstore st
+Proof
+  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
+       asm_step_bitwise_def, asm_step_memory_def]
+QED
+
+Theorem asm_step_op_mload[local]:
+  !o2pc st. asm_step_op o2pc "MLOAD" st = asm_mload st
+Proof
+  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
+       asm_step_bitwise_def, asm_step_memory_def]
 QED
 
 (* =========================================================================
@@ -569,10 +587,6 @@ Proof
   simp[asm_step_def, asm_step_op_mload, asm_mload_def,
        asm_next_def, asm_steps_def]
 QED
-
-(* =========================================================================
-   memory_rel through MSTORE in spill region
-   ========================================================================= *)
 
 (* =========================================================================
    SOSpill preserves venom_asm_rel

@@ -253,7 +253,9 @@ Proof
   simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
        asm_op_arity_table_def, sval_val_def, asm_op_mem_reads_def,
        log_table_def, mem_labels_hit_def, asm_op_mem_writes_def,
-       asmOpSimTheory.asm_step_op_mstore, asm_mstore_def, sym_lift_def,
+       asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
+       asmSemTheory.asm_step_memory_def, asm_mstore_def, sym_lift_def,
        asm_next_def]
 QED
 
@@ -292,7 +294,9 @@ Proof
   simp[sym_mload_def, sym_step_concrete_def, asm_op_arity_def,
        asm_op_arity_table_def, sval_val_def, asm_op_mem_reads_def,
        asm_op_mem_writes_def, log_table_def,
-       asmOpSimTheory.asm_step_op_mload, asm_mload_def, sym_lift_def,
+       asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
+       asmSemTheory.asm_step_memory_def, asm_mload_def, sym_lift_def,
        asm_next_def, mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
        finite_mapTheory.DRESTRICT_UNIV]
 QED
@@ -522,12 +526,22 @@ Proof
   qexists_tac `LUPDATE (HD top) k (LUPDATE (EL k top) 0 top)` >>
   `0 < LENGTH top /\ k < LENGTH top` by simp[] >>
   `HD (top ++ srest) = HD top` by (Cases_on `top` >> gvs[]) >>
-  simp[lupdate_append, EL_APPEND_EQN, planWfTheory.reverse_stack_swap] >>
-  `LUPDATE (EL k (REVERSE ps.ps_stack)) 0
-     (LUPDATE (EL 0 (REVERSE ps.ps_stack)) k (REVERSE ps.ps_stack)) =
-   LUPDATE (HD (REVERSE ps.ps_stack)) k
-     (LUPDATE (EL k (REVERSE ps.ps_stack)) 0 (REVERSE ps.ps_stack))` by
-    simp[LUPDATE_commutes, EL] >>
+  `!k stk. 0 < k /\ k < LENGTH stk ==>
+     REVERSE (stack_swap k stk) =
+     LUPDATE (HD (REVERSE stk)) k
+       (LUPDATE (EL k (REVERSE stk)) 0 (REVERSE stk))` by
+    (rpt strip_tac >>
+     `stack_swap k stk =
+      stack_poke k (stack_peek 0 stk) (stack_poke 0 (stack_peek k stk) stk)` by
+       simp[stack_swap_def, stack_poke_def, stack_peek_def, LET_THM] >>
+     `LENGTH (stack_poke 0 (stack_peek k stk) stk) = LENGTH stk` by
+       simp[stack_poke_def] >>
+     simp[reorderSimTheory.reverse_stack_poke] >>
+     `!j. j < LENGTH stk ==> stack_peek j stk = EL j (REVERSE stk)` by
+       (rpt strip_tac >> simp[stack_peek_def, EL_REVERSE] >>
+        `PRE (LENGTH stk - j) = LENGTH stk - 1 - j` by decide_tac >> simp[]) >>
+     simp[EL]) >>
+  simp[lupdate_append, EL_APPEND_EQN] >>
   gvs[asmSymBridgeTheory.LIST_REL_swap]
 QED
 

@@ -201,7 +201,9 @@ Proof
   simp[sym_mload_def, sym_step_concrete_def, asm_op_arity_def,
        asm_op_arity_table_def, sval_val_def, asm_op_mem_reads_def,
        asm_op_mem_writes_def, sym_lift_def,
-       asmOpSimTheory.asm_step_op_mload, asmSemTheory.asm_mload_def,
+       asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
+       asmSemTheory.asm_step_memory_def, asmSemTheory.asm_mload_def,
        asmSemTheory.asm_next_def, mem_labels_clear_def,
        GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV]
 QED
@@ -224,7 +226,9 @@ Proof
   simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
        sval_val_def, asm_op_arity_table_def, asmSemTheory.log_table_def,
        asm_op_mem_reads_def, asm_op_mem_writes_def,
-       mem_labels_hit_def, sym_lift_def, asmOpSimTheory.asm_step_op_mstore,
+       mem_labels_hit_def, sym_lift_def, asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
+       asmSemTheory.asm_step_memory_def,
        asmSemTheory.asm_mstore_def, asmSemTheory.asm_next_def,
        scratch_labels_write_def, Excl "GENLIST_NUMERALS"]
 QED

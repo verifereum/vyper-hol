@@ -115,10 +115,7 @@ QED
 Theorem expand_memory_retains[local]:
   i < LENGTH m ==> EL i (asm_expand_memory k m) = EL i m
 Proof
-  strip_tac >>
-  `i < LENGTH (asm_expand_memory k m)` by
-    (mp_tac expand_memory_grows >> decide_tac) >>
-  simp[el_expand_read_byte]
+  rw[asm_expand_memory_def] >> simp[EL_APPEND_EQN]
 QED
 
 Theorem expand_memory_agrees[local]:
@@ -127,10 +124,9 @@ Theorem expand_memory_agrees[local]:
   !i. i < LENGTH (asm_expand_memory k n) /\ i NOTIN L ==>
     EL i (asm_expand_memory k m) = EL i (asm_expand_memory k n)
 Proof
-  rpt strip_tac >>
-  `i < LENGTH (asm_expand_memory k m)` by metis_tac[expand_memory_lengths] >>
-  simp[el_expand_read_byte] >>
-  Cases_on `i < LENGTH n` >> simp[]
+  rw[asm_expand_memory_def] >>
+  Cases_on `i < LENGTH n` >>
+  gvs[EL_APPEND_EQN, rich_listTheory.EL_REPLICATE]
 QED
 
 Theorem expand_memory_read[local]:
@@ -1586,7 +1582,9 @@ Proof
   Cases_on `ss.sym_stack` >- simp[sym_mstore_def] >>
   Cases_on `t` >- simp[sym_mstore_def] >>
   Cases_on `h` >> Cases_on `h'` >> simp[sym_mstore_def] >>
-  drule_all mstore_label_sim >> simp[asm_step_op_mstore]
+  drule_all mstore_label_sim >>
+  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
+       asm_step_bitwise_def, asm_step_memory_def]
 QED
 
 Theorem mem_label_at_bytes[local]:
@@ -1789,8 +1787,8 @@ Proof
       Cases_on `w2n dst <= i /\ i < w2n dst + w2n sz` >> simp[] >>
       fs[mem_labels_clear_def, finite_mapTheory.FDOM_DRESTRICT, in_mem_range_def,
          pred_setTheory.IN_INTER, pred_setTheory.SPECIFICATION] >>
-      simp[Abbr `em`, Abbr `ec`, el_expand_read_byte] >>
-      Cases_on `i < LENGTH cs.as_memory` >> simp[] >> metis_tac[]) >>
+      simp[Abbr `em`, Abbr `ec`] >>
+      irule mstore_expansion_equal >> simp[] >> metis_tac[]) >>
   rpt strip_tac >>
   gvs[mem_labels_clear_def, finite_mapTheory.FLOOKUP_DRESTRICT, in_mem_range_def,
       pred_setTheory.SPECIFICATION] >>
@@ -1799,7 +1797,7 @@ Proof
     (simp[Abbr `ec`, asm_expand_memory_def] >> IF_CASES_TAC >> simp[]) >>
   `i < LENGTH ec` by decide_tac >>
   simp[] >>
-  `ec❲i❳ = cs.as_memory❲i❳` by simp[Abbr `ec`, el_expand_read_byte] >>
+  `ec❲i❳ = cs.as_memory❲i❳` by simp[Abbr `ec`, expand_memory_retains] >>
   metis_tac[]
 QED
 

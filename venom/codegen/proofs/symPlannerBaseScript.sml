@@ -250,7 +250,10 @@ Theorem LIST_REL_stack_dup:
   LIST_REL R (REVERSE stk) top /\ d < LENGTH stk ==>
   LIST_REL R (REVERSE (stack_dup d stk)) (EL d top :: top)
 Proof
-  simp[stack_dup_def, stack_peek_eq_EL_REVERSE] >>
+  `!k stk. k < LENGTH stk ==> stack_peek k stk = EL k (REVERSE stk)` by
+    (rpt strip_tac >> simp[stack_peek_def, EL_REVERSE] >>
+     `PRE (LENGTH stk - k) = LENGTH stk - 1 - k` by decide_tac >> simp[]) >>
+  pop_assum (fn th => simp[stack_dup_def, th]) >>
   simp[LIST_REL_EL_EQN]
 QED
 
@@ -285,7 +288,10 @@ Theorem LIST_REL_stack_poke_equiv:
   LIST_REL R (REVERSE (stack_poke d op stk)) top
 Proof
   rpt strip_tac >> simp[reverse_stack_poke] >>
-  metis_tac[LIST_REL_replace_equiv, stack_peek_eq_EL_REVERSE, LENGTH_REVERSE]
+  `!k stk. k < LENGTH stk ==> stack_peek k stk = EL k (REVERSE stk)` by
+    (rpt strip_tac >> simp[stack_peek_def, EL_REVERSE] >>
+     `PRE (LENGTH stk - k) = LENGTH stk - 1 - k` by decide_tac >> simp[]) >>
+  metis_tac[LIST_REL_replace_equiv, LENGTH_REVERSE]
 QED
 
 Theorem sym_kinds_ok_poke_equiv:
@@ -304,7 +310,23 @@ Theorem LIST_REL_stack_swap:
   LIST_REL R (REVERSE (stack_swap d stk))
     (LUPDATE (HD top) d (LUPDATE (EL d top) 0 top))
 Proof
-  rpt strip_tac >> simp[reverse_stack_swap, lupdate_commutes, EL] >>
+  rpt strip_tac >>
+  `!k stk. 0 < k /\ k < LENGTH stk ==>
+     REVERSE (stack_swap k stk) =
+     LUPDATE (HD (REVERSE stk)) k
+       (LUPDATE (EL k (REVERSE stk)) 0 (REVERSE stk))` by
+    (rpt strip_tac >>
+     `stack_swap k stk =
+      stack_poke k (stack_peek 0 stk) (stack_poke 0 (stack_peek k stk) stk)` by
+       simp[stack_swap_def, stack_poke_def, stack_peek_def, LET_THM] >>
+     `LENGTH (stack_poke 0 (stack_peek k stk) stk) = LENGTH stk` by
+       simp[stack_poke_def] >>
+     simp[reverse_stack_poke] >>
+     `!j. j < LENGTH stk ==> stack_peek j stk = EL j (REVERSE stk)` by
+       (rpt strip_tac >> simp[stack_peek_def, EL_REVERSE] >>
+        `PRE (LENGTH stk - j) = LENGTH stk - 1 - j` by decide_tac >> simp[]) >>
+     simp[EL]) >>
+  simp[] >>
   metis_tac[LIST_REL_swap, LENGTH_REVERSE]
 QED
 

@@ -569,7 +569,9 @@ Proof
   strip_tac >>
   simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
        sval_val_def, asm_op_mem_reads_def, asm_op_mem_writes_def,
-       mem_labels_hit_def, sym_lift_def, asmOpSimTheory.asm_step_op_mstore,
+       mem_labels_hit_def, sym_lift_def, asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
+       asmSemTheory.asm_step_memory_def,
        asm_op_arity_table_def, log_table_def,
        asm_mstore_def, mem_sval_at_def, mem_labels_clear_def,
        finite_mapTheory.FLOOKUP_DRESTRICT, asm_next_def,
@@ -624,7 +626,9 @@ Proof
   simp[sym_mload_def, mem_label_at_def, sym_step_concrete_def,
        asm_op_arity_def, asm_op_arity_table_def, sval_val_def,
        asm_op_mem_reads_def, mem_labels_hit_def,
-       asmOpSimTheory.asm_step_op_mload, sym_lift_def] >>
+       asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
+       asmSemTheory.asm_step_memory_def, sym_lift_def] >>
   `~?i. i IN FDOM ss.sym_mem_labels /\ in_mem_range (w2n off) 32 i` by
     metis_tac[mem_sval_at_def] >>
   simp[asm_op_mem_writes_def, mem_labels_clear_def,
@@ -639,7 +643,7 @@ Theorem sym_push_scratch_address:
                     sym_stack := Val (n2w off) :: ss.sym_stack|>)
 Proof
   simp[sym_step_def, sym_lift_def, asm_step_def,
-       spillSimTheory.push_encode_num_roundtrip, asm_next_def] >>
+       doSwapSimTheory.raw_spill_push_encode_num_roundtrip, asm_next_def] >>
   simp[sym_state_component_equality]
 QED
 
