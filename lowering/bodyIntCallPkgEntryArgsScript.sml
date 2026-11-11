@@ -9,7 +9,8 @@ Theorem internal_package_entry_globals:
   stmt_state_rel ctx func caller cx (es with scopes := prev) t /\
   ce.ce_module = caller.ce_module /\
   ce.ce_module_vars = caller.ce_module_vars /\
-  ce.ce_is_ctor = caller.ce_is_ctor ==>
+  ce.ce_is_ctor = caller.ce_is_ctor /\
+  ce.ce_module_var_type = caller.ce_module_var_type ==>
   (ce.ce_is_ctor ==> IS_SOME (FLOOKUP t.vs_labels "runtime_begin")) /\
   state_rel func ce cx (es with scopes := []) t /\
   internal_immutable_regions ce cx es t.vs_alloca_next

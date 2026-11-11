@@ -17,12 +17,14 @@ Theorem internal_package_global_fields:
   ce.ce_module_vars =
     add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
       tops 0 (add_module_var_locations tops FEMPTY) /\
-  ce.ce_is_ctor = ctor
+  ce.ce_is_ctor = ctor /\
+  ce.ce_module_var_type = build_var_type_map tops
 Proof
   rpt gen_tac >>
   simp[set_internal_package_target_def, package_internal_fn_def,
        update_cenv_nonreentrant_def] >> strip_tac >> gvs[] >>
-  simp[build_compile_env_module_vars]
+  simp[build_compile_env_module_vars] >>
+  simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[])
 QED
 
 Theorem package_globals_state_rel:
@@ -41,7 +43,8 @@ Theorem package_initialized_immutable_regions:
   stmt_state_rel ctx func caller cx es s /\
   ce.ce_module = caller.ce_module /\
   ce.ce_module_vars = caller.ce_module_vars /\
-  ce.ce_is_ctor = caller.ce_is_ctor ==>
+  ce.ce_is_ctor = caller.ce_is_ctor /\
+  ce.ce_module_var_type = caller.ce_module_var_type ==>
   internal_immutable_regions ce cx es s.vs_alloca_next
 Proof
   simp[internal_immutable_regions_def] >> rpt strip_tac >>
@@ -51,5 +54,7 @@ Proof
   >- (gvs[immutables_rel_def] >>
       irule (cj 1 loweringSliceTheory.immutable_admissible_val_wf) >>
       metis_tac[]) >>
-  drule_all initialized_immutable_regions >> simp[]
+  TRY (drule_all initialized_immutable_regions >> simp[] >> NO_TAC) >>
+  gvs[stmt_state_rel_def, immutable_alloca_sep_def, immutable_decl_sep_def] >>
+  metis_tac[]
 QED

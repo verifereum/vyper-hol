@@ -77,7 +77,8 @@ Proof
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es cc` by
     fs[intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   `bc.ce_module_vars = ce.ce_module_vars /\ bc.ce_module = ce.ce_module /\
-   bc.ce_is_ctor = ce.ce_is_ctor /\ bc.ce_imm_alloca = ce.ce_imm_alloca` by
+   bc.ce_is_ctor = ce.ce_is_ctor /\ bc.ce_imm_alloca = ce.ce_imm_alloca /\
+   bc.ce_module_var_type = ce.ce_module_var_type` by
     fs[for_code_def, compile_env_component_equality] >>
   qhdtm_assum `for_code` mp_tac >>
   rewrite_tac[for_code_def] >> strip_tac >>

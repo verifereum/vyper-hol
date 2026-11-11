@@ -111,6 +111,9 @@ Proof
   drule internal_package_global_fields >> strip_tac >>
   `ce.ce_module = caller.ce_module /\
    ce.ce_module_vars = caller.ce_module_vars` by metis_tac[] >>
+  `ce.ce_module_var_type = caller.ce_module_var_type` by
+    (qpat_x_assum `body_inv _ _ _ _` mp_tac >>
+     simp[body_inv_def, cenv_module_pins_def] >> metis_tac[]) >>
   `MAP (\(ty,tv,v,flag,op). flag) D = MAP SND params` by metis_tac[] >>
   drule_all internal_package_descriptor_alignment >> strip_tac >>
   drule_all internal_package_entry_globals >> strip_tac >>

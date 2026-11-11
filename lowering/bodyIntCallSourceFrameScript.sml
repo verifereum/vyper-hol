@@ -107,6 +107,8 @@ Proof
       simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
            assert_def, return_def, raise_def, lift_option_type_def] >>
       simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+      Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
+      gvs[raise_def, return_def] >>
       imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]) >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
       assert_def, return_def, raise_def, get_accounts_def, AllCaseEqs()] >>
