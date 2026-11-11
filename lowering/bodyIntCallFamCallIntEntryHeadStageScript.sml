@@ -636,3 +636,100 @@ Proof
   strip_tac >> conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `u` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+
+(* Consume the values and pairwise certificate of one staging endpoint. *)
+Theorem intcall_staged_bound_arguments:
+  !cx args values penv ds start current flags out u base argv ce.
+  bind_arguments (get_tenv cx) args values = SOME penv /\
+  ALL_DISTINCT (MAP FST args) /\ MAP expr_type ds = MAP SND args /\
+  ^completed_prefix cx start current (MAP expr_type ds) flags values out u /\
+  ^staged_regions cx ds flags out u /\
+  (base:num) + LENGTH args <= LENGTH (argv:bytes32 list) /\ LENGTH argv < dimword (:256) /\
+  (!i w. i < LENGTH ds /\ eval_operand (EL i out) u = SOME w ==>
+    EL (base+i) argv = w) /\
+  (!i tv. i < LENGTH args /\
+    evaluate_type (get_tenv cx) (SND (EL i args)) = SOME tv ==>
+    ?off. FLOOKUP ce.ce_vars (FST (EL i args)) =
+      SOME (MemLoc off (type_memory_size tv))) ==>
+  internal_args_rel ce (ZIP (MAP FST args,flags)) penv base argv
+    u.vs_alloca_next u.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH ds = LENGTH args` by
+    (qpat_assum `MAP expr_type ds = MAP SND args`
+      (mp_tac o AP_TERM ``LENGTH : type list -> num``) >> simp[]) >>
+  `!i. i < LENGTH args ==> expr_type (EL i ds) = SND (EL i args)` by
+    (rpt strip_tac >>
+     qpat_assum `MAP expr_type ds = MAP SND args`
+       (mp_tac o Q.AP_TERM `EL i`) >> simp[listTheory.EL_MAP]) >>
+  qpat_x_assum `(^completed_prefix) _ _ _ _ _ _ _ _` mp_tac >>
+  BETA_TAC >> simp[listTheory.EL_MAP] >> strip_tac >>
+  irule intcall_bound_arguments_rel >> simp[] >>
+  qexistsl_tac [`get_tenv cx`, `values`] >> simp[] >> reverse conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!i. i < LENGTH args ==> ?tv w. _`
+        (qspec_then `i` (strip_assume_tac o UNDISCH)) >>
+      drule_all entryDecodePropsTheory.bind_arguments_word_arg >> strip_tac >>
+      `expr_type (EL i ds) = SND (EL i args)` by metis_tac[] >> gvs[] >>
+      qpat_assum `!i tv. _ ==> ?off. _` (drule_all_then strip_assume_tac) >>
+      rename1 `argbase + LENGTH args <= LENGTH argv` >>
+      `EL (argbase+i) argv = w` by metis_tac[] >>
+      qexists_tac `off` >> simp[] >>
+      Cases_on `EL i flags` >> gvs[] >> decide_tac ) >>
+  rpt strip_tac >> drule intcall_staged_regions_pairwise >>
+  disch_then (qspecl_then [`i`,`j`,`ti`,`tj`] mp_tac) >>
+  qpat_assum `!i. i < LENGTH args ==> ?tv w. _`
+    (qspec_then `i` mp_tac) >>
+  qpat_assum `!i. i < LENGTH args ==> ?tv w. _`
+    (qspec_then `j` mp_tac) >>
+  simp[] >> BETA_TAC >> rpt strip_tac >> metis_tac[]
+QED
+
+Theorem intcall_staged_parameter_provenance:
+  !cx ce args ds flags params start current out u func base argv values.
+  params = ZIP (MAP FST args,flags) /\ MAP expr_type ds = MAP SND args /\
+  EVERY (\a. ?off. FLOOKUP ce.ce_vars (FST a) =
+    SOME (MemLoc off (type_memory_bytes ce (SND a)))) args /\
+  ^completed_prefix cx start current (MAP expr_type ds) flags values out u /\
+  (!i tv. i < LENGTH ds /\ ~EL i flags /\
+    evaluate_type (get_tenv cx) (expr_type (EL i ds)) = SOME tv ==>
+    type_memory_bytes ce (expr_type (EL i ds)) = type_memory_size tv /\
+    ^allocation_origin func start current (EL i out) tv u) /\
+  (!i w. i < LENGTH ds /\ eval_operand (EL i out) u = SOME w ==>
+    EL ((base:num)+i) (argv:bytes32 list) = w) ==>
+  !i po psz. i < LENGTH params /\ ~SND (EL i params) /\
+    FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) ==>
+    ?aid off len.
+      FLOOKUP u.vs_allocas aid = SOME (off,len) /\
+      (?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+        inst.inst_id = aid) /\
+      start.cs_next_id <= aid /\ aid < current.cs_next_id /\
+      off <= w2n (EL (base+i) argv) /\ w2n (EL (base+i) argv) + psz <= off+len
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH ds = LENGTH args` by
+    (qpat_assum `MAP expr_type ds = MAP SND args`
+      (mp_tac o AP_TERM ``LENGTH : type list -> num``) >> simp[]) >>
+  `!i. i < LENGTH args ==> expr_type (EL i ds) = SND (EL i args)` by
+    (rpt strip_tac >>
+     qpat_assum `MAP expr_type ds = MAP SND args`
+       (mp_tac o Q.AP_TERM `EL i`) >> simp[listTheory.EL_MAP]) >>
+  qpat_x_assum `(^completed_prefix) _ _ _ _ _ _ _ _` mp_tac >>
+  BETA_TAC >> strip_tac >>
+  rpt gen_tac >> rpt disch_tac >>
+  irule intcall_parameter_slot_provenance >>
+  simp[] >> qexistsl_tac [`args`,`ce`,`flags`,`po`] >>
+  gvs[listTheory.LENGTH_MAP] >> qx_gen_tac `k` >> strip_tac >>
+  qpat_assum `!i. i < LENGTH args ==> ?tv w. _`
+    (qspec_then `k` (strip_assume_tac o UNDISCH)) >>
+  `expr_type (EL k ds) = SND (EL k args)` by metis_tac[] >>
+  gvs[listTheory.EL_MAP] >>
+  `evaluate_type (get_tenv cx) (expr_type (EL k ds)) = SOME tv`
+    by metis_tac[] >>
+  qpat_x_assum `!i tv. _ ==> _ /\ _`
+    (qspecl_then [`k`,`tv`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rename1 `argbase + k` >>
+  `EL (argbase+k) argv = w'` by metis_tac[] >>
+  qexistsl_tac [`w2n w'`,`len'`,`inst`] >> simp[]
+QED
