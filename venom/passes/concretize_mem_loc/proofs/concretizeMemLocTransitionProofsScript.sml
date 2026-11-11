@@ -5,7 +5,104 @@ Ancestors
   staticLayoutCompletionProofs staticLayoutAllocatorProofs
   staticLayoutFoldProofs staticLayoutWf concretizeMemLocDefs staticLayoutDefs
   passSimulationDefs passSharedDefs passSharedProps venomInst list fcgDefs
-  passTransform
+  passTransform venomState finite_map arithmetic sorting pair relation
+
+(* -- first_fit_pos helpers -- *)
+
+(* first_fit_pos avoids all reserved regions. *)
+Triviality pos_cmp_transitive:
+  transitive (\(p1:num,_) (p2,_). p1 <= p2)
+Proof
+  simp[relationTheory.transitive_def, FORALL_PROD]
+QED
+
+Triviality pos_cmp_total:
+  relation$total (\(p1:num,_) (p2,_). p1 <= p2)
+Proof
+  simp[relationTheory.total_def, FORALL_PROD]
+QED
+
+Triviality sorted_pos_mem:
+  !h0 h1 t.
+    SORTED (\(p1:num,_:num) (p2,_). p1 <= p2) ((h0,h1)::t) ==>
+    !p s. MEM (p,s) t ==> h0 <= p
+Proof
+  rpt strip_tac >>
+  imp_res_tac (iffLR (SORTED_EQ
+    |> Q.ISPEC `\(p1:num,_:num) (p2:num,_:num). p1 <= p2`
+    |> SIMP_RULE std_ss [pos_cmp_transitive, FORALL_PROD]))
+QED
+
+(* first_fit_pos returns a position at or after `start` that does not overlap
+   any reserved region. *)
+Theorem first_fit_pos_correct:
+  !reserved size start.
+    SORTED (\(p1:num,_:num) (p2,_). p1 <= p2) reserved ==>
+    start <= first_fit_pos reserved size start /\
+    !rpos rsz. MEM (rpos, rsz) reserved ==>
+      first_fit_pos reserved size start + size <= rpos \/
+      rpos + rsz <= first_fit_pos reserved size start
+Proof
+  Induct >- simp[Once first_fit_pos_def]
+  >> Cases >> rpt gen_tac >> rename1 `(hp,hs)::rest`
+  >> once_rewrite_tac[first_fit_pos_def] >> simp[] >> strip_tac
+  >> imp_res_tac SORTED_TL
+  >> drule sorted_pos_mem >> strip_tac
+  >> IF_CASES_TAC >> gvs[]
+  >- suspend "skip"
+  >> IF_CASES_TAC >> gvs[]
+  >- suspend "gap"
+  >> suspend "overlap"
+QED
+
+Resume first_fit_pos_correct[skip]:
+  first_x_assum (qspecl_then [`size'`, `start`] strip_assume_tac)
+  >> rpt strip_tac >> gvs[]
+  >> disj2_tac >> irule LESS_EQ_TRANS
+  >> qexists `start` >> simp[]
+QED
+
+Resume first_fit_pos_correct[gap]:
+  rpt strip_tac >> gvs[]
+  >> metis_tac[LESS_EQ_TRANS]
+QED
+
+Resume first_fit_pos_correct[overlap]:
+  first_x_assum (qspecl_then [`size'`, `hp + hs`] strip_assume_tac)
+  >> conj_tac >- metis_tac[LESS_EQ_TRANS,
+    LESS_IMP_LESS_OR_EQ, NOT_LESS_EQUAL]
+  >> rpt strip_tac >> gvs[]
+QED
+
+Finalise first_fit_pos_correct
+
+(* allocate_one produces a position that does not overlap any reserved region. *)
+Theorem allocate_one_avoids:
+  !reserved sz pos rest.
+    allocate_one reserved sz = (pos, rest) ==>
+    !rpos rsz. MEM (rpos, rsz) reserved ==>
+      pos + sz <= rpos \/ rpos + rsz <= pos
+Proof
+  rw[allocate_one_def]
+  >> `SORTED (\(p1:num,_) (p2,_). p1 <= p2)
+             (QSORT (\(p1:num,_) (p2,_). p1 <= p2) reserved)`
+    by (irule QSORT_SORTED
+      >> simp[pos_cmp_transitive, pos_cmp_total])
+  >> drule first_fit_pos_correct >> strip_tac
+  >> `MEM (rpos,rsz) (QSORT (\(p1:num,_) (p2,_). p1 <= p2) reserved)`
+    by simp[QSORT_MEM]
+  >> res_tac >> simp[]
+QED
+
+(* Runtime alloca size matches static alloca size from instruction definition.
+   Invariant: exec_alloca stores (offset, w2n alloc_size) where alloc_size = Lit sz_op.
+   get_alloca_size reads w2n sz_op from the same instruction. So they match. *)
+Definition alloca_sizes_match_def:
+  alloca_sizes_match fn (s : venom_state) <=>
+    !aid off sz.
+      FLOOKUP s.vs_allocas aid = SOME (off, sz) ==>
+      sz = get_alloca_size fn (Allocation aid)
+End
 
 Theorem concretize_inst_with_positions_not_alloca[local]:
   static_alloca_items fn = SOME items /\

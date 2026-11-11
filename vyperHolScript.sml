@@ -21,9 +21,8 @@ Ancestors
   vyperLoweringHol
   (* Venom execution: alloca size caching, jump independence *)
   allocaCacheProps jumpIndep
-  (* passes: FMP lowering composition, memory merging, the concretize
-     simulation's oracle projection *)
-  fmpLowerSequenceExec mmTransform memzeroFrame concretizeOracleSim
+  (* passes: FMP lowering composition, memory merging *)
+  fmpLowerSequenceExec mmTransform memzeroFrame
   mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
   (* O1: lifting per-function pass facts to the stage contract *)
   o1PassLift
