@@ -134,6 +134,13 @@ Proof
   `~(is_bytestring_type ret /\
      is_bytestring_type (lowered_value_type cenv' e))` by metis_tac[] >>
   drule_all normalize_return_source_kinds >> strip_tac >>
+  drule_all external_package_raw_flag >> strip_tac >>
+  `~cenv'.ce_raw_return` by
+    (strip_tac >>
+     `lookup_raw_return_or_F (NONE : num option) tx.function_name External tops` by
+       metis_tac[] >>
+     drule_all source_typing_raw_return_type >> strip_tac >>
+     gvs[is_bytestring_type_def]) >>
   suspend "compile"
 QED
 
@@ -228,13 +235,6 @@ QED
 Resume external_frame_ret_value_normalized_run_mem[suffix]:
   `ret <> NoneT` by metis_tac[valued_return_type_not_none] >>
   drule_all external_package_encoder_admissible >> strip_tac >>
-  drule_all external_package_raw_flag >> strip_tac >>
-  `~cenv'.ce_raw_return` by
-    (strip_tac >>
-     `lookup_raw_return_or_F (NONE : num option) tx.function_name External tops` by
-       metis_tac[] >>
-     drule_all source_typing_raw_return_type >> strip_tac >>
-     gvs[is_bytestring_type_def]) >>
   `cenv'.ce_is_external` by suspend "external_flag" >>
   `return_buffer_ok cenv'` by
     (qpat_x_assum `stmt_exprs_ok _ _` mp_tac >>
