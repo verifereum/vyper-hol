@@ -69,7 +69,7 @@ Theorem code_slice_uint_outcome_ptr:
       H (IntV (&i)) ee G tn t /\
       expr_sim_inv cenv cx env ee /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       eval_operand op t = SOME (n2w i) /\
-      op_taint tn op = {} /\ op_prov G op = NONE) R
+      op_taint tn op = {} /\ op_prov G op = NONE /\ ee.gas_obs = []) R
 Proof
   strip_tac >> irule gas_outcome_ptr_marked_conseq >>
   goal_assum (drule_at Any) >> rpt strip_tac >> BETA_TAC >>
@@ -104,7 +104,8 @@ Theorem code_slice_uint_head_outcome_ptr:
        Inv ee /\ typed_args_ready ctx func cenv cx arg_ty Inv args /\
        ptr_args_ready d ctx PG func cenv cx arg_ty Inv args) /\
       expr_sim_inv cenv cx env ee /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
-      eval_operand op t = SOME (n2w i) /\ op_taint tn op = {} /\ op_prov G op = NONE)
+      eval_operand op t = SOME (n2w i) /\ op_taint tn op = {} /\ op_prov G op = NONE /\
+      ee.gas_obs = [])
     (\res ee gt r. expr_exit res r)
 Proof
   strip_tac >>
@@ -198,7 +199,8 @@ Theorem code_slice_two_uint_outcome_ptr:
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     stmt_state_rel ctx func cenv cx ee t /\ ghost_inv d cenv cx ee G tn t /\
     expr_sim_inv cenv cx env ee /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
-    wb_frame cenv es ee sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+    wb_frame cenv es ee sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+    ee.gas_obs = [] ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
       (next (IntV (&i)) (IntV (&k))) (ee,t,G,tn) Q R) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
