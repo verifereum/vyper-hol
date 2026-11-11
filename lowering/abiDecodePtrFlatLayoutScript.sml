@@ -118,7 +118,7 @@ Proof
     supported_word_type_def, supported_string_type_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
   simp[supported_word_type_def, supported_string_type_def]
-  >~ [`BytesT bd`] >>> HEADGOAL (Cases_on `bd` >>
+  >>> Q.SELECT_GOALS_LT_THEN [`BytesT bd`] (Cases_on `bd` >>
        simp[supported_word_type_def, supported_string_type_def]) >>
   rpt strip_tac >>
   simp[abi_decode_member_layout_def, type_to_abi_dec_info_def,

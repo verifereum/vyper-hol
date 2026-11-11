@@ -62,7 +62,7 @@ Proof
   rename1 `BaseT bt` >> Cases_on `bt` >>
   fs[supported_word_type_def, supported_string_type_def,
     type_to_abi_dec_info_def, abi_decode_runtime_footprint_def]
-  >~ [`BytesT bd`] >>> HEADGOAL (Cases_on `bd` >>
+  >>> Q.SELECT_GOALS_LT_THEN [`BytesT bd`] (Cases_on `bd` >>
     fs[supported_word_type_def, supported_string_type_def,
       type_to_abi_dec_info_def, abi_decode_runtime_footprint_def]) >>
   gvs[evaluate_type_def, is_bytestring_type_def, type_memory_size_def] >>
