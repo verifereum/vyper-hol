@@ -6103,6 +6103,61 @@ Resume invoke_gas_crossing_stopped[close]:
 QED
 Finalise invoke_gas_crossing_stopped[local]
 
+(* The recursive prefix and the extracted call share this actual endpoint.
+   In particular the caller updates are replayed, not chosen a second time. *)
+Theorem invoke_extract_shared_successor[local]:
+  !pre s v pg fg tail a.
+    y.inst_opcode = INVOKE /\
+    EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x /\
+      dftGasInvCallPartner$inv_partner_inputs x s
+        (v with vs_inst_idx := SUC s.vs_inst_idx)) pre /\
+    LENGTH pg = LENGTH (FILTER (\x. x.inst_opcode = GAS) pre) /\
+    FOLDR (dft_exec_cons fuel C) OK pre
+      (s with vs_gas_readings := pg ++ (fg ++ tail)) = OK a /\
+    step_inst fuel C y (s with vs_gas_readings := fg ++ tail) =
+      OK (v with vs_gas_readings := tail) ==>
+    ?b.
+      FOLDR (dft_exec_cons fuel C) OK pre
+        (v with <|vs_inst_idx := SUC s.vs_inst_idx;
+                  vs_gas_readings := pg ++ tail|>) = OK b /\
+      FOLDR (dft_exec_cons fuel C) OK (pre ++ [y])
+        (s with vs_gas_readings := pg ++ (fg ++ tail)) = OK b
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `FOLDR _ _ _ _ = OK _`)
+    (Q.INST [`D` |-> `C`] invoke_partner_prefix_replay) >>
+  disch_then (qspecl_then [`y`,
+    `v with vs_inst_idx := SUC s.vs_inst_idx`, `tail`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `uss` strip_assume_tac) >>
+  qexists_tac `FOLDL (\st q. update_var (FST q) (SND q) st)
+    (v with <|vs_gas_readings := tail;
+              vs_inst_idx := SUC s.vs_inst_idx + LENGTH pre|>) (FLAT uss)` >>
+  conj_tac >- gvs[] >>
+  `EVERY (\q. ~MEM (Var (FST q)) y.inst_operands /\
+                ~MEM (FST q) y.inst_outputs) (FLAT uss)` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) pre` by
+    (fs[EVERY_MEM, dft_gas_swap_pair_def] >> metis_tac[]) >>
+  pure_rewrite_tac[FOLDR_APPEND] >>
+  simp[Once dftRunRelTheory.dft_exec_prefix_continue] >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def,
+       venomInstTheory.is_terminator_def] >>
+  drule_all invoke_updates_concrete_frame >>
+  disch_then (qspecl_then [`fuel`, `C`,
+    `s with <|vs_inst_idx := s.vs_inst_idx + LENGTH pre;
+              vs_gas_readings := fg ++ tail|>`] mp_tac) >>
+  simp[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only,
+       arithmeticTheory.ADD_COMM] >>
+  strip_tac >>
+  `(\st q. update_var (FST q) (SND q) st) =
+    (\st (out,value). update_var out value st)` by
+    simp[FUN_EQ_THM, pairTheory.FORALL_PROD] >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >>
+  simp[foldl_update_var_inst_idx, foldl_update_var_idx,
+       arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD_COMM]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
