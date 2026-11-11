@@ -10,6 +10,7 @@ Ancestors
   abiEncoderWindowLookup abiEncoderWindowSequence list venomMemDefs
   exprSimAbiEncodeConcreteResources abiDecoderLoop
   abiBuiltinEncodeSetup abiBuiltinAllocation abiDecoderContract abiBuiltinEncodeCorrect
+  abiEncoderLeafGlobals
   exprSimAbiEncodeExecFrame exprSimAbiEncodeSemantic
   exprSimAbiEncodeOpenFinishExtension abiEncoderExtendSim
   exprLoweringProps compileEnv words finite_map arithmetic
@@ -185,6 +186,8 @@ Proof
   drule abi_builtin_encode_finish_shape >> strip_tac >>
   drule_all abi_encode_finish_sequence_open >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st final) initial = OK encoded` >>
+  drule abi_builtin_encode_finish_global_code >> strip_tac >>
+  drule_all abi_encoder_leaf_sequence_globals >> strip_tac >>
   `abi_encode_exec_frame func initial encoded` by
     (drule_all abi_encode_framed_finish_sequence >> simp[]) >>
   `eval_operand buf encoded = SOME (n2w p)` by
