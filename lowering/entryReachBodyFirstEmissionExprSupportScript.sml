@@ -260,7 +260,8 @@ Proof
           fs[compile_store_memory_labels]) >>
       irule cs_appends_bind >> simp[cs_appends_return] >>
       rw[cs_appends_def] >>
-      qpat_x_assum `!mem_size is_bs buf buf_alloc. _` mp_tac >> simp[] >>
+      qpat_x_assum `!mem_size is_bs buf buf_alloc.
+        mem_size = type_memory_bytes _ _ /\ _ ==> _` mp_tac >> simp[] >>
       disch_then drule >> simp[]) >>
   ho_match_mp_tac first_emission_bind >>
   (conj_tac >- metis_tac[first_emission_unwrap_value] >> gen_tac) >>
