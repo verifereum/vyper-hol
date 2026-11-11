@@ -504,21 +504,6 @@ Proof
   qexists_tac `0` >> simp[NoAsms] >> first_assum ACCEPT_TAC
 QED
 
-Theorem prefix_bool_preheader_fragment_lookup[local]:
-  isPREFIX is (DROP k bb.bb_instructions) /\ j < LENGTH is ==>
-  get_instruction bb (k+j) = SOME (EL j is)
-Proof
-  simp[IS_PREFIX_APPEND] >> rpt strip_tac >>
-  `j < LENGTH (DROP k bb.bb_instructions)` by
-    (asm_rewrite_tac[LENGTH_APPEND] >> decide_tac) >>
-  `k+j < LENGTH bb.bb_instructions` by
-    (gvs[LENGTH_DROP] >> decide_tac) >>
-  simp[get_instruction_def] >>
-  `EL j (DROP k bb.bb_instructions) = EL j is` by
-    simp[EL_APPEND_EQN] >>
-  gvs[EL_DROP]
-QED
-
 Theorem prefix_bool_preheader_gt_taint_frame[local]:
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp ==>
   let q = step_taint (mk_inst iid GT [a;b] [x]) s t tn in
@@ -627,7 +612,7 @@ Proof
   qmatch_asmsub_abbrev_tac `isPREFIX is _` >>
   `!j. j < LENGTH is ==>
      get_instruction bb (s.vs_inst_idx+j) = SOME (EL j is)` by
-    (rpt strip_tac >> irule prefix_bool_preheader_fragment_lookup >> simp[]) >>
+    (rpt strip_tac >> irule ctorDeployMemoryRunPtrPrefixBoolWordTheory.prefix_boolword_instruction >> simp[]) >>
   `get_instruction bb s.vs_inst_idx = SOME (EL 0 is) /\
    get_instruction bb (s.vs_inst_idx+1) = SOME (EL 1 is) /\
    get_instruction bb (s.vs_inst_idx+2) = SOME (EL 2 is)` by
@@ -739,7 +724,7 @@ Proof
   qmatch_asmsub_abbrev_tac `isPREFIX is _` >>
   `!j. j < LENGTH is ==>
      get_instruction bb (s.vs_inst_idx+j) = SOME (EL j is)` by
-    (rpt strip_tac >> irule prefix_bool_preheader_fragment_lookup >> simp[]) >>
+    (rpt strip_tac >> irule ctorDeployMemoryRunPtrPrefixBoolWordTheory.prefix_boolword_instruction >> simp[]) >>
   `get_instruction bb s.vs_inst_idx = SOME (mk_inst iid MUL [Var cnt;Lit 32w] [vm])` by
     (first_x_assum (qspec_then `0` mp_tac) >> simp[Abbr `is`]) >>
   `eval_operand (Lit 32w) s = SOME 32w /\ op_taint tn (Lit 32w) = {}` by
@@ -861,7 +846,7 @@ Resume prefix_bool_preheader_count_cut[reject]:
   qexists_tac `vh` >> conj_tac >- first_assum ACCEPT_TAC >>
   `!j. j < LENGTH is ==>
      get_instruction bb (s.vs_inst_idx+j) = SOME (EL j is)` by
-    (rpt strip_tac >> irule prefix_bool_preheader_fragment_lookup >> simp[]) >>
+    (rpt strip_tac >> irule ctorDeployMemoryRunPtrPrefixBoolWordTheory.prefix_boolword_instruction >> simp[]) >>
   gen_tac >>
   mp_tac (Q.INST [`fuel` |-> `f`]
     (BETA_RULE (REWRITE_RULE [LET_THM]
@@ -880,7 +865,7 @@ Resume prefix_bool_preheader_count_cut[accept]:
   simp[] >>
   `!j. j < LENGTH is ==>
      get_instruction bb (s.vs_inst_idx+j) = SOME (EL j is)` by
-    (rpt strip_tac >> irule prefix_bool_preheader_fragment_lookup >> simp[]) >>
+    (rpt strip_tac >> irule ctorDeployMemoryRunPtrPrefixBoolWordTheory.prefix_boolword_instruction >> simp[]) >>
   `get_instruction bb s.vs_inst_idx = SOME (EL 0 is) /\
    get_instruction bb (s.vs_inst_idx+1) = SOME (EL 1 is) /\
    get_instruction bb (s.vs_inst_idx+2) = SOME (EL 2 is) /\

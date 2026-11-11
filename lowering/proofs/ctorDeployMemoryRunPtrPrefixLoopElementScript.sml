@@ -1,6 +1,7 @@
 (* Zero-hi element preparation: concrete code boundaries for paired execution. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopElement
 Ancestors
+  slotCopyExecution
   compileEnv
   ctorDeployMemoryRunPtrPrefixLoopHeader ctorDeployMemoryRunPtrPrefixMemberSetup
   ctorDeployMemoryRunPtrPrefixBoolBody ctorDeployMemoryRunPtrPrefixSteps
@@ -134,9 +135,9 @@ Proof
   `step_inst_base (mk_inst iid ADD [dst;Lit 32w] [x]) s = OK s1 /\
    step_inst_base (mk_inst (iid+1) MUL [idx;Lit stride] [y]) s1 = OK s2 /\
    step_inst_base (mk_inst (iid+2) ADD [Var x;Var y] [z]) s2 = OK s3` by
-    (conj_tac >- (simp[Abbr `s1`] >> irule prefix_bool_body_add_step >> simp[eval_operand_def]) >>
-     conj_tac >- (simp[Abbr `s2`] >> irule prefix_bool_body_mul_step >> simp[eval_operand_def]) >>
-     simp[Abbr `s3`] >> irule prefix_bool_body_add_step >>
+    (conj_tac >- (simp[Abbr `s1`] >> irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_def]) >>
+     conj_tac >- (simp[Abbr `s2`] >> irule slotCopyExecutionTheory.slot_copy_step_mul >> simp[eval_operand_def]) >>
+     simp[Abbr `s3`] >> irule slotCopyExecutionTheory.slot_copy_step_add >>
      gvs[Abbr `s2`,Abbr `s1`,eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE,ALL_DISTINCT]) >>
   `t = s3` by gvs[run_inst_seq_def] >>
   qexistsl [`g3`,`q3`] >>
@@ -275,7 +276,7 @@ Proof
      disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      simp[abi_decode_load_def,abi_decode_source_def]) >>
   `step_inst_base (mk_inst (iid+1) ADD [base_op;Var x] [y]) s1 = OK s2` by
-    (simp[Abbr `s2`] >> irule prefix_bool_body_add_step >>
+    (simp[Abbr `s2`] >> irule slotCopyExecutionTheory.slot_copy_step_add >>
      simp[Abbr `s1`,eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE]) >>
   `t = s2` by gvs[run_inst_seq_def] >>
   qexistsl [`set_prov g1 [y] (first_prov g1 [base_op;Var x])`,
@@ -317,11 +318,11 @@ Proof
     (Cases_on `idx` >> gvs[Abbr `s1`,eval_operand_def,lookup_var_def,
       update_var_def,FLOOKUP_UPDATE]) >>
   `step_inst_base (mk_inst iid ADD [base_op;Lit 32w] [x]) s = OK s1` by
-    (simp[Abbr `s1`] >> irule prefix_bool_body_add_step >> simp[eval_operand_def]) >>
+    (simp[Abbr `s1`] >> irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_def]) >>
   `step_inst_base (mk_inst (iid+1) MUL [idx;Lit stride] [y]) s1 = OK s2` by
-    (simp[Abbr `s2`] >> irule prefix_bool_body_mul_step >> simp[eval_operand_def]) >>
+    (simp[Abbr `s2`] >> irule slotCopyExecutionTheory.slot_copy_step_mul >> simp[eval_operand_def]) >>
   `step_inst_base (mk_inst (iid+2) ADD [Var x;Var y] [z]) s2 = OK s3` by
-    (simp[Abbr `s3`] >> irule prefix_bool_body_add_step >>
+    (simp[Abbr `s3`] >> irule slotCopyExecutionTheory.slot_copy_step_add >>
      gvs[Abbr `s1`,Abbr `s2`,eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE]) >>
   `t = s3` by gvs[run_inst_seq_def] >>
   simp[Abbr `s3`,Abbr `s2`,Abbr `s1`,update_var_def] >>
@@ -500,7 +501,7 @@ Proof
      disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      simp[abi_decode_load_def,abi_decode_source_def]) >>
   `step_inst_base (mk_inst (iid+1) ADD [base_op;Var x] [y]) s1 = OK s2` by
-    (simp[Abbr `s2`] >> irule prefix_bool_body_add_step >>
+    (simp[Abbr `s2`] >> irule slotCopyExecutionTheory.slot_copy_step_add >>
      simp[Abbr `s1`,eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE]) >>
   `t = s2` by gvs[run_inst_seq_def] >>
   simp[Abbr `s2`,Abbr `s1`,update_var_def] >>
@@ -734,7 +735,7 @@ Proof
      disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      simp[abi_decode_load_def,abi_decode_source_def]) >>
   `step_inst_base (mk_inst (iid+1) ADD [base_op;Var x] [y]) s1 = OK s2` by
-    (simp[Abbr `s2`] >> irule prefix_bool_body_add_step >>
+    (simp[Abbr `s2`] >> irule slotCopyExecutionTheory.slot_copy_step_add >>
      simp[Abbr `s1`,eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE]) >>
   `t = s2` by gvs[run_inst_seq_def] >>
   qexistsl [`set_prov g1 [y] (first_prov g1 [base_op;Var x])`,
@@ -802,9 +803,9 @@ Proof
   `step_inst_base (mk_inst iid ADD [dst;Lit 32w] [x]) s = OK s1 /\
    step_inst_base (mk_inst (iid+1) MUL [idx;Lit stride] [y]) s1 = OK s2 /\
    step_inst_base (mk_inst (iid+2) ADD [Var x;Var y] [z]) s2 = OK s3` by
-    (conj_tac >- (simp[Abbr `s1`] >> irule prefix_bool_body_add_step >> simp[eval_operand_def]) >>
-     conj_tac >- (simp[Abbr `s2`] >> irule prefix_bool_body_mul_step >> simp[eval_operand_def]) >>
-     simp[Abbr `s3`] >> irule prefix_bool_body_add_step >>
+    (conj_tac >- (simp[Abbr `s1`] >> irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_def]) >>
+     conj_tac >- (simp[Abbr `s2`] >> irule slotCopyExecutionTheory.slot_copy_step_mul >> simp[eval_operand_def]) >>
+     simp[Abbr `s3`] >> irule slotCopyExecutionTheory.slot_copy_step_add >>
      gvs[Abbr `s2`,Abbr `s1`,eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE,ALL_DISTINCT]) >>
   `t = s3` by gvs[run_inst_seq_def] >>
   qexistsl [`g3`,`q3`] >>

@@ -1,6 +1,7 @@
 (* Same-state checked boundaries for the dynamic-array backedge. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopBackedge
 Ancestors
+  slotCopyExecution
   ctorDeployMemoryRunPtrPrefixLoopSetup ctorDeployMemoryRunPtrPrefixBoolBody
   ctorDeployMemoryRunPtrPrefixSteps exprLoweringProps instIdxIndep
   ctorAbiActualArrayBody ctorAbiActualArrayInvariant ctorAbiActualFrame
@@ -49,7 +50,7 @@ Proof
      gvs[allocas_from_def,update_var_def,eval_operand_def,lookup_var_def] >> metis_tac[]) >>
   `step_inst_base a s = OK u` by
     (simp[Abbr `a`,Abbr `u`,ADD1,GSYM word_add_n2w] >>
-     irule prefix_bool_body_add_step >> simp[eval_operand_lit_local]) >>
+     irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_lit_local]) >>
   `step_inst_base k u = OK t` by
     (qpat_assum `eval_operand (Var ip) u = SOME _`
       (mp_then Any mp_tac prefix_mstore_step) >> disch_then drule >>

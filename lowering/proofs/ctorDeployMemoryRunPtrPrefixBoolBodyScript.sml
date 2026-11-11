@@ -1,6 +1,7 @@
 (* Arithmetic and two-region frames for the repeatedly visited Bool body. *)
 Theory ctorDeployMemoryRunPtrPrefixBoolBody
 Ancestors
+  slotCopyExecution
   compileEnv
   ctorDeployMemoryRunPtrPrefixBoolHeader ctorDeployMemoryRunPtrPrefixBoolWord
   ctorDeployMemoryRunPtrPrefixWordRead ctorDeployMemoryRunPtrPrefixSteps
@@ -23,22 +24,6 @@ Theorem prefix_bool_body_mul_dispatch[local]:
     exec_pure2 $* (mk_inst iid MUL ops outs) s
 Proof
   pure_rewrite_tac[step_inst_base_def, mk_inst_def] >> simp[]
-QED
-
-Theorem prefix_bool_body_add_step:
-  eval_operand a s = SOME u /\ eval_operand b s = SOME v ==>
-  step_inst_base (mk_inst iid ADD [a;b] [x]) s =
-    OK (update_var x (u+v) s)
-Proof
-  simp[prefix_bool_body_add_dispatch, exec_pure2_def, mk_inst_def]
-QED
-
-Theorem prefix_bool_body_mul_step:
-  eval_operand a s = SOME u /\ eval_operand b s = SOME v ==>
-  step_inst_base (mk_inst iid MUL [a;b] [x]) s =
-    OK (update_var x (u*v) s)
-Proof
-  simp[prefix_bool_body_mul_dispatch, exec_pure2_def, mk_inst_def]
 QED
 
 Theorem prefix_bool_body_arith_ptr_step:
@@ -65,7 +50,7 @@ Theorem prefix_bool_body_add_ghost:
     (set_prov G [x] (first_prov G [a;b]), step_taint inst s t tn)
 Proof
   rpt strip_tac >> simp[] >>
-  simp[ghost_step_def, step_inst_non_invoke, prefix_bool_body_add_step,
+  simp[ghost_step_def, step_inst_non_invoke, slotCopyExecutionTheory.slot_copy_step_add,
        step_prov_def, out_prov_def, mk_inst_def,
        prefix_bool_body_add_dispatch, exec_pure2_def]
 QED
@@ -78,7 +63,7 @@ Theorem prefix_bool_body_mul_ghost:
     (DRESTRICT G (COMPL {x}), step_taint inst s t tn)
 Proof
   rpt strip_tac >> simp[] >>
-  simp[ghost_step_def, step_inst_non_invoke, prefix_bool_body_mul_step,
+  simp[ghost_step_def, step_inst_non_invoke, slotCopyExecutionTheory.slot_copy_step_mul,
        step_prov_def, out_prov_def, set_prov_def, mk_inst_def,
        prefix_bool_body_mul_dispatch, exec_pure2_def]
 QED
@@ -117,7 +102,7 @@ Theorem prefix_bool_body_add_n2w:
   step_inst_base (mk_inst iid ADD [a;b] [x]) s =
     OK (update_var x (n2w (m+n)) s)
 Proof
-  metis_tac[prefix_bool_body_add_step, word_add_n2w]
+  metis_tac[slotCopyExecutionTheory.slot_copy_step_add, word_add_n2w]
 QED
 
 Theorem prefix_bool_body_mul_n2w:
@@ -125,7 +110,7 @@ Theorem prefix_bool_body_mul_n2w:
   step_inst_base (mk_inst iid MUL [a;b] [x]) s =
     OK (update_var x (n2w (m*n)) s)
 Proof
-  metis_tac[prefix_bool_body_mul_step, word_mul_n2w]
+  metis_tac[slotCopyExecutionTheory.slot_copy_step_mul, word_mul_n2w]
 QED
 
 Theorem prefix_bool_body_address_steps:
@@ -274,7 +259,7 @@ QED
 Resume prefix_bool_body_arith_certificate[add]:
   gvs[] >> rpt strip_tac >>
   `step_inst_base (mk_inst iid ADD [a;b] [x]) s = OK (update_var x (u+v) s)` by
-    (irule prefix_bool_body_add_step >> simp[]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_add >> simp[]) >>
   `ghost_step f ctx PG G tn (mk_inst iid ADD [a;b] [x]) s =
     (set_prov G [x] (first_prov G [a;b]),
      step_taint (mk_inst iid ADD [a;b] [x]) s (update_var x (u+v) s) tn)` by
@@ -282,7 +267,7 @@ Resume prefix_bool_body_arith_certificate[add]:
   mp_tac (Q.INST [`opc` |-> `ADD`, `t` |-> `update_var x (u+v) s`]
     prefix_bool_body_arith_taint_frame) >>
   simp[update_var_def] >> strip_tac >>
-  simp[step_inst_non_invoke, prefix_bool_body_add_step,
+  simp[step_inst_non_invoke, slotCopyExecutionTheory.slot_copy_step_add,
        prefix_bool_body_arith_ptr_step,
        SRULE [LET_THM] prefix_bool_body_add_ghost,
        prefix_bool_body_eval_update, update_var_def] >>
@@ -294,7 +279,7 @@ QED
 Resume prefix_bool_body_arith_certificate[mul]:
   gvs[] >> rpt strip_tac >>
   `step_inst_base (mk_inst iid MUL [a;b] [x]) s = OK (update_var x (u*v) s)` by
-    (irule prefix_bool_body_mul_step >> simp[]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_mul >> simp[]) >>
   `ghost_step f ctx PG G tn (mk_inst iid MUL [a;b] [x]) s =
     (DRESTRICT G (COMPL {x}),
      step_taint (mk_inst iid MUL [a;b] [x]) s (update_var x (u*v) s) tn)` by
@@ -302,7 +287,7 @@ Resume prefix_bool_body_arith_certificate[mul]:
   mp_tac (Q.INST [`opc` |-> `MUL`, `t` |-> `update_var x (u*v) s`]
     prefix_bool_body_arith_taint_frame) >>
   simp[update_var_def] >> strip_tac >>
-  simp[step_inst_non_invoke, prefix_bool_body_mul_step,
+  simp[step_inst_non_invoke, slotCopyExecutionTheory.slot_copy_step_mul,
        prefix_bool_body_arith_ptr_step,
        SRULE [LET_THM] prefix_bool_body_mul_ghost,
        prefix_bool_body_eval_update, update_var_def,
@@ -397,7 +382,7 @@ Proof
      gvs[allocas_from_def, update_var_def] >> metis_tac[]) >>
   `step_inst_base j s = OK t` by
     (simp[Abbr `j`, Abbr `t`, ADD1, GSYM word_add_n2w] >>
-     irule prefix_bool_body_add_step >> simp[eval_operand_lit_local]) >>
+     irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_lit_local]) >>
   `step_inst_base k t = OK u` by
     (qpat_assum `eval_operand (Var ip) t = SOME _`
        (mp_then Any mp_tac prefix_mstore_step) >>
@@ -565,7 +550,7 @@ Resume prefix_bool_body_execution[tail]:
      gvs[eval_operand_def, lookup_var_def]) >>
   `step_inst_base (mk_inst (iid+12) ADD [Var iv;Lit 1w] [inc]) v3 = OK v4` by
     (simp[Abbr `v4`, ADD1, GSYM word_add_n2w] >>
-     irule prefix_bool_body_add_step >> simp[eval_operand_lit_local]) >>
+     irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_lit_local]) >>
   `eval_operand (Var ip) v4 = SOME (n2w scratch) /\
    eval_operand (Var inc) v4 = SOME (n2w (SUC i))` by
     (gvs[ALL_DISTINCT] >> simp[Abbr `v4`, prefix_bool_body_eval_update]) >>

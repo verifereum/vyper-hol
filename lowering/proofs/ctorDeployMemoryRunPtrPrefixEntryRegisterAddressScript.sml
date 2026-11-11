@@ -1,6 +1,7 @@
 (* Address computation with ambient projections at the paired endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixEntryRegisterAddress
 Ancestors
+  slotCopyExecution
   compileEnv
   ctorDeployMemoryRunPtrPrefixRegisterAddress ctorDeployMemoryRunPtrPrefixBoolBody
   ctorDeployMemoryRunPtrPrefixMemberSetup abiDecoderReentryAddress
@@ -54,7 +55,7 @@ Proof
     `step_inst_base (mk_inst st.cs_next_id ADD [a;b]
       [STRING #"%" (toString st.cs_next_var)]) initial =
       OK (update_var (STRING #"%" (toString st.cs_next_var)) (u+v) initial)` by
-      (irule prefix_bool_body_add_step >> simp[]) >>
+      (irule slotCopyExecutionTheory.slot_copy_step_add >> simp[]) >>
     simp[run_inst_seq_def]) >>
  drule_all (SRULE [is_terminator_def]
    (Q.INST [`opc` |-> `ADD`] prefix_register_address_emit_finish)) >>

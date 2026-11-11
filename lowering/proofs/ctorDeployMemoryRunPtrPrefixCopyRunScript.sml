@@ -1,6 +1,7 @@
 (* Successful zero-hi copy decoders, with the supplied execution endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixCopyRun
 Ancestors
+  slotCopyExecution
   ghostPcTransportPtr
   compileEnv
   ctorDeployMemoryRunPtrPrefixCopyStep ctorDeployMemoryRunPtrPrefixBoolPreheader
@@ -527,7 +528,7 @@ Proof
   `step_inst_base (mk_inst iid opc [a;b] [x]) s =
      OK (update_var x (if opc = ADD then u+v else u*v) s)` by
     (Cases_on `opc = ADD` >> gvs[] >>
-     simp[prefix_bool_body_add_step, prefix_bool_body_mul_step]) >>
+     simp[slotCopyExecutionTheory.slot_copy_step_add, slotCopyExecutionTheory.slot_copy_step_mul]) >>
   asm_rewrite_tac[] >>
   `ghost_step fuel ctx PG G tn (mk_inst iid opc [a;b] [x]) s =
      (if opc = ADD then set_prov G [x] (first_prov G [a;b]) else DRESTRICT G (COMPL {x}),
@@ -651,7 +652,7 @@ Proof
       lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `step_inst_base (mk_inst (iid+2) MUL [Var r;Lit (n2w mem_sz)] [p]) s2 =
     OK (update_var p (n2w (cnt*mem_sz)) s2)` by
-    (rewrite_tac[GSYM word_mul_n2w] >> irule prefix_bool_body_mul_step >>
+    (rewrite_tac[GSYM word_mul_n2w] >> irule slotCopyExecutionTheory.slot_copy_step_mul >>
      simp[eval_operand_def]) >>
   simp[] >>
   qabbrev_tac `s3 = update_var p (n2w (cnt*mem_sz)) s2` >>
@@ -662,7 +663,7 @@ Proof
      metis_tac[MEM]) >>
   `step_inst_base (mk_inst (iid+3) ADD [src;Lit 32w] [q]) s3 =
      OK (update_var q (a+32w) s3)` by
-    (irule prefix_bool_body_add_step >> simp[eval_operand_def]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_def]) >>
   simp[] >>
   qabbrev_tac `s4 = update_var q (a+32w) s3` >>
   `eval_operand (Var dst) s4 = SOME d` by
@@ -670,7 +671,7 @@ Proof
       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `step_inst_base (mk_inst (iid+4) ADD [Var dst;Lit 32w] [z]) s4 =
      OK (update_var z (d+32w) s4)` by
-    (irule prefix_bool_body_add_step >> simp[eval_operand_def]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_def]) >>
   simp[] >>
   qabbrev_tac `s5 = update_var z (d+32w) s4` >>
   `eval_operand (Var z) s5 = SOME (d+32w) /\
