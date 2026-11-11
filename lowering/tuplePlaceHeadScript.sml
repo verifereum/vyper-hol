@@ -340,12 +340,11 @@ QED
        w2n w0=b+k ==> w2n w0+N<=w2n dw \/ w2n dw+size(dtv)<=w2n w0
        for LocMemory. tuple_place_local_path_extent and
        tuple_place_borrow_destination_apart supply the geometry. The latter
-       expects eval_base_place cx bt ee=(INL(PlaceR p),ee), not E as written.
-       Candidate adapter: EVERY (supported_expr tops) (target_indices bt) /\ E ==> ee=es.
-       targetPlaceLive.nested_pop_eval_base_pure_state proves this from
-       EVERY pure_expr (target_indices bt); a supported-purity-to-semantic-
-       purity adapter is still to be checked/proved (scope equality alone
-       is not full state equality). Do not silently instantiate ee=es.
+       expects eval_base_place cx bt ee=(INL(PlaceR p),ee), not E as written,
+       and takes pure target indices, so it does not cover the chain's
+       targets, whose supported indices may have effects (ee<>es).  The chain
+       uses only scope equality instead (tuple_place_supported_target_scopes,
+       tuple_place_supported_target_borrow_bytes). Do not instantiate ee=es.
    B5: The antecedent of B1 plus branch certificate and the frozen indexed
        size bounds ==> the selected runner's exact arithmetic/containment
        antecedents (enumerated above), including CapMcopy and type_alloc_ok
