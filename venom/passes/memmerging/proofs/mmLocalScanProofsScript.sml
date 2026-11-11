@@ -5,7 +5,7 @@ Ancestors
   venomFnScheduleRunner allocaRemapSSA o1MakeSsaCfg makeSsaCurrentWfSsa
   cfgWf venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
   simplifyCfgPhiSemantics basePtrProofs mmTraceProofs frameViewMemory dftCommutation
-  regularMemorySim
+  regularMemorySim rangeAnalysisProofs
 Libs
   wordsLib finite_mapLib stepInstBaseLib
 
@@ -12879,6 +12879,29 @@ Proof
     mm_local_interval_runtime_capture >>
   disch_then (qspec_then `n` mp_tac) >> simp[] >> strip_tac >>
   simp[rich_listTheory.count_list_sub1, rich_listTheory.COUNT_LIST_def]
+QED
+
+Theorem mm_local_pending_indices_after_phis[local]:
+  MEM j (mm_local_pending_indices is gs n) ==> phi_prefix_length is <= j
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  `j < phi_prefix_length is` by decide_tac >>
+  drule rangeAnalysisProofsTheory.phi_prefix_length_el_phi >>
+  gvs[mm_local_pending_indices_mem]
+QED
+
+Theorem mm_local_epoch_start_after_phis[local]:
+  phi_prefix_length is <= n ==> phi_prefix_length is <= mm_local_epoch_start is gs n
+Proof
+  strip_tac >>
+  `mm_local_pending_indices is gs (phi_prefix_length is) = []` by
+    (Cases_on `mm_local_pending_indices is gs (phi_prefix_length is)` >> simp[] >>
+     rename1 `mm_local_pending_indices is gs (phi_prefix_length is) = j::js` >>
+     `MEM j (mm_local_pending_indices is gs (phi_prefix_length is))` by simp[] >>
+     drule mm_local_pending_indices_after_phis >>
+     gvs[mm_local_pending_indices_mem]) >>
+  rewrite_tac[mm_local_epoch_start_def] >>
+  irule rich_listTheory.MAX_LIST_PROPERTY >> simp[MEM_FILTER, MEM_COUNT_LIST]
 QED
 
 Theorem mm_local_stage_correct:
