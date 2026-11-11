@@ -286,7 +286,8 @@ Proof
      `addr_op` |-> `addr`, `ao_op` |-> `dp`, `az_op` |-> `dl`, `ro_op` |-> `op`,
      `rz_op` |-> `Lit (n2w n)`, `cap` |-> `n`, `iid` |-> `sa.cs_next_id`,
      `flag` |-> `outcome.co_success`, `rd` |-> `outcome.co_returnData`,
-     `ee` |-> `SND (adopt_call_outcome rq outcome es1)`]) >>
+     `ee` |-> `SND (adopt_call_outcome rq outcome es1)`,
+     `es'` |-> `SND (adopt_call_outcome rq outcome es1)`]) >>
   impl_tac >- (drule rawCallMemoryFramePtrTheory.oracle_take_adoption_locals >>
     strip_tac >> gvs[venomStateTheory.eval_operand_def,
       venomStateTheory.update_var_def, wordsTheory.w2n_n2w] >> metis_tac[]) >> strip_tac >>
@@ -394,7 +395,8 @@ Proof
      `addr_op` |-> `addr`, `ao_op` |-> `dp`, `az_op` |-> `dl`, `ro_op` |-> `op`,
      `rz_op` |-> `Lit (n2w n)`, `cap` |-> `n`, `iid` |-> `sa.cs_next_id`,
      `flag` |-> `outcome.co_success`, `rd` |-> `outcome.co_returnData`,
-     `ee` |-> `SND (adopt_call_outcome rq outcome es1)`]) >>
+     `ee` |-> `SND (adopt_call_outcome rq outcome es1)`,
+     `es'` |-> `SND (adopt_call_outcome rq outcome es1)`]) >>
   impl_tac >- (drule rawCallMemoryFramePtrTheory.oracle_take_adoption_locals >>
     strip_tac >> gvs[venomStateTheory.eval_operand_def,
       venomStateTheory.update_var_def, wordsTheory.w2n_n2w] >> metis_tac[]) >> strip_tac >>

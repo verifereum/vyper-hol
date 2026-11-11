@@ -2082,10 +2082,10 @@ Resume raw_call_tuple_construct_stage[frame_compose]:
   `local_ptrs_rel func cenv es.scopes s` by
     fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `ghost_kept cenv es sa G tn s H' un'` by
-    (mp_tac (Q.INST [`G0` |-> `G`, `tn0` |-> `tn`, `s0` |-> `s`, `G1` |-> `H`,
-       `tn1` |-> `un`, `es1` |-> `es`, `es'` |-> `es`, `sb` |-> `sh`, `s1` |-> `t`,
-       `G2` |-> `H'`, `tn2` |-> `un'`] wordOperandsPtrTheory.ghost_kept_trans) >>
-     impl_tac >- fs[exprLoweringPropsTheory.ci_mono_def] >> simp[]) >>
+    (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
+     >- (qexists_tac `func` >> first_assum ACCEPT_TAC) >>
+     qexistsl_tac [`H`, `es`, `es`, `t`, `sh`, `un`] >>
+     fs[exprLoweringPropsTheory.ci_mono_def]) >>
   `wb_frame cenv es es sa s u` by
     (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s`, `sa`, `es`, `es`, `sh`, `t`, `u`, `ctx`]
        exprSimWordArgsTheory.wb_frame_trans) >> impl_tac >>
