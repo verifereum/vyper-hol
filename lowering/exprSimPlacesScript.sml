@@ -99,6 +99,20 @@ QED
    compile_subscript_mismatch_case for a dispatch type other than the
    base's, exprSimTuple's compile_subscript_tuple_sim for a tuple and
    compile_subscript_array_case for an array; no other base types. *)
+(* A mapping-typed base has expr_type NoneT, so the subscript never reads it
+   before the index. *)
+Theorem subscript_map_base_not_read[local]:
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  place_type cenv obj = MapPT kt vt ==>
+  ~subscript_reads_base cx obj idx
+Proof
+  strip_tac >> drule_all expr_body_pre_map_subscript_base >> strip_tac >>
+  drule_all expr_map_pre_checked_type >> strip_tac >>
+  drule type_place_expr_vtype_annotation >>
+  simp[vtype_annotation_ok_def, vyperInterpreterTheory.subscript_reads_base_def,
+       vyperSubscriptOverlapTheory.subscript_overlap_def]
+QED
+
 Theorem compile_subscript_case:
   !nocalls ctx func cenv cx ann obj idx.
     expr_vv_case nocalls ctx func cenv cx obj /\
@@ -113,7 +127,14 @@ Theorem compile_subscript_case:
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   rpt strip_tac >> Cases_on `place_type cenv obj`
-  >- (irule compile_subscript_map_case >> fs[] >> first_assum ACCEPT_TAC) >>
+  >- (simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
+      drule_all subscript_map_base_not_read >> strip_tac >>
+      `expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)` by
+        (irule compile_subscript_map_case >> fs[vyperStateTheory.return_def] >>
+         first_assum ACCEPT_TAC) >>
+      qpat_x_assum `expr_vv_case _ _ _ _ _ (Subscript _ _ _)` mp_tac >>
+      simp[expr_vv_case_def] >>
+      disch_then (qspecl_then [`env`, `ty`, `es`] mp_tac) >> fs[]) >>
   rename1 `ValPT bt` >>
   Cases_on `bt <> expr_type obj`
   >- (irule compile_subscript_mismatch_case >> qexists_tac `bt` >> simp[]) >>
