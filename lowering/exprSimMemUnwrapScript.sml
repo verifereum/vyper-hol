@@ -478,7 +478,7 @@ QED
 
 (* ----- storage and transient ----- *)
 
-Theorem storage_unwrap_word_run[local]:
+Theorem storage_unwrap_word_run:
   (loc = LocStorage \/ loc = LocTransient) /\
   do v <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
      emit_void MSTORE [dst; v] od sa = (u,sb) /\

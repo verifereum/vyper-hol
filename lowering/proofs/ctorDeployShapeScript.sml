@@ -58,7 +58,7 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem package_constructor_shape_ok[local]:
+Theorem package_constructor_shape_ok:
   !tops use_trans nkey_map target cf cenv args pay nr nkey trans body ret.
     supported_program tops /\
     SND (SND (SND (classify_functions tops))) = SOME cf /\

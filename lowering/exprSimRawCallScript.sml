@@ -4322,7 +4322,8 @@ Proof
   simp[vv_holds_def, vv_at_def, read_result_def, return_def,
     expr_val_rel_def, expr_val_at_def, eval_operand_def,
     vyperValueTheory.evaluate_type_def, is_word_type_def,
-    val_in_memory_def, val_wf_def, val_footprint_def, type_memory_size_def]
+    val_in_memory_def, val_wf_def, val_footprint_def, type_memory_size_def] >>
+  gvs[]
 QED
 
 Theorem raw_call_bool_post[local]:
@@ -4359,7 +4360,8 @@ Theorem raw_call_tuple_post[local]:
     (LocatedValue (expr_type e) (mk_ptr result LocMemory)) s
 Proof
   strip_tac >> irule vv_post_allocated_memory_intro >>
-  simp[is_word_type_def, contextTheory.mk_ptr_def] >>
+  qpat_assum `post_value_type _ _ = _`
+    (fn th => simp[th, is_word_type_def, contextTheory.mk_ptr_def]) >>
   qexistsl_tac [`aid`,`w2n w`,`64 + ((n+31) DIV 32)*32`] >>
   simp[val_wf_def, LENGTH_TAKE_EQ, val_footprint_def, type_memory_size_def] >>
   conj_tac
@@ -4447,7 +4449,8 @@ Proof
     (qpat_x_assum `raw_call_finish_view _ = _` mp_tac >>
      simp[raw_call_finish_view_def, venom_state_component_equality, mstore_def]) >>
   irule vv_post_allocated_memory_intro >>
-  simp[is_word_type_def, contextTheory.mk_ptr_def] >>
+  qpat_assum `post_value_type _ _ = _`
+    (fn th => simp[th, is_word_type_def, contextTheory.mk_ptr_def]) >>
   qexistsl_tac [`aid`, `b`, `rounded+32`] >>
   simp[is_word_type_def, val_wf_def, LENGTH_TAKE_EQ, val_footprint_def,
     type_memory_size_def, contextTheory.mk_ptr_def, wordsTheory.w2n_n2w] >>
@@ -5179,7 +5182,7 @@ Resume raw_call_outbuf_tail_vv_frag[zero_finish]:
   >- (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   disch_then (mp_then Any irule frag_exec_weaken) >>
   simp[] >> rpt strip_tac >> gvs[] >>
-  irule raw_call_none_post >> simp[]
+  irule raw_call_none_post >> simp[] >> gvs[]
 QED
 
 Resume raw_call_outbuf_tail_vv_frag[positive]:

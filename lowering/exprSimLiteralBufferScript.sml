@@ -223,7 +223,7 @@ QED
 
 
 
-Theorem literal_chunks_run[local]:
+Theorem literal_chunks_run:
   !ptr bs off sa sb s b.
     compile_store_byte_chunks ptr bs off sa = ((),sb) /\
     (!x. ptr = Var x ==> not_fresh_at sa x) /\

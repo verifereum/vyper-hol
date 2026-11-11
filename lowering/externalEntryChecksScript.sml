@@ -16,7 +16,11 @@ Ancestors
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperInterpreter vyperState vyperContext
   venomState venomExecSemantics venomWf
+Libs
+  monadsyntax
 
+val () = enable_monad "compilation";
+val () = enable_monadsyntax ();
 val _ = Parse.hide "body";
 
 Theorem supported_entry_no_getters:
@@ -641,7 +645,7 @@ Proof
      Linear buckets metadata dense info (initial_compile_state "__entry") = ((),sf)` by
     (`compile_generate_runtime selectors external_fns internal_fns fallback_fn
         Linear buckets metadata dense info =
-      (do prefix; _ <- compile_internal_fn_bodies internal_fns; return () od)` by
+      (do prefix; _ <- compile_internal_fn_bodies internal_fns; comp_return () od)` by
        simp[Abbr `prefix`, compile_generate_runtime_def,
             comp_ignore_bind_def, comp_bind_assoc] >>
      asm_rewrite_tac[] >>

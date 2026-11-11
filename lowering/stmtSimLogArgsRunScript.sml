@@ -12,7 +12,7 @@ Libs
   monadsyntax
 
 
-Theorem log_scalar_base[local]:
+Theorem log_scalar_base:
   supported_scalar_type ty ==> ?bt. ty = BaseT bt
 Proof
   Cases_on `ty` >> simp[supported_scalar_type_def, supported_word_type_def,

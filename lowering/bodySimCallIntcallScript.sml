@@ -8,7 +8,7 @@ Ancestors
   exprSimUnwrap exprSimMemoryRead
   exprSimMemorySource exprSimProps exprLoweringProps gasOutcome gasSummary
   gasSummaryCompose gasExemptCert gasContext fragGasPath fragGasMode fragExec
-  venomState compileEnv exprSimUnwrapProps
+  vyperState venomState compileEnv exprSimUnwrapProps
 
 (* The IHs at a supported callee (body_intcall_source_selection): no
    defaults, as many arguments as parameters. *)
@@ -312,23 +312,22 @@ Proof
   `?nrc nrbs npvs.
      cenv.ce_func_info (nsid_to_string (NONE,fn)) = (nrc,nrbs,npvs)`
     by metis_tac[pairTheory.ABS_PAIR_THM] >>
+  drule body_inv_module_pins >> strip_tac >>
   irule intcall_args_frame_setup >> simp[] >>
   qexistsl_tac [`args`,`cenv`,`mut`,`nr`,`ret`,`rr`,`sa`,`sb`,`ss`,`tenv`,`tops`,
                 `ty`,`vv`] >>
   simp[] >> rpt strip_tac >>
-  qspecl_then [`tops`,`ctx`,`func`,`cenv`,`cx`,`tenv`,`ty`,`v16`,`fn`,`es`,
-               `v17`,`es0`,`sa`,`sb`,`vv`,`s0`,`mut`,`nr`,`args`,`ret`,`ss`,`rr`,
-               `prev`,`penv`,`rtv`,`es1`,`t`,`nrc`,`nrbs`,`npvs`]
-    mp_tac intcall_return_restore >>
-  impl_tac
-  >- (simp[] >> rpt strip_tac >>
-      drule intcall_entry_source >> strip_tac >>
-      `body_stmts_ok (cx with stk updated_by CONS (NONE,fn)) ss` by
-        (Cases_on `u` >>
-         qpat_x_assum `lock_if_nr _ _ _ _ = _` mp_tac >>
-         simp[lock_if_nr_def] >> strip_tac >>
-         qpat_x_assum `!s1 results t1 s2 vs t2 s3 t3 penv rtv. _` drule_all >>
-         simp[]) >>
-      drule_all intcall_callee_body_sim >> simp[]) >>
-  simp[]
+  Cases_on `cenv.ce_func_return_type (nsid_to_string (NONE,fn)) = v16` >|
+  map (qspecl_then [`tops`,`ctx`,`func`,`cenv`,`cx`,`tenv`,`ty`,`v16`,`fn`,
+                    `es`,`v17`,`es0`,`sa`,`sb`,`vv`,`s0`,`mut`,`nr`,`args`,`ret`,
+                    `ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,`t`,`nrc`,`nrbs`,
+                    `npvs`] mp_tac)
+    [intcall_return_restore, intcall_return_widened] >>
+  (impl_tac
+   >- (simp[] >> rpt strip_tac >>
+       drule intcall_entry_source >> strip_tac >>
+       `body_stmts_ok (cx with stk updated_by CONS (NONE,fn)) ss` by
+         metis_tac[] >>
+       drule_all intcall_callee_body_sim >> simp[]) >>
+   simp[])
 QED
