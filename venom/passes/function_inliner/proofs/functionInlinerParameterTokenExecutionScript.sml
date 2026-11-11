@@ -247,3 +247,84 @@ Proof
   simp[eval_operands_def, AllCaseEqs()] >>
   irule inline_token_archived_argument_read >> metis_tac[]
 QED
+
+Theorem inline_token_consumed_fields:
+  inline_cell_zipper c before incoming /\
+  c.ic_fields = (RETPC_PARAM,[Lit idx],[x]) /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) before /\
+  FST incoming.ic_fields = RETPC_PARAM /\
+  inline_token_consumes e incoming next /\ inline_cell_at next /\
+  inline_cell_zipper next after out /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) after ==>
+  out.ic_fields =
+    (ASSIGN, MAP (inline_rename_operand (inline_cell_var_action after)
+      (inline_cell_label_action after)) (FST (SND next.ic_fields)),
+     [inline_cell_var_action (before ++ [(EnterCell e 0,next)] ++ after) x])
+Proof
+  strip_tac >> drule_all inline_token_zipper_survivor_shape >> strip_tac >>
+  `?bb inst. lookup_block next.ic_block next.ic_function.fn_blocks = SOME bb /\
+    get_instruction bb next.ic_index = SOME inst /\
+    next.ic_fields = inline_inst_fields inst` by
+      metis_tac[inline_cell_at_def, inline_fetched_fields_def] >>
+  `inst.inst_opcode = ASSIGN` by
+    gvs[inline_token_consumes_def, inline_inst_fields_def] >>
+  `~MEM inst.inst_opcode [PHI; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP]`
+    by simp[] >>
+  drule_all inline_cell_zipper_mapped_fields >>
+  gvs[inline_token_consumes_def, inline_inst_fields_def] >>
+  simp[inline_cell_var_action_path, MAP_APPEND, inline_path_rename_append,
+    inline_path_rename_def, inline_choice_rename_def, inline_cell_choice_def,
+    o_DEF]
+QED
+
+Theorem inline_token_fetched_storage:
+  inliner_input_ok C /\ inline_annotated_origin C n root cert /\
+  inline_parameter_ancestry C cert root
+    (inline_parameter_owners ((p,a,route,snap)::entries)) /\
+  inline_parameter_saved_reads ((p,a,route,snap)::entries) /\
+  inline_owner_storage cert ((p,a,route,snap)::entries) frame /\
+  inline_routed_leaf cert root p a.ia_function path /\
+  MAP inline_choice_key path =
+    MAP inline_choice_key (MAP (\(tag,next). inline_cell_choice tag) frames) /\
+  inline_cell_at c /\ inline_cell_zipper c frames out /\
+  c.ic_fields = (RETPC_PARAM,[Lit idx],[x]) /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames /\
+  inline_cell_var_action frames x = route.ir_rename x /\
+  MEM x (cfgTransform$fn_all_vars a.ia_function) /\ retpc_var a.ia_function x /\
+  INJ route.ir_rename (x INSERT snap.ils_defined) UNIV ==>
+  ?bb inst t.
+    lookup_block out.ic_block out.ic_function.fn_blocks = SOME bb /\
+    get_instruction bb out.ic_index = SOME inst /\
+    step_inst tfuel Tctx inst frame.ipf_state = OK t /\
+    inline_owner_storage cert
+      ((p,a,route,snap with <|ils_state := update_var x
+          snap.ils_state.vs_return_pc_token snap.ils_state;
+        ils_defined := x INSERT snap.ils_defined|>)::entries)
+      (frame with ipf_state := t) /\
+    inline_parameter_saved_reads
+      ((p,a,route,snap with <|ils_state := update_var x
+          snap.ils_state.vs_return_pc_token snap.ils_state;
+        ils_defined := x INSERT snap.ils_defined|>)::entries)
+Proof
+  strip_tac >>
+  `FST c.ic_fields = RETPC_PARAM` by simp[] >>
+  drule_all inline_token_zipper_first_consumption >> strip_tac
+  >- (irule inline_token_survivor_storage >> metis_tac[]) >>
+  `EVERY (\(tag,next). !e. tag <> SelectedJump e) before /\
+   EVERY (\(tag,next). !e. tag <> SelectedJump e) after` by
+    gvs[EVERY_APPEND] >>
+  drule_all inline_token_consumed_fields >> strip_tac >>
+  `?w. eval_operands
+    (MAP (inline_rename_operand (inline_cell_var_action after)
+      (inline_cell_label_action after)) (FST (SND next.ic_fields)))
+    frame.ipf_state = SOME [w]` by
+      (irule inline_token_consumption_operand_read >> metis_tac[]) >>
+  `inline_cell_at out` by metis_tac[inline_cell_zipper_sound] >>
+  gvs[inline_cell_at_def, inline_fetched_fields_def, inline_inst_fields_def,
+    inline_token_consumes_def, eval_operands_def, AllCaseEqs()] >>
+  qexists_tac `update_var (route.ir_rename x) w frame.ipf_state` >>
+  simp[Once step_inst_def, step_inst_base_def] >>
+  conj_tac
+  >- (irule inline_owner_storage_opaque_write >> metis_tac[]) >>
+  irule inline_parameter_saved_reads_head_replace >> metis_tac[]
+QED
