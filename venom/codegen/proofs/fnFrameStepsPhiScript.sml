@@ -6,7 +6,7 @@
 
 Theory fnFrameStepsPhi
 Ancestors
-  planWfMarked fnPlanLineageJoin genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
+  frameViewFacts planWfMarked fnPlanLineageJoin genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
   allocaRemapSSA fnPlanPrefix dftCommutation fnFrameDeepInvoke fnPlanLineagePhiClasses
@@ -1525,15 +1525,7 @@ Theorem phi_output_retpc:
   MEM out inst.inst_outputs /\ MEM (Var src) inst.inst_operands ==>
   (retpc_var fn out <=> retpc_var fn src)
 Proof
-  strip_tac >> eq_tac
-  >- (strip_tac >>
-      qpat_x_assum `retpc_shape_ok fn` mp_tac >>
-      simp[retpc_shape_ok_def] >> strip_tac >>
-      qpat_x_assum `!inst x. MEM inst _ /\ MEM x _ /\ retpc_var _ _ ==> _`
-        (qspecl_then [`inst`, `out`] mp_tac) >>
-      simp[]) >>
-  simp[retpc_var_def] >> strip_tac >>
-  irule copy_phi_var_phi >> metis_tac[]
+  ACCEPT_TAC frameViewFactsTheory.phi_output_retpc
 QED
 
 Theorem phi_selected_frame_value:

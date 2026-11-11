@@ -184,7 +184,7 @@ Proof
   qexists_tac `32` >> simp[]
 QED
 
-Theorem push_encode_num_roundtrip[local]:
+Theorem push_encode_num_roundtrip:
   word_of_bytes F (0w:bytes32)
     (REVERSE (encode_num_bytes n)) = n2w n
 Proof

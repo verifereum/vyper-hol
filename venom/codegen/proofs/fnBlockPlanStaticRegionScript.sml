@@ -3715,7 +3715,7 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem regional_regular_outputs_marked_wf[local]:
+Theorem regional_regular_outputs_marked_wf:
   generated_plan_state_wf_marked sb ps /\
   LENGTH operands <= 16 /\ PERM pending operands /\
   (!op. MEM op operands /\ is_var_operand op ==>
