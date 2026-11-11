@@ -6273,7 +6273,9 @@ Proof
   `name = "SELFDESTRUCT" /\ mid.as_stack = addr :: DROP 1 mid.as_stack` by
     gvs[asmIRTheory.venom_to_evm_name_def, compute_operands_def,
         python_stack_operands_def, ir_specific_operand_order_def, eval_operands_def] >>
-  metis_tac[fnFrameTerminalHaltTheory.terminal_selfdestruct_rel_step]
+  qpat_x_assum `name = _` SUBST_ALL_TAC >>
+  metis_tac[SIMP_RULE bool_ss [COND_RATOR, combinTheory.I_THM]
+              fnFrameTerminalHaltTheory.terminal_selfdestruct_rel_step]
 QED
 
 Theorem terminal_halt_prepared_step:
