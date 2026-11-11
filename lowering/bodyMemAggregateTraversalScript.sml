@@ -333,8 +333,10 @@ Proof
         rewrite_tac[loweringPostsTheory.vv_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
      rpt strip_tac >>
      qpat_x_assum `!z a. not_fresh_at sm z /\ lookup_var z t1 = SOME a ==> _` irule >>
-     conj_tac >- (irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> fs[ci_mono_def]) >>
-     metis_tac[]) >>
+     `not_fresh_at sm z` by
+       (irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> fs[ci_mono_def]) >>
+     `lookup_var z t1 = SOME w` by metis_tac[] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `sa.cs_next_id <= ss.cs_next_id` by fs[ci_mono_def] >>
   qspecl_then [`ce`, `func`, `es`, `es1`, `sa`, `ss`, `s0`, `q`, `r`, `b`, `asz`]
     mp_tac aggregate_pure_frame_trans >>
