@@ -2,40 +2,8 @@
 Theory bodyIntCallFamCallIntEntryLookup
 Ancestors
   moduleLowering compileEnv vyperCompiler intCallLookup ctorDeployShape ctorDeployLoweringCode intCallCallee
-  bodyIntCallFamCallIntEntryPackage
+  bodyIntCallFamCallIntEntryPackage bodyIntCallFamCallIntEntrySelectedSegment
 
-Theorem intcall_internal_bodies_append:
-  !xs ys s.
-    compile_internal_fn_bodies (xs ++ ys) s =
-    comp_ignore_bind (compile_internal_fn_bodies xs)
-      (compile_internal_fn_bodies ys) s
-Proof
-  Induct
-  >- simp[compile_internal_fn_bodies_def, comp_ignore_bind_def,
-          comp_bind_def, comp_return_def] >>
-  qx_gen_tac `h` >> PairCases_on `h` >>
-  simp[compile_internal_fn_bodies_def, comp_ignore_bind_def, comp_bind_def] >>
-  rpt gen_tac >> rpt (pairarg_tac >> gvs[])
-QED
-
-Theorem intcall_selected_internal_compilation:
-  !pre post lbl ce params rb nr key tr view ctor imm body rt s t.
-    compile_internal_fn_bodies
-      (pre ++ (lbl,ce,params,rb,nr,key,tr,view,ctor,imm,body,rt)::post) s =
-      ((),t) ==>
-    ?a old b c.
-      compile_internal_fn_bodies pre s = ((),a) /\
-      new_block lbl a = (old,b) /\
-      compile_internal_function ce params rb nr key tr view ctor imm body rt b =
-        ((),c) /\
-      compile_internal_fn_bodies post c = ((),t)
-Proof
-  rpt gen_tac >>
-  simp[intcall_internal_bodies_append, compile_internal_fn_bodies_def,
-       comp_ignore_bind_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  rpt (goal_assum (drule_at Any))
-QED
 
 Theorem intcall_extracted_internal_lookup:
   !entry packages sf ctx data imm name rb rc.
