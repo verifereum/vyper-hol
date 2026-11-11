@@ -6,6 +6,20 @@ Theory bodyIntCallFamStmtMutationAssign
 Ancestors
   bodyIntCallJointContract bodyIntCallFamStmtMutationEffectful
 
+(* Probe boundary: flat tuple assignment does not admit a local subscript
+   destination. In particular, swapping two array-valued members of a local
+   tuple through x[1], x[0] is outside supported_assignment, independently
+   of RHS typing or whether an IfExp returns an aliasing pointer. *)
+Theorem assign_tuple_local_subscript_rejected:
+  MEM (BaseTarget (SubscriptTarget (NameTarget nm) key)) gs ==>
+  ~supportedStmts$supported_assignment tops bindings (TupleTarget gs) rhs
+Proof
+  simp[supportedStmtsTheory.supported_assignment_def, listTheory.EVERY_MEM] >>
+  strip_tac >> disj2_tac >>
+  qexists `BaseTarget (SubscriptTarget (NameTarget nm) key)` >>
+  simp[supportedStmtsTheory.supported_target_def]
+QED
+
 Theorem intcall_assign_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
        intcall_map_producer fp e) /\
