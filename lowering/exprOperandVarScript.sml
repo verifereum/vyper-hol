@@ -1689,7 +1689,7 @@ Proof
   qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
   rpt IF_CASES_TAC >>
   irule compiler_reserved_ignore_bind_cong >>
-  simp[ci_mono_emit_void, ci_mono_compile_store_bytestring,
+  simp[ci_mono_emit_void, ci_mono_compile_store_bytestring, ci_mono_compile_store_memory,
        ci_mono_ignore_bind, ci_mono_comp_return] >>
   qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
   irule compiler_reserved_bind_cong >>
