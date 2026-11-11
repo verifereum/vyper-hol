@@ -858,6 +858,63 @@ Resume invoke_fixed_segment_updates[reverse]:
 QED
 Finalise invoke_fixed_segment_updates[local]
 
+(* Reuse the very same packet when replacing a successful call's suffix. *)
+Theorem invoke_fixed_segment_target_suffix[local]:
+  !m es fuel C C' y.
+  let P = (\t unused.
+    PERM (MAP THE (FILTER IS_SOME m) ++ unused) t.vs_gas_readings /\
+    (!u. (step_inst fuel C' y t = OK u \/
+          (?ir. step_inst fuel C' y t = IntRet ir u)) ==>
+      EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+    !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+      (?extra. es = gas_events_step fuel C t.vs_current_bb y
+         (t with vs_gas_readings := gs ++ tail) ++ extra) /\
+      ((?j. terminates (step_inst j C y (t with vs_gas_readings := gs ++ tail))) ==>
+        terminates (step_inst fuel C y (t with vs_gas_readings := gs ++ tail)) /\
+        dft_res_rel
+          (restore_result [] (step_inst fuel C y (t with vs_gas_readings := gs ++ tail)))
+          (restore_result [] (step_inst fuel C' y t)) /\
+        (((?v. step_inst fuel C' y t = OK v) \/
+          (?ir v. step_inst fuel C' y t = IntRet ir v)) ==>
+          gas_events_step fuel C t.vs_current_bb y
+            (t with vs_gas_readings := gs ++ tail) = es /\
+          residual_result tail (step_inst fuel C' y t)
+            (step_inst fuel C y (t with vs_gas_readings := gs ++ tail)))))
+  in !t v.
+    y.inst_opcode = INVOKE /\ step_inst fuel C' y t = OK v /\
+    gas_count_step fuel C' y t <= LENGTH t.vs_gas_readings /\
+    LENGTH m = LENGTH es /\ P t v.vs_gas_readings ==>
+    !r.
+      step_inst fuel C' y
+        (t with vs_gas_readings := TAKE (gas_count_step fuel C' y t) t.vs_gas_readings ++ r) =
+        OK (v with vs_gas_readings := r) /\
+      PERM (MAP THE (FILTER IS_SOME m))
+        (TAKE (gas_count_step fuel C' y t) t.vs_gas_readings) /\
+      LENGTH m = LENGTH es /\
+      P (t with vs_gas_readings := TAKE (gas_count_step fuel C' y t) t.vs_gas_readings ++ r) r
+Proof
+  ntac 6 gen_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  rpt gen_tac >> strip_tac >> fs[] >>
+  `gas_count_step fuel C' y t - LENGTH t.vs_gas_readings = 0` by decide_tac >>
+  `gasOracleReplay$gas_replay_at (gas_count_step fuel C' y t)
+      (step_inst fuel C' y) t` by
+    (irule removeUnusedGasProofsTheory.remove_unused_step_successful_replay_count >> simp[]) >>
+  drule_all removeUnusedGasProofsTheory.remove_unused_replay_ok >>
+  simp[gasOracleReplayTheory.gas_prefix_def, TAKE_APPEND] >> strip_tac >>
+  gen_tac >>
+  `PERM (MAP THE (FILTER IS_SOME m))
+    (TAKE (gas_count_step fuel C' y t) t.vs_gas_readings)` by
+    (qpat_x_assum `PERM _ _` mp_tac >>
+     qpat_x_assum `v.vs_gas_readings = _` SUBST1_TAC >>
+     metis_tac[GSYM TAKE_DROP, PERM_APPEND_IFF]) >>
+  `EVERY IS_SOME m` by metis_tac[] >>
+  simp[PERM_APPEND_IFF] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
+    (qspecl_then [`gs`, `tail`] mp_tac) >> simp[] >> strip_tac >>
+  simp[restore_result_def, dftRunRelTheory.dft_res_rel_def]
+QED
+
 Theorem invoke_return_gas_frame[local]:
   !out outs ir w s j rs t v gs tail.
     ~MEM out outs /\
