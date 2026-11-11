@@ -202,11 +202,20 @@ Definition alloc_env_agree_def:
   alloc_env_agree c c' <=>
     c'.ce_struct_fields = c.ce_struct_fields /\
     c'.ce_event_info = c.ce_event_info /\
+    c'.ce_error_info = c.ce_error_info /\
     c'.ce_module_vars = c.ce_module_vars /\
     c'.ce_hashmap_info = c.ce_hashmap_info /\
     c'.ce_module_var_type = c.ce_module_var_type /\
     c'.ce_func_return_type = c.ce_func_return_type
 End
+
+Theorem custom_error_alloc_ok_frame:
+  !c c' err. alloc_env_agree c c' ==>
+    custom_error_alloc_ok c' err = custom_error_alloc_ok c err
+Proof
+  rw[alloc_env_agree_def] >> drule type_memory_bytes_frame >> strip_tac >>
+  Cases_on `err` >> simp[custom_error_alloc_ok_def]
+QED
 
 Theorem target_store_place_frame:
   !c c' bt.
@@ -253,6 +262,7 @@ Theorem alloc_limits_stmt_struct_fields:
 Proof
   ho_match_mp_tac alloc_limits_stmt_ind >> rpt conj_tac >> rpt gen_tac >>
   rpt strip_tac >> drule assign_alloc_ok_frame >>
+  drule custom_error_alloc_ok_frame >>
   gvs[alloc_env_agree_def] >> drule_all alloc_limits_frame >> strip_tac >>
   gvs[alloc_limits_stmt_def, log_alloc_ok_def]
 QED

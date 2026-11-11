@@ -228,6 +228,21 @@ Definition log_alloc_ok_def:
           abi_size_bound cenv.ce_struct_fields (TupleT tys) < 2 ** 64
 End
 
+(* A custom error's two buffers are below Python's allocation limit, as
+   _revert_with_custom_error allocates them through allocate_buffer: the
+   arguments' tuple at the declared types, and its ABI encoding behind the
+   selector word.  An error the compile env doesn't know has none, since
+   compile_revert_with_custom_error emits INVALID for it. *)
+Definition custom_error_alloc_ok_def:
+  custom_error_alloc_ok cenv (CustomError id positional kwargs) ⇔
+    case cenv.ce_error_info (nsid_to_string id) of
+      NONE => T
+    | SOME params =>
+        let t = TupleT (MAP SND params) in
+          type_memory_bytes cenv t < 2 ** 64 ∧
+          abi_size_bound cenv.ce_struct_fields t + 32 < 2 ** 64
+End
+
 (* For a target in storage or transient storage, SOME of the place type
    compile_get_target_ptr gives it; NONE for any other target.  It reads
    only the module's variables and struct fields, so a local's frame
@@ -285,7 +300,8 @@ End
    Context.new_temporary_value), and a storage, transient or immutable source
    is read into one (compile_ensure_in_memory; Python's Context.unwrap).  The
    check covers both, so don't narrow it to the staging condition alone.
-   A log's two buffers are bounded by log_alloc_ok. *)
+   A log's two buffers are bounded by log_alloc_ok, a custom error's by
+   custom_error_alloc_ok. *)
 Definition alloc_limits_stmt_def:
   alloc_limits_stmt cenv Pass = T ∧
   alloc_limits_stmt cenv Break = T ∧
@@ -307,8 +323,15 @@ Definition alloc_limits_stmt_def:
   alloc_limits_stmt cenv (Log id es) =
     (alloc_limits_exprs cenv es ∧ log_alloc_ok cenv id es) ∧
   alloc_limits_stmt cenv (Assert c reason) =
-    (alloc_limits_expr cenv c ∧ alloc_limits_assert cenv reason) ∧
-  alloc_limits_stmt cenv (Raise reason) = alloc_limits_raise cenv reason ∧
+    (alloc_limits_expr cenv c ∧ alloc_limits_assert cenv reason ∧
+     case reason of
+       AssertCustomError err => custom_error_alloc_ok cenv err
+     | _ => T) ∧
+  alloc_limits_stmt cenv (Raise reason) =
+    (alloc_limits_raise cenv reason ∧
+     case reason of
+       RaiseCustomError err => custom_error_alloc_ok cenv err
+     | _ => T) ∧
   alloc_limits_stmt cenv (If c ss1 ss2) =
     (alloc_limits_expr cenv c ∧ alloc_limits_stmts cenv ss1 ∧
      alloc_limits_stmts cenv ss2) ∧

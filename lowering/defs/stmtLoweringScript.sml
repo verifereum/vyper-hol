@@ -202,6 +202,67 @@ Definition compile_reason_message_def:
     compile_expr cenv (expr_type reason_e) reason_e
 End
 
+(* ===== Revert with Custom Error ===== *)
+(* Store each argument at its declared type's offset in the argument tuple,
+   evaluating them in order: the first at the tuple's base, later ones at
+   base + offset.
+   Mirrors Python: vyper/codegen_venom/stmt.py:_store_custom_error_args *)
+Definition compile_custom_error_store_args_def:
+  compile_custom_error_store_args cenv [] _ dst offset = return () ∧
+  compile_custom_error_store_args cenv _ [] dst offset = return () ∧
+  compile_custom_error_store_args cenv (e::es) (ty::tys) dst offset =
+    do vv <- compile_expr cenv (expr_type e) e;
+       arg_ptr <- (if offset = 0 then return dst
+                   else emit_op ADD [dst; Lit (n2w offset)]);
+       v <- unwrap_value cenv vv;
+       compile_store_memory cenv v arg_ptr ty (lowered_value_type cenv e);
+       compile_custom_error_store_args cenv es tys dst
+         (offset + type_memory_bytes cenv ty)
+    od
+Termination
+  WF_REL_TAC `measure (λ(cenv,es,tys,dst,off). LENGTH es)` >> simp[]
+End
+
+(* Revert with selector || abi_encode(args) of a declared custom error.
+   The arguments are stored in a tuple buffer at their declared types, then
+   ABI-encoded behind the selector word; the revert starts at buf+28, so the
+   data begins with the 4-byte selector.  An error the compile env doesn't
+   know emits INVALID, as an unknown event does.
+   Mirrors Python: vyper/codegen_venom/stmt.py:_revert_with_custom_error *)
+Definition compile_revert_with_custom_error_def:
+  compile_revert_with_custom_error cenv (CustomError id positional kwargs) =
+    let err = CustomError id positional kwargs in
+    case cenv.ce_error_info (nsid_to_string id) of
+      NONE => emit_inst INVALID [] []
+    | SOME params =>
+        let arg_types = MAP SND params in
+        let args_tuple_t = TupleT arg_types in
+        let arg_es = custom_error_exprs err in
+        do args_alloc <- compile_alloc_buffer
+             (type_memory_bytes cenv args_tuple_t);
+           args_buf <- return args_alloc.buf_operand;
+           compile_custom_error_store_args cenv arg_es arg_types args_buf 0;
+           buf_alloc <- compile_alloc_buffer
+             (abi_size_bound cenv.ce_struct_fields args_tuple_t + 32);
+           buf <- return buf_alloc.buf_operand;
+           emit_void MSTORE
+             [buf; Lit (n2w (cenv.ce_method_id (SND id) arg_types))];
+           if NULL arg_es then
+             do revert_offset <- emit_op ADD [buf; Lit 28w];
+                emit_inst REVERT [revert_offset; Lit 4w] []
+             od
+           else
+             do payload_buf <- emit_op ADD [buf; Lit 32w];
+                encoded_len <- compile_abi_encode_to_buf payload_buf args_buf
+                  (type_to_abi_enc_info cenv.ce_struct_fields cenv
+                     args_tuple_t);
+                revert_offset <- emit_op ADD [buf; Lit 28w];
+                revert_len <- emit_op ADD [Lit 4w; encoded_len];
+                emit_inst REVERT [revert_offset; revert_len] []
+             od
+        od
+End
+
 (* ===== Internal Return ===== *)
 (* Pinned frontend convention (VYPER_PIN cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c,
    vyper/codegen_venom/stmt.py:_lower_internal_return): ordinary RET operands
@@ -911,7 +972,8 @@ Definition compile_stmt_def:
     od ∧
 
   (* Assert: evaluate condition, handle failure.
-     Three cases: bare assert, UNREACHABLE, or with reason string.
+     Four cases: bare assert, UNREACHABLE, with a reason string, or with a
+     custom error.
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_Assert, _assert_with_reason *)
   compile_stmt cenv lctx ty (Assert cond_e AssertBare) =
     (* Bare assert: revert 0,0 on failure *)
@@ -946,6 +1008,18 @@ Definition compile_stmt_def:
        msg_mem_size <- return (type_memory_bytes cenv reason_ty);
        msg_op <- compile_reason_message cenv reason_e;
        compile_revert_with_reason cenv msg_op reason_ty msg_mem_size;
+       new_block ok_lbl;
+       return ()
+    od ∧
+  compile_stmt cenv lctx ty (Assert cond_e (AssertCustomError err)) =
+    (* Assert with a custom error: revert with its selector and ABI-encoded
+       arguments on failure *)
+    do cond_op <- lower_value compile_expr cenv (BaseT BoolT) cond_e;
+       ok_lbl <- fresh_label "assert_ok";
+       fail_lbl <- fresh_label "assert_fail";
+       emit_inst JNZ [cond_op; Label ok_lbl; Label fail_lbl] [];
+       new_block fail_lbl;
+       compile_revert_with_custom_error cenv err;
        new_block ok_lbl;
        return ()
     od ∧
@@ -998,8 +1072,9 @@ Definition compile_stmt_def:
 
   (* Raise: revert with optional reason.
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_Raise
-     Three cases: bare raise (revert 0,0), UNREACHABLE (INVALID),
-     or with reason (Error(string) encoding). *)
+     Four cases: bare raise (revert 0,0), UNREACHABLE (INVALID),
+     with reason (Error(string) encoding), or a custom error (its selector
+     and ABI-encoded arguments). *)
   compile_stmt cenv lctx ty (Raise RaiseBare) =
     emit_inst REVERT [Lit 0w; Lit 0w] [] ∧
   compile_stmt cenv lctx ty (Raise RaiseUnreachable) =
@@ -1010,6 +1085,8 @@ Definition compile_stmt_def:
      do msg_op <- compile_reason_message cenv reason_e;
         compile_revert_with_reason cenv msg_op reason_ty msg_mem_size
      od) ∧
+  compile_stmt cenv lctx ty (Raise (RaiseCustomError err)) =
+    compile_revert_with_custom_error cenv err ∧
 
   (* Internal returns use RET; constructor returns jump to their epilogue;
      external returns unlock and STOP, as in Python's lower_Return. *)

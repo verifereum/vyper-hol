@@ -9431,39 +9431,106 @@ Resume compile_revert_with_reason_shape[finish_encoding]:
 QED
 Finalise compile_revert_with_reason_shape[local]
 
-(* Custom errors are outside the supported subset; compile_stmt's catch-all
-   lowers them to INVALID. *)
-Theorem stmt_invalid_shape[local]:
-  shape_step internal compiler_label (\st. T)
-    (comp_ignore_bind (emit_inst INVALID [] []) (comp_return ())) (\u st. T)
+(* Custom errors: the argument tuple is stored, then ABI-encoded behind the
+   selector and reverted. *)
+fun ce_frame input tac =
+  ho_match_mp_tac stmt_shape_frame >> qexists_tac input >>
+  simp[cenv_shape_ok_stable, value_shape_ok_stable, stmt_shape_stable_plain,
+       shape_stable_conj] >> tac;
+
+Theorem compile_custom_error_store_args_shape[local]:
+  !es tys cenv dst offset internal.
+    ~supported_exprs_exists expr_shape_root es ==>
+    shape_step internal compiler_label
+      (\st. cenv_shape_ok st cenv /\ plain_operand st dst)
+      (compile_custom_error_store_args cenv es tys dst offset) (\u st. T)
 Proof
-  match_mp_tac shape_step_ignore_bind >> qexists_tac `\x st. T` >>
-  conj_tac
-  >- (mp_tac (Q.SPECL [`internal`, `compiler_label`, `\st. T`,
-                       `INVALID`, `[]`, `[]`] shape_step_emit_inst) >>
-      simp[shape_stable_def, lowered_inst_ok_def, mk_inst_def,
-           raw_opcode_ok_def, inst_shape_ok_def, label_positions_ok_def, operand_case_not_label,
-           inst_jump_labels_ok_def,
-           is_terminator_def, is_param_opcode_def]) >>
-  gen_tac >> irule shape_step_return >> simp[]
+  Induct
+  >- (rpt strip_tac >> simp[compile_custom_error_store_args_def] >>
+      irule shape_step_return >> simp[]) >>
+  gen_tac >> Cases >> rpt strip_tac >> gvs[supported_exprs_exists_every] >>
+  simp[compile_custom_error_store_args_def]
+  >- (irule shape_step_return >> simp[]) >>
+  stmt_bind `\vv st. value_shape_ok st vv /\
+    (cenv_shape_ok st cenv /\ plain_operand st dst)` `vv`
+    (ce_frame `\st. cenv_shape_ok st cenv`
+       (irule (cj 1 compile_expr_shape) >> simp[])) >>
+  stmt_bind `\p st. plain_operand st p /\ (value_shape_ok st vv /\
+    (cenv_shape_ok st cenv /\ plain_operand st dst))` `arg_ptr`
+    (IF_CASES_TAC >- (irule shape_step_return >> simp[]) >>
+     ce_frame `\st. plain_operand st dst` stmt_plain_emit) >>
+  stmt_bind `\v st. plain_operand st v /\ (plain_operand st arg_ptr /\
+    (cenv_shape_ok st cenv /\ plain_operand st dst))` `v`
+    (ce_frame `\st. cenv_shape_ok st cenv /\ value_shape_ok st vv`
+       (irule unwrap_value_shape)) >>
+  stmt_sequence `\u st. T /\ (cenv_shape_ok st cenv /\ plain_operand st dst)`
+    (ce_frame `\st. plain_operand st arg_ptr /\ plain_operand st v`
+       (irule compile_store_memory_shape)) >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. cenv_shape_ok st cenv /\ plain_operand st dst`, `\u st. T`] >>
+  simp[]
 QED
 
-Theorem compile_custom_error_shape[local]:
-  shape_step internal compiler_label P
-    (compile_stmt cenv lctx ty (Raise (RaiseCustomError err))) (\u st. T) /\
-  shape_step internal compiler_label P
-    (compile_stmt cenv lctx ty (Assert e (AssertCustomError err))) (\u st. T)
+Theorem compile_revert_with_custom_error_shape[local]:
+  !cenv err internal.
+    ~EXISTS (supported_expr_exists expr_shape_root) (custom_error_exprs err) ==>
+    shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
+      (compile_revert_with_custom_error cenv err) (\u st. T)
 Proof
-  `!s. compile_stmt cenv lctx ty s =
-         comp_ignore_bind (emit_inst INVALID [] []) (comp_return ()) ==>
-       shape_step internal compiler_label P (compile_stmt cenv lctx ty s)
-         (\u st. T)` by
-    (rpt strip_tac >> pop_assum SUBST1_TAC >> irule shape_step_conseq >>
-     qexistsl_tac [`compiler_label`, `\st. T`, `\u st. T`] >>
-     simp[stmt_invalid_shape]) >>
-  conj_tac >> first_x_assum irule >>
-  simp[Once compile_stmt_def, FUN_EQ_THM, comp_ignore_bind_def,
-       comp_bind_def, comp_return_def]
+  gen_tac >> Cases >> rename1 `CustomError id pos kws` >> rpt strip_tac >>
+  simp[compile_revert_with_custom_error_def] >>
+  Cases_on `cenv.ce_error_info (nsid_to_string id)` >> simp[]
+  >- stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
+       simp[cenv_shape_ok_stable] >> stmt_shape_emit_simp) >>
+  simp[stmt_return_bind] >>
+  stmt_bind `\a st. plain_operand st a.buf_operand /\ cenv_shape_ok st cenv`
+    `args_alloc` (ce_frame `\st. T` (irule compile_alloc_buffer_shape)) >>
+  stmt_sequence `\u st. T /\
+    (cenv_shape_ok st cenv /\ plain_operand st args_alloc.buf_operand)`
+    (ce_frame `\st. cenv_shape_ok st cenv /\ plain_operand st args_alloc.buf_operand`
+       (irule compile_custom_error_store_args_shape >>
+        gvs[supported_exprs_exists_every])) >>
+  stmt_bind `\b st. plain_operand st b.buf_operand /\
+    plain_operand st args_alloc.buf_operand` `buf_alloc`
+    (ce_frame `\st. T` (irule compile_alloc_buffer_shape)) >>
+  stmt_sequence `\u st. plain_operand st buf_alloc.buf_operand /\
+    plain_operand st args_alloc.buf_operand` stmt_revert_void_drop >>
+  IF_CASES_TAC
+  >- (stmt_bind `\r st. plain_operand st r` `revert_offset`
+        (irule shape_step_conseq >>
+         qexistsl_tac [`compiler_label`,
+           `\st. plain_operand st buf_alloc.buf_operand /\
+                 plain_operand st args_alloc.buf_operand`,
+           `\r st. (plain_operand st buf_alloc.buf_operand /\
+                 plain_operand st args_alloc.buf_operand) /\ plain_operand st r`] >>
+         simp[] >> stmt_plain_emit) >>
+      stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
+        simp[stmt_shape_stable_plain, label_or_plain_def] >>
+        stmt_shape_emit_simp >>
+        simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+             operand_case_not_label] >>
+        rpt strip_tac >> gvs[stackPlanTypesTheory.is_label_operand_def])) >>
+  stmt_bind `\payload st. plain_operand st payload /\
+    (plain_operand st buf_alloc.buf_operand /\
+     plain_operand st args_alloc.buf_operand)` `payload_buf`
+    (stmt_revert_emit `\st. plain_operand st buf_alloc.buf_operand`) >>
+  stmt_bind `\len st. plain_operand st len /\
+    plain_operand st buf_alloc.buf_operand` `encoded_len`
+    (ce_frame `\st. plain_operand st payload_buf /\
+                    plain_operand st args_alloc.buf_operand`
+       (irule (cj 2 compile_abi_encode_shape))) >>
+  stmt_bind `\r st. plain_operand st r /\ plain_operand st encoded_len`
+    `revert_offset`
+    (stmt_revert_emit `\st. plain_operand st buf_alloc.buf_operand`) >>
+  stmt_bind `\l st. plain_operand st l /\ plain_operand st revert_offset`
+    `revert_len` (stmt_revert_emit `\st. plain_operand st encoded_len`) >>
+  stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
+    simp[stmt_shape_stable_plain, shape_stable_conj, label_or_plain_def] >>
+    stmt_shape_emit_simp >>
+    simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+         operand_case_not_label] >>
+    rpt strip_tac >> gvs[stackPlanTypesTheory.is_label_operand_def])
 QED
 
 Theorem compile_raise_shape[local]:
@@ -9473,7 +9540,10 @@ Theorem compile_raise_shape[local]:
       (compile_stmt cenv lctx ty (Raise reason)) (\u st. T)
 Proof
   Cases >> rpt strip_tac
-  >~ [`RaiseCustomError _`] >- simp[compile_custom_error_shape] >>
+  >~ [`RaiseCustomError err`]
+  >- (simp[Once compile_stmt_def] >>
+      irule compile_revert_with_custom_error_shape >>
+      gvs[supported_stmt_expr_exists_def, supported_raise_exists_def]) >>
   simp[Once compile_stmt_def]
   >- (stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
       simp[cenv_shape_ok_stable] >> stmt_shape_emit_simp >>
@@ -9530,7 +9600,17 @@ Theorem compile_assert_shape[local]:
       (compile_stmt cenv lctx ty (Assert cond_e reason)) (\u st. T)
 Proof
   Cases >> rpt strip_tac
-  >~ [`AssertCustomError _`] >- simp[compile_custom_error_shape] >>
+  >~ [`AssertCustomError err`]
+  >- (simp[Once compile_stmt_def, stmt_return_bind] >>
+      stmt_bind `\cond_op st. plain_operand st cond_op /\ cenv_shape_ok st cenv` `cond_op`
+        (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
+         simp[cenv_shape_ok_stable] >> irule lower_value_shape >>
+         gvs[supported_stmt_expr_exists_def]) >>
+      pure_rewrite_tac[comp_ignore_bind_def] >>
+      match_mp_tac (Q.INST [`failure` |-> `compile_revert_with_custom_error cenv err`]
+        (SPEC_ALL (PURE_REWRITE_RULE [comp_ignore_bind_def] stmt_assert_blocks_shape))) >>
+      irule compile_revert_with_custom_error_shape >>
+      gvs[supported_stmt_expr_exists_def, supported_assert_exists_def]) >>
   simp[Once compile_stmt_def, stmt_return_bind] >>
   stmt_bind `\cond_op st. plain_operand st cond_op /\ cenv_shape_ok st cenv` `cond_op`
     (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>

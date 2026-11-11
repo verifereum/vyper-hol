@@ -26,6 +26,7 @@ val () = holbuild_extra_deps
    "../builtin-forms/oracle",
    "../conversions/oracle",
    "../ctor-locals/oracle",
+   "../custom-errors/oracle",
    "../external-calls/oracle",
    "../for-iterables/oracle",
    "../immutables/oracle",
@@ -175,6 +176,10 @@ val suite_fixtures = [
     "ctor_arg_ifelse_local", "ctor_arg_local_array", "ctor_bare_return",
     "ctor_for_range", "ctor_immutable_early_return", "ctor_local_across_call",
     "ctor_local_word"]),
+  ("custom-errors", [
+    "ce_assert_dynamic", "ce_assert_noargs", "ce_assert_static",
+    "ce_raise_dynamic", "ce_raise_dynarray", "ce_raise_kwargs",
+    "ce_raise_noargs", "ce_raise_static"]),
   ("external-calls", [
     "c03_iface_address_attr", "e04_ret_string", "e05_ret_bytes", "e19_gas_kw",
     "e21_default_ret", "e22_static_default", "e25_arg_strlit_short",

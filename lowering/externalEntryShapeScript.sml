@@ -3895,9 +3895,28 @@ Proof
   simp[declare_stmt_local_def, stmt_simple_helpers_labels, comp_return_labels]
 QED
 
+Theorem compile_custom_error_labels:
+  (!cenv es tys d off s.
+    cs_extends s (SND (compile_custom_error_store_args cenv es tys d off s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_custom_error_store_args cenv es tys d off s)))) /\
+  (!cenv err s.
+    cs_extends s (SND (compile_revert_with_custom_error cenv err s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_revert_with_custom_error cenv err s))))
+Proof
+  conj_asm1_tac
+  >- (gen_tac >> Induct >> rpt gen_tac >> Cases_on `tys` >>
+      once_rewrite_tac[compile_custom_error_store_args_def] >>
+      stmt_labels_chain stmt_labels_rws) >>
+  gen_tac >> Cases >> once_rewrite_tac[compile_revert_with_custom_error_def] >>
+  stmt_labels_chain stmt_labels_rws
+QED
+
 val stmt_labels_rws = stmt_labels_rws @
   [compile_assign_value_labels, compile_store_at_loc_labels,
-   compile_reason_message_labels, stmt_simple_helpers_labels, declare_stmt_local_labels];
+   compile_reason_message_labels, stmt_simple_helpers_labels, declare_stmt_local_labels,
+   compile_custom_error_labels];
 
 Theorem stmt_list_helpers_labels:
   (!cenv es s. cs_extends s (SND (compile_log_eval_all cenv es s)) /\
@@ -4072,6 +4091,12 @@ Proof
   >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
       stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
       stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      stmt_labels_chain stmt_labels_rws)
   >- (RULE_ASSUM_TAC (SIMP_RULE bool_ss []) >>
       rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
       simp (comp_return_labels :: for_labels_rws) >>
@@ -4118,12 +4143,6 @@ Proof
   >- (RULE_ASSUM_TAC (SIMP_RULE bool_ss []) >> (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
       stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
       stmt_labels_chain stmt_labels_rws))
-  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
-      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
-      stmt_labels_chain stmt_labels_rws)
-  >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
-      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
-      stmt_labels_chain stmt_labels_rws)
   >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
       stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
       stmt_labels_chain stmt_labels_rws)

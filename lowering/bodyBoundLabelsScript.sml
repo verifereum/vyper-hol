@@ -2257,6 +2257,38 @@ Proof
   simp[bound_labels_expr_mutual]
 QED
 
+Theorem bound_labels_custom_error_store_args[local]:
+  (!l. compiler_label l ==> P l) ==>
+  !es tys dst off s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label)
+    (all_blocks (SND (compile_custom_error_store_args ce es tys dst off s))))
+Proof
+  strip_tac >> Induct >> rpt gen_tac >> Cases_on `tys` >> rpt strip_tac >>
+  simp[compile_custom_error_store_args_def, comp_return_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[cj 1 bound_labels_expr_mutual,
+    bound_labels_emit_op, bound_labels_unwrap_value, bound_labels_store_memory,
+    comp_return_def]),
+    gen_tac, strip_tac, irule bound_labels_bind,
+    irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
+QED
+
+Theorem bound_labels_revert_with_custom_error[local]:
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_revert_with_custom_error ce err s))))
+Proof
+  strip_tac >> Cases_on `err` >> rename1 `CustomError id pos kws` >>
+  simp[compile_revert_with_custom_error_def] >>
+  Cases_on `ce.ce_error_info (nsid_to_string id)` >>
+  simp[bound_labels_emit_inst] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_alloc_buffer, bound_labels_emit_void,
+    bound_labels_emit_op, bound_labels_emit_inst,
+    bound_labels_custom_error_store_args, cj 2 bound_labels_abi_encode,
+    comp_return_def]), gen_tac, strip_tac, irule bound_labels_bind,
+    irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
+QED
+
 Theorem bound_labels_stmt_assert[local]:
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
@@ -2265,7 +2297,8 @@ Theorem bound_labels_stmt_assert[local]:
 Proof
   strip_tac >> Cases_on `reason` >> simp[compile_stmt_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_inst, bound_labels_new_block,
-    bound_labels_reason_message, bound_labels_revert_with_reason, comp_return_def]),
+    bound_labels_reason_message, bound_labels_revert_with_reason,
+    bound_labels_revert_with_custom_error, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_fresh_label_bind,
     irule bound_labels_bind, irule bound_labels_ignore_bind, conj_tac]) >>
   irule bound_labels_lower_value >> simp[bound_labels_expr_mutual]
@@ -2294,7 +2327,8 @@ Theorem bound_labels_stmt_raise[local]:
     (SND (compile_stmt ce lc rt (Raise reason) s))))
 Proof
   strip_tac >> Cases_on `reason` >>
-  simp[compile_stmt_def, bound_labels_emit_inst]
+  simp[compile_stmt_def, bound_labels_emit_inst,
+       bound_labels_revert_with_custom_error]
   >- (irule bound_labels_bind >>
       simp[bound_labels_reason_message, bound_labels_revert_with_reason]) >>
   irule bound_labels_ignore_bind >> simp[bound_labels_emit_inst, comp_return_def]

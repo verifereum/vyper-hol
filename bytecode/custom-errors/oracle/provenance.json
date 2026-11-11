@@ -1,0 +1,48 @@
+{
+  "producer": "pinned Python Vyper",
+  "vyper_commit": "9362e36b145c4b63ceb6a893018ea970e78bf6a6",
+  "vyper_version": "0.5.0a4+commit.9362e36b",
+  "python_version": "3.11.17",
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.3.1",
+    "packaging": "26.3",
+    "pycryptodome": "3.24.1",
+    "wheel": "0.48.0"
+  },
+  "settings": {
+    "experimental_codegen": true,
+    "optimization_level": "NONE",
+    "evm_version": "prague",
+    "bytecode_metadata": false
+  },
+  "sources": {
+    "ce_assert_dynamic.vy": "b09b05ff070711f8f5a92fa92522b59d6cc68a0f6d17206069f9a022638074cb",
+    "ce_assert_noargs.vy": "ac5ea996dacf85d2cb8a0e07cec4d744fac83fe8ebcd799635b934de41a0e7a6",
+    "ce_assert_static.vy": "2e10ddf2fd88353a2d47cccdd905946f5f9fcdfca3433ee5fa6022a94ba4bea3",
+    "ce_raise_dynamic.vy": "cc38970354be36ab07bddc7f5a3e582838eab58b9617a3abe387c62f4c87bafe",
+    "ce_raise_dynarray.vy": "45e395ba93be6d8d17706936405fe7ea31d24813f4e7c4a4b1552cc952e4e882",
+    "ce_raise_kwargs.vy": "b8f25ff70d51b3bd2fe31d921fc7b4f09613a8faf81b71aab7689f2270ddc389",
+    "ce_raise_noargs.vy": "8e59b4d38a98b4fdb6749f17e275982457e0a1af9856764244ec9062a9533241",
+    "ce_raise_static.vy": "33b35a2deb7d1c76ed04e2bd80efb609c5a849d858c79d256e4d56ac380381aa"
+  },
+  "outputs": {
+    "ce_assert_dynamic.hex": "14d5ef63fd35f6b7c2ef9d56264ce868dde75206ab5d99a95c5a11f72d69bb24",
+    "ce_assert_dynamic.json": "a606efb8f311b6cd3bb850afacf171022aa7c0e4421a3a2c42a8b50a6d55bbdc",
+    "ce_assert_noargs.hex": "c32fdf30c0047a41df154311dabca5928100b45c74023d5491558fb530b9609f",
+    "ce_assert_noargs.json": "0f971609cb6c5de4635ebc34da3f4c78ffe40f6461382f46869591be24051786",
+    "ce_assert_static.hex": "3d50228aff2d557645d9547a68d61bc59dd40b013ddb91e1cb5854578f0b6d90",
+    "ce_assert_static.json": "8ff7ecef97261aa3cc2c5371255f2462a60e4bf060875d49304c73cf95770123",
+    "ce_raise_dynamic.hex": "c5bdc110ee4fda8bdc58e4932f2cc4e7a74f12af376006315afc84912df9b192",
+    "ce_raise_dynamic.json": "201a9a0a239e5afcc647bfd57a71fc92643b3ca0688408a6703797295937ddf4",
+    "ce_raise_dynarray.hex": "ece8344f6f737b66d0dfa9c6dfa63dacc1deb045eef46771fe544bd35016f912",
+    "ce_raise_dynarray.json": "184e0d25066119e331067b3aaf4f388561f01551068ebc2353e370455cc7129f",
+    "ce_raise_kwargs.hex": "498fa0f5548850e7e39ab378248aed5db3864cf3dce89cae46b1909bfbe6085d",
+    "ce_raise_kwargs.json": "d6b438ff6a8f66aa1daba62a444347e1ee432ad8fe7b3075f20d4e228e863fe1",
+    "ce_raise_noargs.hex": "d28afc5e36d78f94a52639704a3e69873c57712a4e06422cb331de07ef8dc0b8",
+    "ce_raise_noargs.json": "6799bc1b0b85a7f81fe2bdf262425c5ec1f7108019e5205f044f29846f95a61f",
+    "ce_raise_static.hex": "49861f9d2879224bc2027e49c8fd830c4b19adcd2783dbd2fa7175ebb972452b",
+    "ce_raise_static.json": "e2be9746c77841ae9a644d5f61e8ce9102ef0b4fdd63ba521ef0d91b1e0a2cc6"
+  }
+}

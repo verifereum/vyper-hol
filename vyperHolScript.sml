@@ -30,6 +30,8 @@ Ancestors
   typedCopyArrayExecutionPtr wordCopyRobustPtr
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness
+  (* body induction: custom-error rows, admitted until the gate admits them *)
+  bodyCustomErrorCases
   (* Venom execution: jump independence *)
   jumpIndep
   (* passes: oracle projections, FMP lowering, memory merging, SSA *)

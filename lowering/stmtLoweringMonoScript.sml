@@ -196,6 +196,19 @@ Proof
   ci_mono_chain_tac ci_mono_stmt_rws
 QED
 
+Theorem ci_mono_custom_error:
+  (!cenv es tys d off sa.
+     ci_mono sa (SND (compile_custom_error_store_args cenv es tys d off sa))) /\
+  (!cenv err sa. ci_mono sa (SND (compile_revert_with_custom_error cenv err sa)))
+Proof
+  conj_asm1_tac
+  >- (gen_tac >> Induct >> rpt gen_tac >> Cases_on `tys` >>
+      simp[compile_custom_error_store_args_def] >>
+      ci_mono_chain_tac ci_mono_stmt_rws) >>
+  gen_tac >> Cases >> simp[compile_revert_with_custom_error_def] >>
+  ci_mono_chain_tac ci_mono_stmt_rws
+QED
+
 Theorem ci_mono_internal_return[local]:
   !cenv v pc n rt st ets rb sa.
     ci_mono sa (SND (compile_internal_return cenv v pc n rt st ets rb sa))
@@ -268,7 +281,7 @@ val stmt_ci_tac =
         ci_mono_chain_tac
           (ci_mono_return_helpers :: ci_mono_list_helpers ::
            ci_mono_stmt_helpers :: ci_mono_compile_get_target_ptr ::
-           ci_mono_stmt_rws)
+           ci_mono_custom_error :: ci_mono_stmt_rws)
   in
     rpt gen_tac >> simp[Once compile_stmt_def] >> chain >>
     simp[pairTheory.ELIM_UNCURRY] >> chain
@@ -329,10 +342,10 @@ Proof
    stmt_ci_tac,
    stmt_ci_tac,
    stmt_ci_tac,
+   stmt_ci_tac,
+   stmt_ci_tac,
    suspend "range",
    loop_ci_tac,
-   stmt_ci_tac,
-   stmt_ci_tac,
    stmt_ci_tac,
    stmt_ci_tac,
    stmt_ci_tac,
