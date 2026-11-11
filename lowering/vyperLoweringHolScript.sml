@@ -32,7 +32,6 @@ Ancestors
   e2eDeployFrame
   deployFrameReplay asmDataSuffixProps deployEntryLayout deployUnitProducers
   immutableLocationProps
-  targetOverlapAccess
   loweringShapeDefs
   loweringShapeProps
   ctorShapeProps ctorUnitShape
