@@ -175,6 +175,8 @@ Definition call_state_rel_def:
       am.pending_deletions = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
+      tx.created_in_tx =
+        account_empty (lookup_account tx.target es.originalAccounts) /\
       buffer_to_list ctxt.msgParams.data = tx.calldata /\
       tx_block_fields_rel tx es.txParams /\
       source_deployment_rel tops am tx
@@ -280,9 +282,10 @@ End
 
 Definition unspecified_behaviour_exempt_def:
   unspecified_behaviour_exempt tops e <=>
-    e = RuntimeError "abi_decode invalid" /\
-    ?ty. occurs_abi_decode_target ty tops /\
-         is_dynamic (vyper_to_abi_type (type_env tops) ty)
+    (e = RuntimeError "abi_decode invalid" /\
+     ?ty. occurs_abi_decode_target ty tops /\
+          is_dynamic (vyper_to_abi_type (type_env tops) ty)) \/
+    e = RuntimeError "transfer_value recipient overflow"
 End
 
 Definition source_exempt_def:
