@@ -1,7 +1,7 @@
 (* The contract of the joint reachable induction over an internal callee's
    body (seam 2, intcall_callee_body_sim): the usual simulation carried
-   together with a resource invariant, I below.  DRAFT: definitions and
-   frozen leaf statements only; every leaf is cheated.
+   together with a resource invariant, I below: its definitions and the
+   frozen leaf statements.
 
    TOP-LEVEL definitions:
    - intcall_frame: the parameters fixed for one callee body;
