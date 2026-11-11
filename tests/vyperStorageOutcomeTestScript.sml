@@ -107,7 +107,7 @@ Theorem computed_outcome_suffix_client:
   st'.outcomes = SOME (DROP 1 os) /\ st'.requests = st.requests
 Proof
   strip_tac >> drule_all take_call_outcome_suffix >> strip_tac >>
-  gvs[take_call_outcome_def] >> pairarg_tac >> gvs[AllCaseEqs()] >>
+  gvs[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> gvs[AllCaseEqs()] >>
   metis_tac[take_outcome_rest, SND]
 QED
 
