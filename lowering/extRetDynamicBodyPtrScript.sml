@@ -251,3 +251,79 @@ Proof
   rpt conj_tac >> rpt strip_tac >>
   Cases_on `i < b+32+32*j` >- (gvs[] >> metis_tac[]) >> decide_tac
 QED
+
+Theorem encoder_dynamic_body_backedge_counted_ptr:
+  abi_encode_array_addresses (Var ip) (Var src) (Var dst) 32 msz sa =
+    (((Var idx,Var child_src),(Var data,Var head)),sx) /\
+  abi_encode_array_tail (Var data) (Var cursor) sx =
+    ((Var off,Var child_dst),sb) /\
+  compile_abi_encode_to_buf (Var child_dst) (Var child_src) ei sb = (len,se) /\
+  abi_encode_child_suffix (Var head) (Var cursor) (Var off) len se = (len,ss) /\
+  abi_decode_loop_suffix (Var ip) (Var idx) hdr exit_lbl ss = ((),sc) /\
+  fn_has_code sa sx fn /\ fn_has_code sx sb fn /\ fn_has_code sb se fn /\
+  fn_has_code se ss fn /\ fn_has_code ss sc fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~ctx_has_dalloca ctx /\
+  not_fresh_at sa ip /\ not_fresh_at sa cursor /\ not_fresh_at sa src /\
+  not_fresh_at sa dst /\ not_fresh_at sa cv /\
+  not_fresh_at sb head /\ not_fresh_at sb off /\ not_fresh_at sb idx /\
+  (!x. not_fresh_at sa x ==> not_fresh_at sb x) /\
+  (!x. not_fresh_at sb x ==> not_fresh_at se x) /\
+  (!x. not_fresh_at se x ==> not_fresh_at ss x) /\
+  encoder_dynamic_loop_inv ctx fn sites protected
+    ip cursor src dst cv p c a b scap dcap tv v N ns j G tn s /\
+  j < N /\ LENGTH ns = N /\ k = 32*N+SUM (TAKE j ns) /\ n = EL j ns /\
+  n <= capj /\ 32+k+capj <= dcap /\ 32+j*msz+msz <= scap /\
+  val_wf tv v /\ val_footprint tv v <= scap /\
+  regions_disjoint (p,32) (c,32) /\
+  regions_disjoint (p,32) (b,dcap) /\
+  regions_disjoint (c,32) (b,dcap) /\
+  regions_disjoint (a,scap) (p,32) /\
+  regions_disjoint (a,scap) (c,32) /\
+  regions_disjoint (a,scap) (b,dcap) /\
+  FLOOKUP s.vs_allocas pid = SOME (p,32) /\ pid IN sites /\ pid NOTIN children /\
+  FLOOKUP s.vs_allocas cid = SOME (c,32) /\ cid IN sites /\ cid NOTIN children /\
+  MEM (did,dbase,dsize) protected /\ dbase <= b /\ b+dcap <= dbase+dsize /\
+  children SUBSET sites /\
+  p+32 < dimword(:256) /\ c+32 < dimword(:256) /\
+  a+scap < dimword(:256) /\ b+dcap < dimword(:256) /\
+  j+1 < dimword(:256) /\ k+n < dimword(:256) /\
+  (!Gp tnp sp.
+    sp.vs_current_bb = sb.cs_current_bb /\
+    sp.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sp.vs_halted /\
+    lookup_var child_src sp = SOME (n2w (a+32+j*msz)) /\
+    ptr_covers Gp tnp child_src sp msz /\
+    lookup_var child_dst sp = SOME (n2w (b+32+k)) /\
+    ptr_covers Gp tnp child_dst sp capj /\
+    (!mem. mem_agree_outside tnp.t_mem sp.vs_memory mem ==>
+       val_in_memory tv v a mem) /\
+    encoder_resource ctx fn children a scap
+      ((pid,p,32)::(cid,c,32)::protected) sp ==>
+    ?Gm tnm sm. encoder_framed_child_result D ctx fn PG sb se children a scap
+      ((pid,p,32)::(cid,c,32)::protected) (b+32+k) capj len n cost
+      Gp tnp sp Gm tnm sm) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s cost Gf tnf (OK sf) /\
+    sf.vs_current_bb = hdr /\ sf.vs_inst_idx = 0 /\
+    encoder_dynamic_loop_inv ctx fn sites protected
+      ip cursor src dst cv p c a b scap dcap tv v N ns (j+1) Gf tnf sf /\
+    encoder_dynamic_effect sa sites b dcap G tn s Gf tnf sf
+Proof
+  strip_tac >>
+  `~s.vs_halted /\ lookup_var ip s = SOME (n2w p) /\
+   lookup_var cursor s = SOME (n2w c) /\
+   lookup_var src s = SOME (n2w a) /\ lookup_var dst s = SOME (n2w b) /\
+   ptr_covers G tn ip s 32 /\ ptr_covers G tn cursor s 32 /\
+   ptr_covers G tn src s scap /\ ptr_covers G tn dst s dcap /\
+   mload p s = n2w j /\ mload c s = n2w k /\
+   (!i. p <= i /\ i < p+32 ==> i NOTIN tn.t_mem) /\
+   (!i. c <= i /\ i < c+32 ==> i NOTIN tn.t_mem)` by
+    metis_tac[encoder_dynamic_loop_inv_def] >>
+  `w2n (n2w a : bytes32) = a /\ w2n (n2w b : bytes32) = b /\
+   w2n (n2w p : bytes32) = p /\ c < dimword(:256) /\
+   32+j*32+32 <= dcap /\ 32+k+capj <= dcap` by
+    cheat >>
+  drule_all abi_array_prepare_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  cheat
+QED
