@@ -120,6 +120,7 @@ and slice_origin_tac g = (
 and bop_origin_tac g = (
   rpt (qpat_x_assum `!x. _` kall_tac) >>
   qpat_x_assum `well_typed_expr _ _` kall_tac >>
+  rpt (qpat_x_assum `option_CASE (bytestring_literal_hash _) _ _ = _` kall_tac) >>
   gvs[AllCaseEqs(), as_stack_val_def, vv_operand_def] >>
   rpt (qmatch_asmsub_abbrev_tac `as_stack_val _ result` >>
        Cases_on `result` >>
