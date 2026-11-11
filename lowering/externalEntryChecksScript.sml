@@ -822,7 +822,8 @@ Proof
 QED
 
 Theorem classified_external_labels_distinct:
-  !tops. ALL_DISTINCT (supported_function_names tops) ==>
+  !tops.
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) ==>
     ALL_DISTINCT (MAP (\(mut,nr,rr,name,args,dflts,ret,fbody). "fn_" ++ name)
       (FST (classify_functions tops)))
 Proof
@@ -846,6 +847,7 @@ Theorem source_runtime_entry_checks_code:
   !tops rpolicy unit mut nr rr name args dflts ret fbody
    lbl ce pos_args min_cds pay nr' key ut iv rt.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
     MEM (mut,nr,rr,name,args,dflts,ret,fbody) (FST (classify_functions tops)) /\
     set_external_package_target rpolicy.rpol_target
       (package_external_fn tops F (assign_nkeys tops 0)
@@ -865,8 +867,6 @@ Theorem source_runtime_entry_checks_code:
       sd.cs_next_var <= st.cs_next_var
 Proof
   rpt gen_tac >> strip_tac >>
-  `ALL_DISTINCT (supported_function_names tops)` by
-    gvs[supported_program_def, supported_declaration_names_def] >>
   drule classified_external_labels_distinct >> disch_tac >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def] >>
@@ -1048,6 +1048,7 @@ Proof
   qspecl_then [`tops`, `rpolicy.rpol_target`, `mut`, `rr`,
                `tx.function_name`, `args`, `ret`, `fbody`]
     strip_assume_tac selected_external_package >>
+  drule entryStateRelTheory.source_typing_ok_external_names_distinct >> strip_tac >>
   drule_all source_runtime_entry_checks_code >> strip_tac >>
   `fn_entry_label func = SOME "__entry"` by
     simp[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def,

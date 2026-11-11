@@ -36,6 +36,7 @@ Proof
   qspecl_then [`tops`, `rpolicy.rpol_target`, `mut`, `rr`,
                `tx.function_name`, `args`, `ret`, `fbody`]
     strip_assume_tac selected_external_package >>
+  drule entryStateRelTheory.source_typing_ok_external_names_distinct >> strip_tac >>
   drule_all source_runtime_entry_checks_code >> strip_tac >>
   `fn_entry_label func = SOME "__entry"` by
     simp[fn_entry_label_def, entry_block_def, NULL_EQ] >>

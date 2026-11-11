@@ -1,7 +1,7 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalBodyFrame
 Ancestors
-  supportedGetterProps
+  supportedGetterProps externalRawReturnType
   externalBodySupport memoryLocalRhsProps
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
   loweringPosts
@@ -123,6 +123,7 @@ QED
 
 Theorem distinct_external_classification:
   !tops mut nr rr name args defaults ret body exts ints fb ctor.
+    supported_declaration_headers tops /\
     ALL_DISTINCT (supported_function_names tops) /\
     MEM (FunctionDecl External mut nr rr name args defaults ret body) tops /\
     classify_functions tops = (exts,ints,fb,ctor) ==>
@@ -151,7 +152,8 @@ Theorem supported_external_classification:
 Proof
   strip_tac >> irule distinct_external_classification >>
   drule supported_program_names >>
-  simp[supported_declaration_names_def] >> metis_tac[]
+  simp[supported_declaration_names_def] >>
+  gvs[supported_program_def] >> metis_tac[]
 QED
 
 Theorem supported_external_allocs_ok:
@@ -685,30 +687,6 @@ Proof
           update_cenv_nonreentrant_def, return_buffer_ok_def]) >>
   gvs[package_external_fn_def, set_external_package_target_def,
       external_return_buffer_ok_def]
-QED
-
-Theorem supported_lookup_raw:
-  !ts ambient name mut nr args defaults ret body.
-  EVERY (supported_declaration_header ambient) ts /\
-  lookup_function (NONE : num option) name External ts =
-    SOME (mut,nr,args,defaults,ret,body) ==>
-  ?rr. MEM (FunctionDecl External mut nr rr name args defaults ret body) ts /\
-       lookup_raw_return (NONE : num option) name External ts = SOME rr
-Proof
-  Induct_on `ts` >- simp[lookup_function_def] >>
-  rpt gen_tac >> Cases_on `h`
-  >- (simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
-           listTheory.MEM] >>
-      Cases_on `s = name /\ f = External` >> gvs[] >> metis_tac[])
-  >- (Cases_on `v` >>
-      simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
-           listTheory.MEM, supported_public_variables_rejected] >>
-      metis_tac[])
-  >- (simp[listTheory.EVERY_DEF, supported_hashmap_header_contract] >>
-      strip_tac >> gvs[lookup_function_def, lookup_raw_return_def,
-                      listTheory.MEM] >> metis_tac[])
-  >> simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
-          listTheory.MEM] >> metis_tac[]
 QED
 
 Theorem make_struct_fields_map_fields:
@@ -1274,17 +1252,22 @@ Theorem external_selected_return_buffer_ok:
     (stmts_valued_return fbody /\ cenv.ce_is_external /\
      ~cenv.ce_raw_return ==> return_buffer_ok cenv)
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> strip_tac >>
   qpat_x_assum `set_external_package_target _ _ = _`
     (fn th => mp_tac (Q.ISPEC `[]:expr list`
        (MATCH_MP set_external_package_target_dflts th))) >>
   simp[] >> strip_tac >>
   `EVERY (supported_declaration_header tops) tops` by
     gvs[supported_program_def, supported_declaration_headers_def] >>
-  drule_all supported_lookup_raw >> strip_tac >>
+  `same_frame cenv cenv` by simp[] >>
+  `~lookup_raw_return_or_F (NONE:num option) tx.function_name External tops` by
+    (drule_all external_package_raw_flag >> simp[]) >>
   `tx.function_name <> "__default__"` by gvs[valid_vyper_call_def] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  drule_all supported_external_classification >> simp[] >> strip_tac >>
+  `MEM (mut,F,F,tx.function_name,args,[],ret,fbody) (FST (classify_functions tops))` by
+    (irule supported_headers_external_plain_member >>
+     fs[supported_program_def]) >>
+  gvs[] >>
   drule_all lower_vyper_runtime_unit_return_buffer_ok >>
   gvs[lookup_raw_return_or_F_def] >> strip_tac >>
   qpat_x_assum `external_return_buffer_ok _` mp_tac >>

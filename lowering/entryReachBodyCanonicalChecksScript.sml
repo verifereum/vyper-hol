@@ -84,6 +84,7 @@ QED
 
 Theorem entry_source_canonical_phase[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
   MEM (mut,F,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
   set_external_package_target rpolicy.rpol_target
     (package_external_fn tops F (assign_nkeys tops 0)
@@ -113,9 +114,6 @@ Theorem entry_source_canonical_phase[local]:
     (!inst. MEM inst (state_insts registered) ==> MEM inst (fn_insts func))
 Proof
   strip_tac >>
-  `ALL_DISTINCT (supported_function_names tops)` by
-    gvs[supportedProgramTheory.supported_program_def,
-        supportedNamesTheory.supported_declaration_names_def] >>
   drule classified_external_labels_distinct >> disch_tac >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def] >>
@@ -230,7 +228,7 @@ Theorem entry_canonical_checks_reached:
       ?fuel'. run_context fuel' unit.cu_context vs = r)
 Proof
   strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops))` by
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
     metis_tac[source_typing_ok_external_names_distinct] >>
   drule_all entry_source_canonical_code >> strip_tac >>
   `~block_is_terminated checks` by simp[block_is_terminated_def] >>
