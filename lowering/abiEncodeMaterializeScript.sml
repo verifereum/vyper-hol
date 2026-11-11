@@ -426,7 +426,10 @@ Theorem materialize_store_owned_post_sim:
       eval_operand (Var p) s = SOME w /\
       val_in_memory tv v (w2n w) s.vs_memory /\
       (!name b len. local_region ce es'.scopes s name b len ==>
-         w2n w + type_memory_size tv <= b \/ b + len <= w2n w)) R
+         w2n w + type_memory_size tv <= b \/ b + len <= w2n w) /\
+      s.vs_allocas = z.vs_allocas /\
+      (!off len. regions_disjoint off len (w2n w) (type_memory_size tv) ==>
+         mem_bytes_at off len s.vs_memory = mem_bytes_at off len z.vs_memory)) R
 Proof
   strip_tac >>
   drule_all materialize_expr_post_lowered_source >> strip_tac >>
@@ -480,7 +483,10 @@ Proof
   conj_tac >- simp[materialize_expr_val_at_inst_idx] >>
   conj_tac >- (simp[venomStateTheory.eval_operand_def,
                   venomStateTheory.lookup_var_def] >> metis_tac[]) >>
-  simp[materialize_local_region_inst_idx] >> gvs[]
+  conj_tac >- (simp[materialize_local_region_inst_idx] >> gvs[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!a len. _ ==> mem_bytes_at a len t.vs_memory = _` irule >>
+  fs[regions_disjoint_def]
 QED
 
 Theorem materialize_store_post_sim:

@@ -93,12 +93,14 @@ Theorem abi_args_captured_cons_sim:
      gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es1,t)
        (\rr ee u. ?vs. rr = INL vs /\
           abi_args_post ctx func ce cx es1 sm sb t ee args ops vs u /\
+          (~EXISTS expr_has_effect args ==> pure_frame ce func es1 sm t u) /\
           u.vs_current_bb = sb.cs_current_bb /\
           u.vs_inst_idx = LENGTH sb.cs_current_insts)
        (\rr ee r. wb_args_exit rr r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx (e::args)) (es,s0)
     (\rr ee u. ?vs. rr = INL vs /\
        abi_args_post ctx func ce cx es sa sb s0 ee (e::args) (op::ops) vs u /\
+       (~EXISTS expr_has_effect (e::args) ==> pure_frame ce func es sa s0 u) /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\rr ee r. wb_args_exit rr r)
@@ -190,6 +192,7 @@ Resume abi_args_captured_cons_sim[tail_normal]:
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL vs) _ _`
         (mp_tac o MATCH_MP gas_marked_exec_cons_values) >> simp[]) >>
   disj1_tac >> simp[] >>
+  reverse conj_tac >- suspend "frame" >>
   irule captured_owned_cons_post >>
   qpat_assum `materialize_owned_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
@@ -218,6 +221,24 @@ Resume abi_args_captured_cons_sim[tail_exempt]:
   qexists_tac `marks ++ marks'` >> disj2_tac >>
   irule_at Any wb_args_tail_exempt_cert >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any)
+QED
+Resume abi_args_captured_cons_sim[frame]:
+  rpt strip_tac >>
+  qpat_assum `materialize_owned_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [materialize_owned_post_def]) >>
+  `pure_frame ce func es_end sm t' t''` by
+    (qpat_x_assum `EVERY _ args ==> pure_frame _ _ _ _ _ _` irule >>
+     first_assum ACCEPT_TAC) >>
+  match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `es_end`, `sa`, `sm`, `s0`, `t'`, `t''`]
+    exprSimPropsTheory.pure_frame_trans) >>
+  rpt conj_tac
+  >- (qpat_x_assum `~expr_has_effect e ==> _` irule >> first_assum ACCEPT_TAC)
+  >- first_assum ACCEPT_TAC
+  >- (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac)
+  >- fs[abi_args_post_def, loweringPostsTheory.wb_frame_def]
+  >- first_assum ACCEPT_TAC
+  >- fs[]
+  >> fs[loweringPostsTheory.wb_frame_def]
 QED
 Finalise abi_args_captured_cons_sim
 
@@ -256,6 +277,7 @@ Theorem abi_args_captured_cons_sim_live:
      gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es1,t)
        (\rr ee u. ?vs. rr = INL vs /\
           abi_args_post ctx func ce cx es1 sm sb t ee args ops vs u /\
+          (~EXISTS expr_has_effect args ==> pure_frame ce func es1 sm t u) /\
           EVERY (abi_decoder_operand_live sb.cs_next_var) ops /\
           u.vs_current_bb = sb.cs_current_bb /\
           u.vs_inst_idx = LENGTH sb.cs_current_insts)
@@ -263,6 +285,7 @@ Theorem abi_args_captured_cons_sim_live:
   gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx (e::args)) (es,s0)
     (\rr ee u. ?vs. rr = INL vs /\
        abi_args_post ctx func ce cx es sa sb s0 ee (e::args) (op::ops) vs u /\
+       (~EXISTS expr_has_effect (e::args) ==> pure_frame ce func es sa s0 u) /\
        EVERY (abi_decoder_operand_live sb.cs_next_var) (op::ops) /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
@@ -365,6 +388,7 @@ Resume abi_args_captured_cons_sim_live[tail_normal]:
       strip_tac >> first_x_assum (qspec_then `[]` assume_tac) >>
       qpat_x_assum `!gs v es1 gs' rr ee. _` drule >>
       simp[] >> strip_tac >> gvs[] >> first_x_assum drule >> simp[]) >>
+  conj_tac >- suspend "frame" >>
   irule abi_decoder_operand_live_mono >> qexists_tac `sm.cs_next_var` >>
   conj_tac >- gvs[exprLoweringPropsTheory.ci_mono_def] >>
   Cases_on `op` >>
@@ -387,5 +411,23 @@ Resume abi_args_captured_cons_sim_live[tail_exempt]:
   qexists_tac `marks ++ marks'` >> disj2_tac >>
   irule_at Any wb_args_tail_exempt_cert >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any)
+QED
+Resume abi_args_captured_cons_sim_live[frame]:
+  rpt strip_tac >>
+  qpat_assum `materialize_owned_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [materialize_owned_post_def]) >>
+  `pure_frame ce func es_end sm t' t''` by
+    (qpat_x_assum `EVERY _ args ==> pure_frame _ _ _ _ _ _` irule >>
+     first_assum ACCEPT_TAC) >>
+  match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `es_end`, `sa`, `sm`, `s0`, `t'`, `t''`]
+    exprSimPropsTheory.pure_frame_trans) >>
+  rpt conj_tac
+  >- (qpat_x_assum `~expr_has_effect e ==> _` irule >> first_assum ACCEPT_TAC)
+  >- first_assum ACCEPT_TAC
+  >- (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac)
+  >- fs[abi_args_post_def, loweringPostsTheory.wb_frame_def]
+  >- first_assum ACCEPT_TAC
+  >- fs[]
+  >> fs[loweringPostsTheory.wb_frame_def]
 QED
 Finalise abi_args_captured_cons_sim_live

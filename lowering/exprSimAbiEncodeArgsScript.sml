@@ -29,6 +29,7 @@ Theorem compile_abi_encode_args_sim_live:
     gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
       (\rr ee t. ?vs. rr = INL vs /\
          abi_args_post ctx func ce cx es sa sb s0 ee args ops vs t /\
+         (~EXISTS expr_has_effect args ==> pure_frame ce func es sa s0 t) /\
          EVERY (abi_decoder_operand_live sb.cs_next_var) ops /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
@@ -159,6 +160,7 @@ Theorem compile_abi_encode_args_sim:
     gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
       (\rr ee t. ?vs. rr = INL vs /\
          abi_args_post ctx func ce cx es sa sb s0 ee args ops vs t /\
+         (~EXISTS expr_has_effect args ==> pure_frame ce func es sa s0 t) /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\rr ee r. wb_args_exit rr r)
@@ -184,6 +186,7 @@ Theorem compile_abi_encode_args_case_gas_sim:
     gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
       (\rr ee t. ?vs. rr = INL vs /\
          abi_args_post ctx func ce cx es sa sb s0 ee args ops vs t /\
+         (~EXISTS expr_has_effect args ==> pure_frame ce func es sa s0 t) /\
          EVERY (abi_decoder_operand_live sb.cs_next_var) ops /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)

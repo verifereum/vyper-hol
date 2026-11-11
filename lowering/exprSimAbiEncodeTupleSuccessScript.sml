@@ -287,6 +287,41 @@ Proof
       simp[ADD_COMM])
 QED
 
+(* Staging writes only the fresh tuple buffer, allocated at st's next id and
+   clear of the live locals, so it keeps the pure frame from st. *)
+Theorem abi_encode_tuple_staging_pure_frame:
+  compile_alloc_buffer n st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 xs allocated = ((),staged) /\
+  fn_has_code st allocated func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce st /\
+  n < dimword (:256) /\
+  run_inst_seq (emitted_insts st staged) s = OK actual /\
+  abi_decode_frame b n s actual /\
+  FLOOKUP actual.vs_allocas st.cs_next_id = SOME (b,n) ==>
+  pure_frame ce func es st s actual
+Proof
+  strip_tac >> drule_all abi_encode_tuple_staging_split >>
+  disch_then (qx_choose_then `addressed` strip_assume_tac) >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `st`, `s`, `actual`, `st.cs_next_id`,
+    `[Lit (n2w n)]`, `[STRING #"%" (toString st.cs_next_var)]`, `b`, `n`]
+    exprSimPropsTheory.pure_frame_fresh_alloca) >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- simp[]
+  >- first_assum ACCEPT_TAC
+  >- (rpt strip_tac >>
+      rename1 `local_region ce es.scopes s nm lb lsz` >>
+      `local_region ce es.scopes addressed nm lb lsz` by
+        (drule_all copy_buffer_local_region_frame >> simp[]) >>
+      qpat_x_assum `!name a len. _ ==> regions_disjoint _ _ _ _` drule >>
+      simp[regions_disjoint_def] >> strip_tac >>
+      fs[abi_decode_frame_def] >>
+      qpat_x_assum `!p k. _ ==> mem_bytes_at _ _ actual.vs_memory = _` irule >>
+      simp[ADD_COMM]) >>
+  rpt strip_tac >> fs[abi_decode_frame_def, regions_disjoint_def]
+QED
+
 Theorem abi_encode_tuple_wb_frame_cursor[local]:
   wb_frame ce es es' origin s0 (s with vs_inst_idx := k) <=>
   wb_frame ce es es' origin s0 s
