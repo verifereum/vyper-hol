@@ -619,7 +619,7 @@ Proof
 QED
 
 (* One owner's allocation followed by static or dynamic calldata navigation. *)
-Theorem registration_argument_prepare_forward_ptr:
+Theorem registration_argument_prepare_forward_robust_ptr:
   compile_alloc_buffer n st = (buf,a) /\
   compile_getelemptr_abi (Lit 4w) dyn off CALLDATALOAD (Lit 0w) (Lit 0w)
     a = (src,first) /\
@@ -663,6 +663,12 @@ Theorem registration_argument_prepare_forward_ptr:
     t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
     t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
     t.vs_gas_readings = s.vs_gas_readings /\
+    (!tv0 v0 p0. val_wf tv0 v0 /\
+      (!i. p0 <= i /\ i < p0 + val_footprint tv0 v0 ==> i < s.vs_alloca_next) /\
+      (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+        val_in_memory tv0 v0 p0 mem) ==>
+      !mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+        val_in_memory tv0 v0 p0 mem) /\
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
@@ -713,6 +719,20 @@ Proof
        gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, AllCaseEqs()] >>
      drule_all decoderAllocationBoundsPtrTheory.exec_alloca_preserves_allocas_from >>
      simp[]) >>
+  `!tv0 v0 p0. val_wf tv0 v0 /\
+    (!i. p0 <= i /\ i < p0 + val_footprint tv0 v0 ==> i < s.vs_alloca_next) /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      val_in_memory tv0 v0 p0 mem) ==>
+    !mem. mem_agree_outside u.t_mem allocated.vs_memory mem ==>
+      val_in_memory tv0 v0 p0 mem` by
+    (rpt gen_tac >> strip_tac >>
+     `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [q]) s =
+        OK allocated` by
+       gvs[run_inst_seq_def, emitHelperPropsTheory.emitted_insts_emit_op,
+           AllCaseEqs()] >>
+     drule_at (Pat `step_inst_base`)
+       bodyPtrIfExpAllocFrameTheory.alloca_step_robust_below_frontier >>
+     disch_then (qspecl_then [`tn`, `tv0`, `v0`, `p0`] mp_tac) >> simp[]) >>
   `allocated.vs_current_bb = a.cs_current_bb` by simp[] >>
   drule_all decoderMemberPrefixPtrTheory.member_navigation_source_endpoint_uniform >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
@@ -783,6 +803,58 @@ Proof
   gvs[lookup_var_def, fresh_vars_wrt_def, allocas_from_def] >>
   simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def, mk_inst_def] >>
   gvs[]
+QED
+
+Theorem registration_argument_prepare_forward_ptr:
+  compile_alloc_buffer n st = (buf,a) /\
+  compile_getelemptr_abi (Lit 4w) dyn off CALLDATALOAD (Lit 0w) (Lit 0w)
+    a = (src,first) /\
+  (dyn ==> abi_decode_load CALLDATALOAD (n2w (4+off) : bytes32) s = n2w delta /\
+    4+delta < dimword (:256)) /\
+  fn_has_code st a fn /\ fn_has_code a first fn /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  n < dimword (:256) /\ unit_alloca_budget ctx < dimword (:256) /\
+  (!entry. FLOOKUP s.vs_allocas st.cs_next_id = SOME entry ==>
+    ?p. entry = (p,n) /\ p+n < dimword (:256)) /\
+  fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t H u q p.
+    buf.buf_operand = Var q /\ lookup_var q t = SOME (n2w p) /\
+    ptr_covers H u q t n /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,n) /\
+    p+n < dimword (:256) /\ alloca_inv t /\
+    alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    ~t.vs_halted /\ t.vs_current_bb = first.cs_current_bb /\
+    t.vs_inst_idx = LENGTH first.cs_current_insts /\ fresh_vars_wrt first t /\
+    eval_operand src t = SOME (n2w (4 + if dyn then delta else off)) /\
+    op_taint u src = {} /\ op_prov H src = NONE /\
+    abi_decoder_operand_live first.cs_next_var src /\
+    abi_decoder_operand_live first.cs_next_var (Var q) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    (!id. id <> st.cs_next_id ==>
+      FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    (!p k. ptr_covers G tn p s k ==> ptr_covers H u p t k) /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all registration_argument_prepare_forward_robust_ptr >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
+  qexistsl_tac [`t`, `H`, `u`, `q`, `p`] >> simp[]
 QED
 
 Theorem registration_argument_prepare_ptr:
