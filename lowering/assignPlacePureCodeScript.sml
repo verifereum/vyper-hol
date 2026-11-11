@@ -25,7 +25,7 @@ Theorem assign_place_pure_code_parts:
      | NONE => emit_void INVALID []) su = ((),sf)
 Proof
   strip_tac >> drule stmt_env_assign >> strip_tac >> gvs[] >>
-  drule supported_target_pure_no_mutation >> strip_tac >>
+  drule supported_target_pure_not_mutate >> strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   simp[Once compile_stmt_def, comp_bind_def, comp_return_def] >>
   Cases_on `compile_expr ce (expr_type e) e sa` >>

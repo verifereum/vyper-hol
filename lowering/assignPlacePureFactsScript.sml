@@ -16,7 +16,7 @@ Proof
   simp[expr_can_mutate_def, supported_expr_exists_def, expr_effect_root_def]
 QED
 
-Theorem supported_target_pure_no_mutation:
+Theorem supported_target_pure_not_mutate:
   !tops bt cenv. supported_target_pure tops bt ==>
     ~expr_can_mutate cenv (target_to_expr bt)
 Proof

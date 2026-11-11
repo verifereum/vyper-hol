@@ -47,18 +47,3 @@ Proof
     (drule compile_get_target_ptr_store_place >> simp[] >> metis_tac[]) >>
   gvs[assign_alloc_ok_def, type_alloc_ok_def] >> gvs[]
 QED
-
-(* A checked interface diagnostic, not a counterexample to the root:
-   its lowering-compatibility disjunction allows distinct compiler and
-   logical-post types.  The store consumer must retain that distinction. *)
-Theorem assign_place_bytes_layout_probe[local]:
-  let e = Literal (BaseT (BytesT (Dynamic 64))) (BytesL [1w]) in
-    post_value_type cenv e = expr_type e /\
-    lowered_value_type cenv e <> post_value_type cenv e /\
-    is_bytestring_type (expr_type e) /\
-    is_bytestring_type (lowered_value_type cenv e) /\
-    arg_type_fits (lowered_value_type cenv e) (expr_type e)
-Proof
-  simp[lowered_value_type_def, is_bytestring_type_def,
-       vyperASTTheory.expr_type_def, vyperTypeSystemTheory.arg_type_fits_def]
-QED
