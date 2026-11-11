@@ -3259,6 +3259,82 @@ Proof
   drule venomStepPropsTheory.step_inst_ok_halted >> simp[]
 QED
 
+Theorem ircf_runner_terminal:
+  !D lo vs C fn_meta rma k stk PG G tn fn s t bb inst.
+    o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+    EVERY ircf_no_dst_write_alias C.ctx_functions /\
+    ptr_discipline lo C vs /\ vs.vs_allocas = FEMPTY /\ ~vs.vs_halted /\
+    ~ctx_has_dalloca C /\ taint_within D C vs /\ dead_wf D /\
+    fn_sim_below D vs C (ircf_transform_ctx fn_meta rma C)
+      (ircf_R D fn_meta rma C)
+      (ircf_R_ret_reachable vs D fn_meta rma C) (SUC k) /\
+    MEM fn C.ctx_functions /\
+    frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    s.vs_current_bb = t.vs_current_bb /\ s.vs_inst_idx = t.vs_inst_idx /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+    ircf_cross tn (ircf_gam_cur fn_meta rma C fn s UNION
+      ircf_gam_stk fn_meta rma C stk) s t /\
+    terminates (step_inst k C inst s) /\
+    (!u. step_inst k C inst s = OK u ==> is_terminator inst.inst_opcode)
+    ==> ?m. block_step_rel D vs C (ircf_R D fn_meta rma C)
+      (ircf_R_ret_reachable vs D fn_meta rma C) stk PG fn
+      (exec_block k C bb s)
+      (exec_block m (ircf_transform_ctx fn_meta rma C)
+        (ircf_tbb fn_meta rma C fn bb) t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `?u. step_inst k C inst s = OK u`
+  >- (pop_assum strip_assume_tac >>
+      `is_terminator inst.inst_opcode` by metis_tac[] >>
+      Cases_on `u.vs_halted`
+      >- (irule ircf_runner_halted_ok >> metis_tac[]) >>
+      `MEM inst.inst_opcode [JMP; JNZ; DJMP]` by
+        metis_tac[o1LowerDloadRunnerBoundaryTheory.ld_terminator_ok_branch] >>
+      `inst.inst_opcode <> INVOKE` by gvs[MEM] >>
+      `wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+       fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn` by
+        (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, wf_function_def] >>
+         metis_tac[]) >>
+      `s.vs_inst_idx < LENGTH bb.bb_instructions /\
+       inst = EL s.vs_inst_idx bb.bb_instructions` by fs[get_instruction_def] >>
+      `ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+        (simp[ircf_tbb_def] >> irule ircf_transform_block_plan >>
+         metis_tac[venomExecPropsTheory.lookup_block_MEM]) >>
+      `step_inst_base inst s = OK u /\
+       ircf_cross tn (ircf_gam_stk fn_meta rma C stk) s t` by
+        (fs[step_inst_non_invoke, ircf_cross_def] >> metis_tac[IN_UNION]) >>
+      `?t'. step_inst_base
+         (EL s.vs_inst_idx (ircf_tbb fn_meta rma C fn bb).bb_instructions) t = OK t' /\
+         ~t'.vs_halted /\
+         block_reach vs C stk PG (entry_prov fn u G)
+           (entry_taint_vars fn u tn) fn u /\
+         ircf_R D fn_meta rma C stk PG (entry_prov fn u G)
+           (entry_taint_vars fn u tn) fn u t'` by
+        metis_tac[ircf_jump_boundary] >>
+      qexists_tac `0` >>
+      `get_instruction (ircf_tbb fn_meta rma C fn bb) t.vs_inst_idx =
+         SOME (EL s.vs_inst_idx (ircf_tbb fn_meta rma C fn bb).bb_instructions)` by
+        (fs[get_instruction_def, ircf_block_plan_def] >> gvs[]) >>
+      `s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb)` by
+        (strip_tac >>
+         `?d sr sz. ircf_fwd_ok fn bb s.vs_inst_idx d sr sz` by
+           metis_tac[ircf_block_plan_fwd_ok, ircf_block_plan_def] >>
+         gvs[ircf_fwd_ok_def, MEM]) >>
+      `(EL s.vs_inst_idx (ircf_tbb fn_meta rma C fn bb).bb_instructions).inst_opcode =
+         inst.inst_opcode` by
+        (fs[ircf_block_plan_def] >> metis_tac[]) >>
+      `step_inst 0 (ircf_transform_ctx fn_meta rma C)
+         (EL s.vs_inst_idx (ircf_tbb fn_meta rma C fn bb).bb_instructions) t = OK t'` by
+        gvs[step_inst_non_invoke] >>
+      gvs[] >> once_rewrite_tac[exec_block_def] >>
+      simp[block_step_rel_def] >> metis_tac[]) >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (irule ircf_runner_invoke_nonok >> simp[] >> metis_tac[]) >>
+  irule ircf_runner_noninvoke_nonok >> simp[] >> metis_tac[]
+QED
+
 Theorem ircf_block_sim:
   !D lo vs C fn_meta rma k stk PG G tn fn fn' s t bb.
     o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
