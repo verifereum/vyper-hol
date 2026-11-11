@@ -597,7 +597,7 @@ Proof
     aggregate_tuple_success_continuation_mem) >>
   simp[] >> asm_rewrite_tac[] >>
   conj_tac >- metis_tac[] >>
-  goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
+  conj_tac >- (qexists `marks` >> first_assum ACCEPT_TAC) >>
   goal_assum (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`)) >>
   simp[] >> asm_rewrite_tac[] >> qexists_tac `inst` >> simp[]
 QED
