@@ -51,7 +51,12 @@ Theorem codegen_asm_run_call:
 Proof
   rpt strip_tac >>
   drule_all codegen_assembly_frame_prog_ok >> strip_tac >>
-  drule asm_frame_rel_entry >> strip_tac >>
+  `assemble prog <> []` by metis_tac[codegen_assembly_nonempty] >>
+  Q.SUBGOAL_THEN `vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
+     (lookup_account (FST (HD es.contexts)).msgParams.callee
+       es.rollback.accounts)` assume_tac
+  >- (gvs[initial_ctx_rel_def] >> metis_tac[]) >>
+  drule_all asm_frame_rel_entry >> strip_tac >>
   Cases_on `run_call es` >- fs[run_call_eq_tr] >>
   rename1 `run_call es = SOME res` >> PairCases_on `res` >>
   qexistsl_tac [`res0`, `res1`] >> simp[] >>
