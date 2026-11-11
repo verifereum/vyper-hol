@@ -153,7 +153,7 @@ Proof
 QED
 
 (* Move a load-only variable/index frame across the exact release. *)
-Theorem return_unlock_load_frame[local]:
+Theorem return_unlock_load_frame:
   !cenv s vars n id.
     LENGTH (return_unlock_insts cenv id) <= n ==>
     (return_unlock_state cenv s) with <|vs_vars := vars; vs_inst_idx := n|> =
