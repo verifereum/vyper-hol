@@ -418,7 +418,7 @@ Theorem do_dup_spill_inventory_untouched:
 Proof
   strip_tac >> Cases_on `d <= 15`
   >- gvs[do_dup_def] >>
-  mp_tac (Q.SPECL [`d`, `ps`] do_dup_big_decompose) >>
+  mp_tac (Q.SPECL [`d`, `ps`] do_dup_big_decompose_explicit) >>
   simp[] >> strip_tac >>
   `MEM tmp (FST (spill_alloc_n [] ps.ps_alloc
       (REVERSE (top_n (d - 15) ps.ps_stack))))` by
@@ -1340,7 +1340,7 @@ Theorem scratch_replay_do_dup_deep:
     (REVERSE qs.ps_stack) inventory
 Proof
   strip_tac >>
-  qspecl_then [`dist`, `ps`] mp_tac doSwapSimTheory.do_dup_big_decompose >>
+  qspecl_then [`dist`, `ps`] mp_tac doSwapSimTheory.do_dup_big_decompose_explicit >>
   (impl_tac >- simp[arithmeticTheory.GREATER_DEF]) >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   pure_asm_rewrite_tac[pairTheory.PAIR_EQ] >> strip_tac >>
@@ -1474,7 +1474,7 @@ Proof
   `qs.ps_alloc = FOLDL (\a off. free_spill_slot off a)
     (SND (doSwapSim$spill_alloc_n [] ps.ps_alloc
       (REVERSE (top_n (dist - 15) ps.ps_stack)))) offsets` by
-    (qspecl_then [`dist`, `ps`] mp_tac doSwapSimTheory.do_dup_big_decompose >>
+    (qspecl_then [`dist`, `ps`] mp_tac doSwapSimTheory.do_dup_big_decompose_explicit >>
      simp[] >> strip_tac >> gvs[Abbr `offsets`]) >>
   drule_at (Pat `al2 = FOLDL _ _ _`) scratch_allocated_offsets >>
   disch_then (qspecl_then [`ps.ps_spilled`, `cplan`, `R`] mp_tac) >>
@@ -1715,7 +1715,7 @@ Theorem do_dup_temporary_spill_mem[local]:
     (REVERSE (top_n (dist - 15) ps.ps_stack)))) ==>
   MEM (SOSpill off) ops
 Proof
-  strip_tac >> qspecl_then [`dist`, `ps`] mp_tac doSwapSimTheory.do_dup_big_decompose >>
+  strip_tac >> qspecl_then [`dist`, `ps`] mp_tac doSwapSimTheory.do_dup_big_decompose_explicit >>
   simp[arithmeticTheory.GREATER_DEF] >> strip_tac >> gvs[] >>
   simp[MEM_MAP] >> metis_tac[]
 QED
