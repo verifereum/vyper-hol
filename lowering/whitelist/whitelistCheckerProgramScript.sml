@@ -16,6 +16,9 @@
    function_header_ok gives the constructor's return type NoneT, which
    supported_function_return admits.
 
+   The EventDecl header's indexed-field bound is check_contract_event_fields_wf
+   in the gate's FILTER I (MAP SND _) form.
+
    The FlagDecl, ErrorDecl and InterfaceDecl headers and bodies are T in the
    gate, and its External argument types are unconstrained, so they need no
    lemma here. *)
@@ -109,4 +112,14 @@ Proof
   strip_tac >> drule_all check_contract_single_decl >>
   simp[check_toplevel_decl_def, function_header_ok_def,
        supported_function_return_def, supported_return_type_def]
+QED
+
+(* The indexed-field bound of the EventDecl header, in the gate's form. *)
+Theorem check_contract_event_indexed_bound:
+  check_contract F layouts addr [(NONE, tops)] = SOME art /\
+  MEM (EventDecl name fields) tops ==>
+  LENGTH (FILTER I (MAP SND fields)) <= 3
+Proof
+  strip_tac >> drule_all check_contract_event_fields_wf >>
+  simp[FILTER_MAP, combinTheory.I_o_ID]
 QED
