@@ -247,8 +247,9 @@ Resume concat_args_sim_ptr[locals_ghost]:
          rpt strip_tac >>
          qpat_assum `!p n. _ ==> mem_bytes_at p n t2.vs_memory = _` irule >>
          metis_tac[]) >>
+      qpat_x_assum `ee = _` SUBST_ALL_TAC >>
       irule exprBopSimPropsTheory.locals_kept_trans >>
-      qpat_assum `locals_kept cenv es ee s0 t2` (irule_at (Pat `locals_kept _ _ _ _ _`)) >>
+      qpat_assum `locals_kept cenv es _ s0 t2` (irule_at (Pat `locals_kept _ _ _ _ _`)) >>
       qpat_assum `locals_kept cenv _ _ t2 t'` (irule_at (Pat `locals_kept _ _ _ _ _`)) >>
       simp[] >> metis_tac[]) >>
   `ghost_kept cenv es sa G0 tn0 s0 Gf tnf` by

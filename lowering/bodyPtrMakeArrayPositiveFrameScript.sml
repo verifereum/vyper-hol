@@ -47,24 +47,17 @@ Proof
     metis_tac[not_fresh_at_mono] >>
   qpat_x_assum `wb_frame _ _ _ _ _ _` (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
   simp[wb_frame_def] >> rpt conj_tac
-  >- (qx_genl_tac [`x0`, `w0`] >> strip_tac >>
-      `lookup_var x0 s = SOME w0` by
-        (qpat_x_assum `!x w. not_fresh_at fr x /\ _ ==> _` irule >> simp[]) >>
-      `lookup_var x0 z = lookup_var x0 s` by
-        (qpat_x_assum `!x. not_fresh_at fr x ==> lookup_var x z = _` irule >>
-         simp[]) >>
-      simp[])
-  >- gvs[]
   >- (qx_genl_tac [`aid0`, `lo`, `k`] >> strip_tac >>
       `addr+capacity <= lo \/ k+lo <= addr` by
-        (qpat_x_assum `!old p k. FLOOKUP sf.vs_allocas old = SOME (p,k) /\ _ ==> _`
+        (qpat_x_assum `!old p k. FLOOKUP sf.vs_allocas old = SOME (p,k) /\ old < fr.cs_next_id ==> _`
            drule_all >> simp[]) >>
       `mem_bytes_at lo k z.vs_memory = mem_bytes_at lo k s.vs_memory` by
         (qpat_x_assum `!p k. addr + capacity <= p \/ p + k <= addr ==> _` irule >>
          decide_tac) >>
       `mem_bytes_at lo k s.vs_memory = mem_bytes_at lo k sf.vs_memory` by
-        (qpat_x_assum `!aid off sz. FLOOKUP sf.vs_allocas aid = SOME (off,sz) /\ _ ==> _`
-           irule >> qexists_tac `aid0` >> simp[]) >>
+        (qpat_x_assum `!aid off sz. FLOOKUP sf.vs_allocas aid = SOME (off,sz) /\ _ /\ _ ==> _`
+           irule >> conj_tac >- first_assum ACCEPT_TAC >>
+           qexists_tac `aid0` >> simp[]) >>
       simp[]) >>
   irule exprSimPropsTheory.locals_kept_regions_tail >> qexists_tac `s` >> simp[] >>
   qx_genl_tac [`nm`, `lo`, `k`] >> strip_tac >>

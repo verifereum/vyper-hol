@@ -67,6 +67,11 @@ Proof
   `typed_args_ready ctx func cenv cx expr_type (expr_sim_inv cenv cx env) args` by
     (irule body_word_args_ready >> metis_tac[]) >>
   drule_all typed_args_outcome_ptr_facts >> strip_tac >>
+  `bt <> Bop In /\ bt <> Bop NotIn` by
+    (rpt strip_tac >> gvs[vyperContextTheory.builtin_args_length_ok_def, LENGTH_EQ_NUM_compute] >>
+     qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
+          well_typed_binop_def]) >>
   simp[eval_expr_builtin_action, expr_type_def] >>
   irule gas_outcome_ptr_bind_mid >>
   conj_tac >- suspend "cert_normal" >>

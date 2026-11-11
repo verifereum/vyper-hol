@@ -27,7 +27,7 @@ Theorem alloc_run_compile_array_membership_loop:
 Proof
   strip_tac >> Cases_on `bound_opt` >>
   simp[compile_array_membership_loop_def, comp_ignore_bind_def, comp_bind_assoc] >>
-  irule alloc_run_bind >>
+  (irule alloc_run_bind >>
   qexists `\x s. fresh_outputs s /\ not_fresh_at s x /\ ~alloc_owned s x` >>
   reverse conj_tac >- simp[alloc_run_fresh_var_fresh] >>
   qx_gen_tac `result_var` >> simp[] >>
@@ -70,7 +70,7 @@ Proof
   Cases_on `is_in`
   >- simp[comp_return_def, alloc_run_def, alloc_frame_refl] >>
   simp[] >> irule alloc_run_conseq >>
-  irule_at Any alloc_run_emit_op_fresh >> simp[]
+  irule_at Any alloc_run_emit_op_fresh >> simp[])
 QED
 
 Theorem alloc_run_compile_var_array_membership:
@@ -83,17 +83,7 @@ Proof
   reverse conj_tac
   >- (Cases_on `rhs_ty` >> simp[alloc_run_membership_return] >>
       Cases_on `b` >> simp[alloc_run_compile_ptr_load, alloc_run_membership_return]) >>
-  gen_tac >> simp[comp_ignore_bind_def] >>
-  irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
-  conj_tac
-  >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_array_membership_loop,
-           SRULE [SF ETA_ss] alloc_run_compile_ptr_load] >>
-  simp[SF ETA_ss] >> Cases_on `rhs_ty` >>
-  simp[SRULE [SF ETA_ss] alloc_run_membership_return] >>
-  Cases_on `b` >> simp[SRULE [SF ETA_ss] alloc_run_membership_return] >>
-  ntac 2 (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
-    reverse conj_tac
-    >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
-    gen_tac >> simp[]) >>
-  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_empty_fresh]
+  gen_tac >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_array_membership_loop,
+       SRULE [SF ETA_ss] alloc_run_compile_ptr_load]
 QED

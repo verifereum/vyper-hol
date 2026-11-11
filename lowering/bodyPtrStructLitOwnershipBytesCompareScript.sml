@@ -28,7 +28,7 @@ Proof
         inst_jump_labels_ok_def, is_param_opcode_def, is_read0_opcode_def,
         label_positions_ok_def, is_terminator_def, label_or_plain_def,
         stackPlanTypesTheory.is_label_operand_def]) >>
-  gen_tac >> simp[] >> irule shape_step_bind >>
+  qx_gen_tac `x` >> simp[] >> irule shape_step_bind >>
   qexists `\y s. plain_operand s x /\ plain_operand s y` >> reverse conj_tac
   >- (qspecl_then [`F`, `compiler_label`, `compiler_label`] irule shape_step_conseq >>
       irule_at Any shape_step_frame >> irule_at Any shape_step_emit_op_pre >>
@@ -39,7 +39,7 @@ Proof
         inst_jump_labels_ok_def, is_param_opcode_def, is_read0_opcode_def,
         label_positions_ok_def, is_terminator_def, label_or_plain_def,
         stackPlanTypesTheory.is_label_operand_def]) >>
-  gen_tac >> simp[] >>
+  qx_gen_tac `y` >> simp[] >>
   qspecl_then [`F`, `compiler_label`, `compiler_label`] irule shape_step_conseq >>
   irule_at Any shape_step_emit_op_pre >>
   qexists `\s. plain_operand s x /\ plain_operand s y` >>
@@ -78,8 +78,8 @@ Proof
   >- (CONV_TAC (DEPTH_CONV ETA_CONV) >>
       irule alloc_run_bind >>
       qexists `\v s. shape_state s /\ R s /\ cenv_shape_ok s ce /\ plain_operand s v` >>
-      conj_tac
-      >- (irule alloc_run_lower_value_frame >> qexists_tac `internal` >> simp[]) >>
+      reverse conj_tac
+      >- (irule alloc_run_lower_value_frame >> simp[] >> qexists_tac `internal` >> simp[]) >>
       qx_gen_tac `p` >> simp[] >>
       irule alloc_run_conseq >>
       irule_at Any (Q.INST [`R` |-> `\s. R s /\ cenv_shape_ok s ce`]

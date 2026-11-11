@@ -328,7 +328,8 @@ Resume concat_result_vv_sim_ptr[outcome]:
      qpat_x_assum `buf.buf_operand = Var r` mp_tac >>
      rpt (pop_assum kall_tac) >> strip_tac >>
      simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
-       contextTheory.base_ptr_def, read_result_def, vyperStateTheory.return_def] >>
+       contextTheory.base_ptr_def, read_result_def, vyperStateTheory.return_def,
+       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
      metis_tac[]) >>
   simp[NoAsms, stmtFragPtrTheory.ghost_inv_gas_obs] >>
   conj_tac >- first_assum ACCEPT_TAC >>

@@ -13,7 +13,7 @@ Proof
   reverse conj_tac
   >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
   gen_tac >> simp[] >> irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
-  conj_tac >- simp[SF ETA_ss] >>
+  reverse conj_tac >- (pop_assum mp_tac >> simp[SF ETA_ss]) >>
   simp[comp_return_def, alloc_run_def, alloc_frame_refl]
 QED
 
@@ -24,7 +24,9 @@ Proof
   Induct >> simp[fold_membership_or_def]
   >- simp[comp_return_def, alloc_run_def, alloc_frame_refl] >>
   rpt gen_tac >> irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
-  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh]
+  reverse conj_tac
+  >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
+  pop_assum mp_tac >> simp[SF ETA_ss]
 QED
 
 Theorem alloc_run_fold_membership_and[local]:
@@ -37,7 +39,9 @@ Proof
   reverse conj_tac
   >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
   gen_tac >> simp[] >> irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
-  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh]
+  reverse conj_tac
+  >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
+  pop_assum mp_tac >> simp[SF ETA_ss]
 QED
 
 Theorem alloc_run_compile_list_membership_in:
