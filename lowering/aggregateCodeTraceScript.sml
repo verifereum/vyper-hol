@@ -205,6 +205,7 @@ Proof
   irule code_trace_bind >> simp[code_trace_emit_op] >> gen_tac >>
   irule code_trace_bind >> simp[code_trace_emit_op] >> gen_tac >>
   irule code_trace_bind >> simp[code_trace_emit_op] >> gen_tac >>
+  irule code_trace_bind >> simp[code_trace_emit_op] >> gen_tac >>
   irule code_trace_bind >> simp[code_trace_emit_op, code_trace_emit_void]
 QED
 
