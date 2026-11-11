@@ -22,7 +22,8 @@ Theorem encoder_dynamic_header_counted_ptr[local]:
     sf.vs_inst_idx = 0 /\
     encoder_dynamic_loop_inv ctx fn sites protected
       ip cursor src dst cv p c a b scap dcap tv v N ns j Gf tnf sf /\
-    encoder_dynamic_effect sh sites b dcap G tn s Gf tnf sf
+    encoder_dynamic_effect sh sites b dcap G tn s Gf tnf sf /\
+    (!i. b <= i /\ i < b+32 ==> (i IN tnf.t_mem <=> i IN tn.t_mem))
 Proof
   strip_tac >>
   qhdtm_assum `encoder_dynamic_loop_inv` mp_tac >>
@@ -103,7 +104,8 @@ Theorem encoder_dynamic_inner_loop_counted_ptr:
     sf.vs_current_bb = exit_lbl /\ sf.vs_inst_idx = 0 /\
     encoder_dynamic_loop_inv ctx fn sites protected
       ip cursor src dst cv p c a b scap dcap tv v N ns N Gf tnf sf /\
-    encoder_dynamic_effect sh sites b dcap G tn s Gf tnf sf
+    encoder_dynamic_effect sh sites b dcap G tn s Gf tnf sf /\
+    (!i. b <= i /\ i < b+32 ==> (i IN tnf.t_mem <=> i IN tn.t_mem))
 Proof
   Induct >> rpt gen_tac >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac)
@@ -159,6 +161,14 @@ Proof
     (qpat_assum `j < LENGTH costs` (mp_tac o MATCH_MP DROP_CONS_EL) >>
      disch_then (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
      simp[SUM, ADD1]) >>
+  `!i. b <= i /\ i < b+32 ==> (i IN tnf.t_mem <=> i IN tn.t_mem)` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!i. b <= i /\ i < b+32 ==> (i IN tnh.t_mem <=> _)`
+       (qspec_then `i` mp_tac) >>
+     qpat_assum `!i. b <= i /\ i < b+32 ==> (i IN tnb.t_mem <=> _)`
+       (qspec_then `i` mp_tac) >>
+     qpat_assum `!i. b <= i /\ i < b+32 ==> (i IN tnf.t_mem <=> _)`
+       (qspec_then `i` mp_tac) >> simp[]) >>
   qexistsl_tac [`Gf`,`tnf`,`sf`] >> asm_simp_tac bool_ss [] >>
   irule gas_path_ptr_then >> goal_assum (drule_at Any) >> simp[] >>
   irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`] |>

@@ -78,7 +78,8 @@ Theorem encoder_semantic_dynamic_inner_loop_counted_ptr:
       ip cursor src dst cv p c a b scap dcap
       (ArrayTV tv (Dynamic limit)) (ArrayV (DynArrayV vs)) N ns N Gf tnf sf /\
     mload c sf = n2w (32*N+SUM ns) /\
-    encoder_dynamic_effect sh sites b dcap G tn s Gf tnf sf
+    encoder_dynamic_effect sh sites b dcap G tn s Gf tnf sf /\
+    (!i. b <= i /\ i < b+32 ==> (i IN tnf.t_mem <=> i IN tn.t_mem))
 Proof
   strip_tac >>
   `!i Gp tnp sp. i<N /\

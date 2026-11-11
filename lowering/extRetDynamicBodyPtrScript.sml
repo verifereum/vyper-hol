@@ -357,7 +357,8 @@ Theorem encoder_dynamic_body_backedge_counted_ptr:
     sf.vs_current_bb = hdr /\ sf.vs_inst_idx = 0 /\
     encoder_dynamic_loop_inv ctx fn sites protected
       ip cursor src dst cv p c a b scap dcap tv v N ns (j+1) Gf tnf sf /\
-    encoder_dynamic_effect sa sites b dcap G tn s Gf tnf sf
+    encoder_dynamic_effect sa sites b dcap G tn s Gf tnf sf /\
+    (!i. b <= i /\ i < b+32 ==> (i IN tnf.t_mem <=> i IN tn.t_mem))
 Proof
   strip_tac >>
   `~s.vs_halted /\ lookup_var ip s = SOME (n2w p) /\
@@ -436,6 +437,22 @@ Proof
      qpat_assum `regions_disjoint (a,scap) (b,dcap)` mp_tac >>
      qpat_assum `32+k+capj <= dcap` mp_tac >> qpat_assum `k = _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[regions_disjoint_def] >> decide_tac) >>
+  `!i. b <= i /\ i < b+32 ==>
+    i NOTIN encoder_write_envelope children sm (b+32+k) capj` by
+    (match_mp_tac (encoder_dynamic_subregion_exterior |>
+       Q.INST [`q` |-> `dbase`, `cap` |-> `dsize`]) >>
+     simp[regions_disjoint_def] >> decide_tac) >>
+  `!i. b <= i /\ i < b+32 ==> (i IN tnm.t_mem <=> i IN tn.t_mem)` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!i. i NOTIN encoder_write_envelope children _ _ _ ==> _`
+       (qspec_then `i` mp_tac) >>
+     qpat_assum `!i. b <= i /\ i < b+32 ==> i NOTIN _`
+       (qspec_then `i` mp_tac) >>
+     qpat_assum `tnp.t_mem = tn.t_mem` mp_tac >>
+     qpat_assum `k = _` mp_tac >>
+     qpat_assum `b <= i` mp_tac >> qpat_assum `i < b+32` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[]) >>
   `!i. b+32 <= i /\ i < b+32+32*j ==>
     i NOTIN encoder_write_envelope children sm (b+32+k) capj` by
     (match_mp_tac (encoder_dynamic_subregion_exterior |>
@@ -472,6 +489,15 @@ Proof
   drule_all encoder_dynamic_finish_counted_ptr >>
   disch_then (qspecl_then [`PG`,`D`]
     (qx_choose_then `Gf` (qx_choose_then `tnf` (qx_choose_then `sf` strip_assume_tac)))) >>
+  `!i. b <= i /\ i < b+32 ==> (i IN tnf.t_mem <=> i IN tn.t_mem)` by
+    (qpat_assum `tnf.t_mem = _` mp_tac >>
+     qpat_assum `!i. b <= i /\ i < b+32 ==> (i IN tnm.t_mem <=> _)` mp_tac >>
+     qpat_assum `regions_disjoint (p,32) (b,dcap)` mp_tac >>
+     qpat_assum `regions_disjoint (c,32) (b,dcap)` mp_tac >>
+     qpat_assum `32+k+capj <= dcap` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[regions_disjoint_def, IN_DIFF] >> rpt strip_tac >>
+     first_x_assum (qspec_then `i` mp_tac) >> simp[] >> decide_tac) >>
   `!i. b+32+32*N <= i /\ i < b+32+(32*N+SUM (TAKE j ns)+EL j ns) ==>
     i NOTIN tnm.t_mem` by
     (gen_tac >> strip_tac >> Cases_on `i < b+32+k`
