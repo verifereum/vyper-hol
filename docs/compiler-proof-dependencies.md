@@ -35,7 +35,7 @@ compile_vyper (K SOME) succeeds
 
 supported_program -> S2 raw source-unit shape -> S6 output shape
 call_state_rel + shared entry_venom_state -> L6/L7/L8 initial relations
-source typing/storage + valid ABI call + successful-outcome guards -> S1
+source typing/storage + valid ABI call + outcome guards -> S1
 
 non-exempt branch:
   S3 raw memory -> S4 forward O1 simulation
@@ -44,7 +44,7 @@ non-exempt branch:
   S7, using SAME Inv -> frame-aware EVM correspondence/resource alternatives
 
 clean generic e2e_vyper_to_evm (explicit stage premises, zero admission leaves)
-  -> vyper_call_correct (seven public premises; inherits exactly S1-S7)
+  -> vyper_call_correct (eight public premises; inherits exactly S1-S7)
 exempt branch: actual total run + exact decoder exemption, not invented safety
 ```
 
@@ -55,13 +55,14 @@ Memory/shape/policy/labels/initial state are **not extra public hypotheses**.
 
 ## All public hypotheses and producers
 
-The exact [seven-premise schema](compiler-proof-status-2026-10-09.md#public-runtime-theorem)
+The exact [eight-premise schema](compiler-proof-status-2026-10-09.md#public-runtime-theorem)
 is `e2eCorrectness.vyper_call_correct`.
 
 | Hypothesis | Class | Current producer / absence |
 |---|---|---|
 | compiler returns `(deploy_bc,runtime_bc)` | boundary | Caller supplies success; L1 extracts raw phases and exact assembled runtime bytes. No universal success producer. |
 | `supported_program tops` | computational boundary | Plain EVAL on concrete `tops`; exact whitelist on `tops` alone. No universal membership, typing or semantic correctness producer. |
+| `immutable_free_program tops` | computational boundary | Excludes runtime immutables from the current call theorem. |
 | `source_typing_ok tops am tx` | boundary + environmental | Checker artifact; partial `load_contract_establishes_checked_contract_runtime_ready`, `load_contract_establishes_machine_well_typed`, `checked_call_external_preserves_machine_well_typed`. No complete arbitrary-environment producer. |
 | `source_storage_ok tops am tx` | environmental/layout/hash guard | Conditional `eval_stmt_preserves_contract_storage_well_formed` family and `take_adopt_call_outcome_storage_suffix`. No complete deployment/transaction producer; Milestone 7. |
 | `call_state_rel tops runtime_bc am tx es` | environmental | No general producer or satisfiability theorem. L6/L8 **consume**, not produce, it; transaction corollary deferred to Milestone 7. |
@@ -75,8 +76,8 @@ constants setup; call machine preservation assumes `checked_external_call_inputs
 Storage preservation consumes runtime-storage consistency, protected-call,
 call-evaluation and oracle-storage premises. These are not universal producers.
 
-`call_outcomes_ok` quantifies **all successful records**, including static ones:
-`accounts_runtime_well_typed co_accounts` and `contract_storage_well_formed` on
+`call_outcomes_ok` quantifies **all records**, including failed and static ones:
+return-data length `<2**256`, `accounts_runtime_well_typed co_accounts` and `contract_storage_well_formed` on
 those accounts and `co_tStorage` in the actual source context. Account balance
 `<2**256` and code length `<=24576` guards do not imply storage validity.
 The evaluator checks account bounds on successful nonstatic adoption, not the

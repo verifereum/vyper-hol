@@ -25,31 +25,31 @@ Its **entire** schema is:
 ```sml
 !policy tops deploy_bc runtime_bc am tx ret es.
   compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-  supported_program tops /\
+  supported_program tops /\ immutable_free_program tops /\
   source_typing_ok tops am tx /\
   source_storage_ok tops am tx /\
   call_state_rel tops runtime_bc am tx es /\
-  valid_vyper_call tops tx (FST (HD es.contexts)).msgParams.data ret /\
-  call_outcomes_ok tops am tx (MAP SND (call_trace es))
+  valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
+  call_outcomes_ok am tx (MAP SND (call_trace es))
   ==>
   ?r es'.
     run_call es = SOME (r, es') /\
     (frame_resource_starved es r es' \/
-     precompile_call_starved es \/
      call_result_rel tops ret am tx es r es')
 ```
 
 `run_call` is Verifereum's frame run, not the retired local loop. The compilation
 is the actual O1 `compile_vyper`, with identity finalizer `K SOME`. There are
-exactly **seven** public premises: no extra gas sufficiency, Venom state,
+exactly **eight** public premises: no extra gas sufficiency, Venom state,
 selector table, shape, memory, invariant, context or policy-resolution premise.
 Empty kernel hypotheses do not mean this theorem is unadmitted: its saved tag
 inherits precisely S1–S7 below.
 
-## All seven public premises
+## All eight public premises
 
-Definitions are in [`e2eDefs`](../lowering/e2eDefsScript.sml), except the compiler
-and [`supportedProgram`](../lowering/proofs/supported/supportedProgramScript.sml).
+Definitions are in [`e2eDefs`](../lowering/e2eDefsScript.sml), except the compiler,
+[`supportedProgram`](../lowering/proofs/supported/supportedProgramScript.sml), and
+`immutable_free_program` in [`loweringShapeProps`](../lowering/proofs/loweringShapePropsScript.sml).
 “Producer” means a named result establishing the fact, not merely a definition
 or a theorem that consumes it.
 
@@ -57,11 +57,12 @@ or a theorem that consumes it.
 |---|---|---|
 | `compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc)` | boundary: successful compiler run | Caller supplies success; **no universal success producer**. Proved L1 `e2eProducers.compile_vyper_runtime_phases` extracts the actual resolved policy, raw unit, O1 output, assembly, plan and `runtime_bc = assemble prog`, including data segment and code-end header. |
 | `supported_program tops` | computational boundary on `tops` alone | The 101 exact manifest ASTs have named `*_supported_program` exports under `supportedFixtures*` (TASK022), each plain `EVAL_TAC`; e.g. `supportedFixturesMultiple.two_external_supported_program`. **No universal membership producer.** This is the exact syntax whitelist, not typing, layout safety, successful compilation or semantic correctness. |
+| `immutable_free_program tops` | computational boundary on `tops` alone | Excludes runtime immutables from the current call theorem. |
 | `source_typing_ok tops am tx` | boundary checker plus environmental readiness/machine/transaction bounds | `check_contract F` supplies an artifact; `vyperTypeContractSoundness.load_contract_establishes_checked_contract_runtime_ready`, `vyperTypeDeploymentMachine.load_contract_establishes_machine_well_typed` and `vyperTypeExternalCallMachine.checked_call_external_preserves_machine_well_typed` are **partial conditional producers**, detailed below. **No theorem produces the whole premise for arbitrary environments.** |
 | `source_storage_ok tops am tx` | environmental storage validity and layout/hash separation guard | Conditional preservation: `vyperTypeEvalStoragePreservation.eval_stmt_preserves_contract_storage_well_formed` and its statements/expressions family; oracle adoption: `vyperCallOutcomeStorage.take_adopt_call_outcome_storage_suffix`. **No complete deployment/transaction producer** of this public premise. Milestone 7 remains responsible. |
 | `call_state_rel tops runtime_bc am tx es` | environmental fresh-frame/live-state/source-installation boundary | **No general producer or satisfiability theorem.** L6/L8 consume it to produce initial simulation relations; they do not establish it. Milestone 7 top-level-transaction corollary is deferred. |
 | `valid_vyper_call tops tx calldata ret` | environmental exact function/ABI input boundary | Caller supplies exact lookup, binding and calldata encoding; **no general producer**. Computable focused boundary checks are not a universal call-entry theorem. Fallback calls remain Milestone 7 work. |
-| `call_outcomes_ok tops am tx (MAP SND (call_trace es))` | environmental successful-outcome account/storage guard | **No current producer.** In particular there is no theorem deriving it from arbitrary EVM callees or from source-executed callees. Milestone 7 source-callee execution result is future work; account/code bounds alone do not establish storage validity. |
+| `call_outcomes_ok am tx (MAP SND (call_trace es))` | environmental outcome return-data/account/storage guard | **No current producer.** In particular there is no theorem deriving it from arbitrary EVM callees or from source-executed callees. Milestone 7 source-callee execution result is future work; account/code bounds alone do not establish storage validity. |
 
 ### What partial producers actually establish
 
@@ -100,8 +101,8 @@ The source oracle's implemented account guard is unchanged:
 [`accounts_runtime_well_typed`](../semantics/vyperRuntimeAccountsScript.sml):
 every account has balance `< 2 ** 256` and code length `<= 24576`. It does not
 check contract storage or prove `call_outcomes_ok`. The public latter premise
-requires those same account bounds **and actual contract storage validity** of
-every successful payload, including static outcomes, in its initial source
+requires bounded return data, those same account bounds **and actual contract storage validity** of
+every payload, including failed and static outcomes, in its initial source
 context. Type/storage oracle guards in proof interfaces are assumptions or
 conditional preservation facts, not an extra implemented storage validator;
 no planned guard is silently weakened to “the oracle is trusted”.
@@ -110,11 +111,13 @@ no planned guard is silently weakened to “the oracle is trusted”.
 
 `call_state_rel` supplies a fresh nonstatic head frame and arbitrary caller
 frames below it: `wf_state`, `Collect` mode, `jumpDest = NONE`, memory output,
-code exactly `runtime_bc`, `parse_code 0 FEMPTY runtime_bc`, code size `<=24576`,
+code `runtime_bc ++ section` with `immutables_section_rel tops
+(account_immutables am tx.target) section`, `parse_code 0 FEMPTY` of that code, code size `<=24576`,
 PC zero and empty stack/memory/logs/return data. The source starts with empty
 logs; entry value transfer must succeed. **Live** `es.rollback.accounts` equal
 `accounts_after_transfer tx am.accounts`, not the saved head-frame rollback
-snapshot; transient storage agrees. Caller/callee/value, origin, gas price,
+snapshot; transient storage agrees, pending deletions are empty, and `es.rollback.toDelete`
+equals those pending deletions. Caller/callee/value, origin, gas price,
 chain id, timestamp, coinbase, block gas limit, fees, blob hashes, prevrandao
 and block hashes agree. Block number is nonzero and `< 2 ** 255`, with
 `MIN 256 block_number <= LENGTH block_hashes <= 256`.
@@ -267,6 +270,9 @@ Source owners: [e2eProducers](../lowering/e2e/e2eProducersScript.sml),
   live entry transfer, an empty target account in `es.originalAccounts`, and
   runtime not starting with `0xEF`. Deployment readiness
   is pre-constant setup, not runtime readiness for an uninstalled target.
+  `deploy_state_rel` also requires empty pending deletions matching
+  `es.rollback.toDelete`, `call_outcomes_ok` for the trace, and storage
+  validity for every trace outcome in the deployment evaluation context.
   Success requires returned/installed runtime bytes, exact other accounts and
   target equality modulo code, transient storage and ordered logs; failures and
   resource/exemption cases are explicit. This is **stated, not proved**.
