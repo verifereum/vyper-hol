@@ -27,6 +27,7 @@ val checker_defs =
    callee_write_ok_def,
    callee_writes_ok_def,
    stmt_loop_calls_ok_def,
+   loop_iterator_place_def,
    function_header_ok_def,
    function_mutability_ok_def,
    call_mutability_ok_def,
