@@ -6,7 +6,7 @@ Ancestors
   vyperTypeEvalSoundness vyperTypeExprSoundness vyperInterpreter
   vyperTypeEvalStoragePreservation vyperTypeCallStackSoundness
 
-Theorem local_target_type_only[local]:
+Theorem local_target_type_only:
   !bt env id vt.
     target_root bt = NameTarget id /\
     type_place_target env bt = SOME vt ==> ?ty. vt = Type ty
@@ -19,7 +19,7 @@ Proof
   Cases_on `is_int_type (expr_type e)` >> gvs[]
 QED
 
-Theorem local_subscript_type[local]:
+Theorem local_subscript_type:
   target_root bt = NameTarget id /\
   type_place_target env (SubscriptTarget bt e) = SOME (Type ty) ==>
   ?bd. type_place_target env bt = SOME (Type (ArrayT ty bd)) /\
@@ -116,7 +116,7 @@ Proof
   Cases_on `v` >> gvs[subscript_type_def, fixed_shape_path_def, AllCaseEqs()]
 QED
 
-Theorem local_target_root_var_type[local]:
+Theorem local_target_root_var_type:
   !bt env id vt.
     target_root bt = NameTarget id /\ type_place_target env bt = SOME vt ==>
     ?ty. FLOOKUP env.var_types id = SOME ty
@@ -126,7 +126,7 @@ Proof
   rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem local_root_entry_type[local]:
+Theorem local_root_entry_type:
   runtime_consistent env cx s /\ runtime_consistent env cx t /\
   FLOOKUP env.var_types id = SOME ty /\
   lookup_scopes id s.scopes = SOME e1 /\
@@ -141,7 +141,7 @@ Proof
   disch_then drule_all >> strip_tac >> gvs[]
 QED
 
-Theorem extend_place_memory_path[local]:
+Theorem extend_place_memory_path:
   extend_place cx pv sb s = (INL (PlaceR (MemoryPlace id path)),t) ==>
   ?p. pv = PlaceR (MemoryPlace id p) /\ path = p ++ [sb] /\ t = s
 Proof
@@ -158,7 +158,7 @@ Proof
     lift_option_type_def, AllCaseEqs()]
 QED
 
-Theorem runtime_root_entry[local]:
+Theorem runtime_root_entry:
   runtime_consistent env cx s /\ FLOOKUP env.var_types id = SOME ty ==>
   ?entry. lookup_scopes id s.scopes = SOME entry
 Proof
@@ -166,7 +166,7 @@ Proof
        env_scopes_consistent_def] >> metis_tac[optionTheory.IS_SOME_EXISTS]
 QED
 
-Theorem local_base_fixed_shape_general[local]:
+Theorem local_base_fixed_shape_general:
   !bt cenv cx env es0 s ty id path t entry.
     expr_sim_inv cenv cx env es0 /\ runtime_consistent env cx s /\
     functions_well_typed cx /\
