@@ -80,7 +80,10 @@ Resume target_array_normal_suffix_ptr[common]:
     (drule target_post_index_frame >> simp[] >>
      disch_then irule >> fs[ci_mono_def] >> metis_tac[]) >>
   `ghost_kept cenv es sa G0 tn0 s0 H un` by
-    (mp_tac (Q.INST [`es1` |-> `em with gas_obs := []`, `sb` |-> `sm`, `G1` |-> `G`,
+    (`MAP FDOM es.scopes = MAP FDOM (em with gas_obs := []).scopes` by
+       (qpat_x_assum `wb_frame cenv es (em with gas_obs := []) sa s0 t` mp_tac >>
+        simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def]) >>
+     mp_tac (Q.INST [`es1` |-> `em with gas_obs := []`, `sb` |-> `sm`, `G1` |-> `G`,
                      `tn1` |-> `tn`, `s1` |-> `t`, `G2` |-> `H`, `tn2` |-> `un`,
                      `es'` |-> `em with gas_obs := []`]
                wordOperandsPtrTheory.ghost_kept_trans) >>
