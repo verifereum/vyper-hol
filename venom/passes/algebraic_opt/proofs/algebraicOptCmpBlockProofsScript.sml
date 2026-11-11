@@ -189,7 +189,7 @@ Proof
       simp[] >> irule ao_cmp_selected_chunk >> metis_tac[]) >>
   `ao_cmp_flip_apply_inst fs rs ns inst = [inst]` by
     (irule ao_cmp_untouched_apply >> gvs[]) >>
-  `DISJOINT (set (dfgDefs$operand_vars inst.inst_operands)) flipped /\
+  `DISJOINT (set (operand_vars inst.inst_operands)) flipped /\
    DISJOINT (set inst.inst_outputs) flipped` by
     (gvs[] >> irule ao_cmp_untouched_vars >> gvs[] >> metis_tac[]) >>
   `DISJOINT (set (inst_ir_vars inst)) ignored` by
