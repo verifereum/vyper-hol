@@ -14225,7 +14225,142 @@ Proof
   metis_tac[]
 QED
 
-Theorem mm_local_runtime_representative_transition[local]:
+Definition mm_local_nonmemory_frame_def:
+  mm_local_nonmemory_frame s =
+    stateFrame$state_frame (s with <|vs_memory := []; vs_inst_idx := 0|>)
+End
+
+Definition mm_local_cut_def:
+  mm_local_cut is gs H n excluded pc t <=>
+    t.vs_inst_idx = pc /\
+    mm_local_nonmemory_frame (H n) = mm_local_nonmemory_frame t /\
+    (!v. v NOTIN excluded ==> lookup_var v (H n) = lookup_var v t) /\
+    mm_local_pending (mm_local_write_capture is H n)
+      (mm_local_pending_indices is gs n) (H n) t /\
+    t.vs_memory =
+      (FOLDL (\st q. if MEM q (mm_local_pending_indices is gs n) then st else
+        case mm_local_write_capture is H n q of NONE => st
+        | SOME (d,bs) => write_memory_with_expansion d bs st)
+        (H (mm_local_epoch_start is gs n))
+        (MAP (\q. mm_local_epoch_start is gs n + q)
+          (COUNT_LIST (n - mm_local_epoch_start is gs n)))).vs_memory
+End
+
+Theorem mm_local_nonmemory_frame_updates[local,simp]:
+  mm_local_nonmemory_frame (s with vs_inst_idx := pc) = mm_local_nonmemory_frame s /\
+  mm_local_nonmemory_frame (s with vs_memory := mem) = mm_local_nonmemory_frame s /\
+  mm_local_nonmemory_frame (update_var v w s) = mm_local_nonmemory_frame s /\
+  mm_local_nonmemory_frame (write_memory_with_expansion d bs s) = mm_local_nonmemory_frame s
+Proof
+  simp[mm_local_nonmemory_frame_def, stateFrameTheory.state_frame_def,
+    venomStateTheory.update_var_def, venomStateTheory.write_memory_with_expansion_def]
+QED
+
+Theorem mm_local_nop_capture_suc[local]:
+  (EL n is).inst_opcode = NOP ==>
+  mm_local_write_capture is H (SUC n) = mm_local_write_capture is H n
+Proof
+  strip_tac >> rewrite_tac[FUN_EQ_THM] >> qx_gen_tac `j` >>
+  Cases_on `j = n` >- simp[mm_local_write_capture_def] >>
+  `j < SUC n <=> j < n` by decide_tac >> simp[mm_local_write_capture_def]
+QED
+
+Theorem mm_local_nop_pending_suc[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  n < LENGTH is /\ (EL n is).inst_opcode = NOP ==>
+  mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n
+Proof
+  strip_tac >>
+  `!g. MEM g gs ==> rep_of_group is g <> SOME ((EL n is).inst_id,g)` by
+    (rpt strip_tac >> drule_all mm_local_canonical_rep_write >> simp[]) >>
+  simp[NoAsms, mm_local_pending_indices_def, rich_listTheory.COUNT_LIST_SNOC,
+    rich_listTheory.SNOC_APPEND, FILTER_APPEND] >>
+  `~((EL n is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES})` by simp[] >>
+  simp[] >> rewrite_tac[rich_listTheory.FILTER_EQ] >>
+  qx_gen_tac `j` >> simp[MEM_COUNT_LIST] >> strip_tac >>
+  eq_tac >> strip_tac >> gvs[]
+  >- (qexistsl [`g`,`r`] >> simp[] >> decide_tac) >>
+  `r <> n` by metis_tac[] >> qexistsl [`g`,`r`] >> simp[] >> decide_tac
+QED
+
+Theorem mm_local_cut_nop_stutter[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  (EL n is).inst_opcode = NOP /\
+  mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n /\
+  H (SUC n) = H n with vs_inst_idx := SUC (H n).vs_inst_idx ==>
+  mm_local_cut is gs H (SUC n) excluded (SUC pc)
+    (t with vs_inst_idx := SUC pc)
+Proof
+  strip_tac >>
+  `mm_local_write_capture is H (SUC n) = mm_local_write_capture is H n` by
+    metis_tac[mm_local_nop_capture_suc] >>
+  `mm_local_epoch_start is gs n <= n` by
+    (irule mm_local_epoch_start_bound >> qexistsl [`gs`,`is`] >> simp[]) >>
+  gvs[mm_local_cut_def, venomStateTheory.lookup_var_def] >>
+  conj_tac
+  >- (gvs[mm_local_pending_def] >> qexists `ws` >> simp[] >>
+      irule mm_local_write_log_memory_cong >> simp[]) >>
+  Cases_on `mm_local_pending_indices is gs n = []`
+  >- gvs[mm_local_epoch_start_suc, mm_local_pending_empty,
+       rich_listTheory.COUNT_LIST_def] >>
+  `SUC n - mm_local_epoch_start is gs n = SUC (n - mm_local_epoch_start is gs n)` by
+    decide_tac >>
+  simp[mm_local_epoch_start_suc, rich_listTheory.COUNT_LIST_SNOC,
+    rich_listTheory.SNOC_APPEND, MAP_APPEND, FOLDL_APPEND,
+    mm_local_write_capture_future]
+QED
+
+Theorem mm_local_cut_nop_transition[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  phi_prefix_length is <= n /\ n < LENGTH is /\ (EL n is).inst_opcode = NOP /\
+  mm_local_cut is gs H n excluded pc t /\
+  step_inst fuel ctx (EL n is) (H n) = OK s /\
+  H (SUC n) = s with vs_inst_idx := SUC (H n).vs_inst_idx /\
+  apply_groups_inst_supply Mem2Mem ns rs es (EL n is) = ([EL n is],es) ==>
+  ?fin. step_inst fuel ctx (EL n is) t = OK fin /\
+    mm_local_cut is gs H (SUC n) excluded (SUC pc)
+      (fin with vs_inst_idx := SUC pc)
+Proof
+  strip_tac >>
+  `s = H n` by metis_tac[venomInstPropsTheory.step_nop_identity,
+    venomExecSemanticsTheory.exec_result_11] >>
+  `mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n` by
+    (irule mm_local_nop_pending_suc >> metis_tac[]) >>
+  qexists `t` >> conj_tac
+  >- simp[venomInstPropsTheory.step_nop_identity] >>
+  irule mm_local_cut_nop_stutter >> metis_tac[]
+QED
+
+Theorem mm_local_cut_init[local]:
+  h = phi_prefix_length is ==>
+  mm_local_cut is gs H h excluded pc (H h with vs_inst_idx := pc)
+Proof
+  strip_tac >>
+  `mm_local_pending_indices is gs h = []` by
+    (Cases_on `mm_local_pending_indices is gs h` >> simp[] >>
+     rename1 `mm_local_pending_indices is gs h = j::js` >>
+     `MEM j (mm_local_pending_indices is gs h)` by simp[] >>
+     drule mm_local_pending_indices_after_phis >>
+     gvs[mm_local_pending_indices_mem]) >>
+  `h <= mm_local_epoch_start is gs h` by
+    (gvs[] >> irule mm_local_epoch_start_after_phis >> simp[]) >>
+  `mm_local_epoch_start is gs h <= h` by
+    (irule mm_local_epoch_start_bound >> qexistsl [`gs`,`is`] >> simp[]) >>
+  `mm_local_epoch_start is gs h = h` by decide_tac >>
+  simp[mm_local_cut_def, mm_local_nonmemory_frame_def,
+    stateFrameTheory.state_frame_def, mm_local_pending_empty,
+    rich_listTheory.COUNT_LIST_def, venomStateTheory.lookup_var_def]
+QED
+
+Theorem mm_local_runtime_representative_transition_frame[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
@@ -14256,6 +14391,7 @@ Theorem mm_local_runtime_representative_transition[local]:
      (?i j mid. out = [i;j] /\ step_inst fuel ctx i t = OK mid /\
        step_inst fuel ctx j (mid with vs_inst_idx := SUC t.vs_inst_idx) = OK fin)) /\
     (!x. x IN P ==> lookup_var x fin = lookup_var x t) /\
+    mm_local_nonmemory_frame fin = mm_local_nonmemory_frame t /\
     mm_local_pending cap (mm_local_pending_indices is gs (SUC r))
       (H (SUC r)) (fin with vs_inst_idx := t.vs_inst_idx + LENGTH out) /\
     (fin with vs_inst_idx := t.vs_inst_idx + LENGTH out).vs_memory =
@@ -14283,6 +14419,7 @@ Proof
      (?i j mid. out = [i;j] /\ step_inst fuel ctx i t = OK mid /\
        step_inst fuel ctx j (mid with vs_inst_idx := SUC t.vs_inst_idx) = OK fin)) /\
     (!x. x IN P ==> lookup_var x fin = lookup_var x t) /\
+    mm_local_nonmemory_frame fin = mm_local_nonmemory_frame t /\
     fin.vs_memory = (write_memory_with_expansion g.cg_dst
       (read_memory g.cg_src g.cg_length t) t).vs_memory` by
     (Cases_on `g.cg_length = 32`
@@ -14292,16 +14429,20 @@ Proof
   suspend "renew"
 QED
 
-Resume mm_local_runtime_representative_transition[bulk]:
+Resume mm_local_runtime_representative_transition_frame[bulk]:
   drule_all mm_local_mem2mem_bulk_runtime >>
   disch_then (qspecl_then [`t`,`es`,`fuel`,`ctx`] strip_assume_tac) >>
   qexistsl [`[out]`,`es`,`fin`] >> simp[]
 QED
-Resume mm_local_runtime_representative_transition[word]:
+Resume mm_local_runtime_representative_transition_frame[word]:
   drule_all mm_local_mem2mem_word_runtime >>
-  metis_tac[]
+  disch_then (qspecl_then [`t`,`fuel`,`ctx`] strip_assume_tac) >>
+  `mm_local_nonmemory_frame fin = mm_local_nonmemory_frame t` by
+    (qpat_x_assum `(_ with vs_inst_idx := SUC (SUC _)) = _`
+       (mp_tac o AP_TERM ``mm_local_nonmemory_frame``) >> simp[]) >>
+  qexistsl [`[load;store]`,`es2`,`fin`] >> simp[] >> metis_tac[]
 QED
-Resume mm_local_runtime_representative_transition[retained]:
+Resume mm_local_runtime_representative_transition_frame[retained]:
   `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
   `?dst w src. (EL r is).inst_operands = [Lit dst; Var w] /\
     FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
@@ -14326,7 +14467,7 @@ Resume mm_local_runtime_representative_transition[retained]:
   disch_then (qspec_then `es` strip_assume_tac) >>
   qexistsl [`[EL r is]`,`es`,`fin`] >> simp[] >> gvs[]
 QED
-Resume mm_local_runtime_representative_transition[renew]:
+Resume mm_local_runtime_representative_transition_frame[renew]:
   markerLib.RESUME_TAC >>
   `fin.vs_memory = (FOLDL (\st q.
     if MEM q (mm_local_pending_indices is gs (SUC r)) then st else
@@ -14377,7 +14518,49 @@ Resume mm_local_runtime_representative_transition[renew]:
   gvs[mm_local_pending_def] >>
   qexists `ws'` >> simp[] >> irule mm_local_write_log_memory_cong >> simp[]
 QED
-Finalise mm_local_runtime_representative_transition
+Finalise mm_local_runtime_representative_transition_frame
+
+Theorem mm_local_runtime_representative_transition[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\ h = phi_prefix_length is /\ h <= r /\ r < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  (!q. h <= q /\ q <= r ==> ~is_terminator (EL q is).inst_opcode /\
+    ?z. step_inst fuel ctx (EL q is) (H q) = OK z /\
+      H (SUC q) = z with vs_inst_idx := SUC (H q).vs_inst_idx) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  js = mm_local_pending_indices is gs r /\ a = mm_local_epoch_start is gs r /\
+  u = FOLDL (\st q. if MEM q js then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) /\
+  t.vs_memory = u.vs_memory /\ mm_local_pending cap js (H r) t /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  excluded = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  (!v. v NOTIN excluded ==> lookup_var v (H r) = lookup_var v t) /\
+  fresh_inst_id es = (lid,es1) /\ fresh_ir_var es1 = (v,es2) /\
+  (!x. x IN P ==> x <> v) /\
+  g.cg_dst < dimword (:256) /\ g.cg_src < dimword (:256) /\ g.cg_length < dimword (:256) /\
+  a' = mm_local_epoch_start is gs (SUC r) ==>
+  ?out es' fin.
+    apply_groups_inst_supply Mem2Mem ns rs es (EL r is) = (out,es') /\
+    ((?i. out = [i] /\ step_inst fuel ctx i t = OK fin) \/
+     (?i j mid. out = [i;j] /\ step_inst fuel ctx i t = OK mid /\
+       step_inst fuel ctx j (mid with vs_inst_idx := SUC t.vs_inst_idx) = OK fin)) /\
+    (!x. x IN P ==> lookup_var x fin = lookup_var x t) /\
+    mm_local_pending cap (mm_local_pending_indices is gs (SUC r))
+      (H (SUC r)) (fin with vs_inst_idx := t.vs_inst_idx + LENGTH out) /\
+    (fin with vs_inst_idx := t.vs_inst_idx + LENGTH out).vs_memory =
+      (FOLDL (\st q. if MEM q (mm_local_pending_indices is gs (SUC r)) then st else
+        case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+        (H a') (MAP (\q. a'+q) (COUNT_LIST (SUC r-a')))).vs_memory
+Proof
+  strip_tac >> drule_all mm_local_runtime_representative_transition_frame >>
+  strip_tac >> qexistsl [`out`,`es'`,`fin`] >> simp[]
+QED
 
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
