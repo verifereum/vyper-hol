@@ -7,6 +7,10 @@ Ancestors
   fragExecMem fragGasSeqMem fragGasPathMem fragGasSeqAbort instMemFrontier
   venomExecProofs freshWrites loweringStateRelDefs abiDecoderBytesBound
   abiDecoderDynarrayBound appendStorageStageTransportPtr bodyUnopFragMemory
+  abiDecoderLoopSetup abiDecoderIndexedAddress abiDecoderReentry abiDecoderReentryAddress
+  abiDecoderArrayBackedge ssaOperandFrame
+  abiEncoderWindowArrayCursorMem abiDecoderDynamicLoopSetup abiDecoderStaticLoopSetup
+  abiDecoderArraySetupInputs
   venomInstProofs venomExecSemantics venomState venomInst words arithmetic list rich_list
 
 Theorem extcall_decoder_count_guard_mem_ok:
@@ -219,4 +223,184 @@ Proof
   match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
   >- (irule extcall_decoder_unbounded_array_guard_mem_ok >> metis_tac[]) >>
   metis_tac[writes_fresh_mem_ok]
+QED
+
+Theorem extcall_decoder_array_guard_success:
+  abi_decode_dynarray_position_prefix src MLOAD base_op hi maxn asz st = (addr,st') /\
+  eval_operand src s = SOME (n2w sb) /\ eval_operand base_op s = SOME (n2w B) /\
+  B+sb < dimword(:256) /\ B+sb+32 <= s.vs_alloca_next /\
+  abi_decode_load MLOAD (n2w (B+sb) : bytes32) s = n2w n /\
+  n <= maxn /\ maxn < dimword(:256) /\
+  (hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
+       sb+32+n*asz <= h /\ h < dimword(:256)) /\
+  fresh_vars_wrt st s /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?t. gas_path_mem ctx func s
+        (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st')))
+        (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st st'))) /\
+      eval_operand addr t = SOME (n2w (B+sb)) /\ fresh_vars_wrt st' t /\
+      (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+      t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+      t.vs_data_section = s.vs_data_section /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_halted = s.vs_halted
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  `run_inst_seq_mem_ok (emitted_insts st st') s` by
+    metis_tac[extcall_decoder_array_guard_mem_ok] >>
+  drule abi_decode_dynarray_position_prefix_sequence >>
+  disch_then (qspecl_then [`s`, `sb`, `n`, `B`] mp_tac) >>
+  (impl_tac >- (simp[] >> disj2_tac >> qexists_tac `h` >> simp[])) >> strip_tac >>
+  drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
+  drule_all abi_decoder_guard_sequence_fields >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st')` by fs[EVERY_CONJ] >>
+  drule_all run_inst_seq_gas_path_mem >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem extcall_decoder_array_element_setup_mem_ok:
+  abi_decode_array_element_setup ip src dst MLOAD base_op hi di asz msz st = (ops,st') /\
+  eval_operand ip s = SOME (n2w slot) /\ slot < dimword(:256) /\
+  slot+32 <= s.vs_alloca_next /\ mload slot s = n2w j /\
+  eval_operand src s = SOME (n2w sb) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
+  (dec_info_needs_offset di ==> eval_operand base_op s = SOME (n2w B) /\
+    B+sb+32+j*asz < dimword(:256) /\
+    B+sb+32+j*asz+32 <= s.vs_alloca_next) ==>
+  run_inst_seq_mem_ok (emitted_insts st st') s
+Proof
+  strip_tac >>
+  `!k. st.cs_next_var <= k ==> src <> Var (STRING #"%" (toString k)) /\
+      base_op <> Var (STRING #"%" (toString k))` by
+    metis_tac[abi_decoder_live_excludes_output] >>
+  Cases_on `dec_info_needs_offset di` >> Cases_on `base_op = Lit 0w` >>
+  Cases_on `hi = Lit 0w` >>
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[abi_decode_array_element_setup_def, compile_abi_decode_dyn_elem_ptr_def,
+       compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
+       abi_decode_indexed_address_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+       fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[DROP_LENGTH_APPEND] >>
+  (qmatch_goalsub_abbrev_tac `run_inst_seq_mem_ok code s` >>
+   `code = TAKE (if (EL 4 code).inst_opcode = MLOAD then 5 else
+        if (EL 5 code).inst_opcode = MLOAD then 6 else 1) code ++
+     DROP (if (EL 4 code).inst_opcode = MLOAD then 5 else
+        if (EL 5 code).inst_opcode = MLOAD then 6 else 1) code` by simp[] >>
+   pop_assum (fn th => pure_once_rewrite_tac[th]) >>
+   match_mp_tac run_inst_seq_mem_ok_append >> reverse conj_tac
+   >- (rpt strip_tac >> irule run_inst_seq_mem_ok_every >>
+       simp[Abbr `code`, below_frontier_no_ranges,
+            memSafeRunTheory.inst_dload_in_section_def, mk_inst_def]) >>
+   simp[Abbr `code`, run_inst_seq_mem_ok_cons, run_inst_seq_mem_ok_last,
+        GSYM mk_inst_def, below_frontier_MLOAD, w2n_n2w, below_frontier_no_ranges] >>
+   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, exec_pure2_def,
+        eval_operand_update_var_avoids, eval_operand_def, lookup_var_update_var,
+        word_add_n2w, word_mul_n2w] >>
+   simp[GSYM mk_inst_def, below_frontier_MLOAD, eval_operand_def,
+        lookup_var_update_var, w2n_n2w] >>
+   rpt strip_tac >> gvs[update_var_def, w2n_n2w, mload_def] >> decide_tac)
+QED
+
+Theorem extcall_decoder_array_element_setup_success:
+  abi_decode_array_element_setup ip src dst MLOAD base_op hi di asz msz st = (ops,st') /\
+  eval_operand ip s = SOME (n2w slot) /\ slot < dimword(:256) /\
+  slot+32 <= s.vs_alloca_next /\ mload slot s = n2w j /\
+  eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
+  abi_decoder_operand_live st.cs_next_var hi /\
+  (dec_info_needs_offset di ==> eval_operand base_op s = SOME (n2w B) /\
+    B+sb+32+j*asz < dimword(:256) /\
+    B+sb+32+j*asz+32 <= s.vs_alloca_next /\
+    abi_decode_load MLOAD (n2w (B+(sb+32+j*asz)) : bytes32) s = n2w child_off /\
+    (hi = Lit 0w \/ ?hb. eval_operand hi s = SOME (n2w hb) /\
+      sb+32+child_off+asz <= hb /\ hb < dimword(:256))) /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?t. gas_path_mem ctx func s
+        (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st')))
+        (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st st'))) /\
+      eval_operand (FST ops) t = SOME (n2w j) /\
+      eval_operand (FST (SND ops)) t =
+        SOME (n2w (sb+32+if dec_info_needs_offset di then child_off else j*asz)) /\
+      eval_operand (SND (SND ops)) t = SOME (n2w (d+32+j*msz)) /\
+      fresh_vars_wrt limit_st t /\ abi_decoder_address_frame st.cs_next_var s t /\
+      inst_extends st st'
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  `run_inst_seq_mem_ok (emitted_insts st st') s` by
+    (irule extcall_decoder_array_element_setup_mem_ok >> metis_tac[]) >>
+  `?t. run_inst_seq (emitted_insts st st') s = OK t /\
+      eval_operand (FST ops) t = SOME (n2w j) /\
+      eval_operand (FST (SND ops)) t =
+        SOME (n2w (sb+32+if dec_info_needs_offset di then child_off else j*asz)) /\
+      eval_operand (SND (SND ops)) t = SOME (n2w (d+32+j*msz)) /\
+      fresh_vars_wrt limit_st t /\ abi_decoder_address_frame st.cs_next_var s t /\
+      inst_extends st st'` by
+    (Cases_on `dec_info_needs_offset di`
+     >- (qpat_x_assum `dec_info_needs_offset di ==> _` drule >>
+         disch_then (map_every assume_tac o CONJUNCTS) >>
+         `mload (w2n (n2w slot : bytes32)) s = n2w j` by simp[w2n_n2w] >>
+         drule_all abi_decode_dynamic_element_setup_reentry >> strip_tac >>
+         goal_assum (drule_at Any) >> simp[]) >>
+     `mload (w2n (n2w slot : bytes32)) s = n2w j` by simp[w2n_n2w] >>
+     drule_all abi_decode_static_element_setup_reentry >> strip_tac >>
+     goal_assum (drule_at Any) >> simp[abi_decoder_address_frame_def]) >>
+  drule_all abi_decode_array_element_setup_shape >> strip_tac >>
+  drule_all run_inst_seq_gas_path_mem >> strip_tac >>
+  qexists_tac `t` >> simp[ADD_COMM]
+QED
+
+(* Rejection transport takes the actual rejecting run, not successful guards. *)
+Theorem extcall_decoder_array_guard_reject:
+  abi_decode_dynarray_position_prefix src MLOAD base_op hi maxn asz st = (addr,st') /\
+  eval_operand src s = SOME (n2w sb) /\ eval_operand base_op s = SOME (n2w B) /\
+  B+sb < dimword(:256) /\ B+sb+32 <= s.vs_alloca_next /\ fresh_vars_wrt st s /\
+  run_inst_seq (emitted_insts st st') s = Abort Revert_abort t /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?n j. gas_path_mem ctx func s n (Abort Revert_abort (t with vs_inst_idx := j))
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  `run_inst_seq_mem_ok (emitted_insts st st') s` by
+    metis_tac[extcall_decoder_array_guard_mem_ok] >>
+  drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st')` by fs[EVERY_CONJ] >>
+  drule_all (SIMP_RULE (srw_ss()) [] (Q.SPEC `T` run_inst_seq_abort_gas_path)) >>
+  simp[fragGasModeTheory.gas_marked_path_def]
+QED
+
+Theorem extcall_decoder_array_element_setup_reject:
+  abi_decode_array_element_setup ip src dst MLOAD base_op hi di asz msz st = (ops,st') /\
+  eval_operand ip s = SOME (n2w slot) /\ slot < dimword(:256) /\
+  slot+32 <= s.vs_alloca_next /\ mload slot s = n2w j /\
+  eval_operand src s = SOME (n2w sb) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
+  (dec_info_needs_offset di ==> eval_operand base_op s = SOME (n2w B) /\
+    B+sb+32+j*asz < dimword(:256) /\
+    B+sb+32+j*asz+32 <= s.vs_alloca_next) /\
+  run_inst_seq (emitted_insts st st') s = Abort Revert_abort t /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?n k. gas_path_mem ctx func s n (Abort Revert_abort (t with vs_inst_idx := k))
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  `run_inst_seq_mem_ok (emitted_insts st st') s` by
+    (irule extcall_decoder_array_element_setup_mem_ok >> metis_tac[]) >>
+  drule_all abi_decode_array_element_setup_shape >> strip_tac >>
+  drule_all (SIMP_RULE (srw_ss()) [] (Q.SPEC `T` run_inst_seq_abort_gas_path)) >>
+  simp[fragGasModeTheory.gas_marked_path_def]
 QED
