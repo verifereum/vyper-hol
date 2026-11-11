@@ -222,3 +222,18 @@ Proof
   gvs[post_value_type_def, lowered_value_type_def, vyperASTTheory.expr_type_def] >>
   rpt IF_CASES_TAC >> gvs[]
 QED
+
+(* Actual internal-call operands are effect-free.  In particular the
+   delayed-read boundary cannot contain an intervening Pop or IntCall. *)
+Theorem intcall_body_pre_effect_free_args:
+  expr_body_pre ce cx env (Call ann (IntCall name) args dflt) es ==>
+  EVERY (\e. ~expr_has_effect e) args
+Proof
+  strip_tac >>
+  `~supported_expr_exists call_operands_effect_root
+     (Call ann (IntCall name) args dflt)` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+  `~call_operands_effect_root (Call ann (IntCall name) args dflt)` by
+    metis_tac[supportedExprTraverseTheory.supported_expr_exists_root] >>
+  fs[supportedExprTraverseTheory.call_operands_effect_root_def,
+     EVERY_MEM, EXISTS_MEM] >> metis_tac[]
+QED
