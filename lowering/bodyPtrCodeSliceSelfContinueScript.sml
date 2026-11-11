@@ -465,3 +465,100 @@ Resume self_code_prefix_success_entry[emission]:
 QED
 
 Finalise self_code_prefix_success_entry
+
+(* The semantic tail and the checked writes meet at one raw endpoint. *)
+Theorem self_code_tail_success_ptr:
+  emit_op CODESIZE [] sb = (limit,sc) /\
+  compile_assert_slice_bounds src len limit sc = ((),sd) /\
+  emit_void CODECOPY [Var dst;src;len] sd = ((),se) /\
+  emit_void MSTORE [Var out;len] se = ((),sf) /\
+  eval_operand src u = SOME a /\ eval_operand len u = SOME n /\
+  eval_operand (Var out) u = SOME p /\ eval_operand (Var dst) u = SOME (p+32w) /\
+  (!op x. MEM op [src;len;Var dst;Var out] /\ op = Var x ==> not_fresh_at sb x) /\
+  LENGTH u.vs_code < dimword (:256) /\ w2n a+w2n n <= LENGTH u.vs_code /\
+  stmt_state_rel ctx fn cenv cx es u /\ local_ptrs_reserved cenv sb /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sb.cs_next_var /\
+  sa.cs_next_id <= sb.cs_next_id /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP u.vs_allocas inst.inst_id = SOME (w2n p,sz) /\
+  w2n p+sz < dimword (:256) /\ 32+w2n n <= sz /\
+  (!nm off cap. local_region cenv es.scopes u nm off cap ==>
+    regions_disjoint (w2n p) sz off cap) /\
+  (!id off cap. id < sa.cs_next_id /\ FLOOKUP u.vs_allocas id = SOME (off,cap) ==>
+    regions_disjoint (w2n p) sz off cap) /\
+  expr_type e = BaseT (BytesT (Dynamic bound)) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic bound))) /\
+  w2n n <= bound /\ sa.cs_next_id <= inst.inst_id /\ inst.inst_id < sf.cs_next_id /\
+  run_inst_seq (emitted_insts sb sc ++ emitted_insts sc sd) u = OK v /\
+  v = u with vs_vars := v.vs_vars /\
+  (!x. not_fresh_at sb x ==> lookup_var x v = lookup_var x u) /\
+  ghost_inv d cenv cx es G tn v /\
+  ptr_covers G tn dst v (w2n n) /\ ptr_covers G tn out v 32 /\
+  op_taint tn src = {} /\ op_taint tn len = {} /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sd /\
+  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sd x) /\
+  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sd x) ==>
+  ?z tn'. run_inst_seq (emitted_insts sb sf) u = OK z /\
+    run_inst_seq (emitted_insts sd sf) v = OK z /\
+    vv_post ctx fn cenv cx e es sa sf u es
+      (Value (BytesV (TAKE (w2n n) (DROP (w2n a) u.vs_code))))
+      (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory)) z /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sd sf) v G tn' /\
+    ghost_inv d cenv cx es G tn' z /\
+    ghost_kept cenv es sd G tn v G tn' /\
+    tn' = (tn with t_mem := (tn.t_mem DIFF
+      {j | w2n p+32 <= j /\ j < w2n p+32+w2n n}) DIFF
+      {j | w2n p <= j /\ j < w2n p+32})
+Proof
+  strip_tac >>
+  drule_all self_code_tail_vv_post >> strip_tac >>
+  `v with vs_vars := u.vs_vars = u` by
+    (qpat_assum `v = _ with vs_vars := _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `stmt_state_rel ctx fn cenv cx es v` by
+    (irule hash_readonly_state_rel >> metis_tac[]) >>
+  `v.vs_code = u.vs_code /\ v.vs_labels = u.vs_labels` by
+    (qpat_assum `v = _ with vs_vars := _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `!op. MEM op [src;len;Var dst;Var out] ==> eval_operand op v = eval_operand op u` by
+    (Cases >> simp[eval_operand_def] >> rpt strip_tac >> metis_tac[]) >>
+  `eval_operand src v = SOME a /\ eval_operand len v = SOME n /\
+   lookup_var out v = SOME p /\ lookup_var dst v = SOME (p+32w)` by
+    fs[eval_operand_def] >>
+  `!nm off cap. local_region cenv es.scopes v nm off cap ==>
+    off+cap <= w2n p \/ w2n p+32+w2n n <= off` by suspend "separation" >>
+  `w2n p+32 < dimword (:256) /\ w2n a+w2n n <= LENGTH v.vs_code` by simp[] >>
+  drule_all self_code_copy_store_emitted_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `emitted_insts sb sf = (emitted_insts sb sc ++ emitted_insts sc sd) ++
+    emitted_insts sd sf` by suspend "layout" >>
+  `run_inst_seq ((emitted_insts sb sc ++ emitted_insts sc sd) ++
+    emitted_insts sd sf) u = OK t'` by
+    (qpat_assum `run_inst_seq (emitted_insts sb sc ++ emitted_insts sc sd) u = OK v`
+      (mp_then Any mp_tac run_inst_seq_append) >>
+     disch_then (qspec_then `emitted_insts sd sf` mp_tac) >>
+     qpat_assum `run_inst_seq (emitted_insts sd sf) v = OK t'`
+       (fn th => pure_rewrite_tac[th]) >> simp[]) >>
+  `t = t'` by gvs[listTheory.APPEND_ASSOC] >>
+  qexistsl_tac [`t`,`tn'`] >> gvs[]
+QED
+
+Resume self_code_tail_success_ptr[separation]:
+  rpt strip_tac >>
+  `local_region cenv es.scopes u nm off cap` by
+    (gvs[local_region_def, local_ptrs_reserved_def, eval_operand_def, lookup_var_def] >>
+     metis_tac[]) >>
+  `regions_disjoint (w2n p) sz off cap` by metis_tac[] >>
+  fs[regions_disjoint_def] >> decide_tac
+QED
+
+Resume self_code_tail_success_ptr[layout]:
+  drule_all self_code_tail_layout >> strip_tac >>
+  drule_all (emit_void_extends |> Q.SPECL [`CODECOPY`,`[Var dst;src;len]`,`sd`,`se`]) >> strip_tac >>
+  drule_all (emit_void_extends |> Q.SPECL [`MSTORE`,`[Var out;len]`,`se`,`sf`]) >> strip_tac >>
+  `emitted_insts sd sf = emitted_insts sd se ++ emitted_insts se sf` by
+    (irule emitted_insts_append >> simp[]) >>
+  drule_all (emitted_insts_emit_void |> Q.SPECL [`CODECOPY`,`[Var dst;src;len]`,`sd`,`se`]) >> strip_tac >>
+  drule_all (emitted_insts_emit_void |> Q.SPECL [`MSTORE`,`[Var out;len]`,`se`,`sf`]) >> strip_tac >>
+  simp[listTheory.APPEND_ASSOC]
+QED
+
+Finalise self_code_tail_success_ptr
