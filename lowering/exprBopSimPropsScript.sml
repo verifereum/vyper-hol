@@ -404,6 +404,12 @@ Proof
   gvs[bind_def, return_def, raise_def, read_result_def])
 QED
 
+Theorem bop_result_halt_exit[simp]:
+  halt_exit cx' ee (bop_result cx ann bop ts v1 v2 es) r
+Proof
+  simp[bop_result_def] >> every_case_tac >> simp[]
+QED
+
 Theorem bop_result_gas_obs[simp]:
   bop_result cx ann bop ts v1 v2 (es with gas_obs := gs) =
   bop_result cx ann bop ts v1 v2 es
@@ -648,5 +654,5 @@ Proof
       qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _` (irule_at Any) >>
       qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _` (irule_at Any) >>
       simp[]) >>
-  metis_tac[bop_result_gas_obs]
+  metis_tac[bop_result_gas_obs, bop_result_halt_exit]
 QED
