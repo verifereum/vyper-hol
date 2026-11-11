@@ -526,7 +526,7 @@ Proof
   qexists_tac `LUPDATE (HD top) k (LUPDATE (EL k top) 0 top)` >>
   `0 < LENGTH top /\ k < LENGTH top` by simp[] >>
   `HD (top ++ srest) = HD top` by (Cases_on `top` >> gvs[]) >>
-  `!i l. 0 < i /\ i < LENGTH l ==>
+  `!i (l:operand list). 0 < i /\ i < LENGTH l ==>
      REVERSE (stack_swap i l) =
      LUPDATE (HD (REVERSE l)) i
        (LUPDATE (EL i (REVERSE l)) 0 (REVERSE l))` by

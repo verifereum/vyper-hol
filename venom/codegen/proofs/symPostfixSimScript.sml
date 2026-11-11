@@ -1382,7 +1382,7 @@ Theorem scratch_replay_do_swap_positive[local]:
     (REVERSE qs.ps_stack) slots
 Proof
   strip_tac >>
-  `!k l. 0 < k /\ k < LENGTH l ==>
+  `!k (l:operand list). 0 < k /\ k < LENGTH l ==>
      REVERSE (stack_swap k l) =
      LUPDATE (HD (REVERSE l)) k
        (LUPDATE (EL k (REVERSE l)) 0 (REVERSE l))` by
