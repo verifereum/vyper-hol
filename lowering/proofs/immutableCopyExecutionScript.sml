@@ -1134,7 +1134,7 @@ Proof
   irule immutable_loop_fresh_write >> simp[]
 QED
 
-Theorem immutable_loop_frame_control[local]:
+Theorem immutable_loop_frame_control:
   (immutable_loop_frame sa sb s a b i (jump_to lbl t) <=>
    immutable_loop_frame sa sb s a b i t) /\
   (immutable_loop_frame sa sb s a b i (t with vs_inst_idx := k) <=>
@@ -1312,7 +1312,7 @@ Proof
   simp[run_inst_seq_def, Abbr `q5`, Abbr `q4`, Abbr `q3`, Abbr `q2`, Abbr `q1`]
 QED
 
-Theorem immutable_loop_body_run[local]:
+Theorem immutable_loop_body_run:
   eval_operand src q = SOME a /\ eval_operand dst q = SOME b /\
   eval_operand region q = SOME 0w /\
   eval_operand (Var cv) q = SOME (n2w i) /\
@@ -1376,7 +1376,7 @@ Proof
       lookup_var_def, fresh_vars_wrt_def]
 QED
 
-Theorem immutable_loop_body_frame[local]:
+Theorem immutable_loop_body_frame:
   immutable_loop_frame sa sb s a b i q /\
   (!x. MEM x [cv;mv;sv;vv;dm;dv;av;nv] ==> not_fresh_at sb x) /\
   (!x. not_fresh_at sa x ==> ~MEM x [cv;mv;sv;vv;dm;dv;av;nv]) ==>
