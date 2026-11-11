@@ -10,6 +10,7 @@ Ancestors
   bodyIntCallFamCallIntWordStage bodyIntCallFamCallIntAllocatedStage
   bodyIntCallFamCallIntEntryHeadStage bodyIntCallFamCallIntEntryRoom
   bodyIntCallFamCallIntEntrySource bodyIntCallFamCallIntEntryFrame
+  bodyIntCallFamCallIntEntryPackage
 Libs
   monadsyntax
 
