@@ -799,3 +799,44 @@ Proof
   pure_asm_rewrite_tac [] >>
   fs[intcall_expr_cont_def, venomStateTheory.eval_operand_def]
 QED
+
+(* Static identity and separation of the preserved return buffer. *)
+Theorem intcall_allocated_buffer_geometry:
+  compile_alloc_buffer sz a = (buf,b) /\ fn_has_code a b func /\
+  FLOOKUP u.vs_allocas a.cs_next_id = SOME (off,sz) /\ alloca_inv u ==>
+  buf.buf_size = sz /\
+  (?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id = a.cs_next_id) /\
+  (!aid q len p k. b.cs_next_id <= aid /\
+    FLOOKUP u.vs_allocas aid = SOME (q,len) /\ q <= p /\ p+k <= q+len ==>
+    regions_disjoint off sz p k)
+Proof
+  strip_tac >>
+  drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (drule_all actualAllocExecTheory.actual_alloc_buffer_site >> strip_tac >>
+      goal_assum (drule_at Any) >> simp[venomInstTheory.mk_inst_def]) >>
+  rpt strip_tac >> irule intcall_alloca_subregions_disjoint >>
+  qexistsl_tac [`off`,`a.cs_next_id`,`len`,`aid`,`q`,`u`,`sz`] >>
+  simp[] >> decide_tac
+QED
+
+Theorem intcall_completed_operands:
+  ^completed_prefix cx start current tys flags values ops u ==>
+  ?argv. eval_operands ops u = SOME argv /\ LENGTH argv = LENGTH tys /\
+    (!i w. i < LENGTH tys /\ eval_operand (EL i ops) u = SOME w ==>
+      EL i argv = w)
+Proof
+  BETA_TAC >> strip_tac >>
+  `IS_SOME (eval_operands ops u)` by
+    (rewrite_tac[venomExecProofsTheory.eval_operands_IS_SOME_EVERY,
+       listTheory.EVERY_EL] >> rpt strip_tac >>
+     `n < LENGTH tys` by decide_tac >>
+     first_x_assum drule >> strip_tac >> simp[]) >>
+  Cases_on `eval_operands ops u` >> gvs[] >>
+  drule tupleLoadPropsTheory.eval_operands_length >> strip_tac >>
+  simp[] >> rpt strip_tac >>
+  `i < LENGTH ops` by decide_tac >>
+  drule_all tupleLoadPropsTheory.eval_operands_index >> simp[]
+QED
