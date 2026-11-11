@@ -149,3 +149,85 @@ Proof
      arithmeticTheory.GREATER_DEF] >>
    irule (SRULE [mk_inst_def] slice_bounds_scalar_ghost) >> simp[])
 QED
+
+Theorem slice_bounds_iszero_cons[local]:
+  !D ctx fn PG G tn s id a out wa code.
+    eval_operand a s = SOME wa /\ op_taint tn a = {} /\
+    op_prov G a = NONE /\ ~ctx_has_dalloca ctx /\
+    (?Gf tnf. inst_seq_ptr D 0 ctx fn PG (DRESTRICT G (COMPL {out}))
+      (tn with t_var := tn.t_var |+ (out,{})) code
+      (update_var out (bool_to_word (wa = 0w)) s with
+        vs_inst_idx := SUC s.vs_inst_idx) Gf tnf) ==>
+    ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn
+      (mk_inst id ISZERO [a] [out]::code) s Gf tnf
+Proof
+  rpt gen_tac >> strip_tac >> qexistsl_tac [`Gf`, `tnf`] >>
+  irule slice_bounds_scalar_cons >>
+  conj_tac >- (irule slice_bounds_iszero_checked >> simp[]) >>
+  qexistsl_tac [`DRESTRICT G (COMPL {out})`,
+    `tn with t_var := tn.t_var |+ (out,{})`,
+    `update_var out (bool_to_word (wa = 0w)) s`] >>
+  simp[update_var_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def] >>
+  irule (SRULE [mk_inst_def] slice_bounds_scalar_ghost) >> simp[]
+QED
+
+Theorem slice_bounds_assert_checked[local]:
+  !D ctx fn PG G tn s id a w.
+    eval_operand a s = SOME w /\ op_taint tn a = {} /\
+    ~ctx_has_dalloca ctx ==>
+    ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id ASSERT [a] []] s Gf tnf
+Proof
+  rpt gen_tac >> strip_tac >> qexistsl_tac [`G`, `tn`] >>
+  simp[Once inst_seq_ptr_def] >>
+  conj_tac >- (irule ptr_inst_ok_assert >> metis_tac[]) >>
+  drule venomExecProofsTheory.step_assert_behavior >> strip_tac >> Cases_on `w = 0w` >>
+  simp[mk_inst_def, inst_seq_ptr_def, SRULE [mk_inst_def] assert_ghost_unchanged]
+QED
+
+Theorem slice_bounds_checked_ptr:
+  !D ctx fn PG G tn s a n limit sa sb wa wn wl.
+    compile_assert_slice_bounds a n limit sa = ((),sb) /\
+    eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
+    eval_operand limit s = SOME wl /\
+    op_taint tn a = {} /\ op_taint tn n = {} /\ op_taint tn limit = {} /\
+    op_prov G a = NONE /\ op_prov G n = NONE /\ op_prov G limit = NONE /\
+    (!z. a = Var z ==> not_fresh_at sa z) /\
+    (!z. n = Var z ==> not_fresh_at sa z) /\
+    (!z. limit = Var z ==> not_fresh_at sa z) /\ ~ctx_has_dalloca ctx ==>
+    ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!j. sa.cs_next_var <= j ==> a <> Var (STRING #"%" (toString j)) /\
+       n <> Var (STRING #"%" (toString j)) /\
+       limit <> Var (STRING #"%" (toString j))` by
+    (rpt strip_tac >> spose_not_then assume_tac >> gvs[not_fresh_at_def] >>
+     metis_tac[]) >>
+  drule slice_bounds_shape >> strip_tac >> asm_rewrite_tac[] >>
+  irule slice_bounds_binop_cons >>
+  simp[] >>
+  irule slice_bounds_binop_cons >>
+  simp[ghostPcTransportPtrTheory.eval_operand_inst_idx,
+       slice_bounds_scalar_operand_frame] >>
+  simp[eval_operand_def, emitHelperPropsTheory.lookup_var_update_var,
+       op_taint_def, op_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  irule slice_bounds_binop_cons >>
+  simp[ghostPcTransportPtrTheory.eval_operand_inst_idx,
+       slice_bounds_scalar_operand_frame] >>
+  simp[eval_operand_def, emitHelperPropsTheory.lookup_var_update_var,
+       op_taint_def, op_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  conj_tac >- (Cases_on `limit` >> gvs[op_taint_def] >>
+    rpt IF_CASES_TAC >> gvs[]) >>
+  conj_tac >- (Cases_on `limit` >> gvs[op_prov_def] >>
+    rpt IF_CASES_TAC >> gvs[]) >>
+  irule slice_bounds_binop_cons >>
+  simp[ghostPcTransportPtrTheory.eval_operand_inst_idx,
+       eval_operand_def, emitHelperPropsTheory.lookup_var_update_var,
+       op_taint_def, op_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  irule slice_bounds_iszero_cons >>
+  simp[eval_operand_def, lookup_var_def, update_var_def,
+       op_taint_def, op_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  irule slice_bounds_assert_checked >>
+  simp[eval_operand_def, lookup_var_def, update_var_def,
+       op_taint_def, FLOOKUP_UPDATE]
+QED
