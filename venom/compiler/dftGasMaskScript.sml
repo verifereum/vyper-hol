@@ -6364,12 +6364,149 @@ Proof
      >- (irule (cj 1 dftRunRelTheory.dft_crossing_swap_pair) >>
          simp[] >> qexistsl_tac [`bb`, `fn`] >> simp[]) >>
      fs[EVERY_MEM]) >>
-  qpat_x_assum `P (y::rest) s (mh::mt) (eh::et)` mp_tac >>
-  simp[Abbr `P`] >> strip_tac >>
-  qpat_assum `!k t P n. _`
-    (mp_tac o SRULE [markerTheory.Abbrev_def] o Q.SPECL [`0`, `s`]) >>
-  simp[Abbr `R`] >> strip_tac >>
-  FAIL_TAC "head provenance exposed"
+  Cases_on `?u. step_inst fuel C' y s = OK u`
+  >- (pop_assum (qx_choose_then `u` assume_tac) >>
+      `padM (y::rest) s (mh::mt) =
+         mh :: padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt` by
+        (simp[Abbr `padM`, Abbr `R`] >>
+         ho_match_mp_tac (SRULE [] occurrence_padding_returning_head) >> simp[]) >>
+      `padE (y::rest) s (eh::et) =
+         eh :: padE rest (u with vs_inst_idx := SUC s.vs_inst_idx) et` by
+        (simp[Abbr `padE`, Abbr `R`] >>
+         ho_match_mp_tac (SRULE [] occurrence_padding_returning_head) >> simp[]) >>
+      `dft_remaining_inv fn bb ((pre ++ post) ++ suffix)
+        (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+        (drule_at (Pat `step_inst _ _ _ _ = OK _`)
+           dftRunRelTheory.dft_remaining_inv_step >>
+         disch_then (qspecl_then [`pre`, `post ++ suffix`, `fn`, `bb`] mp_tac) >>
+         impl_tac
+         >- (simp[venomInstTheory.is_terminator_def] >>
+             qpat_assum `dft_remaining_inv fn bb _ s`
+               (mp_tac o PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+             simp[]) >>
+         simp[APPEND_ASSOC]) >>
+      `EVERY (\x. dftGasInvCallPartner$inv_partner_inputs x s u) pre` by
+        (simp[EVERY_MEM] >> rpt strip_tac >>
+         irule invoke_return_partner_inputs >>
+         qexistsl_tac [`C'`, `fuel`, `y`] >> simp[] >>
+         fs[EVERY_MEM]) >>
+      qpat_x_assum `!u v. Abbrev (v = u with vs_inst_idx := _) ==>
+        step_inst fuel C' y s = OK u ==> _`
+        (mp_tac o SRULE [markerTheory.Abbrev_def] o Q.SPEC `u`) >>
+      impl_tac >- simp[] >> strip_tac >>
+      `!rs. ?a. R fuel C pre
+        ((u with vs_inst_idx := SUC s.vs_inst_idx) with vs_gas_readings := rs) = OK a` by
+        (gen_tac >> simp[Abbr `R`] >>
+         irule invoke_partner_prefix_total >>
+         conj_tac
+         >- (qexists_tac `y` >> simp[] >> fs[EVERY_MEM]) >>
+         qexistsl_tac [`bb`, `fn`, `post ++ suffix`] >> simp[] >>
+         irule dftRunRelTheory.dft_remaining_inv_gas_variant >>
+         qexists_tac `u with vs_inst_idx := SUC s.vs_inst_idx` >>
+         simp[] >> metis_tac[APPEND_ASSOC]) >>
+      qpat_assum `Abbrev (T' = _)` (fn def =>
+        qpat_assum `T' rest _ _ _ _ _`
+          (assume_tac o cj 5 o
+           SIMP_RULE bool_ss [REWRITE_RULE [markerTheory.Abbrev_def] def,
+                              markerTheory.Abbrev_def])) >>
+      `!gss tail.
+        LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w))
+          (MAP (\j. EL j (padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt)) rho') gss ==>
+        E C pre (u with <|vs_gas_readings := FLAT gss ++ tail;
+          vs_inst_idx := SUC s.vs_inst_idx|>) =
+        FLAT (TAKE (LENGTH pre)
+          (MAP (\j. EL j (padE rest (u with vs_inst_idx := SUC s.vs_inst_idx) et)) rho'))` by
+        (rpt strip_tac >>
+         qpat_assum `!rs. ?a. R fuel C pre _ = OK a`
+           (qspec_then `FLAT gss ++ tail` (qx_choose_then `a` assume_tac)) >>
+         qpat_x_assum `!gss tail k u'. _`
+           (qspecl_then [`gss`, `tail`, `LENGTH pre`, `a`] mp_tac) >>
+         fs[TAKE_APPEND, venom_state_fupdcanon]) >>
+      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pre` by
+        (fs[EVERY_MEM] >> rpt strip_tac >>
+         first_x_assum (drule_then strip_assume_tac) >>
+         metis_tac[invoke_partner_total_guards]) >>
+      `!rs. E C pre
+        (u with <|vs_gas_readings := rs; vs_inst_idx := SUC s.vs_inst_idx|>) =
+        MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) pre)` by
+        (gen_tac >>
+         qpat_assum `!rs. ?a. R fuel C pre _ = OK a`
+           (qspec_then `rs` (qx_choose_then `a` assume_tac)) >>
+         qpat_assum `Abbrev (R = _)` (fn def =>
+           qpat_x_assum `R fuel C pre _ = OK a`
+             (assume_tac o SIMP_RULE bool_ss [REWRITE_RULE [markerTheory.Abbrev_def] def])) >>
+         drule_all noninvoke_prefix_events_exact >>
+         disch_then (qspecl_then [`owner`, `u.vs_current_bb`, `[]`] mp_tac) >>
+         simp[Abbr `E`, APPEND_NIL, venom_state_fupdcanon] >>
+         disch_tac >>
+         simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]) >>
+      qpat_assum `Abbrev (T' = _)` (fn def =>
+        qpat_assum `T' rest _ _ _ _ _`
+          (assume_tac o cj 3 o
+           SIMP_RULE bool_ss [REWRITE_RULE [markerTheory.Abbrev_def] def,
+                              markerTheory.Abbrev_def])) >>
+      `!gss tail.
+        LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w))
+          (MAP (\j. EL j (padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt)) rho') gss ==>
+        LENGTH (FLAT (TAKE (LENGTH pre) gss)) =
+        LENGTH (FILTER (\i. i.inst_opcode = GAS) pre)` by
+        (rpt strip_tac >>
+         qpat_assum `!gss tail. _ ==> E C pre _ = _`
+           (qspecl_then [`gss`, `tail`] mp_tac) >>
+         (impl_tac >- simp[]) >>
+         qpat_assum `!rs. E C pre _ = _`
+           (qspec_then `FLAT gss ++ tail` (fn th => rewrite_tac[th])) >>
+         disch_tac >>
+         qmatch_asmsub_abbrev_tac `LIST_REL (LIST_REL _) masks gss` >>
+         qmatch_asmsub_abbrev_tac `LIST_REL (\m es. LENGTH m = LENGTH es) masks events` >>
+         `MAP LENGTH masks = MAP LENGTH gss` by
+           (simp[MAP_EQ_EVERY2] >> conj_tac
+            >- metis_tac[LIST_REL_LENGTH] >>
+            irule LIST_REL_mono >>
+            qexists_tac `LIST_REL (\slot w. slot = NONE \/ slot = SOME w)` >>
+            simp[] >> metis_tac[LIST_REL_LENGTH]) >>
+         `MAP LENGTH masks = MAP LENGTH events` by
+           (simp[MAP_EQ_EVERY2] >> metis_tac[LIST_REL_LENGTH]) >>
+         `MAP LENGTH (TAKE (LENGTH pre) gss) =
+          MAP LENGTH (TAKE (LENGTH pre) events)` by
+           (pure_rewrite_tac[MAP_TAKE] >> AP_TERM_TAC >>
+            qpat_x_assum `MAP LENGTH masks = MAP LENGTH gss`
+              (fn th => rewrite_tac[GSYM th]) >>
+            qpat_x_assum `MAP LENGTH masks = MAP LENGTH events`
+              (fn th => rewrite_tac[th])) >>
+         qpat_x_assum `_ = FLAT (TAKE (LENGTH pre) events)`
+           (mp_tac o Q.AP_TERM `LENGTH`) >>
+         simp[rich_listTheory.LENGTH_FLAT]) >>
+      `!rs. ?a. R fuel C pre (s with vs_gas_readings := rs) = OK a` by
+        (gen_tac >> simp[Abbr `R`] >>
+         irule invoke_partner_prefix_total >> conj_tac
+         >- (qexists_tac `y` >> simp[] >> fs[EVERY_MEM]) >>
+         qexistsl_tac [`bb`, `fn`, `(y::post) ++ suffix`] >> simp[] >>
+         irule dftRunRelTheory.dft_remaining_inv_gas_variant >>
+         qexists_tac `s` >> simp[] >> metis_tac[APPEND_ASSOC]) >>
+      `EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x /\
+         dftGasInvCallPartner$inv_partner_inputs x s
+           (u with vs_inst_idx := SUC s.vs_inst_idx)) pre` by
+        (simp[EVERY_MEM] >> gen_tac >> disch_tac >>
+         qpat_assum `EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y) pre`
+           (mp_tac o SRULE [EVERY_MEM]) >>
+         disch_then (drule_then strip_assume_tac) >>
+         qpat_assum `EVERY (\x. dftGasInvCallPartner$inv_partner_inputs x s u) pre`
+           (mp_tac o SRULE [EVERY_MEM]) >>
+         disch_then drule >>
+         simp[dftGasInvCallPartnerTheory.inv_partner_inputs_def] >>
+         rpt strip_tac >> Cases_on `op` >>
+         fs[eval_operand_def, lookup_var_def]) >>
+      qpat_assum `Abbrev (P = _)` (fn def =>
+        qpat_assum `P (y::rest) s (mh::mt) (eh::et)`
+          (mp_tac o cj 5 o SIMP_RULE bool_ss
+            [REWRITE_RULE [markerTheory.Abbrev_def] def,
+             markerTheory.Abbrev_def])) >>
+      disch_then (qspecl_then [`0`, `s`] mp_tac) >>
+      (impl_tac >- simp[Abbr `R`]) >>
+      pure_rewrite_tac[EL, HD] >> strip_tac >>
+      FAIL_TAC "head provenance selected") >>
+  FAIL_TAC "stopped head transport"
 QED
 
 Theorem dft_blocks_gas_mask:
