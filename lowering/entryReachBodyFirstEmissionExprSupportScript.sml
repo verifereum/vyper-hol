@@ -458,12 +458,16 @@ Proof
   map_every qid_spec_tac [`b`, `x`, `a`] >>
   ho_match_mp_tac first_emission_pair_let >> conj_tac
   >- (ho_match_mp_tac first_emission_multi_vvs >> metis_tac[]) >>
+  (* the callee's omitted defaults, compiled after the supplied args *)
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (ho_match_mp_tac first_emission_multi_vvs >> metis_tac[]) >>
   gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
   >- (Cases_on `n > 0` >> simp[]
       >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
           >- metis_tac[first_emission_alloc_buffer] >>
           simp[cs_extends_refl]) >>
-      Cases_on `p0 > 0` >> simp[cs_extends_refl] >>
+      Cases_on `ce.ce_func_return_type (nsid_to_string fid) = NoneT` >>
+      simp[cs_extends_refl] >>
       ho_match_mp_tac first_emission_pair_let >> conj_tac
       >- metis_tac[first_emission_alloc_buffer] >> simp[cs_extends_refl]) >>
   gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac

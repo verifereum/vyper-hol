@@ -133,7 +133,7 @@ Proof
 QED
 
 Theorem first_emission_expr_child_callback[local]:
-  (!ce ty e a x b. expr_size e < bound /\ f ce ty e a = (x,b) ==>
+  (!ce ty e a x b. expr_size e + cenv_defaults_size ce < bound /\ f ce ty e a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
       a.cs_current_insts = b.cs_current_insts) \/
@@ -149,14 +149,14 @@ Theorem first_emission_expr_child_callback[local]:
      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
   strip_tac >> rpt gen_tac >>
-  Cases_on `expr_size e < bound` >> simp[expr_child_callback_def]
-  >- metis_tac[] >>
+  simp[expr_child_callback_def] >> IF_CASES_TAC
+  >- (strip_tac >> first_x_assum (drule_at (Pos last)) >> simp[]) >>
   rewrite_tac[invalid_expr_call_def, LET_THM] >> pairarg_tac >>
   simp[] >> strip_tac >> gvs[] >> imp_res_tac first_emission_emit_helpers >> gvs[]
 QED
 
 Theorem first_emission_builtin_child_callback[local]:
-  (!ce rt ty bi es a x b. list_size expr_size es < bound /\ g ce rt ty bi es a = (x,b) ==>
+  (!ce rt ty bi es a x b. list_size expr_size es + cenv_defaults_size ce < bound /\ g ce rt ty bi es a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
       a.cs_current_insts = b.cs_current_insts) \/
@@ -172,14 +172,14 @@ Theorem first_emission_builtin_child_callback[local]:
      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
   strip_tac >> rpt gen_tac >>
-  Cases_on `list_size expr_size es < bound` >> simp[builtin_child_callback_def]
-  >- metis_tac[] >>
+  simp[builtin_child_callback_def] >> IF_CASES_TAC
+  >- (strip_tac >> first_x_assum (drule_at (Pos last)) >> simp[]) >>
   rewrite_tac[invalid_expr_call_def, LET_THM] >> pairarg_tac >>
   simp[] >> strip_tac >> gvs[] >> imp_res_tac first_emission_emit_helpers >> gvs[]
 QED
 
 Theorem first_emission_type_child_callback[local]:
-  (!ce vt ty tb rt es a x b. list_size expr_size es < bound /\ h ce vt ty tb rt es a = (x,b) ==>
+  (!ce vt ty tb rt es a x b. list_size expr_size es + cenv_defaults_size ce < bound /\ h ce vt ty tb rt es a = (x,b) ==>
     cs_extends a b /\
     ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
       a.cs_current_insts = b.cs_current_insts) \/
@@ -195,8 +195,8 @@ Theorem first_emission_type_child_callback[local]:
      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
   strip_tac >> rpt gen_tac >>
-  Cases_on `list_size expr_size es < bound` >> simp[type_child_callback_def]
-  >- metis_tac[] >>
+  simp[type_child_callback_def] >> IF_CASES_TAC
+  >- (strip_tac >> first_x_assum (drule_at (Pos last)) >> simp[]) >>
   rewrite_tac[invalid_expr_call_def, LET_THM] >> pairarg_tac >>
   simp[] >> strip_tac >> gvs[] >> imp_res_tac first_emission_emit_helpers >> gvs[]
 QED
@@ -316,13 +316,18 @@ Proof
   CONV_TAC (DEPTH_CONV ETA_CONV) >> rpt gen_tac >> strip_tac
   >~ [`compile_expr_body _ _ _ _ _ _ _`] >-
     (irule first_emission_expr_body >> goal_assum (drule_at Any) >> rpt conj_tac
-     >- (match_mp_tac first_emission_expr_child_callback >> metis_tac[])
+     >- (match_mp_tac first_emission_expr_child_callback >>
+     metis_tac[DECIDE ``!a b c d:num. a + b < c + d ==> a + b < d + c``])
      >- (rpt gen_tac >> irule expr_child_callback_labels >> simp[compile_expr_labels])
-     >- (match_mp_tac first_emission_builtin_child_callback >> metis_tac[]) >>
-     match_mp_tac first_emission_type_child_callback >> metis_tac[])
+     >- (match_mp_tac first_emission_builtin_child_callback >>
+     metis_tac[DECIDE ``!a b c d:num. a + b < c + d ==> a + b < d + c``]) >>
+     match_mp_tac first_emission_type_child_callback >>
+     metis_tac[DECIDE ``!a b c d:num. a + b < c + d ==> a + b < d + c``])
   >~ [`compile_builtin_dispatch_body _ _ _ _ _ _ _`] >-
     (irule first_emission_builtin_dispatch >> goal_assum (drule_at Any) >>
-     match_mp_tac first_emission_expr_child_callback >> metis_tac[]) >>
+     match_mp_tac first_emission_expr_child_callback >>
+     metis_tac[DECIDE ``!a b c d:num. a + b < c + d ==> a + b < d + c``]) >>
   irule first_emission_type_builtin_dispatch >> goal_assum (drule_at Any) >>
-  match_mp_tac first_emission_expr_child_callback >> metis_tac[]
+  match_mp_tac first_emission_expr_child_callback >>
+     metis_tac[DECIDE ``!a b c d:num. a + b < c + d ==> a + b < d + c``]
 QED
