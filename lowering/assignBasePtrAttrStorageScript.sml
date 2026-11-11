@@ -227,6 +227,19 @@ Resume assign_base_attr_storage_normal_ptr[store]:
     (Q.INST [`right` |-> `[]`] gas_marked_exec_ptr_bind_normal)) >>
   qexistsl_tac [`G`, `ee`, `s`, `tn`, `raw`] >> simp[] >>
   fs[gas_marked_exec_ptr_def] >>
+  `!ss0. (do
+       v <- read_result cx raw;
+       p <- eval_target_place cx (AttributeTarget (TopLevelNameTarget (src,id)) fld);
+       write_place cx p v
+     od) ss0 =
+     (do
+       p <- eval_target_place cx (AttributeTarget (TopLevelNameTarget (src,id)) fld);
+       v <- read_result cx raw;
+       write_place cx p v
+     od) ss0` by
+    (drule_all assign_base_attr_storage_target >> disch_then SUBST1_TAC >>
+     simp[bind_def, return_def]) >>
+  pop_assum (fn th => rewrite_tac[th]) >>
   metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES]
 QED
 Finalise assign_base_attr_storage_normal_ptr
@@ -383,7 +396,7 @@ Proof
   `cx_tops cx = tops` by (irule cx_tops_module >> fs[body_inv_def]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def,supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat,supported_stmt_expr_exists_def,
        supported_assignment_exists_def,supported_expr_exists_def,
        int_calls_stmt_def,int_calls_atarget_def,int_calls_expr_def] >>
      (conj_tac >- fs[body_inv_def]) >> qexists_tac `[]` >> simp[]) >>
