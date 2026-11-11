@@ -53,7 +53,7 @@ Proof
   qmatch_asmsub_abbrev_tac `compile_alloc_buffer sz sa` >>
   gvs[] >>
   drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`) aggregate_struct_fields_sim_mem >>
-  simp[] >> disch_then drule >> disch_then drule >>
+  simp[] >> disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[] >>

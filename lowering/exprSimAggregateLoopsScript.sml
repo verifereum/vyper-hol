@@ -1140,12 +1140,13 @@ Theorem aggregate_member_not_flat:
 Proof
   Induct >> rpt gen_tac >> Cases_on `args` >> simp[] >>
   rename1 `LIST_REL _ tys rest` >> rename1 `arg_type_fits (expr_type e0) t0` >>
-  strip_tac >>
-  Cases_on `t0 = expr_type e0 \/
-    is_bytestring_type t0 /\ is_bytestring_type (expr_type e0)`
-  >- (gvs[] >> first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
-  qexistsl [`t0`, `e0`] >> gvs[] >>
-  metis_tac[compileEnvTheory.arg_type_fits_bytestring_source]
+  rpt strip_tac >>
+  (Cases_on `LIST_REL (\t e. t = expr_type e \/
+     is_bytestring_type t /\ is_bytestring_type (expr_type e)) tys rest`
+   >- (gvs[] >> qexistsl [`t0`, `e0`] >> gvs[] >>
+       metis_tac[compileEnvTheory.arg_type_fits_bytestring_source]) >>
+   first_x_assum (qspec_then `rest` mp_tac) >> impl_tac >- fs[] >>
+   strip_tac >> metis_tac[])
 QED
 
 Theorem aggregate_make_tuple_fits_sim:
@@ -1321,7 +1322,7 @@ Proof
   (impl_tac >- (simp[] >> conj_tac >- metis_tac[] >>
     first_assum ACCEPT_TAC)) >>
   strip_tac >> simp[] >>
-  imp_res_tac LIST_REL_LENGTH >>
+  imp_res_tac listTheory.LIST_REL_LENGTH >>
   drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[] >> strip_tac >>
   irule struct_gas_outcome_post >>
   goal_assum (drule_at Any) >>
@@ -1487,10 +1488,10 @@ Proof
   strip_tac >>
   `OPT_MMAP (evaluate_type (get_tenv cx)) (REPLICATE (LENGTH args) elem_ty) =
      SOME (REPLICATE (LENGTH args) tv)` by
-    (Q.SPEC_TAC (`LENGTH args`, `n`) >> Induct >> gvs[listTheory.REPLICATE]) >>
+    (Q.SPEC_TAC (`LENGTH args`, `n`) >> Induct >> gvs[rich_listTheory.REPLICATE]) >>
   `LIST_REL (\t e. arg_type_fits (expr_type e) t)
      (REPLICATE (LENGTH args) elem_ty) args` by
-    gvs[LIST_REL_EL_EQN, rich_listTheory.EL_REPLICATE, EVERY_EL] >>
+    gvs[listTheory.LIST_REL_EL_EQN, rich_listTheory.EL_REPLICATE, listTheory.EVERY_EL] >>
   `compile_make_tuple compile_expr ce args (REPLICATE (LENGTH args) elem_ty)
      (Var x) off sa = (out,sb)` by
     (gvs[] >> metis_tac[]) >>

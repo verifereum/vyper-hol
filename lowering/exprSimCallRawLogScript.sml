@@ -42,7 +42,8 @@ Proof
   strip_tac >> gvs[]
   >- (Cases_on `topic_ann` >> simp[]) >>
   gvs[EVERY_MEM] >>
-  metis_tac[arg_type_fits_prim_word, is_prim_word_type_def, LESS_EQ_REFL]
+  metis_tac[arg_type_fits_prim_word, is_prim_word_type_def,
+            arithmeticTheory.LESS_EQ_REFL]
 QED
 
 Theorem raw_log_child_pre[local]:

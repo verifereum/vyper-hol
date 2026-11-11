@@ -83,7 +83,7 @@ Proof
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME (_,_)`)) >>
   disch_then (qspecl_then [`es`, `func`] mp_tac) >>
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >> simp[] >>
-  imp_res_tac LIST_REL_LENGTH >>
+  imp_res_tac listTheory.LIST_REL_LENGTH >>
   drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[] >> strip_tac >>
   irule struct_gas_outcome_post >>
   goal_assum (drule_at Any) >>
@@ -161,10 +161,10 @@ Proof
   strip_tac >>
   `OPT_MMAP (evaluate_type (get_tenv cx)) (REPLICATE (LENGTH args) elem_ty) =
      SOME (REPLICATE (LENGTH args) tv)` by
-    (Q.SPEC_TAC (`LENGTH args`, `n`) >> Induct >> gvs[listTheory.REPLICATE]) >>
+    (Q.SPEC_TAC (`LENGTH args`, `n`) >> Induct >> gvs[rich_listTheory.REPLICATE]) >>
   `LIST_REL (\t e. arg_type_fits (expr_type e) t)
      (REPLICATE (LENGTH args) elem_ty) args` by
-    gvs[LIST_REL_EL_EQN, rich_listTheory.EL_REPLICATE, EVERY_EL] >>
+    gvs[listTheory.LIST_REL_EL_EQN, rich_listTheory.EL_REPLICATE, listTheory.EVERY_EL] >>
   `compile_make_tuple compile_expr ce args (REPLICATE (LENGTH args) elem_ty)
      (Var x) off sa = (out,sb)` by
     (gvs[] >> metis_tac[]) >>
