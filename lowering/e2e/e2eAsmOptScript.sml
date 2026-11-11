@@ -93,7 +93,8 @@ Proof
 QED
 
 (* The swapped frame's entry state reads everything but the code and the
-   layout from es, and its code is prog's followed by es's section. *)
+   layout from es; its code is prog's followed by the section es's code
+   has after prog'. *)
 Theorem opt_entry_fields:
   !tops prog prog' am tx es cp.
   call_state_rel tops (assemble prog') am tx es ==>
@@ -103,8 +104,7 @@ Theorem opt_entry_fields:
     vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\
     vs.vs_call_ctx.cc_calldata =
       buffer_to_list (FST (HD es.contexts)).msgParams.data /\
-    vs.vs_data_section =
-      DROP (LENGTH (assemble prog')) (FST (HD es.contexts)).msgParams.code /\
+    vs.vs_fmp = vs.vs_initial_fmp /\ ~vs.vs_call_ctx.cc_static /\
     vs.vs_code = assemble prog ++ vs.vs_data_section /\
     (FST (HD es.contexts)).msgParams.code =
       assemble prog' ++ vs.vs_data_section /\
