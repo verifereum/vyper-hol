@@ -1,6 +1,6 @@
 Theory regularWriteEmitSim
 Ancestors
-  regularCallEmitSim regularMemorySim emitSim asmOpSim instSimHelpers
+  memoryReadRel regularCallEmitSim regularMemorySim emitSim asmOpSim instSimHelpers
   spillSim stackOpSim stackModel codegenRel list rich_list arithmetic
   venomState asmSem planSpillBounds strongPrefixSim venomExecSemantics
   stackPlanGen contextCodegenRel asmIR byte venomInst vfmState vfmExecution

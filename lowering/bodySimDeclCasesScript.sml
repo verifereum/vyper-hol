@@ -43,7 +43,7 @@ Ancestors
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeValues
   vyperTypeEvalSoundness vyperTypeEnvPreservation vyperTypeEnvExtension
   vyperTypeScopePop vyperEvalOutcomeSuffix vyperTypeCallGraph
-  vyperEvalPreservesScopes
+  vyperEvalPreservesScopes bodyStorageCases evalNoHalt
   vyperTypeCallStackSoundness compileVyper moduleLowering intCallCallee
 Libs
   monadsyntax
@@ -796,14 +796,15 @@ Proof
   `!k. well_typed_literal typ (IntL k) ==> value_has_type tyv (IntV k)` by
     (rpt strip_tac >> drule_all well_typed_literal_sound >>
      simp[vyperValueOperationTheory.evaluate_literal_def]) >>
-  `GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)) <> [] ==>
+  `GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)) <> [] ==>
    body_stmts_ok cx stmts` by
     (strip_tac >>
      first_x_assum (qspecl_then [`get_tenv cx`, `es`, `tyv`, `es`, `es`,
-       `GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))`, `es`, `es`, `()`,
+       `GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))`, `es`, `es`, `()`,
        `es`] mp_tac) >>
      simp[lift_option_type_def, return_def, eval_iterator_range_lit,
-          check_def, assert_def, compatible_bound_def, body_for_ok_def]) >>
+          check_def, assert_def, compatible_bound_def, body_for_ok_def] >>
+     Cases_on `Num (n2 - n1)` >> fs[GENLIST_CONS, read_result_def, return_def]) >>
   `Num (n2 - n1) < dimword (:256)` by metis_tac[range_end_words] >>
   `cenv.ce_alloca_locals` by fs[body_inv_def] >>
   `lookup_scopes id es.scopes = NONE` by
@@ -812,6 +813,9 @@ Proof
      res_tac >> gvs[FLOOKUP_DEF]) >>
   drule_all is_int_type_word >> strip_tac >>
   drule_all word_type_sizes >> disch_then (qspec_then `cenv` strip_assume_tac) >>
+  `word_memory_type tyv` by
+    (qspecl_then [`get_tenv cx`, `typ`, `tyv`] mp_tac
+       loweringSliceTheory.evaluate_word_memory_type >> simp[]) >>
   `call_evaluation_safe cx (int_calls_stmts stmts)` by
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
   `stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) stmts /\
@@ -934,15 +938,15 @@ Proof
   map_every qx_gen_tac [`cx`, `id`, `typ`, `e1`, `e2`, `bound`, `stmts`, `tyv`] >>
   rpt gen_tac >> strip_tac >>
   `eval_iterator cx (Range e1 e2) es0 =
-   (INL (GENLIST (\j. IntV (lo + &j)) (Num (hi - lo))), es2)` by
+   (INL (GENLIST (\j. Value (IntV (lo + &j))) (Num (hi - lo))), es2)` by
     (gvs[bind_def, AllCaseEqs()] >>
      simp[Once evaluate_def, bind_def, get_range_limits_def,
           lift_sum_def, return_def]) >>
   gvs[lift_option_type_def, return_def, check_def, assert_def,
       compatible_bound_def] >>
   first_x_assum drule >>
-  simp[body_for_ok_def, GENLIST_EQ_NIL] >>
-  Cases_on `hi = lo` >> gvs[]
+  simp[body_for_ok_def] >>
+  Cases_on `Num (hi - lo)` >> fs[GENLIST_CONS, read_result_def, return_def]
 QED
 
 (* The enclosing For carries both traversal and allocation safety for its body. *)
@@ -1191,7 +1195,7 @@ Theorem array_for_source_ready[local]:
     0 < n /\ n < dimword (:256) /\ entry.value = ArrayV (SArrayV al) /\
     vs = array_elements (ArrayTV tv (Fixed n)) (SArrayV al) /\ LENGTH vs = n /\
     (!gs. eval_iterator cx (Array (Name (ArrayT typ (Fixed n)) name))
-            (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) /\
+            (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
     body_stmts_ok cx stmts /\
     FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE
 Proof
@@ -1209,19 +1213,20 @@ Proof
         env_scopes_consistent_def] >> metis_tac[]) >>
   `!gs. eval_iterator cx (Array (Name (ArrayT typ (Fixed n)) name))
           (es with gas_obs := gs) =
-        (INL (array_elements (ArrayTV tv (Fixed n)) (SArrayV al)),
+        (INL (MAP Value (array_elements (ArrayTV tv (Fixed n)) (SArrayV al))),
          es with gas_obs := gs)` by
     (gen_tac >> irule eval_iterator_fixed_name >> simp[]) >>
   drule_all eval_iterator_fixed_name >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `INL vs` >>
+  qmatch_asmsub_abbrev_tac `INL (MAP Value vs)` >>
   `LENGTH vs = n` by simp[Abbr `vs`, fixed_array_elements_length] >>
-  `body_for_ok cx tv id stmts vs` by
+  `body_for_ok cx tv id stmts (MAP Value vs)` by
     (qpat_x_assum `!s tyv t s3 vs t3 s4 t4. _` mp_tac >>
      simp[lift_option_type_def, return_def, check_def, assert_def,
           compatible_bound_def] >> disch_then irule >> simp[] >>
      qexistsl_tac [`es`, `es`] >> simp[]) >>
   `body_stmts_ok cx stmts` by
-    (fs[body_for_ok_def] >> `vs <> []` by (strip_tac >> gvs[]) >> metis_tac[]) >>
+    (fs[body_for_ok_def] >> `vs <> []` by (strip_tac >> gvs[]) >>
+     Cases_on `vs` >> gvs[read_result_def, return_def]) >>
   `FLOOKUP cenv.ce_vars id = NONE` by
     (irule declared_name_unbound >> metis_tac[]) >>
   `lookup_scopes id es.scopes = NONE` by
@@ -1314,11 +1319,13 @@ Proof
 QED
 
 Theorem array_body_result_ok:
-  !cx stmts cenv env ei id typ tv v ret_ty env_b r ef.
+  !cx stmts cenv env ei id typ tv v ret_ty env_b r ef tops bindings.
     expr_sim_inv cenv cx env ei /\ id NOTIN FDOM env.var_types /\
     evaluate_type (get_tenv cx) typ = SOME tv /\ value_has_type tv v /\
     type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
     call_evaluation_safe cx (int_calls_stmts stmts) /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    supported_stmts tops bindings stmts /\
     eval_stmts cx stmts
       (ei with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := v;
@@ -1326,6 +1333,11 @@ Theorem array_body_result_ok:
     !ex inc. stmt_res_ok (InLoop ex inc) r
 Proof
   rpt gen_tac >> strip_tac >>
+  `r <> INR HaltException` by
+    (imp_res_tac (cj 2 supported_stmts_storage_syntax) >>
+     `!st st'. eval_stmts cx stmts st <> (INR HaltException, st')` by
+       (rpt gen_tac >> irule (cj 4 eval_no_halt) >> metis_tac[]) >>
+     strip_tac >> gvs[] >> metis_tac[]) >>
   rule_assum_tac (REWRITE_RULE [scopes_CONS_updated]) >>
   `env_consistent (extend_local env id typ F) cx
      (ei with scopes updated_by

@@ -54,7 +54,7 @@ Proof
  `live_vars_at (liveness_analyze fn) bb.bb_label k =
    liveness_transfer fn.fn_blocks (EL k bb.bb_instructions)
      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k))` by
-   (drule livenessAnalysisPropsTheory.live_vars_at_transfer >>
+   (drule livenessProofsTheory.live_vars_at_transfer >>
     disch_then (qspecl_then [`bb.bb_label`, `bb`, `k`] mp_tac) >> simp[]) >>
  `inst_defs (EL k bb.bb_instructions) = []` by
    (gvs[fn_inst_wf_def, codegen_ready_fn_def] >>
@@ -63,6 +63,6 @@ Proof
        irule EL_MEM >> decide_tac) >>
     gvs[inst_wf_def, inst_defs_def]) >>
  gvs[pred_setTheory.SUBSET_DEF, MEM_MAP, livenessDefsTheory.liveness_transfer_def,
-     livenessProofsTheory.live_update_mem, pred_setTheory.EXTENSION] >>
+     livenessTransferProofsTheory.live_update_mem, pred_setTheory.EXTENSION] >>
  metis_tac[]
 QED

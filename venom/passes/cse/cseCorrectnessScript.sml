@@ -19,6 +19,7 @@ Ancestors
   passTransform passSimulationDefs passSimulationProps analysisSimProps
   removeUnusedProofs
   indexedLists list rich_list relation While
+  cfgCorrectnessProof
 Libs
   BasicProvers
 

@@ -10,7 +10,7 @@
 Theory tailMergeStep
 Ancestors
   venomCallOracleDefs venomWf
-  stateEquiv venomExecSemantics execEquivProofs list rich_list
+  stateEquiv venomExecSemantics execEquivProofs list rich_list venomExecProofs
 Libs
   stateEquivTheory stateEquivProofsTheory
   venomExecSemanticsTheory venomInstTheory venomStateTheory

@@ -80,7 +80,7 @@ Proof
   `(\st. Q st /\ (!lbl. P (df_boundary bottom st lbl)) /\
     st.ds_inst = FEMPTY) (SND (wl_iterate changed process deps wl initial))`
     suffices_by simp[] >>
-  irule wl_iterate_invariant_proof >> simp[] >>
+  irule wl_iterate_invariant >> simp[] >>
   conj_tac >- simp[Abbr `changed`, Abbr `process`, le_df_process_changed] >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >> conj_tac

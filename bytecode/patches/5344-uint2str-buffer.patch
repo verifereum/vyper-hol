@@ -1,0 +1,21 @@
+Upstream: https://github.com/vyperlang/vyper/pull/5344
+Status: merged (e1557a510fb41adaa5af871fb4735f0add1fa66a)
+Scope: the digit buffer of uint2str; the unit test is not ported.
+
+diff --git a/vyper/codegen_venom/builtins/strings.py b/vyper/codegen_venom/builtins/strings.py
+index 03017b90..68830b4d 100644
+--- a/vyper/codegen_venom/builtins/strings.py
++++ b/vyper/codegen_venom/builtins/strings.py
+@@ -51,9 +51,9 @@ def lower_uint2str(node: vy_ast.Call, ctx: VenomCodegenContext) -> VyperValue:
+     else:
+         n_digits = out_t.maxlen
+ 
+-    # Allocate buffer
+-    out_val = ctx.new_temporary_value(out_t)
+-    buf = out_val.operand
++    # The result starts up to n_digits bytes into the buffer, so leave
++    # room for a full `out_t` after it: consumers may copy that much.
++    buf = ctx.allocate_buffer(out_t.memory_bytes_required + n_digits, "uint2str")._ptr
+ 
+     # Mutable variables
+     val = b.new_variable()
