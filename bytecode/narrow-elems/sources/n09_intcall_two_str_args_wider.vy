@@ -5,5 +5,7 @@ def h(x: String[40], y: String[40]) -> uint256:
     return len(x) + len(y)
 
 @external
-def d(s: String[5], t: String[5]) -> uint256:
+def d() -> uint256:
+    s: String[5] = "hello"
+    t: String[5] = "world"
     return self.h(s, t)
