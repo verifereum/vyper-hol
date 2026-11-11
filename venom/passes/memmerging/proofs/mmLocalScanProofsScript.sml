@@ -14185,7 +14185,7 @@ Proof
   fs[venomStateTheory.mload_def, venomStateTheory.read_memory_def] >> gvs[]
 QED
 
-Theorem mm_local_retained_operand_agreement[local]:
+Theorem mm_local_retained_operand_not_deleted[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
   mm_local_prefix fn0 supply index k = (bb,sk) /\
@@ -14194,10 +14194,9 @@ Theorem mm_local_retained_operand_agreement[local]:
   rs = rep_map_of_groups bb.bb_instructions
     (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
   excluded = {v | ?q. MEM q bb.bb_instructions /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
-  (!v. v NOTIN excluded ==> lookup_var v s = lookup_var v t) /\
   MEM inst bb.bb_instructions /\ MEM v (venomInst$inst_uses inst) /\
   apply_groups_inst_supply mode ns rs es inst = ([inst],es') ==>
-  lookup_var v s = lookup_var v t
+  v NOTIN excluded
 Proof
   strip_tac >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
@@ -14223,6 +14222,65 @@ Proof
         qexistsl [`[inst]`, `es`, `es'`] >> simp[]) >>
      gvs[]) >>
   metis_tac[]
+QED
+
+Theorem mm_local_retained_operand_agreement[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  rs = rep_map_of_groups bb.bb_instructions
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  excluded = {v | ?q. MEM q bb.bb_instructions /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  (!v. v NOTIN excluded ==> lookup_var v s = lookup_var v t) /\
+  MEM inst bb.bb_instructions /\ MEM v (venomInst$inst_uses inst) /\
+  apply_groups_inst_supply mode ns rs es inst = ([inst],es') ==>
+  lookup_var v s = lookup_var v t
+Proof
+  metis_tac[mm_local_retained_operand_not_deleted]
+QED
+
+Theorem mm_local_retained_operand_protected[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  rs = rep_map_of_groups bb.bb_instructions
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  deleted = {v | ?q. MEM q bb.bb_instructions /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
+  MEM inst bb.bb_instructions /\ MEM v (venomInst$inst_uses inst) /\
+  apply_groups_inst_supply mode ns rs es inst = ([inst],es') ==>
+  MEM v sk.irs_used_vars /\ v NOTIN deleted /\ v NOTIN excluded
+Proof
+  strip_tac >>
+  `v NOTIN deleted` by
+    (irule mm_local_retained_operand_not_deleted >> metis_tac[]) >>
+  `ir_supply_covers_fn sk (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)` by
+    (irule mm_local_prefix_supply_covers >> metis_tac[]) >>
+  `MEM bb (LUPDATE bb index fn0.fn_blocks)` by
+    (simp[MEM_EL] >> qexists `index` >> simp[EL_LUPDATE]) >>
+  `mm_local_inst_covered sk inst` by
+    (gvs[mm_local_supply_coverage, EVERY_MEM] >> metis_tac[]) >>
+  gvs[mm_local_inst_covered_def, irSupplyTheory.inst_ir_vars_def,
+    list_subset_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem mm_local_emission_fresh_excluded[local]:
+  mm_flat_map_supply (apply_groups_inst_supply mode ns rs) sk xs = (out,es) /\
+  fresh_inst_id es = (lid,es1) /\ fresh_ir_var es1 = (v,es2) /\
+  excluded = {x | ~MEM x sk.irs_used_vars \/ x IN deleted} ==>
+  v IN excluded
+Proof
+  strip_tac >>
+  `ir_supply_extends sk es` by
+    (drule_at (Pat `mm_flat_map_supply _ _ _ = _`) mm_local_list_resources >>
+     (impl_tac >- metis_tac[mm_local_mode_resources]) >> simp[]) >>
+  drule irSupplyTheory.fresh_ir_var_contract >>
+  gvs[irSupplyTheory.fresh_inst_id_def, ir_supply_extends_def,
+    list_subset_def, EVERY_MEM] >> metis_tac[]
 QED
 
 Definition mm_local_nonmemory_frame_def:
@@ -14506,7 +14564,7 @@ Proof
     venomStateTheory.update_var_def]
 QED
 
-Theorem mm_local_cut_erased_load_transition[local]:
+Theorem mm_local_cut_erased_load_excluded_transition[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
@@ -14515,7 +14573,7 @@ Theorem mm_local_cut_erased_load_transition[local]:
   gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
   ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
   rs = rep_map_of_groups is gs /\
-  excluded = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} SUBSET excluded /\
   phi_prefix_length is <= n /\ n < LENGTH is /\
   MEM (EL n is).inst_id ns /\ (EL n is).inst_opcode = MLOAD /\
   mm_local_cut is gs H n excluded pc t /\
@@ -14539,11 +14597,64 @@ Proof
     (rpt strip_tac >>
      `~MEM v (EL n is).inst_outputs` by
        (strip_tac >> `MEM (EL n is) is` by metis_tac[EL_MEM] >>
-        qpat_x_assum `v NOTIN excluded` mp_tac >> simp[] >> metis_tac[]) >>
+        fs[pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
      irule venomInstPropsTheory.step_preserves_non_output_vars >>
      qexistsl [`ctx`,`fuel`,`EL n is`] >> simp[venomInstTheory.is_terminator_def]) >>
   irule mm_local_cut_nop_stutter >>
   gvs[venomStateTheory.lookup_var_def]
+QED
+
+Theorem mm_local_cut_erased_load_transition[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  excluded = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  phi_prefix_length is <= n /\ n < LENGTH is /\
+  MEM (EL n is).inst_id ns /\ (EL n is).inst_opcode = MLOAD /\
+  mm_local_cut is gs H n excluded pc t /\
+  step_inst fuel ctx (EL n is) (H n) = OK s /\
+  H (SUC n) = s with vs_inst_idx := SUC (H n).vs_inst_idx ==>
+  apply_groups_inst_supply Mem2Mem ns rs es (EL n is) = ([mk_nop_from (EL n is)],es) /\
+  step_inst fuel ctx (mk_nop_from (EL n is)) t = OK t /\
+  mm_local_cut is gs H (SUC n) excluded (SUC pc)
+    (t with vs_inst_idx := SUC pc)
+Proof
+  strip_tac >> irule mm_local_cut_erased_load_excluded_transition >>
+  simp[] >> metis_tac[pred_setTheory.SUBSET_REFL]
+QED
+
+Theorem mm_local_cut_representative_protected_operands[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ r < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM g gs /\ rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  deleted = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
+  mm_local_cut is gs H r excluded pc t /\
+  (EL r is).inst_opcode = MSTORE /\ g.cg_length = 32 ==>
+  !w. MEM (Var w) (EL r is).inst_operands ==>
+    lookup_var w (H r) = lookup_var w t
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `ALOOKUP rs (EL r is).inst_id = SOME g /\ ~MEM (EL r is).inst_id ns` by
+    metis_tac[mm_local_prefix_selected_rep, EL_MEM] >>
+  `apply_groups_inst_supply Mem2Mem ns rs es (EL r is) = ([EL r is],es)` by
+    simp[apply_groups_inst_supply_def] >>
+  `w NOTIN excluded` by
+    (irule (cj 3 mm_local_retained_operand_protected) >>
+     simp[] >> metis_tac[EL_MEM, venomWfPropsTheory.operand_var_in_inst_uses]) >>
+  fs[mm_local_cut_def]
 QED
 
 Theorem mm_local_cut_init[local]:
