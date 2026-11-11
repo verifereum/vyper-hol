@@ -321,7 +321,8 @@ Proof
         fs[bodyIntCallJointContractTheory.intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
         rpt strip_tac >> gvs[]) >>
      fs[bodyIntCallJointContractTheory.intcall_expr_cont_def,
-        bodyIntCallJointContractTheory.intcall_joint_res_def]) >>
+        bodyIntCallJointContractTheory.intcall_joint_res_def,
+        bodyIntCallJointContractTheory.intcall_expr_res_def]) >>
   drule placeMemoryCopyEffectTheory.typed_copy_effect_endpoint >> strip_tac >>
   irule intcall_target_cont >> simp[] >>
   fs[bodyIntCallJointContractTheory.intcall_expr_cont_def,
