@@ -14130,6 +14130,101 @@ Proof
     venomStateTheory.write_memory_with_expansion_def, venomStateTheory.lookup_var_def]
 QED
 
+Theorem mm_local_runtime_representative_store_payload[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\ h = phi_prefix_length is /\ h <= r /\ r < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  (EL r is).inst_opcode = MSTORE /\ (EL r is).inst_operands = [Lit dst; Var v] /\
+  g.cg_length = 32 /\
+  (!q. h <= q /\ q < r ==> ~is_terminator (EL q is).inst_opcode /\
+    ?z. step_inst fuel ctx (EL q is) (H q) = OK z /\
+      H (SUC q) = z with vs_inst_idx := SUC (H q).vs_inst_idx) /\
+  a = mm_local_epoch_start is gs r /\
+  u = FOLDL (\st q. if MEM q (mm_local_pending_indices is gs r) then st else
+    case mm_local_write_capture is H (SUC r) q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) /\
+  t.vs_memory = u.vs_memory ==>
+  g.cg_dst = w2n dst /\ lookup_var v (H r) = SOME (mload g.cg_src t)
+Proof
+  strip_tac >>
+  qabbrev_tac `due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r)` >>
+  qabbrev_tac `s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+    empty_scan_state (TAKE r is)` >>
+  `MEM r (due ++ [r])` by simp[] >>
+  `due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r)` by simp[Abbr `due`] >>
+  `s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+    empty_scan_state (TAKE r is)` by simp[Abbr `s0`] >>
+  drule_all mm_local_canonical_due_birth_geometry >> strip_tac
+  >- (qpat_x_assum `(EL r is).inst_opcode = MCOPY` mp_tac >> simp[]) >>
+  qpat_x_assum `(EL r is).inst_operands = [Lit dj; Var vj]` mp_tac >>
+  simp[] >> strip_tac >>
+  fs[] >>
+  `g.cg_dst = w2n dj /\ srcj = g.cg_src` by fs[] >>
+  `lookup_var vj (H r) = SOME (mload g.cg_src (H r))` by
+    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_runtime_live_load >>
+     disch_then irule >> goal_assum (drule_at Any) >>
+     simp[] >> qexistsl [`ctx`,`fuel`] >> gvs[]) >>
+  `!q. a <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H (SUC r) q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory` by
+    metis_tac[mm_local_runtime_epoch_recurrence] >>
+  `read_memory c.cg_src c.cg_length t = read_memory c.cg_src c.cg_length (H r)` by
+    (irule (cj 1 mm_local_epoch_source_read_interval) >>
+     goal_assum (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `t.vs_memory = _`)) >>
+     goal_assum (drule_at (Pat `a = mm_local_epoch_start _ _ _`)) >>
+     gvs[]) >>
+  qpat_x_assum `c = _` SUBST_ALL_TAC >>
+  fs[venomStateTheory.mload_def, venomStateTheory.read_memory_def] >> gvs[]
+QED
+
+Theorem mm_local_retained_operand_agreement[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  rs = rep_map_of_groups bb.bb_instructions
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  excluded = {v | ?q. MEM q bb.bb_instructions /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  (!v. v NOTIN excluded ==> lookup_var v s = lookup_var v t) /\
+  MEM inst bb.bb_instructions /\ MEM v (venomInst$inst_uses inst) /\
+  apply_groups_inst_supply mode ns rs es inst = ([inst],es') ==>
+  lookup_var v s = lookup_var v t
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `fn_inst_wf (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)` by
+    metis_tac[mm_local_prefix_inst_wf] >>
+  `MEM bb (LUPDATE bb index fn0.fn_blocks)` by
+    (simp[MEM_EL] >> qexists `index` >> simp[EL_LUPDATE]) >>
+  `!q. MEM q bb.bb_instructions ==> inst_wf q` by
+    (gvs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
+  `v NOTIN excluded` by
+    (strip_tac >> gvs[] >>
+     `~MEM q.inst_id
+       (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+         (scan_block (dfg_build_function fn0) mode bb).ss_flushed)` by
+       (irule mm_local_surviving_demand_not_deleted >>
+        goal_assum (drule_at Any) >>
+        goal_assum (drule_at Any) >> simp[] >>
+        goal_assum (drule_at Any) >>
+        goal_assum (drule_at Any) >> simp[] >>
+        goal_assum (drule_at Any) >>
+        goal_assum (drule_at Any) >> simp[] >>
+        qexistsl [`[inst]`, `es`, `es'`] >> simp[]) >>
+     gvs[]) >>
+  metis_tac[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
