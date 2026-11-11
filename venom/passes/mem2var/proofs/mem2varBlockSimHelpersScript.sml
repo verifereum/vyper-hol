@@ -1,6 +1,6 @@
 Theory mem2varBlockSimHelpers
 Ancestors
-  venomCallOracleDefs venomCallOracleProps
+  venomFnInstsProofs venomCallOracleDefs venomCallOracleProps
   oracleExecProps
   mem2varProofs passSharedFrame passSharedTransfer passSharedField instIdxIndep
   opcodeClass contextCodegenRelProps
@@ -275,91 +275,6 @@ QED
    EXEC_BLOCK PREFIX FACTORING
    ================================================================ *)
 
-(* step_inst idx independence for non-terminator non-INVOKE *)
-Theorem step_inst_idx_indep_local:
-  !fuel ctx inst s n.
-    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
-    step_inst fuel ctx inst (s with vs_inst_idx := n) =
-    exec_result_map (\s'. s' with vs_inst_idx := n)
-      (step_inst fuel ctx inst s)
-Proof
-  rw[step_inst_non_invoke, step_inst_inst_idx_indep]
-QED
-
-(* Skip prefix: if run_insts returns OK, exec_block can skip ahead *)
-Theorem exec_block_skip_prefix:
-  !prefix fuel ctx bb s j s'.
-    j + LENGTH prefix <= LENGTH bb.bb_instructions /\
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
-      prefix /\
-    (!k. k < LENGTH prefix ==>
-         EL (j + k) bb.bb_instructions = EL k prefix) /\
-    run_insts fuel ctx prefix s = OK s' ==>
-    exec_block fuel ctx bb (s with vs_inst_idx := j) =
-    exec_block fuel ctx bb (s' with vs_inst_idx := j + LENGTH prefix)
-Proof
-  Induct >> rw[run_insts_def] >>
-  rename1 `h :: prefix` >>
-  `j < LENGTH bb.bb_instructions` by simp[] >>
-  `EL j bb.bb_instructions = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `step_inst fuel ctx h (s with vs_inst_idx := j) =
-   exec_result_map (\s'. s' with vs_inst_idx := j)
-     (step_inst fuel ctx h s)` by
-    simp[step_inst_idx_indep_local] >>
-  Cases_on `step_inst fuel ctx h s` >> gvs[exec_result_map_def] >>
-  rename1 `step_inst _ _ h s = OK s1` >>
-  `s1.vs_inst_idx = s.vs_inst_idx` by
-    metis_tac[step_inst_preserves_inst_idx] >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
-  simp[get_instruction_def] >>
-  `EL j bb.bb_instructions = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  gvs[] >>
-  first_x_assum (qspecl_then [`fuel`, `ctx`, `bb`, `s1`,
-    `SUC j`, `s'`] mp_tac) >>
-  simp[arithmeticTheory.ADD_CLAUSES] >>
-  impl_tac >- (rw[] >>
-    first_x_assum (qspec_then `SUC k` mp_tac) >>
-    simp[arithmeticTheory.ADD_CLAUSES]) >>
-  simp[]
-QED
-
-(* Error propagation: if run_insts returns Error, exec_block does too *)
-Theorem exec_block_prefix_error:
-  !prefix fuel ctx bb s j e.
-    j + LENGTH prefix <= LENGTH bb.bb_instructions /\
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
-      prefix /\
-    (!k. k < LENGTH prefix ==>
-         EL (j + k) bb.bb_instructions = EL k prefix) /\
-    run_insts fuel ctx prefix s = Error e ==>
-    exec_block fuel ctx bb (s with vs_inst_idx := j) = Error e
-Proof
-  Induct >> simp[run_insts_def] >>
-  rpt gen_tac >> strip_tac >>
-  rename1 `h :: prefix` >>
-  fs[EVERY_DEF] >>
-  `j < LENGTH bb.bb_instructions` by simp[] >>
-  `EL j bb.bb_instructions = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `step_inst fuel ctx h (s with vs_inst_idx := j) =
-   exec_result_map (\s'. s' with vs_inst_idx := j)
-     (step_inst fuel ctx h s)` by
-    simp[step_inst_idx_indep_local] >>
-  ONCE_REWRITE_TAC[exec_block_def] >>
-  simp[get_instruction_def] >>
-  Cases_on `step_inst fuel ctx h s` >>
-  gvs[exec_result_map_def, Once run_insts_def] >>
-  rename1 `step_inst _ _ h s = OK s'` >>
-  first_x_assum (qspecl_then [`fuel`, `ctx`, `bb`, `s'`,
-    `SUC j`, `e`] mp_tac) >>
-  simp[] >> impl_tac >- (simp[] >> rpt strip_tac >>
-    first_x_assum (qspec_then `SUC k` mp_tac) >>
-    simp[arithmeticTheory.ADD_CLAUSES]) >>
-  simp[arithmeticTheory.ADD_CLAUSES]
-QED
-
 (* ================================================================
    INTRA-BLOCK INVARIANT
    Like m2v_inv but without vs_inst_idx constraint.
@@ -490,14 +405,6 @@ Proof
   rw[m2v_pvars_set_def, lookup_var_def]
 QED
 
-(* Helper: ALL_DISTINCT (FLAT (MAP f xs)) /\ MEM x xs ==> ALL_DISTINCT (f x) *)
-Theorem ALL_DISTINCT_FLAT_MAP_MEM:
-  !f xs x. ALL_DISTINCT (FLAT (MAP f xs)) /\ MEM x xs ==>
-    ALL_DISTINCT (f x)
-Proof
-  Induct_on `xs` >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
-QED
-
 (* Helper: within a wf block, EL i = EL j implies i = j
    (instruction IDs are globally distinct, so within a block too) *)
 Theorem wf_bb_EL_inj:
@@ -512,7 +419,7 @@ Proof
   SUBGOAL_THEN ``ALL_DISTINCT (MAP (\i:instruction. i.inst_id)
     bb.bb_instructions)`` assume_tac
   >- (gvs[wf_function_def, fn_inst_ids_distinct_def] >>
-      ho_match_mp_tac ALL_DISTINCT_FLAT_MAP_MEM >>
+      ho_match_mp_tac all_distinct_flat_map_member >>
       qexists `MAP (\bb. bb.bb_instructions) fn.fn_blocks` >>
       simp[MAP_MAP_o, MEM_MAP] >> metis_tac[]) >>
   gvs[EL_ALL_DISTINCT_EL_EQ, EL_MAP] >> metis_tac[]
@@ -908,17 +815,6 @@ Proof
   gvs[ALL_DISTINCT_APPEND] >> metis_tac[MEM_FLAT]
 QED
 
-(* SSA + promo_list → ao not in other non-alloca instruction's outputs.
-   The alloca that defines ao has outputs=[ao], so inst must not be that alloca.
-   ~is_alloca_op ensures inst ≠ alloca_inst. *)
-Theorem ALL_DISTINCT_FLAT_MAP_unique:
-  !f xs a b x. ALL_DISTINCT (FLAT (MAP f xs)) /\
-    MEM a xs /\ MEM b xs /\ MEM x (f a) /\ MEM x (f b) ==> a = b
-Proof
-  Induct_on `xs` >> simp[] >> rpt strip_tac >>
-  gvs[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >> metis_tac[]
-QED
-
 Theorem ssa_promo_ao_not_in_outputs:
   !fn ao pvar sz inst.
     ssa_form fn /\ MEM (ao,pvar,sz) (m2v_promo_list fn) /\
@@ -929,8 +825,8 @@ Proof
   drule m2v_promo_list_is_alloca >> strip_tac >>
   rename1 `alloca_inst.inst_opcode = ALLOCA` >>
   gvs[ssa_form_def] >>
-  qspecl_then [`\i. i.inst_outputs`, `fn_insts fn`,
-    `alloca_inst`, `inst`, `ao`] mp_tac ALL_DISTINCT_FLAT_MAP_unique >>
+  qspecl_then [`fn_insts fn`, `\i. i.inst_outputs`,
+    `alloca_inst`, `inst`, `ao`] mp_tac all_distinct_flat_map_unique >>
   simp[] >> strip_tac >> gvs[is_alloca_op_def]
 QED
 
@@ -1157,14 +1053,6 @@ Finalise m2v_step_nonpromoted
    PER-INSTRUCTION SIMULATION (promoted MSTORE case)
    MSTORE [Var ao; val_op] -> ASSIGN [val_op] output [pvar]
    ================================================================ *)
-
-Theorem len_word_to_bytes_256:
-  LENGTH (word_to_bytes (w:bytes32) be) = 32
-Proof
-  rw[byteTheory.LENGTH_word_to_bytes,
-     fcpTheory.index_bit0, fcpTheory.index_bit1, fcpTheory.index_one,
-     fcpTheory.finite_bit0, fcpTheory.finite_bit1, fcpTheory.finite_one]
-QED
 
 (* General: EL outside a splice is unchanged *)
 Theorem EL_splice_outside:
@@ -2250,17 +2138,6 @@ Finalise m2v_step_promoted_mload
    (proved here instead of mem2varProofsScript to use helpers)
    ================================================================ *)
 
-(* Helper: for non-terminal instruction at index i in a well-formed block,
-   stepping preserves m2v_inv_noix. Dispatches to nonpromoted/mstore/mload. *)
-(* Helper: MEM (Var v) ops ==> MEM v (operand_vars ops) *)
-Theorem MEM_Var_operand_vars:
-  !v ops. MEM (Var v) ops ==> MEM v (operand_vars ops)
-Proof
-  Induct_on `ops` >> rw[operand_vars_def] >>
-  Cases_on `operand_var h` >> gvs[operand_vars_def] >>
-  Cases_on `h` >> gvs[operand_var_def]
-QED
-
 (* Helper: if FIND returns SOME (ao,pvar,sz) from promo_list, the inst
    uses ao and therefore m2v_can_promote_alloca constrains its opcode *)
 Theorem promo_find_inst_opcode:
@@ -2274,7 +2151,7 @@ Proof
   rpt strip_tac >>
   imp_res_tac FIND_MEM >>
   imp_res_tac FIND_P >> gvs[] >>
-  drule MEM_Var_operand_vars >> strip_tac >>
+  drule mem_var_operand_vars >> strip_tac >>
   drule_all dfg_build_function_uses_complete_proof >> strip_tac >>
   drule m2v_promo_list_can_promote >>
   simp[m2v_can_promote_alloca_def, EVERY_MEM] >>
@@ -2371,7 +2248,7 @@ Proof
   (* inst uses Var ao AND is_pointer_preserving_op → contradiction *)
   CCONTR_TAC >> gvs[] >>
   `MEM ao (operand_vars inst.inst_operands)` by
-    (irule MEM_Var_operand_vars >>
+    (irule mem_var_operand_vars >>
      gvs[EXISTS_MEM] >> rename1 `MEM op inst.inst_operands` >>
      Cases_on `op` >> gvs[]) >>
   `MEM inst (fn_insts fn)` by metis_tac[MEM_fn_insts] >>
@@ -2427,7 +2304,7 @@ Proof
   rpt strip_tac >>
   `MEM inst (fn_insts fn)` by metis_tac[MEM_fn_insts] >>
   `MEM ao (operand_vars inst.inst_operands)` by
-    metis_tac[MEM_Var_operand_vars] >>
+    metis_tac[mem_var_operand_vars] >>
   `MEM inst (dfg_get_uses (dfg_build_function fn) ao)` by
     metis_tac[dfg_build_function_uses_complete_proof] >>
   drule m2v_promo_list_can_promote >>
@@ -2565,19 +2442,6 @@ Proof
   gvs[m2v_inv_noix_def]
 QED
 
-(* make_venom_delegatecall_state agrees under m2v_inv_noix *)
-Triviality make_venom_delegatecall_state_m2v_inv:
-  m2v_inv_noix fn s1 s2 ==>
-  make_venom_delegatecall_state s1 tgt gas cd code st =
-  make_venom_delegatecall_state s2 tgt gas cd code st
-Proof
-  strip_tac >>
-  simp[make_venom_delegatecall_state_def] >>
-  `venom_to_tx_params s1 = venom_to_tx_params s2`
-    by metis_tac[venom_to_tx_params_m2v_inv] >>
-  gvs[m2v_inv_noix_def]
-QED
-
 (* make_venom_create_state agrees under m2v_inv_noix *)
 Triviality make_venom_create_state_m2v_inv:
   m2v_inv_noix fn s1 s2 ==>
@@ -2603,9 +2467,6 @@ Proof
   rpt strip_tac >> gvs[m2v_inv_noix_def]
 QED
 
-(* extract_venom_result: same run_result on both sides gives
-   same output, and result states preserve m2v_inv_noix
-   when the write range is nonpromoted *)
 (* Setting non-semantic fields (transient, returndata, accounts, logs, deletions)
    to equal values preserves m2v_inv_noix. All semantic functions
    (lookup_var, mem_byte, mload, in_promoted_region, allocas_non_overlapping)
@@ -2660,56 +2521,6 @@ Proof
            vs_pending_deletions := pending |>)`
     by (irule m2v_inv_noix_set_fields >> simp[]) >>
   gvs[wmwe_preserves, write_memory_with_expansion_def, LET_THM]
-QED
-
-(* Strengthened: only requires s1 extraction succeeds.
-   Since extract_venom_result's SOME/NONE depends only on rr
-   (not s), s2 extraction must also succeed. *)
-Triviality extract_venom_result_m2v_inv:
-  !fn s1 s2 ov retOff retSz rr out1 s1'.
-  m2v_inv_noix fn s1 s2 /\
-  m2v_non32_ok fn s1 s2 /\
-  extract_venom_result s1 ov retOff retSz rr = SOME (out1, s1') /\
-  (!addr. retOff <= addr /\ addr < retOff + retSz ==>
-          ~in_promoted_region fn s1 addr) ==>
-  ?s2'. extract_venom_result s2 ov retOff retSz rr = SOME (out1, s2') /\
-        m2v_inv_noix fn s1' s2'
-Proof
-  rpt strip_tac >>
-  `s1.vs_transient = s2.vs_transient /\
-   s1.vs_accounts = s2.vs_accounts /\
-   s1.vs_logs = s2.vs_logs /\
-   s1.vs_pending_deletions = s2.vs_pending_deletions /\
-   s1.vs_returndata = s2.vs_returndata`
-    by gvs[m2v_inv_noix_def] >>
-  gvs[extract_venom_result_def, CaseEq "option", CaseEq "prod",
-      CaseEq "list"] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[CaseEq "sum", CaseEq "option"] >>
-  simp[LENGTH_TAKE_EQ] >>
-  FIRST
-    [irule m2v_inv_noix_ext_update >> simp[LENGTH_TAKE_EQ],
-     `m2v_inv_noix fn
-        (s1 with
-          <|vs_memory :=
-              (write_memory_with_expansion retOff
-                 (TAKE retSz ctxt.returnData) s1).vs_memory;
-            vs_transient := s2.vs_transient;
-            vs_returndata := ctxt.returnData;
-            vs_accounts := s1.vs_accounts;
-            vs_logs := s2.vs_logs;
-            vs_pending_deletions := s2.vs_pending_deletions|>)
-        (s2 with
-          <|vs_memory :=
-              (write_memory_with_expansion retOff
-                 (TAKE retSz ctxt.returnData) s2).vs_memory;
-            vs_transient := s2.vs_transient;
-            vs_returndata := ctxt.returnData;
-            vs_accounts := s1.vs_accounts;
-            vs_logs := s2.vs_logs;
-            vs_pending_deletions := s2.vs_pending_deletions|>)` by
-       (irule m2v_inv_noix_ext_update >> simp[LENGTH_TAKE_EQ]) >>
-     gvs[]]
 QED
 
 (* ================================================================
@@ -2860,16 +2671,16 @@ Proof
   `read_memory (w2n ao) (w2n as_) s1 =
    read_memory (w2n ao) (w2n as_) s2` by
     metis_tac[read_memory_m2v_inv] >>
-  `s1.vs_accounts = s2.vs_accounts /\ s1.vs_call_ctx = s2.vs_call_ctx`
-    by gvs[m2v_inv_noix_def] >>
-  gvs[exec_delegatecall_def, LET_THM] >>
-  `make_venom_delegatecall_state s1 = make_venom_delegatecall_state s2` by
-    metis_tac[make_venom_delegatecall_state_m2v_inv] >>
-  gvs[] >>
-  qpat_x_assum `_ = OK v1` mp_tac >> simp[AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  drule_all extract_venom_result_m2v_inv >> strip_tac >> gvs[] >>
-  simp[AllCaseEqs()] >>
+  qabbrev_tac `rq = venom_call_request s2 addr 0w ao as_ F with
+                      cr_kind := DelegateMessageCall` >>
+  `venom_call_request s1 addr 0w ao as_ F with cr_kind := DelegateMessageCall = rq`
+    by fs[Abbr`rq`, m2v_inv_noix_def, venom_call_request_def] >>
+  `s1.vs_outcomes = s2.vs_outcomes` by fs[m2v_inv_noix_def] >>
+  `m2v_inv_noix fn
+    (SND (consume_call_outcome rq (w2n ro) (w2n rs) s1))
+    (SND (consume_call_outcome rq (w2n ro) (w2n rs) s2))` by
+    (irule consume_call_outcome_m2v_inv >> simp[]) >>
+  gvs[exec_delegatecall_def, AllCaseEqs()] >>
   irule m2v_inv_noix_update_var >> simp[]
 QED
 
@@ -3613,20 +3424,6 @@ Proof
   mp_tac (Q.SPECL [`fn`,`inst`,`out`] m2v_output_safe) >> simp[]
 QED
 
-(* If each operand evaluates the same on s1 and s2, then eval_operands agrees. *)
-Triviality eval_operands_agree:
-  !ops s1 s2.
-    (!op. MEM op ops ==> eval_operand op s1 = eval_operand op s2) ==>
-    eval_operands ops s1 = eval_operands ops s2
-Proof
-  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
-  `eval_operand h s1 = eval_operand h s2` by simp[] >>
-  Cases_on `eval_operand h s1` >> simp[] >>
-  `eval_operands ops s1 = eval_operands ops s2`
-    by (first_x_assum irule >> simp[]) >>
-  simp[]
-QED
-
 (* Helper: LOG — reads memory for event data, updates vs_logs.
    Event data and topics agree, so same event on both sides. *)
 Theorem m2v_step_nonpromoted_log:
@@ -4170,20 +3967,6 @@ Proof
   simp[m2v_non32_ok_def, lookup_var_def]
 QED
 
-(* eval_operands agreement from operand agreement *)
-Theorem eval_operands_agrees:
-  !ops s1 s2.
-    (!op. MEM op ops ==> eval_operand op s1 = eval_operand op s2) ==>
-    eval_operands ops s1 = eval_operands ops s2
-Proof
-  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
-  `eval_operand h s1 = eval_operand h s2` by simp[] >>
-  Cases_on `eval_operand h s1` >> simp[] >>
-  `eval_operands ops s1 = eval_operands ops s2` by
-    (first_x_assum irule >> simp[]) >>
-  simp[]
-QED
-
 (* For FIND=NONE easy terminators (not RETURN/REVERT), step_inst on s1
    and s2 produce lift_result-related outputs. *)
 Theorem m2v_step_easy_terminator:
@@ -4215,7 +3998,7 @@ Proof
         m2v_inv_noix_eval_agrees) >> simp[]) >>
   SUBGOAL_THEN ``eval_operands inst.inst_operands s1 =
     eval_operands inst.inst_operands s2`` assume_tac
-  >- (irule eval_operands_agrees >> simp[]) >>
+  >- (irule eval_operands_agree >> simp[]) >>
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
   >- (with_step_inst_base_opcode ASM_REWRITE_TAC >> simp[] >>
       every_case_tac >> gvs[lift_result_def] >>
@@ -4589,14 +4372,6 @@ Proof
   rw[mstore_def, LET_THM, len_word_to_bytes_256]
 QED
 
-Theorem take_append_pad:
-  !n (l:'a list) a b x. n <= LENGTH l + a /\ n <= LENGTH l + b ==>
-    TAKE n (l ++ REPLICATE a x) = TAKE n (l ++ REPLICATE b x)
-Proof
-  rw[LIST_EQ_REWRITE, LENGTH_TAKE, LENGTH_APPEND, LENGTH_REPLICATE] >>
-  rw[EL_TAKE, EL_APPEND_EQN, EL_REPLICATE, LENGTH_REPLICATE]
-QED
-
 Theorem return_data_mstore_roundtrip:
   !off (pval:bytes32) s1 s2 k.
     pval = mload off s1 /\ k <= 32 ==>
@@ -4703,91 +4478,7 @@ QED
    Chain passes step_inst result on s2 side to ih_cont,
    allowing pvars_set derivation for IH application. *)
 
-(* step_inst_base can't Halt or IntRet for non-terminators *)
-Triviality exec_result_helpers_no_halt_abort[simp]:
-  (!f inst s s'. exec_pure1 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure1 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_pure2 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure2 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_pure3 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure3 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_read0 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_read0 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_read1 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_read1 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_write2 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_write2 f inst s <> Abort a s') /\
-  (!inst s alloc_size s'. exec_alloca inst s alloc_size <> Halt s') /\
-  (!inst s alloc_size a s'. exec_alloca inst s alloc_size <> Abort a s')
-Proof
-  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
-     exec_alloca_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_result_helpers_not_intret[simp]:
-  (!f inst s vs s'. exec_pure1 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_pure2 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_pure3 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_read0 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_read1 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_write2 f inst s <> IntRet vs s') /\
-  (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
-Proof
-  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
-     exec_alloca_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_call_helpers_not_intret[simp]:
-  (!inst s g a v ao as_ ro rs is_s vs s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> IntRet vs s') /\
-  (!inst s g a ao as_ ro rs vs s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> IntRet vs s') /\
-  (!inst s v off sz salt vs s'.
-     exec_create inst s v off sz salt <> IntRet vs s')
-Proof
-  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_call_helpers_no_halt_abort[simp]:
-  (!inst s g a v ao as_ ro rs is_s s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Halt s') /\
-  (!inst s g a v ao as_ ro rs is_s ab s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Abort ab s') /\
-  (!inst s g a ao as_ ro rs s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Halt s') /\
-  (!inst s g a ao as_ ro rs ab s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
-  (!inst s v off sz salt s'.
-     exec_create inst s v off sz salt <> Halt s')
-Proof
-  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Theorem step_inst_base_no_halt:
-  !inst s s'.
-    step_inst_base inst s = Halt s' ==>
-    is_terminator inst.inst_opcode
-Proof
-  rpt strip_tac >> drule step_inst_base_halt_opcodes >>
-  strip_tac >> gvs[is_terminator_def]
-QED
-
-Theorem step_inst_base_no_intret:
-  !inst s vs s'.
-    step_inst_base inst s = IntRet vs s' ==>
-    is_terminator inst.inst_opcode
-Proof
-  rpt strip_tac >> drule step_inst_base_intret_opcodes >>
-  strip_tac >> gvs[is_terminator_def]
-QED
+val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt_abort]];
 
 (* Abort: both sides run same non-promoted instruction *)
 Theorem step_inst_base_abort_input_equiv:
@@ -5263,40 +4954,6 @@ QED
 
 
 
-(* When extract_venom_result is called with the same args on two states,
-   both produce the same wmwe expansion D.
-   This is the key lemma for showing nao equality across ext_call. *)
-Triviality extract_venom_result_same_D:
-  !s1 s2 ov retOff retSize rr out1 s1' out2 s2'.
-    extract_venom_result s1 ov retOff retSize rr = SOME (out1, s1') /\
-    extract_venom_result s2 ov retOff retSize rr = SOME (out2, s2') ==>
-    s1'.vs_alloca_next = s1.vs_alloca_next /\
-    s2'.vs_alloca_next = s2.vs_alloca_next /\
-    ?D. LENGTH s1'.vs_memory = MAX (LENGTH s1.vs_memory) D /\
-        LENGTH s2'.vs_memory = MAX (LENGTH s2.vs_memory) D
-Proof
-  simp[extract_venom_result_def, AllCaseEqs(), LET_THM] >>
-  rpt strip_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  simp[LENGTH_write_memory_with_expansion] >>
-  metis_tac[]
-QED
-
-(* extract_venom_result preserves alloca_next and has predictable memory length *)
-Triviality extract_venom_result_nao:
-  !s output_val retOff retSize run_result out s'.
-    extract_venom_result s output_val retOff retSize run_result =
-      SOME (out, s') ==>
-    s'.vs_alloca_next = s.vs_alloca_next /\
-    ?D. LENGTH s'.vs_memory = MAX (LENGTH s.vs_memory) D
-Proof
-  simp[extract_venom_result_def, AllCaseEqs(), LET_THM] >>
-  rpt strip_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >>
-  simp[LENGTH_write_memory_with_expansion] >>
-  metis_tac[]
-QED
-
 (* exec_ext_call preserves alloca_next and memory length = MAX old D *)
 Triviality exec_ext_call_nao:
   !inst s gas addr value ao as_ ro rs st s'.
@@ -5319,7 +4976,7 @@ Triviality exec_delegatecall_nao:
 Proof
   simp[exec_delegatecall_def, LET_THM, AllCaseEqs()] >>
   rpt strip_tac >> gvs[update_var_def] >>
-  metis_tac[extract_venom_result_nao]
+  simp[LENGTH_write_memory_with_expansion] >> metis_tac[]
 QED
 
 (* exec_create preserves alloca_next and memory length = MAX old D *)
@@ -5364,26 +5021,6 @@ Proof
     simp[venom_call_request_def] >>
   gvs[exec_ext_call_def, AllCaseEqs(), update_var_def] >>
   simp[LENGTH_write_memory_with_expansion] >> metis_tac[]
-QED
-
-Triviality exec_delegatecall_same_D:
-  !inst s1 s2 g a ao as_ ro rs s1' s2'.
-    exec_delegatecall inst s1 g a ao as_ ro rs = OK s1' /\
-    exec_delegatecall inst s2 g a ao as_ ro rs = OK s2' /\
-    read_memory (w2n ao) (w2n as_) s1 = read_memory (w2n ao) (w2n as_) s2 /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_transient = s2.vs_transient /\
-    venom_to_tx_params s1 = venom_to_tx_params s2 ==>
-    s1'.vs_alloca_next = s1.vs_alloca_next /\
-    s2'.vs_alloca_next = s2.vs_alloca_next /\
-    ?D. LENGTH s1'.vs_memory = MAX (LENGTH s1.vs_memory) D /\
-        LENGTH s2'.vs_memory = MAX (LENGTH s2.vs_memory) D
-Proof
-  simp[exec_delegatecall_def, LET_THM, AllCaseEqs(),
-       make_venom_delegatecall_state_def] >>
-  rpt strip_tac >> gvs[update_var_def] >>
-  metis_tac[extract_venom_result_same_D]
 QED
 
 Triviality exec_create_same_D:

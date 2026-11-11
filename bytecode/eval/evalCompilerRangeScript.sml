@@ -1,10 +1,11 @@
-(* Range lowering and bound typing, including computed endpoints which lower
-   to literal operands. Also execute the existing range fixtures in the source. *)
+(* Range regression checks: the lowered operands, not the AST bound, select
+   folding/checks, and a computed bound that is too small fails in both the
+   source and the target. Also execute the five corrected fixture ASTs in the
+   source. *)
 Theory evalCompilerRange
 Ancestors
   evalCompilerSubsetState compileVyper stmtLowering vyperCompiler
-  vyperInterpreter vyperContext alist integer_word vyperTypeContract
-  jsonToVyperExpr venomExecSemantics
+  vyperInterpreter vyperContext alist integer_word venomExecSemantics
 Libs finite_mapLib computeLib wordsLib intReduce
 
 val () = computeLib.upd_compset add_finite_map_compset
@@ -135,34 +136,4 @@ Theorem range_bound_failure_target:
     (init_venom_state "entry") of Abort Revert_abort _ => T | _ => F)
 Proof
   EVAL_TAC
-QED
-
-Theorem range_computed_bound_typing:
-  type_stmt (artifact_env empty_contract_type_artifact [] NONE) NoneT
-    (For "i" (BaseT (UintT 256))
-      (Range (TypeBuiltin (BaseT (UintT 256)) Empty (BaseT (UintT 256)) [])
-             (Literal (BaseT (UintT 256)) (IntL 2))) (2 ** 256) [Pass]) = NONE /\
-  IS_SOME (type_stmt (artifact_env empty_contract_type_artifact [] NONE) NoneT
-    (For "i" (BaseT (UintT 256))
-      (Range (TypeBuiltin (BaseT (UintT 256)) Empty (BaseT (UintT 256)) [])
-             (Literal (BaseT (UintT 256)) (IntL 2))) 1 [Pass])) /\
-  IS_SOME (type_stmt (artifact_env empty_contract_type_artifact [] NONE) NoneT
-    (For "i" (BaseT (IntT 8))
-      (Range (Literal (BaseT (IntT 8)) (IntL (-128)))
-             (Literal (BaseT (IntT 8)) (IntL 127))) 255 [Pass]))
-Proof
-  EVAL_TAC
-QED
-
-Theorem range_static_folded_endpoints:
-  !ctx e1 e2.
-    translate_iter ctx (BaseT (IntT 8))
-      (JIter_Range [e1;e2] [SOME (-128);SOME 127] NONE) =
-    Range (Literal (BaseT (IntT 8)) (IntL (-128)))
-          (Literal (BaseT (IntT 8)) (IntL 127)) /\
-    translate_iter ctx (BaseT (IntT 8))
-      (JIter_Range [e1;e2] [SOME (-128);SOME 127] (SOME 1)) =
-    Range (translate_expr ctx e1) (translate_expr ctx e2)
-Proof
-  simp[translate_iter_def]
 QED

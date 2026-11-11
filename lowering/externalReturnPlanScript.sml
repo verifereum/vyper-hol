@@ -243,7 +243,7 @@ Theorem return_selected_package_plan:
   supported_place_type tops ret /\ ret <> NoneT /\
   evaluate_type (type_env tops) ret = SOME tv /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map
+    (package_external_fn tops ut nkey_map
       (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sa) ==>
@@ -290,7 +290,7 @@ Theorem return_supported_selected_plan:
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   ret <> NoneT /\ evaluate_type (type_env tops) ret = SOME tv /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map
+    (package_external_fn tops ut nkey_map
       (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sa) ==>
@@ -346,7 +346,7 @@ Theorem return_selected_plan:
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   ret <> NoneT /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map
+    (package_external_fn tops ut nkey_map
       (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sa) ==>

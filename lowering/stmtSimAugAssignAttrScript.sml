@@ -38,8 +38,8 @@ Ancestors
   fragExec freshWrites loweringSlice  exprSimHyps exprSimOps
   exprSimBinopFrag exprSimOperators exprSimLeaves exprSimBuffer
   exprSimAttributeFields
-   stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssign
-  stmtSimAugAssign stmtSimAssignAttr
+  stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssign
+  stmtSimAugAssign stmtSimAssignAttr memoryValueEncoding
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv loweringStateRelDefs valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperTyping
@@ -62,7 +62,7 @@ Proof
   >- (disj1_tac >>
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
       simp[gas_summary_at_def, gas_marked_exec_def,
-           expr_post_def, locals_kept_def]) >>
+           expr_post_def, locals_kept_def, popped_kept_def]) >>
   disj2_tac >> drule gas_exempt_cert_start_gas_obs >>
   disch_then (qspec_then `gs` mp_tac) >> simp[] >> metis_tac[]
 QED
@@ -466,7 +466,8 @@ Proof
    val_in_memory entry.type entry.value (w2n w0) s.vs_memory` by
     (qpat_x_assum `local_ptrs_rel _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
-     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+     first_x_assum drule_all >> strip_tac >> gvs[] >>
+     irule memory_value_rel_val_in_memory >> simp[value_has_type_def]) >>
   `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
   `struct_field_offset flds fld + type_memory_size ftv <=
      type_memory_size_fields fs` by metis_tac[struct_field_offset_le] >>

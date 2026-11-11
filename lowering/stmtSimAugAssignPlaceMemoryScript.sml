@@ -115,6 +115,24 @@ Proof
   metis_tac[read_place_state, place_type_value_state]
 QED
 
+Triviality array_set_index_indexed_error:
+  !tv av i x vj err.
+    array_index tv av i = SOME x /\ array_set_index tv av i vj = INR err ==>
+    ?msg. err = TypeError msg
+Proof
+  rpt gen_tac >>
+  simp[vyperValueOperationTheory.array_index_def,
+       vyperValueOperationTheory.array_set_index_def, LET_THM] >>
+  Cases_on `0 <= i` >> simp[] >>
+  Cases_on `av`
+  >~ [`DynArrayV l`]
+  >- (simp[listTheory.oEL_THM] >> Cases_on `Num i < LENGTH l` >> simp[])
+  >~ [`TupleV l`] >- simp[] >>
+  Cases_on `tv` >> simp[] >>
+  Cases_on `b` >> simp[] >>
+  rename1 `Num i < n` >> Cases_on `Num i < n` >> simp[]
+QED
+
 Theorem aug_place_replace_read_error:
   !path tv a old v err.
     evaluate_subscripts tv a path = INL old /\
@@ -122,22 +140,35 @@ Theorem aug_place_replace_read_error:
     ?msg. err = TypeError msg
 Proof
   Induct_on `path` >- simp[assign_subscripts_def] >>
-  rpt gen_tac >> Cases_on `h`
-  >- (rename1 `ValueSubscript key` >> Cases_on `key` >>
-      Cases_on `a` >>
-      PURE_ONCE_REWRITE_TAC[evaluate_subscripts_def] >>
-      PURE_ONCE_REWRITE_TAC[assign_subscripts_def] >>
-      simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]
-      >~ [`array_set_index _ _ _ _ = INR _`]
-      >- (gvs[vyperValueOperationTheory.array_set_index_def,
-              vyperValueOperationTheory.array_index_def, AllCaseEqs(),
-              listTheory.oEL_THM] >> metis_tac[]) >>
-      first_x_assum drule_all >> simp[]) >>
-  Cases_on `a` >>
-  PURE_ONCE_REWRITE_TAC[evaluate_subscripts_def] >>
-      PURE_ONCE_REWRITE_TAC[assign_subscripts_def] >>
-  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  first_x_assum drule_all >> simp[]
+  rpt gen_tac >> strip_tac >> Cases_on `h`
+  >~ [`ValueSubscript key`]
+  >- (`?i av. key = IntV i /\ a = ArrayV av` by
+        (Cases_on `key` >> fs[evaluate_subscripts_def] >>
+         Cases_on `a` >> fs[]) >>
+      gvs[] >>
+      qpat_x_assum `evaluate_subscripts _ _ _ = _` mp_tac >>
+      qpat_x_assum `assign_subscripts _ _ _ _ = _` mp_tac >>
+      simp[Once evaluate_subscripts_def, Once assign_subscripts_def, LET_THM] >>
+      Cases_on `array_index tv av i` >> simp[] >>
+      rename1 `array_index tv av i = SOME elt` >>
+      qmatch_goalsub_abbrev_tac `assign_subscripts etv elt path` >>
+      Cases_on `assign_subscripts etv elt path (Replace v)` >> simp[]
+      >- metis_tac[array_set_index_indexed_error] >>
+      Cases_on `evaluate_subscripts etv elt path` >> simp[] >>
+      first_x_assum drule_all >> rpt strip_tac >> gvs[])
+  >~ [`AttrSubscript id`]
+  >- (`?al. a = StructV al` by (Cases_on `a` >> fs[evaluate_subscripts_def]) >>
+      gvs[] >>
+      qpat_x_assum `evaluate_subscripts _ _ _ = _` mp_tac >>
+      qpat_x_assum `assign_subscripts _ _ _ _ = _` mp_tac >>
+      simp[Once evaluate_subscripts_def, Once assign_subscripts_def, LET_THM] >>
+      Cases_on `ALOOKUP al id` >> simp[] >>
+      rename1 `ALOOKUP al id = SOME fld` >>
+      qmatch_goalsub_abbrev_tac `assign_subscripts ftv fld path` >>
+      Cases_on `assign_subscripts ftv fld path (Replace v)` >> simp[] >>
+      Cases_on `evaluate_subscripts ftv fld path` >> simp[] >>
+      first_x_assum drule_all >> rpt strip_tac >> gvs[]) >>
+  fs[evaluate_subscripts_def]
 QED
 
 Theorem aug_place_memory_write_success:
@@ -1281,13 +1312,13 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
      conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
      conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
      asm_simp_tac std_ss [] >>
+     conj_tac >- (qexistsl_tac [`entry'`, `old`] >> simp[]) >>
      conj_tac >-
        (qpat_assum `word_value_type ty` mp_tac >>
         qpat_assum `evaluate_type (get_tenv cx) ty = SOME ptv` mp_tac >>
         qpat_assum `value_has_type ptv v` mp_tac >>
         rpt (pop_assum kall_tac) >>
         metis_tac[word_value_type_typed, word_value_not_bytes]) >>
-     conj_tac >- (qexistsl_tac [`entry'`, `old`] >> simp[]) >>
      conj_tac >- simp[gasContextTheory.gas_admissible_gas_obs] >>
      conj_tac >- (qexists_tac `env` >> simp[]) >>
      conj_tac >- simp[] >>

@@ -278,7 +278,8 @@ Proof
   rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
   qpat_x_assum `storage_subregion _ _ _ _` mp_tac >>
   simp_tac (srw_ss()) [Once vyperStoragePlaceRegionTheory.storage_subregion_def] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >> gvs[] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  full_simp_tac bool_ss [arithmeticTheory.ADD_CLAUSES] >>
   drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac
   >- (`Num i * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
         (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
@@ -2259,7 +2260,7 @@ Proof
     metis_tac[aug_place_supported_stmt_target_info] >>
   `target_post ctx func cenv cx start sa sp s0 mid pv (Type ty) ptrout t` by
     (qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[Abbr `start`, target_post_def, locals_kept_def] >>
+     simp[Abbr `start`, target_post_def, locals_kept_def, popped_kept_def] >>
      strip_tac >> metis_tac[]) >>
   drule_all aug_place_storage_target_ready >> strip_tac >>
   qpat_x_assum `pv = _` SUBST_ALL_TAC >>

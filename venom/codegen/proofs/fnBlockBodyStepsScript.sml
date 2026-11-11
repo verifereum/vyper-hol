@@ -83,6 +83,12 @@ Definition body_inv_def:
       SOME (block_ops, ps_after) /\
     ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
     ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
+    (?prefixL prefixD core.
+       ps_after.ps_stack = prefixL ++ core /\
+       ps_dfs_after.ps_stack = prefixD ++ core /\
+       (!v. MEM v (live_vars_at liveness bb.bb_label
+                     (LENGTH bb.bb_instructions)) ==>
+          ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
     block_plan_state liveness dfg cfg fn bb
       (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
       k ps /\

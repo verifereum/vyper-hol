@@ -356,7 +356,7 @@ Theorem target_subscript_mapping_scalar_normal:
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sa s0 s /\
+  `stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
    eval_operand (FST rb) s = SOME slot /\
    (!x. FST rb = Var x ==> not_fresh_at sn x) /\
    FST (SND rb) = SOME (slot_loc tr) /\ SND (SND rb) = SOME (MapPT kt vt)` by
@@ -390,7 +390,7 @@ Theorem target_subscript_mapping_dynamic_normal:
 Proof
   strip_tac >> gvs[] >>
   drule_all target_subscript_dynamic_key_view >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sa s0 s /\
+  `stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
    eval_operand (FST rb) s = SOME slot /\
    (!x. FST rb = Var x ==> not_fresh_at sn x) /\
    FST (SND rb) = SOME (slot_loc tr) /\ SND (SND rb) = SOME (MapPT (expr_type e) vt)` by
@@ -415,11 +415,10 @@ Theorem target_subscript_int_index_view:
   ?i. key = IntV i /\ eval_operand ix s = SOME (i2w i)
 Proof
   strip_tac >> drule_all int_type_value >> strip_tac >>
-  `is_word_type (expr_type e)` by
-    (Cases_on `expr_type e` >> gvs[is_int_type_def] >>
-     rename1 `expr_type e = BaseT bt` >> Cases_on `bt` >>
-     gvs[is_int_type_def, is_word_type_def]) >>
-  `post_value_type cenv e = expr_type e` by simp[] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_word >>
+     Cases_on `expr_type e` >> gvs[is_int_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_int_type_def, is_word_type_def]) >>
   `expr_val_rel cx (expr_type e) key ix s` by fs[expr_post_def] >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   gvs[] >> Cases_on `expr_type e` >> gvs[is_int_type_def] >>
@@ -442,7 +441,7 @@ Proof
      rename1 `BytesT bd` >> Cases_on `bd` >>
      gvs[is_bytestring_type_def, is_word_type_def, evaluate_type_def,
          AllCaseEqs()]) >>
-  `post_value_type cenv e = expr_type e` by simp[] >>
+  `post_value_type cenv e = expr_type e` by simp[post_value_type_word] >>
   irule target_mapping_scalar_operand >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl [`cx`, `tv`] >> fs[expr_post_def]

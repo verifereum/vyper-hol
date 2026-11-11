@@ -270,7 +270,7 @@ Proof
   sym_tac >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-  qpat_x_assum `locals_kept _ _ _ _`
-    (mp_tac o REWRITE_RULE [locals_kept_def]) >>
+  qpat_x_assum `locals_kept _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
   disch_then irule >> qexistsl_tac [`b`, `n`, `sz`] >> simp[]
 QED

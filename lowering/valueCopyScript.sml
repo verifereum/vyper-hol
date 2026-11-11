@@ -161,7 +161,7 @@ QED
    word: the length word and the data rounded up to whole words. *)
 Theorem bytestring_copy_len_word_exact:
   !L. 32 + 32 * word_size L < dimword (:256) ==>
-      w2n (((n2w L + 31w) && i2w (-32)) + 32w : bytes32) =
+      w2n (((n2w L + 31w) && ~31w) + 32w : bytes32) =
       32 + 32 * word_size L
 Proof
   rpt strip_tac >>
@@ -169,7 +169,8 @@ Proof
     (rewrite_tac[word_size_def] >> qspec_then `32` mp_tac DIVISION >> simp[] >>
      disch_then (qspec_then `L + 31` strip_assume_tac) >>
      `(L + 31) MOD 32 < 32` by simp[] >> decide_tac) >>
-  rewrite_tac[buffer_round_mask] >>
+  `(~31w : bytes32) = -32w` by blastLib.BBLAST_TAC >>
+  `!w:bytes32. w && -32w = (w >>> 5) << 5` by blastLib.BBLAST_TAC >>
   `(L + 31) DIV 32 * 32 <= L + 31` by
     (qspec_then `32` mp_tac DIVISION >> simp[] >>
      disch_then (qspec_then `L + 31` mp_tac) >> decide_tac) >>
@@ -189,7 +190,7 @@ QED
 
 Theorem bytestring_copy_len_word[local]:
   !L. L + 64 < dimword (:256) ==>
-      w2n (((n2w L + 31w) && i2w (-32)) + 32w : bytes32) =
+      w2n (((n2w L + 31w) && ~31w) + 32w : bytes32) =
       32 + 32 * word_size L
 Proof
   rpt strip_tac >> irule bytestring_copy_len_word_exact >>
@@ -221,6 +222,16 @@ Theorem step_ADD_some[local]:
 Proof
   rpt strip_tac >> Cases_on `eval_operand op1 ss` >>
   Cases_on `eval_operand op2 ss` >> gvs[] >> irule step_ADD >> simp[]
+QED
+
+Theorem step_NOT_some[local]:
+  !op1 id out ss.
+    IS_SOME (eval_operand op1 ss) ==>
+    step_inst_base (mk_inst id NOT [op1] [out]) ss =
+      OK (update_var out (word_1comp (THE (eval_operand op1 ss))) ss)
+Proof
+  rpt strip_tac >> Cases_on `eval_operand op1 ss` >> gvs[] >>
+  irule step_NOT >> simp[]
 QED
 
 Theorem step_AND_some[local]:
@@ -281,9 +292,11 @@ Proof
       fresh_id_def, fresh_var_def, emit_def, comp_return_def, LET_THM] >>
   simp[emitted_insts_def, same_blocks_def, DROP_APPEND1,
        venomInstTheory.is_terminator_def] >>
-  simp[run_inst_seq_def, step_MLOAD_some, step_ADD_some, step_AND_some,
+  simp[run_inst_seq_def, step_MLOAD_some, step_NOT_some, step_ADD_some, step_AND_some,
        step_MCOPY_some, eval_operand_def, lookup_var_update_var,
        GSYM mem_word_at_eq_mload] >>
+  qmatch_goalsub_abbrev_tac
+    `update_var _ w4 (update_var _ w3 (update_var _ w2 (update_var _ w1 _)))` >>
   simp[update_var_def, mcopy_def, write_memory_with_expansion_def, LET_THM] >>
   rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def, update_var_def,
                        finite_mapTheory.FLOOKUP_UPDATE] >>

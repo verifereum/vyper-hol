@@ -192,6 +192,8 @@ Theorem initializer_registered_effect[local]:
   (FLOOKUP s.vs_allocas id = NONE \/ FLOOKUP s.vs_allocas id = SOME (p,32)) /\
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
   t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+  t.vs_tx_ctx = s.vs_tx_ctx /\ t.vs_block_ctx = s.vs_block_ctx /\
+  t.vs_immutables = s.vs_immutables /\ t.vs_outcomes = s.vs_outcomes /\
   t.vs_pending_deletions = s.vs_pending_deletions ==>
   abi_encoder_registered_effect {id} [(d,32)] s t
 Proof
@@ -270,7 +272,8 @@ Theorem entry_array_init_operational:
     t.vs_halted = initial.vs_halted /\
     t.vs_accounts = initial.vs_accounts /\ t.vs_transient = initial.vs_transient /\
     t.vs_logs = initial.vs_logs /\ t.vs_tx_ctx = initial.vs_tx_ctx /\
-    t.vs_block_ctx = initial.vs_block_ctx /\ t.vs_outcomes = initial.vs_outcomes /\
+    t.vs_block_ctx = initial.vs_block_ctx /\ t.vs_immutables = initial.vs_immutables /\
+    t.vs_outcomes = initial.vs_outcomes /\
     t.vs_requests = initial.vs_requests /\ t.vs_pending_deletions = initial.vs_pending_deletions /\
     t.vs_gas_readings = initial.vs_gas_readings /\ t.vs_fmp = initial.vs_fmp
 Proof

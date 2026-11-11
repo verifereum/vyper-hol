@@ -52,6 +52,27 @@ Proof
   rpt strip_tac >> gvs[vv_post_def] >> metis_tac[]
 QED
 
+(* An effect-free expression's fragment keeps every live local whole and
+   every window clear of its own allocations. *)
+Theorem vv_post_pure_memory_frame:
+  !ctx func cenv cx e es sa sb s0 es' tv vv s.
+    vv_post ctx func cenv cx e es sa sb s0 es' tv vv s /\
+    ~expr_has_effect e ==>
+    (!n b sz. local_region cenv es.scopes s0 n b sz ==>
+       mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory) /\
+    (!off len.
+       (!inst b sz.
+          MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= inst.inst_id /\
+          FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+          loweringStateRelDefs$regions_disjoint off len b sz) ==>
+       mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `pure_frame cenv func es sa s0 s` by gvs[vv_post_def] >>
+  pop_assum mp_tac >> rewrite_tac[pure_frame_def]
+QED
+
 (* Source boundary: positional locations are read only after kwargs. *)
 Theorem eval_extcall_stages:
   eval_expr cx (Call ann (ExtCall static skip sig opts) args dflt) =
@@ -104,7 +125,7 @@ Definition extcall_request_ready_def:
       addr_op value_op gas_op buf_op call_offset call_len cap
       target value_opt calldata has_default default_op default_ty default_opt
       ee t <=>
-    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
+    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sp.cs_current_bb /\
     t.vs_inst_idx = LENGTH sp.cs_current_insts /\ ee.gas_obs = [] /\
     outcomes_accounts_typed ee.outcomes /\
@@ -156,7 +177,7 @@ End
 Definition extcall_returned_def:
   extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
       has_default default_op default_ty default_opt returnData ee t <=>
-    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
+    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sr.cs_current_bb /\
     t.vs_inst_idx = LENGTH sr.cs_current_insts /\ ee.gas_obs = [] /\
     sa.cs_next_var <= sr.cs_next_var /\ sa.cs_next_id <= sr.cs_next_id /\

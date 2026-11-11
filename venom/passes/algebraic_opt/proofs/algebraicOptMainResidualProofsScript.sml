@@ -799,16 +799,11 @@ Theorem ao_main_exec_delegatecall:
     t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx
 Proof
   strip_tac >>
-  `read_memory (w2n ao) (w2n az) s = read_memory (w2n ao) (w2n az) r /\
-   s.vs_accounts = r.vs_accounts /\ s.vs_call_ctx = r.vs_call_ctx` by
-    gvs[read_memory_def, venom_state_component_equality] >>
-  `!target data code.
-    make_venom_delegatecall_state s target (w2n gas) data code r.vs_call_ctx.cc_static =
-    make_venom_delegatecall_state r target (w2n gas) data code r.vs_call_ctx.cc_static` by
-    gvs[make_venom_delegatecall_state_def, venom_to_tx_params_def,
-        venom_state_component_equality] >>
-  gvs[exec_delegatecall_def, extract_venom_result_def, AllCaseEqs()] >>
-  pairarg_tac >> gvs[] >> conj_tac
+  `venom_call_request s addr 0w ao az F =
+   venom_call_request r addr 0w ao az F` by
+    gvs[venom_call_request_def, read_memory_def, venom_state_component_equality] >>
+  `s.vs_outcomes = r.vs_outcomes` by gvs[venom_state_component_equality] >>
+  gvs[exec_delegatecall_def, AllCaseEqs()] >> simp[] >> conj_tac
   >- (irule ao_main_observations_update >> simp[] >>
       irule ao_main_observations_vars >> qexistsl_tac [`r`, `s`] >> simp[]) >>
   gvs[update_var_def, write_memory_with_expansion_def, venom_state_component_equality]

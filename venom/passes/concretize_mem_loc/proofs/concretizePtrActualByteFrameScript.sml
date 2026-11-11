@@ -33,10 +33,11 @@ Theorem ptr_exec_delegatecall_actual_byte_frame:
   ~(w2n ro <= x /\ x < w2n ro + MIN (w2n rz) (LENGTH t.vs_returndata)) ==>
   read_byte x t.vs_memory = read_byte x s.vs_memory
 Proof
-  strip_tac >>
-  qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >>
-  gvs[update_var_def] >> metis_tac[ptr_extract_venom_result_actual_byte_frame]
+  simp[exec_delegatecall_def, consume_call_outcome_eq] >>
+  strip_tac >> gvs[AllCaseEqs(), update_var_def] >>
+  qmatch_goalsub_abbrev_tac `write_memory_with_expansion (w2n ro) bytes s` >>
+  irule write_memory_byte_frame >> qexists `LENGTH bytes` >>
+  gvs[Abbr `bytes`, LENGTH_TAKE_EQ, MIN_DEF]
 QED
 
 Theorem ptr_step_inst_base_OK_actual_byte_frame:

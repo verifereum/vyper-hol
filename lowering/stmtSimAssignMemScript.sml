@@ -38,7 +38,7 @@ Ancestors
   stmtSimDeclPath
   valueCopy valueCopySource valueCopyBytes exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv loweringStateRelDefs valueEncoding
+  compileEnv loweringStateRelDefs valueEncoding memoryValueEncoding
   vyperInterpreter vyperState vyperValue vyperLookup vyperExprNoControl
   venomExecSemantics venomExecProofs venomInst venomState
 Libs
@@ -86,7 +86,8 @@ Proof
   drule compile_get_target_ptr_local >> strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac (srw_ss())
-    [Once compile_stmt_def, comp_bind_def, comp_ignore_bind_def,
+    [Once compile_stmt_def, exprLoweringTheory.expr_can_mutate_def,
+     stmtLoweringTheory.target_to_expr_def, comp_bind_def, comp_ignore_bind_def,
      comp_return_def, LET_THM] >>
   Cases_on `compile_expr cenv (expr_type e) e sa` >>
   rename1 `compile_expr _ _ _ _ = (vv, sV)` >>
@@ -176,6 +177,8 @@ Proof
      qexists_tac `type_memory_size entry.type` >> simp[] >>
      rpt strip_tac >> qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ _ = _` irule >>
      decide_tac) >>
+  `memory_value_rel entry.type v (w2n w) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   `stmt_state_rel ctx func cenv cx es1 t` by
     (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   `t.vs_allocas = s.vs_allocas` by
@@ -587,7 +590,8 @@ Proof
   drule compile_get_target_ptr_local >> strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac (srw_ss())
-    [Once compile_stmt_def, comp_bind_def, comp_ignore_bind_def,
+    [Once compile_stmt_def, exprLoweringTheory.expr_can_mutate_def,
+     stmtLoweringTheory.target_to_expr_def, comp_bind_def, comp_ignore_bind_def,
      comp_return_def, LET_THM] >>
   Cases_on `compile_expr cenv (expr_type e) e sa` >>
   rename1 `compile_expr _ _ _ _ = (vv, sV)` >>
@@ -962,7 +966,7 @@ Theorem local_header_store_state:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\ 32 <= type_memory_size entry.type /\
     val_wf entry.type v /\
-    val_in_memory entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
+    memory_value_rel entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes := pre ++
         (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
@@ -1001,7 +1005,7 @@ Theorem local_header_store_path:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\ 32 <= type_memory_size entry.type /\
     val_wf entry.type v /\
-    val_in_memory entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory /\
+    memory_value_rel entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory /\
     fn_has_code sa sb func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -1037,7 +1041,8 @@ Proof
   rpt strip_tac >> drule stmt_env_assign >> strip_tac >>
   drule compile_get_target_ptr_local >> strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
-  simp[Once compile_stmt_def, comp_bind_def, comp_ignore_bind_def,
+  simp[Once compile_stmt_def, exprLoweringTheory.expr_can_mutate_def,
+     stmtLoweringTheory.target_to_expr_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, LET_THM, compile_store_at_loc_def]
 QED
 
@@ -1049,7 +1054,7 @@ Theorem local_header_store_frag:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\ 32 <= type_memory_size entry.type /\
     val_wf entry.type v /\
-    val_in_memory entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
+    memory_value_rel entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
     frag_exec ctx sa sb (\t. t = s)
       (\t. stmt_state_rel ctx func cenv cx
          (es with scopes := pre ++
@@ -1122,6 +1127,7 @@ Proof
     (irule memory_length_word_layout >>
      simp[valueEncodingPropsTheory.mstore_mem_word_at_same] >>
      qexistsl_tac [`get_tenv cx`, `vtyp`] >> simp[]) >>
+  drule (CONJUNCT1 default_memory_layout) >> strip_tac >>
   gvs[] >> drule_all local_header_store_path >> strip_tac >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>

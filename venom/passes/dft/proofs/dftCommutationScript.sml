@@ -553,44 +553,6 @@ val custom_defs = [
 
 val all_rwts = helper_frames @ update_var_rwts @ helper_hyp_rwts @ core_rwts;
 
-(* Frame lemma for extract_venom_result: update_var threads through *)
-Theorem extract_venom_result_update_var[local]:
-  !s outf retOff retSize rr x v.
-  extract_venom_result (update_var x v s) outf retOff retSize rr =
-  OPTION_MAP (\(output, s'). (output, update_var x v s'))
-    (extract_venom_result s outf retOff retSize rr)
-Proof
-  rw[extract_venom_result_def] >>
-  BasicProvers.TOP_CASE_TAC >> gvs[] >>
-  BasicProvers.TOP_CASE_TAC >> gvs[] >>
-  BasicProvers.TOP_CASE_TAC >> gvs[] >>
-  BasicProvers.TOP_CASE_TAC >> gvs[] >>
-  BasicProvers.TOP_CASE_TAC >> gvs[] >>
-  rw[update_var_def, write_memory_with_expansion_def,
-     venom_state_component_equality] >>
-  BasicProvers.TOP_CASE_TAC >> gvs[] >>
-  BasicProvers.TOP_CASE_TAC >> gvs[]
-QED
-
-(* Shared proof for ext_call/delegatecall/create frame lemmas.
-   Strategy: unfold the ext_call def, show make_*_state is unchanged
-   by update_var (only reads non-var fields), then apply
-   extract_venom_result_update_var and handle the OPTION_MAP. *)
-fun ext_call_frame_proof defs =
-  rpt strip_tac >>
-  (* Unfold ext_call but NOT update_var — keep it abstract for rewriting *)
-  simp(defs @ [read_memory_def, venom_to_tx_params_def, update_var_fields]) >>
-  (* extract_venom_result_update_var fires here *)
-  simp[extract_venom_result_update_var, optionTheory.OPTION_MAP_DEF,
-       pairTheory.UNCURRY] >>
-  (* Case split on extract_venom_result *)
-  BasicProvers.TOP_CASE_TAC >> gvs[map_result_state_def] >>
-  (* Decompose the pair z *)
-  Cases_on `z` >> gvs[map_result_state_def] >>
-  (* Case split on inst_outputs *)
-  BasicProvers.TOP_CASE_TAC >> gvs[map_result_state_def] >>
-  BasicProvers.TOP_CASE_TAC >> gvs[map_result_state_def, update_var_commutes];
-
 (* Frame lemma for exec_ext_call *)
 Theorem exec_ext_call_frame[local]:
   !inst s gas addr value ao as_ ro rs is_static x v.
@@ -600,8 +562,6 @@ Theorem exec_ext_call_frame[local]:
   map_result_state (update_var x v)
     (exec_ext_call inst s gas addr value ao as_ ro rs is_static)
 Proof
-  (* Legacy concrete proof: ext_call_frame_proof
-       [exec_ext_call_def, make_venom_call_state_def] *)
   rpt strip_tac >>
   Cases_on `inst.inst_outputs` >> gvs[exec_ext_call_def, map_result_state_def] >>
   rename1 `inst.inst_outputs = out::rest_outputs` >>
@@ -620,7 +580,13 @@ Theorem exec_delegatecall_frame[local]:
   map_result_state (update_var x v)
     (exec_delegatecall inst s gas addr ao as_ ro rs)
 Proof
-  ext_call_frame_proof [exec_delegatecall_def, make_venom_delegatecall_state_def]
+  rpt strip_tac >>
+  Cases_on `inst.inst_outputs` >> gvs[exec_delegatecall_def, map_result_state_def] >>
+  rename1 `inst.inst_outputs = out::rest_outputs` >>
+  Cases_on `rest_outputs` >> gvs[exec_delegatecall_def, map_result_state_def] >>
+  simp[venom_call_request_def, read_memory_def, update_var_def,
+       write_memory_with_expansion_def, venom_state_component_equality,
+       finite_mapTheory.FUPDATE_COMMUTES]
 QED
 
 (* Frame lemma for exec_create *)

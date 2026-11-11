@@ -80,6 +80,14 @@ Resume fn_block_frame_step[ok]:
     `ps_dfs_after`, `vs`, `as`, `Inv`, `ra`, `rest`, `mem0`, `s'`]
     block_step_prefix) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  Q.SUBGOAL_THEN `?prefixL prefixD core.
+     ps_after.ps_stack = prefixL ++ core /\
+     ps_dfs_after.ps_stack = prefixD ++ core /\
+     (!v. MEM v (live_vars_at liveness bb.bb_label
+                   (LENGTH bb.bb_instructions)) ==>
+        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` ASSUME_TAC
+  >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> rpt conj_tac >>
+      first_assum ACCEPT_TAC) >>
   `!i j. revert_forward_pair bb i j ==>
          phi_prefix_length bb.bb_instructions <= i \/
          j < phi_prefix_length bb.bb_instructions` by

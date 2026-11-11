@@ -407,13 +407,18 @@ Proof
           simp[] >>
           `s1 = st` by metis_tac[eval_exprs_preserves_state] >>
           pop_assum SUBST_ALL_TAC >>
-          gvs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
-              vyperStateTheory.raise_def, vyperStateTheory.bind_def,
-              vyperStateTheory.ignore_bind_def, vyperStateTheory.assert_def,
-              vyperStateTheory.lift_sum_def, vyperStateTheory.lift_option_type_def,
-              vyperInterpreterTheory.precompile_call_success_def,
-              vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
-              AllCaseEqs()]))
+          FIRST [
+            fs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
+               vyperStateTheory.bind_def, vyperStateTheory.lift_sum_def,
+               vyperInterpreterTheory.precompile_call_success_def] >>
+            Cases_on `evaluate_builtin cx st.accounts ty bt (MAP expr_type es) vs` >>
+            gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >> NO_TAC,
+            gvs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
+                vyperStateTheory.raise_def, vyperStateTheory.bind_def,
+                vyperStateTheory.ignore_bind_def, vyperStateTheory.assert_def,
+                vyperStateTheory.lift_sum_def, vyperStateTheory.lift_option_type_def,
+                vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
+                AllCaseEqs()]]))
   (* TypeBuiltin *)
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
       simp[Once eval_pure_expr_def] >>

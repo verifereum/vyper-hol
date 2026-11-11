@@ -31,7 +31,8 @@
 
 Theory context
 Ancestors
-  emitHelper compileEnv venomInst typedCopyDomain list pair arithmetic combin
+  emitHelper compileEnv venomInst typedCopyDomain memoryLayoutDefs
+  list pair arithmetic combin
 Libs
   monadsyntax
 
@@ -107,6 +108,13 @@ End
 Definition vv_is_stack_def:
   vv_is_stack (StackValue _ _) = T ∧
   vv_is_stack (LocatedValue _ _) = F
+End
+
+(* The same value tagged with another type (Python reads VyperValue.typ as
+   the value's lowered type; compile_expr tags with the annotation). *)
+Definition vv_with_type_def:
+  vv_with_type ty (StackValue _ op) = StackValue ty op ∧
+  vv_with_type ty (LocatedValue _ p) = LocatedValue ty p
 End
 
 (* ===== Load/Store by Location ===== *)
@@ -416,6 +424,12 @@ Definition compile_load_immutable_def:
 End
 
 (* ===== Nonreentrant Lock ===== *)
+(* Vyper data_positions.py allocate_global_nonreentrancy_slot reserves the
+   first transient slot for $.nonreentrant_key, shared by all functions. *)
+Definition global_nonreentrant_slot_def:
+  global_nonreentrant_slot = 0n
+End
+
 (* Mirrors Python: context.py emit_nonreentrant_lock/unlock
    is_view: T for view functions — check lock but don't acquire it.
    Python: if func_t.mutability != VIEW: STORE(key, temp_value) *)
@@ -663,11 +677,11 @@ QED
 Definition compile_bytestring_copy_len_def:
   compile_bytestring_copy_len val_op =
     do src_len <- emit_op MLOAD [val_op];
+       (* Python's ceil32: and(add(x, 31), not 31) *)
+       mask <- emit_op NOT [Lit 31w];
        padded_len <- emit_op ADD [src_len; Lit 31w];
-       let mask = i2w (- &32) : bytes32 in
-       do rounded <- emit_op AND [padded_len; Lit mask];
-          emit_op ADD [rounded; Lit 32w]
-       od
+       rounded <- emit_op AND [padded_len; mask];
+       emit_op ADD [rounded; Lit 32w]
     od
 End
 
@@ -861,12 +875,13 @@ End
 
 (* Store a primitive value or a complex memory pointer, with the source layout.
    Bytestrings always copy their runtime length, even when the types agree.
+   Tuple bulk copies retain the pinned code shape when all field layouts agree.
    Mirrors Python: context.py Context.store_memory. *)
 Definition compile_store_memory_def:
   compile_store_memory cenv src dst dst_ty src_ty =
     if is_word_type dst_ty then emit_void MSTORE [dst; src]
     else if is_bytestring_type dst_ty then compile_store_bytestring src dst
-    else if dst_ty ≠ src_ty then
+    else if dst_ty ≠ src_ty ∧ ¬tuple_memory_layout_eq dst_ty src_ty then
       compile_store_memory_typed cenv dst dst_ty src src_ty
     else compile_copy_memory dst src (type_memory_bytes cenv dst_ty)
 End

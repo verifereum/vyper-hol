@@ -65,7 +65,7 @@ Theorem external_registered_frame_metadata:
   supported_program tops /\ source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\ ALL_DISTINCT (MAP FST args) /\
   set_external_package_target target
-    (package_external_fn tops F nkeys
+    (package_external_fn tops T nkeys
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,ce,pos,cds,pay,F,key,ut,view,fbody,rt) /\
   compile_register_positional_args ce pos 4 start = (cef,registered) ==>
@@ -77,14 +77,15 @@ Proof
   strip_tac >>
   drule compile_register_positional_args_cenv >> strip_tac >>
   qpat_x_assum `cef = _` SUBST1_TAC >>
-  Cases_on `package_external_fn tops F nkeys
+  Cases_on `package_external_fn tops T nkeys
     (mut,F,rr,tx.function_name,args,[],ret,fbody)` >>
   PairCases_on `r` >> gvs[set_external_package_target_def] >>
   drule_all package_external_fn_vars >> strip_tac >>
   `~r0.ce_is_ctor /\ r0.ce_imm_alloca = NONE` by
-    (gvs[package_external_fn_def, update_cenv_nonreentrant_def] >>
-     rw[update_cenv_ret_abi_def, build_compile_env_imm_alloca,
-        build_compile_env_def] >> rpt (pairarg_tac >> gvs[])) >>
+    (`!b. ~(build_compile_env tops External mut tx.function_name args ret fbody
+         b).ce_is_ctor` by simp[build_compile_env_def, pairTheory.UNCURRY] >>
+     gvs[package_external_fn_def, update_cenv_nonreentrant_def] >>
+     rw[update_cenv_ret_abi_def, build_compile_env_imm_alloca] >> gvs[]) >>
   `storage_vars_rel r0 (initial_evaluation_context am.sources am.layouts tx NONE) /\
    transient_vars_rel r0 (initial_evaluation_context am.sources am.layouts tx NONE)` by
     (irule runtime_module_storage_rel >> simp[] >>

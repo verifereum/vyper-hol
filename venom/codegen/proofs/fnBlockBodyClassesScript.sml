@@ -114,7 +114,7 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   qspecl_then [`liveness`, `dfg`, `cfg`, `ch`, `growth`, `spill_base`,
                `lbl_ctr`, `fn`, `fn_ops`, `ps_end`, `t`, `tbb`]
-    mp_tac dfs_block_state_reachable >>
+    mp_tac fnPlanCoverTheory.dfs_block_state_reachable >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   qspecl_then [`rpolicy`, `unit`, `cpl`, `prog`, `ctx`, `lo`, `o2pc`, `i`,
                `fn`, `r`, `liveness`, `dfg`, `cfg`, `ch`, `growth`, `lbl_ctr`,
@@ -272,6 +272,14 @@ Proof
    execute_plan cpl.cp_initial_fmp (SOLabel bb.bb_label :: prefix_ops) ++
    execute_plan cpl.cp_initial_fmp ops` by
     REWRITE_TAC [GSYM execute_plan_append, APPEND] >>
+  Q.SUBGOAL_THEN `?prefixL prefixD core.
+     ps_after.ps_stack = prefixL ++ core /\
+     ps_dfs_after.ps_stack = prefixD ++ core /\
+     (!v. MEM v (live_vars_at liveness bb.bb_label
+                   (LENGTH bb.bb_instructions)) ==>
+        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` ASSUME_TAC
+  >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> rpt conj_tac >>
+      first_assum ACCEPT_TAC) >>
   PURE_REWRITE_TAC [body_inv_def] >> rpt conj_tac >>
   TRY (first_assum ACCEPT_TAC)
   >~ [`FLOOKUP (_ with vs_inst_idx := _).vs_labels`]
@@ -695,6 +703,14 @@ Proof
        SUBST1_TAC >>
      irule fnBlockPlanStaticRegionTheory.dfs_edge_spilled >> simp[] >>
      metis_tac[]) >>
+  Q.SUBGOAL_THEN `?prefixL prefixD core.
+     ps_after.ps_stack = prefixL ++ core /\
+     ps_dfs_after.ps_stack = prefixD ++ core /\
+     (!v. MEM v (live_vars_at liveness bb.bb_label
+                   (LENGTH bb.bb_instructions)) ==>
+        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` ASSUME_TAC
+  >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> rpt conj_tac >>
+      first_assum ACCEPT_TAC) >>
   `lineage_entry liveness dfg cfg fn
      (init_cleanup_plan_state ch growth spill_base lbl_ctr) bb.bb_label t
      (ps_tdfs with <| ps_stack := ps_after.ps_stack;

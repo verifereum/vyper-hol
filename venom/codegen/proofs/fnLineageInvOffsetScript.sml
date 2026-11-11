@@ -74,7 +74,7 @@ Proof
      gvs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def]) >>
   `MEM x (live_vars_at (liveness_analyze fn) bb.bb_label (SUC j))` by
     (rewrite_tac[arithmeticTheory.ADD1] >>
-     irule analyzed_offset_output_live_after >> simp[] >> metis_tac[]) >>
+     irule fnLineageInvPointLiveTheory.analyzed_offset_output_live_after >> simp[] >> metis_tac[]) >>
   `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
     (drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
      simp[EXTENSION] >> metis_tac[codegenReadyComputeTheory.fn_reachable_cfg_analyze]) >>

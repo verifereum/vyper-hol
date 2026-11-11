@@ -110,9 +110,7 @@ Proof
   irule native_regular_stack_live_inventory >>
   goal_assum (drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qexists_tac `core` >> simp[] >>
-  conj_tac >- gvs[MEM_APPEND, MEM_REPLICATE] >>
-  gvs[SUBSET_DEF, MEM_MAP, reorderSimTheory.input_mem_operand_vars,
-      passSharedDefsTheory.MEM_operand_vars_eq_Var] >> metis_tac[]
+  gvs[MEM_APPEND, MEM_REPLICATE]
 QED
 
 Theorem analyzed_offset_weak_step:
@@ -224,7 +222,7 @@ Proof
   `LENGTH targets <= LENGTH qs.ps_stack` by
     (qpat_x_assum `stack_pop _ _ ++ _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
      simp[stackModelTheory.stack_pop_def, LENGTH_TAKE] >> decide_tac) >>
-  simp[fnPlanLineagePhiTemporalTheory.stack_pop_bottom_extension, APPEND_ASSOC] >>
+  simp[fnPlanLineageInventoryTheory.stack_pop_bottom_extension, APPEND_ASSOC] >>
   asm_rewrite_tac[]
 QED
 

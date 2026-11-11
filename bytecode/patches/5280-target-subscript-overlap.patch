@@ -1,0 +1,42 @@
+Upstream PR: https://github.com/vyperlang/vyper/pull/5280
+Status: merged 2026-10-02 (f89b81f9b85533791c8191bbdf1fa1a08bde0ffe)
+
+Reject an assignment, augmented-assignment, append or pop target whose
+subscript base passes through a dynamic-array element while its index can
+write a variable that base reads, or makes a risky call.
+
+Adapted to this pin: the pin already has the overlap helpers
+(_subscript_read_write_overlap, _subscript_base_length_can_stale and the
+risky-call walk) and already rejects assignment and augmented-assignment
+targets, which _get_target_ptr lowers with as_ptr=True. Only upstream's
+hunk is kept: append and pop lower their array with as_ptr=True, so they
+reject too instead of writing into a snapshot of the base. Upstream's
+darray_indices argument is not in the pin and is left out.
+
+diff --git a/vyper/codegen_venom/expr.py b/vyper/codegen_venom/expr.py
+--- a/vyper/codegen_venom/expr.py
++++ b/vyper/codegen_venom/expr.py
+@@ -1732,8 +1732,9 @@
+         if is_unbounded_dynarray_type(darray_typ):
+             return self._lower_unbounded_dynarray_append()
+ 
+-        # Get the array VyperValue
+-        darray_vv = Expr(darray_node, self.ctx).lower()
++        # Lower as a target so risky overlap panics: mutating an rvalue
++        # snapshot would silently drop the write.
++        darray_vv = Expr(darray_node, self.ctx, as_ptr=True).lower()
+         darray_ptr = darray_vv.operand
+ 
+         # Get the element value.
+@@ -1897,8 +1898,9 @@
+         darray_typ = darray_node._metadata["type"]
+         elem_typ = darray_typ.value_type
+ 
+-        # Get the array VyperValue
+-        darray_vv = Expr(darray_node, self.ctx).lower()
++        # Lower as a target so risky overlap panics: mutating an rvalue
++        # snapshot would silently drop the write.
++        darray_vv = Expr(darray_node, self.ctx, as_ptr=True).lower()
+         darray_ptr = darray_vv.operand
+ 
+         # Get location from VyperValue

@@ -1,5 +1,6 @@
 Theory fnBlockPlanStaticRegion
 Ancestors
+  dfHelperProofs inputMaterialised reduceDepthSim reorderStages
   fnBlockPlanStaticDfsTrace fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
   planWfMarked fnLineageInv fnPlanPrefix list stackPlanGen fnFrameBoundaryGenRet codegenReadyCompute
   fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs venomWf venomExecProofs rich_list
@@ -130,7 +131,7 @@ Proof
   goal_assum (drule_at (Pat `lookup_block _ _ = _`)) >>
   goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
   qexistsl_tac [`pin.ps_cleanup_height`, `pin.ps_cleanup_promised`] >>
-  simp[]
+  simp[] >> qexistsl_tac [`[]`, `[]`, `pout.ps_stack`] >> simp[]
 QED
 
 Theorem dfs_lineage_mutual[local]:
@@ -294,7 +295,8 @@ Proof
   goal_assum (drule_at (Pat `lineage_state _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
   qexistsl_tac [`pin.ps_cleanup_height`, `pin.ps_cleanup_promised`] >>
-  simp[] >> goal_assum (drule_at Any) >> simp[]
+  simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`[]`, `[]`, `pout.ps_stack`] >> simp[]
 QED
 
 Theorem regional_ret_operand_support_empty:
@@ -345,7 +347,7 @@ Proof
   strip_tac >>
   `wf_function fn` by fs[codegen_ready_fn_def] >>
   `MEM succ (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
-    metis_tac[cfgAnalysisPropsTheory.cfg_analyze_succ_labels,
+    metis_tac[cfgCorrectnessProofTheory.cfg_analyze_succ_labels,
               venomInstTheory.fn_labels_def] >>
   drule dfAnalyzeProofsTheory.lookup_block_exists >> strip_tac >>
   `cfg_reachable_of (cfg_analyze fn) pred` by
@@ -382,7 +384,7 @@ Proof
        MEM pred' (cfg_preds_of (cfg_analyze fn) succ)` by
         metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
       gvs[LENGTH_EQ_NUM_compute] >>
-      `B = pin` by metis_tac[dfs_block_state_unique] >> gvs[]) >>
+      `B = pin` by metis_tac[fnBlockPlanStaticDfsTraceTheory.dfs_block_state_unique] >> gvs[]) >>
   strip_tac >> gvs[] >>
   `1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ)` by
     (`MEM pred (cfg_preds_of (cfg_analyze fn) succ)` by
@@ -1057,7 +1059,7 @@ Proof
     (`wf_function fn` by gvs[codegen_ready_fn_def] >>
      `cfg_reachable_of (cfg_analyze fn) first` by
        (gvs[] >> metis_tac[fn_reachable_cfg_analyze]) >>
-     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels >>
+     drule cfgCorrectnessProofTheory.cfg_analyze_reachable_in_labels >>
      simp[fn_labels_def, MEM_MAP] >> strip_tac >>
      irule_at Any MEM_lookup_block >> simp[] >>
      gvs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
@@ -4243,7 +4245,7 @@ Proof
     metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
   gvs[] >>
   rename1 `generate_block_plan _ _ _ _ pred_bb origin_in = SOME _` >>
-  `origin_in = pin` by metis_tac[dfs_block_state_unique] >> gvs[]
+  `origin_in = pin` by metis_tac[fnBlockPlanStaticDfsTraceTheory.dfs_block_state_unique] >> gvs[]
 QED
 
 Theorem regional_single_successor_recompute_out:

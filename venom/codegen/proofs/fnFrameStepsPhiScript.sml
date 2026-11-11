@@ -9,7 +9,7 @@ Ancestors
   planWfMarked fnPlanLineageJoin genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
-  allocaRemapSSA fnPlanPrefix dftCommutation fnFrameDeepInvoke fnPlanLineagePhiClasses
+  allocaRemapSSA fnPlanPrefix dftCommutation fnFrameDeepInvoke cfgCorrectnessProof livenessProofs fnPlanLineagePhiClasses
   venomWfProps
 
 Theorem phi_regular_plan_spill_support:
@@ -211,7 +211,7 @@ Proof
      simp[rich_listTheory.MEM_LAST_NOT_NIL]) >>
   gvs[venomWfTheory.inst_wf_def] >>
   `cfg_succs_of (cfg_analyze fn) pb.bb_label = bb_succs pb` by
-    (irule cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs >>
+    (irule cfgCorrectnessProofTheory.cfg_analyze_preserves_bb_succs >>
      gvs[codegen_ready_fn_def]) >>
   Cases_on `pb.bb_instructions` >>
   gvs[bb_succs_def, get_successors_def, is_terminator_def, get_label_def,
@@ -246,6 +246,8 @@ Proof
   strip_tac >> gvs[] >>
   qpat_assum `lineage_entry _ _ _ _ _ _ _ _`
     (strip_assume_tac o PURE_REWRITE_RULE [lineage_entry_def]) >>
+  rpt (qpat_x_assum `_.ps_stack = _ ++ core` kall_tac) >>
+  qpat_x_assum `!v. _ ==> ~MEM (Var v) prefixL /\ _` kall_tac >>
   rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
   `wf_function fn` by gvs[codegen_ready_fn_def] >>
   `pb.bb_label = pred` by metis_tac[venomExecProofsTheory.lookup_block_label] >>
@@ -700,6 +702,8 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   qpat_assum `lineage_entry _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [lineage_entry_def]) >>
+  rpt (qpat_x_assum `_.ps_stack = _ ++ core` kall_tac) >>
+  qpat_x_assum `!v. _ ==> ~MEM (Var v) prefixL /\ _` kall_tac >>
   rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
   drule_all (SRULE [] fnLineageInvTheory.lineage_entry_inventory) >>
   strip_tac >>
@@ -899,12 +903,12 @@ Proof
     (Cases_on `cfg_preds_of (cfg_analyze fn) bb.bb_label` >> gvs[] >>
      metis_tac[]) >>
   `MEM p (fn_labels fn)` by
-    metis_tac[cfgAnalysisPropsTheory.cfg_analyze_pred_labels] >>
+    metis_tac[cfgCorrectnessProofTheory.cfg_analyze_pred_labels] >>
   `?pb. MEM pb fn.fn_blocks /\ pb.bb_label = p` by
     (gvs[fn_labels_def, listTheory.MEM_MAP] >> metis_tac[]) >>
   `MEM bb.bb_label (bb_succs pb)` by
     metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond,
-              cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs] >>
+              cfgCorrectnessProofTheory.cfg_analyze_preserves_bb_succs] >>
   `fn_cfg_edge fn p bb.bb_label` by
     (simp[venomWfTheory.fn_cfg_edge_def] >> metis_tac[]) >>
   fs[venomWfTheory.phi_edge_uses_wf_def] >>
@@ -1127,7 +1131,7 @@ Proof
      gvs[codegen_ready_fn_def, venomWfTheory.wf_function_def, fn_labels_def]) >>
   `MEM bb.bb_label (cfg_succs_of (cfg_analyze fn) p)` by
     (gvs[venomWfTheory.fn_cfg_edge_def] >>
-     metis_tac[cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs]) >>
+     metis_tac[cfgCorrectnessProofTheory.cfg_analyze_preserves_bb_succs]) >>
   drule_all livenessConvergenceProofsTheory.liveness_recompute_edge_subset >>
   simp[livenessBlockProofsTheory.liveness_instrs_def, liveness_edge_transfer_def,
        pred_setTheory.SUBSET_DEF] >> strip_tac >>
@@ -1176,7 +1180,7 @@ Proof
     metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre] >>
   `MEM q (cfg_succs_of (cfg_analyze fn) p)` by
     (gvs[venomWfTheory.fn_cfg_edge_def] >>
-     metis_tac[cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs]) >>
+     metis_tac[cfgCorrectnessProofTheory.cfg_analyze_preserves_bb_succs]) >>
   `!i. i <= LENGTH qb.bb_instructions ==>
     MEM v (live_vars_at (liveness_analyze fn) q i)` by
     (rpt strip_tac >>
@@ -1498,7 +1502,7 @@ Proof
      `i <> k` by decide_tac >>
      drule_all phi_uses_disjoint_el >>
      gvs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
-  mp_tac (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_forward_or_used) >>
+  mp_tac (SRULE [LET_THM] livenessProofsTheory.live_vars_at_forward_or_used) >>
   disch_then drule >> disch_then drule >>
   disch_then (qspecl_then
     [`bb`, `SUC i`, `LENGTH (collect_phis bb.bb_instructions)`, `v`] mp_tac) >>

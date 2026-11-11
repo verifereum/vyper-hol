@@ -60,7 +60,8 @@ Theorem compile_alloc_buffer_expr_resources_separated:
     fn_inst_ids_distinct func /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc func /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    ~is_word_type (expr_type e) /\ val_wf tv v /\ n < dimword (:256) /\
+    ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
+    val_wf tv v /\ n < dimword (:256) /\
     eval_operand op s = SOME w /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n w) m) ==>
@@ -87,7 +88,8 @@ Proof
     (drule_all fn_has_code_split >> strip_tac >>
      drule_all emit_inst_fn_member >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[expr_post_def] >>
+  qpat_assum `post_value_type cenv e = _`
+    (fn th => rewrite_tac[expr_post_def, th]) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `p = STRING #"%" (toString sb.cs_next_var)` by
     (drule compile_alloc_buffer_parts >> strip_tac >> gvs[]) >>
@@ -115,7 +117,7 @@ Resume compile_alloc_buffer_expr_resources_separated[resources]:
   qpat_x_assum `!aid off sz. _` kall_tac >>
   qpat_x_assum `!aid b. _` kall_tac >>
   qpat_x_assum `!x w. _` kall_tac >>
-  qpat_x_assum `locals_kept _ _ _ _` kall_tac >>
+  qpat_x_assum `locals_kept _ _ _ _ _` kall_tac >>
   rpt conj_tac
   >- suspend "operand"
   >- (drule_all alloca_step_ptr_covers >> simp[])
@@ -149,7 +151,8 @@ Theorem compile_alloc_buffer_expr_resources:
     fresh_vars_wrt sb s /\ fn_inst_ids_distinct func /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc func /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    ~is_word_type (expr_type e) /\ val_wf tv v /\ n < dimword (:256) /\
+    ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
+    val_wf tv v /\ n < dimword (:256) /\
     eval_operand op s = SOME w /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n w) m) ==>
