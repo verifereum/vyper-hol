@@ -6599,11 +6599,42 @@ Proof
             (fs[EVERY_MEM] >> metis_tac[]) >>
           qpat_assum `Abbrev (R = _)` (fn def =>
             qpat_assum `R fuel C pre (s with vs_gas_readings := _) = OK a`
-              (assume_tac o PURE_REWRITE_RULE
+              (assume_tac o BETA_RULE o PURE_REWRITE_RULE
                 [REWRITE_RULE [markerTheory.Abbrev_def] def, GSYM APPEND_ASSOC])) >>
           drule_all invoke_partner_prefix_concrete >>
           disch_then (qx_choose_then `us` strip_assume_tac) >>
-          FAIL_TAC "actual original prefix updates") >>
+          `EVERY (\q. ~MEM (Var (FST q)) y.inst_operands /\
+             ~MEM (FST q) y.inst_outputs) us` by
+            (qpat_assum `EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x) pre` mp_tac >>
+             qpat_assum `EVERY (\q. MEM (FST q) (FLAT _) /\ _) us` mp_tac >>
+             POP_ASSUM_LIST (K all_tac) >>
+             simp[EVERY_MEM, MEM_FLAT, MEM_MAP,
+               dft_gas_swap_pair_def, venomInstTheory.inst_defs_def,
+               pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+             metis_tac[]) >>
+          qpat_assum `!r. HP (u0 ++ r) _ /\ _`
+            (assume_tac o SRULE [TAKE_DROP] o cj 1 o
+              Q.SPEC `DROP (gas_count_step fuel C' y s) s.vs_gas_readings`) >>
+          qpat_assum `Abbrev (HP = _)` (fn def =>
+            qpat_assum `HP _ s`
+              (mp_tac o cj 3 o BETA_RULE o PURE_REWRITE_RULE
+                [REWRITE_RULE [markerTheory.Abbrev_def] def])) >>
+          disch_then (qspecl_then [`gh`, `FLAT gt ++ tail`] mp_tac) >>
+          simp[] >> strip_tac >>
+          drule_all invoke_reached_prefix_observations >>
+          disch_then (qspecl_then [`fuel`, `owner`] strip_assume_tac) >>
+          `gas_events_step fuel C owner y a =
+             gas_events_step fuel C s.vs_current_bb y
+               (s with vs_gas_readings := gh ++ FLAT gt ++ tail)` by
+            (qpat_assum `gas_events_step fuel C owner y a = _` SUBST1_TAC >>
+             `s with <|vs_gas_readings := gh ++ (FLAT gt ++ tail);
+                vs_inst_idx := s.vs_inst_idx + LENGTH pre|> =
+              (s with vs_gas_readings := gh ++ FLAT gt ++ tail) with
+                vs_inst_idx := s.vs_inst_idx + LENGTH pre` by
+               simp[APPEND_ASSOC] >>
+             asm_rewrite_tac[] >>
+             simp[gas_events_invoke_inst_idx, gas_events_step_def]) >>
+          FAIL_TAC "head observation transported") >>
       FAIL_TAC "returning cuts and barrier") >>
   FAIL_TAC "stopped head transport"
 QED
