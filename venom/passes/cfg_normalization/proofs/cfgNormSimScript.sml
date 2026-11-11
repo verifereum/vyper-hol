@@ -225,32 +225,6 @@ Definition insert_split_blocks_def:
             pred_bb) func.fn_blocks)
 End
 
-(* lookup in the core blocks = lookup in original for non-pred non-target *)
-Theorem lookup_insert_split_blocks_other[local]:
-  !func pred_bb target_bb split_bb var_repls lbl.
-    lbl <> pred_bb.bb_label /\ lbl <> target_bb.bb_label ==>
-    lookup_block lbl (insert_split_blocks func pred_bb target_bb split_bb var_repls) =
-    lookup_block lbl func.fn_blocks
-Proof
-  rw[insert_split_blocks_def] >>
-  `lookup_block lbl
-     (replace_block target_bb.bb_label
-        (update_phis_for_split pred_bb.bb_label split_bb.bb_label
-           var_repls target_bb)
-        (replace_block pred_bb.bb_label
-           (subst_label_terminator target_bb.bb_label split_bb.bb_label
-              pred_bb) func.fn_blocks)) =
-   lookup_block lbl
-     (replace_block pred_bb.bb_label
-        (subst_label_terminator target_bb.bb_label split_bb.bb_label
-           pred_bb) func.fn_blocks)` by (
-    irule lookup_block_replace_neq >>
-    simp[update_phis_for_split_bb_label]) >>
-  simp[] >>
-  irule lookup_block_replace_neq >>
-  simp[subst_label_terminator_bb_label]
-QED
-
 (* lookup in the core blocks for pred_bb *)
 Theorem lookup_insert_split_blocks_pred[local]:
   !func pred_bb target_bb split_bb var_repls.

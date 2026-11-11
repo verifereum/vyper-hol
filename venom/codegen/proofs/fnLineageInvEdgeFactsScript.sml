@@ -1,5 +1,5 @@
 Theory fnLineageInvEdgeFacts
-Ancestors stackPlanGen cfgAnalysisProps venomExecProps cfgTransform venomInst venomWf list rich_list
+Ancestors cfgCorrectnessProof stackPlanGen cfgAnalysisProps venomExecProps cfgTransform venomInst venomWf list rich_list
 
 Theorem ready_outgoing_block_nonhalting:
   !fn pred bb succ.

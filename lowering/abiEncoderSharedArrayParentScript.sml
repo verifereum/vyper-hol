@@ -64,8 +64,10 @@ QED
 
 Theorem abi_encoder_cursor_alloca_observations:
   exec_alloca inst s (32w:bytes32) = OK t ==>
-  (t.vs_accounts,t.vs_transient,t.vs_logs,t.vs_requests,t.vs_pending_deletions) =
-    (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests,s.vs_pending_deletions) /\
+  (t.vs_accounts,t.vs_transient,t.vs_logs,t.vs_requests,
+    t.vs_tx_ctx,t.vs_block_ctx,t.vs_immutables,t.vs_outcomes,t.vs_pending_deletions) =
+    (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests,
+      s.vs_tx_ctx,s.vs_block_ctx,s.vs_immutables,s.vs_outcomes,s.vs_pending_deletions) /\
   (alloca_inv s ==> alloca_inv t)
 Proof
   simp[exec_alloca_def, AllCaseEqs(), dimword_def] >> strip_tac >> gvs[] >>
@@ -79,6 +81,8 @@ Theorem abi_encoder_complex_prefix_raw_observations:
   abi_encoder_member_phase_raw st final initial ready ==>
   ready.vs_accounts = initial.vs_accounts /\ ready.vs_transient = initial.vs_transient /\
   ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests /\
+  ready.vs_tx_ctx = initial.vs_tx_ctx /\ ready.vs_block_ctx = initial.vs_block_ctx /\
+  ready.vs_immutables = initial.vs_immutables /\ ready.vs_outcomes = initial.vs_outcomes /\
   ready.vs_pending_deletions = initial.vs_pending_deletions /\
   (alloca_inv initial ==> alloca_inv ready)
 Proof
@@ -169,6 +173,8 @@ Theorem abi_encoder_array_tail_init_raw_observations:
   abi_encoder_member_phase_raw st final initial ready ==>
   ready.vs_accounts = initial.vs_accounts /\ ready.vs_transient = initial.vs_transient /\
   ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests /\
+  ready.vs_tx_ctx = initial.vs_tx_ctx /\ ready.vs_block_ctx = initial.vs_block_ctx /\
+  ready.vs_immutables = initial.vs_immutables /\ ready.vs_outcomes = initial.vs_outcomes /\
   ready.vs_pending_deletions = initial.vs_pending_deletions /\
   (alloca_inv initial ==> alloca_inv ready)
 Proof

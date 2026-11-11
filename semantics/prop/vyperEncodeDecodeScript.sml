@@ -45,13 +45,6 @@ Proof
        first_byte_at_0w]
 QED
 
-Theorem word_of_bytes_be_word_to_bytes_be[local]:
-  word_of_bytes_be (word_to_bytes_be (w : bytes32)) = w
-Proof
-  simp[word_to_bytes_be_def, word_of_bytes_be_def,
-       word_of_bytes_word_to_bytes]
-QED
-
 Theorem word_of_bytes_replicate_zero[local]:
   ∀a n. word_of_bytes T a (REPLICATE n (0w:word8)) = (0w : bytes32)
 Proof
@@ -89,21 +82,6 @@ Theorem apply_writes_append:
 Proof
   Induct >> simp[apply_writes_def] >>
   Cases >> simp[apply_writes_def]
-QED
-
-Theorem n2w_add_mod_l[local]:
-  n2w (a MOD dimword(:256) + b) = n2w (a + b) : bytes32
-Proof
-  REWRITE_TAC [GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_mod]
-QED
-
-Theorem n2w_add_rearrange[local]:
-  n2w (a + (b + c MOD dimword(:256))) = n2w (b + (a + c) MOD dimword(:256)) : bytes32
-Proof
-  REWRITE_TAC [GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_mod] >>
-  CONV_TAC (AC_CONV
-    (INST_TYPE [alpha |-> ``:256``] wordsTheory.WORD_ADD_ASSOC,
-     INST_TYPE [alpha |-> ``:256``] wordsTheory.WORD_ADD_COMM))
 QED
 
 Theorem apply_writes_shift:
@@ -534,44 +512,6 @@ QED
 
 (* ===== encode_decode_roundtrip_ok: IntT ===== *)
 
-Theorem within_int_bound_signed_256[local]:
-  within_int_bound (Signed n) i ∧ n ≤ 256 ⇒
-  INT_MIN(:256) ≤ i ∧ i ≤ INT_MAX(:256)
-Proof
-  strip_tac >>
-  `INT_MIN(:256) = -&(2 ** 255)` by
-    (simp[integer_wordTheory.INT_MIN_def, integer_wordTheory.INT_MAX_def,
-          wordsTheory.INT_MIN_def] >> EVAL_TAC) >>
-  `INT_MAX(:256) = &(2 ** 255 − 1)` by
-    (simp[integer_wordTheory.INT_MAX_def,
-          wordsTheory.INT_MIN_def] >> EVAL_TAC) >>
-  ntac 2 (pop_assum (fn th => REWRITE_TAC[th])) >>
-  Cases_on`n=0` >- gvs[within_int_bound_def] >>
-  `(if i < 0 then Num (-i) ≤ 2 ** (n − 1) else Num i < 2 ** (n − 1)) ∧ 0 < n`
-    by gvs[within_int_bound_def] >>
-  `n − 1 ≤ 255` by simp[] >>
-  sg `2n ** (n − 1) ≤ 2 ** 255` >- (
-    qspec_then`2`mp_tac (iffRL EXP_BASE_LE_MONO) >>
-    impl_tac >- rw[] >>
-    disch_then drule >>
-    rewrite_tac[]) >>
-  Cases_on `i < 0`
-  >- (
-    `Num (-i) ≤ 2 ** (n − 1)` by gvs[] >>
-    `0 ≤ -i` by intLib.ARITH_TAC >>
-    `Num (-i) ≤ 2 ** 255` by
-      (irule LESS_EQ_TRANS >> qexists_tac `2 ** (n − 1)` >> simp[]) >>
-    `i = -&(Num (-i))` by
-      (`&(Num(-i)) = -i` by simp[integerTheory.INT_OF_NUM] >> simp[]) >>
-    intLib.ARITH_TAC)
-  >> `Num i < 2 ** (n − 1)` by gvs[]
-  >> `0 ≤ i` by intLib.ARITH_TAC
-  >> `Num i < 2 ** 255` by
-       (irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** (n − 1)` >> simp[])
-  >> `i = &(Num i)` by simp[integerTheory.INT_OF_NUM]
-  >> intLib.ARITH_TAC
-QED
-
 Theorem encode_decode_roundtrip_ok_int[local]:
   ∀n i. within_int_bound (Signed n) i ∧ n ≤ 256 ⇒
     encode_decode_roundtrip_ok (BaseTV (IntT n)) (IntV i)
@@ -934,15 +874,6 @@ Proof
 QED
 
 (* ===== General encode_decode_roundtrip_ok from value_has_type ===== *)
-
-Theorem int_lt_dimword_256[local]:
-  ∀n i. 0 ≤ i ∧ Num i < 2 ** n ∧ n ≤ 256 ⇒ i < &dimword(:256)
-Proof
-  rpt strip_tac >>
-  `Num i < dimword(:256)` by
-    (irule lt_dimword_256 >> qexists_tac `n` >> simp[]) >>
-  intLib.ARITH_TAC
-QED
 
 (* For non-compound types, encode_decode_roundtrip_ok follows from value_has_type
    and IS_SOME (encode_value tv v) *)
@@ -1653,24 +1584,6 @@ Proof
   )
 QED
 
-(* Helper: apply_writes with agreeing storages gives agreeing results *)
-Theorem apply_writes_storage_agree[local]:
-  ∀writes base s1 s2.
-    (∀k. lookup_storage (n2w (base + k)) s1 =
-         lookup_storage (n2w (base + k)) s2) ⇒
-    ∀k. lookup_storage (n2w (base + k))
-          (apply_writes (n2w base) writes s1) =
-        lookup_storage (n2w (base + k))
-          (apply_writes (n2w base) writes s2)
-Proof
-  Induct >> simp[apply_writes_def] >>
-  Cases >> rpt gen_tac >> strip_tac >>
-  simp[apply_writes_def] >>
-  first_x_assum irule >> rw[] >>
-  rw[lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM] >>
-  gvs[lookup_storage_def]
-QED
-
 (* Helper: static array - each sparse entry decodes correctly *)
 Theorem encode_decode_static_array[local]:
   ∀sparse tv n offset writes base storage.
@@ -1768,26 +1681,6 @@ Proof
   disch_then SUBST1_TAC >>
   REWRITE_TAC [GSYM read_slot_def] >>
   simp[read_slot_after_apply_writes_single]
-QED
-
-(* Helper: element slot size bounded by list total *)
-Theorem type_slot_size_list_MEM[local]:
-  ∀tvs tv. MEM tv tvs ⇒ type_slot_size tv ≤ type_slot_size_list tvs
-Proof
-  Induct >> simp[type_slot_size_def] >>
-  rpt strip_tac >> gvs[type_slot_size_def] >>
-  first_x_assum drule >> simp[]
-QED
-
-(* Helper: field slot size bounded by fields total *)
-Theorem type_slot_size_fields_MEM[local]:
-  ∀fields nm tv.
-    MEM (nm,tv) fields ⇒
-    type_slot_size tv ≤ type_slot_size_fields fields
-Proof
-  Induct >> simp[type_slot_size_def, FORALL_PROD] >>
-  rpt strip_tac >> gvs[type_slot_size_def] >>
-  first_x_assum drule >> simp[]
 QED
 
 (* Helper: MEM implies element size < TupleTV size *)

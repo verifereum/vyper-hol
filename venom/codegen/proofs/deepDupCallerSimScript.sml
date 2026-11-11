@@ -4,12 +4,6 @@ Ancestors deepDupFrameSim stackPlanGen doSwapSim stackPlanTypes stackModel
           stackPlanOps planWf finite_map list rich_list
 Libs BasicProvers
 
-Theorem caller_stack_get_depth_push[local]:
-  !op stk. stack_get_depth op (stack_push op stk) = SOME 0
-Proof
-  simp[stack_get_depth_def, stack_push_def, REVERSE_SNOC, stack_find_def]
-QED
-
 Theorem emit_one_input_stack_growth:
   !opc nl op ps ops ps'.
     emit_one_input opc nl op ps = (ops,ps') ==>
@@ -30,7 +24,7 @@ Proof
               `x < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_bound] >>
               drule do_dup_stack_exact >> simp[] >> strip_tac >> gvs[]) >>
           strip_tac >> gvs[])
-      >> simp[caller_stack_get_depth_push] >>
+      >> simp[stack_get_depth_push] >>
       Cases_on `MEM s nl` >>
       simp[do_dup_def, stack_dup_def, stack_push_def, stack_peek_def,
            EL_APPEND_EQN] >> strip_tac >> gvs[EL_APPEND_EQN])
@@ -129,7 +123,7 @@ Proof
   rpt gen_tac >> Cases_on `op` >> simp[is_var_operand_def] >>
   Cases_on `FLOOKUP ps.ps_spilled (Var s)` >> simp[] >> strip_tac >>
   gvs[emit_one_input_def, is_var_operand_def, do_restore_def, LET_THM,
-      caller_stack_get_depth_push] >>
+      stack_get_depth_push] >>
   Cases_on `MEM s nl` >>
   gvs[do_dup_def, stack_dup_def, stack_peek_def, stack_push_def,
       EL_APPEND_EQN] >>

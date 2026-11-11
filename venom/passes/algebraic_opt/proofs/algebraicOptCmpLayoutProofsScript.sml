@@ -116,16 +116,6 @@ Proof
   >- (irule ao_cmp_nonphi_chunk >> metis_tac[])
 QED
 
-Theorem ao_cmp_operand_vars_eq:
-  !ops. dfgDefs$operand_vars ops = venomInst$operand_vars ops
-Proof
-  Induct
-  >- simp[dfgDefsTheory.operand_vars_def, venomInstTheory.operand_vars_def] >>
-  Cases_on `h` >>
-  simp[dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def,
-       venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]
-QED
-
 Theorem ao_cmp_phi_separation:
   !fn supply supply' fs inst flipped ignored.
   ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn))) /\
@@ -144,7 +134,7 @@ Proof
      simp[is_comparator_def]) >>
   `DISJOINT (set (inst_ir_vars inst)) ignored` by
     (gvs[] >> irule ao_cmp_ignored_inst_vars >> metis_tac[]) >>
-  gvs[ao_cmp_operand_vars_eq, pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION,
+  gvs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION,
       inst_ir_vars_def, inst_uses_def, MEM_APPEND,
       MEM_operand_vars_eq_Var] >>
   metis_tac[]
