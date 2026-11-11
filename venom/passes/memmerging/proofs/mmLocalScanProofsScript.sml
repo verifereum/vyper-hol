@@ -15634,6 +15634,353 @@ Proof
   metis_tac[]
 QED
 
+Theorem mm_local_representative_finite_bounds[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  h = phi_prefix_length is /\ h <= r /\ r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\ eom < dimword (:256) /\
+  (!q. h <= q /\ q <= r ==> (H q).vs_inst_idx = q /\
+    (H q).vs_current_bb = bb.bb_label /\
+    static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+      (EL q is) (H q) /\
+    ?u. step_inst fuel ctx (EL q is) (H q) = OK u) ==>
+  g.cg_dst < dimword (:256) /\ g.cg_src < dimword (:256) /\
+  g.cg_length < dimword (:256)
+Proof
+  strip_tac >>
+  qabbrev_tac `due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r)` >>
+  `?c. g.cg_dst <= c.cg_dst /\
+    c.cg_dst + c.cg_length <= g.cg_dst + g.cg_length /\
+    c.cg_src = g.cg_src + (c.cg_dst - g.cg_dst) /\
+    ((?d s l. (EL r is).inst_opcode = MCOPY /\
+      (EL r is).inst_operands = [Lit d; Lit s; Lit l] /\
+      c = <|cg_dst := w2n d; cg_src := w2n s; cg_length := w2n l;
+        cg_inst_ids := [(EL r is).inst_id]|>) \/
+     (?d v src. (EL r is).inst_opcode = MSTORE /\
+      (EL r is).inst_operands = [Lit d; Var v] /\
+      FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+        empty_scan_state (TAKE r is)).ss_loads v = SOME src /\
+      c = <|cg_dst := w2n d; cg_src := src; cg_length := 32;
+        cg_inst_ids := [(EL r is).inst_id] ++
+          (case dfg_get_def (dfg_build_function fn0) v of NONE => []
+            | SOME li => [li.inst_id])|>))` by
+    (`MEM r (due ++ [r])` by simp[] >>
+     `due = FILTER (\j. mm_local_rep_index is gs j = r)
+       (mm_local_pending_indices is gs r)` by simp[Abbr `due`] >>
+     drule_all (Q.INST [`j` |-> `r`, `s0` |->
+       `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE r is)`]
+       mm_local_canonical_due_birth_geometry |> SRULE []) >>
+     simp[]) >>
+  `g.cg_src < dimword (:256)` by
+    (Cases_on `(EL r is).inst_opcode = MCOPY`
+     >- (gvs[] >> mp_tac (Q.ISPEC `s:256 word` wordsTheory.w2n_lt) >> simp[] >> decide_tac) >>
+     gvs[] >> drule mm_local_scan_lookup_origin >> strip_tac >> gvs[] >>
+     mp_tac (Q.ISPEC `w:256 word` wordsTheory.w2n_lt) >> simp[] >> decide_tac) >>
+  `?j dj lj. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    mm_local_write_footprint (EL j is) = SOME (dj,lj) /\
+    dj + lj = g.cg_dst + g.cg_length` by
+    (`MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
+     drule_all (Q.INST [`cap` |-> `\p. OPTION_MAP (\(d,l). (d,REPLICATE l (0w:word8)))
+       (mm_local_write_footprint (EL p is))`] mm_local_final_footprint_extent |> SRULE []) >>
+     simp[mm_local_group_endpoint_def] >> strip_tac >>
+     gvs[AllCaseEqs()] >> PairCases_on `z` >> gvs[] >> metis_tac[]) >>
+  `due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r)` by simp[Abbr `due`] >>
+  `MEM j (due ++ [r])` by metis_tac[mm_local_canonical_due_footprint_indices] >>
+  `h <= j /\ j <= r` by
+    (Cases_on `j = r` >- gvs[] >>
+     `MEM j (mm_local_pending_indices is gs r)` by gvs[Abbr `due`, MEM_FILTER] >>
+     drule mm_local_pending_indices_after_phis >>
+     gvs[mm_local_pending_indices_mem] >> decide_tac) >>
+  `wf_function (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)` by
+    (irule mm_local_prefix_function_wf >> metis_tac[wf_ssa_def]) >>
+  `MEM bb (LUPDATE bb index fn0.fn_blocks)` by
+    (simp[listTheory.MEM_LUPDATE]) >>
+  `lookup_block bb.bb_label (LUPDATE bb index fn0.fn_blocks) = SOME bb` by
+    (mp_tac (Q.SPECL [`fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks`, `bb`]
+       removeUnusedProofsTheory.wf_lookup_block) >> simp[]) >>
+  ` (H j).vs_inst_idx = j /\ (H j).vs_current_bb = bb.bb_label /\
+    static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+      (EL j is) (H j) /\ ?u. step_inst fuel ctx (EL j is) (H j) = OK u` by
+    metis_tac[] >>
+  drule_all (Q.INST [`j` |-> `j`, `s0` |->
+    `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is)`]
+    mm_local_canonical_due_birth_geometry |> PURE_REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES]) >> strip_tac >>
+  `~in_revert_forward (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks) (H j)` by
+    (simp[contextCodegenRelTheory.in_revert_forward_def] >> strip_tac >>
+     `get_instruction bb j = SOME (EL j is)` by (gvs[venomInstTheory.get_instruction_def]) >>
+     drule_all memSafeRunTheory.revert_forward_at_opcode >> simp[]) >>
+  qpat_x_assum `!q. h <= q /\ q <= r ==> _` kall_tac >>
+  qpat_x_assum `static_mem_ok _ _ _ (EL j is) _` mp_tac >>
+  simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+    EVERY_APPEND] >> strip_tac >>
+  (Cases_on `(EL j bb.bb_instructions).inst_opcode = MCOPY`
+  >- (gvs[mm_local_write_footprint_def, codegenRelTheory.source_memory_write_ranges_def,
+        codegenRelTheory.sized_source_write_range_def, venomStateTheory.eval_operand_def] >>
+      rename1 `(EL j bb.bb_instructions).inst_operands = [Lit dw; Lit sw; Lit lw]` >>
+      mp_tac (Q.ISPEC `dw:256 word` wordsTheory.w2n_lt) >> simp[] >> decide_tac) >>
+  gvs[mm_local_write_footprint_def] >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  asm_simp_tac (srw_ss()) [venomExecSemanticsTheory.step_inst_non_invoke] >>
+  with_opcode_clause simp >>
+  simp[venomExecSemanticsTheory.exec_write2_def, venomStateTheory.eval_operand_def] >>
+  rename1 `(EL j bb.bb_instructions).inst_operands = [Lit dstw; Var valuev]` >>
+  Cases_on `lookup_var valuev (H j)` >> simp[] >> strip_tac >>
+  gvs[codegenRelTheory.source_memory_write_ranges_def,
+    codegenRelTheory.fixed_source_write_range_def, venomStateTheory.eval_operand_def] >>
+  decide_tac)
+QED
+
+Theorem mm_local_mem2mem_prefix_execution[local]:
+  !n fn0 supply index k bb sk is gs ns rs deleted excluded h H fuel ctx eom pre esh out esn.
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  deleted = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
+  h = phi_prefix_length is /\ h <= n /\ n <= LENGTH is /\
+  (!q. h <= q /\ q < n ==>
+    (H q).vs_inst_idx = q /\ (H q).vs_current_bb = bb.bb_label /\
+    ~is_terminator (EL q is).inst_opcode /\
+    ?u. step_inst fuel ctx (EL q is) (H q) = OK u /\
+      H (SUC q) = u with vs_inst_idx := SUC q) /\
+  (!q. h <= q /\ q < n ==>
+    static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+      (EL q is) (H q)) /\
+  eom < dimword (:256) /\
+  mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE h is) = (pre,esh) /\
+  mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) esh
+    (TAKE (n-h) (DROP h is)) = (out,esn) ==>
+  ?t. mm_local_exec_prefix fuel ctx out (H h with vs_inst_idx := LENGTH pre) t /\
+    mm_local_cut is gs H n excluded (LENGTH pre + LENGTH out) t /\
+    mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE n is) =
+      (pre ++ out,esn) /\
+    ir_supply_extends sk esh /\ ir_supply_extends esh esn /\
+    t.vs_inst_idx = LENGTH pre + LENGTH out
+Proof
+  completeInduct_on `n` >> rpt strip_tac >>
+  Cases_on `n = h`
+  >- (qpat_x_assum `n = h` SUBST_ALL_TAC >>
+      fs[mm_flat_map_supply_def] >>
+      qexists `H h with vs_inst_idx := LENGTH pre` >>
+      simp[mm_local_exec_prefix_def, mm_local_extends_refl] >>
+      conj_tac >- (irule mm_local_cut_init >> simp[]) >>
+      irule (cj 1 mm_local_list_resources) >>
+      qexistsl [`apply_groups_inst_supply Mem2Mem ns rs`,`TAKE h is`] >>
+      metis_tac[mm_local_mode_resources]) >>
+  Cases_on `n` >- fs[] >> rename1 `SUC r <= LENGTH is` >>
+  `h <= r /\ r < LENGTH is` by decide_tac >>
+  Cases_on `mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) esh
+    (TAKE (r-h) (DROP h is))` >>
+  rename1 `mm_flat_map_supply _ esh (TAKE (r-h) (DROP h is)) = (front,es)` >>
+  `!q. h <= q /\ q < r ==>
+    (H q).vs_inst_idx = q /\ (H q).vs_current_bb = bb.bb_label /\
+    ~is_terminator (EL q is).inst_opcode /\
+    ?u. step_inst fuel ctx (EL q is) (H q) = OK u /\
+      H (SUC q) = u with vs_inst_idx := SUC q` by
+    (qx_gen_tac `q` >> strip_tac >>
+     qpat_assum `!q. h <= q /\ q < SUC r ==> (H q).vs_inst_idx = q /\ _`
+       (qspec_then `q` mp_tac) >> simp[]) >>
+  `!q. h <= q /\ q < r ==>
+    static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+      (EL q is) (H q)` by
+    (rpt strip_tac >> first_x_assum irule >> simp[] >> decide_tac) >>
+  `r <= LENGTH is` by decide_tac >>
+  qpat_x_assum `!m. m < SUC r ==> _` (qspec_then `r` mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then drule_all >> strip_tac >>
+  Cases_on `apply_groups_inst_supply Mem2Mem ns rs es (EL r is)` >>
+  rename1 `apply_groups_inst_supply Mem2Mem ns rs es (EL r is) = (frag,es')` >>
+  `TAKE (SUC r-h) (DROP h is) = TAKE (r-h) (DROP h is) ++ [EL r is]` by
+    (`SUC r-h = SUC (r-h) /\ r-h < LENGTH (DROP h is)` by
+       (simp[] >> gvs[]) >>
+     gvs[rich_listTheory.TAKE_SUC_BY_TAKE, rich_listTheory.SNOC_APPEND,
+       rich_listTheory.EL_DROP]) >>
+  `mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) esh
+     (TAKE (SUC r-h) (DROP h is)) = (front ++ frag,es')` by
+    (qpat_assum `TAKE (SUC r-h) (DROP h is) = _` (fn th => rewrite_tac[th]) >>
+     irule mm_local_flat_map_supply_append >>
+     qexists `es` >> simp[mm_flat_map_supply_def]) >>
+  `out = front ++ frag /\ esn = es'` by metis_tac[pairTheory.PAIR_EQ] >>
+  `ir_supply_extends es es'` by
+    (irule (cj 1 mm_local_mode_resources) >> metis_tac[]) >>
+  `mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk
+     (TAKE (SUC r) is) = (pre ++ out,esn)` by
+    (qpat_assum `out = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `esn = _` (fn th => rewrite_tac[th]) >>
+     `TAKE (SUC r) is = TAKE r is ++ [EL r is]` by
+       simp[rich_listTheory.TAKE_SUC_BY_TAKE, rich_listTheory.SNOC_APPEND] >>
+     qpat_assum `TAKE (SUC r) is = _` (fn th => rewrite_tac[th]) >>
+     rewrite_tac[APPEND_ASSOC] >>
+     irule mm_local_flat_map_supply_append >>
+     qexists `es` >> simp[mm_flat_map_supply_def]) >>
+  `?t'. mm_local_exec_prefix fuel ctx frag t t' /\
+    mm_local_cut is gs H (SUC r) excluded
+      (LENGTH pre + LENGTH front + LENGTH frag) t'` suffices_by
+    (strip_tac >> qexists `t'` >>
+     conj_tac >- (qpat_assum `out = _` (fn th => rewrite_tac[th]) >>
+       metis_tac[mm_local_exec_prefix_append]) >>
+     conj_tac >- metis_tac[listTheory.LENGTH_APPEND, arithmeticTheory.ADD_ASSOC] >>
+     conj_tac >- simp[] >> conj_tac >- simp[] >>
+     conj_tac >- metis_tac[mm_local_extends_trans] >>
+     drule mm_local_exec_prefix_cursor >> simp[]) >>
+  ` (H r).vs_inst_idx = r /\ ~is_terminator (EL r is).inst_opcode /\
+    ?u. step_inst fuel ctx (EL r is) (H r) = OK u /\
+      H (SUC r) = u with vs_inst_idx := SUC r` by
+    (qpat_assum `!q. h <= q /\ q < SUC r ==> (H q).vs_inst_idx = q /\ _`
+      (qspec_then `r` mp_tac) >> simp[]) >>
+  Cases_on `MEM (EL r is).inst_id ns`
+  >- (Cases_on `(EL r is).inst_opcode = MLOAD`
+      >- (`{v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} SUBSET excluded` by
+            (simp[pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
+          `phi_prefix_length is <= r` by metis_tac[] >>
+          `H (SUC r) = u with vs_inst_idx := SUC (H r).vs_inst_idx` by simp[] >>
+          drule_all mm_local_cut_erased_load_excluded_transition >>
+          disch_then (qspec_then `es` strip_assume_tac) >>
+          `frag = [mk_nop_from (EL r is)]` by metis_tac[pairTheory.PAIR_EQ] >>
+          qexists `t with vs_inst_idx := SUC (LENGTH pre + LENGTH front)` >>
+          conj_tac >- gvs[mm_local_exec_prefix_def, mk_nop_from_def,
+            venomInstTheory.is_terminator_def] >> gvs[arithmeticTheory.ADD1]) >>
+      Cases_on `(EL r is).inst_opcode IN {MSTORE; MCOPY}`
+      >- (`phi_prefix_length is <= r` by metis_tac[] >>
+          `H (SUC r) = u with vs_inst_idx := SUC (H r).vs_inst_idx` by simp[] >>
+          drule_all mm_local_cut_erased_write_transition >>
+          disch_then (qspec_then `es` strip_assume_tac) >>
+          `frag = [mk_nop_from (EL r is)]` by metis_tac[pairTheory.PAIR_EQ] >>
+          qexists `t with vs_inst_idx := SUC (LENGTH pre + LENGTH front)` >>
+          conj_tac >- gvs[mm_local_exec_prefix_def, mk_nop_from_def,
+            venomInstTheory.is_terminator_def] >> gvs[arithmeticTheory.ADD1]) >>
+      `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+        metis_tac[mm_local_prefix_wf_id_distinct] >>
+      `MEM (EL r is) bb.bb_instructions` by metis_tac[EL_MEM] >>
+      `!g. MEM g gs ==> ~MEM (EL r is).inst_id g.cg_inst_ids` by
+        (gvs[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY] >>
+         metis_tac[mm_local_prefix_nonselected_group_absent,
+           mode_copy_opcode_def, mode_load_opcode_def]) >>
+      qpat_x_assum `MEM (EL r is).inst_id ns` mp_tac >>
+      pure_asm_rewrite_tac[nop_ids_of_groups_def, MEM_FLAT, MEM_MAP] >>
+      strip_tac >> gvs[] >>
+      rename1 `MEM _ (nop_ids_of_group _ _ _ g)` >>
+      qpat_x_assum `MEM _ (nop_ids_of_group _ _ _ _)` mp_tac >>
+      simp[nop_ids_of_group_def] >>
+      Cases_on `REVERSE (sort_ids_by_block bb.bb_instructions g.cg_inst_ids)` >>
+      simp[MEM_FILTER] >> strip_tac >>
+      `MEM (EL r bb.bb_instructions).inst_id
+        (REVERSE (sort_ids_by_block bb.bb_instructions g.cg_inst_ids))` by
+        (pure_asm_rewrite_tac[MEM] >> simp[]) >>
+      gvs[MEM_REVERSE, sort_ids_by_block_def, MEM_FILTER] >> metis_tac[]) >>
+  Cases_on `ALOOKUP rs (EL r is).inst_id`
+  >- (`frag = [EL r is] /\ es' = es` by
+        (gvs[apply_groups_inst_supply_def]) >>
+      `((EL r is).inst_opcode IN {MSTORE; MCOPY} ==>
+        ~(?g. MEM g gs /\ MEM (EL r is).inst_id g.cg_inst_ids))` by
+        (strip_tac >> strip_tac >>
+         `MEM (EL r is) bb.bb_instructions` by metis_tac[EL_MEM] >>
+         `(EL r is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by gvs[] >>
+         `!v li. dfg_get_def (dfg_build_function fn0) v = SOME li ==>
+           li.inst_id <> (EL r is).inst_id` by
+           metis_tac[mm_local_prefix_write_not_def] >>
+         `!rep. rep_pin_id (dfg_build_function fn0) Mem2Mem rep g <>
+           SOME (EL r is).inst_id` by
+           (simp[rep_pin_id_def, AllCaseEqs()] >> metis_tac[]) >>
+         drule_all mm_local_prefix_write_origin >> strip_tac >>
+         rename1 `MEM orig (EL index fn0.fn_blocks).bb_instructions` >>
+         `dfg_get_inst_by_id (dfg_build_function fn0) orig.inst_id = SOME orig` by
+           (irule mm_local_function_ids_exact >> simp[] >>
+            irule mmWfProofsTheory.fn_insts_mem_block >>
+            qexists `EL index fn0.fn_blocks` >> simp[EL_MEM]) >>
+         `~MEM (EL r is).inst_id
+           (nop_ids_of_group (dfg_build_function fn0) Mem2Mem is g)` by
+           (gvs[nop_ids_of_groups_def, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+         `MEM (EL r is).inst_id (sort_ids_by_block is g.cg_inst_ids)` by
+           (simp[sort_ids_by_block_def, MEM_FILTER, MEM_MAP] >> metis_tac[]) >>
+         Cases_on `REVERSE (sort_ids_by_block is g.cg_inst_ids)`
+         >- metis_tac[MEM_REVERSE, MEM] >>
+         rename1 `REVERSE (sort_ids_by_block is g.cg_inst_ids) = rep::earlier` >>
+         `rep_of_group is g = SOME (rep,g)` by gvs[rep_of_group_def] >>
+         `rep = (EL r is).inst_id` by
+           (Cases_on `rep = (EL r is).inst_id` >- simp[] >>
+            `MEM (EL r is).inst_id earlier` by metis_tac[MEM_REVERSE, MEM] >>
+            qpat_x_assum `~MEM _ (nop_ids_of_group _ _ _ _)` mp_tac >>
+            pure_asm_rewrite_tac[nop_ids_of_group_def, MEM_FILTER, MEM_REVERSE] >>
+            gvs[MEM_FILTER, MEM_REVERSE, pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
+         `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+           metis_tac[mm_local_prefix_wf_id_distinct] >>
+         `MEM ((EL r is).inst_id,g) rs` by
+           (pure_asm_rewrite_tac[rep_map_of_groups_def, MEM_MAP, MEM_FILTER] >>
+            qexists `SOME ((EL r is).inst_id,g)` >> simp[] >>
+            qexists `g` >> simp[] >> metis_tac[]) >>
+         gvs[alistTheory.ALOOKUP_NONE, MEM_MAP] >> metis_tac[pairTheory.FST]) >>
+      `?t'. mm_local_exec_prefix fuel ctx [EL r is] t t' /\
+        mm_local_cut is gs H (SUC r) excluded
+          (SUC (LENGTH pre + LENGTH front)) t'` by
+        (irule mm_local_cut_ordinary_transition >> metis_tac[]) >>
+      gvs[arithmeticTheory.ADD1] >> metis_tac[]) >>
+  `?g. MEM g gs /\ rep_of_group is g = SOME ((EL r is).inst_id,x)` by
+    (drule alistTheory.ALOOKUP_MEM >>
+     pure_asm_rewrite_tac[rep_map_of_groups_def, MEM_MAP, MEM_FILTER] >>
+     strip_tac >> rename1 `IS_SOME opt` >>
+     Cases_on `opt` >> fs[] >>
+     metis_tac[]) >>
+  `g = x` by
+    (gvs[rep_of_group_def, AllCaseEqs()]) >>
+  `rep_of_group is x = SOME ((EL r is).inst_id,x) /\ MEM x gs` by metis_tac[] >>
+  `!q. h <= q /\ q <= r ==> ~is_terminator (EL q is).inst_opcode /\
+    ?z. step_inst fuel ctx (EL q is) (H q) = OK z /\
+      H (SUC q) = z with vs_inst_idx := SUC (H q).vs_inst_idx` by
+    (qx_gen_tac `q` >> strip_tac >>
+     qpat_assum `!q. h <= q /\ q < SUC r ==> (H q).vs_inst_idx = q /\ _`
+       (qspec_then `q` mp_tac) >> simp[] >> gvs[]) >>
+  `((EL r is).inst_opcode = MSTORE /\ x.cg_length = 32 ==>
+    !w. MEM (Var w) (EL r is).inst_operands ==>
+      lookup_var w (H r) = lookup_var w t)` by
+    (rpt strip_tac >> irule mm_local_cut_representative_protected_operands >>
+     metis_tac[]) >>
+  Cases_on `fresh_inst_id es` >> rename1 `fresh_inst_id es = (lid,es1)` >>
+  Cases_on `fresh_ir_var es1` >> rename1 `fresh_ir_var es1 = (v,es2)` >>
+  `v IN excluded` by
+    (irule mm_local_emission_fresh_excluded >> metis_tac[]) >>
+  `!q. h <= q /\ q <= r ==> (H q).vs_inst_idx = q /\
+    (H q).vs_current_bb = bb.bb_label /\
+    static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+      (EL q is) (H q) /\
+    ?u. step_inst fuel ctx (EL q is) (H q) = OK u` by
+    (qx_gen_tac `q` >> strip_tac >>
+     qpat_assum `!q. h <= q /\ q < SUC r ==> (H q).vs_inst_idx = q /\ _`
+       (qspec_then `q` mp_tac) >>
+     qpat_assum `!q. h <= q /\ q < SUC r ==> static_mem_ok _ _ _ _ _`
+       (qspec_then `q` mp_tac) >> simp[] >> metis_tac[]) >>
+  `x.cg_dst < dimword (:256) /\ x.cg_src < dimword (:256) /\
+    x.cg_length < dimword (:256)` by
+    (irule mm_local_representative_finite_bounds >> metis_tac[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) frag` by
+    (qpat_x_assum `is = bb.bb_instructions` kall_tac >>
+     qpat_x_assum `apply_groups_inst_supply _ _ _ _ _ = (frag,es')` mp_tac >>
+     pure_asm_rewrite_tac[apply_groups_inst_supply_def] >>
+     Cases_on `x.cg_length = 32` >>
+     Cases_on `(EL r is).inst_opcode = MSTORE` >>
+     pure_asm_rewrite_tac[] >>
+     simp[mk_bulk_copy_inst_def, mk_load_inst_def, mk_mstore_from_load_def,
+       mode_copy_opcode_def, mode_load_opcode_def] >>
+     strip_tac >> gvs[venomInstTheory.is_terminator_def]) >>
+  drule_all mm_local_cut_representative_transition >> strip_tac >>
+  gvs[] >>
+  qmatch_asmsub_abbrev_tac `mm_local_cut _ _ _ (SUC r) _ _ done` >>
+  qexists `done` >> simp[] >>
+  simp[mm_local_exec_prefix_def, Abbr `done`, arithmeticTheory.ADD1] >>
+  qexists `fin` >> gvs[arithmeticTheory.ADD1]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
