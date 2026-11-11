@@ -3558,7 +3558,7 @@ Proof
   `sym_kinds_ok cplan fn ret srest (ps with ps_spilled := FEMPTY) ss` by
     (simp[sym_kinds_ok_def] >> metis_tac[]) >>
   `prefix_spill_wf fmp lo ops (ps with ps_spilled := FEMPTY)` by
-    metis_tac[genBlockSimTheory.simple_prefix_spill_wf] >>
+    metis_tac[singleInputSimTheory.simple_prefix_spill_wf] >>
   `!op. is_simple_stack_op op ==> is_prefix_op op /\
      (!l d. op <> SOPushOfst l d) /\ (!off. op <> SOSpill off)` by
     (Cases >> simp[strongPrefixSimTheory.is_simple_stack_op_def,
