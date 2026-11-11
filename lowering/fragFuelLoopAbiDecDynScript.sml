@@ -25,7 +25,7 @@ Libs
    leaves it alone; that is the precondition. *)
 Theorem fuel_okS_compile_abi_decode_dyn_loop:
   !dst src_op load_opc base_op hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt.
-    ~is_terminator load_opc /\ load_opc <> PHI /\
+    ~is_terminator load_opc /\ load_opc <> PHI /\ load_opc <> INVOKE /\
     (!d s Wv E.
        fuel_ok Wv {} E
          (compile_abi_decode_to_buf d s load_opc base_op hi_op elem_info)) ==>
