@@ -270,6 +270,32 @@ Proof
   first_x_assum drule >> simp[regions_disjoint_def] >> decide_tac
 QED
 
+(* The same write keeps the pure frame of an effect-free expression: it lands
+   inside a fresh ALLOCA's buffer, clear of the live locals. *)
+Theorem slice_allocated_bytes_pure_frame:
+  !cenv func es sa s t inst p sz bytes.
+  (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+     FLOOKUP t.vs_allocas aid = SOME b) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  sa.cs_next_id <= inst.inst_id /\
+  FLOOKUP t.vs_allocas inst.inst_id = SOME (p,sz) /\
+  32 + LENGTH bytes <= sz /\
+  (!name off len. local_region cenv es.scopes s name off len ==>
+     regions_disjoint p sz off len) /\
+  t.vs_memory = (mstore p (n2w (LENGTH bytes))
+                   (write_memory_with_expansion (p+32) bytes s)).vs_memory ==>
+  pure_frame cenv func es sa s t
+Proof
+  rpt strip_tac >>
+  match_mp_tac (Q.SPECL [`cenv`, `func`, `es`, `sa`, `s`, `s`, `t`, `inst`,
+                         `p`, `sz`] exprSimPropsTheory.pure_frame_buffer_tail) >>
+  simp[] >> rpt strip_tac
+  >~ [`regions_disjoint p sz lb lsz`]
+  >- (qpat_x_assum `!name off len. _` drule >> simp[]) >>
+  qpat_x_assum `t.vs_memory = _` (fn th => rewrite_tac[th]) >>
+  irule bytes_buffer_write_frame >> fs[regions_disjoint_def] >> decide_tac
+QED
+
 Theorem slice_data_success_run:
  compile_slice_data src_len src_data start len sz sa = (out,sb) /\
  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -290,7 +316,9 @@ Theorem slice_data_success_run:
  w2n p + sz < dimword (:256) /\
  (!name b l. local_region cenv es.scopes t name b l ==> regions_disjoint (w2n p) sz b l) /\
  t.vs_memory = (mstore (w2n p) (n2w n)
-   (write_memory_with_expansion (w2n p+32) (TAKE n (DROP a bs)) s)).vs_memory
+   (write_memory_with_expansion (w2n p+32) (TAKE n (DROP a bs)) s)).vs_memory /\
+ (?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+         inst.inst_id = aid)
 Proof
   strip_tac >> drule slice_data_decompose >> strip_tac >>
   drule_all slice_data_insts >> strip_tac >>
@@ -521,11 +549,16 @@ Resume slice_data_success_run[finish]:
          qexistsl_tac [`sa`, `es.scopes`, `final`] >> simp[lookup_var_def]) >>
       qpat_assum `!name b l. local_region cenv es.scopes v _ _ _ ==> _` drule >>
       simp[]) >>
-  qpat_assum `final = mstore _ (n2w n) _` SUBST1_TAC >>
-  qpat_assum `v.vs_memory = s.vs_memory` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >>
-  simp_tac std_ss [mstore_def, write_memory_with_expansion_def,
-                   LET_THM, venom_state_accfupds]
+  conj_tac
+  >- (qpat_assum `final = mstore _ (n2w n) _` SUBST1_TAC >>
+      qpat_assum `v.vs_memory = s.vs_memory` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      simp_tac std_ss [mstore_def, write_memory_with_expansion_def,
+                       LET_THM, venom_state_accfupds]) >>
+  qexists_tac `mk_inst sc.cs_next_id ALLOCA [Lit (n2w sz)]
+                 [STRING #"%" (toString sc.cs_next_var)]` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  simp[mk_inst_def]
 QED
 
 Finalise slice_data_success_run

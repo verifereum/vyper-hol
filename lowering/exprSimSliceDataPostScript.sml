@@ -28,6 +28,27 @@ Proof
  gen_tac >> rewrite_tac[exprSimVVFrameTheory.vv_post_inst_idx] >>
  `post_value_type cenv e = expr_type e` by
    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
+ `LENGTH (TAKE n (DROP a bs)) = n` by
+   (simp[LENGTH_TAKE, LENGTH_DROP] >> decide_tac) >>
+ `~expr_has_effect e ==> pure_frame cenv func es sa s t` by
+   (strip_tac >>
+    qpat_assum `wb_frame _ _ _ _ _ _`
+      (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
+    `!name b l. local_region cenv es.scopes s name b l ==>
+                regions_disjoint (w2n p) sz b l` by
+      (rpt strip_tac >>
+       `local_region cenv es.scopes t name b l` by
+         (match_mp_tac (Q.SPECL [`cenv`, `es.scopes`, `sa`, `es.scopes`, `s`, `t`]
+                          exprSimPropsTheory.local_region_frame_fwd) >>
+          rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+       qpat_x_assum `!name b l. local_region cenv es.scopes t _ _ _ ==> _`
+         drule >> simp[]) >>
+    match_mp_tac (Q.SPECL [`cenv`, `func`, `es`, `sa`, `s`, `t`, `inst`, `w2n (p:bytes32)`,
+                           `sz`, `TAKE n (DROP a bs)`]
+                    slice_allocated_bytes_pure_frame) >>
+    qpat_assum `LENGTH (TAKE _ _) = n` (fn th => rewrite_tac[th]) >>
+    qpat_assum `inst.inst_id = aid` (fn th => rewrite_tac[th]) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>
  Cases_on `evaluate_type (get_tenv cx) (expr_type e)`
  >- (irule vv_post_frame_intro >>
      simp[vv_holds_def, vv_at_def, mk_ptr_def, vyperStateTheory.read_result_def] >>
@@ -81,6 +102,27 @@ Proof
  gen_tac >> rewrite_tac[exprSimVVFrameTheory.vv_post_inst_idx] >>
  `post_value_type cenv e = expr_type e` by
    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
+ `LENGTH (TAKE n (DROP a (MAP (n2w o ORD) text : word8 list))) = n` by
+   (simp[LENGTH_TAKE, LENGTH_DROP, LENGTH_MAP] >> decide_tac) >>
+ `~expr_has_effect e ==> pure_frame cenv func es sa s t` by
+   (strip_tac >>
+    qpat_assum `wb_frame _ _ _ _ _ _`
+      (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
+    `!name b l. local_region cenv es.scopes s name b l ==>
+                regions_disjoint (w2n p) sz b l` by
+      (rpt strip_tac >>
+       `local_region cenv es.scopes t name b l` by
+         (match_mp_tac (Q.SPECL [`cenv`, `es.scopes`, `sa`, `es.scopes`, `s`, `t`]
+                          exprSimPropsTheory.local_region_frame_fwd) >>
+          rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+       qpat_x_assum `!name b l. local_region cenv es.scopes t _ _ _ ==> _`
+         drule >> simp[]) >>
+    match_mp_tac (Q.SPECL [`cenv`, `func`, `es`, `sa`, `s`, `t`, `inst`, `w2n (p:bytes32)`,
+                           `sz`, `TAKE n (DROP a (MAP (n2w o ORD) text : word8 list))`]
+                    slice_allocated_bytes_pure_frame) >>
+    qpat_assum `LENGTH (TAKE _ _) = n` (fn th => rewrite_tac[th]) >>
+    qpat_assum `inst.inst_id = aid` (fn th => rewrite_tac[th]) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>
  Cases_on `evaluate_type (get_tenv cx) (expr_type e)`
  >- (irule vv_post_frame_intro >>
      simp[vv_holds_def, vv_at_def, mk_ptr_def, vyperStateTheory.read_result_def] >>

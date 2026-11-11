@@ -385,8 +385,18 @@ Proof
         (lookup_account (w2w a) s.vs_accounts).code))) (w2n p) t.vs_memory` by
     (qpat_x_assum `t.vs_memory = _` (fn th => pure_rewrite_tac[th]) >>
      metis_tac[exprSimCalldataSliceTheory.bytes_buffer_write_encoding, n2w_w2n]) >>
-  qpat_x_assum `t.vs_memory = _` kall_tac >>
   qpat_x_assum `wb_frame _ _ _ _ _ _` (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+  `pure_frame cenv func es sbase s t` by
+    (match_mp_tac (Q.SPECL [`cenv`, `func`, `es`, `sbase`, `s`, `t`, `inst`,
+                            `w2n (p:bytes32)`, `cap`,
+                            `TAKE (w2n (n:bytes32)) (DROP (w2n (b:bytes32))
+                               (lookup_account (w2w (a:bytes32)) s.vs_accounts).code)`]
+                     slice_allocated_bytes_pure_frame) >>
+     qpat_assum `LENGTH _ = w2n n`
+       (fn th => rewrite_tac[th, wordsTheory.n2w_w2n]) >>
+     qpat_assum `inst.inst_id = aid` (fn th => rewrite_tac[th]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `t.vs_memory = _` kall_tac >>
   `post_value_type cenv e = expr_type e` by
     (irule loweringPostsTheory.post_value_type_bytestring >>
      simp[compileEnvTheory.is_bytestring_type_def]) >>

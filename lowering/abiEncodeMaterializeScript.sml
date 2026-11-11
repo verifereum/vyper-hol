@@ -138,6 +138,9 @@ Proof
   `~expr_has_effect e ==> vv_storage_live cx vv es' t` by
     (Cases_on `vv` >>
      gvs[vv_storage_live_def, vv_operand_def]) >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 t` by
+    (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >>
+     simp[]) >>
   simp[vv_post_def] >> gvs[]
 QED
 
@@ -346,7 +349,13 @@ Proof
       `not_fresh_at (sa with cs_next_var := mid.cs_next_var) x` by
         (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
       first_x_assum irule >> simp[] >> metis_tac[])
-  >- metis_tac[] >>
+  >- metis_tac[]
+  >~ [`pure_frame _ _ _ _ _ z`]
+  >- (strip_tac >>
+      match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `es'`, `sa`,
+                             `sa with cs_next_var := mid.cs_next_var`, `s0`,
+                             `u`, `z`] exprSimPropsTheory.pure_frame_trans) >>
+      simp[]) >>
   rpt strip_tac >>
   `FLOOKUP u.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
   `mem_bytes_at off sz z.vs_memory = mem_bytes_at off sz u.vs_memory` by

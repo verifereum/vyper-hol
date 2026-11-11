@@ -36,7 +36,8 @@ Theorem slice_capture_post_initial_index:
 Proof
   simp[loweringPostsTheory.expr_post_def,
        loweringStateRelDefsTheory.local_region_def, venomStateTheory.lookup_var_def,
-       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def]
+       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def,
+       loweringPostsTheory.pure_frame_def]
 QED
 
 Theorem slice_capture_value_index:
