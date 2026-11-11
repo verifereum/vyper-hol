@@ -694,3 +694,68 @@ Resume ac_merge_emission_conditional[carry]:
   Cases_on `FIND (ac_merge_crossing xs (SUC n)) cs` >> gvs[]
 QED
 Finalise ac_merge_emission_conditional
+
+(* Concrete scanner instance of the static interface.  X contains generated
+   names and is disjoint from all variables occurring in the source list. *)
+Theorem ac_merge_cursor_laws_scan:
+  ALL_DISTINCT (MAP (\i. i.inst_id) xs) /\
+  ir_supply_extends
+    (SND (ac_merge_insts (ac_scan_block dfg xs NONE) [] su0 xs)) su_end /\
+  (set su_end.irs_used_vars DIFF set su0.irs_used_vars) SUBSET X /\
+  (!i v. MEM i xs /\ (MEM (Var v) i.inst_operands \/ MEM v i.inst_outputs)
+    ==> v NOTIN X) ==>
+  ac_merge_cursor_laws xs dfg (ac_scan_block dfg xs NONE) X su0
+    (ac_merge_static xs (ac_scan_block dfg xs NONE) su0 su_end)
+    (ac_merge_pending xs (ac_scan_block dfg xs NONE))
+Proof
+  strip_tac >>
+  simp[ac_merge_cursor_laws_def, ac_merge_static_initial,
+       ac_merge_pending_zero] >>
+  conj_tac >- suspend "bounds" >>
+  conj_tac >- suspend "unique" >>
+  conj_tac >- suspend "find" >>
+  suspend "emission"
+QED
+
+Resume ac_merge_cursor_laws_scan[bounds]:
+  rpt gen_tac >> strip_tac >>
+  `ac_merge_prefix_reachable xs (ac_scan_block dfg xs NONE) su0 n mp su` by
+    fs[ac_merge_static_def] >>
+  drule ac_merge_prefix_bounds >> strip_tac >> simp[] >>
+  conj_tac >- metis_tac[ac_merge_static_used_vars] >>
+  conj_tac
+  >- (rpt strip_tac >> irule ac_merge_pending_operand_origin >>
+      simp[] >>
+      qexistsl [`ac_scan_block dfg xs NONE`,`j`,`mp`,`su`,`su0`,`su_end`] >>
+      simp[] >> metis_tac[ac_scan_indexed_edge]) >>
+  strip_tac >> simp[ac_merge_pending_end]
+QED
+
+Resume ac_merge_cursor_laws_scan[unique]:
+  rpt strip_tac >> irule ac_merge_crossing_unique_conditional >> simp[] >>
+  qexistsl [`ac_scan_block dfg xs NONE`,`dfg`,`n`] >>
+  simp[] >> metis_tac[ac_scan_indexed_edge]
+QED
+
+Resume ac_merge_cursor_laws_scan[find]:
+  rpt strip_tac >>
+  `!mc. MEM mc (ac_scan_block dfg xs NONE) ==> ?i j c d.
+    i < j /\ j < LENGTH xs /\
+    (EL i xs).inst_id = mc.mc_first_id /\
+    (EL j xs).inst_id = mc.mc_second_id /\
+    (EL i xs).inst_opcode = ASSERT /\ (EL i xs).inst_operands = [c] /\
+    ac_get_iszero_operand dfg {} c = SOME mc.mc_first_pred /\
+    (EL j xs).inst_opcode = ASSERT /\ (EL j xs).inst_operands = [d] /\
+    ac_get_iszero_operand dfg {} d = SOME mc.mc_second_pred /\
+    (!k. i < k /\ k < j ==> ac_is_safe_between (EL k xs))` by
+    metis_tac[ac_scan_indexed_edge] >>
+  drule_all ac_merge_endpoint_find_conditional >> simp[]
+QED
+
+Resume ac_merge_cursor_laws_scan[emission]:
+  reverse conj_tac >- gvs[] >>
+  rpt gen_tac >> strip_tac >> irule ac_merge_emission_conditional >>
+  simp[] >> metis_tac[ac_scan_indexed_edge]
+QED
+
+Finalise ac_merge_cursor_laws_scan
