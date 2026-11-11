@@ -240,6 +240,39 @@ and raw_finish_tac g = (
 
 ;
 
+Theorem extrequest_bytelike_nonlabel[local]:
+  compile_bytelike_literal bs maxlen sa = (buf,sb) ==>
+  !l. buf.buf_operand <> Label l
+Proof
+  simp[compile_bytelike_literal_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[alloc_buffer_not_label]
+QED
+
+Theorem extrequest_literal_nonlabel[local]:
+  compile_literal_vv t lit sa = (vv,sb) ==> !l. vv_operand vv <> Label l
+Proof
+  Cases_on `lit`
+  >- (Cases_on `b` >>
+      simp[compile_literal_vv_def, comp_return_def] >>
+      rpt strip_tac >> gvs[vv_operand_def]) >>
+  simp[compile_literal_vv_def, comp_return_def, comp_bind_def] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
+  gvs[vv_operand_def, base_ptr_def]
+  >~ [`compile_bytelike_literal _ _ _ = _`] >-
+    (drule extrequest_bytelike_nonlabel >> simp[]) >>
+  Cases_on `t` >> gvs[comp_return_def, comp_bind_def, vv_operand_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  gvs[comp_return_def, comp_bind_def, vv_operand_def] >>
+  rename1 `BytesT bound` >> Cases_on `bound` >>
+  gvs[comp_return_def, comp_bind_def, vv_operand_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[vv_operand_def, base_ptr_def] >>
+  metis_tac[extrequest_bytelike_nonlabel]
+QED
+
 Theorem extrequest_compiler_nonlabel:
   (!ce ty e sa vv sb env.
      compile_expr ce ty e sa = (vv,sb) /\ well_typed_expr env e /\
@@ -270,16 +303,8 @@ Proof
       >~ [`compile_expr_body _ _ _ _ _ (Builtin _ _ _) _`] >- expr_builtin_tac
       >~ [`compile_expr_body _ _ _ _ _ (TypeBuiltin _ _ _ _) _`] >- expr_type_builtin_tac
       >~ [`compile_expr_body _ _ _ _ _ (Literal _ _) _`] >-
-        (Cases_on `l` >>
-         simp[compile_expr_body_def, expr_type_def, compile_literal_vv_def, comp_return_def] >>
-         rpt (BasicProvers.TOP_CASE_TAC >> simp[comp_bind_def, comp_return_def]) >>
-         simp[compile_bytelike_literal_def, comp_bind_def, comp_ignore_bind_def,
-              comp_return_def, LET_THM] >>
-         rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
-         gvs[vv_operand_def, base_ptr_def] >>
-         TRY (rename1 `compile_literal_vv _ (BoolL b) _ = _` >>
-              Cases_on `b` >> gvs[compile_literal_vv_def, comp_return_def, vv_operand_def] >> NO_TAC) >>
-         metis_tac[alloc_buffer_not_label])
+        (simp[compile_expr_body_def, expr_type_def] >>
+         metis_tac[extrequest_literal_nonlabel])
       >~ [`compile_expr_body _ _ _ _ _ (IfExp _ _ _ _) _`] >- ifexp_tac
       >~ [`compile_expr_body _ _ _ _ _ (StructLit _ _ _) _`] >- struct_tac
       >~ [`compile_expr_body _ _ _ _ _ (TopLevelName _ _) _`] >- toplevel_tac
