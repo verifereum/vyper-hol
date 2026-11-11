@@ -322,6 +322,7 @@ QED
 (* ===== The CALL and the ASSERT ===== *)
 
 Theorem expr_post_none_intro:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   expr_type e = NoneT /\ stmt_state_rel ctx func cenv cx es' s /\
   wb_frame cenv es es' sa s0 s ==>
@@ -332,7 +333,7 @@ Proof
        eval_operand_def, vyperValueTheory.evaluate_type_def,
        is_word_type_def, val_in_memory_def, val_wf_def, val_footprint_def,
        type_memory_size_def] >>
-  metis_tac[]
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* The ASSERT of the success word the CALL just bound. *)
@@ -397,6 +398,7 @@ Proof
 QED
 
 Theorem send_tail_frag:
+  expr_has_effect e /\
   emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
     sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (u, sb) /\
@@ -584,6 +586,7 @@ Proof
 QED
 
 Theorem send_tail_path[local]:
+  expr_has_effect e /\
   emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
     sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (u, sb) /\
@@ -670,6 +673,7 @@ Proof
 QED
 
 Theorem send_tail_summary[local]:
+  expr_has_effect e /\
   emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
     sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (u, sb) /\
@@ -789,7 +793,7 @@ Proof
   Cases_on `bind (eval_send cx has_gas (to_v :: amount_v :: gas_vs))
               (read_result cx) ee` >>
   rename1 `_ = (sres, es')` >>
-  irule send_tail_summary >> simp[expr_type_def] >>
+  irule send_tail_summary >> simp[expr_type_def, loweringPostsTheory.expr_has_effect_thm] >>
   qpat_assum `emit_op _ _ _ = _` (irule_at Any) >>
   qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
   qpat_assum `eval_operand addr_op _ = _` (irule_at Any) >>

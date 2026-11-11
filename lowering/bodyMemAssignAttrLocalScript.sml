@@ -310,6 +310,10 @@ Proof
      qpat_assum `wb_frame cenv es ee sa s0 s` (irule_at Any) >>
      qpat_assum `wb_frame cenv ee ee _ s u` (irule_at Any) >>
      qpat_assum `stmt_state_rel _ _ _ _ es s0` (irule_at Any) >> fs[]) >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 u` by
+    (strip_tac >> match_mp_tac exprSimPropsTheory.pure_frame_trans >>
+     qexistsl_tac [`ee`, `sa with cs_next_var := sm.cs_next_var`, `s`] >>
+     gvs[vv_post_def, expr_post_def]) >>
   qexistsl_tac [`v`, `u`] >> simp[] >>
   gvs[expr_post_def, wb_frame_def, expr_val_at_def] >> metis_tac[]
 QED

@@ -358,7 +358,8 @@ Proof
       qexistsl [`fld`, `fs`, `sid`, `tv`, `vals`] >> simp[])
   >~ [`vv_own _ _ _ _ _ _ _ _ _`] >- simp[]
   >~ [`vv_storage_live _ (LocatedValue _ _) _ _`] >- simp[mk_ptr_def] >>
-  first_assum ACCEPT_TAC
+  TRY (first_assum ACCEPT_TAC) >>
+  simp[loweringPostsTheory.expr_has_effect_thm]
 QED
 
 Theorem body_attribute_name_compile:

@@ -242,7 +242,8 @@ Resume pop_nested_local_sim[nonempty]:
       simp[Abbr `result`, Abbr `scopes'`]) >>
   disj1_tac >> simp[] >>
   irule (pop_memory_live_suffix_post |> Q.INST [`mid` |-> `tend with gas_obs := []`, `e` |-> `Pop ann bt`]
-    |> SRULE [exprSimVVFrameTheory.vv_post_inst_idx, expr_type_def]) >>
+    |> SRULE [exprSimVVFrameTheory.vv_post_inst_idx, expr_type_def,
+             loweringPostsTheory.expr_has_effect_thm]) >>
   goal_assum (drule_at Any) >>
   simp[] >> conj_tac >- metis_tac[] >>
   qpat_assum `mem_path_offset entry.type path = _` (irule_at Any) >>
