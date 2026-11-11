@@ -1911,3 +1911,68 @@ Proof
   gvs[] >> drule_all inline_routed_phi_at >> simp[] >> strip_tac >> gvs[] >>
   rpt strip_tac >> metis_tac[inline_tracked_phi_read]
 QED
+
+Theorem inline_phi_outputs_supported[local]:
+  !insts V. EVERY (inline_inst_vars_in (\x. x IN V)) insts ==>
+    inline_phi_outputs insts SUBSET V
+Proof
+  Induct >- simp[inline_phi_outputs_def] >>
+  rpt gen_tac >> simp[EVERY_DEF] >> strip_tac >>
+  first_x_assum drule >>
+  Cases_on `h.inst_opcode = PHI` >>
+  gvs[inline_phi_outputs_def,
+    functionInlinerNamespaceTheory.inline_inst_vars_in_def,
+    SUBSET_DEF, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem inline_owner_phi_batch:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  inline_routed_leaf cert root p a.ia_function path /\
+  route.ir_rename = inline_path_rename path /\
+  lookup_block snap.ils_state.vs_current_bb a.ia_function.fn_blocks = SOME sb /\
+  lookup_block frame.ipf_state.vs_current_bb root.fn_blocks = SOME tb /\
+  (!q. snap.ils_state.vs_prev_bb = SOME q ==> MEM q (fn_labels a.ia_function)) /\
+  inline_phi_entry_path path (snap.ils_state.vs_current_bb,snap.ils_state.vs_prev_bb) =
+    (frame.ipf_state.vs_current_bb,frame.ipf_state.vs_prev_bb) /\
+  eval_phis snap.ils_state sb.bb_instructions = OK u ==>
+  ?v. eval_phis frame.ipf_state tb.bb_instructions = OK v /\
+    inline_owner_storage cert
+      ((p,a,route,snap with <|ils_state := u;
+        ils_defined := inline_phi_outputs sb.bb_instructions UNION snap.ils_defined|>)::rest)
+      (frame with ipf_state := v)
+Proof
+  strip_tac >>
+  drule_all inline_owner_phi_observations >>
+  strip_tac >>
+  `?writes v. eval_phis frame.ipf_state tb.bb_instructions = OK v /\
+    u = FOLDL (\z (x,w,b). update_var x w z) snap.ils_state writes /\
+    v = FOLDL (\z (x,w,b). update_var (route.ir_rename x) b z) frame.ipf_state writes /\
+    set (MAP FST writes) = inline_phi_outputs sb.bb_instructions /\
+    EVERY (\(x,w,b). ~retpc_var a.ia_function x ==> b = w) writes` by
+    (ho_match_mp_tac inline_phis_paired_writes >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `INJ route.ir_rename (set (MAP FST writes) UNION snap.ils_defined) UNIV` by
+    (drule functionInlinerRoutedProvenanceTheory.inline_routed_leaf_namespace >>
+     simp[functionInlinerEnvelopesTheory.inline_namespace_leaf_at_def] >> strip_tac >>
+     drule functionInlinerEnvelopesTheory.inline_namespace_node_injective >>
+     simp[INJ_DEF] >> metis_tac[]) >>
+  `inline_phi_outputs sb.bb_instructions SUBSET set (cfgTransform$fn_all_vars a.ia_function)` by
+    (irule inline_phi_outputs_supported >>
+     `EVERY (inline_inst_vars_in (\v. MEM v (cfgTransform$fn_all_vars a.ia_function)))
+        (fn_insts a.ia_function)` by
+       simp[GSYM functionInlinerNamespaceTheory.inline_fn_vars_in] >>
+     gvs[EVERY_MEM, venomInstTheory.fn_insts_def,
+       unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM]) >>
+  `EVERY (\(x,w,b). MEM x (cfgTransform$fn_all_vars a.ia_function) /\
+      (~retpc_var a.ia_function x ==> w = b)) writes` by
+    (simp[EVERY_MEM, pairTheory.FORALL_PROD] >>
+     map_every qx_gen_tac [`x`,`w`,`b`] >> strip_tac >>
+     `x IN inline_phi_outputs sb.bb_instructions` by
+       (qpat_x_assum `set (MAP FST writes) = _` (fn th => rewrite_tac[GSYM th]) >>
+        simp[MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+     gvs[SUBSET_DEF, EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
+  drule_all inline_owner_storage_paired_writes >>
+  strip_tac >> qexists_tac `v` >> gvs[]
+QED
