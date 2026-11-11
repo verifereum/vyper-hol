@@ -1104,8 +1104,6 @@ Resume body_for_range[body]:
   qpat_x_assum `body_stmts_ok _ _`
     (irule o REWRITE_RULE [body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
   simp[] >> rpt conj_tac
-  >- fs[body_stmts_safe_iff]
-  >- fs[body_stmts_safe_iff]
   >- metis_tac[stmt_exprs_ok_same_frame]
   >- (qexistsl_tac [`bindings`, `tops`] >> simp[] >>
           fs[body_stmts_safe_iff])
