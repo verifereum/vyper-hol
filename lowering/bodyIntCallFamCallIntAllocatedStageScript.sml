@@ -78,11 +78,13 @@ Theorem intcall_target_cont:
   intcall_expr_cont fp ce env es sa s es sb u
 Proof
   strip_tac >>
-  `intcall_joint_res fp ce env es sb u` by
+  `intcall_expr_res fp ce env es sb u` by
     (irule bodyIntCallJointCallCoreTheory.intcall_joint_res_frame >> simp[] >>
      conj_tac
-     >- fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
-     qexistsl_tac [`es`, `s`, `sa`] >> simp[]) >>
+     >- fs[bodyIntCallJointContractTheory.intcall_joint_res_def,
+           bodyIntCallJointContractTheory.intcall_expr_res_def] >>
+     qexistsl_tac [`es`, `s`, `sa`] >>
+     fs[bodyIntCallJointContractTheory.intcall_joint_res_def]) >>
   simp[bodyIntCallJointContractTheory.intcall_expr_cont_def] >> metis_tac[]
 QED
 
@@ -143,13 +145,13 @@ Proof
      simp[exprLoweringPropsTheory.ci_mono_def]) >>
   `!q x. (fp.jc_reserved q \/ MEM q ops) /\ q = Var x ==> not_fresh_at sa x` by
     (rpt strip_tac
-     >- fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+     >- fs[bodyIntCallJointContractTheory.intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
      gvs[listTheory.MEM_EL] >>
      qpat_x_assum `!i. i < LENGTH tys ==> _` (qspec_then `n` mp_tac) >>
      simp[] >> metis_tac[]) >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
    local_ptrs_reserved ce sa /\ allocas_above fp.jc_lo s` by
-    fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+    fs[bodyIntCallJointContractTheory.intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   `!p k. fp.jc_prot p k ==> p+k <= fp.jc_lo` by
     (qpat_assum `intcall_frame_ok fp`
       (ACCEPT_TAC o CONJUNCT1 o
@@ -212,7 +214,7 @@ Proof
       simp[venomStateTheory.eval_operand_def]) >>
   conj_tac
   >- (rpt strip_tac >> first_x_assum irule >>
-      fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+      fs[bodyIntCallJointContractTheory.intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
       rpt strip_tac >> gvs[]) >>
   irule exprSimPropsTheory.locals_kept_mem >> simp[]
 QED
@@ -244,7 +246,7 @@ Proof
   BETA_TAC >> strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
    local_ptrs_reserved ce sa /\ allocas_above fp.jc_lo s` by
-    fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+    fs[bodyIntCallJointContractTheory.intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   drule_all (BETA_RULE intcall_stage_allocation_certificates) >> strip_tac >>
   `intcall_expr_cont fp ce env es sa s es sb u` by
     (irule intcall_allocation_cont >> simp[]) >>
@@ -291,9 +293,9 @@ Theorem intcall_allocation_store_cont:
 Proof
   strip_tac >>
   `intcall_joint_res fp ce env es b s` by
-    fs[bodyIntCallJointContractTheory.intcall_expr_cont_def] >>
+    fs[bodyIntCallJointContractTheory.intcall_expr_cont_def, bodyIntCallJointContractTheory.intcall_joint_res_def] >>
   `local_ptrs_reserved ce b /\ allocas_above fp.jc_lo s` by
-    fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+    fs[bodyIntCallJointContractTheory.intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   `u.vs_allocas = s.vs_allocas` by
     metis_tac[placeMemoryCopyEffectTheory.typed_copy_effect_allocas] >>
   `u.vs_alloca_next = s.vs_alloca_next` by
@@ -316,7 +318,7 @@ Proof
      `eval_operand op u = eval_operand op s` by
        (irule bodyIntCallCopySharpDynamicTheory.typed_copy_effect_operand_preserved >>
         goal_assum (drule_at Any) >>
-        fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+        fs[bodyIntCallJointContractTheory.intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
         rpt strip_tac >> gvs[]) >>
      fs[bodyIntCallJointContractTheory.intcall_expr_cont_def,
         bodyIntCallJointContractTheory.intcall_joint_res_def]) >>
@@ -419,9 +421,9 @@ Proof
   BETA_TAC >> strip_tac >>
   `intcall_joint_res fp ce env es b s /\ ~s.vs_halted /\
    s.vs_current_bb = b.cs_current_bb /\ s.vs_inst_idx = LENGTH b.cs_current_insts` by
-    fs[bodyIntCallJointContractTheory.intcall_expr_cont_def] >>
+    fs[bodyIntCallJointContractTheory.intcall_expr_cont_def, bodyIntCallJointContractTheory.intcall_joint_res_def] >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\ local_ptrs_reserved ce b` by
-    fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+    fs[bodyIntCallJointContractTheory.intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   `?u. val_in_memory tv v (w2n dw) u.vs_memory /\
     typed_copy_effect fp.jc_ctx fp.jc_func b c s u (w2n dw) (type_memory_size tv) /\
     stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es u` by
