@@ -392,7 +392,7 @@ Definition expand_tuple_exports_def:
 End
 
 Definition expand_export_annotation_def:
-  expand_export_annotation exports_map all_import_maps all_inline_maps import_map (JE_Tuple exprs) =
+  expand_export_annotation exports_map all_import_maps all_inline_maps import_map (JE_Tuple exprs _) =
     expand_tuple_exports exports_map all_import_maps all_inline_maps import_map exprs ∧
   expand_export_annotation exports_map all_import_maps all_inline_maps import_map (JE_Attribute base attr tc btn btc sid ty) =
     expand_single_export exports_map all_import_maps all_inline_maps import_map (JE_Attribute base attr tc btn btc sid ty) ∧
@@ -865,7 +865,7 @@ Definition canonical_default_aux_def:
     | JE_UnaryOp op arg _ => JE_UnaryOp op (recur arg) JT_None
     | JE_IfExp test yes no _ =>
         JE_IfExp (recur test) (recur yes) (recur no) JT_None
-    | JE_Tuple es => JE_Tuple (MAP recur es)
+    | JE_Tuple es _ => JE_Tuple (MAP recur es) JT_None
     | JE_List es _ => JE_List (MAP recur es) JT_None
     | JE_Call func args kws _ _ =>
         JE_Call (recur func) (MAP recur args)

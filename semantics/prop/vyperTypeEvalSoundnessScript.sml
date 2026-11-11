@@ -4338,32 +4338,48 @@ Proof
   imp_res_tac evaluate_type_mono >> simp[] >>
   first_x_assum (qspecl_then [`tenv`, `nid`] mp_tac) >> simp[]
 QED
+(* A struct literal's field values, typed at the field expressions' types,
+   have the declared field types those types fit. *)
+Theorem struct_lit_value_has_type:
+  evaluate_type tenv (StructT nsid) = SOME stv /\
+  FLOOKUP tenv nsid = SOME (StructArgs args) /\
+  arg_types_fit (MAP (expr_type o SND) kes) (MAP SND args) /\
+  LIST_REL (\e tv. evaluate_type tenv (expr_type e) = SOME tv) (MAP SND kes) tvs /\
+  LIST_REL value_has_type tvs vs ==>
+  value_has_type stv (StructV (ZIP (MAP FST args,vs)))
+Proof
+  strip_tac >>
+  qpat_x_assum `evaluate_type _ (StructT _) = SOME _` mp_tac >>
+  simp[Once evaluate_type_def, AllCaseEqs(), evaluate_types_OPT_MMAP] >>
+  strip_tac >> gvs[value_has_type_def] >>
+  drule OPT_MMAP_evaluate_type_mono_stmt >> strip_tac >>
+  drule OPT_MMAP_LIST_REL >> strip_tac >>
+  `LIST_REL (\t tv. evaluate_type tenv t = SOME tv)
+     (MAP (expr_type o SND) kes) tvs` by
+    (qpat_x_assum `LIST_REL _ (MAP SND kes) tvs` mp_tac >>
+     simp[LIST_REL_MAP1, combinTheory.o_DEF]) >>
+  rename1 `LIST_REL _ (MAP SND args) ftvs` >>
+  `values_have_types ftvs vs` by
+    metis_tac[vyperTypeArgFitsTheory.arg_type_fits_value_has_type,
+              vyperTypeDefaultsTheory.values_have_types_LIST_REL] >>
+  irule struct_has_type_zip_same_names_stmt >>
+  gvs[GSYM vyperTypeDefaultsTheory.values_have_types_LIST_REL] >>
+  imp_res_tac LIST_REL_LENGTH >> gvs[LENGTH_MAP] >>
+  metis_tac[vyperTypeDefaultsTheory.values_have_types_LIST_REL, LIST_REL_LENGTH]
+QED
+
 Theorem struct_lit_expr_result_typed[local]:
   well_formed_type env.type_defs (StructT nsid) /\
   FLOOKUP env.type_defs (nsid) = SOME (StructArgs args) /\
   MAP FST kes = MAP FST args /\
-  MAP (expr_type o SND) kes = MAP SND args /\
+  arg_types_fit (MAP (expr_type o SND) kes) (MAP SND args) /\
   exprs_runtime_typed env (MAP SND kes) vs ==>
   eval_result_typed (env,cx,st)
     (Value (StructV (ZIP (MAP FST args,vs)))) (Type (StructT nsid))
 Proof
   rw[exprs_runtime_typed_def, eval_result_typed_def] >>
-  qexists_tac `StructTV (ZIP (MAP FST args,tvs))` >>
   gvs[well_formed_type_def, IS_SOME_EXISTS] >>
-  qpat_x_assum `evaluate_type _ (StructT _) = SOME _` mp_tac >>
-  simp[Once evaluate_type_def, AllCaseEqs(), evaluate_types_OPT_MMAP] >>
-  strip_tac >> gvs[value_has_type_def] >>
-  qpat_x_assum `MAP (expr_type o SND) kes = MAP SND args` (assume_tac o GSYM) >>
-  gvs[] >>
-  `OPT_MMAP (evaluate_type env.type_defs) (MAP (expr_type o SND) kes) = SOME tvs` by
-    (irule OPT_MMAP_from_LIST_REL_evaluate_type_stmt >>
-     gvs[LIST_REL_EL_EQN, EL_MAP]) >>
-  `OPT_MMAP (evaluate_type env.type_defs) (MAP (expr_type o SND) kes) = SOME tvs'` by
-    metis_tac[OPT_MMAP_evaluate_type_mono_stmt] >>
-  gvs[] >>
-  irule struct_has_type_zip_same_names_stmt >>
-  imp_res_tac LIST_REL_LENGTH >> gvs[LENGTH_MAP] >>
-  metis_tac[LENGTH_MAP]
+  metis_tac[struct_lit_value_has_type]
 QED
 
 Theorem type_place_expr_StructLit_NONE_stmt[local]:
@@ -6726,7 +6742,8 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
             (qpat_assum `type_check _ "IntCall args length" r = _` mp_tac >>
              POP_ASSUM_LIST (K ALL_TAC) >>
              simp[type_check_def, assert_def] >> IF_CASES_TAC >> simp[] >> decide_tac) >>
-          `MAP expr_type es = TAKE (LENGTH es) (MAP SND x''2)` by metis_tac[] >>
+          `LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es)
+             (TAKE (LENGTH es) (MAP SND x''2))` by metis_tac[] >>
           `?call_env. bind_arguments (get_tenv cx) x''2 (actual_vs ++ dflt_vs) = SOME call_env /\
              scope_well_typed call_env /\
              env_scopes_consistent env_body cx (dflt_st with scopes := [call_env])` by

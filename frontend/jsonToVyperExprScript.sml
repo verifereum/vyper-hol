@@ -987,11 +987,16 @@ Definition translate_expr_def:
   (translate_expr ctx (JE_IfExp test body orelse ret_ty) =
     IfExp (translate_type (expr_type_ctx ctx) ret_ty) (translate_expr ctx test) (translate_expr ctx body) (translate_expr ctx orelse)) /\
 
-  (* Tuple *)
-  (translate_expr ctx (JE_Tuple es) =
+  (* Tuple: Vyper types a tuple literal by its context (e.g. the parameter
+     it is passed to), so members may be wider than the elements. *)
+  (translate_expr ctx (JE_Tuple es ty) =
     let es' = translate_expr_list ctx es in
-    Builtin (TupleT (MAP expr_type es'))
-      (MakeArray NONE (Fixed (LENGTH es'))) es') /\
+    let tys = (case translate_type (expr_type_ctx ctx) ty of
+               | TupleT tys =>
+                   if LENGTH tys = LENGTH es' /\ ~MEM NoneT tys then tys
+                   else MAP expr_type es'
+               | _ => MAP expr_type es') in
+    Builtin (TupleT tys) (MakeArray NONE (Fixed (LENGTH es'))) es') /\
 
   (* List - array literal *)
   (translate_expr ctx (JE_List es ty) =

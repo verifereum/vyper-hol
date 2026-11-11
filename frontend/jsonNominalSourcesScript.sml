@@ -84,8 +84,8 @@ Definition resolve_json_expr_def:
   (resolve_json_expr decls (JE_IfExp test yes no ty) =
     JE_IfExp (resolve_json_expr decls test) (resolve_json_expr decls yes)
       (resolve_json_expr decls no) (resolve_json_type decls ty)) ∧
-  (resolve_json_expr decls (JE_Tuple es) =
-    JE_Tuple (resolve_json_exprs decls es)) ∧
+  (resolve_json_expr decls (JE_Tuple es ty) =
+    JE_Tuple (resolve_json_exprs decls es) (resolve_json_type decls ty)) ∧
   (resolve_json_expr decls (JE_List es ty) =
     JE_List (resolve_json_exprs decls es) (resolve_json_type decls ty)) ∧
   (resolve_json_expr decls (JE_Call func args kws ty src) =

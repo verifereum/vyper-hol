@@ -101,7 +101,7 @@ Datatype:
   | JE_IfExp json_expr json_expr json_expr json_type   (* test, body, orelse, type *)
 
   (* Compound - need type for array element type, tuple handling *)
-  | JE_Tuple (json_expr list)                          (* elements *)
+  | JE_Tuple (json_expr list) json_type                (* elements, type *)
   | JE_List (json_expr list) json_type                 (* elements, type needed for elem type *)
 
   (* Calls - need type for builtins like concat/slice that embed return length *)
