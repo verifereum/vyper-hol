@@ -16,7 +16,7 @@
 Theory bodySimPtrMain
 Ancestors
   bodyPtrCtrlCases bodyPtrExitCases bodyPtrAssignCases bodyPtrLogCases bodyPtrExprCases bodyPtrIntCallCase bodyPtrCallCases exprSimPtr
-  bodyPtrPreds bodyPtrDefs bodySim exprSimSource supportedStmts
+  bodyPtrPreds bodyPtrDefs bodySim bodyExprPreFacts exprSimSource supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph list
 
 val _ = Parse.hide "body";
@@ -138,5 +138,5 @@ Theorem body_stmts_ptr_ok_sim:
     stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
       (stmts_env cenv lctx ret_ty ss) (eval_stmts cx ss) es
 Proof
-  metis_tac[body_sim_ptr_mutual, body_stmts_ptr_ok_def]
+  metis_tac[body_sim_ptr_mutual, body_stmts_ptr_ok_def, supported_stmts_body_safe]
 QED

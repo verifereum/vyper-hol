@@ -14,9 +14,8 @@
  *   body_*_other      — the residual forms of a case
  *   body_assign_local_memory — x = e for a local x held in memory
  *   stmt_expr_body_pre — a statement's expression meets expr_body_pre
- *   supported_expr_body_calls, supported_string_reason_body_calls — a
- *                       supported expression or reason runs no EVM code
- *                       and calls only the main module's functions
+ *   body_stmt_safe    — the statement's no-EVM and internal-call facts;
+ *                       allocation checks exclude bare .code roots
  *   reason_covered    — a reason compiles to a form the reason lemmas take
  *   supported_reason_code — a supported reason they don't take is an
  *                       immutable's, a pointer into code
@@ -120,7 +119,19 @@ Theorem body_assert_case:
 Proof
   rw[body_stmt_ok_def] >>
   `supported_expr tops e` by gvs[supported_stmt_def, supported_expr_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -178,7 +189,19 @@ Theorem body_return_case:
 Proof
   rw[body_stmt_ok_def, frame_ret_ok_def] >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -294,7 +317,19 @@ Proof
   >- (gvs[] >> irule compile_raise_reason_lit_frag >> simp[]) >>
   `supported_string_reason tops e` by
     gvs[supported_stmt_def, supported_raise_reason_def] >>
-  drule_then strip_assume_tac supported_string_reason_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -391,12 +426,24 @@ Proof
    well_typed_expr env se` by gvs[type_stmt_def] >>
   `int_calls_expr e = []` by metis_tac[supported_pure_int_calls] >>
   `supported_expr tops e` by simp[supported_expr_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `~expr_has_evm_run se /\ ~is_extcode se /\
    ~supported_expr_exists call_operands_effect_root se` by
-    metis_tac[supported_string_reason_body_calls] >>
+    simp[] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
@@ -523,6 +570,7 @@ Theorem body_assign_local_word[local]:
        occurs_abi_decode_target target tops) /\ supported_expr tops e /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget (NameTarget id)) e) /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
     call_evaluation_safe cx
       (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
@@ -538,7 +586,19 @@ Proof
      Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >>
      Cases_on `asg` >> gvs[] >> metis_tac[type_widens_to_word]) >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -641,6 +701,7 @@ Theorem body_assign_toplevel_word[local]:
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) =
       SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) /\
     stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget (src, id))) e) /\
     call_evaluation_safe cx
       (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget (src, id))) e)) ==>
@@ -670,7 +731,19 @@ Proof
   `t = ty` by metis_tac[build_maps_variable, optionTheory.SOME_11] >>
   gvs[] >> rename1 `FLOOKUP env.toplevel_vtypes _ = SOME (Type ty)` >>
   `expr_type e = ty` by metis_tac[type_widens_to_word] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -711,6 +784,7 @@ Theorem body_assign_local_rhs_pre[local]:
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget (NameTarget id)) e) /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
     FLOOKUP env.var_types id = SOME ty ==>
@@ -726,7 +800,19 @@ Proof
      Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >> Cases_on `asg` >> gvs[]) >>
   simp[] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   drule_then strip_assume_tac body_inv_cx_tops >>
@@ -773,6 +859,7 @@ Theorem body_assign_local_memory:
        occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget (NameTarget id)) e) /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
     call_evaluation_safe cx
       (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
@@ -843,6 +930,7 @@ Theorem body_assign_attr_local[local]:
     type_stmt env ret_ty
       (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) =
       SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) /\
     stmt_exprs_ok cenv
       (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e) /\
     call_evaluation_safe cx
@@ -864,7 +952,19 @@ Proof
      gvs[vyperTypeEnvTheory.type_place_target_AttributeTarget,
          vyperTypeEnvTheory.type_place_target_NameTarget] >>
      metis_tac[type_widens_to_word]) >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -922,6 +1022,8 @@ Theorem body_assign_attr_storage[local]:
     type_stmt env ret_ty
       (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld))
          e) = SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld))
+         e) /\
     stmt_exprs_ok cenv
       (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld))
          e) /\
@@ -962,7 +1064,19 @@ Proof
   `?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
                     (nsid_to_string sid)) fld = SOME (expr_type e, fsz)` by
     metis_tac[attribute_type_struct_field] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
@@ -986,6 +1100,7 @@ Theorem body_assign_copy_rhs_pre[local]:
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) =
       SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
     stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
     call_evaluation_safe cx
       (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) ==>
@@ -994,7 +1109,19 @@ Proof
   rpt strip_tac >>
   `well_typed_expr env e` by
     gvs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   drule_then strip_assume_tac body_inv_cx_tops >>
@@ -1208,6 +1335,7 @@ Theorem body_assign_toplevel_copy[local]:
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e) =
       SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
     stmt_exprs_ok cenv (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
     call_evaluation_safe cx
       (int_calls_stmt (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) ==>
@@ -1321,6 +1449,7 @@ Theorem body_assign_other:
               occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget t) e) /\
     stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
@@ -1546,6 +1675,7 @@ Theorem body_assign_tuple_locals[local]:
     type_stmt env ret_ty
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) =
       SOME env' /\
+    body_stmt_safe tops (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) /\
     stmt_exprs_ok cenv
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) /\
     call_evaluation_safe cx
@@ -1571,7 +1701,19 @@ Proof
     gvs[type_stmt_def, atarget_accepts_def, well_typed_atarget_def,
         LIST_REL_EL_EQN, EL_MAP, well_typed_target_def,
         well_typed_expr_def, AllCaseEqs()] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -1654,7 +1796,8 @@ Theorem body_assign_tuple_rhs_pre[local]:
   supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
   expr_sim_inv cenv cx env es /\
   type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
-  stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
+  body_stmt_safe tops (Assign (TupleTarget gs) e) /\
+    stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
   call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) ==>
   expr_body_pre cenv cx env e es
 Proof
@@ -1662,7 +1805,19 @@ Proof
   `supported_expr tops e` by
     gvs[supported_stmt_def, supported_assignment_def] >>
   `well_typed_expr env e` by gvs[type_stmt_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   drule_then strip_assume_tac body_inv_cx_tops >>
@@ -1853,6 +2008,7 @@ Theorem body_assign_tuple_targets[local]:
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    body_stmt_safe tops (Assign (TupleTarget gs) e) /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
@@ -2028,6 +2184,7 @@ Theorem body_augassign_local[local]:
        occurs_abi_decode_target target tops) /\ supported_expr tops e /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (AugAssign ty (NameTarget id) bop e) = SOME env' /\
+    body_stmt_safe tops (AugAssign ty (NameTarget id) bop e) /\
     stmt_exprs_ok cenv (AugAssign ty (NameTarget id) bop e) /\
     call_evaluation_safe cx
       (int_calls_stmt (AugAssign ty (NameTarget id) bop e)) ==>
@@ -2036,7 +2193,19 @@ Theorem body_augassign_local[local]:
       (eval_stmt cx (AugAssign ty (NameTarget id) bop e)) es
 Proof
   rpt strip_tac >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -2087,6 +2256,7 @@ Theorem body_augassign_attr_local[local]:
     type_stmt env ret_ty
       (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) =
       SOME env' /\
+    body_stmt_safe tops (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) /\
     stmt_exprs_ok cenv
       (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) /\
     call_evaluation_safe cx
@@ -2098,7 +2268,19 @@ Theorem body_augassign_attr_local[local]:
       (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) es
 Proof
   rpt strip_tac >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -2152,6 +2334,7 @@ Theorem body_augassign_toplevel_word[local]:
     supported_expr tops e /\ expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (AugAssign ty (TopLevelNameTarget (src, id)) bop e) =
       SOME env' /\
+    body_stmt_safe tops (AugAssign ty (TopLevelNameTarget (src, id)) bop e) /\
     stmt_exprs_ok cenv (AugAssign ty (TopLevelNameTarget (src, id)) bop e) /\
     call_evaluation_safe cx
       (int_calls_stmt (AugAssign ty (TopLevelNameTarget (src, id)) bop e)) ==>
@@ -2161,7 +2344,19 @@ Theorem body_augassign_toplevel_word[local]:
       (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e)) es
 Proof
   rpt strip_tac >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   drule supported_scalar_target_decl >> strip_tac >> gvs[] >>
   rename1 `MEM (VariableDecl vis mut id dty init) tops` >>
   `get_module_code cx NONE = SOME tops /\ supported_program tops /\
@@ -2235,6 +2430,8 @@ Theorem body_augassign_attr_storage[local]:
     type_stmt env ret_ty
       (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop e)
       = SOME env' /\
+    body_stmt_safe tops (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop
+         e) /\
     stmt_exprs_ok cenv
       (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop
          e) /\
@@ -2249,7 +2446,19 @@ Theorem body_augassign_attr_storage[local]:
       (eval_stmt cx (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop e)) es
 Proof
   rpt strip_tac >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   drule supported_storage_field_write_decl >> strip_tac >> gvs[] >>
   `get_module_code cx NONE = SOME tops /\ supported_program tops /\
    ALL_DISTINCT
@@ -2323,6 +2532,7 @@ Theorem body_augassign_other:
        (AugAssign ty t bop e) ==> occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+    body_stmt_safe tops (AugAssign ty t bop e) /\
     stmt_exprs_ok cenv (AugAssign ty t bop e) /\
     call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
@@ -2379,10 +2589,23 @@ Theorem body_if_case:
 Proof
   rpt gen_tac >> strip_tac >> simp[Once body_stmt_ok_def] >>
   rpt gen_tac >> strip_tac >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
       stmt_exprs_ok_def, supported_stmt_expr_exists_def, optionTheory.IS_SOME_EXISTS] >>
+  fs[GSYM optionTheory.IS_SOME_EXISTS] >>
   `supported_expr tops e` by simp[supported_expr_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -2412,10 +2635,10 @@ Proof
     (drule_all expr_body_pre_eval_gas >> simp[]) >>
   drule expr_sim_inv_push_scope >> strip_tac >>
   rpt (qpat_x_assum `body_stmts_ok _ _`
-         (strip_assume_tac o REWRITE_RULE [body_stmts_ok_def])) >>
+         (strip_assume_tac o REWRITE_RULE [body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff])) >>
   Cases_on `b` >> fs[] >> first_x_assum irule >>
   gvs[stmts_exprs_ok_thm, stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def,
-      stmt_valued_return_def] >>
+      stmt_valued_return_def, GSYM optionTheory.IS_SOME_EXISTS, listTheory.EVERY_CONJ] >>
   metis_tac[call_evaluation_safe_append_left, call_evaluation_safe_append_right]
 QED
 
@@ -2426,9 +2649,21 @@ Theorem body_expr_stmt_case:
 Proof
   rpt gen_tac >> strip_tac >> simp[Once body_stmt_ok_def] >>
   rpt gen_tac >> strip_tac >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
       stmt_exprs_ok_flat, supported_stmt_expr_exists_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -2452,7 +2687,7 @@ QED
 Theorem body_stmts_nil_case:
   !cx. body_stmts_ok cx []
 Proof
-  rw[body_stmts_ok_def, stmt_frag_nil]
+  rw[body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff, stmt_frag_nil]
 QED
 
 (* stmtSim's stmt_frag_cons_env: the head by the IH, the tail by the IH at
@@ -2463,7 +2698,7 @@ Theorem body_stmts_cons_case:
     body_stmt_ok cx s ==>
     body_stmts_ok cx (s::ss)
 Proof
-  rpt gen_tac >> strip_tac >> simp[Once body_stmts_ok_def] >>
+  rpt gen_tac >> strip_tac >> simp[Once body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   rpt gen_tac >> strip_tac >>
   gvs[supported_stmt_def, type_stmt_def, AllCaseEqs(), int_calls_stmt_def,
       supported_stmt_expr_exists_def] >>
@@ -2471,7 +2706,7 @@ Proof
   irule stmt_frag_cons_env >>
   simp[cj 1 compile_stmt_cs_mono, stmts_env_cs_mono] >> reverse conj_tac
   >- (rpt strip_tac >>
-      qpat_x_assum `body_stmt_ok _ _` (irule o REWRITE_RULE [body_stmt_ok_def]) >>
+      qpat_x_assum `body_stmt_ok _ _` (irule o REWRITE_RULE [body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
       metis_tac[call_evaluation_safe_append_left]) >>
   rpt strip_tac >>
   rename1 `stmt_env cenv lctx ret_ty s sa = (c, sm)` >>
@@ -2488,6 +2723,6 @@ Proof
   `frame_ret_ok ctx func cx RetQ c ret_ty` by
     metis_tac[frame_ret_ok_same_frame] >>
   qpat_x_assum `!s'' t. _ ==> body_stmts_ok _ _` drule >>
-  simp[body_stmts_ok_def] >> disch_then irule >>
+  simp[body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >> disch_then irule >>
   metis_tac[call_evaluation_safe_append_right]
 QED

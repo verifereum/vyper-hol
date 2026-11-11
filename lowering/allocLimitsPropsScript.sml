@@ -18,6 +18,16 @@ Ancestors
   allocLimits compileVyper compileEnv supportedExprTraverse
   supportedStmtTraverse vyperAST list
 
+Theorem alloc_limits_expr_not_extcode:
+  alloc_limits_expr cenv e ==> ~is_extcode e
+Proof
+  Cases_on `e` >> simp[exprLoweringTheory.is_extcode_def] >>
+  rename1 `Builtin ty bi es` >> Cases_on `bi` >>
+  simp[exprLoweringTheory.is_extcode_def, Once alloc_limits_expr_def] >>
+  rename1 `Acc item` >> Cases_on `item` >>
+  simp[exprLoweringTheory.is_extcode_def, Once alloc_limits_expr_def]
+QED
+
 Theorem lowered_value_type_struct_fields:
   !c e c'. c'.ce_struct_fields = c.ce_struct_fields /\
               c'.ce_func_return_type = c.ce_func_return_type ==>

@@ -914,7 +914,9 @@ Theorem eval_stmts_body_oracle_storage:
 Proof
   conj_tac >> rpt strip_tac
   >- (drule (cj 1 supported_stmts_storage_syntax) >> strip_tac >>
+      fs[listTheory.EVERY_CONJ] >>
       drule_all (cj 1 body_oracle_storage_mutual) >> simp[]) >>
   drule (cj 2 supported_stmts_storage_syntax) >> strip_tac >>
+  fs[listTheory.EVERY_CONJ] >>
   drule_all (cj 2 body_oracle_storage_mutual) >> simp[]
 QED

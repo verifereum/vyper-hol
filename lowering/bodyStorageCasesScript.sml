@@ -45,13 +45,17 @@ QED
 
 Theorem supported_pure_main_calls:
   (!tops e. supported_pure_expr tops e ==>
-    EVERY (\c. FST c = NONE) (int_calls_expr e)) /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) /\
   (!tops es. supported_pure_exprs tops es ==>
-    EVERY (\c. FST c = NONE) (int_calls_exprs es)) /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es)) /\
   (!tops fields. supported_pure_fields tops fields ==>
-    EVERY (\c. FST c = NONE) (int_calls_named_exprs fields)) /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_named_exprs fields)) /\
   (!tops e. supported_place_expr tops e ==>
-    EVERY (\c. FST c = NONE) (int_calls_expr e))
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e))
 Proof
   ho_match_mp_tac supported_pure_expr_ind >>
   simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
@@ -69,9 +73,11 @@ QED
 
 Theorem supported_effect_main_calls:
   (!tops e. supported_effect_expr tops e ==>
-    EVERY (\c. FST c = NONE) (int_calls_expr e)) /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) /\
   (!tops e. supported_effect_place_expr tops e ==>
-    EVERY (\c. FST c = NONE) (int_calls_expr e))
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e))
 Proof
   ho_match_mp_tac supported_effect_expr_ind >>
   simp[supported_effect_expr_def, int_calls_expr_def, EVERY_APPEND] >>
@@ -80,7 +86,8 @@ Proof
 QED
 
 Theorem supported_expr_main_calls:
-  supported_expr tops e ==> EVERY (\c. FST c = NONE) (int_calls_expr e)
+  supported_expr tops e ==> EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)
 Proof
   simp[supported_expr_def] >>
   metis_tac[supported_pure_main_calls, supported_effect_main_calls]
@@ -90,40 +97,47 @@ Theorem supported_target_info_storage_syntax:
   !tops bindings target.
     IS_SOME (supported_target_info tops bindings target) ==>
     ~supported_target_exists expr_evm_run_root target /\
-    EVERY (\c. FST c = NONE) (int_calls_target target)
+    ~supported_target_exists call_operands_effect_root target /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_target target)
 Proof
   rpt gen_tac >>
   map_every qid_spec_tac [`bindings`, `tops`, `target`] >>
   measureInduct_on `base_assignment_target_size target` >>
   Cases_on `target` >>
-  simp[supported_target_info_def, supported_expr_exists_def,
+  simp[supported_target_info_def, supported_expr_exists_def, call_operands_effect_root_def,
        int_calls_expr_def, EVERY_APPEND] >>
   rpt gen_tac >>
   simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
   gvs[AllCaseEqs(), expr_size_def] >>
   qmatch_goalsub_rename_tac `int_calls_target tgt` >>
   first_x_assum (qspec_then `tgt` mp_tac) >> simp[] >>
+  simp[GSYM optionTheory.IS_SOME_EXISTS] >>
   metis_tac[supported_expr_no_evm_run, expr_has_evm_run_def,
-            supported_expr_main_calls, optionTheory.IS_SOME_EXISTS]
+            supported_expr_main_calls, supported_expr_no_call_operand_effects, optionTheory.IS_SOME_EXISTS]
 QED
 
 Theorem supported_target_storage_syntax:
   supported_target tops bindings target ==>
   ~supported_target_exists expr_evm_run_root target /\
-  EVERY (\c. FST c = NONE) (int_calls_target target)
+  ~supported_target_exists call_operands_effect_root target /\
+  EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_target target)
 Proof
   Cases_on `target` >>
-  simp[supported_target_def, supported_expr_exists_def, int_calls_expr_def] >>
+  simp[supported_target_def, supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def] >>
   qmatch_goalsub_rename_tac `supported_target_exists _ tgt` >> Cases_on `tgt` >>
-  simp[supported_expr_exists_def, int_calls_expr_def] >>
+  simp[supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def] >>
   metis_tac[supported_expr_no_evm_run, expr_has_evm_run_def,
-            supported_expr_main_calls]
+            supported_expr_main_calls, supported_expr_no_call_operand_effects]
 QED
 
 Theorem supported_assignment_storage_syntax:
   supported_assignment tops bindings tgt e ==>
   ~supported_assignment_exists expr_evm_run_root tgt /\
-  EVERY (\c. FST c = NONE) (int_calls_atarget tgt)
+  ~supported_assignment_exists call_operands_effect_root tgt /\
+  EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget tgt)
 Proof
   Cases_on `tgt`
   >- (qmatch_goalsub_rename_tac `BaseTarget btgt` >>
@@ -131,9 +145,9 @@ Proof
            int_calls_atarget_def] >> strip_tac >>
       gvs[AllCaseEqs()]
       >- (irule supported_target_storage_syntax >>
-          qexistsl [`bindings`, `tops`] >> simp[]) >>
+          qexists_tac `bindings` >> simp[]) >>
       irule supported_target_info_storage_syntax >>
-      qexistsl [`bindings`, `tops`] >>
+      qexists_tac `bindings` >>
       Cases_on `supported_target_info tops bindings btgt` >> gvs[]) >>
   simp[supported_assignment_def] >> strip_tac >>
   qpat_x_assum `EVERY _ _` mp_tac >>
@@ -150,7 +164,9 @@ QED
 Theorem supported_iterator_storage_syntax:
   supported_iterator tops ty iter n ==>
   ~supported_iterator_exists expr_evm_run_root iter /\
-  EVERY (\c. FST c = NONE) (int_calls_iterator iter)
+  ~supported_iterator_exists call_operands_effect_root iter /\
+  EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator iter)
 Proof
   Cases_on `iter`
   >- (simp[supported_iterator_def, supported_iterator_exists_def,
@@ -158,13 +174,14 @@ Proof
       qmatch_goalsub_rename_tac `int_calls_expr arr` >>
       Cases_on `arr` >> simp[] >>
       BasicProvers.EVERY_CASE_TAC >>
-      simp[supported_expr_exists_def, expr_evm_run_root_def, int_calls_expr_def]) >>
+      simp[supported_expr_exists_def, call_operands_effect_root_def, expr_evm_run_root_def, int_calls_expr_def]) >>
   simp[supported_iterator_def, supported_iterator_exists_def,
        int_calls_iterator_def, EVERY_APPEND] >>
   qmatch_goalsub_rename_tac `~supported_expr_exists _ lo /\ ~supported_expr_exists _ hi` >>
   strip_tac >>
   `supported_pure_expr tops lo /\ supported_pure_expr tops hi` suffices_by
     metis_tac[supported_pure_main_calls, supported_expr_no_evm_run,
+              supported_expr_no_call_operand_effects,
               supported_expr_def, expr_has_evm_run_def] >>
   BasicProvers.EVERY_CASE_TAC >> simp[supported_pure_expr_def]
 QED
@@ -172,11 +189,14 @@ QED
 Theorem supported_string_reason_storage_syntax:
   supported_string_reason tops e ==>
   ~supported_expr_exists expr_evm_run_root e /\
-  EVERY (\c. FST c = NONE) (int_calls_expr e)
+  ~supported_expr_exists call_operands_effect_root e /\
+  EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)
 Proof
   strip_tac >>
   `supported_pure_expr tops e` suffices_by
     metis_tac[supported_pure_main_calls, supported_expr_no_evm_run,
+              supported_expr_no_call_operand_effects,
               supported_expr_def, expr_has_evm_run_def] >>
   Cases_on `e` >> gvs[supported_string_reason_def] >>
   rename1 `Literal _ lit` >> Cases_on `lit` >>
@@ -186,10 +206,14 @@ QED
 Theorem supported_reasons_storage_syntax:
   (!tops reason. supported_assert_reason tops reason ==>
     ~supported_assert_exists expr_evm_run_root reason /\
-    EVERY (\c. FST c = NONE) (int_calls_assert_reason reason)) /\
+    ~supported_assert_exists call_operands_effect_root reason /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_assert_reason reason)) /\
   (!tops reason. supported_raise_reason tops reason ==>
     ~supported_raise_exists expr_evm_run_root reason /\
-    EVERY (\c. FST c = NONE) (int_calls_raise_reason reason))
+    ~supported_raise_exists call_operands_effect_root reason /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_raise_reason reason))
 Proof
   conj_tac >> rpt gen_tac >> Cases_on `reason` >>
   simp[supported_assert_reason_def, supported_raise_reason_def,
@@ -201,31 +225,38 @@ QED
 Theorem supported_pure_exprs_storage_syntax:
   supported_pure_exprs tops es ==>
   ~supported_exprs_exists expr_evm_run_root es /\
-  EVERY (\c. FST c = NONE) (int_calls_exprs es)
+  ~supported_exprs_exists call_operands_effect_root es /\
+  EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es)
 Proof
   Induct_on `es` >>
-  simp[supported_pure_expr_def, supported_expr_exists_def,
+  simp[supported_pure_expr_def, supported_expr_exists_def, call_operands_effect_root_def,
        int_calls_expr_def, EVERY_APPEND] >>
   metis_tac[supported_expr_no_evm_run, supported_expr_def,
-            expr_has_evm_run_def, supported_pure_main_calls]
+            expr_has_evm_run_def, supported_pure_main_calls,
+            supported_expr_no_call_operand_effects]
 QED
 
 Theorem supported_append_target_storage_syntax:
   supported_append_target tops tgt ==>
   ~supported_target_exists expr_evm_run_root tgt /\
-  EVERY (\c. FST c = NONE) (int_calls_target tgt)
+  ~supported_target_exists call_operands_effect_root tgt /\
+  EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_target tgt)
 Proof
   Cases_on `tgt` >>
-  simp[supported_append_target_def, supported_expr_exists_def, int_calls_expr_def]
+  simp[supported_append_target_def, supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def]
 QED
 
 Theorem supported_aug_target_storage_syntax:
   supported_aug_target tops bindings tgt ==>
   ~supported_target_exists expr_evm_run_root tgt /\
-  EVERY (\c. FST c = NONE) (int_calls_target tgt)
+  ~supported_target_exists call_operands_effect_root tgt /\
+  EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_target tgt)
 Proof
   strip_tac >> irule supported_target_info_storage_syntax >>
-  qexistsl [`bindings`, `tops`] >>
+  qexists_tac `bindings` >>
   qpat_x_assum `supported_aug_target _ _ _` mp_tac >>
   Cases_on `supported_target_info tops bindings tgt` >>
   simp[supported_aug_target_def]
@@ -234,14 +265,18 @@ QED
 Theorem supported_stmts_storage_syntax:
   (!tops bindings s. supported_stmt tops bindings s ==>
     ~supported_stmt_expr_exists expr_evm_run_root s /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt s)) /\
+    ~supported_stmt_expr_exists call_operands_effect_root s /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s)) /\
   (!tops bindings ss. supported_stmts tops bindings ss ==>
     ~supported_stmts_expr_exists expr_evm_run_root ss /\
-    EVERY (\c. FST c = NONE) (int_calls_stmts ss))
+    ~supported_stmts_expr_exists call_operands_effect_root ss /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss))
 Proof
   ho_match_mp_tac supported_stmt_ind >>
   simp[supported_stmt_def, supported_stmt_expr_exists_def,
-       supported_expr_exists_def, int_calls_expr_def,
+       supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def,
        int_calls_stmt_def, EVERY_APPEND] >>
   rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
   imp_res_tac supported_assignment_def >>
@@ -249,6 +284,7 @@ Proof
   imp_res_tac (REWRITE_RULE [DISJ_IMP_THM] (iffRL supported_expr_def)) >>
   imp_res_tac supportedExprTraverseTheory.supported_expr_no_evm_run >>
   imp_res_tac supported_expr_main_calls >>
+  imp_res_tac supported_expr_no_call_operand_effects >>
   imp_res_tac supported_assignment_storage_syntax >>
   imp_res_tac supported_target_storage_syntax >>
   imp_res_tac supported_aug_target_storage_syntax >>
@@ -268,7 +304,7 @@ Theorem supported_callable_storage_syntax:
   EVERY (\c. FST c = NONE) (int_calls_stmts stmts)
 Proof
   strip_tac >> drule_all supported_callable_body_contract >> strip_tac >>
-  drule (CONJUNCT2 supported_stmts_storage_syntax) >> simp[]
+  drule (CONJUNCT2 supported_stmts_storage_syntax) >> simp[EVERY_CONJ]
 QED
 
 (* Entry transport separates semantic runtime preservation from storage

@@ -252,6 +252,7 @@ Theorem body_for_dynarray_name:
     type_stmt env ret_ty
       (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts) =
       SOME env' /\
+    body_stmt_safe tops (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts) /\
     stmt_exprs_ok cenv
       (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts) /\
     call_evaluation_safe cx
@@ -265,6 +266,7 @@ Theorem body_for_dynarray_name:
          (For id typ (Array (Name (ArrayT typ (Dynamic c)) name)) n stmts)) es
 Proof
   rpt gen_tac >> strip_tac >>
+  imp_res_tac body_stmt_safe_for_body >>
   drule_all dynarray_for_source_ready >> strip_tac >> gvs[] >>
   `!target. supported_stmts_expr_exists
       (expr_abi_decode_target_root target) stmts ==>
