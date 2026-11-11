@@ -12,6 +12,8 @@ Ancestors
   venomState venomInst list rich_list freshWrites
   abiDecodePtrSourceOutcome abiDecodePtrStaticReject abiDecodePtrConversionReject
   vyperABI vyperTypeABI abiValidMembers abiDecoderMembers
+  abiDecodePtrHeaderReject abiDecodePtrSetup abiDecodePtrInputWindow
+  bodyPtrHashBuiltinsCases loweringPosts valueEncoding
 
 Theorem abi_decode_actual_reject_path:
   fn_has_code sa sb func /\ inst_extends sa sb /\
@@ -504,4 +506,50 @@ Proof
   simp[] >> disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
   disch_then (drule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
   simp[] >> metis_tac[]
+QED
+
+Theorem abi_decode_operand_header_reject:
+  expr_post ctx func cenv cx e es0 s0c sa s0 es (BytesV bs) (Var p) s /\
+  ptr_val_ok cx (expr_type e) (BytesV bs) (Var p) G tn s /\
+  expr_type e = BaseT (BytesT (Dynamic cap)) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
+  abi_builtin_decode_header (Var p) mn mx sa = ((len,src),sh) /\
+  fn_has_code sa sh func /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  not_fresh_at sa p /\ abi_decoder_operand_live sa.cs_next_var (Var p) /\
+  mn < dimword (:256) /\ mx < dimword (:256) /\
+  (LENGTH bs < mn \/ mx < LENGTH bs) ==>
+  ?v K tk n j. gas_path_ptr D 0 ctx func PG G tn s n K tk
+    (Abort Revert_abort (v with vs_inst_idx := j))
+Proof
+  strip_tac >>
+  drule_all hash_dynamic_post_view >> strip_tac >>
+  `~is_word_type (expr_type e)` by simp[is_word_type_def] >>
+  drule_all hash_dynamic_bytes_operand >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es s /\
+   expr_val_at cenv cx (expr_type e) s0c sa es (BytesV bs) (Var p) s` by
+    fs[expr_post_def] >>
+  `sa.cs_next_id <= sh.cs_next_id` by
+    (drule abi_builtin_decode_header_shape >> simp[]) >>
+  drule_all abi_decode_bytes_physical_window >> strip_tac >>
+  `mload (w2n (n2w b:bytes32)) s = n2w (LENGTH bs)` by
+    fs[mload_def, mem_word_at_def, w2n_n2w, LESS_MOD] >>
+  `?u. run_inst_seq (emitted_insts sa sh) s = Abort Revert_abort u` by
+    (irule abi_builtin_decode_header_reject_run >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  gvs[] >>
+  `b < dimword (:256)` by decide_tac >>
+  `lookup_var p s = SOME (n2w b)` by fs[eval_operand_def] >>
+  drule_at (Pat `run_inst_seq _ _ = _`) abi_builtin_decode_header_abort_path_ptr >>
+  disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_builtin_decode_header _ _ _ _ = _`)) >>
+  `w2n (n2w b:bytes32) = b` by simp[w2n_n2w, LESS_MOD] >>
+  asm_rewrite_tac[] >>
+  disch_then (qspecl_then [`tn`, `LENGTH bs`] mp_tac) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (qspecl_then [`ctx`, `PG`, `G`, `D`] mp_tac) >>
+  `(32:num) + LENGTH bs = LENGTH bs + 32` by decide_tac >>
+  asm_rewrite_tac [GSYM ADD_ASSOC] >>
+  strip_tac >> metis_tac[]
 QED
