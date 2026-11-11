@@ -325,7 +325,8 @@ Theorem fmp_candidate_plan_lookup:
   fmp_base_analyze (fn_insts fn) = SOME env /\
   ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\ MEM bb fn.fn_blocks /\
   k < LENGTH bb.bb_instructions ==>
-  FLOOKUP (fmp_candidate_plan infos ctx fn states) (bb.bb_label,k) =
+  FLOOKUP (fmp_candidate_plan infos (ctx:venom_context) fn states)
+    (bb.bb_label,k) =
     FST (fmp_reclaim_step infos fn (liveness_analyze fn) env (bb.bb_label,k)
       (EL k bb.bb_instructions) (df_at NONE states bb.bb_label k))
 Proof
@@ -493,3 +494,21 @@ Proof
   simp[fmp_joined_def, df_joined_val_def] >>
   metis_tac[fmp_option_join_empty]
 QED
+
+(* The parameter prefix of an entry block neither pops nor changes a
+ * reachable analysis state. *)
+Theorem fmp_transfer_parameter:
+  MEM inst.inst_opcode [PARAM; RETPC_PARAM; FMP_PARAM] ==>
+  fmp_transfer infos fn live env p inst (SOME st) = SOME st
+Proof
+  strip_tac >>
+  `~fmp_is_reclaim_point infos inst /\ ~fmp_clears_marks infos inst` by
+    (gvs[fmp_is_reclaim_point_def, fmp_clears_marks_def, fmp_callee_info_def,
+         fmpAnalysisDefsTheory.fmp_invoke_target_def]) >>
+  simp[fmp_transfer_def, fmp_reclaim_step_def, fmp_pop_at_def] >>
+  `inst.inst_opcode <> DALLOCA` by (strip_tac >> gvs[]) >>
+  `fmp_getfmp_outputs inst = []` by gvs[fmp_getfmp_outputs_def] >>
+  simp[fmp_apply_effect_def, dfHelperDefsTheory.list_union_def,
+       fmp_reclaim_state_component_equality]
+QED
+
