@@ -9,7 +9,7 @@ Ancestors
   finite_map words arithmetic list rich_list abiDecoderIndexedAddress
   abiDecoderReentryAddress abiDecoderReentry abiDecoderGuards abiDecoderFrame
   emitHelperProps exprLoweringProps abiEncoder abiDecoderExecution
-  valueEncoding instIdxIndep abiDecoderStaticLoopSetup
+  valueEncoding valueEncodingDefs instIdxIndep abiDecoderStaticLoopSetup
   abiDecoderDynamicLoopSetup abiDecoderArraySetupInputs abiDecoderLoopEmit
   abiDecoderCounters abiDecoderDynarrayPrefix abiDecoderDynarrayBound
   abiDecoderArrayHeader abiDecoderReservation abiDecoderArrayLoopInit

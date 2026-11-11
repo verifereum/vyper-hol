@@ -237,7 +237,7 @@ Resume source_owned_coherent_decoder_ptr[nonbulk]:
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[abiDecoderReentryTheory.abi_decoder_operand_live_def,
        abiDecoderReentryTheory.abi_decoder_older_vars_def,
-       compileEnvTheory.not_fresh_at_def]) >>
+       loweringStateRelDefsTheory.not_fresh_at_def]) >>
   metis_tac[venomStateTheory.eval_operand_def]
 QED
 
@@ -306,7 +306,7 @@ Resume source_owned_coherent_decoder_ptr[fixed]:
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[abiDecoderReentryTheory.abi_decoder_operand_live_def,
        abiDecoderReentryTheory.abi_decoder_older_vars_def,
-       compileEnvTheory.not_fresh_at_def] >>
+       loweringStateRelDefsTheory.not_fresh_at_def] >>
      Cases_on `childsrc` >> simp[])) >>
   strip_tac >>
   qpat_x_assum `!v av child childsrc e srcpos root d outsz middle end_st r G tn oid base_addr owner_cap ctx fn site limit lower PG. _` kall_tac >>
@@ -340,7 +340,7 @@ Resume source_owned_coherent_decoder_ptr[fixed]:
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[abiDecoderReentryTheory.abi_decoder_operand_live_def,
        abiDecoderReentryTheory.abi_decoder_older_vars_def,
-       compileEnvTheory.not_fresh_at_def]) >>
+       loweringStateRelDefsTheory.not_fresh_at_def]) >>
   metis_tac[venomStateTheory.eval_operand_def]
 QED
 
@@ -398,12 +398,12 @@ Resume source_owned_coherent_decoder_ptr[tuple]:
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[abiDecoderReentryTheory.abi_decoder_operand_live_def,
        abiDecoderReentryTheory.abi_decoder_older_vars_def,
-       compileEnvTheory.not_fresh_at_def] >>
+       loweringStateRelDefsTheory.not_fresh_at_def] >>
      Cases_on `childsrc` >> simp[])) >>
   strip_tac >> asm_x "members" kall_tac >>
   qexistsl_tac [`t`,`H`,`u`,`fp`] >> asm_rewrite_tac[] >>
   conj_tac
-  >- (simp[NoAsms, Once valueEncodingTheory.val_in_memory_def] >>
+  >- (simp[NoAsms, Once valueEncodingDefsTheory.val_in_memory_def] >>
       irule typedCopyTuplePtrTheory.tuple_in_memory_from_elements >>
       qpat_assum `LIST_REL value_has_type tvs vs` mp_tac >>
       qpat_assum `LENGTH tys = LENGTH tvs` mp_tac >>
@@ -411,7 +411,7 @@ Resume source_owned_coherent_decoder_ptr[tuple]:
       POP_ASSUM_LIST (K ALL_TAC) >> simp[LIST_REL_EL_EQN] >> metis_tac[]) >>
   conj_tac
   >- (rpt strip_tac >>
-      simp[NoAsms, Once valueEncodingTheory.val_in_memory_def] >>
+      simp[NoAsms, Once valueEncodingDefsTheory.val_in_memory_def] >>
       irule typedCopyTuplePtrTheory.tuple_in_memory_from_elements >>
       qpat_assum `LIST_REL value_has_type tvs vs` mp_tac >>
       qpat_assum `LENGTH tys = LENGTH tvs` mp_tac >>
@@ -425,7 +425,7 @@ Resume source_owned_coherent_decoder_ptr[tuple]:
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[abiDecoderReentryTheory.abi_decoder_operand_live_def,
        abiDecoderReentryTheory.abi_decoder_older_vars_def,
-       compileEnvTheory.not_fresh_at_def]) >>
+       loweringStateRelDefsTheory.not_fresh_at_def]) >>
   metis_tac[venomStateTheory.eval_operand_def]
 QED
 
@@ -507,12 +507,12 @@ Resume source_owned_coherent_decoder_ptr[struct]:
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[abiDecoderReentryTheory.abi_decoder_operand_live_def,
        abiDecoderReentryTheory.abi_decoder_older_vars_def,
-       compileEnvTheory.not_fresh_at_def] >>
+       loweringStateRelDefsTheory.not_fresh_at_def] >>
      Cases_on `childsrc` >> simp[])) >>
   strip_tac >> asm_x "members" kall_tac >>
   qexistsl_tac [`t`,`H`,`u`,`fp`] >> asm_rewrite_tac[] >>
   conj_tac
-  >- (simp[NoAsms, Once valueEncodingTheory.val_in_memory_def,
+  >- (simp[NoAsms, Once valueEncodingDefsTheory.val_in_memory_def,
         valueEncodingProofsTheory.fields_in_memory_tuple, MAP_ZIP] >>
       irule typedCopyTuplePtrTheory.tuple_in_memory_from_elements >>
       qpat_assum `LIST_REL value_has_type tvs (MAP SND fields')` mp_tac >>
@@ -521,7 +521,7 @@ Resume source_owned_coherent_decoder_ptr[struct]:
       POP_ASSUM_LIST (K ALL_TAC) >> simp[LIST_REL_EL_EQN, MAP_ZIP] >> metis_tac[]) >>
   conj_tac
   >- (rpt strip_tac >>
-      simp[NoAsms, Once valueEncodingTheory.val_in_memory_def,
+      simp[NoAsms, Once valueEncodingDefsTheory.val_in_memory_def,
         valueEncodingProofsTheory.fields_in_memory_tuple, MAP_ZIP] >>
       irule typedCopyTuplePtrTheory.tuple_in_memory_from_elements >>
       qpat_assum `LIST_REL value_has_type tvs (MAP SND fields')` mp_tac >>
@@ -536,7 +536,7 @@ Resume source_owned_coherent_decoder_ptr[struct]:
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[abiDecoderReentryTheory.abi_decoder_operand_live_def,
        abiDecoderReentryTheory.abi_decoder_older_vars_def,
-       compileEnvTheory.not_fresh_at_def]) >>
+       loweringStateRelDefsTheory.not_fresh_at_def]) >>
   metis_tac[venomStateTheory.eval_operand_def]
 QED
 

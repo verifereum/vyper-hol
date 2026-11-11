@@ -5,8 +5,8 @@ Ancestors
   sourceWordDecoderPtr sourceBytesRepresentation calldataTypedRobustPtr
   calldataWordPtr calldataDecodePtr abiDecoderContract abiDecoderBytes
   abiDecoderCoherence abiDecoderWordTyped abiCanonicalBytes
-  bodyPtrDefs compileEnv venomState venomExecSemantics instIdxIndep
-  vyperABI vyperTyping exprLowering valueEncoding valueEncodingProofs
+  bodyPtrDefs compileEnv loweringStateRelDefs venomState venomExecSemantics instIdxIndep
+  vyperABI vyperTyping exprLowering valueEncoding valueEncodingDefs valueEncodingProofs
   abiDecoderClamp ptrDiscipline fragExec finite_map words arithmetic list pred_set
   entryDecodeProps abiCanonicalHeadSize byte valueEncodingProps abiDecoderWordCopy abiStaticAggregateProps
   abiDecoderBytesTyped exprSimMemoryTransport exprSimProps loweringPosts

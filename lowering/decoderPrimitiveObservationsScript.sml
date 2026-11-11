@@ -3,7 +3,7 @@ Theory decoderPrimitiveObservations
 Ancestors
   abiDecoderClampedWord abiDecoderBytesTyped abiDecoderBytesFrame
   abiDecoderReentryPointer abiDecoderReentry abiDecoderVarSequence
-  abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv
+  abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   venomState venomInst venomExecSemantics
   ctorAbiActualAlloc abiDecoderSequenceReach decoderWorldFramePtr
   list rich_list arithmetic abiDecoderBytesPhases abiDecoderGuards abiDecoderContract

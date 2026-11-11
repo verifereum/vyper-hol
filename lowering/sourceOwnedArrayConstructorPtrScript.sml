@@ -13,8 +13,8 @@ Ancestors
   abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderArrayHeader
   abiDecoderGuards abiDecoderGuard ctorAbiActualAlloc
   emitHelperProps emitHelper exprLowering exprLoweringProps abiDecoderContract
-  rich_list context compileEnv venomState venomInst
-  venomExecSemantics venomMemDefs venomMemProofs valueEncoding valueEncodingProofs venomWf finite_map words list arithmetic
+  rich_list context compileEnv loweringStateRelDefs venomState venomInst
+  venomExecSemantics venomMemDefs venomMemProofs valueEncoding valueEncodingDefs valueEncodingProofs venomWf finite_map words list arithmetic
 
 (* Initialization writes only its own registers, so freshness at the eventual
    decoder limit is preserved, not merely freshness at the initializer limit. *)

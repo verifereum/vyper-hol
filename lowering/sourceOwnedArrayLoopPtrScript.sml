@@ -8,10 +8,10 @@ Ancestors
   abiDecoderDynamicLoopSetup abiDecoderArraySetupCode abiDecoderArraySlice
   abiDecoderValidArrayMemory abiDecoderValidArrayBackedge
   abiEncoder abiEncoderSourceTransport abiCanonicalHeadSize abiCanonicalWindows abiDecodeRanges
-  bodyPtrDefs ptrSafeRun ptrDiscipline compileEnv emitHelperProps fragExec
+  bodyPtrDefs ptrSafeRun ptrDiscipline compileEnv loweringStateRelDefs emitHelperProps fragExec
   venomState venomExecSemantics venomInst venomMemDefs allocaFrontierBound
   exprLowering exprLoweringProps
-  vyperABI vyperValue valueEncoding valueEncodingProps valueTypingMemoryProps
+  vyperABI vyperValue valueEncoding valueEncodingDefs valueEncodingProps valueTypingMemoryProps
   finite_map words list rich_list arithmetic pred_set contractABI byte
   canonicalMemberTraversalPtr abiDecoderOffset decoderWorldFramePtr
   decoderCalldataShell exprSimProps

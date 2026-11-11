@@ -1,7 +1,7 @@
 (* Bulk payload replay with ghosts chosen before the continuation domain. *)
 Theory calldataBulkUniformPtr
 Ancestors calldataBulkPayloadPtr decoderRawEndpointPtr decoderGhostFramePtr
-  decoderArraySetupPtr calldataDynOwned abiDecoderBulk abiEncoder compileEnv
+  decoderArraySetupPtr calldataDynOwned abiDecoderBulk abiEncoder compileEnv loweringStateRelDefs
   emitHelper emitHelperProps exprLoweringProps bodyPtrDefs ptrDiscipline
   ptrSafeRun venomInst venomState venomExecSemantics instIdxIndep
   finite_map pred_set words list arithmetic abiDecoderComposition fragExec

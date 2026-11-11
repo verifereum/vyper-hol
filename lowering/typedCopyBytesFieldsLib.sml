@@ -6,7 +6,8 @@ open HolKernel boolLib bossLib
 open typedCopyFieldsPtrTheory typedCopyBytesRobustPtrTheory typedCopyOffsetPtrTheory
      typedCopyAgreementTheory exprLoweringPropsTheory contextCodegenRelPropsTheory
      bodyPtrDefsTheory fragExecPtrTheory wordsTheory finite_mapTheory listTheory
-     arithmeticTheory contextCodegenRelTheory compileEnvTheory abiEncoderInputTheory
+     arithmeticTheory contextCodegenRelTheory compileEnvTheory loweringStateRelDefsTheory
+     abiEncoderInputTheory
 
 fun field (offset, robust, next_var) =
   rpt gen_tac >> disch_tac >> RULE_L_ASSUM_TAC CONJUNCTS >>

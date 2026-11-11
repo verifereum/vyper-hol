@@ -1,6 +1,6 @@
 (* Same-witness immutable frame for the decoder loop header. *)
 Theory decoderLoopHeaderCorePtr
-Ancestors compileEnv abiDecoderContract instIdxIndep ghostPcTransportPtr memLocDefs bodyPtrDefs decoderGhostFramePtr decoderProtectedScratchPtr typedCopyPtr abiDecoderExecution abiDecoderFrame
+Ancestors compileEnv loweringStateRelDefs abiDecoderContract instIdxIndep ghostPcTransportPtr memLocDefs bodyPtrDefs decoderGhostFramePtr decoderProtectedScratchPtr typedCopyPtr abiDecoderExecution abiDecoderFrame
   entryDispatchPtr typedCopyArrayPtr ptrSafeRun ptrDiscipline
   codegenRel emitHelperProps contextCodegenRel exprLoweringProps
   venomExecSemantics venomState venomInst finite_map pred_set words list arithmetic

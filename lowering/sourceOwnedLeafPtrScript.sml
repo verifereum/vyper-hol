@@ -282,8 +282,8 @@ Proof
   `abi_decode_load CALLDATALOAD (n2w srcpos : bytes32) r = n2w (LENGTH vs)` by
     (qpat_x_assum `mem_word_at srcpos _ = _` mp_tac >>
      simp_tac (srw_ss()) [abiDecoderContractTheory.abi_decode_load_def,
-       abiDecoderContractTheory.abi_decode_source_def, valueEncodingTheory.mem_word_at_def,
-       valueEncodingTheory.mem_bytes_at_def, wordsTheory.w2n_n2w] >>
+       abiDecoderContractTheory.abi_decode_source_def, valueEncodingDefsTheory.mem_word_at_def,
+       valueEncodingDefsTheory.mem_bytes_at_def, wordsTheory.w2n_n2w] >>
      `srcpos MOD dimword (:256) = srcpos` by simp[] >>
      pure_asm_rewrite_tac [] >> simp_tac bool_ss []) >>
   `eval_operand (Var child) r = SOME (n2w e)` by simp[eval_operand_def] >>
@@ -353,11 +353,11 @@ Proof
   qpat_x_assum `v = _` SUBST_ALL_TAC >>
   qexistsl [`t with vs_inst_idx := LENGTH end_st.cs_current_insts`,`H`,`u`] >>
   pure_asm_rewrite_tac [] >>
-  simp_tac (srw_ss()) [compileEnvTheory.fresh_vars_wrt_def,
+  simp_tac (srw_ss()) [loweringStateRelDefsTheory.fresh_vars_wrt_def,
     lookup_var_def, eval_operand_def] >>
   pure_asm_rewrite_tac [] >> simp_tac bool_ss [] >>
   conj_tac >- (qpat_assum `fresh_vars_wrt _ t` mp_tac >>
-    simp_tac (srw_ss()) [compileEnvTheory.fresh_vars_wrt_def]) >>
+    simp_tac (srw_ss()) [loweringStateRelDefsTheory.fresh_vars_wrt_def]) >>
   simp_tac arith_ss [] >>
   conj_tac >- (qpat_x_assum `ptr_covers H u child t _` mp_tac >>
     pure_asm_rewrite_tac [] >> simp_tac arith_ss []) >>

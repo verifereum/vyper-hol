@@ -4,7 +4,7 @@ Ancestors sourceRecursiveComplexPtr sourceOwnedArrayConstructorPtr
   canonicalMemberTraversalPtr
   venomExecSemantics venomState abiDecoderMemberSetup abiDecoderContract
   decoderMemberPrefixPtr abiDecoderDynamicLoopSetup fragExec abiDecoderFrame emitHelper venomInst
-  exprLoweringProps bodyPtrDefs list abiDecoderMemberCode abiDecoderLoop compileEnv arithmetic finite_map abiDecoderMemberCons
+  exprLoweringProps bodyPtrDefs list abiDecoderMemberCode abiDecoderLoop compileEnv loweringStateRelDefs arithmetic finite_map abiDecoderMemberCons
   abiDecoderCode abiEncoder emitHelperProps rich_list abiDecoderOffset
   abiDecoderOffsetHead abiDecoderCoherence vyperValue sourceEncodingLayout
   sourceEncodingWindows abiDecoderOffsetHead abiEncoderInput abiDecoderReentry

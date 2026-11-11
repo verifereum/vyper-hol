@@ -2,7 +2,7 @@
 Theory actualAllocaReplayPtr
 Ancestors
   actualAllocExec actualDecoderAllocationPtr emitHelperProps exprLoweringProps
-  compileEnv fragExec venomExecSemantics venomState venomInst vyperCompiler ptrDiscipline
+  compileEnv loweringStateRelDefs fragExec venomExecSemantics venomState venomInst vyperCompiler ptrDiscipline
   allocaFrontierBound allocaBudgetProps finite_map words arithmetic list pred_set
 
 Theorem fresh_vars_wrt_update_not_fresh:

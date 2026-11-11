@@ -2,7 +2,7 @@
 Theory canonicalMemberTraversalPtr
 Ancestors sourcePrimitiveMemberPtr abiDecoderMemberSetup abiDecoderMemberCode
   abiDecoderDynamicLoopSetup decoderMemberPrefixPtr abiDecoderContract
-  abiDecoderReentry compileEnv ghostPcTransportPtr ptrDiscipline bodyPtrDefs
+  abiDecoderReentry compileEnv loweringStateRelDefs ghostPcTransportPtr ptrDiscipline bodyPtrDefs
   venomState venomExecSemantics exprLoweringProps fragExec words arithmetic
   finite_map list abiEncoder emitHelperProps entrySinkExtraction
   sourceEncodingWindows sourceEncodingLayout abiCanonicalHeadSize abiDecodeRanges

@@ -2,7 +2,7 @@
 Theory sourcePrimitiveMemberPtr
 Ancestors sourceWordDecoderPtr sourceBytesRepresentation sourceEncodingLayout
   decoderMemberPrefixPtr abiDecoderClampedWord ghostPcTransportPtr
-  abiDecoderContract abiDecoderBytes compileEnv venomState words
+  abiDecoderContract abiDecoderBytes compileEnv loweringStateRelDefs venomState words
   abiDecoderCoherence abiDecoderDynamicLoopSetup ptrDiscipline abiDecoderWordTyped
   abiDecoderMemberSetup exprLowering vyperABI vyperTyping abiDecoderClamp
   fragExec list finite_map pred_set arithmetic abiCanonicalBytes bodyPtrDefs
