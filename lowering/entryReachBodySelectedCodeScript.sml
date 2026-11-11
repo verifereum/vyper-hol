@@ -155,7 +155,7 @@ Theorem entry_selected_source_code:
     (!inst. MEM inst (state_insts registered) ==> MEM inst (fn_insts func))
 Proof
   rpt gen_tac >> strip_tac >>
-  `supported_declaration_headers tops` by fs[supported_program_def] >>
+  `supported_declaration_headers tops` by fs[supportedProgramTheory.supported_program_def] >>
   `tx.function_name <> "__default__"` by fs[valid_vyper_call_def] >>
   `MEM (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
         tx.function_name,args,[],ret,fbody) (FST (classify_functions tops))` by
