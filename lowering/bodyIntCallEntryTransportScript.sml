@@ -2,7 +2,7 @@
 Theory bodyIntCallEntryTransport
 Ancestors
   intCallCallee moduleLoweringProps localPtrsProps immutableCopyExecution
-  immutableWordExecution contextProps compileEnv venomState finite_map list
+  immutableWordExecution contextProps compileEnv loweringStateRelDefs venomState finite_map list
 
 Theorem mat_pending_stage_transport:
   mat_pending ce env st s lo mr caps /\

@@ -5,7 +5,7 @@ Ancestors
   bodyIntCallActualJointInit bodyIntCallPackageInputs bodyIntCallJointInputs
   bodyIntCallActualEntryProtection bodyIntCallActualEntryLanding
   bodyIntCallActualEntryFields bodyIntCallActualEntryWitness
-  compileEnv vyperContext vyperState accountsRelProps compileVyper moduleLowering
+  compileEnv loweringStateRelDefs vyperContext vyperState accountsRelProps compileVyper moduleLowering
   bodyIntCallActualEntryReservation bodyIntCallSemanticEntry intCallCallee list pair
   bodyIntCallJointContract
 

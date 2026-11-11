@@ -3,7 +3,7 @@ Theory bodyIntCallActualEntryProtection
 Ancestors
   bodyIntCallActualEntryLanding bodyIntCallActualEntryWitness
   bodyIntCallActualEntryResource bodyIntCallActualEntryFields
-  intCallCallee intCallFrame loweringPosts compileEnv exprLoweringProps
+  intCallCallee intCallFrame loweringPosts compileEnv loweringStateRelDefs exprLoweringProps
   context finite_map list
 
 Theorem internal_entry_landing_allocas_above:

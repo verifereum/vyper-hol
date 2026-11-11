@@ -3,7 +3,7 @@ Theory bodyIntCallJointEntry
 Ancestors
   bodyIntCallRootFrame bodyIntCallJointContract fragGasSeq intCallCallee emitHelperProps
   fragExec exprLoweringProps entrySinkExtraction list rich_list
-  loweringPosts intCallFrame compileEnv venomState arithmetic
+  loweringPosts intCallFrame compileEnv loweringStateRelDefs venomState arithmetic
 
 Theorem internal_prologue_counted_landing:
   compile_internal_prologue ce params has_rb rt st0 = ((ce2,rpc),st1) /\

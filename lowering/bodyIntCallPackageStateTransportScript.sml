@@ -1,7 +1,7 @@
 (* Empty source scopes remove all function-local representation obligations. *)
 Theory bodyIntCallPackageStateTransport
 Ancestors
-  bodyIntCallPackageRootResource compileEnv vyperState
+  bodyIntCallPackageRootResource compileEnv loweringStateRelDefs vyperState
 
 Theorem state_rel_empty_scopes_env:
   ce1.ce_module_vars = ce2.ce_module_vars /\

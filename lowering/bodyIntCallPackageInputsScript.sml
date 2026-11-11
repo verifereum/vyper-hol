@@ -107,7 +107,7 @@ Theorem intcall_entry_caller_protection:
      (!n b sz'. local_region cenv es0.scopes s0 n b sz' ==>
                 off + sz <= b \/ b + sz' <= off) ==>
      mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-  locals_kept cenv es0 s0 t /\
+  locals_kept cenv es0 (es1 with scopes := prev) s0 t /\
   (!n lo sz aid off asz.
      local_region cenv prev t n lo sz /\
      FLOOKUP t.vs_allocas aid = SOME (off,asz) /\

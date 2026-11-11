@@ -2,7 +2,7 @@
 Theory bodyIntCallActualEntryOperands
 Ancestors
   bodyIntCallActualEntrySemantic bodyIntCallBodyTrace bodyIntCallActualEntryResource
-  intCallCallee moduleLowering context emitHelper compileEnv exprLoweringProps
+  intCallCallee moduleLowering context emitHelper compileEnv loweringStateRelDefs exprLoweringProps
   finite_map list pair rich_list
 
 Theorem materialize_internal_params_excludes_old:

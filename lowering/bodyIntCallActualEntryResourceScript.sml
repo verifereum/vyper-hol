@@ -2,7 +2,7 @@
 Theory bodyIntCallActualEntryResource
 Ancestors
   bodyIntCallEntryTransport bodyIntCallPrologueResource bodyIntCallBodyTrace
-  intCallCallee context compileEnv venomState finite_map list
+  intCallCallee context compileEnv loweringStateRelDefs venomState finite_map list
 Libs
   monadsyntax
 

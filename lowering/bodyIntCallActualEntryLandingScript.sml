@@ -3,7 +3,7 @@ Theory bodyIntCallActualEntryLanding
 Ancestors
   bodyIntCallActualEntryWitness bodyIntCallActualEntrySemantic
   bodyIntCallActualEntryResource bodyIntCallActualEntryFields
-  intCallCallee compileEnv exprLoweringProps context venomState finite_map list
+  intCallCallee compileEnv loweringStateRelDefs exprLoweringProps context venomState finite_map list
 
 Theorem state_rel_imm_alloca:
   state_rel func (ce with ce_imm_alloca := imm) cx vs s =

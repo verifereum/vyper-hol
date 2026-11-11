@@ -3,7 +3,7 @@ Theory bodyIntCallPackageProducerExit
 Ancestors
   bodyIntCallSeamDefs bodyIntCallPackageStateTransport
   bodyIntCallPackageRootResource bodyIntCallJointContract stmtSimReturn
-  compileEnv exprSimDefs
+  compileEnv loweringStateRelDefs exprSimDefs
 
 Theorem intcall_stmt_return_callee_exit:
   !fp v ee r cx owner rtv cenv rc t n m rb func.

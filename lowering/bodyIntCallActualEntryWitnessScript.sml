@@ -3,7 +3,7 @@ Theory bodyIntCallActualEntryWitness
 Ancestors
   bodyIntCallActualEntryReservation bodyIntCallActualEntryResource
   bodyIntCallPrologueResource bodyIntCallBodyTrace intCallCallee
-  compileEnv context emitHelper exprLoweringProps finite_map list rich_list
+  compileEnv loweringStateRelDefs context emitHelper exprLoweringProps finite_map list rich_list
   arithmetic venomState
 
 Theorem internal_entry_prefix_operands:

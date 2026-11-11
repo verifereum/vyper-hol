@@ -3,7 +3,7 @@ Theory bodyIntCallActualEntryReservation
 Ancestors
   bodyIntCallActualEntryReserved bodyIntCallActualEntryResource
   bodyIntCallActualEntryFields bodyIntCallBodyTrace intCallCallee
-  compileEnv context emitHelper exprLoweringProps finite_map list rich_list
+  compileEnv loweringStateRelDefs context emitHelper exprLoweringProps finite_map list rich_list
   arithmetic ASCIInumbers
 
 Theorem internal_entry_installed_reserved:

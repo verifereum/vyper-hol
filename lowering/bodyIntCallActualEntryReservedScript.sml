@@ -3,7 +3,7 @@ Theory bodyIntCallActualEntryReserved
 Ancestors
   bodyIntCallActualEntryOperands bodyIntCallActualEntryResource
   bodyIntCallActualEntryFields bodyIntCallBodyTrace intCallCallee
-  compileEnv context emitHelper exprLoweringProps finite_map list rich_list
+  compileEnv loweringStateRelDefs context emitHelper exprLoweringProps finite_map list rich_list
   arithmetic ASCIInumbers
 
 Theorem materialize_internal_params_install_imm:

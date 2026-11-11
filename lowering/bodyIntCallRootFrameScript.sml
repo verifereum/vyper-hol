@@ -193,10 +193,10 @@ Resume internal_root_frame_exists[frame]:
   >- (Cases_on `has_rb` >> fs[] >> rpt strip_tac >>
       qpat_x_assum `!i po z. _ ==> ?aid off asz. _` drule_all >>
       strip_tac >> qpat_x_assum `!aid off asz. _` drule_all >>
-      gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac)
+      gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
   >> simp[] >> Cases_on `has_rb` >> gvs[] >> rpt strip_tac >> gvs[]
   >- (qpat_x_assum `!i po z. _ ==> regions_disjoint _ _ _ _` drule_all >>
-      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac)
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
 QED
 
 Finalise internal_root_frame_exists
