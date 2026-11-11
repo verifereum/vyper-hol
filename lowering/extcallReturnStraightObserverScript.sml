@@ -251,10 +251,10 @@ Proof
     (fs[fn_has_code_def] >>
      `MEM bb func.fn_blocks` by metis_tac[lookup_block_MEM] >>
      `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
-       (irule ALL_DISTINCT_FLAT_MAP_MEM >>
-        qexists_tac `MAP (\b. b.bb_instructions) func.fn_blocks` >>
-        fs[fn_inst_ids_distinct_def, MAP_MAP_o, combinTheory.o_DEF, MEM_MAP] >>
-        metis_tac[]) >>
+       (fs[fn_inst_ids_distinct_def] >>
+        qpat_x_assum `MEM bb func.fn_blocks` mp_tac >>
+        simp[Once MEM_SPLIT] >> strip_tac >>
+        gvs[FLAT_APPEND, ALL_DISTINCT_APPEND]) >>
      qpat_x_assum `isPREFIX sb.cs_current_insts _` mp_tac >>
      simp[IS_PREFIX_APPEND] >> rpt strip_tac >> gvs[MAP_APPEND, ALL_DISTINCT_APPEND]) >>
   `!i. MEM i (DROP (LENGTH sa.cs_current_insts) sb.cs_current_insts) ==>
