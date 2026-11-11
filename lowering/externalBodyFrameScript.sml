@@ -1,7 +1,7 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalBodyFrame
 Ancestors
-  supportedGetterProps externalRawReturnType
+  entryDispatchProps constSubst supportedGetterProps externalRawReturnType
   externalBodySupport memoryLocalRhsProps
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
   loweringPosts
@@ -121,6 +121,24 @@ Proof
   metis_tac[]
 QED
 
+Theorem distinct_classify_fold_fallback[local]:
+  !tops mut nr rr args defaults ret body.
+    ALL_DISTINCT (supported_function_names tops) /\
+    MEM (FunctionDecl External mut nr rr "__default__" args defaults ret body) tops ==>
+    FST (SND (SND (FOLDR classify_function ([],[],NONE,NONE) tops))) =
+      SOME (mut,nr,rr,"__default__",args,defaults,ret,body)
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  simp[Once FOLDR] >>
+  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
+  PairCases_on `acc` >> fs[] >> Cases_on `h` >>
+  simp[supported_function_names_def, classify_function_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  Cases_on `f` >> gvs[] >>
+  Cases_on `s = "__default__"` >> gvs[] >>
+  metis_tac[supported_function_names_mem]
+QED
+
 Theorem distinct_external_classification:
   !tops mut nr rr name args defaults ret body exts ints fb ctor.
     supported_declaration_headers tops /\
@@ -131,15 +149,21 @@ Theorem distinct_external_classification:
        fb = SOME (mut,nr,rr,name,args,defaults,ret,body)
      else MEM (mut,nr,rr,name,args,defaults,ret,body) exts)
 Proof
-  Induct >- simp[] >> rpt gen_tac >>
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  Cases_on `h` >>
-  simp[supported_function_names_def, classify_functions_def,
-       classify_function_def] >>
-  rpt strip_tac >> gvs[GSYM classify_functions_def] >>
-  gvs[classify_function_def, AllCaseEqs()] >>
-  drule supported_function_names_mem >> strip_tac >>
-  Cases_on `name = "__default__"` >> gvs[] >> metis_tac[]
+  rpt gen_tac >> strip_tac >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supported_declaration_headers_def,
+              supported_headers_module_consts_env] >>
+  Cases_on `name = "__default__"`
+  >- (gvs[] >> drule_all distinct_classify_fold_fallback >>
+      qpat_x_assum `classify_functions _ = _` mp_tac >>
+      simp[classify_functions_def] >> pairarg_tac >>
+      rpt strip_tac >> gvs[subst_consts_fn_empty]) >>
+  drule_all classify_fold_external_member >>
+  qpat_x_assum `classify_functions _ = _` mp_tac >>
+  simp[classify_functions_def] >> pairarg_tac >>
+  rpt strip_tac >> gvs[MEM_MAP] >>
+  disj1_tac >> qexists `(mut,nr,rr,name,args,defaults,ret,body)` >>
+  simp[subst_consts_fn_empty]
 QED
 
 Theorem supported_external_classification:
@@ -877,6 +901,37 @@ Proof
   simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[])
 QED
 
+Theorem external_body_support_bounds_from_allocs[local]:
+  fn_allocs_ok tops (mut,nr,rr,name,args,defaults,ret,ss) /\
+  supported_function_body tops External args ss /\
+  cenv.ce_struct_fields = make_struct_fields_map tops /\
+  cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
+  alloc_env_agree (build_compile_env tops Internal mut name args ret ss F)
+    cenv /\
+  env_context_consistent env cx /\
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
+  EVERY (\(n,ty). assignable_type env.type_defs ty) args /\
+  type_stmts env ret ss = SOME env' /\
+  (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
+   return_buffer_ok cenv) ==>
+  locals_alloc_ok cenv env /\ EVERY (stmt_exprs_ok cenv) ss /\
+  ?bindings. supported_stmts tops bindings ss
+Proof
+  disch_then strip_assume_tac >>
+  drule_all fn_allocs_ok_body >> strip_tac >>
+  `~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss` by
+    (drule_all typed_parameter_body_excludes_bad_widths >> simp[]) >>
+  `EVERY (stmt_exprs_ok cenv) ss` by
+    (irule stmt_exprs_ok_from_traversal_bounds >> simp[]) >>
+  conj_tac
+  >- (simp[locals_alloc_ok_def] >> rpt strip_tac >>
+      `MEM (id,ty) args` by metis_tac[] >>
+      qpat_x_assum `EVERY (\(_,ty). type_memory_bytes cenv ty < _) args` mp_tac >>
+      simp[EVERY_MEM] >>
+      disch_then (qspec_then `(id,ty)` mp_tac) >> simp[]) >>
+  gvs[supported_function_body_def] >> metis_tac[]
+QED
+
 Theorem external_body_support_bounds:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
@@ -894,21 +949,10 @@ Theorem external_body_support_bounds:
   locals_alloc_ok cenv env /\ EVERY (stmt_exprs_ok cenv) ss /\
   ?bindings. supported_stmts tops bindings ss
 Proof
-  disch_then strip_assume_tac >>
+  strip_tac >>
   drule_all supported_external_allocs_ok >> strip_tac >>
-  drule_all fn_allocs_ok_body >> strip_tac >>
-  `~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss` by
-    (drule_all typed_parameter_body_excludes_bad_widths >> simp[]) >>
-  `EVERY (stmt_exprs_ok cenv) ss` by
-    (irule stmt_exprs_ok_from_traversal_bounds >> simp[]) >>
-  conj_tac
-  >- (simp[locals_alloc_ok_def] >> rpt strip_tac >>
-      `MEM (id,ty) args` by metis_tac[] >>
-      qpat_x_assum `EVERY (\(_,ty). type_memory_bytes cenv ty < _) args` mp_tac >>
-      simp[EVERY_MEM] >>
-      disch_then (qspec_then `(id,ty)` mp_tac) >> simp[]) >>
-  simp[] >> drule_all supported_program_function >>
-  simp[supported_function_body_def] >> metis_tac[]
+  drule_all supported_program_function >> strip_tac >>
+  drule_all external_body_support_bounds_from_allocs >> simp[]
 QED
 
 Theorem external_bind_arguments_popped:
@@ -1276,6 +1320,7 @@ Proof
   drule package_external_fn_return_buffer_ok >>
   disch_then drule >> strip_tac >>
   drule compile_register_positional_args_cenv >> strip_tac >>
+  `~cenv0.ce_raw_return` by gvs[compile_env_component_equality] >>
   qpat_x_assum `cenv = _` (fn th => once_rewrite_tac [th]) >>
   gvs[return_buffer_ok_def]
 QED
@@ -1368,7 +1413,15 @@ Proof
     (strip_tac >> drule external_selected_return_buffer_ok >>
      rpt (disch_then drule) >> simp[]) >>
   drule_all external_package_alloc_env_agree >> strip_tac >>
-  drule_all external_body_support_bounds >> strip_tac >>
+  `?rr:bool. fn_allocs_ok tops
+     (mut,F,rr,tx.function_name,args,[],ret,fbody)` by
+    (`tx.function_name <> "__default__"` by gvs[valid_vyper_call_def] >>
+     `supported_declaration_headers tops` by fs[supported_program_def] >>
+     drule_all supported_headers_external_member >> strip_tac >>
+     Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
+     qexists `rr` >> irule lower_vyper_runtime_unit_allocs_ok >>
+     metis_tac[]) >>
+  drule_all external_body_support_bounds_from_allocs >> strip_tac >>
   qexistsl [`bindings`, `env_t`, `env'`] >> simp[] >>
   reverse conj_tac
   >- (irule external_entry_target_locals_declared >>

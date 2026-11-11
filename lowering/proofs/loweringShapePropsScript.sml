@@ -13577,20 +13577,6 @@ Proof
   simp[supported_expr_exists_def, expr_shape_root_def]
 QED
 
-Theorem supported_headers_module_consts_env:
-  !ts tops acc.
-    EVERY (supported_declaration_header tops) ts ==>
-    module_consts_env ts acc = acc
-Proof
-  Induct >> simp[module_consts_env_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `h` >> gvs[module_consts_env_def]
-  >~ [`VariableDecl vis mut name ty slot`]
-  >- (Cases_on `mut` >> Cases_on `vis` >>
-      gvs[module_consts_env_def, supportedDeclsTheory.supported_declaration_header_def] >>
-      metis_tac[]) >>
-  metis_tac[]
-QED
-
 Theorem supported_program_runtime_bodies_shape_ok:
   !tops. supported_program tops ==> runtime_bodies_shape_ok tops
 Proof
