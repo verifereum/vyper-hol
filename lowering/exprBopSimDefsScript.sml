@@ -6,7 +6,11 @@ Ancestors
 
 Definition bop_result_def:
   bop_result cx ann bop tys v1 v2 (es:evaluation_state) =
-    case evaluate_builtin cx es.accounts ann (Bop bop) tys [v1; v2] of
+    case (if bop = In \/ bop = NotIn then
+            case evaluate_type (get_tenv cx) (EL 1 tys) of
+              NONE => INR (TypeError "Membership type")
+            | SOME tv => evaluate_membership tv (bop = NotIn) v1 v2
+          else evaluate_builtin cx es.accounts ann (Bop bop) tys [v1; v2]) of
       INL v => INL v
     | INR e => INR (Error e)
 End

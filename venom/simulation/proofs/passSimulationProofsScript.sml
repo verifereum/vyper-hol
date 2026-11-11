@@ -29,6 +29,7 @@ Ancestors
   passSimulationDefs execEquivParamProofs execEquivParamBase execEquivParamDefs
   stateEquivProps execEquivProps stateEquiv venomInst venomExecSemantics
   venomExecProofs venomWf list indexedLists
+  passTransform
 
 (* Rewrite only constructor-headed lifts in the goal.  In particular, do not
    expand the guarded fuel IH or lifts of still-unknown executions. *)

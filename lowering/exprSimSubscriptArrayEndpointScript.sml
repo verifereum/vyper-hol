@@ -5,18 +5,6 @@ Ancestors
   exprSimWordArgs exprSimHash exprSimVVFrame exprLoweringProps
   loweringPosts compileEnv freshWrites finite_map
 
-Theorem array_subscript_grows:
-  compile_array_subscript base_op idx_op dyn cnt ws esz sgn loader sa = (dst,sb) /\
-  (!op st. ci_mono st (SND (loader op st))) ==>
-  cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
-  sa.cs_next_id <= sb.cs_next_id
-Proof
-  strip_tac >>
-  `sb = SND (compile_array_subscript base_op idx_op dyn cnt ws esz sgn loader sa)` by simp[] >>
-  pop_assum SUBST1_TAC >> rewrite_tac[GSYM ci_mono_def] >>
-  irule ci_mono_compile_array_subscript >> simp[]
-QED
-
 Theorem word_expr_post_readonly_tail:
   expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
   is_word_type (expr_type e) /\ sa.cs_next_var <= sb.cs_next_var /\
@@ -27,8 +15,8 @@ Theorem word_expr_post_readonly_tail:
   expr_post ctx func cenv cx e es sa sc s0 es' v op t
 Proof
   strip_tac >>
-  `wb_frame cenv es sa s0 s` by metis_tac[expr_post_frame] >>
-  `wb_frame cenv es sa s0 t` by
+  `wb_frame cenv es es' sa s0 s` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es es' sa s0 t` by
     (irule wb_frame_readonly_tail >> goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[]) >>
   `!w. eval_operand op s = SOME w ==> eval_operand op t = SOME w` by
@@ -41,7 +29,8 @@ QED
 Theorem framed_array_base_endpoint:
   vv_post ctx func cenv cx obj es sa sb s0 t r (LocatedValue (ArrayT et bd) p) u /\
   expr_post ctx func cenv cx idx t sb sc u t' iv iop v /\
-  expr_type obj = ArrayT et bd /\ is_word_type (expr_type idx) /\
+  expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
+  is_word_type (expr_type idx) /\
   ((~cenv.ce_is_ctor /\ p.ptr_location = LocCode) \/
    ((?n. bd = Fixed n) /\
     (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
@@ -67,13 +56,14 @@ Proof
     (irule word_expr_post_readonly_tail >> simp[] >>
      qexistsl_tac [`v`,`sc`] >> simp[]) >>
   drule_all_then strip_assume_tac framed_array_base_transport >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es t sa s0 u` by
     (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_tac o REWRITE_RULE [vv_post_def]) >>
      disch_then (map_every assume_tac o CONJUNCTS) >>
      simp[wb_frame_def] >> first_assum ACCEPT_TAC) >>
-  `wb_frame cenv t sb u q` by metis_tac[expr_post_frame] >>
-  `wb_frame cenv es sa s0 q` by
+  `wb_frame cenv t t' sb u q` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es t' sa s0 q` by
     (drule_all wb_frame_trans >> simp[]) >>
-  irule vv_post_frame_intro >> simp[]
+  irule vv_post_frame_intro >> simp[] >>
+  qpat_x_assum `_ \/ _` strip_assume_tac >> simp[]
 QED

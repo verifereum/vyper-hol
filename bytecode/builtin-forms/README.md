@@ -27,6 +27,7 @@ the native runner (`../native/README.md`); from `bytecode/`:
 | `concat_one_bytes_arg` | `concat` of `Bytes` and `bytes4` |
 | `concat_string3args` | `concat` of three `String`s |
 | `concat_string3` | `concat` of `String`s around a literal |
+| `concat_wide_local` | `concat` of a `Bytes[50]` and one literal byte into a `Bytes[100]` local: the intermediate buffer is sized from the operands (51), not from the wider destination |
 | `len_concat` | `len(concat(a, b))` |
 | `uint2str_local` | `concat("n=", uint2str(x))` |
 | `concat_storage` | `concat` with a storage `Bytes` argument |

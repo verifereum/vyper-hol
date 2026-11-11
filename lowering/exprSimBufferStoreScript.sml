@@ -20,11 +20,12 @@
  *)
 Theory exprSimBufferStore
 Ancestors
+  exprSimProps
   exprSimVVFrame
   exprSimProps
   loweringPosts
   exprSimBuffer exprSimLiteralBuffer words integer_word vfmConstants emitHelperProps
-  exprLoweringProps context venomExecSemantics venomState compileEnv
+  exprLoweringProps context venomExecSemantics venomState compileEnv loweringStateRelDefs
   copyFwdEquiv allocaRemapDefs valueEncodingProofs list rich_list
   exprSimMemoryTransport valueEncodingProps entryDecodeProps entryDecodeStaticProps
   loweringSlice intCallResult valueCopy localPtrsProps fragExec
@@ -276,7 +277,7 @@ Theorem buffer_bytes_header:
     val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) src s.vs_memory ==>
     mload src s = n2w (LENGTH bs)
 Proof
-  simp[valueEncodingTheory.val_in_memory_def, mem_word_at_eq_mload]
+  simp[valueEncodingDefsTheory.val_in_memory_def, mem_word_at_eq_mload]
 QED
 
 Theorem buffer_string_header:
@@ -284,7 +285,7 @@ Theorem buffer_string_header:
     val_in_memory (BaseTV (StringT cap)) (StringV str) src s.vs_memory ==>
     mload src s = n2w (LENGTH str)
 Proof
-  simp[valueEncodingTheory.val_in_memory_def, mem_word_at_eq_mload]
+  simp[valueEncodingDefsTheory.val_in_memory_def, mem_word_at_eq_mload]
 QED
 
 Theorem buffer_store_memory_shape:
@@ -323,7 +324,7 @@ Proof
   strip_tac >> Cases_on `n = 0`
   >- (gvs[] >> irule val_in_memory_relocate_footprint >> simp[] >>
       qexistsl_tac [`s.vs_memory`, `w2n w`] >>
-      simp[valueEncodingTheory.mem_bytes_at_def]) >>
+      simp[valueEncodingDefsTheory.mem_bytes_at_def]) >>
   gvs[] >> conj_tac
   >- (irule buffer_mcopy_encoding >> simp[]) >>
   simp[buffer_mcopy_restore] >> rpt gen_tac >> strip_tac >>
@@ -554,7 +555,7 @@ Proof
      strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> strip_tac >>
      qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   irule result_state_memory_frame >> reverse conj_tac
   >- (qexists_tac `s` >> simp[] >>
       rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
@@ -562,7 +563,7 @@ Proof
         (irule local_ptrs_rel_alloca_disjoint >>
          qexistsl_tac [`cenv`, `func`, `inst`, `name`, `p`, `es.scopes`, `s`] >>
          fs[stmt_state_rel_def, state_rel_def]) >>
-      fs[compileEnvTheory.regions_disjoint_def]) >> first_assum ACCEPT_TAC
+      fs[loweringStateRelDefsTheory.regions_disjoint_def]) >> first_assum ACCEPT_TAC
 QED
 
 Theorem mcopy_alloca_framed_frag:

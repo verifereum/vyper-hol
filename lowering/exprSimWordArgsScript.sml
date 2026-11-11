@@ -45,11 +45,11 @@ Ancestors
   loweringPosts
   list  exprSimHyps exprSimOps loweringSlice exprLowering
   exprLoweringProps vyperEvalExprPreservesScopesDom vyperInterpreter
-  vyperState vyperContext vyperTyping compileEnv freshWrites fragExec varsExt
+  vyperState vyperContext vyperTyping compileEnv loweringStateRelDefs freshWrites fragExec varsExt
   venomExecSemantics venomState emitHelper emitHelperProps venomInst
 
-(* Keep the account parameter: this boundary is valid for every non-Len
-   builtin, not only the account-independent arithmetic cases. *)
+(* Keep the account parameter for account-dependent builtins.  Len and
+   membership have dedicated interpreter paths rather than this boundary. *)
 Definition builtin_result_def:
   builtin_result cx acc ty bt ts vs =
     case evaluate_builtin cx acc ty bt ts vs of
@@ -59,7 +59,7 @@ End
 
 Theorem eval_expr_builtin_cases:
   !cx ann bt args es res es'.
-    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ bt <> Bop In /\ bt <> Bop NotIn /\
     builtin_args_length_ok bt (LENGTH args) /\
     (do r <- eval_expr cx (Builtin ann bt args); read_result cx r od) es = (res, es') ==>
     (?exc. eval_exprs cx args es = (INR exc, es') /\ res = INR exc) \/
@@ -113,6 +113,7 @@ QED
 
 Theorem eval_expr_builtin_action:
   bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+  bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) ==>
   bind (eval_expr cx (Builtin ann bt args)) (read_result cx) =
   bind (eval_exprs cx args)
@@ -270,14 +271,23 @@ QED
 (* ===== Composable expression frames ===== *)
 
 Theorem wb_frame_refl:
-  !cenv es sa s. wb_frame cenv es sa s s
+  !cenv es es' sa s. es'.scopes = es.scopes ==> wb_frame cenv es es' sa s s
 Proof
   simp[wb_frame_def]
 QED
 
+(* A frame reads its end env only through its scopes. *)
+Theorem wb_frame_gas_obs:
+  !cenv es es' sa s0 s gs.
+    wb_frame cenv es (es' with gas_obs := gs) sa s0 s <=>
+    wb_frame cenv es es' sa s0 s
+Proof
+  simp[wb_frame_def, locals_kept_def, popped_kept_def]
+QED
+
 Theorem wb_frame_vars:
-  !cenv es sa s0 s x w.
-    wb_frame cenv es sa s0 s /\ not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+  !cenv es es' sa s0 s x w.
+    wb_frame cenv es es' sa s0 s /\ not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
     lookup_var x s = SOME w
 Proof
   simp[wb_frame_def]
@@ -286,7 +296,7 @@ QED
 Theorem expr_post_frame:
   !func cenv cx e es sa sb s0 es' v op s ctx.
     expr_post ctx func cenv cx e es sa sb s0 es' v op s ==>
-    wb_frame cenv es sa s0 s
+    wb_frame cenv es es' sa s0 s
 Proof
   simp[expr_post_def, wb_frame_def] >> metis_tac[]
 QED
@@ -313,7 +323,7 @@ QED
 Theorem expr_post_word_intro:
   !func cenv cx e es sa sb s0 es' v op s ctx.
     stmt_state_rel ctx func cenv cx es' s /\ is_word_type (expr_type e) /\ word_value v /\
-    eval_operand op s = SOME (val_to_w256 v) /\ wb_frame cenv es sa s0 s ==>
+    eval_operand op s = SOME (val_to_w256 v) /\ wb_frame cenv es es' sa s0 s ==>
     expr_post ctx func cenv cx e es sa sb s0 es' v op s
 Proof
   simp[expr_post_def, wb_frame_def, expr_val_rel_def, expr_val_at_def,
@@ -321,26 +331,26 @@ Proof
 QED
 
 Theorem wb_frame_readonly_tail:
-  !cenv es sa s0 t s1 u.
-    wb_frame cenv es sa s0 t /\ sa.cs_next_var <= s1.cs_next_var /\
+  !cenv es es' sa s0 t s1 u.
+    wb_frame cenv es es' sa s0 t /\ sa.cs_next_var <= s1.cs_next_var /\
     (!z w. not_fresh_at s1 z /\ lookup_var z t = SOME w ==> lookup_var z u = SOME w) /\
     (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
     u.vs_memory = t.vs_memory ==>
-    wb_frame cenv es sa s0 u
+    wb_frame cenv es es' sa s0 u
 Proof
   rpt strip_tac >>
-  `locals_kept cenv es s0 t` by fs[wb_frame_def] >>
-  `locals_kept cenv es s0 u` by metis_tac[locals_kept_mem_tail] >>
+  `locals_kept cenv es es' s0 t` by fs[wb_frame_def] >>
+  `locals_kept cenv es es' s0 u` by metis_tac[locals_kept_mem_tail] >>
   fs[wb_frame_def] >> rpt strip_tac >> metis_tac[not_fresh_at_mono]
 QED
 
 Theorem wb_frame_trans:
-  !func cenv cx es s0 sa es1 s1 t u ctx.
+  !func cenv cx es s0 sa es1 es' s1 t u ctx.
     stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
-    wb_frame cenv es sa s0 t /\ wb_frame cenv es1 s1 t u ==>
-    wb_frame cenv es sa s0 u
+    wb_frame cenv es es1 sa s0 t /\ wb_frame cenv es1 es' s1 t u ==>
+    wb_frame cenv es es' sa s0 u
 Proof
   rpt gen_tac >> simp[wb_frame_def] >> strip_tac >>
   conj_tac
@@ -441,7 +451,7 @@ Definition wb_args_post_def:
   wb_args_post ctx func cenv cx es sa s0 es' xs vs s <=>
     stmt_state_rel ctx func cenv cx es' s /\
     LIST_REL (\x v. eval_operand x s = SOME (val_to_w256 v)) xs vs /\
-    wb_frame cenv es sa s0 s
+    wb_frame cenv es es' sa s0 s
 End
 
 Definition wb_args_shape_def:
@@ -581,11 +591,11 @@ Proof
   rpt strip_tac >>
   `eval_operand x t = SOME (val_to_w256 v)` by
     (drule_all expr_post_word_operand >> simp[]) >>
-  `wb_frame cenv es sa s0 t` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es es1 sa s0 t` by metis_tac[expr_post_frame] >>
   gvs[wb_args_post_def] >> conj_tac
   >- (irule eval_operand_frame >> goal_assum (drule_at Any) >>
       simp[] >> metis_tac[wb_frame_vars]) >>
-  irule wb_frame_trans >> simp[] >> conj_tac
+  irule wb_frame_trans >> simp[] >> reverse conj_tac
   >- (qexistsl_tac [`es1`, `s1`, `t`] >> simp[]) >>
   qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
 QED
@@ -824,6 +834,7 @@ QED
 
 Theorem word_builtin_marked_admissible:
   bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+  bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) /\
   gas_admissible (bind (eval_expr cx (Builtin ann bt args)) (read_result cx))
     expr_res_ok es /\
@@ -843,6 +854,7 @@ QED
 
 Theorem word_builtin_exempt_cert:
   bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+  bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) /\
   gas_exempt_cert memory tops (ctx,func)
     (ignore_bind (eval_exprs cx args) (return ()))
@@ -870,7 +882,7 @@ QED
 
 Theorem compile_word_builtin_sim:
   !ctx func cenv cx ty ann bt args arg_ty Inv es code.
-    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ bt <> Bop In /\ bt <> Bop NotIn /\
     builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
     wb_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
     (!es gs. Inv es ==> Inv (es with gas_obs := gs)) /\

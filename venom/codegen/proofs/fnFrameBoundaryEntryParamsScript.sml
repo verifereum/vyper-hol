@@ -266,8 +266,8 @@ Theorem entry_param_step:
     OK (entry_bind_pairs (entry_param_pairs s [inst]) s)
 Proof
   rw[entry_param_shape_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def,
-       entry_param_pairs_def, update_var_def]
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  simp[entry_param_pairs_def, update_var_def]
 QED
 
 Theorem entry_param_run_insts:
@@ -1019,7 +1019,8 @@ Proof
   impl_tac >- decide_tac >>
   disch_then SUBST1_TAC >> pop_assum SUBST1_TAC >>
   simp[livenessDefsTheory.liveness_transfer_def,
-       livenessDefsTheory.live_update_def, entry_ret_family_el_assign,
+       livenessDefsTheory.live_update_def,
+       livenessDefsTheory.MEM_FOLDL_append_unseen, entry_ret_family_el_assign,
        mk_inst_def, inst_defs_def, livenessDefsTheory.ordered_inst_uses_def,
        python_stack_operands_def, venomInstTheory.operand_vars_def,
        venomInstTheory.operand_var_def, MEM_FILTER]

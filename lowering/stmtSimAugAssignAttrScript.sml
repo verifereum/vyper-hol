@@ -41,7 +41,7 @@ Ancestors
    stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssign
   stmtSimAugAssign stmtSimAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding valueEncodingProps
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperTyping
   vyperTypeBuiltins vyperTypeEnv vyperTypeInvariants vyperTypeExprSoundness vyperTypeSystem
   vyperContext vyperAST vyperExprNoControl
@@ -62,7 +62,7 @@ Proof
   >- (disj1_tac >>
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
       simp[gas_summary_at_def, gas_marked_exec_def,
-           expr_post_def, locals_kept_def]) >>
+           expr_post_def, locals_kept_def, popped_kept_def]) >>
   disj2_tac >> drule gas_exempt_cert_start_gas_obs >>
   disch_then (qspec_then `gs` mp_tac) >> simp[] >> metis_tac[]
 QED
@@ -316,11 +316,11 @@ Theorem augassign_attr_binop_admissible:
   expr_res_ok (bop_result cx ty bop [ty; expr_type e] fv v ee)
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty; expr_type e] fv v ee =
-    case evaluate_binop
+  `expr_res_ok (bop_result cx ty bop [ty; expr_type e] fv v ee) <=>
+   expr_res_ok (case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-      ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+      ftv bop fv v of INL w => INL w | INR err => INR (Error err))` by
+    (irule bop_result_augassign_res_ok >> simp[]) >>
   drule_all eval_augassign_attr_fields_obs >>
   disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`, `gs`] mp_tac) >>
   simp[GSYM bind_assoc, bind_def] >>
@@ -345,19 +345,22 @@ Theorem augassign_attr_write_admissible:
   !m. res <> INR (Error (TypeError m))
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty; expr_type e] fv v ee =
-    case evaluate_binop
-      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-      ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
-  drule_all eval_augassign_attr_fields_obs >>
-  disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`, `gs`] mp_tac) >>
-  Cases_on `evaluate_binop
-    (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-    ftv bop fv v` >> gvs[] >>
-  simp[GSYM bind_assoc, bind_def, lift_sum_def, return_def] >> strip_tac >>
-  drule_all gas_admissible_result >>
-  Cases_on `res` >> simp[stmt_res_ok_def] >> strip_tac >> gvs[]
+  `?actual. evaluate_binop
+     (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+     ftv bop fv v = INL actual` by
+    metis_tac[bop_result_augassign_success] >>
+  Cases_on `write_place cx (MemoryPlace id [AttrSubscript fld]) actual ee` >>
+  rename1 `_ = (actual_res, actual_fin)` >>
+  `eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
+     (es with gas_obs := gs) = (actual_res, actual_fin)` by
+    (drule_all eval_augassign_attr_fields_obs >>
+     disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`, `gs`] mp_tac) >>
+     simp[GSYM bind_assoc, bind_def, lift_sum_def, return_def]) >>
+  `stmt_res_ok lctx actual_res` by metis_tac[gas_admissible_result] >>
+  `res = actual_res` by
+    (qspecl_then [`[AttrSubscript fld]`, `cx`, `id`, `w`, `ee`, `actual`]
+       mp_tac write_place_short_memory_result >> simp[]) >>
+  gvs[stmt_res_ok_def, expr_res_ok_def]
 QED
 
 Theorem augassign_attr_rhs_exempt:
@@ -734,6 +737,9 @@ Proof
     simp[bind_def, AllCaseEqs()] >> metis_tac[]) >> strip_tac >>
   qpat_x_assum `!tv. INL v = INL tv ==> _` (qspec_then `v` mp_tac) >>
   simp[] >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_word >>
+     metis_tac[word_value_type_word]) >>
   irule expr_val_rel_word >> simp[] >>
   qexistsl_tac [`cx`, `expr_type e`] >>
   fs[expr_post_def, word_value_type_word]
@@ -1026,6 +1032,9 @@ Proof
 QED
 Resume augassign_attr_normal_summary[store]:
   gvs[] >>
+  drule_all well_typed_binop_augassign_word >> strip_tac >>
+  `word_value fv` by
+    (drule_all word_value_type_typed >> simp[]) >>
   `well_formed_type (get_tenv cx) ty` by simp[well_formed_type_def] >>
   drule_all augassign_attr_binop_ready >>
   disch_then (qspecl_then [`func`, `ee with gas_obs := []`, `ctx`] strip_assume_tac) >>
@@ -1076,7 +1085,7 @@ Resume augassign_attr_normal_summary[store]:
     case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> simp[word_value_not_bytes]) >>
   `evaluate_binop (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v = INL result` by
     (Cases_on `evaluate_binop (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
@@ -1094,11 +1103,14 @@ Resume augassign_attr_normal_summary[store]:
 QED
 Resume augassign_attr_normal_summary[operator_error]:
   gvs[] >>
+  drule_all well_typed_binop_augassign_word >> strip_tac >>
+  `word_value fv` by
+    (drule_all word_value_type_typed >> simp[]) >>
   `bop_result cx ty bop [ty;expr_type e] fv v ee =
     case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> simp[word_value_not_bytes]) >>
   Cases_on `evaluate_binop (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v` >- gvs[] >>
   gvs[] >>

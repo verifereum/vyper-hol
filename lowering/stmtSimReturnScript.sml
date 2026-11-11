@@ -6,12 +6,12 @@ Ancestors
   exprSimProps
   stmtSimDefs
   exprSimDefs
-  loweringPosts
+  loweringPosts exprSimTypedAlloc
   gasContext gasExemptCert
   list rich_list finite_map fragExec freshWrites
   vyperTypeABI
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding venomMemDefs
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs venomMemDefs
   vyperInterpreter vyperState vyperValue vyperTyping vyperExprNoControl
   vyperStatePreservation
   venomExecSemantics venomInst venomState
@@ -303,25 +303,6 @@ QED
 
 (* A non-word value's footprint fits below 2 ** 256: it sits in an
    allocation or a live local's region, both below the frontier. *)
-Theorem expr_val_at_bound:
-  !func cenv cx t sa sb es v op s tv w ctx.
-    stmt_state_rel ctx func cenv cx es s /\
-    expr_val_at cenv cx t sa sb es v op s /\
-    evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
-    eval_operand op s = SOME w ==>
-    w2n w + val_footprint tv v < dimword (:256)
-Proof
-  rw[expr_val_at_def] >> first_x_assum (qspec_then `tv` mp_tac) >>
-  simp[] >> strip_tac >> gvs[] >>
-  TRY (simp[wordsTheory.w2n_lt] >> NO_TAC) >>
-  `s.vs_alloca_next < dimword (:256)` by
-    (irule alloca_room_next_lt >> fs[stmt_state_rel_def] >> metis_tac[])
-  >- (fs[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
-      first_x_assum drule >> decide_tac) >>
-  fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
-     local_region_def] >>
-  first_x_assum drule_all >> strip_tac >> gvs[] >> decide_tac
-QED
 
 Theorem eval_operands_snoc[local]:
   !ops s vals op v.

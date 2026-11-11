@@ -115,7 +115,7 @@ Proof
           qpat_x_assum `!n b sz'. local_region _ es.scopes s0 _ _ _ ==> _` irule >>
           qexists `n` >> irule local_region_frame >>
           conj_tac >- (qexists `func` >>
-            gvs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+            gvs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
           qexistsl [`sa`, `es1.scopes`, `t`] >> asm_rewrite_tac[])
       >- (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
           qexists `sa.cs_next_id` >> asm_rewrite_tac[]) >>
@@ -272,6 +272,44 @@ Resume rest_word_mixed_outcome[right_normal]:
 QED
 Finalise rest_word_mixed_outcome
 
+(* A word-element array's value is described at a type of the same element
+   and bound kind: the widening of an internal call's return type changes
+   only a dynamic array's capacity. *)
+Theorem rest_word_fits_word[local]:
+  !t u. arg_type_fits t u /\ is_word_type u ==> t = u
+Proof
+  rpt strip_tac >>
+  Cases_on `t` >> Cases_on `u` >>
+  gvs[vyperTypeSystemTheory.arg_type_fits_def, compileEnvTheory.is_word_type_def] >>
+  rename1 `arg_type_fits (BaseT b1) (BaseT b2)` >>
+  Cases_on `b1` >> Cases_on `b2` >>
+  gvs[vyperTypeSystemTheory.arg_type_fits_def, compileEnvTheory.is_word_type_def] >>
+  rename1 `arg_type_fits (BaseT (BytesT d1)) (BaseT (BytesT d2))` >>
+  Cases_on `d1` >> Cases_on `d2` >>
+  gvs[vyperTypeSystemTheory.arg_type_fits_def, compileEnvTheory.is_word_type_def]
+QED
+
+Theorem rest_word_widened_array_shape[local]:
+  !tenv pt u bd.
+    type_widens_to tenv pt (ArrayT u bd) /\ is_word_type u ==>
+    ?pbd. pt = ArrayT u pbd /\
+          case bd of Fixed n => pbd = Fixed n | Dynamic n => ?m. pbd = Dynamic m
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `type_widens_to _ _ _`
+    (strip_assume_tac o REWRITE_RULE [vyperTypeSystemTheory.type_widens_to_def])
+  >- (Cases_on `bd` >> gvs[]) >>
+  `?t sb. pt = ArrayT t sb` by
+    (Cases_on `pt` >> TRY (rename1 `BaseT b` >> Cases_on `b`) >>
+     TRY (rename1 `BytesT d` >> Cases_on `d`) >>
+     gvs[vyperTypeSystemTheory.arg_type_fits_def]) >>
+  gvs[] >>
+  `arg_type_fits t u` by
+    (Cases_on `sb` >> Cases_on `bd` >> gvs[vyperTypeSystemTheory.arg_type_fits_def]) >>
+  drule_all rest_word_fits_word >> strip_tac >> gvs[] >>
+  Cases_on `sb` >> Cases_on `bd` >> gvs[vyperTypeSystemTheory.arg_type_fits_def]
+QED
+
 Theorem compile_rest_word_membership_sim:
   !nocalls ctx func cenv cx env ty ann bop e1 e2 bd es.
     expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
@@ -318,9 +356,9 @@ Resume compile_rest_word_membership_sim[tail_extends]:
     compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   gvs[compileEnvTheory.comp_return_def] >>
-  qpat_assum `compile_array_membership_loop _ _ _ _ _ _ _ _ = _`
+  qpat_assum `compile_array_membership_loop _ _ _ _ _ _ _ _ _ = _`
     (strip_assume_tac o REWRITE_RULE [exprSimBopRestWordLayoutTheory.rest_word_loop_factor_eq]) >>
-  rename1 `rest_word_loop_prefix _ _ _ _ _ loopst = (h,cl)` >>
+  rename1 `rest_word_loop_prefix _ _ _ _ _ _ loopst = (h,cl)` >>
   drule exprSimBopRestWordLayoutTheory.rest_word_loop_prefix_shape >>
   rewrite_tac[exprSimBopRestWordLayoutTheory.rest_word_loop_prefix_shape_def] >> strip_tac >>
   drule exprSimBopRestWordLayoutTheory.rest_word_ptr_load_shape >> strip_tac >>
@@ -330,7 +368,6 @@ Resume compile_rest_word_membership_sim[tail_extends]:
     (simp[compileEnvTheory.cs_extends_def] >> qexists `TAKE 6 sb.cs_blocks` >> simp[]) >>
   qpat_assum `compile_ptr_load _ _ _ (vv_operand arr_vv) st2 = _`
     (mp_tac o MATCH_MP exprSimBopRestWordLayoutTheory.rest_word_ptr_load_shape) >> strip_tac >>
-  drule_all rest_word_capacity_check_shape >> strip_tac >>
   `cs_extends st2 loopst` by
     simp[compileEnvTheory.cs_extends_def,
       rich_listTheory.IS_PREFIX_APPEND, listTheory.APPEND_ASSOC] >>
@@ -400,8 +437,19 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
   `expr_body_pre cenv cx env e2
      (mid with gas_obs := gas_explicit right t.vs_gas_readings)` by gvs[] >>
   drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >> strip_tac >>
-  `vv_holds cenv cx (expr_type e2) tv arr_vv (fin with gas_obs := []) u` by
-    fs[loweringPostsTheory.vv_post_def] >>
+  `?pbd. post_value_type cenv e2 = ArrayT (expr_type e1) pbd /\
+         case bd of Fixed n => pbd = Fixed n | Dynamic n => ?m. pbd = Dynamic m` by
+    (irule rest_word_widened_array_shape >> simp[] >>
+     qexists `env.type_defs` >>
+     qpat_assum `expr_type e2 = _` (SUBST1_TAC o SYM) >>
+     irule exprSimHypsTheory.post_value_type_widens >>
+     conj_tac
+     >- (qpat_x_assum `expr_body_pre _ _ _ e2 (mid with gas_obs := [])`
+           (ACCEPT_TAC o cj 2 o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def])) >>
+     qexistsl [`cx`, `mid with gas_obs := []`] >> first_assum ACCEPT_TAC) >>
+  `vv_holds cenv cx (ArrayT (expr_type e1) pbd) tv arr_vv (fin with gas_obs := []) u` by
+    (qpat_x_assum `post_value_type cenv e2 = _` (assume_tac o SYM) >>
+     fs[loweringPostsTheory.vv_post_def]) >>
   drule exprSimBopRestWordBasicsTheory.rest_word_vv_read_suffix >>
   simp[] >> disch_then (qx_choose_then `v2` assume_tac) >>
   `value_has_type tvt v2` by metis_tac[] >>
@@ -410,6 +458,11 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
     (qpat_x_assum `evaluate_type _ (expr_type e2) = _` mp_tac >>
      simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
   gnvs[] >>
+  `evaluate_type (get_tenv cx) (post_value_type cenv e2) = SOME (ArrayTV et pbd)` by
+    (qpat_assum `expr_body_pre _ _ _ e2 _`
+       (strip_assume_tac o MATCH_MP exprSimHypsTheory.post_type_evaluates) >>
+     pop_assum mp_tac >>
+     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
   `?av. v2 = ArrayV av` by
     (Cases_on `v2` >> fs[vyperTypingTheory.value_has_type_def]) >>
   gnvs[] >>
@@ -469,6 +522,7 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
                   (SPEC_ALL exprSimBopRestWordTailTheory.rest_word_fixed_tail)) >>
          simp[] >> disch_then drule >> simp[] >> disch_then drule >>
          simp[] >> disch_then (qspec_then `v1` mp_tac) >> simp[] >> metis_tac[]) >>
+     qpat_x_assum `?m. pbd = Dynamic m` (qx_choose_then `pcap` SUBST_ALL_TAC) >>
      drule (Q.INST [`loc` |-> `(case vv_location vv of SOME l => l | NONE => LocMemory)`,
                     `memory` |-> `F`, `execctx` |-> `ctx`]
               (SPEC_ALL exprSimBopRestWordTailTheory.rest_word_dynamic_tail)) >>
@@ -485,11 +539,9 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
   qmatch_asmsub_abbrev_tac `eval_operand op q = SOME (bool_to_word answer)` >>
   `!ee. bop_result cx ann bop [expr_type e1; ArrayT (expr_type e1) bd]
           v1 (ArrayV av) ee = INL (BoolV answer)` by
-    (simp[exprBopSimDefsTheory.bop_result_def,
-          vyperContextTheory.evaluate_builtin_def] >>
-     Cases_on `bop = In` >>
-     fs[Abbr `answer`, vyperValueOperationTheory.evaluate_binop_def,
-        vyperValueOperationTheory.binop_negate_def]) >>
+    (Cases_on `bop = In` >>
+     gvs[exprBopSimDefsTheory.bop_result_def, Abbr `answer`,
+         vyperValueOperationTheory.evaluate_membership_array]) >>
   qexistsl [`[]`, `fin`, `q`, `BoolV answer`] >>
   simp[gasSummaryTheory.gas_marked_exec_def] >>
   conj_tac

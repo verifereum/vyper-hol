@@ -45,7 +45,7 @@ Proof
      fresh_id_def, emit_def, venomInstTheory.mk_inst_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
   >> simp[emitted_insts_def, rich_listTheory.DROP_APPEND1,
           rich_listTheory.DROP_LENGTH_NIL, comp_return_def, comp_bind_def, comp_ignore_bind_def]
-  >> simp[run_inst_seq_def, step_inst_base_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
+  >> simp[run_inst_seq_def, step_inst_base_opcode_eqs, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* --- Continue: jumps to increment label --- *)
@@ -60,7 +60,7 @@ Proof
      fresh_id_def, emit_def, venomInstTheory.mk_inst_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
   >> simp[emitted_insts_def, rich_listTheory.DROP_APPEND1,
           rich_listTheory.DROP_LENGTH_NIL, comp_return_def, comp_bind_def, comp_ignore_bind_def]
-  >> simp[run_inst_seq_def, step_inst_base_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
+  >> simp[run_inst_seq_def, step_inst_base_opcode_eqs, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* Every theorem here is closed. *)

@@ -2,7 +2,7 @@
    counted loop execution preserve allocation history and return-buffer frames. *)
 Theory stmtForRangeMemory
 Ancestors
-  stmtSimDefs exprSimMemDefs stmtLowering compileEnv vyperInterpreter
+  stmtSimDefs exprSimMemDefs stmtLowering compileEnv loweringStateRelDefs vyperInterpreter
   vyperState vyperTypeSystem stmtSimForRange stmtForRangeEndpointsMemory
   stmtForRangeChecksMemory stmtForRangeMemoryLoop stmtForRangeMemoryStart
   stmtLoweringMono exprLoweringProps stmtSimProps stmtSimForParts
@@ -258,7 +258,9 @@ Resume compile_for_range_checked_frag_active_mem[checked_tail]:
   `!x w. not_fresh_at s1 x /\ lookup_var x t1 = SOME w ==>
          lookup_var x t2 = SOME w` by fs[expr_post_def] >>
   `eval_operand op1 t2 = SOME (i2w n1)` by
-    (Cases_on `op1` >> gvs[eval_operand_def]) >>
+    (qspecl_then [`op1`, `s1`, `t1`, `t2`, `i2w n1`] mp_tac
+       exprBopSimPropsTheory.eval_operand_frame >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   `local_ptrs_reserved cenv s2` by
     metis_tac[local_ptrs_reserved_next_var] >>
   qabbrev_tac `bad = (
@@ -477,13 +479,19 @@ Resume compile_for_range_checked_frag_active_mem[finish_loop]:
      rpt strip_tac >>
      `not_fresh_at s2 x` by (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[] >> decide_tac) >>
      first_x_assum irule >> simp[]) >>
-  Cases_on `d` >- gvs[return_buf_frame_def] >>
+  Cases_on `d`
+  >- (qpat_x_assum `return_buf_frame NONE _ _ _` mp_tac >>
+      simp[return_buf_frame_def]) >>
   rename1 `SOME desc` >> PairCases_on `desc` >>
-  gvs[return_buf_frame_def] >>
   `sa.cs_next_var <= r.cs_next_var` by
     (drule (SIMP_RULE std_ss [cs_mono_def] (cj 1 compile_stmt_cs_mono)) >> simp[]) >>
-  gvs[not_fresh_at_def] >> gen_tac >> disch_tac >>
-  qpat_x_assum `!n. sa.cs_next_var <= n ==> _` irule >> decide_tac
+  (* Only the frame at sa and the counter bound matter; gvs over the whole
+     context took over 7 s. *)
+  qpat_x_assum `return_buf_frame _ cenv sa t` mp_tac >>
+  qpat_x_assum `sa.cs_next_var <= r.cs_next_var` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  rw[return_buf_frame_def] >> qexistsl_tac [`x`,`slot_size`] >> simp[] >>
+  irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]
 QED
 
 Finalise compile_for_range_checked_frag_active_mem

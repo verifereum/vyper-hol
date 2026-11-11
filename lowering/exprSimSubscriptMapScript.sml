@@ -16,9 +16,10 @@ Ancestors
   vyperTypeStoragePreservation exprSimMapKey
   vyperStorageLayoutSafety vyperStorageBackend accountsRelProps
   vyperTypeValues vyperLookupStorage
-  exprSimTopLevelProps compileEnv finite_map
+  exprSimTopLevelProps compileEnv loweringStateRelDefs finite_map
   fragGasPath fragGasMode vyperInterpreter
   vyperTypeEnv vyperStoragePlaceProvenance exprLoweringProps
+  exprSimSubscriptArraySource
   gasOutcome loweringPosts context venomState
 
 Theorem mapping_leaf_storage_valid:
@@ -99,15 +100,6 @@ QED
 
 (* Counted source sequencing keeps the observation stream available to both
    operands; in particular the index is forced only after the base succeeds. *)
-Theorem eval_subscript_bind:
-  eval_expr cx (Subscript ann obj idx) =
-    bind (eval_expr cx obj) (\tv.
-      bind (bind (eval_expr cx idx) (read_result cx)) (\v.
-        select_result cx (expr_type obj) tv (ValueSubscript v)))
-Proof
-  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_assoc]
-QED
-
 Theorem subscript_result_base_admissible:
   (!ex. A (INR ex) ==> expr_map_res_ok (INR ex)) /\
   gas_admissible (eval_expr cx (Subscript ann obj idx)) A es ==>
@@ -118,7 +110,7 @@ Proof
   rename1 `INR ex` >>
   first_x_assum irule >>
   qpat_x_assum `!gs res ee. _ ==> _` (qspec_then `gs` mp_tac) >>
-  rewrite_tac[eval_subscript_bind] >>
+  rewrite_tac[eval_expr_subscript_bind] >>
   disch_then (qspecl_then [`INR ex`, `ee`] mp_tac) >>
   simp[bind_def]
 QED
@@ -139,7 +131,7 @@ Proof
   first_x_assum irule >>
   qpat_x_assum `!gs res ee. _ ==> _`
     (qspec_then `gas_explicit marks s0.vs_gas_readings ++ gs` mp_tac) >>
-  rewrite_tac[eval_subscript_bind] >>
+  rewrite_tac[eval_expr_subscript_bind] >>
   disch_then (qspecl_then [`INR ex`, `ee`] mp_tac) >>
   gvs[bind_def]
 QED
@@ -720,7 +712,7 @@ Theorem compile_mapping_subscript_outcome:
        p.ptr_location = slot_loc tr /\
        eval_operand p.ptr_operand t =
          SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-       stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
+       stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee r. expr_exit res r)
@@ -773,7 +765,7 @@ Proof
   rewrite_tac[expr_map_sim_def] >>
   disch_then (qspecl_then [`sa`, `sm`, `bvv`, `s0`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  rewrite_tac[eval_subscript_bind] >>
+  rewrite_tac[eval_expr_subscript_bind] >>
   disch_then (mp_then Any irule gas_outcome_bind_result_exec) >>
   reverse conj_tac
   >- (conj_tac
@@ -783,13 +775,13 @@ Proof
   qpat_x_assum `(\res ee t. _) _ _ _` mp_tac >>
   simp[] >> strip_tac >>
   rename1 `v = HashMapRef tr base_slot bkt bvt` >>
-  `wb_frame cenv es sa s0 t` by
+  `wb_frame cenv es (mid with gas_obs := []) sa s0 t` by
     (pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `!x w. not_fresh_at sa x /\ _ ==> _` kall_tac >>
   qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _` kall_tac >>
   qpat_x_assum `!aid off sz. _ ==> mem_bytes_at _ _ t.vs_memory = _` kall_tac >>
-  qpat_x_assum `locals_kept cenv es s0 t` kall_tac >>
+  qpat_x_assum `locals_kept cenv es (mid with gas_obs := []) s0 t` kall_tac >>
   `expr_body_pre cenv cx env idx (mid with gas_obs := []) /\
    ?s u. eval_expr cx obj s = (INL v,u)` by
     (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)
@@ -871,16 +863,18 @@ Proof
   `?out. gas_marked_path F ctx func it 0 (OK out) /\
      eval_operand slot out = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
      stmt_state_rel ctx func cenv cx (fin with gas_obs := []) out /\
-     wb_frame cenv (mid with gas_obs := []) sm t out /\
+     wb_frame cenv (mid with gas_obs := []) (fin with gas_obs := []) sm t out /\
      out.vs_current_bb = sb.cs_current_bb /\
      out.vs_inst_idx = LENGTH sb.cs_current_insts` by
     (drule compile_mapping_index_success_tail >>
      disch_then irule >> simp[] >> qexists `vv_operand bvv` >> simp[]) >>
-  `wb_frame cenv es sa s0 out` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
-     conj_tac
-     >- (qexistsl_tac [`mid with gas_obs := []`, `sm`, `t`] >> simp[]) >>
-     goal_assum (drule_at Any)) >>
+  `wb_frame cenv es (fin with gas_obs := []) sa s0 out` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >>
+     qpat_assum `wb_frame cenv es (mid with gas_obs := []) sa s0 t`
+       (irule_at Any) >>
+     qpat_assum `wb_frame cenv (mid with gas_obs := []) _ sm t out`
+       (irule_at Any) >>
+     qpat_assum `stmt_state_rel _ _ _ _ es s0` (irule_at Any) >> simp[]) >>
   `storage_mapping_region cx tr base_slot (HashMapT kt vt)` by
     (qpat_x_assum `storage_mapping_region _ _ _ _` mp_tac >> simp[]) >>
   qexistsl_tac [`INL selected`, `fin with gas_obs := []`, `OK out`] >>
@@ -1007,7 +1001,7 @@ Proof
   gvs[vyperHashMapStorageTheory.select_result_hashmap_nested] >>
   drule storage_mapping_region_step >> disch_then (qspec_then `kv` assume_tac) >>
   simp[] >>
-  qpat_x_assum `wb_frame _ _ _ _ _` mp_tac >>
+  qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
   strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 
@@ -1087,11 +1081,13 @@ Proof
   drule storage_mapping_region_step >> disch_then (qspec_then `kv` assume_tac) >>
   `contract_storage_well_formed cx ee /\ storage_layout_safe cx` by
     gvs[expr_sim_inv_def] >>
+  drule_all mapping_leaf_storage_valid >> strip_tac >>
   drule_all mapping_leaf_vv_holds >> strip_tac >>
   simp[vv_post_def, expr_type_def, vv_at_def] >>
   conj_tac >- (Cases_on `tr` >> gvs[slot_loc_def]) >>
-  qpat_x_assum `wb_frame _ _ _ _ _` mp_tac >>
+  qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
-  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
+  strip_tac >> rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC, Cases_on `tr` >> gvs[slot_loc_def] >> NO_TAC]
 
 QED

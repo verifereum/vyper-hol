@@ -35,7 +35,7 @@
 Theory valueEncodingProps
 Ancestors
   list rich_list
-  valueEncoding valueEncodingProofs vyperValue
+  valueEncoding valueEncodingDefs valueEncodingProofs vyperValue
 Libs
   wordsLib
 

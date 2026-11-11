@@ -38,7 +38,7 @@ Ancestors
   stmtSimDeclPath
   valueCopy valueCopySource valueCopyBytes exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding
+  compileEnv loweringStateRelDefs valueEncoding
   vyperInterpreter vyperState vyperValue vyperLookup vyperExprNoControl
   venomExecSemantics venomExecProofs venomInst venomState
 Libs
@@ -391,7 +391,7 @@ Theorem assign_local_memory_normal_continuation:
   !ctx func cenv cx lctx id e es tyv sa sb sf s0 marks v ee s op p sz loc info bytes.
     gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
       (stmt_res_ok lctx) es /\
-    ~is_word_type (expr_type e) /\
+    ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
     type_memory_bytes cenv (expr_type e) = type_memory_size tyv /\
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
@@ -430,6 +430,8 @@ Proof
      disch_then (qspec_then `entry` mp_tac) >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
+  qpat_x_assum `post_value_type _ _ = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   `?sw. eval_operand op s = SOME sw /\ val_in_memory tyv v (w2n sw) s.vs_memory` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
   `val_wf tyv v` by metis_tac[value_has_type_memory_wf] >>
@@ -451,7 +453,7 @@ QED
 Theorem assign_local_memory_rhs_outcome:
   gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
     (stmt_res_ok lctx) es /\
-  ~is_word_type (expr_type e) /\
+  ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   type_memory_bytes cenv (expr_type e) = type_memory_size tyv /\
   0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
@@ -545,7 +547,10 @@ Proof
     metis_tac[cj 2 compile_expr_grows] >>
   `local_ptrs_reserved cenv sB` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  irule assign_local_memory_rhs_outcome >> simp[] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
+  irule assign_local_memory_rhs_outcome >>
+  qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >>
   (conj_tac >- gvs[SF ETA_ss]) >>
   qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
     (irule_at Any) >> simp[] >>
@@ -763,7 +768,7 @@ Finalise local_memory_assign_widen_path
 Theorem assign_local_memory_widen_normal_continuation:
   gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
     (stmt_res_ok lctx) es /\
-  ~is_word_type vtyp /\
+  ~is_word_type vtyp /\ post_value_type cenv e = expr_type e /\
   (expr_type e = vtyp \/ is_bytestring_type vtyp /\ is_bytestring_type (expr_type e)) /\
   (sty = vtyp \/ is_bytestring_type vtyp) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
@@ -809,9 +814,13 @@ Proof
        `gas_explicit marks s0.vs_gas_readings ++ []`] >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
+  qpat_x_assum `post_value_type _ _ = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   `val_wf tyv v` by simp[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
   `~is_word_type (expr_type e)` by
-    (qpat_x_assum `expr_type e = _ \/ _` strip_assume_tac >> gvs[is_bytestring_word_type]) >>
+    (qpat_x_assum `expr_type e = _ \/ _` strip_assume_tac
+     >- (qpat_x_assum `expr_type e = vtyp` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+     metis_tac[is_bytestring_word_type]) >>
   `?sw. eval_operand op s = SOME sw /\
         val_in_memory etv v (w2n sw) s.vs_memory` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
@@ -834,7 +843,7 @@ QED
 Theorem assign_local_memory_widen_rhs_outcome:
   gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
     (stmt_res_ok lctx) es /\
-  ~is_word_type vtyp /\
+  ~is_word_type vtyp /\ post_value_type cenv e = expr_type e /\
   (expr_type e = vtyp \/ is_bytestring_type vtyp /\ is_bytestring_type (expr_type e)) /\
   (sty = vtyp \/ is_bytestring_type vtyp) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
@@ -932,7 +941,10 @@ Proof
     metis_tac[cj 2 compile_expr_grows] >>
   `!x. op = Var x ==> not_fresh_at sB x` by
     (drule_then (drule_then assume_tac) compile_lower_value_var >> simp[]) >>
-  irule assign_local_memory_widen_rhs_outcome >> simp[] >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[post_value_type_lowered, post_value_type_bytestring] >>
+  irule assign_local_memory_widen_rhs_outcome >>
+  qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >>
   goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qexists_tac `tyv` >> simp[] >>
   (conj_tac >- (gvs[SF ETA_ss] >> first_assum ACCEPT_TAC)) >>

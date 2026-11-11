@@ -37,7 +37,7 @@ Ancestors
   fragExec exprSimHyps exprSimLeaves exprSimAttributeFields stmtSimDecl stmtSimDeclMem stmtSimAssign stmtSimAssignMem storageStoreFrame
   stmtSimAssignStorage stmtSimAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding accountsRelProps
+  compileEnv loweringStateRelDefs valueEncoding accountsRelProps
   vyperInterpreter vyperState vyperStorage vyperValue vyperTyping
   vyperTypeEnv vyperTypeInvariants vyperTypeExprSoundness vyperTypeExprResult
   vyperExprNoControl
@@ -388,8 +388,9 @@ Proof
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
     lookup_var x s = SOME w` by gvs[vv_post_def] >>
   drule_all assign_attr_ghost_regions >> strip_tac >>
-  gvs[vv_post_def, vv_at_def, lookup_var_def, locals_kept_def] >>
-  conj_tac >> first_assum ACCEPT_TAC
+  gvs[vv_post_def, vv_at_def, lookup_var_def, locals_kept_def,
+      popped_kept_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem assign_attr_ghost_expr_post[local]:
@@ -406,8 +407,9 @@ Proof
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
     lookup_var x s = SOME w` by gvs[vv_post_def] >>
   drule_all assign_attr_ghost_regions >> strip_tac >>
-  gvs[expr_post_def, expr_val_at_def, lookup_var_def, locals_kept_def,
-      not_fresh_at_def] >> rpt strip_tac >> metis_tac[]
+  gvs[expr_post_def, expr_val_at_def, expr_val_own_def, lookup_var_def,
+      locals_kept_def, popped_kept_def, not_fresh_at_def] >>
+  rpt strip_tac >> metis_tac[]
 QED
 
 Theorem assign_attr_path_nonhalting[local]:
@@ -853,7 +855,7 @@ Proof
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
   `~u.vs_call_ctx.cc_static` by
     fs[exprLoweringPropsTheory.stmt_state_rel_def,
-       compileEnvTheory.state_rel_def] >>
+       loweringStateRelDefsTheory.state_rel_def] >>
   `gas_marked_path F ctx func u 0
     (OK ((if tr then tstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u
           else sstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u)

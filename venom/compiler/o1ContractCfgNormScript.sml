@@ -17,6 +17,7 @@ Ancestors
   venomInst irSupply cfgNormSupplySim contextCodegenRel venomExecSemantics
   venomExecProofs venomStepProps ctxLookupAgreeHelpers o1ContractCfgNormStep
   o1PassContract unitMemInv unitShapeDefs venomRetProps o1ComposeSupport
+  venomWfProps
 
 Theorem supply_active_terminator_exec_block:
   st.vs_inst_idx < LENGTH bb.bb_instructions /\

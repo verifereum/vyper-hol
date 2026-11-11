@@ -76,17 +76,17 @@ Ancestors
   loweringPosts
   exprSimAlloc
   allocLimits
-  list  exprSimHyps exprSimConvert exprLowering compileEnv
+  list  exprSimHyps exprSimConvert exprLowering compileEnv loweringStateRelDefs
   exprSimValues gasNormalPrefix gasSummary gasOutcome gasContext
   fragGasMode fragGasPath fragGasSeq
-  valueEncoding vyperAST vyperInterpreter vyperState vyperContext
+  valueEncoding valueEncodingDefs vyperAST vyperInterpreter vyperState vyperContext
   vyperValueOperation vyperTypeSystem fragExec venomState
   exprSimBuffer exprSimBufferEmptyExec exprSimAggregateLayout
   exprSimAggregateSource exprSimAggregateLoops exprSimAggregateChildren
   exprLoweringProps
 
 (* The allocation must be a generated ALLOCA, not merely a tracked map entry. *)
-Theorem aggregate_alloca_immutable_sep[local]:
+Theorem aggregate_alloca_immutable_sep:
   stmt_state_rel ctx func cenv cx es t /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = venomInst$ALLOCA /\
   FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
@@ -474,6 +474,8 @@ Theorem compile_struct_lit_case:
     expr_sim_case nocalls ctx func cenv cx (StructLit ann nsid fields) /\
     expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
+  rpt strip_tac >>
+  `post_value_type cenv (StructLit ann nsid fields) = expr_type (StructLit ann nsid fields)` by simp[] >>
   metis_tac[compile_struct_lit_vv_case, expr_sim_case_of_vv]
 QED
 
@@ -487,6 +489,8 @@ Theorem compile_make_array_case:
     expr_vv_case nocalls ctx func cenv cx
       (Builtin ann (MakeArray topt bnd) args)
 Proof
+  rpt strip_tac >>
+  `post_value_type cenv (Builtin ann (MakeArray topt bnd) args) = expr_type (Builtin ann (MakeArray topt bnd) args)` by simp[] >>
   metis_tac[compile_make_array_vv_case, expr_sim_case_of_vv]
 QED
 
@@ -792,7 +796,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ b len` drule >>
-      simp[compileEnvTheory.regions_disjoint_def] >> strip_tac >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >>
       first_x_assum irule >> decide_tac) >>
   drule_all expr_sim_inv_memory_size >> strip_tac >>
   simp[val_footprint_le, valueEncodingProofsTheory.val_wf_default_value_proof] >>

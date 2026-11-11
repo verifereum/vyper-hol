@@ -12,7 +12,7 @@ Ancestors
   exprSimDefs loweringPosts gasOutcome gasSummary gasContext fragGasMode
   bodySimStmtCases exprLowering exprLoweringProps compileEnv context
   vyperAST vyperInterpreter vyperState vyperTypeExprSoundness fragExec
-  exprSimProps valueTypingMemoryProps valueEncoding vyperTyping
+  exprSimProps valueTypingMemoryProps valueEncoding valueEncodingDefs vyperTyping
 
 (* The counted outcome of a source also gives, at its normal end, a run of
    the source that reached the end state. *)
@@ -62,13 +62,13 @@ Proof
       >- (simp[select_result_def, extend_place_def, place_type_value_def,
                read_place_def, get_scopes_def, bind_def, ignore_bind_def,
                lift_option_type_def, lift_sum_def, return_def, raise_def] >>
-          rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
+          rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def])) >>
       simp[select_result_def, extend_place_def, place_type_value_def,
            read_place_def, get_immutables_def, get_address_immutables_def,
            bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
            return_def, raise_def] >>
       rpt (BasicProvers.FULL_CASE_TAC >>
-           gvs[bind_def, return_def, raise_def])) >>
+           simp[bind_def, return_def, raise_def])) >>
   simp[select_result_def, extend_place_def, raise_def]
 QED
 
@@ -240,6 +240,9 @@ Proof
      gvs[vv_holds_def, vv_operand_def, expr_val_rel_def]) >>
   drule_all attr_add_counted_post >> strip_tac >>
   rename1 `gas_path_mem ctx func t 0 (OK u)` >>
+  `post_value_type cenv obj = expr_type obj` by
+    (drule attr_pre_base >> strip_tac >> drule_all attr_post_value_type >>
+     simp[]) >>
   `vv_post ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
      (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u` by
     (irule attr_vv_post >> simp[] >> qexists_tac `tv` >> gvs[]) >>

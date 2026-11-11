@@ -20,7 +20,7 @@ Proof
      >- (drule_all emit_op_SLOAD_correct >> metis_tac[]) >>
      qspecl_then [`TLOAD`, `tload`] mp_tac emit_op_read1_correct >>
      disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
-     simp[step_inst_base_def, exec_read1_def] >> strip_tac >>
+     simp[step_inst_base_opcode_eqs, exec_read1_def] >> strip_tac >>
      first_x_assum (qspecl_then [`slot`, `s`] mp_tac) >>
      simp[] >> metis_tac[]) >>
   `state_frame s1 = state_frame s` by
