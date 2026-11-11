@@ -5,7 +5,7 @@ Ancestors
   venomFnScheduleRunner allocaRemapSSA o1MakeSsaCfg makeSsaCurrentWfSsa
   cfgWf venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
   simplifyCfgPhiSemantics basePtrProofs mmTraceProofs frameViewMemory dftCommutation
-  regularMemorySim rangeAnalysisProofs
+  regularMemorySim rangeAnalysisProofs dftIndexedExec
 Libs
   wordsLib finite_mapLib stepInstBaseLib
 
@@ -14027,6 +14027,107 @@ Proof
   strip_tac >>
   drule_all mm_local_mode_demands_exclude_deleted >>
   strip_tac >> first_x_assum irule >> metis_tac[]
+QED
+
+Theorem mm_local_mem2mem_word_runtime[local]:
+  ~MEM inst.inst_id nop_set /\ ALOOKUP rep_map inst.inst_id = SOME g /\
+  g.cg_length = 32 /\ inst.inst_opcode <> MSTORE /\
+  fresh_inst_id sk = (lid,sk1) /\ fresh_ir_var sk1 = (v,sk2) /\
+  g.cg_dst < dimword (:256) /\ g.cg_src < dimword (:256) /\
+  (!x. x IN P ==> x <> v) ==>
+  ?load store mid fin.
+    apply_groups_inst_supply Mem2Mem nop_set rep_map sk inst = ([load;store],sk2) /\
+    step_inst fuel ctx load t = OK mid /\
+    step_inst fuel ctx store (mid with vs_inst_idx := SUC t.vs_inst_idx) = OK fin /\
+    (fin with vs_inst_idx := SUC (SUC t.vs_inst_idx)) =
+      (update_var v (mload g.cg_src t)
+        (write_memory_with_expansion g.cg_dst (read_memory g.cg_src 32 t) t)
+        with vs_inst_idx := SUC (SUC t.vs_inst_idx)) /\
+    fin.vs_memory = (write_memory_with_expansion g.cg_dst (read_memory g.cg_src 32 t) t).vs_memory /\
+    (!x. x IN P ==> lookup_var x fin = lookup_var x t)
+Proof
+  strip_tac >>
+  drule_all mm_local_mem2mem_word_emission >> disch_tac >>
+  mp_tac (SPEC_ALL mm_local_mem2mem_word_steps) >> simp[] >> strip_tac >>
+  `~is_terminator (mk_mstore_from_load inst g.cg_dst v).inst_opcode` by
+    simp[mk_mstore_from_load_def, venomInstTheory.is_terminator_def] >>
+  drule_all dftIndexedExecTheory.dft_step_ok_idx >>
+  disch_then (qspec_then `SUC t.vs_inst_idx` assume_tac) >>
+  qexists `update_var v (mload g.cg_src t)
+    (write_memory_with_expansion g.cg_dst (read_memory g.cg_src 32 t) t)
+    with vs_inst_idx := SUC t.vs_inst_idx` >>
+  gvs[venomStateTheory.lookup_var_def,
+    venomStateTheory.update_var_def, venomStateTheory.write_memory_with_expansion_def] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_mem2mem_retained_runtime[local]:
+  ~MEM inst.inst_id nop_set /\ ALOOKUP rep_map inst.inst_id = SOME g /\
+  g.cg_length = 32 /\ inst.inst_opcode = MSTORE /\
+  inst.inst_operands = [Lit dst; Var v] /\
+  step_inst fuel ctx inst s = OK s' /\ lookup_var v s = lookup_var v t ==>
+  ?w fin.
+    apply_groups_inst_supply Mem2Mem nop_set rep_map sk inst = ([inst],sk) /\
+    lookup_var v s = SOME w /\ s' = mstore (w2n dst) w s /\
+    step_inst fuel ctx inst t = OK fin /\ fin = mstore (w2n dst) w t /\
+    (fin with vs_inst_idx := SUC t.vs_inst_idx) =
+      (mstore (w2n dst) w t with vs_inst_idx := SUC t.vs_inst_idx) /\
+    (!x. lookup_var x fin = lookup_var x t)
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.exec_write2_def, venomStateTheory.eval_operand_def] >>
+  Cases_on `lookup_var v t` >> gvs[] >> strip_tac >>
+  simp[apply_groups_inst_supply_def,
+    venomExecSemanticsTheory.step_inst_non_invoke,
+    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.exec_write2_def, venomStateTheory.eval_operand_def,
+    venomStateTheory.lookup_var_def, venomStateTheory.mstore_def]
+QED
+
+Theorem mm_local_mem2mem_retained_payload[local]:
+  ~MEM inst.inst_id nop_set /\ ALOOKUP rep_map inst.inst_id = SOME g /\
+  g.cg_length = 32 /\ inst.inst_opcode = MSTORE /\
+  inst.inst_operands = [Lit dst; Var v] /\ g.cg_dst = w2n dst /\
+  step_inst fuel ctx inst s = OK s' /\ lookup_var v s = lookup_var v t /\
+  lookup_var v s = SOME (mload g.cg_src t) ==>
+  ?fin.
+    apply_groups_inst_supply Mem2Mem nop_set rep_map sk inst = ([inst],sk) /\
+    step_inst fuel ctx inst t = OK fin /\
+    fin = write_memory_with_expansion g.cg_dst (read_memory g.cg_src g.cg_length t) t /\
+    fin.vs_memory =
+      (write_memory_with_expansion g.cg_dst (read_memory g.cg_src g.cg_length t) t).vs_memory /\
+    (!x. lookup_var x fin = lookup_var x t)
+Proof
+  strip_tac >>
+  drule_all mm_local_mem2mem_retained_runtime >>
+  disch_then (qspec_then `sk` strip_assume_tac) >>
+  gvs[mmCopyEquivTheory.mload_mstore_eq_mcopy_state,
+    venomExecSemanticsTheory.mcopy_def, venomStateTheory.read_memory_def]
+QED
+
+Theorem mm_local_mem2mem_bulk_runtime[local]:
+  ~MEM inst.inst_id nop_set /\ ALOOKUP rep_map inst.inst_id = SOME g /\
+  g.cg_length <> 32 /\ g.cg_dst < dimword (:256) /\
+  g.cg_src < dimword (:256) /\ g.cg_length < dimword (:256) ==>
+  ?out fin.
+    apply_groups_inst_supply Mem2Mem nop_set rep_map sk inst = ([out],sk) /\
+    step_inst fuel ctx out t = OK fin /\
+    fin = write_memory_with_expansion g.cg_dst (read_memory g.cg_src g.cg_length t) t /\
+    (fin with vs_inst_idx := SUC t.vs_inst_idx) =
+      (write_memory_with_expansion g.cg_dst (read_memory g.cg_src g.cg_length t) t
+        with vs_inst_idx := SUC t.vs_inst_idx) /\
+    fin.vs_memory =
+      (write_memory_with_expansion g.cg_dst (read_memory g.cg_src g.cg_length t) t).vs_memory /\
+    (!x. lookup_var x fin = lookup_var x t)
+Proof
+  strip_tac >>
+  qexistsl [`mk_bulk_copy_inst Mem2Mem inst g`,
+    `write_memory_with_expansion g.cg_dst (read_memory g.cg_src g.cg_length t) t`] >>
+  simp[mm_local_mem2mem_bulk_emission, mm_local_mem2mem_bulk_step,
+    venomStateTheory.write_memory_with_expansion_def, venomStateTheory.lookup_var_def]
 QED
 
 Theorem mm_local_stage_correct:
