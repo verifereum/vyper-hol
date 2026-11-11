@@ -2,6 +2,7 @@
    position.  Input windows are independent of ABI validity. *)
 Theory abiDecodePtrRead
 Ancestors
+  loweringStateRelDefs wordLoadStorePtr
   abiDecodePtrMemberFrame assignTuplePtrLoadStep typedCopyPtr
   abiEncoder abiDecodeStaticProps bodyPtrDefs emitHelperProps exprLoweringProps ptrDiscipline venomState
   venomExecSemantics venomInst words arithmetic finite_map emitHelper compileEnv fragGasPathPtr

@@ -1,6 +1,7 @@
 (* Normalize stale temporaries before the successful builtin setup. *)
 Theory abiDecodePtrEntry
 Ancestors
+  loweringStateRelDefs valueEncodingDefs exprSimHashBoundary
   abiDecodePtrReady abiDecodePtrEntryFrame abiDecodePtrReentry abiDecodePtrReentryGhost
   abiBuiltinDecodeSetup abiBuiltinDecodeHeader exprLoweringProps loweringHalt
   abiDecodePtrMemberInterface abiDecodePtrInputWindow
@@ -142,14 +143,14 @@ Resume abi_decode_ptr_operand_handoff[normalize]:
        irule arithmeticTheory.LESS_MOD >> decide_tac) >>
     simp[abi_decode_member_live_def, abi_decode_ptr_window_def,
       eval_operand_def, op_prov_def, op_taint_def,
-      compileEnvTheory.regions_disjoint_def] >>
+      loweringStateRelDefsTheory.regions_disjoint_def] >>
     conj_tac >- (rpt strip_tac >>
       irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >>
       simp[] >> metis_tac[]) >>
     conj_tac >- (rpt strip_tac >>
       irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >>
       simp[] >> metis_tac[]) >>
-    gnvs[compileEnvTheory.regions_disjoint_def] >>
+    gnvs[loweringStateRelDefsTheory.regions_disjoint_def] >>
     conj_tac >- (rpt strip_tac >>
       qpat_x_assum `!name b k. local_region _ _ _ _ _ _ ==> _` drule >>
       metis_tac[]) >> first_assum ACCEPT_TAC) >>

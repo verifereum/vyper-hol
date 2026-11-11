@@ -1,5 +1,6 @@
 Theory abiDecodePtrNormalizedSuccess
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrSourceOutcome abiDecodePtrComplexHeader abiDecodePtrFlatValue
   abiDecodePtrCallerMetadata abiDecodePtrMemberInterface abiDecodePtrFlatLayout
   bodyPtrBopHashSuffix bodyPtrBopScalarSeq fragExec fragGasSeqPtr fragGasPathPtr

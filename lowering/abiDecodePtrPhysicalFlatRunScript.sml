@@ -1,6 +1,7 @@
 (* Allocation-free execution of flat members on their actual source bytes. *)
 Theory abiDecodePtrPhysicalFlatRun
 Ancestors
+  valueEncodingDefs
   abiDecodePtrPhysicalMemberRun abiDecodePtrFlatLayout abiDecodePtrMemberInterface
   abiDecoderMemberInfos abiDecoderCoherence abiDecoderReentry abiDecoderCounters
   abiDecoderMemberSetup abiDecoderRange vyperTypeABI

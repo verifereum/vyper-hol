@@ -1,5 +1,6 @@
 Theory abiDecodePtrMemberDecode
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrMemberInterface abiDecodePtrWord abiDecodePtrBytesFramed abiDecodePtrMemberFrame
   abiDecodePtrFootprint
   abiDecodePtrBytesRuntimeFrame abiDecodePtrBytesMember abiDecoderBytesPhases

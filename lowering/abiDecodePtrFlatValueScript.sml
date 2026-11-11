@@ -1,6 +1,7 @@
 (* Semantic sensitivity excludes unused bytestring capacity. *)
 Theory abiDecodePtrFlatValue
 Ancestors
+  valueEncodingDefs
   exprPtrCleanBufferPost exprSimProps valueEncoding valueEncodingProps
   bodyPtrDefs venomState words list arithmetic vfmConstants
   abiDecodePtrMemberFrame exprSimBufferStore contractABI vyperTypeABI

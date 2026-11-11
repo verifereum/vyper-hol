@@ -1,6 +1,7 @@
 (* Actual-start paths obtained from normalized whole-interval certificates. *)
 Theory abiDecodePtrOutcome
 Ancestors
+  loweringStateRelDefs valueEncodingDefs exprSimHashBoundary
   abiDecodePtrRejectSequence abiDecodePtrReentry abiDecoderVarExtend
   abiDecodePtrRejectChecks abiDecoderVarSequence exprSimProps
   abiDecodePtrMemberInterface abiDecodePtrObservationTransport abiDecodePtrReentryObservations

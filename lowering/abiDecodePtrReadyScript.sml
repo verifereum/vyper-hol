@@ -1,6 +1,7 @@
 (* Successful builtin setup, with a framed output allocation. *)
 Theory abiDecodePtrReady
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrHeaderFrame abiDecodePtrInputWindow abiBuiltinDecodeSetup abiBuiltinDecodeHeader
   bodyPtrHashBuiltinsAllocFrame bodyPtrHashBuiltinsShaAllocInput
   bodyPtrHashBuiltinsShaAllocPath bodyPtrHashBuiltinsShaEndpoint bodyPtrHashBuiltinsGhostFrame venomInstProofs venomExecSemantics stmtReasonLitFragMemory

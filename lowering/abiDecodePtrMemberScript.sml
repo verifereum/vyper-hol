@@ -1,5 +1,6 @@
 Theory abiDecodePtrMember
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrSelectionFrame abiDecodePtrWord abiDecodePtrBytesFramed
   abiDecodePtrBytesTail abiDecodePtrMemberFrame assignTuplePtrLoadStep
   bodyPtrDefs ptrDiscipline emitHelper emitHelperProps exprLoweringProps

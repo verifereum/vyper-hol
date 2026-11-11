@@ -1,5 +1,6 @@
 Theory abiDecodePtrSelectionFrame
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrHead abiDecodePtrBytesRuntimeFrame abiDecoderGuard abiEncoder
   emitHelper emitHelperProps exprLoweringProps compileEnv freshWrites
   abiEncoderWindowLookup venomExecSemantics venomState venomInst

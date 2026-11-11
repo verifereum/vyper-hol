@@ -1,6 +1,7 @@
 (* The scalar prefix of a bounded complex decoder, before member iteration. *)
 Theory abiDecodePtrComplexHeader
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrMemberInterface abiDecodePtrScalarFrame abiDecodePtrPrims
   abiDecoderRange abiEncoder bodyPtrBopScalarCompile bodyPtrBopScalarSeq
   stmtReasonLitFragMemory fragGasSeqPtr stateFrame

@@ -1,6 +1,7 @@
 (* Constructive checked prefix shared by selection success and abort. *)
 Theory abiDecodePtrSelectionPrefix
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrRead abiDecodePtrNormalized abiEncoderWindowSequence
   exprSimAccounts bodyPtrBopHashSuffix assignTuplePtrLocalBytesCopy
   bodyPtrBopScalarCompile bodyPtrBopScalarSeq abiDecodePtrMemberFrame

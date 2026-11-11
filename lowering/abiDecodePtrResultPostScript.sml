@@ -1,6 +1,7 @@
 (* Result-post boundaries for freshly decoded memory values. *)
 Theory abiDecodePtrResultPost
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrOutcome bodyPtrDefs exprSimProps loweringPosts
   valueEncoding vyperInterpreter context venomState venomExecSemantics
   ptrDiscipline finite_map words vyperState exprSimHash abiDecoderContract

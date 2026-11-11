@@ -1,6 +1,7 @@
 (* Supplied-runtime interface for the checked relative memory read. *)
 Theory abiDecodePtrLoadReplay
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrRead abiDecodePtrMemberFrame bodyPtrDefs compileEnv venomState venomExecSemantics stateFrame
 
 Theorem abi_decode_relative_load_success_replay_ptr:

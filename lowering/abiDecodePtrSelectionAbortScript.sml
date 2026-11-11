@@ -1,5 +1,6 @@
 Theory abiDecodePtrSelectionAbort
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrHead abiDecodePtrSelectionPrefix abiDecodePtrScalarAbort
   abiDecodePtrContinuation abiDecoderGuard instSeqComposePtr
   emitHelperProps exprLoweringProps emitHelper compileEnv abiEncoder

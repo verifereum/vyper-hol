@@ -1,6 +1,7 @@
 (* Pointer certificates for the exact runtime bytes tail. *)
 Theory abiDecodePtrBytesTail
 Ancestors
+  loweringStateRelDefs
   abiDecoderBytesRuntime abiDecoderBytesPhases abiDecoderRange abiDecodeStaticProps abiDecodePtrRead abiDecodePtrNormalized
   bodyPtrBopScalarCompile bodyPtrBopScalarSeq bodyPtrBopScalarOutcome
   abiDecodePtrMemberFrame assignTuplePtrCopyLen fragGasSeqPtr

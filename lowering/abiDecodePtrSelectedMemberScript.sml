@@ -1,5 +1,6 @@
 Theory abiDecodePtrSelectedMember
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrMemberInterface abiDecodePtrNormalized abiDecodePtrMemberDecode
   abiDecoderClampedWord abiDecoderBytesPhases abiDecoderTypedCompose abiDecoderContract
   abiDecoderReservation freshWrites fragExec externalEntryShape abiDecoderAppend

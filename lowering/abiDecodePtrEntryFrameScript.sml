@@ -1,6 +1,7 @@
 (* Setup normalization preserves the caller relation by retaining old locals. *)
 Theory abiDecodePtrEntryFrame
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrReentryGhost abiDecoderReentry assignTuplePtrLoadStep
   stateFrame compileEnv venomState finite_map pred_set arithmetic
 

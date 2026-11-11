@@ -1,5 +1,6 @@
 Theory abiDecodePtrBytesMember
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrBytesTail abiDecodePtrRead abiDecodePtrPrims abiDecodePtrScalarFrame
   abiDecodePtrBytesPrefixLive
   abiDecoderBytesBound abiDecoderRange abiDecoderGuard abiDecoderGuards abiDecoderContract

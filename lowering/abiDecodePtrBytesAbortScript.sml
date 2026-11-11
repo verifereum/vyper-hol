@@ -1,5 +1,6 @@
 Theory abiDecodePtrBytesAbort
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrBytesMember abiDecodePtrBytesSuccess abiDecodePtrScalarAbort
   abiDecodePtrContinuation abiDecodePtrScalarFrame abiDecodePtrBytesPrefixLive
   instSeqComposePtr fragExec instIdxIndep rich_list assignTuplePtrCopyLen stateFrame

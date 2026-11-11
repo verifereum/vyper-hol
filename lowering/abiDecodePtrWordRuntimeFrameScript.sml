@@ -1,5 +1,6 @@
 Theory abiDecodePtrWordRuntimeFrame
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrBytesRuntimeFrame abiEncoder abiEncoderWindowLookup
   emitHelper emitHelperProps exprLoweringProps compileEnv freshWrites
   venomExecSemantics venomState venomInst words arithmetic list rich_list

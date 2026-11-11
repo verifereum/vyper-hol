@@ -1,6 +1,7 @@
 (* Primitive decoder certificates do not assume that the input passes its clamp. *)
 Theory abiDecodePtrWord
 Ancestors
+  loweringStateRelDefs
   abiEncoder abiDecodePtrRead abiDecodePtrMemberFrame bodyPtrDefs
   bodyPtrBopScalarCompile bodyPtrBopScalarSeq exprLoweringProps
   emitHelperProps compileEnv freshWrites list pred_set

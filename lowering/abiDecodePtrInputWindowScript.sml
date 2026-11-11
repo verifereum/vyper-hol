@@ -1,6 +1,7 @@
 (* Keep physical ownership separate from ghost coverage. *)
 Theory abiDecodePtrInputWindow
 Ancestors
+  loweringStateRelDefs
   exprSimHashBoundary
   bodyPtrHashBuiltinsInputWindow exprSimHash loweringPosts compileEnv
   exprLoweringProps arithmetic words
@@ -43,6 +44,6 @@ Theorem abi_decode_physical_window_disjoint:
        regions_disjoint d m b k) ==>
   regions_disjoint d m a n
 Proof
-  simp[compileEnvTheory.regions_disjoint_def] >> rpt strip_tac >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> rpt strip_tac >>
   first_x_assum drule_all >> strip_tac >> decide_tac
 QED

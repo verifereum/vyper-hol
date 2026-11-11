@@ -1,6 +1,7 @@
 (* Join operand simulation with decoder paths and whole-expression origins. *)
 Theory abiDecodePtrExprComplete
 Ancestors
+  loweringStateRelDefs exprSimHashBoundary
   abiDecodePtrExpr abiDecodePtrUnaryOrigin abiDecodePtrResultPost
   abiDecodePtrRejectOutcome abiDecodePtrCallerMetadata
   abiDecodePtrCallbackMetadata abiDecodePtrSuccessPost

@@ -1,5 +1,6 @@
 Theory abiDecodePtrStaticReject
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrConversionReject abiDecodePtrScalarRejectFacts
   abiDecodePtrPhysicalFlatRun abiDecodePtrRejectPrefix abiDecodePtrRejectSource
   abiDecodePtrRejectChecks abiDecodePtrRejectCapacity abiDecodePtrRejectCode

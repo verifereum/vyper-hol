@@ -1,6 +1,7 @@
 (* Scalar underflow checks for relative dynamic-member positions. *)
 Theory abiDecodePtrHead
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrRead abiDecodePtrPrims abiDecoderGuard bodyPtrBopScalarCompile
   emitHelper emitHelperProps exprLoweringProps compileEnv list pred_set
   bodyPtrBopScalarSeq abiEncoder bodyPtrBopHashSuffix fragExec

@@ -1,6 +1,7 @@
 (* Successful builtin headers: existence, pointer certification and body frames. *)
 Theory abiDecodePtrHeaderFrame
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrSetup abiBuiltinDecodeHeader abiBuiltinPrefix abiDecoderContract
   assignTuplePtrLoadStep exprSimPtrProps bodyPtrDefs exprLoweringProps
   emitHelperProps compileEnv ptrDiscipline venomState stateFrame list
