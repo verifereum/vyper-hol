@@ -275,7 +275,8 @@ Theorem compile_slice_calldata_semantic:
     (!name b len. local_region cenv es.scopes s name b len ==>
       mem_bytes_at b len zf.vs_memory = mem_bytes_at b len s.vs_memory) /\
     (!name b len. local_region cenv es.scopes zf name b len ==>
-      regions_disjoint (w2n w) N b len)
+      regions_disjoint (w2n w) N b len) /\
+    pure_frame cenv fn es sa s zf
 Proof
   strip_tac >>
   `32 <= N` by decide_tac >>
@@ -420,6 +421,22 @@ Resume compile_slice_calldata_semantic[finish]:
     (rpt strip_tac >>
      `regions_disjoint (w2n w) N b len` by
        (qpat_assum `!aid b len. _ ==> regions_disjoint _ _ _ _` drule_all >> simp[]) >>
+     qpat_assum `z = _` SUBST1_TAC >>
+     qspecl_then [`w2n w`,`TAKE n (DROP a q.vs_call_ctx.cc_calldata)`,`q`]
+       mp_tac bytes_buffer_write_frame >>
+     simp[] >> disch_then irule >> fs[regions_disjoint_def] >> decide_tac) >>
+  `pure_frame cenv fn es sa s z` by
+    (rewrite_tac[pure_frame_def] >> conj_tac >- first_assum ACCEPT_TAC >>
+     rpt strip_tac >>
+     `FLOOKUP z.vs_allocas sa.cs_next_id = SOME (w2n w,N)` by
+       (qpat_assum `z = _` SUBST1_TAC >>
+        simp[mstore_def, write_memory_with_expansion_def, LET_THM]) >>
+     `regions_disjoint off len (w2n w) N` by
+       (qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz`
+          (qspecl_then [`mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [r]`,
+                        `w2n w`,`N`] mp_tac) >>
+        impl_tac >- fs[mk_inst_def] >> simp[]) >>
+     qpat_assum `q.vs_memory = _` (SUBST1_TAC o SYM) >>
      qpat_assum `z = _` SUBST1_TAC >>
      qspecl_then [`w2n w`,`TAKE n (DROP a q.vs_call_ctx.cc_calldata)`,`q`]
        mp_tac bytes_buffer_write_frame >>

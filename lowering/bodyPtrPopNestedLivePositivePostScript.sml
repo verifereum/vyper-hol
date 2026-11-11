@@ -6,6 +6,7 @@ Ancestors
 
 (* All clauses refer to the counted suffix's own endpoint. *)
 Theorem pop_positive_framed_posts:
+  expr_has_effect e /\
   expr_sim_inv cenv cx env es /\
   stmt_state_rel ctx func cenv cx es s0 /\
   stmt_state_rel ctx func cenv cx mid s /\
@@ -50,6 +51,8 @@ Theorem pop_positive_framed_posts:
   post_value_type cenv e = expr_type e /\
   lookup_var out t = SOME w /\
   w2n w = w2n b+k+32+(LENGTH vs-1)*type_memory_size etv /\
+  local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv)
+    etv result /\
   ptr_covers H tf out t (type_memory_size etv) /\
   type_memory_bytes cenv (lowered_value_type cenv e) <= type_memory_size etv ==>
   vv_post ctx func cenv cx e es sa sb s0 (mid with scopes := scopes') result
