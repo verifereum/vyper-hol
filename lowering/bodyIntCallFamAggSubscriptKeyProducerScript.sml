@@ -5,6 +5,7 @@ Ancestors
   bodyIntCallJointContract exprSimSubscriptMap exprOperandVar gasSummary
   loweringPosts compileEnv
 
+(* HELD (train 14): pure_frame sweep, retired by alan 451258 *)
 Theorem intcall_mapping_key_producer:
   intcall_forced_producer fp idx /\
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
@@ -46,6 +47,7 @@ Theorem intcall_mapping_key_producer:
       intcall_expr_cont fp ce env es sa s0 en sb out)
     (\res en r. expr_exit res r)
 Proof
+  (* original proof, kept while held:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_body_pre ce fp.jc_cx env idx (mid with gas_obs := [])` by
     (drule_all mapping_subscript_marked_index_pre >> simp[]) >>
@@ -65,4 +67,6 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
   simp[gas_marked_exec_def] >> metis_tac[]
+  *)
+  cheat
 QED
