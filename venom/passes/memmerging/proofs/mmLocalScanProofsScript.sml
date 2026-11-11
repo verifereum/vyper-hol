@@ -14339,6 +14339,102 @@ Proof
   irule mm_local_cut_nop_stutter >> metis_tac[]
 QED
 
+Theorem mm_local_erased_write_pending_suc[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  n < LENGTH is /\ (EL n is).inst_opcode IN {MSTORE; MCOPY} /\
+  MEM (EL n is).inst_id (nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs) ==>
+  mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n ++ [n]
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `!g. MEM g gs ==> rep_of_group is g <> SOME ((EL n is).inst_id,g)` by
+    (rpt strip_tac >>
+     `MEM (EL n is) bb.bb_instructions` by metis_tac[EL_MEM] >>
+     metis_tac[mm_local_prefix_selected_rep]) >>
+  `?g. MEM g gs /\ MEM (EL n is).inst_id g.cg_inst_ids` by
+    (qpat_x_assum `MEM _ (nop_ids_of_groups _ _ _ _)` mp_tac >>
+     pure_rewrite_tac[nop_ids_of_groups_def, MEM_FLAT, MEM_MAP] >> strip_tac >>
+     gvs[] >> rename1 `MEM _ (nop_ids_of_group _ _ _ g)` >>
+     qexists `g` >> simp[] >>
+     qpat_x_assum `MEM _ (nop_ids_of_group _ _ _ _)` mp_tac >>
+     simp[nop_ids_of_group_def] >>
+     Cases_on `REVERSE (sort_ids_by_block bb.bb_instructions g.cg_inst_ids)` >>
+     simp[MEM_FILTER, MEM_REVERSE] >> strip_tac >>
+     `MEM (EL n bb.bb_instructions).inst_id
+       (REVERSE (sort_ids_by_block bb.bb_instructions g.cg_inst_ids))` by
+       metis_tac[MEM] >>
+     gvs[MEM_REVERSE, sort_ids_by_block_def, MEM_FILTER]) >>
+  `?r. n <= r /\ r < LENGTH is /\ rep_of_group is g = SOME ((EL r is).inst_id,g)` by
+    metis_tac[mm_local_event_rep_position] >>
+  `n < r` by (Cases_on `n = r` >> gvs[] >> decide_tac) >>
+  simp[NoAsms, mm_local_pending_indices_def, rich_listTheory.COUNT_LIST_SNOC,
+    rich_listTheory.SNOC_APPEND, FILTER_APPEND] >>
+  `MEM n (mm_local_pending_indices is gs (SUC n))` by
+    (rewrite_tac[mm_local_pending_indices_mem] >>
+     `SUC n <= r` by decide_tac >>
+     conj_tac >- decide_tac >> conj_tac >- gvs[] >>
+     qexistsl [`g`,`r`] >> simp[]) >>
+  qpat_x_assum `MEM n (mm_local_pending_indices is gs (SUC n))` mp_tac >>
+  simp[NoAsms, mm_local_pending_indices_mem] >> strip_tac >>
+  asm_rewrite_tac[] >> simp[NoAsms] >>
+  rewrite_tac[rich_listTheory.FILTER_EQ] >>
+  qx_gen_tac `j` >> simp[MEM_COUNT_LIST] >> strip_tac >>
+  eq_tac
+  >- (strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+        arithmeticTheory.LESS_EQ_SUC_REFL]) >>
+  strip_tac >> gvs[] >>
+  `r'' <> n` by metis_tac[] >>
+  `SUC n <= r''` by decide_tac >> qexistsl [`g''`,`r''`] >> simp[]
+QED
+
+Theorem mm_local_cut_erased_write_stutter[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n ++ [n] /\
+  mm_local_write_capture is H (SUC n) n = SOME (d,bs) /\
+  (H (SUC n)).vs_memory = (write_memory_with_expansion d bs (H n)).vs_memory /\
+  mm_local_nonmemory_frame (H (SUC n)) = mm_local_nonmemory_frame (H n) /\
+  (!v. lookup_var v (H (SUC n)) = lookup_var v (H n)) ==>
+  mm_local_cut is gs H (SUC n) excluded (SUC pc)
+    (t with vs_inst_idx := SUC pc)
+Proof
+  strip_tac >>
+  `mm_local_epoch_start is gs n <= n` by
+    (irule mm_local_epoch_start_bound >> qexistsl [`gs`,`is`] >> simp[]) >>
+  `!j. MEM j (mm_local_pending_indices is gs n) ==> j < n` by
+    simp[mm_local_pending_indices_mem] >>
+  `mm_local_pending (mm_local_write_capture is H (SUC n))
+    (mm_local_pending_indices is gs n) (H n) t` by
+    (irule mm_local_pending_cap_cong >>
+     qexists `mm_local_write_capture is H n` >>
+     gvs[mm_local_cut_def] >>
+     rpt strip_tac >> sym_tac >> irule mm_local_write_capture_past >> simp[]) >>
+  `mm_local_pending (mm_local_write_capture is H (SUC n))
+    (mm_local_pending_indices is gs (SUC n)) (H (SUC n)) t` by
+    (asm_rewrite_tac[] >> irule mm_local_pending_create >> metis_tac[]) >>
+  gvs[mm_local_cut_def, venomStateTheory.lookup_var_def] >>
+  conj_tac
+  >- (qpat_x_assum `mm_local_pending _ (_ ++ [n]) (H (SUC n)) t`
+        (strip_assume_tac o REWRITE_RULE [mm_local_pending_def]) >>
+      simp[mm_local_pending_def] >> goal_assum (drule_at Any) >>
+      irule mm_local_write_log_memory_cong >> simp[]) >>
+  `SUC n - mm_local_epoch_start is gs n = SUC (n - mm_local_epoch_start is gs n)` by
+    decide_tac >>
+  simp[mm_local_epoch_start_suc, rich_listTheory.COUNT_LIST_SNOC,
+    rich_listTheory.SNOC_APPEND, MAP_APPEND, FOLDL_APPEND] >>
+  AP_TERM_TAC >> irule FOLDL_CONG >> simp[] >>
+  rpt strip_tac >> gvs[MEM_MAP, MEM_COUNT_LIST] >>
+  rename1 `q < n - mm_local_epoch_start is gs n` >>
+  `q + mm_local_epoch_start is gs n < n` by decide_tac >>
+  `mm_local_write_capture is H n (q + mm_local_epoch_start is gs n) =
+   mm_local_write_capture is H (SUC n) (q + mm_local_epoch_start is gs n)` by
+    simp[mm_local_write_capture_past] >> simp[]
+QED
+
 Theorem mm_local_cut_init[local]:
   h = phi_prefix_length is ==>
   mm_local_cut is gs H h excluded pc (H h with vs_inst_idx := pc)
