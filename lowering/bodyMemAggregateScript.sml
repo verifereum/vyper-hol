@@ -96,7 +96,8 @@ Resume body_structlit_nowiden_mem[struct_final_post]:
      (StructV (ZIP (MAP FST kes,vs))) <= type_memory_size_list tvs` by
     (drule val_footprint_le >> simp[type_memory_size_def] >>
      `LENGTH (MAP FST kes) = LENGTH tvs` by
-       (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+       (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[] >>
+        imp_res_tac listTheory.LIST_REL_LENGTH >> fs[]) >>
      simp[struct_layout_size_zip]) >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
@@ -145,7 +146,8 @@ Resume body_structlit_nowiden_mem[struct_final_post]:
   qexistsl [`sa.cs_next_id`, `b`, `type_memory_size_list tvs`] >>
   simp[] >>
   `LENGTH (MAP FST kes) = LENGTH tvs` by
-    (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+    (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[] >>
+     imp_res_tac listTheory.LIST_REL_LENGTH >> fs[]) >>
   simp[type_memory_size_def, struct_layout_size_zip,
        venomStateTheory.eval_operand_def] >>
   metis_tac[]
@@ -196,10 +198,13 @@ Resume body_make_array_nowiden_mem[tuple]:
     (qpat_x_assum `ci_mono sa sm` mp_tac >>
      qpat_x_assum `ci_mono sm sb` mp_tac >> simp[ci_mono_def]) >>
   drule_all fn_has_code_split >> strip_tac >>
+  `SUM (MAP (\a. type_memory_bytes cenv a) tys) < 2 ** 64` by
+    gvs[expr_body_pre_def, alloc_limits_expr_def, type_alloc_ok_def,
+        type_memory_bytes_def, is_word_type_def] >>
   `SUM (MAP (type_memory_bytes cenv) tys) < dimword (:256)` by
-    (gvs[expr_body_pre_def, alloc_limits_expr_def, type_alloc_ok_def,
-         type_memory_bytes_def, is_word_type_def] >>
-     simp[wordsTheory.dimword_def] >> decide_tac) >>
+    (`(\a. type_memory_bytes cenv a) = type_memory_bytes cenv` by
+       simp[FUN_EQ_THM] >>
+     fs[wordsTheory.dimword_def]) >>
   `type_memory_size_list tvs < dimword (:256)` by metis_tac[] >>
   drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   drule_all aggregate_buffer_alloc_counted_mem_any_block >> strip_tac >> gvs[] >>
