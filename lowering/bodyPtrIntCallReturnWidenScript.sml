@@ -1,10 +1,15 @@
 (*
- * internal_return_widened_ptr's body, up to the one fact it lacks: that a
- * widened compound return's source is disjoint from the caller's return
- * buffer at the return point (see the RESIDUAL comment on
- * internal_return_widened_ptr in bodyPtrIntCallFrameRet).  The held leaf
- * closes by irule internal_return_widened_ptr_of_disjoint once that fact
- * is derivable from the return buffer's frame invariant.
+ * internal_return_widened_ptr's body, up to the two facts it lacks, both
+ * owed by whoever closes the held leaf (see the RESIDUAL comment on
+ * internal_return_widened_ptr in bodyPtrIntCallFrameRet):
+ *   - a widened compound return's source is disjoint from the caller's
+ *     return buffer at the return point (from the return buffer's frame
+ *     invariant once it carries the caller-buffer frontier);
+ *   - a returned internal call's compiled return type agrees with its
+ *     signature (at the body induction, from expr_body_pre's FST id = NONE
+ *     plus body_inv).
+ * The held leaf closes by irule internal_return_widened_ptr_of_disjoint
+ * once both are derivable.
  *
  * TOP-LEVEL:
  *   internal_return_widened_ptr_of_disjoint
@@ -19,12 +24,15 @@ Ancestors
   ptrDiscipline fragGasPathPtr venomExecSemantics ctorReturnFrame
   returnValueTyped valueEncodingTyping typedMemoryCopy
 
-(* The first premise is the RESIDUAL (held): source/return-buffer
-   disjointness; discharged once return_buf_frame carries the caller-buffer
-   frontier.  It is asked only of a returned expression that has evaluated
-   (its expr_sim_ptr post at the return type), and only when the store is
-   the typed copy (source type differs from a compound, non-bytestring
-   return type). *)
+(* The first two premises are the RESIDUAL (held) facts.
+   1. Source/return-buffer disjointness; discharged once return_buf_frame
+      carries the caller-buffer frontier.  It is asked only of a returned
+      expression that has evaluated (its expr_sim_ptr post at the return
+      type), and only when the store is the typed copy (source type differs
+      from a compound, non-bytestring return type).
+   2. A returned internal call's compiled return type is its signature's;
+      discharged at the body induction from expr_body_pre (FST id = NONE)
+      plus body_inv. *)
 Theorem internal_return_widened_ptr_of_disjoint:
   !tops ctx PG func cx cenv ret_ty ret_tv d rpc rsz cenv' env lctx eo es.
     (!x sa sb op s0 G0 tn0 ee G tn t v sw bw cap stv.
@@ -49,6 +57,10 @@ Theorem internal_return_widened_ptr_of_disjoint:
        ghost_kept cenv' es sa G0 tn0 s0 G tn /\
        eval_operand op t = SOME sw ==>
        regions_disjoint (w2n sw) (type_memory_size stv) (w2n bw) cap) /\
+    (!ann id args drv sig.
+       eo = SOME (Call ann (IntCall id) args drv) /\
+       FLOOKUP env.fn_sigs id = SOME sig ==>
+       cenv'.ce_func_return_type (nsid_to_string id) = sig.ret_ty) /\
     body_inv tops ctx cenv cx /\
     cenv.ce_module = NONE /\
     cenv.ce_module_vars =
