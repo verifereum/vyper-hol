@@ -1,6 +1,7 @@
 Theory readonlyMemoryArgsParam
 Ancestors readonlyMemoryArgsSound readonlyMemoryArgsDefs finite_map list rich_list
-  venomWf venomInst invokeCopyFwdCommonDefs
+  venomWf venomInst invokeCopyFwdCommonDefs allocaRemapSSA
+  readonlyMemoryArgsOrigin dfgAnalysisProps pointerConfinedDefs
 
 Theorem param_index_fold_absent:
   !params fm (i:num) v.
@@ -95,4 +96,57 @@ Proof
   fs[ricf_param_order_ok_def] >>
   first_x_assum drule_all >> strip_tac >> gvs[] >>
   irule collect_param_info_index >> simp[]
+QED
+
+Theorem entry_param_outputs_origin:
+  !insts v. MEM v (entry_param_outputs insts) ==>
+    ?inst. MEM inst insts /\ inst.inst_opcode = PARAM /\
+      MEM v inst.inst_outputs
+Proof
+  Induct >> simp[entry_param_outputs_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> simp[] >> metis_tac[]
+QED
+
+Theorem collect_param_info_nonparam_absent:
+  !fn_meta fn inst v.
+    ssa_form fn /\ MEM inst (fn_insts fn) /\
+    inst.inst_opcode <> PARAM /\ MEM v inst.inst_outputs ==>
+    FLOOKUP (collect_param_info fn_meta fn).fpi_invoke_param_index v = NONE
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~MEM v (case entry_block fn of NONE => []
+    | SOME bb => entry_param_outputs bb.bb_instructions)` by
+    (Cases_on `fn.fn_blocks` >> simp[entry_block_def] >> strip_tac >>
+     drule entry_param_outputs_origin >> strip_tac >>
+     `MEM inst' (fn_insts fn)` by
+       gvs[fn_insts_def, fn_insts_blocks_def, MEM_FLAT, MEM_MAP] >>
+     metis_tac[ssa_unique_output]) >>
+  simp[collect_param_info_def] >> IF_CASES_TAC >> simp[] >>
+  simp[build_param_index_def, param_index_fold_absent,
+       MEM_TAKE] >>
+  irule EQ_TRANS >>
+  irule_at Any param_index_fold_absent >> simp[] >>
+  metis_tac[MEM_TAKE]
+QED
+
+Theorem rma_origin_pointer_preserving:
+  !fn_meta fn inst u v k.
+    ssa_form fn /\ MEM inst (fn_insts fn) /\ inst_wf inst /\
+    is_pointer_preserving_op inst.inst_opcode /\
+    MEM (Var u) inst.inst_operands /\ MEM v inst.inst_outputs /\
+    rma_origin (dfg_build_function fn)
+      (collect_param_info fn_meta fn).fpi_invoke_param_index u k ==>
+    rma_origin (dfg_build_function fn)
+      (collect_param_info fn_meta fn).fpi_invoke_param_index v k
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst.inst_opcode <> PARAM` by
+    (Cases_on `inst.inst_opcode` >> gvs[is_pointer_preserving_op_def]) >>
+  drule_all collect_param_info_nonparam_absent >> strip_tac >>
+  drule_all dfg_build_function_defs_complete >> strip_tac >>
+  drule dfg_build_function_correct >> strip_tac >>
+  `inst' = inst` by metis_tac[ssa_unique_output] >> gvs[] >>
+  irule (cj 2 rma_origin_rules) >> simp[] >>
+  qexists_tac `u` >> simp[] >>
+  metis_tac[root_from_inst_ops_pointer_preserving]
 QED
