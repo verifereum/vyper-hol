@@ -179,10 +179,10 @@ Proof
       mk_ptr_def, vyperASTTheory.expr_type_def, locals_kept_def] >>
    rpt strip_tac >> gvs[]
    >- (qpat_assum `!aid off sz. FLOOKUP _ _ = _ /\ _ ==> _` irule >>
-       simp[] >> metis_tac[]) >>
-   >~ [`mem_bytes_at off len _ = mem_bytes_at off len _`]
-   >- (qpat_x_assum `!n b sz off len. local_region _ _ _ _ _ _ /\ _ ==> _` irule >>
-       metis_tac[]) >>
+       simp[] >> metis_tac[])
+   >>~- ([`mem_bytes_at off len _ = mem_bytes_at off len _`],
+         qpat_x_assum `!n b sz off len. local_region _ _ _ _ _ _ /\ _ ==> _` irule >>
+         metis_tac[]) >>
    metis_tac[])
 QED
 
