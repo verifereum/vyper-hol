@@ -44,7 +44,8 @@ Theorem compile_assign_place_case:
      is_bytestring_type (expr_type e) /\
      is_bytestring_type (lowered_value_type cenv e) /\
      arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
-    ((?s pv s1. eval_expr cx e s = (INL pv,s1)) ==>
+    ((?s pv s1 sread v s2. eval_expr cx e s = (INL pv,s1) /\
+                           read_result cx pv sread = (INL v,s2)) ==>
      target_case F ctx func cenv cx bt) /\
     ~immutable_root cx bt /\
     assign_alloc_ok cenv bt e /\
@@ -66,11 +67,8 @@ Theorem assign_place_effectful_index_case:
     type_place_target env bt = SOME (Type dty) /\
     type_widens_to env.type_defs (expr_type e) dty /\
     assignable_type env.type_defs (expr_type e) /\
-    (lowered_value_type cenv e = expr_type e \/
-     is_bytestring_type (expr_type e) /\
-     is_bytestring_type (lowered_value_type cenv e) /\
-     arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
-    ((?s pv s1. eval_expr cx e s = (INL pv,s1)) ==>
+    ((?s pv s1 sread v s2. eval_expr cx e s = (INL pv,s1) /\
+                           read_result cx pv sread = (INL v,s2)) ==>
      target_case F ctx func cenv cx bt) /\
     ~immutable_root cx bt /\
     assign_alloc_ok cenv bt e /\

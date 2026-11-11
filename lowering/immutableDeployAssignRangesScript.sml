@@ -2,7 +2,7 @@
 Theory immutableDeployAssignRanges
 Ancestors
   immutableDeployAssignFacts exprSimTypedAlloc annassignRelayoutSource
-  compileEnv loweringPosts placeStoreStorage exprSimHyps valueTypingMemoryProps
+  compileEnv loweringStateRelDefs loweringPosts placeStoreStorage exprSimHyps valueTypingMemoryProps
 
 Theorem immutable_assign_source_range:
   stmt_state_rel ctx func cenv cx es s /\

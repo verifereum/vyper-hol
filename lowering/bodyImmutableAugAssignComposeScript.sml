@@ -109,6 +109,7 @@ Resume immutable_deploy_augassign_frag[rhs_normal]:
   `expr_res_ok (bop_result cx ity bop [ity;expr_type e] v0 v ee)` by
     (`expr_res_ok (bop_result cx ity bop [ity;expr_type e] v0 v
        (ee with gas_obs := []))` suffices_by simp[] >>
+     `word_value v0` by metis_tac[exprSimSourceTheory.word_value_type_typed] >>
      irule immutable_augassign_binop_admissible >> metis_tac[]) >>
   suspend "binop_ready"
 QED
@@ -147,7 +148,7 @@ Resume immutable_deploy_augassign_frag[operator_normal]:
      case evaluate_binop
        (case type_to_int_bound ity of SOME bound => bound | NONE => Unsigned 0)
        tv bop v0 v of INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> metis_tac[word_value_not_bytes]) >>
   `evaluate_binop
      (case type_to_int_bound ity of SOME bound => bound | NONE => Unsigned 0)
      tv bop v0 v = INL result` by gvs[AllCaseEqs()] >>
@@ -216,7 +217,7 @@ Resume immutable_deploy_augassign_frag[operator_exit]:
        (case type_to_int_bound ity of SOME bound => bound | NONE => Unsigned 0)
        tv bop v0 v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> metis_tac[word_value_not_bytes]) >>
   Cases_on `evaluate_binop
        (case type_to_int_bound ity of SOME bound => bound | NONE => Unsigned 0)
        tv bop v0 v`

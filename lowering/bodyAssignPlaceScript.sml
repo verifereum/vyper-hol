@@ -120,7 +120,7 @@ Proof
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
   irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[] >>
   metis_tac[call_evaluation_safe_append_right]
 QED
@@ -155,6 +155,7 @@ Theorem target_indices_body_pre[local]:
     type_place_target env t = SOME pt /\
     (supported_target tops bindings t \/
      IS_SOME (supported_target_info tops bindings t)) /\
+    alloc_limits_target cenv t /\
     ~supported_target_exists
       (\e. ~is_extcode e /\
            ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
@@ -171,7 +172,7 @@ Proof
   ntac 2 gen_tac >>
   Induct using base_assignment_target_induct >>
   simp[target_indices_pre_def, supported_expr_exists_def, int_calls_expr_def,
-       listTheory.EVERY_APPEND] >> rpt strip_tac >>
+       allocLimitsTheory.alloc_limits_expr_def, listTheory.EVERY_APPEND] >> rpt strip_tac >>
   imp_res_tac supported_subscript_target_shape >>
   imp_res_tac supported_attribute_target_shape >>
   imp_res_tac supported_expr_body_calls >>
@@ -211,7 +212,8 @@ Proof
     (fs[supported_assignment_def] >>
      Cases_on `supported_target_info tops bindings t` >> fs[]) >>
   irule (Q.SPECL [`tops`, `bindings`] target_indices_body_pre) >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
+      allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_assignment_def,
       supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def] >>
   metis_tac[call_evaluation_safe_append_left]
 QED
@@ -346,9 +348,50 @@ Proof
   fs[bare_global_assignable_complete_def]
 QED
 
+(* An effectful target with any RHS, a widened one included: since Assign
+   reads the RHS first, the effectful-index root covers both. *)
+Theorem body_assign_place_effectful_case:
+  !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_ok cx t) /\
+    body_expr_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+                (Assign (BaseTarget t) e) ==>
+              occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
+    ~supported_target_pure tops t /\ ~immutable_root cx t ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
+      (eval_stmt cx (Assign (BaseTarget t) e)) es
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_then strip_assume_tac assign_place_typing >>
+  `expr_body_pre cenv cx env e es` by metis_tac[body_assign_place_rhs_pre] >>
+  `target_indices_pre cenv cx env t` by metis_tac[body_assign_place_indices_pre] >>
+  `expr_vv_sim ctx func cenv cx (expr_type e) e es` by
+    metis_tac[body_expr_ok_def] >>
+  `((?s pv s1 sread v s2. eval_expr cx e s = (INL pv,s1) /\
+                           read_result cx pv sread = (INL v,s2)) ==>
+      target_case F ctx func cenv cx t)` by metis_tac[body_target_case] >>
+  `cenv.ce_target CapMcopy /\
+   acyclic_struct_metadata cenv.ce_struct_fields` by
+    metis_tac[body_inv_mcopy, body_inv_def] >>
+  `assign_alloc_ok cenv t e` by
+    fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def] >>
+  metis_tac[assign_place_effectful_index_case]
+QED
+
 Theorem body_assign_place_case:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
-    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_ok cx t) /\
     body_expr_ok cx e /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -379,7 +422,8 @@ Proof
       Cases_on `supported_immutable_type tops nsid` >> gvs[] >>
       drule_all_then strip_assume_tac body_immutable_target_type >> gvs[] >>
       metis_tac[immutable_deploy_assign_case]) >>
-  `((?s pv s1. eval_expr cx e s = (INL pv,s1)) ==>
+  `((?s pv s1 sread v s2. eval_expr cx e s = (INL pv,s1) /\
+                           read_result cx pv sread = (INL v,s2)) ==>
       target_case F ctx func cenv cx t)` by metis_tac[body_target_case] >>
   `cenv.ce_target CapMcopy /\
    acyclic_struct_metadata cenv.ce_struct_fields` by

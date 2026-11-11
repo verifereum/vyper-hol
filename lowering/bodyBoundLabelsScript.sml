@@ -756,6 +756,18 @@ Proof
     conj_tac, gen_tac, strip_tac])
 QED
 
+Theorem bound_labels_snapshot_vv:
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_snapshot_vv ce copy vv s))))
+Proof
+  strip_tac >> simp[compile_snapshot_vv_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_materialize_vv,
+    bound_labels_unwrap_value, comp_return_def]),
+    irule bound_labels_bind, conj_tac, gen_tac, strip_tac, IF_CASES_TAC])
+QED
+
 Theorem bound_labels_abi_encode_args:
   !es s. (!ty e t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
@@ -2281,7 +2293,7 @@ Theorem bound_labels_stmt_assign[local]:
 Proof
   strip_tac >> simp[compile_stmt_def] >>
   rpt (FIRST [CHANGED_TAC (simp[cj 1 bound_labels_expr_mutual,
-    bound_labels_unwrap_value, bound_labels_emit_void,
+    bound_labels_unwrap_value, bound_labels_emit_void, bound_labels_snapshot_vv,
     bound_labels_assign_value, bound_labels_store_at_loc, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC, CASE_TAC]) >>

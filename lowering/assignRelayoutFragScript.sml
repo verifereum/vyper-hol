@@ -192,7 +192,8 @@ Proof
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac (srw_ss())
     [Once compile_stmt_def, comp_bind_def, comp_ignore_bind_def,
-     comp_return_def, LET_THM] >>
+     comp_return_def, LET_THM, exprLoweringTheory.expr_can_mutate_def,
+     stmtLoweringTheory.target_to_expr_def] >>
   Cases_on `compile_expr cenv (expr_type e) e sa` >>
   rename1 `compile_expr _ _ _ _ = (vv,sV)` >>
   Cases_on `unwrap_value cenv vv sV` >>

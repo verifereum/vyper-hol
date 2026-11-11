@@ -329,8 +329,8 @@ QED
 Theorem immutable_direct_composite_old_path:
   compile_assign_value cenv dst LocCode src F src_loc dty sty mem_size sa = ((),sb) /\
   cenv.ce_imm_alloca = imm /\
-  (dty = sty \/ (is_bytestring_type dty /\ is_bytestring_type sty)) /\
-  copy_size = (if is_bytestring_type dty then type_memory_bytes cenv sty else mem_size) /\
+  dty = sty /\ ~is_bytestring_type dty /\
+  copy_size = mem_size /\
   n = (if copy_size <= 32 then 1 else (copy_size+31) DIV 32) /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -355,17 +355,10 @@ Theorem immutable_direct_composite_old_path:
       mem_bytes_at p len u.vs_memory = mem_bytes_at p len s.vs_memory) /\
     u.vs_immutables = (immutable_transfers T T (n2w a) (n2w b) n 0 s).vs_immutables
 Proof
-  rpt gen_tac >> disch_tac >>
-  gvs[stmtLoweringTheory.compile_assign_value_def, immutable_comp_bind_cases,
-      comp_return_def] >>
-  (qmatch_asmsub_abbrev_tac `copybytes <= 32` >>
-   Cases_on `copybytes <= 32` >> gvs[]
-   >- (`compile_imm_store_words cenv.ce_imm_alloca src dst 1 0 sa = ((),sb)` by
-         (irule (SRULE [] (Q.INST [`copy_size` |-> `0`] immutable_store_suffix_words)) >>
-          first_assum ACCEPT_TAC) >>
-       irule (SRULE [arithmeticTheory.ADD_COMM]
-         (Q.INST [`n` |-> `1`] immutable_words_old_prefix_path)) >>
-       simp[] >> metis_tac[]) >>
-   irule (SRULE [arithmeticTheory.ADD_COMM] immutable_words_old_prefix_path) >>
-   simp[] >> metis_tac[])
+  strip_tac >>
+  `compile_imm_store_words imm src dst n 0 sa = ((),sb)` by
+    (asm_rewrite_tac[] >> irule immutable_store_suffix_words >>
+     gvs[stmtLoweringTheory.compile_assign_value_def, comp_bind_def, comp_return_def]) >>
+  irule immutable_words_old_prefix_path >>
+  metis_tac[]
 QED

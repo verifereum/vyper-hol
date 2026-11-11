@@ -5,7 +5,7 @@ Ancestors
   placeRelayoutCode bodyPlacePremises exprSimAggregateBodySource
   exprSimDefs exprSimHypsDefs loweringPosts stmtSimDefs compileEnv
   targetPlaceSimCases gasSummary gasSummaryCompose exprSimSubscriptMap
-  placeRelayoutOpen exprOpenMain
+  placeRelayoutOpen exprOpenMain supportedExprs supportedTargets
 
 Theorem widened_place_raw_rhs_outcome:
   expr_body_pre cenv cx env e es /\
@@ -43,6 +43,30 @@ Proof
   metis_tac[]
 QED
 
+(* A pure target has no call or pop, so Assign stores without snapshotting
+   the RHS first. *)
+Theorem expr_can_mutate_not_pure[local]:
+  (!cenv e. expr_can_mutate cenv e ==>
+     !tops. ~supported_pure_expr tops e /\ ~supported_place_expr tops e) /\
+  (!cenv es. exprs_can_mutate cenv es ==> !tops. ~supported_pure_exprs tops es) /\
+  (!cenv oe. opt_expr_can_mutate cenv oe ==> T) /\
+  (!cenv kes. named_exprs_can_mutate cenv kes ==>
+     !tops. ~supported_pure_fields tops kes)
+Proof
+  ho_match_mp_tac exprLoweringTheory.expr_can_mutate_ind >>
+  rw[exprLoweringTheory.expr_can_mutate_def, supported_pure_expr_def]
+QED
+
+Theorem supported_target_pure_not_mutate:
+  !tops bt cenv.
+    supported_target_pure tops bt ==> ~expr_can_mutate cenv (target_to_expr bt)
+Proof
+  gen_tac >> Induct >>
+  rw[supported_target_pure_def, stmtLoweringTheory.target_to_expr_def,
+     exprLoweringTheory.expr_can_mutate_def] >>
+  metis_tac[expr_can_mutate_not_pure]
+QED
+
 Theorem body_assign_nonimmutable_widened_place:
   (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx bt) /\
   body_expr_ok cx e /\ body_inv tops ctx cenv cx /\
@@ -57,6 +81,7 @@ Theorem body_assign_nonimmutable_widened_place:
     is_bytestring_type (expr_type e) /\
     is_bytestring_type (lowered_value_type cenv e) /\
     arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
+  supported_target_pure tops bt /\
   ~immutable_root cx bt ==>
   stmt_frag ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Assign (BaseTarget bt) e))
@@ -80,6 +105,8 @@ Proof
    ~is_word_type (post_value_type cenv e)` by fs[] >>
   rewrite_tac[stmt_frag_def, stmt_framed_frag_def] >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~expr_can_mutate cenv (target_to_expr bt)` by
+    metis_tac[supported_target_pure_not_mutate] >>
   drule_all assign_place_relayout_code_parts >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
   `gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)

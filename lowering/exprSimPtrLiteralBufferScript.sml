@@ -478,7 +478,8 @@ Theorem literal_ptr_memory_vv_post:
        FLOOKUP s0.vs_allocas aid = SOME (b,len) ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
     (!name b len. local_region cenv es.scopes s0 name b len ==>
-       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) ==>
+       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
+    pure_frame cenv func es sa s0 t ==>
     vv_post ctx func cenv cx e es sa sb s0 es (Value v)
       (LocatedValue (expr_type e) (base_ptr buf))
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)
@@ -501,7 +502,8 @@ Proof
         gvs[local_region_def, lookup_var_def] >>
       qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _`
         drule >> simp[regions_disjoint_def] >> decide_tac) >>
-  rpt strip_tac >> first_x_assum irule >> metis_tac[]
+  rpt strip_tac >- (first_x_assum irule >> metis_tac[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem literal_ptr_local_footprint_exterior:
@@ -659,6 +661,30 @@ Proof
   `!name a len. local_region cenv es.scopes s name a len <=>
     local_region cenv es.scopes u name a len` by
     (irule literal_ptr_local_region_frame >> simp[] >> metis_tac[]) >>
+  `t.vs_allocas = u.vs_allocas` by
+    (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = u` mp_tac >>
+     disch_then (SUBST1_TAC o SYM) >> simp[]) >>
+  `pure_frame cenv func es sa s t` by
+    (match_mp_tac exprSimPropsTheory.pure_frame_fresh_alloca >>
+     qpat_assum `MEM (mk_inst _ ALLOCA _ _) _` (irule_at Any) >>
+     qexistsl_tac [`n`, `w2n w`] >>
+     rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
+     TRY (qpat_assum `t.vs_allocas = _` (fn th => rewrite_tac[th]) >>
+          first_assum ACCEPT_TAC >> NO_TAC)
+     >- (qx_genl_tac [`nm`, `lb`, `lsz`] >> strip_tac >>
+         `local_region cenv es.scopes u nm lb lsz` by
+           (qpat_assum `!name a len. local_region cenv es.scopes s name a len <=> _`
+              (fn th => full_simp_tac std_ss [th])) >>
+         qpat_assum `!name a len. local_region _ _ u name a len ==> _` drule >>
+         rewrite_tac[regions_disjoint_def] >> strip_tac >>
+         qpat_x_assum `u.vs_memory = s.vs_memory` (SUBST1_TAC o SYM) >>
+         qpat_x_assum `!a len. _ ==> mem_bytes_at a len t.vs_memory = _` irule >>
+         decide_tac) >>
+     qx_genl_tac [`off`, `len`] >> rewrite_tac[regions_disjoint_def] >>
+     strip_tac >>
+     qpat_x_assum `u.vs_memory = s.vs_memory` (SUBST1_TAC o SYM) >>
+     qpat_x_assum `!a len. _ ==> mem_bytes_at a len t.vs_memory = _` irule >>
+     decide_tac) >>
   irule literal_ptr_memory_vv_post >> goal_assum (drule_at Any) >> simp[] >>
   conj_tac
   >- (rpt strip_tac >>
@@ -672,10 +698,7 @@ Proof
       simp[] >> disch_then irule >>
       qpat_x_assum `!aid a len. _ ==> regions_disjoint _ _ a len` drule_all >>
       simp[regions_disjoint_def] >> decide_tac) >>
-  `t.vs_allocas = u.vs_allocas` by
-    (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = u` mp_tac >>
-     disch_then (SUBST1_TAC o SYM) >> simp[]) >>
-  simp[] >> first_assum ACCEPT_TAC
+  simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem literal_ptr_value_posts:

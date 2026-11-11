@@ -40,7 +40,7 @@
  *   stmts_env_cs_mono, stmt_env_declare, declare_stmt_local_other,
  *   type_stmt_other    — stmt_env and type_stmt of a statement
  *   same_frame_trans, body_inv_same_frame, frame_ret_ok_same_frame,
- *   stmt_exprs_ok_same_frame, stmts_exprs_ok_EVERY — the frame facts
+ *   stmt_exprs_ok_same_frame, stmts_exprs_ok_thm — the frame facts
  *                        at a later compile env of the same body
  *   expr_sim_inv_push_scope — expr_sim_inv in a new scope
  *   body_inv_mcopy     — the frame's target has MCOPY
@@ -48,7 +48,8 @@
 
 Theory bodySimStmtCases
 Ancestors
-  loweringStateRelDefs valueEncodingProps assignRelayoutFrag assignRelayoutCaller annassignRelayoutSource
+  bodyAssignTupleWidenedPrep stmtSimAssignTuplePlaces
+  loweringStateRelDefs valueEncodingProps bodyAssignTupleOther assignRelayoutFrag assignRelayoutCaller annassignRelayoutSource
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
@@ -126,7 +127,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assert_exists_def, int_calls_stmt_def,
          int_calls_assert_reason_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -184,7 +185,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
   first_x_assum irule >> fs[body_expr_ok_def] >>
@@ -220,7 +221,7 @@ Proof
   ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >>
   rw[exprLoweringTheory.lowered_value_type_def, is_word_type_def, expr_type_def] >>
   simp[exprLoweringTheory.concat_buffer_type_def] >>
-  Cases_on `ty` >> simp[is_word_type_def] >>
+  Cases_on `ty` >> gvs[is_word_type_def] >>
   rename1 `BaseT b` >> Cases_on `b` >> gvs[is_word_type_def]
 QED
 
@@ -300,7 +301,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_raise_exists_def, int_calls_stmt_def,
          int_calls_raise_reason_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -400,7 +401,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          int_calls_stmt_def] >>
      qexists_tac `int_calls_assert_reason (AssertReason se)` >> simp[]) >>
   `expr_sim ctx func cenv cx (BaseT BoolT) e es` by
@@ -424,7 +425,7 @@ Proof
                   `es with gas_obs := gs`, `es1`] mp_tac assert_reason_vv_sim >>
      disch_then irule >>
      drule_then strip_assume_tac body_inv_cx_tops >>
-     gvs[expr_sim_pre_body, stmt_exprs_ok_def,
+     gvs[expr_sim_pre_body, stmt_exprs_ok_flat,
          supported_stmt_expr_exists_def, supported_assert_exists_def] >>
      metis_tac[expr_sim_pre_gas_obs]) >>
   Cases_on `reason_covered cenv se`
@@ -544,7 +545,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -676,7 +677,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -731,7 +732,7 @@ Proof
     gvs[body_inv_def] >>
   drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, int_calls_stmt_def,
       int_calls_atarget_def, int_calls_expr_def] >>
   qexists_tac `[]` >> simp[]
@@ -870,7 +871,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, supported_expr_exists_def,
          int_calls_stmt_def, int_calls_atarget_def, int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -966,7 +967,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, supported_expr_exists_def,
          int_calls_stmt_def, int_calls_atarget_def, int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -999,7 +1000,7 @@ Proof
     gvs[body_inv_def] >>
   drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, int_calls_stmt_def,
       int_calls_atarget_def, int_calls_expr_def] >>
   qexists_tac `[]` >> simp[]
@@ -1317,7 +1318,9 @@ QED
    for a local, at any place. *)
 Theorem body_assign_place_widened_aggregate_call:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
-    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_ok cx t) /\
     body_expr_ok cx e /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -1342,7 +1345,9 @@ Proof
       disch_then (qspec_then `func` strip_assume_tac) >>
       gvs[] >> irule stmtSimAssignPlaceTheory.immutable_deploy_assign_case >>
       metis_tac[]) >>
-  irule body_assign_nonimmutable_widened_place >> metis_tac[]
+  Cases_on `supported_target_pure tops t`
+  >- (irule body_assign_nonimmutable_widened_place >> metis_tac[]) >>
+  irule bodyAssignPlaceTheory.body_assign_place_effectful_case >> metis_tac[]
 QED
 
 (* The other base targets, by bodyAssignPlace's general place root (the
@@ -1350,7 +1355,9 @@ QED
    whose lowered type differs from its own (above). *)
 Theorem body_assign_other:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
-    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_ok cx t) /\
     body_expr_ok cx e /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -1461,7 +1468,9 @@ QED
 
 Theorem body_assign_case:
   !cx t e.
-    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_ok cx t) /\
     body_expr_ok cx e ==>
     body_stmt_ok cx (Assign (BaseTarget t) e)
 Proof
@@ -1597,7 +1606,7 @@ Theorem tuple_staging_bound:
 Proof
   rpt strip_tac >>
   `type_memory_bytes cenv (TupleT tys) < 2 ** 64` by
-    gvs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+    gvs[stmt_exprs_ok_flat, allocLimitsTheory.alloc_limits_stmt_def] >>
   `type_memory_bytes cenv (TupleT tys) = type_memory_size (TupleTV tvs)` by
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   `type_memory_size (TupleTV tvs) + 64 < dimword (:256)` by
@@ -1649,7 +1658,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          int_calls_stmt_def] >>
      qexists_tac `[]` >> simp[] >>
      metis_tac[call_evaluation_safe_append_right]) >>
@@ -1739,7 +1748,7 @@ Proof
     gvs[body_inv_def] >>
   drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[] >>
   metis_tac[call_evaluation_safe_append_right]
 QED
@@ -2005,11 +2014,15 @@ Theorem body_assign_tuple_other:
        body_tuple_target_ok cx (TupleTarget gs) v) /\ body_expr_ok cx e /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    lowered_value_type cenv e = expr_type e /\
     ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
             EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) /\
     ~EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
@@ -2027,25 +2040,73 @@ Theorem body_assign_tuple_other:
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  qspecl_then [`cx`, `gs`, `e`, `tops`, `bindings`, `ctx`, `func`, `cenv`,
+               `env`, `env'`, `ret_ty`, `lctx`, `RetQ`, `es`] mp_tac
+    bodyAssignTupleOtherTheory.body_assign_tuple_places >>
+  impl_tac >- (
+    rpt conj_tac
+    >~ [`cenv.ce_target CapMcopy`] >- metis_tac[body_inv_mcopy]
+    >~ [`expr_body_pre _ _ _ _ _`]
+    >- (irule body_assign_tuple_rhs_pre >> metis_tac[])
+    >~ [`type_memory_size _ < _`]
+    >- (rpt strip_tac >> irule tuple_staging_bound >> metis_tac[])
+    >> metis_tac[]) >>
+  simp[]
 QED
 
 (* RESIDUAL (#767): a tuple target assigned an internal call whose return
    type widens to the call's type (type_widens_to: a tuple elementwise), so
    the tuple is unpacked at the callee's return type. *)
 Theorem body_assign_tuple_widened_call[local]:
-  !cx gs e tops ctx func cenv env env' ret_ty lctx RetQ es res es'.
+  !cx gs e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_ok cx (TupleTarget gs) v) /\
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     lowered_value_type cenv e <> expr_type e ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `EXISTS (\g. ?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
+    cx.in_deploy /\ IS_SOME (supported_immutable_type tops nsid)) gs`
+  >- (irule immutable_deploy_tuple_assign >> metis_tac[]) >>
+  Cases_on `EXISTS (\g. ?nsid key.
+    g = BaseTarget (SubscriptTarget (TopLevelNameTarget nsid) key) /\
+    ~supported_pure_expr tops key) gs`
+  >- (irule tuple_assign_effectful_index >> metis_tac[]) >>
+  `expr_body_pre cenv cx env e es` by
+    (irule body_assign_tuple_rhs_pre >> metis_tac[]) >>
+  drule_all tuple_places_typing >> strip_tac >>
+  drule_all tuple_widened_physical_layout >> strip_tac >>
+  `cenv.ce_target CapMcopy` by metis_tac[body_inv_mcopy] >>
+  `get_module_code cx NONE = SOME tops /\
+   acyclic_struct_metadata cenv.ce_struct_fields` by gvs[body_inv_def] >>
+  `expr_sim ctx func cenv cx (TupleT tys) e es` by
+    (drule_all body_expr_ok_case >>
+     disch_then (qspec_then `func` strip_assume_tac) >>
+     gvs[expr_sim_case_def] >> metis_tac[]) >>
+  `EVERY (\g. ?bt. g = BaseTarget bt /\ supported_target_pure tops bt /\
+    target_case F ctx func cenv cx bt /\ ~immutable_root cx bt /\
+    target_indices_pre cenv cx env bt) gs` by
+    (rw[EVERY_MEM] >>
+     drule_all tuple_places_member >> strip_tac >> gvs[] >>
+     conj_tac >- metis_tac[tuple_places_target_case] >>
+     metis_tac[tuple_places_indices_pre]) >>
+  irule compile_assign_tuple_places_stmt_frag >> simp[] >>
+  qexistsl_tac [`env`, `tops`] >> simp[] >>
+  metis_tac[tuple_places_component_bound, tuple_widened_component_bound]
 QED
 
 Theorem body_assign_tuple_case:
@@ -2114,7 +2175,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def,
          int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -2176,7 +2237,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def,
          int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -2263,7 +2324,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def,
          int_calls_expr_def] >>
      TRY (conj_tac >-
@@ -2336,7 +2397,7 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
      irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def,
          int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -2459,7 +2520,7 @@ Proof
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
-     irule stmt_expr_body_pre >> simp[] >>
+     irule stmt_expr_body_pre_alloc >> fs[allocLimitsTheory.alloc_limits_stmt_def] >>
      qexists_tac `int_calls_stmts ss1 ++ int_calls_stmts ss2` >> simp[]) >>
   `!ty. expr_sim ctx func cenv cx ty e es /\
         expr_vv_sim ctx func cenv cx ty e es` by
@@ -2486,7 +2547,7 @@ Proof
   rpt (qpat_x_assum `body_stmts_ok _ _`
          (strip_assume_tac o REWRITE_RULE [body_stmts_ok_def])) >>
   Cases_on `b` >> fs[] >> first_x_assum irule >>
-  gvs[stmts_exprs_ok_EVERY, stmt_exprs_ok_def, alloc_limits_stmt_def,
+  gvs[stmts_exprs_ok_thm, stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def,
       stmt_valued_return_def] >>
   metis_tac[call_evaluation_safe_append_left, call_evaluation_safe_append_right]
 QED
@@ -2499,7 +2560,7 @@ Proof
   rpt gen_tac >> strip_tac >> simp[Once body_stmt_ok_def] >>
   rpt gen_tac >> strip_tac >>
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
-      stmt_exprs_ok_def, supported_stmt_expr_exists_def] >>
+      stmt_exprs_ok_flat, supported_stmt_expr_exists_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
@@ -2548,8 +2609,8 @@ Proof
   rpt strip_tac >>
   rename1 `stmt_env cenv lctx ret_ty s sa = (c, sm)` >>
   `same_frame cenv c` by metis_tac[cenv_top_ext_same_frame] >>
-  `stmt_exprs_ok c = stmt_exprs_ok cenv` by
-    metis_tac[stmt_exprs_ok_same_frame] >>
+  `stmts_exprs_ok c = stmts_exprs_ok (decl_var_type cenv s)` by
+    metis_tac[stmt_env_stmts_exprs_ok] >>
   `expr_sim_inv c cx env1 es1` by
     (irule expr_sim_inv_stmt >> fs[body_inv_def] >>
      metis_tac[expr_sim_inv_gas_obs, call_evaluation_safe_append_left]) >>

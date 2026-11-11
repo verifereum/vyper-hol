@@ -266,6 +266,8 @@ Proof
     (irule locals_kept_mem_tail >> goal_assum (drule_at Any) >> simp[]) >>
   `vv_storage_live cx vv ee s ==> vv_storage_live cx vv ee u` by
     (Cases_on `vv` >> fs[contextTheory.vv_operand_def]) >>
+  `~expr_has_effect e ==> pure_frame ce func es sa s0 u` by
+    (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >> simp[]) >>
   simp[vv_post_def] >> rpt strip_tac >> metis_tac[]
 QED
 

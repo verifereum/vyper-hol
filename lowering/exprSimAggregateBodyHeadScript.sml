@@ -63,7 +63,16 @@ Theorem aggregate_body_tuple_head_path:
     (!p n. b <= p /\ p+n <= b+asz /\
       (p+n <= b+off \/ b+off+type_memory_size tv <= p) ==>
       mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-    locals_kept ce es (mid with gas_obs := []) s0 q
+    locals_kept ce es (mid with gas_obs := []) s0 q /\
+    (~expr_has_effect e ==>
+      (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+        mem_bytes_at lo sz q.vs_memory = mem_bytes_at lo sz s0.vs_memory) /\
+      (!p n. (p+n <= b \/ b+asz <= p) /\
+        (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= i.inst_id /\
+          FLOOKUP q.vs_allocas i.inst_id = SOME (c,sz) ==>
+          regions_disjoint p n c sz) ==>
+        mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory))
 Proof
   strip_tac >>
   `?v. read_result cx tvv (mid with gas_obs := []) =
@@ -231,8 +240,35 @@ Resume aggregate_body_tuple_head_path[store]:
           rpt strip_tac >>
           metis_tac[arithmeticTheory.ADD_COMM]) 
       >- (pure_asm_rewrite_tac[] >> decide_tac))) >>
-  irule locals_kept_trans >>
-  qexistsl_tac [`mid with gas_obs := []`, `sa`, `q`] >>
-  simp[] >> metis_tac[vv_post_def]
+  conj_tac
+  >- (irule locals_kept_trans >>
+      qexistsl_tac [`mid with gas_obs := []`, `sa`, `q`] >>
+      simp[] >> metis_tac[vv_post_def]) >>
+  suspend "pure_frame"
+QED
+Resume aggregate_body_tuple_head_path[pure_frame]:
+  strip_tac >>
+  `pure_frame ce func es sa s0 q` by fs[vv_post_def] >>
+  `pure_frame ce func (mid with gas_obs := [])
+     (sa with cs_next_var := sn.cs_next_var) q u` by
+    (drule exprSimWordArgsTheory.expr_post_pure_frame >> simp[]) >>
+  `!aid a. FLOOKUP q.vs_allocas aid = SOME a ==>
+      FLOOKUP u.vs_allocas aid = SOME a` by fs[expr_post_def] >>
+  `!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
+      lookup_var z q = SOME w` by fs[vv_post_def] >>
+  `pure_frame ce func es sa s0 u` by
+    (match_mp_tac pure_frame_trans >>
+     qexistsl_tac [`mid with gas_obs := []`,
+       `sa with cs_next_var := sn.cs_next_var`, `q`] >>
+     simp[]) >>
+  match_mp_tac (SRULE [arithmeticTheory.ADD_COMM] aggregate_pure_frame_store) >>
+  qexistsl_tac [`u`, `b+off`, `type_memory_size tv`] >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `not_local_ptr ce es.scopes x` by fs[expr_body_pre_def] >>
+      fs[stmt_state_rel_def, state_rel_def] >>
+      drule_all localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint >>
+      simp[regions_disjoint_def]) >>
+  rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
 Finalise aggregate_body_tuple_head_path

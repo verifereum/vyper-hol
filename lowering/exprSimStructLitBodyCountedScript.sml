@@ -121,6 +121,7 @@ Resume compile_struct_lit_body_case[outcome]:
      goal_assum (drule_at Any) >>
      metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh]) >>
   conj_tac >- suspend "frame" >>
+  reverse conj_tac >- suspend "pure_frame" >>
   irule exprBopSimPropsTheory.locals_kept_trans >>
   qexistsl_tac [`es`, `sa`, `t`] >> simp[] >>
   irule exprSimPropsTheory.locals_kept_mem >> simp[]
@@ -177,6 +178,21 @@ Resume compile_struct_lit_body_case[frame]:
     (qexists_tac `aid` >> conj_tac >- fs[ci_mono_def] >> metis_tac[]) >>
   qpat_x_assum `!aid p n. aid < sa.cs_next_id /\ _ ==> _` drule_all >>
   simp[regions_disjoint_def]
+QED
+
+Resume compile_struct_lit_body_case[pure_frame]:
+  rewrite_tac[expr_has_effect_thm] >> strip_tac >>
+  `EVERY ($~ o expr_has_effect) (MAP SND fields)` by
+    gvs[listTheory.EVERY_MAP, listTheory.EXISTS_MAP, combinTheory.o_DEF] >>
+  qpat_x_assum `EVERY ($~ o expr_has_effect) _ ==> _` drule >>
+  strip_tac >>
+  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+  irule aggregate_pure_frame_buffer >>
+  qpat_assum `MEM (venomInst$mk_inst _ ALLOCA _ _) _` (irule_at Any) >>
+  `FLOOKUP t'.vs_allocas inst.inst_id =
+     SOME (b,type_memory_size_list tvs)` by metis_tac[] >>
+  qexistsl_tac [`t`, `sm`, `b`, `type_memory_size_list tvs`] >>
+  gvs[] >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
 
 Finalise compile_struct_lit_body_case

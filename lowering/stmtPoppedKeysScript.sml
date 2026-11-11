@@ -357,8 +357,8 @@ Proof
   drule_all eval_expr_popped_keys_indexed >> strip_tac >>
   drule_all (cj 1 (cj 5 eval_scc_type_sound_mutual)) >>
   strip_tac >> gvs[] >>
+  imp_res_tac read_result_state >> gvs[] >>
   imp_res_tac eval_target_place_popped_keys_indexed >>
-  imp_res_tac read_result_scopes >> gvs[] >>
   metis_tac[write_place_popped_keys_indexed]
 QED
 

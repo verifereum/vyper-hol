@@ -12,6 +12,7 @@ Theorem immutable_normalized_copy_size:
   type_widens_to tenv sty dty /\
   ~(is_bytestring_type dty /\ is_bytestring_type sty) /\
   mem_size = type_memory_size dtv ==>
+  ~is_bytestring_type dty /\
   (if is_bytestring_type dty then type_memory_bytes cenv sty else mem_size) =
     32 * ((type_memory_size dtv + 31) DIV 32)
 Proof

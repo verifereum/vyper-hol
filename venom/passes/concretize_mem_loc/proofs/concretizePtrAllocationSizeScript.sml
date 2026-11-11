@@ -1,7 +1,7 @@
 Theory concretizePtrAllocationSize
 Ancestors venomWfProps
   concretizePtrActivationSupport concretizePtrAllocationOrigins
-  concretizeMemLocDefs concretizeMemLocProofs concretizeAnalysisBoundary
+  concretizeMemLocDefs concretizeMemLocTransitionProofs concretizeAnalysisBoundary
   o1PassContract unitTransformDefs ptrDiscipline ptrDisciplineEmptyTaint
   venomWf venomInst venomState venomExecSemantics venomMemProps
   contextCodegenRel removeUnusedSsaProofs finite_map list words

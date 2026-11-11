@@ -512,8 +512,6 @@ Theorem raw_delegatecall_not_exit[local]:
     ~exit_result (exec_delegatecall inst s gas addr ao az ro rz)
 Proof
   rpt gen_tac >> simp[exec_delegatecall_def] >>
-  BasicProvers.TOP_CASE_TAC >> simp[exit_result_def] >>
-  rename1 `SOME pair` >> PairCases_on `pair` >> simp[] >>
   namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[exit_result_def] >>
   Cases_on `outs` >> simp[exit_result_def]
 QED

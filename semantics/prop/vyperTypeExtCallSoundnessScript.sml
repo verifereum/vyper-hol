@@ -464,6 +464,24 @@ Proof
           Cases_on `flags.rcf_max_outsize = 0` >>
           simp[] >> RAW_CALL_FINISH_TAC) >>
       strip_tac >> drule vyperCallOutcomePropsTheory.take_call_outcome_error >>
+      strip_tac >> gvs[no_type_error_result_def]))
+  >>~- ([`take_delegate_outcome _ _ _ _`],
+    (Cases_on `take_delegate_outcome target_addr calldata value_opt st` >>
+      rename1 `take_delegate_outcome _ _ _ _ = (taken,mid)` >>
+      `runtime_consistent env cx mid` by
+        (drule_all take_delegate_outcome_runtime_consistent >> simp[]) >>
+      Cases_on `taken` >> simp[]
+      >- (rename1 `take_delegate_outcome _ _ _ _ = (INL ro,_)` >> PairCases_on `ro` >>
+          Cases_on `adopt_call_outcome ro0 ro1 mid` >>
+          rename1 `adopt_call_outcome ro0 ro1 mid = (adopted,final)` >>
+          drule vyperCallOutcomeTheory.adopt_call_outcome_frame >>
+          strip_tac >> gvs[] >>
+          `runtime_consistent env cx final` by
+            (drule_all take_adopt_delegate_outcome_runtime_consistent >> simp[]) >>
+          Cases_on `ro1.co_success` >> Cases_on `flags.rcf_revert_on_failure` >>
+          Cases_on `flags.rcf_max_outsize = 0` >>
+          simp[] >> RAW_CALL_FINISH_TAC) >>
+      strip_tac >> drule vyperCallOutcomePropsTheory.take_delegate_outcome_error >>
       strip_tac >> gvs[no_type_error_result_def])) >>
   (Cases_on `run_raw_call cx flags target_addr calldata amount gas
     st.accounts st.tStorage` >>

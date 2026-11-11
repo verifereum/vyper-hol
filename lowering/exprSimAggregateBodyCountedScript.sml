@@ -149,7 +149,11 @@ Theorem aggregate_store_body_rebased_slice_path:
       off <= a /\ a+len <= off+sz /\
       (a+len <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
       mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
-    locals_kept ce es' es' r q
+    locals_kept ce es' es' r q /\
+    (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==>
+      FLOOKUP q.vs_allocas aid = SOME a) /\
+    (!a len. a + len <= w2n w \/ w2n w + type_memory_size tv <= a ==>
+      mem_bytes_at a len q.vs_memory = mem_bytes_at a len s.vs_memory)
 Proof
   strip_tac >>
   `well_typed_expr env e` by fs[expr_body_pre_def] >>
@@ -224,7 +228,15 @@ Proof
    >- (gvs[typedMemoryCopyTheory.typed_copy_state_frame_def,
            typedMemoryCopyTheory.typed_copy_frame_def] >>
        rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  strip_tac >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
+  strip_tac >> gvs[] >>
+  gvs[typedMemoryCopyTheory.typed_copy_state_frame_def,
+      typedMemoryCopyTheory.typed_copy_frame_def,
+      arithmeticTheory.ADD_COMM] >>
+  qpat_x_assum `t with <|vs_memory := _; vs_vars := _; vs_prev_bb := _;
+    vs_current_bb := _; vs_inst_idx := _|> = s`
+    (mp_tac o Q.AP_TERM `\z. z.vs_allocas`) >> simp[] >>
+  strip_tac >> simp[] >> rpt conj_tac >>
+  first_assum (MATCH_ACCEPT_TAC o SRULE [arithmeticTheory.ADD_COMM])
 QED
 
 Resume aggregate_store_body_rebased_slice_path[same_layout]:
@@ -251,7 +263,12 @@ Resume aggregate_store_body_rebased_slice_path[same_layout]:
           (mp_tac o Q.AP_TERM `\z. z with <|vs_prev_bb := s.vs_prev_bb;
             vs_current_bb := s.vs_current_bb|>`) >> simp[]) >>
     rpt conj_tac >> first_assum (ACCEPT_TAC o SRULE [arithmeticTheory.ADD_COMM]))) >>
-  strip_tac >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
+  strip_tac >> gvs[] >>
+  gvs[typedMemoryCopyTheory.typed_copy_state_frame_def,
+      typedMemoryCopyTheory.typed_copy_frame_def,
+      arithmeticTheory.ADD_COMM] >>
+  rpt conj_tac >>
+  first_assum (MATCH_ACCEPT_TAC o SRULE [arithmeticTheory.ADD_COMM])
 QED
 
 Finalise aggregate_store_body_rebased_slice_path

@@ -1,12 +1,13 @@
 Theory exprSimIfExpWidenedAggregate
 Ancestors
-  exprSimIfExpWidenedPosts exprSimIfExpWidenedEndpoints
+  exprSimIfExpWidenedPosts exprSimIfExpWidenedEndpoints exprSimTypedAlloc exprSimAlloc
   exprSimIfExpWidenedAdapter exprSimProps exprBopSimProps freshWrites
   exprSimHypsDefs exprLoweringProps compileEnv loweringStateRelDefs valueEncodingTyping
   valueEncodingProps fragExec context emitHelper emitHelperProps
   loweringPosts exprSimDefs exprOperandVar exprSimHyps
 
 Theorem changed_aggregate_post_frag:
+  (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
   expr_body_pre ce cx env e es /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
   post_value_type ce e <> expr_type e /\
@@ -70,6 +71,10 @@ Resume changed_aggregate_post_frag[post]:
     (rpt strip_tac >> irule local_region_frame >>
      conj_tac >- (qexists_tac `func` >> asm_rewrite_tac[]) >>
      qexistsl_tac [`sa`, `ee.scopes`, `q`] >> simp[] >> metis_tac[]) >>
+  `cs_extends sa sm /\ cs_extends sm sb` by
+    metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND, typed_return_store_mono, ci_mono_def] >>
+  `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
+  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   drule allocated_result_expr_post_frame >> disch_then irule >>
   simp[vyperASTTheory.expr_type_def, expr_val_rel_def] >>
   conj_tac >- (rpt strip_tac >> irule local_region_frame_fwd >>
@@ -77,8 +82,9 @@ Resume changed_aggregate_post_frag[post]:
     qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
       (strip_assume_tac o PURE_REWRITE_RULE[expr_post_def]) >> asm_rewrite_tac[]) >>
   conj_tac >- metis_tac[not_fresh_at_mono] >>
-  qexistsl_tac [`type_memory_size dtv`, `sa.cs_next_id`, `w2n w`] >>
-  simp[vyperASTTheory.expr_type_def, expr_val_rel_def] >>
+  qexistsl_tac [`type_memory_size dtv`, `w2n w`] >>
+  qpat_assum `MEM (mk_inst sa.cs_next_id ALLOCA _ _) _` (irule_at Any) >>
+  simp[venomInstTheory.mk_inst_def, vyperASTTheory.expr_type_def, expr_val_rel_def] >>
   conj_tac >- (rpt strip_tac >>
     qpat_x_assum `!name b len. _ ==> regions_disjoint _ _ _ _` drule >>
     simp[regions_disjoint_def]) >>
@@ -95,6 +101,7 @@ QED
 Finalise changed_aggregate_post_frag
 
 Theorem compile_changed_aggregate_post_frag:
+  (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
   expr_body_pre ce cx env e es /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
   post_value_type ce e <> expr_type e /\
