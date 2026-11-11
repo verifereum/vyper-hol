@@ -16203,6 +16203,30 @@ Proof
     dftIndexedExecTheory.dft_eval_phis_append]
 QED
 
+Theorem mm_local_cut_assert_abort[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  (i.inst_opcode = ASSERT \/ i.inst_opcode = ASSERT_UNREACHABLE) /\
+  step_inst fuel ctx i (H n) = Abort a u ==>
+  ?v. step_inst fuel ctx i t = Abort a v /\ revert_equiv u v
+Proof
+  strip_tac >>
+  `state_equiv excluded
+    ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) t` by
+    metis_tac[mm_local_cut_memory_state_equiv] >>
+  `!op. MEM op i.inst_operands ==>
+    eval_operand op (H n) = eval_operand op t` by
+    (rpt strip_tac >> Cases_on `op` >>
+     gvs[venomStateTheory.eval_operand_def, state_equiv_def,
+       execution_equiv_def, venomStateTheory.lookup_var_def] >> metis_tac[]) >>
+  qpat_x_assum `step_inst fuel ctx i (H n) = _` mp_tac >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+    venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  simp[revert_equiv_def, venomStateTheory.revert_state_def,
+    venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
