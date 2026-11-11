@@ -51,6 +51,10 @@ Proof
       drule taint_var_bounded_operand >>
       disch_then (qspec_then `h` mp_tac) >> simp[SUBSET_DEF]) >>
   Cases_on `t'` >> simp[] >>
+  Cases_on `inst.inst_opcode = MUL`
+  >- (simp[] >> rpt IF_CASES_TAC >>
+      simp[taint_var_bounded_operand]) >>
+  simp[] >>
   Cases_on `eval_operand h s` >> simp[] >>
   IF_CASES_TAC >> simp[shift_taint_def, SUBSET_DEF] >>
   rpt IF_CASES_TAC >> simp[] >> metis_tac[]

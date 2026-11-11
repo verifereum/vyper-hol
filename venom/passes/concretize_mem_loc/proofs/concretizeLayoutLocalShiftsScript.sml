@@ -1,5 +1,6 @@
 Theory concretizeLayoutLocalShifts
 Ancestors concretizeLayoutLocalValues concretizeLayoutReaderContext
+  frameRelocationCleanValueSteps
   frameRelocationLocal frameRelocationGuardedValues frameRelocationTaintOrder
   frameRelocationOpaque frameRelocationGhostCopy frameOriginUpdates
   frameRelocationMemory frameRelocationStoreValues frameRelocationEnvironment frameRelocationReachableSupport
@@ -45,32 +46,7 @@ Proof
   fs[MEM] >> metis_tac[]
 QED
 
-Theorem guarded_masked_write_restrict:
-  local_rel (\u. F) (guarded_ptr Opaque L rv)
-    (guarded_bytes Opaque rv tn) R
-    (\s t. dead_result_rel D (Halt s) (Halt t)) s t /\
-  word_agree_except m x y /\ (!a b. next a b ==> R a b) ==>
-  local_rel (\u. F) (guarded_ptr Opaque L (origin_set rv [v] NONE))
-    (guarded_bytes Opaque (origin_set rv [v] NONE)
-      (tn with t_var := tn.t_var |+ (v,m))) next
-    (\s t. dead_result_rel D (Halt s) (Halt t))
-    (update_var v x s) (update_var v y t)
-Proof
-  strip_tac >>
-  `local_rel (\u. F) (guarded_ptr Opaque L (origin_set rv [v] NONE))
-    (guarded_bytes Opaque (origin_set rv [v] NONE)
-      (tn with t_var := tn.t_var |+ (v,m))) R
-    (\s t. dead_result_rel D (Halt s) (Halt t))
-    (update_var v x s) (update_var v y t)` by
-    (irule local_rel_update_observation_invariant >>
-     simp[guarded_ptr_def, guarded_bytes_def, copy_ptr_def, copy_bytes_def,
-          origin_set_lookup, op_taint_def, FLOOKUP_UPDATE] >>
-     conj_tac >- simp[update_var_def, dead_result_rel_def] >>
-     qexistsl_tac [`guarded_bytes Opaque rv tn`, `\u. F`, `guarded_ptr Opaque L rv`] >>
-     simp[guarded_ptr_def, guarded_bytes_def, copy_ptr_def, copy_bytes_def,
-          op_taint_def, update_var_def, dead_result_rel_def]) >>
-  fs[local_rel_def, frameRelocationDemandTheory.demand_agree_def] >> metis_tac[]
-QED
+
 
 Theorem masked_pure2_execution[local]:
   local_rel (\u. F) (guarded_ptr Opaque L rv)
@@ -116,17 +92,7 @@ Proof
        out_taint_def, set_var_taint_def, taint_component_equality]
 QED
 
-Theorem relocation_masked_write_taint:
-  relocation_taint_le R tn un /\ (!a b. next a b ==> R a b) /\
-  m SUBSET n ==>
-  relocation_taint_le next (tn with t_var := tn.t_var |+ (v,n))
-    (un with t_var := un.t_var |+ (v,m))
-Proof
-  simp[relocation_taint_le_def, op_taint_def, FLOOKUP_UPDATE] >>
-  strip_tac >> conj_tac
-  >- (fs[frameRelocationCopyTaintTheory.demand_taint_def] >> metis_tac[]) >>
-  rpt strip_tac >> IF_CASES_TAC >> simp[]
-QED
+
 
 Theorem shift_prov_erasure:
   MEM inst.inst_opcode [SHL; SHR; SAR] /\ inst.inst_outputs = [v] ==>
