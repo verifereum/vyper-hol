@@ -84,13 +84,14 @@ Proof
       irule alloc_run_conseq >>
       irule_at Any (Q.INST [`R` |-> `\s. R s /\ cenv_shape_ok s ce`]
         alloc_run_bytestring_hash_frame) >>
+      qexistsl [`ce`, `R`] >>
       simp[shape_stable_conj, cenv_shape_ok_stable]) >>
   simp[alloc_run_def, alloc_frame_refl, plain_operand_def,
        stackPlanTypesTheory.is_label_operand_def]
 QED
 
 Theorem alloc_run_uncurry[local]:
-  alloc_run P m M /\ (!v. alloc_run (M v) (k v) Q) ==>
+  (?M. alloc_run P m M /\ !v. alloc_run (M v) (k v) Q) ==>
   alloc_run P (\st. UNCURRY k (m st)) Q
 Proof
   strip_tac >>
@@ -118,14 +119,14 @@ Proof
   simp[SF ETA_ss] >>
   `MEM (HD args) args /\ MEM (HD (TL args)) args` by
     (Cases_on `args` >> gvs[] >> Cases_on `t` >> gvs[]) >>
-  irule alloc_run_uncurry >>
+  ho_match_mp_tac alloc_run_uncurry >>
   qexists `\v s. shape_state s /\ cenv_shape_ok s ce /\ plain_operand s v` >>
   conj_tac
   >- (irule alloc_run_conseq >>
       irule_at Any (Q.INST [`R` |-> `\s. T`] alloc_run_lower_bytestring_hash) >>
       qexists_tac `internal` >> simp[shape_stable_def]) >>
   qx_gen_tac `h1` >> simp[] >>
-  irule alloc_run_uncurry >>
+  ho_match_mp_tac alloc_run_uncurry >>
   qexists `\v s. shape_state s /\ plain_operand s h1 /\ cenv_shape_ok s ce /\
                  plain_operand s v` >>
   conj_tac

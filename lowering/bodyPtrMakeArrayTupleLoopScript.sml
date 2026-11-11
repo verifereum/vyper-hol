@@ -86,7 +86,7 @@ Theorem literal_loop_frame_gas_obs[simp]:
   literal_loop_frame ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es cs G tn s cells off
 Proof
-  simp[literal_loop_frame_def, bodyPtrDefsTheory.ghost_inv_def]
+  simp[literal_loop_frame_def, bodyPtrDefsTheory.ghost_inv_def, exprSimWordArgsTheory.wb_frame_gas_obs]
 QED
 
 Theorem literal_tuple_eval_cons:

@@ -67,7 +67,7 @@ Proof
      regions_disjoint (w2n w) capacity b len` by
     metis_tac[exprSimPtrLiteralBufferTheory.literal_ptr_local_region_frame] >>
   qexistsl [`a`, `H`, `tm`, `w2n w`] >> simp[] >>
-  gvs[literal_loop_frame_def, wb_frame_def, locals_kept_def,
+  gvs[literal_loop_frame_def, wb_frame_def, locals_kept_def, popped_kept_def,
     regions_disjoint_def, eval_operand_def] >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
