@@ -1,7 +1,9 @@
 (* Memory execution of bounded ABI bytestring decoding. *)
 Theory abiDecodeMemBytes
 Ancestors
-  abiDecodeMemRange abiDecoderBytesRuntime abiDecoderBytesPhases abiDecoderBytesEdges
+  abiDecodeMemRange abiDecodeMemBytesGuards abiDecodeMemCountGuard
+  entryDecoderHistoryFrame entrySinkExtraction abiDecoderBytesPrefix
+  abiDecoderBytesRuntime abiDecoderBytesPhases abiDecoderBytesEdges
   allocaFootprint entryDecodeProps freshWrites bodyUnopFragMemory
   codegenRel contextCodegenRel venomMemDefs memSafeRun fragExecMem fragGasSeqMem fragGasSeqAbort allocaHistoryFragment
   instMemFrontier loweringStateRelDefs abiEncoder emitHelperProps exprLoweringProps
@@ -141,3 +143,63 @@ Resume abi_decode_bytes_runtime_tail_mem_ok[tail]:
   qexistsl_tac [`a`, `c`, `d`, `32*((c+31) DIV 32)`] >> simp[]
 QED
 Finalise abi_decode_bytes_runtime_tail_mem_ok
+
+Theorem abi_decode_bytes_tail_no_gas[local]:
+  abi_decode_bytes_runtime_tail dst addr cnt st = ((),st') ==>
+  FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st') = []
+Proof
+  simp[abi_decode_bytes_runtime_tail_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
+    emit_def, LET_THM] >> strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp[DROP_LENGTH_APPEND, mk_inst_def]
+QED
+
+Theorem abi_decode_bytes_tail_path_mem[local]:
+  abi_decode_bytes_runtime_tail dst addr cnt st = ((),st') /\
+  eval_operand dst s = SOME (n2w d) /\ eval_operand addr s = SOME (n2w a) /\
+  eval_operand cnt s = SOME (n2w c) /\ c <= n /\ c+31 < dimword (:256) /\
+  a < dimword (:256) /\ d+32+32*((n+31) DIV 32) < dimword (:256) /\
+  d+32+32*((n+31) DIV 32) <= s.vs_alloca_next /\
+  a+32+c <= s.vs_alloca_next /\ fresh_vars_wrt st s /\
+  fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+    t.vs_current_bb = st'.cs_current_bb /\
+    t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
+    fresh_vars_wrt st' t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    t.vs_memory = (mcopy d a (32+c)
+      (mstore (d+32*((c+31) DIV 32)) 0w s)).vs_memory /\
+    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
+    alloca_history func t
+Proof
+  strip_tac >>
+  `32*((c+31) DIV 32)+32 <= 32+32*((n+31) DIV 32)` by
+    (irule abi_decode_bytes_round_capacity >> simp[]) >>
+  `c <= 32*((c+31) DIV 32)` by simp[abi_decode_bytes_round_bounds] >>
+  `d+32*((c+31) DIV 32) < dimword (:256) /\
+   d < dimword (:256) /\ 32+c < dimword (:256)` by decide_tac >>
+  drule_all abi_decode_bytes_runtime_tail_sequence >> strip_tac >>
+  drule_all abi_decode_bytes_runtime_tail_mem_ok >> strip_tac >>
+  drule abi_decode_bytes_runtime_tail_shape >> strip_tac >>
+  `isPREFIX st.cs_current_insts st'.cs_current_insts` by fs[inst_extends_def] >>
+  drule_all entry_straight_line_code_slice >> strip_tac >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+   isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions)`
+    by simp[IS_PREFIX_APPEND] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts st st') /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st st')`
+    by fs[EVERY_MEM] >>
+  drule abi_decode_bytes_tail_no_gas >> strip_tac >>
+  drule_all run_inst_seq_gas_path_mem >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  drule_all entry_straight_line_alloca_history >> strip_tac >>
+  drule_all abi_decode_bytes_runtime_tail_allocation_frame >> strip_tac >>
+  drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
+  `s.vs_inst_idx + LENGTH (emitted_insts st st') = LENGTH st'.cs_current_insts`
+    by (gvs[IS_PREFIX_APPEND, emitted_insts_def, DROP_LENGTH_APPEND]) >>
+  qexists_tac `t with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+  simp[eval_operand_def, lookup_var_def] >> gvs[fresh_vars_wrt_def]
+QED
