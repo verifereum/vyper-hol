@@ -579,13 +579,17 @@ Proof
       >- (gvs[accesses_expr_def, int_calls_expr_def] >>
           qpat_x_assum `!A R st res st'. _`
             (qspecl_then [`A`,`R`] mp_tac) >> simp[] >> disch_tac >>
+          `!s r t. eval_exprs cx es s = (r,t) ==> ^immutable_frame cx A s t` by
+            (BETA_TAC >> rpt strip_tac >> first_x_assum irule >> simp[] >>
+             first_assum ACCEPT_TAC) >>
+          qpat_x_assum `!st res st'. (_ /\ eval_exprs _ _ _ = _) ==> _` kall_tac >>
+          qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
           qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
           simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
             assert_def, return_def, raise_def, lift_option_type_def,
             vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >> strip_tac >>
           imp_res_tac lift_sum_state >> gvs[] >>
-          rpt strip_tac >> first_x_assum irule >> simp[] >>
-          first_assum ACCEPT_TAC) >>
+          first_x_assum drule_all >> simp[]) >>
       Cases_on `bt = Env MsgGas`
       >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
             assert_def, return_def, raise_def, AllCaseEqs()] >>
@@ -986,6 +990,72 @@ Proof
   imp_res_tac read_result_state >> gvs[COND_RATOR, AllCaseEqs(), return_def, raise_def] >>
   qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
   simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_assert_reason_case[local]:
+  ^(immutable_stmt_case "AssertReason")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[accesses_stmt_def, accesses_assert_reason_def, int_calls_stmt_def,
+      int_calls_assert_reason_def, DISJ_IMP_THM, FORALL_AND_THM] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rpt (qpat_x_assum `!a b c. eval_expr _ _ _ = _ ==> _` drule >> strip_tac) >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+       simp[] >> disch_tac) >>
+  qpat_x_assum `!st res st'. _` drule_all >> simp[] >> strip_tac >>
+  `!s r t. eval_expr cx se s = (r,t) ==> ^immutable_frame cx A s t` by
+    (BETA_TAC >> rpt strip_tac >>
+     qpat_assum `!s r t src id. (_ /\ eval_expr cx se _ = _) /\ _ ==> _` irule >>
+     simp[] >> first_assum ACCEPT_TAC) >>
+  `^immutable_frame cx A s'' st'` by
+    (BETA_TAC >> rpt strip_tac >>
+     drule_at (Pat `switch_BoolV _ _ _ _ _ = _`)
+       (BETA_RULE immutable_switch_bool_frame) >>
+     disch_then (qspec_then `A` mp_tac) >> disch_then irule >>
+     qpat_x_assum `switch_BoolV _ _ _ _ _ = _` kall_tac >>
+     qpat_x_assum `!s r t src id. (_ /\ eval_expr cx se _ = _) /\ _ ==> _` kall_tac >>
+     qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+     conj_tac
+     >- (simp[return_def] >> rpt strip_tac >> gvs[]) >>
+     simp[] >> rpt strip_tac >>
+     qpat_x_assum `bind _ _ _ = _` mp_tac >>
+     simp[bind_def, AllCaseEqs(), lift_option_type_def,
+          vyperMiscTheory.option_CASE_rator, return_def, raise_def] >>
+     strip_tac >> imp_res_tac read_result_state >> gvs[] >>
+     qpat_x_assum `!s r t. eval_expr _ _ _ = _ ==> _` drule_all >> simp[]) >>
+  fs[]
+QED
+
+Theorem evaluate_immutable_raise_custom_case[local]:
+  ^(immutable_stmt_case "RaiseCustomError")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  Cases_on `err` >>
+  gvs[accesses_stmt_def, accesses_raise_reason_def, int_calls_stmt_def,
+      int_calls_raise_reason_def] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, AllCaseEqs(), raise_def] >> strip_tac >> gvs[] >>
+  Cases_on `get_module_code cx (FST p)` >> gvs[raise_def] >>
+  Cases_on `lookup_custom_error_args_in (SND p) x` >> gvs[raise_def] >>
+  Cases_on `order_custom_error_args x' (CustomError p l l0)` >> gvs[raise_def] >>
+  `x'' = custom_error_exprs (CustomError p l l0)` by
+    (gvs[vyperASTTheory.order_custom_error_args_def,
+         vyperASTTheory.custom_error_exprs_def, NULL_EQ, AllCaseEqs()] >>
+     drule vyperASTTheory.order_custom_error_kwargs_SOME >> simp[]) >>
+  gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_tac >>
+  `!s r t. eval_exprs cx (custom_error_exprs (CustomError p l l0)) s = (r,t) ==>
+     ^immutable_frame cx A s t` by
+    (BETA_TAC >> rpt strip_tac >> first_x_assum irule >> simp[] >>
+     first_assum ACCEPT_TAC) >>
+  qpat_x_assum `!st res st'. (_ /\ eval_exprs _ _ _ = _) ==> _` kall_tac >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
+  simp[bind_def, lift_option_def, vyperMiscTheory.option_CASE_rator,
+       AllCaseEqs(), return_def, raise_def] >>
+  strip_tac >> gvs[] >> first_x_assum drule_all >> simp[]
 QED
 
 Theorem immutable_defaults_scope_frame[local]:
