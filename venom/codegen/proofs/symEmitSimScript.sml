@@ -969,6 +969,32 @@ Proof
   EVAL_TAC
 QED
 
+Theorem named_suffix_dispatch_names:
+  venom_to_evm_name opc = SOME name /\ opc <> CODESIZE ==>
+  ~MEM name ["POP"; "JUMP"; "JUMPI"; "CODESIZE"] /\
+  ALOOKUP dup_table name = NONE /\ ALOOKUP swap_table name = NONE
+Proof
+  Cases_on `opc = CODECOPY`
+  >- (gvs[asmIRTheory.venom_to_evm_name_def] >> EVAL_TAC) >>
+  metis_tac[named_numeric_dispatch_names, MEM]
+QED
+
+Theorem named_suffix_emission_arity:
+  venom_to_evm_name inst.inst_opcode = SOME name /\ inst_wf inst /\
+  step_inst fuel ctx inst vs = OK vs' /\
+  ~is_pre_codegen_opcode inst.inst_opcode /\ inst.inst_opcode <> GAS /\
+  inst.inst_opcode <> CODESIZE /\
+  (ef_read0 inst.inst_opcode ==> inst.inst_operands = []) ==>
+  asm_op_arity name = LENGTH (compute_operands inst)
+Proof
+  Cases_on `inst.inst_opcode = CODECOPY`
+  >- (gvs[asmIRTheory.venom_to_evm_name_def, venomWfTheory.inst_wf_def,
+        stackPlanGenTheory.compute_operands_def,
+        venomInstTheory.python_stack_operands_def,
+        venomInstTheory.ir_specific_operand_order_def] >> EVAL_TAC) >>
+  metis_tac[named_numeric_emission_arity]
+QED
+
 Theorem regular_numeric_selection_shape:
   (selected = operands \/
    (is_commutative opc /\ 2 <= LENGTH operands /\

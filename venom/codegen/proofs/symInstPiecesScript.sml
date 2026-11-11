@@ -932,6 +932,89 @@ Proof
   disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
   disch_then (drule_at (Pat `emitted = _`)) >>
   disch_then (qspecl_then [`stack_pop (LENGTH selected) arranged.ps_stack`, `name`] mp_tac) >>
-  cheat
+  (impl_tac >- (simp[venomMemPropsTheory.eval_operand_with_memory,
+    genFrameSimTheory.operand_val_memory_update,
+    genFrameSimTheory.frame_view_control_fields])) >>
+  strip_tac >>
+  `inst.inst_opcode <> CODESIZE` by metis_tac[label_flow_ok_def] >>
+  drule_all named_suffix_dispatch_names >> strip_tac >>
+  drule_all named_suffix_emission_arity >> strip_tac >>
+  `asm_op_arity name <= LENGTH top'` by
+    (qpat_x_assum `venom_asm_rel _ arranged _ mid` mp_tac >>
+     qpat_x_assum `arranged.ps_stack = _ ++ selected` mp_tac >>
+     qpat_x_assum `LENGTH selected = _` mp_tac >>
+     qpat_x_assum `LENGTH top' = _` mp_tac >>
+     qpat_x_assum `asm_op_arity name = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[codegenRelTheory.venom_asm_rel_def, codegenRelTheory.plan_stack_rel_def] >>
+     rpt strip_tac >>
+     qpat_x_assum `arranged.ps_stack = _ ++ _`
+       (mp_tac o AP_TERM ``LENGTH:operand list -> num``) >>
+     simp[NoAsms, listTheory.LENGTH_APPEND] >> decide_tac) >>
+  drule_at (Pat `sym_steps _ _ 1 _ = _`) sym_named_emit_restore_stack >>
+  disch_then (drule_at (Pat `asm_sym_rel _ _ after_emit _`)) >>
+  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ [] emitted _`)) >>
+  disch_then (drule_at (Pat `LIST_REL _ srest rest`)) >>
+  disch_then (qspec_then `name` mp_tac) >>
+  simp[NoAsms] >>
+  (impl_tac >-
+    (simp[IgnAsm `arranged.ps_stack = _`, IgnAsm `emitted = _`,
+      IgnAsm `ops = _`] >> metis_tac[listTheory.MEM])) >>
+  strip_tac >>
+  drule_at (Pat `generated_plan_state_wf_marked sb emitted`)
+    sym_regular_postfix_applicability >>
+  disch_then (drule_at (Pat `_ = (popops,popped)`)) >>
+  disch_then (drule_at (Pat `_ = (optops,tail)`)) >>
+  disch_then (drule_at (Pat `ps' = release_dead_spills _ _`)) >>
+  disch_then (drule_at (Pat `MEM r cplan.cp_regions`)) >>
+  disch_then (qspecl_then [`fn.fn_name`, `ctx`] mp_tac) >>
+  simp[IgnAsm `arranged.ps_stack = _`, IgnAsm `emitted = _`, IgnAsm `ops = _`] >>
+  strip_tac >>
+  `!out. inst.inst_outputs = [out] ==>
+    stack_get_depth (Var out) emitted.ps_stack = SOME 0` by
+    (rpt strip_tac >> simp[Abbr `emitted`, Abbr `estack`,
+       IgnAsm `arranged.ps_stack = _`] >>
+     metis_tac[]) >>
+  `!off. MEM (SOSpill off) (popops ++ optops) ==> off < dimword (:256)` by
+    (qpat_x_assum `EVERY _ ops` mp_tac >>
+     qpat_x_assum `ops = _` (fn th => rewrite_tac[th]) >>
+     simp[NoAsms, listTheory.EVERY_APPEND, listTheory.EVERY_MEM] >>
+     rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  `full.sym_base.as_pc = after_emit.as_pc` by
+    (qpat_x_assum `asm_sym_rel prog env _ full` mp_tac >>
+     simp[NoAsms, asmSymBridgeTheory.asm_sym_rel_def] >> rpt strip_tac >> simp[]) >>
+  drule_at (Pat `sym_kinds_ok _ _ _ _ emitted full`)
+    sym_regular_generated_postfix_sim_marked >>
+  disch_then (drule_at (Pat `_ = (popops,popped)`)) >>
+  disch_then (drule_at (Pat `_ = (optops,tail)`)) >>
+  disch_then (drule_at (Pat `qs = release_dead_spills _ _`)) >>
+  disch_then (qspecl_then [`prog`, `cplan.cp_initial_fmp`, `env`,
+    `closure_spill_byte ctx cplan fn.fn_name`] mp_tac) >>
+  simp[IgnAsm `arranged.ps_stack = _`, IgnAsm `emitted = _`, IgnAsm `ops = _`] >>
+  (impl_tac >- metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
+  strip_tac >>
+  rename1 `sym_steps prog env (LENGTH (execute_plan _ (popops ++ optops))) full = SymOK final` >>
+  `execute_plan cplan.cp_initial_fmp [SOEmit name] = [AsmOp name]` by
+    simp[NoAsms, planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def] >>
+  qexists `final` >> (conj_tac
+  >- (`sym_steps prog env
+        (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) +
+         (1 + LENGTH (execute_plan cplan.cp_initial_fmp (popops ++ optops)))) ss = SymOK final` suffices_by
+        (pure_rewrite_tac[stackOpSimTheory.execute_plan_append, listTheory.LENGTH_APPEND] >>
+         qpat_x_assum `execute_plan _ [SOEmit name] = _` (fn th => rewrite_tac[th]) >>
+         rewrite_tac[listTheory.LENGTH, arithmeticTheory.ADD_ASSOC, arithmeticTheory.ONE]) >>
+      once_rewrite_tac[sym_steps_add] >>
+      qpat_x_assum `sym_steps _ _ _ ss = SymOK ss'` (fn th => rewrite_tac[th]) >>
+      once_rewrite_tac[sym_steps_add] >>
+      qpat_x_assum `sym_steps _ _ 1 _ = SymOK full` mp_tac >>
+      qpat_x_assum `ss'.sym_stack = _` (fn th => rewrite_tac[GSYM th]) >>
+      simp_tac (srw_ss()) [] >> strip_tac >>
+      asm_rewrite_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  `!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
+    FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b` by
+    metis_tac[symInstKindsTheory.spill_region_labels_outside_closure] >>
+  qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[NoAsms, sym_frame_inv_def] >> metis_tac[])
 
 QED
