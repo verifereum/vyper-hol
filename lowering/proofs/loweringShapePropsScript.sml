@@ -13582,7 +13582,7 @@ Theorem supported_program_runtime_bodies_shape_ok:
 Proof
   rpt strip_tac >>
   `module_consts_env tops [] = []` by
-    (irule supported_headers_module_consts_env >>
+    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
      gvs[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def] >>
      metis_tac[]) >>
   rw[runtime_bodies_shape_ok_def]
