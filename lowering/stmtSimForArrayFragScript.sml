@@ -501,9 +501,9 @@ Proof
                `bod`, `incr`, `exit`, `sa`, `sb0`, `sb1`, `sj`] >> gvs[]
 QED
 
-(* A gas-free successful values prefix retains syntactic certificate binds. *)
+(* A gas-free successful results prefix retains syntactic certificate binds. *)
 Theorem array_values_prefix_outcome[local]:
-  (!gs. source (es with gas_obs := gs) = (INL (vs:value list), es with gas_obs := gs)) /\
+  (!gs. source (es with gas_obs := gs) = (INL (vs:eval_result list), es with gas_obs := gs)) /\
   ~s.vs_halted /\
   gas_outcome F tops (ctx,func) (next vs) (es with gas_obs := [],s) Q R ==>
   gas_outcome F tops (ctx,func) (bind source next) (es,s) Q R
@@ -526,7 +526,7 @@ Proof
   rewrite_tac[ignore_bind_def, bind_assoc] >>
   qpat_x_assum `gas_exempt_cert _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[ignore_bind_def] >> strip_tac >>
-  drule gas_exempt_cert_bind_values >>
+  drule gas_exempt_cert_bind_results >>
   disch_then (qspecl_then [`tops`, `\v. bind (next v) (\x. return ())`] mp_tac) >>
   simp[] >> disch_then drule >> simp[]
 QED
@@ -675,8 +675,8 @@ Theorem array_code_loop_counted[local]:
         P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) /\
   array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
     ainst cond st 0 es cc /\ array_caller_frame st s0 cc /\
-  gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx) es ==>
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_for cx tv id stmts vs) (es,cc)
+  gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx) es ==>
+  gas_outcome F (cx_tops cx) (ctx,func) (eval_for cx tv id stmts (MAP Value vs)) (es,cc)
     (\res ee t. res = INL () /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
       ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
       array_caller_frame st s0 t)
@@ -809,7 +809,7 @@ QED
 Theorem compile_for_array_frag_zero[local]:
   !ctx func cx cenv lctx RetQ ty id et n name arr_ptr arr_sz stmts tv vs es P.
   (!gs. eval_iterator cx (Array (Name (ArrayT et (Fixed n)) name))
-          (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) /\
+          (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
   LENGTH vs = n /\
   n < dimword (:256) /\ evaluate_type (get_tenv cx) et = SOME tv /\
   type_memory_bytes cenv et = type_memory_size tv /\
@@ -862,7 +862,7 @@ Proof
      strip_tac >> asm_rewrite_tac[]) >>
   `lookup_scopes id (es with gas_obs := []).scopes = NONE` by simp[] >>
   drule_all array_public_entry_ready >> strip_tac >>
-  `gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx)
+  `gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx)
      (es with gas_obs := [])` by
     (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
      simp[gas_admissible_def, Once evaluate_def, lift_option_type_def,
@@ -885,7 +885,9 @@ Proof
     (rpt strip_tac >> qpat_assum `!ei s. _` drule_all >> simp[]) >>
   drule_all array_code_loop_counted >> strip_tac >>
   drule_all stmtSimDeclComposeTheory.gas_outcome_zero_prefix >> strip_tac >>
-  drule_all (SRULE [] (Q.INST [`n` |-> `LENGTH (vs : value list)`] array_for_source_prefix)) >> strip_tac >>
+  drule_all (SRULE [] (INST [``n:num`` |-> ``LENGTH (vs0:value list)``,
+                              ``vs:eval_result list`` |-> ``MAP Value (vs0:value list)``]
+                          array_for_source_prefix)) >> strip_tac >>
   irule array_outcome_stmt_post >> simp[] >> goal_assum (drule_at Any)
 QED
 
@@ -915,7 +917,7 @@ QED
 Theorem compile_for_array_frag:
   !ctx func cx cenv lctx RetQ ty id et n name arr_ptr arr_sz stmts tv vs es P.
   (!gs. eval_iterator cx (Array (Name (ArrayT et (Fixed n)) name))
-          (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) /\
+          (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
   LENGTH vs = n /\
   n < dimword (:256) /\ evaluate_type (get_tenv cx) et = SOME tv /\
   type_memory_bytes cenv et = type_memory_size tv /\
@@ -958,7 +960,7 @@ Proof
   irule (Q.SPEC `\ei. ?gs. P (ei with gas_obs := gs)`
            (Q.GEN `P` (SPEC_ALL compile_for_array_frag_zero))) >>
   simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qexists `P` >> simp[] >> rpt conj_tac
+  qexistsl [`P`, `vs`] >> simp[] >> rpt conj_tac
   >- (rpt strip_tac >> rename1 `P (ei with gas_obs := g0)` >>
       first_x_assum (qspecl_then [`st0`, `bc`, `sd`, `ex`, `inc`,
         `ei with gas_obs := g0`, `k`] mp_tac) >> simp[] >>

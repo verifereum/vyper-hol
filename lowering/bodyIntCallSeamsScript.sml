@@ -42,16 +42,16 @@ Theorem intcall_return_widened = bodyIntCallSeamReturnTheory.intcall_return_wide
    writes there only through rb and its memory parameters' pointers),
    which this seam proves on its own. *)
 Theorem intcall_callee_body_sim:
-  !tops ctx func cenv cx tenv name es sa sb vv s0 es0 mut args ret ss rr
+  !tops ctx func cenv cx tenv name es sa sb vv s0 es0 mut nr args ret ss rr
    prev penv rtv es1 t callee entered rc rbs pvs.
     body_inv tops ctx cenv cx /\
     cenv_module_pins tops cenv /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,F,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+      SOME (mut,nr,args,[],ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
     body_stmts_ok (cx with stk updated_by CONS (NONE,name)) ss /\
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-      (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+      (mut,nr,args,ret,ss,rr) prev penv rtv es1 t /\
     gas_invoke_entry (ctx,func) t callee entered /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
     !bb inst lbl arg_ops argv.

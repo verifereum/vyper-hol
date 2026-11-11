@@ -164,6 +164,16 @@ Definition concat_payload_capacity_def:
   concat_payload_capacity _ = 32
 End
 
+Theorem concat_payload_capacity_bound:
+  !ts. EVERY (\t. (?bd. t = BaseT (BytesT bd)) \/ ?m. t = BaseT (StringT m)) ts ==>
+       MAP bytelike_type_bound ts = MAP concat_payload_capacity ts
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  gvs[vyperTypeSystemTheory.bytelike_type_bound_def, concat_payload_capacity_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[bound_length_def, concat_payload_capacity_def]
+QED
+
 Definition concat_buffer_type_def:
   concat_buffer_type ret_ty n =
     (case ret_ty of
@@ -2973,8 +2983,13 @@ Definition compile_call_def:
      | _ => let (_, st') = emit_inst INVALID [] [] st in
             (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty SelfDestructTarget args default_ret st =
-    (let (_, st') = emit_inst INVALID [] [] st in
-     (StackValue ret_ty (Lit 0w), st')) ∧
+    (case args of
+       [to_e] =>
+         let (to_op, st1) = lower_value cfn cenv (BaseT AddressT) to_e st in
+         let (_, st2) = compile_selfdestruct to_op st1 in
+         (StackValue ret_ty (Lit 0w), st2)
+     | _ => let (_, st') = emit_inst INVALID [] [] st in
+            (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty (CreateTarget ck has_salt rof _) args default_ret st =
     as_stack_val ret_ty (compile_create_call cfn cenv ck has_salt rof args st)
 End
@@ -3782,6 +3797,7 @@ Proof
   simp[compile_make_array_def, compile_make_array_elems_def,
        unwrap_value_def, mk_ptr_def, is_word_type_def, is_bytestring_type_def,
        compile_store_memory_def, compile_store_memory_typed_def,
+       memoryLayoutDefsTheory.tuple_memory_layout_eq_def,
        compile_with_byte_offset_def,
        emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]

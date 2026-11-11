@@ -121,7 +121,7 @@ Theorem create_check_branch_step:
 Proof
   strip_tac >>
   simp[Once exec_block_def, get_instruction_def, mk_inst_def,
-       step_inst_def, step_inst_base_def, eval_operand_def,
+       step_inst_def, step_inst_base_opcode_eqs, eval_operand_def,
        is_terminator_def, jump_to_def] >>
   Cases_on `addr = 0w` >> simp[]
 QED

@@ -689,6 +689,12 @@ Resume aggregate_make_tuple_sim[unwrap_store]:
     (qpat_x_assum `gas_marked_exec F _ (read_result _ _) _ _ _ _ _`
        (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
      strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >>
+     (* keep only the read_result/gas_obs facts, so gvs skips ~110 others *)
+     POP_ASSUM_LIST (MAP_EVERY ASSUME_TAC o List.filter (fn th =>
+       can (find_term (fn t => is_const t andalso
+              (let val n = fst (dest_const t)
+               in n = "read_result" orelse String.isSubstring "gas_obs" n end)))
+           (concl th))) >>
      gvs[gas_explicit_def]) >>
   qpat_x_assum `v' = v` SUBST_ALL_TAC >>
   drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`) aggregate_tuple_store_marked >>
@@ -752,12 +758,15 @@ Resume aggregate_make_tuple_sim[rest]:
 QED
 
 Resume aggregate_make_tuple_sim[tuple_join]:
-  gvs[] >>
+  qpat_x_assum `Abbrev (r = q)`
+     (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  qpat_x_assum `rr = INL vs` SUBST_ALL_TAC >>
+  simp_tac (srw_ss()) [] >>
   qpat_x_assum `q.vs_memory = t1.vs_memory` (fn th =>
     RULE_ASSUM_TAC (REWRITE_RULE [GSYM th]) >> assume_tac th) >>
   qpat_x_assum `q.vs_allocas = t1.vs_allocas` (fn th =>
     RULE_ASSUM_TAC (REWRITE_RULE [GSYM th]) >> assume_tac th) >>
-  rpt conj_tac
+  (rpt conj_tac >> TRY (first_assum ACCEPT_TAC))
   >- suspend "head_encoding"
   >- suspend "vars_join"
   >- suspend "allocas_join"

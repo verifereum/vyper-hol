@@ -23,7 +23,7 @@ Ancestors
   supportedExprs supportedExprTraverse supportedStmtTraverse vyperEvent vyperInterpreter
   vyperState vyperTypeSystem supportedProgram supportedNames vyperContext
   vyperABI vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallGraph
-  vyperTypeCallStackSoundness
+  vyperTypeCallStackSoundness exprLowering
 
 (* ===== The event's metadata ===== *)
 
@@ -175,6 +175,31 @@ Proof
   gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def]
 QED
 
+(* Supported pure expressions make no calls and pop nothing, so none can
+   mutate memory or storage. *)
+Theorem supported_pure_expr_no_mutate:
+  (!tops e. supported_pure_expr tops e ==> ~expr_can_mutate cenv e) /\
+  (!tops es. supported_pure_exprs tops es ==> ~exprs_can_mutate cenv es) /\
+  (!tops fs. supported_pure_fields tops fs ==> ~named_exprs_can_mutate cenv fs) /\
+  (!tops e. supported_place_expr tops e ==> ~expr_can_mutate cenv e)
+Proof
+  ho_match_mp_tac supported_pure_expr_ind >>
+  rw[supported_pure_expr_def, expr_can_mutate_def] >>
+  gvs[supported_pure_expr_def, expr_can_mutate_def]
+QED
+
+Theorem supported_pure_exprs_bytestring_iff:
+  !es. supported_pure_exprs tops es /\ well_typed_exprs env es ==>
+    EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+               is_bytestring_type (expr_type e)) es
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  simp[Once supported_pure_expr_def, Once well_typed_expr_def] >> strip_tac >>
+  irule lowered_value_type_bytestring_iff >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> gvs[supported_pure_expr_def]) >>
+  qexists_tac `env` >> simp[]
+QED
+
 Theorem body_log_case:
   !cx id es. body_exprs_ok cx es ==> body_stmt_ok cx (Log id es)
 Proof
@@ -199,6 +224,10 @@ Proof
    !id t. FLOOKUP env.var_types id = SOME t ==>
      ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
     gvs[type_stmt_def, expr_sim_inv_def, AllCaseEqs()] >>
+  `~exprs_can_mutate cenv es` by metis_tac[supported_pure_expr_no_mutate] >>
+  `EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+              is_bytestring_type (expr_type e)) es` by
+    metis_tac[supported_pure_exprs_bytestring_iff] >>
   irule compile_log_stmt_frag >> simp[] >>
   conj_tac
   >- (qpat_x_assum `MAP expr_type _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
