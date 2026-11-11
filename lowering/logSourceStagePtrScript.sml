@@ -42,7 +42,7 @@ QED
 Theorem log_allocated_source_store_raw_path_ptr[local]:
   compile_alloc_buffer cap st = (buf,start) /\ fn_has_code st start func /\
   buf.buf_operand = Var src /\
-  compile_log_store_data ce xs (Var src) 0 start = ((),end_st) /\
+  compile_log_store_data ce xs (MAP SND xs) (Var src) 0 start = ((),end_st) /\
   stmt_state_rel ctx func ce cx es s0 /\ stmt_state_rel ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce st /\
   st.cs_next_var <= start.cs_next_var /\
@@ -116,7 +116,7 @@ Theorem log_allocated_source_store_path_ptr:
   ghost_kept ce es st G0 tn0 s0 G tn ==>
   compile_alloc_buffer cap st = (buf,start) /\ fn_has_code st start func /\
   buf.buf_operand = Var src /\
-  compile_log_store_data ce xs buf.buf_operand 0 start = ((),end_st) /\
+  compile_log_store_data ce xs (MAP SND xs) buf.buf_operand 0 start = ((),end_st) /\
   stmt_state_rel ctx func ce cx es s0 /\ stmt_state_rel ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce st /\
   st.cs_next_var <= start.cs_next_var /\

@@ -1,7 +1,8 @@
 (* Readiness-parametric composition over counted pointer outcomes. *)
 Theory logStmtComposePtr
 Ancestors
-  logReadyRunPtr logArgsRunPtr logSuccessSuffixPtr logComposeFacts bodyPtrDefs stmtFragPtr
+  logReadyRunPtr logArgsRunPtr logSuccessSuffixPtr logComposeFacts stmtSimLogCompose
+  bodyPtrDefs stmtFragPtr
   stmtSimLogArgs stmtSimLogSource stmtSimLogArgsGrowth stmtSimProps
   exprSimDefs exprSimProps exprSimHypsDefs loweringPosts compileEnv loweringStateRelDefs
   stmtLowering gasSummaryComposePtr gasExemptCert gasOutcome gasContext
@@ -34,6 +35,9 @@ Theorem compile_log_ready_stmt_frag_ptr:
   lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id = SOME (h,tys,flags) /\
   MAP expr_type args = tys /\ LENGTH flags = LENGTH tys /\
   LENGTH (FILTER I flags) <= 3 /\ EVERY supported_scalar_type tys /\
+  ~exprs_can_mutate cenv args /\
+  EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+             is_bytestring_type (expr_type e)) args /\
   SUM (MAP (type_memory_bytes cenv) (log_non_indexed_types flags tys)) < dimword(:256) /\
   abi_size_bound cenv.ce_struct_fields (TupleT (log_non_indexed_types flags tys)) < dimword(:256) ==>
   stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
@@ -43,7 +47,7 @@ Proof
   `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   gvs[stmt_env_def, declare_stmt_local_def, comp_bind_def, comp_return_def,
       comp_ignore_bind_def] >> pairarg_tac >> gvs[] >>
-  drule_all log_compile_decompose >> strip_tac >>
+  drule_all log_compile_structure >> strip_tac >>
   `gas_admissible (eval_exprs cx args)
     (\r. !exc. r = INR exc ==> expr_res_ok (INR exc : value + exception)) es` by
     metis_tac[log_arguments_admissible] >>
@@ -76,6 +80,7 @@ QED
 
 Resume compile_log_ready_stmt_frag_ptr[args_value]:
   markerLib.RESUME_TAC >> gvs[Excl "enc_def"] >>
+  qabbrev_tac `xs = ZIP (MAP FST ys,MAP expr_type args)` >>
   suspend "success"
 QED
 
@@ -94,10 +99,10 @@ Resume compile_log_ready_stmt_frag_ptr[success]:
   `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
     metis_tac[log_args_post_state] >>
   `local_ptrs_reserved cenv sm` by
-    (drule compile_log_eval_all_grows >> strip_tac >>
+    (drule_all compile_log_eval_all_grows >> strip_tac >>
      metis_tac[local_ptrs_reserved_next_var]) >>
   `sa.cs_next_var <= sm.cs_next_var` by
-    (drule compile_log_eval_all_grows >> simp[]) >>
+    (drule_all compile_log_eval_all_grows >> simp[]) >>
   `(!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
    (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p)` by
     metis_tac[not_fresh_at_mono] >>
@@ -118,6 +123,10 @@ Resume compile_log_ready_stmt_frag_ptr[path]:
    vyper_to_abi_list (get_tenv cx) (log_non_indexed_types flags (MAP SND xs))
       (log_non_indexed_values flags vs) = SOME avs` by asm_rewrite_tac[] >>
   `LENGTH flags = LENGTH xs` by simp[] >>
+  `EVERY (supported_scalar_type o SND) xs` by
+    fs[EVERY_MAP, combinTheory.o_DEF, Excl "enc_def"] >>
+  `cenv.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags)` by
+    simp[Excl "enc_def"] >>
   drule_all log_success_suffix_path_ptr >>
   disch_then (qspecl_then [`PG`,`cx_dead cx`] strip_assume_tac) >>
   suspend "bind"
@@ -152,7 +161,7 @@ QED
 
 Resume compile_log_ready_stmt_frag_ptr[post]:
   markerLib.RESUME_TAC >>
-  `~block_is_terminated cs'` by metis_tac[log_compiled_not_terminated] >>
+  `~block_is_terminated cs'` by metis_tac[log_stmt_open] >>
   `stmt_lands lctx cs' (INL ()) t'` by
     (fs[stmt_lands_def, same_blocks_def, inst_extends_def, IS_PREFIX_APPEND,
         emitted_insts_def] >>

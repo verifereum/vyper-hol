@@ -40,6 +40,10 @@ Proof
    !id t. FLOOKUP env.var_types id = SOME t ==>
      ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
     gvs[type_stmt_def, expr_sim_inv_def, AllCaseEqs()] >>
+  `~exprs_can_mutate cenv es` by metis_tac[supported_pure_expr_no_mutate] >>
+  `EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+              is_bytestring_type (expr_type e)) es` by
+    metis_tac[supported_pure_exprs_bytestring_iff] >>
   irule compile_log_ready_stmt_frag_ptr >>
   conj_tac
   >- (qexistsl_tac [`MAP SND fields`,`h`,`MAP (SND o FST) fields`] >> simp[] >>
