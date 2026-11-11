@@ -5753,6 +5753,135 @@ Proof
   cheat
 QED
 
+Theorem ret_label_concrete_head:
+  asm_sym_rel p env cs ss /\ cs.as_stack = ra :: tail /\
+  ss.sym_stack = Lab ret 0 :: stail ==>
+  sval_conc (SND (compute_label_offsets p)) (Lab ret 0) = SOME ra
+Proof
+  strip_tac >> gvs[asm_sym_rel_def]
+QED
+
+Theorem ret_label_jump_destination:
+  asm_static_wf p /\ MEM (AsmLabel ret) p /\
+  sval_conc (SND (compute_label_offsets p)) (Lab ret 0) = SOME ra /\
+  FLOOKUP (build_offset_to_pc p) (w2n ra) = SOME pc ==>
+  sym_jump_dest p (Lab ret 0) = SOME pc
+Proof
+  strip_tac >>
+  `?i. INDEX_OF (AsmLabel ret) p = SOME i` by
+    metis_tac[listTheory.INDEX_OF_eq_NONE, optionTheory.option_CASES] >>
+  drule_all_then strip_assume_tac asm_static_wf_code_label >>
+  gvs[sval_conc_def, sym_delta_ok_def] >>
+  irule sym_code_label_dest >> simp[] >>
+  `off < dimword(:256)` by simp[wordsTheory.dimword_def] >>
+  gvs[wordsTheory.w2n_n2w]
+QED
+
+Theorem ret_preparation_arranged_stack:
+  !base ps inputs nl iops prepared rops arranged final dfg.
+  generated_plan_state_wf_marked base ps /\ LENGTH inputs <= 16 /\
+  LENGTH inputs <= LENGTH prepared.ps_stack /\
+  (!op. MEM op inputs /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan RET inputs nl ps = (iops,prepared) /\
+  reorder_plan dfg inputs prepared = (rops,arranged) /\
+  final.ps_stack = stack_pop (LENGTH inputs) arranged.ps_stack /\
+  final.ps_stack = [] ==> arranged.ps_stack = inputs
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `generated_plan_state_wf_marked spillbase ps` >>
+  `residual_budget_wf_marked spillbase [] ps` by
+    metis_tac[deepResidualSimTheory.generated_plan_state_wf_marked_residual_nil] >>
+  `residual_budget_wf_marked spillbase inputs prepared` by
+    metis_tac[deepResidualBudgetTheory.emit_input_plan_residual_budget_wf_marked,
+              listTheory.APPEND] >>
+  `!x. LIST_ELEM_COUNT x inputs <= LIST_ELEM_COUNT x prepared.ps_stack` by
+    metis_tac[reorderSimTheory.emit_input_plan_materialised] >>
+  drule_all_then strip_assume_tac
+    deepResidualBudgetTheory.reorder_plan_materialised_arranged_marked >> gvs[]
+QED
+
+Theorem sym_ret_ready_frame_sim:
+  !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst nl halting term label
+   base ps vs cs ops final ra rest mem0 pc_ret env ret srest labs0 ss rv vs'.
+  lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
+  inst.inst_opcode = RET /\ MEM inst (fn_insts (reachable_fn fn)) /\
+  codegen_ready_fn fn /\ opaque_use_ok fn /\ retpc_shape_ok fn /\ inst_wf inst /\
+  generated_plan_state_wf_marked base ps /\ LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan RET (compute_operands inst) nl ps)).ps_stack /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    IS_SOME (stack_get_depth op ps.ps_stack) \/ IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  (!op. MEM op (compute_operands inst) ==>
+    eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
+  (!op at. MEM op (compute_operands inst) /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at (compute_operands inst)) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  (!off. MEM (SORestore off) ops ==> off < dimword(:256)) /\
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps vs cs /\
+  (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret) /\
+  generate_inst_plan liveness dfg cfg fn inst nl halting term label ps = SOME (ops,final) /\
+  final.ps_stack = [] /\ asm_block_at prog cs.as_pc (execute_plan cp.cp_initial_fmp ops) /\
+  dfg = dfg_build_function fn /\ MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\
+  label_flow_ok ctx /\ asm_static_wf prog /\
+  sym_frame_inv prog env ctx cp fn ret srest labs0 ps cs ss /\
+  step_inst fuel ctx inst vs = IntRet rv vs' ==>
+  ?mid smid arranged.
+    asm_steps lo o2pc prog (LENGTH (execute_plan cp.cp_initial_fmp ops) - 1) cs = AsmOK mid /\
+    sym_steps prog env (LENGTH (execute_plan cp.cp_initial_fmp ops) - 1) ss = SymOK smid /\
+    sym_frame_inv prog env ctx cp fn ret srest labs0 arranged mid smid /\
+    asm_block_at prog mid.as_pc [AsmOp "JUMP"] /\
+    smid.sym_stack = Lab ret 0 :: MAP Val (REVERSE rv.iret_values) ++ srest /\
+    sym_jump_dest prog (Lab ret 0) = SOME pc_ret /\
+    0 < LENGTH (execute_plan cp.cp_initial_fmp ops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all_then (qspec_then `ra` strip_assume_tac)
+    fnFrameBoundaryGenRetTheory.ret_source_frame_boundary >>
+  gvs[] >>
+  `LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps)).ps_stack` by simp[] >>
+  drule_all_then strip_assume_tac (SRULE [] fnFrameDeepRetTheory.ret_frame_prefix_marked_exact) >>
+  drule_all_then strip_assume_tac sym_ret_generated_prepare_frame_sim >>
+  suspend "package"
+QED
+
+Resume sym_ret_ready_frame_sim[package]:
+  qpat_x_assum `!o2pc. ?mid. _` (qspec_then `build_offset_to_pc prog` strip_assume_tac) >>
+  `LENGTH (execute_plan cp'.cp_initial_fmp ops) =
+    LENGTH (execute_plan cp'.cp_initial_fmp (iops ++ rops)) + 1` by
+    simp[stackOpSimTheory.execute_plan_append, planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def] >>
+  gvs[] >>
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    metis_tac[deepInstSimTheory.marked_operand_owned] >>
+  `arranged.ps_stack = compute_operands inst` by
+    (irule ret_preparation_arranged_stack >> simp[] >> metis_tac[]) >>
+  suspend "typed"
+QED
+
+Resume sym_ret_ready_frame_sim[typed]:
+  `EVERY (\op. op <> dead_stack_marker) (compute_operands inst)` by
+    (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  drule_all_then (qspec_then `ret` strip_assume_tac) ret_source_op_kinds >>
+  `LENGTH (REVERSE rv.iret_values) = LENGTH front` by
+    (drule fnFrameBoundaryInvokeTheory.eval_operands_some_length >> simp[]) >>
+  `Var x <> dead_stack_marker` by gvs[listTheory.EVERY_APPEND] >>
+  `ss'.sym_stack = Lab ret 0 :: MAP Val (REVERSE rv.iret_values) ++ srest` by
+    (irule ret_prepared_symbolic_stack >>
+     fs[sym_frame_inv_def] >> metis_tac[]) >>
+  `sym_jump_dest prog (Lab ret 0) = SOME pc_ret` by
+    (irule ret_label_jump_destination >> fs[sym_frame_inv_def] >>
+     metis_tac[ret_label_concrete_head]) >>
+  qexists_tac `arranged` >> simp[]
+QED
+Finalise sym_ret_ready_frame_sim
+
 Theorem sym_ret_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' ra rest mem0 pc_ret
