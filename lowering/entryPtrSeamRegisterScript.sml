@@ -989,6 +989,232 @@ Proof
   drule_all sourceRecursiveComplexPtrTheory.robust_value_footprint_frame >> simp[]
 QED
 
+Theorem registration_aggregate_singleton_ptr_framed:
+  compile_register_positional_args ce
+    [(name,F,dyn,sz,type_to_abi_dec_info sf ce ty)] (4+h) st = (ce',last) /\
+  FLOOKUP ce.ce_vars name = SOME loc /\
+  var_location_memory_size loc = SOME (type_memory_size tv) /\
+  abi_decoder_coherent ce env sf ty tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  mem_bytes_at srcpos (LENGTH (enc (vyper_to_abi_type env ty) av))
+    s.vs_call_ctx.cc_calldata = enc (vyper_to_abi_type env ty) av /\
+  srcpos + LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
+  srcpos = 4 + (if dyn then delta else h) /\
+  (dyn ==> abi_decode_load CALLDATALOAD (n2w (4+h) : bytes32) s = n2w delta /\
+    4+delta < dimword (:256)) /\
+  type_memory_size tv < dimword (:256) /\
+  (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==> id < st.cs_next_id) /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  fn_has_code st last fn /\ fn_inst_ids_distinct fn /\
+  (!bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t H u q p.
+    ce' = ce with ce_vars updated_by
+      (\m. m |+ (name,PtrVar (Var q) (type_memory_size tv))) /\
+    lookup_var q t = SOME (n2w p) /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,type_memory_size tv) /\
+    ptr_covers H u q t (type_memory_size tv) /\
+    val_in_memory tv v p t.vs_memory /\
+    (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+      val_in_memory tv v p mem) /\
+    (!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < last.cs_next_id) /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\ fresh_vars_wrt last t /\
+    ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
+    t.vs_inst_idx = LENGTH last.cs_current_insts /\
+    (!old q0 p0 n0 tv0 v0.
+      old < st.cs_next_id /\ FLOOKUP s.vs_allocas old = SOME (p0,n0) /\
+      lookup_var q0 s = SOME (n2w p0) /\ ptr_covers G tn q0 s n0 /\
+      val_wf tv0 v0 /\ val_footprint tv0 v0 <= n0 /\
+      (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+        val_in_memory tv0 v0 p0 mem) ==>
+      old < last.cs_next_id /\ FLOOKUP t.vs_allocas old = SOME (p0,n0) /\
+      lookup_var q0 t = SOME (n2w p0) /\ ptr_covers H u q0 t n0 /\
+      val_wf tv0 v0 /\ val_footprint tv0 v0 <= n0 /\
+      (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+        val_in_memory tv0 v0 p0 mem)) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all registration_aggregate_phases >> strip_tac >>
+  `cs_extends st a /\ cs_extends a first /\ cs_extends first last` by
+    metis_tac[abiDecoderAppendTheory.cs_appends_abi_alloc_buffer,
+      abiDecoderAppendTheory.cs_appends_abi_member_pointer,
+      abiDecoderAppendTheory.cs_appends_abi_decode_mutual,
+      fragExecTheory.cs_appends_def] >>
+  `fn_has_code st a fn /\ fn_has_code a first fn /\ fn_has_code first last fn` by
+    metis_tac[fragExecTheory.fn_has_code_split, compileEnvTheory.cs_extends_trans] >>
+  `!entry. FLOOKUP s.vs_allocas st.cs_next_id = SOME entry ==>
+    ?p. entry = (p,type_memory_size tv) /\ p+type_memory_size tv < dimword (:256)` by
+    (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
+    gvs[fn_inst_ids_distinct_def, venomInstTheory.fn_insts_def,
+        allocaFrontierBoundTheory.fn_insts_blocks_inst_ids] >>
+  drule_all registration_argument_prepare_forward_robust_ptr >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
+  rename1 `lookup_var q ready = SOME (n2w p)` >>
+  drule_all registration_preparation_forward_slots >> strip_tac >>
+  `st.cs_next_id < first.cs_next_id` by
+    ( `emit_op ALLOCA [Lit (n2w (type_memory_size tv))] st = (buf.buf_operand,a)` by
+        (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+         simp[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+         pairarg_tac >> simp[] >> strip_tac >> gvs[]) >>
+      drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+      fs[cs_extends_def]) >>
+  `first.cs_next_var <= last.cs_next_var` by
+    metis_tac[abiDecoderCountersTheory.abi_decoder_vars_mono_mutual,
+      abiDecoderCountersTheory.abi_decoder_vars_mono_def, pairTheory.SND] >>
+  `fresh_vars_wrt last ready` by
+    (irule emitHelperPropsTheory.fresh_vars_wrt_mono >>
+     qexists_tac `first` >> simp[]) >>
+  `lo <= ready.vs_alloca_next` by decide_tac >>
+  `compile_abi_decode_to_buf (Var q) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    (type_to_abi_dec_info sf ce ty) first = ((),last)` by metis_tac[] >>
+  drule sourceOwnedCoherentPtrTheory.source_owned_coherent_decoder_ptr >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf`)) >>
+  disch_then (drule_at (Pat `ptr_covers`)) >>
+  disch_then (drule_at (Pat `ptr_covers`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (_,_)`)) >>
+  disch_then (drule_at (Pat `fresh_vars_wrt`)) >>
+  disch_then (drule_at (Pat `alloca_frontier_inv`)) >>
+  disch_then (drule_at (Pat `value_has_type`)) >>
+  disch_then (drule_at (Pat `vyper_to_abi`)) >>
+  disch_then (drule_at (Pat `lookup_var`)) >>
+  disch_then (drule_at (Pat `lookup_var`)) >>
+  disch_then (drule_at (Pat `allocas_from`)) >>
+  disch_then (qspecl_then [`srcpos`, `PG`] mp_tac) >>
+  (impl_tac >-
+    (gvs[Excl "enc_def"] >> rpt strip_tac >>
+     qpat_x_assum `!id entry. FLOOKUP ready.vs_allocas id = SOME entry ==> _`
+       drule >> simp[])) >>
+  strip_tac >>
+  qexistsl_tac [`t`, `H'`, `u'`, `q`, `p`] >>
+  `CALLDATALOAD <> ALLOCA` by simp[] >>
+  `first.cs_next_id <= last.cs_next_id` by
+    metis_tac[abiDecoderCodeTheory.abi_decoder_code_mutual,
+      abiDecoderCodeTheory.abi_decoder_code_def, pairTheory.SND] >>
+  `st.cs_next_id <= last.cs_next_id` by decide_tac >>
+  `st.cs_next_var <= first.cs_next_var` by
+    metis_tac[abiDecoderCountersTheory.abi_decoder_vars_mono_abi_alloc_buffer,
+      abiDecoderCountersTheory.abi_decoder_vars_mono_abi_member_pointer,
+      abiDecoderCountersTheory.abi_decoder_vars_mono_def, pairTheory.SND,
+      arithmeticTheory.LESS_EQ_TRANS] >>
+  `!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < last.cs_next_id` by
+    (rpt strip_tac >> spose_not_then assume_tac >>
+     `FLOOKUP t.vs_allocas id = FLOOKUP ready.vs_allocas id` by
+       (qpat_x_assum `!id. _ \/ _ ==> FLOOKUP t.vs_allocas id = _`
+          (qspec_then `id` mp_tac) >> simp[]) >>
+     `first.cs_next_id <= id` by decide_tac >>
+     metis_tac[optionTheory.NOT_NONE_SOME]) >>
+  `t.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_x_assum `abi_decode_footprint_frame _ ready t`
+       (strip_assume_tac o REWRITE_RULE [abiDecoderFrameTheory.abi_decode_footprint_frame_def]) >>
+     metis_tac[]) >>
+  asm_rewrite_tac [] >>
+  (conj_tac >-
+    (qpat_x_assum `!op. abi_decoder_operand_live first.cs_next_var op ==> _`
+       (qspec_then `Var q` mp_tac) >>
+     asm_rewrite_tac [abiDecoderReentryTheory.abi_decoder_operand_live_def,
+       venomStateTheory.eval_operand_def])) >>
+  (conj_tac >- decide_tac) >>
+  (conj_tac >- suspend "old_local") >>
+  (conj_tac >-
+    (rpt strip_tac >>
+     `abi_decoder_operand_live first.cs_next_var op` by
+       (irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
+        qexists_tac `st.cs_next_var` >> asm_rewrite_tac []) >>
+     qpat_x_assum `!op. abi_decoder_operand_live first.cs_next_var op ==> _`
+       (qspec_then `op` mp_tac) >>
+     qpat_x_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> _`
+       (qspec_then `op` mp_tac) >> asm_rewrite_tac [] >>
+     rpt strip_tac >> metis_tac[])) >>
+  (conj_tac >-
+    (rpt strip_tac >> PairCases_on `entry` >> metis_tac[])) >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!D. _ ==> !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s`
+    (qspec_then `D` irule) >>
+  qpat_x_assum `!D. _ ==> !fuel. ptr_safe_run D lo fuel ctx fn PG H u ready`
+    (qspec_then `D` irule) >> first_assum ACCEPT_TAC
+QED
+
+Resume registration_aggregate_singleton_ptr_framed[old_local]:
+  rpt gen_tac >> strip_tac >>
+  `old < first.cs_next_id /\ old < last.cs_next_id /\ old <> st.cs_next_id` by
+    decide_tac >>
+  `FLOOKUP ready.vs_allocas old = SOME (p0,n0) /\
+   FLOOKUP t.vs_allocas old = SOME (p0,n0)` by metis_tac[] >>
+  `ptr_covers H u q0 ready n0` by metis_tac[] >>
+  `p0 + n0 <= s.vs_alloca_next` by
+    (qpat_x_assum `alloca_inv s` mp_tac >>
+     rewrite_tac [venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.alloca_next_valid_def] >>
+     metis_tac[]) >>
+  `!mem. mem_agree_outside u.t_mem ready.vs_memory mem ==>
+    val_in_memory tv0 v0 p0 mem` by
+    (first_assum (qspecl_then [`tv0`, `v0`, `p0`] mp_tac) >>
+     (impl_tac >-
+       (asm_rewrite_tac [] >> rpt strip_tac >> decide_tac)) >>
+     disch_then ACCEPT_TAC) >>
+  `not_fresh_at st q0` by
+    (rewrite_tac [not_fresh_at_def] >> rpt strip_tac >>
+     qpat_x_assum `fresh_vars_wrt st s` mp_tac >>
+     rewrite_tac [fresh_vars_wrt_def] >>
+     disch_then (qspec_then `n` mp_tac) >>
+     (impl_tac >- decide_tac) >> strip_tac >>
+     qpat_x_assum `lookup_var q0 s = SOME _` mp_tac >>
+     asm_rewrite_tac [venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_DEF] >>
+     simp[NoAsms]) >>
+  `abi_decoder_operand_live st.cs_next_var (Var q0)` by
+    asm_rewrite_tac [calldataDynOwnedTheory.calldata_operand_live_not_fresh] >>
+  `abi_decoder_operand_live first.cs_next_var (Var q0)` by
+    (irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
+     qexists_tac `st.cs_next_var` >> asm_rewrite_tac []) >>
+  `not_fresh_at first q0` by
+    metis_tac[calldataDynOwnedTheory.calldata_operand_live_not_fresh] >>
+  `lookup_var q0 ready = SOME (n2w p0) /\ lookup_var q0 t = SOME (n2w p0)` by
+    (qpat_x_assum `!op. abi_decoder_operand_live st.cs_next_var op ==> _`
+       (qspec_then `Var q0` mp_tac) >>
+     qpat_x_assum `!op. abi_decoder_operand_live first.cs_next_var op ==> _`
+       (qspec_then `Var q0` mp_tac) >>
+     asm_rewrite_tac [venomStateTheory.eval_operand_def] >>
+     rpt strip_tac >> asm_rewrite_tac []) >>
+  `FLOOKUP H' q0 = FLOOKUP H q0 /\
+   op_taint u' (Var q0) = op_taint u (Var q0)` by metis_tac[] >>
+  `lookup_var q0 t = lookup_var q0 ready` by asm_rewrite_tac [] >>
+  drule_at (Pat `abi_decode_footprint_frame`) registration_owned_local_frame >>
+  disch_then (drule_at (Pat `val_wf`)) >>
+  disch_then (drule_at (Pat `ptr_covers`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (_,_)`)) >>
+  disch_then (drule_at (Pat `op_taint _ _ = op_taint _ _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = FLOOKUP _ _`)) >>
+  disch_then (drule_at (Pat `!mem. mem_agree_outside tm memory mem ==> val_in_memory tv v p mem`)) >>
+  disch_then (qspec_then `st.cs_next_id` mp_tac) >>
+  disch_then (qspecl_then
+    [`last.cs_next_id`, `type_memory_size tv`, `first.cs_next_id`, `p`] mp_tac) >>
+  (impl_tac >-
+    (asm_rewrite_tac [] >> decide_tac)) >> strip_tac >>
+  asm_rewrite_tac []
+QED
+
+Finalise registration_aggregate_singleton_ptr_framed
+
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
    Hints (not binding):
