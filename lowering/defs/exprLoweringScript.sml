@@ -2543,24 +2543,6 @@ Proof
 QED
 
 
-(* Freeze a call argument's value before later operands are lowered: a word
-   value is read at once; a composite one is copied into a fresh temporary
-   when copy is set (a later operand can modify memory or storage), and left
-   where it is otherwise.
-   Mirrors Python: context.py snapshot_value_for_delayed_use *)
-Definition compile_snapshot_vv_def:
-  compile_snapshot_vv cenv copy vv =
-    if is_word_type (vv_type vv) then
-      do op <- unwrap_value cenv vv;
-         return (StackValue (vv_type vv) op)
-      od
-    else if copy then
-      do op <- compile_materialize_vv cenv (vv_type vv) vv;
-         return (LocatedValue (vv_type vv) (mk_ptr op LocMemory))
-      od
-    else return vv
-End
-
 (* Whether subscript base_e[idx_e] copies its base before lowering the index:
    the index could resize a dynamic array the base was derived from.
    Mirrors Python: expr.py _lower_array_subscript (overlap) *)

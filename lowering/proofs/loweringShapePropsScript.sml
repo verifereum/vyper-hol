@@ -5723,7 +5723,7 @@ Proof
   gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `BufFrame`]
 QED
 
-Theorem compile_snapshot_vv_shape[local]:
+Theorem compile_snapshot_vv_shape_framed[local]:
   shape_stable R ==>
   shape_step internal compiler_label (\st. R st /\ value_shape_ok st vv)
     (compile_snapshot_vv cenv copy vv) (\v st. R st /\ value_shape_ok st v)
@@ -5785,7 +5785,7 @@ Proof
   match_mp_tac shape_step_bind >>
   qexists_tac `\v st. cenv_shape_ok st cenv /\ value_shape_ok st v` >> conj_tac
   >- (IF_CASES_TAC
-      >- (ho_match_mp_tac compile_snapshot_vv_shape >> simp[cenv_shape_ok_stable]) >>
+      >- (ho_match_mp_tac compile_snapshot_vv_shape_framed >> simp[cenv_shape_ok_stable]) >>
       irule shape_step_return >> simp[]) >>
   qx_gen_tac `base_vv` >> simp[] >>
   assume_tac (Q.SPEC `base_vv` value_shape_ok_stable) >>
@@ -7358,7 +7358,7 @@ Proof
       qexistsl_tac [`compiler_label`,
                     `\st. P st /\ value_shape_ok st (ext_call_arg_value ty head_vv)`,
                     `\v st. P st /\ value_shape_ok st v`] >>
-      reverse (rpt conj_tac) >- (irule compile_snapshot_vv_shape >> simp[]) >>
+      reverse (rpt conj_tac) >- (irule compile_snapshot_vv_shape_framed >> simp[]) >>
       simp[value_shape_ok_ext_call_arg_value]) >>
   qx_gen_tac `snapped` >> simp[] >>
   qmatch_goalsub_abbrev_tac `shape_step internal compiler_label HeadFrame _ _` >>
