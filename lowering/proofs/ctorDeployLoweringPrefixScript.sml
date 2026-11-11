@@ -195,7 +195,8 @@ Proof
   dep_rewrite.DEP_REWRITE_TAC[deploy_prefix_send_value_ready] >>
   simp[e2eDeployDefsTheory.deploy_evaluation_context_def,
        initial_evaluation_context_def, initial_state_def,
-       vyperStateTheory.return_def] >> gvs[]
+       vyperStateTheory.return_def,
+       e2eDeployDefsTheory.value_transfer_created_in_tx] >> gvs[]
 QED
 
 Theorem deploy_prefix_no_start_nonpayable:
@@ -259,7 +260,7 @@ Theorem deploy_prefix_packaged_payable:
   vyperInterpreter$lookup_function NONE "__init__" Deploy tops =
     SOME (mut,F,args,[],NoneT,body) /\
   set_constructor_package_target rp.rpol_target
-    (package_constructor tops F (assign_nkeys tops 0) cf) =
+    (package_constructor tops T (K global_nonreentrant_slot) cf) =
     (ce,pa,pay,nr,key,ut,ss,ret) ==>
   pay = (mut = Payable)
 Proof

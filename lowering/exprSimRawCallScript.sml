@@ -2679,7 +2679,7 @@ Theorem raw_call_emit_run:
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   Cases_on `static_call` >>
-  gvs[run_inst_seq_def, Once step_inst_base_def, mk_inst_def] >>
+  gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def] >>
   Cases_on `s.vs_call_ctx.cc_static` >> gvs[]
 QED
 

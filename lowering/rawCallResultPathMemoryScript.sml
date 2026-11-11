@@ -9,6 +9,7 @@ Libs
   monadsyntax
 
 Theorem raw_call_nonrevert_positive_path_mem:
+  expr_has_effect e /\
   expr_type e = TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))] /\
   lowered_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) =

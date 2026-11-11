@@ -1,0 +1,17 @@
+Not upstream: vyper-hol DFT departure. Also treat create/create2 as aborts,
+as the HOL pass (dft_abort_kind) does. Applies after 5336-dft-abort-order.patch.
+
+diff --git a/vyper/venom/passes/dft.py b/vyper/venom/passes/dft.py
+--- a/vyper/venom/passes/dft.py
++++ b/vyper/venom/passes/dft.py
+@@ -22,6 +22,10 @@
+     "assert_unreachable": "halt",
+     "returndatacopy": "halt",
+     "invoke": "any",
++    # not upstream: vyper-hol's DFT (dft_abort_kind) also treats a create as
++    # an abort, since it can fault
++    "create": "halt",
++    "create2": "halt",
+ }
+ 
+ 

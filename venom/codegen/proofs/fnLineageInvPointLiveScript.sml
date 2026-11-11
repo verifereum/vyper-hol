@@ -20,7 +20,7 @@ Proof
   `MEM d (cfg_analyze fn).cfg_dfs_pre` by gvs[] >>
   Cases_on `d = p`
   >- (gvs[] >>
-      drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+      drule livenessProofsTheory.live_vars_at_propagate_range >>
       disch_then (qspecl_then [`d`, `bb`, `j+1`, `k`, `v`] mp_tac) >>
       simp[] >> disch_then irule >> simp[] >>
       rpt strip_tac >> gvs[inst_defs_def] >>
@@ -44,7 +44,7 @@ Resume analyzed_output_live_point_to_after[different_blocks]:
      `p = d` by metis_tac[ssa_output_position_unique] >> gvs[]) >>
   `MEM v (live_vars_at (liveness_analyze fn) p
       (LENGTH (collect_phis pb.bb_instructions)))` by
-    (drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+    (drule livenessProofsTheory.live_vars_at_propagate_range >>
      disch_then (qspecl_then [`p`, `pb`, `LENGTH (collect_phis pb.bb_instructions)`, `k`, `v`] mp_tac) >>
      simp[] >> disch_then irule >> gvs[EVERY_EL]) >>
   `EVERY (phi_block_ready (liveness_analyze fn)) fn.fn_blocks` by
@@ -94,7 +94,7 @@ Resume analyzed_output_live_point_to_after[different_blocks]:
      qpat_x_assum `MEM inst b.bb_instructions` mp_tac >>
      pure_rewrite_tac[MEM_EL] >> strip_tac >> gvs[] >>
      `lbl = d` by metis_tac[ssa_output_position_unique] >> gvs[]) >>
-  drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+  drule livenessProofsTheory.live_vars_at_propagate_range >>
   disch_then (qspecl_then [`d`, `bb`, `j+1`, `LENGTH bb.bb_instructions`, `v`] mp_tac) >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
   gvs[inst_defs_def] >>
@@ -163,7 +163,7 @@ Resume analyzed_offset_output_live_after[ordinary_use]:
   `MEM v (live_vars_at (liveness_analyze fn) ub.bb_label u)` by
     (`MEM v (inst_uses use)` by
        (irule venomWfPropsTheory.operand_var_in_inst_uses >> simp[]) >>
-     drule livenessAnalysisPropsTheory.live_vars_at_uses >>
+     drule livenessProofsTheory.live_vars_at_uses >>
      disch_then (qspecl_then [`ub.bb_label`, `ub`, `u`, `v`] mp_tac) >> simp[]) >>
   irule analyzed_output_live_point_to_after >> simp[] >>
   qexistsl_tac [`u`, `ub.bb_label`, `ub`] >> simp[] >>
