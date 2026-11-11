@@ -649,6 +649,8 @@ Proof
   drule_all hash_dynamic_post_view >> strip_tac >>
   `~is_word_type (expr_type e)` by simp[is_word_type_def] >>
   drule_all hash_dynamic_bytes_operand >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> fs[is_bytestring_type_def]) >>
   `stmt_state_rel ctx func cenv cx es s /\
    expr_val_at cenv cx (expr_type e) s0c sa es (BytesV bs) (Var p) s` by
     fs[expr_post_def] >>

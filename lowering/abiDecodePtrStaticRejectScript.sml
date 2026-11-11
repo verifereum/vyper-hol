@@ -210,6 +210,21 @@ Proof
   simp[eval_operand_def, WORD_ADD_0, word_add_n2w]
 QED
 
+Triviality supported_word_abi_member:
+  supported_word_type ty ==>
+  ?clamp. type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
+    abi_member_head_size (vyper_to_abi_type env ty) = 32
+Proof
+  Cases_on `ty` >> simp[supported_word_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  gvs[supported_word_type_def, type_to_abi_dec_info_def,
+    vyper_to_abi_type_def, vyper_base_to_abi_type_def,
+    abi_member_head_size_def, is_dynamic_def, static_length_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  gvs[supported_word_type_def, type_to_abi_dec_info_def,
+    vyper_base_to_abi_type_def, is_dynamic_def, static_length_def]
+QED
+
 Theorem abi_decode_flat_static_reject:
   EVERY supported_scalar_type tys /\
   EVERY (\ty. ~is_dynamic (vyper_to_abi_type env ty)) tys /\
@@ -271,14 +286,7 @@ Resume abi_decode_flat_static_reject[member]:
   `supported_word_type ty` by metis_tac[abi_decode_static_scalar_word] >>
   `?clamp. type_to_abi_dec_info ce.ce_struct_fields ce ty = DecPrimWord clamp /\
     abi_member_head_size (vyper_to_abi_type env ty) = 32` by
-    (Cases_on `ty` >> fs[supported_word_type_def] >>
-     rename1 `BaseT bt` >> Cases_on `bt` >>
-     gvs[supported_word_type_def, type_to_abi_dec_info_def,
-       vyper_to_abi_type_def, vyper_base_to_abi_type_def,
-       abi_member_head_size_def, is_dynamic_def, static_length_def] >>
-     rename1 `BytesT bd` >> Cases_on `bd` >>
-     gvs[supported_word_type_def, type_to_abi_dec_info_def,
-       vyper_base_to_abi_type_def, is_dynamic_def, static_length_def]) >>
+    (irule supported_word_abi_member >> first_assum ACCEPT_TAC) >>
   `SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pre)) + 32 <= LENGTH bs` by
     (fs[SUM_APPEND] >> decide_tac) >>
   `eval_operand (Var src) reached = SOME (n2w B) /\

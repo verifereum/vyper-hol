@@ -2,7 +2,7 @@
 Theory abiDecodePtrSourceOutcome
 Ancestors
   abiDecodePtrPhysicalFlatRun abiValidMembers abiValidBytesUnwrap abiDecoderCoherence
-  exprSimAbiDecodeReject exprSimAbiDecodeGas
+  exprSimAbiDecodeReject
   vyperABI vyperContext vyperTypeABI valueEncoding words list
 
 (* In particular, conversion failure is not the invalid-input exemption. *)
