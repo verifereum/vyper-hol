@@ -764,6 +764,70 @@ Proof
   gvs[var_below_def] >> metis_tac[LESS_EQ_REFL]
 QED
 
+Theorem dynstorage_loop_outcome[local]:
+  !G ctx fn N lv counter vl vd vi s8 s9 s10 s11 s12 s13 s14 s15 s16 s17
+    body exit cond old2 old3 Kcopy.
+    no_phi_fn fn /\ callees_stable G ctx fn /\
+    s8.cs_current_bb = cond /\ s8.cs_current_insts = [] /\
+    s12.cs_current_bb = body /\ s12.cs_current_insts = [] /\
+    s17.cs_current_bb = exit /\ s17.cs_current_insts = [] /\
+    lv <> vl /\ lv <> vd /\ counter <> vl /\ counter <> vd /\
+    lv <> counter /\ lv <> vi /\
+    ~var_below N vl /\ ~var_below N vd /\
+    ~var_below N vi /\ ~var_below N counter /\ N <= s12.cs_next_var /\
+    emit_op LT [Var counter; Var lv] s8 = (Var vl,s9) /\
+    emit_op ISZERO [Var vl] s9 = (Var vd,s10) /\
+    emit_inst JNZ [Var vd; Label exit; Label body] [] s10 = ((),s11) /\
+    new_block body s11 = (old2,s12) /\
+    emit_op ADD [Var counter; Lit 1w] s13 = (Var vi,s14) /\
+    emit_inst ASSIGN [Var vi] [counter] s14 = ((),s15) /\
+    emit_inst JMP [Label cond] [] s15 = ((),s16) /\
+    new_block exit s16 = (old3,s17) /\
+    fn_has_code s8 s12 fn /\ fn_has_code s13 s17 fn /\
+    (!t. at_point s12 t ==> ?j. j <= Kcopy /\ fuel_outcome G ctx fn t j
+      (\u. vars_kept s12.cs_next_var {} t u /\
+           lookup_var lv u = lookup_var lv t /\
+           lookup_var counter u = lookup_var counter t /\ at_point s13 u)) ==>
+    !origin l s.
+      at_point s8 s /\ lookup_var lv s = SOME l /\
+      (?c. lookup_var counter s = SOME c) /\ vars_kept N {} origin s ==>
+      ?j. j <= 2 ** 256 * (Kcopy + 2) /\ fuel_outcome G ctx fn s j
+        (\t. at_point s17 t /\ vars_kept N {} origin t)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `at_point s8 (s with <|vs_current_bb := s8.cs_current_bb;
+                         vs_inst_idx := LENGTH s8.cs_current_insts|>)` by
+    simp[at_point_def] >>
+  drule_all dynstorage_condition_code >> strip_tac >>
+  `at_point s13 (s with <|vs_current_bb := s13.cs_current_bb;
+                          vs_inst_idx := LENGTH s13.cs_current_insts|>)` by
+    simp[at_point_def] >>
+  drule_all dynstorage_increment_code >> strip_tac >>
+  gvs[] >>
+  irule fuel_outcome_iterate >>
+  qexistsl_tac [`\t. at_point s8 t /\ lookup_var lv t = SOME l /\
+                      (?c. lookup_var counter t = SOME c) /\ vars_kept N {} origin t`,
+                `\t. w2n l - w2n (THE (lookup_var counter t))`] >>
+  BETA_TAC >> conj_tac >- simp[] >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      mp_tac (Q.ISPEC `l:bytes32` w2n_lt) >> simp[dimword_def] >> decide_tac) >>
+  rpt gen_tac >> strip_tac >>
+  irule (SIMP_RULE bool_ss [LET_THM] dynstorage_round_outcome) >>
+  simp[] >>
+  qexistsl_tac [`s8.cs_next_id`, `s8.cs_next_id + 1`, `bb`, `bb'`,
+                `s8.cs_next_id + 2`, `s13.cs_next_id`, `s13.cs_next_id + 1`,
+                `s13.cs_next_id + 2`, `s12`, `s13`, `vd`, `vi`, `vl`] >>
+  simp[] >> reverse conj_tac
+  >- (rpt strip_tac >> fs[at_point_def] >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!t. at_point s12 t ==> _` (drule_then strip_assume_tac) >>
+  qexists_tac `j` >> simp[] >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  rpt strip_tac >> simp[] >>
+  fs[vars_kept_def, var_below_def] >> metis_tac[LESS_LESS_EQ_TRANS]
+QED
+
 Theorem fuel_ok_compile_dynarray_to_storage:
   !src_ptr dst_slot elem_words elem_mem_size transient Wv E.
     fuel_ok Wv {} E
@@ -772,5 +836,43 @@ Theorem fuel_ok_compile_dynarray_to_storage:
 Proof
   rpt gen_tac >> rewrite_tac[fuel_ok_def] >> rpt gen_tac >> strip_tac >>
   drule dynstorage_structure >> strip_tac >> simp[] >>
+  Cases_on `x` >>
+  qpat_x_assum `compile_dynarray_to_storage _ _ _ _ _ _ = _` mp_tac >>
+  rewrite_tac[SIMP_RULE std_ss [LET_THM] dynstorage_parts] >>
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `copy s12 = ((),s13)` >>
+  `fuel_ok {} {} {} copy` by
+    (unabbrev_all_tac >>
+     mp_tac (Q.SPECL [`src_ptr`, `dst_slot`, `counter`, `elem_words`,
+       `elem_mem_size`, `transient`, `{}`, `{}`] fuel_ok_dynstorage_copy_body) >>
+     Cases_on `transient` >> simp[]) >>
+  drule_all dynstorage_entry_layout >> strip_tac >>
+  `var_below s8.cs_next_var lv /\ var_below s8.cs_next_var counter` by gvs[] >>
+  `len = Var lv` by simp[] >>
+  qpat_x_assum `len = Var lv` SUBST_ALL_TAC >>
+  drule_all dynstorage_entry_extends >> strip_tac >>
+  drule_all dynstorage_condition_extends >> strip_tac >>
+  drule_all dynstorage_increment_extends >> strip_tac >>
+  drule_all dynstorage_slice_frontiers >> strip_tac >>
+  qpat_x_assum `lt = Var vl` SUBST_ALL_TAC >>
+  qpat_x_assum `done = Var vd` SUBST_ALL_TAC >>
+  qpat_x_assum `inc = Var vi` SUBST_ALL_TAC >>
+  drule dynstorage_copy_body_outcome >>
+  disch_then (qspecl_then [`s12`, `()`, `s13`, `lv`, `counter`] mp_tac) >>
+  simp[] >> disch_then (qx_choose_then `Kcopy` strip_assume_tac) >>
+  `fuel_ok {} {} {} (emit_void (if transient then TSTORE else SSTORE)
+      [dst_slot; Var lv])` by
+    (irule fuel_ok_emit_void_any >> Cases_on `transient` >> simp[is_terminator_def]) >>
+  qpat_x_assum `fuel_ok _ _ _ (emit_void _ _)` mp_tac >>
+  rewrite_tac[fuel_ok_def] >> disch_then drule >> strip_tac >>
+  rename1 `frag_fuel {} {} {} s17 st' Kstore` >>
+  qexists_tac `1 + 2 ** 256 * (Kcopy + 2) + Kstore` >>
+  rewrite_tac[frag_fuel_def] >> rpt gen_tac >> simp[] >> strip_tac >>
+  drule_all dynstorage_slice_code >> strip_tac >>
+  drule_all dynstorage_entry_code >> strip_tac >>
+  qpat_x_assum `Var lv = Var _` (mp_tac o SRULE []) >>
+  disch_then (fn th => SUBST_ALL_TAC (SYM th)) >>
+  drule_all dynstorage_entry_outcome >>
+  disch_then (qspecl_then [`G`, `ctx`] assume_tac) >>
   cheat
 QED
