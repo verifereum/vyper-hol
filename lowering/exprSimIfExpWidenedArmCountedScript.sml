@@ -30,6 +30,10 @@ Theorem compile_nocopy_ifexp_post_path:
       es origin sb s0 ee v op q /\
     (~is_word_type (expr_type e) ==> vv_at ce cx (expr_type e) origin sb ee tvv
       (LocatedValue (expr_type e) (mk_ptr op LocMemory)) q) /\
+    (~is_word_type (expr_type e) ==>
+     !id path. tvv = PlaceR (MemoryPlace id path) ==>
+       vv_place_ptr ce cx ee q tvv
+         (LocatedValue (expr_type e) (mk_ptr op LocMemory))) /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -66,6 +70,13 @@ Proof
   `expr_post ctx func ce cx (IfExp (expr_type e) c a b)
     es origin sb s0 ee v op u` by
     (irule nocopy_ifexp_post_annotated >> simp[] >> metis_tac[]) >>
+  `~is_word_type (expr_type e) ==> !id path. tvv <> PlaceR (MemoryPlace id path)` by
+    (strip_tac >>
+     `~is_word_type (post_value_type ce e)` by
+       (irule post_value_type_nonword >> metis_tac[]) >>
+     qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ tvv _ _` mp_tac >>
+     Cases_on `vv` >> gvs[vv_post_def, vv_at_def, vv_holds_def] >>
+     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
   qexists_tac `u` >> simp[] >> conj_tac
   >- suspend "provenance" >>
   fs[gas_marked_path_def] >> metis_tac[cj 1 gas_path_normal]
@@ -80,6 +91,10 @@ Resume compile_nocopy_ifexp_post_path[memory]:
   `expr_post ctx func ce cx (IfExp (expr_type e) c a b)
     es origin sa s0 ee v p.ptr_operand s` by
     (irule nocopy_ifexp_post_annotated >> simp[] >> metis_tac[]) >>
+  `vv_place_ptr ce cx ee s tvv
+     (LocatedValue (expr_type e) (mk_ptr p.ptr_operand LocMemory))` by
+    (irule exprSimIfExpTheory.ifexp_place_ptr_mem_ptr >>
+     simp[] >> qexists_tac `t` >> fs[vv_post_def]) >>
   qexists_tac `s` >>
   simp[gas_marked_path_def, cj 1 gas_path_rules] >>
   Cases_on `post_value_type ce e = expr_type e`

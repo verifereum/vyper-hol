@@ -38,6 +38,10 @@ Theorem compile_selected_ifexp_post_path:
       es origin sb s0 ee v op q /\
     (~is_word_type (expr_type e) ==> vv_at ce cx (expr_type e) origin sb ee tvv
       (LocatedValue (expr_type e) (mk_ptr op LocMemory)) q) /\
+    (~is_word_type (expr_type e) ==>
+     !id path. tvv = PlaceR (MemoryPlace id path) ==>
+       vv_place_ptr ce cx ee q tvv
+         (LocatedValue (expr_type e) (mk_ptr op LocMemory))) /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -45,7 +49,12 @@ Proof
   Cases_on `is_word_type (expr_type e) \/
     same_memory_layout ce (lowered_value_type ce e) (expr_type e)`
   >- (irule compile_nocopy_ifexp_post_path >> metis_tac[]) >>
-  fs[] >> Cases_on `is_bytestring_type (expr_type e)`
+  fs[] >>
+  `!id path. tvv <> PlaceR (MemoryPlace id path)` by
+    metis_tac[exprSimIfExpTheory.ifexp_raw_place_layout] >>
+  qpat_assum `!id path. tvv <> _` (fn th =>
+    PURE_REWRITE_TAC [th, IMP_CLAUSES, FORALL_SIMP, AND_CLAUSES]) >>
+  Cases_on `is_bytestring_type (expr_type e)`
   >- (irule compile_bytes_ifexp_post_path >> metis_tac[expr_has_effect_thm]) >>
   `lowered_value_type ce e <> expr_type e` by
     (strip_tac >> fs[same_memory_layout_def, punnable_reflexive]) >>
@@ -117,6 +126,8 @@ Theorem selected_ifexp_arm_outcome:
         es sc sb s0 ee v op t /\
       (~is_word_type (expr_type e) ==> vv_at ce cx (expr_type e) sc sb ee tv
         (LocatedValue (expr_type e) (mk_ptr op LocMemory)) t) /\
+      (~is_word_type (expr_type e) ==> vv_place_ptr ce cx ee t tv
+        (LocatedValue (expr_type e) (mk_ptr op LocMemory))) /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee r. expr_exit res r)
@@ -178,6 +189,11 @@ Proof
   `expr_post ctx func ce cx (IfExp (expr_type e) c a b)
     es sc sb s0 (mid with gas_obs := []) v' op q` by
     (fs[expr_post_def, locals_kept_def, popped_kept_def] >> metis_tac[]) >>
+  `~is_word_type (expr_type e) ==>
+   vv_place_ptr ce cx mid q tv
+     (LocatedValue (expr_type e) (mk_ptr op LocMemory))` by
+    (strip_tac >> drule exprSimIfExpTheory.ifexp_conditional_result_place >>
+     strip_tac >> gvs[]) >>
   simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INL tv`, `mid with gas_obs := []`, `OK q`] >>

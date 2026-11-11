@@ -309,7 +309,8 @@ Theorem body_attr_memory_vv_post:
             read_result cx tv' es1 = (INL fv, es1)) /\
     vv_loc bvv = LocMemory /\
     (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
-       ?path. path' = path ++ [AttrSubscript fld] /\ tv = PlaceR (MemoryPlace id path)) ==>
+       ?path. path' = path ++ [AttrSubscript fld] /\ tv = PlaceR (MemoryPlace id path)) /\
+    vv_place_ptr cenv cx es1 q tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ==>
     vv_post ctx func cenv cx (Attribute ann obj fld) es sa sn s0 es1 tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof
