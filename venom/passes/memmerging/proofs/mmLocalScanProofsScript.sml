@@ -7548,6 +7548,28 @@ Proof
   simp[mode_load_opcode_def]
 QED
 
+Theorem mm_local_canonical_pending_copy_owner[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  n <= LENGTH is /\ MEM j (mm_local_pending_indices is gs n) ==>
+  ?h. MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids
+Proof
+  strip_tac >>
+  qpat_x_assum `MEM j (mm_local_pending_indices _ _ _)`
+    (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+  `j < LENGTH is` by decide_tac >>
+  `MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
+  drule_all mm_local_final_write_birth >> strip_tac
+  >- (drule_all mm_local_indexed_bulk_owner >> metis_tac[]) >>
+  drule_all (REWRITE_RULE [] (Q.INST [`s0` |->
+    `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is)`]
+    (SPEC_ALL mm_local_indexed_store_owner))) >> metis_tac[]
+QED
+
 Theorem mm_local_canonical_pending_owner[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
@@ -12909,6 +12931,89 @@ Proof
         (Cases_on `(EL q is).inst_opcode` >> gvs[venomInstTheory.is_alloca_op_def]) >>
       drule_all venomMemPropsTheory.step_inst_alloca_preserves_memory >> simp[]) >>
   drule_all venomInstPropsTheory.write_effects_sound_memory >> simp[]
+QED
+
+Theorem mm_local_live_segment_runtime_recurrence[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ r < LENGTH is /\ r < N /\ N <= LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM b (mm_local_pending_indices is gs r) /\ b <= q /\ q < r /\
+  ~is_terminator (EL q is).inst_opcode /\
+  step_inst fuel ctx (EL q is) (H q) = OK t /\
+  H (SUC q) = t with vs_inst_idx := SUC (H q).vs_inst_idx ==>
+  (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H N q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory
+Proof
+  strip_tac >> `q < N` by decide_tac >>
+  Cases_on `mm_local_write_capture is H N q`
+  >- (simp[] >>
+      Cases_on `b = q`
+      >- (qpat_assum `MEM b (mm_local_pending_indices _ _ r)`
+            (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+          `b < LENGTH is` by decide_tac >>
+          `MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
+          drule_all mm_local_final_write_birth >> strip_tac >> gvs[] >>
+          drule_at (Pat `step_inst _ _ _ _ = _`) mm_local_interval_runtime_capture >>
+          disch_then (qspec_then `N` mp_tac) >> simp[]) >>
+      `MEM b (mm_local_pending_indices is gs q)` by
+        (pure_rewrite_tac[mm_local_pending_indices_mem] >>
+         qpat_assum `MEM b (mm_local_pending_indices _ _ r)`
+           (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+         conj_tac >- decide_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+         goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
+      qabbrev_tac `ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+        empty_scan_state (TAKE q is)` >>
+      `q <= LENGTH is` by decide_tac >>
+      `?c. MEM c ss.ss_copies /\ MEM (EL b is).inst_id c.cg_inst_ids` by
+        metis_tac[mm_local_canonical_pending_copy_owner] >>
+      `~MEM c (scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is)).ss_flushed` by
+        (qpat_x_assum `MEM b (mm_local_pending_indices _ _ r)`
+           (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+         `b < LENGTH is` by decide_tac >>
+         `scan_inst (dfg_build_function fn0) Mem2Mem ss (EL q is) =
+          FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+            empty_scan_state (TAKE (SUC q) is)` by
+           (`q < LENGTH is` by decide_tac >>
+            gvs[Abbr `ss`, rich_listTheory.TAKE_SUC,
+              rich_listTheory.DROP_EL_CONS, FOLDL_APPEND]) >>
+         rename1 `rep_of_group is g = SOME ((EL owner_r is).inst_id,g)` >>
+         `SUC q <= owner_r` by decide_tac >>
+         metis_tac[mm_local_indexed_future_not_flushed]) >>
+      drule_all mm_local_surviving_runtime_frame >> simp[]) >>
+  PairCases_on `x` >> simp[] >>
+  `(EL q is).inst_opcode = MSTORE \/ (EL q is).inst_opcode = MCOPY` by
+    (gvs[mm_local_write_capture_def, AllCaseEqs()] >> metis_tac[]) >>
+  drule_at (Pat `step_inst _ _ _ _ = _`) mm_local_interval_runtime_capture >>
+  disch_then (qspec_then `N` mp_tac) >> simp[]
+QED
+
+Theorem mm_local_fixed_cut_runtime_recurrence[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ h <= a /\ a <= r /\ r < LENGTH is /\
+  r < N /\ N <= LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  (!q. a <= q /\ q < r ==> ?b. MEM b (mm_local_pending_indices is gs (SUC q))) /\
+  (!q. h <= q /\ q < r ==> ~is_terminator (EL q is).inst_opcode /\
+    ?t. step_inst fuel ctx (EL q is) (H q) = OK t /\
+      H (SUC q) = t with vs_inst_idx := SUC (H q).vs_inst_idx) ==>
+  !q. a <= q /\ q < r ==>
+  (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H N q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `?b. MEM b (mm_local_pending_indices is gs (SUC q))` by metis_tac[] >>
+  `b < SUC q` by metis_tac[mm_local_pending_indices_mem] >>
+  `b <= q /\ q < SUC q /\ SUC q < LENGTH is /\ SUC q < N /\ h <= q` by decide_tac >>
+  `~is_terminator (EL q is).inst_opcode /\
+    ?t. step_inst fuel ctx (EL q is) (H q) = OK t /\
+      H (SUC q) = t with vs_inst_idx := SUC (H q).vs_inst_idx` by metis_tac[] >>
+  drule_all mm_local_live_segment_runtime_recurrence >> simp[]
 QED
 
 Theorem mm_local_pending_indices_after_phis[local]:
