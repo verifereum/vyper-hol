@@ -250,9 +250,9 @@ Theorem LIST_REL_stack_dup:
   LIST_REL R (REVERSE stk) top /\ d < LENGTH stk ==>
   LIST_REL R (REVERSE (stack_dup d stk)) (EL d top :: top)
 Proof
-  `!k stk. k < LENGTH stk ==> stack_peek k stk = EL k (REVERSE stk)` by
-    (rpt strip_tac >> simp[stack_peek_def, EL_REVERSE] >>
-     `PRE (LENGTH stk - k) = LENGTH stk - 1 - k` by decide_tac >> simp[]) >>
+  `!k l. k < LENGTH l ==> stack_peek k l = EL k (REVERSE l)` by
+    (rpt strip_tac >> simp[stackModelTheory.stack_peek_def, EL_REVERSE] >>
+     AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
   pop_assum (fn th => simp[stack_dup_def, th]) >>
   simp[LIST_REL_EL_EQN]
 QED
@@ -288,9 +288,9 @@ Theorem LIST_REL_stack_poke_equiv:
   LIST_REL R (REVERSE (stack_poke d op stk)) top
 Proof
   rpt strip_tac >> simp[reverse_stack_poke] >>
-  `!k stk. k < LENGTH stk ==> stack_peek k stk = EL k (REVERSE stk)` by
-    (rpt strip_tac >> simp[stack_peek_def, EL_REVERSE] >>
-     `PRE (LENGTH stk - k) = LENGTH stk - 1 - k` by decide_tac >> simp[]) >>
+  `!k l. k < LENGTH l ==> stack_peek k l = EL k (REVERSE l)` by
+    (rpt strip_tac >> simp[stackModelTheory.stack_peek_def, EL_REVERSE] >>
+     AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
   metis_tac[LIST_REL_replace_equiv, LENGTH_REVERSE]
 QED
 
@@ -311,20 +311,21 @@ Theorem LIST_REL_stack_swap:
     (LUPDATE (HD top) d (LUPDATE (EL d top) 0 top))
 Proof
   rpt strip_tac >>
-  `!k stk. 0 < k /\ k < LENGTH stk ==>
-     REVERSE (stack_swap k stk) =
-     LUPDATE (HD (REVERSE stk)) k
-       (LUPDATE (EL k (REVERSE stk)) 0 (REVERSE stk))` by
+  `!k l. 0 < k /\ k < LENGTH l ==>
+     REVERSE (stack_swap k l) =
+     LUPDATE (HD (REVERSE l)) k
+       (LUPDATE (EL k (REVERSE l)) 0 (REVERSE l))` by
     (rpt strip_tac >>
-     `stack_swap k stk =
-      stack_poke k (stack_peek 0 stk) (stack_poke 0 (stack_peek k stk) stk)` by
-       simp[stack_swap_def, stack_poke_def, stack_peek_def, LET_THM] >>
-     `LENGTH (stack_poke 0 (stack_peek k stk) stk) = LENGTH stk` by
-       simp[stack_poke_def] >>
+     `stack_swap k l =
+      stack_poke k (stack_peek 0 l) (stack_poke 0 (stack_peek k l) l)` by
+       simp[stackModelTheory.stack_swap_def, stackModelTheory.stack_poke_def,
+            stackModelTheory.stack_peek_def, LET_THM] >>
+     `LENGTH (stack_poke 0 (stack_peek k l) l) = LENGTH l` by
+       simp[stackModelTheory.stack_poke_def] >>
      simp[reverse_stack_poke] >>
-     `!j. j < LENGTH stk ==> stack_peek j stk = EL j (REVERSE stk)` by
-       (rpt strip_tac >> simp[stack_peek_def, EL_REVERSE] >>
-        `PRE (LENGTH stk - j) = LENGTH stk - 1 - j` by decide_tac >> simp[]) >>
+     `!j. j < LENGTH l ==> stack_peek j l = EL j (REVERSE l)` by
+       (rpt strip_tac >> simp[stackModelTheory.stack_peek_def, EL_REVERSE] >>
+        AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
      simp[EL]) >>
   simp[] >>
   metis_tac[LIST_REL_swap, LENGTH_REVERSE]

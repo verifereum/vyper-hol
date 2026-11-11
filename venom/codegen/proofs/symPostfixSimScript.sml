@@ -1382,20 +1382,21 @@ Theorem scratch_replay_do_swap_positive[local]:
     (REVERSE qs.ps_stack) slots
 Proof
   strip_tac >>
-  `!k stk. 0 < k /\ k < LENGTH stk ==>
-     REVERSE (stack_swap k stk) =
-     LUPDATE (HD (REVERSE stk)) k
-       (LUPDATE (EL k (REVERSE stk)) 0 (REVERSE stk))` by
+  `!k l. 0 < k /\ k < LENGTH l ==>
+     REVERSE (stack_swap k l) =
+     LUPDATE (HD (REVERSE l)) k
+       (LUPDATE (EL k (REVERSE l)) 0 (REVERSE l))` by
     (rpt strip_tac >>
-     `stack_swap k stk =
-      stack_poke k (stack_peek 0 stk) (stack_poke 0 (stack_peek k stk) stk)` by
-       simp[stack_swap_def, stack_poke_def, stack_peek_def, LET_THM] >>
-     `LENGTH (stack_poke 0 (stack_peek k stk) stk) = LENGTH stk` by
-       simp[stack_poke_def] >>
+     `stack_swap k l =
+      stack_poke k (stack_peek 0 l) (stack_poke 0 (stack_peek k l) l)` by
+       simp[stackModelTheory.stack_swap_def, stackModelTheory.stack_poke_def,
+            stackModelTheory.stack_peek_def, LET_THM] >>
+     `LENGTH (stack_poke 0 (stack_peek k l) l) = LENGTH l` by
+       simp[stackModelTheory.stack_poke_def] >>
      simp[reorderSimTheory.reverse_stack_poke] >>
-     `!j. j < LENGTH stk ==> stack_peek j stk = EL j (REVERSE stk)` by
-       (rpt strip_tac >> simp[stack_peek_def, EL_REVERSE] >>
-        `PRE (LENGTH stk - j) = LENGTH stk - 1 - j` by decide_tac >> simp[]) >>
+     `!j. j < LENGTH l ==> stack_peek j l = EL j (REVERSE l)` by
+       (rpt strip_tac >> simp[stackModelTheory.stack_peek_def, EL_REVERSE] >>
+        AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
      simp[EL]) >>
   gvs[do_swap_def] >>
   irule (cj 2 scratch_replay_rules) >>
