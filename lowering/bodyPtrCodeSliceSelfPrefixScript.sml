@@ -7,7 +7,7 @@ Ancestors
   compileEnv loweringStateRelDefs codegenRel ptrSafeRun memLocDefs
   contextCodegenRel words finite_map pred_set
   bodyPtrCodeSliceBounds exprSimCalldataSlice ghostPcTransportPtr
-  loweringHalt emitHelperProps exprLoweringProps
+  loweringHalt emitHelperProps exprLoweringProps exprSimPtrLiteralChunks
 
 Theorem self_code_data_add_frame:
   !d cenv cx es G tn s sa dst src site off v PG id.
@@ -237,3 +237,95 @@ Resume self_code_out_buffer_checked[checked]:
 QED
 
 Finalise self_code_out_buffer_checked
+
+Theorem self_code_prefix_operand_frame:
+  ghost_kept cenv es sa G tn s G1 tn1 /\
+  t.vs_labels = s.vs_labels /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+  (!x. value = Var x ==> not_fresh_at sa x) ==>
+  eval_operand value t = eval_operand value s /\
+  op_prov G1 value = op_prov G value /\
+  op_taint tn1 value = op_taint tn value
+Proof
+  strip_tac >> Cases_on `value` >>
+  gvs[eval_operand_def, op_prov_def, ghost_kept_def, op_taint_def] >>
+  metis_tac[]
+QED
+
+Theorem self_code_prefix_checked:
+  compile_slice_out_buf sz sa = ((out,dst),sb) /\
+  emit_op CODESIZE [] sb = (src_len,sc) /\
+  compile_assert_slice_bounds sop lop src_len sc = ((),sd) /\
+  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  32 <= sz /\ sz < dimword (:256) /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
+  ghost_inv d cenv cx es G tn s /\
+  (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
+  (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
+  eval_operand sop s = SOME wa /\ eval_operand lop s = SOME wn /\
+  op_taint tn sop = {} /\ op_taint tn lop = {} /\
+  op_prov G sop = NONE /\ op_prov G lop = NONE /\
+  (!x. sop = Var x ==> not_fresh_at sa x) /\
+  (!x. lop = Var x ==> not_fresh_at sa x) ==>
+  ?Gf tnf.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sd) s Gf tnf
+Proof
+  strip_tac >> drule_all self_code_out_buffer_checked >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  drule_all slice_out_buf_run >> strip_tac >> gvs[] >>
+  `!value. (!x. value = Var x ==> not_fresh_at sa x) ==>
+    eval_operand value t = eval_operand value s /\
+    op_prov G1 value = op_prov G value /\ op_taint tn1 value = op_taint tn value` by
+    (gen_tac >> disch_tac >> irule self_code_prefix_operand_frame >>
+     metis_tac[]) >>
+  `sa.cs_next_var <= sb.cs_next_var` by
+    (mp_tac (Q.SPECL [`sz`, `sa`] ci_mono_compile_slice_out_buf) >>
+     simp[ci_mono_def]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sb x` by
+    simp[not_fresh_at_def] >>
+  `?Gf tnf. inst_seq_ptr D 0 ctx fn PG G1 tn1
+     (emitted_insts sb sc ++ emitted_insts sc sd)
+     (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) Gf tnf` by
+    (irule self_code_size_bounds_checked >>
+     simp[eval_operand_inst_idx] >>
+     goal_assum (drule_at (Pat `compile_assert_slice_bounds _ _ _ _ = _`)) >>
+     simp[]) >>
+  `emitted_insts sa sd = emitted_insts sa sb ++
+    (emitted_insts sb sc ++ emitted_insts sc sd)` by suspend "emission" >>
+  qexistsl_tac [`Gf`, `tnf`] >>
+  qpat_x_assum `emitted_insts sa sd = _` (fn th => pure_once_rewrite_tac [th]) >>
+  irule literal_inst_seq_ptr_append >>
+  conj_tac >- suspend "nonterm" >>
+  qexistsl_tac [`G1`, `tn1`, `t`] >> simp[]
+QED
+
+Resume self_code_prefix_checked[emission]:
+  drule slice_out_buf_decompose >> strip_tac >>
+  qpat_assum `emit_op CODESIZE [] sb = _`
+    (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+  drule slice_bounds_shape >> strip_tac >>
+  `emitted_insts sb sd = emitted_insts sb sc ++ emitted_insts sc sd` by
+    (irule emitted_insts_append >> simp[]) >>
+  `sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb` by
+    simp[emitted_insts_append] >>
+  `emitted_insts sa sd = emitted_insts sa sb ++ emitted_insts sb sd` by
+    (irule emitted_insts_append >> simp[]) >> simp[]
+QED
+
+Resume self_code_prefix_checked[nonterm]:
+  drule slice_out_buf_decompose >> strip_tac >>
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  drule compile_alloc_buffer_emission >> strip_tac >>
+  drule emitted_insts_emit_inst >> strip_tac >>
+  `emitted_insts sa sm = emitted_insts sx sm` by
+    (qpat_x_assum `sx = _` SUBST1_TAC >>
+     simp[NoAsms, emitted_insts_def]) >>
+  simp[mk_inst_def, is_terminator_def]
+QED
+
+Finalise self_code_prefix_checked
