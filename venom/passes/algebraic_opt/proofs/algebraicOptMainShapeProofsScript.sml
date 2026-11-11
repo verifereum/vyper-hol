@@ -1,7 +1,7 @@
 Theory algebraicOptMainShapeProofs
 Ancestors
   algebraicOptShapeProofs algebraicOptDefs algebraicOptSupplyProofs
-  venomWf venomInst venomFnScheduleRunner irSupply rtaSupplyProofs
+  venomWf venomInst venomFnScheduleRunner irSupply irSupplyFreshProps
   unitShapeDefs stackPlanTypes list pred_set
 
 Theorem ao_handle_offset_inst_wf:

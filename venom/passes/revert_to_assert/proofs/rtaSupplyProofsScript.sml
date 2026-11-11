@@ -6,42 +6,10 @@
 
 Theory rtaSupplyProofs
 Ancestors
-  rtaDefs irSupply venomFnScheduleRunner fmpStepChunk fmpStepList venomWf
+  rtaDefs irSupply irSupplyFreshProps venomFnScheduleRunner fmpStepChunk fmpStepList venomWf
   venomInst venomState list
 Libs
   listTheory
-
-(* ===== Freshness bookkeeping ===== *)
-
-(* Going from supply list u to u', the list xs became xs': every new
-   member was outside u and is recorded in u', and distinctness of xs
-   (when xs is covered by u) carries over to xs'. *)
-Definition rta_fresh_ext_def:
-  rta_fresh_ext (u:'a list) u' xs xs' <=>
-    (!v. MEM v u ==> MEM v u') /\
-    (!v. MEM v xs' ==> MEM v xs \/ (~MEM v u /\ MEM v u')) /\
-    (ALL_DISTINCT xs /\ (!v. MEM v xs ==> MEM v u) ==> ALL_DISTINCT xs')
-End
-
-Theorem rta_fresh_ext_refl:
-  rta_fresh_ext u u xs xs
-Proof
-  simp[rta_fresh_ext_def]
-QED
-
-Theorem rta_fresh_ext_append:
-  rta_fresh_ext u u1 xs1 ys1 /\ rta_fresh_ext u1 u2 xs2 ys2 ==>
-  rta_fresh_ext u u2 (xs1 ++ xs2) (ys1 ++ ys2)
-Proof
-  rewrite_tac[rta_fresh_ext_def, ALL_DISTINCT_APPEND, MEM_APPEND] >>
-  strip_tac >> rpt conj_tac
-  >- metis_tac[]
-  >- metis_tac[]
-  >> strip_tac >>
-  `ALL_DISTINCT ys1` by metis_tac[] >>
-  `ALL_DISTINCT ys2` by metis_tac[] >>
-  simp[] >> metis_tac[]
-QED
 
 (* ===== Single instruction ===== *)
 
@@ -76,21 +44,21 @@ QED
 
 Theorem rta_transform_inst_supply_fresh:
   rta_transform_inst_supply fn s inst = (out,s') ==>
-  rta_fresh_ext s.irs_used_vars s'.irs_used_vars inst.inst_outputs
+  ir_fresh_ext s.irs_used_vars s'.irs_used_vars inst.inst_outputs
     (FLAT (MAP (\i. i.inst_outputs) out)) /\
   (ir_supply_inst_ok s ==>
    ir_supply_inst_ok s' /\
-   rta_fresh_ext s.irs_used_inst_ids s'.irs_used_inst_ids [inst.inst_id]
+   ir_fresh_ext s.irs_used_inst_ids s'.irs_used_inst_ids [inst.inst_id]
      (MAP (\i. i.inst_id) out))
 Proof
   strip_tac >> drule rta_transform_inst_supply_cases >> strip_tac
-  >- gvs[rta_fresh_ext_refl]
+  >- gvs[ir_fresh_ext_refl]
   >- (drule fresh_ir_var_contract >> strip_tac >>
       `s2.irs_used_vars = s1.irs_used_vars /\
        s'.irs_used_vars = s2.irs_used_vars` by gvs[fresh_inst_id_def] >>
       conj_tac
       >- gvs[mk_iszero_inst_def, mk_assert_inst_def, mk_jmp_inst_def,
-             rta_fresh_ext_def] >>
+             ir_fresh_ext_def] >>
       strip_tac >>
       `ir_supply_inst_ok s1` by gvs[ir_supply_inst_ok_def] >>
       qspecl_then [`s1`,`iz`,`s2`] mp_tac
@@ -100,16 +68,16 @@ Proof
         (Q.GENL [`s`,`id`,`s'`] fresh_inst_id_contract) >>
       simp[] >> strip_tac >>
       gvs[mk_iszero_inst_def, mk_assert_inst_def, mk_jmp_inst_def,
-          rta_fresh_ext_def] >>
+          ir_fresh_ext_def] >>
       rpt strip_tac >> gvs[] >> metis_tac[])
   >> `s'.irs_used_vars = s.irs_used_vars` by gvs[fresh_inst_id_def] >>
   conj_tac
-  >- gvs[mk_assert_inst_def, mk_jmp_inst_def, rta_fresh_ext_def] >>
+  >- gvs[mk_assert_inst_def, mk_jmp_inst_def, ir_fresh_ext_def] >>
   strip_tac >>
   qspecl_then [`s`,`as`,`s'`] mp_tac
     (Q.GENL [`s`,`id`,`s'`] fresh_inst_id_contract) >>
   simp[] >> strip_tac >>
-  gvs[mk_assert_inst_def, mk_jmp_inst_def, rta_fresh_ext_def] >>
+  gvs[mk_assert_inst_def, mk_jmp_inst_def, ir_fresh_ext_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
@@ -134,15 +102,15 @@ QED
 Theorem rta_transform_insts_supply_fresh:
   !insts s out s'.
     rta_transform_insts_supply fn s insts = (out,s') ==>
-    rta_fresh_ext s.irs_used_vars s'.irs_used_vars
+    ir_fresh_ext s.irs_used_vars s'.irs_used_vars
       (FLAT (MAP (\i. i.inst_outputs) insts))
       (FLAT (MAP (\i. i.inst_outputs) out)) /\
     (ir_supply_inst_ok s ==>
      ir_supply_inst_ok s' /\
-     rta_fresh_ext s.irs_used_inst_ids s'.irs_used_inst_ids
+     ir_fresh_ext s.irs_used_inst_ids s'.irs_used_inst_ids
        (MAP (\i. i.inst_id) insts) (MAP (\i. i.inst_id) out))
 Proof
-  Induct >- simp[rta_transform_insts_supply_def, rta_fresh_ext_refl] >>
+  Induct >- simp[rta_transform_insts_supply_def, ir_fresh_ext_refl] >>
   rpt gen_tac >> simp[rta_transform_insts_supply_def] >>
   Cases_on `rta_transform_inst_supply fn s h` >> rename1 `rta_transform_inst_supply fn s h = (o1,s1)` >>
   Cases_on `rta_transform_insts_supply fn s1 insts` >>
@@ -151,11 +119,11 @@ Proof
   first_x_assum drule >> strip_tac >>
   conj_tac
   >- (simp[MAP_APPEND, FLAT_APPEND] >>
-      irule rta_fresh_ext_append >> metis_tac[]) >>
+      irule ir_fresh_ext_append >> metis_tac[]) >>
   strip_tac >> gvs[] >>
-  qpat_x_assum `rta_fresh_ext s.irs_used_inst_ids _ _ _` (fn th1 =>
-    qpat_x_assum `rta_fresh_ext s1.irs_used_inst_ids _ _ _` (fn th2 =>
-      mp_tac (MATCH_MP rta_fresh_ext_append (CONJ th1 th2)))) >>
+  qpat_x_assum `ir_fresh_ext s.irs_used_inst_ids _ _ _` (fn th1 =>
+    qpat_x_assum `ir_fresh_ext s1.irs_used_inst_ids _ _ _` (fn th2 =>
+      mp_tac (MATCH_MP ir_fresh_ext_append (CONJ th1 th2)))) >>
   simp[MAP_APPEND]
 QED
 
@@ -305,31 +273,6 @@ Proof
   Induct >> simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
-(* ===== Covered names ===== *)
-
-Theorem fn_insts_blocks_outputs_ir_vars:
-  !bbs v. MEM v (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs))) ==>
-          MEM v (FLAT (MAP block_ir_vars bbs))
-Proof
-  Induct >> simp[fn_insts_blocks_def, MAP_APPEND, FLAT_APPEND] >>
-  rw[] >> gvs[block_ir_vars_def, inst_ir_vars_def, MEM_FLAT, MEM_MAP] >>
-  metis_tac[MEM_APPEND]
-QED
-
-Theorem fn_insts_blocks_inst_ids:
-  !bbs. MAP (\i. i.inst_id) (fn_insts_blocks bbs) =
-        FLAT (MAP block_ir_inst_ids bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def, block_ir_inst_ids_def]
-QED
-
-Theorem rta_inst_ids_blocks[local]:
-  !bbs. FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs) =
-        FLAT (MAP block_ir_inst_ids bbs)
-Proof
-  Induct >> simp[block_ir_inst_ids_def]
-QED
-
 (* ===== Function-level obligations ===== *)
 
 Theorem rta_transform_function_supply_ssa_form:
@@ -339,7 +282,7 @@ Proof
   rpt strip_tac >> simp[rta_transform_function_supply_def] >>
   Cases_on `rta_transform_blocks_supply fn s fn.fn_blocks` >> simp[] >>
   drule rta_transform_blocks_supply_insts >> strip_tac >>
-  drule rta_transform_insts_supply_fresh >> simp[rta_fresh_ext_def] >>
+  drule rta_transform_insts_supply_fresh >> simp[ir_fresh_ext_def] >>
   strip_tac >> gvs[ssa_form_def, fn_insts_def] >>
   first_x_assum irule >> simp[] >>
   gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM, fn_ir_vars_def] >>
@@ -371,10 +314,10 @@ Proof
     (gvs[fn_succs_closed_def, fn_labels_def] >> metis_tac[]) >>
   simp[] >>
   drule rta_transform_blocks_supply_insts >> strip_tac >>
-  drule rta_transform_insts_supply_fresh >> simp[rta_fresh_ext_def] >>
+  drule rta_transform_insts_supply_fresh >> simp[ir_fresh_ext_def] >>
   strip_tac >> gvs[] >>
   qpat_x_assum `ALL_DISTINCT (MAP _ (fn_insts_blocks fn.fn_blocks)) /\ _ ==> _`
     mp_tac >>
-  fs[fn_inst_ids_distinct_def, rta_inst_ids_blocks, fn_insts_blocks_inst_ids,
+  fs[fn_inst_ids_distinct_def, blocks_inst_ids_flat, fn_insts_blocks_inst_ids,
      ir_supply_covers_fn_def, list_subset_def, EVERY_MEM, fn_ir_inst_ids_def]
 QED

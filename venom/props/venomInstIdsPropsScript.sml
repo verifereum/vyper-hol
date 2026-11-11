@@ -35,3 +35,20 @@ Proof
    EL n' (MAP (\i. i.inst_id) (fn_insts fn))` by gvs[EL_MAP] >>
   `n = n'` by metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP] >> gvs[]
 QED
+
+Theorem all_distinct_flat_imp[local]:
+  !xss xs. ALL_DISTINCT (FLAT xss) /\ MEM xs xss ==> ALL_DISTINCT xs
+Proof
+  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
+QED
+
+Theorem fn_inst_ids_distinct_block:
+  !fn bb. fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks ==>
+    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)
+Proof
+  rw[fn_inst_ids_distinct_def] >>
+  drule_then (qspec_then `MAP (\i. i.inst_id) bb.bb_instructions` mp_tac)
+    all_distinct_flat_imp >>
+  impl_tac >- (simp[MEM_MAP] >> metis_tac[]) >>
+  simp[]
+QED

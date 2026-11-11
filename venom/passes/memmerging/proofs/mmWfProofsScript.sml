@@ -836,24 +836,6 @@ Proof
   imp_res_tac terminator_no_outputs >> gvs[]
 QED
 
-(* fn_inst_ids_distinct implies per-block ALL_DISTINCT *)
-Theorem all_distinct_flat_imp[local]:
-  !xss xs. ALL_DISTINCT (FLAT xss) /\ MEM xs xss ==> ALL_DISTINCT xs
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
-QED
-
-Theorem fn_inst_ids_distinct_block:
-  !fn bb. fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks ==>
-    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)
-Proof
-  rw[fn_inst_ids_distinct_def] >>
-  drule_then (qspec_then `MAP (\i. i.inst_id) bb.bb_instructions` mp_tac)
-    all_distinct_flat_imp >>
-  impl_tac >- (simp[MEM_MAP] >> metis_tac[]) >>
-  simp[]
-QED
-
 (* General: MEM in MAP THE (FILTER IS_SOME (MAP f l)) gives SOME witness *)
 Theorem mem_map_the_filter_some[local]:
   !f l x. MEM x (MAP THE (FILTER IS_SOME (MAP f l))) ==>

@@ -1,79 +1,71 @@
+(*
+ * Assert Combiner — semantic correctness.
+ *
+ * The structural obligations (SSA form, wf_function, fn_inst_wf, and the
+ * supply staying valid and covering the result) are in acSupplyProofs.
+ *
+ * Why it holds (intuition, not a prescribed proof):
+ *
+ *  - Inside a block the transform turns   ASSERT a; ...; ASSERT b
+ *    (a = ISZERO p1, b = ISZERO p2, possibly through ASSIGN chains, and
+ *    only ac_is_safe_between instructions in between) into
+ *    NOP; ...; t = OR p1 p2; u = ISZERO t; ASSERT u.  t and u are fresh
+ *    (outside the supply that covers fn), so on every path the original
+ *    passes, the transformed run differs only in fresh variables.
+ *  - When the original aborts at the first assert, the transformed run
+ *    executes the instructions in between and aborts at the merged assert.
+ *    Those instructions have no effects, so the abort states differ only
+ *    in variables (execution_equiv UNIV) and in the GAS readings consumed
+ *    by a GAS instruction in between (ac_abort_equiv).  The in-between
+ *    instructions can't fail on an operand in the transformed run: a Var
+ *    operand is defined (SSA dominance, below, or an earlier in-between
+ *    instruction) and a Label operand is in vs_labels (the premise).
+ *  - The source predicates p1 and p2 hold the value the DFG says when the
+ *    ASSERTs run.  Not because variables are never redefined (they are, on
+ *    a loop back edge), but by dominance: in wf_ssa every use is dominated
+ *    by its unique definition, so when control is at instruction idx of
+ *    bb, every definition strictly dominating that point has run, and its
+ *    output and the operands it read still hold their values (nothing
+ *    after it on the path redefines them).  This is the invariant to
+ *    carry: the DFG ISZERO/ASSIGN facts (acChainProofs's ac_dfg_inv_local)
+ *    for the definitions that strictly dominate the cursor (bb, idx),
+ *    together with strict_dom_vars_defined (venomWfProps) and
+ *    reachability, all about the original run.  ssa_unique_output_block
+ *    and fn_dominates_antisym (venomWfProps) show the instruction at the
+ *    cursor can't overwrite what that invariant talks about.  PHIs (at
+ *    block entry, eval_phis) are never merged and keep it.
+ *  - Blocks keep their labels and successor structure, so the simulation
+ *    is block by block, starting at inst index 0 of each block (the
+ *    transform inserts instructions, so mid-block indices don't
+ *    correspond).  INVOKE runs the same callee on both sides.
+ *  - An Error of the original run is excused (first disjunct).
+ *)
+
 Theory assertCombinerCorrectness
 Ancestors
-  assertCombinerProofs acWfPreserveProofs acSsaPreserveProofs venomWf
+  acSupplyProofs acChainProofs acAbortRelProofs acBaseProofs
+  assertCombinerDefs irSupply irSupplyFreshProps venomFnScheduleRunner
+  stateEquiv stateEquivProps venomWf venomWfProps venomExecSemantics
+  venomExecProofs venomInstIdsProps venomInst list
 
-(* The assert combiner transformation preserves semantic equivalence: running the
-   transformed function yields an equivalent result to the original, modulo fresh
-   variables introduced by the transformation. *)
+(* The assert combiner preserves semantics: on every run where the original
+   doesn't error, the transformed function ends the same way.  OK and halt
+   states agree up to the variables the transform took from the supply;
+   revert states fully; abort states up to the remaining GAS readings,
+   since a GAS read between the two merged asserts still runs in the
+   transformed function after the original has aborted at the first. *)
 Theorem ac_transform_function_correct:
-  !fuel ctx fn s.
-    let fn' = ac_transform_function fn in
-    let dfg = dfg_build_function fn in
-    wf_ssa fn /\
-    wf_function fn /\
-    fn_inst_wf fn /\
-    (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
-       ac_is_safe_between inst \/ inst.inst_opcode = ASSERT \/
-       is_terminator inst.inst_opcode) /\
-    (!bb inst x. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-       MEM (Var x) inst.inst_operands ==> x NOTIN ac_fresh_vars_fn fn) /\
-    (!bb inst x. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-       MEM x inst.inst_outputs ==> x NOTIN ac_fresh_vars_fn fn) /\
-    ac_inv fn dfg s /\
-    (* no_redefine: all instruction outputs are undefined in initial state *)
-    (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
-       MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s)) /\
-    (* Combined invariant preservation for fn blocks *)
-    (!bb fuel' ctx' s0 s0'.
-       MEM bb fn.fn_blocks /\
-       ac_inv fn dfg s0 /\
-       (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
-          MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0)) /\
-       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
-       ac_inv fn dfg s0' /\
-       (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
-          MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0'))) /\
-    (* Combined invariant preservation for fn' blocks *)
-    (!bb fuel' ctx' s0 s0'.
-       MEM bb fn'.fn_blocks /\
-       ac_inv fn dfg s0 /\
-       (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
-          MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0)) /\
-       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
-       ac_inv fn dfg s0' /\
-       (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
-          MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0'))) /\
-    s.vs_inst_idx = 0 ==>
-    lift_result (state_equiv (ac_fresh_vars_fn fn))
-               (execution_equiv UNIV)
-               (\s1 s2. ?gs. execution_equiv UNIV s1
-                 (s2 with vs_gas_readings := gs))
+  !fuel ctx fn su s.
+    wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\
+    ir_supply_covers_fn su fn /\
+    (!inst l. MEM inst (fn_insts fn) /\ ac_is_safe_between inst /\
+              MEM (Label l) inst.inst_operands ==> l IN FDOM s.vs_labels) /\
+    s.vs_inst_idx = 0 /\ fn_entry_label fn = SOME s.vs_current_bb ==>
+    (?e. run_blocks fuel ctx fn s = Error e) \/
+    lift_result (state_equiv (ac_fresh_vars su fn)) (execution_equiv UNIV)
+      (\s1 s2. ?gs. execution_equiv UNIV s1 (s2 with vs_gas_readings := gs))
       (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx fn' s)
+      (run_blocks fuel ctx (FST (ac_transform_function su fn)) s)
 Proof
-  ACCEPT_TAC ac_transform_function_correct_proof
-QED
-
-(* ===== Obligations ===== *)
-
-(* The assert combiner transformation preserves SSA form. *)
-(* Needs wf_function (distinct inst ids key distinct fresh names) and the
-   freshness premise of ac_transform_function_correct: ssa_form alone is
-   false, since the fresh names ac_or_<id>/ac_iz_<id> may already be used. *)
-Theorem ac_preserves_ssa_form:
-  ∀fn.
-    wf_function fn ∧ ssa_form fn ∧
-    (∀bb inst x.
-       MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions ∧
-       MEM x inst.inst_outputs ⇒ x ∉ ac_fresh_vars_fn fn) ⇒
-    ssa_form (ac_transform_function fn)
-Proof
-  ACCEPT_TAC ac_preserves_ssa_form_proof
-QED
-
-(* The assert combiner transformation preserves well-formedness. *)
-Theorem ac_preserves_wf_function:
-  ∀fn. wf_function fn ⇒ wf_function (ac_transform_function fn)
-Proof
-  ACCEPT_TAC ac_preserves_wf_function_proof
+  cheat
 QED
