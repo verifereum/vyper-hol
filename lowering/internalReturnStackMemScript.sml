@@ -1,7 +1,7 @@
 (* Memory safety of internal stack-return suffixes. *)
 Theory internalReturnStackMem
 Ancestors
-  stmtSimReturn fragGasSeqMem instMemFrontier memSafeRun fragExecMem
+  internalReturnSequenceMem stmtSimReturn fragGasSeqMem instMemFrontier memSafeRun fragExecMem
   gasCount fragExec runFromGasPathMem loweringStateRelDefs
   valueEncoding stmtSimDefs venomExecSemantics venomInstProofs venomState venomInst
   emitHelperProps exprLoweringProps list rich_list arithmetic
@@ -20,30 +20,11 @@ Theorem internal_word_return_mem_safe:
   ~s.vs_call_ctx.cc_static ==>
   mem_safe_run fuel ctx func s
 Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `st'.cs_current_insts = _`
-    (assume_tac o PURE_REWRITE_RULE [GSYM APPEND_ASSOC]) >>
-  drule_all fn_has_code_same_block >> strip_tac >>
-  qpat_x_assum `!i. _` (fn th =>
-    assume_tac (Q.SPEC `0` th) >> assume_tac (Q.SPEC `1` th)) >>
-  qabbrev_tac `info = cenv.ce_nonreentrant` >> PairCases_on `info` >>
-  Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
-  gvs[return_unlock_insts_def] >>
-  simp[mem_safe_run_def, Once mem_safe_block_def,
-       mem_safe_step_non_invoke, below_frontier_no_ranges,
-       inst_dload_in_section_other, mk_inst_def] >>
-  simp[Once exec_block_def, is_terminator_def] >>
-  simp[step_inst_non_invoke] >>
-  simp[mk_inst_def] >>
-  simp[SRULE [mk_inst_def] step_internal_word_return,
-       SRULE [mk_inst_def] step_persistent_return_unlock,
-       SRULE [mk_inst_def] transientLockPropsTheory.step_TSTORE_lit] >>
-  simp[eval_operand_def] >>
-  simp[Once mem_safe_block_def, Once exec_block_def, ADD1,
-       step_inst_non_invoke, mk_inst_def, mem_safe_step_non_invoke,
-       below_frontier_no_ranges, inst_dload_in_section_other,
-       SRULE [mk_inst_def] step_internal_word_return,
-       is_terminator_def]
+  rpt strip_tac >>
+  irule (cj 2 internal_return_values_run_mem) >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`cenv`, `[op]`, `pc`, `rpc`, `st`, `st'`, `[w]`] >>
+  simp[eval_operands_def]
 QED
 
 Theorem compile_internal_word_return_path_mem:
