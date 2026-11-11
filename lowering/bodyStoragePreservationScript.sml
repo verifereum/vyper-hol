@@ -839,7 +839,10 @@ Resume body_oracle_storage_mutual[intcall_lock_success]:
       `get_module_code (cx with stk updated_by CONS (NONE,fn)) NONE = SOME tops` by
         (qpat_x_assum `get_module_code cx NONE = _` mp_tac >>
          simp[vyperContextTheory.get_module_code_def]) >>
-      gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"] >>
+      (* set the IH aside: as a gvs rewrite it made this step slow *)
+      qpat_x_assum `!s0 vs t0 prev s1 dflt_vs t1 s3 ce t3 s4 rtv t4 s5 t5 s6 cxf t6. _`
+        (fn ih => gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def",
+                      Excl "lift_option_type_def"] >> assume_tac ih) >>
       qpat_x_assum `!vs st lock_st cxf call_env body_st args_st tops env ret_ty env' st' res st''. (_ /\ _) /\ type_stmts _ _ _ = _ /\ _ ==> _` irule >>
       simp[Excl "lock_if_nr_def", Excl "is_view_mut_def"] >>
       conj_tac
