@@ -8,7 +8,7 @@ Ancestors
   abiDecoderArrayInitReentry freshWrites compileEnv venomState finite_map
   words arithmetic list valueEncoding abiDecodePtrMemberFrame ptrDiscipline bodyPtrBopHashFrame
 
-Theorem abi_decode_ptr_operand_entry:
+Theorem abi_decode_ptr_operand_handoff:
   expr_post ctx func cenv cx e es0 s0c sa s0 es (BytesV bs) (Var p) s /\
   ptr_val_ok cx (expr_type e) (BytesV bs) (Var p) G tn s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
@@ -34,6 +34,9 @@ Theorem abi_decode_ptr_operand_entry:
     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa ready)
       (abi_decoder_prune_vars sa.cs_next_var s) G2 tn2 /\
     u.vs_memory = s.vs_memory /\
+    FLOOKUP u.vs_allocas sh.cs_next_id = SOME (w2n wout,outsz) /\
+    sh.cs_next_id < ready.cs_next_id /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
     ghost_kept cenv es sa G tn s G2 tn2 /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP u.vs_allocas aid = SOME entry) /\
@@ -60,7 +63,7 @@ Proof
   suspend "normalize"
 QED
 
-Resume abi_decode_ptr_operand_entry[normalize]:
+Resume abi_decode_ptr_operand_handoff[normalize]:
   gvs[] >>
   `b < dimword (:256)` by decide_tac >>
   `(b:num) MOD dimword (:256) = b` by
@@ -117,6 +120,10 @@ Resume abi_decode_ptr_operand_entry[normalize]:
   strip_tac >>
   qexistsl_tac [`u`, `G2`, `tn2`, `out`, `q`, `r`, `wout`] >>
   simp[abi_decoder_prune_vars_def] >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x u = _` drule >>
+    gvs[lookup_var_def, FLOOKUP_DRESTRICT, abi_decoder_older_vars_def,
+         not_fresh_at_def]) >>
   conj_tac >- (
     qpat_x_assum `ghost_kept cenv es sa G tn _ G2 tn2` mp_tac >>
     simp_tac bool_ss [bodyPtrDefsTheory.ghost_kept_def] >>
@@ -149,7 +156,7 @@ Resume abi_decode_ptr_operand_entry[normalize]:
   MATCH_ACCEPT_TAC (REWRITE_RULE [abi_decoder_prune_vars_def] abi_decoder_prune_extension)
 QED
 
-Resume abi_decode_ptr_operand_entry[locals]:
+Resume abi_decode_ptr_operand_handoff[locals]:
   `!name a k. local_region cenv es.scopes u name a k <=>
       local_region cenv es.scopes (abi_decoder_prune_vars sa.cs_next_var s) name a k` by
     (rpt gen_tac >> irule bop_local_region_readonly_frame >>
@@ -159,4 +166,47 @@ Resume abi_decode_ptr_operand_entry[locals]:
   asm_rewrite_tac[] >> goal_assum (drule_at Any)
 QED
 
-Finalise abi_decode_ptr_operand_entry
+Finalise abi_decode_ptr_operand_handoff
+
+Theorem abi_decode_ptr_operand_entry:
+  expr_post ctx func cenv cx e es0 s0c sa s0 es (BytesV bs) (Var p) s /\
+  ptr_val_ok cx (expr_type e) (BytesV bs) (Var p) G tn s /\
+  expr_type e = BaseT (BytesT (Dynamic cap)) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
+  abi_builtin_decode_header (Var p) mn mx sa = ((len,src),sh) /\
+  compile_alloc_buffer outsz sh = (buf,ready) /\
+  fn_has_code sa ready func /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  not_fresh_at sa p /\ abi_decoder_operand_live sa.cs_next_var (Var p) /\
+  mn <= LENGTH bs /\ LENGTH bs <= mx /\ mx < dimword (:256) /\
+  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  fn_inst_ids_distinct func /\ outsz < dimword (:256) ==>
+  ?u G2 tn2 out q r w wout.
+    eval_operand (Var p) s = SOME w /\
+    buf.buf_operand = Var out /\ src = Var q /\ len = Var r /\
+    gas_path_ptr D 0 ctx func PG G tn (abi_decoder_prune_vars sa.cs_next_var s)
+      0 G2 tn2 (OK u) /\
+    run_inst_seq (emitted_insts sa ready) (abi_decoder_prune_vars sa.cs_next_var s) =
+      OK (u with vs_inst_idx := s.vs_inst_idx) /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa ready)
+      (abi_decoder_prune_vars sa.cs_next_var s) G2 tn2 /\
+    u.vs_memory = s.vs_memory /\
+    ghost_kept cenv es sa G tn s G2 tn2 /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!aid b k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,k) ==>
+       regions_disjoint (w2n wout) outsz b k) /\
+    (!name b k. local_region cenv es.scopes s name b k ==>
+       regions_disjoint (w2n wout) outsz b k) /\
+    abi_decode_member_live d ctx func cenv cx es q (w+32w) (LENGTH bs)
+      out wout outsz (Lit 0w) 0w (Var r) ready G2 tn2 u /\
+    abi_decoder_vars_extend s.vs_vars (abi_decoder_prune_vars sa.cs_next_var s) s
+Proof
+  strip_tac >> drule_all abi_decode_ptr_operand_handoff >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`u`, `G2`, `tn2`, `out`, `q`, `r`, `w`, `wout`] >>
+  simp[] >> conj_tac >> first_assum ACCEPT_TAC
+QED
