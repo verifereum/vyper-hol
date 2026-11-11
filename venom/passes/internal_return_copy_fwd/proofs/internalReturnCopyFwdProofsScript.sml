@@ -808,5 +808,24 @@ Theorem ircf_pass_correct_nonvacuity:
       (readonly_mem_analyze ircf_witness_ctx) ircf_witness_ctx <>
     ircf_witness_ctx
 Proof
-  cheat
+  qx_choose_then `vs` strip_assume_tac ircf_witness_safe_entry >>
+  qexistsl_tac
+    [`<| d_stor := K (K UNIV); d_trans := K (K UNIV);
+         d_imm := K UNIV; d_ret := K UNIV |>`, `0`, `vs`] >>
+  simp[ircf_witness_wf, ircf_witness_no_dalloca, dead_wf_def] >>
+  `ptr_discipline 0 ircf_witness_ctx vs /\
+   taint_within
+     (<| d_stor := K (K UNIV); d_trans := K (K UNIV);
+         d_imm := K UNIV; d_ret := K UNIV |>) ircf_witness_ctx vs` by
+    (irule ptr_safe_ptr_discipline >>
+     simp[] >> conj_tac
+     >- (qexistsl_tac [`ircf_witness_main`, `"main"`, `"main"`] >>
+         simp[] >> EVAL_TAC) >>
+     metis_tac[ircf_witness_ptr_static]) >>
+  simp[] >>
+  strip_tac >>
+  qpat_x_assum `ircf_transform_ctx _ _ _ = _`
+    (mp_tac o Q.AP_TERM `\ctx. EL 1 ctx.ctx_functions`) >>
+  simp[ircf_transform_ctx_def, ircf_witness_ctx_def] >>
+  mp_tac ircf_witness_forwards >> simp[ircf_witness_ctx_def]
 QED
