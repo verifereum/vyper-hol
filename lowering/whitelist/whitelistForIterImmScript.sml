@@ -16,6 +16,7 @@ Ancestors
   vyperTypeInvariants vyperTypeValues vyperTypeEnv valueEncoding
   valueEncodingProps valueEncodingTyping exprSimAggregateEncoding
   exprSimTopLevelImmutable exprSimCopy loweringPosts venomState arithmetic
+  supportedExprTraverse allocLimitsProps
 Libs
   monadsyntax
 
@@ -171,7 +172,8 @@ Theorem immutable_for_body_callback[local]:
   id NOTIN FDOM env.var_types /\ evaluate_type (get_tenv cx) typ = SOME tv /\
   (!k. k < LENGTH vs ==> value_has_type tv (EL k vs)) /\
   type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
-  stmt_exprs_ok cenv
+  body_stmt_safe tops (For id typ (Array (TopLevelName (ArrayT typ bd) (src,name))) n stmts) /\
+    stmt_exprs_ok cenv
     (For id typ (Array (TopLevelName (ArrayT typ bd) (src,name))) n stmts) /\
   type_memory_bytes cenv typ < 2 ** 64 /\
   call_evaluation_safe cx (int_calls_stmt
@@ -187,7 +189,8 @@ Theorem immutable_for_body_callback[local]:
       (ei with scopes := (FEMPTY |+ (id,
         <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes)
 Proof
-  strip_tac >> rpt gen_tac >> strip_tac >>
+  strip_tac >>
+  imp_res_tac body_stmt_safe_for_body >> rpt gen_tac >> strip_tac >>
   `vs <> []` by (Cases_on `vs` >> fs[]) >>
   `body_stmts_ok cx stmts` by fs[body_for_ok_def] >>
   `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) stmts ==>
@@ -247,6 +250,7 @@ Theorem body_for_immutable_array:
     type_stmt env ret_ty
       (For id typ (Array (TopLevelName (ArrayT typ bd) (src,name))) n stmts) =
       SOME env' /\
+    body_stmt_safe tops (For id typ (Array (TopLevelName (ArrayT typ bd) (src,name))) n stmts) /\
     stmt_exprs_ok cenv
       (For id typ (Array (TopLevelName (ArrayT typ bd) (src,name))) n stmts) /\
     call_evaluation_safe cx
@@ -260,6 +264,7 @@ Theorem body_for_immutable_array:
         (For id typ (Array (TopLevelName (ArrayT typ bd) (src,name))) n stmts)) es
 Proof
   rpt gen_tac >> strip_tac >>
+  imp_res_tac body_stmt_safe_for_body >>
   drule_all immutable_for_typing_ready >> strip_tac >> gvs[] >>
   drule_all immutable_for_elements_ready >> strip_tac >>
   qmatch_asmsub_abbrev_tac `LENGTH vs <= bound_length bd` >>

@@ -3,6 +3,7 @@
    (S1's body_assign_local_memory). *)
 Theory bodyMemAssignLocalMem
 Ancestors
+  supportedExprTraverse allocLimits allocLimitsProps
   bodyMemoryPreds bodySim bodyExprPreFacts memoryLocalRhsProps
   bodyRhsRoomMemory exprSimAggregateLayout vyperTypeArgFits
   supportedStmtTraverse supportedStmts supportedExprs vyperTypeSystem
@@ -30,6 +31,7 @@ Theorem body_assign_local_rhs_pre[local]:
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget (NameTarget id)) e) /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
     FLOOKUP env.var_types id = SOME ty ==>
@@ -45,7 +47,19 @@ Proof
      Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >> Cases_on `asg` >> gvs[]) >>
   simp[] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
@@ -804,6 +818,7 @@ Theorem body_assign_local_memory_mem:
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget (NameTarget id)) e) /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
     frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\

@@ -1,6 +1,7 @@
 (* Memory case of the body induction (bodyMemory's body_mem_mutual): log. *)
 Theory bodyMemLog
 Ancestors
+  allocLimitsProps exprSimSource
   bodyMemoryPreds stmtLogMemory bodySimLog
   exprSimMemDefs exprSimHypsDefs bodyExprPreFacts bodySimStmtCases bodySim
   supportedExprs supportedExprTraverse supportedStmtTraverse supportedStmts
@@ -8,10 +9,10 @@ Ancestors
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   gasContext allocLimits vyperInterpreter vyperState list
 
-(* A supported pure argument meets expr_body_pre wherever expr_sim_inv
-   holds: it makes no internal call and runs no EVM code. *)
+(* The argument's explicit body-safety facts supply the call preconditions. *)
 Theorem log_mem_arg_body_pre[local]:
   !tops ctx cenv cx env e es.
+    body_stmt_safe tops (Expr e) /\ ~is_extcode e /\
     body_inv tops ctx cenv cx /\ supported_pure_expr tops e /\
     well_typed_expr env e /\
     ~supported_expr_exists
@@ -23,14 +24,16 @@ Theorem log_mem_arg_body_pre[local]:
     expr_body_pre cenv cx env e es
 Proof
   rpt strip_tac >>
-  `int_calls_expr e = []` by metis_tac[supported_pure_int_calls] >>
-  `supported_expr tops e` by simp[supported_expr_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
-  `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
-  `cx_tops cx = tops` by simp[cx_tops_def] >>
-  irule stmt_expr_body_pre >> simp[] >>
-  conj_tac >- (fs[body_inv_def] >> metis_tac[]) >>
-  qexists_tac `[]` >> gvs[]
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      int_calls_stmt_def, listTheory.EVERY_CONJ, GSYM expr_has_evm_run_def]) >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
+   (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+       is_dynamic (vyper_to_abi_type (type_env tops) target))` by
+    fs[body_inv_def] >>
+  `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
+  qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `[]`]
+    irule stmt_expr_body_pre >> simp[] >> metis_tac[]
 QED
 
 (* One step of the arguments: the head simulates under the memory
@@ -38,6 +41,7 @@ QED
    and the head's value has its type. *)
 Theorem log_mem_args_step[local]:
   !tops ctx func cenv cx env e tail s.
+    EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) (e::tail) /\
     body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx (e::tail) /\
     expr_sim_inv cenv cx env s /\
     supported_pure_exprs tops (e::tail) /\ well_typed_exprs env (e::tail) /\
@@ -48,7 +52,8 @@ Theorem log_mem_args_step[local]:
               occurs_abi_decode_target target tops) ==>
     expr_sim_mem ctx func cenv cx (expr_type e) e s /\
     !v s1. (do r <- eval_expr cx e; read_result cx r od) s = (INL v,s1) ==>
-      (body_exprs_mem_ok cx tail /\ expr_sim_inv cenv cx env s1 /\
+      (EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) tail /\
+       body_exprs_mem_ok cx tail /\ expr_sim_inv cenv cx env s1 /\
        supported_pure_exprs tops tail /\ well_typed_exprs env tail /\
        ~supported_exprs_exists
           (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) tail /\
@@ -58,7 +63,7 @@ Theorem log_mem_args_step[local]:
       ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
            value_has_type tv v
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> simp[EVERY_DEF] >> strip_tac >>
   qpat_x_assum `supported_pure_exprs _ _` (strip_assume_tac o
     SIMP_RULE std_ss [Once supported_pure_expr_def]) >>
   qpat_x_assum `well_typed_exprs _ _` (strip_assume_tac o
@@ -124,7 +129,13 @@ Proof
              occurs_abi_decode_target target tops)` by
     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
         int_calls_stmt_def, AllCaseEqs()] >>
-  qabbrev_tac `RR = \tail s. body_exprs_mem_ok cx tail /\ expr_sim_inv cenv cx env s /\ supported_pure_exprs tops tail /\ well_typed_exprs env tail /\ ~supported_exprs_exists (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) tail /\ call_evaluation_safe cx (int_calls_exprs tail) /\ (!target. supported_exprs_exists (expr_abi_decode_target_root target) tail ==> occurs_abi_decode_target target tops)` >>
+  `alloc_limits_exprs cenv es` by
+    fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) es` by
+    (fs[body_stmt_safe_log_args, EVERY_CONJ] >>
+     rw[EVERY_MEM] >> irule alloc_limits_expr_not_extcode >>
+     metis_tac[exprSimSourceTheory.alloc_limits_exprs_mem]) >>
+  qabbrev_tac `RR = \tail s. EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) tail /\ body_exprs_mem_ok cx tail /\ expr_sim_inv cenv cx env s /\ supported_pure_exprs tops tail /\ well_typed_exprs env tail /\ ~supported_exprs_exists (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) tail /\ call_evaluation_safe cx (int_calls_exprs tail) /\ (!target. supported_exprs_exists (expr_abi_decode_target_root target) tail ==> occurs_abi_decode_target target tops)` >>
   irule compile_log_ready_stmt_frag_mem >>
   conj_tac >- (
     qexists_tac `RR` >> simp[Abbr `RR`] >>

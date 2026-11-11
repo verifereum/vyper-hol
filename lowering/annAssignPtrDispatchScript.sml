@@ -11,6 +11,7 @@ Libs monadsyntax
 
 Theorem body_annassign_memory_ptr:
  !cx id typ e tops bindings ctx func cenv env env' ret_ty lctx RetQ es d PG.
+    body_stmt_safe tops (AnnAssign id typ e) /\
  (!tenv s'' tyv t. tenv = get_tenv cx /\
    lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
      (INL tyv,t) ==> body_expr_ptr_ok cx e) /\

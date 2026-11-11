@@ -10,6 +10,7 @@
    memory flag where S1's fix it to F. *)
 Theory bodyMemAugAssignTopWord
 Ancestors
+  supportedExprTraverse allocLimitsProps
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyMemAssignTopWord bodyDeclMemoryCounted
   bodyDeclMemoryCore allocaFootprint instMemFrontier memSafeRun
@@ -752,6 +753,7 @@ Finalise compile_augassign_toplevel_mem
 
 Theorem body_augassign_toplevel_word_mem:
   !cx ty src id bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    body_stmt_safe tops (AugAssign ty (TopLevelNameTarget (src,id)) bop e) /\
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx (TopLevelNameTarget (src, id)) s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
@@ -820,7 +822,19 @@ Proof
   gvs[optionTheory.IS_SOME_EXISTS] >>
   rename1 `lookup_var_slot_from_layout _ _ _ _ = SOME slot'` >>
   rename1 `evaluate_type _ ty = SOME tvt` >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>

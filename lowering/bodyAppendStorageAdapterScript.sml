@@ -1,6 +1,7 @@
 (* Body-side discharge for primitive storage Append. *)
 Theory bodyAppendStorageAdapter
 Ancestors
+  supportedExprTraverse allocLimits allocLimitsProps
   stmtSimDefs exprSimSource exprSimHypsDefs
   bodyAppendStorageFacts bodyExprPreFacts stmtSimAppendStorageCompose
   stmtSimAssignStorage bodySim exprSimHyps supportedStmts supportedStmtTraverse
@@ -12,6 +13,7 @@ Libs
   monadsyntax
 
 Theorem body_append_expr_pre:
+  body_stmt_safe tops (Append (TopLevelNameTarget nid) e) /\
   body_inv tops ctx cenv cx /\ supported_expr tops e /\
   expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
   stmt_exprs_ok cenv (Append (TopLevelNameTarget nid) e) /\
@@ -21,7 +23,20 @@ Theorem body_append_expr_pre:
             occurs_abi_decode_target target tops) ==>
   expr_body_pre cenv cx env e es
 Proof
-  strip_tac >> drule supported_expr_body_calls >> strip_tac >>
+  strip_tac >> qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
+
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     fs[body_inv_def] >>
   `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
@@ -66,6 +81,7 @@ Proof
 QED
 
 Theorem body_append_storage_fragment:
+  body_stmt_safe tops (Append (TopLevelNameTarget (src,id)) e) /\
   (!s p t. eval_target_place cx (TopLevelNameTarget (src,id)) s = (INL p,t) ==>
              body_expr_ok cx e) /\
   body_inv tops ctx cenv cx /\ supported_storage_dynamic_array tops (src,id) /\

@@ -130,6 +130,10 @@ QED
 
 Theorem aug_place_target_indices_pre:
   !t.
+    ~supported_target_exists expr_evm_run_root t /\
+    ~supported_target_exists call_operands_effect_root t /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) /\
+    EVERY (\e. ~is_extcode e) (target_indices t) /\
     IS_SOME (type_place_target env t) /\
     IS_SOME (supported_target_info tops bindings t) /\
     ~supported_target_exists
@@ -143,6 +147,10 @@ Theorem aug_place_target_indices_pre:
     target_indices_pre cenv cx env t
 Proof
   `(!e:expr. T) /\ (!t.
+    ~supported_target_exists expr_evm_run_root t /\
+    ~supported_target_exists call_operands_effect_root t /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) /\
+    EVERY (\e. ~is_extcode e) (target_indices t) /\
     IS_SOME (type_place_target env t) /\
     IS_SOME (supported_target_info tops bindings t) /\
     ~supported_target_exists
@@ -155,7 +163,8 @@ Proof
     supported_program tops /\ get_module_code cx NONE = SOME tops ==>
     target_indices_pre cenv cx env t)` suffices_by simp[] >>
   ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
-  simp[target_indices_pre_def, supported_expr_exists_def, int_calls_expr_def] >>
+  simp[target_indices_pre_def, supported_expr_exists_def, int_calls_expr_def, target_indices_def, EVERY_APPEND, EVERY_CONJ,
+       GSYM expr_has_evm_run_def] >>
   rpt conj_tac >> rpt gen_tac
   >~ [`IS_SOME (type_place_target env (SubscriptTarget t e))`]
     >- suspend "subscript"
@@ -179,7 +188,6 @@ Resume aug_place_target_indices_pre[subscript]:
   >- (first_x_assum irule >> simp[] >>
       metis_tac[call_evaluation_safe_append_left]) >>
   irule stmt_expr_body_pre >>
-  drule supported_expr_body_calls >> strip_tac >>
   simp[gasContextTheory.cx_tops_def] >>
   metis_tac[call_evaluation_safe_append_right, APPEND_NIL]
 QED

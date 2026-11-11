@@ -16,6 +16,7 @@
  *)
 Theory bodyPtrCtrlCases
 Ancestors
+  supportedStmtTraverse allocLimits allocLimitsProps
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list
   bodySimStmtCases bodyExprPreFacts supportedStmts supportedExprs
@@ -25,7 +26,6 @@ Ancestors
   emitHelperProps exprLoweringProps fragExec ptrSafeRun ptrDiscipline
   codegenRel contextCodegenRel venomInst venomState venomExecSemantics
   venomExecProofs stmtIfPtr exprSimSource supportedExprTraverse
-  supportedStmtTraverse
 
 val _ = Parse.hide "body";
 
@@ -156,7 +156,7 @@ Proof
          comp_bind_def, comp_ignore_bind_def, compile_stmt_def,
          comp_return_def] >>
   mp_tac (Q.SPEC `cx` body_stmts_nil_case_ptr) >>
-  simp[body_stmt_ptr_ok_def, body_stmt_safe_def, body_stmts_safe_iff, body_stmts_ptr_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
+  simp[body_stmt_ptr_ok_def, body_stmts_ptr_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   rpt strip_tac >>
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
       supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >>
@@ -169,7 +169,7 @@ QED
 Theorem body_continue_case_ptr:
   !cx. body_stmt_ptr_ok cx Continue
 Proof
-  rw[body_stmt_ptr_ok_def, body_stmt_safe_def, body_stmts_safe_iff, stmt_frag_ptr_def] >>
+  rw[body_stmt_ptr_ok_def, stmt_frag_ptr_def] >>
   Cases_on `lctx`
   >- (gvs[gas_admissible_def] >>
       first_x_assum (qspec_then `es.gas_obs` mp_tac) >>
@@ -185,7 +185,7 @@ QED
 Theorem body_break_case_ptr:
   !cx. body_stmt_ptr_ok cx Break
 Proof
-  rw[body_stmt_ptr_ok_def, body_stmt_safe_def, body_stmts_safe_iff, stmt_frag_ptr_def] >>
+  rw[body_stmt_ptr_ok_def, stmt_frag_ptr_def] >>
   Cases_on `lctx`
   >- (gvs[gas_admissible_def] >>
       first_x_assum (qspec_then `es.gas_obs` mp_tac) >>
@@ -209,12 +209,25 @@ Theorem body_if_case_ptr:
        body_stmts_ptr_ok cx ss2) /\ body_expr_ptr_ok cx e ==>
     body_stmt_ptr_ok cx (If e ss1 ss2)
 Proof
-  rpt gen_tac >> strip_tac >> simp[Once body_stmt_ptr_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
+  rpt gen_tac >> strip_tac >> simp[Once body_stmt_ptr_ok_def] >>
   rpt gen_tac >> strip_tac >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
       stmt_exprs_ok_def, supported_stmt_expr_exists_def, optionTheory.IS_SOME_EXISTS] >>
+  fs[GSYM optionTheory.IS_SOME_EXISTS] >>
   `supported_expr tops e` by fs[supportedExprsTheory.supported_expr_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
@@ -275,11 +288,23 @@ QED
 Theorem body_expr_stmt_case_ptr:
   !cx e. body_expr_ptr_ok cx e ==> body_stmt_ptr_ok cx (Expr e)
 Proof
-  rpt gen_tac >> strip_tac >> simp[Once body_stmt_ptr_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
+  rpt gen_tac >> strip_tac >> simp[Once body_stmt_ptr_ok_def] >>
   rpt gen_tac >> strip_tac >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
       stmt_exprs_ok_def, supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
@@ -314,7 +339,7 @@ Proof
   simp[cj 1 compile_stmt_cs_mono, stmts_env_cs_mono] >> reverse conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `body_stmt_ptr_ok _ _`
-        (irule o REWRITE_RULE [body_stmt_ptr_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
+        (irule o REWRITE_RULE [body_stmt_ptr_ok_def]) >>
       metis_tac[call_evaluation_safe_append_left]) >>
   rpt strip_tac >>
   rename1 `stmt_env cenv lctx ret_ty s sa = (c, sm)` >>

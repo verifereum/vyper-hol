@@ -15,6 +15,7 @@
  *)
 Theory bodyAugAssignOther
 Ancestors
+  targetPlaceLive supportedExprTraverse allocLimits allocLimitsProps
   supportedStmts supportedTargets supportedExprForms supportedDecls
   supportedTypes bodyStorageMetadata compileEnv vyperAST list alist
   bodySim stmtSimDefs exprSimHypsDefs targetPlaceSim targetPlaceSimCases
@@ -164,14 +165,28 @@ Theorem augassign_rhs_pre[local]:
   body_inv tops ctx cenv cx /\ supported_expr tops e /\
   expr_sim_inv cenv cx env es /\
   type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
-  stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+  body_stmt_safe tops (AugAssign ty t bop e) /\
+    stmt_exprs_ok cenv (AugAssign ty t bop e) /\
   call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (AugAssign ty t bop e) ==> occurs_abi_decode_target target tops) ==>
   expr_body_pre cenv cx env e es
 Proof
   rpt strip_tac >>
-  drule supported_expr_body_calls >> strip_tac >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
+
   gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
       int_calls_stmt_def, AllCaseEqs()] >>
   irule stmt_expr_body_pre >>
@@ -270,13 +285,21 @@ Theorem augassign_target_pre[local]:
   supported_stmt tops bindings (AugAssign ty t bop e) /\
   ((?b fld. t = AttributeTarget b fld) \/ (?b k. t = SubscriptTarget b k)) /\
   type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
-  stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+  body_stmt_safe tops (AugAssign ty t bop e) /\
+    stmt_exprs_ok cenv (AugAssign ty t bop e) /\
   call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (AugAssign ty t bop e) ==> occurs_abi_decode_target target tops) ==>
   target_indices_pre cenv cx env t
 Proof
   rpt strip_tac >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      int_calls_stmt_def, EVERY_APPEND, DE_MORGAN_THM]) >>
+  `EVERY (\e. ~is_extcode e) (target_indices t)` by
+    (irule alloc_limits_target_indices_not_extcode >>
+     qexists_tac `cenv` >>
+     fs[stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
   `?pt. supported_target_info tops bindings t = SOME pt` by
     metis_tac[aug_place_supported_stmt_target_info] >>
   irule aug_place_target_indices_pre >>
@@ -324,6 +347,7 @@ Theorem body_augassign_toplevel_aug:
        occurs_abi_decode_target target tops) /\
     type_stmt env ret_ty (AugAssign ty (TopLevelNameTarget (src, id)) bop e) =
       SOME env' /\
+    body_stmt_safe tops (AugAssign ty (TopLevelNameTarget (src, id)) bop e) /\
     stmt_exprs_ok cenv (AugAssign ty (TopLevelNameTarget (src, id)) bop e) /\
     call_evaluation_safe cx
       (int_calls_stmt (AugAssign ty (TopLevelNameTarget (src, id)) bop e)) ==>
@@ -354,6 +378,7 @@ QED
    (augassign_place_effectful_index_case). *)
 Theorem body_augassign_other_leaf:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    body_stmt_safe tops (AugAssign ty t bop e) /\
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx t s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\

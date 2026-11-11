@@ -18,6 +18,7 @@
 
 Theory bodySimLog
 Ancestors
+  allocLimits allocLimitsProps
   exprSimSource bodyExprPreFacts exprSimHypsDefs list bodySim bodySimStmtCases stmtSimLog exprSimHyps
   compileEnv compileVyper supportedStmts supportedDecls supportedTypes
   supportedExprs supportedExprTraverse supportedStmtTraverse vyperEvent vyperInterpreter
@@ -104,10 +105,10 @@ QED
 
 (* ===== The arguments ===== *)
 
-(* A supported pure argument meets expr_body_pre wherever expr_sim_inv
-   holds: it makes no internal call and runs no EVM code. *)
+(* The argument's explicit body-safety facts supply the call preconditions. *)
 Theorem log_arg_body_pre[local]:
   !tops ctx cenv cx env e calls es.
+    body_stmt_safe tops (Expr e) /\ ~is_extcode e /\
     body_inv tops ctx cenv cx /\ supported_pure_expr tops e /\
     well_typed_expr env e /\
     ~supported_expr_exists
@@ -120,21 +121,23 @@ Theorem log_arg_body_pre[local]:
     expr_body_pre cenv cx env e es
 Proof
   rpt strip_tac >>
-  `int_calls_expr e = []` by metis_tac[supported_pure_int_calls] >>
-  `supported_expr tops e` by simp[supported_expr_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
-  `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      int_calls_stmt_def, listTheory.EVERY_CONJ, GSYM expr_has_evm_run_def]) >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
+   (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+       is_dynamic (vyper_to_abi_type (type_env tops) target))` by
+    fs[body_inv_def] >>
   `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
-  irule stmt_expr_body_pre >> simp[] >>
-  conj_tac >- (fs[body_inv_def] >> metis_tac[]) >>
-  qexists_tac `calls` >> gvs[]
+  qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `calls`]
+    irule stmt_expr_body_pre >> simp[] >> metis_tac[]
 QED
 
-(* The arguments of a supported log are pure, so each meets expr_body_pre
-   wherever expr_sim_inv holds, and its evaluation keeps expr_sim_inv and
-   types its value (expr_body_pre_eval). *)
+(* Body safety and root allocation checks give each argument expr_body_pre;
+   expression evaluation then preserves the invariant and types its value. *)
 Theorem body_log_args_ready:
   !tops ctx func cenv cx env args.
+    EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) args /\
     body_inv tops ctx cenv cx /\ body_exprs_ok cx args /\
     supported_pure_exprs tops args /\ well_typed_exprs env args /\
     ~supported_exprs_exists
@@ -199,6 +202,12 @@ Proof
    !id t. FLOOKUP env.var_types id = SOME t ==>
      ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
     gvs[type_stmt_def, expr_sim_inv_def, AllCaseEqs()] >>
+  `alloc_limits_exprs cenv es` by
+    fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) es` by
+    (fs[body_stmt_safe_log_args, EVERY_CONJ] >>
+     rw[EVERY_MEM] >> irule alloc_limits_expr_not_extcode >>
+     metis_tac[exprSimSourceTheory.alloc_limits_exprs_mem]) >>
   irule compile_log_stmt_frag >> simp[] >>
   conj_tac
   >- (qpat_x_assum `MAP expr_type _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >>

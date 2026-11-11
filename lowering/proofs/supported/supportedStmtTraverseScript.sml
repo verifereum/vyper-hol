@@ -134,6 +134,24 @@ Proof
   metis_tac[]
 QED
 
+Theorem body_stmt_safe_log_args:
+  body_stmt_safe tops (Log id es) <=>
+  EVERY (\e. body_stmt_safe tops (Expr e)) es
+Proof
+  Induct_on `es` >>
+  fs[body_stmt_safe_def, supported_stmt_expr_exists_def,
+       supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def,
+       EVERY_APPEND, EVERY_CONJ] >> metis_tac[]
+QED
+
+Theorem body_stmt_safe_for_body:
+  body_stmt_safe tops (For id typ it n stmts) ==>
+  body_stmts_safe tops stmts
+Proof
+  rw[body_stmt_safe_def, body_stmts_safe_iff,
+     supported_stmt_expr_exists_def, int_calls_stmt_def]
+QED
+
 (* keep duplicates, all branches and nesting, and their declared types;
    locals=T collects AnnAssign, locals=F collects For. *)
 Definition supported_stmt_bindings_def:

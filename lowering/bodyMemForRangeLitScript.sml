@@ -21,6 +21,7 @@ val _ = Parse.hide "body";
 Theorem body_for_range_lit_mem:
   !cx id typ it n body d tops bindings ctx func cenv env env' ret_ty lctx RetQ
    es.
+    body_stmt_safe tops (For id typ it n body) /\
     (!tenv s'' tyv t s'3' vs t' s'4' x t''.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
@@ -49,7 +50,8 @@ Theorem body_for_range_lit_mem:
       (stmt_env cenv lctx ret_ty (For id typ it n body))
       (eval_stmt cx (For id typ it n body)) es
 Proof
-  rpt strip_tac >> gvs[] >> rename1 `For id typ _ n stmts` >>
+  rpt strip_tac >>
+  imp_res_tac body_stmt_safe_for_body >> gvs[] >> rename1 `For id typ _ n stmts` >>
   `FLOOKUP cenv.ce_vars id = NONE` by
     (irule declared_name_unbound >> metis_tac[]) >>
   `id NOTIN FDOM env.var_types /\ is_int_type typ /\
@@ -109,7 +111,7 @@ Proof
       `value_has_type tyv (IntV (n1 + &j))` by
         (irule range_value_has_type >> simp[] >> qexists_tac `n2` >> simp[]) >>
       `body_stmts_safe tops stmts` by
-        metis_tac[supported_stmts_body_safe] >>
+        metis_tac[body_stmt_safe_for_body] >>
       qpat_x_assum `body_stmts_mem_ok _ _`
         (irule o REWRITE_RULE [body_stmts_mem_ok_def]) >>
       simp[] >> rpt conj_tac

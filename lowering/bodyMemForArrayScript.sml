@@ -116,6 +116,7 @@ QED
 Theorem array_body_fragment_callback_mem[local]:
   !cx stmts tops ctx cenv bindings env ei id typ tv v env_b ret_ty
    d func RetQ st0 bc sd ex inc.
+    body_stmts_safe tops stmts /\
     body_stmts_mem_ok cx stmts /\ body_inv tops ctx cenv cx /\
     supported_stmts tops bindings stmts /\
     (!target. supported_stmts_expr_exists
@@ -147,7 +148,7 @@ Proof
     (drule_then irule declare_local_same_frame >> simp[]) >>
   `body_inv tops ctx bc cx` by metis_tac[body_inv_same_frame] >>
   `body_stmts_safe tops stmts` by
-    metis_tac[supported_stmts_body_safe] >>
+    metis_tac[body_stmt_safe_for_body] >>
   qpat_x_assum `body_stmts_mem_ok _ _`
     (irule o REWRITE_RULE [body_stmts_mem_ok_def]) >>
   simp[] >> rpt conj_tac
@@ -165,6 +166,7 @@ QED
 Theorem body_for_array_mem:
   !cx id typ it n body d tops bindings ctx func cenv env env' ret_ty lctx RetQ
    es.
+    body_stmt_safe tops (For id typ it n body) /\
     (!tenv s'' tyv t s'3' vs t' s'4' x t''.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
@@ -193,7 +195,8 @@ Theorem body_for_array_mem:
       (stmt_env cenv lctx ret_ty (For id typ it n body))
       (eval_stmt cx (For id typ it n body)) es
 Proof
-  rpt gen_tac >> strip_tac >> qpat_x_assum `it = Array _` SUBST_ALL_TAC >>
+  rpt gen_tac >> strip_tac >>
+  imp_res_tac body_stmt_safe_for_body >> qpat_x_assum `it = Array _` SUBST_ALL_TAC >>
   drule_all array_for_source_ready_mem >> strip_tac >> gvs[] >>
   rename1 `lookup_scopes name es.scopes = SOME entry` >>
   rename1 `evaluate_type (get_tenv cx) typ = SOME tv` >>

@@ -5,7 +5,7 @@
    invariant. *)
 Theory bodyMemForRange
 Ancestors
-  bodyMemoryPreds bodySeqMemory stmtForRangeMemory exprSimMemDefs bodySimDeclCases
+  allocLimitsProps supportedExprTraverse bodyMemoryPreds bodySeqMemory stmtForRangeMemory exprSimMemDefs bodySimDeclCases
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs
   vyperTypeStoragePreservation list finite_map bodySim bodySimStmtCases
   allocLimits exprSimHyps exprLoweringProps stmtLowering stmtLoweringMono
@@ -27,6 +27,7 @@ fun range_tuple_forall th =
 Theorem body_for_range_mem:
   !cx id typ it n body d tops bindings ctx func cenv env env' ret_ty lctx RetQ
    es.
+    body_stmt_safe tops (For id typ it n body) /\
     (!tenv s'' tyv t s'3' vs t' s'4' x t''.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
@@ -56,7 +57,8 @@ Theorem body_for_range_mem:
       (stmt_env cenv lctx ret_ty (For id typ it n body))
       (eval_stmt cx (For id typ it n body)) es
 Proof
-  rpt strip_tac >> gvs[] >> rename1 `For id typ _ n stmts` >>
+  rpt strip_tac >>
+  imp_res_tac body_stmt_safe_for_body >> gvs[] >> rename1 `For id typ _ n stmts` >>
   drule (range_tuple_forall body_range_typing) >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
   `env.type_defs = get_tenv cx` by
@@ -101,17 +103,26 @@ Proof
   `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
             is_dynamic (vyper_to_abi_type (type_env tops) target)` by
     fs[body_inv_def] >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `expr_body_pre cenv cx env e1 es` by
     (irule stmt_expr_body_pre >>
-     qpat_assum `supported_expr tops e1`
-       (strip_assume_tac o MATCH_MP supported_expr_body_calls) >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def] >>
      qexists_tac `int_calls_expr e2 ++ int_calls_stmts stmts` >> simp[]) >>
   `!ei. expr_sim_inv cenv cx env ei ==> expr_body_pre cenv cx env e2 ei` by
     (rpt strip_tac >> irule stmt_expr_body_pre >>
-     qpat_assum `supported_expr tops e2`
-       (strip_assume_tac o MATCH_MP supported_expr_body_calls) >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def] >>
      qexists_tac `int_calls_stmts stmts` >>
@@ -190,7 +201,7 @@ Resume body_for_range_mem[body]:
               stmts ==> occurs_abi_decode_target target tops` by
     fs[supported_stmt_expr_exists_def] >>
   `body_stmts_safe tops stmts` by
-    metis_tac[supported_stmts_body_safe] >>
+    metis_tac[body_stmt_safe_for_body] >>
   qpat_x_assum `body_stmts_mem_ok _ _`
     (irule o REWRITE_RULE [body_stmts_mem_ok_def]) >>
   simp[] >> rpt conj_tac

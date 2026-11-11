@@ -59,6 +59,7 @@
  *)
 Theory whitelistLogWiden
 Ancestors
+  allocLimits allocLimitsProps
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
   stmtSimLogArgsRun stmtSimLogArgsGrowth stmtSimLogSuffix stmtSimLogSource
   exprSimWordArgs stmtSimLogSuffixActual stmtSimLogSuffixFrame
@@ -518,6 +519,7 @@ QED
    event's fields.  The premises are body_stmt_ok's that the case uses. *)
 Theorem body_log_widen_case:
   !cx id args tops ctx func cenv env env' ret_ty lctx RetQ es fields.
+    body_stmt_safe tops (Log id args) /\
     body_exprs_ok cx args /\ body_inv tops ctx cenv cx /\
     supported_pure_exprs tops args /\
     supported_event_fields tops id = SOME fields /\
@@ -549,6 +551,12 @@ Proof
    !id t. FLOOKUP env.var_types id = SOME t ==>
      ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
     gvs[type_stmt_def, expr_sim_inv_def, AllCaseEqs()] >>
+  `alloc_limits_exprs cenv args` by
+    fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) args` by
+    (fs[body_stmt_safe_log_args, EVERY_CONJ] >>
+     rw[EVERY_MEM] >> irule alloc_limits_expr_not_extcode >>
+     metis_tac[exprSimSourceTheory.alloc_limits_exprs_mem]) >>
   qspecl_then [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ret_ty`, `id`,
                `args`, `es`, `\s. expr_sim_inv cenv cx env s`, `h`,
                `MAP (SND o FST) fields`, `MAP SND fields`, `env`]
