@@ -28,6 +28,7 @@ Ancestors
   loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
   list rich_list selectorDispatch byte contractABI vyperABIRoundtrip
   valueEncoding entryDispatchProps ctorDeployInitcode abiCallerBuiltinInput compileVyper
+  ctorDeployMemoryFrontier
 
 (* Argument registration starts before any allocation or memory write. *)
 Theorem registration_start_resources:
@@ -122,6 +123,98 @@ Proof
   drule calldataTypedRobustPtrTheory.clean_footprint_val_in_memory_robust >>
   disch_then drule >>
   disch_then (qspec_then `{}` mp_tac) >> simp[]
+QED
+
+Theorem registration_empty_frontier:
+  lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\
+  lookup_function name ctx.ctx_functions = SOME fn /\ s.vs_alloca_next = 0 ==>
+  alloca_frontier_inv ctx fn site s /\ unit_alloca_budget ctx < dimword (:256)
+Proof
+  strip_tac >> drule_all ctorDeployMemoryFrontierTheory.lowered_unit_entry_facts >> strip_tac >>
+  `fn.fn_name = name /\ MEM fn ctx.ctx_functions` by
+    metis_tac[lookup_function_result_name, lookup_function_MEM] >>
+  `fcg_is_reachable (fcg_analyze ctx) name` by
+    (irule fcgCorrectnessProofTheory.fcg_analyze_reachable_complete_proof >>
+     simp[fcgDefsTheory.fcg_path_def, venomInstTheory.ctx_fn_names_def] >>
+     metis_tac[lookup_function_mem]) >>
+  reverse conj_tac
+  >- (fs[lowering_context_ok_def] >> decide_tac) >>
+  simp[allocaFrontierBoundTheory.alloca_frontier_inv_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `reachable_fcg_acyclic ctx (fcg_analyze ctx)` by
+        fs[lowering_context_ok_def] >>
+      `fcg_is_reachable (fcg_analyze ctx) g` by
+        metis_tac[fcgPostorderTheory.reachable_fcg_acyclic_tc_rank] >>
+      metis_tac[fcgPostorderTheory.reachable_fcg_acyclic_no_reachable_cycle]) >>
+  simp_tac bool_ss [unit_alloca_budget_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `CARD below * frame + r <= (1+n)*frame` >>
+  `r <= frame` by
+    simp[Abbr `r`, Abbr `frame`, allocaFrontierBoundTheory.remaining_alloca_budget_frame] >>
+  `CARD below <= n` by
+    simp[Abbr `below`, Abbr `n`, allocaFrontierBoundTheory.call_targets_card] >>
+  `CARD below * frame <= n * frame` by (irule arithmeticTheory.LESS_MONO_MULT >> simp[]) >>
+  full_simp_tac bool_ss [arithmeticTheory.RIGHT_ADD_DISTRIB,
+    arithmeticTheory.MULT_LEFT_1] >> decide_tac
+QED
+
+Theorem registration_runtime_acceptance:
+  lower_vyper_runtime_unit tops policy = SOME unit ==>
+  lowering_context_ok unit.cu_context /\ unit.cu_context.ctx_entry = SOME "__entry"
+Proof
+  simp[lower_vyper_runtime_unit_def] >>
+  pairarg_tac >> simp[AllCaseEqs()] >>
+  metis_tac[run_lowering_context_ok, run_lowering_entry]
+QED
+
+Theorem registration_initial_ptr_resources:
+  lower_vyper_runtime_unit tops policy = SOME unit /\
+  initial_venom_state_rel tops am tx vs /\
+  vars_pc_only (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+    vs_inst_idx := 0 |>) s /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+  ~ctx_has_dalloca unit.cu_context ==>
+  s.vs_allocas = FEMPTY /\ s.vs_alloca_next = 0 /\ s.vs_memory = [] /\
+  alloca_inv s /\ allocas_from 0 s /\ s.vs_call_ctx = vs.vs_call_ctx /\
+  alloca_frontier_inv unit.cu_context fn site s /\
+  unit_alloca_budget unit.cu_context < dimword (:256) /\
+  (!label bb. lookup_block label fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0)
+Proof
+  strip_tac >>
+  `vars_pc_only vs s` by
+    gvs[vars_pc_only_def, venom_state_component_equality] >>
+  drule_all registration_start_resources >>
+  disch_then (qspec_then `0` strip_assume_tac) >>
+  drule registration_runtime_acceptance >> strip_tac >>
+  drule_all registration_empty_frontier >>
+  disch_then (qspec_then `site` strip_assume_tac) >>
+  asm_rewrite_tac [] >> rpt strip_tac >>
+  irule acceptedContextPhiTheory.lowering_context_ok_block_phi >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  asm_rewrite_tac [] >> qexists_tac `"__entry"` >> asm_rewrite_tac []
+QED
+
+Theorem registration_package_inputs:
+  ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
+  ALL_DISTINCT (MAP FST args) /\
+  set_external_package_target target
+    (package_external_fn tops ut nk (mut,nr,rr,name,args,dflts,ret,fbody)) =
+    (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) ==>
+  pos = build_positional_args ce args /\ dec_cenv_agrees ce (type_env tops) /\
+  EVERY (\a. ?off. FLOOKUP ce.ce_vars (FST a) =
+    SOME (MemLoc off (type_memory_bytes ce (SND a)))) args /\
+  (!k. ~MEM k (MAP FST args) ==> FLOOKUP ce.ce_vars k = NONE)
+Proof
+  strip_tac >>
+  Cases_on `package_external_fn tops ut nk (mut,nr,rr,name,args,dflts,ret,fbody)` >>
+  PairCases_on `r` >> gvs[set_external_package_target_def] >>
+  drule_all package_external_fn_dec_cenv_agrees >> strip_tac >>
+  drule_all package_external_fn_vars >> strip_tac >>
+  `!ty. type_memory_bytes (r0 with ce_target := target) ty = type_memory_bytes r0 ty` by
+    (gen_tac >> irule type_memory_bytes_struct_fields >> simp[]) >>
+  `build_positional_args (r0 with ce_target := target) args = build_positional_args r0 args` by
+    (irule build_positional_args_layout_cong >> simp[]) >>
+  gvs[dec_cenv_agrees_def]
 QED
 
 Theorem registration_package_decoder_layout:
