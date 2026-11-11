@@ -71,8 +71,13 @@ Proof
     (simp[gasContextTheory.gas_admissible_def] >> rpt strip_tac >>
      metis_tac[expr_body_pre_gas_obs, expr_body_pre_vv_res_ok]) >>
   drule (cj 2 exprLoweringPropsTheory.compile_expr_grows) >> strip_tac >>
-  `cs_extends st2 sb` by
-    (irule (cj 1 array_subscript_grows) >> goal_assum (drule_at Any) >>
+  `cs_extends st2 sb /\ st2.cs_next_var <= sb.cs_next_var /\
+   st2.cs_next_id <= sb.cs_next_id` by
+    (qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
+       (mp_tac o Q.AP_TERM `SND`) >>
+     simp[] >> disch_then (SUBST1_TAC o SYM) >>
+     rewrite_tac[GSYM exprLoweringPropsTheory.ci_mono_def] >>
+     irule exprLoweringPropsTheory.ci_mono_compile_array_subscript >>
      simp[exprLoweringPropsTheory.ci_mono_compile_ptr_load]) >>
   `cs_extends sm sb` by
     (irule compileEnvTheory.cs_extends_trans >> qexists `st2` >> simp[]) >>
@@ -280,7 +285,11 @@ QED
 
 Resume subscript_array_framed_code_ptr[suffix_finish]:
   `cs_extends st2 sb /\ st2.cs_next_var <= sb.cs_next_var /\ st2.cs_next_id <= sb.cs_next_id` by
-    (irule array_subscript_grows >> goal_assum (drule_at Any) >>
+    (qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
+       (mp_tac o Q.AP_TERM `SND`) >>
+     simp[] >> disch_then (SUBST1_TAC o SYM) >>
+     rewrite_tac[GSYM exprLoweringPropsTheory.ci_mono_def] >>
+     irule exprLoweringPropsTheory.ci_mono_compile_array_subscript >>
      simp[exprLoweringPropsTheory.ci_mono_compile_ptr_load]) >>
   `!q. (!x. not_fresh_at st2 x ==> lookup_var x q = lookup_var x u) /\
     q.vs_allocas = u.vs_allocas /\ q.vs_memory = u.vs_memory /\

@@ -73,7 +73,10 @@ Resume subscript_array_framed_memory_ptr[compile]:
   `ci_mono sa sm` by (drule (cj 1 compile_expr_grows) >> simp[ci_mono_def]) >>
   `ci_mono sm st2` by (drule (cj 2 compile_expr_grows) >> simp[ci_mono_def]) >>
   `ci_mono st2 sb` by
-    (drule array_subscript_grows >> simp[ci_mono_compile_ptr_load, ci_mono_def]) >>
+    (qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ st2 = _`
+       (mp_tac o Q.AP_TERM `SND`) >>
+     simp[] >> disch_then (SUBST1_TAC o SYM) >>
+     irule ci_mono_compile_array_subscript >> simp[ci_mono_compile_ptr_load]) >>
   `fn_has_code sa sm func /\ fn_has_code sm st2 func /\ fn_has_code st2 sb func` by
     (gvs[ci_mono_def] >> metis_tac[fn_has_code_split, compileEnvTheory.cs_extends_trans]) >>
   `local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv st2` by
