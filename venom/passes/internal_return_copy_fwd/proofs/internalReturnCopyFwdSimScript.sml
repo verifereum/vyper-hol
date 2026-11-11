@@ -2411,6 +2411,81 @@ Proof
   drule_all ircf_ordinary_nonassign_next >> metis_tac[]
 QED
 
+Theorem ircf_jump_boundary:
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\
+  ptr_discipline lo C vs /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  ti = EL s.vs_inst_idx (ircf_tbb fn_meta rma C fn bb).bb_instructions /\
+  ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb) /\
+  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+  ircf_cross tn (ircf_gam_stk fn_meta rma C stk) s t /\
+  step_inst_base inst s = OK s' /\ ~s'.vs_halted ==>
+  ?t'. step_inst_base ti t = OK t' /\ ~t'.vs_halted /\
+    block_reach vs C stk PG (entry_prov fn s' G)
+      (entry_taint_vars fn s' tn) fn s' /\
+    ircf_R D fn_meta rma C stk PG (entry_prov fn s' G)
+      (entry_taint_vars fn s' tn) fn s' t'
+Proof
+  strip_tac >>
+  `ssa_form fn /\ inst.inst_opcode <> INVOKE` by
+    gvs[wf_ssa_def, MEM] >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb)` by
+    (strip_tac >>
+     `?d sr sz. ircf_fwd_ok fn bb s.vs_inst_idx d sr sz` by
+       metis_tac[ircf_block_plan_fwd_ok, ircf_block_plan_def] >>
+     gvs[ircf_fwd_ok_def, MEM]) >>
+  `ti = inst` by
+    (spose_not_then assume_tac >>
+     `MEM inst.inst_opcode [MLOAD; SHA3; LOG; CREATE; CREATE2; RETURN; REVERT]` by
+       metis_tac[ircf_block_plan_changed_opcode] >> gvs[MEM]) >>
+  `inst.inst_outputs = []` by
+    (`inst_wf inst` by (fs[fn_inst_wf_def] >> metis_tac[EL_MEM]) >>
+     qpat_x_assum `inst_wf inst` mp_tac >>
+     gvs[MEM] >> simp[inst_wf_def] >> metis_tac[]) >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  drule_all taint_agree_jump >> strip_tac >>
+  `step_inst 0 C inst s = OK s' /\ step_inst 0 C inst t = OK t'` by
+    simp[step_inst_non_invoke] >>
+  `s' = s with <|vs_current_bb := s'.vs_current_bb;
+     vs_prev_bb := s'.vs_prev_bb; vs_inst_idx := s'.vs_inst_idx|> /\
+   t' = t with <|vs_current_bb := t'.vs_current_bb;
+     vs_prev_bb := t'.vs_prev_bb; vs_inst_idx := t'.vs_inst_idx|>` by
+    metis_tac[o1LowerDloadPhiEntryTheory.ld_branch_noncontrol] >>
+  `s'.vs_memory = s.vs_memory /\ t'.vs_memory = t.vs_memory /\
+   s'.vs_allocas = s.vs_allocas` by
+    (qpat_assum `s' = _` (fn th =>
+       mp_tac (Q.AP_TERM `\x. x.vs_memory` th) >>
+       mp_tac (Q.AP_TERM `\x. x.vs_allocas` th)) >>
+     qpat_assum `t' = _`
+       (mp_tac o Q.AP_TERM `\x. x.vs_memory`) >> simp[]) >>
+  `step_taint inst s s' tn = tn /\ s'.vs_prev_bb <> NONE` by
+    (gvs[MEM] >>
+     qpat_x_assum `step_inst_base _ s = OK s'` mp_tac >>
+     simp[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >>
+     simp[step_taint_def, mem_taint_def, store_taint_def, jump_to_def,
+          imm_taint_def, adopt_reset_def, new_site_bytes_def,
+          step_writes_def, codegenRelTheory.source_memory_write_ranges_def, written_taint_def,
+          range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, set_var_taint_def,
+          DRESTRICT_UNIV, taint_component_equality] >>
+     gvs[jump_to_def, venom_state_component_equality] >>
+     rpt (BasicProvers.TOP_CASE_TAC >> simp[])) >>
+  `~t'.vs_halted` by
+    (drule taint_agree_frame >>
+     disch_then (mp_tac o Q.AP_TERM `\x. x.vs_halted`) >> simp[]) >>
+  `block_reach vs C stk PG (entry_prov fn s' G)
+     (entry_taint_vars fn s' tn) fn s'` by
+    metis_tac[frame_reachable_block_reach, is_terminator_def, MEM] >>
+  qexists_tac `t'` >> conj_tac >- metis_tac[] >> simp[] >>
+  irule ircf_R_boundary >> gvs[ircf_dead_def, ircf_cross_def] >> gvs[]
+QED
+
 Theorem ircf_ret_result:
   inst.inst_opcode = RET /\ taint_ok fn tn inst s /\
   taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
