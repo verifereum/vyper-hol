@@ -83,7 +83,7 @@ Theorem abi_decoder_word_success_effect:
   d < dimword (:256) /\
   abi_decoder_clamp_valid clamp (abi_decode_load opc (n2w (B+pos):bytes32) s) /\
   fresh_vars_wrt st s /\ decode_site_resources ctx fn s /\
-  {a | d <= a /\ a < d+32} SUBSET writes ==>
+  {a | d <= a /\ a < d+32} SUBSET writes /\ d+32 <= s.vs_alloca_next ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     mem_word_at d t.vs_memory = abi_decode_load opc (n2w (B+pos):bytes32) s /\
     fresh_vars_wrt st' t /\
@@ -100,6 +100,13 @@ Proof
    t.vs_fmp = s.vs_fmp` by fs[venom_state_component_equality] >>
   `decode_site_resources ctx fn t` by metis_tac[decode_site_resources_fields] >>
   `decode_memory_frame writes s t` by metis_tac[abi_word_frame_memory] >>
+  `decode_upper_frame s t` by
+    (match_mp_tac (Q.SPECL [`d`, `32`] decode_upper_frame_outside) >>
+     reverse conj_tac >- fs[] >>
+     qpat_x_assum `abi_decode_frame _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [abi_decode_frame_def]) >>
+     rpt strip_tac >>
+     qpat_x_assum `!p k. _ ==> mem_bytes_at p k _ = _` irule >> decide_tac) >>
   qexists `t` >> simp[decode_site_effect_def]
 QED
 
@@ -152,7 +159,8 @@ Theorem abi_decoder_word_finite_outcome:
   eval_operand hi s = SOME (n2w H) /\ pos+32 <= H /\
   B+H < dimword (:256) /\ d+32 < dimword (:256) /\
   fresh_vars_wrt st s /\ abi_decoder_clamp_wf clamp /\
-  decode_site_resources ctx fn s /\ {a | d <= a /\ a < d+32} SUBSET writes ==>
+  decode_site_resources ctx fn s /\ {a | d <= a /\ a < d+32} SUBSET writes /\
+  d+32 <= s.vs_alloca_next ==>
   ((?t. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decoder_clamp_valid clamp (abi_decode_load opc (n2w (B+pos):bytes32) s) /\
     mem_word_at d t.vs_memory = abi_decode_load opc (n2w (B+pos):bytes32) s /\

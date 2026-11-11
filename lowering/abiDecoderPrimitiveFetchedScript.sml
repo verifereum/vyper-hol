@@ -17,7 +17,7 @@ Theorem abi_decoder_scalar_fetched_outcome:
   B+H < dimword (:256) /\ d+32 < dimword (:256) /\
   fresh_vars_wrt st s /\ abi_decoder_clamp_wf clamp /\
   decode_site_resources ctx fn s /\ {a | d <= a /\ a < d+32} SUBSET writes /\
-  assignable_type env ty /\ abi_decode_bytes_widths env ty /\
+  d+32 <= s.vs_alloca_next /\ assignable_type env ty /\ abi_decode_bytes_widths env ty /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   bs = mem_bytes_at (B+pos) 32 (abi_decode_source opc s) /\
@@ -64,6 +64,7 @@ Theorem abi_decoder_bytestring_fetched_outcome:
   (b+h <= d \/ d+abi_decode_bytes_copy_size n <= b) /\
   fresh_vars_wrt st s /\ decode_site_resources ctx fn s /\
   {a | d <= a /\ a < d+abi_decode_bytes_copy_size n} SUBSET writes /\
+  d+abi_decode_bytes_copy_size n <= s.vs_alloca_next /\
   bs = mem_bytes_at (b+p) (h-p) s.vs_memory /\
   (bt = BytesT (Dynamic n) \/ bt = StringT n) /\
   fn_has_code st st' func /\ ~s.vs_halted /\

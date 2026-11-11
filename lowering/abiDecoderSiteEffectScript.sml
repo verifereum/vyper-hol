@@ -30,6 +30,12 @@ Definition decode_memory_frame_def:
       mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory
 End
 
+(* Memory at and above the final frontier is untouched: the decoder writes
+   only into allocated regions. *)
+Definition decode_upper_frame_def:
+  decode_upper_frame s t <=> decode_memory_frame {a | a < t.vs_alloca_next} s t
+End
+
 Definition decode_site_effect_def:
   decode_site_effect ctx fn next writes s t <=>
     decode_site_resources ctx fn t /\
@@ -38,7 +44,8 @@ Definition decode_site_effect_def:
     s.vs_alloca_next <= t.vs_alloca_next /\
     (!op w. abi_decoder_operand_live next op /\ eval_operand op s = SOME w ==>
       eval_operand op t = SOME w) /\
-    decode_static_frame s t /\ decode_memory_frame writes s t
+    decode_static_frame s t /\ decode_memory_frame writes s t /\
+    decode_upper_frame s t
 End
 
 Theorem decode_static_frame_refl:
@@ -67,10 +74,54 @@ Proof
   rw[decode_memory_frame_def] >> metis_tac[IN_UNION]
 QED
 
+Theorem decode_upper_frame_refl:
+  decode_upper_frame s s
+Proof
+  simp[decode_upper_frame_def, decode_memory_frame_def]
+QED
+
+Theorem decode_upper_frame_trans:
+  decode_upper_frame s t /\ decode_upper_frame t u /\
+  t.vs_alloca_next <= u.vs_alloca_next ==>
+  decode_upper_frame s u
+Proof
+  rw[decode_upper_frame_def, decode_memory_frame_def] >>
+  `mem_bytes_at p n u.vs_memory = mem_bytes_at p n t.vs_memory` by
+    (qpat_x_assum `!p n. _ ==> mem_bytes_at p n u.vs_memory = _` irule >>
+     metis_tac[]) >>
+  simp[] >>
+  qpat_x_assum `!p n. _ ==> mem_bytes_at p n t.vs_memory = _` irule >>
+  rpt strip_tac >> res_tac >> decide_tac
+QED
+
+Theorem decode_upper_frame_region:
+  decode_memory_frame {a | d <= a /\ a < d + k} s t /\
+  d + k <= t.vs_alloca_next ==>
+  decode_upper_frame s t
+Proof
+  rw[decode_upper_frame_def, decode_memory_frame_def] >> first_x_assum irule >>
+  rpt strip_tac >> res_tac >> decide_tac
+QED
+
+Theorem decode_upper_frame_outside:
+  !d n s t.
+    (!p k. p + k <= d \/ d + n <= p ==>
+       mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    d + n <= t.vs_alloca_next ==>
+    decode_upper_frame s t
+Proof
+  rw[decode_upper_frame_def, decode_memory_frame_def] >>
+  rename1 `mem_bytes_at q m t.vs_memory = _` >>
+  Cases_on `m = 0` >- simp[mem_bytes_at_def] >>
+  first_x_assum irule >> disj2_tac >>
+  `q <= q /\ q < m + q` by decide_tac >> res_tac >> decide_tac
+QED
+
 Theorem decode_site_effect_refl:
   decode_site_resources ctx fn s ==> decode_site_effect ctx fn next writes s s
 Proof
-  simp[decode_site_effect_def, decode_static_frame_refl, decode_memory_frame_refl]
+  simp[decode_site_effect_def, decode_static_frame_refl, decode_memory_frame_refl,
+       decode_upper_frame_refl]
 QED
 
 Theorem decode_site_effect_trans:
@@ -80,7 +131,7 @@ Theorem decode_site_effect_trans:
 Proof
   simp_tac bool_ss [decode_site_effect_def] >> strip_tac >>
   rpt conj_tac >> metis_tac[decode_static_frame_trans, decode_memory_frame_trans,
-                           LESS_EQ_TRANS]
+                           decode_upper_frame_trans, LESS_EQ_TRANS]
 QED
 
 Theorem decode_site_effect_resources:
@@ -148,7 +199,8 @@ QED
 
 Theorem decode_site_effect_write:
   decode_site_resources ctx fn s /\
-  {a | dst <= a /\ a < dst + LENGTH bs} SUBSET writes ==>
+  {a | dst <= a /\ a < dst + LENGTH bs} SUBSET writes /\
+  dst + LENGTH bs <= s.vs_alloca_next ==>
   decode_site_effect ctx fn next writes s (write_memory_with_expansion dst bs s)
 Proof
   strip_tac >> simp_tac bool_ss [decode_site_effect_def] >>
@@ -159,7 +211,9 @@ Proof
   conj_tac >- simp[write_memory_with_expansion_def] >>
   conj_tac >- simp[write_memory_with_expansion_def, eval_operand_def, lookup_var_def] >>
   conj_tac >- simp[write_memory_with_expansion_def, decode_static_frame_def] >>
-  irule decode_memory_frame_write >> simp[]
+  conj_tac >- (irule decode_memory_frame_write >> simp[]) >>
+  simp[decode_upper_frame_def] >> irule decode_memory_frame_write >>
+  simp[write_memory_with_expansion_def, SUBSET_DEF]
 QED
 
 Theorem decode_site_effect_live:
@@ -204,7 +258,7 @@ Theorem decode_site_effect_inst_idx[simp]:
   decode_site_effect ctx fn next writes s (t with vs_inst_idx := ix) <=>
   decode_site_effect ctx fn next writes s t
 Proof
-  simp[decode_site_effect_def, decode_static_frame_def, decode_memory_frame_def,
+  simp[decode_site_effect_def, decode_static_frame_def, decode_memory_frame_def, decode_upper_frame_def,
        instIdxIndepTheory.eval_op_inst_idx, venom_state_component_equality]
 QED
 

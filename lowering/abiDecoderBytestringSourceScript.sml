@@ -115,6 +115,7 @@ Theorem abi_decoder_bytestring_source_outcome:
   (b+h <= d \/ d+abi_decode_bytes_copy_size n <= b) /\
   fresh_vars_wrt st s /\ decode_site_resources ctx fn s /\
   {a | d <= a /\ a < d+abi_decode_bytes_copy_size n} SUBSET writes /\
+  d+abi_decode_bytes_copy_size n <= s.vs_alloca_next /\
   bs = mem_bytes_at (b+p) (h-p) s.vs_memory /\
   (bt = BytesT (Dynamic n) \/ bt = StringT n) ==>
   ((?t v. run_inst_seq (emitted_insts st st') s = OK t /\
