@@ -220,13 +220,13 @@ Proof
                                     mk_inst_def, below_frontier_no_ranges])
           emitted_insts_emit_op)) >>
   qx_gen_tac `u` >> strip_tac >>
-  qabbrev_tac `k = STRING #"%" (toString sa.cs_next_var)` >>
-  `run_inst_seq (emitted_insts sa s1) s = OK (update_var k (w + 32w) s)` by
-    (simp[Abbr `k`] >>
-     irule (buffer_emit_add_run |> SPEC_ALL |> Q.INST [`off` |-> `32`]
-              |> SRULE []) >> metis_tac[]) >>
-  `u = update_var k (w + 32w) s` by fs[] >>
+  `u = update_var (STRING #"%" (toString sa.cs_next_var)) (w + 32w) s` by
+    (qpat_x_assum `run_inst_seq _ s = OK u` mp_tac >>
+     drule_all (buffer_emit_add_run |> SPEC_ALL |> Q.INST [`off` |-> `32`]
+                  |> SRULE []) >>
+     simp[]) >>
   pop_assum SUBST_ALL_TAC >>
+  qabbrev_tac `k = STRING #"%" (toString sa.cs_next_var)` >>
   `data_op = Var k` by
     (qpat_assum `emit_op ADD _ _ = _`
        (mp_then Any (fn th => simp[th, Abbr `k`]) emitted_insts_emit_op)) >>
