@@ -224,6 +224,9 @@ Proof
                 logs := s.logs ++ logs; pending_deletions := pending|>)` by
     (rpt gen_tac >> irule preserves_immutables_dom_eq >> simp[]) >>
   `!s. preserves_immutables_dom cx s s` by simp[preserves_immutables_dom_refl] >>
+  `!s t observations. preserves_immutables_dom cx s t ==>
+      preserves_immutables_dom cx s (t with storage_trace := observations)` by
+    simp[preserves_immutables_dom_def] >>
   drule_all (ExtCall_outcome_transport |> Q.INST
     [`R` |-> `preserves_immutables_dom cx`]) >> simp[]
 QED
