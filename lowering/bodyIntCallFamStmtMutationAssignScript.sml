@@ -5,6 +5,7 @@
 Theory bodyIntCallFamStmtMutationAssign
 Ancestors
   bodyIntCallJointContract bodyIntCallFamStmtMutationEffectful
+  bodyIntCallFamStmtMutationAssignResolveRoot
 
 (* Probe boundary: flat tuple assignment does not admit a local subscript
    destination. In particular, swapping two array-valued members of a local
