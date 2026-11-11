@@ -14,7 +14,7 @@ Ancestors
   symFrameBoundary symFrameControl symFrameInvoke symFrameInst symFnSimSpec
   codegenSymRel fnBlockBody fnBlockBodySteps fnSimSpec asmSymBridge
   asmSymSem frameRel contextCodegenRel codegenRel unitShapeDefs
-  venomExecSemantics venomState venomInst
+  venomExecSemantics venomState venomInst fnPlanLineageEntryProduction
 
 (* block_body_frame_sim's conclusion (fnBlockBodySteps' body_result) with
    the symbolic run from ss over the same n steps: it ends where the
@@ -196,7 +196,7 @@ Theorem placed_nonentry_sym_code_label:
   MEM (AsmLabel bb.bb_label) prog
 Proof
   rpt strip_tac >>
-  drule_all fnBlockStepHelpersTheory.generate_block_plan_nonentry >>
+  drule_all fnPlanLineageEntryProductionTheory.generate_block_plan_nonentry >>
   strip_tac >> gvs[] >>
   irule spillWordBoundsTheory.asm_block_at_member >>
   goal_assum (drule_at Any) >>
