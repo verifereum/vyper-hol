@@ -765,9 +765,21 @@ Proof
 QED
 
 Theorem dynstorage_loop_outcome[local]:
-  !G ctx fn N lv counter vl vd vi s8 s9 s10 s11 s12 s13 s14 s15 s16 s17
+  !G ctx fn lv counter vl vd vi s8 s9 s10 s11 s12 s13 s14 s15 s16 s17
     body exit cond old2 old3 Kcopy.
-    no_phi_fn fn /\ callees_stable G ctx fn /\
+    emit_op LT [Var counter; Var lv] s8 = (Var vl,s9) ==>
+    emit_op ISZERO [Var vl] s9 = (Var vd,s10) ==>
+    emit_inst JNZ [Var vd; Label exit; Label body] [] s10 = ((),s11) ==>
+    new_block body s11 = (old2,s12) ==>
+    emit_op ADD [Var counter; Lit 1w] s13 = (Var vi,s14) ==>
+    emit_inst ASSIGN [Var vi] [counter] s14 = ((),s15) ==>
+    emit_inst JMP [Label cond] [] s15 = ((),s16) ==>
+    new_block exit s16 = (old3,s17) ==>
+    (!t. at_point s12 t ==> ?j. j <= Kcopy /\ fuel_outcome G ctx fn t j
+      (\u. vars_kept s12.cs_next_var {} t u /\
+           lookup_var lv u = lookup_var lv t /\
+           lookup_var counter u = lookup_var counter t /\ at_point s13 u)) ==>
+    !N. no_phi_fn fn /\ callees_stable G ctx fn /\
     s8.cs_current_bb = cond /\ s8.cs_current_insts = [] /\
     s12.cs_current_bb = body /\ s12.cs_current_insts = [] /\
     s17.cs_current_bb = exit /\ s17.cs_current_insts = [] /\
@@ -775,26 +787,15 @@ Theorem dynstorage_loop_outcome[local]:
     lv <> counter /\ lv <> vi /\
     ~var_below N vl /\ ~var_below N vd /\
     ~var_below N vi /\ ~var_below N counter /\ N <= s12.cs_next_var /\
-    emit_op LT [Var counter; Var lv] s8 = (Var vl,s9) /\
-    emit_op ISZERO [Var vl] s9 = (Var vd,s10) /\
-    emit_inst JNZ [Var vd; Label exit; Label body] [] s10 = ((),s11) /\
-    new_block body s11 = (old2,s12) /\
-    emit_op ADD [Var counter; Lit 1w] s13 = (Var vi,s14) /\
-    emit_inst ASSIGN [Var vi] [counter] s14 = ((),s15) /\
-    emit_inst JMP [Label cond] [] s15 = ((),s16) /\
-    new_block exit s16 = (old3,s17) /\
-    fn_has_code s8 s12 fn /\ fn_has_code s13 s17 fn /\
-    (!t. at_point s12 t ==> ?j. j <= Kcopy /\ fuel_outcome G ctx fn t j
-      (\u. vars_kept s12.cs_next_var {} t u /\
-           lookup_var lv u = lookup_var lv t /\
-           lookup_var counter u = lookup_var counter t /\ at_point s13 u)) ==>
+    fn_has_code s8 s12 fn /\ fn_has_code s13 s17 fn ==>
     !origin l s.
       at_point s8 s /\ lookup_var lv s = SOME l /\
       (?c. lookup_var counter s = SOME c) /\ vars_kept N {} origin s ==>
       ?j. j <= 2 ** 256 * (Kcopy + 2) /\ fuel_outcome G ctx fn s j
         (\t. at_point s17 t /\ vars_kept N {} origin t)
 Proof
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> ntac 9 disch_tac >> gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
   `at_point s8 (s with <|vs_current_bb := s8.cs_current_bb;
                          vs_inst_idx := LENGTH s8.cs_current_insts|>)` by
     simp[at_point_def] >>
@@ -874,5 +875,46 @@ Proof
   disch_then (fn th => SUBST_ALL_TAC (SYM th)) >>
   drule_all dynstorage_entry_outcome >>
   disch_then (qspecl_then [`G`, `ctx`] assume_tac) >>
-  cheat
+  `st.cs_next_var <= s12.cs_next_var /\ st.cs_next_var <= s17.cs_next_var`
+    by decide_tac >>
+  qpat_x_assum `!G ctx fn s. _` (qspecl_then [`G`, `ctx`, `fn`] mp_tac) >>
+  qpat_assum `lv = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `counter = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_x_assum `lv = _` kall_tac >>
+  qpat_x_assum `counter = _` kall_tac >>
+  simp[] >> strip_tac >>
+  drule dynstorage_loop_outcome >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then drule >> disch_then drule >>
+  disch_then (qspec_then `st.cs_next_var` mp_tac) >>
+  simp[] >> strip_tac >>
+  `!t. at_point s8 t /\ lookup_var counter t = SOME 0w /\
+       (?l. lookup_var lv t = SOME l) /\ vars_kept st.cs_next_var {} s t ==>
+       ?j. j <= 2 ** 256 * (Kcopy + 2) /\ fuel_outcome G ctx fn t j
+         (\u. at_point s17 u /\ vars_kept st.cs_next_var {} s u)` by
+    (rpt strip_tac >> simp[]) >>
+  qpat_x_assum `fuel_outcome G ctx fn s 1 _` (mp_then Any mp_tac fuel_outcome_compose) >>
+  disch_then (qspecl_then [`\u. at_point s17 u /\ vars_kept st.cs_next_var {} s u`,
+                         `2 ** 256 * (Kcopy + 2)`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `frag_fuel {} {} {} s17 st' Kstore` mp_tac >>
+  rewrite_tac[frag_fuel_def] >>
+  disch_then (qspecl_then [`G`, `st.cs_next_var`, `ctx`, `fn`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `!t. at_point s17 t /\ vars_kept st.cs_next_var {} s t ==>
+    ?k. k <= Kstore /\ fuel_outcome G ctx fn t k
+      (\u. vars_kept N Wv s u /\
+           (at_point st' u \/ (u.vs_current_bb IN E /\ u.vs_inst_idx = 0)))` by
+    (rpt strip_tac >>
+     qpat_assum `!s''. at_point s17 s'' ==> _` (drule_then strip_assume_tac) >>
+     qexists_tac `j'` >> simp[] >>
+     irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+     rpt strip_tac >> simp[] >>
+     fs[vars_kept_def, var_below_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  qpat_x_assum `fuel_outcome G ctx fn s j _` (mp_then Any mp_tac fuel_outcome_compose) >>
+  qmatch_goalsub_abbrev_tac `fuel_outcome G ctx fn s _ Q` >>
+  disch_then (qspecl_then [`Q`, `Kstore`] mp_tac) >>
+  simp[Abbr `Q`] >> strip_tac >>
+  qexists_tac `j'` >> simp[] >> decide_tac
 QED
