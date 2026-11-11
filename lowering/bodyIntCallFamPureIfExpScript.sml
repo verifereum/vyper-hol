@@ -594,10 +594,10 @@ Resume ifexp_joint_expr_producer[lift_root]:
      simp[] >>
      conj_tac >- (first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
      qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[vv_post_def, locals_kept_def] >> strip_tac >> metis_tac[]) >>
+     simp[vv_post_def, locals_kept_def, popped_kept_def] >> strip_tac >> metis_tac[]) >>
   `intcall_expr_cont fp ce env es sa s (mid with gas_obs := []) sb t` by
     (qpat_x_assum `intcall_expr_cont _ _ _ (_ with gas_obs := _) _ _ _ _ _` mp_tac >>
-     simp[intcall_expr_cont_def, locals_kept_def] >> strip_tac >> metis_tac[]) >>
+     simp[intcall_expr_cont_def, locals_kept_def, popped_kept_def] >> strip_tac >> metis_tac[]) >>
   qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[vv_post_def] >> strip_tac >>
   simp[] >> conj_tac

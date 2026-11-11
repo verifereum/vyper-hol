@@ -329,7 +329,7 @@ Proof
     fs[venom_state_component_equality] >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH sb.cs_current_insts`, `w`] >>
   simp[intcall_expr_cont_frame, eval_op_inst_idx, local_region_def,
-       lookup_var_def, wb_frame_def, locals_kept_def] >>
+       lookup_var_def, wb_frame_def, locals_kept_mem] >>
   fs[local_region_def, lookup_var_def] >> metis_tac[]
 QED
 

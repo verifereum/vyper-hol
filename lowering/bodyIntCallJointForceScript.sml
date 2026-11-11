@@ -63,7 +63,9 @@ Proof
       `not_fresh_at sm x` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
       metis_tac[])
   >- (rpt strip_tac >> metis_tac[])
-  >> fs[locals_kept_def] >> metis_tac[]
+  >> irule locals_kept_trans >>
+  qpat_assum `local_ptrs_reserved ce sa` (irule_at Any) >>
+  qpat_assum `locals_kept ce ee ee t u` (irule_at Any) >> metis_tac[]
 QED
 
 Theorem intcall_joint_window_forcing:

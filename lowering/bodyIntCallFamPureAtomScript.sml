@@ -31,10 +31,10 @@ Proof
   strip_tac >>
   `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e
      (es with gas_obs := gs) sa sb s ee tv vv u` by
-    (fs[vv_post_def, locals_kept_def] >> metis_tac[]) >>
+    (fs[vv_post_def, locals_kept_def, popped_kept_def] >> metis_tac[]) >>
   `intcall_expr_res fp ce env (es with gas_obs := gs) sa s` by simp[] >>
   drule_all pure_vv_post_cont >>
-  simp[intcall_expr_cont_def, locals_kept_def] >> metis_tac[]
+  simp[intcall_expr_cont_def, locals_kept_def, popped_kept_def] >> metis_tac[]
 QED
 
 Theorem intcall_pure_nonconditional_producer:
@@ -132,7 +132,7 @@ Proof
   disj1_tac >> simp_tac std_ss [] >> qexists `s` >> simp_tac std_ss [] >>
   qexistsl [`tr`, `n2w slot`, `kt`, `vt`] >>
   simp[slot_loc_def, mk_ptr_def, venomStateTheory.eval_operand_def] >>
-  simp[intcall_expr_cont_def, locals_kept_def]
+  simp[intcall_expr_cont_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem intcall_pure_atom_map:

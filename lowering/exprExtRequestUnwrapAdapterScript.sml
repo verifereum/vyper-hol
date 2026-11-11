@@ -69,7 +69,7 @@ Proof
     (irule extrequest_history_placement >>
      qpat_assum `extrequest_history_frame _ _ _ _ _ _ _ _` (irule_at Any) >>
      gvs[vv_post_def] >> metis_tac[]) >>
-  simp[vv_post_def, locals_kept_def] >>
+  simp[vv_post_def] >>
   strip_tac >> Cases_on `vv` >> simp[] >>
   rpt strip_tac >>
   `eval_operand p.ptr_operand t = eval_operand p.ptr_operand tc` by
