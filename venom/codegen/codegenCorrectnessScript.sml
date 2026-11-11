@@ -69,7 +69,8 @@ Ancestors
   symbolResolve venomExecSemantics venomState venomInst contextCodegenRel
   stackOpSim fnPlanDecomp list rich_list finite_map arithmetic
   frameOutcome callTrace unitShapeDefs vfmExecutionProp unitMemInv
-  frameGas venomRunBounded
+  frameGas venomRunBounded frameStep codegenEntryBounded asmFrameNext
+  asmFrameGas
 Libs
   BasicProvers
 
@@ -304,16 +305,65 @@ Proof
   res_tac >> gvs[venom_asm_terminal_rel_def] >> metis_tac[]
 QED
 
-(* PLANNED ADMISSION S7g (sufficient gas), next to S7.  Given the Venom
-   run's resource bound (fuel and memory, venom_run_bounded), some gas g,
-   independent of the EVM state, is enough: with g' >= g more gas, our
-   frame runs out of gas only once it has run a RETURNDATACOPY, whose size
-   the callee sets.  The generated code runs RETURNDATACOPY only to forward
-   a failed callee's revert data, followed by the REVERT's operands and the
-   REVERT, so the exemption covers that tail.  Proof idea: each Venom block runs a bounded number of assembly
-   steps, each with a bounded cost under the memory bound, and each call
+(* S7g's surplus form, for the stages that need gas left over after our
+   frame's steps (D).  Given the Venom run's resource bound (fuel and memory,
+   venom_run_bounded), some gas g, independent of the EVM state, is
+   enough: with g' >= g more gas, each step of our frame that no
+   RETURNDATACOPY of it (whose size the callee sets) comes at or before
+   doesn't run out of gas at our depth and leaves at least D.  The generated code runs
+   RETURNDATACOPY only to forward a failed callee's revert data, followed
+   by the REVERT's operands and the REVERT.  Proof idea: each Venom block
+   runs a bounded number of assembly steps (codegen_entry_asm_bounded),
+   each with a bounded cost under the memory bound (asm_frame_gas_step)
+   along our frame's own states (asm_frame_step_next), and each call
    forwards at most all but 1/64 of the remaining gas, so g grows by a
-   factor of 64 per call the fuel allows. *)
+   factor of 64 per call the steps allow. *)
+Theorem codegen_gas_surplus:
+  !rpolicy unit cp prog fuel M D.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit
+    ==>
+    ?g. !g' Inv vs es s op r s'.
+      g <= g' /\ wf_state (add_frame_gas g' es) /\
+      g' <= frame_gas_left (add_frame_gas g' es) /\
+      codegen_context_obligations Inv unit.cu_context cp /\
+      codegen_reachability_package Inv unit.cu_context vs /\
+      initial_ctx_rel cp prog unit.cu_context vs (add_frame_gas g' es) /\
+      venom_run_bounded fuel M unit.cu_context vs /\
+      frame_inst_at (add_frame_gas g' es) s op /\
+      (!t. frame_inst_at (add_frame_gas g' es) t ReturnDataCopy ==>
+           ~RTC (\a b. LENGTH a.contexts >= LENGTH s.contexts /\
+                       step a = (INL (), b)) t s) /\
+      step_inst op s = (r, s') /\ LENGTH s'.contexts = LENGTH s.contexts
+      ==>
+      r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'
+Proof
+  cheat
+QED
+
+(* Lockstep corollary: our frame runs only instructions of prog (or STOP
+   past the code's end), so code without an assembly RETURNDATACOPY has no
+   frame state that runs one. *)
+Theorem codegen_no_returndatacopy:
+  !rpolicy unit cp prog fuel M Inv vs es t.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\ wf_state es /\
+    codegen_context_obligations Inv unit.cu_context cp /\
+    codegen_reachability_package Inv unit.cu_context vs /\
+    initial_ctx_rel cp prog unit.cu_context vs es /\
+    venom_run_bounded fuel M unit.cu_context vs /\
+    ~MEM (AsmOp "RETURNDATACOPY") prog
+    ==>
+    ~frame_inst_at es t ReturnDataCopy
+Proof
+  cheat
+QED
+
+(* S7g (sufficient gas), next to S7: codegen_gas_surplus with D = 0.  With
+   g' >= g more gas, our frame runs out of gas only once it has run a
+   RETURNDATACOPY, whose size the callee sets. *)
 Theorem codegen_gas_sufficient:
   !rpolicy unit cp prog fuel M.
     generate_context_plan unit.cu_context = SOME cp /\
@@ -332,7 +382,22 @@ Theorem codegen_gas_sufficient:
         ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all codegen_gas_surplus >>
+  disch_then (qspecl_then [`fuel`, `M`, `0`] strip_assume_tac) >>
+  qexists_tac `g` >> rpt strip_tac >>
+  drule_all codegen_asm_run_call >> strip_tac >>
+  qexistsl_tac [`r`, `es'`] >> simp[] >>
+  rpt strip_tac >> gvs[frame_inst_raises_def] >>
+  CCONTR_TAC >>
+  `wf_state (add_frame_gas g' es) /\
+   g' <= frame_gas_left (add_frame_gas g' es)` by
+    metis_tac[add_frame_gas_wf_state, wf_state_frame_gas_left] >>
+  `LENGTH s.contexts = LENGTH (add_frame_gas g' es).contexts` by
+    fs[frame_inst_at_def] >>
+  first_x_assum (qspecl_then [`g'`, `Inv`, `vs`, `es`, `s`, `op`, `s'`]
+                   mp_tac) >>
+  metis_tac[]
 QED
 
 (* TASK056 RETIRED SOURCE ARCHIVE. Replaced by initial_ctx_rel and S7 above;
