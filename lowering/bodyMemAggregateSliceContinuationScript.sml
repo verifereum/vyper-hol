@@ -131,7 +131,8 @@ Proof
          gvs[is_bytestring_type_def, is_word_type_def]) >>
       `expr_store_bound cx (expr_type e) v op s` by metis_tac[] >>
       drule_all aggregate_bytestring_rebased_store_path_mem >>
-      strip_tac >> qexists `q` >> gvs[arithmeticTheory.ADD_COMM] >> gvs[]) >>
+      strip_tac >> qexists `q` >> gvs[arithmeticTheory.ADD_COMM] >> gvs[] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `type_widens_to (get_tenv cx) (post_value_type ce e) (expr_type e)` by
     (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
      simp[expr_body_pre_def] >> strip_tac >>
@@ -150,7 +151,8 @@ Proof
   `FLOOKUP s.vs_allocas did = SOME (b,k)` by fs[expr_post_def] >>
   `!z. Var x = Var z \/ op = Var z ==> not_fresh_at su z` by metis_tac[] >>
   drule_all aggregate_body_physical_store_path_mem >>
-  strip_tac >> qexists `q` >> gvs[arithmeticTheory.ADD_COMM] >> gvs[]
+  strip_tac >> qexists `q` >> gvs[arithmeticTheory.ADD_COMM] >> gvs[] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem aggregate_body_unwrap_store_slice_mem_cursor:

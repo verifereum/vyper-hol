@@ -89,5 +89,6 @@ Proof
       conj_tac >- (rpt strip_tac >>
         qpat_x_assum `!n lo k. local_region ce es'.scopes u n lo k ==> _`
           (drule_then mp_tac) >> decide_tac) >> first_assum ACCEPT_TAC)) >>
-    simp[])) >> simp[]
+    disch_then (qx_choosel_then [`v'`, `q'`] strip_assume_tac) >>
+    qexistsl [`v'`, `q'`] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[]
 QED
