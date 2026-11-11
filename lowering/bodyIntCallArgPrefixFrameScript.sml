@@ -92,7 +92,7 @@ Resume intcall_args_frame_accumulated[tail]:
   `wb_frame ce initial_es initial_es a sinitial_es t` by
     (`wb_frame ce initial_es initial_es sm s t` by
        (`wb_frame ce initial_es initial_es sm s t <=> wb_frame ce es es sm s t` by
-          simp[wb_frame_def, locals_kept_def, popped_kept_def] >>
+          (qpat_assum `es.scopes = _` (fn sc => simp[wb_frame_def, locals_kept_def, popped_kept_def, sc])) >>
         pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC) >>
      mp_tac (Q.SPECL [`func`, `ce`, `cx`, `initial_es`, `sinitial_es`, `a`,
                       `initial_es`, `initial_es`, `sm`, `s`, `t`, `ctx`]
