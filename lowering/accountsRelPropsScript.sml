@@ -124,12 +124,13 @@ QED
 
 (* ===== Frames ===== *)
 
-(* accounts_rel reads only the accounts and transient storage of both sides. *)
+(* accounts_rel reads only the accounts, transient storage, and vs_code. *)
 Theorem accounts_rel_frame:
   !cx es es' s s'.
     es'.accounts = es.accounts /\ es'.tStorage = es.tStorage /\
     es'.pending_deletions = es.pending_deletions /\
-    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient ==>
+    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
+    s'.vs_code = s.vs_code ==>
     (accounts_rel cx es' s' <=> accounts_rel cx es s)
 Proof
   simp[accounts_rel_def]
@@ -164,7 +165,8 @@ Theorem accounts_rel_set_storage:
       (cx.txn.target =+
          (lookup_account cx.txn.target s.vs_accounts with storage := stor'))
         s.vs_accounts /\
-    s'.vs_transient = s.vs_transient ==>
+    s'.vs_transient = s.vs_transient /\
+    s'.vs_code = s.vs_code ==>
     accounts_rel cx es' s'
 Proof
   rpt strip_tac >>
@@ -183,7 +185,8 @@ Theorem accounts_rel_set_transient:
     set_storage_backend cx T stor es = (INL (), es') /\
     storage_agree (storage_dead cx T stor) stor stor' /\
     s'.vs_accounts = s.vs_accounts /\
-    s'.vs_transient = (cx.txn.target =+ stor') s.vs_transient ==>
+    s'.vs_transient = (cx.txn.target =+ stor') s.vs_transient /\
+    s'.vs_code = s.vs_code ==>
     accounts_rel cx es' s'
 Proof
   rw[set_storage_backend_def, vyperStateTheory.update_transient_def,
@@ -319,7 +322,8 @@ Theorem accounts_rel_adopt_call_outcome:
       FST (adopt_outcome rq' outcome' (s.vs_accounts, s.vs_transient, logs)) /\
     s'.vs_transient =
       FST (SND (adopt_outcome rq' outcome'
-                  (s.vs_accounts, s.vs_transient, logs))) ==>
+                  (s.vs_accounts, s.vs_transient, logs))) /\
+    s'.vs_code = s.vs_code ==>
     accounts_rel cx es' s'
 Proof
   rw[adopt_call_outcome_equation] >>

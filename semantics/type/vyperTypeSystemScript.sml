@@ -281,11 +281,31 @@ Definition account_item_type_def:
   account_item_type Code = BaseT (BytesT (Dynamic 24576))
 End
 
-(* Static capacities used by Vyper's concat result inference. *)
+(* Static capacities used by Vyper's concat and slice result inference. *)
 Definition bytelike_type_bound_def:
   bytelike_type_bound (BaseT (BytesT bd)) = bound_length bd /\
   bytelike_type_bound (BaseT (StringT n)) = n /\
   bytelike_type_bound _ = 0
+End
+
+(* Slice's result bound depends on its reduced length expression. Folded
+   names lose literal-start provenance, so start bounds stay runtime checks. *)
+Definition slice_operands_ok_def:
+  slice_operands_ok bi es <=>
+    case bi of
+    | Slice n =>
+      (case EL 0 es of
+       | Builtin _ (Acc Code) [addr] =>
+           (case EL 2 es of
+            | Literal _ (IntL len) => 1 <= len /\ len <= &n
+            | _ => F)
+       | _ =>
+        let src_bound = bytelike_type_bound (expr_type (EL 0 es)) in
+        (case EL 2 es of
+         | Literal _ (IntL len) =>
+             1 <= len /\ len <= &src_bound /\ len <= &n
+         | _ => src_bound <= n))
+    | _ => T
 End
 
 Definition well_typed_builtin_app_def:
@@ -847,7 +867,8 @@ Definition well_typed_expr_def:
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (Builtin ty blt es) =
     (well_typed_exprs env es /\ well_typed_builtin_app ty blt (MAP expr_type es) /\
-     builtin_operands_ok ty blt es /\ well_formed_type env.type_defs ty) /\
+     slice_operands_ok blt es /\ builtin_operands_ok ty blt es /\
+     well_formed_type env.type_defs ty) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\ well_formed_type env.type_defs ty /\
      type_builtin_result_ok env.type_defs tb ty target_ty (MAP expr_type es) /\
@@ -1317,7 +1338,8 @@ Definition type_stmt_def:
            Range (Literal _ (IntL start)) (Literal _ (IntL finish)) =>
              start < finish /\ n = Num (finish - start)
          | Range _ _ => 0 < n /\ well_typed_literal typ (IntL (&n))
-         | Array _ => T) /\
+         | Array e => expr_type e = ArrayT typ (Fixed n) \/
+                      expr_type e = ArrayT typ (Dynamic n)) /\
         id NOTIN FDOM env.var_types /\ iterator_unmodified it body /\
         IS_SOME (type_stmts (extend_local env id typ F) ret_ty body)
      then SOME env else NONE) /\
@@ -1335,6 +1357,14 @@ Theorem type_stmt_for_range_literal_bounds:
     (For id typ (Range (Literal start_ty (IntL start))
                       (Literal end_ty (IntL finish))) n body) = SOME env' ==>
   start < finish /\ n = Num (finish - start)
+Proof
+  rw[type_stmt_def, AllCaseEqs()]
+QED
+
+Theorem type_stmt_for_array_bound:
+  type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' ==>
+  expr_type e = ArrayT typ (Fixed n) \/
+  expr_type e = ArrayT typ (Dynamic n)
 Proof
   rw[type_stmt_def, AllCaseEqs()]
 QED

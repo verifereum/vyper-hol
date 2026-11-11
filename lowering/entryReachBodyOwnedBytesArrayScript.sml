@@ -88,6 +88,7 @@ Resume owned_array_initializer[control]:
   metis_tac[step_preserves_call_ctx, step_preserves_data_section, step_inst_non_invoke]
 QED
 Resume owned_array_initializer[pc_frame]:
+  drule_all entry_initializer_code >> strip_tac >>
   map_every (fn q => qpat_x_assum q kall_tac)
     [`abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`,
      `abi_decode_dynarray_prefix _ _ _ _ _ _ = _`,

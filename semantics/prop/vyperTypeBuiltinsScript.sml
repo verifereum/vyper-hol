@@ -1180,7 +1180,7 @@ QED
 (* Boundary lemma: evaluate_slice on BytesV + IntV indices never produces TypeError.
    Concrete constructor args avoid case-explosion in consumer proofs.
    Proved at implementation level; consumers use irule without expanding evaluate_slice_def. *)
-Theorem evaluate_slice_BytesV_no_type_error[local]:
+Theorem evaluate_slice_BytesV_no_type_error:
   !bs i j n msg.
     0 ≤ i ∧ 0 ≤ j ==>
     evaluate_slice (BytesV bs) (IntV i) (IntV j) n ≠ INR (TypeError msg)
@@ -1188,6 +1188,15 @@ Proof
   rw[evaluate_slice_def, LET_THM] >>
   Cases_on `Num i + Num j ≤ LENGTH bs` >> gvs[] >>
   Cases_on `compatible_bound (Dynamic n) (Num j)` >> gvs[]
+QED
+
+Theorem evaluate_slice_BytesV_success_type:
+  !bs sv lv n v.
+    evaluate_slice (BytesV bs) sv lv n = INL v ==>
+    ?out. v = BytesV out /\ LENGTH out <= n
+Proof
+  rw[evaluate_slice_def, LET_THM, compatible_bound_def, AllCaseEqs(),
+     LENGTH_TAKE]
 QED
 
 (* Boundary lemma: evaluate_slice on StringV + IntV indices never produces TypeError. *)

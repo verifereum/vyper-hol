@@ -2,7 +2,7 @@
 Theory annAssignPtrMemoryLayout
 Ancestors
  annAssignPtrFacts loweringSlice stmtSimProps stmtSimDefs
- stmtSimDeclMem stmtSimDecl exprLoweringProps
+ stmtSimDeclMem stmtSimDecl exprLoweringProps allocLimitsProps
  stmtLowering exprLowering emitHelper emitHelperProps context compileEnv
  loweringPosts fragExec venomInst venomState list rich_list finite_map
 Libs monadsyntax
@@ -20,7 +20,8 @@ Proof
    (qpat_x_assum `c with <|ce_vars := _; ce_var_type := _;
       ce_dynarray_capacity := _|> = cenv` mp_tac >>
     simp[compile_env_component_equality]) >>
- simp[type_memory_bytes_frame, oneline lowered_value_type_def]
+ conj_tac >- simp[type_memory_bytes_frame] >>
+ gen_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >> gvs[]
 QED
 
 Theorem annassign_memory_lowering_parts_ptr:

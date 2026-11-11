@@ -27,7 +27,7 @@ Ancestors
   list  exprSimHyps exprSimLeaves exprSimOperators exprSimPlaces
   exprSimAggregates exprSimBuiltins exprSimCalls exprLowering
   vyperAST vyperTypeCallGraph vyperTypeSystem exprSimWordBuiltins
-  exprSimCalldataSlice exprSimPrecompiles exprSimLen
+  exprSimCalldataSlice exprSimPrecompiles exprSimLen exprSimSlice
 
 val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
                   basicSizeTheory.option_size_def];
@@ -41,7 +41,9 @@ Theorem compile_builtin_case:
   !nocalls ctx func cenv cx ann bi args.
     (!bop. bi <> Bop bop) /\ (!t n. bi <> MakeArray t n) /\
     bi <> ECAdd /\ bi <> ECMul /\
-    exprs_case nocalls ctx func cenv cx args ==>
+    (code_slice_source bi args = NONE ==>
+     exprs_case nocalls ctx func cenv cx args) /\
+    (!m. bi = Slice m ==> slice_extcode_case nocalls ctx func cenv cx args) ==>
     expr_sim_case nocalls ctx func cenv cx (Builtin ann bi args) /\
     expr_vv_case nocalls ctx func cenv cx (Builtin ann bi args)
 Proof
@@ -81,6 +83,8 @@ Proof
   Cases_on `bi = ECMul`
   >- (gvs[] >> irule expr_ok_of_vv >> irule compile_ecmul_sim >> gvs[]) >>
   rw[expr_ok_case] >> drule exprs_case_below >>
+  disch_then (qspecl_then [`ctx`, `func`, `cx`] assume_tac) >>
+  drule slice_extcode_case_below >>
   disch_then (qspecl_then [`ctx`, `func`, `cx`] assume_tac) >>
   drule_at Any compile_builtin_case >> gvs[]
 QED
