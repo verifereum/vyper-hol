@@ -93,15 +93,11 @@ them to top-level statements:
 - Code generation: `venom_asm_rel` lets the two runs revert at different
   `ASSERT`s of the same block when both revert with the same data.
 - Wrapping offsets: the correctness theorems (`vyper_call_correct`,
-  `e2e_deploy_correctness`) take a gas bound that real executions satisfy,
-  for example `ctxt.msgParams.gasLimit < 2 ** 63` (EIP-1985) in
-  `call_state_rel` and its deployment counterpart. Under it, a memory
-  access past about `2^42` bytes runs out of gas, which
-  `frame_resource_starved` already covers, and the stages carry "Venom
-  touched memory past the bound" through to that outcome. The gas
-  sufficiency theorems (`vyper_call_gas_sufficient`,
-  `e2e_deploy_gas_sufficient`) need a matching change for return data with
-  out-of-range head offsets: either their out-of-gas escape, today only a
-  `RETURNDATACOPY`, also admits a decoder load, or `call_outcomes_ok`
-  requires each callee's return data to have its ABI head offsets within
-  the data.
+  `e2e_deploy_correctness`) need no new hypothesis. verifereum's
+  `calldata_bounded` (`spec/prop/vfmCalldataBoundScript.sml`) already
+  bounds every frame's gas limit below `2^64`, so a memory access far
+  enough past that bound runs out of gas, which `frame_resource_starved`
+  already covers; the stages carry "Venom touched memory past the bound"
+  through to that outcome. The gas sufficiency theorems
+  (`vyper_call_gas_sufficient`, `e2e_deploy_gas_sufficient`) need a
+  matching, weaker statement.
