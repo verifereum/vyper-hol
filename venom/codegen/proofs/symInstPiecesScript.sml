@@ -1105,3 +1105,15 @@ Proof
   qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[NoAsms, sym_frame_inv_def] >> metis_tac[]
 QED
+
+Theorem sym_log_name_dispatch:
+  n <= 4 ==>
+  ALOOKUP log_table ("LOG" ++ num_to_dec_string n) = SOME n /\
+  ~MEM ("LOG" ++ num_to_dec_string n) ["POP"; "JUMP"; "JUMPI"; "CODESIZE"] /\
+  ALOOKUP dup_table ("LOG" ++ num_to_dec_string n) = NONE /\
+  ALOOKUP swap_table ("LOG" ++ num_to_dec_string n) = NONE /\
+  asm_op_arity ("LOG" ++ num_to_dec_string n) = n + 2
+Proof
+  strip_tac >> `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >>
+  gvs[] >> EVAL_TAC
+QED
