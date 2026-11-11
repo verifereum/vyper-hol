@@ -261,7 +261,8 @@ Proof
   strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[targetPlaceSimTheory.target_pre_def] >>
   `gas_admissible (eval_target_place cx bt) target_place_res_ok es` by
-    (irule tuple_place_target_gas_admissible >> metis_tac[]) >>
+    (irule tuple_place_target_gas_admissible >>
+     metis_tac[targetPlaceSimTheory.target_pre_def]) >>
   `type_place_target env bt = SOME (Type (EL i tys))` by
     fs[vyperTypeSystemTheory.well_typed_target_def] >>
   `gas_outcome F (cx_tops cx) (ctx,func) (eval_target_place cx bt) (es,s0)
