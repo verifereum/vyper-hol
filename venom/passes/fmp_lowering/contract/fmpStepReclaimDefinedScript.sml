@@ -52,7 +52,7 @@ Proof
 QED
 
 (* The entry block always has a joined state. *)
-Theorem fmp_joined_entry_some:
+Theorem fmp_joined_entry_some[local]:
   ?st. fmp_joined (SOME (lbl,SOME fmp_empty_reclaim_state)) cfg states lbl =
        SOME st
 Proof
@@ -63,7 +63,7 @@ QED
 
 (* A block-stable predecessor with an exit state gives its successor a
    joined state. *)
-Theorem fmp_joined_pred_some:
+Theorem fmp_joined_pred_some[local]:
   fmp_process_block transfer entry cfg bbs pred states = states /\
   MEM pred (cfg_preds_of cfg succ) /\
   FST (fmp_fold_at transfer entry cfg bbs states pred) = SOME exit_st ==>
@@ -112,7 +112,7 @@ Proof
   disj2_tac >> qexists `k` >> simp[Abbr `inst`]
 QED
 
-Theorem fmp_reclaim_states_path_defined:
+Theorem fmp_reclaim_states_path_defined[local]:
   fmp_reclaim_states infos fn = SOME states /\
   fmp_base_analyze (fn_insts fn) = SOME env /\
   entry_block fn = SOME ebb /\

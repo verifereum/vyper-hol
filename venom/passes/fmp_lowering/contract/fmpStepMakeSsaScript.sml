@@ -567,17 +567,6 @@ Proof
   gen_tac >> Cases_on `p` >> gvs[is_fn_path_def]
 QED
 
-Theorem fmp_block_insts_distinct[local]:
-  fn_inst_ids_distinct f /\ MEM b f.fn_blocks ==>
-  ALL_DISTINCT b.bb_instructions
-Proof
-  rpt strip_tac >>
-  `?pre post. f.fn_blocks = pre ++ b::post` by metis_tac[MEM_SPLIT] >>
-  gvs[fn_inst_ids_distinct_def, MAP_APPEND, FLAT_APPEND,
-      ALL_DISTINCT_APPEND] >>
-  metis_tac[ALL_DISTINCT_MAP]
-QED
-
 Theorem fmp_source_var_reserved[local]:
   ir_supply_covers_fn s f /\ MEM b f.fn_blocks /\
   MEM i b.bb_instructions /\ MEM v (inst_ir_vars i) ==>
@@ -729,7 +718,8 @@ Proof
       qx_gen_tac `v` >> strip_tac >>
       partner_tac `MEM bb fn'.fn_blocks` `a` >>
       `ALL_DISTINCT a.bb_instructions` by
-        metis_tac[fmp_block_insts_distinct] >>
+        metis_tac[venomFnInstsProofsTheory.fn_inst_ids_block_distinct,
+                  ALL_DISTINCT_MAP] >>
       qpat_x_assum `MEM inst bb.bb_instructions`
         (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
       rename1 `inst = EL j' bb.bb_instructions` >>
