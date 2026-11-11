@@ -5225,7 +5225,7 @@ Proof
   fs[memory_rel_def] >> first_x_assum irule >> decide_tac
 QED
 
-Theorem log_asm_rel[local]:
+Theorem log_asm_rel:
   !lo ps vs st n off sz topics tail.
     venom_asm_rel lo ps vs st /\
     st.as_stack = off :: sz :: (topics ++ tail) /\
@@ -5275,7 +5275,7 @@ Proof
       TAKE_APPEND1]
 QED
 
-Theorem log_opcode_dispatch[local]:
+Theorem log_opcode_dispatch:
   !n lo o2pc st.
     n <= 4 ==>
     asm_step lo o2pc (AsmOp ("LOG" ++ num_to_dec_string n)) st = asm_log n st

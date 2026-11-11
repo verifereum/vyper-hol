@@ -1117,3 +1117,44 @@ Proof
   strip_tac >> `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >>
   gvs[] >> EVAL_TAC
 QED
+
+Theorem sym_log_prepared_suffix:
+  inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc :: selected /\
+  LENGTH selected = w2n tc + 2 /\ REVERSE selected = off :: len :: topics /\
+  w2n tc <= 4 /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ fn_shape_ok fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  sym_kinds_ok cplan fn ret [] ps ss /\
+  venom_asm_rel lo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  venom_asm_rel lo qs vsout cs' /\
+  ps.ps_stack = residual ++ selected /\
+  EVERY (\op. op <> dead_stack_marker) selected /\
+  (!op. MEM op selected ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) lo op) /\
+  source_memory_reads_disjoint cplan inst vs /\
+  context_source_memory_writes_disjoint cplan inst vs /\
+  qs = ps with ps_stack := stack_pop (LENGTH selected) ps.ps_stack /\
+  asm_block_at p cs.as_pc [AsmOp ("LOG" ++ num_to_dec_string (w2n tc))] /\
+  asm_step (SND (compute_label_offsets p)) (build_offset_to_pc p)
+    (AsmOp ("LOG" ++ num_to_dec_string (w2n tc))) cs = AsmOK cs' /\
+  LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
+    stail wtail ==>
+  ?full. sym_steps p env 1 (ss with sym_stack := ss.sym_stack ++ stail) =
+      SymOK full /\
+    asm_sym_rel p env (cs' with as_stack := cs'.as_stack ++ wtail) full /\
+    full.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret stail (release_dead_spills nl qs) full
+Proof
+  strip_tac >> drule_all sym_log_name_dispatch >> strip_tac >>
+  drule_all sym_log_source_emit >> strip_tac >>
+  `asm_block_at p ss.sym_base.as_pc
+     [AsmOp ("LOG" ++ num_to_dec_string (w2n tc))]` by
+    gvs[asmSymBridgeTheory.asm_sym_rel_def] >>
+  `asm_op_arity ("LOG" ++ num_to_dec_string (w2n tc)) <= LENGTH ss.sym_stack` by
+    (drule_all prepared_suffix_concrete_height >>
+     gvs[asmSymBridgeTheory.asm_sym_rel_def, listTheory.LIST_REL_EL_EQN]) >>
+  drule_all sym_named_emit_restore_stack >> strip_tac >>
+  qexists `full` >> simp[sym_kinds_ok_release_dead_spills]
+QED
