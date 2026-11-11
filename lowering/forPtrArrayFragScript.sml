@@ -21,7 +21,7 @@ Theorem compile_for_array_frag_ptr:
   id NOTIN FDOM env.var_types /\
   evaluate_type (get_tenv cx) et = SOME tv /\
   type_stmts (extend_local env id et F) ty stmts = SOME env_b /\
-  EVERY (stmt_exprs_ok cenv) stmts /\
+  stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME et)) stmts /\
   type_memory_bytes cenv et < 2 ** 64 /\
   type_memory_bytes cenv et = type_memory_size tv /\
   type_memory_bytes cenv et + 64 < dimword (:256) /\
