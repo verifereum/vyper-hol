@@ -32,5 +32,11 @@ Theorem body_assign_widened_aggregate_call_mem:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all bodyMemAssignLocalMemTheory.body_assign_local_rhs_pre >> strip_tac >>
+  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  `cenv.ce_var_type id = SOME ty` by fs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
+  drule_all widened_assignment_rhs_classify >> strip_tac >> gvs[] >>
+  irule widened_assignment_integration_mem >> simp[] >>
+  metis_tac[]
 QED
