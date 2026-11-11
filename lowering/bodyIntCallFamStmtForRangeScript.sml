@@ -547,6 +547,8 @@ QED
 
 Resume intcall_for_range_iterations[round]:
   rpt strip_tac >>
+  simp[listTheory.EL_GENLIST, vyperStateTheory.read_result_def,
+       vyperStateTheory.bind_return] >>
   irule exprSimMemDefsTheory.gas_outcome_post_mono >>
   qexists_tac `H k' s''` >>
   reverse conj_tac >- (first_x_assum irule >> simp[]) >>
@@ -604,7 +606,7 @@ Theorem intcall_for_range_producer_round:
   call_evaluation_safe fp.jc_cx (int_calls_stmts stmts) /\
   stmts_env bc (InLoop exit_lbl incr_lbl)
     (if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty) stmts sb0 = (ce_b,sb1) /\
-  gas_admissible (eval_for fp.jc_cx tyv id stmts (IntV (n1 + &k) :: vs))
+  gas_admissible (eval_for fp.jc_cx tyv id stmts (Value (IntV (n1 + &k)) :: vs))
     (stmt_res_ok lctx) es ==>
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
     (ignore_bind (push_scope_with_var id tyv (IntV (n1 + &k)))
