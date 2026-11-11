@@ -214,7 +214,7 @@ Proof
   `emitted_insts sa sb = emitted_insts sa s1 ++ emitted_insts s1 sb` by
     (imp_res_tac inst_extends_emit_op >> irule emitted_insts_append >>
      fs[inst_extends_def]) >>
-  pop_assum SUBST1_TAC >> irule run_inst_seq_mem_ok_append >> conj_tac
+  pop_assum SUBST1_TAC >> irule run_inst_seq_mem_ok_append >> reverse conj_tac
   >- (qpat_assum `emit_op ADD _ _ = _`
         (mp_then Any (fn th => simp[CONJUNCT1 th, run_inst_seq_mem_ok_last,
                                     mk_inst_def, below_frontier_no_ranges])
@@ -274,7 +274,7 @@ Proof
   drule_all calldata_slice_allocation_split >> strip_tac >>
   qpat_x_assum `emitted_insts sa sb = _` SUBST1_TAC >>
   (* CALLDATASIZE *)
-  irule run_inst_seq_mem_ok_append >> conj_tac
+  irule run_inst_seq_mem_ok_append >> reverse conj_tac
   >- (qpat_assum `emit_op CALLDATASIZE _ _ = _`
         (mp_then Any (fn th => simp[CONJUNCT1 th, run_inst_seq_mem_ok_last,
                                     mk_inst_def, below_frontier_no_ranges])
@@ -286,7 +286,7 @@ Proof
   qpat_x_assum `u = s with vs_vars := _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [venom_state_component_equality]) >>
   (* the bounds checks *)
-  irule run_inst_seq_mem_ok_append >> conj_tac
+  irule run_inst_seq_mem_ok_append >> reverse conj_tac
   >- (qpat_assum `compile_assert_slice_bounds _ _ _ _ = _`
         (mp_then Any MATCH_ACCEPT_TAC compile_assert_slice_bounds_mem_ok)) >>
   qx_gen_tac `pre` >> strip_tac >>
@@ -312,7 +312,7 @@ Proof
      qpat_x_assum `local_ptrs_reserved cenv sa` mp_tac >>
      simp[local_ptrs_reserved_def] >> metis_tac[]) >>
   (* the allocation *)
-  irule run_inst_seq_mem_ok_append >> conj_tac
+  irule run_inst_seq_mem_ok_append >> reverse conj_tac
   >- (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
       simp[compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
       pairarg_tac >> strip_tac >> gvs[] >>
