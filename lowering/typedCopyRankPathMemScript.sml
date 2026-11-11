@@ -437,7 +437,7 @@ Resume typed_store_rank_path_mem[tuple_metadata]:
    LENGTH tys = LENGTH stys /\ LENGTH l = LENGTH tys /\
    EVERY2 val_wf tvs l /\ EVERY2 val_wf tvs' l` by
     (qpat_x_assum `!m. m < n ==> _` kall_tac >>
-     fs[LIST_REL_EL_EQN, val_wf_def,
+     fs[LIST_REL_EL_EQN, valueEncodingDefsTheory.val_wf_def,
        abiTupleValueEncodingTheory.abi_values_have_types] >>
      metis_tac[valueEncodingTypingTheory.value_has_type_val_wf]) >>
   qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>

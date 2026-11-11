@@ -133,8 +133,8 @@ Proof
   `mem_bytes_at p n r.vs_memory = mem_bytes_at p n sh.vs_memory` by
     (qpat_x_assum `!aid p n. _ ==> _` irule >>
      conj_tac
-     >- (simp[mstore_def, local_region_def, lookup_var_def] >>
-         gvs[local_region_def, lookup_var_def]) >>
+     >- (simp[mstore_def, loweringStateRelDefsTheory.local_region_def, lookup_var_def] >>
+         gvs[loweringStateRelDefsTheory.local_region_def, lookup_var_def]) >>
      conj_tac >- (qexists_tac `aid` >> simp[mstore_def] >> decide_tac) >>
      simp[]) >>
   `mem_bytes_at p n sh.vs_memory = mem_bytes_at p n s0.vs_memory` by

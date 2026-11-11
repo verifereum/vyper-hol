@@ -86,7 +86,8 @@ Proof
   disch_then (qspec_then `n2w len` strip_assume_tac) >>
   `stmt_state_rel ctx func ce cx es sh` by simp[stmt_state_rel_inst_idx] >>
   `locals_kept ce es es s0 sh` by
-    (irule exprSimPropsTheory.locals_kept_regions >> gvs[mstore_def]) >>
+    (irule exprSimPropsTheory.locals_kept_mem_tail >>
+     qpat_assum `locals_kept _ _ _ _ _` (irule_at Any) >> gvs[mstore_def]) >>
   gvs[mstore_def, lookup_var_def] >>
   metis_tac[]
 QED
