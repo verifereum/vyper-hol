@@ -173,3 +173,52 @@ Proof
      rpt (pairarg_tac >> gvs[vv_type_def]) >>
      gvs[AllCaseEqs(), vv_type_def])
 QED
+
+Theorem builtin_result_tag:
+  compile_builtin_dispatch ce ann ty bi args sa = (vv,sb) ==> vv_type vv = ann
+Proof
+  simp[Once compile_expr_raw_def] >>
+  strip_tac >> drule builtin_body_result_tag >> simp[]
+QED
+
+Theorem type_builtin_result_tag:
+  compile_type_builtin_dispatch ce ann ty tb ret args sa = (vv,sb) ==> vv_type vv = ann
+Proof
+  simp[Once compile_expr_raw_def] >>
+  strip_tac >> drule type_builtin_body_result_tag >> simp[]
+QED
+
+Theorem expr_result_tag:
+  compile_expr ce ty e sa = (vv,sb) ==>
+  vv_type vv = (case e of Call _ (IntCall fid) _ _ =>
+    ce.ce_func_return_type (nsid_to_string fid) | _ => expr_type e)
+Proof
+  Cases_on `e` >> simp[Once compile_expr_component_eq] >>
+  rpt (pairarg_tac >> fs[]) >> rpt IF_CASES_TAC >>
+  rpt (pairarg_tac >> fs[]) >> rpt strip_tac >>
+  gvs[AllCaseEqs(), vv_type_def]
+  >>~- ([`compile_name_vv _ _ _ _ = _`], drule name_vv_result_tag >> simp[])
+  >>~- ([`compile_literal_vv _ _ _ = _`], drule literal_vv_result_tag >> simp[])
+  >>~- ([`compile_subscript _ _ _ _ _ _ _ = _`], drule subscript_result_tag >> simp[])
+  >>~- ([`compile_attribute _ _ _ _ _ _ _ = _`], drule attribute_result_tag >> simp[])
+  >>~- ([`compile_builtin_dispatch _ _ _ _ _ _ = _`], drule builtin_result_tag >> simp[])
+  >>~- ([`compile_type_builtin_dispatch _ _ _ _ _ _ _ = _`], drule type_builtin_result_tag >> simp[])
+  >>~- ([`compile_call _ _ _ _ target _ _ _ = _`],
+    drule call_result_tag >> Cases_on `target` >> simp[]) >>
+  gvs[compile_addmod_names_def, compile_mulmod_names_def, compile_powmod256_names_def] >>
+  rpt (pairarg_tac >> gvs[as_stack_val_pair, vv_type_def])
+QED
+
+Theorem expr_stack_compound_post_tag:
+  compile_expr ce ty e sa = (StackValue ann op,sb) /\
+  ~is_word_type (post_value_type ce e) /\
+  ~is_bytestring_type (post_value_type ce e) ==>
+  ann = post_value_type ce e
+Proof
+  strip_tac >> drule expr_result_tag >>
+  Cases_on `e` >>
+  gvs[post_value_type_def, vv_type_def] >>
+  rename1 `Call _ target _ _` >> Cases_on `target` >>
+  gvs[post_value_type_def, lowered_value_type_def, vyperASTTheory.expr_type_def] >>
+  rpt IF_CASES_TAC >> gvs[]
+QED
