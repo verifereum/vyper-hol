@@ -73,9 +73,61 @@ Resume ac_deferred_emission_contract[gap]:
   simp[run_insts_def] >> metis_tac[ac_abort_equiv_trans]
 QED
 Resume ac_deferred_emission_contract[equal]:
-  FAIL_TAC "equal"
+  Cases_on `more`
+  >- (`cert (SUC n) g` by metis_tac[ac_merge_runtime_laws_skip_assert] >>
+      disj2_tac >> qexistsl [`t`,`g`] >>
+      gvs[run_insts_def, step_inst_non_invoke, step_inst_base_def] >>
+      metis_tac[]) >>
+  `eval_operand p g = eval_operand p t` by
+    (irule eval_operand_equiv >> metis_tac[]) >>
+  drule_all ac_merge_runtime_laws_query >> strip_tac >>
+  `eval_operand c g = eval_operand c t` by
+    (irule eval_operand_equiv >>
+     fs[ac_merge_cursor_laws_def] >> metis_tac[EL_MEM, MEM]) >>
+  `step_inst fuel ctx (EL n xs) t =
+    Abort Revert_abort (revert_state (set_returndata [] t))` by
+    (irule step_assert_abort >> gvs[bool_to_word_def] >> metis_tac[]) >>
+  disj1_tac >> qexists_tac `revert_state (set_returndata [] t)` >>
+  gvs[run_insts_def] >>
+  `ac_abort_equiv g t` by
+    (irule execution_equiv_ac_abort_equiv >>
+     fs[state_equiv_def, execution_equiv_def]) >>
+  metis_tac[ac_abort_equiv_revert_returndata, ac_abort_equiv_trans]
 QED
 Resume ac_deferred_emission_contract[generated]:
-  FAIL_TAC "generated"
+  drule_all ac_merge_runtime_laws_query >> strip_tac >>
+  `eval_operand q g = eval_operand q t` by
+    (irule eval_operand_equiv >> metis_tac[]) >>
+  `ac_abort_equiv g t` by
+    (irule execution_equiv_ac_abort_equiv >>
+     fs[state_equiv_def, execution_equiv_def]) >>
+  `cert (SUC n) g` by metis_tac[ac_merge_runtime_laws_skip_assert] >>
+  Cases_on `EL n xs` >> gvs[] >>
+  Cases_on `more`
+  >- (disj2_tac >>
+      qexistsl [`update_var zv (bool_to_word (v = 0w /\ w = 0w))
+                  (update_var ov (word_or v w) t)`,`g`] >>
+      conj_tac
+      >- (qpat_assum `eval_operand p t = SOME v`
+            (mp_then (Pos hd) mp_tac ac_or_iszero_nop) >>
+          disch_then drule >> simp[] >> metis_tac[]) >>
+      simp[] >>
+      conj_tac >- (qpat_assum `state_equiv X g t`
+        (mp_then (Pos hd) mp_tac ac_or_iszero_frame) >>
+        disch_then (qspecl_then [`ov`,`zv`,`v`,`w`] mp_tac) >> simp[]) >>
+      simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+           word_or_eq_0w]) >>
+  disj1_tac >>
+  qexists_tac `revert_state (set_returndata []
+    (update_var zv (bool_to_word (v = 0w /\ w = 0w))
+      (update_var ov (word_or v w) t)))` >>
+  conj_tac
+  >- (qpat_assum `eval_operand p t = SOME v`
+        (mp_then (Pos hd) mp_tac ac_or_iszero_assert) >>
+      disch_then drule >> simp[] >> metis_tac[]) >>
+  qpat_assum `ac_abort_equiv g t`
+    (mp_then (Pos hd) mp_tac ac_or_iszero_abort_frame) >>
+  disch_then (qspecl_then [`ov`,`zv`,`v`,`w`] assume_tac) >>
+  metis_tac[ac_abort_equiv_trans]
 QED
 Finalise ac_deferred_emission_contract
