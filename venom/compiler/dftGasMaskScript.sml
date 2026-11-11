@@ -4041,6 +4041,193 @@ QED
 
 Finalise prefix_extract_mask[local]
 
+Theorem stopped_singleton_suffix[local]:
+  (~?u. FOLDR (dft_exec_cons fuel C) OK [y] s = OK u) ==>
+  FOLDR (dft_exec_cons fuel C) OK (y::xs) s =
+    FOLDR (dft_exec_cons fuel C) OK [y] s /\
+  gas_events_block fuel C s.vs_current_bb
+    <|bb_label := s.vs_current_bb; bb_instructions :=
+      REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ y::xs|> s =
+  gas_events_block fuel C s.vs_current_bb
+    <|bb_label := s.vs_current_bb; bb_instructions :=
+      REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ [y]|> s
+Proof
+  simp[dftIndexedExecTheory.dft_exec_cons_def] >> strip_tac >>
+  once_rewrite_tac[gas_events_block_def] >>
+  simp[venomInstTheory.get_instruction_def, EL_APPEND_EQN] >>
+  Cases_on `step_inst fuel C y s` >> gvs[] >>
+  Cases_on `is_terminator y.inst_opcode` >> gvs[] >>
+  Cases_on `v.vs_halted` >> gvs[]
+QED
+
+Theorem stopped_prefix_suffix[local]:
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  (~?u. FOLDR (dft_exec_cons fuel C) OK pre s = OK u) ==>
+  FOLDR (dft_exec_cons fuel C) OK (pre ++ post) s =
+    FOLDR (dft_exec_cons fuel C) OK pre s /\
+  gas_events_block fuel C s.vs_current_bb
+    <|bb_label := s.vs_current_bb; bb_instructions :=
+      REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ (pre ++ post)|> s =
+  gas_events_block fuel C s.vs_current_bb
+    <|bb_label := s.vs_current_bb; bb_instructions :=
+      REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre|> s
+Proof
+  strip_tac >> conj_tac
+  >- (simp[FOLDR_APPEND, Once dftRunRelTheory.dft_exec_prefix_continue] >>
+      Cases_on `FOLDR (dft_exec_cons fuel C) OK pre s` >> gvs[]) >>
+  irule prefix_events_stopped >> simp[DROP_APPEND] >> gvs[]
+QED
+
+Theorem stopped_extracted_suffix[local]:
+  EVERY (\x. dft_gas_swap_pair x y /\ ~dft_must_order x y) pre /\
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  (~?u. FOLDR (dft_exec_cons fuel C) OK (pre ++ [y]) s = OK u) ==>
+  FOLDR (dft_exec_cons fuel C) OK (pre ++ y::post) s =
+    FOLDR (dft_exec_cons fuel C) OK (pre ++ [y]) s /\
+  gas_events_block fuel C s.vs_current_bb
+    <|bb_label := s.vs_current_bb; bb_instructions :=
+      REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ (pre ++ y::post)|> s =
+  gas_events_block fuel C s.vs_current_bb
+    <|bb_label := s.vs_current_bb; bb_instructions :=
+      REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ (pre ++ [y])|> s
+Proof
+  strip_tac >> Cases_on `is_terminator y.inst_opcode`
+  >- (`pre = []` by (Cases_on `pre` >> gvs[dft_gas_swap_pair_def]) >>
+      qpat_x_assum `pre = []` SUBST_ALL_TAC >>
+      pure_rewrite_tac[APPEND] >> irule stopped_singleton_suffix >> gvs[]) >>
+  mp_tac (Q.INST [`pre` |-> `pre ++ [y]`] stopped_prefix_suffix) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[] >> gvs[]
+QED
+
+Theorem stopped_head_suffix_mask[local]:
+  !fuel C C'.
+  let CalleeIH = (!fn fn' t.
+      LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+      LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+      o1_ctx_shape C /\ o1_ctx_shape C' /\
+      MEM fn C.ctx_functions /\ fn' = dft_fn fn /\
+      dft_fn_rel fn fn' /\ strict_dom_vars_defined fn t /\
+      fn_reachable fn t.vs_current_bb /\
+      ctx_labels_bound C t.vs_labels /\ ctx_labels_bound C' t.vs_labels /\
+      ~t.vs_call_ctx.cc_static /\ terminates (run_blocks fuel C' fn' t) /\
+      gas_count_blocks fuel C' fn' t <= LENGTH t.vs_gas_readings ==>
+      ?m es unused.
+        LENGTH m = LENGTH es /\
+        PERM (MAP THE (FILTER IS_SOME m) ++ unused) t.vs_gas_readings /\
+        (!u. (?ir. run_blocks fuel C' fn' t = IntRet ir u) ==>
+          EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+        !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+          (?extra. es = gas_events_blocks fuel C fn
+             (t with vs_gas_readings := gs ++ tail) ++ extra) /\
+          ((?j. terminates (run_blocks j C fn
+             (t with vs_gas_readings := gs ++ tail))) ==>
+           terminates (run_blocks fuel C fn (t with vs_gas_readings := gs ++ tail)) /\
+           dft_res_rel
+             (restore_result [] (run_blocks fuel C fn (t with vs_gas_readings := gs ++ tail)))
+             (restore_result [] (run_blocks fuel C' fn' t)) /\
+           (!u. (?ir. run_blocks fuel C' fn' t = IntRet ir u) ==>
+             gas_events_blocks fuel C fn (t with vs_gas_readings := gs ++ tail) = es /\
+             residual_result tail (run_blocks fuel C' fn' t)
+               (run_blocks fuel C fn (t with vs_gas_readings := gs ++ tail)))));
+      R = (\n D xs st. FOLDR (dft_exec_cons n D) OK xs st);
+      E = (\D xs st. gas_events_block fuel D st.vs_current_bb
+        <|bb_label := st.vs_current_bb; bb_instructions :=
+          REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> st)
+  in
+  !fn bb pre y post rest s.
+    CalleeIH /\
+    LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+    LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+    o1_ctx_shape C /\ o1_ctx_shape C' /\ MEM fn C.ctx_functions /\
+    wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+    EVERY inst_wf bb.bb_instructions /\
+    EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+    EVERY (\i. MEM i bb.bb_instructions) (pre ++ y::post) /\
+    dft_remaining_inv fn bb (pre ++ y::post) s /\
+    EVERY (\x. dft_gas_swap_pair x y /\ ~dft_must_order x y) pre /\
+    EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+    ctx_labels_bound C s.vs_labels /\ ctx_labels_bound C' s.vs_labels /\
+    ~s.vs_call_ctx.cc_static /\ terminates (R fuel C' [y] s) /\
+    (~?u. R fuel C' [y] s = OK u) /\
+    LENGTH (E C' [y] s) <= LENGTH s.vs_gas_readings ==>
+    ?m es unused.
+      LENGTH m = LENGTH es /\
+      PERM (MAP THE (FILTER IS_SOME m) ++ unused) s.vs_gas_readings /\
+      (!u. (?ir. R fuel C' (y::rest) s = IntRet ir u) ==>
+        EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+      !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+        (?extra. es = E C (pre ++ y::post) (s with vs_gas_readings := gs ++ tail) ++ extra) /\
+        ((?j. terminates (R j C (pre ++ y::post) (s with vs_gas_readings := gs ++ tail))) ==>
+          terminates (R fuel C (pre ++ y::post) (s with vs_gas_readings := gs ++ tail)) /\
+          dft_res_rel
+            (restore_result [] (R fuel C (pre ++ y::post) (s with vs_gas_readings := gs ++ tail)))
+            (restore_result [] (R fuel C' (y::rest) s)) /\
+          ((?ir u. R fuel C' (y::rest) s = IntRet ir u) ==>
+            E C (pre ++ y::post) (s with vs_gas_readings := gs ++ tail) = es /\
+            residual_result tail (R fuel C' (y::rest) s)
+              (R fuel C (pre ++ y::post) (s with vs_gas_readings := gs ++ tail))))
+Proof
+  rpt gen_tac >> rpt BasicProvers.LET_ELIM_TAC >> rpt gen_tac >>
+  `!xs. R fuel C' (y::xs) s = R fuel C' [y] s /\
+    E C' (y::xs) s = E C' [y] s` by
+    (gen_tac >> qunabbrev_tac `R` >> qunabbrev_tac `E` >> BETA_TAC >>
+     irule stopped_singleton_suffix >> gvs[]) >>
+  mp_tac (Q.SPECL [`fuel`, `C`, `C'`] prefix_extract_mask) >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  disch_then (qspecl_then [`fn`, `bb`, `pre`, `y`, `post`, `s`] mp_tac) >>
+  (impl_tac >-
+    (qpat_assum `!xs. R _ _ _ _ = _ /\ _`
+       (qspec_then `pre` strip_assume_tac) >>
+     gvs[])) >>
+  disch_then (CONJUNCTS_THEN2 kall_tac
+    (qx_choose_then `m` (qx_choose_then `es` (qx_choose_then `unused` strip_assume_tac)))) >>
+  qpat_assum `!xs. R _ _ _ _ = _ /\ _` (qspec_then `pre` strip_assume_tac) >>
+  qpat_assum `!xs. R _ _ _ _ = _ /\ _` (qspec_then `rest` strip_assume_tac) >>
+  qpat_x_assum `CalleeIH` kall_tac >>
+  qpat_x_assum `Abbrev (CalleeIH = _)` kall_tac >>
+  qunabbrev_tac `R` >> qunabbrev_tac `E` >> BETA_TAC >>
+  RULE_ASSUM_TAC BETA_RULE >> fs[] >>
+  qexistsl_tac [`m`, `es`, `unused`] >> simp[] >> conj_tac
+  >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
+    (qspecl_then [`gs`, `tail`] mp_tac) >> simp[] >> strip_tac >>
+  `~?u. FOLDR (dft_exec_cons fuel C) OK (pre ++ [y])
+      (s with vs_gas_readings := gs ++ tail) = OK u` by
+    (strip_tac >>
+     `?j. terminates (FOLDR (dft_exec_cons j C) OK (pre ++ [y])
+        (s with vs_gas_readings := gs ++ tail))` by
+       (qexists_tac `fuel` >> simp[passSimulationDefsTheory.terminates_def]) >>
+     qpat_x_assum `(?j. _) ==> _` mp_tac >>
+     (impl_tac >- metis_tac[]) >> strip_tac >>
+     qpat_x_assum `dft_res_rel _ _` mp_tac >>
+     simp[restore_result_def, dftRunRelTheory.dft_res_rel_def] >>
+     Cases_on `FOLDR (dft_exec_cons fuel C') OK (y::pre) s` >> gvs[restore_result_def]) >>
+  drule_all stopped_extracted_suffix >>
+  disch_then (qspec_then `post` strip_assume_tac) >>
+  fs[] >> strip_tac >>
+  `?j. terminates (FOLDR (dft_exec_cons j C) OK (pre ++ [y])
+      (s with vs_gas_readings := gs ++ tail))` by
+    (qexists_tac `j` >>
+     qpat_x_assum `terminates (FOLDR (dft_exec_cons j C) _ _ _)` mp_tac >>
+     qpat_x_assum `EVERY (\i. ~is_terminator i.inst_opcode) pre` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     simp[FOLDR_APPEND] >>
+     simp[Q.INST [`k` |-> `dft_exec_cons j C y OK`]
+       dftRunRelTheory.dft_exec_prefix_continue,
+       Q.INST [`k` |-> `dft_exec_cons j C y (FOLDR (dft_exec_cons j C) OK post)`]
+       dftRunRelTheory.dft_exec_prefix_continue] >>
+     Cases_on `FOLDR (dft_exec_cons j C) OK pre
+       (s with vs_gas_readings := gs ++ tail)` >>
+     gvs[passSimulationDefsTheory.terminates_def,
+       dftIndexedExecTheory.dft_exec_cons_def] >>
+     Cases_on `step_inst j C y v` >> gvs[] >>
+     Cases_on `is_terminator y.inst_opcode` >> gvs[] >>
+     Cases_on `v'.vs_halted` >> gvs[]) >>
+  qpat_x_assum `(?j. _) ==> _` mp_tac >>
+  (impl_tac >- metis_tac[]) >> strip_tac >> gvs[]
+QED
+
 (* Source-cut design probe: the middle block can be a singleton GAS
    slot or a complete INVOKE mask.  This is only allocation transport;
    it deliberately makes no claim about dynamic execution endpoints. *)
