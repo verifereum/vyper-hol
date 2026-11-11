@@ -907,7 +907,7 @@ Resume prefix_bool_body_paired[source_add]:
   simp_tac pure_ss [Abbr `g1`, Abbr `t1`, Abbr `u1`] >>
   qpat_x_assum `EL 1 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM word_add_n2w] >>
-  irule (GEN_ALL (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+  irule (GEN_ALL (SIMP_RULE bool_ss [LET_THM, opcode_distinct] (Q.INST [`opc` |-> `ADD`]
     prefix_bool_body_arith_certificate))) >>
   simp[eval_operand_lit_local, op_taint_def]
 QED
@@ -950,7 +950,7 @@ Resume prefix_bool_body_paired[source_mul]:
   simp_tac pure_ss [Abbr `g2`, Abbr `t2`, Abbr `u2`] >>
   qpat_x_assum `EL 2 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM word_mul_n2w] >>
-  irule (GEN_ALL (SRULE [LET_THM] (Q.INST [`opc` |-> `MUL`]
+  irule (GEN_ALL (SIMP_RULE bool_ss [LET_THM, opcode_distinct] (Q.INST [`opc` |-> `MUL`]
     prefix_bool_body_arith_certificate))) >>
   simp[eval_operand_lit_local, op_taint_def]
 QED
@@ -996,7 +996,7 @@ Resume prefix_bool_body_paired[source_ptr]:
   simp_tac pure_ss [Abbr `g3`, Abbr `t3`, Abbr `u3`] >>
   qpat_x_assum `EL 3 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM ADD_ASSOC, GSYM word_add_n2w] >>
-  irule (GEN_ALL (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+  irule (GEN_ALL (SIMP_RULE bool_ss [LET_THM, opcode_distinct] (Q.INST [`opc` |-> `ADD`]
     prefix_bool_body_arith_certificate))) >> simp[word_add_n2w]
 QED
 
@@ -1040,7 +1040,7 @@ Resume prefix_bool_body_paired[dest_add]:
   simp_tac pure_ss [Abbr `g4`, Abbr `t4`, Abbr `u4`] >>
   qpat_x_assum `EL 4 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM word_add_n2w] >>
-  irule (GEN_ALL (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+  irule (GEN_ALL (SIMP_RULE bool_ss [LET_THM, opcode_distinct] (Q.INST [`opc` |-> `ADD`]
     prefix_bool_body_arith_certificate))) >>
   simp[eval_operand_lit_local, op_taint_def]
 QED
@@ -1090,7 +1090,7 @@ Resume prefix_bool_body_paired[dest_mul]:
   simp_tac pure_ss [Abbr `g5`, Abbr `t5`, Abbr `u5`] >>
   qpat_x_assum `EL 5 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM word_mul_n2w] >>
-  irule (GEN_ALL (SRULE [LET_THM] (Q.INST [`opc` |-> `MUL`]
+  irule (GEN_ALL (SIMP_RULE bool_ss [LET_THM, opcode_distinct] (Q.INST [`opc` |-> `MUL`]
     prefix_bool_body_arith_certificate))) >>
   simp[eval_operand_lit_local, op_taint_def]
 QED
@@ -1137,7 +1137,7 @@ Resume prefix_bool_body_paired[dest_ptr]:
   simp_tac pure_ss [Abbr `g6`, Abbr `t6`, Abbr `u6`] >>
   qpat_x_assum `EL 6 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM ADD_ASSOC, GSYM word_add_n2w] >>
-  irule (GEN_ALL (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+  irule (GEN_ALL (SIMP_RULE bool_ss [LET_THM, opcode_distinct] (Q.INST [`opc` |-> `ADD`]
     prefix_bool_body_arith_certificate))) >> simp[word_add_n2w]
 QED
 

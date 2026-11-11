@@ -2,7 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixEntryLiteralSizes
 Ancestors
   ctorDeployLoweringEntryResourceRegister abiDecoderCode venomWf ctorAbiActualFrame
-  abiEncoderRegisteredEffect ctorAbiActualSites contextCodegenRel
+  abiEncoderRegisteredEffect ctorAbiActualSites contextCodegenRel localPtrsProps
   abiEncoder abiEncoderProps abiDecoderLoop exprLoweringProps fragExec finite_map words list pred_set
 
 Theorem prefix_entry_literal_sizes_frame:
@@ -48,7 +48,7 @@ Proof
          `?site. site.inst_id = inst.inst_id /\ MEM site (fn_insts func) /\
            abi_decoder_alloc_shape site` by
            (gvs[ctor_actual_sites_def, frag_ids_def] >> metis_tac[pairTheory.SND]) >>
-         `site = inst` by metis_tac[fn_inst_ids_distinct_inj] >>
+         `site = inst` by metis_tac[localPtrsPropsTheory.fn_inst_ids_distinct_inj] >>
          gvs[abi_decoder_alloc_shape_def]) >>
       gvs[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256]) >>
   fs[abi_encoder_registered_effect_def] >> metis_tac[]

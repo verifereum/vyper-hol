@@ -1,6 +1,7 @@
 (* Same-endpoint index-slot allocation and initialization boundaries. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopSlot
 Ancestors
+  ghostPcTransportPtr
   ctorDeployMemoryRunPtrPrefixAllocationFloor
   ctorDeployMemoryRunPtrPrefixSteps ctorDeployMemoryRunPtrPrefixBoolBody
   ctorDeployMemoryRunPtrPrefixSequence
@@ -140,17 +141,6 @@ Proof
   fs[allocas_from_def] >> metis_tac[]
 QED
 
-Theorem prefix_loop_slot_taint_idx:
-  MEM i.inst_opcode [ALLOCA;MSTORE] ==>
-  step_taint i (s with vs_inst_idx := k) (t with vs_inst_idx := k) tn =
-  step_taint i s t tn
-Proof
-  strip_tac >>
-  simp[step_taint_def, mem_taint_def, new_site_bytes_def, step_writes_def,
-    written_taint_def, out_taint_def, store_taint_def, imm_taint_def,
-    source_memory_write_ranges_def, fixed_source_write_range_def,
-    eval_op_inst_idx]
-QED
 
 Theorem prefix_loop_slot_zero_block:
   eval_operand (Var ip) a = SOME (n2w p) /\ p < dimword (:256) /\
@@ -282,7 +272,7 @@ Resume prefix_loop_index_slot_pair[continuation]:
        (mstore p 0w a) with vs_inst_idx := k` by
     simp[mstore_def,write_memory_def] >>
   asm_rewrite_tac[] >>
-  simp[prefix_loop_slot_taint_idx,mk_inst_def,ADD1] >>
+  simp[ghostPcTransportPtrTheory.step_taint_inst_idx,mk_inst_def,ADD1] >>
   fs[mk_inst_def]
 QED
 

@@ -1,6 +1,8 @@
 (* Zero-hi element preparation: concrete code boundaries for paired execution. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopElement
 Ancestors
+  instIdxIndep
+  ghostPcTransportPtr
   slotCopyExecution
   compileEnv
   ctorDeployMemoryRunPtrPrefixLoopHeader ctorDeployMemoryRunPtrPrefixMemberSetup
@@ -609,16 +611,6 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
-Theorem prefix_loop_element_taint_idx:
-  MEM i.inst_opcode [MLOAD;DLOAD;ADD;MUL] ==>
-  step_taint i (s with vs_inst_idx := k) (t with vs_inst_idx := k) tn =
-  step_taint i s t tn
-Proof
-  strip_tac >>
-  simp[step_taint_def,mem_taint_def,new_site_bytes_def,step_writes_def,
-    written_taint_def,out_taint_def,store_taint_def,imm_taint_def,
-    source_memory_write_ranges_def,fixed_source_write_range_def,instIdxIndepTheory.eval_op_inst_idx]
-QED
 
 Theorem prefix_loop_element_mload_cursor_block:
   eval_operand (Var ip) s = SOME p /\
@@ -648,7 +640,7 @@ Proof
   `update_var x (mload (w2n p) s) (s with vs_inst_idx := cursor) =
     (update_var x (mload (w2n p) s) s) with vs_inst_idx := cursor` by
     simp[update_var_def] >>
-  simp[prefix_loop_element_taint_idx,mk_inst_def,ADD1]
+  simp[ghostPcTransportPtrTheory.step_taint_inst_idx,mk_inst_def,ADD1]
 QED
 
 Theorem prefix_loop_element_arith_cursor_block:
@@ -678,7 +670,7 @@ Proof
     (update_var x (if opc = ADD then u+v else u*v) s) with vs_inst_idx := cursor` by
     simp[update_var_def] >>
   Cases_on `opc = ADD` >> gvs[] >>
-  simp[prefix_loop_element_taint_idx,mk_inst_def,ADD1]
+  simp[ghostPcTransportPtrTheory.step_taint_inst_idx,mk_inst_def,ADD1]
 QED
 
 Theorem prefix_loop_element_dload_cursor_block:

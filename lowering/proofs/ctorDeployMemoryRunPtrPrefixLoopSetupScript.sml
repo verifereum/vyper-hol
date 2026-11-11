@@ -1,6 +1,7 @@
 (* Paired boundaries for canonical dynamic-array loop preparation. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopSetup
 Ancestors
+  ghostPcTransportPtr
   ctorDeployMemoryRunPtrPrefixBoolWord
   compileEnv
   ctorDeployMemoryRunPtrPrefixLoopSlot ctorDeployMemoryRunPtrPrefixCopyRun
@@ -197,7 +198,7 @@ Resume prefix_loop_count_header_block_interior[trace]:
   `!v k. mstore d v (update_var x v (s with vs_inst_idx := k)) =
     (mstore d v (update_var x v s)) with vs_inst_idx := k` by
     simp[update_var_def,mstore_def] >>
-  fs[prefix_loop_slot_taint_idx,mk_inst_def] >>
+  fs[ghostPcTransportPtrTheory.step_taint_inst_idx,mk_inst_def] >>
   mp_tac prefix_loop_count_header_steps_interior >>
   simp[prefix_copy_pure_taint] >> strip_tac >>
   gvs[step_inst_non_invoke,mk_inst_def,update_var_def,mstore_def]

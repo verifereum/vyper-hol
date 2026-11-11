@@ -1,6 +1,7 @@
 (* Same-state checked boundaries for the dynamic-array backedge. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopBackedge
 Ancestors
+  ghostPcTransportPtr
   slotCopyExecution
   ctorDeployMemoryRunPtrPrefixLoopSetup ctorDeployMemoryRunPtrPrefixBoolBody
   ctorDeployMemoryRunPtrPrefixSteps exprLoweringProps instIdxIndep
@@ -99,16 +100,6 @@ QED
 
 Finalise prefix_loop_increment_steps
 
-Theorem prefix_loop_backedge_taint_idx[local]:
-  MEM i.inst_opcode [ADD;MSTORE] ==>
-  step_taint i (s with vs_inst_idx := k) (t with vs_inst_idx := k) tn =
-    step_taint i s t tn
-Proof
-  strip_tac >>
-  simp[step_taint_def,mem_taint_def,new_site_bytes_def,step_writes_def,
-    written_taint_def,out_taint_def,store_taint_def,imm_taint_def,
-    source_memory_write_ranges_def,fixed_source_write_range_def,eval_op_inst_idx]
-QED
 
 Theorem prefix_loop_increment_run:
   ip <> fresh /\
@@ -185,7 +176,7 @@ Proof
   `ghost_step fuel ctx PG H q k u1 = (H,qt)` by
     (simp[Abbr `k`] >>
      drule_then mp_tac prefix_mstore_ghost_step >>
-     simp[Abbr `qt`,Abbr `u1`,prefix_loop_backedge_taint_idx,mk_inst_def]) >>
+     simp[Abbr `qt`,Abbr `u1`,ghostPcTransportPtrTheory.step_taint_inst_idx,mk_inst_def]) >>
   qpat_x_assum `!fuel. ptr_safe_run _ _ _ _ _ _ _ _ t2`
     (qspec_then `fuel` mp_tac) >>
   simp[ptr_safe_run_def,Abbr `t2`] >> strip_tac >>

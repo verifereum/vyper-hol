@@ -1,6 +1,7 @@
 (* The emitted Bool-array preheader, including both rejecting guards. *)
 Theory ctorDeployMemoryRunPtrPrefixBoolPreheader
 Ancestors
+  instIdxIndep
   ghostPcTransportPtr
   ctorDeployMemoryRunPtrPrefixBoolLoop ctorDeployMemoryRunPtrPrefixBoolBody
   ctorDeployMemoryRunPtrPrefixBoolShape ctorDeployMemoryRunPtrPrefixSteps
@@ -12,27 +13,7 @@ Ancestors
 
 
 
-Theorem prefix_preheader_mstore_index[local]:
-  mstore a w (s with vs_inst_idx := k) =
-  (mstore a w s) with vs_inst_idx := k
-Proof
-  simp[mstore_def]
-QED
 
-Theorem prefix_preheader_taint_index[local]:
-  i.inst_opcode IN {DLOAD; MSTORE; ALLOCA} ==>
-  step_taint i (s with vs_inst_idx := k) (t with vs_inst_idx := j) tn =
-  step_taint i s t tn
-Proof
-  strip_tac >>
-  `!op. eval_operand op (s with vs_inst_idx := k) = eval_operand op s`
-    by simp[ghostPcTransportPtrTheory.eval_operand_inst_idx] >>
-  gvs[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY] >>
-  simp[step_taint_def, mem_taint_def, new_site_bytes_def,
-       step_writes_def, source_memory_write_ranges_def,
-       fixed_source_write_range_def, written_taint_def, out_taint_def,
-       adopt_reset_def, store_taint_def, imm_taint_def]
-QED
 
 Theorem prefix_bool_preheader_gt_step:
   eval_operand u s = SOME w /\ eval_operand v s = SOME z ==>
@@ -1403,14 +1384,14 @@ Resume prefix_bool_preheader_initialize_paired[safety]:
       OK (t with vs_inst_idx := LENGTH prefix+1)` by
     simp[step_inst_non_invoke, mk_inst_def,
          step_inst_base_def, exec_write2_def,
-         ghostPcTransportPtrTheory.eval_operand_inst_idx, prefix_preheader_mstore_index,
+         ghostPcTransportPtrTheory.eval_operand_inst_idx, instIdxIndepTheory.mstore_idx,
          w2n_n2w, Abbr `t`] >>
   `ghost_step f ctx PG (DRESTRICT G (COMPL {loaded})) q
       (mk_inst (iid+1) MSTORE [Var dst;Var loaded] [])
       (l with vs_inst_idx := LENGTH prefix+1) =
       (DRESTRICT G (COMPL {loaded}),r)` by
     (drule prefix_mstore_ghost_step >>
-     simp[Abbr `r`, prefix_preheader_taint_index, mk_inst_def]) >>
+     simp[Abbr `r`, ghostPcTransportPtrTheory.step_taint_inst_idx, mk_inst_def]) >>
   `ptr_safe_step D lo f ctx fn PG (DRESTRICT G (COMPL {loaded})) q
       (mk_inst (iid+1) MSTORE [Var dst;Var loaded] [])
       (l with vs_inst_idx := LENGTH prefix+1)` by
@@ -1429,7 +1410,7 @@ Resume prefix_bool_preheader_initialize_paired[safety]:
   `step_taint (mk_inst (iid+2) ALLOCA [Lit 32w] [ip])
       (t with vs_inst_idx := LENGTH prefix+2)
       (u with vs_inst_idx := LENGTH prefix+2) r = z` by
-    (simp[Abbr `z`, prefix_preheader_taint_index, mk_inst_def]) >>
+    (simp[Abbr `z`, ghostPcTransportPtrTheory.step_taint_inst_idx, mk_inst_def]) >>
   `ghost_step f ctx PG (DRESTRICT G (COMPL {loaded})) r
       (mk_inst (iid+2) ALLOCA [Lit 32w] [ip])
       (t with vs_inst_idx := LENGTH prefix+2) = (Gh,z)` by
@@ -1454,11 +1435,11 @@ Resume prefix_bool_preheader_initialize_paired[safety]:
       OK (v with vs_inst_idx := LENGTH prefix+3)` by
     simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def, exec_write2_def,
          ghostPcTransportPtrTheory.eval_operand_inst_idx, eval_operand_def,
-         prefix_preheader_mstore_index, w2n_n2w, Abbr `v`] >>
+         instIdxIndepTheory.mstore_idx, w2n_n2w, Abbr `v`] >>
   `ghost_step f ctx PG Gh z (mk_inst (iid+3) MSTORE [Var ip;Lit 0w] [])
       (u with vs_inst_idx := LENGTH prefix+3) = (Gh,th)` by
     (drule prefix_mstore_ghost_step >>
-     simp[Abbr `th`, prefix_preheader_taint_index, mk_inst_def]) >>
+     simp[Abbr `th`, ghostPcTransportPtrTheory.step_taint_inst_idx, mk_inst_def]) >>
   `ptr_safe_step D lo f ctx fn PG Gh z
       (mk_inst (iid+3) MSTORE [Var ip;Lit 0w] [])
       (u with vs_inst_idx := LENGTH prefix+3)` by

@@ -1,6 +1,7 @@
 (* Successful zero-hi copy decoders, with the supplied execution endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixCopyRun
 Ancestors
+  instIdxIndep
   slotCopyExecution
   ghostPcTransportPtr
   compileEnv
@@ -134,25 +135,7 @@ Proof
 QED
 
 
-Theorem prefix_copy_update_index[local]:
-  update_var x w (s with vs_inst_idx := m) =
-    (update_var x w s) with vs_inst_idx := m
-Proof
-  simp[update_var_def]
-QED
 
-Theorem prefix_copy_taint_index[local]:
-  i.inst_opcode IN {DLOAD;GT;ISZERO;DLOADBYTES} ==>
-  step_taint i (s with vs_inst_idx := k) (t with vs_inst_idx := j) tn =
-    step_taint i s t tn
-Proof
-  strip_tac >> gvs[] >>
-  simp[step_taint_def, mem_taint_def, new_site_bytes_def,
-       step_writes_def, source_memory_write_ranges_def,
-       sized_source_write_range_def, written_taint_def, out_taint_def,
-       adopt_reset_def, store_taint_def, imm_taint_def,
-       ghostPcTransportPtrTheory.eval_operand_inst_idx]
-QED
 
 Theorem prefix_copy_count_success_block:
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
@@ -430,7 +413,7 @@ Resume prefix_bytestring_success_ghost[finish]:
        simp[w2n_n2w] >>
      drule_all prefix_copy_success_block >>
      simp[LET_THM, w2n_n2w, Abbr `u`, Abbr `qt`, Abbr `i`,
-       prefix_copy_taint_index, mk_inst_def, ADD1]) >>
+       ghostPcTransportPtrTheory.step_taint_inst_idx, mk_inst_def, ADD1]) >>
   qpat_assum `!fuel. qt.t_mem SUBSET _ /\ _` (qspec_then `0` strip_assume_tac) >>
   qexistsl_tac [`H`,`qt`] >>
   `q3.t_mem = tn.t_mem /\ q3.t_stor = tn.t_stor /\
@@ -689,18 +672,7 @@ Proof
   fs[step_inst_non_invoke, mk_inst_def] >> simp[]
 QED
 
-Theorem prefix_bulk_mstore_index[local]:
-  mstore a w (s with vs_inst_idx := k) = mstore a w s with vs_inst_idx := k
-Proof
-  simp[mstore_def]
-QED
 
-Theorem prefix_bulk_write_index[local]:
-  write_memory_with_expansion a bs (s with vs_inst_idx := k) =
-    write_memory_with_expansion a bs s with vs_inst_idx := k
-Proof
-  simp[write_memory_with_expansion_def]
-QED
 
 Theorem prefix_bulk_body_success_block:
   let ys =
@@ -913,7 +885,7 @@ Proof
          update_var_def, mstore_def] >>
      simp[Abbr `r6`, Abbr `s5`, Abbr `r5`, Abbr `s4`, Abbr `r4`,
        Abbr `s3`, Abbr `r3`, Abbr `s2`, Abbr `r2`, Abbr `s1`,
-       prefix_copy_update_index, prefix_bulk_mstore_index, prefix_bulk_write_index,
+       instIdxIndepTheory.update_var_idx, instIdxIndepTheory.mstore_idx, ghostPcTransportPtrTheory.write_memory_with_expansion_inst_idx,
        GSYM word_mul_n2w, LESS_MOD, ADD1]) >>
   gen_tac >> disch_tac >>
   qpat_x_assum `!fuel. _ ==> ptr_safe_block D lo fuel ctx fn PG G tn bb s` irule >>

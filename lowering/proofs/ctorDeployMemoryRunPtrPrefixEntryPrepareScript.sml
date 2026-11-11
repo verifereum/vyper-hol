@@ -118,44 +118,6 @@ Proof
   simp[update_var_def]
 QED
 
-Theorem prefix_entry_prepare_emit_actual:
-  emit_op opc ops st = (out,last) /\
-  ((opc = CALLVALUE /\ ops = [] /\ w = initial.vs_call_ctx.cc_callvalue) \/
-   (opc = ASSIGN /\ ops = [Lit 0w] /\ w = 0w) \/
-   (opc = ISZERO /\ ops = [a] /\ eval_operand a initial = SOME 0w /\
-    op_taint tn a = {} /\ w = 1w)) /\
-  allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
-  fresh_vars_wrt st initial /\ fn_has_code st last func /\
-  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
-  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t H qt. eval_operand out t = SOME w /\ op_taint qt out = {} /\
-    op_prov H out = NONE /\ fresh_vars_wrt last t /\
-    t.vs_memory = initial.vs_memory /\ t.vs_allocas = initial.vs_allocas /\
-    t.vs_alloca_next = initial.vs_alloca_next /\
-    t.vs_accounts = initial.vs_accounts /\ t.vs_transient = initial.vs_transient /\
-    t.vs_data_section = initial.vs_data_section /\
-    t.vs_call_ctx = initial.vs_call_ctx /\ t.vs_labels = initial.vs_labels /\
-    t.vs_outcomes = initial.vs_outcomes /\ t.vs_gas_readings = initial.vs_gas_readings /\
-    t.vs_code = initial.vs_code /\ t.vs_tx_ctx = initial.vs_tx_ctx /\
-    t.vs_block_ctx = initial.vs_block_ctx /\ t.vs_logs = initial.vs_logs /\
-    t.vs_requests = initial.vs_requests /\
-    t.vs_pending_deletions = initial.vs_pending_deletions /\
-    (!y v. not_fresh_at st y /\ lookup_var y initial = SOME v ==> lookup_var y t = SOME v) /\
-    (!y. not_fresh_at st y ==> FLOOKUP H y = FLOOKUP G y /\
-      op_taint qt (Var y) = op_taint tn (Var y)) /\
-    qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
-    qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
-    t.vs_inst_idx = LENGTH last.cs_current_insts /\
-    abi_decode_sim ctx func initial t /\
-    ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt t) ==>
-      !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
-Proof
-  BETA_TAC >> disch_tac >>
-  mp_tac (SRULE [] prefix_entry_prepare_emit_actual_checked) >>
-  (impl_tac >- asm_rewrite_tac[]) >>
-  strip_tac >> qexistsl [`t`,`H`,`qt`] >> simp[]
-QED
 
 val PrepareRegion = ``\checked.
   (if cap > 0 then
@@ -206,43 +168,6 @@ Proof
     gas_path_mem_rules]
 QED
 
-Theorem prefix_entry_prepare_region_actual:
-  (if cap > 0 then
-     comp_bind (compile_fixed_region_with_id cap) (\r. comp_return (SND r).buf_operand)
-   else comp_return (Lit 0w)) st = (imm,last) /\
-  allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
-  fresh_vars_wrt st initial /\ fn_has_code st last func /\
-  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
-  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t H qt.
-    eval_operand imm t = SOME 0w /\ op_taint qt imm = {} /\ op_prov H imm = NONE /\
-    fresh_vars_wrt last t /\
-    t.vs_memory = initial.vs_memory /\ t.vs_allocas = initial.vs_allocas /\
-    t.vs_alloca_next = initial.vs_alloca_next /\
-    t.vs_accounts = initial.vs_accounts /\ t.vs_transient = initial.vs_transient /\
-    t.vs_data_section = initial.vs_data_section /\
-    t.vs_call_ctx = initial.vs_call_ctx /\ t.vs_labels = initial.vs_labels /\
-    t.vs_outcomes = initial.vs_outcomes /\ t.vs_gas_readings = initial.vs_gas_readings /\
-    t.vs_code = initial.vs_code /\ t.vs_tx_ctx = initial.vs_tx_ctx /\
-    t.vs_block_ctx = initial.vs_block_ctx /\ t.vs_logs = initial.vs_logs /\
-    t.vs_requests = initial.vs_requests /\
-    t.vs_pending_deletions = initial.vs_pending_deletions /\
-    (!y v. not_fresh_at st y /\ lookup_var y initial = SOME v ==> lookup_var y t = SOME v) /\
-    (!y. not_fresh_at st y ==> FLOOKUP H y = FLOOKUP G y /\
-      op_taint qt (Var y) = op_taint tn (Var y)) /\
-    qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
-    qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
-    t.vs_inst_idx = LENGTH last.cs_current_insts /\
-    abi_decode_sim ctx func initial t /\
-    ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt t) ==>
-      !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
-Proof
-  BETA_TAC >> disch_tac >>
-  mp_tac (SRULE [] prefix_entry_prepare_region_actual_checked) >>
-  (impl_tac >- asm_rewrite_tac[]) >>
-  strip_tac >> qexistsl [`t`,`H`,`qt`] >> simp[]
-QED
 
 Theorem prefix_entry_prepare_paycheck_actual_checked:
   emit_op CALLVALUE [] st = (cv,sa) /\
@@ -320,41 +245,6 @@ Proof
   >> metis_tac[]
 QED
 
-Theorem prefix_entry_prepare_paycheck_actual:
-  emit_op CALLVALUE [] st = (cv,sa) /\
-  emit_op ISZERO [cv] sa = (nv,sb) /\ emit_void ASSERT [nv] sb = ((),last) /\
-  fn_has_code st sa func /\ fn_has_code sa sb func /\ fn_has_code sb last func /\
-  initial.vs_call_ctx.cc_callvalue = 0w /\
-  allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
-  fresh_vars_wrt st initial /\ ~initial.vs_halted /\
-  initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t H qt.
-    fresh_vars_wrt last t /\
-    t.vs_memory = initial.vs_memory /\ t.vs_allocas = initial.vs_allocas /\
-    t.vs_alloca_next = initial.vs_alloca_next /\
-    t.vs_accounts = initial.vs_accounts /\ t.vs_transient = initial.vs_transient /\
-    t.vs_data_section = initial.vs_data_section /\
-    t.vs_call_ctx = initial.vs_call_ctx /\ t.vs_labels = initial.vs_labels /\
-    t.vs_outcomes = initial.vs_outcomes /\ t.vs_gas_readings = initial.vs_gas_readings /\
-    t.vs_code = initial.vs_code /\ t.vs_tx_ctx = initial.vs_tx_ctx /\
-    t.vs_block_ctx = initial.vs_block_ctx /\ t.vs_logs = initial.vs_logs /\
-    t.vs_requests = initial.vs_requests /\
-    t.vs_pending_deletions = initial.vs_pending_deletions /\
-    (!y v. not_fresh_at st y /\ lookup_var y initial = SOME v ==> lookup_var y t = SOME v) /\
-    (!y. not_fresh_at st y ==> FLOOKUP H y = FLOOKUP G y /\
-      op_taint qt (Var y) = op_taint tn (Var y)) /\
-    qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
-    qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
-    t.vs_inst_idx = LENGTH last.cs_current_insts /\
-    abi_decode_sim ctx func initial t /\
-    ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt t) ==>
-      !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
-Proof
-  disch_tac >> mp_tac prefix_entry_prepare_paycheck_actual_checked >>
-  (impl_tac >- asm_rewrite_tac[]) >>
-  strip_tac >> qexistsl [`t`,`H`,`qt`] >> simp[]
-QED
 
 Theorem prefix_entry_prepare_payable_actual_checked:
   (if payable then comp_return ()
@@ -407,41 +297,6 @@ Proof
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem prefix_entry_prepare_payable_actual:
-  (if payable then comp_return ()
-   else comp_bind (emit_op CALLVALUE [])
-     (\cv. comp_bind (emit_op ISZERO [cv]) (\nv. emit_void ASSERT [nv]))) st = ((),last) /\
-  (payable \/ initial.vs_call_ctx.cc_callvalue = 0w) /\
-  fn_has_code st last func /\ allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
-  fresh_vars_wrt st initial /\ ~initial.vs_halted /\
-  initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t H qt.
-    fresh_vars_wrt last t /\
-    t.vs_memory = initial.vs_memory /\ t.vs_allocas = initial.vs_allocas /\
-    t.vs_alloca_next = initial.vs_alloca_next /\
-    t.vs_accounts = initial.vs_accounts /\ t.vs_transient = initial.vs_transient /\
-    t.vs_data_section = initial.vs_data_section /\
-    t.vs_call_ctx = initial.vs_call_ctx /\ t.vs_labels = initial.vs_labels /\
-    t.vs_outcomes = initial.vs_outcomes /\ t.vs_gas_readings = initial.vs_gas_readings /\
-    t.vs_code = initial.vs_code /\ t.vs_tx_ctx = initial.vs_tx_ctx /\
-    t.vs_block_ctx = initial.vs_block_ctx /\ t.vs_logs = initial.vs_logs /\
-    t.vs_requests = initial.vs_requests /\
-    t.vs_pending_deletions = initial.vs_pending_deletions /\
-    (!y v. not_fresh_at st y /\ lookup_var y initial = SOME v ==> lookup_var y t = SOME v) /\
-    (!y. not_fresh_at st y ==> FLOOKUP H y = FLOOKUP G y /\
-      op_taint qt (Var y) = op_taint tn (Var y)) /\
-    qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
-    qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
-    t.vs_inst_idx = LENGTH last.cs_current_insts /\
-    abi_decode_sim ctx func initial t /\
-    ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt t) ==>
-      !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
-Proof
-  disch_tac >> mp_tac prefix_entry_prepare_payable_actual_checked >>
-  (impl_tac >- asm_rewrite_tac[]) >>
-  strip_tac >> qexistsl [`t`,`H`,`qt`] >> simp[]
-QED
 
 Theorem prefix_entry_prepare_actual_checked:
   (if payable then comp_return ()
@@ -499,46 +354,4 @@ Proof
   conj_tac >- (rpt strip_tac >> gvs[op_prov_def]) >>
   conj_tac >- (strip_tac >> gvs[entry_taint_def]) >>
   metis_tac[abi_decode_sim_trans, gas_path_mem_then, ADD]
-QED
-
-Theorem prefix_entry_prepare_actual:
-  (if payable then comp_return ()
-   else comp_bind (emit_op CALLVALUE [])
-     (\cv. comp_bind (emit_op ISZERO [cv]) (\nv. emit_void ASSERT [nv]))) st = ((),pay) /\
-  (if cap > 0 then
-     comp_bind (compile_fixed_region_with_id cap) (\r. comp_return (SND r).buf_operand)
-   else comp_return (Lit 0w)) pay = (imm,last) /\
-  (payable \/ initial.vs_call_ctx.cc_callvalue = 0w) /\
-  fn_has_code st last func /\ allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
-  fresh_vars_wrt st initial /\ ~initial.vs_halted /\
-  initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t H qt.
-    eval_operand imm t = SOME 0w /\ op_taint qt imm = {} /\ op_prov H imm = NONE /\
-    fresh_vars_wrt last t /\
-    (!x. imm = Var x ==> FLOOKUP H x = NONE) /\
-    (tn = entry_taint ==> qt.t_mem = {} /\ qt.t_stor = {} /\ qt.t_trans = {} /\ qt.t_imm = {}) /\
-    t.vs_memory = initial.vs_memory /\ t.vs_allocas = initial.vs_allocas /\
-    t.vs_alloca_next = initial.vs_alloca_next /\
-    t.vs_accounts = initial.vs_accounts /\ t.vs_transient = initial.vs_transient /\
-    t.vs_data_section = initial.vs_data_section /\
-    t.vs_call_ctx = initial.vs_call_ctx /\ t.vs_labels = initial.vs_labels /\
-    t.vs_outcomes = initial.vs_outcomes /\ t.vs_gas_readings = initial.vs_gas_readings /\
-    t.vs_code = initial.vs_code /\ t.vs_tx_ctx = initial.vs_tx_ctx /\
-    t.vs_block_ctx = initial.vs_block_ctx /\ t.vs_logs = initial.vs_logs /\
-    t.vs_requests = initial.vs_requests /\
-    t.vs_pending_deletions = initial.vs_pending_deletions /\
-    (!y v. not_fresh_at st y /\ lookup_var y initial = SOME v ==> lookup_var y t = SOME v) /\
-    (!y. not_fresh_at st y ==> FLOOKUP H y = FLOOKUP G y /\
-      op_taint qt (Var y) = op_taint tn (Var y)) /\
-    qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
-    qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
-    t.vs_inst_idx = LENGTH last.cs_current_insts /\
-    abi_decode_sim ctx func initial t /\
-    ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt t) ==>
-      !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
-Proof
-  disch_tac >> mp_tac prefix_entry_prepare_actual_checked >>
-  (impl_tac >- asm_rewrite_tac[]) >>
-  strip_tac >> qexistsl [`t`,`H`,`qt`] >> gvs[]
 QED
