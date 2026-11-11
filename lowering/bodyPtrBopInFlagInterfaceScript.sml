@@ -8,7 +8,8 @@ Theorem membership_flag_source_run:
   value_has_type (FlagTV m) v1 /\ value_has_type (FlagTV m) v2 /\ m <= 256 /\
   compile_binop bop x y ty bl el sa = (op,sb) /\
   eval_operand x s = SOME (val_to_w256 v1) /\
-  eval_operand y s = SOME (val_to_w256 v2) /\ fresh_vars_wrt sa s ==>
+  eval_operand y s = SOME (val_to_w256 v2) /\ fresh_vars_wrt sa s /\
+  expr_res_ok (bop_result cx ann bop tys v1 v2 es) ==>
   ?v t. bop_result cx ann bop tys v1 v2 es = INL v /\ word_value v /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (val_to_w256 v)
@@ -23,7 +24,7 @@ Proof
   >- (Cases_on `if bop = In then val_to_w256 v1 && val_to_w256 v2 <> 0w
         else val_to_w256 v1 && val_to_w256 v2 = 0w` >>
       simp[venomExecSemanticsTheory.bool_to_word_def]) >>
-  irule bop_result_flag_in >> simp[] >> qexists_tac `m` >> simp[]
+  irule bop_result_flag_in >> simp[] >> metis_tac[]
 QED
 
 Theorem membership_flag_compile_dispatch:

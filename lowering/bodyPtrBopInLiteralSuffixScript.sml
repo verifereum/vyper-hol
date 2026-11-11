@@ -235,17 +235,370 @@ Proof
   Induct >> simp[] >> rpt strip_tac >> gvs[is_terminator_def]
 QED
 
+Theorem membership_shape_nonterminators[local]:
+  !is. EVERY (\i. (i.inst_opcode = EQ \/ i.inst_opcode = OR \/
+                   i.inst_opcode = AND \/ i.inst_opcode = ISZERO) /\
+         (LENGTH i.inst_operands = 1 \/ LENGTH i.inst_operands = 2) /\
+         LENGTH i.inst_outputs = 1) is ==>
+       EVERY (\i. ~is_terminator i.inst_opcode) is
+Proof
+  Induct >> simp[] >> rpt strip_tac >> gvs[is_terminator_def]
+QED
+
+Theorem membership_defined_from_rel[local]:
+  !s cs vs. LIST_REL (\c v. eval_operand c s = SOME v) cs vs ==>
+    EVERY (\c. ?v. eval_operand c s = SOME v) cs
+Proof
+  gen_tac >> Induct >> rpt strip_tac >> gvs[LIST_REL_CONS1] >> metis_tac[]
+QED
+
+Theorem membership_defined_from_bool_rel[local]:
+  !s cs bs. LIST_REL (\c b. eval_operand c s = SOME (bool_to_word b)) cs bs ==>
+    EVERY (\c. ?v. eval_operand c s = SOME v) cs
+Proof
+  gen_tac >> Induct >> rpt strip_tac >> gvs[LIST_REL_CONS1] >> metis_tac[]
+QED
+
+Theorem membership_clean_spec[local]:
+  !sa s x v G tn G' tn'.
+    fresh_vars_wrt sa s /\ eval_operand x s = SOME v /\
+    op_prov G x = NONE /\ op_taint tn x = {} /\
+    (!p. not_fresh_at sa p ==> FLOOKUP G' p = FLOOKUP G p /\
+      op_taint tn' (Var p) = op_taint tn (Var p)) ==>
+    op_prov G' x = NONE /\ op_taint tn' x = {}
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all membership_clean_operand_frame >> simp[]
+QED
+
+Theorem membership_clean_list_frame[local]:
+  !sa s G tn G' tn' xs.
+    fresh_vars_wrt sa s /\ EVERY (\x. ?v. eval_operand x s = SOME v) xs /\
+    EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
+    (!p. not_fresh_at sa p ==> FLOOKUP G' p = FLOOKUP G p /\
+      op_taint tn' (Var p) = op_taint tn (Var p)) ==>
+    EVERY (\x. op_prov G' x = NONE /\ op_taint tn' x = {}) xs
+Proof
+  ntac 6 gen_tac >> Induct >> simp[] >> rpt strip_tac
+  >- (drule_all membership_clean_operand_frame >> simp[])
+  >- (drule_all membership_clean_operand_frame >> simp[]) >>
+  first_x_assum irule >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem membership_defined_mono[local]:
+  !s t xs.
+    EVERY (\x. ?v. eval_operand x s = SOME v) xs /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) ==>
+    EVERY (\x. ?v. eval_operand x t = SOME v) xs
+Proof
+  rpt strip_tac >> fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem membership_op_uniform[local]:
+  !D ctx fn PG opc ops sa dst sb s t G tn.
+    emit_op opc ops sa = (dst,sb) /\ MEM opc [EQ; OR; AND; ISZERO; GT] /\
+    (LENGTH ops = 1 \/ LENGTH ops = 2) /\
+    EVERY (\op. op_prov G op = NONE /\ op_taint tn op = {}) ops /\
+    ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    ?G' tn'.
+      (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+             (s with vs_inst_idx := k) G' tn') /\
+      op_prov G' dst = NONE /\ op_taint tn' dst = {} /\
+      (tn' with t_var := tn.t_var) = tn /\
+      (!p. not_fresh_at sa p ==> FLOOKUP G' p = FLOOKUP G p /\
+        op_taint tn' (Var p) = op_taint tn (Var p))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `EVERY _ _` (assume_tac o SRULE [EVERY_MEM]) >>
+  irule membership_scalar_uniform_run >> metis_tac[]
+QED
+
+Theorem membership_op_facts[local]:
+  !opc ops sa dst sb.
+    emit_op opc ops sa = (dst,sb) /\ MEM opc [EQ; OR; AND; ISZERO] ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+    sa.cs_next_var <= sb.cs_next_var
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule emit_op_extends >> drule emitted_insts_emit_op >> rpt strip_tac >>
+  gvs[mk_inst_def, is_terminator_def]
+QED
+
+(* Composition of two uniform pointer segments of straight scalar code. *)
+Theorem membership_uniform_trans[local]:
+  !D ctx fn PG G tn G1 tn1 G2 tn2 sa sm sb s t.
+    sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm /\
+    sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\
+    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sm) /\
+    run_inst_seq (emitted_insts sa sm) s = OK t /\
+    sa.cs_next_var <= sm.cs_next_var /\
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sm)
+       (s with vs_inst_idx := k) G1 tn1) /\
+    (tn1 with t_var := tn.t_var) = tn /\
+    (!p. not_fresh_at sa p ==> FLOOKUP G1 p = FLOOKUP G p /\
+       op_taint tn1 (Var p) = op_taint tn (Var p)) /\
+    (!k. inst_seq_ptr D 0 ctx fn PG G1 tn1 (emitted_insts sm sb)
+       (t with vs_inst_idx := k) G2 tn2) /\
+    (tn2 with t_var := tn1.t_var) = tn1 /\
+    (!p. not_fresh_at sm p ==> FLOOKUP G2 p = FLOOKUP G1 p /\
+       op_taint tn2 (Var p) = op_taint tn1 (Var p)) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+       (s with vs_inst_idx := k) G2 tn2) /\
+    (tn2 with t_var := tn.t_var) = tn /\
+    (!p. not_fresh_at sa p ==> FLOOKUP G2 p = FLOOKUP G p /\
+       op_taint tn2 (Var p) = op_taint tn (Var p))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  conj_tac >- simp[] >>
+  conj_tac
+  >- (pop_assum SUBST1_TAC >> irule inst_seq_ptr_uniform_append >>
+      metis_tac[]) >>
+  conj_tac >- gvs[taint_component_equality] >>
+  rpt gen_tac >> strip_tac >>
+  `not_fresh_at sm p` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  metis_tac[]
+QED
+
+Theorem literal_eqs_next_var[local]:
+  !xs needle sa cs sb.
+    emit_membership_eqs needle xs sa = (cs,sb) ==>
+    sa.cs_next_var <= sb.cs_next_var
+Proof
+  Induct >> rpt gen_tac
+  >- simp[emit_membership_eqs_def, comp_return_def] >>
+  simp[emit_membership_eqs_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  imp_res_tac emitted_insts_emit_op >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem literal_or_next_var[local]:
+  !cs acc sa op sb.
+    fold_membership_or acc cs sa = (op,sb) ==>
+    sa.cs_next_var <= sb.cs_next_var
+Proof
+  Induct >> rpt gen_tac
+  >- simp[fold_membership_or_def, comp_return_def] >>
+  simp[fold_membership_or_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  imp_res_tac emitted_insts_emit_op >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem literal_and_next_var[local]:
+  !cs acc sa op sb.
+    fold_membership_and acc cs sa = (op,sb) ==>
+    sa.cs_next_var <= sb.cs_next_var
+Proof
+  Induct >> rpt gen_tac
+  >- simp[fold_membership_and_def, comp_return_def] >>
+  simp[fold_membership_and_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  imp_res_tac emitted_insts_emit_op >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
 Theorem literal_in_next_var:
   !xs needle sa dst sb.
     compile_list_membership_in needle xs sa = (dst,sb) ==>
     sa.cs_next_var <= sb.cs_next_var
 Proof
-  Induct >> rpt gen_tac
-  >- simp[compile_list_membership_in_def, comp_return_def] >>
-  Cases_on `xs` >> simp[compile_list_membership_in_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  imp_res_tac emitted_insts_emit_op >> gvs[] >>
-  first_x_assum drule >> simp[]
+  rpt gen_tac >> simp[compile_list_membership_in_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_membership_eqs needle xs sa = (cs, sm)` >>
+  drule literal_eqs_next_var >> strip_tac >>
+  Cases_on `cs` >> gvs[comp_return_def] >>
+  drule literal_or_next_var >> strip_tac >> decide_tac
+QED
+
+(* The equalities read only clean operands and produce clean results. *)
+Theorem literal_eqs_uniform[local]:
+  !D ctx fn PG xs ws needle w sa cs sb s G tn.
+    emit_membership_eqs needle xs sa = (cs,sb) /\
+    LIST_REL (\x v. eval_operand x s = SOME v) xs ws /\
+    eval_operand needle s = SOME w /\ fresh_vars_wrt sa s /\
+    op_prov G needle = NONE /\ op_taint tn needle = {} /\
+    EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
+    ~ctx_has_dalloca ctx ==>
+    ?G' tn'.
+      (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+             (s with vs_inst_idx := k) G' tn') /\
+      EVERY (\c. op_prov G' c = NONE /\ op_taint tn' c = {}) cs /\
+      (tn' with t_var := tn.t_var) = tn /\
+      (!p. not_fresh_at sa p ==> FLOOKUP G' p = FLOOKUP G p /\
+        op_taint tn' (Var p) = op_taint tn (Var p))
+Proof
+  ntac 4 gen_tac >> Induct >> rpt gen_tac
+  >- (simp[emit_membership_eqs_def, comp_return_def] >> rpt strip_tac >>
+      gvs[emitted_insts_refl] >> qexistsl_tac [`G`, `tn`] >>
+      simp[inst_seq_ptr_def]) >>
+  Cases_on `ws` >> simp[emit_membership_eqs_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `emit_op EQ _ sa = (c,s1)` >>
+  rename1 `emit_membership_eqs needle xs s1 = (cs1,sb)` >>
+  rename1 `eval_operand h s = SOME hv` >>
+  mp_tac (Q.SPECL [`needle`, `h`, `w`, `hv`, `sa`, `c`, `s1`, `s`]
+    emit_op_EQ_correct) >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa s1) s = OK ss1` >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `EQ`, `[needle; h]`, `sa`, `c`,
+    `s1`, `s`, `ss1`, `G`, `tn`] membership_op_uniform) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`G1`, `tn1`] strip_assume_tac) >>
+  `op_prov G1 needle = NONE /\ op_taint tn1 needle = {}` by
+    (mp_tac (Q.SPECL [`sa`, `s`, `needle`, `w`, `G`, `tn`, `G1`, `tn1`] membership_clean_spec) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  rename1 `LIST_REL _ xs ts` >>
+  `EVERY (\x. ?v. eval_operand x s = SOME v) xs` by
+    (irule membership_defined_from_rel >> first_assum (irule_at Any)) >>
+  `EVERY (\x. op_prov G1 x = NONE /\ op_taint tn1 x = {}) xs` by
+    (mp_tac (Q.SPECL [`sa`, `s`, `G`, `tn`, `G1`, `tn1`, `xs`] membership_clean_list_frame) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `LIST_REL (\x v. eval_operand x ss1 = SOME v) xs ts` by
+    (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  `eval_operand needle ss1 = SOME w` by
+    (qpat_x_assum `!op w. eval_operand op s = SOME w ==> _` drule >> simp[]) >>
+  first_x_assum (qspecl_then [`ts`, `needle`, `w`, `s1`, `cs1`, `sb`, `ss1`,
+    `G1`, `tn1`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`G2`, `tn2`] strip_assume_tac) >>
+  `op_prov G2 c = NONE /\ op_taint tn2 c = {}` by
+    (mp_tac (Q.SPECL [`s1`, `ss1`, `c`, `bool_to_word ((w:256 word) = hv)`, `G1`, `tn1`, `G2`, `tn2`] membership_clean_spec) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  mp_tac (Q.SPECL [`EQ`, `[needle; h]`, `sa`, `c`, `s1`] membership_op_facts) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule literal_eqs_shape >> strip_tac >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `G`, `tn`, `G1`, `tn1`, `G2`, `tn2`,
+    `sa`, `s1`, `sb`, `s`, `ss1`] membership_uniform_trans) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qexistsl_tac [`G2`, `tn2`] >> simp[]
+QED
+
+Theorem literal_or_uniform[local]:
+  !D ctx fn PG cs acc sa op sb s G tn.
+    fold_membership_or acc cs sa = (op,sb) /\
+    EVERY (\c. ?v. eval_operand c s = SOME v) cs /\
+    (?a. eval_operand acc s = SOME a) /\ fresh_vars_wrt sa s /\
+    op_prov G acc = NONE /\ op_taint tn acc = {} /\
+    EVERY (\c. op_prov G c = NONE /\ op_taint tn c = {}) cs /\
+    ~ctx_has_dalloca ctx ==>
+    ?G' tn'.
+      (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+             (s with vs_inst_idx := k) G' tn') /\
+      op_prov G' op = NONE /\ op_taint tn' op = {} /\
+      (tn' with t_var := tn.t_var) = tn /\
+      (!p. not_fresh_at sa p ==> FLOOKUP G' p = FLOOKUP G p /\
+        op_taint tn' (Var p) = op_taint tn (Var p))
+Proof
+  ntac 4 gen_tac >> Induct >> rpt gen_tac
+  >- (simp[fold_membership_or_def, comp_return_def] >> rpt strip_tac >>
+      gvs[emitted_insts_refl] >> qexistsl_tac [`G`, `tn`] >>
+      simp[inst_seq_ptr_def]) >>
+  simp[fold_membership_or_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `emit_op OR _ sa = (r,s1)` >>
+  rename1 `eval_operand h s = SOME hv` >>
+  mp_tac (Q.SPECL [`acc`, `h`, `a`, `hv`, `sa`, `r`, `s1`, `s`]
+    emit_op_OR_correct) >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa s1) s = OK ss1` >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `OR`, `[acc; h]`, `sa`, `r`,
+    `s1`, `s`, `ss1`, `G`, `tn`] membership_op_uniform) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`G1`, `tn1`] strip_assume_tac) >>
+  `EVERY (\x. op_prov G1 x = NONE /\ op_taint tn1 x = {}) cs` by
+    (mp_tac (Q.SPECL [`sa`, `s`, `G`, `tn`, `G1`, `tn1`, `cs`] membership_clean_list_frame) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `EVERY (\c. ?v. eval_operand c ss1 = SOME v) cs` by
+    (mp_tac (Q.SPECL [`s`, `ss1`, `cs`] membership_defined_mono) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  first_x_assum (qspecl_then [`r`, `s1`, `op`, `sb`, `ss1`, `G1`, `tn1`]
+    mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`G2`, `tn2`] strip_assume_tac) >>
+  mp_tac (Q.SPECL [`OR`, `[acc; h]`, `sa`, `r`, `s1`] membership_op_facts) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule literal_or_shape >> strip_tac >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `G`, `tn`, `G1`, `tn1`, `G2`, `tn2`,
+    `sa`, `s1`, `sb`, `s`, `ss1`] membership_uniform_trans) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qexistsl_tac [`G2`, `tn2`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem literal_and_uniform[local]:
+  !D ctx fn PG cs acc sa op sb s G tn.
+    fold_membership_and acc cs sa = (op,sb) /\
+    EVERY (\c. ?v. eval_operand c s = SOME v) cs /\
+    (?a. eval_operand acc s = SOME a) /\ fresh_vars_wrt sa s /\
+    op_prov G acc = NONE /\ op_taint tn acc = {} /\
+    EVERY (\c. op_prov G c = NONE /\ op_taint tn c = {}) cs /\
+    ~ctx_has_dalloca ctx ==>
+    ?G' tn'.
+      (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+             (s with vs_inst_idx := k) G' tn') /\
+      op_prov G' op = NONE /\ op_taint tn' op = {} /\
+      (tn' with t_var := tn.t_var) = tn /\
+      (!p. not_fresh_at sa p ==> FLOOKUP G' p = FLOOKUP G p /\
+        op_taint tn' (Var p) = op_taint tn (Var p))
+Proof
+  ntac 4 gen_tac >> Induct >> rpt gen_tac
+  >- (simp[fold_membership_and_def, comp_return_def] >> rpt strip_tac >>
+      gvs[emitted_insts_refl] >> qexistsl_tac [`G`, `tn`] >>
+      simp[inst_seq_ptr_def]) >>
+  simp[fold_membership_and_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `emit_op ISZERO _ sa = (z,s1)` >>
+  rename1 `emit_op AND _ s1 = (r,s2)` >>
+  rename1 `eval_operand h s = SOME hv` >>
+  mp_tac (Q.SPECL [`h`, `hv`, `sa`, `z`, `s1`, `s`]
+    emit_op_ISZERO_correct) >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa s1) s = OK ss1` >>
+  `eval_operand acc ss1 = SOME a` by
+    (qpat_x_assum `!op w. eval_operand op s = SOME w ==> _` drule >> simp[]) >>
+  mp_tac (Q.SPECL [`acc`, `z`, `a`, `bool_to_word ((hv:256 word) = 0w)`, `s1`, `r`,
+    `s2`, `ss1`] emit_op_AND_correct) >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts s1 s2) ss1 = OK ss2` >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `ISZERO`, `[h]`, `sa`, `z`,
+    `s1`, `s`, `ss1`, `G`, `tn`] membership_op_uniform) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`G1`, `tn1`] strip_assume_tac) >>
+  `op_prov G1 acc = NONE /\ op_taint tn1 acc = {}` by
+    (mp_tac (Q.SPECL [`sa`, `s`, `acc`, `a`, `G`, `tn`, `G1`, `tn1`] membership_clean_spec) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `AND`, `[acc; z]`, `s1`, `r`,
+    `s2`, `ss1`, `ss2`, `G1`, `tn1`] membership_op_uniform) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`G2`, `tn2`] strip_assume_tac) >>
+  `EVERY (\x. op_prov G1 x = NONE /\ op_taint tn1 x = {}) cs` by
+    (mp_tac (Q.SPECL [`sa`, `s`, `G`, `tn`, `G1`, `tn1`, `cs`] membership_clean_list_frame) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `EVERY (\c. ?v. eval_operand c ss1 = SOME v) cs` by
+    (mp_tac (Q.SPECL [`s`, `ss1`, `cs`] membership_defined_mono) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `EVERY (\x. op_prov G2 x = NONE /\ op_taint tn2 x = {}) cs` by
+    (mp_tac (Q.SPECL [`s1`, `ss1`, `G1`, `tn1`, `G2`, `tn2`, `cs`] membership_clean_list_frame) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `EVERY (\c. ?v. eval_operand c ss2 = SOME v) cs` by
+    (mp_tac (Q.SPECL [`ss1`, `ss2`, `cs`] membership_defined_mono) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  first_x_assum (qspecl_then [`r`, `s2`, `op`, `sb`, `ss2`, `G2`, `tn2`]
+    mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`G3`, `tn3`] strip_assume_tac) >>
+  mp_tac (Q.SPECL [`ISZERO`, `[h]`, `sa`, `z`, `s1`] membership_op_facts) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  mp_tac (Q.SPECL [`AND`, `[acc; z]`, `s1`, `r`, `s2`] membership_op_facts) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule literal_and_shape >> strip_tac >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `G1`, `tn1`, `G2`, `tn2`, `G3`, `tn3`,
+    `s1`, `s2`, `sb`, `ss1`, `ss2`] membership_uniform_trans) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `G`, `tn`, `G1`, `tn1`, `G3`, `tn3`,
+    `sa`, `s1`, `sb`, `s`, `ss1`] membership_uniform_trans) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qexistsl_tac [`G3`, `tn3`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem literal_in_uniform:
@@ -264,129 +617,49 @@ Theorem literal_in_uniform:
       (!p. not_fresh_at sa p ==> FLOOKUP G' p = FLOOKUP G p /\
         op_taint tn' (Var p) = op_taint tn (Var p))
 Proof
-  Induct >> rpt gen_tac
-  >- (simp[compile_list_membership_in_def, comp_return_def, emitted_insts_refl] >>
-      rpt strip_tac >> qexistsl_tac [`G`, `tn`] >>
-      simp[inst_seq_ptr_def, op_prov_def, op_taint_def]) >>
-  Cases_on `xs` >> Cases_on `ws` >>
-  simp[compile_list_membership_in_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[]
-  >~ [`emit_op EQ _ sa = (dst,sb)`]
-  >- suspend "single" >>
-  suspend "cons"
+  rpt gen_tac >> simp[compile_list_membership_in_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_membership_eqs needle xs sa = (cs, sm)` >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `xs`, `ws`, `needle`, `w`, `sa`,
+    `cs`, `sm`, `s`, `G`, `tn`] literal_eqs_uniform) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`G1`, `tn1`] strip_assume_tac) >>
+  Cases_on `cs` >> gvs[comp_return_def]
+  >- (qexistsl_tac [`G1`, `tn1`] >> simp[op_prov_def, op_taint_def]) >>
+  rename1 `fold_membership_or c rest sm = (dst,sb)` >>
+  drule_all literal_eqs_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK tt` >>
+  `EVERY (\x. ?v. eval_operand x tt = SOME v) (c::rest)` by
+    (irule membership_defined_from_bool_rel >> first_assum (irule_at Any)) >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `rest`, `c`, `sm`, `dst`, `sb`,
+    `tt`, `G1`, `tn1`] literal_or_uniform) >>
+  (impl_tac >- fs[]) >>
+  disch_then (qx_choosel_then [`G2`, `tn2`] strip_assume_tac) >>
+  drule literal_eqs_shape >> strip_tac >>
+  drule membership_shape_nonterminators >> strip_tac >>
+  drule literal_or_shape >> strip_tac >>
+  drule literal_eqs_next_var >> strip_tac >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `G`, `tn`, `G1`, `tn1`, `G2`, `tn2`,
+    `sa`, `sm`, `sb`, `s`, `tt`] membership_uniform_trans) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qexistsl_tac [`G2`, `tn2`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-Resume literal_in_uniform[single]:
-  drule_all emit_op_EQ_correct >> strip_tac >>
-  irule membership_scalar_uniform_run >>
-  goal_assum (drule_at Any) >> conj_tac
-  >- (goal_assum (drule_at Any)) >>
-  goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >> gvs[]
-QED
-
-Resume literal_in_uniform[cons]:
-  drule_all emit_op_EQ_correct >> strip_tac >>
-  `?G1 tn1.
-    (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa cs')
-      (s with vs_inst_idx := k) G1 tn1) /\
-    op_prov G1 eq_res = NONE /\ op_taint tn1 eq_res = {} /\
-    (tn1 with t_var := tn.t_var) = tn /\
-    (!p. not_fresh_at sa p ==> FLOOKUP G1 p = FLOOKUP G p /\
-      op_taint tn1 (Var p) = op_taint tn (Var p))` by
-    (irule membership_scalar_uniform_run >> goal_assum (drule_at Any) >>
-     conj_tac >- (goal_assum (drule_at Any)) >>
-     goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >> gvs[]) >>
-  `op_prov G1 needle = NONE /\ op_taint tn1 needle = {}` by
-    (drule_all membership_operand_ghost_frame >> simp[]) >>
-  `EVERY (\x. op_prov G1 x = NONE /\ op_taint tn1 x = {}) (h'::t)` by
-    (pure_rewrite_tac[EVERY_DEF] >> BETA_TAC >> conj_tac
-     >- (irule membership_clean_operand_frame >>
-         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-     rewrite_tac[EVERY_MEM] >> qx_gen_tac `x` >> strip_tac >>
-     `?v. eval_operand x s = SOME v` by
-       (qpat_x_assum `!ws needle' w' sa' dst' sb' s'' G' tn'. _` kall_tac >>
-        gvs[MEM_EL, LIST_REL_EL_EQN] >> metis_tac[]) >>
-     BETA_TAC >> irule membership_clean_operand_frame >>
-     goal_assum (drule_at Any) >> simp[] >>
-     gvs[EVERY_MEM] >> metis_tac[]) >>
-  qpat_x_assum `!ws needle' w' sa' dst' sb' s'' G' tn'. _`
-    (qspec_then `v::ys` mp_tac) >> simp[] >> disch_then drule >>
-  disch_then (qspecl_then [`w`, `ss'`, `G1`, `tn1`] mp_tac) >>
-  (impl_tac >-
-    (simp[] >> conj_tac
-     >- (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
-     gvs[EVERY_DEF])) >> strip_tac >> suspend "combine"
-QED
-
-Resume literal_in_uniform[combine]:
-  `LIST_REL (\x v. eval_operand x ss' = SOME v) (h'::t) (v::ys)` by
-    (simp[] >> irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
-  `eval_operand needle ss' = SOME w` by metis_tac[] >>
-  drule_all literal_in_run >> strip_tac >>
-  `op_prov G' eq_res = NONE /\ op_taint tn' eq_res = {}` by
-    (irule membership_clean_operand_frame >>
-     qexistsl_tac [`G1`, `ss'`, `cs'`, `tn1`, `bool_to_word (w = h'')`] >>
-     simp[]) >>
-  `eval_operand eq_res tt = SOME (bool_to_word (w = h''))` by metis_tac[] >>
-  drule_all emit_op_OR_correct >> strip_tac >>
-  `?G2 tn2.
-    (!k. inst_seq_ptr D 0 ctx fn PG G' tn' (emitted_insts cs'' sb)
-      (tt with vs_inst_idx := k) G2 tn2) /\
-    op_prov G2 dst = NONE /\ op_taint tn2 dst = {} /\
-    (tn2 with t_var := tn'.t_var) = tn' /\
-    (!p. not_fresh_at cs'' p ==> FLOOKUP G2 p = FLOOKUP G' p /\
-      op_taint tn2 (Var p) = op_taint tn' (Var p))` by
-    (irule membership_scalar_uniform_run >> goal_assum (drule_at Any) >>
-     conj_tac >- (goal_assum (drule_at Any)) >>
-     goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >> gvs[]) >>
-  suspend "append"
-QED
-
-Resume literal_in_uniform[append]:
-  imp_res_tac emit_op_extends >>
-  `emitted_insts sa cs'' = emitted_insts sa cs' ++ emitted_insts cs' cs''` by
-    (irule emitted_insts_append >> simp[]) >>
-  `cs''.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa cs''` by simp[] >>
-  `emitted_insts sa sb = emitted_insts sa cs'' ++ emitted_insts cs'' sb` by
-    (irule emitted_insts_append >> simp[]) >>
-  `!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa cs'')
-       (s with vs_inst_idx := k) G' tn'` by
-    (simp[] >> irule inst_seq_ptr_uniform_append >> conj_tac
-     >- (qexistsl_tac [`G1`, `ss'`, `tn1`] >> simp[]) >>
-     imp_res_tac emitted_insts_emit_op >>
-     simp[mk_inst_def, is_terminator_def]) >>
-  `run_inst_seq (emitted_insts sa cs'') s = OK tt` by
-    (drule_all (Q.SPECL [`sa`, `cs'`, `cs''`] run_inst_seq_chain) >> simp[]) >>
-  qexistsl_tac [`G2`, `tn2`] >> simp[] >> conj_tac
-  >- (irule inst_seq_ptr_uniform_append >> conj_tac
-      >- (qexistsl_tac [`G'`, `tt`, `tn'`] >> gvs[]) >>
-      drule literal_in_code >> strip_tac >>
-      drule membership_scalar_nonterminators >> strip_tac >>
-      imp_res_tac emitted_insts_emit_op >>
-      simp[mk_inst_def, is_terminator_def]) >>
-  conj_tac
-  >- (gvs[taint_component_equality]) >>
-  drule literal_in_next_var >> strip_tac >>
-  imp_res_tac emitted_insts_emit_op >> rpt strip_tac >>
-  `not_fresh_at cs' p /\ not_fresh_at cs'' p` by
-    (gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS, DECIDE ``n <= n+1``]) >>
-  metis_tac[]
-QED
-
-Finalise literal_in_uniform
 
 Theorem literal_notin_next_var:
   !xs needle sa dst sb.
     compile_list_membership_notin needle xs sa = (dst,sb) ==>
     sa.cs_next_var <= sb.cs_next_var
 Proof
-  Induct >> rpt gen_tac
-  >- simp[compile_list_membership_notin_def, comp_return_def] >>
-  Cases_on `xs` >> simp[compile_list_membership_notin_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  imp_res_tac emitted_insts_emit_op >> gvs[] >>
-  first_x_assum drule >> simp[]
+  rpt gen_tac >> simp[compile_list_membership_notin_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_membership_eqs needle xs sa = (cs, sm)` >>
+  drule literal_eqs_next_var >> strip_tac >>
+  Cases_on `cs` >> gvs[comp_return_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >>
+  imp_res_tac emitted_insts_emit_op >> imp_res_tac literal_and_next_var >>
+  gvs[]
 QED
+
 
 Theorem membership_neq_uniform:
   emit_op EQ [needle;x] sa = (eq_res,sm) /\
@@ -459,112 +732,55 @@ Theorem literal_notin_uniform:
       (!p. not_fresh_at sa p ==> FLOOKUP G' p = FLOOKUP G p /\
         op_taint tn' (Var p) = op_taint tn (Var p))
 Proof
-  Induct >> rpt gen_tac
-  >- (simp[compile_list_membership_notin_def, comp_return_def, emitted_insts_refl] >>
-      rpt strip_tac >> qexistsl_tac [`G`, `tn`] >>
-      simp[inst_seq_ptr_def, op_prov_def, op_taint_def]) >>
-  Cases_on `xs` >> Cases_on `ws` >>
-  simp[compile_list_membership_notin_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[]
-  >~ [`emit_op ISZERO _ _ = (dst,sb)`]
-  >- suspend "single" >>
-  suspend "cons"
+  rpt gen_tac >> simp[compile_list_membership_notin_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_membership_eqs needle xs sa = (cs, sm)` >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `xs`, `ws`, `needle`, `w`, `sa`,
+    `cs`, `sm`, `s`, `G`, `tn`] literal_eqs_uniform) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`G1`, `tn1`] strip_assume_tac) >>
+  Cases_on `cs` >> gvs[comp_return_def, comp_bind_def]
+  >- (qexistsl_tac [`G1`, `tn1`] >> simp[op_prov_def, op_taint_def]) >>
+  pairarg_tac >> gvs[] >>
+  rename1 `emit_op ISZERO [c] sm = (z,s1)` >>
+  rename1 `fold_membership_and z rest s1 = (dst,sb)` >>
+  drule_all literal_eqs_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK tt` >>
+  `EVERY (\x. ?v. eval_operand x tt = SOME v) (c::rest)` by
+    (irule membership_defined_from_bool_rel >> first_assum (irule_at Any)) >>
+  qpat_x_assum `EVERY _ (c::rest)` (strip_assume_tac o SRULE []) >>
+  rename1 `eval_operand c tt = SOME cv` >>
+  mp_tac (Q.SPECL [`c`, `cv`, `sm`, `z`, `s1`, `tt`]
+    emit_op_ISZERO_correct) >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm s1) tt = OK ss1` >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `ISZERO`, `[c]`, `sm`, `z`,
+    `s1`, `tt`, `ss1`, `G1`, `tn1`] membership_op_uniform) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`G2`, `tn2`] strip_assume_tac) >>
+  `EVERY (\x. op_prov G2 x = NONE /\ op_taint tn2 x = {}) rest` by
+    (mp_tac (Q.SPECL [`sm`, `tt`, `G1`, `tn1`, `G2`, `tn2`, `rest`] membership_clean_list_frame) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `EVERY (\x. ?v. eval_operand x ss1 = SOME v) rest` by
+    (mp_tac (Q.SPECL [`tt`, `ss1`, `rest`] membership_defined_mono) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `rest`, `z`, `s1`, `dst`, `sb`,
+    `ss1`, `G2`, `tn2`] literal_and_uniform) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choosel_then [`G3`, `tn3`] strip_assume_tac) >>
+  drule literal_eqs_shape >> strip_tac >>
+  drule membership_shape_nonterminators >> strip_tac >>
+  drule literal_eqs_next_var >> strip_tac >>
+  mp_tac (Q.SPECL [`ISZERO`, `[c]`, `sm`, `z`, `s1`] membership_op_facts) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule literal_and_shape >> strip_tac >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `G1`, `tn1`, `G2`, `tn2`, `G3`, `tn3`,
+    `sm`, `s1`, `sb`, `tt`, `ss1`] membership_uniform_trans) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  mp_tac (Q.SPECL [`D`, `ctx`, `fn`, `PG`, `G`, `tn`, `G1`, `tn1`, `G3`, `tn3`,
+    `sa`, `sm`, `sb`, `s`, `tt`] membership_uniform_trans) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qexistsl_tac [`G3`, `tn3`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-Resume literal_notin_uniform[single]:
-  drule_all emit_op_EQ_correct >> strip_tac >>
-  drule_all emit_op_ISZERO_correct >> strip_tac >>
-  drule_all membership_neq_uniform >> simp[]
-QED
-
-Resume literal_notin_uniform[cons]:
-  drule_all emit_op_EQ_correct >> strip_tac >>
-  drule_all emit_op_ISZERO_correct >> strip_tac >>
-  drule_all membership_neq_uniform >>
-  disch_then (qspecl_then [`fn`, `PG`, `D`]
-    (qx_choose_then `G1` (qx_choose_then `tn1` strip_assume_tac))) >>
-  `op_prov G1 needle = NONE /\ op_taint tn1 needle = {}` by
-    (drule_all membership_operand_ghost_frame >> simp[]) >>
-  `EVERY (\x. op_prov G1 x = NONE /\ op_taint tn1 x = {}) (h'::t)` by
-    (pure_rewrite_tac[EVERY_DEF] >> BETA_TAC >> conj_tac
-     >- (irule membership_clean_operand_frame >>
-         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-     rewrite_tac[EVERY_MEM] >> qx_gen_tac `x` >> strip_tac >>
-     `?v. eval_operand x s = SOME v` by
-       (qpat_x_assum `!ws needle' w' sa' dst' sb' s'' G' tn'. _` kall_tac >>
-        gvs[MEM_EL, LIST_REL_EL_EQN] >> metis_tac[]) >>
-     BETA_TAC >> irule membership_clean_operand_frame >>
-     goal_assum (drule_at Any) >> simp[] >>
-     gvs[EVERY_MEM] >> metis_tac[]) >>
-  qpat_x_assum `!ws needle' w' sa' dst' sb' s'' G' tn'. _`
-    (qspec_then `v::ys` mp_tac) >> simp[] >> disch_then drule >>
-  disch_then (qspecl_then [`w`, `ss''`, `G1`, `tn1`] mp_tac) >>
-  (impl_tac >-
-    (simp[] >> conj_tac
-     >- (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-     gvs[EVERY_DEF] >> metis_tac[])) >> strip_tac >> suspend "combine"
-QED
-
-Resume literal_notin_uniform[combine]:
-  rename1 `compile_list_membership_notin needle (h'::t) cs'' = (rest_res,sc)` >>
-  `LIST_REL (\x v. eval_operand x ss'' = SOME v) (h'::t) (v::ys)` by
-    (simp[] >> irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  `eval_operand needle ss'' = SOME w` by metis_tac[] >>
-  drule_all literal_notin_run >> strip_tac >>
-  `op_prov G' neq_res = NONE /\ op_taint tn' neq_res = {}` by
-    (irule membership_clean_operand_frame >>
-     qexistsl_tac [`G1`, `ss''`, `cs''`, `tn1`,
-       `bool_to_word (bool_to_word (w = h'') = 0w)`] >> simp[]) >>
-  `eval_operand neq_res tt = SOME (bool_to_word (bool_to_word (w = h'') = 0w))` by
-    metis_tac[] >>
-  drule_all emit_op_AND_correct >> strip_tac >>
-  `?G2 tn2.
-    (!k. inst_seq_ptr D 0 ctx fn PG G' tn' (emitted_insts sc sb)
-      (tt with vs_inst_idx := k) G2 tn2) /\
-    op_prov G2 dst = NONE /\ op_taint tn2 dst = {} /\
-    (tn2 with t_var := tn'.t_var) = tn' /\
-    (!p. not_fresh_at sc p ==> FLOOKUP G2 p = FLOOKUP G' p /\
-      op_taint tn2 (Var p) = op_taint tn' (Var p))` by
-    (irule membership_scalar_uniform_run >> goal_assum (drule_at Any) >>
-     conj_tac >- (goal_assum (drule_at Any)) >>
-     goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >> gvs[]) >>
-  suspend "append"
-QED
-
-Resume literal_notin_uniform[append]:
-  imp_res_tac emit_op_extends >>
-  `emitted_insts sa cs'' = emitted_insts sa cs' ++ emitted_insts cs' cs''` by
-    (irule emitted_insts_append >> simp[]) >>
-  `cs''.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa cs''` by simp[] >>
-  `emitted_insts sa sc = emitted_insts sa cs'' ++ emitted_insts cs'' sc` by
-    (irule emitted_insts_append >> simp[]) >>
-  `sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc` by simp[] >>
-  `emitted_insts sa sb = emitted_insts sa sc ++ emitted_insts sc sb` by
-    (irule emitted_insts_append >> simp[]) >>
-  `run_inst_seq (emitted_insts sa cs'') s = OK ss''` by
-    (drule_all (Q.SPECL [`sa`, `cs'`, `cs''`] run_inst_seq_chain) >> simp[]) >>
-  `!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sc)
-       (s with vs_inst_idx := k) G' tn'` by
-    (simp[] >> irule inst_seq_ptr_uniform_append >> conj_tac
-     >- (qexistsl_tac [`G1`, `ss''`, `tn1`] >> gvs[]) >>
-     imp_res_tac emitted_insts_emit_op >> simp[mk_inst_def, is_terminator_def]) >>
-  `run_inst_seq (emitted_insts sa sc) s = OK tt` by
-    (drule_all (Q.SPECL [`sa`, `cs''`, `sc`] run_inst_seq_chain) >> simp[]) >>
-  qexistsl_tac [`G2`, `tn2`] >> simp[] >> conj_tac
-  >- (irule inst_seq_ptr_uniform_append >> conj_tac
-      >- (qexistsl_tac [`G'`, `tt`, `tn'`] >> gvs[]) >>
-      drule literal_notin_code >> strip_tac >>
-      drule membership_scalar_nonterminators >> strip_tac >>
-      imp_res_tac emitted_insts_emit_op >> simp[mk_inst_def, is_terminator_def]) >>
-  conj_tac >- gvs[taint_component_equality] >>
-  drule literal_notin_next_var >> strip_tac >>
-  imp_res_tac emitted_insts_emit_op >> rpt strip_tac >>
-  `not_fresh_at cs'' p /\ not_fresh_at sc p` by
-    (gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS, DECIDE ``n <= n+1``]) >>
-  metis_tac[]
-QED
-
-Finalise literal_notin_uniform
 
 Theorem membership_scalar_run_path:
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
