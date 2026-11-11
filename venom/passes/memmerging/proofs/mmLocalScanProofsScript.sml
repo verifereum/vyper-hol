@@ -13921,6 +13921,114 @@ Proof
   disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >> metis_tac[]
 QED
 
+Theorem mm_local_surviving_demand_not_deleted[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM q bb.bb_instructions /\ inst_wf q /\ MEM v q.inst_outputs /\
+  MEM v (venomInst$inst_uses u) /\
+  ((MEM u bb.bb_instructions /\
+    apply_groups_inst_supply mode
+      (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+        (scan_block (dfg_build_function fn0) mode bb).ss_flushed)
+      (rep_map_of_groups bb.bb_instructions
+        (scan_block (dfg_build_function fn0) mode bb).ss_flushed) s u = (out,t) /\
+    MEM u out) \/
+   (MEM u (fn_insts fn0) /\ ~MEM u (EL index fn0.fn_blocks).bb_instructions)) ==>
+  ~MEM q.inst_id (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all mm_local_prefix_used_producer_unchanged >>
+  disch_then (qspec_then `sk` assume_tac) >>
+  strip_tac >> gvs[apply_groups_inst_supply_def, mk_nop_from_def] >>
+  qpat_x_assum `_ with <|inst_opcode := NOP; inst_operands := []; inst_outputs := []|> = _`
+    (mp_tac o AP_TERM ``\i:instruction. i.inst_outputs``) >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem mm_local_emitted_demand_not_deleted[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM q bb.bb_instructions /\ inst_wf q /\ MEM v q.inst_outputs ==>
+  !xs s ys t. EVERY (\i. MEM i bb.bb_instructions) xs /\ MEM v s.irs_used_vars /\
+    mm_flat_map_supply (apply_groups_inst_supply mode
+      (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+        (scan_block (dfg_build_function fn0) mode bb).ss_flushed)
+      (rep_map_of_groups bb.bb_instructions
+        (scan_block (dfg_build_function fn0) mode bb).ss_flushed)) s xs = (ys,t) ==>
+    !u. MEM u ys /\ MEM v (venomInst$inst_uses u) ==>
+    ~MEM q.inst_id (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+      (scan_block (dfg_build_function fn0) mode bb).ss_flushed)
+Proof
+  strip_tac >> Induct >> simp[mm_flat_map_supply_def] >>
+  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()] >>
+  drule_at (Pat `apply_groups_inst_supply _ _ _ _ _ = _`) mm_local_mode_old_use >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[MEM_APPEND]
+  >- (irule mm_local_surviving_demand_not_deleted >> metis_tac[]) >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem mm_local_mode_demands_exclude_deleted[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  transform_block_mode_supply (dfg_build_function fn0) mode sk bb = (cc,t) /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  excluded = {v | ?q. MEM q bb.bb_instructions /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} ==>
+  (!u v. MEM u cc.bb_instructions /\ MEM v (venomInst$inst_uses u) /\
+    MEM v (irSupply$fn_ir_vars fn0) ==> v NOTIN excluded) /\
+  (!u v. MEM u (fn_insts fn0) /\ ~MEM u (EL index fn0.fn_blocks).bb_instructions /\
+    MEM v (venomInst$inst_uses u) ==> v NOTIN excluded)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `fn_inst_wf (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)` by
+    metis_tac[mm_local_prefix_inst_wf] >>
+  `MEM bb (LUPDATE bb index fn0.fn_blocks)` by
+    (simp[MEM_EL] >> qexists `index` >> simp[EL_LUPDATE]) >>
+  `!q. MEM q bb.bb_instructions ==> inst_wf q` by
+    (gvs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `MEM v sk.irs_used_vars` by
+        (irule mm_local_prefix_used_vars_mono >>
+         goal_assum (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)) >>
+         gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM]) >>
+      spose_not_then strip_assume_tac >> gvs[] >>
+      qpat_x_assum `transform_block_mode_supply _ _ _ _ = _` mp_tac >>
+      simp[transform_block_mode_supply_def, AllCaseEqs()] >> rpt strip_tac >>
+      `inst_wf q` by metis_tac[] >>
+      `EVERY (\i. MEM i bb.bb_instructions) bb.bb_instructions` by simp[EVERY_MEM] >>
+      `MEM u insts` by (gvs[] ) >>
+      drule_all mm_local_emitted_demand_not_deleted >> simp[]) >>
+  rpt gen_tac >> strip_tac >> spose_not_then strip_assume_tac >> gvs[] >>
+  metis_tac[mm_local_surviving_demand_not_deleted]
+QED
+
+Theorem mm_local_retained_mstore_lookup[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  transform_block_mode_supply (dfg_build_function fn0) mode sk bb = (cc,t) /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  excluded = {v | ?q. MEM q bb.bb_instructions /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  (!v. v NOTIN excluded ==> lookup_var v s = lookup_var v s') /\
+  MEM u cc.bb_instructions /\ u.inst_opcode = MSTORE /\
+  MEM v (venomInst$inst_uses u) /\ MEM v (irSupply$fn_ir_vars fn0) ==>
+  lookup_var v s = lookup_var v s'
+Proof
+  strip_tac >>
+  drule_all mm_local_mode_demands_exclude_deleted >>
+  strip_tac >> first_x_assum irule >> metis_tac[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
