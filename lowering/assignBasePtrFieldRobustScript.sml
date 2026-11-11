@@ -4,6 +4,41 @@ Ancestors stmtSimAssignAttr stmtSimDeclStore exprSimFieldLayout annAssignPtrStor
   valueEncodingProps valueEncodingProofs venomMemProofs venomState
   venomExecSemantics exprSimMemoryTransport representationCleanPtr pred_set list arithmetic
 
+(* Storing a word over one field of an in-memory struct keeps the other
+   fields and lays the new field value out (canonical valueEncoding form). *)
+Theorem fields_in_memory_mstore_field:
+  !vals fs flds off s fld v wd ftv.
+    fields_layout flds fs /\ struct_has_type fs vals /\
+    fields_val_wf vals fs /\ fields_in_memory vals fs off s.vs_memory /\
+    ALOOKUP fs fld = SOME ftv /\ type_memory_size ftv = 32 /\
+    val_in_memory ftv v (off + struct_field_offset flds fld)
+      (mstore (off + struct_field_offset flds fld) wd s).vs_memory ==>
+    fields_in_memory (AFUPDKEY fld (K v) vals) fs off
+      (mstore (off + struct_field_offset flds fld) wd s).vs_memory
+Proof
+  Induct
+  >- (Cases_on `fs` >> simp[vyperTypingTheory.value_has_type_def]) >>
+  PairCases >> rpt gen_tac >>
+  Cases_on `fs` >- simp[vyperTypingTheory.value_has_type_def] >>
+  rename1 `hf::fs'` >> PairCases_on `hf` >>
+  Cases_on `flds` >- simp[exprSimFieldLayoutTheory.fields_layout_def] >>
+  rename1 `hl::flds'` >> PairCases_on `hl` >>
+  simp[exprSimFieldLayoutTheory.fields_layout_def,
+       vyperTypingTheory.value_has_type_def, alistTheory.AFUPDKEY_def,
+       compileEnvTheory.struct_field_offset_def] >>
+  strip_tac >> gvs[] >>
+  Cases_on `h0 = fld` >> gvs[val_in_memory_def, val_wf_def]
+  >- (`mstore off wd s = mstore off wd (s with vs_memory := s.vs_memory)` by
+        simp[mstore_def] >>
+      pop_assum SUBST1_TAC >>
+      irule (cj 2 mstore_preserves_val_in_memory) >> simp[]) >>
+  conj_tac
+  >- (irule localPtrsPropsTheory.mstore_keeps_val_in_memory >> simp[]) >>
+  REWRITE_TAC [arithmeticTheory.ADD_ASSOC] >>
+  first_x_assum irule >> REWRITE_TAC [GSYM arithmeticTheory.ADD_ASSOC] >>
+  gvs[exprSimFieldLayoutTheory.fields_layout_def]
+QED
+
 Theorem assign_base_field_restore_witness:
   !dirty s off wd mem.
     mem_agree_outside (dirty DIFF {i | off <= i /\ i < off+32})

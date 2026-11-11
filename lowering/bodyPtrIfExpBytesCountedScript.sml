@@ -554,6 +554,7 @@ Proof
   `clean_emitted_prefix D ctx fn PG sa s1 (Var v1)
      (mload (w2n a) s) s G tn` by
     (irule clean_emitted_prefix_mload >> metis_tac[]) >>
+  once_rewrite_tac[wordsTheory.WORD_AND_COMM] >>
   irule (REWRITE_RULE [not31_i2w] clean_emitted_prefix_round) >> metis_tac[]
 QED
 
