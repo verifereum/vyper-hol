@@ -5,6 +5,7 @@
 Theory readonlyInvokeCopyFwdPlan
 Ancestors
   readonlyInvokeCopyFwdDefs readonlyMemoryArgsProps indexedLists dfgAnalysisProps
+  invokeCopyFwdTransport
   list rich_list pair option passSharedDefs allocaRemapSSA
 
 Datatype:
@@ -984,4 +985,141 @@ Theorem ricf_function_trace_assign_uses:
        inst.inst_opcode = ASSIGN /\ inst.inst_outputs = [out]))
 Proof
   metis_tac[ricf_function_trace_edit, ricf_function_edit_assign_uses]
+QED
+
+(* Rebuilding the DFG observes the same ASSIGN graph, not the same use lists. *)
+Theorem ricf_function_trace_assign_root:
+  ricf_function_trace ctx0 fn cur /\ ssa_form fn /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) ==>
+  !visited v. icf_assign_root (dfg_build_function fn) visited v =
+              icf_assign_root (dfg_build_function cur) visited v
+Proof
+  strip_tac >> rpt gen_tac >> irule icf_assign_root_cong >>
+  simp[icf_assign_predecessor_def] >>
+  metis_tac[ricf_function_trace_assign_predecessor]
+QED
+
+Theorem ricf_function_trace_assign_root_op:
+  ricf_function_trace ctx0 fn cur /\ ssa_form fn /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) ==>
+  !op. icf_assign_root_op (dfg_build_function fn) op =
+       icf_assign_root_op (dfg_build_function cur) op
+Proof
+  strip_tac >> irule icf_assign_root_op_cong >>
+  simp[icf_assign_predecessor_def] >>
+  metis_tac[ricf_function_trace_assign_predecessor]
+QED
+
+Theorem ricf_function_trace_collect_aliases:
+  ricf_function_trace ctx0 fn cur /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) ==>
+  !root. icf_collect_aliases (dfg_build_function fn) root =
+         icf_collect_aliases (dfg_build_function cur) root
+Proof
+  strip_tac >> irule icf_collect_aliases_cong >>
+  metis_tac[ricf_function_trace_assign_uses]
+QED
+
+Theorem ricf_block_trace_label:
+  !bb es cur. ricf_block_trace bb es cur ==> cur.bb_label = bb.bb_label
+Proof
+  ho_match_mp_tac ricf_block_trace_ind >>
+  simp[ricf_event_apply_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem ricf_round_certificate_structure:
+  ricf_round_certificate ctx fn cur ==>
+  cur.fn_name = fn.fn_name /\
+  MAP (\bb. bb.bb_label) cur.fn_blocks = MAP (\bb. bb.bb_label) fn.fn_blocks
+Proof
+  simp[ricf_round_certificate_def] >> rpt strip_tac >> gvs[] >>
+  gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP] >>
+  metis_tac[ricf_block_trace_label]
+QED
+
+Theorem ricf_function_trace_structure:
+  !base fn cur. ricf_function_trace base fn cur ==>
+  cur.fn_name = fn.fn_name /\
+  MAP (\bb. bb.bb_label) cur.fn_blocks = MAP (\bb. bb.bb_label) fn.fn_blocks
+Proof
+  ho_match_mp_tac ricf_function_trace_ind >> simp[] >>
+  metis_tac[ricf_round_certificate_structure]
+QED
+
+Theorem ricf_function_plan_structure:
+  ricf_function_plan ctx0 fn cur ==>
+  cur.fn_name = fn.fn_name /\
+  MAP (\bb. bb.bb_label) cur.fn_blocks = MAP (\bb. bb.bb_label) fn.fn_blocks
+Proof
+  simp[ricf_function_plan_def] >> rpt strip_tac >> gvs[] >>
+  drule ricf_function_trace_structure >>
+  simp[clear_nops_function_def, MAP_MAP_o, combinTheory.o_DEF,
+       clear_nops_block_def] >> rw[] >>
+  simp[MAP_MAP_o, combinTheory.o_DEF, clear_nops_block_def]
+QED
+
+(* These structural facts live below Sim; the witness theory reuses them. *)
+Theorem ricf_transform_function_fn_name:
+  !fn_meta ctx_fns rma fn.
+    (ricf_transform_function fn_meta ctx_fns rma fn).fn_name = fn.fn_name
+Proof
+  rpt gen_tac >> simp[ricf_transform_function_def] >>
+  qmatch_goalsub_abbrev_tac `OWHILE G step_fn (T, ctx0, fn)` >>
+  Cases_on `OWHILE G step_fn (T, ctx0, fn)` >> simp[] >>
+  PairCases_on `x` >> simp[] >>
+  mp_tac (WhileTheory.OWHILE_INV_IND
+            |> INST_TYPE [alpha |-> ``:bool # icf_ctx # ir_function``]
+            |> Q.INST [`P` |-> `\(c, ctx, cur_fn). cur_fn.fn_name = fn.fn_name`]
+            |> Q.SPECL [`G`, `step_fn`, `(T, ctx0, fn)`]) >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >> PairCases_on `x` >>
+      fs[Abbr `step_fn`, ricf_function_step_def, pairTheory.UNCURRY] >>
+      rw[] >> gvs[] >> rw[]) >>
+  disch_then (qspec_then `(x0, x1, x2)` mp_tac) >>
+  simp[clear_nops_function_def] >> rw[]
+QED
+
+Theorem ricf_transform_ctx_entry[simp]:
+  !ctx fn_meta rma.
+    (ricf_transform_ctx fn_meta rma ctx).ctx_entry = ctx.ctx_entry
+Proof
+  simp[ricf_transform_ctx_def]
+QED
+
+Theorem ricf_transform_function_labels:
+  ricf_full_alloca_copies fn /\
+  ricf_no_derived_mutable_sibling fn /\ ricf_src_alloca fn ==>
+  MAP (\bb. bb.bb_label)
+    (ricf_transform_function fn_meta ctx_fns rma fn).fn_blocks =
+  MAP (\bb. bb.bb_label) fn.fn_blocks
+Proof
+  strip_tac >> drule_all ricf_transform_function_certificate >>
+  metis_tac[ricf_function_plan_structure]
+QED
+
+(* The positional edit interface ends BEFORE NOP clearing.  Final block
+   labels survive clearing, whereas final instruction indices need not. *)
+Theorem ricf_transform_function_edit_interface:
+  ricf_full_alloca_copies fn /\
+  ricf_no_derived_mutable_sibling fn /\ ricf_src_alloca fn /\
+  ssa_form fn /\ ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) ==>
+  ?mid.
+    ricf_function_trace (icf_build_ctx fn_meta ctx_fns rma fn) fn mid /\
+    ricf_function_edit fn mid /\
+    LIST_REL ricf_outputs_edit (fn_insts fn) (fn_insts mid) /\
+    (!visited v. icf_assign_root (dfg_build_function fn) visited v =
+                 icf_assign_root (dfg_build_function mid) visited v) /\
+    (!op. icf_assign_root_op (dfg_build_function fn) op =
+          icf_assign_root_op (dfg_build_function mid) op) /\
+    (!root. icf_collect_aliases (dfg_build_function fn) root =
+            icf_collect_aliases (dfg_build_function mid) root) /\
+    ricf_transform_function fn_meta ctx_fns rma fn =
+      if mid.fn_blocks <> fn.fn_blocks then clear_nops_function mid else mid
+Proof
+  strip_tac >> drule_all ricf_transform_function_certificate >>
+  disch_then (qspecl_then [`fn_meta`,`ctx_fns`,`rma`] mp_tac) >>
+  simp[ricf_function_plan_def] >> strip_tac >> qexists_tac `mid` >>
+  metis_tac[ricf_function_trace_edit, ricf_function_trace_outputs,
+            ricf_function_trace_assign_root, ricf_function_trace_assign_root_op,
+            ricf_function_trace_collect_aliases]
 QED
