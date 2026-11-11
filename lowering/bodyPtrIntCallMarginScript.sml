@@ -87,7 +87,9 @@ Proof
     metis_tac[body_inv_internal_return_size] >>
   `t.vs_alloca_next < dimword (:256)` by
     metis_tac[stmt_state_rel_def, alloca_room_next_lt] >>
-  conj_tac >> decide_tac
+  `w2n (HD argv) = off MOD dimword (:256)` by
+    (qpat_x_assum `HD argv = _` SUBST1_TAC >> simp[wordsTheory.w2n_n2w]) >>
+  decide_tac
 QED
 
 (* Boundary producer inventory for the pointer-call composition:

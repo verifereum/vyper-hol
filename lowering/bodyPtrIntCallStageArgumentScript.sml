@@ -99,22 +99,22 @@ Proof
   pairarg_tac >> gvs[vv_type_def]
 QED
 
+Theorem as_ptr_val_pair[local]:
+  !ty loc p. as_ptr_val ty loc p = (LocatedValue ty (mk_ptr (FST p) loc), SND p)
+Proof
+  Cases_on `p` >> simp[as_ptr_val_def]
+QED
+
 Theorem builtin_body_result_tag:
   compile_builtin_dispatch_body cfn ce ann ty bi args sa = (vv,sb) ==>
   vv_type vv = ann
 Proof
   Cases_on `bi` >>
-  simp[compile_builtin_dispatch_body_def] >>
-  rpt (pairarg_tac >> simp[]) >>
-  rpt IF_CASES_TAC >>
-  gvs[as_stack_val_pair, vv_type_def] >>
-  rpt (pairarg_tac >> gvs[as_stack_val_pair, vv_type_def]) >>
+  simp[compile_builtin_dispatch_body_def, pairTheory.UNCURRY,
+       as_stack_val_pair, as_ptr_val_pair] >>
   rpt strip_tac >>
-  gvs[AllCaseEqs(), as_stack_val_pair, vv_type_def]
-  >>~- ([`as_ptr_val _ _ _ = _`],
-    drule as_ptr_val_result >> strip_tac >> gvs[vv_type_def]) >>
-  rpt (pairarg_tac >> gvs[vv_type_def]) >>
-  drule literal_vv_result_tag >> simp[]
+  gvs[AllCaseEqs(), vv_type_def] >>
+  imp_res_tac literal_vv_result_tag >> gvs[]
 QED
 
 Theorem name_vv_result_tag:
