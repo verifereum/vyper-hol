@@ -12,16 +12,13 @@ Proof
 QED
 
 Theorem gas_shadow_compiles_log_store_data:
-  !ops buf off. gas_shadow_compiles (compile_log_store_data cenv ops buf off)
-    (compile_log_store_data cenv ops buf off)
+  !ops tys buf off. gas_shadow_compiles (compile_log_store_data cenv ops tys buf off)
+    (compile_log_store_data cenv ops tys buf off)
 Proof
-  Induct >> rpt gen_tac >>
+  Induct >> Cases_on `tys` >> rpt gen_tac >>
   simp[compile_log_store_data_def, comp_ignore_bind_def,
-       gas_shadow_compiles_return] >>
-  irule gas_shadow_compiles_bind >> simp[] >> gen_tac >>
-  irule gas_shadow_compiles_bind >> simp[] >>
-  rpt IF_CASES_TAC >>
-  simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_store_bytestring]
+       gas_shadow_compiles_return, gas_shadow_compiles_bind,
+       gas_shadow_compiles_emit_void, gas_shadow_compiles_store_memory]
 QED
 
 Theorem gas_shadow_compiles_revert_with_reason:

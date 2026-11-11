@@ -30,6 +30,12 @@ Proof
   Cases_on `e` >> simp[gas_shadow_expr_def, method_id_literal_def]
 QED
 
+Theorem gas_shadow_bytestring_literal_hash[simp]:
+  bytestring_literal_hash (gas_shadow_expr e) = bytestring_literal_hash e
+Proof
+  Cases_on `e` >> simp[gas_shadow_expr_def, bytestring_literal_hash_def]
+QED
+
 Theorem gas_shadow_HD:
   HD (MAP gas_shadow_expr args) =
     if args = [] then HD args else gas_shadow_expr (HD args)

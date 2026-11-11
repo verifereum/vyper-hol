@@ -954,7 +954,18 @@ Proof
   >- (irule gas_shadow_compiles_call_raw_calldata >> simp[])
   >- (irule gas_shadow_compiles_call_raw_log >> simp[])
   >- (irule gas_shadow_compiles_call_raw_revert >> simp[])
-  >- invalid >>
+  >- (namedCases_on `args` ["", "to_e rest"] >- invalid >>
+      Cases_on `rest` >> Cases_on `sh` >> gvs[] >>
+      CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
+      simp[compile_call_def, GSYM comp_bind_def, GSYM comp_return_def,
+           comp_bind_uncurry] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >>
+      rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+           >- (irule gas_shadow_compiles_lower_value >> simp[]) >>
+           gen_tac >> BETA_TAC) >>
+      simp[gasShadowCompileBuiltinSystemTheory.gas_shadow_compiles_selfdestruct,
+           gas_shadow_compiles_bind, gas_shadow_compiles_return,
+           gas_shadow_compiles_emit_inst]) >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_call_def] >>
   irule gasShadowCompileNamesTheory.gas_shadow_compiles_as_stack_val >>

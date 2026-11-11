@@ -65,14 +65,14 @@ Proof
 QED
 
 
-Theorem gas_shadow_compiles_word_copy_loop:
+Theorem gas_shadow_compiles_word_copy_loop_base:
   gas_shadow_compiles
-    (compile_word_copy_loop src dst word_count load_loc store_loc is_ctor)
-    (compile_word_copy_loop src dst word_count load_loc store_loc is_ctor)
+    (compile_word_copy_loop_base src dst count_op load_loc store_loc is_ctor imm)
+    (compile_word_copy_loop_base src dst count_op load_loc store_loc is_ctor imm)
 Proof
   Cases_on `word_scale load_loc = 1` >>
   Cases_on `word_scale store_loc = 1` >>
-  pure_rewrite_tac[compile_word_copy_loop_def, LET_THM] >> BETA_TAC >>
+  pure_rewrite_tac[compile_word_copy_loop_base_def, LET_THM] >> BETA_TAC >>
   asm_rewrite_tac[] >>
   rewrite_tac[comp_ignore_bind_def] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
@@ -85,6 +85,15 @@ Proof
                gas_shadow_compiles_ptr_store]
        >> gen_tac >> BETA_TAC) >>
   simp[gas_shadow_compiles_new_block]
+QED
+
+Theorem gas_shadow_compiles_word_copy_loop:
+  gas_shadow_compiles
+    (compile_word_copy_loop src dst word_count load_loc store_loc is_ctor)
+    (compile_word_copy_loop src dst word_count load_loc store_loc is_ctor)
+Proof
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def,
+       gas_shadow_compiles_word_copy_loop_base]
 QED
 
 Theorem gas_shadow_compiles_storage_to_memory:
@@ -456,7 +465,7 @@ Theorem gas_shadow_compiles_store_memory:
     (compile_store_memory cenv src dst dst_ty src_ty)
 Proof
   Cases_on `is_word_type dst_ty` >> Cases_on `is_bytestring_type dst_ty` >>
-  Cases_on `dst_ty = src_ty` >>
+  Cases_on `dst_ty = src_ty` >> Cases_on `tuple_memory_layout_eq dst_ty src_ty` >>
   simp[compile_store_memory_def, gas_shadow_compiles_emit_void,
        gas_shadow_compiles_store_bytestring, gas_shadow_compiles_store_memory_typed,
        gas_shadow_compiles_copy_memory]

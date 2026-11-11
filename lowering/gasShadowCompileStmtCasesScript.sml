@@ -84,7 +84,8 @@ Proof
        >- simp[gas_shadow_stmt_lower_value, gas_shadow_compiles_fresh_label,
                gas_shadow_compiles_emit_inst, gas_shadow_compiles_new_block,
                gas_shadow_compiles_return, gas_shadow_compile_reason_message,
-               gas_shadow_compiles_revert_with_reason] >> gen_tac) >>
+               gas_shadow_compiles_revert_with_reason,
+               gas_shadow_compile_revert_with_custom_error] >> gen_tac) >>
   simp[gas_shadow_compiles_return]
 QED
 
@@ -94,7 +95,8 @@ Theorem gas_shadow_stmt_raise:
 Proof
   Cases_on `r` >>
   simp[gas_shadow_stmt_def, gas_shadow_raise_reason_def, compile_stmt_def,
-       gas_shadow_compiles_emit_inst, comp_ignore_bind_def,
+       gas_shadow_compiles_emit_inst, gas_shadow_compile_revert_with_custom_error,
+       comp_ignore_bind_def,
        gas_shadow_compiles_bind, gas_shadow_compiles_return] >>
   ho_match_mp_tac gas_shadow_compiles_bind >>
   simp[gas_shadow_compile_reason_message, gas_shadow_compiles_revert_with_reason]

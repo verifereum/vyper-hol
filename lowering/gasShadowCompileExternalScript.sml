@@ -15,8 +15,8 @@ Proof
 QED
 
 Theorem gas_shadow_compiles_return_value_decode:
-  gas_shadow_compiles (compile_return_value_decode buf_op min_size max_size)
-    (compile_return_value_decode buf_op min_size max_size)
+  gas_shadow_compiles (compile_return_value_decode min_size max_size)
+    (compile_return_value_decode min_size max_size)
 Proof
   simp[compile_return_value_decode_def, comp_ignore_bind_def] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
