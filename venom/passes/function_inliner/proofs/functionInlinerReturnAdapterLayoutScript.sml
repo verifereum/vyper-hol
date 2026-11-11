@@ -428,6 +428,61 @@ Proof
      metis_tac[inline_adapter_choice_label]) >>
   first_x_assum drule >> disch_then drule >> disch_then drule >> strip_tac >>
   qexistsl [`ml`,`mj`] >>
-  simp[inline_adapter_path_fields_def, inline_path_rename_def,
-       inline_parameter_boundary_path_def] >> metis_tac[]
+  gvs[inline_adapter_path_fields_def, inline_path_rename_def,
+      inline_parameter_boundary_path_def] >> metis_tac[]
+QED
+
+Theorem inline_adapter_path_fields_length[simp]:
+  !path fields. LENGTH (inline_adapter_path_fields path fields) = LENGTH fields
+Proof
+  Induct >> simp[inline_adapter_path_fields_def]
+QED
+
+Theorem inline_adapter_path_fields_nil[simp]:
+  !path. inline_adapter_path_fields path [] = []
+Proof
+  Induct >> simp[inline_adapter_path_fields_def]
+QED
+
+(* A block entry is transported independently of the instruction at zero. *)
+Theorem inline_adapter_boundary_entry:
+  !path fn l root ml mj.
+  inline_parameter_boundary_path path fn l 0 root ml mj ==>
+  ml = inline_path_rename path l /\ mj = 0
+Proof
+  Induct >- simp[inline_parameter_boundary_path_def, inline_path_rename_def] >>
+  rpt gen_tac >> simp[inline_parameter_boundary_path_def] >> strip_tac >>
+  Cases_on `h` >>
+  gvs[inline_parameter_boundary_def, inline_keep_boundary_def,
+      inline_path_rename_def, inline_choice_rename_def] >>
+  metis_tac[]
+QED
+
+Theorem inline_adapter_path_entry:
+  inline_annotated_choice_path ctx path fn root /\ MEM target (fn_labels fn) ==>
+  inline_parameter_boundary_path path fn target 0 root
+    (inline_path_rename path target) 0 /\
+  ?bb. lookup_block (inline_path_rename path target) root.fn_blocks = SOME bb
+Proof
+  strip_tac >>
+  `?bb. lookup_block target fn.fn_blocks = SOME bb` by
+    (gvs[fn_labels_def] >>
+     drule dfAnalyzeProofsTheory.lookup_block_exists >> metis_tac[]) >>
+  `inline_parameter_interval fn target 0 0` by
+    simp[inline_parameter_interval_def] >>
+  drule_all inline_parameter_interval_transport >> strip_tac >>
+  drule inline_adapter_boundary_entry >> strip_tac >>
+  gvs[inline_parameter_interval_def]
+QED
+
+(* Zero user outputs still leave a real, fetched jump, not an empty adapter. *)
+Theorem inline_adapter_interval_zero:
+  inline_adapter_interval fn l start [] target <=>
+  ?bb. lookup_block l fn.fn_blocks = SOME bb /\
+    start < LENGTH bb.bb_instructions /\
+    inline_inst_fields (EL start bb.bb_instructions) = (JMP,[Label target],[])
+Proof
+  simp[inline_adapter_interval_points, inline_fetched_fields_def,
+       get_instruction_def] >>
+  eq_tac >> strip_tac >> gvs[] >> qexists `bb` >> simp[]
 QED
