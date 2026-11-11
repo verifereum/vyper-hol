@@ -364,7 +364,7 @@ Proof
   metis_tac[ifexp_zero_source_fits]
 QED
 
-Theorem ifexp_physical_source_positive[local]:
+Theorem ifexp_physical_source_positive:
   expr_body_pre cenv cx env e es /\
   post_value_type cenv e <> expr_type e /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME stv ==>
@@ -1131,7 +1131,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ifexp_aggregate_source_kind[local]:
+Theorem ifexp_aggregate_source_kind:
   !sty dty. arg_type_fits sty dty /\
     ~is_word_type dty /\ ~is_bytestring_type dty ==>
     ~is_word_type sty /\ ~is_bytestring_type sty
