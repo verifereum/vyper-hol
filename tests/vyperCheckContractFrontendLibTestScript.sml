@@ -562,43 +562,39 @@ val _ =
      if String.isSubstring "check_contract returned NONE" message then ()
      else raise Fail message);
 
-(* Ordinary slices, like calldata slices, use the reduced length for their
-   result capacity. A folded start remains an ordinary runtime expression. *)
+(* Ordinary slices, like calldata slices, use the literal length for their
+   result capacity. A constant start remains an ordinary runtime expression. *)
 val slice_uint_json =
   "{\"typeclass\":\"integer\",\"bits\":256,\"is_signed\":false}";
 val slice_sum_json =
   "{\"ast_type\":\"BinOp\",\"left\":{\"ast_type\":\"Int\",\"value\":1}," ^
   "\"op\":{\"ast_type\":\"Add\"},\"right\":{\"ast_type\":\"Int\",\"value\":1}," ^
-  "\"type\":" ^ slice_uint_json ^ ",\"folded_value\":{\"ast_type\":\"Int\"," ^
-  "\"value\":2,\"type\":" ^ slice_uint_json ^ "}}";
+  "\"type\":" ^ slice_uint_json ^ "}";
+val slice_length_json =
+  "{\"ast_type\":\"Int\",\"value\":2,\"type\":" ^ slice_uint_json ^ "}";
 val ordinary_slice_ast = JSONDecode.decodeString jsonASTLib.annotated_ast
   ("{\"ast\":{\"body\":[{\"ast_type\":\"FunctionDef\",\"name\":\"test\",\"decorator_list\":[]," ^
    "\"args\":{\"ast_type\":\"arguments\",\"args\":[]},\"func_type\":{\"argument_types\":[],\"return_type\":null}," ^
    "\"body\":[{\"ast_type\":\"Expr\",\"value\":{\"ast_type\":\"Call\",\"func\":{\"ast_type\":\"Name\",\"id\":\"slice\"}," ^
    "\"args\":[{\"ast_type\":\"Name\",\"id\":\"b\",\"type\":{\"name\":\"Bytes\",\"length\":10}}," ^
-   slice_sum_json ^ "," ^ slice_sum_json ^ "],\"keywords\":[]," ^
+   slice_sum_json ^ "," ^ slice_length_json ^ "],\"keywords\":[]," ^
    "\"type\":{\"name\":\"Bytes\",\"length\":2}}}]}]}}");
-val expected_slice_length =
-  ``JE_Folded
-      (JE_BinOp (JE_Int 1 JT_None) JBop_Add (JE_Int 1 JT_None)
-        (JT_Integer 256 F))
-      (JE_Int 2 (JT_Integer 256 F))``;
 val expected_ordinary_slice =
   ``JE_Call (JE_Name "slice" NONE JMissingSource JT_None)
       [JE_Name "b" NONE JMissingSource (JT_Bytes 10);
        JE_BinOp (JE_Int 1 JT_None) JBop_Add (JE_Int 1 JT_None)
          (JT_Integer 256 F);
-       ^expected_slice_length] [] (JT_Bytes 2) JMissingSource``;
+       JE_Int 2 (JT_Integer 256 F)] [] (JT_Bytes 2) JMissingSource``;
 val () = if not (null (find_terms (aconv expected_ordinary_slice) ordinary_slice_ast))
-  then () else raise Fail "ordinary slice lost its reduced length or folded its start";
+  then () else raise Fail "ordinary slice lost its length or folded its start";
 val () = if aconv (rhs (concl (bossLib.EVAL
-    ``translate_expr (0,NONE,[],[],[],[],[]) ^expected_ordinary_slice``)))
+    ``translate_expr (0,NONE,[],[],[],[],[],[],[]) ^expected_ordinary_slice``)))
   ``Builtin (BaseT (BytesT (Dynamic 2))) (Slice 2)
       [Name (BaseT (BytesT (Dynamic 10))) "b";
        Builtin (BaseT (UintT 256)) (Bop Add)
          [Literal NoneT (IntL 1); Literal NoneT (IntL 1)];
        Literal (BaseT (UintT 256)) (IntL 2)]``
-  then () else raise Fail "ordinary slice did not translate its reduced length";
+  then () else raise Fail "ordinary slice did not translate its literal length";
 
 (* Issue 565: the public getter flag follows the pragma, except for explicit
    reentrant, constant and immutable declarations (g37/g38/g39 controls). *)
