@@ -5,6 +5,7 @@ Ancestors bodyPtrIntCallFieldOffset bodyPtrIntCallStoreFields
   assignBasePtrFieldOffsets appendStorageGhostPtr stmtFragPtr
   typedCopyLayoutPtr typedCopyTuplePtr exprSimPtrTopLevelStorageFrame
   context compileEnv fragExec fragGasPathPtr venomState words finite_map arithmetic
+  bodyPtrSubscriptMemoryRebuild vyperTypeDefaults
 
 Theorem intcall_field_offsets_counted:
   !dst src doff soff sa dop sm sop sb G tn s d a dtot stot dn sn fn ctx D PG.
@@ -159,4 +160,46 @@ Proof
   >- (drule_all gas_path_ptr_then >> simp[]) >>
   conj_tac >- metis_tac[not_fresh_at_mono] >>
   metis_tac[]
+QED
+
+(* Semantic part of advancing the destination prefix.  Fields need not have
+   equal strides; empty fields are included in the prefix like every other. *)
+Theorem intcall_tuple_prefix_advance:
+  !tvs vs k b ms mem ms' mem'.
+    values_have_types tvs vs /\ k < LENGTH tvs /\
+    (!j. j < k ==> !m. mem_agree_outside ms mem m ==>
+      val_in_memory (EL j tvs) (EL j vs)
+        (b + SUM (MAP type_memory_size (TAKE j tvs))) m) /\
+    (!i. ~(b + SUM (MAP type_memory_size (TAKE k tvs)) <= i /\
+            i < b + SUM (MAP type_memory_size (TAKE k tvs)) +
+                    type_memory_size (EL k tvs)) ==>
+      mem_bytes_at i 1 mem' = mem_bytes_at i 1 mem /\
+      (i IN ms' <=> i IN ms)) /\
+    (!m. mem_agree_outside ms' mem' m ==>
+      val_in_memory (EL k tvs) (EL k vs)
+        (b + SUM (MAP type_memory_size (TAKE k tvs))) m) ==>
+    !j. j < SUC k ==> !m. mem_agree_outside ms' mem' m ==>
+      val_in_memory (EL j tvs) (EL j vs)
+        (b + SUM (MAP type_memory_size (TAKE j tvs))) m
+Proof
+  rpt gen_tac >> strip_tac >> qx_gen_tac `j` >> strip_tac >>
+  Cases_on `j = k` >- gvs[] >>
+  `j < k /\ k <= LENGTH tvs /\ j < LENGTH tvs` by decide_tac >>
+  `value_has_type (EL j tvs) (EL j vs)` by
+    (fs[values_have_types_LIST_REL, listTheory.LIST_REL_EL_EQN]) >>
+  `val_wf (EL j tvs) (EL j vs)` by
+    metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  drule_all sum_take_element_before >>
+  disch_then (qspec_then `type_memory_size` assume_tac) >>
+  `SUM (MAP type_memory_size (TAKE j tvs)) +
+     val_footprint (EL j tvs) (EL j vs) <=
+     SUM (MAP type_memory_size (TAKE k tvs))` by
+    (drule_all tupleMemoryLayoutTheory.tuple_element_footprint >> decide_tac) >>
+  rpt strip_tac >> irule toplevel_robust_exterior_frame >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`mem`, `mem'`, `ms`, `ms'`,
+    `{i | b + SUM (MAP type_memory_size (TAKE k tvs)) <= i /\
+           i < b + SUM (MAP type_memory_size (TAKE k tvs)) +
+               type_memory_size (EL k tvs)}`] >>
+  simp[] >> rpt strip_tac >> gvs[]
 QED
