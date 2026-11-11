@@ -36,3 +36,23 @@ Proof
     simp[] >> IF_CASES_TAC >> simp[gas_shadow_unit_def]) >>
   simp[run_lowering_def]
 QED
+
+Theorem gas_shadow_run_grouped_lowering:
+  !groups ints fb rp entry.
+  OPTREL gas_shadow_unit
+    (run_grouped_lowering groups ints fb rp entry)
+    (run_grouped_lowering
+      (MAP (\group. case group of
+        ExternalSingle selector package =>
+          ExternalSingle selector (gas_shadow_external_package package)
+      | ExternalDefaults common entries specs head_offset =>
+          ExternalDefaults
+            (common with ec_body := MAP gas_shadow_stmt common.ec_body)
+            entries
+            (MAP (\(name,ty,e). (name,ty,gas_shadow_expr e)) specs)
+            head_offset) groups)
+      (MAP gas_shadow_internal_package ints)
+      (OPTION_MAP gas_shadow_fallback_package fb) rp entry)
+Proof
+  rewrite_tac[run_grouped_lowering_def]
+QED

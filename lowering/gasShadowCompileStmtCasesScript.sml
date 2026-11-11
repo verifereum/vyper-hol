@@ -49,13 +49,15 @@ Theorem gas_shadow_stmt_assign_base:
     (compile_stmt cenv lctx ty (gas_shadow_stmt (Assign (BaseTarget bt) e)))
 Proof
   simp[gas_shadow_stmt_def, gas_shadow_assignment_def, compile_stmt_def,
-       gas_shadow_lowered_value_type] >>
+       gas_shadow_lowered_value_type, gas_shadow_expr_can_mutate] >>
   IF_CASES_TAC >> simp[]
   >- (ho_match_mp_tac gas_shadow_compiles_bind >>
       simp[gas_shadow_stmt_get_target_ptr, gas_shadow_compiles_store_at_loc]) >>
+  Cases_on `expr_can_mutate cenv (target_to_expr bt)` >> simp[] >>
   rpt (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_stmt_compile_expr, gas_shadow_stmt_get_target_ptr,
-               gas_shadow_compiles_return, gas_shadow_compiles_unwrap_value] >>
+               gas_shadow_compiles_return, gas_shadow_compiles_unwrap_value,
+               gas_shadow_compiles_snapshot_vv] >>
        gen_tac) >>
   Cases_on `dst_loc_opt` >>
   simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_assign_value]
@@ -164,6 +166,7 @@ Proof
   simp[gas_shadow_stmt_def, compile_stmt_def] >>
   Cases_on `cenv.ce_return_pc` >>
   simp[gas_shadow_compiles_bind, gas_shadow_compiles_emit_op,
+       comp_ignore_bind_def, gas_shadow_compiles_return_unlock,
        gas_shadow_compiles_emit_inst]
   >- (Cases_on `cenv.ce_ctor_exit_label` >> simp[gas_shadow_compiles_emit_inst] >>
       pairarg_tac >> simp[comp_ignore_bind_def] >>
@@ -173,6 +176,7 @@ Proof
       simp[gas_shadow_compiles_emit_inst]) >>
   rename1 `SOME loc` >> Cases_on `loc` >>
   simp[gas_shadow_compiles_bind, gas_shadow_compiles_emit_op,
+       comp_ignore_bind_def, gas_shadow_compiles_return_unlock,
        gas_shadow_compiles_emit_inst] >>
   Cases_on `cenv.ce_ctor_exit_label` >> simp[gas_shadow_compiles_emit_inst] >>
   pairarg_tac >> simp[comp_ignore_bind_def] >>

@@ -84,7 +84,7 @@ Proof
   simp[gas_shadow_compiles_emit_inst] >>
   simp[GSYM gas_shadow_custom_error_def, gas_shadow_custom_error_exprs,
        comp_ignore_bind_def] >>
-  rpt (irule gas_shadow_compiles_bind >> conj_tac
+  rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_return,
                gas_shadow_compile_custom_error_store_args,
                gas_shadow_compiles_emit_void] >> gen_tac >> BETA_TAC) >>

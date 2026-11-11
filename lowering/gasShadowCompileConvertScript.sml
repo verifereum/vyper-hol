@@ -63,6 +63,18 @@ Proof
        >> gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_return]
 QED
 
+Theorem gas_shadow_compiles_snapshot_vv:
+  gas_shadow_compiles (compile_snapshot_vv cenv copy_flag vv)
+    (compile_snapshot_vv cenv copy_flag vv)
+Proof
+  Cases_on `is_word_type (vv_type vv)` >> Cases_on `copy_flag` >>
+  simp[compile_snapshot_vv_def] >>
+  rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+       >- simp[gas_shadow_compiles_unwrap_value, gas_shadow_compiles_materialize_vv]
+       >> gen_tac >> BETA_TAC) >>
+  simp[gas_shadow_compiles_return]
+QED
+
 Theorem gas_shadow_compiles_ifexp_arm:
   gas_shadow_compiles (compile_ifexp_arm cenv res_ty arm_ty vv)
     (compile_ifexp_arm cenv res_ty arm_ty vv)

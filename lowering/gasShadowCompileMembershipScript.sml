@@ -42,7 +42,7 @@ Theorem gas_shadow_compiles_list_membership_in:
     (compile_list_membership_in needle elems)
 Proof
   rpt gen_tac >> rewrite_tac[compile_list_membership_in_def] >>
-  irule gas_shadow_compiles_bind >>
+  match_mp_tac gas_shadow_compiles_bind >>
   conj_tac >- simp[gas_shadow_compiles_emit_membership_eqs] >>
   Cases >> simp[gas_shadow_compiles_return, gas_shadow_compiles_fold_membership_or]
 QED
@@ -52,7 +52,7 @@ Theorem gas_shadow_compiles_list_membership_notin:
     (compile_list_membership_notin needle elems)
 Proof
   rpt gen_tac >> rewrite_tac[compile_list_membership_notin_def] >>
-  irule gas_shadow_compiles_bind >>
+  match_mp_tac gas_shadow_compiles_bind >>
   conj_tac >- simp[gas_shadow_compiles_emit_membership_eqs] >>
   Cases >> simp[gas_shadow_compiles_return, gas_shadow_compiles_bind,
                 gas_shadow_compiles_fold_membership_and]
@@ -89,7 +89,8 @@ Theorem gas_shadow_compiles_array_membership_loop:
 Proof
   strip_tac >> Cases_on `0 < offset_base` >> Cases_on `is_in` >> Cases_on `bound` >>
   simp[compile_array_membership_loop_def, comp_ignore_bind_def] >>
-  rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+  rpt (pure_rewrite_tac[comp_bind_assoc] >> BETA_TAC >>
+       match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_return, gas_shadow_compiles_fresh_var,
                gas_shadow_compiles_fresh_label, gas_shadow_compiles_emit_inst,
                gas_shadow_compiles_new_block]

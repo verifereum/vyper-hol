@@ -52,13 +52,6 @@ Proof
   simp[gas_shadow_compiles_emit_op, gas_shadow_compiles_emit_void]
 QED
 
-Theorem gas_shadow_compiles_raw_log:
-  gas_shadow_compiles (compile_raw_log n_topics data_ptr data_len topic_ops)
-    (compile_raw_log n_topics data_ptr data_len topic_ops)
-Proof
-  simp[compile_raw_log_def, gas_shadow_compiles_emit_void]
-QED
-
 Theorem gas_shadow_compiles_raw_revert:
   gas_shadow_compiles (compile_raw_revert data_ptr) (compile_raw_revert data_ptr)
 Proof

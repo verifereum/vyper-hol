@@ -62,6 +62,14 @@ Proof
        gas_shadow_compiles_emit_void]
 QED
 
+Theorem gas_shadow_compiles_return_unlock:
+  gas_shadow_compiles (compile_return_unlock cenv) (compile_return_unlock cenv)
+Proof
+  simp[compile_return_unlock_def] >> pairarg_tac >>
+  IF_CASES_TAC >>
+  simp[gas_shadow_compiles_nonreentrant_unlock, gas_shadow_compiles_return]
+QED
+
 Theorem gas_shadow_compiles_external_return:
   gas_shadow_compiles (compile_external_return rv prim raw info max_size nr key transient view)
     (compile_external_return rv prim raw info max_size nr key transient view)
@@ -177,8 +185,14 @@ Resume gas_shadow_compiles_assign_value[code]:
       simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
            gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_store_memory_typed]) >>
   gen_tac >> Cases_on `prim` >>
-  Cases_on `(if is_bytestring_type ty then type_memory_bytes cenv sty else n) <= 32` >>
-  simp[gas_shadow_compiles_bind, gas_shadow_compiles_imm_store_word,
+  Cases_on `is_bytestring_type ty` >> Cases_on `n <= 32` >>
+  simp[compile_store_immutable_bytestring_def, compile_bytestring_word_count_def,
+       comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
+       >- simp[gas_shadow_compiles_return, gas_shadow_compiles_word_copy_loop_base,
+               gas_shadow_compiles_imm_store_word, gas_shadow_compiles_imm_store_words]
+       >> gen_tac) >>
+  simp[gas_shadow_compiles_return, gas_shadow_compiles_imm_store_word,
        gas_shadow_compiles_imm_store_words]
 QED
 
@@ -189,6 +203,8 @@ Theorem gas_shadow_compiles_internal_return_from_env:
     (compile_internal_return_from_env cenv ty sty v rpc)
 Proof
   simp[compile_internal_return_from_env_def] >>
+  ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
+  >- simp[gas_shadow_compiles_return_unlock] >> gen_tac >>
   ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
   >- (Cases_on `cenv.ce_return_buf` >>
       simp[gas_shadow_compiles_return] >>
