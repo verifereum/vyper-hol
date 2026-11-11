@@ -56,9 +56,7 @@ under it; with none, every fixture runs.
 Each fixture prints `PASS` or `FAIL` with its time. The exit status is
 non-zero unless every selected fixture matches. A requested path without a
 compiled-in fixture also fails, as does a `.hex` file in the directory of a
-selected fixture that has no fixture. The one exception is the pending list in
-`compilerNativeParity.sml` (`builtin-forms/oracle/uint2str_local.hex`; see
-`../pending-uint2str-buffer.md`), and the fixtures listed in
+selected fixture that has no fixture. The exception is the fixtures listed in
 [`pending-5127-port.md`](../pending-5127-port.md), which run only when their
 own path is requested until their port lands.
 

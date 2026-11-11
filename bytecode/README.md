@@ -59,6 +59,9 @@ current series contains:
   after the previous run of aborting instructions.
 - `5338-widen-bytestring-convert.patch`, vyperlang/vyper#5338: widening
   bytestring conversions copy the value into a buffer of the result type.
+- `5344-uint2str-buffer.patch`, vyperlang/vyper#5344: `uint2str` allocates
+  `n_digits` bytes beyond its result type's size, since its result starts up
+  to `n_digits` bytes into the buffer and consumers copy the full type size.
 - `5349-dft-effectless-roots.patch`, vyperlang/vyper#5349: an instruction with
   no outputs and no effects (an `assert`) stays a scheduling root even when a
   later abort depends on it, so nothing is hoisted above it.
