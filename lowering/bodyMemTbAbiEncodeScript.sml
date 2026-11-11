@@ -2,7 +2,7 @@
 Theory bodyMemTbAbiEncode
 Ancestors
   bodyMemoryPreds abiEncodeContinuationMemory abiEncodeWindowMemory abiEncodeWindowLift
-  bodyAbiEncodeMemorySource abiEncodeEmptySourceInput
+  bodyAbiEncodeMemorySource abiEncodeEmptySourceInput abiEncodeEmptySourceSteps
 
 Theorem body_type_builtin_abi_encode_mem_case:
   !cx v11 ensure mid typ es.
