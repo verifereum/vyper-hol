@@ -175,7 +175,7 @@ Theorem assign_local_rhs_located_mem[local]:
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-        (\res ee r. expr_exit res r)
+        (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `expr_vv_sim_mem ctx func c cx (expr_type e) e es` by
@@ -713,7 +713,7 @@ Resume compile_assign_local_memory_widen_stmt_frag_mem[exception]:
   Cases_on `res` >- fs[expr_exit_def] >>
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (first_x_assum irule >> irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
+  disj2_tac >> fs[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
 QED
 
 Resume compile_assign_local_memory_widen_stmt_frag_mem[normal]:

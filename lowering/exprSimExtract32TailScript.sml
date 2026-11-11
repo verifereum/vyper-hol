@@ -40,7 +40,7 @@ Theorem extract32_tail_ready:
         es sa sb s0 ee (Value v) (StackValue ty op) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> simp[evaluate_type_builtin_def] >>
   Cases_on `evaluate_extract32 bs (Num i) bt`

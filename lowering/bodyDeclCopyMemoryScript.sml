@@ -242,7 +242,7 @@ Proof
       t.vs_current_bb = sB.cs_current_bb /\
       t.vs_inst_idx = LENGTH sB.cs_current_insts /\
       alloca_history func t /\ salloc.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _` mp_tac >>
      simp[expr_sim_mem_def] >> disch_then irule >> simp[]) >>
   `~block_is_terminated sb` by

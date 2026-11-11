@@ -288,7 +288,7 @@ Theorem compile_expr_add_read_outcome_mem_src[local]:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
       eval_operand dst u = SOME (kb + ko))
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
@@ -397,7 +397,7 @@ Proof
      simp[ci_mono_def] >> strip_tac >>
      drule emitted_insts_emit_void >> strip_tac >> decide_tac) >>
   irule forced_then_outcome >> conj_tac
-  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+  >- (rpt strip_tac >> fs[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   qexists_tac `\v ee t.
     expr_post ctx func cenv cx e es sa su s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\

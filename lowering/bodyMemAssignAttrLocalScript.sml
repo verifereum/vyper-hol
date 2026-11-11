@@ -670,7 +670,7 @@ Resume assign_attr_local_frag_mem[exception]:
   >- (irule assign_attr_local_marked_exec_mem_src >>
       (conj_tac >- (qexists_tac `lctx` >> simp[])) >>
       ntac 2 (irule gas_marked_exec_bind_exception) >> simp[]) >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
+  disj2_tac >> fs[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
 QED
 
 Resume assign_attr_local_frag_mem[normal]:

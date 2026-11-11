@@ -1062,10 +1062,10 @@ Theorem forced_endpoint_bind_outcome[local]:
     gas_admissible (next v) (stmt_res_ok lctx) (mid with gas_obs := []) ==>
     gas_outcome F (cx_tops cx) (ctx,func) (next v)
       (mid with gas_obs := [],t) Post
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)) ==>
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (bind (eval_expr cx e) (read_result cx)) next) (es,s0) Post
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
@@ -1175,7 +1175,7 @@ Theorem for_range_checked_tail_outcome[local]:
           (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)) od)
     (es,t0)
     (stmt_post ctx func cx lctx cenv cenv st sf t0)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `cs_extends st st` by simp[cs_extends_refl] >>
@@ -1681,7 +1681,7 @@ Resume compile_for_range_checked_frag_active[tail_apply]:
   `gas_outcome F (cx_tops cx) (ctx,func) source
     (mid' with gas_obs := [],t')
     (stmt_post ctx func cx lctx cenv cenv s2 sb t')
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)` by
     (simp[Abbr `source`] >> irule for_range_checked_tail_outcome >>
      simp[] >> qexistsl_tac [`P`, `fty`, `op1`, `op2`, `ty`] >>
      simp[] >> suspend "tail_hyps") >>

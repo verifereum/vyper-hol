@@ -84,7 +84,7 @@ Resume compile_annassign_empty_stmt_frag_ptr[rhs]:
      (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
        ptr_buf_ok c e p.ptr_operand G t) /\
      ghost_kept c es sA G1 tn1 s1 G tn)
-   (\res ee gt r. expr_exit res r)` by
+   (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)` by
    (qpat_x_assum `expr_vv_sim_ptr _ _ _ _ _ _ _ _ _` mp_tac >>
     simp[expr_vv_sim_ptr_def] >> disch_then irule >> simp[] >>
     drule_all declare_local_ptr >> strip_tac >>

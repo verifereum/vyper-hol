@@ -1209,7 +1209,7 @@ Resume compile_assert_reason_frag_general[exception]:
   >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
       simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
       gen_tac >> simp[eval_assert_reason_bind, Once bind_def]) >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> fs[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED
 Resume compile_assert_reason_frag_general[normal]:
   `!tail. bind (eval_expr cx e) (read_result cx)

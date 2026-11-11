@@ -104,6 +104,34 @@ Proof
   simp[halt_exit_def]
 QED
 
+(* halt_exit asks something only of a halt, and of the source state only
+   what halt_rel reads. *)
+Theorem halt_exit_simps[simp]:
+  (!cx ee e r. halt_exit cx ee (INR e) r <=>
+               (e = HaltException ==> ?s. r = Halt s /\ halt_rel cx ee s)) /\
+  (!cx ee res a s. halt_exit cx ee res (Abort a s) <=>
+                   res <> INR HaltException) /\
+  (!cx ee res s. halt_exit cx ee res (OK s) <=> res <> INR HaltException) /\
+  (!cx ee res ir s. halt_exit cx ee res (IntRet ir s) <=>
+                    res <> INR HaltException) /\
+  (!cx ee res m. halt_exit cx ee res (Error m) <=> res <> INR HaltException) /\
+  (!cx ee res g. halt_exit cx (ee with gas_obs := g) res =
+                 halt_exit cx ee res) /\
+  (!cx ee res x. halt_exit cx (ee with scopes := x) res =
+                 halt_exit cx ee res)
+Proof
+  rw[halt_exit_def, FUN_EQ_THM, loweringStateRelDefsTheory.halt_rel_def,
+     loweringStateRelDefsTheory.accounts_rel_def]
+QED
+
+(* An exit expr_exit allows that isn't a Halt meets halt_exit. *)
+Theorem expr_exit_halt_exit:
+  !res r cx ee.
+    expr_exit res r /\ (!s. r <> Halt s) ==> halt_exit cx ee res r
+Proof
+  Cases_on `r` >> simp[]
+QED
+
 Theorem halt_exit_INR_type:
   !cx ee ex r.
     halt_exit cx ee (INR ex : 'a + exception) r =

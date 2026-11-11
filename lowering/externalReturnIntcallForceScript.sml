@@ -30,7 +30,7 @@ Theorem return_intcall_located_force:
         es sa sb s0 ee v op s /\
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   drule return_compile_intcall_output >> simp[] >> strip_tac >> gvs[] >>

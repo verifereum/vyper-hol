@@ -46,7 +46,7 @@ Theorem accounts_agree_transfer_value:
     accounts_agree cx (vfmExecution$transfer_value fr to v a1)
                       (vfmExecution$transfer_value fr to v a2)
 Proof
-  rw[vfmExecutionTheory.transfer_value_def] >>
+  rw[vfmExecutionTheory.transfer_value_def] >> fs[] >>
   `!a. lookup_account to a =
        lookup_account to
          (update_account fr

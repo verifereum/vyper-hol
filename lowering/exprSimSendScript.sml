@@ -698,7 +698,7 @@ Theorem send_tail_summary[local]:
        expr_post ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `(do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);

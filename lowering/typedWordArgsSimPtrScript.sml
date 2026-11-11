@@ -112,7 +112,7 @@ Proof
       simp[SF ETA_ss]) >>
   strip_tac >>
   drule_all (typed_args_ptr_head_outcome_facts |> SIMP_RULE (srw_ss()) [SF ETA_ss]) >>
-  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ (\res ee gt r. expr_exit res r)` kall_tac >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)` kall_tac >>
   disch_tac >>
   rewrite_tac[eval_exprs_cons_action] >>
   irule gas_outcome_ptr_bind >> rpt conj_tac

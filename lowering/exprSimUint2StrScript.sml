@@ -2915,7 +2915,7 @@ Proof
   rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
   qexistsl_tac [`case builtin_result cx ee.accounts ann bt [expr_type e] [v] of
                    INL w => INL (Value w) | INR exc => INR exc`, `ee`, `r`] >>
-  simp[expr_exit_success_map] >>
+  simp[expr_exit_success_map, halt_exit_success_map] >>
   Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[]
 QED
 

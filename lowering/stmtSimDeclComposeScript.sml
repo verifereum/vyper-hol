@@ -60,7 +60,7 @@ Theorem annassign_rhs_outcome:
     evaluate_type (get_tenv cx) typ = SOME tyv /\
     gas_outcome F (cx_tops cx) (ctx,func)
       (bind (eval_expr cx e) (read_result cx)) (es,salloc) Q
-      (\res ee r. expr_exit res r) /\
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
     (!res ee t. Q res ee t ==> ?v. res = INL v) /\
     (!marks v ee t.
       gas_marked_exec F (ctx,func)
@@ -74,7 +74,7 @@ Theorem annassign_rhs_outcome:
     gas_outcome F (cx_tops cx) (ctx,func)
       (eval_stmt cx (AnnAssign id typ e)) (es,salloc)
       (stmt_post ctx func cx lctx old c sa sf s0)
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[gas_outcome_def] >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
@@ -98,7 +98,7 @@ Proof
       simp[gas_summary_at_def] >>
       qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >> conj_tac
       >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      disj2_tac >> gen_tac >> simp[stmt_exit_def] >>
+      disj2_tac >> gen_tac >> fs[stmt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
@@ -201,11 +201,11 @@ Theorem annassign_concrete_rhs_outcome:
         expr_post ctx func c cx e es sa sb salloc ee v op t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r) ==>
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r) ==>
     gas_outcome F (cx_tops cx) (ctx,func)
       (eval_stmt cx (AnnAssign id typ e)) (es,salloc)
       (stmt_post ctx func cx lctx old c sa sf salloc)
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   irule annassign_rhs_outcome >>

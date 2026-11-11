@@ -130,7 +130,7 @@ Proof
      drule emitted_insts_emit_void >> strip_tac >> decide_tac) >>
   irule forced_then_outcome >>
   conj_tac
-  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+  >- (rpt strip_tac >> fs[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   qexists_tac `\v ee t.
     expr_post ctx func cenv cx e es sa sB s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\

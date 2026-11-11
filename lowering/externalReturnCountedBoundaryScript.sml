@@ -40,7 +40,7 @@ Theorem return_counted_continuation:
   gas_outcome F tops (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
     (\res ee t. ?v. res = INL v /\ P v ee t)
-    (\res ee r. expr_exit res r) /\
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
   (!marks ee v t.
     bind (eval_expr cx e) (read_result cx)
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
@@ -50,7 +50,7 @@ Theorem return_counted_continuation:
       !tail. stmt_exit RetQ (ee with gas_obs := tail)
         (INR (ReturnException v)) r) ==>
   gas_outcome F tops (ctx,func) (eval_stmt cx (Return (SOME e))) (es,s0)
-    Q (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    Q (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `eval_stmt cx (Return (SOME e)) =

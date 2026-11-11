@@ -1066,7 +1066,7 @@ Resume compile_augassign_place_memory_case[base_exit]:
   (conj_tac
    >- (simp[Once evaluate_def, aug_place_target_bind_base] >>
        irule gas_marked_exec_bind_exception >> simp[])) >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> fs[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_augassign_place_memory_case[base_normal]:
@@ -1368,7 +1368,7 @@ Resume compile_augassign_place_memory_case[rhs_exit]:
   qexistsl_tac [`INR ex`, `es_end`, `r'`] >>
   (conj_tac >- (rewrite_tac[GSYM bind_assoc] >>
     irule gas_marked_exec_bind_exception >> simp[])) >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> fs[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_augassign_place_memory_case[rhs_exempt]:

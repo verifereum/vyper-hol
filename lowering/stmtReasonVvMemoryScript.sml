@@ -236,7 +236,7 @@ Theorem raise_reason_vv_outcome:
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_outcome T (cx_tops cx) (ctx,func) (eval_stmt cx (Raise (RaiseReason se)))
-      (es, s) Q (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (es, s) Q (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   `cs_extends sa sm` by metis_tac[cj 1 compile_expr_grows] >>
@@ -297,7 +297,7 @@ Resume raise_reason_vv_outcome[exception]:
       simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
       gen_tac >> rewrite_tac[eval_raise_reason_eq] >>
       asm_simp_tac (srw_ss()) [bind_def]) >>
-  disj2_tac >> simp[stmt_exit_def] >>
+  disj2_tac >> fs[stmt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
 
@@ -515,7 +515,7 @@ Proof
   conj_tac >- suspend "normal" >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>
   Cases_on `res` >- fs[expr_exit_def] >>
-  simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  fs[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_assert_reason_vv_frag_mem[normal]:

@@ -305,11 +305,11 @@ Theorem extcall_request_setup:
          (ext_call_kwarg EKDefault opts (DROP (LENGTH arg_types) rest)) ee t ==>
        ?marks. gas_summary_at F (ctx,func) marks
          (eval_ext_call cx is_static skip (fname,arg_types,ret_type) opts
-            (target_v :: rest)) (ee,t) Q (\res ee r. expr_exit res r)) ==>
+            (target_v :: rest)) (ee,t) Q (\res ee r. expr_exit res r /\ halt_exit cx ee res r)) ==>
     gas_outcome F (cx_tops cx) (ctx,func)
       (eval_expr cx
          (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
-            args dflt)) (es,s0) Q (\res ee r. expr_exit res r)
+            args dflt)) (es,s0) Q (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   cheat
 QED
@@ -354,7 +354,7 @@ Theorem extcall_call_step:
        extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
          has_default default_op default_ty default_opt returnData ee' t' ==>
        ?marks. gas_summary_at F (ctx,func) marks (k returnData) (ee',t') Q
-                 (\res ee r. expr_exit res r)) ==>
+                 (\res ee r. expr_exit res r /\ halt_exit cx ee res r)) ==>
     ?marks. gas_summary_at F (ctx,func) marks
       (do accounts <- get_accounts;
           check (ext_call_precheck_ok skip ret_type target accounts)
@@ -363,7 +363,7 @@ Theorem extcall_call_step:
           returnData <- eval_ext_call_effects cx target calldata value_opt'
                           gas accounts;
           k returnData
-       od) (ee,t) Q (\res ee r. expr_exit res r)
+       od) (ee,t) Q (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   cheat
 QED
@@ -424,7 +424,7 @@ Theorem extcall_return_values:
               args dflt) es sa sb s0 ee' tv vv t' /\
          t'.vs_current_bb = sb.cs_current_bb /\
          t'.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   cheat
 QED

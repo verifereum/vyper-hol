@@ -658,7 +658,7 @@ Theorem raw_call_operand_suffix[local]:
   stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee r. expr_exit (INR exc : value + exception) r ==> R (INR exc) ee r) /\
+  (!exc ee r. expr_exit (INR exc : value + exception) r /\ halt_exit cx ee (INR exc : value + exception) r ==> R (INR exc) ee r) /\
   (!gs v ee t.
      bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
      ee.gas_obs = [] /\ expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
@@ -1598,7 +1598,7 @@ Theorem raw_call_addr_data_sim[local]:
   stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee r. expr_exit (INR exc : value + exception) r ==> R (INR exc) ee r) /\
+  (!exc ee r. expr_exit (INR exc : value + exception) r /\ halt_exit cx ee (INR exc : value + exception) r ==> R (INR exc) ee r) /\
   (!gsA av esA tA gsD bs esD tD.
     bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) = (INL av,esA) /\
     esA.gas_obs = [] /\
@@ -2235,7 +2235,7 @@ Theorem raw_call_prefix_sim[local]:
   stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee r. expr_exit (INR exc : value + exception) r ==> R (INR exc) ee r) /\
+  (!exc ee r. expr_exit (INR exc : value + exception) r /\ halt_exit cx ee (INR exc : value + exception) r ==> R (INR exc) ee r) /\
   (!gsA av esA tA gsD bs esD tD gsK kvs esK tm tk t xs b gw.
     bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) =
       (INL av,esA) /\ esA.gas_obs = [] /\
@@ -5620,7 +5620,7 @@ Theorem raw_call_tail_outcome[local]:
         (if flags.rcf_max_outsize = 0 then StackValue ann result
          else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)) u) res ee u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all raw_call_prefix_source_ready >> strip_tac >>
   drule raw_call_pre_flags >> strip_tac >>

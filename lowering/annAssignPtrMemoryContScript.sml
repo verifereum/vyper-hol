@@ -230,7 +230,7 @@ Theorem annassign_memory_concrete_rhs_outcome_ptr:
      ghost_inv d c cx ee G tn s /\ ptr_val_ok cx (expr_type e) v op G tn s /\
      (~is_word_type (expr_type e) ==> ptr_buf_ok c e op G s) /\
      ghost_kept c es sa Ga tna salloc G tn)
-   (\res ee gt r. expr_exit res r) ==>
+   (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r) ==>
  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
    (eval_stmt cx (AnnAssign id typ e)) (es,salloc,Ga,tna)
    (\res ee G tn s. ?cenv''.
@@ -241,7 +241,7 @@ Theorem annassign_memory_concrete_rhs_outcome_ptr:
      (!x z. not_fresh_at fr x /\ lookup_var x salloc = SOME z ==> lookup_var x s = SOME z) /\
      (!x. not_fresh_at fr x ==> FLOOKUP G x = FLOOKUP Ga x /\
        op_taint tn (Var x) = op_taint tna (Var x)))
-   (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+   (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r)
 Proof
  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
  irule annassign_rhs_outcome_ptr >> goal_assum (drule_at Any) >> simp[] >>

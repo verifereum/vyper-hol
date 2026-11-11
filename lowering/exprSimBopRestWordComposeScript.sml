@@ -190,7 +190,7 @@ Theorem rest_word_mixed_outcome:
       expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
         es sa ct s0 ee v out q /\
       q.vs_current_bb = ct.cs_current_bb /\ q.vs_inst_idx = LENGTH ct.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `gas_admissible (bind (eval_expr cx e1) (read_result cx)) expr_res_ok es` by

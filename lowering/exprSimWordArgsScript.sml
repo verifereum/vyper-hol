@@ -508,7 +508,7 @@ Theorem expr_sim_apply:
         expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rewrite_tac[expr_sim_def] >> rpt strip_tac >>
   first_x_assum irule >> asm_rewrite_tac[]

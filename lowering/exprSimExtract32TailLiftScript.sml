@@ -45,7 +45,7 @@ Theorem extract32_tail_ready_any:
         es sa sb s0 ee (Value v) (StackValue ty op) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `eval_operand len (drop_fresh st3 s2) = SOME (n2w (LENGTH bs)) /\

@@ -311,7 +311,7 @@ Theorem imm_target_root_walk[local]:
          imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt strip_tac >>
   drule_all imm_target_root_assignable >> strip_tac >>
@@ -1169,7 +1169,7 @@ Theorem imm_attr_walk_compose[local]:
         imm_target_post ctx func cenv cx es sa sm s0 ee pv (StructT sid) rb t /\
         t.vs_current_bb = sm.cs_current_bb /\
         t.vs_inst_idx = LENGTH sm.cs_current_insts)
-      (\res ee r. expr_exit res r) ==>
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r) ==>
     gas_outcome F (cx_tops cx) (ctx,func)
       (bind (eval_base_place cx bt) (\pv. extend_place cx pv (AttrSubscript fld)))
       (es,s0)
@@ -1178,7 +1178,7 @@ Theorem imm_attr_walk_compose[local]:
           (dst,FST (SND rb),target_field_type cenv (SND (SND rb)) fld) t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
@@ -1263,14 +1263,14 @@ Theorem imm_target_attr_step[local]:
           imm_target_post ctx func cenv cx es sa sm s0 ee pv bty rb t /\
           t.vs_current_bb = sm.cs_current_bb /\
           t.vs_inst_idx = LENGTH sm.cs_current_insts)
-        (\res ee r. expr_exit res r)) ==>
+        (\res ee r. expr_exit res r /\ halt_exit cx ee res r)) ==>
     gas_outcome F (cx_tops cx) (ctx,func)
       (eval_base_place cx (AttributeTarget bt fld)) (es,s0)
       (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
         imm_target_post ctx func cenv cx es sa sb s0 ee pv fty r t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `type_place_target _ _ = _` mp_tac >>
@@ -1962,14 +1962,14 @@ Theorem imm_target_subscript_step[local]:
           imm_target_post ctx func cenv cx es sa sm s0 ee pv bty rb t /\
           t.vs_current_bb = sm.cs_current_bb /\
           t.vs_inst_idx = LENGTH sm.cs_current_insts)
-        (\res ee r. expr_exit res r)) ==>
+        (\res ee r. expr_exit res r /\ halt_exit cx ee res r)) ==>
     gas_outcome F (cx_tops cx) (ctx,func)
       (eval_base_place cx (SubscriptTarget bt e)) (es,s0)
       (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
         imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all imm_target_subscript_type >> strip_tac >>
@@ -2291,7 +2291,7 @@ Theorem imm_target_walk:
          imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   Induct_on `bt` using base_assignment_target_induct >>
   rpt gen_tac >> strip_tac >>
@@ -2355,7 +2355,7 @@ Theorem imm_target_walk_place:
          imm_target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) ty r t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   `gas_admissible (eval_base_place cx bt) target_res_ok es` by
@@ -2369,7 +2369,7 @@ Proof
          imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)` by
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (irule imm_target_walk >> simp[] >> conj_tac
      >- (qexists `env` >> simp[]) >>
      qexists `nocalls` >> simp[]) >>

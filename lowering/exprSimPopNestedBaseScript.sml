@@ -41,7 +41,7 @@ Definition pop_target_frag_def:
             r t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\res ee r. expr_exit res r)
+        (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 End
 
 Theorem pop_target_frag_of_sim:

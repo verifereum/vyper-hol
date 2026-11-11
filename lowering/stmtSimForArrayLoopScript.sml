@@ -1066,7 +1066,7 @@ Theorem array_round_body_prepare:
           :: es.scopes) (OK s2) /\
     gas_outcome F (cx_tops cx) (ctx,func) source (ei,s2)
       (stmt_post ctx func cx lctx bc bc' sb0 sb1 s2)
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all array_entry_inputs_run >> strip_tac >>
   qexists_tac `s2` >> (conj_tac >- simp[]) >>
@@ -1446,7 +1446,7 @@ Theorem array_round_prepare:
       (OK s2) /\
     gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (entry,s2)
       (stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2)
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   drule array_for_code_condition >> strip_tac >>

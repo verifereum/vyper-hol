@@ -2149,8 +2149,8 @@ QED
 Theorem ec_outcome_then[local]:
   gas_outcome F tops (ctx,func)
     (m : evaluation_state -> value evaluation_result) (es,s0)
-    (\res ee t. ?v. res = INL v /\ P v ee t) (\res ee r. expr_exit res r) /\
-  (!exc ee r. expr_exit (INR exc : value + exception) r ==>
+    (\res ee t. ?v. res = INL v /\ P v ee t) (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
+  (!exc ee r. expr_exit (INR exc : value + exception) r /\ halt_exit cx ee (INR exc : value + exception) r ==>
      R (INR exc) ee r) /\
   (!gs v ee t. m (es with gas_obs := gs) = (INL v, ee) /\ ee.gas_obs = [] /\
      P v ee t /\ ~t.vs_halted ==>
@@ -2284,7 +2284,7 @@ Theorem ec_binary_call_gas[local]:
        vv_post ctx func cenv cx (Builtin ann bt [a;b]) es sa sb s0 ee tv vv t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>

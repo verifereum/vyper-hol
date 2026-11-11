@@ -170,7 +170,7 @@ Theorem bop_normal_prefix_summary_mem:
       ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   qpat_x_assum `gas_value_prefix _ _ _ (sa, s1, x) _ _ _`

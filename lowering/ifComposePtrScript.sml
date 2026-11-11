@@ -29,11 +29,11 @@ Theorem if_selected_outcome_prefix_ptr:
     (ignore_bind push_scope (finally (eval_stmts cx (if b then ss1 else ss2)) pop_scope))
     (mid with gas_obs := [],jump_to label t,G1,tn1)
     (stmt_post_ptr d ctx func cx lctx cenv cenv entry sb (jump_to label t) G1 tn1)
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) ==>
+    (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r) ==>
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG (eval_stmt cx (If c ss1 ss2))
     (es,s0,G0,tn0)
     (stmt_post_ptr d ctx func cx lctx cenv cenv sa sb s0 G0 tn0)
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `gas_marked_exec_ptr D (ctx,func) PG (bind (eval_expr cx c) (read_result cx))

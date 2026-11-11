@@ -532,7 +532,7 @@ Theorem concat_values_then_outcome:
            gas_marked_path F ctx func t 0 r /\
            ((?t'. r = OK t' /\ Q res (ee' with gas_obs := []) t') \/
             (exit_result r /\ R res (ee' with gas_obs := []) r))) /\
-      (!ex ee r. expr_exit (INR ex : eval_result + exception) r ==>
+      (!ex ee r. expr_exit (INR ex : eval_result + exception) r /\ halt_exit cx ee (INR ex : eval_result + exception) r ==>
                  R (INR ex) ee r) ==>
       gas_outcome F tops (ctx,func) (bind a k) (es,s0) Q R
 Proof

@@ -44,11 +44,11 @@ Theorem assign_local_rhs_outcome:
     (\res ee t. ?v. res = INL v /\
       expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r) ==>
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
     (stmt_post ctx func cx lctx cenv cenv sa sf s0)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
@@ -71,7 +71,7 @@ Proof
       >- (irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
-      disj2_tac >> gen_tac >> simp[stmt_exit_def] >>
+      disj2_tac >> gen_tac >> fs[stmt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists `marks` >> disj2_tac >>
   qexistsl [`err`, `ee`, `leaf`, `finish'`] >>

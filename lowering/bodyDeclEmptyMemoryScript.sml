@@ -26,7 +26,7 @@ Theorem annassign_raw_rhs_outcome_mem:
     (!gs tv ee. eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) ==>
        ?v. tv = Value v) /\
     gas_outcome T tops (ctx,func) (eval_expr cx e) (es,salloc) Q
-      (\res ee r. expr_exit res r) /\
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
     (!res ee t. Q res ee t ==> ?tv. res = INL tv) /\
     (!marks v ee t.
       gas_marked_exec T (ctx,func) (eval_expr cx e) (es,salloc)
@@ -37,7 +37,7 @@ Theorem annassign_raw_rhs_outcome_mem:
         P (INL ()) (ff with gas_obs := []) u) ==>
     gas_outcome T tops (ctx,func)
       (eval_stmt cx (AnnAssign id typ e)) (es,s0) P
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   irule gas_outcome_zero_prefix_mem >> qexists_tac `salloc` >> simp[] >>
@@ -69,7 +69,7 @@ Proof
       simp[gas_summary_at_def] >>
       qexistsl [`INR y`, `es_end`, `r`] >> simp[] >> conj_tac
       >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      disj2_tac >> gen_tac >> simp[stmt_exit_def] >>
+      disj2_tac >> gen_tac >> fs[stmt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists `marks` >> disj2_tac >>
   qexistsl [`err`, `ee`, `leaf`, `finish'`] >>
@@ -159,7 +159,7 @@ Proof
       t.vs_current_bb = sB.cs_current_bb /\
       t.vs_inst_idx = LENGTH sB.cs_current_insts /\
       alloca_history func t /\ salloc.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ _ _` mp_tac >>
      simp[expr_vv_sim_mem_def] >> disch_then irule >> simp[]) >>
   `~block_is_terminated sb` by

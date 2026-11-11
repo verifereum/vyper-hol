@@ -19,7 +19,7 @@ Theorem annassign_rhs_outcome_ptr:
  evaluate_type (get_tenv cx) typ = SOME tyv /\
  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
    (bind (eval_expr cx e) (read_result cx)) (es,salloc,Ga,tna) Q
-   (\res ee gt r. expr_exit res r) /\
+   (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r) /\
  (!res ee G tn t. Q res ee G tn t ==> ?v. res = INL v) /\
  (!marks v ee G tn t.
    gas_marked_exec_ptr D (ctx,func) PG
@@ -32,7 +32,7 @@ Theorem annassign_rhs_outcome_ptr:
      P (INL ()) (ff with gas_obs := []) Gf tnf u) ==>
  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
    (eval_stmt cx (AnnAssign id typ e)) (es,salloc,Ga,tna) P
-   (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+   (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r)
 Proof
  rpt gen_tac >> strip_tac >> rewrite_tac[gas_outcome_ptr_def] >>
  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _`
@@ -125,7 +125,7 @@ Theorem annassign_raw_rhs_outcome_ptr:
     ?v. tv = Value v) /\
  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
    (eval_expr cx e) (es,salloc,Ga,tna) Q
-   (\res ee gt r. expr_exit res r) /\
+   (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r) /\
  (!res ee G tn t. Q res ee G tn t ==> ?tv. res = INL tv) /\
  (!marks v ee G tn t.
    gas_marked_exec_ptr D (ctx,func) PG (eval_expr cx e)
@@ -137,7 +137,7 @@ Theorem annassign_raw_rhs_outcome_ptr:
      P (INL ()) (ff with gas_obs := []) Gf tnf u) ==>
  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
    (eval_stmt cx (AnnAssign id typ e)) (es,salloc,Ga,tna) P
-   (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+   (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r)
 Proof
  rpt gen_tac >> strip_tac >> rewrite_tac[gas_outcome_ptr_def] >>
  drule eval_annassign_action >>

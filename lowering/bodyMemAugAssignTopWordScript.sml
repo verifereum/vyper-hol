@@ -744,7 +744,7 @@ Resume compile_augassign_toplevel_mem[operator_exit]:
                     `u`, `v`, `v0`] >> simp[] >>
       irule augassign_storage_continuation_exec_mem_src >>
       simp[lift_sum_def, bind_def, raise_def]) >>
-  disj2_tac >> simp[stmt_exit_def] >>
+  disj2_tac >> fs[stmt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
 

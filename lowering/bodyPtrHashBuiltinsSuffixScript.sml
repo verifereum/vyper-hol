@@ -21,8 +21,8 @@ QED
 Theorem hash_value_outcome_ptr_suffix:
   gas_outcome_ptr D tops (ctx, func) PG source (es, s0, G0, tn0)
     (\res ee G tn t. ?v:value. res = INL v /\ P v ee G tn t)
-    (\res ee gt r. expr_exit res r) /\
-  (!exc ee gt r. expr_exit (INR exc : value + exception) r ==>
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r) /\
+  (!exc ee gt r. expr_exit (INR exc : value + exception) r /\ halt_exit cx ee (INR exc : value + exception) r ==>
      R (INR exc) ee gt r) /\
   (!gs v ee G tn t.
      source (es with gas_obs := gs) = (INL v, ee) /\
@@ -67,7 +67,7 @@ Theorem hash_expr_sim_ptr_suffix:
   ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee gt r. expr_exit (INR exc : value + exception) r ==>
+  (!exc ee gt r. expr_exit (INR exc : value + exception) r /\ halt_exit cx ee (INR exc : value + exception) r ==>
      R (INR exc) ee gt r) /\
   (!gs v ee G tn t.
      bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =

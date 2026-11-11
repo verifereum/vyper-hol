@@ -617,7 +617,7 @@ Theorem forced_then_outcome_exec[local]:
   gas_outcome memory tops (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
     (\res ee t. ?v. res = INL v /\ P v ee t)
-    (\res ee r. expr_exit res r) /\
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
   (!marks v mid t.
     gas_marked_exec memory (ctx,func)
       (bind (eval_expr cx e) (read_result cx)) (es,s0)
@@ -628,7 +628,7 @@ Theorem forced_then_outcome_exec[local]:
       gas_marked_path memory ctx func t 0 r /\
       ((?t'. r = OK t' /\ Q res (ee' with gas_obs := []) t') \/
        (exit_result r /\ R res (ee' with gas_obs := []) r))) /\
-  (!ex ee r. expr_exit (INR ex : value + exception) r ==>
+  (!ex ee r. expr_exit (INR ex : value + exception) r /\ halt_exit cx ee (INR ex : value + exception) r ==>
              R (INR ex) ee r) ==>
   gas_outcome memory tops (ctx,func)
     (bind (bind (eval_expr cx e) (read_result cx)) k) (es,s0) Q R
@@ -718,7 +718,7 @@ Theorem compile_mapping_subscript_outcome:
           pure_frame cenv func es sa s0 t) /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 assume_tac

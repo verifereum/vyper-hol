@@ -137,7 +137,7 @@ Resume compile_if_stmt_frag_ptr[compose]:
   `gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_stmt cx (If c ss1 ss2)) (es,s0,G0,tn0)
     (stmt_post_ptr d ctx func cx lctx cenv cenv sa sb s0 G0 tn0)
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)`
+    (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r)`
     suffices_by simp[gas_outcome_ptr_def, gas_summary_ptr_at_marked, stmt_post_ptr_def] >>
   irule if_selected_outcome_prefix_ptr >>
   qexistsl_tac [`G`, `b`, `cond`, `entry`, `if b then tl else el`,

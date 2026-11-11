@@ -105,7 +105,7 @@ Theorem compile_log_eval_all_gas_mem:
          LIST_REL (\p v. expr_store_bound cx (SND p) v (FST p) t) xs vs /\
          EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sb z) /\
                     (!lab. FST p <> Label lab)) xs)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   Induct
   >- (rpt gen_tac >> strip_tac >> gvs[compile_log_eval_all_nil] >>

@@ -454,7 +454,7 @@ Resume compile_for_range_checked_frag_active_mem[loop_ready]:
       cc.vs_alloca_next <= s.vs_alloca_next /\
       (!x v. not_fresh_at s2 x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\
       (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b))
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)` by
     (irule for_loop_mem >> ntac 4 (conj_tac >- simp[]) >>
      conj_tac >- (qexists_tac `lctx` >> simp[]) >>
      ntac 3 (conj_tac >- simp[]) >>

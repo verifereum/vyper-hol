@@ -591,7 +591,7 @@ Theorem augassign_load_rhs_counted:
         expr_post ctx func cenv cx e (es with gas_obs := []) sa sb sm ee v op t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r) \/
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r) \/
     ?err ee leaf finish.
       gas_exempt_cert F (cx_tops cx) (ctx,func)
         (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
@@ -1006,7 +1006,7 @@ Theorem augassign_attr_normal_summary[local]:
   gas_summary_at F (ctx,func) marks
     (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)) (es,s0)
     (stmt_post ctx func cx lctx cenv cenv sa sb s0)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `bind (eval_expr cx e) (read_result cx)
@@ -1252,7 +1252,7 @@ Resume compile_augassign_attr_local_case[rhs_error]:
       rewrite_tac[gas_marked_exec_def] >> strip_tac >> simp[] >>
       gen_tac >> irule augassign_attr_rhs_exception >>
       simp[] >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
-  disj2_tac >> gen_tac >> simp[stmt_exit_def] >>
+  disj2_tac >> gen_tac >> fs[stmt_exit_def] >>
   metis_tac[expr_exit_INR_type]
 QED
 

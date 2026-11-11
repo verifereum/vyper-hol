@@ -275,7 +275,8 @@ End
 
 Theorem decoding_exemption_exact:
   (unspecified_behaviour_exempt dynamic_decode_program e <=>
-    e = RuntimeError "abi_decode invalid") /\
+    e = RuntimeError "abi_decode invalid" \/
+    e = RuntimeError "transfer_value recipient overflow") /\
   ~unspecified_behaviour_exempt [] (RuntimeError "abi_decode invalid") /\
   ~unspecified_behaviour_exempt dynamic_decode_program (RuntimeError "abi_decode conversion") /\
   ~unspecified_behaviour_exempt dynamic_decode_program (TypeError "abi_decode invalid")

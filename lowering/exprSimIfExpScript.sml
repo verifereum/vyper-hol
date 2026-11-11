@@ -2389,7 +2389,7 @@ Theorem ifexp_arm_outcome[local]:
          (~is_word_type (expr_type e) ==>
           vv_at cenv cx (expr_type e) sa sb ee tv
             (LocatedValue (expr_type e) (mk_ptr op LocMemory)) t))
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   drule compile_expr_extends >> strip_tac >>
@@ -2645,7 +2645,7 @@ Theorem ifexp_root_condition_exit[local]:
     (vyperState$bind (eval_expr cx c) (read_result cx))
     (es,s0) marks res mid r /\ expr_exit res r ==>
   gas_outcome F tops (ctx,func) (eval_expr cx (IfExp t c a b)) (es,s0) Q
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   Cases_on `res` >> simp[] >> strip_tac >>
   simp[gas_outcome_def, gas_summary_at_def] >>

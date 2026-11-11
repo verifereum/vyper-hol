@@ -59,7 +59,7 @@ Theorem annassign_rhs_outcome_mem:
     evaluate_type (get_tenv cx) typ = SOME tyv /\
     gas_outcome T tops (ctx,func)
       (bind (eval_expr cx e) (read_result cx)) (es,salloc) Q
-      (\res ee r. expr_exit res r) /\
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
     (!res ee t. Q res ee t ==> ?v. res = INL v) /\
     (!marks v ee t.
       gas_marked_exec T (ctx,func)
@@ -71,7 +71,7 @@ Theorem annassign_rhs_outcome_mem:
         P (INL ()) (ff with gas_obs := []) u) ==>
     gas_outcome T tops (ctx,func)
       (eval_stmt cx (AnnAssign id typ e)) (es,s0) P
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   irule gas_outcome_zero_prefix_mem >> qexists_tac `salloc` >> simp[] >>
@@ -97,7 +97,7 @@ Proof
       simp[gas_summary_at_def] >>
       qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >> conj_tac
       >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      disj2_tac >> gen_tac >> simp[stmt_exit_def] >>
+      disj2_tac >> gen_tac >> fs[stmt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>

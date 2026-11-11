@@ -747,7 +747,7 @@ Theorem for_round_prepare[local]:
         value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes; gas_obs := [] |>,s2)
       (stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc
         (FST (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts sb0)) sb0 sb1 s2)
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >> fs[for_code_def] >>
   `bc.ce_module_vars = cenv.ce_module_vars /\
@@ -1142,7 +1142,7 @@ Theorem for_loop_alloca:
                 lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
                 FLOOKUP s.vs_allocas a = SOME b))
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `Inv = \j ee t.
@@ -1303,7 +1303,7 @@ Theorem for_loop:
                 lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
                 FLOOKUP s.vs_allocas a = SOME b))
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >> drule_all for_loop_alloca >> simp[]
 QED

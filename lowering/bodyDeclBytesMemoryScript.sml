@@ -317,7 +317,7 @@ Theorem compile_annassign_bytes_stmt_frag_mem:
              t.vs_current_bb = sb.cs_current_bb /\
              t.vs_inst_idx = LENGTH sb.cs_current_insts /\
              alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-           (\res ee r. expr_exit res r)) ==>
+           (\res ee r. expr_exit res r /\ halt_exit cx ee res r)) ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (AnnAssign id vtyp e))
       (eval_stmt cx (AnnAssign id vtyp e)) es
@@ -497,7 +497,7 @@ Theorem annassign_bytes_rhs_located_mem:
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-        (\res ee r. expr_exit res r)
+        (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `expr_vv_sim_mem ctx func c cx (expr_type e) e es` by

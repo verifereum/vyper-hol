@@ -124,7 +124,7 @@ Theorem for_round_outcome_mem:
     (esk with scopes :=
       (FEMPTY |+ (id, <|assignable := F; type := tyv;
                         value := v; popped := []|>)) :: esk.scopes,s)
-    B (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+    B (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r) /\
   ~s.vs_halted /\
   (!res ee t gs. B res ee t /\
      eval_stmts cx stmts

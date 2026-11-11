@@ -34,7 +34,7 @@ Theorem for_body_outcome_mem:
                FLOOKUP t.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb1 t /\ alloca_history func t /\
       s2.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `bc.ce_return_pc = cenv.ce_return_pc /\ bc.ce_return_buf = cenv.ce_return_buf` by
@@ -405,7 +405,7 @@ Theorem for_loop_mem:
          cc.vs_alloca_next <= s.vs_alloca_next /\
          (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b))
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >>
   map_every qid_spec_tac [`w`, `cc`, `esk`, `k`, `m`] >>

@@ -57,7 +57,7 @@ Proof
   reverse conj_tac
   >- (`(\(res:value+exception) (ee:evaluation_state) r.
           ?exc. res = INR exc /\ expr_exit (INR exc : eval_result+exception) r) =
-        (\res ee r. expr_exit res r)` by
+        (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
         (simp[FUN_EQ_THM] >> rpt gen_tac >> Cases_on `res`
          >- simp[] >>
          rename1 `INR exc` >>
@@ -103,7 +103,7 @@ Proof
   reverse conj_tac
   >- (`(\(res:value+exception) (ee:evaluation_state) r.
           ?exc. res = INR exc /\ expr_exit (INR exc : eval_result+exception) r) =
-        (\res ee r. expr_exit res r)` by
+        (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
         (simp[FUN_EQ_THM] >> rpt gen_tac >> Cases_on `res`
          >- simp[] >> rename1 `INR exc` >>
          qspecl_then [`Value`, `INR exc`] mp_tac expr_exit_success_map >> simp[FUN_EQ_THM]) >>

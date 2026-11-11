@@ -344,7 +344,7 @@ Resume compile_for_range_frag[loop]:
        s.vs_inst_idx = 0 /\ ~s.vs_halted /\ stmt_state_rel ctx func cenv cx ee s /\
        (!x v. not_fresh_at sa x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\
        (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b))
-     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
+     (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)` by
     (qpat_x_assum `bc with <| ce_vars := _; ce_var_type := _; ce_dynarray_capacity := _ |> = cenv` kall_tac >>
      qpat_x_assum `cc = _` kall_tac >>
      qpat_x_assum `Abbrev (cc = _)` kall_tac >>

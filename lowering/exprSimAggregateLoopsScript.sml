@@ -110,7 +110,7 @@ Theorem aggregate_tuple_child_outcome[local]:
       vv_post ctx func ce cx e es sa sb s0 ee tv vv t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `expr_vv_sim ctx func ce cx (expr_type e) e es` by

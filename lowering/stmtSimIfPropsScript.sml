@@ -537,12 +537,12 @@ Theorem if_branch_outcome_cleanup:
   gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx ss)
     (es with scopes := FEMPTY :: es.scopes,s0)
     (stmt_post ctx func cx lctx cenv cenv' sa sb s0)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r) /\
   es.gas_obs = [] /\ ~s0.vs_halted ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (ignore_bind push_scope (finally (eval_stmts cx ss) pop_scope)) (es,s0)
     (stmt_post ctx func cx lctx cenv cenv sa sb s0)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
   >- (rename1 `gas_marked_exec _ _ _ _ marks res ee r` >>
@@ -627,7 +627,7 @@ Theorem if_branch_outcome:
   gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx ss)
     (es with scopes := FEMPTY :: es.scopes,s0)
     (stmt_post ctx func cx lctx cenv cenv' sa last s0)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r) /\
   es.gas_obs = [] /\ ~s0.vs_halted /\
   (~block_is_terminated last ==>
     emit_inst JMP [Label xl] [] last = ((),after) /\
@@ -636,7 +636,7 @@ Theorem if_branch_outcome:
   gas_outcome F (cx_tops cx) (ctx,func)
     (ignore_bind push_scope (finally (eval_stmts cx ss) pop_scope)) (es,s0)
     (stmt_post ctx func cx lctx cenv cenv sa sb s0)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >> irule if_branch_outcome_to_exit >>
   qexistsl_tac [`after`, `last`, `xl`] >> simp[] >>
@@ -665,10 +665,10 @@ Theorem if_selected_outcome_prefix:
     (ignore_bind push_scope (finally (eval_stmts cx (if b then ss1 else ss2)) pop_scope))
     (mid with gas_obs := [],jump_to label t)
     (stmt_post ctx func cx lctx cenv cenv entry sb (jump_to label t))
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) ==>
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func) (eval_stmt cx (If c ss1 ss2)) (es,s0)
     (stmt_post ctx func cx lctx cenv cenv sa sb s0)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `gas_marked_exec F (ctx,func) (bind (eval_expr cx c) (read_result cx))
@@ -763,7 +763,7 @@ Theorem if_branch_outcome_cleanup_mem:
                FLOOKUP t.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb t /\ alloca_history func t /\
       s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r) /\
   es.gas_obs = [] /\ ~s0.vs_halted ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (ignore_bind push_scope (finally (eval_stmts cx ss) pop_scope)) (es,s0)
@@ -778,7 +778,7 @@ Theorem if_branch_outcome_cleanup_mem:
                FLOOKUP t.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb t /\ alloca_history func t /\
       s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
   >- (rename1 `gas_marked_exec _ _ _ _ marks res ee r` >>
@@ -928,7 +928,7 @@ Theorem if_branch_outcome_mem:
                FLOOKUP t.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' last t /\ alloca_history func t /\
       s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r) /\
   es.gas_obs = [] /\ ~s0.vs_halted /\
   last.cs_next_var <= sb.cs_next_var /\
   (~block_is_terminated last ==>
@@ -948,7 +948,7 @@ Theorem if_branch_outcome_mem:
                FLOOKUP t.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb t /\ alloca_history func t /\
       s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >> irule if_branch_outcome_to_exit_mem >>
   qexistsl_tac [`after`, `last`, `xl`] >> simp[] >>
@@ -1009,7 +1009,7 @@ Theorem if_selected_outcome_prefix_mem:
                FLOOKUP u.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb u /\ alloca_history func u /\
       (jump_to label t).vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) ==>
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r) ==>
   gas_outcome T (cx_tops cx) (ctx,func) (eval_stmt cx (If c ss1 ss2)) (es,s0)
     (\res ee u. ?cenv''.
       stmt_lands lctx sb res u /\ ~u.vs_halted /\
@@ -1022,7 +1022,7 @@ Theorem if_selected_outcome_prefix_mem:
                FLOOKUP u.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb u /\ alloca_history func u /\
       s0.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `gas_marked_exec T (ctx,func) (bind (eval_expr cx c) (read_result cx))

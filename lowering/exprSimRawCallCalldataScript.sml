@@ -4687,7 +4687,7 @@ Theorem calldata_call_normal[local]:
          es sa sb s0 ee tv vv t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   drule calldata_call_pre >> strip_tac >> gvs[] >>

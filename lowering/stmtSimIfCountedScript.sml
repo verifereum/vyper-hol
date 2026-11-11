@@ -53,7 +53,7 @@ Proof
       conj_tac
       >- (rewrite_tac[eval_stmt_if_forced] >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
-      disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+      disj2_tac >> fs[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   qexists_tac `marks` >> disj2_tac >>
   drule eval_stmt_if_condition_cert >> metis_tac[]
 QED
@@ -125,7 +125,7 @@ Resume compile_if_stmt_frag[selected_branch]:
      (ignore_bind push_scope (finally (eval_stmts cx (if b then ss1 else ss2)) pop_scope))
      (es_end with gas_obs := [], jump_to (if b then tl else el) t)
      (stmt_post ctx func cx lctx cenv cenv entry sb (jump_to (if b then tl else el) t))
-     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
+     (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)` by
     (irule if_branch_outcome >> simp[jump_to_def] >>
      qexistsl_tac [`after`, `FST (stmts_env cenv lctx ty (if b then ss1 else ss2) entry)`,
        `last`, `xl`] >> simp[] >>

@@ -86,7 +86,7 @@ Resume compile_annassign_stmt_frag_ptr[rhs]:
      ghost_inv d c cx ee G tn t /\ ptr_val_ok cx (expr_type e) v op G tn t /\
      (~is_word_type (expr_type e) ==> ptr_buf_ok c e op G t) /\
      ghost_kept c es sA G1 tn1 s1 G tn)
-   (\res ee gt r. expr_exit res r)` by
+   (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)` by
    (qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _` mp_tac >>
     simp[expr_sim_ptr_def] >> disch_then irule >> simp[] >>
     drule_all declare_local_ptr >> strip_tac >>

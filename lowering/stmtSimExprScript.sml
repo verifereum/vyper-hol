@@ -136,7 +136,7 @@ Proof
       qexistsl_tac [`INR y`, `es_end`, `r`] >>
       conj_tac
       >- (fs[gas_marked_exec_def] >> metis_tac[eval_expr_stmt_exception]) >>
-      disj2_tac >> simp[stmt_exit_def] >>
+      disj2_tac >> fs[stmt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists_tac `marks` >> disj2_tac >>
   metis_tac[expr_stmt_exempt]
