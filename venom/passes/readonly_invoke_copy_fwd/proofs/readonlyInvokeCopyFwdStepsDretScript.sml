@@ -132,3 +132,57 @@ Proof
   disch_then (qspecl_then [`cursor + n2w (venomLayout$ceil32 (w2n h1))`, `tail`] mp_tac) >>
   disch_then drule_all >> simp[]
 QED
+
+Theorem ricf_cert_common_fmp:
+  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t ==>
+  ricf_cert_core D ids stk PG
+    (ricf_effective_prov fn (s with vs_fmp := f) G0)
+    (ricf_effective_taint fn (s with vs_fmp := f) tn0) fn
+    sites maps targets G0 tn0 cur curs
+    (s with vs_fmp := f) (t with vs_fmp := f)
+Proof
+  simp[ricf_cert_core_def, ricf_live_boundary_core_def,
+    ricf_effective_prov_def, ricf_effective_taint_def] >> strip_tac >>
+  gvs[ricf_frame_agree_def, ricf_live_stack_agree_def,
+    ircf_dead_def, ricf_complete_params_def, ricf_cert_crosses_def,
+    ircf_cross_def, taint_agree_def, o1LowerDloadSharedTheory.ld_shared_agree_def,
+    merge_callee_state_def, EVERY_MEM] >>
+  gvs[venom_state_component_equality] >> metis_tac[]
+QED
+
+Theorem ricf_cert_dret:
+  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t /\
+  inst.inst_opcode = DRET /\ inst.inst_outputs = [] /\
+  parse_dret_shape inst = SOME (ordinary,dynamic) /\
+  eval_operands inst.inst_operands s = SOME vals /\
+  eval_operands inst.inst_operands t = SOME vals' /\
+  pair_dret_words (TAKE (2*dynamic) (DROP (1+ordinary) vals)) = SOME pairs /\
+  pair_dret_words (TAKE (2*dynamic) (DROP (1+ordinary) vals')) = SOME qs /\
+  TAKE ordinary (DROP 1 vals) = TAKE ordinary (DROP 1 vals') /\
+  ricf_pack_checks (ricf_pack_footprint sites maps stk cur curs)
+    s.vs_call_entry_fmp pairs qs tn0.t_mem s t /\
+  pack_dret_dynamic s.vs_call_entry_fmp pairs s = (ps,fc,u) /\
+  pack_dret_dynamic s.vs_call_entry_fmp qs t = (pt,gc,v) ==>
+  step_inst_base inst s = IntRet
+    <| iret_values := TAKE ordinary (DROP 1 vals) ++ ps;
+       iret_adopt_fmp := SOME fc |> (u with vs_fmp := fc) /\
+  step_inst_base inst t = IntRet
+    <| iret_values := TAKE ordinary (DROP 1 vals) ++ ps;
+       iret_adopt_fmp := SOME fc |> (v with vs_fmp := fc) /\
+  ricf_cert_core D ids stk PG
+    (ricf_effective_prov fn (u with vs_fmp := fc) G0)
+    (ricf_effective_taint fn (u with vs_fmp := fc)
+      (ricf_pack_taint s.vs_call_entry_fmp pairs tn0)) fn
+    sites maps targets G0 (ricf_pack_taint s.vs_call_entry_fmp pairs tn0)
+    cur curs (u with vs_fmp := fc) (v with vs_fmp := fc) /\
+  (u with vs_fmp := fc).vs_fmp = (v with vs_fmp := fc).vs_fmp
+Proof
+  strip_tac >>
+  `s.vs_call_entry_fmp = t.vs_call_entry_fmp` by
+    (fs[ricf_cert_core_def, ricf_live_boundary_core_def,
+        ricf_frame_agree_def, taint_agree_def,
+        venom_state_component_equality]) >>
+  drule_all ricf_cert_pack_dret_dynamic >> strip_tac >> gvs[] >>
+  simp[step_inst_base_DRET] >>
+  irule ricf_cert_common_fmp >> metis_tac[]
+QED
