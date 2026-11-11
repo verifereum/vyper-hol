@@ -6,6 +6,7 @@ Ancestors
 (* S1's local suffix post on the actual counted-path witness, not a separately
    chosen erased execution.  Only the administrative index is normalized. *)
 Theorem pop_framed_memory_live_vv_post:
+  expr_has_effect e /\
   expr_sim_inv cenv cx env es /\
   stmt_state_rel ctx func cenv cx es s0 /\
   stmt_state_rel ctx func cenv cx mid s /\
@@ -42,7 +43,9 @@ Theorem pop_framed_memory_live_vv_post:
   evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
   post_value_type cenv e = expr_type e /\
   eval_operand op t = SOME w /\
-  w2n w = w2n b+k+32+(LENGTH vs-1)*type_memory_size etv ==>
+  w2n w = w2n b+k+32+(LENGTH vs-1)*type_memory_size etv /\
+  local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv)
+    etv result ==>
   vv_post ctx func cenv cx e es sa sb s0 (mid with scopes := scopes') result
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) t
 Proof

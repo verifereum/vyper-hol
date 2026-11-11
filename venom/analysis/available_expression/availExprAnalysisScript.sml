@@ -6,4 +6,4 @@
 
 Theory availExprAnalysis
 Ancestors
-  availExprDefs availExprAnalysisProps
+  availExprDefs availExprProofs

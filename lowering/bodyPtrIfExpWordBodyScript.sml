@@ -124,6 +124,7 @@ Proof
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`cop`,`if sel then a else b`,`op`,`sc`,`se`,`sx`,`sy`,`sz`,`BoolV sel`] >>
   simp[] >> conj_tac >- (Cases_on `sel` >> simp[]) >>
+  conj_tac >- (Cases_on `sel` >> simp[]) >>
   irule ifexp_selected_body_word_outcome_ptr >>
   goal_assum (drule_at Any) >> simp[] >>
   simp[jump_to_def, ghost_inv_jump_to, stmt_state_rel_jump_to] >>

@@ -27,6 +27,27 @@ Proof
   metis_tac[]
 QED
 
+Theorem emit_copy_len_not_ambient_frag_ptr:
+  !G cx ctx PG R sa sb x out tn s a.
+    emit_op NOT [x] sa = (Var out,sb) /\
+    eval_operand x s = SOME a /\ op_taint tn x = {} ==>
+    ?Gf tnf sf.
+      frag_exec_ptr cx ctx PG sa sb
+        (\g t v. g = G /\ t = tn /\ v = s)
+        (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
+      lookup_var out sf = SOME (~a) /\ op_taint tnf (Var out) = {} /\
+      sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
+      sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\
+        FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  typedCopyAmbientLib.emit_not (copy_len_not_frag_ptr, copy_len_not_ghost_frame)
+QED
+
 Theorem emit_mload_clean_ambient_frag_ptr:
   !cx ctx PG R sa sb src out G tn s a.
     emit_op MLOAD [Var src] sa = (Var out,sb) /\
@@ -61,7 +82,7 @@ Theorem compile_bytestring_copy_len_ambient_frag_ptr:
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       eval_operand count_op sf =
-        SOME ((mload (w2n a) s + 31w && i2w (-32)) + 32w) /\
+        SOME ((mload (w2n a) s + 31w && ~31w) + 32w) /\
       op_taint tnf count_op = {} /\
       sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
       tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\

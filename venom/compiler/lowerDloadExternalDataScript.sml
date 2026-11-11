@@ -82,13 +82,14 @@ Proof
        simp[] >> disch_then drule >>
        simp[DISJ_IMP_THM, FORALL_AND_THM] >> strip_tac >>
        drule_at (Pat `step_inst _ _ _ _ = OK _`) ld_delegatecall_step_backward_extract >>
-       simp[] >>
+       simp[Excl "consume_call_outcome_eq"] >>
        disch_then (qspecl_then [`un`,`tn`,`s`] mp_tac) >>
        qpat_x_assum `!op. MEM op i.inst_operands /\ _ ==> _` kall_tac >>
-       fs[] >>
+       fs[Excl "consume_call_outcome_eq"] >>
        disch_then (qspec_then `CS` strip_assume_tac) >>
-       qpat_x_assum `_ ==> ?out w rS rT v rr. _` mp_tac >>
-       gvs[] >> strip_tac >> suspend "delegate_shared") >>
+       qpat_x_assum `_ ==> ?out w rS rT. _` mp_tac >>
+       gvs[Excl "consume_call_outcome_eq"] >> strip_tac >>
+       suspend "delegate_shared") >>
   Cases_on `i.inst_opcode = CREATE`
   >- (`?v off sz. i.inst_operands = [v;off;sz]` by
         (qpat_x_assum `inst_wf i` mp_tac >>
@@ -191,38 +192,68 @@ Resume ld_normal_external_backward[call_shared]:
 QED
 
 Resume ld_normal_external_backward[delegate_shared]:
-  drule_all ld_delegate_extract_tainted_shared >> strip_tac >>
-  drule ld_extract_result_frame_fields >> strip_tac >>
-  rev_drule ld_extract_result_frame_fields >> strip_tac >>
-  drule ld_extract_result_vars >> disch_tac >>
-  rev_drule ld_extract_result_vars >> disch_tac >>
-  drule ld_extract_result_labels >> disch_tac >>
-  rev_drule ld_extract_result_labels >> disch_tac >>
-  drule ld_external_bind_tainted_shared >> strip_tac >>
-  qexists_tac `update_var out w rS` >>
-  conj_tac >- asm_rewrite_tac[] >>
-  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
-     (step_taint i s rS tn).t_mem (step_taint i t rT un).t_mem
-     (\a. read_memory a 1 rS) (\b. read_memory b 1 rT)` by
-    (drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-       ld_external_memory_preserved >>
-     disch_then drule >> disch_then drule >> simp[MEM] >>
-     disch_then (qspecl_then [`rT`,`rS`] mp_tac) >>
-     simp[mem_write_ops_def, source_memory_write_ranges_def] >>
-     disch_then irule >>
-     qpat_x_assum `!v'. _ ==> v' IN U` mp_tac >> simp[] >> metis_tac[]) >>
-  qpat_assum `!w out. ld_shared_state _ _ _ _`
-    (qspecl_then [`w`,`out`] assume_tac) >>
-  drule ld_shared_state_masks >> strip_tac >>
-  drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    ld_external_normal_reconstruct >>
-  asm_rewrite_tac[] >> disch_then irule >>
-  simp[MEM, update_var_def] >>
-  conj_tac
-  >- (qexistsl_tac [`rS`,`rT`,`w`] >> simp[update_var_def]) >>
-  qpat_x_assum `ld_byte_rel _ _ _ _ _` mp_tac >>
-  simp[step_taint_def, update_var_def, mem_taint_def, new_site_bytes_def,
-       step_writes_def, read_memory_def]
+  markerLib.RESUME_TAC >> (
+       `ld_shared_state (step_taint i s rS tn) (step_taint i t rT un) rS rT` by
+         (irule ld_delegate_consume_tainted_shared >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          reverse conj_tac >- first_assum ACCEPT_TAC >>
+          goal_assum (drule_at (Pat `consume_call_outcome _ _ _ _ = _`)) >>
+          goal_assum (drule_at (Pat `consume_call_outcome _ _ _ _ = _`)) >>
+          simp[venom_call_request_def, Excl "consume_call_outcome_eq"] >>
+          qpat_x_assum `read_memory _ _ s = _` mp_tac >>
+          asm_rewrite_tac[]) >>
+       drule ld_consume_call_frame_fields >> strip_tac >>
+       rev_drule ld_consume_call_frame_fields >> strip_tac >>
+       drule ld_external_bind_tainted_shared >> strip_tac >>
+       qexists_tac `update_var out w rS` >>
+       conj_tac >- asm_rewrite_tac[] >>
+       `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+          (step_taint i s rS tn).t_mem (step_taint i t rT un).t_mem
+          (\a. read_memory a 1 rS) (\b. read_memory b 1 rT)` by
+         (drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+            ld_external_memory_preserved >>
+          disch_then drule >> disch_then drule >>
+          simp[MEM] >>
+          disch_then (qspecl_then [`rT`,`rS`] mp_tac) >>
+          simp[mem_write_ops_def, source_memory_write_ranges_def,
+               Excl "consume_call_outcome_eq"] >>
+          disch_then irule >>
+          qpat_x_assum `!v'. _ ==> v' IN U` mp_tac >>
+          simp[] >> metis_tac[]) >>
+       drule ld_normal_data_companions >> strip_tac >>
+       drule ld_normal_data_frame >> disch_tac >>
+       drule ld_frame_data_shared >> disch_tac >>
+       `(!a. a <> rS.vs_call_ctx.cc_address ==>
+          (rS.vs_accounts a).storage = (rT.vs_accounts a).storage) /\
+        (!a. a <> rS.vs_call_ctx.cc_address ==>
+          rS.vs_transient a = rT.vs_transient a)` by
+         (irule ld_external_consume_noncurrent >>
+          goal_assum (drule_at Any) >>
+          pure_rewrite_tac [LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR] >>
+          simp[NoAsms, EXISTS_OR_THM, Excl "consume_call_outcome_eq",
+               Excl "consume_create_outcome_eq"] >>
+          disj1_tac >>
+          goal_assum (drule_at (Pat `consume_call_outcome _ _ _ _ = _`)) >>
+          goal_assum (drule_at (Pat `consume_call_outcome _ _ _ _ = _`)) >>
+          simp[venom_call_request_def, Excl "consume_call_outcome_eq"] >>
+          qpat_x_assum `read_memory _ _ s = _` mp_tac >>
+          asm_rewrite_tac[]) >>
+       drule ld_consume_call_vars >> disch_tac >>
+       rev_drule ld_consume_call_vars >> disch_tac >>
+       drule ld_consume_call_labels >> disch_tac >>
+       rev_drule ld_consume_call_labels >> disch_tac >>
+       qpat_assum `!w out. ld_shared_state _ _ _ _`
+         (qspecl_then [`w`,`out`] assume_tac) >>
+       drule ld_shared_state_masks >> strip_tac >>
+       drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+         ld_external_normal_reconstruct >>
+       asm_rewrite_tac[] >> disch_then irule >>
+       simp[MEM, update_var_def] >>
+       conj_tac
+       >- (qexistsl_tac [`rS`,`rT`,`w`] >> simp[update_var_def]) >>
+       qpat_x_assum `ld_byte_rel _ _ _ _ _` mp_tac >>
+       simp[step_taint_def, update_var_def, mem_taint_def, new_site_bytes_def,
+            step_writes_def, read_memory_def])
 QED
 
 Resume ld_normal_external_backward[create_shared]:

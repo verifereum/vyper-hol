@@ -239,7 +239,8 @@ Resume compile_bytestring_fields_frag_ptr[fields_elements]:
     (qpat_x_assum `!ft fv p. _ ==> _ ==> _ ==> !m.
        mem_agree_outside tn1.t_mem _ _ ==> _` (qspecl_then [`ft`, `fv`, `p`] mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >> (impl_tac >- decide_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >> simp[])) >> simp[]
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp_tac bool_ss [])) >>
+  simp_tac bool_ss []
 QED
 
 Finalise compile_bytestring_fields_frag_ptr

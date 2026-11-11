@@ -22,11 +22,12 @@ Proof
 QED
 
 Theorem load_contract_singleton_tenv:
-  load_contract NONE gobs am tx [(NONE,tops)] [] = INL (am',rqs) ==>
+  load_contract NONE gobs am tx [(NONE,tops)] [] = INL (am',rqs) /\
+  supported_program tops ==>
   get_tenv (initial_evaluation_context am'.sources am'.layouts tx NONE) =
     type_env tops
 Proof
-  strip_tac >> drule load_contract_sources_layouts >> strip_tac >>
+  strip_tac >> drule_all load_contract_sources_layouts >> strip_tac >>
   simp[get_tenv_def, initial_evaluation_context_def,
        type_env_all_modules_def, type_env_def,
        finite_mapTheory.FUNION_FEMPTY_2]
@@ -44,9 +45,12 @@ Proof
   rpt strip_tac >>
   `MEM (VariableDecl vis Immutable name ty slot) tops` by simp[] >>
   qpat_x_assum `tops = _` kall_tac >>
+  `supported_program tops` by
+    (qpat_x_assum `deploy_source_ok _ _ _` mp_tac >>
+     simp[deploy_source_ok_def]) >>
   `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
     metis_tac[deploy_source_ok_def, deploy_typing_ok_def] >>
-  drule load_contract_sources_layouts >> strip_tac >>
+  drule_all load_contract_sources_layouts >> strip_tac >>
   `FLOOKUP art.cta_bare_globals (NONE,name) = SOME ty` by
     (irule checked_singleton_immutable_lookup >>
      qexistsl [`am.layouts`, `slot`, `tops`, `tx`, `vis`] >> simp[]) >>
@@ -56,7 +60,7 @@ Proof
     (irule load_contract_establishes_immutables_ready >>
      qexistsl [`am`, `tx`, `[]`, `gobs`, `[(NONE,tops)]`, `NONE`, `rqs`] >>
      gvs[]) >>
-  drule load_contract_singleton_tenv >> strip_tac >>
+  drule_all load_contract_singleton_tenv >> strip_tac >>
   qpat_x_assum `immutables_ready _ _ _ _` mp_tac >>
   simp[immutables_ready_def] >> strip_tac >>
   qpat_x_assum `!src id ty tv v. _` mp_tac >>

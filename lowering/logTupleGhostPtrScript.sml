@@ -74,8 +74,7 @@ Theorem ghost_kept_footprint_transport:
     (!n b sz'. local_region ce es.scopes s0 n b sz' ==>
       off+sz <= b \/ b+sz' <= off) /\ off <= i /\ i < off+sz ==>
     abi_footprint_disjoint i 1 fp) /\
-  (!n b sz i. local_region ce es.scopes s0 n b sz /\ b <= i /\ i < b+sz /\
-    (!k. dynarray_len_at ce n k ==> i < b+k \/ b+k+32 <= i) ==>
+  (!n b sz i. local_region ce es.scopes s0 n b sz /\ b <= i /\ i < b+sz ==>
     abi_footprint_disjoint i 1 fp) ==>
   ghost_kept ce es se G0 tn0 s0 H tm
 Proof

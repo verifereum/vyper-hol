@@ -73,7 +73,7 @@ Resume compile_uint2str_counted_ptr[post]:
    b+n-LENGTH (num_to_dec_string X) +
      val_footprint (BaseTV (StringT cap)) (StringV (num_to_dec_string X)) <= b+(sz+n)`
     by decide_tac >>
-  `wb_frame cenv es es sa s t` by
+  `wb_frame cenv es es sa s t /\ pure_frame cenv fn es sa s t` by
     (qpat_x_assum `!out. u2s_safe _ _ _ _ _ _ _ _ _ _ _ out ==> _`
        (qspec_then `t` mp_tac) >> simp[]) >>
   `inst.inst_id = sa.cs_next_id` by simp[mk_inst_def] >>

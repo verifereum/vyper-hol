@@ -11,7 +11,7 @@ Theory fnPlanLineageJoin
 Ancestors
   fnPlanPrefix fnLineageInv fnPlanLineage stackPlanGen stackPlanTypes livenessDefs dfgDefs cfgDefs
   cfgAnalysisProps venomWf venomInst list rich_list simplifyCfgDefs
-  livenessConvergenceProofs livenessBlockProofs livenessTransferProofs
+  livenessConvergenceProofs livenessBlockProofs livenessTransferProofs cfgCorrectnessProof dfHelperProofs
 
 Theorem lineage_state_cfg_path:
   !lv dfg cfg fn ps0 lbl ps.

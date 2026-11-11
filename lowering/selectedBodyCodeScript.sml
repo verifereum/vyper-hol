@@ -73,7 +73,7 @@ Theorem source_selected_body_code:
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
   fn_entry_label efn = SOME elbl /\
   set_external_package_target rpolicy.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,lookup_raw_return_or_F (NONE:num option) name External tops,
        name,args,([] : expr list),ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) ==>

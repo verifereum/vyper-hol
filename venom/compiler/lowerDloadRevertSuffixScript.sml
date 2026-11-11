@@ -283,12 +283,11 @@ Theorem ld_step_back_assign_support:
   EVERY (\v. MEM v used) (venomInst$operand_vars [y])
 Proof
   Cases_on `x` >>
-  simp[step_back_assign_def, venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def, dfgDefsTheory.operand_var_def, dfgDefsTheory.operand_vars_def,
+  simp[step_back_assign_def, venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
        inst_ir_vars_def, inst_uses_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   Cases_on `i.inst_operands` >>
-  gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
-      dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def]
+  gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]
 QED
 
 Theorem ld_reserved_not_fresh[local]:
@@ -386,7 +385,7 @@ Proof
           disch_then irule >> simp[] >>
           Cases_on `h.inst_operands` >>
           gvs[inst_ir_vars_def, inst_uses_def,
-              venomInstTheory.operand_vars_def, dfgDefsTheory.operand_vars_def]) >>
+              venomInstTheory.operand_vars_def]) >>
       simp[]) >>
   simp[] >> first_x_assum (qspecl_then [`Var s`, `used`] mp_tac) >>
   disch_then irule >> simp[]

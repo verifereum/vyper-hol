@@ -40,10 +40,6 @@ exit-block, whole-stack, dominance/derived-variable whitelist, and whole-functio
 capture restrictions are gone. `analyze_fmp_reclaims_target_checked` exposes
 the resulting current-state certificate, not an operational safety claim.
 
-The probe theories `fmpIndexedProbe` and `fmpReclaimProbe`, which evaluated
-the production step on reference cases, have been deleted. Nothing in the tree
-checks those cases now.
-
 ## Limits
 
 The static projection ordering limits documented in `fmpAliasInterface.md`

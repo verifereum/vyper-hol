@@ -35,8 +35,9 @@ Ancestors
      bodyPtrPopLengthGuard, bodyPtrPopMemoryStore, bodyPtrPopLengthStore,
      bodyPtrPopInteriorPointer, bodyPtrPopLiveElement (listed at
      bodyPtrPopSeamLocalRoot's pop_local_root_vv_ptr).
-   - The new length word is a dynarray_len_at offset of the local, which
-     ghost_kept exempts. *)
+   - The new length word is a dynarray_len_at offset of the local; the
+     pop stores an untainted word there, so ghost_kept's taint frame over
+     the whole local region still holds. *)
 Theorem pop_nested_local_live_vv_ptr:
   !tops ctx cenv cx env ann bt id ty es d PG func.
     body_inv tops ctx cenv cx /\

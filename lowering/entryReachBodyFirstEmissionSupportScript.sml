@@ -256,7 +256,11 @@ Proof
   measureInduct_on `base_assignment_target_size tgt` >>
   Cases_on `tgt` >> simp_tac (srw_ss()) [compile_get_target_ptr_def]
   >- (rpt CASE_TAC >> metis_tac[first_emission_return])
-  >- (rpt CASE_TAC >> metis_tac[first_emission_return])
+  >- (rpt gen_tac >> simp_tac std_ss [LET_THM] >>
+      Cases_on `FLOOKUP ce.ce_module_vars p`
+      >- (simp_tac (srw_ss()) [] >> metis_tac[first_emission_return]) >>
+      rename1 `SOME loc` >> Cases_on `loc` >>
+      simp_tac (srw_ss()) [] >> metis_tac[first_emission_return])
   >- (ho_match_mp_tac first_emission_bind >> conj_tac
       >- (first_x_assum (qspec_then `b` mp_tac) >> simp[]) >>
       gen_tac >> rename1 `FST result` >> PairCases_on `result` >>

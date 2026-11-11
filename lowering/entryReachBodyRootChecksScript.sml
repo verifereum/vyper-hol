@@ -17,7 +17,7 @@ Theorem entry_reaches_checks_root:
       SOME (mut, F, args, [], ret, fbody) ==>
     ?rr lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st st' func s0.
       set_external_package_target rpolicy.rpol_target
-        (package_external_fn tops F (assign_nkeys tops 0)
+        (package_external_fn tops T (K global_nonreentrant_slot)
            (mut, F, rr, tx.function_name, args, ([] : expr list), ret, fbody)) =
         (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody, rt) /\
       compile_entry_checks min_cds is_payable st = ((), st') /\

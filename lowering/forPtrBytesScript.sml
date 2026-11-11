@@ -72,17 +72,54 @@ Proof
   irule (cj 5 copy_len_binop_ghost_frame) >> simp[])
 QED
 
+Theorem for_copy_len_not_endpoint:
+  eval_operand x s = SOME a /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx ==>
+  ?u g t.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id NOT [x] [tmp]] (s with vs_inst_idx := k) g t) /\
+    step_inst_base (mk_inst id NOT [x] [tmp]) s = OK u /\
+    run_inst_seq [mk_inst id NOT [x] [tmp]] s = OK u /\
+    lookup_var tmp u = SOME (~a) /\ op_taint t (Var tmp) = {} /\
+    u.vs_memory = s.vs_memory /\ t.t_mem = tn.t_mem /\
+    t.t_stor = tn.t_stor /\ t.t_trans = tn.t_trans /\
+    (!p. p <> tmp ==> lookup_var p u = lookup_var p s /\
+      FLOOKUP g p = FLOOKUP G p /\ op_taint t (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  qabbrev_tac `u = update_var tmp (~a) s` >>
+  qabbrev_tac `g = step_prov PG G (mk_inst id NOT [x] [tmp]) u` >>
+  qabbrev_tac `t = step_taint (mk_inst id NOT [x] [tmp]) s u tn` >>
+  `step_inst_base (mk_inst id NOT [x] [tmp]) s = OK u` by
+    (simp[Abbr `u`] >> irule emitHelperPropsTheory.step_NOT >> simp[]) >>
+  `~is_terminator (mk_inst id NOT [x] [tmp]).inst_opcode` by
+    simp[mk_inst_def, is_terminator_def] >>
+  qexistsl [`u`, `g`, `t`] >> conj_tac
+  >- (gen_tac >> simp[inst_seq_ptr_def, step_inst_inst_idx_indep,
+                      exec_result_map_def, Abbr `g`, Abbr `t`] >>
+      irule ptr_inst_ok_copy_len_not >> simp[]) >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[run_inst_seq_def] >>
+  `op_taint t (Var tmp) = {} /\ t.t_mem = tn.t_mem /\
+   t.t_stor = tn.t_stor /\ t.t_trans = tn.t_trans /\
+   (!p. p <> tmp ==> FLOOKUP g p = FLOOKUP G p /\
+      op_taint t (Var p) = op_taint tn (Var p))` by
+    simp[Abbr `g`, Abbr `t`, Abbr `u`, copy_len_not_ghost_frame] >>
+  simp[Abbr `u`, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
 Theorem for_bytes_copy_code:
   compile_store_bytestring src dst sa = ((),sb) ==>
-  ?t0 t1 t2 t3.
+  ?t0 m t1 t2 t3.
     emitted_insts sa sb =
       [mk_inst sa.cs_next_id MLOAD [src] [t0];
-       mk_inst (sa.cs_next_id+1) ADD [Var t0; Lit 31w] [t1];
-       mk_inst (sa.cs_next_id+2) AND [Var t1; Lit (i2w (-32))] [t2];
-       mk_inst (sa.cs_next_id+3) ADD [Var t2; Lit 32w] [t3];
-       mk_inst (sa.cs_next_id+4) MCOPY [dst; src; Var t3] []] /\
-    ALL_DISTINCT [t0;t1;t2;t3] /\
-    (!p. not_fresh_at sa p ==> p <> t0 /\ p <> t1 /\ p <> t2 /\ p <> t3)
+       mk_inst (sa.cs_next_id+1) NOT [Lit 31w] [m];
+       mk_inst (sa.cs_next_id+2) ADD [Var t0; Lit 31w] [t1];
+       mk_inst (sa.cs_next_id+3) AND [Var t1; Var m] [t2];
+       mk_inst (sa.cs_next_id+4) ADD [Var t2; Lit 32w] [t3];
+       mk_inst (sa.cs_next_id+5) MCOPY [dst; src; Var t3] []] /\
+    ALL_DISTINCT [t0;m;t1;t2;t3] /\
+    (!p. not_fresh_at sa p ==>
+      p <> t0 /\ p <> m /\ p <> t1 /\ p <> t2 /\ p <> t3)
 Proof
   simp[compile_store_bytestring_def, compile_bytestring_copy_len_def,
        emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
@@ -90,9 +127,11 @@ Proof
   gvs[] >> qexistsl [`"%" ++ toString sa.cs_next_var`,
     `"%" ++ toString (sa.cs_next_var+1)`,
     `"%" ++ toString (sa.cs_next_var+2)`,
-    `"%" ++ toString (sa.cs_next_var+3)`] >>
+    `"%" ++ toString (sa.cs_next_var+3)`,
+    `"%" ++ toString (sa.cs_next_var+4)`] >>
   simp[emitted_insts_def, DROP_LENGTH_APPEND, not_fresh_at_def] >>
-  metis_tac[LESS_EQ_REFL, DECIDE ``!n:num. n <= n+1 /\ n <= n+2 /\ n <= n+3``]
+  metis_tac[LESS_EQ_REFL,
+    DECIDE ``!n:num. n <= n+1 /\ n <= n+2 /\ n <= n+3 /\ n <= n+4``]
 QED
 
 Theorem for_copy_len_binop_covers:
@@ -113,61 +152,69 @@ QED
 
 Theorem for_bytes_copy_steps:
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
-  dst <> t0 /\ dst <> t1 /\ dst <> t2 /\ dst <> t3 /\
-  src <> t0 /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
+  dst <> t0 /\ dst <> m /\ dst <> t1 /\ dst <> t2 /\ dst <> t3 /\
+  src <> t0 /\ src <> m /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
+  t0 <> m /\ m <> t1 /\
   u0 = update_var t0 (mload (w2n a) s) s /\
-  u1 = update_var t1 (mload (w2n a) s + 31w) u0 /\
-  u2 = update_var t2 ((mload (w2n a) s + 31w) && i2w (-32)) u1 /\
-  u3 = update_var t3 (((mload (w2n a) s + 31w) && i2w (-32)) + 32w) u2 ==>
+  um = update_var m (~31w) u0 /\
+  u1 = update_var t1 (mload (w2n a) s + 31w) um /\
+  u2 = update_var t2 ((mload (w2n a) s + 31w) && ~31w) u1 /\
+  u3 = update_var t3 (((mload (w2n a) s + 31w) && ~31w) + 32w) u2 ==>
   step_inst_base (mk_inst id MLOAD [Var src] [t0]) s = OK u0 /\
-  step_inst_base (mk_inst (id+1) ADD [Var t0; Lit 31w] [t1]) u0 = OK u1 /\
-  step_inst_base (mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2]) u1 = OK u2 /\
-  step_inst_base (mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]) u2 = OK u3 /\
-  step_inst_base (mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []) u3 =
+  step_inst_base (mk_inst (id+1) NOT [Lit 31w] [m]) u0 = OK um /\
+  step_inst_base (mk_inst (id+2) ADD [Var t0; Lit 31w] [t1]) um = OK u1 /\
+  step_inst_base (mk_inst (id+3) AND [Var t1; Var m] [t2]) u1 = OK u2 /\
+  step_inst_base (mk_inst (id+4) ADD [Var t2; Lit 32w] [t3]) u2 = OK u3 /\
+  step_inst_base (mk_inst (id+5) MCOPY [Var dst; Var src; Var t3] []) u3 =
     OK (mcopy (w2n b) (w2n a)
-      (w2n (((mload (w2n a) s + 31w) && i2w (-32)) + 32w)) u3)
+      (w2n (((mload (w2n a) s + 31w) && ~31w) + 32w)) u3)
 Proof
   strip_tac >>
-  `eval_operand (Var t0) u0 = SOME (mload (w2n a) s) /\
+  `eval_operand (Var t0) um = SOME (mload (w2n a) s) /\
+   eval_operand (Var m) u1 = SOME (~31w) /\
    eval_operand (Var t1) u1 = SOME (mload (w2n a) s + 31w) /\
-   eval_operand (Var t2) u2 = SOME ((mload (w2n a) s + 31w) && i2w (-32)) /\
-   eval_operand (Var t3) u3 = SOME (((mload (w2n a) s + 31w) && i2w (-32)) + 32w) /\
+   eval_operand (Var t2) u2 = SOME ((mload (w2n a) s + 31w) && ~31w) /\
+   eval_operand (Var t3) u3 = SOME (((mload (w2n a) s + 31w) && ~31w) + 32w) /\
    eval_operand (Var src) u3 = SOME a /\ eval_operand (Var dst) u3 = SOME b` by
     (simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
      gvs[lookup_var_def]) >>
   rpt conj_tac >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
-  simp[exec_read1_def, exec_pure2_def, eval_operand_def] >>
+  simp[exec_read1_def, exec_pure1_def, exec_pure2_def, eval_operand_def] >>
   gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem for_bytes_copy_run:
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
-  dst <> t0 /\ dst <> t1 /\ dst <> t2 /\ dst <> t3 /\
-  src <> t0 /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
+  dst <> t0 /\ dst <> m /\ dst <> t1 /\ dst <> t2 /\ dst <> t3 /\
+  src <> t0 /\ src <> m /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
+  t0 <> m /\ m <> t1 /\
   u0 = update_var t0 (mload (w2n a) s) s /\
-  u1 = update_var t1 (mload (w2n a) s + 31w) u0 /\
-  u2 = update_var t2 ((mload (w2n a) s + 31w) && i2w (-32)) u1 /\
-  u3 = update_var t3 (((mload (w2n a) s + 31w) && i2w (-32)) + 32w) u2 ==>
+  um = update_var m (~31w) u0 /\
+  u1 = update_var t1 (mload (w2n a) s + 31w) um /\
+  u2 = update_var t2 ((mload (w2n a) s + 31w) && ~31w) u1 /\
+  u3 = update_var t3 (((mload (w2n a) s + 31w) && ~31w) + 32w) u2 ==>
   run_inst_seq
     [mk_inst id MLOAD [Var src] [t0];
-     mk_inst (id+1) ADD [Var t0; Lit 31w] [t1];
-     mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2];
-     mk_inst (id+3) ADD [Var t2; Lit 32w] [t3];
-     mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []] s =
+     mk_inst (id+1) NOT [Lit 31w] [m];
+     mk_inst (id+2) ADD [Var t0; Lit 31w] [t1];
+     mk_inst (id+3) AND [Var t1; Var m] [t2];
+     mk_inst (id+4) ADD [Var t2; Lit 32w] [t3];
+     mk_inst (id+5) MCOPY [Var dst; Var src; Var t3] []] s =
     OK (mcopy (w2n b) (w2n a)
-      (w2n (((mload (w2n a) s + 31w) && i2w (-32)) + 32w)) u3)
+      (w2n (((mload (w2n a) s + 31w) && ~31w) + 32w)) u3)
 Proof
   strip_tac >>
   `step_inst_base (mk_inst id MLOAD [Var src] [t0]) s = OK u0 /\
-   step_inst_base (mk_inst (id+1) ADD [Var t0; Lit 31w] [t1]) u0 = OK u1 /\
-   step_inst_base (mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2]) u1 = OK u2 /\
-   step_inst_base (mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]) u2 = OK u3 /\
-   step_inst_base (mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []) u3 =
+   step_inst_base (mk_inst (id+1) NOT [Lit 31w] [m]) u0 = OK um /\
+   step_inst_base (mk_inst (id+2) ADD [Var t0; Lit 31w] [t1]) um = OK u1 /\
+   step_inst_base (mk_inst (id+3) AND [Var t1; Var m] [t2]) u1 = OK u2 /\
+   step_inst_base (mk_inst (id+4) ADD [Var t2; Lit 32w] [t3]) u2 = OK u3 /\
+   step_inst_base (mk_inst (id+5) MCOPY [Var dst; Var src; Var t3] []) u3 =
      OK (mcopy (w2n b) (w2n a)
-       (w2n (((mload (w2n a) s + 31w) && i2w (-32)) + 32w)) u3)` by
+       (w2n (((mload (w2n a) s + 31w) && ~31w) + 32w)) u3)` by
     (irule for_bytes_copy_steps >> simp[]) >>
   map_every (fn pat => qpat_x_assum pat kall_tac)
-    [`u0 = _`, `u1 = _`, `u2 = _`, `u3 = _`] >>
+    [`u0 = _`, `um = _`, `u1 = _`, `u2 = _`, `u3 = _`] >>
   simp[run_inst_seq_def]
 QED
 
@@ -236,15 +283,16 @@ QED
 
 Theorem for_copy_len_last_two:
   lookup_var p s = SOME w /\ op_taint tn (Var p) = {} /\
+  lookup_var m s = SOME mv /\ op_taint tn (Var m) = {} /\
   ~ctx_has_dalloca ctx ==>
   ?sf gf tf.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn
-      [mk_inst id AND [Var p; Lit (i2w (-32))] [q];
+      [mk_inst id AND [Var p; Var m] [q];
        mk_inst (id+1) ADD [Var q; Lit 32w] [r]]
       (s with vs_inst_idx := k) gf tf) /\
-    run_inst_seq [mk_inst id AND [Var p; Lit (i2w (-32))] [q];
+    run_inst_seq [mk_inst id AND [Var p; Var m] [q];
        mk_inst (id+1) ADD [Var q; Lit 32w] [r]] s = OK sf /\
-    lookup_var r sf = SOME ((w && i2w (-32)) + 32w) /\
+    lookup_var r sf = SOME ((w && mv) + 32w) /\
     op_taint tf (Var r) = {} /\ sf.vs_memory = s.vs_memory /\
     tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
     (!x. x <> q /\ x <> r ==> lookup_var x sf = lookup_var x s /\
@@ -253,10 +301,10 @@ Proof
   strip_tac >>
   `?u g t.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn
-      [mk_inst id AND [Var p; Lit (i2w (-32))] [q]] (s with vs_inst_idx := k) g t) /\
-    step_inst_base (mk_inst id AND [Var p; Lit (i2w (-32))] [q]) s = OK u /\
-    run_inst_seq [mk_inst id AND [Var p; Lit (i2w (-32))] [q]] s = OK u /\
-    lookup_var q u = SOME (w && i2w (-32)) /\ op_taint t (Var q) = {} /\
+      [mk_inst id AND [Var p; Var m] [q]] (s with vs_inst_idx := k) g t) /\
+    step_inst_base (mk_inst id AND [Var p; Var m] [q]) s = OK u /\
+    run_inst_seq [mk_inst id AND [Var p; Var m] [q]] s = OK u /\
+    lookup_var q u = SOME (w && mv) /\ op_taint t (Var q) = {} /\
     u.vs_memory = s.vs_memory /\ t.t_mem = tn.t_mem /\
     t.t_stor = tn.t_stor /\ t.t_trans = tn.t_trans /\
     (!x. x <> q ==> lookup_var x u = lookup_var x s /\
@@ -267,7 +315,7 @@ Proof
       [mk_inst (id+1) ADD [Var q; Lit 32w] [r]] (u with vs_inst_idx := k) gf tf) /\
     step_inst_base (mk_inst (id+1) ADD [Var q; Lit 32w] [r]) u = OK sf /\
     run_inst_seq [mk_inst (id+1) ADD [Var q; Lit 32w] [r]] u = OK sf /\
-    lookup_var r sf = SOME ((w && i2w (-32)) + 32w) /\ op_taint tf (Var r) = {} /\
+    lookup_var r sf = SOME ((w && mv) + 32w) /\ op_taint tf (Var r) = {} /\
     sf.vs_memory = u.vs_memory /\ tf.t_mem = t.t_mem /\
     tf.t_stor = t.t_stor /\ tf.t_trans = t.t_trans /\
     (!x. x <> r ==> lookup_var x sf = lookup_var x u /\
@@ -282,17 +330,18 @@ QED
 
 Theorem for_copy_len_suffix:
   lookup_var t0 s = SOME w /\ op_taint tn (Var t0) = {} /\
+  lookup_var m s = SOME mv /\ op_taint tn (Var m) = {} /\ m <> t1 /\
   ~ctx_has_dalloca ctx ==>
   ?sf gf tf.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst id ADD [Var t0; Lit 31w] [t1];
-       mk_inst (id+1) AND [Var t1; Lit (i2w (-32))] [t2];
+       mk_inst (id+1) AND [Var t1; Var m] [t2];
        mk_inst (id+2) ADD [Var t2; Lit 32w] [t3]]
       (s with vs_inst_idx := k) gf tf) /\
     run_inst_seq [mk_inst id ADD [Var t0; Lit 31w] [t1];
-       mk_inst (id+1) AND [Var t1; Lit (i2w (-32))] [t2];
+       mk_inst (id+1) AND [Var t1; Var m] [t2];
        mk_inst (id+2) ADD [Var t2; Lit 32w] [t3]] s = OK sf /\
-    lookup_var t3 sf = SOME (((w + 31w) && i2w (-32)) + 32w) /\
+    lookup_var t3 sf = SOME (((w + 31w) && mv) + 32w) /\
     op_taint tf (Var t3) = {} /\ sf.vs_memory = s.vs_memory /\
     tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
     (!p. p <> t1 /\ p <> t2 /\ p <> t3 ==> lookup_var p sf = lookup_var p s /\
@@ -310,13 +359,14 @@ Proof
     (!p. p <> t1 ==> lookup_var p u = lookup_var p s /\
       FLOOKUP g p = FLOOKUP G p /\ op_taint t (Var p) = op_taint tn (Var p))` by
     (irule for_copy_len_binop_endpoint >> simp[eval_operand_def, op_taint_def]) >>
+  `lookup_var m u = SOME mv /\ op_taint t (Var m) = {}` by metis_tac[] >>
   `?sf gf tf.
     (!k. inst_seq_ptr D 0 ctx fn PG g t
-      [mk_inst (id+1) AND [Var t1; Lit (i2w (-32))] [t2];
+      [mk_inst (id+1) AND [Var t1; Var m] [t2];
        mk_inst (id+2) ADD [Var t2; Lit 32w] [t3]] (u with vs_inst_idx := k) gf tf) /\
-    run_inst_seq [mk_inst (id+1) AND [Var t1; Lit (i2w (-32))] [t2];
+    run_inst_seq [mk_inst (id+1) AND [Var t1; Var m] [t2];
        mk_inst (id+2) ADD [Var t2; Lit 32w] [t3]] u = OK sf /\
-    lookup_var t3 sf = SOME (((w+31w) && i2w (-32)) + 32w) /\
+    lookup_var t3 sf = SOME (((w+31w) && mv) + 32w) /\
     op_taint tf (Var t3) = {} /\ sf.vs_memory = u.vs_memory /\
     tf.t_mem = t.t_mem /\ tf.t_stor = t.t_stor /\ tf.t_trans = t.t_trans /\
     (!p. p <> t2 /\ p <> t3 ==> lookup_var p sf = lookup_var p u /\
@@ -385,22 +435,24 @@ QED
 Theorem for_bytes_length_prefix:
   lookup_var src s = SOME a /\ ptr_covers G tn src s 32 /\
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
-  ~ctx_has_dalloca ctx ==>
+  ~ctx_has_dalloca ctx /\ t0 <> m /\ m <> t1 ==>
   ?sf gf tf.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst id MLOAD [Var src] [t0];
-       mk_inst (id+1) ADD [Var t0; Lit 31w] [t1];
-       mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2];
-       mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]]
+       mk_inst (id+1) NOT [Lit 31w] [m];
+       mk_inst (id+2) ADD [Var t0; Lit 31w] [t1];
+       mk_inst (id+3) AND [Var t1; Var m] [t2];
+       mk_inst (id+4) ADD [Var t2; Lit 32w] [t3]]
       (s with vs_inst_idx := k) gf tf) /\
     run_inst_seq [mk_inst id MLOAD [Var src] [t0];
-       mk_inst (id+1) ADD [Var t0; Lit 31w] [t1];
-       mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2];
-       mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]] s = OK sf /\
-    lookup_var t3 sf = SOME (((mload (w2n a) s + 31w) && i2w (-32)) + 32w) /\
+       mk_inst (id+1) NOT [Lit 31w] [m];
+       mk_inst (id+2) ADD [Var t0; Lit 31w] [t1];
+       mk_inst (id+3) AND [Var t1; Var m] [t2];
+       mk_inst (id+4) ADD [Var t2; Lit 32w] [t3]] s = OK sf /\
+    lookup_var t3 sf = SOME (((mload (w2n a) s + 31w) && ~31w) + 32w) /\
     op_taint tf (Var t3) = {} /\ sf.vs_memory = s.vs_memory /\
     tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
-    (!p. p <> t0 /\ p <> t1 /\ p <> t2 /\ p <> t3 ==>
+    (!p. p <> t0 /\ p <> m /\ p <> t1 /\ p <> t2 /\ p <> t3 ==>
       lookup_var p sf = lookup_var p s /\ FLOOKUP gf p = FLOOKUP G p /\
       op_taint tf (Var p) = op_taint tn (Var p))
 Proof
@@ -415,26 +467,42 @@ Proof
     (!p. p <> t0 ==> lookup_var p u = lookup_var p s /\
       FLOOKUP g p = FLOOKUP G p /\ op_taint t (Var p) = op_taint tn (Var p))` by
     (irule for_copy_header_endpoint >> simp[]) >>
-  `?sf gf tf.
+  `?v gm tm.
     (!k. inst_seq_ptr D 0 ctx fn PG g t
-      [mk_inst (id+1) ADD [Var t0; Lit 31w] [t1];
-       mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2];
-       mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]] (u with vs_inst_idx := k) gf tf) /\
-    run_inst_seq [mk_inst (id+1) ADD [Var t0; Lit 31w] [t1];
-       mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2];
-       mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]] u = OK sf /\
-    lookup_var t3 sf = SOME (((mload (w2n a) s+31w) && i2w (-32)) + 32w) /\
-    op_taint tf (Var t3) = {} /\ sf.vs_memory = u.vs_memory /\
-    tf.t_mem = t.t_mem /\ tf.t_stor = t.t_stor /\ tf.t_trans = t.t_trans /\
-    (!p. p <> t1 /\ p <> t2 /\ p <> t3 ==> lookup_var p sf = lookup_var p u /\
-      FLOOKUP gf p = FLOOKUP g p /\ op_taint tf (Var p) = op_taint t (Var p))` by
+      [mk_inst (id+1) NOT [Lit 31w] [m]] (u with vs_inst_idx := k) gm tm) /\
+    step_inst_base (mk_inst (id+1) NOT [Lit 31w] [m]) u = OK v /\
+    run_inst_seq [mk_inst (id+1) NOT [Lit 31w] [m]] u = OK v /\
+    lookup_var m v = SOME (~31w) /\ op_taint tm (Var m) = {} /\
+    v.vs_memory = u.vs_memory /\ tm.t_mem = t.t_mem /\
+    tm.t_stor = t.t_stor /\ tm.t_trans = t.t_trans /\
+    (!p. p <> m ==> lookup_var p v = lookup_var p u /\
+      FLOOKUP gm p = FLOOKUP g p /\ op_taint tm (Var p) = op_taint t (Var p))` by
+    (irule for_copy_len_not_endpoint >> simp[eval_operand_def, op_taint_def]) >>
+  `lookup_var t0 v = SOME (mload (w2n a) s) /\ op_taint tm (Var t0) = {}` by
+    metis_tac[] >>
+  `?sf gf tf.
+    (!k. inst_seq_ptr D 0 ctx fn PG gm tm
+      [mk_inst (id+2) ADD [Var t0; Lit 31w] [t1];
+       mk_inst (id+3) AND [Var t1; Var m] [t2];
+       mk_inst (id+4) ADD [Var t2; Lit 32w] [t3]] (v with vs_inst_idx := k) gf tf) /\
+    run_inst_seq [mk_inst (id+2) ADD [Var t0; Lit 31w] [t1];
+       mk_inst (id+3) AND [Var t1; Var m] [t2];
+       mk_inst (id+4) ADD [Var t2; Lit 32w] [t3]] v = OK sf /\
+    lookup_var t3 sf = SOME (((mload (w2n a) s+31w) && ~31w) + 32w) /\
+    op_taint tf (Var t3) = {} /\ sf.vs_memory = v.vs_memory /\
+    tf.t_mem = tm.t_mem /\ tf.t_stor = tm.t_stor /\ tf.t_trans = tm.t_trans /\
+    (!p. p <> t1 /\ p <> t2 /\ p <> t3 ==> lookup_var p sf = lookup_var p v /\
+      FLOOKUP gf p = FLOOKUP gm p /\ op_taint tf (Var p) = op_taint tm (Var p))` by
     (irule (SRULE [GSYM ADD_ASSOC]
-      (Q.INST [`id` |-> `id+1`] (SPEC_ALL for_copy_len_suffix))) >> simp[]) >>
+      (Q.INST [`id` |-> `id+2`] (SPEC_ALL for_copy_len_suffix))) >> simp[]) >>
   qexistsl [`sf`, `gf`, `tf`] >> conj_tac
   >- (irule for_inst_seq_ptr_cons_nonterminator >>
       conj_tac >- simp[mk_inst_def, is_terminator_def] >>
-      qexistsl [`g`, `t`, `u`] >> simp[]) >>
-  simp[Once run_inst_seq_def] >> metis_tac[]
+      qexistsl [`g`, `t`, `u`] >> simp[] >>
+      irule for_inst_seq_ptr_cons_nonterminator >>
+      conj_tac >- simp[mk_inst_def, is_terminator_def] >>
+      qexistsl [`gm`, `tm`, `v`] >> simp[]) >>
+  simp[Once run_inst_seq_def] >> simp[Once run_inst_seq_def] >> metis_tac[]
 QED
 
 Theorem for_ptr_covers_transport:
@@ -447,7 +515,7 @@ QED
 
 Theorem for_bytes_runtime_extent:
   len <= cap /\ 32 + 32 * word_size cap < dimword (:256) ==>
-  w2n ((((n2w len:bytes32) + 31w) && i2w (-32)) + 32w) =
+  w2n ((((n2w len:bytes32) + 31w) && ~31w) + 32w) =
     32 + 32 * word_size len /\
   32 + 32 * word_size len <= 32 + 32 * word_size cap /\
   32 + 32 * word_size len < dimword (:256)
@@ -461,14 +529,16 @@ QED
 
 Theorem for_bytes_copy_endpoint:
   pre = [mk_inst id MLOAD [Var src] [t0];
-         mk_inst (id+1) ADD [Var t0; Lit 31w] [t1];
-         mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2];
-         mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]] /\
-  n = (((mload (w2n a) s + 31w) && i2w (-32)) + 32w) /\
+         mk_inst (id+1) NOT [Lit 31w] [m];
+         mk_inst (id+2) ADD [Var t0; Lit 31w] [t1];
+         mk_inst (id+3) AND [Var t1; Var m] [t2];
+         mk_inst (id+4) ADD [Var t2; Lit 32w] [t3]] /\
+  n = (((mload (w2n a) s + 31w) && ~31w) + 32w) /\
   32 <= w2n n /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
-  src <> t0 /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
-  dst <> t0 /\ dst <> t1 /\ dst <> t2 /\ dst <> t3 /\
+  src <> t0 /\ src <> m /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
+  dst <> t0 /\ dst <> m /\ dst <> t1 /\ dst <> t2 /\ dst <> t3 /\
+  t0 <> m /\ m <> t1 /\
   ptr_covers G tn src s (w2n n) /\ ptr_covers G tn dst s (w2n n) /\
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
   ~ctx_has_dalloca ctx /\ val_wf tv v /\ val_footprint tv v <= w2n n /\
@@ -476,13 +546,13 @@ Theorem for_bytes_copy_endpoint:
     val_in_memory tv v (w2n a) m) ==>
   ?sf gf tf.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn
-      (pre ++ [mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []])
+      (pre ++ [mk_inst (id+5) MCOPY [Var dst; Var src; Var t3] []])
       (s with vs_inst_idx := k) gf tf) /\
-    run_inst_seq (pre ++ [mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []]) s = OK sf /\
+    run_inst_seq (pre ++ [mk_inst (id+5) MCOPY [Var dst; Var src; Var t3] []]) s = OK sf /\
     mem_agree_outside {i | w2n b <= i /\ i < w2n b + w2n n}
       sf.vs_memory s.vs_memory /\
     tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
-    (!p. p <> t0 /\ p <> t1 /\ p <> t2 /\ p <> t3 ==>
+    (!p. p <> t0 /\ p <> m /\ p <> t1 /\ p <> t2 /\ p <> t3 ==>
       lookup_var p sf = lookup_var p s /\ FLOOKUP gf p = FLOOKUP G p /\
       op_taint tf (Var p) = op_taint tn (Var p)) /\
     (!m. mem_agree_outside tf.t_mem sf.vs_memory m ==>
@@ -497,17 +567,17 @@ Proof
     (simp[] >> conj_tac >> gvs[ptr_covers_def] >> metis_tac[]) >>
   `?tfinal sfinal.
     inst_seq_ptr D 0 ctx fn PG gf tf
-      [mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []] sf gf tfinal /\
-    run_inst_seq [mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []] sf = OK sfinal /\
+      [mk_inst (id+5) MCOPY [Var dst; Var src; Var t3] []] sf gf tfinal /\
+    run_inst_seq [mk_inst (id+5) MCOPY [Var dst; Var src; Var t3] []] sf = OK sfinal /\
     mem_agree_outside {i | w2n b <= i /\ i < w2n b+w2n n} sfinal.vs_memory sf.vs_memory /\
     tfinal.t_stor = tf.t_stor /\ tfinal.t_trans = tf.t_trans /\
     (!p. lookup_var p sfinal = lookup_var p sf /\ op_taint tfinal (Var p) = op_taint tf (Var p)) /\
     (!m. mem_agree_outside tfinal.t_mem sfinal.vs_memory m ==> val_in_memory tv v (w2n b) m)` by
     (irule for_bulk_copy_robust_checked >> simp[eval_operand_def] >> metis_tac[]) >>
   `!k. inst_seq_ptr D 0 ctx fn PG gf tf
-     [mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []]
+     [mk_inst (id+5) MCOPY [Var dst; Var src; Var t3] []]
      (sf with vs_inst_idx := k) gf tfinal` by
-    (`step_inst_base (mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []) sf =
+    (`step_inst_base (mk_inst (id+5) MCOPY [Var dst; Var src; Var t3] []) sf =
        OK (mcopy (w2n b) (w2n a) (w2n n) sf)` by
        (simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
      qpat_x_assum `step_inst_base _ sf = _` (fn th =>
@@ -521,7 +591,7 @@ Proof
       qexistsl [`gf`, `sf`, `tf`] >> simp[]) >>
   conj_tac
   >- (rev_drule run_inst_seq_append >>
-      disch_then (qspec_then `[mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []]` mp_tac) >>
+      disch_then (qspec_then `[mk_inst (id+5) MCOPY [Var dst; Var src; Var t3] []]` mp_tac) >>
       simp[]) >> gvs[]
 QED
 
@@ -572,18 +642,21 @@ Proof
   `32 + 32 * word_size cap < dimword (:256)` by metis_tac[] >>
   drule_all for_bytes_runtime_extent >> strip_tac >>
   drule for_bytes_copy_code >> strip_tac >>
-  `src <> t0 /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
-   dst <> t0 /\ dst <> t1 /\ dst <> t2 /\ dst <> t3` by metis_tac[] >>
+  `src <> t0 /\ src <> m /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
+   dst <> t0 /\ dst <> m /\ dst <> t1 /\ dst <> t2 /\ dst <> t3` by metis_tac[] >>
+  `t0 <> m /\ m <> t1` by fs[ALL_DISTINCT, MEM] >>
   qabbrev_tac `pre = [mk_inst sa.cs_next_id MLOAD [Var src] [t0];
-    mk_inst (sa.cs_next_id+1) ADD [Var t0; Lit 31w] [t1];
-    mk_inst (sa.cs_next_id+2) AND [Var t1; Lit (i2w (-32))] [t2];
-    mk_inst (sa.cs_next_id+3) ADD [Var t2; Lit 32w] [t3]]` >>
+    mk_inst (sa.cs_next_id+1) NOT [Lit 31w] [m];
+    mk_inst (sa.cs_next_id+2) ADD [Var t0; Lit 31w] [t1];
+    mk_inst (sa.cs_next_id+3) AND [Var t1; Var m] [t2];
+    mk_inst (sa.cs_next_id+4) ADD [Var t2; Lit 32w] [t3]]` >>
   `pre = [mk_inst sa.cs_next_id MLOAD [Var src] [t0];
-    mk_inst (sa.cs_next_id+1) ADD [Var t0; Lit 31w] [t1];
-    mk_inst (sa.cs_next_id+2) AND [Var t1; Lit (i2w (-32))] [t2];
-    mk_inst (sa.cs_next_id+3) ADD [Var t2; Lit 32w] [t3]]` by simp[Abbr `pre`] >>
-  qabbrev_tac `n = (((mload (w2n a) s + 31w) && i2w (-32)) + 32w)` >>
-  `n = (((mload (w2n a) s + 31w) && i2w (-32)) + 32w)` by simp[Abbr `n`] >>
+    mk_inst (sa.cs_next_id+1) NOT [Lit 31w] [m];
+    mk_inst (sa.cs_next_id+2) ADD [Var t0; Lit 31w] [t1];
+    mk_inst (sa.cs_next_id+3) AND [Var t1; Var m] [t2];
+    mk_inst (sa.cs_next_id+4) ADD [Var t2; Lit 32w] [t3]]` by simp[Abbr `pre`] >>
+  qabbrev_tac `n = (((mload (w2n a) s + 31w) && ~31w) + 32w)` >>
+  `n = (((mload (w2n a) s + 31w) && ~31w) + 32w)` by simp[Abbr `n`] >>
   `32 <= w2n n /\ w2n n <= type_memory_size tv /\ val_footprint tv v <= w2n n` by
     (gvs[Abbr `n`]) >>
   `ptr_covers G tn src s (w2n n) /\ ptr_covers G tn dst s (w2n n)` by

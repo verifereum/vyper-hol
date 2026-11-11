@@ -64,13 +64,40 @@ fun emit_mload (fragment, ghost_clean) =
        out_prov_def, step_taint_def, set_var_taint_def, mk_inst_def,
        op_taint_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE];
 
-fun copy_len (load, binop, extends_trans) =
+fun emit_not (fragment, ghost_frame) =
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id NOT [x] [out]] /\
+   (!p. not_fresh_at sa p ==> p <> out)` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  qabbrev_tac `t = update_var out (~a) s` >>
+  qabbrev_tac `Gf = step_prov PG G (mk_inst sa.cs_next_id NOT [x] [out]) t` >>
+  qabbrev_tac `tnf = step_taint (mk_inst sa.cs_next_id NOT [x] [out]) s t tn` >>
+  qexistsl_tac [`Gf`, `tnf`, `t with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  conj_tac >-
+    (irule fragment >> simp[mk_inst_def] >>
+     simp[Abbr `Gf`, Abbr `tnf`, Abbr `t`, mk_inst_def]) >>
+  `tnf.t_imm = tn.t_imm` by
+    (gvs[Abbr `tnf`, step_taint_def, set_var_taint_def,
+         adopt_reset_def, imm_taint_def, mk_inst_def]) >>
+  simp[Abbr `tnf`, Abbr `Gf`, Abbr `t`, ghost_frame,
+       lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> `p <> out` by metis_tac[] >>
+  simp[ghost_frame, lookup_var_def, update_var_def, FLOOKUP_UPDATE];
+
+fun copy_len (load, notop, binop, extends_trans) =
   rpt strip_tac >>
   qpat_x_assum `compile_bytestring_copy_len _ _ = _` mp_tac >>
   simp[contextTheory.compile_bytestring_copy_len_def, comp_bind_def] >>
-  ntac 3 (pairarg_tac >> simp[LET_THM, pairTheory.pair_case_def]) >>
+  ntac 4 (pairarg_tac >> simp[LET_THM, pairTheory.pair_case_def]) >>
   strip_tac >>
   `?v1. src_len = Var v1` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_return_def]) >>
+  `?vm. mask = Var vm` by
     (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
          fresh_id_def, emit_def, comp_return_def]) >>
   `?v2. padded_len = Var v2` by
@@ -84,31 +111,44 @@ fun copy_len (load, binop, extends_trans) =
          fresh_id_def, emit_def, comp_return_def]) >>
   gvs[] >>
   rename1 `emit_op MLOAD [Var src] sa = (Var v1,sc1)` >>
-  rename1 `emit_op ADD [Var v1; Lit 31w] sc1 = (Var v2,sc2)` >>
-  rename1 `emit_op AND [Var v2; Lit (i2w (-32))] sc2 = (Var v3,sc3)` >>
+  rename1 `emit_op NOT [Lit 31w] sc1 = (Var vm,scm)` >>
+  rename1 `emit_op ADD [Var v1; Lit 31w] scm = (Var v2,sc2)` >>
+  rename1 `emit_op AND [Var v2; Var vm] sc2 = (Var v3,sc3)` >>
+  `not_fresh_at sc1 v1 /\ not_fresh_at scm vm` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_return_def, not_fresh_at_def,
+         ASCIInumbersTheory.toString_11]) >>
   drule_all load >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G1` (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
-  `eval_operand (Var v1) s1 = SOME (mload (w2n a) s) /\
-   eval_operand (Lit 31w) s1 = SOME 31w /\ op_taint tn1 (Lit 31w) = {}` by
+  `eval_operand (Lit 31w) s1 = SOME 31w /\ op_taint tn1 (Lit 31w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
-  drule_all (SRULE [] (Q.SPECL [`ADD`, `word_add`] binop)) >>
+  drule_all notop >>
   disch_then (qspecl_then [`G1`, `cx`, `ctx`, `PG`, `R`]
+    (qx_choose_then `Gm` (qx_choose_then `tnm` (qx_choose_then `sm` strip_assume_tac)))) >>
+  `eval_operand (Var v1) sm = SOME (mload (w2n a) s) /\
+   op_taint tnm (Var v1) = {} /\
+   eval_operand (Lit 31w) sm = SOME 31w /\ op_taint tnm (Lit 31w) = {}` by
+    (qpat_assum `!p. not_fresh_at sc1 p ==> _` (qspec_then `v1` mp_tac) >>
+     simp[eval_operand_def, op_taint_def]) >>
+  drule_all (SRULE [] (Q.SPECL [`ADD`, `word_add`] binop)) >>
+  disch_then (qspecl_then [`Gm`, `cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G2` (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
   `eval_operand (Var v2) s2 = SOME (mload (w2n a) s + 31w) /\
-   eval_operand (Lit (i2w (-32))) s2 = SOME (i2w (-32)) /\
-   op_taint tn2 (Lit (i2w (-32))) = {}` by simp[eval_operand_def, op_taint_def] >>
+   eval_operand (Var vm) s2 = SOME (~31w) /\ op_taint tn2 (Var vm) = {}` by
+    (qpat_assum `!p. not_fresh_at scm p ==> _` (qspec_then `vm` mp_tac) >>
+     simp[eval_operand_def, op_taint_def]) >>
   drule_all (SRULE [] (Q.SPECL [`AND`, `word_and`] binop)) >>
   disch_then (qspecl_then [`G2`, `cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G3` (qx_choose_then `tn3` (qx_choose_then `s3` strip_assume_tac)))) >>
-  `eval_operand (Var v3) s3 = SOME (mload (w2n a) s + 31w && i2w (-32)) /\
+  `eval_operand (Var v3) s3 = SOME (mload (w2n a) s + 31w && ~31w) /\
    eval_operand (Lit 32w) s3 = SOME 32w /\ op_taint tn3 (Lit 32w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
   drule_all (SRULE [] (Q.SPECL [`ADD`, `word_add`] binop)) >>
   disch_then (qspecl_then [`G3`, `cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G4` (qx_choose_then `tn4` (qx_choose_then `s4` strip_assume_tac)))) >>
   qexistsl_tac [`G4`, `tn4`, `s4`] >>
-  `cs_extends sa sc1 /\ cs_extends sc1 sc2 /\
+  `cs_extends sa sc1 /\ cs_extends sc1 scm /\ cs_extends scm sc2 /\
    cs_extends sc2 sc3 /\ cs_extends sc3 sb` by
     (imp_res_tac exprLoweringPropsTheory.emit_op_extends >>
      fs[cs_extends_def, exprLoweringPropsTheory.same_blocks_def] >>
@@ -118,19 +158,24 @@ fun copy_len (load, binop, extends_trans) =
      qpat_assum `frag_exec_ptr _ _ _ sa sc1 _ _ _` (irule_at Any) >>
      simp[] >> conj_tac >- metis_tac[extends_trans] >>
      irule fragExecPtrTheory.frag_exec_ptr_seq >>
-     qpat_assum `frag_exec_ptr _ _ _ sc1 sc2 _ _ _` (irule_at Any) >>
+     qpat_assum `frag_exec_ptr _ _ _ sc1 scm _ _ _` (irule_at Any) >>
+     simp[] >> conj_tac >- metis_tac[extends_trans] >>
+     irule fragExecPtrTheory.frag_exec_ptr_seq >>
+     qpat_assum `frag_exec_ptr _ _ _ scm sc2 _ _ _` (irule_at Any) >>
      simp[] >> conj_tac >- metis_tac[extends_trans] >>
      irule fragExecPtrTheory.frag_exec_ptr_seq >>
      qpat_assum `frag_exec_ptr _ _ _ sc2 sc3 _ _ _` (irule_at Any) >> simp[]) >>
-  `!p. not_fresh_at sa p ==> not_fresh_at sc1 p /\
+  `!p. not_fresh_at sa p ==> not_fresh_at sc1 p /\ not_fresh_at scm p /\
        not_fresh_at sc2 p /\ not_fresh_at sc3 p` by
     (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
          fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
      rpt strip_tac >> decide_tac) >>
   simp[eval_operand_def] >> gen_tac >> strip_tac >>
-  `not_fresh_at sc1 p /\ not_fresh_at sc2 p /\ not_fresh_at sc3 p` by metis_tac[] >>
+  `not_fresh_at sc1 p /\ not_fresh_at scm p /\ not_fresh_at sc2 p /\
+   not_fresh_at sc3 p` by metis_tac[] >>
   qpat_x_assum `!p. not_fresh_at sa p ==> _` (qspec_then `p` mp_tac) >>
   qpat_x_assum `!p. not_fresh_at sc1 p ==> _` (qspec_then `p` mp_tac) >>
+  qpat_x_assum `!p. not_fresh_at scm p ==> _` (qspec_then `p` mp_tac) >>
   qpat_x_assum `!p. not_fresh_at sc2 p ==> _` (qspec_then `p` mp_tac) >>
   qpat_x_assum `!p. not_fresh_at sc3 p ==> _` (qspec_then `p` mp_tac) >>
   simp[];

@@ -113,6 +113,7 @@ QED
 
 (* A positive suffix returns its own counted endpoint, never an S1 witness. *)
 Theorem pop_positive_memory_suffix:
+  expr_has_effect e /\
   expr_sim_inv cenv cx env es /\
   stmt_state_rel ctx func cenv cx es s0 /\
   stmt_state_rel ctx func cenv cx mid s /\ wb_frame cenv es mid sa s0 s /\
@@ -141,6 +142,8 @@ Theorem pop_positive_memory_suffix:
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   ptr_covers G tn src s span /\ lookup_var src s = SOME a /\
   w2n a = w2n b+k /\
+  local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv) etv
+    (PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))]))) /\
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
   mload (w2n a) s = n2w (LENGTH vs) /\ LENGTH vs < dimword(:256) /\
   32+(LENGTH vs-1)*type_memory_size etv+type_memory_size etv <= span /\
@@ -184,7 +187,9 @@ Proof
       (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory))
       (mid with scopes := scopes') H tf t /\
    ptr_buf_ok cenv e (Var out) H t /\ ghost_kept cenv mid sm G tn s H tf` by
-    (match_mp_tac (Q.INST
+    (qpat_assum `local_place_at _ _ _ _ _ _`
+       (assume_tac o SIMP_RULE (srw_ss()) []) >>
+     match_mp_tac (Q.INST
        [`w` |-> `n2w (w2n (a:bytes32)+32+(LENGTH vs-1)*type_memory_size etv):bytes32`]
        pop_positive_framed_posts) >> simp[record_pop_def]) >>
   qpat_x_assum `scopes' = _` (fn th => rewrite_tac[GSYM th]) >>
@@ -316,6 +321,25 @@ Resume pop_normal_target_continuation[positive]:
   `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
     metis_tac[stmtFragPtrTheory.not_fresh_at_mono, ci_mono_def] >>
   `local_ptrs_rel func cenv tend.scopes s` by fs[stmt_state_rel_def, state_rel_def] >>
+  `local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv) etv
+     (PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))])))` by
+    (`mem_step_offset (ArrayTV etv (Dynamic n))
+        (ValueSubscript (IntV &(LENGTH vs - 1))) =
+      SOME (32 + (LENGTH vs - 1) * type_memory_size etv, etv)` by
+       (simp[loweringPostsTheory.mem_step_offset_def] >> Cases_on `vs` >> gvs[]) >>
+     `mem_path_offset entry.type
+        (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))]) =
+      SOME (k + 32 + (LENGTH vs - 1) * type_memory_size etv, etv)` by
+       (qspecl_then [`path`, `entry.type`, `k`, `ArrayTV etv (Dynamic n)`,
+          `ValueSubscript (IntV &(LENGTH vs - 1))`,
+          `32 + (LENGTH vs - 1) * type_memory_size etv`, `etv`]
+          mp_tac exprSimPropsTheory.mem_path_offset_snoc >>
+        impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+     rewrite_tac[loweringPostsTheory.local_place_at_def] >> rpt gen_tac >>
+     disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+     rpt BasicProvers.VAR_EQ_TAC >> conj_tac >- REFL_TAC >> metis_tac[]) >>
+  qpat_assum `local_place_at _ _ _ _ _ _`
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
   `?result fin out' t H tf.
      q = Var out' /\ fin.gas_obs = [] /\ t.vs_current_bb = r.cs_current_bb /\
      t.vs_inst_idx = LENGTH r.cs_current_insts /\
@@ -327,7 +351,7 @@ Resume pop_normal_target_continuation[positive]:
      ptr_vv_ok cx ann result (LocatedValue ann (mk_ptr (Var out') LocMemory)) fin H tf t /\
      ptr_buf_ok cenv (Pop ann bt) (Var out') H t /\
      ghost_kept cenv es sa G0 tn0 s0 H tf` by
-    (irule (SRULE [expr_type_def]
+    (irule (SRULE [expr_type_def, loweringPostsTheory.expr_has_effect_thm]
        (Q.INST [`e` |-> `Pop ann bt`, `mid` |-> `tend with gas_obs := []`]
          pop_positive_memory_suffix)) >>
      qpat_assum `type_memory_bytes cenv ann = _`

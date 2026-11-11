@@ -163,6 +163,18 @@ Proof
   PairCases_on `x` >> gvs[return_buf_ptr_def, ptr_covers_def] >> metis_tac[]
 QED
 
+(* A word value has the same layout under every type that relates it. *)
+Theorem word_value_memory_value_rel_in_memory[local]:
+  !ty v off mem.
+    word_value v /\ memory_value_rel ty v off mem ==>
+    val_in_memory ty v off mem
+Proof
+  rw[word_value_def] >> Cases_on `ty` >>
+  fs[memoryValueDefsTheory.memory_value_rel_def,
+     valueEncodingDefsTheory.val_in_memory_def] >>
+  rename1 `ArrayTV _ bd` >> Cases_on `bd` >> fs[memoryValueDefsTheory.memory_value_rel_def]
+QED
+
 Theorem ghost_inv_word_local_inputs:
   stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
   lookup_scopes name es.scopes = SOME entry /\
@@ -177,7 +189,9 @@ Proof
     type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
     val_in_memory entry.type entry.value (w2n a) s.vs_memory` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-     first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
+     first_x_assum drule_all >> strip_tac >>
+     qexists_tac `w` >> simp[] >>
+     irule word_value_memory_value_rel_in_memory >> simp[]) >>
   `32 <= sz` by
     (gvs[word_value_def, valueEncodingDefsTheory.val_wf_def] >> decide_tac) >>
   qexists_tac `a` >> simp[] >> conj_tac

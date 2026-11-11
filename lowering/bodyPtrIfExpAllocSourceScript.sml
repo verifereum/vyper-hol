@@ -52,6 +52,9 @@ Proof
      qexistsl_tac [`s`, `sb`] >> gvs[vv_post_def]) >>
   `locals_kept cenv es es' s0 q` by
     (irule locals_kept_mem_tail >> qexists_tac `s` >> gvs[vv_post_def]) >>
+  `~expr_has_effect e ==> pure_frame cenv fn es sa s0 q` by
+    (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >>
+     gvs[vv_post_def]) >>
   gvs[vv_post_def] >>
   conj_tac
   >- (Cases_on `vv` >> gvs[vv_storage_live_def, vv_operand_def]) >>

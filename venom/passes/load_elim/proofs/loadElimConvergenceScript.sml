@@ -44,7 +44,7 @@ Theorem le_load_analyze_fixpoint:
     (load_analyze ctx fn)
 Proof
   strip_tac >> simp[load_analyze_def, le_solver_process_def] >>
-  irule (SRULE [LET_THM] (Q.SPEC `Forward` df_analyze_fixpoint_proof)) >>
+  irule (SRULE [LET_THM] (Q.SPEC `Forward` df_analyze_fixpoint)) >>
   conj_tac
   >- metis_tac[le_solver_deps_complete, le_solver_process_def] >>
   qexistsl [
@@ -92,7 +92,7 @@ Theorem le_solver_iterate_supported:
            ds_boundary := (init_df_state NONE (fn_labels fn)).ds_boundary |+
              (lbl, SOME FEMPTY))))
 Proof
-  strip_tac >> irule wl_iterate_invariant_proof >>
+  strip_tac >> irule wl_iterate_invariant >>
   simp[le_process_changed, le_solver_entry_init] >>
   conj_tac >- metis_tac[le_solver_process_closed] >>
   qexistsl [

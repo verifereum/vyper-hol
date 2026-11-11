@@ -31,7 +31,7 @@ Theorem mapping_slot_hash_ptr_frame:
         (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
       ghost_kept cenv es sa G tn s G' tn' /\
       op_taint tn' op = {} /\ op_prov G' op = NONE /\
-      wb_frame cenv es es sa s t /\
+      wb_frame cenv es es sa s t /\ pure_frame cenv fn es sa s t /\
       (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s /\
         FLOOKUP G' z = FLOOKUP G z /\ op_taint tn' (Var z) = op_taint tn (Var z))
 Proof

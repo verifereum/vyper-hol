@@ -74,6 +74,20 @@ QED
 
 Resume ifexp_copy_buffer_post_transport[post]:
   drule copy_static_fields >> strip_tac >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 z` by
+    (strip_tac >>
+     `pure_frame cenv func es sa s0 u` by
+       (irule exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `s` >>
+        gvs[vv_post_def]) >>
+     match_mp_tac exprSimPropsTheory.pure_frame_buffer_tail >>
+     qexistsl_tac [`u`, `inst`, `w2n w`, `sz`] >>
+     fs[regions_disjoint_def] >> conj_tac
+     >- (rpt strip_tac >>
+         qpat_x_assum `!name b len. local_region cenv es.scopes s0 _ _ _ ==> _`
+           drule >> simp[]) >>
+     rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = _` drule >>
+     fs[]) >>
   irule copy_buffer_expr_post >>
   simp[] >> conj_tac
   >- (gvs[vv_post_def] >> metis_tac[]) >>

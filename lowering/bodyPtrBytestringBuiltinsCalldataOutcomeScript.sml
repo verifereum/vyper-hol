@@ -235,7 +235,8 @@ Theorem compile_slice_calldata_shared_success:
     zf.vs_call_ctx = s.vs_call_ctx /\
     (!name b len. local_region cenv es.scopes s name b len ==>
       mem_bytes_at b len zf.vs_memory = mem_bytes_at b len s.vs_memory) /\
-    (!i. w2n w <= i /\ i < w2n w + 32 + n ==> i NOTIN tm.t_mem)
+    (!i. w2n w <= i /\ i < w2n w + 32 + n ==> i NOTIN tm.t_mem) /\
+    pure_frame cenv fn es sa s zf
 Proof
   strip_tac >>
   drule_all compile_slice_calldata_semantic >>
@@ -389,6 +390,8 @@ Proof
     (drule compile_slice_calldata_id_range >> simp[]) >>
   `wb_frame cenv es es sa s zf` by
     (simp[wb_frame_def] >> metis_tac[]) >>
+  `~expr_has_effect e ==> pure_frame cenv fn es sa s zf` by
+    (strip_tac >> first_assum ACCEPT_TAC) >>
   `LENGTH (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) <= n` by simp[] >>
   qpat_x_assum `out = Var root` SUBST_ALL_TAC >>
   `!i. w2n w <= i /\ i < w2n w + 32 +

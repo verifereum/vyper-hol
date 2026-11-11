@@ -104,7 +104,7 @@ QED
    shared opcode interface supplies every storage/immutable frame here. *)
 Theorem ghost_inv_install_after_finite_copy:
   ghost_inv d cenv cx es G tn s /\
-  EVERY (\i. MEM i.inst_opcode [MLOAD; ADD; AND; MSTORE; MCOPY]) code /\
+  EVERY (\i. MEM i.inst_opcode [MLOAD; NOT; ADD; AND; MSTORE; MCOPY]) code /\
   run_inst_seq code s = OK sf /\
   inst_seq_ptr D lo ctx fn PG G tn code s gf tf /\
   mem_agree_outside writes sf.vs_memory s.vs_memory /\
@@ -182,7 +182,7 @@ Theorem ghost_inv_install_bytes_copy:
   ptr_covers G tn src s 32 /\
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
   ~ctx_has_dalloca ctx /\
-  w2n (((mload (w2n a) s + 31w) && i2w (-32)) + 32w) <= capacity /\
+  w2n (((mload (w2n a) s + 31w) && ~31w) + 32w) <= capacity /\
   run_inst_seq (emitted_insts sa sb) s = OK sf /\
   inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s gf tf /\
   mem_agree_outside {i | w2n b <= i /\ i < w2n b+capacity} sf.vs_memory s.vs_memory /\

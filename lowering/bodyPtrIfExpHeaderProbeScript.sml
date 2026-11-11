@@ -39,14 +39,15 @@ Theorem header_probe_compile:
      mk_inst 2 MSTORE [Var "%1"; Lit 0w] [];
      mk_inst 3 ADD [Var "%0"; Lit 0w] ["%2"];
      mk_inst 4 MLOAD [Var "%1"] ["%3"];
-     mk_inst 5 ADD [Var "%3"; Lit 31w] ["%4"];
-     mk_inst 6 AND [Var "%4"; Lit (i2w (-32))] ["%5"];
-     mk_inst 7 ADD [Var "%5"; Lit 32w] ["%6"];
-     mk_inst 8 MCOPY [Var "%2"; Var "%1"; Var "%6"] [];
-     mk_inst 9 ALLOCA [Lit 64w] ["%7"];
-     mk_inst 10 MSTORE [Var "%7"; Lit 0w] [];
-     mk_inst 11 ADD [Var "%0"; Lit 64w] ["%8"];
-     mk_inst 12 MCOPY [Var "%8"; Var "%7"; Lit 64w] []]
+     mk_inst 5 NOT [Lit 31w] ["%4"];
+     mk_inst 6 ADD [Var "%3"; Lit 31w] ["%5"];
+     mk_inst 7 AND [Var "%5"; Var "%4"] ["%6"];
+     mk_inst 8 ADD [Var "%6"; Lit 32w] ["%7"];
+     mk_inst 9 MCOPY [Var "%2"; Var "%1"; Var "%7"] [];
+     mk_inst 10 ALLOCA [Lit 64w] ["%8"];
+     mk_inst 11 MSTORE [Var "%8"; Lit 0w] [];
+     mk_inst 12 ADD [Var "%0"; Lit 64w] ["%9"];
+     mk_inst 13 MCOPY [Var "%9"; Var "%8"; Lit 64w] []]
 Proof
   simp[header_probe_expr_def, header_probe_ty_def,
        lower_value_def, compile_expr_component_eq,

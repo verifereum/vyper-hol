@@ -47,6 +47,8 @@ QED
 
 Theorem literal_bool_post:
   stmt_state_rel ctx fn cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
+  (~expr_has_effect (Builtin (BaseT BoolT) (Bop bop) [e1;e2]) ==>
+   pure_frame cenv fn es sa s0 t) /\
   eval_operand op t = SOME (bool_to_word b) /\
   op_prov G op = NONE /\ op_taint tn op = {} ==>
   expr_post ctx fn cenv cx
@@ -55,7 +57,7 @@ Theorem literal_bool_post:
   ptr_val_ok cx (BaseT BoolT) (BoolV b) op G tn t
 Proof
   strip_tac >> conj_tac
-  >- (irule expr_post_word_intro >>
+  >- (irule expr_post_word_intro >> asm_rewrite_tac[] >>
       simp[expr_type_def, is_word_type_def, word_value_def, val_to_w256_def,
            bool_to_word_def] >> Cases_on `b` >> simp[]) >>
   irule ptr_val_ok_word >> simp[is_word_type_def]
@@ -79,6 +81,9 @@ Theorem literal_typed_continuation_summary_ptr:
   op_prov G needle = NONE /\ op_taint tn needle = {} /\
   EVERY (\x. op_prov G x = NONE /\ op_taint tn x = {}) xs /\
   wb_frame cenv es (ee with gas_obs := []) sa s0 s /\
+  (~expr_has_effect
+     (Builtin (BaseT BoolT) (Bop bop) [e1; Builtin a (MakeArray aet n) elems]) ==>
+   pure_frame cenv fn es sa s0 s) /\
   sa.cs_next_var <= sm.cs_next_var /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
@@ -109,5 +114,13 @@ Proof
   qexistsl_tac [`INL (BoolV (if bop = In then MEM v vs else ~MEM v vs))`,
     `ee`,`G'`,`tn'`,`OK t`] >>
   simp[vyperStateTheory.return_def] >>
+  `~expr_has_effect
+     (Builtin (BaseT BoolT) (Bop bop) [e1; Builtin a (MakeArray aet n) elems]) ==>
+   pure_frame cenv fn es sa s0 t` by
+    (strip_tac >>
+     `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
+       gvs[venom_state_component_equality] >>
+     irule exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `s` >> simp[] >>
+     qpat_x_assum `_ ==> pure_frame _ _ _ _ _ s` irule >> first_assum ACCEPT_TAC) >>
   drule_all literal_bool_post >> disch_tac >> gvs[]
 QED

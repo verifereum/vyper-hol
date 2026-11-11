@@ -13,7 +13,7 @@ Theorem source_runtime_external_packages:
   ?sels extpkgs fallback label_st dispatch_st external_st entry_end.
     sels = build_selectors (type_env tops) (FST (classify_functions tops)) /\
     extpkgs = MAP (set_external_package_target rpolicy.rpol_target o
-      package_external_fn tops F (assign_nkeys tops 0))
+      package_external_fn tops T (K global_nonreentrant_slot))
       (FST (classify_functions tops)) /\
     EVERY external_fn_shape_ok extpkgs /\
     fresh_label "fallback" (initial_compile_state "__entry") = (fallback,label_st) /\
@@ -41,6 +41,11 @@ Proof
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts,ints,fb,ctor)` >>
   simp[] >> strip_tac >>
+  `~EXISTS external_has_defaults exts` by
+    (drule supported_program_no_external_defaults >> simp[]) >>
+  qpat_x_assum `(if EXISTS external_has_defaults exts then _ else _) = _`
+    mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
   qspecl_then [`tops`, `F`] mp_tac internal_descriptors_ok >>
   impl_tac >- fs[] >>
   rewrite_tac[pairTheory.FST, pairTheory.SND] >> strip_tac >>
@@ -49,17 +54,17 @@ Proof
     rewrite_tac[build_selectors_fn_labels] >>
   `EVERY external_fn_shape_ok
     (MAP (set_external_package_target rpolicy.rpol_target o
-      package_external_fn tops F (assign_nkeys tops 0)) exts)` by
+      package_external_fn tops T (K global_nonreentrant_slot)) exts)` by
     (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
      irule package_external_fn_shape_ok >> gs[]) >>
   `EVERY internal_fn_shape_ok
     (MAP (set_internal_package_target rpolicy.rpol_target o
-      package_internal_fn tops F (assign_nkeys tops 0) F 0) ints)` by
+      package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)` by
     (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
      irule package_internal_fn_shape_ok >> gs[]) >>
   `fallback_shape_ok (set_fallback_package_target rpolicy.rpol_target
-    (package_fallback_fn tops F (assign_nkeys tops 0) fb))` by
-    (qspecl_then [`tops`, `F`, `assign_nkeys tops 0`,
+    (package_fallback_fn tops T (K global_nonreentrant_slot) fb))` by
+    (qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`,
        `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok >> gs[]) >>
   gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
     internal_fn_descriptors_MAP_package_internal_fn] >>

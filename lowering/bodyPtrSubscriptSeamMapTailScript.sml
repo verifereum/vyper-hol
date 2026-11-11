@@ -20,7 +20,8 @@ Theorem mapping_slot_hash_endpoint_ptr:
     eval_operand op u = SOME (hashmap_slot w0 w1) /\
     stmt_state_rel ctx fn cenv cx es u /\ ghost_inv d cenv cx es G' tn' u /\
     ghost_kept cenv es sa G tn s G' tn' /\ op_taint tn' op = {} /\
-    wb_frame cenv es es sa s u /\ u.vs_current_bb = sb.cs_current_bb /\
+    wb_frame cenv es es sa s u /\ pure_frame cenv fn es sa s u /\
+    u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
@@ -148,6 +149,7 @@ Theorem mapping_index_tail_ptr:
     eval_operand out u = SOME (hashmap_slot base_slot (encode_hashmap_key (expr_type e) kv)) /\
     stmt_state_rel ctx fn cenv cx ee u /\ ghost_inv d cenv cx ee Gu tnu u /\
     op_taint tnu out = {} /\ wb_frame cenv ee ee sn s u /\
+    pure_frame cenv fn ee sn s u /\
     ghost_kept cenv ee sn G tn s Gu tnu /\
     u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -185,6 +187,12 @@ Proof
   `wb_frame cenv ee ee sn s u` by
     (qspecl_then [`fn`, `cenv`, `cx`, `ee`, `s`, `sn`, `ee`, `ee`, `sp`, `a`, `u`, `ctx`]
        mp_tac exprSimWordArgsTheory.wb_frame_trans >> simp[]) >>
+  `pure_frame cenv fn ee sn s u` by
+    (match_mp_tac exprSimPropsTheory.pure_frame_trans >>
+     qexistsl_tac [`ee`, `sp`, `a`] >>
+     `pure_frame cenv fn ee sn s a` by
+       (irule loweringPostsTheory.pure_frame_mem_eq >> fs[]) >>
+     gvs[loweringPostsTheory.wb_frame_def] >> metis_tac[]) >>
   `ghost_kept cenv ee sn G tn s G'' tn''` by
     (irule hash_ghost_kept_then >> goal_assum (drule_at Any) >>
      qexistsl [`G'`, `a`, `sp`, `tn'`] >> simp[] >>

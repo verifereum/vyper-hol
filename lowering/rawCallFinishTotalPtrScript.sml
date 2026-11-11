@@ -12,6 +12,7 @@ Theorem raw_call_take_gas_obs:
      SND (take_call_outcome target data value_opt es) with gas_obs := tail)
 Proof
   simp[vyperCallOutcomeTheory.take_call_outcome_def,
+    vyperCallOutcomeTheory.take_request_outcome_def,
     vyperCallOutcomeTheory.call_outcome_request_def] >>
   Cases_on `es.outcomes` >> simp[] >> pairarg_tac >> simp[] >>
   IF_CASES_TAC >> simp[]
@@ -24,7 +25,8 @@ Theorem raw_call_adopt_gas_obs:
 Proof
   simp[vyperCallOutcomeTheory.adopt_call_outcome_equation] >>
   Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
-  Cases_on `rq.cr_kind = MessageCall` >> simp[]
+  Cases_on `rq.cr_kind = MessageCall` >>
+  Cases_on `rq.cr_kind = DelegateMessageCall` >> simp[]
 QED
 
 Theorem raw_call_prepared_source_total:

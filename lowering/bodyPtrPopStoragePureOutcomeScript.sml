@@ -7,7 +7,7 @@ Ancestors
   compileEnv loweringStateRelDefs targetPlaceSimDefs exprSimDefs loweringPosts
   vyperStorageBackend vyperStorage vyperValue vyperState vyperInterpreter
   ptrDiscipline context exprSimVVFrame gasSummaryComposePtr
-  exprSimPopStorage words pred_set finite_map appendStorageSourcePtr
+  exprSimPopStorage words pred_set finite_map stmtSimAppendStorageCompose
 
 Theorem pop_storage_suffix_counted:
   fn_has_code sa sb func /\ sb.cs_current_bb = sa.cs_current_bb /\

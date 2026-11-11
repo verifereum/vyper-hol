@@ -27,6 +27,7 @@ Theorem ifexp_selected_nonword_outcome_ptr:
     (\res ee G tn u. ?tv v. res = INL tv /\
        read_result cx tv ee = (INL v,ee) /\
        expr_post ctx fn ce cx arm es sa sd s0 ee v op u /\
+       vv_at ce cx ty sa sd ee tv (LocatedValue ty (mk_ptr op LocMemory)) u /\
        ptr_val_ok cx ty v op G tn u /\ ptr_buf_ok ce (IfExp ty c a b) op G u /\
        ghost_inv d ce cx ee G tn u /\
        ghost_kept ce es sa G0 tn0 s0 G tn /\
