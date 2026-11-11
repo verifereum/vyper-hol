@@ -130,7 +130,7 @@ Proof
   `EVERY (\i. i.inst_opcode <> PHI) normal` by
     (fs[EVERY_MEM] >> metis_tac[is_pseudo_def]) >>
   `eval_phis s pseudos = OK u` by
-    metis_tac[venomExecProofsTheory.dft_eval_phis_append] >>
+    metis_tac[dftIndexedExecTheory.dft_eval_phis_append] >>
   `strict_dom_vars_defined fn s` by metis_tac[strict_dom_vars_defined_entry] >>
   qpat_assum `FILTER (\i. ~is_pseudo i.inst_opcode) _ = normal`
     (fn th => once_rewrite_tac[GSYM th]) >>

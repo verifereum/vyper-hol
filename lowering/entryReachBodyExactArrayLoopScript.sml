@@ -8,11 +8,13 @@ Ancestors
 Definition entry_loop_fields_def:
   entry_loop_fields s t <=>
     (t.vs_accounts, t.vs_transient, t.vs_logs, t.vs_tx_ctx,
-     t.vs_block_ctx, t.vs_outcomes, t.vs_requests, t.vs_pending_deletions,
-     t.vs_gas_readings, t.vs_fmp, t.vs_call_ctx, t.vs_data_section) =
+     t.vs_block_ctx, t.vs_immutables, t.vs_outcomes, t.vs_requests,
+     t.vs_pending_deletions, t.vs_gas_readings, t.vs_fmp, t.vs_call_ctx,
+     t.vs_data_section) =
     (s.vs_accounts, s.vs_transient, s.vs_logs, s.vs_tx_ctx,
-     s.vs_block_ctx, s.vs_outcomes, s.vs_requests, s.vs_pending_deletions,
-     s.vs_gas_readings, s.vs_fmp, s.vs_call_ctx, s.vs_data_section)
+     s.vs_block_ctx, s.vs_immutables, s.vs_outcomes, s.vs_requests,
+     s.vs_pending_deletions, s.vs_gas_readings, s.vs_fmp, s.vs_call_ctx,
+     s.vs_data_section)
 End
 
 Theorem entry_loop_fields_refl[local]:

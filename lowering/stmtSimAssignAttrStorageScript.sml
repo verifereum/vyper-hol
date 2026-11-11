@@ -389,7 +389,7 @@ Proof
     lookup_var x s = SOME w` by gvs[vv_post_def] >>
   drule_all assign_attr_ghost_regions >> strip_tac >>
   gvs[vv_post_def, vv_at_def, lookup_var_def, locals_kept_def,
-      popped_kept_def] >>
+      popped_kept_def, pure_frame_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -407,8 +407,16 @@ Proof
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
     lookup_var x s = SOME w` by gvs[vv_post_def] >>
   drule_all assign_attr_ghost_regions >> strip_tac >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 u` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ u`
+       (mp_tac o last o CONJUNCTS o REWRITE_RULE [expr_post_def]) >>
+     qpat_x_assum `!n b sz. local_region _ _ (s0 with vs_vars := _) _ _ _ <=> _`
+       mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[pure_frame_def]) >>
   gvs[expr_post_def, expr_val_at_def, expr_val_own_def, lookup_var_def,
       locals_kept_def, popped_kept_def, not_fresh_at_def] >>
+  TRY (qpat_x_assum `~expr_has_effect e ==> pure_frame _ _ _ (sa with cs_next_var := _) _ _`
+         kall_tac) >>
   rpt strip_tac >> metis_tac[]
 QED
 
@@ -549,16 +557,17 @@ Proof
   Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
   Cases_on `r1` >> simp[] >>
   rename1 `eval_expr cx e es = (INL pv, es1)` >>
+  Cases_on `read_result cx pv es1` >>
+  rename1 `read_result cx pv es1 = (r3, es3)` >>
+  imp_res_tac read_result_state >> gvs[] >>
+  Cases_on `r3` >> simp[] >>
   Cases_on `eval_target_place cx
               (AttributeTarget (TopLevelNameTarget (src, id)) fld) es1` >>
   rename1 `_ = (r2, es2)` >>
   drule eval_target_place_attr_toplevel >> rpt (disch_then drule) >>
   strip_tac >>
   Cases_on `r2` >> simp[]
-  >- (gvs[] >> Cases_on `read_result cx pv es1` >>
-      rename1 `read_result cx pv es1 = (r3, es3)` >>
-      imp_res_tac read_result_state >> gvs[] >>
-      Cases_on `r3` >> simp[write_place_def] >> metis_tac[]) >>
+  >- (gvs[] >> simp[write_place_def] >> metis_tac[]) >>
   strip_tac >> gvs[]
 QED
 
@@ -567,9 +576,9 @@ Theorem eval_assign_attr_toplevel_action:
     (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld)) e) =
   bind (eval_expr cx e)
     (\pv. do
+      v <- read_result cx pv;
       p <- eval_target_place cx
         (AttributeTarget (TopLevelNameTarget (src, id)) fld);
-      v <- read_result cx pv;
       write_place cx p v
     od)
 Proof
@@ -603,9 +612,9 @@ Theorem assign_attr_storage_tail[local]:
   write_storage_slot cx tr (n2w slot + n2w off) ftv v ee = (res, ee') ==>
   !tail.
     (do
+      v <- read_result cx raw;
       p <- eval_target_place cx
         (AttributeTarget (TopLevelNameTarget (src, id)) fld);
-      v <- read_result cx raw;
       write_place cx p v
     od) (ee with gas_obs := tail) = (res, ee' with gas_obs := tail)
 Proof
@@ -702,9 +711,9 @@ Theorem assign_attr_storage_source_counted[local]:
     write_storage_slot cx tr (n2w slot + n2w off) ftv v ee = (res, ee') /\
     (!tail.
       (do
+        v <- read_result cx raw;
         p <- eval_target_place cx
           (AttributeTarget (TopLevelNameTarget (src,id)) fld);
-        v <- read_result cx raw;
         write_place cx p v
       od) (ee with gas_obs := tail) = (res, ee' with gas_obs := tail)) /\
     (!u st. storage_dead cx tr
@@ -766,7 +775,8 @@ Proof
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   Cases_on `tr` >>
   asm_simp_tac (srw_ss())
-    [compile_stmt_def, compile_assign_value_def, comp_bind_def,
+    [compile_stmt_def, exprLoweringTheory.expr_can_mutate_def,
+     stmtLoweringTheory.target_to_expr_def, compile_assign_value_def, comp_bind_def,
      comp_ignore_bind_def, comp_return_def, LET_THM] >>
   Cases_on `compile_expr cenv (expr_type e) e sa` >>
   rename1 `compile_expr _ _ _ _ = (vv, sm)` >> simp[] >>
@@ -817,6 +827,7 @@ Theorem assign_attr_storage_word_suffix[local]:
   fn_has_code sm sn func /\ fn_has_code sn su func /\
   fn_has_code su sf func /\ fn_inst_ids_distinct func /\
   vv_post ctx func cenv cx e es sa sm s0 ee raw vv s /\
+  MAP FDOM ee.scopes = MAP FDOM es.scopes /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\ ee.gas_obs = [] /\
   (!v. read_result cx raw ee = (INL v,ee) ==>
@@ -831,7 +842,7 @@ Theorem assign_attr_storage_word_suffix[local]:
   ?res ee' r.
     (!tail. k raw (ee with gas_obs := tail) = (res,ee' with gas_obs := tail)) /\
     gas_marked_path F ctx func s 0 r /\
-    ?t'. r = OK t' /\ stmt_post ctx func cx lctx cenv cenv sa sf s0 res
+    ?t'. r = OK t' /\ stmt_post ctx func cx lctx cenv cenv sa sf es s0 res
       (ee' with gas_obs := []) t'
 Proof
   strip_tac >>
@@ -850,6 +861,19 @@ Proof
     (gvs[eval_operand_def] >> metis_tac[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `alloca_frame cenv es sa s0 cenv ee' u` by
+    (`ee'.scopes = ee.scopes` by
+       (drule vyperScopePreservationTheory.write_storage_slot_scopes >>
+        simp[]) >>
+     mp_tac (Q.INST [`es'` |-> `ee'`, `s` |-> `u`] alloca_frame_of_mem_frame) >>
+     impl_tac
+     >- (rpt conj_tac
+         >- first_assum ACCEPT_TAC
+         >- first_assum ACCEPT_TAC
+         >- fs[]
+         >- fs[lookup_var_def] >>
+         first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   `eval_operand op u = SOME (typed_val_to_w256 ftv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
@@ -889,7 +913,9 @@ Proof
   simp[stmt_post_def,stmt_lands_def,cenv_top_ext_refl,
        stmt_state_rel_inst_idx] >>
   Cases_on `tr` >>
-  gvs[sstore_def,tstore_def,lookup_var_def,LET_THM]
+  gvs[sstore_def,tstore_def,lookup_var_def,LET_THM] >>
+  irule alloca_frame_same_state >> qexists_tac `u` >> simp[] >>
+  first_assum ACCEPT_TAC
 QED
 
 (* self.x.f = e for a storage or transient struct x the lowering holds by
@@ -939,9 +965,10 @@ Proof
     `\raw ee t. vv_post ctx func cenv cx e es sa sm s0 ee raw vv t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts`, `e`,
-    `\raw. do p <- eval_target_place cx
-       (AttributeTarget (TopLevelNameTarget (src,id)) fld);
-       v <- read_result cx raw; write_place cx p v od`] >>
+    `\raw. do v <- read_result cx raw;
+       p <- eval_target_place cx
+         (AttributeTarget (TopLevelNameTarget (src,id)) fld);
+       write_place cx p v od`] >>
   reverse conj_tac
   >- (conj_tac >- simp[eval_assign_attr_toplevel_action] >>
       qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
@@ -961,9 +988,10 @@ Proof
       write_storage_slot cx tr (n2w slot + n2w (struct_field_offset_slots
         (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))
         ftv v ee = (res,ee') /\
-      (!tail. (do p <- eval_target_place cx
-        (AttributeTarget (TopLevelNameTarget (src,id)) fld);
-        v <- read_result cx tv; write_place cx p v od)
+      (!tail. (do v <- read_result cx tv;
+        p <- eval_target_place cx
+          (AttributeTarget (TopLevelNameTarget (src,id)) fld);
+        write_place cx p v od)
         (ee with gas_obs := tail) = (res,ee' with gas_obs := tail)) /\
       (!u st. storage_dead cx tr (update_storage
         (n2w slot + n2w (struct_field_offset_slots
@@ -973,9 +1001,15 @@ Proof
      drule_all (SRULE [] (Q.INST [`fty` |-> `expr_type e`]
        assign_attr_storage_source_counted)) >>
      strip_tac >> goal_assum (drule_at Any) >> simp[]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `eval_expr cx e (es with gas_obs := _) = _`
+       (mp_tac o MATCH_MP
+          vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom) >>
+     simp[]) >>
   drule_all (SRULE [] (Q.INST [`k` |-> `\raw. do
+    v <- read_result cx raw;
     p <- eval_target_place cx (AttributeTarget (TopLevelNameTarget (src,id)) fld);
-    v <- read_result cx raw; write_place cx p v od`]
+    write_place cx p v od`]
     assign_attr_storage_word_suffix)) >>
   disch_then (qspec_then `lctx` strip_assume_tac) >>
   qexistsl_tac [`res`,`ee'`,`r`] >> simp[]

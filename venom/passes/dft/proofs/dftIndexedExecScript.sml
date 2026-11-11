@@ -208,6 +208,23 @@ Proof
   simp[step_inst_idx_indep, exec_result_map_def]
 QED
 
+Theorem dft_phi_prefix_append:
+  !pre rest. EVERY (\i. i.inst_opcode <> PHI) rest ==>
+    phi_prefix_length (pre ++ rest) = phi_prefix_length pre
+Proof
+  Induct >> simp[phi_prefix_length_def] >> rpt strip_tac
+  >- (Cases_on `rest` >> gvs[phi_prefix_length_def]) >>
+  Cases_on `h.inst_opcode = PHI` >> simp[phi_prefix_length_def]
+QED
+
+Theorem dft_eval_phis_append:
+  !pre rest s. EVERY (\i. i.inst_opcode <> PHI) rest ==>
+    eval_phis s (pre ++ rest) = eval_phis s pre
+Proof
+  Induct >> simp[eval_phis_def] >> rpt strip_tac
+  >- (Cases_on `rest` >> gvs[eval_phis_def]) >>
+  Cases_on `h.inst_opcode = PHI` >> simp[eval_phis_def]
+QED
 
 Theorem dft_run_block_prefix:
   !bb pre rest fuel C s.

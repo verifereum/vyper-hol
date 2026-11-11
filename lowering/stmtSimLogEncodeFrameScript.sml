@@ -29,7 +29,7 @@ Proof
   `abi_footprint_disjoint (w2n w) sz fp` by metis_tac[] >>
   `mem_bytes_at (w2n w) sz t.vs_memory = mem_bytes_at (w2n w) sz s.vs_memory` by
     (irule abi_decode_footprint_frame_slice >> goal_assum (drule_at Any) >> simp[]) >>
-  irule val_in_memory_mem_agree >> simp[] >>
+  irule memoryValueFrameTheory.memory_value_rel_mem_agree_region >> simp[] >>
   qexistsl_tac [`sz`,`s.vs_memory`] >> simp[]
 QED
 
@@ -64,9 +64,10 @@ Proof
       simp[mstore_memory_nondecreasing])
   >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), mcopy_def] >>
       simp[write_memory_with_expansion_nondecreasing])
-  >- gvs[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs(), update_var_def] >>
-  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
-  simp[write_memory_with_expansion_nondecreasing]
+  >- gvs[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs(), update_var_def]
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      simp[write_memory_with_expansion_nondecreasing]) >>
+  gvs[step_inst_base_opcode_eqs, exec_pure1_def, AllCaseEqs(), update_var_def]
 QED
 
 Theorem log_encode_run_memory_mono:
@@ -348,6 +349,8 @@ Theorem log_scalar_tuple_continue:
     mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
       enc (Tuple ats) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
+    abi_decode_footprint_frame
+      ((db,outcap)::(if (?infos. ei = AbiComplex infos) then [(p,32)] else [])) initial actual /\
     stmt_state_rel ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\
       eval_operand op initial = SOME w ==> eval_operand op actual = SOME w)

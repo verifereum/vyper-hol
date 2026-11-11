@@ -27,7 +27,7 @@ Ancestors
   stmtLowering exprLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   venomState valueEncoding valueEncodingDefs vyperTyping valueEncodingProps valueEncodingProofs
-  arithmetic list
+  arithmetic list memoryValueEncoding
 
 Theorem place_store_default_typed[local]:
   (!tv. value_has_type tv (default_value tv)) /\
@@ -681,10 +681,13 @@ Theorem place_store_read_cons[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   drule mem_step_offset_shape >> strip_tac >> gvs[] >>
+  TRY (drule mem_field_offset_sound >> strip_tac) >>
   Cases_on `a` >>
   simp[evaluate_subscripts_def, subscript_type_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
-  drule mem_field_offset_sound >> strip_tac >> gvs[]
+  BasicProvers.TOP_CASE_TAC >>
+  rewrite_tac[optionTheory.option_case_def, sumTheory.sum_case_def] >>
+  BasicProvers.TOP_CASE_TAC >>
+  rewrite_tac[optionTheory.option_case_def, sumTheory.sum_case_def]
 QED
 
 Theorem place_store_path_unread_frame:
@@ -772,7 +775,7 @@ Proof
   >- (drule_all place_store_step_read >> strip_tac >>
       drule_all place_store_assign_cons >>
       disch_then (qspecl_then [`path`, `v`] mp_tac) >>
-      Cases_on `assign_subscripts ctv x path (Replace v)` >> gvs[] >>
+      Cases_on `assign_subscripts ctv x path (Replace v)` >> asm_rewrite_tac[] >> simp_tac (srw_ss()) [] >>
       strip_tac >>
       `val_in_memory ctv x' (b+j) mem'` by
         (first_x_assum irule >>
@@ -822,7 +825,7 @@ Theorem place_store_local_ptrs_replace:
     mem_path_offset entry.type path = SOME (k,tv) /\
     value_has_type entry.type entry.value /\ value_has_type tv v /\
     replace_memory_entry entry path v = INL entry' /\
-    val_wf entry'.type entry'.value /\
+    val_wf entry'.type entry'.value /\ value_has_type entry'.type entry'.value /\
     val_in_memory tv v (w2n bw+k) mem' /\
     (!q. q < w2n bw+k \/ w2n bw+k+type_memory_size tv <= q ==>
          mem_bytes_at q 1 s.vs_memory = mem_bytes_at q 1 mem') ==>
@@ -836,10 +839,13 @@ Proof
    type_memory_size entry.type <= sz /\
    val_in_memory entry.type entry.value (w2n bw) s.vs_memory` by
     (fs[local_ptrs_rel_def] >>
-     first_x_assum drule_all >> simp[] >> metis_tac[]) >>
+     first_x_assum drule_all >> simp[] >>
+     metis_tac[memory_value_rel_val_in_memory]) >>
   `entry'.type = entry.type /\
    val_in_memory entry'.type entry'.value (w2n bw) mem'` by
     (drule_all place_store_replace_memory_entry >> simp[]) >>
+  `memory_value_rel entry'.type entry'.value (w2n bw) mem'` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   `!n b sz'. n <> id /\ local_region cenv sc s n b sz' ==>
        regions_disjoint (w2n bw) sz b sz'` by
     (fs[local_ptrs_rel_def] >> metis_tac[]) >>
@@ -1587,7 +1593,8 @@ Theorem place_store_word_run:
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                  FLOOKUP t.vs_allocas aid = SOME b) /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-        t.vs_inst_idx = LENGTH sb.cs_current_insts
+        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        (loc = LocStorage \/ loc = LocTransient ==> t.vs_memory = s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   `eval_operand op s = SOME (typed_val_to_w256 dtv v)` by
@@ -1617,7 +1624,8 @@ Proof
      qpat_assum `emit_void _ _ _ = _` (irule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[]) >>
   qexists_tac `u with vs_inst_idx := SUC s.vs_inst_idx` >>
-  fs[stmt_state_rel_inst_idx, lookup_var_def]
+  fs[stmt_state_rel_inst_idx, lookup_var_def] >>
+  rpt strip_tac >> gvs[Abbr `u`, sstore_def, tstore_def, LET_THM]
 QED
 
 (* compile_assign_value at the place: a word by one store, an aggregate

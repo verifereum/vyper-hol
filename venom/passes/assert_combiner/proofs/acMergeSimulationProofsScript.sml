@@ -4,7 +4,7 @@
    D stores a frozen abort reason/state and a separately advancing ghost. *)
 Theory acMergeSimulationProofs
 Ancestors
-  acChainProofs acAbortRelProofs assertCombinerDefs analysisSimDefs stateEquiv
+  acChainProofs acAbortRelProofs assertCombinerDefs analysisSimDefs stateEquiv runInstsProps
   rich_list
 Libs
   listTheory arithmeticTheory

@@ -430,6 +430,10 @@ Datatype:
        absence explicit prevents unknown events from silently compiling/logging
        as hash-0/no-arg events. *)
     ce_event_info : string -> (num # type list # bool list) option;
+    (* Custom-error metadata: error name -> SOME declared (name, type)
+       parameters. NONE means no such error is declared in this compilation
+       unit. Mirrors Python's ErrorT (arguments, selector). *)
+    ce_error_info : string -> (string # type) list option;
     (* Type environment used by ABI conversion for structs/flags/interfaces. *)
     ce_type_env : (nsid, type_args) fmap;
     (* Internal return: how many return values passed on stack (0 = memory return).
@@ -485,6 +489,9 @@ Datatype:
        (internal_fn_label).
        Mirrors Python: func_t._function_id in expr.py lower_Call *)
     ce_func_ids : string -> num;
+    (* The contract's modules, for the subscript overlap check
+       (vyperSubscriptOverlap). *)
+    ce_modules : (num option # toplevel list) list;
     (* Nonreentrant lock info for explicit return statements:
        (is_nonreentrant, nkey, use_transient, is_view).
        Python: stmt.py _lower_external_return calls emit_nonreentrant_unlock.

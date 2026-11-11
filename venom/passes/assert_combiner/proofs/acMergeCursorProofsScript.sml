@@ -1,6 +1,6 @@
 Theory acMergeCursorProofs
 Ancestors
-  acMergeCursorDefs acSupplyProofs acChainProofs assertCombinerDefs
+  acMergeCursorDefs acSupplyProofs acChainProofs assertCombinerDefs venomInst
   irSupplyFreshProps irSupply venomFnScheduleRunner list rich_list alist pred_set arithmetic
 
 (* Prefix reachability records the actual supply, not arbitrary historical

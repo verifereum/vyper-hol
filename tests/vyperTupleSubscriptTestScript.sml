@@ -3,7 +3,7 @@ Theory vyperTupleSubscriptTest
 Ancestors
   finite_map integer list vyperAST vyperTypeSystem jsonToVyperExpr
 Libs
-  jsonASTLib vyperCheckContractLib
+  jsonASTLib vyperConstEvalLib vyperCheckContractLib
 
 Theorem homogeneous_tuple_dynamic_index_rejected:
   ~well_typed_expr env
@@ -171,15 +171,15 @@ val () = if optionSyntax.is_none (rhs (concl
   (check_tuple_index ``Name (BaseT (UintT 256)) "index"``)))
   then () else raise Fail "checker accepted dynamic tuple index";
 
-(* Compiler-folded tuple indices become literals; ordinary array indexing
-   continues to translate the expression rather than its folded metadata. *)
+(* Constant tuple indices are evaluated to literals; ordinary array indexing
+   keeps the expression. The compiler's folded_value is never read. *)
 val uint_json =
   "{\"typeclass\":\"integer\",\"bits\":256,\"is_signed\":false}";
 val computed_index_json =
-  "{\"ast_type\":\"BinOp\",\"left\":{\"ast_type\":\"Int\",\"value\":0}," ^
-  "\"op\":{\"ast_type\":\"Add\"},\"right\":{\"ast_type\":\"Int\",\"value\":1}," ^
-  "\"type\":" ^ uint_json ^ ",\"folded_value\":{\"ast_type\":\"Int\"," ^
-  "\"value\":1,\"type\":" ^ uint_json ^ "}}";
+  "{\"ast_type\":\"BinOp\",\"left\":{\"ast_type\":\"Int\",\"value\":0,\"type\":" ^
+  uint_json ^ "},\"op\":{\"ast_type\":\"Add\"},\"right\":{\"ast_type\":\"Int\"," ^
+  "\"value\":1,\"type\":" ^ uint_json ^ "},\"type\":" ^ uint_json ^
+  ",\"folded_value\":{\"ast_type\":\"Int\",\"value\":1,\"type\":" ^ uint_json ^ "}}";
 fun decode_subscript base_type index_json = let
   val source = "{\"ast_type\":\"Subscript\",\"value\":{\"ast_type\":\"Name\"," ^
     "\"id\":\"xs\",\"type\":" ^ base_type ^ "},\"slice\":" ^
@@ -199,55 +199,45 @@ val folded_tuple = decode_subscript
   ("{\"typeclass\":\"tuple\",\"member_types\":[" ^ uint_json ^ "," ^ uint_json ^ "]}")
   computed_index_json;
 val translated_tuple = rhs (concl (EVAL
-  ``translate_expr (0,NONE,[],[],[],[],[]) ^folded_tuple``));
+  ``translate_expr (0,NONE,[],[],[],[],[],[],[]) ^folded_tuple``));
 val () = if aconv translated_tuple
   ``Subscript (BaseT (UintT 256))
       (Name (TupleT [BaseT (UintT 256); BaseT (UintT 256)]) "xs")
       (Literal (BaseT (UintT 256)) (IntL 1))``
-  then () else raise Fail "folded tuple index was not translated as a literal";
+  then () else raise Fail ("constant tuple index was not translated as a literal: " ^
+    term_to_string translated_tuple);
 val folded_array = decode_subscript
   ("{\"typeclass\":\"static_array\",\"value_type\":" ^ uint_json ^ ",\"length\":2}")
   computed_index_json;
 val translated_array = rhs (concl (EVAL
-  ``translate_expr (0,NONE,[],[],[],[],[]) ^folded_array``));
+  ``translate_expr (0,NONE,[],[],[],[],[],[],[]) ^folded_array``));
 val () = if can (find_term (aconv ``Bop Add``)) translated_array
   then () else raise Fail "array index expression was unexpectedly folded";
 
-(* Optional folded annotations must not erase a known slice type. Keep an
-   explicit folded type authoritative, and reject indices with no known type. *)
-fun check_folded_index label source expected accepted = let
+(* A tuple index takes its type from its own annotation, whatever folded_value
+   says, and an index without a type is rejected. *)
+fun check_index label source expected accepted = let
   val decoded = decode_subscript
     ("{\"typeclass\":\"tuple\",\"member_types\":[" ^ uint_json ^ "," ^ uint_json ^ "]}")
     source
   val translated = rhs (concl (EVAL
-    ``translate_expr (0,NONE,[],[],[],[],[]) ^decoded``))
+    ``translate_expr (0,NONE,[],[],[],[],[],[],[]) ^decoded``))
   val index = case strip_comb translated of
       (_, [_, _, index]) => index
     | _ => raise Fail ("expected translated subscript: " ^ label)
   val checked = rhs (concl (check_tuple_index index))
 in
   if aconv index expected andalso optionSyntax.is_some checked = accepted
-  then () else raise Fail ("folded index type regression: " ^ label)
+  then () else raise Fail ("tuple index type regression: " ^ label)
 end;
 val typed_index_prefix =
   "{\"ast_type\":\"Int\",\"value\":1,\"type\":" ^ uint_json;
-val untyped_folded_index =
-  ",\"folded_value\":{\"ast_type\":\"Int\",\"value\":1}}";
 val uint_index = ``Literal (BaseT (UintT 256)) (IntL 1)``;
-val () = check_folded_index "literal inherits slice type"
-  (typed_index_prefix ^ untyped_folded_index) uint_index true;
-val () = check_folded_index "computed index inherits slice type"
-  ("{\"ast_type\":\"BinOp\",\"left\":{\"ast_type\":\"Int\",\"value\":0}," ^
-   "\"op\":{\"ast_type\":\"Add\"},\"right\":{\"ast_type\":\"Int\",\"value\":1}," ^
-   "\"type\":" ^ uint_json ^ untyped_folded_index) uint_index true;
-val () = check_folded_index "null folded type inherits slice type"
-  (typed_index_prefix ^
-   ",\"folded_value\":{\"ast_type\":\"Int\",\"value\":1,\"type\":null}}")
-  uint_index true;
-val () = check_folded_index "explicit invalid folded type is not replaced"
+val () = check_index "typed literal index" (typed_index_prefix ^ "}") uint_index true;
+val () = check_index "folded type is ignored"
   (typed_index_prefix ^
    ",\"folded_value\":{\"ast_type\":\"Int\",\"value\":1,\"type\":{\"name\":\"bool\"}}}")
-  ``Literal (BaseT BoolT) (IntL 1)`` false;
-val () = check_folded_index "missing both types remains rejected"
-  ("{\"ast_type\":\"Int\",\"value\":1" ^ untyped_folded_index)
+  uint_index true;
+val () = check_index "untyped index is rejected"
+  "{\"ast_type\":\"Int\",\"value\":1,\"folded_value\":{\"ast_type\":\"Int\",\"value\":1}}"
   ``Literal NoneT (IntL 1)`` false;

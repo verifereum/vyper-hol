@@ -407,7 +407,7 @@ Proof
 QED
 
 Theorem immutable_ctor_pointer_post[local]:
-  post_value_type cenv e = expr_type e /\
+  expr_has_effect e /\ post_value_type cenv e = expr_type e /\
   stmt_state_rel ctx func cenv cx es' u /\
   wb_frame cenv initial es' sa s0 u /\ cenv.ce_is_ctor /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
@@ -418,6 +418,7 @@ Theorem immutable_ctor_pointer_post[local]:
   j + type_memory_size etv <= type_memory_size tv /\
   val_in_memory etv v (off+j) u.vs_memory /\ value_has_type etv v /\
   read_result cx result es' = (INL v,es') /\
+  (!id path. result <> PlaceR (MemoryPlace id path)) /\
   eval_operand op u = SOME (n2w (off+j)) ==>
   vv_post ctx func cenv cx e initial sa sb s0 es' result
     (LocatedValue (expr_type e) (mk_ptr op LocCode)) u
@@ -466,6 +467,10 @@ Proof
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
        ASCIInumbersTheory.toString_11, bool_to_word_def, WORD_ADD_0] >>
   simp[Ntimes run_inst_seq_def 4,
+       step_inst_base_opcode_eqs, exec_read1_def, exec_pure1_def, exec_pure2_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       ASCIInumbersTheory.toString_11, bool_to_word_def, WORD_ADD_0] >>
+  simp[Ntimes run_inst_seq_def 3,
        step_inst_base_opcode_eqs, exec_read1_def, exec_pure1_def, exec_pure2_def,
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
        ASCIInumbersTheory.toString_11, bool_to_word_def, WORD_ADD_0] >>
@@ -752,7 +757,8 @@ Proof
   `vv_post ctx func cenv cx (Pop ann bt) es0 sa r s0 fin
       (Value (LAST vs)) (LocatedValue ann (mk_ptr q LocCode)) u` by
     (drule_all (SRULE [expr_type_def]
-       (Q.INST [`e` |-> `Pop ann bt`] immutable_ctor_pointer_post)) >> simp[]) >>
+       (Q.INST [`e` |-> `Pop ann bt`, `result` |-> `Value (LAST vs)`]
+          immutable_ctor_pointer_post)) >> simp[]) >>
   `!tail. pop_place cx (ImmutablePlace cenv.ce_module id path)
       (es with gas_obs := tail) =
       (INL (Value (LAST vs)),fin with gas_obs := tail)` by

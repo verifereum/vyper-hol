@@ -2,6 +2,7 @@ Theory cseHistoryProps
 Ancestors passSharedProps venomExecSemantics venomState stateEquiv execEquivProofs
   cfgAnalysisProps analysisSimProps venomInstIdsProps venomInstProps venomExecProps
   venomWf venomWfProps venomInst venomExecProofs list cfgDefs cseCanonProps instIdxIndep
+  cfgCorrectnessProof cfgHelpers
 
 (* Reachable-block restriction of wf_ssa: preserves def_dominates_uses on all
    DFS-reachable blocks so CSE's single-pass step is inductive across OWHILE

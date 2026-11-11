@@ -9,7 +9,7 @@
 Theory simplifyCfgCompute
 Ancestors
   simplifyCfgDefs cfgTransform cfgDefs cfgAnalysisProps cfgHelpers
-  venomExecProps venomWf venomInst
+  venomExecProps venomWf venomInst cfgCorrectnessProof
 
 Theorem fn_succ_cfg_analyze:
   !fn src dst.
@@ -25,7 +25,7 @@ Proof
       `bb.bb_label = src` by
         metis_tac[venomExecPropsTheory.lookup_block_label] >>
       `cfg_succs_of (cfg_analyze fn) bb.bb_label = bb_succs bb` by
-        metis_tac[cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs] >>
+        metis_tac[cfgCorrectnessProofTheory.cfg_analyze_preserves_bb_succs] >>
       gvs[])
   >- (`MEM src (fn_labels fn)` by
         (CCONTR_TAC >>
@@ -40,7 +40,7 @@ Proof
         (irule venomExecPropsTheory.MEM_lookup_block >>
          gvs[wf_function_def, fn_labels_def]) >>
       `cfg_succs_of (cfg_analyze fn) src = bb_succs bb` by
-        metis_tac[cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs] >>
+        metis_tac[cfgCorrectnessProofTheory.cfg_analyze_preserves_bb_succs] >>
       qexists_tac `bb` >> gvs[])
 QED
 

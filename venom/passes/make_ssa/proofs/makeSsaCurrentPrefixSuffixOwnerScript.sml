@@ -4,7 +4,7 @@ Ancestors
   makeSsaCurrentPrefixMaps makeSsaCurrentCarrierOwner
   makeSsaCurrentWfSsa makeSsaCurrentLockstepShape
   makeSsaCurrentCleanupBoundary makeSsaDefs makeSsaCurrentCertificate
-  venomInst venomExecSemantics venomExecProofs list rich_list makeSsaRfAllocation
+  venomInst venomExecSemantics list rich_list makeSsaRfAllocation
 Theorem current_prefix_phi_copy_owner:
   current_wf_phi_context s fn renamed s' A H events /\
   entry_block fn = SOME eb /\ lookup_block h fn.fn_blocks = SOME old /\

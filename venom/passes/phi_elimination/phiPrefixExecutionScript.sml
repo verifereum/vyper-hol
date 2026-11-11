@@ -1,7 +1,7 @@
 Theory phiPrefixExecution
 Ancestors
   phiOriginValues phiTransform instIdxIndep rich_list
-  dftIndexedExec simplifyCfgAvailability venomExecProofs
+  dftIndexedExec simplifyCfgAvailability
   venomInst venomExecSemantics venomState list arithmetic
 
 Definition prefix_eval_def:

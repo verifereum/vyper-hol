@@ -8,7 +8,25 @@ Ancestors
   runInstsExecBlockProps assertCombinerDefs venomExecSemantics venomExecProofs
   venomWf venomWfProps venomState venomInst dfgAnalysisProps
   stateEquiv stateEquivProps stateFrame irSupply irSupplyFreshProps list rich_list pred_set
-  acSourceBlockInvariantProofs venomExecProps
+  acSourceBlockInvariantProofs venomExecProps mmWfProofs
+
+(* PHIs form a prefix of a well-formed block, so nothing after the
+   PHI prefix is a PHI. *)
+val phi_suffix_nonphi_tac =
+  `!xs. (!i j. i < j /\ j < LENGTH xs /\ (EL j xs).inst_opcode = PHI ==>
+               (EL i xs).inst_opcode = PHI) ==>
+        EVERY (\i. i.inst_opcode <> PHI) (DROP (phi_prefix_length xs) xs)` by
+    (rpt (pop_assum kall_tac) >>
+     Induct >> simp[venomExecSemanticsTheory.phi_prefix_length_def] >>
+     rpt strip_tac >> Cases_on `h.inst_opcode = PHI`
+     >- (simp[venomExecSemanticsTheory.phi_prefix_length_def] >>
+         first_x_assum irule >> rpt strip_tac >>
+         first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
+     simp[venomExecSemanticsTheory.phi_prefix_length_def, EVERY_MEM] >>
+     rpt strip_tac >> gvs[] >>
+     `?j. j < LENGTH xs /\ EL j xs = i` by metis_tac[MEM_EL] >>
+     first_x_assum (qspecl_then [`0`, `SUC j`] mp_tac) >> simp[]) >>
+  pop_assum irule >> gvs[bb_well_formed_def] >> metis_tac[];
 
 Theorem ac_query_fresh_operand:
   ir_supply_covers_fn su fn /\
@@ -97,7 +115,7 @@ Proof
   `MEM bb fn.fn_blocks` by gvs[ac_cursor_inv_def] >>
   `bb_well_formed bb` by metis_tac[wf_function_bb_well_formed] >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
-    metis_tac[venomInstIdsPropsTheory.fn_inst_ids_distinct_block, wf_function_def] >>
+    metis_tac[mmWfProofsTheory.fn_inst_ids_distinct_block, wf_function_def] >>
   `bb_well_formed bt` by metis_tac[ac_transform_block_shape] >>
   drule_all ac_transform_block_phi_boundary >> strip_tac >>
   irule run_block_run_insts_lift_result >> simp[] >>
@@ -132,8 +150,7 @@ Proof
   simp[phi_prefix_length_le, ir_supply_extends_refl] >>
   reverse conj_tac
   >- (conj_tac >- metis_tac[ALL_DISTINCT_DROP, MAP_DROP] >>
-      simp[EVERY_EL, EL_DROP] >> rpt strip_tac >>
-      gvs[phi_prefix_length_non_phi_suffix]) >>
+      phi_suffix_nonphi_tac) >>
   rpt gen_tac >> disch_tac >> irule ac_fresh_vars_original_var >> simp[] >>
   simp[fn_ir_vars_def, MEM_FLAT, MEM_MAP] >>
   qexists `block_ir_vars bb` >> conj_tac
@@ -177,7 +194,6 @@ Proof
   `bb_well_formed bb` by metis_tac[wf_function_bb_well_formed] >>
   irule ac_source_run_block_successor >> simp[] >>
   qexistsl [`bb`, `ctx`, `fuel`, `s`] >> simp[] >> conj_tac
-  >- metis_tac[bb_well_formed_phi_prefix_length_lt] >>
-  simp[EVERY_EL, EL_DROP] >> rpt strip_tac >>
-  gvs[phi_prefix_length_non_phi_suffix]
+  >- metis_tac[phi_prefix_length_lt_wf] >>
+  phi_suffix_nonphi_tac
 QED

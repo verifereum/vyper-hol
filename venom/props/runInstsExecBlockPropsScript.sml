@@ -238,6 +238,6 @@ Proof
   qspecl_then [`s`,`b1.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs
   >- (first_x_assum drule >> strip_tac >> simp[run_block_def] >>
       irule exec_block_run_insts_lift_result >>
-      metis_tac[bb_well_formed_phi_prefix_length_lt]) >>
+      metis_tac[phi_prefix_length_lt_wf]) >>
   simp[run_block_def]
 QED

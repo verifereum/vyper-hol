@@ -777,7 +777,7 @@ Theorem vyper_call_correct:
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok am tx (MAP SND (call_trace es))
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -785,6 +785,8 @@ Theorem vyper_call_correct:
        call_result_rel tops ret am tx es r es')
 Proof
   rpt strip_tac >>
+  drule_all call_state_rel_call_outcomes_ok >> strip_tac >>
+  qpat_x_assum `call_outcomes_storage_ok _ _ _` kall_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
   qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
@@ -816,8 +818,8 @@ Proof
      gvs[Abbr`vs`, entry_venom_state_def, call_state_rel_def]) >>
   `EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
    fixed_region_reserved 0 unit.cu_context` by
-    (drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-     drule run_lowering_eom_none >> simp[fixed_region_reserved_def]) >>
+    (drule lower_vyper_runtime_unit_raw_defaults >>
+     simp[fixed_region_reserved_def]) >>
   `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
     (drule lower_vyper_runtime_unit_global_reserved >>
      simp[staticLayoutDefsTheory.reserved_intervals_wf_def]) >>

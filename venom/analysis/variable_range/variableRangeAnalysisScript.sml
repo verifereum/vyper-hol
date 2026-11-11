@@ -7,4 +7,4 @@
 Theory variableRangeAnalysis
 Ancestors
   valueRangeDefs rangeEvalDefs rangeAnalysisDefs
-  variableRangeAnalysisProps
+  rangeAnalysisProofs venomWf

@@ -14,6 +14,7 @@ Ancestors
   acChainProofs assertCombinerDefs irSupplyFreshProps irSupply
   venomFnScheduleRunner fmpStepChunk fmpStepList dfgAnalysisProps
   passSharedDefs venomInstIdsProps venomWf venomInst venomExecProps alist list
+  rtaSupplyProofs mmWfProofs dftIndexedExec makeSsaCurrentLockstepShape
 Libs
   listTheory
 
@@ -62,15 +63,15 @@ QED
 Theorem ac_merge_inst_fresh:
   ac_merge_inst cands mp su inst = (mp',out,su') ==>
   ir_supply_extends su su' /\
-  ir_fresh_ext su.irs_used_vars su'.irs_used_vars inst.inst_outputs
+  rta_fresh_ext su.irs_used_vars su'.irs_used_vars inst.inst_outputs
     (FLAT (MAP (\i. i.inst_outputs) out)) /\
   (ir_supply_inst_ok su ==>
    ir_supply_inst_ok su' /\
-   ir_fresh_ext su.irs_used_inst_ids su'.irs_used_inst_ids [inst.inst_id]
+   rta_fresh_ext su.irs_used_inst_ids su'.irs_used_inst_ids [inst.inst_id]
      (MAP (\i. i.inst_id) out))
 Proof
   strip_tac >> drule ac_merge_inst_cases >> strip_tac
-  >- (gvs[ir_supply_extends_refl] >> rw[] >> simp[ir_fresh_ext_def]) >>
+  >- (gvs[ir_supply_extends_refl] >> rw[] >> simp[rta_fresh_ext_def]) >>
   `ir_supply_extends su su'` by
     (imp_res_tac fresh_inst_id_ir_supply_extends >>
      imp_res_tac fresh_ir_var_ir_supply_extends >>
@@ -88,12 +89,12 @@ Proof
     (qpat_x_assum `fresh_ir_var s3 = _` mp_tac >> rpt (pop_assum kall_tac) >>
      strip_tac >> drule fresh_ir_var_contract >> simp[]) >>
   gvs[fresh_inst_id_def] >>
-  (conj_tac >- (rw[ir_fresh_ext_def] >> gvs[] >> metis_tac[]) >>
+  (conj_tac >- (rw[rta_fresh_ext_def] >> gvs[] >> metis_tac[]) >>
    simp[ir_supply_inst_ok_def, EVERY_MEM] >> strip_tac >>
    `~MEM su.irs_next_inst su.irs_used_inst_ids /\
     ~MEM s2.irs_next_inst su.irs_used_inst_ids` by
      (rpt strip_tac >> res_tac >> fs[]) >>
-   rw[ir_fresh_ext_def] >> gvs[] >> rpt strip_tac >> res_tac >> fs[])
+   rw[rta_fresh_ext_def] >> gvs[] >> rpt strip_tac >> res_tac >> fs[])
 QED
 
 (* Under the premise that merge candidates name only ASSERTs, every
@@ -122,16 +123,16 @@ Theorem ac_merge_insts_fresh:
   !insts cands mp su out su'.
     ac_merge_insts cands mp su insts = (out,su') ==>
     ir_supply_extends su su' /\
-    ir_fresh_ext su.irs_used_vars su'.irs_used_vars
+    rta_fresh_ext su.irs_used_vars su'.irs_used_vars
       (FLAT (MAP (\i. i.inst_outputs) insts))
       (FLAT (MAP (\i. i.inst_outputs) out)) /\
     (ir_supply_inst_ok su ==>
      ir_supply_inst_ok su' /\
-     ir_fresh_ext su.irs_used_inst_ids su'.irs_used_inst_ids
+     rta_fresh_ext su.irs_used_inst_ids su'.irs_used_inst_ids
        (MAP (\i. i.inst_id) insts) (MAP (\i. i.inst_id) out))
 Proof
   Induct
-  >- simp[ac_merge_insts_def, ir_fresh_ext_refl, ir_supply_extends_refl] >>
+  >- simp[ac_merge_insts_def, rta_fresh_ext_refl, ir_supply_extends_refl] >>
   rpt gen_tac >> simp[ac_merge_insts_def] >>
   Cases_on `ac_merge_inst cands mp su h` >> rename1 `_ = (mp1,r)` >>
   Cases_on `r` >> rename1 `_ = (mp1,o1,s1)` >>
@@ -143,11 +144,11 @@ Proof
   conj_tac >- metis_tac[ir_supply_extends_trans] >>
   conj_tac
   >- (simp[MAP_APPEND, FLAT_APPEND] >>
-      irule ir_fresh_ext_append >> metis_tac[]) >>
+      irule rta_fresh_ext_append >> metis_tac[]) >>
   strip_tac >> gvs[] >>
-  qpat_x_assum `ir_fresh_ext su.irs_used_inst_ids _ _ _` (fn th1 =>
-    qpat_x_assum `ir_fresh_ext s1.irs_used_inst_ids _ _ _` (fn th2 =>
-      mp_tac (MATCH_MP ir_fresh_ext_append (CONJ th1 th2)))) >>
+  qpat_x_assum `rta_fresh_ext su.irs_used_inst_ids _ _ _` (fn th1 =>
+    qpat_x_assum `rta_fresh_ext s1.irs_used_inst_ids _ _ _` (fn th2 =>
+      mp_tac (MATCH_MP rta_fresh_ext_append (CONJ th1 th2)))) >>
   simp[MAP_APPEND]
 QED
 
@@ -270,17 +271,17 @@ Theorem ac_transform_blocks_fresh:
   !bbs su bbs' su'.
     ac_transform_blocks dfg su bbs = (bbs',su') ==>
     ir_supply_extends su su' /\
-    ir_fresh_ext su.irs_used_vars su'.irs_used_vars
+    rta_fresh_ext su.irs_used_vars su'.irs_used_vars
       (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs)))
       (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs'))) /\
     (ir_supply_inst_ok su ==>
      ir_supply_inst_ok su' /\
-     ir_fresh_ext su.irs_used_inst_ids su'.irs_used_inst_ids
+     rta_fresh_ext su.irs_used_inst_ids su'.irs_used_inst_ids
        (MAP (\i. i.inst_id) (fn_insts_blocks bbs))
        (MAP (\i. i.inst_id) (fn_insts_blocks bbs')))
 Proof
   Induct
-  >- simp[ac_transform_blocks_def, fn_insts_blocks_def, ir_fresh_ext_refl,
+  >- simp[ac_transform_blocks_def, fn_insts_blocks_def, rta_fresh_ext_refl,
           ir_supply_extends_refl] >>
   rpt gen_tac >> simp[ac_transform_blocks_def] >>
   Cases_on `ac_transform_block dfg su h` >> rename1 `_ = (bb1,s1)` >>
@@ -295,10 +296,10 @@ Proof
   first_x_assum drule >> strip_tac >>
   conj_tac >- metis_tac[ir_supply_extends_trans] >>
   conj_tac
-  >- (simp[MAP_APPEND, FLAT_APPEND] >> irule ir_fresh_ext_append >>
+  >- (simp[MAP_APPEND, FLAT_APPEND] >> irule rta_fresh_ext_append >>
       metis_tac[]) >>
   strip_tac >> gvs[] >>
-  simp[MAP_APPEND] >> irule ir_fresh_ext_append >> metis_tac[]
+  simp[MAP_APPEND] >> irule rta_fresh_ext_append >> metis_tac[]
 QED
 
 Theorem ac_list_rel_labels:
@@ -319,7 +320,7 @@ Proof
   rpt strip_tac >> simp[ac_transform_function_def] >>
   Cases_on `ac_transform_blocks (dfg_build_function fn) su fn.fn_blocks` >>
   simp[] >>
-  drule ac_transform_blocks_fresh >> simp[ir_fresh_ext_def] >>
+  drule ac_transform_blocks_fresh >> simp[rta_fresh_ext_def] >>
   strip_tac >> gvs[ssa_form_def, fn_insts_def] >>
   first_x_assum irule >> simp[] >>
   gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM, fn_ir_vars_def] >>
@@ -359,11 +360,11 @@ Proof
   `fn_succs_closed (fn with fn_blocks := bbs')` by
     (gvs[fn_succs_closed_def, fn_labels_def] >> metis_tac[]) >>
   simp[] >>
-  drule ac_transform_blocks_fresh >> simp[ir_fresh_ext_def] >>
+  drule ac_transform_blocks_fresh >> simp[rta_fresh_ext_def] >>
   strip_tac >> gvs[] >>
   qpat_x_assum `ALL_DISTINCT (MAP _ (fn_insts_blocks fn.fn_blocks)) /\ _ ==> _`
     mp_tac >>
-  fs[fn_inst_ids_distinct_def, blocks_inst_ids_flat, fn_insts_blocks_inst_ids,
+  fs[fn_inst_ids_distinct_def, lambdify block_ir_inst_ids_def, fn_insts_blocks_inst_ids,
      ir_supply_covers_fn_def, list_subset_def, EVERY_MEM, fn_ir_inst_ids_def]
 QED
 
@@ -525,7 +526,7 @@ Proof
        fn_ir_vars_def, fn_ir_labels_def, GSYM fn_insts_blocks_inst_ids,
        blocks_ir_vars_flat, blocks_ir_labels_mem] >>
   strip_tac >>
-  gvs[ir_supply_extends_def, ir_supply_inst_ok_def, ir_fresh_ext_def,
+  gvs[ir_supply_extends_def, ir_supply_inst_ok_def, rta_fresh_ext_def,
       list_subset_def, EVERY_MEM, GSYM fn_insts_def] >>
   fs[MEM_FLAT, MEM_MAP, PULL_EXISTS, inst_ir_vars_def, inst_uses_def,
      inst_ir_labels_def, MEM_operand_ir_labels, MEM_operand_vars_eq_Var] >>
@@ -602,6 +603,24 @@ Proof
   simp[ac_scan_phi_prefix]
 QED
 
+(* PHIs form a prefix of a well-formed block, so nothing after the
+   PHI prefix is a PHI. *)
+val phi_suffix_nonphi_tac =
+  `!xs. (!i j. i < j /\ j < LENGTH xs /\ (EL j xs).inst_opcode = PHI ==>
+               (EL i xs).inst_opcode = PHI) ==>
+        EVERY (\i. i.inst_opcode <> PHI) (DROP (phi_prefix_length xs) xs)` by
+    (rpt (pop_assum kall_tac) >>
+     Induct >> simp[venomExecSemanticsTheory.phi_prefix_length_def] >>
+     rpt strip_tac >> Cases_on `h.inst_opcode = PHI`
+     >- (simp[venomExecSemanticsTheory.phi_prefix_length_def] >>
+         first_x_assum irule >> rpt strip_tac >>
+         first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
+     simp[venomExecSemanticsTheory.phi_prefix_length_def, EVERY_MEM] >>
+     rpt strip_tac >> gvs[] >>
+     `?j. j < LENGTH xs /\ EL j xs = i` by metis_tac[MEM_EL] >>
+     first_x_assum (qspecl_then [`0`, `SUC j`] mp_tac) >> simp[]) >>
+  pop_assum irule >> gvs[bb_well_formed_def] >> metis_tac[];
+
 (* The parallel PHI batch is unchanged; only the non-PHI suffix is merged. *)
 Theorem ac_transform_block_phi_boundary:
   ac_transform_block dfg su bb = (bt,st) /\
@@ -620,8 +639,7 @@ Proof
   `EVERY (\i. i.inst_opcode = PHI) pre` by
     (simp[Abbr `pre`, EVERY_MEM] >> metis_tac[phi_prefix_mem]) >>
   `EVERY (\i. i.inst_opcode <> PHI) rest` by
-    (simp[Abbr `rest`, EVERY_EL, EL_DROP] >> rpt strip_tac >>
-     gvs[venomExecProofsTheory.phi_prefix_length_non_phi_suffix]) >>
+    (simp[Abbr `rest`] >> phi_suffix_nonphi_tac) >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) rest)` by
     (gvs[MAP_APPEND, ALL_DISTINCT_APPEND]) >>
   Cases_on `ac_merge_insts (ac_scan_block dfg rest NONE) [] su rest` >>
@@ -634,11 +652,11 @@ Proof
   `bt.bb_instructions = pre ++ out /\ st = su1` by
     gvs[ac_transform_block_def] >>
   `phi_prefix_length bt.bb_instructions = LENGTH pre` by
-    simp[venomExecProofsTheory.phi_prefix_length_prepend,
+    simp[makeSsaCurrentLockstepShapeTheory.phi_prefix_length_prepend,
          venomExecProofsTheory.no_phis_phi_prefix_length_zero] >>
   `LENGTH pre = phi_prefix_length bb.bb_instructions` by
     simp[Abbr `pre`, venomExecProofsTheory.phi_prefix_length_le] >>
   simp[] >> conj_tac
-  >- metis_tac[venomExecProofsTheory.dft_eval_phis_append] >>
+  >- metis_tac[dftIndexedExecTheory.dft_eval_phis_append] >>
   simp[DROP_APPEND]
 QED

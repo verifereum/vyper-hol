@@ -15,7 +15,7 @@
 Theory makeSsaCurrentCutInv
 Ancestors livenessTransferProofs
   makeSsaCurrentCleanupTransparent makeSsaCurrentSourceEntryRuntime
-  makeSsaCurrentPhiBatchRuntime venomState venomExecProofs
+  makeSsaCurrentPhiBatchRuntime venomState
   makeSsaCurrentExecRuntime makeSsaCurrentReturnRuntime
   makeSsaCurrentWfSsa o1FrameLockstep o1PassLift makeSsaCurrentDemand
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentCertificate

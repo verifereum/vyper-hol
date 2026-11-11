@@ -201,7 +201,7 @@ Proof
        (fn_insts func) /\
    MEM (mk_inst (id0 + 3) ALLOCA [Lit (n2w Z)] ["%" ++ toString (v0 + 2)])
        (fn_insts func) /\
-   MEM (mk_inst (id0 + 4 + 5) ALLOCA [Lit 32w] ["%" ++ toString (v0 + 3 + 4)])
+   MEM (mk_inst (id0 + 4 + 6) ALLOCA [Lit 32w] ["%" ++ toString (v0 + 3 + 5)])
        (fn_insts func)` by
     (rpt conj_tac >>
      qpat_assum `!i. MEM i ecode ==> MEM i (fn_insts func)` irule >>
@@ -239,8 +239,8 @@ Proof
           disch_then drule >> simp[])
       >- (gen_tac >> strip_tac >>
           qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `t1`,
-                       `sa.cs_next_id`, `id0 + 4 + 5`, `32`,
-                       `["%" ++ toString (v0 + 3 + 4)]`] mp_tac
+                       `sa.cs_next_id`, `id0 + 4 + 6`, `32`,
+                       `["%" ++ toString (v0 + 3 + 5)]`] mp_tac
             other_site_size >>
           impl_tac >- simp[Abbr `id0`] >>
           disch_then drule >> strip_tac >> simp[] >>
@@ -253,7 +253,7 @@ Proof
           PairCases_on `x` >> PairCases_on `y` >> fs[] >>
           qpat_x_assum `allocas_non_overlapping s0`
             (mp_tac o REWRITE_RULE [allocas_non_overlapping_def]) >>
-          disch_then (qspecl_then [`id0 + 4 + 5`, `id0 + 3`, `x0`, `x1`,
+          disch_then (qspecl_then [`id0 + 4 + 6`, `id0 + 3`, `x0`, `x1`,
                                    `y0`, `y1`] mp_tac) >>
           simp[])
       >- (simp[] >> rpt strip_tac >> fs[ASCIInumbersTheory.toString_11])

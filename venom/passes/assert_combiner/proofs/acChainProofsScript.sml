@@ -287,20 +287,6 @@ QED
 
 (* ===== run_insts infrastructure ===== *)
 
-Theorem run_insts_append:
-  !xs ys fuel ctx s.
-    run_insts fuel ctx (xs ++ ys) s =
-    case run_insts fuel ctx xs s of
-      OK s' => run_insts fuel ctx ys s'
-    | Halt s' => Halt s'
-    | Abort a s' => Abort a s'
-    | IntRet v s' => IntRet v s'
-    | Error e => Error e
-Proof
-  Induct >> rw[run_insts_def] >>
-  Cases_on `step_inst fuel ctx h s` >> simp[run_insts_def]
-QED
-
 (* Appending a NOP instruction to a successful run_insts is still OK *)
 Theorem run_insts_snoc_nop[local]:
   !insts nop fuel ctx s s'.
@@ -801,37 +787,6 @@ QED
 (*
  * Helper: safe_between step succeeds and preserves eval_operand + exec_equiv.
  *)
-
-Triviality INDEX_FIND_P[local]:
-  !l i P n x. INDEX_FIND i P l = SOME (n, x) ==> P x
-Proof
-  Induct >> simp[INDEX_FIND_def] >> rpt strip_tac >>
-  Cases_on `P h` >> gvs[] >> metis_tac[]
-QED
-
-Theorem FIND_P:
-  !P l x. FIND P l = SOME x ==> P x
-Proof
-  rpt strip_tac >>
-  fs[FIND_def] >>
-  Cases_on `INDEX_FIND 0 P l` >> gvs[] >>
-  Cases_on `x'` >> gvs[] >> metis_tac[INDEX_FIND_P]
-QED
-
-Triviality INDEX_FIND_MEM[local]:
-  !l i P n x. INDEX_FIND i P l = SOME (n, x) ==> MEM x l
-Proof
-  Induct >> simp[INDEX_FIND_def] >> rpt strip_tac >>
-  Cases_on `P h` >> gvs[] >> metis_tac[]
-QED
-
-Theorem FIND_MEM:
-  !P l x. FIND P l = SOME x ==> MEM x l
-Proof
-  rpt strip_tac >> fs[FIND_def] >>
-  Cases_on `INDEX_FIND 0 P l` >> gvs[] >>
-  Cases_on `x'` >> gvs[] >> metis_tac[INDEX_FIND_MEM]
-QED
 
 (* If P holds for some member of l, then FIND P l returns SOME *)
 
