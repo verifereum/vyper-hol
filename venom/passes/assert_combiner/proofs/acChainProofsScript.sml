@@ -1087,3 +1087,24 @@ Proof
   first_x_assum (qspec_then `P` mp_tac) >>
   impl_tac >- (simp[] >> metis_tac[]) >> simp[]
 QED
+
+(* The scanner's edges connect adjacent recognized assertions. *)
+Theorem ac_scan_indexed_edge:
+  MEM mc (ac_scan_block dfg xs NONE) ==>
+  ?i j c d.
+    i < j /\ j < LENGTH xs /\
+    (EL i xs).inst_id = mc.mc_first_id /\
+    (EL j xs).inst_id = mc.mc_second_id /\
+    (EL i xs).inst_opcode = ASSERT /\
+    (EL i xs).inst_operands = [c] /\
+    ac_get_iszero_operand dfg {} c = SOME mc.mc_first_pred /\
+    (EL j xs).inst_opcode = ASSERT /\
+    (EL j xs).inst_operands = [d] /\
+    ac_get_iszero_operand dfg {} d = SOME mc.mc_second_pred /\
+    (!k. i < k /\ k < j ==> ac_is_safe_between (EL k xs))
+Proof
+  strip_tac >> drule ac_scan_pair_decompose >> strip_tac >> gvs[] >>
+  qexistsl [`LENGTH prefix`, `LENGTH prefix + SUC (LENGTH gap)`, `op1`, `op2`] >>
+  simp[EL_APPEND_EQN, ADD1] >> rpt strip_tac >>
+  fs[EVERY_EL] >> first_x_assum irule >> decide_tac
+QED
