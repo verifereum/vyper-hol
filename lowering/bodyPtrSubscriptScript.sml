@@ -7,12 +7,13 @@
  * type than its own (a widening internal call) is the residual
  * bodyPtrSubscriptWidenedResidual.  The rest by place_type of the base, as
  * S1's compile_subscript_case: a mapping (bodyPtrSubscriptSeamMap, over the
- * base's judgment from the residual bodyPtrSubscriptMapResidual), a tuple
+ * base's mapping judgment from body_expr_ptr_ok's mapping clause), a tuple
  * (bodyPtrSubscriptSeamTuple), an array whose index frames its base in
  * memory or in code (bodyPtrSubscriptSeamArrayMemory,
  * bodyPtrSubscriptSeamArrayCode), and every other array (the residual
  * bodyPtrSubscriptArrayPlaceResidual).  No other base type dispatches
- * (bodyPtrSubscriptCaseSplit).
+ * (bodyPtrSubscriptCaseSplit).  A subscript naming a mapping (a mapping of
+ * mappings) has its mapping judgment by bodyPtrSubscriptMapMap.
  *
  * TOP-LEVEL:
  *   subscript_expr_ptr_ok
@@ -22,7 +23,7 @@ Ancestors
   bodyPtrSubscriptCaseSplit bodyPtrSubscriptTupleDispatch
   bodyPtrSubscriptSeamTuple bodyPtrSubscriptSeamArrayMemory
   bodyPtrSubscriptSeamArrayCode bodyPtrSubscriptSeamMap
-  bodyPtrSubscriptArrayPlaceResidual bodyPtrSubscriptMapResidual
+  bodyPtrSubscriptArrayPlaceResidual bodyPtrSubscriptMapMap
   bodyPtrSubscriptWidenedResidual
   exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph list
@@ -36,7 +37,15 @@ Theorem subscript_expr_ptr_ok:
     body_expr_ptr_ok cx (Subscript v8 e1 e2)
 Proof
   rpt gen_tac >> strip_tac >> ONCE_REWRITE_TAC[body_expr_ptr_ok_def] >>
-  reverse conj_tac >- simp[] >>
+  reverse conj_tac
+  >- (conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
+      `expr_map_pre cenv cx env e1 es` by
+        metis_tac[exprSimSubscriptMapTheory.expr_map_pre_subscript_base] >>
+      `expr_map_sim_ptr d ctx PG func cenv cx ty e1 es` by
+        (qpat_x_assum `body_expr_ptr_ok cx e1`
+           (mp_tac o CONJUNCT2 o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ptr_ok_def]) >>
+         metis_tac[]) >>
+      metis_tac[subscript_map_map_ptr]) >>
   rpt gen_tac >> strip_tac >>
   reverse (Cases_on `post_value_type cenv e1 = expr_type e1`)
   >- (qspecl_then [`cx`,`v8`,`e1`,`e2`] mp_tac
@@ -53,10 +62,12 @@ Proof
                  first_assum ACCEPT_TAC) >>
   Cases_on `place_type cenv e1`
   >- (rename1 `MapPT kt vt` >>
-      qspecl_then [`cx`,`v8`,`e1`,`e2`,`d`,`PG`,`tops`,`ctx`,`func`,`cenv`,
-                   `env`,`ty`,`es`,`kt`,`vt`] mp_tac
-        body_subscript_map_base_ptr >>
-      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+      `expr_map_sim_ptr d ctx PG func cenv cx ty e1 es` by
+        (`expr_map_pre cenv cx env e1 es` by
+           metis_tac[exprSimSubscriptMapTheory.expr_body_pre_map_subscript_base] >>
+         qpat_x_assum `body_expr_ptr_ok cx e1`
+           (mp_tac o CONJUNCT2 o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ptr_ok_def]) >>
+         metis_tac[]) >>
       qspecl_then [`cx`,`v8`,`e1`,`e2`,`d`,`PG`,`tops`,`ctx`,`func`,`cenv`,
                    `env`,`ty`,`es`,`kt`,`vt`] mp_tac subscript_map_ptr >>
       impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
