@@ -251,11 +251,13 @@ Proof
           IF_CASES_TAC
           >- (irule cs_appends_ignore_bind >> simp[cs_appends_return] >>
               rw[cs_appends_def] >>
-              qspecl_then [`val_op`, `buf_alloc.buf_operand`, `st`] mp_tac
-                (cj 1 compile_store_bytestring_labels) >> simp[]) >>
+              qpat_x_assum `compile_store_bytestring _ _ _ = _`
+                (assume_tac o GSYM o Q.AP_TERM `SND`) >>
+              fs[compile_store_bytestring_labels]) >>
           rw[cs_appends_def] >>
-          qspecl_then [`ce`, `val_op`, `buf_alloc.buf_operand`, `ty`, `vv_type vv`, `st`]
-            mp_tac (cj 1 compile_store_memory_labels) >> simp[]) >>
+          qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _`
+            (assume_tac o GSYM o Q.AP_TERM `SND`) >>
+          fs[compile_store_memory_labels]) >>
       irule cs_appends_bind >> simp[cs_appends_return] >>
       rw[cs_appends_def] >> metis_tac[]) >>
   ho_match_mp_tac first_emission_bind >>
