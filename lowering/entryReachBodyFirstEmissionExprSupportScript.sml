@@ -266,7 +266,10 @@ Proof
   ho_match_mp_tac first_emission_bind >>
   (conj_tac >- metis_tac[first_emission_unwrap_value] >> gen_tac) >>
   ho_match_mp_tac first_emission_bind >>
-  (conj_tac >- metis_tac[] >> metis_tac[first_emission_return])
+  (conj_tac
+   >- (qpat_x_assum `_ ==> !a x b. _` mp_tac >>
+       impl_tac >- first_assum ACCEPT_TAC >> disch_then ACCEPT_TAC) >>
+   metis_tac[first_emission_return])
 QED
 
 Theorem first_emission_materialize_vv:
