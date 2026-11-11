@@ -25,7 +25,8 @@ Proof
     dst.inst_operands = [Label (inline_cell_label_action frames eb.bb_label)] /\
     dst.inst_outputs = []` by
     (irule inline_selected_jump_residual_fetch >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`c`, `e`, `mid`] >> simp[]) >>
   `?entry_bb. lookup_block (inline_cell_label_action frames eb.bb_label)
       d.ic_function.fn_blocks = SOME entry_bb` by
     (gvs[venomInstTheory.fn_labels_def] >>
