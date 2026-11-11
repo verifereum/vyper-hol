@@ -180,12 +180,12 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem assignment_storage_read_is_delayed:
+Theorem assignment_storage_read_precedes_target_effects:
   let (res,st) = assignment_run assign_delayed_storage_read_source_context
         assign_delayed_storage_read_source_program assignment_empty_state in
   res = INL () /\ assignment_slot assign_delayed_storage_read_source_context st 0w = 1w /\
   assignment_slot assign_delayed_storage_read_source_context st
-    92458281274488595289803937127152923398167637295201432141969818930235769911599w = 1w
+    92458281274488595289803937127152923398167637295201432141969818930235769911599w = 0w
 Proof
   CONV_TAC cv_eval
 QED
@@ -198,14 +198,16 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem assignment_nested_pop_reads_updated_snapshot:
+Theorem assignment_nested_pop_reads_prior_snapshot:
   let (res,st) = assignment_run assign_nested_popped_read_source_context
         assign_nested_popped_read_source_program assignment_empty_state in
   res = INL () /\
   assignment_slot assign_nested_popped_read_source_context st
-    24465873643947496235832446106509767096567058095563226156125564318740882468607w = 1w /\
+    24465873643947496235832446106509767096567058095563226156125564318740882468607w = 2w /\
   assignment_slot assign_nested_popped_read_source_context st
-    24465873643947496235832446106509767096567058095563226156125564318740882468608w = 1w
+    24465873643947496235832446106509767096567058095563226156125564318740882468608w = 1w /\
+  assignment_slot assign_nested_popped_read_source_context st
+    24465873643947496235832446106509767096567058095563226156125564318740882468609w = 2w
 Proof
   CONV_TAC cv_eval
 QED

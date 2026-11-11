@@ -122,6 +122,8 @@ Theorem vv_at_fixed_array_element:
   evaluate_type (get_tenv cx) et = SOME etv /\
   read_result cx child es = (INL v,es) /\ val_wf etv v /\
   mem_step_offset (ArrayTV etv (Fixed n)) (ValueSubscript (IntV i)) = SOME (j,etv) /\
+  (!id path'. child = PlaceR (MemoryPlace id path') <=>
+     ?path. path' = path ++ [ValueSubscript (IntV i)] /\ r = PlaceR (MemoryPlace id path)) /\
   eval_operand dst s = SOME dw /\ w2n dw = w2n w + j ==>
   vv_at cenv cx et sa sb es child (LocatedValue et (mk_ptr dst LocMemory)) s
 Proof
@@ -144,9 +146,12 @@ Proof
   disj2_tac >> disj1_tac >> qexistsl_tac [`n'`, `b`, `sz`] >>
   simp[] >>
   `j + w2n w - b = (w2n w - b) + j` by decide_tac >>
-  drule_all local_val_at_array_element >>
-  disch_then (qspec_then `v` assume_tac) >>
-  qpat_x_assum `j + w2n w - b = _` SUBST1_TAC >> first_assum ACCEPT_TAC
+  qpat_x_assum `j + w2n w - b = _` SUBST1_TAC >>
+  conj_tac
+  >- (drule_all local_val_at_array_element >>
+      disch_then (qspec_then `v` ACCEPT_TAC)) >>
+  irule exprSimPropsTheory.local_place_at_step >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem vv_holds_array_element:
@@ -658,6 +663,8 @@ Theorem vv_post_array_element:
   read_result cx child es' = (INL v,es') /\
   j = (case bd of Fixed _ => 0 | Dynamic _ => 32) + Num i * type_memory_size etv /\
   eval_operand dst s = SOME (w + n2w j) /\
+  (!id path'. child = PlaceR (MemoryPlace id path') <=>
+     ?path. path' = path ++ [ValueSubscript (IntV i)] /\ r = PlaceR (MemoryPlace id path)) /\
   (p.ptr_location = LocMemory ==> w2n (w + n2w j) = w2n w + j) ==>
   vv_post ctx func cenv cx (Subscript et obj idx) es sa sb s0 es' child
     (LocatedValue et (mk_ptr dst p.ptr_location)) s
@@ -678,7 +685,11 @@ Proof
                 valueEncodingDefsTheory.val_wf_def, listTheory.oEL_THM,
                 AllCaseEqs()]) >>
          drule_all vv_at_fixed_array_element >> simp[]) >>
-     simp[vv_at_def, contextTheory.mk_ptr_def]) >>
+     `vv_at cenv cx (ArrayT et bd) sa sb es' r (LocatedValue ann p) s`
+       by gvs[vv_post_def] >>
+     pop_assum mp_tac >>
+     simp[vv_at_def, contextTheory.mk_ptr_def, compileEnvTheory.is_word_type_def] >>
+     metis_tac[]) >>
   gvs[vv_post_def, vyperASTTheory.expr_type_def, contextTheory.mk_ptr_def] >>
   first_assum ACCEPT_TAC
 QED

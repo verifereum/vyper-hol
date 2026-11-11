@@ -7,7 +7,8 @@ Theorem rest_word_fixed_tail_mem:
   compile_var_array_membership cenv needleop vv (ArrayT ty (Fixed n)) is_in sm = (out,ct) /\
   fn_has_code sm ct fn /\
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\
-  vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv s /\
+  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  read_result cx tv es' = (INL (ArrayV av), es') /\
   loc = (case vv_location vv of SOME l => l | NONE => LocMemory) /\ loc <> LocCalldata /\
   post_value_type cenv e = ArrayT ty (Fixed n) /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME (ArrayTV et (Fixed n)) /\
@@ -24,7 +25,7 @@ Theorem rest_word_fixed_tail_mem:
       alloca_history fn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       t.vs_current_bb = ct.cs_current_bb /\
       t.vs_inst_idx = LENGTH ct.cs_current_insts /\ ~t.vs_halted /\
-      vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv t /\
+      vv_post ctx func cenv cx e es sa sm s0 es' tv vv t /\
       eval_operand needleop t = SOME (typed_val_to_w256 et needle) /\
       eval_operand (vv_operand vv) t = SOME baseword /\
       eval_operand out t = SOME (bool_to_word
@@ -42,7 +43,8 @@ Theorem rest_word_dynamic_tail_mem:
   compile_var_array_membership cenv needleop vv (ArrayT ty (Dynamic cap)) is_in sm = (out,ct) /\
   fn_has_code sm ct fn /\
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\
-  vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv s /\
+  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  read_result cx tv es' = (INL (ArrayV av), es') /\
   loc = (case vv_location vv of SOME l => l | NONE => LocMemory) /\ loc <> LocCalldata /\
   post_value_type cenv e = ArrayT ty (Dynamic pcap) /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME (ArrayTV et (Dynamic pcap)) /\
@@ -59,7 +61,7 @@ Theorem rest_word_dynamic_tail_mem:
       alloca_history fn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       t.vs_current_bb = ct.cs_current_bb /\
       t.vs_inst_idx = LENGTH ct.cs_current_insts /\ ~t.vs_halted /\
-      vv_post ctx func cenv cx e es sa sm s0 es' (Value (ArrayV av)) vv t /\
+      vv_post ctx func cenv cx e es sa sm s0 es' tv vv t /\
       eval_operand needleop t = SOME (typed_val_to_w256 et needle) /\
       eval_operand (vv_operand vv) t = SOME baseword /\
       eval_operand out t = SOME (bool_to_word

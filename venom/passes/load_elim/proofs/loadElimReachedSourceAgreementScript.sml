@@ -1,7 +1,7 @@
 Theory loadElimReachedSourceAgreement
 Ancestors
   loadElimReachedCapture loadElimReachedAvailability loadElimSingletonSuffix
-  loadElimTransferProvenance cfgNormBase cfgNormProof cfgTransform
+  loadElimTransferProvenance cfgNormBase cfgTransform
   loadElimActionFreshness loadElimOccurrence loadElimActualGeneration
   loadElimExitCurrentness loadElimPhiCapture venomExecProofs list finite_map pred_set
 

@@ -19,7 +19,7 @@
  *   vv_post_local_region_backward — local
  *     regions after a child were there before it
  *
- * Helpers: the *_materialise lemmas, vv_*_vars_frame, vv_post_rebase,
+ * Helpers: vv_*_vars_frame, vv_post_rebase,
  *   the *_rebased_* and aggregate_store_* lemmas, buffer_alloc_provenance.
  *)
 Theory exprSimAggregateChildren
@@ -97,44 +97,6 @@ Proof
 QED
 
 
-Theorem vv_holds_materialise:
-  read_result cx tv es = (INL v,es) /\
-  vv_holds cenv cx t tv vv es s ==>
-  vv_holds cenv cx t (Value v) vv es s
-Proof
-  Cases_on `vv`
-  >- (simp[vv_holds_def] >> rpt strip_tac >>
-      gvs[read_result_def, return_def]) >>
-  rename1 `LocatedValue t' p` >>
-  Cases_on `p.ptr_location` >>
-  simp[vv_holds_def, storage_holds_def, immutable_holds_def,
-       read_result_def, return_def] >>
-  rpt strip_tac >> gvs[read_result_def, return_def] >>
-  qexistsl [`name`, `off`, `itv`, `iv`, `k`] >> simp[]
-QED
-
-Theorem vv_at_materialise:
-  read_result cx tv es = (INL v,es) /\
-  vv_holds cenv cx t tv vv es s /\
-  vv_at cenv cx t sa sb es tv vv s ==>
-  vv_at cenv cx t sa sb es (Value v) vv s
-Proof
-  Cases_on `vv`
-  >- (simp[vv_holds_def, vv_at_def] >> rpt strip_tac >>
-      gvs[read_result_def, return_def]) >>
-  rename1 `LocatedValue t' p` >>
-  simp[vv_at_def, read_result_def, return_def] >>
-  metis_tac[]
-QED
-
-Theorem vv_post_materialise:
-  read_result cx tv es' = (INL v,es') /\
-  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s
-Proof
-  rpt strip_tac >> drule vv_post_read_result >> metis_tac[]
-QED
-
 (* Materialization keeps the child's physical post layout, including widened
    internal-call buffers. *)
 Theorem unwrap_value_materialise_physical_sim:
@@ -159,7 +121,7 @@ Proof
     [`\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s`,
      `\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s`, `R`] >>
   simp[] >> conj_tac
-  >- (rpt strip_tac >> drule_all vv_post_materialise >> simp[]) >>
+  >- (rpt strip_tac >> drule_all vv_post_read_result >> simp[]) >>
   irule unwrap_value_physical_sim >> simp[]
 QED
 
@@ -1392,7 +1354,7 @@ Proof
       qexistsl_tac [`es`, `s0`, `tv`, `vv`] >> simp[]) >>
   `vv_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     sm r es' (Value v) vv r` by
-    (drule_all vv_post_materialise >> disch_then (mp_tac o MATCH_MP vv_post_rebase) >> simp[]) >>
+    (drule_all vv_post_read_result >> disch_then (mp_tac o MATCH_MP vv_post_rebase) >> simp[]) >>
   irule frag_exec_conseq >>
   qexistsl_tac
     [`\s. vv_post ctx func ce cx e es'
