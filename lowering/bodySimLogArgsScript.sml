@@ -58,7 +58,8 @@ QED
    same declaration in the module get_module_code gives. *)
 Theorem body_log_metadata:
   !tops ctx cenv cx id fields.
-    body_inv tops ctx cenv cx /\ supported_event_fields tops id = SOME fields ==>
+    body_inv tops ctx cenv cx /\ supported_event_fields tops id = SOME fields /\
+    EVERY supported_scalar_type (MAP (SND o FST) fields) ==>
     ?h. cenv.ce_event_info (nsid_to_string id) =
           SOME (h, MAP (SND o FST) fields, MAP SND fields) /\
         lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id =

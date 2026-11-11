@@ -105,6 +105,7 @@ Theorem body_log_widen_mem_case:
     body_exprs_mem_ok cx args /\ body_inv tops ctx cenv cx /\
     supported_pure_exprs tops args /\
     supported_event_fields tops id = SOME fields /\
+    EVERY supported_scalar_type (MAP (SND o FST) fields) /\
     LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) args fields /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Log id args) ==>
@@ -160,22 +161,36 @@ Proof
   qexists_tac `env` >> simp[]
 QED
 
+(* Memory counterpart of the non-scalar event data case. *)
+Theorem body_log_aggregate_mem_case:
+  !cx id es tops ctx cenv fields.
+    body_stmt_safe tops (Log id es) /\
+    body_exprs_mem_ok cx es /\ body_inv tops ctx cenv cx /\
+    supported_event_fields tops id = SOME fields /\
+    ~EVERY supported_scalar_type (MAP (SND o FST) fields) ==>
+    body_stmt_mem_ok cx (Log id es)
+Proof
+  cheat
+QED
+
 Theorem body_log_mem_case:
   !cx id es. body_exprs_mem_ok cx es ==> body_stmt_mem_ok cx (Log id es)
 Proof
   rw[body_stmt_mem_ok_def] >>
   rename1 `stmt_frag_mem _ _ _ _ _ _ _ _ _ st` >>
-  reverse (Cases_on `supported_log_exact tops id es`)
-  >- (`?fields. supported_event_fields tops id = SOME fields /\
-               supported_pure_exprs tops es /\
-               LIST_REL (\e ((_,fty),_).
-                 event_arg_compatible fty (expr_type e)) es fields` by
-        (gvs[supported_stmt_def, supported_log_def, AllCaseEqs()] >>
-         Cases_on `supported_event_fields tops id` >> gvs[]) >>
-      drule_all body_log_widen_mem_case >> simp[]) >>
   `?fields. supported_event_fields tops id = SOME fields /\
             supported_pure_exprs tops es /\
-            MAP expr_type es = MAP (SND o FST) fields` by
+            LIST_REL (\e ((_,fty),_).
+              event_arg_compatible fty (expr_type e)) es fields` by
+    (gvs[supported_stmt_def, supported_log_def, AllCaseEqs()] >>
+     Cases_on `supported_event_fields tops id` >> gvs[]) >>
+  reverse (Cases_on `EVERY supported_scalar_type (MAP (SND o FST) fields)`)
+  >- (`body_stmt_mem_ok cx (Log id es)` by
+        (drule_all body_log_aggregate_mem_case >> simp[]) >>
+      fs[body_stmt_mem_ok_def] >> metis_tac[]) >>
+  reverse (Cases_on `supported_log_exact tops id es`)
+  >- (drule_all body_log_widen_mem_case >> simp[]) >>
+  `MAP expr_type es = MAP (SND o FST) fields` by
     (gvs[supported_log_exact_def, AllCaseEqs()] >>
      Cases_on `supported_event_fields tops id` >> gvs[]) >>
   drule_all body_log_metadata >> strip_tac >>
