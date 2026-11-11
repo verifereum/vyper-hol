@@ -44,7 +44,9 @@ Theorem abi_encode_alloc_window_phase:
     FLOOKUP u.vs_allocas st.cs_next_id = SOME (d,n) /\
     d+n <= u.vs_alloca_next /\ d+n < dimword (:256) /\
     u.vs_memory = s.vs_memory /\ u.vs_call_ctx = s.vs_call_ctx /\
-    u.vs_data_section = s.vs_data_section
+    u.vs_data_section = s.vs_data_section /\
+    ((FLOOKUP s.vs_allocas st.cs_next_id = NONE /\ d = s.vs_alloca_next) \/
+     FLOOKUP s.vs_allocas st.cs_next_id = SOME (d,n))
 Proof
   strip_tac >> drule_all actual_alloc_buffer_site >> strip_tac >>
   qmatch_asmsub_abbrev_tac `MEM inst (fn_insts func)` >>
@@ -82,5 +84,8 @@ Proof
      `inst.inst_id = _`, `n < dimword (:256)`, `buf.buf_operand = _`,
      `not_fresh_at en _`, `b+n < dimword (:256)`,
      `t.vs_memory = _`, `t.vs_call_ctx = _`, `t.vs_data_section = _`] >>
-  rpt (pop_assum kall_tac) >> simp[]
+  qpat_x_assum `exec_alloca (mk_inst _ _ _ _) _ _ = _` mp_tac >>
+  rpt (pop_assum kall_tac) >> simp[] >> rpt strip_tac >>
+  gvs[exec_alloca_def, mk_inst_def, AllCaseEqs(), update_var_def,
+      FLOOKUP_UPDATE]
 QED

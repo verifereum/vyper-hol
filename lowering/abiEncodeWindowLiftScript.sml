@@ -99,11 +99,16 @@ Theorem abi_encode_setup_window_mem:
     FLOOKUP t.vs_allocas st.cs_next_id =
       SOME (p,32+32*word_size (maxlen+(case mid of NONE => 0 | SOME _ => 4))) /\
     p+32+32*word_size (maxlen+(case mid of NONE => 0 | SOME _ => 4)) <= t.vs_alloca_next /\
-    p+32+32*word_size (maxlen+(case mid of NONE => 0 | SOME _ => 4)) < dimword (:256)
+    p+32+32*word_size (maxlen+(case mid of NONE => 0 | SOME _ => 4)) < dimword (:256) /\
+    ((FLOOKUP s.vs_allocas st.cs_next_id = NONE /\ p = s.vs_alloca_next) \/
+     FLOOKUP s.vs_allocas st.cs_next_id =
+       SOME (p,32+32*word_size (maxlen+(case mid of NONE => 0 | SOME _ => 4))))
 Proof
   strip_tac >> drule abi_builtin_encode_setup_trace >> strip_tac >>
   drule_all abi_encode_setup_parts >> strip_tac >>
-  drule_all abi_encode_alloc_window_phase >> strip_tac >>
+  drule_all abi_encode_alloc_window_phase >>
+  disch_then (qx_choose_then `allocated_s` (qx_choose_then `p`
+    (map_every assume_tac o CONJUNCTS))) >>
   rename1 `window_phase ctx func st allocated {st.cs_next_id} [] s allocated_s` >>
   rename1 `eval_operand buf.buf_operand allocated_s = SOME (n2w p)` >>
   `p+32 < dimword (:256)` by decide_tac >>
@@ -126,5 +131,23 @@ Proof
   conj_tac >- metis_tac[window_phase_effect, abi_encoder_registered_effect_allocated] >>
   `allocated_s.vs_alloca_next <= t.vs_alloca_next` by
     metis_tac[window_phase_resources, window_alloca_growth_def] >>
-  decide_tac
+  conj_tac >- decide_tac >> conj_tac >- decide_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem abi_encode_setup_source[local]:
+  window_phase ctx func st en {st.cs_next_id}
+    (case mid of NONE => [] | SOME _ => [(p+32,32)]) s t /\
+  abi_encoder_window_input ei at av sb cap s.vs_memory /\
+  FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,n) /\
+  venomMemDefs$regions_disjoint (sb,cap) (p,n) /\
+  (IS_SOME mid ==> 64 <= n) ==>
+  abi_encoder_window_input ei at av sb cap t.vs_memory
+Proof
+  strip_tac >> irule abi_encoder_window_effect_source >>
+  qexistsl_tac [`{st.cs_next_id}`,
+    `case mid of NONE => [] | SOME _ => [(p+32,32)]`, `s`] >>
+  conj_tac >- simp[window_phase_effect] >> conj_tac
+  >- (Cases_on `mid` >> simp[] >>
+      fs[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  metis_tac[window_phase_effect]
 QED
