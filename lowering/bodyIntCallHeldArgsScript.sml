@@ -186,7 +186,12 @@ Proof
       `local_ptrs_rel func ce es.scopes s` by
         gvs[stmt_state_rel_def, state_rel_def] >>
       `wb_frame ce es es sm s t` by
-        (gvs[wb_frame_def, vv_post_def] >> metis_tac[]) >>
+        (`locals_kept ce es es s t <=> locals_kept ce es ee s t` by
+           simp[locals_kept_def, popped_kept_def] >>
+         pop_assum (fn lk => rewrite_tac[wb_frame_def, lk]) >>
+         qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+         rewrite_tac[vv_post_def] >> strip_tac >> rpt conj_tac >>
+         first_assum ACCEPT_TAC) >>
       drule (CONJUNCT1 compile_expr_grows) >> strip_tac >>
       irule intcall_held_args_transport >> metis_tac[]) >>
   irule intcall_held_args_start_mono >>
