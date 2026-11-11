@@ -992,7 +992,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem assert_reason_expr_exempt[local]:
+Theorem assert_reason_expr_exempt:
   gas_exempt_cert memory tops (ctx,func)
     (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
     (es,s0) marks (err,ee) (leaf,fin) ==>
@@ -1036,6 +1036,8 @@ Proof
   imp_res_tac new_block_props >> gvs[]
 QED
 
+Theorem compile_assert_reason_raise_parts = compile_assert_reason_parts
+
 Theorem compile_raise_reason_extends[local]:
   stmt_env cenv lctx ty (Raise (RaiseReason r)) sa = (cenv',sb) ==>
   cs_extends sa sb
@@ -1068,7 +1070,7 @@ Proof
   drule unwrap_value_extends >> strip_tac >> metis_tac[cs_extends_trans]
 QED
 
-Theorem assert_reason_compiler_code[local]:
+Theorem assert_reason_compiler_code:
   lower_value compile_expr cenv (BaseT BoolT) e sa = (op,s1) /\
   fresh_label "assert_ok" s1 = (ok,s2) /\
   fresh_label "assert_fail" s2 = (fl,s3) /\

@@ -185,6 +185,7 @@ val checker_defs =
    bound_at_most_def,
    vtype_annotation_ok_def,
    subscript_type_ok_def,
+   subscript_base_type_exact_def,
    subscript_vtype_def,
    attribute_type_def,
    attribute_type_ok_def,

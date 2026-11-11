@@ -109,7 +109,7 @@ Definition tuple_offset_def:
     SUM (TAKE k (MAP (elem_size_in_location cenv loc) tys))
 End
 
-Theorem compile_expr_tuple_subscript[local]:
+Theorem compile_expr_tuple_subscript:
   !cenv ty ann obj idx tys st vv st'.
     compile_expr cenv ty (Subscript ann obj idx) st = (vv, st') /\
     place_type cenv obj = ValPT (TupleT tys) ==>
@@ -463,7 +463,7 @@ QED
    precondition, and an in-range integer literal index whose element type
    is the annotation.  A place-typed base (the other branch of
    well_typed_expr) is an array or a mapping, never a tuple. *)
-Theorem tuple_pre_base[local]:
+Theorem tuple_pre_base:
   !cenv cx env ann obj idx es tys.
     expr_body_pre cenv cx env (Subscript ann obj idx) es /\
     expr_type obj = TupleT tys ==>
@@ -497,7 +497,7 @@ Proof
   simp[supportedExprTraverseTheory.supported_expr_exists_def]
 QED
 
-Theorem eval_expr_tuple_subscript[local]:
+Theorem eval_expr_tuple_subscript:
   !cx ann obj ity k es.
     eval_expr cx (Subscript ann obj (Literal ity (IntL (&k)))) es =
     (do r <- eval_expr cx obj;
@@ -569,7 +569,7 @@ QED
 
 (* The element's pointer in memory: the element lies inside the base's
    bytes, so its address does not wrap, and the base sits where vv_at says. *)
-Theorem tuple_elem_ptr[local]:
+Theorem tuple_elem_ptr:
   !func cenv cx env es sa sn es1 tv bvv q w tys tvs vs k ctx.
     stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
@@ -920,7 +920,7 @@ Proof
 QED
 
 (* The element's value_vv after the ADD, from the base's. *)
-Theorem tuple_vv_post[local]:
+Theorem tuple_vv_post:
   !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv' ctx.
     vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
     post_value_type cenv obj = TupleT tys /\
@@ -1038,7 +1038,7 @@ Proof
 QED
 
 (* The element's selection reads no gas observation. *)
-Theorem tuple_select_gas_obs[local]:
+Theorem tuple_select_gas_obs:
   !cx ty tv i ee r.
     select_result cx ty tv (ValueSubscript (IntV i)) ee = (r, ee) ==>
     !tail. select_result cx ty tv (ValueSubscript (IntV i))
@@ -1121,7 +1121,7 @@ Proof
 QED
 
 (* The source facts at the base's actual end state. *)
-Theorem tuple_base_facts[local]:
+Theorem tuple_base_facts:
   !cenv cx env obj ity k es0 tys btv es1.
     expr_body_pre cenv cx env
       (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es0 /\
@@ -1155,7 +1155,7 @@ Proof
 QED
 
 (* A completed base execution: the ADD's path and the element's post. *)
-Theorem tuple_summary_ok[local]:
+Theorem tuple_summary_ok:
   !ctx func cenv cx env ty obj ity k es tys sa sm p sb bvv s0 marks btv fe
    t R.
     expr_body_pre cenv cx env

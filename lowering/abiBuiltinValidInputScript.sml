@@ -17,6 +17,7 @@ Proof
   >- (`!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem` by
         metis_tac[abi_decoder_readable_type_head] >>
       drule_all abi_valid_dynamic_head_min >> asm_simp_tac bool_ss [abi_member_head_size_def]) >>
+  drule vyper_valid_enc_static_length_lower >>
   asm_simp_tac bool_ss [abi_member_head_size_def]
 QED
 
@@ -54,7 +55,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_builtin_source_metadata >> strip_tac >>
   drule evaluate_abi_decode_vyper_valid_enc >> strip_tac >>
-  drule vyper_valid_enc_length_lower >> strip_tac >>
+  drule vyper_valid_enc_static_length_lower >> strip_tac >>
   asm_simp_tac bool_ss [abi_builtin_valid_pre_def] >>
   fs[vyper_valid_enc_def, val_in_memory_def, Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"]
 QED

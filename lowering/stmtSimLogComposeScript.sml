@@ -41,7 +41,7 @@ Proof
        mk_inst_def, is_terminator_def]
 QED
 
-Theorem log_compile_structure[local]:
+Theorem log_compile_structure:
   cenv.ce_event_info (nsid_to_string id) = SOME (h,MAP expr_type args,flags) /\
   LENGTH flags = LENGTH args /\ EVERY supported_scalar_type (MAP expr_type args) /\
   compile_stmt cenv lctx ty (Log id args) sa = ((),sb) /\
@@ -76,7 +76,7 @@ Proof
 QED
 
 
-Theorem log_stmt_open[local]:
+Theorem log_stmt_open:
   cenv.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
   compile_log_eval_all cenv args sa = (xs,sm) /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
@@ -95,7 +95,7 @@ Proof
 QED
 
 (* Outside a static frame the static-write check passes. *)
-Theorem eval_log_bind[local]:
+Theorem eval_log_bind:
   ~cx.txn.is_static ==>
   eval_stmt cx (Log id args) =
     bind (eval_exprs cx args)
@@ -108,7 +108,7 @@ Proof
   rpt (CASE_TAC >> gvs[])
 QED
 
-Theorem log_args_admissible[local]:
+Theorem log_args_admissible:
   ~cx.txn.is_static /\
   gas_admissible (eval_stmt cx (Log id args)) (stmt_res_ok lctx) es ==>
   gas_admissible (eval_exprs cx args) log_args_res_ok es
