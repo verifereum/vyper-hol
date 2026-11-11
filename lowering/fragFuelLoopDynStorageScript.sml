@@ -393,5 +393,7 @@ Theorem fuel_ok_compile_dynarray_to_storage:
       (compile_dynarray_to_storage src_ptr dst_slot elem_words elem_mem_size
          transient)
 Proof
+  rpt gen_tac >> rewrite_tac[fuel_ok_def] >> rpt gen_tac >> strip_tac >>
+  drule dynstorage_structure >> strip_tac >> simp[] >>
   cheat
 QED
