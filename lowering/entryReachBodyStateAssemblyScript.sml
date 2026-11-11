@@ -30,7 +30,7 @@ Theorem entry_body_state_assembly:
        <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
     (INL (), es0) /\
   set_external_package_target rpolicy.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
        (mut, F, lookup_raw_return_or_F (NONE : num option)
                    tx.function_name External tops,
         tx.function_name, args, ([] : expr list), ret, fbody)) =

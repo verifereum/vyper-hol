@@ -470,6 +470,10 @@ Proof
        step_inst_base_opcode_eqs, exec_read1_def, exec_pure1_def, exec_pure2_def,
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
        ASCIInumbersTheory.toString_11, bool_to_word_def, WORD_ADD_0] >>
+  simp[Ntimes run_inst_seq_def 3,
+       step_inst_base_opcode_eqs, exec_read1_def, exec_pure1_def, exec_pure2_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       ASCIInumbersTheory.toString_11, bool_to_word_def, WORD_ADD_0] >>
   simp[run_inst_seq_def,
        step_inst_base_opcode_eqs, exec_read1_def, exec_pure1_def, exec_pure2_def,
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,

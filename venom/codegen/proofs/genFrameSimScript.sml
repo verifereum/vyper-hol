@@ -24,7 +24,7 @@
 
 Theory genFrameSim
 Ancestors
-  frameRel asmFrame genBlockSim regularPostfixSim generatedReorderSim
+  frameRel asmFrame genBlockSim spillPlanSim regularPostfixSim generatedReorderSim
   generatedPrefixSim planSpillBounds
   reorderSim mixedPrefixSim prefixSim stackOpAsmSim stackOpSim instSimHelpers
   blockSimHelpers planWf frameViewStep frameViewFacts
@@ -649,7 +649,7 @@ Proof
   simp[] >> strip_tac >>
   qspecl_then [`rops`, `lo`, `apply_prefix_ops f lo iops ps`, `ps1`] mp_tac
     (Q.INST [`initial_fmp` |-> `f`] apply_prefix_ops_ext_relevant) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- simp[]) >> simp[LET_THM] >> strip_tac >>
   gvs[planAlignTheory.apply_prefix_ops_append] >>
   conj_tac
   >- (irule venom_asm_rel_sem_stack_transport >>

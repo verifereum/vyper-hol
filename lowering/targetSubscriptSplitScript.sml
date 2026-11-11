@@ -3,9 +3,11 @@
  * target's root and its indices.
  *
  * TOP-LEVEL:
+ *   target_subscript_shared_case — shared capacity-based storage and local
+ *                          no-Pop path; the next two exports are wrappers
  *   target_subscript_main_case — a local root whose indices pop nothing,
  *                          or a storage root whose indices are all pure
- *   target_subscript_storage_effectful_case — RESIDUAL: a storage root
+ *   target_subscript_storage_effectful_case — a storage root
  *                          with an index that calls or pops
  *   target_subscript_local_pop_case — RESIDUAL: a local root with an index
  *                          that pops
@@ -13,7 +15,7 @@
 
 Theory targetSubscriptSplit
 Ancestors
-  targetPlaceLive targetSubscriptMemory targetSubscriptDecode targetSubscriptContinuation
+  targetPlaceLive targetSubscriptMemory targetSubscriptStorage targetSubscriptDecode targetSubscriptContinuation
   targetPlaceSimCasesBase exprReasonOperand exprSimPopNestedLocalHandoff
   exprSimFieldLayout exprSafeOperandBuiltins exprSafeOperand
   exprSimSource
@@ -96,7 +98,7 @@ QED
 
 (* The counted index keeps the original source computation and error post.
    Readability is a source preservation premise, supplied separately by the
-   local no-Pop or storage pure-index boundary. *)
+   local no-Pop or unrestricted storage readability boundary. *)
 Theorem target_index_outcome:
   target_post ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
   expr_sim ctx func cenv cx (expr_type e) e es1 /\
@@ -216,18 +218,30 @@ Proof
 QED
 
 Theorem target_subscript_call_cleanup_scopes:
-  finally source (ignore_bind (pop_function prev) (unlock_if_nr cx nr is_view))
-    es = (res, ee) ==> ee.scopes = prev
+  finally_unless_halt (finally f (pop_function prev))
+    (unlock_if_nr cx nr is_view) s = (r,s') ==> s'.scopes = prev
 Proof
-  strip_tac >> drule finally_pop_function_then_scopes >>
-  impl_tac >- metis_tac[target_subscript_unlock_scopes] >> simp[]
+  strip_tac >>
+  Cases_on `finally f (pop_function prev) s` >> rename1 `_ = (q0,s0)` >>
+  `s0.scopes = prev` by
+    (qpat_x_assum `finally _ _ _ = _` mp_tac >>
+     simp[finally_def, pop_function_def, set_scopes_def, bind_def,
+          ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+     rw[] >> gvs[]) >>
+  qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
+  simp[finally_unless_halt_def] >>
+  Cases_on `q0` >> TRY (Cases_on `y`) >>
+  simp[ignore_bind_def, bind_def, return_def, raise_def] >>
+  Cases_on `unlock_if_nr cx nr is_view s0` >> rename1 `_ = (gr,gs)` >>
+  Cases_on `gr` >> simp[] >> rw[] >>
+  imp_res_tac target_subscript_unlock_scopes >> gvs[]
 QED
 
 Theorem target_subscript_nopop_scopes_mutual[local]:
   (!cx:evaluation_context. !s:stmt. T) /\
   (!cx:evaluation_context. !ss:stmt list. T) /\
   (!cx:evaluation_context. !it:iterator. T) /\
-  (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:value list. T) /\
+  (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:eval_result list. T) /\
   (!cx e st res st'.
     ~supported_expr_exists (\x. ?ty t. x = Pop ty t) e /\
     eval_expr cx e st = (res,st') ==> st'.scopes = st.scopes) /\
@@ -281,6 +295,7 @@ Proof
           Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
           gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
               assert_def, return_def, raise_def, AllCaseEqs()] >>
+          imp_res_tac lift_option_type_state >>
           imp_res_tac result_array_length_state >>
           imp_res_tac next_gas_reading_state >>
           imp_res_tac precompile_call_success_state >>
@@ -345,13 +360,17 @@ Proof
       strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >> metis_tac[])
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
-          raise_def, check_def, type_check_def, assert_def] >> metis_tac[])
+          raise_def, check_def, type_check_def, assert_def,
+          lift_option_type_def, option_CASE_rator] >> metis_tac[])
   >- (rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
            raise_def, check_def, type_check_def, assert_def, lift_option_def,
            lift_option_type_def, get_accounts_def, option_CASE_rator] >>
       strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac transfer_value_scopes >> gvs[] >> metis_tac[])
+      imp_res_tac transfer_value_scopes >> gvs[] >>
+      Cases_on `cx.txn.created_in_tx` >>
+      gvs[bind_def, ignore_bind_def, return_def, update_accounts_def,
+          update_pending_deletions_def] >> metis_tac[])
   >- suspend "CreateTarget"
   >- simp[Once evaluate_def, return_def]
   >- (rpt strip_tac >>
@@ -419,7 +438,7 @@ Resume target_subscript_nopop_scopes_mutual[IntCall]:
   imp_res_tac finally_set_scopes >>
   imp_res_tac (target_subscript_call_cleanup_scopes |>
     Q.INST [`is_view` |-> `mut = View \/ mut = Pure`] |>
-    SRULE [unlock_if_nr_def, ignore_bind_def]) >>
+    SRULE [unlock_if_nr_def]) >>
   imp_res_tac read_results_state >>
   gvs[get_scopes_def] >>
   rpt (qpat_x_assum `!a b c. _` drule_all >> strip_tac) >>
@@ -807,9 +826,18 @@ Proof
   Cases_on `read_memory_path x l` >> simp[return_def, raise_def]
 QED
 
-Theorem target_subscript_marked_index_readable:
-  (!nsid. target_root bt = TopLevelNameTarget nsid ==>
-    EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
+Theorem target_subscript_storage_index_readable:
+  target_root bt = TopLevelNameTarget nsid /\
+  eval_base_place cx bt es = (INL pv,mid) ==>
+  place_readable cx fin pv
+Proof
+  strip_tac >> Cases_on `pv` >> simp[place_readable_def] >>
+  Cases_on `p` >> simp[place_readable_def] >>
+  drule stmtSimForArrayFrameTheory.eval_base_place_memory_root >>
+  simp[place_access_target_root]
+QED
+
+Theorem target_subscript_index_readable:
   (!id. target_root bt = NameTarget id ==>
     ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e)) /\
   gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
@@ -828,10 +856,23 @@ Proof
   disch_then (qspec_then `gs` assume_tac) >> gvs[]
   >- (drule_all target_subscript_local_index_live >> strip_tac >> gvs[] >>
       irule place_readable_memory_live >> metis_tac[]) >>
-  drule_all target_subscript_pure_index_live >> strip_tac >> gvs[] >>
-  qpat_x_assum `mid with gas_obs := gs = _` mp_tac >>
-  qpat_x_assum `place_readable cx mid pv` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >> metis_tac[target_subscript_readable_gas_obs]
+  irule target_subscript_storage_index_readable >>
+  goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+Theorem target_subscript_marked_index_readable:
+  (!nsid. target_root bt = TopLevelNameTarget nsid ==>
+    EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
+  (!id. target_root bt = NameTarget id ==>
+    ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e)) /\
+  gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
+    (es,s0) left (INL pv) mid (OK t) /\
+  place_readable cx (mid with gas_obs := []) pv ==>
+  !gs v ee. bind (eval_expr cx e) (read_result cx)
+    (mid with gas_obs := gs) = (INL v,ee) ==>
+    place_readable cx ee pv
+Proof
+  metis_tac[target_subscript_index_readable]
 QED
 
 Theorem target_subscript_typed_base_not_label:
@@ -907,29 +948,6 @@ Proof
   gvs[place_ptr_rel_def]
 QED
 
-Theorem target_subscript_storage_ready[local]:
-  storage_layout_safe cx /\ contract_storage_well_formed cx es /\
-  EVERY pure_expr (target_indices (SubscriptTarget bt e)) /\
-  eval_base_place cx bt es = (INL (PlaceR (StoragePlace tr slot tv)),mid) /\
-  bind (eval_expr cx e) (read_result cx) mid = (res,ee) ==>
-  storage_read_live cx tr (get_storage cx ee tr) slot tv /\
-  w2n slot + type_slot_size tv <= dimword(:256) /\
-  (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
-     w2n (lookup_storage slot (get_storage cx ee tr)) <= cnt)
-Proof
-  strip_tac >>
-  drule_all target_subscript_pure_index_live >> strip_tac >> gvs[] >>
-  `EVERY pure_expr (target_indices bt)` by fs[target_indices_def, EVERY_APPEND] >>
-  `storage_read_live cx tr (get_storage cx ee tr) slot tv /\
-   w2n slot + type_slot_size tv <= dimword(:256)` by
-    (irule target_subscript_storage_base_view >>
-     conj_tac >- simp[] >>
-     qexistsl [`bt`, `ee`, `ee`] >>
-     simp[vyperStorageBackendTheory.get_storage_backend_eq]) >>
-  simp[] >> rpt strip_tac >> gvs[] >>
-  drule_all target_eval_base_header_capacity >> simp[]
-QED
-
 Theorem target_subscript_typed_summary[local]:
   subscript_vtype bvt (expr_type e) = SOME vt /\
   well_formed_vtype (get_tenv cx) vt /\
@@ -986,8 +1004,6 @@ QED
 Theorem target_subscript_source_readiness[local]:
   target_pre cenv cx env bt es0 /\
   expr_sim_inv cenv cx env es /\ expr_sim_inv cenv cx env fin /\
-  (!nsid. target_root bt = TopLevelNameTarget nsid ==>
-    EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
   (!id. target_root bt = NameTarget id ==>
     ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e)) /\
   eval_base_place cx bt es = (INL pv,mid) /\
@@ -1018,10 +1034,9 @@ Proof
       drule stmtSimForArrayFrameTheory.eval_base_place_memory_root >>
       simp[place_access_target_root]) >>
   rpt gen_tac >> disch_tac >> gvs[] >>
-  `EVERY pure_expr (target_indices (SubscriptTarget bt e))` by metis_tac[] >>
-  `storage_layout_safe cx /\ contract_storage_well_formed cx es` by
-    fs[expr_sim_inv_def] >>
-  drule_all target_subscript_storage_ready >> simp[]
+  drule_at (Pat `eval_base_place _ _ _ = _`) eval_base_place_storage_ready >>
+  disch_then (qspec_then `fin` mp_tac) >>
+  fs[expr_sim_inv_def]
 QED
 
 Theorem target_subscript_suffix_var[local]:
@@ -1097,16 +1112,14 @@ Proof
   drule gas_marked_path_exec >> strip_tac >> metis_tac[gas_path_normal]
 QED
 
-Theorem target_subscript_continuation_core[local]:
+Theorem target_subscript_continuation:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
   ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
     expr_sim_case nocalls ctx func cenv cx e /\
     expr_vv_case nocalls ctx func cenv cx e) /\
-  (((!nsid. target_root bt = TopLevelNameTarget nsid ==>
-      EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
-    (!id. target_root bt = NameTarget id ==>
-      ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e))) \/
+  ((!id. target_root bt = NameTarget id ==>
+     ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e)) \/
    (?id. !gs key ee.
      bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) = (INL key,ee) ==>
      ?path entry v. pv = PlaceR (MemoryPlace id path) /\
@@ -1152,7 +1165,7 @@ Proof
      >- (`place_readable cx (mid with gas_obs := []) pv` by fs[target_post_def] >>
          rpt gen_tac >> strip_tac >>
          drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)
-           target_subscript_marked_index_readable >>
+           target_subscript_index_readable >>
          disch_then (qspec_then `e` irule) >> simp[] >>
          goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >>
          simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -1280,7 +1293,7 @@ Theorem target_subscript_base_continuation:
     (\res ee r. expr_exit res r)
 Proof
   strip_tac >>
-  drule_at (Pat `target_pre _ _ _ _ _`) target_subscript_continuation_core >>
+  drule_at (Pat `target_pre _ _ _ _ _`) target_subscript_continuation >>
   disch_then (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   disch_then irule >> simp[] >> metis_tac[]
 QED
@@ -1329,7 +1342,7 @@ Theorem target_subscript_local_live_continuation:
     (\res ee r. expr_exit res r)
 Proof
   strip_tac >>
-  drule_at (Pat `target_pre _ _ _ _ _`) target_subscript_continuation_core >>
+  drule_at (Pat `target_pre _ _ _ _ _`) target_subscript_continuation >>
   disch_then (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   disch_then irule >> simp[] >> metis_tac[]
 QED
@@ -1424,8 +1437,8 @@ Proof
   drule_all target_subscript_local_popped_case >> simp[]
 QED
 
-(* An element of an array or a mapping, when no index can shrink an array
-   the place is already in: the base's fragment, the index's (lower_value),
+(* An element of an array or a mapping, with no local ancestor pop:
+   the base's fragment, the index's (lower_value),
    then, by the base's place type, the slot of the key
    (compile_mapping_subscript, with compile_keccak256_key for a bytes or
    string key) or the bounds check and the element's pointer
@@ -1435,9 +1448,9 @@ QED
      pointers and the base's operand are not fresh at the index's start);
      place_readable does too, as without a pop the index leaves the source
      locals as they were (a call restores the caller's scopes);
-   - for a storage root, every index is pure, so the source state is the
-     one the target started from, and the base's place is read live
-     (targetPlaceLive's nested_pop_eval_base_live), so the header the
+   - for a storage root, capacity-based provenance keeps the captured
+     region valid even when an index shrinks an ancestor.  The final
+     source invariant supplies storage readiness, so the header the
      bounds check loads is one stmt_state_rel relates;
    - the bounds check: a source RuntimeError for an index out of range
      (evaluate_subscripts array_index for a local's place,
@@ -1451,14 +1464,12 @@ QED
    Given those, the element's place is at the base's pointer plus the
    element's offset (mem_step_offset) for a local, and at the element's
    slot for storage. *)
-Theorem target_subscript_main_case:
+Theorem target_subscript_shared_case:
   !nocalls ctx func cenv cx bt e.
     target_case nocalls ctx func cenv cx bt /\
     ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
      expr_sim_case nocalls ctx func cenv cx e /\
      expr_vv_case nocalls ctx func cenv cx e) /\
-    (!nsid. target_root bt = TopLevelNameTarget nsid ==>
-            EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
     (!id. target_root bt = NameTarget id ==>
           ~supported_target_exists (\x. ?ty t. x = Pop ty t)
              (SubscriptTarget bt e)) ==>
@@ -1495,23 +1506,33 @@ Proof
   reverse conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
   gvs[BETA_THM] >>
-  irule target_subscript_base_continuation >> simp[] >>
+  irule target_subscript_continuation >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   qexistsl [`env`, `ix`, `nocalls`, `sn`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-(* RESIDUAL (effectful storage indices): an index that calls or pops can
-   shrink an array the target already points into (outer[0][shrink()] = v,
-   or with the call in an index of the base), so the header the bounds
-   check reads can be dead.  Source and Venom read the same raw slot, but
-   stmt_state_rel relates only live storage (storage_dead).  Needs raw
-   agreement on slots made dead by a write; exprSimPopNestedStorageEffectful's
-   pop_nested_storage_effectful_sim has the same exposure.  The root is any
-   module name, so this also covers an immutable's member in the
-   constructor, which a call in an index can pop (es.immutables is
-   module-wide; a call restores only the scopes); target_pre excludes such
-   a root (immutable_root), so its pure case needs nothing. *)
+Theorem target_subscript_main_case:
+  !nocalls ctx func cenv cx bt e.
+    target_case nocalls ctx func cenv cx bt /\
+    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
+     expr_sim_case nocalls ctx func cenv cx e /\
+     expr_vv_case nocalls ctx func cenv cx e) /\
+    (!nsid. target_root bt = TopLevelNameTarget nsid ==>
+            EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
+    (!id. target_root bt = NameTarget id ==>
+          ~supported_target_exists (\x. ?ty t. x = Pop ty t)
+             (SubscriptTarget bt e)) ==>
+    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
+Proof
+  rpt gen_tac >> strip_tac >> irule target_subscript_shared_case >>
+  simp[] >> first_assum ACCEPT_TAC
+QED
+
+(* Effectful storage indices can shrink an ancestor after the base pointer
+   is captured.  Capacity-based provenance keeps that captured region valid;
+   the post-index source invariant supplies its storage readiness without a
+   storage-frame or purity restriction on the index. *)
 Theorem target_subscript_storage_effectful_case:
   !nocalls ctx func cenv cx bt e nsid.
     target_case nocalls ctx func cenv cx bt /\
@@ -1522,7 +1543,8 @@ Theorem target_subscript_storage_effectful_case:
     ~EVERY pure_expr (target_indices (SubscriptTarget bt e)) ==>
     target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> irule target_subscript_shared_case >>
+  simp[] >> metis_tac[]
 QED
 
 (* RESIDUAL (a pop in a local target's index): the pop can pop an ancestor

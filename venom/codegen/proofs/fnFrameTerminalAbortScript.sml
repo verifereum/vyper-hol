@@ -6,7 +6,7 @@ Ancestors
   asmFrame asmSem codegenRel frameRel contextCodegenRel genBlockSim
   preparedPrefixSim genFrameSim frameViewFacts frameViewMemory
   venomState regularMemorySim venomWf venomEffects asmIR allocMono
-  list stackOpSim planExec emitSim blockSimHelpers venomMemProps
+  list stackOpSim planExec emitSim blockSimHelpers venomMemProps memoryReadRel
 
 (* A transient spill is covered by the output high-water mark even though
    the live spill map is empty again after restoration. *)

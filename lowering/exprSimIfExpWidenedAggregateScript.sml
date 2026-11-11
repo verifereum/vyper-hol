@@ -5,6 +5,9 @@ Ancestors
   exprSimHypsDefs exprLoweringProps compileEnv loweringStateRelDefs valueEncodingTyping
   valueEncodingProps fragExec context emitHelper emitHelperProps
   loweringPosts exprSimDefs exprOperandVar exprSimHyps
+  memoryLayoutDefs memoryLayoutSource vyperAST
+Libs
+  legacyInduction
 
 Theorem changed_aggregate_post_frag:
   (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
@@ -100,6 +103,39 @@ QED
 
 Finalise changed_aggregate_post_frag
 
+Theorem punnable_non_aggregate:
+  (!b u. punnable ce u (BaseT b)) /\ (!n u. punnable ce u (StructT n)) /\
+  (!n u. punnable ce u (FlagT n)) /\ (!u. punnable ce u NoneT)
+Proof
+  rpt strip_tac >> Cases_on `u` >> simp[punnable_def]
+QED
+
+Theorem memory_layout_key_punnable:
+  (!t u. memory_layout_key u = memory_layout_key t ==> punnable ce u t) /\
+  (!ts us. MAP memory_layout_key us = MAP memory_layout_key ts ==>
+     punnable_list ce us ts)
+Proof
+  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops type_induction) >>
+  rpt strip_tac >>
+  gvs[memory_layout_key_tuple, memory_layout_key_array,
+    memory_layout_key_tuple_cases, memory_layout_key_array_cases,
+    listTheory.MAP_EQ_CONS, punnable_non_aggregate, punnable_def] >>
+  metis_tac[memory_layout_key_bytes]
+QED
+
+(* An equal-layout tuple pair is already same_memory_layout, so the
+   changed-layout arm never takes compile_store_memory's bulk-copy branch. *)
+Theorem tuple_memory_layout_eq_same_layout:
+  tuple_memory_layout_eq dst src ==> same_memory_layout ce src dst
+Proof
+  strip_tac >> simp[same_memory_layout_def] >>
+  `type_memory_bytes ce src = type_memory_bytes ce dst` by
+    metis_tac[tuple_memory_layout_eq_bytes] >>
+  simp[] >> Cases_on `dst` >> Cases_on `src` >>
+  gvs[tuple_memory_layout_eq_def, punnable_def] >>
+  metis_tac[memory_layout_key_punnable]
+QED
+
 Theorem compile_changed_aggregate_post_frag:
   (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
   expr_body_pre ce cx env e es /\
@@ -137,6 +173,8 @@ Proof
     (rpt strip_tac >> irule compiler_unwrap_value_var >>
      qexistsl_tac [`ce`, `src`, `sa`, `vv`] >>
      simp[] >> Cases_on `vv` >> gvs[vv_operand_def]) >>
+  `~tuple_memory_layout_eq (expr_type e) (lowered_value_type ce e)` by
+    metis_tac[tuple_memory_layout_eq_same_layout] >>
   irule changed_aggregate_post_frag >>
   simp[] >> gvs[compile_store_memory_def] >>
   conj_tac

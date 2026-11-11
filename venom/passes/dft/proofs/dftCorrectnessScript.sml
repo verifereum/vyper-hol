@@ -22,6 +22,7 @@
 
 Theory dftCorrectness
 Ancestors
+  venomInstProofs venomExecProofs venomFnInstsProofs
   dftFrontEquiv dftTopoSort dftWf dftDefs dftHelpers stateEquiv stateEquivProps passSimulationDefs
   venomExecSemantics venomWf venomState finite_map venomInst
   analysisSimDefs analysisSimProofsBase dftPermSim dftCompleteness dftPipelineInvar
@@ -236,7 +237,6 @@ Proof
   simp[]
 QED
 
-
 (* ===== Permutation lift_result for run_insts ===== *)
 
 (* Non-terminator, non-INVOKE instructions never produce Halt or IntRet *)
@@ -406,18 +406,7 @@ QED
    then y produces the same result constructor on sx as on s.
    Specifically: if y aborts on s, y also aborts on sx with the same type;
    if y doesn't error on s, y doesn't error on sx. *)
-(* Helper: MEM (Var v) ops ==> MEM v (operand_vars ops) *)
-Theorem MEM_operand_vars_iff:
-  !ops v. MEM v (operand_vars ops) <=> MEM (Var v) ops
-Proof
-  Induct >> simp[operand_vars_def] >>
-  rpt gen_tac >> Cases_on `operand_var h` >> simp[operand_var_def] >>
-  Cases_on `h` >> gvs[operand_var_def]
-QED
-
-val MEM_Var_operand_vars =
-  MEM_operand_vars_iff |> SPEC_ALL |> EQ_IMP_RULE |> snd
-    |> GENL [``ops : operand list``, ``v : string``];
+Theorem MEM_operand_vars_iff = venomInstTheory.MEM_operand_vars_eq_Var
 
 (* ML pre-computation: non-aborting opcodes can't produce Abort *)
 local
@@ -490,7 +479,7 @@ Proof
         metis_tac[step_preserves_non_output_vars] >>
       first_x_assum irule >>
       `MEM s' (inst_uses y)` by
-        (simp[inst_uses_def] >> irule MEM_Var_operand_vars >> simp[]) >>
+        (simp[inst_uses_def] >> irule mem_var_operand_vars >> simp[]) >>
       spose_not_then assume_tac >>
       `MEM s' (inst_defs x)` by fs[inst_defs_def] >>
       qpat_x_assum `DISJOINT (set (inst_defs x)) (set (inst_uses y))` mp_tac >>
@@ -721,7 +710,7 @@ Proof
     fs[bi_independent_def] >>
   `step_inst_base y s = OK sy` by fs[step_inst_non_invoke] >>
   `sx.vs_prev_bb = s.vs_prev_bb` by
-    metis_tac[step_inst_preserves_prev_bb, step_inst_non_invoke] >>
+    metis_tac[step_preserves_prev_bb, step_inst_non_invoke] >>
   `sx.vs_params = s.vs_params` by
     metis_tac[step_preserves_params, step_inst_non_invoke] >>
   `sx.vs_call_ctx = s.vs_call_ctx` by
@@ -857,7 +846,7 @@ Proof
       (* Get state field preservation *)
       `s'.vs_prev_bb = s.vs_prev_bb` by
         (qspecl_then [`fuel`,`ctx`,`x`,`s`,`s'`] mp_tac
-           step_inst_preserves_prev_bb >> simp[]) >>
+           step_preserves_prev_bb >> simp[]) >>
       `s'.vs_params = s.vs_params` by
         (qspecl_then [`fuel`,`ctx`,`x`,`s`,`s'`] mp_tac
            step_preserves_params >> simp[]) >>
@@ -1040,7 +1029,6 @@ Resume run_insts_perm_lift_strong[trans]:
 QED
 
 Finalise run_insts_perm_lift_strong
-
 
 Theorem run_insts_perm_lift:
   !l1 l2 fuel ctx s.
@@ -2577,47 +2565,12 @@ Proof
   metis_tac[MEM_SPLIT_APPEND_first]
 QED
 
-Triviality fn_insts_blocks_flat_dft:
-  !bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def]
-QED
-
 Triviality flat_map_outputs_fn_insts_blocks:
   !bbs.
     FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs)) =
     FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) bbs)
 Proof
   Induct >> simp[fn_insts_blocks_def]
-QED
-
-(* block body instructions have ALL_DISTINCT inst_ids *)
-Triviality all_distinct_flat_mem:
-  !ls l. ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
-QED
-
-(* General: if ALL_DISTINCT (FLAT (MAP f ls)), distinct elements a,b of ls
-   have disjoint images under f *)
-Triviality all_distinct_flat_map_disjoint:
-  !ls f a b x.
-    ALL_DISTINCT (FLAT (MAP f ls)) /\
-    MEM a ls /\ MEM b ls /\ a <> b /\
-    MEM x (f a) ==> ~MEM x (f b)
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[MAP, FLAT, ALL_DISTINCT_APPEND]
-  >> metis_tac[MEM_FLAT, MEM_MAP]
-QED
-
-Triviality all_distinct_flat_map_unique[local]:
-  !ls f (a:'a) b (x:'b).
-    ALL_DISTINCT (FLAT (MAP f ls)) /\
-    MEM a ls /\ MEM b ls /\ MEM x (f a) /\ MEM x (f b) ==>
-    a = b
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >>
-  metis_tac[]
 QED
 
 Triviality all_distinct_flat_map_filter[local]:
@@ -2731,18 +2684,6 @@ Proof
   simp[MEM_MAP] >> qexists `bb` >> simp[]
 QED
 
-Triviality flip_operands_is_terminator:
-  !i. is_terminator (flip_operands i).inst_opcode = is_terminator i.inst_opcode
-Proof
-  rw[flip_operands_def] >>
-  Cases_on `i.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `t'` >> simp[LET_THM] >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `i.inst_opcode` >> gvs[] >>
-  EVAL_TAC
-QED
-
 (* Forward: for j in block_body bb, matching instruction in block_body bb' *)
 Triviality block_body_from_block_rev:
   !fn bb bb' j.
@@ -2851,26 +2792,6 @@ QED
    Part 3 (defs/defs): from ssa_form — no two distinct instructions share outputs. *)
 (* Use ssa_unique_output / mem_fn_insts_intro from allocaRemapSSATheory *)
 
-(* If an instruction is MEM of two blocks, those blocks must be the same
-   (by fn_inst_ids_distinct). *)
-Triviality fn_inst_same_block:
-  !fn bb1 bb2 inst.
-    wf_function fn /\
-    MEM bb1 fn.fn_blocks /\ MEM bb2 fn.fn_blocks /\
-    MEM inst bb1.bb_instructions /\ MEM inst bb2.bb_instructions ==>
-    bb1 = bb2
-Proof
-  rpt strip_tac >> spose_not_then assume_tac >>
-  `fn_inst_ids_distinct fn` by fs[wf_function_def] >>
-  fs[fn_inst_ids_distinct_def] >>
-  `MEM inst.inst_id (MAP (\i. i.inst_id) bb2.bb_instructions)` by
-    (simp[MEM_MAP] >> metis_tac[]) >>
-  qspecl_then [`fn.fn_blocks`,
-    `\bb. MAP (\i. i.inst_id) bb.bb_instructions`,
-    `bb1`, `bb2`, `inst.inst_id`] mp_tac all_distinct_flat_map_disjoint >>
-  simp[MEM_MAP] >> metis_tac[]
-QED
-
 (* In block_body, a later element cannot define a variable used by an earlier
    element. This follows from def_dominates_uses + SSA uniqueness + filter
    preserving order. *)
@@ -2931,8 +2852,8 @@ Proof
   `def_inst = EL j bd` by metis_tac[ssa_unique_output] >>
   (* def_bb = bb: def_inst is MEM of both def_bb and bb (since def_inst = bd[j]).
      If def_bb ≠ bb, same inst_id in two blocks contradicts fn_inst_ids_distinct. *)
-  `def_bb = bb` by
-    metis_tac[fn_inst_same_block] >>
+  `fn_inst_ids_distinct fn` by fs[wf_function_def] >>
+  `def_bb = bb` by metis_tac[inst_in_unique_block] >>
   gvs[] >>
   (* Now have: i' < j' with EL i' bb = definer (EL j bd),
      EL j' bb = user (EL i bd). But filter_el_mono gives
@@ -2990,7 +2911,7 @@ Resume block_body_topo_sorted[case1]:
   simp[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
   spose_not_then strip_assume_tac >> rename1 `MEM v _` >>
   `MEM (Var v) (EL i bd).inst_operands` by
-    gvs[inst_uses_def, MEM_operand_vars_iff] >>
+    gvs[inst_uses_def, MEM_operand_vars_eq_Var] >>
   `bd = block_body bb` by fs[markerTheory.Abbrev_def] >>
   metis_tac[block_body_defs_before_uses]
 QED
@@ -3028,7 +2949,7 @@ Proof
   Cases_on `t` >> simp[] >>
   Cases_on `t'` >> simp[] >>
   IF_CASES_TAC >> simp[] >>
-  simp[MEM_operand_vars_iff] >> metis_tac[]
+  simp[MEM_operand_vars_eq_Var] >> metis_tac[]
 QED
 
 (* from_block source: unique original with inst_id, inst_outputs, ¬is_pseudo *)
@@ -3232,7 +3153,7 @@ QED
 Resume schedule_topo_sorted_full_dep[uses_defs_case]:
   fs[pred_setTheory.IN_DISJOINT, inst_uses_def, inst_defs_def] >>
   rename1 `MEM v (operand_vars _)` >>
-  `MEM (Var v) (EL i output).inst_operands` by metis_tac[MEM_operand_vars_iff] >>
+  `MEM (Var v) (EL i output).inst_operands` by metis_tac[MEM_operand_vars_eq_Var] >>
   `MEM (EL j output) output` by (simp[MEM_EL] >> metis_tac[]) >>
   (* Get j_orig ∈ bi: inst_id, inst_outputs, ¬is_pseudo — no case split *)
   `from_block bi (EL j output)` by metis_tac[] >>
@@ -3247,7 +3168,7 @@ Resume schedule_topo_sorted_full_dep[uses_defs_case]:
      simp[] >> disch_then irule >> rpt strip_tac >>
      rename1 `MEM other bi` >>
      qspecl_then [`bi`, `(\i. i.inst_outputs)`, `j_orig`, `other`, `v`]
-       mp_tac all_distinct_flat_map_disjoint >> simp[]) >>
+       mp_tac all_distinct_flat_map_unique >> simp[]) >>
   (* Apply output_producer_before with k=i *)
   fs[output_producer_before_def] >>
   first_x_assum (qspecl_then [`i`, `v`, `j_orig`] mp_tac) >> simp[] >>
@@ -3282,7 +3203,7 @@ Resume schedule_topo_sorted_full_dep[defs_defs_case]:
   `i_orig = j_orig` by
     (spose_not_then assume_tac >>
      qspecl_then [`bi`, `(\i. i.inst_outputs)`, `i_orig`, `j_orig`, `v`]
-       mp_tac all_distinct_flat_map_disjoint >> simp[]) >>
+       mp_tac all_distinct_flat_map_unique >> simp[]) >>
   (* Same original → same inst_id → i = j, contradicts i < j *)
   `(EL i output).inst_id = (EL j output).inst_id` by
     (qpat_x_assum `i_orig = j_orig` SUBST_ALL_TAC >> gvs[]) >>
@@ -3489,42 +3410,6 @@ QED
 (* Helper: element in prefix of FILTER is not at last position of original list.
    Used to show that a barrier appearing before y in the non-pseudo filter
    cannot be the terminator (which is always last in bi). *)
-Triviality filter_prefix_not_last:
-  !P l pre y sfx e.
-    ALL_DISTINCT l /\ FILTER P l = pre ++ [y] ++ sfx /\
-    MEM e pre /\ P e /\ MEM e l /\
-    (!k. k < LENGTH l /\ is_terminator (EL k l).inst_opcode ==>
-         k = PRE (LENGTH l)) /\
-    l <> [] /\ is_terminator e.inst_opcode ==>
-    F
-Proof
-  rpt strip_tac >>
-  (* e is in pre, hence at index n < LENGTH pre in the filter *)
-  `?n. n < LENGTH pre /\ EL n pre = e` by metis_tac[MEM_EL] >>
-  (* y is at index LENGTH pre in the filter *)
-  `n < LENGTH (FILTER P l)` by
-    (pop_assum kall_tac >>
-     qpat_assum `FILTER P l = _` (fn th => rewrite_tac[th]) >>
-     rewrite_tac[LENGTH_APPEND, LENGTH] >> decide_tac) >>
-  `LENGTH pre < LENGTH (FILTER P l)` by
-    (qpat_assum `FILTER P l = _` (fn th => rewrite_tac[th]) >>
-     rewrite_tac[LENGTH_APPEND, LENGTH] >> decide_tac) >>
-  (* EL n (FILTER P l) = e, and EL (LENGTH pre) (FILTER P l) = y *)
-  `EL n (FILTER P l) = e /\
-   EL (LENGTH pre) (FILTER P l) = y` by
-    (asm_rewrite_tac[] >> conj_tac >>
-     simp[EL_APPEND_EQN]) >>
-  (* filter_el_mono: n < LENGTH pre, so positions in l satisfy i' < j' *)
-  drule_all filter_el_mono >>
-  disch_then (qx_choosel_then [`ne`, `ny`] strip_assume_tac) >>
-  (* ne is the position of e in l, ny is the position of y in l *)
-  (* l[ne] = e, so ne = PRE(LENGTH l) since e is terminator *)
-  `ne = PRE (LENGTH l)` by
-    (first_x_assum irule >> gvs[]) >>
-  (* But ny > ne and ny < LENGTH l => PRE(LENGTH l) < ny < LENGTH l.
-     That means LENGTH l <= ny, contradiction. *)
-  decide_tac
-QED
 
 Resume barrier_tc_connected[mem_b'_body]:
   (* b' = LAST(h::t) is in FILTER is_barrier pre_y, hence in pre_y.
@@ -3616,10 +3501,9 @@ Proof
   simp[ef_commutes_def] >>
   fs[data_dep_body_def, MEM_FILTER] >>
   simp[DISJOINT_DEF, EXTENSION, inst_uses_def, inst_defs_def,
-       MEM_operand_vars_iff] >>
+       MEM_operand_vars_eq_Var] >>
   `in_np_body bi x` by (simp[in_np_body_def, MEM_FILTER, MEM_MAP] >> qexists `x` >> simp[]) >> `in_np_body bi y` by (simp[in_np_body_def, MEM_FILTER, MEM_MAP] >> qexists `y` >> simp[]) >> metis_tac[]
 QED
-
 
 (* TC-uncomparable body elements (under restricted dep) commute.
    Uses barrier_tc_connected for the barrier contradiction. *)
@@ -3880,21 +3764,6 @@ QED
 
 (* ===== Unified lift_result for topo-sorted permutations ===== *)
 
-(* run_insts_append: decompose run_insts over concatenation *)
-Triviality run_insts_append:
-  !xs ys fuel ctx s.
-    run_insts fuel ctx (xs ++ ys) s =
-    case run_insts fuel ctx xs s of
-      OK s' => run_insts fuel ctx ys s'
-    | Halt s' => Halt s'
-    | Abort a s' => Abort a s'
-    | IntRet v s' => IntRet v s'
-    | Error e => Error e
-Proof
-  Induct >> rw[run_insts_def] >>
-  Cases_on `step_inst fuel ctx h s` >> simp[run_insts_def]
-QED
-
 Triviality run_insts_error_append:
   !fuel ctx l1 l2 s e.
     run_insts fuel ctx l1 s = Error e ==>
@@ -4140,7 +4009,6 @@ Proof
       fs[bi_independent_def, LET_THM])
 QED
 
-
 (* ===== Topo-sorted permutation lift_result ===== *)
 
 (* Strategy: Use run_insts_topo_lift for OK<=>OK and Abort=>revert_equiv,
@@ -4273,7 +4141,6 @@ Proof
   >> metis_tac[step_inst_preserves_inst_idx]
 QED
 
-
 (* Unified: non-terminator step with idx adjustment preserves lift_result
    for all non-OK results. Replaces step_inst_idx_non_term_{abort,error,halt,intret}. *)
 Triviality step_inst_idx_non_term_non_ok:
@@ -4299,7 +4166,6 @@ Proof
       gvs[instIdxIndepTheory.exec_result_map_def, lift_result_def,
           execution_equiv_def, FDOM_FEMPTY, revert_equiv_def, lookup_var_def])
 QED
-
 
 (* Unified: if run_insts on a prefix gives non-OK result, exec_block gives
    lift_result-related result. Replaces the 4 per-constructor versions. *)
@@ -4347,7 +4213,6 @@ Proof
       simp[get_instruction_def, revert_equiv_def, lift_result_def,
            execution_equiv_def, FDOM_FEMPTY])
 QED
-
 
 (* topo_sorted is preserved by TAKE *)
 Triviality topo_sorted_take:
@@ -5233,17 +5098,6 @@ Proof
        opcode_fail_class_def, empty_effects_def, gas_pair_def]
 QED
 
-(* Two distinct instructions in fn_insts can't share an output variable *)
-Triviality ssa_no_shared_output:
-  !fn i1 i2 v.
-    ssa_form fn /\ MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-    i1 <> i2 /\ MEM v i1.inst_outputs /\ MEM v i2.inst_outputs ==>
-    F
-Proof
-  rw[ssa_form_def, fn_insts_def] >>
-  metis_tac[all_distinct_flat_map_disjoint]
-QED
-
 (* Consequence: distinct same-block instructions have disjoint defs *)
 Theorem ssa_disjoint_defs:
   !fn bb i1 i2.
@@ -5253,7 +5107,7 @@ Theorem ssa_disjoint_defs:
 Proof
   rpt strip_tac >>
   simp[inst_defs_def, pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
-  metis_tac[ssa_no_shared_output, mem_fn_insts_blocks, fn_insts_def]
+  metis_tac[ssa_unique_output, mem_fn_insts_blocks, fn_insts_def]
 QED
 
 (* Key: pseudo inst_id is not among non-pseudo inst_ids *)
@@ -5462,7 +5316,7 @@ Proof
   simp[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
   spose_not_then strip_assume_tac >> rename1 `MEM v _` >>
   `MEM (Var v) (EL i bi).inst_operands` by
-    gvs[inst_uses_def, MEM_operand_vars_iff] >>
+    gvs[inst_uses_def, MEM_operand_vars_eq_Var] >>
   `MEM v (EL j bi).inst_outputs` by fs[inst_defs_def] >>
   (* EL i and EL j are distinct *)
   `ALL_DISTINCT (MAP (\i. i.inst_id) bi)` by
@@ -5502,15 +5356,9 @@ Proof
      By fn_inst_ids_distinct, instruction IDs are unique across all blocks,
      so these must be the same block. *)
   `def_bb = bb` by
-    (spose_not_then assume_tac >>
-     qspecl_then [`fn.fn_blocks`,
-       `\bb. MAP (\i. i.inst_id) bb.bb_instructions`,
-       `def_bb`, `bb`, `(EL j bi).inst_id`]
-       mp_tac all_distinct_flat_map_disjoint >>
-     simp[MEM_MAP] >>
-     gvs[wf_function_def, fn_inst_ids_distinct_def] >>
-     conj_tac >> qexists `EL j bi` >>
-     simp[Abbr `bi`, MEM_EL] >> metis_tac[]) >>
+    (irule inst_in_unique_block >> conj_tac
+     >- (qexists `fn` >> gvs[wf_function_def]) >>
+     qexists `EL j bi` >> fs[Abbr `bi`]) >>
   gvs[] >>
   (* Now: i' < j' < LENGTH bi, EL i' bi = EL j bi, EL j' bi = EL i bi
      By ALL_DISTINCT: i' = j, j' = i. So j < i. But i < j. *)
@@ -6860,7 +6708,7 @@ Triviality frame_conds_from_disjoint:
       ~MEM out h.inst_outputs
 Proof
   rw[inst_defs_def, inst_uses_def] >>
-  fs[DISJOINT_DEF, EXTENSION, MEM_operand_vars_iff] >>
+  fs[DISJOINT_DEF, EXTENSION, MEM_operand_vars_eq_Var] >>
   metis_tac[]
 QED
 
@@ -6979,7 +6827,6 @@ Proof
   MATCH_ACCEPT_TAC lift_result_refl
 QED
 
-
 (* Original blocks satisfy block_perm_of *)
 Theorem original_block_perm_of:
   !fn bb. MEM bb fn.fn_blocks ==> block_perm_of fn bb
@@ -7095,7 +6942,6 @@ Proof
                  (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions)` >>
   simp[dft_block_perm_ids]
 QED
-
 
 (* ===== dft_fn preserves bb_well_formed ===== *)
 
@@ -7548,19 +7394,6 @@ Proof
     flip_operands_inst_id]
 QED
 
-Triviality output_var_unique_in_block[local]:
-  !bi a b v.
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bi)) /\
-    MEM a bi /\ MEM b bi /\
-    MEM v a.inst_outputs /\ MEM v b.inst_outputs ==>
-    a = b
-Proof
-  rpt strip_tac >> Cases_on `a = b` >> simp[] >>
-  qspecl_then [`bi`, `\i. i.inst_outputs`, `a`, `b`, `v`]
-    mp_tac all_distinct_flat_map_disjoint >>
-  simp[]
-QED
-
 Triviality block_body_defs_before_uses_gen[local]:
   !bb i j v.
     bb_well_formed bb /\
@@ -7599,10 +7432,10 @@ Proof
   `MEM prod bb.bb_instructions /\ MEM v prod.inst_outputs` by
     (drule producing_inst_unique >> simp[]) >>
   `prod = EL fj bb.bb_instructions` by
-    (mp_tac (Q.SPECL [`bb.bb_instructions`, `prod`,
-             `EL fj bb.bb_instructions`, `v`] output_var_unique_in_block) >>
-     simp[MEM_EL] >>
-     impl_tac >- (qexists_tac `fj` >> simp[]) >>
+    (qspecl_then [`bb.bb_instructions`, `\i:instruction. i.inst_outputs`,
+                  `prod`, `EL fj bb.bb_instructions`, `v`]
+       mp_tac all_distinct_flat_map_unique >>
+     impl_tac >- (simp[] >> metis_tac[EL_MEM]) >>
      simp[]) >>
   `~is_pseudo (EL fi bb.bb_instructions).inst_opcode` by
     (qpat_x_assum `EL fi _ = _` SUBST1_TAC >>
@@ -7654,7 +7487,7 @@ Proof
   >- (simp[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
       spose_not_then strip_assume_tac >> rename1 `MEM v _` >>
       `MEM (Var v) (EL i bd).inst_operands` by
-        gvs[inst_uses_def, MEM_operand_vars_iff] >>
+        gvs[inst_uses_def, MEM_operand_vars_eq_Var] >>
       `bd = block_body bb` by fs[markerTheory.Abbrev_def] >>
       metis_tac[block_body_defs_before_uses_gen])
   >> (simp[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
@@ -7669,7 +7502,9 @@ Proof
          simp[Abbr `bd`, block_body_def, MEM_FILTER]) >>
       `MEM v (EL i bd).inst_outputs /\ MEM v (EL j bd).inst_outputs` by
         fs[inst_defs_def] >>
-      `EL i bd = EL j bd` by metis_tac[output_var_unique_in_block] >>
+      `EL i bd = EL j bd` by
+        metis_tac[GEN_ALL (BETA_RULE (Q.ISPECL [`l:instruction list`,
+          `\i:instruction. i.inst_outputs`] all_distinct_flat_map_unique))] >>
       `i <> j` by decide_tac >>
       metis_tac[ALL_DISTINCT_EL_IMP])
 QED
@@ -8197,7 +8032,6 @@ Proof
   fs[all_blocks_perm_of_def, EVERY_MEM]
 QED
 
-
 (* All blocks in dft_fn are well-formed *)
 Theorem dft_fn_blocks_well_formed:
   !fn bb'.
@@ -8255,7 +8089,6 @@ QED
           inst_defs = inst_outputs preserved by flip_operands_inst_outputs.
           set(inst_uses) = set(operand_vars) preserved by flip_operands_operand_vars_set.
    This condition is exactly what map_choose_original_topo_sorted_restricted needs. *)
-
 
 (* ===== Function-level: run_blocks lift_result ===== *)
 
@@ -8655,9 +8488,6 @@ Proof
       EVAL_TAC >> simp[])
 QED
 
-
-
-
 Triviality error_or_lift_trans[local]:
   !r1 r2 r3.
     (((?e. r1 = Error e) /\ (?e. r2 = Error e)) \/
@@ -8930,7 +8760,7 @@ Triviality data_dep_body_imp_full_dep_local[local]:
 Proof
   rpt strip_tac >> fs[full_dep_def] >> disj2_tac >> disj1_tac >>
   fs[data_dep_body_def, inst_uses_def, inst_defs_def, IN_DISJOINT] >>
-  qexists `v` >> fs[MEM_operand_vars_iff]
+  qexists `v` >> fs[MEM_operand_vars_eq_Var]
 QED
 
 (* Bridge: from_barrier_dep → eda_dep → full_dep *)
@@ -9018,28 +8848,6 @@ Proof
   Induct >> simp[fn_insts_blocks_def]
 QED
 
-(* SSA: per-block outputs are distinct.
-   Proof by induction on blocks: ALL_DISTINCT(FLAT(MAP outputs blocks))
-   means each block's output list is a component of a distinct append. *)
-Triviality ssa_block_outputs_distinct_local[local]:
-  !bbs bb.
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs))) /\
-    MEM bb bbs ==>
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
-Proof
-  Induct >> simp[fn_insts_blocks_def] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `bb = h` >> gvs[] >>
-  fs[ALL_DISTINCT_APPEND]
-QED
-
-(* MEM in FILTER implies in_np_body *)
-Triviality mem_filter_in_np_body_local[local]:
-  !bi x. MEM x (FILTER (\i. ~is_pseudo i.inst_opcode) bi) ==> in_np_body bi x
-Proof
-  simp[in_np_body_def, MEM_MAP, MEM_FILTER, PULL_EXISTS] >> metis_tac[]
-QED
-
 (* Original block's non-pseudo filter is topo_sorted(canonical_dep).
    Direct proof: in program order, no earlier instruction can depend on
    a later one via canonical_dep (data deps need def before use,
@@ -9058,9 +8866,9 @@ Proof
   `MEM (EL i fl) fl` by (irule EL_MEM >> decide_tac) >>
   `MEM (EL j fl) fl` by metis_tac[EL_MEM] >>
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bi))` by
-    metis_tac[ssa_block_outputs_distinct_local, fn_insts_def, ssa_form_def, wf_ssa_def] >>
+    metis_tac[ssa_block_outputs_all_distinct, fn_insts_def, ssa_form_def, wf_ssa_def] >>
   `in_np_body bi (EL i fl) /\ in_np_body bi (EL j fl)` by
-    metis_tac[mem_filter_in_np_body_local] >>
+    metis_tac[mem_np_filter_in_np_body] >>
   Cases_on `data_dep_body bi (EL i fl) (EL j fl)`
   >- (fs[data_dep_body_def] >> metis_tac[orig_data_dep_contra_filtered]) >>
   Cases_on `from_barrier_dep bi (EL i fl) (EL j fl)`
@@ -9167,7 +8975,7 @@ Proof
     metis_tac[all_distinct_map_mem_inj, fn_labels_def, wf_function_def] >>
   fs[] >>
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb_orig.bb_instructions))` by
-    metis_tac[ssa_block_outputs_distinct_local, fn_insts_def, ssa_form_def, wf_ssa_def] >>
+    metis_tac[ssa_block_outputs_all_distinct, fn_insts_def, ssa_form_def, wf_ssa_def] >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) bb_orig.bb_instructions)` by
     metis_tac[wf_fn_block_inst_ids_distinct] >>
   (* Key: PERM of MAP inst_outputs for non-pseudos *)
@@ -9651,7 +9459,7 @@ Proof
   (* data_dep_body: structural via uses/defs overlap *)
   (irule TC_SUBSET >> simp[full_dep_def] >> disj2_tac >> disj1_tac >>
    fs[data_dep_body_def, inst_uses_def, inst_defs_def, IN_DISJOINT] >>
-   qexists `v` >> fs[MEM_operand_vars_iff]) >-
+   qexists `v` >> fs[MEM_operand_vars_eq_Var]) >-
   (* from_barrier_dep: eda_dep from lemma, then lift to full_dep, then TC *)
   (`eda_dep (build_full_eda cur_bi) x y` by metis_tac[from_barrier_dep_tc_case_local] >>
    irule TC_SUBSET >> metis_tac[eda_dep_imp_full_dep_local]) >>
@@ -9661,16 +9469,6 @@ Proof
             on_barrier_dep_tc_case_local) >>
   simp[]
 QED
-Triviality sched_output_nonpseudo[local]:
-  !block_insts order eda om entries i.
-    eda_wf eda block_insts /\
-    EVERY (\i. MEM i block_insts) entries /\
-    MEM i (schedule_from_entries block_insts order eda om entries) ==>
-    ~is_pseudo i.inst_opcode
-Proof
-  rpt strip_tac >> imp_res_tac schedule_output_from_block >> simp[]
-QED
-
 (* If MAP f l is ALL_DISTINCT and f is injective on l, then l is ALL_DISTINCT *)
 Triviality map_inj_all_distinct[local]:
   !f l. ALL_DISTINCT (MAP f l) /\
@@ -9956,32 +9754,6 @@ Proof
   metis_tac[full_dep_right_cong_local]
 QED
 
-(* FILTER decomposition: dft_block non-pseudo instructions = schedule output *)
-Triviality dft_block_filter_nonpseudo[local]:
-  !order bb.
-    FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions =
-    schedule_from_entries bb.bb_instructions order (dft_eda bb.bb_instructions)
-      (build_offspring_map bb.bb_instructions order)
-      (entry_instructions bb.bb_instructions order (dft_eda bb.bb_instructions))
-Proof
-  simp[dft_block_def, LET_THM, FILTER_APPEND_DISTRIB, FILTER_FILTER,
-       FILTER_EQ_NIL, FILTER_EQ_ID, EVERY_MEM] >>
-  rpt strip_tac >>
-  metis_tac[sched_output_nonpseudo, dft_eda_wf, entry_instructions_mem]
-QED
-
-
-(* Extracted by-block: ALL_DISTINCT inst_outputs for perm-of block *)
-Triviality block_perm_inst_outputs_local[local]:
-  !fn bb_orig bb_cur.
-    wf_ssa fn /\ wf_function fn /\
-    MEM bb_orig fn.fn_blocks /\
-    block_perm_of fn bb_cur /\ bb_cur.bb_label = bb_orig.bb_label ==>
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb_cur.bb_instructions))
-Proof
-  metis_tac[block_perm_of_inst_outputs_distinct_local]
-QED
-
 (* Schedule output lemma pack — avoid irule on multi-antecedent theorems in by-blocks *)
 Triviality sched_output_distinct_local[local]:
   !bi order eda om entries.
@@ -10060,7 +9832,6 @@ Proof
   metis_tac[schedule_output_from_block, from_block_sched_via_perm_of]
 QED
 
-
 (* ===== Cross-bi bridge helpers (ported from dftCanonicalSimScript) ===== *)
 
 (* Cross-bi version: from_block on both sides, with ALL_DISTINCT inst_ids *)
@@ -10127,7 +9898,7 @@ Triviality data_dep_body_imp_full_dep_any_eda[local]:
 Proof
   rpt strip_tac >> simp[full_dep_def] >> disj2_tac >> disj1_tac >>
   fs[data_dep_body_def, inst_uses_def, inst_defs_def, IN_DISJOINT] >>
-  qexists `v` >> fs[MEM_operand_vars_iff]
+  qexists `v` >> fs[MEM_operand_vars_eq_Var]
 QED
 
 (* If MAP inst_id of FILTER ~pseudo bi = pfx++[xid]++sfx with ALL_DISTINCT, and MEM yid pfx, then xid <> yid *)
@@ -10718,15 +10489,12 @@ Proof
   (* Case 1: data_dep_body -- order-independent *)
   >- (simp[full_dep_def] >> disj2_tac >> disj1_tac >>
       fs[data_dep_body_def, inst_uses_def, inst_defs_def, IN_DISJOINT] >>
-      qexists `v` >> fs[MEM_operand_vars_iff])
+      qexists `v` >> fs[MEM_operand_vars_eq_Var])
   (* Case 2: from_barrier_dep -- extracted helper *)
   >- metis_tac[from_barrier_dep_imp_full_dep_current]
   (* Case 3: on_barrier_dep -- extracted helper *)
   >- metis_tac[on_barrier_dep_imp_full_dep_current]
 QED
-
-
-
 
 (* Filtering a topologically sorted list preserves topo_sorted.
    FILTER preserves relative order, so for i < j in the filtered list,

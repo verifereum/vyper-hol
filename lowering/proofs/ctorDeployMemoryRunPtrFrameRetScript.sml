@@ -40,6 +40,28 @@ Proof
   simp[storage_dead_def]
 QED
 
+(* The constructor runs with created_in_tx set; no storage region depends on
+   it. *)
+Theorem storage_dead_created_in_tx[local]:
+  !srcs lay tx c tr st j b.
+    storage_dead
+      (initial_evaluation_context srcs lay (tx with created_in_tx := c) NONE)
+      tr st j b <=>
+    storage_dead (initial_evaluation_context srcs lay tx NONE) tr st j b
+Proof
+  rpt gen_tac >>
+  `!mid n subs.
+     declared_storage_region
+       (initial_evaluation_context srcs lay (tx with created_in_tx := c) NONE)
+       mid n subs =
+     declared_storage_region (initial_evaluation_context srcs lay tx NONE)
+       mid n subs` by
+    simp[declared_storage_region_def, get_module_code_def, get_tenv_def,
+         lookup_var_slot_from_layout_def,
+         vyperInterpreterTheory.initial_evaluation_context_def] >>
+  simp[storage_dead_def]
+QED
+
 (* A copy of ctorReturnFrame's local constructor_exit_code. *)
 Theorem constructor_exit_code_ptr[local]:
   (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
@@ -902,10 +924,10 @@ Proof
      pairTheory.FORALL_PROD] >>
   first_x_assum drule >> rw[] >>
   fs[deploy_evaluation_context_def] >>
-  qmatch_goalsub_abbrev_tac `storage_dead cx0 T _ _ _` >>
-  `(cx0 with in_deploy := T).nonreentrant_slot = SOME nkey` by simp[] >>
+  qmatch_asmsub_abbrev_tac `storage_layout_safe cx1` >>
+  `cx1.nonreentrant_slot = SOME nkey` by fs[Abbr `cx1`] >>
   drule_all nonreentrant_storage_dead_frame >> strip_tac >>
-  fs[storage_dead_in_deploy]
+  fs[Abbr `cx1`, storage_dead_in_deploy, storage_dead_created_in_tx]
 QED
 
 Theorem constructor_exit_run_ptr:

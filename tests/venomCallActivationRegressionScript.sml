@@ -6,7 +6,7 @@ Ancestors
   venomCallOracleRegression venomExecSemantics venomCallOracleDefs
   venomState venomInst extCallOracle stateFrame words list
 Libs
-  wordsLib
+  wordsLib stepInstBaseLib
 
 val () = augment_srw_ss [wordsLib.SIZES_ss, wordsLib.WORD_GROUND_ss];
 
@@ -16,15 +16,11 @@ Definition probe_call_def:
     ["result"]
 End
 
-val dispatch_defs =
-  [probe_call_def, call_probe_state_def, call_probe_request_def,
-   call_probe_outcome_def, init_venom_state_def, empty_call_context_def,
-   venom_call_request_def, read_memory_def, consume_call_outcome_def,
-   take_outcome_def, computed_precompile_addresses, record_request_def,
-   failed_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def,
-   write_memory_with_expansion_def,
-   update_var_def, lookup_var_def, mk_inst_def, step_inst_base_opcode_eqs,
-   exec_ext_call_def, eval_operand_def, w2w_n2w];
+(* Per-opcode step_inst_base arms: unfolding step_inst_base_def simplifies
+   every opcode's arm and exceeds the step budget. *)
+val call_clauses =
+  [stepInstBaseLib.simp_opcode_clause ``CALL``,
+   stepInstBaseLib.simp_opcode_clause ``STATICCALL``];
 
 (* Dispatcher retains evaluation/arity obligations; the completion helper
    has no alternate dispatch. This equation is also used by focused probes. *)
@@ -45,7 +41,7 @@ Theorem activated_call_not_preservation:
   in ?t. step_inst_base (probe_call 8w) s = OK t /\
          t.vs_outcomes <> s.vs_outcomes /\ t.vs_requests <> s.vs_requests
 Proof
-  simp dispatch_defs >> EVAL_TAC
+  simp[probe_call_dispatch] >> EVAL_TAC
 QED
 
 Theorem activated_call_vs_nop:
@@ -70,7 +66,7 @@ Theorem activated_ordinary_success_short_write:
     t.vs_transient = call_probe_outcome.co_tStorage /\
     t.vs_logs = call_probe_outcome.co_logs
 Proof
-  simp dispatch_defs >> EVAL_TAC
+  simp[probe_call_dispatch] >> EVAL_TAC
 QED
 
 Theorem activated_failed_short_write:
@@ -83,7 +79,7 @@ Theorem activated_failed_short_write:
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
     t.vs_logs = s.vs_logs
 Proof
-  simp dispatch_defs >> EVAL_TAC
+  simp[probe_call_dispatch] >> EVAL_TAC
 QED
 
 Theorem activated_exhausted:
@@ -95,7 +91,7 @@ Theorem activated_exhausted:
     t.vs_transient = call_probe_state.vs_transient /\
     t.vs_logs = call_probe_state.vs_logs
 Proof
-  simp dispatch_defs >> EVAL_TAC
+  simp[probe_call_dispatch] >> EVAL_TAC
 QED
 
 Theorem activated_inherited_static:
@@ -109,7 +105,7 @@ Theorem activated_inherited_static:
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
     t.vs_logs = s.vs_logs
 Proof
-  simp dispatch_defs >> EVAL_TAC
+  simp[probe_call_dispatch] >> EVAL_TAC
 QED
 
 Theorem activated_staticcall_zero_value:
@@ -124,7 +120,8 @@ Theorem activated_staticcall_zero_value:
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
     t.vs_logs = s.vs_logs
 Proof
-  simp dispatch_defs >> EVAL_TAC
+  simp ([LET_THM, probe_call_def, mk_inst_def, eval_operand_def,
+         exec_ext_call_def] @ call_clauses) >> EVAL_TAC
 QED
 
 Definition probe_computed_def:
@@ -251,7 +248,8 @@ Theorem activated_nonzero_precompile_ordinary:
     t.vs_requests = [call_probe_request; rq] /\ t.vs_returndata = [9w] /\
     t.vs_memory = [1w; 9w; 3w; 4w]
 Proof
-  simp dispatch_defs >> EVAL_TAC
+  simp ([LET_THM, probe_call_def, mk_inst_def, eval_operand_def,
+         exec_ext_call_def] @ call_clauses) >> EVAL_TAC
 QED
 
 Theorem activated_actual_length_expansion:
@@ -261,7 +259,8 @@ Theorem activated_actual_length_expansion:
   in ?t. step_inst_base inst s = OK t /\
     t.vs_memory = [1w; 2w; 3w; 4w; 0w; 9w] /\ LENGTH t.vs_memory = 6
 Proof
-  simp dispatch_defs >> EVAL_TAC
+  simp ([LET_THM, probe_call_def, mk_inst_def, eval_operand_def,
+         exec_ext_call_def] @ call_clauses) >> EVAL_TAC
 QED
 
 Theorem activated_gas_value_ignored:
@@ -278,7 +277,10 @@ Theorem activated_gas_expression_evaluated:
     [Var "missing"; Lit 8w; Lit 0w; Lit 0w; Lit 1w; Lit 1w; Lit 3w])
     call_probe_state = Error "undefined operand"
 Proof
-  simp dispatch_defs
+  rewrite_tac[probe_call_def, mk_inst_def] >>
+  CONV_TAC (LAND_CONV stepInstBaseLib.STEP_INST_BASE_OPCODE_SIMP_CONV) >>
+  simp[eval_operand_def, exec_ext_call_def, lookup_var_def,
+       call_probe_state_def, init_venom_state_def]
 QED
 
 Theorem activated_output_arity:

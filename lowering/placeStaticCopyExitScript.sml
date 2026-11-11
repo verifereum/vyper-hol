@@ -21,7 +21,9 @@ Theorem place_static_copy_exit:
       stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
-  drule_all place_store_copy_code >> strip_tac >>
+  qpat_x_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _`
+    (assume_tac o REWRITE_RULE [compile_word_copy_loop_def]) >>
+  drule_all place_store_runtime_copy_code >> strip_tac >>
   `?r. gas_marked_path F ctx func s0 0 (OK r) /\
        store_copy_frame sa loc b k s0 0 r /\
        eval_operand (Var cv) r = SOME 0w /\ ~r.vs_halted /\
@@ -68,7 +70,8 @@ Resume place_static_copy_exit[header]:
   `lookup_block r.vs_current_bb func.fn_blocks = SOME bbh` by simp[] >>
   `eval_operand (Var cv) r = SOME (n2w 0)` by simp[] >>
   `0 <= n` by simp[] >>
-  drule_all place_store_copy_test_path >>
+  `eval_operand (Lit (n2w n)) r = SOME (n2w n)` by simp[eval_operand_def] >>
+  drule_all place_store_runtime_copy_test_path >>
   disch_then (qspec_then `ctx` mp_tac) >> simp[] >> strip_tac >>
   `get_instruction bbh t.vs_inst_idx =
    SOME (mk_inst (idh+1) JNZ [Var tv; Label exit; Label body_lbl] [])` by
@@ -85,8 +88,10 @@ Resume place_static_copy_exit[body]:
   drule_at (Pat `store_copy_frame _ _ _ _ _ _ q`) place_store_frame_fields >>
   strip_tac >>
   `eval_operand src q = SOME b /\ eval_operand dst q = SOME k` by
-    (Cases_on `src` >> Cases_on `dst` >>
-     gvs[eval_operand_def, store_copy_frame_def] >> metis_tac[]) >>
+    (Cases_on `src` >> Cases_on `dst` >> fs[eval_operand_def] >>
+     qpat_x_assum `store_copy_frame _ _ _ _ _ _ q`
+       (strip_assume_tac o REWRITE_RULE [store_copy_frame_def]) >>
+     metis_tac[]) >>
   `!x. MEM x [cv;mv;sv;vv;dv;nv] ==> src <> Var x /\ dst <> Var x` by
     (fs[ALL_DISTINCT] >> rpt strip_tac >> metis_tac[]) >>
   qabbrev_tac `code =

@@ -205,15 +205,53 @@ Definition shift_amount_ok_def:
   shift_amount_ok e <=> is_uint_type (expr_type e) \/ nonneg_int_literal e
 End
 
-(* The operand forms Vyper requires beyond their types: ** needs a literal
-   base or a non-negative literal exponent (the overflow check of
-   compile_safe_pow is derived from that literal), and a shift amount must
-   not be negative. *)
+(* Power has an operand-domain rule in addition to its type signature.
+   A literal base permits a dynamic exponent or a large nonnegative literal;
+   otherwise the exponent must be a literal bounded by the value-bit count.
+   Negative literal exponents are never valid, even with a literal base. *)
+Definition integer_value_bits_def:
+  integer_value_bits (BaseT (UintT n)) = n /\
+  integer_value_bits (BaseT (IntT n)) = n - 1 /\
+  integer_value_bits _ = 0
+End
+
+Definition power_exponent_ok_def:
+  power_exponent_ok ty (Literal _ (IntL n)) =
+    (0 <= n /\ Num n <= integer_value_bits ty) /\
+  power_exponent_ok ty _ = F
+End
+
+Definition power_operands_ok_def:
+  power_operands_ok ty base_e exponent =
+    ((IS_SOME (int_literal_value base_e) \/ power_exponent_ok ty exponent) /\
+     case exponent of Literal _ (IntL n) => 0 <= n | _ => T)
+End
+
 Definition builtin_operands_ok_def:
-  builtin_operands_ok blt es <=>
-    (blt = Bop Exp ==>
-       IS_SOME (int_literal_value (EL 0 es)) \/ nonneg_int_literal (EL 1 es)) /\
-    (blt = Bop ShL \/ blt = Bop ShR ==> shift_amount_ok (EL 1 es))
+  builtin_operands_ok ty (Bop Exp) es =
+    (case es of [base_e; exponent] => power_operands_ok ty base_e exponent
+              | _ => F) /\
+  builtin_operands_ok ty (Bop ShL) es = shift_amount_ok (EL 1 es) /\
+  builtin_operands_ok ty (Bop ShR) es = shift_amount_ok (EL 1 es) /\
+  builtin_operands_ok ty _ es = T
+End
+
+Theorem power_operands_ok_literal:
+  power_operands_ok ty base_e exponent ==>
+  IS_SOME (int_literal_value base_e) \/ nonneg_int_literal exponent
+Proof
+  Cases_on `exponent` >> simp[power_operands_ok_def, power_exponent_ok_def] >>
+  rename1 `Literal _ lit` >> Cases_on `lit` >>
+  simp[power_exponent_ok_def, nonneg_int_literal_def, int_literal_value_def]
+QED
+
+(* A shift amount must be nonnegative. Stricter than Vyper, which accepts
+   <<= and >>= by a signed amount: its code shifts by the amount's word where
+   the semantics raises on a negative amount. *)
+Definition augassign_operand_ok_def:
+  augassign_operand_ok ty (bop : binop) rhs =
+    ((bop <> Exp \/ power_exponent_ok ty rhs) /\
+     (bop = ShL \/ bop = ShR ==> shift_amount_ok rhs))
 End
 
 Definition env_item_type_def:
@@ -533,29 +571,13 @@ Definition defaults_env_def:
   defaults_env env = env with <| var_types := FEMPTY; var_assignable := FEMPTY |>
 End
 
-Definition event_arg_compatible_def:
-  event_arg_compatible (BaseT (StringT n)) (BaseT (StringT m)) = (m <= n) /\
-  event_arg_compatible (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic m))) = (m <= n) /\
-  event_arg_compatible (ArrayT ft (Dynamic n)) (ArrayT at (Dynamic m)) =
-    (m <= n /\ event_arg_compatible ft at) /\
-  event_arg_compatible (ArrayT ft (Fixed n)) (ArrayT at (Fixed m)) =
-    (m = n /\ event_arg_compatible ft at) /\
-  event_arg_compatible (TupleT fts) (TupleT ats) =
-    (LENGTH fts = LENGTH ats /\ event_arg_compatible_list fts ats) /\
-  event_arg_compatible fty aty = (aty = fty) /\
-  event_arg_compatible_list [] [] = T /\
-  event_arg_compatible_list (f::fs) (a::rest) =
-    (event_arg_compatible f a /\ event_arg_compatible_list fs rest) /\
-  event_arg_compatible_list _ _ = F
-End
-
 (* ===== Type builtin/conversion checks ===== *)
 
 (* Bytes[N]/String[N] targets accept only Bytes/String sources
-   (vyper/codegen_venom/builtins/convert.py: _to_bytes, _to_string), and no
-   conversion takes a source that is a subtype of its target: same-class
-   bytestrings must narrow, bytesM must change width
-   (vyper/builtins/functions.py: Convert.infer_arg_types). *)
+   (vyper/codegen_venom/builtins/convert.py: _to_bytes, _to_string), and a
+   bytestring or bytesM conversion may not take a source that is a subtype
+   of its target: same-class bytestrings must narrow, bytesM must change
+   width (vyper/builtins/functions.py: Convert.infer_arg_types). *)
 Definition valid_conversion_def:
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT BoolT) = T /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT BoolT) = (n <= 32) /\
@@ -789,6 +811,35 @@ Proof
   rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> gvs[subscript_base_type_exact_def]
 QED
 
+(* Pinned Vyper local.py:_handle_modification counts direct immutable writes,
+   but explicitly excludes complex (struct/array) projections in constructors.
+   Do not inherit a direct-root ban through projections. Their deploy/runtime
+   permission is already enforced by type_place_target on the parent root. *)
+Definition target_mutable_def:
+  target_mutable env (NameTarget id) =
+    (FLOOKUP env.var_assignable id = SOME T) /\
+  target_mutable env (TopLevelNameTarget nsid) =
+    (FLOOKUP env.bare_globals nsid = NONE /\
+     IS_SOME (FLOOKUP env.toplevel_vtypes nsid)) /\
+  target_mutable env (SubscriptTarget tgt e) = T /\
+  target_mutable env (AttributeTarget tgt id) = T
+End
+
+Theorem target_mutable_static_maps_transfer:
+  !tgt env1 env2.
+    target_mutable env1 tgt /\
+    env2.var_assignable = env1.var_assignable /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==>
+       FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\
+            FLOOKUP env1.bare_globals k = NONE ==>
+       FLOOKUP env2.bare_globals k = NONE) ==>
+    target_mutable env2 tgt
+Proof
+  gen_tac >> Cases_on `tgt` >> simp[target_mutable_def] >>
+  rpt strip_tac >> gvs[IS_SOME_EXISTS] >> metis_tac[]
+QED
+
 Definition well_typed_expr_def:
   well_typed_expr env (Name ty id) =
     (FLOOKUP env.var_types id = SOME ty) /\
@@ -821,7 +872,7 @@ Definition well_typed_expr_def:
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (Builtin ty blt es) =
     (well_typed_exprs env es /\ well_typed_builtin_app ty blt (MAP expr_type es) /\
-     builtin_operands_ok blt es /\ well_formed_type env.type_defs ty) /\
+     builtin_operands_ok ty blt es /\ well_formed_type env.type_defs ty) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\ well_formed_type env.type_defs ty /\
      type_builtin_result_ok env.type_defs tb ty target_ty (MAP expr_type es) /\
@@ -1017,7 +1068,11 @@ End
 
    A place is compared by VarAccess (base.py): its variable and its
    attribute path up to the first subscript, which is an analysis barrier.
-   place_access tgt [] gives both. *)
+   place_access tgt [] gives both.
+
+   Here a call counts only its arguments.  The state variables an internal
+   callee writes, which Vyper counts too, are checked with the whole
+   contract in sight: stmt_loop_calls_ok in vyperTypeContract. *)
 Definition place_access_def:
   place_access (NameTarget id) attrs = (NameTarget id, attrs) /\
   place_access (TopLevelNameTarget n) attrs = (TopLevelNameTarget n, attrs) /\
@@ -1253,7 +1308,7 @@ Definition type_stmt_def:
        NONE => NONE
      | SOME fields =>
          if well_typed_exprs env es /\ LENGTH es = LENGTH fields /\
-            LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) es fields
+            LIST_REL (\e ((_,fty),_). arg_type_fits (expr_type e) fty) es fields
          then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =
     (if well_typed_expr env e /\ assignable_type env.type_defs typ /\
@@ -1263,23 +1318,19 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Append bt e) =
     (case type_place_target env bt of
      | SOME (Type (ArrayT elem_ty (Dynamic n))) =>
-         if well_typed_expr env e /\ type_widens_to env.type_defs (expr_type e) elem_ty /\
+         if target_mutable env bt /\ well_typed_expr env e /\
+            type_widens_to env.type_defs (expr_type e) elem_ty /\
             assignable_type env.type_defs elem_ty then SOME env else NONE
      | _ => NONE) /\
   type_stmt env ret_ty (Assign tgt e) =
     (if atarget_accepts env tgt (expr_type e) /\ well_typed_expr env e /\
         assignable_type env.type_defs (expr_type e) then SOME env else NONE) /\
   type_stmt env ret_ty (AugAssign ty bt bop e) =
-    (if well_typed_target env bt ty /\ well_typed_expr env e /\
+    (if target_mutable env bt /\ well_typed_target env bt ty /\ well_typed_expr env e /\
         assignable_type env.type_defs ty /\
         assignable_type env.type_defs (expr_type e) /\
         well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
-        (* the target is never a literal, so ** needs a literal exponent *)
-        (bop = Exp ==> nonneg_int_literal e) /\
-        (* Stricter than Vyper, which accepts <<= and >>= by a signed
-           amount: its code shifts by the amount's word where the semantics
-           raises on a negative amount. *)
-        (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
+        augassign_operand_ok ty bop e
      then SOME env else NONE) /\
   type_stmt env ret_ty (If e ss1 ss2) =
     (if well_typed_expr env e /\ expr_type e = BaseT BoolT /\
@@ -1316,11 +1367,17 @@ QED
 (* Conservative syntactic control-flow predicate for callable bodies.  If this
  * holds for a statement/list, the evaluator should not be able to fall through
  * normally; the semantic boundary lemma is proved in vyperTypeStmtSoundness. *)
+Definition expr_no_fallthrough_def:
+  expr_no_fallthrough (Call _ RawRevert _ _) = T /\
+  expr_no_fallthrough (Call _ SelfDestructTarget _ _) = T /\
+  expr_no_fallthrough _ = F
+End
+
 Definition stmt_no_fallthrough_def:
   stmt_no_fallthrough Pass = F /\
   stmt_no_fallthrough Continue = T /\
   stmt_no_fallthrough Break = T /\
-  stmt_no_fallthrough (Expr e) = F /\
+  stmt_no_fallthrough (Expr e) = expr_no_fallthrough e /\
   stmt_no_fallthrough (For id ty it n body) = F /\
   stmt_no_fallthrough (If e ss1 ss2) =
     (stmts_no_fallthrough ss1 /\ stmts_no_fallthrough ss2) /\

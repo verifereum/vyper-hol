@@ -331,6 +331,7 @@ Proof
   irule code_trace_certified_bind >> simp[code_trace_certified_emit_op] >> gen_tac >>
   irule code_trace_certified_bind >> simp[code_trace_certified_emit_op] >> gen_tac >>
   irule code_trace_certified_bind >> simp[code_trace_certified_emit_op] >> gen_tac >>
+  irule code_trace_certified_bind >> simp[code_trace_certified_emit_op] >> gen_tac >>
   irule code_trace_certified_bind >>
   simp[code_trace_certified_emit_op, code_trace_certified_emit_void]
 QED
