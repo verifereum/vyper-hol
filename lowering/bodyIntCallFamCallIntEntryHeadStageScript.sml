@@ -255,7 +255,7 @@ Proof
   fs[intcall_expr_cont_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
 QED
 
-Theorem intcall_list_stage_origin_endpoint:
+Theorem intcall_list_stage_fresh_origin_endpoint:
   !ds vs rs values flags a c out start tys pflags pvalues pops t.
   compile_stage_intcall_args ce vs flags (MAP expr_type ds) a = (out,c) /\
   LENGTH vs = LENGTH ds /\ LENGTH rs = LENGTH ds /\
@@ -287,7 +287,7 @@ Theorem intcall_list_stage_origin_endpoint:
       (pflags ++ flags) (pvalues ++ values) (pops ++ out) u /\
     (!i tv. i < LENGTH ds /\ ~EL i flags /\
       evaluate_type (get_tenv fp.jc_cx) (expr_type (EL i ds)) = SOME tv ==>
-      ^allocation_origin fp.jc_func start c (EL i out) tv u)
+      ^allocation_origin fp.jc_func a c (EL i out) tv u)
 Proof
   Induct_on `ds`
   >- (rpt gen_tac >> strip_tac >> gvs[] >>
@@ -306,7 +306,7 @@ Proof
   suspend "head"
 QED
 
-Resume intcall_list_stage_origin_endpoint[head]:
+Resume intcall_list_stage_fresh_origin_endpoint[head]:
   qpat_assum `!i. i < LENGTH (h::ds) ==> _`
     (qspec_then `0` mp_tac) >> simp[NoAsms] >> strip_tac >>
   qpat_x_assum `compile_stage_intcall_args ce (vv::vs) _ _ a = _` mp_tac >>
@@ -347,15 +347,15 @@ Resume intcall_list_stage_origin_endpoint[head]:
   suspend "singleton"
 QED
 
-Resume intcall_list_stage_origin_endpoint[singleton]:
+Resume intcall_list_stage_fresh_origin_endpoint[singleton]:
   `type_memory_size tv < 2**64` by
     (qpat_x_assum `!vs rs values flags a c out start tys pflags pvalues pops t. _` kall_tac >> simp[]) >>
-  drule_all intcall_singleton_stage_origin_endpoint >> strip_tac >>
+  drule_all intcall_singleton_stage_fresh_origin_endpoint >> strip_tac >>
   rename1 `intcall_expr_cont fp ce env es a t es b mid` >>
   suspend "tail"
 QED
 
-Resume intcall_list_stage_origin_endpoint[tail]:
+Resume intcall_list_stage_fresh_origin_endpoint[tail]:
   `LENGTH vs' = LENGTH ds /\ LENGTH rs' = LENGTH ds /\
    LENGTH values' = LENGTH ds /\ LENGTH flags' = LENGTH ds` by
     (map_every (fn pat => qpat_assum pat mp_tac)
@@ -378,7 +378,7 @@ Resume intcall_list_stage_origin_endpoint[tail]:
   suspend "prefix"
 QED
 
-Resume intcall_list_stage_origin_endpoint[prefix]:
+Resume intcall_list_stage_fresh_origin_endpoint[prefix]:
   `(!i tv'. i < LENGTH (tys ++ [expr_type h]) /\
     ~EL i (pflags ++ [flag]) /\
     evaluate_type (get_tenv fp.jc_cx) (EL i (tys ++ [expr_type h])) = SOME tv' ==>
@@ -417,7 +417,7 @@ Resume intcall_list_stage_origin_endpoint[prefix]:
   suspend "compose"
 QED
 
-Resume intcall_list_stage_origin_endpoint[compose]:
+Resume intcall_list_stage_fresh_origin_endpoint[compose]:
   `a.cs_next_id <= b.cs_next_id /\ a.cs_next_var <= b.cs_next_var` by
     (qpat_assum `ci_mono a b` mp_tac >> simp[NoAsms, ci_mono_def]) >>
   `intcall_expr_cont fp ce env es a t es c u` by
@@ -434,10 +434,10 @@ Resume intcall_list_stage_origin_endpoint[compose]:
      qpat_x_assum `!i. i < LENGTH (tys ++ [expr_type h]) ==> _`
        (qspec_then `LENGTH tys` mp_tac) >>
      simp[listTheory.EL_APPEND_EQN] >> metis_tac[]) >>
-  `~flag ==> ^allocation_origin fp.jc_func start c op tv u` by
+  `~flag ==> ^allocation_origin fp.jc_func a c op tv u` by
     (strip_tac >>
-     `^allocation_origin fp.jc_func start b op tv mid` by
-       (BETA_TAC >> first_x_assum irule >> simp[]) >>
+     `^allocation_origin fp.jc_func a b op tv mid` by
+       (BETA_TAC >> metis_tac[]) >>
      drule_all intcall_allocation_origin_frame >> simp[]) >>
   conj_tac
   >- (qpat_x_assum `[op] ++ rest = out` (SUBST1_TAC o SYM) >>
@@ -455,13 +455,66 @@ Resume intcall_list_stage_origin_endpoint[compose]:
   simp[NoAsms, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
   rpt strip_tac >> ntac 3 (pop_assum mp_tac) >>
   qpat_assum `evaluate_type _ (expr_type h) = SOME tv` mp_tac >>
-  qpat_assum `~flag ==> (^allocation_origin) _ _ c op tv u` mp_tac >>
+  qpat_assum `~flag ==> (^allocation_origin) _ a c op tv u` mp_tac >>
   qpat_assum `!i tv. i < LENGTH ds /\ ~EL i flags' /\ _ ==> _` mp_tac >>
+  qpat_assum `a.cs_next_id <= b.cs_next_id` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> Cases_on `i` >>
-  gvs[] >> metis_tac[]
+  gvs[]
+  >- (qexistsl_tac [`len`, `inst`] >> simp[]) >>
+  rename1 `SUC k < LENGTH ds + 1` >>
+  `k < LENGTH ds` by decide_tac >>
+  qpat_x_assum `!i tv. _` drule_all >> strip_tac >>
+  rename1 `FLOOKUP u.vs_allocas site.inst_id = SOME (w2n word,sz)` >>
+  qexistsl_tac [`sz`, `site`, `word`] >> simp[] >> decide_tac
 QED
 
-Finalise intcall_list_stage_origin_endpoint
+Finalise intcall_list_stage_fresh_origin_endpoint
+
+Theorem intcall_list_stage_origin_endpoint:
+  !ds vs rs values flags a c out start tys pflags pvalues pops t.
+  compile_stage_intcall_args ce vs flags (MAP expr_type ds) a = (out,c) /\
+  LENGTH vs = LENGTH ds /\ LENGTH rs = LENGTH ds /\
+  LENGTH values = LENGTH ds /\ LENGTH flags = LENGTH ds /\
+  ^deferred_list fp ce (ds ++ tail_ds) (vs ++ tail_vs) (rs ++ tail_rs) a es t /\
+  ^completed_prefix fp.jc_cx start a tys pflags pvalues pops t /\
+  (!i tv. i < LENGTH tys /\ ~EL i pflags /\
+    evaluate_type (get_tenv fp.jc_cx) (EL i tys) = SOME tv ==>
+    val_wf tv (EL i pvalues)) /\
+  (!i. i < LENGTH ds ==>
+    post_value_type ce (EL i ds) = expr_type (EL i ds) /\
+    vv_type (EL i vs) = expr_type (EL i ds) /\
+    read_result fp.jc_cx (EL i rs) es = (INL (EL i values),es) /\
+    (EL i flags ==> is_word_type (expr_type (EL i ds))) /\
+    ?tv. evaluate_type (get_tenv fp.jc_cx) (expr_type (EL i ds)) = SOME tv /\
+      type_memory_bytes ce (expr_type (EL i ds)) = type_memory_size tv /\
+      type_memory_size tv < 2**64 /\ value_has_type tv (EL i values) /\
+      (~EL i flags ==> val_wf tv (EL i values))) /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es a t /\
+  fn_has_code a c fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+  start.cs_next_id <= a.cs_next_id /\
+  ~t.vs_halted /\ t.vs_current_bb = a.cs_current_bb /\
+  t.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  LENGTH out = LENGTH ds /\
+  ?u. gas_marked_path F fp.jc_ctx fp.jc_func t 0 (OK u) /\
+    intcall_expr_cont fp ce env es a t es c u /\
+    ^deferred_list fp ce tail_ds tail_vs tail_rs c es u /\
+    ^completed_prefix fp.jc_cx start c (tys ++ MAP expr_type ds)
+      (pflags ++ flags) (pvalues ++ values) (pops ++ out) u /\
+    (!i tv. i < LENGTH ds /\ ~EL i flags /\
+      evaluate_type (get_tenv fp.jc_cx) (expr_type (EL i ds)) = SOME tv ==>
+      ^allocation_origin fp.jc_func start c (EL i out) tv u)
+Proof
+  rpt gen_tac >> strip_tac >> drule_all intcall_list_stage_fresh_origin_endpoint >>
+  strip_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `u` >> rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >> BETA_TAC >>
+  qpat_x_assum `!i tv. i < LENGTH ds /\ _ ==> _` drule_all >>
+  BETA_TAC >> strip_tac >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
 
 Theorem intcall_list_stage_endpoint:
   !ds vs rs values flags a c out start tys pflags pvalues pops t.
@@ -494,7 +547,7 @@ Theorem intcall_list_stage_endpoint:
     ^completed_prefix fp.jc_cx start c (tys ++ MAP expr_type ds)
       (pflags ++ flags) (pvalues ++ values) (pops ++ out) u
 Proof
-  rpt gen_tac >> strip_tac >> drule_all intcall_list_stage_origin_endpoint >>
+  rpt gen_tac >> strip_tac >> drule_all intcall_list_stage_fresh_origin_endpoint >>
   strip_tac >> conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `u` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
