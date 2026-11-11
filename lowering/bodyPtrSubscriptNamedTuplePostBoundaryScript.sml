@@ -66,5 +66,5 @@ Proof
      (LocatedValue ann (mk_ptr (Var out) LocMemory)) sf` by
     (irule local_child_vv_at >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[value_has_type_val_wf]) >>
-  simp[vv_post_def, locals_kept_def] >> simp[mk_ptr_def]
+  simp[vv_post_def, locals_kept_mem] >> simp[mk_ptr_def]
 QED

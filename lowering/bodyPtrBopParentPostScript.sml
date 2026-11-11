@@ -43,7 +43,7 @@ Theorem bop_pair_ghost_kept_suffix:
 Proof
   simp[bop_operand_post_def] >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es1 t1 /\
-   wb_frame cenv es ca t0 t1 /\ wb_frame cenv es1 c1 t1 t2` by
+   wb_frame cenv es es1 ca t0 t1 /\ wb_frame cenv es1 es2 c1 t1 t2` by
     metis_tac[expr_post_frame, expr_post_state] >>
   `ghost_kept cenv es1 c1 G1 tn1 t1 G tn` by
     metis_tac[ghost_kept_wb_trans] >>

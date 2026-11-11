@@ -6,6 +6,7 @@ Ancestors
   vyperState venomState compileEnv loweringStateRelDefs finite_map exprSimDefs venomExecSemantics fragExec
   vyperLookup vyperScopePreservation exprSimPopNestedLocalMemory exprSimProps
   appendStorageGhostPtr bodyPtrPopNestedLiveSource bodyPtrPopTargetDefs
+  stmtPoppedKeys exprSimHypsDefs
   bodyPtrPopNestedLiveHandoff reasonCopySourcePtr
   exprSimPopNestedBase exprSimPopNestedLocalHandoff exprSimPopNestedLocalSuffix
   exprSimPopNestedLocalSource exprLowering exprLoweringProps stmtLoweringMono
@@ -114,13 +115,13 @@ QED
 Theorem pop_positive_memory_suffix:
   expr_sim_inv cenv cx env es /\
   stmt_state_rel ctx func cenv cx es s0 /\
-  stmt_state_rel ctx func cenv cx mid s /\ wb_frame cenv es sa s0 s /\
+  stmt_state_rel ctx func cenv cx mid s /\ wb_frame cenv es mid sa s0 s /\
   ghost_inv d cenv cx mid G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
   local_ptrs_rel func cenv mid.scopes s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-  MAP FDOM es.scopes = MAP FDOM mid.scopes /\
+  MAP FDOM es.scopes = MAP FDOM mid.scopes /\ popped_keys_indexed mid.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   find_containing_scope id mid.scopes = SOME (pre,sc,entry,rest) /\
   entry.assignable /\ mutable_place_path entry.type path /\
@@ -184,9 +185,8 @@ Proof
       (mid with scopes := scopes') H tf t /\
    ptr_buf_ok cenv e (Var out) H t /\ ghost_kept cenv mid sm G tn s H tf` by
     (match_mp_tac (Q.INST
-       [`hist` |-> `record_pop path (ArrayV (DynArrayV vs)) (LAST vs) entry.popped`,
-        `w` |-> `n2w (w2n (a:bytes32)+32+(LENGTH vs-1)*type_memory_size etv):bytes32`]
-       pop_positive_framed_posts) >> simp[]) >>
+       [`w` |-> `n2w (w2n (a:bytes32)+32+(LENGTH vs-1)*type_memory_size etv):bytes32`]
+       pop_positive_framed_posts) >> simp[record_pop_def]) >>
   qpat_x_assum `scopes' = _` (fn th => rewrite_tac[GSYM th]) >>
   simp[] >> irule ghost_kept_suffix_compose >>
   qexistsl_tac [`G`, `sm`, `tn`] >> simp[]
@@ -257,6 +257,14 @@ Proof
      strip_tac >> drule eval_target_place_preserves_scopes_dom >> simp[]) >>
   drule_all pop_array_element_layout >> strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `popped_keys_indexed tend.scopes` by
+    (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `expr_sim_inv _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rewrite_tac[gasSummaryTheory.gas_marked_exec_def] >>
+     rpt strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[] >>
+     strip_tac >>
+     drule stmtPoppedKeysTheory.eval_target_place_popped_keys_indexed >>
+     fs[expr_sim_inv_def]) >>
   `~s.vs_halted` by
     (fs[gas_marked_exec_ptr_def] >>
      metis_tac[fragGasSeqPtrTheory.gas_path_ptr_ok_not_halted]) >>

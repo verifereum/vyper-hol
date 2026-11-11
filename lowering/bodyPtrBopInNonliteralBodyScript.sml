@@ -46,23 +46,21 @@ Theorem membership_mixed_post_frames:
   stmt_state_rel ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id ==>
-  wb_frame cenv es sa s0 s2 /\
+  wb_frame cenv es es2 sa s0 s2 /\
   ghost_kept cenv es sa G0 tn0 s0 G2 tn2
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   fs[bodyPtrBopOperandContractTheory.bop_operand_post_def,
      bodyPtrBopInVvContractTheory.membership_vv_post_def] >>
-  `wb_frame cenv es sa s0 s1` by metis_tac[expr_post_frame] >>
-  `wb_frame cenv es1 sc s1 s2` by
+  `wb_frame cenv es es1 sa s0 s1` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es1 es2 sc s1 s2` by
     (fs[loweringPostsTheory.vv_post_def, loweringPostsTheory.wb_frame_def] >>
      metis_tac[]) >>
   conj_tac
-  >- (irule wb_frame_trans >> simp[] >>
-      conj_tac >- (qexistsl_tac [`es1`,`sc`,`s1`] >> simp[]) >>
-      metis_tac[]) >>
-  irule ghost_kept_wb_trans >> simp[] >>
-  conj_tac >- metis_tac[] >>
-  qexistsl_tac [`G1`,`es1`,`s1`,`sc`,`tn1`] >> simp[]
+  >- (qspecl_then [`fn`, `cenv`, `cx`, `es`, `s0`, `sa`, `es1`, `es2`, `sc`, `s1`, `s2`,
+                   `ctx`] mp_tac wb_frame_trans >> simp[]) >>
+  mp_tac (Q.INST [`func` |-> `fn`, `es0` |-> `es`, `es'` |-> `es1`, `sb` |-> `sc`]
+            ghost_kept_wb_trans) >> simp[]
 QED
 
 Theorem membership_nonliteral_tail_extends:

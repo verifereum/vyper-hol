@@ -79,6 +79,7 @@ Resume pop_local_expr_vv_ptr[posts]:
      simp[word_add_n2w, word_mul_n2w, ADD_ASSOC]) >>
   `t.vs_memory = (mstore (w2n w) (n2w (LENGTH vs)-1w) s0).vs_memory` by
     simp[GSYM n2w_sub] >>
+  `popped_keys_indexed es.scopes` by fs[expr_sim_pre_def, expr_sim_inv_def] >>
   `vv_post ctx func cenv cx (Pop ann (NameTarget id)) es sa sc s0 ee
     (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs-1))]))
     (LocatedValue ann (mk_ptr (Var out) LocMemory)) t` by

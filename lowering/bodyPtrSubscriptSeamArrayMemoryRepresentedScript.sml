@@ -24,9 +24,9 @@ Theorem memory_vv_post_readonly_tail:
   vv_post ctx func cenv cx e es sa sd s0 ee r (LocatedValue ann p) z
 Proof
   strip_tac >>
-  `wb_frame cenv es sa s0 s` by
+  `wb_frame cenv es ee sa s0 s` by
     (gvs[vv_post_def, wb_frame_def] >> metis_tac[]) >>
-  `wb_frame cenv es sa s0 z` by
+  `wb_frame cenv es ee sa s0 z` by
     (irule wb_frame_readonly_tail >> goal_assum (drule_at Any) >> metis_tac[]) >>
   `vv_holds cenv cx (expr_type e) r (LocatedValue ann p) ee z` by
     (irule vv_holds_vars_frame >> qexists_tac `s` >>

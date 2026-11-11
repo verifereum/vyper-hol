@@ -41,7 +41,7 @@ Theorem mapping_leaf_vv_post:
   contract_storage_well_formed cx ee /\ storage_layout_safe cx /\
   stmt_state_rel ctx fn cenv cx ee s /\
   p.ptr_location = slot_loc tr /\ eval_operand p.ptr_operand s = SOME slot /\
-  wb_frame cenv es sa s0 s ==>
+  wb_frame cenv es ee sa s0 s ==>
   vv_post ctx fn cenv cx (Subscript ann obj idx) es sa sb s0 ee
     (PlaceR (StoragePlace tr slot tv)) (LocatedValue ann p) s
 Proof
@@ -58,7 +58,7 @@ Theorem mapping_leaf_ptr_post:
   contract_storage_well_formed cx ee /\ storage_layout_safe cx /\
   stmt_state_rel ctx fn cenv cx ee s /\ ghost_inv d cenv cx ee G tn s /\
   p.ptr_location = slot_loc tr /\ eval_operand p.ptr_operand s = SOME slot /\
-  op_taint tn p.ptr_operand = {} /\ wb_frame cenv es sa s0 s ==>
+  op_taint tn p.ptr_operand = {} /\ wb_frame cenv es ee sa s0 s ==>
   vv_post ctx fn cenv cx (Subscript ann obj idx) es sa sb s0 ee
     (PlaceR (StoragePlace tr slot tv)) (LocatedValue ann p) s /\
   ptr_vv_ok cx (post_value_type cenv (Subscript ann obj idx))

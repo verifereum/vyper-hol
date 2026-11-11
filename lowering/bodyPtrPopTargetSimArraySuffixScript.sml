@@ -76,16 +76,14 @@ Resume target_array_normal_suffix_ptr[common]:
     (drule eval_base_place_preserves_scopes_dom >>
      simp[] >> gvs[]) >>
   gvs[] >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es ef sa s0 u` by
     (drule target_post_index_frame >> simp[] >>
      disch_then irule >> fs[ci_mono_def] >> metis_tac[]) >>
   `ghost_kept cenv es sa G0 tn0 s0 H un` by
-    (qpat_assum `ghost_kept cenv es sa _ _ _ _ _`
-       (mp_then Any mp_tac wordOperandsPtrTheory.ghost_kept_trans) >>
-     disch_then irule >> simp[] >>
-     conj_tac
-     >- (qexists_tac `func` >> fs[stmt_state_rel_def, state_rel_def]) >>
-     qexistsl_tac [`em with gas_obs := []`, `t`, `sm`] >>
+    (mp_tac (Q.INST [`es1` |-> `em with gas_obs := []`, `sb` |-> `sm`, `G1` |-> `G`,
+                     `tn1` |-> `tn`, `s1` |-> `t`, `G2` |-> `H`, `tn2` |-> `un`,
+                     `es'` |-> `em with gas_obs := []`]
+               wordOperandsPtrTheory.ghost_kept_trans) >>
      fs[target_post_wb_frame, ci_mono_def, stmt_state_rel_def, state_rel_def]) >>
   suspend "typed"
 QED

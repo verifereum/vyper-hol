@@ -412,7 +412,7 @@ Theorem map_scratch_ptr_frame:
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t G' tn'. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (hashmap_slot w0 w1) /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     ghost_inv d cenv cx es G' tn' t /\

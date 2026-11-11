@@ -4,7 +4,7 @@ Ancestors
 
 Theorem bop_argument_placement_kept:
   expr_val_at cenv cx ty sa sb es v op s /\
-  wb_frame cenv es sb s t /\
+  wb_frame cenv es es2 sb s t /\
   local_ptrs_rel func cenv es.scopes s /\ local_ptrs_reserved cenv sb /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   eval_operand op t = eval_operand op s ==>
