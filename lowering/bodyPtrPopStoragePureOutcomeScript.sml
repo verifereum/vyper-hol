@@ -176,12 +176,10 @@ Proof
      Cases_on `tr` >> simp_tac (srw_ss()) [NoAsms, sstore_def, tstore_def, LET_THM]) >>
   `locals_kept cenv es0 es s0 s` by fs[target_post_def, wb_frame_def] >>
   `!X. locals_kept cenv es0 (set_storage cx es tr X) s0 u` by
-    (gen_tac >> irule exprSimPropsTheory.locals_kept_mem_tail >> qexists_tac `s` >> conj_tac
-     >- (qpat_x_assum `locals_kept cenv es0 es s0 s` mp_tac >>
-         rewrite_tac[locals_kept_def, popped_kept_def,
-                     vyperStorageBackendTheory.set_storage_scopes] >>
-         simp[]) >>
-     fs[]) >>
+    (qpat_x_assum `locals_kept cenv es0 es s0 s` mp_tac >>
+     qpat_x_assum `u.vs_memory = s.vs_memory` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     rw[locals_kept_def, popped_kept_def] >> metis_tac[]) >>
   Cases_on `tr` >>
   (fs[target_post_def, vv_post_def, vv_holds_def, vv_at_def,
       mk_ptr_def, vyperASTTheory.expr_type_def] >>
