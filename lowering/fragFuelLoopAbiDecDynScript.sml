@@ -161,6 +161,20 @@ Proof
   rpt (goal_assum (drule_at Any))
 QED
 
+Theorem abi_dyn_counter_rank[local]:
+  !w:bytes32.
+    (2 ** 256 - 1) - w2n w < 2 ** 256 /\
+    (w2n w < 2 ** 256 - 1 ==>
+     (2 ** 256 - 1) - w2n (w + 1w) < (2 ** 256 - 1) - w2n w)
+Proof
+  gen_tac >> conj_tac >- simp[] >>
+  strip_tac >>
+  `w2n (w + 1w) = w2n w + 1` by
+    (gvs[wordsTheory.word_add_def, wordsTheory.w2n_n2w,
+         wordsTheory.dimword_def, arithmeticTheory.LESS_MOD]) >>
+  gvs[]
+QED
+
 (* The counter need not be disjoint from the element destination.  The
    final MSTORE overwrites any writes by the element decoder.  The bound
    is reloaded at every header and need not stay fixed. *)
