@@ -1392,13 +1392,6 @@ Proof
   simp[state_rel_frame_result] >> metis_tac[protected_cell_frame_eq]
 QED
 
-Theorem frame_lift_option_type_success[local]:
-  lift_option_type opt msg st = (INL v,st') <=> opt = SOME v /\ st' = st
-Proof
-  Cases_on `opt` >> simp[lift_option_type_def, return_def, raise_def] >>
-  metis_tac[]
-QED
-
 Theorem protected_cell_frame_bind:
   state_rel_frame (protected_cell_frame addr src id) f /\
   (!s v t. f s = (INL v,t) ==>
@@ -2623,7 +2616,7 @@ Proof
       simp[protected_cell_frame_create] >>
       simp[state_rel_frame_result] >> metis_tac[])
   >~ [`well_typed_expr env (Call ty (IntCall (call_src,call_fn)) es drv)`]
-  >- (rule_assum_tac (SIMP_RULE bool_ss [frame_lift_option_type_success]) >>
+  >- (rule_assum_tac (SIMP_RULE bool_ss [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >>
       rewrite_tac[ignore_bind_def] >>
       irule protected_cell_frame_bind >>
       simp[protected_cell_frame_pure_guards] >> rpt strip_tac >>
@@ -2632,13 +2625,13 @@ Proof
       simp[protected_cell_frame_pure_guards] >> rpt strip_tac >>
       simp_tac bool_ss [] >>
       qpat_x_assum `lift_option_type _ _ _ = (INL _,_)`
-        (mp_tac o REWRITE_RULE [frame_lift_option_type_success]) >>
+        (mp_tac o REWRITE_RULE [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >>
       strip_tac >> full_simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >>
       simp[protected_cell_frame_pure_guards] >> rpt strip_tac >>
       simp_tac bool_ss [] >>
       qpat_x_assum `lift_option_type _ _ _ = (INL _,_)`
-        (mp_tac o REWRITE_RULE [frame_lift_option_type_success]) >>
+        (mp_tac o REWRITE_RULE [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >>
       strip_tac >> full_simp_tac bool_ss [] >>
       rename1 `lookup_callable_function _ _ _ = SOME tup` >>
       PairCases_on `tup` >> gvs[] >>
@@ -2683,11 +2676,11 @@ Proof
       irule protected_cell_frame_bind >> simp[protected_cell_frame_pure_guards] >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       qpat_x_assum `lift_option_type _ _ _ = (INL _,_)`
-        (mp_tac o REWRITE_RULE [frame_lift_option_type_success]) >> strip_tac >>
+        (mp_tac o REWRITE_RULE [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >> strip_tac >>
       irule protected_cell_frame_bind >> simp[protected_cell_frame_pure_guards] >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       qpat_x_assum `lift_option_type _ _ _ = (INL _,_)`
-        (mp_tac o REWRITE_RULE [frame_lift_option_type_success]) >> strip_tac >>
+        (mp_tac o REWRITE_RULE [vyperTypeEvalSoundnessTheory.lift_option_type_INL_eq]) >> strip_tac >>
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (Cases_on `tup1` >> simp[protected_cell_frame_return] >>
           Cases_on `cx.nonreentrant_slot` >>
@@ -3714,15 +3707,6 @@ Proof
   Cases_on `t` >> gvs[subscript_vtype_def] >> metis_tac[]
 QED
 
-Theorem const_subscript_type_ok[local]:
-  well_typed_expr env (Subscript ty e1 e2) /\
-  well_typed_expr env e1 ==>
-  subscript_type_ok (expr_type e1) e2 ty
-Proof
-  strip_tac >> irule const_subscript_domain_type_ok >>
-  metis_tac[vyperTypeExprResultTheory.well_typed_expr_not_hashmap_place]
-QED
-
 Theorem fold_const_literal_forms[local]:
   (int_literal_value e = SOME n ==>
     int_literal_value (fold_const_expr e) = SOME n) /\
@@ -3890,7 +3874,7 @@ Proof
     Cases_on `ALOOKUP E ns1` >> gvs[expr_type_def])
   >>~- ([`well_typed_expr env (Subscript ty (subst_consts_expr E a) (subst_consts_expr E b))`],
     `well_typed_expr env a` by (asm "subscript_base" (fn th => metis_tac[th])) >>
-    `subscript_type_ok (expr_type a) b ty` by metis_tac[const_subscript_type_ok] >>
+    `subscript_type_ok (expr_type a) b ty` by metis_tac[vyperTypeConstantFoldTheory.constant_subscript_type_ok] >>
     `well_typed_expr env b` by gvs[Once well_typed_expr_def] >>
     `well_typed_expr env (subst_consts_expr E a) /\
      expr_type (subst_consts_expr E a) = expr_type a` by metis_tac[] >>
