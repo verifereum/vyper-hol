@@ -70,7 +70,7 @@ Theorem computed_load_suffix_framed_path:
         (t with vs_inst_idx := s.vs_inst_idx + 3) tn1) /\
     stmt_state_rel ctx fn cenv cx
       (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
-    wb_frame cenv es sf s t /\
+    wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s t /\
     ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
     ghost_kept cenv es sf G tn s G' tn'
 Proof

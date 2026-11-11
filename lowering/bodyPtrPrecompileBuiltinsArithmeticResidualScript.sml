@@ -52,7 +52,7 @@ Theorem ecmul_residual_success:
     mem_bytes_at (w2n out) 64 t.vs_memory =
       word_to_bytes (n2w x:bytes32) T ++ word_to_bytes (n2w y:bytes32) T /\
     stmt_state_rel ctx fn cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
-    wb_frame cenv es sf s t /\
+    wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s t /\
     ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
     ghost_kept cenv es sf G tn s G' tn' /\
     ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (mk_ec_result (x,y)) res G' tn' t /\
@@ -186,7 +186,7 @@ Theorem ecadd_residual_success:
     mem_bytes_at (w2n out) 64 t.vs_memory =
       word_to_bytes (n2w x:bytes32) T ++ word_to_bytes (n2w y:bytes32) T /\
     stmt_state_rel ctx fn cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
-    wb_frame cenv es sf s t /\
+    wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s t /\
     ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
     ghost_kept cenv es sf G tn s G' tn' /\
     ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (mk_ec_result (x,y)) res G' tn' t /\

@@ -6,12 +6,12 @@ Ancestors bodyPtrPrecompileBuiltinsRecoveryContinuation
           ptrSafeRun codegenRel
 
 Theorem fresh_read_ordinary_frame:
-  stmt_state_rel ctx fn cenv cx es' q /\ wb_frame cenv es sf s q /\
+  stmt_state_rel ctx fn cenv cx es' q /\ wb_frame cenv es es' sf s q /\
   local_ptrs_reserved cenv sm /\ sm.cs_next_var <= n /\
   sf.cs_next_var <= n ==>
   stmt_state_rel ctx fn cenv cx es'
     (update_var (STRING #"%" (toString n)) w q) /\
-  wb_frame cenv es sf s
+  wb_frame cenv es es' sf s
     (update_var (STRING #"%" (toString n)) w q)
 Proof
   strip_tac >> conj_tac
@@ -46,11 +46,13 @@ Theorem computed_load_suffix_ordinary_frame:
        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
      regions_disjoint (w2n wo) 32 off (type_memory_size tv)) ==>
   stmt_state_rel ctx fn cenv cx
-    (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\ wb_frame cenv es sf s t
+    (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
+  wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s t
 Proof
   strip_tac >>
   `stmt_state_rel ctx fn cenv cx
-     (es with outcomes := SOME (DROP 1 s.vs_outcomes)) q /\ wb_frame cenv es sf s q` by
+     (es with outcomes := SOME (DROP 1 s.vs_outcomes)) q /\
+     wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s q` by
     (qpat_assum `_ sm = (Var dst,sl)`
        (mp_then Any mp_tac computed_suffix_preserves) >>
      disch_then (drule_all o SRULE [wordsTheory.dimword_def]) >> simp[]) >>

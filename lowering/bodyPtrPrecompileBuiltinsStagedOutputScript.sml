@@ -73,7 +73,7 @@ Theorem staged_full_output_paths:
   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
     (s.vs_transient s.vs_call_ctx.cc_address) /\
   ghost_inv d cenv cx es Gf tnf t /\ stmt_state_rel ctx fn cenv cx es t /\
-  ghost_kept cenv es sf G tn s Gf tnf /\ wb_frame cenv es sf s t /\
+  ghost_kept cenv es sf G tn s Gf tnf /\ wb_frame cenv es es sf s t /\
   stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sf /\
   local_ptrs_reserved cenv sm /\ sf.cs_next_var <= sm.cs_next_var /\
   sf.cs_next_id <= sm.cs_next_id /\
@@ -103,7 +103,7 @@ Theorem staged_full_output_paths:
         ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G2 tn2 q /\
         ghost_kept cenv es sf G tn s G2 tn2 /\
         stmt_state_rel ctx fn cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) q /\
-        wb_frame cenv es sf s q /\
+        wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s q /\
         (!name b sz. local_region cenv es.scopes q name b sz ==>
           regions_disjoint (w2n wo) (w2n outsz) b sz)) /\
     ((precompile_result (venom_call_request u target 0w wi insz T).cr_target
@@ -118,7 +118,7 @@ QED
 Resume staged_full_output_paths[entry]:
   `eval_operand (Var src) u = SOME wi /\ eval_operand (Var dst) u = SOME wo /\
    ptr_covers Gf tnf src u (w2n insz) /\ ptr_covers Gf tnf dst u (w2n outsz) /\
-   stmt_state_rel ctx fn cenv cx es u /\ wb_frame cenv es sf s u` by
+   stmt_state_rel ctx fn cenv cx es u /\ wb_frame cenv es es sf s u` by
     simp[stmt_state_rel_inst_idx, precompile_frame_cursor] >>
   `ghost_inv d cenv cx es Gf tnf u` by
     simp[SRULE [] (Q.INST [`gs` |-> `es.gas_obs`] literal_ptr_ghost_inv_normalize)] >>
@@ -158,7 +158,7 @@ Resume staged_full_output_paths[compose]:
   `sf.cs_next_var <= sf.cs_next_var /\ sf.cs_next_id <= sf.cs_next_id /\
    MAP FDOM es.scopes = MAP FDOM es.scopes` by simp[] >>
   drule_all ghost_kept_wb_trans >> strip_tac >>
-  qpat_assum `wb_frame cenv es sf u q`
+  qpat_assum `wb_frame cenv es _ sf u q`
     (mp_then Any mp_tac (Q.INST [`es1` |-> `es`] wb_frame_local_regions)) >>
   disch_then drule_all >> strip_tac >>
   `!name b sz. local_region cenv es.scopes q name b sz ==>

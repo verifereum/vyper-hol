@@ -52,7 +52,7 @@ Theorem registered_word_store_wb_frame:
   FLOOKUP s.vs_allocas id = SOME (b,32) /\ sf.cs_next_id <= id /\
   (!name lo sz. local_region cenv es.scopes s name lo sz ==>
      regions_disjoint b 32 lo sz) ==>
-  wb_frame cenv es sf s (mstore b w s)
+  wb_frame cenv es es sf s (mstore b w s)
 Proof
   strip_tac >> simp[wb_frame_def] >> conj_tac
   >- (rpt strip_tac >> irule mstore_region_frame >>
@@ -65,9 +65,9 @@ Proof
 QED
 
 Theorem wb_frame_counter_weaken:
-  wb_frame cenv es sb s t /\
+  wb_frame cenv es es' sb s t /\
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id ==>
-  wb_frame cenv es sa s t
+  wb_frame cenv es es' sa s t
 Proof
   simp[wb_frame_def, not_fresh_at_def] >> rpt strip_tac >>
   metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_LESS_EQ_TRANS]

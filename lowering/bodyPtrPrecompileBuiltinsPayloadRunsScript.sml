@@ -65,7 +65,7 @@ Theorem allocated_word_store_frame:
     FLOOKUP s.vs_allocas aid = SOME (a,sz) ==>
     regions_disjoint b 32 a sz) ==>
   stmt_state_rel ctx func cenv cx es (mstore b w s) /\
-  wb_frame cenv es sa s (mstore b w s)
+  wb_frame cenv es es sa s (mstore b w s)
 Proof
   strip_tac >> drule precompile_alloca_immutable_disjoint >>
   disch_tac >>
@@ -95,14 +95,14 @@ Theorem allocated_word_store_run:
     FLOOKUP s.vs_allocas aid = SOME (a,sz) ==>
     regions_disjoint (w2n p) 32 a sz) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
     t.vs_allocas = s.vs_allocas /\
     (!op. eval_operand op t = eval_operand op s) /\
     mem_bytes_at (w2n p) 32 t.vs_memory = word_to_bytes w T
 Proof
   strip_tac >> drule_all direct_store_run >> disch_tac >>
   `stmt_state_rel ctx func cenv cx es (mstore (w2n p) w s) /\
-   wb_frame cenv es sa s (mstore (w2n p) w s)` by
+   wb_frame cenv es es sa s (mstore (w2n p) w s)` by
     (irule allocated_word_store_frame >> simp[] >>
      conj_tac >- metis_tac[] >>
      conj_tac >- metis_tac[] >> qexists `inst` >> simp[]) >>

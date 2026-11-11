@@ -76,7 +76,7 @@ Theorem recovery_payload_callback:
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint (w2n p) 128 b sz) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sc s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sc s t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\ eval_operand buf t = SOME p /\
     mem_bytes_at (w2n p) 128 t.vs_memory =
@@ -93,7 +93,7 @@ Proof
      simp[mstore_mem_bytes_at_disjoint]) >>
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (simp[immutable_mstore_capacity] >> decide_tac) >>
-  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sc s t` by
+  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sc s t` by
     (irule scratch_memory_frame >> simp[] >>
      conj_tac >- metis_tac[] >> qexists `sa` >> simp[]) >>
   qexists `t` >> simp[] >>
@@ -271,7 +271,7 @@ Theorem mul_payload_callback:
      FLOOKUP s.vs_allocas aid = SOME (a,sz) ==>
      regions_disjoint (w2n b) 96 a sz) ==>
   ?t. run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\ eval_operand buf t = SOME b /\
     mem_bytes_at (w2n b) 96 t.vs_memory =
@@ -294,7 +294,7 @@ Proof
      simp[mstore_mem_bytes_at_disjoint]) >>
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (simp[immutable_mstore_capacity] >> decide_tac) >>
-  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t` by
+  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t` by
     (irule scratch_memory_frame >> simp[] >>
      conj_tac >- metis_tac[] >> qexists `sa` >> simp[]) >>
   qexists `t` >> simp[] >> conj_tac
@@ -413,7 +413,7 @@ Theorem add_payload_callback:
      FLOOKUP s.vs_allocas aid = SOME (a,sz) ==>
      regions_disjoint (w2n b) 128 a sz) ==>
   ?t. run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\ eval_operand buf t = SOME b /\
     mem_bytes_at (w2n b) 128 t.vs_memory =
@@ -443,7 +443,7 @@ Proof
      simp[mstore_mem_bytes_at_disjoint]) >>
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (simp[immutable_mstore_capacity] >> decide_tac) >>
-  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t` by
+  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t` by
     (irule scratch_memory_frame >> simp[] >>
      conj_tac >- metis_tac[] >> qexists `sa` >> simp[]) >>
   qexists `t` >> simp[] >> conj_tac

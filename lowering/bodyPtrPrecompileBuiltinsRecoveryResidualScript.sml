@@ -129,7 +129,7 @@ Theorem recovery_framed_input:
       word_to_bytes wh T ++ word_to_bytes wv T ++
       word_to_bytes wr T ++ word_to_bytes wq T /\
     mem_word_at (w2n c) t.vs_memory = 0w /\
-    stmt_state_rel ctx fn cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx fn cenv cx es t /\ wb_frame cenv es es sf s t /\
     ghost_inv d cenv cx es Gf tnf t /\ ghost_kept cenv es sf G tn s Gf tnf /\
     (!name lo len. local_region cenv es.scopes t name lo len ==>
        regions_disjoint (w2n c) 32 lo len) /\
@@ -280,12 +280,12 @@ Proof
 QED
 
 Theorem precompile_frame_cursor:
-  (wb_frame cenv es sf s (t with vs_inst_idx := k) <=> wb_frame cenv es sf s t) /\
-  (wb_frame cenv es sf (s with vs_inst_idx := j) t <=> wb_frame cenv es sf s t) /\
+  (wb_frame cenv es es' sf s (t with vs_inst_idx := k) <=> wb_frame cenv es es' sf s t) /\
+  (wb_frame cenv es es' sf (s with vs_inst_idx := j) t <=> wb_frame cenv es es' sf s t) /\
   (ghost_kept cenv es sf G tn (s with vs_inst_idx := j) G' tn' <=>
    ghost_kept cenv es sf G tn s G' tn')
 Proof
-  simp[wb_frame_def, ghost_kept_def, locals_kept_def,
+  simp[wb_frame_def, ghost_kept_def, locals_kept_def, popped_kept_def,
        local_region_def, lookup_var_def]
 QED
 
@@ -319,7 +319,7 @@ Theorem recovery_residual_success:
     op_prov G' res = NONE /\ op_taint tn' res = {} /\
     stmt_state_rel ctx fn cenv cx
       (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
-    wb_frame cenv es sf s t /\
+    wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s t /\
     ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
     ghost_kept cenv es sf G tn s G' tn'
 Proof
@@ -403,7 +403,7 @@ Resume recovery_residual_success[finish]:
         NONE => 0w | SOME addr => addr))` by
     (irule recovery_output_write >> simp[] >>
      Cases_on `vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n wq)` >> simp[]) >>
-  `wb_frame cenv es sf s u` by
+  `wb_frame cenv es es sf s u` by
     simp[Abbr `u`, precompile_frame_cursor] >>
   `sf.cs_next_var <= sf.cs_next_var /\ sf.cs_next_id <= sf.cs_next_id /\
    MAP FDOM es.scopes = MAP FDOM es.scopes` by simp[] >>

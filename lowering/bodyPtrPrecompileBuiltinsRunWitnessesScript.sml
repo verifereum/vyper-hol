@@ -21,7 +21,7 @@ Theorem allocated_payload_run_witnesses:
     eval_operand ib.buf_operand s1 = SOME wi /\
     FLOOKUP s1.vs_allocas sf.cs_next_id = SOME (w2n wi,insz) /\
     w2n wi + insz < dimword (:256) /\ s1.vs_memory = s.vs_memory /\
-    wb_frame cenv es sf s s1 /\ s1.vs_labels = s.vs_labels /\
+    wb_frame cenv es es sf s s1 /\ s1.vs_labels = s.vs_labels /\
     (!name b len. local_region cenv es.scopes s1 name b len ==>
       regions_disjoint (w2n wi) insz b len) /\
     (!aid b len. aid < sf.cs_next_id /\
@@ -32,14 +32,14 @@ Theorem allocated_payload_run_witnesses:
       regions_disjoint (w2n wi) insz b len) /\
     (!x. not_fresh_at sf x ==> lookup_var x s1 = lookup_var x s) ==>
     ?u. run_inst_seq code s1 = OK u /\ stmt_state_rel ctx func cenv cx es u /\
-      wb_frame cenv es sf s1 u /\
+      wb_frame cenv es es sf s1 u /\
       (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s1) /\
       FLOOKUP u.vs_allocas sf.cs_next_id = SOME (w2n wi,insz) /\
       eval_operand ib.buf_operand u = SOME wi /\
       mem_bytes_at (w2n wi) insz u.vs_memory = bytes) ==>
   ?t pi po s1 u.
     run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + insz < dimword (:256) /\ w2n po + outsz < dimword (:256) /\
@@ -58,7 +58,7 @@ Theorem allocated_payload_run_witnesses:
     stmt_state_rel ctx func cenv cx es s1 /\
     eval_operand ib.buf_operand s1 = SOME pi /\
     FLOOKUP s1.vs_allocas sf.cs_next_id = SOME (w2n pi,insz) /\
-    s1.vs_memory = s.vs_memory /\ wb_frame cenv es sf s s1 /\
+    s1.vs_memory = s.vs_memory /\ wb_frame cenv es es sf s s1 /\
     s1.vs_labels = s.vs_labels /\
     (!name b len. local_region cenv es.scopes s1 name b len ==>
       regions_disjoint (w2n pi) insz b len) /\
@@ -68,7 +68,7 @@ Theorem allocated_payload_run_witnesses:
       regions_disjoint (w2n pi) insz b len) /\
     (!x. not_fresh_at sf x ==> lookup_var x s1 = lookup_var x s) /\
     run_inst_seq code s1 = OK u /\ stmt_state_rel ctx func cenv cx es u /\
-    wb_frame cenv es sf s1 u /\
+    wb_frame cenv es es sf s1 u /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s1) /\
     FLOOKUP u.vs_allocas sf.cs_next_id = SOME (w2n pi,insz) /\
     eval_operand ib.buf_operand u = SOME pi /\
@@ -93,10 +93,9 @@ Proof
   `!x. not_fresh_at sf x ==> lookup_var x u = lookup_var x s` by
     (rpt strip_tac >>
      `not_fresh_at sa x` by (gvs[not_fresh_at_def] >> decide_tac) >> simp[]) >>
-  `wb_frame cenv es sf s u` by
-    (irule wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl [`es`,`sf`,`s1`] >> simp[]) >>
-     qexistsl [`ctx`,`cx`,`func`] >> simp[]) >>
+  `wb_frame cenv es es sf s u` by
+    (qspecl_then [`func`,`cenv`,`cx`,`es`,`s`,`sf`,`es`,`es`,`sf`,`s1`,`u`,`ctx`]
+       mp_tac wb_frame_trans >> impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   `!x. ib.buf_operand = Var x ==> not_fresh_at sb x` by
     (rpt strip_tac >> gvs[not_fresh_at_def] >> decide_tac) >>
   drule_all alloc_buffer_finish >> strip_tac >>

@@ -55,11 +55,11 @@ Theorem recovery_prefix_runtime:
       word_to_bytes wh T ++ word_to_bytes wv T ++
       word_to_bytes wr T ++ word_to_bytes wq T /\
     (!x. not_fresh_at sf x ==> lookup_var x s2 = lookup_var x s0) /\
-    wb_frame cenv es sf s0 s1 /\ wb_frame cenv es sf s1 s2 /\
+    wb_frame cenv es es sf s0 s1 /\ wb_frame cenv es es sf s1 s2 /\
     s2.vs_allocas = s1.vs_allocas /\
     s4 = mstore (w2n c) 0w s3 /\
     FLOOKUP s3.vs_allocas sp.cs_next_id = SOME (w2n c,32) /\
-    wb_frame cenv es sp s2 s3 /\
+    wb_frame cenv es es sp s2 s3 /\
     (!name lo len. local_region cenv es.scopes s3 name lo len ==>
        regions_disjoint (w2n c) 32 lo len) /\
     (!aid entry. FLOOKUP s2.vs_allocas aid = SOME entry ==>
@@ -67,8 +67,8 @@ Theorem recovery_prefix_runtime:
     stmt_state_rel ctx fn cenv cx es s4 /\
     mem_word_at (w2n c) s4.vs_memory = 0w /\
     FLOOKUP s4.vs_allocas sp.cs_next_id = SOME (w2n c,32) /\
-    wb_frame cenv es sp s3 s4 /\
-    wb_frame cenv es sf s0 s4 /\
+    wb_frame cenv es es sp s3 s4 /\
+    wb_frame cenv es es sf s0 s4 /\
     sf.cs_next_var <= sp.cs_next_var /\ sf.cs_next_id <= sp.cs_next_id /\
     (!aid lo len. aid < sf.cs_next_id /\
        FLOOKUP s4.vs_allocas aid = SOME (lo,len) ==>
@@ -107,7 +107,7 @@ Proof
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
   `?s2. run_inst_seq (emitted_insts sa sp) s1 = OK s2 /\
-    stmt_state_rel ctx fn cenv cx es s2 /\ wb_frame cenv es sf s1 s2 /\
+    stmt_state_rel ctx fn cenv cx es s2 /\ wb_frame cenv es es sf s1 s2 /\
     (!x. not_fresh_at sa x ==> lookup_var x s2 = lookup_var x s1) /\
     s2.vs_allocas = s1.vs_allocas /\ eval_operand ib.buf_operand s2 = SOME b /\
     mem_bytes_at (w2n b) 128 s2.vs_memory =
@@ -138,7 +138,7 @@ Resume recovery_prefix_runtime[finish]:
      simp[] >>
      qexists `mk_inst sp.cs_next_id ALLOCA [Lit 32w]
        [STRING #"%" (toString sp.cs_next_var)]` >> simp[mk_inst_def]) >>
-  `wb_frame cenv es sp s3 (mstore (w2n c) 0w s3)` by
+  `wb_frame cenv es es sp s3 (mstore (w2n c) 0w s3)` by
     (irule registered_word_store_wb_frame >>
      goal_assum (drule_at Any) >> simp[] >> conj_tac
      >- (qexists `sp.cs_next_id` >> simp[]) >>
@@ -151,23 +151,20 @@ Resume recovery_prefix_runtime[frame]:
   `sf.cs_next_var <= sp.cs_next_var /\ sf.cs_next_id <= sp.cs_next_id` by decide_tac >>
   qpat_x_assum `sp.cs_next_id = _` kall_tac >>
   qpat_x_assum `sp.cs_next_var = _` kall_tac >>
-  `wb_frame cenv es sf s2 s3 /\ wb_frame cenv es sf s3 (mstore (w2n c) 0w s3)` by
+  `wb_frame cenv es es sf s2 s3 /\ wb_frame cenv es es sf s3 (mstore (w2n c) 0w s3)` by
     (conj_tac >> irule wb_frame_counter_weaken >> qexists `sp` >> simp[]) >>
-  `wb_frame cenv es sf s0 s2` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >>
-     simp[] >> conj_tac
-     >- (qexistsl [`es`,`sf`,`s1`] >> simp[]) >>
-     goal_assum (drule_at Any)) >>
-  `wb_frame cenv es sf s0 s3` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >>
-     simp[] >> conj_tac
-     >- (qexistsl [`es`,`sf`,`s2`] >> simp[]) >>
-     goal_assum (drule_at Any)) >>
-  `wb_frame cenv es sf s0 (mstore (w2n c) 0w s3)` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >>
-     simp[] >> conj_tac
-     >- (qexistsl [`es`,`sf`,`s3`] >> simp[]) >>
-     goal_assum (drule_at Any)) >>
+  `wb_frame cenv es es sf s0 s2` by
+    (qspecl_then [`fn`,`cenv`,`cx`,`es`,`s0`,`sf`,`es`,`es`,`sf`,`s1`,`s2`,`ctx`]
+       mp_tac exprSimWordArgsTheory.wb_frame_trans >>
+     impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `wb_frame cenv es es sf s0 s3` by
+    (qspecl_then [`fn`,`cenv`,`cx`,`es`,`s0`,`sf`,`es`,`es`,`sf`,`s2`,`s3`,`ctx`]
+       mp_tac exprSimWordArgsTheory.wb_frame_trans >>
+     impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `wb_frame cenv es es sf s0 (mstore (w2n c) 0w s3)` by
+    (qspecl_then [`fn`,`cenv`,`cx`,`es`,`s0`,`sf`,`es`,`es`,`sf`,`s3`,`mstore (w2n c) 0w s3`,`ctx`]
+       mp_tac exprSimWordArgsTheory.wb_frame_trans >>
+     impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   qexistsl [`s1`,`s2`,`s3`,`mstore (w2n c) 0w s3`,`b`,`c`] >>
   simp[] >> conj_tac
   >- (qpat_assum `!name lo len. local_region _ _ s3 _ _ _ ==> _` ACCEPT_TAC) >>
