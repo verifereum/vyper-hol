@@ -18,7 +18,8 @@ End
 Definition abi_decode_immutable_success_def:
   abi_decode_immutable_success ce env ty tv bs out d start final ctx func cx es s t <=>
     abi_decode_success_closed ce env ty tv bs out d start final ctx func s t /\
-    abi_decode_immutable_memory ce cx es s t
+    abi_decode_immutable_memory ce cx es s t /\
+    abi_decode_window_frame func start s t
 End
 
 Theorem abi_decode_success_closed_source:
@@ -81,8 +82,16 @@ Proof
   (impl_tac >- simp[]) >> strip_tac
   >- (drule abi_decode_success_closed_source >> strip_tac >>
       disj1_tac >> qexists_tac `t` >>
-      simp[abi_decode_immutable_success_def, abi_decode_immutable_memory_def] >>
-      rpt strip_tac >> irule abi_decode_prefix_immutable_frame >>
+      simp[abi_decode_immutable_success_def] >> conj_tac
+      >- (simp[abi_decode_immutable_memory_def] >>
+          rpt strip_tac >> irule abi_decode_prefix_immutable_frame >>
+          asm_rewrite_tac [] >>
+          goal_assum (drule_at (Pat `local_prefix _ _ _ _ _`)) >>
+          goal_assum (drule_at (Pat `lower_abi_decode _ _ _ _ _ _ = _`)) >>
+          goal_assum (drule_at (Pat `abi_builtin_decode_site_resources _ _ _ _ _ _ _ _ _ _ _`)) >>
+          goal_assum (drule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
+          asm_rewrite_tac [] >> metis_tac[]) >>
+      irule abi_decode_prefix_window_frame >>
       asm_rewrite_tac [] >>
       goal_assum (drule_at (Pat `local_prefix _ _ _ _ _`)) >>
       goal_assum (drule_at (Pat `lower_abi_decode _ _ _ _ _ _ = _`)) >>
