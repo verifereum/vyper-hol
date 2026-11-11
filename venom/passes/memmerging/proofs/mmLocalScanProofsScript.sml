@@ -12658,6 +12658,165 @@ Proof
     venomStateTheory.write_memory_with_expansion_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
+Theorem mm_local_history_live_load[local]:
+  !j fn0 supply index k bb sk is H N.
+  wf_ssa fn0 /\ wf_function fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 3 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\ is = bb.bb_instructions /\
+  mm_local_history is H N /\
+  (!q. q < N ==> ~is_terminator (EL q is).inst_opcode) /\ j <= N ==>
+  !v src. FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+    empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))
+Proof
+  Induct_on `j`
+  >- simp[empty_scan_state_def] >>
+  rpt gen_tac >> strip_tac >>
+  `!v src. FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+    empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))` by
+    (rpt strip_tac >> first_x_assum irule >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexists `N` >> gvs[]) >>
+  `j < LENGTH is /\ j < N` by gvs[mm_local_history_def] >>
+  `step_inst_base (EL j is) (H j) = OK (H (SUC j))` by
+    metis_tac[mm_local_history_def] >>
+  `~is_terminator (EL j is).inst_opcode` by metis_tac[] >>
+  `MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])` by
+    (`k = 0 \/ k = 1 \/ k = 2 \/ k = 3` by decide_tac >> gvs[]) >>
+  `!v src. FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+    empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    ~MEM v (EL j is).inst_outputs` by
+    (rpt gen_tac >> disch_tac >> gvs[] >> irule mm_local_live_cut_fresh >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `step_inst 0 ctx (EL j is) (H j) = OK (H (SUC j))` by
+    (Cases_on `(EL j is).inst_opcode = INVOKE`
+     >- gvs[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[venomExecSemanticsTheory.step_inst_non_invoke]) >>
+  simp[rich_listTheory.TAKE_SUC_BY_TAKE, rich_listTheory.FOLDL_SNOC] >>
+  rpt gen_tac >> disch_tac >> irule mm_local_live_load_step >>
+  goal_assum (drule_at Any) >> gvs[] >> metis_tac[]
+QED
+
+Theorem mm_local_history_pending_crossings[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 3 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\
+  (!q. q < SUC r ==> ~is_terminator (EL q is).inst_opcode) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  js = mm_local_pending_indices is gs r /\
+  MEM g gs /\ rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  (!pre j mid l post a p b bs.
+    js = pre ++ [j] ++ mid ++ [l] ++ post /\
+    cap j = SOME (a,p) /\ cap l = SOME (b,bs) ==>
+    mm_local_write_compatible a p b bs) /\
+  (!j a p b bs. MEM j js /\ cap j = SOME (a,p) /\ cap r = SOME (b,bs) ==>
+    mm_local_write_compatible a p b bs)
+Proof
+  strip_tac >>
+  `!j v src. j <= SUC r /\ FLOOKUP
+    (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))` by
+    (rpt strip_tac >> irule mm_local_history_live_load >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  irule mm_local_canonical_pending_crossings >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexists `H` >> gvs[] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >>
+  gvs[mm_local_pending_indices_def, MEM_FILTER, MEM_COUNT_LIST]
+QED
+
+Theorem mm_local_history_pending_discharge[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 3 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  (!q. q < SUC r ==> ~is_terminator (EL q is).inst_opcode) /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  js = mm_local_pending_indices is gs r /\
+  a = mm_local_epoch_start is gs r /\
+  u = FOLDL (\st q. if MEM q js then st else
+    case cap q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) /\
+  t.vs_memory = u.vs_memory /\ mm_local_pending cap js s t /\
+  cap r = SOME (d,payload) /\
+  s'.vs_memory = (write_memory_with_expansion d payload s).vs_memory /\
+  t'.vs_memory = (write_memory_with_expansion g.cg_dst
+    (read_memory g.cg_src g.cg_length t) t).vs_memory ==>
+  mm_local_pending cap (FILTER (\j. mm_local_rep_index is gs j <> r) js) s' t'
+Proof
+  strip_tac >>
+  `!j v src. j <= SUC r /\ FLOOKUP
+    (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))` by
+    (rpt strip_tac >> irule mm_local_history_live_load >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  drule_at (Pat `mm_local_prefix _ _ _ _ = _`)
+    mm_local_canonical_pending_discharge >>
+  disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
+  disch_then irule >> simp[] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl [`H`, `s`, `t`] >> gvs[] >>
+  rpt strip_tac >> first_x_assum irule >> simp[] >>
+  gvs[mm_local_pending_indices_def, MEM_FILTER, MEM_COUNT_LIST]
+QED
+
+Theorem mm_local_history_retained_renew[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 3 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  (!q. q < SUC r ==> ~is_terminator (EL q is).inst_opcode) /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  js = mm_local_pending_indices is gs r /\
+  a = mm_local_epoch_start is gs r /\
+  u = FOLDL (\st q. if MEM q js then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) /\
+  t.vs_memory = u.vs_memory /\ mm_local_pending cap js (H r) t /\
+  t'.vs_memory = (write_memory_with_expansion g.cg_dst
+    (read_memory g.cg_src g.cg_length t) t).vs_memory /\
+  a' = mm_local_epoch_start is gs (SUC r) ==>
+  t'.vs_memory = (FOLDL (\st q.
+    if MEM q (mm_local_pending_indices is gs (SUC r)) then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a') (MAP (\q. a'+q) (COUNT_LIST (SUC r-a')))).vs_memory
+Proof
+  strip_tac >>
+  `!j v src. j <= SUC r /\ FLOOKUP
+    (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))` by
+    (rpt strip_tac >> irule mm_local_history_live_load >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  drule_at (Pat `mm_local_prefix _ _ _ _ = _`)
+    mm_local_canonical_retained_renew >>
+  disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
+  disch_then irule >> simp[] >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  qexists `t` >> gvs[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
