@@ -370,8 +370,11 @@ Finalise compile_subscript_array_framed_base_case
 Theorem compile_subscript_array_place_base_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
-    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) /\
+    (!s tv t s' tv' t'. eval_expr cx obj s = (INL tv, t) /\
+       (if subscript_reads_base cx obj idx
+        then do v <- read_result cx tv; return (Value v) od
+        else return tv) s' = (INL tv', t') ==>
+       expr_sim_case nocalls ctx func cenv cx idx) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     (~nocalls ==> post_value_type cenv obj = expr_type obj) /\
     ~(~subscript_reads_base cx obj idx /\ ~copies_subscript_base cenv obj idx /\
@@ -391,8 +394,11 @@ QED
 Theorem compile_subscript_array_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
-    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) /\
+    (!s tv t s' tv' t'. eval_expr cx obj s = (INL tv, t) /\
+       (if subscript_reads_base cx obj idx
+        then do v <- read_result cx tv; return (Value v) od
+        else return tv) s' = (INL tv', t') ==>
+       expr_sim_case nocalls ctx func cenv cx idx) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     (~nocalls ==> post_value_type cenv obj = expr_type obj) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
@@ -407,7 +413,14 @@ Proof
              ((?n. bd = Fixed n) /\
               (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
               !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocMemory))`
-  >- (irule compile_subscript_array_framed_base_case >> asm_rewrite_tac[] >>
+  >- (`!s tv t. eval_expr cx obj s = (INL tv, t) ==>
+                expr_sim_case nocalls ctx func cenv cx idx` by
+        (rpt strip_tac >>
+         qpat_x_assum `!s tv t s' tv' t'. _`
+           (qspecl_then [`s`, `tv`, `t`, `t`, `tv`, `t`] mp_tac) >>
+         fs[vyperStateTheory.return_def]) >>
+      qpat_x_assum `!s tv t s' tv' t'. _` kall_tac >>
+      irule compile_subscript_array_framed_base_case >> asm_rewrite_tac[] >>
       metis_tac[]) >>
   irule compile_subscript_array_place_base_case >> asm_rewrite_tac[] >>
   qexistsl [`bd`, `et`] >> asm_rewrite_tac[]
