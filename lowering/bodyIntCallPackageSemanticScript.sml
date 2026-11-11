@@ -22,8 +22,8 @@ QED
 
 Theorem intcall_entry_body_typing:
   body_inv tops ctx cenv cx /\ cenv_module_pins tops cenv /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
-  lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,[],ret,ss) /\
+  MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,dflts,ret,ss) /\
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
     (mut,F,args,ret,ss,rr) prev penv rtv es1 t ==>
   ?env_body env_after.

@@ -20,8 +20,8 @@
  *                              fragment: later steps compose with it (fuel
  *                              monotonicity, from venomExecProofs' fuel_mono)
  *   frag_exec_invoke_intret  — frag_exec_invoke from the callee's IntRet
- *   compile_call_intcall_shape — compile_call's IntCall case: arguments,
- *                              return buffer, staged arguments, INVOKE,
+ *   compile_call_intcall_shape — compile_call's IntCall case: supplied arguments,
+ *                              the omitted defaults, return buffer, staged arguments, INVOKE,
  *                              and the value it returns.  The buffer is
  *                              32 * returns_count bytes for stack returns,
  *                              which the INVOKE's outputs are stored into,
@@ -253,10 +253,15 @@ Theorem compile_call_intcall_shape:
     compile_call cfn cenv ret_ty ty (IntCall func_id) args dret st =
       (v, st') /\
     cenv.ce_func_info (nsid_to_string func_id) = (ret_count, rbs, pvs) ==>
-    ?arg_vals st1 st2 invoke_args st3.
-      compile_multi_vvs cfn cenv args st = (arg_vals, st1) /\
-      compile_stage_intcall_args cenv arg_vals pvs (MAP expr_type args) st2 =
-        (invoke_args, st3) /\
+    ?sup_vals st0 dflt_vals st1 st2 invoke_args st3.
+      compile_multi_vvs cfn cenv args st = (sup_vals, st0) /\
+      compile_multi_vvs cfn (cenv_without_defaults cenv (nsid_to_string func_id))
+        (omitted_defaults cenv (nsid_to_string func_id) (LENGTH args)) st0 =
+        (dflt_vals, st1) /\
+      compile_stage_intcall_args cenv (sup_vals ++ dflt_vals) pvs
+        (MAP expr_type
+           (args ++ omitted_defaults cenv (nsid_to_string func_id) (LENGTH args)))
+        st2 = (invoke_args, st3) /\
       (0 < ret_count ==>
        ?rbuf results st4 u.
          compile_alloc_buffer (32 * ret_count) st1 = (rbuf, st2) /\

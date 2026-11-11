@@ -99,8 +99,8 @@ QED
 Theorem intcall_entry_callee_dynamic:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (Call ann (IntCall (NONE,name)) es dflt) es0 /\
-  lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,[],ret,ss) /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,dflts,ret,ss) /\
+  MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
   intcall_entry tops ctx func ce cx env name es sa sb vv s0 es0
     (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   intcall_callee_src cx name ss (es1 with gas_obs := gs) = (res,ee) ==>
@@ -149,8 +149,8 @@ QED
 Theorem intcall_entry_marked_restore_inv:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (Call ann (IntCall (NONE,name)) es dflt) es0 /\
-  lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,[],ret,ss) /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,dflts,ret,ss) /\
+  MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
   intcall_entry tops ctx func ce cx env name es sa sb vv s0 es0
     (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   gas_marked_exec memory (ctx,callee) (intcall_callee_src cx name ss)

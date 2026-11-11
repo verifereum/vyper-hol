@@ -10,7 +10,7 @@ Ancestors
 
 Theorem intcall_entry_root_frame:
   body_inv tops ctx cenv cx /\ cenv_module_pins tops cenv /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+  MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
   call_stack_follows (call_edge_rel E) ((NONE,name)::cx.stk) /\
   irreflexive (TC (call_edge_rel E)) /\
   functions_follow_call_graph E (cx with stk updated_by CONS (NONE,name)) /\

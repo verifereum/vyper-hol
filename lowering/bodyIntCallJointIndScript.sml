@@ -32,6 +32,16 @@ Proof
       `CARD {z | TC (call_edge_rel fp.jc_edges) fp'.jc_owner z}` mp_tac) >>
     impl_tac >- gvs[] >>
     disch_then (qspec_then `fp'` mp_tac) >> gvs[]) >>
+  `!fp' e'. fp'.jc_edges = fp.jc_edges /\
+     CARD {z | TC (call_edge_rel fp.jc_edges) fp'.jc_owner z} <
+     CARD {z | TC (call_edge_rel fp.jc_edges) fp.jc_owner z} ==>
+     intcall_expr_producer fp' e' /\ intcall_forced_producer fp' e' /\
+     intcall_map_producer fp' e'` by (
+    rpt gen_tac >> strip_tac >>
+    first_x_assum (qspec_then
+      `CARD {z | TC (call_edge_rel fp.jc_edges) fp'.jc_owner z}` mp_tac) >>
+    impl_tac >- gvs[] >>
+    disch_then (qspec_then `fp'` mp_tac) >> gvs[]) >>
   `!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
        intcall_map_producer fp e` by (
     measureInduct_on `expr_size e` >>

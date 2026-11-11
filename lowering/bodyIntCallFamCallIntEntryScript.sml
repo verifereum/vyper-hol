@@ -1,6 +1,8 @@
 (* Nested internal call, argument side: from the call's producer premises
    to the INVOKE.  As seam 1 (intcall_args_frame_setup), the continuation
-   gets intcall_entry; it also gets the caller's resource invariant at the
+   gets intcall_entry.  The callee's omitted defaults are evaluated at the
+   callee's stack: their producers come from the frames below the owner in
+   the call graph.  The continuation also gets the caller's resource invariant at the
    INVOKE, at the caller's scopes and the call's start compile state, and
    the frontier's monotonicity. *)
 Theory bodyIntCallFamCallIntEntry
@@ -14,6 +16,12 @@ Theorem intcall_nested_entry:
     (!e'. expr_size e' < expr_size (Call ann (IntCall (NONE,name)) es dflt) ==>
           intcall_expr_producer fp e' /\ intcall_forced_producer fp e' /\
           intcall_map_producer fp e') /\
+    (!fp' e'.
+       fp'.jc_edges = fp.jc_edges /\
+       CARD {z | TC (call_edge_rel fp.jc_edges) fp'.jc_owner z} <
+       CARD {z | TC (call_edge_rel fp.jc_edges) fp.jc_owner z} ==>
+       intcall_expr_producer fp' e' /\ intcall_forced_producer fp' e' /\
+       intcall_map_producer fp' e') /\
     intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
     cenv_module_pins fp.jc_tops ce /\
     expr_body_pre ce fp.jc_cx env (Call ann (IntCall (NONE,name)) es dflt) es0 /\
@@ -21,8 +29,8 @@ Theorem intcall_nested_entry:
     calls_follow_call_graph fp.jc_edges fp.jc_owner
       (int_calls_expr (Call ann (IntCall (NONE,name)) es dflt)) /\
     lookup_callable_function fp.jc_cx.in_deploy name fp.jc_tops =
-      SOME (mut,F,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut F rr name args [] ret ss) fp.jc_tops /\
+      SOME (mut,F,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut F rr name args dflts ret ss) fp.jc_tops /\
     compile_expr ce ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sb) /\
     fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
     gas_admissible (eval_expr fp.jc_cx (Call ann (IntCall (NONE,name)) es dflt))

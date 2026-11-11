@@ -86,8 +86,8 @@ Theorem body_intcall_selected_parameter_capacity:
   expr_body_pre caller cx env
     (Call ann (IntCall (NONE,name)) es dflt) es0 /\
   lookup_callable_function cx.in_deploy name tops =
-    SOME (mut,F,args,[],ret,ss) /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+    SOME (mut,F,args,dflts,ret,ss) /\
+  MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
   set_internal_package_target target
     (package_internal_fn tops trans keys ctor imm
       (mut,F,rr,name,args,[],ret,ss)) =

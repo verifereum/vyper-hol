@@ -8,7 +8,7 @@ Ancestors
 
 Theorem callable_body_follows_graph:
   functions_follow_call_graph edges cx /\ get_module_code cx src = SOME tops /\
-  lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,[],ret,ss) ==>
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) ==>
   calls_follow_call_graph edges (src,name) (int_calls_stmts ss)
 Proof
   simp[functions_follow_call_graph_def, calls_follow_call_graph_def] >>
