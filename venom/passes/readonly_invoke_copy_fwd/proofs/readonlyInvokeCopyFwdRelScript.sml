@@ -577,3 +577,206 @@ Proof
     ricf_sites_ok_def, ricf_site_triples_def, ircf_cross_def,
     ld_shared_agree_refl]
 QED
+
+(* Suspended maps are immutable indices of a function run.  Only the
+   current frame's map and the saved target witnesses are existential. *)
+Definition ricf_indexed_boundary_def:
+  ricf_indexed_boundary D ids maps stk PG G tn fn s t <=>
+    ?sites targets G0 tn0.
+      ricf_live_boundary_core D ids stk PG G tn fn
+        sites maps targets G0 tn0 s t
+End
+
+Definition ricf_indexed_return_def:
+  ricf_indexed_return D ids maps stk (PG:(num # num) option list)
+      (G:(string,num # num) fmap) tn (fn:ir_function) (ret:internal_return) s t <=>
+    ?targets. ricf_live_return_core D ids stk maps targets tn s t
+End
+
+Theorem ricf_indexed_initial:
+  s.vs_prev_bb = NONE /\ taint_agree D (ircf_dead ids s []) tn s s ==>
+  ricf_indexed_boundary D ids [] [] [] FEMPTY tn fn s s
+Proof
+  strip_tac >>
+  simp[ricf_indexed_boundary_def, ricf_live_boundary_core_def] >>
+  qexistsl [`FEMPTY`, `[]`] >>
+  simp[ricf_frame_agree_completed_identity]
+QED
+
+Theorem ricf_indexed_saved_locals:
+  ricf_live_boundary_core D ids stk PG G tn fn sites maps targets G0 tn0 s t ==>
+  LENGTH targets = LENGTH stk /\
+  (!j. j < LENGTH stk ==>
+    ricf_live_local_agree (EL j maps)
+      (ricf_complete_params (EL j stk).cf_params (EL j stk).cf_state.vs_params)
+      (EL j stk).cf_prov (EL j stk).cf_tvar
+      (EL j stk).cf_state (EL j targets))
+Proof
+  simp[ricf_live_boundary_core_def, ricf_live_stack_agree_def,
+       ricf_live_frame_decompose] >> metis_tac[]
+QED
+
+Theorem ricf_indexed_return_elim:
+  ricf_indexed_return D ids maps stk PG G tn fn ret s t /\
+  LENGTH actual = LENGTH stk /\
+  (!j. j < LENGTH stk ==>
+    ricf_live_local_agree (EL j maps)
+      (ricf_complete_params (EL j stk).cf_params (EL j stk).cf_state.vs_params)
+      (EL j stk).cf_prov (EL j stk).cf_tvar
+      (EL j stk).cf_state (EL j actual)) ==>
+  ricf_live_return_core D ids stk maps actual tn s t
+Proof
+  simp[ricf_indexed_return_def] >> metis_tac[ricf_live_return_reanchor]
+QED
+
+Theorem ricf_indexed_return_caller:
+  ricf_indexed_return D ids (sites::maps) (cf::stk) PG G tn fn ret s t /\
+  LENGTH (caller::actual) = LENGTH (cf::stk) /\
+  (!j. j < LENGTH (cf::stk) ==>
+    ricf_live_local_agree (EL j (sites::maps))
+      (ricf_complete_params (EL j (cf::stk)).cf_params
+        (EL j (cf::stk)).cf_state.vs_params)
+      (EL j (cf::stk)).cf_prov (EL j (cf::stk)).cf_tvar
+      (EL j (cf::stk)).cf_state (EL j (caller::actual))) ==>
+  ricf_frame_agree D (ircf_dead ids cf.cf_state stk) sites
+    (ricf_complete_params cf.cf_params cf.cf_state.vs_params)
+    cf.cf_prov (tn with t_var := cf.cf_tvar)
+    (merge_callee_state cf.cf_state s) (merge_callee_state caller t)
+Proof
+  strip_tac >> irule ricf_live_return_actual_caller >>
+  metis_tac[ricf_indexed_return_elim]
+QED
+
+Theorem ricf_indexed_nested_entry:
+  ricf_frame_agree D (ircf_dead ids s stk) oldsites
+    (ricf_complete_params PG s.vs_params) G tn s t /\
+  ricf_live_stack_agree D ids tn maps stk targets s t /\
+  cf.cf_state = s /\ cf.cf_params = PG /\ cf.cf_prov = G /\
+  cf.cf_tvar = tn.t_var /\
+  ricf_params_agree sites newPG args args' /\ ricf_sites_ok sites /\
+  ircf_cross tn (ricf_site_triples sites) s t /\
+  (if NULL args then 0w else LAST args) =
+    (if NULL args' then 0w else LAST args') /\
+  setup_callee fn args s = SOME cs /\
+  setup_callee fn args' t = SOME ct ==>
+  ricf_indexed_boundary D ids (oldsites::maps) (cf::stk) newPG FEMPTY
+    (tn with t_var := FEMPTY) fn cs ct
+Proof
+  strip_tac >> simp[ricf_indexed_boundary_def] >>
+  drule_all ricf_live_nested_entry >> metis_tac[]
+QED
+
+(* The universal quantifier over maps is OUTSIDE fn_sim_below: each
+   recursive call specializes it to its own oldsites::maps. *)
+Definition ricf_indexed_sim_below_def:
+  ricf_indexed_sim_below D ids vs C C' n <=>
+    !maps. fn_sim_below D vs C C'
+      (ricf_indexed_boundary D ids maps) (ricf_indexed_return D ids maps) n
+End
+
+Theorem ricf_indexed_sim_below_elim:
+  ricf_indexed_sim_below D ids vs C C' n /\ k < n /\
+  MEM fn C.ctx_functions /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+  ricf_indexed_boundary D ids maps stk PG G tn fn s t /\
+  block_reach vs C stk PG G tn fn s /\
+  terminates (run_blocks k C fn s) ==>
+  ?m. fn_run_rel D (ricf_indexed_return D ids maps) stk PG fn
+    (run_blocks k C fn s) (run_blocks m C' fn' t)
+Proof
+  simp[ricf_indexed_sim_below_def, fn_sim_below_def] >> metis_tac[]
+QED
+
+Definition ricf_indexed_block_step_rel_def:
+  ricf_indexed_block_step_rel D ids maps vs C stk PG fn r r' <=>
+    block_step_rel D vs C (ricf_indexed_boundary D ids maps)
+      (ricf_indexed_return D ids maps) stk PG fn r r'
+End
+
+(* Save the actual target list before recursion.  Returned targets are
+   deliberately unconstrained: only the suspended-map INDEX is shared. *)
+Theorem ricf_indexed_call_return:
+  ricf_live_boundary_core D ids stk PG G tn fn sites maps actual G0 tn0 s t /\
+  ricf_indexed_return D ids maps stk PG' G' un fn' ret u v ==>
+  ricf_live_return_core D ids stk maps actual un u v
+Proof
+  strip_tac >> drule ricf_indexed_saved_locals >> strip_tac >>
+  metis_tac[ricf_indexed_return_elim]
+QED
+
+(* Two nonempty maps with genuinely displaced pointer parameters.  The
+   inherited frame has a DIFFERENT translation, so a tail cannot be lost
+   or replaced with the current frame map.  Live shared memory is empty;
+   saved locals are nontrivial and do not observe historical memory. *)
+Theorem ricf_indexed_displaced_stack_probe:
+  let headmap = FEMPTY |+ ((4,1),(4,8,1));
+      tailmap = FEMPTY |+ ((12,1),(12,16,1));
+      a = s0 with <| vs_vars := FEMPTY; vs_params := [4w]; vs_alloca_next := 0 |>;
+      b = s0 with <| vs_vars := FEMPTY; vs_params := [12w]; vs_alloca_next := 0 |>;
+      cf = frame with <| cf_state := a; cf_params := [SOME (4,1)];
+                         cf_prov := FEMPTY; cf_tvar := FEMPTY |>;
+      older = frame with <| cf_state := b; cf_params := [SOME (12,1)];
+                            cf_prov := FEMPTY; cf_tvar := FEMPTY |>;
+      actual = [a with vs_params := [8w]; b with vs_params := [16w]];
+      live = s0 with vs_memory := [] in
+  4 <> 8 /\ 12 <> 16 /\
+  ricf_live_stack_agree D ids (tn with t_mem := {})
+    [headmap;tailmap] [cf;older] actual live live
+Proof
+  simp_tac bool_ss [LET_THM] >>
+  simp[ricf_live_stack_cons, ricf_live_frame_decompose,
+       ricf_live_local_agree_def, merge_callee_state_def,
+       ricf_complete_params_def, ricf_params_agree_def,
+       ricf_sites_ok_def, ricf_value_agree_def, ld_value_agree_def,
+       ricf_site_triples_def, ircf_cross_def, read_byte_def,
+       ld_shared_agree_refl, FLOOKUP_UPDATE, venom_state_component_equality,
+       wordsTheory.WORD_ADD_SUB2]
+QED
+
+Theorem ricf_indexed_entry_return_probe:
+  let headmap = FEMPTY |+ ((4,1),(4,8,1));
+      tailmap = FEMPTY |+ ((12,1),(12,16,1));
+      a = s0 with <| vs_vars := FEMPTY; vs_params := [4w]; vs_alloca_next := 0 |>;
+      b = s0 with <| vs_vars := FEMPTY; vs_params := [12w]; vs_alloca_next := 0 |>;
+      cf = frame with <| cf_state := a; cf_params := [SOME (4,1)];
+                         cf_prov := FEMPTY; cf_tvar := FEMPTY |>;
+      older = frame with <| cf_state := b; cf_params := [SOME (12,1)];
+                            cf_prov := FEMPTY; cf_tvar := FEMPTY |>;
+      actual = [a with vs_params := [8w]; b with vs_params := [16w]];
+      live = s0 with <| vs_memory := []; vs_vars := FEMPTY;
+                       vs_params := []; vs_prev_bb := NONE |>;
+      clean = tn with t_mem := {} in
+  4 <> 8 /\ 12 <> 16 /\
+  ricf_live_boundary_core D ids [cf;older] [] FEMPTY clean fn
+    FEMPTY [headmap;tailmap] actual FEMPTY clean live live /\
+  ricf_indexed_boundary D ids [headmap;tailmap] [cf;older]
+    [] FEMPTY clean fn live live /\
+  (!PG G un fn' ret u v.
+    ricf_indexed_return D ids [headmap;tailmap] [cf;older] PG G un fn' ret u v ==>
+    ricf_live_return_core D ids [cf;older] [headmap;tailmap] actual un u v)
+Proof
+  simp_tac bool_ss [LET_THM] >>
+  qmatch_goalsub_abbrev_tac `ricf_live_boundary_core D ids stk [] FEMPTY clean fn
+    FEMPTY maps actual FEMPTY clean live live` >>
+  `ricf_live_stack_agree D ids clean maps stk actual live live`
+    by (simp[Abbr `stk`, Abbr `clean`, Abbr `maps`, Abbr `actual`, Abbr `live`,
+        ricf_live_stack_cons, ricf_live_frame_decompose,
+        ricf_live_local_agree_def, merge_callee_state_def,
+        ricf_complete_params_def, ricf_params_agree_def,
+        ricf_sites_ok_def, ricf_value_agree_def, ld_value_agree_def,
+        ricf_site_triples_def, ircf_cross_def, read_byte_def,
+        ld_shared_agree_refl, FLOOKUP_UPDATE, venom_state_component_equality,
+        wordsTheory.WORD_ADD_SUB2]) >>
+  `ricf_live_boundary_core D ids stk [] FEMPTY clean fn
+     FEMPTY maps actual FEMPTY clean live live`
+    by (simp[ricf_live_boundary_core_def, Abbr `live`,
+             ricf_frame_agree_completed_identity, taint_agree_def,
+             ld_shared_agree_refl, word_agree_except_def,
+             venom_state_component_equality] >>
+        irule ricf_frame_agree_completed_identity >>
+        simp[taint_agree_def, ld_shared_agree_refl,
+             word_agree_except_def, venom_state_component_equality]) >>
+  simp[] >> conj_tac
+  >- (simp[ricf_indexed_boundary_def] >> metis_tac[]) >>
+  metis_tac[ricf_indexed_call_return]
+QED

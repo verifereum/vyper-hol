@@ -130,3 +130,27 @@ Proof
   strip_tac >> drule_all ricf_live_resume_caller >> strip_tac >>
   qexists_tac `t'` >> simp[] >> irule ricf_frame_inst_idx >> simp[]
 QED
+
+(* The callee run keeps the suspended-map index fixed.  Entry saves the
+   actual caller locals; the recursive return may choose fresh targets,
+   which are reanchored before the existing restoration kernel is used. *)
+Theorem ricf_indexed_resume_next:
+  ricf_live_boundary_core D ids (cf::stk) PG G etn fn current
+    (sites::maps) (caller::targets) G0 tn0 cs ct /\
+  ricf_indexed_return D ids (sites::maps) (cf::stk)
+    PG' G' tn fn' ret se te /\
+  bind_outputs outs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state cf.cf_state se)) = SOME s' ==>
+  ?t'. bind_outputs outs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state caller te)) = SOME t' /\
+    ricf_frame_agree D (ircf_dead ids cf.cf_state stk) sites
+      (ricf_complete_params cf.cf_params cf.cf_state.vs_params)
+      (DRESTRICT cf.cf_prov (COMPL (set outs)))
+      (tn with t_var := DRESTRICT cf.cf_tvar (COMPL (set outs)))
+      (s' with vs_inst_idx := SUC cf.cf_state.vs_inst_idx)
+      (t' with vs_inst_idx := SUC cf.cf_state.vs_inst_idx) /\
+    ricf_live_stack_agree D ids tn maps stk targets se te
+Proof
+  strip_tac >> drule_all ricf_indexed_call_return >> strip_tac >>
+  drule_all ricf_live_resume_next >> simp[]
+QED
