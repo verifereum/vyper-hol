@@ -16,9 +16,8 @@ Theorem deploy_internal_package_shape:
         (package_internal_fn tops use_trans nkey_map is_ctor immutables_len src))
 Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
-  drule (iffLR MEM_classify_internal) >> strip_tac >>
   `~supported_stmts_expr_exists expr_shape_root src7` by
-    (gs[runtime_bodies_shape_ok_def] >> first_x_assum drule >> simp[]) >>
+    (gs[runtime_bodies_shape_ok_def] >> metis_tac[]) >>
   qspecl_then [`tops`, `Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
     (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
   simp[package_internal_fn_def, set_internal_package_target_def,
@@ -45,10 +44,14 @@ Theorem deploy_constructor_package_shape:
 Proof
   rpt gen_tac >> strip_tac >> PairCases_on `cf` >>
   `MEM (FunctionDecl Deploy cf0 cf1 cf2 cf3 cf4 cf5 cf6 cf7) tops` by
-    (drule classify_functions_ctor_mem >>
-     fs[deploy_source_ok_def, supported_program_def,
-        supported_declaration_headers_def, supported_headers_module_consts_env,
-        subst_consts_fn_empty]) >>
+    (`SND (SND (SND (classify_functions tops))) =
+        SOME (cf0,cf1,cf2,cf3,cf4,cf5,cf6,cf7)` by simp[] >>
+     drule classify_functions_ctor_mem >> strip_tac >>
+     `module_consts_env tops [] = []` by
+       metis_tac[deploy_source_ok_def, supported_program_def,
+         supportedDeclsTheory.supported_declaration_headers_def,
+         supportedDeclsTheory.supported_headers_module_consts_env] >>
+     gvs[constSubstTheory.subst_consts_fn_empty]) >>
   `supported_program tops` by fs[deploy_source_ok_def] >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>

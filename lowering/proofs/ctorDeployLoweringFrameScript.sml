@@ -1058,7 +1058,8 @@ Proof
   `fname = "__init__"` by
     (drule_all lower_vyper_deploy_unit_ctor_named_init >> simp[ctor_named_init_def]) >>
   mp_tac (Q.SPECL [`tops`, `NONE:num option`, `"__init__"`]
-    classify_functions_ctor_lookup) >> simp[] >> strip_tac >> gvs[] >>
+    classify_functions_ctor_lookup) >> simp[] >> strip_tac >>
+  gvs[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
   rpt gen_tac >> strip_tac >>
   drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
   drule_all supported_program_function >> strip_tac >>
@@ -1086,7 +1087,8 @@ Proof
   `fname = "__init__"` by
     (drule_all lower_vyper_deploy_unit_ctor_named_init >> simp[ctor_named_init_def]) >>
   mp_tac (Q.SPECL [`tops`, `NONE:num option`, `"__init__"`]
-    classify_functions_ctor_lookup) >> simp[] >> strip_tac >> gvs[] >>
+    classify_functions_ctor_lookup) >> simp[] >> strip_tac >>
+  gvs[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
   `fn_allocs_ok tops (mut,nr,rr,"__init__",args,[],NoneT,stmts)` by
     (irule lower_vyper_deploy_unit_allocs_ok >>
      conj_tac >- metis_tac[] >>

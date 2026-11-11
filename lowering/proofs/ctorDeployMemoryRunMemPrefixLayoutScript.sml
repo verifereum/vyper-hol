@@ -177,6 +177,11 @@ Theorem package_constructor_shape_ok[local]:
 Proof
   rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
   drule classify_functions_ctor_mem >> strip_tac >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supportedProgramTheory.supported_program_def,
+      supportedDeclsTheory.supported_declaration_headers_def,
+      supportedDeclsTheory.supported_headers_module_consts_env] >>
+  gvs[constSubstTheory.subst_consts_fn_empty] >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   qspecl_then [`tops`, `Deploy`, `cf0`, `cf3`, `cf4`, `cf6`, `cf7`, `use_trans`]
@@ -197,9 +202,14 @@ Theorem package_internal_fn_ctor_shape_ok[local]:
 Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   drule (iffLR MEM_classify_internal) >> strip_tac >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supportedProgramTheory.supported_program_def,
+      supportedDeclsTheory.supported_declaration_headers_def,
+      supportedDeclsTheory.supported_headers_module_consts_env] >>
+  gvs[constSubstTheory.subst_consts_fn_empty] >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
-  qspecl_then [`tops`, `Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
+  qspecl_then [`tops`, `Internal`, `src0`, `src3`, `src4`, `src6`, `rawbody`, `use_trans`]
     (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
   simp[package_internal_fn_def, set_internal_package_target_def,
        update_cenv_nonreentrant_def, internal_fn_shape_ok_def,

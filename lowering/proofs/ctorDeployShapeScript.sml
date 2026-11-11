@@ -44,9 +44,9 @@ Proof
   rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
   drule classify_functions_ctor_mem >> strip_tac >>
   `module_consts_env tops [] = []` by
-    metis_tac[supported_program_def, supported_declaration_headers_def,
-              supported_headers_module_consts_env] >>
-  gvs[subst_consts_fn_empty] >>
+    metis_tac[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def,
+              supportedDeclsTheory.supported_headers_module_consts_env] >>
+  gvs[constSubstTheory.subst_consts_fn_empty] >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   gvs[package_constructor_def, set_constructor_package_target_def,
@@ -65,6 +65,11 @@ Theorem package_internal_fn_ctor_shape_ok[local]:
 Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   drule (iffLR MEM_classify_internal) >> strip_tac >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supported_program_def,
+      supportedDeclsTheory.supported_declaration_headers_def,
+      supportedDeclsTheory.supported_headers_module_consts_env] >>
+  gvs[constSubstTheory.subst_consts_fn_empty] >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   simp[package_internal_fn_def, set_internal_package_target_def,
