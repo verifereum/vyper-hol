@@ -190,7 +190,7 @@ Proof
      disch_then (qspecl_then [`nm`, `tv`, `iv`, `off`] mp_tac o CONJUNCT2) >>
      simp[] >> strip_tac >>
      qpat_x_assum `!id b sz. local_region _ _ _ _ _ _ ==> _` drule >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   Cases_on `src_loc = SOME LocMemory`
   >- suspend "staged" >>
   `compile_store_memory cenv op dst_op dty sty sa = ((),sb)` by
@@ -282,7 +282,7 @@ Resume tuple_place_owned_memory_forward_frame[staged]:
    w2n w + type_memory_size dtv <= w2n tw` by
     (`regions_disjoint (w2n tw) (type_memory_size stv) b' len'` by metis_tac[] >>
      qpat_x_assum `regions_disjoint _ _ b' len'` mp_tac >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   all_tac >>
   `u.vs_labels = s.vs_labels` by
     (qpat_x_assum `(u with <|vs_vars := _; vs_memory := _; vs_prev_bb := _;

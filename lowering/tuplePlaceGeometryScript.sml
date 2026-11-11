@@ -1,7 +1,7 @@
 (* Full type envelopes, independent of runtime values. *)
 Theory tuplePlaceGeometry
 Ancestors
-  exprSimProps compileEnv vyperTyping vyperValue valueEncoding
+  exprSimProps loweringPosts compileEnv vyperTyping vyperValue valueEncoding
   list rich_list arithmetic integer pair alist
 Libs
   pairLib

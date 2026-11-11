@@ -2,8 +2,8 @@
 Theory tuplePlacePrefix
 Ancestors
   tuplePlaceRhsCert tuplePlaceStage tuplePlaceLoad tupleTypedLoad tupleStageProps
-  tupleAssignPrefix stmtSimAssignTuple exprLoweringProps compileEnv loweringPosts
-  valueEncoding valueEncodingProofs vyperValue stmtLowering fragGasPath fragGasSeq
+  tupleAssignPrefix stmtSimAssignTuple exprLoweringProps compileEnv loweringStateRelDefs loweringPosts
+  valueEncoding valueEncodingDefs valueEncodingProofs vyperValue stmtLowering fragGasPath fragGasSeq
   fragGasMode vyperTyping vyperTypeABI emitHelper
 Libs monadsyntax
 

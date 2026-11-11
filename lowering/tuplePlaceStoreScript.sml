@@ -2,7 +2,7 @@
 Theory tuplePlaceStore
 Ancestors
   tuplePlaceSnapshot assignRelayoutFrame placeStore placeStoreStorage
-  exprLoweringProps compileEnv loweringPosts venomState venomExecSemantics
+  exprLoweringProps compileEnv loweringStateRelDefs loweringPosts venomState venomExecSemantics
   valueEncoding valueEncodingProofs
 
 Theorem tuple_place_local_relayout_snapshot:

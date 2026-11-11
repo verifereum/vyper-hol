@@ -39,7 +39,7 @@ Proof
       `val_in_memory (TupleTV ltvs) (ArrayV (TupleV vs)) (w2n sw) s.vs_memory /\
        val_wf (TupleTV ltvs) (ArrayV (TupleV vs)) /\
        val_footprint (TupleTV ltvs) (ArrayV (TupleV vs)) <= type_memory_size_list ltvs` by
-        simp[valueEncodingTheory.val_in_memory_def, valueEncodingTheory.val_wf_def,
+        simp[valueEncodingDefsTheory.val_in_memory_def, valueEncodingDefsTheory.val_wf_def,
           loweringPostsTheory.val_footprint_def, valueEncodingTheory.type_memory_size_def] >>
       `type_memory_size_list ltvs < dimword (:256)` by decide_tac >>
       drule_all tuplePlaceStageTheory.tuple_place_stage_snapshot_path >>
@@ -49,7 +49,7 @@ Proof
         (irule tupleTypedLoadTheory.tuple_container_bound >>
          goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
          disj1_tac >> qexists `su.cs_next_id` >> simp[]) >>
-      qexistsl [`t`, `w`] >> gvs[valueEncodingTheory.val_in_memory_def]) >>
+      qexistsl [`t`, `w`] >> gvs[valueEncodingDefsTheory.val_in_memory_def]) >>
   gvs[compileEnvTheory.comp_return_def] >> qexistsl [`s`, `sw`] >> simp[] >>
   simp[fragGasModeTheory.gas_marked_path_def, cj 1 fragGasPathTheory.gas_path_rules,
     stmtSimDefsTheory.alloca_frame_def] >> metis_tac[]
@@ -132,7 +132,7 @@ Proof
       gvs[listTheory.LIST_REL_EL_EQN]) >>
   conj_tac
   >- (rpt strip_tac >>
-      `not_fresh_at sl x` by gvs[compileEnvTheory.not_fresh_at_def] >> simp[]) >>
+      `not_fresh_at sl x` by gvs[loweringStateRelDefsTheory.not_fresh_at_def] >> simp[]) >>
   `gas_marked_path F ctx func sv (0 + 0) (OK t)` suffices_by simp[] >>
   irule fragGasModeTheory.gas_marked_path_then >> qexists `st` >> simp[]
 QED

@@ -3,7 +3,7 @@ Theory tuplePlaceSuffixOpen
 Ancestors
   tuplePlaceHeadOpen tuplePlaceHeadGas tuplePlaceSource tuplePlaceHead tuplePlaceSuffixCode
   stmtSimForRounds tupleTargetStoreProps vyperInterpreter vyperState
-  stmtLowering compileEnv fragGasMode fragGasPath exprSimHypsDefs
+  stmtLowering compileEnv loweringStateRelDefs fragGasMode fragGasPath exprSimHypsDefs
   vyperTypeDefaults list rich_list
 
 Theorem tuple_place_suffix_run_open:

@@ -4,7 +4,7 @@ Ancestors
   placeMemoryStateRebuild placeMemoryLiveRegion placeMemoryStagingFrame
   tuplePlaceMemoryFrame exprSimProps exprSimHyps valueEncodingProps
   stmtLowering exprLoweringProps loweringPosts stmtSimDefs
-  compileEnv venomState context finite_map loweringHalt rich_list fragExec
+  compileEnv loweringStateRelDefs venomState context finite_map loweringHalt rich_list fragExec
   abiBuiltinEncodeReusedInput placeMemoryProtectedFrame exprSimAlloc
   placeMemoryTypedPrimitive placeMemoryStaging arithmetic abiTupleProps freshWrites
 

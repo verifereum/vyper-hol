@@ -76,7 +76,7 @@ Proof
   qpat_x_assum `lookup_block st3.cs_current_bb _ = _` kall_tac >>
   `LENGTH vs <= cap /\ LENGTH vs <= scap` by metis_tac[typed_memory_dynarray_length] >>
   `mload (w2n sw) s = n2w (LENGTH vs)` by
-    gvs[valueEncodingTheory.val_in_memory_def, valueEncodingPropsTheory.mem_word_at_eq_mload] >>
+    gvs[valueEncodingDefsTheory.val_in_memory_def, valueEncodingPropsTheory.mem_word_at_eq_mload] >>
   drule_all typed_memory_dynarray_setup_forward >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `typed_copy_effect ctx func sa sm s t (w2n dw)
@@ -133,8 +133,8 @@ Resume tuple_place_dynarray_slow_size_forward[integration]:
        [`value_has_type (ArrayTV dtv _) _`, `value_has_type (ArrayTV stv _) _`,
         `val_wf (ArrayTV dtv _) _`, `val_wf (ArrayTV stv _) _`] >>
      rpt (first_x_assum kall_tac) >>
-     simp[valueEncodingTheory.val_wf_def, vyperTypingTheory.value_has_type_def] >>
-     qid_spec_tac `vs` >> Induct >> simp[valueEncodingTheory.val_wf_def,
+     simp[valueEncodingDefsTheory.val_wf_def, vyperTypingTheory.value_has_type_def] >>
+     qid_spec_tac `vs` >> Induct >> simp[valueEncodingDefsTheory.val_wf_def,
        vyperTypingTheory.value_has_type_def] >> rpt strip_tac >>
      Cases_on `i` >> gvs[] >> metis_tac[]) >>
   `?z. val_in_memory (ArrayTV stv (Dynamic scap)) (ArrayV (DynArrayV vs))
@@ -254,7 +254,7 @@ Resume tuple_place_dynarray_slow_size_forward[exit]:
   qexists_tac `r` >> conj_tac
   >- (simp[valueEncodingPropsTheory.val_in_memory_dynarray] >> conj_tac
       >- (qpat_x_assum `mem_bytes_at _ _ r.vs_memory = _` mp_tac >>
-          gvs[valueEncodingTheory.mem_word_at_def, valueEncodingTheory.mem_bytes_at_def]) >>
+          gvs[valueEncodingDefsTheory.mem_word_at_def, valueEncodingDefsTheory.mem_bytes_at_def]) >>
       irule exprSimAggregateEncodingTheory.elems_in_memory_intro >>
       qpat_x_assum `!j. j < LENGTH vs ==> val_in_memory _ _ _ _` mp_tac >>
       simp[Abbr `elem`]) >>

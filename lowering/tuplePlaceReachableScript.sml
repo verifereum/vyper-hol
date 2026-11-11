@@ -4,7 +4,7 @@ Ancestors
   tuplePlaceGeometry tuplePlaceBorrow bodySimAugPlaceLoad
   exprSimPopNestedLocalSource vyperTargetPlaceWrite bodyExprPreFacts
   vyperTypeCallStackSoundness vyperTypeCallGraph exprSimHypsDefs supportedTargets
-  vyperPlaceWriteSoundness exprLoweringProps compileEnv loweringPosts exprSimProps pair
+  vyperPlaceWriteSoundness exprLoweringProps compileEnv loweringStateRelDefs loweringPosts exprSimProps pair
 
 Theorem tuple_place_local_path_extent:
   expr_sim_inv cenv cx env ee /\
@@ -164,7 +164,7 @@ Proof
   >- (`regions_disjoint b sz base' sz''` by
         (gvs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
          metis_tac[]) >>
-      gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   gvs[local_region_def, local_path_at_def] >>
   `evaluate_type (get_tenv cx) t0 = SOME entry.type` by
     (drule aug_place_entry_type_agrees >> metis_tac[]) >> gvs[] >>

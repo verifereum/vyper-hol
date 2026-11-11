@@ -82,6 +82,6 @@ Proof
   simp[loweringPostsTheory.target_post_def] >> strip_tac >>
   rpt strip_tac >>
   `not_fresh_at sa x` by
-    (fs[compileEnvTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+    (fs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   metis_tac[]
 QED

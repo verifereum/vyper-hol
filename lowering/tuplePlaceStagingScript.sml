@@ -1,7 +1,7 @@
 Theory tuplePlaceStaging
 Ancestors
   placeMemoryStaging exprSimProps bodyMemoryDefs venomMemDefs
-  placeMemoryTypedPrimitive exprLoweringProps compileEnv venomState
+  placeMemoryTypedPrimitive exprLoweringProps compileEnv loweringStateRelDefs venomState
   fragGasMode valueEncodingProps loweringPosts stmtSimDefs
   finite_map context freshWrites loweringHalt rich_list fragExec
   abiTupleProps placeMemoryCopyFrames

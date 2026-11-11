@@ -37,10 +37,10 @@ Proof
   gvs[expr_post_def] >>
   `?w. eval_operand op sv = SOME w /\
        tuple_in_memory vs ltvs (w2n w) sv.vs_memory` by
-    gvs[expr_val_rel_def, is_word_type_def, valueEncodingTheory.val_in_memory_def] >>
+    gvs[expr_val_rel_def, is_word_type_def, valueEncodingDefsTheory.val_in_memory_def] >>
   qexists `w` >> simp[] >> conj_tac
   >- (drule (cj 1 valueEncodingTypingTheory.value_has_type_val_wf) >>
-      simp[valueEncodingTheory.val_wf_def]) >>
+      simp[valueEncodingDefsTheory.val_wf_def]) >>
   Cases_on `ltys = tys`
   >- (drule_all tuplePlaceSnapshotTheory.tuple_place_expr_snapshot_cases >>
       strip_tac

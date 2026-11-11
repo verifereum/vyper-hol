@@ -4,7 +4,7 @@ Ancestors
   tuplePlaceStore placeStore abiValueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   venomState venomExecSemantics loweringPosts exprSimHypsDefs
-  stmtSimDefs exprSimProps emitHelper exprLoweringProps compileEnv
+  stmtSimDefs exprSimProps emitHelper exprLoweringProps compileEnv loweringStateRelDefs
 
 Theorem tuple_place_word_run_frame:
   !ctx func cenv cx env ee ff s p w loc dst_op op dty dtv v sa sb a n.

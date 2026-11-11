@@ -123,7 +123,7 @@ Proof
    mem_bytes_at (w2n w) (type_memory_size_list ltvs) s0.vs_memory` by
     (fs[tuplePlacePrefixCertTheory.tuple_place_snapshot_def]
      >- gvs[listTheory.EVERY_EL]
-     >- simp[valueEncodingTheory.mem_bytes_at_def]
+     >- simp[valueEncodingDefsTheory.mem_bytes_at_def]
      >- (drule_all tuplePlaceSnapshotTheory.tuple_place_target_allocation >>
          strip_tac >> drule valueEncodingPropsTheory.mem_bytes_at_translated_window >>
          disch_then (qspecl_then [`w2n w-b`, `type_memory_size_list ltvs`] mp_tac) >>
@@ -255,10 +255,10 @@ Proof
   gvs[] >> reverse (Cases_on `s' = n`)
   >- (`regions_disjoint b sz base' sz''` by
         (gvs[exprLoweringPropsTheory.stmt_state_rel_def,
-             compileEnvTheory.state_rel_def, compileEnvTheory.local_ptrs_rel_def] >>
+             loweringStateRelDefsTheory.state_rel_def, loweringStateRelDefsTheory.local_ptrs_rel_def] >>
          metis_tac[]) >>
-      gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
-  gvs[compileEnvTheory.local_region_def, loweringPostsTheory.local_path_at_def] >>
+      gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  gvs[loweringStateRelDefsTheory.local_region_def, loweringPostsTheory.local_path_at_def] >>
   `evaluate_type (get_tenv cx) t0 = SOME entry.type` by
     (drule bodySimAugPlaceLoadTheory.aug_place_entry_type_agrees >> metis_tac[]) >> gvs[] >>
   `tuple_place_no_tuple_step entry.type l` by

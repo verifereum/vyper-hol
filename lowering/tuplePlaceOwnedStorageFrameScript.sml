@@ -2,7 +2,7 @@ Theory tuplePlaceOwnedStorageFrame
 Ancestors
   tuplePlaceStorageFrame tuplePlaceStore tuplePlaceFramedStore placeStoreStorage
   stmtSimDefs exprSimHypsDefs loweringPosts venomState stmtLowering exprLowering
-  compileEnv vyperInterpreter vyperState vyperValue vyperTypeSystem
+  compileEnv loweringStateRelDefs vyperInterpreter vyperState vyperValue vyperTypeSystem
   fragGasPath fragGasMode arithmetic exprLoweringProps stmtSimStoreCopy
   tuplePlaceOwnedNormalize
 

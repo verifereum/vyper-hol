@@ -2,7 +2,7 @@
 Theory tuplePlaceStage
 Ancestors
   tuplePlacePrefixCert tupleStageProps exprLoweringProps localPtrsProps
-  compileEnv loweringSlice fragExec valueEncoding vyperValue list finite_map
+  compileEnv loweringStateRelDefs loweringSlice fragExec valueEncoding vyperValue list finite_map
   exprLowering stmtSimDeclPath exprSimBufferStore fragGasPath fragGasSeq fragGasMode venomMemDefs
   venomInstProofs venomInst venomState venomExecSemantics emitHelper
   valueEncodingProofs valueEncodingProps valueCopy loweringHalt stmtLowering
@@ -120,7 +120,7 @@ Proof
      drule_at (Pat `MEM _ _`) local_ptrs_rel_alloca_disjoint >>
      simp[mk_inst_def] >>
      disch_then (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
-     gvs[] >> simp[compileEnvTheory.regions_disjoint_def, arithmeticTheory.ADD_COMM] ) >>
+     gvs[] >> simp[loweringStateRelDefsTheory.regions_disjoint_def, arithmeticTheory.ADD_COMM] ) >>
   `alloca_frame cenv es sa s cenv es t` by
     (irule localMemoryStorePathTheory.alloca_frame_owned_copy >>
      `allocas_non_overlapping t` by gvs[stmt_state_rel_def, state_rel_def, alloca_inv_def] >>

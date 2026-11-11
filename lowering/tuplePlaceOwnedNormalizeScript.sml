@@ -107,7 +107,7 @@ Resume tuple_place_owned_normalize_frame[state]:
      w2n w + type_memory_size dtv <= lb \/ lb + len <= w2n w` by
     (rpt strip_tac >>
      qpat_x_assum `!name b len. _` drule_all >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   irule copy_buffer_state_rel_frame >>
   qexistsl_tac [`w2n w`,
     `mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_size dtv))]
@@ -120,7 +120,7 @@ Resume tuple_place_owned_normalize_frame[bytes]:
   `regions_disjoint (w2n w) (type_memory_size dtv) b' len'` by
     (qpat_x_assum `!aid b len. _` drule_all >> simp[]) >>
   `a + n <= w2n w \/ w2n w + type_memory_size dtv <= a` by
-    (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+    (gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   qpat_x_assum `!a len. _` (qspecl_then [`a`, `n`] mp_tac) >> simp[]
 QED
 

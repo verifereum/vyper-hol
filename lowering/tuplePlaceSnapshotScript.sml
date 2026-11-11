@@ -2,7 +2,7 @@
 Theory tuplePlaceSnapshot
 Ancestors
   loweringPosts valueEncodingProps valueEncodingProofs
-  venomExecSemantics venomState compileEnv placeMemoryCopyEffect
+  venomExecSemantics venomState compileEnv loweringStateRelDefs placeMemoryCopyEffect
   tupleStageProps exprLoweringProps localPtrsProps emitHelper
 Libs
   monadsyntax

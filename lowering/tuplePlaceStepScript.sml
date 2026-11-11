@@ -13,7 +13,7 @@ Theorem tuple_place_endpoint_local_regions_some:
 Proof
   strip_tac >> rpt gen_tac >> eq_tac
   >- (strip_tac >> irule exprSimPropsTheory.local_region_frame >>
-      fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+      fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
       metis_tac[]) >>
   strip_tac >> irule exprSimPropsTheory.local_region_frame_fwd >> metis_tac[]
 QED

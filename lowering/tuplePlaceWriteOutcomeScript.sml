@@ -3,7 +3,7 @@ Theory tuplePlaceWriteOutcome
 Ancestors
   tuplePlaceSourceHead stmtSimAugAssignPlaceMemory bodyAugPlaceTarget
   vyperState vyperPlaceWriteSoundness vyperTypeExprSoundness vyperStorageBackend
-  vyperTyping exprLoweringProps compileEnv
+  vyperTyping exprLoweringProps compileEnv loweringStateRelDefs
 
 Theorem tuple_place_memory_write_result:
   write_place cx (MemoryPlace id path) v es = (res,ff) /\

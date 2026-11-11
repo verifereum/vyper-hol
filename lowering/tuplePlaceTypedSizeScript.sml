@@ -3,7 +3,7 @@ Ancestors
   tuplePlaceChildSize tuplePlaceArraySize tuplePlaceDynarraySize tuplePlaceFieldsSize tuplePlacePrimitiveSize
   placeMemoryArrayForward placeMemoryFieldsForward placeMemoryTypedPrimitive placeMemoryDynarrayForward
   placeMemoryTypedForward typedCopyDomain compileEnv vyperTypeSystem
-  vyperValue vyperTyping valueEncoding placeMemoryChildForward
+  vyperValue vyperTyping valueEncoding valueEncodingDefs placeMemoryChildForward
   placeMemoryCopyEffect placeMemoryTypedBase context vyperTypeValues
 
 Theorem tuple_place_rank_size_forward:

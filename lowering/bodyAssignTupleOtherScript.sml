@@ -338,6 +338,24 @@ Proof
       gvs[immutable_root_def, target_root_def])
 QED
 
+Theorem mem_expr_size_lt[local]:
+  !xs y. MEM y xs ==> expr_size y < list_size expr_size xs
+Proof
+  Induct >> rw[listTheory.list_size_def] >> res_tac >> decide_tac
+QED
+
+Theorem mem_int_calls_nil[local]:
+  !xs y. MEM y xs /\ int_calls_exprs xs = [] ==> int_calls_expr y = []
+Proof
+  Induct >> simp[vyperTypeCallGraphTheory.int_calls_expr_def] >> metis_tac[]
+QED
+
+Theorem body_exprs_ok_of_mem[local]:
+  !xs. (!y. MEM y xs ==> body_expr_ok cx y) ==> body_exprs_ok cx xs
+Proof
+  Induct >> simp[body_exprs_ok_def] >> metis_tac[]
+QED
+
 (* An expression with no internal call is body_expr_ok: a subscript by
    body_subscript_case on its parts, anything else by body_expr_ok_intro,
    whose internal-call premise is then vacuous. *)
@@ -350,7 +368,13 @@ Proof
       gvs[vyperTypeCallGraphTheory.int_calls_expr_def] >>
       conj_tac >> rpt strip_tac >> qpat_assum `!y. _` irule >>
       gvs[vyperASTTheory.expr_size_def]) >>
-  irule body_expr_ok_intro >> gvs[] >> metis_tac[]
+  irule body_expr_ok_intro >> gvs[] >> rpt strip_tac >> gvs[] >>
+  irule body_exprs_ok_of_mem >> rpt strip_tac >>
+  `expr_size y < list_size expr_size elems` by metis_tac[mem_expr_size_lt] >>
+  `int_calls_expr y = []` by
+    (fs[vyperTypeCallGraphTheory.int_calls_expr_def] >> metis_tac[mem_int_calls_nil]) >>
+  qpat_x_assum `!y. expr_size y < _ ==> _` irule >>
+  simp[vyperASTTheory.expr_size_def] >> decide_tac
 QED
 
 Theorem tuple_places_target_case:
