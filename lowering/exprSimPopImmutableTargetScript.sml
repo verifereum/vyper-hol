@@ -36,7 +36,7 @@ Ancestors
   exprSimArrayIndex immutableCopyExecution varsExt freshWrites fragGasSeq fragGasSeqAbort
   exprOperandVar exprSimWordArgs exprBopSimProps
   bodySim targetPlaceSim targetPlaceSimCasesBase targetPlaceSimCases
-  targetPlaceSimDefs
+  targetPlaceSimDefs targetOverlapAccess vyperImmutableAccessFrame
   exprSimHypsDefs exprSimDefs loweringPosts gasOutcome gasContext
   exprLowering exprLoweringProps compileEnv loweringStateRelDefs vyperAST vyperState
   vyperInterpreter vyperTypeSystem vyperTypeCallGraph venomState
@@ -3000,8 +3000,12 @@ QED
    supported_program / target_pre, and in static target checking once
    supported_program is gone. *)
 Theorem pop_nested_immutable_deploy_impure_index_case:
-  !ctx func cenv cx env ann bt ty es src id.
-    cx.in_deploy /\
+  !ctx func cenv cx env ann bt ty es src id nocalls.
+    cx.in_deploy /\ cenv.ce_is_ctor /\
+    (!ty0. FLOOKUP env.bare_global_assignable (src,id) = SOME ty0 ==>
+           cenv.ce_module_var_type (src,id) = SOME ty0) /\
+    target_idx_case nocalls ctx func cenv cx bt /\
+    (nocalls ==> int_calls_target bt = []) /\
     ~EVERY pure_expr (target_indices bt) /\
     expr_body_pre cenv cx env (Pop ann bt) es /\
     target_root bt = TopLevelNameTarget (src,id) /\

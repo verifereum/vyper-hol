@@ -13,6 +13,7 @@
  *     — bt reads its root
  *   find_var_decl_not_constant_decl — a storage variable is not a constant
  *     when top-level names are distinct
+ *   is_immutable_decl_not_constant_decl — nor is an immutable
  *)
 
 Theory targetOverlapAccess
@@ -113,4 +114,28 @@ Proof
   rpt gen_tac >> TRY (rename1 `VariableDecl _ m _ _ _` >> Cases_on `m`) >>
   rw[constant_decl_def] >>
   metis_tac[find_var_decl_vtype_key, constant_decl_vtype_key]
+QED
+
+Theorem is_immutable_decl_vtype_key[local]:
+  !id tls src.
+    is_immutable_decl id tls ==>
+    MEM (src,id) (FLAT (MAP (toplevel_vtype_keys_toplevel src) tls))
+Proof
+  Induct_on `tls` >> simp[is_immutable_decl_def] >>
+  Cases >> TRY (rename1 `VariableDecl _ m _ _ _` >> Cases_on `m`) >>
+  rw[is_immutable_decl_def, toplevel_vtype_keys_toplevel_def] >>
+  metis_tac[]
+QED
+
+Theorem is_immutable_decl_not_constant_decl:
+  !src tls id.
+    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) tls)) /    is_immutable_decl id tls ==>
+    ~constant_decl id tls
+Proof
+  Induct_on `tls` >- simp[constant_decl_def] >>
+  Cases >>
+  simp[toplevel_vtype_keys_toplevel_def, listTheory.ALL_DISTINCT_APPEND] >>
+  rpt gen_tac >> TRY (rename1 `VariableDecl _ m _ _ _` >> Cases_on `m`) >>
+  rw[constant_decl_def, is_immutable_decl_def] >>
+  metis_tac[is_immutable_decl_vtype_key, constant_decl_vtype_key]
 QED
