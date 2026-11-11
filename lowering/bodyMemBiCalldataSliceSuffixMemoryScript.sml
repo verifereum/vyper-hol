@@ -354,6 +354,9 @@ Proof
      qexists_tac `sa` >> simp[]) >>
   `!x. buf.buf_operand = Var x ==> not_fresh_at s3 x` by
     (qpat_x_assum `buf.buf_operand = Var _` SUBST1_TAC >> simp[]) >>
+  `t.vs_labels = s.vs_labels` by
+    (`t.vs_labels = pre.vs_labels` by
+       metis_tac[exprSimAllocTheory.hash_alloc_buffer_labels] >> fs[]) >>
   `eval_operand start_op t = SOME wa` by
     (Cases_on `start_op` >> fs[eval_operand_def] >>
      `not_fresh_at s2 s'` by
