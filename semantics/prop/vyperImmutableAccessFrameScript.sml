@@ -345,6 +345,306 @@ Proof
   strip_tac >> drule unlock_if_nr_immutables >> simp[]
 QED
 
+val immutable_intcall_prefix = ``\cx src fn (es:expr list) ts mut nr args dflts ret body.
+  ~MEM (src,fn) cx.stk /\ get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,body) /\
+  LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts``;
+
+Theorem evaluate_immutable_intcall_case[local]:
+  !cx src fn es ty drv.
+  (!ts mut nr args dflts ret body.
+    ^immutable_intcall_prefix cx src fn es ts mut nr args dflts ret body ==>
+    ^im_results cx es) /\
+  (!ts mut nr args dflts ret body s results t.
+    ^immutable_intcall_prefix cx src fn es ts mut nr args dflts ret body /\
+    eval_expr_results cx es s = (INL results,t) ==>
+    ^im_exprs (cx with stk updated_by CONS (src,fn))
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) /\
+  (!ts mut nr args dflts ret body s results t sd prev dvs td sr vs tr env rtv sl x tl.
+    ^immutable_intcall_prefix cx src fn es ts mut nr args dflts ret body /\
+    eval_expr_results cx es s = (INL results,t) /\
+    finally
+      (ignore_bind (set_scopes [FEMPTY])
+        (eval_exprs (cx with stk updated_by CONS (src,fn))
+          (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)))
+      (set_scopes prev) sd = (INL dvs,td) /\
+    read_results cx results sr = (INL vs,tr) /\
+    bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME env /\
+    evaluate_type (get_tenv cx) ret = SOME rtv /\
+    lock_if_nr cx nr (is_view_mut mut) sl = (INL x,tl) ==>
+    ^im_stmts (cx with stk updated_by CONS (src,fn)) body) ==>
+  ^im_expr cx (Call ty (IntCall (src,fn)) es drv)
+Proof
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 (mk_asm "args_ih")
+    (CONJUNCTS_THEN2 (mk_asm "defaults_ih") (mk_asm "body_ih"))) >>
+  BETA_TAC >> rpt gen_tac >> strip_tac >>
+  Cases_on `MEM (src,fn) cx.stk`
+  >- gvs[Once evaluate_def, type_check_def, assert_def, ignore_bind_def,
+         bind_def, return_def, raise_def] >>
+  Cases_on `get_module_code cx src`
+  >- gvs[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
+         ignore_bind_def, bind_def, return_def, raise_def] >>
+  rename1 `get_module_code cx src = SOME ts` >>
+  Cases_on `lookup_callable_function cx.in_deploy fn ts`
+  >- gvs[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
+         ignore_bind_def, bind_def, return_def, raise_def] >>
+  rename1 `lookup_callable_function cx.in_deploy fn ts = SOME tup` >>
+  PairCases_on `tup` >>
+  rename1 `lookup_callable_function cx.in_deploy fn ts =
+    SOME (mut,nr,args,dflts,ret,bdy)` >>
+  Cases_on `LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts`
+  >- (asm_x "args_ih" mp_tac >> simp[] >>
+      disch_then (mk_asm "args_frame") >>
+      `^safe_accesses A R (accesses_exprs es) (int_calls_exprs es)` by
+        gvs[accesses_expr_def, int_calls_expr_def] >>
+      `^im_results cx es` by (asm "args_frame" mp_tac >> simp[]) >>
+      rule_assum_tac BETA_RULE >>
+      drule (BETA_RULE immutable_results_frame_rule) >>
+      disch_then (qspecl_then [`R`,`A`] mp_tac) >> simp[] >>
+      disch_then (mk_asm "args_run") >>
+      Cases_on `eval_expr_results cx es st` >>
+      rename1 `eval_expr_results cx es st = (ar,sa)` >>
+      Cases_on `ar`
+      >- (rename1 `eval_expr_results cx es st = (INL avs,sa)` >>
+          qpat_x_assum `eval_expr cx _ st = _` mp_tac >>
+          simp[Once evaluate_def, type_check_def, assert_def,
+            lift_option_type_def, ignore_bind_def, bind_def, return_def,
+            raise_def, get_scopes_def, Excl "lock_if_nr_def",
+            Excl "unlock_if_nr_def", Excl "push_function_def",
+            Excl "pop_function_def"] >>
+          disch_then (mk_asm "run") >>
+          `MEM (src,fn) R` by gvs[int_calls_expr_def] >>
+          drule_all (BETA_RULE immutable_callable_safe) >> strip_tac >>
+          `^safe_accesses A R
+            (accesses_exprs (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts))
+            (int_calls_exprs (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts))` by
+            (BETA_TAC >> irule (BETA_RULE immutable_safe_accesses_drop) >> simp[]) >>
+          `(cx with stk updated_by CONS (src,fn)) =
+           (cx with stk := CONS (src,fn) cx.stk)` by
+            simp[evaluation_context_component_equality] >>
+          `^callable_closed (cx with stk updated_by CONS (src,fn)) A R` by
+            (BETA_TAC >> asm_rewrite_tac[] >>
+             rewrite_tac[BETA_RULE callable_closed_stk] >>
+             qpat_x_assum `!src fn ts mut nr args dflts ret body. _` mp_tac >>
+             simp[]) >>
+          asm_x "defaults_ih" mp_tac >> simp[] >>
+          disch_then drule >> simp[] >>
+          disch_then (mk_asm "defaults_frame") >>
+          `!s r t. eval_exprs (cx with stk := (src,fn)::cx.stk)
+              (DROP (LENGTH dflts + LENGTH es - LENGTH args) dflts) s = (r,t) ==>
+              ^immutable_frame cx A s t` by
+            (BETA_TAC >> rpt gen_tac >> strip_tac >>
+             asm "defaults_frame" (qspecl_then [`A`,`R`] mp_tac) >>
+             `LENGTH dflts - (LENGTH args - LENGTH es) =
+                LENGTH dflts + LENGTH es - LENGTH args` by decide_tac >>
+             qpat_assum `cx with stk updated_by _ = _` (fn th => fs[th]) >>
+             disch_then (qspecl_then [`s`,`r`,`t`] mp_tac) >> simp[] >>
+             disch_tac >> rpt gen_tac >> strip_tac >>
+             first_x_assum irule >> simp[] >> first_assum ACCEPT_TAC) >>
+          pop_assum (mk_asm "defaults_run") >>
+          qmatch_asmsub_abbrev_tac `finally df dc sa` >>
+          `!r t. finally df dc sa = (r,t) ==> ^immutable_frame cx A sa t` by
+            (rpt strip_tac >>
+             qpat_x_assum `finally df dc sa = _` mp_tac >>
+             simp[Abbr `df`, Abbr `dc`, GSYM ignore_bind_def] >> strip_tac >>
+             drule_at (Pat `finally _ _ _ = _`)
+               (BETA_RULE immutable_defaults_scope_frame) >>
+             disch_then (qspecl_then [`cx`,`A`] mp_tac) >>
+             disch_tac >> rpt gen_tac >> strip_tac >>
+             first_x_assum irule >> simp[] >>
+             asm "defaults_run" (mp_tac o BETA_RULE) >>
+             disch_then (qspec_then `sa with scopes := [FEMPTY]` mp_tac) >>
+             simp[]) >>
+          pop_assum (mk_asm "scoped_run") >>
+          Cases_on `finally df dc sa` >>
+          rename1 `finally df dc sa = (dr,sd)` >>
+          `^immutable_frame cx A sa sd` by
+            (asm "scoped_run" (mp_tac o BETA_RULE) >> simp[]) >>
+          `^immutable_frame cx A st sa` by
+            (BETA_TAC >> rpt strip_tac >> asm "args_run" irule >> simp[] >> gvs[]) >>
+          `^immutable_frame cx A st sd` by
+            (irule immutable_frame_trans >> qexists_tac `sa` >> simp[]) >>
+          pop_assum (mk_asm "prefix_frame") >>
+          Cases_on `dr`
+          >- (rename1 `finally df dc sa = (INL dvs,sd)` >>
+              asm_x "run" mp_tac >> simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
+              disch_then (mk_asm "run") >>
+              Cases_on `read_results cx avs sd` >>
+              rename1 `read_results cx avs sd = (rr,sr)` >>
+              `sr = sd` by metis_tac[read_results_state] >>
+              qpat_x_assum `sr = sd` SUBST_ALL_TAC >>
+              Cases_on `rr`
+              >- (rename1 `read_results cx avs sd = (INL vs,sd)` >>
+                  Cases_on `bind_arguments (get_tenv cx) args (vs ++ dvs)`
+                  >- (asm_x "run" mp_tac >> simp[raise_def] >>
+                      strip_tac >> qpat_x_assum `sd = st'` SUBST_ALL_TAC >>
+                      asm "prefix_frame" (ACCEPT_TAC o BETA_RULE)) >>
+                  rename1 `bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME argenv` >>
+                  asm_x "run" mp_tac >> simp[return_def, Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
+                  disch_then (mk_asm "run") >>
+                  Cases_on `evaluate_type (get_tenv cx) ret`
+                  >- (asm_x "run" mp_tac >> simp[raise_def] >>
+                      strip_tac >> qpat_x_assum `sd = st'` SUBST_ALL_TAC >>
+                      asm "prefix_frame" (ACCEPT_TAC o BETA_RULE)) >>
+                  rename1 `evaluate_type (get_tenv cx) ret = SOME rtv` >>
+                  asm_x "run" mp_tac >> simp[return_def, Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
+                  disch_then (mk_asm "run") >>
+                  Cases_on `lock_if_nr cx nr (mut = View \/ mut = Pure) sd` >>
+                  rename1 `lock_if_nr cx nr (mut = View \/ mut = Pure) sd = (lr,sl)` >>
+                  `sl.immutables = sd.immutables` by
+                    (drule lock_if_nr_immutables >> simp[]) >>
+                  `^immutable_frame cx A st sl` by
+                    (asm "prefix_frame" mp_tac >> simp[]) >>
+                  pop_assum (mk_asm "locked_frame") >>
+                  Cases_on `lr`
+                  >- (rename1 `lock_if_nr cx nr (mut = View \/ mut = Pure) sd = (INL lx,sl)` >>
+                      asm_x "run" mp_tac >>
+                      simp[push_function_def, return_def, Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
+                      disch_then (mk_asm "run") >>
+                      unabbrev_all_tac >>
+                      asm_x "body_ih" mp_tac >>
+                      simp[GSYM ignore_bind_def, Excl "lock_if_nr_def"] >>
+                      disch_then drule >> simp[Excl "lock_if_nr_def"] >>
+                      disch_then (mk_asm "guarded_body") >>
+                      qpat_assum `cx with stk updated_by _ = _`
+                        (fn th =>
+                          qpat_x_assum `finally _ _ sa = (INL dvs,sd)`
+                            (assume_tac o SRULE [th, GSYM ignore_bind_def])) >>
+                      asm_x "guarded_body" (drule_at (Pat `finally _ _ _ = _`)) >>
+                      simp[Excl "lock_if_nr_def"] >>
+                      disch_then (drule_at (Pat `read_results _ _ _ = _`)) >>
+                      simp[Excl "lock_if_nr_def"] >>
+                      Cases_on `lx` >>
+                      disch_then (drule_at (Pat `lock_if_nr _ _ _ _ = _`)) >>
+                      simp[Excl "lock_if_nr_def"] >>
+                      disch_then (qspecl_then [`A`,`R`] mp_tac) >>
+                      qpat_assum `cx with stk updated_by _ = _`
+                        (fn th => rule_assum_tac (PURE_REWRITE_RULE [th] o BETA_RULE)) >>
+                      simp[Excl "lock_if_nr_def"] >>
+                      disch_then (mk_asm "body_run") >>
+                      `!s r t. eval_stmts (cx with stk := (src,fn)::cx.stk) bdy s = (r,t) ==>
+                         ^immutable_frame cx A s t` by
+                        (BETA_TAC >> rpt strip_tac >>
+                         asm "body_run" irule >> simp[MEM_APPEND] >>
+                         first_assum (ACCEPT_TAC o SRULE [MEM_APPEND])) >>
+                      pop_assum (mk_asm "body_exec") >>
+                      asm_x "run" (mk_asm "run" o PURE_REWRITE_RULE [GSYM ignore_bind_def]) >>
+                      qmatch_asmsub_abbrev_tac `finally bf bc (sl with scopes := [argenv])` >>
+                      `!r t. finally bf bc (sl with scopes := [argenv]) = (r,t) ==>
+                         ^immutable_frame cx A (sl with scopes := [argenv]) t` by
+                        (BETA_TAC >> rpt strip_tac >>
+                         drule_at (Pat `finally _ _ _ = _`) (BETA_RULE immutable_frame_finally) >>
+                         disch_then (qspecl_then [`cx`,`A`] mp_tac) >>
+                         disch_then irule >> reverse conj_tac
+                         >- (rpt strip_tac >>
+                             qunabbrev_tac `bf` >>
+                             drule_at (Pat `try _ _ _ = _`) (BETA_RULE immutable_try_function_frame) >>
+                             disch_then (qspecl_then [`cx`,`A`] mp_tac) >>
+                             disch_then irule >>
+                             asm "body_exec" (mp_tac o BETA_RULE) >> simp[])
+                         >> rpt strip_tac >>
+                         qunabbrev_tac `bc` >>
+                         metis_tac[BETA_RULE immutable_intcall_cleanup_frame]) >>
+                      pop_assum (mk_asm "finished_body") >>
+                      Cases_on `finally bf bc (sl with scopes := [argenv])` >>
+                      rename1 `finally bf bc (sl with scopes := [argenv]) = (br,sb)` >>
+                      asm_x "finished_body" (mp_tac o BETA_RULE) >> simp[NoAsms] >>
+                      disch_then (mk_asm "body_frame") >>
+                      asm_x "run" mp_tac >>
+                      asm_x "body_frame" mp_tac >>
+                      asm_x "locked_frame" mp_tac >>
+                      POP_ASSUM_LIST (K ALL_TAC) >>
+                      Cases_on `br`
+                      >- (rename1 `INL rv` >> Cases_on `safe_cast rtv rv` >>
+                          simp[return_def, raise_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+                      simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+                  asm_x "run" mp_tac >>
+                  simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
+                  strip_tac >> qpat_x_assum `sl = st'` SUBST_ALL_TAC >>
+                  asm "locked_frame" (ACCEPT_TAC o BETA_RULE)) >>
+              asm_x "run" mp_tac >>
+              simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
+              strip_tac >> qpat_x_assum `sd = st'` SUBST_ALL_TAC >>
+              asm "prefix_frame" (ACCEPT_TAC o BETA_RULE)) >>
+          asm_x "run" mp_tac >>
+          simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
+          strip_tac >> qpat_x_assum `sd = st'` SUBST_ALL_TAC >>
+          asm "prefix_frame" (ACCEPT_TAC o BETA_RULE)) >>
+      qpat_x_assum `eval_expr cx _ st = _` mp_tac >>
+      simp[Once evaluate_def, type_check_def, assert_def,
+        lift_option_type_def, ignore_bind_def, bind_def, return_def, raise_def,
+        Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
+      strip_tac >> qpat_x_assum `sa = st'` SUBST_ALL_TAC >>
+      BETA_TAC >> rpt strip_tac >> asm "args_run" irule >> simp[] >> gvs[]) >>
+  gvs[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
+      ignore_bind_def, bind_def, return_def, raise_def]
+QED
+
+val intcall_ind_premise = let
+  val (ps, core) = strip_forall (concl evaluate_ind)
+  val cs = strip_conj (fst (dest_imp core))
+  val c = List.find (fn t => can (find_term (fn u =>
+    is_const u andalso fst (dest_const u) = "IntCall"))
+    (snd (strip_imp (snd (strip_forall t))))) cs
+in valOf c end;
+val intcall_predicate_subst = map (fn (n,t) =>
+  (valOf (List.find (fn v => fst (dest_var v) = n)
+    (free_vars intcall_ind_premise))) |-> t)
+  [("P1",im_stmts),("P4",im_expr),("P5",im_exprs),("P10",im_results)];
+val intcall_normalization = INST intcall_predicate_subst
+  (SIMP_CONV (srw_ss())
+    [type_check_def, assert_def, lift_option_type_def, get_scopes_def,
+     push_function_def, set_scopes_def, bind_def, ignore_bind_def,
+     return_def, raise_def, vyperMiscTheory.option_CASE_rator,
+     Excl "lock_if_nr_def", Excl "is_view_mut_def", AllCaseEqs()]
+    intcall_ind_premise);
+
+Theorem evaluate_immutable_intcall_ind_bridge[local]:
+  ^(subst intcall_predicate_subst intcall_ind_premise)
+Proof
+  CONV_TAC (K intcall_normalization) >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 (mk_asm "ind_body")
+    (CONJUNCTS_THEN2 (mk_asm "ind_defaults") (mk_asm "ind_args"))) >>
+  irule evaluate_immutable_intcall_case >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+      qpat_x_assum `~MEM _ _ /\ _` strip_assume_tac >>
+      rename1 `lookup_callable_function cx.in_deploy fn ts =
+        SOME (mut,nr,args,dflts,ret,bdy)` >>
+      asm "ind_body" (drule_at (Pat `lookup_callable_function _ _ _ = _`)) >>
+      simp[NoAsms, Excl "lock_if_nr_def", Excl "is_view_mut_def"] >>
+      disch_then (mk_asm "body_run") >> rpt strip_tac >>
+      asm "body_run" irule >>
+      asm_x "ind_body" kall_tac >> asm_x "ind_defaults" kall_tac >>
+      asm_x "ind_args" kall_tac >> asm_x "body_run" kall_tac >>
+      `?s0:evaluation_state. s0.scopes = prev` by
+        (qexists_tac `sd with scopes := prev` >> simp[]) >>
+      Cases_on `x` >> fs[GSYM ignore_bind_def] >>
+      simp[SF SFY_ss] >>
+      (conj_tac >- (qexistsl_tac [`A`,`R`] >> gvs[] >> metis_tac[])) >>
+      metis_tac[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+      qpat_x_assum `~MEM _ _ /\ _` strip_assume_tac >>
+      asm "ind_defaults" (drule_at (Pat `lookup_callable_function _ _ _ = _`)) >>
+      simp[NoAsms] >> disch_then (mk_asm "defaults_run") >> rpt strip_tac >>
+      asm "defaults_run" irule >>
+      asm_x "ind_body" kall_tac >> asm_x "ind_defaults" kall_tac >>
+      asm_x "ind_args" kall_tac >> asm_x "defaults_run" kall_tac >>
+      simp[SF SFY_ss] >>
+      qexistsl_tac [`A`,`R`] >> gvs[] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+  qpat_x_assum `~MEM _ _ /\ _` strip_assume_tac >>
+  asm "ind_args" (drule_at (Pat `lookup_callable_function _ _ _ = _`)) >>
+  simp[NoAsms] >> disch_then (mk_asm "args_run") >> rpt strip_tac >>
+  asm "args_run" irule >>
+  asm_x "ind_body" kall_tac >> asm_x "ind_defaults" kall_tac >>
+  asm_x "ind_args" kall_tac >> asm_x "args_run" kall_tac >>
+  simp[SF SFY_ss] >>
+  qexistsl_tac [`A`,`R`] >> gvs[] >> metis_tac[]
+QED
+
 Theorem eval_expr_unwritten_immutable:
   !cx e st res st' env mods src id.
     eval_expr cx e st = (res,st') /\
