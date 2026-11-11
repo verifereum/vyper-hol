@@ -6531,7 +6531,48 @@ Proof
       >- (irule EVERY2_APPEND_suff >> conj_tac
           >- simp[EVERY2_TAKE] >>
           simp[EVERY2_DROP]) >>
-      FAIL_TAC "returning semantic clauses") >>
+      conj_tac
+      >- (qpat_assum `Abbrev (P = _)` (fn def =>
+            qpat_assum `P (y::rest) s (mh::mt) (eh::et)`
+              (mp_tac o cj 8 o BETA_RULE o PURE_REWRITE_RULE
+                [REWRITE_RULE [markerTheory.Abbrev_def] def])) >>
+          disch_then (qspec_then `LENGTH (y::rest)` mp_tac) >>
+          `LENGTH (padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt) = LENGTH rest /\
+           LENGTH (padE rest (u with vs_inst_idx := SUC s.vs_inst_idx) et) = LENGTH rest` by
+            simp[Abbr `padM`, Abbr `padE`] >>
+          simp[TAKE_LENGTH_TOO_LONG] >>
+          disch_then (qx_choose_then `unused` assume_tac) >>
+          qpat_assum `Abbrev (S' = _)` (fn def =>
+            qpat_assum `S' (y::rest) s _ _ unused`
+              (strip_assume_tac o BETA_RULE o PURE_REWRITE_RULE
+                [REWRITE_RULE [markerTheory.Abbrev_def] def])) >>
+          `PERM rm (padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt)` by
+            (simp[Abbr `rm`] >>
+             `GENLIST (\j. EL j (padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt)) (LENGTH rest) =
+               padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt` by
+               simp[LIST_EQ_REWRITE, EL_GENLIST] >>
+             metis_tac[MAP_COUNT_LIST, PERM_MAP]) >>
+          `PERM (TAKE (LENGTH pre) rm ++ [mh] ++ DROP (LENGTH pre) rm)
+             (mh::padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt)` by
+            (irule PERM_TRANS >> qexists_tac `mh::rm` >> conj_tac
+             >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND, PERM_FUN_APPEND_CONS, TAKE_DROP, PERM_REFL]) >>
+             simp[]) >>
+          drule PERM_FLAT >> simp[] >> disch_tac >>
+          qexists_tac `unused` >>
+          conj_tac
+          >- (drule (Q.ISPEC `IS_SOME` PERM_FILTER) >>
+              disch_then (mp_tac o MATCH_MP (Q.ISPEC `THE` PERM_MAP)) >>
+              metis_tac[PERM_TRANS, PERM_APPEND_IFF]) >>
+          conj_tac
+          >- (qx_gen_tac `v` >> disch_tac >>
+              qpat_assum `!v. _ ==> EVERY IS_SOME _ /\ unused = _`
+                (qspec_then `v` mp_tac) >>
+              (impl_tac >- simp[]) >> strip_tac >> simp[] >>
+              qpat_assum `PERM (FLAT (TAKE (LENGTH pre) rm) ++ _) _`
+                (mp_tac o MATCH_MP PERM_EVERY) >>
+              simp[]) >>
+          FAIL_TAC "whole padded fillings") >>
+      FAIL_TAC "returning cuts and barrier") >>
   FAIL_TAC "stopped head transport"
 QED
 
