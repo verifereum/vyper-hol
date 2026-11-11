@@ -8,6 +8,8 @@
  *   local_ptrs_rel   — live locals held through pointer variables match memory
  *   accounts_rel     — every address's accounts and transient storage match,
  *                      the running contract's storage up to dead bytes
+ *   halt_rel         — what a halting run keeps of state_rel: accounts,
+ *                      logs, requests and pending deletions
  *   dead_bytes       — the bytes of a stored value past a bytestring's
  *                      length (or a nested DynArray's)
  *   storage_dead     — dead_bytes of a declared storage region, which the
@@ -761,6 +763,18 @@ Definition state_rel_def:
      vs.pending_deletions = ss.vs_pending_deletions)
 End
 
+(* The part of state_rel a halting run (selfdestruct) must keep: accounts,
+   transient storage, logs, requests and pending deletions.  A halt ends
+   the call, so scopes, locals and memory are not compared; the source's
+   cleanup on the way out (pop_function, scope pops) keeps it. *)
+Definition halt_rel_def:
+  halt_rel cx (vs:evaluation_state) ss ⇔
+    accounts_rel cx vs ss ∧
+    vs.logs = ss.vs_logs ∧
+    LIST_REL (request_agree cx) vs.requests ss.vs_requests ∧
+    vs.pending_deletions = ss.vs_pending_deletions
+End
+
 (* Legacy event invariant: retain the word-indexed immutable bookkeeping
    contract of the fixed-offset proofs. This is not the constructor memory
    representation or deployment relation; those use immutables_rel above.
@@ -811,6 +825,15 @@ Theorem state_rel_gas_obs:
 Proof
   simp[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
        immutables_rel_def, logs_rel_def]
+QED
+
+Theorem state_rel_halt_rel:
+  state_rel func cenv cx vs ss ⇒ halt_rel cx vs ss
+Proof
+  `log_entry_equiv cenv cx.txn.target = $=` by
+    simp[FUN_EQ_THM, log_entry_equiv_def] >>
+  simp[state_rel_def, halt_rel_def, logs_rel_def] >> strip_tac >>
+  gvs[LIST_REL_eq]
 QED
 
 (* ===== Result Relation ===== *)

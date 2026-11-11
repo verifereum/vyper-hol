@@ -290,7 +290,7 @@ Definition expr_sim_ptr_def:
           ptr_val_ok cx (expr_type e) v op G tn t /\
           (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 End
 
 Definition expr_vv_sim_ptr_def:
@@ -322,7 +322,7 @@ Definition expr_vv_sim_ptr_def:
           (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
                   ptr_buf_ok cenv e p.ptr_operand G t) /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 End
 
 (* stmt_exit with the ghost where the run stops: a return's RetQ sees it,
@@ -363,7 +363,8 @@ Definition stmt_frag_ptr_def:
                FLOOKUP G x = FLOOKUP G0 x /\
                op_taint tn (Var x) = op_taint tn0 (Var x)))
         (\res ee gt r.
-          !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+          (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\
+          halt_exit cx ee res r)
 End
 
 Definition frame_ret_ok_ptr_def:

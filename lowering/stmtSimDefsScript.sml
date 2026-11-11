@@ -12,6 +12,7 @@ Definition stmt_res_ok_def:
     (?d. res = INR (Error (RevertData d))) \/
     (?str. res = INR (AssertException str)) \/
     (?v. res = INR (ReturnException v)) \/
+    res = INR HaltException \/
     ((res = INR BreakException \/ res = INR ContinueException) /\
      ?ex inc. lctx = InLoop ex inc)
 End
@@ -49,7 +50,8 @@ Definition stmt_framed_frag_def:
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       gas_outcome F (cx_tops cx) (ctx, func) source (es, s0)
         (stmt_post ctx func cx lctx cenv cenv' sa sb s0)
-        (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+        (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+                   halt_exit cx ee res r)
 End
 
 Definition stmt_frag_def:
@@ -81,7 +83,8 @@ Definition stmt_frag_mem_def:
                    FLOOKUP t.vs_allocas aid = SOME b) /\
           return_buf_frame d cenv'' sb t /\ alloca_history func t /\
           s0.vs_alloca_next <= t.vs_alloca_next)
-        (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+        (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+                   halt_exit cx ee res r)
 End
 
 Definition alloca_prefix_def:

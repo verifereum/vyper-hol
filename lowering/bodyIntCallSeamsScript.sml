@@ -183,11 +183,11 @@ Definition intcall_entry_def:
 End
 
 (* How the callee's run ends, seen from the caller's state t at the
-   INVOKE, whose call's code allocates from ALLOCA id n on: an abort the
-   call's source exception allows (expr_exit), or an IntRet with the
-   returned value v: the callee's global state related at the caller's
-   compile env, its stack values v's words (rc of them), the return
-   buffer rb, if any, holding v, and the caller's memory below t's
+   INVOKE, whose call's code allocates from ALLOCA id n on: a halt or an
+   abort the call's source exception allows (expr_exit, halt_exit), or an
+   IntRet with the returned value v: the callee's global state related at
+   the caller's compile env, its stack values v's words (rc of them), the
+   return buffer rb, if any, holding v, and the caller's memory below t's
    frontier untouched outside the call's own allocations (the return
    buffer and the staged memory arguments, which the callee may write).
    The memory frame is a fact of the callee's Venom code (it writes below
@@ -196,7 +196,7 @@ End
 Definition intcall_callee_exit_def:
   intcall_callee_exit func cenv cx rtv rc (rb:bytes32 option) (n:num)
                       (t:venom_state) res (ee:evaluation_state) r <=>
-    expr_exit res r \/
+    (expr_exit res r /\ halt_exit cx ee res r) \/
     ?v ir s'.
       res = INL v /\ r = IntRet ir s' /\
       state_rel func cenv cx (ee with scopes := []) s' /\
@@ -231,7 +231,7 @@ Theorem intcall_args_frame_setup:
     stmt_state_rel ctx func cenv cx es0 s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    (!res ee r. expr_exit res r ==> R res ee r) /\
+    (!res ee r. expr_exit res r /\ halt_exit cx ee res r ==> R res ee r) /\
     (!prev penv rtv es1 t.
        intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
          (mut,nr,args,ret,ss,rr) prev penv rtv es1 t ==>
@@ -314,7 +314,7 @@ Theorem intcall_return_restore:
            es0 sa sb s0 ee tv vv t' /\
          t'.vs_current_bb = sb.cs_current_bb /\
          t'.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   cheat
 QED
