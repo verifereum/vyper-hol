@@ -168,6 +168,8 @@ Resume place_relayout_storage_run[suffix]:
   drule_all place_store_storage_leaf_bounds >> strip_tac >>
   `n2w (w2n root + delta) = root + n2w delta` by
     simp[GSYM wordsTheory.word_add_n2w] >>
+  `(slot_loc tr = LocTransient) <=> tr` by (Cases_on `tr` >> simp[slot_loc_def]) >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   drule_at (Pat `val_in_memory _ _ _ u.vs_memory`) place_store_slots_suffix_run >>
   disch_then (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ u`)) >>
@@ -175,6 +177,7 @@ Resume place_relayout_storage_run[suffix]:
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `encode_value _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_store_slots _ _ _ _ _ _ = _`)) >>
+  disch_then (qspec_then `w2n root + delta` mp_tac) >>
   (impl_tac >- (simp[] >> Cases_on `tr` >> fs[slot_loc_def] >> metis_tac[])) >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
   qexists_tac `t` >> simp[] >> metis_tac[]
