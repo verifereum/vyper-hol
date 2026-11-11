@@ -11982,6 +11982,77 @@ Proof
   gvs[FOLDL_APPEND, FOLDL_MAP, pairTheory.UNCURRY, combinTheory.o_DEF]
 QED
 
+Theorem mm_local_indexed_future_nonbarrier[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < l /\ l <= R /\ R < LENGTH is /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE l is) /\
+  (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  MEM A ss.ss_copies /\ MEM (EL j is).inst_id A.cg_inst_ids /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL R is).inst_id,g) ==>
+  scan_inst (dfg_build_function fn0) Mem2Mem ss (EL l is) <> hard_barrier ss
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    (gvs[] >> drule_all mm_local_prefix_wf_id_distinct >> simp[]) >>
+  `~MEM (EL R is).inst_id (MAP (\i. i.inst_id) (TAKE l is))` by
+    (irule mm_local_future_id_not_prefix >> simp[]) >>
+  `l < LENGTH is /\ j < LENGTH is` by decide_tac >>
+  `bb.bb_instructions = TAKE l is ++ EL l is::DROP (SUC l) is` by
+    (qspec_then `l` (qspec_then `is` mp_tac) rich_listTheory.TAKE_DROP_SUC >> simp[]) >>
+  `MEM A (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by
+    (qspecl_then [`DROP (SUC l) is`, `scan_inst (dfg_build_function fn0) Mem2Mem ss (EL l is)`]
+      strip_assume_tac (Q.INST [`dfg` |-> `dfg_build_function fn0`, `mode` |-> `Mem2Mem`]
+        mm_local_fold_flushed_extension) >>
+     gvs[scan_block_def, FOLDL_APPEND, hard_barrier_def, MEM_APPEND]) >>
+  qpat_x_assum `bb.bb_instructions = _ ++ _` kall_tac >>
+  `MEM (EL j is) bb.bb_instructions` by metis_tac[EL_MEM] >>
+  `A = g` by
+    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_prefix_write_group_owner >>
+     disch_then irule >> metis_tac[]) >>
+  `MEM (EL R is).inst_id A.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  `MEM (EL R is).inst_id (MAP (\i. i.inst_id) (TAKE l is))` by
+    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_prefix_fragment_ids_before_cut >>
+     disch_then irule >> simp[] >> conj_tac
+     >- (qexists `DROP l is` >> simp[]) >>
+     qexistsl [`A`,`Mem2Mem`] >> gvs[MEM_APPEND]) >>
+  metis_tac[]
+QED
+
+Theorem mm_local_captured_nonbarrier_selected[local]:
+  mm_local_write_capture is H N l = SOME (b,bs) /\
+  scan_inst dfg Mem2Mem ss (EL l is) <> hard_barrier ss ==>
+  ((?dst src len. (EL l is).inst_opcode = MCOPY /\
+      (EL l is).inst_operands = [Lit dst; Lit src; Lit len]) \/
+   (?dst v src. (EL l is).inst_opcode = MSTORE /\
+      (EL l is).inst_operands = [Lit dst; Var v] /\
+      FLOOKUP ss.ss_loads v = SOME src))
+Proof
+  strip_tac >>
+  `(EL l is).inst_opcode = MSTORE \/ (EL l is).inst_opcode = MCOPY` by
+    (Cases_on `(EL l is).inst_opcode = MSTORE` >>
+     Cases_on `(EL l is).inst_opcode = MCOPY` >>
+     gvs[mm_local_write_capture_def]) >>
+  qpat_x_assum `scan_inst _ _ _ _ <> _` mp_tac >>
+  simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  strip_tac >>
+  Cases_on `(EL l is).inst_opcode = MSTORE` >> gvs[]
+  >- (qpat_x_assum `scan_store _ _ _ _ <> _` mp_tac >>
+      simp[scan_store_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+      gvs[operand_var_name_def, operand_lit_val_def] >>
+      rename1 `(EL l is).inst_operands = [a1;a2]` >>
+      Cases_on `a1` >> Cases_on `a2` >>
+      gvs[operand_var_name_def, operand_lit_val_def]) >>
+  qpat_x_assum `scan_bulk_copy _ _ _ <> _` mp_tac >>
+  simp[scan_bulk_copy_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+  gvs[operand_lit_val_def] >>
+  rename1 `(EL l is).inst_operands = [a1;a2;a3]` >>
+  map_every Cases_on [`a1`,`a2`,`a3`] >> gvs[operand_lit_val_def]
+QED
+
 Theorem mm_local_final_captures_compatible[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
@@ -12025,6 +12096,62 @@ Proof
   disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
   simp[] >> disch_then irule >>
   metis_tac[]
+QED
+
+Theorem mm_local_retained_captures_compatible[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < l /\ l <= R /\ R < LENGTH is /\
+  l < N /\ mm_local_history is H N /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL R is).inst_id,g) /\
+  (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  (!v src. FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))) /\
+  (!v src. FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE l is)).ss_loads v = SOME src ==>
+    lookup_var v (H l) = SOME (mload src (H l))) /\
+  mm_local_write_capture is H N j = SOME (a,p) /\
+  mm_local_write_capture is H N l = SOME (b,qbytes) ==>
+  mm_local_write_compatible a p b qbytes
+Proof
+  strip_tac >>
+  `j < LENGTH is /\ l < LENGTH is` by decide_tac >>
+  `((?dst src len. (EL j is).inst_opcode = MCOPY /\
+      (EL j is).inst_operands = [Lit dst; Lit src; Lit len]) \/
+    (?dst v src. (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dst; Var v] /\
+      FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+        empty_scan_state (TAKE j is)).ss_loads v = SOME src))` by
+    metis_tac[mm_local_final_write_birth] >>
+  qabbrev_tac `ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+    empty_scan_state (TAKE l is)` >>
+  `?A. MEM A ss.ss_copies /\ MEM (EL j is).inst_id A.cg_inst_ids` by
+    (`ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+        empty_scan_state (TAKE l is)` by simp[Abbr `ss`] >>
+     qpat_x_assum `Abbrev _` kall_tac >>
+     Cases_on `(EL j is).inst_opcode = MCOPY`
+     >- (fs[] >> drule_all mm_local_indexed_bulk_owner >> metis_tac[]) >>
+     fs[] >> drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_indexed_store_owner >>
+     disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
+     simp[] >> metis_tac[]) >>
+  `scan_inst (dfg_build_function fn0) Mem2Mem ss (EL l is) <> hard_barrier ss` by
+    (`ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+        empty_scan_state (TAKE l is)` by simp[Abbr `ss`] >>
+     drule_all mm_local_indexed_future_nonbarrier >> simp[]) >>
+  `((?dst src len. (EL l is).inst_opcode = MCOPY /\
+      (EL l is).inst_operands = [Lit dst; Lit src; Lit len]) \/
+    (?dst v src. (EL l is).inst_opcode = MSTORE /\
+      (EL l is).inst_operands = [Lit dst; Var v] /\
+      FLOOKUP ss.ss_loads v = SOME src))` by
+    (drule_all mm_local_captured_nonbarrier_selected >> simp[]) >>
+  drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_indexed_selected_captures_compatible >>
+  disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
+  simp[] >> disch_then irule >>
+  gvs[Abbr `ss`] >> metis_tac[]
 QED
 
 Theorem mm_local_canonical_pending_captures_compatible[local]:
