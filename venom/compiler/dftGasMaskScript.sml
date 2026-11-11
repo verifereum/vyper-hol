@@ -5155,6 +5155,97 @@ Proof
   simp[update_var_def, finite_mapTheory.FUPDATE_COMMUTES]
 QED
 
+(* Operational pending-GAS cut: replay the invocation's actual consumed core.
+   The caller update survives only an OK return, not a stopped call. *)
+Theorem source_cut_invoke_gas[local]:
+  !fuel C x y out w s n r.
+    x.inst_opcode = INVOKE /\ y.inst_opcode = GAS /\
+    y.inst_outputs = [out] /\ dft_gas_swap_pair x y /\
+    n <= LENGTH s.vs_gas_readings /\ terminates (step_inst fuel C x s) /\
+    gasOracleReplay$gas_replay_at n (step_inst fuel C x) s ==>
+    FOLDR (dft_exec_cons fuel C) OK [y;x]
+      (s with vs_gas_readings := w::(TAKE n s.vs_gas_readings ++ r)) =
+    (case step_inst fuel C x s of
+       OK u => OK (update_var out w u with
+         <|vs_gas_readings := r; vs_inst_idx := SUC (SUC s.vs_inst_idx)|>)
+     | Halt u => Halt (u with vs_gas_readings := r)
+     | Abort a u => Abort a (u with vs_gas_readings := r)
+     | IntRet ir u => IntRet ir (u with vs_gas_readings := r)
+     | Error e => Error e)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~MEM (Var out) x.inst_operands /\ ~MEM out x.inst_outputs` by
+    (qpat_x_assum `dft_gas_swap_pair x y` mp_tac >>
+     simp[dft_gas_swap_pair_def, venomInstTheory.inst_defs_def,
+          venomInstTheory.inst_uses_def, pred_setTheory.DISJOINT_DEF,
+          pred_setTheory.EXTENSION] >>
+     metis_tac[dftBlockSimTheory.mem_var_operand_vars]) >>
+  `!st. step_inst fuel C y st = OK (update_var out
+    (case st.vs_gas_readings of [] => 0w | h::tl => h)
+    (st with vs_gas_readings := DROP 1 st.vs_gas_readings))` by
+    (gen_tac >> irule dftBlockSimTheory.step_inst_gas_single >> simp[]) >>
+  `n - LENGTH s.vs_gas_readings = 0` by decide_tac >>
+  `!st. step_inst fuel C x (update_var out w st) =
+    (case step_inst fuel C x st of
+       OK u => OK (update_var out w u)
+     | Halt u => Halt u | Abort a u => Abort a u
+     | IntRet ir u => IntRet ir u | Error e => Error e)` by
+    (gen_tac >> irule dftCommutationTheory.step_inst_invoke_frame >> simp[]) >>
+  qpat_x_assum `gasOracleReplay$gas_replay_at _ _ _` mp_tac >>
+  simp[gasOracleReplayTheory.gas_replay_at_def,
+       gasOracleReplayTheory.gas_prefix_def, TAKE_APPEND] >>
+  disch_then (qspec_then `r` mp_tac) >>
+  `!st j. (update_var out w st with vs_inst_idx := j) =
+    update_var out w (st with vs_inst_idx := j)` by simp[update_var_def] >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def,
+       venomInstTheory.is_terminator_def,
+       analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
+  Cases_on `step_inst fuel C x s` >>
+  Cases_on `step_inst fuel C x (s with vs_gas_readings := TAKE n s.vs_gas_readings ++ r)` >>
+  fs[passSimulationDefsTheory.terminates_def] >>
+  simp[stateEquivTheory.lift_result_def] >> rpt strip_tac >>
+  `!st gs. (update_var out w st with vs_gas_readings := gs) =
+    update_var out w (st with vs_gas_readings := gs)` by simp[update_var_def] >>
+  qpat_x_assum `!st gs. _` (fn th => once_rewrite_tac[th]) >>
+  qpat_x_assum `!st j. _` kall_tac >>
+  simp[] >> simp[update_var_def]
+QED
+
+(* The source-order cut retains the pending reading on stopped calls. *)
+Theorem source_cut_gas_after_invoke[local]:
+  !fuel C x y out w s n r.
+    x.inst_opcode = INVOKE /\ y.inst_opcode = GAS /\
+    y.inst_outputs = [out] /\ n <= LENGTH s.vs_gas_readings /\
+    terminates (step_inst fuel C x s) /\
+    gasOracleReplay$gas_replay_at n (step_inst fuel C x) s ==>
+    FOLDR (dft_exec_cons fuel C) OK [x;y]
+      (s with vs_gas_readings := TAKE n s.vs_gas_readings ++ w::r) =
+    (case step_inst fuel C x s of
+       OK u => OK (update_var out w u with
+         <|vs_gas_readings := r; vs_inst_idx := SUC (SUC s.vs_inst_idx)|>)
+     | Halt u => Halt (u with vs_gas_readings := w::r)
+     | Abort a u => Abort a (u with vs_gas_readings := w::r)
+     | IntRet ir u => IntRet ir (u with vs_gas_readings := w::r)
+     | Error e => Error e)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `n - LENGTH s.vs_gas_readings = 0` by decide_tac >>
+  `!st. step_inst fuel C y st = OK (update_var out
+    (case st.vs_gas_readings of [] => 0w | h::tl => h)
+    (st with vs_gas_readings := DROP 1 st.vs_gas_readings))` by
+    (gen_tac >> irule dftBlockSimTheory.step_inst_gas_single >> simp[]) >>
+  qpat_x_assum `gasOracleReplay$gas_replay_at _ _ _` mp_tac >>
+  simp[gasOracleReplayTheory.gas_replay_at_def,
+       gasOracleReplayTheory.gas_prefix_def, TAKE_APPEND] >>
+  disch_then (qspec_then `w::r` mp_tac) >>
+  Cases_on `step_inst fuel C x s` >>
+  Cases_on `step_inst fuel C x (s with vs_gas_readings := TAKE n s.vs_gas_readings ++ w::r)` >>
+  fs[passSimulationDefsTheory.terminates_def] >>
+  simp[stateEquivTheory.lift_result_def] >> rpt strip_tac >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def,
+       venomInstTheory.is_terminator_def, update_var_def]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
