@@ -153,6 +153,6 @@ Theorem intcall_stage_empty_endpoint:
 Proof
   simp[exprLoweringTheory.compile_stage_intcall_args_def,
        compileEnvTheory.comp_return_def, fragGasModeTheory.gas_marked_path_def,
-       intcall_expr_cont_def, loweringPostsTheory.locals_kept_def] >>
+       intcall_expr_cont_def, exprSimPropsTheory.locals_kept_refl] >>
   metis_tac[fragGasPathTheory.gas_path_rules]
 QED
