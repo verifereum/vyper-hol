@@ -298,6 +298,264 @@ Proof
        step_inst_base_opcode_eqs]
 QED
 
+(* ===== Block-level composition ===== *)
+
+(* fmp_lower_indexed_exec with the instruction at each point given by its
+ * original index rather than by membership. *)
+Theorem fmp_lower_indexed_exec_el:
+  !insts k supply restores code leftover supply' s.
+  fmp_lower_indexed infos ctx runner label k supply restores insts =
+    SOME (code,leftover,supply') /\
+  invariant k supply restores s /\
+  (!j sp plan bases later prefix sp0 head sp1 st.
+    k <= j /\ j < k + LENGTH insts /\
+    fmp_select_point_restores (label,j) plan = (bases,later) /\
+    fmp_emit_restores runner sp bases = (prefix,sp0) /\
+    fmp_lower_inst infos ctx runner sp0 (EL (j - k) insts) =
+      SOME (head,sp1) /\
+    invariant j sp plan st ==>
+    ?restored next.
+      run_insts fuel ctx prefix st = OK restored /\
+      run_insts fuel ctx head restored = OK next /\
+      invariant (SUC j) sp1 later next) ==>
+  ?final.
+    run_insts fuel ctx code s = OK final /\
+    invariant (k + LENGTH insts) supply' leftover final
+Proof
+  Induct >- simp[fmpLowerDefsTheory.fmp_lower_indexed_def, run_insts_def] >>
+  rpt gen_tac >> simp[fmp_lower_indexed_cons] >> rpt strip_tac >>
+  rename1 `fmp_lower_inst _ _ _ s0 inst = SOME (head,s1)` >>
+  `?restored next.
+     run_insts fuel ctx prefix s = OK restored /\
+     run_insts fuel ctx head restored = OK next /\
+     invariant (SUC k) s1 later next` by
+    (first_x_assum (qspec_then `k` mp_tac) >> simp[] >> metis_tac[]) >>
+  `?final. run_insts fuel ctx tail next = OK final /\
+     invariant (SUC k + LENGTH insts) supply' leftover final` by
+    (last_x_assum (qspecl_then [`SUC k`, `s1`, `later`, `tail`, `leftover`,
+       `supply'`, `next`] mp_tac) >>
+     impl_tac
+     >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+         rpt strip_tac >>
+         `j - k = SUC (j - SUC k)` by decide_tac >>
+         first_x_assum (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]) >>
+     simp[]) >>
+  qexists_tac `final` >>
+  fs[run_insts_append, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem fmp_lower_inst_dalloca_shape:
+  inst.inst_opcode = DALLOCA /\
+  fmp_lower_inst infos c runner sp inst = SOME (head,sp1) ==>
+  ?size_op out plus31 mask aligned ai ni mi bi.
+    inst.inst_operands = [size_op] /\ inst.inst_outputs = [out] /\
+    head = [mk_inst ai ADD [Lit 31w;size_op] [plus31];
+            mk_inst ni NOT [Lit 31w] [mask];
+            mk_inst mi AND [Var plus31;Var mask] [aligned];
+            mk_inst bi BUMP [Var runner;Var aligned] [out;runner]]
+Proof
+  rw[fmpLowerDefsTheory.fmp_lower_inst_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[]
+QED
+
+Theorem fmp_dalloca_not_clear:
+  inst.inst_opcode = DALLOCA ==> ~fmp_clears_marks infos inst
+Proof
+  simp[fmp_clears_marks_def, fmp_callee_info_def,
+       fmpAnalysisDefsTheory.fmp_invoke_target_def]
+QED
+
+(* One reachable block of the lowered function, against a raw run R relates
+ * to it.  The block invariant carries the restore selection, the analysis
+ * state, the runner, the frontier relation between the raw FMP and the runner
+ * (fmp0 is the lowered base, raw0 the raw one) and the ledger.  The caller
+ * owes, per original instruction: for DALLOCA, the expansion's operand,
+ * no-wrap and freshness facts and R across the computed raw and lowered
+ * steps; for any other instruction, the lowered head's run, R, the frontier
+ * relation afterwards, and (unless it clears the marks) an unchanged runner
+ * and marks. *)
+Theorem fmp_lower_block_ledger:
+  fmp_reclaim_states infos fn = SOME states /\
+  fmp_base_analyze (fn_insts fn) = SOME env /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\ MEM bb fn.fn_blocks /\
+  fmp_lower_indexed infos ctx runner bb.bb_label 0 supply restores
+    bb.bb_instructions = SOME (code,leftover,supply') /\
+  (!j b. j < LENGTH bb.bb_instructions ==>
+     (MEM ((bb.bb_label,j),b) restores <=>
+      FLOOKUP (fmp_candidate_plan infos ctx fn states) (bb.bb_label,j) =
+        SOME b)) /\
+  (!j st. j < LENGTH bb.bb_instructions /\
+     df_at NONE states bb.bb_label j = SOME st ==> ~MEM runner st.frs_stack) /\
+  df_at NONE states bb.bb_label 0 = SOME st0 /\
+  lookup_var runner s = SOME (n2w lo0) /\
+  fmp_frontier_rel fmp0 raw0 lo0 raw.vs_fmp /\
+  fmp_ledger_inv insts lenv fmp0 s lo0 st0.frs_stack /\ R 0 supply raw s /\
+  (* DALLOCA *)
+  (!j sp sp0 sp1 st kept lo rawj s0 s1 size_op out plus31 mask aligned
+      ai ni mi bi.
+     j < LENGTH bb.bb_instructions /\
+     (EL j bb.bb_instructions).inst_opcode = DALLOCA /\
+     (EL j bb.bb_instructions).inst_operands = [size_op] /\
+     (EL j bb.bb_instructions).inst_outputs = [out] /\
+     fmp_lower_inst infos ctx runner sp0 (EL j bb.bb_instructions) =
+       SOME ([mk_inst ai ADD [Lit 31w;size_op] [plus31];
+              mk_inst ni NOT [Lit 31w] [mask];
+              mk_inst mi AND [Var plus31;Var mask] [aligned];
+              mk_inst bi BUMP [Var runner;Var aligned] [out;runner]],sp1) /\
+     df_at NONE states bb.bb_label j = SOME st /\
+     (?ps. st.frs_stack = ps ++ kept) /\
+     R j sp rawj s0 /\ fmp_frontier_rel fmp0 raw0 lo rawj.vs_fmp /\
+     (s1 = s0 \/ s1 = update_var runner (n2w lo) s0) /\
+     lookup_var runner
+       s1 =
+       SOME (n2w lo) /\
+     fmp_ledger_inv insts lenv fmp0
+       s1 lo kept ==>
+     ?sz site.
+       eval_operand size_op rawj = SOME sz /\
+       eval_operand size_op
+         s1 =
+         SOME sz /\
+       w2n rawj.vs_fmp + ceil32 (w2n sz) < dimword (:256) /\
+       ALL_DISTINCT [plus31;mask;aligned;runner;out] /\
+       ~MEM out kept /\ ~MEM plus31 kept /\ ~MEM mask kept /\
+       ~MEM aligned kept /\
+       fmp_dalloca_query insts lenv out = SOME site /\
+       R (SUC j) sp1
+         (update_var out rawj.vs_fmp
+           (rawj with vs_fmp := n2w (w2n rawj.vs_fmp + ceil32 (w2n sz))))
+         (update_var runner (n2w (lo + ceil32 (w2n sz)))
+           (update_var out (n2w lo)
+             (update_var aligned (n2w (ceil32 (w2n sz)))
+               (update_var mask (~31w)
+                 (update_var plus31 (sz + 31w)
+                   s1)))))) /\
+  (* everything else *)
+  (!j sp sp0 head sp1 st kept lo rawj s0 s1.
+     j < LENGTH bb.bb_instructions /\
+     (EL j bb.bb_instructions).inst_opcode <> DALLOCA /\
+     fmp_lower_inst infos ctx runner sp0 (EL j bb.bb_instructions) =
+       SOME (head,sp1) /\
+     df_at NONE states bb.bb_label j = SOME st /\
+     (?ps. st.frs_stack = ps ++ kept) /\
+     R j sp rawj s0 /\ fmp_frontier_rel fmp0 raw0 lo rawj.vs_fmp /\
+     (s1 = s0 \/ s1 = update_var runner (n2w lo) s0) /\
+     lookup_var runner
+       s1 =
+       SOME (n2w lo) /\
+     fmp_ledger_inv insts lenv fmp0
+       s1 lo kept ==>
+     ?next raw' lo'.
+       run_insts fuel ctx head
+         s1 =
+         OK next /\
+       R (SUC j) sp1 raw' next /\
+       lookup_var runner next = SOME (n2w lo') /\
+       fmp_frontier_rel fmp0 raw0 lo' raw'.vs_fmp /\
+       (~fmp_clears_marks infos (EL j bb.bb_instructions) ==>
+        lo' = lo /\
+        !v. MEM v kept ==>
+          lookup_var v next =
+          lookup_var v
+            s1)) ==>
+  ?final rawn st lo.
+    run_insts fuel ctx code s = OK final /\
+    R (LENGTH bb.bb_instructions) supply' rawn final /\
+    df_at NONE states bb.bb_label (LENGTH bb.bb_instructions) = SOME st /\
+    lookup_var runner final = SOME (n2w lo) /\
+    fmp_frontier_rel fmp0 raw0 lo rawn.vs_fmp /\
+    fmp_ledger_inv insts lenv fmp0 final lo st.frs_stack
+Proof
+  strip_tac >>
+  qabbrev_tac `binv = \j sp plan st.
+    (!j' b. j <= j' /\ j' < LENGTH bb.bb_instructions ==>
+       (MEM ((bb.bb_label,j'),b) plan <=>
+        FLOOKUP (fmp_candidate_plan infos ctx fn states) (bb.bb_label,j') =
+          SOME b)) /\
+    ?rawj ast lo. R j sp rawj st /\
+      df_at NONE states bb.bb_label j = SOME ast /\
+      lookup_var runner st = SOME (n2w lo) /\
+      fmp_frontier_rel fmp0 raw0 lo rawj.vs_fmp /\
+      fmp_ledger_inv insts lenv fmp0 st lo ast.frs_stack` >>
+  `?final. run_insts fuel ctx code s = OK final /\
+     binv (0 + LENGTH bb.bb_instructions) supply' leftover final`
+    suffices_by
+    (strip_tac >> qexists `final` >> gvs[Abbr `binv`] >> metis_tac[]) >>
+  `binv 0 supply restores s` by (simp[Abbr `binv`] >> metis_tac[]) >>
+  irule fmp_lower_indexed_exec_el >>
+  qexistsl [`infos`, `bb.bb_label`, `restores`, `runner`, `supply`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  simp[Abbr `binv`] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `df_at NONE states bb.bb_label j = SOME ast` >>
+  `!b. MEM ((bb.bb_label,j),b) plan <=>
+     FLOOKUP (fmp_candidate_plan infos ctx fn states) (bb.bb_label,j) =
+       SOME b` by simp[] >>
+  `~MEM runner ast.frs_stack` by metis_tac[] >>
+  `fmp0 <= lo` by fs[fmp_frontier_rel_def] >>
+  drule_all fmp_point_restore_ledger >>
+  disch_then (qspec_then `fuel` strip_assume_tac) >>
+  rename1 `fmp_ledger_inv _ _ _ _ lr kept` >>
+  `fmp_frontier_rel fmp0 raw0 lr rawj.vs_fmp` by
+    metis_tac[fmp_restore_frontier] >>
+  qpat_x_assum `fmp_frontier_rel fmp0 raw0 lo rawj.vs_fmp` kall_tac >>
+  `!j'' b. SUC j <= j'' /\ j'' < LENGTH bb.bb_instructions ==>
+     (MEM ((bb.bb_label,j''),b) later <=>
+      FLOOKUP (fmp_candidate_plan infos ctx fn states) (bb.bb_label,j'') =
+        SOME b)` by
+    (drule fmp_select_point_restores_once >> rpt strip_tac >> gvs[]) >>
+  qexists `if bases = [] then st else update_var runner (n2w lr) st` >>
+  simp[] >>
+  qabbrev_tac `restored = if bases = [] then st else update_var runner (n2w lr) st` >>
+  Q.SUBGOAL_THEN
+    `restored = st \/ restored = update_var runner (n2w lr) st` assume_tac
+  >- rw[Abbr `restored`] >>
+  Cases_on `(EL j bb.bb_instructions).inst_opcode = DALLOCA`
+  >- (drule_all fmp_lower_inst_dalloca_shape >> strip_tac >>
+      first_x_assum (qspecl_then [`j`, `sp`, `sp0`, `sp1`, `ast`, `kept`,
+          `lr`, `rawj`, `st`, `restored`, `size_op`, `out`, `plus31`, `mask`,
+          `aligned`, `ai`, `ni`, `mi`, `bi`] mp_tac) >>
+      impl_tac >- (simp[] >> metis_tac[]) >>
+      strip_tac >>
+      drule_all fmp_frontier_rel_dalloca >> strip_tac >>
+      qspecl_then [`fuel`, `ctx`, `restored`, `size_op`, `sz`, `n2w lr`,
+        `runner`, `plus31`, `mask`, `aligned`, `out`, `ai`, `ni`, `mi`, `bi`]
+        mp_tac fmpLowerExecTheory.dalloca_expansion_exec >>
+      impl_tac >- gs[] >>
+      simp[wordsTheory.word_add_n2w] >> strip_tac >>
+      `~MEM runner kept` by (strip_tac >> gvs[]) >>
+      `fmp0 <= lr` by fs[fmp_frontier_rel_def] >>
+      drule_all fmp_dalloca_expansion_ledger_inv >> strip_tac >>
+      qexistsl [`update_var out rawj.vs_fmp
+          (rawj with vs_fmp := n2w (w2n rawj.vs_fmp + ceil32 (w2n sz)))`,
+        `lr + ceil32 (w2n sz)`] >>
+      `!st'. (fmp_apply_effect infos (EL j bb.bb_instructions) st').frs_stack =
+         out::st'.frs_stack` by
+        (gen_tac >> irule fmp_apply_effect_dalloca_stack >>
+         simp[fmp_dalloca_not_clear]) >>
+      gs[fmp_dalloca_not_clear,
+         venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE])
+  >> first_x_assum (qspecl_then [`j`, `sp`, `sp0`, `head`, `sp1`, `ast`,
+       `kept`, `lr`, `rawj`, `st`, `restored`] mp_tac) >>
+  impl_tac >- (simp[] >> metis_tac[]) >>
+  strip_tac >>
+  qexists `next` >> conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`raw'`, `lo'`] >>
+  Cases_on `fmp_clears_marks infos (EL j bb.bb_instructions)`
+  >- gs[fmp_apply_effect_clear_stack] >>
+  `!st'. (fmp_apply_effect infos (EL j bb.bb_instructions) st').frs_stack =
+     st'.frs_stack` by
+    (gen_tac >> irule fmp_apply_effect_other_stack >> gs[]) >>
+  `lo' = lr /\ !v. MEM v kept ==> lookup_var v next = lookup_var v restored`
+    by metis_tac[] >>
+  `fmp_ledger_inv insts lenv fmp0 next lr kept` by
+    (irule fmp_ledger_inv_frame >> qexists `restored` >> metis_tac[]) >>
+  gs[]
+QED
+
 val _ = List.app (fn (name,th) =>
   if null (Thm.hyp th) andalso
      List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th))) then ()
