@@ -117,7 +117,7 @@ Proof
        pairTheory.FORALL_PROD, combinTheory.o_DEF,
        vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def] >>
      metis_tac[]) >>
-  gvs[EVERY_MEM, assignable_type_entry_abi_support]
+  gvs[EVERY_MEM, entryReachBodyConversionSupportTheory.assignable_type_entry_abi_support]
 QED
 
 Theorem entry_runtime_package_memlocs:
