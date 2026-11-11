@@ -87,7 +87,10 @@ Theorem aggregate_bytestring_rebased_store_path_mem:
       (a+len <= w2n dw \/ w2n dw+type_memory_size tv <= a) ==>
       mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
     locals_kept ce es' es' r q /\ alloca_history func q /\
-    q.vs_alloca_next = s.vs_alloca_next
+    q.vs_alloca_next = s.vs_alloca_next /\
+    (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
+    (!a len. a+len <= w2n dw \/ w2n dw+type_memory_size tv <= a ==>
+      mem_bytes_at a len q.vs_memory = mem_bytes_at a len s.vs_memory)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_val_rel cx (expr_type e) v op s` by

@@ -33,7 +33,18 @@ Theorem aggregate_body_head_continuation_mem:
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es1 tv vv t1 /\
   t1.vs_current_bb = sm.cs_current_bb /\
   t1.vs_inst_idx = LENGTH sm.cs_current_insts /\ alloca_history func t1 ==>
-  ?v q. gas_marked_exec T (ctx,func) (read_result cx tv) (es1,t1)
+  ?v q. (~expr_has_effect e /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+     (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        b + asz <= lb \/ lb + lsz <= b) ==>
+     (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        mem_bytes_at lb lsz q.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+     !p n. (p + n <= b \/ b + asz <= p) /\
+       (!inst c sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= inst.inst_id /\
+          FLOOKUP q.vs_allocas inst.inst_id = SOME (c,sz) ==>
+          regions_disjoint p n c sz) ==>
+       mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+    gas_marked_exec T (ctx,func) (read_result cx tv) (es1,t1)
       [] (INL v) es1 (OK q) /\
     val_in_memory htv v (b+off) q.vs_memory /\
     stmt_state_rel ctx func ce cx es1 q /\
@@ -90,7 +101,8 @@ Proof
   (impl_tac >- (simp[] >> fs[body_inv_def, expr_sim_inv_def] >>
     metis_tac[arithmeticTheory.ADD_COMM])) >> strip_tac >>
   `body_exprs_mem_ok cx args` by metis_tac[aggregate_body_exprs_mem_tail] >>
-  qexistsl_tac [`v`, `q`] >> simp[GSYM arithmeticTheory.ADD_ASSOC] >>
+  qpat_x_assum `~expr_has_effect e /\ MAP FDOM _ = _ /\ _ ==> _` (fn pth =>
+    qexistsl_tac [`v`, `q`] >> conj_tac >- ACCEPT_TAC pth) >> simp[GSYM arithmeticTheory.ADD_ASSOC] >>
   conj_tac >- gvs[] >>
   qpat_x_assum `!v. read_result _ _ _ = _ ==> _` irule >>
   qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>

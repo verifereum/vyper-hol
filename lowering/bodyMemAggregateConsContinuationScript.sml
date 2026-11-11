@@ -193,7 +193,21 @@ Theorem aggregate_cons_from_slice_mem_cursor:
     (!t. gas_path_mem ctx func u 0 (OK t) ==> alloca_inv t) /\
     ~u.vs_halted /\ u.vs_current_bb = sn.cs_current_bb /\
     u.vs_inst_idx = LENGTH sn.cs_current_insts ==>
-    ?v q. gas_marked_exec T (ctx,func) (read_result cx tvv) (es',u) [] (INL v) es' (OK q) /\
+    ?v q. (~expr_has_effect e /\ local_ptrs_reserved ce sa /\
+       MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
+       !bb bsz. bb <= w2n (n2w (b+off):bytes32) /\
+         w2n (n2w (b+off):bytes32) + type_memory_size tv <= bb + bsz /\
+         (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+            bb + bsz <= lb \/ lb + lsz <= bb) ==>
+         (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+            mem_bytes_at lb lsz q.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+         !p n. (p + n <= bb \/ bb + bsz <= p) /\
+           (!inst c sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+              sa.cs_next_id <= inst.inst_id /\
+              FLOOKUP q.vs_allocas inst.inst_id = SOME (c,sz) ==>
+              regions_disjoint p n c sz) ==>
+           mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+      gas_marked_exec T (ctx,func) (read_result cx tvv) (es',u) [] (INL v) es' (OK q) /\
       val_in_memory tv v (w2n (n2w (b+off):bytes32)) q.vs_memory /\
       stmt_state_rel ctx func ce cx es' q /\
       (!z a. not_fresh_at sn z /\ lookup_var z u = SOME a ==> lookup_var z q = SOME a) /\
@@ -207,7 +221,18 @@ Theorem aggregate_cons_from_slice_mem_cursor:
       locals_kept ce es' es' u q /\
       q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func q /\ u.vs_alloca_next <= q.vs_alloca_next) ==>
-  ?v q. gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r) [] (INL v) es' (OK q) /\
+  ?v q. (~expr_has_effect e /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+     (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        b + asz <= lb \/ lb + lsz <= b) ==>
+     (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        mem_bytes_at lb lsz q.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+     !p n. (p + n <= b \/ b + asz <= p) /\
+       (!inst c sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= inst.inst_id /\
+          FLOOKUP q.vs_allocas inst.inst_id = SOME (c,sz) ==>
+          regions_disjoint p n c sz) ==>
+       mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+    gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r) [] (INL v) es' (OK q) /\
     val_in_memory tv v (b+off) q.vs_memory /\
     stmt_state_rel ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
@@ -240,7 +265,30 @@ Proof
   (impl_tac >- (gvs[] >> rpt strip_tac >> first_x_assum irule >> metis_tac[])) >> strip_tac >>
   `u.vs_gas_readings = r.vs_gas_readings` by
     (drule gas_marked_path_ok_suffix >> simp[]) >>
-  qexistsl_tac [`v`, `q`] >> simp[] >>
+  `w2n (n2w (b+off):bytes32) = b+off` by
+    (`b+off < dimword(:256)` by decide_tac >> simp[w2n_n2w]) >>
+  `~expr_has_effect e /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+   (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+      b + asz <= lb \/ lb + lsz <= b) ==>
+   (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+      mem_bytes_at lb lsz q.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+   !p n. (p + n <= b \/ b + asz <= p) /\
+     (!inst c sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+        sa.cs_next_id <= inst.inst_id /\
+        FLOOKUP q.vs_allocas inst.inst_id = SOME (c,sz) ==>
+        regions_disjoint p n c sz) ==>
+     mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory` by
+    (strip_tac >>
+     qpat_x_assum `~expr_has_effect e /\ local_ptrs_reserved _ _ /\ _ ==> _` mp_tac >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then (qspecl_then [`b`, `asz`] mp_tac) >>
+     (impl_tac >- (qpat_assum `w2n (n2w (b+off):bytes32) = _`
+                     (fn th => rewrite_tac[th]) >> rpt conj_tac >>
+                   TRY (first_assum ACCEPT_TAC) >> decide_tac)) >>
+     disch_then ACCEPT_TAC) >>
+  qpat_x_assum `~expr_has_effect e /\ MAP FDOM _ = _ /\ _ ==> _` (fn pth =>
+    qexistsl_tac [`v`, `q`] >> conj_tac >- ACCEPT_TAC pth) >>
+  simp[] >>
   conj_tac
   >- (qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
       simp[gas_marked_exec_def] >>

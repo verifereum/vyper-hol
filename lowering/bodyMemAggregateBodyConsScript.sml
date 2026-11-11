@@ -37,7 +37,18 @@ Theorem aggregate_body_cons_continuation_mem_cursor:
     FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
     regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size tv)) ==>
-  ?v q. gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
+  ?v q. (~expr_has_effect e /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+     (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        b + asz <= lb \/ lb + lsz <= b) ==>
+     (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        mem_bytes_at lb lsz q.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+     !p n. (p + n <= b \/ b + asz <= p) /\
+       (!inst c sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= inst.inst_id /\
+          FLOOKUP q.vs_allocas inst.inst_id = SOME (c,sz) ==>
+          regions_disjoint p n c sz) ==>
+       mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+    gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
           [] (INL v) es' (OK q) /\
     val_in_memory tv v (b+off) q.vs_memory /\
     stmt_state_rel ctx func ce cx es' q /\
