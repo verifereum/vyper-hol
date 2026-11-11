@@ -70,3 +70,60 @@ Proof
   gvs[mstore_mem_word_at_same, GSYM mem_word_at_eq_mload,
       mem_agree_outside_def]
 QED
+
+Theorem widened_assign_typed_bytes_counted:
+  !ctx PG D fn cenv dst src dty sty sa sb G tn s dw sw tenv dtv stv v.
+    compile_store_memory_typed cenv (Var dst) dty (Var src) sty sa = ((),sb) /\
+    is_bytestring_type sty /\ is_bytestring_type dty /\
+    evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\
+    not_fresh_at sa src /\ not_fresh_at sa dst /\
+    ptr_covers G tn src s (type_memory_size stv) /\
+    ptr_covers G tn dst s (type_memory_size dtv) /\
+    lookup_var src s = SOME sw /\ lookup_var dst s = SOME dw /\
+    type_memory_size dtv < dimword (:256) /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      val_in_memory stv v (w2n sw) m) /\
+    fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?Gf tf t.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK t) /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+      typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t /\
+      (!m. mem_agree_outside tf.t_mem t.vs_memory m ==>
+        val_in_memory dtv v (w2n dw) m) /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tf (Var p) = op_taint tn (Var p)) /\
+      tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+      (!i. ~(w2n dw <= i /\ i < w2n dw+type_memory_size dtv) ==>
+        (i IN tf.t_mem <=> i IN tn.t_mem))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `compile_store_bytestring (Var src) (Var dst) sa = ((),sb)` by
+    metis_tac[compile_store_memory_typed_bytes] >>
+  `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+       val_in_memory dtv v (w2n sw) m` by
+    metis_tac[valueCopyBytesTheory.bytestring_val_in_memory_transfer] >>
+  qspecl_then [`tenv`,`sty`,`dty`,`stv`,`dtv`,`v`,`w2n sw`,`s`,`tn`]
+    mp_tac annAssignPtrMemorySourceTheory.annassign_bytestring_window_ptr >>
+  simp[] >> strip_tac >>
+  `val_wf dtv v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  `32 + 32 * word_size len <= type_memory_size stv /\
+   32 + 32 * word_size len <= type_memory_size dtv /\
+   val_footprint dtv v <= 32 + 32 * word_size len /\
+   32 + 32 * word_size len < dimword (:256)` by
+    gvs[vfmConstantsTheory.word_size_def] >>
+  `ptr_covers G tn src s 32 /\
+   ptr_covers G tn src s (32 + 32 * word_size len) /\
+   ptr_covers G tn dst s (32 + 32 * word_size len)` by
+    (gvs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  drule_all assign_base_store_bytestring_robust_counted >>
+  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`,`tf`,`u`] >> simp[] >>
+  conj_tac
+  >- (irule typed_copy_state_frame_subinterval >> goal_assum (drule_at Any) >> simp[]) >>
+  rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
