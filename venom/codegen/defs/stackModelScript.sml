@@ -113,7 +113,7 @@ Proof
   simp[stack_find_NONE_EVERY, EVERY_EL]
 QED
 
-Theorem stack_peek_eq_EL_REVERSE[local]:
+Theorem stack_peek_eq_EL_REVERSE:
   d < LENGTH stk ⇒ stack_peek d stk = EL d (REVERSE stk)
 Proof
   strip_tac >> simp[stack_peek_def, EL_REVERSE] >>
