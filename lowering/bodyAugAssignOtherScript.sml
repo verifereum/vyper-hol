@@ -188,7 +188,8 @@ Proof
   imp_res_tac alloc_limits_expr_not_extcode >>
 
   gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
-      int_calls_stmt_def, AllCaseEqs()] >>
+      allocLimitsTheory.alloc_limits_stmt_def, int_calls_stmt_def, AllCaseEqs()] >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   irule stmt_expr_body_pre >>
   fs[body_inv_def, gasContextTheory.cx_tops_def] >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right,
