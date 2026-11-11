@@ -32,7 +32,7 @@ Proof
     (drule rest_word_word_stride >> Cases_on `tr` >> simp[word_scale_def]) >>
   `compile_array_membership_loop needle arr_op (Lit (n2w cap)) 1 0
      (compile_ptr_load F cenv.ce_imm_alloca (if tr then LocTransient else LocStorage))
-     is_in sa = (op,sb)` by
+     NONE is_in sa = (op,sb)` by
     gvs[compile_var_array_membership_def, vv_operand_def, vv_location_def,
         comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
   `membership_load_contract D ctx fn PG sa 0 F cenv.ce_imm_alloca
