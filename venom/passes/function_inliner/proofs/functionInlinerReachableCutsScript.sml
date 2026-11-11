@@ -869,3 +869,104 @@ Proof
   pure_rewrite_tac[inline_path_location_def, MAP, FOLDL] >>
   simp[inline_location_step_def, GSYM inline_path_location_def] >> metis_tac[]
 QED
+
+(* Parameter focus is computed at the current block's prefix counter. *)
+Theorem inline_cell_parameter_focus:
+  args = rotate_invoke_ops (EL e.ise_index bb.bb_instructions).inst_operands /\
+  ci = clone_instruction e.ise_prefix (fn_labels e.ise_callee)
+    (EL j cb.bb_instructions) /\
+  q = SND (inline_cell_prefix e bb cb j) /\
+  is_param_opcode ci.inst_opcode ==>
+  inline_cell_focus e bb cb j =
+    (if q < LENGTH args then
+       ([ci with <|inst_opcode := ASSIGN; inst_operands := [EL q args]|>],q+1)
+     else ([ci],q))
+Proof
+  strip_tac >> gvs[inline_cell_focus_def, rewrite_inline_inst_def]
+QED
+
+Theorem inline_cell_parameter_prefix_suc:
+  j < LENGTH cb.bb_instructions /\
+  args = rotate_invoke_ops (EL e.ise_index bb.bb_instructions).inst_operands /\
+  ci = clone_instruction e.ise_prefix (fn_labels e.ise_callee)
+    (EL j cb.bb_instructions) /\
+  q = SND (inline_cell_prefix e bb cb j) /\
+  is_param_opcode ci.inst_opcode ==>
+  LENGTH (FST (inline_cell_prefix e bb cb (SUC j))) =
+    SUC (LENGTH (FST (inline_cell_prefix e bb cb j))) /\
+  SND (inline_cell_prefix e bb cb (SUC j)) =
+    (if q < LENGTH args then q+1 else q)
+Proof
+  strip_tac >> drule_all inline_cell_parameter_focus >> strip_tac >>
+  simp[inline_cell_prefix_suc] >>
+  Cases_on `q < LENGTH args` >> gvs[]
+QED
+
+(* After replacement the outer edit sees ASSIGN, not the original token. *)
+Theorem inline_replaced_parameter_outer_rewrite:
+  inst.inst_opcode = ASSIGN ==>
+  rewrite_inline_inst args outs ret (clone_instruction pref labs inst) q =
+    ([clone_instruction pref labs inst],q)
+Proof
+  simp[rewrite_inline_inst_def, clone_instruction_def, is_param_opcode_def]
+QED
+
+Theorem inline_surviving_token_outer_rewrite:
+  inst.inst_opcode = RETPC_PARAM ==>
+  rewrite_inline_inst args outs ret (clone_instruction pref labs inst) q =
+    (if q < LENGTH args then
+       ([(clone_instruction pref labs inst) with
+          <|inst_opcode := ASSIGN; inst_operands := [EL q args]|>],q+1)
+     else ([clone_instruction pref labs inst],q))
+Proof
+  simp[rewrite_inline_inst_def, clone_instruction_def, is_param_opcode_def]
+QED
+
+Theorem inline_enter_parameter_fields:
+  inline_cell_frame (EnterCell e k) c mid /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+  lookup_block c.ic_block e.ise_callee.fn_blocks = SOME cb /\
+  args = rotate_invoke_ops (EL e.ise_index bb.bb_instructions).inst_operands /\
+  ci = clone_instruction e.ise_prefix (fn_labels e.ise_callee)
+    (EL c.ic_index cb.bb_instructions) /\
+  q = SND (inline_cell_prefix e bb cb c.ic_index) /\
+  is_param_opcode ci.inst_opcode /\ q < LENGTH args ==>
+  k = 0 /\
+  mid.ic_index = LENGTH (FST (inline_cell_prefix e bb cb c.ic_index)) /\
+  mid.ic_fields = inline_inst_fields
+    (ci with <|inst_opcode := ASSIGN; inst_operands := [EL q args]|>)
+Proof
+  strip_tac >> drule_all inline_cell_parameter_focus >> strip_tac >>
+  gvs[inline_cell_frame_def, inline_make_cell_def, get_instruction_def,
+      inline_edit_repair_def, inline_inst_fields_def]
+QED
+
+Theorem inline_parameter_residual_fetch:
+  inline_cell_frame (EnterCell e k) c mid /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+  lookup_block c.ic_block e.ise_callee.fn_blocks = SOME cb /\
+  args = rotate_invoke_ops (EL e.ise_index bb.bb_instructions).inst_operands /\
+  ci = clone_instruction e.ise_prefix (fn_labels e.ise_callee)
+    (EL c.ic_index cb.bb_instructions) /\
+  q = SND (inline_cell_prefix e bb cb c.ic_index) /\
+  is_param_opcode ci.inst_opcode /\ q < LENGTH args /\
+  inline_cell_zipper mid frames d /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames ==>
+  ?tb dst.
+    lookup_block d.ic_block d.ic_function.fn_blocks = SOME tb /\
+    get_instruction tb d.ic_index = SOME dst /\
+    dst.inst_opcode = ASSIGN /\
+    dst.inst_operands =
+      [inline_rename_operand (inline_cell_var_action frames)
+        (inline_cell_label_action frames) (EL q args)] /\
+    dst.inst_outputs = MAP (inline_cell_var_action frames) ci.inst_outputs
+Proof
+  strip_tac >> drule_all inline_enter_parameter_fields >> strip_tac >>
+  `inline_cell_at mid` by metis_tac[inline_cell_frame_sound] >>
+  drule_at (Pos hd) inline_cell_zipper_mapped_fields >>
+  disch_then (drule_at (Pos hd)) >>
+  simp[] >> strip_tac >>
+  drule_all inline_cell_zipper_sound >>
+  simp[inline_cell_at_def, inline_fetched_fields_def, inline_inst_fields_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
