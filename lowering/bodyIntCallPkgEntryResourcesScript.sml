@@ -228,7 +228,7 @@ Theorem body_inv_internal_charge_witness:
   fn_allocs_ok tops (mut,nr,rr,name,args,dflts,ret,bd) /\
   ?keys imm lbl ce ps hr isn key tr view ctor il ss rt sa sb sf.
     set_internal_package_target caller.ce_target
-      (package_internal_fn tops F keys caller.ce_is_ctor imm
+      (package_internal_fn tops T keys caller.ce_is_ctor imm
         (mut,nr,rr,name,args,dflts,ret,bd)) =
       (lbl,ce,ps,hr,isn,key,tr,view,ctor,il,ss,rt) /\
     compile_internal_function ce ps hr isn key tr view ctor il ss rt sa = ((),sb) /\
