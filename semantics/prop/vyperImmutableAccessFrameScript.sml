@@ -1189,6 +1189,70 @@ Proof
   disch_then (mp_tac o SRULE []) >> simp[]
 QED
 
+Theorem evaluate_immutable_atarget_base_case[local]:
+  ^(hd (immutable_stmt_predicate_cases im_atarget))
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[accesses_atarget_def, int_calls_atarget_def] >>
+  qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[] >> disch_then drule_all >> strip_tac) >>
+  gvs[] >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  `!p s m. eval_target_place cx t s = (INL p,m) ==>
+     !path. p <> ImmutablePlace src id path` by
+    metis_tac[eval_target_place_immutable_access] >>
+  imp_res_tac write_place_key_frame >> metis_tac[]
+QED
+
+Theorem evaluate_immutable_atarget_tuple_case[local]:
+  ^(List.nth (immutable_stmt_predicate_cases im_atarget,1))
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  Cases_on `v` >>
+  gvs[Once evaluate_def, raise_def, accesses_atarget_def, int_calls_atarget_def] >>
+  Cases_on `a` >>
+  gvs[Once evaluate_def, raise_def] >>
+  first_x_assum (qspecl_then [`A`,`R`] mp_tac) >> simp[] >>
+  disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_atargets_nil_case[local]:
+  ^(hd (immutable_stmt_predicate_cases im_atargets))
+Proof
+  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def, return_def]
+QED
+
+Theorem evaluate_immutable_atargets_cons_case[local]:
+  ^(List.nth (immutable_stmt_predicate_cases im_atargets,1))
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[accesses_atarget_def, int_calls_atarget_def, DISJ_IMP_THM, FORALL_AND_THM] >>
+  qpat_x_assum `assign_tuple_target_list _ (_::_) (_::_) _ = _` mp_tac >>
+  simp[Once evaluate_def, ignore_bind_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  gvs[] >>
+  rpt (qpat_x_assum `!a b. assign_tuple_targets _ _ _ _ = _ ==> _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[] >> disch_then drule_all >> strip_tac) >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  metis_tac[]
+QED
+
+Theorem evaluate_immutable_atargets_length_case[local]:
+  ^(List.nth (immutable_stmt_predicate_cases im_atargets,2))
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, raise_def]
+QED
+
+Theorem evaluate_immutable_atargets_length_other_case[local]:
+  ^(List.nth (immutable_stmt_predicate_cases im_atargets,3))
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, raise_def]
+QED
+
 Theorem immutable_defaults_scope_frame[local]:
   (!r t. f (st with scopes := scopes) = (r,t) ==>
     ^immutable_frame cx A (st with scopes := scopes) t) /\
