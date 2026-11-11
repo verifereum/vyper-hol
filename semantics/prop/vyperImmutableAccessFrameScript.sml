@@ -1058,6 +1058,47 @@ Proof
   strip_tac >> gvs[] >> first_x_assum drule_all >> simp[]
 QED
 
+Theorem evaluate_immutable_assert_custom_case[local]:
+  ^(immutable_stmt_case "AssertCustomError")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[accesses_stmt_def, accesses_assert_reason_def, int_calls_stmt_def,
+      int_calls_assert_reason_def, DISJ_IMP_THM, FORALL_AND_THM] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rpt (qpat_x_assum `!a b c. eval_expr _ _ _ = _ ==> _` drule >> strip_tac) >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[] >> strip_tac >>
+  `!s r t. eval_stmt cx (Raise (RaiseCustomError err)) s = (r,t) ==>
+     ^immutable_frame cx A s t` by
+    (BETA_TAC >> rpt strip_tac >>
+     irule (BETA_RULE evaluate_immutable_raise_custom_case) >>
+     qexistsl [`A`,`R`,`err`,`r`] >>
+     simp[accesses_stmt_def, accesses_raise_reason_def, int_calls_stmt_def,
+          int_calls_raise_reason_def, MEM_APPEND, DISJ_IMP_THM, FORALL_AND_THM] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_x_assum `!s tv t id positional kwargs tops params es. _`
+       (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+     simp[] >> disch_tac >> rpt strip_tac >>
+     first_x_assum irule >>
+     goal_assum (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `_ = CustomError _ _ _`)) >>
+     qexistsl [`A'`,`R'`] >> simp[] >> metis_tac[]) >>
+  `^immutable_frame cx A s'' st'` by
+    (BETA_TAC >> rpt strip_tac >>
+     drule_at (Pat `switch_BoolV _ _ _ _ _ = _`)
+       (BETA_RULE immutable_switch_bool_frame) >>
+     disch_then (qspec_then `A` mp_tac) >> disch_then irule >>
+     conj_tac
+     >- (simp[return_def] >> rpt strip_tac >> gvs[]) >>
+     simp[] >> rpt strip_tac >>
+     qpat_x_assum `!s r t. eval_stmt _ _ _ = _ ==> _` (irule o BETA_RULE) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists_tac `r` >> simp[Once evaluate_def] >>
+     first_assum ACCEPT_TAC) >>
+  fs[]
+QED
+
 Theorem immutable_defaults_scope_frame[local]:
   (!r t. f (st with scopes := scopes) = (r,t) ==>
     ^immutable_frame cx A (st with scopes := scopes) t) /\
