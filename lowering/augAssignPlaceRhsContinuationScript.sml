@@ -50,7 +50,7 @@ QED
 (* Concrete, observation-free operator/write suffix.  Write success and its
    source replay are established by the memory or storage branch. *)
 Theorem aug_place_operator_write_path_mem[local]:
-  bop <> In /\ bop <> NotIn /\
+  bop <> In /\ bop <> NotIn /\ word_value cur /\
   compile_binop bop x y ty NONE el s2 = (op,s3) /\
   emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE
                        | _ => MSTORE) [dst;op] s3 = ((),sf) /\
@@ -102,7 +102,8 @@ Proof
    case evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      ptv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-    (irule stmtSimAugAssignTheory.bop_result_augassign >> simp[]) >>
+    (irule stmtSimAugAssignTheory.bop_result_augassign >> simp[] >>
+     metis_tac[stmtSimAugAssignTheory.word_value_not_bytes]) >>
   qpat_x_assum `binop_frag_val_mem _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [binop_frag_val_mem_def, binop_frag_mem_def]) >>
   disch_then (qspecl_then [`s2`, `s3`, `x`, `y`, `op`, `s`] mp_tac) >>
@@ -140,7 +141,7 @@ Theorem aug_place_rhs_operator_write_mem:
   emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE
                        | _ => MSTORE) [dst;op] s3 = ((),sf) /\
   fn_has_code s1 s2 func /\ fn_has_code s2 s3 func /\ fn_has_code s3 sf func /\
-  fn_inst_ids_distinct func /\ bop <> In /\ bop <> NotIn /\
+  fn_inst_ids_distinct func /\ bop <> In /\ bop <> NotIn /\ word_value cur /\
   local_ptrs_reserved cenv s1 /\ local_ptrs_reserved cenv s2 /\
   local_ptrs_reserved cenv s3 /\
   (!z. x = Var z ==> not_fresh_at s1 z) /\

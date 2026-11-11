@@ -111,6 +111,11 @@ Proof
   disch_then drule >>
   (impl_tac >- (Cases_on `tr` >> simp[])) >> strip_tac >>
   qexists_tac `t` >> simp[] >>
+  `!x. arg = Var x ==> x <> STRING #"%" (toString sa.cs_next_var)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!x. arg = Var x ==> not_fresh_at sa x` drule >>
+     rewrite_tac[not_fresh_at_def] >>
+     disch_then (qspec_then `sa.cs_next_var` mp_tac) >> gvs[]) >>
   Cases_on `arg` >> gvs[eval_operand_def, lookup_var_def] >> metis_tac[]
 QED
 

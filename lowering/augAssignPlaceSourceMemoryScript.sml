@@ -8,7 +8,7 @@ Ancestors
   exprSimSource exprSimHyps exprSimHypsDefs
 
 Theorem aug_place_memory_suffix_source[local]:
-  bop <> In /\ bop <> NotIn /\
+  bop <> In /\ bop <> NotIn /\ word_value cur /\
   lookup_scopes id ee.scopes = SOME entry /\
   evaluate_subscripts entry.type entry.value path = INL old /\
   gas_admissible
@@ -35,7 +35,7 @@ Proof
       case evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         ptv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-       (irule bop_result_augassign >> simp[]) >>
+       (irule bop_result_augassign >> simp[] >> metis_tac[word_value_not_bytes]) >>
      pop_assum SUBST1_TAC >>
      qpat_x_assum `suffix ee = _` mp_tac >>
      simp[Abbr `suffix`, bind_def, lift_sum_def, return_def, raise_def] >>
@@ -93,7 +93,7 @@ Theorem aug_place_memory_rhs_callback:
   expr_body_pre cenv cx env e st /\
   type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
   type_bits ty MOD 8 = 0 /\ evaluate_type (get_tenv cx) ty = SOME dtv /\
-  value_has_type dtv cur /\
+  value_has_type dtv cur /\ word_value cur /\
   bind (eval_expr cx e) (read_result cx) (st with gas_obs := gs) = (INL rhs,ee) /\
   lookup_scopes id ee.scopes = SOME entry /\
   evaluate_subscripts entry.type entry.value path = INL old /\
