@@ -2,7 +2,7 @@
 Theory rawCallOracleMemory
 Ancestors
   rawCallArgumentMemory bodyMemRawCallBounds bodyMemBiMethodIdSuffix loweringStateRelDefs
-  exprSimRawCall exprSafeOperand fragExec exprLoweringProps fragGasMode entrySinkExtraction builtinSystem context
+  loweringPosts exprSimRawCall exprSafeOperand fragExec exprLoweringProps fragGasMode entrySinkExtraction builtinSystem context
   emitHelper emitHelperProps compileEnv venomExecSemantics venomState venomInst
   rich_list list
 
@@ -198,8 +198,7 @@ Proof
        (fn th => once_rewrite_tac[th]) >> simp[]) >>
   `~not_fresh_at initial (STRING #"%" (toString sa.cs_next_var))` by
     simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
-  `wb_frame cenv initial_es (SND (adopt_call_outcome rq outcome es1))
-    initial s0 u` by
+  `wb_frame cenv initial_es es initial s0 u` by
     (qpat_assum `u = update_var _ _ t` (fn th => once_rewrite_tac[th]) >>
      irule raw_call_oracle_frame >> simp[] >>
      goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
@@ -207,6 +206,13 @@ Proof
      conj_tac >> rpt gen_tac >> strip_tac >>
      first_x_assum (drule_all_then mp_tac) >>
      simp[regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
+  `wb_frame cenv initial_es (SND (adopt_call_outcome rq outcome es1))
+    initial s0 u` by
+    (drule exprSimRawCallCalldataTheory.raw_call_take_adopt_fields >> strip_tac >>
+     qpat_x_assum `wb_frame cenv initial_es es initial s0 u` mp_tac >>
+     pure_rewrite_tac[wb_frame_def, locals_kept_def, popped_kept_def] >>
+     qpat_x_assum `(SND (adopt_call_outcome rq outcome es1)).scopes = es.scopes`
+       (fn th => pure_rewrite_tac[th]) >> disch_then ACCEPT_TAC) >>
   qexistsl_tac [`t`,`u`] >>
   qpat_x_assum `u = update_var _ _ t` SUBST_ALL_TAC >>
   simp[update_var_def] >> gvs[] >> rpt strip_tac >>

@@ -442,7 +442,7 @@ Resume raw_call_prefix_sim_mem[frames]:
      rpt (pop_assum kall_tac) >> simp[expr_post_def, wb_frame_def] >>
      rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) >>
   `wb_frame cenv es esD sa s0 tD` by
-    (irule wb_frame_trans >> simp[] >> reverse conj_tac
+    (irule wb_frame_trans >> simp[] >> conj_tac
      >- (goal_assum (drule_at Any)) >>
      qexistsl_tac [`esA`,`s1`,`tA`] >> fs[ci_mono_def]) >>
   suspend "frame_slice"
@@ -450,18 +450,18 @@ QED
 
 Resume raw_call_prefix_sim_mem[frame_slice]:
   `wb_frame cenv esD esD s2 tD tm` by
-    (simp[Abbr `tm`, wb_frame_def, locals_kept_def, lookup_var_def] >>
-     fs[wb_frame_def, locals_kept_def, lookup_var_def]) >>
+    (simp[Abbr `tm`, wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >>
+     fs[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def]) >>
   `wb_frame cenv es esD sa s0 tm` by
-    (irule wb_frame_trans >> simp[] >> reverse conj_tac
+    (irule wb_frame_trans >> simp[] >> conj_tac
      >- (goal_assum (drule_at Any)) >>
      qexistsl_tac [`esD`,`s2`,`tD`] >> fs[ci_mono_def] >> decide_tac) >>
   `wb_frame cenv es ee sa s0 t` by
-    (irule wb_frame_trans >> simp[] >> reverse conj_tac
+    (irule wb_frame_trans >> simp[] >> conj_tac
      >- (goal_assum (drule_at Any)) >>
      qexistsl_tac [`esD`,`s4`,`tm`] >> fs[ci_mono_def] >> decide_tac) >>
   `wb_frame cenv es ee sa s0 t'` by
-    (irule wb_frame_trans >> simp[] >> reverse conj_tac
+    (irule wb_frame_trans >> simp[] >> conj_tac
      >- (goal_assum (drule_at Any)) >>
      qexistsl_tac [`ee`,`s5`,`t`] >> fs[ci_mono_def] >> decide_tac) >>
   suspend "pack"
@@ -551,7 +551,7 @@ Resume raw_call_prefix_sim_mem[continuation]:
   conj_tac
   >- (qpat_x_assum `wb_frame cenv es ee sa s0 t'` mp_tac >>
       rpt (pop_assum kall_tac) >>
-      simp[wb_frame_def, locals_kept_def, lookup_var_def] >> metis_tac[]) >>
+      simp[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >> metis_tac[]) >>
   qexistsl_tac [`esA`,`esD`,`gsA`,`gsD`,`gs`,`tA`,`tD`,`t`,`tm`,`xs`] >>
   simp[] >> first_x_assum ACCEPT_TAC
 QED
