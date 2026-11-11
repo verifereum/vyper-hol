@@ -1,7 +1,7 @@
 (* Struct layout adapter for body-aware allocated tuple traversal. *)
 Theory bodyMemStructFieldsBody
 Ancestors
-  bodyMemAggregateAdapters bodyMemAggregateBodyLoops exprSimAggregateLoops
+  bodyMemAggregateAdapters bodyMemAggregateTraversal exprSimAggregateLoops
 
 Theorem aggregate_struct_fields_body_sim_mem:
   !fields ce cx env ty off sa out sb es tvs func inst x b asz s0 ctx tops.
@@ -50,8 +50,17 @@ Theorem aggregate_struct_fields_body_sim_mem:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r /\ alloca_history func r /\
-      s0.vs_alloca_next <= r.vs_alloca_next)
+      locals_kept ce es es' s0 r /\ alloca_history func r /\
+      s0.vs_alloca_next <= r.vs_alloca_next /\
+      (~EXISTS expr_has_effect (MAP SND fields) ==>
+        (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+        !p n. (p + n <= b \/ b + asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+             sa.cs_next_id <= i.inst_id /\
+             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+             regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -71,5 +80,5 @@ Proof
   goal_assum (drule_at Any) >>
   BETA_TAC >> rpt strip_tac >> qexists_tac `vs` >> gvs[] >> simp[] >>
   conj_tac >- (irule struct_tuple_memory_post >> simp[]) >>
-  conj_tac >> first_assum ACCEPT_TAC
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
