@@ -1052,7 +1052,7 @@ Resume ifexp_different_type_unwrap_pure[call]:
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   simp[unwrap_value_def, base_ptr_def, comp_return_def] >> metis_tac[]
 QED
-Finalise ifexp_different_type_unwrap_pure
+Finalise ifexp_different_type_unwrap_pure[local]
 
 Theorem ifexp_post_annotated[local]:
   (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
@@ -2031,7 +2031,7 @@ Resume ifexp_arm_bytestring_path[suffix]:
   qexists_tac `q` >> simp[] >>
   metis_tac[gas_path_then, arithmeticTheory.ADD]
 QED
-Finalise ifexp_arm_bytestring_path
+Finalise ifexp_arm_bytestring_path[local]
 
 Theorem ifexp_arm_raw_admissible:
   gas_admissible (bind (eval_expr cx e) (conditional_result cx))
@@ -2432,7 +2432,7 @@ Resume ifexp_arm_outcome[exception]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >>
   irule gas_marked_exec_bind_exception >> goal_assum drule
 QED
-Finalise ifexp_arm_outcome
+Finalise ifexp_arm_outcome[local]
 
 Theorem ifexp_root_outcome_suffix:
   gas_outcome F tops (ctx,func) source (es,s0) Q R /\

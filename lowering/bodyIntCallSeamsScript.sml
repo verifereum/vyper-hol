@@ -14,6 +14,12 @@ Theory bodyIntCallSeams
 Ancestors
   bodyIntCallSeamDefs bodyIntCallSeamArgs bodyIntCallSeamReturn
   bodyIntCallJointPackage bodyIntCallJointInd vyperTypeCallStackSoundness
+  bodyIntCallArgSequence bodyIntCallCompilerListTags bodyIntCallCompilerSeparation
+  bodyIntCallCopyFrame bodyIntCallDecoderCountedClosure bodyIntCallEncoderActualCopy
+  bodyIntCallEncoderCountedExport bodyIntCallLocalArrayProducer bodyIntCallMcopyFrame
+  bodyIntCallMemoryView bodyIntCallPackageEntryInterface bodyIntCallPureLayout
+  bodyIntCallScratchCreditProbe bodyIntCallStagingBuffer bodyIntCallStoreFrame
+  bodyIntCallTopLevelProducer bodyIntCallWordProducer
 Libs
   monadsyntax
 
