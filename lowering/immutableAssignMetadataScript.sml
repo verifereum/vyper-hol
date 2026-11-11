@@ -51,3 +51,27 @@ Proof
        get_address_immutables_def, get_place_def, bind_def, return_def,
        lift_option_type_def, lift_sum_def, get_source_immutables_def]
 QED
+
+(* A deploy-time immutable target names its place without touching the state. *)
+Theorem immutable_target_place_state:
+  body_inv tops ctx ce cx /\ cx.in_deploy /\
+  supported_immutable_type tops (src,id) = SOME ity /\
+  expr_sim_inv ce cx env st ==>
+  eval_target_place cx (TopLevelNameTarget (src,id)) st =
+    (INL (ImmutablePlace src id []),st)
+Proof
+  strip_tac >>
+  drule_all immutable_assign_bare_global >> strip_tac >>
+  `env_consistent env cx st` by fs[expr_sim_inv_def] >>
+  drule_all env_consistent_bare_global_find_NONE >> strip_tac >>
+  drule_all env_consistent_bare_global_ready_src >> strip_tac >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  gvs[get_source_immutables_def] >>
+  Cases_on `FLOOKUP (get_source_immutables NONE x) id` >>
+  gvs[get_source_immutables_def] >>
+  rename1 `_ = SOME entry` >> PairCases_on `entry` >>
+  simp[Once evaluate_def, bind_def] >>
+  simp[Once evaluate_def, lookup_global_def, get_immutables_def,
+       get_address_immutables_def, get_place_def, bind_def, return_def,
+       lift_option_type_def, lift_sum_def, get_source_immutables_def]
+QED
