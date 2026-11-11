@@ -601,7 +601,8 @@ Proof
   `vv_at ce fp.jc_cx ty a b es r
      (LocatedValue ann (mk_ptr op LocMemory)) s` by
     (fs[loweringPostsTheory.vv_at_def,
-        loweringPostsTheory.expr_val_at_def, contextTheory.mk_ptr_def] >>
+        loweringPostsTheory.expr_val_at_def, contextTheory.mk_ptr_def,
+        loweringPostsTheory.local_place_at_def] >>
      metis_tac[]) >>
   irule intcall_pure_child_located_memory >>
   goal_assum (drule_at Any) >> simp[contextTheory.mk_ptr_def] >>

@@ -90,10 +90,13 @@ Resume intcall_args_frame_accumulated[tail]:
      simp[]) >>
   `local_ptrs_reserved ce sh` by metis_tac[local_ptrs_reserved_next_var] >>
   `wb_frame ce initial_es initial_es a sinitial_es t` by
-    (irule wb_frame_trans >>
-     simp[] >> conj_tac
-     >- (qexistsl_tac [`es`,`sm`,`s`] >> asm_rewrite_tac[]) >>
-     metis_tac[]) >>
+    (`wb_frame ce initial_es initial_es sm s t` by
+       (qpat_assum `wb_frame ce es es sm s t` mp_tac >>
+        simp[wb_frame_def, locals_kept_def, popped_kept_def]) >>
+     mp_tac (Q.SPECL [`func`, `ce`, `cx`, `initial_es`, `sinitial_es`, `a`,
+                      `initial_es`, `initial_es`, `sm`, `s`, `t`, `ctx`]
+               wb_frame_trans) >>
+     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >> simp[]) >>
   `EVERY (\e. expr_body_pre ce cx env e (mid with gas_obs := []) /\
               ~expr_has_effect e) args` by
     (fs[EVERY_MEM, expr_body_pre_def] >> metis_tac[]) >>
