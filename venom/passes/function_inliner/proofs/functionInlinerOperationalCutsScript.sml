@@ -1623,3 +1623,118 @@ Proof
   disch_then (mp_tac o AP_TERM ``inline_shared_frame``) >>
   fs[jump_to_def, inline_shared_frame_def, stateFrameTheory.execution_frame_def]
 QED
+
+(* Terminal cuts retain the tracked support: neither outcome writes locals. *)
+Theorem inline_owner_halt_cut:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  inline_shared_frame snap.ils_state = inline_shared_frame frame.ipf_state /\
+  inst_wf src /\ inline_ordinary_opcode src.inst_opcode /\
+  step_inst fuel C src snap.ils_state = Halt u /\
+  EVERY (\op. !v. op = Var v ==>
+    MEM v (cfgTransform$fn_all_vars a.ia_function) /\ ~retpc_var a.ia_function v)
+    src.inst_operands /\
+  get_instruction sb snap.ils_state.vs_inst_idx = SOME src /\
+  d.ic_index = frame.ipf_state.vs_inst_idx /\
+  inline_cell_at c /\ inline_cell_zipper c frames d /\
+  c.ic_fields = inline_inst_fields src /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames /\
+  inline_cell_var_action frames = route.ir_rename /\
+  inline_cell_label_action frames = lab ==>
+  ?tb dst v.
+    lookup_block d.ic_block d.ic_function.fn_blocks = SOME tb /\
+    get_instruction tb frame.ipf_state.vs_inst_idx = SOME dst /\
+    step_inst tfuel Tctx dst frame.ipf_state = Halt v /\
+    exec_block fuel C sb snap.ils_state = Halt u /\
+    exec_block tfuel Tctx tb frame.ipf_state = Halt v /\
+    inline_owner_storage cert
+      ((p,a,route,snap with ils_state := u)::rest)
+      (frame with ipf_state := v) /\
+    inline_shared_frame u = inline_shared_frame v
+Proof
+  strip_tac >>
+  `~MEM src.inst_opcode [PHI; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP]` by
+    gvs[inline_ordinary_opcode_def] >>
+  drule_all inline_cell_zipper_route_fetch >> strip_tac >>
+  drule inline_owner_storage_head >> strip_tac >>
+  `inline_opaque_frame_rel route.ir_rename snap.ils_defined snap.ils_opaque
+    FEMPTY {} snap.ils_state frame.ipf_state` by
+    gvs[inline_tracked_snapshot_def, inline_snapshot_data_def,
+        inline_opaque_frame_rel_def, inline_frame_rel_def] >>
+  `!vs. eval_operands src.inst_operands snap.ils_state = SOME vs ==>
+    eval_operands dst.inst_operands frame.ipf_state = SOME vs` by
+    (rpt strip_tac >> simp[] >> irule inline_tracked_operands_success >>
+     metis_tac[]) >>
+  `LENGTH dst.inst_operands = LENGTH src.inst_operands` by simp[] >>
+  drule_all inline_ordinary_halt_transport >>
+  disch_then (qspecl_then [`tfuel`, `Tctx`] strip_assume_tac) >>
+  `inline_success_footprint [] snap.ils_state u` by
+    metis_tac[inline_ordinary_halt_footprint] >>
+  `inline_success_footprint [] frame.ipf_state v` by
+    metis_tac[inline_ordinary_halt_footprint] >>
+  `inline_owner_storage cert
+    ((p,a,route,snap with ils_state := u)::rest)
+    (frame with ipf_state := v) /\ inline_shared_frame u = inline_shared_frame v` by
+    (irule (inline_owner_storage_success_footprint |> Q.INST [`outs` |-> `[]`]
+      |> SRULE []) >> metis_tac[]) >>
+  `get_instruction bb frame.ipf_state.vs_inst_idx = SOME dst` by metis_tac[] >>
+  qexistsl [`bb`, `dst`, `v`] >> simp[Once exec_block_def] >>
+  simp[Once exec_block_def]
+QED
+
+Theorem inline_owner_abort_cut:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  inline_shared_frame snap.ils_state = inline_shared_frame frame.ipf_state /\
+  inst_wf src /\ inline_ordinary_opcode src.inst_opcode /\
+  step_inst fuel C src snap.ils_state = Abort reason u /\
+  EVERY (\op. !v. op = Var v ==>
+    MEM v (cfgTransform$fn_all_vars a.ia_function) /\ ~retpc_var a.ia_function v)
+    src.inst_operands /\
+  get_instruction sb snap.ils_state.vs_inst_idx = SOME src /\
+  d.ic_index = frame.ipf_state.vs_inst_idx /\
+  inline_cell_at c /\ inline_cell_zipper c frames d /\
+  c.ic_fields = inline_inst_fields src /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames /\
+  inline_cell_var_action frames = route.ir_rename /\
+  inline_cell_label_action frames = lab ==>
+  ?tb dst v.
+    lookup_block d.ic_block d.ic_function.fn_blocks = SOME tb /\
+    get_instruction tb frame.ipf_state.vs_inst_idx = SOME dst /\
+    step_inst tfuel Tctx dst frame.ipf_state = Abort reason v /\
+    exec_block fuel C sb snap.ils_state = Abort reason u /\
+    exec_block tfuel Tctx tb frame.ipf_state = Abort reason v /\
+    inline_owner_storage cert
+      ((p,a,route,snap with ils_state := u)::rest)
+      (frame with ipf_state := v) /\
+    inline_shared_frame u = inline_shared_frame v
+Proof
+  strip_tac >>
+  `~MEM src.inst_opcode [PHI; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP]` by
+    gvs[inline_ordinary_opcode_def] >>
+  drule_all inline_cell_zipper_route_fetch >> strip_tac >>
+  drule inline_owner_storage_head >> strip_tac >>
+  `inline_opaque_frame_rel route.ir_rename snap.ils_defined snap.ils_opaque
+    FEMPTY {} snap.ils_state frame.ipf_state` by
+    gvs[inline_tracked_snapshot_def, inline_snapshot_data_def,
+        inline_opaque_frame_rel_def, inline_frame_rel_def] >>
+  `!vs. eval_operands src.inst_operands snap.ils_state = SOME vs ==>
+    eval_operands dst.inst_operands frame.ipf_state = SOME vs` by
+    (rpt strip_tac >> simp[] >> irule inline_tracked_operands_success >>
+     metis_tac[]) >>
+  `LENGTH dst.inst_operands = LENGTH src.inst_operands` by simp[] >>
+  drule_all inline_ordinary_abort_transport >>
+  disch_then (qspecl_then [`tfuel`, `Tctx`] strip_assume_tac) >>
+  `inline_success_footprint [] snap.ils_state u` by
+    metis_tac[inline_ordinary_abort_footprint] >>
+  `inline_success_footprint [] frame.ipf_state v` by
+    metis_tac[inline_ordinary_abort_footprint] >>
+  `inline_owner_storage cert
+    ((p,a,route,snap with ils_state := u)::rest)
+    (frame with ipf_state := v) /\ inline_shared_frame u = inline_shared_frame v` by
+    (irule (inline_owner_storage_success_footprint |> Q.INST [`outs` |-> `[]`]
+      |> SRULE []) >> metis_tac[]) >>
+  `get_instruction bb frame.ipf_state.vs_inst_idx = SOME dst` by metis_tac[] >>
+  qexistsl [`bb`, `dst`, `v`] >> simp[Once exec_block_def] >>
+  simp[Once exec_block_def]
+QED
