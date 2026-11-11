@@ -167,6 +167,7 @@ Resume ecmul_prefix_runtime[finish]:
   `sa.cs_next_var <= sp.cs_next_var /\ sa.cs_next_id <= sp.cs_next_id` by
     (qpat_x_assum `(do src <- _; value <- _; dst <- _; _ od) sa = _` mp_tac >>
      qpat_x_assum `(do dst <- _; _ od) smid = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
      simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
           comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
      rpt strip_tac >> gvs[]) >>
