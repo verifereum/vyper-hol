@@ -1543,3 +1543,49 @@ Proof
   (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
+
+(* Both assertion templates execute three steps on their successful path. *)
+Theorem sym_assertion_prepared_run:
+  (inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE) /\
+  inst.inst_operands = [cond] /\
+  step_inst fuel ctx inst vs = OK vsout /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ fn_shape_ok fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  asm_sym_rel p env cs (ss with sym_stack := localtop) /\
+  sym_kinds_ok cplan fn ret [] ps (ss with sym_stack := localtop) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\ ss.sym_stack = localtop ++ srest /\
+  venom_asm_rel lo ps (frame_view fn ra vs with vs_memory := m) cs /\
+  ps.ps_stack = residual ++ inst.inst_operands /\
+  EVERY (\op. op <> dead_stack_marker) inst.inst_operands /\
+  (!op. MEM op inst.inst_operands ==>
+    eval_operand op (frame_view fn ra vs with vs_memory := m) =
+    operand_val (frame_view fn ra vs with vs_memory := m) lo op) /\
+  (inst.inst_opcode = ASSERT ==>
+    asm_block_at p ss.sym_base.as_pc
+      [AsmOp "ISZERO"; AsmPushLabel "revert"; AsmOp "JUMPI"]) /\
+  (inst.inst_opcode = ASSERT_UNREACHABLE ==>
+    asm_block_at p ss.sym_base.as_pc
+      [AsmPushLabel lbl; AsmOp "JUMPI"; AsmOp "INVALID"; AsmLabel lbl] /\
+    INDEX_OF (AsmLabel lbl) p = SOME (ss.sym_base.as_pc + 3)) ==>
+  ?full. sym_steps p env 3 ss = SymOK full /\
+    full.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest
+      (release_dead_spills nl (ps with ps_stack := stack_pop 1 ps.ps_stack)) full
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  `?w tail. localtop = Val w :: tail /\ w <> 0w` by
+    (drule_at (Pat `venom_asm_rel _ _ _ _`) sym_assert_prepared_nonzero >>
+     disch_then (drule_at (Pat `asm_sym_rel _ _ _ _`)) >>
+     disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >>
+     simp[] >> metis_tac[]) >>
+  `ss.sym_stack = Val w :: (tail ++ srest)` by simp[] >>
+  `?full. sym_steps p env 3 ss = SymOK full /\
+    full.sym_mem_labels = ss.sym_mem_labels /\
+    full.sym_stack = DROP 1 ss.sym_stack` by
+    (Cases_on `inst.inst_opcode = ASSERT` >> gvs[]
+     >- (drule_all sym_assert_success_run >> simp[] >> metis_tac[]) >>
+     drule_all sym_assert_unreachable_success_run >> simp[] >> metis_tac[]) >>
+  `1 <= LENGTH ps.ps_stack` by simp[] >>
+  qexists `full` >> simp[] >> irule sym_kinds_ok_release_dead_spills >>
+  irule sym_emit_kinds_pop >> qexistsl [`1`, `ps`, `ss`] >> simp[]
+QED
