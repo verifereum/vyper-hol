@@ -2,6 +2,7 @@
 Theory readonlyMemoryArgsOrigin
 Ancestors
   readonlyMemoryArgsSound readonlyMemoryArgsDefs list rich_list finite_map pred_set
+  venomWf pointerConfinedDefs
 
 Inductive rma_origin:
   (!dfg param_idx p k.
@@ -67,4 +68,16 @@ Theorem root_from_inst_ops_sub:
 Proof
   rpt strip_tac >> gvs[root_from_inst_ops_def] >>
   Cases_on `a` >> Cases_on `b` >> simp[]
+QED
+
+Theorem root_from_inst_ops_pointer_preserving:
+  !inst u. inst_wf inst /\ is_pointer_preserving_op inst.inst_opcode /\
+    MEM (Var u) inst.inst_operands ==> MEM u (root_from_inst_ops inst)
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_pointer_preserving_op_def, inst_wf_def] >>
+  gvs[LENGTH_EQ_NUM_compute] >>
+  gvs[root_from_inst_ops_def, MEM_FLAT, MEM_MAP] >>
+  qexists_tac `[u]` >> simp[] >> qexists_tac `Var u` >> simp[]
 QED
