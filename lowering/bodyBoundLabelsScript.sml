@@ -725,7 +725,7 @@ Theorem bound_labels_subscript:
 Proof
   strip_tac >> simp[compile_subscript_def] >> irule bound_labels_bind >>
   simp[] >> rpt strip_tac >>
-  irule bound_labels_bind >> conj_tac
+  irule bound_labels_bind >> reverse conj_tac
   >- (rpt strip_tac >> IF_CASES_TAC >> gvs[comp_return_def] >>
       irule bound_labels_snapshot_vv >> gvs[]) >>
   qx_gen_tac `bvv` >> rpt strip_tac >>

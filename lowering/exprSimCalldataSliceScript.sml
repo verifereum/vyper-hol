@@ -868,9 +868,9 @@ Proof
           qpat_assum `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x t` mp_tac >>
           POP_ASSUM_LIST (K all_tac) >>
           simp[local_ptrs_reserved_def] >> metis_tac[])
-      >- (rpt strip_tac >> drule_all local_ptrs_reserved_imm_base >> strip_tac >>
+      >- (rpt strip_tac >>
           qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x t` irule >>
-          first_assum ACCEPT_TAC)
+          irule local_ptrs_reserved_imm_base >> qexists_tac `cenv` >> asm_rewrite_tac[])
       >- (qpat_assum `u.vs_memory = _` (fn th => once_rewrite_tac[th]) >>
           simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
                immutableMemoryFrameTheory.immutable_write_memory_capacity] >>

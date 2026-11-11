@@ -1185,11 +1185,11 @@ Theorem compile_slice_calldata_labels:
     EVERY P (added_labels s (SND (compile_slice_calldata start len size s)))
 Proof
   rpt gen_tac >> rewrite_tac[builtinBytesTheory.compile_slice_calldata_def] >>
-  irule comp_bind_labels >> conj_tac >- simp[emit_op_labels] >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[emit_op_labels] >>
   rpt gen_tac >> BETA_TAC >>
-  irule comp_ignore_bind_labels >> conj_tac
+  irule comp_ignore_bind_labels >> reverse conj_tac
   >- simp[compile_assert_slice_bounds_labels] >>
-  rpt gen_tac >> irule comp_bind_labels >> conj_tac
+  rpt gen_tac >> irule comp_bind_labels >> reverse conj_tac
   >- simp[compile_slice_out_buf_labels] >>
   Cases >> rpt gen_tac >> rewrite_tac[pairTheory.UNCURRY_DEF] >> BETA_TAC >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
@@ -1204,11 +1204,11 @@ Theorem compile_slice_code_labels:
     EVERY P (added_labels s (SND (compile_slice_code start len size s)))
 Proof
   rpt gen_tac >> rewrite_tac[builtinBytesTheory.compile_slice_code_def] >>
-  irule comp_bind_labels >> conj_tac >- simp[emit_op_labels] >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[emit_op_labels] >>
   rpt gen_tac >> BETA_TAC >>
-  irule comp_ignore_bind_labels >> conj_tac
+  irule comp_ignore_bind_labels >> reverse conj_tac
   >- simp[compile_assert_slice_bounds_labels] >>
-  rpt gen_tac >> irule comp_bind_labels >> conj_tac
+  rpt gen_tac >> irule comp_bind_labels >> reverse conj_tac
   >- simp[compile_slice_out_buf_labels] >>
   Cases >> rpt gen_tac >> rewrite_tac[pairTheory.UNCURRY_DEF] >> BETA_TAC >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
@@ -1223,11 +1223,11 @@ Theorem compile_slice_extcode_labels:
     EVERY P (added_labels s (SND (compile_slice_extcode addr start len size s)))
 Proof
   rpt gen_tac >> rewrite_tac[builtinBytesTheory.compile_slice_extcode_def] >>
-  irule comp_bind_labels >> conj_tac >- simp[emit_op_labels] >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[emit_op_labels] >>
   rpt gen_tac >> BETA_TAC >>
-  irule comp_ignore_bind_labels >> conj_tac
+  irule comp_ignore_bind_labels >> reverse conj_tac
   >- simp[compile_assert_slice_bounds_labels] >>
-  rpt gen_tac >> irule comp_bind_labels >> conj_tac
+  rpt gen_tac >> irule comp_bind_labels >> reverse conj_tac
   >- simp[compile_slice_out_buf_labels] >>
   Cases >> rpt gen_tac >> rewrite_tac[pairTheory.UNCURRY_DEF] >> BETA_TAC >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
