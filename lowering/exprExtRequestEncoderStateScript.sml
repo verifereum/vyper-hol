@@ -89,18 +89,17 @@ Proof
        metis_tac[immutable_base_zero_def, eval_operand_def, lookup_var_def] >>
      metis_tac[]) >>
   `immutable_alloca_sep func ce cx es t` by
-    (fs[stmt_state_rel_def, immutable_alloca_sep_def] >>
-     rpt strip_tac >> first_x_assum drule_all >> strip_tac
-     >- (fs[window_alloca_growth_def] >> decide_tac)
-     >- (Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
-         >- (fs[window_alloca_growth_def] >>
-             first_x_assum drule_all >>
-             simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
-         `FLOOKUP t.vs_allocas inst.inst_id = SOME x` by
-           metis_tac[abi_encoder_registered_effect_allocated] >>
-         gvs[] >> metis_tac[]) >>
-     `local_ptrs_rel func ce es.scopes s` by fs[state_rel_def] >>
-     metis_tac[local_region_frame]) >>
+    (irule immutable_alloca_sep_frame >> qexistsl_tac [`s`, `es`] >>
+     fs[stmt_state_rel_def, window_alloca_growth_def] >> rpt conj_tac
+     >~ [`local_region`]
+     >- (rpt strip_tac >> disj1_tac >> qexists_tac `id` >>
+         `local_ptrs_rel func ce es.scopes s` by fs[state_rel_def] >>
+         metis_tac[local_region_frame]) >>
+     rpt strip_tac >> Cases_on `FLOOKUP s.vs_allocas aid`
+     >- metis_tac[] >>
+     `FLOOKUP t.vs_allocas aid = SOME x` by
+       metis_tac[abi_encoder_registered_effect_allocated] >>
+     gvs[]) >>
   fs[stmt_state_rel_def] >> rpt strip_tac >>
   Cases_on `inst.inst_id IN window_alloca_sites func (frag_ids st en)`
   >- (`inst.inst_id IN frag_ids st en` by fs[window_alloca_sites_def] >>
