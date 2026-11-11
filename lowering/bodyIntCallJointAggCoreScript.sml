@@ -756,17 +756,11 @@ Proof
    ~is_bytestring_type dty /\ ~is_bytestring_type sty` by
     metis_tac[type_widens_to_word, return_source_word_widens_eq,
               typed_copy_bytestring_source, type_widens_from_bytestring] >>
-  `w2n w + type_memory_size stv < dimword (:256) /\
-   (w2n w + type_memory_size stv <= w2n dw \/
-    w2n dw + type_memory_size dtv <= w2n w)` by
-    (irule aggregate_physical_source_slot_bounds >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `val_wf dtv v /\ val_wf stv v` by
     metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
   Cases_on `tuple_memory_layout_eq dty sty`
-  >- ((* equal layouts are copied in bulk, as the same type is *)
-      `compile_store_memory ce src dst dty dty sa = ((),sb)` by
+  (* equal layouts are copied in bulk, as the same type is *)
+  >- (`compile_store_memory ce src dst dty dty sa = ((),sb)` by
         (qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
          simp[compile_store_memory_def]) >>
       `memory_layout_key dty = memory_layout_key sty` by
@@ -786,6 +780,12 @@ Proof
                       `func` |-> `fp.jc_func`, `cx` |-> `fp.jc_cx`]
                 intcall_compatible_store_effect) >>
       impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
+  `w2n w + type_memory_size stv < dimword (:256) /\
+   (w2n w + type_memory_size stv <= w2n dw \/
+    w2n dw + type_memory_size dtv <= w2n w)` by
+    (irule aggregate_physical_source_slot_bounds >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `compile_store_memory_typed ce dst dty src sty sa = ((),sb)` by
     fs[compile_store_memory_def] >>
   `acyclic_struct_metadata ce.ce_struct_fields /\
