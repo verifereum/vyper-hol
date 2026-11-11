@@ -147,7 +147,7 @@ Theorem reason_literal_buffer_ptr_run:
     (!name a len. local_region cenv es.scopes u name a len ==>
       regions_disjoint b (32+32*word_size ml) a len) /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
-    u.vs_labels = s.vs_labels /\ wb_frame cenv es sa s u /\
+    u.vs_labels = s.vs_labels /\ wb_frame cenv es es sa s u /\
     (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
     LENGTH u.vs_memory <= LENGTH t.vs_memory /\
     (!x. not_fresh_at sh x ==> lookup_var x t = lookup_var x u) /\

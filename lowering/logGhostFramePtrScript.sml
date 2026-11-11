@@ -36,7 +36,7 @@ Theorem ghost_kept_wb_trans:
   ghost_kept cenv es1 sm G1 tn1 s1 G2 tn2 /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
-  MAP FDOM es.scopes = MAP FDOM es1.scopes /\ wb_frame cenv es sa s0 s1 ==>
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\ wb_frame cenv es es' sa s0 s1 ==>
   ghost_kept cenv es sa G0 tn0 s0 G2 tn2
 Proof
   strip_tac >> irule ghost_kept_trans >>
