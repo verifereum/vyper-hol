@@ -6,6 +6,8 @@ Ancestors
   freshWrites abiEncoderWindowArrayRound abiEncoderArrayContext abiEncoderRegisteredEffect
   abiEncoderArrayLoopCode
   abiEncoderWindowArrayEntryMem abiEncoderWindowArrayCursorMem abiEncoderWindowLoopMem
+  abiEncoderWindowLoopFrameMem abiEncoderWindowSequenceFrameMem abiEncoderWindowMemFrame
+  abiEncoderSharedArrayEntry abiDecoderVarSequence
   windowPhaseMem windowSequenceMem windowTransitionMem abiEncoderArrayCode allocaFootprint
   abiEncoderWindowSequence abiEncoderWindowPhase emitHelperProps emitHelper
   compileEnv exprLoweringProps fragExec fragExecMem venomState venomExecSemantics venomInst
@@ -108,7 +110,8 @@ Theorem window_array_scalar_exit_run_mem:
     mem_bytes_at d (LENGTH (enc (Array NONE ty) (ListV avs))) t.vs_memory =
       enc (Array NONE ty) (ListV avs) /\
     eval_operand out t = SOME (n2w (LENGTH (enc (Array NONE ty) (ListV avs)))) /\
-    (!x. out = Var x ==> not_fresh_at en x) /\ mem_cont_sim ctx func s t
+    (!x. out = Var x ==> not_fresh_at en x) /\ mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t)
 Proof
   strip_tac >>
   `?t. window_pure_seq st en s t /\
@@ -124,6 +127,17 @@ Proof
   `window_phase ctx func st en {} [] s
      (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
     metis_tac[window_pure_seq_phase] >>
+  `fn_inst_ids_distinct func ==> window_mem_frame ctx func s
+    (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    (strip_tac >> irule window_seq_mem_frame >>
+     asm_rewrite_tac[] >> qexists_tac `st` >> asm_rewrite_tac[] >>
+     reverse conj_tac >- metis_tac[window_pure_seq_def] >>
+     `EVERY (\i. i.inst_opcode = ADD \/ i.inst_opcode = MUL \/ i.inst_opcode = MLOAD)
+       (emitted_insts st en)` by
+       (irule abi_encoder_array_exit_opcodes >>
+        qexistsl_tac [`active`, `asz`, `dp`, `out`, `src`] >>
+        Cases_on `active` >> fs[]) >>
+     fs[EVERY_MEM, abi_decoder_reentry_opcode_def] >> metis_tac[]) >>
   qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
   asm_rewrite_tac[] >> conj_tac
   >- metis_tac[window_array_pure_phase_transition] >>
@@ -144,7 +158,8 @@ Theorem window_array_completed_exit_mem:
     eval_operand out t = SOME (n2w (LENGTH (enc (Array NONE ty) (ListV avs)))) /\
     (!x. out = Var x ==> not_fresh_at en x) /\
     t.vs_current_bb = en.cs_current_bb /\ t.vs_inst_idx = LENGTH en.cs_current_insts /\
-    mem_cont_sim ctx func s t
+    mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t)
 Proof
   strip_tac >>
   `abi_encoder_window_input (AbiDynArray ei asz msz active)
@@ -193,7 +208,8 @@ Theorem window_array_exit_parent_mem:
       enc (Array NONE ty) (ListV avs) /\
     eval_operand out t = SOME (n2w (LENGTH (enc (Array NONE ty) (ListV avs)))) /\
     t.vs_current_bb = en.cs_current_bb /\ t.vs_inst_idx = LENGTH en.cs_current_insts /\
-    mem_cont_sim ctx func s t
+    mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t)
 Proof
   strip_tac >> drule_all window_array_completed_exit_mem >> strip_tac >>
   rename1 `window_array_transition ctx func owner {} [] s u` >>
@@ -237,7 +253,7 @@ Resume window_array_exit_parent_mem[finish]:
   >- (irule window_array_transition_trans >> qexists_tac `u` >> asm_rewrite_tac[] >>
       irule window_array_transition_enlarge >>
       qexistsl_tac [`{}`, `[]`] >> asm_rewrite_tac[] >> simp[]) >>
-  metis_tac[window_phase_control, mem_cont_sim_trans]
+  metis_tac[window_phase_control, mem_cont_sim_trans, window_mem_frame_trans]
 QED
 
 Finalise window_array_exit_parent_mem
@@ -262,7 +278,14 @@ Theorem window_array_actual_control_loop_mem:
       [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s t /\
     mem_cont_sim ctx func s t /\
     window_array_inv ctx func owner ids ei asz msz active ty avs src dst
-      ip isite islot dp dsite dslot count_op (SND (SND labels)) sb cap d (LENGTH avs) t
+      ip isite islot dp dsite dslot count_op (SND (SND labels)) sb cap d (LENGTH avs) t /\
+    (fn_inst_ids_distinct func /\
+     (!dst src st out st' ctx func s at av sb cap d.
+       compile_abi_encode_to_buf dst src ei st = (out,st') /\
+       abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
+       ?t. window_strong_result ctx func st st' out at av d s t /\
+         mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t) ==>
+     window_mem_frame ctx func s t)
 Proof
   strip_tac >>
   `!k u. k < LENGTH avs /\
@@ -272,11 +295,20 @@ Proof
         [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] u v /\
       mem_cont_sim ctx func u v /\
       window_array_inv ctx func owner ids ei asz msz active ty avs src dst
-        ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) v` by
+        ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) v /\
+      (fn_inst_ids_distinct func /\
+       (!dst src st out st' ctx func s at av sb cap d.
+         compile_abi_encode_to_buf dst src ei st = (out,st') /\
+         abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
+         ?t. window_strong_result ctx func st st' out at av d s t /\
+           mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t) ==>
+       window_mem_frame ctx func u v)` by
     (rpt gen_tac >> strip_tac >> Cases_on `active` >> full_simp_tac bool_ss []
-     >- metis_tac[window_array_dynamic_round_mem] >>
-     metis_tac[window_array_static_round_mem]) >>
-  irule window_array_control_loop_mem >>
+     >- (drule_all window_array_dynamic_round_mem >> strip_tac >>
+         qexists_tac `t` >> asm_rewrite_tac[] >> metis_tac[]) >>
+     drule_all window_array_static_round_mem >> strip_tac >>
+     qexists_tac `t` >> asm_rewrite_tac[] >> metis_tac[]) >>
+  irule window_array_control_loop_conditional_mem >>
   full_simp_tac bool_ss [abi_encoder_array_loop_code_def] >> conj_tac
   >- metis_tac[] >>
   qmatch_asmsub_rename_tac `lookup_block body_st.cs_current_bb _ = SOME body_bb` >>
@@ -309,7 +341,14 @@ Theorem window_array_loop_parent_mem:
     window_array_inv ctx func owner ids ei asz msz active ty avs src dst
       ip isite islot dp dsite dslot count_op (SND (SND labels)) sb cap d (LENGTH avs) t /\
     window_array_cursor T owner pp psite pb 0 sb cap d
-      (LENGTH (enc (Array NONE ty) (ListV avs))) t
+      (LENGTH (enc (Array NONE ty) (ListV avs))) t /\
+    (fn_inst_ids_distinct func /\
+     (!dst src st out st' ctx func s at av sb cap d.
+       compile_abi_encode_to_buf dst src ei st = (out,st') /\
+       abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
+       ?t. window_strong_result ctx func st st' out at av d s t /\
+         mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t) ==>
+     window_mem_frame ctx func s t)
 Proof
   strip_tac >> `0 <= LENGTH avs` by simp[] >>
   drule_all window_array_actual_control_loop_mem >> strip_tac >>
@@ -383,7 +422,8 @@ Theorem window_array_constructor_entry_mem:
       ei asz msz active ty avs src dst ip mid.cs_next_id bi dp
       (if active then mid.cs_next_id+2 else 0) bd count_op (FST labels) sb cap d 0 t /\
     window_array_cursor T owner pp st.cs_next_id pb 0 sb cap d
-      (LENGTH (enc (Array NONE ty) (ListV avs))) t /\ mem_cont_sim ctx func s t
+      (LENGTH (enc (Array NONE ty) (ListV avs))) t /\ mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t)
 Proof
   strip_tac >> drule_all window_array_constructor_sites_mem >> strip_tac >>
   asm_rewrite_tac[] >> Cases_on `active` >> full_simp_tac bool_ss []
@@ -401,7 +441,13 @@ Theorem window_array_strong_contract_mem:
     compile_abi_encode_to_buf dst src (AbiDynArray ei asz msz active) st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src (AbiDynArray ei asz msz active)
       at av sb cap d s ==>
-    ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t
+    ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t /\
+      ((!dst src st out st' ctx func s at av sb cap d.
+         compile_abi_encode_to_buf dst src ei st = (out,st') /\
+         abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
+         ?t. window_strong_result ctx func st st' out at av d s t /\
+           mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t) ==>
+       window_mem_frame ctx func s t)
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   drule window_array_pre_root >> strip_tac >> gvs[] >>
@@ -466,6 +512,16 @@ Resume window_array_strong_contract_mem[loop]:
     metis_tac[] >>
   drule_all window_array_exit_parent_mem >> strip_tac >>
   `mem_cont_sim ctx func s t` by metis_tac[mem_cont_sim_trans] >>
+  `fn_inst_ids_distinct func` by fs[abi_encoder_window_pre_def] >>
+  `(!dst src st out st' ctx func s at av sb cap d.
+      compile_abi_encode_to_buf dst src ei st = (out,st') /\
+      abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
+      ?t. window_strong_result ctx func st st' out at av d s t /\
+        mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t) ==>
+    window_mem_frame ctx func s t` by
+    (strip_tac >> irule window_mem_frame_trans >> qexists_tac `entry` >>
+     conj_tac >- metis_tac[] >>
+     irule window_mem_frame_trans >> qexists_tac `completed` >> metis_tac[]) >>
   suspend "package"
 QED
 
@@ -517,7 +573,7 @@ Resume window_array_strong_contract_mem[result]:
      qexistsl_tac [`ids`, `[(d,LENGTH (enc (Array NONE ty) (ListV avs))) ]`] >>
      asm_rewrite_tac[] >>
      simp_tac bool_ss [Abbr `ids`] >> irule window_alloca_sites_subset) >>
-  qexists_tac `t` >>
+  qexists_tac `t` >> reverse conj_tac >- asm_rewrite_tac[] >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
   asm_rewrite_tac[] >>
   conj_tac >- metis_tac[abiEncoderExtendSimTheory.abi_encoder_extend_sim_sim] >>

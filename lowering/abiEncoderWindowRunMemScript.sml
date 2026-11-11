@@ -2,7 +2,7 @@
 Theory abiEncoderWindowRunMem
 Ancestors
   abiEncoderWindowLeavesMem abiEncoderWindowArrayMem abiEncoderWindowComplexMem
-  abiEncoderWindowPrimitiveFrameMem
+  abiEncoderWindowPrimitiveFrameMem abiEncoderWindowArrayFrameMem
   abiEncoderWindowContract abiEncoderAdmissible abiEncoder compileEnv
   memContinuation list pair
 
@@ -25,9 +25,9 @@ Proof
   >- metis_tac[window_copy_contract_mem]
   >- metis_tac[window_bytes_contract_mem]
   >- (drule window_array_strong_contract_mem >> disch_then drule >>
-      disch_then drule >> simp[])
+      disch_then drule >> metis_tac[])
   >- (drule window_array_strong_contract_mem >> disch_then drule >>
-      disch_then drule >> simp[]) >>
+      disch_then drule >> metis_tac[]) >>
   `!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==>
     !dst src st out en ctx func s at av sb cap d.
       compile_abi_encode_to_buf dst src ei st = (out,en) /\
