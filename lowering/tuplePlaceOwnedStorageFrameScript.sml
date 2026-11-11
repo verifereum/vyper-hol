@@ -2,7 +2,8 @@ Theory tuplePlaceOwnedStorageFrame
 Ancestors
   tuplePlaceValueStorageFrame allocaSiteResource stmtSimDefs exprSimHypsDefs
   loweringPosts venomState stmtLowering exprLowering compileEnv loweringStateRelDefs
-  vyperInterpreter vyperState vyperValue vyperTypeSystem arithmetic
+  vyperInterpreter vyperState vyperValue vyperTypeSystem arithmetic exprLoweringProps
+  venomMemDefs
 
 Theorem tuple_place_owned_storage_run_frame:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
