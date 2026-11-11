@@ -20,6 +20,7 @@ Theory fragFuelUnit
 Ancestors
   fragFuel fragFuelCtx fragFuelPackage fragFuelStmtBase fragFuelFunction
   compileVyper vyperCompiler moduleLowering loweringShapeProps loweringShapeDefs
+  supportedProgram
   crossBlockSimProofs passSimulationDefs venomExecSemantics finite_map list
 
 (* ===== From per-function stability to one fuel for every run ===== *)
@@ -143,4 +144,16 @@ Proof
                `r`, `st1`, `ctx`, `data`, `Wv`] mp_tac
     extract_context_fuel_stable >>
   impl_tac >- simp[next_stable_def] >> simp[]
+QED
+
+(* ===== The lowered runtime unit ===== *)
+
+Theorem lower_vyper_runtime_unit_fns_stable:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops ==>
+    !fn. MEM fn unit.cu_context.ctx_functions ==>
+         ?Kf. !G. callees_stable G unit.cu_context fn ==>
+                  fuel_stable (G + Kf) unit.cu_context fn
+Proof
+  cheat
 QED
