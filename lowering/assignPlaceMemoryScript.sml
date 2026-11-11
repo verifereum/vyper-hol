@@ -1,6 +1,6 @@
 Theory assignPlaceMemory
 Ancestors
-  assignPlaceStorage assignPlaceDirectCopy assignPlaceStaging
+  assignPlaceStorage assignPlaceDirectCopy assignPlaceStaging assignPlaceStagedEndpoint
   assignPlacePhysicalBytes assignPlaceLayout placeMemoryCopyEffect
   placeMemoryLiveRegion loweringPosts stmtLowering placeStore
   stmtSimDefs compileEnv exprLowering placeDestinationBounds context
@@ -172,23 +172,9 @@ Resume assign_place_memory_from_expr_post[bytes_staged]:
   simp[compile_assign_value_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> simp[comp_ignore_bind_def, comp_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
-  suspend "bytes_stage_suffix")
-QED
-
-Resume assign_place_memory_from_expr_post[bytes_stage_suffix]:
   rename1 `compile_alloc_buffer _ su = (buf,sm)` >>
   rename1 `compile_copy_memory _ _ _ sm = (uu,sn)` >>
   Cases_on `uu` >>
-  `cs_extends su sm` by metis_tac[compile_alloc_buffer_extends] >>
-  `cs_extends sm sn` by
-    (drule_all compile_copy_memory_extends >> strip_tac >>
-     gvs[same_blocks_def] >> irule cs_extends_same_block >> simp[IS_PREFIX_APPEND]) >>
-  `cs_extends sn sb` by
-    (mp_tac externalEntryShapeTheory.compile_store_memory_labels >>
-     disch_then (qspecl_then [`cenv`, `buf.buf_operand`, `dst`, `dty`,
-                              `lowered_value_type cenv e`, `sn`] mp_tac) >> simp[]) >>
-  `fn_has_code su sn func /\ fn_has_code sn sb func` by
-    metis_tac[fn_has_code_split, cs_extends_trans] >>
   `type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty` by
     metis_tac[immutableDeployPhysicalSourceTheory.immutable_rhs_physical_widens] >>
   `type_memory_size stv' <= type_memory_size dtv` by
@@ -196,64 +182,48 @@ Resume assign_place_memory_from_expr_post[bytes_stage_suffix]:
      simp[type_widens_to_def] >> strip_tac >- gvs[] >>
      metis_tac[aggregateEvaluatedLayoutTheory.arg_fits_evaluated_memory_size]) >>
   `type_memory_size stv' < dimword (:256)` by decide_tac >>
-  suspend "bytes_staging_run"
+  irule assign_place_staged_copy_endpoint >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
+  simp[] >> qexistsl_tac [`p`, `src`, `sw`, `v`] >> gvs[])
 QED
 
-Resume assign_place_memory_from_expr_post[bytes_staging_run]:
-  `val_footprint stv' v <= type_memory_size stv'` by
-    metis_tac[val_footprint_le] >>
-  drule_all assign_place_staging_live >> strip_tac >>
-  suspend "bytes_staging_finish"
-QED
-
-Resume assign_place_memory_from_expr_post[bytes_staging_finish]:
+Resume assign_place_memory_from_expr_post[same_staged]:
   markerLib.RESUME_TAC >> (rpt strip_tac >>
-  `u.vs_labels = s.vs_labels` by
-    (qpat_x_assum `(u with <|vs_vars := _; vs_memory := _; vs_prev_bb := _;
-       vs_current_bb := _; vs_inst_idx := _|>) = r`
-       (strip_assume_tac o SRULE [venom_state_component_equality]) >>
-     qpat_x_assum `(r with <|vs_vars := _; vs_allocas := _;
-       vs_alloca_next := _; vs_inst_idx := _|>) = s`
-       (strip_assume_tac o SRULE [venom_state_component_equality]) >> simp[]) >>
-  `eval_operand dst u = SOME dw` by
-    metis_tac[eval_operand_old_vars] >>
-  `place_ptr_rel cenv cx u (PlaceR p) dw (SOME LocMemory) (Type dty)` by
-    (irule place_ptr_rel_vars_frame >> qexistsl_tac [`s`, `su`] >> simp[]) >>
-  suspend "bytes_finish_effect")
+  `~is_word_type (expr_type e)` by metis_tac[] >>
+  `val_wf dtv v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  `type_memory_bytes cenv dty = type_memory_size dtv` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  `type_memory_size dtv < dimword (:256)` by
+    (drule_all memory_place_destination_bound >> simp[]) >>
+  `?sw. eval_operand src s = SOME sw /\
+        val_in_memory dtv v (w2n sw) s.vs_memory` by
+    (gvs[expr_val_rel_def] >> metis_tac[]) >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_assign_value_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `compile_copy_memory _ _ _ _ = (uu,sn)` >> Cases_on `uu` >>
+  irule assign_place_staged_copy_endpoint >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
+  simp[] >> qexistsl_tac [`p`, `src`, `sw`, `v`] >> gvs[])
 QED
 
-Resume assign_place_memory_from_expr_post[bytes_finish_effect]:
+Resume assign_place_memory_from_expr_post[relayout_direct]:
   markerLib.RESUME_TAC >> (rpt strip_tac >>
-  `cs_extends su sn` by metis_tac[cs_extends_trans] >>
-  `sn.cs_next_var = sm.cs_next_var /\ sm.cs_next_var = su.cs_next_var + 1` by
-    metis_tac[exprSimBufferStoreTheory.buffer_copy_memory_shape, compile_alloc_buffer_parts] >>
-  `local_ptrs_reserved cenv sn` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `su` >> simp[]) >>
-  `!x. buf.buf_operand = Var x \/ dst = Var x ==> not_fresh_at sn x` by
-    (rpt strip_tac >> gvs[not_fresh_at_def] >> metis_tac[]) >>
-  `?t. val_in_memory dtv v (w2n dw) t.vs_memory /\
-       typed_copy_effect ctx func sn sb u t (w2n dw) (type_memory_size dtv)` by
-    (irule assign_place_bytes_copy_effect >> simp[] >>
-     goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
-     simp[] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx ff t /\
-   alloca_frame cenv ee sn u cenv ff t` by
-    (irule assign_place_copy_effect_state_frame >> simp[] >> metis_tac[]) >>
-  suspend "bytes_compose")
+  `compile_assign_value cenv dst LocMemory src F NONE dty
+    (lowered_value_type cenv e)
+    (case dty of ArrayT et (Dynamic _) =>
+       SOME ((type_memory_bytes cenv et + 31) DIV 32,
+             type_memory_bytes cenv et) | _ => NONE)
+    (type_memory_bytes cenv dty) su = ((),sb)` by
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[compile_assign_value_def] >> metis_tac[]) >>
+  irule assignPlaceStoreReadyTheory.assign_place_relayout_from_provenance >>
+  simp[] >> (conj_tac >- metis_tac[]) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[] >> metis_tac[])
 QED
 
-Resume assign_place_memory_from_expr_post[bytes_compose]:
-  markerLib.RESUME_TAC >> (rpt strip_tac >>
-  `alloca_frame cenv ee su s cenv ff t` by
-    (irule alloca_frame_trans >>
-     qexistsl_tac [`cenv`, `ee`, `u`, `sn`] >> simp[] >>
-     drule exprSimBufferStoreTheory.buffer_copy_memory_shape >> strip_tac >>
-     fs[typed_copy_effect_def] >> metis_tac[]) >>
-  `gas_marked_path F ctx func s 0 (OK t)` by
-    (qpat_assum `gas_marked_path F ctx func s 0 (OK u)` mp_tac >>
-     qpat_assum `typed_copy_effect _ _ _ _ _ _ _ _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> simp[typed_copy_effect_def] >>
-     metis_tac[gas_marked_path_then, arithmeticTheory.ADD]) >>
-  qexists_tac `t` >> fs[typed_copy_effect_def] >>
-  simp[not_fresh_at_def])
-QED
+Finalise assign_place_memory_from_expr_post
