@@ -548,9 +548,15 @@ Proof
   `lookup_var src s4 = SOME a /\ lookup_var dst s4 = SOME b /\
    ptr_covers G4 tn4 src s4 n /\ ptr_covers G4 tn4 dst s4 n` by
     (gvs[ptr_covers_def] >> metis_tac[]) >>
+  `(((n2w len:bytes32) + 31w) && i2w (-32)) + 32w = n2w n` by
+    (qpat_assum `n = _` SUBST1_TAC >>
+     qspec_then `len` mp_tac buffer_round_size >>
+     rewrite_tac [reason_not31_mask] >> disch_then irule >> decide_tac) >>
   `eval_operand (Var v4) s4 = SOME (n2w n)` by
-    (qspec_then `len` mp_tac buffer_round_size >>
-     gvs[eval_operand_def, WORD_ADD_COMM]) >>
+    (rewrite_tac [eval_operand_def] >>
+     qpat_assum `lookup_var v4 s4 = _` SUBST1_TAC >>
+     qpat_assum `mload (w2n a) s = _` SUBST1_TAC >>
+     rewrite_tac [Once WORD_ADD_COMM] >> AP_TERM_TAC >> first_assum ACCEPT_TAC) >>
   qabbrev_tac `t = mcopy (w2n b) (w2n a) n s4` >>
   qabbrev_tac `Gf = step_prov PG G4
     (mk_inst c4.cs_next_id MCOPY [Var dst;Var src;Var v4] []) t` >>
