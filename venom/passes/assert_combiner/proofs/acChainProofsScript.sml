@@ -1201,3 +1201,12 @@ Proof
     (gvs[ac_is_safe_between_def, ac_is_volatile_def] >> metis_tac[]) >>
   decide_tac
 QED
+
+(* A parallel PHI prefix cannot participate in an assertion chain. *)
+Theorem ac_scan_phi_prefix:
+  !pre rest dfg.
+    EVERY (\i. i.inst_opcode = PHI) pre ==>
+    ac_scan_block dfg (pre ++ rest) NONE = ac_scan_block dfg rest NONE
+Proof
+  Induct >> simp[ac_scan_block_def, ac_is_safe_between_def]
+QED

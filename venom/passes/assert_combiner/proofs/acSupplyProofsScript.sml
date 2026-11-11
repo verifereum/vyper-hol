@@ -554,3 +554,50 @@ Proof
       qpat_x_assum `!x. MEM x su.irs_used_labels ==> MEM x _` irule >>
       qpat_x_assum `!x. _ ==> MEM x su.irs_used_labels` irule >> metis_tac[])
 QED
+
+(* Prefixes disjoint from candidate endpoints are left literally unchanged. *)
+Theorem ac_merge_inst_untouched:
+  (!mc. MEM mc cs ==> mc.mc_first_id <> inst.inst_id /\
+                          mc.mc_second_id <> inst.inst_id) ==>
+  ac_merge_inst cs mp su inst = (mp,[inst],su)
+Proof
+  strip_tac >>
+  `FIND (\mc. mc.mc_second_id = inst.inst_id) cs = NONE` by
+    (Cases_on `FIND (\mc. mc.mc_second_id = inst.inst_id) cs` >>
+     simp[] >> drule FIND_P >> drule FIND_MEM >> simp[] >> metis_tac[]) >>
+  `~EXISTS (\mc. mc.mc_first_id = inst.inst_id) cs` by
+    (simp[EXISTS_MEM, EVERY_MEM]) >>
+  simp[ac_merge_inst_def]
+QED
+
+Theorem ac_merge_insts_untouched_prefix:
+  !pre rest cs mp su.
+    (!i mc. MEM i pre /\ MEM mc cs ==>
+      mc.mc_first_id <> i.inst_id /\ mc.mc_second_id <> i.inst_id) ==>
+    ac_merge_insts cs mp su (pre ++ rest) =
+      (pre ++ FST (ac_merge_insts cs mp su rest),
+       SND (ac_merge_insts cs mp su rest))
+Proof
+  Induct >> simp[ac_merge_insts_def] >> rpt strip_tac >>
+  `ac_merge_inst cs mp su h = (mp,[h],su)` by
+    (irule ac_merge_inst_untouched >> metis_tac[]) >>
+  simp[ac_merge_insts_def]
+QED
+
+Theorem ac_merge_phi_prefix:
+  EVERY (\i. i.inst_opcode = PHI) pre /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (pre ++ rest)) ==>
+  ac_merge_insts (ac_scan_block dfg (pre ++ rest) NONE) mp su (pre ++ rest) =
+    (pre ++ FST (ac_merge_insts (ac_scan_block dfg rest NONE) mp su rest),
+     SND (ac_merge_insts (ac_scan_block dfg rest NONE) mp su rest))
+Proof
+  strip_tac >>
+  `!i mc. MEM i pre /\ MEM mc (ac_scan_block dfg (pre ++ rest) NONE) ==>
+    mc.mc_first_id <> i.inst_id /\ mc.mc_second_id <> i.inst_id` by
+    (rpt strip_tac >> drule ac_scan_names_asserts >>
+     disch_then (qspecl_then [`dfg`,`i`,`mc`] mp_tac) >>
+     fs[EVERY_MEM] >> simp[]) >>
+  drule ac_merge_insts_untouched_prefix >>
+  disch_then (qspecl_then [`rest`,`mp`,`su`] mp_tac) >>
+  simp[ac_scan_phi_prefix]
+QED
