@@ -52,7 +52,7 @@ Ancestors
   venomInstProps
   passSharedField passSharedTransfer passSharedVarFrame passSharedFrame
   passSharedSubst instIdxIndep venomState venomInst venomWf
-  copyFwdEquiv pred_set list rich_list
+  copyFwdEquiv opcodeClass pred_set list rich_list
 
 
 
@@ -1108,3 +1108,47 @@ Theorem assign_transparent =
 
 Theorem phi_transparent =
   copyFwdEquivTheory.phi_transparent
+
+Theorem step_inst_IntRet_control:
+  !fuel ctx inst s ret t. step_inst fuel ctx inst s = IntRet ret t ==>
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_prev_bb = s.vs_prev_bb
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `inst.inst_opcode = INVOKE`
+  >- gvs[Once step_inst_def, AllCaseEqs()] >>
+  gvs[step_inst_non_invoke] >>
+  drule step_inst_base_intret_opcodes >> strip_tac >>
+  qpat_x_assum `step_inst_base inst s = IntRet ret t` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> asm_rewrite_tac[] >>
+  simp_tac (srw_ss()) [] >> strip_tac >> gvs[AllCaseEqs()] >>
+  pairarg_tac >> gvs[] >>
+  drule venomInstProofs1Theory.pack_dret_dynamic_preserves_non_memory >> simp[]
+QED
+
+Theorem exec_block_IntRet_control:
+  !fuel ctx bb s ret t. exec_block fuel ctx bb s = IntRet ret t ==>
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_prev_bb = s.vs_prev_bb
+Proof
+  ho_match_mp_tac (cj 2 run_defs_ind) >>
+  qexists_tac `\fuel ctx inst s. T` >>
+  qexists_tac `\fuel ctx fn s. T` >> rw[] >>
+  pop_assum mp_tac >> simp[Once exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  metis_tac[step_inst_IntRet_control,
+            venomInstProofsTheory.step_preserves_control_flow]
+QED
+
+Theorem run_block_IntRet_control:
+  !fuel ctx bb s ret t. run_block fuel ctx bb s = IntRet ret t ==>
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_prev_bb = s.vs_prev_bb
+Proof
+  rpt gen_tac >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs >>
+  simp[run_block_def] >> strip_tac >>
+  drule exec_block_IntRet_control >> simp[] >>
+  drule eval_phis_only_updates_vs_vars >>
+  simp[venom_state_component_equality] >> metis_tac[]
+QED
