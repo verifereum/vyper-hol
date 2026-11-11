@@ -329,3 +329,88 @@ Resume self_code_prefix_checked[nonterm]:
 QED
 
 Finalise self_code_prefix_checked
+
+Theorem self_code_bounds_cursor_frame:
+  compile_assert_slice_bounds a n limit sa = ((),sb) /\
+  inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
+    (s with vs_inst_idx := k) Gf tnf /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!p j. cenv.ce_return_buf = SOME (PtrVar (Var p) j) ==> not_fresh_at sa p) /\
+  (!p j. cenv.ce_return_pc = SOME (PtrVar (Var p) j) ==> not_fresh_at sa p) ==>
+  ghost_inv d cenv cx es Gf tnf t /\ ghost_kept cenv es sa G tn s Gf tnf
+Proof
+  strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    (drule slice_bounds_shape >> strip_tac >> simp[mk_inst_def, is_terminator_def]) >>
+  `run_inst_seq (emitted_insts sa sb) (s with vs_inst_idx := k) =
+    OK (t with vs_inst_idx := k)` by simp[fragExecTheory.run_inst_seq_inst_idx, instIdxIndepTheory.exec_result_map_def] >>
+  `ghost_inv d cenv cx es G tn (s with vs_inst_idx := k)` by
+    simp[hash_ghost_inv_inst_idx] >>
+  drule_all slice_bounds_ghost_frame >>
+  simp[hash_ghost_inv_inst_idx, ghost_kept_def, local_region_def, eval_operand_def,
+    lookup_var_def] >> metis_tac[]
+QED
+
+Theorem self_code_size_bounds_frame:
+  emit_op CODESIZE [] sa = (limit,sb) /\
+  compile_assert_slice_bounds a n limit sb = ((),sc) /\
+  inst_seq_ptr D 0 ctx fn PG G tn
+    (emitted_insts sa sb ++ emitted_insts sb sc) s Gf tnf /\
+  run_inst_seq (emitted_insts sa sb ++ emitted_insts sb sc) s = OK t /\
+  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!p j. cenv.ce_return_buf = SOME (PtrVar (Var p) j) ==> not_fresh_at sa p) /\
+  (!p j. cenv.ce_return_pc = SOME (PtrVar (Var p) j) ==> not_fresh_at sa p) ==>
+  ghost_inv d cenv cx es Gf tnf t /\ ghost_kept cenv es sa G tn s Gf tnf /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+  t.vs_labels = s.vs_labels
+Proof
+  strip_tac >> drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  gvs[] >>
+  qabbrev_tac `v = STRING #"%" (toString sa.cs_next_var)` >>
+  qabbrev_tac `u = update_var v (n2w (LENGTH s.vs_code)) s` >>
+  `step_inst_base (mk_inst sa.cs_next_id CODESIZE [] [v]) s = OK u` by
+    simp[Abbr `u`, step_inst_base_opcode_eqs, mk_inst_def, exec_read0_def] >>
+  `run_inst_seq (emitted_insts sb sc) u = OK t` by
+    gvs[Once run_inst_seq_def, mk_inst_def, is_terminator_def] >>
+  `inst_seq_ptr D 0 ctx fn PG (G \\ v)
+    (tn with t_var := tn.t_var |+ (v,{})) (emitted_insts sb sc)
+    (u with vs_inst_idx := SUC s.vs_inst_idx) Gf tnf` by
+    gvs[Once inst_seq_ptr_def, Abbr `u`, self_code_codesize_ghost] >>
+  `~not_fresh_at sa v` by simp[Abbr `v`, not_fresh_at_def] >>
+  drule_all slice_bounds_scalar_frame >>
+  disch_then (qspec_then `n2w (LENGTH s.vs_code)` strip_assume_tac) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sb x` by simp[not_fresh_at_def] >>
+  `local_ptrs_reserved cenv sb` by
+    (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `(!p j. cenv.ce_return_buf = SOME (PtrVar (Var p) j) ==> not_fresh_at sb p) /\
+   (!p j. cenv.ce_return_pc = SOME (PtrVar (Var p) j) ==> not_fresh_at sb p)` by
+    metis_tac[] >>
+  `ghost_inv d cenv cx es (G \\ v) (tn with t_var := tn.t_var |+ (v,{})) u` by
+    gvs[Abbr `u`, fmap_domsub] >>
+  drule_all self_code_bounds_cursor_frame >> strip_tac >>
+  conj_tac >- simp[] >> suspend "kept_runtime"
+QED
+
+Resume self_code_size_bounds_frame[kept_runtime]:
+  `writes_fresh sb (emitted_insts sb sc)` by
+    (irule exprSimSliceBoundsTheory.slice_bounds_writes_fresh >> metis_tac[]) >>
+  drule_all freshWritesTheory.run_inst_seq_writes_fresh >> strip_tac >>
+  `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by
+    (simp[Abbr `u`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+     metis_tac[]) >>
+  `!name b sz. local_region cenv es.scopes u name b sz <=>
+    local_region cenv es.scopes s name b sz` by
+    (gvs[local_region_def, local_ptrs_reserved_def, eval_operand_def] >>
+     metis_tac[]) >>
+  conj_tac
+  >- (irule wordArgsPtrTheory.ghost_kept_trans >>
+      goal_assum (drule_at (Pat `ghost_kept _ _ sb _ _ _ _ _`)) >>
+      gvs[Abbr `u`, fmap_domsub]) >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[lookup_var_def] >> metis_tac[]) >>
+  qpat_x_assum `t = _ with vs_vars := _` (fn th => once_rewrite_tac [th]) >>
+  simp[Abbr `u`, update_var_def]
+QED
+
+Finalise self_code_size_bounds_frame
