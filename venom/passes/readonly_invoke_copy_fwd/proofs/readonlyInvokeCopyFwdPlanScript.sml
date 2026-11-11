@@ -4,7 +4,7 @@
    Safety of these traces is a separate obligation, not a constructor rule. *)
 Theory readonlyInvokeCopyFwdPlan
 Ancestors
-  readonlyInvokeCopyFwdDefs readonlyMemoryArgsProps indexedLists
+  readonlyInvokeCopyFwdDefs readonlyMemoryArgsProps indexedLists dfgAnalysisProps
   list rich_list pair option passSharedDefs
 
 Datatype:
@@ -486,4 +486,311 @@ Theorem ricf_event_operand_length:
 Proof
   simp[ricf_event_apply_def, ricf_apply_forward_def, EL_MAPi] >>
   rpt strip_tac >> rw[]
+QED
+
+(* Recorded sites come from the fixed DFG, not from a recomputation on the
+   current block.  This is the missing link between event and round histories. *)
+Theorem ricf_sites_fold_origin[local]:
+  !uses acc sites.
+    FOLDL (\acc (v,inst,pos).
+      case acc of NONE => NONE | SOME xs =>
+        if icf_is_assign_output_use inst pos then SOME xs
+        else if inst.inst_opcode = MCOPY /\ pos = 0 then
+          if inst.inst_id = copy_id then SOME xs else NONE
+        else if inst.inst_opcode = INVOKE /\ icf_is_readonly_op rma inst pos
+          then SOME ((inst,pos)::xs) else NONE) acc uses = SOME sites ==>
+    !ri p. MEM (ri,p) sites ==>
+      (?xs. acc = SOME xs /\ MEM (ri,p) xs) \/
+      ?v. MEM (v,ri,p) uses
+Proof
+  Induct >> pure_rewrite_tac[FOLDL]
+  >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  rpt gen_tac >> PairCases_on `h` >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `FOLDL f next uses = SOME sites` >>
+  qpat_x_assum `!acc sites. _` (qspecl_then [`next`,`sites`] mp_tac) >>
+  simp[Abbr `f`] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac
+  >- (Cases_on `acc` >>
+      gvs[Abbr `next`, AllCaseEqs()] >> metis_tac[]) >>
+  metis_tac[MEM]
+QED
+
+Theorem ricf_event_sites_origin:
+  ricf_event_ok e bb /\ MEM (ri,p) e.rfe_sites ==>
+  ?v. MEM ri (dfg_get_uses e.rfe_ctx.icf_dfg v)
+Proof
+  simp[ricf_event_ok_def, ricf_try_forward_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  `?v. MEM (v,ri,p)
+    (icf_alias_use_positions e.rfe_ctx.icf_dfg
+      (icf_collect_aliases e.rfe_ctx.icf_dfg
+        (icf_assign_root e.rfe_ctx.icf_dfg {} dst)))` by
+    (drule (INST_TYPE [alpha |-> ``:string``] ricf_sites_fold_origin) >>
+     disch_then drule >> simp[]) >>
+  gvs[invokeCopyFwdCommonDefsTheory.icf_alias_use_positions_def,
+      invokeCopyFwdCommonDefsTheory.icf_use_positions_mem,
+      MEM_FLAT, MEM_MAP, pairTheory.EXISTS_PROD] >>
+  metis_tac[]
+QED
+
+Definition ricf_inst_edit_def:
+  ricf_inst_edit old cur <=>
+    cur.inst_id = old.inst_id /\
+    (cur.inst_opcode = old.inst_opcode \/
+      old.inst_opcode = MCOPY /\ cur.inst_opcode = NOP) /\
+    (old.inst_opcode <> MCOPY /\ old.inst_opcode <> INVOKE ==> cur = old) /\
+    (cur.inst_opcode = MCOPY ==> cur = old)
+End
+
+Definition ricf_block_edit_def:
+  ricf_block_edit old cur <=>
+    old.bb_label = cur.bb_label /\
+    LIST_REL ricf_inst_edit old.bb_instructions cur.bb_instructions
+End
+
+Theorem ricf_inst_edit_refl[simp]:
+  ricf_inst_edit inst inst
+Proof
+  simp[ricf_inst_edit_def]
+QED
+
+Theorem ricf_inst_edit_trans:
+  ricf_inst_edit a b /\ ricf_inst_edit b c ==> ricf_inst_edit a c
+Proof
+  rw[ricf_inst_edit_def] >> metis_tac[]
+QED
+
+Theorem ricf_block_edit_refl[simp]:
+  ricf_block_edit bb bb
+Proof
+  simp[ricf_block_edit_def, LIST_REL_refl]
+QED
+
+Theorem ricf_block_edit_trans:
+  ricf_block_edit a b /\ ricf_block_edit b c ==> ricf_block_edit a c
+Proof
+  simp[ricf_block_edit_def, LIST_REL_EL_EQN] >>
+  metis_tac[ricf_inst_edit_trans]
+QED
+
+Theorem ricf_block_edit_EL:
+  ricf_block_edit old cur ==> 
+  LENGTH old.bb_instructions = LENGTH cur.bb_instructions /\
+  !i. i < LENGTH old.bb_instructions ==>
+    ricf_inst_edit (EL i old.bb_instructions) (EL i cur.bb_instructions)
+Proof
+  simp[ricf_block_edit_def, LIST_REL_EL_EQN]
+QED
+
+Theorem ricf_event_block_edit:
+  ricf_event_ok e bb /\
+  (!ri p i. MEM (ri,p) e.rfe_sites /\ i < LENGTH bb.bb_instructions /\
+     ri.inst_id = (EL i bb.bb_instructions).inst_id ==>
+     (EL i bb.bb_instructions).inst_opcode = INVOKE) ==>
+  ricf_block_edit bb (ricf_event_apply e bb)
+Proof
+  strip_tac >> simp[ricf_block_edit_def, ricf_event_apply_def,
+    ricf_apply_forward_def, LIST_REL_EL_EQN, EL_MAPi] >>
+  rpt strip_tac >> simp[ricf_inst_edit_def] >>
+  Cases_on `n = e.rfe_index`
+  >- (drule ricf_event_copy_shape >>
+      simp[ricf_event_copy_def] >> strip_tac >> simp[mk_nop_inst_def]) >>
+  simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  `?ri p. MEM (ri,p) e.rfe_sites /\
+    ri.inst_id = (EL n bb.bb_instructions).inst_id` by
+    (gvs[NULL_EQ, FILTER_EQ_NIL, EVERY_MEM, pairTheory.FORALL_PROD] >>
+     metis_tac[]) >>
+  `(EL n bb.bb_instructions).inst_opcode = INVOKE` by metis_tac[] >>
+  simp[]
+QED
+
+Theorem ricf_event_sites_function:
+  ricf_event_ok e bb /\ MEM (ri,p) e.rfe_sites /\
+  e.rfe_ctx.icf_dfg = dfg_build_function fn ==>
+  MEM ri (fn_insts fn) /\ ri.inst_opcode = INVOKE
+Proof
+  strip_tac >> drule_all ricf_event_sites_origin >> strip_tac >>
+  drule_all ricf_event_sites_readonly >> strip_tac >>
+  gvs[] >> metis_tac[dfg_build_function_uses_sound]
+QED
+
+(* Enough of the round-start function is retained to identify each recorded
+   INVOKE by ID.  This does not claim equality of its (edited) operands. *)
+Theorem ricf_event_current_sites:
+  ricf_event_ok e cur /\ e.rfe_ctx.icf_dfg = dfg_build_function fn /\
+  ricf_block_edit old cur /\ MEM old fn.fn_blocks /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) ==>
+  !ri p i. MEM (ri,p) e.rfe_sites /\ i < LENGTH cur.bb_instructions /\
+    ri.inst_id = (EL i cur.bb_instructions).inst_id ==>
+    (EL i cur.bb_instructions).inst_opcode = INVOKE
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all ricf_event_sites_function >> strip_tac >>
+  drule ricf_block_edit_EL >> strip_tac >>
+  `ricf_inst_edit (EL i old.bb_instructions) (EL i cur.bb_instructions)`
+    by metis_tac[] >>
+  `MEM (EL i old.bb_instructions) (fn_insts fn)` by
+    (simp[venomInstTheory.fn_insts_def] >>
+     irule venomInstTheory.fmp_fn_insts_blocks_intro >>
+     qexists_tac `old` >> simp[EL_MEM]) >>
+  `ri = EL i old.bb_instructions` by
+    (gvs[ricf_inst_edit_def] >>
+     gvs[MEM_EL] >>
+     gvs[EL_ALL_DISTINCT_EL_EQ, EL_MAP] >> metis_tac[]) >>
+  qpat_x_assum `!i. _ ==> ricf_inst_edit _ _` kall_tac >>
+  gvs[ricf_inst_edit_def]
+QED
+
+Theorem ricf_block_trace_edit:
+  !bb es last. ricf_block_trace bb es last ==>
+  !fn old ctx.
+    EVERY (\e. e.rfe_ctx = ctx) es /\
+    ctx.icf_dfg = dfg_build_function fn /\
+    ricf_block_edit old bb /\ MEM old fn.fn_blocks /\
+    ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) ==>
+    ricf_block_edit old last
+Proof
+  ho_match_mp_tac ricf_block_trace_ind >> rpt strip_tac >> gvs[] >>
+  first_x_assum irule >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  irule ricf_block_edit_trans >> goal_assum drule >>
+  irule ricf_event_block_edit >> simp[] >>
+  metis_tac[ricf_event_current_sites]
+QED
+
+Definition ricf_function_edit_def:
+  ricf_function_edit old cur <=>
+    cur = old with fn_blocks := cur.fn_blocks /\
+    LIST_REL ricf_block_edit old.fn_blocks cur.fn_blocks
+End
+
+Theorem ricf_function_edit_refl[simp]:
+  ricf_function_edit fn fn
+Proof
+  simp[ricf_function_edit_def, LIST_REL_refl]
+QED
+
+Theorem ricf_function_edit_trans:
+  ricf_function_edit a b /\ ricf_function_edit b c ==>
+  ricf_function_edit a c
+Proof
+  simp[ricf_function_edit_def] >> strip_tac >> conj_tac
+  >- (qpat_x_assum `c = _` (fn th => once_rewrite_tac[th]) >>
+      qpat_x_assum `b = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  gvs[LIST_REL_EL_EQN] >> metis_tac[ricf_block_edit_trans]
+QED
+
+Theorem ricf_round_certificate_edit:
+  ricf_round_certificate ctx fn cur /\
+  ctx.icf_dfg = dfg_build_function fn /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) ==>
+  ricf_function_edit fn cur
+Proof
+  simp[ricf_round_certificate_def, ricf_function_edit_def] >>
+  strip_tac >> gvs[] >>
+  gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  irule ricf_block_trace_edit >>
+  qexistsl_tac [`EL n fn.fn_blocks`,`ctx`,`es`] >> simp[EL_MEM] >>
+  qexists_tac `fn` >> simp[EL_MEM]
+QED
+
+Theorem ricf_block_edits_insts:
+  !bbs cs. LIST_REL ricf_block_edit bbs cs ==>
+  LIST_REL ricf_inst_edit (fn_insts_blocks bbs) (fn_insts_blocks cs)
+Proof
+  Induct >> Cases_on `cs` >>
+  simp[venomInstTheory.fn_insts_blocks_def, ricf_block_edit_def] >>
+  rpt strip_tac >> irule EVERY2_APPEND_suff >> simp[]
+QED
+
+Theorem ricf_function_edit_insts:
+  ricf_function_edit fn cur ==>
+  LIST_REL ricf_inst_edit (fn_insts fn) (fn_insts cur)
+Proof
+  simp[ricf_function_edit_def, venomInstTheory.fn_insts_def] >>
+  metis_tac[ricf_block_edits_insts]
+QED
+
+Theorem ricf_function_edit_ids:
+  ricf_function_edit fn cur ==>
+  MAP (\inst. inst.inst_id) (fn_insts cur) =
+  MAP (\inst. inst.inst_id) (fn_insts fn)
+Proof
+  strip_tac >> drule ricf_function_edit_insts >>
+  simp[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP] >>
+  metis_tac[ricf_inst_edit_def]
+QED
+
+Theorem ricf_function_trace_edit:
+  !base fn cur. ricf_function_trace base fn cur ==>
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) ==>
+  ricf_function_edit fn cur
+Proof
+  ho_match_mp_tac ricf_function_trace_ind >> simp[] >> rpt strip_tac >>
+  rename1 `ricf_round_certificate (base0 with icf_dfg := _) fn mid` >>
+  `ricf_function_edit fn mid` by
+    (irule ricf_round_certificate_edit >> simp[] >>
+     qexists_tac `base0 with icf_dfg := dfg_build_function fn` >> simp[]) >>
+  irule ricf_function_edit_trans >> goal_assum drule >>
+  first_x_assum irule >> metis_tac[ricf_function_edit_ids]
+QED
+
+(* Record sources at the pre-event block.  Operand histories are folds over
+   this chronological log, so a later rewrite wins at a repeated position. *)
+Definition ricf_event_log_def:
+  ricf_event_log bb [] = [] /\
+  ricf_event_log bb (e::es) =
+    (e, ricf_event_source e bb) ::
+      ricf_event_log (ricf_event_apply e bb) es
+End
+
+Definition ricf_edit_operand_def:
+  ricf_edit_operand i iid j op (e,src) =
+    if i = e.rfe_index then NONE
+    else case op of NONE => NONE | SOME v =>
+      if MEM (iid,j) (MAP (\(ri,p). (ri.inst_id,p)) e.rfe_sites)
+      then SOME src else SOME v
+End
+
+Definition ricf_operand_at_def:
+  ricf_operand_at (inst:instruction) j =
+    if j < LENGTH inst.inst_operands then SOME (EL j inst.inst_operands)
+    else NONE
+End
+
+Theorem ricf_event_operand_at:
+  i < LENGTH bb.bb_instructions ==>
+  ricf_operand_at (EL i (ricf_event_apply e bb).bb_instructions) j =
+  ricf_edit_operand i (EL i bb.bb_instructions).inst_id j
+    (ricf_operand_at (EL i bb.bb_instructions) j)
+    (e,ricf_event_source e bb)
+Proof
+  strip_tac >> Cases_on `i = e.rfe_index`
+  >- simp[ricf_operand_at_def, ricf_edit_operand_def, ricf_event_apply_def,
+          ricf_apply_forward_def, EL_MAPi, mk_nop_inst_def] >>
+  drule_all ricf_event_operand_length >> strip_tac >>
+  simp[ricf_edit_operand_def, ricf_operand_at_def] >>
+  Cases_on `j < LENGTH (EL i bb.bb_instructions).inst_operands` >> simp[] >>
+  drule_all ricf_event_operand >> simp[] >> metis_tac[]
+QED
+
+Theorem ricf_block_trace_operand_history:
+  !bb es last. ricf_block_trace bb es last ==>
+  !i j. i < LENGTH bb.bb_instructions ==>
+    ricf_operand_at (EL i last.bb_instructions) j =
+    FOLDL (ricf_edit_operand i (EL i bb.bb_instructions).inst_id j)
+      (ricf_operand_at (EL i bb.bb_instructions) j) (ricf_event_log bb es)
+Proof
+  ho_match_mp_tac ricf_block_trace_ind >> simp[ricf_event_log_def] >>
+  rpt strip_tac >> pure_rewrite_tac[FOLDL] >>
+  drule ricf_event_prefix_and_copy >> strip_tac >>
+  `i < LENGTH (ricf_event_apply e bb).bb_instructions` by simp[] >>
+  first_x_assum (qspecl_then [`i`,`j`] mp_tac) >> simp[] >>
+  `((EL i (ricf_event_apply e bb).bb_instructions).inst_id =
+     (EL i bb.bb_instructions).inst_id)` by
+    (mp_tac ricf_event_ids >>
+     simp[LIST_EQ_REWRITE, EL_MAP] >> metis_tac[]) >>
+  simp[ricf_event_operand_at]
 QED
