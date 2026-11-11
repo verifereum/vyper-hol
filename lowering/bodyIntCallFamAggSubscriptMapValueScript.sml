@@ -87,9 +87,17 @@ Proof
   gvs[] >>
   rename1 `intcall_expr_cont fp ce env es sa s ee sb u` >>
   rename1 `select_result _ _ (HashMapRef tr base_slot kt _) (ValueSubscript kv) ee = (INL selected,ee)` >>
-  `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript ann obj idx)
-     es sa sb s ee selected (LocatedValue ann (mk_ptr slot (slot_loc tr))) u` by
+  `vv_holds ce fp.jc_cx (post_value_type ce (Subscript ann obj idx))
+     selected (LocatedValue ann (mk_ptr slot (slot_loc tr))) ee u /\
+   vv_at ce fp.jc_cx (post_value_type ce (Subscript ann obj idx)) sa sb ee
+     selected (LocatedValue ann (mk_ptr slot (slot_loc tr))) u /\
+   (post_value_type ce (Subscript ann obj idx) <>
+    expr_type (Subscript ann obj idx) ==>
+    vv_own ce fp.jc_cx (post_value_type ce (Subscript ann obj idx)) sa sb ee
+      selected (LocatedValue ann (mk_ptr slot (slot_loc tr))) u) /\
+   (~expr_has_effect (Subscript ann obj idx) ==>
+    vv_storage_live fp.jc_cx (LocatedValue ann (mk_ptr slot (slot_loc tr))) ee u)` by
     (irule intcall_mapping_leaf_post >> simp[mk_ptr_def] >> metis_tac[]) >>
-  fs[vv_post_def, vv_operand_def, mk_ptr_def, vv_location_def] >>
+  fs[vv_operand_def, mk_ptr_def, vv_location_def] >>
   Cases_on `tr` >> gvs[slot_loc_def]
 QED
