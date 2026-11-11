@@ -2,7 +2,8 @@
 Theory bodyIntCallFamCallIntStageStore
 Ancestors
   bodyIntCallAggregateStoreFrame bodyIntCallWidenedChildStore
-  memoryLocalRhsProps
+  memoryLocalRhsProps memoryLayoutDefs memoryLayoutSource memoryLayoutRel
+  memoryValueEncoding
 
 Theorem intcall_stage_store_effect:
   compile_store_memory ce src dst dty sty sa = ((),sb) /\
@@ -46,6 +47,30 @@ Theorem intcall_stage_store_effect:
     stmt_state_rel ctx func ce cx es u
 Proof
   strip_tac >>
+  (* Equal tuple layouts are copied in bulk, as the same type is. *)
+  Cases_on `dty <> sty /\ ~is_bytestring_type dty /\ tuple_memory_layout_eq dty sty`
+  >- (qpat_x_assum `~_ ==> _` mp_tac >> (impl_tac >- fs[]) >> strip_tac >>
+      `~is_word_type dty` by
+        metis_tac[compileEnvTheory.type_widens_to_word] >>
+      `compile_store_memory ce src dst dty dty sa = ((),sb)` by
+        gvs[contextTheory.compile_store_memory_def] >>
+      `memory_layout_key dty = memory_layout_key sty` by
+        (Cases_on `dty` >> Cases_on `sty` >>
+         gvs[tuple_memory_layout_eq_def, memory_layout_key_tuple]) >>
+      `memory_layout_rel dtv stv` by metis_tac[memory_layout_key_evaluated] >>
+      `val_in_memory dtv v (w2n sw) s.vs_memory` by
+        (irule memory_value_rel_val_in_memory >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         irule memory_layout_rel_value >> qexists_tac `stv` >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         irule val_in_memory_memory_value_rel >> fs[]) >>
+      mp_tac (Q.INST
+        [`P` |-> `\b n. regions_disjoint b n (w2n dw) (type_memory_size dtv)`,
+         `reserved` |-> `\op:operand. F`, `sty` |-> `dty`, `stv` |-> `dtv`]
+        (SPEC_ALL protected_compatible_store_state_landing)) >>
+      (impl_tac >- (fs[] >> metis_tac[])) >> strip_tac >> qexists `u` >>
+      simp[placeMemoryCopyEffectTheory.typed_copy_effect_def,
+           loweringStateRelDefsTheory.regions_disjoint_def]) >>
   Cases_on `dty = sty \/ is_bytestring_type dty /\ is_bytestring_type sty`
   >- (mp_tac (Q.INST
         [`P` |-> `\b n. regions_disjoint b n (w2n dw) (type_memory_size dtv)`,
