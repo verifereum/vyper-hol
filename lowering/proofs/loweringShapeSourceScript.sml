@@ -187,12 +187,8 @@ Theorem check_contract_runtime_bodies_shape_ok:
   raw_shape_free_program tops ==>
   runtime_bodies_shape_ok tops
 Proof
-  simp[runtime_bodies_shape_ok_def, raw_shape_free_program_def] >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  Cases_on `vis = Deploy`
-  >- (`dflts = []` by metis_tac[check_contract_deploy_no_defaults, MEM] >>
-      gvs[supported_expr_exists_def]) >>
+  rw[runtime_bodies_shape_ok_def, raw_shape_free_program_def] >>
+  first_x_assum drule_all >> strip_tac >>
   drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
   drule check_contract_runtime_function_body_MEM >> simp[] >>
   disch_then drule_all >>
@@ -254,12 +250,6 @@ Proof
   rw[supported_stmt_expr_exists_def] >>
   metis_tac[supported_expr_exists_mono, supported_assignment_exists_mono,
             supported_stmt_parts_exists_mono]
-QED
-
-Theorem raw_shape_root_shape_root[local]:
-  !e. expr_raw_shape_root e ==> expr_shape_root e
-Proof
-  simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]
 QED
 
 Theorem supported_program_raw_shape_free_program:
