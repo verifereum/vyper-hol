@@ -38,12 +38,14 @@ Proof
     is_bytestring_type (expr_type e) /\
     is_bytestring_type (lowered_value_type cenv e) /\
     arg_type_fits (lowered_value_type cenv e) (expr_type e)`
-  >- (`supported_copy_types typ (expr_type e)` by
-        gvs[supported_stmt_def] >>
-      `lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
-       has_length_word typ /\ is_empty_value_expr e` by
-        metis_tac[copy_types_not_word_bytestring_ptr] >>
-      irule body_annassign_memory_ptr >> metis_tac[]) >>
+  >- (Cases_on `lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
+                 has_length_word typ /\ is_empty_value_expr e`
+      >- (irule body_annassign_memory_ptr >> metis_tac[]) >>
+      `type_widens_to env.type_defs (expr_type e) typ` by
+        gvs[type_stmt_def, AllCaseEqs()] >>
+      `lowered_value_type cenv e = expr_type e` by
+        metis_tac[type_widens_to_def, arg_type_fits_bytestring_target] >>
+      irule body_annassign_widened_aggregate_ptr >> gvs[] >> metis_tac[]) >>
   irule body_annassign_widened_aggregate_call_ptr >> metis_tac[]
 QED
 

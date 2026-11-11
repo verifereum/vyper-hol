@@ -19,8 +19,8 @@
  *                                  and out of a loop iteration's scope
  *   body_annassign_case, body_for_case — the cases
  *   body_annassign_memory        — the declarations in memory
- *   body_annassign_other         — the declarations it leaves, which are
- *                                  unsupported
+ *   body_annassign_widened_aggregate — a declaration whose non-call
+ *                                  right-hand side widens (RESIDUAL)
  *   body_for_other               — dispatcher for computed ranges and arrays
  *   body_for_array               — iteration over a fixed array
  *   body_for_range               — checked integer-range body simulation
@@ -385,49 +385,6 @@ Proof
   metis_tac[]
 QED
 
-(* A supported copy into a type other than the source's, and not a word,
-   is a bytestring copy. *)
-Theorem copy_types_not_word_bytestring[local]:
-  !dst src.
-    supported_copy_types dst src /\ dst <> src /\ ~is_word_type dst ==>
-    is_bytestring_type dst
-Proof
-  simp[supportedTypesTheory.supported_copy_types_def] >> rpt strip_tac
-  >- metis_tac[typedCopyMetadataTheory.supported_word_type_is_word] >>
-  BasicProvers.every_case_tac >> gvs[is_bytestring_type_def]
-QED
-
-(* The declarations body_annassign_memory leaves are not supported: a
-   supported declaration copies a value of the declared type itself, a
-   word, or a bytestring (supported_copy_types). *)
-Theorem body_annassign_other:
-  !cx id typ e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res
-   es'.
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_expr_ok cx e) /\
-    body_inv tops ctx cenv cx /\
-    supported_stmt tops bindings (AnnAssign id typ e) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
-    stmt_exprs_ok cenv (AnnAssign id typ e) /\
-    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    ~is_word_type typ /\
-    ~(expr_type e = typ \/ is_bytestring_type typ \/
-      has_length_word typ /\ is_empty_value_expr e) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
-      (eval_stmt cx (AnnAssign id typ e)) es
-Proof
-  rpt strip_tac >>
-  `supported_copy_types typ (expr_type e)` by
-    (qpat_x_assum `supported_stmt _ _ _` mp_tac >> simp[supported_stmt_def]) >>
-  metis_tac[copy_types_not_word_bytestring]
-QED
-
 (* RESIDUAL (#767): a memory-backed declaration of an internal call whose
    return type widens to the call's type other than as a bytestring
    (type_widens_to: a DynArray of a smaller bound, a tuple elementwise). *)
@@ -520,7 +477,13 @@ Proof
             body_annassign_memory) >>
           simp[] >> first_assum ACCEPT_TAC) >>
       irule body_annassign_widened_aggregate_call >> metis_tac[]) >>
-  irule body_annassign_other >> metis_tac[]
+  Cases_on `lowered_value_type cenv e = expr_type e`
+  >- (irule body_annassign_widened_aggregate >> metis_tac[]) >>
+  `type_widens_to env.type_defs (expr_type e) typ` by
+    gvs[type_stmt_def, AllCaseEqs()] >>
+  `~is_bytestring_type (expr_type e)` by
+    metis_tac[type_widens_to_def, arg_type_fits_bytestring_target] >>
+  irule body_annassign_widened_aggregate_call >> metis_tac[]
 QED
 
 (* ===== For ===== *)

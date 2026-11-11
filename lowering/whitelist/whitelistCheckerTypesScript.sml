@@ -235,6 +235,17 @@ Proof
   simp[supported_copy_types_def]
 QED
 
+(* The copy-types conjunct of supported_stmt's AnnAssign clause: the checker
+   lets the right-hand side's type widen to the declared type. *)
+Theorem type_stmt_annassign_copy_types:
+  !env ret_ty id typ e env'.
+    type_stmt env ret_ty (AnnAssign id typ e) = SOME env' ==>
+    supported_copy_types typ (expr_type e) \/ arg_type_fits (expr_type e) typ
+Proof
+  rpt strip_tac >> gvs[type_stmt_def, AllCaseEqs(), type_widens_to_def] >>
+  metis_tac[supported_copy_types_refl]
+QED
+
 (* ===== Binary operators ===== *)
 
 Theorem int_literal_value_supported:
