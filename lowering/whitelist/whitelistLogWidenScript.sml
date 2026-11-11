@@ -1,9 +1,9 @@
 (*
  * Whitelist removal: log arguments that widen to the event field type.
  *
- * supported_log asks each log argument's type to equal its event field's
- * type (MAP expr_type es = MAP (SND o FST) fields); the type checker asks
- * only event_arg_compatible (a String[5] argument for a String[10] field,
+ * supported_log_exact classifies arguments whose types equal their event
+ * fields (MAP expr_type es = MAP (SND o FST) fields); supported_log and
+ * the type checker use event_arg_compatible (a String[5] argument for a String[10] field,
  * a shorter Bytes[...]).  The lowering never reads the field types: its
  * Log case types the topics and the data tuple by the arguments
  * (data_types = MAP SND data_ops, compile_log_eval_all_types), and
@@ -34,10 +34,8 @@
  *       -> body_log_widen_case, under the type checker's
  *          LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e))
  *          es fields (type_stmt's Log clause) for the event's fields.
- *   The S3 twins have the same single use: stmtLogMemory:143
- *     compile_log_ready_stmt_frag_mem (log_source_event_encoded at the
- *     argument types, and [local] log_mem_compile_structure) and
- *     bodyMemLog:96 body_log_mem_case; not this piece (S1).
+ *   The S3 memory twin is compile_log_ready_stmt_frag_mem_widen
+ *     (stmtLogMemory), used by body_log_widen_mem_case (bodyMemLog).
  *     bodyPtrLogCases:20 body_log_case_ptr is admitted at the branch head.
  *
  * Already general (argument types only, no field types):
@@ -69,7 +67,7 @@ Ancestors
   stmtSimLogTrace emitHelper context venomInst
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasSeq rich_list
-  stmtSimLogCompose stmtSimLog bodySimLog e2eDefs vyperEvent vyperABI
+  stmtSimLogCompose stmtSimLog bodySimLogArgs e2eDefs vyperEvent vyperABI
   vyperTypeSystem supportedTypes supportedDecls supportedStmts
   supportedExprs supportedExprTraverse supportedStmtTraverse
   exprSimSource bodyExprPreFacts exprSimHypsDefs bodySim exprSimHyps

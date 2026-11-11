@@ -6,7 +6,7 @@
 Theory supportedStmts
 Ancestors
   supportedStmtTraverse supportedExprs supportedExprForms supportedExprTraverse
-  supportedTypes supportedDecls supportedTargets exprLowering vyperAST list alist integer
+  supportedTypes supportedDecls supportedTargets vyperTypeSystem exprLowering vyperAST list alist integer
 
 Definition supported_local_word_def:
   supported_local_word bindings name <=>
@@ -101,11 +101,20 @@ Definition supported_raise_reason_def:
   supported_raise_reason tops (RaiseCustomError err) = F
 End
 
+(* Exact argument types select the original Log proofs. *)
+Definition supported_log_exact_def:
+  supported_log_exact tops id es <=>
+    supported_pure_exprs tops es /\
+    case supported_event_fields tops id of
+      SOME fields => MAP expr_type es = MAP (SND o FST) fields
+    | NONE => F
+End
+
 Definition supported_log_def:
   supported_log tops id es <=>
     supported_pure_exprs tops es /\
     case supported_event_fields tops id of
-      SOME fields => MAP expr_type es = MAP (SND o FST) fields
+      SOME fields => LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) es fields
     | NONE => F
 End
 
