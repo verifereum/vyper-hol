@@ -1,7 +1,7 @@
 Theory simplifyCfgRetpc
 Ancestors
   unitShapeDefs simplifyCfgDefs simplifyCfgShape simplifyCfgLabelProps rich_list
-  simplifyCfgStruct cfgTransform venomWf venomInst list
+  simplifyCfgStruct cfgTransform venomWf venomWfProps venomInst list
   cfgNormBase simplifyCfgBypassPhi simplifyCfgPhiSemantics
   venomExecSemantics alist option
   simplifyCfgRepairDataflow simplifyCfgCollapseShape simplifyCfgPhiShape
@@ -638,7 +638,7 @@ Resume retpc_normalized_transport[unique]:
   asm "data" (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
   `i.inst_id = j.inst_id` by
     (fs[retpc_shape_ok_def] >> metis_tac[]) >>
-  metis_tac[fn_inst_ids_distinct_inj]
+  metis_tac[venomWfPropsTheory.fn_inst_ids_distinct_inj]
 QED
 
 Finalise retpc_normalized_transport
