@@ -2,6 +2,7 @@ Theory bodyPtrIntCallStageArgument
 Ancestors exprLowering compileEnv context list
   bodyPtrIntCallStagingFrame assignTuplePtrBoundary
   bodyPtrTypeBuiltinsTransport bodyPtrDefs loweringPosts
+  exprBopLowering abiBuiltinDispatchCorrect
 
 (* Expose precisely the head segment, without executing the recursive tail.
    Destination and source annotations remain distinct in the typed store. *)
@@ -63,4 +64,20 @@ Proof
      simp[] >>
      gvs[ptr_vv_ok_def]) >>
   gvs[ptr_vv_ok_def]
+QED
+
+(* Dispatch wrappers determine result tags independently of child values. *)
+Theorem type_builtin_body_result_tag:
+  compile_type_builtin_dispatch_body cfn ce ann ty tb ret args sa = (vv,sb) ==>
+  vv_type vv = ann
+Proof
+  Cases_on `tb` >>
+  simp[compile_type_builtin_dispatch_body_def] >>
+  rpt (pairarg_tac >> simp[]) >>
+  rpt IF_CASES_TAC >>
+  gvs[as_stack_val_def, as_ptr_val_def, vv_type_def] >>
+  rpt (pairarg_tac >> gvs[as_stack_val_def, as_ptr_val_def, vv_type_def]) >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs(), as_stack_val_pair, vv_type_def] >>
+  drule as_ptr_val_result >> strip_tac >> gvs[vv_type_def]
 QED
