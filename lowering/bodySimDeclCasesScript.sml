@@ -37,6 +37,7 @@ Ancestors
   stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps
   stmtSimFor stmtSimForParts stmtSimForRange stmtLowering stmtLoweringMono
   stmtSimForArray stmtSimForArrayFrag stmtSimForArrayFrame vyperTyping
+  loweringPosts exprLowering
   fragExec compileEnv supportedStmts supportedStmtTraverse vyperAST
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeValues
@@ -1163,7 +1164,7 @@ Theorem array_for_source_ready[local]:
   supported_stmt tops bindings (For id typ (Array e) n stmts) /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
   type_stmt env ret_ty (For id typ (Array e) n stmts) = SOME env' /\
-  e = Name (ArrayT typ (Fixed m)) arr ==>
+  e = Name (ArrayT typ (Fixed n)) arr ==>
   ?name env_b entry tv ptr sz al vs.
     e = Name (ArrayT typ (Fixed n)) name /\ env' = env /\
     well_typed_expr env (Name (ArrayT typ (Fixed n)) name) /\
@@ -1420,9 +1421,10 @@ Theorem post_value_type_declared_return:
 Proof
   rpt strip_tac >>
   Cases_on `?t fid args drv. e = Call t (IntCall fid) args drv`
-  >- (gvs[] >> drule_all supported_internal_return_type >> strip_tac >>
-      simp[post_value_type_def, lowered_value_type_def, expr_type_def]) >>
-  irule post_value_type_not_int_call >> metis_tac[]
+  >- (gvs[] >> drule_all supported_internal_return_type >>
+      simp[exprLoweringTheory.lowered_value_type_def,
+           vyperASTTheory.expr_type_def]) >>
+  irule loweringPostsTheory.post_value_type_not_int_call >> metis_tac[]
 QED
 
 Theorem body_for_array:
@@ -1451,7 +1453,7 @@ Theorem body_for_array:
     stmt_exprs_ok cenv (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    it = Array e /\ e = Name (ArrayT typ (Fixed m)) arr ==>
+    it = Array e /\ e = Name (ArrayT typ (Fixed n)) arr ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ it n body))
       (eval_stmt cx (For id typ it n body)) es

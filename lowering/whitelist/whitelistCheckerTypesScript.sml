@@ -592,7 +592,7 @@ QED
    ternary, is not a place rooted at a top-level name, and an internal call
    at its top has its callee's declared return type. *)
 Theorem type_stmt_for_array_supported_iterator:
-  type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
+  type_stmt env ret_ty (For id typ (Array e) n ss) = SOME env' /\
   (!bd. expr_type e = ArrayT typ bd ==> bound_length bd = n) /\
   (!t nid. e = TopLevelName t nid ==>
            IS_SOME (supported_immutable_type tops nid)) /\

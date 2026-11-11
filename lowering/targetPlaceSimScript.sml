@@ -99,7 +99,10 @@ End
 Theorem place_access_root:
   !tgt attrs. FST (place_access tgt attrs) = target_root tgt
 Proof
-  ho_match_mp_tac vyperTypeSystemTheory.place_access_ind >>
+  `(!e:expr. T) /\
+   !tgt attrs. FST (place_access tgt attrs) = target_root tgt`
+    suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
   simp[vyperTypeSystemTheory.place_access_def, target_root_def]
 QED
 

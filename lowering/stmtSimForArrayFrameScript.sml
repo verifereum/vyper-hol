@@ -1393,7 +1393,7 @@ Proof
       >~ [`TopLevelName _ nid`]
       >- (PairCases_on `nid` >> simp[Once evaluate_def] >>
           metis_tac[lookup_global_scopes]) >>
-      gvs[supported_iterator_def, supported_iterator_exists_def] >>
+      gvs[supported_iterator_def, supportedStmtTraverseTheory.supported_iterator_exists_def] >>
       metis_tac[supported_expr_scopes]) >>
   rename1 `eval_iterator cx (Range a b) es = _` >>
   irule range_iterator_scopes >> goal_assum (drule_at Any) >>

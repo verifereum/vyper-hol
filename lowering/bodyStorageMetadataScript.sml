@@ -46,7 +46,10 @@ Proof
   gvs[toplevel_vtype_keys_toplevel_def, find_var_decl_by_name_def,
       ALL_DISTINCT_APPEND] >>
   rw[] >> gvs[MEM_FLAT, MEM_MAP, PULL_EXISTS] >> res_tac >>
-  gvs[toplevel_vtype_keys_toplevel_def]
+  gvs[toplevel_vtype_keys_toplevel_def] >>
+  qpat_x_assum `!y. ~MEM y tops \/ _`
+    (qspec_then `VariableDecl vis Immutable id ty init` mp_tac) >>
+  simp[toplevel_vtype_keys_toplevel_def]
 QED
 
 (* A supported immutable is a main-module variable with no storage or

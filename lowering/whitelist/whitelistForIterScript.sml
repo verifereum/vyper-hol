@@ -393,7 +393,7 @@ Theorem body_for_other:
 Proof
   rpt strip_tac >>
   imp_res_tac body_stmt_safe_for_body >> Cases_on `it`
-  >~ [`Range _ _`] >- (irule body_for_range >> simp[] >> metis_tac[]) >>
+  >~ [`For _ _ (Range _ _) _ _`] >- (irule body_for_range >> simp[] >> metis_tac[]) >>
   rename1 `For id typ (Array e) n body` >>
   `supported_type_namespace typ /\ supported_iterator tops typ (Array e) n /\
    supported_stmts tops bindings body /\
@@ -410,7 +410,8 @@ Proof
      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops))` by
     fs[bodySimTheory.body_inv_def] >>
   `post_value_type cenv e = expr_type e` by
-    (irule post_value_type_declared_return >> simp[] >> rpt strip_tac >>
+    (irule post_value_type_declared_return >> qexists_tac `tops` >>
+     simp[] >> rpt strip_tac >>
      gvs[supported_iterator_def]) >>
   Cases_on `e` >>
   gvs[supported_iterator_def, expr_type_def, place_access_root]

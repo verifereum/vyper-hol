@@ -31,7 +31,7 @@ Theorem array_for_source_ready_mem[local]:
   supported_stmt tops bindings (For id typ (Array e) n stmts) /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
   type_stmt env ret_ty (For id typ (Array e) n stmts) = SOME env' /\
-  e = Name (ArrayT typ (Fixed m)) arr ==>
+  e = Name (ArrayT typ (Fixed n)) arr ==>
   ?name env_b entry tv ptr sz al vs.
     e = Name (ArrayT typ (Fixed n)) name /\ env' = env /\
     well_typed_expr env (Name (ArrayT typ (Fixed n)) name) /\
@@ -315,7 +315,7 @@ Theorem body_for_fixed_array_mem[local]:
     stmt_exprs_ok cenv (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
     frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\
-    it = Array e /\ e = Name (ArrayT typ (Fixed m)) arr ==>
+    it = Array e /\ e = Name (ArrayT typ (Fixed n)) arr ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ it n body))
       (eval_stmt cx (For id typ it n body)) es
@@ -419,7 +419,8 @@ Proof
      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops))` by
     fs[bodySimTheory.body_inv_def] >>
   `post_value_type cenv e = expr_type e` by
-    (irule post_value_type_declared_return >> simp[] >> rpt strip_tac >>
+    (irule post_value_type_declared_return >> qexists_tac `tops` >>
+     simp[] >> rpt strip_tac >>
      gvs[supported_iterator_def]) >>
   Cases_on `e` >>
   gvs[supported_iterator_def, expr_type_def, place_access_root]
@@ -434,5 +435,5 @@ Proof
         (irule toplevel_find_NONE_bare_global >>
          fs[expr_sim_inv_def] >> metis_tac[]) >>
       irule body_for_immutable_array_mem >> simp[] >> metis_tac[]) >>
-  irule body_for_memory_iterable_mem >> simp[] >> metis_tac[]
+  irule body_for_memory_iterable_mem >> simp[expr_type_def] >> metis_tac[]
 QED

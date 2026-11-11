@@ -110,9 +110,10 @@ Theorem deploy_frame_supported_iterator_no_extcode:
   ~supported_iterator_exists is_extcode iter
 Proof
   Cases_on `iter`
-  >- (rename1 `Array arr` >> Cases_on `arr` >>
-      simp[supported_iterator_exists_def, supported_expr_exists_def, is_extcode_def] >>
-      simp[supported_iterator_def] >>
+  >- (rename1 `Array arr` >> strip_tac >> simp[supported_iterator_exists_def] >>
+      Cases_on `(?t v. arr = Name t v) \/ (?t nid. arr = TopLevelName t nid)`
+      >- gvs[supported_expr_exists_def, is_extcode_def] >>
+      `supported_expr tops arr` by (Cases_on `arr` >> gvs[supported_iterator_def]) >>
       metis_tac[deploy_frame_supported_expr_no_extcode]) >>
   rename1 `Range a b` >>
   `supported_iterator tops ty (Range a b) n ==>
