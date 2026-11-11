@@ -701,11 +701,11 @@ Theorem storage_agree_storage_dead:
 Proof
   rpt strip_tac >> simp[FUN_EQ_THM] >> rpt gen_tac >>
   PURE_REWRITE_TAC [storage_dead_def] >>
-  `!slot tv mid n subs.
-     declared_storage_region cx mid n subs = SOME (tr,slot,tv) /\
+  `!slot tv.
+     MEM (tr,slot,tv) (FST H) /\
      w2n slot + type_slot_size tv <= dimword (:256) /\
-     (!mid' n' subs' slot' tv'.
-        declared_storage_region cx mid' n' subs' = SOME (tr,slot',tv') /\
+     (!slot' tv'.
+        MEM (tr,slot',tv') (FST H) /\
         (slot',tv') <> (slot,tv) ==>
         ranges_disjoint (w2n slot) (type_slot_size tv) (w2n slot')
           (type_slot_size tv')) ==>
@@ -713,8 +713,7 @@ Proof
     suffices_by (
       strip_tac >> eq_tac >> strip_tac >> first_x_assum drule_all >>
       strip_tac >>
-      qexistsl_tac [`mid`, `n`, `subs`, `slot`, `tv`] >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
+      simp[] >> qexistsl_tac [`slot`, `tv`] >> gvs[]) >>
   rpt strip_tac >> irule (cj 1 dead_bytes_live_frame) >>
   rpt strip_tac >>
   qpat_x_assum `storage_agree _ _ _` mp_tac >>
@@ -722,17 +721,14 @@ Proof
   disch_then (qspecl_then [`n2w i`, `c`] mp_tac) >>
   `i < dimword (:256)` by decide_tac >> simp[] >>
   impl_tac >- (
-    simp[storage_dead_def] >> rpt strip_tac >>
+    rewrite_tac[storage_dead_def] >> strip_tac >>
     rename1 `dead_bytes st1 (w2n slot') tv' i c` >>
     Cases_on `(slot', tv') = (slot, tv)` >- gvs[] >>
-    first_x_assum drule_all >> strip_tac >>
-    Cases_on `dead_bytes st1 (w2n slot') tv' i c` >- (
-      qsuff_tac `F` >- simp[] >>
-      drule (cj 1 dead_bytes_range) >>
-      qpat_x_assum `ranges_disjoint _ _ _ _` mp_tac >>
-      PURE_REWRITE_TAC [vyperStorageFrameTheory.ranges_disjoint_def] >>
-      decide_tac) >>
-    asm_rewrite_tac[]) >>
+    qpat_x_assum `!s t. MEM (tr,s,t) _ /\ (s,t) <> (slot,tv) ==> _`
+      (qspecl_then [`slot'`, `tv'`] mp_tac) >>
+    simp[] >> strip_tac >>
+    drule (cj 1 dead_bytes_range) >>
+    gvs[vyperStorageFrameTheory.ranges_disjoint_def] >> decide_tac) >>
   simp[]
 QED
 
@@ -758,17 +754,11 @@ Theorem nonreentrant_slot_read_live:
   MEM key (SND H) /\ key < dimword (:256) ==>
   storage_read_live H T st (n2w key) (BaseTV (UintT 256))
 Proof
-  strip_tac >> gvs[nonreentrant_slot_separated_def] >>
-  `key < dimword (:256)` by decide_tac >>
+  strip_tac >>
   simp[storage_read_live_def, wordsTheory.w2n_n2w,
        arithmeticTheory.LESS_MOD, vyperValueTheory.type_slot_size_def] >>
   rpt strip_tac >> gvs[storage_dead_def] >>
-  qpat_x_assum `!mid n subs slot tv. _ ==> ranges_disjoint key 1 _ _`
-    (qspecl_then [`mid`, `n`, `subs`, `slot`, `tv`] mp_tac) >>
-  simp[] >>
-  drule (cj 1 dead_bytes_range) >>
-  simp[vyperStorageFrameTheory.ranges_disjoint_def] >>
-  rpt strip_tac >> decide_tac
+  `j = key` by decide_tac >> gvs[]
 QED
 
 Theorem nonreentrant_slot_dead_preserved:
@@ -777,25 +767,20 @@ Theorem nonreentrant_slot_dead_preserved:
   storage_dead H T st j b ==>
   storage_dead H T (update_storage (n2w key) value st) j b
 Proof
-  strip_tac >> gvs[nonreentrant_slot_separated_def] >>
+  strip_tac >> gvs[vyperStorageFootprintTheory.storage_locks_separated_def] >>
   `key < dimword (:256)` by decide_tac >>
   qpat_x_assum `storage_dead _ _ _ _ _` mp_tac >>
   rewrite_tac[storage_dead_def] >> strip_tac >>
   rename1 `dead_bytes st (w2n slot) tv j b` >>
   `ranges_disjoint (w2n slot) (type_slot_size tv) (w2n (n2w key:bytes32)) 1` by
-    (qpat_x_assum `!mid n subs slot tv. _ ==> ranges_disjoint key 1 _ _`
-       (qspecl_then [`mid`, `n`, `subs`, `slot`, `tv`] mp_tac) >>
-     simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
-          vyperStorageFrameTheory.ranges_disjoint_def] >>
-     decide_tac) >>
+    (simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
+     first_x_assum irule >> simp[]) >>
   `dead_bytes (update_storage (n2w key) value st) (w2n slot) tv j b <=>
    dead_bytes st (w2n slot) tv j b` by
     (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
      irule disjoint_word_update_lookup >>
      qexistsl_tac [`w2n slot`, `type_slot_size tv`] >> simp[]) >>
-  qexistsl_tac [`mid`, `n`, `subs`, `slot`, `tv`] >>
-  gvs[pairTheory.PAIR_EQ] >> rpt strip_tac >>
-  first_x_assum irule >> simp[] >> metis_tac[]
+  simp[] >> qexistsl_tac [`slot`, `tv`] >> simp[]
 QED
 
 Theorem update_storage_lookup_other[local]:
@@ -839,18 +824,18 @@ Proof
   (rename1 `dead_bytes _ (w2n slot) tv' j b` >>
    `w2n k0 + type_slot_size tv0 <= dimword (:256)` by
      (Cases_on `(slot, tv') = (k0, tv0)` >- gvs[] >>
-      qpat_x_assum `!mid'' n'' subs'' slot'' tv''. _`
-        (qspecl_then [`mid`, `n`, `subs`, `k0`, `tv0`] mp_tac) >>
+      qpat_x_assum `!slot'' tv''. _`
+        (qspecl_then [`k0`, `tv0`] mp_tac) >>
       simp[vyperStorageFrameTheory.ranges_disjoint_def]) >>
    qpat_x_assum `_ ==> _` drule >> strip_tac >>
-   qexistsl_tac [`mid'`, `n'`, `subs'`, `slot`, `tv'`] >>
-   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+   simp[] >> qexistsl_tac [`slot`, `tv'`] >>
+   asm_rewrite_tac[] >>
    Cases_on `(slot, tv') = (k0, tv0)` >- gvs[] >>
    `ranges_disjoint (w2n slot) (type_slot_size tv') (w2n k) 1` by
      (irule ranges_disjoint_within >>
       qexistsl_tac [`w2n k0`, `type_slot_size tv0`] >> simp[] >>
-      qpat_x_assum `!mid'' n'' subs'' slot'' tv''. _`
-        (qspecl_then [`mid`, `n`, `subs`, `k0`, `tv0`] mp_tac) >>
+      qpat_x_assum `!slot'' tv''. _`
+        (qspecl_then [`k0`, `tv0`] mp_tac) >>
       simp[]) >>
    `(dead_bytes (update_storage k u st) (w2n slot) tv' j b <=>
      dead_bytes st (w2n slot) tv' j b)` by
@@ -869,7 +854,7 @@ Theorem storage_dead_update_word_region:
     storage_dead H tr (update_storage k v st) = storage_dead H tr st
 Proof
   rpt strip_tac >> irule storage_dead_update_in_region >>
-  qexistsl_tac [`k`, `mid`, `n`, `subs`, `tv`] >> simp[] >>
+  qexistsl_tac [`k`, `tv`] >> simp[] >>
   rpt strip_tac >> eq_tac >> strip_tac >>
   drule (cj 1 dead_bytes_range) >> simp[]
 QED
@@ -915,7 +900,7 @@ Theorem storage_dead_update_struct_word_field:
     storage_dead H tr st
 Proof
   rpt strip_tac >> irule storage_dead_update_in_region >>
-  qexistsl_tac [`k`, `mid`, `n`, `[]`, `StructTV fs`] >> simp[] >>
+  qexistsl_tac [`k`, `StructTV fs`] >> simp[] >>
   strip_tac >>
   drule struct_field_slot_end_bound >> strip_tac >>
   `w2n k + off < dimword (:256)` by
@@ -990,8 +975,8 @@ Theorem storage_dead_update_zero:
     storage_dead H tr (update_storage k 0w st) j b
 Proof
   rw[storage_dead_def] >>
-  qexistsl_tac [`mid`, `n`, `subs`, `slot`, `tv`] >>
-  simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`slot`, `tv`] >>
+  simp[] >>
   irule (cj 1 dead_bytes_update_zero) >> simp[]
 QED
 
