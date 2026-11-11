@@ -2229,7 +2229,8 @@ Theorem identity_suffix_mask_cuts[local]:
         k <= LENGTH xs /\
         R fuel C (TAKE k xs) (s with vs_gas_readings := FLAT gss ++ tail) = OK u ==>
         E C (TAKE k xs) (s with vs_gas_readings := FLAT gss ++ tail) = FLAT (TAKE k ess) /\
-        u.vs_gas_readings = FLAT (DROP k gss) ++ tail
+        u.vs_gas_readings = FLAT (DROP k gss) ++ tail /\
+        (?t. R fuel C' (TAKE k xs) s = OK t)
 Proof
   ntac 3 gen_tac >> BasicProvers.LET_ELIM_TAC >>
   qsuff_tac `?ms ess. P xs s ms ess`
