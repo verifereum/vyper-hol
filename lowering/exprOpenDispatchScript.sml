@@ -150,6 +150,7 @@ Proof
   >- (rpt (pairarg_tac >> simp[]) >>
       Cases_on `b` >>
       TRY (rename1 `Builtin ann bi elems` >> Cases_on `bi`) >>
+      pure_rewrite_tac [vyperASTTheory.expr_case_def, vyperASTTheory.builtin_case_def] >>
       simp[oneline as_stack_val_def, AllCaseEqs()] >>
       rpt (pairarg_tac >> simp[]) >>
       rpt IF_CASES_TAC >> rpt (pairarg_tac >> simp[]) >>
