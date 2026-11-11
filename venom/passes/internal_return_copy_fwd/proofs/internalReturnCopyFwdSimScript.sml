@@ -25,7 +25,8 @@ Ancestors
   taintAgree o1LowerDloadShared o1PassContract ptrDiscipline passSharedDefs
   venomExecSemantics venomInst venomWf venomState finite_map pred_set list
   rangeAnalysisProofs stepWriteFootprintBase o1LowerDloadOccurrence occurrenceGeometry
-  venomExecProps fnRunFields ptrTaintClean
+  venomExecProps fnRunFields ptrTaintClean internalReturnCopyFwdAbort
+  o1LowerDloadForwardInversion
 
 (* The transformed block, before NOPs are cleared *)
 Definition ircf_tbb_def:
@@ -2364,6 +2365,52 @@ Proof
   fs[ircf_cross_def] >> metis_tac[]
 QED
 
+Theorem ircf_noninvoke_next:
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY ircf_no_dst_write_alias C.ctx_functions /\ ptr_discipline lo C vs /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  taint_within D C vs /\ dead_wf D /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  ti = EL s.vs_inst_idx (ircf_tbb fn_meta rma C fn bb).bb_instructions /\
+  inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+  ~in_revert_forward fn s /\
+  ircf_cross tn (ircf_gam_cur fn_meta rma C fn s UNION
+    ircf_gam_stk fn_meta rma C stk) s t /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base ti t = OK t' /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s' stk)
+      (step_taint inst s s' tn) s' t' /\
+    ircf_cross (step_taint inst s s' tn)
+      (ircf_gam_cur fn_meta rma C fn (s' with vs_inst_idx := SUC s.vs_inst_idx)
+        UNION ircf_gam_stk fn_meta rma C stk) s' t'
+Proof
+  strip_tac >> drule frame_reachable_occurrence_lift >> strip_tac >>
+  drule occ_frame_reachable_annotation >> strip_tac >>
+  `ctx_inst_ids_distinct C /\ EVERY wf_function C.ctx_functions /\
+   EVERY fn_inst_wf C.ctx_functions /\ EVERY fn_inst_ids_distinct C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, wf_function_def] >>
+     metis_tac[]) >>
+  `lo <= vs.vs_alloca_next /\ access_ok lo G fn inst s` by
+    (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `ircf_alias_boundary fn s G` by
+    (drule_all ircf_alias_frames_reachable >>
+     metis_tac[ircf_alias_frames_current]) >>
+  Cases_on `s.vs_inst_idx IN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb)`
+  >- (`ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+        (fs[EVERY_MEM] >> metis_tac[ircf_transform_block_plan, ircf_tbb_def,
+          venomExecPropsTheory.lookup_block_MEM]) >>
+      `?d sr sz. ircf_copy_roots fn inst = SOME (d,sr,sz)` by
+        metis_tac[ircf_block_plan_def] >>
+      drule_all ircf_forward_copy_next >> metis_tac[]) >>
+  Cases_on `inst.inst_opcode = ASSIGN`
+  >- (drule_all ircf_assign_next >> metis_tac[]) >>
+  drule_all ircf_ordinary_nonassign_next >> metis_tac[]
+QED
+
 Theorem ircf_ret_result:
   inst.inst_opcode = RET /\ taint_ok fn tn inst s /\
   taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
@@ -2578,6 +2625,45 @@ Proof
   qpat_x_assum `_ with inst_operands := _ = _` (SUBST1_TAC o SYM) >>
   simp[step_inst_base_opcode_eqs, AllCaseEqs()] >>
   metis_tac[optionTheory.IS_SOME_EXISTS]
+QED
+
+Theorem ircf_revert_forward_suffix:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY ircf_no_dst_write_alias C.ctx_functions /\ ptr_discipline lo C vs /\
+  vs.vs_allocas = FEMPTY /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\ in_revert_forward fn s /\
+  taint_agree D X tn s t /\ terminates (exec_block fuel C bb s) ==>
+  ?reason se. exec_block fuel C bb s = Abort reason se /\
+    !fuel' C'. ?te. exec_block fuel' C' (ircf_tbb fn_meta rma C fn bb) t = Abort reason te
+Proof
+  strip_tac >>
+  `revert_forward_at bb s.vs_inst_idx` by
+    gvs[contextCodegenRelTheory.in_revert_forward_def] >>
+  `?reason se. exec_block fuel C bb s = Abort reason se` by
+    metis_tac[revert_forward_at_terminates_abort] >>
+  `EVERY wf_function C.ctx_functions /\ EVERY fn_inst_wf C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
+  `MEM fn C.ctx_functions` by
+    (drule frame_reachable_occurrence_lift >> strip_tac >>
+     drule occ_frame_reachable_annotation >> simp[]) >>
+  `ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+    (fs[EVERY_MEM] >> metis_tac[ircf_transform_block_plan, ircf_tbb_def,
+      venomExecPropsTheory.lookup_block_MEM]) >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  qexistsl_tac [`reason`, `se`] >> simp[] >>
+  fs[contextCodegenRelTheory.revert_forward_at_def]
+  >- (drule_all ircf_revert_forward_copy_abort >> simp[]) >>
+  `inst.inst_opcode = REVERT` by
+    gvs[contextCodegenRelTheory.revert_forward_pair_def] >>
+  `s.vs_inst_idx = t.vs_inst_idx /\ s.vs_labels = t.vs_labels /\
+   FDOM s.vs_vars = FDOM t.vs_vars` by
+    (drule taint_agree_labels >> drule taint_agree_var_domain >>
+     drule taint_agree_frame >>
+     disch_then (mp_tac o Q.AP_TERM `\u. u.vs_inst_idx`) >> simp[]) >>
+  `inst = EL s.vs_inst_idx bb.bb_instructions` by fs[get_instruction_def] >>
+  metis_tac[SRULE [] (Q.INST [`d` |-> `0`] (SPEC_ALL ircf_assign_prefix_abort_domain))]
 QED
 
 Theorem ircf_invoke_arguments:
