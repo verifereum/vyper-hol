@@ -107,6 +107,49 @@ Proof
   gvs[EVERY_MEM] >> metis_tac[]
 QED
 
+(* Finite straight-line slices either reach their endpoint at zero block
+   cost, or have an already fuel-independent result. *)
+Theorem encode_static_sequence_outcome[local]:
+  !code s bb rest P G ctx fn.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    DROP s.vs_inst_idx bb.bb_instructions = code ++ rest /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+    (!t. run_inst_seq code s = OK t ==>
+      P (t with vs_inst_idx := s.vs_inst_idx + LENGTH code)) ==>
+    fuel_outcome G ctx fn s 0 P
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[exprLoweringPropsTheory.run_inst_seq_def] >> strip_tac >>
+      irule fuel_outcome_refl >> metis_tac[venomStateTheory.venom_state_component_equality]) >>
+  strip_tac >> fs[EVERY_DEF] >>
+  `get_instruction bb s.vs_inst_idx = SOME h` by
+    (gvs[get_instruction_def, DROP_EQ_CONS]) >>
+  `!f. run_from f ctx fn s =
+    case step_inst_base h s of
+      OK t => run_from f ctx fn (t with vs_inst_idx := SUC s.vs_inst_idx)
+    | IntRet v t => IntRet v t | Halt t => Halt t
+    | Abort a t => Abort a t | Error e => Error e` by
+    (gen_tac >> drule_all run_from_nonterm >>
+     gvs[EVERY_DEF, step_inst_non_invoke]) >>
+  Cases_on `step_inst_base h s` >>
+  gvs[fuel_outcome_def, exprLoweringPropsTheory.run_inst_seq_def] >>
+  `v.vs_current_bb = s.vs_current_bb` by
+    (irule (cj 1 venomInstPropsTheory.step_preserves_control_flow) >>
+     qexistsl_tac [`ctx`, `G`, `h`] >> simp[step_inst_non_invoke]) >>
+  first_x_assum (qspecl_then
+    [`v with vs_inst_idx := SUC s.vs_inst_idx`, `bb`, `rest`, `P`, `G`, `ctx`, `fn`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> conj_tac
+      >- (gvs[DROP_EQ_CONS, DROP_SUC]) >>
+      rpt strip_tac >>
+      `EVERY (\i. ~is_terminator i.inst_opcode) code` by
+        (fs[EVERY_MEM]) >>
+      gvs[run_inst_seq_inst_idx] >>
+      Cases_on `run_inst_seq code v` >>
+      gvs[instIdxIndepTheory.exec_result_map_def, ADD_CLAUSES]) >>
+  simp[]
+QED
+
 (* The loop counter lives in a buffer the function allocates itself and
    starts at 0.  Each round, while the counter is below len_op (unsigned),
    encodes one element with straight-line code (no calls back into the
