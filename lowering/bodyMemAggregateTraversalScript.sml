@@ -207,12 +207,12 @@ Proof
 QED
 
 (* Closes one side condition of a window frame: the window disjunction by
-   arithmetic, the alloca-disjointness premise from the matching hypothesis. *)
+   arithmetic, the alloca-disjointness premise from the hypothesis that
+   states it, possibly with its conjunctions grouped to the left. *)
 fun window_side_tac (asl, w) =
   (if is_disj w then decide_tac
    else first_assum ACCEPT_TAC ORELSE
-     (rpt strip_tac >> first_x_assum irule >> rpt conj_tac >>
-      first_assum ACCEPT_TAC)) (asl, w)
+     (rewrite_tac [CONJ_ASSOC] >> first_assum ACCEPT_TAC)) (asl, w)
 
 Theorem aggregate_tuple_tail_outcome_mem[local]:
   gas_marked_exec T (ctx,func) (read_result cx tv) (es1,t1) [] (INL v) es1 (OK q) /\
