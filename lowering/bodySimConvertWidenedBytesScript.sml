@@ -122,6 +122,8 @@ Resume intcall_convert_bytestring_sim[compose]:
      gvs[allocLimitsTheory.alloc_limits_expr_def,
          allocLimitsTheory.type_alloc_ok_def, vyperASTTheory.expr_type_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
+  `~expr_has_effect (TypeBuiltin t Convert t [e1]) ==> ~expr_has_effect e1` by
+    simp[loweringPostsTheory.expr_has_effect_thm] >>
   drule_all (Q.INST [`e` |-> `TypeBuiltin t Convert t [e1]`]
     convert_bytestring_continuation_summary |> REWRITE_RULE [vyperASTTheory.expr_type_def]) >>
   rewrite_tac[gasSummaryTheory.gas_summary_at_def] >> strip_tac >>
