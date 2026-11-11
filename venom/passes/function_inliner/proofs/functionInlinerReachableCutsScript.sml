@@ -1192,3 +1192,43 @@ Proof
   simp[inline_inst_fields_def, inline_rename_inst_def, inline_phi_entry_step_def] >>
   strip_tac >> irule inline_rename_resolve_phi >> simp[]
 QED
+
+Theorem inline_routed_leaf_producer_origins:
+  !cert root p fn path. inline_routed_leaf cert root p fn path ==>
+  !C n. inline_annotated_origin C n root cert ==>
+  EVERY (\choice. case choice of
+      InlineKeep e => qualified_origin C e.ise_state.is_inline_count e.ise_caller /\
+                      qualified_origin C e.ise_state.is_inline_count e.ise_callee
+    | InlineEnter e => qualified_origin C e.ise_state.is_inline_count e.ise_caller /\
+                       qualified_origin C e.ise_state.is_inline_count e.ise_callee) path
+Proof
+  ho_match_mp_tac inline_routed_leaf_ind >> rpt conj_tac
+  >- simp[] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  simp[EVERY_APPEND] >>
+  drule functionInlinerOccurrencesTheory.inline_annotated_origin_edit_elim >>
+  simp[] >> strip_tac >>
+  gvs[] >> metis_tac[functionInlinerEnvelopesTheory.inline_annotated_origin_erasure]
+QED
+
+Theorem inline_routed_leaf_phi_producer_facts:
+  inline_annotated_origin C n root cert /\ inline_routed_leaf cert root p fn path ==>
+  EVERY (\choice. case choice of
+      InlineKeep e => inliner_phi_labels_closed e.ise_caller /\
+        inliner_phi_labels_closed e.ise_callee /\
+        ~MEM e.ise_return (fn_labels e.ise_caller)
+    | InlineEnter e => inliner_phi_labels_closed e.ise_caller /\
+        inliner_phi_labels_closed e.ise_callee /\
+        ~MEM e.ise_return (fn_labels e.ise_caller)) path
+Proof
+  strip_tac >> drule inline_routed_leaf_producer_origins >>
+  disch_then (drule_then assume_tac) >>
+  drule inline_routed_leaf_valid_choices >> strip_tac >>
+  gvs[EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum (drule_then assume_tac) >>
+  first_x_assum (drule_then assume_tac) >>
+  Cases_on `choice` >> gvs[] >>
+  metis_tac[functionInlinerOriginTheory.qualified_origin_phi_labels_closed,
+    functionInlinerEnvelopesTheory.inline_annotated_origin_exists,
+    functionInlinerOccurrencesTheory.inline_annotated_edit_fetch_facts]
+QED
