@@ -291,40 +291,6 @@ Proof
   simp[pairTheory.LAMBDA_PROD]
 QED
 
-Theorem invoke_partner_pure_portable[local]:
-  dft_gas_swap_pair y x /\ y.inst_opcode = INVOKE /\ inst_wf x /\
-  x.inst_opcode <> GAS /\
-  dftGasInvCallPartner$inv_partner_inputs x s t /\
-  step_inst fuel C x s = OK u ==>
-  ?pairs. MAP FST pairs = x.inst_outputs /\
-    u = FOLDL (\st (out,w). update_var out w st) s pairs /\
-    step_inst fuel D x t = OK (FOLDL (\st (out,w). update_var out w st) t pairs)
-Proof
-  strip_tac >>
-  drule_all dftGasInvCallPartnerTheory.inv_call_partner_class >> strip_tac >>
-  `step_inst_base x s = OK u` by gvs[step_inst_non_invoke] >>
-  simp[step_inst_non_invoke] >>
-  Cases_on `x.inst_opcode` >> (
-  gvs[venomEffectsTheory.read_effects_def, venomEffectsTheory.write_effects_def,
-      venomEffectsTheory.empty_effects_def, venomEffectsTheory.all_effects_def,
-      venomInstTheory.is_terminator_def, venomInstTheory.is_alloca_op_def,
-      venomInstTheory.is_pseudo_def, venomInstTheory.is_ext_call_op_def,
-      pred_setTheory.EXTENSION] >>
-  qpat_x_assum `step_inst_base x s = OK u` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
-  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, AllCaseEqs()] >> strip_tac >>
-  gvs[dftGasInvCallPartnerTheory.inv_partner_inputs_def, MEM] >>
-  FIRST [
-    qmatch_goalsub_abbrev_tac `update_var out2 value2 (update_var out1 value1 s)` >>
-      qexists_tac `[(out1,value1); (out2,value2)]` >> simp[],
-    qmatch_goalsub_abbrev_tac `update_var out value s` >>
-      qexists_tac `[(out,value)]` >> simp[] >>
-      gvs[Abbr `value`] >> metis_tac[],
-    qexists_tac `[]` >> gvs[venomWfTheory.inst_wf_def] >> metis_tac[]])
-QED
-
 Theorem invoke_partner_step_portable[local]:
   dft_gas_swap_pair y x /\ y.inst_opcode = INVOKE /\ inst_wf x /\
   dftGasInvCallPartner$inv_partner_inputs x s t /\
@@ -347,7 +313,12 @@ Proof
   `dftGasInvCallPartner$inv_partner_inputs x
     (s with vs_gas_readings := rs) (t with vs_gas_readings := rt)` by
     gvs[dftGasInvCallPartnerTheory.inv_partner_inputs_def, eval_operand_def] >>
-  drule_all invoke_partner_pure_portable >> metis_tac[]
+  drule_all dftGasInvCallPartnerTheory.inv_call_partner_class >> strip_tac >>
+  `ev_step (K 0w) [] 0 fuel C x (s with vs_gas_readings := rs) = OK u` by
+    fs[dftGasOracleDefsTheory.ev_step_def, step_inst_non_invoke] >>
+  drule_all dftGasInvCallPartnerTheory.inv_partner_portable_updates >>
+  strip_tac >> qexists_tac `pairs` >>
+  gvs[dftGasOracleDefsTheory.ev_step_def, step_inst_non_invoke]
 QED
 
 Theorem invoke_partner_inputs_updates[local]:
