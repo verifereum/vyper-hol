@@ -313,8 +313,8 @@ Resume return_default_allocated_entry[frame]:
   rpt conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at a x` by fs[not_fresh_at_def] >> metis_tac[])
-  >- metis_tac[]
-  >- gvs[] >>
+  >- metis_tac[] >>
+  TRY (gvs[] >> NO_TAC) >>
   irule locals_kept_mem_tail >> qexists `s` >> gvs[]
 QED
 Resume return_default_allocated_entry[allocation_returndata]:
