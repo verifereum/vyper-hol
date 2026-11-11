@@ -146,7 +146,7 @@ Proof
         (simp[Abbr `t`, venom_state_component_equality] >>
          fs[venom_state_component_equality]) >>
       `!z. not_fresh_at su z ==> lookup_var z t = lookup_var z s` by
-        simp[Abbr `t`, lookup_var_def] >>
+        (simp[Abbr `t`, lookup_var_def] >> fs[lookup_var_def]) >>
       `!a len. a+len <= w2n dw \/ w2n dw+type_memory_size dtv <= a ==>
         mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory` by
         (simp[Abbr `t`] >> gvs[]) >>
