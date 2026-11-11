@@ -72,46 +72,6 @@ Proof
   simp[AllCaseEqs()] >> strip_tac >> gvs[]
 QED
 
-(* Equal concrete inputs execute the identical opaque EVM computation. *)
-Theorem ld_exec_delegatecall_transport:
-  ld_joint_local_fields s t /\
-  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
-  s.vs_logs = t.vs_logs /\
-  s.vs_pending_deletions = t.vs_pending_deletions /\
-  read_memory (w2n off) (w2n sz) s =
-    read_memory (w2n off') (w2n sz) t /\
-  exec_delegatecall inst s gas addr off sz ro rs = OK s1 ==>
-  ?out w r. inst.inst_outputs = [out] /\ s1 = update_var out w r /\
-    exec_delegatecall inst t gas addr off' sz ro' rs =
-      OK (update_var out w (t with <|
-        vs_returndata := r.vs_returndata;
-        vs_accounts := r.vs_accounts; vs_logs := r.vs_logs;
-        vs_transient := r.vs_transient;
-        vs_pending_deletions := r.vs_pending_deletions;
-        vs_memory := (write_memory_with_expansion (w2n ro')
-          (TAKE (w2n rs) r.vs_returndata) t).vs_memory |>)) /\
-    extract_venom_result s 1w (w2n ro) (w2n rs)
-      (run (make_venom_delegatecall_state s (w2w addr) (w2n gas)
-        (read_memory (w2n off) (w2n sz) s)
-        (lookup_account (w2w addr) s.vs_accounts).code
-        s.vs_call_ctx.cc_static)) = SOME (w,r)
-Proof
-  strip_tac >>
-  `s.vs_call_ctx = t.vs_call_ctx` by fs[ld_joint_local_fields_def] >>
-  `make_venom_delegatecall_state s (w2w addr) (w2n gas)
-     (read_memory (w2n off) (w2n sz) s)
-     (lookup_account (w2w addr) s.vs_accounts).code s.vs_call_ctx.cc_static =
-   make_venom_delegatecall_state t (w2w addr) (w2n gas)
-     (read_memory (w2n off') (w2n sz) t)
-     (lookup_account (w2w addr) t.vs_accounts).code t.vs_call_ctx.cc_static` by
-    (drule_all ld_concrete_constructors >> simp[]) >>
-  qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  drule_all ld_extract_concrete_transport >>
-  disch_then (qspec_then `w2n ro'` assume_tac) >>
-  simp[exec_delegatecall_def] >> metis_tac[]
-QED
-
 Theorem ld_extract_concrete_shape:
   extract_venom_result s v ro rs rr = SOME (w,r) ==>
   r = s with <|

@@ -80,38 +80,35 @@ Proof
        storage_agree_except_def, word_agree_except_def]
 QED
 
-Theorem ptr_create_family_delegate_state[local]:
-  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} ==>
-  make_venom_delegatecall_state s target gas data code static =
-  make_venom_delegatecall_state t target gas data code static
-Proof
-  strip_tac >> drule_all ptr_create_family_current_stores >> strip_tac >>
-  fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-     ptr_core_shared_def, ptr_shared_fields_def] >>
-  simp[make_venom_delegatecall_state_def, venom_to_tx_params_def]
-QED
-
-Theorem ptr_create_family_delegate_extract[local]:
+Theorem ptr_create_family_call_completion[local]:
   ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
-  extract_venom_result t output rt rz result = SOME (w,z) ==>
-  ?u. extract_venom_result s output ro rz result = SOME (w,u) /\
-      u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z
+  consume_call_outcome rq ro rz s = (w,u) /\
+  consume_call_outcome rq rt rz t = (v,z) ==>
+  w = v /\ u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z
 Proof
-  strip_tac >> drule_all ptr_create_family_current_stores >> strip_tac >>
+  strip_tac >>
+  drule_all ptr_create_family_current_stores >> strip_tac >>
+  `ptr_request_history (record_request rq s.vs_requests)
+     (record_request rq t.vs_requests)` by
+    (irule ptr_request_record >> fs[ptr_history_content_def]) >>
   fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
      ptr_core_shared_def, ptr_shared_fields_def] >>
-  gvs[extract_venom_result_def, AllCaseEqs()] >>
-  Cases_on `result'`
-  >- (gvs[] >>
-      simp[extract_venom_result_def, ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-           ptr_core_shared_def, ptr_shared_fields_def,
-           contract_storage_def, contract_transient_def,
-           storage_agree_except_def, word_agree_except_def]) >>
-  Cases_on `y` >> gvs[] >>
+  gvs[consume_call_outcome_eq] >>
   simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
        ptr_core_shared_def, ptr_shared_fields_def,
        contract_storage_def, contract_transient_def,
        storage_agree_except_def, word_agree_except_def]
+QED
+
+Theorem ptr_create_family_delegate_request[local]:
+  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t ==>
+  venom_call_request s addr 0w ao az F = venom_call_request t addr 0w at az F
+Proof
+  strip_tac >> drule_all ptr_create_family_current_stores >> strip_tac >>
+  fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+     ptr_core_shared_def, ptr_shared_fields_def] >>
+  simp[venom_call_request_def]
 QED
 
 Theorem ptr_create_family_execution[local]:
@@ -176,66 +173,39 @@ Proof
   rpt strip_tac >> fs[ptr_mixed_vars_def, op_taint_def, word_agree_except_def]
 QED
 
-Theorem ptr_create_family_delegate_execution[local]:
-  ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
-  read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t /\
-  exec_delegatecall inst t gas addr at az rt rz = OK z ==>
-  ?u. exec_delegatecall inst s gas addr ao az ro rz = OK u /\
-      u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z
-Proof
-  strip_tac >>
-  `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
-    (irule ptr_create_family_current_stores >> metis_tac[]) >>
-  `s.vs_call_ctx = t.vs_call_ctx` by
-    fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-       ptr_core_shared_def, ptr_shared_fields_def] >>
-  `!target gas data code static.
-     make_venom_delegatecall_state s target gas data code static =
-     make_venom_delegatecall_state t target gas data code static` by
-    (rpt gen_tac >> irule ptr_create_family_delegate_state >> metis_tac[]) >>
-  qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = OK _` mp_tac >>
-  simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  drule_all ptr_create_family_delegate_extract >>
-  disch_then (qspec_then `w2n ro` mp_tac) >> strip_tac >>
-  qexists_tac `update_var out output u` >>
-  simp[exec_delegatecall_def, ptr_history_content_update_var]
-QED
-
 Theorem ptr_create_family_delegate_mixed_execution[local]:
   ptr_mixed_vars births positions TG tn f g s t /\
   ptr_history_content tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t /\
   inst.inst_opcode = DELEGATECALL /\ inst.inst_outputs = [out] /\ ~retpc_var f out /\
-  exec_delegatecall inst t gas addr at az rt rz = OK z ==>
-  ?u. exec_delegatecall inst s gas addr ao az ro rz = OK u /\
+  exec_delegatecall inst t (gas:bytes32) (addr:bytes32) (at:bytes32) (az:bytes32)
+    (rt:bytes32) (rz:bytes32) = OK z ==>
+  ?u. exec_delegatecall inst s gas addr (ao:bytes32) az (ro:bytes32) rz = OK u /\
       u.vs_returndata = z.vs_returndata /\ ptr_history_content tn u z /\
       ptr_mixed_vars births positions (step_prov PT TG inst u)
         (step_taint inst s u tn) f g u z
 Proof
   strip_tac >>
-  `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
-    (irule ptr_create_family_current_stores >> metis_tac[]) >>
-  `s.vs_call_ctx = t.vs_call_ctx` by
-    fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-       ptr_core_shared_def, ptr_shared_fields_def] >>
-  `!target gas data code static.
-     make_venom_delegatecall_state s target gas data code static =
-     make_venom_delegatecall_state t target gas data code static` by
-    (rpt gen_tac >> irule ptr_create_family_delegate_state >> metis_tac[]) >>
+  `venom_call_request s addr 0w ao az F = venom_call_request t addr 0w at az F` by
+    (irule ptr_create_family_delegate_request >> metis_tac[]) >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = OK _` mp_tac >>
-  simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  drule_all ptr_create_family_delegate_extract >>
-  disch_then (qspec_then `w2n ro` mp_tac) >> strip_tac >>
-  qexists_tac `update_var out output u` >>
-  simp[exec_delegatecall_def, ptr_history_content_update_var] >>
-  rename1 `extract_venom_result t _ _ _ _ = SOME (output, target)` >>
-  `ptr_mixed_vars births positions TG tn f g u target` by
-    (irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >>
-     qpat_x_assum `extract_venom_result s _ _ _ _ = _` mp_tac >>
-     qpat_x_assum `extract_venom_result t _ _ _ _ = _` mp_tac >>
-     simp[extract_venom_result_def, AllCaseEqs()] >> rpt strip_tac >>
-     (Cases_on `result` >- gvs[venom_state_component_equality] >>
-      Cases_on `y` >> gvs[venom_state_component_equality])) >>
+  Cases_on `consume_call_outcome (venom_call_request t addr 0w at az F with
+    cr_kind := DelegateMessageCall) (w2n rt) (w2n rz) t` >>
+  Cases_on `consume_call_outcome (venom_call_request t addr 0w at az F with
+    cr_kind := DelegateMessageCall) (w2n ro) (w2n rz) s` >>
+  rename1 `consume_call_outcome _ (w2n rt) _ t = (wt,zt)` >>
+  rename1 `consume_call_outcome _ (w2n ro) _ s = (ws,us)` >>
+  simp[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
+  strip_tac >> gvs[exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
+  `ws = wt /\ us.vs_returndata = zt.vs_returndata /\ ptr_history_content tn us zt` by
+    (drule_all ptr_create_family_call_completion >> simp[]) >>
+  gvs[Excl "consume_call_outcome_eq"] >>
+  `ptr_mixed_vars births positions TG tn f g us zt` by
+    (irule ptr_mixed_vars_fields >>
+     rpt (goal_assum (drule_at Any)) >>
+     qpat_x_assum `consume_call_outcome _ _ _ s = _` mp_tac >>
+     qpat_x_assum `consume_call_outcome _ _ _ t = _` mp_tac >>
+     simp[consume_call_outcome_eq] >> rpt strip_tac >> gvs[]) >>
   drule ptr_mixed_vars_update >> disch_then irule >> simp[] >>
   simp[step_prov_def, out_prov_def, set_prov_def,
        step_taint_def, set_var_taint_def, out_taint_def,
@@ -895,8 +865,6 @@ Proof
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >>
   gvs[update_var_def] >>
-  drule extract_venom_result_memory >>
-  disch_then (fn th => once_rewrite_tac[th]) >>
   simp[read_byte_write_memory_with_expansion, LENGTH_TAKE_EQ, EL_TAKE,
        MIN_DEF] >> gvs[MIN_DEF]
 QED
