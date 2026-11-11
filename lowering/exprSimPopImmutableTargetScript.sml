@@ -426,6 +426,42 @@ Proof
   disch_then (qspec_then `[sb]` mp_tac) >> simp[]
 QED
 
+Theorem imm_place_at_readable_rebase[local]:
+  !cenv cx es ee env src id path w ty root_ty itv iv.
+    imm_place_at cenv cx es (PlaceR (ImmutablePlace src id path)) w ty /\
+    expr_sim_inv cenv cx env ee /\
+    FLOOKUP env.bare_globals (src,id) = SOME root_ty /\
+    evaluate_type (get_tenv cx) root_ty = SOME itv /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+               NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
+      SOME (itv,iv) /\
+    (!v. value_has_type itv v /\ well_formed_type_value itv ==>
+         ?u. evaluate_subscripts itv v path = INL u) ==>
+    imm_place_at cenv cx ee (PlaceR (ImmutablePlace src id path)) w ty
+Proof
+  rpt strip_tac >>
+  `env_immutables_consistent env cx ee` by
+    fs[expr_sim_inv_def, env_consistent_def] >>
+  `?imms v. ALOOKUP ee.immutables cx.txn.target = SOME imms /\
+            FLOOKUP (get_source_immutables src imms) id = SOME (itv,v)` by
+    (Cases_on `ALOOKUP ee.immutables cx.txn.target` >>
+     gvs[env_immutables_consistent_def, get_source_immutables_def] >>
+     `IS_SOME (FLOOKUP (case ALOOKUP x src of
+                         NONE => FEMPTY | SOME imm => imm) id)` by metis_tac[] >>
+     Cases_on `FLOOKUP (case ALOOKUP x src of
+                        NONE => FEMPTY | SOME imm => imm) id` >> gvs[] >>
+     PairCases_on `x'` >>
+     `evaluate_type (get_tenv cx) root_ty = SOME x'0` by metis_tac[] >>
+     gvs[]) >>
+  `state_well_typed ee` by fs[expr_sim_inv_def] >>
+  drule_all vyperTypeEnvTheory.state_well_typed_immutables_ALOOKUP >>
+  strip_tac >>
+  drule_all vyperTypeEnvTheory.imms_well_typed_get_source_immutables >>
+  strip_tac >>
+  `?u. evaluate_subscripts itv v path = INL u` by metis_tac[] >>
+  gvs[imm_place_at_def] >> metis_tac[]
+QED
+
 Theorem imm_typed_step_memory[local]:
   !tv v sub d ptv pv b mem.
     value_has_type tv v /\ well_formed_type_value tv /\
