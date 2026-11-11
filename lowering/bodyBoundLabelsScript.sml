@@ -1048,17 +1048,13 @@ Theorem bound_labels_ext_call_args:
 Proof
   Induct_on `es` >> rpt gen_tac >> Cases_on `tys` >>
   simp[compile_ext_call_args_def, comp_return_def] >>
-  rpt strip_tac >> irule bound_labels_bind >> conj_tac
-  >- (simp[] >> rpt strip_tac >> irule bound_labels_bind >> conj_tac
-      >- (simp[] >> rpt strip_tac >> irule bound_labels_bind >>
-          simp[comp_return_def] >> first_x_assum irule >> simp[] >>
-          metis_tac[]) >>
-      rpt strip_tac >~ [`compile_snapshot_vv`]
-      >- (irule bound_labels_snapshot_vv >> gvs[]) >>
-      first_assum ACCEPT_TAC) >>
-  rpt strip_tac >~ [`cfn`]
-  >- (first_x_assum irule >> gvs[]) >>
-  first_assum ACCEPT_TAC
+  rpt strip_tac >>
+  rpt (FIRST [first_assum ACCEPT_TAC,
+              irule bound_labels_bind >> rpt conj_tac >> rpt gen_tac >>
+                rpt strip_tac,
+              irule bound_labels_snapshot_vv >> simp[],
+              CHANGED_TAC (simp[comp_return_def])]) >>
+  first_x_assum irule >> simp[]
 QED
 
 Theorem bound_labels_call_external[local]:

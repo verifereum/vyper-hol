@@ -284,7 +284,7 @@ Proof
   Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
   Cases_on `var_location_decode_operand x` >> simp[] >>
   rpt (ho_match_mp_tac ctor_id_bind >> conj_tac
-        >- simp[ctor_id_prims] >> gen_tac) >>
+        >- simp[ctor_id_prims] >> gen_tac)
   (* the dynamic case starts with the calldata pointer guard, a no-op for DLOAD *)
   >~ [`compile_abi_arg_ptr_guard`]
   >- (ho_match_mp_tac ctor_id_ignore_bind >> conj_tac

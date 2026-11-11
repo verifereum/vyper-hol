@@ -3605,7 +3605,8 @@ Proof
        simp[lower_value_labels, compile_alloc_buffer_labels, emit_void_labels]) >>
   all_tac >>~- ([`cs_extends _ (SND (as_ptr_val _ _ _))`],
        irule as_ptr_val_labels >> simp[compile_slice_calldata_labels,
-            compile_slice_code_labels, compile_slice_data_labels]) >>
+            compile_slice_code_labels, compile_slice_extcode_labels,
+            compile_slice_data_labels]) >>
   (ho_match_mp_tac application_labels >> conj_tac
    >- simp[compile_slice_out_buf_labels, compile_bytestring_src_labels] >>
    map_every qx_gen_tac [`x`, `s`] >> PairCases_on `x` >> simp[] >>
