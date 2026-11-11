@@ -2849,11 +2849,11 @@ Resume identity_suffix_mask_cuts[exact_prefixes]:
   conj_tac
   >- (qpat_x_assum `!ams aes. _`
         (qspecl_then [`ms`, `ess`] mp_tac) >>
-      simp[SF ETA_ss]) >>
+      simp[SF ETA_ss] >> metis_tac[]) >>
   conj_asm1_tac
   >- (qpat_x_assum `!ams aes. _`
         (qspecl_then [`pm`, `pe`] mp_tac) >>
-      simp[Abbr `pm`, Abbr `pe`]) >>
+      simp[Abbr `pm`, Abbr `pe`] >> metis_tac[]) >>
   rpt strip_tac >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]
 QED
 Resume identity_suffix_mask_cuts[prefix_projection]:
@@ -2964,7 +2964,9 @@ Proof
   pure_rewrite_tac [LET_THM] >> BETA_TAC >>
   disch_then (qspecl_then [`fn`, `bb`, `xs`, `post`, `s`] mp_tac) >>
   (impl_tac >- fs[Abbr `CalleeIH`, Abbr `R`, Abbr `E`]) >>
-  strip_tac >> gvs[] >>
+  strip_tac >>
+  qpat_x_assum `(\xs s ms ess. _) _ _ _ _`
+    (strip_assume_tac o BETA_RULE) >>
   qpat_x_assum `!n. n <= LENGTH xs ==> _` (qspec_then `LENGTH xs` mp_tac) >>
   simp[] >> strip_tac >>
   qexistsl_tac [`FLAT (TAKE (LENGTH xs) ms)`,
