@@ -1888,6 +1888,75 @@ Proof
   POP_ASSUM_LIST (K all_tac) >> metis_tac[]
 QED
 
+(* Assemble the fold's caller readiness without exposing allocation state. *)
+Theorem registration_owned_source_ready:
+  calldata_encodes env fname (MAP SND args) vals cd.cc_calldata /\
+  LIST_REL (abi_decoder_coherent ce0 env ce0.ce_struct_fields)
+    (MAP SND args) tvs /\ LIST_REL value_has_type tvs vals /\
+  LENGTH cd.cc_calldata < dimword (:256) /\
+  (!j. j < LENGTH args ==> type_memory_size (EL j tvs) < dimword (:256)) ==>
+  !j ce1 s. j < LENGTH args /\
+    ce1 = ce0 with ce_vars := ce1.ce_vars /\ s.vs_call_ctx = cd ==>
+  ?prim dyn sz av delta srcpos.
+    build_positional_arg ce0 (EL j args) =
+      (FST (EL j args),prim,dyn,sz,
+        type_to_abi_dec_info ce0.ce_struct_fields ce1 (SND (EL j args))) /\
+    sz = abi_member_head_size (vyper_to_abi_type env (SND (EL j args))) /\
+    (prim ==> ~dyn /\ ?clamp.
+      type_to_abi_dec_info ce0.ce_struct_fields ce1 (SND (EL j args)) =
+        DecPrimWord clamp) /\
+    abi_decoder_coherent ce1 env ce0.ce_struct_fields (SND (EL j args)) (EL j tvs) /\
+    value_has_type (EL j tvs) (EL j vals) /\
+    vyper_to_abi env (SND (EL j args)) (EL j vals) = SOME av /\
+    mem_bytes_at srcpos
+      (LENGTH (enc (vyper_to_abi_type env (SND (EL j args))) av)) cd.cc_calldata =
+      enc (vyper_to_abi_type env (SND (EL j args))) av /\
+    srcpos + LENGTH (enc (vyper_to_abi_type env (SND (EL j args))) av) < dimword (:256) /\
+    srcpos = 4 + (if dyn then delta else
+      SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND) (TAKE j args))) /\
+    (dyn ==> abi_decode_load CALLDATALOAD
+      (n2w (4 + SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND)
+        (TAKE j args))) : bytes32) s = n2w delta /\ 4+delta < dimword (:256)) /\
+    type_memory_size (EL j tvs) < dimword (:256)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `ce1.ce_struct_fields = ce0.ce_struct_fields /\
+   ce1.ce_flag_n_members = ce0.ce_flag_n_members` by
+    (qpat_assum `ce1 = ce0 with ce_vars := ce1.ce_vars`
+       (fn th => pure_once_rewrite_tac[th]) >> simp[]) >>
+  `LIST_REL (abi_decoder_coherent ce1 env ce0.ce_struct_fields)
+    (MAP SND args) tvs` by
+    (irule LIST_REL_mono >> goal_assum (drule_at Any) >>
+     rpt strip_tac >> irule abiDecoderCoherenceTheory.abi_decoder_coherent_layout_transport >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `calldata_encodes env fname (MAP SND args) vals s.vs_call_ctx.cc_calldata /\
+   LENGTH s.vs_call_ctx.cc_calldata < dimword (:256)` by simp[] >>
+  `j < LENGTH (MAP SND args)` by simp[] >>
+  drule_at (Pat `LIST_REL (abi_decoder_coherent _ _ _) _ _`)
+    registration_calldata_index_ready >>
+  disch_then (drule_at (Pat `LIST_REL value_has_type _ _`)) >>
+  disch_then (drule_at (Pat `calldata_encodes _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`j`,
+    `SUM (MAP abi_member_head_size (TAKE j (MAP (vyper_to_abi_type env) (MAP SND args))))`]
+    mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `abi_decoder_header ce1 env (SND (EL j args)) (EL j tvs)` by
+    metis_tac[LIST_REL_EL_EQN, EL_MAP,
+      abiDecoderCoherenceTheory.abi_decoder_coherent_header] >>
+  qexistsl_tac [`is_word_type (SND (EL j args))`,
+    `is_abi_dynamic ce0.ce_struct_fields (SND (EL j args))`,
+    `abi_embedded_static_size ce0.ce_struct_fields (SND (EL j args))`,
+    `av`, `delta`, `srcpos`] >>
+  gvs[abiDecoderCoherenceTheory.abi_decoder_header_def, EL_MAP,
+    MAP_TAKE, MAP_MAP_o, combinTheory.o_DEF] >>
+  conj_tac >-
+    (Cases_on `EL j args` >> simp[build_positional_arg_def] >>
+     gvs[GSYM exprLoweringTheory.type_to_abi_dec_info_layout_cong]) >>
+  strip_tac >> conj_tac
+  >- metis_tac[entryDecodeStaticPropsTheory.word_type_dec_sizes] >>
+  metis_tac[ctorArgDecodeTheory.ctor_arg_word_descriptor]
+QED
+
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
    Hints (not binding):
