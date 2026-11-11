@@ -140,7 +140,9 @@ Resume slice_calldata_path_mem[success]:
   `!j. vv_post ctx func cenv cx e es sa sb s0 es
      (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
      (LocatedValue (expr_type e) p) (t with vs_inst_idx := j)` by
-    (irule slice_calldata_vv_post >> simp[] >> metis_tac[]) >>
+    (irule slice_calldata_vv_post >> simp[] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists_tac `sa.cs_next_id + 7` >> simp[]) >>
   qexistsl_tac [`k`, `OK (t with vs_inst_idx := s0.vs_inst_idx +
                                   LENGTH (emitted_insts sa sb))`] >>
   simp[] >> disj1_tac >>
