@@ -6,4 +6,4 @@
 
 Theory dominatorAnalysis
 Ancestors
-  dominatorDefs dominatorAnalysisProps
+  dominatorDefs dominatorProofs

@@ -65,7 +65,7 @@ Definition deploy_ctor_code_def:
       lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
       classify_functions tops = (exts, ints, fb, SOME cf) /\
       set_constructor_package_target rpolicy.rpol_target
-        (package_constructor tops F (assign_nkeys tops 0) cf) =
+        (package_constructor tops T (K global_nonreentrant_slot) cf) =
         (cenv0, pos_args, is_payable, nr, nkey, ut, body, ret) /\
       cap = imm_len tops /\
       (if is_payable then comp_return ()

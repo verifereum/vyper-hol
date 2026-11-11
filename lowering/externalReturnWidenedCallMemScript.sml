@@ -21,6 +21,21 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+Theorem arg_type_fits_antisym[local]:
+  (!t u. arg_type_fits t u ==> arg_type_fits u t ==> t = u) /\
+  (!ts us. arg_types_fit ts us ==> arg_types_fit us ts ==> ts = us)
+Proof
+  ho_match_mp_tac arg_type_fits_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp_tac std_ss [arg_type_fits_def] >> rpt strip_tac >> gvs[] >>
+  gvs[arg_type_fits_def]
+QED
+
+Theorem type_widens_to_antisym[local]:
+  type_widens_to tenv t u /\ type_widens_to tenv u t ==> t = u
+Proof
+  rw[type_widens_to_def] >> metis_tac[arg_type_fits_antisym]
+QED
+
 Theorem external_frame_ret_widened_call_mem:
   !tops rpolicy unit am tx ret vs mut args fbody env0 lbl cenv0 pos_args
    min_cds is_payable nkey ut' iv rt st cenv sa0 func.
@@ -37,7 +52,7 @@ Theorem external_frame_ret_widened_call_mem:
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env0 /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
           tx.function_name, args, [], ret, fbody)) =
@@ -113,6 +128,6 @@ Proof
      is_bytestring_type ret)` by
     metis_tac[typedMemoryCopyTheory.type_widens_from_bytestring] >>
   `lowered_value_type cenv' (Call ann (IntCall fid) xs drv) <> ret` by
-    metis_tac[vyperTypeArgFitsTheory.type_widens_to_antisym] >>
+    metis_tac[type_widens_to_antisym] >>
   drule_all external_frame_ret_value_normalized_run_mem >> simp[]
 QED

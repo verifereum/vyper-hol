@@ -17,7 +17,8 @@ Ancestors
   stackPlanOps stackPlanTypes venomExecSemantics venomState livenessDefs
   dfgDefs cfgDefs deepResidualBudget fnFrameStepsRevertForward frameViewFacts
   venomExecProps venomInstProps planWf stackModel foldlSim
-  list rich_list finite_map pred_set fnPlanLineageInventory fnPlanLineageReorder
+  list rich_list finite_map pred_set reorderStages fnPlanLineageInventory fnPlanLineageReorder
+
 (* ===== Slot provenance: the planner manufactures no operand ===== *)
 
 Theorem restore_spilled_plan_inventory_subset = fnPlanLineageInventoryTheory.restore_spilled_plan_inventory_subset

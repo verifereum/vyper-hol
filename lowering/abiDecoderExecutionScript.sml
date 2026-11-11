@@ -655,7 +655,7 @@ Proof
   qpat_x_assum `run_block_non_phis _ _ _ _ = _` kall_tac >>
   qpat_x_assum `!id exit body_lbl. _` kall_tac >>
   simp[is_terminator_def] >>
-  simp[step_inst_def, Once step_inst_base_def, mk_inst_def] >>
+  simp[step_inst_def, step_inst_base_opcode_eqs, mk_inst_def] >>
   simp[abi_decode_position_header_state_def, abi_decode_position_header_delta_def,
        eval_operand_def, lookup_var_update_var] >>
   Cases_on `i < ncount` >>

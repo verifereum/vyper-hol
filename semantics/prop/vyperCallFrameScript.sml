@@ -23,7 +23,7 @@ Theorem concrete_extcall_tail:
   else (INR (Error (RuntimeError msg)),st)
 Proof
   rw[bind_def, ignore_bind_def, check_def, assert_def,
-     update_accounts_def, update_transient_def, append_logs_def,
+     update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def,
      return_def, raise_def]
 QED
 
@@ -61,7 +61,7 @@ Theorem concrete_extcall_tail_cases:
 Proof
   Cases_on `success` >>
   simp[concrete_extcall_tail, check_def, assert_def, return_def,
-       update_accounts_def, update_transient_def, append_logs_def, EQ_SYM_EQ]
+       update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def, EQ_SYM_EQ]
 QED
 
 (* Reusable relation transport, keeping default/decode in k. *)
@@ -123,3 +123,4 @@ Proof
      return_def, raise_def] >>
   gvs[AllCaseEqs(), evaluation_state_component_equality]
 QED
+

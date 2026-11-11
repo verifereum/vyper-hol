@@ -28,6 +28,8 @@ Definition window_pure_seq_def:
     t.vs_inst_idx = s.vs_inst_idx /\
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
     t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+    t.vs_tx_ctx = s.vs_tx_ctx /\ t.vs_block_ctx = s.vs_block_ctx /\
+    t.vs_immutables = s.vs_immutables /\ t.vs_outcomes = s.vs_outcomes /\
     t.vs_pending_deletions = s.vs_pending_deletions
 End
 

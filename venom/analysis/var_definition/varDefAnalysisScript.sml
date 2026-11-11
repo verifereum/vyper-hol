@@ -6,4 +6,4 @@
 
 Theory varDefAnalysis
 Ancestors
-  varDefDefs varDefAnalysisProps
+  varDefDefs varDefProofs

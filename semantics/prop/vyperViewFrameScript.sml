@@ -67,6 +67,8 @@ Proof
                (find_function_module am tx.target tx.function_name))
             nr mut ts mods args dflts tx.args body ret of
        (INL value, am1, rqs1) => (INL value, finalize_pending_deletions am1, rqs1)
+     | (INR HaltException, am1, rqs1) =>
+         (INR HaltException, finalize_pending_deletions am1, rqs1)
      | failure => failure` by (irule call_external_selected_entry >> fs[]) >>
   gvs[AllCaseEqs()] >>
   drule_at (Pos last) selected_entry_external_function_frame >> simp[] >>

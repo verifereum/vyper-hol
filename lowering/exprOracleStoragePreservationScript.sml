@@ -394,6 +394,7 @@ Resume eval_expr_oracle_storage_mutual[Expr_Builtin]:
   gvs[bind_def, return_def, raise_def, get_accounts_def, lift_sum_def,
     lift_option_type_def, vyperMiscTheory.option_CASE_rator,
     vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >>
+  imp_res_tac precompile_call_success_state >> gvs[] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac precompile_call_success_state >> gvs[] >>
   irule contract_storage_well_formed_storage_frame >>
@@ -437,7 +438,8 @@ Resume eval_expr_oracle_storage_mutual[Expr_Call_RawRevert]:
       first_x_assum drule_all >> strip_tac >>
       Cases_on `args_res` >> gvs[bind_def, ignore_bind_def, type_check_def,
         assert_def, return_def, raise_def]
-      >- (Cases_on `LENGTH x = 1` >> gvs[] >> rpt strip_tac >> gvs[]) >>
+      >- (strip_tac >> gvs[AllCaseEqs()] >>
+          imp_res_tac lift_option_type_state >> gvs[]) >>
       rpt strip_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >> gvs[Once well_typed_expr_def]
 QED
