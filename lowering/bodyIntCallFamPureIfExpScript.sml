@@ -30,7 +30,8 @@ Theorem vv_post_forcing_frames:
      FLOOKUP s.vs_allocas aid = SOME (off,sz) /\ aid < sm.cs_next_id /\
      (!n b sz'. local_region ce ee.scopes s n b sz' ==>
                 off + sz <= b \/ b + sz' <= off) ==>
-     mem_bytes_at off sz q.vs_memory = mem_bytes_at off sz s.vs_memory) ==>
+     mem_bytes_at off sz q.vs_memory = mem_bytes_at off sz s.vs_memory) /\
+  (~expr_has_effect e ==> pure_frame ce func ee sm s q) ==>
   expr_post ctx func ce cx e es sa sb s0 ee v op q
 Proof
   strip_tac >>
@@ -44,8 +45,10 @@ Proof
   >- (rpt strip_tac >>
       `mem_bytes_at off sz q.vs_memory = mem_bytes_at off sz s.vs_memory` by
         (first_x_assum irule >> metis_tac[LESS_LESS_EQ_TRANS]) >>
-      metis_tac[]) >>
-  irule locals_kept_trans >> metis_tac[]
+      metis_tac[])
+  >- (irule locals_kept_trans >> metis_tac[]) >>
+  strip_tac >> irule exprSimPropsTheory.pure_frame_trans >>
+  qexistsl [`ee`, `sm`, `s`] >> fs[]
 QED
 
 (* Protected forcing and its ordinary post share a single endpoint. *)
@@ -97,7 +100,7 @@ Proof
       aid < sm.cs_next_id /\
       (!n b z. local_region ce ee.scopes s n b z ==> p+k <= b \/ b+z <= p)`,
     `scopes` |-> `ee.scopes`]
-    bodyIntCallWindowForcingTheory.protected_value_window_forcing) >>
+    bodyIntCallWindowForcingTheory.protected_value_pure_forcing) >>
   impl_tac >- (simp[] >> rpt strip_tac >> qexistsl [`aid`,`p`,`k`] >> simp[]) >>
   strip_tac >> qexists `u` >> simp[] >>
   irule vv_post_forcing_frames >>
