@@ -3605,6 +3605,126 @@ Proof
   metis_tac[]
 QED
 
+Theorem ircf_transform_block_lookup:
+  ctx_wf C /\ MEM fn C.ctx_functions /\
+  lookup_function fn.fn_name (ircf_transform_ctx fm rma C).ctx_functions = SOME fn' /\
+  lookup_block lbl fn.fn_blocks = SOME bb ==>
+  ?ch. lookup_block lbl fn'.fn_blocks = SOME
+    (if ch then clear_nops_block (ircf_tbb fm rma C fn bb)
+     else ircf_tbb fm rma C fn bb)
+Proof
+  strip_tac >> drule_all ircf_transform_ctx_lookup >> strip_tac >> gvs[] >>
+  qspecl_then [`fm`, `C.ctx_functions`, `rma`, `fn`] strip_assume_tac
+    ircf_transform_function_blocks >>
+  qexists_tac `ch` >> gvs[] >> Cases_on `ch` >>
+  simp[passSimulationPropsTheory.lookup_block_map,
+       ircf_transform_block_label, clear_nops_block_def, ircf_tbb_def]
+QED
+
+Theorem ircf_tbb_well_formed:
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY ircf_no_dst_write_alias C.ctx_functions /\
+  MEM fn C.ctx_functions /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
+  bb_well_formed (ircf_tbb fm rma C fn bb)
+Proof
+  strip_tac >>
+  `wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+   ircf_no_dst_write_alias fn /\ MEM bb fn.fn_blocks` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, wf_ssa_def] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM]) >>
+  irule ircf_block_plan_well_formed >> qexistsl_tac [`bb`, `fn`] >>
+  conj_tac
+  >- (fs[wf_function_def, EVERY_MEM] >> metis_tac[]) >>
+  simp[ircf_tbb_def] >> irule ircf_transform_block_plan >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem ircf_block_target_transport:
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY ircf_no_dst_write_alias C.ctx_functions /\ MEM fn C.ctx_functions /\
+  lookup_function fn.fn_name (ircf_transform_ctx fm rma C).ctx_functions = SOME fn' /\
+  ircf_R D fm rma C stk PG G tn fn s t /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  block_step_rel D vs C (ircf_R D fm rma C)
+    (ircf_R_ret_reachable vs D fm rma C) stk PG fn r
+    (run_block m (ircf_transform_ctx fm rma C) (ircf_tbb fm rma C fn bb) t) ==>
+  ?bb'. lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    block_step_rel D vs C (ircf_R D fm rma C)
+      (ircf_R_ret_reachable vs D fm rma C) stk PG fn r
+      (run_block m (ircf_transform_ctx fm rma C) bb' t)
+Proof
+  strip_tac >>
+  `ctx_wf C /\ s.vs_current_bb = t.vs_current_bb` by
+    (fs[o1_ctx_shape_def, ircf_R_def, taint_agree_def] >>
+     qpat_x_assum `_ with <|vs_memory := _; vs_transient := _;
+       vs_vars := _; vs_accounts := _; vs_requests := _;
+       vs_immutables := _|> = _`
+       (mp_tac o Q.AP_TERM `\u. u.vs_current_bb`) >> simp[]) >>
+  drule_all ircf_transform_block_lookup >> strip_tac >>
+  qexists_tac `if ch then clear_nops_block (ircf_tbb fm rma C fn bb)
+              else ircf_tbb fm rma C fn bb` >> simp[] >>
+  Cases_on `ch` >> gvs[] >>
+  irule ircf_block_step_clear_nops >> simp[] >>
+  metis_tac[ircf_tbb_well_formed]
+QED
+
+Theorem ircf_block_sim_from_internal:
+  (!D lo vs C fm rma k stk PG G tn fn s t bb.
+    o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+    EVERY ircf_no_dst_write_alias C.ctx_functions /\
+    ptr_discipline lo C vs /\ vs.vs_allocas = FEMPTY /\ ~vs.vs_halted /\
+    ~ctx_has_dalloca C /\ taint_within D C vs /\ dead_wf D /\
+    fn_sim_below D vs C (ircf_transform_ctx fm rma C)
+      (ircf_R D fm rma C) (ircf_R_ret_reachable vs D fm rma C) (SUC k) /\
+    MEM fn C.ctx_functions /\ ircf_R D fm rma C stk PG G tn fn s t /\
+    block_reach vs C stk PG G tn fn s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    terminates (run_block k C bb s) ==>
+    ?m. block_step_rel D vs C (ircf_R D fm rma C)
+      (ircf_R_ret_reachable vs D fm rma C) stk PG fn
+      (run_block k C bb s)
+      (run_block m (ircf_transform_ctx fm rma C) (ircf_tbb fm rma C fn bb) t)) ==>
+  !D lo vs C fm rma k stk PG G tn fn fn' s t bb.
+    o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+    EVERY ircf_no_dst_write_alias C.ctx_functions /\
+    ptr_discipline lo C vs /\ vs.vs_allocas = FEMPTY /\ ~vs.vs_halted /\
+    ~ctx_has_dalloca C /\ taint_within D C vs /\ dead_wf D /\
+    fn_sim_below D vs C (ircf_transform_ctx fm rma C)
+      (ircf_R D fm rma C) (ircf_R_ret D fm rma C) (SUC k) /\
+    MEM fn C.ctx_functions /\
+    lookup_function fn.fn_name (ircf_transform_ctx fm rma C).ctx_functions = SOME fn' /\
+    ircf_R D fm rma C stk PG G tn fn s t /\
+    block_reach vs C stk PG G tn fn s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    terminates (run_block k C bb s) ==>
+    ?m bb'. lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+      block_step_rel D vs C (ircf_R D fm rma C) (ircf_R_ret D fm rma C)
+        stk PG fn (run_block k C bb s)
+        (run_block m (ircf_transform_ctx fm rma C) bb' t)
+Proof
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!D lo vs C fm rma k stk PG G tn fn s t bb. _`
+    (assume_tac o Q.SPECL [`D`, `lo`, `vs`, `C`, `fm`, `rma`]) >>
+  `!n. fn_sim_below D vs C (ircf_transform_ctx fm rma C)
+     (ircf_R D fm rma C) (ircf_R_ret_reachable vs D fm rma C) n` by
+    (irule block_sim_fn_sim_below >> rpt strip_tac >>
+     `?m. block_step_rel D vs C (ircf_R D fm rma C)
+       (ircf_R_ret_reachable vs D fm rma C) stk' PG' fn''
+       (run_block k' C bb' s')
+       (run_block m (ircf_transform_ctx fm rma C)
+         (ircf_tbb fm rma C fn'' bb') t')` by metis_tac[] >>
+     drule_all ircf_block_target_transport >> metis_tac[]) >>
+  `?m. block_step_rel D vs C (ircf_R D fm rma C)
+    (ircf_R_ret_reachable vs D fm rma C) stk PG fn (run_block k C bb s)
+    (run_block m (ircf_transform_ctx fm rma C) (ircf_tbb fm rma C fn bb) t)`
+    by metis_tac[] >>
+  drule_all ircf_block_target_transport >> strip_tac >>
+  qexistsl_tac [`m`, `bb'`] >> simp[] >>
+  irule block_step_rel_return_mono >>
+  qexists_tac `ircf_R_ret_reachable vs D fm rma C` >>
+  simp[] >> MATCH_ACCEPT_TAC ircf_R_ret_reachable_forget
+QED
+
 Theorem ircf_block_sim:
   !D lo vs C fn_meta rma k stk PG G tn fn fn' s t bb.
     o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\

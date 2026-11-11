@@ -1431,3 +1431,41 @@ Proof
      metis_tac[ircf_try_forward_phis]) >>
   simp[]
 QED
+
+Theorem ircf_block_plan_classification:
+  ircf_block_plan fn bb tb /\ i < LENGTH bb.bb_instructions ==>
+  (is_terminator (EL i tb.bb_instructions).inst_opcode <=>
+   is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+  ((EL i tb.bb_instructions).inst_opcode = PHI <=>
+   (EL i bb.bb_instructions).inst_opcode = PHI)
+Proof
+  strip_tac >>
+  Cases_on `i IN ircf_fwds bb tb`
+  >- (gvs[ircf_fwds_def] >> fs[ircf_block_plan_def, mk_nop_inst_def,
+                                is_terminator_def]) >>
+  fs[ircf_block_plan_def] >>
+  Cases_on `(EL i bb.bb_instructions).inst_opcode = ASSIGN` >> gvs[]
+QED
+
+Theorem ircf_block_plan_well_formed:
+  ircf_block_plan fn bb tb /\ bb_well_formed bb ==> bb_well_formed tb
+Proof
+  strip_tac >>
+  `LENGTH tb.bb_instructions = LENGTH bb.bb_instructions` by
+    fs[ircf_block_plan_def] >>
+  `!i. i < LENGTH bb.bb_instructions ==>
+     (is_terminator (EL i tb.bb_instructions).inst_opcode <=>
+      is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+     ((EL i tb.bb_instructions).inst_opcode = PHI <=>
+      (EL i bb.bb_instructions).inst_opcode = PHI)` by
+    metis_tac[ircf_block_plan_classification] >>
+  fs[bb_well_formed_def] >>
+  `tb.bb_instructions <> []` by
+    metis_tac[LENGTH_NIL] >>
+  simp[bb_well_formed_def] >>
+  conj_tac
+  >- (`PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions` by
+        (Cases_on `bb.bb_instructions` >> gvs[]) >>
+      fs[LAST_EL] >> simp[rich_listTheory.EL_PRE_LENGTH]) >>
+  metis_tac[]
+QED
