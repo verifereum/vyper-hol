@@ -11,7 +11,7 @@ Ancestors
   bodyIntCallFamCallIntEntryHeadStage bodyIntCallFamCallIntEntryRoom
   bodyIntCallFamCallIntEntrySource bodyIntCallFamCallIntEntryFrame
   bodyIntCallFamCallIntEntryPackage bodyIntCallFamCallIntEntryLookup
-  bodyIntCallFamCallIntEntryRuntimeCode
+  bodyIntCallFamCallIntEntryRuntimeCode bodyIntCallFamCallIntEntryDeployCode
 Libs
   monadsyntax
 
