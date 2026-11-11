@@ -219,36 +219,4 @@ val fields_memory =
        (qpat_x_assum `!i. _ ==> (i IN tn1.t_mem <=> _)`
           (qspec_then `i` mp_tac) >> (impl_tac >- decide_tac) >> simp[]) >>
      metis_tac[]) >> suspend "fields_elements";
-
-val fields_elements =
-  markerLib.RESUME_TAC >>
-  conj_tac >-
-    (qx_gen_tac `i` >> strip_tac >> Cases_on `i`
-     >- (pure_rewrite_tac [EL, TAKE_def, MAP, SUM, ADD_CLAUSES] >>
-         qpat_x_assum `!ft fv p. _ ==> _ ==> _ ==> !m.
-           mem_agree_outside tnf.t_mem _ _ ==> _`
-           (qspecl_then [`dtv`, `v`, `doff + w2n b`] mp_tac) >>
-         (impl_tac >- first_assum ACCEPT_TAC) >> (impl_tac >- decide_tac) >>
-         (impl_tac >-
-           (`doff + w2n b = w2n b + doff` by decide_tac >> asm_rewrite_tac[])) >>
-         simp[]) >>
-     rename1 `SUC j < SUC (LENGTH dts)` >>
-     simp_tac (srw_ss()) [EL, TAKE_def, MAP, SUM, TL] >>
-     qpat_x_assum `!i. i < LENGTH dts ==> !m.
-       mem_agree_outside tnf.t_mem _ _ ==> _` (qspec_then `j` mp_tac) >>
-     (impl_tac >- decide_tac) >>
-     `doff + (type_memory_bytes cenv dt +
-        SUM (MAP (type_memory_bytes cenv) (TAKE j dts)) + w2n b) =
-      doff + type_memory_bytes cenv dt +
-        (SUM (MAP (type_memory_bytes cenv) (TAKE j dts)) + w2n b)` by decide_tac >>
-     asm_rewrite_tac[]) >>
-  rpt gen_tac >> disch_tac >> RULE_L_ASSUM_TAC CONJUNCTS >>
-  qpat_x_assum `!ft fv p. _ ==> _ ==> _ ==> !m.
-    mem_agree_outside tnf.t_mem _ _ ==> _` (qspecl_then [`ft`, `fv`, `p`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> (impl_tac >- decide_tac) >>
-  (impl_tac >-
-    (qpat_x_assum `!ft fv p. _ ==> _ ==> _ ==> !m.
-       mem_agree_outside tn1.t_mem _ _ ==> _` (qspecl_then [`ft`, `fv`, `p`] mp_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >> (impl_tac >- decide_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >> simp[])) >> simp[];
 end
