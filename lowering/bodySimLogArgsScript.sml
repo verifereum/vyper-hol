@@ -160,4 +160,3 @@ Proof
   `env.type_defs = get_tenv cx` suffices_by metis_tac[] >>
   gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def]
 QED
-
