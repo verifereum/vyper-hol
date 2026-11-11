@@ -567,7 +567,7 @@ Proof
   >- (Cases_on `expr_type e1` >> gvs[subscript_type_ok_def])
   >> Cases_on `vt` >> gvs[subscript_vtype_def]
   >> rename1 `Type t` >> Cases_on `t` >> gvs[subscript_vtype_def] >>
-  drule type_place_expr_annotation >> simp[]
+  drule vyperTypeSystemTheory.type_place_expr_annotation >> simp[]
 QED
 
 (* Row 92: .field is checked against the struct the checker resolved, which

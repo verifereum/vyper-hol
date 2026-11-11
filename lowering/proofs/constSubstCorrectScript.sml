@@ -3673,13 +3673,6 @@ Proof
   gvs[builtin_operands_ok_def]
 QED
 
-Theorem const_place_expr_annotation:
-  !env e vt. type_place_expr env e = SOME vt ==>
-    vtype_annotation_ok vt (expr_type e)
-Proof
-  metis_tac[type_place_expr_vtype_annotation]
-QED
-
 Theorem const_subscript_domain_type_ok:
   (well_typed_expr env (Subscript ty a b) \/
    IS_SOME (type_place_expr env (Subscript ty a b))) /\
@@ -3689,7 +3682,7 @@ Proof
   disch_then (CONJUNCTS_THEN2 mp_tac assume_tac) >>
   simp[Once well_typed_expr_def, optionTheory.IS_SOME_EXISTS] >>
   simp[Once well_typed_expr_def] >> strip_tac >> gvs[AllCaseEqs()] >>
-  drule const_place_expr_annotation >> strip_tac >>
+  drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >> strip_tac >>
   rename1 `vtype_annotation_ok base_vt (expr_type a)` >>
   Cases_on `base_vt` >> gvs[vtype_annotation_ok_def, subscript_vtype_def] >>
   Cases_on `expr_type a` >>
