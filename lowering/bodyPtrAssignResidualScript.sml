@@ -28,6 +28,9 @@ Theorem body_assign_other_ptr:
     body_expr_ptr_ok cx e /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget t) e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
@@ -70,6 +73,9 @@ Theorem body_assign_widened_aggregate_call_ptr:
    ty.
     body_expr_ptr_ok cx e /\ body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget (NameTarget id)) e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
@@ -98,6 +104,9 @@ Theorem body_assign_tuple_other_ptr:
        body_tuple_target_ptr_ok cx (TupleTarget gs) v) /\ body_expr_ptr_ok cx e /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
@@ -129,6 +138,9 @@ QED
 Theorem body_assign_tuple_widened_call_ptr:
   !d PG cx gs e tops ctx func cenv env env' ret_ty lctx RetQ es res es'.
     body_expr_ptr_ok cx e /\ body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
@@ -154,6 +166,9 @@ Theorem body_augassign_other_ptr:
        body_expr_ptr_ok cx e) /\ body_base_target_ptr_ok cx t /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AugAssign ty t bop e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (AugAssign ty t bop e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
     stmt_exprs_ok cenv (AugAssign ty t bop e) /\
@@ -185,6 +200,9 @@ Theorem body_annassign_widened_aggregate_call_ptr:
        body_expr_ptr_ok cx e) /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (AnnAssign id typ e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
