@@ -17,6 +17,10 @@ The changes, as they appear in the pinned Python compiler:
   first.
 - P4 direct ABI encoder: values are encoded straight into the destination
   buffer, and an external call sends exactly the encoded length plus 4 bytes.
+  It also covers `_revert_with_custom_error`, which lowers each argument as
+  a value (`snapshot_value_for_delayed_use`), keeps no declared-type
+  argument tuple, and encodes with `abi_encode_values_to_buf`; the
+  `custom-errors/` fixtures return to parity with that port.
 - P5 slice allocation order: a slice's output buffer is allocated after its
   bounds check.
 - P6 eager call arguments: internal- and external-call arguments are read as
@@ -115,6 +119,12 @@ fixtures.
 - `create-builtins/cb02_blueprint_args`
 - `create-builtins/cb05_blueprint_rof`
 - `create-builtins/cb07_blueprint_args_salt`
+- `custom-errors/ce_assert_dynamic`
+- `custom-errors/ce_assert_noargs`
+- `custom-errors/ce_assert_static`
+- `custom-errors/ce_raise_kwargs`
+- `custom-errors/ce_raise_noargs`
+- `custom-errors/ce_raise_static`
 - `external-calls/e25_arg_strlit_short`
 - `external-calls/e36_arg_bytes_literal`
 - `external-calls/e40_extcall_gas`
@@ -172,6 +182,8 @@ fixtures.
 
 - `abi-codegen/enc_ensT_bytes`
 - `create-builtins/cb06_blueprint_dyn_offset`
+- `custom-errors/ce_raise_dynamic`
+- `custom-errors/ce_raise_dynarray`
 - `external-calls/e26_arg_str_smaller`
 - `external-calls/e27_arg_dyn_smaller`
 - `main/abi_dynamic`
