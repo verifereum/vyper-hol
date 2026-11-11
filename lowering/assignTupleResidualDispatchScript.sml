@@ -3,7 +3,9 @@ Theory assignTupleResidualDispatch
 Ancestors
   assignTupleResidualBoundary stmtLowering loweringPosts exprLowering
   vyperAST vyperTypeSystem finite_map compileEnv
-  tuplePlaceSnapshot tuplePlacePrefixCert
+  tuplePlaceSnapshot tuplePlacePrefixCert tupleStageProps
+Libs
+  monadsyntax
 
 (* expr_post supplies expr_val_at, rather than unconditional ownership, for
    this equal-layout internal-call case.  Its local-region alternative is
@@ -44,4 +46,44 @@ Proof
     (ArrayV (TupleV vs)) op sv` by gvs[] >>
   drule_all tuple_place_expr_owned_snapshot >>
   simp[tuple_place_snapshot_def] >> metis_tac[]
+QED
+
+(* A cut for every compiler dispatch, including rejection. The caller
+   supplies the actual element list, not the annotation's element list. *)
+Theorem tuple_unpack_dispatch_cut:
+  elem_types = (case ty of
+      TupleT tys => tys
+    | StructT nsid => MAP (FST o SND)
+        (get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid))
+    | _ => REPLICATE (LENGTH gs) (BaseT (UintT 256))) /\
+  stage = ((may_stage /\ EXISTS (\t. ~is_word_type t) elem_types) /\
+           0 < SUM (MAP (type_memory_bytes cenv) elem_types)) /\
+  compile_tuple_unpack cenv ty may_stage gs op su = ((),sf) ==>
+  (stage /\ ~cenv.ce_target CapMcopy /\ emit_inst INVALID [] [] su = ((),sf)) \/
+  (~(stage /\ ~cenv.ce_target CapMcopy) /\
+   ?staged sl elems ss.
+     (if stage then
+        do buf <- compile_alloc_buffer (SUM (MAP (type_memory_bytes cenv) elem_types));
+           emit_void MCOPY [buf.buf_operand; op;
+             Lit (n2w (SUM (MAP (type_memory_bytes cenv) elem_types)))];
+           comp_return buf.buf_operand od
+      else comp_return op) su = (staged,sl) /\
+     compile_tuple_load_all cenv staged elem_types 0 sl = (elems,ss) /\
+     compile_tuple_store_all cenv elem_types gs elems ss = ((),sf))
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_tuple_unpack _ _ _ _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [compile_tuple_unpack_def, LET_THM] >>
+  qpat_x_assum `elem_types = _` (fn th => rewrite_tac[GSYM th]) >>
+  rewrite_tac[arithmeticTheory.GREATER_DEF, CONJ_ASSOC] >>
+  qpat_x_assum `stage = _` (fn th => rewrite_tac[GSYM th]) >>
+  Cases_on `stage /\ ~cenv.ce_target CapMcopy`
+  >- simp[] >>
+  simp[] >> strip_tac >> conj_tac >- metis_tac[] >>
+  qpat_x_assum `_ su = ((),sf)` mp_tac >>
+  rewrite_tac[optional_tuple_stage_code] >>
+  simp_tac bool_ss [type_memory_bytes_def] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  metis_tac[]
 QED
