@@ -467,6 +467,38 @@ QED
 
 Finalise self_code_prefix_success_entry
 
+(* The checked suffix has a cursor-independent taint endpoint. *)
+Theorem self_code_copy_store_uniform_ptr:
+  emit_void CODECOPY [Var dst;src;len] sa = ((),sb) /\
+  emit_void MSTORE [Var out;len] sb = ((),sc) /\
+  ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn out s 32 /\
+  eval_operand src s = SOME a /\ eval_operand len s = SOME n /\
+  lookup_var out s = SOME p /\ lookup_var dst s = SOME (p+32w) /\
+  w2n p+32 < dimword (:256) /\ w2n a+w2n n <= LENGTH s.vs_code /\
+  op_taint tn src = {} /\ op_taint tn len = {} /\ ~ctx_has_dalloca ctx /\
+  ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!name off sz. local_region cenv es.scopes s name off sz ==>
+    off+sz <= w2n p \/ w2n p+32+w2n n <= off) ==>
+  !k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sc)
+    (s with vs_inst_idx := k) G
+    (tn with t_mem := (tn.t_mem DIFF
+      {j | w2n p+32 <= j /\ j < w2n p+32+w2n n}) DIFF
+      {j | w2n p <= j /\ j < w2n p+32})
+Proof
+  strip_tac >> gen_tac >>
+  mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`]
+    self_code_copy_store_emitted_ptr) >>
+  impl_tac
+  >- (fs[lookup_var_def] >>
+      simp[hash_ghost_inv_inst_idx, stmt_state_rel_inst_idx, lookup_var_def] >>
+      rpt strip_tac >> first_x_assum irule >>
+      fs[local_region_def, eval_operand_def, lookup_var_def] >> metis_tac[]) >>
+  strip_tac >> gvs[]
+QED
+
 (* The semantic tail and the checked writes meet at one raw endpoint. *)
 Theorem self_code_tail_success_ptr:
   emit_op CODESIZE [] sb = (limit,sc) /\
@@ -508,6 +540,8 @@ Theorem self_code_tail_success_ptr:
       (Value (BytesV (TAKE (w2n n) (DROP (w2n a) u.vs_code))))
       (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory)) z /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sd sf) v G tn' /\
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sd sf)
+      (v with vs_inst_idx := k) G tn') /\
     ghost_inv d cenv cx es G tn' z /\
     ghost_kept cenv es sd G tn v G tn' /\
     ptr_vv_ok cx (expr_type e)
@@ -538,6 +572,16 @@ Proof
   `w2n p+32 < dimword (:256) /\ w2n a+w2n n <= LENGTH v.vs_code` by simp[] >>
   `ptr_covers G tn out v 32` by
     (fs[ptr_covers_def] >> goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
+  `!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sd sf)
+    (v with vs_inst_idx := k) G
+    (tn with t_mem := (tn.t_mem DIFF
+      {j | w2n p+32 <= j /\ j < w2n p+32+w2n n}) DIFF
+      {j | w2n p <= j /\ j < w2n p+32})` by
+    (irule self_code_copy_store_uniform_ptr >>
+     simp[] >> conj_tac
+     >- (qexistsl_tac [`a`,`dst`,`len`,`out`,`se`,`src`] >> simp[]) >>
+     qexistsl_tac [`cenv`,`cx`,`d`,`es`] >>
+     metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
   drule_all self_code_copy_store_emitted_ptr >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   `emitted_insts sb sf = (emitted_insts sb sc ++ emitted_insts sc sd) ++
@@ -621,39 +665,6 @@ Resume self_code_tail_success_ptr[result]:
   qpat_x_assum `ptr_covers G tn out v sz` mp_tac >>
   simp[NoAsms, ptr_covers_def, mstore_def,
        write_memory_with_expansion_def, lookup_var_def]
-QED
-
-(* The checked suffix can start at the cursor required by concatenation;
-   its taint endpoint is independent of that cursor. *)
-Theorem self_code_copy_store_uniform_ptr:
-  emit_void CODECOPY [Var dst;src;len] sa = ((),sb) /\
-  emit_void MSTORE [Var out;len] sb = ((),sc) /\
-  ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn out s 32 /\
-  eval_operand src s = SOME a /\ eval_operand len s = SOME n /\
-  lookup_var out s = SOME p /\ lookup_var dst s = SOME (p+32w) /\
-  w2n p+32 < dimword (:256) /\ w2n a+w2n n <= LENGTH s.vs_code /\
-  op_taint tn src = {} /\ op_taint tn len = {} /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
-  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
-  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
-  (!name off sz. local_region cenv es.scopes s name off sz ==>
-    off+sz <= w2n p \/ w2n p+32+w2n n <= off) ==>
-  !k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sc)
-    (s with vs_inst_idx := k) G
-    (tn with t_mem := (tn.t_mem DIFF
-      {j | w2n p+32 <= j /\ j < w2n p+32+w2n n}) DIFF
-      {j | w2n p <= j /\ j < w2n p+32})
-Proof
-  strip_tac >> gen_tac >>
-  mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`]
-    self_code_copy_store_emitted_ptr) >>
-  impl_tac
-  >- (fs[lookup_var_def] >>
-      simp[hash_ghost_inv_inst_idx, stmt_state_rel_inst_idx, lookup_var_def] >>
-      rpt strip_tac >> first_x_assum irule >>
-      fs[local_region_def, eval_operand_def, lookup_var_def] >> metis_tac[]) >>
-  strip_tac >> gvs[]
 QED
 
 Finalise self_code_tail_success_ptr
