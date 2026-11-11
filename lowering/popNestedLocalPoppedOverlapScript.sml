@@ -11,7 +11,7 @@ Theorem local_target_overlap_excludes_write:
   ~MEM RiskyAcc (expr_accesses cenv.ce_modules idx)
 Proof
   strip_tac >> irule target_subscript_overlap_unwritten >>
-  simp[target_root_local_nonconstant_read]
+  qexists_tac `bt` >> simp[target_root_local_nonconstant_read]
 QED
 
 Theorem pop_body_alloc_limits_target:
