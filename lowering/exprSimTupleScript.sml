@@ -944,7 +944,10 @@ Proof
   qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   rewrite_tac[vv_post_def] >> gvs[vyperASTTheory.expr_type_def] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY (strip_tac >>
+       qpat_x_assum `~expr_has_effect obj ==> pure_frame _ _ _ _ _ _` irule >>
+       first_assum ACCEPT_TAC >> NO_TAC)
   >- (irule tuple_vv_holds_elem >> simp[] >> metis_tac[]) >>
   `vv_at cenv cx (EL k tys) sa sn es1 tv'
      (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q` by
@@ -953,7 +956,7 @@ Proof
                   `EL k tys`, `ctx`] mp_tac tuple_vv_at_elem >>
      imp_res_tac values_have_types_length >> simp[]) >>
   simp[] >> rpt strip_tac >>
-  qpat_x_assum `~expr_has_effect obj ==> _` mp_tac >>
+  qpat_x_assum `~expr_has_effect obj ==> vv_storage_live _ _ _ _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
   `evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs)` by
     (drule opt_mmap_el >> disch_then (qspec_then `k` mp_tac) >>

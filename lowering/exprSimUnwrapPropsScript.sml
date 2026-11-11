@@ -61,8 +61,14 @@ Proof
   >- (fs[vv_post_def] >> metis_tac[not_fresh_at_mono])
   >~ [`FLOOKUP s.vs_allocas`] >- fs[vv_post_def]
   >~ [`locals_kept`]
-  >- (fs[vv_post_def] >> metis_tac[locals_kept_mem_tail]) >>
-  fs[vv_post_def] >> metis_tac[]
+  >- (fs[vv_post_def] >> metis_tac[locals_kept_mem_tail])
+  >~ [`pure_frame`]
+  >- (fs[vv_post_def] >> metis_tac[pure_frame_mem_tail]) >>
+  qpat_x_assum `s.vs_memory = s1.vs_memory` SUBST1_TAC >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+  first_x_assum (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]
 QED
 
 Theorem expr_post_of_vv_post_load:
