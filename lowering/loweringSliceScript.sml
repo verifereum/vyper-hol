@@ -36,7 +36,7 @@
 
 Theory loweringSlice
 Ancestors
-  list rich_list finite_map pred_set
+  list rich_list finite_map pred_set venomWfProps
   fragExec localPtrsProps venomMemDefs immutableMemoryFrame immutableRelation
   immutableEncoding
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
