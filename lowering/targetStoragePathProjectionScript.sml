@@ -301,3 +301,30 @@ Proof
   drule_all storage_fixed_extension_read_live >> strip_tac >> gvs[] >>
   drule_all storage_fixed_extension_slots_in_range >> simp[]
 QED
+
+Theorem storage_saved_place_capacity_frame:
+  !cx mid name keys tr root rtv path delta slot tv raw raw'.
+    declared_storage_region cx mid name keys = SOME (tr,root,rtv) /\
+    storage_layout_safe cx /\ storage_subregion rtv path delta tv /\
+    slot = root + n2w delta /\ 0 < type_slot_size tv /\
+    storage_read_live cx tr raw slot tv /\ slots_in_range raw (w2n slot) tv /\
+    (!q. w2n root <= q /\ q < w2n root + type_slot_size rtv ==>
+      lookup_storage (n2w q) raw' = lookup_storage (n2w q) raw) ==>
+    storage_read_live cx tr raw' slot tv /\ slots_in_range raw' (w2n slot) tv
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all storage_layout_safe_region_nonoverflow >> strip_tac >>
+  drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
+  `delta < dimword (:256)` by decide_tac >>
+  `w2n root + delta < dimword (:256)` by decide_tac >>
+  `w2n slot = w2n root + delta` by
+    (gvs[] >> simp[wordsTheory.w2n_add_2]) >>
+  conj_tac
+  >- (irule storage_read_live_capacity_frame >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qexistsl_tac [`keys`, `mid`, `name`] >> simp[] >>
+      qexists_tac `raw` >> gvs[]) >>
+  irule (iffRL (INST_TYPE [alpha |-> ``:256``] slots_in_range_capacity_frame)) >>
+  goal_assum (drule_at Any) >>
+  qexists_tac `raw` >> simp[] >> decide_tac
+QED
