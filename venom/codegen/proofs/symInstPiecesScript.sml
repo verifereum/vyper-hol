@@ -1261,15 +1261,17 @@ Proof
   rpt gen_tac >> strip_tac >>
   `inst.inst_outputs = []` by
     (qpat_x_assum `inst_wf inst` mp_tac >>
-     simp[inst_wf_def]) >>
+     simp[venomWfTheory.inst_wf_def]) >>
   qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
        is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
-       is_raw_fmp_opcode_def, is_fmp_param_opcode_def, is_param_opcode_def] >>
+       venomInstTheory.is_raw_fmp_opcode_def,
+       venomInstTheory.is_fmp_param_opcode_def,
+       venomExecSemanticsTheory.is_param_opcode_def] >>
   simp[generate_regular_inst_plan_def, compute_operands_def,
-       is_commutative_def, LET_THM] >>
+       venomEffectsTheory.is_commutative_def, LET_THM] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  simp[generate_emit_ops_def, venom_to_evm_name_def, LET_THM] >>
+  simp[generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def, LET_THM] >>
   strip_tac >> gvs[]
 QED
 
