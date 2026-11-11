@@ -7,6 +7,7 @@
    a simulation case can split on it. *)
 Theory whitelistCheckerTypes
 Ancestors
+  supportedStmts supportedDecls supportedExprs whitelistCheckerDecls
   supportedExprForms supportedTypes vyperTypeSystem vyperContext vyperValue
   vyperAST vyperMisc exprLowering placeTypingProps abiCallerStructSize
   alist finite_map list pred_set pair arithmetic
@@ -581,4 +582,16 @@ Proof
        AllCaseEqs()] >>
   rw[] >> drule type_env_struct_fields >> rw[] >>
   drule ALOOKUP_MEM >> simp[MEM_MAP, EXISTS_PROD] >> metis_tac[]
+QED
+
+(* Pure arguments and scalar event headers retain their existing gates. *)
+Theorem type_stmt_log_supported:
+  check_contract F layouts addr [(NONE, tops)] = SOME art /\
+  env.event_fields = art.cta_event_fields /\
+  type_stmt env ret (Log id es) = SOME env' /\
+  supported_pure_exprs tops es ==>
+  supported_log tops id es
+Proof
+  strip_tac >> drule_all check_contract_log_event_fields >> strip_tac >>
+  gvs[type_stmt_def, supported_log_def, AllCaseEqs()]
 QED

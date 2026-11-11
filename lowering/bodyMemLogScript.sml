@@ -2,7 +2,7 @@
 Theory bodyMemLog
 Ancestors
   allocLimitsProps exprSimSource
-  bodyMemoryPreds stmtLogMemory bodySimLog
+  bodyMemoryPreds stmtLogMemory bodySimLogArgs
   exprSimMemDefs exprSimHypsDefs bodyExprPreFacts bodySimStmtCases bodySim
   supportedExprs supportedExprTraverse supportedStmtTraverse supportedStmts
   supportedProgram vyperTypeCallGraph vyperTypeSystem vyperTypeExprResult
@@ -124,10 +124,18 @@ Theorem body_log_mem_case:
 Proof
   rw[body_stmt_mem_ok_def] >>
   rename1 `stmt_frag_mem _ _ _ _ _ _ _ _ _ st` >>
+  reverse (Cases_on `supported_log_exact tops id es`)
+  >- (`?fields. supported_event_fields tops id = SOME fields /\
+               supported_pure_exprs tops es /\
+               LIST_REL (\e ((_,fty),_).
+                 event_arg_compatible fty (expr_type e)) es fields` by
+        (gvs[supported_stmt_def, supported_log_def, AllCaseEqs()] >>
+         Cases_on `supported_event_fields tops id` >> gvs[]) >>
+      drule_all body_log_widen_mem_case >> simp[]) >>
   `?fields. supported_event_fields tops id = SOME fields /\
             supported_pure_exprs tops es /\
             MAP expr_type es = MAP (SND o FST) fields` by
-    (gvs[supported_stmt_def, supported_log_def, AllCaseEqs()] >>
+    (gvs[supported_log_exact_def, AllCaseEqs()] >>
      Cases_on `supported_event_fields tops id` >> gvs[]) >>
   drule_all body_log_metadata >> strip_tac >>
   `SUM (MAP (type_memory_bytes cenv)
