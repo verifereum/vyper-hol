@@ -21,6 +21,19 @@ Proof
   cheat
 QED
 
+(* Held: tuple targets with an element whose base target has effectful
+   indices; same ordering (RHS loaded before the target resolves) as
+   intcall_assign_effectful_index_step, held on the same turns. *)
+Theorem intcall_assign_tuple_effectful_index_step:
+  !fp gs e.
+    (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
+         intcall_map_producer fp e) /\
+    EXISTS (\g. ?bt. g = BaseTarget bt /\ ~supported_target_pure fp.jc_tops bt) gs ==>
+    intcall_stmts_producer fp [Assign (TupleTarget gs) e]
+Proof
+  cheat
+QED
+
 (* Held: twin of augassign_place_effectful_index_case; waits on the
    target-overlap turn and the RHS-first turn. *)
 Theorem intcall_augassign_effectful_index_step:
