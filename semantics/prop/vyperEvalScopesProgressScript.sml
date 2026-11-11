@@ -159,6 +159,7 @@ Proof
       metis_tac[])
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
       imp_res_tac read_result_state >> imp_res_tac select_result_state >>
       gvs[] >> imp_res_tac eval_expr_preserves_scopes_dom >>
       metis_tac[scopes_progress_trans])
@@ -335,7 +336,7 @@ Resume eval_mutual_scopes_progress[IntCall]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum
     `!s t s1 ts t1 s2 tup t2 s3 t3. _ ==>
-       !st res st'. eval_expr_results cx es st = (res,st') ==> _`
+       !st res st'. eval_exprs cx es st = (res,st') ==> _`
     (mp_tac o SRULE [type_check_def, assert_def, lift_option_type_def,
                      option_CASE_rator, return_def, raise_def, AllCaseEqs()]) >>
   disch_then assume_tac >>
