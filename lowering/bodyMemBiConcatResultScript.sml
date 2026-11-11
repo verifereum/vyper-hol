@@ -212,7 +212,7 @@ Resume concat_result_vv_sim_mem[finalpost]:
    alloca_history func tf /\ s0.vs_alloca_next <= tf.vs_alloca_next` by
     (simp[Abbr `tf`, mstore_def, update_var_def] >> decide_tac) >>
   asm_rewrite_tac[] >>
-  `wb_frame cenv es sa s0 t` by
+  `wb_frame cenv es es sa s0 t` by
     (irule (INST_TYPE [alpha |-> ``:256``] concat_prefix_frame) >> reverse (rpt conj_tac)
      >- first_assum ACCEPT_TAC
      >- (rpt strip_tac >> first_x_assum drule >> simp[])
@@ -225,7 +225,7 @@ Resume concat_result_vv_sim_mem[finalpost]:
 QED
 
 Resume concat_result_vv_sim_mem[frame]:
-  `wb_frame cenv es sa s0 t'` by
+  `wb_frame cenv es ee sa s0 t'` by
     (irule (INST_TYPE [alpha |-> ``:256``] concat_prefix_list_frame) >>
      conj_tac >- first_assum ACCEPT_TAC >>
      reverse conj_tac

@@ -5,7 +5,7 @@ Ancestors
   localPtrsProps compileEnv venomState finite_map list arithmetic loweringStateRelDefs
 
 Theorem protected_allocation_frame_tail:
-  wb_frame cenv es sa s0 t /\
+  wb_frame cenv es ee sa s0 t /\
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_id <= sc.cs_next_id /\
@@ -13,7 +13,7 @@ Theorem protected_allocation_frame_tail:
          lookup_var x u = SOME w) /\
   (!aid a. FLOOKUP t.vs_allocas aid = SOME a ==>
            FLOOKUP u.vs_allocas aid = SOME a) /\
-  locals_kept cenv ee t u /\
+  locals_kept cenv ee es' t u /\
   (!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
              aid < sa.cs_next_id ==> H p n) /\
   (!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\
@@ -21,10 +21,10 @@ Theorem protected_allocation_frame_tail:
      (!name lo sz. local_region cenv ee.scopes t name lo sz ==>
                    p+n <= lo \/ lo+sz <= p) ==>
      mem_bytes_at p n u.vs_memory = mem_bytes_at p n t.vs_memory) ==>
-  wb_frame cenv es sa s0 u
+  wb_frame cenv es es' sa s0 u
 Proof
   strip_tac >>
-  `locals_kept cenv es s0 u` by
+  `locals_kept cenv es es' s0 u` by
     (irule locals_kept_trans >> qexistsl_tac [`ee`, `sa`, `t`] >>
      fs[wb_frame_def]) >>
   fs[wb_frame_def] >> rpt strip_tac >>

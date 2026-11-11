@@ -120,7 +120,8 @@ Theorem first_emission_word_copy_loop:
       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
 Proof
-  simp_tac bool_ss [compile_word_copy_loop_def, LET_THM] >>
+  simp_tac bool_ss [compile_word_copy_loop_def, compile_word_copy_loop_op_def,
+                    compile_word_copy_loop_base_def, LET_THM] >>
   ho_match_mp_tac entry_first_emission_then_strong >> conj_tac
   >- (ho_match_mp_tac first_emission_no_code >> metis_tac[first_emission_counters]) >>
   gen_tac >> ho_match_mp_tac entry_first_emission_then_strong >> conj_tac

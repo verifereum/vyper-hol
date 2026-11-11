@@ -102,7 +102,7 @@ Proof
      >> gvs[place_ptr_rel_def, Abbr `u`, slot_loc_def] >>
      drule_all place_store_word_backend_state >> Cases_on `b` >> gvs[]) >>
   drule_all place_store_write_location >> strip_tac >>
-  `alloca_inv s` by fs[stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+  `alloca_inv s` by fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `gas_marked_path T ctx func s 0
       (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
    alloca_history func (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\

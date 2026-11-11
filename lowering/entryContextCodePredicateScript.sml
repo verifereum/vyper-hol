@@ -95,7 +95,8 @@ Proof
   `!ops base. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (comp_bind (emit_op MUL ops) (\scaled. emit_op ADD [base; scaled]))`
     by (rpt gen_tac >> irule entry_code_bind >> simp[entry_code_emit_op]) >>
-  rewrite_tac[compile_word_copy_loop_def] >>
+  rewrite_tac[compile_word_copy_loop_def, compile_word_copy_loop_op_def,
+              compile_word_copy_loop_base_def] >>
   Cases_on `word_scale load_loc = 1` >>
   Cases_on `word_scale store_loc = 1` >>
   simp[compileEnvTheory.comp_ignore_bind_def] >>

@@ -8,12 +8,12 @@ Theorem raw_log_alloc_mem_counted:
   compile_alloc_buffer sz sm = (buf,sn) /\ fn_has_code sm sn func /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sm /\ sz < dimword (:256) /\
-  wb_frame cenv es0 sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
+  wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
   alloca_history func s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t w. gas_path_mem ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 sa s0 t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 es sa s0 t /\
     eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
     w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\

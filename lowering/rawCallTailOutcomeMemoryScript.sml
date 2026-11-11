@@ -28,7 +28,7 @@ Theorem raw_call_tail_outcome_mem:
   alloca_history func t /\ b+32+LENGTH bs <= t.vs_alloca_next /\
   lowered_value_type cenv (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE) =
     raw_call_return_type flags /\
-  stmt_state_rel ctx func cenv cx esK t /\ wb_frame cenv es sa s0 t /\
+  stmt_state_rel ctx func cenv cx esK t /\ wb_frame cenv es esK sa s0 t /\
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   ci_mono sa s6 /\ fn_has_code s6 sb func /\ fn_inst_ids_distinct func /\
   ~t.vs_halted /\ t.vs_current_bb = s6.cs_current_bb /\
@@ -158,7 +158,7 @@ Resume raw_call_tail_outcome_mem[execute]:
   disch_then (drule_at (Pat `expr_type _ = _`)) >>
   simp[expr_type_def] >>
   disch_then (drule_at (Pat `lowered_value_type _ _ = _`)) >>
-  disch_then (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ esK t`)) >>
   disch_then (drule_at (Pat `eval_operand addr t = _`)) >>
   disch_then (drule_at (Pat `eval_operand dp t = _`)) >>

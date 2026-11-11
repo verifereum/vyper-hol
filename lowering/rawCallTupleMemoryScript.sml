@@ -120,7 +120,7 @@ Theorem raw_call_nonrevert_positive_mem_ok:
           emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
           return buf.buf_operand od
      else return ok) sa = (result,sb) /\ 0 < n /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sf s0 s /\
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sf s0 s /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
   alloc.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\

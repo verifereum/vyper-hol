@@ -18,7 +18,7 @@ Theorem ifexp_copy_endpoint:
   eval_operand op (mcopy (w2n w) src len s) = SOME w /\
   (!n b k. local_region cenv ee.scopes (mcopy (w2n w) src len s) n b k ==>
      w2n w + sz <= b \/ b + k <= w2n w) /\
-  wb_frame cenv es sa s0 (mcopy (w2n w) src len s) /\
+  wb_frame cenv es ee sa s0 (mcopy (w2n w) src len s) /\
   w2n w + sz <= (mcopy (w2n w) src len s).vs_alloca_next /\
   val_store_size tvt v <= sz /\
   (!ltv. evaluate_type (get_tenv cx) lt = SOME ltv ==> type_memory_size ltv <= sz) ==>

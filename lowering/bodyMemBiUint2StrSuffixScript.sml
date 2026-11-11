@@ -13,7 +13,7 @@ Theorem u2s_alloc_mem_ready[local]:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ sz < dimword (:256) /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\
-  wb_frame cenv es sp spre s /\ local_ptrs_reserved cenv sp /\
+  wb_frame cenv es es sp spre s /\ local_ptrs_reserved cenv sp /\
   sp.cs_next_var <= sa.cs_next_var /\ sp.cs_next_id <= sa.cs_next_id ==>
   ?b t inst. gas_path_mem ctx fn s 0 (OK t) /\
     alloca_history fn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
@@ -24,7 +24,7 @@ Theorem u2s_alloc_mem_ready[local]:
     (?p. ba.buf_operand = Var p /\ not_fresh_at a p) /\
     b+sz < dimword (:256) /\ t.vs_current_bb = a.cs_current_bb /\
     t.vs_inst_idx = LENGTH a.cs_current_insts /\ ~t.vs_halted /\
-    wb_frame cenv es sp spre t /\
+    wb_frame cenv es es sp spre t /\
     (!name lb lsz. local_region cenv es.scopes t name lb lsz ==>
        b+sz <= lb \/ lb+lsz <= b) /\
     (!aid off len. aid < sp.cs_next_id /\
@@ -42,7 +42,7 @@ Proof
      metis_tac[ADD_COMM]) >>
   `eval_operand op t = SOME (n2w X)` by
     (Cases_on `op` >> gvs[eval_operand_def]) >>
-  `wb_frame cenv es sp spre t` by
+  `wb_frame cenv es es sp spre t` by
     (irule wb_frame_allocating_tail >>
      simp[] >> qexistsl_tac [`s`, `es.scopes`, `sa`] >> simp[]) >>
   `!aid off len. aid < sp.cs_next_id /\
@@ -70,7 +70,7 @@ Theorem u2s_allocated_mem_exit:
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\ X < dimword (:256) /\
   78 <= n /\ 32 <= sz /\
-  wb_frame cenv es sp spre s /\ local_ptrs_reserved cenv sp /\
+  wb_frame cenv es es sp spre s /\ local_ptrs_reserved cenv sp /\
   sp.cs_next_var <= sa.cs_next_var /\ sp.cs_next_id <= sa.cs_next_id ==>
   ?b ready inst t. gas_path_mem ctx fn s 0 (OK t) /\
     alloca_history fn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
@@ -80,7 +80,7 @@ Theorem u2s_allocated_mem_exit:
       (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
     b+n-LENGTH (num_to_dec_string X)+sz <= t.vs_alloca_next /\
     t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
-    wb_frame cenv es sp spre t /\
+    wb_frame cenv es es sp spre t /\
     inst.inst_id = sa.cs_next_id /\ inst.inst_id < a.cs_next_id /\
     b+sz+n < dimword (:256)
 Proof
@@ -103,7 +103,7 @@ Proof
   `sa.cs_next_var <= a.cs_next_var` by
     (mp_tac (Q.SPECL [`sz+n`, `sa`] exprLoweringPropsTheory.ci_mono_compile_alloc_buffer) >>
      simp[exprLoweringPropsTheory.ci_mono_def]) >>
-  `wb_frame cenv es sp spre t` by
+  `wb_frame cenv es es sp spre t` by
     (irule u2s_frame_wb_tail >>
      simp[] >> qexistsl_tac [`a`, `b`, `ready`, `sz+n`] >>
      fs[u2s_safe_def] >> conj_tac >> first_assum ACCEPT_TAC) >>

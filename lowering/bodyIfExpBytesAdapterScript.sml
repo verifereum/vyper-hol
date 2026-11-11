@@ -16,13 +16,13 @@ Proof
 QED
 
 Theorem ifexp_copy_frame[local]:
-  wb_frame ce es origin s0 s /\ stmt_state_rel ctx func ce cx ee s /\
+  wb_frame ce es ee origin s0 s /\ stmt_state_rel ctx func ce cx ee s /\
   local_ptrs_reserved ce origin /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   FLOOKUP s.vs_allocas aid = SOME (dst,cap) /\ origin.cs_next_id <= aid /\
   len <= cap /\
   (!name b k. local_region ce ee.scopes s name b k ==>
      regions_disjoint dst cap b k) ==>
-  wb_frame ce es origin s0 (mcopy dst src len s)
+  wb_frame ce es ee origin s0 (mcopy dst src len s)
 Proof
   strip_tac >> irule wb_frame_allocating_tail >>
   conj_tac >- simp[] >>
@@ -127,8 +127,8 @@ Resume ifexp_bytestring_adapter_path_mem[endpoint]:
     (irule expr_post_rebased_compose_mem_src >> goal_assum (drule_at Any) >>
      simp[] >> goal_assum (drule_at Any) >> simp[] >>
      metis_tac[]) >>
-  `wb_frame ce es origin s0 u` by metis_tac[expr_post_frame] >>
-  `wb_frame ce es origin s0 (mcopy (w2n d) (w2n w) (32 + 32 * word_size len) u)` by
+  `wb_frame ce es ee origin s0 u` by metis_tac[expr_post_frame] >>
+  `wb_frame ce es ee origin s0 (mcopy (w2n d) (w2n w) (32 + 32 * word_size len) u)` by
     (irule ifexp_copy_frame >> goal_assum (drule_at Any) >>
      simp[] >> goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >>
@@ -151,7 +151,7 @@ QED
 
 Resume ifexp_bytestring_adapter_path_mem[canonical]:
   `evaluate_type (get_tenv cx) (expr_type e) = SOME tvt` by simp[] >>
-  drule_at (Pat `wb_frame _ _ _ _ _`) ifexp_copy_endpoint >>
+  drule_at (Pat `wb_frame _ _ _ _ _ _`) ifexp_copy_endpoint >>
   disch_then (drule_at (Pat `post_value_type _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>

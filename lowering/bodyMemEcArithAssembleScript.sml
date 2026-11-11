@@ -295,7 +295,7 @@ Theorem ecmul_prefix_run:
     (!i. MEM i (emitted_insts sf sm) ==>
       MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
     run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + 96 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\
@@ -378,7 +378,7 @@ Theorem ecadd_prefix_run:
     (!i. MEM i (emitted_insts sf sm) ==>
       MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
     run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + 128 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\
@@ -468,7 +468,7 @@ Theorem ecmul_prefix_mem:
     (!i. MEM i (emitted_insts sf sm) ==>
       MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
     run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + 96 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\
@@ -525,7 +525,7 @@ Theorem ecadd_prefix_mem:
     (!i. MEM i (emitted_insts sf sm) ==>
       MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
     run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + 128 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\

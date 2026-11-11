@@ -15,23 +15,23 @@ Theorem extract32_operands_frame:
   ci_mono sa s1 /\ ci_mono s1 s2 /\
   (u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
   (!x. not_fresh_at s1 x ==> lookup_var x u = lookup_var x s) ==>
-  wb_frame cenv es sa s0 t
+  wb_frame cenv es es2 sa s0 t
 Proof
   strip_tac >>
-  `wb_frame cenv es sa s0 s` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es es1 sa s0 s` by metis_tac[expr_post_frame] >>
   `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es es1 sa s0 u` by
     (irule wb_frame_readonly_tail >> goal_assum (drule_at Any) >>
      qexists_tac `s1` >> fs[ci_mono_def] >> metis_tac[]) >>
-  `wb_frame cenv es1 s2 u t` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es1 es2 s2 u t` by metis_tac[expr_post_frame] >>
   irule wb_frame_trans >> goal_assum (drule_at Any) >>
   fs[ci_mono_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem extract32_suffix_word_post:
-  stmt_state_rel ctx func cenv cx es' s /\ wb_frame cenv es sa s0 s /\
+  stmt_state_rel ctx func cenv cx es' s /\ wb_frame cenv es es' sa s0 s /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   t = s with vs_vars := t.vs_vars /\
   (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
@@ -48,7 +48,7 @@ Proof
   `stmt_state_rel ctx func cenv cx es' (t with vs_inst_idx := n)` by
     (irule extract32_snapshot_entry_frame >> goal_assum (drule_at Any) >>
      qexists_tac `sm` >> simp[]) >>
-  `wb_frame cenv es sa s0 (t with vs_inst_idx := n)` by
+  `wb_frame cenv es es' sa s0 (t with vs_inst_idx := n)` by
     (irule wb_frame_readonly_tail >> goal_assum (drule_at Any) >>
      qexists_tac `s` >> simp[lookup_var_def] >>
      qpat_x_assum `t = s with vs_vars := _` SUBST1_TAC >>
@@ -123,7 +123,7 @@ Theorem extract32_suffix_success_entry:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s /\
-  stmt_state_rel ctx func cenv cx es' s /\ wb_frame cenv es s0c s0 s /\
+  stmt_state_rel ctx func cenv cx es' s /\ wb_frame cenv es es' s0c s0 s /\
   local_ptrs_reserved cenv sa /\ s0c.cs_next_var <= sa.cs_next_var /\
   expr_type e = BaseT bt /\ is_word_type (BaseT bt) /\
   eval_operand l s = SOME (n2w (LENGTH bs)) /\

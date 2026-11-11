@@ -59,7 +59,7 @@ Proof
   qpat_assum `emit_op MLOAD _ _ = _` (irule_at Any) >>
   qpat_assum `emit_op ADD _ _ = _` (irule_at Any) >>
   qpat_assum `emit_inst LOG _ _ _ = _` (irule_at Any) >>
-  qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `wb_frame _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `expr_type call = NoneT` (irule_at Any) >>
   qexistsl_tac [`b`, `R`] >> simp[] >> decide_tac
 QED
@@ -193,7 +193,7 @@ Proof
   irule_at Any raw_log_fixed_continuation_mem >>
   qpat_assum `emit_void MSTORE _ _ = _` (irule_at Any) >>
   qpat_assum `emit_inst LOG _ _ _ = _` (irule_at Any) >>
-  qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `wb_frame _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `expr_type call = NoneT` (irule_at Any) >>
   qpat_assum `MEM inst _` (irule_at Any) >>
   `w2n p + 32 <= u.vs_alloca_next` by decide_tac >>
@@ -312,7 +312,7 @@ Proof
   drule_all raw_log_topics_marked_post_mem >> strip_tac >>
   drule_all raw_log_marked_data_ready_mem >> strip_tac >>
   `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t /\
-   wb_frame cenv es sa s0 t` by fs[wb_args_post_def] >>
+   wb_frame cenv es (mid with gas_obs := []) sa s0 t` by fs[wb_args_post_def] >>
   `~t.vs_halted` by
     (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[gas_marked_exec_def] >> strip_tac >>

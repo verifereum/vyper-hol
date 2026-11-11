@@ -18,10 +18,10 @@ Theorem concat_prefix_frame:
               w2n ow + 64 <= p \/ p+n <= w2n ow) /\
   (!p n. p+n <= w2n ow \/ w2n ow+64 <= p ==>
          mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory) ==>
-  wb_frame cenv es sa s0 t
+  wb_frame cenv es es sa s0 t
 Proof
   strip_tac >>
-  `locals_kept cenv es s0 t` by
+  `locals_kept cenv es es s0 t` by
     (irule locals_kept_regions >> rpt strip_tac >>
      `local_region cenv es.scopes t n b sz` by
        (irule local_region_frame_fwd >> qexistsl_tac [`s0`, `sa`, `es.scopes`] >> simp[]) >>
@@ -33,7 +33,7 @@ Proof
 QED
 
 Theorem concat_prefix_list_frame:
-  wb_frame cenv es sa s0 t /\
+  wb_frame cenv es ee sa s0 t /\
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_id <= sc.cs_next_id /\ sa.cs_next_var <= sc.cs_next_var /\
@@ -41,7 +41,7 @@ Theorem concat_prefix_list_frame:
          lookup_var z u = SOME w) /\
   (!aid a. FLOOKUP t.vs_allocas aid = SOME a ==>
            FLOOKUP u.vs_allocas aid = SOME a) /\
-  locals_kept cenv ee t u /\
+  locals_kept cenv ee es' t u /\
   (!aid p n. aid < sa.cs_next_id /\ FLOOKUP s0.vs_allocas aid = SOME (p,n) ==>
      (B+bsz <= p \/ p+n <= B) /\ (w2n ow+64 <= p \/ p+n <= w2n ow)) /\
   (!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\ aid < sc.cs_next_id /\
@@ -49,7 +49,7 @@ Theorem concat_prefix_list_frame:
      (!name lo sz. local_region cenv ee.scopes t name lo sz ==>
                    p+n <= lo \/ lo+sz <= p) ==>
      mem_bytes_at p n u.vs_memory = mem_bytes_at p n t.vs_memory) ==>
-  wb_frame cenv es sa s0 u
+  wb_frame cenv es es' sa s0 u
 Proof
   strip_tac >> irule protected_allocation_frame_tail >> simp[] >>
   reverse conj_tac >- (qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
@@ -67,14 +67,14 @@ QED
 
 (* The suffix changes one fresh register and the result's length word. *)
 Theorem concat_suffix_frame[local]:
-  wb_frame cenv es sa s0 t /\ local_ptrs_reserved cenv sa /\
+  wb_frame cenv es ee sa s0 t /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   (!x. not_fresh_at sa x ==> x <> fresh) /\
   (!aid p n. aid < sa.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,n) ==>
      B+32 <= p \/ p+n <= B) /\
   (!name p n. local_region cenv ee.scopes t name p n ==>
      B+32 <= p \/ p+n <= B) ==>
-  wb_frame cenv es sa s0
+  wb_frame cenv es ee sa s0
     (mstore B w (update_var fresh w t))
 Proof
   strip_tac >> irule wb_frame_allocating_tail >> simp[] >>
@@ -151,7 +151,7 @@ Theorem concat_suffix_post:
   (!ltv. evaluate_type (get_tenv cx) lt = SOME ltv ==>
          type_memory_size ltv <= bsz) /\ B+bsz <= t.vs_alloca_next /\
   lookup_var bv t = SOME (n2w B) /\ bv <> fresh /\
-  wb_frame cenv es sa s0 t /\ stmt_state_rel ctx func cenv cx ee t /\
+  wb_frame cenv es ee sa s0 t /\ stmt_state_rel ctx func cenv cx ee t /\
   local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   (!x. not_fresh_at sa x ==> x <> fresh) /\
   not_local_ptr cenv ee.scopes fresh /\
@@ -172,7 +172,7 @@ Proof
   strip_tac >> simp[LET_THM] >>
   qmatch_goalsub_abbrev_tac `vv_post _ _ _ _ _ _ _ _ _ _ _ _ u` >>
   `32 <= bsz` by decide_tac >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es ee sa s0 u` by
     (simp[Abbr `u`] >> irule concat_suffix_frame >>
      asm_rewrite_tac[] >> qexists_tac `ee` >> simp[] >>
      rpt strip_tac >>

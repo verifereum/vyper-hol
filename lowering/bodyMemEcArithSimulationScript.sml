@@ -37,7 +37,7 @@ Proof
   `sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
    s1.cs_next_var <= sm.cs_next_var /\ s1.cs_next_id <= sm.cs_next_id` by
     metis_tac[cj 2 compile_expr_grows] >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es es2 sa s0 u` by
     (irule wb_frame_trans >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[expr_post_frame]) >>
   irule vv_post_prefix_frame >> goal_assum (drule_at Any) >>

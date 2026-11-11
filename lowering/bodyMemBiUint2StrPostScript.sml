@@ -7,7 +7,7 @@ Ancestors
 
 Theorem u2s_wb_frame_scopes[local]:
   MAP FDOM es.scopes = MAP FDOM et.scopes ==>
-  (wb_frame cenv es sa s0 s <=> wb_frame cenv et sa s0 s)
+  (wb_frame cenv es ee sa s0 s <=> wb_frame cenv et ee sa s0 s)
 Proof
   strip_tac >>
   `!t name b sz. local_region cenv es.scopes t name b sz <=>
@@ -41,7 +41,7 @@ Proof
   strip_tac >> drule_all compile_uint2str_layout >> strip_tac >>
   drule_all expr_post_frame >> strip_tac >>
   drule_all expr_post_state >> strip_tac >>
-  `wb_frame cenv es' sa s0 s` by metis_tac[u2s_wb_frame_scopes] >>
+  `wb_frame cenv es' es' sa s0 s` by metis_tac[u2s_wb_frame_scopes] >>
   `is_word_type (expr_type e)` by simp[is_word_type_def] >>
   drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
   `well_formed_type env.type_defs (expr_type e)` by
@@ -55,7 +55,7 @@ Proof
   drule_all u2s_allocated_mem_exit >>
   disch_then (qspec_then `BaseTV (StringT n)` mp_tac) >>
   strip_tac >>
-  `wb_frame cenv es sa s0 t` by metis_tac[u2s_wb_frame_scopes] >>
+  `wb_frame cenv es es' sa s0 t` by metis_tac[u2s_wb_frame_scopes] >>
   mp_tac (Q.INST [`X` |-> `X`, `n` |-> `n`] uint2str_result_memory_bounds) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `LENGTH (num_to_dec_string X) <= n` by

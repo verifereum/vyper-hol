@@ -14,7 +14,7 @@ Theorem raw_log_data_operands_mem:
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\
                (!l. op <> Label l)) ops ==>
-  wb_frame cenv es0 sa s0 u /\
+  wb_frame cenv es0 es2 sa s0 u /\
   eval_operands ops u = SOME (MAP event_value_to_word vals)
 Proof
   strip_tac >> drule_all raw_log_data_post_transport >> strip_tac >> simp[] >>
@@ -96,7 +96,7 @@ Theorem raw_log_dynamic_continuation_mem:
   TAKE (LENGTH bs) (DROP (b + 32) s.vs_memory ++ REPLICATE (LENGTH bs) 0w) = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
-  wb_frame cenv es0 sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
+  wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
   post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\ alloca_history func s /\
@@ -155,7 +155,7 @@ Theorem raw_log_fixed_continuation_mem:
   eval_operand ptr_op s = SOME p /\ eval_operand data_op s = SOME w /\
   eval_operands ops s = SOME (MAP event_value_to_word vals) /\ LENGTH ops <= 4 /\
   LENGTH vals <= 4 /\ LENGTH bs = 32 /\ TAKE 32 (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sa s0 s /\
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
   local_ptrs_reserved cenv sa /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n p,32) /\

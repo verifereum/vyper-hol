@@ -183,7 +183,7 @@ Resume log_success_suffix_mem_ok[data]:
      `?w. eval_operand (FST arg) s = SOME w` by
        (Cases_on `arg` >> fs[log_arg_rel_def, expr_val_rel_def]) >>
      simp[] >> irule log_frame_operand >>
-     qpat_assum `wb_frame ce es sm s u` (irule_at Any) >> simp[]) >>
+     qpat_assum `wb_frame ce es es sm s u` (irule_at Any) >> simp[]) >>
   `s.vs_alloca_next <= u.vs_alloca_next` by simp[] >>
   drule_all log_mem_selected_rounded >> strip_tac >>
   suspend "prepare"

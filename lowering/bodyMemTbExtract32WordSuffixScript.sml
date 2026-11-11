@@ -10,7 +10,7 @@ Theorem extract32_word_suffix_success:
   fn_has_code ca cb func /\ fn_inst_ids_distinct func /\
   s.vs_current_bb = ca.cs_current_bb /\
   s.vs_inst_idx = LENGTH ca.cs_current_insts /\ alloca_history func s /\
-  stmt_state_rel ctx func cenv cx es' s /\ wb_frame cenv es c0 s0 s /\
+  stmt_state_rel ctx func cenv cx es' s /\ wb_frame cenv es es' c0 s0 s /\
   local_ptrs_reserved cenv ca /\ c0.cs_next_var <= ca.cs_next_var /\
   is_word_type (BaseT bt) /\
   eval_operand l s = SOME (n2w (LENGTH bs)) /\

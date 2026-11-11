@@ -233,7 +233,7 @@ Resume compile_extract32_sim_mem[suffix_entry]:
     (qpat_assum `bind (eval_expr cx src) _ _ = _`
        (mp_tac o MATCH_MP (CONV_RULE (DEPTH_CONV ETA_CONV)
          exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom)) >> simp[]) >>
-  `wb_frame cenv es sa s0 t'` by
+  `wb_frame cenv es es_end' sa s0 t'` by
     (irule extract32_operands_frame >> simp[] >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any)) >>

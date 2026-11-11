@@ -22,7 +22,7 @@ Theorem ec_allocated_payload_capacity_run:
     eval_operand ib.buf_operand s1 = SOME wi /\
     FLOOKUP s1.vs_allocas sf.cs_next_id = SOME (w2n wi,insz) /\
     w2n wi + insz < dimword (:256) /\ s1.vs_memory = s.vs_memory /\
-    wb_frame cenv es sf s s1 /\ s1.vs_labels = s.vs_labels /\
+    wb_frame cenv es es sf s s1 /\ s1.vs_labels = s.vs_labels /\
     (!name b len. local_region cenv es.scopes s1 name b len ==>
       regions_disjoint (w2n wi) insz b len) /\
     (!aid b len. aid < sf.cs_next_id /\
@@ -33,13 +33,13 @@ Theorem ec_allocated_payload_capacity_run:
       regions_disjoint (w2n wi) insz b len) /\
     (!x. not_fresh_at sf x ==> lookup_var x s1 = lookup_var x s) ==>
     ?u. run_inst_seq code s1 = OK u /\ stmt_state_rel ctx func cenv cx es u /\
-      wb_frame cenv es sf s1 u /\
+      wb_frame cenv es es sf s1 u /\
       (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s1) /\
       FLOOKUP u.vs_allocas sf.cs_next_id = SOME (w2n wi,insz) /\
       eval_operand ib.buf_operand u = SOME wi /\
       mem_bytes_at (w2n wi) insz u.vs_memory = bytes) ==>
   ?t pi po. run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + insz < dimword (:256) /\ w2n po + outsz < dimword (:256) /\

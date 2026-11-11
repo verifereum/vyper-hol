@@ -1,7 +1,7 @@
 (* Source footprint and saved-register boundary for dynamic extract32. *)
 Theory bodyMemTbExtract32Source
 Ancestors
-  builtinBytesMemory exprSimHash exprSimMemDefs exprSimProps loweringPosts
+  builtinBytesMemory exprSimHash exprSimHashBoundary exprSimMemDefs exprSimProps loweringPosts
   builtinBytes exprLoweringProps emitHelperProps emitHelper
   vyperValue vyperAST vyperTypeSystem venomExecSemantics venomState
   words arithmetic exprLowering compileEnv

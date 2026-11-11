@@ -41,18 +41,20 @@ Theorem raw_log_dynamic_suffix_run[local]:
   TAKE (LENGTH bs) (DROP (b + 32) s.vs_memory ++ REPLICATE (LENGTH bs) 0w) = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
-  wb_frame cenv es0 sa s0 s /\ sa.cs_next_var <= sm.cs_next_var ==>
+  wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
     stmt_state_rel ctx func cenv cx
       (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) t /\
-    wb_frame cenv es0 sa s0 t
+    wb_frame cenv es0
+      (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t
 Proof
   strip_tac >> drule_all raw_log_dynamic_prepare_frame >> strip_tac >>
   `?t'. step_inst_base (mk_inst s2.cs_next_id LOG
       (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) []) t = OK t' /\
     stmt_state_rel ctx func cenv cx
       (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) t' /\
-    wb_frame cenv es0 sa s0 t'` by
+    wb_frame cenv es0
+      (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t'` by
     (irule raw_log_core_frame >> simp[mk_inst_def] >>
      qexistsl_tac [`ops`, `len_op`, `ptr_op`,
                   `n2w (b + 32)`, `n2w (LENGTH bs)`] >> simp[dimword_def]) >>
@@ -74,7 +76,7 @@ Theorem raw_log_dynamic_tail_mem_counted:
   TAKE (LENGTH bs) (DROP (b + 32) s.vs_memory ++ REPLICATE (LENGTH bs) 0w) = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
-  wb_frame cenv es0 sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
+  wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
   post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\ alloca_history func s /\
@@ -149,7 +151,7 @@ Theorem raw_log_fixed_suffix_run[local]:
   eval_operand ptr_op s = SOME p /\ eval_operand data_op s = SOME w /\
   eval_operands ops s = SOME (MAP event_value_to_word vals) /\ LENGTH ops <= 4 /\
   LENGTH bs = 32 /\ TAKE 32 (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sa s0 s /\
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
   local_ptrs_reserved cenv sa /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n p,32) /\
@@ -160,7 +162,8 @@ Theorem raw_log_fixed_suffix_run[local]:
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
     stmt_state_rel ctx func cenv cx
       (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) t /\
-    wb_frame cenv es0 sa s0 t
+    wb_frame cenv es0
+      (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t
 Proof
   strip_tac >> drule_all raw_log_fixed_store_frame >> strip_tac >>
   `?t. step_inst_base (mk_inst s1.cs_next_id LOG
@@ -168,7 +171,8 @@ Proof
       (mstore (w2n p) w s) = OK t /\
     stmt_state_rel ctx func cenv cx
       (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) t /\
-    wb_frame cenv es0 sa s0 t` by
+    wb_frame cenv es0
+      (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t` by
     (irule raw_log_core_frame >> simp[mk_inst_def] >>
      qexists_tac `32w` >>
      simp[eval_operand_def, eval_operand_mstore, raw_log_mstore_operands, dimword_def]) >>
@@ -184,7 +188,7 @@ Theorem raw_log_fixed_tail_mem_counted:
   eval_operand ptr_op s = SOME p /\ eval_operand data_op s = SOME w /\
   eval_operands ops s = SOME (MAP event_value_to_word vals) /\ LENGTH ops <= 4 /\
   LENGTH bs = 32 /\ TAKE 32 (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sa s0 s /\
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
   local_ptrs_reserved cenv sa /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n p,32) /\

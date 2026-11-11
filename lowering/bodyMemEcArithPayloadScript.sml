@@ -235,7 +235,7 @@ Theorem ec_scratch_stores_frame:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
     regions_disjoint a len off (type_memory_size tv)) ==>
-  stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sc s t
+  stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sc s t
 Proof
   strip_tac >>
   `!b sz. regions_disjoint a len b sz ==>
@@ -279,7 +279,7 @@ Theorem ecmul_input_stores_sim:
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sc s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sc s t /\
     mem_bytes_at (w2n bw) 96 t.vs_memory =
       word_to_bytes (mem_word_at (w2n point) s.vs_memory) T ++
       word_to_bytes (mem_word_at (w2n point+32) s.vs_memory) T ++
@@ -338,7 +338,7 @@ Theorem ecadd_input_stores_sim:
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sc s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sc s t /\
     mem_bytes_at (w2n bw) 128 t.vs_memory =
       word_to_bytes (mem_word_at (w2n point) s.vs_memory) T ++
       word_to_bytes (mem_word_at (w2n point+32) s.vs_memory) T ++

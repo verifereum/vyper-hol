@@ -72,7 +72,7 @@ Proof
   `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
   `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
     metis_tac[exprSimHypsTheory.expr_body_pre_type_evaluates] >>
-  `~cx.txn.is_static` by fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+  `~cx.txn.is_static` by fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `storage_place_region cx (StoragePlace tr slot tv)` by
     metis_tac[vyperStoragePlaceProvenanceTheory.eval_target_place_region] >>
   `~block_is_terminated sf` by

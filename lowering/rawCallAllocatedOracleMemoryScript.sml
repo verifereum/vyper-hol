@@ -13,7 +13,7 @@ Theorem raw_call_allocated_oracle_mem:
      else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]) sm = (ok,sc) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_has_code sa sm func /\ fn_has_code sm sc func /\ fn_inst_ids_distinct func /\
-  ci_mono initial sa /\ wb_frame cenv initial_es initial s0 s /\
+  ci_mono initial sa /\ wb_frame cenv initial_es es initial s0 s /\
   stmt_state_rel ctx func cenv cx initial_es s0 /\ local_ptrs_reserved cenv initial /\
   MAP FDOM initial_es.scopes = MAP FDOM es.scopes /\
   eval_operand gas_op s = SOME gas /\ eval_operand to_op s = SOME aw /\
@@ -38,7 +38,7 @@ Theorem raw_call_allocated_oracle_mem:
     u.vs_inst_idx = LENGTH sc.cs_current_insts /\
     alloca_history func u /\ ~u.vs_halted /\
     stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
-    wb_frame cenv initial_es initial s0 u /\
+    wb_frame cenv initial_es (SND (adopt_call_outcome rq outcome es1)) initial s0 u /\
     eval_operand ok u = SOME (bool_to_word outcome.co_success) /\
     eval_operand ov u = SOME w /\ safe_operand sc ov /\ safe_operand sc ok /\
     FLOOKUP u.vs_allocas sa.cs_next_id =
@@ -66,8 +66,8 @@ Proof
   disch_then (qx_choose_then `t` (qx_choose_then `w` (map_every assume_tac o CONJUNCTS))) >>
   `!p v. safe_operand sa p /\ eval_operand p s = SOME v ==> eval_operand p t = SOME v` by
     (rpt strip_tac >> Cases_on `p` >> gvs[safe_operand_def, eval_operand_def] >>
-     irule wb_frame_vars >> qexistsl_tac [`cenv`,`es`,`s`,`sa`] >> simp[]) >>
-  `wb_frame cenv initial_es initial s0 t` by
+     irule wb_frame_vars >> qexistsl_tac [`cenv`,`es`,`es`,`s`,`sa`] >> simp[]) >>
+  `wb_frame cenv initial_es es initial s0 t` by
     (irule wb_frame_trans >> simp[] >> conj_tac
      >- (qexistsl_tac [`es`,`sa`,`s`] >> fs[ci_mono_def]) >> metis_tac[]) >>
   `local_ptrs_reserved cenv sm` by
@@ -107,7 +107,7 @@ Resume raw_call_allocated_oracle_mem[oracle_pre]:
        (drule_all raw_call_outbuf_no_gas >> simp[EVERY_MEM] >> metis_tac[]) >>
      drule_all run_inst_seq_preserves_entry_control >> simp[]) >>
   qabbrev_tac `a = t with vs_inst_idx := LENGTH sm.cs_current_insts` >>
-  `stmt_state_rel ctx func cenv cx es a /\ wb_frame cenv initial_es initial s0 a /\
+  `stmt_state_rel ctx func cenv cx es a /\ wb_frame cenv initial_es es initial s0 a /\
    alloca_history func a /\ a.vs_current_bb = sm.cs_current_bb /\
    a.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~a.vs_halted` by
     (simp[Abbr `a`, stmt_state_rel_inst_idx, raw_call_wb_frame_inst_idx] >>
@@ -176,7 +176,7 @@ Resume raw_call_allocated_oracle_mem[call]:
     (mp_then Any mp_tac raw_call_oracle_run_mem) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ es a`)) >>
   disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `wb_frame _ initial_es initial s0 a`)) >>
+  disch_then (drule_at (Pat `wb_frame _ initial_es es initial s0 a`)) >>
   disch_then (qspecl_then [`val_word`,`if cap=0 then w else w+32w`,`gas`,`aw`] mp_tac) >>
   (impl_tac >- (gs[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choose_then `r` (qx_choose_then `u` strip_assume_tac)) >>
