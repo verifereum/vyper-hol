@@ -84,7 +84,7 @@ Proof
     gvs[jump_to_def, update_var_def] >>
   fs[wb_frame_def] >> rpt conj_tac >>
   TRY (gvs[not_fresh_at_def] >> NO_TAC) >>
-  irule locals_kept_mem_tail >> qexists `s` >> simp[]
+  irule locals_kept_mem_tail >> qexists `s` >> gvs[]
 QED
 
 Theorem return_default_shell_ready:
