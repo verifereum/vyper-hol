@@ -84,7 +84,20 @@ Proof
             (drule_then mp_tac) >> decide_tac) >>
       first_assum ACCEPT_TAC)) >>
     disch_then (qx_choosel_then [`v'`, `q'`] strip_assume_tac) >>
-    qexistsl [`v'`, `q'`] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[]
+    qexistsl [`v'`, `q'`] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+    >~ [`~expr_has_effect e /\ _ ==> _`]
+    >- (strip_tac >> qx_genl_tac [`bb`, `bsz`] >> strip_tac >>
+    qpat_x_assum `_ /\ local_ptrs_reserved ce sa /\ _ ==> _` mp_tac >>
+    (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+    disch_then (qspecl_then [`bb`, `bsz`] mp_tac) >>
+    qpat_x_assum `w2n (n2w (b+off):bytes32) = b+off` (fn th => rewrite_tac[th]) >>
+    (impl_tac >- (rpt conj_tac >- first_assum ACCEPT_TAC
+                  >- decide_tac >> first_assum ACCEPT_TAC)) >>
+    disch_then (fn th => conj_tac >- ACCEPT_TAC (CONJUNCT1 th) >>
+      qx_genl_tac [`pp`, `nn`] >> strip_tac >>
+      mp_tac (Q.SPECL [`pp`, `nn`] (CONJUNCT2 th)) >>
+      (impl_tac >- (conj_tac >- decide_tac >> first_assum ACCEPT_TAC)) >>
+      disch_then ACCEPT_TAC)) >> simp[])) >> simp[]
 QED
 
 Theorem aggregate_tuple_cons_continuation_mem:

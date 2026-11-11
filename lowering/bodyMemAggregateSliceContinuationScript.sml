@@ -293,8 +293,8 @@ Proof
        (match_mp_tac exprSimPropsTheory.pure_frame_trans >>
         qexistsl_tac [`es'`, `sa with cs_next_var := sm.cs_next_var`, `r`] >>
         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
-     rpt gen_tac >> strip_tac >>
-     qspecl_then [`ce`, `func`, `es`, `sa`, `s0`, `u`, `q`, `b`, `asz`, `w2n w`,
+     qx_genl_tac [`bb`, `bsz`] >> strip_tac >>
+     qspecl_then [`ce`, `func`, `es`, `sa`, `s0`, `u`, `q`, `bb`, `bsz`, `w2n w`,
                   `type_memory_size tv`] mp_tac aggregate_pure_frame_store >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then ACCEPT_TAC) >>
