@@ -12,13 +12,15 @@
  * TOP-LEVEL:
  *   run_context_terminates_uniform
  *   package_internal_fn_cenv_ptrs_below
+ *   generated_ctx_fns_stable    - a unit generated as entry code then internal
+ *                                 functions has every function stable
  *)
 
 Theory fragFuelUnit
 Ancestors
   fragFuel fragFuelCtx fragFuelPackage fragFuelStmtBase fragFuelFunction
-  compileVyper vyperCompiler crossBlockSimProofs passSimulationDefs
-  venomExecSemantics finite_map list
+  compileVyper vyperCompiler moduleLowering loweringShapeProps loweringShapeDefs
+  crossBlockSimProofs passSimulationDefs venomExecSemantics finite_map list
 
 (* ===== From per-function stability to one fuel for every run ===== *)
 
@@ -93,3 +95,52 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
+
+(* ===== A generated unit ===== *)
+
+(* A unit whose generator is entry code (prefix) followed by the internal
+   functions: each of its functions is stable once its callees are.  The
+   entry code's shape keeps the internal labels out of its blocks. *)
+Theorem generated_ctx_fns_stable:
+  !prefix ifns P0 Wv mid r st1 ctx data.
+    prefix (initial_compile_state "__entry") = ((), mid) /\
+    shape_step F jump_label_ok (\st. T) prefix (\u st. T) /\
+    fuel_okS P0 Wv {} {} prefix /\ P0 (initial_compile_state "__entry") /\
+    EVERY internal_fn_shape_ok ifns /\
+    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
+    ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns)) /\
+    EVERY (\(fn_lbl, cenv, params, has_ret_buf, is_nr, nkey, use_trans,
+             is_view, is_ctor, imm_len, body, ret_type).
+             ?Wv. fuel_okS (\st. T) Wv {} {}
+                    (compile_internal_function cenv params has_ret_buf is_nr
+                       nkey use_trans is_view is_ctor imm_len body ret_type))
+      ifns /\
+    compile_internal_fn_bodies ifns mid = (r, st1) /\
+    extract_context_with_internals "__entry" ifns st1 = SOME (ctx, data) /\
+    lowering_context_ok ctx ==>
+    !fn. MEM fn ctx.ctx_functions ==>
+         ?Kf. !G. callees_stable G ctx fn ==> fuel_stable (G + Kf) ctx fn
+Proof
+  rpt gen_tac >> strip_tac >>
+  `shape_extends F jump_label_ok (initial_compile_state "__entry") mid /\
+   shape_state mid` by
+    (qpat_x_assum `shape_step _ _ _ prefix _` mp_tac >>
+     simp[shape_step_def] >> disch_then drule >>
+     simp[shape_state_initial_compile_state]) >>
+  drule initial_entry_blocks_shape >> strip_tac >>
+  `!d. MEM d (internal_fn_descriptors ifns) ==> internal_label_ok (FST d)` by
+    fs[EVERY_MEM] >>
+  `EVERY (\d. ~compiler_label (FST d) /\
+              ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks mid)))
+     (internal_fn_descriptors ifns)` by
+    (simp[EVERY_MEM] >> gen_tac >> strip_tac >>
+     first_x_assum drule >> strip_tac >>
+     qspecl_then [`FST d`, `all_blocks mid`] mp_tac
+       internal_name_not_entry_label >> simp[]) >>
+  `EVERY (\fn. ALL_DISTINCT (fn_labels fn)) ctx.ctx_functions` by
+    fs[lowering_context_ok_def, EVERY_MEM] >>
+  qspecl_then [`prefix`, `P0`, `\st. T`, `"__entry"`, `ifns`, `()`, `mid`,
+               `r`, `st1`, `ctx`, `data`, `Wv`] mp_tac
+    extract_context_fuel_stable >>
+  impl_tac >- simp[next_stable_def] >> simp[]
+QED
