@@ -1,6 +1,9 @@
 Theory extRetSemanticDynamicArrayPtr
 Ancestors
   extRetDynamicExitPtr extRetBytesCopyCountedPtr extRetBulkCopyCountedPtr
+  extRetDynamicArrayPhasePtr extRetDynamicArrayInitFramePtr
+  extRetDynamicArrayEntryPtr extRetDynamicArrayCountPtr
+  extRetSemanticDynamicLoopPtr
   extRetScratchInitPtr fragGasPathPtr fragExec emitHelperProps exprLoweringProps
   emitHelper compileEnv bodyPtrDefs ptrDiscipline venomState venomExecSemantics
   venomMemDefs venomMemProps valueEncoding words finite_map pred_set arithmetic
