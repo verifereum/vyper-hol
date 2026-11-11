@@ -6774,6 +6774,21 @@ Proof
   rpt strip_tac >> gvs[] >> decide_tac
 QED
 
+Theorem mm_local_surviving_write_opcode[local]:
+  MEM h ss.ss_copies /\ ~MEM h (scan_inst dfg Mem2Mem ss i).ss_flushed ==>
+  i.inst_opcode = MSTORE \/ i.inst_opcode = MCOPY \/
+  ~(Eff_MEMORY IN write_effects i.inst_opcode)
+Proof
+  strip_tac >>
+  Cases_on `i.inst_opcode = MSTORE` >- simp[] >>
+  Cases_on `i.inst_opcode = MCOPY` >- simp[] >>
+  Cases_on `i.inst_opcode = MLOAD`
+  >- simp[venomEffectsTheory.write_effects_def, venomEffectsTheory.empty_effects_def] >>
+  gvs[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  Cases_on `is_volatile_memory i` >>
+  gvs[hard_barrier_def, MEM_APPEND, is_volatile_memory_def]
+QED
+
 Theorem mm_local_surviving_history_frame[local]:
   mm_local_history is H n /\ q < n /\ MEM h ss.ss_copies /\
   ~MEM h (scan_inst dfg Mem2Mem ss (EL q is)).ss_flushed /\
@@ -6782,13 +6797,7 @@ Theorem mm_local_surviving_history_frame[local]:
 Proof
   strip_tac >> irule mm_local_history_noncapture_frame >>
   goal_assum (drule_at Any) >> simp[] >>
-  Cases_on `(EL q is).inst_opcode = MSTORE` >- simp[] >>
-  Cases_on `(EL q is).inst_opcode = MCOPY` >- simp[] >>
-  Cases_on `(EL q is).inst_opcode = MLOAD`
-  >- simp[venomEffectsTheory.write_effects_def, venomEffectsTheory.empty_effects_def] >>
-  gvs[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
-  Cases_on `is_volatile_memory (EL q is)` >>
-  gvs[hard_barrier_def, MEM_APPEND, is_volatile_memory_def]
+  metis_tac[mm_local_surviving_write_opcode]
 QED
 
 Theorem mm_local_surviving_source_read[local]:
@@ -12879,6 +12888,27 @@ Proof
     mm_local_interval_runtime_capture >>
   disch_then (qspec_then `n` mp_tac) >> simp[] >> strip_tac >>
   simp[rich_listTheory.count_list_sub1, rich_listTheory.COUNT_LIST_def]
+QED
+
+Theorem mm_local_surviving_runtime_frame[local]:
+  q < N /\ N <= LENGTH is /\ MEM c ss.ss_copies /\
+  ~MEM c (scan_inst dfg Mem2Mem ss (EL q is)).ss_flushed /\
+  ~is_terminator (EL q is).inst_opcode /\
+  step_inst fuel ctx (EL q is) (H q) = OK t /\
+  H (SUC q) = t with vs_inst_idx := SUC (H q).vs_inst_idx /\
+  mm_local_write_capture is H N q = NONE ==>
+  (H (SUC q)).vs_memory = (H q).vs_memory
+Proof
+  strip_tac >> drule_all mm_local_surviving_write_opcode >> strip_tac
+  >- (drule_at (Pat `step_inst _ _ _ _ = _`) mm_local_interval_runtime_capture >>
+      disch_then (qspec_then `N` mp_tac) >> simp[])
+  >- (drule_at (Pat `step_inst _ _ _ _ = _`) mm_local_interval_runtime_capture >>
+      disch_then (qspec_then `N` mp_tac) >> simp[]) >>
+  Cases_on `is_alloca_op (EL q is).inst_opcode`
+  >- (`(EL q is).inst_opcode <> INVOKE` by
+        (Cases_on `(EL q is).inst_opcode` >> gvs[venomInstTheory.is_alloca_op_def]) >>
+      drule_all venomMemPropsTheory.step_inst_alloca_preserves_memory >> simp[]) >>
+  drule_all venomInstPropsTheory.write_effects_sound_memory >> simp[]
 QED
 
 Theorem mm_local_pending_indices_after_phis[local]:
