@@ -2,7 +2,7 @@ Theory vyperMisc
 Ancestors
   ASCIInumbers byte pair integer string pred_set
   int_bitwise numposrep list rich_list words
-  cv cv_std vfmTypes
+  cv cv_std vfmTypes keccak
 Libs
   cv_transLib blastLib dep_rewrite
 
