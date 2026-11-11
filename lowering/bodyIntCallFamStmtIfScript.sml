@@ -358,8 +358,8 @@ Resume intcall_if_producer[branch_start]:
 QED
 
 Resume intcall_if_producer[branch_pre]:
-  `EVERY (stmt_exprs_ok ce) ss1 /\ EVERY (stmt_exprs_ok ce) ss2` by
-    fs[stmts_exprs_ok_EVERY, stmt_exprs_ok_def,
+  `stmts_exprs_ok ce ss1 /\ stmts_exprs_ok ce ss2` by
+    fs[stmts_exprs_ok_thm, stmt_exprs_ok_def,
        supported_stmt_expr_exists_def, alloc_limits_stmt_def,
        stmt_valued_return_def] >>
   fs[intcall_expr_cont_def] >>

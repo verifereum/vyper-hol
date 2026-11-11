@@ -336,7 +336,7 @@ Definition intcall_stmts_producer_def:
       type_stmts env fp.jc_ret_ty ss = SOME env' /\
       IS_SOME (type_stmts (env with bare_global_assignable := FEMPTY)
                  fp.jc_ret_ty ss) /\
-      EVERY (stmt_exprs_ok ce) ss /\
+      stmts_exprs_ok ce ss /\
       calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_stmts ss) /\
       stmts_env ce lctx
         (if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty) ss sa =

@@ -36,7 +36,7 @@ Theorem intcall_entry_producer_semantics:
       occurs_abi_decode_target target tops) /\
     type_stmts env ret ss = SOME env_after /\
     IS_SOME (type_stmts (env with bare_global_assignable := FEMPTY) ret ss) /\
-    EVERY (stmt_exprs_ok (ce2 with <|ce_imm_alloca := imm; ce_alloca_locals := T|>)) ss /\
+    stmts_exprs_ok (ce2 with <|ce_imm_alloca := imm; ce_alloca_locals := T|>) ss /\
     calls_follow_call_graph E (NONE,name) (int_calls_stmts ss) /\
     gas_admissible (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss)
       (stmt_res_ok NoLoop) es1 /\
@@ -112,7 +112,7 @@ Theorem intcall_entry_producer_resources:
       occurs_abi_decode_target target tops) /\
     type_stmts env ret ss = SOME env_after /\
     IS_SOME (type_stmts (env with bare_global_assignable := FEMPTY) ret ss) /\
-    EVERY (stmt_exprs_ok fp.jc_root_ce) ss /\
+    stmts_exprs_ok fp.jc_root_ce ss /\
     calls_follow_call_graph E (NONE,name) (int_calls_stmts ss) /\
     gas_admissible (eval_stmts fp.jc_cx ss) (stmt_res_ok NoLoop) es1 /\
     (ret = NoneT \/ stmts_no_fallthrough ss) /\

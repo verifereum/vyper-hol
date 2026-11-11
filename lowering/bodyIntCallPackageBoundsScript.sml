@@ -21,7 +21,7 @@ Theorem internal_body_traversal_bounds:
   alloc_env_agree (build_compile_env tops Internal mut name args ret ss F) ce /\
   env_consistent env cx es /\ type_stmts env ret ss = SOME env' /\
   ~ce.ce_is_external ==>
-  EVERY (stmt_exprs_ok ce) ss
+  stmts_exprs_ok ce ss
 Proof
   strip_tac >> drule_all fn_allocs_ok_body >> strip_tac >>
   `!n ty. FLOOKUP env.var_types n = SOME ty ==> well_formed_type env.type_defs ty` by

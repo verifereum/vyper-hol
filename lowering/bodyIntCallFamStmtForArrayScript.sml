@@ -75,9 +75,10 @@ Resume intcall_stmts_producer_for_array[iterate]:
   `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) stmts ==>
     occurs_abi_decode_target target fp.jc_tops` by
     (fs[supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >> metis_tac[]) >>
-  `EVERY (stmt_exprs_ok bc) stmts` by
-    (drule bodyExprPreFactsTheory.stmt_exprs_ok_same_frame >>
-     disch_then SUBST1_TAC >> drule body_for_exprs_ok >> simp[]) >>
+  `stmts_exprs_ok bc stmts` by
+    (irule bodyExprPreFactsTheory.for_declare_stmts_exprs_ok >>
+     qhdtm_assum `declare_local` (irule_at Any) >>
+     metis_tac[bodySimDeclCasesTheory.body_for_exprs_ok]) >>
   `IS_SOME (type_stmts ((extend_local env id fty F) with bare_global_assignable := FEMPTY)
     fp.jc_ret_ty stmts)` by
     (qpat_x_assum `IS_SOME (type_stmts _ _ _)` mp_tac >>

@@ -30,7 +30,8 @@ Theorem intcall_for_checked_compiled_tail:
      occurs_abi_decode_target target fp.jc_tops) /\
   type_stmts (extend_local env id fty F) fp.jc_ret_ty stmts = SOME env_b /\
   IS_SOME (type_stmts ((extend_local env id fty F) with bare_global_assignable := FEMPTY)
-    fp.jc_ret_ty stmts) /\ EVERY (stmt_exprs_ok ce) stmts /\
+    fp.jc_ret_ty stmts) /\
+  stmts_exprs_ok (ce with ce_var_type updated_by (id =+ SOME fty)) stmts /\
   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_stmts stmts) /\
   (n1 <= n2 /\ Num (n2 - n1) <= bound ==>
     gas_admissible (eval_for fp.jc_cx tyv id stmts
@@ -105,8 +106,9 @@ Proof
      qhdtm_assum `declare_local` (irule_at Any) >> simp[]) >>
   `body_inv fp.jc_tops fp.jc_ctx bc fp.jc_cx` by
     metis_tac[body_inv_same_frame] >>
-  `EVERY (stmt_exprs_ok bc) stmts` by
-    metis_tac[stmt_exprs_ok_same_frame, listTheory.EVERY_MONOTONIC] >>
+  `stmts_exprs_ok bc stmts` by
+    (irule bodyExprPreFactsTheory.for_declare_stmts_exprs_ok >>
+     qhdtm_assum `declare_local` (irule_at Any) >> metis_tac[]) >>
   `?ce_b. stmts_env bc (InLoop exit_lbl incr_lbl)
       (if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty) stmts sb0 = (ce_b,sb1)` by
     (qmatch_goalsub_abbrev_tac `stmts_env bc lc rt stmts sb0` >>

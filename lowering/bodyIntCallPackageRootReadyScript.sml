@@ -58,7 +58,7 @@ Theorem intcall_entry_root_ready:
       occurs_abi_decode_target target tops) /\
     type_stmts env ret ss = SOME env_after /\
     IS_SOME (type_stmts (env with bare_global_assignable := FEMPTY) ret ss) /\
-    EVERY (stmt_exprs_ok fp.jc_root_ce) ss /\
+    stmts_exprs_ok fp.jc_root_ce ss /\
     calls_follow_call_graph E (NONE,name) (int_calls_stmts ss) /\
     gas_admissible (eval_stmts fp.jc_cx ss) (stmt_res_ok NoLoop) es1 /\
     (ret = NoneT \/ stmts_no_fallthrough ss) /\

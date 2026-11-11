@@ -60,7 +60,7 @@ Theorem intcall_for_checked_tail:
   type_stmts (extend_local env id fty F) fp.jc_ret_ty stmts = SOME env_b /\
   IS_SOME (type_stmts ((extend_local env id fty F) with bare_global_assignable := FEMPTY)
     fp.jc_ret_ty stmts) /\
-  EVERY (stmt_exprs_ok bc) stmts /\
+  stmts_exprs_ok bc stmts /\
   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_stmts stmts) /\
   call_evaluation_safe fp.jc_cx (int_calls_stmts stmts) /\
   stmts_env bc (InLoop exit_lbl incr_lbl)

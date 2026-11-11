@@ -599,7 +599,7 @@ Theorem intcall_for_range_producer_round:
   type_stmts (extend_local env id fty F) fp.jc_ret_ty stmts = SOME env_b /\
   IS_SOME (type_stmts ((extend_local env id fty F) with bare_global_assignable := FEMPTY)
     fp.jc_ret_ty stmts) /\
-  EVERY (stmt_exprs_ok bc) stmts /\
+  stmts_exprs_ok bc stmts /\
   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_stmts stmts) /\
   call_evaluation_safe fp.jc_cx (int_calls_stmts stmts) /\
   stmts_env bc (InLoop exit_lbl incr_lbl)
@@ -703,7 +703,7 @@ Theorem intcall_for_range_producer_iterations:
   type_stmts (extend_local env id fty F) fp.jc_ret_ty stmts = SOME env_b /\
   IS_SOME (type_stmts ((extend_local env id fty F) with bare_global_assignable := FEMPTY)
     fp.jc_ret_ty stmts) /\
-  EVERY (stmt_exprs_ok bc) stmts /\
+  stmts_exprs_ok bc stmts /\
   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_stmts stmts) /\
   call_evaluation_safe fp.jc_cx (int_calls_stmts stmts) /\
   stmts_env bc (InLoop exit_lbl incr_lbl)
@@ -911,9 +911,9 @@ Resume intcall_stmts_producer_for_range_lit[iteration_apply]:
      conj_tac >-
        (qpat_x_assum `IS_SOME (case _ of _ => _ | _ => _)` mp_tac >>
         simp[extend_local_def] >> IF_CASES_TAC >> simp[]) >>
-     drule bodyExprPreFactsTheory.stmt_exprs_ok_same_frame >>
-     disch_then SUBST1_TAC >>
-     drule bodySimDeclCasesTheory.body_for_exprs_ok >> simp[]) >>
+     irule bodyExprPreFactsTheory.for_declare_stmts_exprs_ok >>
+     qhdtm_assum `declare_local` (irule_at Any) >>
+     metis_tac[bodySimDeclCasesTheory.body_for_exprs_ok]) >>
   fs[listTheory.DROP_0] >>
   irule exprSimSubscriptMapTheory.gas_outcome_conseq >>
   qhdtm_assum `gas_outcome` (irule_at Any) >> simp[] >>
