@@ -2,7 +2,7 @@
    Direct copies frame their padded write extent, not the value footprint. *)
 Theory tupleAssignImmutableDeployAggregatePlain
 Ancestors
-  immutableAssignStore
+  immutableAssignStore immutableAssignStoreLength
 
 Theorem tuple_immutable_direct_aggregate_store:
   compile_assign_value cenv dst LocCode src F NONE dty sty da L sa = ((),sb) /\
@@ -36,6 +36,7 @@ Theorem tuple_immutable_direct_aggregate_store:
       FLOOKUP q.vs_allocas aid = SOME entry) /\
     (!p len. regions_disjoint p len b (32*n) ==>
       mem_bytes_at p len q.vs_memory = mem_bytes_at p len s.vs_memory) /\
+    LENGTH r.vs_memory <= LENGTH q.vs_memory /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -49,6 +50,11 @@ Proof
   disch_then (drule_at (Pat `eval_operand dst s = _`)) >>
   disch_then (qspecl_then [`ctx`, `b`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
+  `compile_imm_store_words cenv.ce_imm_alloca src dst n 0 sa = ((),sb)` by
+    (asm_rewrite_tac[] >> irule immutableDeployOperandTransferTheory.immutable_store_suffix_words >>
+     gvs[stmtLoweringTheory.compile_assign_value_def,
+         compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def]) >>
+  drule_all immutable_assign_store_words_memory_length >> strip_tac >>
   qexistsl_tac [`s`, `u with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
   gvs[venomStateTheory.venom_state_component_equality,
       loweringStateRelDefsTheory.regions_disjoint_def,
