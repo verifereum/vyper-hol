@@ -465,10 +465,8 @@ Proof
 QED
 
 (* A function's FMP convention, if set, has no hidden FMP parameter.  The
-   lowering leaves every convention unset, the other passes keep it
-   (fn_pass_step_fmp_sig_no_param), and FmpLowering seals a function
-   without raw FMP operations whose callees have no such parameter
-   without one: it then leaves the blocks as they are. *)
+   lowering leaves every convention unset and every pass but FmpLowering
+   keeps it (fn_pass_step_fmp_sig_no_param). *)
 Definition fmp_sig_no_param_def:
   fmp_sig_no_param fn <=>
     !sig. fn.fn_fmp_signature = SOME sig ==> ~sig.fms_has_fmp_param
@@ -733,13 +731,11 @@ End
    max_live_eom (the largest function layout end and global reserved end),
    where codegen's spill regions start, or in the dynamic region.  The
    bound is the context's, not existential over any upper bound, so it is
-   not satisfiable by a large eom.  What FmpLowering needs of its input:
-   the pointer discipline with the static accesses exempt below eom, and
-   taint reaching only the dead bytes D. *)
+   not satisfiable by a large eom.  FmpLowering also needs taint reaching
+   only the dead bytes D. *)
 Definition o1_static_inv_def:
   o1_static_inv D C vs <=>
-    (?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs /\
-           ptr_discipline eom C vs) /\
+    (?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs) /\
     taint_within D C vs /\ fmp_free_ctx C
 End
 
