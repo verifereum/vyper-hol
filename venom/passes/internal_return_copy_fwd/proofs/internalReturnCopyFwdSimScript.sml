@@ -3001,7 +3001,7 @@ Theorem ircf_block_sim:
   !D lo vs C fn_meta rma k stk PG G tn fn fn' s t bb.
     o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
     EVERY ircf_no_dst_write_alias C.ctx_functions /\
-    ptr_discipline lo C vs /\ vs.vs_allocas = FEMPTY /\
+    ptr_discipline lo C vs /\ vs.vs_allocas = FEMPTY /\ ~vs.vs_halted /\
     ~ctx_has_dalloca C /\ taint_within D C vs /\ dead_wf D /\
     fn_sim_below D vs C (ircf_transform_ctx fn_meta rma C)
       (ircf_R D fn_meta rma C) (ircf_R_ret D fn_meta rma C) (SUC k) /\
@@ -3026,7 +3026,7 @@ Theorem ircf_ctx_sim:
   !D lo vs C fn_meta rma.
     o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
     EVERY ircf_no_dst_write_alias C.ctx_functions /\
-    ptr_discipline lo C vs /\ vs.vs_allocas = FEMPTY /\
+    ptr_discipline lo C vs /\ vs.vs_allocas = FEMPTY /\ ~vs.vs_halted /\
     ~ctx_has_dalloca C /\ taint_within D C vs /\ dead_wf D ==>
     ctx_sim D C (ircf_transform_ctx fn_meta rma C) vs vs
 Proof
