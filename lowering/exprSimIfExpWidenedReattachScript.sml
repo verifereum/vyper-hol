@@ -32,7 +32,11 @@ Proof
         metis_tac[] >>
       `mem_bytes_at off sz q.vs_memory = mem_bytes_at off sz u.vs_memory` by
         metis_tac[] >> simp[]) >>
-  irule locals_kept_trans >> qexistsl_tac [`ee`, `origin`, `u`] >> simp[]
+  conj_tac
+  >- (irule locals_kept_trans >> qexistsl_tac [`ee`, `origin`, `u`] >> simp[]) >>
+  strip_tac >> irule pure_frame_trans >> simp[] >>
+  qexistsl_tac [`ee`, `origin with cs_next_var := sm.cs_next_var`, `u`] >>
+  simp[]
 QED
 
 Theorem unwrap_value_physical_framed_path:
