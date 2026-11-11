@@ -2,8 +2,8 @@
 Theory exprSimExtract32Read
 Ancestors
   freshWrites fragExec varsExt exprSimProps exprLowering emitHelper emitHelperProps
-  exprLoweringProps compileEnv builtinBytes venomExecSemantics venomInst venomState
-  list rich_list finite_map ASCIInumbers valueEncoding
+  exprLoweringProps compileEnv loweringStateRelDefs builtinBytes venomExecSemantics venomInst venomState
+  list rich_list finite_map ASCIInumbers valueEncoding valueEncodingDefs
 Libs
   monadsyntax
 

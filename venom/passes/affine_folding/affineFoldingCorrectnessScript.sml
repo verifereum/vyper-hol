@@ -7,6 +7,7 @@ Ancestors
   passSimulationDefs
   venomInst
   execEquivProps passSharedDefs passSharedProps stateEquivProps venomExecProps venomExecSemantics venomInstProps venomState
+  passTransform
 
 Libs
   BasicProvers

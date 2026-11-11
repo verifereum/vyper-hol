@@ -2,7 +2,7 @@
 Theory bodyPtrHashBuiltinsShaTail
 Ancestors bodyPtrHashBuiltinsShaTailCall bodyPtrHashBuiltinsShaTailSteps
   bodyPtrHashBuiltinsShaCall bodyPtrDefs fragGasSeqPtr ptrDiscipline
-  exprSimHash valueEncoding venomExecSemantics venomInst venomState finite_map pred_set words
+  exprSimHash valueEncoding valueEncodingDefs venomExecSemantics venomInst venomState finite_map pred_set words
   fragExec fragGasSeqAbort exprLoweringProps instIdxIndep venomInstProofs list
 
 Theorem hash_sha256_tail_success_check:

@@ -2,7 +2,7 @@
 Theory externalReturnCopyAlloc
 Ancestors
   externalReturnCopyRecursive externalReturnCopyAdapter exprSimAlloc
-  localPtrsProps exprLoweringProps loweringSlice compileEnv
+  localPtrsProps exprLoweringProps loweringSlice compileEnv loweringStateRelDefs
   externalReturnCopyFrame valueEncodingProps venomState fragExec
 
 Theorem return_alloc_local_region_frame:

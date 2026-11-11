@@ -1,7 +1,7 @@
 Theory makeSsaCurrentPrefixCopyOccurrence
 Ancestors
   makeSsaCurrentPrefixSuffixOwner makeSsaCurrentWfSsa
-  makeSsaCurrentLockstepShape makeSsaCurrentCleanupBoundary makeSsaCurrentDefs
+  makeSsaCurrentLockstepShape makeSsaCurrentCleanupBoundary makeSsaDefs
   venomInst venomExecSemantics list rich_list
 
 Theorem current_prefix_cleaned_copy_occurrence:

@@ -6,7 +6,7 @@ Ancestors
   allocaFrontierBound allocaBudgetProps abiDecoderAppend
   abiDecoderCoherence abiDecoderTypedContract abiEncoderProps venomMemDefs venomState pred_set
   abiDecoderMemberCons abiDecoderEmpty abiDecoderEmptyMember abiDecoderContract abiDecoderReentry
-  abiEncoderRegisteredEffect abiDecoderLoop fragExec compileEnv valueEncoding
+  abiEncoderRegisteredEffect abiDecoderLoop fragExec compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs
   abiEncoder contractABI words list rich_list arithmetic abiDecoderMemberInfos
   abiDecoderMembers abiDecoderMemberSetup abiDecoderMemberCode exprLowering abiDecodeRanges
   abiDecoderDynamicLoopSetup abiDecoderReentryPointer valueTypingMemoryProps

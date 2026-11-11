@@ -5,7 +5,7 @@ Ancestors
   list pair option vyperMisc vyperState vyperInterpreter vyperCreate
   vyperStatePreservation vyperCallFrame vyperStorageBackend vyperCallOutcome
   vyperCallOutcomeProps vyperPlaceFrames
-Libs monadsyntax pairLib
+Libs monadsyntax pairLib evalWalkLib
 
 Definition outcomes_frame_def:
   outcomes_frame f <=> !st. (SND (f st)).outcomes = st.outcomes
@@ -250,36 +250,12 @@ fun outcomes_frame_net facts binds =
 val assign_outcomes_frame_net = outcomes_frame_net
   assign_outcomes_frame_facts [outcomes_frame_bind, outcomes_frame_ignore_bind];
 
-val outcomes_head_conv =
-  let
-    val case_rules = List.concat (List.map
-      (map SPEC_ALL o CONJUNCTS o SPEC_ALL)
-      (LET_THM :: COND_CLAUSES ::
-       List.mapPartial (total TypeBasePure.case_def_of) (TypeBase.elts ())));
-    val cases = List.foldl (fn (th,net) =>
-      Net.insert (lhs (concl th), REWR_CONV th) net) Net.empty case_rules;
-    fun root tm = FIRST_CONV (Net.match tm cases) tm;
-    fun head tm = (BETA_CONV ORELSEC root ORELSEC
-      REWR_CONV UNCURRY ORELSEC RATOR_CONV head) tm;
-  in head end;
-
-(* Split the exposed case, not a case buried in its continuations. Retain
-   guarded IHs verbatim and simplify using only fresh branch equations. *)
-fun OUTCOMES_CASE_TAC (g as (old,_)) =
-  let
-    fun simplify (asl,w) =
-      let
-        val fresh = List.filter (fn a => not (is_forall a) andalso
-          not (List.exists (aconv a) old)) asl;
-      in simp_tac bool_ss (map ASSUME fresh) (asl,w) end;
-  in (BasicProvers.PURE_TOP_CASE_TAC >> simplify) g end;
-
 val ASSIGN_OUTCOMES_FRAME_STEP = FIRST [
   gen_tac, first_assum ACCEPT_TAC,
   (fn g as (_,w) => FIRST (Net.match w assign_outcomes_frame_net) g),
-  CONV_TAC (RAND_CONV (CHANGED_CONV outcomes_head_conv)),
+  CONV_TAC (RAND_CONV (CHANGED_CONV evalWalkLib.head_conv)),
   CONV_TAC (HO_REWR_CONV FORALL_PROD),
-  OUTCOMES_CASE_TAC];
+  evalWalkLib.HEAD_CASE_TAC];
 
 Theorem outcomes_frame_bind_guarded:
   outcomes_frame f /\
@@ -468,15 +444,31 @@ Proof
   drule_all outcome_suffix_trans >> simp[]
 QED
 
+Theorem outcomes_suffix_take_request:
+  (!st. g st = take_request_outcome (f st) st) ==> outcomes_suffix g
+Proof
+  simp[outcomes_suffix_def] >> rpt strip_tac >>
+  Cases_on `take_request_outcome (f st) st` >>
+  Cases_on `st.outcomes`
+  >- gvs[take_request_outcome_NONE] >>
+  drule_all take_request_outcome_suffix >> strip_tac >>
+  simp[outcome_suffix_def] >> qexists_tac `prefix` >> simp[]
+QED
+
 Theorem outcomes_suffix_take:
   outcomes_suffix (take_call_outcome target calldata value_opt)
 Proof
-  simp[outcomes_suffix_def] >> gen_tac >>
-  Cases_on `take_call_outcome target calldata value_opt st` >>
-  Cases_on `st.outcomes`
-  >- gvs[take_call_outcome_NONE] >>
-  drule_all take_call_outcome_suffix >> strip_tac >>
-  simp[outcome_suffix_def] >> qexists_tac `prefix` >> simp[]
+  irule outcomes_suffix_take_request >>
+  qexists_tac `call_outcome_request target calldata value_opt` >>
+  simp[take_call_outcome_def]
+QED
+
+Theorem outcomes_suffix_take_delegate:
+  outcomes_suffix (take_delegate_outcome target calldata value_opt)
+Proof
+  irule outcomes_suffix_take_request >>
+  qexists_tac `delegate_outcome_request target calldata value_opt` >>
+  simp[take_delegate_outcome_def]
 QED
 
 Theorem outcomes_frame_adopt:
@@ -584,14 +576,15 @@ fun outcomes_suffix_step facts =
       CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac,
       first_assum ACCEPT_TAC,
       (fn g as (_,w) => FIRST (Net.match w net) g),
-      CONV_TAC (RAND_CONV (CHANGED_CONV outcomes_head_conv)),
+      CONV_TAC (RAND_CONV (CHANGED_CONV evalWalkLib.head_conv)),
       CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
       CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
-      strip_tac, conj_tac, OUTCOMES_CASE_TAC]
+      strip_tac, conj_tac, evalWalkLib.HEAD_CASE_TAC]
   end;
 
 val outcomes_suffix_base_facts =
-  outcomes_suffix_create_oracle :: outcomes_suffix_read :: outcomes_suffix_take :: outcomes_suffix_frame_simps;
+  outcomes_suffix_create_oracle :: outcomes_suffix_read :: outcomes_suffix_take ::
+  outcomes_suffix_take_delegate :: outcomes_suffix_frame_simps;
 
 Theorem outcomes_suffix_ext_call:
   outcomes_suffix (eval_ext_call cx static skip_check sig opts vs)

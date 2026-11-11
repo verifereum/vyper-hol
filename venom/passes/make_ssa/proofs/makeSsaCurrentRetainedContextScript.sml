@@ -1,6 +1,6 @@
 Theory makeSsaCurrentRetainedContext
 Ancestors
-  makeSsaCurrentRetainedEffect makeSsaCurrentWfSsa removeUnusedProofs
+  makeSsaCurrentRetainedEffect makeSsaCurrentWfSsa venomWfProps
   venomExecProps venomWf venomInst list
 
 Theorem current_retained_block_count:

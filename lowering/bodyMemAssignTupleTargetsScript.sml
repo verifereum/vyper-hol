@@ -8,7 +8,7 @@ Ancestors
   tupleTargetStoreProps bodyExprPreFacts bodySim bodyMemoryDefs exprSimDefs
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants exprSimHypsDefs
   supportedStmts supportedExprs stmtSimDefs loweringPosts
-  list rich_list exprLoweringProps compileEnv vyperTypeValues
+  list rich_list exprLoweringProps compileEnv loweringStateRelDefs vyperTypeValues
   vyperTyping vyperTypeDefaults vyperTypeExprSoundness exprSimSource
   compileVyper vyperCompiler vyperTypeExprResult
 Libs

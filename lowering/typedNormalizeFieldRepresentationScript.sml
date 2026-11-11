@@ -11,9 +11,9 @@ Theorem normalize_tuple_memory_intro:
         (b + SUM (MAP type_memory_size (TAKE j tvs))) m) ==>
     tuple_in_memory vs tvs b m
 Proof
-  Induct_on `vs` >- simp[valueEncodingTheory.val_in_memory_def] >>
+  Induct_on `vs` >- simp[valueEncodingDefsTheory.val_in_memory_def] >>
   rpt gen_tac >> Cases_on `tvs` >- simp[] >> strip_tac >>
-  simp[valueEncodingTheory.val_in_memory_def] >> conj_tac
+  simp[valueEncodingDefsTheory.val_in_memory_def] >> conj_tac
   >- (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   first_x_assum irule >> reverse conj_tac >- gvs[] >>
   gen_tac >> strip_tac >>

@@ -8,7 +8,7 @@ Ancestors
   externalEntryShape
   stmtSimProps stmtSimDefs exprSimDefs loweringPosts
   list pair fragExec bodySim bodySimMain loweringHalt stmtLoweringMono
-  exprLoweringProps compileEnv compileVyper moduleLowering stmtLowering
+  exprLoweringProps compileEnv loweringStateRelDefs compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect rawReturnHeader
   entryChecksProps moduleLoweringProps entryDispatchProps supportedNames
   abiDecoderCounters context supportedDecls supportedExprForms

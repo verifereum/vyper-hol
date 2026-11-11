@@ -284,14 +284,14 @@ Proof
     (Cases_on `p` >> gvs[place_ptr_rel_def]) >>
   `mload (w2n pw) q = n2w (LENGTH vs)` by
     (drule place_dyn_memory_header >>
-     simp[venomStateTheory.mload_def, valueEncodingTheory.mem_word_at_def]) >>
+     simp[venomStateTheory.mload_def, valueEncodingDefsTheory.mem_word_at_def]) >>
   `LENGTH vs < dimword (:256)` by
     gvs[well_formed_type_value_def, value_has_type_def] >>
   `type_slot_size etv = 1 ==> 32 * type_slot_size etv = 32` by simp[] >>
   `~q.vs_call_ctx.cc_static` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ q` mp_tac >>
      pure_rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def,
-                      compileEnvTheory.state_rel_def] >>
+                      loweringStateRelDefsTheory.state_rel_def] >>
      strip_tac >> asm_rewrite_tac[]) >>
   qpat_x_assum `compile_dynarray_to_storage _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac (srw_ss()) [] >> disch_tac >>

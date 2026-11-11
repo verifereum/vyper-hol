@@ -10,7 +10,7 @@
  *)
 Theory makeSsaCurrentLockstep
 Ancestors
-  o1FrameLockstep o1PassLift makeSsaCurrentDefs venomWf cfgWf venomInst
+  o1FrameLockstep o1PassLift makeSsaDefs venomWf cfgWf venomInst
   irSupply unitShapeDefs o1PassContract venomState stateFrame venomExecSemantics
   venomExecProps venomExecProofs contextCodegenRel list rich_list
   makeSsaCurrentCutInv makeSsaCurrentWfSsa o1MakeSsaFormats
@@ -378,7 +378,7 @@ Proof
       `lookup_block st.vs_current_bb fn.fn_blocks = SOME bb'` by
         (irule MEM_lookup_block >> simp[]) >> gvs[]) >>
   strip_tac >> simp[active_inst_def] >> qexists_tac `bb` >>
-  metis_tac[lookup_block_MEM, makeSsaHelperTheory.lookup_block_label]
+  metis_tac[lookup_block_MEM, venomExecProofsTheory.lookup_block_label]
 QED
 
 Theorem current_phi_context_output_distinct:

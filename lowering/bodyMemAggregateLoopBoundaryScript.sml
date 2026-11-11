@@ -4,7 +4,7 @@ Ancestors
   exprSimAggregateLoops
   bodyMemoryPreds gasSummary gasOutcome gasSummaryCompose gasExemptCert vyperState
   exprSimHyps vyperEvalExprPreservesScopesDom vyperImmutableMetadataFrame
-  loweringPosts exprSimSource exprLoweringProps compileEnv
+  loweringPosts exprSimSource exprLoweringProps compileEnv loweringStateRelDefs
   fragGasMode fragGasPathMem exprSimMemDefs exprSimWordArgs
   exprLowering vyperInterpreter exprSimProps
 

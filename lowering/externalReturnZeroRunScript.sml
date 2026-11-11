@@ -1,7 +1,7 @@
 Theory externalReturnZeroRun
 Ancestors
   externalReturnZeroWindow abiEncoderWindowRun abiEncoderWindowLeaves
-  abiEncoderWindow abiEncoderInput contractABI valueEncoding
+  abiEncoderWindow abiEncoderInput contractABI valueEncoding valueEncodingDefs
   abiEncoderLeaves abiEncoderRegisteredEffect abiEncoderExtendSim
   abiEncoderPrimitiveEffect
   emitHelperProps exprLoweringProps compileEnv venomState venomExecSemantics

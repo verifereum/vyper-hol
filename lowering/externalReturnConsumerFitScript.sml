@@ -88,11 +88,11 @@ QED
    In the located branch the producer supplies sty = expr_type e. *)
 Theorem return_consumer_annotation_memory:
   expr_post ctx func ce cx e es sa sb s0 ee v op s /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-  ~is_word_type (expr_type e) ==>
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
+  ~is_word_type (post_value_type ce e) ==>
   ?w. stmt_state_rel ctx func ce cx ee s /\
     eval_operand op s = SOME w /\ val_in_memory tv v (w2n w) s.vs_memory /\
-    expr_val_at ce cx (expr_type e) sa sb ee v op s /\ val_wf tv v
+    expr_val_at ce cx (post_value_type ce e) sa sb ee v op s /\ val_wf tv v
 Proof
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def] >> metis_tac[]
 QED
@@ -102,7 +102,7 @@ QED
    demanded when the footprint is zero. *)
 Theorem return_consumer_located_normalize:
   expr_post ctx func ce cx e es se sa s0 ee v src s /\
-  sty = expr_type e /\ ~is_word_type sty /\
+  sty = post_value_type ce e /\ ~is_word_type sty /\
   compile_alloc_buffer (type_memory_bytes ce dty) sa = (buf,sm) /\
   compile_store_memory_typed ce buf.buf_operand dty src sty sm = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -128,7 +128,7 @@ Theorem return_consumer_located_normalize:
       val_in_memory dtv v (w2n w) t.vs_memory /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)) (\r. F)
 Proof
-  strip_tac >> qpat_x_assum `sty = expr_type e` SUBST_ALL_TAC >>
+  strip_tac >> qpat_x_assum `sty = post_value_type ce e` SUBST_ALL_TAC >>
   drule_all return_consumer_annotation_memory >> strip_tac >>
   irule return_normalize_expr_frag >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]

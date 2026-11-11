@@ -12,8 +12,10 @@ Theorem hash_gas_step:
         (s with vs_gas_readings := DROP 1 s.vs_gas_readings))
 Proof
   rpt gen_tac >> Cases_on `s.vs_gas_readings` >>
-  pure_once_rewrite_tac[step_inst_base_def] >>
-  simp[mk_inst_def, exec_gas_def, update_var_def, venom_state_component_equality]
+  (* the per-opcode equations skip simplifying the whole dispatcher, which
+     ran over the step limit *)
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_gas_def, update_var_def,
+       venom_state_component_equality]
 QED
 
 Theorem hash_gas_inst_ok:

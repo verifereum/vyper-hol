@@ -3,7 +3,7 @@
    compiler provenance, independent of the next expression's semantics. *)
 Theory logArgumentWriters
 Ancestors
-  logArgumentSourceTypes sourceAllocationPrivacy sourceMemorySeparation sourceMemoryFrames
+  loweringStateRelDefs logArgumentSourceTypes sourceAllocationPrivacy sourceMemorySeparation sourceMemoryFrames
   compileAllocaProvenance compileAllocaFlow compileEnv fragExec
   allocationGrowth localPtrsProps venomInst venomMemDefs venomState list
   abiStaticLoopCode

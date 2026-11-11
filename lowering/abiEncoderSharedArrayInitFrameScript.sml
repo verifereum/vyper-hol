@@ -4,11 +4,11 @@ Ancestors
   abiEncoderArrayBodyCode abiEncoderInput abiDecoderFootprint abiDecoderContract
   abiDecoderReentry abiCanonicalWindows abiDecodeRanges abiCanonicalHeadSize
   abiEncoderSharedMembersCorrect abiEncoderArrayPrefix abiEncoderTuple abiEncoderMemory
-  valueEncoding contractABI venomState venomMemDefs list rich_list arithmetic words
+  valueEncoding valueEncodingDefs contractABI venomState venomMemDefs list rich_list arithmetic words
   abiEncoderArrayParent abiDecoderArrayHeader abiDecoderArrayLoopInit abiDecoderGuards
   abiEncoderMemberPhaseRaw abiEncoderMemberPhaseEffect abiEncoderRegisteredEffect
   abiEncoderExtendSim abiScratchLeafEffect abiScratchEffect abiDecoderAllocation abiDecoderFrame
-  abiDecoderFrameCompose abiDecoderDynamicLoopSetup exprLoweringProps compileEnv emitHelper
+  abiDecoderFrameCompose abiDecoderDynamicLoopSetup exprLoweringProps compileEnv loweringStateRelDefs emitHelper
   emitHelperProps venomInst venomExecSemantics instIdxIndep valueEncodingProps abiScratchSubset
   pred_set
 

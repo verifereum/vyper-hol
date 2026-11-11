@@ -23,8 +23,8 @@ Theorem elems_in_memory_EL:
     elems_in_memory vs off tv mem /\ i < LENGTH vs ==>
     val_in_memory tv (EL i vs) (off + i * type_memory_size tv) mem
 Proof
-  Induct >> rewrite_tac[LENGTH, cj 14 valueEncodingTheory.val_in_memory_def,
-                        cj 15 valueEncodingTheory.val_in_memory_def] >>
+  Induct >> rewrite_tac[LENGTH, cj 14 valueEncodingDefsTheory.val_in_memory_def,
+                        cj 15 valueEncodingDefsTheory.val_in_memory_def] >>
   rpt gen_tac >> Cases_on `i` >>
   simp[EL, MULT_CLAUSES, ADD_CLAUSES] >> rpt strip_tac >>
   first_x_assum drule >>
@@ -38,7 +38,7 @@ Theorem elems_in_memory_intro:
       val_in_memory tv (EL i vs) (off + i * type_memory_size tv) mem) ==>
     elems_in_memory vs off tv mem
 Proof
-  Induct >> simp[valueEncodingTheory.val_in_memory_def] >>
+  Induct >> simp[valueEncodingDefsTheory.val_in_memory_def] >>
   rpt gen_tac >> strip_tac >> conj_tac
   >- (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   first_x_assum irule >> qx_gen_tac `i` >> strip_tac >>
@@ -53,9 +53,9 @@ Theorem kvs_in_memory_every:
     EVERY (\(i,v). val_in_memory tv v
                     (off + i * type_memory_size tv) mem) kvs
 Proof
-  Induct >> rewrite_tac[EVERY_DEF, cj 16 valueEncodingTheory.val_in_memory_def,
-                        cj 17 valueEncodingTheory.val_in_memory_def] >>
-  Cases_on `h` >> simp[cj 17 valueEncodingTheory.val_in_memory_def]
+  Induct >> rewrite_tac[EVERY_DEF, cj 16 valueEncodingDefsTheory.val_in_memory_def,
+                        cj 17 valueEncodingDefsTheory.val_in_memory_def] >>
+  Cases_on `h` >> simp[cj 17 valueEncodingDefsTheory.val_in_memory_def]
 QED
 
 Theorem fixed_array_from_dense:
@@ -84,7 +84,7 @@ Theorem tuple_in_memory_replicate_elems:
   !vs p. tuple_in_memory vs (REPLICATE (LENGTH vs) tv) p mem <=>
     elems_in_memory vs p tv mem
 Proof
-  Induct >> simp[valueEncodingTheory.val_in_memory_def,
+  Induct >> simp[valueEncodingDefsTheory.val_in_memory_def,
                  rich_listTheory.REPLICATE]
 QED
 

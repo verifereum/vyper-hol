@@ -7,7 +7,7 @@ Libs
   jsonASTLib JSONDecode
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../lowering/defs/bytecode/external-entries"]
+val () = holbuild_extra_deps ["../bytecode/external-entries"]
 
 (* Mutate the real sanitized AST, preserving the frontend's expression types
    and layout, including its global transient lock slot. *)
@@ -16,7 +16,7 @@ val bytes10 = ``BaseT (BytesT (Dynamic 10))``;
 val zero = ``Literal ^uint256 (IntL 0)``;
 val one = ``Literal ^uint256 (IntL 1)``;
 val mutation_ast_path =
-  "../lowering/defs/bytecode/external-entries/ast/base_dom1.json";
+  "../bytecode/external-entries/ast/base_dom1.json";
 val mutation_input = vyperCheckContractFrontendLib.prepare_check_input
   {in_deploy = false, address = ``0w : address``,
    annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast mutation_ast_path,
@@ -87,18 +87,21 @@ val () = both "fallback_arguments" false
 val () = both "constructor_value_return" false
   (subst [ctor |-> ``FunctionDecl Deploy Nonpayable F F "__init__"
     [] [] ^uint256 [Return (SOME ^one)]``] base_dom1);
-val () = both "constructor_guard_with_lock_layout" true (mutate ctor 2 ``T``);
+(* Vyper rejects @nonreentrant on __init__. *)
+val () = both "constructor_nonreentrant" false (mutate ctor 2 ``T``);
 val () = both "nested_nonreentrant_calls" true (mutate external_f 2 ``T``);
 (* Vyper rejects @raw_return on non-external functions
    (vyper/semantics/types/function.py:539 at VYPER_PIN). *)
 val () = both "internal_raw_return_bytes" false (mutate internal_h 3 ``T``);
-val () = both "private_x_function_name" true (mutate burn 4 ``"x"``);
-val () = both "internal_external_same_name" true (mutate pure_fn 4 ``"h"``);
+(* Functions of every visibility and storage variables share Vyper's self
+   namespace (NamespaceCollision), so these renamings are rejected. *)
+val () = both "private_x_function_name" false (mutate burn 4 ``"x"``);
+val () = both "internal_external_same_name" false (mutate pure_fn 4 ``"h"``);
 (* Constructor mutability is checked in both runtime and deployment modes. *)
 val () = both "constructor_view_guard" false
   (subst [ctor |-> ``FunctionDecl Deploy View T F "__init__"
     [] [] NoneT [Pass]``] base_dom1);
-val () = both "internal_fallback_name" true
+val () = both "internal_fallback_name" false
   (subst [internal_h |-> header 4 ``"__default__"`` internal_h,
     external_k |-> ``FunctionDecl External Nonpayable F F "k" [] [] ^bytes10
       [Return (SOME (Call ^bytes10 (IntCall (NONE,"__default__")) [] NONE))]``]
@@ -199,7 +202,7 @@ val () = both "effectful_internal_call_default" true
 val () = List.app (fn name => List.app (fn in_deploy =>
   ignore (vyperCheckContractFrontendLib.check_contract_file
     {in_deploy = in_deploy, address = ``0w : address``,
-     path = "../lowering/defs/bytecode/external-entries/ast/" ^ name ^ ".json"}))
+     path = "../bytecode/external-entries/ast/" ^ name ^ ".json"}))
   [false,true])
   ["nr_ext_nonpayable", "nr_multi", "nr_internal", "nr_pragma",
    "dflt_one_lit", "dflt_multi", "dflt_bytes", "dflt_sender",

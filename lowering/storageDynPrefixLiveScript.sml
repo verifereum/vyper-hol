@@ -1,6 +1,6 @@
 Theory storageDynPrefixLive
 Ancestors
-  storageSubregionLive storageSubregionFrame compileEnv vyperEncodeDecode vyperStoragePlaceRegion
+  storageSubregionLive storageSubregionFrame compileEnv loweringStateRelDefs vyperEncodeDecode vyperStoragePlaceRegion
   arithmetic list rich_list words
 
 (* Every slot beyond the stored length prefix is dead, including nested

@@ -1,6 +1,6 @@
 (* Actual zero-layout values, independently of physical source ownership. *)
 Theory externalReturnBufferlessNormalize
-Ancestors externalReturnZeroCopy externalReturnZeroWitness runFromGasPath valueEncoding vyperValue venomState fragExec
+Ancestors externalReturnZeroCopy externalReturnZeroWitness runFromGasPath valueEncoding valueEncodingDefs vyperValue venomState fragExec
 
 Theorem return_zero_kvs_memory[local]:
   (!v. val_wf tv v ==> !p mem. val_in_memory tv v p mem) ==>

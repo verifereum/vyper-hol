@@ -10,8 +10,8 @@ Ancestors
   abiEncoderWindowArrayInvariant abiEncoderWindowArrayBody abiEncoderWindowArrayRound
   abiEncoderWindowStructuralMembers abiEncoderRegisteredEffect
   abiEncoderWindowContract abiEncoderPrimitiveEffect freshWrites
-  emitHelperProps exprLoweringProps compileEnv emitHelper fragExec
-  venomState venomMemDefs valueEncoding valueEncodingProps finite_map pred_set words list arithmetic
+  emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs emitHelper fragExec
+  venomState venomMemDefs valueEncoding valueEncodingDefs valueEncodingProps finite_map pred_set words list arithmetic
 
 Theorem window_array_length_copy_phase_mem:
   emit_op MLOAD [src] st = (count_op,mid) /\
@@ -266,7 +266,7 @@ Proof
   `{st.cs_next_id} SUBSET ids` by simp[SUBSET_DEF] >>
   drule_all window_array_root_transition >> strip_tac >>
   qexistsl_tac [`t`, `b`] >> asm_rewrite_tac[] >> conj_tac
-  >- metis_tac[window_array_prefix_zero] >>
+  >- metis_tac[abiEncoderArrayPrefixTheory.abi_encoder_array_prefix_empty] >>
   conj_tac >- (simp_tac bool_ss [window_array_cursor_def] >> asm_rewrite_tac[] >>
     qpat_x_assum `window_array_root _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
     simp_tac bool_ss [window_array_root_def] >> strip_tac >>

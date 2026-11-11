@@ -70,7 +70,7 @@ Proof
   `!base j b. ~dead_bytes st base tv j b` by
     (rpt strip_tac >> drule (cj 1 dead_bytes_range) >> simp[] >> decide_tac) >>
   rpt strip_tac >> first_x_assum irule >>
-  simp[compileEnvTheory.dead_bytes_def] >> rpt strip_tac >> gvs[] >> decide_tac
+  simp[loweringStateRelDefsTheory.dead_bytes_def] >> rpt strip_tac >> gvs[] >> decide_tac
 QED
 
 Theorem rest_word_slots_array_index:

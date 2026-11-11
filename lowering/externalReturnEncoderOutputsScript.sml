@@ -3,7 +3,7 @@ Theory externalReturnEncoderOutputs
 Ancestors
   externalReturnEncoderSitesCert abiEncoder abiEncoderAppend abiEncoderCounters
   abiEncoderProps localPtrsProps exprLoweringProps emitHelperProps fragExec
-  compileEnv context venomInst list arithmetic pred_set pair emitHelper rich_list
+  compileEnv loweringStateRelDefs context venomInst list arithmetic pred_set pair emitHelper rich_list
 
 Definition return_encoder_outputs_def:
   return_encoder_outputs (action : 'a compiler) <=>

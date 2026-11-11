@@ -28,7 +28,7 @@ Theorem body_expr_ptr_ok_leaf:
     body_expr_ptr_ok cx e
 Proof
   rpt gen_tac >> disch_tac >> simp[body_expr_ptr_ok_def] >>
-  rpt gen_tac >> strip_tac >>
+  reverse conj_tac >- (rpt strip_tac >> gvs[]) >> rpt gen_tac >> strip_tac >>
   `expr_sim_pre cenv cx env e es` by
     (simp[expr_sim_pre_body] >>
      qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[int_calls_expr_def]) >>
@@ -132,7 +132,7 @@ Theorem body_stmts_ptr_ok_sim:
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
-    EVERY (stmt_exprs_ok cenv) ss /\
+    stmts_exprs_ok cenv ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
     frame_ret_ok_ptr d ctx PG func cx RetQ cenv ret_ty ==>
     stmt_frag_ptr d ctx PG func cx lctx RetQ cenv

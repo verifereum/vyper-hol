@@ -4,7 +4,7 @@ Ancestors
   typedCopyCompatibilityPtr normalizationPrefixPtr fragExecPtr bodyPtrDefs ptrSafeRun ptrDiscipline
   venomExecSemantics venomInstProofs venomInst venomState
   contextCodegenRelProps finite_map memLocDefs codegenRel contextCodegenRel fragExec
-  typedCopyAgreement emitHelper compileEnv valueEncodingProps representationCleanPtr
+  typedCopyAgreement emitHelper compileEnv loweringStateRelDefs valueEncodingProps representationCleanPtr
   ptrCoverage allocationPtr exprLoweringProps typedCopyLayoutPtr exprSimBufferStore loweringPosts exprSimProps
 Theorem ptr_inst_ok_mload:
   !D ctx fn G tn s id src tmp fuel.
@@ -19,8 +19,7 @@ Proof
        eval_operand_def] >>
   conj_tac >- (rpt strip_tac >> gvs[] >> simp[mem_read_ops_def] >> metis_tac[]) >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds, opcode_case_def, combinTheory.K_THM] >>
   simp[exec_read1_def, eval_operand_def, AllCaseEqs(), mload_def,
        update_var_def] >> rpt strip_tac >> gvs[]
 QED
@@ -141,8 +140,7 @@ Proof
     (first_x_assum drule >> simp[ptr_covers_def] >> metis_tac[]) >>
   qexists_tac `update_var tmp (mload (w2n a) s) s` >>
   conj_tac >-
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]) >>
   simp[update_var_def] >> conj_tac
   >- (rpt strip_tac >> irule (SRULE [mk_inst_def] ptr_inst_ok_mload) >> metis_tac[]) >>
   first_x_assum drule >> simp[mk_inst_def, update_var_def]
@@ -167,8 +165,7 @@ Proof
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
   qexists_tac `mstore (w2n a) w s` >>
   conj_tac >-
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def]) >>
   simp[mstore_def] >> rpt strip_tac >>
   irule ptr_inst_ok_mstore >> simp[]
 QED
@@ -574,8 +571,7 @@ Proof
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
   qexists_tac `mcopy (w2n b) (w2n a) (w2n n) s` >>
   conj_tac >-
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   simp[mcopy_def, write_memory_with_expansion_def] >> rpt strip_tac >>
   irule ptr_inst_ok_mcopy_operand >> simp[] >> metis_tac[]
 QED
@@ -596,8 +592,7 @@ Proof
        source_memory_read_ranges_def] >>
   conj_tac >- metis_tac[] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
@@ -625,8 +620,7 @@ Proof
   reverse conj_tac >- (gvs[is_terminator_def]) >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
   qexists_tac `update_var tmp (f a b) s` >> conj_tac >-
-    (gvs[] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors,
+    (gvs[] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
                       instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
      simp[exec_pure2_def]) >>
   asm_rewrite_tac[] >> simp[update_var_def] >> rpt strip_tac >>

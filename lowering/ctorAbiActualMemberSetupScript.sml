@@ -4,7 +4,7 @@ Ancestors
   abiDecoderDynamic abiDecoderOffset
   abiDecoderMemberSetup abiDecoderDynamicLoopSetup abiDecoderVarSequence
   abiDecoderReentry abiDecoderContract abiDecoderLoop abiEncoderRegisteredEffect
-  abiEncoder fragExec instIdxIndep compileEnv emitHelper emitHelperProps
+  abiEncoder fragExec instIdxIndep compileEnv loweringStateRelDefs emitHelper emitHelperProps
   exprLoweringProps venomExecSemantics venomState venomInst words list rich_list arithmetic
 
 Theorem ctor_actual_member_setup_opcodes:

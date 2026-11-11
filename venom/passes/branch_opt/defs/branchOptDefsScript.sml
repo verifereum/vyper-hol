@@ -30,7 +30,7 @@
 
 Theory branchOptDefs
 Ancestors
-  passSimulationDefs dfgDefs venomExecSemantics venomInst irSupply
+  passTransform dfgDefs venomExecSemantics venomInst irSupply
 
 (* ===== Comparator Opcodes ===== *)
 

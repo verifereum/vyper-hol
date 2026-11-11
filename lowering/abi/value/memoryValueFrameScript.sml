@@ -3,7 +3,7 @@
    defaults represented by omitted fixed-array entries. *)
 Theory memoryValueFrame
 Ancestors
-  memoryValueDefs valueEncoding valueEncodingProps valueEncodingProofs
+  valueEncodingDefs memoryValueDefs valueEncoding valueEncodingProps valueEncodingProofs
   memoryReadProps venomState venomExecSemantics vyperValue list alist arithmetic pair
   typeValueInduction
 

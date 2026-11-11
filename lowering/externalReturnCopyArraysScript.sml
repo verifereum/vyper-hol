@@ -1,7 +1,7 @@
 (* Task-owned array representation interfaces; no typedMemoryCopy import. *)
 Theory externalReturnCopyArrays
 Ancestors
-  externalReturnCopyDynamic externalReturnCopyBulk externalReturnCopyArrayLoop fragExec valueEncoding valueEncodingProps
+  externalReturnCopyDynamic externalReturnCopyBulk externalReturnCopyArrayLoop fragExec valueEncoding valueEncodingDefs valueEncodingProps
   valueEncodingProofs vyperTypeSystem vyperTypeArgFits vyperTyping
   vyperValue list pair alist sorting arithmetic words context compileEnv
 

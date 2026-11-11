@@ -66,11 +66,12 @@ Theorem rest_word_dynamic_dispatch:
       (case vv_location vv of SOME l => l | NONE => LocMemory) (vv_operand vv))
     (\len_op.
       compile_array_membership_loop needle (vv_operand vv) len_op
-          (elem_size_in_location cenv
-            (case vv_location vv of SOME l => l | NONE => LocMemory) et)
-          (word_scale (case vv_location vv of SOME l => l | NONE => LocMemory))
-          (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
-            (case vv_location vv of SOME l => l | NONE => LocMemory)) (SOME cap) is_in)
+        (elem_size_in_location cenv
+          (case vv_location vv of SOME l => l | NONE => LocMemory) et)
+        (word_scale (case vv_location vv of SOME l => l | NONE => LocMemory))
+        (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
+          (case vv_location vv of SOME l => l | NONE => LocMemory))
+        (SOME cap) is_in)
 Proof
   simp[compile_var_array_membership_def, LET_THM]
 QED

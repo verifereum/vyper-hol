@@ -5,7 +5,7 @@ Ancestors
   windowSequenceMem allocaFootprint instMemFrontier abiEncoderArrayTail
   abiEncoderArrayCode abiEncoderArrayBodyCode abiDecoderDynamicLoopSetup
   abiEncoderWindowSequence abiEncoderWindowPhase emitHelperProps emitHelper
-  compileEnv exprLoweringProps fragExec fragExecMem venomState venomExecSemantics venomInst
+  compileEnv loweringStateRelDefs exprLoweringProps fragExec fragExecMem venomState venomExecSemantics venomInst
   words list rich_list pred_set finite_map instIdxIndep memSafeRun
   abiEncoderWindowChild abiEncoderWindowArrayInvariant abiEncoderRegisteredEffect
   valueEncoding valueEncodingProps venomMemDefs windowTransitionMem memContinuation

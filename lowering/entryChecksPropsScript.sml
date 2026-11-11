@@ -48,7 +48,7 @@ Ancestors
   arithmetic list rich_list words finite_map
   entryDispatchProps entryDecodePlanProps entryDecodeProps
   moduleLoweringProps exprLoweringProps emitHelperProps fragExec
-  compileVyper moduleLowering compileEnv selectorDispatch contractABI
+  compileVyper moduleLowering compileEnv loweringStateRelDefs selectorDispatch contractABI
   venomState venomInst venomExecSemantics
   valueEncodingProofs vyperABIRoundtrip
   e2eDefs vyperLoweringCorrect vyperTypeContractSoundness

@@ -10,6 +10,7 @@ Theory concretizeStageShape
 Ancestors
   concretizeStepStructure o1PassContract stackPlanGen concretizeMemLocDefs venomPassDispatcher venomPassSchedule venomFnScheduleRunner cfgWf
   staticLayoutFoldProofs staticLayoutDefs passSharedDefs venomWf passSimulationDefs list rich_list combin venomInst
+  passTransform
 
 Theorem concretize_inst_positions_outputs[local]:
   (inst.inst_opcode = ALLOCA ==>

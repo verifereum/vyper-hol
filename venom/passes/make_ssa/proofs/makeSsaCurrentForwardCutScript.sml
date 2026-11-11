@@ -28,10 +28,10 @@ Proof
      `ALL_DISTINCT (MAP (\bb. bb.bb_label) renamed)` by
        fs[wf_function_def, fn_labels_def] >>
      `MEM l (MAP (\bb. bb.bb_label) renamed)` by
-       metis_tac[lookup_block_MEM, makeSsaHelperTheory.lookup_block_label, MEM_MAP] >>
+       metis_tac[lookup_block_MEM, venomExecProofsTheory.lookup_block_label, MEM_MAP] >>
      fs[MEM_MAP] >> metis_tac[MEM_lookup_block]) >>
   `MEM new renamed /\ new.bb_label = l` by
-    metis_tac[lookup_block_MEM, makeSsaHelperTheory.lookup_block_label] >>
+    metis_tac[lookup_block_MEM, venomExecProofsTheory.lookup_block_label] >>
   drule_all current_wf_precleanup_block_shape >> strip_tac >>
   drule current_wf_precleanup_structural >> strip_tac >>
   `lookup_block (current_event_label ev) fn.fn_blocks = SOME old` by simp[] >>

@@ -8,7 +8,7 @@ Libs
   evalCompilerBytecodeLib cv_transLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../lowering/defs/bytecode/external-entries"]
+val () = holbuild_extra_deps ["../bytecode/external-entries"]
 fun entry_runtime name = snd (pairSyntax.dest_pair
   (evalCompilerBytecodeLib.read_hex_bytes
     ("../external-entries/oracle/" ^ name ^ ".hex")))

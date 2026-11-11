@@ -2,8 +2,9 @@ Theory makeSsaCurrentTreePaths
 Ancestors
   makeSsaCurrentTreeTrace makeSsaCurrentCertificate makeSsaCurrentInduct
   makeSsaCurrentRenameTrace makeSsaDefs makeSsaCurrentTokens
-  makeSsaCurrentDefs makeSsaCurrentProps makeSsaHelper cfgTransformProps
+   makeSsaCurrentProps cfgTransformProps
   venomInst list rich_list pair
+  venomExecProofs
 
 Definition current_event_label_def:
   current_event_label (l,bb,s,rs,H,E,insts1,s1,rs1,H1,E1,bbs1,bbs2) = l

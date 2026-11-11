@@ -3,11 +3,11 @@ Theory bodyMemAssignTupleTargetsLoad
 Ancestors
   bodyMemAssignTupleTargetsFacts tupleLoadProps stmtSimReturn
   fragExecMem instMemFrontier context emitHelper emitHelperProps
-  venomExecSemantics venomState venomInst compileEnv exprLoweringProps
+  venomExecSemantics venomState venomInst compileEnv loweringStateRelDefs exprLoweringProps
   list rich_list words unitTransformDefs memSafeRun contextCodegenRel codegenRel
   stmtLowering freshWrites tupleTypedLoad tupleMemoryLayout valueEncodingProofs
   bodyDeclMemoryCounted bodyDeclMemoryCore loweringPosts bodyMemoryDefs allocaHistory
-  tupleStageProps valueTypingMemoryProps valueEncoding vyperTyping gasCount fragGasPathMem
+  tupleStageProps valueTypingMemoryProps valueEncoding valueEncodingDefs vyperTyping gasCount fragGasPathMem
 Libs
   monadsyntax
 
@@ -27,7 +27,11 @@ Proof
   simp[emitted_insts_def, DROP_APPEND1, mk_inst_def,
        run_inst_seq_mem_ok_def, inst_mem_below_frontier_def,
        inst_dload_in_section_def] >>
-  simp[Once step_inst_base_def, exec_pure2_def, eval_operand_def,
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[venomInstTheory.instruction_accessors,
+                   venomInstTheory.instruction_accfupds,
+                   combinTheory.K_THM, venomInstTheory.opcode_case_def] >>
+  simp[exec_pure2_def, eval_operand_def,
        bind_outputs_def, lookup_var_update_var] >>
   simp[inst_mem_below_frontier_def, inst_dload_in_section_def,
        source_memory_read_ranges_def, source_memory_write_ranges_def,

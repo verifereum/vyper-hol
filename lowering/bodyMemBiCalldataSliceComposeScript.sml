@@ -67,7 +67,10 @@ Proof
     (drule expr_post_word_operand >>
      simp[evaluate_type_def, is_word_type_def, word_value_def, val_to_w256_def,
           integer_wordTheory.i2w_pos]) >>
-  `wb_frame cenv es sa s0 s` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es ee sa s0 s` by metis_tac[expr_post_frame] >>
+  `~expr_has_effect (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) ==>
+   pure_frame cenv func es sa s0 s` by
+    (simp[expr_has_effect_thm] >> metis_tac[expr_post_pure_frame]) >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (qpat_x_assum `bind _ _ (es with gas_obs := gs) = _` mp_tac >>
      simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>

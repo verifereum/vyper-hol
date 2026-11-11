@@ -1,6 +1,6 @@
 Theory placeStoreAllocPath
 Ancestors
-  exprSimAlloc fragGasSeq context compileEnv loweringSlice exprLoweringProps
+  exprSimAlloc fragGasSeq context compileEnv loweringStateRelDefs loweringSlice exprLoweringProps
   emitHelperProps fragExec localPtrsProps venomInst venomState
   venomExecSemantics venomInstProofs rich_list finite_map
 

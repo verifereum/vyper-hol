@@ -2,7 +2,7 @@
    concrete EVM event, in source topic order, with the requested memory bytes. *)
 Theory eventEmitProps
 Ancestors
-  exprLoweringProps emitHelperProps emitHelper compileEnv context
+  loweringStateRelDefs exprLoweringProps emitHelperProps emitHelper compileEnv context
   venomExecSemantics venomState venomInst vyperState
   list rich_list words
 Libs wordsLib

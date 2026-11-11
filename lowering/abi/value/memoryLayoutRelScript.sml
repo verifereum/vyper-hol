@@ -3,7 +3,7 @@
    Helpers lift matching layouts through arrays and tuples. *)
 Theory memoryLayoutRel
 Ancestors
-  memoryValueDefs valueEncoding vyperValue list words arithmetic
+  valueEncodingDefs memoryValueDefs valueEncoding vyperValue list words arithmetic
 
 Definition memory_layout_rel_def:
   memory_layout_rel ftv atv <=>

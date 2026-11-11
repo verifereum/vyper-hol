@@ -1,7 +1,7 @@
 (* Constructor probes for the semantic caller interface. *)
 Theory externalReturnSemanticProbe
 Ancestors
-  abiEncoderWindow abiEncoderInput valueEncoding vyperValue
+  abiEncoderWindow abiEncoderInput valueEncoding valueEncodingDefs vyperValue
   contractABI e2eDefs vyperABI list arithmetic
 
 Theorem return_dynamic_bytes_window:

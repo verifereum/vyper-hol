@@ -1,6 +1,6 @@
 Theory ctorSourceInputs
 Ancestors
-  entryStateRel entryArgPtrs abiCallerBuiltinInput abiDecoderCoherence
+  valueEncodingDefs loweringStateRelDefs structFieldsProps entryStateRel entryArgPtrs abiCallerBuiltinInput abiDecoderCoherence
   compileVyper compileEnv vyperABIRoundtrip vyperInterpreter vyperTypeContract
   list finite_map
 

@@ -4,7 +4,7 @@ Ancestors
   abiEncoderArrayBodyCode abiEncoderMemberPhaseRaw abiEncoderSharedArrayEntry abiEncoderSequence
   abiEncoderRegisteredEffect abiEncoderExtendSim abiScratchAddress
   abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderContract valueEncoding
-  abiEncoderArrayCode emitHelper exprLoweringProps compileEnv emitHelperProps
+  abiEncoderArrayCode emitHelper exprLoweringProps compileEnv loweringStateRelDefs emitHelperProps
   venomState venomMemDefs venomExecSemantics venomInst instIdxIndep list rich_list words arithmetic
 
 Theorem abi_encoder_array_address_opcodes[local]:

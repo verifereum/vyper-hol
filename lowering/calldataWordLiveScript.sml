@@ -1,9 +1,8 @@
 (* Reentrant primitive calldata decoding: older operands may be absent. *)
 Theory calldataWordLive
 Ancestors
-  abiDecoderRange
-  calldataDynOwned calldataWordLeaf abiDecoderClampedWord entryDecodeProps abiEncoder abiDecoderReentry
-  abiDecoderGuards abiDecoderContract valueEncodingProps safeSequence
+  valueEncodingDefs calldataDynOwned calldataWordLeaf abiDecoderClampedWord entryDecodeProps abiEncoder abiDecoderReentry
+  abiDecoderGuards abiDecoderRange abiDecoderContract valueEncodingProps safeSequence
   emitHelperProps exprLoweringProps compileEnv emitHelper
   venomExecSemantics venomState venomInst words arithmetic list rich_list finite_map
 
@@ -217,12 +216,10 @@ Theorem calldata_word_accepted_live:
       eval_operand op t = eval_operand op s) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
 Proof
-  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
-    compile_abi_dec_addr_zero, compile_abi_decode_range_check_def, comp_return_def,
+  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def, pairTheory.UNCURRY_DEF, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [src] st = (value,c1)` >>
-  pairarg_tac >> gvs[] >>
   rename1 `compile_abi_clamp_basetype value clamp c1 = ((),c2)` >>
   drule_all calldata_read_repeat >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
@@ -272,12 +269,10 @@ Theorem calldata_word_rejected_live:
     t.vs_data_section = s.vs_data_section /\ t.vs_allocas = s.vs_allocas /\
     t.vs_alloca_next = s.vs_alloca_next
 Proof
-  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
-    compile_abi_dec_addr_zero, compile_abi_decode_range_check_def, comp_return_def,
+  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def, pairTheory.UNCURRY_DEF, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [src] st = (value,c1)` >>
-  pairarg_tac >> gvs[] >>
   rename1 `compile_abi_clamp_basetype value clamp c1 = ((),c2)` >>
   drule_all calldata_read_repeat >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
@@ -328,12 +323,10 @@ Theorem calldata_word_prefix_live:
   !pre i post u. emitted_insts st last = pre ++ i::post /\
     run_inst_seq pre s = OK u ==> inst_mem_below_frontier i u
 Proof
-  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
-    compile_abi_dec_addr_zero, compile_abi_decode_range_check_def, comp_return_def,
+  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def, pairTheory.UNCURRY_DEF, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [src] st = (value,c1)` >>
-  pairarg_tac >> gvs[] >>
   rename1 `compile_abi_clamp_basetype value clamp c1 = ((),c2)` >>
   drule_all calldata_read_repeat >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>

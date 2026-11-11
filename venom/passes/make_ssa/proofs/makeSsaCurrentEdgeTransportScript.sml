@@ -1,5 +1,5 @@
 Theory makeSsaCurrentEdgeTransport
-Ancestors
+Ancestors livenessTransferProofs
   makeSsaCurrentDemand makeSsaCurrentAnalysis makeSsaCurrentDemandDominance
   venomExecProps cfgWf venomWf venomInst list
   makeSsaCurrentWfSsa makeSsaCurrentDemandedCut makeSsaCurrentPathBridge

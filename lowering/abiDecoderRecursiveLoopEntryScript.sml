@@ -7,7 +7,7 @@ Ancestors
   abiDecoderEffect abiDecoderDynamicLoopSetup abiDecoderLoopRegisters
   abiDecoderAllocation abiDecoderContract abiDecoderCorrect abiDecoderLoop abiDecoderReentry
   abiDecoderExecution abiDecoderTypedContract
-  fragExec compileEnv emitHelperProps emitHelper valueEncoding
+  fragExec compileEnv loweringStateRelDefs emitHelperProps emitHelper valueEncoding
   venomState venomExecSemantics venomInst words list arithmetic
 
 Theorem abi_decoder_completed_loop_entry:

@@ -13,6 +13,7 @@ Ancestors
   passSimulationDefs passSimulationProps passSharedDefs passSharedProps
   venomWf venomInst venomEffects venomMemDefs basePtrProps
   list rich_list indexedLists
+  passTransform
 Libs
   pairLib BasicProvers
 

@@ -8,7 +8,7 @@ Theory ctorDeployEntry
 Ancestors
   ctorDeployDefs deployFrameReplay codegenCorrectness o1PassContract
   e2eEntry immutableCodeLayout codegenEncodingWf contextPlanLayoutProps
-  e2eDefs e2eDeployDefs compileEnv vyperArith unitShapeDefs callTrace
+  e2eDefs e2eDeployDefs compileEnv loweringStateRelDefs vyperArith unitShapeDefs callTrace
   contextCodegenRel lowerDloadDefs venomState unitTransformDefs
   words list rich_list
 

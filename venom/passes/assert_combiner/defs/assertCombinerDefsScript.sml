@@ -33,7 +33,7 @@
 
 Theory assertCombinerDefs
 Ancestors
-  passSimulationDefs dfgDefs dfgAnalysisProps venomExecSemantics venomInst venomEffects
+  passTransform dfgDefs venomExecSemantics venomInst venomEffects
 Libs
   pred_setTheory
 

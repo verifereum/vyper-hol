@@ -41,6 +41,7 @@ Ancestors
   execEquivParamBase execEquivParamProps
   finite_map worklistDefs worklistProps
   list passSharedSubst
+  passTransform
 Libs
   pairLib BasicProvers
 

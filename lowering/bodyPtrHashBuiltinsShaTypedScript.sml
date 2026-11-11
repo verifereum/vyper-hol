@@ -3,7 +3,7 @@ Theory bodyPtrHashBuiltinsShaTyped
 Ancestors bodyPtrHashBuiltinsShaUnary bodyPtrHashBuiltinsShaSummary
   bodyPtrHashBuiltinsShaStringSummary bodyPtrHashBuiltinsCases
   exprSimHash exprSimHypsDefs vyperTypeSystem exprLoweringProps
-  exprSimDefs exprLowering emitHelperProps bodyPtrDefs compileEnv
+  exprSimDefs exprLowering emitHelperProps bodyPtrDefs compileEnv loweringStateRelDefs
   exprSimSource exprSimHyps exprSimWordArgs fragExec list rich_list arithmetic vyperTyping
 
 Theorem hash_sha256_typed_vv_sim_ptr:

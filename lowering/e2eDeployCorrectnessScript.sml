@@ -4,7 +4,7 @@
  * owns its own file. *)
 Theory e2eDeployCorrectness
 Ancestors
-  e2eCorrectness e2eDeployDefs ctorDeployDefs
+  e2eDeployDefs ctorDeployDefs
   ctorDeployInitcode ctorDeployEntry ctorDeployShape ctorDeployDefsReach
   ctorDeployLowering ctorDeployMemory ctorDeployDload ctorDeployDead
   ctorDeployFrame

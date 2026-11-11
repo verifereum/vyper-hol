@@ -3,9 +3,10 @@ Ancestors
   makeSsaCurrentFinalSlots makeSsaCurrentTreePaths makeSsaCurrentTreeTrace
   makeSsaCurrentEdgeTrace
   makeSsaCurrentCertificate makeSsaCurrentAllocation makeSsaCurrentTokens
-  makeSsaCurrentProps makeSsaCurrentDefs makeSsaHelper cfgTransformProps
+  makeSsaCurrentProps makeSsaDefs cfgTransformProps
   makeSsaCurrentAnalysis cfgAnalysisProps cfgHelpers venomExecProps
   venomFnScheduleRunner irSupply venomWf venomInst list rich_list pair sorting cfgCorrectnessProof
+  venomExecProofs
 
 Theorem current_event_names_accessors:
   current_event_names H V ev /\ MEM v V ==>

@@ -4,7 +4,7 @@ Ancestors
   supportedStmts vyperTypeSystem vyperTypeValues vyperValue
   arithmetic words vyperAST vyperInterpreter vyperState vyperValueOperation
   vyperArray vyperTypeEnv vyperTypeInvariants vyperTyping exprSimHyps
-  compileEnv valueEncodingProps valueEncodingProofs valueCopy stmtLowering
+  compileEnv loweringStateRelDefs valueEncodingProps valueEncodingProofs valueCopy stmtLowering
   emitHelperProps exprLoweringProps venomState emitHelper rich_list
   immutableMemoryFrame stmtSimDeclStore loweringSlice localPtrsProps
   stmtSimForArrayFrame valueEncodingTyping memoryValueEncoding list alist pair

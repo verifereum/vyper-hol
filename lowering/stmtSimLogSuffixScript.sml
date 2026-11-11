@@ -2,8 +2,8 @@
 Theory stmtSimLogSuffix
 Ancestors
   stmtSimLogStoreCompose stmtSimLogEmit stmtSimLogTrace stmtSimLogTopics
-  compileEnv exprLoweringProps emitHelperProps venomExecSemantics venomState
-  valueEncoding words list arithmetic stmtSimLogTopicFresh stmtSimLogSourceAllocate
+  compileEnv loweringStateRelDefs exprLoweringProps emitHelperProps venomExecSemantics venomState
+  valueEncoding valueEncodingDefs words list arithmetic stmtSimLogTopicFresh stmtSimLogSourceAllocate
   exprSimWordArgs stmtSimLogArgs fragExec stmtLowering stmtSimLogStoreEncode
   stmtSimLogDataRun abiEncoderCounters abiDecoderReentry abiEncoderAppend
   loweringHalt vyperABI contractABI
@@ -92,7 +92,7 @@ QED
 Theorem log_empty_suffix_finish[local]:
   compile_log_topic_ops raw sm = (ops,st) /\
   run_inst_seq (emitted_insts sm st) s = OK u /\
-  wb_frame ce es sm s u /\
+  wb_frame ce es es sm s u /\
   LIST_REL (\op w. eval_operand op u = SOME w) ops topics /\
   stmt_state_rel ctx func ce cx es u /\ fresh_vars_wrt limit_st s /\
   sb.cs_next_var <= limit_st.cs_next_var /\

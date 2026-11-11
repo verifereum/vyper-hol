@@ -148,6 +148,7 @@ Theorem call_ops_nh[local]:
   (precompile_call_success bt s = (INR HaltException, s') ==> F) /\
   (frame_call_value cx vo s = (INR HaltException, s') ==> F) /\
   (take_call_outcome tg cd vo s = (INR HaltException, s') ==> F) /\
+  (take_delegate_outcome tg cd vo s = (INR HaltException, s') ==> F) /\
   (adopt_call_outcome rq oc s = (INR HaltException, s') ==> F) /\
   (acquire_nonreentrant_lock a sl iv s = (INR HaltException, s') ==> F) /\
   (release_nonreentrant_lock a sl s = (INR HaltException, s') ==> F)
@@ -159,6 +160,7 @@ Proof
       simp[frame_call_value_def, ignore_bind_def, bind_def, check_def,
            assert_def, return_def] >> rw[])
   >- (strip_tac >> drule take_call_outcome_error >> simp[])
+  >- (strip_tac >> drule take_delegate_outcome_error >> simp[])
   >- simp[adopt_call_outcome_equation]
   >- (simp[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
            get_transient_storage_def, LET_THM, return_def] >>
@@ -723,4 +725,24 @@ Proof
   strip_tac >>
   qpat_x_assum `!e. MEM e tops ==> supported_declaration_header tops e`
     drule >> simp[supported_declaration_header_def]
+QED
+
+(* The constructor body (declared, or the synthetic empty one) never halts
+   in a supported program. *)
+Theorem deploy_body_no_halt:
+  supported_program tops /\ get_module_code cx NONE = SOME tops /\
+  lookup_function src name Deploy tops =
+    SOME (mut,nr,args,dflts,ret,fbody) ==>
+  eval_stmts cx fbody st <> (INR HaltException, st')
+Proof
+  strip_tac >>
+  drule vyperTypeContractStaticMapsTheory.lookup_function_Deploy_SOME_cases >>
+  strip_tac >> gvs[]
+  >- simp[Once evaluate_def, return_def] >>
+  drule_all supported_program_declaration >>
+  simp[supported_declaration_header_def, supported_declaration_body_def,
+       supported_function_body_def, NULL_EQ] >>
+  strip_tac >>
+  drule (cj 2 supported_stmts_storage_syntax) >> strip_tac >>
+  irule (cj 4 eval_no_halt) >> metis_tac[]
 QED

@@ -1,6 +1,6 @@
 (* Hide the compiler's concrete fresh names from dynamic hash consumers. *)
 Theory bodyPtrHashBuiltinsKeccakShape
-Ancestors builtinHashing emitHelper emitHelperProps compileEnv
+Ancestors builtinHashing emitHelper emitHelperProps compileEnv loweringStateRelDefs
   exprLoweringProps venomInst ASCIInumbers rich_list
 
 Theorem hash_keccak_bytes_emission:

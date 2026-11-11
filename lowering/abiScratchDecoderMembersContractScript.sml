@@ -5,7 +5,7 @@ Ancestors
   abiScratchDecoderContract abiScratchEncoderContract abiScratchLeafEffect abiDecoderFrame
   abiDecoderMemberInfos abiDecoderMembers abiValidMembers abiDecoderValidContract abiDecoderEffect
   abiDecoderReentry abiDecoderLoop abiDecoderTypedContract abiDecoderContract
-  abiDecodeRanges abiEncoder compileEnv valueEncoding vyperABI fragExec
+  abiDecodeRanges abiEncoder compileEnv valueEncoding valueEncodingDefs vyperABI fragExec
   venomState venomExecSemantics words list arithmetic
 
 Definition abi_scratch_decoder_members_def:

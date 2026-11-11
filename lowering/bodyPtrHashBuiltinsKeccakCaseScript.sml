@@ -3,7 +3,7 @@ Theory bodyPtrHashBuiltinsKeccakCase
 Ancestors
   bodyPtrHashBuiltinsUnary bodyPtrHashBuiltinsCases
   bodyPtrHashBuiltinsKeccakFixedFrame bodyPtrHashBuiltinsKeccakBytesFrame
-  bodyPtrHashBuiltinsShaEndpoint exprSimHash exprSimVVFrame exprSimAlloc
+  bodyPtrHashBuiltinsShaEndpoint exprSimHash exprSimHashBoundary exprSimVVFrame exprSimAlloc
   exprLoweringProps exprOperandVar exprSimWordArgs bodyPtrDefs
   gasSummaryComposePtr compileEnv venomState arithmetic words list
 

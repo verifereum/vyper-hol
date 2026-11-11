@@ -3,7 +3,7 @@ Ancestors
   o1MakeSsaVisitRetention o1MakeSsaVisitNames o1MakeSsaRootedTree
   o1MakeSsaActualMaps o1MakeSsaVisitPaths o1MakeSsaPrefixNames
   o1MakeSsaVisitTrace o1MakeSsaEventFrames o1MakeSsaTraversalFrames
-  o1MakeSsaFormats o1MakeSsaPreparation makeSsaCurrentDefs list alist pair o1ContractMakeSsaSrcOpcodes makeSsaCurrentTraceCertificate makeSsaCurrentTreeTrace
+  o1MakeSsaFormats o1MakeSsaPreparation makeSsaDefs list alist pair o1ContractMakeSsaSrcOpcodes makeSsaCurrentTraceCertificate makeSsaCurrentTreeTrace
 
 (* latest_current_name of the initial rename state is the identity *)
 val _ = augment_srw_ss [rewrites [makeSsaCurrentTreeTraceTheory.current_initial_latest]];

@@ -5,7 +5,7 @@ Theory abiDecoderComplexGuard
 Ancestors
   abiDecoderComplexHead abiDecoderGuard abiDecoderReentryPointer abiDecoderReentry
   abiDecoderVarSequence abiDecoderVarExtend abiDecoderDynamicLoopSetup abiDecoderReservation
-  abiDecoderContract abiDecoderLoop fragExec instIdxIndep abiEncoder compileEnv emitHelper
+  abiDecoderContract abiDecoderLoop fragExec instIdxIndep abiEncoder compileEnv loweringStateRelDefs emitHelper
   emitHelperProps exprLoweringProps venomState venomExecSemantics venomInst words list rich_list
   arithmetic
 

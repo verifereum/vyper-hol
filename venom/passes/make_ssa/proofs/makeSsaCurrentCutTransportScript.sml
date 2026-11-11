@@ -2,7 +2,7 @@ Theory makeSsaCurrentCutTransport
 Ancestors
   makeSsaCurrentCarrierOwner makeSsaCurrentWfSsa makeSsaCurrentAllocation
   makeSsaCurrentCertificate makeSsaCurrentFinalBlock makeSsaCurrentTreeTrace
-  makeSsaCurrentDemand makeSsaHelper makeSsaCurrentHistoryOwner
+  makeSsaCurrentDemand venomExecProps makeSsaCurrentHistoryOwner
   makeSsaCurrentRenameTrace makeSsaCurrentTreePaths makeSsaCurrentTokens
   makeSsaCurrentSourceCuts list rich_list venomInst makeSsaRfAllocation
 Theorem current_transport_precleanup_output_names:

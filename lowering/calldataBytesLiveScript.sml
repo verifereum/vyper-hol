@@ -1,9 +1,8 @@
 (* Reentrant count guards and zero-filled calldata copies. *)
 Theory calldataBytesLive
 Ancestors
-  abiDecoderRange
-  calldataWordLive calldataWordLeaf calldataBytesLeaf calldataDynOwned abiDecoderReentry
-  abiDecoderBytes abiDecoderCopy abiDecoderGuards abiEncoder
+  valueEncodingDefs calldataWordLive calldataWordLeaf calldataBytesLeaf calldataDynOwned abiDecoderReentry
+  abiDecoderBytes abiDecoderCopy abiDecoderGuards abiDecoderRange abiEncoder
   abiDecoderContract abiDecoderComposition valueEncoding safeSequence
   abiDecoderBytesTyped fragExecMem
   emitHelperProps exprLoweringProps compileEnv emitHelper
@@ -104,8 +103,9 @@ Theorem calldata_bytes_accepted_live:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, compile_abi_dec_addr_zero, pairTheory.UNCURRY_DEF, comp_bind_def, LET_THM] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, compile_abi_dec_addr_zero, comp_bind_def,
+    pairTheory.UNCURRY_DEF, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[abi_decode_copy_opcode_def] >>
   rename1 `abi_decode_count_guard CALLDATALOAD src maxn st = (count_op,c1)` >>
   drule_all calldata_count_guard_repeat_sequence >> strip_tac >>
@@ -136,8 +136,9 @@ Theorem calldata_bytes_rejected_live:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, compile_abi_dec_addr_zero, pairTheory.UNCURRY_DEF, comp_bind_def, LET_THM] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, compile_abi_dec_addr_zero, comp_bind_def,
+    pairTheory.UNCURRY_DEF, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   drule_all calldata_count_guard_rejected_live >> strip_tac >>
   drule abi_decode_count_guard_shape >> strip_tac >>
@@ -159,8 +160,9 @@ Theorem calldata_bytes_prefix_live:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, compile_abi_dec_addr_zero, pairTheory.UNCURRY_DEF, comp_bind_def, LET_THM] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, compile_abi_dec_addr_zero, comp_bind_def,
+    pairTheory.UNCURRY_DEF, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   rename1 `abi_decode_count_guard CALLDATALOAD src maxn st = (count_op,c1)` >>
   drule abi_decode_count_guard_shape >> strip_tac >>

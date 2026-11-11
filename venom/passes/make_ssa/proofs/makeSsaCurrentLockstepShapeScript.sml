@@ -12,7 +12,7 @@
  *)
 Theory makeSsaCurrentLockstepShape
 Ancestors
-  makeSsaCurrentProps makeSsaCurrentDefs o1PassContract unitShapeDefs
+  makeSsaCurrentProps makeSsaDefs o1PassContract unitShapeDefs
   venomWf venomExecSemantics venomExecProofs simplifyCfgStruct irSupply venomInst list
   makeSsaCurrentCleanupBoundary o1MakeSsaFormats
 
@@ -203,7 +203,7 @@ Proof
   impl_tac >- (
   simp[Abbr `upd`] >> rpt strip_tac >>
   Cases_on `lookup_block x a` >> gvs[] >>
-  drule makeSsaHelperTheory.lookup_block_label >> strip_tac >>
+  drule venomExecProofsTheory.lookup_block_label >> strip_tac >>
   simp[cfgTransformPropsTheory.fn_labels_replace_block] >>
   irule EQ_TRANS >> goal_assum (first_assum o mp_then Any mp_tac) >>
   irule simplifyCfgStructTheory.replace_block_projection >> simp[] >>
@@ -232,7 +232,7 @@ Proof
   >- (rpt strip_tac >>
       gvs[rename_current_blocks_def, AllCaseEqs()] >>
       pairarg_tac >> gvs[] >>
-      drule makeSsaHelperTheory.lookup_block_label >> strip_tac >>
+      drule venomExecProofsTheory.lookup_block_label >> strip_tac >>
       drule rename_current_block_insts_signatures >> strip_tac >>
       first_x_assum (drule_at (Pat `rename_current_children _ _ _ _ _ _ = _`)) >>
       simp[update_current_succ_phis_labels,
@@ -545,7 +545,7 @@ Theorem make_ssa_current_fn_lookup_block_rev:
   ?bb. lookup_block l fn.fn_blocks = SOME bb
 Proof
   rpt strip_tac >> drule make_ssa_current_fn_labels >> strip_tac >>
-  drule makeSsaHelperTheory.lookup_block_labels_agree >>
+  drule venomExecProofsTheory.lookup_block_labels_agree >>
   disch_then (qspec_then `l` mp_tac) >> simp[] >>
   Cases_on `lookup_block l fn.fn_blocks` >> simp[]
 QED

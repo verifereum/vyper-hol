@@ -129,9 +129,12 @@ Theorem deploy_frame_typed_stmts_widths_mutual:
 Proof
   ho_match_mp_tac type_stmt_ind >>
   rpt conj_tac >> rpt (FIRST [gen_tac, disch_tac]) >>
-  gvs[Once type_stmt_def, supported_stmt_expr_exists_def,
+  qpat_x_assum `_ = SOME env'` mp_tac >>
+  simp[Once type_stmt_def, AllCaseEqs()] >>
+  strip_tac >>
+  gvs[supported_stmt_expr_exists_def,
       supported_assert_exists_def, supported_raise_exists_def,
-      supported_expr_exists_def, AllCaseEqs()] >>
+      supported_expr_exists_def] >>
   drule_all_then strip_assume_tac deploy_frame_typed_traversal_adapters >>
   imp_res_tac deploy_frame_typed_expr_no_bad_widths >>
   asm_rewrite_tac[] >>

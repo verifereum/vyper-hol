@@ -2,7 +2,7 @@
 Theory annAssignPtrContinuationFrame
 Ancestors
  annAssignPtrDeclarationPost annAssignPtrDestinationFrame annAssignPtrStore
- annAssignPtrBytestring bodyPtrDefs exprSimProps compileEnv finite_map arithmetic
+ annAssignPtrBytestring bodyPtrDefs exprSimProps compileEnv loweringStateRelDefs finite_map arithmetic
 
 Theorem annassign_ghost_kept_compose_ptr:
  !cenv es sa sb G0 tn0 s0 G1 tn1 s1 G2 tn2.

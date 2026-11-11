@@ -13,6 +13,7 @@ Ancestors
   venomFnInstsProofs instIdxIndep affineFoldingDefs execEquivProps passSimulationDefs passSimulationProps
   passSharedDefs passSharedProps stateEquivProps venomExecProps
   venomExecSemantics venomInst venomInstProps venomState
+  passTransform
 Libs
   BasicProvers
 

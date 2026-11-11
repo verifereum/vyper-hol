@@ -3,7 +3,7 @@ Theory stmtSimAssignPath
 Ancestors
   stmtSimAssignStore stmtSimAssignSource stmtSimDeclPath stmtSimProps
   stmtSimDefs exprSimDefs loweringPosts gasSummary
-  venomState compileEnv valueEncoding list finite_map stmtLowering
+  venomState compileEnv loweringStateRelDefs valueEncoding list finite_map stmtLowering
   emitHelper emitHelperProps exprLoweringProps fragGasPath fragGasMode vyperLookup
 Libs monadsyntax
 

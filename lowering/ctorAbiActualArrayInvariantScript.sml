@@ -5,8 +5,8 @@ Ancestors
   ctorAbiActualMemory ctorAbiActualFrame abiDecoderDynamicLoopSetup abiDecoderContract
   abiDecoderReentry abiDecoderVarSequence abiEncoderRegisteredEffect abiDecoderTypedContract
   abiDecoderArraySetupInputs abiDecoderArrayInvariant rich_list ctorAbiActualChildFrame vyperTyping
-  allocaFrontierBound allocaBudgetProps valueEncoding valueEncodingProps
-  venomMemDefs venomState compileEnv finite_map list words arithmetic pred_set
+  allocaFrontierBound allocaBudgetProps valueEncoding valueEncodingDefs valueEncodingProps
+  venomMemDefs venomState compileEnv loweringStateRelDefs finite_map list words arithmetic pred_set
   abiDecoderArrayPrefix abiDecoderReentryAddress abiDecoderExecution
   abiEncoderPrimitiveEffect venomExecSemantics
 

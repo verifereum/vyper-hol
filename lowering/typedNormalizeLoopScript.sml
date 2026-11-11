@@ -1,7 +1,7 @@
 Theory typedNormalizeLoop
 Ancestors
   typedNormalizeFrame typedNormalizeContinuation typedArrayLoopControlMem typedArrayLoopLayoutMem memContinuation
-  context compileEnv emitHelper emitHelperProps exprLoweringProps fragExec
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps fragExec
   venomInst venomState venomExecSemantics valueEncoding valueEncodingProps
   words arithmetic list rich_list
 

@@ -5,7 +5,7 @@ Ancestors
   exprSimPtrTopLevelStorageCopy exprSimCopy exprSimAlloc
   exprSimPtrTopLevelStorageFrame exprSimUnwrap loweringHalt fragExec
   ghostPcTransportPtr fragGasPathPtr exprSimStorageCopy
-  compileEnv context exprLoweringProps venomInst venomState words ptrDiscipline
+  compileEnv loweringStateRelDefs context exprLoweringProps venomInst venomState words ptrDiscipline
 
 Theorem toplevel_copy_alloc_taint_bound:
   tna.t_stor = tn.t_stor /\ tna.t_trans = tn.t_trans /\

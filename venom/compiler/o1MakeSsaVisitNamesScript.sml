@@ -1,7 +1,7 @@
 Theory o1MakeSsaVisitNames
 Ancestors
   o1MakeSsaVisitTrace o1MakeSsaReaching o1MakeSsaFormats o1MakeSsaFlags
-  makeSsaCurrentDefs makeSsaCurrentInduct venomInst list pair makeSsaCurrentAllocation o1MakeSsaCfg
+  makeSsaDefs makeSsaCurrentInduct venomInst list pair makeSsaCurrentAllocation o1MakeSsaCfg
 
 Definition last_name_def:
   (last_name x n [] = n) /\

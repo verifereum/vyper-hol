@@ -6,7 +6,7 @@ Ancestors
   vyperTypeGlobalLookupSoundness vyperStorageLayoutSafety
   exprSimHypsDefs exprSimTopLevelProps accountsRelProps exprSimMemorySource
   vyperInterpreter vyperLookupStorage vyperAST context vyperState
-  exprSimHyps exprLowering exprLoweringProps compileEnv loweringPosts exprSimSource
+  exprSimHyps exprLowering exprLoweringProps compileEnv loweringStateRelDefs loweringPosts exprSimSource
   bodyPtrDefs exprSimPtrTopLevelStorageCopy words pred_set venomState storageDecodeMemory
   exprSimPtrTopLevelStorageDecode exprSimStorageCopy
 
@@ -50,7 +50,9 @@ Proof
     (es with gas_obs := []) = (INL v,es with gas_obs := [])` by
     (drule read_result_gas_obs >>
      disch_then (qspec_then `[]` ACCEPT_TAC)) >>
-  drule vv_post_read_result >> disch_then (fn th => rewrite_tac[GSYM th]) >>
+  irule vv_post_read_result >>
+  qexists_tac `PlaceR (StoragePlace tr (n2w slot) tv)` >>
+  conj_tac >- simp[] >>
   irule toplevel_storage_value_post >> simp[]
 QED
 

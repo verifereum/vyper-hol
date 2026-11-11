@@ -2,7 +2,7 @@
 Theory abiEncoderWindowLookup
 Ancestors
   venomInstProps venomExecProps venomExecSemantics venomState venomInst
-  compileEnv emitHelper emitHelperProps exprLoweringProps finite_map list arithmetic
+  compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps finite_map list arithmetic
 
 Theorem abi_window_step_non_output:
   step_inst_base inst s = OK t /\ inst.inst_opcode <> INVOKE /\

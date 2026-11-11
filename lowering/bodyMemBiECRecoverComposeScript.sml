@@ -4,7 +4,7 @@ Ancestors
   exprSimMemDefs gasOutcome gasSummary gasSummaryCompose gasExemptCert
   fragGasMode fragGasPath exprSimDefs vyperInterpreter vyperState list
   exprSimProps exprLowering exprLoweringProps exprSimHypsDefs vyperTyping
-  vyperAST vyperTypeSystem compileEnv rich_list builtinMisc loweringPosts
+  vyperAST vyperTypeSystem compileEnv loweringStateRelDefs rich_list builtinMisc loweringPosts
   exprBopLowering vyperContext vyperValue vyperTypeInvariants valueEncoding
   integer_word words byte context emitHelper emitHelperProps venomExecSemantics
   venomInst venomState venomMemDefs venomCallOracleDefs extCallOracle
@@ -125,8 +125,10 @@ Proof
       asm_simp_tac (srw_ss()) [gas_marked_exec_def, exit_result_def,
         expr_exit_def, ignore_bind_def, bind_def, ecrecover_source_outcome_step]) >>
   rename1 `t.vs_outcomes = co::rest` >> Cases_on `co.co_success`
-  >- (drule_all ecrecover_success_path_mem >>
-      disch_then (qspec_then `[ah;av;ar;asig]` strip_assume_tac) >>
+  >- (`~EXISTS expr_has_effect [ah;av;ar;asig] ==>
+        pure_frame cenv func es sa s0 t` by
+        (strip_tac >> first_assum match_mp_tac >> gvs[]) >>
+      drule_all ecrecover_success_path_mem >> strip_tac >>
       qabbrev_tac `es2 = ee with outcomes := SOME rest` >>
       `es2 with gas_obs := [] = es2` by
         gvs[Abbr `es2`, evaluation_state_component_equality] >>

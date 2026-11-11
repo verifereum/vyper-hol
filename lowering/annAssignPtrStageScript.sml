@@ -79,6 +79,7 @@ QED
    above.  Staging reads the lowered source buffer, not the annotation size. *)
 Theorem annassign_rhs_stage_input_ptr:
  !ctx func cenv cx e es ea eb s0 es1 v op s G tn dst tv k.
+ post_value_type cenv e = expr_type e /\
  expr_post ctx func cenv cx e es ea eb s0 es1 v op s /\
  lower_value compile_expr cenv (expr_type e) e ea = (op,eb) /\
  local_ptrs_reserved cenv ea /\ ~not_fresh_at eb dst /\
@@ -96,7 +97,10 @@ Proof
  rpt gen_tac >> strip_tac >>
  drule compile_lower_value_var >> disch_then drule >> disch_tac >>
  `expr_val_at cenv cx (expr_type e) ea eb es1 v op s` by
-   fs[expr_post_def] >>
+   (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    qpat_x_assum `post_value_type _ _ = _`
+      (fn th => rewrite_tac[expr_post_def, th]) >>
+    strip_tac >> first_assum ACCEPT_TAC) >>
  `val_wf tv v /\ ?w. eval_operand op s = SOME w` by
    (fs[expr_val_at_def] >> metis_tac[]) >>
  fs[ptr_buf_ok_def] >>

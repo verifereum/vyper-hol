@@ -3,7 +3,7 @@
    reusable for dynamic-array payloads. Helpers: total byte-window splitting. *)
 Theory memoryValueAbiArray
 Ancestors
-  sourceAbiArray memoryValueDefs memoryReadProps valueEncoding valueEncodingProofs
+  valueEncodingDefs sourceAbiArray memoryValueDefs memoryReadProps valueEncoding valueEncodingProofs
   vyperABI vyperValueOperation vyperValue vyperTyping vyperTypeDefaults
   vyperAssignPreservesType contractABI venomState
   list rich_list option alist arithmetic words

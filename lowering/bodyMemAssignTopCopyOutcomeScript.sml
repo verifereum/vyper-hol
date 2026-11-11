@@ -5,7 +5,7 @@ Ancestors
   bodyMemAssignTopWord bodyMemoryDefs bodyMemoryPreds
   exprSimMemDefs exprSimDefs exprSimSource exprSimProps exprLoweringProps
   stmtSimDefs stmtSimProps stmtSimAssignStorage stmtSimAssignStorageCopy stmtSimForced
-  stmtLowering stmtLoweringMono exprSimTopLevelProps fragExec exprLowering emitHelper emitHelperProps compileEnv context
+  stmtLowering stmtLoweringMono exprSimTopLevelProps fragExec exprLowering emitHelper emitHelperProps compileEnv loweringStateRelDefs context
   gasOutcome gasSummary fragGasMode fragGasPath gasContext
   vyperStorageLayoutSafety vyperStorageBackend vyperStorage vyperValue
   loweringPosts bodySim vyperState list rich_list finite_map words arithmetic

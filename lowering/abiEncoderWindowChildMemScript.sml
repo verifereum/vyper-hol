@@ -5,7 +5,7 @@ Ancestors
   abiEncoderWindowContract abiEncoderRegisteredEffect abiEncoderChildCode abiEncoderProps
   abiEncoderChildContext abiEncoderAppend abiEncoderWindowArrayBodyMem
   windowTransitionMem instMemFrontier allocaFootprint venomMemDefs
-  emitHelperProps freshWrites compileEnv fragExec venomState words list pred_set arithmetic
+  emitHelperProps freshWrites compileEnv loweringStateRelDefs fragExec venomState words list pred_set arithmetic
 
 Theorem window_static_child_run_mem:
   (!dst src st out st' ctx func s at av sb cap d.

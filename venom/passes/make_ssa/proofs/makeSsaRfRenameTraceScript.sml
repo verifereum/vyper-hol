@@ -1,6 +1,6 @@
 Theory makeSsaRfRenameTrace
 Ancestors makeSsaCurrentAllocation makeSsaCurrentRenameTrace
-  makeSsaRfAllocation makeSsaCurrentDefs makeSsaCurrentProps
+  makeSsaRfAllocation makeSsaDefs makeSsaCurrentProps
   venomInst list alist pair combin
 
 

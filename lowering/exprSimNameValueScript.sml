@@ -4,7 +4,7 @@ Ancestors
   exprSimHypsDefs exprSimProps exprSimDefs loweringPosts
   gasOutcome gasSummary gasSummaryCompose gasContext fragGasPath fragGasMode
   list finite_map fragExec localPtrsProps loweringSlice
-  exprLowering exprLoweringProps compileEnv context
+  exprLowering exprLoweringProps compileEnv loweringStateRelDefs context
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeEnv vyperTypeInvariants
   valueEncoding valueEncodingProofs venomInst venomState memoryValueEncoding
 
@@ -64,7 +64,8 @@ Proof
   asm_simp_tac (srw_ss()) [local_region_def] >>
   drule val_footprint_le >> strip_tac >>
   conj_tac >- decide_tac >>
-  irule local_path_at_val_at >> irule local_path_at_root >> simp[]
+  conj_tac >- (irule local_path_at_val_at >> irule local_path_at_root >> simp[]) >>
+  irule local_place_at_root >> simp[]
 QED
 
 Theorem compile_name_vv_sim:

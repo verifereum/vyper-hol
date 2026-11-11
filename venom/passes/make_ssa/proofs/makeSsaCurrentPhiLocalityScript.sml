@@ -1,5 +1,6 @@
 Theory makeSsaCurrentPhiLocality
 Ancestors
+  livenessTransferProofs
   makeSsaCurrentPlacement makeSsaCurrentDefSupport makeSsaCurrentSelectedLive
   makeSsaCurrentDominanceBridge makeSsaCurrentFrontier
   dominatorDefs venomWf cfgWf list venomInst venomExecProps

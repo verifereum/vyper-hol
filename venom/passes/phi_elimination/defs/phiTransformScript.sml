@@ -32,7 +32,7 @@
 Theory phiTransform
 Ancestors
   list finite_map pred_set sorting rich_list
-  venomState venomInst venomWf venomExecSemantics phiDefs phiOrigins
+  venomState venomInst venomWf venomWfProps venomExecSemantics phiDefs phiOrigins
 
 (* ==========================================================================
    PHI Elimination Transformation
@@ -43,14 +43,8 @@ Ancestors
 Definition transform_inst_def:
   transform_inst dfg inst =
     case phi_single_origin dfg inst of
-      SOME origin =>
-        (case origin.inst_outputs of
-           [src_var] =>
-             inst with <|
-               inst_opcode := ASSIGN;
-               inst_operands := [Var src_var]
-             |>
-         | _ => inst)
+      SOME src_var =>
+        inst with <| inst_opcode := ASSIGN; inst_operands := [Var src_var] |>
     | NONE => inst
 End
 
@@ -265,20 +259,13 @@ Proof
   rw[transform_inst_def]
 QED
 
-Theorem phi_single_origin_has_output:
-  !dfg inst origin.
-    phi_single_origin dfg inst = SOME origin ==>
-    ?v. origin.inst_outputs = [v] /\ dfg_lookup dfg v = SOME origin
+Theorem transform_inst_phi_to_assign:
+  !dfg inst src_var.
+    phi_single_origin dfg inst = SOME src_var ==>
+    transform_inst dfg inst =
+      inst with <| inst_opcode := ASSIGN; inst_operands := [Var src_var] |>
 Proof
-  rw[phi_single_origin_def] >> gvs[AllCaseEqs()] >>
-  `compute_origins dfg inst DELETE inst <> {}` by
-    (strip_tac >> gvs[]) >>
-  `CHOICE (compute_origins dfg inst DELETE inst) IN
-   (compute_origins dfg inst DELETE inst)` by
-    metis_tac[pred_setTheory.CHOICE_DEF] >>
-  fs[pred_setTheory.IN_DELETE] >>
-  drule_all compute_origins_non_self_in_dfg >> strip_tac >>
-  metis_tac[dfg_lookup_single_output]
+  simp[transform_inst_def]
 QED
 
 Theorem transform_inst_phi_iff:
@@ -289,8 +276,8 @@ Proof
   rpt gen_tac >>
   Cases_on `phi_single_origin dfg inst` >> simp[transform_inst_def] >>
   rename1 `phi_single_origin dfg inst = SOME origin` >>
-  drule phi_single_origin_has_output >> strip_tac >>
-  simp[]
+  `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
+  fs[transform_inst_def, is_phi_inst_def]
 QED
 
 Theorem transform_inst_kept_phi:
@@ -310,7 +297,6 @@ Proof
   >- (simp[transform_inst_def]) >>
   rename1 `phi_single_origin dfg inst = SOME origin` >>
   `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
-  drule phi_single_origin_has_output >> strip_tac >>
   fs[transform_inst_def, is_phi_inst_def]
 QED
 
@@ -328,21 +314,7 @@ Proof
       Cases_on `inst.inst_opcode` >> simp[is_pseudo_def]) >>
   rename1 `phi_single_origin dfg inst = SOME origin` >>
   `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
-  drule phi_single_origin_has_output >> strip_tac >>
   fs[transform_inst_def, is_phi_inst_def, is_pseudo_def]
-QED
-
-Theorem transform_inst_single_origin_assign:
-  !dfg inst origin.
-    phi_single_origin dfg inst = SOME origin ==>
-    ?src_var.
-      origin.inst_outputs = [src_var] /\
-      transform_inst dfg inst =
-        inst with <| inst_opcode := ASSIGN; inst_operands := [Var src_var] |>
-Proof
-  rpt strip_tac >>
-  drule phi_single_origin_has_output >> strip_tac >>
-  simp[transform_inst_def]
 QED
 
 Theorem transform_inst_single_origin_not_pseudo:
@@ -351,7 +323,7 @@ Theorem transform_inst_single_origin_not_pseudo:
     ~is_pseudo (transform_inst dfg inst).inst_opcode
 Proof
   rpt strip_tac >>
-  drule transform_inst_single_origin_assign >> strip_tac >>
+  drule transform_inst_phi_to_assign >> strip_tac >>
   gvs[is_pseudo_def]
 QED
 
@@ -361,7 +333,7 @@ Theorem transform_inst_single_origin_not_terminator:
     ~is_terminator (transform_inst dfg inst).inst_opcode
 Proof
   rpt strip_tac >>
-  drule transform_inst_single_origin_assign >> strip_tac >>
+  drule transform_inst_phi_to_assign >> strip_tac >>
   gvs[is_terminator_def]
 QED
 
@@ -479,7 +451,7 @@ Proof
   gen_tac >> Induct >> simp[] >> rpt strip_tac >> gvs[] >>
   Cases_on `phi_single_origin dfg h`
   >- simp[transform_inst_def, is_pseudo_def] >>
-  drule transform_inst_single_origin_assign >> strip_tac >>
+  drule transform_inst_phi_to_assign >> strip_tac >>
   simp[is_pseudo_def, is_terminator_def]
 QED
 
@@ -635,8 +607,7 @@ Theorem transform_inst_preserves_outputs:
 Proof
   rw[transform_inst_def] >>
   Cases_on `phi_single_origin dfg inst` >> simp[] >>
-  Cases_on `x.inst_outputs` >> simp[] >>
-  Cases_on `t` >> simp[]
+  simp[]
 QED
 
 Theorem transform_inst_preserves_id:
@@ -644,8 +615,7 @@ Theorem transform_inst_preserves_id:
 Proof
   rw[transform_inst_def] >>
   Cases_on `phi_single_origin dfg inst` >> simp[] >>
-  Cases_on `x.inst_outputs` >> simp[] >>
-  Cases_on `t` >> simp[]
+  simp[]
 QED
 
 Theorem transform_inst_preserves_operands_non_phi:
@@ -698,6 +668,16 @@ Proof
   metis_tac[transform_insts_outputs_perm, PERM_CONG]
 QED
 
+(* SSA form is preserved: instruction outputs remain unique per function after
+   PHI elimination. *)
+Theorem phi_elim_preserves_ssa_form:
+  ∀fn. ssa_form fn ⇒ ssa_form (transform_function fn)
+Proof
+  rw[transform_function_def, LET_DEF, venomWfTheory.ssa_form_def,
+     venomInstTheory.fn_insts_def] >>
+  metis_tac[transform_blocks_outputs_perm, ALL_DISTINCT_PERM]
+QED
+
 Theorem transform_blocks_ids_perm:
   !dfg blocks.
     PERM (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
@@ -716,20 +696,9 @@ Theorem transform_inst_preserves_terminator:
 Proof
   rw[transform_inst_def] >>
   Cases_on `phi_single_origin dfg inst` >> simp[] >>
-  Cases_on `x.inst_outputs` >> simp[is_terminator_def] >>
-  Cases_on `t` >> simp[is_terminator_def] >>
+  simp[is_terminator_def] >>
   fs[phi_single_origin_def] >>
   Cases_on `is_phi_inst inst` >> fs[is_phi_inst_def, is_terminator_def]
-QED
-
-Theorem transform_inst_phi_to_assign:
-  !dfg inst origin src_var.
-    phi_single_origin dfg inst = SOME origin /\
-    origin.inst_outputs = [src_var] ==>
-    transform_inst dfg inst =
-      inst with <| inst_opcode := ASSIGN; inst_operands := [Var src_var] |>
-Proof
-  rw[transform_inst_def]
 QED
 
 Theorem transform_inst_nonterminator:
@@ -882,6 +851,66 @@ Proof
       disch_then (qspecl_then [`i`, `j`] mp_tac) >> simp[])
 QED
 
+Theorem transform_block_nonpseudo_order:
+  !dfg bb i j.
+    bb_well_formed bb /\ i < j /\ j < LENGTH bb.bb_instructions /\
+    ~is_pseudo (EL j bb.bb_instructions).inst_opcode ==>
+    ?i' j'. i' < j' /\
+      j' < LENGTH (transform_block dfg bb).bb_instructions /\
+      EL i' (transform_block dfg bb).bb_instructions =
+        transform_inst dfg (EL i bb.bb_instructions) /\
+      EL j' (transform_block dfg bb).bb_instructions =
+        transform_inst dfg (EL j bb.bb_instructions)
+Proof
+  rpt strip_tac >>
+  `~is_terminator (EL i bb.bb_instructions).inst_opcode` by
+    (fs[bb_well_formed_def] >> strip_tac >>
+     `i < LENGTH bb.bb_instructions` by decide_tac >>
+     qpat_x_assum `!k. _ /\ _ ==> _` (qspec_then `i` mp_tac) >>
+     simp[] >> decide_tac) >>
+  `~is_pseudo (transform_inst dfg (EL j bb.bb_instructions)).inst_opcode` by
+    (simp[transform_inst_pseudo_iff] >>
+     metis_tac[is_pseudo_def]) >>
+  `~is_terminator (transform_inst dfg (EL i bb.bb_instructions)).inst_opcode` by
+    simp[transform_inst_preserves_terminator] >>
+  drule_all EL_SPLIT_2 >>
+  disch_then (qx_choose_then `pre` (qx_choose_then `mid` (qx_choose_then `post` assume_tac))) >>
+  qabbrev_tac `d = transform_inst dfg (EL i bb.bb_instructions)` >>
+  qabbrev_tac `u = transform_inst dfg (EL j bb.bb_instructions)` >>
+  `MAP (transform_inst dfg) bb.bb_instructions =
+    MAP (transform_inst dfg) pre ++ d::MAP (transform_inst dfg) mid ++
+    u::MAP (transform_inst dfg) post` by
+    (qpat_x_assum `bb.bb_instructions = _` (fn th => once_rewrite_tac[th]) >>
+     simp[MAP_APPEND, Abbr `d`, Abbr `u`]) >>
+  simp[transform_block_def, transform_insts_def] >>
+  pop_assum SUBST1_TAC >>
+  qabbrev_tac `p = MAP (transform_inst dfg) pre` >>
+  qabbrev_tac `m = MAP (transform_inst dfg) mid` >>
+  qabbrev_tac `s = MAP (transform_inst dfg) post` >>
+  Cases_on `is_pseudo d.inst_opcode` >>
+  Cases_on `is_terminator u.inst_opcode` >>
+  simp[FILTER_APPEND] >>
+  qabbrev_tac `pp = FILTER (\inst. is_pseudo inst.inst_opcode) p` >>
+  qabbrev_tac `pm = FILTER (\inst. is_pseudo inst.inst_opcode) m` >>
+  qabbrev_tac `ps = FILTER (\inst. is_pseudo inst.inst_opcode) s` >>
+  qabbrev_tac `rp = FILTER (\inst. ~is_pseudo inst.inst_opcode /\ ~is_terminator inst.inst_opcode) p` >>
+  qabbrev_tac `rm = FILTER (\inst. ~is_pseudo inst.inst_opcode /\ ~is_terminator inst.inst_opcode) m` >>
+  qabbrev_tac `rs = FILTER (\inst. ~is_pseudo inst.inst_opcode /\ ~is_terminator inst.inst_opcode) s` >>
+  qabbrev_tac `tp = FILTER (\inst. is_terminator inst.inst_opcode) p` >>
+  qabbrev_tac `tm = FILTER (\inst. is_terminator inst.inst_opcode) m` >>
+  qabbrev_tac `ts = FILTER (\inst. is_terminator inst.inst_opcode) s` >>
+  qexistsl_tac
+    [`if is_pseudo d.inst_opcode then LENGTH pp
+      else LENGTH pp + LENGTH pm + LENGTH ps + LENGTH rp`,
+     `if is_terminator u.inst_opcode then
+        LENGTH pp + LENGTH pm + LENGTH ps + LENGTH rp + LENGTH rm + LENGTH rs +
+        LENGTH tp + LENGTH tm + 1
+      else LENGTH pp + LENGTH pm + LENGTH ps + LENGTH rp + LENGTH rm + 1`] >>
+  simp[EL_APPEND_EQN, LENGTH_APPEND] >>
+  qmatch_goalsub_abbrev_tac `EL k (u::tail)` >>
+  `k = 0` by (qunabbrev_tac `k` >> decide_tac) >> simp[]
+QED
+
 Theorem transform_block_succs:
   !dfg bb. bb_well_formed bb ==> bb_succs (transform_block dfg bb) = bb_succs bb
 Proof
@@ -930,4 +959,166 @@ Theorem exec_block_transform_identity:
     exec_block fuel ctx (transform_block dfg bb) s = exec_block fuel ctx bb s
 Proof
   rw[]
+QED
+
+Theorem bb_pseudo_segments:
+  bb_well_formed bb /\ pseudos_prefix bb ==>
+  ?phis params rest.
+    bb.bb_instructions = phis ++ params ++ rest /\
+    EVERY (\i. i.inst_opcode = PHI) phis /\
+    EVERY (\i. is_param_opcode i.inst_opcode) params /\
+    EVERY (\i. ~is_pseudo i.inst_opcode) rest
+Proof
+  strip_tac >>
+  `?phis tail. bb.bb_instructions = phis ++ tail /\
+    EVERY (\i. i.inst_opcode = PHI) phis /\
+    EVERY (\i. i.inst_opcode <> PHI) tail` by
+    (qspecl_then [`\i. i.inst_opcode = PHI`, `bb.bb_instructions`]
+       mp_tac every_prefix_split >> fs[bb_well_formed_def] >> metis_tac[]) >>
+  `?params rest. tail = params ++ rest /\
+    EVERY (\i. is_pseudo i.inst_opcode) params /\
+    EVERY (\i. ~is_pseudo i.inst_opcode) rest` by
+    (qspecl_then [`\i. is_pseudo i.inst_opcode`, `tail`]
+       mp_tac every_prefix_split >> simp[] >> disch_then (irule o iffLR) >>
+     rpt strip_tac >> fs[pseudos_prefix_def] >>
+     first_x_assum (qspecl_then [`LENGTH phis + i`, `LENGTH phis + j`] mp_tac) >>
+     simp[EL_APPEND2]) >>
+  qexistsl [`phis`, `params`, `rest`] >> gvs[EVERY_APPEND] >>
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  first_assum (drule_then assume_tac) >>
+  `i.inst_opcode <> PHI /\ is_pseudo i.inst_opcode` by metis_tac[] >>
+  Cases_on `i.inst_opcode` >> gvs[is_pseudo_def, is_param_opcode_def]
+QED
+
+Theorem bb_pseudo_prefix_layout:
+  bb_well_formed bb /\ pseudos_prefix bb ==>
+  case (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions,
+        FILTER (\i. is_param_opcode i.inst_opcode) bb.bb_instructions) of
+    (phis, params) =>
+     bb.bb_instructions = phis ++ params ++
+       DROP (LENGTH phis + LENGTH params) bb.bb_instructions /\
+     EVERY (\i. i.inst_opcode = PHI) phis /\
+     EVERY (\i. is_param_opcode i.inst_opcode) params /\
+     EVERY (\i. ~is_pseudo i.inst_opcode)
+       (DROP (LENGTH phis + LENGTH params) bb.bb_instructions)
+Proof
+  strip_tac >> drule_all bb_pseudo_segments >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> PHI) (params ++ rest)` by
+    (fs[EVERY_APPEND, EVERY_MEM] >> metis_tac[is_pseudo_def, is_param_opcode_def]) >>
+  `FILTER (\i. is_param_opcode i.inst_opcode) phis = []` by
+    (fs[listTheory.FILTER_EQ_NIL, EVERY_MEM] >> rpt strip_tac >>
+     `i.inst_opcode = PHI` by metis_tac[] >> gvs[is_param_opcode_def]) >>
+  `FILTER (\i. is_param_opcode i.inst_opcode) params = params` by
+    (simp[listTheory.FILTER_EQ_ID]) >>
+  `FILTER (\i. is_param_opcode i.inst_opcode) rest = []` by
+    (simp[listTheory.FILTER_EQ_NIL, EVERY_MEM] >>
+     fs[EVERY_MEM] >> metis_tac[is_pseudo_def, is_param_opcode_iff]) >>
+  `TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions = phis` by
+    (asm_rewrite_tac[] >> rewrite_tac[GSYM APPEND_ASSOC] >>
+     irule take_phi_prefix_append_no_phi >> simp[]) >>
+  simp[LET_THM, FILTER_APPEND, DROP_APPEND, EVERY_APPEND,
+       DROP_LENGTH_TOO_LONG]
+QED
+
+Triviality bb_suffix_terminator_partition:
+  bb_well_formed bb /\ bb.bb_instructions = pre ++ rest ==>
+  FILTER (\i. ~is_terminator i.inst_opcode) rest ++
+  FILTER (\i. is_terminator i.inst_opcode) rest = rest
+Proof
+  strip_tac >>
+  `?xs ys. rest = xs ++ ys /\
+    EVERY (\i. ~is_terminator i.inst_opcode) xs /\
+    EVERY (\i. is_terminator i.inst_opcode) ys` by
+    (qspecl_then [`\i. ~is_terminator i.inst_opcode`, `rest`]
+       mp_tac every_prefix_split >> simp[] >> disch_then (irule o iffLR) >>
+     rpt strip_tac >> fs[bb_well_formed_def] >>
+     spose_not_then assume_tac >>
+     qpat_x_assum `!k. k < _ /\ is_terminator _ ==> _`
+       (qspec_then `LENGTH pre + i` mp_tac) >>
+     simp[EL_APPEND2] >> decide_tac) >>
+  `FILTER (\i. ~is_terminator i.inst_opcode) xs = xs /\
+   FILTER (\i. is_terminator i.inst_opcode) xs = [] /\
+   FILTER (\i. ~is_terminator i.inst_opcode) ys = [] /\
+   FILTER (\i. is_terminator i.inst_opcode) ys = ys` by
+    (fs[listTheory.FILTER_EQ_ID, listTheory.FILTER_EQ_NIL, EVERY_MEM]) >>
+  simp[FILTER_APPEND]
+QED
+
+Theorem transform_insts_pseudo_segments:
+  bb_well_formed bb /\ bb.bb_instructions = phis ++ params ++ rest /\
+  EVERY (\i. i.inst_opcode = PHI) phis /\
+  EVERY (\i. is_param_opcode i.inst_opcode) params /\
+  EVERY (\i. ~is_pseudo i.inst_opcode) rest ==>
+  transform_insts dfg bb.bb_instructions =
+    FILTER (\i. phi_single_origin dfg i = NONE) phis ++ params ++
+    MAP (transform_inst dfg)
+      (FILTER (\i. ?r. phi_single_origin dfg i = SOME r) phis) ++ rest
+Proof
+  strip_tac >>
+  `EVERY (\i. i.inst_opcode <> PHI) (params ++ rest)` by
+    (fs[EVERY_APPEND, EVERY_MEM] >> metis_tac[is_pseudo_def, is_param_opcode_def]) >>
+  `MAP (transform_inst dfg) (params ++ rest) = params ++ rest` by
+    (`MAP (transform_inst dfg) (params ++ rest) = MAP I (params ++ rest)`
+       suffices_by simp[] >>
+     irule MAP_CONG >> simp[] >> fs[EVERY_MEM] >>
+     metis_tac[transform_inst_non_phi, is_phi_inst_def]) >>
+  `FILTER (\i. ~is_terminator i.inst_opcode) rest ++
+   FILTER (\i. is_terminator i.inst_opcode) rest = rest` by
+    (irule bb_suffix_terminator_partition >> qexistsl [`bb`, `phis ++ params`] >> simp[]) >>
+  `FILTER (\i. is_pseudo i.inst_opcode) params = params /\
+   FILTER (\i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode) params = [] /\
+   FILTER (\i. is_terminator i.inst_opcode) params = []` by
+    (simp[listTheory.FILTER_EQ_ID, listTheory.FILTER_EQ_NIL, EVERY_MEM] >>
+     fs[EVERY_MEM] >> rpt strip_tac >>
+     `is_param_opcode i.inst_opcode` by metis_tac[] >>
+     qpat_x_assum `is_param_opcode i.inst_opcode` mp_tac >>
+     pure_rewrite_tac[is_param_opcode_iff] >> strip_tac >>
+     gvs[is_pseudo_def, is_terminator_def]) >>
+  `FILTER (\i. is_pseudo i.inst_opcode) rest = [] /\
+   FILTER (\i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode) rest =
+     FILTER (\i. ~is_terminator i.inst_opcode) rest` by
+    (simp[listTheory.FILTER_EQ_NIL, rich_listTheory.FILTER_EQ] >> fs[EVERY_MEM]) >>
+  `FILTER (\i. is_pseudo i.inst_opcode) (MAP (transform_inst dfg) phis) =
+   FILTER (\i. phi_single_origin dfg i = NONE) phis` by
+    (`!xs. EVERY (\i. i.inst_opcode = PHI) xs ==>
+       FILTER (\i. is_pseudo i.inst_opcode) (MAP (transform_inst dfg) xs) =
+       FILTER (\i. phi_single_origin dfg i = NONE) xs`
+       suffices_by metis_tac[] >>
+     POP_ASSUM_LIST (K all_tac) >> Induct >> simp[] >> strip_tac >>
+     Cases_on `phi_single_origin dfg h` >>
+     simp[transform_inst_def, is_pseudo_def]) >>
+  `FILTER (\i. is_terminator i.inst_opcode) (MAP (transform_inst dfg) phis) = []` by
+    (simp[FILTER_MAP, listTheory.FILTER_EQ_NIL, EVERY_MAP, EVERY_MEM,
+          transform_inst_preserves_terminator] >>
+     fs[EVERY_MEM] >> metis_tac[is_terminator_not_phi]) >>
+  asm_rewrite_tac[transform_insts_def, LET_THM, GSYM APPEND_ASSOC,
+                  MAP_APPEND, FILTER_APPEND] >>
+  BETA_TAC >> asm_rewrite_tac[FILTER_APPEND] >>
+  asm_simp_tac pure_ss [filter_regular_transform_phi_prefix] >>
+  asm_rewrite_tac[GSYM APPEND_ASSOC, APPEND]
+QED
+
+Theorem transform_insts_pseudo_prefix_layout:
+  bb_well_formed bb /\ pseudos_prefix bb ==>
+  case (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions,
+        FILTER (\i. is_param_opcode i.inst_opcode) bb.bb_instructions) of
+    (phis, params) => transform_insts dfg bb.bb_instructions =
+    FILTER (\i. phi_single_origin dfg i = NONE) phis ++ params ++
+    MAP (transform_inst dfg)
+      (FILTER (\i. ?r. phi_single_origin dfg i = SOME r) phis) ++
+    DROP (LENGTH phis + LENGTH params) bb.bb_instructions
+Proof
+  strip_tac >> drule_all bb_pseudo_prefix_layout >>
+  simp[LET_THM] >> strip_tac >>
+  irule transform_insts_pseudo_segments >> simp[]
+QED
+
+Theorem transform_phi_prefix_lengths:
+  !dfg phis.
+  LENGTH (FILTER (\i. phi_single_origin dfg i = NONE) phis) +
+  LENGTH (MAP (transform_inst dfg)
+    (FILTER (\i. ?r. phi_single_origin dfg i = SOME r) phis)) = LENGTH phis
+Proof
+  gen_tac >> Induct >> simp[] >>
+  Cases_on `phi_single_origin dfg h` >> gvs[]
 QED

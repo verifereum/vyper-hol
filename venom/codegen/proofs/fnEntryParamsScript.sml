@@ -35,7 +35,7 @@ Proof
   simp[eval_phis_def, phi_prefix_length_def]
 QED
 
-Theorem entry_prefix_fields[local]:
+Theorem entry_prefix_fields:
   (entry_bind_pairs (entry_param_pairs s (TAKE k insts)) s
      with vs_inst_idx := k).vs_current_bb = s.vs_current_bb /\
   (entry_bind_pairs (entry_param_pairs s (TAKE k insts)) s
@@ -46,14 +46,14 @@ Proof
   simp[entry_bind_pairs_normal]
 QED
 
-Theorem entry_prefix_zero[local]:
+Theorem entry_prefix_zero:
   (entry_bind_pairs (entry_param_pairs s (TAKE 0 insts)) s
      with vs_inst_idx := 0) = (s with vs_inst_idx := 0)
 Proof
   simp[entry_param_pairs_def]
 QED
 
-Theorem entry_prefix_step[local]:
+Theorem entry_prefix_step:
   EVERY (entry_param_shape s) insts /\ k < LENGTH insts ==>
   step_inst fuel ctx (EL k insts)
     (entry_bind_pairs (entry_param_pairs s (TAKE k insts)) s
@@ -74,7 +74,7 @@ Proof
        rich_listTheory.FOLDL_APPEND]
 QED
 
-Theorem entry_prefix_enters[local]:
+Theorem entry_prefix_enters:
   !fn cp s st ra rest. codegen_ready_fn fn /\ fn_entry_state_rel cp fn s st ra rest ==>
   enters_block fn s (s with vs_inst_idx := 0)
 Proof
@@ -95,7 +95,7 @@ Proof
   Cases_on `inst.inst_opcode = PHI` >> gvs[]
 QED
 
-Theorem entry_prefix_active[local]:
+Theorem entry_prefix_active:
   fn.fn_blocks <> [] /\
   s.vs_current_bb = (HD fn.fn_blocks).bb_label /\
   k < LENGTH (get_params (HD fn.fn_blocks).bb_instructions) ==>
@@ -117,7 +117,7 @@ Proof
     (fn th => simp[SimpLHS, Once th, EL_APPEND_EQN])
 QED
 
-Theorem entry_prefix_inv[local]:
+Theorem entry_prefix_inv:
   !fn cp s st ra rest Inv ctx.
     codegen_ready_fn fn /\ fn_entry_state_rel cp fn s st ra rest /\
     LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
@@ -154,7 +154,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem entry_shallow_swap_inventory[local]:
+Theorem entry_shallow_swap_inventory:
   d <= 16 /\ do_swap d ps = (ops, ps') ==>
   !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
     MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
@@ -171,7 +171,7 @@ Proof
   gvs[stack_swap_def, MEM_LUPDATE, EL_LUPDATE] >> metis_tac[listTheory.EL_MEM]
 QED
 
-Theorem entry_pop_fold_inventory[local]:
+Theorem entry_pop_fold_inventory:
   !items ops ps at.
     MEM at (SND (FOLDL (\(ops, ps) v.
       case stack_get_depth v ps.ps_stack of
@@ -211,7 +211,7 @@ Proof
   metis_tac[rich_listTheory.MEM_TAKE]
 QED
 
-Theorem entry_popmany_inventory[local]:
+Theorem entry_popmany_inventory:
   popmany_plan items ps = (ops, ps') ==>
   !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
     MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
@@ -231,7 +231,7 @@ Proof
   gvs[Abbr `f`, Abbr `initial`] >> metis_tac[]
 QED
 
-Theorem entry_params_inventory[local]:
+Theorem entry_params_inventory:
   !ps0 ch growth spill_base lbl_ctr liveness fn ops ps1.
     ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
     prepare_params_plan liveness fn ps0 = (ops, ps1) ==>
@@ -267,7 +267,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem entry_param_normalize[local]:
+Theorem entry_param_normalize:
   codegen_ready_fn fn /\
   MEM at (MAP (\i. Var (HD i.inst_outputs))
     (get_params (HD fn.fn_blocks).bb_instructions)) ==>
@@ -298,7 +298,7 @@ Proof
   simp[Once normalize_operand_def] >> gvs[is_param_opcode_iff]
 QED
 
-Theorem entry_plan_normalize[local]:
+Theorem entry_plan_normalize:
   codegen_ready_fn fn /\
   ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
   prepare_params_plan liveness fn ps0 = (ops, ps1) ==>
@@ -309,7 +309,7 @@ Proof
   metis_tac[entry_params_inventory]
 QED
 
-Theorem entry_prefix_asm[local]:
+Theorem entry_prefix_asm:
   !ctx cp lo o2pc prog liveness fn ch growth spill_base lbl_ctr ps0
    param_ops ps1 r vs a ra rest vp.
     lo = SND (compute_label_offsets prog) /\

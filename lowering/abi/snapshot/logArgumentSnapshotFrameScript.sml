@@ -5,7 +5,7 @@
    required operand bounds for the fresh-state corollary. *)
 Theory logArgumentSnapshotFrame
 Ancestors
-  materializeValuePath memorySnapshotFrame memoryValueSnapshotSource memoryValueTyping
+  loweringStateRelDefs materializeValuePath memorySnapshotFrame memoryValueSnapshotSource memoryValueTyping
   typedLogArgs typedLogArgsFrames typedSArrayDynInvariant abiLogTopicsReady
   allocationGrowth abiAllocationFrame abiAllocatedWindows abiFieldOperands abiStaticLoopCode abiStateFrame
   valueLoadProps typeLayoutProps typedCopyProducer compileVyper vyperTypeContract vyperContext

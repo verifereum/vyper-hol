@@ -3,13 +3,11 @@
 Theory abiProofs
 Ancestors
   (* Descriptor, physical-scratch and source-value encoding. *)
-  abiEncoderCorrectArray abiEncoderCorrectComplex
   abiEncoderFragmentBridge abiEncoderLeafSafety
-  abiScratchEncoderArray abiScratchEncoderComplex
   (* Canonical and actual-source decoding. *)
   abiDecoderCanonicalBound abiDecoderNestedArrayLoop
   abiDecoderReadabilityBoundary abiDecoderSingletonBulk
-  abiDecoderStatic abiDecoderUnwrapExecute abiScratchDecoderIndex
+  abiDecoderStatic abiScratchDecoderIndex
   ctorAbiActual ctorArgDecode
   (* Builtins, empty values and caller inputs. *)
   abiBuiltinFlatChecks abiBuiltinHeaderReach abiBuiltinValidCaller

@@ -162,25 +162,6 @@ QED
 
 (* The checker/lowering interface lives on the lowering side: the type system
    does not depend on compileEnv. *)
-Theorem membership_element_word_boundary:
-  !ty. is_prim_word_type ty = is_word_type ty
-Proof
-  Cases >> simp[is_prim_word_type_def, is_word_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[is_prim_word_type_def, is_word_type_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[is_prim_word_type_def, is_word_type_def]
-QED
-
-Theorem membership_checker_lowering_boundary:
-  (bop = In \/ bop = NotIn) /\
-  well_typed_binop ty bop needle_ty (ArrayT elem_ty bd) ==>
-  needle_ty = elem_ty /\ is_word_type elem_ty
-Proof
-  metis_tac[well_typed_membership_array_element,
-            membership_element_word_boundary]
-QED
-
 (* Symbolic bounds cover both literal/static and variable/dynamic arrays.
    Fixed bytes wider than 32 are not primitive words either. *)
 Theorem membership_checker_reject_aggregate_test:

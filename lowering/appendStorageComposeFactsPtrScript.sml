@@ -3,7 +3,7 @@ Theory appendStorageComposeFactsPtr
 Ancestors
   stmtSimAppendStorageCompose stmtSimDefs
   accountsRelProps appendStorageRel exprLowering emitHelper emitHelperProps
-  compileEnv venomState vyperStorage vfmState list rich_list
+  compileEnv loweringStateRelDefs venomState vyperStorage vfmState list rich_list
   exprSimDefs exprLoweringProps vyperState vyperValue vyperStorageBackend venomInst
 
 Theorem declared_storage_head_agree:

@@ -3,7 +3,7 @@
    containing function. Generated output names may already be defined. *)
 Theory abiBytestringProps
 Ancestors
-  abiBytestringCode abiBytestringExec ssaOperandFrame fragBlockPath fragExec
+  loweringStateRelDefs abiBytestringCode abiBytestringExec ssaOperandFrame fragBlockPath fragExec
   abiEncoder compileEnv exprLoweringProps emitHelperProps instIdxIndep
   venomState venomExecSemantics venomInst list rich_list finite_map
 

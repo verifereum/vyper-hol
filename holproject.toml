@@ -11,17 +11,15 @@ roots = [
   "vyperHolScript.sml",
   # hand-written tests of the semantics, frontend and test runner
   "tests/vyperTestsHolScript.sml",
-  # concrete checks of the lowering and compiler: parity, membership, audits
+  # concrete checks of the lowering and compiler
   "lowering/loweringChecksScript.sml",
   # concrete checks of Venom execution, the passes and codegen
   "venom/venomChecksScript.sml",
-  # pinned-Python bytecode witnesses, a root of their own so CI can shard them
-  "lowering/evalCompilerWitnessesScript.sml",
 ]
 
 [[executable]]
 name = "bytecode_parity_native"
-output = "lowering/defs/bytecode/native/bytecode_parity_native.exe"
+output = "bytecode/native/bytecode_parity_native.exe"
 objects = ["compilerNativeParity"]
 
 [actions.compilerNativeParity]

@@ -35,14 +35,15 @@ on reference source compilation.
 - [Lowering](../../lowering/defs/stmtLoweringScript.sml): literal-operand range
   branch; [source](../../semantics/vyperInterpreterScript.sml): For/range bound.
 - [Frontend](../../frontend/jsonToVyperExprScript.sml): range-bound construction.
-- [Four ASTs](../../lowering/defs/bytecode/eval/evalCompilerScript.sml),
-  [storage loop AST](../../lowering/defs/bytecode/eval/evalCompilerSubsetStateScript.sml).
-- [Exact regression exports](../../lowering/defs/bytecode/eval/evalCompilerRangeScript.sml):
+- [Four ASTs](../../bytecode/eval/evalCompilerScript.sml),
+  [storage loop AST](../../bytecode/eval/evalCompilerSubsetStateScript.sml).
+- [Exact regression exports](../../bytecode/eval/evalCompilerRangeScript.sml):
   `range_literal_operands_skip_checks`, `range_nonliteral_operands_checked`,
   `for_pass_source_result`, `for_accum_source_result`, `for_continue_source_result`,
   `for_break_source_result`, `storage_scalar_loop_source_result`.
-- [Original for_pass source](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/for_pass.vy),
-  [original storage loop source](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/storage_scalar_loop.vy).
+- [Original for_pass source](../../bytecode/python-o1-no-asm-opt-sources/for_pass.vy),
+  [original storage loop source](../../bytecode/python-o1-no-asm-opt-sources/storage_scalar_loop.vy),
+  and [native byte parity](../../bytecode/native/compilerNativeEmitScript.sml).
 
 Pinned `vyper/codegen/stmt.py:228–288`, `Stmt._parse_For_range`: without explicit
 bound, uses literal `end.int_value()-start.int_value()` for rounds and bound;

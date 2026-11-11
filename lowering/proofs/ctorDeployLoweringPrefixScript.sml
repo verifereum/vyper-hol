@@ -195,7 +195,8 @@ Proof
   dep_rewrite.DEP_REWRITE_TAC[deploy_prefix_send_value_ready] >>
   simp[e2eDeployDefsTheory.deploy_evaluation_context_def,
        initial_evaluation_context_def, initial_state_def,
-       vyperStateTheory.return_def] >> gvs[]
+       vyperStateTheory.return_def,
+       e2eDeployDefsTheory.value_transfer_created_in_tx] >> gvs[]
 QED
 
 Theorem deploy_prefix_no_start_nonpayable:
@@ -408,16 +409,17 @@ Theorem deploy_prefix_guard_abort:
   s.vs_inst_idx = 0 /\ s.vs_call_ctx.cc_callvalue <> 0w ==>
   ?ss. exec_block fuel ctx bb s = Abort Revert_abort ss
 Proof
+  (* per-opcode step equations instead of unfolding the whole dispatcher,
+     which ran over the step limit *)
   rpt gen_tac >> strip_tac >>
   simp[Once venomExecSemanticsTheory.exec_block_def, venomInstTheory.get_instruction_def,
-       venomExecSemanticsTheory.step_inst_non_invoke,
-       venomExecSemanticsTheory.step_inst_base_def,
-       venomExecSemanticsTheory.exec_read0_def] >>
-  simp[venomInstTheory.is_terminator_def] >>
+       venomExecSemanticsTheory.step_inst_non_invoke] >>
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomExecSemanticsTheory.exec_read0_def, venomInstTheory.is_terminator_def] >>
   simp[Once venomExecSemanticsTheory.exec_block_def,
        venomInstTheory.get_instruction_def, venomStateTheory.update_var_def,
-       venomExecSemanticsTheory.step_inst_non_invoke,
-       venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.step_inst_non_invoke] >>
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
        venomExecSemanticsTheory.exec_pure1_def,
        venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
        venomExecSemanticsTheory.bool_to_word_def] >>
@@ -425,10 +427,10 @@ Proof
        venomExecSemanticsTheory.bool_to_word_def] >>
   simp[Once venomExecSemanticsTheory.exec_block_def,
        venomInstTheory.get_instruction_def,
-       venomExecSemanticsTheory.step_inst_non_invoke,
-       venomExecSemanticsTheory.step_inst_base_def,
-       venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE]
+       venomExecSemanticsTheory.step_inst_non_invoke] >>
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomStateTheory.update_var_def, venomStateTheory.eval_operand_def,
+       venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem deploy_prefix_context_guard_abort:

@@ -1,7 +1,7 @@
 (* Code-free top-level pointer views and their live storage boundary. *)
 Theory exprSimPtrTopLevelViews
 Ancestors
-  bodyPtrDefs ptrDiscipline compileEnv context vyperAST vyperState
+  bodyPtrDefs ptrDiscipline compileEnv loweringStateRelDefs context vyperAST vyperState
   exprSimTopLevelProps exprSimHypsDefs exprSimTopLevelStorage exprSimTopLevelImmutable
   exprSimHyps exprSimDefs exprSimProps exprLowering exprLoweringProps
   gasSummary fragGasPathPtr gasContext loweringPosts

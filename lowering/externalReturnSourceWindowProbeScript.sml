@@ -1,7 +1,7 @@
 Theory externalReturnSourceWindowProbe
 Ancestors
   abiEncoderSourceProducer abiEncoderSourceWindow abiEncoderWindow abiEncoderOpenInput
-  contractABI valueEncoding loweringPosts vyperABI vyperValue words list rich_list
+  contractABI valueEncoding valueEncodingDefs loweringPosts vyperABI vyperValue words list rich_list
 
 Theorem return_source_window_probe:
   abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\

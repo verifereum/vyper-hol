@@ -1,6 +1,6 @@
 Theory makeSsaCurrentRenameTrace
 Ancestors
-  makeSsaCurrentAllocation makeSsaCurrentDefs makeSsaCurrentProps
+  makeSsaCurrentAllocation makeSsaDefs makeSsaCurrentProps
   makeSsaCurrentTokens venomInst list alist pair combin
 
 (* An annotation carries the definition token and its immutable source owner.

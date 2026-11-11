@@ -3,7 +3,7 @@
 Theory annAssignPtrMemoryAssign
 Ancestors
  annAssignPtrMemoryStageFrame annAssignPtrDeclarationPost stmtSimDeclStore
- exprLoweringProps compileEnv valueEncoding finite_map
+ exprLoweringProps compileEnv loweringStateRelDefs valueEncoding finite_map
 
 Theorem annassign_memory_scope_state_ptr:
  !ctx func cenv cx es s id p sz w inst v tv sc rest assignable.

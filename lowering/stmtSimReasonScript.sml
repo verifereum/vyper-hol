@@ -39,7 +39,7 @@ Ancestors
   loweringHalt gasOutcome gasSummary gasSummaryCompose gasContext gasExemptCert
   gasCount fragGasPath fragGasMode fragGasSeq fragGasSeqAbort venomInstProofs
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding
+  compileEnv loweringStateRelDefs valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperExprNoControl
   vyperStatePreservation
   venomExecSemantics venomExecProofs venomInst venomState

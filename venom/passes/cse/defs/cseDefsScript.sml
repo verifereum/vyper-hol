@@ -33,7 +33,7 @@
 
 Theory cseDefs
 Ancestors
-  analysisSimDefs availExprDefs dfgDefs passSharedDefs venomEffects While
+  passTransform availExprDefs dfgDefs passSharedDefs venomEffects While
 
 (* ===== Opcodes excluded from CSE ===== *)
 
@@ -69,10 +69,11 @@ End
 
 (* Python: SMALL_EXPRESSION = 1.
    Only eliminate cross-block if expr.depth > SMALL_EXPRESSION.
-   depth(Var/Lit) = 0, depth(Op _ args) = 1 + max(map depth args) *)
+   depth(Var/Lit/Label) = 0, depth(Op _ args) = 1 + max(map depth args) *)
 Definition expr_depth_def:
   (expr_depth (ExprVar _) = 0n) /\
   (expr_depth (ExprLit _) = 0n) /\
+  (expr_depth (ExprLabel _) = 0n) /\
   (expr_depth (ExprOp _ args) = 1 + expr_depth_list args) /\
   (expr_depth_list [] = 0n) /\
   (expr_depth_list (e :: es) =
@@ -247,7 +248,7 @@ Definition cse_inst_def:
     if cse_skip_opcode inst.inst_opcode then inst
     else if is_terminator inst.inst_opcode then inst
     else if inst.inst_opcode = INVOKE then inst
-    else if is_nonidempotent inst.inst_opcode then inst
+    else if avail_nonidempotent inst.inst_opcode then inst
     else
     let try_replace = \make_replacement.
       case cse_lookup canon dfg av inst of

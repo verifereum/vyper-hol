@@ -12,8 +12,8 @@ val source =
   qspecl_then [`tenv`, `sty`, `stv`] mp_tac bytestring_type_value >>
   asm_rewrite_tac[] >> strip_tac >>
   (conj_tac >-
-     (gvs[valueEncodingTheory.val_in_memory_def, venomStateTheory.mload_def,
-           valueEncodingTheory.mem_word_at_def] >> metis_tac[]) >>
+     (gvs[valueEncodingDefsTheory.val_in_memory_def, venomStateTheory.mload_def,
+           valueEncodingDefsTheory.mem_word_at_def] >> metis_tac[]) >>
    gvs[] >> FIRST [drule robust_val_in_memory_bytes_clean,
                    drule robust_val_in_memory_string_clean] >> simp[]);
 
@@ -42,22 +42,32 @@ fun destination copied_window =
   qpat_x_assum `val_in_memory stv v _ _` kall_tac >>
   qspecl_then [`tenv`, `dty`, `dtv`] mp_tac bytestring_type_value >>
   asm_rewrite_tac[] >> strip_tac >>
-  gvs[valueEncodingTheory.val_in_memory_def,
-      valueEncodingTheory.mem_word_at_def, GSYM valueEncodingTheory.mem_bytes_at_def];
+  gvs[valueEncodingDefsTheory.val_in_memory_def,
+      valueEncodingDefsTheory.mem_word_at_def, GSYM valueEncodingDefsTheory.mem_bytes_at_def];
 
-fun robust (execution, exterior, copied_window, ambient) =
+(* The steps of a robust bytestring copy proof, called one after another
+   from the theorem's Proof so that each is timed as its own step:
+   intro >> execute (execution, exterior) >> [ambient >>] witness >>
+   conclude copied_window.  execute splits the bytes/string cases, so
+   conclude runs on each case. *)
+val intro =
   rpt gen_tac >> disch_tac >>
   `mload (w2n a) s = n2w len /\
    (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
-   (!i. w2n a+32 <= i /\ i < w2n a+32+len ==> i NOTIN tn.t_mem)` by source >>
+   (!i. w2n a+32 <= i /\ i < w2n a+32+len ==> i NOTIN tn.t_mem)` by source;
+
+fun execute (execution, exterior) =
   qpat_x_assum `_ /\ _` strip_assume_tac >>
   drule_all execution >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `Gf` (qx_choose_then `tnf` (qx_choose_then `sf` strip_assume_tac)))) >>
   drule exterior >> disch_then drule >>
-  disch_then (assume_tac o SIMP_RULE bool_ss [AND_IMP_INTRO]) >>
-  ambient >>
-  qexistsl_tac [`Gf`, `tnf`, `sf`] >> asm_rewrite_tac[] >>
-  (conj_tac >- destination copied_window >> gvs[] >>
-   rpt strip_tac >> qpat_x_assum `!ft fv p m. _` irule >> asm_rewrite_tac[]);
+  disch_then (assume_tac o SIMP_RULE bool_ss [AND_IMP_INTRO]);
+
+val witness = qexistsl_tac [`Gf`, `tnf`, `sf`] >> asm_rewrite_tac[];
+
+fun conclude copied_window =
+  conj_tac >- destination copied_window >> gvs[] >>
+  rpt strip_tac >> qpat_x_assum `!ft fv p m. _` irule >> asm_rewrite_tac[];
+
 end

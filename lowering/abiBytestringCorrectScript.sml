@@ -4,7 +4,7 @@
    Helpers state the memory layout, word bounds and preliminary-store frame. *)
 Theory abiBytestringCorrect
 Ancestors
-  abiBytestringProps abiBytestringMemory abiBytestringExec abiBytestringCode
+  valueEncodingDefs abiBytestringProps abiBytestringMemory abiBytestringExec abiBytestringCode
   memoryReadProps valueEncoding valueEncodingProps vyperValue vyperAST
   fragBlockPath fragExec abiEncoder compileEnv exprLoweringProps
   venomState venomExecSemantics venomInst contractABI list words arithmetic

@@ -1,7 +1,7 @@
 Theory externalReturnIntcallMetadata
 Ancestors
   externalReturnPhysicalMetadata externalReturnPackage compileVyper compileEnv
-  bodySim entryStateRel vyperAST
+  bodySim entryStateRel structFieldsProps vyperAST
 
 Theorem return_compute_info_bufferless:
   compute_func_info sft ret sz ats = (0,0,pvs) ==>

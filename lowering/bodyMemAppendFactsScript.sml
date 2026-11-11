@@ -3,7 +3,7 @@ Theory bodyMemAppendFacts
 Ancestors
   stmtSimAppendStorageCompose accountsRelProps vyperStorage vyperStorageBackend
   vyperValue vfmState vyperInterpreter vyperState stmtSimDefs
-  exprLowering compileEnv emitHelper emitHelperProps exprLoweringProps
+  exprLowering compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   instMemFrontier fragExecMem memSafeRun venomMemDefs venomInst venomState
   venomExecSemantics list rich_list
 

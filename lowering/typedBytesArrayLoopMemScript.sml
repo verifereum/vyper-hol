@@ -2,8 +2,8 @@
 Theory typedBytesArrayLoopMem
 Ancestors
   typedArrayLoopLayoutMem typedBytesArrayMem typedArrayLoopControlMem
-  memContinuation fragExec fragExecMem instMemFrontier exprSimAggregateEncoding valueEncoding valueEncodingProps
-  venomState venomInst venomExecSemantics compileEnv exprLoweringProps emitHelperProps
+  memContinuation fragExec fragExecMem instMemFrontier exprSimAggregateEncoding valueEncoding valueEncodingDefs valueEncodingProps
+  venomState venomInst venomExecSemantics compileEnv loweringStateRelDefs exprLoweringProps emitHelperProps
   vyperValue vyperTyping words arithmetic list rich_list vfmConstants
 
 Definition typed_bytes_array_prefix_def:

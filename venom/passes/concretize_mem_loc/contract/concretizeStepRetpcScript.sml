@@ -2,6 +2,7 @@ Theory concretizeStepRetpc
 Ancestors
   concretizeStepStructure unitShapeDefs concretizeMemLocDefs
   passSharedDefs passSimulationDefs venomInst venomWf unitLabelMapIdentity list
+  passTransform
 
 Theorem concretize_positions_retained_member:
   MEM i (fn_insts fn) /\ i.inst_opcode <> ALLOCA /\ i.inst_opcode <> NOP ==>

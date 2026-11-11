@@ -541,7 +541,7 @@ Proof
         gvs[LIST_ELEM_COUNT_THM]
 QED
 
-Theorem residual_budget_wf_do_swap[local]:
+Theorem residual_budget_wf_do_swap:
   !base pending dist ps ops ps'.
     residual_budget_wf base pending ps /\
     dist < LENGTH ps.ps_stack /\
@@ -656,7 +656,7 @@ Proof
      >> metis_tac[]
 QED
 
-Theorem do_spill_at_inventory_count[local]:
+Theorem do_spill_at_inventory_count:
   !d ps spill_ops ps'.
     spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
     d < LENGTH ps.ps_stack /\ d <= 16 /\
@@ -686,7 +686,7 @@ Proof
        simp[LIST_ELEM_COUNT_THM] >>
      decide_tac
 QED
-Theorem residual_budget_wf_do_spill_at[local]:
+Theorem residual_budget_wf_do_spill_at:
   !base pending d ps ops ps'.
     residual_budget_wf base pending ps /\
     d < LENGTH ps.ps_stack /\ d <= 16 /\
@@ -800,7 +800,7 @@ Proof
   >> qspecl_then [`op`, `ps`] mp_tac do_restore_length >> simp[]
 QED
 
-Theorem reduce_depth_plan_residual_budget_wf[local]:
+Theorem reduce_depth_plan_residual_budget_wf:
   !fuel base pending target_op f ps ops ps'.
     residual_budget_wf base pending ps /\
     reduce_depth_plan fuel pending target_op f (LENGTH pending) ps =
@@ -1117,6 +1117,8 @@ Proof
   qexists_tac `x` >> simp[]
 QED
 
+
+Theorem input_mem_operand_vars = venomInstTheory.MEM_operand_vars_eq_Var
 
 Theorem emit_input_plan_inventory_accumulation:
   !operands ps opc nl iops ps1 x.
@@ -1604,7 +1606,7 @@ Proof
 QED
 
 (* Exchanging two in-range stack depths preserves the structural list facts. *)
-Theorem stack_poke_exchange_structural_wf[local]:
+Theorem stack_poke_exchange_structural_wf:
   !stk d1 d2.
     ALL_DISTINCT stk /\ d1 < LENGTH stk /\ d2 < LENGTH stk ==>
     ALL_DISTINCT
@@ -2228,7 +2230,7 @@ Proof
   strip_tac >> gvs[]
 QED
 
-Theorem reorder_restore_inventory_mono[local]:
+Theorem reorder_restore_inventory_mono:
   !op f target_len (ps : plan_state) x.
     LIST_ELEM_COUNT x ps.ps_stack +
       (if x IN FDOM ps.ps_spilled then 1 else 0) <=
@@ -3305,7 +3307,7 @@ Proof
   rpt strip_tac >> gvs[] >> fs[FLOOKUP_DEF]
 QED
 
-Theorem stack_swap_mem_subset[local]:
+Theorem stack_swap_mem_subset:
   !d stk at. MEM at (stack_swap d stk) ==> MEM at stk
 Proof
   rpt gen_tac >> Cases_on `stk = []` >- simp[stack_swap_def, LUPDATE_def] >>
@@ -3379,7 +3381,7 @@ Proof
   metis_tac[sortingTheory.PERM_MEM_EQ]
 QED
 
-Theorem reorder_restore_inventory_subset[local]:
+Theorem reorder_restore_inventory_subset:
   !op f n ps ops ps'.
     (case stack_get_unfixed_depth op f n ps.ps_stack of
        SOME _ => ([],ps)
@@ -3399,7 +3401,7 @@ Proof
   metis_tac[do_restore_inventory_subset]
 QED
 
-Theorem stack_poke_mem_subset[local]:
+Theorem stack_poke_mem_subset:
   !d op stk at. MEM at (stack_poke d op stk) ==> at = op \/ MEM at stk
 Proof
   simp[stack_poke_def, MEM_LUPDATE] >> metis_tac[EL_MEM]
@@ -4456,7 +4458,7 @@ Proof
   simp[] >> decide_tac
 QED
 
-Theorem do_restore_preserves_not_spilled[local]:
+Theorem do_restore_preserves_not_spilled:
   !op ps x.
     x NOTIN FDOM ps.ps_spilled ==>
     x NOTIN FDOM (SND (do_restore op ps)).ps_spilled

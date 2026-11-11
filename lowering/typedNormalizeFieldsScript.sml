@@ -1,7 +1,7 @@
 Theory typedNormalizeFields
 Ancestors
   typedNormalizeFrame typedBytesArrayMem externalReturnNormalizeMem abiDecoderFrame
-  context compileEnv emitHelper venomInst exprLoweringProps memContinuation venomState
+  context compileEnv loweringStateRelDefs emitHelper venomInst exprLoweringProps memContinuation venomState
   valueEncodingProps typedNormalizeContinuation typedNormalizeEntryBoundary
 
 (* Offsets are straight-line, even when the child they precede has a CFG. *)

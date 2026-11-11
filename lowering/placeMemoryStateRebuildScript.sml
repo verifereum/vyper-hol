@@ -2,7 +2,7 @@ Theory placeMemoryStateRebuild
 Ancestors
   placeMemoryPathRebuild placeMemoryLiveRegion placeMemoryAssignForward
   localPtrsProps exprLoweringProps loweringSlice vyperLookup vyperPlaceFrames
-  vyperPlaceWriteSoundness vyperState compileEnv stmtSimDefs
+  vyperPlaceWriteSoundness vyperState compileEnv loweringStateRelDefs stmtSimDefs
   finite_map list pair exprSimProps valueEncodingTyping loweringPosts
   vyperStoragePlaceProvenance exprSimHypsDefs vyperTypeStatePreservation words
   vyperTypeValues venomState arithmetic memoryValueEncoding

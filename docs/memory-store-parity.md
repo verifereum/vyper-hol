@@ -21,7 +21,7 @@ the existing finite-map compset and `fmap_to_alist_FEMPTY`, `i2w_pos` and
 substitution. The diagnostic per-source bound
 was 900 seconds; the proof-step timeout was unchanged.
 
-Fixtures named in [the pending list](../lowering/defs/bytecode/pending-5127-port.md)
+Fixtures named in [the pending list](../bytecode/pending-5127-port.md)
 are out of the parity checks until the compiler changes they depend on are
 ported; their MATCH entries below hold again once they are back.
 
@@ -117,11 +117,11 @@ To reproduce, generate the oracle with the pinned Python environment, then run
 checker outcomes, whitelist results, closed EVAL results, bytecode and any residuals:
 
 ```sh
-python lowering/defs/bytecode/memory_store_witnesses.py prepare \
+python bytecode/memory_store_witnesses.py prepare \
   --fixtures /tmp/memory-store-oracle --check
-python3 lowering/defs/bytecode/memory_store_witnesses.py probe \
+python3 bytecode/memory_store_witnesses.py probe \
   --repo WORKTREE --fixtures /tmp/memory-store-oracle --output RESULT_DIRECTORY
-python lowering/defs/bytecode/memory_store_witnesses.py execute \
+python bytecode/memory_store_witnesses.py execute \
   --fixtures /tmp/memory-store-oracle --output RESULT_DIRECTORY
 ```
 

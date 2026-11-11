@@ -2,7 +2,7 @@
 Theory abiCanonicalBytes
 Ancestors
   venomMemProps
-  abiDecoderTypedContract abiCanonicalHeadSize abiStaticAggregateProps valueEncoding
+  abiDecoderTypedContract abiCanonicalHeadSize abiStaticAggregateProps valueEncoding valueEncodingDefs
   valueEncodingProps contractABI words byte arithmetic list rich_list
 
 Theorem canonical_bytes_encoding:

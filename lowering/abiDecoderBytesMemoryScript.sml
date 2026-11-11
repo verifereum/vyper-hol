@@ -1,7 +1,7 @@
 (* The memory-only bytes tail writes just a snapshot prefix and padding. *)
 Theory abiDecoderBytesMemory
 Ancestors
-  abiDecoderBytesPhases abiDecoderContract valueEncodingProps valueEncoding
+  abiDecoderBytesPhases abiDecoderContract valueEncodingProps valueEncoding valueEncodingDefs
   venomState venomExecSemantics words list rich_list
 
 Theorem abi_decode_bytes_store_copy_prefix:

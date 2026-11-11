@@ -1,6 +1,6 @@
 Theory storageSubregionLive
 Ancestors
-  storageSubregionFrame storageCopyLive compileEnv vyperStoragePlaceRegion
+  storageSubregionFrame storageCopyLive compileEnv loweringStateRelDefs vyperStoragePlaceRegion
   words list
 
 Theorem storage_subregion_global_live:

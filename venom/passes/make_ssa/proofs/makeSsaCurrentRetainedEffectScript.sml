@@ -1,7 +1,7 @@
 Theory makeSsaCurrentRetainedEffect
 Ancestors
   makeSsaCurrentPrefixEffect makeSsaCurrentCleanupBoundary
-  makeSsaCurrentDefs o1FrameLockstep venomExecSemantics venomInst list
+  makeSsaDefs o1FrameLockstep venomExecSemantics venomInst list
 
 Theorem current_retained_phi_effect:
   !pre inst rest x p.

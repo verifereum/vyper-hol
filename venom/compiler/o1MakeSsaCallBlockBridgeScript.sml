@@ -1,7 +1,7 @@
 Theory o1MakeSsaCallBlockBridge
 Ancestors
   o1MakeSsaCallChecks o1MakeSsaTraversalFrames o1MakeSsaFormats
-  o1MakeSsaCallOwnership o1MakeSsaCallPaths unitShapeDefs makeSsaCurrentDefs
+  o1MakeSsaCallOwnership o1MakeSsaCallPaths unitShapeDefs makeSsaDefs
   list pred_set o1ContractMakeSsaSrcOpcodes simplifyCfgCallChecks o1MakeSsaReaching
 
 Theorem current_calls_flagged_phi_prefix:

@@ -3,7 +3,7 @@
    Helpers separate external state, typed RAM and allocator backing. *)
 Theory sourceMemoryFrames
 Ancestors
-  allocationGrowth sourceValueFrames localPtrsProps valueLoadProps memoryValueTyping
+  loweringStateRelDefs allocationGrowth sourceValueFrames localPtrsProps valueLoadProps memoryValueTyping
   typedStoreFrames typedSArrayDynInvariant abiStateFrame abiFieldOperands
   compileEnv valueEncoding memoryValueDefs vyperTypeEnv vyperTypeInvariants
   venomState venomExecSemantics finite_map list words arithmetic
@@ -12,11 +12,11 @@ Definition source_memory_separated_def:
   source_memory_separated cenv scopes before dst byte_count <=>
     (!name entry offset region_size. lookup_scopes name scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (MemLoc offset region_size) ==>
-      compileEnv$regions_disjoint offset (type_memory_size entry.type) dst byte_count) /\
+      loweringStateRelDefs$regions_disjoint offset (type_memory_size entry.type) dst byte_count) /\
     (!name entry p region_size ptr_addr. lookup_scopes name scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) /\
       lookup_var p before = SOME ptr_addr ==>
-      compileEnv$regions_disjoint (w2n ptr_addr) (type_memory_size entry.type) dst byte_count)
+      loweringStateRelDefs$regions_disjoint (w2n ptr_addr) (type_memory_size entry.type) dst byte_count)
 End
 
 Theorem source_pointer_lifetimes_mono:
@@ -83,13 +83,13 @@ Theorem source_memloc_copy_frame:
 Proof
   rpt gen_tac >> strip_tac >> drule_all scope_well_typed_lookup_scopes >> strip_tac >>
   drule_all vars_rel_memloc_value >> DISCH_TAC >>
-  `compileEnv$regions_disjoint offset (type_memory_size entry.type) dst (copy_count * type_memory_size ftv)` by
+  `loweringStateRelDefs$regions_disjoint offset (type_memory_size entry.type) dst (copy_count * type_memory_size ftv)` by
     (qpat_x_assum `source_memory_separated _ _ _ _ _`
        (mp_tac o CONJUNCT1 o REWRITE_RULE [source_memory_separated_def]) >>
      disch_then (qspecl_then [`name`, `entry`, `offset`, `region_size`] mp_tac) >> simp[]) >>
   mp_tac (Q.SPECL [`ftv`, `entry.type`, `entry.value`, `copy_count`, `dst`, `offset`,
     `before.vs_memory`, `after.vs_memory`] array_copy_frame_source) >>
-  impl_tac >- fs[compileEnvTheory.regions_disjoint_def] >> simp[]
+  impl_tac >- fs[loweringStateRelDefsTheory.regions_disjoint_def] >> simp[]
 QED
 
 Theorem vars_rel_copy_frame:
@@ -114,13 +114,13 @@ Theorem source_ptrvar_copy_frame:
     memory_value_rel entry.type entry.value (w2n ptr_addr) after.vs_memory
 Proof
   rpt gen_tac >> strip_tac >> drule_all scope_well_typed_lookup_scopes >> strip_tac >>
-  `compileEnv$regions_disjoint (w2n ptr_addr) (type_memory_size entry.type) dst (copy_count * type_memory_size ftv)` by
+  `loweringStateRelDefs$regions_disjoint (w2n ptr_addr) (type_memory_size entry.type) dst (copy_count * type_memory_size ftv)` by
     (qpat_x_assum `source_memory_separated _ _ _ _ _`
        (mp_tac o CONJUNCT2 o REWRITE_RULE [source_memory_separated_def]) >>
      disch_then (qspecl_then [`name`, `entry`, `p`, `region_size`, `ptr_addr`] mp_tac) >> simp[]) >>
   mp_tac (Q.SPECL [`ftv`, `entry.type`, `entry.value`, `copy_count`, `dst`, `w2n (ptr_addr:bytes32)`,
     `before.vs_memory`, `after.vs_memory`] array_copy_frame_source) >>
-  impl_tac >- fs[compileEnvTheory.regions_disjoint_def] >> simp[]
+  impl_tac >- fs[loweringStateRelDefsTheory.regions_disjoint_def] >> simp[]
 QED
 
 Theorem local_ptrs_rel_copy_frame:

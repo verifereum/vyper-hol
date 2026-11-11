@@ -13,7 +13,7 @@ Libs
    expression the evaluator leaves alone (a decimal, a list, a runtime value)
    is counted, not compared. Literal nodes are skipped. *)
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../tests/fixtures", "../lowering/defs/bytecode"];
+val () = holbuild_extra_deps ["../tests/fixtures", "../bytecode"];
 
 fun json_files dir = let
   val stream = OS.FileSys.openDir dir
@@ -201,7 +201,7 @@ in
   else app (check_ast path) asts
 end;
 
-val files = json_files "../tests/fixtures" @ json_files "../lowering/defs/bytecode";
+val files = json_files "../tests/fixtures" @ json_files "../bytecode";
 val () = app check_file files;
 
 val () = print (String.concat

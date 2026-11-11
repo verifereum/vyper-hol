@@ -2,7 +2,7 @@ Theory makeSsaCurrentEndpointBatch
 Ancestors
   makeSsaCurrentDominanceAvailability makeSsaCurrentPhiBatchRuntime
   makeSsaCurrentPrefixRuntime venomExecProofs venomWf venomExecSemantics
-  venomState list option cfgNormSupplySim finite_map sccpCorrectnessProofs simplifyCfgRetpc
+  venomState list option cfgNormSupplySim finite_map venomWfProps simplifyCfgRetpc
 Theorem current_endpoint_available_lookup[local]:
   wf_function f /\ MEM pred f.fn_blocks /\
   def_available_at f pred NONE x /\

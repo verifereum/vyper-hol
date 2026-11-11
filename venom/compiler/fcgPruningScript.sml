@@ -7,14 +7,6 @@ Ancestors
   fcgPostorder fcgVisit fcgCorrectnessProof fcgDefs venomWf venomCompilerWf
   irSupply venomInst relation
 
-Definition prune_unit_fcg_unreachable_def:
-  prune_unit_fcg_unreachable unit fcg =
-    unit with cu_context :=
-      unit.cu_context with ctx_functions :=
-        FILTER (\fn. fcg_is_reachable fcg fn.fn_name)
-               unit.cu_context.ctx_functions
-End
-
 Theorem MAP_FILTER_fn_name_reachable[local]:
   !fns.
   MAP (\fn. fn.fn_name)

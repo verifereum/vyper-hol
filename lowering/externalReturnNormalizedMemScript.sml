@@ -5,7 +5,7 @@ Ancestors
   externalReturnSelectedMetadata externalReturnEncoderSuffixMem
   stmtSimReturnWiden typedStoreEndpoint externalReturnPrefix returnValueTyped
   vyperTypeSystem stmtLowering exprLoweringProps loweringPosts
-  exprSimDefs vyperTypeArgFits compileEnv typedNormalizeEntryBoundary
+  exprSimDefs vyperTypeArgFits compileEnv loweringStateRelDefs typedNormalizeEntryBoundary
   stmtLoweringMono fragExec exprOperandVar externalReturnRegisteredWindowMem
   externalReturnZeroLayout externalReturnEncoderSites externalRawReturnType
   bodySim compileVyper externalReturnDirectSource externalReturnWindowResources
@@ -155,10 +155,23 @@ Resume external_frame_ret_value_normalized_run_mem[resources]:
   `fn_has_code s1 s2 func /\ fn_has_code s2 s3 func` by
     metis_tac[fn_has_code_split, cs_extends_trans] >>
   qpat_x_assum `cenv' = cenv''` (SUBST_ALL_TAC o SYM) >>
+  (* the statement's [] has a free element type; package_external_fn ignores it *)
+  `set_external_package_target rpolicy.rpol_target
+     (package_external_fn tops F (assign_nkeys tops 0)
+        (mut, F, lookup_raw_return_or_F (NONE : num option)
+                    tx.function_name External tops,
+         tx.function_name, args, ([] : expr list), ret, fbody)) =
+     (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody, rt)` by
+    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+     simp[package_external_fn_def]) >>
   drule_all normalize_external_frame_resources >>
   simp[GSYM (markerTheory.Abbrev_def)] >> strip_tac >>
+  `post_value_type cenv' e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_lowered >>
+     first_assum ACCEPT_TAC) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+    (fn th => strip_assume_tac
+       (REWRITE_RULE [expr_post_def, ASSUME ``post_value_type cenv' e = expr_type e``] th)) >>
   `sfields_tenv_consistent cenv'.ce_struct_fields (get_tenv cx) /\
    (!name fields. FLOOKUP cenv'.ce_struct_fields name = SOME fields ==>
       ALL_DISTINCT (MAP FST fields) /\

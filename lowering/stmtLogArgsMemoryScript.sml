@@ -248,7 +248,9 @@ Resume compile_log_eval_all_gas_mem[tail_value]:
         fs[log_args_post_def, wb_frame_def] >> metis_tac[]) >>
      rw[expr_store_bound_def] >>
      `?w'. eval_operand x t = SOME w'` by
-       (fs[expr_post_def, expr_val_at_def] >> metis_tac[]) >>
+       (fs[expr_post_def] >>
+        qpat_x_assum `expr_val_rel _ _ _ x t`
+          (strip_assume_tac o REWRITE_RULE [expr_val_rel_def]) >> simp[]) >>
      `w' = w` by (res_tac >> fs[]) >> gvs[] >>
      `val_store_size tv v = 0 \/
       w2n w + val_store_size tv v <= t.vs_alloca_next` by
@@ -263,6 +265,13 @@ Resume compile_log_eval_all_gas_mem[tail_value]:
       qexistsl_tac [`es_end2`, `t2`, `vs`] >> fs[]) >>
   simp[] >> rpt conj_tac
   >- (`?bt. expr_type e = BaseT bt` by (irule log_mem_scalar_base >> fs[]) >>
+      `post_value_type cenv e = expr_type e` by
+        (qpat_assum `supported_scalar_type (expr_type e)` mp_tac >>
+         qpat_assum `expr_type e = BaseT bt` SUBST1_TAC >>
+         Cases_on `bt` >> TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
+         simp[supported_scalar_type_def, supported_word_type_def,
+              supported_string_type_def, is_word_type_def,
+              is_bytestring_type_def]) >>
       irule log_args_post_cons >> simp[] >>
       conj_tac >- metis_tac[] >>
       qexistsl_tac [`es_end with gas_obs := []`, `sm`, `t`] >> simp[])

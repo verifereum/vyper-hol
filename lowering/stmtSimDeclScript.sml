@@ -30,7 +30,7 @@ Ancestors
   list rich_list finite_map pred_set
   fragExec localPtrsProps  loweringSlice  stmtSimDeclStore stmtSimDeclPath
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding
+  compileEnv loweringStateRelDefs valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperExprNoControl
   venomExecSemantics venomExecProofs venomInst venomState
 Libs

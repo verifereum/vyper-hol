@@ -3,8 +3,8 @@ Ancestors
   externalReturnZeroWindow externalReturnZeroRun abiEncoderWindowContract
   abiEncoderWindowStructuralMembers abiEncoderWindowMembers abiEncoderWindow
   abiEncoderInput abiEncoderWindowPhase abiEncoderRegisteredEffect
-  abiEncoderExtendSim abiEncoderProps compileEnv venomState venomInst venomMemDefs
-  contractABI valueEncoding words list finite_map pred_set
+  abiEncoderExtendSim abiEncoderProps compileEnv loweringStateRelDefs venomState venomInst venomMemDefs
+  contractABI valueEncoding valueEncodingDefs words list finite_map pred_set
   abiEncoderWindowLeaves abiEncoderLeaves abiEncoderPrimitiveEffect
   emitHelperProps exprLoweringProps venomExecSemantics
 

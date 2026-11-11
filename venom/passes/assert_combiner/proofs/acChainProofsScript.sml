@@ -22,6 +22,7 @@ Ancestors
   stateEquiv stateEquivProps execEquivParamProps venomInstProps venomExecProps
   dfgAnalysisProps venomState venomWf venomExecSemantics venomExecProofs
   analysisSimDefs analysisSimProofsBase
+  passTransform
 Libs
   pred_setTheory arithmeticTheory listTheory rich_listTheory alistTheory
 

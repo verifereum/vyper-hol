@@ -4,7 +4,7 @@ Ancestors
   ctorAbiActualMemberRun ctorAbiActualChildFrame ctorAbiActualLabelEmpty
   abiDecoderComplexExecute abiDecoderComplexHead
   abiDecoderReentry abiDecoderDynamicLoopSetup
-  abiDecoderContract abiDecoderLoop fragExec compileEnv
+  abiDecoderContract abiDecoderLoop fragExec compileEnv loweringStateRelDefs
   abiEncoderRegisteredEffect venomState venomExecSemantics venomInst words list arithmetic
   abiDecoderMembers abiDecoderMemberInfos abiDecodeRanges contractABI vyperABI
   allocaFrontierBound allocaBudgetProps venomMemDefs pred_set exprLowering ctorAbiActualFrame abiEncoderProps

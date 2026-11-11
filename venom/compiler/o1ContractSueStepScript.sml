@@ -11,7 +11,7 @@
 Theory o1ContractSueStep
 Ancestors
   o1PassContract singleUseExpansionSupplyProofs singleUseExpansionSupplySim singleUseExpansionDefs
-  venomPassDispatcher venomWf venomInst unitShapeDefs
+  venomPassDispatcher venomWf venomWfProps venomInst unitShapeDefs
 
 Theorem sue_label_projection_nonlabels:
   MAP get_label xs = MAP get_label ys ==>
@@ -1220,40 +1220,6 @@ QED
    of every other instruction.  So it keeps every block's pseudo-instruction
    prefix and adds no parameter instruction. *)
 
-Theorem every_prefix_split:
-  !P l. (!i j. i < j /\ j < LENGTH l /\ P (EL j l) ==> P (EL i l)) <=>
-        ?ps rs. l = ps ++ rs /\ EVERY P ps /\ EVERY (\x. ~P x) rs
-Proof
-  rpt gen_tac >> eq_tac
-  >- (qid_spec_tac `l` >> Induct >- simp[] >>
-      rpt strip_tac >>
-      `?ps rs. l = ps ++ rs /\ EVERY P ps /\ EVERY (\x. ~P x) rs` by
-        (first_x_assum irule >> rpt strip_tac >>
-         first_x_assum (qspecl_then [`SUC i`,`SUC j`] mp_tac) >> simp[]) >>
-      Cases_on `P h`
-      >- (qexistsl [`h::ps`,`rs`] >> simp[]) >>
-      qexistsl [`[]`,`h::l`] >> simp[listTheory.EVERY_EL] >>
-      rpt strip_tac >>
-      first_x_assum (qspecl_then [`0`,`SUC n`] mp_tac) >> simp[]) >>
-  rpt strip_tac >> gvs[] >>
-  Cases_on `j < LENGTH ps`
-  >- (`i < LENGTH ps` by simp[] >>
-      gvs[rich_listTheory.EL_APPEND1, listTheory.EVERY_EL]) >>
-  gvs[rich_listTheory.EL_APPEND2, listTheory.EVERY_EL, arithmeticTheory.NOT_LESS] >>
-  first_x_assum (qspec_then `j - LENGTH ps` mp_tac) >> simp[]
-QED
-
-Theorem pseudos_prefix_split:
-  pseudos_prefix bb <=>
-  ?ps rs. bb.bb_instructions = ps ++ rs /\
-    EVERY (\i. is_pseudo i.inst_opcode) ps /\
-    EVERY (\i. ~is_pseudo i.inst_opcode) rs
-Proof
-  simp[pseudos_prefix_def] >>
-  qspecl_then [`\i. is_pseudo i.inst_opcode`, `bb.bb_instructions`]
-    mp_tac every_prefix_split >>
-  simp[]
-QED
 
 Theorem is_pseudo_sue_should_skip:
   is_pseudo opc ==> sue_should_skip opc

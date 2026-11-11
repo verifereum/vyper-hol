@@ -4,7 +4,7 @@ Ancestors
   abiEncoderWindowArrayLoop abiEncoderWindowArrayBody abiEncoderWindowChild
   abiEncoderWindowArrayInvariant abiEncoderWindowArrayLayout abiEncoderRegisteredEffect
   abiEncoderArrayLoopCode abiEncoderArrayBodyCode abiEncoderWindowContract
-  compileEnv freshWrites venomState finite_map pred_set list arithmetic
+  compileEnv loweringStateRelDefs freshWrites venomState finite_map pred_set list arithmetic
 
 Theorem window_array_root_owner_mono:
   window_array_root ctx func owner ids ei asz msz active ty avs src dst sb cap d s /\
@@ -129,7 +129,7 @@ Proof
     (`eval_operand ip s = SOME (n2w islot) /\ islot < dimword (:256) /\
       mload islot s = n2w k /\ fn_has_code body_st body_end func` by
        fs[window_array_cursor_def, abi_encoder_array_loop_code_def,
-         venomStateTheory.mload_def, valueEncodingTheory.mem_word_at_def] >>
+         venomStateTheory.mload_def, valueEncodingDefsTheory.mem_word_at_def] >>
      Cases_on `obsv`
      >- (full_simp_tac bool_ss [] >> drule_all window_array_static_body_run_observed >>
          strip_tac >> goal_assum (drule_at Any) >> asm_rewrite_tac[]) >>
@@ -313,7 +313,7 @@ Proof
     (`eval_operand ip s = SOME (n2w islot) /\ islot < dimword (:256) /\
       mload islot s = n2w k /\ fn_has_code body_st body_end func` by
        fs[window_array_cursor_def, abi_encoder_array_loop_code_def,
-         venomStateTheory.mload_def, valueEncodingTheory.mem_word_at_def] >>
+         venomStateTheory.mload_def, valueEncodingDefsTheory.mem_word_at_def] >>
      `off = LENGTH avs * abi_member_head_size ty +
        SUM (MAP (abi_member_tail_size ty) (TAKE k avs))` by simp[Abbr `off`] >>
      Cases_on `obsv`

@@ -3,7 +3,7 @@ Theory bodyMemBiECRecoverMemory
 Ancestors
   exprSimPrecompiles exprSimDefs exprSimProps exprLowering exprLoweringProps
   exprSimWordArgs exprSimHypsDefs vyperTyping vyperAST vyperTypeSystem
-  compileEnv list rich_list builtinMisc loweringPosts exprBopLowering
+  compileEnv loweringStateRelDefs list rich_list builtinMisc loweringPosts exprBopLowering
   vyperInterpreter vyperState vyperContext vyperValue vyperTypeInvariants
   valueEncoding integer_word words byte exprSimAlloc exprSimLiteralBuffer
   exprSimOps emitHelper emitHelperProps fragExec venomExecSemantics
@@ -175,7 +175,7 @@ Proof
      fs[alloca_inv_def, allocas_non_overlapping_def] >>
      qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _`
        (qspecl_then [`sf.cs_next_id`,`aid`] mp_tac) >>
-     simp[compileEnvTheory.regions_disjoint_def]) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   drule_all ecrecover_input_stores_sim >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sb) s1 = OK s2` >>
   drule_all ecrecover_alloc_mem >> strip_tac >>
@@ -271,7 +271,7 @@ Proof
        wordsTheory.dimword_def,
        eval_operand_def, lookup_var_update_var] >>
   pure_rewrite_tac[GSYM update_var_def] >>
-  FIRST [simp[step_inst_base_def, mk_inst_def, eval_operand_def,
+  FIRST [simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
        lookup_var_update_var, exec_ext_call_def, inst_dload_in_section_def,
        Excl "consume_call_outcome_eq", pairTheory.UNCURRY_DEF]] >>
   CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
@@ -279,7 +279,7 @@ Proof
   pure_rewrite_tac[GSYM mk_inst_def] >>
   simp[Once run_inst_seq_mem_ok_cons, below_frontier_no_ranges,
        Excl "consume_call_outcome_eq"] >>
-  simp[NoAsms, step_inst_base_def, mk_inst_def, eval_operand_def,
+  simp[NoAsms, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
        lookup_var_update_var, Excl "consume_call_outcome_eq",
        inst_dload_in_section_def] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>

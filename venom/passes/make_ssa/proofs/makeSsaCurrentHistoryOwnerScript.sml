@@ -1,7 +1,7 @@
 Theory makeSsaCurrentHistoryOwner
 Ancestors
   makeSsaCurrentWfSsa makeSsaCurrentCertificate makeSsaCurrentAllocation
-  makeSsaCurrentTreeTrace makeSsaHelper list rich_list venomInst
+  makeSsaCurrentTreeTrace venomExecProps list rich_list venomInst
 
 Theorem current_history_original_outputs_member[local]:
   !xs j t v. MEM (t,v) (current_original_outputs l i j xs) ==>

@@ -8,7 +8,7 @@ Ancestors
   venomExecSemantics venomMemDefs words list arithmetic abiEncoderArrayExit
   abiEncoderArrayContext abiEncoderArrayCode abiEncoderMemberPhaseRaw
   abiEncoderMemberPhaseEffect abiBuiltinPrefix abiScratchEffect abiScratchLeafEffect
-  abiDecoderFrame abiEncoderArrayPrefix exprLoweringProps compileEnv emitHelper emitHelperProps
+  abiDecoderFrame abiEncoderArrayPrefix exprLoweringProps compileEnv loweringStateRelDefs emitHelper emitHelperProps
   venomInst venomInstProps instIdxIndep rich_list abiEncoderSharedArrayInitFrame
   abiScratchEncoderContract valueEncodingProps abiDecodeRanges valueEncoding contractABI
   abiEncoderArrayLoopDynamicStep abiEncoderArrayLoopCode abiDecoderPrimitiveLoopEntry

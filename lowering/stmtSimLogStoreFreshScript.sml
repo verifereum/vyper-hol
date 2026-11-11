@@ -2,7 +2,7 @@
 Theory stmtSimLogStoreFresh
 Ancestors
   stmtSimLogStoreContinue stmtSimLogTopics stmtSimLogDataRun
-  freshWrites exprLoweringProps emitHelper emitHelperProps exprSimBufferStore context stmtLowering compileEnv
+  freshWrites exprLoweringProps emitHelper emitHelperProps exprSimBufferStore context stmtLowering compileEnv loweringStateRelDefs
   venomExecSemantics venomInst venomState words list rich_list arithmetic finite_map ASCIInumbers
 
 Theorem log_store_scalar_outputs[local]:

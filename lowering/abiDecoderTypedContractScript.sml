@@ -13,7 +13,7 @@ Ancestors
   abiDecoderFrame abiDecodeRanges abiWrappedDecodeProps abiStaticLayoutProps
   abiCanonicalHeadSize vyperABI vyperABIRoundtrip contractABI byte
   abiDecoderContract fragExec exprLoweringProps vyperTyping context
-  abiEncoder emitHelper valueEncoding abiBoundaryChecks compileEnv
+  abiEncoder emitHelper valueEncoding valueEncodingDefs abiBoundaryChecks compileEnv loweringStateRelDefs
   emitHelperProps valueEncodingProps venomExecSemantics venomExecProofs venomInst
 
 Definition abi_decoder_metadata_def:

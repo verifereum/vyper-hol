@@ -1,7 +1,7 @@
 Theory o1MakeSsaPrefixNames
 Ancestors
   o1MakeSsaVisitNames o1MakeSsaReaching o1MakeSsaFormats
-  makeSsaCurrentDefs venomInst list pair o1MakeSsaCfg
+  makeSsaDefs venomInst list pair o1MakeSsaCfg
 
 Theorem current_operand_var_at:
   !ops j x. j < LENGTH ops /\ EL j ops = Var x ==>

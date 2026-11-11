@@ -1,7 +1,7 @@
 (* Static recursive-call boundaries, independent of calldata and runtime freshness. *)
 Theory calldataRecursiveProducers
 Ancestors
-  calldataMembers calldataDynOwned abiDecoderLoopCode abiDecoderLoopEmit
+  valueEncodingDefs calldataMembers calldataDynOwned abiDecoderLoopCode abiDecoderLoopEmit abiDecoderExecution
   abiDecoderCoherence exprLoweringProps abiDecoderContract abiCallerAllocation list
   abiDecoderRecursiveLoopLayout abiDecoderArraySetupCode abiDecoderArraySetupInputs abiDecoderPhi fragExec
   abiEncoder emitHelper emitHelperProps compileEnv abiDecoderAppend abiDecoderReentry
@@ -36,7 +36,8 @@ Proof
        `CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`di`,`middle`] mp_tac) >> simp[]) >>
   `st0.cs_current_insts = []` by
     (qpat_x_assum `abi_decode_loop_prefix _ _ _ _ _ = _` mp_tac >>
-     simp[abi_decode_loop_prefix_shape, abi_decode_loop_prefix_state_def] >>
+     simp[abi_decode_loop_prefix_shape, abi_decode_loop_prefix_state_def, abi_decode_position_header_zero,
+       abi_decode_position_header_delta_def] >>
      strip_tac >> gvs[]) >>
   drule_all abi_decoder_array_body_entry_phi >> strip_tac >>
   fs[ci_mono_def] >> metis_tac[]
@@ -127,8 +128,12 @@ Theorem calldata_loop_cfg_producer:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decoder_loop_phase_lookups >> strip_tac >>
-  drule abi_decoder_loop_prefix_facts >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [abiDecoderExecutionTheory.abi_decode_position_header_zero,
+      abiDecoderExecutionTheory.abi_decode_position_header_delta_def, arithmeticTheory.ADD_0]
+      (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_loop_phase_lookups)) >> strip_tac >>
+  drule (SIMP_RULE bool_ss [abiDecoderExecutionTheory.abi_decode_position_header_zero,
+      abiDecoderExecutionTheory.abi_decode_position_header_delta_def, arithmeticTheory.ADD_0]
+      (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_loop_prefix_facts)) >> strip_tac >>
   drule abi_decoder_array_setup_head >> strip_tac >>
   drule_all calldata_loop_child_static >> strip_tac >>
   qpat_x_assum `abi_decode_loop_suffix _ _ _ _ _ = _` mp_tac >>
@@ -137,9 +142,7 @@ Proof
   drule abi_decode_array_element_setup_operands >> strip_tac >>
   `?bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb` by
     fs[fn_has_code_def] >>
-  gvs[abiDecoderExecutionTheory.abi_decode_position_header_zero,
-      abiDecoderExecutionTheory.abi_decode_position_header_delta_def] >>
-  rpt conj_tac >> FIRST [decide_tac, metis_tac[]]
+  simp[] >> rpt conj_tac >> FIRST [decide_tac, metis_tac[]]
 QED
 
 Theorem calldata_member_address_static_live:
@@ -152,9 +155,7 @@ Theorem calldata_member_address_static_live:
     abi_decoder_operand_live mid.cs_next_var op)
 Proof
   Cases_on `dyn` >>
-  simp[compile_getelemptr_abi_def,
-    abiDecoderRangeTheory.compile_abi_dec_addr_zero,
-    compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
   FIRST [simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
@@ -217,9 +218,7 @@ Theorem calldata_member_address_continuation_phi:
     phi_prefix_length bb.bb_instructions = 0
 Proof
   Cases_on `dyn` >>
-  simp[compile_getelemptr_abi_def,
-    abiDecoderRangeTheory.compile_abi_dec_addr_zero,
-    compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[fn_has_code_def] >>
   Cases_on `bb.bb_instructions` >>
@@ -237,9 +236,9 @@ Theorem calldata_member_tail_continuation_phi:
     phi_prefix_length bb.bb_instructions = 0
 Proof
   Cases_on `elems`
-  >- simp[Once compile_abi_decode_to_buf_def, comp_return_def] >>
+  >- simp[Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def] >>
   rename1 `h::rest` >> PairCases_on `h` >>
-  simp_tac bool_ss [Once compile_abi_decode_to_buf_def, LET_THM,
+  simp_tac bool_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def, pairTheory.UNCURRY_DEF, LET_THM,
     comp_bind_def, comp_ignore_bind_def] >>
   Cases_on `compile_getelemptr_abi src (dec_info_needs_offset h0) ao CALLDATALOAD (Lit 0w) (Lit 0w) a` >>
   rename1 `_ = (ep,mid)` >> simp_tac bool_ss [] >>
@@ -428,23 +427,22 @@ Theorem calldata_nonbulk_parent_intervals:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_decode_loop_array_trace >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf dst src _ _ _ _ st = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf dst src _ (Lit 0w) _ _ st = _` kall_tac >>
   qpat_x_assum `dyn \/ _` kall_tac >>
   drule abi_decode_array_loop_init_trace >> strip_tac >> gvs[] >>
-  drule abi_decode_dyn_loop_trace >> strip_tac >>
-  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_array_loop_init_shape >> strip_tac >>
   `addr = src /\
    abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn asz st = ((),guard_st)` by
     (qpat_x_assum `abi_decode_dynarray_position_prefix _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_position_prefix_zero_base_eq,
-       abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_checked_prefix_def,
-       abiDecoderBytesBoundTheory.abi_decode_bytes_head_def,
-       abiDecoderDynarrayBoundTheory.abi_decode_dynarray_payload_guard_def,
-       abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_prefix_def,
-       abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
+     Cases_on `abi_decode_count_guard CALLDATALOAD src maxn st` >>
+     simp[abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_position_prefix_unbounded,
+          abiEncoderTheory.compile_abi_dec_addr_def, abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_prefix_def,
+          abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     strip_tac >> gvs[]) >>
   gvs[] >>
+  drule abi_decode_dyn_loop_trace >> strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_array_loop_init_shape >> strip_tac >>
   drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
@@ -468,7 +466,9 @@ Proof
     (mp_tac (cj 1 ci_mono_compile_abi_decode) >>
      disch_then (qspecl_then [`SND (SND ops)`,`FST (SND ops)`,
        `CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`di`,`middle`] mp_tac) >> simp[]) >>
-  drule abi_decoder_loop_prefix_facts >> strip_tac >>
+  drule (SIMP_RULE bool_ss [abiDecoderExecutionTheory.abi_decode_position_header_zero,
+      abiDecoderExecutionTheory.abi_decode_position_header_delta_def, arithmeticTheory.ADD_0]
+      (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_loop_prefix_facts)) >> strip_tac >>
   drule abi_decoder_loop_suffix_facts >> strip_tac >>
   `?bb. lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME bb /\
      isPREFIX loop_st.cs_current_insts bb.bb_instructions` by
@@ -480,8 +480,8 @@ Proof
      qexists_tac `loop_st.cs_current_insts` >> simp[] >>
      irule rich_listTheory.MEM_DROP_IMP >>
      qexists_tac `LENGTH header_st.cs_current_insts` >> fs[emitted_insts_def]) >>
-  gvs[ci_mono_def,
-    abiDecoderExecutionTheory.abi_decode_position_header_delta_def]
+  qexistsl_tac [`labels`,`st0`,`ops`,`middle`,`st1`] >>
+  gvs[ci_mono_def]
 QED
 
 Theorem calldata_nonbulk_empty_exit:
@@ -565,7 +565,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all calldata_nonbulk_parent_intervals >> strip_tac >>
   qpat_x_assum `dyn \/ _` kall_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf dst src _ _ _ _ st = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf dst src _ (Lit 0w) _ _ st = _` kall_tac >>
   drule_all calldata_loop_cfg_producer >> strip_tac >>
   drule_all calldata_loop_child_static >> strip_tac >>
   drule_all calldata_shell_static_producer >> strip_tac >>
@@ -889,7 +889,7 @@ QED
    RESIDUAL: calldata_complex_tuple_owned_run's callback (AggregateTyped:85-129),
    reused for struct and fixed arrays, quantifies arbitrary i,a,mid,b and only
    supplies cs_extends st a, cs_extends b final, ci_mono and fn_has_code mid b fn.
-   It does NOT supply compile_abi_decode_complex_elems ... rest ... b=((),final)
+   It does NOT supply compile_abi_decode_complex_elems ... rest ... (Lit 0w) b=((),final)
    or fn_has_code b final fn. calldata_member_child_exit_certificate REQUIRES
    both facts, and calldata_member_tail_continuation_phi also requires the
    actual tail equation. They cannot simply be drule'd at this callback.
@@ -916,9 +916,9 @@ Theorem calldata_member_tail_empty_exit_phi:
     phi_prefix_length bb.bb_instructions = 0
 Proof
   Cases_on `elems`
-  >- simp[Once compile_abi_decode_to_buf_def, comp_return_def] >>
+  >- simp[Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def] >>
   rename1 `h::rest` >> PairCases_on `h` >>
-  simp_tac bool_ss [Once compile_abi_decode_to_buf_def, LET_THM,
+  simp_tac bool_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def, pairTheory.UNCURRY_DEF, LET_THM,
     comp_bind_def, comp_ignore_bind_def] >>
   Cases_on `compile_getelemptr_abi src (dec_info_needs_offset h0) ao CALLDATALOAD (Lit 0w) (Lit 0w) a` >>
   rename1 `_ = (ep,mid)` >> simp_tac bool_ss [] >>

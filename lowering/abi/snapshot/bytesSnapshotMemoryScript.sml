@@ -3,7 +3,7 @@
    about unused capacity or padding bytes are required. *)
 Theory bytesSnapshotMemory
 Ancestors
-  bytesSnapshotExec memoryValueRelocation memoryValueDefs memoryValueFrame
+  valueEncodingDefs bytesSnapshotExec memoryValueRelocation memoryValueDefs memoryValueFrame
   valueLoadProps eventTopicValueProps abiBytestringMemory abiBytestringExec
   memoryReadProps valueEncoding valueEncodingProps compileEnv
   vyperValue vyperTyping vyperAST contractABI vfmConstants

@@ -16,7 +16,7 @@
 
 Theory removeUnusedStructProofs
 Ancestors
-  removeUnusedSsaProofs
+  removeUnusedSsaProofs venomWfProps
   removeUnusedProofs removeUnusedDefs
   passSimulationDefs
   venomWf
@@ -24,6 +24,7 @@ Ancestors
   venomInst
   indexedLists pointerConfinedDefs pointerConfinedProps
   list rich_list combin
+  passTransform
 
 (* ===== Structural preservation: remove_unused_single_pass ===== *)
 

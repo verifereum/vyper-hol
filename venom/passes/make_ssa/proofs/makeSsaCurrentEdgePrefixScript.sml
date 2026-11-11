@@ -4,6 +4,7 @@ Ancestors
   makeSsaCurrentCopyPrefixRuntime makeSsaCurrentLockstepShape
   makeSsaCurrentForwardReadiness cfgNormSupplySim
   venomExecProofs venomExecSemantics venomState stateFrame list rich_list pred_set option
+  venomWfProps
 
 Theorem current_completed_edge_cleaned_prefix_total:
   current_wf_phi_context s fn renamed s' A H events /\
@@ -46,7 +47,7 @@ Proof
   `bb.bb_label = h` by
     (`new.bb_label = h` by metis_tac[lookup_block_label] >>
      Cases_on `new.bb_instructions` >>
-     simp[makeSsaCurrentDefsTheory.simplify_current_phi_block_def] >>
+     simp[makeSsaDefsTheory.simplify_current_phi_block_def] >>
      IF_CASES_TAC >> simp[]) >>
   `post.vs_current_bb = h` by
     metis_tac[eval_phis_preserves_current_bb, lookup_block_label] >>
@@ -75,7 +76,7 @@ Proof
     (rpt strip_tac >> first_x_assum irule >> simp[]) >>
   `strict_dom_vars_defined final done` by
     (qpat_x_assum `strict_dom_vars_defined final post` mp_tac >>
-     simp[sccpCorrectnessProofsTheory.strict_dom_vars_defined_def] >>
+     simp[venomWfPropsTheory.strict_dom_vars_defined_def] >>
      rpt strip_tac >>
      `v IN FDOM post.vs_vars` by metis_tac[] >>
      `IS_SOME (lookup_var v post)` by

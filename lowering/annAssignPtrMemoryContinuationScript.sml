@@ -2,7 +2,7 @@
    Source layout typing is explicit: the semantic RHS type need not be sty. *)
 Theory annAssignPtrMemoryContinuation
 Ancestors annAssignPtrMemoryAssign annAssignPtrMemoryWindow
- annAssignPtrMemoryStageFrame stmtFragPtr compileEnv valueTypingMemoryProps
+ annAssignPtrMemoryStageFrame stmtFragPtr compileEnv loweringStateRelDefs valueTypingMemoryProps
  fragGasPathPtr
 
 Theorem ghost_kept_restrict_frontier_ptr:

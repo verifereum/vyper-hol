@@ -3,7 +3,7 @@
    Helpers cover zero-sized layouts without executing a spurious MCOPY. *)
 Theory memoryStoreProps
 Ancestors
-  typedCopyStateFrame memoryStoreCode memoryValueDefs memoryValueTyping memoryValueFrame memoryValueRelocation
+  valueEncodingDefs typedCopyStateFrame memoryStoreCode memoryValueDefs memoryValueTyping memoryValueFrame memoryValueRelocation
   memoryReadProps valueLoadProps valueEncoding valueEncodingProps
   context compileEnv fragBlockPath fragExec instIdxIndep ssaOperandFrame dynCopyExec
   vyperTyping vyperValue venomState list words arithmetic

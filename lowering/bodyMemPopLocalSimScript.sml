@@ -3,9 +3,9 @@ Theory bodyMemPopLocalSim
 Ancestors
   bodyMemPopLocalPath bodyMemPopLocalFacts exprSimMemDefs exprSimPop
   exprSimDefs exprSimProps exprSimSource exprLowering exprLoweringProps
-  compileEnv context vyperAST vyperValue vyperState vyperInterpreter
+  compileEnv loweringStateRelDefs context vyperAST vyperValue vyperState vyperInterpreter
   vyperLookup venomState gasOutcome gasSummary fragGasMode fragGasPathMem
-  loweringPosts list words arithmetic valueEncoding exprSimVVFrame
+  loweringPosts list words arithmetic valueEncoding valueEncodingDefs exprSimVVFrame
   exprSimHypsDefs exprSimMemoryStack venomMemDefs fragExec
 
 Theorem pop_local_source_empty[local]:
@@ -52,6 +52,7 @@ Theorem compile_pop_name_sim_mem:
 Proof
   rw[expr_vv_sim_mem_def] >>
   drule_all pop_name_facts >> strip_tac >>
+  `popped_keys_indexed es.scopes` by fs[expr_sim_pre_def, expr_sim_inv_def] >>
   drule_all compile_expr_pop_name >> strip_tac >> gvs[] >>
   Cases_on `compile_dynarray_pop (Var p) 32 (type_memory_size etv)
               cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory sa` >>

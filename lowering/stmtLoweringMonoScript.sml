@@ -47,7 +47,7 @@ fun ci_mono_chain_tac rws =
 val ci_mono_grows_rws = [
   ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst, ci_mono_fresh_var,
   ci_mono_fresh_label, ci_mono_new_block, ci_mono_compile_alloc_buffer,
-  ci_mono_unwrap_value, ci_mono_compile_store_memory,
+  ci_mono_unwrap_value, ci_mono_compile_snapshot_vv, ci_mono_compile_store_memory,
   ci_mono_compile_copy_memory, ci_mono_compile_word_copy_loop,
   ci_mono_compile_store_bytestring, ci_mono_compile_keccak256_key,
   ci_mono_compile_mapping_subscript, ci_mono_compile_array_subscript,
@@ -108,7 +108,7 @@ QED
 
 val ci_mono_stmt_rws =
   ci_mono_grows_rws @
-  [ci_mono_compile_expr_sa, ci_mono_context_helpers,
+  [ci_mono_store_immutable_bytestring, ci_mono_compile_expr_sa, ci_mono_context_helpers,
    ci_mono_compile_dynarray_append, ci_mono_comp_get,
    ci_mono_compile_ptr_load, ci_mono_compile_imm_store_word,
    ci_mono_compile_imm_store_words, ci_mono_compile_imm_copy_to_memory];
@@ -302,8 +302,12 @@ val range_ci_step =
   let val rws = ci_mono_return_helpers :: ci_mono_list_helpers ::
                 ci_mono_stmt_helpers :: ci_mono_compile_get_target_ptr ::
                 ci_mono_stmt_rws
-      val close = FIRST (map MATCH_ACCEPT_TAC
-        (List.concat (map BODY_CONJUNCTS (ci_mono_comp_return :: rws))))
+      (* index the closing facts by conclusion, so each goal tries only the
+         facts whose conclusion can match it *)
+      val net = List.foldl (fn (th, n) => Net.insert (concl (SPEC_ALL th), th) n)
+        Net.empty (List.concat (map BODY_CONJUNCTS (ci_mono_comp_return :: rws)))
+      fun close (asl, w) =
+        FIRST (map MATCH_ACCEPT_TAC (Net.match w net)) (asl, w)
   in
     FIRST [close, FIRST_ASSUM MATCH_ACCEPT_TAC,
            MATCH_MP_TAC ci_mono_bind, MATCH_MP_TAC ci_mono_ignore_bind,

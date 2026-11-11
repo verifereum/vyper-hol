@@ -5,7 +5,7 @@ Ancestors
  annAssignPtrSetup annAssignPtrCompose annAssignPtrFacts
  stmtSimDeclMem stmtSimDecl stmtSimDeclGas stmtSimDeclCompose stmtSimDeclSource
  stmtSimProps stmtSimDefs bodyPtrDefs exprSimDefs exprLoweringProps emitHelperProps
- stmtLowering compileEnv emitHelper rich_list loweringPosts fragGasPathPtr
+ stmtLowering compileEnv loweringStateRelDefs emitHelper rich_list loweringPosts fragGasPathPtr
  stmtFragPtr venomInst vyperInterpreter vyperState venomState valueEncoding
  vyperTypeArgFits valueCopyBytes list finite_map
 Libs monadsyntax

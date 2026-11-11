@@ -14,20 +14,19 @@
  * Uses DFG analysis (use tracking per variable).
  *
  * TOP-LEVEL:
- *   m2v_can_promote_alloca      — check if alloca uses are all mstore/mload/return
+ *   m2v_can_promote_alloca      — check that every use is an address use
  *   m2v_promote_inst            — promote a single alloca use
- *   m2v_transform_function      — function-level transform
+ *   m2v_transform_function_checked — checked function-level transform
  *   m2v_stores_dominate_loads   — precondition: MSTOREs dominate MLOADs per alloca
  *   m2v_promotable_wf           — all promoted allocas satisfy domination
- *   m2v_equiv                   — equivalence relation (ignores memory)
  *
  * Upstream: vyperlang/vyper@8780b3134 (remove alloca_id)
  *)
 
 Theory mem2varDefs
 Ancestors
-  passSimulationDefs dfgDefs venomExecSemantics venomInst stateEquiv venomWf
-  pred_set finite_map mem2varFrame irSupply
+  passTransform dfgDefs venomExecSemantics venomInst venomWf
+  pred_set finite_map irSupply
 
 (* ===== Fresh Variable ===== *)
 
@@ -38,17 +37,53 @@ End
 
 (* ===== Use Analysis ===== *)
 
-(* Check if all uses are mstore/mload/return (promotable).
-   Requires at least one mstore (otherwise never written). *)
+(* Python stores operands in the reverse of semantic order. Its first
+   MSTORE/RETURN operand is the value/size, the second operand here. *)
+Definition m2v_is_pointer_use_def:
+  m2v_is_pointer_use (alloca_out : string) (inst : instruction) <=>
+    inst.inst_opcode = MLOAD \/
+    ((inst.inst_opcode = MSTORE \/ inst.inst_opcode = RETURN) /\
+     case inst.inst_operands of
+       [addr; value_or_size] => value_or_size <> Var alloca_out
+     | _ => F)
+End
+
 Definition m2v_can_promote_alloca_def:
-  m2v_can_promote_alloca uses <=>
-    EVERY (\inst. inst.inst_opcode = MSTORE \/
-                  inst.inst_opcode = MLOAD \/
-                  inst.inst_opcode = RETURN) uses /\
+  m2v_can_promote_alloca alloca_out uses <=>
+    EVERY (m2v_is_pointer_use alloca_out) uses /\
     EXISTS (\inst. inst.inst_opcode = MSTORE) uses
 End
 
+(* Python consumes a name for a nonempty pointer-only use set before it
+   tests for an MSTORE. A read-only alloca therefore advances the counter.
+   Dynamic sizes and empty use sets do not. *)
+Definition m2v_scan_step_def:
+  m2v_scan_step dfg (ctr, promos, fresh) (i : instruction) =
+    case (i.inst_outputs, i.inst_operands) of
+      ([alloca_out], [Lit size_word]) =>
+        let uses = dfg_get_uses dfg alloca_out in
+        if uses <> [] /\ EVERY (m2v_is_pointer_use alloca_out) uses then
+          if EXISTS (\inst. inst.inst_opcode = MSTORE) uses then
+            let var = m2v_fresh_var alloca_out ctr in
+            (ctr + 1, (alloca_out, var, w2n size_word) :: promos, var INSERT fresh)
+          else (ctr + 1, promos, fresh)
+        else (ctr, promos, fresh)
+    | _ => (ctr, promos, fresh)
+End
 
+Definition m2v_scan_def:
+  m2v_scan fn =
+    FOLDL (m2v_scan_step (dfg_build_function fn)) (0, [], {})
+      (FILTER (\i : instruction. i.inst_opcode = ALLOCA) (fn_insts fn))
+End
+
+Definition m2v_promo_list_def:
+  m2v_promo_list fn = FST (SND (m2v_scan fn))
+End
+
+Definition m2v_fresh_vars_def:
+  m2v_fresh_vars fn = SND (SND (m2v_scan fn))
+End
 
 (* ===== Store-Dominates-Load Precondition ===== *)
 
@@ -83,7 +118,8 @@ Definition m2v_promotable_wf_def:
       MEM inst (fn_insts fn) /\
       inst.inst_opcode = ALLOCA /\
       inst.inst_outputs = [alloca_out] /\
-      m2v_can_promote_alloca (dfg_get_uses dfg alloca_out) ==>
+      inst.inst_operands = [Lit (32w : bytes32)] /\
+      m2v_can_promote_alloca alloca_out (dfg_get_uses dfg alloca_out) ==>
       m2v_stores_dominate_loads fn alloca_out
 End
 
@@ -156,28 +192,9 @@ End
  * upstream because phi/assign guards on alloca are impossible after
  * alloca_id removal.
  *)
-Definition m2v_transform_function_def:
-  m2v_transform_function fn =
-    let dfg = dfg_build_function fn in
-    (* Collect alloca instructions *)
-    let alloca_insts = FILTER (\i : instruction.
-      i.inst_opcode = ALLOCA)
-      (fn_insts fn) in
-    (* Build promotion map *)
-    let scan_result = FOLDL (\(ctr, promos) (i : instruction).
-      case i.inst_outputs of
-        [alloca_out] =>
-          let uses = dfg_get_uses dfg alloca_out in
-          let size_val = case i.inst_operands of
-                           Lit w :: _ => w2n w | _ => 0 in
-          if m2v_can_promote_alloca uses then
-            let var = m2v_fresh_var alloca_out ctr in
-            (ctr + 1, (alloca_out, var, size_val) :: promos)
-          else
-            (ctr, promos)
-        | _ => (ctr, promos))
-      (0, []) alloca_insts in
-    let promo_list = SND scan_result in
+Definition m2v_transform_function_raw_def:
+  m2v_transform_function_raw fn =
+    let promo_list = m2v_promo_list fn in
     (* Rewrite instructions *)
     let rewrite_inst = \i : instruction.
       case FIND (\(ao, _, _). MEM (Var ao) i.inst_operands) promo_list of
@@ -187,54 +204,6 @@ Definition m2v_transform_function_def:
       MAP (\bb. bb with bb_instructions :=
         FLAT (MAP rewrite_inst bb.bb_instructions))
       fn.fn_blocks
-End
-
-(* ===== Equivalence Relation ===== *)
-
-(*
- * m2v_equiv: State equivalence ignoring vs_memory.
- *
- * mem2var promotes MSTORE→ASSIGN, so memory genuinely differs after
- * transformation (alloca regions are not written in the transformed code).
- * This relation captures everything that IS preserved:
- *   - All variables (except fresh alloca promotion vars)
- *   - Residual m2v_frame (ignores memory, index and call-entry FMP)
- *   - Both block labels (usable as both R_ok and R_term in lift_result)
- *
- * The `vars` parameter excludes fresh variables introduced by promotion
- * (the alloca_N_M naming scheme). These variables exist only in the
- * transformed state.
- *
- * Allocation state and the other three FMP fields remain compared.
- * Clearing fields in the mask does not constrain their original values.
- *)
-Definition m2v_equiv_def:
-  m2v_equiv vars s1 s2 <=>
-    (!v. v NOTIN vars ==> lookup_var v s1 = lookup_var v s2) /\
-    m2v_frame s1 = m2v_frame s2
-End
-
-(* Fresh variables introduced by the transform *)
-Definition m2v_fresh_vars_def:
-  m2v_fresh_vars fn =
-    let dfg = dfg_build_function fn in
-    let alloca_insts = FILTER (\i : instruction.
-      i.inst_opcode = ALLOCA)
-      (fn_insts fn) in
-    let scan_result = FOLDL (\(ctr, fresh) (i : instruction).
-      case i.inst_outputs of
-        [alloca_out] =>
-          let uses = dfg_get_uses dfg alloca_out in
-          let size_val = case i.inst_operands of
-                           Lit w :: _ => w2n w | _ => 0 in
-          if m2v_can_promote_alloca uses then
-            let var = m2v_fresh_var alloca_out ctr in
-            (ctr + 1, var INSERT fresh)
-          else
-            (ctr, fresh)
-        | _ => (ctr, fresh))
-      (0, {}) alloca_insts in
-    SND scan_result
 End
 
 (* Fresh variable names don't collide with any original instruction
@@ -253,26 +222,6 @@ End
 (* ================================================================
    INVARIANT DEFINITIONS (moved from mem2varProofsScript)
    ================================================================ *)
-
-(* Promotion list: extracted from function *)
-Definition m2v_promo_list_def:
-  m2v_promo_list fn =
-    let dfg = dfg_build_function fn in
-    let alloca_insts = FILTER (\i : instruction.
-      i.inst_opcode = ALLOCA) (fn_insts fn) in
-    SND (FOLDL (\(ctr, promos) (i : instruction).
-      case i.inst_outputs of
-        [alloca_out] =>
-          let uses = dfg_get_uses dfg alloca_out in
-          let size_val = case i.inst_operands of
-                           Lit w :: _ => w2n w | _ => 0 in
-          if m2v_can_promote_alloca uses then
-            let var = m2v_fresh_var alloca_out ctr in
-            (ctr + 1, (alloca_out, var, size_val) :: promos)
-          else (ctr, promos)
-        | _ => (ctr, promos))
-      (0, []) alloca_insts)
-End
 
 (* Block transform *)
 Definition m2v_bt_def:
@@ -328,8 +277,8 @@ Definition m2v_rewrite_blocks_supply_def:
           (bbs', s2) => ((bb with bb_instructions := insts) :: bbs', s2)
 End
 
-Definition m2v_transform_function_supply_def:
-  m2v_transform_function_supply s fn =
+Definition m2v_transform_function_supply_raw_def:
+  m2v_transform_function_supply_raw s fn =
     case m2v_rewrite_blocks_supply (m2v_promo_list fn) s fn.fn_blocks of
       (bbs, s1) => (fn with fn_blocks := bbs, s1)
 End
@@ -342,7 +291,7 @@ Definition m2v_promoted_ids_def:
       MEM inst (fn_insts fn) /\
       inst.inst_opcode = ALLOCA /\
       ?alloca_out. inst.inst_outputs = [alloca_out] /\
-        m2v_can_promote_alloca
+        m2v_can_promote_alloca alloca_out
           (dfg_get_uses (dfg_build_function fn) alloca_out) }
 End
 
@@ -365,31 +314,26 @@ Definition mem_byte_def:
     if i < LENGTH s.vs_memory then EL i s.vs_memory else (0w : word8)
 End
 
-(* Inter-block invariant:
-   1. m2v_equiv: all non-fresh variables and non-memory fields agree
-   2. Memory agreement outside promoted alloca regions
-   3. Sync: each written promoted variable tracks the alloca memory cell *)
-Definition m2v_inv_def:
-  m2v_inv fn s1 s2 <=>
-    m2v_equiv (m2v_fresh_vars fn) s1 s2 /\
-    s1.vs_inst_idx = s2.vs_inst_idx /\
-    (!i. ~in_promoted_region fn s1 i ==>
-         mem_byte i s1 = mem_byte i s2) /\
-    (!ao pvar sz.
-       MEM (ao, pvar, sz) (m2v_promo_list fn) ==>
-       !addr. lookup_var ao s1 = SOME addr ==>
-         IS_SOME (lookup_var pvar s2) ==>
-         lookup_var pvar s2 = SOME (mload (w2n addr) s1))
-End
-
-(* Predicate: all promoted allocas have size exactly 32.
- * Required because EVM MSTORE/MLOAD always accesses 32 bytes,
- * and RETURN promotion inserts a MSTORE that writes exactly 32 bytes.
- * In practice, Vyper allocas for single words are always 32 bytes.
- * Provable from a sound bp_ptrs_bounded analysis that tracks alloca pointers. *)
+(* Every candidate has an MSTORE use. Python raises CompilerPanic exactly
+   when such a candidate has literal size below one word. Larger candidates
+   consume a fresh name but leave their instructions unchanged. *)
 Definition m2v_promo_sizes_bounded_def:
   m2v_promo_sizes_bounded fn <=>
-    !ao pvar sz. MEM (ao, pvar, sz) (m2v_promo_list fn) ==> sz = 32
+    EVERY (\(ao, pvar, sz). 32 <= sz) (m2v_promo_list fn)
+End
+
+(* Canonical entries: NONE is a compile-time failure, not an identity pass. *)
+Definition m2v_transform_function_checked_def:
+  m2v_transform_function_checked fn =
+    if m2v_promo_sizes_bounded fn then SOME (m2v_transform_function_raw fn)
+    else NONE
+End
+
+Definition m2v_transform_function_supply_checked_def:
+  m2v_transform_function_supply_checked s fn =
+    if m2v_promo_sizes_bounded fn then
+      SOME (m2v_transform_function_supply_raw s fn)
+    else NONE
 End
 
 (* Predicate: promoted RETURN instructions have literal size ≤ alloca size.
@@ -402,7 +346,7 @@ Definition m2v_return_size_bounded_def:
     !bb inst ao pvar sz.
       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
       inst.inst_opcode = RETURN /\
-      MEM (ao, pvar, sz) (m2v_promo_list fn) /\
+      MEM (ao, pvar, sz) (m2v_promo_list fn) /\ sz = 32 /\
       MEM (Var ao) inst.inst_operands ==>
       ?n. inst.inst_operands = [Var ao; Lit n] /\ w2n n <= sz
 End
@@ -411,19 +355,4 @@ End
 Definition m2v_fresh_undef_def:
   m2v_fresh_undef fn s <=>
     !v. v IN m2v_fresh_vars fn ==> lookup_var v s = NONE
-End
-
-(* Combined scan: compute (ctr, promo_list, fresh_set) in one FOLDL *)
-Definition m2v_scan_step_def:
-  m2v_scan_step dfg (ctr, promos, fresh) (i : instruction) =
-    case i.inst_outputs of
-      [alloca_out] =>
-        let uses = dfg_get_uses dfg alloca_out in
-        let size_val = case i.inst_operands of
-                         Lit w :: _ => w2n w | _ => 0 in
-        if m2v_can_promote_alloca uses then
-          let var = m2v_fresh_var alloca_out ctr in
-          (ctr + 1, (alloca_out, var, size_val) :: promos, var INSERT fresh)
-        else (ctr, promos, fresh)
-    | _ => (ctr, promos, fresh)
 End

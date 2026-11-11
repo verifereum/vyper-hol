@@ -7,8 +7,8 @@ Ancestors
   exprSimHypsDefs exprLoweringProps freshWrites option vyperPlaceResultTyping
   exprSimAggregateEncoding tupleMemoryLayout exprSimAttributeFields
   vyperTypeExprSoundness vyperTypeInvariants vyperPlaceTyping
-  vyperTypeStatePreservation vyperPlaceStatePreservation vyperTyping valueEncoding valueEncodingProofs
-  valueEncodingProps loweringPosts exprLowering compileEnv vyperState vyperInterpreter
+  vyperTypeStatePreservation vyperPlaceStatePreservation vyperTyping valueEncoding valueEncodingDefs valueEncodingProofs
+  valueEncodingProps loweringPosts exprLowering compileEnv loweringStateRelDefs vyperState vyperInterpreter
   vyperTypeSystem vyperValue vyperValueOperation list rich_list pair
   words arithmetic finite_map venomState venomMemDefs exprSimSubscriptArrayFramed
   memoryValueEncoding
@@ -178,7 +178,7 @@ Theorem target_post_suffix_frame:
     (dst,loc,SOME (value_type_place vt')) u
 Proof
   strip_tac >>
-  `locals_kept cenv es s0 u` by
+  `locals_kept cenv es es' s0 u` by
     (irule locals_kept_mem_tail >> qexists `t` >> gvs[target_post_def]) >>
   gvs[target_post_def] >> rpt conj_tac
   >- (rpt strip_tac >>

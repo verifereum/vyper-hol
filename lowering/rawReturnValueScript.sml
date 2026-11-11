@@ -1,7 +1,7 @@
 Theory rawReturnValue
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts
-   valueEncoding valueEncodingProps valueCopyBytes valueTypingMemoryProps
+   valueEncoding valueEncodingDefs valueEncodingProps valueCopyBytes valueTypingMemoryProps
   vyperTyping vyperValue venomState
 
 Theorem raw_return_value_layout[local]:

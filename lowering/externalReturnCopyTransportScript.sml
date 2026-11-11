@@ -1,8 +1,8 @@
 (* Task-owned transport interfaces; no recursive copy execution here. *)
 Theory externalReturnCopyTransport
 Ancestors
-  externalReturnCopyFrame exprLoweringProps venomState compileEnv
-  loweringPosts valueEncoding valueEncodingProps arithmetic
+  externalReturnCopyFrame exprLoweringProps venomState compileEnv loweringStateRelDefs
+  loweringPosts valueEncoding valueEncodingDefs valueEncodingProps arithmetic
   fragExec emitHelper emitHelperProps context venomExecSemantics venomInst words finite_map
 
 Theorem return_copy_frame_mono:

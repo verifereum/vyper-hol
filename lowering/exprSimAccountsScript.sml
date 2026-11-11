@@ -39,7 +39,7 @@ Ancestors
   list rich_list words integer_word byte
   fragExec freshWrites varsExt loweringSlice  exprSimHyps exprSimUnop
   exprSimOperators exprSimWordBuiltins exprBopLowering exprLowering
-  emitHelper emitHelperProps compileEnv exprLoweringProps accountsRelProps
+  emitHelper emitHelperProps compileEnv loweringStateRelDefs exprLoweringProps accountsRelProps
   valueEncoding
   valueEncodingProofs venomExecSemantics venomInst venomState venomMemProps
   vyperAST vyperInterpreter vyperContext vyperValue vyperTyping
@@ -117,7 +117,7 @@ Proof
         `0`, `"o"`] mp_tac) >>
      `!ss. step_inst_base (mk_inst 0 GAS [x] ["o"]) ss =
            exec_gas (mk_inst 0 GAS [x] ["o"]) ss` by
-       (gen_tac >> simp[Once venomExecSemanticsTheory.step_inst_base_def, mk_inst_def]) >>
+       (gen_tac >> simp[step_inst_base_opcode_eqs, mk_inst_def]) >>
      pop_assum (fn th => REWRITE_TAC [th]) >>
      `eval_operand x
         (s0 with <|vs_gas_readings := [1w]; vs_inst_idx := s0.vs_inst_idx|>) = SOME w1` by

@@ -4,7 +4,7 @@ Ancestors
   bodyDeclMemoryCounted bodyDeclMemoryCore allocaFootprint
   instMemFrontier memSafeRun fragGasPathMem stmtSimProps
   emitHelperProps freshWrites exprOperandVar
-  exprLoweringProps fragGasMode compileEnv
+  exprLoweringProps fragGasMode compileEnv loweringStateRelDefs
   venomExecSemantics venomExecProofs venomInst venomState
   list finite_map
 

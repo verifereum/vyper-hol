@@ -22,7 +22,7 @@ Ancestors
   loweringPosts
   list fragExec loweringSlice exprSimStack gasNormalPrefix gasSummary gasContext fragGasMode fragGasPath
   exprBopLowering exprLowering exprLoweringProps builtinSimple emitHelper
-  compileEnv valueEncoding emitHelperProps
+  compileEnv loweringStateRelDefs valueEncoding emitHelperProps
   venomExecSemantics venomInst venomState vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeSystem
 

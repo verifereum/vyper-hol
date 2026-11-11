@@ -59,7 +59,7 @@ Ancestors
   vyperContext
   venomExecSemantics
   venomState
-  compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
+  compileEnv loweringStateRelDefs e2eDefs supportedProgram compileVyper immutableSectionRel
   unitTransformDefs unitShapeDefs o1PassContract ptrDiscipline
   fragExec loweringHalt loweringShapeProps loweringShapeSource retAbiPlanProps
   venomInst venomWf contextCodegenRel memSafeRun allocaFrontierBound
@@ -71,7 +71,7 @@ Ancestors
 
 (* Observable state produced by an external source call. Function-local scope
    state is gone at this boundary, so this is intentionally smaller than
-   compileEnv$state_rel but still includes all externally visible effects. *)
+   loweringStateRelDefs$state_rel but still includes all externally visible effects. *)
 Definition external_logs_rel_def:
   external_logs_rel cenv (addr : address) (am : abstract_machine) ss ⇔
     LIST_REL (log_entry_equiv cenv addr) am.logs ss.vs_logs
@@ -128,7 +128,7 @@ End
    code/labels and frame-pointer fields are deliberately free at entry. *)
 Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
-    compileEnv$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
+    loweringStateRelDefs$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
     ~vs.vs_call_ctx.cc_static /\
     ~tx.is_static /\
     vs.vs_prev_hashes = tx.block_hashes
@@ -680,7 +680,7 @@ Theorem singleton_tuple_memory:
     val_in_memory (TupleTV [tv]) (ArrayV (TupleV [v])) p mem =
     val_in_memory tv v p mem
 Proof
-  simp[valueEncodingTheory.val_in_memory_def]
+  simp[valueEncodingDefsTheory.val_in_memory_def]
 QED
 
 Theorem singleton_tuple_memory_size:

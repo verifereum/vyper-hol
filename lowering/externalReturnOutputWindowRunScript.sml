@@ -2,7 +2,7 @@ Theory externalReturnOutputWindowRun
 Ancestors
   externalReturnEncoderOutputs externalReturnEncoderSitesCert externalReturnOutputAlloc
   externalReturnFootprint externalReturnWindowDispatch allocaSiteResource abiEncoderProps
-  exprLoweringProps loweringPosts compileEnv fragExec venomState venomInst
+  exprLoweringProps loweringPosts compileEnv loweringStateRelDefs fragExec venomState venomInst
   venomMemDefs valueEncoding words finite_map pred_set
 
 Theorem return_output_window_run:

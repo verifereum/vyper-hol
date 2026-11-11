@@ -3,7 +3,7 @@
    Writes private from source locals preserve all such windows. *)
 Theory logArgumentSourceWindows
 Ancestors
-  sourceMemoryFrames sourceAbiFrames abiMemoryFrame logArgumentSourceTypes vyperTypeInvariants
+  loweringStateRelDefs sourceMemoryFrames sourceAbiFrames abiMemoryFrame logArgumentSourceTypes vyperTypeInvariants
   compileEnv venomState vyperState list pair words arithmetic
 
 Definition source_value_window_def:

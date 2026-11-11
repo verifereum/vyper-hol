@@ -3,7 +3,7 @@
 Theory makeSsaCurrentTargetWf
 Ancestors
   o1MakeSsaFormats o1MakeSsaStructuralShape venomWf o1PassContract irSupply
-  makeSsaCurrentDefs list
+  makeSsaDefs list
 
 Theorem current_final_block_well_formed:
   make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\

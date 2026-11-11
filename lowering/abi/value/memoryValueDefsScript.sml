@@ -4,7 +4,7 @@
    Helpers: exact field and tuple layouts. *)
 Theory memoryValueDefs
 Ancestors
-  valueEncoding vyperValue list alist arithmetic pair
+  valueEncoding valueEncodingDefs vyperValue list alist arithmetic pair
 
 Definition memory_value_rel_def:
   memory_value_rel (BaseTV bt) v offset mem =

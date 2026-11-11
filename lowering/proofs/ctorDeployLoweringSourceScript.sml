@@ -4,7 +4,7 @@ Theory ctorDeployLoweringSource
 Ancestors
   ctorDeployLoweringDefs vyperState vyperInterpreter vyperScopePreservation
   supportedStmtTraverse supportedExprTraverse e2eDeployDefs
-  vyperTypeDeploymentSoundness
+  vyperTypeDeploymentSoundness evalNoHalt
 
 Theorem outcomes_replace_bind:
   (!s oc. f (s with outcomes := oc) =
@@ -229,7 +229,7 @@ Theorem outcomes_replace_get_address_immutables:
     (FST (get_address_immutables cx s),
      SND (get_address_immutables cx s) with outcomes := oc)
 Proof
-  simp[get_address_immutables_def, outcomes_replace_lifts]
+  rewrite_tac[get_address_immutables_def, outcomes_replace_lifts] >> simp[]
 QED
 
 Theorem outcomes_replace_get_immutables:
@@ -433,7 +433,7 @@ Theorem outcomes_replace_lookup_global:
      SND (lookup_global cx src nm s) with outcomes := oc)
 Proof
   rewrite_tac[lookup_global_def] >> irule outcomes_replace_bind >>
-  simp[outcomes_replace_lifts] >> qx_gen_tac `ts` >>
+  rewrite_tac[outcomes_replace_lifts] >> simp[] >> qx_gen_tac `ts` >>
   simp[] >>
   Cases_on `find_var_decl_by_name nm ts`
   >- (simp[] >> irule outcomes_replace_bind >>
@@ -453,7 +453,7 @@ Proof
   >- (rewrite_tac[result_array_length_def] >> irule outcomes_replace_bind >>
       simp[outcomes_replace_read_result] >>
       Cases >> simp[return_def, raise_def] >>
-      BasicProvers.CASE_TAC >> simp[return_def])
+      Cases_on `a` >> simp[return_def])
   >- (rename1 `PlaceR p` >> Cases_on `p`
       >- (rename1 `StoragePlace tr slot ty` >> Cases_on `ty` >>
           rewrite_tac[result_array_length_def]
@@ -463,15 +463,15 @@ Proof
               simp[outcomes_replace_storage_backend, return_def])
           >> irule outcomes_replace_bind >> simp[outcomes_replace_read_result] >>
           Cases >> simp[return_def, raise_def] >>
-          BasicProvers.CASE_TAC >> simp[return_def])
+          Cases_on `a` >> simp[return_def])
       >> rewrite_tac[result_array_length_def] >> irule outcomes_replace_bind >>
       simp[outcomes_replace_read_result] >>
       Cases >> simp[return_def, raise_def] >>
-      BasicProvers.CASE_TAC >> simp[return_def])
+      Cases_on `a` >> simp[return_def])
   >> rewrite_tac[result_array_length_def] >> irule outcomes_replace_bind >>
   simp[outcomes_replace_read_result] >>
   Cases >> simp[return_def, raise_def] >>
-  BasicProvers.CASE_TAC >> simp[return_def]
+  Cases_on `a` >> simp[return_def]
 QED
 
 Theorem outcomes_replace_array_iterator_results:
@@ -735,7 +735,7 @@ Proof
       Excl "lock_if_nr_def", Excl "is_view_mut_def"]) >>
   gvs[lock_if_nr_def, is_view_mut_def] >>
   `cx = (initial_evaluation_context ((tx.target,[(NONE,tops)])::am.sources)
-      am.layouts tx NONE with in_deploy := T)` by
+      am.layouts (tx with created_in_tx := T) NONE with in_deploy := T)` by
     simp[Abbr `cx`, deploy_evaluation_context_def] >>
   `ALOOKUP [(NONE,tops)] NONE = SOME tops` by simp[] >>
   qpat_x_assum `supported_program _` kall_tac >>
@@ -764,6 +764,18 @@ Proof
     (rpt strip_tac >> irule deploy_ctor_return_none >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      qexistsl [`gobs`, `NONE`, `st`] >> gvs[]) >>
+  `res <> INR HaltException` by
+    (strip_tac >>
+     gvs[ctorDeployDefsTheory.deploy_source_ok_def, deploy_ctor_start_def,
+         Excl "lock_if_nr_def", Excl "is_view_mut_def"] >>
+     rename1 `lookup_function NONE _ Deploy tops = SOME (_,_,_,_,_,cbody)` >>
+     `get_module_code (deploy_evaluation_context tops am tx) NONE = SOME tops` by
+       simp[deploy_evaluation_context_def, vyperInterpreterTheory.initial_evaluation_context_def,
+            vyperContextTheory.get_module_code_def] >>
+     `!st st'. eval_stmts (deploy_evaluation_context tops am tx) cbody st <>
+               (INR HaltException, st')` by
+       (rpt gen_tac >> irule deploy_body_no_halt >> metis_tac[]) >>
+     metis_tac[]) >>
   gvs[deploy_ctor_start_def, Excl "lock_if_nr_def", Excl "is_view_mut_def"] >>
   drule deploy_ctor_prefix_transport >>
   disch_then (qspecl_then [`NONE`, `gobs`] assume_tac) >>
@@ -779,7 +791,7 @@ Proof
       (am with <|exports updated_by CONS (tx.target,[]);
         immutables updated_by CONS (tx.target,imms)|>) tx = cx` by
     simp[Abbr `cx`, deploy_evaluation_context_def] >>
-  `cx.in_deploy /\ cx.txn = tx` by
+  `cx.in_deploy /\ cx.txn = tx with created_in_tx := T` by
     simp[Abbr `cx`, deploy_evaluation_context_def, initial_evaluation_context_def] >>
   `bind (eval_external_defaults cx [])
       (\dflt_vs. case bind_arguments (type_env_all_modules [(NONE,tops)]) args
@@ -807,12 +819,20 @@ Proof
   >- (Cases_on `x` >>
       simp[deploy_ctor_finish_def, Abbr `cx`, unlock_if_nr_def] >>
       qmatch_goalsub_abbrev_tac `action st` >>
-      namedCases_on `action st` ["rr ss"] >> Cases_on `rr` >> simp[]) >>
+      namedCases_on `action st` ["rr ss"] >> Cases_on `rr` >> simp[] >>
+      qpat_x_assum `action st = _` mp_tac >> simp[Abbr `action`] >>
+      Cases_on `(deploy_evaluation_context tops am tx).nonreentrant_slot` >>
+      rw[return_def, release_nonreentrant_lock_def, bind_def,
+         get_transient_storage_def, update_transient_def]) >>
   rename1 `INR ex` >> Cases_on `ex` >>
   gvs[deploy_ctor_finish_def, Abbr `cx`, unlock_if_nr_def] >>
   simp[vyperValueOperationTheory.safe_cast_def] >>
   qmatch_goalsub_abbrev_tac `action st` >>
-  namedCases_on `action st` ["rr ss"] >> Cases_on `rr` >> simp[]
+  namedCases_on `action st` ["rr ss"] >> Cases_on `rr` >> simp[] >>
+  qpat_x_assum `action st = _` mp_tac >> simp[Abbr `action`] >>
+  Cases_on `(deploy_evaluation_context tops am tx).nonreentrant_slot` >>
+  rw[return_def, release_nonreentrant_lock_def, bind_def,
+     get_transient_storage_def, update_transient_def]
 QED
 
 Theorem deploy_ctor_finish_outcomes:
@@ -871,7 +891,36 @@ Proof
   rpt strip_tac >> map_every qid_spec_tac [`oc`, `s`] >>
   gvs[] >> once_rewrite_tac[evaluate_def] >>
   simp[outcomes_replace_lookup_global, outcomes_replace_lookup_flag_mem,
-    return_def, raise_def] >>
+    return_def, raise_def]
+  >~ [`builtin_args_length_ok bt (LENGTH es)`]
+  >- (match_mp_tac outcomes_replace_ignore_bind_guarded >>
+      simp[outcomes_replace_basic] >>
+      rpt gen_tac >> strip_tac >>
+      match_mp_tac outcomes_replace_bind >> conj_tac
+      >- (Cases_on `bt = Len`
+          >- (gvs[] >> match_mp_tac outcomes_replace_bind >> conj_tac
+              >- (first_x_assum irule >> reverse conj_tac
+                  >- (goal_assum (drule_at Any)) >>
+                  Cases_on `es` >>
+                  gvs[type_check_def, assert_def, raise_def,
+                      vyperContextTheory.builtin_args_length_ok_def,
+                      supported_exprs_exists_every]) >>
+              simp[outcomes_replace_bind, outcomes_replace_result_array_length,
+                   return_def]) >>
+          Cases_on `bt = Bop In \/ bt = Bop NotIn`
+          >- (gvs[] >>
+              (match_mp_tac outcomes_replace_bind >> conj_tac
+               >- metis_tac[] >>
+               simp[outcomes_replace_ignore_bind, outcomes_replace_bind,
+                    outcomes_replace_basic, outcomes_replace_lifts])) >>
+          Cases_on `bt = Env MsgGas`
+          >- gvs[outcomes_replace_next_gas_reading] >>
+          gvs[] >> match_mp_tac outcomes_replace_bind >> conj_tac
+          >- metis_tac[] >>
+          simp[outcomes_replace_bind, outcomes_replace_ignore_bind,
+               outcomes_replace_basic, outcomes_replace_lifts,
+               outcomes_replace_precompile_call_success, return_def]) >>
+      simp[return_def]) >>
   rpt (FIRST [first_assum ACCEPT_TAC,
       goal_assum (drule_at Any),
       first_assum (fn th => irule th >> rpt conj_tac >>
@@ -894,7 +943,9 @@ Proof
       outcomes_replace_extend_place, outcomes_replace_get_place,
       outcomes_replace_result_array_length, outcomes_replace_conditional_result,
       outcomes_replace_next_gas_reading, return_def, raise_def])
-  >> EVERY (map (fn tac => TRY (tac >> NO_TAC)) [
+  (* the seven goals left: two custom errors, a tuple-target value, struct
+     fields, the array iterator, the for loop, a builtin arity clash *)
+  >>~- ([`order_custom_error_args`],
     (Cases_on `err` >> simp[] >>
         rpt BasicProvers.TOP_CASE_TAC >> simp[raise_def] >>
         drule vyperASTTheory.order_custom_error_args_perm >> strip_tac >>
@@ -908,17 +959,21 @@ Proof
           metis_tac[] >>
         map_every qid_spec_tac [`oc`, `s`] >>
         irule outcomes_replace_bind >> simp[] >> gen_tac >>
-        irule outcomes_replace_bind >> simp[outcomes_replace_lifts, raise_def]),
-    Cases_on `v` >> simp[raise_def] >>
-      Cases_on `a` >> gvs[raise_def],
-    Cases_on `es` >>
-      gvs[type_check_def, assert_def, raise_def,
-          vyperContextTheory.builtin_args_length_ok_def,
-          supported_exprs_exists_every],
-    gvs[supported_fields_exists_every, supported_exprs_exists_every,
-        listTheory.EVERY_MAP] >>
-      metis_tac[outcomes_replace_array_iterator_results],
-    metis_tac[outcomes_replace_array_iterator_results]])
+        irule outcomes_replace_bind >> simp[outcomes_replace_lifts, raise_def]))
+  >~ [`TupleV _`]
+  >- (Cases_on `v` >> simp[raise_def] >> Cases_on `a` >> gvs[raise_def])
+  >~ [`eval_exprs _ (MAP SND _)`]
+  >- (gvs[supported_fields_exists_every, supported_exprs_exists_every,
+          listTheory.EVERY_MAP] >>
+      metis_tac[outcomes_replace_array_iterator_results])
+  >~ [`array_iterator_results _ _ _ (_ with outcomes := _)`]
+  >- metis_tac[outcomes_replace_array_iterator_results]
+  >~ [`eval_for _ _ _ _ _ (_ with outcomes := _)`]
+  >- metis_tac[]
+  >> Cases_on `es` >>
+  gvs[type_check_def, assert_def, raise_def,
+      vyperContextTheory.builtin_args_length_ok_def,
+      supported_exprs_exists_every]
 QED
 
 Theorem deploy_ctor_source_run:

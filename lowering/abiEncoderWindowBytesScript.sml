@@ -6,7 +6,7 @@ Ancestors
   abiEncoderRegisteredEffect abiEncoderWindowContract contractABI valueEncoding valueEncodingProps
   abiEncoderWindowLeaves abiEncoderBytes abiEncoderWrites emitHelperProps
   exprLoweringProps localPtrsProps abiEncoderExtendSim venomMemDefs
-  emitHelper compileEnv freshWrites venomState venomExecSemantics venomInst words arithmetic
+  emitHelper compileEnv loweringStateRelDefs freshWrites venomState venomExecSemantics venomInst words arithmetic
   abiEncoder list rich_list abiEncoderWindowLookup
 
 Theorem window_bytes_output_bounds:

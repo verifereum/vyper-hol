@@ -1,5 +1,6 @@
 Theory makeSsaCurrentDemandDominance
 Ancestors
+  livenessTransferProofs
   makeSsaCurrentDemand makeSsaCurrentAvailability makeSsaCurrentOccurrence venomExecProofs
 Libs
   listTheory arithmeticTheory venomWfTheory
@@ -88,13 +89,6 @@ Proof
   qexistsl_tac [`db`, `di`] >> simp[] >> conj_tac
   >- metis_tac[current_available_unique_dominates] >>
   metis_tac[current_available_local_index]
-QED
-
-Theorem current_collect_phis_length:
-  !insts. LENGTH (collect_phis insts) <= LENGTH insts
-Proof
-  Induct >> simp[livenessDefsTheory.collect_phis_def] >>
-  Cases_on `h.inst_opcode = PHI` >> simp[]
 QED
 
 Theorem current_live_phi_cut_single_definition:

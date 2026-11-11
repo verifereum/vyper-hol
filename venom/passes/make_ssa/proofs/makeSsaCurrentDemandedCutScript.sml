@@ -3,7 +3,7 @@ Ancestors
   makeSsaCurrentSingletonCut makeSsaCurrentPlacementCut makeSsaCurrentCutTokens
   makeSsaCurrentPlacement
   makeSsaCurrentSelectedLive makeSsaCurrentOccurrence makeSsaCurrentLastSite
-  makeSsaCurrentDominanceBridge makeSsaCurrentAnalysis makeSsaCurrentDefs
+  makeSsaCurrentDominanceBridge makeSsaCurrentAnalysis makeSsaDefs
   livenessTransferProofs livenessDefs venomWf venomInst venomExecProps cfgWf dominatorDefs
   list alist cfgCorrectnessProof
 

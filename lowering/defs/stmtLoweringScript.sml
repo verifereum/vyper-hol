@@ -407,7 +407,8 @@ Definition compile_assign_value_def:
                        (dst_ty : type) (src_ty : type)
                        (dynarray_info : (num # num) option) mem_size =
     (* A bytestring source keeps its own, possibly narrower, buffer, so a
-       storage, transient or immutable target gets only the words it holds.
+       storage or transient target gets only the words it holds.
+       Immutable bytestring stores use their runtime length below.
        Mirrors Python: stmt.py _store_complex_type with copy_typ
        (vyperlang/vyper#5332). *)
     let copy_size = (if is_bytestring_type dst_ty
@@ -499,12 +500,14 @@ Definition compile_assign_value_def:
               else return val_op);
            if is_prim_word then
              compile_imm_store_word cenv.ce_imm_alloca dst_op val_op'
-           else if copy_size ≤ 32 then
+           else if is_bytestring_type dst_ty then
+             compile_store_immutable_bytestring cenv.ce_imm_alloca val_op' dst_op
+           else if mem_size ≤ 32 then
              do loaded <- emit_op MLOAD [val_op'];
                 compile_imm_store_word cenv.ce_imm_alloca dst_op loaded
              od
            else compile_imm_store_words cenv.ce_imm_alloca val_op' dst_op
-                  ((copy_size + 31) DIV 32) 0
+                  ((mem_size + 31) DIV 32) 0
         od
     | LocCalldata =>
         (* Calldata is read-only — store is invalid *)
@@ -862,7 +865,10 @@ Definition compile_stmt_def:
 
   (* Assign: store to target (memory, storage, transient, code).
      Evaluate RHS to a value/location, then the target pointer, then unwrap
-     the RHS (so an lvalue-shaped RHS is read after target side effects).
+     the RHS. When the target's indices can modify memory or storage, the
+     RHS value is frozen first (a word read at once, a composite copied to
+     a fresh temporary) so the store sees the value from before those
+     effects, as the source semantics reads it (vyperlang/vyper#5282).
      dst_ty from compile_get_target_ptr (target's declared type),
      src_ty from expr_type e (expression's type). These may differ
      for subtype assignments (e.g., DynArray[Bytes[540]] → DynArray[Bytes[704]]).
@@ -874,7 +880,10 @@ Definition compile_stmt_def:
        od
      else
      let src_ty = lowered_value_type cenv e in
-     do src_vv <- compile_expr cenv (expr_type e) e;
+     do src_vv0 <- compile_expr cenv (expr_type e) e;
+        src_vv <- (if expr_can_mutate cenv (target_to_expr bt) then
+                     compile_snapshot_vv cenv T (vv_with_type src_ty src_vv0)
+                   else return src_vv0);
         tgt_result <- compile_get_target_ptr compile_expr cenv bt;
         dst_op <- return (FST tgt_result);
         dst_loc_opt <- return (FST (SND tgt_result));

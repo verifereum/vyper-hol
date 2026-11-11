@@ -1,6 +1,6 @@
 Theory o1MakeSsaRootedTree
 Ancestors
-  o1MakeSsaActualMaps dominatorProofs makeSsaCurrentDefs venomInst list
+  o1MakeSsaActualMaps dominatorProofs makeSsaDefs venomInst list
 
 (* Ancestors are stored nearest first; the endpoint is separate. *)
 Definition rooted_parent_path_def:

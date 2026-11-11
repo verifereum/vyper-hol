@@ -234,7 +234,7 @@ Proof
         mp_tac body_revert_no_spill >>
       impl_tac
       >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY REFL_TAC >>
-          metis_tac[body_ready_fn_no_marker]) >>
+          metis_tac[codegen_ready_fn_no_marker]) >>
       disch_then (qspec_then `j` mp_tac) >>
       impl_tac >- first_assum ACCEPT_TAC >>
       disch_then (qspecl_then [`rest_ops`, `ps_after`] mp_tac) >>
@@ -450,6 +450,13 @@ Theorem block_body_frame_sim:
       (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
       SOME (block_ops, ps_after) /\
     ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+    ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
+    (?prefixL prefixD core.
+       ps_after.ps_stack = prefixL ++ core /\
+       ps_dfs_after.ps_stack = prefixD ++ core /\
+       (!v. MEM v (live_vars_at liveness bb.bb_label
+                     (LENGTH bb.bb_instructions)) ==>
+          ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
     block_plan_state liveness dfg cfg fn bb
       (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
       k ps /\
@@ -491,6 +498,14 @@ Theorem block_body_frame_sim:
 Proof
   rpt gen_tac >> strip_tac >>
   rename1 `generate_context_plan _ = SOME cpl` >>
+  Q.SUBGOAL_THEN `?prefixL prefixD core.
+     ps_after.ps_stack = prefixL ++ core /\
+     ps_dfs_after.ps_stack = prefixD ++ core /\
+     (!v. MEM v (live_vars_at liveness bb.bb_label
+                   (LENGTH bb.bb_instructions)) ==>
+        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` ASSUME_TAC
+  >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> rpt conj_tac >>
+      first_assum ACCEPT_TAC) >>
   `body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv

@@ -1,7 +1,7 @@
 (* Apply the Log suffix to the actual endpoint, hiding its arbitrary limit. *)
 Theory stmtSimLogSuffixActual
 Ancestors
-  stmtSimLogSuffixFrame compileEnv context venomState finite_map pred_set
+  stmtSimLogSuffixFrame compileEnv loweringStateRelDefs context venomState finite_map pred_set
   ASCIInumbers list
 
 Theorem log_finite_name_bound[local]:

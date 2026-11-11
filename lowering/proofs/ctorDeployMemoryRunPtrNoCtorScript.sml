@@ -61,7 +61,7 @@ Proof
                  vs_alloca_next := b + N |>)` >>
   `step_inst n ctx i0 t0 = OK s1` by
     simp[Abbr `i0`, Abbr `s1`, Abbr `t0`, Abbr `b`, Abbr `N`, mk_inst_def,
-         step_inst_non_invoke, step_inst_base_def, exec_alloca_def] >>
+         step_inst_non_invoke, opcode_eq ``ALLOCA``, exec_alloca_def] >>
   `get_instruction bb t0.vs_inst_idx = SOME i0` by
     simp[Abbr `bb`, Abbr `t0`, get_instruction_def] >>
   `~is_terminator i0.inst_opcode` by

@@ -4,7 +4,7 @@ Ancestors
   abiEncoderWindowPhase abiEncoderWindowContract abiEncoderChildCode
   abiEncoderAppend abiEncoderCounters abiEncoderAddressReach abiEncoderProps
   abiEncoderChildContext abiEncoderWindowLookup
-  emitHelperProps freshWrites compileEnv fragExec venomState words list pred_set arithmetic
+  emitHelperProps freshWrites compileEnv loweringStateRelDefs fragExec venomState words list pred_set arithmetic
 
 Definition window_observed_contract_def:
   window_observed_contract ei <=>

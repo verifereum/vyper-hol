@@ -3,7 +3,7 @@
 Theory abiEncoderLeaves
 Ancestors
   abiDecoderWordCopy abiDecoderComposition abiDecoderContract abiDecoderCopy
-  abiEncoder emitHelperProps exprLoweringProps emitHelper compileEnv valueEncoding
+  abiEncoder emitHelperProps exprLoweringProps emitHelper compileEnv valueEncoding valueEncodingDefs
   venomState venomExecSemantics venomInst words list
 
 Theorem abi_encode_word_decode_code:

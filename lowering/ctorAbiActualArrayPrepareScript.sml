@@ -6,7 +6,7 @@ Ancestors
   abiDecoderReentryPointer abiDecoderReentry abiDecoderVarSequence abiDecoderVarExtend
   abiDecoderDynamicLoopSetup abiDecoderContract abiDecoderGuard abiDecoderReservation
   ctorAbiActualObservations ctorAbiActualWorld abiEncoderRegisteredEffect
-  compileEnv emitHelper emitHelperProps exprLoweringProps
+  compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   venomState venomExecSemantics venomInst words list rich_list arithmetic
   fragExec instIdxIndep abiDecoderLoop
 

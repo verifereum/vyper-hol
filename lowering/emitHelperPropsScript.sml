@@ -30,7 +30,7 @@
 Theory emitHelperProps
 Ancestors
   fragGasPath gasCount fragExec
-  exprLoweringProps localPtrsProps emitHelper compileEnv
+  exprLoweringProps localPtrsProps emitHelper compileEnv loweringStateRelDefs
   venomExecSemantics venomExecProofs venomState venomInst
   instIdxIndep vfmState freshLabelStringProps ASCIInumbers
   list pred_set arithmetic
@@ -388,6 +388,14 @@ Theorem lookup_var_mstore[simp]:
   lookup_var v (mstore a b s) = lookup_var v s
 Proof
   rw[lookup_var_def, mstore_def]
+QED
+
+Theorem slot_copy_operand_update:
+  eval_operand op (update_var name value s) =
+    if op = Var name then SOME value else eval_operand op s
+Proof
+  Cases_on `op` >> simp[eval_operand_def, lookup_var_def, update_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
 (* Lookup the variable just written *)

@@ -2,7 +2,7 @@
 Theory abiDecoderArrayInvariant
 Ancestors
   abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiCanonicalHeadSize
-  abiDecoderArrayPrefix abiDecoderFrameCompose valueEncodingProps valueEncoding
+  abiDecoderArrayPrefix abiDecoderFrameCompose valueEncodingProps valueEncoding valueEncodingDefs
   vyperABI vyperABIRoundtrip vyperTyping vyperValue venomState words list rich_list arithmetic
 
 Theorem abi_decoder_dynarray_values:

@@ -2,7 +2,7 @@
 Theory externalReturnCopyFields
 Ancestors
   externalReturnCopyTransport externalReturnCopyFrame fragExec
-  exprLoweringProps valueEncoding valueEncodingProps valueEncodingProofs
+  exprLoweringProps valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs
   vyperTypeSystem vyperTyping list rich_list pair alist arithmetic words
   compileEnv context
 

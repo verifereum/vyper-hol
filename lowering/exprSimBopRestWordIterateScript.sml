@@ -41,12 +41,13 @@ Proof
   simp[loweringPostsTheory.vv_post_def,
        exprLoweringPropsTheory.stmt_state_rel_jump_to,
        loweringPostsTheory.vv_holds_def, loweringPostsTheory.vv_at_def,
+       loweringPostsTheory.vv_own_def, loweringPostsTheory.expr_val_own_def,
        loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
-       venomStateTheory.lookup_var_def, compileEnvTheory.local_region_def,
+       venomStateTheory.lookup_var_def, loweringStateRelDefsTheory.local_region_def,
        loweringPostsTheory.storage_holds_def, loweringPostsTheory.immutable_holds_def,
        venomStateTheory.contract_storage_def, venomStateTheory.contract_transient_def,
        venomStateTheory.jump_to_def, venomStateTheory.eval_operand_def,
-       loweringPostsTheory.locals_kept_def]
+       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def, loweringPostsTheory.pure_frame_def]
 QED
 
 (* Finite-search composition consumes the four local marked block contracts.
@@ -186,7 +187,7 @@ Proof
   `!n. cl.cs_next_var <= n ==>
        needleop <> Var (STRING #"%" (toString n)) /\
        lenop <> Var (STRING #"%" (toString n))` by
-    (rpt strip_tac >> gvs[compileEnvTheory.not_fresh_at_def]) >>
+    (rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
   simp[exprLoweringPropsTheory.emitted_insts_def] >>
   once_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
@@ -195,9 +196,9 @@ Proof
        exec_read1_def, exec_pure2_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
   irule rest_word_search_rep_update >>
-  simp[compileEnvTheory.not_fresh_at_def] >>
+  simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
   irule rest_word_search_rep_update >>
-  simp[compileEnvTheory.not_fresh_at_def]
+  simp[loweringStateRelDefsTheory.not_fresh_at_def]
 QED
 
 (* Boundary check: freshness and the tested register come from the SAME
@@ -282,10 +283,11 @@ Proof
   `cs.cs_next_var <= cl.cs_next_var /\ cl.cs_next_var <= cm.cs_next_var` by
     (qspec_then `cl` mp_tac (Q.SPECL [`ctor`, `imm`, `loc`, `h.rw_addr`]
        exprLoweringPropsTheory.ci_mono_compile_ptr_load) >>
-     simp[exprLoweringPropsTheory.ci_mono_def]) >>
+     simp[exprLoweringPropsTheory.ci_mono_def] >>
+     Cases_on `bound_opt` >> simp[]) >>
   `!z. not_fresh_at cs z ==> not_fresh_at cl z` by metis_tac[not_fresh_at_mono] >>
   `~not_fresh_at cs h.rw_idx /\ ~not_fresh_at cs h.rw_result` by
-    simp[compileEnvTheory.not_fresh_at_def] >>
+    simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
   qpat_x_assum `h.rw_idx = _` kall_tac >>
   qpat_x_assum `h.rw_result = _` kall_tac >>
   qpat_x_assum `h.rw_entry = _` kall_tac >>
@@ -313,16 +315,17 @@ Proof
   `R s` by simp[Abbr `R`] >>
   `gas_marked_path memory execctx fn s 0 (OK (jump_to h.rw_entry s))` by
     (drule_all rest_word_layout_caller_path >> simp[]) >>
-  `R (update_var h.rw_result 0w
-       (update_var h.rw_idx 0w (jump_to h.rw_entry s)))` by metis_tac[] >>
-  `eval_operand lenop (update_var h.rw_result 0w
-       (update_var h.rw_idx 0w (jump_to h.rw_entry s))) = SOME (n2w len)` by
-    fs[Abbr `R`, rest_word_search_rep_def] >>
   `?u. gas_marked_path memory execctx fn (jump_to h.rw_entry s) 0 (OK u) /\
     u.vs_current_bb = h.rw_cond /\ u.vs_inst_idx = 0 /\ ~u.vs_halted /\
     rest_word_membership_inv h.rw_idx h.rw_result len needle elem R 0 u` by
-    (irule rest_word_layout_entry_path >> simp[venomStateTheory.jump_to_def] >>
-     goal_assum (drule_at Any) >> fs[venomStateTheory.jump_to_def] >> metis_tac[]) >>
+    (irule rest_word_layout_entry_path >>
+     qpat_assum `rest_word_loop_layout_safe _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (irule_at Any) >>
+     simp[venomStateTheory.jump_to_def] >>
+     Cases_on `lenop` >>
+     gvs[rest_word_search_rep_def, venomStateTheory.eval_operand_def,
+         venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
   qpat_x_assum `!i u. _` drule_all >> strip_tac >>
   `?w. gas_marked_path memory execctx fn t 0 (OK w) /\
     w.vs_current_bb = ct.cs_current_bb /\

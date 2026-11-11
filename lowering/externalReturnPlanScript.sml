@@ -2,7 +2,7 @@ Theory externalReturnPlan
 Ancestors
   externalReturnPackage retAbiPlanProps externalReturnSupport
   e2eDefs vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractContext
-  vyperInterpreter supportedDecls supportedProgram abiTypeBoundProps compileVyper compileEnv exprLowering
+  vyperInterpreter supportedDecls supportedProgram abiTypeBoundProps compileVyper compileEnv loweringStateRelDefs exprLowering
   abiEncoderProps structFieldsProps typedCopyProducer supportedTypes
   vyperTypeSystem vyperContext vyperValue vyperABI contractABI
   valueEncoding finite_map list rich_list option pair combin

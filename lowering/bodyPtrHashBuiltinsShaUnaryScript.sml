@@ -56,7 +56,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   rewrite_tac[expr_vv_sim_ptr_def] >> rpt strip_tac >>
   `local_ptrs_rel func cenv es.scopes s0` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `expr_body_pre cenv cx env e es` by
     (irule expr_body_pre_builtin_arg >>
      first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >>

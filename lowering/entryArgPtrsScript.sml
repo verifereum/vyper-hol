@@ -14,7 +14,7 @@ Theory entryArgPtrs
 Ancestors
   list rich_list finite_map alist
   vyperLoweringCorrect entryDecodePlanProps entryDecodeProps fragExec
-  compileEnv compileVyper moduleLowering selectorDispatch
+  compileEnv loweringStateRelDefs compileVyper moduleLowering selectorDispatch
   vyperInterpreter vyperState vyperContext vyperAST
   venomState vyperCall loweringHalt entryDecodeStaticProps retAbiPlanProps
   valueEncodingProofs vyperABIRoundtrip contractABI entryDispatchProps

@@ -8,7 +8,7 @@
  *)
 Theory valueTypingMemoryProps
 Ancestors
-  vyperTyping valueEncoding arithmetic list vfmConstants
+  vyperTyping valueEncoding valueEncodingDefs arithmetic list vfmConstants
 Libs
   intLib
 

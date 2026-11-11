@@ -239,19 +239,23 @@ Theorem terminal_selfdestruct_rel_step:
   st.as_call_ctx = vs.vs_call_ctx ==>
   ?st'. asm_steps lo o2pc prog 1 st = AsmHalt st' /\
     venom_asm_terminal_rel
-      (halt_state (set_returndata [] (vs with vs_accounts :=
-        (\a. if a = vs.vs_call_ctx.cc_address then
-          lookup_account vs.vs_call_ctx.cc_address vs.vs_accounts with balance := 0
-        else if a = (w2w addr : address) then
-          lookup_account (w2w addr) vs.vs_accounts with balance :=
-            (lookup_account vs.vs_call_ctx.cc_address vs.vs_accounts).balance +
-            (lookup_account (w2w addr) vs.vs_accounts).balance
-        else vs.vs_accounts a)))) st'
+      (halt_state (set_returndata [] (vs with <|
+        vs_accounts :=
+          (if vs.vs_call_ctx.cc_created_in_tx then
+             update_account vs.vs_call_ctx.cc_address
+               (lookup_account vs.vs_call_ctx.cc_address vs.vs_accounts with balance := 0)
+           else I)
+          (transfer_value vs.vs_call_ctx.cc_address (w2w addr)
+            (lookup_account vs.vs_call_ctx.cc_address vs.vs_accounts).balance
+            vs.vs_accounts);
+        vs_pending_deletions := if vs.vs_call_ctx.cc_created_in_tx then
+          vs.vs_call_ctx.cc_address :: vs.vs_pending_deletions
+          else vs.vs_pending_deletions |>))) st'
 Proof
   strip_tac >> `1 = SUC 0` by simp[] >> pop_assum SUBST1_TAC >>
   simp[Once asm_steps_def, asm_steps_def] >>
   fs[asm_block_at_def] >>
   rewrite_tac[stackOpAsmSimTheory.asm_step_selfdestruct, asm_selfdestruct_def] >>
   asm_rewrite_tac[] >>
-  fs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def]
+  fs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def, COND_RATOR]
 QED

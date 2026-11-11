@@ -5,7 +5,7 @@ Ancestors
   stmtSimAppendStorageCompose stmtSimAppendStorage appendStorageRel
   varsExt freshWrites stateFrame exprOperandVar stmtSimProps stmtSimDefs exprSimDefs
   fragGasMode fragGasPathMem fragExecMem fragExec
-  exprLoweringProps emitHelperProps loweringPosts compileEnv venomState venomInst venomExecSemantics
+  exprLoweringProps emitHelperProps loweringPosts compileEnv loweringStateRelDefs venomState venomInst venomExecSemantics
   vyperState vyperStorage list rich_list words finite_map
 
 Theorem append_storage_word_frame_fields_mem[local]:

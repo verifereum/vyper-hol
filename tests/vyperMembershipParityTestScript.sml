@@ -1,5 +1,5 @@
 Theory vyperMembershipParityTest
-Ancestors compileVyper concretizeMemLocDefs alist byte integer_word option vyperTypeSystem
+Ancestors compileVyper concretizeMemLocDefs codegenReadyCompute alist byte integer_word option vyperTypeSystem
 Libs vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib membershipParityLib finite_mapLib wordsLib
 
 (* Hash and stage the independent inputs, including in exported source builds. *)

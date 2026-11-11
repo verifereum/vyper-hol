@@ -1,9 +1,10 @@
 Theory makeSsaCurrentTreeTrace
 Ancestors
   makeSsaCurrentCertificate makeSsaCurrentAllocation makeSsaCurrentRenameTrace
-  makeSsaCurrentEdgeTrace makeSsaCurrentInduct makeSsaCurrentDefs
-  makeSsaCurrentProps makeSsaDefs cfgTransform cfgTransformProps makeSsaHelper
+  makeSsaCurrentEdgeTrace makeSsaCurrentInduct makeSsaDefs
+  makeSsaCurrentProps cfgTransform cfgTransformProps
   makeSsaCurrentAnalysis venomInst venomWf irSupply list pair sorting
+  venomExecProofs
 
 (* Sibling calls retain global counters/history but restore the lexical
    stacks and environment of their parent. These boundaries do not equate

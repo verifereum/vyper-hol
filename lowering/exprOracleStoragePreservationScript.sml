@@ -382,7 +382,6 @@ Resume eval_expr_oracle_storage_mutual[Expr_Builtin]:
   qpat_assum `bt <> Env MsgGas` (fn th => rewrite_tac[th]) >>
   Cases_on `bt = Bop In \/ bt = Bop NotIn` >> gvs[] >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
-  qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
     type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
   Cases_on `eval_exprs cx es st` >>

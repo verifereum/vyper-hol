@@ -10,6 +10,19 @@ Ancestors
   bodyMemoryPreds exprSimOperators exprSimIfExp exprSimSource exprSimHyps
   exprSimHypsDefs
 
+(* The wave's compatibility lemma has a stronger third disjunct; this
+   trunk-side use only needs the memory layout. *)
+Theorem ifexp_lowered_type_compatible_mem[local]:
+  expr_body_pre ce cx env e es /\
+  (int_calls_expr e = [] \/ same_memory_layout ce (lowered_value_type ce e) (expr_type e)) ==>
+  lowered_value_type ce e = expr_type e \/
+  is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
+    arg_type_fits (lowered_value_type ce e) (expr_type e) \/
+  same_memory_layout ce (lowered_value_type ce e) (expr_type e)
+Proof
+  metis_tac[ifexp_body_pre_lowered_type_compatible]
+QED
+
 Theorem body_ifexp_mem_ok:
   !cx v5 e1 e2 e3.
     (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_mem_ok cx e2) /\
@@ -71,7 +84,7 @@ Proof
        is_bytestring_type (lowered_value_type cenv e) /\
        arg_type_fits (lowered_value_type cenv e) (expr_type e) \/
        same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)` by
-    (rpt strip_tac >> irule ifexp_body_pre_lowered_type_compatible >>
+    (rpt strip_tac >> irule ifexp_lowered_type_compatible_mem >>
      metis_tac[]) >>
   `!gs tv es1.
      (do result <- eval_expr cx e1; read_result cx result od)

@@ -1,6 +1,6 @@
 Theory makeSsaCurrentAllocation
 Ancestors
-  makeSsaCurrentTokens makeSsaCurrentDefs makeSsaCurrentProps irSupply
+  makeSsaCurrentTokens makeSsaDefs makeSsaCurrentProps irSupply
   list alist pair
 
 (* Histories contain definition occurrences only. Defaults intentionally alias

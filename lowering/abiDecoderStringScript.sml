@@ -3,7 +3,7 @@ Theory abiDecoderString
 Ancestors
   abiDecoderBytesTyped abiDecoderTypedContract abiDecoderContract abiDecoderBytes
   abiCanonicalBytes abiDecoderPointed compileEnv exprLoweringProps exprLowering
-  vyperABI vyperTyping vyperValue contractABI valueEncoding
+  vyperABI vyperTyping vyperValue contractABI valueEncoding valueEncodingDefs
   fragExec venomExecSemantics byte words list string combin
 
 Theorem abi_decoder_string_pre_bytes:

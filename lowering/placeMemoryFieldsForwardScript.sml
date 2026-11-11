@@ -2,7 +2,7 @@ Theory placeMemoryFieldsForward
 Ancestors
   placeMemoryDynarrayForward placeMemoryTypedBase placeMemoryForwardPath placeMemoryPrimitiveForward
   placeMemoryCopyFrames placeMemoryCopyEffect placeMemoryChildForward
-  context compileEnv exprLoweringProps emitHelper emitHelperProps
+  context compileEnv loweringStateRelDefs exprLoweringProps emitHelper emitHelperProps
   venomState venomInst venomExecSemantics venomExecProofs fragExec
   fragGasMode freshWrites ASCIInumbers list rich_list finite_map
 
@@ -280,9 +280,9 @@ Theorem typed_memory_tuple_outside_write:
 Proof
   strip_tac >>
   `val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) p m'` suffices_by
-    simp[valueEncodingTheory.val_in_memory_def] >>
+    simp[valueEncodingDefsTheory.val_in_memory_def] >>
   irule val_in_memory_outside_write >>
-  simp[valueEncodingTheory.val_in_memory_def, valueEncodingTheory.val_wf_def,
+  simp[valueEncodingDefsTheory.val_in_memory_def, valueEncodingDefsTheory.val_wf_def,
        valueEncodingTheory.type_memory_size_def] >>
   qexistsl_tac [`d`, `m`, `n`] >> metis_tac[]
 QED
@@ -315,14 +315,14 @@ Theorem typed_memory_fields_forward:
 Proof
   Induct
   >- (Cases_on `sts` >> Cases_on `dtvs` >> Cases_on `stvs` >> Cases_on `vs` >>
-      simp[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def,
-           valueEncodingTheory.val_in_memory_def, valueEncodingTheory.type_memory_size_def,
+      simp[vyperTypingTheory.value_has_type_def, valueEncodingDefsTheory.val_wf_def,
+           valueEncodingDefsTheory.val_in_memory_def, valueEncodingTheory.type_memory_size_def,
            cj 2 compile_store_memory_typed_def, comp_return_def] >>
       rpt strip_tac >> gvs[] >> qexists_tac `s` >>
       irule typed_copy_effect_identity >> simp[]) >>
   pop_assum (mk_asm "ih") >>
   Cases_on `sts` >> Cases_on `dtvs` >> Cases_on `stvs` >> Cases_on `vs` >>
-  simp[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def,
+  simp[vyperTypingTheory.value_has_type_def, valueEncodingDefsTheory.val_wf_def,
        valueEncodingTheory.type_memory_size_def] >>
   rpt strip_tac >> gvs[] >>
   rename1 `compile_typed_copy_fields cenv dst src (dt::dts) (st::sts) doff soff sa = ((),sb)` >>
@@ -351,7 +351,7 @@ Proof
      simp[venom_state_component_equality]) >>
   `val_in_memory stv v (w2n (sw + n2w soff)) u.vs_memory /\
    tuple_in_memory vs stvs (w2n sw + soff + type_memory_size stv) u.vs_memory` by
-    gvs[valueEncodingTheory.val_in_memory_def] >>
+    gvs[valueEncodingDefsTheory.val_in_memory_def] >>
   `typed_memory_child_forward cenv tenv ctx func dt` by metis_tac[] >>
   `(w2n (sw + n2w soff) + type_memory_size stv <= w2n (dw + n2w doff) \/
     w2n (dw + n2w doff) + type_memory_size dtv <= w2n (sw + n2w soff)) /\
@@ -400,7 +400,7 @@ Proof
      gvs[] >> rpt strip_tac >> irule typed_copy_effect_bytes >>
      goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
   qexists_tac `t` >> (conj_tac
-  >- gvs[valueEncodingTheory.val_in_memory_def] >>
+  >- gvs[valueEncodingDefsTheory.val_in_memory_def] >>
   asm_x "ih" kall_tac >>
   `typed_copy_effect ctx func sa b s u (w2n dw + doff)
      (type_memory_size dtv + type_memory_size_list dtvs)` by

@@ -19,7 +19,7 @@ Ancestors
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
   vyperStorageLayoutSafety vyperRuntimeAccounts
-  supportedProgram compileEnv context selectorDispatch immutableSectionRel
+  supportedProgram compileEnv loweringStateRelDefs selectorDispatch immutableSectionRel context
 
 (* ===== Source deployment, typing and storage ===== *)
 
@@ -162,6 +162,8 @@ Definition call_state_rel_def:
       (?mr. ctxt.msgParams.outputTo = Memory mr) /\
       installed_code_rel tops runtime_bc (account_immutables am tx.target)
         ctxt.msgParams.code /\
+      (lookup_account tx.target es.rollback.accounts).code =
+        ctxt.msgParams.code /\
       ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
       LENGTH ctxt.msgParams.code <= 24576 /\
       ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
@@ -278,10 +280,9 @@ End
 
 Definition unspecified_behaviour_exempt_def:
   unspecified_behaviour_exempt tops e <=>
-    (e = RuntimeError "abi_decode invalid" /\
-     ?ty. occurs_abi_decode_target ty tops /\
-          is_dynamic (vyper_to_abi_type (type_env tops) ty)) \/
-    e = RuntimeError "convert empty bytes to signed"
+    e = RuntimeError "abi_decode invalid" /\
+    ?ty. occurs_abi_decode_target ty tops /\
+         is_dynamic (vyper_to_abi_type (type_env tops) ty)
 End
 
 Definition source_exempt_def:

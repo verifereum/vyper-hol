@@ -1,8 +1,8 @@
 Theory stmtLogTopicsMemory
 Ancestors
   freshWrites stmtLowering stmtSimLogTopics stmtReasonMemory fragExecMem instMemFrontier
-  stmtSimLogArgs exprSimHash exprSimDefs supportedTypes vyperTyping vyperValue
-  valueEncoding valueEncodingProps exprSimProps stmtReasonMemory moduleLoweringProps context emitHelper emitHelperProps exprLoweringProps venomExecSemantics
+  stmtSimLogArgs exprSimHash exprSimHashBoundary exprSimDefs supportedTypes vyperTyping vyperValue
+  valueEncoding valueEncodingDefs valueEncodingProps exprSimProps stmtReasonMemory moduleLoweringProps context emitHelper emitHelperProps exprLoweringProps venomExecSemantics
   contractABI venomState venomInst words finite_map list rich_list arithmetic compileEnv
 
 Theorem compile_encode_log_topic_bytes_mem_ok:

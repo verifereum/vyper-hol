@@ -4,7 +4,7 @@ Ancestors
   bodyPtrDefs exprLowering exprSimProps valueEncoding words finite_map
   exprSimPtrTopLevelStorageDecode exprSimPtrTopLevelStoragePost
   pred_set list venomState vyperAST robustCopyTransportPtr valueEncodingProps
-  compileEnv exprLoweringProps exprSimDefs
+  compileEnv loweringStateRelDefs exprLoweringProps exprSimDefs
 
 Theorem toplevel_storage_copy_pointer_post:
   ~is_word_type ann /\

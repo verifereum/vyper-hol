@@ -3,7 +3,7 @@ Ancestors
   abiValidWrapped abiValidSingletonPrefix abiBuiltinPrefixSource abiBuiltinSource
   abiBuiltinDecodeSetup abiBuiltinSetupReach abiBuiltinAllocation abiDecoderCoherence
   abiDecoderTypedContract abiDecoderContract abiDecoderReentry abiDecoderAllocation
-  abiDecoderArrayInitExec compileEnv valueEncoding vyperABI contractABI venomState words list
+  abiDecoderArrayInitExec compileEnv valueEncoding valueEncodingDefs vyperABI contractABI venomState words list
   arithmetic abiValidSingletonPrefixDecode abiBuiltinDecodeCorrect abiBuiltinSetupReach
   abiBuiltinDecodeEffect abiDecoderDynamic abiDecoderEffect abiDecoderLoop abiCanonicalHeadSize
   abiEncoder builtinAbi fragExec valueEncodingProps venomExecSemantics

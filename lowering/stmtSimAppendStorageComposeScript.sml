@@ -9,7 +9,7 @@ Ancestors
   accountsRelProps vyperStorage vyperStorageBackend vyperValue vfmState
   exprOperandVar
   vyperInterpreter vyperState vyperExprNoControl stmtLowering exprLowering
-  exprLoweringProps compileEnv emitHelper emitHelperProps venomInst venomExecSemantics
+  exprLoweringProps compileEnv loweringStateRelDefs emitHelper emitHelperProps venomInst venomExecSemantics
 Libs
   monadsyntax
 

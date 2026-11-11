@@ -3,7 +3,7 @@ Theory abiDecoderBytesRuntime
 Ancestors
   abiDecoderBytesMemory abiEncoderRounding abiDecoderRange abiDecoderBytesPhases
   abiDecoderContract
-  emitHelperProps exprLoweringProps compileEnv emitHelper
+  emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs emitHelper
   venomState venomExecSemantics venomExecProofs venomInst words arithmetic list
 Libs wordsLib
 

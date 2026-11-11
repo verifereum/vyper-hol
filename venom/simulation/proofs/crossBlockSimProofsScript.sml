@@ -13,6 +13,7 @@ Ancestors
   stateEquiv stateEquivProps execEquivProps venomExecProps
   venomExecSemantics venomExecProofs venomInst
   arithmetic relation pair list
+  passTransform
 
 (* ===== resolves_to_mono ===== *)
 

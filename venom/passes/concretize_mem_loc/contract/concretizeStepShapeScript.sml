@@ -3,6 +3,7 @@ Ancestors
   concretizeStepRetpc concretizeStepCallChecks concretizeStepStructure
   concretizeMemLocDefs unitShapeDefs venomInst venomWf passSharedDefs
   o1PassContract irSupply list stackPlanTypes passSimulationDefs dretDesugarDefs
+  passTransform
 
 Theorem concretize_positions_every:
   EVERY P (fn_insts fn) /\

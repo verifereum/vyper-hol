@@ -1,6 +1,6 @@
 Theory placeStoreStatePatch
 Ancestors
-  exprLoweringProps accountsRelProps compileEnv vyperStorageBackend
+  exprLoweringProps accountsRelProps compileEnv loweringStateRelDefs vyperStorageBackend
   vfmState venomState venomMemDefs
 
 Theorem stmt_state_selected_storage_agree:
@@ -72,7 +72,7 @@ Proof
   >- (irule fmp_room_fields >> qexists_tac `s` >> simp[]) >>
   conj_tac
   >- (qpat_assum `immutable_alloca_sep _ _ _ _ s` mp_tac >>
-      simp_tac (boss_ss()) [immutable_alloca_sep_def, set_storage_def,
+      simp_tac (boss_ss()) [immutable_alloca_sep_def, immutable_decl_sep_def, set_storage_def,
                            local_region_def, lookup_var_def]) >>
   conj_tac
   >- (qpat_assum `immutable_base_zero _ s` mp_tac >>

@@ -29,7 +29,7 @@ Ancestors
   list rich_list finite_map pred_set
   fragExec localPtrsProps loweringSlice  stmtSimDeclStore stmtSimDecl
   exprLowering stmtLowering exprLoweringProps
-  compileEnv valueEncoding valueEncodingProps
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperLookup
   venomExecSemantics venomExecProofs venomInst venomState emitHelperProps
 
@@ -190,7 +190,7 @@ Proof
      strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> strip_tac >> metis_tac[]) >>
   irule mstore_mem_bytes_at_disjoint >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 (* One MSTORE of a word that lays v out at the local's base. *)

@@ -180,6 +180,9 @@ Resume external_frame_ret_value_direct_run_mem[raw_leaf]:
   qpat_x_assum `cenv'.ce_raw_return` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
   qpat_x_assum `cenv'.ce_raw_return` (SUBST_ALL_TAC o EQT_INTRO) >>
+  `post_value_type cenv' e = expr_type e` by
+    simp[loweringPostsTheory.post_value_type_bytestring] >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   drule_all external_return_raw_value_mem >>
   rewrite_tac[frag_exec_mem_def] >>
   disch_then (qspecl_then [`func`, `t`] mp_tac) >> simp[] >>
@@ -187,6 +190,10 @@ Resume external_frame_ret_value_direct_run_mem[raw_leaf]:
 QED
 
 Resume external_frame_ret_value_direct_run_mem[aggregate]:
+  `post_value_type cenv' e = expr_type e` by
+    metis_tac[loweringPostsTheory.post_value_type_lowered,
+              loweringPostsTheory.post_value_type_bytestring] >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   drule_all direct_return_layout_split >> disch_then assume_tac >>
   `ret <> NoneT` by metis_tac[valued_return_type_not_none] >>
   drule_all external_package_encoder_admissible >> strip_tac >>

@@ -49,11 +49,18 @@ Theorem return_selected_compatible_suffix:
          ee.requests) r)
 Proof
   strip_tac
-  >- (drule_all return_selected_located_suffix >> simp[]) >>
+  >- (`post_value_type ce e = lowered_value_type ce e` by
+        metis_tac[loweringPostsTheory.post_value_type_lowered] >>
+      `post_value_type ce e <> lowered_value_type ce e ==>
+       is_bytestring_type (post_value_type ce e) /\
+       is_bytestring_type (lowered_value_type ce e)` by simp[] >>
+      drule_all return_selected_located_suffix >> simp[]) >>
   drule_all return_selected_consumer_resources >> strip_tac >>
   `~is_word_type ret` by metis_tac[is_bytestring_word_type] >>
-  (Q.SUBGOAL_THEN `expr_type e = ret \/
-    (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)` assume_tac
+  `post_value_type ce e = expr_type e` by
+    simp[loweringPostsTheory.post_value_type_bytestring] >>
+  (Q.SUBGOAL_THEN `post_value_type ce e = ret \/
+    (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)` assume_tac
     >- simp[]) >>
   Cases_on `ce.ce_raw_return`
   >- (`is_bytestring_type (expr_type e)` by

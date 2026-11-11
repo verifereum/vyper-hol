@@ -1,7 +1,7 @@
 Theory rawCreateContractProbe
 Ancestors
   builtinCreate exprLoweringProps vyperCompiler
-  venomExecSemantics venomState compileEnv
+  venomExecSemantics venomState compileEnv loweringStateRelDefs
 Libs
   wordsLib
 

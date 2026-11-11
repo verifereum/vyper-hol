@@ -8,9 +8,9 @@ Ancestors
   abiEncoderWindowArrayEntryMem abiEncoderWindowArrayCursorMem abiEncoderWindowLoopMem
   windowPhaseMem windowSequenceMem windowTransitionMem abiEncoderArrayCode allocaFootprint
   abiEncoderWindowSequence abiEncoderWindowPhase emitHelperProps emitHelper
-  compileEnv exprLoweringProps fragExec fragExecMem venomState venomExecSemantics venomInst
+  compileEnv loweringStateRelDefs exprLoweringProps fragExec fragExecMem venomState venomExecSemantics venomInst
   words list rich_list pred_set finite_map instIdxIndep memSafeRun instMemFrontier arithmetic
-  valueEncoding valueEncodingProps venomMemDefs memContinuation abiEncoderWindowContract
+  valueEncoding valueEncodingDefs valueEncodingProps venomMemDefs memContinuation abiEncoderWindowContract
 
 Theorem window_array_static_exit_seq_mem[local]:
   abi_encode_array_static_exit src asz st = (out,en) /\

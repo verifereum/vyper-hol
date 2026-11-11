@@ -1681,58 +1681,6 @@ Proof
   )
 QED
 
-
-Triviality step_inst_base_DRET_not_OK:
-  !inst s r. inst.inst_opcode = DRET ==>
-    step_inst_base inst s <> OK r
-Proof
-  rpt strip_tac >>
-  gvs[step_inst_base_def] >>
-  Cases_on `inst.inst_outputs = []` >> gvs[] >>
-  Cases_on `parse_dret_shape inst` >> gvs[] >>
-  PairCases_on `x` >> gvs[] >>
-  Cases_on `eval_operands inst.inst_operands s` >> gvs[] >>
-  Cases_on `pair_dret_words
-    (TAKE (2 * x1) (DROP (1 + x0) x))` >> gvs[] >>
-  pairarg_tac >> gvs[]
-QED
-
-Triviality step_inst_base_RETFMP_not_OK:
-  !inst s r. inst.inst_opcode = RETFMP ==>
-    step_inst_base inst s <> OK r
-Proof
-  rpt strip_tac >> gvs[step_inst_base_def] >>
-  Cases_on `eval_operands inst.inst_operands s` >> gvs[] >>
-  Cases_on `x` >> gvs[]
-QED
-val term_ok_jump_tac =
-  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  simp[step_inst_base_def, eval_operands_def, eval_operand_def,
-       AllCaseEqs()] >>
-  rpt CASE_TAC >> gvs[] >> rpt strip_tac >> pairarg_tac >> gvs[];
-
-Triviality step_inst_base_ok_terminator_jump:
-  !inst s s'.
-    is_terminator inst.inst_opcode /\
-    step_inst_base inst s = OK s' ==>
-    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
-    inst.inst_opcode = DJMP
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  TRY (rename1 `inst.inst_opcode = DRET` >>
-       metis_tac[step_inst_base_DRET_not_OK]) >>
-  TRY (rename1 `inst.inst_opcode = RETFMP` >>
-       metis_tac[step_inst_base_RETFMP_not_OK]) >>
-  TRY (rename1 `inst.inst_opcode = RET` >> term_ok_jump_tac) >>
-  TRY (rename1 `inst.inst_opcode = RETURN` >> term_ok_jump_tac) >>
-  TRY (rename1 `inst.inst_opcode = REVERT` >> term_ok_jump_tac) >>
-  TRY (rename1 `inst.inst_opcode = STOP` >> term_ok_jump_tac) >>
-  TRY (rename1 `inst.inst_opcode = SINK` >> term_ok_jump_tac) >>
-  TRY (rename1 `inst.inst_opcode = SELFDESTRUCT` >> term_ok_jump_tac) >>
-  TRY (rename1 `inst.inst_opcode = INVALID` >> term_ok_jump_tac)
-QED
-
 (* Unified helper: step_inst_base on a non-PHI instruction with
    execution_equiv states. For non-terminators: preserves execution_equiv +
    current_bb + inst_idx + ~halted. For terminators (jumps): additionally

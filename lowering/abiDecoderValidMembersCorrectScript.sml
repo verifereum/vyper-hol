@@ -4,7 +4,7 @@ Theory abiDecoderValidMembersCorrect
 Ancestors
   abiDecoderMemberInfos abiDecoderMembers abiValidMembers abiDecoderValidContract abiDecoderEffect
   abiDecoderReentry abiDecoderLoop abiDecoderTypedContract abiDecoderContract
-  abiDecodeRanges abiEncoder compileEnv valueEncoding vyperABI fragExec
+  abiDecodeRanges abiEncoder compileEnv valueEncoding valueEncodingDefs vyperABI fragExec
   venomState venomExecSemantics words list arithmetic
 
 Definition abi_decoder_valid_members_correct_def:

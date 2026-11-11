@@ -2,7 +2,7 @@
    The slot is explicit: callers must establish source/compiled slot agreement. *)
 Theory nonreentrantEquiv
 Ancestors
-  transientLockProps transientLockFrameProps
+  loweringStateRelDefs transientLockProps transientLockFrameProps
   accountsRelProps vyperStorageLayoutSafety
   emitHelperProps exprLoweringProps context compileEnv
   venomExecSemantics venomState

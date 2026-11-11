@@ -1,6 +1,6 @@
 Theory makeSsaCurrentNonDegCleanup
 Ancestors
-  makeSsaCurrentCleanupBoundary makeSsaCurrentDefs unitShapeDefs venomInst venomWf list pair
+  makeSsaCurrentCleanupBoundary makeSsaDefs unitShapeDefs venomInst venomWf list pair
 
 Definition current_nondeg_block_shape_def:
   current_nondeg_block_shape bb <=>

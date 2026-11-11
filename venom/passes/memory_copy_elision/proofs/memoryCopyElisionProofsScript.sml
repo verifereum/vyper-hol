@@ -27,6 +27,7 @@ Ancestors
   memAliasDefs memAliasProofs memLocDefs
   cfgDefs cfgHelpers cfgAnalysisProps
   finite_map list pred_set arithmetic words pair
+  passTransform
 Libs
   stepInstBaseLib
 

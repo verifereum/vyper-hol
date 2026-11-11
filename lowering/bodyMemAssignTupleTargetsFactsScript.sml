@@ -3,7 +3,7 @@
 Theory bodyMemAssignTupleTargetsFacts
 Ancestors
   bodySimStmtCases bodyMemAssignTupleLocalsPrep bodyDeclMemoryCounted tupleTypedLoad instMemFrontier
-  exprLoweringProps venomMemDefs compileEnv tupleMemoryLayout valueEncodingProofs
+  exprLoweringProps venomMemDefs compileEnv loweringStateRelDefs tupleMemoryLayout valueEncodingProofs
   context venomInst bodyDeclMemoryCore exprSimAlloc exprSimBufferStore
   venomExecSemantics venomState loweringSlice loweringPosts list
   fragExec fragExecMem bodyMemoryDefs bodyExprPreFacts bodySim

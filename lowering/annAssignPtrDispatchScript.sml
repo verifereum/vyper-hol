@@ -44,9 +44,9 @@ Proof
  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
    metis_tac[assignable_type_well_formed, well_formed_type_def,
              optionTheory.IS_SOME_EXISTS] >>
- `body_expr_ptr_ok cx e` by (irule annassign_ih_ptr >> metis_tac[]) >>
+ `body_expr_ptr_ok cx e` by (drule_all annassign_ih_ptr >> simp[]) >>
  `supported_expr tops e` by gvs[supported_stmt_def] >>
- `expr_body_pre cenv cx env e es` by metis_tac[annassign_rhs_pre_ptr] >>
+ `expr_body_pre cenv cx env e es` by (drule_all annassign_rhs_pre_ptr >> simp[]) >>
  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
  `lookup_scopes id es.scopes = NONE` by
    (Cases_on `lookup_scopes id es.scopes` >> simp[] >>
@@ -67,7 +67,7 @@ Resume body_annassign_memory_ptr[empty]:
  irule compile_annassign_empty_stmt_frag_ptr >> gns[] >>
  conj_tac
  >- (rpt gen_tac >> strip_tac >> conj_tac
-     >- (irule annassign_declared_expr_vv_sim_ptr >> metis_tac[]) >>
+     >- (drule_all annassign_declared_expr_vv_sim_ptr >> simp[]) >>
      metis_tac[compile_expr_grows]) >>
  rpt gen_tac >> strip_tac >> metis_tac[memory_rhs_empty_eval_destination]
 QED

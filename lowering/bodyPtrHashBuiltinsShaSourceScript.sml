@@ -1,6 +1,6 @@
 (* Source outcome consumption and implicit-GAS exceptional summaries. *)
 Theory bodyPtrHashBuiltinsShaSource
-Ancestors exprSimHash exprLoweringProps compileEnv vyperState vyperInterpreter
+Ancestors exprSimHash exprLoweringProps compileEnv loweringStateRelDefs vyperState vyperInterpreter
   gasSummaryComposePtr fragGasPathPtr list rich_list
 
 Theorem hash_counted_exit_summary:
