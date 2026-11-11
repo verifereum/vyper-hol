@@ -3559,6 +3559,54 @@ Proof
   irule ircf_runner_noninvoke_nonok >> simp[] >> metis_tac[]
 QED
 
+Theorem ircf_run_block_sim_reachable:
+  !D lo vs C fn_meta rma k stk PG G tn fn s t bb.
+    o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+    EVERY ircf_no_dst_write_alias C.ctx_functions /\
+    ptr_discipline lo C vs /\ vs.vs_allocas = FEMPTY /\ ~vs.vs_halted /\
+    ~ctx_has_dalloca C /\ taint_within D C vs /\ dead_wf D /\
+    fn_sim_below D vs C (ircf_transform_ctx fn_meta rma C)
+      (ircf_R D fn_meta rma C) (ircf_R_ret_reachable vs D fn_meta rma C) (SUC k) /\
+    MEM fn C.ctx_functions /\
+    ircf_R D fn_meta rma C stk PG G tn fn s t /\
+    block_reach vs C stk PG G tn fn s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    terminates (run_block k C bb s) ==>
+    ?m. block_step_rel D vs C (ircf_R D fn_meta rma C)
+      (ircf_R_ret_reachable vs D fn_meta rma C) stk PG fn
+      (run_block k C bb s)
+      (run_block m (ircf_transform_ctx fn_meta rma C)
+        (ircf_tbb fn_meta rma C fn bb) t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?sp. eval_phis s bb.bb_instructions = OK sp` by
+    (qpat_x_assum `terminates (run_block _ _ _ _)` mp_tac >>
+     qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+       eval_phis_ok_or_error_defs >>
+     simp[run_block_def, passSimulationDefsTheory.terminates_def]) >>
+  `sp.vs_current_bb = s.vs_current_bb` by
+    (drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+     disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `terminates (exec_block k C bb
+     (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))` by
+    fs[run_block_def] >>
+  `phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions` by
+    (spose_not_then assume_tac >>
+     qpat_x_assum `terminates (exec_block _ _ _ _)` mp_tac >>
+     simp[Once exec_block_def, get_instruction_def,
+       passSimulationDefsTheory.terminates_def]) >>
+  `active_inst fn (EL (phi_prefix_length bb.bb_instructions) bb.bb_instructions)
+    (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
+    (simp[contextCodegenRelTheory.active_inst_def] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM,
+       venomExecPropsTheory.lookup_block_label]) >>
+  drule_all ircf_runner_entry >> strip_tac >>
+  gvs[] >> simp[run_block_def] >>
+  mp_tac ircf_exec_block_sim_from_terminal >>
+  (impl_tac >- metis_tac[ircf_runner_terminal, ircf_runner_forward]) >>
+  disch_then irule >> simp[get_instruction_def] >> metis_tac[]
+QED
+
 Theorem ircf_block_sim:
   !D lo vs C fn_meta rma k stk PG G tn fn fn' s t bb.
     o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
