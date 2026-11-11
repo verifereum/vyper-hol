@@ -310,6 +310,17 @@ Resume ecmul_expr_vv_sim_ptr[entry_rebase]:
     (irule wordArgsPtrTheory.ghost_kept_wb_trans >>
      qpat_assum `ghost_kept _ ee' sm _ _ _ G'' tn''` (irule_at Any) >>
      simp[] >> metis_tac[]) >>
+  `~expr_has_effect a /\ ~expr_has_effect b ==> pure_frame cenv fn es sa s0 t'` by
+    (strip_tac >>
+     `pure_frame cenv fn es sa s0 t /\ pure_frame cenv fn ee s1 t t'` by
+       metis_tac[exprSimWordArgsTheory.expr_post_pure_frame] >>
+     qpat_x_assum `wb_frame cenv es ee sa s0 t`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     qpat_x_assum `wb_frame cenv ee ee' s1 t t'`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     match_mp_tac (Q.SPECL [`cenv`, `fn`, `es`, `ee`, `sa`, `s1`, `s0`, `t`, `t'`]
+       exprSimPropsTheory.pure_frame_trans) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
   fs[as_ptr_val_def, contextTheory.mk_ptr_def] >>
   irule exprSimCalldataSliceTheory.vv_post_prefix_frame >>
   qpat_assum `vv_post _ _ _ _ _ ee' sm _ _ _ _ _ _` (irule_at Any) >>
