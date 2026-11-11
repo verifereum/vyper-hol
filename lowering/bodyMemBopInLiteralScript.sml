@@ -160,7 +160,10 @@ Theorem literal_typed_continuation_summary_mem[local]:
   stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
   LIST_REL (\x v. eval_operand x t0 = SOME (typed_val_to_w256 tv v)) xs vs /\
   eval_operand needle t0 = SOME (typed_val_to_w256 tv v) /\
-  wb_frame cenv es sa s0 t0 /\ sa.cs_next_var <= sm.cs_next_var /\
+  wb_frame cenv es (ee with gas_obs := []) sa s0 t0 /\
+  (~expr_has_effect e1 /\ EVERY ($~ o expr_has_effect) elems ==>
+   pure_frame cenv func es sa s0 t0) /\
+  sa.cs_next_var <= sm.cs_next_var /\
   ~t0.vs_halted /\ t0.vs_current_bb = sm.cs_current_bb /\
   t0.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   gas_summary_at T (ctx,func) []
@@ -176,7 +179,16 @@ Theorem literal_typed_continuation_summary_mem[local]:
     (\res fin r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `wb_frame _ _ (_ with gas_obs := _) _ _ _`
+    (assume_tac o REWRITE_RULE [exprSimWordArgsTheory.wb_frame_gas_obs]) >>
   drule_all literal_typed_fragment_success_mem >> strip_tac >>
+  `wb_frame cenv es ee sa s0 s` by
+    (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
+     goal_assum (drule_at Any) >> qexists_tac `sm` >> simp[]) >>
+  `~expr_has_effect e1 /\ EVERY ($~ o expr_has_effect) elems ==>
+   pure_frame cenv func es sa s0 s` by
+    (strip_tac >> irule exprSimPropsTheory.pure_frame_mem_tail >>
+     qexists_tac `t0` >> fs[]) >>
   simp[gasSummaryTheory.gas_summary_at_def] >>
   qexistsl_tac [`INL (BoolV (if bop = In then MEM v vs else ~MEM v vs))`, `ee`, `OK s`] >>
   conj_tac
@@ -187,11 +199,10 @@ Proof
   simp[vyperASTTheory.expr_type_def, is_word_type_def,
        loweringSliceTheory.word_value_def, valueEncodingTheory.val_to_w256_def,
        venomExecSemanticsTheory.bool_to_word_def] >>
-  conj_tac
-  >- (Cases_on `if bop = In then MEM v vs else ~MEM v vs` >>
-      simp[venomExecSemanticsTheory.bool_to_word_def]) >>
-  irule exprSimWordArgsTheory.wb_frame_readonly_tail >> goal_assum (drule_at Any) >>
-  qexists_tac `sm` >> simp[]
+  rpt conj_tac >>
+  Cases_on `if bop = In then MEM v vs else ~MEM v vs` >>
+  fs[venomExecSemanticsTheory.bool_to_word_def,
+     exprSimWordArgsTheory.wb_frame_gas_obs]
 QED
 
 Theorem literal_expr_sim_mem[local]:
@@ -264,7 +275,7 @@ Resume literal_expr_sim_mem[normal]:
   qpat_x_assum `value_has_type _ _ /\ _` strip_assume_tac >>
   drule_all literal_typed_continuation_summary_mem >>
   disch_then (qspecl_then
-    [`SOME (expr_type e1)`, `n`, `elems`, `e1`, `ArrayT (expr_type e1) n`] mp_tac) >>
+    [`SOME (expr_type e1)`, `n`, `ArrayT (expr_type e1) n`] mp_tac) >>
   rewrite_tac[gas_summary_at_def] >>
   disch_then (qx_choose_then `res` (qx_choose_then `es_end'`
     (qx_choose_then `r` (map_every assume_tac o CONJUNCTS)))) >>

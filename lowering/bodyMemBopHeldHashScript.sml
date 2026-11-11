@@ -38,7 +38,7 @@ Proof
   `eval_operand x (update_var (STRING #"%" (toString sa.cs_next_var))
       (n2w b + 32w) s) = SOME (n2w b)` by
     (irule eval_operand_update_other_local >> simp[] >>
-     rpt strip_tac >> first_x_assum drule >> simp[not_fresh_at_def]) >>
+     rpt strip_tac >> first_x_assum drule >> simp[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   conj_tac >- simp[below_frontier_MLOAD, update_var_def] >>
   drule step_MLOAD_local >>
   disch_then (qspecl_then [`STRING #"%" (toString (sa.cs_next_var + 1))`,

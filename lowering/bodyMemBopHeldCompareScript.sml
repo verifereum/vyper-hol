@@ -235,10 +235,21 @@ Proof
          qpat_assum `ci_mono s1 s2` mp_tac >>
          simp_tac (srw_ss()) [exprLoweringPropsTheory.ci_mono_def] >>
          rpt strip_tac >> first_assum ACCEPT_TAC) >>
-      `locals_kept cenv mid t t'` by
-        (qpat_assum `locals_kept _ (mid with gas_obs := []) _ _` mp_tac >>
-         simp_tac (srw_ss()) [locals_kept_def] >>
-         disch_then ACCEPT_TAC) >>
+      `locals_kept cenv es mid s0 t` by
+        (qpat_assum `locals_kept _ es (mid with gas_obs := []) _ _` mp_tac >>
+         rewrite_tac[locals_kept_def, popped_kept_def] >>
+         simp_tac (srw_ss()) [] >> strip_tac >> rpt conj_tac >>
+         first_assum ACCEPT_TAC) >>
+      `locals_kept cenv mid (mid' with gas_obs := []) t t'` by
+        (qpat_assum
+           `locals_kept _ (mid with gas_obs := []) (mid' with gas_obs := []) _ _`
+           mp_tac >>
+         rewrite_tac[locals_kept_def, popped_kept_def] >>
+         simp_tac (srw_ss()) [] >> strip_tac >> rpt conj_tac >>
+         first_assum ACCEPT_TAC) >>
+      `~expr_has_effect e2 ==> pure_frame cenv func mid s1 t t'` by
+        (qpat_assum `~expr_has_effect e2 ==> _` mp_tac >>
+         simp_tac (srw_ss()) [pure_frame_gas_obs]) >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   simp[exprSimWordArgsTheory.stmt_state_rel_gas_obs]
 QED

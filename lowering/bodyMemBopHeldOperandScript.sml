@@ -4,7 +4,7 @@ Ancestors
   exprSimHashBoundary
   bodyMemBopHeldHash bodyMemBopHeldFacts exprBopLowering
   exprLoweringProps exprOperandVar exprLowering compileEnv emitHelper
-  list rich_list fragExec exprSimMemDefs exprSimSource gasSummary
+  list rich_list fragExec exprSimMemDefs exprSimSource gasSummary exprSimWordArgs
   fragGasPathMem fragGasPath gasOutcome fragGasMode vyperInterpreter vyperState
   vyperValue venomState loweringPosts exprSimProps exprSimHash
   exprBopSimProps bodyMemBiKeccakBounds vyperTyping
@@ -133,7 +133,8 @@ Theorem held_digest_operand_outcome:
         (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                    off + sz <= b \/ b + sz' <= off) ==>
         mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-      locals_kept cenv es s0 t /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+      locals_kept cenv es ee s0 t /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+      (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\ ~t.vs_halted /\
@@ -238,8 +239,17 @@ Resume held_digest_operand_outcome[runtime_normal]:
        simp[] >> metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES])) >>
   simp[] >>
   `!z. not_fresh_at sa z ==> not_fresh_at sm z` by
-    (fs[ci_mono_def, not_fresh_at_def] >> decide_tac) >>
-  fs[expr_post_def, locals_kept_def] >>
+    (fs[ci_mono_def, loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
+  `locals_kept cenv es (es_end with gas_obs := []) s0 t'` by
+    (irule exprSimPropsTheory.locals_kept_mem_tail >> qexists_tac `t` >>
+     simp[] >> drule exprSimWordArgsTheory.expr_post_frame >>
+     rewrite_tac[wb_frame_def] >>
+     disch_then (ACCEPT_TAC o last o CONJUNCTS)) >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 t'` by
+    (strip_tac >> irule exprSimPropsTheory.pure_frame_mem_tail >>
+     qexists_tac `t` >> simp[] >>
+     metis_tac[exprSimWordArgsTheory.expr_post_pure_frame]) >>
+  fs[expr_post_def] >>
   asm_rewrite_tac[]
 QED
 
