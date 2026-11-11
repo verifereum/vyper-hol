@@ -10,7 +10,8 @@ Theorem code_array_marked_post_view:
   expr_type obj = ArrayT et bd /\
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
   ee.scopes = t.scopes /\ ee.immutables = t.immutables /\
-  vv_post ctx func cenv cx obj es sa sc s0 ee r (LocatedValue (ArrayT et bd) p) q /\
+  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee r
+    (LocatedValue (ArrayT et bd) p) q /\
   (p.ptr_location = LocMemory \/ (~cenv.ce_is_ctor /\ p.ptr_location = LocCode)) ==>
   ?etv av w.
     evaluate_type (get_tenv cx) et = SOME etv /\
@@ -48,7 +49,8 @@ Theorem code_array_marked_suffix_ptr_summary:
   fn_has_code sc sd func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts /\
   stmt_state_rel ctx func cenv cx ee s /\
-  vv_post ctx func cenv cx obj es sa sc s0 ee r (LocatedValue (ArrayT et bd) p) s /\
+  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee r
+    (LocatedValue (ArrayT et bd) p) s /\
   evaluate_type (get_tenv cx) et = SOME etv /\
   evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
   read_result cx r ee = (INL (ArrayV av),ee) /\
@@ -63,7 +65,8 @@ Theorem code_array_marked_suffix_ptr_summary:
   (!q. (!x. not_fresh_at sc x ==> lookup_var x q = lookup_var x s) /\
        q.vs_allocas = s.vs_allocas /\ q.vs_memory = s.vs_memory /\
        stmt_state_rel ctx func cenv cx ee q ==>
-       vv_post ctx func cenv cx obj es sa sd s0 ee r (LocatedValue (ArrayT et bd) p) q) ==>
+       vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
+         (LocatedValue (ArrayT et bd) p) q) ==>
   gas_summary_ptr_at D (ctx,func) PG []
     (select_result cx (ArrayT et bd) r (ValueSubscript (IntV i))) (ee,s,G,tn)
     (\res ee' Gf tnf q. ?child. res = INL child /\

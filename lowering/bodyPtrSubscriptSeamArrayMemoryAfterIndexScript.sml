@@ -171,12 +171,12 @@ Proof
 QED
 
 Resume fixed_array_after_index_summary_ptr[frame]:
-  `vv_post ctx func cenv cx obj es sa sc s0 (raw with gas_obs := []) r
-     (LocatedValue (ArrayT et (Fixed n)) p) q` by
+  `vv_post ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sc s0
+     (raw with gas_obs := []) r (LocatedValue (ArrayT et (Fixed n)) p) q` by
     (irule exprSimSubscriptArrayEndpointTheory.framed_array_base_endpoint >>
      simp[] >>
      conj_tac >- gvs[loweringPostsTheory.expr_post_def] >>
-     qexistsl_tac [`env`,`idx`,`iop`,`iv`,`sb`,`sc`,`mid with gas_obs := []`,`u`,`q`] >>
+     qexistsl_tac [`env`,`iop`,`iv`,`sb`,`sc`,`mid with gas_obs := []`,`u`,`q`] >>
      gvs[exprLoweringPropsTheory.ci_mono_def]) >>
   suspend "ptr_frame"
 QED
