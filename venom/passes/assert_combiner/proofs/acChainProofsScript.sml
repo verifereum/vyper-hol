@@ -269,7 +269,7 @@ QED
 
 (* ===== Lift result helpers ===== *)
 
-Theorem execution_equiv_weaken_UNIV[local]:
+Theorem execution_equiv_weaken_UNIV:
   !vars s1 s2. execution_equiv vars s1 s2 ==> execution_equiv UNIV s1 s2
 Proof
   rw[stateEquivTheory.execution_equiv_def]
