@@ -2792,6 +2792,61 @@ Proof
   simp[update_var_def]
 QED
 
+(* Output packets supplied by invoke_partner_nongas_outputs meet the cut
+   interface through the canonical swap frame, also across INVOKEs. *)
+Theorem prefix_independent_updates_support[local]:
+  MAP FST pairs = i.inst_outputs /\
+  EVERY (\x. dft_gas_swap_pair i x /\
+    ~is_terminator x.inst_opcode) xs ==>
+  EVERY (\p. EVERY (\x. ~is_terminator x.inst_opcode /\
+    (!v. MEM (Var v) x.inst_operands ==> FST p <> v) /\
+    ~MEM (FST p) x.inst_outputs) xs) pairs
+Proof
+  strip_tac >> fs[EVERY_MEM] >> rpt strip_tac >>
+  `MEM (FST p) i.inst_outputs` by
+    (metis_tac[MEM_MAP]) >>
+  metis_tac[dftRunRelTheory.dft_swap_output_frame]
+QED
+
+(* One actual execution cut, shared by the result and observation clauses.
+   Gas readings remain universally quantified, including filled masks/tails. *)
+Theorem prefix_independent_updates_cuts[local]:
+  !pairs s.
+    EVERY (\p. EVERY (\i. ~is_terminator i.inst_opcode /\
+      (!v. MEM (Var v) i.inst_operands ==> FST p <> v) /\
+      ~MEM (FST p) i.inst_outputs) xs) pairs ==>
+    !n gs. n <= LENGTH xs ==>
+    let base = s with vs_gas_readings := gs;
+        upd = \st. FOLDL (\st p. update_var (FST p) (SND p) st) st pairs;
+        run = FOLDR (dft_exec_cons fuel C) OK (TAKE n xs);
+        obs = gas_events_block fuel C owner
+          <|bb_label := owner; bb_instructions :=
+            REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE n xs|>
+    in
+      (!u. (run (upd base) = OK u <=>
+        ?v. run base = OK v /\ u = upd v)) /\
+      obs (upd base) = obs base /\
+      (!u. (run (upd base) = Halt u <=> run base = Halt u)) /\
+      (!a. ((?u. run (upd base) = Abort a u) <=>
+            ?u. run base = Abort a u)) /\
+      (!e. (run (upd base) = Error e <=> run base = Error e)) /\
+      (terminates (run (upd base)) <=> terminates (run base))
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `EVERY (\p. EVERY (\i. ~is_terminator i.inst_opcode /\
+      (!v. MEM (Var v) i.inst_operands ==> FST p <> v) /\
+      ~MEM (FST p) i.inst_outputs) (TAKE n xs)) pairs` by
+    (fs[EVERY_MEM] >> metis_tac[rich_listTheory.MEM_TAKE]) >>
+  simp[LET_THM] >>
+  conj_tac >- metis_tac[prefix_independent_updates_ok] >>
+  conj_tac
+  >- (mp_tac (Q.INST [`xs` |-> `TAKE n xs`]
+        prefix_independent_updates_events) >>
+      disch_then (qspecl_then [`pairs`, `s with vs_gas_readings := gs`] mp_tac) >>
+      simp[]) >>
+  metis_tac[prefix_independent_updates_stopped]
+QED
+
 Theorem nongas_extract_prefix_success[local]:
   !pre s u.
     inst_wf y /\ ~is_terminator y.inst_opcode /\
