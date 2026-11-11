@@ -384,6 +384,198 @@ Proof
   irule range_body_finish >> metis_tac[]
 QED
 
+(* One complete round, from the comparison through the back edge. *)
+Theorem range_round_outcome[local]:
+  !G ctx fn bs be Kb Wb E exit incr cond bodylbl N p Wv root s
+    counter endpoint test tmp c e hc bc ic eqi br inst addi assi ji tail.
+    frag_fuel Wb {} (E UNION {exit;incr}) bs be Kb /\
+    no_phi_fn fn /\ fn_has_code bs be fn /\ callees_stable G ctx fn /\
+    N <= bs.cs_next_var /\ N <= p /\
+    Wb SUBSET (STRING #"%" (toString p) INSERT
+                 {x | x IN Wv /\ var_below N x}) /\
+    var_below bs.cs_next_var counter /\ counter NOTIN Wb /\
+    var_below bs.cs_next_var endpoint /\ endpoint NOTIN Wb /\
+    test <> counter /\ test <> endpoint /\
+    tmp <> counter /\ tmp <> endpoint /\ counter <> endpoint /\
+    (~var_below N test \/ test IN Wv) /\
+    (~var_below N tmp \/ tmp IN Wv) /\
+    (~var_below N counter \/ counter IN Wv) /\
+    lookup_block cond fn.fn_blocks = SOME hc /\
+    get_instruction hc 0 = SOME eqi /\ get_instruction hc 1 = SOME br /\
+    eqi.inst_opcode = EQ /\ eqi.inst_operands = [Var counter; Var endpoint] /\
+    eqi.inst_outputs = [test] /\
+    br.inst_opcode = JNZ /\ br.inst_operands = [Var test; Label exit; Label bodylbl] /\
+    lookup_block bodylbl fn.fn_blocks = SOME bc /\ get_instruction bc 0 = SOME inst /\
+    bs.cs_current_bb = bodylbl /\ LENGTH bs.cs_current_insts = 1 /\
+    (inst.inst_opcode = INVALID \/
+     (inst.inst_opcode = MSTORE /\ inst.inst_outputs = [])) /\
+    lookup_block be.cs_current_bb fn.fn_blocks = SOME tail /\
+    (get_instruction tail (LENGTH be.cs_current_insts) = NONE \/
+     ?ij. get_instruction tail (LENGTH be.cs_current_insts) = SOME ij /\
+          ij.inst_opcode = JMP /\ ij.inst_operands = [Label incr]) /\
+    lookup_block incr fn.fn_blocks = SOME ic /\
+    get_instruction ic 0 = SOME addi /\ get_instruction ic 1 = SOME assi /\
+    get_instruction ic 2 = SOME ji /\
+    addi.inst_opcode = ADD /\ addi.inst_operands = [Var counter; Lit 1w] /\
+    addi.inst_outputs = [tmp] /\
+    assi.inst_opcode = ASSIGN /\ assi.inst_operands = [Var tmp] /\
+    assi.inst_outputs = [counter] /\
+    ji.inst_opcode = JMP /\ ji.inst_operands = [Label cond] /\
+    s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
+    lookup_var counter s = SOME c /\ lookup_var endpoint s = SOME e /\
+    vars_kept N Wv root s ==>
+    ?j. j <= Kb + 3 /\ fuel_outcome G ctx fn s j
+      (\t. vars_kept N Wv root t /\
+           ((t.vs_current_bb IN (E UNION {exit}) /\ t.vs_inst_idx = 0) \/
+            (t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
+             lookup_var counter t = SOME (c + 1w) /\
+             lookup_var endpoint t = SOME e /\ c <> e)))
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `fuel_outcome G ctx fn s 1
+    (\t. vars_kept N Wv s t /\
+         lookup_var counter t = SOME c /\ lookup_var endpoint t = SOME e /\
+         t.vs_current_bb = (if c = e then exit else bodylbl) /\ t.vs_inst_idx = 0)` by
+    (irule range_condition_outcome >> gvs[]) >>
+  drule fuel_outcome_compose >>
+  disch_then (qspec_then
+    `\t. vars_kept N Wv root t /\
+         ((t.vs_current_bb IN (E UNION {exit}) /\ t.vs_inst_idx = 0) \/
+          (t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
+           lookup_var counter t = SOME (c + 1w) /\
+           lookup_var endpoint t = SOME e /\ c <> e))` mp_tac) >>
+  disch_then (qspec_then `Kb + 2` mp_tac) >>
+  impl_tac
+  >- (gen_tac >> BETA_TAC >> strip_tac >>
+      `vars_kept N Wv root t` by metis_tac[vars_kept_trans] >>
+      Cases_on `c = e`
+      >- (qexists_tac `0` >> simp[] >> irule fuel_outcome_refl >> gvs[]) >>
+      `?jb. jb <= Kb + 1 /\ fuel_outcome G ctx fn t jb
+        (\u. vars_kept N Wv root u /\
+             lookup_var counter u = SOME c /\ lookup_var endpoint u = SOME e /\
+             u.vs_current_bb IN (E UNION {exit;incr}) /\ u.vs_inst_idx = 0)` by
+        (irule range_body_bridge >> gvs[] >> metis_tac[]) >>
+      drule fuel_outcome_compose >>
+      disch_then (qspec_then
+        `\t. vars_kept N Wv root t /\
+             ((t.vs_current_bb IN (E UNION {exit}) /\ t.vs_inst_idx = 0) \/
+              (t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
+               lookup_var counter t = SOME (c + 1w) /\
+               lookup_var endpoint t = SOME e /\ c <> e))` mp_tac) >>
+      disch_then (qspec_then `1` mp_tac) >>
+      impl_tac
+      >- (gen_tac >> BETA_TAC >> strip_tac >>
+          Cases_on `t'.vs_current_bb IN (E UNION {exit})`
+          >- (qexists_tac `0` >> simp[] >> irule fuel_outcome_refl >>
+              BETA_TAC >> conj_tac >- asm_rewrite_tac[] >> disj1_tac >>
+              qpat_x_assum `t'.vs_current_bb IN (E UNION {exit})` mp_tac >>
+              simp_tac pure_ss [pred_setTheory.IN_UNION, pred_setTheory.IN_INSERT,
+                                pred_setTheory.NOT_IN_EMPTY] >>
+              strip_tac >> asm_rewrite_tac[]) >>
+          `t'.vs_current_bb = incr` by
+            (qpat_x_assum `t'.vs_current_bb IN (E UNION {exit;incr})` mp_tac >>
+             qpat_x_assum `t'.vs_current_bb NOTIN (E UNION {exit})` mp_tac >>
+             simp_tac (pure_ss ++ boolSimps.CONJ_ss) [pred_setTheory.IN_UNION,
+               pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY] >>
+             metis_tac[]) >>
+          `fuel_outcome G ctx fn t' 1
+             (\u. vars_kept N Wv t' u /\
+                  lookup_var counter u = SOME (c + 1w) /\
+                  lookup_var endpoint u = SOME e /\
+                  u.vs_current_bb = cond /\ u.vs_inst_idx = 0)` by
+            (irule range_increment_outcome >> simp[] >>
+             qexistsl_tac [`addi`, `assi`, `ic`, `ji`, `tmp`] >> simp[]) >>
+          qexists_tac `1` >> simp[] >>
+          drule fuel_outcome_weaken >> disch_then irule >>
+          rpt strip_tac >> simp[] >> metis_tac[vars_kept_trans]) >>
+      strip_tac >> qexists_tac `j` >> simp[] >> decide_tac) >>
+  strip_tac >> qexists_tac `j` >> simp[] >> decide_tac
+QED
+
+(* The cycle boundary accepts arbitrary runtime header states, including
+   undefined operands. No runtime typing or label disjointness is needed. *)
+Theorem range_cycle_outcome[local]:
+  !G ctx fn bs be Kb Wb E exit incr cond bodylbl N p Wv root s
+    counter endpoint test tmp hc bc ic eqi br inst addi assi ji tail.
+    frag_fuel Wb {} (E UNION {exit;incr}) bs be Kb /\
+    no_phi_fn fn /\ fn_has_code bs be fn /\ callees_stable G ctx fn /\
+    N <= bs.cs_next_var /\ N <= p /\
+    Wb SUBSET (STRING #"%" (toString p) INSERT
+                 {x | x IN Wv /\ var_below N x}) /\
+    var_below bs.cs_next_var counter /\ counter NOTIN Wb /\
+    var_below bs.cs_next_var endpoint /\ endpoint NOTIN Wb /\
+    test <> counter /\ test <> endpoint /\
+    tmp <> counter /\ tmp <> endpoint /\ counter <> endpoint /\
+    (~var_below N test \/ test IN Wv) /\
+    (~var_below N tmp \/ tmp IN Wv) /\
+    (~var_below N counter \/ counter IN Wv) /\
+    lookup_block cond fn.fn_blocks = SOME hc /\
+    get_instruction hc 0 = SOME eqi /\ get_instruction hc 1 = SOME br /\
+    eqi.inst_opcode = EQ /\ eqi.inst_operands = [Var counter; Var endpoint] /\
+    eqi.inst_outputs = [test] /\
+    br.inst_opcode = JNZ /\ br.inst_operands = [Var test; Label exit; Label bodylbl] /\
+    lookup_block bodylbl fn.fn_blocks = SOME bc /\ get_instruction bc 0 = SOME inst /\
+    bs.cs_current_bb = bodylbl /\ LENGTH bs.cs_current_insts = 1 /\
+    (inst.inst_opcode = INVALID \/
+     (inst.inst_opcode = MSTORE /\ inst.inst_outputs = [])) /\
+    lookup_block be.cs_current_bb fn.fn_blocks = SOME tail /\
+    (get_instruction tail (LENGTH be.cs_current_insts) = NONE \/
+     ?ij. get_instruction tail (LENGTH be.cs_current_insts) = SOME ij /\
+          ij.inst_opcode = JMP /\ ij.inst_operands = [Label incr]) /\
+    lookup_block incr fn.fn_blocks = SOME ic /\
+    get_instruction ic 0 = SOME addi /\ get_instruction ic 1 = SOME assi /\
+    get_instruction ic 2 = SOME ji /\
+    addi.inst_opcode = ADD /\ addi.inst_operands = [Var counter; Lit 1w] /\
+    addi.inst_outputs = [tmp] /\
+    assi.inst_opcode = ASSIGN /\ assi.inst_operands = [Var tmp] /\
+    assi.inst_outputs = [counter] /\
+    ji.inst_opcode = JMP /\ ji.inst_operands = [Label cond] /\
+    s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\ vars_kept N Wv root s ==>
+    ?j. j <= (2 ** 256) * (Kb + 8) /\ fuel_outcome G ctx fn s j
+      (\t. vars_kept N Wv root t /\
+           t.vs_current_bb IN (E UNION {exit}) /\ t.vs_inst_idx = 0)
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  Cases_on `s.vs_current_bb IN (E UNION {exit})`
+  >- (qexists_tac `0` >> simp[] >> irule fuel_outcome_refl >>
+      qpat_x_assum `s.vs_current_bb IN (E UNION {exit})` mp_tac >> simp[]) >>
+  Cases_on `lookup_var counter s`
+  >- (qexists_tac `0` >> simp[] >> irule range_condition_undefined >>
+      simp[] >> metis_tac[]) >>
+  rename1 `lookup_var counter s = SOME c0` >>
+  Cases_on `lookup_var endpoint s`
+  >- (qexists_tac `0` >> simp[] >> irule range_condition_undefined >>
+      simp[] >> metis_tac[]) >>
+  rename1 `lookup_var endpoint s = SOME e` >>
+  qabbrev_tac `H = \t. vars_kept N Wv root t /\
+     t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
+     lookup_var endpoint t = SOME e /\ ?c. lookup_var counter t = SOME c` >>
+  qabbrev_tac `Q = \t. vars_kept N Wv root t /\
+     t.vs_current_bb IN (E UNION {exit}) /\ t.vs_inst_idx = 0` >>
+  qabbrev_tac `mu = \t. w2n (e - THE (lookup_var counter t))` >>
+  `!t. H t ==> ?j. j <= (2 ** 256) * (Kb + 8) /\
+                         fuel_outcome G ctx fn t j Q` by
+    (match_mp_tac fuel_outcome_iterate >> qexists_tac `mu` >> conj_tac
+     >- (rpt strip_tac >> simp[Abbr `mu`] >>
+         qspec_then `e - THE (lookup_var counter s')` mp_tac wordsTheory.w2n_lt >>
+         simp[wordsTheory.dimword_def]) >>
+     gen_tac >> simp[Abbr `H`] >> strip_tac >>
+     `?j. j <= Kb + 3 /\ fuel_outcome G ctx fn s' j
+       (\t. vars_kept N Wv root t /\
+            ((t.vs_current_bb IN (E UNION {exit}) /\ t.vs_inst_idx = 0) \/
+             (t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
+              lookup_var counter t = SOME (c + 1w) /\
+              lookup_var endpoint t = SOME e /\ c <> e)))` by
+       (irule range_round_outcome >> simp[] >>
+        qpat_assum `frag_fuel _ _ _ _ _ _` (irule_at Any) >> simp[] >>
+        rpt (goal_assum (drule_at Any)) >> simp[]) >>
+     qexists_tac `j` >> conj_tac >- decide_tac >>
+     drule fuel_outcome_weaken >> disch_then irule >>
+     simp[Abbr `Q`, Abbr `mu`] >> rpt strip_tac >>
+     simp[range_distance_decreases]) >>
+  first_x_assum (qspec_then `s` mp_tac) >> simp[Abbr `H`, Abbr `Q`]
+QED
+
 Theorem fuel_okS_compile_for_range:
   !cenv lctx ty id fty start_e end_e bound body Wv E.
     (!c t e Wv' E'. fuel_ok Wv' {} E' (lower_value compile_expr c t e)) /\
