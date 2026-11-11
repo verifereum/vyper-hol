@@ -3,6 +3,8 @@ Ancestors bodyPtrBopInRuntimeContracts bodyPtrBopInLoopSearch
   exprSimBopRestWordTail exprLowering compileEnv context vyperValue
   venomState ptrDiscipline bodyPtrBopInRuntimeCompiler
   bodyPtrBopInSlotHeaderRuntime bodyPtrBopInHeaderCode fragExec
+  bodyPtrBopInBoundedSlot bodyPtrBopInBoundedLoop
+  bodyPtrBopInBoundedLayout bodyPtrBopInLoopContract fragGasPathPtr
 
 Theorem membership_fixed_slot_runtime:
   compile_var_array_membership cenv needle (LocatedValue ann p)
@@ -70,8 +72,6 @@ Theorem membership_dynamic_slot_runtime:
     op_prov G' op = NONE /\ op_taint tn' op = {} /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  (* Broke on trunk's bound_opt compile_array_membership_loop. *)
-  (* Old proof:
   strip_tac >>
   `elem_size_in_location cenv (if tr then LocTransient else LocStorage) ety = 1` by
     (drule rest_word_word_stride >> Cases_on `tr` >> simp[word_scale_def]) >>
@@ -83,13 +83,15 @@ Proof
   pairarg_tac >> simp[] >> strip_tac >>
   rename1 `compile_array_membership_loop _ _ _ _ _ _ _ _ mid = _` >>
   `cs_extends sa mid /\ cs_extends mid sb` by
-    metis_tac[membership_runtime_header_extends, membership_runtime_loop_extends] >>
+    metis_tac[membership_length_header_extends, membership_bounded_loop_extends] >>
   `fn_has_code sa mid fn /\ fn_has_code mid sb fn` by
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
-  irule membership_dynamic_slot_header_runtime >> simp[] >>
-  goal_assum (drule_at (Pat `vv_holds _ _ _ _ _ _ _`)) >> gvs[] >>
-  goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ _ = _`)) >>
-  simp[] >> metis_tac[]
-  *)
-  cheat
+  drule_all membership_bounded_slot_prepare >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  fs[] >> drule membership_bounded_loop_conditional >> simp[] >>
+  disch_then (drule_at (Pat `membership_element_load_contract _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> strip_tac >>
+  dxrule_all gas_path_ptr_then >> simp[] >> strip_tac >>
+  goal_assum (drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> metis_tac[membership_loop_frame_source]
 QED
