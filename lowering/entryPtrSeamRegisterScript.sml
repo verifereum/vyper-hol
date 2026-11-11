@@ -304,6 +304,32 @@ Proof
   metis_tac[]
 QED
 
+Theorem registration_primitive_as_aggregate:
+  compile_register_positional_args ce
+    ((name,T,F,sz,DecPrimWord clamp)::rest) off st =
+  compile_register_positional_args ce
+    ((name,F,F,sz,DecPrimWord clamp)::rest) off st
+Proof
+  simp[Ntimes compile_register_positional_args_def 2] >>
+  Cases_on `FLOOKUP ce.ce_vars name` >> simp[] >>
+  Cases_on `var_location_memory_size x` >> simp[] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >>
+  simp[compile_decode_args_def, finite_mapTheory.FLOOKUP_UPDATE,
+       var_location_decode_operand_def,
+       abiEncoderTheory.compile_abi_decode_to_buf_def,
+       abiEncoderTheory.compile_abi_decode_static_def,
+       abiEncoderTheory.compile_abi_dec_addr_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  Cases_on `emit_op ADD [Lit 4w; Lit (n2w (off - 4))] cs'` >> simp[] >>
+  rename1 `emit_op ADD _ cs' = (src,b)` >>
+  Cases_on `emit_op CALLDATALOAD [src] b` >> simp[] >>
+  rename1 `emit_op CALLDATALOAD _ b = (v,c)` >>
+  Cases_on `compile_abi_clamp_basetype v clamp c` >> simp[] >>
+  rename1 `compile_abi_clamp_basetype _ _ _ = (u,d)` >>
+  Cases_on `emit_void MSTORE [buf.buf_operand;v] d` >> simp[]
+QED
+
 (* Supplied physical success for an owner buffer of arbitrary size. *)
 Theorem registration_owner_alloca_ptr:
   emit_op ALLOCA [Lit (n2w n)] sa = (ip,sb) /\
@@ -1214,6 +1240,79 @@ Resume registration_aggregate_singleton_ptr_framed[old_local]:
 QED
 
 Finalise registration_aggregate_singleton_ptr_framed
+
+Theorem registration_singleton_ptr_framed:
+  compile_register_positional_args ce
+    [(name,prim,dyn,sz,type_to_abi_dec_info sf ce ty)] (4+h) st = (ce',last) /\
+  (prim ==> ~dyn /\ ?clamp. type_to_abi_dec_info sf ce ty = DecPrimWord clamp) /\
+  FLOOKUP ce.ce_vars name = SOME loc /\
+  var_location_memory_size loc = SOME (type_memory_size tv) /\
+  abi_decoder_coherent ce env sf ty tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  mem_bytes_at srcpos (LENGTH (enc (vyper_to_abi_type env ty) av))
+    s.vs_call_ctx.cc_calldata = enc (vyper_to_abi_type env ty) av /\
+  srcpos + LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
+  srcpos = 4 + (if dyn then delta else h) /\
+  (dyn ==> abi_decode_load CALLDATALOAD (n2w (4+h) : bytes32) s = n2w delta /\
+    4+delta < dimword (:256)) /\
+  type_memory_size tv < dimword (:256) /\
+  (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==> id < st.cs_next_id) /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  fn_has_code st last fn /\ fn_inst_ids_distinct fn /\
+  (!bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t H u q p.
+    ce' = ce with ce_vars updated_by
+      (\m. m |+ (name,PtrVar (Var q) (type_memory_size tv))) /\
+    lookup_var q t = SOME (n2w p) /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,type_memory_size tv) /\
+    ptr_covers H u q t (type_memory_size tv) /\
+    val_in_memory tv v p t.vs_memory /\
+    (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+      val_in_memory tv v p mem) /\
+    (!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < last.cs_next_id) /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\ fresh_vars_wrt last t /\
+    ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
+    t.vs_inst_idx = LENGTH last.cs_current_insts /\
+    (!old q0 p0 n0 tv0 v0.
+      old < st.cs_next_id /\ FLOOKUP s.vs_allocas old = SOME (p0,n0) /\
+      lookup_var q0 s = SOME (n2w p0) /\ ptr_covers G tn q0 s n0 /\
+      val_wf tv0 v0 /\ val_footprint tv0 v0 <= n0 /\
+      (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+        val_in_memory tv0 v0 p0 mem) ==>
+      old < last.cs_next_id /\ FLOOKUP t.vs_allocas old = SOME (p0,n0) /\
+      lookup_var q0 t = SOME (n2w p0) /\ ptr_covers H u q0 t n0 /\
+      val_wf tv0 v0 /\ val_footprint tv0 v0 <= n0 /\
+      (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+        val_in_memory tv0 v0 p0 mem)) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >>
+  `compile_register_positional_args ce
+    [(name,F,dyn,sz,type_to_abi_dec_info sf ce ty)] (4+h) st = (ce',last)` by
+    (Cases_on `prim` >> gvs[registration_primitive_as_aggregate]) >>
+  drule_all registration_aggregate_singleton_ptr_framed >>
+  simp[]
+QED
 
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
