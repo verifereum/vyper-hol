@@ -165,6 +165,10 @@ Definition fmp_reclaim_analyze_fuel_def:
       (cfg_succs_of cfg) cfg.cfg_dfs_pre st1) in
     SOME (fmp_populate transfer entry cfg fn.fn_blocks result)
 End
+(* The result is accepted only at a fixed point: one more round of fuel
+   changes nothing, and processing any block again leaves its boundary as
+   it is.  Otherwise the analysis fails and FmpLowering rejects the
+   function. *)
 Definition fmp_reclaim_states_def:
   fmp_reclaim_states infos fn =
     case fmp_base_analyze (fn_insts fn) of NONE => NONE | SOME env =>
@@ -174,7 +178,19 @@ Definition fmp_reclaim_states_def:
     | SOME states =>
         (case fmp_reclaim_analyze_fuel (fmp_reclaim_fuel fn + 1)
                 infos fn live env of
-           SOME states' => if states' = states then SOME states else NONE
+           SOME states' =>
+             if states' = states /\
+                (case entry_block fn of
+                   NONE => F
+                 | SOME ebb =>
+                     EVERY (\bb. fmp_process_block
+                                   (fmp_transfer infos fn live env)
+                                   (SOME (ebb.bb_label,
+                                          SOME fmp_empty_reclaim_state))
+                                   (cfg_analyze fn) fn.fn_blocks
+                                   bb.bb_label states = states)
+                       fn.fn_blocks)
+             then SOME states else NONE
          | NONE => NONE)
 End
 

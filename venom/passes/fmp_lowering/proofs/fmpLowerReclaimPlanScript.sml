@@ -253,6 +253,19 @@ Proof
   gvs[fmp_reclaim_analyze_fuel_def, AllCaseEqs()] >> metis_tac[]
 QED
 
+(* Every block of an accepted analysis is stable: processing it again
+   leaves the states as they are. *)
+Theorem fmp_reclaim_states_stable:
+  fmp_reclaim_states infos fn = SOME states /\
+  fmp_base_analyze (fn_insts fn) = SOME env /\
+  entry_block fn = SOME ebb /\ MEM bb fn.fn_blocks ==>
+  fmp_process_block (fmp_transfer infos fn (liveness_analyze fn) env)
+    (SOME (ebb.bb_label,SOME fmp_empty_reclaim_state)) (cfg_analyze fn)
+    fn.fn_blocks bb.bb_label states = states
+Proof
+  rw[fmp_reclaim_states_def] >> gvs[AllCaseEqs(), EVERY_MEM]
+QED
+
 Theorem fmp_reclaim_states_df_at_suc:
   fmp_reclaim_states infos fn = SOME states /\
   fmp_base_analyze (fn_insts fn) = SOME env /\
