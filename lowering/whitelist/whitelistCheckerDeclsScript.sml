@@ -160,6 +160,16 @@ QED
 
 (* ===== S15: indexed event fields ===== *)
 
+Theorem check_contract_event_fields_wf:
+  check_contract F layouts addr [(NONE, tops)] = SOME art /\
+  MEM (EventDecl name fields) tops ==>
+  LENGTH (FILTER SND fields) <= 3 /\
+  ALL_DISTINCT (MAP (FST o FST) fields)
+Proof
+  strip_tac >> drule_all check_contract_single_decl >>
+  simp[check_toplevel_decl_def]
+QED
+
 Theorem check_contract_event_indexed_indexable:
   check_contract F layouts addr [(NONE, tops)] = SOME art /\
   MEM (EventDecl name fields) tops /\ MEM ((fname, ty), T) fields ==>
