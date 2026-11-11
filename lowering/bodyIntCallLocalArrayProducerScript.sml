@@ -322,7 +322,7 @@ Proof
        val_in_memory entry.type entry.value (w2n b) s.vs_memory` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      first_x_assum drule_all >> strip_tac >> qexists_tac `w` >>
-     simp[] >> irule memory_value_rel_val_in_memory >> simp[]) >>
+     simp[] >> metis_tac[memory_value_rel_val_in_memory]) >>
   qexists_tac `b` >> simp[] >> rpt strip_tac >>
   `s.vs_alloca_next < dimword (:256)` by
     (fs[stmt_state_rel_def, alloca_room_def] >> decide_tac) >>
@@ -488,7 +488,7 @@ Proof
    val_in_memory entry.type entry.value (w2n b) s.vs_memory` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      first_x_assum drule_all >> strip_tac >> gvs[] >>
-     irule memory_value_rel_val_in_memory >> simp[]) >>
+     metis_tac[memory_value_rel_val_in_memory]) >>
   `sub_layout entry.type entry.value k tvt selected` by
     (irule mem_path_selection_sub_layout >> simp[] >>
      qexists_tac `path` >> simp[]) >>
