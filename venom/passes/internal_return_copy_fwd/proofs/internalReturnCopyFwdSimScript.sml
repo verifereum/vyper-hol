@@ -134,7 +134,8 @@ End
 Definition ircf_R_ret_def:
   ircf_R_ret D fn_meta rma C stk (PG : (num # num) option list)
              (G : (string, num # num) fmap) tn fn (v : internal_return) s t <=>
-    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s
+      (t with vs_inst_idx := s.vs_inst_idx) /\
     ircf_cross tn (ircf_gam_stk fn_meta rma C stk) s t
 End
 
