@@ -7,7 +7,7 @@ Ancestors
   typedCopyPtr loweringPosts pred_set bodyPtrMakeArrayPrimitiveInstall context
 
 Theorem literal_word_store_frames:
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sa G tn s cells off /\
   w2n a = addr+off /\ off+32 <= capacity /\
   local_ptrs_reserved ce sa /\ ~ce.ce_is_ctor /\
@@ -48,7 +48,7 @@ Proof
 QED
 
 Theorem literal_word_loop_store:
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sa G tn s cells off /\
   literal_prefix_ok cells tn s /\
   lookup_var dst s = SOME a /\ w2n a = addr+off /\ ptr_covers G tn dst s 32 /\
@@ -63,7 +63,7 @@ Theorem literal_word_loop_store:
   ~ctx_has_dalloca ctx /\ ~ce.ce_is_ctor ==>
   ?z tm.
     gas_path_ptr D 0 ctx func PG G tn s 0 G tm (OK z) /\
-    literal_loop_frame ctx func ce cx d root aid addr capacity
+    literal_loop_frame pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es sb G tm z (cells ++ [(tv,v,addr+off,32)]) (off+32) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,32)]) tm z
 Proof
@@ -87,14 +87,14 @@ Proof
   `z.vs_allocas = s.vs_allocas /\ ~z.vs_halted /\
    z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts` by
     simp[mstore_def] >>
-  `literal_loop_frame ctx func ce cx d root aid addr capacity
+  `literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sb G tm z cells off` by
     (irule literal_loop_store_endpoint >> simp[] >>
      qexistsl [`G`, `32`, `s`, `sa`, `tn`] >> gvs[] >> metis_tac[]) >>
   `literal_prefix_ok cells tm z` by
     (irule literal_prefix_store_frame >> qexistsl [`addr+off`, `32`, `s`, `tn`] >> simp[] >>
      gvs[literal_loop_frame_def, listTheory.EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
-  `literal_loop_frame ctx func ce cx d root aid addr capacity
+  `literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sb G tm z (cells ++ [(tv,v,addr+off,32)]) (off+32)` by
     (irule literal_loop_frame_advance >> simp[]) >>
   qexistsl [`z`, `tm`] >> gvs[literal_prefix_cell] >>
@@ -102,7 +102,7 @@ Proof
 QED
 
 Theorem literal_scalar_loop_store:
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sa G tn s cells off /\
   literal_prefix_ok cells tn s /\
   lookup_var dst s = SOME a /\ w2n a = addr+off /\ ptr_covers G tn dst s 32 /\
@@ -115,7 +115,7 @@ Theorem literal_scalar_loop_store:
   ~ctx_has_dalloca ctx /\ ~ce.ce_is_ctor ==>
   ?z tm.
     gas_path_ptr D 0 ctx func PG G tn s 0 G tm (OK z) /\
-    literal_loop_frame ctx func ce cx d root aid addr capacity
+    literal_loop_frame pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es sb G tm z (cells ++ [(tv,v,addr+off,32)]) (off+32) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,32)]) tm z
 Proof

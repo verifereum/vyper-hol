@@ -28,7 +28,7 @@ Proof
 QED
 
 Theorem literal_store_outer_wb:
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sa G tn s cells off /\
   local_ptrs_reserved ce fr /\
   (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s) /\
@@ -69,7 +69,7 @@ Proof
 QED
 
 Theorem literal_loop_store_endpoint:
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sa G tn s cells off /\
   local_ptrs_reserved ce fr /\ local_ptrs_reserved ce sa /\
   (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s) /\
@@ -81,10 +81,14 @@ Theorem literal_loop_store_endpoint:
   FLOOKUP H root = SOME (addr,capacity) /\ ptr_covers H tm root z capacity /\
   (!i. ~(addr+off <= i /\ i < addr+off+n) ==>
     mem_bytes_at i 1 z.vs_memory = mem_bytes_at i 1 s.vs_memory) ==>
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sb H tm z cells off
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!p k. addr+capacity <= p \/ p+k <= addr ==>
+     mem_bytes_at p k z.vs_memory = mem_bytes_at p k s.vs_memory` by
+    (rpt strip_tac >> irule mem_bytes_at_bytewise >> rpt strip_tac >>
+     `~(addr+off <= i /\ i < addr+off+n)` by decide_tac >> metis_tac[]) >>
   drule_all literal_store_outer_wb >> strip_tac >>
   `!name p k. local_region ce es.scopes z name p k <=>
               local_region ce es.scopes s name p k` by
@@ -94,14 +98,25 @@ Proof
     (gvs[literal_loop_frame_def, bodyPtrDefsTheory.ghost_kept_def] >>
      metis_tac[local_region_scopes_domain]) >>
   gvs[literal_loop_frame_def] >>
+  `pure ==> pure_frame ce func ees fr sf z` by
+    (strip_tac >>
+     MATCH_MP_TAC (Q.SPECL [`ce`, `func`, `ees`, `fr`, `sf`, `s`, `z`, `inst`,
+       `addr`, `capacity`] literal_loop_pure_store) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+     >- metis_tac[]
+     >- (rpt strip_tac >>
+         qpat_x_assum `!name p k. local_region ce ees.scopes sf _ _ _ ==> _` drule >>
+         decide_tac) >>
+     rpt strip_tac >>
+     qpat_x_assum `!p k. _ ==> mem_bytes_at _ _ _ = _` irule >> decide_tac) >>
   `lookup_var root z = SOME (n2w addr)` by metis_tac[] >>
   `not_fresh_at sb root` by metis_tac[not_fresh_at_mono] >>
-  `aid < sb.cs_next_id /\ fr.cs_next_var <= sb.cs_next_var` by decide_tac >>
+  `inst.inst_id < sb.cs_next_id /\ fr.cs_next_var <= sb.cs_next_var` by decide_tac >>
   simp[] >> metis_tac[]
 QED
 
 Theorem literal_flat_loop_store:
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sa G tn s cells off /\
   literal_prefix_ok cells tn s /\
   compile_store_memory ce (Var src) (Var dst) ty ty sa = ((),sb) /\
@@ -118,7 +133,7 @@ Theorem literal_flat_loop_store:
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id ==>
   ?z tm.
     gas_path_ptr D 0 ctx func PG G tn s 0 G tm (OK z) /\
-    literal_loop_frame ctx func ce cx d root aid addr capacity
+    literal_loop_frame pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es sb G tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z
 Proof
@@ -131,7 +146,7 @@ Proof
   rename1 `gas_path_ptr D 0 ctx func PG G tn s 0 G tm (OK z)` >>
   `FLOOKUP G root = SOME (addr,capacity) /\ ptr_covers G tm root z capacity` by
     metis_tac[literal_loop_frame_allocation] >>
-  `literal_loop_frame ctx func ce cx d root aid addr capacity
+  `literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sb G tm z cells off` by
     (irule literal_loop_store_endpoint >> simp[] >>
      qexistsl [`G`, `k`, `s`, `sa`, `tn`] >> simp[] >> metis_tac[]) >>
