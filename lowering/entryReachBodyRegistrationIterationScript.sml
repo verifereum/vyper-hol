@@ -24,7 +24,7 @@ Theorem entry_registration_prefix_run:
   lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
   bind_arguments (type_env tops) args tx.args = SOME scope /\
   set_external_package_target target
-    (package_external_fn tops F keys (mut,F,raw,tx.function_name,args,([]:expr list),ret,fbody)) =
+    (package_external_fn tops T keys (mut,F,raw,tx.function_name,args,([]:expr list),ret,fbody)) =
     (lbl,ce,pos,cds,pay,F,key,ut,view,fbody,rt) /\
   compile_register_positional_args ce pos 4 start = (cef,registered) /\
   compile_guarded_body cef F key ut view fbody rt registered = ((),final) /\
@@ -115,7 +115,7 @@ Theorem entry_registration_full_run:
   lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
   bind_arguments (type_env tops) args tx.args = SOME scope /\
   set_external_package_target target
-    (package_external_fn tops F keys (mut,F,raw,tx.function_name,args,([]:expr list),ret,fbody)) =
+    (package_external_fn tops T keys (mut,F,raw,tx.function_name,args,([]:expr list),ret,fbody)) =
     (lbl,ce,pos,cds,pay,F,key,ut,view,fbody,rt) /\
   compile_register_positional_args ce pos 4 start = (cef,registered) /\
   compile_guarded_body cef F key ut view fbody rt registered = ((),final) /\

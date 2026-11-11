@@ -161,6 +161,10 @@ Proof
   `val_in_memory tyv v (w2n w)
      (mstore (w2n w) (typed_val_to_w256 etv v) t).vs_memory /\
    val_wf tyv v /\ type_memory_size tyv = 32` by fs[store_lays_out_def] >>
+  `memory_value_rel tyv v (w2n w)
+     (mstore (w2n w) (typed_val_to_w256 etv v) t).vs_memory` by
+    (`word_memory_type tyv` by fs[store_lays_out_def] >>
+     metis_tac[loweringSliceTheory.word_memory_type_memory_value_rel]) >>
   `stmt_state_rel ctx func c cx ee' u` by
     (simp[Abbr `u`, Abbr `ee'`, stmt_state_rel_inst_idx] >>
      irule stmt_state_rel_declare_store >> simp[] >>

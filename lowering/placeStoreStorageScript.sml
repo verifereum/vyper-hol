@@ -3666,7 +3666,7 @@ Proof
   strip_tac >> gvs[] >>
   `eval_operand (Var cv) s = SOME k` by simp[eval_operand_def] >>
   simp_tac (srw_ss()) [LET_THM] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def,
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
     exec_pure2_def, place_store_operand_update,
     emitHelperPropsTheory.eval_operand_lit] >>
   `src <> Var mv /\ src <> Var sv /\ src <> Var vv /\
@@ -3888,7 +3888,7 @@ Proof
   `step_inst_base (mk_inst (cs.cs_next_id + 2) EQ
      [Var (slot_copy_var cs 0); Lit (n2w n)] [slot_copy_var cs 1]) s =
      OK (update_var (slot_copy_var cs 1) (bool_to_word (k = n)) s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_pure2_def,
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
          eval_operands_def, eval_operand_def] >>
   `gas_path_edge ctx func s 0
      (OK ((update_var (slot_copy_var cs 1) (bool_to_word (k = n)) s)

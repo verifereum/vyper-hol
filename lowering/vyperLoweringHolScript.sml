@@ -23,6 +23,10 @@ Ancestors
   stmtSimAssignAttrStorage stmtSimAugAssignAttr
   valueEncodingProofs
   localPtrsProps
+  externalEntryProps constructorGuardProps
+  nonreentrantEntryEquiv internalReturnLockProps
+  transientLockFrameProps
+  selectorCompilerProps checkedSelectorTableProps
   immutableStagingBridge
   immutableCodeLayout
   e2eDeployFrame
@@ -40,3 +44,6 @@ Ancestors
   vyperLoweringCorrect
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
   loweringMemCorrect
+  asmSymBridge
+  asmDataEnv
+  asmOptFinalizerCorrect

@@ -128,7 +128,7 @@ Proof
   drule static_alloca_items_MEM >>
   disch_then (fn th => fs[th]) >>
   simp[fn_needs_liveness_allocation_def] >>
-  irule ptr_two_allocas_multiple >>
+  disj1_tac >> irule ptr_two_allocas_multiple >>
   metis_tac[venomInstTheory.is_alloca_op_def, optionTheory.SOME_11, pairTheory.PAIR_EQ]
 QED
 

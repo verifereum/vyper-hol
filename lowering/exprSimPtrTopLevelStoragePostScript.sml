@@ -67,7 +67,9 @@ Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `b < dimword (:256)` by gvs[dimword_def] >>
   `step_inst_base i s = OK u` by
-    (Cases_on `loc = LocStorage` >>
+    (Cases_on `loc = LocStorage`
+     >- (simp[copy_runtime_word_def, step_inst_base_def, mk_inst_def,
+           exec_read1_def] >> gvs[]) >>
      simp[copy_runtime_word_def, step_inst_base_def, mk_inst_def,
        exec_read1_def] >> gvs[]) >>
   `eval_operand (Var dst) u1 = SOME (n2w b) /\
