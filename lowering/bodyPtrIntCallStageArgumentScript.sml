@@ -116,3 +116,36 @@ Proof
   rpt (pairarg_tac >> gvs[vv_type_def]) >>
   drule literal_vv_result_tag >> simp[]
 QED
+
+Theorem name_vv_result_tag:
+  compile_name_vv ce ann id sa = (vv,sb) ==> vv_type vv = ann
+Proof
+  Cases_on `FLOOKUP ce.ce_vars id` >>
+  simp[compile_name_vv_def, comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  rpt strip_tac >> gvs[vv_type_def] >>
+  rpt (pairarg_tac >> gvs[vv_type_def]) >>
+  rename1 `SOME vl` >> Cases_on `vl` >>
+  gvs[comp_ignore_bind_def, comp_bind_def, comp_return_def, vv_type_def] >>
+  pairarg_tac >> gvs[comp_return_def, vv_type_def]
+QED
+
+Theorem attribute_result_tag:
+  compile_attribute cfn ce ann ty base_e fld sa = (vv,sb) ==> vv_type vv = ann
+Proof
+  simp[compile_attribute_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >>
+  strip_tac >> gvs[vv_type_def]
+QED
+
+Theorem subscript_result_tag:
+  compile_subscript cfn ce ann ty base_e idx sa = (vv,sb) ==> vv_type vv = ann
+Proof
+  simp[compile_subscript_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >>
+  strip_tac >> Cases_on `place_type ce base_e` >>
+  gvs[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[comp_return_def, vv_type_def]) >>
+  rename1 `ValPT vt` >> Cases_on `vt` >>
+  gvs[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[comp_return_def, vv_type_def])
+QED
