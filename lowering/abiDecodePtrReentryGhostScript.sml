@@ -1,6 +1,7 @@
 (* Pruning only dead future variables preserves the live ghost invariant. *)
 Theory abiDecodePtrReentryGhost
 Ancestors
+  loweringStateRelDefs
   abiDecodePtrReentryObservations abiDecoderReentry abiDecoderVarExtend
   bodyPtrDefs compileEnv venomState finite_map pred_set list
 

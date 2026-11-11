@@ -2,6 +2,7 @@
    failure; no source-validity or canonical-encoding premise is required. *)
 Theory abiDecodePtrPrims
 Ancestors
+  loweringStateRelDefs
   abiDecoderRange bodyPtrBopScalarCompile
   abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv freshWrites
   list rich_list pred_set

@@ -1,6 +1,7 @@
 (* Value-only boundary for a dynamic member's relative position. *)
 Theory abiDecodePtrPosition
 Ancestors
+  loweringStateRelDefs
   abiDecoderGuard abiEncoderWindowSequence freshWrites emitHelperProps
   exprLoweringProps emitHelper compileEnv venomExecSemantics venomState
   words list finite_map

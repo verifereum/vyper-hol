@@ -22,8 +22,21 @@ Theorem abi_decode_ptr_reentry_taint_ok:
   (taint_ok fn tn inst s <=> taint_ok fn tn inst t)
 Proof
   strip_tac >>
+  drule abi_decode_ptr_reentry_eval >> disch_then drule >> strip_tac >>
   drule_all abi_decode_ptr_reentry_read_ranges >> strip_tac >>
-  drule abi_decode_ptr_reentry_revert >> strip_tac >> simp[taint_ok_def]
+  drule abi_decode_ptr_reentry_revert >> strip_tac >>
+  `!op b. inst.inst_operands = [op; b] \/ inst.inst_operands = [b; op] ==>
+          eval_operand b t = eval_operand b s` by (rpt strip_tac >> gvs[]) >>
+  `!op b. (inst.inst_operands = [op; b] \/ inst.inst_operands = [b; op]) /\
+          op_taint tn b = {} /\
+          (eval_operand b s = SOME 0w \/ eval_operand b s = SOME 1w) <=>
+          (inst.inst_operands = [op; b] \/ inst.inst_operands = [b; op]) /\
+          op_taint tn b = {} /\
+          (eval_operand b t = SOME 0w \/ eval_operand b t = SOME 1w)` by
+    (rpt gen_tac >>
+     Cases_on `inst.inst_operands = [op; b] \/ inst.inst_operands = [b; op]` >>
+     simp[] >> first_x_assum drule >> simp[]) >>
+  asm_rewrite_tac[taint_ok_def]
 QED
 
 Theorem abi_decode_ptr_reentry_prov:

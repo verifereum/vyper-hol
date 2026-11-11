@@ -1,6 +1,7 @@
 (* Keep physical ownership separate from ghost coverage. *)
 Theory abiDecodePtrInputWindow
 Ancestors
+  exprSimHashBoundary
   bodyPtrHashBuiltinsInputWindow exprSimHash loweringPosts compileEnv
   exprLoweringProps arithmetic words
 

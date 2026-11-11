@@ -1,5 +1,6 @@
 Theory abiDecodePtrBytesRuntimeFrame
 Ancestors
+  loweringStateRelDefs
   abiDecoderBytesPhases abiDecoderBytesBound abiDecoderGuard abiDecoderContract
   abiDecoderGuards abiDecoderCopy abiDecoderComposition
   abiEncoder emitHelper emitHelperProps exprLoweringProps freshWrites

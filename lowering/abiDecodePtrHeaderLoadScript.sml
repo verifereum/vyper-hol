@@ -1,6 +1,7 @@
 (* The decoder's length load and payload address, before any guard. *)
 Theory abiDecodePtrHeaderLoad
 Ancestors
+  wordLoadStorePtr
   assignTuplePtrLoadStep typedCopyPtr venomExecSemantics venomInst emitHelper
   exprSimAccounts freshWrites fragGasPathPtr fragGasSeqPtr
   abiDecodeStaticProps bodyPtrDefs emitHelperProps exprLoweringProps compileEnv fragExec venomState ptrDiscipline stateFrame words arithmetic

@@ -2,6 +2,7 @@
    not require unused output capacity to be initialized. *)
 Theory abiDecodePtrMemberFrame
 Ancestors
+  wordLoadStorePtr
   assignTuplePtrBytesCopy assignTuplePtrLocalFixedCopy assignTuplePtrStageFrame
   typedCopyPtr bodyPtrDefs ptrDiscipline fragGasSeqPtr emitHelperProps
   exprSimBufferStore bodyPtrHashBuiltinsGhostFrame valueEncodingProps
