@@ -11,6 +11,7 @@ Ancestors
   compileVyper compilePhasesProps codegen e2eProducers e2eComposition
   o1PipelineCorrect o1PassContract codegenCorrectness passSimulationDefs
   lowerDloadDefs e2eEntry gasSummary asmOptimizer
+  codegenAsmOpt e2eAsmOpt e2eDeployAsmOpt
 
 (* A successful compilation exposes the deployment unit's phases. *)
 Theorem compile_vyper_deploy_phases:
@@ -215,7 +216,99 @@ Theorem e2e_deploy_correctness_asm_opt:
        | INR ContinueException => F
        | INR (ReturnException _) => F)
 Proof
-  cheat
+  rpt strip_tac >>
+  drule compile_vyper_deploy_phases_asm_opt >> strip_tac >>
+  drule compile_vyper_runtime_nonempty_asm_opt >> strip_tac >>
+  qpat_x_assum `deploy_bc = assemble prog'` SUBST_ALL_TAC >>
+  `deploy_source_ok tops am tx` by simp[deploy_source_ok_def] >>
+  (* The constructor's Venom side runs on the frame with the unoptimized
+     deploy code (opt_entry_frame). *)
+  qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`] mp_tac
+    opt_deploy_state_rel >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`] mp_tac
+    opt_deploy_entry_fields >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  CONV_TAC (LAND_CONV (SIMP_CONV bool_ss [LET_THM])) >> strip_tac >>
+  qabbrev_tac `es_p = opt_entry_frame prog prog' es` >>
+  drule_all deploy_unit_shape_ok >> strip_tac >>
+  drule_all deploy_unit_defs_reach_uses >> strip_tac >>
+  drule_all deploy_initcode_half_bounded >> strip_tac >>
+  `o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\
+   codegen_assembly rpolicy dout.po_unit = SOME prog /\
+   generate_context_plan dout.po_unit.cu_context = SOME cplan` by
+    fs[deploy_phases_def] >>
+  drule_all run_venom_pipeline_output_shape >> strip_tac >>
+  drule_all deploy_entry_state_ok >> strip_tac >>
+  qspecl_then [`deploy_dead tops runtime_bc am tx`, `imm_len tops`, `rpolicy`,
+               `dunit`, `dout`, `deploy_entry_state prog cplan tops es_p`] mp_tac
+    run_venom_pipeline_correct >>
+  impl_tac >- fs[deploy_dead_wf] >> strip_tac >>
+  Cases_on `?marks. deploy_source_exempt tops
+              (load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
+                 [(NONE, tops)] [])`
+  >- (fs[] >> qspec_then `es` strip_assume_tac run_call_total >>
+      qexistsl_tac [`r`, `es'`] >> simp[] >> disj2_tac >>
+      qexists_tac `gas_explicit marks vs_in.vs_gas_readings` >>
+      Cases_on `load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
+                  [(NONE, tops)] []` >>
+      fs[deploy_source_exempt_def] >>
+      rename1 `INR exc` >> Cases_on `exc` >> fs[]) >>
+  pop_assum (strip_assume_tac o SIMP_RULE bool_ss []) >>
+  drule_all deploy_unit_execution_correct >> strip_tac >- metis_tac[] >>
+  `code_layout_valid vs_in` by
+    (irule gas_variant_code_layout_valid >>
+     qexists_tac `deploy_entry_state prog cplan tops es_p` >> fs[o1_run_state_ok_def]) >>
+  drule_all deploy_unit_memory_ok >> strip_tac >>
+  drule_all deploy_unit_dload_ok >> strip_tac >>
+  `ctx_sim (deploy_dead tops runtime_bc am tx) dunit.cu_context dout.po_unit.cu_context vs_in
+     (deploy_entry_state prog cplan tops es_p) /\
+   o1_lowered_inv dout.po_unit.cu_context (deploy_entry_state prog cplan tops es_p)` by
+    metis_tac[] >>
+  `terminates (run_context fuel dunit.cu_context vs_in)` by
+    metis_tac[deploy_venom_result_rel_terminates] >>
+  `?fuel'. dead_result_rel (deploy_dead tops runtime_bc am tx) (run_context fuel dunit.cu_context vs_in)
+             (run_context fuel' dout.po_unit.cu_context
+                (deploy_entry_state prog cplan tops es_p))` by
+    metis_tac[ctx_sim_def] >>
+  `~deploy_source_exempt tops
+      (load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
+         [(NONE, tops)] [])` by metis_tac[] >>
+  qspecl_then [`tops`, `runtime_bc`, `am`, `tx`,
+               `gas_explicit marks vs_in.vs_gas_readings`] mp_tac
+    deploy_venom_result_rel_dead >>
+  simp[] >> disch_then drule_all >> strip_tac >>
+  `(deploy_entry_state prog cplan tops es_p).vs_initial_fmp = n2w cplan.cp_initial_fmp` by
+    simp[deploy_entry_state_def, entry_venom_state_def] >>
+  drule_all o1_pipeline_memory_obligations_raw >> strip_tac >>
+  drule_all o1_pipeline_codegen_obligations >> strip_tac >>
+  (* The optimizer case's static facts of the constructor's O1 output. *)
+  `label_flow_ok dout.po_unit.cu_context` by
+    metis_tac[o1_deploy_label_flow_ok] >>
+  `code_end_offset_ok
+     (raw_reachable (deploy_entry_state prog cplan tops es_p))
+     dout.po_unit.cu_context` by
+    metis_tac[o1_deploy_code_end_offset_ok] >>
+  `sym_unit_static_ok dout.po_unit` by
+    metis_tac[o1_deploy_sym_unit_static_ok] >>
+  qpat_x_assum `initial_ctx_rel _ _ _ _ (shadow_root _)` mp_tac >>
+  qpat_x_assum `frame_code_swap _ _ = _` (SUBST1_TAC o SYM) >> strip_tac >>
+  qspecl_then [`fuel'`, `rpolicy`, `dout.po_unit`, `cplan`, `prog`, `prog'`,
+               `raw_reachable (deploy_entry_state prog cplan tops es_p)`,
+               `deploy_entry_state prog cplan tops es_p`, `shadow_root es`] mp_tac
+    codegen_correct_asm_opt >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+  disch_tac >>
+  qspecl_then [`tops`, `runtime_bc`, `assemble prog'`, `am`, `tx`, `es`,
+               `load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
+                  [(NONE, tops)] []`,
+               `run_context fuel' dout.po_unit.cu_context
+                  (deploy_entry_state prog cplan tops es_p)`] mp_tac deploy_venom_frame >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`r`, `es'`] strip_assume_tac) >>
+  qexistsl_tac [`r`, `es'`] >> fs[] >>
+  disj2_tac >> qexists_tac `gas_explicit marks vs_in.vs_gas_readings` >>
+  fs[deploy_result_rel_def]
 QED
 
 (* TOP-LEVEL: one theorem over the accepted finalizers (Python's -O none and
