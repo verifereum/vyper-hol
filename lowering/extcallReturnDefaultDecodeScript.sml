@@ -1,7 +1,7 @@
 (* Return-size prefix with an already allocated destination. *)
 Theory extcallReturnDefaultDecode
 Ancestors
-  extcallReturnCallerSuccess extcallReturnCallerReject extcallReturnEntryBridge
+  extcallProtFrameDecode extcallReturnCallerSuccess extcallReturnCallerReject extcallReturnEntryBridge
   extcallReturnUnifiedCounted extcallReturnCountedReject extcallReturnFrameBridge
   extcallReturnDecoderOwnership extcallReturnDecoderLabels
   abiReturnSize abiReturnPrefixTransport abiMalformedRecursiveInterface
@@ -188,5 +188,11 @@ Proof
       (type_memory_bytes ce rt) z` by
     (irule abi_malformed_resource_destination >> goal_assum (drule_at Any) >>
      fs[abi_malformed_entry_def]) >>
+  `!pa pk. prot pa pk ==>
+    mem_bytes_at pa pk z.vs_memory = mem_bytes_at pa pk s0.vs_memory` by
+    (rpt strip_tac >>
+     `mem_bytes_at pa pk z.vs_memory = mem_bytes_at pa pk s.vs_memory` by
+       (irule abi_valid_allocated_frame_path_protected >>
+        fs[abi_malformed_entry_def] >> metis_tac[]) >> metis_tac[]) >>
   qexists_tac `z` >> metis_tac[ADD_0]
 QED
