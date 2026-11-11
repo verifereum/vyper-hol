@@ -75,7 +75,7 @@ Theorem tuple_place_pointer_equal_memory_store:
   0 < type_memory_size (EL i tvs) /\
   type_memory_size (EL i tvs)+64 < dimword (:256) /\
   compile_assign_value cenv dst LocMemory (EL i elems) F src_loc
-    (EL i tys) (EL i tys) arr (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
+    (EL i tys) (EL i tys) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -141,10 +141,7 @@ Theorem tuple_place_pointer_equal_storage_store:
   i < LENGTH tys /\ ~is_word_type (EL i tys) /\ cenv.ce_target CapMcopy /\
   (loc = LocStorage \/ loc = LocTransient) /\
   compile_assign_value cenv dst loc (EL i elems) (is_word_type (EL i tys)) src_loc
-    (EL i tys) (EL i tys)
-    (case EL i tys of ArrayT et (Dynamic _) =>
-      SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-     | _ => NONE) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
+    (EL i tys) (EL i tys) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -219,10 +216,7 @@ Theorem tuple_place_pointer_owned_store:
   (EXISTS (\t. ~is_word_type t) ltys ==> cenv.ce_target CapMcopy) /\
   type_alloc_ok cenv (TupleT tys) /\ i < LENGTH tys /\ ~is_word_type (EL i ltys) /\
   compile_assign_value cenv dst loc (EL i elems) (is_word_type (EL i tys)) src_loc
-    (EL i tys) (EL i ltys)
-    (case EL i tys of ArrayT et (Dynamic _) =>
-      SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-     | _ => NONE) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
+    (EL i tys) (EL i ltys) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\

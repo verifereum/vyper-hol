@@ -14,10 +14,7 @@ Theorem tuple_place_equal_storage_run_memory:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
     (!et n. dty <> ArrayT et (Dynamic n)) /\
-    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty dty
-      (case dty of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
-       | _ => NONE) (type_memory_bytes cenv dty) sa = ((),sb) /\
+    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty dty (type_memory_bytes cenv dty) sa = ((),sb) /\
     eval_operand dst_op s = SOME w /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
     (!x. dst_op = Var x ==> not_fresh_at sa x) /\
@@ -122,10 +119,7 @@ Theorem tuple_place_equal_dyn_run_memory:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
     (?et n. dty = ArrayT et (Dynamic n)) /\
-    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty dty
-      (case dty of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
-       | _ => NONE) (type_memory_bytes cenv dty) sa = ((),sb) /\
+    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty dty (type_memory_bytes cenv dty) sa = ((),sb) /\
     eval_operand dst_op s = SOME w /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
     (!x. dst_op = Var x ==> not_fresh_at sa x) /\
@@ -257,10 +251,7 @@ Finalise tuple_place_equal_dyn_run_memory
    clauses refer to the same t as the source write correctness result. *)
 Theorem tuple_place_equal_value_run_frame:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty stv v sa sb.
-    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty dty
-      (case dty of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
-       | _ => NONE) (type_memory_bytes cenv dty) sa = ((),sb) /\
+    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty dty (type_memory_bytes cenv dty) sa = ((),sb) /\
     eval_operand dst_op s = SOME w /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
     (!x. dst_op = Var x ==> not_fresh_at sa x) /\

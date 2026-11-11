@@ -3,19 +3,6 @@ Ancestors
   annassignRelayoutContinue stmtSimDeclMem exprOpenCopies stmtSimAssignStorageSparse
   stmtLowering context compileEnv exprLowering exprOpenPrimitives
 
-Theorem compile_assign_storage_endpoint_open:
-  !cenv dst src tr sloc dty sty bytes sa sf.
-    compile_assign_value cenv dst (if tr then LocTransient else LocStorage)
-      src F sloc dty sty bytes sa = ((),sf) /\
-    acyclic_struct_metadata cenv.ce_struct_fields ==>
-    ~block_is_terminated sf
-Proof
-  rpt gen_tac >> Cases_on `tr` >>
-  simp[compile_assign_value_def, comp_bind_def] >>
-  pairarg_tac >> simp[] >> strip_tac >>
-  metis_tac[cj 1 store_slots_open]
-QED
-
 Theorem compile_assign_place_endpoint_open:
   compile_assign_value cenv dst loc src F sloc dty sty bytes st = ((),sf) /\
   (loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient) /\

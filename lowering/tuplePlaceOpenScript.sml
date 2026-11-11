@@ -1,6 +1,6 @@
 Theory tuplePlaceOpen
 Ancestors
-  stmtLowering exprLowering exprSimHypsDefs exprOpenCopies
+  stmtLowering exprLowering exprSimHypsDefs exprOpenCopies stmtSimAssignStorageSparse
   exprOpenPrimitives exprOpenTerminals aggregateEvaluatedLayout
   vyperTypeEnv compileEnv context venomInst loweringPosts
 
@@ -21,7 +21,7 @@ QED
 Theorem tuple_place_memory_assign_open_probe:
   acyclic_struct_metadata cenv.ce_struct_fields /\
   ~block_is_terminated sa /\
-  compile_assign_value cenv dst LocMemory src F NONE dty sty info bytes sa = ((),sb) ==>
+  compile_assign_value cenv dst LocMemory src F NONE dty sty bytes sa = ((),sb) ==>
   ~block_is_terminated sb
 Proof
   simp[compile_assign_value_def] >> strip_tac >>
@@ -98,34 +98,10 @@ QED
 
 Finalise tuple_place_target_ptr_open
 
-Theorem tuple_place_dynarray_store_open[local]:
-  !src dst ew em tr sa u sb.
-    compile_dynarray_to_storage src dst ew em tr sa = (u,sb) ==>
-    ~block_is_terminated sb
-Proof
-  rpt gen_tac >>
-  simp[compile_dynarray_to_storage_def, comp_bind_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> simp[]) >>
-  Cases_on `ew = 1` >> simp[comp_bind_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> simp[]) >>
-  Cases_on `tr` >> strip_tac >> gvs[] >>
-  drule emit_void_terminated >> simp[is_terminator_def]
-QED
-
-Theorem tuple_place_bulk_storage_open[local]:
-  (!src dst n sa u sb. compile_memory_to_storage src dst n sa = (u,sb) ==>
-    ~block_is_terminated sb) /\
-  (!src dst n sa u sb. compile_memory_to_transient src dst n sa = (u,sb) ==>
-    ~block_is_terminated sb)
-Proof
-  simp[compile_memory_to_storage_def, compile_memory_to_transient_def] >>
-  metis_tac[compile_word_copy_loop_open]
-QED
-
 Theorem tuple_place_assign_value_open:
   acyclic_struct_metadata cenv.ce_struct_fields /\ ~block_is_terminated sa /\
   (loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient) /\
-  compile_assign_value cenv dst loc src prim NONE dty sty arr bytes sa = ((),sb) ==>
+  compile_assign_value cenv dst loc src prim NONE dty sty bytes sa = ((),sb) ==>
   ~block_is_terminated sb
 Proof
   strip_tac >> gvs[]
@@ -141,31 +117,27 @@ Resume tuple_place_assign_value_open[memory]:
 QED
 
 Resume tuple_place_assign_value_open[storage]:
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_assign_value_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  pairarg_tac >> simp[] >>
   Cases_on `prim`
-  >- (strip_tac >> gvs[] >> drule emit_void_terminated >> simp[is_terminator_def]) >>
-  Cases_on `arr` >> simp[]
-  >- (IF_CASES_TAC >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-      rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-      metis_tac[emit_void_terminated, is_terminator_def, tuple_place_bulk_storage_open]) >>
-  PairCases_on `x` >> simp[] >> strip_tac >>
-  metis_tac[tuple_place_dynarray_store_open]
+  >- (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[compile_assign_value_def, comp_bind_def, comp_ignore_bind_def,
+           comp_return_def] >>
+      strip_tac >> gvs[] >> drule emit_void_terminated >>
+      simp[is_terminator_def]) >>
+  drule (SIMP_RULE std_ss []
+    (Q.SPECL [`cenv`,`dst`,`src`,`F`] compile_assign_storage_endpoint_open)) >>
+  simp[]
 QED
 
 Resume tuple_place_assign_value_open[transient]:
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_assign_value_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  pairarg_tac >> simp[] >>
   Cases_on `prim`
-  >- (strip_tac >> gvs[] >> drule emit_void_terminated >> simp[is_terminator_def]) >>
-  Cases_on `arr` >> simp[]
-  >- (IF_CASES_TAC >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-      rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-      metis_tac[emit_void_terminated, is_terminator_def, tuple_place_bulk_storage_open]) >>
-  PairCases_on `x` >> simp[] >> strip_tac >>
-  metis_tac[tuple_place_dynarray_store_open]
+  >- (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[compile_assign_value_def, comp_bind_def, comp_ignore_bind_def,
+           comp_return_def] >>
+      strip_tac >> gvs[] >> drule emit_void_terminated >>
+      simp[is_terminator_def]) >>
+  drule (SIMP_RULE std_ss []
+    (Q.SPECL [`cenv`,`dst`,`src`,`T`] compile_assign_storage_endpoint_open)) >>
+  simp[]
 QED
 
 Finalise tuple_place_assign_value_open
@@ -177,16 +149,13 @@ Theorem tuple_place_success_store_open:
   acyclic_struct_metadata cenv.ce_struct_fields /\
   (let dst = FST r; loc_opt = FST (SND r); dst_ty_opt = SND (SND r);
        loc = case loc_opt of SOME l => l | NONE => LocMemory;
-       dt = case dst_ty_opt of SOME (ValPT ty) => ty | _ => sty;
-       arr = case dt of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-         | _ => NONE
+       dt = case dst_ty_opt of SOME (ValPT ty) => ty | _ => sty
    in (if is_word_type sty then
          if is_word_type dt then
            compile_store_at_loc cenv.ce_imm_alloca dst src loc_opt
          else emit_void INVALID []
        else compile_assign_value cenv dst loc src (is_word_type dt)
-         NONE dt sty arr (type_memory_bytes cenv dt)) sa) = ((),sb) ==>
+         NONE dt sty (type_memory_bytes cenv dt)) sa) = ((),sb) ==>
   ~block_is_terminated sb
 Proof
   strip_tac >> drule tuple_place_success_descriptor_probe >> strip_tac >>

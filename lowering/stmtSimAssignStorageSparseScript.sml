@@ -118,6 +118,20 @@ Proof
       rpt (pairarg_tac >> simp[]) >> strip_tac >> metis_tac[])
   >- metis_tac[copy_elements_open]
 QED
+
+Theorem compile_assign_storage_endpoint_open:
+  !cenv dst src tr sloc dty sty bytes sa sf.
+    compile_assign_value cenv dst (if tr then LocTransient else LocStorage)
+      src F sloc dty sty bytes sa = ((),sf) /\
+    acyclic_struct_metadata cenv.ce_struct_fields ==>
+    ~block_is_terminated sf
+Proof
+  rpt gen_tac >> Cases_on `tr` >>
+  simp[compile_assign_value_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  metis_tac[cj 1 store_slots_open]
+QED
+
 (* Assignment to a non-word storage or transient variable with no length
    word, by the live-slot store.  The region fits the slot space. *)
 Theorem compile_assign_storage_sparse_stmt_frag:
