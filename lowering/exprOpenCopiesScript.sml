@@ -280,11 +280,6 @@ QED
 Theorem compile_struct_lit_open:
   !cfn cenv ty fields buf off sa r sb.
     acyclic_struct_metadata cenv.ce_struct_fields /\
-    (!name e fty sz.
-       MEM (name,e) fields /\
-       ALOOKUP (get_struct_fields cenv.ce_struct_fields
-         (case ty of StructT n => nsid_to_string n | _ => "")) name = SOME (fty,sz) ==>
-       is_word_type fty \/ is_bytestring_type fty \/ fty = expr_type e) /\
     ~block_is_terminated sa /\
     compile_struct_lit cfn cenv ty fields buf off sa = (r,sb) ==>
     ~block_is_terminated sb
@@ -303,40 +298,3 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem aligned_fields_lookup_type[local]:
-  !values fields f key e ty size.
-    MAP FST fields = MAP FST values /\
-    MAP (FST o SND) fields = MAP (f o SND) values /\
-    ALL_DISTINCT (MAP FST fields) /\ MEM (key,e) values /\
-    ALOOKUP fields key = SOME (ty,size) ==> ty = f e
-Proof
-  Induct_on `values` >- simp[] >>
-  rpt gen_tac >> Cases_on `fields` >> simp[] >>
-  PairCases_on `h` >> rename1 `ALOOKUP (fld::rest) _ = SOME _` >>
-  PairCases_on `fld` >>
-  simp[] >> strip_tac >> gvs[] >>
-  gvs[AllCaseEqs()]
-  >- (qpat_x_assum `!fields f key e ty size. _` kall_tac >>
-      metis_tac[MEM_MAP_f, FST]) >>
-  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
-QED
-
-Theorem struct_literal_store_paths:
-  !cenv cx env ann nsid kes es.
-    expr_sim_inv cenv cx env es /\ well_typed_expr env (StructLit ann nsid kes) ==>
-    !name e fty sz.
-      MEM (name,e) kes /\
-      ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid)) name =
-        SOME (fty,sz) ==> fty = expr_type e
-Proof
-  rpt gen_tac >> strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
-  `sfields_tenv_consistent cenv.ce_struct_fields env.type_defs` by
-    gvs[expr_sim_inv_def] >>
-  drule_all struct_literal_layout_types >> strip_tac >>
-  `ALL_DISTINCT (MAP FST fields)` by
-    (fs[expr_sim_inv_def] >> metis_tac[]) >>
-  rpt gen_tac >> simp[get_struct_fields_def] >> strip_tac >>
-  drule_all aligned_fields_lookup_type >> simp[]
-QED

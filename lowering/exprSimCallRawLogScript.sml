@@ -13,6 +13,7 @@ Ancestors
   vyperEvent venomExecSemantics venomInst venomState exprLoweringProps
   extCallOracleStep venomMemDefs exprSimHash builtinSystem emitHelper fragExec
   emitHelperProps venomExecProofs exprSimOperators exprSimRawLog exprSimRawLogSimCompose
+  vyperTypeArgFits
 Libs
   pairLib
 
@@ -38,7 +39,10 @@ Proof
   rename1 `MakeArray elem_ty bnd` >>
   Cases_on `elem_ty` >>
   simp[well_typed_expr_def, well_typed_builtin_app_def, expr_type_def] >>
-  strip_tac >> gvs[] >> metis_tac[]
+  strip_tac >> gvs[]
+  >- (Cases_on `topic_ann` >> simp[]) >>
+  gvs[EVERY_MEM] >>
+  metis_tac[arg_type_fits_prim_word, is_prim_word_type_def, LESS_EQ_REFL]
 QED
 
 Theorem raw_log_child_pre[local]:

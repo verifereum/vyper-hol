@@ -16,7 +16,7 @@ Ancestors
   gasContext gasSummary gasOutcome gasSummaryCompose gasExemptCert
   fragGasMode fragGasPath fragGasFresh varsExt exprSimUnopCompose exprSimWordArgs loweringPosts valueEncoding
   exprSimBopTyped exprBopSimDefs exprBopSimProps
-  exprSimUnopProps freshWrites emitHelperProps exprLoweringProps
+  exprSimUnopProps freshWrites emitHelperProps exprLoweringProps vyperTypeArgFits
   venomExecSemantics venomState words valueEncodingProofs vyperStorage
   exprSimSource
   exprSimHypsDefs
@@ -166,7 +166,7 @@ Theorem literal_membership_typing:
 Proof
   strip_tac >> Cases_on `t` >>
   gvs[well_typed_builtin_app_def, well_typed_binop_def, EVERY_MAP] >>
-  gvs[EVERY_MEM] >> metis_tac[]
+  gvs[EVERY_MEM] >> metis_tac[arg_type_fits_prim_word]
 QED
 
 Theorem literal_membership_result:

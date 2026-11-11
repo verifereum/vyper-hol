@@ -53,7 +53,7 @@ Proof
   qmatch_asmsub_abbrev_tac `compile_alloc_buffer sz sa` >>
   gvs[] >>
   drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`) aggregate_struct_fields_sim_mem >>
-  simp[] >> disch_then drule >>
+  simp[] >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[] >>
@@ -196,15 +196,16 @@ Resume body_make_array_nowiden_mem[tuple]:
     (qpat_x_assum `ci_mono sa sm` mp_tac >>
      qpat_x_assum `ci_mono sm sb` mp_tac >> simp[ci_mono_def]) >>
   drule_all fn_has_code_split >> strip_tac >>
-  `SUM (MAP (type_memory_bytes cenv o expr_type) es) < dimword (:256)` by
-    (gvs[expr_body_pre_def, alloc_limits_expr_def] >>
+  `SUM (MAP (type_memory_bytes cenv) tys) < dimword (:256)` by
+    (gvs[expr_body_pre_def, alloc_limits_expr_def, type_alloc_ok_def,
+         type_memory_bytes_def, is_word_type_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
   `type_memory_size_list tvs < dimword (:256)` by metis_tac[] >>
   drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   drule_all aggregate_buffer_alloc_counted_mem_any_block >> strip_tac >> gvs[] >>
   drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`)
-    bodyMemAggregateLoopsTheory.aggregate_make_tuple_sim_mem >>
-  disch_then drule >> disch_then drule >>
+    bodyMemAggregateLoopsTheory.aggregate_make_tuple_fits_sim_mem >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
   disch_then (qspecl_then [`ctx`,`tops`] mp_tac) >> simp[] >>
@@ -227,12 +228,12 @@ Resume body_make_array_nowiden_mem[tuple]:
 QED
 
 Resume body_make_array_nowiden_mem[tuple_final_post]:
-  `eval_expr cx (Builtin (TupleT (MAP expr_type es)) (MakeArray NONE n) es)
+  `eval_expr cx (Builtin (TupleT tys) (MakeArray NONE n) es)
     (st with gas_obs := gs) = (INL (Value (ArrayV (TupleV vs))),ee)` by
     (drule_all aggregate_eval_make_tuple >> simp[]) >>
   rpt (qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac) >>
   `expr_body_pre cenv cx env
-    (Builtin (TupleT (MAP expr_type es)) (MakeArray NONE n) es)
+    (Builtin (TupleT tys) (MakeArray NONE n) es)
     (st with gas_obs := gs)` by simp[] >>
   `val_wf (TupleTV tvs) (ArrayV (TupleV vs))` by
     (irule aggregate_materialised_child_wf >>
@@ -246,7 +247,7 @@ Resume body_make_array_nowiden_mem[tuple_final_post]:
   `!nm lb len. local_region cenv ee.scopes t' nm lb len ==>
      b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
     (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
-  `~expr_has_effect (Builtin (TupleT (MAP expr_type es)) (MakeArray NONE n) es) ==>
+  `~expr_has_effect (Builtin (TupleT tys) (MakeArray NONE n) es) ==>
      pure_frame cenv func st sa s0 t'` by
     (rewrite_tac[expr_has_effect_thm] >> strip_tac >>
      qpat_x_assum `EVERY _ _ ==> _` mp_tac >>
@@ -268,7 +269,7 @@ Resume body_make_array_nowiden_mem[tuple_final_post]:
      strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
   conj_asm1_tac
   >- (irule (SRULE [expr_type_def] (Q.INST
-        [`e` |-> `Builtin (TupleT (MAP expr_type es)) (MakeArray NONE n) es`]
+        [`e` |-> `Builtin (TupleT tys) (MakeArray NONE n) es`]
         (Q.INST [`es` |-> `st`] buffer_loop_memory_vv_post))) >>
       simp[expr_type_def, is_word_type_def, contextTheory.mk_ptr_def, contextTheory.base_ptr_def,
         venomStateTheory.eval_operand_def, val_in_memory_def] >>
@@ -282,7 +283,7 @@ Resume body_make_array_nowiden_mem[tuple_final_post]:
       metis_tac[arithmeticTheory.ADD_COMM]) >>
   simp[expr_type_def, exprLoweringTheory.lowered_value_type_def] >>
   irule (SRULE [expr_type_def, exprLoweringTheory.lowered_value_type_def]
-    (Q.INST [`e` |-> `Builtin (TupleT (MAP expr_type es)) (MakeArray NONE n) es`]
+    (Q.INST [`e` |-> `Builtin (TupleT tys) (MakeArray NONE n) es`]
       (Q.INST [`es` |-> `st`] aggregate_allocated_result_store_bound_mem))) >>
   simp[expr_type_def, exprLoweringTheory.lowered_value_type_def,
        contextTheory.base_ptr_def] >>

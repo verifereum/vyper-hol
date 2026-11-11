@@ -85,7 +85,8 @@ Theorem typed_intcall_source_signature:
       SOME (mut,nr,args,dflts,ret,ss) /\
     LENGTH es <= LENGTH args /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
-    MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
+    LIST_REL (type_widens_to env.type_defs) (MAP expr_type es)
+      (TAKE (LENGTH es) (MAP SND args)) /\
     type_widens_to env.type_defs ret ty
 Proof
   simp[vyperTypeSystemTheory.well_typed_expr_def] >> strip_tac >>
@@ -102,7 +103,8 @@ Theorem expr_body_pre_intcall_signature:
       SOME (mut,nr,args,dflts,ret,ss) /\
     LENGTH es <= LENGTH args /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
-    MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
+    LIST_REL (type_widens_to env.type_defs) (MAP expr_type es)
+      (TAKE (LENGTH es) (MAP SND args)) /\
     type_widens_to env.type_defs ret ty
 Proof
   strip_tac >>
@@ -124,7 +126,7 @@ Theorem body_intcall_source_selection:
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,F,args,[],ret,ss) /\
     LENGTH es = LENGTH args /\
-    MAP expr_type es = MAP SND args /\
+    LIST_REL (type_widens_to env.type_defs) (MAP expr_type es) (MAP SND args) /\
     type_widens_to env.type_defs ret ty /\
     (?rr. MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops) /\
     EVERY (supported_value_type tops o SND) args /\
@@ -142,5 +144,8 @@ Proof
   `supported_program tops` by gvs[body_inv_def] >>
   drule_all supported_internal_callable >> strip_tac >> gvs[] >>
   `LENGTH es = LENGTH args` by decide_tac >>
-  gvs[] >> goal_assum (drule_at Any) >> simp[]
+  gvs[] >> qpat_x_assum `LIST_REL _ _ (TAKE _ _)` mp_tac >>
+  `TAKE (LENGTH args) (MAP SND args) = MAP SND args` by
+    simp[listTheory.TAKE_LENGTH_ID_rwt] >>
+  simp[] >> metis_tac[]
 QED

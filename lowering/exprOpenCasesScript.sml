@@ -162,9 +162,7 @@ Proof
   ntac 2 (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
   drule compile_alloc_buffer_open >> disch_tac >>
   drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`)
-    compile_struct_lit_open >> simp[] >>
-  impl_tac >- (fs[] >> rpt strip_tac >> drule_all struct_literal_store_paths >> simp[]) >>
-  simp[]
+    compile_struct_lit_open >> simp[]
 QED
 
 Theorem compile_addmod_names_open:
