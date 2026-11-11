@@ -532,3 +532,272 @@ QED
    instruction-justified history, frontier credit, and both persistent
    ownership entries.  Its allocation IDs may be reused by later children;
    no completed-prefix preservation is assumed in that callback. *)
+
+(* Counted control companions for the installed loop phases. *)
+Theorem loop_terminator_gas_path[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> GAS /\
+  is_terminator inst.inst_opcode /\
+  step_inst 0 ctx inst s = OK t /\ ~s.vs_halted /\ ~t.vs_halted /\
+  lookup_block t.vs_current_bb fn.fn_blocks = SOME target /\
+  phi_prefix_length target.bb_instructions = 0 /\ t.vs_inst_idx = 0 ==>
+  gas_path ctx fn s 0 (OK t)
+Proof
+  strip_tac >> irule entry_decode_observer_gas_path >>
+  conj_tac >- simp[] >>
+  qexists_tac `(s.vs_current_bb,SUC s.vs_inst_idx)` >>
+  simp[abi_observer_step_def] >> qexists_tac `t` >> simp[] >>
+  once_rewrite_tac[GSYM eval_phis_prefix] >> simp[eval_phis_def]
+QED
+
+Theorem loop_header_gas_path:
+  abi_decode_loop_cfg fn hdr body_lbl exit id ip src CALLDATALOAD iv cv cmp done /\
+  abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr n j s /\
+  src <> Var iv /\ iv <> cv /\ n < dimword (:256) ==>
+  gas_path ctx fn s 0
+    (OK (jump_to (if j < n then body_lbl else exit)
+      (abi_decode_header_state iv cv cmp done j n s)))
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD` by
+    simp[abiDecoderContractTheory.abi_decode_source_opcode_def] >>
+  `run_inst_seq (TAKE 4 (abi_decode_header_insts id ip src CALLDATALOAD
+      iv cv cmp done body_lbl exit)) s =
+    OK (abi_decode_header_state iv cv cmp done j n s)` by
+    (irule abi_decode_header_prefix >> fs[abi_decode_loop_ready_def]) >>
+  qmatch_goalsub_abbrev_tac `jump_to lbl h` >>
+  `~h.vs_halted` by
+    fs[Abbr `h`, abi_decode_header_state_def, update_var_def, abi_decode_loop_ready_def] >>
+  `gas_path ctx fn s 0 (OK (h with vs_inst_idx := 4))` by
+    (drule_at (Pat `run_inst_seq _ _ = OK _`)
+       fragGasSeqTheory.tuple_run_inst_seq_gas_path >>
+     fs[abi_decode_loop_cfg_def, abi_decode_loop_ready_def, Abbr `h`,
+       abi_decode_header_insts_def, mk_inst_def, is_terminator_def]) >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
+    fragGasPathTheory.gas_path_then)) >>
+  qexists_tac `h with vs_inst_idx := 4` >>
+  simp[] >> irule loop_terminator_gas_path >>
+  simp[jump_to_def] >> conj_tac
+  >- (fs[abi_decode_loop_cfg_def, Abbr `lbl`] >> Cases_on `j < n` >> metis_tac[]) >>
+  qexistsl_tac [`<|bb_label := hdr; bb_instructions :=
+       abi_decode_header_insts id ip src CALLDATALOAD iv cv cmp done body_lbl exit|>`,
+     `mk_inst (id+4) JNZ [Var done;Label exit;Label body_lbl] []`] >>
+  fs[abi_decode_loop_cfg_def, abi_decode_loop_ready_def, Abbr `h`, Abbr `lbl`,
+     abi_decode_header_insts_def, get_instruction_def, mk_inst_def, is_terminator_def,
+     jump_to_def, abi_decode_header_state_def, update_var_def] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
+       eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+       bool_to_word_def, jump_to_def] >>
+  Cases_on `j < n` >> simp[]
+QED
+
+Theorem loop_backedge_gas_path:
+  entry_loop_child_end fn tail prefix bid iv nv ip hdr src p srcaddr n j s /\
+  lookup_block hdr fn.fn_blocks = SOME target /\
+  phi_prefix_length target.bb_instructions = 0 /\
+  ip <> Var nv /\ j < n /\ n < dimword (:256) ==>
+  gas_path ctx fn s 0
+    (OK (jump_to hdr (mstore (w2n p) (n2w (SUC j)) (update_var nv (n2w (SUC j)) s))))
+Proof
+  strip_tac >>
+  `run_inst_seq (TAKE 2 (abi_decode_backedge_insts bid iv nv ip hdr)) s =
+    OK (mstore (w2n p) (n2w (SUC j)) (update_var nv (n2w (SUC j)) s))` by
+    (irule abi_decode_increment_prefix >> fs[entry_loop_child_end_def] >> metis_tac[]) >>
+  qmatch_goalsub_abbrev_tac `jump_to hdr h` >>
+  `~h.vs_halted /\ h.vs_current_bb = tail` by
+    fs[Abbr `h`, mstore_def, write_memory_with_expansion_def, update_var_def,
+       entry_loop_child_end_def] >>
+  `gas_path ctx fn s 0 (OK (h with vs_inst_idx := LENGTH prefix + 2))` by
+    (drule_at (Pat `run_inst_seq _ _ = OK _`)
+       fragGasSeqTheory.tuple_run_inst_seq_gas_path >>
+     fs[entry_loop_child_end_def, Abbr `h`, abi_decode_backedge_insts_def,
+       mk_inst_def, is_terminator_def, DROP_LENGTH_APPEND]) >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
+    fragGasPathTheory.gas_path_then)) >>
+  qexists_tac `h with vs_inst_idx := LENGTH prefix + 2` >> simp[] >>
+  irule loop_terminator_gas_path >> simp[jump_to_def] >>
+  qpat_x_assum `entry_loop_child_end _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE[entry_loop_child_end_def]) >>
+  qexistsl_tac [`bb`, `mk_inst (bid+2) JMP [Label hdr] []`] >>
+  fs[entry_loop_child_end_def, abi_decode_backedge_insts_def,
+     get_instruction_def, listTheory.EL_APPEND_EQN, mk_inst_def, is_terminator_def] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def, jump_to_def]
+QED
+
+Theorem entry_operational_loop_header_gas_phase:
+  abi_decode_loop_cfg fn hdr body_lbl exit hid ip src CALLDATALOAD iv cv cmp done /\
+  src <> Var iv /\ iv <> cv /\ LENGTH xs < dimword (:256) /\
+  abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr (LENGTH xs) j s /\
+  entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap s /\
+  entry_loop_prefix tv xs d j s /\
+  t = jump_to (if j < LENGTH xs then body_lbl else exit)
+    (abi_decode_header_state iv cv cmp done j (LENGTH xs) s) ==>
+  gas_path ctx fn s 0 (OK t)
+Proof
+  strip_tac >> gvs[] >> irule loop_header_gas_path >> metis_tac[]
+QED
+
+Theorem entry_operational_loop_backedge_gas_phase:
+  abi_decode_loop_cfg fn hdr body_lbl exit hid ip src CALLDATALOAD iv cv cmp done /\
+  ip <> Var nv /\ src <> Var nv /\ LENGTH xs < dimword (:256) /\
+  EVERY (val_wf tv) xs /\ 32+LENGTH xs*type_memory_size tv <= cap /\
+  oid <> cid /\ cid IN ids /\
+  j < LENGTH xs /\
+  entry_loop_child_end fn tail prefix bid iv nv ip hdr src p srcaddr (LENGTH xs) j s /\
+  entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap s /\
+  entry_loop_prefix tv xs d (SUC j) s /\
+  t = jump_to hdr (mstore (w2n p) (n2w (SUC j)) (update_var nv (n2w (SUC j)) s)) ==>
+  gas_path ctx fn s 0 (OK t)
+Proof
+  strip_tac >> gvs[] >> irule loop_backedge_gas_path >>
+  fs[abi_decode_loop_cfg_def] >>
+  simp[abi_decode_header_insts_def, phi_prefix_length_def, mk_inst_def] >>
+  qhdtm_assum `entry_loop_child_end` (irule_at Any) >> simp[] >> decide_tac
+QED
+
+Theorem loop_shell_gas_round[local]:
+  entry_operational_loop_shell ctx fn site hdr body_lbl exit hid tail prefix bid
+    ip src iv cv cmp done nv p srcaddr tv xs d cap cid oid ids child_ids /\
+  (!k u. k < LENGTH xs /\ ~u.vs_halted /\ u.vs_current_bb = body_lbl /\
+    u.vs_inst_idx = 0 /\
+    entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap u ==>
+    ?t. entry_loop_child_end fn tail prefix bid iv nv ip hdr src p srcaddr (LENGTH xs) k t /\
+      entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap t /\
+      val_in_memory tv (EL k xs) (d+32+k*type_memory_size tv) t.vs_memory /\
+      entry_loop_fields u t /\ entry_decode_path ctx fn u t /\
+      abi_encoder_registered_effect child_ids
+        [(d+32+k*type_memory_size tv,type_memory_size tv)] u t /\
+      gas_path ctx fn u 0 (OK t)) /\
+  entry_operational_loop_inv ctx fn site hdr ip src p srcaddr tv xs d cap cid oid j s /\
+  j < LENGTH xs ==>
+  ?v. entry_operational_loop_inv ctx fn site hdr ip src p srcaddr tv xs d cap cid oid (SUC j) v /\
+    entry_loop_trace ctx fn ids [(d,32+LENGTH xs*type_memory_size tv)] s v /\
+    gas_path ctx fn s 0 (OK v)
+Proof
+  strip_tac >> fs[entry_operational_loop_inv_def] >>
+  qabbrev_tac `h = jump_to (if j < LENGTH xs then body_lbl else exit)
+    (abi_decode_header_state iv cv cmp done j (LENGTH xs) s)` >>
+  `(~h.vs_halted /\ h.vs_current_bb = (if j < LENGTH xs then body_lbl else exit) /\ h.vs_inst_idx = 0) /\
+   entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap h /\
+   entry_loop_prefix tv xs d j h /\
+   entry_loop_trace ctx fn ids [(d,32+LENGTH xs*type_memory_size tv)] s h` by
+    (simp_tac bool_ss [entry_loop_trace_def] >>
+     irule loop_shell_header >> simp[Abbr `h`] >> metis_tac[]) >>
+  `gas_path ctx fn s 0 (OK h)` by
+    (irule entry_operational_loop_header_gas_phase >> simp[Abbr `h`] >>
+     fs[entry_operational_loop_shell_def] >> metis_tac[]) >>
+  `?t. entry_loop_child_end fn tail prefix bid iv nv ip hdr src p srcaddr (LENGTH xs) j t /\
+    entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap t /\
+    entry_loop_prefix tv xs d (SUC j) t /\
+    entry_loop_trace ctx fn ids [(d,32+LENGTH xs*type_memory_size tv)] h t /\
+    gas_path ctx fn h 0 (OK t)` by suspend "child" >>
+  qabbrev_tac `v = jump_to hdr
+    (mstore (w2n p) (n2w (SUC j)) (update_var nv (n2w (SUC j)) t))` >>
+  `entry_operational_loop_inv ctx fn site hdr ip src p srcaddr tv xs d cap cid oid (SUC j) v /\
+   entry_loop_trace ctx fn ids [(d,32+LENGTH xs*type_memory_size tv)] t v` by
+    (simp_tac bool_ss [entry_operational_loop_inv_def, entry_loop_trace_def, GSYM CONJ_ASSOC] >>
+     irule loop_shell_backedge >> simp[Abbr `v`] >> metis_tac[]) >>
+  `gas_path ctx fn t 0 (OK v)` by
+    (irule entry_operational_loop_backedge_gas_phase >> simp[Abbr `v`] >>
+     fs[entry_operational_loop_shell_def] >> metis_tac[]) >>
+  qexists_tac `v` >> conj_tac >- fs[entry_operational_loop_inv_def] >> conj_tac
+  >- (irule loop_trace_trans >> qexists_tac `t` >> reverse conj_tac
+      >- fs[ADD_COMM] >> irule loop_trace_trans >> qexists_tac `h` >> fs[ADD_COMM]) >>
+  metis_tac[fragGasPathTheory.gas_path_then, ADD_CLAUSES]
+QED
+Resume loop_shell_gas_round[child]:
+  qpat_x_assum `!k u. _` (qspecl_then [`j`, `h`] mp_tac) >>
+  simp[] >> disch_then (qx_choose_then `t` strip_assume_tac) >>
+  `32+j*type_memory_size tv <= cap` by
+    (irule loop_shell_capacity >> metis_tac[LESS_IMP_LESS_OR_EQ]) >>
+  qexists_tac `t` >> simp[entry_loop_trace_def] >> conj_tac
+  >- (irule entry_registered_child_prefix_extend >>
+      fs[entry_operational_loop_resources_def, entry_operational_loop_shell_def,
+         AC ADD_ASSOC ADD_COMM] >>
+      qexistsl_tac [`cap`, `child_ids`, `oid`, `h`] >> simp[AC ADD_ASSOC ADD_COMM]) >>
+  irule (SRULE [AC ADD_ASSOC ADD_COMM] loop_child_effect_enlarge) >>
+  fs[entry_operational_loop_shell_def, AC ADD_ASSOC ADD_COMM] >> metis_tac[]
+QED
+Finalise loop_shell_gas_round
+
+Theorem loop_shell_gas_exit[local]:
+  entry_operational_loop_shell ctx fn site hdr body_lbl exit hid tail prefix bid
+    ip src iv cv cmp done nv p srcaddr tv xs d cap cid oid ids child_ids /\
+  entry_operational_loop_inv ctx fn site hdr ip src p srcaddr tv xs d cap cid oid (LENGTH xs) s ==>
+  ?t. (~t.vs_halted /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
+    entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap t /\
+    entry_loop_prefix tv xs d (LENGTH xs) t /\
+    entry_loop_trace ctx fn ids [(d,32+LENGTH xs*type_memory_size tv)] s t) /\
+    gas_path ctx fn s 0 (OK t)
+Proof
+  strip_tac >>
+  qexists_tac `jump_to exit
+    (abi_decode_header_state iv cv cmp done (LENGTH xs) (LENGTH xs) s)` >>
+  conj_tac
+  >- (simp_tac bool_ss [entry_loop_trace_def] >>
+      irule (SRULE [GSYM CONJ_ASSOC] (Q.INST [`j` |-> `LENGTH xs`] loop_shell_header)) >>
+      fs[entry_operational_loop_inv_def] >> metis_tac[]) >>
+  irule (SRULE [] (Q.INST [`j` |-> `LENGTH xs`, `n` |-> `LENGTH xs`]
+    loop_header_gas_path)) >>
+  fs[entry_operational_loop_inv_def, entry_operational_loop_shell_def] >> metis_tac[]
+QED
+
+Theorem entry_operational_array_loop_gas_from_index:
+  entry_operational_loop_shell ctx fn site hdr body_lbl exit hid tail prefix bid
+    ip src iv cv cmp done nv p srcaddr tv xs d cap cid oid ids child_ids /\
+  (!k u. k < LENGTH xs /\ ~u.vs_halted /\ u.vs_current_bb = body_lbl /\
+    u.vs_inst_idx = 0 /\
+    entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap u ==>
+    ?t. entry_loop_child_end fn tail prefix bid iv nv ip hdr src p srcaddr (LENGTH xs) k t /\
+      entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap t /\
+      val_in_memory tv (EL k xs) (d+32+k*type_memory_size tv) t.vs_memory /\
+      entry_loop_fields u t /\ entry_decode_path ctx fn u t /\
+      abi_encoder_registered_effect child_ids
+        [(d+32+k*type_memory_size tv,type_memory_size tv)] u t /\
+      gas_path ctx fn u 0 (OK t)) /\
+  entry_operational_loop_inv ctx fn site hdr ip src p srcaddr tv xs d cap cid oid j s ==>
+  ?t. ((~t.vs_halted /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
+    entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap t /\
+    entry_loop_prefix tv xs d (LENGTH xs) t /\
+    entry_loop_trace ctx fn ids [(d,32+LENGTH xs*type_memory_size tv)] s t) /\
+    gas_path ctx fn s 0 (OK t)) /\ abi_decode_sim ctx fn s t
+Proof
+  strip_tac >>
+  qabbrev_tac `loopinv = \k u.
+    entry_operational_loop_inv ctx fn site hdr ip src p srcaddr tv xs d cap cid oid k u /\
+    entry_loop_trace ctx fn ids [(d,32+LENGTH xs*type_memory_size tv)] s u /\
+    gas_path ctx fn s 0 (OK u)` >>
+  `!k u. loopinv k u /\ k < LENGTH xs ==>
+    ?v. loopinv (SUC k) v /\ abi_decode_sim ctx fn u v` by suspend "round" >>
+  `!u. loopinv (LENGTH xs) u ==>
+    ?t. ((~t.vs_halted /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
+      entry_operational_loop_resources ctx fn site cid (w2n p) oid d cap t /\
+      entry_loop_prefix tv xs d (LENGTH xs) t /\
+      entry_loop_trace ctx fn ids [(d,32+LENGTH xs*type_memory_size tv)] s t) /\
+      gas_path ctx fn s 0 (OK t)) /\
+      abi_decode_sim ctx fn u t` by suspend "exit" >>
+  ho_match_mp_tac abiDecoderLoopTheory.abi_decode_finite_iteration >>
+  qexistsl_tac [`LENGTH xs`, `j`, `loopinv`] >>
+  simp[Abbr `loopinv`, loop_trace_refl, fragGasPathTheory.gas_path_rules] >>
+  fs[entry_operational_loop_inv_def, abi_decode_loop_ready_def] >>
+  simp[fragGasPathTheory.gas_path_rules]
+QED
+Resume entry_operational_array_loop_gas_from_index[round]:
+  simp_tac bool_ss [Abbr `loopinv`] >> rpt strip_tac >>
+  drule_all loop_shell_gas_round >> disch_then (qx_choose_then `v` strip_assume_tac) >>
+  qexists_tac `v` >> simp[] >> rpt conj_tac
+  >- (irule loop_trace_trans >> qexists_tac `u` >> fs[ADD_COMM]) 
+  >- metis_tac[fragGasPathTheory.gas_path_then, ADD_CLAUSES] >>
+  irule loop_trace_sim >> goal_assum (drule_at Any)
+QED
+Resume entry_operational_array_loop_gas_from_index[exit]:
+  simp_tac bool_ss [Abbr `loopinv`] >> rpt strip_tac >>
+  drule_all loop_shell_gas_exit >> disch_then (qx_choose_then `t` strip_assume_tac) >>
+  `entry_loop_trace ctx fn ids [(d,32+LENGTH xs*type_memory_size tv)] s t` by
+    (irule loop_trace_trans >> qexists_tac `u` >> fs[ADD_COMM]) >>
+  qexists_tac `t` >> simp[] >> conj_tac
+  >- metis_tac[fragGasPathTheory.gas_path_then, ADD_CLAUSES] >>
+  irule loop_trace_sim >> goal_assum (drule_at Any)
+QED
+Finalise entry_operational_array_loop_gas_from_index

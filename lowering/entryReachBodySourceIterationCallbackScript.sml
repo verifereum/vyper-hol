@@ -80,3 +80,112 @@ Resume entry_source_certified_iteration_callback[execute]:
     `root`,`oid`,`extent`,`st.cs_next_var`] >> simp[]
 QED
 Finalise entry_source_certified_iteration_callback
+
+Theorem entry_source_certified_iteration_callback_gas:
+  cfg = ((ce,env,ty,tv,maxn,parent_di,avs,xs),
+     (ip,src,dst,st,ops,mid,last,limit_st,next,nv),
+     (ctx,fn,site,cid,oid,root,extent,d,b,reserve,prepared,p,sb,ambient),
+     (hdr,body_lbl,exit,hid,bb)) /\ iteration_callback_config cfg /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+    (type_to_abi_dec_info sf ce ty)
+    (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,mid) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+    (type_to_abi_dec_info sf ce ty) mid = ((),last) /\
+  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
+  entry_source_metadata ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
+  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    (abi_decode_source CALLDATALOAD prepared) = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
+  sb+LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword (:256) /\
+  cert last /\
+  (!j. j < LENGTH xs ==>
+    !st last dst src sb cell s.
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+      (type_to_abi_dec_info sf ce ty) st = ((),last) /\
+    abi_decoder_coherent ce env sf ty tv /\
+    entry_source_metadata ce env sf ty tv (type_to_abi_dec_info sf ce ty) (EL j avs) (EL j xs) /\
+    mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env ty) (EL j avs)))
+      (abi_decode_source CALLDATALOAD s) = enc (vyper_to_abi_type env ty) (EL j avs) /\
+    sb+LENGTH (enc (vyper_to_abi_type env ty) (EL j avs)) < dimword (:256) /\
+    cell+type_memory_size tv < dimword (:256) /\
+    eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w cell) /\
+    abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+    last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+    fn_has_code st last fn /\ abi_decoder_code st last /\ cert last /\
+    fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\
+    oid NOTIN abi_decoder_ids st.cs_next_id last.cs_next_id /\
+    window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id) SUBSET ambient /\
+    oid NOTIN ambient /\ entry_scratch_ready ambient b reserve s /\ alloca_inv s /\
+    abi_alloca_history (fn_insts fn) s /\ alloca_frontier_inv ctx fn site s /\
+    entry_owned_region oid root extent cell (type_memory_size tv) s /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+    ?t. array_child_result ctx fn oid root extent ambient
+      (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
+      b reserve site limit_st st last cell tv (EL j xs) s t /\ gas_path ctx fn s 0 (OK t)) ==>
+  !j u.
+    iteration_body next limit_st prepared ambient b reserve d (LENGTH xs) p j u /\
+    j < LENGTH xs /\ ~u.vs_halted /\ u.vs_current_bb = body_lbl /\ u.vs_inst_idx = 0 /\
+    entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) u ==>
+    ?t. iteration_frame next limit_st prepared ambient b reserve
+        (\m. mem_word_at d m = n2w (LENGTH xs)) t /\
+      entry_loop_child_end fn last.cs_current_bb last.cs_current_insts last.cs_next_id
+        (STRING #"%" (toString st.cs_next_var)) (STRING #"%" (toString nv))
+        ip hdr src p (n2w sb) (LENGTH xs) j t /\
+      entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+        (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) t /\
+      val_in_memory tv (EL j xs) (d+(j*type_memory_size tv+32)) t.vs_memory /\
+      entry_loop_fields u t /\ entry_decode_path ctx fn u t /\
+      abi_encoder_registered_effect
+        (window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id))
+        [(d+(j*type_memory_size tv+32),type_memory_size tv)] u t /\
+      gas_path ctx fn u 0 (OK t)
+Proof
+  strip_tac >> qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+  qhdtm_x_assum `iteration_callback_config`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [iteration_callback_config_def]) >>
+  rpt strip_tac >>
+  qhdtm_x_assum `iteration_body`
+    (strip_assume_tac o PURE_REWRITE_RULE [iteration_body_def]) >>
+  drule_all iteration_frame_inputs >> strip_tac >>
+  `abi_decoder_operand_live st.cs_next_var ip /\
+   abi_decoder_operand_live st.cs_next_var src /\
+   abi_decoder_operand_live st.cs_next_var dst` by
+    metis_tac[abi_decoder_operand_live_mono, LESS_EQ_TRANS, DECIDE ``n <= n+4``] >>
+  `fresh_vars_wrt limit_st u /\ entry_scratch_ready ambient b reserve u` by
+    fs[iteration_frame_def] >>
+  qpat_assum `entry_owned_loop_resources _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_owned_loop_resources_def]) >>
+  `eval_operand ip u = SOME p /\
+   u.vs_current_bb = st.cs_current_bb /\
+   u.vs_inst_idx = LENGTH st.cs_current_insts` by fs[iteration_frame_def] >>
+  suspend "execute"
+QED
+Resume entry_source_certified_iteration_callback_gas[execute]:
+  first_x_assum (drule_at (Pat `j < LENGTH xs`)) >> disch_tac >>
+  drule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`)
+    (SIMP_RULE bool_ss [] entry_source_certified_array_child_gas) >>
+  disch_then (drule_at (Pat `entry_source_metadata _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `entry_owned_region _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = _`)) >>
+  disch_then (drule_at (Pat `bb.bb_instructions = _`)) >>
+  simp[Excl "enc_def"] >>
+  disch_then (qspecl_then [`sb`,`parent_di`,`LENGTH xs`] mp_tac) >>
+  simp[Excl "enc_def"] >> strip_tac >>
+  qhdtm_x_assum `array_child_result`
+    (strip_assume_tac o PURE_REWRITE_RULE [array_child_result_def]) >>
+  `oid NOTIN window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id)` by
+    metis_tac[SUBSET_DEF] >>
+  `entry_owned_region oid root extent d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) t` by
+    (irule entry_owned_region_preserved >>
+     qpat_assum `abi_encoder_registered_effect _ _ _ _` (irule_at Any) >> simp[]) >>
+  qexists_tac `t` >> asm_simp_tac bool_ss [entry_owned_loop_resources_def] >>
+  gvs[Excl "enc_def"] >>
+  irule iteration_array_child_frame >>
+  qpat_assum `abi_encoder_registered_effect _ _ _ _` (irule_at Any) >>
+  simp[] >> qexistsl_tac [`type_memory_bytes ce (ArrayT ty (Dynamic maxn))`,
+    `root`,`oid`,`extent`,`st.cs_next_var`] >> simp[]
+QED
+Finalise entry_source_certified_iteration_callback_gas

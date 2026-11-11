@@ -70,7 +70,7 @@ Proof
   disch_then (mp_tac o AP_TERM ``\ce:compile_env. ce.ce_is_ctor``) >> simp[]
 QED
 
-Theorem entry_selected_slot_run:
+Theorem entry_selected_slot_run_gas:
   lower_vyper_runtime_unit tops policy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
   initial_venom_state_rel tops am tx vs /\
@@ -102,9 +102,18 @@ Theorem entry_selected_slot_run:
     t.vs_current_bb = last.cs_current_bb /\ t.vs_inst_idx = LENGTH last.cs_current_insts /\
     cei1.ce_is_ctor = F /\
     (!fuel r. run_from fuel unit.cu_context fn t = r /\ (!e. r <> Error e) ==>
-      ?fuel'. run_from fuel' unit.cu_context fn s = r)
+      ?fuel'. run_from fuel' unit.cu_context fn s = r) /\
+    gas_path unit.cu_context fn s 0 (OK t)
 Proof
-  strip_tac >> drule_all entry_selected_indexed_shell >> strip_tac >> gvs[] >>
+  strip_tac >> drule_all entry_selected_indexed_shell >> strip_tac >>
+  qpat_x_assum `compile_register_positional_args ce (TAKE i pos) 4 start = (cei',sti)` mp_tac >>
+  asm_rewrite_tac[] >> simp_tac bool_ss [pairTheory.PAIR_EQ] >>
+  disch_then (CONJUNCTS_THEN (SUBST_ALL_TAC o SYM)) >>
+  qpat_x_assum `off = _` SUBST_ALL_TAC >>
+  qpat_x_assum `compile_register_positional_args cei [EL i pos] _ st = (cei1',sti1)` mp_tac >>
+  asm_rewrite_tac[] >> simp_tac bool_ss [pairTheory.PAIR_EQ] >>
+  disch_then (CONJUNCTS_THEN (SUBST_ALL_TAC o SYM)) >>
+  qpat_x_assum `fn = _` SUBST_ALL_TAC >>
   drule_all entry_selected_indexed_metadata >> strip_tac >>
   drule_all entry_selected_slot_allocation >> strip_tac >>
   gvs[] >>
@@ -128,12 +137,14 @@ Proof
   `FLOOKUP s.vs_allocas st.cs_next_id = NONE` by
     (irule registration_support_absent >> goal_assum (drule_at Any) >> simp[]) >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts (mk_raw_function "__entry" (all_blocks entry_end))))` by
-    fs[venomWfTheory.fn_inst_ids_distinct_def, venomInstTheory.fn_insts_def, entry_slot_block_ids] >>
+    (qpat_assum `fn_inst_ids_distinct _` mp_tac >>
+     simp_tac bool_ss [venomWfTheory.fn_inst_ids_distinct_def,
+       venomInstTheory.fn_insts_def, entry_slot_block_ids]) >>
   gvs[abiDecoderMembersTheory.vyper_to_abi_types_MAP] >>
   suspend "endpoint"
 QED
 
-Resume entry_selected_slot_run[endpoint]:
+Resume entry_selected_slot_run_gas[endpoint]:
   `?ready root t.
     FLOOKUP cei1.ce_vars (FST (EL i args)) =
       SOME (PtrVar buf.buf_operand (type_memory_size tv)) /\
@@ -158,13 +169,14 @@ Resume entry_selected_slot_run[endpoint]:
     (!fuel r. run_from fuel unit.cu_context
       (mk_raw_function "__entry" (all_blocks entry_end)) t = r /\
       (!err. r <> Error err) ==> ?fuel'. run_from fuel' unit.cu_context
-      (mk_raw_function "__entry" (all_blocks entry_end)) s = r)` by
+      (mk_raw_function "__entry" (all_blocks entry_end)) s = r) /\
+    gas_path unit.cu_context (mk_raw_function "__entry" (all_blocks entry_end)) s 0 (OK t)` by
     (suspend "decoder") >>
   suspend "prefix"
 QED
 
-Resume entry_selected_slot_run[decoder]:
-  irule registration_resource_decoder_run >>
+Resume entry_selected_slot_run_gas[decoder]:
+  irule registration_resource_decoder_run_gas >>
      qpat_assum `compile_register_positional_args cei [_] _ _ = _` (irule_at Any) >>
      qpat_assum `entry_source_metadata _ _ _ _ _ _ _ _` (irule_at Any) >>
      qpat_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
@@ -190,7 +202,7 @@ Resume entry_selected_slot_run[decoder]:
      qpat_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _` (irule_at Any) >> simp[]
 QED
 
-Resume entry_selected_slot_run[prefix]:
+Resume entry_selected_slot_run_gas[prefix]:
   drule_all externalBodyFrameTheory.external_selected_args_distinct >> disch_tac >>
   `val_wf tv (EL i tx.args)` by
     (irule valueTypingMemoryPropsTheory.value_has_type_memory_wf >>
@@ -232,9 +244,47 @@ Resume entry_selected_slot_run[prefix]:
   rpt strip_tac >> first_x_assum irule >> simp[] >> qexists_tac `fuel` >> simp[]
 QED
 
-Resume entry_selected_slot_run[provenance]:
+Resume entry_selected_slot_run_gas[provenance]:
   drule_all calldataRegistrationTheory.register_singleton_alloca_output >> strip_tac >>
   gvs[] >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Finalise entry_selected_slot_run
+Finalise entry_selected_slot_run_gas
+
+Theorem entry_selected_slot_run:
+  lower_vyper_runtime_unit tops policy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  initial_venom_state_rel tops am tx vs /\
+  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME scope /\
+  set_external_package_target target
+    (package_external_fn tops F keys (mut,F,raw,tx.function_name,args,([]:expr list),ret,fbody)) =
+    (lbl,ce,pos,cds,pay,F,key,ut,view,fbody,rt) /\
+  compile_register_positional_args ce pos 4 start = (cef,registered) /\
+  compile_guarded_body cef F key ut view fbody rt registered = ((),final) /\
+  compile_register_positional_args ce (TAKE i pos) 4 start = (cei,st) /\
+  compile_register_positional_args cei [EL i pos] off st = (cei1,last) /\
+  off = 4 + SUM (MAP abi_member_head_size
+    (TAKE i (MAP (vyper_to_abi_type (type_env tops)) (MAP SND args)))) /\
+  fn_has_code start final fn /\ cs_extends final entry_end /\
+  fn = mk_raw_function "__entry" (all_blocks entry_end) /\ fn_inst_ids_distinct fn /\
+  i < LENGTH args /\ entry_prefix_witness fn (type_env tops) args tx.args i cei st s /\
+  alloca_inv s /\ alloca_frontier_inv unit.cu_context fn site s /\
+  abi_alloca_history (fn_insts fn) s /\ fresh_vars_wrt final s /\
+  (!id r. FLOOKUP s.vs_allocas id = SOME r ==> id < st.cs_next_id) /\
+  entry_loop_fields vs s /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. entry_prefix_witness fn (type_env tops) args tx.args (SUC i) cei1 last t /\
+    alloca_inv t /\ alloca_frontier_inv unit.cu_context fn site t /\
+    abi_alloca_history (fn_insts fn) t /\ fresh_vars_wrt final t /\
+    (!id r. FLOOKUP t.vs_allocas id = SOME r ==> id < last.cs_next_id) /\
+    entry_loop_fields vs t /\ ~t.vs_halted /\
+    t.vs_current_bb = last.cs_current_bb /\ t.vs_inst_idx = LENGTH last.cs_current_insts /\
+    cei1.ce_is_ctor = F /\
+    (!fuel r. run_from fuel unit.cu_context fn t = r /\ (!e. r <> Error e) ==>
+      ?fuel'. run_from fuel' unit.cu_context fn s = r)
+Proof
+  strip_tac >> drule_all entry_selected_slot_run_gas >> strip_tac >>
+  qexists_tac `t` >> gvs[]
+QED

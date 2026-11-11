@@ -36,7 +36,7 @@ Ancestors
   venomExecSemantics venomState venomInst venomExecProofs venomMemProps
   stateEquiv
   abiEncoder abiDecoderAppend
-  fragExec selectorDispatch byte vyperMisc list rich_list finite_map words
+  fragGasPath gasCount fragGasSeq fragExec selectorDispatch byte vyperMisc list rich_list finite_map words
 Libs
   wordsLib
 
@@ -299,14 +299,61 @@ QED
 (* From the start of the checks with the method id m in mid, execution
    reaches the label of the first selector equal to m, or else the end of
    the checks. *)
-Theorem compile_selector_checks_correct:
+Theorem dispatch_gas_path_runs_through[local]:
+  gas_path ctx fn s 0 (OK t) ==> runs_through ctx fn s t
+Proof
+  simp[runs_through_def] >> metis_tac[gas_path_normal]
+QED
+
+Theorem dispatch_gas_path_trans[local]:
+  gas_path ctx fn s 0 (OK t) /\ gas_path ctx fn t 0 (OK u) ==>
+  gas_path ctx fn s 0 (OK u)
+Proof
+  metis_tac[gas_path_then, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem dispatch_step_gas_path[local]:
+  !ctx fn ss bb inst s1 n.
+    lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb ss.vs_inst_idx = SOME inst /\
+    inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+    step_inst_base inst ss = OK s1 /\ n = SUC ss.vs_inst_idx /\
+    ~ss.vs_halted /\ inst.inst_opcode <> GAS ==>
+    gas_path ctx fn ss 0 (OK (s1 with vs_inst_idx := n))
+Proof
+  rpt strip_tac >>
+  `gas_path_edge ctx fn ss 0 (OK (s1 with vs_inst_idx := n))` by
+    (drule_all tuple_straight_line_edge >> simp[]) >>
+  `~(s1 with vs_inst_idx := n).vs_halted` by
+    metis_tac[gas_path_edge_normal] >>
+  metis_tac[gas_path_rules, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem dispatch_jump_gas_path[local]:
+  !ctx fn ss bb inst lbl.
+    lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb ss.vs_inst_idx = SOME inst /\
+    is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    step_inst_base inst ss = OK (jump_to lbl ss) /\ ~ss.vs_halted /\
+    inst.inst_opcode <> GAS ==>
+    gas_path ctx fn ss 0 (OK (jump_to lbl ss))
+Proof
+  rpt strip_tac >>
+  `gas_path_edge ctx fn ss 0 (OK (jump_to lbl ss))` by
+    (simp[gas_path_edge_def] >> qexists_tac `0` >>
+     simp[step_inst_non_invoke, gas_count_step_def] >> metis_tac[]) >>
+  `~(jump_to lbl ss).vs_halted` by simp[jump_to_def] >>
+  metis_tac[gas_path_rules, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem compile_selector_checks_correct_gas:
   !sels mid st st'. compile_selector_checks mid sels st = ((), st') ==>
      !ctx fn ss m.
        fn_has_code st st' fn /\ eval_operand mid ss = SOME m /\
        fresh_vars_wrt st ss /\ ~ss.vs_halted /\
        ss.vs_current_bb = st.cs_current_bb /\
        ss.vs_inst_idx = LENGTH st.cs_current_insts ==>
-       ?tt. runs_through ctx fn ss tt /\ vars_pc_only ss tt /\ fresh_vars_wrt
+       ?tt. gas_path ctx fn ss 0 (OK tt) /\ vars_pc_only ss tt /\ fresh_vars_wrt
          st' tt /\
            (!x. not_fresh_at st x ==> lookup_var x tt = lookup_var x ss) /\
            case selector_hit m sels of
@@ -316,7 +363,7 @@ Theorem compile_selector_checks_correct:
 Proof
   (Induct >- (simp[compile_selector_checks_def, comp_return_def,
     selector_hit_def] >> rpt strip_tac >> qexists_tac `ss`
-    >> simp[runs_through_refl, vars_pc_only_refl])) >>
+    >> simp[gas_path_rules, vars_pc_only_refl])) >>
     (Cases >> rename1 `(sel, lbl)` >> rpt gen_tac
       >> simp[compile_selector_checks_def, comp_bind_def, comp_ignore_bind_def]
       >> rpt (pairarg_tac >> fs[]) >> strip_tac >> rpt gen_tac >> strip_tac) >>
@@ -365,10 +412,9 @@ Proof
       #"%" (toString st.cs_next_var)); Label match_lbl; Label next_lbl] [])` by
       simp[Abbr `blk`, get_instruction_def, EL_APPEND_EQN,
       arithmeticTheory.ADD1]) >>
-    (`runs_through ctx fn ss (update_var (STRING #"%" (toString st.cs_next_var))
-      (bool_to_word (m = n2w sel)) ss with vs_inst_idx := SUC ss.vs_inst_idx)`
-      by (irule run_from_step_runs_through >> conj_tac >- simp[]
-      >> qexists_tac `blk` >> fs[mk_inst_def, is_terminator_def]
+    (`gas_path ctx fn ss 0 (OK (update_var (STRING #"%" (toString st.cs_next_var))
+      (bool_to_word (m = n2w sel)) ss with vs_inst_idx := SUC ss.vs_inst_idx))`
+      by (irule dispatch_step_gas_path >> simp[mk_inst_def, is_terminator_def]
       >> irule (SIMP_RULE std_ss [mk_inst_def] step_EQ)
       >> simp[eval_operand_def])) >>
     (qabbrev_tac `u1 = update_var (STRING #"%" (toString st.cs_next_var))
@@ -395,20 +441,20 @@ Proof
       >> fs[not_fresh_at_def] >> NO_TAC) >> irule eval_operand_update_fresh
       >> conj_tac >- first_assum ACCEPT_TAC
       >> qexistsl_tac [`st.cs_next_var`, `st`] >> fs[])) >>
-    (`runs_through ctx fn u1 (jump_to (if m = n2w sel then match_lbl else
-      next_lbl) u1)` by (irule run_from_jump_runs_through >> fs[]
+    (`gas_path ctx fn u1 0 (OK (jump_to (if m = n2w sel then match_lbl else
+      next_lbl) u1))` by (irule dispatch_jump_gas_path >> fs[]
       >> rw[is_terminator_def])) >>
     (`s7.cs_next_var <= st'.cs_next_var` by (imp_res_tac
       compile_selector_checks_next_var >> fs[])) >>
     (Cases_on `m = n2w sel` >> fs[selector_hit_def])
-    >- (`runs_through ctx fn (jump_to match_lbl u1) (jump_to lbl (jump_to
-      match_lbl u1))` by (irule run_from_jump_runs_through
+    >- (`gas_path ctx fn (jump_to match_lbl u1) 0 (OK (jump_to lbl (jump_to
+      match_lbl u1)))` by (irule dispatch_jump_gas_path
       >> simp[control_moves_keep_vars] >> fs[]
       >> simp[jump_to_def, get_instruction_def, mk_inst_def, is_terminator_def,
       step_jmp_behavior]) >>
         qexists_tac `jump_to lbl (jump_to match_lbl u1)`
           >> simp[control_moves_keep_vars] >> rpt conj_tac
-        >- (metis_tac[runs_through_trans])
+        >- (metis_tac[dispatch_gas_path_trans])
         >- (metis_tac[vars_pc_only_jump_to])
         >- (irule fresh_vars_wrt_mono >> qexists_tac `s7` >> fs[])
         >- (simp[jump_to_def])
@@ -417,7 +463,7 @@ Proof
       u1`, `m`] mp_tac)) >> impl_tac >- (simp[control_moves_keep_vars]
       >> simp[jump_to_def])) >>
     (strip_tac >> qexists_tac `tt` >> rpt conj_tac)
-    >- (metis_tac[runs_through_trans])
+    >- (metis_tac[dispatch_gas_path_trans])
     >- (metis_tac[vars_pc_only_trans, vars_pc_only_jump_to])
     >- (fs[])
     >- (rpt strip_tac >> `not_fresh_at s7 x` by fs[not_fresh_at_def]
@@ -425,11 +471,33 @@ Proof
     >> fs[]
 QED
 
+Theorem compile_selector_checks_correct:
+  !sels mid st st'. compile_selector_checks mid sels st = ((), st') ==>
+     !ctx fn ss m.
+       fn_has_code st st' fn /\ eval_operand mid ss = SOME m /\
+       fresh_vars_wrt st ss /\ ~ss.vs_halted /\
+       ss.vs_current_bb = st.cs_current_bb /\
+       ss.vs_inst_idx = LENGTH st.cs_current_insts ==>
+       ?tt. runs_through ctx fn ss tt /\ vars_pc_only ss tt /\ fresh_vars_wrt
+         st' tt /\
+           (!x. not_fresh_at st x ==> lookup_var x tt = lookup_var x ss) /\
+           case selector_hit m sels of
+             SOME lbl => tt.vs_current_bb = lbl /\ tt.vs_inst_idx = 0
+           | NONE => tt.vs_current_bb = st'.cs_current_bb /\
+                     tt.vs_inst_idx = LENGTH st'.cs_current_insts
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all compile_selector_checks_correct_gas >>
+  disch_then (qspec_then `ctx` mp_tac) >> simp[] >>
+  strip_tac >> qexists_tac `tt` >> simp[] >>
+  irule dispatch_gas_path_runs_through >> simp[]
+QED
+
 (* Linear dispatch: from the start of the dispatch code, execution reaches
    the start of the block linear_dispatch_target picks for the calldata,
    changing only fresh variables.  Every non-Error result from there is a
    result from the start. *)
-Theorem compile_selector_dispatch_linear_correct:
+Theorem compile_selector_dispatch_linear_correct_gas:
   !selectors fallback_lbl st st' ctx fn ss.
       compile_selector_dispatch_linear selectors fallback_lbl st = ((), st') /\
       fn_has_code st st' fn /\
@@ -438,7 +506,7 @@ Theorem compile_selector_dispatch_linear_correct:
       fresh_vars_wrt st ss /\ ~ss.vs_halted /\
       ss.vs_current_bb = st.cs_current_bb /\
       ss.vs_inst_idx = LENGTH st.cs_current_insts ==>
-      ?tt. runs_through ctx fn ss tt /\ vars_pc_only ss tt /\
+      ?tt. gas_path ctx fn ss 0 (OK tt) /\ vars_pc_only ss tt /\
            fresh_vars_wrt st' tt /\
            (!x. not_fresh_at st x ==> lookup_var x tt = lookup_var x ss) /\
            tt.vs_current_bb =
@@ -512,8 +580,8 @@ Proof
     (qabbrev_tac `cd = ss.vs_call_ctx.cc_calldata`) >>
     (qabbrev_tac `u1 = update_var (STRING #"%" (toString st.cs_next_var)) (n2w
       (LENGTH cd)) ss with vs_inst_idx := SUC ss.vs_inst_idx`) >>
-    (`runs_through ctx fn ss u1` by (simp[Abbr `u1`]
-      >> irule run_from_step_runs_through >> fs[]
+    (`gas_path ctx fn ss 0 (OK u1)` by (simp[Abbr `u1`]
+      >> irule dispatch_step_gas_path >> simp[]
       >> fs[step_CALLDATASIZE, Abbr `cd`]
       >> simp[mk_inst_def, is_terminator_def])) >>
     (`u1.vs_current_bb = st.cs_current_bb /\ u1.vs_inst_idx = SUC (LENGTH
@@ -533,8 +601,8 @@ Proof
     (qabbrev_tac `u2 = update_var (STRING #"%" (toString (st.cs_next_var + 1)))
       (bool_to_word (LENGTH cd < 4)) u1 with vs_inst_idx := SUC u1.vs_inst_idx`)
       >>
-    (`runs_through ctx fn u1 u2` by (simp[Abbr `u2`]
-      >> irule run_from_step_runs_through >> fs[is_terminator_def]
+    (`gas_path ctx fn u1 0 (OK u2)` by (simp[Abbr `u2`]
+      >> irule dispatch_step_gas_path >> simp[is_terminator_def]
       >> `bool_to_word (LENGTH cd < 4) = bool_to_word (w2n (n2w (LENGTH cd) :
       bytes32) < w2n (4w : bytes32))` by fs[Abbr `cd`] >> pop_assum SUBST1_TAC
       >> irule step_LT >> fs[eval_operand_def])) >>
@@ -557,8 +625,8 @@ Proof
     (qabbrev_tac `u3 = update_var (STRING #"%" (toString (st.cs_next_var + 2)))
       (bool_to_word (4 <= LENGTH cd)) u2 with vs_inst_idx := SUC
       u2.vs_inst_idx`) >>
-    (`runs_through ctx fn u2 u3` by (simp[Abbr `u3`]
-      >> irule run_from_step_runs_through >> fs[is_terminator_def]
+    (`gas_path ctx fn u2 0 (OK u3)` by (simp[Abbr `u3`]
+      >> irule dispatch_step_gas_path >> simp[is_terminator_def]
       >> `bool_to_word (4 <= LENGTH cd) = bool_to_word (bool_to_word (LENGTH cd
       < 4) = 0w)` by (Cases_on `LENGTH cd < 4` >> simp[bool_to_word_def])
       >> pop_assum SUBST1_TAC >> irule step_ISZERO >> fs[])) >>
@@ -586,8 +654,8 @@ Proof
       `st.cs_next_id + 3`, `bool_to_word (4 <= LENGTH cd)`] mp_tac
       step_jnz_behavior >> impl_tac >- fs[] >> simp[mk_inst_def]
       >> Cases_on `4 <= LENGTH cd` >> simp[bool_to_word_def])) >>
-    (`runs_through ctx fn u3 (jump_to (if 4 <= LENGTH cd then dispatch_lbl else
-      fallback_lbl) u3)` by (irule run_from_jump_runs_through >> fs[]
+    (`gas_path ctx fn u3 0 (OK (jump_to (if 4 <= LENGTH cd then dispatch_lbl else
+      fallback_lbl) u3))` by (irule dispatch_jump_gas_path >> fs[]
       >> rw[is_terminator_def])) >>
     (`st.cs_next_var + 5 <= st'.cs_next_var` by fs[]) >>
     (Cases_on `4 <= LENGTH cd` >> fs[])
@@ -598,8 +666,9 @@ Proof
     (qabbrev_tac `u5 = update_var (STRING #"%" (toString (st.cs_next_var + 3)))
       (word_of_bytes T (0w:bytes32) (TAKE 32 (DROP 0 cd ++ REPLICATE 32 0w)))
       (jump_to dispatch_lbl u3) with vs_inst_idx := 1`) >>
-    (`runs_through ctx fn (jump_to dispatch_lbl u3) u5` by (simp[Abbr `u5`]
-      >> irule run_from_step_runs_through >> conj_tac >- fs[]
+    (`gas_path ctx fn (jump_to dispatch_lbl u3) 0 (OK u5)` by (simp[Abbr `u5`]
+      >> irule dispatch_step_gas_path >> simp[]
+      >> (conj_tac >- fs[control_moves_keep_vars])
       >> qexistsl_tac [`bb2`, `mk_inst (st.cs_next_id + 4) CALLDATALOAD [Lit 0w]
       [STRING #"%" (toString (st.cs_next_var + 3))]`] >> fs[] >> rpt conj_tac
       >- simp[is_terminator_def]
@@ -627,8 +696,8 @@ Proof
       >> fs[control_moves_keep_vars])) >>
     (qabbrev_tac `u6 = update_var (STRING #"%" (toString (st.cs_next_var + 4)))
       (calldata_method_id cd) u5 with vs_inst_idx := 2`) >>
-    (`runs_through ctx fn u5 u6` by (simp[Abbr `u6`]
-      >> irule run_from_step_runs_through >> conj_tac >- fs[]
+    (`gas_path ctx fn u5 0 (OK u6)` by (simp[Abbr `u6`]
+      >> irule dispatch_step_gas_path >> simp[]
       >> qexistsl_tac [`bb2`, `mk_inst (st.cs_next_id + 5) SHR [Lit 224w; Var
       (STRING #"%" (toString (st.cs_next_var + 3)))] [STRING #"%" (toString
       (st.cs_next_var + 4))]`] >> fs[is_terminator_def] >> conj_tac
@@ -655,32 +724,32 @@ Proof
       lookup_var_update_not_fresh >> qexists_tac `st` >> simp[])
       >> fs[control_moves_keep_vars])) >>
     (qspecl_then [`selectors`, `Var (STRING #"%" (toString (st.cs_next_var +
-      4)))`, `a8`, `a9`] mp_tac compile_selector_checks_correct >> impl_tac
+      4)))`, `a8`, `a9`] mp_tac compile_selector_checks_correct_gas >> impl_tac
       >- fs[] >> disch_then (qspecl_then [`ctx`, `fn`, `u6`, `calldata_method_id
       cd`] mp_tac) >> impl_tac >- (fs[] >> irule fresh_vars_wrt_mono
       >> qexists_tac `st with cs_next_var := st.cs_next_var + 5` >> fs[])
       >> strip_tac) >>
-    (`runs_through ctx fn ss u6` by metis_tac[runs_through_trans]) >>
+    (`gas_path ctx fn ss 0 (OK u6)` by metis_tac[dispatch_gas_path_trans]) >>
     (`!x. not_fresh_at st x ==> not_fresh_at a8 x` by fs[not_fresh_at_def]) >>
     (`linear_dispatch_target cd selectors fallback_lbl = case selector_hit
       (calldata_method_id cd) selectors of SOME l => l | NONE => fallback_lbl`
       by (irule linear_dispatch_target_selector_hit >> fs[])) >>
     (Cases_on `selector_hit (calldata_method_id cd) selectors` >> fs[])
-        >- ((`runs_through ctx fn tt (jump_to fallback_lbl tt)` by (irule
-          run_from_jump_runs_through
+        >- ((`gas_path ctx fn tt 0 (OK (jump_to fallback_lbl tt))` by (irule
+          dispatch_jump_gas_path
           >> `~tt.vs_halted` by metis_tac[vars_pc_only_fields] >> conj_tac
           >- fs[] >> qexistsl_tac [`bb3`, `mk_inst a9.cs_next_id JMP [Label
           fallback_lbl] []`] >> fs[]
           >> simp[is_terminator_def, mk_inst_def, step_jmp_behavior])) >>
             (qexists_tac `jump_to fallback_lbl tt`
               >> simp[control_moves_keep_vars] >> rpt conj_tac)
-            >- (metis_tac[runs_through_trans])
+            >- (metis_tac[dispatch_gas_path_trans])
             >- (metis_tac[vars_pc_only_trans, vars_pc_only_jump_to])
             >- (irule fresh_vars_wrt_mono >> qexists_tac `a9` >> fs[])
             >- (simp[jump_to_def])
             >> simp[jump_to_def])
         >> (qexists_tac `tt` >> rpt conj_tac)
-        >- (metis_tac[runs_through_trans])
+        >- (metis_tac[dispatch_gas_path_trans])
         >- (metis_tac[vars_pc_only_trans])
         >- (irule fresh_vars_wrt_mono >> qexists_tac `a9` >> fs[])
         >- (fs[])
@@ -688,13 +757,37 @@ Proof
         >> fs[])
     >> (qexists_tac `jump_to fallback_lbl u3` >> simp[control_moves_keep_vars]
       >> rpt conj_tac)
-    >- (metis_tac[runs_through_trans])
+    >- (metis_tac[dispatch_gas_path_trans])
     >- (irule vars_pc_only_jump_to >> fs[])
     >- (irule fresh_vars_wrt_mono
       >> qexists_tac `st with cs_next_var := st.cs_next_var + 3` >> fs[])
     >- (`LENGTH cd < 4` by fs[]
       >> simp[jump_to_def, linear_dispatch_target_short])
     >> simp[jump_to_def]
+QED
+
+Theorem compile_selector_dispatch_linear_correct:
+  !selectors fallback_lbl st st' ctx fn ss.
+      compile_selector_dispatch_linear selectors fallback_lbl st = ((), st') /\
+      fn_has_code st st' fn /\
+      EVERY (\(sel, lbl). sel < 2 ** 32) selectors /\
+      LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256) /\
+      fresh_vars_wrt st ss /\ ~ss.vs_halted /\
+      ss.vs_current_bb = st.cs_current_bb /\
+      ss.vs_inst_idx = LENGTH st.cs_current_insts ==>
+      ?tt. runs_through ctx fn ss tt /\ vars_pc_only ss tt /\
+           fresh_vars_wrt st' tt /\
+           (!x. not_fresh_at st x ==> lookup_var x tt = lookup_var x ss) /\
+           tt.vs_current_bb =
+             linear_dispatch_target ss.vs_call_ctx.cc_calldata selectors
+               fallback_lbl /\
+           tt.vs_inst_idx = 0
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_selector_dispatch_linear_correct_gas >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `tt` >> simp[] >>
+  irule dispatch_gas_path_runs_through >> simp[]
 QED
 
 (* Needed for Holmake: mark incomplete theorems *)

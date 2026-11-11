@@ -1,7 +1,7 @@
 (* Operational entry boundary for conditional nonbulk array constructors. *)
 Theory entryReachBodyConditionalArrayConstructor
 Ancestors
-  valueEncodingDefs loweringStateRelDefs entryReachBodyConditionalArray entryReachBodyOperationalHeader
+  valueEncodingDefs loweringStateRelDefs entryReachBodyConditionalArray entryReachBodyOperationalHeader abiEncoderObserver venomExecProofs
   entryReachBodyCanonicalArrayIteration entryReachBodyOwnedRegion
   entryReachBodyExactArrayLoop abiDecoderFrame entryReachBodyOperationalLoop
   entryReachBodyConditionalProducer entryReachBodyReentryResources
@@ -19,6 +19,26 @@ Ancestors
   rich_list fragExec abiDecoderCode pred_set valueEncoding
   entryReachBodyCanonicalArrayChild abiDecoderReentry
   venomExecSemantics finite_map words list arithmetic
+
+Theorem conditional_array_header_jump_gas[local]:
+  ~prepared.vs_halted /\ prepared.vs_current_bb = loop_st.cs_current_bb /\
+  prepared.vs_inst_idx = LENGTH loop_st.cs_current_insts /\
+  lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME
+    <|bb_label := loop_st.cs_current_bb; bb_instructions :=
+      loop_st.cs_current_insts ++ [mk_inst loop_st.cs_next_id JMP [Label hdr] []]|> /\
+  lookup_block hdr fn.fn_blocks = SOME hdr_bb /\ phi_prefix_length hdr_bb.bb_instructions = 0 ==>
+  gas_path ctx fn prepared 0 (OK (jump_to hdr prepared))
+Proof
+  strip_tac >> irule entry_decode_observer_gas_path >>
+  conj_tac
+  >- simp[get_instruction_def, EL_APPEND_EQN, mk_inst_def] >>
+  qexists_tac `(loop_st.cs_current_bb,SUC (LENGTH loop_st.cs_current_insts))` >>
+  simp[abi_observer_step_def, jump_to_def] >>
+  qexistsl_tac [`mk_inst loop_st.cs_next_id JMP [Label hdr] []`, `jump_to hdr prepared`] >>
+  simp[mk_inst_def, get_instruction_def, EL_APPEND_EQN, is_terminator_def,
+    step_inst_non_invoke, step_inst_base_opcode_eqs, jump_to_def] >>
+  once_rewrite_tac[GSYM eval_phis_prefix] >> simp[eval_phis_def]
+QED
 
 Theorem conditional_array_header_entry[local]:
   ~prepared.vs_halted /\ prepared.vs_current_bb = loop_st.cs_current_bb /\
@@ -112,6 +132,84 @@ Proof
   asm_rewrite_tac[] >> conj_tac
   >- metis_tac[entry_decode_path_trans] >>
   irule abi_encoder_registered_effect_trans >>
+  qexists_tac `jump_to hdr prepared` >> simp[]
+QED
+
+Theorem callback_array_prepared_endpoint_gas:
+  cfg = ((ce,env,ty,tv,maxn,parent_di,avs,xs),
+     (ip,src,dst,st,ops,mid,last,limit_st,next,nv),
+     (ctx,fn,site,cid,oid,root,extent,d,b,reserve,prepared,p,sb,ambient),
+     (hdr,body_lbl,exit,hid,bb)) /\ iteration_callback_config cfg /\
+  (!j u.
+    iteration_body next limit_st prepared ambient b reserve d (LENGTH xs) p j u /\
+    j < LENGTH xs /\ ~u.vs_halted /\ u.vs_current_bb = body_lbl /\ u.vs_inst_idx = 0 /\
+    entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) u ==>
+    ?t. iteration_frame next limit_st prepared ambient b reserve
+        (\m. mem_word_at d m = n2w (LENGTH xs)) t /\
+      entry_loop_child_end fn last.cs_current_bb last.cs_current_insts last.cs_next_id
+        (STRING #"%" (toString st.cs_next_var)) (STRING #"%" (toString nv))
+        ip hdr src p (n2w sb) (LENGTH xs) j t /\
+      entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+        (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) t /\
+      val_in_memory tv (EL j xs) (d+(j*type_memory_size tv+32)) t.vs_memory /\
+      entry_loop_fields u t /\ entry_decode_path ctx fn u t /\
+      abi_encoder_registered_effect
+        (window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id))
+        [(d+(j*type_memory_size tv+32),type_memory_size tv)] u t /\
+      gas_path ctx fn u 0 (OK t)) /\
+  ~prepared.vs_halted /\ prepared.vs_current_bb = ploop.cs_current_bb /\
+  prepared.vs_inst_idx = LENGTH ploop.cs_current_insts /\
+  lookup_block ploop.cs_current_bb fn.fn_blocks = SOME
+    <|bb_label := ploop.cs_current_bb; bb_instructions :=
+      ploop.cs_current_insts ++ [mk_inst ploop.cs_next_id JMP [Label hdr] []]|> /\
+  lookup_block hdr fn.fn_blocks = SOME hdr_bb /\ phi_prefix_length hdr_bb.bb_instructions = 0 /\
+  entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) prepared /\
+  eval_operand ip prepared = SOME p /\ eval_operand src prepared = SOME (n2w sb) /\
+  mload (w2n p) prepared = 0w /\
+  abi_decode_load CALLDATALOAD (n2w sb : bytes32) prepared = n2w (LENGTH xs) /\
+  fresh_vars_wrt limit_st prepared /\ mem_word_at d prepared.vs_memory = n2w (LENGTH xs) /\
+  entry_scratch_ready ambient b reserve prepared ==>
+  ?t. ~t.vs_halted /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
+    entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) t /\
+    iteration_frame next limit_st prepared ambient b reserve
+      (\m. mem_word_at d m = n2w (LENGTH xs)) t /\
+    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV xs)) d t.vs_memory /\
+    entry_loop_fields prepared t /\ entry_decode_path ctx fn prepared t /\
+    abi_encoder_registered_effect
+      (cid INSERT window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id))
+      [(d,32+LENGTH xs*type_memory_size tv)] prepared t /\
+    gas_path ctx fn prepared 0 (OK t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `entry_decode_path ctx fn prepared (jump_to hdr prepared) /\
+   entry_owned_loop_inv ctx fn site hdr ip src p (n2w sb) tv xs d
+     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) cid oid root extent 0
+     (jump_to hdr prepared) /\
+   iteration_frame next limit_st prepared ambient b reserve
+     (\m. mem_word_at d m = n2w (LENGTH xs)) (jump_to hdr prepared) /\
+   entry_loop_fields prepared (jump_to hdr prepared) /\
+   abi_encoder_registered_effect
+     (cid INSERT window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id))
+     [(d,32+LENGTH xs*type_memory_size tv)] prepared (jump_to hdr prepared)` by
+    (irule conditional_array_header_entry >> simp[] >>
+     qexists_tac `ploop` >> simp[] >> goal_assum (drule_at Any)) >>
+  `gas_path ctx fn prepared 0 (OK (jump_to hdr prepared))` by
+    (irule conditional_array_header_jump_gas >> simp[] >>
+     qexists_tac `ploop` >> simp[] >> goal_assum (drule_at Any)) >>
+  drule_all entry_generic_array_callback_iteration_gas >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  qhdtm_x_assum `entry_loop_trace`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_loop_trace_def]) >>
+  `entry_loop_fields prepared t` by fs[iteration_frame_def] >>
+  asm_rewrite_tac[] >> conj_tac
+  >- metis_tac[entry_decode_path_trans] >> conj_tac
+  >- (irule abi_encoder_registered_effect_trans >>
+      qexists_tac `jump_to hdr prepared` >> simp[]) >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] fragGasPathTheory.gas_path_then)) >>
   qexists_tac `jump_to hdr prepared` >> simp[]
 QED
 
@@ -560,3 +658,64 @@ Resume entry_conditional_nonbulk_array_constructor[finish]:
   first_x_assum irule >> simp[]
 QED
 Finalise entry_conditional_nonbulk_array_constructor
+
+Theorem conditional_array_initialization_gas:
+  abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn asz st = ((),guard_st) /\
+  abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
+  abi_decode_index_init header_st = (ip,loop_st) /\
+  (!i. MEM i (emitted_insts header_st loop_st) ==> MEM i (fn_insts fn)) /\
+  (!i. MEM i (emitted_insts st loop_st) ==> MEM i (fn_insts fn)) /\
+  fn_has_code st loop_st fn /\ fn_inst_ids_distinct fn /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  alloca_inv s /\ abi_alloca_history (fn_insts fn) s /\ alloca_frontier_inv ctx fn site s /\
+  entry_owned_region oid root extent d sz s /\ 32 <= sz /\
+  entry_scratch_ready ambient b reserve s /\ header_st.cs_next_id IN ambient /\ oid NOTIN ambient /\
+  mem_bytes_at sb (LENGTH (enc (Array NONE aty) (ListV avs)))
+    (abi_decode_source CALLDATALOAD s) = enc (Array NONE aty) (ListV avs) /\
+  sb+LENGTH (enc (Array NONE aty) (ListV avs)) < dimword (:256) /\
+  d+sz < dimword (:256) /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand dst s = SOME (n2w d) /\
+  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  maxn < dimword (:256) /\ LENGTH avs <= maxn /\
+  loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?p t. gas_path ctx fn s 0 (OK t) /\ entry_decode_path ctx fn s t /\
+    entry_owned_loop_resources ctx fn site header_st.cs_next_id p oid root extent d sz t /\
+    abi_encoder_registered_effect {header_st.cs_next_id} [(d,32)] s t /\
+    entry_scratch_ready ambient b reserve t /\
+    eval_operand ip t = SOME (n2w p) /\ mload p t = 0w /\
+    mem_word_at d t.vs_memory = n2w (LENGTH avs) /\
+    abi_decode_load CALLDATALOAD (n2w sb : bytes32) t = n2w (LENGTH avs) /\
+    entry_loop_fields s t /\ fresh_vars_wrt limit_st t /\ ~t.vs_halted /\
+    t.vs_current_bb = loop_st.cs_current_bb /\
+    t.vs_inst_idx = LENGTH loop_st.cs_current_insts /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op t = eval_operand op s) /\
+    eval_operand src t = SOME (n2w sb) /\ eval_operand dst t = SOME (n2w d) /\
+    mem_bytes_at sb (LENGTH (enc (Array NONE aty) (ListV avs)))
+      (abi_decode_source CALLDATALOAD t) = enc (Array NONE aty) (ListV avs)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all conditional_array_initializer_resources >>
+  disch_then (qx_choose_then `p` assume_tac) >>
+  `oid <> header_st.cs_next_id` by metis_tac[] >>
+  `d+sz <= p \/ p+32 <= d` by
+    (irule (cj 2 entry_owned_region_counter_separation) >>
+     qexistsl_tac [`header_st.cs_next_id`,`extent`,`oid`,`root`,`s`] >>
+     fs[entry_array_init_resources_def] >> metis_tac[]) >>
+  `entry_array_init_resources dst src maxn asz
+    (st,guard_st,header_st,loop_st,ip,cnt) (ctx,fn,site,d,sz,p,32,p,s)` by
+    fs[entry_array_init_resources_def] >>
+  `abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+    (LENGTH (enc (Array NONE aty) (ListV avs))) d sz p 32 s` by
+    simp[abi_decoder_ranges_def, abi_decode_source_opcode_def] >>
+  drule_all owned_array_canonical_initializer_gas >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  drule_all conditional_array_initialized_scratch >> disch_tac >>
+  `abi_decode_load CALLDATALOAD (n2w sb : bytes32) t = n2w (LENGTH avs)` by
+    (irule canonical_dynamic_array_count_load >> qexists_tac `aty` >>
+     asm_rewrite_tac[]) >>
+  qexistsl_tac [`p`,`t`] >> asm_rewrite_tac[] >>
+  qpat_x_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> simp[abi_decoder_ranges_def]
+QED

@@ -150,3 +150,172 @@ Proof
     `env \\ nsid`,`sb`,`sf \\ nsid_to_string nsid`,`src`,`tvs`,`MAP SND args`,`MAP SND vals`] >>
   fs[Excl "enc_def"]
 QED
+
+(* Script-local notation for the expanded path-bearing producer proposition.
+   This installs no HOL constant or definition. *)
+val _ = temp_overload_on ("source_child_gas", ``
+  \cert ce env sf ty tv av v ctx fn oid root extent ambient b cap site limit_st.
+  !st last dst src sb cell s.
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+      (type_to_abi_dec_info sf ce ty) st = ((),last) /\
+    abi_decoder_coherent ce env sf ty tv /\
+    entry_source_metadata ce env sf ty tv (type_to_abi_dec_info sf ce ty) av v /\
+    mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env ty) av))
+      (abi_decode_source CALLDATALOAD s) = enc (vyper_to_abi_type env ty) av /\
+    sb+LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
+    cell+type_memory_size tv < dimword (:256) /\
+    eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w cell) /\
+    abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+    last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+    fn_has_code st last fn /\ abi_decoder_code st last /\ cert last /\
+    fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\
+    oid NOTIN abi_decoder_ids st.cs_next_id last.cs_next_id /\
+    window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id) SUBSET ambient /\
+    oid NOTIN ambient /\ entry_scratch_ready ambient b cap s /\ alloca_inv s /\
+    abi_alloca_history (fn_insts fn) s /\ alloca_frontier_inv ctx fn site s /\
+    entry_owned_region oid root extent cell (type_memory_size tv) s /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+    ?t. array_child_result ctx fn oid root extent ambient
+      (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
+      b cap site limit_st st last cell tv v s t /\ gas_path ctx fn s 0 (OK t)``);
+
+Theorem source_complex_result_gas[local]:
+  (last.cs_current_insts = [] ==> !bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  entry_source_members ce env sf tys tvs avs vs /\
+  mem_bytes_at sb (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)))
+    (abi_decode_source CALLDATALOAD s) = enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs) /\
+  (!i. i < LENGTH tys ==> source_child_gas
+    (\z. z.cs_current_insts = [] ==> !bb. lookup_block z.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) ce env sf
+    (EL i tys) (EL i tvs) (EL i avs) (EL i vs)
+    ctx fn oid root extent ambient b cap site limit_st) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    (DecComplex dyn (abi_decoder_member_infos sf ce tys)) st = ((),last) /\
+  canonical_members_frame ctx fn oid root extent ambient b cap site limit_st
+    dst src sb d (SUM (MAP (type_memory_bytes ce) tys)) st s /\
+  sb+LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)) < dimword (:256) /\
+  d+SUM (MAP (type_memory_bytes ce) tys) < dimword (:256) /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code st last fn /\
+  fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword (:256) /\ oid NOTIN ambient /\
+  oid NOTIN abi_decoder_ids st.cs_next_id last.cs_next_id /\
+  window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id) SUBSET ambient /\
+  type_memory_size outtv = SUM (MAP (type_memory_bytes ce) tys) /\
+  (!d mem. tuple_in_memory vs tvs d mem ==> val_in_memory outtv outv d mem) ==>
+  ?t. array_child_result ctx fn oid root extent ambient
+    (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
+    b cap site limit_st st last d outtv outv s t /\ gas_path ctx fn s 0 (OK t)
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+    (assume_tac o SIMP_RULE (srw_ss()) [Once compile_abi_decode_to_buf_def, LET_THM]) >>
+  `?t. tuple_in_memory vs tvs d t.vs_memory /\
+    canonical_members_frame ctx fn oid root extent ambient b cap site limit_st
+      dst src sb d (SUM (MAP (type_memory_bytes ce) tys)) last t /\
+    canonical_members_effect ctx fn ambient d (SUM (MAP (type_memory_bytes ce) tys)) st s t /\
+    abi_encoder_registered_effect
+      (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
+      [(d,SUM (MAP (type_memory_bytes ce) tys))] s t /\ gas_path ctx fn s 0 (OK t)` by
+    (irule (entry_source_certified_members_endpoint_gas |> Q.INST
+      [`cert` |-> `\z. z.cs_current_insts = [] ==> !bb.
+        lookup_block z.cs_current_bb fn.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0`] |> SIMP_RULE bool_ss []) >>
+     asm_rewrite_tac[] >> conj_tac
+     >- metis_tac[calldata_member_tail_empty_exit_phi] >>
+     conj_tac
+     >- (qexistsl_tac [`avs`,`env`,`sf`] >> asm_rewrite_tac[] >> gvs[]) >>
+     qexists_tac `SUM (MAP (type_memory_bytes ce) tys)` >> asm_rewrite_tac[]) >>
+  qexists_tac `t` >>
+  gvs[canonical_members_effect_def, canonical_members_frame_def,
+      array_child_result_def, Excl "enc_def"]
+QED
+
+Theorem entry_source_tuple_producer_gas:
+  abi_decoder_coherent ce env sf (TupleT tys) (TupleTV tvs) /\
+  (!i av v. i < LENGTH tys ==> source_child_gas
+    (\z. z.cs_current_insts = [] ==> !bb.
+      lookup_block z.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0)
+    ce env sf (EL i tys) (EL i tvs) av v ctx fn oid root extent ambient b cap site limit_st) ==>
+  source_child_gas
+    (\z. z.cs_current_insts = [] ==> !bb.
+      lookup_block z.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0)
+    ce env sf (TupleT tys) (TupleTV tvs) pav pv ctx fn oid root extent ambient b cap site limit_st
+Proof
+  strip_tac >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  rpt gen_tac >> strip_tac >> rename1 `fn_has_code st last fn` >>
+  drule_all entry_source_tuple_inputs >> strip_tac >> gvs[Excl "enc_def"] >>
+  `canonical_members_frame ctx fn oid root extent ambient b cap site limit_st
+    dst src sb cell (SUM (MAP (type_memory_bytes ce) tys)) st s` by
+    (simp[canonical_members_frame_def] >> gvs[Excl "enc_def"]) >>
+  `cell+SUM (MAP (type_memory_bytes ce) tys) < dimword (:256)` by gvs[Excl "enc_def"] >>
+  irule source_complex_result_gas >> asm_rewrite_tac[] >>
+  qexistsl_tac [`avs`,`ce`,`dst`,`EXISTS (is_abi_dynamic ce.ce_struct_fields) tys`,
+    `env`,`sb`,`sf`,`src`,`tvs`,`tys`,`vs`] >>
+  simp[val_in_memory_tuple, Excl "enc_def"] >> metis_tac[]
+QED
+
+Theorem entry_source_fixed_array_producer_gas:
+  abi_decoder_coherent ce env sf (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n)) /\
+  (!av v. source_child_gas
+    (\z. z.cs_current_insts = [] ==> !bb. lookup_block z.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0)
+    ce env sf ty tv av v ctx fn oid root extent ambient b cap site limit_st) ==>
+  source_child_gas
+    (\z. z.cs_current_insts = [] ==> !bb. lookup_block z.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0)
+    ce env sf (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n)) pav pv
+      ctx fn oid root extent ambient b cap site limit_st
+Proof
+  strip_tac >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  rpt gen_tac >> strip_tac >> rename1 `fn_has_code st last fn` >>
+  drule_all entry_source_fixed_inputs >> strip_tac >>
+  qpat_x_assum `pav = _` SUBST_ALL_TAC >> qpat_x_assum `pv = _` SUBST_ALL_TAC >>
+  `canonical_members_frame ctx fn oid root extent ambient b cap site limit_st
+    dst src sb cell (SUM (MAP (type_memory_bytes ce) (REPLICATE n ty))) st s` by
+    (simp[canonical_members_frame_def] >> gvs[Excl "enc_def"]) >>
+  `cell+SUM (MAP (type_memory_bytes ce) (REPLICATE n ty)) < dimword (:256)` by
+    gvs[Excl "enc_def"] >>
+  irule source_complex_result_gas >> asm_rewrite_tac[] >>
+  qexistsl_tac [`avs`,`ce`,`dst`,`is_abi_dynamic ce.ce_struct_fields ty`,
+    `env`,`sb`,`sf`,`src`,`REPLICATE n tv`,`REPLICATE n ty`,`vs`] >>
+  fs[EL_REPLICATE, Excl "enc_def"] >> metis_tac[]
+QED
+
+Theorem entry_source_struct_producer_gas:
+  FLOOKUP env nsid = SOME (StructArgs args) /\ LENGTH tvs = LENGTH args /\
+  abi_decoder_coherent ce env sf (StructT nsid) (StructTV (ZIP (MAP FST args,tvs))) /\
+  (!i av v. i < LENGTH args ==> source_child_gas
+    (\z. z.cs_current_insts = [] ==> !bb. lookup_block z.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0)
+    ce (env \\ nsid) (sf \\ nsid_to_string nsid) (EL i (MAP SND args)) (EL i tvs) av v
+      ctx fn oid root extent ambient b cap site limit_st) ==>
+  source_child_gas
+    (\z. z.cs_current_insts = [] ==> !bb. lookup_block z.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0)
+    ce env sf (StructT nsid) (StructTV (ZIP (MAP FST args,tvs))) pav pv
+      ctx fn oid root extent ambient b cap site limit_st
+Proof
+  strip_tac >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  rpt gen_tac >> strip_tac >> rename1 `fn_has_code st last fn` >>
+  drule_all entry_source_struct_inputs >> strip_tac >>
+  `args' = args` by gvs[] >>
+  `tvs' = tvs` by
+    (qpat_x_assum `StructTV _ = StructTV _` mp_tac >>
+     simp[] >> disch_then (mp_tac o AP_TERM ``MAP SND : (string # type_value) list -> type_value list``) >>
+     fs[MAP_ZIP]) >>
+  qpat_x_assum `args' = args` SUBST_ALL_TAC >>
+  qpat_x_assum `tvs' = tvs` SUBST_ALL_TAC >>
+  qpat_x_assum `pav = _` SUBST_ALL_TAC >> qpat_x_assum `pv = _` SUBST_ALL_TAC >>
+  `canonical_members_frame ctx fn oid root extent ambient b cap site limit_st
+    dst src sb cell (SUM (MAP (type_memory_bytes ce) (MAP SND args))) st s` by
+    (simp[canonical_members_frame_def] >> gvs[Excl "enc_def"]) >>
+  `cell+SUM (MAP (type_memory_bytes ce) (MAP SND args)) < dimword (:256)` by
+    gvs[Excl "enc_def"] >>
+  irule source_complex_result_gas >> simp[Excl "enc_def"] >>
+  qexistsl_tac [`avs`,`ce`,`dst`,`EXISTS (is_abi_dynamic ce.ce_struct_fields) (MAP SND args)`,
+    `env \\ nsid`,`sb`,`sf \\ nsid_to_string nsid`,`src`,`tvs`,`MAP SND args`,`MAP SND vals`] >>
+  fs[Excl "enc_def"] >> metis_tac[]
+QED

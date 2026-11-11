@@ -142,3 +142,69 @@ Proof
   gvs[fresh_vars_wrt_def, entry_loop_fields_def, abi_encoder_registered_effect_def,
        eval_operand_def] >> first_assum ACCEPT_TAC
 QED
+
+Theorem entry_canonical_word_owned_endpoint_gas:
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
+  abi_decoder_coherent ce env sf ty tv /\
+  type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
+  abi_decoder_metadata ce env ty tv (DecPrimWord clamp) av v /\
+  eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+  sb < dimword (:256) /\ d < dimword (:256) /\
+  mem_bytes_at sb 32 (abi_decode_source CALLDATALOAD s) = enc (vyper_to_abi_type env ty) av /\
+  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  fn_has_code st last fn /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  alloca_inv s /\ abi_alloca_history (fn_insts fn) s /\ alloca_frontier_inv ctx fn site s /\
+  entry_owned_region oid root extent d (type_memory_bytes ce ty) s /\
+  entry_scratch_ready sites b cap s ==>
+  ?t. gas_path ctx fn s 0 (OK t) /\
+    val_in_memory tv v d t.vs_memory /\ entry_decode_path ctx fn s t /\
+    entry_loop_fields s t /\ fresh_vars_wrt limit_st t /\ entry_scratch_ready sites b cap t /\
+    alloca_inv t /\ abi_alloca_history (fn_insts fn) t /\ alloca_frontier_inv ctx fn site t /\
+    entry_owned_region oid root extent d (type_memory_bytes ce ty) t /\
+    abi_encoder_registered_effect child_sites [(d,type_memory_bytes ce ty)] s t /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
+      eval_operand op t = SOME w) /\
+    ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
+    t.vs_inst_idx = LENGTH last.cs_current_insts /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_primitive_memory_reentry >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st last) s = OK actual` >>
+  drule_all abi_decoder_clamped_word_shape >> strip_tac >>
+  `entry_loop_fields s actual` by
+    (irule word_sequence_fields >> goal_assum (drule_at Any) >>
+     irule word_opcode_shape >> goal_assum (drule_at Any)) >>
+  `entry_decode_path ctx fn s (actual with vs_inst_idx := LENGTH last.cs_current_insts)` by
+    (irule entry_decode_emitted_path >> goal_assum (drule_at Any) >>
+     simp[] >> fs[EVERY_MEM] >> metis_tac[]) >>
+  `gas_path ctx fn s 0 (OK (actual with vs_inst_idx := LENGTH last.cs_current_insts))` by
+    (drule word_opcode_shape >> strip_tac >>
+     irule entry_decode_emitted_gas_path >> simp[] >> qexists_tac `st` >>
+     fs[EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `!i. MEM i _ ==> (_ \/ _)` drule >> simp[]) >>
+  `type_memory_bytes ce ty = 32` by
+    (drule abi_decoder_primitive_cases >> disch_then (qspec_then `clamp` mp_tac) >> simp[]) >>
+  `abi_encoder_registered_effect child_sites [(d,32)] s actual` by
+    (irule word_registered_frame >> simp[]) >>
+  `actual.vs_current_bb = s.vs_current_bb` by
+    (irule run_inst_seq_preserves_field >> goal_assum (drule_at Any) >>
+     rpt strip_tac >>
+     `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
+       (fs[EVERY_MEM] >> metis_tac[]) >>
+     `step_inst 0 ctx i ss1 = OK ss2` by simp[step_inst_non_invoke] >>
+     drule_all step_preserves_control_flow >> simp[]) >>
+  `alloca_inv (actual with vs_inst_idx := LENGTH last.cs_current_insts) /\
+   abi_alloca_history (fn_insts fn) (actual with vs_inst_idx := LENGTH last.cs_current_insts) /\
+   alloca_frontier_inv ctx fn site (actual with vs_inst_idx := LENGTH last.cs_current_insts) /\
+   entry_owned_region oid root extent d (type_memory_bytes ce ty)
+     (actual with vs_inst_idx := LENGTH last.cs_current_insts) /\
+   entry_scratch_ready sites b cap (actual with vs_inst_idx := LENGTH last.cs_current_insts)` by
+    (irule word_allocation_invariants >> qexists_tac `s` >> simp[]) >>
+  qexists_tac `actual with vs_inst_idx := LENGTH last.cs_current_insts` >>
+  gvs[fresh_vars_wrt_def, entry_loop_fields_def, abi_encoder_registered_effect_def,
+       eval_operand_def] >> first_assum ACCEPT_TAC
+QED

@@ -5,7 +5,7 @@
    pieces. *)
 Theory externalEntryChecks
 Ancestors
-  externalEntryShape
+  externalEntryShape fragGasPath
   stmtSimProps stmtSimDefs exprSimDefs loweringPosts
   list pair fragExec bodySim bodySimMain loweringHalt stmtLoweringMono
   exprLoweringProps compileEnv loweringStateRelDefs compileVyper moduleLowering stmtLowering
@@ -987,6 +987,59 @@ Proof
   drule_all run_blocks_run_from_no_phi >> simp[]
 QED
 
+Theorem linear_dispatch_context_reaches_gas:
+  !ctx func selectors fb sa sd st vs.
+    ctx.ctx_entry = SOME "__entry" /\
+    venomInst$lookup_function "__entry" ctx.ctx_functions = SOME func /\
+    fn_entry_label func = SOME "__entry" /\
+    fresh_label "fallback" (initial_compile_state "__entry") = (fb,sa) /\
+    compile_selector_dispatch_linear selectors fb sa = ((),sd) /\
+    fn_has_code sa sd func /\ EVERY (\(sel,lbl). sel < 2 ** 32) selectors /\
+    LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256) /\
+    vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+    linear_dispatch_target vs.vs_call_ctx.cc_calldata selectors fb = st.cs_current_bb /\
+    st.cs_current_insts = [] /\ sd.cs_next_var <= st.cs_next_var ==>
+    ?s0. vars_pc_only vs s0 /\ fresh_vars_wrt st s0 /\ ~s0.vs_halted /\
+      s0.vs_current_bb = st.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH st.cs_current_insts /\
+      gas_path ctx func
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                   vs_inst_idx := 0|>) 0 (OK s0) /\
+      !fuel r. run_from fuel ctx func s0 = r /\ (!e. r <> Error e) ==>
+        ?fuel'. run_context fuel' ctx vs = r
+Proof
+  rpt gen_tac >> strip_tac >>
+  `sa.cs_current_bb = "__entry" /\ sa.cs_current_insts = []` by
+    (qpat_x_assum `fresh_label _ _ = _` mp_tac >>
+     simp[fresh_label_def, vyperCompilerTheory.initial_compile_state_def, LET_THM] >>
+     strip_tac >> gvs[]) >>
+  qabbrev_tac `ss = vs with <|vs_prev_bb := NONE;
+    vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
+  `fresh_vars_wrt sa ss /\ ~ss.vs_halted /\
+   ss.vs_current_bb = sa.cs_current_bb /\
+   ss.vs_inst_idx = LENGTH sa.cs_current_insts /\
+   LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256)` by
+    simp[Abbr `ss`, fresh_vars_wrt_def] >>
+  drule_all compile_selector_dispatch_linear_correct_gas >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `vars_pc_only vs ss` by
+    simp[vars_pc_only_def, Abbr `ss`, venom_state_component_equality] >>
+  `vars_pc_only vs tt` by (drule_all vars_pc_only_trans >> simp[]) >>
+  `fresh_vars_wrt st tt` by
+    (irule emitHelperPropsTheory.fresh_vars_wrt_mono >> qexists_tac `sd` >> simp[]) >>
+  `~tt.vs_halted` by
+    (qpat_x_assum `vars_pc_only vs tt` mp_tac >>
+     simp[vars_pc_only_def, venom_state_component_equality]) >>
+  `tt.vs_current_bb = st.cs_current_bb` by gvs[Abbr `ss`] >>
+  drule_all linear_dispatch_entry_no_phi >> strip_tac >>
+  `runs_through ctx func ss tt` by
+    (simp[runs_through_def] >> drule gas_path_normal >> simp[]) >>
+  qexists_tac `tt` >> simp[GSYM markerTheory.Abbrev_def] >>
+  rpt gen_tac >> strip_tac >>
+  irule entry_context_continuation >> simp[] >>
+  qexistsl_tac [`bb`, `fuel`, `tt`] >> gvs[Abbr `ss`]
+QED
+
 Theorem linear_dispatch_context_reaches:
   !ctx func selectors fb sa sd st vs.
     ctx.ctx_entry = SOME "__entry" /\
@@ -1006,33 +1059,8 @@ Theorem linear_dispatch_context_reaches:
         ?fuel'. run_context fuel' ctx vs = r
 Proof
   rpt gen_tac >> strip_tac >>
-  `sa.cs_current_bb = "__entry" /\ sa.cs_current_insts = []` by
-    (qpat_x_assum `fresh_label _ _ = _` mp_tac >>
-     simp[fresh_label_def, vyperCompilerTheory.initial_compile_state_def, LET_THM] >>
-     strip_tac >> gvs[]) >>
-  qabbrev_tac `ss = vs with <|vs_prev_bb := NONE;
-    vs_current_bb := "__entry"; vs_inst_idx := 0|>` >>
-  `fresh_vars_wrt sa ss /\ ~ss.vs_halted /\
-   ss.vs_current_bb = sa.cs_current_bb /\
-   ss.vs_inst_idx = LENGTH sa.cs_current_insts /\
-   LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256)` by
-    simp[Abbr `ss`, fresh_vars_wrt_def] >>
-  drule_all compile_selector_dispatch_linear_correct >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
-  `vars_pc_only vs ss` by
-    simp[vars_pc_only_def, Abbr `ss`, venom_state_component_equality] >>
-  `vars_pc_only vs tt` by (drule_all vars_pc_only_trans >> simp[]) >>
-  `fresh_vars_wrt st tt` by
-    (irule emitHelperPropsTheory.fresh_vars_wrt_mono >> qexists_tac `sd` >> simp[]) >>
-  `~tt.vs_halted` by
-    (qpat_x_assum `vars_pc_only vs tt` mp_tac >>
-     simp[vars_pc_only_def, venom_state_component_equality]) >>
-  `tt.vs_current_bb = st.cs_current_bb` by gvs[Abbr `ss`] >>
-  drule_all linear_dispatch_entry_no_phi >> strip_tac >>
-  qexists_tac `tt` >> simp[] >>
-  rpt gen_tac >> strip_tac >>
-  irule entry_context_continuation >> simp[] >>
-  qexistsl_tac [`bb`, `fuel`, `tt`] >> gvs[Abbr `ss`]
+  drule_all linear_dispatch_context_reaches_gas >> strip_tac >>
+  qexists_tac `s0` >> gvs[]
 QED
 
 Theorem external_entry_reaches_checks:

@@ -318,6 +318,20 @@ Proof
   gvs[not_fresh_at_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
+Theorem payable_check_pass_seq:
+  emit_op CALLVALUE [] st0 = (cv, st1) /\
+  emit_op ISZERO [cv] st1 = (nv, st2) /\
+  emit_void ASSERT [nv] st2 = ((), st3) /\
+  fresh_vars_wrt st0 s0 /\ s0.vs_call_ctx.cc_callvalue = 0w ==>
+  ?t. run_inst_seq (emitted_insts st0 st3) s0 = OK t /\
+      vars_pc_only s0 t /\ fresh_vars_wrt st3 t /\
+      (!x. not_fresh_at st0 x ==> lookup_var x t = lookup_var x s0)
+Proof
+  strip_tac >> drule_all compile_payable_check_ok_or_revert >>
+  strip_tac >> gvs[] >> drule_all fallback_check_run_frame >>
+  strip_tac >> goal_assum (drule_at Any) >> simp[]
+QED
+
 (* The payable check (CALLVALUE is zero) on its own, as
    compile_payable_check_ok_or_revert has it, for the fallback and for
    compile_entry_checks. *)

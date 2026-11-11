@@ -1,6 +1,6 @@
 Theory entryReachBodyCanonicalChecks
 Ancestors
-  loweringStateRelDefs entryReachBodyCanonicalOccurrence entryReachBodySelectedCode
+  loweringStateRelDefs entryReachBodyCanonicalOccurrence entryReachBodySelectedCode fragGasPath
   externalEntryChecks moduleLoweringProps vyperCompiler venomInst
   loweringShapeDefs compileEnv selectedBodyCode venomWf moduleLowering
   loweringShapeProps compileVyper vyperLoweringCorrect entryDispatchProps
@@ -202,7 +202,7 @@ Proof
   simp[stringTheory.STRCAT_EQNS]
 QED
 
-Theorem entry_canonical_checks_reached:
+Theorem entry_canonical_checks_reached_gas:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
@@ -230,7 +230,12 @@ Theorem entry_canonical_checks_reached:
     s.vs_current_bb = checks.cs_current_bb /\
     s.vs_inst_idx = LENGTH checks.cs_current_insts /\
     (!fuel r. run_from fuel unit.cu_context func s = r /\ (!e. r <> Error e) ==>
-      ?fuel'. run_context fuel' unit.cu_context vs = r)
+      ?fuel'. run_context fuel' unit.cu_context vs = r) /\
+    unit.cu_context.ctx_entry = SOME "__entry" /\
+    fn_entry_label func = SOME "__entry" /\
+    gas_path unit.cu_context func
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+                 vs_inst_idx := 0|>) 0 (OK s)
 Proof
   strip_tac >> drule_all entry_source_canonical_code >> strip_tac >>
   `~block_is_terminated checks` by simp[block_is_terminated_def] >>
@@ -255,7 +260,42 @@ Proof
      (MAP (\(sel,lbl,z). (sel,lbl))
        (build_selectors (type_env tops) (FST (classify_functions tops)))) fb =
      checks.cs_current_bb` by simp[] >>
-  drule_all linear_dispatch_context_reaches >> strip_tac >>
+  drule_all linear_dispatch_context_reaches_gas >> strip_tac >>
   qexistsl_tac [`lbl`,`ce`,`pos`,`mincd`,`pay`,`key`,`ut`,`iv`,`rt`,`func`,
     `se`,`checks`,`start`,`cenv`,`registered`,`body_end`,`s0`] >> gvs[]
+QED
+
+Theorem entry_canonical_checks_reached:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  initial_venom_state_rel tops am tx vs /\
+  vyperInterpreter$lookup_function NONE tx.function_name External tops =
+    SOME (mut,F,args,[],ret,fbody) ==>
+  ?lbl ce pos mincd pay key ut iv rt func se checks start cenv registered body_end s.
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops F (assign_nkeys tops 0)
+        (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+         tx.function_name,args,([]:expr list),ret,fbody)) =
+      (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) /\
+    venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+    func = mk_raw_function "__entry" (all_blocks se) /\ fn_inst_ids_distinct func /\
+    ~block_is_terminated start /\
+    compile_entry_checks mincd pay checks = ((),start) /\
+    compile_register_positional_args ce pos 4 start = (cenv,registered) /\
+    compile_guarded_body cenv F key ut iv fbody rt registered = ((),body_end) /\
+    cs_extends start registered /\ cs_extends registered body_end /\
+    cs_extends body_end se /\
+    fn_has_code checks start func /\ fn_has_code start body_end func /\
+    fn_has_code registered body_end func /\
+    (!inst. MEM inst (state_insts registered) ==> MEM inst (fn_insts func)) /\
+    vars_pc_only vs s /\ fresh_vars_wrt checks s /\ ~s.vs_halted /\
+    s.vs_current_bb = checks.cs_current_bb /\
+    s.vs_inst_idx = LENGTH checks.cs_current_insts /\
+    (!fuel r. run_from fuel unit.cu_context func s = r /\ (!e. r <> Error e) ==>
+      ?fuel'. run_context fuel' unit.cu_context vs = r)
+Proof
+  strip_tac >> drule_all entry_canonical_checks_reached_gas >> strip_tac >>
+  qexistsl_tac [`lbl`,`ce`,`pos`,`mincd`,`pay`,`key`,`ut`,`iv`,`rt`,`func`,
+    `se`,`checks`,`start`,`cenv`,`registered`,`body_end`,`s`] >> gvs[]
 QED

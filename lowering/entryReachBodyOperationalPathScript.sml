@@ -1,6 +1,6 @@
 Theory entryReachBodyOperationalPath
 Ancestors
-  valueEncodingDefs abiEncoderObserver abiAllocationHistory allocaFrontierBound
+  valueEncodingDefs abiEncoderObserver abiAllocationHistory allocaFrontierBound fragGasSeq
   entryReachBodyArrayInit abiEncoderRegisteredEffect abiDecoderFrame
   abiDecoderArrayLoopInit abiDecoderIndexInit abiDecoderContract compileEnv emitHelperProps
   abiDecoderLoop contextCodegenRel venomExecProofs venomInst venomInstProofs1 venomInstProofs venomExecSemantics emitHelper phiTransform fragExec exprLoweringProps instIdxIndep rich_list relation
@@ -12,6 +12,26 @@ End
 Definition entry_decode_path_def:
   entry_decode_path ctx fn = RTC (entry_decode_step ctx fn)
 End
+
+(* Counted transport retains exactly the observer's endpoint. *)
+Theorem entry_decode_observer_gas_path:
+  abi_observer_step ctx fn cut s t /\
+  (!bb inst. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst ==>
+    inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE) ==>
+  gas_path ctx fn s 0 (OK t)
+Proof
+  strip_tac >>
+  `gas_path_edge ctx fn s 0 (OK t)` suffices_by
+    (strip_tac >> drule fragGasPathTheory.gas_path_edge_normal >> strip_tac >>
+     drule (cj 2 fragGasPathTheory.gas_path_rules) >>
+     disch_then (qspec_then `0` mp_tac) >>
+     simp[fragGasPathTheory.gas_path_rules]) >>
+  gvs[abi_observer_step_def] >>
+  `inst.inst_opcode <> GAS` by metis_tac[] >>
+  simp[fragGasPathTheory.gas_path_edge_def] >> qexists_tac `0` >>
+  gvs[gasCountTheory.gas_count_step_def] >> metis_tac[]
+QED
 
 Theorem entry_decode_path_refl:
   entry_decode_path ctx fn s s
@@ -300,4 +320,111 @@ Proof
     (irule entry_decode_emitted_path >> simp[] >> qexists_tac `st` >> simp[] >>
      fs[inst_extends_def, rich_listTheory.IS_PREFIX_APPEND]) >>
   qexists_tac `t` >> simp[]
+QED
+
+(* The generated straight-line window, rather than the containing function,
+   excludes GAS. The endpoint is the successful sequence's actual state. *)
+Theorem entry_decode_emitted_gas_path:
+  st'.cs_current_bb = st.cs_current_bb /\
+  isPREFIX st.cs_current_insts st'.cs_current_insts /\
+  fn_has_code st st' fn /\
+  EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+    ~is_terminator i.inst_opcode) (emitted_insts st st') /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  run_inst_seq (emitted_insts st st') s = OK t ==>
+  gas_path ctx fn s 0 (OK (t with vs_inst_idx := LENGTH st'.cs_current_insts))
+Proof
+  strip_tac >>
+  `?bb. lookup_block st.cs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX st'.cs_current_insts bb.bb_instructions` by
+    metis_tac[fn_has_code_def] >>
+  `?xs. st'.cs_current_insts = st.cs_current_insts ++ xs /\
+        emitted_insts st st' = xs` by
+    (qpat_x_assum `isPREFIX st.cs_current_insts _` mp_tac >>
+     simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `isPREFIX xs (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (qpat_x_assum `isPREFIX st'.cs_current_insts _` mp_tac >>
+     simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+     simp[rich_listTheory.IS_PREFIX_APPEND] >>
+     rewrite_tac[GSYM listTheory.APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+     metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) xs /\
+   FILTER (\i. i.inst_opcode = GAS) xs = []` by
+    (gvs[listTheory.EVERY_MEM, listTheory.FILTER_EQ_NIL] >> metis_tac[]) >>
+  gvs[] >>
+  qspecl_then [`emitted_insts st st'`, `s`, `t`, `ctx`, `fn`, `bb`]
+    mp_tac fragGasSeqTheory.tuple_run_inst_seq_gas_path >> simp[]
+QED
+
+Theorem initializer_path_gas_shape[local]:
+  abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st = ((),guard_st) /\
+  abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
+  abi_decode_index_init header_st = (ip,loop_st) ==>
+  loop_st.cs_current_bb = st.cs_current_bb /\ inst_extends st loop_st /\
+  EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+    ~is_terminator i.inst_opcode) (emitted_insts st loop_st)
+Proof
+  simp[abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_prefix_def,
+       abiDecoderGuardsTheory.abi_decode_count_guard_def,
+       abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
+       abiDecoderArrayHeaderTheory.abi_decode_array_header_def,
+       abi_decode_index_init_def, contextTheory.compile_alloc_buffer_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[inst_extends_def, emitted_insts_def, IS_PREFIX_APPEND] >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >>
+  simp[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
+QED
+
+Theorem entry_array_init_operational_gas:
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+    ((ip,cnt),loop_st) /\
+  abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st = ((),guard_st) /\
+  abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
+  abi_decode_index_init header_st = (ip,loop_st) /\
+  eval_operand src initial = SOME srcword /\ eval_operand dst initial = SOME (n2w d) /\
+  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  maxn < dimword (:256) /\ d < dimword (:256) /\
+  32 <= sz /\ d+sz <= initial.vs_alloca_next /\
+  alloca_frontier_inv ctx fn site initial /\ unit_alloca_budget ctx < dimword (:256) /\
+  (!i. MEM i (emitted_insts st loop_st) ==> MEM i (fn_insts fn)) /\
+  ((FLOOKUP initial.vs_allocas header_st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+   (FLOOKUP initial.vs_allocas header_st.cs_next_id = SOME (p,32) /\
+    p < dimword (:256) /\ p+32 <= initial.vs_alloca_next)) /\
+  (d+sz <= p \/ p+32 <= d) /\ alloca_inv initial /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  abi_decode_load CALLDATALOAD srcword initial = n2w ncount /\ ncount <= maxn /\
+  abi_alloca_history (fn_insts fn) initial /\ fn_has_code st loop_st fn /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. run_inst_seq (emitted_insts st loop_st) initial = OK t /\
+    gas_path ctx fn initial 0 (OK (t with vs_inst_idx := LENGTH loop_st.cs_current_insts)) /\
+    entry_decode_path ctx fn initial (t with vs_inst_idx := LENGTH loop_st.cs_current_insts) /\
+    abi_alloca_history (fn_insts fn) t /\
+    abi_encoder_registered_effect {header_st.cs_next_id} [(d,32)] initial t /\
+    eval_operand ip t = SOME (n2w p) /\ mload p t = 0w /\
+    eval_operand cnt t = SOME (n2w ncount) /\ mem_word_at d t.vs_memory = n2w ncount /\
+    FLOOKUP t.vs_allocas header_st.cs_next_id = SOME (p,32) /\
+    (!id. id <> header_st.cs_next_id ==> FLOOKUP t.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+    (if FLOOKUP initial.vs_allocas header_st.cs_next_id = NONE then
+       t.vs_alloca_next = initial.vs_alloca_next+32 else t.vs_alloca_next = initial.vs_alloca_next) /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\
+    abi_decode_footprint_frame [(d,32);(p,32)] initial t /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op t = eval_operand op initial) /\
+    t.vs_halted = initial.vs_halted /\
+    t.vs_accounts = initial.vs_accounts /\ t.vs_transient = initial.vs_transient /\
+    t.vs_logs = initial.vs_logs /\ t.vs_tx_ctx = initial.vs_tx_ctx /\
+    t.vs_block_ctx = initial.vs_block_ctx /\ t.vs_outcomes = initial.vs_outcomes /\
+    t.vs_requests = initial.vs_requests /\ t.vs_pending_deletions = initial.vs_pending_deletions /\
+    t.vs_gas_readings = initial.vs_gas_readings /\ t.vs_fmp = initial.vs_fmp
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all entry_array_init_operational >> strip_tac >>
+  drule_all initializer_path_gas_shape >> strip_tac >>
+  qexists_tac `t` >> simp[] >>
+  irule entry_decode_emitted_gas_path >> simp[] >> qexists_tac `st` >>
+  gvs[inst_extends_def, IS_PREFIX_APPEND]
 QED

@@ -235,3 +235,224 @@ Proof
   strip_tac >> drule_at (Pat `cursor _ _ _ _`) entry_members_execution_suffix >>
   simp_tac bool_ss [MAP, SUM, APPEND] >> disch_then drule_all >> simp[]
 QED
+
+(* Path-bearing callbacks retain the resource witness of each member. *)
+Theorem entry_members_core_cons_gas[local]:
+  (!pre ty tys ao vo st ops middle next last s.
+    cursor pre (ty::tys) st s /\
+    ao = SUM (MAP (abi_embedded_static_size ce.ce_struct_fields) pre) /\
+    vo = SUM (MAP (type_memory_bytes ce) pre) /\
+    canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+      dst src sb d outsz st s /\
+    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+      (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\
+    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+      (type_to_abi_dec_info sf ce ty) middle = ((),next) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+      (abi_decoder_member_infos sf ce tys)
+      (ao + abi_embedded_static_size ce.ce_struct_fields ty)
+      (vo + type_memory_bytes ce ty) next = ((),last) /\
+    cert next /\ fn_has_code st middle fn /\ fn_has_code middle next fn /\
+    fn_has_code st next fn /\ fn_has_code next last fn /\
+    abi_decoder_code middle next /\
+    st.cs_next_id < middle.cs_next_id /\ middle.cs_next_id <= next.cs_next_id /\
+    next.cs_next_id <= last.cs_next_id /\
+    st.cs_next_var <= middle.cs_next_var /\ middle.cs_next_var <= next.cs_next_var /\
+    next.cs_next_var <= last.cs_next_var /\ last.cs_next_var <= limit_st.cs_next_var /\
+    fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword(:256) /\
+    oid NOTIN sites /\ oid NOTIN abi_decoder_ids st.cs_next_id last.cs_next_id /\
+    window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id) SUBSET sites ==>
+    ?t. cursor (pre ++ [ty]) tys next t /\
+      canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+        dst src sb d outsz next t /\
+      canonical_members_effect ctx fn sites d outsz st s t /\
+      abi_encoder_registered_effect
+        (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
+        [(d,outsz)] s t /\ gas_path ctx fn s 0 (OK t)) /\
+  (!a z elems ao vo.
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) elems ao vo a = ((),z) /\
+    fn_has_code a z fn /\ cert z ==> cert a) /\ cert last /\
+  cursor pre (ty::tys) st s /\
+  canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+    dst src sb d outsz st s /\
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    (abi_decoder_member_infos sf ce (ty::tys))
+    (SUM (MAP (abi_embedded_static_size ce.ce_struct_fields) pre))
+    (SUM (MAP (type_memory_bytes ce) pre)) st = ((),last) /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code st last fn /\
+  fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword(:256) /\
+  oid NOTIN sites /\ oid NOTIN abi_decoder_ids st.cs_next_id last.cs_next_id /\
+  window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id) SUBSET sites ==>
+  ?next t. cursor (pre++[ty]) tys next t /\
+    canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+      dst src sb d outsz next t /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+      (abi_decoder_member_infos sf ce tys)
+      (SUM (MAP (abi_embedded_static_size ce.ce_struct_fields) (pre++[ty])))
+      (SUM (MAP (type_memory_bytes ce) (pre++[ty]))) next = ((),last) /\
+    fn_has_code next last fn /\ st.cs_next_id <= next.cs_next_id /\
+    next.cs_next_id <= last.cs_next_id /\ st.cs_next_var <= next.cs_next_var /\
+    canonical_members_effect ctx fn sites d outsz st s t /\
+    abi_encoder_registered_effect
+      (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
+      [(d,outsz)] s t /\ gas_path ctx fn s 0 (OK t)
+Proof
+  strip_tac >> drule abi_decoder_member_cons_trace >> strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_member_cons_code >> strip_tac >>
+  drule_all abi_decoder_member_body_code >> strip_tac >>
+  `cert end_st` by
+    (first_x_assum (drule_at (Pat `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _`)) >>
+     disch_then drule_all >> simp[]) >>
+  `abi_decoder_code middle end_st` by
+    (drule_all abi_decoder_to_buf_code >> simp[]) >>
+  first_x_assum (drule_at (Pat `cursor pre (ty::tys) st s`)) >>
+  simp_tac bool_ss [AND_IMP_INTRO, GSYM CONJ_ASSOC, FORALL_AND_THM] >>
+  disch_then (drule_at (Pat `abi_decode_member_setup _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then drule_all >> simp[] >> strip_tac >>
+  qexistsl_tac [`end_st`, `t`] >> asm_rewrite_tac[] >>
+  conj_tac >- (simp[MAP_APPEND, SUM_APPEND]) >> decide_tac
+QED
+
+Theorem entry_members_execution_suffix_gas:
+  !tys pre st last s.
+  (!pre ty tys ao vo st ops middle next last s.
+    cursor pre (ty::tys) st s /\
+    ao = SUM (MAP (abi_embedded_static_size ce.ce_struct_fields) pre) /\
+    vo = SUM (MAP (type_memory_bytes ce) pre) /\
+    canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+      dst src sb d outsz st s /\
+    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+      (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\
+    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+      (type_to_abi_dec_info sf ce ty) middle = ((),next) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+      (abi_decoder_member_infos sf ce tys)
+      (ao + abi_embedded_static_size ce.ce_struct_fields ty)
+      (vo + type_memory_bytes ce ty) next = ((),last) /\
+    cert next /\ fn_has_code st middle fn /\ fn_has_code middle next fn /\
+    fn_has_code st next fn /\ fn_has_code next last fn /\
+    abi_decoder_code middle next /\
+    st.cs_next_id < middle.cs_next_id /\ middle.cs_next_id <= next.cs_next_id /\
+    next.cs_next_id <= last.cs_next_id /\
+    st.cs_next_var <= middle.cs_next_var /\ middle.cs_next_var <= next.cs_next_var /\
+    next.cs_next_var <= last.cs_next_var /\ last.cs_next_var <= limit_st.cs_next_var /\
+    fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword(:256) /\
+    oid NOTIN sites /\ oid NOTIN abi_decoder_ids st.cs_next_id last.cs_next_id /\
+    window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id) SUBSET sites ==>
+    ?t. cursor (pre ++ [ty]) tys next t /\
+      canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+        dst src sb d outsz next t /\
+      canonical_members_effect ctx fn sites d outsz st s t /\
+      abi_encoder_registered_effect
+        (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
+        [(d,outsz)] s t /\ gas_path ctx fn s 0 (OK t)) /\
+  (!a z elems ao vo.
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) elems ao vo a = ((),z) /\
+    fn_has_code a z fn /\ cert z ==> cert a) /\ cert last /\
+  cursor pre tys st s /\
+  canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+    dst src sb d outsz st s /\
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    (abi_decoder_member_infos sf ce tys)
+    (SUM (MAP (abi_embedded_static_size ce.ce_struct_fields) pre))
+    (SUM (MAP (type_memory_bytes ce) pre)) st = ((),last) /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code st last fn /\
+  fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword(:256) /\
+  oid NOTIN sites /\ oid NOTIN abi_decoder_ids st.cs_next_id last.cs_next_id /\
+  window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id) SUBSET sites ==>
+  ?t. cursor (pre++tys) [] last t /\
+    canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+      dst src sb d outsz last t /\
+    canonical_members_effect ctx fn sites d outsz st s t /\
+    abi_encoder_registered_effect
+      (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
+      [(d,outsz)] s t /\ gas_path ctx fn s 0 (OK t)
+Proof
+  Induct_on `tys` >> rpt gen_tac >> strip_tac
+  >- (fs[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def, comp_return_def] >>
+      qexists_tac `s` >> simp[entry_members_effect_refl, abi_encoder_registered_effect_refl] >>
+      irule (cj 1 fragGasPathTheory.gas_path_rules) >>
+      fs[canonical_members_frame_def]) >>
+  drule_all entry_members_core_cons_gas >> strip_tac >>
+  `window_alloca_sites fn (abi_decoder_ids next.cs_next_id last.cs_next_id) SUBSET
+   window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id)` by
+    (irule entry_decoder_sites_interval_subset >> simp[]) >>
+  `oid NOTIN abi_decoder_ids next.cs_next_id last.cs_next_id /\
+   window_alloca_sites fn (abi_decoder_ids next.cs_next_id last.cs_next_id) SUBSET sites` by
+    (conj_tac >- (fs[abi_decoder_ids_def] >> decide_tac) >> metis_tac[SUBSET_TRANS]) >>
+  last_x_assum (drule_at (Pat `cursor _ tys _ _`)) >>
+  disch_then drule_all >> strip_tac >>
+  `abi_encoder_registered_effect
+    (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
+    [(d,outsz)] t t'` by
+    (irule abi_encoder_registered_effect_enlarge >>
+     qpat_assum `abi_encoder_registered_effect _ _ t t'` (irule_at Any) >> simp[]) >>
+  qpat_x_assum `cursor (_ ++ _) [] last t'`
+    (assume_tac o PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+  qexists_tac `t'` >> asm_rewrite_tac[] >> conj_tac
+  >- (irule entry_members_effect_trans >> goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac
+  >- (irule abi_encoder_registered_effect_trans >> goal_assum (drule_at Any) >> simp[]) >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] fragGasPathTheory.gas_path_then)) >>
+  qexists_tac `t` >> simp[]
+QED
+
+Theorem entry_members_execution_gas:
+  (!pre ty tys ao vo st ops middle next last s.
+    cursor pre (ty::tys) st s /\
+    ao = SUM (MAP (abi_embedded_static_size ce.ce_struct_fields) pre) /\
+    vo = SUM (MAP (type_memory_bytes ce) pre) /\
+    canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+      dst src sb d outsz st s /\
+    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+      (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\
+    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+      (type_to_abi_dec_info sf ce ty) middle = ((),next) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+      (abi_decoder_member_infos sf ce tys)
+      (ao + abi_embedded_static_size ce.ce_struct_fields ty)
+      (vo + type_memory_bytes ce ty) next = ((),last) /\
+    cert next /\ fn_has_code st middle fn /\ fn_has_code middle next fn /\
+    fn_has_code st next fn /\ fn_has_code next last fn /\
+    abi_decoder_code middle next /\
+    st.cs_next_id < middle.cs_next_id /\ middle.cs_next_id <= next.cs_next_id /\
+    next.cs_next_id <= last.cs_next_id /\
+    st.cs_next_var <= middle.cs_next_var /\ middle.cs_next_var <= next.cs_next_var /\
+    next.cs_next_var <= last.cs_next_var /\ last.cs_next_var <= limit_st.cs_next_var /\
+    fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword(:256) /\
+    oid NOTIN sites /\ oid NOTIN abi_decoder_ids st.cs_next_id last.cs_next_id /\
+    window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id) SUBSET sites ==>
+    ?t. cursor (pre ++ [ty]) tys next t /\
+      canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+        dst src sb d outsz next t /\
+      canonical_members_effect ctx fn sites d outsz st s t /\
+      abi_encoder_registered_effect
+        (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
+        [(d,outsz)] s t /\ gas_path ctx fn s 0 (OK t)) /\
+  (!a z elems ao vo.
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) elems ao vo a = ((),z) /\
+    fn_has_code a z fn /\ cert z ==> cert a) /\ cert last /\
+  cursor [] tys st s /\
+  canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+    dst src sb d outsz st s /\
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    (abi_decoder_member_infos sf ce tys) 0 0 st = ((),last) /\
+  last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code st last fn /\
+  fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword(:256) /\
+  oid NOTIN sites /\ oid NOTIN abi_decoder_ids st.cs_next_id last.cs_next_id /\
+  window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id) SUBSET sites ==>
+  ?t. cursor tys [] last t /\
+    canonical_members_frame ctx fn oid root extent sites b cap site limit_st
+      dst src sb d outsz last t /\
+    canonical_members_effect ctx fn sites d outsz st s t /\
+    abi_encoder_registered_effect
+      (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
+      [(d,outsz)] s t /\ gas_path ctx fn s 0 (OK t)
+Proof
+  strip_tac >>
+  irule (SRULE [MAP, SUM, APPEND]
+    (Q.SPECL [`tys`, `[]`] entry_members_execution_suffix_gas)) >>
+  asm_rewrite_tac[] >> qexistsl_tac [`ce`, `cert`, `sf`] >> gvs[] >>
+  asm_rewrite_tac[]
+QED

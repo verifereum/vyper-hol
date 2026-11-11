@@ -5,7 +5,7 @@ Ancestors
   moduleLoweringProps vyperLoweringCorrect vyperInterpreter vyperState
   e2eDefs abiDecoderCorrect abiDecoderCounters
   entryReachBodyRegistrationInitialization entryBodyEndpointStructure
-  entryRegistrationOpen words list
+  entryRegistrationOpen fragGasPath words list
 
 Theorem entry_successful_value[local]:
   send_call_value mut cx st = (INL (),es) ==>
@@ -55,7 +55,7 @@ Proof
       valid_vyper_call_def]
 QED
 
-Theorem entry_canonical_registration_reached:
+Theorem entry_canonical_registration_gas_path:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
@@ -69,6 +69,89 @@ Theorem entry_canonical_registration_reached:
   ?lbl ce pos mincd pay key ut iv rt fn start cenv registered final site t.
     set_external_package_target rpolicy.rpol_target
       (package_external_fn tops T (K global_nonreentrant_slot)
+        (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+         tx.function_name,args,([]:expr list),ret,fbody)) =
+      (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) /\
+    unit.cu_context.ctx_entry = SOME "__entry" /\
+    venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME "__entry" /\
+    gas_path unit.cu_context fn
+      (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                  vs_inst_idx := 0 |>) 0 (OK t) /\
+    fn_inst_ids_distinct fn /\
+    compile_register_positional_args ce pos 4 start = (cenv,registered) /\
+    ~block_is_terminated start /\ ~block_is_terminated registered /\
+    local_ptrs_reserved cenv registered /\
+    compile_guarded_body cenv F key ut iv fbody rt registered = ((),final) /\
+    fn_has_code start final fn /\ fn_has_code registered final fn /\
+    (!inst. MEM inst (state_insts registered) ==> MEM inst (fn_insts fn)) /\
+    entry_prefix_witness fn (type_env tops) args tx.args (LENGTH args) cenv registered t /\
+    alloca_inv t /\ alloca_frontier_inv unit.cu_context fn site t /\
+    abi_alloca_history (fn_insts fn) t /\ fresh_vars_wrt final t /\
+    (!id r. FLOOKUP t.vs_allocas id = SOME r ==> id < registered.cs_next_id) /\
+    entry_loop_fields vs t /\ ~t.vs_halted /\
+    t.vs_current_bb = registered.cs_current_bb /\
+    t.vs_inst_idx = LENGTH registered.cs_current_insts /\ cenv.ce_is_ctor = F /\
+    (!fuel r. run_from fuel unit.cu_context fn t = r /\ (!e. r <> Error e) ==>
+      ?fuel'. run_context fuel' unit.cu_context vs = r)
+Proof
+  strip_tac >> drule_all entry_canonical_checks_reached_gas >> strip_tac >>
+  drule_all registration_preserves_open >> strip_tac >>
+  drule_all targeted_external_entry_locals >> strip_tac >>
+  drule_all entry_selected_check_premises >> strip_tac >>
+  `start.cs_next_var <= body_end.cs_next_var` by
+    (drule compile_register_positional_args_next_var >> strip_tac >>
+     metis_tac[compile_guarded_body_vars_mono, abi_decoder_vars_mono_def,
+               pairTheory.SND, arithmeticTheory.LESS_EQ_TRANS]) >>
+  `?u. entry_prefix_witness func (type_env tops) args tx.args 0 ce start u /\
+    fresh_vars_wrt body_end u /\ alloca_inv u /\
+    abi_alloca_history (fn_insts func) u /\
+    alloca_frontier_inv unit.cu_context func (ARB:instruction) u /\
+    (!id r. FLOOKUP u.vs_allocas id = SOME r ==> id < start.cs_next_id) /\
+    entry_loop_fields vs u /\ ~u.vs_halted /\
+    u.vs_current_bb = start.cs_current_bb /\
+    u.vs_inst_idx = LENGTH start.cs_current_insts /\
+    (!fuel r. run_from fuel unit.cu_context func u = r /\ (!e. r <> Error e) ==>
+      ?fuel'. run_from fuel' unit.cu_context func s = r) /\
+    gas_path unit.cu_context func s 0 (OK u)` by
+    (irule entry_registration_initial_endpoint_gas >>
+     qpat_assum `compile_entry_checks _ _ _ = _` (irule_at Any) >>
+     qpat_assum `lower_vyper_runtime_unit _ _ = _` (irule_at Any) >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  drule_all entry_registration_full_run_gas >> strip_tac >>
+  `gas_path unit.cu_context func
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+               vs_inst_idx := 0|>) 0 (OK u)` by
+    (irule (SIMP_RULE std_ss [arithmeticTheory.ADD_CLAUSES]
+      (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_then)) >>
+     qexists_tac `s` >> simp[]) >>
+  `gas_path unit.cu_context func
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry";
+               vs_inst_idx := 0|>) 0 (OK t)` by
+    (irule (SIMP_RULE std_ss [arithmeticTheory.ADD_CLAUSES]
+      (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_then)) >>
+     qexists_tac `u` >> simp[]) >>
+  qexistsl_tac [`lbl`,`ce`,`pos`,`mincd`,`pay`,`key`,`ut`,`iv`,`rt`,`func`,
+    `start`,`cenv`,`registered`,`body_end`,`ARB:instruction`,`t`] >>
+  simp[] >> metis_tac[]
+QED
+
+
+Theorem entry_canonical_registration_reached:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with
+      <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) ==>
+  ?lbl ce pos mincd pay key ut iv rt fn start cenv registered final site t.
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops F (assign_nkeys tops 0)
         (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
          tx.function_name,args,([]:expr list),ret,fbody)) =
       (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) /\
@@ -90,31 +173,7 @@ Theorem entry_canonical_registration_reached:
     (!fuel r. run_from fuel unit.cu_context fn t = r /\ (!e. r <> Error e) ==>
       ?fuel'. run_context fuel' unit.cu_context vs = r)
 Proof
-  strip_tac >> drule_all entry_canonical_checks_reached >> strip_tac >>
-  drule_all registration_preserves_open >> strip_tac >>
-  drule_all targeted_external_entry_locals >> strip_tac >>
-  drule_all entry_selected_check_premises >> strip_tac >>
-  `start.cs_next_var <= body_end.cs_next_var` by
-    (drule compile_register_positional_args_next_var >> strip_tac >>
-     metis_tac[compile_guarded_body_vars_mono, abi_decoder_vars_mono_def,
-               pairTheory.SND, arithmeticTheory.LESS_EQ_TRANS]) >>
-  `?u. entry_prefix_witness func (type_env tops) args tx.args 0 ce start u /\
-    fresh_vars_wrt body_end u /\ alloca_inv u /\
-    abi_alloca_history (fn_insts func) u /\
-    alloca_frontier_inv unit.cu_context func (ARB:instruction) u /\
-    (!id r. FLOOKUP u.vs_allocas id = SOME r ==> id < start.cs_next_id) /\
-    entry_loop_fields vs u /\ ~u.vs_halted /\
-    u.vs_current_bb = start.cs_current_bb /\
-    u.vs_inst_idx = LENGTH start.cs_current_insts /\
-    (!fuel r. run_from fuel unit.cu_context func u = r /\ (!e. r <> Error e) ==>
-      ?fuel'. run_from fuel' unit.cu_context func s = r)` by
-    (irule entry_registration_initial_endpoint >>
-     qpat_assum `compile_entry_checks _ _ _ = _` (irule_at Any) >>
-     qpat_assum `lower_vyper_runtime_unit _ _ = _` (irule_at Any) >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  drule_all entry_registration_full_run >> strip_tac >>
-  qexistsl_tac [`lbl`,`ce`,`pos`,`mincd`,`pay`,`key`,`ut`,`iv`,`rt`,`func`,
-    `start`,`cenv`,`registered`,`body_end`,`ARB:instruction`,`t`] >>
-  simp[] >> metis_tac[]
+  strip_tac >> drule_all entry_canonical_registration_gas_path >> strip_tac >>
+  qexistsl_tac [`lbl`,`ce`,`pos`,`mincd`,`pay`,`key`,`ut`,`iv`,`rt`,`fn`,
+    `start`,`cenv`,`registered`,`final`,`site`,`t`] >> gvs[]
 QED

@@ -45,7 +45,7 @@
  *)
 Theory entryChecksProps
 Ancestors
-  arithmetic list rich_list words finite_map
+  arithmetic list rich_list words finite_map fragGasSeq fragGasPath
   entryDispatchProps entryDecodePlanProps entryDecodeProps
   moduleLoweringProps exprLoweringProps emitHelperProps fragExec
   compileVyper moduleLowering compileEnv loweringStateRelDefs selectorDispatch contractABI
@@ -256,6 +256,122 @@ Proof
   irule frag_exec_refl >> simp[vars_pc_only_refl]
 QED
 
+Theorem payable_cds_pass_seq[local]:
+  emit_op CALLVALUE [] st = (cv, st1) /\ emit_op ISZERO [cv] st1 = (nv, st2) /\
+  emit_void ASSERT [nv] st2 = ((), st3) /\
+  emit_op CALLDATASIZE [] st3 = (cd, st4) /\
+  emit_op LT [cd; Lit (n2w m)] st4 = (lt, st5) /\
+  emit_op ISZERO [lt] st5 = (ok, st6) /\ emit_void ASSERT [ok] st6 = ((), st7) /\
+  fresh_vars_wrt st s /\ s.vs_call_ctx.cc_callvalue = 0w /\
+  m <= LENGTH s.vs_call_ctx.cc_calldata /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts st st7) s = OK t /\
+      vars_pc_only s t /\ fresh_vars_wrt st7 t /\
+      (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule_all payable_check_pass_seq >> strip_tac >>
+  `t.vs_call_ctx = s.vs_call_ctx` by metis_tac[vars_pc_only_fields] >>
+  drule_all cds_check_run >> strip_tac >> gvs[] >>
+  `st.cs_next_var <= st3.cs_next_var` by
+    (imp_res_tac emitted_insts_emit_op >>
+     imp_res_tac emitted_insts_emit_void >> gvs[]) >>
+  `emitted_insts st st7 = emitted_insts st st3 ++ emitted_insts st3 st7` by
+    (imp_res_tac emitted_insts_emit_op >>
+     imp_res_tac emitted_insts_emit_void >>
+     metis_tac[emitted_insts_def, GSYM APPEND_ASSOC, DROP_LENGTH_APPEND]) >>
+  goal_assum (drule_at Any) >>
+  simp[] >> conj_tac
+  >- metis_tac[run_inst_seq_append] >>
+  conj_tac >- metis_tac[vars_pc_only_trans] >>
+  rpt strip_tac >> `not_fresh_at st3 x` by fs[not_fresh_at_def] >>
+  metis_tac[]
+QED
+
+Theorem compile_entry_checks_pass_seq:
+  compile_entry_checks min_cds pay st = ((),last) /\
+  fresh_vars_wrt st s /\ (pay \/ s.vs_call_ctx.cc_callvalue = 0w) /\
+  min_cds <= LENGTH s.vs_call_ctx.cc_calldata /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts st last) s = OK t /\
+      vars_pc_only s t /\ fresh_vars_wrt last t /\
+      (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `pay` >>
+  gvs[compile_entry_checks_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  all_tac >> Cases_on `4 < min_cds` >>
+  gvs[comp_return_def, comp_bind_def, comp_ignore_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[])
+  >~ [`emit_op CALLVALUE _ _ = _`, `emit_op CALLDATASIZE _ _ = _`]
+  >- (irule payable_cds_pass_seq >> goal_assum (drule_at Any) >> simp[] >> metis_tac[])
+  >~ [`emit_op CALLVALUE _ _ = _`]
+  >- (drule_all payable_check_pass_seq >> simp[])
+  >~ [`emit_op CALLDATASIZE _ _ = _`]
+  >- (drule_all cds_check_run >> strip_tac >> gvs[] >> metis_tac[]) >>
+  qexists_tac `s` >> simp[emitted_insts_def, run_inst_seq_def, vars_pc_only_refl]
+QED
+
+Theorem entry_checks_seq_structure[local]:
+  compile_entry_checks min_cds pay st = ((),last) ==>
+  last.cs_current_bb = st.cs_current_bb /\
+  last.cs_current_insts = st.cs_current_insts ++ emitted_insts st last /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> GAS) (emitted_insts st last)
+Proof
+  strip_tac >> Cases_on `pay` >> Cases_on `4 < min_cds` >>
+  gvs[compile_entry_checks_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
+  imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
+  gvs[same_blocks_def] >>
+  simp[emitted_insts_def, APPEND_ASSOC, DROP_LENGTH_APPEND, mk_inst_def,
+       is_terminator_def]
+QED
+
+Theorem compile_entry_checks_pass_gas:
+  compile_entry_checks min_cds pay st = ((),last) /\
+  fresh_vars_wrt st s /\ (pay \/ s.vs_call_ctx.cc_callvalue = 0w) /\
+  min_cds <= LENGTH s.vs_call_ctx.cc_calldata /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) ==>
+  !fn. fn_has_code st last fn /\ ~s.vs_halted /\
+    s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. vars_pc_only s t /\ fresh_vars_wrt last t /\
+      (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
+      ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
+      t.vs_inst_idx = LENGTH last.cs_current_insts /\
+      (!fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
+        ?fuel'. run_from fuel' ctx fn s = r) /\
+      gas_path ctx fn s 0 (OK t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all compile_entry_checks_pass_seq >> strip_tac >>
+  drule entry_checks_seq_structure >> strip_tac >>
+  gen_tac >> strip_tac >>
+  `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX last.cs_current_insts bb.bb_instructions` by
+    gvs[fn_has_code_def] >>
+  `isPREFIX (emitted_insts st last)
+     (DROP s.vs_inst_idx bb.bb_instructions)` by
+    metis_tac[IS_PREFIX_APPEND, DROP_LENGTH_APPEND, APPEND_ASSOC] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st last)` by fs[EVERY_MEM] >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts st last) = []` by
+    (simp[FILTER_EQ_NIL, EVERY_MEM] >> fs[EVERY_MEM]) >>
+  drule_all tuple_run_inst_seq_gas_path >>
+  disch_then (qspec_then `ctx` mp_tac) >> simp[] >> strip_tac >>
+  qexists_tac `t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st last)` >>
+  drule gas_path_normal >> strip_tac >>
+  simp[vars_pc_only_inst_idx, control_moves_keep_vars, fresh_vars_wrt_def] >>
+  `t.vs_current_bb = s.vs_current_bb` by
+    (drule_all exec_block_run_inst_seq >>
+     disch_then (qspec_then `0` mp_tac) >> metis_tac[]) >>
+  gvs[]
+QED
+
 Theorem compile_entry_checks_pass:
   !min_cds is_payable st st' ctx s0.
     compile_entry_checks min_cds is_payable st = ((), st') /\
@@ -268,12 +384,12 @@ Theorem compile_entry_checks_pass:
            (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s0))
       (\r. F)
 Proof
-  rpt strip_tac >>
-  `min_cds < dimword (:256)` by decide_tac >>
-  drule_all compile_entry_checks_frag >>
-  disch_then (qspec_then `ctx` assume_tac) >>
-  first_x_assum (mp_tac o MATCH_MP frag_exec_weaken) >>
-  disch_then irule >> rw[] >> gvs[]
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rw[frag_exec_def] >>
+  drule compile_entry_checks_pass_gas >>
+  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
+  disch_then (qspecl_then [`ctx`, `fn`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `t` >> simp[] >> metis_tac[]
 QED
 
 Theorem compile_entry_checks_value_revert:

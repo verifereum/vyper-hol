@@ -594,3 +594,120 @@ Proof
   drule iteration_config_callback >> strip_tac >>
   drule_all entry_array_callback_iteration >> simp[]
 QED
+
+(* The persistent frame carries a path from the fixed input as well as resources. *)
+Theorem entry_generic_array_callback_iteration_gas:
+  cfg = ((ce,env,ty,tv,maxn,parent_di,avs,xs),
+     (ip,src,dst,st,ops,mid,last,limit_st,next,nv),
+     (ctx,fn,site,cid,oid,root,extent,d,b,reserve,prepared,p,sb,ambient),
+     (hdr,body_lbl,exit,hid,bb)) /\ iteration_callback_config cfg /\
+  (!j u.
+    iteration_body next limit_st prepared ambient b reserve d (LENGTH xs) p j u /\
+    j < LENGTH xs /\ ~u.vs_halted /\ u.vs_current_bb = body_lbl /\ u.vs_inst_idx = 0 /\
+    entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) u ==>
+    ?t. iteration_frame next limit_st prepared ambient b reserve
+        (\m. mem_word_at d m = n2w (LENGTH xs)) t /\
+      entry_loop_child_end fn last.cs_current_bb last.cs_current_insts last.cs_next_id
+        (STRING #"%" (toString st.cs_next_var)) (STRING #"%" (toString nv))
+        ip hdr src p (n2w sb) (LENGTH xs) j t /\
+      entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+        (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) t /\
+      val_in_memory tv (EL j xs) (d+(j*type_memory_size tv+32)) t.vs_memory /\
+      entry_loop_fields u t /\ entry_decode_path ctx fn u t /\
+      abi_encoder_registered_effect
+        (window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id))
+        [(d+(j*type_memory_size tv+32),type_memory_size tv)] u t /\
+      gas_path ctx fn u 0 (OK t)) /\
+  entry_owned_loop_inv ctx fn site hdr ip src p (n2w sb) tv xs d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) cid oid root extent j s /\
+  iteration_frame next limit_st prepared ambient b reserve
+    (\m. mem_word_at d m = n2w (LENGTH xs)) s ==>
+  ?t. ~t.vs_halted /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
+    entry_owned_loop_resources ctx fn site cid (w2n p) oid root extent d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) t /\
+    iteration_frame next limit_st prepared ambient b reserve
+      (\m. mem_word_at d m = n2w (LENGTH xs)) t /\
+    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV xs)) d t.vs_memory /\
+    entry_loop_trace ctx fn
+      (cid INSERT window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id))
+      [(d,32+LENGTH xs*type_memory_size tv)] s t /\ gas_path ctx fn s 0 (OK t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
+  qhdtm_assum `iteration_callback_config`
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [iteration_callback_config_def]) >>
+  qabbrev_tac `frame = iteration_frame next limit_st prepared ambient b reserve
+    (\m. mem_word_at d m = n2w (LENGTH xs))` >>
+  `entry_actual_owned_indexed_contract ctx fn site hdr body_lbl exit hid
+    last.cs_current_bb last.cs_current_insts last.cs_next_id ip src
+    (STRING #"%" (toString next)) (STRING #"%" (toString st.cs_next_var))
+    (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+    (STRING #"%" (toString (next+3))) (STRING #"%" (toString nv))
+    p (n2w sb) tv xs d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) cid oid root extent
+    (cid INSERT window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id))
+    (window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id))
+    (\j u. frame u /\ gas_path ctx fn s 0 (OK u))
+    (\j u. iteration_body next limit_st prepared ambient b reserve d (LENGTH xs) p j u /\
+      gas_path ctx fn s 0 (OK u))
+    (\j u. frame u /\ gas_path ctx fn s 0 (OK u))
+    (\u. frame u /\ gas_path ctx fn s 0 (OK u))` by suspend "contract" >>
+  drule entry_actual_owned_indexed_array_loop_from_index >> simp_tac bool_ss [] >>
+  disch_then drule >>
+  `~s.vs_halted` by fs[entry_owned_loop_inv_def, abi_decode_loop_ready_def] >>
+  simp[fragGasPathTheory.gas_path_rules] >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  fs[Abbr `frame`] >>
+  irule (cj 2 calldata_terminal_array_memory) >>
+  fs[entry_loop_prefix_def, iteration_frame_def, Excl "enc_def"] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+Resume entry_generic_array_callback_iteration_gas[contract]:
+  `src <> Var (STRING #"%" (toString next)) /\
+   ip <> Var (STRING #"%" (toString nv)) /\ src <> Var (STRING #"%" (toString nv))` by
+    (rpt conj_tac >> irule abi_decoder_live_excludes_output >>
+     qexists_tac `next` >> simp[]) >>
+  `oid NOTIN window_alloca_sites fn (abi_decoder_ids mid.cs_next_id last.cs_next_id)` by
+    metis_tac[SUBSET_DEF] >>
+  simp_tac bool_ss [entry_actual_owned_indexed_contract_def] >>
+  asm_rewrite_tac[] >> simp[Excl "enc_def", SUBSET_DEF] >> rpt conj_tac
+  >- suspend "header"
+  >- suspend "child"
+  >> suspend "backedge"
+QED
+Resume entry_generic_array_callback_iteration_gas[header]:
+  rpt strip_tac >> rename1 `frame u` >>
+  qpat_assum `entry_owned_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ u`
+    (strip_assume_tac o PURE_REWRITE_RULE [entry_owned_loop_inv_def]) >>
+  `STRING #"%" (toString next) <> STRING #"%" (toString (next+1))` by simp[] >>
+  drule_all entryReachBodyOperationalLoopTheory.loop_header_gas_path >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  Cases_on `j' < LENGTH xs` >> simp[] >> conj_tac
+  >- (irule iteration_header_body >> fs[Abbr `frame`, Excl "enc_def"] >> metis_tac[])
+  >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] fragGasPathTheory.gas_path_then)) >>
+      qexists_tac `u` >> fs[])
+  >- (simp[Abbr `frame`] >> irule iteration_frame_header >> simp[]) >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] fragGasPathTheory.gas_path_then)) >>
+  qexists_tac `u` >> fs[]
+QED
+Resume entry_generic_array_callback_iteration_gas[child]:
+  rpt strip_tac >>
+  qpat_x_assum `!j u. iteration_body _ _ _ _ _ _ _ _ _ _ _ /\ _ ==> _` drule_all >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  qexists_tac `t` >> simp[AC ADD_ASSOC ADD_COMM] >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] fragGasPathTheory.gas_path_then)) >>
+  qexists_tac `u` >> simp[]
+QED
+Resume entry_generic_array_callback_iteration_gas[backedge]:
+  rpt gen_tac >> strip_tac >> rename1 `entry_loop_child_end _ _ _ _ _ _ _ _ _ _ _ _ _ t` >> conj_tac
+  >- (simp[Abbr `frame`] >> irule iteration_array_backedge_frame >>
+      asm_rewrite_tac[] >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] fragGasPathTheory.gas_path_then)) >>
+  qexists_tac `t` >> simp[] >>
+  irule entryReachBodyOperationalLoopTheory.loop_backedge_gas_path >>
+  qhdtm_assum `entry_loop_child_end` (irule_at Any) >> simp[] >>
+  fs[abi_decode_loop_cfg_def] >>
+  simp[abi_decode_header_insts_def, venomExecSemanticsTheory.phi_prefix_length_def, mk_inst_def]
+QED
+Finalise entry_generic_array_callback_iteration_gas

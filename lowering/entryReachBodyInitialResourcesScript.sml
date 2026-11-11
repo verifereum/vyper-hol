@@ -39,6 +39,35 @@ Proof
   simp[] >> metis_tac[alloca_inv_empty, abi_alloca_history_empty]
 QED
 
+Theorem entry_checks_pass_allocation_resources_gas:
+  compile_entry_checks min_cds pay st = ((),st') /\
+  initial_venom_state_rel tops am tx initial /\ vars_pc_only initial s /\
+  fresh_vars_wrt st s /\
+  (pay \/ s.vs_call_ctx.cc_callvalue = 0w) /\
+  min_cds <= LENGTH s.vs_call_ctx.cc_calldata /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) ==>
+  !fn. fn_has_code st st' fn /\ ~s.vs_halted /\
+    s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. (vars_pc_only s t /\ fresh_vars_wrt st' t /\
+      (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = FEMPTY /\ t.vs_alloca_next = 0 /\
+      alloca_inv t /\ abi_alloca_history code t) /\
+    ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
+    t.vs_inst_idx = LENGTH st'.cs_current_insts /\
+    (!fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
+      ?fuel'. run_from fuel' ctx fn s = r) /\
+    gas_path ctx fn s 0 (OK t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> gen_tac >> strip_tac >>
+  drule compile_entry_checks_pass_gas >>
+  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
+  disch_then (qspecl_then [`ctx`, `fn`] mp_tac) >> simp[] >> strip_tac >>
+  qexists_tac `t` >> simp[] >>
+  drule_all vars_pc_only_trans >> disch_tac >>
+  drule_all entry_checks_start_allocation_resources >> simp[]
+QED
+
 Theorem entry_checks_pass_allocation_resources:
   compile_entry_checks min_cds pay st = ((),st') /\
   initial_venom_state_rel tops am tx initial /\ vars_pc_only initial s /\
@@ -53,13 +82,13 @@ Theorem entry_checks_pass_allocation_resources:
       alloca_inv t /\ abi_alloca_history code t)
     (\r. F)
 Proof
-  strip_tac >> drule compile_entry_checks_pass >> simp[] >>
-  disch_then (qspecl_then [`ctx`, `s`] mp_tac) >> simp[] >>
-  disch_tac >>
-  irule frag_exec_conseq >> goal_assum $ drule_at Any >> simp[] >>
-  rpt strip_tac >>
-  drule_all vars_pc_only_trans >> disch_tac >>
-  drule_all entry_checks_start_allocation_resources >> simp[]
+  disch_then (map_every assume_tac o CONJUNCTS) >> rw[frag_exec_def] >>
+  drule entry_checks_pass_allocation_resources_gas >>
+  disch_then (drule_at (Pat `initial_venom_state_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vars_pc_only _ _`)) >>
+  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
+  disch_then (qspecl_then [`ctx`, `code`, `fn`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `t` >> simp[] >> metis_tac[]
 QED
 
 Theorem entry_root_zero_frontier:

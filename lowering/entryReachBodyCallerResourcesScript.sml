@@ -66,6 +66,42 @@ Proof
 QED
 
 
+Theorem caller_checks_empty_prefix_gas:
+  compile_entry_checks min_cds pay st = ((),last) /\
+  initial_venom_state_rel tops am tx initial /\ vars_pc_only initial s /\
+  fresh_vars_wrt st s /\
+  (pay \/ s.vs_call_ctx.cc_callvalue = 0w) /\
+  min_cds <= LENGTH s.vs_call_ctx.cc_calldata /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  ctx_wf ctx /\ wf_invoke_targets ctx /\ reachable_call_graph_acyclic ctx /\
+  ctx.ctx_entry = SOME name /\
+  venomInst$lookup_function name ctx.ctx_functions = SOME fn /\
+  last.cs_next_var <= limit.cs_next_var ==>
+  !exec_fn. fn_has_code st last exec_fn /\ ~s.vs_halted /\
+    s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. (vars_pc_only s t /\ fresh_vars_wrt limit t /\
+      t.vs_allocas = FEMPTY /\ t.vs_alloca_next = 0 /\
+      alloca_inv t /\ abi_alloca_history (fn_insts fn) t /\
+      alloca_frontier_inv ctx fn site t) /\
+    ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
+    t.vs_inst_idx = LENGTH last.cs_current_insts /\
+    (!fuel r. run_from fuel ctx exec_fn t = r /\ (!e. r <> Error e) ==>
+      ?fuel'. run_from fuel' ctx exec_fn s = r) /\
+    gas_path ctx exec_fn s 0 (OK t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> gen_tac >> strip_tac >>
+  drule entry_checks_pass_allocation_resources_gas >>
+  disch_then (drule_at (Pat `initial_venom_state_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vars_pc_only _ _`)) >>
+  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
+  disch_then (qspecl_then [`ctx`, `fn_insts fn`, `exec_fn`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `t` >> simp[] >>
+  conj_tac >- (drule_at (Pos hd) emitHelperPropsTheory.fresh_vars_wrt_mono >>
+    disch_then (qspec_then `limit` mp_tac) >> simp[]) >>
+  irule entry_root_zero_frontier >> goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem caller_checks_empty_prefix:
   compile_entry_checks min_cds pay st = ((),last) /\
   initial_venom_state_rel tops am tx initial /\ vars_pc_only initial s /\
@@ -84,12 +120,13 @@ Theorem caller_checks_empty_prefix:
       alloca_frontier_inv ctx fn site t)
     (\r. F)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all entry_checks_pass_allocation_resources >>
-  disch_then (qspecl_then [`ctx`, `fn_insts fn`] mp_tac) >>
-  disch_tac >> irule frag_exec_conseq >> goal_assum $ drule_at Any >>
-  simp[] >> rpt gen_tac >> strip_tac >> simp[] >>
-  conj_tac >- (drule_at (Pos hd) emitHelperPropsTheory.fresh_vars_wrt_mono >>
-    disch_then (qspec_then `limit` mp_tac) >> simp[]) >>
-  irule entry_root_zero_frontier >> goal_assum $ drule_at Any >> simp[]
+  disch_then (map_every assume_tac o CONJUNCTS) >> rw[frag_exec_def] >>
+  drule caller_checks_empty_prefix_gas >>
+  disch_then (drule_at (Pat `initial_venom_state_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vars_pc_only _ _`)) >>
+  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
+  disch_then (drule_at (Pat `lookup_function _ _ = SOME _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (qspecl_then [`site`, `limit`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `t` >> simp[] >> metis_tac[]
 QED
