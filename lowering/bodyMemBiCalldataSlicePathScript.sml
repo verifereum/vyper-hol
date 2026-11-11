@@ -81,8 +81,8 @@ Proof
      DROP s0.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest` by
     (gvs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
      simp[DROP_APPEND1]) >>
-  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (32 + 32 * word_size n))]
-       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
+  `MEM (mk_inst (sa.cs_next_id + 7) ALLOCA [Lit (n2w (32 + 32 * word_size n))]
+       [STRING #"%" (toString (sa.cs_next_var + 6))]) (fn_insts func)` by
     (gvs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
      irule lookup_block_fn_insts >> goal_assum (drule_at Any) >>
      simp[MEM_APPEND] >> metis_tac[MEM_APPEND]) >>
@@ -159,7 +159,7 @@ Resume slice_calldata_path_mem[success]:
   irule slice_calldata_vv_capacity >>
   simp[stmt_state_rel_inst_idx] >>
   conj_tac
-  >- (qexistsl_tac [`sa.cs_next_id`, `n`] >> simp[]) >>
+  >- (qexistsl_tac [`sa.cs_next_id + 7`, `n`] >> simp[]) >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
