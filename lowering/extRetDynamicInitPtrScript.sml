@@ -112,12 +112,19 @@ Proof
     (rpt gen_tac >> strip_tac >>
      irule scratch_word_init_registered_cursor >>
      conj_tac >- (gen_tac >> Cases >> simp[] >> metis_tac[]) >>
-     simp[] >> qexistsl_tac [`addr`,`sa.cs_next_id`,`parent`,`n2w (n*stride)`] >>
-     simp[] >> gvs[encoder_resource_def, scratch_resource_def] >> metis_tac[]) >>
+     conj_tac >- metis_tac[encoder_resource_def, scratch_resource_def] >>
+     qexistsl_tac [`addr`,`sa.cs_next_id`,`parent`,`n2w (n*stride)`] >>
+     simp[] >> metis_tac[encoder_resource_def, scratch_resource_def]) >>
   qexistsl_tac [`addr`,`Gf'`,`tnf''`,`sf''`] >>
   conj_tac >-
     (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
      qexistsl_tac [`Gf'`,`sf'`,`tnf'`] >> simp[]) >>
-  simp[w2n_n2w, LESS_MOD, IN_DIFF] >> rpt conj_tac >> rpt strip_tac >>
-  metis_tac[LESS_LESS_EQ_TRANS]
+  simp[w2n_n2w, LESS_MOD, IN_DIFF] >>
+  conj_tac >- (rpt strip_tac >> first_assum irule >> simp[] >> metis_tac[]) >>
+  conj_tac >-
+    (rpt strip_tac >>
+     qpat_x_assum `!i. i < addr \/ addr+32 <= i ==> _` (qspec_then `i` mp_tac) >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!parent p. FLOOKUP s.vs_allocas parent = SOME (p,32) /\ _ ==> _`
+    (qspecl_then [`parent`,`p`] mp_tac) >> simp[]
 QED
