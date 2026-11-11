@@ -7,6 +7,7 @@ Ancestors
   compileEnv loweringStateRelDefs codegenRel ptrSafeRun memLocDefs
   contextCodegenRel words finite_map pred_set
   bodyPtrCodeSliceBounds exprSimCalldataSlice ghostPcTransportPtr
+  loweringHalt emitHelperProps exprLoweringProps
 
 Theorem self_code_data_add_frame:
   !d cenv cx es G tn s sa dst src site off v PG id.
@@ -159,3 +160,80 @@ Proof
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read0_def,
     SRULE [mk_inst_def] self_code_codesize_ghost]
 QED
+
+Theorem self_code_out_buffer_checked:
+  compile_slice_out_buf sz sa = ((out,dst),sb) /\
+  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  32 <= sz /\ sz < dimword (:256) /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
+  ghost_inv d cenv cx es G tn s /\
+  (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
+  (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) ==>
+  ?t G1 tn1 p q. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G1 tn1 /\
+    ghost_inv d cenv cx es G1 tn1 t /\
+    ghost_kept cenv es sa G tn s G1 tn1 /\
+    out = Var p /\ dst = Var q /\
+    ptr_covers G1 tn1 p t sz /\ ptr_covers G1 tn1 q t (sz - 32)
+Proof
+  strip_tac >> drule slice_out_buf_decompose >> strip_tac >> gvs[] >>
+  drule_all hash_literal_alloc_buffer_frame >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts sa sm = [mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+    [STRING #"%" (toString sa.cs_next_var)]]` by
+    (drule compile_alloc_buffer_emission >> strip_tac >>
+     drule emitted_insts_emit_inst >> gvs[emitted_insts_def]) >>
+  gvs[] >>
+  qmatch_asmsub_abbrev_tac `ptr_covers Ga tna ap t az` >>
+  qabbrev_tac `p = STRING #"%" (toString sa.cs_next_var)` >>
+  qabbrev_tac `q = STRING #"%" (toString (sa.cs_next_var + 1))` >>
+  `p <> q` by simp[Abbr `p`, Abbr `q`] >>
+  gvs[Abbr `ap`, Abbr `az`] >> suspend "compose"
+QED
+
+Resume self_code_out_buffer_checked[compose]:
+  `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w buf.buf_size)] [p]) s = OK t` by
+    gvs[run_inst_seq_def, AllCaseEqs()] >>
+  qpat_assum `ptr_covers Ga tna p t _`
+    (strip_assume_tac o REWRITE_RULE [ptr_covers_def]) >>
+  gvs[eval_operand_def] >>
+  `w2n w + 32 < dimword (:256)` by decide_tac >>
+  `w2n w + 32 + (buf.buf_size - 32) <= b + sz'` by decide_tac >>
+  drule_all self_code_data_add_checked >>
+  disch_then (qspecl_then [`D`, `fn`, `PG`, `sa.cs_next_id+1`, `q`] strip_assume_tac) >>
+  `!x. not_fresh_at sa x ==> x <> q` by
+    simp[Abbr `q`, not_fresh_at_def] >>
+  drule_all self_code_data_add_frame >>
+  disch_then (qspecl_then [`32w`, `n2w (w2n w+32)`, `PG`, `sa.cs_next_id+1`] strip_assume_tac) >>
+  drule literal_add_ghost >> strip_tac >>
+  gvs[] >>
+  qexistsl_tac [`update_var q (n2w (w2n w+32)) t`, `Ga |+ (q,(b,sz'))`,
+    `tna with t_var := tna.t_var |+ (q,{})`] >>
+  conj_tac >- simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+    exec_pure2_def, eval_operand_def, GSYM word_add_n2w] >>
+  conj_tac >- suspend "checked" >>
+  conj_tac >- simp[] >>
+  conj_tac >- (irule hash_ghost_kept_clean_tail >>
+    qexistsl_tac [`Ga`, `tna`] >> simp[op_taint_def, FLOOKUP_UPDATE] >>
+    rpt strip_tac >> metis_tac[]) >>
+  reverse conj_tac >- simp[] >>
+  qpat_x_assum `ptr_covers Ga tna p t _` mp_tac >>
+  simp[ptr_covers_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE, op_taint_def] >>
+  conj_tac >- (qpat_x_assum `op_taint tna (Var p) = {}` mp_tac >> simp[op_taint_def]) >>
+  qexists_tac `w` >> qpat_x_assum `lookup_var p t = SOME w` mp_tac >> simp[lookup_var_def]
+QED
+
+Resume self_code_out_buffer_checked[checked]:
+  simp[Once inst_seq_ptr_def, literal_alloca_ptr_inst_ok, Abbr `Ga`, Abbr `tna`] >>
+  irule (cj 1 self_code_data_add_checked) >>
+  simp[lookup_var_def] >> goal_assum (drule_at Any) >> simp[] >>
+  qexists_tac `0` >> gvs[lookup_var_def]
+QED
+
+Finalise self_code_out_buffer_checked
