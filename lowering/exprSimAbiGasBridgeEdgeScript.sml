@@ -81,7 +81,7 @@ Proof
   qexists_tac `p` >> simp[venom_state_component_equality]
 QED
 
-Theorem frag_relabel_edge_operand_control[local]:
+Theorem frag_relabel_edge_operand_control:
   !op s b p.
     eval_operand op (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
     eval_operand op s
@@ -231,7 +231,7 @@ Proof
   gvs[] >> metis_tac[frag_relabel_edge_raw_jump, MEM]
 QED
 
-Theorem edge_eval_operands_control[local]:
+Theorem edge_eval_operands_control:
   !ops s b p.
     eval_operands ops (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
     eval_operands ops s
