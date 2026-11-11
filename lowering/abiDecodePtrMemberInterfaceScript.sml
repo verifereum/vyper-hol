@@ -148,20 +148,6 @@ Proof
   simp[state_frame_def, venom_state_component_equality]
 QED
 
-Theorem abi_decode_member_code_bind:
-  abi_decode_member_code dst pos src hi ei off q sa sb <=>
-  (do v <- compile_getelemptr_abi pos (dec_info_needs_offset ei) off MLOAD (Var src) hi;
-      out <- emit_op ADD [Var dst;Lit (n2w q)];
-      compile_abi_decode_to_buf out v MLOAD (Var src) hi ei
-   od) sa = ((),sb)
-Proof
-  simp[abi_decode_member_code_def, comp_bind_def] >>
-  Cases_on `compile_getelemptr_abi pos (dec_info_needs_offset ei) off MLOAD (Var src) hi sa` >>
-  rename1 `compile_getelemptr_abi _ _ _ _ _ _ _ = (v,sm)` >> simp[] >>
-  Cases_on `emit_op ADD [Var dst;Lit (n2w q)] sm` >>
-  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >> gvs[]
-QED
-
 Theorem abi_decode_member_live_separation:
   abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sa G tn s ==>
   hi <> Lit 0w /\ w2n b+h < dimword(:256) /\ w2n d+cap < dimword(:256) /\

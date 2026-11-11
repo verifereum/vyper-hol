@@ -22,8 +22,8 @@ Theorem abi_decode_clamp_scalar:
 Proof
   Cases_on `clamp`
   >- (simp[compile_abi_clamp_basetype_def, comp_return_def] >> strip_tac >>
-      gvs[] >> qexists_tac `A` >> simp[emitted_insts_def, same_blocks_def]) >>
-  TRY (rename1 `IntClamp bits signed` >> Cases_on `signed`) >>
+      gvs[] >> qexists_tac `A` >> simp[emitted_insts_def, same_blocks_def])
+  >~ [`IntClamp bits signed`] >>> HEADGOAL (Cases_on `signed`) >>
   (simp[compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
        compile_abi_bytes_clamp_def, comp_ignore_bind_def] >> strip_tac >>
   drule bop_scalar_compile_bind_run >>
@@ -35,40 +35,6 @@ Proof
       `!x. x IN R ==> not_fresh_at m x` by metis_tac[not_fresh_at_mono] >>
       `value IN B` by metis_tac[SUBSET_DEF] >>
       Cases_on `v` >> drule bop_scalar_compile_emit_checked >> simp[]) >> simp[])
-QED
-
-(* Compiler-facing replay keeps pointer-bearing live variables protected,
-   while the clamp itself sees only its clean loaded word and literals. *)
-Theorem abi_decode_clamp_success_ptr:
-  compile_abi_clamp_basetype value clamp sa = ((),sb) /\
-  op_prov G value = NONE /\ op_taint tn value = {} /\
-  (!x. x IN R ==> not_fresh_at sa x) /\
-  ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
-    op_prov G' value = NONE /\ op_taint tn' value = {} /\
-    t = s with vs_vars := t.vs_vars /\
-    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
-    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-    (!x. x IN R ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
-Proof
-  strip_tac >>
-  `?B. bop_scalar_seq R ({value} UNION IMAGE Lit UNIV)
-    (emitted_insts sa sb) B /\ ({value} UNION IMAGE Lit UNIV) SUBSET B` by
-    (drule abi_decode_clamp_scalar >>
-     disch_then (qspecl_then [`R`, `{value} UNION IMAGE Lit UNIV`] mp_tac) >>
-     simp[] >> metis_tac[]) >>
-  `!op. op IN {value} UNION IMAGE Lit UNIV ==>
-    op_prov G op = NONE /\ op_taint tn op = {}` by
-    (simp[IN_UNION, IN_SING, IN_IMAGE] >> rpt strip_tac >>
-     gvs[op_prov_def, op_taint_def]) >>
-  drule_all bop_scalar_seq_run >>
-  disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
-  drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
-  qexistsl_tac [`G'`, `tn'`] >> simp[] >>
-  conj_tac >- (fs[SUBSET_DEF] >> metis_tac[]) >>
-  conj_tac >- (fs[SUBSET_DEF] >> metis_tac[]) >>
-  rpt strip_tac >> fs[lookup_var_def] >> metis_tac[]
 QED
 
 Theorem abi_decode_clamp_abort_ptr:
@@ -603,40 +569,6 @@ Resume abi_decode_word_outcome[abort]:
 QED
 
 Finalise abi_decode_word_outcome
-
-Theorem abi_decode_word_total_ptr:
-  compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
-    (DecPrimWord clamp) sa = ((),sb) /\
-  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  not_fresh_at sa src /\ not_fresh_at sa dst /\
-  abi_decode_ptr_window G tn s src b h /\
-  lookup_var dst s = SOME d /\ ptr_covers G tn dst s 32 /\
-  eval_operand pos s = SOME (n2w p) /\ op_taint tn pos = {} /\
-  p+32 <= h /\ w2n b+h < dimword(:256) /\
-  (w2n b+h <= w2n d \/ w2n d+32 <= w2n b) ==>
-  ?u G' tn'.
-    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
-    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-    (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
-      op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    ((run_inst_seq (emitted_insts sa sb) s = OK u /\
-      abi_decode_ptr_window G' tn' u dst d 32 /\
-      abi_decode_ptr_window G' tn' u src b h /\
-      (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)) \/
-     (run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort u /\
-      tn'.t_mem = tn.t_mem))
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all abi_decode_word_outcome >> strip_tac
-  >- (drule_all abi_decode_word_success_ptr >>
-      disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-      qexistsl_tac [`u`, `G'`, `tn'`] >> simp[]) >>
-  drule_all abi_decode_word_abort_ptr >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qexistsl_tac [`u`, `G'`, `tn'`] >> simp[]
-QED
 
 (* Consumer boundary: local and immutable separation are precisely the
    existing generic frame contracts, not ABI canonicality assumptions. *)

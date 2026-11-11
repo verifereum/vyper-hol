@@ -57,24 +57,6 @@ Proof
   simp[abi_decode_members_def, Once abi_to_vyper_def]
 QED
 
-Theorem abi_decode_static_invalid_selection:
-  EVERY (\ty. ~is_dynamic (vyper_to_abi_type env ty)) tys /\
-  LENGTH tys < dimword(:256) /\
-  LENGTH bs <= vyper_abi_size_bound env (TupleT tys) /\
-  ~vyper_valid_enc env (TupleT tys) bs ==>
-  LENGTH bs < SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) \/
-  ?pre ty post.
-    tys = pre ++ ty::post /\
-    vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) pre) bs bs /\
-    ~vyper_decode_valid_enc (vyper_to_abi_type env ty)
-      (abi_decode_member_bytes (vyper_to_abi_type env ty) bs
-        (DROP (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pre))) bs))
-Proof
-  strip_tac >> drule_all abi_decode_static_tuple_invalid >>
-  strip_tac >- simp[] >> disj2_tac >>
-  gvs[MAP_EQ_APPEND, MAP_EQ_CONS] >> metis_tac[]
-QED
-
 Theorem abi_decode_complex_head_reject_witness:
   abi_decode_complex_head_guard pos hi head_sz st = ((),last) /\
   hi <> Lit 0w /\ head_sz < dimword(:256) /\ h < head_sz /\

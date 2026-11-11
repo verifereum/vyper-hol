@@ -5,7 +5,7 @@ Ancestors
   abiDecodePtrRead abiDecodePtrPrims abiDecoderGuard bodyPtrBopScalarCompile
   emitHelper emitHelperProps exprLoweringProps compileEnv list pred_set
   bodyPtrBopScalarSeq abiEncoder bodyPtrBopHashSuffix fragExec
-  abiDecodePtrScalarReplay abiDecodePtrLoadReplay abiDecodePtrPosition
+  abiDecodePtrScalarReplay abiDecodePtrMemberFrame abiDecodePtrPosition
   abiDecodePtrNormalized abiDecodePtrSelectionPrefix assignTuplePtrLocalBytesCopy
   stmtReasonLitFragMemory words arithmetic
   stateFrame fragExecPtr fragGasSeqPtr venomExecSemantics exprSimAccounts rich_list ptrDiscipline
@@ -33,35 +33,6 @@ Proof
   `emitted_insts sa sb = emitted_insts sa c2 ++ emitted_insts c2 sb` by
     (irule emitted_insts_append >> asm_rewrite_tac[APPEND_ASSOC]) >>
   asm_rewrite_tac[] >> metis_tac[bop_scalar_seq_append]
-QED
-
-(* Success is conditional on the unsigned guard, not on ABI validity. *)
-Theorem abi_decode_ge_guard_success_ptr:
-  abi_decode_ge_guard a b sa = ((),sb) /\
-  eval_operand a s = SOME va /\ eval_operand b s = SOME vb /\
-  w2n vb <= w2n va /\ fresh_vars_wrt sa s /\
-  op_prov G a = NONE /\ op_prov G b = NONE /\
-  op_taint tn a = {} /\ op_taint tn b = {} /\ ~ctx_has_dalloca ctx /\
-  (!x. x IN R ==> not_fresh_at sa x) ==>
-  ?t G' tn'. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
-    fresh_vars_wrt sb t /\
-    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
-    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
-    t.vs_data_section = s.vs_data_section /\
-    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
-    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-    (!x. x IN R ==> FLOOKUP G' x = FLOOKUP G x /\
-                      FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
-Proof
-  strip_tac >> drule_all abi_decode_ge_guard_sequence >> strip_tac >>
-  `?B. bop_scalar_seq R {a;b} (emitted_insts sa sb) B` by
-    (irule abi_decode_ge_guard_scalar >> simp[] >> metis_tac[]) >>
-  `!op. op IN {a;b} ==> op_prov G op = NONE /\ op_taint tn op = {}` by
-    (simp[] >> metis_tac[]) >>
-  drule_all bop_scalar_seq_run >>
-  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
-  qexistsl_tac [`t`, `G'`, `tn'`] >> simp[]
 QED
 
 (* The actual-position ADD and its optional underflow guard are wholly scalar.

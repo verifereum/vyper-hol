@@ -30,7 +30,7 @@ QED
 (* Ordinary bytes are framed by the decoder's physical write window,
    independently of its ghost frame.  The setup has not changed memory. *)
 Theorem abi_decode_result_wb_frame:
-  wb_frame cenv es sa s0 s /\
+  wb_frame cenv es ee sa s0 s /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   u.vs_memory = s.vs_memory /\ abi_decode_frame d cap u t /\
@@ -41,7 +41,7 @@ Theorem abi_decode_result_wb_frame:
     regions_disjoint d cap b k) /\
   (!name b k. local_region cenv ee.scopes s name b k ==>
     regions_disjoint d cap b k) ==>
-  wb_frame cenv es sa s0 t
+  wb_frame cenv es ee sa s0 t
 Proof
   strip_tac >> irule wb_frame_allocating_tail >>
   simp[] >> qexistsl [`s`, `ee.scopes`, `sm`] >> simp[] >>
@@ -61,7 +61,7 @@ Theorem abi_decode_tuple_result_posts:
   ptr_covers H tk dst t (type_memory_bytes cenv (TupleT tys)) /\
   (!mem. mem_agree_outside tk.t_mem t.vs_memory mem ==>
     tuple_in_memory vs tvs (w2n d) mem) /\
-  stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
+  stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
   FLOOKUP t.vs_allocas aid = SOME (w2n d,type_memory_bytes cenv (TupleT tys)) /\
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
   (!name b k. local_region cenv ee.scopes t name b k ==>

@@ -223,28 +223,6 @@ Proof
   irule bop_scalar_seq_append >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem abi_decode_count_guard_success_bound:
-  abi_decode_count_guard opc addr n sa = (cnt,sb) /\
-  abi_decode_source_opcode opc /\ eval_operand addr s = SOME p /\
-  fresh_vars_wrt sa s /\ n < dimword(:256) /\
-  run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  w2n (abi_decode_load opc p s) <= n /\
-  eval_operand cnt t = SOME (abi_decode_load opc p s)
-Proof
-  strip_tac >> fs[abi_decode_count_guard_trace] >>
-  drule_all abi_decode_read >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts sa sc) s = OK u` >>
-  imp_res_tac inst_extends_emit_op >>
-  drule abi_decode_le_guard_shape >> strip_tac >>
-  `run_inst_seq (emitted_insts sc sb) u = OK t` by
-    metis_tac[run_inst_seq_emit_extend] >>
-  `eval_operand (Lit (n2w n)) u = SOME (n2w n)` by simp[eval_operand_def] >>
-  drule_all abi_decode_le_guard_success_bound >> strip_tac >>
-  `w2n (abi_decode_load opc p s) <= n` by gvs[w2n_n2w] >>
-  drule_all abi_decode_le_guard_sequence >> strip_tac >>
-  gvs[] >> metis_tac[]
-QED
-
 (* The member's memory accesses are separated from its three scalar guards. *)
 Theorem abi_decode_bytes_member_phases:
   compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi

@@ -13,16 +13,6 @@ Definition abi_decode_flat_layout_def:
     abi_decode_flat_layout rest (off+asz) (q+msz) z h cap)
 End
 
-Theorem abi_decode_flat_layout_capacity:
-  !elems off q z h cap.
-    abi_decode_flat_layout elems off q z h cap ==>
-    q + SUM (MAP (SND o SND) elems) <= cap
-Proof
-  Induct >> simp[abi_decode_flat_layout_def] >>
-  qx_gen_tac `entry` >> PairCases_on `entry` >> rpt strip_tac >>
-  fs[abi_decode_flat_layout_def] >> first_x_assum drule >> simp[]
-QED
-
 Theorem abi_decode_flat_compile_cons:
   compile_abi_decode_complex_elems (Var dst) pos MLOAD (Var src) hi
     ((ei,asz,msz)::rest) off q sa = ((),sb) ==>
@@ -127,8 +117,8 @@ Proof
   Cases_on `ty` >> simp[supported_scalar_type_def,
     supported_word_type_def, supported_string_type_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[supported_word_type_def, supported_string_type_def] >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[supported_word_type_def, supported_string_type_def]
+  >~ [`BytesT bd`] >>> HEADGOAL (Cases_on `bd` >>
        simp[supported_word_type_def, supported_string_type_def]) >>
   rpt strip_tac >>
   simp[abi_decode_member_layout_def, type_to_abi_dec_info_def,

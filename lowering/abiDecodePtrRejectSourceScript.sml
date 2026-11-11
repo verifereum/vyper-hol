@@ -54,10 +54,11 @@ Proof
   gvs[supported_word_type_def, supported_string_type_def, Excl "dec_def"] >>
   Cases_on `av` >>
   gvs[check_IntV_def, compatible_bound_def,
-      contractABITheory.has_type_def, AllCaseEqs(), Excl "dec_def"] >>
-  TRY (Cases_on `b` >>
+      contractABITheory.has_type_def, AllCaseEqs(), Excl "dec_def"]
+  >>~- ([`BytesT b`],
+    Cases_on `b` >>
     gvs[supported_word_type_def, supported_string_type_def,
-        compatible_bound_def, valid_length_def, Excl "dec_def"] >> NO_TAC) >>
+        compatible_bound_def, valid_length_def, Excl "dec_def"]) >>
   gvs[within_int_bound_def, int_bits_bound_def, supported_int_width_def,
       Excl "dec_def", AllCaseEqs()] >>
   intLib.COOPER_TAC
@@ -95,31 +96,4 @@ Proof
            Excl "vyper_decode_valid_enc_def", Excl "dec_def"]) >>
   qexistsl_tac [`[]`, `at`, `ats`] >>
   simp[Once vyper_decode_valid_enc_def, Excl "dec_def"]
-QED
-
-Theorem abi_decode_static_tuple_invalid:
-  EVERY (\ty. ~is_dynamic (vyper_to_abi_type env ty)) tys /\
-  LENGTH tys < dimword(:256) /\
-  LENGTH bs <= vyper_abi_size_bound env (TupleT tys) /\
-  ~vyper_valid_enc env (TupleT tys) bs ==>
-  LENGTH bs < SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) \/
-  ?pre at post.
-    MAP (vyper_to_abi_type env) tys = pre ++ at::post /\
-    vyper_decode_valid_enc_tuple pre bs bs /\
-    ~vyper_decode_valid_enc at
-      (abi_decode_member_bytes at bs (DROP (SUM (MAP abi_member_head_size pre)) bs))
-Proof
-  strip_tac >>
-  `EVERY (\at. ~is_dynamic at) (MAP (vyper_to_abi_type env) tys)` by
-    fs[EVERY_MAP] >>
-  `SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) =
-   static_length (Tuple (MAP (vyper_to_abi_type env) tys))` by
-    (simp[static_length_Tuple_SUM] >> AP_TERM_TAC >> irule MAP_CONG >>
-     fs[abi_member_head_size_def, EVERY_MEM] >> metis_tac[]) >>
-  Cases_on `LENGTH bs < SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys))`
-  >- simp[] >>
-  disj2_tac >> irule abi_decode_first_static_invalid_member >>
-  simp[] >>
-  gvs[vyper_valid_enc_def, vyper_strict_enc_def, vyper_to_abi_types_MAP,
-      Once vyper_decode_valid_enc_def, Excl "vyper_decode_valid_enc_def"]
 QED

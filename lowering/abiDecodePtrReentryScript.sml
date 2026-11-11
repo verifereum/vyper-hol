@@ -59,27 +59,3 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[abi_decode_ptr_sequence_reentry]
 QED
-
-(* Internal freshness and ghost facts are obtained by pruning, not demanded
-   of the actual entry state. The raw and checked runs share an endpoint. *)
-Theorem abi_decode_ptr_pruned_entry:
-  EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode /\
-    ~is_terminator i.inst_opcode) insts /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv st /\
-  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==>
-    not_fresh_at st p) /\
-  run_inst_seq insts (abi_decoder_prune_vars st.cs_next_var s) = OK u /\
-  inst_seq_ptr D lo ctx fn PG G tn insts
-    (abi_decoder_prune_vars st.cs_next_var s) G' tn' ==>
-  fresh_vars_wrt st (abi_decoder_prune_vars st.cs_next_var s) /\
-  ghost_inv d cenv cx es G tn (abi_decoder_prune_vars st.cs_next_var s) /\
-  ?v. run_inst_seq insts s = OK v /\
-    abi_decoder_vars_extend s.vs_vars u v /\
-    inst_seq_ptr D lo ctx fn PG G tn insts s G' tn'
-Proof
-  strip_tac >> simp[abi_decoder_prune_fresh] >>
-  conj_tac >- metis_tac[abi_decode_ptr_prune_ghost_reserved] >>
-  irule abi_decode_ptr_sequence_extend >> simp[] >>
-  qexists_tac `abi_decoder_prune_vars st.cs_next_var s` >>
-  simp[abi_decoder_prune_extension] >> metis_tac[]
-QED

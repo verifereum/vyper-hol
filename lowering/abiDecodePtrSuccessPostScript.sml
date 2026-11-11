@@ -43,7 +43,7 @@ Proof
 QED
 
 Theorem abi_decode_success_frame_posts:
-  wb_frame cenv es0 sc s0 s /\
+  wb_frame cenv es0 es sc s0 s /\
   sc.cs_next_var <= sa.cs_next_var /\ sc.cs_next_id <= sa.cs_next_id /\
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
@@ -58,7 +58,7 @@ Theorem abi_decode_success_frame_posts:
     regions_disjoint a k b n) /\
   (!name b n. local_region cenv es.scopes s name b n ==>
     regions_disjoint a k b n) ==>
-  wb_frame cenv es0 sc s0 v /\ v.vs_allocas = u.vs_allocas /\
+  wb_frame cenv es0 es sc s0 v /\ v.vs_allocas = u.vs_allocas /\
   (!name b n. local_region cenv es.scopes v name b n ==>
     regions_disjoint a k b n)
 Proof
@@ -99,7 +99,7 @@ Theorem abi_decode_operand_success_posts:
   compile_abi_decode_to_buf buf.buf_operand (Lit 0w) MLOAD src len
     (DecComplex dyn (abi_decoder_member_infos ce.ce_struct_fields ce tys)) ready = ((),sb) /\
   fn_has_code ready sb func /\ fn_has_code sa sb func /\
-  wb_frame cenv es0 sc s0 s /\ local_ptrs_reserved cenv sc /\
+  wb_frame cenv es0 es sc s0 s /\ local_ptrs_reserved cenv sc /\
   sc.cs_next_var <= sa.cs_next_var /\ sc.cs_next_id <= sa.cs_next_id /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes ==>
   ?v H tf dst d. buf.buf_operand = Var dst /\
@@ -110,7 +110,7 @@ Theorem abi_decode_operand_success_posts:
     lookup_var dst v = SOME d /\ ptr_covers H tf dst v outsz /\
     (!mem'. mem_agree_outside tf.t_mem v.vs_memory mem' ==>
       tuple_in_memory vs tvs (w2n d) mem') /\
-    ghost_kept cenv es sa G tn s H tf /\ wb_frame cenv es0 sc s0 v /\
+    ghost_kept cenv es sa G tn s H tf /\ wb_frame cenv es0 es sc s0 v /\
     FLOOKUP v.vs_allocas sh.cs_next_id = SOME (w2n d,outsz) /\
     sc.cs_next_id <= sh.cs_next_id /\ sh.cs_next_id < sb.cs_next_id /\
     (!name b n. local_region cenv es.scopes v name b n ==>

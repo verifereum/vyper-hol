@@ -29,19 +29,6 @@ Proof
   simp[Once val_in_memory_def]
 QED
 
-Theorem abi_decode_window_value_robust:
-  abi_decode_ptr_window G tn s root b m /\
-  val_in_memory tv v (w2n b) s.vs_memory /\ val_wf tv v /\
-  val_footprint tv v <= m ==>
-  !mem'. mem_agree_outside tn.t_mem s.vs_memory mem' ==>
-    val_in_memory tv v (w2n b) mem'
-Proof
-  rpt strip_tac >> irule clean_footprint_value_robust >> simp[] >>
-  qexistsl_tac [`tn.t_mem`, `s.vs_memory`] >> simp[] >>
-  fs[abi_decode_ptr_window_def] >> rpt strip_tac >>
-  first_x_assum irule >> decide_tac
-QED
-
 (* The runtime header determines the sensitive size, not the declared cap. *)
 Theorem abi_decode_bytestring_value_footprint:
   is_bytestring_type ty /\ evaluate_type env ty = SOME tv /\
@@ -74,8 +61,8 @@ Proof
     supported_string_type_def] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
   fs[supported_word_type_def, supported_string_type_def,
-    type_to_abi_dec_info_def, abi_decode_runtime_footprint_def] >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd` >>
+    type_to_abi_dec_info_def, abi_decode_runtime_footprint_def]
+  >~ [`BytesT bd`] >>> HEADGOAL (Cases_on `bd` >>
     fs[supported_word_type_def, supported_string_type_def,
       type_to_abi_dec_info_def, abi_decode_runtime_footprint_def]) >>
   gvs[evaluate_type_def, is_bytestring_type_def, type_memory_size_def] >>

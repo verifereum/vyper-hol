@@ -100,7 +100,7 @@ Proof
   fs[abi_decoder_tuple_infos] >>
   `type_memory_bytes cenv (TupleT tys) = SUM (MAP (type_memory_bytes cenv) tys)` by
     metis_tac[type_memory_bytes_def] >>
-  `wb_frame cenv es sa s0 s` by
+  `wb_frame cenv es ee sa s0 s` by
     (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
      rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>

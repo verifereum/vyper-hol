@@ -154,31 +154,6 @@ Proof
   simp[venom_state_component_equality]
 QED
 
-Theorem abi_decode_actual_success_post:
-  fn_has_code sa sb func /\ inst_extends sa sb /\
-  sb.cs_current_bb = sa.cs_current_bb /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode /\
-    ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
-  abi_decoder_vars_extend extras r s /\
-  run_inst_seq (emitted_insts sa sb) r = OK (u with vs_inst_idx := s.vs_inst_idx) /\
-  inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) r H tf /\
-  abi_decode_member_live ret ctx func cenv cx es src b h dst d cap
-    pos z hi sb H tf u /\
-  (!mem'. mem_agree_outside tf.t_mem u.vs_memory mem' ==>
-    tuple_in_memory vs tvs (w2n d) mem') ==>
-  ?v. gas_path_ptr D lo ctx func PG G tn s
-      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) H tf (OK v) /\
-    v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv ret cenv cx es H tf v /\ stmt_state_rel ctx func cenv cx es v /\
-    lookup_var dst v = SOME d /\ ptr_covers H tf dst v cap /\
-    (!mem'. mem_agree_outside tf.t_mem v.vs_memory mem' ==>
-      tuple_in_memory vs tvs (w2n d) mem')
-Proof
-  strip_tac >> drule_all abi_decode_actual_success_handoff >> metis_tac[]
-QED
-
 Theorem abi_decode_complex_header_reentry:
   emit_op ADD [pos;Lit (n2w static_sz)] sa = (e,sm) /\
   compile_abi_decode_range_check pos e hi sm = ((),sb) ==>
@@ -287,39 +262,6 @@ Proof
   `abi_decoder_vars_extend s.vs_vars (abi_decoder_prune_vars sa.cs_next_var s) s` by
     simp[abi_decoder_prune_extension] >>
   drule_all abi_decode_actual_success_handoff >> metis_tac[]
-QED
-
-Theorem abi_decode_setup_actual_success:
-  abi_builtin_decode_header data mn mx sa = (inputs,sh) /\
-  compile_alloc_buffer outsz sh = (buf,ready) /\
-  run_inst_seq (emitted_insts sa ready) (abi_decoder_prune_vars sa.cs_next_var s) =
-    OK (u0 with vs_inst_idx := s.vs_inst_idx) /\
-  inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa ready)
-    (abi_decoder_prune_vars sa.cs_next_var s) H tf /\
-  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  abi_decode_member_live ret ctx func cenv cx es src b (LENGTH bs) dst d cap
-    (Lit 0w) 0w hi ready H tf u0 /\
-  EVERY supported_scalar_type tys /\
-  abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields (TupleT tys) (TupleTV tvs) /\
-  cap = SUM (MAP (type_memory_bytes ce) tys) /\
-  evaluate_type_builtin cx (AbiDecode F) (TupleT tys) arg_tys [BytesV bs] =
-    INL (ArrayV (TupleV vs)) /\
-  LIST_REL value_has_type tvs vs /\ LIST_REL val_wf tvs vs /\
-  mem_bytes_at (w2n b) (LENGTH bs) (abi_decode_source MLOAD u0) = bs /\
-  compile_abi_decode_to_buf (Var dst) (Lit 0w) MLOAD (Var src) hi
-    (DecComplex dyn (abi_decoder_member_infos ce.ce_struct_fields ce tys)) ready = ((),sb) /\
-  fn_has_code ready sb func /\ fn_has_code sa sb func ==>
-  ?v K tk. gas_path_ptr D 0 ctx func PG G tn s
-      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) K tk (OK v) /\
-    v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv ret cenv cx es K tk v /\ stmt_state_rel ctx func cenv cx es v /\
-    lookup_var dst v = SOME d /\ ptr_covers K tk dst v cap /\
-    (!mem'. mem_agree_outside tk.t_mem v.vs_memory mem' ==>
-      tuple_in_memory vs tvs (w2n d) mem') /\
-    (?u. abi_decode_member_frame ready H tf u0 K tk u (w2n d) cap)
-Proof
-  strip_tac >> drule_all abi_decode_setup_success_handoff >> metis_tac[]
 QED
 
 Theorem abi_decode_setup_actual_reject:
@@ -474,46 +416,6 @@ Resume abi_decode_operand_success_handoff[local_kept]:
 QED
 
 Finalise abi_decode_operand_success_handoff
-
-Theorem abi_decode_operand_actual_success:
-  expr_post ctx func cenv cx e es0 s0c sa s0 es (BytesV bs) (Var p) s /\
-  ptr_val_ok cx (expr_type e) (BytesV bs) (Var p) G tn s /\
-  expr_type e = BaseT (BytesT (Dynamic cap)) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
-  abi_builtin_decode_header (Var p) mn mx sa = ((len,src),sh) /\
-  compile_alloc_buffer outsz sh = (buf,ready) /\
-  fn_has_code sa ready func /\ ~ctx_has_dalloca ctx /\
-  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  not_fresh_at sa p /\ abi_decoder_operand_live sa.cs_next_var (Var p) /\
-  mn <= LENGTH bs /\ LENGTH bs <= mx /\ mx < dimword (:256) /\
-  ghost_inv ret cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
-  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  fn_inst_ids_distinct func /\ outsz < dimword (:256) /\
-  EVERY supported_scalar_type tys /\
-  abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields (TupleT tys) (TupleTV tvs) /\
-  outsz = SUM (MAP (type_memory_bytes ce) tys) /\
-  evaluate_type_builtin cx (AbiDecode F) (TupleT tys) arg_tys [BytesV bs] =
-    INL (ArrayV (TupleV vs)) /\
-  LIST_REL value_has_type tvs vs /\ LIST_REL val_wf tvs vs /\
-  compile_abi_decode_to_buf buf.buf_operand (Lit 0w) MLOAD src len
-    (DecComplex dyn (abi_decoder_member_infos ce.ce_struct_fields ce tys)) ready = ((),sb) /\
-  fn_has_code ready sb func /\ fn_has_code sa sb func ==>
-  ?v K tk dst d. buf.buf_operand = Var dst /\
-    gas_path_ptr D 0 ctx func PG G tn s
-      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) K tk (OK v) /\
-    v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv ret cenv cx es K tk v /\ stmt_state_rel ctx func cenv cx es v /\
-    lookup_var dst v = SOME d /\ ptr_covers K tk dst v outsz /\
-    (!mem'. mem_agree_outside tk.t_mem v.vs_memory mem' ==>
-      tuple_in_memory vs tvs (w2n d) mem') /\
-    ghost_kept cenv es sa G tn s K tk
-Proof
-  strip_tac >> drule_all abi_decode_operand_success_handoff >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  metis_tac[]
-QED
 
 (* Source classification produces a concrete rejection witness before replay.
    Dynamic invalid input remains the separately licensed exemption. *)

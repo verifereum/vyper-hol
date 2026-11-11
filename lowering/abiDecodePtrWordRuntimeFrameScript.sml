@@ -12,8 +12,8 @@ Theorem abi_decode_word_memory_shape:
     MEM i.inst_opcode [MLOAD; MSTORE; MCOPY]) /\
     EVERY (not_fresh_at sb) i.inst_outputs) (emitted_insts sa sb)
 Proof
-  Cases_on `clamp` >>
-  TRY (rename1 `IntClamp bits signed` >> Cases_on `signed`) >>
+  Cases_on `clamp`
+  >~ [`IntClamp bits signed`] >>> HEADGOAL (Cases_on `signed`) >>
   Cases_on `base_op = Lit 0w` >>
   simp[Once compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
        compile_abi_dec_addr_def, compile_abi_clamp_basetype_def,

@@ -86,15 +86,15 @@ Proof
       strip_tac >> qpat_x_assum `!e. p e ==> _` drule >> simp[]) >>
   simp[supported_iterator_def, supported_iterator_exists_def] >>
   rename1 `~supported_expr_exists p lo /\ ~supported_expr_exists p hi` >>
-  Cases_on `lo` >> simp[] >>
-  TRY (rename1 `Literal _ lit` >> Cases_on `lit` >> simp[]) >>
+  Cases_on `lo` >> simp[]
+  >~ [`Literal _ lit`] >>> HEADGOAL (Cases_on `lit` >> simp[]) >>
   rpt strip_tac >>
   gvs[AllCaseEqs()] >>
   imp_res_tac (iffRL supported_expr_def) >>
   qpat_assum `!e. supported_expr tops e ==> _` imp_res_tac >>
   gvs[] >>
-  Cases_on `hi` >> gvs[] >>
-  TRY (rename1 `Literal _ lit` >> Cases_on `lit` >> gvs[]) >>
+  Cases_on `hi` >> gvs[]
+  >~ [`Literal _ lit`] >>> HEADGOAL (Cases_on `lit` >> gvs[]) >>
   imp_res_tac (iffRL supported_expr_def) >>
   qpat_assum `!e. supported_expr tops e ==> _` imp_res_tac >>
   gvs[supported_expr_exists_def] >>
