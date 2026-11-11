@@ -1,7 +1,7 @@
 (* Memory case of the body induction for abi_encode (admitted; its own piece). *)
 Theory bodyMemTbAbiEncode
 Ancestors
-  bodyMemoryPreds abiEncodeContinuationMemory abiEncodeWindowMemory
+  bodyMemoryPreds abiEncodeContinuationMemory abiEncodeWindowMemory abiEncodeWindowLift
 
 Theorem body_type_builtin_abi_encode_mem_case:
   !cx v11 ensure mid typ es.
