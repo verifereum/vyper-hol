@@ -99,3 +99,30 @@ Proof
       fs[type_memory_size_list_sum] >> decide_tac) >>
   metis_tac[tuple_word_member_clean]
 QED
+
+Theorem word_aggregate_return_extent:
+  expr_sim_inv ce cx env es /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+  ets = (case ty of TupleT ts => ts | StructT ns =>
+    MAP (FST o SND) (get_struct_fields ce.ce_struct_fields (nsid_to_string ns))
+    | _ => []) /\ ets <> [] /\ EVERY is_word_type ets /\
+  value_has_type tv v /\
+  (!m. mem_agree_outside tn.t_mem mem m ==> val_in_memory tv v a m) ==>
+  !i. i < LENGTH ets ==>
+    SUM (MAP (type_memory_bytes ce) (TAKE i ets)) + 32 <= type_memory_size tv
+Proof
+  strip_tac >> drule_all word_aggregate_normalize >> strip_tac >>
+  `LIST_REL (\t tv. type_memory_bytes ce t = type_memory_size tv) ets tvs` by
+    (fs[LIST_REL_EL_EQN, EVERY_EL] >> rpt strip_tac >>
+     metis_tac[word_type_sizes]) >>
+  gen_tac >> strip_tac >>
+  `SUM (MAP (type_memory_bytes ce) (TAKE i ets)) =
+   SUM (MAP type_memory_size (TAKE i tvs))` by
+    metis_tac[tuple_prefix_sizes] >>
+  `i < LENGTH tvs /\ is_word_type (EL i ets) /\
+   evaluate_type tenv (EL i ets) = SOME (EL i tvs)` by
+    fs[LIST_REL_EL_EQN, EVERY_EL] >>
+  `type_memory_size (EL i tvs) = 32` by metis_tac[word_type_sizes] >>
+  drule tuple_element_interval >>
+  fs[type_memory_size_list_sum] >> decide_tac
+QED
