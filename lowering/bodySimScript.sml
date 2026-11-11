@@ -144,8 +144,8 @@ Theorem body_inv_modules_aligned:
 Proof
   rw[body_inv_def, cenv_module_pins_def]
   >- (Cases_on `src` >> simp[] >>
-      Cases_on `get_module_code cx (SOME x)` >> gvs[] >> metis_tac[]) >>
-  `src = NONE` by metis_tac[] >> gvs[]
+      Cases_on `get_module_code cx (SOME x)` >> gvs[] >> res_tac >> gvs[]) >>
+  res_tac >> gvs[]
 QED
 
 (* The compile env binds no local the typing does not know: every name
