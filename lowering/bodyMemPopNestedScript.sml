@@ -2,7 +2,7 @@
    nested target. *)
 Theory bodyMemPopNested
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds popNestedTargetMemory
 
 Theorem body_pop_nested_mem_case:
   !cx v10 bt.
