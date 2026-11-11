@@ -181,3 +181,345 @@ Proof
        (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
   gvs[jump_to_def, lookup_var_def] >> Cases_on `i<n` >> simp[]
 QED
+
+Theorem tuple_dynamic_storage_offset_counted:
+  !s fn bb id root ctr mv off a i total tn G ctx D PG.
+    ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME (mk_inst id MUL [Var ctr;Lit 32w] [mv]) /\
+    get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst (id+1) ADD [Lit 32w;Var mv] [off]) /\
+    ptr_covers G tn root s total /\ lookup_var root s = SOME a /\
+    lookup_var ctr s = SOME (n2w i) /\ op_taint tn (Var ctr) = {} /\
+    ALL_DISTINCT [root;ctr;mv;off] /\ ~ctx_has_dalloca ctx ==>
+    ?Gf tf u.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
+      lookup_var off u = SOME (n2w (32+32*i)) /\ op_taint tf (Var off) = {} /\
+      ptr_covers Gf tf root u total /\ lookup_var root u = SOME a /\
+      execution_frame u = execution_frame s /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_call_ctx = s.vs_call_ctx /\ u.vs_memory = s.vs_memory /\
+      tf.t_mem = tn.t_mem /\ tf.t_imm = tn.t_imm /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+      u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = s.vs_inst_idx+2 /\ ~u.vs_halted /\
+      (!x. x <> mv /\ x <> off ==> lookup_var x u = lookup_var x s /\
+        FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `root <> mv /\ ctr <> mv` by gvs[ALL_DISTINCT] >>
+  drule_all assign_base_storage_offset_counted >>
+  disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
+  disch_then (qx_choose_then `g1` (qx_choose_then `t1`
+    (qx_choose_then `s1` strip_assume_tac))) >>
+  `lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s1.vs_inst_idx = SOME (mk_inst (id+1) ADD [Lit 32w;Var mv] [off]) /\
+   eval_operand (Lit 32w) s1 = SOME 32w /\ eval_operand (Var mv) s1 = SOME (n2w (32*i)) /\
+   op_taint t1 (Lit 32w) = {}` by simp[eval_operand_def, op_taint_def] >>
+  drule_all assign_base_storage_add_counted >>
+  disch_then (qspecl_then [`g1`, `D`, `PG`] mp_tac) >>
+  disch_then (qx_choose_then `g2` (qx_choose_then `t2`
+    (qx_choose_then `s2` strip_assume_tac))) >>
+  qexistsl_tac [`g2`, `t2`, `s2`] >>
+  conj_tac >-
+    (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
+       (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
+  gvs[ALL_DISTINCT, execution_frame_def, update_var_def, lookup_var_def,
+      FLOOKUP_UPDATE, word_add_n2w, ADD1, bodyPtrDefsTheory.ptr_covers_def] >>
+  metis_tac[]
+QED
+
+Theorem tuple_dynamic_storage_address_load_counted:
+  !s fn bb id root off ptr value a offset total tn G ctx D PG.
+    ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME (mk_inst id ADD [Var root;Var off] [ptr]) /\
+    get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst (id+1) MLOAD [Var ptr] [value]) /\
+    ptr_covers G tn root s total /\ lookup_var root s = SOME a /\
+    lookup_var off s = SOME (n2w offset) /\ op_taint tn (Var off) = {} /\
+    offset < total /\ offset+32 <= total /\ w2n a+offset < dimword (:256) /\
+    ALL_DISTINCT [root;off;ptr;value] /\ ~ctx_has_dalloca ctx ==>
+    ?Gf tf u.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
+      lookup_var value u = SOME (mload (w2n (a+n2w offset)) s) /\
+      op_taint tf (Var value) = mem_word_taint tn.t_mem (w2n (a+n2w offset)) /\
+      FLOOKUP Gf value = NONE /\
+      execution_frame u = execution_frame s /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_call_ctx = s.vs_call_ctx /\ u.vs_memory = s.vs_memory /\
+      tf.t_mem = tn.t_mem /\ tf.t_imm = tn.t_imm /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+      u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = s.vs_inst_idx+2 /\ ~u.vs_halted /\
+      (!x. x <> ptr /\ x <> value ==> lookup_var x u = lookup_var x s /\
+        FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `ALL_DISTINCT [root;off;pvar;value]` >>
+  `root <> pvar /\ eval_operand (Var off) s = SOME (n2w offset)` by
+    gvs[ALL_DISTINCT, eval_operand_def] >>
+  drule_all assign_base_storage_address_counted >>
+  disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
+  disch_then (qx_choose_then `g1` (qx_choose_then `t1`
+    (qx_choose_then `s1` strip_assume_tac))) >>
+  `lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s1.vs_inst_idx = SOME (mk_inst (id+1) MLOAD [Var pvar] [value]) /\
+   pvar <> value` by gvs[ALL_DISTINCT] >>
+  drule_all assign_base_storage_load_counted >>
+  disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
+  disch_then (qx_choose_then `g2` (qx_choose_then `t2`
+    (qx_choose_then `s2` strip_assume_tac))) >>
+  qexistsl_tac [`g2`, `t2`, `s2`] >>
+  conj_tac >-
+    (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
+       (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
+  gvs[mload_def, ADD1] >> metis_tac[]
+QED
+
+Theorem tuple_dynamic_storage_write_prefix:
+  !s fn bb id tr dst ctr slot value dv k i w tn G ctx D PG.
+    ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME (mk_inst id ADD [Var ctr;Lit 1w] [slot]) /\
+    get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst (id+1) ADD [dst;Var slot] [dv]) /\
+    get_instruction bb (s.vs_inst_idx+2) =
+      SOME (mk_inst (id+2) (if tr then TSTORE else SSTORE) [Var dv;Var value] []) /\
+    eval_operand dst s = SOME k /\ lookup_var ctr s = SOME (n2w i) /\
+    lookup_var value s = SOME w /\ op_taint tn dst = {} /\
+    op_taint tn (Var ctr) = {} /\ ALL_DISTINCT [ctr;slot;value;dv] /\
+    (!x. dst = Var x ==> x <> slot) /\
+    ~ctx_has_dalloca ctx /\ ~s.vs_call_ctx.cc_static ==>
+    ?Gf tf u.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
+      u.vs_memory = s.vs_memory /\ tf.t_mem = tn.t_mem /\ tf.t_imm = tn.t_imm /\
+      tf.t_stor = (if tr then tn.t_stor else key_update tn.t_stor (k+n2w (SUC i)) (op_taint tn (Var value))) /\
+      tf.t_trans = (if tr then key_update tn.t_trans (k+n2w (SUC i)) (op_taint tn (Var value)) else tn.t_trans) /\
+      execution_frame u = execution_frame (if tr then tstore (k+n2w (SUC i)) w s else sstore (k+n2w (SUC i)) w s) /\
+      u.vs_accounts = (if tr then s.vs_accounts else (sstore (k+n2w (SUC i)) w s).vs_accounts) /\
+      u.vs_transient = (if tr then (tstore (k+n2w (SUC i)) w s).vs_transient else s.vs_transient) /\
+      u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = s.vs_inst_idx+3 /\
+      u.vs_call_ctx = s.vs_call_ctx /\ ~u.vs_halted /\
+      (!x. x <> slot /\ x <> dv ==> lookup_var x u = lookup_var x s /\
+        FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `eval_operand (Var ctr) s = SOME (n2w i) /\
+   eval_operand (Lit 1w) s = SOME 1w /\ op_taint tn (Lit 1w) = {}` by
+    simp[eval_operand_def, op_taint_def] >>
+  drule_all assign_base_storage_add_counted >>
+  disch_then (qspecl_then [`G`, `D`, `PG`] mp_tac) >>
+  disch_then (qx_choose_then `g1` (qx_choose_then `t1`
+    (qx_choose_then `s1` strip_assume_tac))) >>
+  `~s1.vs_halted /\ lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s1.vs_inst_idx = SOME (mk_inst (id+1) ADD [dst;Var slot] [dv]) /\
+   get_instruction bb (SUC s1.vs_inst_idx) =
+     SOME (mk_inst ((id+1)+1) (if tr then TSTORE else SSTORE) [Var dv;Var value] []) /\
+   eval_operand dst s1 = SOME k /\ lookup_var slot s1 = SOME (n2w (SUC i)) /\
+   lookup_var value s1 = SOME w /\ op_taint t1 dst = {} /\
+   dv <> slot /\ dv <> value /\ ~s1.vs_call_ctx.cc_static` by
+    (gvs[ALL_DISTINCT, update_var_def, lookup_var_def, FLOOKUP_UPDATE, word_add_n2w, ADD1] >>
+     Cases_on `dst` >> gvs[eval_operand_def, op_taint_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+  drule_all assign_base_storage_destination_prefix >>
+  disch_then (qspecl_then [`g1`, `D`, `PG`] mp_tac) >>
+  disch_then (qx_choose_then `g2` (qx_choose_then `t2`
+    (qx_choose_then `s2` strip_assume_tac))) >>
+  qexistsl_tac [`g2`, `t2`, `s2`] >>
+  conj_tac >-
+    (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
+       (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
+  Cases_on `tr` >>
+  gvs[ALL_DISTINCT, execution_frame_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+      sstore_def, tstore_def, ADD1] >> metis_tac[]
+QED
+
+Theorem tuple_dynamic_storage_load_prefix:
+  !s fn bb id root ctr mv off pvar value a i total tn G ctx D PG.
+    ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME (mk_inst id MUL [Var ctr;Lit 32w] [mv]) /\
+    get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst (id+1) ADD [Lit 32w;Var mv] [off]) /\
+    get_instruction bb (s.vs_inst_idx+2) = SOME (mk_inst (id+2) ADD [Var root;Var off] [pvar]) /\
+    get_instruction bb (s.vs_inst_idx+3) = SOME (mk_inst (id+3) MLOAD [Var pvar] [value]) /\
+    ptr_covers G tn root s total /\ lookup_var root s = SOME a /\
+    lookup_var ctr s = SOME (n2w i) /\ op_taint tn (Var ctr) = {} /\
+    32+32*i < total /\ 32+32*i+32 <= total /\ w2n a+(32+32*i) < dimword (:256) /\
+    ALL_DISTINCT [root;ctr;mv;off;pvar;value] /\ ~ctx_has_dalloca ctx ==>
+    ?Gf tf u.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
+      lookup_var value u = SOME (mload (w2n (a+n2w (32+32*i))) s) /\
+      op_taint tf (Var value) = mem_word_taint tn.t_mem (w2n (a+n2w (32+32*i))) /\
+      FLOOKUP Gf value = NONE /\
+      execution_frame u = execution_frame s /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_call_ctx = s.vs_call_ctx /\ u.vs_memory = s.vs_memory /\
+      tf.t_mem = tn.t_mem /\ tf.t_imm = tn.t_imm /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+      u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = s.vs_inst_idx+4 /\ ~u.vs_halted /\
+      (!x. ~MEM x [mv;off;pvar;value] ==> lookup_var x u = lookup_var x s /\
+        FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ALL_DISTINCT [root;ctr;mv;off]` by gvs[ALL_DISTINCT] >>
+  drule_all tuple_dynamic_storage_offset_counted >>
+  disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
+  disch_then (qx_choose_then `g1` (qx_choose_then `t1`
+    (qx_choose_then `s1` strip_assume_tac))) >>
+  `lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s1.vs_inst_idx = SOME (mk_inst (id+2) ADD [Var root;Var off] [pvar]) /\
+   get_instruction bb (SUC s1.vs_inst_idx) = SOME (mk_inst ((id+2)+1) MLOAD [Var pvar] [value]) /\
+   ALL_DISTINCT [root;off;pvar;value]` by gvs[ALL_DISTINCT, ADD1] >>
+  drule_all tuple_dynamic_storage_address_load_counted >>
+  disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
+  disch_then (qx_choose_then `g2` (qx_choose_then `t2`
+    (qx_choose_then `s2` strip_assume_tac))) >>
+  qexistsl_tac [`g2`, `t2`, `s2`] >>
+  conj_tac >-
+    (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
+       (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
+  gvs[mload_def, ADD1] >> metis_tac[]
+QED
+
+Theorem tuple_dynamic_storage_data_prefix:
+  !s fn bb id root dst ctr mv off pvar value slot dv a k i total tr tn G ctx D PG.
+    ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME (mk_inst id MUL [Var ctr;Lit 32w] [mv]) /\
+    get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst (id+1) ADD [Lit 32w;Var mv] [off]) /\
+    get_instruction bb (s.vs_inst_idx+2) = SOME (mk_inst (id+2) ADD [Var root;Var off] [pvar]) /\
+    get_instruction bb (s.vs_inst_idx+3) = SOME (mk_inst (id+3) MLOAD [Var pvar] [value]) /\
+    get_instruction bb (s.vs_inst_idx+4) = SOME (mk_inst (id+4) ADD [Var ctr;Lit 1w] [slot]) /\
+    get_instruction bb (s.vs_inst_idx+5) = SOME (mk_inst (id+5) ADD [dst;Var slot] [dv]) /\
+    get_instruction bb (s.vs_inst_idx+6) =
+      SOME (mk_inst (id+6) (if tr then TSTORE else SSTORE) [Var dv;Var value] []) /\
+    ptr_covers G tn root s total /\ lookup_var root s = SOME a /\
+    eval_operand dst s = SOME k /\ op_taint tn dst = {} /\
+    lookup_var ctr s = SOME (n2w i) /\ op_taint tn (Var ctr) = {} /\
+    32+32*i < total /\ 32+32*i+32 <= total /\ w2n a+(32+32*i) < dimword (:256) /\
+    ALL_DISTINCT [root;ctr;mv;off;pvar;value;slot;dv] /\
+    (!x. dst = Var x ==> ~MEM x [mv;off;pvar;value;slot;dv]) /\
+    ~ctx_has_dalloca ctx /\ ~s.vs_call_ctx.cc_static ==>
+    ?Gf tf u.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
+      u.vs_memory = s.vs_memory /\ tf.t_mem = tn.t_mem /\ tf.t_imm = tn.t_imm /\
+      tf.t_stor = (if tr then tn.t_stor else key_update tn.t_stor (k+n2w (SUC i))
+        (mem_word_taint tn.t_mem (w2n (a+n2w (32+32*i))))) /\
+      tf.t_trans = (if tr then key_update tn.t_trans (k+n2w (SUC i))
+        (mem_word_taint tn.t_mem (w2n (a+n2w (32+32*i)))) else tn.t_trans) /\
+      execution_frame u = execution_frame
+        (if tr then tstore (k+n2w (SUC i)) (mload (w2n (a+n2w (32+32*i))) s) s
+         else sstore (k+n2w (SUC i)) (mload (w2n (a+n2w (32+32*i))) s) s) /\
+      u.vs_accounts = (if tr then s.vs_accounts else
+        (sstore (k+n2w (SUC i)) (mload (w2n (a+n2w (32+32*i))) s) s).vs_accounts) /\
+      u.vs_transient = (if tr then
+        (tstore (k+n2w (SUC i)) (mload (w2n (a+n2w (32+32*i))) s) s).vs_transient else s.vs_transient) /\
+      u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = s.vs_inst_idx+7 /\
+      u.vs_call_ctx = s.vs_call_ctx /\ ~u.vs_halted /\
+      (!x. ~MEM x [mv;off;pvar;value;slot;dv] ==> lookup_var x u = lookup_var x s /\
+        FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ALL_DISTINCT [root;ctr;mv;off;pvar;value]` by gvs[ALL_DISTINCT] >>
+  drule_all tuple_dynamic_storage_load_prefix >>
+  disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
+  disch_then (qx_choose_then `g1` (qx_choose_then `t1`
+    (qx_choose_then `s1` strip_assume_tac))) >>
+  `lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s1.vs_inst_idx = SOME (mk_inst (id+4) ADD [Var ctr;Lit 1w] [slot]) /\
+   get_instruction bb (SUC s1.vs_inst_idx) = SOME (mk_inst ((id+4)+1) ADD [dst;Var slot] [dv]) /\
+   get_instruction bb (s1.vs_inst_idx+2) =
+     SOME (mk_inst ((id+4)+2) (if tr then TSTORE else SSTORE) [Var dv;Var value] []) /\
+   eval_operand dst s1 = SOME k /\ op_taint t1 dst = {} /\
+   lookup_var ctr s1 = SOME (n2w i) /\ op_taint t1 (Var ctr) = {} /\
+   ALL_DISTINCT [ctr;slot;value;dv] /\ (!x. dst = Var x ==> x <> slot) /\
+   ~s1.vs_call_ctx.cc_static` by
+    (gvs[ALL_DISTINCT, ADD1] >> Cases_on `dst` >>
+     gvs[eval_operand_def, op_taint_def] >> metis_tac[]) >>
+  drule_all tuple_dynamic_storage_write_prefix >>
+  disch_then (qspecl_then [`g1`, `D`, `PG`] mp_tac) >>
+  disch_then (qx_choose_then `g2` (qx_choose_then `t2`
+    (qx_choose_then `s2` strip_assume_tac))) >>
+  qexistsl_tac [`g2`, `t2`, `s2`] >>
+  conj_tac >-
+    (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
+       (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
+  Cases_on `tr` >> gvs[execution_frame_def, sstore_def, tstore_def, mload_def] >> metis_tac[]
+QED
+
+Theorem tuple_dynamic_storage_body_counted:
+  !s fn bb id root dst ctr mv off pvar value slot dv nv a k i total tr hdr tn G ctx D PG.
+    ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME (mk_inst id MUL [Var ctr;Lit 32w] [mv]) /\
+    get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst (id+1) ADD [Lit 32w;Var mv] [off]) /\
+    get_instruction bb (s.vs_inst_idx+2) = SOME (mk_inst (id+2) ADD [Var root;Var off] [pvar]) /\
+    get_instruction bb (s.vs_inst_idx+3) = SOME (mk_inst (id+3) MLOAD [Var pvar] [value]) /\
+    get_instruction bb (s.vs_inst_idx+4) = SOME (mk_inst (id+4) ADD [Var ctr;Lit 1w] [slot]) /\
+    get_instruction bb (s.vs_inst_idx+5) = SOME (mk_inst (id+5) ADD [dst;Var slot] [dv]) /\
+    get_instruction bb (s.vs_inst_idx+6) =
+      SOME (mk_inst (id+6) (if tr then TSTORE else SSTORE) [Var dv;Var value] []) /\
+    get_instruction bb (s.vs_inst_idx+7) = SOME (mk_inst (id+7) ADD [Var ctr;Lit 1w] [nv]) /\
+    get_instruction bb (s.vs_inst_idx+8) = SOME (mk_inst (id+8) ASSIGN [Var nv] [ctr]) /\
+    get_instruction bb (s.vs_inst_idx+9) = SOME (mk_inst (id+9) JMP [Label hdr] []) /\
+    ptr_covers G tn root s total /\ lookup_var root s = SOME a /\
+    eval_operand dst s = SOME k /\ op_taint tn dst = {} /\
+    lookup_var ctr s = SOME (n2w i) /\ op_taint tn (Var ctr) = {} /\ FLOOKUP G ctr = NONE /\
+    32+32*i < total /\ 32+32*i+32 <= total /\ w2n a+(32+32*i) < dimword (:256) /\
+    ALL_DISTINCT [root;ctr;mv;off;pvar;value;slot;dv;nv] /\
+    (!x. dst = Var x ==> ~MEM x [ctr;mv;off;pvar;value;slot;dv;nv]) /\
+    ~ctx_has_dalloca ctx /\ ~s.vs_call_ctx.cc_static ==>
+    ?Gf tf u.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
+      lookup_var ctr u = SOME (n2w (SUC i)) /\ FLOOKUP Gf ctr = NONE /\ op_taint tf (Var ctr) = {} /\
+      u.vs_memory = s.vs_memory /\ tf.t_mem = tn.t_mem /\ tf.t_imm = tn.t_imm /\
+      tf.t_stor = (if tr then tn.t_stor else key_update tn.t_stor (k+n2w (SUC i))
+        (mem_word_taint tn.t_mem (w2n (a+n2w (32+32*i))))) /\
+      tf.t_trans = (if tr then key_update tn.t_trans (k+n2w (SUC i))
+        (mem_word_taint tn.t_mem (w2n (a+n2w (32+32*i)))) else tn.t_trans) /\
+      execution_frame u = execution_frame
+        (if tr then tstore (k+n2w (SUC i)) (mload (w2n (a+n2w (32+32*i))) s) s
+         else sstore (k+n2w (SUC i)) (mload (w2n (a+n2w (32+32*i))) s) s) /\
+      u.vs_accounts = (if tr then s.vs_accounts else
+        (sstore (k+n2w (SUC i)) (mload (w2n (a+n2w (32+32*i))) s) s).vs_accounts) /\
+      u.vs_transient = (if tr then
+        (tstore (k+n2w (SUC i)) (mload (w2n (a+n2w (32+32*i))) s) s).vs_transient else s.vs_transient) /\
+      u.vs_current_bb = hdr /\ u.vs_inst_idx = 0 /\
+      u.vs_call_ctx = s.vs_call_ctx /\ ~u.vs_halted /\
+      (!x. ~MEM x [ctr;mv;off;pvar;value;slot;dv;nv] ==> lookup_var x u = lookup_var x s /\
+        FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ALL_DISTINCT [root;ctr;mv;off;pvar;value;slot;dv] /\
+   (!x. dst = Var x ==> ~MEM x [mv;off;pvar;value;slot;dv]) /\ ctr <> nv` by
+    (gvs[ALL_DISTINCT] >> metis_tac[]) >>
+  drule_all tuple_dynamic_storage_data_prefix >>
+  disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
+  disch_then (qx_choose_then `g1` (qx_choose_then `t1`
+    (qx_choose_then `s1` strip_assume_tac))) >>
+  `lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s1.vs_inst_idx = SOME (mk_inst (id+7) ADD [Var ctr;Lit 1w] [nv]) /\
+   get_instruction bb (SUC s1.vs_inst_idx) = SOME (mk_inst ((id+7)+1) ASSIGN [Var nv] [ctr]) /\
+   lookup_var ctr s1 = SOME (n2w i) /\ FLOOKUP g1 ctr = NONE /\ op_taint t1 (Var ctr) = {}` by
+    gvs[ALL_DISTINCT, ADD1] >>
+  drule_all assign_base_storage_increment_prefix >>
+  disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
+  disch_then (qx_choose_then `g2` (qx_choose_then `t2`
+    (qx_choose_then `s2` strip_assume_tac))) >>
+  `lookup_block s2.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s2.vs_inst_idx = SOME (mk_inst (id+9) JMP [Label hdr] [])` by simp[] >>
+  drule_all assign_base_storage_jump_counted >>
+  disch_then (qspecl_then [`t2`, `g2`, `D`, `PG`] mp_tac) >> strip_tac >>
+  qexistsl_tac [`g2`, `t2`, `jump_to hdr s2`] >> conj_tac >-
+    (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
+      (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[] >>
+     disch_then (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
+  gvs[jump_to_def, lookup_var_def, ALL_DISTINCT] >> metis_tac[]
+QED
+
+Theorem tuple_dynamic_storage_frame_advance:
+  assign_base_store_frame (if tr then LocTransient else LocStorage)
+    (a+32w) (k+1w) s0 tn0 i s tn /\
+  u.vs_accounts = (if tr then s.vs_accounts else
+    (sstore (k+n2w (SUC i)) (mload (w2n (a+n2w (32+32*i))) s) s).vs_accounts) /\
+  u.vs_transient = (if tr then
+    (tstore (k+n2w (SUC i)) (mload (w2n (a+n2w (32+32*i))) s) s).vs_transient else s.vs_transient) /\
+  u.vs_memory = s.vs_memory /\ u.vs_call_ctx = s.vs_call_ctx /\
+  tf.t_stor = (if tr then tn.t_stor else key_update tn.t_stor (k+n2w (SUC i))
+    (mem_word_taint tn.t_mem (w2n (a+n2w (32+32*i))))) /\
+  tf.t_trans = (if tr then key_update tn.t_trans (k+n2w (SUC i))
+    (mem_word_taint tn.t_mem (w2n (a+n2w (32+32*i)))) else tn.t_trans) /\
+  tf.t_mem = tn.t_mem /\ tf.t_imm = tn.t_imm ==>
+  assign_base_store_frame (if tr then LocTransient else LocStorage)
+    (a+32w) (k+1w) s0 tn0 (SUC i) u tf
+Proof
+  strip_tac >> irule assign_base_store_frame_advance >>
+  simp[word_add_n2w, GSYM WORD_ADD_ASSOC, ADD1] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
