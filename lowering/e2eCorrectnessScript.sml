@@ -641,8 +641,9 @@ QED
 
    Gas is existential: there exists a gas bound such that with enough
    gas, EVM execution produces the correct result. *)
-(* TASK049 original theorem statement/proof retained verbatim:
-Theorem vyper_call_correct:
+(* TASK049's original statement and proof of the legacy wrapper
+   (vyper_call_correct_legacy below), kept as text, not compiled:
+Theorem vyper_call_correct_legacy:
   !tops pipeline finalizer policy rpolicy unit out prog deploy_bc runtime_bc
    cp name i r fn off Inv cenv am tx tenv ret ctxt rb rest es vs R_ok R_term.
     resolve_o1_policy policy = SOME rpolicy /\
@@ -692,9 +693,10 @@ QED
 
 *)
 
-(* Preserved legacy public wrapper, STAGE-ADMITTED. Its existing admitted
-   dependencies remain classified as such; NOT a new-boundary certificate. *)
-Theorem vyper_call_correct:
+(* Preserved legacy wrapper, STAGE-ADMITTED. Its existing admitted
+   dependencies remain classified as such; NOT a new-boundary certificate.
+   Not the top theorem: that is vyper_call_correct at the end. *)
+Theorem vyper_call_correct_legacy:
   !tops pipeline finalizer policy rpolicy unit out prog deploy_bc runtime_bc
    cp name i r fn off Inv cenv am tx tenv ret ctxt rb rest es vs R_ok R_term.
     resolve_o1_policy policy = SOME rpolicy /\
