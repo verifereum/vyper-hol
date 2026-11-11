@@ -764,11 +764,11 @@ Proof
     (rpt gen_tac >> irule stmtSimLogArgsTheory.log_frame_local_region >>
      fs[intcall_joint_res_def, intcall_expr_res_def, intcall_expr_cont_def,
         loweringPostsTheory.wb_frame_def] >>
-     conj_tac >-
-       (qexists `c` >> simp[] >> rpt conj_tac >> rpt gen_tac >>
-        strip_tac >> first_x_assum irule >> simp[] >>
-        conj_tac >- (first_assum ACCEPT_TAC) >> qexists `aid` >> simp[]) >>
-     qexistsl [`fp.jc_ctx`, `fp.jc_cx`, `fp.jc_func`] >> simp[]) >>
+     rpt conj_tac >>
+     TRY (qexistsl [`fp.jc_ctx`, `fp.jc_cx`, `fp.jc_func`] >> simp[] >> NO_TAC) >>
+     qexists `c` >> simp[] >> rpt conj_tac >> rpt gen_tac >>
+     strip_tac >> first_x_assum irule >> simp[] >>
+     conj_tac >- (first_assum ACCEPT_TAC) >> qexists `aid` >> simp[]) >>
   conj_tac
   >- (irule intcall_pure_child_vv_holds >> metis_tac[]) >>
   conj_tac

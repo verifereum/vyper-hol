@@ -91,8 +91,9 @@ Resume intcall_args_frame_accumulated[tail]:
   `local_ptrs_reserved ce sh` by metis_tac[local_ptrs_reserved_next_var] >>
   `wb_frame ce initial_es initial_es a sinitial_es t` by
     (`wb_frame ce initial_es initial_es sm s t` by
-       (qpat_assum `wb_frame ce es es sm s t` mp_tac >>
-        simp[wb_frame_def, locals_kept_def, popped_kept_def]) >>
+       (`wb_frame ce initial_es initial_es sm s t <=> wb_frame ce es es sm s t` by
+          simp[wb_frame_def, locals_kept_def, popped_kept_def] >>
+        pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC) >>
      mp_tac (Q.SPECL [`func`, `ce`, `cx`, `initial_es`, `sinitial_es`, `a`,
                       `initial_es`, `initial_es`, `sm`, `s`, `t`, `ctx`]
                wb_frame_trans) >>
