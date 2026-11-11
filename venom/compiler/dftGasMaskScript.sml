@@ -6103,6 +6103,38 @@ Resume invoke_gas_crossing_stopped[close]:
 QED
 Finalise invoke_gas_crossing_stopped[local]
 
+(* Padding commutes with the actual returning target-head cut.  The generic
+   packet payload covers both slot and event arrays without parallel proofs. *)
+Theorem occurrence_padding_returning_head[local]:
+  !fuel C' y rest s u a as fill.
+    y.inst_opcode = INVOKE /\ step_inst fuel C' y s = OK u ==>
+    GENLIST (\j. if j < LENGTH (y::rest) /\
+        (EL j (y::rest)).inst_opcode = GAS /\
+        ~(?t. FOLDR (dft_exec_cons fuel C') OK (TAKE j (y::rest)) s = OK t)
+      then fill (EL j (y::rest)) else EL j (a::as)) (LENGTH (y::rest)) =
+    a :: GENLIST (\j. if j < LENGTH rest /\
+        (EL j rest).inst_opcode = GAS /\
+        ~(?t. FOLDR (dft_exec_cons fuel C') OK (TAKE j rest)
+          (u with vs_inst_idx := SUC s.vs_inst_idx) = OK t)
+      then fill (EL j rest) else EL j as) (LENGTH rest)
+Proof
+  rpt strip_tac >>
+  simp[listTheory.GENLIST_CONS, combinTheory.o_DEF, EL, TAKE_def,
+       dftIndexedExecTheory.dft_exec_cons_def, venomInstTheory.is_terminator_def]
+QED
+
+(* Insert the selected target occurrence into the recursive source order. *)
+Theorem occurrence_extract_packets[local]:
+  !rho k a as.
+    MAP (\j. EL j (a::as))
+      (MAP SUC (TAKE k rho) ++ [0] ++ MAP SUC (DROP k rho)) =
+    TAKE k (MAP (\j. EL j as) rho) ++ [a] ++
+      DROP k (MAP (\j. EL j as) rho)
+Proof
+  simp[MAP_APPEND, MAP_MAP_o, combinTheory.o_DEF,
+       EL, MAP_TAKE, MAP_DROP]
+QED
+
 (* The recursive prefix and the extracted call share this actual endpoint.
    In particular the caller updates are replayed, not chosen a second time. *)
 Theorem invoke_extract_shared_successor[local]:
