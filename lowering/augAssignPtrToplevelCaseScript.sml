@@ -291,8 +291,9 @@ Resume compile_augassign_toplevel_case_ptr[store_entry]:
          else sstore (n2w slot) (typed_val_to_w256 tvt result) u)` by
     (drule emitted_insts_emit_void >> strip_tac >>
      simp[run_inst_seq_def, mk_inst_def] >>
-     once_rewrite_tac[step_inst_base_def] >>
-     Cases_on `tr` >> simp[exec_write2_def, eval_operands_def, eval_operand_def]) >>
+     Cases_on `tr` >>
+     simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, exec_write2_def,
+          eval_operands_def, eval_operand_def]) >>
   `~u.vs_halted /\ u.vs_current_bb = s3.cs_current_bb /\
    u.vs_inst_idx = LENGTH s3.cs_current_insts` by simp[Abbr `u`] >>
   qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts s3 sb) u = OK last` >>

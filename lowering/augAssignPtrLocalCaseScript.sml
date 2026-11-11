@@ -306,6 +306,10 @@ Resume compile_augassign_local_case_ptr[ordinary_store_post]:
   `val_in_memory entry'.type result (w2n a)
       (mstore (w2n a) (val_to_w256 result) u).vs_memory` by
     metis_tac[loweringSliceTheory.word_value_in_memory] >>
+  `memory_value_rel entry'.type result (w2n a)
+      (mstore (w2n a) (val_to_w256 result) u).vs_memory` by
+    (irule loweringSliceTheory.word_value_memory_rel >> simp[] >>
+     irule loweringSliceTheory.evaluate_word_memory_type >> metis_tac[]) >>
   suspend "ordinary_store_relation"
 QED
 
