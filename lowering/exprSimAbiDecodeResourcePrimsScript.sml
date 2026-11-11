@@ -1,6 +1,6 @@
 Theory exprSimAbiDecodeResourcePrims
 Ancestors
-  exprSimAbiDecodeResource abiEncoder context emitHelper venomInst compileEnv emitHelperProps pred_set exprSimAbiDecodeTrace exprSimAbiDecodeShapeProbe
+  exprSimAbiDecodeResource abiEncoder context emitHelper venomInst compileEnv emitHelperProps pred_set exprSimAbiDecodeTrace exprSimAbiDecodeTraceSafe
 
 (* Straight-line contracts retain the entire caller's label pool. *)
 Definition decode_straight_def:

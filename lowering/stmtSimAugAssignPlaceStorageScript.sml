@@ -461,6 +461,15 @@ Proof
               assert_def, return_def, raise_def, AllCaseEqs()] >>
           imp_res_tac vyperStatePreservationTheory.next_gas_reading_state >>
           Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def])
+      >> `code_slice_source blt es = NONE` by
+           (Cases_on `code_slice_source blt es` >> simp[] >>
+            rename1 `code_slice_source blt es = SOME csa` >> PairCases_on `csa` >>
+            qpat_x_assum `supported_pure_exprs _ es` mp_tac >>
+            qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
+            rpt (pop_assum kall_tac) >>
+            rw[code_slice_source_SOME] >>
+            simp[supported_pure_expr_def,
+                 supportedExprFormsTheory.supported_builtin_form_def])
       >> Cases_on `blt = Bop In \/ blt = Bop NotIn`
       >> gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
              assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
@@ -1169,9 +1178,8 @@ Theorem aug_place_storage_load_path[local]:
 Proof
   strip_tac >> irule emitHelperPropsTheory.emit_op_zero_path >> simp[] >>
   qexistsl_tac [`[arg]`, `op`, `if tr then TLOAD else SLOAD`, `sb`] >>
-  Cases_on `tr` >>
-  simp[venomInstTheory.is_terminator_def,
-       venomExecSemanticsTheory.step_inst_base_def,
+  Cases_on `tr` >> simp[venomInstTheory.is_terminator_def] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
        venomExecSemanticsTheory.exec_read1_def, venomInstTheory.mk_inst_def]
 QED
 
