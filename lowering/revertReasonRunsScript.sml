@@ -23,22 +23,26 @@ Proof
   simp[mk_inst_def, exec_read1_def, eval_operand_def] >>
   simp[Once run_inst_seq_def] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, opcode_case_def] >>
+  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+                   combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, eval_operand_def, update_var_def,
        lookup_var_def, FLOOKUP_UPDATE] >>
   simp[Once run_inst_seq_def] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, opcode_case_def] >>
+  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+                   combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, eval_operand_def, update_var_def,
        lookup_var_def, FLOOKUP_UPDATE] >>
   simp[Once run_inst_seq_def] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, opcode_case_def] >>
+  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+                   combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, eval_operand_def, update_var_def,
        lookup_var_def, FLOOKUP_UPDATE] >>
   simp[Once run_inst_seq_def] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, opcode_case_def] >>
+  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+                   combinTheory.K_THM, opcode_case_def] >>
   simp[eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   fs[lookup_var_def] >> simp[run_inst_seq_def]
 QED
