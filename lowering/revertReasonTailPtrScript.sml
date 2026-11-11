@@ -135,9 +135,11 @@ Proof
        revert_reason_suffix_resources_path_ptr)) >>
      asm_rewrite_tac[venom_state_accfupds, combinTheory.K_THM] >>
      conj_tac >- (rpt gen_tac >> strip_tac >> qpat_x_assum `!k. k <= 22 ==> _`
-       (qspec_then `k+1` mp_tac) >> simp[]) >>
+       (qspec_then `k+1` mp_tac) >> qpat_x_assum `k <= 21` mp_tac >>
+       simp[NoAsms]) >>
      conj_tac >- (qexists_tac `bb` >> asm_rewrite_tac[]) >>
-     qexistsl_tac [`B`,`L`,`P`,`Q`,`ms`,`parent`] >> asm_rewrite_tac[]) >>
+     qexistsl_tac [`B`,`L`,`P`,`Q`,`ms`,`parent`] >> asm_rewrite_tac[] >>
+     rewrite_tac[ADD_ASSOC] >> asm_rewrite_tac[]) >>
   qexistsl_tac [`t`,`z`,`G2`,`tn2`,`j`] >> asm_rewrite_tac[] >>
   drule_all gas_path_ptr_then >> simp[]
 QED

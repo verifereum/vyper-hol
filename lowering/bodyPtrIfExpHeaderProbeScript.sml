@@ -77,7 +77,8 @@ Theorem header_probe_return_compile:
   !ce src dst rpc st.
   compile_internal_return_from_env
     (ce with <| ce_return_buf := SOME (PtrVar dst 128);
-                ce_returns_count := 0 |>)
+                ce_returns_count := 0;
+                ce_nonreentrant := (F,0,T,F) |>)
     header_probe_ty header_probe_ty src rpc st =
   (do emit_void MCOPY [dst; src; Lit 128w];
       emit_inst RET [rpc] []
@@ -86,8 +87,8 @@ Proof
   simp[compile_internal_return_from_env_def, compile_internal_return_def,
        header_probe_ty_def, compile_store_memory_def,
        is_word_type_def, is_bytestring_type_def, type_memory_bytes_def,
-       oneline compile_copy_memory_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def]
+       oneline compile_copy_memory_def, stmtLoweringTheory.compile_return_unlock_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED
 
 (* This is a local fixed run, NOT an admissible body frame or the frozen

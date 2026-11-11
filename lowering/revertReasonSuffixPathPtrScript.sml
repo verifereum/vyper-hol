@@ -4,7 +4,7 @@ Theory revertReasonSuffixPathPtr
 Ancestors
   wordLoadStorePtr finalAbortSeqPtr revertReasonSuffixPtr revertReasonPrefixFramePtr fragGasSeqPtr
   instSeqComposePtr ghostPcTransportPtr valueEncodingProps pred_set instIdxIndep
-  revertReasonPrefixPtr revertAllocationPtr
+  revertReasonPrefixPtr revertAllocationPtr abiEncoderRounding
   typedCopyPtr decoderGhostFramePtr typedCopyLoopHeaderPtr finite_map ptrDiscipline
   mstoreOperandStep revertReasonLayout exprLoweringProps fragExec bodyPtrDefs revertReasonCopyPtr
   venomMemProps venomState venomInst venomExecSemantics words arithmetic list
@@ -549,11 +549,16 @@ Proof
       0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w =
       n2w (contractABI$ceil32 L)` by
     (once_rewrite_tac[WORD_AND_COMM] >> rewrite_tac[Once WORD_ADD_COMM] >>
-     irule abi_encoder_round_ceil32 >> simp[]) >>
+     irule abi_encoder_round_ceil32 >>
+     qpat_assum `L + 63 < dimword(:256)` mp_tac >>
+     simp[NoAsms, dimword_def] >> decide_tac) >>
   `(n2w L:bytes32)+31w && ~31w = n2w (contractABI$ceil32 L)` by
     (`(~31w:bytes32) =
       0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w`
        by blastLib.BBLAST_TAC >> pop_assum SUBST1_TAC >> first_x_assum ACCEPT_TAC) >>
+  `(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w:bytes32) &&
+      n2w L + 31w = n2w (contractABI$ceil32 L)` by
+    (once_rewrite_tac[WORD_AND_COMM] >> first_assum ACCEPT_TAC) >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ [h;i;j] _ _ _` >>
   `ptr_inst_ok D 0 0 ctx fn G tn h s` by
     (simp[Abbr `h`] >> irule ptr_inst_ok_copy_len_not >> simp[op_taint_def]) >>
@@ -875,7 +880,8 @@ Resume revert_reason_suffix_checks[second_round_post]:
        revert_reason_suffix_def, Abbr `msk2`, Abbr `tmp2`, Abbr `rnd2`] >>
      irule (SRULE [GSYM ADD_ASSOC]
        (Q.INST [`id` |-> `id+18`] round_ceil32_mask_checks)) >>
-     fs[Abbr `s13c`, Abbr `msk2`, lookup_var_def, ASCIInumbersTheory.toString_inj]) >>
+     fs[Abbr `s13c`, lookup_var_def, dimword_def,
+        ASCIInumbersTheory.toString_inj]) >>
   first_x_assum (drule_then strip_assume_tac) >>
   suspend "second_round_frames"
 QED
