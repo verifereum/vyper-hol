@@ -167,6 +167,21 @@ Proof
   simp[oneline imm_place_at_def]
 QED
 
+(* The frame needs only the selected root lookup, not whole-state equality. *)
+Theorem imm_place_at_root_lookup[local]:
+  !cenv cx es ee src id path w ty.
+    FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+               NONE => FEMPTY
+             | SOME imms => get_source_immutables src imms) id =
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+               NONE => FEMPTY
+             | SOME imms => get_source_immutables src imms) id ==>
+    (imm_place_at cenv cx ee (PlaceR (ImmutablePlace src id path)) w ty <=>
+     imm_place_at cenv cx es (PlaceR (ImmutablePlace src id path)) w ty)
+Proof
+  rpt strip_tac >> simp[imm_place_at_def]
+QED
+
 Theorem imm_place_at_pure_index[local]:
   !cenv cx es pv w ty e gs res ee.
     pure_expr e /\
