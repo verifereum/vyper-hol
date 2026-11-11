@@ -49,7 +49,7 @@ Theorem assign_place_live_word_start:
   off + 32*i < dimword (:256)
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `i = 0` >- simp[] >>
-  gvs[compileEnvTheory.dyn_bytes_dead_def] >>
+  gvs[loweringStateRelDefsTheory.dyn_bytes_dead_def] >>
   `i <= word_size cap` by decide_tac >>
   `base < base+i /\ base+i <= base + word_size cap` by decide_tac >>
   gvs[] >>
@@ -120,11 +120,11 @@ Proof
   gvs[] >>
   Cases_on `v` >>
   gvs[vyperTypingTheory.value_has_type_def, vyperStorageTheory.encode_value_def,
-      compileEnvTheory.dead_bytes_def, vyperValueTheory.type_slot_size_def] >>
+      loweringStateRelDefsTheory.dead_bytes_def, vyperValueTheory.type_slot_size_def] >>
   drule (SRULE [AC ADD_ASSOC ADD_COMM] place_store_dyn_bytes_header) >>
   disch_then (qspecl_then [`k`, `st`] mp_tac) >>
   (impl_tac >- decide_tac) >> strip_tac >>
-  gvs[compileEnvTheory.dyn_bytes_dead_def]
+  gvs[loweringStateRelDefsTheory.dyn_bytes_dead_def]
 QED
 
 Theorem assign_place_bytestring_wrapped_live_copy:

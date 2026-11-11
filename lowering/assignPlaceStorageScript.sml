@@ -194,7 +194,7 @@ Resume assign_place_storage_from_expr_post[normalize]:
     (conj_tac >- (fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[])) >>
     (conj_tac >- (fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[])) >>
     drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)
-      exprSimHashTheory.expr_val_at_footprint >>
+      exprSimHashBoundaryTheory.expr_val_at_footprint >>
     disch_then (drule_at (Pat `evaluate_type _ _ = SOME stv`)) >>
     disch_then (drule_at (Pat `eval_operand src s = _`)) >>
     `0 < type_memory_size stv` by

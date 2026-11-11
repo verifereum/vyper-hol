@@ -1,5 +1,6 @@
 Theory assignPlaceStagedEndpoint
 Ancestors
+  loweringStateRelDefs
   assignPlaceStaging assignPlaceDirectCopy exprSimBufferStore
   stmtSimDefs loweringPosts exprLoweringProps loweringHalt
   abiTupleProps rich_list fragGasMode exprLowering compileEnv

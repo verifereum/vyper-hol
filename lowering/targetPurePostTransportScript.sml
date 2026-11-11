@@ -1,5 +1,7 @@
 Theory targetPurePostTransport
 Ancestors
+  valueEncodingDefs
+  loweringStateRelDefs
   loweringPosts exprSimSubscriptArrayFrame exprBopSimProps compileEnv
   context arithmetic valueEncodingProofs valueEncoding targetPureSourceFrame
   ctorDeployLoweringSource exprSimMemorySource vyperState vyperStorageBackend

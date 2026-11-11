@@ -75,15 +75,17 @@ QED
 Resume target_pure_source_mutual[builtin]:
   rpt strip_tac >>
   Cases_on `blt = Len` >> Cases_on `blt = Env MsgGas` >>
+  Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
       assert_def, return_def, raise_def, AllCaseEqs()] >>
   imp_res_tac result_array_length_state >>
+  imp_res_tac lift_option_type_state >> imp_res_tac lift_sum_state >>
   gvs[next_gas_reading_def, precompile_call_success_def,
       check_def, assert_def, bind_def, return_def, raise_def, get_accounts_def, lift_sum_def,
       AllCaseEqs()] >>
   gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
   Cases_on `es` >> gvs[builtin_args_length_ok_def] >>
-  first_x_assum drule >> simp[]
+  metis_tac[]
 QED
 Resume target_pure_source_mutual[typebuiltin]:
   rpt strip_tac >>

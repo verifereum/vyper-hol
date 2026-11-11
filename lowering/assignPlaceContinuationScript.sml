@@ -1,5 +1,6 @@
 Theory assignPlaceContinuation
 Ancestors
+  loweringStateRelDefs
   assignPlaceCallerFacts assignPlaceStoreReady assignPlaceGasCompose assignPlaceEndpoint
   assignPlaceOperandFacts targetPureVvFrame targetPlaceSimCases
   stmtSimAugAssignPlaceMemory assignPlaceTargetLive exprSimHyps
@@ -212,7 +213,7 @@ Proof
        evaluate_type (get_tenv cx) dty = SOME dtv` by
     (fs[target_post_def] >> metis_tac[vyperTypeArgFitsTheory.type_widens_to_value_has_type]) >>
   `~cx.txn.is_static` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   Cases_on `write_place cx p v (mid' with gas_obs := [])` >>
   rename1 `write_place cx p v (mid' with gas_obs := []) = (wr,ff)` >>
   `stmt_res_ok lctx wr` by metis_tac[] >>

@@ -1,5 +1,6 @@
 Theory assignPlaceProvenance
 Ancestors
+  loweringStateRelDefs
   assignPlaceSourceBounds assignPlacePathSeparation assignPlaceLayoutHeight
   placeMemoryLiveRegion placeMemoryTypeInterfaces bodySimAugPlaceLoad
   exprSimHypsDefs exprSimProps stmtSimDefs compileEnv words

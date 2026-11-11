@@ -60,6 +60,6 @@ Proof
      (reverse conj_tac >- metis_tac[]) >>
      rpt strip_tac >>
      `regions_disjoint (w2n w) (type_memory_size dtv) off sz` by metis_tac[] >>
-     gvs[compileEnvTheory.regions_disjoint_def]) >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   qexistsl_tac [`u`, `w`] >> asm_rewrite_tac[]
 QED

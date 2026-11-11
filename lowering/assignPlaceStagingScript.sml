@@ -1,5 +1,6 @@
 Theory assignPlaceStaging
 Ancestors
+  loweringStateRelDefs
   placeMemoryStaging placeMemoryTypedPrimitive exprLoweringProps
   placeMemoryCopyEffect fragGasMode exprSimProps valueCopy
   context compileEnv venomState venomInst exprSimAlloc fragExec
@@ -79,7 +80,7 @@ Proof
   `alloca_frame cenv ee sa s cenv ee t` by suspend "copy_frame" >>
   qexistsl_tac [`r`, `t`, `tw`] >> simp[] >>
   rpt conj_tac >> rpt strip_tac >>
-  gvs[compileEnvTheory.regions_disjoint_def, eval_operand_def, lookup_var_def] >>
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def, eval_operand_def, lookup_var_def] >>
   metis_tac[]
 QED
 
@@ -95,8 +96,8 @@ Resume assign_place_staging_live[copy_state]:
   `sx.cs_next_id = sa.cs_next_id` by simp[] >>
   irule copy_buffer_state_rel_frame >>
   qexistsl_tac [`w2n tw`, `mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [q]`, `r`, `sm`, `n`] >>
-  simp[mk_inst_def, compileEnvTheory.regions_disjoint_def] >>
-  conj_tac >- (fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+  simp[mk_inst_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
+  conj_tac >- (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   conj_tac >- (rpt strip_tac >> fs[] >>
     qpat_x_assum `!a len. _ ==> mem_bytes_at a len _ = _` irule >> decide_tac) >>
   conj_tac

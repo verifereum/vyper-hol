@@ -1,5 +1,6 @@
 Theory assignPlaceEmptyStore
 Ancestors
+  loweringStateRelDefs
   placeStore placeMemoryLiveRegion stmtSimDefs loweringPosts exprSimHypsDefs
   stmtLowering exprLowering compileEnv vyperInterpreter vyperState
   vyperScopePreservation venomState venomExecSemantics valueEncodingProps

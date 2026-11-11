@@ -1,6 +1,6 @@
 Theory assignPlacePathSeparation
 Ancestors
-  assignPlaceLayoutHeight exprSimProps compileEnv valueEncoding
+  assignPlaceLayoutHeight exprSimProps loweringPosts compileEnv valueEncoding
   list arithmetic integer pair
 
 (* A selected field is either the same selected window, or a disjoint one. *)
@@ -16,16 +16,6 @@ Proof
   rw[optionTheory.OPTION_MAP_EQ_SOME, EXISTS_PROD] >> gvs[] >>
   first_x_assum (qspecl_then [`id1`, `id2`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >> decide_tac
-QED
-
-Theorem memory_take_element_le[local]:
-  !xs i j. i < j /\ j <= LENGTH xs ==>
-    type_memory_size_list (TAKE i xs) + type_memory_size (EL i xs) <=
-    type_memory_size_list (TAKE j xs)
-Proof
-  Induct >> simp[] >> rpt gen_tac >> Cases_on `i` >> Cases_on `j` >>
-  simp[type_memory_size_def] >> strip_tac >>
-  first_x_assum (qspecl_then [`n`, `n'`] mp_tac) >> simp[]
 QED
 
 Theorem array_size_windows[local]:
@@ -45,9 +35,15 @@ Theorem tuple_size_windows[local]:
     type_memory_size_list (TAKE i xs) + type_memory_size (EL i xs) <= type_memory_size_list (TAKE j xs) \/
     type_memory_size_list (TAKE j xs) + type_memory_size (EL j xs) <= type_memory_size_list (TAKE i xs)
 Proof
+  `!(ys:type_value list) a b. a < b /\ b <= LENGTH ys ==>
+     type_memory_size_list (TAKE a ys) + type_memory_size (EL a ys) <=
+     type_memory_size_list (TAKE b ys)` by
+    (Induct >> simp[] >> rpt gen_tac >> Cases_on `a` >> Cases_on `b` >>
+     simp[type_memory_size_def] >> strip_tac >>
+     first_x_assum (qspecl_then [`n`, `n'`] mp_tac) >> simp[]) >>
   rpt strip_tac >> Cases_on `i = j` >- simp[] >>
   `i < j \/ j < i` by decide_tac >>
-  metis_tac[memory_take_element_le, LESS_IMP_LESS_OR_EQ]
+  metis_tac[LESS_IMP_LESS_OR_EQ]
 QED
 
 Theorem mem_step_offset_windows:

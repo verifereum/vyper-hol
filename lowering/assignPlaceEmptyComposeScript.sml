@@ -1,5 +1,6 @@
 Theory assignPlaceEmptyCompose
 Ancestors
+  loweringStateRelDefs
   assignPlaceEmpty assignPlacePureCode assignPlaceGasCompose placeStore
   targetPlaceSimCases stmtSimDefs gasContext vyperExprNoControl vyperState
   assignPlaceEmptySource assignPlaceEmptyStore assignPlaceTargetLive exprSimHyps stmtLoweringMono
