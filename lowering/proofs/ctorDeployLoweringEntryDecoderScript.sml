@@ -108,8 +108,11 @@ Proof
  `abi_decoder_operand_live st.cs_next_var src /\
   abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var hi` by
-   (Cases_on `src` >> Cases_on `dst` >> Cases_on `hi` >>
-    fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+   (qpat_x_assum `!x. src = Var x \/ _ ==> not_fresh_at st x` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    Cases_on `src` >> Cases_on `dst` >> Cases_on `hi` >>
+    simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def] >>
+    metis_tac[]) >>
  `d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= initial.vs_alloca_next /\
   initial.vs_alloca_next < dimword (:256)` by
    (drule_all deploy_ctor_shifted_frontier_bound >> strip_tac >> decide_tac) >>

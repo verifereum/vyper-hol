@@ -271,7 +271,11 @@ Proof
     (rpt conj_tac >> rpt strip_tac >> irule ctor_actual_old_operand >>
      qexistsl [`initial`, `st`] >> simp[] >> metis_tac[]) >>
   `!x. src = Var x \/ dst = Var x \/ hi = Var x ==> not_fresh_at end_st x` by
-    (rpt strip_tac >> `not_fresh_at st x` by metis_tac[] >>
+    (rpt strip_tac >>
+     `not_fresh_at st x` by
+       (pop_assum mp_tac >>
+        qpat_x_assum `!x. src = Var x \/ _ ==> not_fresh_at st x` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
      fs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
   `after_head.vs_data_section = initial.vs_data_section` by
     fs[abi_decoder_address_frame_def] >>
