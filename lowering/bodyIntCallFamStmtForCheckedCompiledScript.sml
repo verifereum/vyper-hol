@@ -35,12 +35,12 @@ Theorem intcall_for_checked_compiled_tail:
   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_stmts stmts) /\
   (n1 <= n2 /\ Num (n2 - n1) <= bound ==>
     gas_admissible (eval_for fp.jc_cx tyv id stmts
-      (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))) (stmt_res_ok lctx) es) ==>
+      (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)))) (stmt_res_ok lctx) es) ==>
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for fp.jc_cx tyv id stmts
-          (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od)
+          (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)) od)
     (es,s)
     (\res ee t. res = INL () /\ t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = 0 /\ ~t.vs_halted /\ intcall_joint_res fp ce env ee sa t /\

@@ -241,13 +241,13 @@ Theorem intcall_for_checked_range_outcome:
   (n1 <= n2 /\ Num (n2 - n1) <= bound ==>
     gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
       (eval_for fp.jc_cx tyv id stmts
-        (GENLIST (\j. vyperValue$IntV (n1 + &j : int)) (Num (n2 - n1))))
+        (GENLIST (\j. Value (IntV (n1 + &j : int))) (Num (n2 - n1))))
       (es,s0) Q (intcall_stmt_exit fp)) ==>
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for fp.jc_cx tyv id stmts
-          (GENLIST (\j. vyperValue$IntV (FST rl + &j : int)) (SND rl)) od)
+          (GENLIST (\j. Value (IntV (FST rl + &j : int))) (SND rl)) od)
     (es,s0) Q (intcall_stmt_exit fp)
 Proof
   strip_tac >> drule_at (Pat `evaluate_type _ _ = _`) range_end_words >>

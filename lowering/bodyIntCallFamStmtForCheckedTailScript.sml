@@ -67,12 +67,12 @@ Theorem intcall_for_checked_tail:
     (if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty) stmts sb0 = (ce_b,sb1) /\
   (n1 <= n2 /\ Num (n2 - n1) <= bound ==>
     gas_admissible (eval_for fp.jc_cx tyv id stmts
-      (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))) (stmt_res_ok lctx) es) ==>
+      (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)))) (stmt_res_ok lctx) es) ==>
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for fp.jc_cx tyv id stmts
-          (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od)
+          (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)) od)
     (es,s0)
     (\res ee t. res = INL () /\ t.vs_current_bb = exit_lbl /\
       t.vs_inst_idx = 0 /\ ~t.vs_halted /\ intcall_joint_res fp ce env ee sa t /\
@@ -116,7 +116,7 @@ Resume intcall_for_checked_tail[iterations]:
   irule gas_outcome_zero_prefix >> qexists_tac `cc` >> simp[] >>
   `gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
     (eval_for fp.jc_cx tyv id stmts
-      (DROP 0 (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))))) (es,cc)
+      (DROP 0 (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))))) (es,cc)
     (\res ee t. res = INL () /\ t.vs_current_bb = exit_lbl /\
       t.vs_inst_idx = 0 /\ ~t.vs_halted /\ intcall_joint_res fp ce env ee sa t /\
       (!x z. not_fresh_at sa x /\ lookup_var x cc = SOME z ==> lookup_var x t = SOME z) /\

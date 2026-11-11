@@ -468,7 +468,7 @@ QED
 
 Theorem intcall_for_range_iterations:
   let N = Num (n2 - n1);
-      vs = GENLIST (\j. IntV (n1 + &j)) N;
+      vs = GENLIST (\j. Value (IntV (n1 + &j))) N;
       K = (\s.
         (!x z. not_fresh_at sa x /\ lookup_var x cc0 = SOME z ==>
                lookup_var x s = SOME z) /\
@@ -663,7 +663,7 @@ QED
 (* The finite range loop, with its round callback supplied by the body producer. *)
 Theorem intcall_for_range_producer_iterations:
   let N = Num (n2 - n1);
-      vs = GENLIST (\j. IntV (n1 + &j)) N;
+      vs = GENLIST (\j. Value (IntV (n1 + &j))) N;
       K = (\s.
         (!x z. not_fresh_at sa x /\ lookup_var x cc0 = SOME z ==>
                lookup_var x s = SOME z) /\
@@ -847,7 +847,7 @@ Resume intcall_stmts_producer_for_range_lit[iterate]:
   `eval_stmt fp.jc_cx
      (For id fty (Range (Literal fty (IntL n1)) (Literal fty (IntL n2)))
        (Num (n2 - n1)) stmts) =
-   eval_for fp.jc_cx tyv id stmts (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))` by
+   eval_for fp.jc_cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)))` by
     (simp[FUN_EQ_THM] >> gen_tac >>
      qmatch_goalsub_abbrev_tac `lhs = _` >> Cases_on `lhs` >>
      fs[] >> drule stmtSimForPartsTheory.eval_stmt_for_range_lit >> simp[]) >>
@@ -890,7 +890,7 @@ Resume intcall_stmts_producer_for_range_lit[iteration_apply]:
   qexists_tac `cc` >> simp[] >>
   `gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
     (eval_for fp.jc_cx tyv id stmts
-      (DROP 0 (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))))) (es,cc)
+      (DROP 0 (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))))) (es,cc)
     (\res ee t. res = INL () /\ t.vs_current_bb = exit_lbl /\
       t.vs_inst_idx = 0 /\ ~t.vs_halted /\ intcall_joint_res fp ce env ee sa t /\
       (!x z. not_fresh_at sa x /\ lookup_var x cc = SOME z ==> lookup_var x t = SOME z) /\
