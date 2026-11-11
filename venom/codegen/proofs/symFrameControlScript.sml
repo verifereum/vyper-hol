@@ -5882,6 +5882,59 @@ Resume sym_ret_ready_frame_sim[typed]:
 QED
 Finalise sym_ret_ready_frame_sim
 
+Theorem sym_ret_symbolic_exact:
+  !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst nl halting term label
+   base ps vs cs ops final ra rest mem0 pc_ret env ret srest labs0 ss rv vs' final_cs.
+  lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
+  inst.inst_opcode = RET /\ MEM inst (fn_insts (reachable_fn fn)) /\
+  codegen_ready_fn fn /\ opaque_use_ok fn /\ retpc_shape_ok fn /\ inst_wf inst /\
+  generated_plan_state_wf_marked base ps /\ LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan RET (compute_operands inst) nl ps)).ps_stack /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    IS_SOME (stack_get_depth op ps.ps_stack) \/ IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  (!op. MEM op (compute_operands inst) ==>
+    eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
+  (!op at. MEM op (compute_operands inst) /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at (compute_operands inst)) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  (!off. MEM (SORestore off) ops ==> off < dimword(:256)) /\
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps vs cs /\
+  (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret) /\
+  generate_inst_plan liveness dfg cfg fn inst nl halting term label ps = SOME (ops,final) /\
+  final.ps_stack = [] /\ asm_block_at prog cs.as_pc (execute_plan cp.cp_initial_fmp ops) /\
+  dfg = dfg_build_function fn /\ MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\
+  label_flow_ok ctx /\ asm_static_wf prog /\
+  sym_frame_inv prog env ctx cp fn ret srest labs0 ps cs ss /\
+  step_inst fuel ctx inst vs = IntRet rv vs' /\
+  asm_steps lo o2pc prog (LENGTH (execute_plan cp.cp_initial_fmp ops)) cs = AsmOK final_cs ==>
+  ?ss'. sym_steps prog env (LENGTH (execute_plan cp.cp_initial_fmp ops)) ss = SymOK ss' /\
+    asm_sym_rel prog env final_cs ss' /\
+    ss'.sym_stack = MAP Val (REVERSE rv.iret_values) ++ srest /\
+    (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP labs0 b) /\
+    (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all_then strip_assume_tac sym_ret_ready_frame_sim >>
+  qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ ps _ _` kall_tac >>
+  drule sym_ret_suffix_steps >>
+  disch_then (qspec_then `rv.iret_values` mp_tac) >> simp[] >> strip_tac >>
+  `LENGTH (execute_plan cp'.cp_initial_fmp ops) - 1 + 1 =
+    LENGTH (execute_plan cp'.cp_initial_fmp ops)` by decide_tac >>
+  `asm_steps lo o2pc prog
+    ((LENGTH (execute_plan cp'.cp_initial_fmp ops) - 1) + 1) cs = AsmOK cs'` by
+    (irule blockSimHelpersTheory.asm_steps_compose_ok >> metis_tac[]) >>
+  gvs[] >> qexists_tac `ss'` >> simp[] >>
+  qspecl_then [`LENGTH (execute_plan cp'.cp_initial_fmp ops) - 1`, `1`, `ss`]
+    mp_tac (Q.INST [`p` |-> `prog`] sym_steps_add) >> simp[]
+QED
+
 Theorem sym_ret_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' ra rest mem0 pc_ret
@@ -5946,7 +5999,12 @@ Theorem sym_ret_frame_sim_deep:
              FLOOKUP ss'.sym_mem_labels b = FLOOKUP labs0 b) /\
         (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all_then strip_assume_tac fnFrameDeepRetTheory.gen_ret_frame_sim_deep_exact >>
+  `LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan RET (compute_operands inst) next_liveness ps)).ps_stack` by gvs[] >>
+  drule_all_then strip_assume_tac sym_ret_symbolic_exact >>
+  metis_tac[]
 QED
 
 Theorem sym_halt_frame_sim_deep:
