@@ -704,7 +704,8 @@ Resume local_fixed_array_producer[counted_index_success]:
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings)
      sa sm s0 (es_end with gas_obs := []) v i t` by
     (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_post_def, locals_kept_def, popped_kept_def] >> strip_tac >> fs[]) >>
+     match_mp_tac EQ_IMPLIES >>
+     simp[expr_post_def, locals_kept_def, popped_kept_def]) >>
   `expr_body_pre cenv cx env
      (Subscript ann (Name (ArrayT et (Fixed cnt)) id) idx)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
