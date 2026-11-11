@@ -261,7 +261,7 @@ Proof
          (strip_assume_tac o REWRITE_RULE [body_stmts_ptr_ok_def, body_stmt_safe_def, body_stmts_safe_iff])) >>
   Cases_on `b` >> fs[] >> first_x_assum irule >>
   gvs[stmts_exprs_ok_EVERY, stmt_exprs_ok_def,
-      allocLimitsTheory.alloc_limits_stmt_def, compileVyperTheory.stmt_valued_return_def, GSYM optionTheory.IS_SOME_EXISTS] >>
+      allocLimitsTheory.alloc_limits_stmt_def, compileVyperTheory.stmt_valued_return_def, GSYM optionTheory.IS_SOME_EXISTS, listTheory.EVERY_CONJ] >>
   metis_tac[call_evaluation_safe_append_left, call_evaluation_safe_append_right]
 QED
 
@@ -339,7 +339,7 @@ Proof
   simp[cj 1 compile_stmt_cs_mono, stmts_env_cs_mono] >> reverse conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `body_stmt_ptr_ok _ _`
-        (irule o REWRITE_RULE [body_stmt_ptr_ok_def]) >>
+        (irule o REWRITE_RULE [body_stmt_ptr_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
       metis_tac[call_evaluation_safe_append_left]) >>
   rpt strip_tac >>
   rename1 `stmt_env cenv lctx ret_ty s sa = (c, sm)` >>
