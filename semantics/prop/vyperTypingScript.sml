@@ -297,26 +297,21 @@ Theorem default_value_has_type[local]:
 Proof
   ho_match_mp_tac
     (legacyInduction.mutual_ind_from_ops
-       (TypeBase.induction_of ``:type_value``)) >>
+       (TypeBase.set_induction_of ``:type_value``)) >>
   simp[default_value_def, default_value_tuple_MAP,
        default_value_struct_MAP, value_has_type_def,
        well_formed_type_value_def, within_int_bound_def] >>
-  rpt conj_tac >> rpt gen_tac >> simp[] >|
-  [(* BaseTV b *)
-   Cases_on `b` >> simp[default_value_def, value_has_type_def,
-     well_formed_type_value_def, within_int_bound_def] >>
-   TRY (Cases_on `b'` >> simp[default_value_def, value_has_type_def,
-        well_formed_type_value_def]) ,
-   (* TupleTV tvs - IH *)
-   strip_tac >> metis_tac[] ,
-   (* ArrayTV tv b *)
-   strip_tac >> Cases_on `b` >>
-   simp[default_value_def, value_has_type_def, all_have_type_EVERY] ,
-   (* StructTV ftypes - IH *)
-   strip_tac >> metis_tac[] ,
-   (* struct cons: p::ftypes *)
-   PairCases_on `p` >> simp[value_has_type_def]
-  ]
+  rpt conj_tac >> rpt gen_tac >> simp[]
+  >~ [`BaseTV b`]
+  >- (Cases_on `b` >> simp[default_value_def, value_has_type_def,
+        well_formed_type_value_def, within_int_bound_def] >>
+      TRY (Cases_on `b'` >> simp[default_value_def, value_has_type_def,
+           well_formed_type_value_def]))
+  >~ [`ArrayTV tv`]
+  >- (strip_tac >> Cases_on `b` >>
+      simp[default_value_def, value_has_type_def, all_have_type_EVERY])
+  >~ [`struct_has_type (p::ftypes)`]
+  >- (PairCases_on `p` >> simp[value_has_type_def])
 QED
 
 Theorem default_value_well_typed:

@@ -114,6 +114,8 @@ Proof
   gen_tac >> DISCH_TAC >>
   `(!ty. WFP (type_copy_child sf) ty) /\
    (!tys. EVERY (WFP (type_copy_child sf)) tys)` suffices_by simp[WF_EQ_WFP] >>
-  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops type_induction) >>
+  ho_match_mp_tac
+    (legacyInduction.mutual_ind_from_ops
+       (TypeBase.set_induction_of ``:type``)) >>
   simp[copy_wfp_leaves, copy_wfp_array, copy_wfp_tuple, copy_wfp_struct]
 QED

@@ -45,7 +45,8 @@ Theorem dom_tree_list_induction:
 Proof
   rpt gen_tac >> strip_tac >>
   ho_match_mp_tac
-    (legacyInduction.mutual_ind_from_ops (TypeBase.induction_of ``:dom_tree``)) >>
+    (legacyInduction.mutual_ind_from_ops
+       (TypeBase.set_induction_of ``:dom_tree``)) >>
   metis_tac[]
 QED
 
