@@ -9,6 +9,7 @@ Theory fragFuelLoopSarray
 Ancestors
   fragFuel fragFuelContextBase compileEnv emitHelper context venomInst
   venomExecSemantics venomExecProps venomState
+  typedCopyLoopLayoutPtr
 Libs
   fragFuelLib
 
@@ -80,6 +81,45 @@ Proof
      rpt strip_tac >> gvs[] >>
      `x <> vdone /\ x <> vlt` by metis_tac[] >> simp[]) >>
   gvs[fuel_outcome_def] >> metis_tac[]
+QED
+
+(* The layout theorem is purely symbolic: its only non-definitional premise
+   is the slow-branch guard.  It uses compile_copy_sarray_typed_slow, whose
+   proof is one unfolding of compile_store_memory_typed_def. *)
+Theorem sarray_slow_structure[local]:
+  (!d s Wv E. fuel_ok Wv {} E
+      (compile_store_memory_typed ce d dt s st)) /\
+  ~(type_memory_bytes ce dt = type_memory_bytes ce st /\
+    ~is_abi_dynamic ce.ce_struct_fields dt) /\
+  compile_copy_sarray_typed ce dst dt src st n sa = ((),sz) ==>
+  cs_extends sa sz /\ sa.cs_next_var <= sz.cs_next_var /\
+  (cs_no_phi sa ==> cs_no_phi sz)
+Proof
+  strip_tac >>
+  drule_all compile_copy_sarray_typed_loop_layout >> strip_tac >>
+  `cs_extends si se /\ si.cs_next_var <= se.cs_next_var /\
+   (cs_no_phi si ==> cs_no_phi se)` by
+    (qpat_x_assum `!d s Wv E. _` (qspecl_then [`Var dp`, `Var sp`, `{}`, `{}`] mp_tac) >>
+     pure_rewrite_tac[fuel_ok_def] >> disch_then drule >> metis_tac[]) >>
+  (* These frontier facts also apply to the witnesses reused by the runtime
+     proof: the counter is below both ends of the recursive child. *)
+  `si.cs_next_var = sa.cs_next_var + 7 /\
+   sa.cs_next_var < si.cs_next_var /\ sa.cs_next_var < se.cs_next_var` by
+    (gvs[] >> decide_tac) >>
+  `cs_extends sa si` by
+    (simp[cs_extends_def] >>
+     qexists_tac `TAKE 2 si.cs_blocks` >> simp[]) >>
+  `cs_extends se sz` by
+    (simp[cs_extends_def] >> qexists_tac `[HD sz.cs_blocks]` >> simp[]) >>
+  conj_tac >- metis_tac[cs_extends_trans] >>
+  conj_tac >- gvs[] >>
+  strip_tac >>
+  `cs_no_phi si` by
+    (simp[cs_no_phi_def, venomInstTheory.mk_inst_def] >>
+     gvs[cs_no_phi_def]) >>
+  `cs_no_phi se` by metis_tac[] >>
+  simp[cs_no_phi_def, venomInstTheory.mk_inst_def] >>
+  gvs[cs_no_phi_def]
 QED
 
 (* Body pointer prefix: its values may fail to evaluate, but no instruction
