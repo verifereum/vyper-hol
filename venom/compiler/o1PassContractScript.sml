@@ -520,10 +520,8 @@ End
    CFGNormalization needs none of these of it.  Row 6 also has every block reachable,
    as stage row 6 does: SingleUseExpansion keeps SSA only then.  Up to
    row 4 (MakeSSA's second run) the function is a valid MakeSSA input,
-   and up to row 3 (FmpLowering) it has no raw FMP operation and no
-   FmpLowering output opcode (pre_fmp_ops); with
-   fmp_sig_no_param of every function, at every row, FmpLowering's run
-   leaves the blocks as they are, so it keeps make_ssa_input_ok. *)
+   and up to row 3 (FmpLowering) it has no FMP operation but DALLOCA and
+   no FmpLowering output opcode (pre_fmp_ops). *)
 Definition o1_fn_row_def:
   o1_fn_row (k : num) fn <=>
     (3 <= k ==> EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn)) /\
@@ -533,20 +531,17 @@ Definition o1_fn_row_def:
     (5 <= k /\ k <= 7 ==> wf_ssa fn) /\
     (k = 6 ==> all_reachable fn) /\
     (k <= 4 ==> make_ssa_input_ok fn) /\
-    (k <= 3 ==> no_raw_fmp_ops fn /\ pre_fmp_ops fn) /\
-    fmp_sig_no_param fn
+    (k <= 3 ==> pre_fmp_ops fn)
 End
 
 (* The step contract of the k-th walk run: the step contract, with row k
    of the function rows assumed of the input and row k+1 owed of the
-   output.  Every function of the observed unit is at some row, so has
-   fmp_sig_no_param, which FmpLowering reads of the callees. *)
+   output. *)
 Definition o1_step_contract_at_def:
   o1_step_contract_at k rpolicy pass <=>
     !observed s fn out.
       fn_pass_step rpolicy pass observed s fn out /\
       o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-      EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
       o1_fn_row k fn ==>
       o1_fn_shape observed.cu_context out.fpo_function /\
       fresh_names_ok s fn out.fpo_function /\
@@ -570,7 +565,6 @@ Theorem o1_step_contract_at_preserve:
   (!observed s fn out.
      fn_pass_step rpolicy pass observed s fn out /\
      o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-     EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
      o1_fn_row k fn ==>
      o1_fn_row (SUC k) out.fpo_function) ==>
   o1_step_contract_at k rpolicy pass
@@ -677,11 +671,11 @@ End
 (* ===== The stage invariants ===== *)
 
 (* Until FmpLowering, no function has its FMP convention set or an FMP
-   operation: the source has none (raw_opcode_ok, unit_fmp_unsealed) and
-   no earlier pass adds one.  FmpLowering then only seals. *)
+   operation but DALLOCA: the source has none (raw_opcode_ok,
+   unit_fmp_unsealed) and no earlier pass adds one. *)
 Definition fmp_free_ctx_def:
   fmp_free_ctx C <=>
-    EVERY (\fn. fn.fn_fmp_signature = NONE /\ no_raw_fmp_ops fn)
+    EVERY (\fn. fn.fn_fmp_signature = NONE /\ pre_fmp_ops fn)
       C.ctx_functions
 End
 
@@ -693,8 +687,8 @@ Definition callee_first_def:
 End
 
 (* Before ConcretizeMemLoc: the raw phase of the shared memory invariant,
-   and what ConcretizeMemLoc needs of its input: no static layout yet, no
-   DALLOCA, the pointer discipline above a reserved fixed region, and
+   and what ConcretizeMemLoc needs of its input: no static layout yet,
+   the pointer discipline above a reserved fixed region, and
    taint reaching only the dead bytes D.  S3's conclusion, with
    well-formed global reservations, which max_live_eom (row 3 on)
    requires and the walk never changes; the lowering reserves nothing in
@@ -705,7 +699,7 @@ End
 Definition o1_src_inv_def:
   o1_src_inv D C vs <=>
     reserved_intervals_wf C.ctx_global_reserved /\ mem_inv raw_mem_ok C vs /\
-    EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ ~ctx_has_dalloca C /\
+    EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
     (?lo. fixed_region_reserved lo C /\ ptr_discipline lo C vs) /\
     taint_within D C vs /\ fmp_free_ctx C /\
     mem_inv dload_offset_ok C vs /\ mem_inv dload_headroom_ok C vs
@@ -737,13 +731,16 @@ End
 
 (* After ConcretizeMemLoc: every access below the context's layout end,
    max_live_eom (the largest function layout end and global reserved end),
-   where codegen's spill regions start.  The bound is the context's, not
-   existential over any upper bound, so it is not satisfiable by a large
-   eom. *)
+   where codegen's spill regions start, or in the dynamic region.  The
+   bound is the context's, not existential over any upper bound, so it is
+   not satisfiable by a large eom.  What FmpLowering needs of its input:
+   the pointer discipline with the static accesses exempt below eom, and
+   taint reaching only the dead bytes D. *)
 Definition o1_static_inv_def:
-  o1_static_inv C vs <=>
-    (?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs) /\
-    fmp_free_ctx C
+  o1_static_inv D C vs <=>
+    (?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs /\
+           ptr_discipline eom C vs) /\
+    taint_within D C vs /\ fmp_free_ctx C
 End
 
 (* After FmpLowering: static, or dynamic at or above the initial fmp. *)
@@ -767,9 +764,9 @@ End
    S4 that the lowering stage owes.  A row may speak of the dead bytes D
    the runs are matched up to.  Up to FmpLowering, which seals a
    function after its callees, the functions are in a callee-first
-   order.  Rows 1 and 2 are in SSA form (MakeSSA's first run establishes
-   it, LowerDload's fresh variables keep it), which ConcretizeMemLoc's
-   pointer provenance needs. *)
+   order.  Rows 1 to 3 are in SSA form (MakeSSA's first run establishes
+   it, LowerDload's fresh variables and ConcretizeMemLoc keep it), which
+   the pointer provenance of ConcretizeMemLoc and FmpLowering needs. *)
 Definition o1_inv_def:
   o1_inv (D : dead) (k : num) =
     if k = 0 then
@@ -779,7 +776,8 @@ Definition o1_inv_def:
                EVERY ssa_form C.ctx_functions /\
                ?names. callee_first names C.ctx_functions)
     else if k = 3 then
-      (\C vs. o1_static_inv C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+      (\C vs. o1_static_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+               EVERY ssa_form C.ctx_functions /\
                ?names. callee_first names C.ctx_functions)
     else if k = 4 then
       (\C vs. o1_lowered_inv C vs /\ EVERY make_ssa_input_ok C.ctx_functions)
