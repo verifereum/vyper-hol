@@ -36,3 +36,36 @@ Proof
     `mem`, `mem'`, `type_memory_size (EL k tvs)`, `tn`, `tf`] >>
   simp[] >> metis_tac[]
 QED
+
+(* Any destination write disjoint from the source window preserves its
+   remaining fields.  Empty windows need no artificial ordering premise. *)
+Theorem typed_fields_robust_suffix_frame:
+  !tvs vs k src dst n tn tf mem mem'.
+    LENGTH vs = LENGTH tvs /\
+    (!j. k <= j /\ j < LENGTH tvs ==> val_wf (EL j tvs) (EL j vs)) /\
+    (SUM (MAP type_memory_size tvs) <> 0 /\ n <> 0 ==>
+      src + SUM (MAP type_memory_size tvs) <= dst \/ dst+n <= src) /\
+    (!i. ~(dst <= i /\ i < dst+n) ==>
+      mem_bytes_at i 1 mem' = mem_bytes_at i 1 mem /\
+      (i IN tf <=> i IN tn)) /\
+    (!j. k <= j /\ j < LENGTH tvs ==> !m.
+      mem_agree_outside tn mem m ==>
+      val_in_memory (EL j tvs) (EL j vs)
+        (src + SUM (MAP type_memory_size (TAKE j tvs))) m) ==>
+    !j. k <= j /\ j < LENGTH tvs ==> !m.
+      mem_agree_outside tf mem' m ==>
+      val_in_memory (EL j tvs) (EL j vs)
+        (src + SUM (MAP type_memory_size (TAKE j tvs))) m
+Proof
+  rpt strip_tac >>
+  `val_wf (EL j tvs) (EL j vs)` by metis_tac[] >>
+  drule val_footprint_le >> strip_tac >>
+  `SUM (MAP type_memory_size (TAKE j tvs)) +
+    type_memory_size (EL j tvs) <= SUM (MAP type_memory_size tvs)` by
+    (irule abi_encoder_prefix_sum_bound >> simp[]) >>
+  irule robustCopyTransportPtrTheory.robust_val_in_memory_exterior_frame >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`mem`, `mem'`, `tn`, `tf`,
+    `{i | dst <= i /\ i < dst+n}`] >>
+  simp[]
+QED
