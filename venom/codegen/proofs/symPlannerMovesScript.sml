@@ -1673,7 +1673,9 @@ Theorem sym_do_dup_big_shape:
        (GENLIST (\i. k-1-i) k)))
 Proof
   strip_tac >> drule_all (SRULE [arithmeticTheory.GREATER_DEF] do_dup_big_decompose) >>
-  Cases_on `k <= 16` >> gvs[top_n_def, MAP_MAP_o, combinTheory.o_DEF, flat_map_singleton]
+  Cases_on `k <= 16` >>
+  gvs[top_n_def, MAP_MAP_o, combinTheory.o_DEF, flat_map_singleton,
+      dup_restore_indices_explicit]
 QED
 
 Theorem sym_dup_restore_tail[local]:
