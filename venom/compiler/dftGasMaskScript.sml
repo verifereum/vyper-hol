@@ -8,6 +8,70 @@ Ancestors
   venomExecProps simplifyCfgDefs unitLabelMapIdentity
   venomExecSemantics venomState list rich_list sorting option
 
+(* U identifies unreachable GAS occurrences; site retains their original owner/id.
+   Legacy packets are not changed, so their exact TAKE witnesses remain usable. *)
+Theorem occurrence_packet_padding[local]:
+  LENGTH ms = n /\ LENGTH ess = n /\
+  LIST_REL (\m es. LENGTH m = LENGTH es) ms ess /\
+  (!j. j < n /\ U j ==> EL j ms = [] /\ EL j ess = []) ==>
+  let pm = GENLIST (\j. if U j then [NONE] else EL j ms) n;
+      pe = GENLIST (\j. if U j then [site j] else EL j ess) n
+  in
+    LENGTH pm = n /\ LENGTH pe = n /\
+    (!j. j < n ==>
+      EL j pm = (if U j then [NONE] else EL j ms) /\
+      EL j pe = (if U j then [site j] else EL j ess)) /\
+    LIST_REL (\m es. LENGTH m = LENGTH es) pm pe /\
+    MAP THE (FILTER IS_SOME (FLAT pm)) =
+      MAP THE (FILTER IS_SOME (FLAT ms)) /\
+    ((!j. j < n ==> ~U j) ==> pm = ms /\ pe = ess) /\
+    (!packet_order. PERM packet_order (COUNT_LIST n) ==>
+      PERM (FLAT (MAP (\j. EL j pm) packet_order)) (FLAT pm) /\
+      PERM (FLAT (MAP (\j. EL j pe) packet_order)) (FLAT pe) /\
+      !unused readings.
+        PERM (MAP THE (FILTER IS_SOME (FLAT ms)) ++ unused) readings ==>
+        PERM (MAP THE (FILTER IS_SOME
+          (FLAT (MAP (\j. EL j pm) packet_order))) ++ unused) readings)
+Proof
+  rpt strip_tac >> simp[LET_THM] >>
+  qabbrev_tac `pm = GENLIST (\j. if U j then [NONE] else EL j ms) n` >>
+  qabbrev_tac `pe = GENLIST (\j. if U j then [site j] else EL j ess) n` >>
+  `LENGTH pm = n /\ LENGTH pe = n` by simp[Abbr `pm`, Abbr `pe`] >>
+  `!j. j < n ==>
+    EL j pm = (if U j then [NONE] else EL j ms) /\
+    EL j pe = (if U j then [site j] else EL j ess)`
+    by simp[Abbr `pm`, Abbr `pe`, EL_GENLIST] >>
+  `LIST_REL (\m es. LENGTH m = LENGTH es) pm pe` by
+    (fs[LIST_REL_EL_EQN] >> rw[] >> Cases_on `U n'` >> simp[]) >>
+  `FILTER IS_SOME (FLAT pm) = FILTER IS_SOME (FLAT ms)` by
+    (simp[FILTER_FLAT] >> AP_TERM_TAC >>
+     simp[LIST_EQ_REWRITE] >> rpt strip_tac >>
+     simp[EL_MAP] >> Cases_on `U x` >> simp[] >>
+     `EL x ms = []` by metis_tac[] >> simp[]) >>
+  simp[] >> conj_tac
+  >- (strip_tac >> conj_tac >> simp[LIST_EQ_REWRITE] >>
+      rpt strip_tac >> simp[]) >>
+  rpt strip_tac >>
+  `GENLIST (\j. EL j pm) n = pm /\
+   GENLIST (\j. EL j pe) n = pe` by
+    (conj_tac >> simp[LIST_EQ_REWRITE, EL_GENLIST]) >>
+  `PERM (FLAT (MAP (\j. EL j pm) packet_order)) (FLAT pm)` by
+    metis_tac[MAP_COUNT_LIST, PERM_FLAT, PERM_MAP] >>
+  `PERM (FLAT (MAP (\j. EL j pe) packet_order)) (FLAT pe)` by
+    metis_tac[MAP_COUNT_LIST, PERM_FLAT, PERM_MAP] >>
+  simp[] >> rpt strip_tac >>
+  `PERM (FILTER IS_SOME (FLAT (MAP (\j. EL j pm) packet_order)))
+        (FILTER IS_SOME (FLAT ms))` by metis_tac[PERM_FILTER] >>
+  `PERM (MAP THE (FILTER IS_SOME
+          (FLAT (MAP (\j. EL j pm) packet_order))))
+        (MAP THE (FILTER IS_SOME (FLAT ms)))` by metis_tac[PERM_MAP] >>
+  `PERM (MAP THE (FILTER IS_SOME
+          (FLAT (MAP (\j. EL j pm) packet_order))) ++ unused)
+        (MAP THE (FILTER IS_SOME (FLAT ms)) ++ unused)`
+    by simp[PERM_APPEND_IFF] >>
+  metis_tac[PERM_TRANS]
+QED
+
 Theorem gas_events_invoke_update_var[local]:
   i.inst_opcode = INVOKE /\
   (!v. MEM (Var v) i.inst_operands ==> out <> v) ==>
