@@ -46,19 +46,19 @@ QED
 
 Theorem expr_stack_outcome:
   (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) /\
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
-    (\res ee u. ?v. res = INL v /\
-      expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+    (\H res ee u. ?v. res = INL v /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r) ==>
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
-    (\res ee u. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx e es sa sb s0 ee tv (StackValue t op) u /\
+    (\H res ee r. expr_exit res r) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_expr cx e) (es,s0)
+    (\H res ee u. ?tv. res = INL tv /\
+      vv_post H ctx func cenv cx e es sa sb s0 ee tv (StackValue t op) u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   rw[gas_outcome_def] >> qexists_tac `marks`
   >- (disj1_tac >>

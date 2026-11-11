@@ -4,9 +4,9 @@
  * provenance G and taint tn threaded as frame_reachable threads them.
  *
  * TOP-LEVEL:
- *   ghost_inv -- what the ghost owes the source state at a statement
+ *   ghost_inv H -- what the ghost owes the source state at a statement
  *     boundary
- *   frag_exec_ptr -- frag_exec with the ghost and pointer safety, for
+ *   frag_exec_ptr H -- frag_exec with the ghost and pointer safety, for
  *     fixed runs
  *   expr_sim_ptr, expr_vv_sim_ptr, stmt_frag_ptr, frame_ret_ok_ptr --
  *     the twins of expr_sim, expr_vv_sim, stmt_frag, frame_ret_ok, as
@@ -14,7 +14,7 @@
  *)
 Theory bodyPtrDefs
 Ancestors
-  fragGasPathPtr gasContext bodySim stmtSimDefs stmtSimProps exprSimDefs exprSimProps exprSimHyps fragExec ptrSafeRun ptrDiscipline
+  fragGasPathPtr gasContext bodySim stmtSimDefs exprSimDefs exprSimHypsDefs fragExec ptrSafeRun ptrDiscipline
   compileEnv valueEncoding exprLowering exprLoweringProps context
   venomState venomExecSemantics vyperInterpreter vyperTypeSystem list
   finite_map words
@@ -24,12 +24,12 @@ Ancestors
    external_call_dead does for the source call that cx is the context of.
    The return data may hold no taint. *)
 Definition cx_dead_def:
-  cx_dead cx =
+  cx_dead H cx =
     <| d_stor := (\a st. if a = cx.txn.target
-                         then {(k,b) | storage_dead cx F st (w2n k) b}
+                         then {(k,b) | storage_dead H F st (w2n k) b}
                          else {});
        d_trans := (\a st. if a = cx.txn.target
-                          then {(k,b) | storage_dead cx T st (w2n k) b}
+                          then {(k,b) | storage_dead H T st (w2n k) b}
                           else {});
        d_imm := K {}; d_ret := K {} |>
 End
@@ -63,12 +63,12 @@ End
    no immutable is tainted, as ptrSafeRun's ptr_inst_ok checks them at a
    request or a halt. *)
 Definition stor_taint_ok_def:
-  stor_taint_ok cx tn (s : venom_state) <=>
+  stor_taint_ok H cx tn (s : venom_state) <=>
     tn.t_stor SUBSET
-      (cx_dead cx).d_stor s.vs_call_ctx.cc_address
+      (cx_dead H cx).d_stor s.vs_call_ctx.cc_address
         (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
     tn.t_trans SUBSET
-      (cx_dead cx).d_trans s.vs_call_ctx.cc_address
+      (cx_dead H cx).d_trans s.vs_call_ctx.cc_address
         (s.vs_transient s.vs_call_ctx.cc_address) /\
     tn.t_imm = {}
 End
@@ -78,7 +78,7 @@ End
    bytes hold; the return buffer is covered; the return PC is untainted;
    and storage is tainted only in dead bytes. *)
 Definition ghost_inv_def:
-  ghost_inv d cenv cx (es : evaluation_state) G tn (s : venom_state) <=>
+  ghost_inv H d cenv cx (es : evaluation_state) G tn (s : venom_state) <=>
     (!name entry p sz.
        lookup_scopes name es.scopes = SOME entry /\
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
@@ -89,11 +89,11 @@ Definition ghost_inv_def:
     return_buf_ptr d cenv G tn s /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
             op_taint tn (Var x) = {}) /\
-    stor_taint_ok cx tn s
+    stor_taint_ok H cx tn s
 End
 
 (* Variables older than sa keep their provenance and taint; the bytes of
-   the frame's older allocations outside live locals (those expr_post
+   the frame's older allocations outside live locals (those expr_post H
    keeps) gain no taint, and nor do the live locals' bytes that
    locals_kept keeps (all but the length words of the dynamic arrays
    inside them). *)
@@ -235,7 +235,7 @@ End
    reaches what it reaches from s') and pointer safety back to s; an exit
    is pointer-safe from s, and R sees the ghost where the run stops. *)
 Definition frag_exec_ptr_def:
-  frag_exec_ptr cx ctx PG (st : compile_state) (st' : compile_state) P Q R <=>
+  frag_exec_ptr H cx ctx PG (st : compile_state) (st' : compile_state) P Q R <=>
     !fn G tn s.
       fn_has_code st st' fn /\ ~ctx_has_dalloca ctx /\ P G tn s /\
       ~s.vs_halted /\
@@ -249,24 +249,24 @@ Definition frag_exec_ptr_def:
            ?fuel'. run_from fuel' ctx fn s = r /\
              ghost_run fuel' ctx fn PG G tn s =
                ghost_run fuel ctx fn PG G' tn' s' /\
-             (ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G' tn' s' ==>
-              ptr_safe_run (cx_dead cx) 0 fuel' ctx fn PG G tn s)) \/
+             (ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG G' tn' s' ==>
+              ptr_safe_run (cx_dead H cx) 0 fuel' ctx fn PG G tn s)) \/
       (?fuel r. run_from fuel ctx fn s = r /\ exit_result r /\
                 R (ghost_run fuel ctx fn PG G tn s) r /\
-                ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s)
+                ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG G tn s)
 End
 
 (* expr_sim with the ghost: the ghost invariant at s0 gives a pointer-safe
    counted path whose post keeps the invariant, with the value's pointer
    covered, and leaves older variables' ghost alone.  The return buffer's
-   and return PC's variables, which ghost_inv reads, are older than sa, so
+   and return PC's variables, which ghost_inv H reads, are older than sa, so
    the fragment's fresh variables don't clobber them.  S3 is about the
    runtime code only: a constructor's immutable region is read and written
    through fixed addresses, not pointers, so the judgments assume
    ~cenv.ce_is_ctor. *)
 Definition expr_sim_ptr_def:
   expr_sim_ptr d ctx PG func cenv cx ty e es <=>
-    !sa sb op s0 G0 tn0.
+    !st0 sa sb op s0 G0 tn0.
       lower_value compile_expr cenv ty e sa = (op, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
@@ -276,26 +276,28 @@ Definition expr_sim_ptr_def:
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-      stmt_state_rel ctx func cenv cx es s0 /\
-      ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 ∧
+        storage_well_formed_on cx es (FST H) ∧
+        ghost_inv H d cenv cx es G0 tn0 s0) ∧ ~s0.vs_halted ∧
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
+      gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx, func) PG cx st0
         (bind (eval_expr cx e) (read_result cx)) (es, s0, G0, tn0)
-        (\res ee G tn t. ?v. res = INL v /\
-          expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+        (\H res ee G tn t. ?v. res = INL v /\
+          expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-          ghost_inv d cenv cx ee G tn t /\
+          ghost_inv H d cenv cx ee G tn t /\
           ptr_val_ok cx (expr_type e) v op G tn t /\
           (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\H res ee gt r. expr_exit res r)
 End
 
 Definition expr_vv_sim_ptr_def:
   expr_vv_sim_ptr d ctx PG func cenv cx ty e es <=>
-    !sa sb vv s0 G0 tn0.
+    !st0 sa sb vv s0 G0 tn0.
       compile_expr cenv ty e sa = (vv, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
@@ -305,24 +307,26 @@ Definition expr_vv_sim_ptr_def:
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
-      stmt_state_rel ctx func cenv cx es s0 /\
-      ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 ∧
+        storage_well_formed_on cx es (FST H) ∧
+        ghost_inv H d cenv cx es G0 tn0 s0) ∧ ~s0.vs_halted ∧
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
+      gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx, func) PG cx st0
         (eval_expr cx e) (es, s0, G0, tn0)
-        (\res ee G tn t. ?tv. res = INL tv /\
-          vv_post ctx func cenv cx e es sa sb s0 ee tv vv t /\
+        (\H res ee G tn t. ?tv. res = INL tv /\
+          vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-          ghost_inv d cenv cx ee G tn t /\
+          ghost_inv H d cenv cx ee G tn t /\
           ptr_vv_ok cx (expr_type e) tv vv ee G tn t /\
           (!t' op. vv = StackValue t' op /\ ~is_word_type (expr_type e) ==>
                    ptr_buf_ok cenv e op G t) /\
           (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
                   ptr_buf_ok cenv e p.ptr_operand G t) /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\H res ee gt r. expr_exit res r)
 End
 
 (* stmt_exit with the ghost where the run stops: a return's RetQ sees it,
@@ -337,7 +341,7 @@ End
 Definition stmt_frag_ptr_def:
   stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
     (m : compile_env compiler) source es <=>
-    !sa sb s0 G0 tn0 cenv'.
+    !st0 sa sb s0 G0 tn0 cenv'.
       m sa = (cenv', sb) /\ fn_has_code sa sb func /\
       ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
@@ -345,25 +349,28 @@ Definition stmt_frag_ptr_def:
               not_fresh_at sa x) /\
       ~block_is_terminated sa /\
       gas_admissible source (stmt_res_ok lctx) es /\
-      stmt_state_rel ctx func cenv cx es s0 /\
-      ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 ∧
+        storage_well_formed_on cx es (FST H) ∧
+        ghost_inv H d cenv cx es G0 tn0 s0) ∧ ~s0.vs_halted ∧
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG source
+      gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx, func) PG cx st0 source
         (es, s0, G0, tn0)
-        (\res ee G tn t. ?cenv''.
+        (\H res ee G tn t. ?cenv''.
           stmt_lands lctx sb res t /\ ~t.vs_halted /\
           (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
           cenv_top_ext cenv cenv'' ee.scopes /\
-          stmt_state_rel ctx func cenv'' cx ee t /\
-          ghost_inv d cenv'' cx ee G tn t /\
+          stmt_state_rel H ctx func cenv'' cx ee t ∧
+          storage_well_formed_on cx ee (FST H) ∧
+          ghost_inv H d cenv'' cx ee G tn t /\
           (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                  lookup_var x t = SOME w) /\
           (!x. not_fresh_at sa x ==>
                FLOOKUP G x = FLOOKUP G0 x /\
                op_taint tn (Var x) = op_taint tn0 (Var x)))
-        (\res ee gt r.
-          !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+        (\H res ee gt r.
+          !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
 End
 
 Definition frame_ret_ok_ptr_def:

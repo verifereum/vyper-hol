@@ -9,12 +9,12 @@ Ancestors
 Definition gas_exempt_origin_def:
   gas_exempt_origin memory tops (ctx, func) source (es, s0)
     marks (err, ee) t <=>
-    ?cenv cx out_ty ann tb ty e sa sb sc vv op v.
+    ?H cenv cx out_ty ann tb ty e sa sb sc vv op v.
       source = ignore_bind (eval_expr cx (TypeBuiltin ann tb ty [e]))
                            (return ()) /\
       compile_expr cenv out_ty (TypeBuiltin ann tb ty [e]) sa = (vv, sb) /\
       fn_has_code sa sb func /\
-      gas_value_prefix memory (ctx, func, cenv, cx) (expr_type e, e)
+      gas_value_prefix H memory (ctx, func, cenv, cx) (expr_type e, e)
         (sa, sc, op) (es, s0) marks (v, ee, t) /\
       evaluate_type_builtin cx tb ty [expr_type e] [v] = INR err /\
       ?unwrap. tb = AbiDecode unwrap /\

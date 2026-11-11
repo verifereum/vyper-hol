@@ -6,7 +6,8 @@
  * call_external_transaction_pending_deletions,
  * load_contract_pending_deletions, valid_vyper_call, compiled_event_info,
  * return_bytes, tx_return_bytes,
- * unspecified_behaviour_exempt, source_exempt, call_result_rel, logs_correspond.
+ * unspecified_behaviour_exempt, source_exempt, gas_readings_rel,
+ * call_success_rel, exception_outcome_rel, call_result_rel, logs_correspond.
  * TASK056: all compiler/call consumers use this exact boundary; the obsolete
  * compatibility owner is deleted. No old/new equivalence is claimed.
  * DAG: source/typing/storage + supported syntax + frame/trace -> e2eDefs;
@@ -18,8 +19,9 @@ Ancestors
   frameOutcome callTrace
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
-  vyperStorageLayoutSafety vyperRuntimeAccounts
+  vyperStorageLayoutSafety vyperStorageFootprint vyperRuntimeAccounts
   supportedProgram compileEnv loweringStateRelDefs selectorDispatch immutableSectionRel context
+  sorting
 
 (* ===== Source deployment, typing and storage ===== *)
 
@@ -92,10 +94,21 @@ Definition source_typing_ok_def:
 End
 
 Definition source_storage_ok_def:
-  source_storage_ok (tops : toplevel list) am tx <=>
+  source_storage_ok am tx os gs <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-      contract_storage_well_formed cx (initial_state am []) /\
-      storage_layout_safe cx
+    let obs = source_storage_trace am tx os gs in
+    let (regions, locks) = storage_trace_horizon obs in
+      storage_roots_fit obs ∧ regions_consistent regions ∧
+      storage_locks_separated regions locks ∧
+      storage_well_formed_on cx (initial_state am []) regions
+End
+
+Definition call_outcomes_storage_ok_def:
+  call_outcomes_storage_ok am tx os gs <=>
+    let cx = initial_evaluation_context am.sources am.layouts tx NONE in
+    let obs = source_storage_trace am tx os gs in
+      storage_trace_backends_well_formed cx
+        (FST (storage_trace_horizon obs)) obs
 End
 
 Definition call_outcomes_ok_def:
@@ -477,55 +490,79 @@ End
    source's: equal except at storage bytes the source leaves dead
    (accounts_agree, compileEnv). *)
 
+(* Fixed slots use distinct observations; absent slots must be irrelevant
+   to the observation selected by run. *)
+Definition gas_readings_rel_def:
+  gas_readings_rel readings run out <=>
+    ?slots unused.
+      PERM (MAP THE (FILTER IS_SOME slots) ++ unused) readings /\
+      !gobs tail.
+        LIST_REL (\slot w. slot = NONE \/ slot = SOME w) slots gobs ==>
+        run (gobs ++ tail) = out
+End
+
+Definition call_success_rel_def:
+  call_success_rel H tops ret tx (v, am', rqs) es r es' <=>
+    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+    ?out.
+      frame_outcome es r es' NONE out am'.logs /\
+      tx_return_bytes tops ret tx v out /\
+      accounts_agree H cx am'.accounts
+        (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+      transient_agree H cx am'.tStorage es'.rollback.tStorage /\
+      LIST_REL (request_agree H cx) rqs (call_requests es)
+End
+
+Definition exception_outcome_rel_def:
+  (exception_outcome_rel tops (AssertException s) es r es' <=>
+     ?exc out lgs.
+       frame_outcome es r es' (SOME exc) out lgs /\
+       (exc = Reverted \/ s = "UNREACHABLE")) /\
+  (exception_outcome_rel tops (Error e) es r es' <=>
+     unspecified_behaviour_exempt tops e \/
+     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) /\
+  (exception_outcome_rel tops _ es r es' <=> F)
+End
+
+Theorem exception_outcome_rel_cases:
+  exception_outcome_rel tops exc es r es' <=>
+    case exc of
+      AssertException s =>
+        ?failure out lgs.
+          frame_outcome es r es' (SOME failure) out lgs /\
+          (failure = Reverted \/ s = "UNREACHABLE")
+    | Error e =>
+        unspecified_behaviour_exempt tops e \/
+        ?failure out lgs. frame_outcome es r es' (SOME failure) out lgs
+    | _ => F
+Proof
+  Cases_on `exc` >> simp[exception_outcome_rel_def]
+QED
+
+(* Fixed-reading transport used by the compiler proof. *)
 Definition call_result_rel_at_def:
   call_result_rel_at gobs tops ret am tx es r es' <=>
-    let trace = call_trace es in
-    case call_external (SOME (MAP SND trace)) gobs am tx of
-      (INL v, am', rqs) =>
+    let H = storage_trace_horizon
+      (source_storage_trace am tx (MAP SND (call_trace es)) gobs) in
+    let (res, am', rqs) =
+      call_external (SOME (MAP SND (call_trace es))) gobs am tx in
+    case res of
+      INL v => call_success_rel H tops ret tx (v, am', rqs) es r es'
+    | INR HaltException =>
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-        ?out lgs.
-          frame_outcome es r es' NONE out lgs /\
-          tx_return_bytes tops ret tx v out /\
-          accounts_agree cx am'.accounts
+          frame_outcome es r es' NONE [] am'.logs /\
+          accounts_agree H cx am'.accounts
             (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-          transient_agree cx am'.tStorage es'.rollback.tStorage /\
-          logs_correspond (compiled_event_info tops) (type_env tops)
-            tx.target am'.logs lgs /\
-          LIST_REL (request_agree cx) rqs (call_requests es)
-    | (INR HaltException, am', rqs) =>
-        let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-        ?lgs.
-          frame_outcome es r es' NONE [] lgs /\
-          accounts_agree cx am'.accounts
-            (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-          transient_agree cx am'.tStorage es'.rollback.tStorage /\
-          logs_correspond (compiled_event_info tops) (type_env tops)
-            tx.target am'.logs lgs /\
-          LIST_REL (request_agree cx) rqs (call_requests es)
-    | (INR (AssertException s), _, _) =>
-        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                      (exc = Reverted \/ s = "UNREACHABLE")
-    | (INR (Error e), _, _) =>
-        unspecified_behaviour_exempt tops e \/
-        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
-    | (INR BreakException, _, _) => F
-    | (INR ContinueException, _, _) => F
-    | (INR (ReturnException _), _, _) => F
+          transient_agree H cx am'.tStorage es'.rollback.tStorage /\
+          LIST_REL (request_agree H cx) rqs (call_requests es)
+    | INR exc => exception_outcome_rel tops exc es r es'
 End
 
-(* OPEN ITEM, must land before main: the top-level gas observations gobs
-   are not yet tied to the EVM's gas readings (gas_readings es).
-   run_venom_pipeline_correct only gives ?vs_in. gas_variant vs_in vs, so
-   the source-side readings are unconstrained here; tying them needs the
-   O1 contract to relate vs_in's readings to vs's. *)
 Definition call_result_rel_def:
   call_result_rel tops ret am tx es r es' <=>
-    ?gobs. call_result_rel_at gobs tops ret am tx es r es'
+    gas_readings_rel (gas_readings es)
+      (\gobs.
+        source_storage_ok am tx (MAP SND (call_trace es)) gobs ∧
+        call_outcomes_storage_ok am tx (MAP SND (call_trace es)) gobs ==>
+        call_result_rel_at gobs tops ret am tx es r es') T
 End
-
-Theorem call_result_rel_at_imp:
-  call_result_rel_at gobs tops ret am tx es r es' ==>
-  call_result_rel tops ret am tx es r es'
-Proof
-  metis_tac[call_result_rel_def]
-QED

@@ -16,7 +16,7 @@
  *)
 Theory fragGasPathPtr
 Ancestors
-  gasExemptCert gasSummary fragGasPath gasCount fragExec ptrSafeRun
+  gasExemptCert gasSummary gasStorage fragGasPath gasCount fragExec ptrSafeRun
   ptrDiscipline venomExecSemantics venomExecProofs venomInstProofs
   venomState vyperState arithmetic list
 
@@ -65,27 +65,30 @@ End
 (* gas_summary_at over gas_path_ptr from the ghost (G0, tn0) at s0: Q sees
    the ghost where the path continues, R the ghost where it stops. *)
 Definition gas_summary_ptr_at_def:
-  gas_summary_ptr_at D (ctx, func) PG marks source (es, s0, G0, tn0) Q R <=>
+  gas_summary_ptr_at D (ctx,func) PG cx st0 marks source
+    (es,s0,G0,tn0) Q R <=>
     ?res es_end G tn r.
       (!tail.
          source (es with gas_obs :=
                    gas_explicit marks s0.vs_gas_readings ++ tail) =
-           (res, es_end with gas_obs := tail)) /\
-      gas_path_ptr D 0 ctx func PG G0 tn0 s0 (LENGTH marks) G tn r /\
-      ((?t. r = OK t /\ Q res (es_end with gas_obs := []) G tn t) \/
-       (exit_result r /\ R res (es_end with gas_obs := []) (G, tn) r))
+           (res,es_end with gas_obs := tail)) ∧
+      !H. valid_horizon cx st0 H es_end.storage_trace ==>
+        gas_path_ptr (D H) 0 ctx func PG G0 tn0 s0
+          (LENGTH marks) G tn r ∧
+        ((?t. r = OK t /\ Q H res (es_end with gas_obs := []) G tn t) \/
+         (exit_result r /\ R H res (es_end with gas_obs := []) (G,tn) r))
 End
 
-(* gas_outcome with the pointer check on the completed path.  An exempt
-   execution claims nothing about pointers: the entry's composition rules
-   it out with ~source_exempt. *)
+(* Exempt runs retain the existing source certificate; finite trace failure
+   carries no pointer claim. Completed pointer paths share one horizon. *)
 Definition gas_outcome_ptr_def:
-  gas_outcome_ptr D tops (ctx, func) PG source (es, s0, G0, tn0) Q R <=>
+  gas_outcome_ptr D tops p PG cx st0 source (es,s0,G0,tn0) Q R <=>
     ?marks.
-      gas_summary_ptr_at D (ctx, func) PG marks source (es, s0, G0, tn0) Q R \/
+      gas_bad_storage_at cx st0 source es s0 marks \/
+      gas_summary_ptr_at D p PG cx st0 marks source (es,s0,G0,tn0) Q R \/
       ?err ee leaf finish.
-        gas_exempt_cert F tops (ctx, func) (ignore_bind source (return ()))
-          (es, s0) marks (err, ee) (leaf, finish)
+        gas_exempt_cert F tops p (ignore_bind source (return ()))
+          (es,s0) marks (err,ee) (leaf,finish)
 End
 
 Theorem gas_path_ptr_edge_erase:
