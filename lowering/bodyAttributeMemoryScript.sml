@@ -245,7 +245,9 @@ Proof
      simp[]) >>
   `vv_post ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
      (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u` by
-    (irule attr_vv_post >> simp[] >> qexists_tac `tv` >> gvs[]) >>
+    (qpat_assum `!tail. select_result _ _ _ _ _ = _`
+       (qspec_then `[]` (assume_tac o MATCH_MP select_result_memory_place)) >>
+     irule attr_vv_post >> simp[] >> qexists_tac `tv` >> gvs[]) >>
   qexistsl_tac [`tv'`, `u`] >> simp[] >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ann`, `obj`, `fld`, `es`, `sa`,
                `sb`, `s0`, `ee`, `tv'`, `dst`, `bvv`, `u`, `tv`, `sid`, `fs`,

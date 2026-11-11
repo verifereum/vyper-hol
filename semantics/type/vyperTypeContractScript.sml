@@ -919,7 +919,7 @@ Definition function_header_ok_def:
       (dflts : expr list) ret <=>
     (rr ==> vis = External /\ (?n. ret = BaseT (BytesT (Dynamic n)))) /\
     (* Constructor code returns the deployed runtime, not an ABI value. *)
-    (vis = Deploy ==> NULL dflts /\ ret = NoneT) /\
+    (vis = Deploy ==> NULL dflts /\ ret = NoneT /\ ~nr) /\
     (* The source treats Pure as a read-only guard, while the compiler's
        guard packaging uses mut = View. Reject the explicit invalid header;
        the pragma frontend already leaves pure functions unguarded. *)
@@ -1086,6 +1086,16 @@ Proof
   simp[check_module_def, EVERY_MEM] >> strip_tac >>
   qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
   simp[check_toplevel_decl_def]
+QED
+
+Theorem check_contract_deploy_nonreentrant:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods /\
+  MEM (FunctionDecl Deploy mut nr rr name args dflts ret body) tls ==>
+  nr = F
+Proof
+  strip_tac >> drule_all check_contract_function_header >>
+  simp[function_header_ok_def]
 QED
 
 Theorem check_contract_external_method_ids_distinct:

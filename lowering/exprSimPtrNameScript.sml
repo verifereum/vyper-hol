@@ -177,7 +177,8 @@ Proof
      (Value entry.value) (LocatedValue ann (mk_ptr (Var p) LocMemory)) s0` by
     (`read_result cx (PlaceR (MemoryPlace id [])) (es with gas_obs := []) =
        (INL entry.value, es with gas_obs := [])` by simp[] >>
-     drule vv_post_read_result >> disch_then (fn th => rewrite_tac[GSYM th]) >>
+     irule vv_post_read_result >>
+     qexists_tac `PlaceR (MemoryPlace id [])` >> simp[] >>
      irule name_value_post >> simp[]) >>
   `ptr_buf_ok cenv (Name ann id) (Var p) G0 s0` by
     metis_tac[name_ptr_buf_ok] >>
@@ -237,7 +238,8 @@ Proof
      (Value entry.value) (LocatedValue ann (mk_ptr (Var p) LocMemory)) s0` by
     (`read_result cx (PlaceR (MemoryPlace id [])) (es with gas_obs := []) =
        (INL entry.value, es with gas_obs := [])` by simp[] >>
-     drule vv_post_read_result >> disch_then (fn th => rewrite_tac[GSYM th]) >>
+     irule vv_post_read_result >>
+     qexists_tac `PlaceR (MemoryPlace id [])` >> simp[] >>
      irule name_value_post >> simp[]) >>
   `expr_post ctx func cenv cx (Name ann id) es sa sb s0 (es with gas_obs := [])
      entry.value (Var out) u` by

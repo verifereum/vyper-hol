@@ -8458,12 +8458,23 @@ Resume eval_scc_type_sound_results_mutual[Assign_Base_sequence]:
   >- (POP_ASSUM_LIST (map_every assume_tac o List.filter (not o is_forall o concl)) >>
       simp[] >> strip_tac >> gvs[no_type_error_result_def] >>
       drule eval_expr_exception_return_typed >> simp[]) >>
-  qpat_x_assum `!s'' pv t'. eval_expr _ _ _ = _ ==> _`
-    (drule_then strip_assume_tac) >>
   qpat_x_assum `!env st res st'. _ ==> (case _ of INL pv => live_memory_result _ _ | INR _ => T)`
     (qspec_then `env` mp_tac) >> simp[] >>
   disch_then (drule_all_then strip_assume_tac) >>
+  rename1 `eval_expr cx e st = (INL pv,rhs_st)` >>
   simp_tac (srw_ss()) [] >>
+  Cases_on `read_result cx pv rhs_st` >>
+  rename1 `read_result cx pv rhs_st = (read_res,read_st)` >>
+  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
+  drule_all typed_result_read_sound >> strip_tac >> gvs[] >>
+  rename1 `read_result cx pv rhs_st = (read_res,rhs_st)` >>
+  reverse (Cases_on `read_res`)
+  >- (simp_tac (srw_ss()) [] >> strip_tac >> gvs[no_type_error_result_def] >>
+      irule no_control_exc_return_exception_typed >>
+      drule read_result_no_control >> simp[]) >>
+  simp_tac (srw_ss()) [] >>
+  qpat_x_assum `!s'' pv t' s3 v t''. eval_expr _ _ _ = _ /\ _ ==> _`
+    (drule_all_then strip_assume_tac) >>
   Cases_on `eval_target_place cx bt rhs_st` >>
   rename1 `eval_target_place cx bt rhs_st = (target_res,target_st)` >>
   qpat_assum `!env ty st res st'. _ ==> state_well_typed _ /\ _`
@@ -8479,37 +8490,25 @@ Resume eval_scc_type_sound_results_mutual[Assign_Base_sequence]:
   simp_tac (srw_ss()) [] >> suspend "Assign_Base_write"
 QED
 
-(* The resolved target preserves the delayed RHS place until its read. *)
+(* The RHS value is read before the target resolves, so only the target's
+   state reaches the write. *)
 Resume eval_scc_type_sound_results_mutual[Assign_Base_write]:
   RESUME_TAC >>
   POP_ASSUM_LIST (map_every assume_tac o List.filter (not o is_forall o concl)) >>
   RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
-  qmatch_assum_rename_tac `eval_expr cx e st = (INL pv,rhs_st)` >>
+  qmatch_assum_rename_tac `read_result cx pv rhs_st = (INL v,rhs_st)` >>
   qmatch_assum_rename_tac `eval_target_place cx bt rhs_st = (INL p,target_st)` >>
-  `vyperImmutableMetadataFrame$immutable_metadata_frame rhs_st target_st` by
-    (drule (cj 8 eval_metadata_frame_mutual) >> simp[]) >>
-  `eval_result_typed (env,cx,target_st) pv (Type (expr_type e))` by
-    (irule eval_result_typed_transport >> qexists_tac `rhs_st` >> simp[]) >>
-  `live_memory_result target_st pv` by
-    (irule live_result_transport >> qexists_tac `rhs_st` >> simp[]) >>
-  Cases_on `read_result cx pv target_st` >>
-  rename1 `read_result cx pv target_st = (read_res,read_st)` >>
-  drule_all typed_result_read_sound >> strip_tac >> gvs[] >>
-  Cases_on `read_res` >> simp[] >> strip_tac >> gvs[no_type_error_result_def]
-  >- (qmatch_assum_rename_tac
-        `read_result cx pv target_st = (INL v,target_st)` >>
-      `value_runtime_typed env tty v` by
-        (fs[value_runtime_typed_def] >>
-         drule_all type_widens_to_value_has_type >> strip_tac >> gvs[]) >>
-      `eval_result_typed (env,cx,target_st) (PlaceR p) (Type tty)` by
-        simp[eval_result_typed_def] >>
-      drule_all typed_target_place_write_sound >> strip_tac >>
-      simp[no_type_error_result_def] >>
-      Cases_on `res` >> fs[no_type_error_result_def] >>
-      irule no_control_exc_return_exception_typed >>
-      drule write_place_no_control >> simp[]) >>
+  strip_tac >>
+  `value_runtime_typed env tty v` by
+    (fs[value_runtime_typed_def] >>
+     drule_all type_widens_to_value_has_type >> strip_tac >> gvs[]) >>
+  `eval_result_typed (env,cx,target_st) (PlaceR p) (Type tty)` by
+    simp[eval_result_typed_def] >>
+  drule_all typed_target_place_write_sound >> strip_tac >>
+  simp[no_type_error_result_def] >>
+  Cases_on `res` >> fs[no_type_error_result_def] >>
   irule no_control_exc_return_exception_typed >>
-  drule read_result_no_control >> simp[]
+  drule write_place_no_control >> simp[]
 QED
 
 Resume eval_scc_type_sound_results_mutual[AugAssign_place]:

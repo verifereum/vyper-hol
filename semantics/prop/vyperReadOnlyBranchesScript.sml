@@ -39,10 +39,11 @@ Proof
   match_mp_tac state_rel_frame_bind_guarded >>
   conj_tac >- metis_tac[machine_frame_trans] >>
   conj_tac >- simp[] >> rpt strip_tac >> simp[] >>
-  ho_match_mp_tac machine_frame_local_place_effect >> simp[] >>
-  conj_tac >- metis_tac[] >> rpt gen_tac >>
   match_mp_tac machine_frame_bind >>
-  simp[machine_frame_read_result, machine_frame_write_memory_place]
+  simp[machine_frame_read_result] >> gen_tac >>
+  ho_match_mp_tac machine_frame_local_place_effect >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  simp[machine_frame_write_memory_place]
 QED
 
 Theorem machine_frame_expr_pop:

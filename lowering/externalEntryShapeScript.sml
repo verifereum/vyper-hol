@@ -1983,6 +1983,18 @@ Proof
             unwrap_value_labels, compile_store_memory_labels])
 QED
 
+Theorem compile_snapshot_vv_labels:
+  !cenv copy vv s.
+    cs_extends s (SND (compile_snapshot_vv cenv copy vv s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_snapshot_vv cenv copy vv s)))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_snapshot_vv_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac, IF_CASES_TAC] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, unwrap_value_labels,
+            compile_materialize_vv_labels])
+QED
+
 Theorem compile_store_abi_tuple_labels:
   !cenv buf off elems s P.
     cs_extends s (SND (compile_store_abi_tuple cenv buf off elems s)) /\
@@ -3813,7 +3825,8 @@ fun stmt_labels_chain rws =
 
 val stmt_labels_rws =
   [emit_op_labels, emit_void_labels, emit_inst_labels, fresh_var_action_labels,
-   compile_alloc_buffer_labels, unwrap_value_labels, compile_store_memory_labels,
+   compile_alloc_buffer_labels, unwrap_value_labels, compile_snapshot_vv_labels,
+   compile_store_memory_labels,
    compile_copy_memory_labels, compile_word_copy_loop_labels, compile_store_immutable_bytestring_labels,
    compile_store_bytestring_labels, compile_keccak256_key_labels,
    compile_mapping_subscript_labels, compile_array_subscript_labels,

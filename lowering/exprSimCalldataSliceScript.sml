@@ -612,6 +612,7 @@ Theorem slice_calldata_run:
   else ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
     stmt_state_rel ctx func cenv cx es t /\ eval_operand ptr t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,32 + 32 * word_size n) /\
+    pure_frame cenv func es sa s t /\
     val_in_memory (BaseTV (BytesT (Dynamic n)))
       (BytesV (TAKE n (DROP a cx.txn.calldata))) (w2n w) t.vs_memory /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -707,7 +708,6 @@ Proof
   qpat_x_assum `sb.cs_next_id = _` kall_tac >>
   qpat_x_assum `sb.cs_next_var = _` kall_tac >>
   qpat_x_assum `MEM _ (emitted_insts _ _)` kall_tac >>
-  qpat_x_assum `MEM _ (fn_insts _)` kall_tac >>
   qpat_x_assum `compile_alloc_buffer _ _ = _` kall_tac >>
   qpat_x_assum `emit_op ADD _ _ = _` kall_tac >>
   qpat_x_assum `emit_op CALLDATASIZE _ _ = _` kall_tac >>
@@ -746,6 +746,33 @@ Proof
      qpat_assum `u.vs_memory = _` (fn th => once_rewrite_tac[th]) >>
      `n2w n = n2w (LENGTH (TAKE n (DROP a cx.txn.calldata))):bytes32` by simp[] >>
      pop_assum SUBST1_TAC >> irule bytes_buffer_write_frame >> simp[]) >>
+  `!off len. regions_disjoint off len (w2n w) (32 + 32 * word_size n) ==>
+     mem_bytes_at off len u.vs_memory = mem_bytes_at off len s.vs_memory` by
+    (rpt strip_tac >>
+     `off + len <= w2n w \/ w2n w + 32 + n <= off` by
+       (fs[regions_disjoint_def] >> decide_tac) >>
+     qpat_assum `!b len. _ ==> mem_bytes_at _ _ u.vs_memory = _`
+       (qspecl_then [`off`, `len`] mp_tac) >>
+     (impl_tac >- decide_tac) >>
+     disch_then SUBST1_TAC >> simp[IgnAsm `u.vs_memory = _`]) >>
+  `!nm lb lsz. local_region cenv es.scopes s nm lb lsz ==>
+     mem_bytes_at lb lsz u.vs_memory = mem_bytes_at lb lsz s.vs_memory` by
+    (rpt strip_tac >>
+     `local_region cenv es.scopes t nm lb lsz` by
+       (irule exprSimPropsTheory.local_region_frame_fwd >>
+        qexistsl [`s`, `sa`, `es.scopes`] >> simp[]) >>
+     qpat_assum `!off len. regions_disjoint _ _ (w2n w) _ ==> _` irule >>
+     qpat_x_assum `!name b len. local_region _ _ t _ _ _ ==> _` drule >>
+     simp[regions_disjoint_def] >> decide_tac) >>
+  `pure_frame cenv func es sa s u` by
+    (match_mp_tac exprSimPropsTheory.pure_frame_fresh_alloca >>
+     qpat_assum `MEM _ (fn_insts _)` (irule_at Any) >>
+     qexistsl_tac [`32 + 32 * word_size n`, `w2n w`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >> simp[]) >>
+  qpat_x_assum `MEM _ (fn_insts _)` kall_tac >>
+  qpat_x_assum `!off len. regions_disjoint _ _ (w2n w) _ ==> _` kall_tac >>
+  qpat_x_assum `!nm lb lsz. local_region cenv es.scopes s _ _ _ ==>
+                  mem_bytes_at _ _ u.vs_memory = _` kall_tac >>
   conj_tac
   >- (irule literal_state_memory_frame >> qexists_tac `t` >>
       simp[IgnAsm `u.vs_memory = _`] >>
@@ -815,6 +842,7 @@ Theorem slice_calldata_vv_post:
   eval_operand p.ptr_operand t = SOME w /\ a+n <= LENGTH cx.txn.calldata /\
   stmt_state_rel ctx func cenv cx es t /\
   FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,32 + 32 * word_size n) /\
+  pure_frame cenv func es sa s t /\
   sa.cs_next_id < sb.cs_next_id /\
   val_in_memory (BaseTV (BytesT (Dynamic n)))
     (BytesV (TAKE n (DROP a cx.txn.calldata))) (w2n w) t.vs_memory /\
@@ -982,15 +1010,31 @@ Theorem vv_post_prefix_frame:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   wb_frame cenv es es1 sa s0 t /\
+  (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
   vv_post ctx func cenv cx e es1 sm sb t es2 tv vv u ==>
   vv_post ctx func cenv cx e es sa sb s0 es2 tv vv u
 Proof
-  simp[vv_post_def, GSYM wb_frame_def] >> rpt strip_tac
-  >- metis_tac[vv_at_start_mono]
-  >- metis_tac[vv_own_start_mono] >>
+  strip_tac >>
+  `wb_frame cenv es1 es2 sm t u` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+     rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qspecl_then [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `es1`, `es2`, `sm`,
                `t`, `u`, `ctx`] mp_tac wb_frame_trans >>
-  simp[]
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rewrite_tac[wb_frame_def] >> strip_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+  rewrite_tac[vv_post_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >~ [`vv_at _ _ _ sa _ _ _ _ _`]
+  >- (irule vv_at_start_mono >> qexists_tac `sm` >>
+      conj_tac >> first_assum ACCEPT_TAC)
+  >~ [`_ ==> vv_own _ _ _ sa _ _ _ _ _`]
+  >- (strip_tac >> irule vv_own_start_mono >> qexists_tac `sm` >>
+      conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qpat_x_assum `_ ==> vv_own _ _ _ sm _ _ _ _ _` irule >> first_assum ACCEPT_TAC) >>
+  strip_tac >> match_mp_tac pure_frame_trans >>
+  qexistsl_tac [`es1`, `sm`, `t`] >> fs[wb_frame_def]
 QED
 
 Theorem slice_expr_exit_INR_cast[local]:
@@ -1178,7 +1222,11 @@ Proof
   strip_tac >> qexistsl_tac [`m`, `r`] >>
   asm_simp_tac (srw_ss()) [vyperASTTheory.expr_type_def] >>
   gvs[vyperASTTheory.expr_type_def] >>
+  `~expr_has_effect
+      (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) ==>
+   pure_frame cenv func es sa s0 s` by
+    (simp[expr_has_effect_thm] >> metis_tac[expr_post_pure_frame]) >>
   irule vv_post_prefix_frame >>
   first_assum (irule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  simp[]
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
 QED

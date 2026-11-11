@@ -1832,7 +1832,7 @@ Proof
   reverse (Cases_on `res`)
   >- metis_tac[vv_post_failed_read] >>
   rename1 `read_result cx tv ee = (INL v, ee)` >>
-  drule vv_post_read_result >> strip_tac >> gvs[] >> pop_assum kall_tac >>
+  drule_all vv_post_read_result >> strip_tac >>
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_path >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- simp[] >> strip_tac >>

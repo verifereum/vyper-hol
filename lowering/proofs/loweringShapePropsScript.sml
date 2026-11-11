@@ -10176,6 +10176,38 @@ Proof
   simp[] >> irule compile_tuple_store_all_shape >> simp[]
 QED
 
+Theorem vv_with_type_shape_ok[local]:
+  value_shape_ok st (vv_with_type ty vv) = value_shape_ok st vv
+Proof
+  Cases_on `vv` >> simp[vv_with_type_def, value_shape_ok_def]
+QED
+
+(* The RHS snapshot taken before an effectful target yields a value whose
+   operands are plain: the unwrapped word, or the fresh buffer's pointer. *)
+Theorem compile_snapshot_vv_shape[local]:
+  shape_step internal compiler_label
+    (\st. value_shape_ok st vv /\ cenv_shape_ok st cenv)
+    (compile_snapshot_vv cenv copy vv)
+    (\v st. value_shape_ok st v /\ cenv_shape_ok st cenv)
+Proof
+  simp[compile_snapshot_vv_def] >> IF_CASES_TAC
+  >- (match_mp_tac shape_step_bind >>
+      qexists_tac `\op st. plain_operand st op /\ cenv_shape_ok st cenv` >> conj_tac
+      >- (irule shape_step_conseq >>
+          irule_at Any shape_step_frame >> irule_at Any unwrap_value_shape >>
+          qexists_tac `\st. cenv_shape_ok st cenv` >> simp[cenv_shape_ok_stable]) >>
+      gen_tac >> simp[] >> irule shape_step_return >> simp[value_shape_ok_def]) >>
+  IF_CASES_TAC
+  >- (match_mp_tac shape_step_bind >>
+      qexists_tac `\op st. plain_operand st op /\ cenv_shape_ok st cenv` >> conj_tac
+      >- (irule shape_step_conseq >>
+          irule_at Any (Q.INST [`R` |-> `\st. T`] compile_materialize_vv_shape_under) >>
+          simp[shape_stable_def]) >>
+      gen_tac >> simp[] >> irule shape_step_return >>
+      simp[value_shape_ok_def, mk_ptr_def]) >>
+  irule shape_step_return >> simp[]
+QED
+
 Theorem compile_assign_base_shape[local]:
   !bt e cenv lctx ty internal.
     ~supported_target_exists expr_shape_root bt /\
@@ -10190,9 +10222,15 @@ Proof
       irule shape_step_conseq >> irule_at Any compile_store_at_loc_cenv_shape >>
       simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
   (* Preserve the RHS value through target evaluation; unwrap only afterwards. *)
-  stmt_bind `\v st. value_shape_ok st v /\ cenv_shape_ok st cenv` `v`
+  stmt_bind `\v st. value_shape_ok st v /\ cenv_shape_ok st cenv` `v0`
     (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
      simp[cenv_shape_ok_stable] >> irule (cj 1 compile_expr_shape) >> simp[]) >>
+  (* Snapshot the RHS before an effectful target's indices. *)
+  stmt_bind `\v st. value_shape_ok st v /\ cenv_shape_ok st cenv` `v`
+    (IF_CASES_TAC
+     >- (irule shape_step_conseq >> irule_at Any compile_snapshot_vv_shape >>
+         simp[vv_with_type_shape_ok]) >>
+     irule shape_step_return >> simp[]) >>
   stmt_bind `\r st. plain_operand st (FST r) /\
     (value_shape_ok st v /\ cenv_shape_ok st cenv)` `r`
     (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
