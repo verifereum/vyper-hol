@@ -8,7 +8,7 @@ Ancestors
   abiEncoderChildContext abiEncoderAppend abiEncoderWindowArrayBodyMem
   windowTransitionMem instMemFrontier allocaFootprint venomMemDefs arithmetic pred_set
 
-Theorem empty_source_child_pre[local]:
+Theorem empty_source_child_pre:
   abi_encoder_admissible ei /\
   abi_encoder_window_input ei at av sb 0 s.vs_memory /\
   eval_operand src s = SOME (n2w sb) /\
