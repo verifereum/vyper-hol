@@ -1,24 +1,34 @@
 (*
- * A pure target walk keeps memory outside its own fresh allocations.
+ * A target walk whose indices can't mutate keeps the source machine state.
  *
- * compile_get_target_ptr writes memory only into scratch buffers it
- * allocates itself (compile_alloc_buffer for mapping keys) and through the
- * code of its index expressions, which are pure when supported_target_pure
- * holds.  So across the walk, the live locals and every window disjoint
- * from the walk's fresh ALLOCAs keep their bytes (pure_frame), next to
- * the walk's own target_post from target_sim.
+ * Assign evaluates its RHS first and then the target's place
+ * (eval_base_place, compiled by compile_get_target_ptr).  When no index of
+ * the target can mutate (~expr_can_mutate: internal calls only to view or
+ * pure functions, external calls only static), the walk leaves the
+ * accounts, transient storage, immutables, logs and pending deletions
+ * (machine_frame) and the scopes as they were, next to the walk's own
+ * target_post from target_sim.  Internal calls are tied to the module's
+ * declared mutability by ce_func_mutability and function_mutability_ok.
  *
  * TOP-LEVEL:
- *   target_pure_walk_pure_frame
+ *   target_walk_frame
  *)
 Theory targetPureWalkFrame
 Ancestors
-  targetPlaceSimDefs supportedTargets loweringStateRelDefs loweringPosts
-  gasOutcome
+  targetPlaceSimDefs loweringStateRelDefs loweringPosts gasOutcome gasContext
+  stmtLowering exprLowering compileVyper vyperTypeContract vyperTypeCallGraph
+  vyperMachineFrame
 
-Theorem target_pure_walk_pure_frame:
-  !ctx func cenv cx env tops bt es vt sa sb op s0.
-    supported_target_pure tops bt /\ target_sim ctx func cenv cx env bt es /\
+Theorem target_walk_frame:
+  !ctx func cenv cx env bt es vt sa sb op s0.
+    ~expr_can_mutate cenv (target_to_expr bt) /\
+    cenv.ce_func_mutability = build_func_mutability (cx_tops cx) /\
+    (!vis mut nr rr fn args dflts ret body.
+       MEM (FunctionDecl vis mut nr rr fn args dflts ret body) (cx_tops cx) ==>
+       function_mutability_ok [(NONE, cx_tops cx)] vis mut nr dflts body) /\
+    get_module_code cx NONE = SOME (cx_tops cx) /\
+    EVERY (\c. FST c = NONE) (int_calls_target bt) /\
+    target_sim ctx func cenv cx env bt es /\
     type_place_target env bt = SOME vt /\
     compile_get_target_ptr compile_expr cenv bt sa = (op, sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -30,7 +40,7 @@ Theorem target_pure_walk_pure_frame:
     gas_outcome F (cx_tops cx) (ctx, func) (eval_base_place cx bt) (es, s0)
       (\res ee t. ?pv. res = INL pv /\
          target_post ctx func cenv cx es sa sb s0 ee pv vt op t /\
-         pure_frame cenv func es sa s0 t /\
+         machine_frame es ee /\ ee.scopes = es.scopes /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
