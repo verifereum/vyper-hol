@@ -24,6 +24,7 @@
 Theory exprExtRequestEncoderFrame
 Ancestors
   abiEncoderWindowContract exprLoweringProps fragGasMode
+  extRequestEncoderFrameNoBlock extRequestEncoderFrameRelabel
 
 Theorem abi_encoder_window_run_fmp:
   compile_abi_encode_to_buf dst src ei st = (out,st') /\
@@ -49,5 +50,8 @@ Theorem abi_encoder_window_run_fmp:
       t.vs_data_section = s.vs_data_section /\
       LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `st.cs_blocks = st'.cs_blocks`
+  >- (drule_all abi_encoder_window_run_fmp_no_blocks >> simp[]) >>
+  drule_all abi_encoder_window_run_fmp_blocks >> simp[]
 QED
