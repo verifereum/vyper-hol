@@ -4,6 +4,8 @@ Theory dftGasMask
 Ancestors
   dftGasOracleSim dftGasSimFuel dftGasFromListRestore dftGasToListReplay
   dftRunRel dftDefs o1PassContract gasEvents gasCount
+  cfgNormSupplySim lowerDloadReturnCallContext venomWf venomExecProofs
+  venomExecProps simplifyCfgDefs unitLabelMapIdentity
   venomExecSemantics venomState list rich_list sorting option
 
 Theorem gas_events_invoke_update_var[local]:
@@ -4226,6 +4228,58 @@ Proof
      Cases_on `v'.vs_halted` >> gvs[]) >>
   qpat_x_assum `(?j. _) ==> _` mp_tac >>
   (impl_tac >- metis_tac[]) >> strip_tac >> gvs[]
+QED
+
+(* Preserve the source invariant at the actual target block endpoint. *)
+Theorem target_block_entry_frame[local]:
+  LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+  o1_ctx_shape C' /\ MEM fn C.ctx_functions /\ fn' = dft_fn fn /\
+  dft_fn_rel fn fn' /\
+  lookup_block s.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  run_block_entry fuel C' bb' s = OK t /\
+  strict_dom_vars_defined fn s /\ fn_reachable fn s.vs_current_bb /\
+  ctx_labels_bound C s.vs_labels /\ ctx_labels_bound C' s.vs_labels /\
+  ~s.vs_call_ctx.cc_static ==>
+  strict_dom_vars_defined fn t /\ fn_reachable fn t.vs_current_bb /\
+  ctx_labels_bound C t.vs_labels /\ ctx_labels_bound C' t.vs_labels /\
+  ~t.vs_call_ctx.cc_static
+Proof
+  strip_tac >>
+  `MEM fn' C'.ctx_functions` by
+    (drule_all LIST_REL_MEM_IMP >> simp[]) >>
+  `wf_function fn' /\ fn_inst_wf fn'` by
+    gvs[o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def] >>
+  `MEM bb' fn'.fn_blocks /\ bb'.bb_label = s.vs_current_bb` by
+    metis_tac[lookup_block_member_label] >>
+  `EVERY inst_wf bb'.bb_instructions` by
+    metis_tac[fn_inst_wf_def, EVERY_MEM, fn_insts_MEM] >>
+  `strict_dom_vars_defined fn' s /\ fn_reachable fn' s.vs_current_bb` by
+    metis_tac[dft_fn_strict_dom_vars_defined, dft_fn_reachable] >>
+  `strict_dom_vars_defined fn' t` by
+    (irule strict_dom_vars_defined_run_block_entry >> metis_tac[]) >>
+  `strict_dom_vars_defined fn t` by
+    metis_tac[dft_fn_strict_dom_vars_defined] >>
+  qspecl_then [`s`, `bb'.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs >>
+  gvs[run_block_def] >>
+  `t.vs_labels = s.vs_labels` by
+    (drule venomExecPropsTheory.exec_block_preserves_labels >>
+     drule eval_phis_preserves_labels >> simp[]) >>
+  `t.vs_call_ctx = s.vs_call_ctx` by
+    (drule (cj 1 (SRULE[DISJ_IMP_THM] ld_exec_block_return_call_ctx)) >>
+     drule dft_eval_phis_call_ctx >> simp[]) >>
+  `MEM t.vs_current_bb (bb_succs bb')` by
+    (irule venomExecProofsTheory.exec_block_current_bb_in_succs >>
+     `bb_well_formed bb'` by metis_tac[wf_function_def] >>
+     gvs[bb_well_formed_def] >>
+     conj_tac
+     >- (rpt strip_tac >>
+         qpat_x_assum `!i. _ /\ is_terminator _ ==> _`
+           (qspec_then `i` mp_tac) >> simp[] >> decide_tac) >>
+     goal_assum (drule_at Any) >> simp[phi_prefix_length_le]) >>
+  `fn_cfg_edge (dft_fn fn) s.vs_current_bb t.vs_current_bb` by
+    (simp[fn_cfg_edge_def] >> metis_tac[]) >>
+  metis_tac[fn_reachable_step, dft_fn_reachable]
 QED
 
 (* Source-cut design probe: the middle block can be a singleton GAS
