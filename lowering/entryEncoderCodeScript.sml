@@ -106,7 +106,7 @@ QED
 Resume entry_code_encoder_mutual[bytes]:
   rpt gen_tac >>
   simp[Once compile_abi_encode_child_def, compileEnvTheory.comp_ignore_bind_def] >>
-  ntac 9 (irule entry_code_bind >> reverse conj_tac
+  ntac 10 (irule entry_code_bind >> reverse conj_tac
     >- simp[entry_code_emit_op, entry_code_emit_void] >>
     rpt gen_tac >> BETA_TAC) >> simp[entry_code_emit_op]
 QED

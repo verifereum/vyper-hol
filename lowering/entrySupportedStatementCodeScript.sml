@@ -221,7 +221,8 @@ Proof
   rename1 `SOME binding` >> Cases_on `binding` >>
   simp[entry_code_emit_inst] >>
   rpt (irule entry_code_bind >> reverse conj_tac
-    >- simp[entry_code_emit_op] >> rpt gen_tac >> BETA_TAC) >>
+    >- simp[entry_code_emit_op, entry_code_return_unlock] >>
+    rpt gen_tac >> BETA_TAC) >>
   simp[entry_code_emit_inst] >>
   Cases_on `ce.ce_ctor_exit_label` >> simp[entry_code_emit_inst] >>
   CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
