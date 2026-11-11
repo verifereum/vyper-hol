@@ -2347,7 +2347,8 @@ Proof
        rpt gen_tac >> BETA_TAC >>
        simp[cs_appends_emit_helpers, cs_appends_return, GSYM cs_appends_def]) >>
   rw[cs_appends_def] >>
-  metis_tac[cj 1 compile_assert_slice_bounds_labels, pairTheory.SND]
+  first_x_assum (assume_tac o GSYM o Q.AP_TERM `SND`) >>
+  fs[compile_assert_slice_bounds_labels, compile_slice_out_buf_labels]
 QED
 
 Theorem first_emission_builtin_slice:
