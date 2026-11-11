@@ -382,3 +382,98 @@ Proof
   `n <> i /\ n <> j` by metis_tac[] >>
   simp[]
 QED
+
+Theorem ac_merge_carry_find_conditional:
+  ALL_DISTINCT (MAP (\i. i.inst_id) xs) /\
+  (!mc. MEM mc cs ==> ?i j c d.
+    i < j /\ j < LENGTH xs /\
+    (EL i xs).inst_id = mc.mc_first_id /\
+    (EL j xs).inst_id = mc.mc_second_id /\
+    (EL i xs).inst_opcode = ASSERT /\ (EL i xs).inst_operands = [c] /\
+    ac_get_iszero_operand dfg {} c = SOME mc.mc_first_pred /\
+    (EL j xs).inst_opcode = ASSERT /\ (EL j xs).inst_operands = [d] /\
+    ac_get_iszero_operand dfg {} d = SOME mc.mc_second_pred /\
+    (!k. i < k /\ k < j ==> ac_is_safe_between (EL k xs))) /\
+  (!mc. MEM mc cs ==> mc.mc_first_id <> (EL n xs).inst_id /\
+                         mc.mc_second_id <> (EL n xs).inst_id) ==>
+  FIND (ac_merge_crossing xs n) cs = FIND (ac_merge_crossing xs (SUC n)) cs /\
+  (!mc. FIND (ac_merge_crossing xs n) cs = SOME mc ==>
+        ac_is_safe_between (EL n xs))
+Proof
+  strip_tac >>
+  `!mc. MEM mc cs ==>
+    (ac_merge_crossing xs n mc <=> ac_merge_crossing xs (SUC n) mc) /\
+    (ac_merge_crossing xs n mc ==> ac_is_safe_between (EL n xs))` by
+    (rpt strip_tac >>
+     qpat_x_assum `!mc. MEM mc cs ==> ?i j c d. _` drule >> strip_tac >>
+     qpat_x_assum `!mc. MEM mc cs ==> _` drule >> strip_tac >>
+     metis_tac[ac_merge_crossing_carry]) >>
+  qpat_x_assum `!mc. MEM mc cs ==> ?i j c d. _` kall_tac >>
+  qpat_x_assum `!mc. MEM mc cs ==> mc.mc_first_id <> _ /\ _` kall_tac >>
+  conj_tac
+  >- (Induct_on `cs` >> simp[FIND_thm] >> rpt strip_tac >>
+      Cases_on `ac_merge_crossing xs n h` >> simp[] >> metis_tac[]) >>
+  metis_tac[FIND_MEM, FIND_P]
+QED
+
+Theorem ac_merge_assert_crossing_conditional:
+  ALL_DISTINCT (MAP (\i. i.inst_id) xs) /\
+  (!mc. MEM mc cs ==> ?i j c d.
+    i < j /\ j < LENGTH xs /\
+    (EL i xs).inst_id = mc.mc_first_id /\
+    (EL j xs).inst_id = mc.mc_second_id /\
+    (EL i xs).inst_opcode = ASSERT /\ (EL i xs).inst_operands = [c] /\
+    ac_get_iszero_operand dfg {} c = SOME mc.mc_first_pred /\
+    (EL j xs).inst_opcode = ASSERT /\ (EL j xs).inst_operands = [d] /\
+    ac_get_iszero_operand dfg {} d = SOME mc.mc_second_pred /\
+    (!k. i < k /\ k < j ==> ac_is_safe_between (EL k xs))) ==>
+  !n mc. n < LENGTH xs /\ (EL n xs).inst_opcode = ASSERT /\ MEM mc cs ==>
+    (ac_merge_crossing xs n mc <=> mc.mc_second_id = (EL n xs).inst_id) /\
+    (ac_merge_crossing xs (SUC n) mc <=> mc.mc_first_id = (EL n xs).inst_id)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!mc. MEM mc cs ==> _` drule >> strip_tac >>
+  `!m. ac_merge_crossing xs m mc <=> i < m /\ m <= j` by
+    (gen_tac >> irule ac_merge_crossing_interval >> simp[] >> metis_tac[]) >>
+  `~(i < n /\ n < j)` by
+    (strip_tac >> `ac_is_safe_between (EL n xs)` by metis_tac[] >>
+     fs[ac_is_safe_between_def, ac_is_volatile_def]) >>
+  `((EL n xs).inst_id = mc.mc_second_id ==> ac_merge_crossing xs n mc) /\
+   ((EL n xs).inst_id = mc.mc_first_id ==> ac_merge_crossing xs (SUC n) mc)` by
+    (irule ac_merge_endpoint_crossing >> simp[] >> metis_tac[]) >>
+  `!m. i < m /\ m <= j ==> m = j \/ i < m /\ m < j` by decide_tac >>
+  conj_tac >> eq_tac >> strip_tac
+  >- (`n = j` by (gvs[] >> decide_tac) >> simp[])
+  >- metis_tac[]
+  >- (`n = i` by (gvs[] >> decide_tac) >> simp[]) >> metis_tac[]
+QED
+
+Theorem ac_merge_assert_find_conditional:
+  ALL_DISTINCT (MAP (\i. i.inst_id) xs) /\
+  (!mc. MEM mc cs ==> ?i j c d.
+    i < j /\ j < LENGTH xs /\
+    (EL i xs).inst_id = mc.mc_first_id /\
+    (EL j xs).inst_id = mc.mc_second_id /\
+    (EL i xs).inst_opcode = ASSERT /\ (EL i xs).inst_operands = [c] /\
+    ac_get_iszero_operand dfg {} c = SOME mc.mc_first_pred /\
+    (EL j xs).inst_opcode = ASSERT /\ (EL j xs).inst_operands = [d] /\
+    ac_get_iszero_operand dfg {} d = SOME mc.mc_second_pred /\
+    (!k. i < k /\ k < j ==> ac_is_safe_between (EL k xs))) ==>
+  !n. n < LENGTH xs /\ (EL n xs).inst_opcode = ASSERT ==>
+    FIND (ac_merge_crossing xs n) cs =
+      FIND (\mc. mc.mc_second_id = (EL n xs).inst_id) cs /\
+    FIND (ac_merge_crossing xs (SUC n)) cs =
+      FIND (\mc. mc.mc_first_id = (EL n xs).inst_id) cs
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  `!mc. MEM mc cs ==>
+    (ac_merge_crossing xs n mc <=> mc.mc_second_id = (EL n xs).inst_id) /\
+    (ac_merge_crossing xs (SUC n) mc <=> mc.mc_first_id = (EL n xs).inst_id)` by
+    (gen_tac >> disch_tac >> irule ac_merge_assert_crossing_conditional >>
+     simp[] >> metis_tac[]) >>
+  qpat_x_assum `!mc. MEM mc cs ==> ?i j c d. _` kall_tac >>
+  Induct_on `cs` >> simp[FIND_thm] >> rpt strip_tac >>
+  `ac_merge_crossing xs n h <=> h.mc_second_id = (EL n xs).inst_id` by metis_tac[] >>
+  `ac_merge_crossing xs (SUC n) h <=> h.mc_first_id = (EL n xs).inst_id` by metis_tac[] >>
+  simp[] >> metis_tac[]
+QED
