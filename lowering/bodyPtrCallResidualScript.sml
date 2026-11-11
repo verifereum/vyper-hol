@@ -8,14 +8,11 @@
  * lifts the topics' and data operand's pointer simulations through
  * compile_raw_log's fixed and dynamic LOG tails.
  *
- * extcall is false here twice over.  The lowering sends the arguments'
- * bound-sized encoding (abi_size_bound) where the source sends the exact
- * one, so the oracle requests differ; the port of the exact-length
- * lowering is on the S1 branch.  And the return decoder forms
- * src + offset from the returndata and compares it with src before its
- * bounds ASSERT, while access_ok's comparison clause wants both compared
- * pointers inside src's site, which a returned offset past the buffer
- * breaks.
+ * extcall is held.  Its two old falsity reasons are gone: the lowering
+ * now sends the arguments' exact-length encoding, as the source does, and
+ * the return decoder is in position form (df93f4034), so its offset
+ * compares are on positions with no ghost provenance and access_ok's
+ * comparison clause does not apply to them.
  *
  * TOP-LEVEL:
  *   raw_log_case_ptr_residual
@@ -56,9 +53,8 @@ Proof
   metis_tac[raw_revert_sim_ptr, raw_revert_vv_sim_ptr]
 QED
 
-(* RESIDUAL: false while extcall's calldata is bound-sized and the return
-   decoder's offset compare can leave the buffer's site; waits on the S1
-   lowering port and a decision on access_ok's comparison clause. *)
+(* RESIDUAL: not yet proved.  The S1 seams it lifts (extcall_request_setup,
+   extcall_call_step, exprSimExtCallCase) are proved. *)
 Theorem extcall_case_ptr_residual:
   !cx v14 is_static skip_check sig opts es v15.
     (!s'' target t nargs s'3' results t'.
