@@ -3795,7 +3795,9 @@ Theorem ircf_block_sim:
         (run_block k C bb s)
         (run_block m (ircf_transform_ctx fn_meta rma C) bb' t)
 Proof
-  cheat
+  mp_tac ircf_block_sim_from_internal >>
+  (impl_tac >- MATCH_ACCEPT_TAC ircf_run_block_sim_reachable) >>
+  simp[]
 QED
 
 Theorem ircf_ctx_sim:
