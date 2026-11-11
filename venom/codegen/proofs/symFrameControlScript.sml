@@ -2693,13 +2693,14 @@ Proof
   drule_all doSwapSimTheory.do_dup_big_decompose >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   gvs[listTheory.MEM_APPEND, listTheory.MEM_MAP] >>
-  `FST (spill_alloc_n [] ps.ps_alloc
-    (REVERSE (top_n (d - 15) ps.ps_stack))) = []` by
-    (Cases_on `FST (spill_alloc_n [] ps.ps_alloc
-      (REVERSE (top_n (d - 15) ps.ps_stack)))` >> gvs[] >> metis_tac[listTheory.MEM]) >>
+  qmatch_asmsub_abbrev_tac `FST (spill_alloc_n [] ps.ps_alloc items)` >>
+  `FST (spill_alloc_n [] ps.ps_alloc items) = []` by
+    (Cases_on `FST (spill_alloc_n [] ps.ps_alloc items)` >> gvs[] >>
+     metis_tac[listTheory.MEM]) >>
   pop_assum (mp_tac o AP_TERM ``LENGTH:num list -> num``) >>
-  simp[doSwapSimTheory.spill_alloc_n_offsets_length, stackPlanOpsTheory.top_n_def] >>
-  decide_tac
+  simp[doSwapSimTheory.spill_alloc_n_offsets_length, Abbr`items`,
+       stackPlanOpsTheory.top_n_def, listTheory.LENGTH_TAKE_EQ] >>
+  rw[] >> decide_tac
 QED
 
 Theorem do_restore_read_only_replay:
