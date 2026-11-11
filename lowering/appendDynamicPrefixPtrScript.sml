@@ -1,0 +1,187 @@
+(* Finite same-element Dynamic copy prefix, before MCOPY. *)
+Theory appendDynamicPrefixPtr
+Ancestors appendDynamicPointerAddPtr appendDynamicHeaderStorePtr
+  appendDynamicPurePtr typedCopyAmbientFramePtr fragExecPtr
+  valueEncodingProps bodyPtrDefs loweringStateRelDefs contextCodegenRel
+  compileEnv context emitHelper venomState venomInst words finite_map
+  abiDecodeStaticProps
+
+Theorem append_dynamic_prefix_ptr_conditional:
+  !cx ctx PG R G tn s sa s1 s2 s3 s4 s5 s6 s7 sb
+    src dst len gt ok sd dd count a b l sn dn esz.
+    emit_op MLOAD [Var src] sa = (Var len,s1) /\
+    emit_op GT [Var len;Lit (n2w dn)] s1 = (Var gt,s2) /\
+    emit_op ISZERO [Var gt] s2 = (Var ok,s3) /\
+    emit_void ASSERT [Var ok] s3 = ((),s4) /\
+    emit_void MSTORE [Var dst;Var len] s4 = ((),s5) /\
+    emit_op ADD [Var src;Lit 32w] s5 = (Var sd,s6) /\
+    emit_op ADD [Var dst;Lit 32w] s6 = (Var dd,s7) /\
+    emit_op MUL [Var len;Lit (n2w esz)] s7 = (Var count,sb) /\
+    not_fresh_at sa src /\ not_fresh_at sa dst /\
+    lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+    ptr_covers G tn src s (32+sn*esz) /\
+    ptr_covers G tn dst s (32+dn*esz) /\
+    mload (w2n a) s = n2w l /\
+    (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
+    l <= sn /\ sn <= dn /\ dn < dimword(:256) /\
+    l*esz < dimword(:256) /\
+    w2n a+32 < dimword(:256) /\ w2n b+32 < dimword(:256) /\
+    (w2n a+32+sn*esz <= w2n b \/ w2n b+32+dn*esz <= w2n a) ==>
+    ?Gf tnf sf.
+      frag_exec_ptr cx ctx PG sa sb
+        (\g t v. g = G /\ t = tn /\ v = s)
+        (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
+      lookup_var sd sf = SOME (n2w (w2n a+32)) /\
+      lookup_var dd sf = SOME (n2w (w2n b+32)) /\
+      ptr_covers Gf tnf sd sf (l*esz) /\
+      ptr_covers Gf tnf dd sf (l*esz) /\
+      lookup_var count sf = SOME (n2w (l*esz)) /\
+      op_taint tnf (Var count) = {} /\
+      (!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
+        mem_word_at (w2n b) m = n2w l) /\
+      mem_bytes_at (w2n a) (32+sn*esz) sf.vs_memory =
+        mem_bytes_at (w2n a) (32+sn*esz) s.vs_memory /\
+      (!i. i < w2n b \/ w2n b+32 <= i ==>
+        mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+        (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+      cs_extends sa sb /\ not_fresh_at sb sd /\ not_fresh_at sb dd /\
+      not_fresh_at sb count /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
+      sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  rpt gen_tac >> disch_tac >>
+  `sa.cs_next_var <= s1.cs_next_var /\
+   s1.cs_next_var <= s2.cs_next_var /\
+   s2.cs_next_var <= s3.cs_next_var /\
+   s3.cs_next_var = s4.cs_next_var /\
+   s4.cs_next_var = s5.cs_next_var /\
+   s5.cs_next_var <= s6.cs_next_var /\
+   s6.cs_next_var <= s7.cs_next_var /\
+   s7.cs_next_var <= sb.cs_next_var /\
+   not_fresh_at s1 len` by
+    (gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+         fresh_var_def, fresh_id_def, emit_def, comp_return_def,
+         not_fresh_at_def] >> decide_tac) >>
+  `cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 s3 /\
+   cs_extends s3 s4 /\ cs_extends s4 s5 /\ cs_extends s5 s6 /\
+   cs_extends s6 s7 /\ cs_extends s7 sb` by
+    (gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+         fresh_var_def, fresh_id_def, emit_def, comp_return_def,
+         cs_extends_def]) >>
+  qpat_x_assum `_ /\ _` strip_assume_tac >>
+  `ptr_covers G tn src s 32` by
+    (gvs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+      arithmeticTheory.LESS_EQ_ADD]) >>
+  drule_all emit_mload_clean_ambient_frag_ptr >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
+    (qx_choose_then `G1` (qx_choose_then `tn1` (qx_choose_then `v1` strip_assume_tac)))) >>
+  `eval_operand (Var len) v1 = SOME (n2w l)` by simp[eval_operand_def] >>
+  drule_all (SRULE[] (Q.SPECL [`GT`, `(\a b. bool_to_word (w2n a > w2n b))`]
+    emit_dynamic_binop_clean_ptr)) >>
+  disch_then (qspec_then `G1` mp_tac) >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
+    (qx_choose_then `G2` (qx_choose_then `tn2` (qx_choose_then `v2` strip_assume_tac)))) >>
+  `l < dimword(:256)` by decide_tac >>
+  `eval_operand (Var gt) v2 = SOME 0w` by
+    (simp[eval_operand_def, arithmeticPropsTheory.bool_to_word_eq_0w] >> decide_tac) >>
+  drule_all emit_dynamic_iszero_clean_ptr >>
+  disch_then (qspec_then `G2` mp_tac) >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
+    (qx_choose_then `G3` (qx_choose_then `tn3` (qx_choose_then `v3` strip_assume_tac)))) >>
+  `eval_operand (Var ok) v3 = SOME 1w` by
+    simp[eval_operand_def, arithmeticPropsTheory.bool_to_word_T] >>
+  `(1w:bytes32) <> 0w` by simp[] >>
+  drule_all emit_dynamic_assert_true_ptr >>
+  disch_then (qspecl_then [`G3`, `cx`, `ctx`, `PG`, `R`] assume_tac) >>
+  qabbrev_tac `v4 = v3 with vs_inst_idx := SUC v3.vs_inst_idx` >>
+  `!p. not_fresh_at sa p ==> not_fresh_at s1 p /\
+    not_fresh_at s2 p /\ not_fresh_at s3 p /\ not_fresh_at s4 p /\
+    not_fresh_at s5 p /\ not_fresh_at s6 p /\ not_fresh_at s7 p` by
+    (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `not_fresh_at s2 len /\ not_fresh_at s3 len /\ not_fresh_at s4 len /\
+   not_fresh_at s5 len /\ not_fresh_at s6 len /\ not_fresh_at s7 len` by
+    (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `lookup_var dst v4 = SOME b /\ eval_operand (Var len) v4 = SOME (n2w l) /\
+   op_taint tn3 (Var len) = {}` by
+    (simp[Abbr `v4`, lookup_var_def, eval_operand_def] >>
+     metis_tac[lookup_var_def]) >>
+  `ptr_covers G3 tn3 dst v4 32` by
+    (gvs[ptr_covers_def, Abbr `v4`, lookup_var_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_ADD]) >>
+  drule_all emit_dynamic_header_store_ptr >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
+    (qx_choose_then `tn5` (qx_choose_then `v5` strip_assume_tac))) >>
+  `lookup_var src v5 = SOME a /\ lookup_var dst v5 = SOME b /\
+   ptr_covers G3 tn5 src v5 (32+sn*esz) /\
+   ptr_covers G3 tn5 dst v5 (32+dn*esz)` by
+    (gvs[ptr_covers_def, Abbr `v4`, lookup_var_def] >> metis_tac[]) >>
+  `32+l*esz <= 32+sn*esz /\ 32+l*esz <= 32+dn*esz` by
+    (simp[] >> conj_tac >> irule arithmeticTheory.LESS_MONO_MULT2 >> decide_tac) >>
+  `not_fresh_at s5 src /\ not_fresh_at s6 dst` by metis_tac[] >>
+  qpat_x_assum `emit_op ADD _ s6 = _` mp_tac >>
+  drule_all (Q.GENL [`cx`, `ctx`, `PG`, `R`]
+    (SRULE[] (Q.INST [`n` |-> `l*esz`, `off` |-> `32`]
+      (SPEC_ALL emit_dynamic_pointer_add_ptr)))) >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
+    (qx_choose_then `G6` (qx_choose_then `tn6` (qx_choose_then `v6` strip_assume_tac)))) >>
+  disch_tac >>
+  qpat_x_assum `emit_op ADD _ s5 = _` mp_tac >>
+  `lookup_var dst v6 = SOME b /\ ptr_covers G6 tn6 dst v6 (32+dn*esz)` by
+    (gvs[ptr_covers_def] >> metis_tac[]) >>
+  drule_all (Q.GENL [`cx`, `ctx`, `PG`, `R`]
+    (SRULE[] (Q.INST [`n` |-> `l*esz`, `off` |-> `32`, `root` |-> `dst`,
+      `s` |-> `v6`] (SPEC_ALL emit_dynamic_pointer_add_ptr)))) >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
+    (qx_choose_then `G7` (qx_choose_then `tn7` (qx_choose_then `v7` strip_assume_tac)))) >>
+  disch_tac >>
+  `eval_operand (Var len) v7 = SOME (n2w l) /\ op_taint tn7 (Var len) = {}` by
+    (gvs[eval_operand_def] >> metis_tac[]) >>
+  drule_all (SRULE[] (Q.SPECL [`MUL`, `word_mul`] emit_dynamic_binop_clean_ptr)) >>
+  disch_then (qspec_then `G7` mp_tac) >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
+    (qx_choose_then `G8` (qx_choose_then `tn8` (qx_choose_then `v8` strip_assume_tac)))) >>
+  qexistsl_tac [`G8`, `tn8`, `v8`] >> (conj_tac >-
+    (irule frag_exec_ptr_seq >>
+     qpat_assum `frag_exec_ptr _ _ _ s7 sb _ _ _` (irule_at Any) >>
+     simp[] >> (conj_tac >- metis_tac[cs_extends_trans]) >>
+     irule frag_exec_ptr_seq >>
+     qpat_assum `frag_exec_ptr _ _ _ s6 s7 _ _ _` (irule_at Any) >>
+     simp[] >> (conj_tac >- metis_tac[cs_extends_trans]) >>
+     irule frag_exec_ptr_seq >>
+     qpat_assum `frag_exec_ptr _ _ _ s5 s6 _ _ _` (irule_at Any) >>
+     simp[] >> (conj_tac >- metis_tac[cs_extends_trans]) >>
+     irule frag_exec_ptr_seq >>
+     qpat_assum `frag_exec_ptr _ _ _ s4 s5 _ _ _` (irule_at Any) >>
+     simp[] >> (conj_tac >- metis_tac[cs_extends_trans]) >>
+     irule frag_exec_ptr_seq >>
+     qpat_assum `frag_exec_ptr _ _ _ s3 s4 _ _ _` (irule_at Any) >>
+     simp[] >> (conj_tac >- metis_tac[cs_extends_trans]) >>
+     irule frag_exec_ptr_seq >>
+     qpat_assum `frag_exec_ptr _ _ _ s2 s3 _ _ _` (irule_at Any) >>
+     simp[] >> (conj_tac >- metis_tac[cs_extends_trans]) >>
+     irule frag_exec_ptr_seq >>
+     qpat_assum `frag_exec_ptr _ _ _ s1 s2 _ _ _` (irule_at Any) >>
+     simp[] >> metis_tac[])) >>
+  `not_fresh_at s7 sd /\ not_fresh_at sb sd /\ not_fresh_at sb dd` by
+    (gvs[not_fresh_at_def] >> decide_tac) >>
+  rename1 `emit_op MUL _ s7 = (Var bytecount,sb)` >>
+  `not_fresh_at sb bytecount` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+       fresh_id_def, emit_def, comp_return_def, not_fresh_at_def]) >>
+  rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `emit_op _ _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `emit_void _ _ _ = _` kall_tac) >>
+  gvs[Abbr `v4`, GSYM word_mul_n2w] >>
+  (conj_tac >- (gvs[ptr_covers_def] >> metis_tac[])) >>
+  (conj_tac >- (gvs[ptr_covers_def] >> metis_tac[])) >>
+  (conj_tac >-
+    (irule mem_bytes_at_bytewise >> rpt strip_tac >>
+     `i < w2n b \/ w2n b+32 <= i` by decide_tac >> metis_tac[])) >>
+  (conj_tac >- metis_tac[]) >>
+  (conj_tac >- metis_tac[cs_extends_trans]) >>
+  simp[lookup_var_def] >> metis_tac[lookup_var_def]
+QED
