@@ -2254,6 +2254,84 @@ Proof
   fs[EVERY_MEM] >> metis_tac[]
 QED
 
+(* Transport a packet already selected at the unmodified call entry.
+   The updates below belong to the actual reached prefix, not a second
+   choice of call packet or a separately simulated endpoint. *)
+Theorem invoke_reached_fixed_segment_mask[local]:
+  !fuel C C' s pre y m es unused.
+  let b0 = s with vs_inst_idx := s.vs_inst_idx + LENGTH pre in
+    y.inst_opcode = INVOKE /\
+    EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x) pre /\
+    LENGTH m = LENGTH es /\
+    PERM (MAP THE (FILTER IS_SOME m) ++ unused) b0.vs_gas_readings /\
+    (!u. (step_inst fuel C' y b0 = OK u \/
+          (?ir. step_inst fuel C' y b0 = IntRet ir u)) ==>
+      EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+    (!gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+      (?extra. es = gas_events_step fuel C b0.vs_current_bb y
+         (b0 with vs_gas_readings := gs ++ tail) ++ extra) /\
+      ((?j. terminates (step_inst j C y (b0 with vs_gas_readings := gs ++ tail))) ==>
+        terminates (step_inst fuel C y (b0 with vs_gas_readings := gs ++ tail)) /\
+        dft_res_rel
+          (restore_result [] (step_inst fuel C y (b0 with vs_gas_readings := gs ++ tail)))
+          (restore_result [] (step_inst fuel C' y b0)) /\
+        (((?v. step_inst fuel C' y b0 = OK v) \/
+          (?ir v. step_inst fuel C' y b0 = IntRet ir v)) ==>
+          gas_events_step fuel C b0.vs_current_bb y
+            (b0 with vs_gas_readings := gs ++ tail) = es /\
+          residual_result tail (step_inst fuel C' y b0)
+            (step_inst fuel C y (b0 with vs_gas_readings := gs ++ tail))))) ==>
+    !fg tail pg u n.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m fg /\
+      LENGTH pg = LENGTH (FILTER (\x. x.inst_opcode = GAS) pre) /\
+      FOLDR (dft_exec_cons n C) OK pre
+        (s with vs_gas_readings := pg ++ (fg ++ tail)) = OK u ==>
+      ((?extra. es = gas_events_step fuel C s.vs_current_bb y u ++ extra) /\
+      ((?j. terminates (step_inst j C y u)) ==>
+        terminates (step_inst fuel C y (b0 with vs_gas_readings := fg ++ tail)) /\
+        dft_res_rel
+          (restore_result [] (step_inst fuel C y (b0 with vs_gas_readings := fg ++ tail)))
+          (restore_result [] (step_inst fuel C' y b0)) /\
+        (((?v. step_inst fuel C' y b0 = OK v) \/
+          (?ir v. step_inst fuel C' y b0 = IntRet ir v)) ==>
+          gas_events_step fuel C b0.vs_current_bb y
+            (b0 with vs_gas_readings := fg ++ tail) = es /\
+          residual_result tail (step_inst fuel C' y b0)
+            (step_inst fuel C y (b0 with vs_gas_readings := fg ++ tail))))) /\
+      (?us.
+        EVERY (\q. MEM (FST q) (FLAT (MAP (\x. x.inst_outputs) pre)) /\
+          ~MEM (Var (FST q)) y.inst_operands /\
+          ~MEM (FST q) y.inst_outputs) us /\
+        u = FOLDL (\st q. update_var (FST q) (SND q) st)
+          (b0 with vs_gas_readings := fg ++ tail) us /\
+        !k. step_inst k C y u =
+          (case step_inst k C y (b0 with vs_gas_readings := fg ++ tail) of
+             OK t => OK (FOLDL (\st q. update_var (FST q) (SND q) st) t us)
+           | Halt t => Halt t | Abort a t => Abort a t
+           | IntRet vals t => IntRet vals t | Error e => Error e))
+Proof
+  rpt gen_tac >> pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (drule_all invoke_reached_prefix_observations >> strip_tac >>
+      qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
+        (qspecl_then [`fg`, `tail`] mp_tac) >>
+      simp[] >> metis_tac[]) >>
+  drule_all invoke_partner_prefix_concrete >> strip_tac >>
+  `EVERY (\q. ~MEM (Var (FST q)) y.inst_operands /\
+                ~MEM (FST q) y.inst_outputs) us` by
+    (fs[EVERY_MEM, MEM_FLAT, MEM_MAP] >> rpt strip_tac >>
+     metis_tac[dft_swap_output_frame]) >>
+  qexists_tac `us` >> conj_tac
+  >- (fs[EVERY_MEM] >> metis_tac[]) >>
+  conj_tac >- gvs[] >>
+  gen_tac >> drule_all invoke_updates_concrete_frame >>
+  disch_then (qspecl_then [`k`, `C`,
+    `s with <|vs_inst_idx := s.vs_inst_idx + LENGTH pre;
+              vs_gas_readings := fg ++ tail|>`] mp_tac) >>
+  gvs[]
+QED
+
 Theorem invoke_reached_segment_mask[local]:
   !fuel C C' s pre y.
   let b0 = s with vs_inst_idx := s.vs_inst_idx + LENGTH pre in
@@ -2318,16 +2396,14 @@ Theorem invoke_reached_segment_mask[local]:
               (step_inst fuel C y (b0 with vs_gas_readings := fg ++ tail))))
 Proof
   rpt gen_tac >> pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
-  drule_all invoke_segment_mask >> strip_tac >> gvs[] >>
-  qexistsl [`m`, `es`, `unused`] >> simp[] >>
+  drule_all invoke_segment_mask >> strip_tac >>
+  qexistsl [`m`, `es`, `unused`] >>
+  conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `FOLDR _ _ _ _ = OK _` mp_tac >>
-  pure_rewrite_tac [GSYM APPEND_ASSOC] >> disch_tac >>
-  drule_all invoke_reached_prefix_observations >> strip_tac >>
-  qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
-    (qspecl_then [`fg`, `tail`] mp_tac) >>
-  simp[] >> metis_tac[]
+  drule_all (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
+    invoke_reached_fixed_segment_mask)) >>
+  metis_tac[]
 QED
 
 Theorem gas_events_invoke_inst_idx[local]:
