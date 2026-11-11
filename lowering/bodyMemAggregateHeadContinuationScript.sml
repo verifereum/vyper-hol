@@ -102,7 +102,16 @@ Proof
     metis_tac[arithmeticTheory.ADD_COMM])) >> strip_tac >>
   `body_exprs_mem_ok cx args` by metis_tac[aggregate_body_exprs_mem_tail] >>
   qpat_x_assum `~expr_has_effect e /\ MAP FDOM _ = _ /\ _ ==> _` (fn pth =>
-    qexistsl_tac [`v`, `q`] >> conj_tac >- ACCEPT_TAC pth) >> simp[GSYM arithmeticTheory.ADD_ASSOC] >>
+    qexistsl_tac [`v`, `q`] >> conj_tac
+    >- (strip_tac >> mp_tac pth >>
+        (impl_tac >- (rpt conj_tac >- first_assum ACCEPT_TAC
+                      >- first_assum ACCEPT_TAC >>
+           rpt strip_tac >> first_x_assum drule >> decide_tac)) >>
+        disch_then (fn th => conj_tac >- ACCEPT_TAC (CONJUNCT1 th) >>
+          qx_genl_tac [`pp`, `nn`] >> strip_tac >>
+          mp_tac (Q.SPECL [`pp`, `nn`] (CONJUNCT2 th)) >>
+          (impl_tac >- (conj_tac >- decide_tac >> first_assum ACCEPT_TAC)) >>
+          disch_then ACCEPT_TAC))) >> simp[GSYM arithmeticTheory.ADD_ASSOC] >>
   conj_tac >- gvs[] >>
   qpat_x_assum `!v. read_result _ _ _ = _ ==> _` irule >>
   qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
