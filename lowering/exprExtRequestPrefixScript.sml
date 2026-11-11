@@ -51,7 +51,8 @@ Proof
          loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   irule exprSimPropsTheory.locals_kept_regions_tail >> qexists `s` >>
   fs[exprExtRequestHistoryTheory.extrequest_history_frame_def,
-     exprExtRequestReadProbeTheory.extrequest_read_frame_def]
+     exprExtRequestReadProbeTheory.extrequest_read_frame_def] >>
+  metis_tac[]
 QED
 
 Theorem extrequest_empty_prefix_endpoint:
