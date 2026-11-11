@@ -2,6 +2,8 @@
 Theory abiDecodeMemBytes
 Ancestors
   abiDecodeMemRange abiDecodeMemBytesGuards abiDecodeMemCountGuard
+  abiDecoderContract abiDecoderBytesBound abiDecoderGuards fragExec arithmeticProps localPtrsProps
+  fragGasMode fragGasPathMem
   entryDecoderHistoryFrame entrySinkExtraction abiDecoderBytesPrefix
   abiDecoderBytesRuntime abiDecoderBytesPhases abiDecoderBytesEdges
   allocaFootprint entryDecodeProps freshWrites bodyUnopFragMemory
@@ -203,3 +205,163 @@ Proof
   qexists_tac `t with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   simp[eval_operand_def, lookup_var_def] >> gvs[fresh_vars_wrt_def]
 QED
+
+Theorem abi_decode_bytes_bounded_path_mem:
+  compile_abi_decode_to_buf dst pos MLOAD base_op hi (DecBytestring n) st = ((),st') /\
+  base_op <> Lit 0w /\ hi <> Lit 0w /\
+  eval_operand dst s = SOME (n2w d) /\ eval_operand pos s = SOME (n2w p) /\
+  eval_operand base_op s = SOME (n2w b) /\ eval_operand hi s = SOME (n2w h) /\
+  p < dimword (:256) /\ b+h < dimword (:256) /\
+  b+h <= s.vs_alloca_next /\
+  d+32+32*((n+31) DIV 32) < dimword (:256) /\
+  d+32+32*((n+31) DIV 32) <= s.vs_alloca_next /\
+  fresh_vars_wrt st s /\ fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  (?t. gas_marked_path T ctx func s 0 (Abort Revert_abort t)) \/
+  (?c t. c <= n /\ p+32+c <= h /\
+    abi_decode_load MLOAD (n2w (b+p) : bytes32) s = n2w c /\
+    gas_path_mem ctx func s 0 (OK t) /\
+    t.vs_current_bb = st'.cs_current_bb /\
+    t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
+    fresh_vars_wrt st' t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    t.vs_memory = (mcopy d (b+p) (32+c)
+      (mstore (d+32*((c+31) DIV 32)) 0w s)).vs_memory /\
+    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
+    alloca_history func t)
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_bytes_position_phases, comp_bind_def,
+    comp_ignore_bind_def, LET_THM] >>
+  pairarg_tac >> strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
+  rename1 `abi_decode_bytes_head pos hi st = (head,c1)` >>
+  rename1 `compile_abi_dec_addr base_op pos c1 = (addr,c2)` >>
+  rename1 `abi_decode_count_guard MLOAD addr n c2 = (cnt,c3)` >>
+  rename1 `abi_decode_bytes_payload_guard head cnt hi c3 = ((),c4)` >>
+  `emit_op ADD [base_op;pos] c1 = (addr,c2)` by gvs[compile_abi_dec_addr_def] >>
+  drule abi_decode_bytes_head_fragment_shape >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  drule inst_extends_emit_op >> strip_tac >>
+  drule_all abi_decode_count_guard_fragment_shape >> strip_tac >>
+  drule abi_decode_bytes_payload_guard_fragment_shape >> strip_tac >>
+  drule abi_decode_bytes_runtime_tail_shape >> strip_tac >>
+  suspend "code"
+QED
+
+Resume abi_decode_bytes_bounded_path_mem[code]:
+  `fn_has_code st c1 func /\ fn_has_code c1 c2 func /\
+   fn_has_code c2 c3 func /\ fn_has_code c3 c4 func /\
+   fn_has_code c4 st' func` by
+    (gvs[fn_has_code_def, emitted_blocks_def, inst_extends_def, same_blocks_def] >>
+     metis_tac[IS_PREFIX_APPEND, APPEND_ASSOC]) >>
+  drule_all abi_decode_bytes_head_path_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  Cases_on `w2n (n2w p : bytes32) <= w2n (n2w p + 32w : bytes32) /\
+    w2n (n2w p + 32w : bytes32) <= w2n (n2w h : bytes32)`
+  >- suspend "head_accept" >>
+  gvs[] >> metis_tac[]
+QED
+Resume abi_decode_bytes_bounded_path_mem[head_accept]:
+  `p+32 < dimword (:256)` by
+    (spose_not_then assume_tac >>
+     mp_tac (Q.SPECL [`n2w p`, `32w`] w2n_add_overflow) >>
+     gvs[w2n_n2w]) >>
+  `h < dimword (:256) /\ p+32 <= h` by
+    (gvs[word_add_n2w, w2n_n2w]) >>
+  gvs[word_add_n2w, w2n_n2w] >>
+  rename1 `gas_path_mem ctx func s 0 (OK s1)` >>
+  `eval_operand base_op s1 = SOME (n2w b) /\
+   eval_operand pos s1 = SOME (n2w p)` by metis_tac[] >>
+  `alloca_inv s1` by (irule alloca_inv_fields >> metis_tac[]) >>
+  `s1.vs_current_bb = c1.cs_current_bb` by simp[] >>
+  drule_all abi_decode_add_path_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `gas_path_mem ctx func s1 0 (OK s2)` >>
+  `gas_path_mem ctx func s 0 (OK s2)` by
+    metis_tac[gas_path_mem_then, ADD_CLAUSES] >>
+  `b+p < dimword (:256) /\ b+p+32 <= s2.vs_alloca_next` by decide_tac >>
+  `eval_operand addr s2 = SOME (n2w (b+p))` by gvs[word_add_n2w] >>
+  `alloca_inv s2` by (irule alloca_inv_fields >> metis_tac[]) >>
+  `n < dimword (:256)` by
+    (mp_tac (Q.INST [`c` |-> `n`] abi_decode_bytes_round_bounds) >> decide_tac) >>
+  `w2n (n2w (b+p) : bytes32)+32 <= s2.vs_alloca_next` by simp[w2n_n2w] >>
+  drule_all abi_decode_mload_count_path_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  Cases_on `w2n (abi_decode_load MLOAD (n2w (b+p) : bytes32) s2) <= n`
+  >- suspend "count_accept" >>
+  `n < w2n (abi_decode_load MLOAD (n2w (b+p) : bytes32) s2)` by decide_tac >>
+  gvs[GSYM word_add_n2w] >>
+  disj1_tac >> fs[gas_marked_path_def] >>
+  drule_all gas_path_mem_then >> simp[] >> metis_tac[]
+QED
+Resume abi_decode_bytes_bounded_path_mem[count_accept]:
+  gvs[GSYM word_add_n2w] >>
+  rename1 `gas_path_mem ctx func s2 0 (OK s3)` >>
+  `gas_path_mem ctx func s 0 (OK s3)` by
+    metis_tac[gas_path_mem_then, ADD_CLAUSES] >>
+  `abi_decode_load MLOAD (n2w (b+p) : bytes32) s2 =
+   abi_decode_load MLOAD (n2w (b+p) : bytes32) s` by
+    simp[abi_decode_load_def, mload_def] >>
+  qmatch_asmsub_abbrev_tac `w2n cw <= n` >>
+  `cw = n2w (w2n cw)` by simp[] >>
+  `eval_operand head s3 = SOME (n2w (p+32)) /\
+   eval_operand hi s3 = SOME (n2w h)` by (simp[word_add_n2w] >> metis_tac[]) >>
+  `alloca_inv s3` by (irule alloca_inv_fields >> metis_tac[]) >>
+  `s3.vs_current_bb = c3.cs_current_bb` by simp[] >>
+  drule_all abi_decode_bytes_payload_guard_path_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  Cases_on `w2n (n2w (p+32) : bytes32) <=
+      w2n ((n2w (p+32) : bytes32) + cw) /\
+    w2n ((n2w (p+32) : bytes32) + cw) <= w2n (n2w h : bytes32)`
+  >- suspend "payload_accept" >>
+  gvs[] >> disj1_tac >> fs[gas_marked_path_def] >>
+  drule_all gas_path_mem_then >> simp[] >> metis_tac[]
+QED
+Resume abi_decode_bytes_bounded_path_mem[payload_accept]:
+  `h < dimword (:256) /\ p+32 < dimword (:256)` by decide_tac >>
+  `p+32+w2n cw < dimword (:256)` by
+    (spose_not_then assume_tac >>
+     mp_tac (Q.SPECL [`n2w (p+32)`, `cw`] w2n_add_overflow) >>
+     gvs[w2n_n2w]) >>
+  `p+32+w2n cw <= h` by
+    (fs[w2n_add_2, w2n_n2w]) >>
+  fs[w2n_add_2, w2n_n2w] >>
+  rename1 `gas_path_mem ctx func s3 0 (OK s4)` >>
+  `eval_operand dst s4 = SOME (n2w d) /\
+   eval_operand addr s4 = SOME (n2w (b+p)) /\
+   eval_operand cnt s4 = SOME (n2w (w2n cw))` by
+    (simp[word_add_n2w] >> metis_tac[]) >>
+  `w2n cw+31 < dimword (:256) /\ b+p < dimword (:256) /\
+   b+p+32+w2n cw <= s4.vs_alloca_next` by
+    (mp_tac (Q.INST [`c` |-> `n`] abi_decode_bytes_round_bounds) >> decide_tac) >>
+  `alloca_inv s4` by (irule alloca_inv_fields >> metis_tac[]) >>
+  `d+32+32*((n+31) DIV 32) <= s4.vs_alloca_next` by decide_tac >>
+  mp_tac (Q.INST [`c` |-> `w2n (cw : bytes32)`, `a` |-> `b+p`, `d` |-> `d`,
+    `n` |-> `n`, `s` |-> `s4`, `st` |-> `c4`]
+    abi_decode_bytes_tail_path_mem) >>
+  impl_tac >- simp[] >>
+  strip_tac >>
+  `gas_path_mem ctx func s 0 (OK s4)` by
+    metis_tac[gas_path_mem_then, ADD_CLAUSES] >>
+  `gas_path_mem ctx func s 0 (OK t)` by
+    metis_tac[gas_path_mem_then, ADD_CLAUSES] >>
+  disj2_tac >> qexistsl_tac [`w2n cw`, `t`] >>
+  simp[] >>
+  conj_tac >- gvs[Abbr `cw`, word_add_n2w] >>
+  conj_tac >-
+    (rpt strip_tac >>
+     qpat_x_assum `!op w. eval_operand op s4 = _ ==> _` irule >>
+     qpat_x_assum `!op w. eval_operand op s3 = _ ==> _` irule >>
+     qpat_x_assum `!op w. eval_operand op s2 = _ ==> _` irule >>
+     qpat_x_assum `!op w. eval_operand op s1 = _ ==> _` irule >>
+     metis_tac[]) >>
+  `s4.vs_memory = s.vs_memory` by metis_tac[] >>
+  qpat_x_assum `s4.vs_memory = s.vs_memory` mp_tac >>
+  rpt (pop_assum kall_tac) >> strip_tac >>
+  metis_tac[abiEncoderMemoryTheory.abi_encoder_bytes_write_memory_cong,
+    arithmeticTheory.ADD_COMM]
+QED
+Finalise abi_decode_bytes_bounded_path_mem

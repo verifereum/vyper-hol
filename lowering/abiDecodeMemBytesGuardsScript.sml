@@ -5,7 +5,7 @@ Ancestors
   venomState venomExecSemantics venomInst words list rich_list exprLoweringProps
   loweringStateRelDefs abiDecoderRange localPtrsProps
 
-Theorem abi_decode_add_path_mem[local]:
+Theorem abi_decode_add_path_mem:
   emit_op ADD [a;b] st = (v,st') /\
   eval_operand a s = SOME p /\ eval_operand b s = SOME q /\
   fresh_vars_wrt st s /\ fn_has_code st st' func /\
