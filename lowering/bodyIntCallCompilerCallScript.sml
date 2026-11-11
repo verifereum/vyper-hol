@@ -194,13 +194,19 @@ Proof
 QED
 
 Theorem intcall_interval_call_selfdestruct:
+  (!ce ty e a. k <= a.cs_next_var ==>
+    intcall_compiler_interval k a (SND (cfn ce ty e a))) /\
   k <= a.cs_next_var ==>
   intcall_compiler_interval k a
     (SND (compile_call cfn ce rt ty SelfDestructTarget es dflt a))
 Proof
-  strip_tac >> simp[compile_call_def] >>
-  ho_match_mp_tac intcall_interval_pair_bind_floor >>
-  simp[intcall_interval_emit_inst, intcall_compiler_interval_refl]
+  strip_tac >> namedCases_on `es` ["", "to_e rest"] >>
+  TRY (Cases_on `rest`) >> simp[compile_call_def] >>
+  rpt (ho_match_mp_tac intcall_interval_pair_bind_floor >>
+       gs[intcall_interval_lower_value, intcall_interval_emit_inst,
+          intcall_interval_emit_void, intcall_compiler_interval_refl,
+          builtinSystemTheory.compile_selfdestruct_def] >>
+       rpt strip_tac)
 QED
 
 Theorem intcall_interval_call_create:
