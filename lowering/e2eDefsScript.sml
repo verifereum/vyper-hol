@@ -204,42 +204,11 @@ Theorem call_external_transaction_pending_deletions:
     am'.pending_deletions = []
 Proof
   rw[call_external_transaction_def] >> Cases_on `r`
-  >- (qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
-      simp[call_external_def] >>
-      Cases_on `ALOOKUP (clear_machine_logs am).sources tx.target` >> simp[] >>
-      qmatch_goalsub_abbrev_tac `get_self_code cx` >>
-      Cases_on `(case find_function_module (clear_machine_logs am) tx.target tx.function_name of
-                   NONE => get_self_code cx
-                 | SOME sid => get_module_code cx (SOME sid))` >> simp[] >>
-      Cases_on `lookup_exported_function cx (clear_machine_logs am) tx.function_name` >> simp[] >>
-      rename1 `SOME fn` >> PairCases_on `fn` >> simp[] >>
-      qmatch_goalsub_abbrev_tac
-        `call_external_function orc gobs am0 cx nr0 mut0 ts0 mods0 args0 dflts0 vals0 body0 ret0` >>
-      Cases_on `call_external_function orc gobs am0 cx nr0 mut0 ts0 mods0 args0 dflts0 vals0 body0 ret0` >>
-      rename1 `(res, tail)` >> PairCases_on `tail` >> Cases_on `res` >> simp[] >>
-      TRY (rename1 `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = (INR exc,_,_)` >>
-           Cases_on `exc` >> simp[]) >>
-      rw[] >> simp[finalize_pending_deletions_metadata]) >>
+  >- (fs[call_external_def, call_external_trace_def, AllCaseEqs()] >> gvs[]) >>
   rename1 `call_external orc gobs (clear_machine_logs am) tx = (INR exn, am', rqs)` >>
   reverse (Cases_on `exn = HaltException`)
   >- (drule call_external_error_rollback >> simp[clear_machine_logs_def]) >>
-  qpat_x_assum `exn = HaltException` SUBST_ALL_TAC >>
-  qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
-  simp[call_external_def] >>
-  Cases_on `ALOOKUP (clear_machine_logs am).sources tx.target` >> simp[] >>
-  qmatch_goalsub_abbrev_tac `get_self_code cx` >>
-  Cases_on `(case find_function_module (clear_machine_logs am) tx.target tx.function_name of
-               NONE => get_self_code cx
-             | SOME sid => get_module_code cx (SOME sid))` >> simp[] >>
-  Cases_on `lookup_exported_function cx (clear_machine_logs am) tx.function_name` >> simp[] >>
-  rename1 `SOME fn` >> PairCases_on `fn` >> simp[] >>
-  qmatch_goalsub_abbrev_tac
-        `call_external_function orc gobs am0 cx nr0 mut0 ts0 mods0 args0 dflts0 vals0 body0 ret0` >>
-      Cases_on `call_external_function orc gobs am0 cx nr0 mut0 ts0 mods0 args0 dflts0 vals0 body0 ret0` >>
-  rename1 `(res, tail)` >> PairCases_on `tail` >> Cases_on `res` >> simp[] >>
-  rename1 `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = (INR exc,_,_)` >>
-  Cases_on `exc` >> simp[] >>
-  rw[] >> simp[finalize_pending_deletions_metadata]
+  gvs[call_external_def, call_external_trace_def, AllCaseEqs()]
 QED
 
 Theorem load_contract_pending_deletions:
@@ -247,7 +216,8 @@ Theorem load_contract_pending_deletions:
     load_contract orc gobs am tx mods exps = INL (am', rqs) ==>
     am'.pending_deletions = []
 Proof
-  rw[load_contract_def] >> gvs[AllCaseEqs()]
+  rw[load_contract_def, load_contract_trace_def] >>
+  BasicProvers.every_case_tac >> gvs[]
 QED
 
 (* Exact PLAN lookup: the source lookup_function API, no invented additional
