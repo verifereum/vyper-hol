@@ -55,7 +55,9 @@ Proof
   gvs[vv_post_def] >>
   conj_tac
   >- (Cases_on `vv` >> gvs[vv_storage_live_def, vv_operand_def]) >>
-  rpt strip_tac >> metis_tac[]
+  conj_tac
+  >- (rpt strip_tac >> first_assum irule >> simp[] >> metis_tac[]) >>
+  strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >> simp[]
 QED
 
 Theorem alloca_step_contracts:
