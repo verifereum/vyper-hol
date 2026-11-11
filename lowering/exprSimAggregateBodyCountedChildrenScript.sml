@@ -208,8 +208,10 @@ Proof
   `compile_store_memory ce op (Var x) (expr_type e) (post_value_type ce e)
       su = ((),sb)` by metis_tac[] >>
   Cases_on `is_word_type (expr_type e) \/ is_bytestring_type (expr_type e) \/
-             expr_type e = post_value_type ce e`
+             expr_type e = post_value_type ce e \/
+             tuple_memory_layout_eq (expr_type e) (post_value_type ce e)`
   >- suspend "ordinary" >>
+  pop_assum (strip_assume_tac o SRULE [DE_MORGAN_THM]) >>
   `compile_store_memory_typed ce (Var x) (expr_type e) op (post_value_type ce e)
       su = ((),sb)` by fs[compile_store_memory_def] >>
   `acyclic_struct_metadata ce.ce_struct_fields` by
@@ -231,7 +233,16 @@ Proof
 QED
 
 Resume aggregate_store_body_rebased_slice_marked[ordinary]:
-  drule_all aggregate_store_ordinary_certificate >> strip_tac >>
+  (* Tuples with equal member layouts store by the same-type bulk copy. *)
+  `cs_extends su sb /\ su.cs_blocks = sb.cs_blocks /\ frag_ops_free su sb /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (frag_code su sb)` by
+    (Cases_on `tuple_memory_layout_eq (expr_type e) (post_value_type ce e)`
+     >- (`compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su =
+          ((),sb)` by
+           (qpat_x_assum `compile_store_memory _ _ _ _ (post_value_type _ _) _ = _`
+              mp_tac >> simp[compile_store_memory_def]) >>
+         metis_tac[aggregate_store_ordinary_certificate]) >>
+     metis_tac[aggregate_store_ordinary_certificate]) >>
   drule_all aggregate_store_body_rebased_slice_sim >>
   disch_then (qspec_then `\rr. F` assume_tac) >>
   drule frag_exec_same_block_gas_path >>
