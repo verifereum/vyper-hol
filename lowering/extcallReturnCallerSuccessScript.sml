@@ -309,8 +309,9 @@ Proof
       not_local_ptr ce ee.scopes q` by
     (rpt strip_tac >> irule return_decoder_scratch_owned >> metis_tac[]) >>
   `wb_frame ce es ee sa s0 z` by
-    (irule return_allocated_wb_frame >> goal_assum (drule_at Any) >>
-     goal_assum (drule_at Any) >>
+    (irule return_allocated_wb_frame >>
+     qpat_assum `wb_frame ce es ee sa s0 u` (irule_at Any) >>
+     qpat_assum `abi_malformed_destination _ _ _ _ _ _ u` (irule_at Any) >>
      qexistsl_tac [`ctx`, `cx`, `abi_malformed_scratch_sites st en func`, `st`] >>
      fs[stmt_state_rel_def, state_rel_def, ci_mono_def,
        abi_malformed_scratch_sites_def] >> metis_tac[LESS_EQ_TRANS]) >>

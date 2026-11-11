@@ -246,11 +246,11 @@ Proof
   gvs[package_internal_fn_def, set_internal_package_target_def,
       update_cenv_nonreentrant_def, build_compile_env_def, ELIM_UNCURRY] >>
   fs[get_module_code_def, get_tenv_def] >>
-  conj_tac >- (qpat_x_assum `!n fs. FLOOKUP (make_struct_fields_map tops) n = SOME fs ==> _`
-                ACCEPT_TAC) >>
-  reverse conj_tac >-
-    (rpt strip_tac >> qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> _`
-       drule >> simp[]) >>
+  rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY (rpt strip_tac >>
+       qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> _`
+         drule >> simp[] >> NO_TAC) >>
   irule (iffRL placeTypingPropsTheory.place_map_tables_agree_on_defined_cong) >>
   qexistsl [`caller`, `env`] >> simp[]
 QED
