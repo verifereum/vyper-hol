@@ -2832,6 +2832,59 @@ Proof
        setup_callee_def, venom_state_component_equality]
 QED
 
+(* Cursor replacement transports the same fixed invocation packet. *)
+Theorem invoke_fixed_segment_inst_idx[local]:
+  !m es unused fuel C C' y.
+  let P = (\t.
+    PERM (MAP THE (FILTER IS_SOME m) ++ unused) t.vs_gas_readings /\
+    (!u. (step_inst fuel C' y t = OK u \/
+          (?ir. step_inst fuel C' y t = IntRet ir u)) ==>
+      EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+    !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+      (?extra. es = gas_events_step fuel C t.vs_current_bb y
+         (t with vs_gas_readings := gs ++ tail) ++ extra) /\
+      ((?n. terminates (step_inst n C y (t with vs_gas_readings := gs ++ tail))) ==>
+        terminates (step_inst fuel C y (t with vs_gas_readings := gs ++ tail)) /\
+        dft_res_rel
+          (restore_result [] (step_inst fuel C y (t with vs_gas_readings := gs ++ tail)))
+          (restore_result [] (step_inst fuel C' y t)) /\
+        (((?v. step_inst fuel C' y t = OK v) \/
+          (?ir v. step_inst fuel C' y t = IntRet ir v)) ==>
+          gas_events_step fuel C t.vs_current_bb y
+            (t with vs_gas_readings := gs ++ tail) = es /\
+          residual_result tail (step_inst fuel C' y t)
+            (step_inst fuel C y (t with vs_gas_readings := gs ++ tail)))))
+  in !t j. y.inst_opcode = INVOKE ==>
+    (P (t with vs_inst_idx := j) <=> P t)
+Proof
+  ntac 7 gen_tac >> BasicProvers.LET_ELIM_TAC >>
+  `!t j. y.inst_opcode = INVOKE /\ P t ==> P (t with vs_inst_idx := j)` by
+    (rpt gen_tac >> strip_tac >> fs[Abbr `P`] >>
+     simp[gas_events_invoke_inst_idx,
+          analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only,
+          GSYM venom_state_accfupds] >>
+     conj_tac
+     >- (rpt strip_tac >> Cases_on `step_inst fuel C' y t` >> gvs[] >> metis_tac[]) >>
+     rpt gen_tac >> strip_tac >> strip_tac >>
+     `?n. terminates (step_inst n C y (t with vs_gas_readings := gs ++ tail))` by
+       (qexists_tac `n` >> qpat_x_assum `terminates _` mp_tac >>
+        Cases_on `step_inst n C y (t with vs_gas_readings := gs ++ tail)` >>
+        simp[passSimulationDefsTheory.terminates_def]) >>
+     qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
+       (qspecl_then [`gs`, `tail`] mp_tac) >> simp[] >> strip_tac >>
+     qpat_x_assum `(?n. _) ==> _` mp_tac >>
+     (impl_tac >- metis_tac[]) >> strip_tac >>
+     Cases_on `step_inst fuel C y (t with vs_gas_readings := gs ++ tail)` >>
+     Cases_on `step_inst fuel C' y t` >>
+     gvs[restore_result_def, dftRunRelTheory.dft_res_rel_def,
+         passSimulationDefsTheory.terminates_def, residual_result_def,
+         stateEquivTheory.lift_result_def]) >>
+  rpt strip_tac >> eq_tac
+  >- (strip_tac >> first_x_assum (qspecl_then
+        [`t with vs_inst_idx := j`, `t.vs_inst_idx`] mp_tac) >> simp[]) >>
+  metis_tac[]
+QED
+
 Theorem invoke_target_entry[local]:
   y.inst_opcode = INVOKE /\
   terminates (FOLDR (dft_exec_cons fuel D) OK (y::pre) s) /\
