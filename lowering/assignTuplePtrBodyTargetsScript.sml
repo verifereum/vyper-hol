@@ -121,7 +121,7 @@ Resume body_assign_tuple_targets_ptr[apply]:
   conj_tac >- simp[] >> conj_tac >- simp[] >>
   qexistsl_tac [`tvs`, `tys`] >> rpt conj_tac
   >~ [`expr_sim_ptr _ _ _ _ _ _ _ _ _`] >- metis_tac[body_expr_ptr_ok_def]
-  >~ [`cenv.ce_target CapMcopy`] >- metis_tac[body_inv_mcopy_ptr]
+  >~ [`cenv.ce_target CapMcopy`] >- metis_tac[bodySimStmtCasesTheory.body_inv_mcopy]
   >~ [`type_memory_size (TupleTV _) < _`]
   >- (strip_tac >> irule tuple_staging_bound_ptr >> metis_tac[])
   >~ [`tuple_target_layout _ _ _ _ _`]
