@@ -1976,3 +1976,58 @@ Proof
   drule_all inline_owner_storage_paired_writes >>
   strip_tac >> qexists_tac `v` >> gvs[]
 QED
+
+Theorem inline_owner_phi_body_cut:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  inline_routed_leaf cert root p a.ia_function path /\
+  route.ir_rename = inline_path_rename path /\
+  lookup_block snap.ils_state.vs_current_bb a.ia_function.fn_blocks = SOME sb /\
+  lookup_block frame.ipf_state.vs_current_bb root.fn_blocks = SOME tb /\
+  (!q. snap.ils_state.vs_prev_bb = SOME q ==> MEM q (fn_labels a.ia_function)) /\
+  inline_phi_entry_path path (snap.ils_state.vs_current_bb,snap.ils_state.vs_prev_bb) =
+    (frame.ipf_state.vs_current_bb,frame.ipf_state.vs_prev_bb) /\
+  inline_shared_frame snap.ils_state = inline_shared_frame frame.ipf_state /\
+  eval_phis snap.ils_state sb.bb_instructions = OK u ==>
+  ?v. eval_phis frame.ipf_state tb.bb_instructions = OK v /\
+    let ks = phi_prefix_length sb.bb_instructions;
+        kt = phi_prefix_length tb.bb_instructions;
+        su = u with vs_inst_idx := ks;
+        tv = v with vs_inst_idx := kt
+    in ks = kt /\
+      inline_owner_storage cert
+        ((p,a,route,snap with <|ils_state := su;
+          ils_defined := inline_phi_outputs sb.bb_instructions UNION snap.ils_defined|>)::rest)
+        (frame with ipf_state := tv) /\
+      inline_shared_frame su = inline_shared_frame tv /\
+      su.vs_current_bb = snap.ils_state.vs_current_bb /\
+      su.vs_prev_bb = snap.ils_state.vs_prev_bb /\
+      tv.vs_current_bb = frame.ipf_state.vs_current_bb /\
+      tv.vs_prev_bb = frame.ipf_state.vs_prev_bb /\
+      inline_phi_entry_path path (su.vs_current_bb,su.vs_prev_bb) =
+        (tv.vs_current_bb,tv.vs_prev_bb) /\
+      su.vs_inst_idx = ks /\ tv.vs_inst_idx = kt
+Proof
+  strip_tac >>
+  drule_all inline_owner_phi_batch >> strip_tac >>
+  `phi_prefix_length tb.bb_instructions = phi_prefix_length sb.bb_instructions` by
+    (drule_all inline_routed_phi_prefix_length >>
+     disch_then (qspec_then `snap.ils_state.vs_prev_bb` mp_tac) >>
+     simp[] >> strip_tac >> gvs[]) >>
+  `!k. inline_shared_frame (u with vs_inst_idx := k) = inline_shared_frame snap.ils_state /\
+      u.vs_current_bb = snap.ils_state.vs_current_bb /\
+      u.vs_prev_bb = snap.ils_state.vs_prev_bb` by
+    (qpat_assum `eval_phis snap.ils_state _ = OK u`
+       (mp_tac o MATCH_MP venomExecProofsTheory.eval_phis_only_updates_vs_vars) >>
+     disch_then (fn th => once_rewrite_tac[th]) >>
+     simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def]) >>
+  `!k. inline_shared_frame (v with vs_inst_idx := k) = inline_shared_frame frame.ipf_state /\
+      v.vs_current_bb = frame.ipf_state.vs_current_bb /\
+      v.vs_prev_bb = frame.ipf_state.vs_prev_bb` by
+    (qpat_assum `eval_phis frame.ipf_state _ = OK v`
+       (mp_tac o MATCH_MP venomExecProofsTheory.eval_phis_only_updates_vs_vars) >>
+     disch_then (fn th => once_rewrite_tac[th]) >>
+     simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def]) >>
+  qexists_tac `v` >> simp[] >>
+  drule inline_owner_storage_index >> simp[]
+QED
