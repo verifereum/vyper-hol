@@ -1,7 +1,7 @@
 (* Byte observations for storage values copied to memory. *)
 Theory storageDecodeMemory
 Ancestors
-  list rich_list words valueEncoding valueEncodingProps compileEnv
+  list rich_list words valueEncoding valueEncodingDefs valueEncodingProps compileEnv loweringStateRelDefs
   vyperLookupStorage vyperStorage vyperValue accountsRelProps venomMemProps
   exprSimAggregateEncoding vyperTyping valueTypingMemoryProps
 

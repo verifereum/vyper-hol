@@ -2,7 +2,7 @@
    loop re-entry while retaining a final freshness bound and all defined inputs. *)
 Theory abiDecoderVarExtend
 Ancestors
-  execEquivParamDefs venomState compileEnv finite_map pred_set
+  execEquivParamDefs venomState compileEnv loweringStateRelDefs finite_map pred_set
 
 Definition abi_decoder_var_map_def:
   abi_decoder_var_map extras small large <=>

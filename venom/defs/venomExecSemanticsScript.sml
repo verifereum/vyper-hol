@@ -395,7 +395,8 @@ Definition make_venom_call_state_def:
     <| contexts := [(ctxt, rb)];
        txParams := venom_to_tx_params s;
        rollback := rb;
-       originalAccounts := rb.accounts;
+       originalAccounts := if s.vs_call_ctx.cc_created_in_tx then
+         update_account caller empty_account_state rb.accounts else rb.accounts;
        msdomain := Collect empty_domain |>
 End
 
@@ -418,7 +419,8 @@ Definition make_venom_delegatecall_state_def:
     <| contexts := [(ctxt, rb)];
        txParams := venom_to_tx_params s;
        rollback := rb;
-       originalAccounts := rb.accounts;
+       originalAccounts := if s.vs_call_ctx.cc_created_in_tx then
+         update_account caller empty_account_state rb.accounts else rb.accounts;
        msdomain := Collect empty_domain |>
 End
 
@@ -505,23 +507,19 @@ Definition exec_ext_call_def:
        | _ => Error "ext_call requires single output"
 End
 
-(* Execute DELEGATECALL via verifereum EVM semantics.
-   Runs target's code in caller's own context (storage, address, balance).
-   msg.sender = caller's original caller; msg.value = inherited.
+(* Execute DELEGATECALL using the shared outcome oracle, as CALL does. The
+   request carries the target's code address, the calldata, no value and the
+   caller's static flag; the outcome's accounts carry the effects on the
+   caller's own storage.
    Operands: [gas; addr; argsOff; argsSize; retOff; retSize] *)
 Definition exec_delegatecall_def:
   exec_delegatecall inst s gas addr_w argsOff argsSize retOff retSize =
-    let calldata = read_memory (w2n argsOff) (w2n argsSize) s in
-    let target : address = w2w addr_w in
-    let code = (lookup_account target s.vs_accounts).code in
-    let evm_s = make_venom_delegatecall_state s target (w2n gas)
-                  calldata code s.vs_call_ctx.cc_static in
-    case extract_venom_result s 1w (w2n retOff) (w2n retSize) (run evm_s) of
-    | SOME (output, s') =>
-        (case inst.inst_outputs of
-           [out] => OK (update_var out output s')
-         | _ => Error "delegatecall requires single output")
-    | NONE => Error "delegatecall: non-terminating or invalid state"
+    let rq = venom_call_request s addr_w 0w argsOff argsSize F with
+               cr_kind := DelegateMessageCall;
+        (output, s') = consume_call_outcome rq (w2n retOff) (w2n retSize) s
+    in case inst.inst_outputs of
+         [out] => OK (update_var out output s')
+       | _ => Error "delegatecall requires single output"
 End
 
 (* CREATE/CREATE2 share the observed outcome oracle with CALL. *)
@@ -1072,8 +1070,8 @@ Definition step_inst_base_def:
               | _ => Error "log: undefined operand")
         | _ => Error "log requires Lit topic_count as first operand")
 
-    (* Selfdestruct: transfer balance to beneficiary, then halt.
-       Deprecated post-Cancun but still defined in Venom IR. *)
+    (* EIP-6780: transfer balance; only transaction-created accounts are
+       zeroed and scheduled for deletion, including a self-beneficiary. *)
     | SELFDESTRUCT =>
         if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) then
           Abort ExHalt_abort (halt_state (set_returndata [] s)) else
@@ -1086,13 +1084,15 @@ Definition step_inst_base_def:
                 let beneficiary = w2w addr in
                 let accts = s.vs_accounts in
                 let self_acct = lookup_account self accts in
-                let ben_acct = lookup_account beneficiary accts in
-                let accts' = (\a. if a = self then
-                                    self_acct with balance := 0
-                                  else if a = beneficiary then
-                                    ben_acct with balance := ben_acct.balance + bal
-                                  else accts a) in
-                Halt (halt_state (set_returndata [] (s with vs_accounts := accts')))
+                let transferred = transfer_value self beneficiary bal accts in
+                let created = s.vs_call_ctx.cc_created_in_tx in
+                let accts' = if created then
+                    update_account self (self_acct with balance := 0) transferred
+                  else transferred in
+                Halt (halt_state (set_returndata [] (s with <|
+                  vs_accounts := accts';
+                  vs_pending_deletions := if created then
+                    self :: s.vs_pending_deletions else s.vs_pending_deletions |>)))
             | NONE => Error "selfdestruct: undefined operand")
         | _ => Error "selfdestruct requires 1 operand")
 

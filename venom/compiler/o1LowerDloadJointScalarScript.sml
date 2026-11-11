@@ -233,7 +233,7 @@ Proof
   `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
     metis_tac[ld_joint_unary_operands_clean] >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  gvs[step_inst_non_invoke, step_inst_base_def, exec_pure1_def, AllCaseEqs()] >>
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_pure1_def, AllCaseEqs()] >>
   (strip_tac >> rename1 `eval_operand op1 s = SOME arg` >>
   qpat_x_assum `update_var _ _ _ = s1` (SUBST_ALL_TAC o SYM) >>
   qmatch_goalsub_abbrev_tac `update_var out value s` >>
@@ -292,7 +292,7 @@ Proof
        step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
        range_bytes_def, FLOOKUP_DEF, SF CONJ_ss] >>
   qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, exec_pure1_def, AllCaseEqs()] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_pure1_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -312,7 +312,7 @@ Proof
     metis_tac[ld_joint_binary_operands_clean] >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
   fs[MEM] >>
-  (gvs[step_inst_non_invoke, step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
+  (gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()] >>
   strip_tac >>
   qpat_x_assum `update_var _ _ _ = s1` (SUBST_ALL_TAC o SYM) >>
   qmatch_goalsub_abbrev_tac `update_var out value s` >>

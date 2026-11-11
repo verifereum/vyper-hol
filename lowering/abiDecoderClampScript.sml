@@ -2,7 +2,7 @@
    the sequence theorem proves execution, freshness and operand preservation. *)
 Theory abiDecoderClamp
 Ancestors
-  abiDecoderUnsignedClamp abiDecoderGuards abiDecoderContract abiEncoder
+  abiDecoderRange abiDecoderUnsignedClamp abiDecoderGuards abiDecoderContract abiEncoder
   emitHelperProps exprLoweringProps compileEnv emitHelper valueEncoding
   venomExecSemantics venomState venomInst words arithmetic rich_list list
 

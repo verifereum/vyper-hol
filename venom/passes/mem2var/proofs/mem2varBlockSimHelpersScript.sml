@@ -1,11 +1,11 @@
 Theory mem2varBlockSimHelpers
 Ancestors
-  venomCallOracleDefs venomCallOracleProps
+  venomFnInstsProofs venomCallOracleDefs venomCallOracleProps
   oracleExecProps
   mem2varProofs passSharedFrame passSharedTransfer passSharedField instIdxIndep
-  opcodeClass
+  opcodeClass contextCodegenRelProps
   venomMemProps venomMemProofs venomExecProofs venomInstProofs
-  mem2varDefs mem2varFrame
+  mem2varDefs mem2varFrame mem2varInvariant
   venomExecSemantics venomState venomWf
   venomInst
   stateEquiv
@@ -13,7 +13,7 @@ Ancestors
   analysisSimDefs
   dfgDefs dfgCorrectnessProof
   basePtrDefs basePtrProofs
-  pointerConfinedDefs memLocDefs
+  pointerConfinedDefs pointerConfinedProps memLocDefs
   venomEffects venomMemDefs
   finite_map list rich_list pred_set pair
 Libs
@@ -275,91 +275,6 @@ QED
    EXEC_BLOCK PREFIX FACTORING
    ================================================================ *)
 
-(* step_inst idx independence for non-terminator non-INVOKE *)
-Theorem step_inst_idx_indep_local:
-  !fuel ctx inst s n.
-    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
-    step_inst fuel ctx inst (s with vs_inst_idx := n) =
-    exec_result_map (\s'. s' with vs_inst_idx := n)
-      (step_inst fuel ctx inst s)
-Proof
-  rw[step_inst_non_invoke, step_inst_inst_idx_indep]
-QED
-
-(* Skip prefix: if run_insts returns OK, exec_block can skip ahead *)
-Theorem exec_block_skip_prefix:
-  !prefix fuel ctx bb s j s'.
-    j + LENGTH prefix <= LENGTH bb.bb_instructions /\
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
-      prefix /\
-    (!k. k < LENGTH prefix ==>
-         EL (j + k) bb.bb_instructions = EL k prefix) /\
-    run_insts fuel ctx prefix s = OK s' ==>
-    exec_block fuel ctx bb (s with vs_inst_idx := j) =
-    exec_block fuel ctx bb (s' with vs_inst_idx := j + LENGTH prefix)
-Proof
-  Induct >> rw[run_insts_def] >>
-  rename1 `h :: prefix` >>
-  `j < LENGTH bb.bb_instructions` by simp[] >>
-  `EL j bb.bb_instructions = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `step_inst fuel ctx h (s with vs_inst_idx := j) =
-   exec_result_map (\s'. s' with vs_inst_idx := j)
-     (step_inst fuel ctx h s)` by
-    simp[step_inst_idx_indep_local] >>
-  Cases_on `step_inst fuel ctx h s` >> gvs[exec_result_map_def] >>
-  rename1 `step_inst _ _ h s = OK s1` >>
-  `s1.vs_inst_idx = s.vs_inst_idx` by
-    metis_tac[step_inst_preserves_inst_idx] >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
-  simp[get_instruction_def] >>
-  `EL j bb.bb_instructions = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  gvs[] >>
-  first_x_assum (qspecl_then [`fuel`, `ctx`, `bb`, `s1`,
-    `SUC j`, `s'`] mp_tac) >>
-  simp[arithmeticTheory.ADD_CLAUSES] >>
-  impl_tac >- (rw[] >>
-    first_x_assum (qspec_then `SUC k` mp_tac) >>
-    simp[arithmeticTheory.ADD_CLAUSES]) >>
-  simp[]
-QED
-
-(* Error propagation: if run_insts returns Error, exec_block does too *)
-Theorem exec_block_prefix_error:
-  !prefix fuel ctx bb s j e.
-    j + LENGTH prefix <= LENGTH bb.bb_instructions /\
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
-      prefix /\
-    (!k. k < LENGTH prefix ==>
-         EL (j + k) bb.bb_instructions = EL k prefix) /\
-    run_insts fuel ctx prefix s = Error e ==>
-    exec_block fuel ctx bb (s with vs_inst_idx := j) = Error e
-Proof
-  Induct >> simp[run_insts_def] >>
-  rpt gen_tac >> strip_tac >>
-  rename1 `h :: prefix` >>
-  fs[EVERY_DEF] >>
-  `j < LENGTH bb.bb_instructions` by simp[] >>
-  `EL j bb.bb_instructions = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `step_inst fuel ctx h (s with vs_inst_idx := j) =
-   exec_result_map (\s'. s' with vs_inst_idx := j)
-     (step_inst fuel ctx h s)` by
-    simp[step_inst_idx_indep_local] >>
-  ONCE_REWRITE_TAC[exec_block_def] >>
-  simp[get_instruction_def] >>
-  Cases_on `step_inst fuel ctx h s` >>
-  gvs[exec_result_map_def, Once run_insts_def] >>
-  rename1 `step_inst _ _ h s = OK s'` >>
-  first_x_assum (qspecl_then [`fuel`, `ctx`, `bb`, `s'`,
-    `SUC j`, `e`] mp_tac) >>
-  simp[] >> impl_tac >- (simp[] >> rpt strip_tac >>
-    first_x_assum (qspec_then `SUC k` mp_tac) >>
-    simp[arithmeticTheory.ADD_CLAUSES]) >>
-  simp[arithmeticTheory.ADD_CLAUSES]
-QED
-
 (* ================================================================
    INTRA-BLOCK INVARIANT
    Like m2v_inv but without vs_inst_idx constraint.
@@ -490,14 +405,6 @@ Proof
   rw[m2v_pvars_set_def, lookup_var_def]
 QED
 
-(* Helper: ALL_DISTINCT (FLAT (MAP f xs)) /\ MEM x xs ==> ALL_DISTINCT (f x) *)
-Theorem ALL_DISTINCT_FLAT_MAP_MEM:
-  !f xs x. ALL_DISTINCT (FLAT (MAP f xs)) /\ MEM x xs ==>
-    ALL_DISTINCT (f x)
-Proof
-  Induct_on `xs` >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
-QED
-
 (* Helper: within a wf block, EL i = EL j implies i = j
    (instruction IDs are globally distinct, so within a block too) *)
 Theorem wf_bb_EL_inj:
@@ -512,7 +419,7 @@ Proof
   SUBGOAL_THEN ``ALL_DISTINCT (MAP (\i:instruction. i.inst_id)
     bb.bb_instructions)`` assume_tac
   >- (gvs[wf_function_def, fn_inst_ids_distinct_def] >>
-      ho_match_mp_tac ALL_DISTINCT_FLAT_MAP_MEM >>
+      ho_match_mp_tac all_distinct_flat_map_member >>
       qexists `MAP (\bb. bb.bb_instructions) fn.fn_blocks` >>
       simp[MAP_MAP_o, MEM_MAP] >> metis_tac[]) >>
   gvs[EL_ALL_DISTINCT_EL_EQ, EL_MAP] >> metis_tac[]
@@ -520,8 +427,8 @@ QED
 
 (* Helper: promo_list membership + promotable_wf ==> stores_dominate_loads *)
 Theorem m2v_promo_stores_dominate:
-  !fn ao pvar sz.
-    m2v_promotable_wf fn /\ MEM (ao,pvar,sz) (m2v_promo_list fn) ==>
+  !fn ao pvar.
+    m2v_promotable_wf fn /\ MEM (ao,pvar,32) (m2v_promo_list fn) ==>
     m2v_stores_dominate_loads fn ao
 Proof
   rpt strip_tac >>
@@ -529,6 +436,7 @@ Proof
   first_x_assum irule >>
   drule m2v_promo_list_is_alloca >> strip_tac >>
   drule m2v_promo_list_can_promote >> strip_tac >>
+  `w = (32w:bytes32)` by metis_tac[wordsTheory.n2w_w2n] >>
   metis_tac[]
 QED
 
@@ -553,14 +461,15 @@ Proof
   first_x_assum (qspecl_then [`bb`, `EL i bb.bb_instructions`] mp_tac) >>
   (impl_tac >- (simp[MEM_EL] >> metis_tac[])) >>
   disch_then (qx_choosel_then [`store_bb`,`store_inst`] strip_assume_tac) >>
-  Cases_on `store_bb = bb` >> fs[] >> (
-    TRY (SUBGOAL_THEN ``j = i:num`` SUBST_ALL_TAC
-         >- (irule wf_bb_EL_inj >> metis_tac[])) >>
-    fs[m2v_pvars_set_def] >>
-    first_x_assum (qspecl_then [`ao`,`pvar`] mp_tac) >> simp[] >>
-    strip_tac >>
-    TRY (first_x_assum (qspec_then `i'` mp_tac) >> simp[] >> NO_TAC) >>
-    first_x_assum (qspecl_then [`store_bb`,`store_inst`] mp_tac) >> simp[])
+  (Cases_on `store_bb = bb`
+  >- (fs[] >> `j = i:num` by (irule wf_bb_EL_inj >> metis_tac[]) >>
+      gvs[m2v_pvars_set_def] >>
+      first_x_assum (qspecl_then [`ao`,`pvar`] mp_tac) >> simp[] >>
+      strip_tac >> first_x_assum (qspec_then `i'` mp_tac) >> simp[]) >>
+  fs[m2v_pvars_set_def] >>
+  first_x_assum (qspecl_then [`ao`,`pvar`] mp_tac) >> simp[] >>
+  strip_tac >>
+  first_x_assum (qspecl_then [`store_bb`,`store_inst`] mp_tac) >> simp[])
 QED
 
 (* Backwards compatibility alias *)
@@ -682,9 +591,10 @@ Proof
       imp_res_tac m2v_promo_list_in_fresh_vars >>
       gvs[m2v_fresh_names_disjoint_def] >> res_tac >> gvs[]) >>
   (* MSTORE+32: outputs=[pvar2] when offset matches, else original *)
-  EVERY_CASE_TAC >> gvs[] >>
-  TRY (imp_res_tac m2v_promo_list_in_fresh_vars >>
-       gvs[m2v_fresh_names_disjoint_def] >> res_tac >> gvs[] >> NO_TAC) >>
+  EVERY_CASE_TAC >> gvs[]
+  >>~- ([`MEM pvar inst.inst_outputs`],
+        imp_res_tac m2v_promo_list_in_fresh_vars >>
+        gvs[m2v_fresh_names_disjoint_def] >> res_tac >> gvs[]) >>
   (* Remaining: pvar in [pvar2] → pvar=pvar2 → (ao,sz)=(ao2,sz2) *)
   qpat_x_assum `FIND _ _ = SOME _` (mp_tac o MATCH_MP venomExecProofsTheory.FIND_MEM) >>
   strip_tac >>
@@ -772,8 +682,9 @@ Proof
   PairCases_on `x` >>
   rename1 `SOME (ao2, pvar2, sz2)` >> simp[] >>
   simp[m2v_promote_inst_def] >>
-  rpt (CASE_TAC >> simp[is_terminator_def] >> gvs[is_terminator_def]) >>
-  TRY (gvs[m2v_fresh_names_disjoint_def] >> res_tac >> NO_TAC) >>
+  rpt (CASE_TAC >> simp[is_terminator_def] >> gvs[is_terminator_def])
+  >>~- ([`~MEM pvar inst.inst_outputs`],
+        gvs[m2v_fresh_names_disjoint_def] >> res_tac) >>
   strip_tac >> gvs[] >>
   qpat_x_assum `FIND _ _ = SOME _` (strip_assume_tac o
     MATCH_MP venomExecProofsTheory.FIND_MEM) >>
@@ -904,17 +815,6 @@ Proof
   gvs[ALL_DISTINCT_APPEND] >> metis_tac[MEM_FLAT]
 QED
 
-(* SSA + promo_list → ao not in other non-alloca instruction's outputs.
-   The alloca that defines ao has outputs=[ao], so inst must not be that alloca.
-   ~is_alloca_op ensures inst ≠ alloca_inst. *)
-Theorem ALL_DISTINCT_FLAT_MAP_unique:
-  !f xs a b x. ALL_DISTINCT (FLAT (MAP f xs)) /\
-    MEM a xs /\ MEM b xs /\ MEM x (f a) /\ MEM x (f b) ==> a = b
-Proof
-  Induct_on `xs` >> simp[] >> rpt strip_tac >>
-  gvs[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >> metis_tac[]
-QED
-
 Theorem ssa_promo_ao_not_in_outputs:
   !fn ao pvar sz inst.
     ssa_form fn /\ MEM (ao,pvar,sz) (m2v_promo_list fn) /\
@@ -925,8 +825,8 @@ Proof
   drule m2v_promo_list_is_alloca >> strip_tac >>
   rename1 `alloca_inst.inst_opcode = ALLOCA` >>
   gvs[ssa_form_def] >>
-  qspecl_then [`\i. i.inst_outputs`, `fn_insts fn`,
-    `alloca_inst`, `inst`, `ao`] mp_tac ALL_DISTINCT_FLAT_MAP_unique >>
+  qspecl_then [`fn_insts fn`, `\i. i.inst_outputs`,
+    `alloca_inst`, `inst`, `ao`] mp_tac all_distinct_flat_map_unique >>
   simp[] >> strip_tac >> gvs[is_alloca_op_def]
 QED
 
@@ -1087,11 +987,12 @@ Proof
   (* Dispatch easy subgoals: allocas, memory, bridge, then vars+sync *)
   >> TRY (gvs[allocas_non_overlapping_def] >> NO_TAC)
   >> TRY (gvs[in_promoted_region_def, mem_byte_def] >> NO_TAC)
-  >> TRY (gvs[in_promoted_region_def] >> metis_tac[] >> NO_TAC)
-  (* Bridge: vs_allocas preserved, ao not in outputs *)
-  >> TRY (rpt strip_tac >> res_tac >> metis_tac[] >> NO_TAC)
   >- suspend "g1"
+  >- (gvs[in_promoted_region_def] >> metis_tac[])
+  >- (gvs[in_promoted_region_def] >> metis_tac[])
   >- suspend "g2"
+  (* Bridge: vs_allocas preserved, ao not in outputs *)
+  >- (rpt strip_tac >> res_tac >> metis_tac[])
   >> suspend "g3"
 QED
 
@@ -1152,14 +1053,6 @@ Finalise m2v_step_nonpromoted
    PER-INSTRUCTION SIMULATION (promoted MSTORE case)
    MSTORE [Var ao; val_op] -> ASSIGN [val_op] output [pvar]
    ================================================================ *)
-
-Theorem len_word_to_bytes_256:
-  LENGTH (word_to_bytes (w:bytes32) be) = 32
-Proof
-  rw[byteTheory.LENGTH_word_to_bytes,
-     fcpTheory.index_bit0, fcpTheory.index_bit1, fcpTheory.index_one,
-     fcpTheory.finite_bit0, fcpTheory.finite_bit1, fcpTheory.finite_one]
-QED
 
 (* General: EL outside a splice is unchanged *)
 Theorem EL_splice_outside:
@@ -1696,8 +1589,10 @@ Proof
   >> `allocas_non_overlapping s1` by fs[m2v_inv_noix_def] >>
   fs[allocas_non_overlapping_def] >>
   first_x_assum (qspecl_then [`inst_id`, `aid`] mp_tac) >> simp[] >>
-  `sz = 32` by (fs[m2v_promo_sizes_bounded_def] >> res_tac) >>
-  simp[]
+  `32 <= sz` by
+    (fs[m2v_promo_sizes_bounded_def, EVERY_MEM] >>
+     first_x_assum drule >> simp[]) >>
+  simp[regions_disjoint_def] >> decide_tac
 QED
 
 
@@ -2243,17 +2138,6 @@ Finalise m2v_step_promoted_mload
    (proved here instead of mem2varProofsScript to use helpers)
    ================================================================ *)
 
-(* Helper: for non-terminal instruction at index i in a well-formed block,
-   stepping preserves m2v_inv_noix. Dispatches to nonpromoted/mstore/mload. *)
-(* Helper: MEM (Var v) ops ==> MEM v (operand_vars ops) *)
-Theorem MEM_Var_operand_vars:
-  !v ops. MEM (Var v) ops ==> MEM v (operand_vars ops)
-Proof
-  Induct_on `ops` >> rw[operand_vars_def] >>
-  Cases_on `operand_var h` >> gvs[operand_vars_def] >>
-  Cases_on `h` >> gvs[operand_var_def]
-QED
-
 (* Helper: if FIND returns SOME (ao,pvar,sz) from promo_list, the inst
    uses ao and therefore m2v_can_promote_alloca constrains its opcode *)
 Theorem promo_find_inst_opcode:
@@ -2267,10 +2151,12 @@ Proof
   rpt strip_tac >>
   imp_res_tac FIND_MEM >>
   imp_res_tac FIND_P >> gvs[] >>
-  drule MEM_Var_operand_vars >> strip_tac >>
+  drule mem_var_operand_vars >> strip_tac >>
   drule_all dfg_build_function_uses_complete_proof >> strip_tac >>
   drule m2v_promo_list_can_promote >>
-  simp[m2v_can_promote_alloca_def, EVERY_MEM]
+  simp[m2v_can_promote_alloca_def, EVERY_MEM] >>
+  strip_tac >> first_x_assum drule >>
+  simp[m2v_is_pointer_use_def] >> metis_tac[]
 QED
 
 (* When promote_inst actually changes the instruction, derive format *)
@@ -2319,56 +2205,6 @@ QED
    pointer_confined then forces ao into offset position for MSTORE.
    ================================================================ *)
 
-(* Variables in the initial list remain in pointer_use_vars output *)
-Theorem mem_pointer_use_vars:
-  !fn vars v. MEM v vars ==> MEM v (pointer_use_vars fn vars)
-Proof
-  rpt strip_tac >> simp[pointer_use_vars_def] >>
-  qabbrev_tac `g = \w:string list + string list.
-    case pointer_use_step_step fn (OUTL w) of
-      NONE => INR (OUTL w) | SOME vs => INL vs` >>
-  qspecl_then [`ISL`, `g`, `INL vars`]
-    mp_tac (DB.fetch "While" "OWHILE_INV_IND"
-      |> INST_TYPE [alpha |-> ``:string list + string list``]
-      |> Q.INST [`P` |->
-           `\s. case s of INL l => MEM v l | INR l => MEM v l`]
-      |> SIMP_RULE (srw_ss()) []) >>
-  impl_tac
-  >- (simp[] >> rpt strip_tac >>
-      rename [`ISL xx`] >> Cases_on `xx` >> gvs[Abbr`g`] >>
-      Cases_on `pointer_use_step_step fn x` >> simp[] >>
-      gvs[pointer_use_step_step_def, LET_DEF] >> rw[] >> simp[MEM_APPEND]) >>
-  disch_tac >>
-  Cases_on `OWHILE ISL g (INL vars)` >> simp[] >>
-  Cases_on `x` >> simp[] >> res_tac >> gvs[]
-QED
-
-(* Roots are always in pointer_derived_vars *)
-Theorem roots_in_pointer_derived_vars:
-  !fn roots v. FINITE roots /\ v IN roots ==>
-    v IN pointer_derived_vars fn roots
-Proof
-  rw[pointer_derived_vars_def] >>
-  irule mem_pointer_use_vars >>
-  metis_tac[MEM_SET_TO_LIST]
-QED
-
-(* alloca_roots is always finite (defined via fn_insts, a finite list) *)
-Theorem FINITE_alloca_roots:
-  !fn. FINITE (alloca_roots fn)
-Proof
-  rw[alloca_roots_def] >>
-  irule SUBSET_FINITE >>
-  qexists `set (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn)))` >>
-  simp[SUBSET_DEF, MEM_FLAT, MEM_MAP] >> rpt strip_tac >>
-  rename1 `MEM ainst (fn_insts fn)` >>
-  qexists `ainst.inst_outputs` >> simp[] >>
-  (conj_tac >- (qexists `ainst` >> simp[])) >>
-  gvs[inst_output_def] >>
-  Cases_on `ainst.inst_outputs` >> gvs[inst_output_def] >>
-  Cases_on `t` >> gvs[]
-QED
-
 (* ao from promo_list is in alloca_roots *)
 Theorem m2v_promo_ao_in_alloca_roots:
   !fn ao pvar sz.
@@ -2412,7 +2248,7 @@ Proof
   (* inst uses Var ao AND is_pointer_preserving_op → contradiction *)
   CCONTR_TAC >> gvs[] >>
   `MEM ao (operand_vars inst.inst_operands)` by
-    (irule MEM_Var_operand_vars >>
+    (irule mem_var_operand_vars >>
      gvs[EXISTS_MEM] >> rename1 `MEM op inst.inst_operands` >>
      Cases_on `op` >> gvs[]) >>
   `MEM inst (fn_insts fn)` by metis_tac[MEM_fn_insts] >>
@@ -2420,7 +2256,9 @@ Proof
     (irule dfgCorrectnessProofTheory.dfg_build_function_uses_complete_proof >>
      simp[]) >>
   gvs[m2v_can_promote_alloca_def, EVERY_MEM] >>
-  res_tac >> gvs[is_pointer_preserving_op_def]
+  first_x_assum drule >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[m2v_is_pointer_use_def, is_pointer_preserving_op_def]
 QED
 
 Theorem pointer_use_vars_promo_id:
@@ -2456,7 +2294,6 @@ QED
    and MEM (Var ao) inst.inst_operands, then Var ao is the offset (first operand) *)
 Theorem m2v_pointer_confined_mstore_ao_is_offset:
   !fn bb inst ao pvar sz.
-    alloca_pointer_confined fn /\
     MEM bb fn.fn_blocks /\
     MEM inst bb.bb_instructions /\
     inst.inst_opcode = MSTORE /\
@@ -2465,27 +2302,24 @@ Theorem m2v_pointer_confined_mstore_ao_is_offset:
     ?val_op. inst.inst_operands = [Var ao; val_op]
 Proof
   rpt strip_tac >>
-  `ao IN pointer_derived_vars fn (alloca_roots fn)` by
-    metis_tac[m2v_promo_ao_in_pointer_derived] >>
-  gvs[alloca_pointer_confined_def, pointer_confined_def, LET_DEF] >>
-  first_x_assum (qspecl_then [`bb`,`inst`,`ao`] mp_tac) >> simp[] >>
-  strip_tac >> gvs[]
-  >- ((* mem_write_ops case: Var ao = iao_ofst = HD inst.inst_operands *)
-      gvs[mem_write_ops_def] >>
-      every_case_tac >> gvs[] >>
-      Cases_on `inst.inst_operands` >> gvs[] >>
-      Cases_on `t` >> gvs[] >>
-      Cases_on `t'` >> gvs[])
-  >- ((* mem_read_ops case: impossible for MSTORE *)
-      gvs[mem_read_ops_def] >> every_case_tac >> gvs[])
-  >> (* pointer_preserving: impossible for MSTORE *)
-  gvs[is_pointer_preserving_op_def]
+  `MEM inst (fn_insts fn)` by metis_tac[MEM_fn_insts] >>
+  `MEM ao (operand_vars inst.inst_operands)` by
+    metis_tac[mem_var_operand_vars] >>
+  `MEM inst (dfg_get_uses (dfg_build_function fn) ao)` by
+    metis_tac[dfg_build_function_uses_complete_proof] >>
+  drule m2v_promo_list_can_promote >>
+  simp[m2v_can_promote_alloca_def, EVERY_MEM] >>
+  strip_tac >> first_x_assum drule >>
+  simp[m2v_is_pointer_use_def, AllCaseEqs()] >>
+  strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `t'` >> gvs[]
 QED
 
 (* Unchanged MSTORE with confined pointer → sz ≠ 32 *)
 Theorem m2v_promote_mstore_unchanged_neq32:
   !fn bb inst ao pvar sz.
-    alloca_pointer_confined fn /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     inst.inst_opcode = MSTORE /\
     MEM (ao,pvar,sz) (m2v_promo_list fn) /\
@@ -2549,44 +2383,12 @@ Proof
   simp[]
 QED
 
-(* Property: FIND=NONE memory accesses avoid promoted regions.
-   Depends on pointer analysis soundness + alloca bounds.
-   Used by RETURN/REVERT FIND=NONE and nonpromoted memory ops. *)
-Definition m2v_nonpromoted_access_safe_def:
-  m2v_nonpromoted_access_safe fn s <=>
-    (!bb inst ops off_val sz_val sz_op.
-      MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-      (mem_write_ops inst = SOME ops \/ mem_read_ops inst = SOME ops) /\
-      FIND (\(ao,_,_). MEM (Var ao) inst.inst_operands)
-           (m2v_promo_list fn) = NONE /\
-      eval_operand ops.iao_ofst s = SOME off_val /\
-      ops.iao_max_size = SOME sz_op /\
-      eval_operand sz_op s = SOME sz_val ==>
-      !addr. w2n off_val <= addr /\ addr < w2n off_val + w2n sz_val ==>
-        ~in_promoted_region fn s addr) /\
-    (!bb inst vals q r pairs src sz.
-      MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-      inst.inst_opcode = DRET /\
-      parse_dret_shape inst = SOME (q,r) /\
-      eval_operands inst.inst_operands s = SOME vals /\
-      pair_dret_words (TAKE (2 * r) (DROP (q + 1) vals)) = SOME pairs /\
-      MEM (src,sz) pairs ==>
-      !addr. w2n src <= addr /\ addr < w2n src + w2n sz ==>
-        ~in_promoted_region fn s addr)
-End
 
 Triviality eval_operand_idx[simp]:
   eval_operand op (s with vs_inst_idx := n) = eval_operand op s
 Proof simp[instIdxIndepTheory.eval_op_inst_idx]
 QED
 
-Theorem m2v_nonpromoted_access_safe_idx[simp]:
-  m2v_nonpromoted_access_safe fn (s with vs_inst_idx := n) =
-  m2v_nonpromoted_access_safe fn s
-Proof
-  simp[m2v_nonpromoted_access_safe_def, in_promoted_region_def,
-       instIdxIndepTheory.eval_ops_inst_idx]
-QED
 
 (* Element of TAKE sz (DROP off mem ++ REPLICATE sz 0w) = mem_byte *)
 Triviality el_take_drop_replicate:
@@ -2640,19 +2442,6 @@ Proof
   gvs[m2v_inv_noix_def]
 QED
 
-(* make_venom_delegatecall_state agrees under m2v_inv_noix *)
-Triviality make_venom_delegatecall_state_m2v_inv:
-  m2v_inv_noix fn s1 s2 ==>
-  make_venom_delegatecall_state s1 tgt gas cd code st =
-  make_venom_delegatecall_state s2 tgt gas cd code st
-Proof
-  strip_tac >>
-  simp[make_venom_delegatecall_state_def] >>
-  `venom_to_tx_params s1 = venom_to_tx_params s2`
-    by metis_tac[venom_to_tx_params_m2v_inv] >>
-  gvs[m2v_inv_noix_def]
-QED
-
 (* make_venom_create_state agrees under m2v_inv_noix *)
 Triviality make_venom_create_state_m2v_inv:
   m2v_inv_noix fn s1 s2 ==>
@@ -2678,9 +2467,6 @@ Proof
   rpt strip_tac >> gvs[m2v_inv_noix_def]
 QED
 
-(* extract_venom_result: same run_result on both sides gives
-   same output, and result states preserve m2v_inv_noix
-   when the write range is nonpromoted *)
 (* Setting non-semantic fields (transient, returndata, accounts, logs, deletions)
    to equal values preserves m2v_inv_noix. All semantic functions
    (lookup_var, mem_byte, mload, in_promoted_region, allocas_non_overlapping)
@@ -2735,56 +2521,6 @@ Proof
            vs_pending_deletions := pending |>)`
     by (irule m2v_inv_noix_set_fields >> simp[]) >>
   gvs[wmwe_preserves, write_memory_with_expansion_def, LET_THM]
-QED
-
-(* Strengthened: only requires s1 extraction succeeds.
-   Since extract_venom_result's SOME/NONE depends only on rr
-   (not s), s2 extraction must also succeed. *)
-Triviality extract_venom_result_m2v_inv:
-  !fn s1 s2 ov retOff retSz rr out1 s1'.
-  m2v_inv_noix fn s1 s2 /\
-  m2v_non32_ok fn s1 s2 /\
-  extract_venom_result s1 ov retOff retSz rr = SOME (out1, s1') /\
-  (!addr. retOff <= addr /\ addr < retOff + retSz ==>
-          ~in_promoted_region fn s1 addr) ==>
-  ?s2'. extract_venom_result s2 ov retOff retSz rr = SOME (out1, s2') /\
-        m2v_inv_noix fn s1' s2'
-Proof
-  rpt strip_tac >>
-  `s1.vs_transient = s2.vs_transient /\
-   s1.vs_accounts = s2.vs_accounts /\
-   s1.vs_logs = s2.vs_logs /\
-   s1.vs_pending_deletions = s2.vs_pending_deletions /\
-   s1.vs_returndata = s2.vs_returndata`
-    by gvs[m2v_inv_noix_def] >>
-  gvs[extract_venom_result_def, CaseEq "option", CaseEq "prod",
-      CaseEq "list"] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[CaseEq "sum", CaseEq "option"] >>
-  simp[LENGTH_TAKE_EQ] >>
-  FIRST
-    [irule m2v_inv_noix_ext_update >> simp[LENGTH_TAKE_EQ],
-     `m2v_inv_noix fn
-        (s1 with
-          <|vs_memory :=
-              (write_memory_with_expansion retOff
-                 (TAKE retSz ctxt.returnData) s1).vs_memory;
-            vs_transient := s2.vs_transient;
-            vs_returndata := ctxt.returnData;
-            vs_accounts := s1.vs_accounts;
-            vs_logs := s2.vs_logs;
-            vs_pending_deletions := s2.vs_pending_deletions|>)
-        (s2 with
-          <|vs_memory :=
-              (write_memory_with_expansion retOff
-                 (TAKE retSz ctxt.returnData) s2).vs_memory;
-            vs_transient := s2.vs_transient;
-            vs_returndata := ctxt.returnData;
-            vs_accounts := s1.vs_accounts;
-            vs_logs := s2.vs_logs;
-            vs_pending_deletions := s2.vs_pending_deletions|>)` by
-       (irule m2v_inv_noix_ext_update >> simp[LENGTH_TAKE_EQ]) >>
-     gvs[]]
 QED
 
 (* ================================================================
@@ -2935,16 +2671,16 @@ Proof
   `read_memory (w2n ao) (w2n as_) s1 =
    read_memory (w2n ao) (w2n as_) s2` by
     metis_tac[read_memory_m2v_inv] >>
-  `s1.vs_accounts = s2.vs_accounts /\ s1.vs_call_ctx = s2.vs_call_ctx`
-    by gvs[m2v_inv_noix_def] >>
-  gvs[exec_delegatecall_def, LET_THM] >>
-  `make_venom_delegatecall_state s1 = make_venom_delegatecall_state s2` by
-    metis_tac[make_venom_delegatecall_state_m2v_inv] >>
-  gvs[] >>
-  qpat_x_assum `_ = OK v1` mp_tac >> simp[AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  drule_all extract_venom_result_m2v_inv >> strip_tac >> gvs[] >>
-  simp[AllCaseEqs()] >>
+  qabbrev_tac `rq = venom_call_request s2 addr 0w ao as_ F with
+                      cr_kind := DelegateMessageCall` >>
+  `venom_call_request s1 addr 0w ao as_ F with cr_kind := DelegateMessageCall = rq`
+    by fs[Abbr`rq`, m2v_inv_noix_def, venom_call_request_def] >>
+  `s1.vs_outcomes = s2.vs_outcomes` by fs[m2v_inv_noix_def] >>
+  `m2v_inv_noix fn
+    (SND (consume_call_outcome rq (w2n ro) (w2n rs) s1))
+    (SND (consume_call_outcome rq (w2n ro) (w2n rs) s2))` by
+    (irule consume_call_outcome_m2v_inv >> simp[]) >>
+  gvs[exec_delegatecall_def, AllCaseEqs()] >>
   irule m2v_inv_noix_update_var >> simp[]
 QED
 
@@ -2983,78 +2719,41 @@ Proof
   irule m2v_inv_noix_update_var >> simp[]
 QED
 
-(* NAS extraction: write range disjointness from promoted regions *)
-Theorem nas_write_range_disjoint:
-  !fn s bb inst ops off_val sz_val sz_op.
-    m2v_nonpromoted_access_safe fn s /\
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-    mem_write_ops inst = SOME ops /\
-    FIND (\(ao,_0,_1). MEM (Var ao) inst.inst_operands)
-         (m2v_promo_list fn) = NONE /\
-    eval_operand ops.iao_ofst s = SOME off_val /\
-    ops.iao_max_size = SOME sz_op /\
-    eval_operand sz_op s = SOME sz_val ==>
-    !addr. w2n off_val <= addr /\ addr < w2n off_val + w2n sz_val ==>
-           ~in_promoted_region fn s addr
+(* Active-access boundaries do not require block membership or descriptors. *)
+Theorem m2v_access_read_range_disjoint:
+  m2v_access_safe fn inst s /\
+  FIND (\(ao,pvar,sz). MEM (Var ao) inst.inst_operands)
+    (m2v_promo_list fn) = NONE /\
+  MEM (off,len) (source_memory_read_ranges inst s) ==>
+  !addr. off <= addr /\ addr < off + len ==>
+    ~in_promoted_region fn s addr
 Proof
-  simp[m2v_nonpromoted_access_safe_def] >> metis_tac[]
+  strip_tac >> fs[m2v_access_safe_def, MEM_APPEND] >> metis_tac[]
 QED
 
-(* NAS extraction: read range disjointness from promoted regions *)
-Theorem nas_read_range_disjoint:
-  !fn s bb inst ops off_val sz_val sz_op.
-    m2v_nonpromoted_access_safe fn s /\
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-    mem_read_ops inst = SOME ops /\
-    FIND (\(ao,_0,_1). MEM (Var ao) inst.inst_operands)
-         (m2v_promo_list fn) = NONE /\
-    eval_operand ops.iao_ofst s = SOME off_val /\
-    ops.iao_max_size = SOME sz_op /\
-    eval_operand sz_op s = SOME sz_val ==>
-    !addr. w2n off_val <= addr /\ addr < w2n off_val + w2n sz_val ==>
-           ~in_promoted_region fn s addr
+Theorem m2v_access_write_range_disjoint:
+  m2v_access_safe fn inst s /\
+  FIND (\(ao,pvar,sz). MEM (Var ao) inst.inst_operands)
+    (m2v_promo_list fn) = NONE /\
+  MEM (off,len) (source_memory_write_ranges inst s) ==>
+  !addr. off <= addr /\ addr < off + len ==>
+    ~in_promoted_region fn s addr
 Proof
-  simp[m2v_nonpromoted_access_safe_def] >> metis_tac[]
+  strip_tac >> fs[m2v_access_safe_def, MEM_APPEND] >> metis_tac[]
 QED
 
-(* NAS extraction: each successfully parsed DRET dynamic source range is
-   disjoint from promoted regions. *)
-Theorem nas_dret_source_range_disjoint:
-  !fn s bb inst vals q r pairs src sz.
-    m2v_nonpromoted_access_safe fn s /\
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-    inst.inst_opcode = DRET /\
-    parse_dret_shape inst = SOME (q,r) /\
-    eval_operands inst.inst_operands s = SOME vals /\
-    pair_dret_words (TAKE (2 * r) (DROP (q + 1) vals)) = SOME pairs /\
-    MEM (src,sz) pairs ==>
-    !addr. w2n src <= addr /\ addr < w2n src + w2n sz ==>
-           ~in_promoted_region fn s addr
+Theorem read_memory_access_agrees:
+  m2v_inv_noix fn s1 s2 /\ m2v_access_safe fn inst s1 /\
+  FIND (\(ao,pvar,sz). MEM (Var ao) inst.inst_operands)
+    (m2v_promo_list fn) = NONE /\
+  MEM (off,len) (source_memory_read_ranges inst s1) ==>
+  read_memory off len s1 = read_memory off len s2
 Proof
-  simp[m2v_nonpromoted_access_safe_def] >> metis_tac[]
+  strip_tac >> irule read_memory_m2v_inv >>
+  qexists `fn` >> simp[Once arithmeticTheory.ADD_COMM] >>
+  metis_tac[arithmeticTheory.ADD_COMM, m2v_access_read_range_disjoint]
 QED
 
-(* Combined: read_memory agrees for nonpromoted mem_read_ops instructions.
-   Chains read_memory_m2v_inv + nas_read_range_disjoint.
-   Takes eval_operand on EITHER state (bridges via agreement). *)
-Triviality read_memory_nas_agrees:
-  !fn s1 s2 bb inst ops off_val sz_val sz_op.
-    m2v_inv_noix fn s1 s2 /\
-    m2v_nonpromoted_access_safe fn s1 /\
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-    mem_read_ops inst = SOME ops /\
-    FIND (\(ao,_0,_1). MEM (Var ao) inst.inst_operands)
-         (m2v_promo_list fn) = NONE /\
-    eval_operand ops.iao_ofst s1 = SOME off_val /\
-    ops.iao_max_size = SOME sz_op /\
-    eval_operand sz_op s1 = SOME sz_val ==>
-    read_memory (w2n off_val) (w2n sz_val) s1 =
-    read_memory (w2n off_val) (w2n sz_val) s2
-Proof
-  rpt strip_tac >>
-  irule read_memory_m2v_inv >> simp[] >>
-  metis_tac[nas_read_range_disjoint]
-QED
 
 (* step_inst_base wrapper: dispatch all 5 ext_call opcodes *)
 val ext_call_source_unfold_tac =
@@ -3076,7 +2775,7 @@ Triviality m2v_step_ext_call:
   (!ao pvar sz. MEM (ao,pvar,sz) (m2v_promo_list fn) ==>
      ~MEM ao inst.inst_outputs) /\
   (!v. MEM v inst.inst_outputs ==> v NOTIN m2v_fresh_vars fn) /\
-  m2v_nonpromoted_access_safe fn s1 /\
+  m2v_access_safe fn inst s1 /\
   MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
   FIND (\(ao,_0,_1). MEM (Var ao) inst.inst_operands)
        (m2v_promo_list fn) = NONE /\
@@ -3141,46 +2840,59 @@ Proof
   simp[m2v_inv_noix_def]
 QED
 
-val m2v_ext_call_tac =
+fun m2v_ext_call_tac exec_helper =
   strip_tac >> drule m2v_inv_noix_call_ctx >> strip_tac >> gvs[] >>
   gvs[eval_operands_def] >>
-  FIRST [match_mp_tac exec_ext_call_m2v_inv,
-         match_mp_tac exec_delegatecall_m2v_inv,
-         match_mp_tac exec_create_m2v_inv] >>
+  match_mp_tac exec_helper >>
   (* match_mp_tac unifies st with s2 fields;
      rewrite exec asm using call_ctx equality from m2v_inv_noix *)
   drule m2v_inv_noix_call_ctx >> strip_tac >>
   qpat_assum `s1.vs_call_ctx = s2.vs_call_ctx`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
-  simp[] >>
-  rpt conj_tac >>
-  TRY (CHANGED_TAC (simp[]) >> NO_TAC) >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  TRY (ho_match_mp_tac nas_read_range_disjoint >>
-       qexistsl [`bb`, `inst`] >>
-       simp[mem_read_ops_def, is_immutable_op_def] >> NO_TAC) >>
-  TRY (ho_match_mp_tac nas_write_range_disjoint >>
-       qexistsl [`bb`, `inst`] >>
-       simp[mem_write_ops_def, is_immutable_op_def] >> NO_TAC);
+  simp[];
+
+val m2v_ext_call_ranges_tac =
+  conj_tac >-
+    (ho_match_mp_tac m2v_access_read_range_disjoint >>
+     simp[contextCodegenRelTheory.source_memory_read_ranges_def,
+          contextCodegenRelTheory.memory_range_of_operands_def] >>
+     metis_tac[]) >>
+  conj_tac >-
+    (ho_match_mp_tac m2v_access_write_range_disjoint >>
+     simp[codegenRelTheory.source_memory_write_ranges_def] >>
+     metis_tac[]) >>
+  metis_tac[];
 
 Resume m2v_step_ext_call[call]:
-  m2v_ext_call_tac
+  m2v_ext_call_tac exec_ext_call_m2v_inv >> m2v_ext_call_ranges_tac
 QED
 
 Resume m2v_step_ext_call[static]:
-  m2v_ext_call_tac
+  m2v_ext_call_tac exec_ext_call_m2v_inv >> m2v_ext_call_ranges_tac
 QED
 
 Resume m2v_step_ext_call[deleg]:
-  m2v_ext_call_tac
+  m2v_ext_call_tac exec_delegatecall_m2v_inv >> m2v_ext_call_ranges_tac
 QED
 
 Resume m2v_step_ext_call[create]:
-  m2v_ext_call_tac
+  m2v_ext_call_tac exec_create_m2v_inv >> (
+  conj_tac >-
+    (ho_match_mp_tac m2v_access_read_range_disjoint >>
+     simp[contextCodegenRelTheory.source_memory_read_ranges_def,
+          contextCodegenRelTheory.memory_range_of_operands_def] >>
+     metis_tac[]) >>
+  metis_tac[])
 QED
 
 Resume m2v_step_ext_call[create2]:
-  m2v_ext_call_tac
+  m2v_ext_call_tac exec_create_m2v_inv >> (
+  conj_tac >-
+    (ho_match_mp_tac m2v_access_read_range_disjoint >>
+     simp[contextCodegenRelTheory.source_memory_read_ranges_def,
+          contextCodegenRelTheory.memory_range_of_operands_def] >>
+     metis_tac[]) >>
+  metis_tac[])
 QED
 Finalise m2v_step_ext_call
 
@@ -3188,10 +2900,10 @@ Theorem m2v_promo_sizes_bounded_MEM:
   !fn ao pvar sz.
     m2v_promo_sizes_bounded fn /\
     MEM (ao,pvar,sz) (m2v_promo_list fn) ==>
-    sz = 32
+    32 <= sz
 Proof
   rpt strip_tac >>
-  fs[m2v_promo_sizes_bounded_def] >>
+  fs[m2v_promo_sizes_bounded_def, EVERY_MEM] >>
   first_x_assum drule >> simp[]
 QED
 
@@ -3203,11 +2915,9 @@ Theorem m2v_nonterminal_step_dispatch:
     m2v_promotable_wf fn /\
     m2v_fresh_names_disjoint fn /\
     m2v_promo_sizes_bounded fn /\
-    alloca_pointer_confined fn /\
-    all_mem_via_pointer fn (alloca_roots fn) /\
     alloca_inv s1 /\
     alloca_bridge fn s1 /\
-    m2v_nonpromoted_access_safe fn s1 /\
+    m2v_access_safe fn (EL i bb.bb_instructions) s1 /\
     EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
     EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions /\
     MEM bb fn.fn_blocks /\
@@ -3339,9 +3049,9 @@ Resume m2v_nonterminal_step_dispatch[disjoint]:
   strip_tac >> simp[] >>
   (* IS_SOME ==> sz2 >= 32: fresh pvar2 only assigned by promoted MSTORE (sz=32) *)
   strip_tac >>
-  `sz2 = 32` by
-    (drule_all m2v_promo_sizes_bounded_MEM >> gvs[]) >>
-  simp[]
+  `32 <= sz2` by
+    (irule m2v_promo_sizes_bounded_MEM >> metis_tac[]) >>
+  gvs[regions_disjoint_def] >> decide_tac
 QED
 
 Resume m2v_nonterminal_step_dispatch[mload]:
@@ -3448,11 +3158,9 @@ Resume m2v_nonterminal_step_dispatch[mstore_unchanged]:
   mp_tac (Q.SPECL [`fn`,`s1`,`s2`,`ao`,`pvar`,`sz`,`ao'`,`pvar'`,`32`,
     `addr`,`addr'`] m2v_inv_noix_regions_disjoint) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  (* regions_disjoint (w2n addr, sz) (w2n addr', 32) with sz = 32 *)
-  `sz = 32` by
-    (mp_tac (Q.SPECL [`fn`,`ao`,`pvar`,`sz`]
-       m2v_promo_sizes_bounded_MEM) >> simp[]) >>
-  gvs[regions_disjoint_def]
+  (* Restrict the actual allocation's disjoint range to its first word. *)
+  `32 <= sz` by (irule m2v_promo_sizes_bounded_MEM >> metis_tac[]) >>
+  gvs[regions_disjoint_def] >> decide_tac
 QED
 
 Resume m2v_nonterminal_step_dispatch[alloca]:
@@ -3690,7 +3398,7 @@ Theorem m2v_step_nonpromoted_sha3:
           eval_operand op s1 = eval_operand op s2) /\
     (!i. ~in_promoted_region fn s1 i ==>
          mem_byte i s1 = mem_byte i s2) /\
-    m2v_nonpromoted_access_safe fn s1 /\
+    m2v_access_safe fn inst s1 /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     FIND (\(ao,_0,_1). MEM (Var ao) inst.inst_operands)
          (m2v_promo_list fn) = NONE ==>
@@ -3702,9 +3410,10 @@ Proof
   (* Memory data agrees: extract from nonpromoted_access_safe *)
   `!addr. w2n offset <= addr /\ addr < w2n offset + w2n size_val ==>
           ~in_promoted_region fn s1 addr`
-    by (ho_match_mp_tac nas_read_range_disjoint >>
-        qexistsl [`bb`, `inst`] >>
-        simp[mem_read_ops_def, is_immutable_op_def]) >>
+    by (ho_match_mp_tac m2v_access_read_range_disjoint >>
+        simp[contextCodegenRelTheory.source_memory_read_ranges_def,
+             contextCodegenRelTheory.memory_range_of_operands_def] >>
+        metis_tac[]) >>
   `TAKE (w2n size_val) (DROP (w2n offset) s1.vs_memory ++
      REPLICATE (w2n size_val) 0w) =
    TAKE (w2n size_val) (DROP (w2n offset) s2.vs_memory ++
@@ -3713,20 +3422,6 @@ Proof
   simp[] >>
   irule m2v_inv_noix_update_var >> simp[] >>
   mp_tac (Q.SPECL [`fn`,`inst`,`out`] m2v_output_safe) >> simp[]
-QED
-
-(* If each operand evaluates the same on s1 and s2, then eval_operands agrees. *)
-Triviality eval_operands_agree:
-  !ops s1 s2.
-    (!op. MEM op ops ==> eval_operand op s1 = eval_operand op s2) ==>
-    eval_operands ops s1 = eval_operands ops s2
-Proof
-  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
-  `eval_operand h s1 = eval_operand h s2` by simp[] >>
-  Cases_on `eval_operand h s1` >> simp[] >>
-  `eval_operands ops s1 = eval_operands ops s2`
-    by (first_x_assum irule >> simp[]) >>
-  simp[]
 QED
 
 (* Helper: LOG — reads memory for event data, updates vs_logs.
@@ -3740,7 +3435,7 @@ Theorem m2v_step_nonpromoted_log:
           eval_operand op s1 = eval_operand op s2) /\
     (!i. ~in_promoted_region fn s1 i ==>
          mem_byte i s1 = mem_byte i s2) /\
-    m2v_nonpromoted_access_safe fn s1 /\
+    m2v_access_safe fn inst s1 /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     FIND (\(ao,_0,_1). MEM (Var ao) inst.inst_operands)
          (m2v_promo_list fn) = NONE ==>
@@ -3760,13 +3455,10 @@ Proof
   (* Memory read range is outside promoted regions *)
   `!addr. w2n off <= addr /\ addr < w2n off + w2n sz ==>
           ~in_promoted_region fn s1 addr`
-    by (ho_match_mp_tac nas_read_range_disjoint >>
-        qexistsl [`bb`, `inst`] >>
-        `LENGTH (REVERSE rest) >= 2` by simp[] >>
-        simp[mem_read_ops_def, is_immutable_op_def] >>
-        Cases_on `REVERSE rest` >> gvs[] >>
-        Cases_on `t` >> gvs[REVERSE_REVERSE] >>
-        Cases_on `t'` >> gvs[]) >>
+    by (ho_match_mp_tac m2v_access_read_range_disjoint >>
+        simp[contextCodegenRelTheory.source_memory_read_ranges_def,
+             contextCodegenRelTheory.memory_range_of_operands_def] >>
+        gvs[EL]) >>
   (* Memory data for event agrees *)
   `TAKE (w2n sz) (DROP (w2n off) s1.vs_memory ++ REPLICATE (w2n sz) 0w) =
    TAKE (w2n sz) (DROP (w2n off) s2.vs_memory ++ REPLICATE (w2n sz) 0w)`
@@ -3807,7 +3499,7 @@ Theorem m2v_nonpromoted_mem_dispatch:
     step_inst fuel ctx inst s1 = OK v1 /\
     (!op. MEM op inst.inst_operands ==>
           eval_operand op s1 = eval_operand op s2) /\
-    m2v_nonpromoted_access_safe fn s1 /\
+    m2v_access_safe fn inst s1 /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     FIND (\(ao,_0,_1). MEM (Var ao) inst.inst_operands)
          (m2v_promo_list fn) = NONE /\
@@ -3853,7 +3545,8 @@ Resume m2v_nonpromoted_mem_dispatch[istore]:
   ho_match_mp_tac m2v_step_nonpromoted_istore >>
   qexists `s1` >> simp[] >>
   rpt strip_tac >>
-  `?offset_op value_op. inst.inst_operands = [offset_op; value_op]` by
+  `?offset_op value_op value. inst.inst_operands = [offset_op; value_op] /\
+     eval_operand value_op s1 = SOME value` by
     (qpat_x_assum `step_inst fuel ctx inst s1 = OK v1` mp_tac >>
      simp[step_inst_non_invoke] >>
      with_step_inst_base_opcode PURE_ONCE_REWRITE_TAC >> ASM_REWRITE_TAC[] >>
@@ -3866,12 +3559,9 @@ Resume m2v_nonpromoted_mem_dispatch[istore]:
   `eval_operand offset_op s2 = SOME off` by
     (qpat_x_assum `!op. MEM op inst.inst_operands ==> _`
        (qspec_then `offset_op` mp_tac) >> simp[]) >>
-  mp_tac (Q.SPECL [`fn`, `s1`, `bb`, `inst`,
-    `<| iao_ofst := HD inst.inst_operands;
-        iao_size := SOME (Lit 32w); iao_max_size := SOME (Lit 32w) |>`,
-    `off`, `32w`, `Lit 32w`] nas_write_range_disjoint) >>
-  simp[mem_write_ops_def, eval_operand_def, lt_32_dimword_256,
-       arithmeticTheory.LESS_MOD]
+  ho_match_mp_tac m2v_access_write_range_disjoint >>
+  simp[codegenRelTheory.source_memory_write_ranges_def,
+       codegenRelTheory.fixed_source_write_range_def]
 QED
 
 Resume m2v_nonpromoted_mem_dispatch[iload]:
@@ -3884,16 +3574,20 @@ Resume m2v_nonpromoted_mem_dispatch[iload]:
   qpat_x_assum `m2v_inv_noix _ _ _` mp_tac >>
   simp[m2v_inv_noix_def] >> strip_tac >>
   first_x_assum irule >>
-  mp_tac (Q.SPECL [`fn`, `s1`, `bb`, `inst`] nas_read_range_disjoint) >>
-  simp[mem_read_ops_def, is_immutable_op_def, eval_operand_def] >>
-  disch_then irule >>
   `step_inst fuel ctx inst s1 = step_inst_base inst s1` by
     (irule step_inst_non_invoke >> simp[]) >>
   qpat_x_assum `step_inst fuel ctx inst s1 = OK v1` mp_tac >>
   ASM_REWRITE_TAC[] >>
   with_step_inst_base_opcode PURE_ONCE_REWRITE_TAC >> ASM_REWRITE_TAC[] >>
   simp[exec_read1_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  simp[eval_operand_def, lt_32_dimword_256, arithmeticTheory.LESS_MOD]
+  `MEM (w2n a,32) (source_memory_read_ranges inst s1)` by
+    simp[contextCodegenRelTheory.source_memory_read_ranges_def] >>
+  `FIND (\(ao,pvar,sz). MEM (Var ao) inst.inst_operands)
+     (m2v_promo_list fn) = NONE` by simp[] >>
+  `!addr. w2n a <= addr /\ addr < w2n a + 32 ==>
+     ~in_promoted_region fn s1 addr` by
+    (ho_match_mp_tac m2v_access_read_range_disjoint >> simp[]) >>
+  first_x_assum irule >> simp[]
 QED
 
 Resume m2v_nonpromoted_mem_dispatch[dload]:
@@ -3925,8 +3619,10 @@ fun wmwe_nas_tac field_eq =
   with_step_inst_base_opcode (fn eqs => gvs (AllCaseEqs() :: eqs)) >>
   field_eq by gvs[m2v_inv_noix_def] >>
   gvs[] >> irule m2v_inv_noix_both_sides_wmwe >> simp[] >>
-  ho_match_mp_tac nas_write_range_disjoint >>
-  qexistsl [`bb`, `inst`] >> simp[mem_write_ops_def, is_immutable_op_def];
+  ho_match_mp_tac m2v_access_write_range_disjoint >>
+  simp[codegenRelTheory.source_memory_write_ranges_def,
+       codegenRelTheory.sized_source_write_range_def] >>
+  metis_tac[];
 
 Resume m2v_nonpromoted_mem_dispatch[dloadbytes]:
   wmwe_nas_tac `s1.vs_data_section = s2.vs_data_section`
@@ -3955,29 +3651,33 @@ Resume m2v_nonpromoted_mem_dispatch[mstore8]:
   `eval_operand op1 s1 = SOME addr` by gvs[] >>
   irule m2v_inv_noix_both_sides_wmwe >> simp[] >>
   rpt strip_tac >> `addr' = w2n addr` by simp[] >> gvs[] >>
-  mp_tac (Q.SPECL [`fn`, `s1`, `bb`, `inst`] nas_write_range_disjoint) >>
-  simp[mem_write_ops_def, is_immutable_op_def, eval_operand_def] >>
-  qexists `w2n addr` >> simp[]
+  `!i. w2n addr <= i /\ i < w2n addr + 1 ==>
+     ~in_promoted_region fn s1 i` by
+    (ho_match_mp_tac m2v_access_write_range_disjoint >>
+     simp[codegenRelTheory.source_memory_write_ranges_def,
+          codegenRelTheory.fixed_source_write_range_def] >> metis_tac[]) >>
+  first_x_assum (qspec_then `w2n addr` mp_tac) >> simp[]
 QED
 
 Resume m2v_nonpromoted_mem_dispatch[mcopy]:
   gvs[step_inst_non_invoke, step_inst_base_for ``MCOPY``, AllCaseEqs(),
       mcopy_def, LET_THM] >>
-  (* Source bytes agree: inv memory clause + NAS read range disjointness *)
+  `!i. w2n src <= i /\ i < w2n src + w2n sz ==>
+     ~in_promoted_region fn s1 i` by
+    (ho_match_mp_tac m2v_access_read_range_disjoint >>
+     simp[contextCodegenRelTheory.source_memory_read_ranges_def] >>
+     metis_tac[]) >>
+  (* Source bytes agree outside the active read range. *)
   `TAKE (w2n sz) (DROP (w2n src) s1.vs_memory ++ REPLICATE (w2n sz) 0w) =
    TAKE (w2n sz) (DROP (w2n src) s2.vs_memory ++ REPLICATE (w2n sz) 0w)`
     by (irule mem_byte_agrees_take_drop >> rpt strip_tac >>
         qpat_x_assum `m2v_inv_noix _ _ _` mp_tac >>
         simp[m2v_inv_noix_def] >> strip_tac >>
-        first_x_assum irule >>
-        `eval_operand op_src s1 = SOME src` by gvs[] >>
-        mp_tac (Q.SPECL [`fn`, `s1`, `bb`, `inst`]
-                nas_read_range_disjoint) >>
-        simp[mem_read_ops_def, is_immutable_op_def, eval_operand_def] >>
-        disch_then irule >> simp[]) >>
+        first_x_assum irule >> metis_tac[]) >>
   gvs[] >> irule m2v_inv_noix_both_sides_wmwe >> simp[] >>
-  ho_match_mp_tac nas_write_range_disjoint >>
-  qexistsl [`bb`, `inst`] >> simp[mem_write_ops_def, is_immutable_op_def]
+  ho_match_mp_tac m2v_access_write_range_disjoint >>
+  simp[codegenRelTheory.source_memory_write_ranges_def,
+       codegenRelTheory.sized_source_write_range_def] >> metis_tac[]
 QED
 
 Resume m2v_nonpromoted_mem_dispatch[mstore]:
@@ -4006,14 +3706,11 @@ Resume m2v_nonpromoted_mem_dispatch[mstore_done]:
   ho_match_mp_tac promoted_region_disjoint_from_nonpromoted >>
   qexistsl [`fn`, `s1`, `inst_id`] >> simp[] >>
   rpt strip_tac >>
-  mp_tac (Q.SPECL [`fn`, `s1`, `bb`, `inst`,
-    `<| iao_ofst := op1; iao_size := SOME (Lit 32w);
-        iao_max_size := SOME (Lit 32w) |>`,
-    `addr`, `32w`, `Lit 32w`] nas_write_range_disjoint) >>
-  (impl_tac >-
-    simp[mem_write_ops_def, is_immutable_op_def, eval_operand_def,
-         lt_32_dimword_256, arithmeticTheory.LESS_MOD]) >>
-  simp[lt_32_dimword_256, arithmeticTheory.LESS_MOD] >>
+  `!i. w2n addr <= i /\ i < w2n addr + 32 ==>
+     ~in_promoted_region fn s1 i` by
+    (ho_match_mp_tac m2v_access_write_range_disjoint >>
+     simp[codegenRelTheory.source_memory_write_ranges_def,
+          codegenRelTheory.fixed_source_write_range_def] >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -4027,16 +3724,20 @@ Resume m2v_nonpromoted_mem_dispatch[mload]:
   qpat_x_assum `m2v_inv_noix _ _ _` mp_tac >>
   simp[m2v_inv_noix_def] >> strip_tac >>
   first_x_assum irule >>
-  mp_tac (Q.SPECL [`fn`, `s1`, `bb`, `inst`] nas_read_range_disjoint) >>
-  simp[mem_read_ops_def, is_immutable_op_def, eval_operand_def] >>
-  disch_then irule >>
   `step_inst fuel ctx inst s1 = step_inst_base inst s1` by
     (irule step_inst_non_invoke >> simp[]) >>
   qpat_x_assum `step_inst fuel ctx inst s1 = OK v1` mp_tac >>
   ASM_REWRITE_TAC[] >>
   with_step_inst_base_opcode PURE_ONCE_REWRITE_TAC >> ASM_REWRITE_TAC[] >>
   simp[exec_read1_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  simp[eval_operand_def, lt_32_dimword_256, arithmeticTheory.LESS_MOD]
+  `MEM (w2n a,32) (source_memory_read_ranges inst s1)` by
+    simp[contextCodegenRelTheory.source_memory_read_ranges_def] >>
+  `FIND (\(ao,pvar,sz). MEM (Var ao) inst.inst_operands)
+     (m2v_promo_list fn) = NONE` by simp[] >>
+  `!addr. w2n a <= addr /\ addr < w2n a + 32 ==>
+     ~in_promoted_region fn s1 addr` by
+    (ho_match_mp_tac m2v_access_read_range_disjoint >> simp[]) >>
+  first_x_assum irule >> simp[]
 QED
 
 Finalise m2v_nonpromoted_mem_dispatch
@@ -4237,18 +3938,33 @@ Proof
   rw[m2v_non32_ok_def, lookup_var_def]
 QED
 
-(* eval_operands agreement from operand agreement *)
-Theorem eval_operands_agrees:
-  !ops s1 s2.
-    (!op. MEM op ops ==> eval_operand op s1 = eval_operand op s2) ==>
-    eval_operands ops s1 = eval_operands ops s2
+Theorem m2v_ao_undef_sync_update_deletions:
+  !fn s1 s2 pending. m2v_ao_undef_sync fn s1 s2 ==>
+    m2v_ao_undef_sync fn
+      (s1 with vs_pending_deletions := pending)
+      (s2 with vs_pending_deletions := pending)
 Proof
-  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
-  `eval_operand h s1 = eval_operand h s2` by simp[] >>
-  Cases_on `eval_operand h s1` >> simp[] >>
-  `eval_operands ops s1 = eval_operands ops s2` by
-    (first_x_assum irule >> simp[]) >>
-  simp[]
+  simp[m2v_ao_undef_sync_def, lookup_var_def]
+QED
+
+Theorem m2v_inv_noix_update_deletions:
+  !fn s1 s2 pending. m2v_inv_noix fn s1 s2 ==>
+    m2v_inv_noix fn
+      (s1 with vs_pending_deletions := pending)
+      (s2 with vs_pending_deletions := pending)
+Proof
+  rw[m2v_inv_noix_def, lookup_var_def,
+     mem_byte_def, in_promoted_region_def, mload_def,
+     allocas_non_overlapping_def] >> metis_tac[]
+QED
+
+Theorem m2v_non32_ok_update_deletions:
+  !fn s1 s2 pending. m2v_non32_ok fn s1 s2 ==>
+    m2v_non32_ok fn
+      (s1 with vs_pending_deletions := pending)
+      (s2 with vs_pending_deletions := pending)
+Proof
+  simp[m2v_non32_ok_def, lookup_var_def]
 QED
 
 (* For FIND=NONE easy terminators (not RETURN/REVERT), step_inst on s1
@@ -4282,7 +3998,7 @@ Proof
         m2v_inv_noix_eval_agrees) >> simp[]) >>
   SUBGOAL_THEN ``eval_operands inst.inst_operands s1 =
     eval_operands inst.inst_operands s2`` assume_tac
-  >- (irule eval_operands_agrees >> simp[]) >>
+  >- (irule eval_operands_agree >> simp[]) >>
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
   >- (with_step_inst_base_opcode ASM_REWRITE_TAC >> simp[] >>
       every_case_tac >> gvs[lift_result_def] >>
@@ -4311,15 +4027,21 @@ Proof
                 m2v_ao_undef_sync_halt_state])
   (* SELFDESTRUCT: extract call_ctx/accounts agreement before case split. *)
   >- (SUBGOAL_THEN ``s1.vs_call_ctx = s2.vs_call_ctx /\
-        s1.vs_accounts = s2.vs_accounts`` strip_assume_tac
+        s1.vs_accounts = s2.vs_accounts /\
+        s1.vs_pending_deletions = s2.vs_pending_deletions`` strip_assume_tac
       >- gvs[m2v_inv_noix_def] >>
       with_step_inst_base_opcode ASM_REWRITE_TAC >> simp[] >>
       every_case_tac >> gvs[lift_result_def] >>
+      qpat_x_assum `s1.vs_pending_deletions = s2.vs_pending_deletions`
+        (fn th => PURE_REWRITE_TAC[GSYM th]) >> simp[] >>
       metis_tac[m2v_inv_noix_update_accounts, m2v_inv_noix_halt_state,
                 m2v_inv_noix_set_returndata,
+                m2v_inv_noix_update_deletions,
                 m2v_non32_ok_update_accounts, m2v_non32_ok_halt_state,
                 m2v_non32_ok_set_returndata,
+                m2v_non32_ok_update_deletions,
                 m2v_ao_undef_sync_update_accounts,
+                m2v_ao_undef_sync_update_deletions,
                 m2v_ao_undef_sync_set_returndata,
                 m2v_ao_undef_sync_halt_state]) >>
   with_step_inst_base_opcode ASM_REWRITE_TAC >> simp[lift_result_def] >>
@@ -4415,9 +4137,9 @@ val return_revert_find_none_tac =
   rename1 `eval_operand sz_op s2 = SOME sz_val` >>
   `!addr. w2n off_val <= addr /\ addr < w2n off_val + w2n sz_val ==>
           ~in_promoted_region fn s1 addr` by (
-    ho_match_mp_tac nas_read_range_disjoint >>
-    qexistsl [`bb`, `inst`] >>
-    simp[mem_read_ops_def, is_immutable_op_def]) >>
+    ho_match_mp_tac m2v_access_read_range_disjoint >>
+    simp[contextCodegenRelTheory.source_memory_read_ranges_def,
+         contextCodegenRelTheory.memory_range_of_operands_def]) >>
   `TAKE (w2n sz_val) (DROP (w2n off_val) s1.vs_memory ++
      REPLICATE (w2n sz_val) 0w) =
    TAKE (w2n sz_val) (DROP (w2n off_val) s2.vs_memory ++
@@ -4442,7 +4164,7 @@ Theorem m2v_step_return_revert_find_none:
     m2v_non32_ok fn s1 s2 /\
     m2v_ao_undef_sync fn s1 s2 /\
     m2v_fresh_names_disjoint fn /\
-    m2v_nonpromoted_access_safe fn s1 /\
+    m2v_access_safe fn inst s1 /\
     MEM inst (fn_insts fn) /\
     inst_wf inst /\
     s1.vs_alloca_next = s2.vs_alloca_next /\
@@ -4650,14 +4372,6 @@ Proof
   rw[mstore_def, LET_THM, len_word_to_bytes_256]
 QED
 
-Theorem take_append_pad:
-  !n (l:'a list) a b x. n <= LENGTH l + a /\ n <= LENGTH l + b ==>
-    TAKE n (l ++ REPLICATE a x) = TAKE n (l ++ REPLICATE b x)
-Proof
-  rw[LIST_EQ_REWRITE, LENGTH_TAKE, LENGTH_APPEND, LENGTH_REPLICATE] >>
-  rw[EL_TAKE, EL_APPEND_EQN, EL_REPLICATE, LENGTH_REPLICATE]
-QED
-
 Theorem return_data_mstore_roundtrip:
   !off (pval:bytes32) s1 s2 k.
     pval = mload off s1 /\ k <= 32 ==>
@@ -4764,91 +4478,7 @@ QED
    Chain passes step_inst result on s2 side to ih_cont,
    allowing pvars_set derivation for IH application. *)
 
-(* step_inst_base can't Halt or IntRet for non-terminators *)
-Triviality exec_result_helpers_no_halt_abort[simp]:
-  (!f inst s s'. exec_pure1 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure1 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_pure2 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure2 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_pure3 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure3 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_read0 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_read0 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_read1 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_read1 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_write2 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_write2 f inst s <> Abort a s') /\
-  (!inst s alloc_size s'. exec_alloca inst s alloc_size <> Halt s') /\
-  (!inst s alloc_size a s'. exec_alloca inst s alloc_size <> Abort a s')
-Proof
-  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
-     exec_alloca_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_result_helpers_not_intret[simp]:
-  (!f inst s vs s'. exec_pure1 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_pure2 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_pure3 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_read0 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_read1 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_write2 f inst s <> IntRet vs s') /\
-  (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
-Proof
-  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
-     exec_alloca_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_call_helpers_not_intret[simp]:
-  (!inst s g a v ao as_ ro rs is_s vs s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> IntRet vs s') /\
-  (!inst s g a ao as_ ro rs vs s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> IntRet vs s') /\
-  (!inst s v off sz salt vs s'.
-     exec_create inst s v off sz salt <> IntRet vs s')
-Proof
-  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_call_helpers_no_halt_abort[simp]:
-  (!inst s g a v ao as_ ro rs is_s s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Halt s') /\
-  (!inst s g a v ao as_ ro rs is_s ab s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Abort ab s') /\
-  (!inst s g a ao as_ ro rs s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Halt s') /\
-  (!inst s g a ao as_ ro rs ab s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
-  (!inst s v off sz salt s'.
-     exec_create inst s v off sz salt <> Halt s')
-Proof
-  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Theorem step_inst_base_no_halt:
-  !inst s s'.
-    step_inst_base inst s = Halt s' ==>
-    is_terminator inst.inst_opcode
-Proof
-  rpt strip_tac >> drule step_inst_base_halt_opcodes >>
-  strip_tac >> gvs[is_terminator_def]
-QED
-
-Theorem step_inst_base_no_intret:
-  !inst s vs s'.
-    step_inst_base inst s = IntRet vs s' ==>
-    is_terminator inst.inst_opcode
-Proof
-  rpt strip_tac >> drule step_inst_base_intret_opcodes >>
-  strip_tac >> gvs[is_terminator_def]
-QED
+val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt_abort]];
 
 (* Abort: both sides run same non-promoted instruction *)
 Theorem step_inst_base_abort_input_equiv:
@@ -4971,7 +4601,6 @@ Theorem m2v_pvars_set_after_dispatch:
     wf_function fn /\
     ssa_form fn /\
     m2v_fresh_names_disjoint fn /\
-    alloca_pointer_confined fn /\
     MEM bb fn.fn_blocks /\
     bb_well_formed bb /\
     i < LENGTH bb.bb_instructions - 1 /\
@@ -5325,40 +4954,6 @@ QED
 
 
 
-(* When extract_venom_result is called with the same args on two states,
-   both produce the same wmwe expansion D.
-   This is the key lemma for showing nao equality across ext_call. *)
-Triviality extract_venom_result_same_D:
-  !s1 s2 ov retOff retSize rr out1 s1' out2 s2'.
-    extract_venom_result s1 ov retOff retSize rr = SOME (out1, s1') /\
-    extract_venom_result s2 ov retOff retSize rr = SOME (out2, s2') ==>
-    s1'.vs_alloca_next = s1.vs_alloca_next /\
-    s2'.vs_alloca_next = s2.vs_alloca_next /\
-    ?D. LENGTH s1'.vs_memory = MAX (LENGTH s1.vs_memory) D /\
-        LENGTH s2'.vs_memory = MAX (LENGTH s2.vs_memory) D
-Proof
-  simp[extract_venom_result_def, AllCaseEqs(), LET_THM] >>
-  rpt strip_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  simp[LENGTH_write_memory_with_expansion] >>
-  metis_tac[]
-QED
-
-(* extract_venom_result preserves alloca_next and has predictable memory length *)
-Triviality extract_venom_result_nao:
-  !s output_val retOff retSize run_result out s'.
-    extract_venom_result s output_val retOff retSize run_result =
-      SOME (out, s') ==>
-    s'.vs_alloca_next = s.vs_alloca_next /\
-    ?D. LENGTH s'.vs_memory = MAX (LENGTH s.vs_memory) D
-Proof
-  simp[extract_venom_result_def, AllCaseEqs(), LET_THM] >>
-  rpt strip_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >>
-  simp[LENGTH_write_memory_with_expansion] >>
-  metis_tac[]
-QED
-
 (* exec_ext_call preserves alloca_next and memory length = MAX old D *)
 Triviality exec_ext_call_nao:
   !inst s gas addr value ao as_ ro rs st s'.
@@ -5381,7 +4976,7 @@ Triviality exec_delegatecall_nao:
 Proof
   simp[exec_delegatecall_def, LET_THM, AllCaseEqs()] >>
   rpt strip_tac >> gvs[update_var_def] >>
-  metis_tac[extract_venom_result_nao]
+  simp[LENGTH_write_memory_with_expansion] >> metis_tac[]
 QED
 
 (* exec_create preserves alloca_next and memory length = MAX old D *)
@@ -5428,26 +5023,6 @@ Proof
   simp[LENGTH_write_memory_with_expansion] >> metis_tac[]
 QED
 
-Triviality exec_delegatecall_same_D:
-  !inst s1 s2 g a ao as_ ro rs s1' s2'.
-    exec_delegatecall inst s1 g a ao as_ ro rs = OK s1' /\
-    exec_delegatecall inst s2 g a ao as_ ro rs = OK s2' /\
-    read_memory (w2n ao) (w2n as_) s1 = read_memory (w2n ao) (w2n as_) s2 /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_transient = s2.vs_transient /\
-    venom_to_tx_params s1 = venom_to_tx_params s2 ==>
-    s1'.vs_alloca_next = s1.vs_alloca_next /\
-    s2'.vs_alloca_next = s2.vs_alloca_next /\
-    ?D. LENGTH s1'.vs_memory = MAX (LENGTH s1.vs_memory) D /\
-        LENGTH s2'.vs_memory = MAX (LENGTH s2.vs_memory) D
-Proof
-  simp[exec_delegatecall_def, LET_THM, AllCaseEqs(),
-       make_venom_delegatecall_state_def] >>
-  rpt strip_tac >> gvs[update_var_def] >>
-  metis_tac[extract_venom_result_same_D]
-QED
-
 Triviality exec_create_same_D:
   !inst s1 s2 v off sz salt s1' s2'.
     exec_create inst s1 v off sz salt = OK s1' /\
@@ -5477,7 +5052,7 @@ Theorem step_inst_ext_call_nao:
     step_inst_base inst s1 = OK s1' /\
     step_inst_base inst s2 = OK s2' /\
     m2v_inv_noix fn s1 s2 /\
-    m2v_nonpromoted_access_safe fn s1 /\
+    m2v_access_safe fn inst s1 /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     FIND (\(ao,_0,_1). MEM (Var ao) inst.inst_operands)
          (m2v_promo_list fn) = NONE /\
@@ -5504,9 +5079,9 @@ Theorem nao_dispatch_preserved:
   !fn bb idx fuel ctx s1 s2 s1' s2'.
     wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
     m2v_promotable_wf fn /\ m2v_fresh_names_disjoint fn /\
-    m2v_promo_sizes_bounded fn /\ alloca_pointer_confined fn /\
+    m2v_promo_sizes_bounded fn /\
     alloca_inv s1 /\
-    m2v_nonpromoted_access_safe fn s1 /\
+    m2v_access_safe fn (EL idx bb.bb_instructions) s1 /\
     MEM bb fn.fn_blocks /\ bb_well_formed bb /\
     EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
     idx < LENGTH bb.bb_instructions - 1 /\

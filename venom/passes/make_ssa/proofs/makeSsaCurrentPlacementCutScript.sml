@@ -2,7 +2,7 @@ Theory makeSsaCurrentPlacementCut
 Ancestors
   makeSsaCurrentPlacement makeSsaCurrentPhiLocality makeSsaCurrentAnalysis
   makeSsaCurrentLastSite makeSsaCurrentFrontier cfgAnalysisProps
-  makeSsaCurrentCutTokens makeSsaCurrentDefs makeSsaDefs venomInst list alist
+  makeSsaCurrentCutTokens makeSsaDefs venomInst list alist
 
 Definition current_actual_inserted_def:
   current_actual_inserted fn v l <=>

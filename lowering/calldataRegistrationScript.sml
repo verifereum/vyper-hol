@@ -37,7 +37,7 @@ Theorem decode_singleton_aggregate_prelude:
          emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
          emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
      else src = head /\ first = after_head) /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),stf)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),stf)
 Proof
   strip_tac >>
   qpat_x_assum `compile_decode_args _ _ _ _ _ _ _ = _` mp_tac >>

@@ -7,7 +7,7 @@
  *)
 Theory makeSsaCurrentFrameRf
 Ancestors
-  o1PassLift makeSsaCurrentDefs venomWf cfgWf venomInst irSupply
+  o1PassLift makeSsaDefs venomWf cfgWf venomInst irSupply
   unitShapeDefs o1PassContract o1FrameLockstep makeSsaCurrentLockstep
   makeSsaCurrentLockstepRf makeSsaCurrentRevertForward
 

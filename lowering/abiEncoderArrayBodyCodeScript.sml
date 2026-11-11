@@ -3,10 +3,10 @@ Ancestors
   abiEncoderInput abiCanonicalWindows abiCanonicalHeadSize abiDecodeRanges valueEncoding
   contractABI words list rich_list arithmetic abiEncoderArrayCode abiDecoderDynamicLoopSetup
   abiDecoderReentryAddress abiDecoderReentry abiDecoderGuards abiDecoderContract
-  abiDecoderArrayHeader emitHelperProps exprLoweringProps compileEnv emitHelper
+  abiDecoderArrayHeader emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs emitHelper
   venomExecSemantics venomState venomInst abiDecoderLoop fragExec instIdxIndep
   abiEncoderChildInputs abiDecoderArraySlice abiEncoderAdmissible abiEncoderLeafCode
-  abiEncoderChildContext abiEncoderAppend abiEncoderCounters abiEncoder
+  abiEncoderChildContext abiEncoderAppend abiEncoderCounters abiEncoder abiDecoderRange
 
 (* Uniform semantic layout and complete source slots for dynamic-array encoding. *)
 Theorem abi_encoder_have_type_every:

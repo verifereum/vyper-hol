@@ -128,56 +128,7 @@ Proof
   irule run_blocks_no_return >> simp[]
 QED
 
-Theorem def_available_on_all_paths:
-  wf_function fn /\ MEM bb fn.fn_blocks /\ def_available_at fn bb point v ==>
-  def_on_all_paths fn bb point v
-Proof
-  simp[def_available_at_def] >> rpt strip_tac >>
-  simp[def_on_all_paths_def] >> rpt strip_tac >>
-  Cases_on `def_bb = bb`
-  >- (gvs[] >> disj2_tac >> Cases_on `point` >> gvs[]
-      >- metis_tac[MEM_EL] >>
-      qexists_tac `i` >> simp[] >> metis_tac[LESS_TRANS]) >>
-  disj1_tac >>
-  `MEM def_bb.bb_label path` by metis_tac[fn_dominates_def] >>
-  `def_bb.bb_label <> bb.bb_label` by metis_tac[same_label_same_block] >>
-  qpat_x_assum `MEM def_bb.bb_label path` mp_tac >>
-  disch_then (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
-  rename1 `k < LENGTH path` >>
-  qexistsl_tac [`k`, `def_bb`, `def_inst`] >> simp[] >>
-  `LAST path = EL (LENGTH path - 1) path` by
-    (qspec_then `path` mp_tac LAST_EL >> simp[PRE_SUB1]) >>
-  Cases_on `k = LENGTH path - 1` >> gvs[] >> decide_tac
-QED
-
-Theorem wf_ssa_defs_reach_uses:
-  wf_ssa fn /\ wf_function fn ==> fn_defs_reach_uses fn
-Proof
-  simp[wf_ssa_def, fn_defs_reach_uses_def, def_dominates_uses_def] >>
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode = PHI` >> simp[]
-  >- (rpt strip_tac >>
-      `phi_edge_uses_wf fn bb inst` by metis_tac[] >>
-      qpat_x_assum `phi_edge_uses_wf _ _ _` mp_tac >>
-      pure_rewrite_tac[phi_edge_uses_wf_def] >> strip_tac >>
-      qpat_x_assum `!pred v. MEM (pred,v) _ ==> _` drule >>
-      strip_tac >> rename1 `def_available_at fn source NONE v` >>
-      `source = pred_bb` by metis_tac[same_label_same_block] >>
-      gvs[] >> irule def_available_on_all_paths >> metis_tac[]) >>
-  rpt strip_tac >> irule def_available_on_all_paths >> metis_tac[]
-QED
-
-Theorem phi_pairs_resolve_phi_some:
-  !ops l v. MEM (l,v) (phi_pairs ops) ==> ?op. resolve_phi l ops = SOME op
-Proof
-  recInduct phi_pairs_ind >> simp[phi_pairs_def, resolve_phi_def] >>
-  rpt strip_tac >> gvs[] >>
-  rpt CASE_TAC >> simp[]
-  >- metis_tac[] >>
-  rename1 `resolve_phi _ (head::_::_)` >>
-  Cases_on `head` >> gvs[resolve_phi_def] >>
-  rpt CASE_TAC >> simp[] >> metis_tac[]
-QED
+(* Generic availability/path facts live in venomWfProps. *)
 
 Theorem simplify_cfg_fn_ok_no_phi:
   wf_function fn /\ fn_defs_reach_uses fn /\
@@ -202,7 +153,7 @@ Theorem simplify_cfg_fn_ok_ssa:
   simplify_cfg_fn_ok fn
 Proof
   strip_tac >>
-  `fn_defs_reach_uses fn` by metis_tac[wf_ssa_defs_reach_uses] >>
+  `fn_defs_reach_uses fn` by metis_tac[venomWfPropsTheory.wf_ssa_defs_reach_uses] >>
   simp[simplify_cfg_fn_ok_def, GSYM first_block_no_phi_def] >>
   conj_tac
   >- (rpt strip_tac >> irule ssa_unique_output >>
@@ -219,7 +170,7 @@ Proof
   simp[phi_edge_uses_wf_def] >> strip_tac >>
   `?p. MEM p (phi_pairs inst.inst_operands) /\ FST p = pred_bb.bb_label` by
     metis_tac[] >>
-  PairCases_on `p` >> gvs[] >> irule phi_pairs_resolve_phi_some >> metis_tac[]
+  PairCases_on `p` >> gvs[] >> irule venomWfPropsTheory.phi_pairs_resolve_phi_some >> metis_tac[]
 QED
 
 Theorem simplify_cfg_pre_walk_structure:

@@ -2,7 +2,7 @@ Theory entryValueRejectFacts
 Ancestors
   vyperLoweringCorrect e2eBoundaryTest entryDispatchProps supportedProgram
   supportedNames supportedDecls vyperTypeContractSoundness
-  vyperInterpreter vyperState compileEnv words e2eDefs list
+  vyperInterpreter vyperState compileEnv loweringStateRelDefs words e2eDefs list
 
 Theorem send_call_value_rejects_only_nonpayable:
   value_transfer_ok tx am.accounts /\

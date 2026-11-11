@@ -28,7 +28,7 @@ val ctor_decode_tail_tac =
   >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
   irule shape_step_conseq >>
   qexistsl_tac [`compiler_label`,
-    `\st. cenv_shape_ok st cenv /\ EVERY (plain_operand st) [dst; src; Lit (n2w data_size)]`,
+    `\st. cenv_shape_ok st cenv /\ EVERY (plain_operand st) [dst; src; Lit 0w; Lit (n2w data_size)]`,
     `\u st. cenv_shape_ok st cenv /\ T`] >>
   conj_tac >- simp[] >> conj_tac
   >- (BETA_TAC >> rpt strip_tac >> drule_all cenv_decode_operand_plain >>

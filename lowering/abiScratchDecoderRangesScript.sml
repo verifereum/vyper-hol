@@ -17,9 +17,9 @@ Proof
 QED
 
 Theorem abi_scratch_decoder_ranges_point:
-  abi_scratch_decoder_ranges opc hi src dst sb len d outsz first last b cap s /\
+  abi_scratch_decoder_ranges opc base_op hi src dst src_base sb len d outsz first last b cap s /\
   abi_decoder_budget first last b cap s ==>
-  abi_decoder_ranges opc hi src dst sb len d outsz s.vs_alloca_next 0 s
+  abi_decoder_ranges opc base_op hi src dst src_base sb len d outsz s.vs_alloca_next 0 s
 Proof
   simp_tac bool_ss [abi_scratch_decoder_ranges_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -35,7 +35,7 @@ Proof
   qpat_x_assum `opc = MLOAD ==> _` (fn th => drule_all th) >>
   simp_tac bool_ss [abi_scratch_disjoint_cons] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `abi_footprint_disjoint sb len [(s.vs_alloca_next,0)]` by
+  `abi_footprint_disjoint (src_base + sb) len [(s.vs_alloca_next,0)]` by
     (irule abi_scratch_frontier_point_disjoint >> asm_simp_tac bool_ss [] >>
      qexistsl_tac [`b`, `cap`, `abi_decoder_ids first last`] >> asm_simp_tac bool_ss []) >>
   fs[abi_footprint_disjoint_def]
@@ -53,9 +53,9 @@ Proof
 QED
 
 Theorem abi_scratch_decoder_input_point:
-  abi_scratch_decoder_input ce env sf ty tv bs v st src dst opc hi sb d first last b cap s /\
+  abi_scratch_decoder_input ce env sf ty tv bs v st src dst opc base_op hi src_base sb d first last b cap s /\
   abi_decoder_budget first last b cap s ==>
-  abi_decoder_valid_pre ce env sf ty tv bs v st src dst opc hi sb d s.vs_alloca_next 0 s
+  abi_decoder_valid_pre ce env sf ty tv bs v st src dst opc base_op hi src_base sb d s.vs_alloca_next 0 s
 Proof
   simp_tac bool_ss [abi_scratch_decoder_input_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>

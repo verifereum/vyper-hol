@@ -25,7 +25,7 @@ Theorem clamp_assert_step:
          SOME c => if c = 0w then Abort Revert_abort (revert_state (set_returndata [] ss)) else OK ss
        | NONE => Error "undefined operand")
 Proof
-  pure_rewrite_tac[step_inst_base_def, mk_inst_def, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accfupds,
     instruction_accessors, combinTheory.K_THM, opcode_case_def] >> simp[]
 QED
 
@@ -41,7 +41,7 @@ Theorem clamp_step_equations:
   (!id a dst ss. step_inst_base (mk_inst id ISZERO [a] [dst]) ss =
     exec_pure1 (\x. bool_to_word (x = 0w)) (mk_inst id ISZERO [a] [dst]) ss)
 Proof
-  pure_rewrite_tac[step_inst_base_def, mk_inst_def, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accfupds,
     instruction_accessors, combinTheory.K_THM, opcode_case_def] >> simp[]
 QED
 

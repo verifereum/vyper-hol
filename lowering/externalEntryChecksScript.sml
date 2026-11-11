@@ -8,7 +8,7 @@ Ancestors
   externalEntryShape
   stmtSimProps stmtSimDefs exprSimDefs loweringPosts
   list pair fragExec bodySim bodySimMain loweringHalt stmtLoweringMono
-  exprLoweringProps compileEnv compileVyper moduleLowering stmtLowering
+  exprLoweringProps compileEnv loweringStateRelDefs compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect rawReturnHeader
   entryChecksProps moduleLoweringProps entryDispatchProps supportedNames
   abiDecoderCounters context supportedDecls supportedExprForms
@@ -295,7 +295,7 @@ Theorem selected_external_package:
   !tops target mut rr name args ret fbody.
   ?cenv pos_args min_cds is_payable nkey ut iv rt.
     set_external_package_target target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut, F, rr, name, args, ([] : expr list), ret, fbody)) =
     ("fn_" ++ name, cenv, pos_args, min_cds, is_payable, F,
      nkey, ut, iv, fbody, rt)
@@ -860,7 +860,7 @@ Theorem source_runtime_entry_checks_code:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
     MEM (mut,nr,rr,name,args,dflts,ret,fbody) (FST (classify_functions tops)) /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,nr,rr,name,args,dflts,ret,fbody)) =
       (lbl,ce,pos_args,min_cds,pay,nr',key,ut,iv,fbody,rt) ==>
     ?func fb sa sd st st'.
@@ -885,6 +885,12 @@ Proof
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts,ints,fallback,ctor)` >>
   simp[] >> strip_tac >>
+  `~EXISTS external_has_defaults exts` by
+    (drule loweringShapePropsTheory.supported_program_no_external_defaults >>
+     qpat_assum `classify_functions tops = _` (fn th => simp[th])) >>
+  qpat_x_assum `(if EXISTS external_has_defaults exts then _ else _) = _`
+    mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
   `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)
      (build_selectors (type_env tops) exts)` by
     simp[loweringShapePropsTheory.build_selectors_fn_labels] >>
@@ -1042,7 +1048,7 @@ Theorem external_entry_reaches_checks:
     ?rr lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st st' func
      s0.
       set_external_package_target rpolicy.rpol_target
-        (package_external_fn tops F (assign_nkeys tops 0)
+        (package_external_fn tops T (K global_nonreentrant_slot)
            (mut, F, rr, tx.function_name, args, ([] : expr list), ret, fbody)) =
         (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
          rt) /\

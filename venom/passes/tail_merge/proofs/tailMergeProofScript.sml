@@ -11,7 +11,7 @@ Ancestors
   tailMergeMap tailMergeSim tailMergeHelpers tailMergeStep tailMergeDefs stateEquiv
   cfgTransform venomState venomExecSemantics venomInst
   venomWf cfgTransformProofs execEquivProofs stateEquivProofs
-  venomInstProps venomExecProps execEquivParamProps unitShapeDefs
+  venomInstProps venomExecProofs venomExecProps execEquivParamProps unitShapeDefs
 Libs
   stepInstBaseLib
 
@@ -1530,15 +1530,6 @@ QED
 (* Key block-level lemma: running a block and its label-rewritten
    version from the same state *)
 
-(* Helper: non-block-label-opcode instructions are unchanged *)
-Theorem subst_block_labels_inst_id[local]:
-  !m inst.
-    ~is_block_label_opcode inst.inst_opcode ==>
-    subst_block_labels_inst m inst = inst
-Proof
-  rw[subst_block_labels_inst_def]
-QED
-
 (* Helper: non-terminator, non-PHI instructions are unchanged *)
 Theorem subst_non_term_non_phi[local]:
   !m inst.
@@ -1696,12 +1687,6 @@ Theorem get_instruction_subst[local]:
 Proof
   rw[get_instruction_def, subst_block_labels_block_def] >>
   simp[listTheory.EL_MAP]
-QED
-
-Theorem subst_block_labels_inst_opcode[local]:
-  !m inst. (subst_block_labels_inst m inst).inst_opcode = inst.inst_opcode
-Proof
-  rw[subst_block_labels_inst_def, subst_label_map_inst_def]
 QED
 
 (* Block-level result relationship under label substitution *)
@@ -1963,8 +1948,8 @@ Proof
   Cases_on `inst.inst_operands` >> simp[subst_label_map_op_def] >>
   Cases_on `t` >> simp[subst_label_map_op_def] >>
   Cases_on `h'` >> simp[subst_label_map_op_def] >>
-  Cases_on `t'` >> simp[subst_label_map_op_def] >>
-  TRY (BasicProvers.every_case_tac >> simp[] >> NO_TAC) >>
+  Cases_on `t'` >> simp[subst_label_map_op_def]
+  >- (BasicProvers.every_case_tac >> simp[]) >>
   Cases_on `h'` >> simp[subst_label_map_op_def] >>
   Cases_on `t` >> simp[subst_label_map_op_def] >>
   TRY (BasicProvers.every_case_tac >> simp[] >> NO_TAC) >>
@@ -2065,33 +2050,6 @@ Proof
   Cases_on `r` >> simp[execution_equiv_def]
 QED
 
-val term_ok_jump_tac =
-  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  with_opcode_clause (fn ths =>
-    simp (ths @ [eval_operands_def, eval_operand_def, AllCaseEqs()])) >>
-  rpt CASE_TAC >> gvs[] >> TRY pairarg_tac >> gvs[];
-
-Theorem step_inst_base_ok_terminator_jump[local]:
-  !inst s s'.
-    is_terminator inst.inst_opcode /\
-    step_inst_base inst s = OK s' ==>
-    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
-    inst.inst_opcode = DJMP
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- (term_ok_jump_tac >> rpt strip_tac >>
-      Cases_on `pack_dret_dynamic s.vs_call_entry_fmp pairs s` >>
-      Cases_on `r` >> gvs[])
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-  >- term_ok_jump_tac
-QED
 
 (* Non-jump terminators never return OK *)
 Theorem step_inst_base_non_jump_term_not_ok[local]:
@@ -2446,32 +2404,6 @@ Proof
   imp_res_tac exec_block_OK_imp_no_phis >>
   imp_res_tac venomExecProofsTheory.run_block_no_phis_eq_exec_block >>
   fs[venom_state_component_equality]
-QED
-
-(* FIND SOME implies MEM *)
-Theorem FIND_SOME_MEM[local]:
-  !P l x. FIND P l = SOME x ==> MEM x l
-Proof
-  Induct_on `l` >> simp[listTheory.FIND_thm] >> rw[] >> metis_tac[]
-QED
-
-(* lookup_block SOME implies MEM *)
-Theorem lookup_block_MEM[local]:
-  !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs
-Proof
-  rw[lookup_block_def] >> metis_tac[FIND_SOME_MEM]
-QED
-
-Theorem FIND_SOME_P[local]:
-  !P l x. FIND P l = SOME x ==> P x
-Proof
-  Induct_on `l` >> simp[listTheory.FIND_thm] >> rw[] >> gvs[]
-QED
-
-Theorem lookup_block_label[local]:
-  !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> bb.bb_label = lbl
-Proof
-  rw[lookup_block_def] >> imp_res_tac FIND_SOME_P >> gvs[]
 QED
 
 Theorem ALL_DISTINCT_MAP_MEM_INJ[local]:

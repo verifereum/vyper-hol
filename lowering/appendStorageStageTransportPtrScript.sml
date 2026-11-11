@@ -4,7 +4,7 @@ Theory appendStorageStageTransportPtr
 Ancestors appendStorageStageRuns stmtAppendStorageSuffixPtr stmtAppendStorageGuardPtr
   varsExt freshWrites
   stateFrame venomState venomInst finite_map exprLoweringProps emitHelperProps
-  venomExecSemantics compileEnv venomInstProps
+  venomExecSemantics compileEnv loweringStateRelDefs venomInstProps
 
 Theorem run_inst_seq_vars_ext_ok:
   vars_ext s s' /\
@@ -298,6 +298,22 @@ Proof
   gvs[venom_state_component_equality]
 QED
 
+Theorem state_frame_fields[local]:
+  !a b. state_frame a = state_frame b ==>
+        a.vs_allocas = b.vs_allocas /\ a.vs_fmp = b.vs_fmp /\
+        a.vs_requests = b.vs_requests
+Proof
+  rpt strip_tac >> fs[state_frame_def, venom_state_component_equality]
+QED
+
+Theorem store_if_fields[local]:
+  (if tr then tstore k v s else sstore k v s).vs_allocas = s.vs_allocas /\
+  (if tr then tstore k v s else sstore k v s).vs_fmp = s.vs_fmp /\
+  (if tr then tstore k v s else sstore k v s).vs_requests = s.vs_requests
+Proof
+  Cases_on `tr` >> simp[tstore_def, sstore_def, LET_THM]
+QED
+
 Theorem append_storage_store_tail_stages_actual:
   emit_void (if tr then TSTORE else SSTORE) [pop; vop] st6 = ((),st7) /\
   emit_op ADD [lop; Lit 1w] st7 = (nop,st8) /\
@@ -360,9 +376,45 @@ Resume append_storage_store_tail_stages_actual[post]:
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  Cases_on `tr` >>
-  gvs[state_frame_def, venom_state_component_equality, drop_fresh_def,
-      tstore_def, sstore_def, LET_THM]
+  `state_frame u7 = state_frame (if tr then tstore addr w s6 else sstore addr w s6)` by
+    (qpat_x_assum `u7 = _` SUBST1_TAC >> irule stmtSimAppendStorageTheory.append_storage_store_frame >>
+     simp[drop_fresh_def]) >>
+  `state_frame s7 = state_frame (if tr then tstore addr w s6 else sstore addr w s6)` by
+    metis_tac[] >>
+  `state_frame u9 =
+   state_frame (if tr then tstore slot (len+1w) s8 else sstore slot (len+1w) s8)` by
+    (qpat_x_assum `u9 = _` SUBST1_TAC >> irule stmtSimAppendStorageTheory.append_storage_store_frame >>
+     metis_tac[]) >>
+  `state_frame s9 =
+   state_frame (if tr then tstore slot (len+1w) s8 else sstore slot (len+1w) s8)` by
+    metis_tac[] >>
+  `s7.vs_allocas = s6.vs_allocas /\ s7.vs_fmp = s6.vs_fmp /\
+   s7.vs_requests = s6.vs_requests` by
+    (qspecl_then [`s7`, `if tr then tstore addr w s6 else sstore addr w s6`]
+       mp_tac state_frame_fields >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     rewrite_tac[store_if_fields] >> rpt strip_tac >> first_assum ACCEPT_TAC) >>
+  `s9.vs_allocas = s8.vs_allocas /\ s9.vs_fmp = s8.vs_fmp /\
+   s9.vs_requests = s8.vs_requests` by
+    (qspecl_then [`s9`,
+                  `if tr then tstore slot (len+1w) s8 else sstore slot (len+1w) s8`]
+       mp_tac state_frame_fields >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     rewrite_tac[store_if_fields] >> rpt strip_tac >> first_assum ACCEPT_TAC) >>
+  `state_frame
+     (if tr then tstore slot (len+1w) s8 else sstore slot (len+1w) s8) =
+   state_frame
+     (if tr then tstore slot (len+1w) (if tr then tstore addr w s6 else sstore addr w s6)
+      else sstore slot (len+1w) (if tr then tstore addr w s6 else sstore addr w s6))` by
+    (irule stmtSimAppendStorageTheory.append_storage_store_frame >> metis_tac[]) >>
+  `state_frame s9 = state_frame
+     (if tr then tstore slot (len+1w) (tstore addr w s6)
+      else sstore slot (len+1w) (sstore addr w s6))` by
+    (qpat_x_assum `state_frame (if _ then _ else _) = _` mp_tac >>
+     qpat_x_assum `state_frame s9 = state_frame (if _ then tstore _ _ s8 else _)`
+       mp_tac >>
+     Cases_on `tr` >> rewrite_tac[] >> rpt strip_tac >> metis_tac[]) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Finalise append_storage_store_tail_stages_actual

@@ -2,7 +2,7 @@ Theory o1MakeSsaEventOwnership
 Ancestors
   o1MakeSsaOwnership o1MakeSsaCallOwnership o1MakeSsaVisitTrace o1MakeSsaEventFrames
   o1MakeSsaTraversalFrames o1MakeSsaFrontier makeSsaCurrentProps makeSsaDefs irSupply
-  makeSsaCurrentInduct makeSsaCurrentDefs list pair pred_set
+  makeSsaCurrentInduct list pair pred_set
 
 Theorem visit_current_rename_owner:
   (!tree path s rs bbs sm ct t final events V H.

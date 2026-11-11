@@ -21,7 +21,11 @@ the existing finite-map compset and `fmap_to_alist_FEMPTY`, `i2w_pos` and
 substitution. The diagnostic per-source bound
 was 900 seconds; the proof-step timeout was unchanged.
 
-The oracle is Vyper `0.5.0a4+9362e36b+commit.9362e36b`, pinned by `VYPER_PIN`,
+Fixtures named in [the pending list](../bytecode/pending-5127-port.md)
+are out of the parity checks until the compiler changes they depend on are
+ported; their MATCH entries below hold again once they are back.
+
+The oracle is Vyper `0.5.0b1+commit.577d2534`, pinned by `VYPER_PIN`,
 with experimental codegen, no optimization, Prague and bytecode metadata disabled.
 The retained 29 JSON/bytecode fixtures and dependency provenance reproduced
 byte for byte with `prepare --check`. Diagnostic probes used holbuild 0.11.4;
@@ -34,9 +38,9 @@ parity suite to 41 fixtures; `method_id_lit` and `st_forward_ref_lit` (a struct
 field naming a later struct) make 43, and `p20_nested_pop` (pops from
 arrays nested in memory, storage and hashmap places) makes 44, and the
 `w01` internal-call DynArray byte-widening fixture makes 45. Six append
-fixtures, `p21`–`p26`, extend this to 51: storage/memory struct fields,
-subscripted DynArrays, a transient field, non-word elements and plain roots.
-Their bytecode comparisons are in `evalCompilerNestedAppendTheory`.
+fixtures, `p21`–`p26`, cover storage/memory struct fields, subscripted
+DynArrays, a transient field, non-word elements and plain roots. Their
+bytecode comparisons run in the native memory-stores suite.
 The `p16` bytecode matches the oracle. The
 `set_byte_bit_field_insert` rule is no longer needed: `word_of_bytes_T_0w_256` in
 `vyperMiscScript.sml` lets EVAL compute 256-bit words built from bytes.
@@ -118,11 +122,11 @@ To reproduce, generate the oracle with the pinned Python environment, then run
 checker outcomes, whitelist results, closed EVAL results, bytecode and any residuals:
 
 ```sh
-python lowering/defs/bytecode/memory_store_witnesses.py prepare \
+python bytecode/memory_store_witnesses.py prepare \
   --fixtures /tmp/memory-store-oracle --check
-python3 lowering/defs/bytecode/memory_store_witnesses.py probe \
+python3 bytecode/memory_store_witnesses.py probe \
   --repo WORKTREE --fixtures /tmp/memory-store-oracle --output RESULT_DIRECTORY
-python lowering/defs/bytecode/memory_store_witnesses.py execute \
+python bytecode/memory_store_witnesses.py execute \
   --fixtures /tmp/memory-store-oracle --output RESULT_DIRECTORY
 ```
 

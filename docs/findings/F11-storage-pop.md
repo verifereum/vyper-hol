@@ -31,8 +31,8 @@ indices below the new length, not a promise that discarded storage is zero.
 - [Storage reconstruction](../../semantics/prop/vyperStorageWritePreservationScript.sml)
   and [type preservation](../../semantics/prop/vyperTypeStoragePreservationScript.sml).
 - [Lowering](../../lowering/defs/exprLoweringScript.sml): `compile_dynarray_pop`.
-- [Original Vyper fixture](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/storage_dynarray.vy),
-  [HOL fixture](../../lowering/defs/bytecode/eval/evalCompilerSubsetStateScript.sml).
+- [Original Vyper fixture](../../bytecode/python-o1-no-asm-opt-sources/storage_dynarray.vy),
+  [HOL fixture](../../bytecode/eval/evalCompilerSubsetStateScript.sml).
 
 Pinned reference `vyper/codegen/core.py:520–542`, `pop_dyn_array`:
 `STORE(darray_node,new_len)` only; optional popped-item pointer uses the old

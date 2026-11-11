@@ -1,10 +1,10 @@
 (* Allocation-based entry to a memory-safe range body. *)
 Theory stmtForRangeMemoryEntry
 Ancestors
-  stmtForRangeMemoryParts stmtSimForLoop stmtSimDeclStore
+  valueEncodingDefs stmtForRangeMemoryParts stmtSimForLoop stmtSimDeclStore
   loweringSlice localPtrsProps valueEncodingProps stmtSimProps stmtSimForParts
   venomState venomExecSemantics finite_map vyperState valueEncoding
-  stmtSimDefs compileEnv vyperValue exprLoweringProps allocaHistory
+  stmtSimDefs compileEnv loweringStateRelDefs vyperValue exprLoweringProps allocaHistory
   fragGasPathMem venomInst
 Libs
   intLib
@@ -32,11 +32,13 @@ Theorem for_body_entry_mem:
     bc.ce_module_vars = cenv.ce_module_vars /\
     bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
     bc.ce_imm_alloca = cenv.ce_imm_alloca /\
+    bc.ce_module_var_type = cenv.ce_module_var_type /\
     not_local_ptr cenv esk.scopes dv /\
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
     MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
     ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
-    32 <= sz /\ type_memory_size tyv = 32 /\ alloca_history func cc ==>
+    32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv /\
+    alloca_history func cc ==>
     ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
          ~s2.vs_halted /\
          stmt_state_rel ctx func bc cx
@@ -75,10 +77,10 @@ Proof
      reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
      qexistsl_tac [`w2n w`, `func`, `ainst`, `sz`] >>
      fs[stmt_state_rel_def, state_rel_def]) >>
-  `val_in_memory tyv (IntV (n1 + &k)) (w2n w)
+  `memory_value_rel tyv (IntV (n1 + &k)) (w2n w)
      (mstore (w2n w) (i2w (n1 + &k)) s1).vs_memory` by
     (rewrite_tac[GSYM val_to_w256_def] >>
-     irule word_value_in_memory >> simp[word_value_def]) >>
+     irule word_value_memory_rel >> simp[word_value_def]) >>
   `!n b sz'. n <> id /\ local_region bc (FEMPTY :: esk.scopes) s1 n b sz' ==>
      mem_bytes_at b sz' s1.vs_memory =
      mem_bytes_at b sz' (mstore (w2n w) (i2w (n1 + &k)) s1).vs_memory` by

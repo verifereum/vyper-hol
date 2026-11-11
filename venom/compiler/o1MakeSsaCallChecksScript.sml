@@ -1,7 +1,7 @@
 Theory o1MakeSsaCallChecks
 Ancestors
   o1MakeSsaCallOwnership o1MakeSsaCallPaths o1MakeSsaFlags unitShapeDefs
-  makeSsaCurrentDefs list pred_set
+  makeSsaDefs list pred_set
 
 Theorem current_flag_fails_operands:
   current_flag_alias rs vs ws /\ LENGTH bbs = LENGTH bbs' /\

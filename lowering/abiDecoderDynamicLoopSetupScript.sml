@@ -1,7 +1,7 @@
 (* Execute the dynamic array element's actual head, offset and output setup. *)
 Theory abiDecoderDynamicLoopSetup
 Ancestors
-  abiDecoderLoopSetup abiDecoderIndexedAddress abiDecoderReentryAddress
+  abiDecoderRange abiDecoderLoopSetup abiDecoderIndexedAddress abiDecoderReentryAddress
   abiDecoderReentryPointer abiDecoderReentry abiDecoderGuards abiDecoderContract
   abiDecoderDynamic abiEncoder emitHelperProps exprLoweringProps
   compileEnv emitHelper venomExecSemantics venomState venomInst words arithmetic list rich_list
@@ -176,52 +176,51 @@ Proof
 QED
 
 Theorem abi_decoder_array_pointer_counters:
-  compile_abi_decode_dyn_elem_ptr opc head data_op hi abi_sz st = (child_op,st') ==>
-  st'.cs_next_var = st.cs_next_var + (if hi = Lit 0w then 2 else 7) /\
+  compile_abi_decode_dyn_elem_ptr opc base_op head data_op hi abi_sz st = (child_op,st') ==>
+  st'.cs_next_var = st.cs_next_var + (if hi = Lit 0w then 2 else 10) +
+    (if base_op = Lit 0w then 0 else 1) /\
   abi_decoder_operand_live st'.cs_next_var child_op
 Proof
-  Cases_on `hi = Lit 0w` >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def,
-    comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
-  imp_res_tac abi_decoder_operand_live_emit >>
-  (conj_tac >- decide_tac)
-  >- first_assum ACCEPT_TAC >>
-  irule abi_decoder_operand_live_mono >>
-  goal_assum (drule_at Any) >> decide_tac
+  Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >>
+  gvs[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
+      compile_abi_decode_range_check_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+  rpt strip_tac >> simp[] >> decide_tac
 QED
 
 Definition abi_decode_array_source_setup_def:
-  abi_decode_array_source_setup ip src opc hi abi_sz =
+  abi_decode_array_source_setup ip src opc base_op hi abi_sz =
     do head_ops <- abi_decode_array_head_setup ip src abi_sz;
-       child_src <- compile_abi_decode_dyn_elem_ptr opc (SND (SND head_ops))
+       child_src <- compile_abi_decode_dyn_elem_ptr opc base_op (SND (SND head_ops))
          (FST (SND head_ops)) hi abi_sz;
        return (FST head_ops,child_src)
     od
 End
 
 Theorem abi_decode_array_source_setup_counters:
-  abi_decode_array_source_setup ip src opc hi abi_sz st = (ops,st') ==>
-  st'.cs_next_var = st.cs_next_var + 4 + (if hi = Lit 0w then 2 else 7) /\
+  abi_decode_array_source_setup ip src opc base_op hi abi_sz st = (ops,st') ==>
+  st'.cs_next_var = st.cs_next_var + 4 + (if hi = Lit 0w then 2 else 10) +
+    (if base_op = Lit 0w then 0 else 1) /\
   abi_decoder_operand_live st'.cs_next_var (FST ops) /\
   abi_decoder_operand_live st'.cs_next_var (SND ops)
 Proof
   simp[abi_decode_array_source_setup_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `abi_decode_array_head_setup ip src abi_sz st = (head_ops,c1)` >>
-  rename1 `compile_abi_decode_dyn_elem_ptr opc _ _ hi abi_sz c1 = (child_src,end_st)` >>
+  rename1 `compile_abi_decode_dyn_elem_ptr opc base_op _ _ hi abi_sz c1 = (child_src,end_st)` >>
   imp_res_tac abi_decode_array_head_setup_counters >> imp_res_tac abi_decoder_array_pointer_counters >>
-  `c1.cs_next_var <= end_st.cs_next_var` by (Cases_on `hi = Lit 0w` >> gvs[]) >>
-  conj_tac >- (Cases_on `hi = Lit 0w` >> gvs[]) >>
+  `c1.cs_next_var <= end_st.cs_next_var` by (Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >> gvs[]) >>
+  conj_tac >- (Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >> gvs[]) >>
   metis_tac[abi_decoder_operand_live_mono]
 QED
 
 Theorem abi_decode_array_source_setup_split:
-  abi_decode_array_source_setup ip src opc hi abi_sz st = (ops,st') ==>
+  abi_decode_array_source_setup ip src opc base_op hi abi_sz st = (ops,st') ==>
   ?head_ops c1.
     abi_decode_array_head_setup ip src abi_sz st = (head_ops,c1) /\
-    compile_abi_decode_dyn_elem_ptr opc (SND (SND head_ops)) (FST (SND head_ops))
+    compile_abi_decode_dyn_elem_ptr opc base_op (SND (SND head_ops)) (FST (SND head_ops))
       hi abi_sz c1 = (SND ops,st') /\ FST ops = FST head_ops
 Proof
   simp[abi_decode_array_source_setup_def, comp_bind_def, comp_return_def] >>
@@ -231,13 +230,15 @@ Proof
 QED
 
 Theorem abi_decode_array_source_setup_reentry:
-  abi_decode_array_source_setup ip src opc hi abi_sz st = (ops,st') /\
+  abi_decode_array_source_setup ip src opc base_op hi abi_sz st = (ops,st') /\
   abi_decode_source_opcode opc /\ eval_operand ip s = SOME p /\ mload (w2n p) s = n2w i /\
   eval_operand src s = SOME (n2w sb) /\
-  abi_decode_load opc (n2w (sb + 32 + i * abi_sz) : bytes32) s = n2w child_off /\
+  eval_operand base_op s = SOME (n2w B) /\
+  abi_decode_load opc (n2w (B + (sb + 32 + i * abi_sz)) : bytes32) s = n2w child_off /\
   (hi = Lit 0w \/ ?hb. eval_operand hi s = SOME (n2w hb) /\
     sb + 32 + child_off + abi_sz <= hb /\ hb < dimword (:256)) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var hi /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     eval_operand (FST ops) t = SOME (n2w i) /\
@@ -248,12 +249,15 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_decode_array_source_setup_split >> strip_tac >>
   imp_res_tac abi_decode_array_head_setup_counters >> imp_res_tac abi_decoder_array_pointer_counters >>
-  `c1.cs_next_var <= limit_st.cs_next_var` by (Cases_on `hi = Lit 0w` >> gvs[] >> decide_tac) >>
-  `abi_decoder_operand_live c1.cs_next_var hi` by
-    (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
+  `c1.cs_next_var <= limit_st.cs_next_var` by (Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >> gvs[] >> decide_tac) >>
+  `abi_decoder_operand_live c1.cs_next_var hi /\
+   abi_decoder_operand_live c1.cs_next_var base_op` by
+    (conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
   drule_all abi_decode_array_head_setup_reentry >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
-  `abi_decode_load opc (n2w (sb + 32 + i * abi_sz) : bytes32) s1 = n2w child_off`
+  `eval_operand base_op s1 = SOME (n2w B)` by
+    (fs[abi_decoder_address_frame_def] >> metis_tac[]) >>
+  `abi_decode_load opc (n2w (B + (sb + 32 + i * abi_sz)) : bytes32) s1 = n2w child_off`
     by (drule_all abi_decoder_address_frame_load >> strip_tac >> gvs[]) >>
   SUBGOAL_THEN ``hi = Lit 0w \/ ?hb. eval_operand hi s1 = SOME (n2w hb) /\
      sb + 32 + child_off + abi_sz <= hb /\ hb < dimword (:256)`` assume_tac
@@ -273,8 +277,8 @@ QED
 
 Theorem abi_decode_dynamic_element_setup_phases:
   dec_info_needs_offset di ==>
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz =
-    do src_ops <- abi_decode_array_source_setup ip src opc hi abi_sz;
+  abi_decode_array_element_setup ip src dst opc base_op hi di abi_sz mem_sz =
+    do src_ops <- abi_decode_array_source_setup ip src opc base_op hi abi_sz;
        child_dst <- abi_decode_indexed_address dst (FST src_ops) mem_sz;
        return (FST src_ops,SND src_ops,child_dst)
     od
@@ -287,25 +291,26 @@ Proof
 QED
 
 Theorem abi_decode_dynamic_element_setup_split:
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz st = (ops,st') /\
+  abi_decode_array_element_setup ip src dst opc base_op hi di abi_sz mem_sz st = (ops,st') /\
   dec_info_needs_offset di ==>
   ?src_ops c1.
-    abi_decode_array_source_setup ip src opc hi abi_sz st = (src_ops,c1) /\
+    abi_decode_array_source_setup ip src opc base_op hi abi_sz st = (src_ops,c1) /\
     abi_decode_indexed_address dst (FST src_ops) mem_sz c1 = (SND (SND ops),st') /\
     FST ops = FST src_ops /\ FST (SND ops) = SND src_ops
 Proof
-  strip_tac >> qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  strip_tac >> qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_dynamic_element_setup_phases, comp_bind_def,
     comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  rename1 `abi_decode_array_source_setup ip src opc hi abi_sz st = (src_ops,c1)` >>
+  rename1 `abi_decode_array_source_setup ip src opc base_op hi abi_sz st = (src_ops,c1)` >>
   qexistsl_tac [`src_ops`, `c1`] >> simp[]
 QED
 
 Theorem abi_decode_dynamic_element_setup_counters:
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz st = (ops,st') /\
+  abi_decode_array_element_setup ip src dst opc base_op hi di abi_sz mem_sz st = (ops,st') /\
   dec_info_needs_offset di ==>
-  st'.cs_next_var = st.cs_next_var + 7 + (if hi = Lit 0w then 2 else 7) /\
+  st'.cs_next_var = st.cs_next_var + 7 + (if hi = Lit 0w then 2 else 10) +
+    (if base_op = Lit 0w then 0 else 1) /\
   abi_decoder_operand_live st'.cs_next_var (FST ops) /\
   abi_decoder_operand_live st'.cs_next_var (FST (SND ops)) /\
   abi_decoder_operand_live st'.cs_next_var (SND (SND ops))
@@ -314,20 +319,22 @@ Proof
   imp_res_tac abi_decode_array_source_setup_counters >>
   imp_res_tac abi_decode_indexed_address_counters >>
   `c1.cs_next_var <= st'.cs_next_var` by decide_tac >>
-  conj_tac >- (Cases_on `hi = Lit 0w` >> gvs[]) >>
+  conj_tac >- (Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >> gvs[]) >>
   metis_tac[abi_decoder_operand_live_mono]
 QED
 
 Theorem abi_decode_dynamic_element_setup_reentry:
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz st = (ops,st') /\
+  abi_decode_array_element_setup ip src dst opc base_op hi di abi_sz mem_sz st = (ops,st') /\
   dec_info_needs_offset di /\ abi_decode_source_opcode opc /\
   eval_operand ip s = SOME p /\ mload (w2n p) s = n2w i /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
-  abi_decode_load opc (n2w (sb + 32 + i * abi_sz) : bytes32) s = n2w child_off /\
+  eval_operand base_op s = SOME (n2w B) /\
+  abi_decode_load opc (n2w (B + (sb + 32 + i * abi_sz)) : bytes32) s = n2w child_off /\
   (hi = Lit 0w \/ ?hb. eval_operand hi s = SOME (n2w hb) /\
     sb + 32 + child_off + abi_sz <= hb /\ hb < dimword (:256)) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var hi /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     eval_operand (FST ops) t = SOME (n2w i) /\
@@ -345,7 +352,7 @@ Proof
   imp_res_tac abi_decode_array_source_setup_counters >>
   imp_res_tac abi_decode_indexed_address_counters >>
   `c1.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
-  `st.cs_next_var <= c1.cs_next_var` by (Cases_on `hi = Lit 0w` >> gvs[]) >>
+  `st.cs_next_var <= c1.cs_next_var` by (Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >> gvs[]) >>
   drule_all abi_decode_array_source_setup_reentry >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
   `eval_operand dst s1 = SOME (n2w d)` by (fs[abi_decoder_address_frame_def] >> metis_tac[]) >>
@@ -363,7 +370,7 @@ Proof
 QED
 
 Theorem abi_decode_dynamic_element_setup_shape:
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz st = (ops,st') /\
+  abi_decode_array_element_setup ip src dst opc base_op hi di abi_sz mem_sz st = (ops,st') /\
   dec_info_needs_offset di /\ abi_decode_source_opcode opc ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\
@@ -371,9 +378,10 @@ Theorem abi_decode_dynamic_element_setup_shape:
     (emitted_insts st st')
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  Cases_on `hi = Lit 0w` >>
-  asm_simp_tac bool_ss [abi_decode_array_element_setup_def, abi_decode_indexed_address_def,
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >>
+  asm_simp_tac bool_ss [compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
+    abi_decode_array_element_setup_def, abi_decode_indexed_address_def,
     compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_return_def,
     emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
     comp_ignore_bind_def, LET_THM] >>

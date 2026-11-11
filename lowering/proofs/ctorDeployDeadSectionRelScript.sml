@@ -2,7 +2,7 @@
 Theory ctorDeployDeadSectionRel
 Ancestors
   ctorDeployDeadSection ctorDeployDefs immutableSectionRel immutableValue
-  immutableEncoding valueEncoding compileVyper structFieldsProps entryStateRel
+  immutableEncoding valueEncoding valueEncodingDefs compileVyper structFieldsProps entryStateRel
   list rich_list vyperValue words arithmetic vyperTyping alist valueEncodingProofs
   valueTypingMemoryProps exprSimAggregateEncoding immutableEncodingProofs valueEncodingProps
 
@@ -362,61 +362,6 @@ Proof
   Cases_on `ALOOKUP kvs i` >> simp[] >>
   drule ALOOKUP_MEM >> strip_tac >>
   gvs[EVERY_MEM] >> first_x_assum drule >> simp[]
-QED
-
-Theorem section_tuple_cons_valid:
-  immutable_tuple_admissible (tv::tvs) vs \/ vs = MAP default_value (tv::tvs) ==>
-  ?v rest. vs = v::rest /\
-    (immutable_value_admissible tv v \/ v = default_value tv) /\
-    (immutable_tuple_admissible tvs rest \/ rest = MAP default_value tvs)
-Proof
-  Cases_on `vs` >> simp[immutable_value_admissible_def] >>
-  strip_tac >> gvs[] >> metis_tac[]
-QED
-
-Theorem section_fields_cons_valid:
-  immutable_fields_admissible ((name,tv)::fields) vs \/
-  vs = MAP (\(id,t). (id,default_value t)) ((name,tv)::fields) ==>
-  ?v rest. vs = (name,v)::rest /\
-    (immutable_value_admissible tv v \/ v = default_value tv) /\
-    (immutable_fields_admissible fields rest \/
-     rest = MAP (\(id,t). (id,default_value t)) fields)
-Proof
-  namedCases_on `vs` ["", "entry rest"] >> simp[immutable_value_admissible_def] >>
-  Cases_on `entry` >>
-  simp[immutable_value_admissible_def] >> strip_tac >> gvs[] >> metis_tac[]
-QED
-
-Theorem section_tuple_mask_length_cons[local]:
-  (!vs. LENGTH (immutable_tuple_mask tvs vs) = type_memory_size_list tvs) ==>
-  !tv vs. LENGTH (immutable_tuple_mask (tv::tvs) vs) = type_memory_size_list (tv::tvs)
-Proof
-  strip_tac >> rpt gen_tac >> Cases_on `vs` >>
-  simp[Once immutable_value_mask_def, type_memory_size_def]
-QED
-
-Theorem section_tuple_mask_length:
-  !tvs vs. LENGTH (immutable_tuple_mask tvs vs) = type_memory_size_list tvs
-Proof
-  Induct >- simp[Once immutable_value_mask_def, type_memory_size_def] >>
-  drule section_tuple_mask_length_cons >> simp[]
-QED
-
-Theorem section_fields_mask_length_cons[local]:
-  (!vs. LENGTH (immutable_fields_mask fields vs) = type_memory_size_fields fields) ==>
-  !field vs. LENGTH (immutable_fields_mask (field::fields) vs) =
-    type_memory_size_fields (field::fields)
-Proof
-  strip_tac >> qx_gen_tac `entry` >> PairCases_on `entry` >> gen_tac >> Cases_on `vs`
-  >- simp[Once immutable_value_mask_def, type_memory_size_def] >>
-  PairCases_on `h` >> simp[Once immutable_value_mask_def, type_memory_size_def]
-QED
-
-Theorem section_fields_mask_length:
-  !fields vs. LENGTH (immutable_fields_mask fields vs) = type_memory_size_fields fields
-Proof
-  Induct >- simp[Once immutable_value_mask_def, type_memory_size_def] >>
-  drule section_fields_mask_length_cons >> simp[]
 QED
 
 Theorem section_tuple_cons_support:

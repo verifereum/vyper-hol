@@ -1269,7 +1269,7 @@ Proof
   qexistsl [`f`,`s`,`t`] >> simp[]
 QED
 
-Theorem lower_dload_covers_member[local]:
+Theorem lower_dload_covers_member:
   ir_supply_covers_unit s u /\ MEM f u.cu_context.ctx_functions ==>
   ir_supply_covers_fn s f
 Proof

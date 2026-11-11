@@ -1,6 +1,6 @@
 Theory makeSsaOriginRename
 Ancestors
-  makeSsaOriginInsert makeSsaOriginInvariant makeSsaCurrentDefs
+  makeSsaOriginInsert makeSsaOriginInvariant makeSsaDefs
   makeSsaCurrentProps makeSsaCurrentInduct irSupply venomInst list alist
 
 Theorem origin_rename_operands:

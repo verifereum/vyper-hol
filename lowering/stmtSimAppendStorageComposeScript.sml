@@ -9,7 +9,7 @@ Ancestors
   accountsRelProps vyperStorage vyperStorageBackend vyperValue vfmState
   exprOperandVar
   vyperInterpreter vyperState vyperExprNoControl stmtLowering exprLowering
-  exprLoweringProps compileEnv emitHelper emitHelperProps venomInst venomExecSemantics
+  exprLoweringProps compileEnv loweringStateRelDefs emitHelper emitHelperProps venomInst venomExecSemantics
 Libs
   monadsyntax
 
@@ -191,12 +191,26 @@ Proof
     (gen_tac >> simp[Once evaluate_def] >>
      simp[Once evaluate_def, bind_def]) >>
   pop_assum (fn th => rewrite_tac[th]) >>
+  Cases_on `get_module_code cx nid0` >>
   simp[bind_def, lookup_global_def, lift_option_type_def, return_def,
-       raise_def, get_immutables_def, get_address_immutables_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
-           get_immutables_def, get_address_immutables_def,
-           lift_option_type_def])
+       raise_def, LET_THM] >>
+  rename1 `find_var_decl_by_name nid1 ts` >>
+  Cases_on `find_var_decl_by_name nid1 ts`
+  >- (simp[get_immutables_def, get_address_immutables_def, bind_def,
+           lift_option_type_def, return_def, raise_def] >>
+      Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+      simp[return_def, raise_def] >>
+      rename1 `get_source_immutables nid0 imms` >>
+      Cases_on `FLOOKUP (get_source_immutables nid0 imms) nid1` >>
+      simp[get_place_def, return_def, raise_def]) >>
+  rename1 `find_var_decl_by_name nid1 ts = SOME decl` >> PairCases_on `decl` >> Cases_on `decl0` >>
+  simp[] >>
+  rename1 `lookup_var_slot_from_layout cx istr nid0 decl1` >>
+  Cases_on `lookup_var_slot_from_layout cx istr nid0 decl1` >>
+  simp[bind_def, get_place_def, return_def, raise_def] >>
+  rename1 `evaluate_type (get_tenv cx) vty` >>
+  Cases_on `evaluate_type (get_tenv cx) vty` >>
+  simp[bind_def, get_place_def, return_def, raise_def]
 QED
 
 Theorem eval_append_storage_bind:
@@ -586,14 +600,57 @@ Resume compile_append_storage_word_stmt_frag[stored]:
   disj1_tac >> simp[] >>
   `sb.cs_current_bb = sB.cs_current_bb` by
     (drule append_storage_word_suffix_structure >> simp[same_blocks_def]) >>
+  `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+         lookup_var x (u with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w` by
+    (rpt strip_tac >> simp[lookup_var_def] >>
+     `lookup_var x t = SOME w` by metis_tac[] >>
+     `not_fresh_at sB x` by metis_tac[not_fresh_at_mono] >>
+     `lookup_var x u = SOME w` by metis_tac[] >>
+     fs[lookup_var_def]) >>
+  `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP u.vs_allocas aid = SOME b` by
+    (rpt strip_tac >> qpat_x_assum `u.vs_allocas = _` SUBST1_TAC >>
+     qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _` irule >>
+     first_assum ACCEPT_TAC) >>
+  `u.vs_memory = t.vs_memory` by
+    (qpat_x_assum `state_frame u = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `tr` >> simp[state_frame_def, sstore_def, tstore_def,
+       LET_THM, venom_state_component_equality]) >>
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (qpat_x_assum `gas_marked_exec F (ctx,func) _ (es,s0) _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >>
+     disch_then (qspec_then `[]` strip_assume_tac o CONJUNCT1) >>
+     drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
+  `MAP FDOM ee1.scopes = MAP FDOM es.scopes` by
+    (qpat_x_assum `append_place _ _ _ (es_end with gas_obs := []) = _`
+       (assume_tac o MATCH_MP vyperScopePreservationTheory.append_place_scopes_dom) >>
+     fs[]) >>
+  `!aid off sz.
+     FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+     (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                off + sz <= b \/ b + sz' <= off) ==>
+     mem_bytes_at off sz (u with vs_inst_idx := LENGTH sb.cs_current_insts).vs_memory =
+     mem_bytes_at off sz s0.vs_memory` by
+    (rpt strip_tac >> simp[] >> qpat_x_assum `u.vs_memory = _` SUBST1_TAC >>
+     qpat_x_assum `!aid off sz. _ ==> mem_bytes_at off sz t.vs_memory = _`
+       (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+     impl_tac
+     >- (rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
+         rpt strip_tac >>
+         qpat_x_assum `!n b sz'. local_region cenv es.scopes s0 _ _ _ ==> _` irule >>
+         qpat_assum `local_region cenv es.scopes s0 _ _ _` (irule_at Any)) >>
+     disch_then ACCEPT_TAC) >>
+  `alloca_frame cenv es sa s0 cenv ee1
+     (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (mp_tac (Q.INST [`es'` |-> `ee1`,
+                     `s` |-> `u with vs_inst_idx := LENGTH sb.cs_current_insts`]
+               (SPEC_ALL alloca_frame_of_mem_frame)) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   simp[stmt_post_def, stmt_lands_def, stmt_state_rel_inst_idx] >>
   simp[cenv_top_ext_refl] >>
-  conj_tac >- metis_tac[append_storage_word_suffix_open] >>
-  rpt strip_tac >> simp[lookup_var_def] >>
-  `lookup_var x t = SOME w` by metis_tac[] >>
-  `not_fresh_at sB x` by metis_tac[not_fresh_at_mono] >>
-  `lookup_var x u = SOME w` by metis_tac[] >>
-  fs[lookup_var_def]
+  metis_tac[append_storage_word_suffix_open]
 QED
 
 Finalise compile_append_storage_word_stmt_frag

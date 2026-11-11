@@ -1,7 +1,7 @@
 (* Pointer-safe dispatch into a rejecting external call-value check. *)
 Theory entryValueRevertPtr
 Ancestors entryDispatchPtr entryChecksPtr sourceEntryCode sourceValueRejection
-  ptrSafeRun ptrDiscipline moduleLowering compileEnv emitHelper fragExec
+  ptrSafeRun ptrDiscipline moduleLowering compileEnv loweringStateRelDefs emitHelper fragExec
   venomExecSemantics venomInst venomState list finite_map words
   actualEntryAllocationFrame moduleLoweringProps vyperLoweringCorrect
   e2eDefs vyperTypeContractSoundness vyperState vyperContext vyperInterpreter

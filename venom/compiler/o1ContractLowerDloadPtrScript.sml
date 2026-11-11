@@ -11,6 +11,7 @@ Theory o1ContractLowerDloadPtr
 Ancestors
   o1ContractLowerDload o1PassContract ptrDiscipline unitMemInv
   lowerDloadDefs venomPassSchedule list
+  lowerDloadPtrReachableStatic lowerDloadPtrJointSafety
 
 (* The output keeps the pointer discipline above the same fixed region. *)
 Theorem lower_dload_stage_ptr:
@@ -21,5 +22,13 @@ Theorem lower_dload_stage_ptr:
     fixed_region_reserved lo C /\ ptr_discipline lo C vs ==>
     ptr_discipline lo C' vs
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `ptr_discipline lo C vs` mp_tac >>
+  rewrite_tac[ptr_discipline_def] >> strip_tac >>
+  simp[ptr_discipline_def] >> qexists_tac `P` >> conj_tac
+  >- (drule_all lower_dload_stage_static_ptr_ok >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `EVERY (fn_ptr_ok P) C.ctx_functions` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all lower_dload_stage_dynamic_safety >> simp[]
 QED

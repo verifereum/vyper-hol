@@ -62,7 +62,7 @@ Proof
 QED
 
 Theorem abi_decoder_pre_output_separated:
-  abi_decoder_pre ce env ty tv di av v st last src dst opc hi sb d b cap s ==>
+  abi_decoder_pre ce env ty tv di av v st last src dst opc base_op hi B sb d b cap s ==>
   d + type_memory_bytes ce ty <= b \/ b + cap <= d
 Proof
   simp_tac bool_ss [abi_decoder_pre_def, abi_decoder_ranges_def] >>

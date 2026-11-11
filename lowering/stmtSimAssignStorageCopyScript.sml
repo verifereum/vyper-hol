@@ -16,6 +16,7 @@
 
 Theory stmtSimAssignStorageCopy
 Ancestors
+  exprSimHashBoundary
   valueEncodingProps exprSimTopLevelProps gasOutcome gasSummary gasContext
   stmtSimProps stmtSimForced
   exprSimProps
@@ -28,7 +29,7 @@ Ancestors
   stmtSimStoreCopy storageCopyLive accountsRelProps
   fragGasMode fragGasSeq fragGasPath venomExecProofs
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  context compileEnv valueEncoding stmtLoweringMono
+  context compileEnv loweringStateRelDefs valueEncoding stmtLoweringMono
   vyperContext vyperAST vyperInterpreter vyperState vyperStorage vyperStorageBackend vyperValue
   vyperTyping vyperStorageLayoutSafety vyperStorageFrame
   venomExecSemantics venomInst venomState
@@ -282,7 +283,8 @@ Proof
   drule stmt_env_assign >> strip_tac >> gvs[] >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   Cases_on `tr` >>
-  simp[compile_stmt_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_stmt_def, exprLoweringTheory.expr_can_mutate_def,
+     stmtLoweringTheory.target_to_expr_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, compile_store_at_loc_def]
 QED
 
@@ -325,7 +327,8 @@ Proof
   qpat_x_assum `c = cenv` SUBST_ALL_TAC >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac (srw_ss())
-    [Once compile_stmt_def, comp_bind_def, comp_ignore_bind_def,
+    [Once compile_stmt_def, exprLoweringTheory.expr_can_mutate_def,
+     stmtLoweringTheory.target_to_expr_def, comp_bind_def, comp_ignore_bind_def,
      comp_return_def, LET_THM] >>
   Cases_on `compile_expr cenv (expr_type e) e sa` >>
   rename1 `compile_expr _ _ _ _ = (vv, sV)` >>
@@ -364,7 +367,7 @@ Theorem storage_copy_loop_open[local]:
     ~block_is_terminated sb
 Proof
   rpt gen_tac >>
-  simp[compile_word_copy_loop_def, comp_ignore_bind_def, comp_bind_def] >>
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_loop_base_def, comp_ignore_bind_def, comp_bind_def] >>
   ntac 4 (pairarg_tac >> simp[]) >>
   ntac 4 (pairarg_tac >> simp[]) >>
   ntac 4 (pairarg_tac >> simp[]) >>
@@ -664,6 +667,7 @@ QED
 Theorem storage_copy_post_words[local]:
   !ctx func cenv cx e es sa sm s0 es1 v op s tv w writes k st.
     expr_post ctx func cenv cx e es sa sm s0 es1 v op s /\
+    post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     ~is_word_type (expr_type e) /\ eval_operand op s = SOME w /\
     value_has_type tv v /\ encode_value tv v = SOME writes /\
@@ -909,7 +913,7 @@ Theorem compile_store_copy_path[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_word_copy_loop_def, word_scale_def, compile_ptr_load_def,
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_loop_base_def, word_scale_def, compile_ptr_load_def,
        compile_ptr_store_def, comp_ignore_bind_def, comp_bind_def,
        comp_return_def, fresh_label_def, fresh_var_def, emit_inst_def,
        emit_op_def, emit_void_def, fresh_id_def, emit_def, new_block_def] >>
@@ -1249,6 +1253,14 @@ Proof
   Induct >> simp[FOLDL] >> Cases_on `tr` >> simp[sstore_def, tstore_def]
 QED
 
+Theorem storage_fold_memory[local]:
+  !l s f g tr.
+    (FOLDL (\t i. (if tr then tstore else sstore) (f i) (g i) t) s l).vs_memory =
+    s.vs_memory
+Proof
+  Induct >> simp[FOLDL] >> Cases_on `tr` >> simp[sstore_def, tstore_def]
+QED
+
 Theorem storage_copy_bulk_run[local]:
   !ctx func cenv cx es' tr src k n sa sb u s b.
     compile_word_copy_loop src (Lit k) n LocMemory
@@ -1269,6 +1281,7 @@ Theorem storage_copy_bulk_run[local]:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
                   FLOOKUP t.vs_allocas aid = SOME ent) /\
+      t.vs_memory = s.vs_memory /\
       !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
                ?fuel'. run_from fuel' ctx func s = r
 Proof
@@ -1294,6 +1307,11 @@ Proof
   `(if (if tr then LocTransient else LocStorage) = LocStorage
      then sstore else tstore) = (if tr then tstore else sstore)` by
     (Cases_on `tr` >> simp[]) >>
+  `t.vs_memory = s.vs_memory` by
+    (qpat_x_assum `norm = _`
+       (mp_tac o AP_TERM ``\t:venom_state. t.vs_memory``) >>
+     simp[Abbr `norm`, storage_fold_memory]) >>
+  simp[] >>
   qpat_x_assum `norm = _`
     (mp_tac o AP_TERM ``\t:venom_state. t.vs_allocas``) >>
   simp[Abbr `norm`, storage_copy_backend_fold] >>
@@ -1317,6 +1335,7 @@ Theorem storage_copy_one_run[local]:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
                   FLOOKUP t.vs_allocas aid = SOME ent) /\
+      t.vs_memory = s.vs_memory /\
       !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
                ?fuel'. run_from fuel' ctx func s = r
 Proof
@@ -1413,6 +1432,7 @@ Theorem storage_copy_suffix_run[local]:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
                   FLOOKUP t.vs_allocas aid = SOME ent) /\
+      t.vs_memory = s.vs_memory /\
       !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
                ?fuel'. run_from fuel' ctx func s = r
 Proof
@@ -1442,6 +1462,7 @@ QED
 Theorem storage_copy_post_region[local]:
   !ctx func cenv cx e es sa sm s0 es1 v op s tv tr mid id slot es'.
     expr_post ctx func cenv cx e es sa sm s0 es1 v op s /\
+    post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     ~is_word_type (expr_type e) /\ value_has_type tv v /\
     declared_storage_region cx mid id [] = SOME (tr,n2w slot,tv) /\
@@ -1555,7 +1576,8 @@ Proof
       disj1_tac >> simp[stmt_post_def, stmt_lands_def] >>
       gvs[Abbr `ee`, Abbr `z`, cenv_top_ext_refl] >>
       Cases_on `tr` >>
-      gvs[sstore_def, tstore_def, lookup_var_def, LET_THM]) >>
+      gvs[sstore_def, tstore_def, lookup_var_def, LET_THM] >>
+      irule alloca_frame_same >> simp[set_storage_def]) >>
   qpat_x_assum `gas_admissible _ _ _` mp_tac >>
   rewrite_tac[gas_admissible_def] >>
   disch_then (qspec_then `[]` mp_tac) >>
@@ -1596,13 +1618,21 @@ Theorem storage_copy_success_run[local]:
       (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
              lookup_var x t = SOME u) /\
       (!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==>
-                  FLOOKUP t.vs_allocas aid = SOME ent)
+                  FLOOKUP t.vs_allocas aid = SOME ent) /\
+      t.vs_memory = s1.vs_memory /\
+      (!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\
+        aid < sa.cs_next_id /\
+        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+          off + sz <= b \/ b + sz' <= off) ==>
+        mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s0.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   drule compile_lower_value_var >> simp[] >> disch_tac >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   `local_ptrs_reserved cenv sm` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
   drule_all storage_copy_post_region >> strip_tac >>
   RULE_ASSUM_TAC (REWRITE_RULE [valueEncodingPropsTheory.type_memory_size_slots]) >>
   drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)
@@ -1712,5 +1742,11 @@ Proof
   qexistsl_tac [`INL ()`, `ee'`, `OK t'`] >>
   conj_tac >- fs[write_storage_slot_gas_obs] >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
-  disj1_tac >> irule assign_storage_copy_suffix_open >> metis_tac[]
+  disj1_tac >> conj_tac
+  >- (irule assign_storage_copy_suffix_open >> metis_tac[]) >>
+  irule alloca_frame_of_mem_frame >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  simp[] >>
+  drule eval_read_preserves_scopes_dom >>
+  simp[Abbr `ee'`, set_storage_def] >> metis_tac[]
 QED

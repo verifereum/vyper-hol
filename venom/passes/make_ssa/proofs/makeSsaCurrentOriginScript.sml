@@ -7,7 +7,7 @@
  *)
 Theory makeSsaCurrentOrigin
 Ancestors
-  makeSsaCurrentDefs venomWf cfgWf venomInst irSupply unitShapeDefs
+  makeSsaDefs venomWf cfgWf venomInst irSupply unitShapeDefs
   o1PassContract makeSsaOriginRename makeSsaOriginCleanup
   makeSsaOriginInvariant makeSsaOriginInsert makeSsaCurrentProps list
 

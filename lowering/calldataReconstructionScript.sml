@@ -1,7 +1,7 @@
 (* Arbitrary observed memory, without canonical ABI encoding premises. *)
 Theory calldataReconstruction
 Ancestors
-  abiDecoderMembers vyperABI contractABI exprLowering entryDecodeProps abiDecoderString abiDecoderCoherence valueEncodingTyping
+  valueEncodingDefs abiDecoderMembers vyperABI contractABI exprLowering entryDecodeProps abiDecoderString abiDecoderCoherence valueEncodingTyping
   valueEncoding valueEncodingProps compileEnv abiEncoder vyperTyping vyperTypeABI vyperValue words list arithmetic
 
 Theorem calldata_observed_bytes_typed:

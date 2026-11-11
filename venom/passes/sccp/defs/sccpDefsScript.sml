@@ -21,7 +21,7 @@
 
 Theory sccpDefs
 Ancestors
-  dfAnalyzeDefs analysisSimDefs passSharedDefs venomExecSemantics
+  dfAnalyzeDefs passTransform passSharedDefs venomExecSemantics
 
 (* ===== Constant lattice ===== *)
 

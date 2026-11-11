@@ -30,7 +30,7 @@ Ancestors
   list rich_list finite_map pred_set
   fragExec localPtrsProps  loweringSlice  stmtSimDeclStore stmtSimDeclPath
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding
+  compileEnv loweringStateRelDefs valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperExprNoControl
   venomExecSemantics venomExecProofs venomInst venomState
 Libs
@@ -216,7 +216,7 @@ Theorem annassign_word_store_run:
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz /\ type_memory_size tyv <= sz /\
-    val_in_memory tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
+    memory_value_rel tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
     val_wf tyv v ==>
     ?t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
@@ -312,9 +312,10 @@ Proof
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
   `lookup_var p s = SOME w` by metis_tac[] >>
   `FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz)` by metis_tac[] >>
-  `val_in_memory tyv v (w2n w)
-     (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory /\
-   val_wf tyv v /\ type_memory_size tyv = 32` by fs[store_lays_out_def] >>
+  `memory_value_rel tyv v (w2n w)
+     (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory` by
+    metis_tac[store_lays_out_memory_value_rel] >>
+  `val_wf tyv v /\ type_memory_size tyv = 32` by fs[store_lays_out_def] >>
   `type_memory_size tyv <= sz` by simp[] >>
   drule_all annassign_word_store_run >>
   disch_then (qspecl_then [`a`] mp_tac) >> strip_tac >>
@@ -465,13 +466,18 @@ Proof
     (`sA.cs_next_var = st.cs_next_var` by
        (drule emit_inst_extends >> simp[]) >>
      drule declare_local_old_fresh >> simp[] >> simp[not_fresh_at_def]) >>
+  `sa.cs_next_id <= ai.inst_id /\ sa.cs_next_id <= sA.cs_next_id /\
+   sa.cs_next_var <= sA.cs_next_var` by
+    (drule_all declare_local_ptr >> strip_tac >>
+     qpat_x_assum `emit_inst ALLOCA _ _ _ = _` assume_tac >>
+     drule emit_inst_extends >>
+     simp[Abbr `ai`, venomInstTheory.mk_inst_def]) >>
   irule annassign_outcome_entry_prefix >>
-  qexistsl_tac [`sA`, `salloc`] >> simp[] >>
+  simp[] >> qexists_tac `salloc` >> simp[] >>
   irule annassign_concrete_rhs_outcome >>
   goal_assum (drule_at Any) >> simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- (goal_assum (drule_at Any) >> simp[]) >>
-  qexistsl_tac [`ai`, `op`, `sB`] >> simp[]
+  qexistsl_tac [`ai`, `op`, `sA`, `sB`] >> simp[]
 QED
 
 Theorem compile_annassign_word_stmt_frag:
@@ -500,7 +506,7 @@ Proof
   rpt strip_tac >> irule compile_annassign_stmt_frag >>
   simp[] >> conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac >>
   qpat_x_assum `!gs v es1. _ ==> word_value v` drule >> strip_tac >>
-  irule store_lays_out_word_value >> metis_tac[]
+  irule store_lays_out_word_value >> metis_tac[evaluate_word_memory_type]
 QED
 
 (* x: T = e for a word type T, address and bytesN included, where e has

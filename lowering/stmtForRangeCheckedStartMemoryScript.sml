@@ -1,7 +1,7 @@
 Theory stmtForRangeCheckedStartMemory
 Ancestors
   stmtForRangeMemoryStart stmtForRangeChecksMemory bodyMemoryDefs localPtrsProps
-  stmtSimProps exprSimProps compileEnv exprLoweringProps fragGasMode fragGasPathMem allocaHistory
+  stmtSimProps exprSimProps compileEnv loweringStateRelDefs exprLoweringProps fragGasMode fragGasPathMem allocaHistory
   venomExecSemantics venomState venomInst finite_map list rich_list words
 
 Theorem for_range_checked_start_mem:

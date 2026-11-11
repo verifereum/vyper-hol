@@ -28,7 +28,7 @@ Proof
     simp[alloca_size_def, dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
   `inst.inst_id NOTIN FDOM s.vs_allocas` by fs[FLOOKUP_DEF] >>
   drule_all actual_word_alloca_no_wrap >> strip_tac >>
-  simp[step_inst_base_def, exec_alloca_def] >>
+  simp[step_inst_base_opcode_eqs, exec_alloca_def] >>
   simp[update_var_def, FLOOKUP_UPDATE,
        dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]
 QED
@@ -42,7 +42,7 @@ Theorem actual_word_alloca_reuse_run:
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     remaining_alloca_budget insts t = remaining_alloca_budget insts s
 Proof
-  strip_tac >> simp[step_inst_base_def, exec_alloca_def] >>
+  strip_tac >> simp[step_inst_base_opcode_eqs, exec_alloca_def] >>
   simp[update_var_def, remaining_alloca_budget_def]
 QED
 
@@ -131,7 +131,7 @@ Proof
   `inst.inst_id NOTIN FDOM s.vs_allocas` by fs[FLOOKUP_DEF] >>
   drule_all actual_alloca_frontier_credit >> strip_tac >>
   `s.vs_alloca_next + n < dimword (:256)` by decide_tac >>
-  simp[step_inst_base_def, exec_alloca_def] >>
+  simp[step_inst_base_opcode_eqs, exec_alloca_def] >>
   simp[update_var_def, FLOOKUP_UPDATE]
 QED
 
@@ -145,7 +145,7 @@ Theorem actual_literal_alloca_reuse_run:
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     remaining_alloca_budget insts t = remaining_alloca_budget insts s
 Proof
-  strip_tac >> simp[step_inst_base_def, exec_alloca_def] >>
+  strip_tac >> simp[step_inst_base_opcode_eqs, exec_alloca_def] >>
   simp[update_var_def, remaining_alloca_budget_def]
 QED
 

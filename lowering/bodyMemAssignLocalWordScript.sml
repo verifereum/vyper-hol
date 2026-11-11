@@ -13,7 +13,7 @@ Ancestors
   gasOutcome gasSummary gasSummaryCompose gasExemptCert fragGasMode fragGasPath
   gasContext
   exprSimHypsDefs exprLoweringProps emitHelperProps emitHelper exprLowering
-  compileEnv fragExecMem supportedStmtTraverse supportedStmts supportedExprs
+  compileEnv loweringStateRelDefs fragExecMem supportedStmtTraverse supportedStmts supportedExprs
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants
   vyperTypeSystem vyperLookup vyperInterpreter vyperState
   venomInst venomState list rich_list finite_map
@@ -233,7 +233,7 @@ Proof
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def, body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>

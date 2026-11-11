@@ -11,7 +11,7 @@ Theory o1ContractMakeSsaSrc
 Ancestors
   o1PassContract ptrDiscipline unitMemInv lowerDloadDefs venomPassSchedule
   list o1PassLift contextRawReachable venomInst venomWf venomFnScheduleRunner
-  makeSsaCurrentDefs makeSsaCurrentProps makeSsaCurrentSim
+  makeSsaDefs makeSsaCurrentProps makeSsaCurrentSim
   o1ContractMakeSsaReplay o1ContractMakeSsaSrcOpcodes makeSsaCurrentLockstep
   o1FrameLockstep stateFrame venomState option
 

@@ -5,7 +5,7 @@ Theory abiEncoderArrayTail
 Ancestors
   abiEncoderBytesPrefix abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderReentry
   abiDecoderContract abiDecoderLoop fragExec instIdxIndep emitHelperProps exprLoweringProps
-  compileEnv emitHelper venomExecSemantics venomState venomInst words list rich_list arithmetic
+  compileEnv loweringStateRelDefs emitHelper venomExecSemantics venomState venomInst words list rich_list arithmetic
 Libs monadsyntax
 
 Definition abi_encode_array_tail_def:

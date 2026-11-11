@@ -70,7 +70,9 @@ Proof
       rename1 `eval_expr cx arg es = (res,st)` >> Cases_on `res` >>
       simp[] >> metis_tac[]) >>
   `bi <> Env MsgGas` by (strip_tac >> gvs[vyperContextTheory.builtin_args_length_ok_def]) >>
-  simp[bind_def] >> Cases_on `eval_exprs cx (arg::args) es` >>
+  Cases_on `bi = Bop In \/ bi = Bop NotIn` >>
+  simp[bind_def, ignore_bind_def] >>
+  Cases_on `eval_exprs cx (arg::args) es` >>
   rename1 `eval_exprs cx (arg::args) es = (res,st)` >> Cases_on `res` >>
   simp[] >> strip_tac >> drule eval_exprs_head_success >> simp[]
 QED

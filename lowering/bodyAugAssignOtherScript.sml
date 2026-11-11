@@ -21,7 +21,7 @@ Ancestors
   vyperTypeEnv vyperTypeInvariants vyperTypeSystem vyperInterpreter
   vyperContext stmtSimAugAssignStorage stmtSimAugAssignPlace
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlaceStorage bodyAugPlaceTarget
-  bodyExprPreFacts bodySimExprCases
+  bodyExprPreFacts bodySimExprCases bodyImmutableAugAssignCompose
   supportedStmtTraverse vyperTypeCallGraph vyperState exprSimTopLevelProps
 
 Theorem supported_word_type_is_word:
@@ -114,7 +114,7 @@ Theorem immutable_deploy_augassign_case:
       (stmt_env cenv lctx ret_ty (AugAssign ty (TopLevelNameTarget nsid) bop e))
       (eval_stmt cx (AugAssign ty (TopLevelNameTarget nsid) bop e)) es
 Proof
-  cheat
+  ACCEPT_TAC immutable_deploy_augassign_frag
 QED
 
 (* ADMITTED: x op= e at a storage place whose indices have effects, as
@@ -172,7 +172,7 @@ Theorem augassign_rhs_pre[local]:
 Proof
   rpt strip_tac >>
   drule supported_expr_body_calls >> strip_tac >>
-  gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       int_calls_stmt_def, AllCaseEqs()] >>
   irule stmt_expr_body_pre >>
   fs[body_inv_def, gasContextTheory.cx_tops_def] >>
@@ -236,7 +236,8 @@ Proof
    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
    (bop = Exp ==> nonneg_int_literal e) /\
    (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
-    gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+    (gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+     metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]) >>
   `FLOOKUP env.bare_global_assignable (NONE,id) = NONE` by
     (Cases_on `FLOOKUP env.bare_global_assignable (NONE,id)` >> simp[] >>
      drule_all aug_assignable_find_NONE >> strip_tac >> gvs[]) >>
@@ -280,7 +281,8 @@ Proof
   `?pt. supported_target_info tops bindings t = SOME pt` by
     metis_tac[aug_place_supported_stmt_target_info] >>
   irule aug_place_target_indices_pre >>
-  gvs[type_stmt_def, well_typed_target_def, stmt_exprs_ok_def,
+  gvs[type_stmt_def, well_typed_target_def, stmt_exprs_ok_flat,
+      allocLimitsTheory.alloc_limits_stmt_def,
       supported_stmt_expr_exists_def, int_calls_stmt_def, AllCaseEqs()] >>
   fs[body_inv_def] >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
@@ -339,6 +341,7 @@ Proof
   `expr_sim_case F ctx func cenv cx e` by
     metis_tac[body_expr_ok_case] >>
   drule_all augassign_toplevel_metadata >> strip_tac >>
+  `augassign_operand_ok ty bop e` by gvs[type_stmt_def, AllCaseEqs()] >>
   irule compile_augassign_toplevel_case >>
   simp[] >> metis_tac[]
 QED

@@ -17,14 +17,13 @@ Ancestors
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource vfmExecution
-  venomPipelineCorrect
   passSimulationDefs
   codegenCorrectness immutableCodeLayout
   stateEquiv stateEquivProps
   venomExecSemantics
   vyperABI
   vyperInterpreter
-  compileEnv compileVyper
+  compileEnv loweringStateRelDefs compileVyper
   venomInst
   list
 
@@ -626,32 +625,6 @@ Proof
   >> Cases_on `y` >> gvs[external_call_result_rel_legacy_def]
 QED
 
-(* Bridge from vyper_evm_correspondence to run_call + call_result_matches.
-
-   vyper_evm_correspondence is defined in terms of VFM's `run` which
-   executes all frames to completion. call_result_matches uses `run_call`
-   which stops when the current call frame completes.
-
-   For outermost calls (LENGTH es.contexts = 1): run_call = run because
-   step never empties the context stack (step_preserves_nonempty_contexts).
-   For inner calls (LENGTH es.contexts > 1): run_call stops when
-   handle_exception pops the callee frame; the postcondition includes
-   the frame-popping effects (stack push, account rollback on revert).
-
-   This encapsulates the EVM execution semantics reasoning about
-   context stack management, handle_exception, and the OWHILE loop. *)
-Theorem evm_correspondence_to_call_result[local]:
-  !tenv event_info am tx ret es.
-    vyper_evm_correspondence_legacy tenv event_info ret am tx es /\
-    ~NULL es.contexts
-    ==>
-    ?r es_final.
-      run_call_legacy es = SOME (r, es_final) /\
-      call_result_matches_legacy tenv event_info am tx ret r es es_final
-Proof
-  cheat
-QED
-
 (* ===== Main Correctness Theorem ===== *)
 
 (* LEGACY compiler correctness for a single external call.
@@ -804,7 +777,7 @@ Theorem vyper_call_correct:
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok am tx (MAP SND (call_trace es))
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -812,6 +785,8 @@ Theorem vyper_call_correct:
        call_result_rel tops ret am tx es r es')
 Proof
   rpt strip_tac >>
+  drule_all call_state_rel_call_outcomes_ok >> strip_tac >>
+  qpat_x_assum `call_outcomes_storage_ok _ _ _` kall_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
   qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
@@ -843,8 +818,8 @@ Proof
      gvs[Abbr`vs`, entry_venom_state_def, call_state_rel_def]) >>
   `EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
    fixed_region_reserved 0 unit.cu_context` by
-    (drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-     drule run_lowering_eom_none >> simp[fixed_region_reserved_def]) >>
+    (drule lower_vyper_runtime_unit_raw_defaults >>
+     simp[fixed_region_reserved_def]) >>
   `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
     (drule lower_vyper_runtime_unit_global_reserved >>
      simp[staticLayoutDefsTheory.reserved_intervals_wf_def]) >>

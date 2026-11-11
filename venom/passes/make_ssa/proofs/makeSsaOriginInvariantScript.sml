@@ -2,7 +2,7 @@
    allocated supply, and stack coverage includes keys as well as values. *)
 Theory makeSsaOriginInvariant
 Ancestors
-  makeSsaCurrentProps makeSsaCurrentDefs venomInst list alist
+  makeSsaCurrentProps makeSsaDefs venomInst list alist
 
 Definition origin_agrees_def:
   origin_agrees s (orig:string -> string) orig' <=>

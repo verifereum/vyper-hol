@@ -11,7 +11,7 @@
  *)
 Theory joinSpillWitness
 Ancestors
-  stackPlanGen planExec asmSem venomExecSemantics venomState venomInst
+  stackPlanGen planExec asmSem venomExecSemantics venomState venomInst fnPlanLineageReplay
 Libs finite_mapLib wordsLib
 
 val () = computeLib.upd_compset add_finite_map_compset;
@@ -98,23 +98,7 @@ End
    release_dead_spills sticks whenever something is spilled.  When every
    spilled key is live, the release is the identity; this conversion proves
    that side condition and fails (leaving the term stuck) otherwise. *)
-Theorem jp_release_live:
-  !next ps.
-    (!op. op IN FDOM ps.ps_spilled ==> ?v. op = Var v /\ MEM v next) ==>
-    release_dead_spills next ps = ps
-Proof
-  rpt strip_tac >>
-  simp[stackPlanOpsTheory.release_dead_spills_def] >>
-  `FILTER (\(op,off). case op of Var v => ~MEM v next | _ => T)
-     (alist$fmap_to_alist ps.ps_spilled) = []` suffices_by simp[] >>
-  simp[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM] >>
-  Cases >> simp[] >> rpt strip_tac >>
-  rename1 `FLOOKUP ps.ps_spilled op = SOME off` >>
-  `op IN FDOM ps.ps_spilled` by
-    (qpat_x_assum `FLOOKUP _ _ = SOME _` mp_tac >>
-     simp[finite_mapTheory.FLOOKUP_DEF] >> IF_CASES_TAC >> simp[]) >>
-  first_x_assum drule >> strip_tac >> gvs[]
-QED
+Theorem jp_release_live = fnPlanLineageReplayTheory.release_dead_spills_live_domain
 
 val release_count = ref 0;
 fun release_conv tm =

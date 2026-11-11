@@ -5,7 +5,7 @@ Ancestors
   bodyAppendStorageFacts bodyExprPreFacts stmtSimDefs exprSimMemDefs
   exprSimSource exprSimHypsDefs stmtSimAssignStorage bodySim exprSimHyps
   supportedStmts supportedStmtTraverse vyperStorageLayoutSafety
-  vyperTypeSystem vyperTypeValues compileEnv vyperTypeCallGraph vyperState
+  vyperTypeSystem vyperTypeValues compileEnv loweringStateRelDefs vyperTypeCallGraph vyperState
   vyperInterpreter vyperTypeInvariants vyperTypeExprSoundness
   vyperTypeExprResult supportedDecls supportedTypes vyperValue bodyStorageMetadata
   exprLoweringProps

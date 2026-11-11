@@ -5,7 +5,7 @@ Ancestors
   gasOutcome gasSummary fragGasMode loweringPosts emitHelper emitHelperProps
   ctorReturnFrame fragGasSeq fragGasPath gasCount instIdxIndep rich_list list arithmetic venomInstProofs
   bodySim stmtSimReturn immutableDeployExecution nonreentrantSource loweringHalt
-  moduleLowering stmtLowering stmtSimDefs stmtSimProps exprLoweringProps fragExec compileEnv
+  moduleLowering stmtLowering stmtSimDefs stmtSimProps exprLoweringProps fragExec compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperContext vyperStorageLayoutSafety
   venomExecSemantics venomState venomInst
 
@@ -26,8 +26,8 @@ Theorem ctor_return_idx[local]:
   step_inst_base i (s with vs_inst_idx := n) =
   exec_result_map (\u. u with vs_inst_idx := n) (step_inst_base i s)
 Proof
-  strip_tac >> simp[Once step_inst_base_def] >>
-  simp[Once step_inst_base_def] >>
+  strip_tac >> simp[step_inst_base_opcode_eqs] >>
+  simp[step_inst_base_opcode_eqs] >>
   Cases_on `i.inst_operands` >> simp[exec_result_map_def] >>
   Cases_on `t` >> simp[exec_result_map_def] >>
   Cases_on `t'` >> simp[exec_result_map_def] >>
@@ -218,7 +218,7 @@ Proof
   >- (gvs[fn_has_code_def] >>
       `run_inst_seq [mk_inst st.cs_next_id TSTORE [Lit (n2w nkey); Lit 0w] []] s =
          OK (tstore (n2w nkey) 0w s)` by
-        simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+        simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
              exec_write2_def, eval_operand_def, eval_operands_def] >>
       drule_at (Pat `run_inst_seq _ _ = OK _`) tuple_run_inst_seq_gas_path >>
       disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>

@@ -173,6 +173,7 @@ End
 Definition frame_probe_vs_def:
   frame_probe_vs = init_venom_state "entry" with <|
     vs_code := assemble frame_probe_prog;
+    vs_call_ctx := empty_call_context with cc_created_in_tx := T;
     vs_labels := FEMPTY |+ ("code_end", 1w) |>
 End
 
@@ -230,7 +231,8 @@ Proof
        wf_state_def, wf_context_def, all_accounts_def, wf_accounts_def,
        stack_room_ok_def, gas_stack_ok_def, outputTo_consistent_stack_def,
        outputTo_consistent_ctx_def, empty_accounts_def, stack_limit_def,
-       context_limit_def, FLOOKUP_UPDATE] >>
+       context_limit_def, FLOOKUP_UPDATE, lookup_account_def,
+       account_empty_def, empty_account_state_def, wf_account_state_def] >>
   simp[dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
   gen_tac >> IF_CASES_TAC >> simp[]
 QED

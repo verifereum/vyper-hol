@@ -1,6 +1,6 @@
 Theory o1MakeSsaFlags
 Ancestors
-  unitShapeDefs makeSsaCurrentDefs irSupply venomInst list alist pair makeSsaCurrentAllocation
+  unitShapeDefs makeSsaDefs irSupply venomInst list alist pair makeSsaCurrentAllocation
 
 (* The live original flags need only have their current concrete names among
    the output aliases. Older concrete versions can safely remain in ws. *)

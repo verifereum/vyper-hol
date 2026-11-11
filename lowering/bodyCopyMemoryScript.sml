@@ -7,7 +7,7 @@ Ancestors
   bodyAllocMemory exprSimDefs exprSimBufferStore exprSimLiteralBuffer exprSimAlloc fragExec fragExecMem instMemFrontier
   stmtLowering
   allocaHistoryFragment exprLoweringProps exprLowering emitHelperProps emitHelper
-  compileEnv context venomInst venomState venomExecSemantics venomMemDefs
+  compileEnv loweringStateRelDefs context venomInst venomState venomExecSemantics venomMemDefs
   valueEncoding valueEncodingProofs list rich_list finite_map words arithmetic
 
 Theorem compile_copy_memory_body_mem_ok:
@@ -145,15 +145,18 @@ QED
 
 Theorem copy_len_arithmetic_mem_ok[local]:
   run_inst_seq_mem_ok
-    [mk_inst a ADD ops xs; mk_inst b AND ops' ys; mk_inst c ADD ops'' zs] s
+    [mk_inst n NOT ops0 ws; mk_inst a ADD ops xs; mk_inst b AND ops' ys;
+     mk_inst c ADD ops'' zs] s
 Proof
-  `!s. inst_mem_below_frontier (mk_inst a ADD ops xs) s /\
+  `!s. inst_mem_below_frontier (mk_inst n NOT ops0 ws) s /\
+       inst_mem_below_frontier (mk_inst a ADD ops xs) s /\
        inst_mem_below_frontier (mk_inst b AND ops' ys) s /\
        inst_mem_below_frontier (mk_inst c ADD ops'' zs) s` by
     simp[below_frontier_no_ranges, mk_inst_def] >>
   simp[run_inst_seq_mem_ok_cons] >>
-  Cases_on `step_inst_base (mk_inst a ADD ops xs) s` >> simp[] >>
-  Cases_on `step_inst_base (mk_inst b AND ops' ys) v` >>
+  Cases_on `step_inst_base (mk_inst n NOT ops0 ws) s` >> simp[] >>
+  Cases_on `step_inst_base (mk_inst a ADD ops xs) v` >> simp[] >>
+  Cases_on `step_inst_base (mk_inst b AND ops' ys) v'` >>
   simp[run_inst_seq_mem_ok_last]
 QED
 
@@ -421,7 +424,7 @@ Proof
     (drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >> strip_tac >>
      drule emitted_insts_emit_op >> strip_tac >>
      qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK a` mp_tac >>
-     asm_simp_tac (srw_ss()) [run_inst_seq_def, step_inst_base_def, mk_inst_def,
+     asm_simp_tac (srw_ss()) [run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        eval_operand_def, exec_alloca_def] >>
      Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
      >- (simp[LET_THM, update_var_def] >> rpt strip_tac >> gvs[]) >>

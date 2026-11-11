@@ -2,7 +2,7 @@
 Theory builtinBytesMemory
 Ancestors
   builtinBytes allocaFootprint fragExecMem instMemFrontier abiBuiltinAllocation
-  exprLoweringProps emitHelperProps emitHelper compileEnv context venomInst
+  exprLoweringProps emitHelperProps emitHelper compileEnv loweringStateRelDefs context venomInst
   venomState venomExecSemantics venomMemDefs finite_map list words arithmetic
 
 Theorem slice_bounds_shape[local]:
