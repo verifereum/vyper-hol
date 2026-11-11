@@ -2002,6 +2002,243 @@ QED
 
 (* Caller readiness is quantified over the unchanged decoder metadata and
    calldata; no package or source-interpreter facts enter this induction. *)
+Theorem registration_owned_suffix_invariant_resources:
+  !R ce0 args tvs vals env sf cd ctx fn site lo PG.
+  (!ce2 st2 ce3 last2 name prim dyn sz di h loc n q.
+    compile_register_positional_args ce2 [(name,prim,dyn,sz,di)] (4+h) st2 = (ce3,last2) /\
+    (prim ==> ~dyn /\ ?clamp. di = DecPrimWord clamp) /\
+    FLOOKUP ce2.ce_vars name = SOME loc /\ var_location_memory_size loc = SOME n /\
+    ce3 = ce2 with ce_vars updated_by (\m. m |+ (name,PtrVar (Var q) n)) /\
+    fn_has_code st2 last2 fn ==> R st2.cs_next_id q n) ==>
+  !i ce st s G tn cf last.
+  ALL_DISTINCT (MAP FST args) /\
+  (!j. j < LENGTH args ==> ?loc.
+    FLOOKUP ce0.ce_vars (FST (EL j args)) = SOME loc /\
+    var_location_memory_size loc = SOME (type_memory_size (EL j tvs))) /\
+  (!j ce1 s1. j < LENGTH args /\
+    ce1 = ce0 with ce_vars := ce1.ce_vars /\ s1.vs_call_ctx = cd ==>
+    ?prim dyn sz av delta srcpos.
+    build_positional_arg ce0 (EL j args) =
+      (FST (EL j args),prim,dyn,sz,type_to_abi_dec_info sf ce1 (SND (EL j args))) /\
+    sz = abi_member_head_size (vyper_to_abi_type env (SND (EL j args))) /\
+    (prim ==> ~dyn /\ ?clamp.
+      type_to_abi_dec_info sf ce1 (SND (EL j args)) = DecPrimWord clamp) /\
+    abi_decoder_coherent ce1 env sf (SND (EL j args)) (EL j tvs) /\
+    value_has_type (EL j tvs) (EL j vals) /\
+    vyper_to_abi env (SND (EL j args)) (EL j vals) = SOME av /\
+    mem_bytes_at srcpos
+      (LENGTH (enc (vyper_to_abi_type env (SND (EL j args))) av)) cd.cc_calldata =
+      enc (vyper_to_abi_type env (SND (EL j args))) av /\
+    srcpos + LENGTH (enc (vyper_to_abi_type env (SND (EL j args))) av) <
+      dimword (:256) /\
+    srcpos = 4 + (if dyn then delta else
+      SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND) (TAKE j args))) /\
+    (dyn ==> abi_decode_load CALLDATALOAD
+      (n2w (4 + SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND)
+        (TAKE j args))) : bytes32) s1 = n2w delta /\
+      4+delta < dimword (:256)) /\
+    type_memory_size (EL j tvs) < dimword (:256)) /\
+  i <= LENGTH args /\ ce = ce0 with ce_vars := ce.ce_vars /\
+  s.vs_call_ctx = cd /\
+  compile_register_positional_args ce (build_positional_args ce0 (DROP i args))
+    (4 + SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND)
+      (TAKE i args))) st = (cf,last) /\
+  (!j. i <= j /\ j < LENGTH args ==>
+    FLOOKUP ce.ce_vars (FST (EL j args)) = FLOOKUP ce0.ce_vars (FST (EL j args))) /\
+  (!j. j < i ==> ?aid q p n.
+    R aid q n /\ aid < st.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,n) /\
+    FLOOKUP ce.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+    lookup_var q s = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+    ptr_covers G tn q s n /\ val_wf (EL j tvs) (EL j vals) /\
+    val_footprint (EL j tvs) (EL j vals) <= n /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      val_in_memory (EL j tvs) (EL j vals) p mem)) /\
+  (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==> id < st.cs_next_id) /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  fn_has_code st last fn /\ fn_inst_ids_distinct fn /\
+  (!label bb. lookup_block label fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t H u.
+    t.vs_data_section = s.vs_data_section /\
+    ((!inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+        inst.inst_operands = [Lit w] /\
+        FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) ==>
+     (!inst w b n. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+        inst.inst_operands = [Lit w] /\
+        FLOOKUP t.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w)) /\
+    (!j. j < LENGTH args ==> ?aid q p n.
+      R aid q n /\ aid < last.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,n) /\
+      FLOOKUP cf.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+      lookup_var q t = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+      ptr_covers H u q t n /\ val_wf (EL j tvs) (EL j vals) /\
+      val_footprint (EL j tvs) (EL j vals) <= n /\
+      (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+        val_in_memory (EL j tvs) (EL j vals) p mem)) /\
+    cf = ce0 with ce_vars := cf.ce_vars /\
+    (!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < last.cs_next_id) /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\ fresh_vars_wrt last t /\
+    ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
+    t.vs_inst_idx = LENGTH last.cs_current_insts /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  ntac 13 gen_tac >> disch_tac >> gen_tac >> measureInduct_on `LENGTH args - i` >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `i = LENGTH args`
+  >- (gvs[build_positional_args_def, register_positional_args_nil] >>
+      qexistsl_tac [`s`, `G`, `tn`] >> simp[]) >>
+  `i < LENGTH args` by decide_tac >>
+  qpat_assum `!j ce1 s1. _`
+    (qspecl_then [`i`, `ce`, `s`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `DROP i args = EL i args :: DROP (SUC i) args` by
+    metis_tac[DROP_CONS_EL] >>
+  `build_positional_args ce0 (DROP i args) =
+    [build_positional_arg ce0 (EL i args)] ++
+    build_positional_args ce0 (DROP (SUC i) args)` by
+    simp[build_positional_args_def] >>
+  qpat_x_assum `compile_register_positional_args _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `build_positional_args ce0 (DROP i args) = _`
+    (fn th => pure_once_rewrite_tac[th]) >>
+  qpat_assum `build_positional_arg ce0 (EL i args) = _`
+    (fn th => pure_once_rewrite_tac[th]) >>
+  rewrite_tac[register_positional_args_append] >>
+  simp_tac (srw_ss()) [MAP, SUM, pairTheory.pair_case_thm, arithmeticTheory.ADD_0] >>
+  strip_tac >>
+  rename1 `compile_register_positional_args ce [_] _ st = (ce1,mid)` >>
+  `cs_extends st mid /\ cs_extends mid last` by
+    metis_tac[register_positional_args_suffix_extends] >>
+  `fn_has_code st mid fn /\ fn_has_code mid last fn` by
+    metis_tac[fn_has_code_split] >>
+  qpat_assum `!j. j < LENGTH args ==> ?loc. _` (qspec_then `i` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `FLOOKUP ce.ce_vars (FST (EL i args)) = SOME loc` by
+    (qpat_assum `!j. i <= j /\ _ ==> _` (qspec_then `i` mp_tac) >>
+     simp[]) >>
+  `!bb. lookup_block mid.cs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
+  qpat_x_assum `mem_bytes_at _ _ cd.cc_calldata = _` mp_tac >>
+  qpat_assum `s.vs_call_ctx = cd`
+    (fn th => pure_once_rewrite_tac[GSYM th]) >> disch_tac >>
+  drule_all registration_singleton_ptr_resources >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
+  rename1 `ptr_covers H1 u1 q a (type_memory_size (EL i tvs))` >>
+  `val_wf (EL i tvs) (EL i vals)` by
+    metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  `val_footprint (EL i tvs) (EL i vals) <= type_memory_size (EL i tvs)` by
+    metis_tac[exprSimPropsTheory.val_footprint_le] >>
+  `st.cs_next_id < mid.cs_next_id` by
+    (qpat_assum `!id entry. FLOOKUP a.vs_allocas id = SOME entry ==> _` drule >>
+     simp[]) >>
+  `R st.cs_next_id q (type_memory_size (EL i tvs))` by
+    (qpat_assum `!ce2 st2 ce3 last2 name prim dyn sz di h loc n q. _`
+       drule_all >> simp[]) >>
+  `!j. j < SUC i ==> ?aid q p n.
+    R aid q n /\ aid < mid.cs_next_id /\ FLOOKUP a.vs_allocas aid = SOME (p,n) /\
+    FLOOKUP ce1.ce_vars (EL j (MAP FST args)) = SOME (PtrVar (Var q) n) /\
+    lookup_var q a = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+    ptr_covers H1 u1 q a n /\ val_wf (EL j tvs) (EL j vals) /\
+    val_footprint (EL j tvs) (EL j vals) <= n /\
+    (!mem. mem_agree_outside u1.t_mem a.vs_memory mem ==>
+      val_in_memory (EL j tvs) (EL j vals) p mem)` by
+    (match_mp_tac registration_owned_prefix_invariant_update >>
+     qpat_x_assum `!y. LENGTH args - y < _ ==> _` kall_tac >>
+     qpat_x_assum `!j ce1 s1. j < LENGTH args /\ _ ==> _` kall_tac >>
+     qpat_x_assum `ce = ce0 with ce_vars := ce.ce_vars` kall_tac >>
+     gvs[EL_MAP] >>
+     qpat_x_assum `!old q0 p0 n0 tv0 v0. _` mp_tac >>
+     qpat_x_assum `!id entry. FLOOKUP a.vs_allocas id = SOME entry ==> _` mp_tac >>
+     qpat_x_assum `FLOOKUP a.vs_allocas st.cs_next_id = SOME _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> ntac 3 strip_tac >>
+     `st.cs_next_id < mid.cs_next_id` by
+       (qpat_x_assum `!id entry. _` drule >> simp[]) >>
+     rpt gen_tac >> strip_tac >> conj_tac >- decide_tac >>
+     first_x_assum irule >> simp[] >> qexists_tac `old` >> simp[]) >>
+  `ce1 = ce0 with ce_vars := ce1.ce_vars` by
+    (qpat_assum `ce1 = ce with ce_vars updated_by _`
+       (fn th => pure_rewrite_tac[th]) >>
+     qpat_x_assum `ce = ce0 with ce_vars := ce.ce_vars` mp_tac >>
+     simp_tac (srw_ss()) [compileEnvTheory.compile_env_component_equality]) >>
+  `!j. SUC i <= j /\ j < LENGTH args ==>
+    FLOOKUP ce1.ce_vars (FST (EL j args)) = FLOOKUP ce0.ce_vars (FST (EL j args))` by
+    (rpt gen_tac >> strip_tac >>
+     `FST (EL i args) <> FST (EL j args)` by
+       (qspecl_then [`MAP FST args`, `i`, `j`] mp_tac ALL_DISTINCT_EL_IMP >>
+        simp[EL_MAP]) >>
+     qpat_assum `ce1 = ce with ce_vars updated_by _`
+       (fn th => pure_rewrite_tac[th]) >>
+     simp[finite_mapTheory.FLOOKUP_UPDATE,
+       IgnAsm `ce = ce0 with ce_vars := ce.ce_vars`]) >>
+  `TAKE (SUC i) args = TAKE i args ++ [EL i args]` by
+    metis_tac[TAKE_EL_SNOC, arithmeticTheory.ADD1, SNOC_APPEND] >>
+  `SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND) (TAKE (SUC i) args)) =
+    SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND) (TAKE i args)) + sz` by
+    (qpat_assum `TAKE (SUC i) args = _` (fn th => pure_rewrite_tac[th]) >>
+     simp[IgnAsm `ce = ce0 with ce_vars := ce.ce_vars`,
+       IgnAsm `ce1 = ce0 with ce_vars := ce1.ce_vars`, SUM_APPEND]) >>
+  `compile_register_positional_args ce1 (build_positional_args ce0 (DROP (SUC i) args))
+    (4 + SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND)
+      (TAKE (SUC i) args))) mid = (cf,last)` by
+    (qpat_assum `SUM (MAP _ (TAKE (SUC i) args)) = _`
+       (fn th => pure_once_rewrite_tac[th]) >>
+     pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `!y. LENGTH args - y < _ ==> _` (qspec_then `SUC i` mp_tac) >>
+  (impl_tac >- decide_tac) >>
+  disch_then (drule_at (Pat `compile_register_positional_args _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
+  disch_then (qspecl_then [`H1`, `u1`] mp_tac) >>
+  impl_tac >-
+    (ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
+     conj_tac >- decide_tac >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >-
+       (qpat_assum `a.vs_call_ctx = s.vs_call_ctx`
+          (fn th => pure_rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >-
+       (rpt gen_tac >> strip_tac >>
+        `j < LENGTH args` by decide_tac >>
+        qpat_x_assum `!j. j < SUC i ==> _` (qspec_then `j` mp_tac) >>
+        qpat_x_assum `j < LENGTH args` mp_tac >>
+        qpat_x_assum `j < SUC i` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> ntac 2 strip_tac >>
+        simp[EL_MAP]) >>
+     `lo <= a.vs_alloca_next` by decide_tac >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >> qexistsl_tac [`t`, `H`, `u`] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >-
+    (qpat_x_assum `(!inst w b n. _ ) ==> _` mp_tac >>
+     qpat_x_assum `(!inst w b n. _ ) ==> _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> tautLib.TAUT_TAC) >>
+  conj_tac >-
+    (qpat_assum `!j. j < LENGTH args ==> ?aid q p n. _`
+       (ACCEPT_TAC o SRULE [])) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!j ce1 s1. j < LENGTH args /\ _ ==> _` kall_tac >>
+  qpat_x_assum `ce = ce0 with ce_vars := ce.ce_vars` kall_tac >>
+  qpat_x_assum `ce1 = ce0 with ce_vars := ce1.ce_vars` kall_tac >>
+  qpat_x_assum `cf = ce0 with ce_vars := cf.ce_vars` kall_tac >>
+  simp[] >>
+  qpat_x_assum `!D. (!fuel. ptr_safe_run D _ _ _ _ _ _ _ t) ==> _` mp_tac >>
+  qpat_x_assum `!D. (!fuel. ptr_safe_run D _ _ _ _ _ _ _ a) ==> _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
+QED
+
 Theorem registration_owned_suffix_invariant_ptr:
   !R ce0 args tvs vals env sf cd ctx fn site lo PG.
   (!ce2 st2 ce3 last2 name prim dyn sz di h loc n q.
@@ -2089,142 +2326,10 @@ Theorem registration_owned_suffix_invariant_ptr:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  ntac 13 gen_tac >> disch_tac >> gen_tac >> measureInduct_on `LENGTH args - i` >>
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `i = LENGTH args`
-  >- (gvs[build_positional_args_def, register_positional_args_nil] >>
-      qexistsl_tac [`s`, `G`, `tn`] >> simp[]) >>
-  `i < LENGTH args` by decide_tac >>
-  qpat_assum `!j ce1 s1. _`
-    (qspecl_then [`i`, `ce`, `s`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  `DROP i args = EL i args :: DROP (SUC i) args` by
-    metis_tac[DROP_CONS_EL] >>
-  `build_positional_args ce0 (DROP i args) =
-    [build_positional_arg ce0 (EL i args)] ++
-    build_positional_args ce0 (DROP (SUC i) args)` by
-    simp[build_positional_args_def] >>
-  qpat_x_assum `compile_register_positional_args _ _ _ _ = _` mp_tac >>
-  qpat_x_assum `build_positional_args ce0 (DROP i args) = _`
-    (fn th => pure_once_rewrite_tac[th]) >>
-  qpat_assum `build_positional_arg ce0 (EL i args) = _`
-    (fn th => pure_once_rewrite_tac[th]) >>
-  rewrite_tac[register_positional_args_append] >>
-  simp_tac (srw_ss()) [MAP, SUM, pairTheory.pair_case_thm, arithmeticTheory.ADD_0] >>
-  strip_tac >>
-  rename1 `compile_register_positional_args ce [_] _ st = (ce1,mid)` >>
-  `cs_extends st mid /\ cs_extends mid last` by
-    metis_tac[register_positional_args_suffix_extends] >>
-  `fn_has_code st mid fn /\ fn_has_code mid last fn` by
-    metis_tac[fn_has_code_split] >>
-  qpat_assum `!j. j < LENGTH args ==> ?loc. _` (qspec_then `i` mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  `FLOOKUP ce.ce_vars (FST (EL i args)) = SOME loc` by
-    (qpat_assum `!j. i <= j /\ _ ==> _` (qspec_then `i` mp_tac) >>
-     simp[]) >>
-  `!bb. lookup_block mid.cs_current_bb fn.fn_blocks = SOME bb ==>
-    phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
-  qpat_x_assum `mem_bytes_at _ _ cd.cc_calldata = _` mp_tac >>
-  qpat_assum `s.vs_call_ctx = cd`
-    (fn th => pure_once_rewrite_tac[GSYM th]) >> disch_tac >>
-  drule_all registration_singleton_ptr_framed >>
-  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
-  rename1 `ptr_covers H1 u1 q a (type_memory_size (EL i tvs))` >>
-  `val_wf (EL i tvs) (EL i vals)` by
-    metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
-  `val_footprint (EL i tvs) (EL i vals) <= type_memory_size (EL i tvs)` by
-    metis_tac[exprSimPropsTheory.val_footprint_le] >>
-  `st.cs_next_id < mid.cs_next_id` by
-    (qpat_assum `!id entry. FLOOKUP a.vs_allocas id = SOME entry ==> _` drule >>
-     simp[]) >>
-  `R st.cs_next_id q (type_memory_size (EL i tvs))` by
-    (qpat_assum `!ce2 st2 ce3 last2 name prim dyn sz di h loc n q. _`
-       drule_all >> simp[]) >>
-  `!j. j < SUC i ==> ?aid q p n.
-    R aid q n /\ aid < mid.cs_next_id /\ FLOOKUP a.vs_allocas aid = SOME (p,n) /\
-    FLOOKUP ce1.ce_vars (EL j (MAP FST args)) = SOME (PtrVar (Var q) n) /\
-    lookup_var q a = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
-    ptr_covers H1 u1 q a n /\ val_wf (EL j tvs) (EL j vals) /\
-    val_footprint (EL j tvs) (EL j vals) <= n /\
-    (!mem. mem_agree_outside u1.t_mem a.vs_memory mem ==>
-      val_in_memory (EL j tvs) (EL j vals) p mem)` by
-    (match_mp_tac registration_owned_prefix_invariant_update >>
-     qpat_x_assum `!y. LENGTH args - y < _ ==> _` kall_tac >>
-     qpat_x_assum `!j ce1 s1. j < LENGTH args /\ _ ==> _` kall_tac >>
-     qpat_x_assum `ce = ce0 with ce_vars := ce.ce_vars` kall_tac >>
-     gvs[EL_MAP] >>
-     qpat_x_assum `!old q0 p0 n0 tv0 v0. _` mp_tac >>
-     qpat_x_assum `!id entry. FLOOKUP a.vs_allocas id = SOME entry ==> _` mp_tac >>
-     qpat_x_assum `FLOOKUP a.vs_allocas st.cs_next_id = SOME _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> ntac 3 strip_tac >>
-     `st.cs_next_id < mid.cs_next_id` by
-       (qpat_x_assum `!id entry. _` drule >> simp[]) >>
-     rpt gen_tac >> strip_tac >> conj_tac >- decide_tac >>
-     first_x_assum irule >> simp[] >> qexists_tac `old` >> simp[]) >>
-  `ce1 = ce0 with ce_vars := ce1.ce_vars` by
-    (qpat_assum `ce1 = ce with ce_vars updated_by _`
-       (fn th => pure_rewrite_tac[th]) >>
-     qpat_x_assum `ce = ce0 with ce_vars := ce.ce_vars` mp_tac >>
-     simp_tac (srw_ss()) [compileEnvTheory.compile_env_component_equality]) >>
-  `!j. SUC i <= j /\ j < LENGTH args ==>
-    FLOOKUP ce1.ce_vars (FST (EL j args)) = FLOOKUP ce0.ce_vars (FST (EL j args))` by
-    (rpt gen_tac >> strip_tac >>
-     `FST (EL i args) <> FST (EL j args)` by
-       (qspecl_then [`MAP FST args`, `i`, `j`] mp_tac ALL_DISTINCT_EL_IMP >>
-        simp[EL_MAP]) >>
-     qpat_assum `ce1 = ce with ce_vars updated_by _`
-       (fn th => pure_rewrite_tac[th]) >>
-     simp[finite_mapTheory.FLOOKUP_UPDATE,
-       IgnAsm `ce = ce0 with ce_vars := ce.ce_vars`]) >>
-  `TAKE (SUC i) args = TAKE i args ++ [EL i args]` by
-    metis_tac[TAKE_EL_SNOC, arithmeticTheory.ADD1, SNOC_APPEND] >>
-  `SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND) (TAKE (SUC i) args)) =
-    SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND) (TAKE i args)) + sz` by
-    (qpat_assum `TAKE (SUC i) args = _` (fn th => pure_rewrite_tac[th]) >>
-     simp[IgnAsm `ce = ce0 with ce_vars := ce.ce_vars`,
-       IgnAsm `ce1 = ce0 with ce_vars := ce1.ce_vars`, SUM_APPEND]) >>
-  `compile_register_positional_args ce1 (build_positional_args ce0 (DROP (SUC i) args))
-    (4 + SUM (MAP (abi_member_head_size o vyper_to_abi_type env o SND)
-      (TAKE (SUC i) args))) mid = (cf,last)` by
-    (qpat_assum `SUM (MAP _ (TAKE (SUC i) args)) = _`
-       (fn th => pure_once_rewrite_tac[th]) >>
-     pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `!y. LENGTH args - y < _ ==> _` (qspec_then `SUC i` mp_tac) >>
-  (impl_tac >- decide_tac) >>
-  disch_then (drule_at (Pat `compile_register_positional_args _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
-  disch_then (qspecl_then [`H1`, `u1`] mp_tac) >>
-  impl_tac >-
-    (ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
-     conj_tac >- decide_tac >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >-
-       (qpat_assum `a.vs_call_ctx = s.vs_call_ctx`
-          (fn th => pure_rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >-
-       (rpt gen_tac >> strip_tac >>
-        `j < LENGTH args` by decide_tac >>
-        qpat_x_assum `!j. j < SUC i ==> _` (qspec_then `j` mp_tac) >>
-        qpat_x_assum `j < LENGTH args` mp_tac >>
-        qpat_x_assum `j < SUC i` mp_tac >>
-        POP_ASSUM_LIST (K all_tac) >> ntac 2 strip_tac >>
-        simp[EL_MAP]) >>
-     `lo <= a.vs_alloca_next` by decide_tac >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  strip_tac >> qexistsl_tac [`t`, `H`, `u`] >>
-  conj_tac >-
-    (qpat_assum `!j. j < LENGTH args ==> ?aid q p n. _`
-       (ACCEPT_TAC o SRULE [])) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `!j ce1 s1. j < LENGTH args /\ _ ==> _` kall_tac >>
-  qpat_x_assum `ce = ce0 with ce_vars := ce.ce_vars` kall_tac >>
-  qpat_x_assum `ce1 = ce0 with ce_vars := ce1.ce_vars` kall_tac >>
-  qpat_x_assum `cf = ce0 with ce_vars := cf.ce_vars` kall_tac >>
-  simp[] >>
-  qpat_x_assum `!D. (!fuel. ptr_safe_run D _ _ _ _ _ _ _ t) ==> _` mp_tac >>
-  qpat_x_assum `!D. (!fuel. ptr_safe_run D _ _ _ _ _ _ _ a) ==> _` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
+  ntac 13 gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
+  drule_all registration_owned_suffix_invariant_resources >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`t`, `H`, `u`] >> simp[]
 QED
 
 Theorem registration_owned_suffix_ptr:
@@ -2411,7 +2516,7 @@ Proof
     exprLoweringPropsTheory.fmp_room_def, EXISTS_MEM] >> metis_tac[]
 QED
 
-Theorem registration_owned_locals_endpoint:
+Theorem registration_owned_locals_endpoint_resources:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
   valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
@@ -2453,6 +2558,10 @@ Theorem registration_owned_locals_endpoint:
     s0.vs_pending_deletions = s1.vs_pending_deletions /\ s0.vs_tx_ctx = s1.vs_tx_ctx /\
     s0.vs_block_ctx = s1.vs_block_ctx /\ s0.vs_fmp = s1.vs_fmp /\
     s0.vs_gas_readings = s1.vs_gas_readings /\
+    s0.vs_data_section = s1.vs_data_section /\
+    (!inst w b n. MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_operands = [Lit w] /\
+      FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) /\
     (!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
       !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1)
 Proof
@@ -2463,7 +2572,7 @@ Proof
   disch_then (drule_at (Pat `calldata_encodes _ _ _ _ _`)) >>
   simp[] >> disch_tac >>
   drule_at (Pat `fresh_vars_wrt _ _`)
-    (registration_owned_suffix_invariant_ptr |> Q.SPEC
+    (registration_owned_suffix_invariant_resources |> Q.SPEC
       `\aid q n. ?inst. MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
         inst.inst_outputs = [q] /\ inst.inst_id = aid`) >>
   disch_then (qspec_then `efn` mp_tac) >>
@@ -2499,10 +2608,10 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- suspend "endpoint_domain" >>
   qpat_x_assum `cenv = cenv0 with ce_vars := cenv.ce_vars` kall_tac >>
-  simp[]
+  gvs[] >> first_assum ACCEPT_TAC
 QED
 
-Resume registration_owned_locals_endpoint[endpoint_locals]:
+Resume registration_owned_locals_endpoint_resources[endpoint_locals]:
   rewrite_tac[local_ptrs_rel_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
     `FLOOKUP env name = SOME entry` by gvs[vyperStateTheory.lookup_scopes_def, AllCaseEqs()] >>
@@ -2577,7 +2686,7 @@ Resume registration_owned_locals_endpoint[endpoint_locals]:
   metis_tac[regions_disjoint_def]
 QED
 
-Resume registration_owned_locals_endpoint[endpoint_domain]:
+Resume registration_owned_locals_endpoint_resources[endpoint_domain]:
   drule compile_register_positional_args_cenv >> strip_tac >>
   rpt strip_tac >>
   qpat_x_assum `!n. ~MEM n (MAP FST pos_args) ==> _`
@@ -2585,7 +2694,57 @@ Resume registration_owned_locals_endpoint[endpoint_domain]:
   simp[build_positional_args_FST]
 QED
 
-Finalise registration_owned_locals_endpoint
+Finalise registration_owned_locals_endpoint_resources
+
+Theorem registration_owned_locals_endpoint:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+  set_external_package_target target
+    (package_external_fn tops ut nk (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,mincd,pay,nr',key,ut',iv,fbody',rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+  fn_has_code st sa efn /\ fn_inst_ids_distinct efn /\
+  vars_pc_only (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>) s1 /\
+  fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
+  s1.vs_current_bb = st.cs_current_bb /\ s1.vs_inst_idx = LENGTH st.cs_current_insts /\
+  ~ctx_has_dalloca unit.cu_context ==>
+  ?tvs s0 G0 tn0.
+    LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv) (MAP SND args) tvs /\
+    local_ptrs_rel efn cenv [env] s0 /\
+    (!j. j < LENGTH args ==> ?aid q p n inst.
+      MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_outputs = [q] /\ inst.inst_id = aid /\
+      aid < sa.cs_next_id /\ FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+      FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+      lookup_var q s0 = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+      ptr_covers G0 tn0 q s0 n /\ val_wf (EL j tvs) (EL j tx.args) /\
+      val_footprint (EL j tvs) (EL j tx.args) <= n /\
+      (!mem. mem_agree_outside tn0.t_mem s0.vs_memory mem ==>
+        val_in_memory (EL j tvs) (EL j tx.args) p mem)) /\
+    cenv = cenv0 with ce_vars := cenv.ce_vars /\
+    (!k. ~MEM k (MAP FST args) ==> FLOOKUP cenv.ce_vars k = NONE) /\
+    alloca_inv s0 /\ alloca_frontier_inv unit.cu_context efn site s0 /\ allocas_from 0 s0 /\
+    fresh_vars_wrt sa s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    tn0.t_stor = tn1.t_stor /\ tn0.t_trans = tn1.t_trans /\ tn0.t_imm = tn1.t_imm /\
+    s0.vs_call_ctx = s1.vs_call_ctx /\ s0.vs_accounts = s1.vs_accounts /\
+    s0.vs_transient = s1.vs_transient /\ s0.vs_logs = s1.vs_logs /\
+    s0.vs_outcomes = s1.vs_outcomes /\ s0.vs_requests = s1.vs_requests /\
+    s0.vs_pending_deletions = s1.vs_pending_deletions /\ s0.vs_tx_ctx = s1.vs_tx_ctx /\
+    s0.vs_block_ctx = s1.vs_block_ctx /\ s0.vs_fmp = s1.vs_fmp /\
+    s0.vs_gas_readings = s1.vs_gas_readings /\
+    (!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
+      !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1)
+Proof
+  strip_tac >> drule_all registration_owned_locals_endpoint_resources >>
+  disch_then (qspecl_then [`tn1`, `site`, `G1`] strip_assume_tac) >>
+  qexistsl_tac [`tvs`, `s0`, `G0`, `tn0`] >> simp[]
+QED
 
 Theorem registration_charge_margin:
   !total pending reserve budget:num.
