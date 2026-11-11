@@ -1,10 +1,27 @@
 (* Boundary facts for the supported storage/transient Append case. *)
 Theory bodyAppendStorageFacts
 Ancestors
-  bodySim supportedExprForms supportedTypes vyperValue vyperTypeSystem
+  bodySim allocLimits supportedExprForms supportedTypes vyperValue vyperTypeSystem
   compileVyper compileEnv loweringStateRelDefs vyperAST words supportedDecls vyperInterpreter
   vyperState bodyStorageMetadata exprOpenCases vyperTypeEnv
   exprSimHyps exprSimHypsDefs finite_map vyperTypeInvariants
+
+Theorem body_append_element_alloc_bound:
+  stmt_exprs_ok cenv (Append target e) ==>
+  type_memory_bytes cenv (expr_type e) < 2 ** 64
+Proof
+  strip_tac >>
+  `alloc_limits_expr cenv e` by
+    gvs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  Cases_on `is_word_type (expr_type e)`
+  >- (Cases_on `expr_type e` >> gvs[is_word_type_def, type_memory_bytes_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      gvs[is_word_type_def, type_memory_bytes_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      gvs[is_word_type_def, type_memory_bytes_def]) >>
+  Cases_on `e` >>
+  gvs[Once alloc_limits_expr_def, type_alloc_ok_def, expr_type_def]
+QED
 
 Theorem supported_append_storage_decl:
   supported_storage_dynamic_array tops nid ==>
