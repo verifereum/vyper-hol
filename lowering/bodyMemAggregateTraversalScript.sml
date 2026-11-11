@@ -340,11 +340,14 @@ Proof
   `sa.cs_next_id <= ss.cs_next_id` by fs[ci_mono_def] >>
   qspecl_then [`ce`, `func`, `es`, `es1`, `sa`, `ss`, `s0`, `q`, `r`, `b`, `asz`]
     mp_tac aggregate_pure_frame_trans >>
-  RULE_ASSUM_TAC (REWRITE_RULE [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM,
-                                GSYM CONJ_ASSOC]) >>
-  rewrite_tac [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM, GSYM CONJ_ASSOC] >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then ACCEPT_TAC
+  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     rpt strip_tac >>
+     (first_x_assum irule >- decide_tac >>
+      rpt strip_tac >> first_x_assum irule >> rpt conj_tac >> first_assum ACCEPT_TAC))) >>
+  disch_then (fn th => conj_tac >- ACCEPT_TAC (CONJUNCT1 th) >>
+    rpt strip_tac >>
+    (irule (CONJUNCT2 th) >- decide_tac >>
+     rpt strip_tac >> first_x_assum irule >> rpt conj_tac >> first_assum ACCEPT_TAC))
 QED
 
 Theorem aggregate_tuple_success_continuation_mem[local]:
