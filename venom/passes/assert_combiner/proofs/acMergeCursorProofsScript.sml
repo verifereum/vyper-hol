@@ -477,3 +477,77 @@ Proof
   `ac_merge_crossing xs (SUC n) h <=> h.mc_first_id = (EL n xs).inst_id` by metis_tac[] >>
   simp[] >> metis_tac[]
 QED
+
+Theorem ac_merge_inst_emission_pointwise:
+  !cs mp su inst mp' out su' dfg X pin pout.
+  ac_merge_inst cs mp su inst = (mp',out,su') /\
+  (!v. MEM v su'.irs_used_vars /\ ~MEM v su.irs_used_vars ==> v IN X) /\
+  (!mc. FIND (\c. c.mc_second_id = inst.inst_id) cs = SOME mc ==>
+    inst.inst_opcode = ASSERT /\
+    (?c. inst.inst_operands = [c] /\
+         ac_get_iszero_operand dfg {} c = SOME mc.mc_second_pred) /\
+    pin = SOME (mc.mc_first_id,ac_merge_resolve mp mc)) /\
+  (!mc. FIND (\c. c.mc_first_id = inst.inst_id) cs = SOME mc ==>
+    inst.inst_opcode = ASSERT /\
+    (?c. inst.inst_operands = [c] /\
+         ac_get_iszero_operand dfg {} c = SOME mc.mc_first_pred) /\
+    pout = SOME (inst.inst_id,ac_merge_resolve mp' mc)) /\
+  (FIND (\c. c.mc_second_id = inst.inst_id) cs = NONE /\
+   FIND (\c. c.mc_first_id = inst.inst_id) cs <> NONE ==>
+   pin = NONE /\ ALOOKUP mp inst.inst_id = NONE) /\
+  (FIND (\c. c.mc_second_id = inst.inst_id) cs <> NONE /\
+   FIND (\c. c.mc_first_id = inst.inst_id) cs = NONE ==> pout = NONE) /\
+  (FIND (\c. c.mc_second_id = inst.inst_id) cs = NONE /\
+   FIND (\c. c.mc_first_id = inst.inst_id) cs = NONE ==>
+   pout = pin /\ (pin <> NONE ==> ac_is_safe_between inst)) ==>
+  ac_merge_emission_form dfg X inst pin pout out
+Proof
+  rpt gen_tac >> strip_tac >>
+  `EXISTS (\mc. mc.mc_first_id = inst.inst_id) cs <=>
+   FIND (\mc. mc.mc_first_id = inst.inst_id) cs <> NONE` by
+    (POP_ASSUM_LIST (K ALL_TAC) >> Induct_on `cs` >> simp[FIND_thm] >>
+     Cases_on `h.mc_first_id = inst.inst_id` >> simp[]) >>
+  Cases_on `FIND (\mc. mc.mc_second_id = inst.inst_id) cs`
+  >- (Cases_on `FIND (\mc. mc.mc_first_id = inst.inst_id) cs`
+      >- (gvs[ac_merge_inst_def, ac_merge_emission_form_def]) >>
+      rename1 `FIND _ cs = SOME mc` >>
+      `mc.mc_first_id = inst.inst_id` by (imp_res_tac FIND_P >> fs[]) >>
+      gvs[ac_merge_inst_def, ac_merge_emission_form_def, ac_merge_resolve_def]) >>
+  rename1 `FIND _ cs = SOME mc` >>
+  `mc.mc_second_id = inst.inst_id` by (imp_res_tac FIND_P >> fs[]) >>
+  fs[] >>
+  Cases_on `ac_merge_resolve mp mc = mc.mc_second_pred`
+  >- suspend "equal" >>
+  suspend "allocate"
+QED
+
+Resume ac_merge_inst_emission_pointwise[equal]:
+  Cases_on `FIND (\mc. mc.mc_first_id = inst.inst_id) cs`
+  >- (gvs[ac_merge_inst_def, GSYM ac_merge_resolve_def] >>
+      simp[ac_merge_emission_form_def] >> metis_tac[]) >>
+  rename1 `FIND _ cs = SOME next` >>
+  `next.mc_first_id = inst.inst_id` by (imp_res_tac FIND_P >> fs[]) >>
+  gvs[ac_merge_inst_def, GSYM ac_merge_resolve_def] >>
+  gvs[ac_merge_resolve_def, ac_merge_emission_form_def] >> metis_tac[]
+QED
+
+Resume ac_merge_inst_emission_pointwise[allocate]:
+  Cases_on `fresh_inst_id su` >> rename1 `fresh_inst_id su = (oi,s1)` >>
+  Cases_on `fresh_ir_var s1` >> rename1 `fresh_ir_var s1 = (ov,s2)` >>
+  Cases_on `fresh_inst_id s2` >> rename1 `fresh_inst_id s2 = (zi,s3)` >>
+  Cases_on `fresh_ir_var s3` >> rename1 `fresh_ir_var s3 = (zv,s4)` >>
+  fs[ac_merge_inst_def, GSYM ac_merge_resolve_def] >>
+  `~MEM ov s1.irs_used_vars /\ s2.irs_used_vars = ov::s1.irs_used_vars` by
+    metis_tac[fresh_ir_var_contract] >>
+  `~MEM zv s3.irs_used_vars /\ s4.irs_used_vars = zv::s3.irs_used_vars` by
+    metis_tac[fresh_ir_var_contract] >>
+  gvs[fresh_inst_id_def] >>
+  Cases_on `FIND (\mc. mc.mc_first_id = inst.inst_id) cs`
+  >- (gvs[] >> simp[ac_merge_emission_form_def] >> metis_tac[]) >>
+  rename1 `FIND _ cs = SOME next` >>
+  `next.mc_first_id = inst.inst_id` by (imp_res_tac FIND_P >> fs[]) >>
+  gvs[ac_merge_resolve_def, ac_merge_emission_form_def] >>
+  metis_tac[]
+QED
+
+Finalise ac_merge_inst_emission_pointwise
