@@ -648,12 +648,84 @@ Proof
   Cases_on `vv` >> simp[]
 QED
 
+(* The location of a storage or transient place. *)
+Definition slot_loc_def:
+  slot_loc tr = if tr then LocTransient else LocStorage
+End
+
+(* Where a located value points when the source result is a place: a
+   local's place at its pointer plus the path's offset in its declared
+   type, a storage or transient place (or mapping) at its slot, and an
+   immutable of the module being lowered at its offset plus the path's
+   offset in its value at es.  Other results, and stack values, pin
+   nothing.  This is place_ptr_rel for expression results. *)
+Definition vv_place_ptr_def:
+  (vv_place_ptr cenv cx (es:evaluation_state) s tv (StackValue t op) <=> T) /\
+  (vv_place_ptr cenv cx es s tv (LocatedValue t p) <=>
+     case tv of
+       PlaceR (MemoryPlace id path) =>
+         p.ptr_location = LocMemory /\
+         ?q sz b t0 tv0 k tvk.
+           FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var q) sz) /\
+           lookup_var q s = SOME b /\ cenv.ce_var_type id = SOME t0 /\
+           evaluate_type (get_tenv cx) t0 = SOME tv0 /\
+           mem_path_offset tv0 path = SOME (k, tvk) /\
+           eval_operand p.ptr_operand s = SOME (b + n2w k)
+     | PlaceR (StoragePlace tr slot tvs) =>
+         p.ptr_location = slot_loc tr /\
+         eval_operand p.ptr_operand s = SOME slot
+     | HashMapRef tr slot kt vt =>
+         p.ptr_location = slot_loc tr /\
+         eval_operand p.ptr_operand s = SOME slot
+     | PlaceR (ImmutablePlace src id path) =>
+         p.ptr_location = LocCode /\ src = cenv.ce_module /\
+         ?off itv iv k tvk.
+           FLOOKUP cenv.ce_module_vars (cenv.ce_module, id) =
+             SOME (ImmutableLoc off) /\
+           FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+                      NONE => FEMPTY
+                    | SOME imms => get_source_immutables cenv.ce_module imms)
+                   id = SOME (itv, iv) /\
+           mem_path_offset itv path = SOME (k, tvk) /\
+           eval_operand p.ptr_operand s = SOME (n2w (off + k))
+     | Value v => T)
+End
+
+Theorem vv_place_ptr_Value[simp]:
+  vv_place_ptr cenv cx es s (Value v) vv
+Proof
+  Cases_on `vv` >> simp[vv_place_ptr_def]
+QED
+
+Theorem vv_place_ptr_StackValue[simp]:
+  vv_place_ptr cenv cx es s tv (StackValue t op)
+Proof
+  simp[vv_place_ptr_def]
+QED
+
+Theorem vv_place_ptr_gas_obs[simp]:
+  vv_place_ptr cenv cx (es with gas_obs := gs) s tv vv <=>
+  vv_place_ptr cenv cx es s tv vv
+Proof
+  Cases_on `vv` >> simp[vv_place_ptr_def]
+QED
+
+Theorem vv_place_ptr_inst_idx[simp]:
+  vv_place_ptr cenv cx es (s with vs_inst_idx := n) tv vv <=>
+  vv_place_ptr cenv cx es s tv vv
+Proof
+  `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
+    (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  Cases_on `vv` >> simp[vv_place_ptr_def, lookup_var_def]
+QED
+
 (* expr_post with a value_vv in place of an operand. *)
 Definition vv_post_def:
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
     stmt_state_rel ctx func cenv cx es' s /\
     vv_holds cenv cx (post_value_type cenv e) tv vv es' s /\
     vv_at cenv cx (post_value_type cenv e) sa sb es' tv vv s /\
+    vv_place_ptr cenv cx es' s tv vv /\
     (post_value_type cenv e <> expr_type e ==>
      vv_own cenv cx (post_value_type cenv e) sa sb es' tv vv s) /\
     (~expr_has_effect e ==> vv_storage_live cx vv es' s) /\
@@ -668,11 +740,6 @@ Definition vv_post_def:
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
     locals_kept cenv es es' s0 s /\
     (~expr_has_effect e ==> pure_frame cenv func es sa s0 s)
-End
-
-(* The location of a storage or transient place. *)
-Definition slot_loc_def:
-  slot_loc tr = if tr then LocTransient else LocStorage
 End
 
 (* w is where the lowering finds the source place pv of type vt, at
