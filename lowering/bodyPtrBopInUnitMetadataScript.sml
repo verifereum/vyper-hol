@@ -42,12 +42,6 @@ Proof
   simp[equality_tops_def, classify_functions_def, classify_function_def]
 QED
 
-Theorem equality_nkeys:
-  assign_nkeys equality_tops 0 = K 0
-Proof
-  EVAL_TAC
-QED
-
 (* Keep the cryptographic selector atomic: it is irrelevant to the body EQ.
    Expanding Keccak via EVAL exceeds the fixed per-step budget. *)
 Theorem equality_selectors:
