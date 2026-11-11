@@ -499,8 +499,10 @@ Proof
   `val_footprint tvt selected <= type_memory_size tvt` by
     simp[val_footprint_le] >>
   conj_tac >- (fs[sub_layout_def] >> decide_tac) >>
-  irule local_path_at_val_at >> simp[local_path_at_def] >>
-  qexists_tac `path` >> simp[]
+  conj_tac
+  >- (irule local_path_at_val_at >> simp[local_path_at_def] >>
+      qexists_tac `path` >> simp[]) >>
+  simp[local_place_at_def] >> qexistsl_tac [`t0`, `entry.type`] >> simp[]
 QED
 
 Theorem local_selection_endpoint:

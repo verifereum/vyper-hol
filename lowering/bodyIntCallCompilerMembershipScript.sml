@@ -63,9 +63,9 @@ Theorem intcall_interval_membership_loop:
     intcall_compiler_interval k a (SND (loader v a))) /\
   k <= a.cs_next_var ==>
   intcall_compiler_interval k a
-    (SND (compile_array_membership_loop needle arr len sz off loader isin a))
+    (SND (compile_array_membership_loop needle arr len sz off loader bound_opt isin a))
 Proof
-  strip_tac >> Cases_on `off > 0` >> Cases_on `isin` >>
+  strip_tac >> Cases_on `bound_opt` >> Cases_on `off > 0` >> Cases_on `isin` >>
   simp[compile_array_membership_loop_def, comp_ignore_bind_def] >>
   rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
        simp[intcall_interval_emit_op, intcall_interval_emit_inst,

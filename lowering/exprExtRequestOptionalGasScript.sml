@@ -3,7 +3,7 @@ Ancestors
   exprExtRequestHistory exprExtRequestSourceProbe exprExtRequestReadProbe exprSafeOperand
   exprSimHash exprSimHashBoundary exprSimWordArgs exprLoweringProps emitHelperProps emitHelper
   venomState venomInst venomInstProofs venomExecSemantics compileEnv loweringStateRelDefs
-  loweringPosts fragExec list rich_list arithmetic finite_map
+  loweringPosts fragExec list rich_list arithmetic finite_map exprSimProps
 
 Theorem extrequest_optional_gas_run:
   (case go of SOME g => (g,sa) | NONE => emit_op GAS [] sa) = (gas,sb) /\
@@ -32,7 +32,8 @@ Proof
          simp[Abbr `u`, hash_gas_readings_state_rel] >>
          qexists `sa` >> simp[lookup_var_def]) >>
       qexists `t` >> simp[Abbr `t`, Abbr `u`, update_var_def, eval_operand_def,
-        lookup_var_def, FLOOKUP_UPDATE, wb_frame_def, locals_kept_def] >>
+        lookup_var_def, FLOOKUP_UPDATE, wb_frame_def,
+        exprSimPropsTheory.locals_kept_mem] >>
       rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def]) >>
   simp[] >> strip_tac >> gvs[] >>
   qexists `s` >> simp[emitted_insts_def, run_inst_seq_def, wb_frame_refl]
