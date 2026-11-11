@@ -432,6 +432,7 @@ Proof
   simp[NoAsms] >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   irule source_return_dispatch >> asm_rewrite_tac[] >>
+  conj_tac >- simp[] >>
   reverse conj_tac >- (qexists_tac `es1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   goal_assum (drule_at (Pat `compile_multi_vvs _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
@@ -625,6 +626,7 @@ Proof
      first_x_assum drule >> decide_tac) >>
   qpat_assum `vv = LocatedValue ret _` (fn th => pure_rewrite_tac[th]) >>
   irule widened_allocated_buffer_post >>
+  conj_tac >- simp[] >>
   goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)

@@ -127,6 +127,7 @@ Proof
      qpat_x_assum `eval_operand _ s = SOME w` mp_tac >>
      simp[eval_operand_def]) >>
   irule owned_buffer_result_post >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl_tac [`aid`,`w2n w`,`s`,`si`,`32 * LENGTH results`] >>
   simp[] >> metis_tac[ADD_COMM]

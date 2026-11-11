@@ -198,6 +198,7 @@ Proof
     (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
   qexists_tac `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sj sb))` >>
   irule (ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM] stack_completed_endpoint) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
   goal_assum (drule_at (Pat `emit_multi_op _ _ _ _ = _`)) >>

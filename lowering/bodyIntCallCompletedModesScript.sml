@@ -63,6 +63,7 @@ Proof
   qexists_tac `merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx` >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule void_invoke_return_post >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at Any) >> simp[merge_callee_state_def] >>
   qexistsl_tac [`ops`,`si`] >> simp[]
 QED
@@ -98,6 +99,7 @@ Proof
   qexists_tac `merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx` >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule memory_invoke_return_post >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
@@ -316,6 +318,7 @@ Proof
      simp[] >> rpt strip_tac >> gvs[] >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   irule invoke_store_completed_endpoint >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at Any) >> conj_tac >- metis_tac[] >>
   goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >>
