@@ -812,22 +812,22 @@ in assert_some (check p03_constructor_modules);
    assert_none (check p15x_constructor_modules)
 end) [false,true];
 
-(* Event declaration regressions: indexed aggregates and duplicate event names
-   are rejected; field-name duplication and four indexed fields remain legal. *)
+(* Event declaration regressions: indexed aggregates, duplicate event names,
+   duplicate field names and more than three indexed fields are rejected. *)
 Theorem event_declaration_regressions:
   check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])] = NONE /\
   check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F)];
             EventDecl "E" [(("b",BaseT (UintT 256)),T)]])] = NONE /\
-  IS_SOME (check_contract F [] 0w
+  check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),T);
                           (("b",BaseT (UintT 256)),T);
                           (("c",BaseT (UintT 256)),T);
-                          (("d",BaseT (UintT 256)),T)]])]) /\
-  IS_SOME (check_contract F [] 0w
+                          (("d",BaseT (UintT 256)),T)]])] = NONE /\
+  check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F);
-                          (("a",BaseT BoolT),F)]])]) /\
+                          (("a",BaseT BoolT),F)]])] = NONE /\
   IS_SOME (check_contract F [] 0w
     [(NONE,[FlagDecl "F" ["A";"B"];
             EventDecl "E" [(("a",FlagT (NONE,"F")),T);
@@ -840,6 +840,14 @@ val event_decl_rejections =
   [``([(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])]
       : (num option # toplevel list) list)``,
    ``([(NONE,[EventDecl "E" []; EventDecl "E" []])]
+      : (num option # toplevel list) list)``,
+   ``([(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),T);
+                            (("b",BaseT (UintT 256)),T);
+                            (("c",BaseT (UintT 256)),T);
+                            (("d",BaseT (UintT 256)),T)]])]
+      : (num option # toplevel list) list)``,
+   ``([(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F);
+                            (("a",BaseT BoolT),F)]])]
       : (num option # toplevel list) list)``];
 val () = List.app (fn mods =>
   let val th = vyperCheckContractLib.check_contract_conv
@@ -1547,6 +1555,86 @@ Proof
   CONV_TAC vyperCheckContractLib.check_contract_conv
 QED
 
+(* burn(uint256) and collate_propagate_storage(bytes16) share 0x42966c68. *)
+fun selector_main name =
+  ``FunctionDecl External Pure F F ^(stringSyntax.fromMLstring name)
+      [("a", BaseT (UintT 256))] [] NoneT []``
+val selector_collate =
+  ``FunctionDecl External Pure F F "collate_propagate_storage"
+      [("a", BaseT (BytesT (Fixed 16)))] [] NoneT []``
+fun selector_modules name lib =
+  ``[(NONE, [^(selector_main name)]); (SOME 1, ^lib)]
+    : (num option # toplevel list) list``
+val selector_exports = ``[("collate_propagate_storage", 1n)]``
+val selector_collision_modules = selector_modules "burn" ``[^selector_collate]``
+
+Theorem exports_ok_function_selector_collision:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address
+             ^selector_collision_modules) /\
+  ~exports_ok ^empty_layouts ^zero_address ^selector_collision_modules
+     ^selector_exports
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val selector_renamed_modules = selector_modules "burn_safe" ``[^selector_collate]``
+Theorem exports_ok_renamed_selector_accepted:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address
+             ^selector_renamed_modules) /\
+  exports_ok ^empty_layouts ^zero_address ^selector_renamed_modules
+     ^selector_exports
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val selector_default_modules = selector_modules "burn"
+  ``[FunctionDecl External Pure F F "collate_propagate_storage"
+       [("a", BaseT (BytesT (Fixed 16))); ("b", BaseT (UintT 256))]
+       [Literal (BaseT (UintT 256)) (IntL 0)] NoneT []]``
+Theorem exports_ok_default_prefix_selector_collision:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address
+             ^selector_default_modules) /\
+  ~exports_ok ^empty_layouts ^zero_address ^selector_default_modules
+     ^selector_exports
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val selector_getter_modules = selector_modules "burn"
+  ``[HashMapDecl (Public F) F "collate_propagate_storage"
+       (BaseT (BytesT (Fixed 16))) (Type (BaseT (UintT 256))) NONE]``
+val selector_getter_layouts =
+  ``([((0w : address),
+       ([((SOME 1, "collate_propagate_storage"), 0)] : storage_layout,
+        [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+Theorem exports_ok_getter_selector_collision:
+  IS_SOME (check_contract F ^selector_getter_layouts ^zero_address
+             ^selector_getter_modules) /\
+  ~exports_ok ^selector_getter_layouts ^zero_address ^selector_getter_modules
+     ^selector_exports
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val selector_unexported_modules = selector_modules "burn"
+  ``[^selector_collate; FunctionDecl External Pure F F "safe" [] [] NoneT []]``
+Theorem exports_ok_unexported_selector_accepted:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address
+             ^selector_unexported_modules) /\
+  exports_ok ^empty_layouts ^zero_address ^selector_unexported_modules
+     [("safe", 1)]
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+Theorem check_contract_main_selector_collision:
+  check_contract F ^empty_layouts ^zero_address
+    [(NONE, [^(selector_main "burn"); ^selector_collate])] = NONE
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
 (* Operator forms Vyper rejects, where the compiled code would not compute
    what the semantics does: ** with neither a literal base nor a non-negative
    literal exponent, unary minus on an unsigned type, << on a type narrower
@@ -1697,6 +1785,52 @@ val () = List.app (fn in_deploy =>
             [("a", BaseT (BytesT (Fixed 16)))] [] NoneT []]``))
    [(``[Literal (BaseT (UintT 256)) (IntL 0)]``, assert_none),
     (``([] : expr list)``, assert_some)])) [false, true]
+
+(* Vyper reports NamespaceCollision for repeated self members, independently
+   of function visibility, variable visibility, declaration order or mode.
+   Renaming only the second member makes each control acceptable. *)
+fun self_member_function vis name =
+  ``FunctionDecl ^vis Nonpayable F F ^name [] [] NoneT []``
+
+fun self_member_variable vis name =
+  ``VariableDecl ^vis Storage ^name (BaseT (UintT 256)) (SOME 0)``
+
+fun self_member_hashmap vis name =
+  ``HashMapDecl ^vis F ^name (BaseT (UintT 256))
+      (Type (BaseT (UintT 256))) (SOME 0)``
+
+val self_member_layouts =
+  ``[((0w : address),
+      ([((NONE,"foo"),0); ((NONE,"bar"),0)] : storage_layout,
+       [] : storage_layout))]``
+
+val () = List.app (fn in_deploy =>
+  List.app (fn (first, second) =>
+    List.app (fn reverse_order =>
+      List.app (fn (name, expect) => let
+        val a = first ``"foo"``
+        val b = second name
+        val decls = if reverse_order then ``[^b; ^a]`` else ``[^a; ^b]``
+      in
+        expect (check_selector_decls in_deploy self_member_layouts decls)
+      end) [(``"foo"``, assert_none), (``"bar"``, assert_some)])
+      [false, true])
+    ((self_member_function ``Internal``, self_member_function ``External``) ::
+     List.concat (map (fn vis => map (fn variable =>
+       (self_member_function vis, variable))
+       [self_member_variable ``Private``, self_member_variable ``Public F``,
+        self_member_hashmap ``Private``, self_member_hashmap ``Public F``])
+       [``Internal``, ``External``, ``Deploy``]))) [false, true]
+
+val () = cv_auto_trans contract_namespaces_ok_def;
+
+Theorem cross_visibility_self_member_clash_cv:
+  ~contract_namespaces_ok F
+    [(NONE, [FunctionDecl Internal Nonpayable F F "foo" [] [] NoneT [];
+             FunctionDecl External Nonpayable F F "foo" [] [] NoneT []])]
+Proof
+  CONV_TAC cv_eval
+QED
 
 (* Like Vyper (ImmutableViolation "Cannot modify loop variable"), a loop
    body may not write the array it iterates over: the evaluator iterates

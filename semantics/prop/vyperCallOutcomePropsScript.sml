@@ -9,12 +9,21 @@ Ancestors
 
 (* ===== Exact equations ===== *)
 
+Theorem take_request_outcome_NONE:
+  st.outcomes = NONE ==>
+  take_request_outcome rq st =
+    (INR (Error (RuntimeError "take_call_outcome")), st)
+Proof
+  simp[take_request_outcome_def]
+QED
+
 Theorem take_call_outcome_NONE:
   st.outcomes = NONE ==>
   take_call_outcome target calldata value_opt st =
     (INR (Error (RuntimeError "take_call_outcome")), st)
 Proof
-  simp[take_call_outcome_def]
+  PURE_REWRITE_TAC [take_call_outcome_def] >>
+  MATCH_ACCEPT_TAC take_request_outcome_NONE
 QED
 
 Theorem take_call_outcome_SOME:
@@ -29,7 +38,7 @@ Theorem take_call_outcome_SOME:
      st with <|outcomes := SOME rest;
                requests := record_request rq st.requests|>)
 Proof
-  rpt strip_tac >> gvs[take_call_outcome_def] >> rw[] >> gvs[]
+  rpt strip_tac >> gvs[take_call_outcome_def, take_request_outcome_def] >> rw[] >> gvs[]
 QED
 
 Theorem take_call_outcome_ordinary:
@@ -43,7 +52,7 @@ Theorem take_call_outcome_ordinary:
      else INL (rq, outcome),
      st with <|outcomes := SOME rest; requests := st.requests ++ [rq]|>)
 Proof
-  rpt strip_tac >> gvs[take_call_outcome_def, take_outcome_def, record_request_def] >>
+  rpt strip_tac >> gvs[take_call_outcome_def, take_request_outcome_def, take_outcome_def, record_request_def] >>
   rw[] >> gvs[]
 QED
 
@@ -55,7 +64,7 @@ Theorem take_call_outcome_exhausted:
     (INL (rq, failed_outcome rq),
      st with <|outcomes := SOME []; requests := st.requests ++ [rq]|>)
 Proof
-  rpt strip_tac >> gvs[take_call_outcome_def, take_outcome_def, record_request_def]
+  rpt strip_tac >> gvs[take_call_outcome_def, take_request_outcome_def, take_outcome_def, record_request_def]
 QED
 
 Theorem take_call_outcome_computed_valid:
@@ -72,7 +81,7 @@ Theorem take_call_outcome_computed_valid:
      st with outcomes := SOME rest)
 Proof
   rpt strip_tac >>
-  gvs[take_call_outcome_def, take_outcome_def, record_request_def,
+  gvs[take_call_outcome_def, take_request_outcome_def, take_outcome_def, record_request_def,
       computed_precompile_def, failed_outcome_def, call_outcome_request_def] >>
   rw[] >> gvs[evaluation_state_component_equality]
 QED
@@ -85,7 +94,7 @@ Theorem take_call_outcome_computed_invalid:
     (INL (rq, failed_outcome rq), st with outcomes := SOME (DROP 1 os))
 Proof
   rpt strip_tac >> Cases_on `os` >>
-  gvs[take_call_outcome_def, take_outcome_def, record_request_def,
+  gvs[take_call_outcome_def, take_request_outcome_def, take_outcome_def, record_request_def,
       computed_precompile_def, call_outcome_request_def, evaluation_state_component_equality]
 QED
 
@@ -115,13 +124,22 @@ Proof
   rpt strip_tac >> drule_all take_call_outcome_SOME >> simp[]
 QED
 
+Theorem take_request_outcome_error:
+  take_request_outcome rq st = (INR exc, st') ==>
+  exc = Error (RuntimeError "take_call_outcome") \/
+  exc = Error (RuntimeError "call outcome accounts")
+Proof
+  Cases_on `st.outcomes` >> simp[take_request_outcome_def] >>
+  pairarg_tac >> rw[] >> gvs[]
+QED
+
 Theorem take_call_outcome_error:
   take_call_outcome target calldata value_opt st = (INR exc, st') ==>
   exc = Error (RuntimeError "take_call_outcome") \/
   exc = Error (RuntimeError "call outcome accounts")
 Proof
-  Cases_on `st.outcomes` >> simp[take_call_outcome_def] >>
-  pairarg_tac >> rw[] >> gvs[]
+  PURE_REWRITE_TAC [take_call_outcome_def] >>
+  MATCH_ACCEPT_TAC take_request_outcome_error
 QED
 
 Theorem take_call_outcome_no_type_error_control:
@@ -136,6 +154,21 @@ Proof
   Cases_on `res` >> simp[] >> drule take_call_outcome_error >> rw[]
 QED
 
+Theorem take_request_outcome_success:
+  take_request_outcome rq0 st = (INL (rq,outcome), st') ==>
+  ?os rest.
+    st.outcomes = SOME os /\
+    rq = rq0 /\
+    take_outcome rq os = (outcome,rest) /\
+    st' = st with <|outcomes := SOME rest;
+                   requests := record_request rq st.requests|> /\
+    (outcome.co_success /\ ~rq.cr_static ==>
+       accounts_runtime_well_typed outcome.co_accounts)
+Proof
+  Cases_on `st.outcomes` >> simp[take_request_outcome_def] >>
+  pairarg_tac >> rw[] >> gvs[]
+QED
+
 Theorem take_call_outcome_success:
   take_call_outcome target calldata value_opt st = (INL (rq,outcome), st') ==>
   ?os rest.
@@ -147,8 +180,22 @@ Theorem take_call_outcome_success:
     (outcome.co_success /\ ~rq.cr_static ==>
        accounts_runtime_well_typed outcome.co_accounts)
 Proof
-  Cases_on `st.outcomes` >> simp[take_call_outcome_def] >>
-  pairarg_tac >> rw[] >> gvs[]
+  PURE_REWRITE_TAC [take_call_outcome_def] >>
+  MATCH_ACCEPT_TAC take_request_outcome_success
+QED
+
+Theorem take_request_outcome_suffix:
+  take_request_outcome rq st = (res,st') /\
+  st.outcomes = SOME os ==>
+  ?rest prefix. st'.outcomes = SOME rest /\ os = prefix ++ rest /\
+    LENGTH prefix <= 1 /\
+    (computed_precompile rq ==> st'.requests = st.requests)
+Proof
+  rpt strip_tac >> gvs[take_request_outcome_def] >> pairarg_tac >>
+  `rest = DROP 1 os` by metis_tac[take_outcome_rest, SND] >>
+  gvs[AllCaseEqs(), record_request_def] >>
+  Cases_on `os` >> simp[] >>
+  rename1 `head::tail` >> qexists_tac `[head]` >> simp[]
 QED
 
 Theorem take_call_outcome_suffix:
@@ -159,11 +206,22 @@ Theorem take_call_outcome_suffix:
     (computed_precompile (call_outcome_request target calldata value_opt st) ==>
        st'.requests = st.requests)
 Proof
-  rpt strip_tac >> gvs[take_call_outcome_def] >> pairarg_tac >>
-  `rest = DROP 1 os` by metis_tac[take_outcome_rest, SND] >>
-  gvs[AllCaseEqs(), record_request_def] >>
-  Cases_on `os` >> simp[] >>
-  rename1 `head::tail` >> qexists_tac `[head]` >> simp[]
+  PURE_REWRITE_TAC [take_call_outcome_def] >>
+  MATCH_ACCEPT_TAC take_request_outcome_suffix
+QED
+
+(* A successful non-static take is well typed; a failed one is adopted only
+   by a CREATE, so calls and delegate calls keep the caller's accounts. *)
+Theorem take_adopt_request_outcome_typed:
+  accounts_runtime_well_typed st.accounts /\
+  take_request_outcome rq0 st = (INL (rq,outcome),st') /\
+  adopt_call_outcome rq outcome st' = (INL (),st'') /\
+  (rq0.cr_kind = MessageCall \/ rq0.cr_kind = DelegateMessageCall) ==>
+  accounts_runtime_well_typed st''.accounts
+Proof
+  rpt strip_tac >> drule take_request_outcome_success >> strip_tac >>
+  Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
+  gvs[adopt_call_outcome_equation]
 QED
 
 Theorem take_adopt_call_outcome_typed:
@@ -172,7 +230,65 @@ Theorem take_adopt_call_outcome_typed:
   adopt_call_outcome rq outcome st' = (INL (),st'') ==>
   accounts_runtime_well_typed st''.accounts
 Proof
-  rpt strip_tac >> drule take_call_outcome_success >> strip_tac >>
-  Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
-  gvs[adopt_call_outcome_equation, call_outcome_request_def]
+  rw[take_call_outcome_def] >>
+  drule_at (Pat `take_request_outcome _ _ = _`) take_adopt_request_outcome_typed >>
+  simp[call_outcome_request_def]
+QED
+
+(* ===== Delegate calls: the same boundary under a delegate request ===== *)
+
+Theorem take_delegate_outcome_NONE:
+  st.outcomes = NONE ==>
+  take_delegate_outcome target calldata value_opt st =
+    (INR (Error (RuntimeError "take_call_outcome")), st)
+Proof
+  PURE_REWRITE_TAC [take_delegate_outcome_def] >>
+  MATCH_ACCEPT_TAC take_request_outcome_NONE
+QED
+
+Theorem take_delegate_outcome_suffix:
+  take_delegate_outcome target calldata value_opt st = (res,st') /\
+  st.outcomes = SOME os ==>
+  ?rest prefix. st'.outcomes = SOME rest /\ os = prefix ++ rest /\
+    LENGTH prefix <= 1 /\
+    (computed_precompile (delegate_outcome_request target calldata value_opt st) ==>
+       st'.requests = st.requests)
+Proof
+  PURE_REWRITE_TAC [take_delegate_outcome_def] >>
+  MATCH_ACCEPT_TAC take_request_outcome_suffix
+QED
+
+Theorem take_delegate_outcome_error:
+  take_delegate_outcome target calldata value_opt st = (INR exc, st') ==>
+  exc = Error (RuntimeError "take_call_outcome") \/
+  exc = Error (RuntimeError "call outcome accounts")
+Proof
+  PURE_REWRITE_TAC [take_delegate_outcome_def] >>
+  MATCH_ACCEPT_TAC take_request_outcome_error
+QED
+
+Theorem take_delegate_outcome_success:
+  take_delegate_outcome target calldata value_opt st = (INL (rq,outcome), st') ==>
+  ?os rest.
+    st.outcomes = SOME os /\
+    rq = delegate_outcome_request target calldata value_opt st /\
+    take_outcome rq os = (outcome,rest) /\
+    st' = st with <|outcomes := SOME rest;
+                   requests := record_request rq st.requests|> /\
+    (outcome.co_success /\ ~rq.cr_static ==>
+       accounts_runtime_well_typed outcome.co_accounts)
+Proof
+  PURE_REWRITE_TAC [take_delegate_outcome_def] >>
+  MATCH_ACCEPT_TAC take_request_outcome_success
+QED
+
+Theorem take_adopt_delegate_outcome_typed:
+  accounts_runtime_well_typed st.accounts /\
+  take_delegate_outcome target calldata value_opt st = (INL (rq,outcome),st') /\
+  adopt_call_outcome rq outcome st' = (INL (),st'') ==>
+  accounts_runtime_well_typed st''.accounts
+Proof
+  rw[take_delegate_outcome_def] >>
+  drule_at (Pat `take_request_outcome _ _ = _`) take_adopt_request_outcome_typed >>
+  simp[delegate_outcome_request_def, call_outcome_request_def]
 QED
